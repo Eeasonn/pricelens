@@ -51,6 +51,12 @@ export const BREAK_MAX = 2;
 export const SEG_MIN_RATIO = 0.08;
 export const BREAK_PX = 24;
 
+/** 步长滞回区间（第十一轮）：沿用上一次步长所能接受的格数范围，出界才换档。
+ *  换档（步长翻倍 → 格数腰斩 → 图高突跳）只应发生在数据跨度实质变化时，
+ *  不应被窗口平移/一周价格漂移触发。 */
+export const STICKY_MIN_CELLS = 5;
+export const STICKY_MAX_CELLS = 13;
+
 // ---------------- 钉顶卡片（第三轮 = 常驻图例卡）几何 ----------------
 
 export const CARD_GAP = 8; // 卡片间距
@@ -104,12 +110,15 @@ export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local'): 
 
 // ---------------- Y 轴（第七轮：纯自适应 + 空白压缩分段刻度） ----------------
 
-/** §6.6 nice 步长：1/2/2.5/5 ×10^k */
+/** §6.6 nice 步长：1/2/2.5/5 ×10^k。
+ *  第十一轮起**就近取档**（档界 = 相邻档中点 1.5/2.25/3.75/7.5）：
+ *  旧版进位取档在档界附近极不稳定——跨度/8 从 4 869 涨到 5 149（+5.7%）步长即从 5K 翻到 10K，
+ *  刻度翻档连带格数腰斩、图高突跳 184px（第十轮用户反馈的高度突变即此根因之一）。 */
 export function niceStep(raw: number): number {
   if (!(raw > 0)) return 1;
   const p = Math.pow(10, Math.floor(Math.log10(raw)));
   const r = raw / p;
-  const m = r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10;
+  const m = r < 1.5 ? 1 : r < 2.25 ? 2 : r < 3.75 ? 2.5 : r < 7.5 ? 5 : 10;
   return m * p;
 }
 
@@ -151,13 +160,16 @@ function collectValues(series: Series[], priceTypes: { discounted: boolean; rrp:
 }
 
 /**
- * 计算 Y 轴分段刻度（第七轮口径，唯一入口）。
+ * 计算 Y 轴分段刻度（第七轮口径，唯一入口；第十一轮加步长滞回 prev）。
  * 空数据/单点退化为 0–100 单段（与旧自动口径一致，不崩）。
  */
 export function computeYAxis(params: {
   series: Series[];
   priceTypes: { discounted: boolean; rrp: boolean };
   sliderScale: number;
+  /** 上一次的 Y 轴模型（第十一轮步长滞回）：其 interval 若仍能给出合理格数则沿用，
+   *  保证窗口平移/价格小漂移时 刻度步长与图高稳定（见 STICKY_* 常量） */
+  prev?: YScale | null;
 }): YScale {
   const scale = Math.min(Math.max(params.sliderScale, 0.5), 3);
   const end = (partial: Omit<YScale, 'sliderScale'>): YScale => ({ ...partial, sliderScale: scale });
@@ -205,14 +217,37 @@ export function computeYAxis(params: {
     segDomains.push({ min: lo, max: hi });
   }
   const pseudoSpan0 = segDomains.reduce((acc, d) => acc + (d.max - d.min), 0);
+  // 外缘吸附评估：给定步长做"最下段.min 向下取整格、最上段.max 向上撑满整格"，
+  // 返回吸附后的伪跨度与格数。顶格锚点 = 单段时取吸附后的底（全域保持整格数，两端刻度都顶边）；
+  // 多段时取末段自身下缘（与旧实现一致）。中段域不变，伪跨度按首末差值修正。
+  const snapWith = (cand: number): { lo: number; hi: number; pseudoSpan: number; cells: number } => {
+    const first = segDomains[0];
+    const last = segDomains[segDomains.length - 1];
+    const lo = Math.max(0, Math.floor(first.min / cand) * cand);
+    const anchorMin = segDomains.length === 1 ? lo : last.min;
+    const hi = anchorMin + cand * Math.ceil((last.max - anchorMin) / cand - 1e-9);
+    // 两端向外吸附扩展都使跨度变大（底缘下移 + 顶缘上移）
+    const pseudoSpan = pseudoSpan0 + (first.min - lo) + (hi - last.max);
+    return { lo, hi, pseudoSpan, cells: clampInt(pseudoSpan / cand, MIN_CELLS, MAX_CELLS) };
+  };
+  // 步长选择（第十一轮）：就近档为基准；上一次的步长若仍能给出 STICKY 区间内的格数则沿用——
+  // 窗口平移/一周价格漂移只改变吸附格数（±46px 一档），不再触发步长换档
+  // （换档 = 步长翻倍 + 格数腰斩 = 图高突跳的根源，第十轮用户反馈即此）。
   const interval = niceStep(pseudoSpan0 / TARGET_CELLS);
-  // 外缘吸附：最下段.min 向下取整格、最上段.max 向上撑满整格（刻度线顶到边更整齐）
-  segDomains[0].min = Math.max(0, Math.floor(segDomains[0].min / interval) * interval);
-  segDomains[segDomains.length - 1].max = segDomains[segDomains.length - 1].min + interval * Math.ceil(
-    (segDomains[segDomains.length - 1].max - segDomains[segDomains.length - 1].min) / interval - 1e-9,
-  );
-  const pseudoSpan = segDomains.reduce((acc, d) => acc + (d.max - d.min), 0);
-  const cells = clampInt(pseudoSpan / interval, MIN_CELLS, MAX_CELLS);
+  let snapped = snapWith(interval);
+  let finalInterval = interval;
+  const prevInterval = params.prev?.interval;
+  if (prevInterval && prevInterval !== interval) {
+    const cand = snapWith(prevInterval);
+    if (cand.cells >= STICKY_MIN_CELLS && cand.cells <= STICKY_MAX_CELLS) {
+      snapped = cand;
+      finalInterval = prevInterval;
+    }
+  }
+  segDomains[0].min = snapped.lo;
+  segDomains[segDomains.length - 1].max = snapped.hi;
+  const pseudoSpan = snapped.pseudoSpan;
+  const cells = clampInt(pseudoSpan / finalInterval, MIN_CELLS, MAX_CELLS);
   const availPx = Math.round(cells * TICK_PX * scale);
   const plotHeight = availPx + (segDomains.length - 1) * BREAK_PX;
 
@@ -234,7 +269,7 @@ export function computeYAxis(params: {
   return end({
     min: segDomains[0].min,
     max: segDomains[segDomains.length - 1].max,
-    interval,
+    interval: finalInterval,
     cells,
     plotHeight,
     segs,

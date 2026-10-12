@@ -134,11 +134,14 @@ export default function Chart(props: ChartProps) {
   const commitSliderScale = props.onSliderScale ?? setInnerSliderScale;
 
   // ---- Y 轴：自适应分段刻度（外部 yScale 优先——主图用它承接刷选冻结与伸缩倍率；
-  //      内部自算必须吃 sliderScale，第十轮修复：此前硬编码 ×1 导致滑杆提交后图表纹丝不动） ----
-  const selfScale: YScale = useMemo(
-    () => computeYAxis({ series, priceTypes, sliderScale }),
-    [series, priceTypes, sliderScale],
-  );
+  //      内部自算必须吃 sliderScale，第十轮修复：此前硬编码 ×1 导致滑杆提交后图表纹丝不动）。
+  //      selfPrevRef 传 prev 做步长滞回（第十一轮），迷你图同样获得稳定刻度 ----
+  const selfPrevRef = useRef<YScale | null>(null);
+  const selfScale: YScale = useMemo(() => {
+    const next = computeYAxis({ series, priceTypes, sliderScale, prev: selfPrevRef.current });
+    selfPrevRef.current = next;
+    return next;
+  }, [series, priceTypes, sliderScale]);
   const scale = props.yScale ?? selfScale;
   // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
   const totalH = gridTop + scale.plotHeight + GRID.bottom;

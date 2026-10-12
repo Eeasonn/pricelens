@@ -132,12 +132,14 @@ export default function PriceTrend() {
     });
   };
 
-  // Y 轴 = 纯自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
-  // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）
+  // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
+  // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）。
+  // scaleRef 同时是步长滞回的 prev（第十一轮）：存的是"上一次未冻结"的模型，
+  // 只要旧步长仍给得出 5~13 格就沿用，窗口平移/价格小漂移不再触发刻度换档+图高突跳
   const scaleRef = useRef<YScale | null>(null);
   const yCfg = useMemo(() => {
     if (adjusting && scaleRef.current) return scaleRef.current;
-    const next = computeYAxis({ series: chartSeries, priceTypes: state.priceTypes, sliderScale });
+    const next = computeYAxis({ series: chartSeries, priceTypes: state.priceTypes, sliderScale, prev: scaleRef.current });
     scaleRef.current = next;
     return next;
   }, [chartSeries, state.priceTypes, sliderScale, adjusting]);
