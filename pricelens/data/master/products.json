@@ -10,10 +10,29 @@
     "tier_code": "800-1000",
     "prev_model_id": "own-pura-80-ultra",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 76990, "12+512 GB": 79990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 76990,
+      "12+512 GB": 79990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "Gold", "Orange", "Purple"] },
-      { "romram": "12+512 GB", "colors": ["Black", "Gold", "Orange", "Purple"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Orange",
+          "Purple"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Orange",
+          "Purple"
+        ]
+      }
     ]
   },
   {
@@ -27,10 +46,29 @@
     "tier_code": "800-1000",
     "prev_model_id": "own-pura-80-pro",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 69990, "12+512 GB": 74990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 69990,
+      "12+512 GB": 74990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "White", "Orange", "Pink"] },
-      { "romram": "12+512 GB", "colors": ["Black", "White", "Orange", "Pink"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Orange",
+          "Pink"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Orange",
+          "Pink"
+        ]
+      }
     ]
   },
   {
@@ -44,12 +82,49 @@
     "tier_code": "1000+",
     "prev_model_id": "own-mate-x6",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 169990, "12+512 GB": 179990, "16+512 GB": 189990, "16+1TB": 199990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 169990,
+      "12+512 GB": 179990,
+      "16+512 GB": 189990,
+      "16+1TB": 199990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black"] },
-      { "romram": "12+512 GB", "colors": ["Black"] },
-      { "romram": "16+512 GB", "colors": ["Black"] },
-      { "romram": "16+1TB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Blue",
+          "White"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Blue",
+          "White"
+        ]
+      },
+      {
+        "romram": "16+512 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Blue",
+          "White"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Blue",
+          "White"
+        ]
+      }
     ]
   },
   {
@@ -63,10 +138,27 @@
     "tier_code": "1000+",
     "prev_model_id": null,
     "next_model_id": null,
-    "rrp_rub_by_romram": { "16+512 GB": 189990, "16+1TB": 209990 },
+    "rrp_rub_by_romram": {
+      "16+512 GB": 189990,
+      "16+1TB": 209990
+    },
     "skus": [
-      { "romram": "16+512 GB", "colors": ["Red"] },
-      { "romram": "16+1TB", "colors": ["Red"] }
+      {
+        "romram": "16+512 GB",
+        "colors": [
+          "Red",
+          "Black",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Red",
+          "Black",
+          "Gold"
+        ]
+      }
     ]
   },
   {
@@ -80,12 +172,49 @@
     "tier_code": "800-1000",
     "prev_model_id": null,
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 79990, "12+512 GB": 89990, "16+512 GB": 99990, "16+1TB": 109990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 79990,
+      "12+512 GB": 89990,
+      "16+512 GB": 99990,
+      "16+1TB": 109990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black"] },
-      { "romram": "12+512 GB", "colors": ["Black"] },
-      { "romram": "16+512 GB", "colors": ["Black"] },
-      { "romram": "16+1TB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Green",
+          "White",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "Green",
+          "White",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "16+512 GB",
+        "colors": [
+          "Black",
+          "Green",
+          "White",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Black",
+          "Green",
+          "White",
+          "Gold"
+        ]
+      }
     ]
   },
   {
@@ -99,10 +228,29 @@
     "tier_code": "400-600",
     "prev_model_id": "own-nova-14",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 35990, "12+512 GB": 37990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 35990,
+      "12+512 GB": 37990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black"] },
-      { "romram": "12+512 GB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Green",
+          "Pink"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Green",
+          "Pink"
+        ]
+      }
     ]
   },
   {
@@ -116,10 +264,27 @@
     "tier_code": "200-400",
     "prev_model_id": "own-nova-y73",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "8+128 GB": 21990, "8+256 GB": 23990 },
+    "rrp_rub_by_romram": {
+      "8+128 GB": 21990,
+      "8+256 GB": 23990
+    },
     "skus": [
-      { "romram": "8+128 GB", "colors": ["Black"] },
-      { "romram": "8+256 GB", "colors": ["Black"] }
+      {
+        "romram": "8+128 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "White"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "White"
+        ]
+      }
     ]
   },
   {
@@ -133,10 +298,27 @@
     "tier_code": "200-400",
     "prev_model_id": "own-nova-14i",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "8+128 GB": 25990, "8+256 GB": 27990 },
+    "rrp_rub_by_romram": {
+      "8+128 GB": 25990,
+      "8+256 GB": 27990
+    },
     "skus": [
-      { "romram": "8+128 GB", "colors": ["Black"] },
-      { "romram": "8+256 GB", "colors": ["Black"] }
+      {
+        "romram": "8+128 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Blue"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Blue"
+        ]
+      }
     ]
   },
   {
@@ -150,10 +332,27 @@
     "tier_code": "1000+",
     "prev_model_id": null,
     "next_model_id": "own-pura-90s-pro-max",
-    "rrp_rub_by_romram": { "16+512 GB": 119990, "16+1TB": 139990 },
+    "rrp_rub_by_romram": {
+      "16+512 GB": 119990,
+      "16+1TB": 139990
+    },
     "skus": [
-      { "romram": "16+512 GB", "colors": ["Black"] },
-      { "romram": "16+1TB", "colors": ["Black"] }
+      {
+        "romram": "16+512 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Green"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Green"
+        ]
+      }
     ]
   },
   {
@@ -167,11 +366,36 @@
     "tier_code": "800-1000",
     "prev_model_id": null,
     "next_model_id": "own-pura-90s-pro",
-    "rrp_rub_by_romram": { "12+256 GB": 64990, "12+512 GB": 69990, "12+1TB": 79990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 64990,
+      "12+512 GB": 69990,
+      "12+1TB": 79990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "White"] },
-      { "romram": "12+512 GB", "colors": ["Black", "White"] },
-      { "romram": "12+1TB", "colors": ["Black", "White"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "12+1TB",
+        "colors": [
+          "Black",
+          "White",
+          "Gold"
+        ]
+      }
     ]
   },
   {
@@ -185,10 +409,29 @@
     "tier_code": "1000+",
     "prev_model_id": null,
     "next_model_id": "own-mate-x7",
-    "rrp_rub_by_romram": { "12+256 GB": 129990, "12+512 GB": 139990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 129990,
+      "12+512 GB": 139990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black"] },
-      { "romram": "12+512 GB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Blue",
+          "Purple"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Blue",
+          "Purple"
+        ]
+      }
     ]
   },
   {
@@ -202,10 +445,29 @@
     "tier_code": "400-600",
     "prev_model_id": null,
     "next_model_id": "own-nova-15",
-    "rrp_rub_by_romram": { "12+256 GB": 33990, "12+512 GB": 35990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 33990,
+      "12+512 GB": 35990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "White"] },
-      { "romram": "12+512 GB", "colors": ["Black", "White"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Green",
+          "Pink"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Green",
+          "Pink"
+        ]
+      }
     ]
   },
   {
@@ -219,10 +481,27 @@
     "tier_code": "200-400",
     "prev_model_id": null,
     "next_model_id": "own-nova-y74",
-    "rrp_rub_by_romram": { "8+128 GB": 19990, "8+256 GB": 21990 },
+    "rrp_rub_by_romram": {
+      "8+128 GB": 19990,
+      "8+256 GB": 21990
+    },
     "skus": [
-      { "romram": "8+128 GB", "colors": ["Black"] },
-      { "romram": "8+256 GB", "colors": ["Black"] }
+      {
+        "romram": "8+128 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "White"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "White"
+        ]
+      }
     ]
   },
   {
@@ -236,10 +515,27 @@
     "tier_code": "<200",
     "prev_model_id": null,
     "next_model_id": "own-nova-15-max",
-    "rrp_rub_by_romram": { "8+128 GB": 16990, "8+256 GB": 17990 },
+    "rrp_rub_by_romram": {
+      "8+128 GB": 16990,
+      "8+256 GB": 17990
+    },
     "skus": [
-      { "romram": "8+128 GB", "colors": ["Black"] },
-      { "romram": "8+256 GB", "colors": ["Black"] }
+      {
+        "romram": "8+128 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "Silver"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "Silver"
+        ]
+      }
     ]
   },
   {
@@ -252,10 +548,29 @@
     "eol_date": null,
     "prev_model_id": "cmp-iphone-16",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "8+256 GB": 99990, "8+512 GB": 119990 },
+    "rrp_rub_by_romram": {
+      "8+256 GB": 99990,
+      "8+512 GB": 119990
+    },
     "skus": [
-      { "romram": "8+256 GB", "colors": ["Black"] },
-      { "romram": "8+512 GB", "colors": ["Black"] }
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Silver",
+          "Pink",
+          "Lavender"
+        ]
+      },
+      {
+        "romram": "8+512 GB",
+        "colors": [
+          "Black",
+          "Silver",
+          "Pink",
+          "Lavender"
+        ]
+      }
     ]
   },
   {
@@ -268,11 +583,39 @@
     "eol_date": null,
     "prev_model_id": "cmp-iphone-16-pro",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 134990, "12+512 GB": 154990, "12+1TB": 174990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 134990,
+      "12+512 GB": 154990,
+      "12+1TB": 174990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Silver", "Blue"] },
-      { "romram": "12+512 GB", "colors": ["Silver", "Blue"] },
-      { "romram": "12+1TB", "colors": ["Silver", "Blue"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Silver",
+          "Blue",
+          "Black",
+          "Orange"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Silver",
+          "Blue",
+          "Black",
+          "Orange"
+        ]
+      },
+      {
+        "romram": "12+1TB",
+        "colors": [
+          "Silver",
+          "Blue",
+          "Black",
+          "Orange"
+        ]
+      }
     ]
   },
   {
@@ -285,11 +628,39 @@
     "eol_date": null,
     "prev_model_id": null,
     "next_model_id": "cmp-iphone-17",
-    "rrp_rub_by_romram": { "128 GB": 89990, "256 GB": 99990, "512 GB": 119990 },
+    "rrp_rub_by_romram": {
+      "128 GB": 89990,
+      "256 GB": 99990,
+      "512 GB": 119990
+    },
     "skus": [
-      { "romram": "128 GB", "colors": ["Black", "Pink"] },
-      { "romram": "256 GB", "colors": ["Black", "Pink"] },
-      { "romram": "512 GB", "colors": ["Black", "Pink"] }
+      {
+        "romram": "128 GB",
+        "colors": [
+          "Black",
+          "Pink",
+          "White",
+          "Ultramarine"
+        ]
+      },
+      {
+        "romram": "256 GB",
+        "colors": [
+          "Black",
+          "Pink",
+          "White",
+          "Ultramarine"
+        ]
+      },
+      {
+        "romram": "512 GB",
+        "colors": [
+          "Black",
+          "Pink",
+          "White",
+          "Ultramarine"
+        ]
+      }
     ]
   },
   {
@@ -302,12 +673,49 @@
     "eol_date": "2025-10-17",
     "prev_model_id": null,
     "next_model_id": "cmp-iphone-17-pro",
-    "rrp_rub_by_romram": { "128 GB": 119990, "256 GB": 129990, "512 GB": 149990, "1TB": 169990 },
+    "rrp_rub_by_romram": {
+      "128 GB": 119990,
+      "256 GB": 129990,
+      "512 GB": 149990,
+      "1TB": 169990
+    },
     "skus": [
-      { "romram": "128 GB", "colors": ["Black"] },
-      { "romram": "256 GB", "colors": ["Black"] },
-      { "romram": "512 GB", "colors": ["Black"] },
-      { "romram": "1TB", "colors": ["Black"] }
+      {
+        "romram": "128 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Titanium",
+          "Blue"
+        ]
+      },
+      {
+        "romram": "256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Titanium",
+          "Blue"
+        ]
+      },
+      {
+        "romram": "512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Titanium",
+          "Blue"
+        ]
+      },
+      {
+        "romram": "1TB",
+        "colors": [
+          "Black",
+          "White",
+          "Titanium",
+          "Blue"
+        ]
+      }
     ]
   },
   {
@@ -320,10 +728,27 @@
     "eol_date": null,
     "prev_model_id": "cmp-galaxy-s25",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 89990, "12+512 GB": 94990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 89990,
+      "12+512 GB": 94990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "White"] },
-      { "romram": "12+512 GB", "colors": ["Black", "White"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Violet"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Violet"
+        ]
+      }
     ]
   },
   {
@@ -336,11 +761,39 @@
     "eol_date": null,
     "prev_model_id": "cmp-galaxy-s25-ultra",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 129990, "12+512 GB": 149990, "16+1TB": 169990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 129990,
+      "12+512 GB": 149990,
+      "16+1TB": 169990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black"] },
-      { "romram": "12+512 GB", "colors": ["Black", "Violet"] },
-      { "romram": "16+1TB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Violet",
+          "Silver",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "Violet",
+          "Silver",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Black",
+          "Violet",
+          "Silver",
+          "Gold"
+        ]
+      }
     ]
   },
   {
@@ -353,10 +806,27 @@
     "eol_date": null,
     "prev_model_id": "cmp-galaxy-s25-plus",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 109990, "12+512 GB": 119990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 109990,
+      "12+512 GB": 119990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black"] },
-      { "romram": "12+512 GB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Violet"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Violet"
+        ]
+      }
     ]
   },
   {
@@ -369,10 +839,29 @@
     "eol_date": "2026-04-01",
     "prev_model_id": null,
     "next_model_id": "cmp-galaxy-s26",
-    "rrp_rub_by_romram": { "12+256 GB": 79990, "12+512 GB": 89990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 79990,
+      "12+512 GB": 89990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "Navy"] },
-      { "romram": "12+512 GB", "colors": ["Black", "Navy"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Navy",
+          "Mint",
+          "Silver"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "Navy",
+          "Mint",
+          "Silver"
+        ]
+      }
     ]
   },
   {
@@ -385,10 +874,29 @@
     "eol_date": "2026-04-01",
     "prev_model_id": null,
     "next_model_id": "cmp-galaxy-s26-plus",
-    "rrp_rub_by_romram": { "12+256 GB": 99990, "12+512 GB": 109990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 99990,
+      "12+512 GB": 109990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Mint", "Navy"] },
-      { "romram": "12+512 GB", "colors": ["Mint", "Navy"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Mint",
+          "Navy",
+          "Black",
+          "Silver"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Mint",
+          "Navy",
+          "Black",
+          "Silver"
+        ]
+      }
     ]
   },
   {
@@ -401,11 +909,39 @@
     "eol_date": "2026-04-01",
     "prev_model_id": null,
     "next_model_id": "cmp-galaxy-s26-ultra",
-    "rrp_rub_by_romram": { "12+256 GB": 129990, "12+512 GB": 149990, "16+1TB": 169990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 129990,
+      "12+512 GB": 149990,
+      "16+1TB": 169990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "White"] },
-      { "romram": "12+512 GB", "colors": ["Black", "White"] },
-      { "romram": "16+1TB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Violet",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Violet",
+          "Gold"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Black",
+          "White",
+          "Violet",
+          "Gold"
+        ]
+      }
     ]
   },
   {
@@ -418,11 +954,36 @@
     "eol_date": null,
     "prev_model_id": null,
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 179990, "12+512 GB": 189990, "16+1TB": 219990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 179990,
+      "12+512 GB": 189990,
+      "16+1TB": 219990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Blue"] },
-      { "romram": "12+512 GB", "colors": ["Black", "Silver"] },
-      { "romram": "16+1TB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Blue",
+          "Black",
+          "Silver"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Blue",
+          "Black",
+          "Silver"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Blue",
+          "Black",
+          "Silver"
+        ]
+      }
     ]
   },
   {
@@ -435,12 +996,49 @@
     "eol_date": null,
     "prev_model_id": "cmp-galaxy-a56",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "8+128 GB": 37990, "8+256 GB": 40990, "12+256 GB": 43990, "12+512 GB": 47990 },
+    "rrp_rub_by_romram": {
+      "8+128 GB": 37990,
+      "8+256 GB": 40990,
+      "12+256 GB": 43990,
+      "12+512 GB": 47990
+    },
     "skus": [
-      { "romram": "8+128 GB", "colors": ["Gray"] },
-      { "romram": "8+256 GB", "colors": ["Gray"] },
-      { "romram": "12+256 GB", "colors": ["Gray"] },
-      { "romram": "12+512 GB", "colors": ["Gray"] }
+      {
+        "romram": "8+128 GB",
+        "colors": [
+          "Gray",
+          "White",
+          "Mint",
+          "Lavender"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Gray",
+          "White",
+          "Mint",
+          "Lavender"
+        ]
+      },
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Gray",
+          "White",
+          "Mint",
+          "Lavender"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Gray",
+          "White",
+          "Mint",
+          "Lavender"
+        ]
+      }
     ]
   },
   {
@@ -460,10 +1058,42 @@
       "12+256 GB": 42990
     },
     "skus": [
-      { "romram": "6+128 GB", "colors": ["Graphite", "Olive", "Pink"] },
-      { "romram": "8+128 GB", "colors": ["Graphite", "Olive", "Pink"] },
-      { "romram": "8+256 GB", "colors": ["Graphite", "Olive", "Pink"] },
-      { "romram": "12+256 GB", "colors": ["Graphite", "Olive", "Pink"] }
+      {
+        "romram": "6+128 GB",
+        "colors": [
+          "Graphite",
+          "Olive",
+          "Pink",
+          "White"
+        ]
+      },
+      {
+        "romram": "8+128 GB",
+        "colors": [
+          "Graphite",
+          "Olive",
+          "Pink",
+          "White"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Graphite",
+          "Olive",
+          "Pink",
+          "White"
+        ]
+      },
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Graphite",
+          "Olive",
+          "Pink",
+          "White"
+        ]
+      }
     ]
   },
   {
@@ -476,10 +1106,29 @@
     "eol_date": null,
     "prev_model_id": "cmp-galaxy-a36",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "8+128 GB": 32990, "8+256 GB": 35990 },
+    "rrp_rub_by_romram": {
+      "8+128 GB": 32990,
+      "8+256 GB": 35990
+    },
     "skus": [
-      { "romram": "8+128 GB", "colors": ["Graygreen"] },
-      { "romram": "8+256 GB", "colors": ["Charcoal", "White"] }
+      {
+        "romram": "8+128 GB",
+        "colors": [
+          "Graygreen",
+          "Charcoal",
+          "White",
+          "Pink"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Graygreen",
+          "Charcoal",
+          "White",
+          "Pink"
+        ]
+      }
     ]
   },
   {
@@ -499,10 +1148,42 @@
       "12+256 GB": 37990
     },
     "skus": [
-      { "romram": "6+128 GB", "colors": ["Black", "Lavender", "Lime", "White"] },
-      { "romram": "8+128 GB", "colors": ["Black", "Lavender", "Lime", "White"] },
-      { "romram": "8+256 GB", "colors": ["Black", "Lavender", "Lime", "White"] },
-      { "romram": "12+256 GB", "colors": ["Black", "Lavender", "Lime", "White"] }
+      {
+        "romram": "6+128 GB",
+        "colors": [
+          "Black",
+          "Lavender",
+          "Lime",
+          "White"
+        ]
+      },
+      {
+        "romram": "8+128 GB",
+        "colors": [
+          "Black",
+          "Lavender",
+          "Lime",
+          "White"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Lavender",
+          "Lime",
+          "White"
+        ]
+      },
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Lavender",
+          "Lime",
+          "White"
+        ]
+      }
     ]
   },
   {
@@ -515,10 +1196,29 @@
     "eol_date": "2025-10-06",
     "prev_model_id": null,
     "next_model_id": "cmp-galaxy-a17",
-    "rrp_rub_by_romram": { "6+128 GB": 22990, "8+256 GB": 26990 },
+    "rrp_rub_by_romram": {
+      "6+128 GB": 22990,
+      "8+256 GB": 26990
+    },
     "skus": [
-      { "romram": "6+128 GB", "colors": ["Black", "Pink"] },
-      { "romram": "8+256 GB", "colors": ["Black", "Pink"] }
+      {
+        "romram": "6+128 GB",
+        "colors": [
+          "Black",
+          "Pink",
+          "Mint",
+          "White"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Pink",
+          "Mint",
+          "White"
+        ]
+      }
     ]
   },
   {
@@ -531,10 +1231,27 @@
     "eol_date": null,
     "prev_model_id": "cmp-galaxy-a26",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "6+128 GB": 23990, "8+256 GB": 27990 },
+    "rrp_rub_by_romram": {
+      "6+128 GB": 23990,
+      "8+256 GB": 27990
+    },
     "skus": [
-      { "romram": "6+128 GB", "colors": ["Black"] },
-      { "romram": "8+256 GB", "colors": ["Black"] }
+      {
+        "romram": "6+128 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "Gray"
+        ]
+      },
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "Gray"
+        ]
+      }
     ]
   },
   {
@@ -547,11 +1264,36 @@
     "eol_date": null,
     "prev_model_id": null,
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+256 GB": 129990, "16+512 GB": 149990, "16+1TB": 159990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 129990,
+      "16+512 GB": 149990,
+      "16+1TB": 159990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "Gold"] },
-      { "romram": "16+512 GB", "colors": ["Black", "Gold"] },
-      { "romram": "16+1TB", "colors": ["Black", "Gold"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "White"
+        ]
+      },
+      {
+        "romram": "16+512 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "White"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Black",
+          "Gold",
+          "White"
+        ]
+      }
     ]
   },
   {
@@ -564,10 +1306,29 @@
     "eol_date": null,
     "prev_model_id": "cmp-magic-7-pro",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "12+512 GB": 94990, "16+1TB": 104990 },
+    "rrp_rub_by_romram": {
+      "12+512 GB": 94990,
+      "16+1TB": 104990
+    },
     "skus": [
-      { "romram": "12+512 GB", "colors": ["Black"] },
-      { "romram": "16+1TB", "colors": ["Black"] }
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "Gray",
+          "Green",
+          "White"
+        ]
+      },
+      {
+        "romram": "16+1TB",
+        "colors": [
+          "Black",
+          "Gray",
+          "Green",
+          "White"
+        ]
+      }
     ]
   },
   {
@@ -580,10 +1341,27 @@
     "eol_date": "2025-11-19",
     "prev_model_id": null,
     "next_model_id": "cmp-magic-8-pro",
-    "rrp_rub_by_romram": { "12+256 GB": 89990, "12+512 GB": 94990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 89990,
+      "12+512 GB": 94990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black"] },
-      { "romram": "12+512 GB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Gray"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "White",
+          "Gray"
+        ]
+      }
     ]
   },
   {
@@ -596,10 +1374,27 @@
     "eol_date": null,
     "prev_model_id": "cmp-honor-400",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "8+256 GB": 35990, "12+256 GB": 38990 },
+    "rrp_rub_by_romram": {
+      "8+256 GB": 35990,
+      "12+256 GB": 38990
+    },
     "skus": [
-      { "romram": "8+256 GB", "colors": ["Black", "Orange", "Golden White"] },
-      { "romram": "12+256 GB", "colors": ["Black", "Orange", "Golden White"] }
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Orange",
+          "Golden White"
+        ]
+      },
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Orange",
+          "Golden White"
+        ]
+      }
     ]
   },
   {
@@ -612,10 +1407,29 @@
     "eol_date": "2026-07-01",
     "prev_model_id": null,
     "next_model_id": "cmp-honor-600",
-    "rrp_rub_by_romram": { "12+256 GB": 34990, "12+512 GB": 37990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 34990,
+      "12+512 GB": 37990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Gold"] },
-      { "romram": "12+512 GB", "colors": ["Black"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Gold",
+          "Black",
+          "Gray",
+          "Pink"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Gold",
+          "Black",
+          "Gray",
+          "Pink"
+        ]
+      }
     ]
   },
   {
@@ -628,10 +1442,27 @@
     "eol_date": null,
     "prev_model_id": null,
     "next_model_id": null,
-    "rrp_rub_by_romram": { "6+128 GB": 16990, "6+256 GB": 18990 },
+    "rrp_rub_by_romram": {
+      "6+128 GB": 16990,
+      "6+256 GB": 18990
+    },
     "skus": [
-      { "romram": "6+128 GB", "colors": ["Black"] },
-      { "romram": "6+256 GB", "colors": ["Black"] }
+      {
+        "romram": "6+128 GB",
+        "colors": [
+          "Black",
+          "Silver",
+          "Blue"
+        ]
+      },
+      {
+        "romram": "6+256 GB",
+        "colors": [
+          "Black",
+          "Silver",
+          "Blue"
+        ]
+      }
     ]
   },
   {
@@ -644,11 +1475,39 @@
     "eol_date": null,
     "prev_model_id": null,
     "next_model_id": null,
-    "rrp_rub_by_romram": { "8+256 GB": 24990, "12+256 GB": 26990, "12+512 GB": 29990 },
+    "rrp_rub_by_romram": {
+      "8+256 GB": 24990,
+      "12+256 GB": 26990,
+      "12+512 GB": 29990
+    },
     "skus": [
-      { "romram": "8+256 GB", "colors": ["Black"] },
-      { "romram": "12+256 GB", "colors": ["Black", "Gold", "Green", "Reddish Brown"] },
-      { "romram": "12+512 GB", "colors": ["Black", "Gold", "Green", "Reddish Brown"] }
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Green",
+          "Reddish Brown"
+        ]
+      },
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Green",
+          "Reddish Brown"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "Gold",
+          "Green",
+          "Reddish Brown"
+        ]
+      }
     ]
   },
   {
@@ -661,10 +1520,27 @@
     "eol_date": null,
     "prev_model_id": "cmp-redmi-note-15-pro",
     "next_model_id": null,
-    "rrp_rub_by_romram": { "8+256 GB": 29990, "8+512 GB": 33990 },
+    "rrp_rub_by_romram": {
+      "8+256 GB": 29990,
+      "8+512 GB": 33990
+    },
     "skus": [
-      { "romram": "8+256 GB", "colors": ["Black"] },
-      { "romram": "8+512 GB", "colors": ["Black"] }
+      {
+        "romram": "8+256 GB",
+        "colors": [
+          "Black",
+          "Purple",
+          "Blue"
+        ]
+      },
+      {
+        "romram": "8+512 GB",
+        "colors": [
+          "Black",
+          "Purple",
+          "Blue"
+        ]
+      }
     ]
   },
   {
@@ -677,11 +1553,36 @@
     "eol_date": "2026-02-16",
     "prev_model_id": null,
     "next_model_id": "cmp-redmi-note-17-pro",
-    "rrp_rub_by_romram": { "12+256 GB": 26990, "12+512 GB": 29990, "16+512 GB": 32990 },
+    "rrp_rub_by_romram": {
+      "12+256 GB": 26990,
+      "12+512 GB": 29990,
+      "16+512 GB": 32990
+    },
     "skus": [
-      { "romram": "12+256 GB", "colors": ["Black", "Blue", "Titanium"] },
-      { "romram": "12+512 GB", "colors": ["Black", "Blue", "Titanium"] },
-      { "romram": "16+512 GB", "colors": ["Black", "Blue", "Titanium"] }
+      {
+        "romram": "12+256 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "Titanium"
+        ]
+      },
+      {
+        "romram": "12+512 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "Titanium"
+        ]
+      },
+      {
+        "romram": "16+512 GB",
+        "colors": [
+          "Black",
+          "Blue",
+          "Titanium"
+        ]
+      }
     ]
   }
 ]

@@ -11,7 +11,8 @@
 //    同产品多配置时补 ROMRAM 后缀区分；② 档位行内「颜色」小按钮（按钮名 = 当前
 //    生效颜色，默认 = 最低价色），点击在级联面板右侧弹出颜色浮层：可多选颜色
 //    （多选时折后价取所选颜色均价——只改 skuIds 集合，下游聚合天然均值）、
-//    「恢复默认色」一键回退；未勾选时点颜色按钮 = 先勾上该配置再弹层。
+//    「恢复默认色」一键回退；按钮只开浮层、绝不改勾选——未勾选配置在浮层里勾任意
+//    颜色才创建勾选（toggleSku 原生语义），取消最后一个颜色 = 整组退场。
 // 反馈第 8 条：竞品不随我司产品自动带出；「匹配竞品」按钮点击才按配置矩阵
 // （configStore / LPL3.config.benchmark，缺省 dimBenchmark）为当前所有已选我司产品
 // 带出默认竞品组（并集、主竞品在前），再次点击重新匹配；带出后临时增删不回写配置。
@@ -20,14 +21,13 @@
 // 幂等可反复点击）；上一代关系在配置页「上一代关系」块维护。
 // 两个匹配按钮均为关键功能：浅蓝底+蓝描边+图标显性化（区别于普通文字链接）。
 // ============================================================
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, Cascader, Checkbox, Select, Tooltip, message } from 'antd';
 import { AimOutlined, HistoryOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { groupsFromPrevGeneration } from '../../state/configStore';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import {
-  addRomram,
   buildCompetitorTree,
   buildOwnTree,
   defaultColorSkuIds,
@@ -254,15 +254,10 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
     else actions.set({ competitors: next }); // 竞品临时增删不回写配置（§5.2③/§13）
   };
 
-  // 颜色浮层锚点档位（`${modelId}|${romram}`），null = 收起
+  // 颜色浮层锚点档位（`${modelId}|${romram}`），null = 收起。
+  // 未勾选配置也可弹层（第十六轮：按钮只开浮层不改勾选）；收起走显式路径：
+  // 下拉关闭 / 浮层内取消最后一个颜色 / 菜单里锚点被取消勾选（含父级联动）
   const [colorPanelKey, setColorPanelKey] = useState<string | null>(null);
-
-  // 勾选被移除（含在浮层里取消最后一个颜色 → 整组退场）时同步收起浮层
-  useEffect(() => {
-    if (colorPanelKey && !list.some((s) => `${s.modelId}|${s.romram}` === colorPanelKey)) {
-      setColorPanelKey(null);
-    }
-  }, [list, colorPanelKey]);
 
   // options + 路径查询表（系列/品牌 key ↔ modelId；modelId|romram ↔ 配置节点）。
   // 叶层 label = ROMRAM + 「颜色」按钮（按钮名 = 当前生效颜色，默认 = 最低价色）；
@@ -290,9 +285,8 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
             role="button"
             title={`颜色 ${text} · 点击修改（可多选，多选取均价）`}
             onClick={(e) => {
-              e.stopPropagation(); // 只弹颜色浮层，不触发档位勾选/取消
+              e.stopPropagation(); // 只弹颜色浮层，绝不触发档位勾选/取消（第十六轮反馈①）
               e.preventDefault();
-              if (!findSelection(list, r)) writeList(addRomram(list, r));
               setColorPanelKey(r.key);
             }}
             onMouseDown={(e) => {
@@ -351,6 +345,10 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
       next.push(keep ? { ...keep } : { modelId, romram, skuIds: defaultColorSkuIds(node) });
     }
     writeList(next);
+    // 锚点档位被取消勾选（含父级联动传导）→ 同步收起颜色浮层
+    if (colorPanelKey && !next.some((s) => `${s.modelId}|${s.romram}` === colorPanelKey)) {
+      setColorPanelKey(null);
+    }
   };
 
   // 已选标签：显产品名（倒数第二层）；同产品多配置时补 ROMRAM 后缀区分
@@ -371,7 +369,12 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
         node={node}
         list={list}
         currency={state.currency}
-        onToggle={(skuId, next) => writeList(toggleSku(list, node, skuId, next))}
+        onToggle={(skuId, next) => {
+          const after = toggleSku(list, node, skuId, next);
+          writeList(after);
+          // 取消最后一个颜色 = 整组退场 → 同步收起浮层
+          if (!findSelection(after, node)) setColorPanelKey(null);
+        }}
         onReset={() =>
           writeList(
             list.map((s) =>
