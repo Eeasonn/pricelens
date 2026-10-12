@@ -3,3 +3,4 @@ dist/
 .shots/
 归档.zip
 .DS_Store
+.zcodeignore

@@ -3,7 +3,7 @@
 // 第一行 = 左 [折后价|RRP 复选]；右 [汇总]（仅月/季，写回 state.agg）
 // ——每格高度伸缩滑杆（第十轮）收进图内币种符号旁的齿轮弹层（Popover），不占版面；
 //   倍率状态仍在本层（与刷选冻结共用 yCfg），经 yScale/sliderScale 受控传入 Chart
-// 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）> PromoTable（促销力度矩阵）
+// 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）> PromoTable（促销力度热力带）
 // Y 轴口径（第七/九轮）：纯自适应分段压缩刻度，无手动覆盖；刷选拖动中冻结 Y 轴
 // （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
 // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
@@ -39,6 +39,7 @@ import {
   gridTopFor,
   normalizeWindow,
   type Bucket,
+  type StripGeom,
   type YScale,
 } from './helpers';
 import PromoTable from './PromoTable';
@@ -51,6 +52,7 @@ export default function PriceTrend() {
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null); // null=整个筛选范围
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例卡取消选中的系列（折线隐藏）
+  const [stripGeom, setStripGeom] = useState<StripGeom | null>(null); // 图表上报的横向几何（促销热力带对齐用）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
 
   // §5.6/§6.6：切换产品/价格类型/币种 → 滑杆倍率复位 ×1；图例显隐一并复位
@@ -277,6 +279,7 @@ export default function PriceTrend() {
         enableOffer={state.granularity === 'week'}
         onDrill={onDrill}
         windowKey={`${win.s}:${win.e}`}
+        onGeom={setStripGeom}
         yScale={yCfg}
         sliderScale={sliderScale}
         onSliderScale={setSliderScale}
@@ -291,9 +294,9 @@ export default function PriceTrend() {
         <XBrush buckets={buckets} s={win.s} e={win.e} granularity={state.granularity} onChange={onWindowChange} onAdjusting={setAdjusting} />
       )}
 
-      {/* 促销力度矩阵表（行=产品，列=窗口内每个时间节点，格=相对上市价降幅%） */}
+      {/* 促销力度热力带（第十五轮：列几何复用图表 plotLeft/plotWidth，与时间轴逐像素对齐） */}
       {visSeries.length > 0 && win.s <= win.e && (
-        <PromoTable series={visSeries} currency={state.currency} />
+        <PromoTable series={visSeries} currency={state.currency} geom={stripGeom} />
       )}
 
       {/* 月/季下钻弹窗 */}

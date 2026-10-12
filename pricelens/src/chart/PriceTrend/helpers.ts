@@ -302,6 +302,14 @@ export interface Geom {
   n: number; // 桶数
 }
 
+/** 促销热力带所需的横向几何原语（第十五轮：与时间轴逐像素对齐；由 Chart.onGeom 上报，
+ *  只含动画/高度无关的三个字段，避免过渡帧连坐重渲染） */
+export interface StripGeom {
+  plotLeft: number;
+  plotWidth: number;
+  n: number;
+}
+
 /** 点位置=桶中点（category + boundaryGap） */
 export function xPxOf(g: Geom, i: number): number {
   return g.plotLeft + (g.plotWidth / g.n) * (i + 0.5);

@@ -49,6 +49,7 @@ import {
   yPxOf,
   type AvoidItem,
   type Geom,
+  type StripGeom,
   type YScale,
 } from './helpers';
 import PinnedTooltips from './PinnedTooltips';
@@ -87,6 +88,8 @@ export interface ChartProps {
   sliderScale?: number;
   /** 伸缩倍率提交（滑杆松手回调；缺省写内部状态） */
   onSliderScale?: (v: number) => void;
+  /** 绘图区横向几何原语上报（第十五轮：促销热力带与时间轴逐像素对齐用） */
+  onGeom?: (g: StripGeom | null) => void;
 }
 
 const HIT_PX = 12; // 圈点点击/悬停命中半径
@@ -238,6 +241,14 @@ export default function Chart(props: ChartProps) {
       n,
     };
   }, [width, totalH, gridTop, series, displayScale, currency, props.gridLeft]);
+
+  // ---- 促销热力带对齐（第十五轮）：把绘图区横向几何原语上报给下方 PromoTable；
+  //      只按三个原语组成的 key 触发，高度过渡帧（displayScale 变）不重发 ----
+  const stripKey = geom ? `${geom.plotLeft}|${geom.plotWidth}|${geom.n}` : '';
+  useEffect(() => {
+    props.onGeom?.(geom ? { plotLeft: geom.plotLeft, plotWidth: geom.plotWidth, n: geom.n } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stripKey]);
 
   // ---- 标签避让计划（价格标签 dy + 系列名位置 + 可见集） ----
   // 自适应规则（长窗口数值防叠）：
