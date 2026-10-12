@@ -91,7 +91,9 @@ export default function PromoTable({ series, currency }: { series: Series[]; cur
     boxSizing: 'border-box', // 覆盖全局 content-box：width 才含 padding，fixed 布局列宽与 sticky 偏移精确一致
     padding: '6px 8px',
     fontSize: 10,
-    fontFamily: font.mono,
+    // 第十二轮：弃 mono，全页数字字体统一（tabular-nums 保对齐）
+    fontFamily: font.family,
+    fontVariantNumeric: 'tabular-nums',
     fontWeight: 400,
     color: color.mute,
     textAlign: 'right',
@@ -104,7 +106,7 @@ export default function PromoTable({ series, currency }: { series: Series[]; cur
     padding: '5px 8px',
     height: 30,
     textAlign: 'right',
-    fontFamily: font.mono,
+    fontFamily: font.family,
     fontSize: fontSize.caption,
     fontVariantNumeric: 'tabular-nums',
     color: color.ink,

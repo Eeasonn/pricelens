@@ -21,13 +21,15 @@ import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataM
 /** grid 固定边距：top 预留钉顶附框行（§6.2 附框钉在绘图区上方同一水平线） */
 export const GRID = { top: 78, bottom: 36, right: 24 } as const;
 
-/** §6.6 每格像素间距恒定（高度自适应的基准） */
-export const TICK_PX = 46;
-/** 格数约束：下限保可读，上限防失控（跨度再大也不超 16 格 ≈ 736px 绘图高） */
+/** §6.6 每格像素间距恒定（高度自适应的基准）。
+ *  第十二轮 46→92：×1.0 倍率下刻度密度降一倍（同高约半数刻度，如 60K~110K 直接 10K 一档），
+ *  伸缩滑杆 ×0.5 即旧版 ×1.0 的密度 */
+export const TICK_PX = 92;
+/** 格数约束：下限保可读，上限防失控（跨度再大也不超 16 格 ≈ 1472px 绘图高） */
 export const MIN_CELLS = 4;
 export const MAX_CELLS = 16;
-/** 目标格数：interval 按它取 nice 值（典型图 ≈8 格；跨度大时格数自然上浮） */
-const TARGET_CELLS = 8;
+/** 目标格数：interval 按它取 nice 值（第十二轮 8→5，配合 TICK_PX 翻倍后总高与旧版同量级） */
+const TARGET_CELLS = 5;
 
 /** §6.5 刷选窗口最小 4 个桶 */
 export const MIN_WINDOW = 4;
@@ -53,9 +55,10 @@ export const BREAK_PX = 24;
 
 /** 步长滞回区间（第十一轮）：沿用上一次步长所能接受的格数范围，出界才换档。
  *  换档（步长翻倍 → 格数腰斩 → 图高突跳）只应发生在数据跨度实质变化时，
- *  不应被窗口平移/一周价格漂移触发。 */
+ *  不应被窗口平移/一周价格漂移触发。第十二轮随 TARGET_CELLS 5 调整为 5~9
+ *  （就近档典型落在 3~8 格：允许细档沿用到 9 格才换档；缩侧 <5 即重拟合）。 */
 export const STICKY_MIN_CELLS = 5;
-export const STICKY_MAX_CELLS = 13;
+export const STICKY_MAX_CELLS = 9;
 
 // ---------------- 钉顶卡片（第三轮 = 常驻图例卡）几何 ----------------
 
@@ -68,10 +71,11 @@ export function cardWidthFor(plotWidth: number): number {
   return Math.max(120, Math.floor((plotWidth - (CARDS_PER_ROW - 1) * CARD_GAP) / CARDS_PER_ROW));
 }
 
-/** 图顶预留高 = 卡片排数（ceil(N/6)）× 卡高 + 上下留白；排数只随产品选择变化，悬停不变高 */
+/** 图顶预留高 = 卡片排数（ceil(N/6)）× 卡高 + 上下留白；排数只随产品选择变化，悬停不变高。
+ *  第十二轮：上下留白 6→3，压缩标题排与页签排之间的空白 */
 export function gridTopFor(seriesCount: number): number {
   const rows = Math.max(1, Math.ceil(seriesCount / CARDS_PER_ROW));
-  return 6 + rows * CARD_H + (rows - 1) * CARD_GAP + 6;
+  return 3 + rows * CARD_H + (rows - 1) * CARD_GAP + 3;
 }
 
 const clampInt = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, Math.round(v)));

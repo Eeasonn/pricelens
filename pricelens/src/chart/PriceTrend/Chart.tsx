@@ -20,7 +20,7 @@
 // - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
-import { Popover } from 'antd';
+import { Checkbox, Popover } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
 import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
@@ -118,6 +118,8 @@ export default function Chart(props: ChartProps) {
   const [width, setWidth] = useState(0);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [lockedIdx, setLockedIdx] = useState<number | null>(null); // 点击锁定的时间列（跨悬停常驻）
+  // Y 刻度线显隐（第十二轮）：齿轮弹层内开关，只隐藏刻度线+数字标签（档位带/断轴标记保留）
+  const [showYTicks, setShowYTicks] = useState(true);
 
   // 图顶卡片区预留：缺省按 series 数量推（弹窗迷你图）
   const gridTop = props.gridTop ?? gridTopFor(Math.max(props.series.length, 1));
@@ -325,7 +327,6 @@ export default function Chart(props: ChartProps) {
     const first = series[0];
     if (!first) return null;
     const xLabels = first.points.map((p) => p.xLabel);
-    const monthLike = granularity !== 'week';
     const lineWidth = (s: Series): number => (s.isOwn ? 3 : 2);
     const sArr: Record<string, unknown>[] = [];
 
@@ -434,14 +435,8 @@ export default function Chart(props: ChartProps) {
         boundaryGap: true,
         axisLine: { lineStyle: { color: color.hairline } },
         axisTick: { show: false },
-        axisLabel: monthLike
-          ? {
-              interval: 'auto',
-              hideOverlap: true,
-              formatter: (v: string) => `{mono|${v}}`,
-              rich: { mono: { fontFamily: font.mono, fontSize: 12, color: color.body } },
-            }
-          : { interval: 'auto', hideOverlap: true, fontSize: 12, color: color.body, fontFamily: font.family },
+        // 第十二轮：月/季标签弃 mono rich，与周视图同一字体字号（全页数字字体统一）
+        axisLabel: { interval: 'auto', hideOverlap: true, fontSize: 12, color: color.body, fontFamily: font.family },
       },
       // 值轴整体隐藏（第七轮）：刻度线/标签/断裂符号/档位带全部 DOM 层绘制
       yAxis: { show: false, min: 0, max: 1 },
@@ -653,61 +648,61 @@ export default function Chart(props: ChartProps) {
       )}
       {geom && (
         <>
-          {/* 轴单位：Y 轴顶端 = 币种（caption mute） */}
+          {/* 轴单位 + Y 轴显示设置（第十二轮）：币种符号与齿轮组成同组居中，
+              两种币种下符号↔齿轮间距恒为 6px；弹层内含伸缩滑杆与刻度线开关 */}
           <div
             style={{
               position: 'absolute',
               left: 0,
-              top: gridTop - 34,
+              top: gridTop - 36,
               width: geom.gridLeft - NAME_ZONE_W,
-              textAlign: 'center',
-              fontSize: fontSize.caption,
-              lineHeight: '16px',
-              color: color.mute,
-              pointerEvents: 'none',
-              zIndex: 1,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 6,
+              zIndex: 3,
             }}
           >
-            {currency === 'usd' ? '$' : '₽'}
-          </div>
-          {/* Y 轴显示设置（第十轮）：币种符号旁的小齿轮 → 弹层内横向伸缩滑杆。
-              绝对定位悬浮，不占任何纵向/横向版面；stopPropagation 避免落入图表锁定/下钻命中 */}
-          <Popover
-            trigger="click"
-            placement="bottom"
-            content={
-              <div style={{ width: 236 }}>
-                <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度（不改 Y 轴刻度值）</div>
-                <ScaleSlider scale={sliderScale} onCommit={commitSliderScale} />
-                <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>拖动后松手生效；双击滑杆复位 ×1.00</div>
-              </div>
-            }
-          >
-            <button
-              type="button"
-              title="Y 轴显示设置（每格高度伸缩）"
-              aria-label="Y 轴显示设置"
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: 'absolute',
-                left: geom.gridLeft - NAME_ZONE_W + 2,
-                top: gridTop - 36,
-                width: 20,
-                height: 20,
-                display: 'grid',
-                placeItems: 'center',
-                padding: 0,
-                border: `1px solid ${color.hairline}`,
-                borderRadius: 4,
-                background: color.canvas,
-                color: color.mute,
-                cursor: 'pointer',
-                zIndex: 3,
-              }}
+            <span style={{ fontSize: fontSize.caption, lineHeight: '16px', color: color.mute, pointerEvents: 'none' }}>
+              {currency === 'usd' ? '$' : '₽'}
+            </span>
+            <Popover
+              trigger="click"
+              placement="bottom"
+              content={
+                <div style={{ width: 236 }}>
+                  <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度（不改 Y 轴刻度值）</div>
+                  <ScaleSlider scale={sliderScale} onCommit={commitSliderScale} />
+                  <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>拖动后松手生效；双击滑杆复位 ×1.00</div>
+                  <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
+                  <Checkbox checked={showYTicks} onChange={(e) => setShowYTicks(e.target.checked)}>
+                    <span style={{ fontSize: 12 }}>显示 Y 刻度线</span>
+                  </Checkbox>
+                </div>
+              }
             >
-              <SettingOutlined style={{ fontSize: 12 }} />
-            </button>
-          </Popover>
+              <button
+                type="button"
+                title="Y 轴显示设置（每格高度伸缩 / 刻度线显隐）"
+                aria-label="Y 轴显示设置"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: 20,
+                  height: 20,
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: 0,
+                  border: `1px solid ${color.hairline}`,
+                  borderRadius: 4,
+                  background: color.canvas,
+                  color: color.mute,
+                  cursor: 'pointer',
+                }}
+              >
+                <SettingOutlined style={{ fontSize: 12 }} />
+              </button>
+            </Popover>
+          </div>
           <div
             style={{
               position: 'absolute',
@@ -722,8 +717,8 @@ export default function Chart(props: ChartProps) {
           >
             {granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季'}
           </div>
-          {/* DOM 刻度线 + 缩写标签（12px，与时间轴同字号；ECharts 值轴已隐藏） */}
-          {tickRows.map((t) => (
+          {/* DOM 刻度线 + 缩写标签（12px，与时间轴同字号；ECharts 值轴已隐藏；齿轮弹层可关） */}
+          {showYTicks && tickRows.map((t) => (
             <div key={`tk-${t.v}`}>
               <div
                 style={{
@@ -933,7 +928,7 @@ export default function Chart(props: ChartProps) {
           currency={currency}
           priceTypes={priceTypes}
           left={geom ? geom.plotLeft : legendFallback!.left}
-          top={6}
+          top={3}
           maxWidth={geom ? geom.plotWidth : legendFallback!.width}
           onToggle={props.onToggleLegend}
         />

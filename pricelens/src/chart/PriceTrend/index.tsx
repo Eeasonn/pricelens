@@ -215,29 +215,28 @@ export default function PriceTrend() {
   // ---- 渲染 ----
   return (
     <div>
-      {/* 图内筛选器行（§6.1/§4.1）：价格类型复选（左）+ 汇总（右，仅月/季）。
-          每格高度伸缩滑杆已收进图内币种符号旁的齿轮弹层（第十轮） */}
+      {/* 标题行（第十二轮）：价格走势 + 折后价/RRP + 汇总 同排（汇总仅月/季，右对齐），
+          消除原「标题排 / 筛选排 / 页签排」三段式留下的纵向空白；
+          每格高度伸缩滑杆与刻度线开关在图内币种符号旁的齿轮弹层里 */}
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
+          alignItems: 'center',
           flexWrap: 'wrap',
           gap: space.md,
-          marginBottom: space.md,
+          marginBottom: space.sm,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
-          <Checkbox checked={state.priceTypes.discounted} onChange={(e) => setPriceType('discounted', e.target.checked)}>
-            折后价
-          </Checkbox>
-          <Checkbox checked={state.priceTypes.rrp} onChange={(e) => setPriceType('rrp', e.target.checked)}>
-            RRP
-          </Checkbox>
-        </div>
+        <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>价格走势</h2>
+        <Checkbox checked={state.priceTypes.discounted} onChange={(e) => setPriceType('discounted', e.target.checked)}>
+          折后价
+        </Checkbox>
+        <Checkbox checked={state.priceTypes.rrp} onChange={(e) => setPriceType('rrp', e.target.checked)}>
+          RRP
+        </Checkbox>
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
         {state.granularity !== 'week' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
             <span>汇总：</span>
             <Segmented
               size="small"

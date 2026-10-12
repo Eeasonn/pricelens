@@ -29,7 +29,7 @@ export default function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md }}>
             <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
             <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-              欧亚 / R国 · 数据批次 <span className="mono">2026-W41</span>
+              欧亚 / R国 · 数据批次 <span className="tnum">2026-W41</span>
             </span>
           </div>
           <div style={{ display: 'flex', gap: space.sm }}>
@@ -45,7 +45,7 @@ export default function Dashboard() {
         {/* 筛选条五框（占位 → Agent B 替换） */}
         <FilterBar />
 
-        {/* 价格走势 */}
+        {/* 价格走势（第十二轮：标题并入 PriceTrend 首行，消除三段式纵向空白） */}
         <main style={{ flex: 1, padding: space.lg }}>
           <section
             style={{
@@ -55,10 +55,7 @@ export default function Dashboard() {
               padding: space.lg,
             }}
           >
-            <h2 style={{ margin: 0, marginBottom: space.md, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>
-              价格走势
-            </h2>
-            {/* 图表全家桶（§6：档位/价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
+            {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
             <PriceTrend />
           </section>
         </main>

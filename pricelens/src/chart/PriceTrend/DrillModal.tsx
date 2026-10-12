@@ -93,7 +93,7 @@ function DrillInner(props: DrillModalProps & { info: DrillInfo }) {
       {/* 标题 = 产品名 · 期间 + 面包屑 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space.xs, marginBottom: space.md }}>
         <div style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>
-          {info.label} · <span className="mono">{cur.bucketId}</span>
+          {info.label} · <span className="tnum">{cur.bucketId}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: space.xs, fontSize: fontSize.caption }}>
           {crumbs.map((c, i) => {

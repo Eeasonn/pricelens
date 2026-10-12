@@ -119,7 +119,9 @@ export default function XBrush(props: XBrushProps) {
     top: 44,
     transform: 'translateX(-50%)',
     fontSize: 11,
-    fontFamily: font.mono,
+    // 第十二轮：弃 mono，与周视图 X 轴/全页数字字体统一
+    fontFamily: font.family,
+    fontVariantNumeric: 'tabular-nums',
     color: color.mute,
     whiteSpace: 'nowrap',
   });

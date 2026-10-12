@@ -15,6 +15,10 @@ import { color, formatPrice, radius, shadow } from '../../theme/tokens';
 import BrandDot, { brandTintBg } from '../../components/BrandMark';
 import { CARD_GAP, CARD_H, cardWidthFor, diffPct } from './helpers';
 
+/** 页签显示名（第十二轮）：去容量后缀 GB/TB（品牌保留，与曲线名口径对齐） */
+const cardLabel = (label: string): string => label.replace(/\s*(GB|TB)$/i, '').trim();
+
+
 export interface PinnedTooltipsProps {
   series: Series[]; // 全部勾选系列（含图例取消选中的——卡片常驻）
   hiddenKeys: Set<string>; // 图例未选中的系列 key（折线已隐藏）
@@ -76,7 +80,7 @@ export default function PinnedTooltips(props: PinnedTooltipsProps) {
             key={s.key}
             role={onToggle ? 'button' : undefined}
             aria-pressed={onToggle ? !selected : undefined}
-            title={onToggle ? `${s.label}（点击${selected ? '隐藏' : '显示'}折线）` : s.label}
+            title={onToggle ? `${cardLabel(s.label)}（点击${selected ? '隐藏' : '显示'}折线）` : cardLabel(s.label)}
             onClick={
               onToggle
                 ? (e) => {
@@ -122,7 +126,7 @@ export default function PinnedTooltips(props: PinnedTooltipsProps) {
                 }}
               >
                 <BrandDot brand={s.brand} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{cardLabel(s.label)}</span>
               </div>
             ) : (
               <>
@@ -130,7 +134,7 @@ export default function PinnedTooltips(props: PinnedTooltipsProps) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 16 }}>
                   <BrandDot brand={s.brand} />
                   <div
-                    title={s.label}
+                    title={cardLabel(s.label)}
                     style={{
                       fontSize: 12,
                       lineHeight: '16px',
@@ -141,7 +145,7 @@ export default function PinnedTooltips(props: PinnedTooltipsProps) {
                       textOverflow: 'ellipsis',
                     }}
                   >
-                    {s.label}
+                    {cardLabel(s.label)}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 12, lineHeight: '16px' }}>
