@@ -8,7 +8,11 @@
 // - 档位带（仅 USD）：Y 轴左侧新增一列档位框（如 200~400 框住 200..400 刻度区段），
 //   本币映射未定义不渲染；图隐藏（空态/几何失效）时随之隐藏；
 // - 名称预留带：绘图区左缘常驻 NAME_ZONE_W 空白带，折线不进入——
-//   系列起点靠后 → 名称仍在起点旁；起点贴近左缘 → 名称收进预留带（右对齐+省略号）；
+//   系列名右缘锚在起点左侧、随窗口平移连续左移（第十轮：不再跳变），
+//   滑到预留带左界即停驻带内（同一文案，位置连续）；文案去品牌前缀 + 去容量后缀 GB/TB
+//   （品牌由色点/图例卡表达，第十轮）
+// - 第十轮：每格高度伸缩滑杆收进币种符号旁的齿轮弹层（Popover），不占任何版面；
+//   Y 轴模型可由外部传入（yScale，含刷选冻结与伸缩倍率），迷你图缺省内部自算
 // - 折后价：monotone 平滑实线品牌色（我司 3px / 竞品 2px），白底圆环圈点 r≈3.5
 // - RRP：虚线 6/4 + step 阶梯（平段+调价点垂直跳变，不平滑），同色 75% 不透明度
 // - 缺采：跨接段虚线 + 空心圆点；价格标签自适应避让（resolveCollisions 两遍式）
@@ -16,6 +20,8 @@
 // - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { Popover } from 'antd';
+import { SettingOutlined } from '@ant-design/icons';
 import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
 import type { CurrencyMode, Granularity, OfferInfo, Series, SeriesPoint } from '../../dataModel/types';
@@ -47,6 +53,7 @@ import {
 import PinnedTooltips from './PinnedTooltips';
 import JumpIcon from './JumpIcon';
 import OfferPopover from './OfferPopover';
+import ScaleSlider from './ScaleSlider';
 import BrandDot from '../../components/BrandMark';
 
 export interface ChartProps {
@@ -73,6 +80,12 @@ export interface ChartProps {
   emptyHint?: string;
   /** 窗口标识（起止下标）；变化 = 重采样换列，锁定列下标失义 → 复位 */
   windowKey?: string;
+  /** 外部计算的 Y 轴模型（主图传入，含刷选拖动冻结与伸缩倍率）；缺省内部自适应（迷你图） */
+  yScale?: YScale;
+  /** 每格高度伸缩倍率（受控；缺省用内部状态，齿轮弹层在两种模式下都可用） */
+  sliderScale?: number;
+  /** 伸缩倍率提交（滑杆松手回调；缺省写内部状态） */
+  onSliderScale?: (v: number) => void;
 }
 
 const HIT_PX = 12; // 圈点点击/悬停命中半径
@@ -84,6 +97,13 @@ const NAME_LOGO_W = 12; // 系列名前置品牌色小点（8px）+ 间距 4，�
 const ZONE_FONT = 12; // 名称预留带内字号（小一号）+ 两行换行
 const ZONE_LINE_H = 16;
 const NO_KEYS = new Set<string>(); // hiddenKeys 缺省值
+
+/** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB/TB */
+function curveNameOf(s: Series): string {
+  const bp = `${s.brand} `;
+  const noBrand = s.label.startsWith(bp) ? s.label.slice(bp.length) : s.label;
+  return noBrand.replace(/\s*(GB|TB)$/i, '').trim();
+}
 
 export default function Chart(props: ChartProps) {
   const { series, granularity, currency, priceTypes } = props;
@@ -107,11 +127,19 @@ export default function Chart(props: ChartProps) {
     setLockedIdx(null);
   }, [props.windowKey]);
 
-  // ---- Y 轴：纯自适应分段刻度（第七轮，无手动覆盖） ----
-  const scale: YScale = useMemo(
-    () => computeYAxis({ series, priceTypes, sliderScale: 1 }),
-    [series, priceTypes],
+  // 每格高度伸缩（第十轮）：主图受控于上层 index（同一份 sliderScale 状态），迷你图用内部状态；
+  // 齿轮弹层里的滑杆松手才提交，两种模式下都可用
+  const [innerSliderScale, setInnerSliderScale] = useState(1);
+  const sliderScale = props.sliderScale ?? innerSliderScale;
+  const commitSliderScale = props.onSliderScale ?? setInnerSliderScale;
+
+  // ---- Y 轴：自适应分段刻度（外部 yScale 优先——主图用它承接刷选冻结与伸缩倍率；
+  //      内部自算必须吃 sliderScale，第十轮修复：此前硬编码 ×1 导致滑杆提交后图表纹丝不动） ----
+  const selfScale: YScale = useMemo(
+    () => computeYAxis({ series, priceTypes, sliderScale }),
+    [series, priceTypes, sliderScale],
   );
+  const scale = props.yScale ?? selfScale;
   // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
   const totalH = gridTop + scale.plotHeight + GRID.bottom;
 
@@ -160,8 +188,8 @@ export default function Chart(props: ChartProps) {
   // 自适应规则（长窗口数值防叠）：
   // P0 必放 = 每系列首个/末个有值点 + 窗口内最大/最小（形状锚点，冲突时纵向推挤）；
   // P1 候选 = 变价点（周）/ 全部点（月/季），期望位无冲突才显示，冲突即隐藏；
-  // 系列名 = 第一个有值点左侧（垂直居中于该点）；左缘放不下（起点贴近左缘）→
-  // 收进绘图区左侧的名称预留带（右对齐、省略号），折线永不进入该带（第七轮）。
+  // 系列名（第十轮）= 右缘锚在起点左侧 8px、随窗口平移连续左移；滑到名称预留带左界
+  // 即停驻带内（同一文案同一锚点语义，位置连续不跳变），折线永不进入预留带。
   const labelPlan = useMemo(() => {
     const empty = { dy: {} as Record<string, Record<number, number>>, names: [] as AvoidResultNames[] };
     if (!geom) return empty;
@@ -206,29 +234,30 @@ export default function Chart(props: ChartProps) {
       valIdx.forEach((i) => {
         if (!p0.has(i) && change.has(i)) pushPrice(i, false);
       });
-      // 系列名：起点旁（垂直居中于该点）；放不下 → 名称预留带内右对齐（12px、最多两行换行）。
-      // 带内去掉品牌前缀（品牌已由色点表达），给产品名腾空间
+      // 系列名（第十轮）：文案去品牌前缀 + 去容量后缀（GB/TB）——品牌由色点/图例卡表达。
+      // 位置 = 右缘锚在起点左侧连续滑动；besideLeft 触到带左界 → 停驻带内（左对齐，
+      // 仅当名宽超出带宽才换两行）——切换瞬间 left 恒等于 zoneLeft，无位置跳变。
       const fi = valIdx[0];
       const v0 = primaryOf(pts[fi]) ?? 0;
       const px = xPxOf(geom, fi);
       const py = yPxOf(geom, v0);
-      const besideLeft = px - 8 - nameW(s.label);
-      const useZone = besideLeft < geom.plotLeft + 2;
-      const brandPrefix = `${s.brand} `;
-      const zoneText = useZone && s.label.startsWith(brandPrefix) ? s.label.slice(brandPrefix.length) : s.label;
-      const zoneTextW = NAME_LOGO_W + 4 + zoneText.length * (ZONE_FONT * 0.62);
-      const zoneBoxW = Math.min(zoneTextW, NAME_ZONE_W - 12);
-      const zoneLines = Math.max(1, Math.min(2, Math.ceil(zoneTextW / Math.max(1, NAME_ZONE_W - 12))));
+      const nameText = curveNameOf(s);
+      const nw = nameW(nameText);
+      const zoneLeft = geom.plotLeft - NAME_ZONE_W + 4;
+      const besideLeft = px - 8 - nw;
+      const useZone = besideLeft < zoneLeft;
+      const zoneBoxW = Math.min(nw, NAME_ZONE_W - 8);
+      const zoneLines = nw > NAME_ZONE_W - 8 ? 2 : 1;
       items.push({
         kind: 'name',
         seriesKey: s.key,
         pointIdx: fi,
         pinned: true,
-        left: useZone ? geom.plotLeft - 8 - zoneBoxW : besideLeft,
-        right: useZone ? geom.plotLeft - 8 : px - 8,
+        left: useZone ? zoneLeft : besideLeft,
+        right: useZone ? zoneLeft + zoneBoxW : px - 8,
         top: useZone ? py - (zoneLines * ZONE_LINE_H) / 2 : py - NAME_LINE_HEIGHT / 2,
         h: useZone ? zoneLines * ZONE_LINE_H : NAME_LINE_HEIGHT,
-        text: useZone ? zoneText : s.label,
+        text: nameText,
         color: s.color,
         maxW: useZone ? zoneBoxW : undefined,
       });
@@ -588,6 +617,44 @@ export default function Chart(props: ChartProps) {
           >
             {currency === 'usd' ? '$' : '₽'}
           </div>
+          {/* Y 轴显示设置（第十轮）：币种符号旁的小齿轮 → 弹层内横向伸缩滑杆。
+              绝对定位悬浮，不占任何纵向/横向版面；stopPropagation 避免落入图表锁定/下钻命中 */}
+          <Popover
+            trigger="click"
+            placement="bottom"
+            content={
+              <div style={{ width: 236 }}>
+                <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度（不改 Y 轴刻度值）</div>
+                <ScaleSlider scale={sliderScale} onCommit={commitSliderScale} />
+                <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>拖动后松手生效；双击滑杆复位 ×1.00</div>
+              </div>
+            }
+          >
+            <button
+              type="button"
+              title="Y 轴显示设置（每格高度伸缩）"
+              aria-label="Y 轴显示设置"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                left: geom.gridLeft - NAME_ZONE_W + 2,
+                top: gridTop - 36,
+                width: 20,
+                height: 20,
+                display: 'grid',
+                placeItems: 'center',
+                padding: 0,
+                border: `1px solid ${color.hairline}`,
+                borderRadius: 4,
+                background: color.canvas,
+                color: color.mute,
+                cursor: 'pointer',
+                zIndex: 3,
+              }}
+            >
+              <SettingOutlined style={{ fontSize: 12 }} />
+            </button>
+          </Popover>
           <div
             style={{
               position: 'absolute',

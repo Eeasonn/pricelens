@@ -1,8 +1,8 @@
 // ============================================================
 // §4.1 图卡内容 + §6 价格走势全家桶编排：
-// 第一行 = 左 [折后价|RRP 复选 / 其下横向每格高度滑杆]；右 [汇总]（仅月/季，写回 state.agg）
-// ——滑杆（第九轮）改横向移到价格类型筛选器下方，不再占 Y 轴左侧；拖动中只动握把，
-//    松手统一提交（与刷选一致，避免拖动过程图表高度实时晃动）
+// 第一行 = 左 [折后价|RRP 复选]；右 [汇总]（仅月/季，写回 state.agg）
+// ——每格高度伸缩滑杆（第十轮）收进图内币种符号旁的齿轮弹层（Popover），不占版面；
+//   倍率状态仍在本层（与刷选冻结共用 yCfg），经 yScale/sliderScale 受控传入 Chart
 // 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）> PromoTable（促销力度矩阵）
 // Y 轴口径（第七/九轮）：纯自适应分段压缩刻度，无手动覆盖；刷选拖动中冻结 Y 轴
 // （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
@@ -27,7 +27,6 @@ import type { ProductSelection } from '../../state/filtersTypes';
 import { color, fontSize, space } from '../../theme/tokens';
 import Chart from './Chart';
 import XBrush from './XBrush';
-import ScaleSlider from './ScaleSlider';
 import DrillModal, { type DrillInfo } from './DrillModal';
 import {
   GRID,
@@ -214,7 +213,8 @@ export default function PriceTrend() {
   // ---- 渲染 ----
   return (
     <div>
-      {/* 图内筛选器行（§6.1/§4.1）：价格类型复选 + 其下横向每格高度滑杆（左）；汇总（右，仅月/季） */}
+      {/* 图内筛选器行（§6.1/§4.1）：价格类型复选（左）+ 汇总（右，仅月/季）。
+          每格高度伸缩滑杆已收进图内币种符号旁的齿轮弹层（第十轮） */}
       <div
         style={{
           display: 'flex',
@@ -225,16 +225,13 @@ export default function PriceTrend() {
           marginBottom: space.md,
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
-            <Checkbox checked={state.priceTypes.discounted} onChange={(e) => setPriceType('discounted', e.target.checked)}>
-              折后价
-            </Checkbox>
-            <Checkbox checked={state.priceTypes.rrp} onChange={(e) => setPriceType('rrp', e.target.checked)}>
-              RRP
-            </Checkbox>
-          </div>
-          <ScaleSlider scale={sliderScale} onCommit={setSliderScale} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
+          <Checkbox checked={state.priceTypes.discounted} onChange={(e) => setPriceType('discounted', e.target.checked)}>
+            折后价
+          </Checkbox>
+          <Checkbox checked={state.priceTypes.rrp} onChange={(e) => setPriceType('rrp', e.target.checked)}>
+            RRP
+          </Checkbox>
         </div>
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
         {state.granularity !== 'week' && (
@@ -269,6 +266,9 @@ export default function PriceTrend() {
         enableOffer={state.granularity === 'week'}
         onDrill={onDrill}
         windowKey={`${win.s}:${win.e}`}
+        yScale={yCfg}
+        sliderScale={sliderScale}
+        onSliderScale={setSliderScale}
         emptyHint={
           visSeries.length > 0 && chartSeries.length === 0
             ? '所有系列已在图例中隐藏，点击顶部图例卡恢复显示'

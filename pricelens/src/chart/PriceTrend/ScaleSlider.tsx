@@ -1,6 +1,6 @@
 // ============================================================
-// 每格高度横向滑杆（第九轮）：位于价格类型筛选器下方，不再占用 Y 轴左侧空间。
-// 只缩放每格像素高（0.5×–3×，不改刻度值），双击复位 ×1。
+// 每格高度横向滑杆（第十轮）：收进图内币种符号旁的齿轮弹层（Popover）里，
+// 不占任何纵向/横向版面。只缩放每格像素高（0.5×–3×，不改刻度值），双击复位 ×1。
 // 交互：拖动中握把 1:1 跟手（仅视觉），松手才提交 —— 与时间刷选一致，
 // 避免拖动过程中图表高度实时变化带来的晃动感（用户反馈：调节完再统一自适应）。
 // 样式沿用 X 刷选条语言：浅灰轨道 + 白底握把 + hairline 描边，悬停/拖动变蓝。
@@ -31,6 +31,7 @@ export default function ScaleSlider({ scale, onCommit }: { scale: number; onComm
 
   const onDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
     ev.preventDefault();
+    ev.stopPropagation(); // 握把按下不再冒泡进轨道 handler（单一路径，避免二次 setPointerCapture）
     dragRef.current = { grabOffset: 0 };
     setDragLeft(fracOf(ev.clientX) * (TRACK_W - GRIP_W));
     setLit(true);
@@ -72,6 +73,7 @@ export default function ScaleSlider({ scale, onCommit }: { scale: number; onComm
           display: 'flex',
           alignItems: 'center',
           cursor: 'ew-resize',
+          touchAction: 'none',
         }}
         onPointerDown={(ev) => {
           // 点轨道 = 握把跳到该处并进入拖动
