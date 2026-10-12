@@ -322,9 +322,10 @@ export default function Chart(props: ChartProps) {
   }, [geom, series, granularity, priceTypes, props.priceTypes.discounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- 端点标记（第十三轮引入、第十四轮改为 DOM 徽标）：
-  //      S = 真实开头（该段连续有值区间的首点）；E = 真实截止（其后连续两周无值，
-  //      或窗口右缘且无续接数据）；in/out = 窗口左/右缘的续接点（窗口外 2 周内仍有
-  //      数据，非真实首尾）。标记点在 canvas 上不再画默认符号，由 DOM 徽标接管 ----
+  //      S = 真实开头（该段连续有值区间的首点）；E = 真实截止（第十五轮：其后连续
+  //      3 个区间均无值才确认——数据末端/最新批次一律不标 E）；in/out = 窗口左/右缘
+  //      的续接点（窗口外 2 周内仍有数据，非真实首尾）。
+  //      标记点在 canvas 上不再画默认符号，由 DOM 徽标接管 ----
   const endpointMarks = useMemo(() => {
     const marks = new Map<string, 'S' | 'E' | 'in' | 'out'>();
     for (const s of series) {
@@ -339,8 +340,8 @@ export default function Chart(props: ChartProps) {
       const isEnd = (i: number): boolean => {
         if (val(i) == null) return false;
         if (i + 1 < n && val(i + 1) != null) return false; // 非段尾
-        if (i === n - 1) return !s.edgeEnd; // 触右缘：有续接=非截止
-        return val(i + 1) == null && (i + 2 < n ? val(i + 2) == null : true);
+        // 其后连续 3 个区间都无值才确认截止；数据末端观察不足 3 个区间，不标 E
+        return i + 3 < n && val(i + 1) == null && val(i + 2) == null && val(i + 3) == null;
       };
       for (let i = 0; i < n; i++) {
         if (val(i) == null) continue;
