@@ -231,13 +231,15 @@ function buildFact(dimTime, dimProduct, weeklyFx) {
     const launchLen = Math.min(LAUNCH_WEEKS, n);
     const clearLen = p.eol_date ? Math.min(10 + Math.floor(rnd(`clear|${p.sku_id}`) * 5), n) : 0;
     const clearStart = n - clearLen;
-    // RRP 官方调价：清库段内 1-2 次阶梯跳变（−3~−5%）
-    const nCuts = clearLen > 0 ? (rnd(`cuts|${p.sku_id}`) < 0.5 ? 1 : 2) : 0;
-    const cutAt = [];
-    const cutPct = [];
-    for (let c = 0; c < nCuts; c++) {
-      cutAt.push(c === 0 ? clearStart : clearStart + Math.max(1, Math.floor(clearLen / 2)));
-      cutPct.push(0.03 + rnd(`cut|${p.sku_id}|${c}`) * 0.02);
+    // RRP 官方价恒定（第十三轮：不再随清库下调）；成本上涨可出现一次上调（+3~6%），
+    // 时点在上市稳定段之后、清库段之前；≈18% 的 SKU 命中
+    let rrpUpAt = null;
+    let rrpUpPct = 0;
+    if (rnd(`rrpup|${p.sku_id}`) < 0.18) {
+      const lo = Math.min(launchLen + 6, n - 1);
+      const hi = Math.max(lo + 1, clearStart - 2);
+      rrpUpAt = lo + Math.floor(rnd(`rrpupat|${p.sku_id}`) * (hi - lo));
+      rrpUpPct = 0.03 + rnd(`rrpuppct|${p.sku_id}`) * 0.03;
     }
     // 清库折后价：2-3 个台阶，每台阶 −2~−4%，台阶内恒定（§11.1 修订：阶梯稳定）
     const nSteps = clearLen > 0 ? (rnd(`clrsteps|${p.sku_id}`) < 0.5 ? 2 : 3) : 0;
@@ -254,8 +256,8 @@ function buildFact(dimTime, dimProduct, weeklyFx) {
       n,
       launchLen,
       clearStart,
-      cutAt,
-      cutPct,
+      rrpUpAt,
+      rrpUpPct,
       stepAt,
       stepPct,
       convDepth: clo + (chi - clo) * rnd(`conv|${p.sku_id}`),
@@ -317,9 +319,9 @@ function buildFact(dimTime, dimProduct, weeklyFx) {
       const wed = w.week_wed_date;
       const fxw = weeklyFx.get(w.week_id);
 
-      // RRP 官方阶梯：清库段 1-2 次 −3~−5% 阶梯跳变
+      // RRP 官方价：恒定，至多一次成本性上调（第十三轮）
       let rrp = baseRrp;
-      for (let c = 0; c < lf.cutAt.length; c++) if (rel >= lf.cutAt[c]) rrp *= 1 - lf.cutPct[c];
+      if (lf.rrpUpAt != null && rel >= lf.rrpUpAt) rrp *= 1 + lf.rrpUpPct;
       const rrpRub = roundRub(rrp);
 
       // 缺采：≈4%，不与上市段重叠

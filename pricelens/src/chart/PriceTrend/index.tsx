@@ -20,6 +20,7 @@ import type {
   AggMode,
   Granularity,
   Series,
+  SeriesPoint,
   SeriesQuery,
   SkuGroupQuery,
 } from '../../dataModel/types';
@@ -111,10 +112,19 @@ export default function PriceTrend() {
   );
 
   // §6.5 窗口内所有桶压满绘图宽度（重采样重绘，无横向滚动条）
+  // 第十三轮：edgeStart/edgeEnd = 边缘点在窗口外 2 周内仍有数据（该点非真实开头/截止，
+  // 图上画灰色续接短线；右缘为最新时间时无续接 → 按真实截止处理）
   const visSeries: Series[] = useMemo(() => {
     if (win.s > win.e) return [];
+    const listed = (p?: SeriesPoint) => !!p && (p.price != null || p.rrp != null);
     return allSeries
-      .map((s) => ({ ...s, points: s.points.slice(win.s, win.e + 1) }))
+      .map((s) => {
+        const points = s.points.slice(win.s, win.e + 1);
+        const edgeStart = listed(points[0]) && (listed(s.points[win.s - 1]) || listed(s.points[win.s - 2]));
+        const edgeEnd =
+          listed(points[points.length - 1]) && (listed(s.points[win.e + 1]) || listed(s.points[win.e + 2]));
+        return { ...s, points, edgeStart, edgeEnd };
+      })
       .filter((s) => s.points.length > 0);
   }, [allSeries, win]);
 

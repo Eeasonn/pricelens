@@ -133,6 +133,10 @@ export interface Series {
   skuIds: string[];
   color: string; // 品牌色（brandColor）
   points: SeriesPoint[];
+  /** 第十三轮：窗口左缘点在窗口外 2 周内仍有数据（非真实开头，画灰色续接短线） */
+  edgeStart?: boolean;
+  /** 第十三轮：窗口右缘点在窗口外 2 周内仍有数据（非真实截止，画灰色续接短线） */
+  edgeEnd?: boolean;
 }
 
 export interface SkuGroupQuery {

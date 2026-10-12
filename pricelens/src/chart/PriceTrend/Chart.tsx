@@ -333,21 +333,45 @@ export default function Chart(props: ChartProps) {
     for (const s of series) {
       const dyMap = labelPlan.dy[s.key] ?? {};
       if (priceTypes.discounted) {
-        const data = s.points.map((p, i) => ({
-          value: p.price != null ? yNormOf(geom, p.price) : null,
-          label: {
-            show: p.price != null && dyMap[i] !== undefined,
-            position: 'top' as const,
-            distance: LABEL_DISTANCE,
-            offset: [0, dyMap[i] ?? 0],
-            color: color.ink,
-            fontSize: fontSize.bodySm,
-            fontWeight: 400,
-            fontFamily: font.family,
-            lineHeight: LABEL_LINE_HEIGHT,
-            formatter: p.price != null ? fmtInt(p.price) : '',
-          },
-        }));
+        // 端点样式（第十三轮）：每段连续有值区间的「开头/截止」画实心品牌色圆点（白描边），
+        // 与普通空心点区分。截止 = 其后连续两周无值；窗口右缘有续接数据（edgeEnd）则非截止。
+        // 窗口左缘有续接（edgeStart）的点也不是真实开头，保持空心（由灰色续接线表达）。
+        const n = s.points.length;
+        const val = (i: number): number | null => s.points[i]?.price ?? null;
+        const isStart = (i: number): boolean => {
+          if (val(i) == null) return false;
+          if (i === 0) return !s.edgeStart;
+          if (val(i - 1) != null) return false;
+          return i === 1 || val(i - 2) == null; // 前面连续两周无值才算新开头（1 周断采视为连续）
+        };
+        const isEnd = (i: number): boolean => {
+          if (val(i) == null) return false;
+          if (i + 1 < n && val(i + 1) != null) return false; // 非段尾
+          if (i === n - 1) return !s.edgeEnd; // 触右缘：有续接=非截止（灰色短线），否则=真实终点
+          // 段尾：其后连续两周无值才认定截止（尾后只剩 1 桶时按截止处理）
+          return val(i + 1) == null && (i + 2 < n ? val(i + 2) == null : true);
+        };
+        const data = s.points.map((p, i) => {
+          const endpoint = p.price != null && (isStart(i) || isEnd(i));
+          return {
+            value: p.price != null ? yNormOf(geom, p.price) : null,
+            symbol: endpoint ? 'circle' : undefined,
+            symbolSize: endpoint ? 8.5 : undefined,
+            itemStyle: endpoint ? { color: s.color, borderColor: color.canvas, borderWidth: 1.5 } : undefined,
+            label: {
+              show: p.price != null && dyMap[i] !== undefined,
+              position: 'top' as const,
+              distance: LABEL_DISTANCE,
+              offset: [0, dyMap[i] ?? 0],
+              color: color.ink,
+              fontSize: fontSize.bodySm,
+              fontWeight: 400,
+              fontFamily: font.family,
+              lineHeight: LABEL_LINE_HEIGHT,
+              formatter: p.price != null ? fmtInt(p.price) : '',
+            },
+          };
+        });
         sArr.push({
           type: 'line',
           data,
@@ -531,6 +555,34 @@ export default function Chart(props: ChartProps) {
     }
     return out;
   }, [props.enableOffer, geom, series]);
+
+  // ---- 边界续接短线（第十三轮）：窗口边缘点在窗口外 2 周内仍有数据时，从该点向
+  //      绘图区边界外伸出灰色虚线（越过边缘 14px），暗示"这不是终点，可拉伸时间窗口"；
+  //      右缘若已是最新时间则无短线（真实终点，端点按截止样式） ----
+  const edgeStubs = useMemo(() => {
+    if (!geom) return [];
+    const out: { key: string; x1: number; x2: number; y: number }[] = [];
+    for (const s of series) {
+      const n = s.points.length;
+      if (s.edgeStart && primaryOf(s.points[0]) != null) {
+        out.push({
+          key: `${s.key}-s`,
+          x1: geom.plotLeft - 14,
+          x2: xPxOf(geom, 0) - 4,
+          y: yPxOf(geom, primaryOf(s.points[0])!),
+        });
+      }
+      if (s.edgeEnd && primaryOf(s.points[n - 1]) != null) {
+        out.push({
+          key: `${s.key}-e`,
+          x1: xPxOf(geom, n - 1) + 4,
+          x2: geom.plotLeft + geom.plotWidth + 14,
+          y: yPxOf(geom, primaryOf(s.points[n - 1])!),
+        });
+      }
+    }
+    return out;
+  }, [geom, series]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const empty = series.length === 0;
   const brandByKey = useMemo(() => new Map(series.map((s) => [s.key, s.brand])), [series]);
@@ -861,6 +913,24 @@ export default function Chart(props: ChartProps) {
               }}
             />
           )}
+          {/* 边界续接短线（第十三轮）：灰色虚线 = 数据在窗口外延续，暗示可拉伸时间窗口 */}
+          {edgeStubs.map((st) => (
+            <div
+              key={`stub-${st.key}`}
+              title="数据在窗口外仍有延续，可拉伸时间窗口查看"
+              style={{
+                position: 'absolute',
+                left: st.x1,
+                top: Math.round(st.y) - 1,
+                width: Math.max(0, st.x2 - st.x1),
+                height: 0,
+                borderTop: `2px dashed ${color.hairlineStrong}`,
+                opacity: 0.8,
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            />
+          ))}
           {/* 系列名（起点旁 13px / 名称预留带 12px 两行换行，前置品牌色小点；
               zIndex 9 = 全图层最上，白描边保证不被任何元素遮挡） */}
           {labelPlan.names.map((nm, i) => (

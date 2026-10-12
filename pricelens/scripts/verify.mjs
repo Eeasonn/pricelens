@@ -148,23 +148,26 @@ console.log('\n[3] 生命周期边界');
   }
   check('launch 前无行', launchOk);
   check('eol 周后无行', eolOk);
-  // Mate X6（eol 2026-01-05，X7 2025-11-25 上市后 ~6 周退市）清库段 RRP 阶梯
+  // 第十三轮：RRP = 官方价恒定，至多一次成本性上调（只涨不跌，+2~8%）
   const mx6 = factBySku.get('own-mate-x6__12+512GB__Black');
-  const ladder = [...new Set(mx6.map((r) => r.rrp_rub))];
-  const firstCutWeek = mx6.find((r) => r.rrp_rub < 139990)?.week_id;
-  const lastDrop = 1 - ladder[ladder.length - 1] / 139990;
   const eolWeekX6 = [...wedById.entries()].filter(([, wed]) => wed <= '2026-01-05').map(([id]) => id).sort().pop();
-  const weekIdx = new Map(dimTime.map((w, i) => [w.week_id, i]));
-  const weeksBetween = (a, b) => weekIdx.get(b) - weekIdx.get(a);
+  let rrpMonotone = true;
+  let upSkus = 0;
+  for (const p of dimProduct) {
+    const rows = factBySku.get(p.sku_id) ?? [];
+    const seq = [...new Set(rows.map((r) => r.rrp_rub))];
+    for (let i = 1; i < seq.length; i++) if (seq[i] < seq[i - 1]) rrpMonotone = false;
+    if (seq.length > 2) rrpMonotone = false;
+    if (seq.length === 2) {
+      upSkus++;
+      const up = seq[1] / seq[0] - 1;
+      if (up < 0.02 || up > 0.08) rrpMonotone = false;
+    }
+  }
   check(
-    'Mate X6（eol 2026-01-05）有清库段 RRP 阶梯调价（≥2 档；1-2 次 × −3~−5%）',
-    ladder.length >= 2 && lastDrop >= 0.03 && lastDrop <= 0.1,
-    `阶梯 ${ladder.join(' → ')}（累计 −${(lastDrop * 100).toFixed(1)}%）`,
-  );
-  check(
-    'Mate X6 调价起点在 eol 前 4~14 周',
-    weeksBetween(firstCutWeek, eolWeekX6) >= 4 && weeksBetween(firstCutWeek, eolWeekX6) <= 14,
-    `首调 ${firstCutWeek}，eol 周 ${eolWeekX6}（间隔 ${weeksBetween(firstCutWeek, eolWeekX6)} 周）`,
+    'RRP 恒定，至多一次成本性上调（只涨不跌）',
+    rrpMonotone,
+    `${upSkus} 个 SKU 有一次上调，其余恒定`,
   );
   check('Mate X6 最后一行 = eol 周', mx6[mx6.length - 1].week_id === eolWeekX6 && mx6.length === lifeOf('own-mate-x6__12+512GB__Black').n, `${mx6[mx6.length - 1].week_id}，共 ${mx6.length} 行`);
 }
