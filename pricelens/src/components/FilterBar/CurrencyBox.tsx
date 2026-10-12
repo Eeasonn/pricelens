@@ -1,0 +1,32 @@
+// ============================================================
+// §5.5 框五：币种 —— 单选 本地货币（RUB，默认）/ USD。
+// 切换只改 state.currency（显示层重算由图表侧按汇率完成，§7.3，不重取数）。
+// 反馈 2.2/2.5：控件行与其它筛选器统一为单行高 32、底部对齐 → 改横向排布，
+// 标题「币种」由 FilterBar 的 FilterCell 统一渲染。
+// 反馈 2.4：选中圆点浅蓝由 FilterBar 嵌套 ConfigProvider 生效。
+// ============================================================
+import { Radio } from 'antd';
+import { useFilters } from '../../state/FiltersContext';
+import { space } from '../../theme/tokens';
+import { CONTROL_ROW_H } from './FilterCell';
+
+export default function CurrencyBox() {
+  const { state, actions } = useFilters();
+  return (
+    <Radio.Group
+      value={state.currency}
+      onChange={(e) => actions.set({ currency: e.target.value })}
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: space.sm,
+        height: CONTROL_ROW_H,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Radio value="local">本币</Radio>
+      <Radio value="usd">USD</Radio>
+    </Radio.Group>
+  );
+}

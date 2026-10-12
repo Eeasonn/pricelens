@@ -1,0 +1,687 @@
+[
+  {
+    "model_id": "own-pura-90s-pro-max",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "Pura",
+    "model_name": "Pura 90s Pro Max",
+    "launch_date": "2026-06-10",
+    "eol_date": null,
+    "tier_code": "800-1000",
+    "prev_model_id": "own-pura-80-ultra",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 76990, "12+512 GB": 79990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "Gold", "Orange", "Purple"] },
+      { "romram": "12+512 GB", "colors": ["Black", "Gold", "Orange", "Purple"] }
+    ]
+  },
+  {
+    "model_id": "own-pura-90s-pro",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "Pura",
+    "model_name": "Pura 90s Pro",
+    "launch_date": "2026-06-10",
+    "eol_date": null,
+    "tier_code": "800-1000",
+    "prev_model_id": "own-pura-80-pro",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 69990, "12+512 GB": 74990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "White", "Orange", "Pink"] },
+      { "romram": "12+512 GB", "colors": ["Black", "White", "Orange", "Pink"] }
+    ]
+  },
+  {
+    "model_id": "own-mate-x7",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "Mate",
+    "model_name": "Mate X7",
+    "launch_date": "2025-11-25",
+    "eol_date": null,
+    "tier_code": "1000+",
+    "prev_model_id": "own-mate-x6",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 169990, "12+512 GB": 179990, "16+512 GB": 189990, "16+1TB": 199990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black"] },
+      { "romram": "12+512 GB", "colors": ["Black"] },
+      { "romram": "16+512 GB", "colors": ["Black"] },
+      { "romram": "16+1TB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "own-mate-xt",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "Mate",
+    "model_name": "Mate XT",
+    "launch_date": "2024-09-10",
+    "eol_date": null,
+    "tier_code": "1000+",
+    "prev_model_id": null,
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "16+512 GB": 189990, "16+1TB": 209990 },
+    "skus": [
+      { "romram": "16+512 GB", "colors": ["Red"] },
+      { "romram": "16+1TB", "colors": ["Red"] }
+    ]
+  },
+  {
+    "model_id": "own-mate-80-pro",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "Mate",
+    "model_name": "Mate 80 Pro",
+    "launch_date": "2025-11-25",
+    "eol_date": null,
+    "tier_code": "800-1000",
+    "prev_model_id": null,
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 79990, "12+512 GB": 89990, "16+512 GB": 99990, "16+1TB": 109990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black"] },
+      { "romram": "12+512 GB", "colors": ["Black"] },
+      { "romram": "16+512 GB", "colors": ["Black"] },
+      { "romram": "16+1TB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "own-nova-15",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "nova",
+    "model_name": "nova 15",
+    "launch_date": "2025-12-22",
+    "eol_date": "2026-07-13",
+    "tier_code": "400-600",
+    "prev_model_id": "own-nova-14",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 35990, "12+512 GB": 37990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black"] },
+      { "romram": "12+512 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "own-nova-y74",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "nova",
+    "model_name": "nova Y74",
+    "launch_date": "2025-09-10",
+    "eol_date": null,
+    "tier_code": "200-400",
+    "prev_model_id": "own-nova-y73",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "8+128 GB": 21990, "8+256 GB": 23990 },
+    "skus": [
+      { "romram": "8+128 GB", "colors": ["Black"] },
+      { "romram": "8+256 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "own-nova-15-max",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "nova",
+    "model_name": "nova 15 Max",
+    "launch_date": "2025-09-10",
+    "eol_date": null,
+    "tier_code": "200-400",
+    "prev_model_id": "own-nova-14i",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "8+128 GB": 25990, "8+256 GB": 27990 },
+    "skus": [
+      { "romram": "8+128 GB", "colors": ["Black"] },
+      { "romram": "8+256 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "own-pura-80-ultra",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "Pura",
+    "model_name": "Pura 80 Ultra",
+    "launch_date": "2025-06-11",
+    "eol_date": null,
+    "tier_code": "1000+",
+    "prev_model_id": null,
+    "next_model_id": "own-pura-90s-pro-max",
+    "rrp_rub_by_romram": { "16+512 GB": 119990, "16+1TB": 139990 },
+    "skus": [
+      { "romram": "16+512 GB", "colors": ["Black"] },
+      { "romram": "16+1TB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "own-pura-80-pro",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "Pura",
+    "model_name": "Pura 80 Pro",
+    "launch_date": "2025-06-11",
+    "eol_date": "2026-07-13",
+    "tier_code": "800-1000",
+    "prev_model_id": null,
+    "next_model_id": "own-pura-90s-pro",
+    "rrp_rub_by_romram": { "12+256 GB": 64990, "12+512 GB": 69990, "12+1TB": 79990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "White"] },
+      { "romram": "12+512 GB", "colors": ["Black", "White"] },
+      { "romram": "12+1TB", "colors": ["Black", "White"] }
+    ]
+  },
+  {
+    "model_id": "own-mate-x6",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "Mate",
+    "model_name": "Mate X6",
+    "launch_date": "2024-11-15",
+    "eol_date": "2026-01-05",
+    "tier_code": "1000+",
+    "prev_model_id": null,
+    "next_model_id": "own-mate-x7",
+    "rrp_rub_by_romram": { "12+256 GB": 129990, "12+512 GB": 139990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black"] },
+      { "romram": "12+512 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "own-nova-14",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "nova",
+    "model_name": "nova 14",
+    "launch_date": "2025-05-19",
+    "eol_date": "2026-01-26",
+    "tier_code": "400-600",
+    "prev_model_id": null,
+    "next_model_id": "own-nova-15",
+    "rrp_rub_by_romram": { "12+256 GB": 33990, "12+512 GB": 35990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "White"] },
+      { "romram": "12+512 GB", "colors": ["Black", "White"] }
+    ]
+  },
+  {
+    "model_id": "own-nova-y73",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "nova",
+    "model_name": "nova Y73",
+    "launch_date": "2024-09-15",
+    "eol_date": "2025-10-13",
+    "tier_code": "200-400",
+    "prev_model_id": null,
+    "next_model_id": "own-nova-y74",
+    "rrp_rub_by_romram": { "8+128 GB": 19990, "8+256 GB": 21990 },
+    "skus": [
+      { "romram": "8+128 GB", "colors": ["Black"] },
+      { "romram": "8+256 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "own-nova-14i",
+    "brand": "HUAWEI",
+    "is_own": true,
+    "series": "nova",
+    "model_name": "nova 14i",
+    "launch_date": "2024-08-15",
+    "eol_date": "2025-10-20",
+    "tier_code": "<200",
+    "prev_model_id": null,
+    "next_model_id": "own-nova-15-max",
+    "rrp_rub_by_romram": { "8+128 GB": 16990, "8+256 GB": 17990 },
+    "skus": [
+      { "romram": "8+128 GB", "colors": ["Black"] },
+      { "romram": "8+256 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-iphone-17",
+    "brand": "APPLE",
+    "is_own": false,
+    "series": "iPhone",
+    "model_name": "iPhone 17",
+    "launch_date": "2025-09-19",
+    "eol_date": null,
+    "prev_model_id": "cmp-iphone-16",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "8+256 GB": 99990, "8+512 GB": 119990 },
+    "skus": [
+      { "romram": "8+256 GB", "colors": ["Black"] },
+      { "romram": "8+512 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-iphone-17-pro",
+    "brand": "APPLE",
+    "is_own": false,
+    "series": "iPhone",
+    "model_name": "iPhone 17 Pro",
+    "launch_date": "2025-09-19",
+    "eol_date": null,
+    "prev_model_id": "cmp-iphone-16-pro",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 134990, "12+512 GB": 154990, "12+1TB": 174990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Silver", "Blue"] },
+      { "romram": "12+512 GB", "colors": ["Silver", "Blue"] },
+      { "romram": "12+1TB", "colors": ["Silver", "Blue"] }
+    ]
+  },
+  {
+    "model_id": "cmp-iphone-16",
+    "brand": "APPLE",
+    "is_own": false,
+    "series": "iPhone",
+    "model_name": "iPhone 16",
+    "launch_date": "2024-09-20",
+    "eol_date": null,
+    "prev_model_id": null,
+    "next_model_id": "cmp-iphone-17",
+    "rrp_rub_by_romram": { "128 GB": 89990, "256 GB": 99990, "512 GB": 119990 },
+    "skus": [
+      { "romram": "128 GB", "colors": ["Black", "Pink"] },
+      { "romram": "256 GB", "colors": ["Black", "Pink"] },
+      { "romram": "512 GB", "colors": ["Black", "Pink"] }
+    ]
+  },
+  {
+    "model_id": "cmp-iphone-16-pro",
+    "brand": "APPLE",
+    "is_own": false,
+    "series": "iPhone",
+    "model_name": "iPhone 16 Pro",
+    "launch_date": "2024-09-20",
+    "eol_date": "2025-10-17",
+    "prev_model_id": null,
+    "next_model_id": "cmp-iphone-17-pro",
+    "rrp_rub_by_romram": { "128 GB": 119990, "256 GB": 129990, "512 GB": 149990, "1TB": 169990 },
+    "skus": [
+      { "romram": "128 GB", "colors": ["Black"] },
+      { "romram": "256 GB", "colors": ["Black"] },
+      { "romram": "512 GB", "colors": ["Black"] },
+      { "romram": "1TB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-s26",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy S",
+    "model_name": "Galaxy S26",
+    "launch_date": "2026-02-25",
+    "eol_date": null,
+    "prev_model_id": "cmp-galaxy-s25",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 89990, "12+512 GB": 94990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "White"] },
+      { "romram": "12+512 GB", "colors": ["Black", "White"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-s26-ultra",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy S",
+    "model_name": "Galaxy S26 Ultra",
+    "launch_date": "2026-02-25",
+    "eol_date": null,
+    "prev_model_id": "cmp-galaxy-s25-ultra",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 129990, "12+512 GB": 149990, "16+1TB": 169990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black"] },
+      { "romram": "12+512 GB", "colors": ["Black", "Violet"] },
+      { "romram": "16+1TB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-s26-plus",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy S",
+    "model_name": "Galaxy S26+",
+    "launch_date": "2026-02-25",
+    "eol_date": null,
+    "prev_model_id": "cmp-galaxy-s25-plus",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 109990, "12+512 GB": 119990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black"] },
+      { "romram": "12+512 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-s25",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy S",
+    "model_name": "Galaxy S25",
+    "launch_date": "2025-01-22",
+    "eol_date": "2026-04-01",
+    "prev_model_id": null,
+    "next_model_id": "cmp-galaxy-s26",
+    "rrp_rub_by_romram": { "12+256 GB": 79990, "12+512 GB": 89990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "Navy"] },
+      { "romram": "12+512 GB", "colors": ["Black", "Navy"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-s25-plus",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy S",
+    "model_name": "Galaxy S25+",
+    "launch_date": "2025-01-22",
+    "eol_date": "2026-04-01",
+    "prev_model_id": null,
+    "next_model_id": "cmp-galaxy-s26-plus",
+    "rrp_rub_by_romram": { "12+256 GB": 99990, "12+512 GB": 109990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Mint", "Navy"] },
+      { "romram": "12+512 GB", "colors": ["Mint", "Navy"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-s25-ultra",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy S",
+    "model_name": "Galaxy S25 Ultra",
+    "launch_date": "2025-01-22",
+    "eol_date": "2026-04-01",
+    "prev_model_id": null,
+    "next_model_id": "cmp-galaxy-s26-ultra",
+    "rrp_rub_by_romram": { "12+256 GB": 129990, "12+512 GB": 149990, "16+1TB": 169990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "White"] },
+      { "romram": "12+512 GB", "colors": ["Black", "White"] },
+      { "romram": "16+1TB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-z-fold7",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy Z",
+    "model_name": "Galaxy Z Fold7",
+    "launch_date": "2025-07-25",
+    "eol_date": null,
+    "prev_model_id": null,
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 179990, "12+512 GB": 189990, "16+1TB": 219990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Blue"] },
+      { "romram": "12+512 GB", "colors": ["Black", "Silver"] },
+      { "romram": "16+1TB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-a57",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy A",
+    "model_name": "Galaxy A57",
+    "launch_date": "2026-03-15",
+    "eol_date": null,
+    "prev_model_id": "cmp-galaxy-a56",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "8+128 GB": 37990, "8+256 GB": 40990, "12+256 GB": 43990, "12+512 GB": 47990 },
+    "skus": [
+      { "romram": "8+128 GB", "colors": ["Gray"] },
+      { "romram": "8+256 GB", "colors": ["Gray"] },
+      { "romram": "12+256 GB", "colors": ["Gray"] },
+      { "romram": "12+512 GB", "colors": ["Gray"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-a56",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy A",
+    "model_name": "Galaxy A56",
+    "launch_date": "2025-03-15",
+    "eol_date": "2026-04-22",
+    "prev_model_id": null,
+    "next_model_id": "cmp-galaxy-a57",
+    "rrp_rub_by_romram": {
+      "6+128 GB": 33990,
+      "8+128 GB": 36990,
+      "8+256 GB": 39990,
+      "12+256 GB": 42990
+    },
+    "skus": [
+      { "romram": "6+128 GB", "colors": ["Graphite", "Olive", "Pink"] },
+      { "romram": "8+128 GB", "colors": ["Graphite", "Olive", "Pink"] },
+      { "romram": "8+256 GB", "colors": ["Graphite", "Olive", "Pink"] },
+      { "romram": "12+256 GB", "colors": ["Graphite", "Olive", "Pink"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-a37",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy A",
+    "model_name": "Galaxy A37",
+    "launch_date": "2026-03-15",
+    "eol_date": null,
+    "prev_model_id": "cmp-galaxy-a36",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "8+128 GB": 32990, "8+256 GB": 35990 },
+    "skus": [
+      { "romram": "8+128 GB", "colors": ["Graygreen"] },
+      { "romram": "8+256 GB", "colors": ["Charcoal", "White"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-a36",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy A",
+    "model_name": "Galaxy A36",
+    "launch_date": "2025-03-15",
+    "eol_date": "2026-04-22",
+    "prev_model_id": null,
+    "next_model_id": "cmp-galaxy-a37",
+    "rrp_rub_by_romram": {
+      "6+128 GB": 29990,
+      "8+128 GB": 31990,
+      "8+256 GB": 34990,
+      "12+256 GB": 37990
+    },
+    "skus": [
+      { "romram": "6+128 GB", "colors": ["Black", "Lavender", "Lime", "White"] },
+      { "romram": "8+128 GB", "colors": ["Black", "Lavender", "Lime", "White"] },
+      { "romram": "8+256 GB", "colors": ["Black", "Lavender", "Lime", "White"] },
+      { "romram": "12+256 GB", "colors": ["Black", "Lavender", "Lime", "White"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-a26",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy A",
+    "model_name": "Galaxy A26",
+    "launch_date": "2025-03-15",
+    "eol_date": "2025-10-06",
+    "prev_model_id": null,
+    "next_model_id": "cmp-galaxy-a17",
+    "rrp_rub_by_romram": { "6+128 GB": 22990, "8+256 GB": 26990 },
+    "skus": [
+      { "romram": "6+128 GB", "colors": ["Black", "Pink"] },
+      { "romram": "8+256 GB", "colors": ["Black", "Pink"] }
+    ]
+  },
+  {
+    "model_id": "cmp-galaxy-a17",
+    "brand": "SAMSUNG",
+    "is_own": false,
+    "series": "Galaxy A",
+    "model_name": "Galaxy A17",
+    "launch_date": "2025-09-01",
+    "eol_date": null,
+    "prev_model_id": "cmp-galaxy-a26",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "6+128 GB": 23990, "8+256 GB": 27990 },
+    "skus": [
+      { "romram": "6+128 GB", "colors": ["Black"] },
+      { "romram": "8+256 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-magic-v5",
+    "brand": "HONOR",
+    "is_own": false,
+    "series": "Magic",
+    "model_name": "Magic V5",
+    "launch_date": "2025-07-15",
+    "eol_date": null,
+    "prev_model_id": null,
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+256 GB": 129990, "16+512 GB": 149990, "16+1TB": 159990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "Gold"] },
+      { "romram": "16+512 GB", "colors": ["Black", "Gold"] },
+      { "romram": "16+1TB", "colors": ["Black", "Gold"] }
+    ]
+  },
+  {
+    "model_id": "cmp-magic-8-pro",
+    "brand": "HONOR",
+    "is_own": false,
+    "series": "Magic",
+    "model_name": "Magic 8 Pro",
+    "launch_date": "2025-10-15",
+    "eol_date": null,
+    "prev_model_id": "cmp-magic-7-pro",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "12+512 GB": 94990, "16+1TB": 104990 },
+    "skus": [
+      { "romram": "12+512 GB", "colors": ["Black"] },
+      { "romram": "16+1TB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-magic-7-pro",
+    "brand": "HONOR",
+    "is_own": false,
+    "series": "Magic",
+    "model_name": "Magic 7 Pro",
+    "launch_date": "2025-01-15",
+    "eol_date": "2025-11-19",
+    "prev_model_id": null,
+    "next_model_id": "cmp-magic-8-pro",
+    "rrp_rub_by_romram": { "12+256 GB": 89990, "12+512 GB": 94990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black"] },
+      { "romram": "12+512 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-honor-600",
+    "brand": "HONOR",
+    "is_own": false,
+    "series": "Honor",
+    "model_name": "Honor 600",
+    "launch_date": "2026-05-20",
+    "eol_date": null,
+    "prev_model_id": "cmp-honor-400",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "8+256 GB": 35990, "12+256 GB": 38990 },
+    "skus": [
+      { "romram": "8+256 GB", "colors": ["Black", "Orange", "Golden White"] },
+      { "romram": "12+256 GB", "colors": ["Black", "Orange", "Golden White"] }
+    ]
+  },
+  {
+    "model_id": "cmp-honor-400",
+    "brand": "HONOR",
+    "is_own": false,
+    "series": "Honor",
+    "model_name": "Honor 400",
+    "launch_date": "2025-05-20",
+    "eol_date": "2026-07-01",
+    "prev_model_id": null,
+    "next_model_id": "cmp-honor-600",
+    "rrp_rub_by_romram": { "12+256 GB": 34990, "12+512 GB": 37990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Gold"] },
+      { "romram": "12+512 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-honor-x7e",
+    "brand": "HONOR",
+    "is_own": false,
+    "series": "Honor",
+    "model_name": "Honor X7e",
+    "launch_date": "2025-11-01",
+    "eol_date": null,
+    "prev_model_id": null,
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "6+128 GB": 16990, "6+256 GB": 18990 },
+    "skus": [
+      { "romram": "6+128 GB", "colors": ["Black"] },
+      { "romram": "6+256 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-honor-x9d",
+    "brand": "HONOR",
+    "is_own": false,
+    "series": "Honor",
+    "model_name": "Honor X9d",
+    "launch_date": "2025-11-01",
+    "eol_date": null,
+    "prev_model_id": null,
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "8+256 GB": 24990, "12+256 GB": 26990, "12+512 GB": 29990 },
+    "skus": [
+      { "romram": "8+256 GB", "colors": ["Black"] },
+      { "romram": "12+256 GB", "colors": ["Black", "Gold", "Green", "Reddish Brown"] },
+      { "romram": "12+512 GB", "colors": ["Black", "Gold", "Green", "Reddish Brown"] }
+    ]
+  },
+  {
+    "model_id": "cmp-redmi-note-17-pro",
+    "brand": "XIAOMI",
+    "is_own": false,
+    "series": "Redmi Note",
+    "model_name": "Redmi Note 17 Pro",
+    "launch_date": "2026-01-15",
+    "eol_date": null,
+    "prev_model_id": "cmp-redmi-note-15-pro",
+    "next_model_id": null,
+    "rrp_rub_by_romram": { "8+256 GB": 29990, "8+512 GB": 33990 },
+    "skus": [
+      { "romram": "8+256 GB", "colors": ["Black"] },
+      { "romram": "8+512 GB", "colors": ["Black"] }
+    ]
+  },
+  {
+    "model_id": "cmp-redmi-note-15-pro",
+    "brand": "XIAOMI",
+    "is_own": false,
+    "series": "Redmi Note",
+    "model_name": "Redmi Note 15 Pro",
+    "launch_date": "2025-08-21",
+    "eol_date": "2026-02-16",
+    "prev_model_id": null,
+    "next_model_id": "cmp-redmi-note-17-pro",
+    "rrp_rub_by_romram": { "12+256 GB": 26990, "12+512 GB": 29990, "16+512 GB": 32990 },
+    "skus": [
+      { "romram": "12+256 GB", "colors": ["Black", "Blue", "Titanium"] },
+      { "romram": "12+512 GB", "colors": ["Black", "Blue", "Titanium"] },
+      { "romram": "16+512 GB", "colors": ["Black", "Blue", "Titanium"] }
+    ]
+  }
+]

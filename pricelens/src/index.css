@@ -1,0 +1,24 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #fafafa;
+  color: #171717;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* §3.3 数字一律 tabular-nums */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* §4.3 mono 仅用于技术标记：W41 / 202607 / 2026Q1 / 批次号 */
+.mono {
+  font-family: Geist Mono, ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
