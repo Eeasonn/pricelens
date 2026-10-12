@@ -129,14 +129,14 @@ function DrillInner(props: DrillModalProps & { info: DrillInfo }) {
           })}
         </div>
       </div>
-      {/* 迷你走势图（同编码；月度层可点继续下钻，周度层不再响应） */}
+      {/* 迷你走势图（同编码；月度层可点继续下钻，周度层不再响应）。
+          第七轮：容器高由 Y 模型自适应派生（Chart 内部），不再固定 320 */}
       {s0 ? (
         <Chart
           series={[s0]}
           granularity={cur.gran}
           currency={currency}
           priceTypes={priceTypes}
-          height={320}
           enableDrill={cur.gran === 'month'}
           enableJump={false}
           enableOffer={false}

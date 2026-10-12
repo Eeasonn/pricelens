@@ -1,17 +1,19 @@
 // ============================================================
 // §6.2/§6.3/§6.4 图主体：ECharts canvas + DOM 覆盖层。
+// 第七轮（branch feature/y-axis-adaptive）Y 轴简化重构：
+// - 值轴纯自适应（computeYAxis 分段压缩刻度），拖柄/档位 chips 删除；
+// - ECharts 值轴整体隐藏，刻度线/刻度标签（12px K/M 缩写）/断轴符号/档位带全部 DOM 层绘制——
+//   分段映射的数据喂归一化伪值（yNormOf），DOM 与 canvas 同源几何恒一致；
+// - 断裂轴：值簇空白 ≥ 阈值（helpers 阈值常量）压成 BREAK_PX 条，双虚线 + 轴上断轴符号；
+// - 档位带（仅 USD）：Y 轴左侧新增一列档位框（如 200~400 框住 200..400 刻度区段），
+//   本币映射未定义不渲染；图隐藏（空态/几何失效）时随之隐藏；
+// - 名称预留带：绘图区左缘常驻 NAME_ZONE_W 空白带，折线不进入——
+//   系列起点靠后 → 名称仍在起点旁；起点贴近左缘 → 名称收进预留带（右对齐+省略号）；
 // - 折后价：monotone 平滑实线品牌色（我司 3px / 竞品 2px），白底圆环圈点 r≈3.5
 // - RRP：虚线 6/4 + step 阶梯（平段+调价点垂直跳变，不平滑），同色 75% 不透明度
-// - 缺采：跨接段虚线 + 空心圆点，曲线自然跨接不中断（桥接系列 + 插值散点）
-// - 价格标签：自适应避让（helpers.resolveCollisions 两遍式）——
-//   P0 必放 = 每系列首/末有值点 + 窗口最大/最小；P1 = 变价点（周）/全部点（月/季），冲突即隐藏；
-//   dy map 同时是可见集，长窗口宁缺不叠
-// - 系列名：第一个有值点左侧（垂直居中；左缘放不下 → 点上方），品牌色 13px/600，
-//   DOM 层 zIndex 9 置于所有图层之上
-// - X 刻度：周=周三 MM-DD；月/季=mono 技术标记；点位置=桶中点
-// - 轴单位：Y 轴顶端=币种（₽/$）、X 轴右端下方=粒度（周/月/季），caption mute（用户反馈 #5）
+// - 缺采：跨接段虚线 + 空心圆点；价格标签自适应避让（resolveCollisions 两遍式）
 // - 悬停：十字竖线（DOM）+ 钉顶附框 + 周视图跳转图标 + offer 图标；ECharts tooltip 禁用
-// - 点击：月/季圈点（±12px 命中）触发下钻；周视图无下钻
+// - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import * as echarts from 'echarts';
@@ -19,20 +21,29 @@ import type { EChartsOption } from 'echarts';
 import type { CurrencyMode, Granularity, OfferInfo, Series, SeriesPoint } from '../../dataModel/types';
 import { color, font, fontSize } from '../../theme/tokens';
 import {
+  BREAK_PX,
+  DEFAULT_TIERS,
   GRID,
+  NAME_ZONE_W,
+  SLIDER_GUTTER,
+  TIER_BAND_GAP,
+  TIER_BAND_W,
   computeYAxis,
   estGridLeft,
+  fmtAxisShort,
   fmtInt,
   gapRuns,
   gridTopFor,
   hollowPoints,
   resolveCollisions,
+  segTicks,
   weekLabeledIdx,
   xPxOf,
+  yNormOf,
   yPxOf,
   type AvoidItem,
   type Geom,
-  type YConfig,
+  type YScale,
 } from './helpers';
 import PinnedTooltips from './PinnedTooltips';
 import JumpIcon from './JumpIcon';
@@ -44,9 +55,8 @@ export interface ChartProps {
   granularity: Granularity;
   currency: CurrencyMode;
   priceTypes: { discounted: boolean; rrp: boolean };
-  height: number;
-  /** Y 轴配置；null/缺省 → 内部自动适配（±8%，用于弹窗迷你图） */
-  y?: YConfig | null;
+  // 第七轮：height/y 已删 —— 容器高 = gridTop + plotHeight + GRID.bottom（自适应派生），
+  // Y 轴 = 纯自适应分段刻度（无手动覆盖）
   /** Y 轴左边距；缺省按最长刻度估算 */
   gridLeft?: number;
   /** 图顶卡片区预留高；缺省按 series 数量推（gridTopFor） */
@@ -75,7 +85,7 @@ const NAME_LOGO_W = 12; // 系列名前置品牌色小点（8px）+ 间距 4，�
 const NO_KEYS = new Set<string>(); // hiddenKeys 缺省值
 
 export default function Chart(props: ChartProps) {
-  const { series, granularity, currency, priceTypes, height } = props;
+  const { series, granularity, currency, priceTypes } = props;
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const chartDivRef = useRef<HTMLDivElement | null>(null); // ECharts 挂载层（背景带之下、DOM 覆盖层之下）
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -96,8 +106,13 @@ export default function Chart(props: ChartProps) {
     setLockedIdx(null);
   }, [props.windowKey]);
 
-  // 主价线：折后价优先；仅勾 RRP 时 RRP 成为主价线（标签/下钻/跳转跟随）
-  const primaryOf = (p: SeriesPoint): number | null => (priceTypes.discounted ? p.price : p.rrp);
+  // ---- Y 轴：纯自适应分段刻度（第七轮，无手动覆盖） ----
+  const scale: YScale = useMemo(
+    () => computeYAxis({ series, priceTypes, sliderScale: 1 }),
+    [series, priceTypes],
+  );
+  // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
+  const totalH = gridTop + scale.plotHeight + GRID.bottom;
 
   // ---- 容器宽度（ResizeObserver） ----
   useEffect(() => {
@@ -126,36 +141,26 @@ export default function Chart(props: ChartProps) {
   // ---- 几何（纯公式复现 grid，保证 DOM 层与 canvas 一致） ----
   const geom: Geom | null = useMemo(() => {
     const n = series[0]?.points.length ?? 0;
-    if (!width || width < 160 || n === 0 || height < 160) return null;
-    const yCfg =
-      props.y ??
-      computeYAxis({
-        series,
-        priceTypes,
-        tierRange: null,
-        manual: null,
-        sliderScale: 1,
-      });
-    const gl = props.gridLeft ?? estGridLeft(yCfg.max);
+    if (!width || width < 160 || n === 0 || totalH < 160) return null;
+    const gl = props.gridLeft ?? estGridLeft(scale.max, currency);
     if (gl + GRID.right > width - 48) return null;
     return {
       gridLeft: gl,
       plotLeft: gl,
       plotTop: gridTop,
       plotWidth: width - gl - GRID.right,
-      plotHeight: height - gridTop - GRID.bottom,
-      min: yCfg.min,
-      max: yCfg.max,
-      interval: yCfg.interval,
+      plotHeight: scale.plotHeight,
+      scale,
       n,
     };
-  }, [width, height, gridTop, series, priceTypes, props.y, props.gridLeft]);
+  }, [width, totalH, gridTop, series, scale, currency, props.gridLeft]);
 
   // ---- 标签避让计划（价格标签 dy + 系列名位置 + 可见集） ----
   // 自适应规则（长窗口数值防叠）：
   // P0 必放 = 每系列首个/末个有值点 + 窗口内最大/最小（形状锚点，冲突时纵向推挤）；
   // P1 候选 = 变价点（周）/ 全部点（月/季），期望位无冲突才显示，冲突即隐藏；
-  // 系列名 = 第一个有值点左侧（垂直居中于该点）；绘图区左缘放不下 → 点上方（首点必有值）。
+  // 系列名 = 第一个有值点左侧（垂直居中于该点）；左缘放不下（起点贴近左缘）→
+  // 收进绘图区左侧的名称预留带（右对齐、省略号），折线永不进入该带（第七轮）。
   const labelPlan = useMemo(() => {
     const empty = { dy: {} as Record<string, Record<number, number>>, names: [] as AvoidResultNames[] };
     if (!geom) return empty;
@@ -200,32 +205,36 @@ export default function Chart(props: ChartProps) {
       valIdx.forEach((i) => {
         if (!p0.has(i) && change.has(i)) pushPrice(i, false);
       });
-      // 系列名：第一个有值点左侧（垂直居中于该点）；左缘放不下 → 点上方堆叠
+      // 系列名：起点旁（垂直居中于该点）；放不下 → 名称预留带内右对齐（省略号）。
+      // 带内去掉品牌前缀（品牌已由色点表达），给产品名腾空间
       const fi = valIdx[0];
       const v0 = primaryOf(pts[fi]) ?? 0;
       const px = xPxOf(geom, fi);
       const py = yPxOf(geom, v0);
-      const nw = nameW(s.label);
-      const leftAt = px - 8 - nw;
-      const above = leftAt < geom.plotLeft + 2;
+      const besideLeft = px - 8 - nameW(s.label);
+      const useZone = besideLeft < geom.plotLeft + 2;
+      const brandPrefix = `${s.brand} `;
+      const zoneText = useZone && s.label.startsWith(brandPrefix) ? s.label.slice(brandPrefix.length) : s.label;
+      const zoneW = Math.min(nameW(zoneText), NAME_ZONE_W - 12);
       items.push({
         kind: 'name',
         seriesKey: s.key,
         pointIdx: fi,
         pinned: true,
-        left: above ? px - 4 : leftAt,
-        right: above ? px - 4 + nw : px - 8,
-        top: above ? py - LABEL_DISTANCE - LABEL_LINE_HEIGHT - NAME_LINE_HEIGHT : py - NAME_LINE_HEIGHT / 2,
+        left: useZone ? geom.plotLeft - 8 - zoneW : besideLeft,
+        right: useZone ? geom.plotLeft - 8 : px - 8,
+        top: py - NAME_LINE_HEIGHT / 2,
         h: NAME_LINE_HEIGHT,
-        text: s.label,
+        text: useZone ? zoneText : s.label,
         color: s.color,
+        maxW: useZone ? zoneW : undefined,
       });
     }
     const res = resolveCollisions(items, geom.plotTop);
     return { dy: res.dy, names: res.names as AvoidResultNames[] };
   }, [geom, series, granularity, priceTypes, props.priceTypes.discounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- ECharts option ----
+  // ---- ECharts option（值轴隐藏，数据喂归一化伪值） ----
   const option = useMemo<EChartsOption | null>(() => {
     if (!geom) return null;
     const first = series[0];
@@ -239,7 +248,7 @@ export default function Chart(props: ChartProps) {
       const dyMap = labelPlan.dy[s.key] ?? {};
       if (priceTypes.discounted) {
         const data = s.points.map((p, i) => ({
-          value: p.price,
+          value: p.price != null ? yNormOf(geom, p.price) : null,
           label: {
             show: p.price != null && dyMap[i] !== undefined,
             position: 'top' as const,
@@ -271,7 +280,9 @@ export default function Chart(props: ChartProps) {
           const vp = s.points[a - 1].price;
           const vn = s.points[b + 1].price;
           if (vp == null || vn == null) continue;
-          const bridge = s.points.map((_, i) => (i === a - 1 ? vp : i === b + 1 ? vn : null));
+          const bridge = s.points.map((_, i) =>
+            i === a - 1 ? yNormOf(geom, vp) : i === b + 1 ? yNormOf(geom, vn) : null,
+          );
           sArr.push({
             type: 'line',
             data: bridge,
@@ -288,7 +299,7 @@ export default function Chart(props: ChartProps) {
         if (hollow.length > 0) {
           sArr.push({
             type: 'scatter',
-            data: hollow.map(([i, v]) => ({ value: [i, v] })),
+            data: hollow.map(([i, v]) => ({ value: [i, yNormOf(geom, v)] })),
             symbol: 'circle',
             symbolSize: 7,
             itemStyle: { color: '#ffffff', borderColor: s.color, borderWidth: 2 },
@@ -300,7 +311,7 @@ export default function Chart(props: ChartProps) {
       if (priceTypes.rrp) {
         // 两价同选不标 RRP（避免重复）；仅 RRP 时 = 主价线，可见集与折后价同源（避让后 dy）
         const rdata = s.points.map((p, i) => ({
-          value: p.rrp,
+          value: p.rrp != null ? yNormOf(geom, p.rrp) : null,
           label: {
             show: !priceTypes.discounted && p.rrp != null && dyMap[i] !== undefined,
             position: 'top' as const,
@@ -347,24 +358,11 @@ export default function Chart(props: ChartProps) {
             }
           : { interval: 'auto', hideOverlap: true, fontSize: 12, color: color.body, fontFamily: font.family },
       },
-      yAxis: {
-        type: 'value',
-        min: geom.min,
-        max: geom.max,
-        interval: geom.interval,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        splitLine: { lineStyle: { color: color.hairline } },
-        axisLabel: {
-          fontSize: fontSize.bodySm,
-          color: color.body,
-          fontFamily: font.family,
-          formatter: (v: number) => fmtInt(v),
-        },
-      },
+      // 值轴整体隐藏（第七轮）：刻度线/标签/断裂符号/档位带全部 DOM 层绘制
+      yAxis: { show: false, min: 0, max: 1 },
       series: sArr,
     } as unknown as EChartsOption;
-  }, [geom, series, priceTypes, granularity, labelPlan]);
+  }, [geom, series, priceTypes, granularity, labelPlan, gridTop]);
 
   // ---- setOption / resize ----
   useEffect(() => {
@@ -393,8 +391,8 @@ export default function Chart(props: ChartProps) {
   const onMouseMove = (e: ReactMouseEvent<HTMLDivElement>): void => {
     const hit = locate(e);
     const el = wrapRef.current;
-    // 图顶卡片区不是时间轴触发域：悬停列清空（有锁定列时保持锁定明细，BUG 修复：
-    // 锁定后指针挪到页签上明细不再消失）；无锁定 → 卡片回图例态
+    // 图顶卡片区不是时间轴触发域：悬停列清空（有锁定列时保持锁定明细；
+    // 无锁定 → 卡片回图例态）
     if (hit && hit.my < gridTop) {
       setHoverIdx(null);
       if (el) el.style.cursor = 'default';
@@ -466,10 +464,45 @@ export default function Chart(props: ChartProps) {
         }
       : null;
 
+  // ---- DOM 刻度/断轴/档位带数据 ----
+  // 左缘布局：[滑杆 gutter][档位带(仅USD)][刻度列][名称预留带][绘图区]
+  const tickW = geom
+    ? Math.max(34, geom.gridLeft - SLIDER_GUTTER - (currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0) - NAME_ZONE_W)
+    : 44;
+  const tickRows = useMemo(() => {
+    if (!geom) return [];
+    const out: { v: number; y: number }[] = [];
+    for (const seg of geom.scale.segs) {
+      for (const v of segTicks(seg, geom.scale.interval)) out.push({ v, y: yPxOf(geom, v) });
+    }
+    return out;
+  }, [geom]);
+
+  const showTierBand = currency === 'usd' && geom != null;
+  const tierBoxes = useMemo(() => {
+    if (!showTierBand || !geom) return [];
+    const out: { label: string; top: number; h: number }[] = [];
+    for (const tier of DEFAULT_TIERS) {
+      const lo = Math.max(tier.min, geom.scale.min);
+      const hi = Math.min(tier.max ?? geom.scale.max, geom.scale.max);
+      if (lo >= hi - 1e-9) continue;
+      const top = yPxOf(geom, hi);
+      const h = yPxOf(geom, lo) - top;
+      if (h < 2) continue;
+      out.push({ label: tier.label, top, h });
+    }
+    return out;
+  }, [showTierBand, geom]);
+
+  // 主价线：折后价优先；仅勾 RRP 时 RRP 成为主价线（标签/下钻/跳转跟随）
+  function primaryOf(p: SeriesPoint): number | null {
+    return priceTypes.discounted ? p.price : p.rrp;
+  }
+
   return (
     <div
       ref={wrapRef}
-      style={{ position: 'relative', width: '100%', height } as CSSProperties}
+      style={{ position: 'relative', width: '100%', height: totalH } as CSSProperties}
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
       onClick={onClick}
@@ -518,13 +551,13 @@ export default function Chart(props: ChartProps) {
       )}
       {geom && (
         <>
-          {/* 轴单位（用户反馈 #5）：Y 轴顶端 = 币种（caption mute），X 轴右端下方 = 时间粒度 */}
+          {/* 轴单位：Y 轴顶端 = 币种（caption mute） */}
           <div
             style={{
               position: 'absolute',
               left: 0,
               top: gridTop - 34,
-              width: geom.gridLeft,
+              width: geom.gridLeft - NAME_ZONE_W,
               textAlign: 'center',
               fontSize: fontSize.caption,
               lineHeight: '16px',
@@ -549,6 +582,112 @@ export default function Chart(props: ChartProps) {
           >
             {granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季'}
           </div>
+          {/* DOM 刻度线 + 缩写标签（12px，与时间轴同字号；ECharts 值轴已隐藏） */}
+          {tickRows.map((t) => (
+            <div key={`tk-${t.v}`}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: geom.plotLeft,
+                  top: Math.round(t.y) - 0.5,
+                  width: geom.plotWidth,
+                  height: 1,
+                  background: color.hairline,
+                  pointerEvents: 'none',
+                  zIndex: 0,
+                }}
+              />
+              <div
+                className="tnum"
+                style={{
+                  position: 'absolute',
+                  left: geom.plotLeft - NAME_ZONE_W - tickW,
+                  top: Math.round(t.y) - 8,
+                  width: tickW - 8,
+                  textAlign: 'right',
+                  fontSize: 12,
+                  lineHeight: '16px',
+                  color: color.body,
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {fmtAxisShort(t.v)}
+              </div>
+            </div>
+          ))}
+          {/* 断裂轴：压缩空白条 = 双虚线 + 轴上断轴符号（第七轮阈值见 helpers 常量） */}
+          {geom.scale.breaks.map((b, i) => {
+            const stripTop = geom.plotTop + b - BREAK_PX / 2;
+            return (
+              <div key={`brk-${i}`}>
+                {[stripTop, stripTop + BREAK_PX].map((ly, j) => (
+                  <div
+                    key={j}
+                    style={{
+                      position: 'absolute',
+                      left: geom.plotLeft,
+                      top: Math.round(ly) - 0.5,
+                      width: geom.plotWidth,
+                      height: 0,
+                      borderTop: `1px dashed ${color.hairlineStrong}`,
+                      opacity: 0.7,
+                      pointerEvents: 'none',
+                      zIndex: 0,
+                    }}
+                  />
+                ))}
+                {/* 轴上断轴符号：刻度列处两道斜切短线 */}
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  style={{
+                    position: 'absolute',
+                    left: geom.plotLeft - NAME_ZONE_W - tickW / 2 - 7,
+                    top: geom.plotTop + b - 7,
+                    pointerEvents: 'none',
+                    zIndex: 2,
+                  }}
+                  aria-hidden
+                >
+                  <path d="M2.5 9.5 L11.5 4.5" stroke={color.hairlineStrong} strokeWidth="1.4" strokeLinecap="round" />
+                  <path d="M2.5 12 L11.5 7" stroke={color.hairlineStrong} strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </div>
+            );
+          })}
+          {/* 档位带（仅 USD）：Y 轴左侧档位框，框住对应刻度区段（如 200~400 框住 200..400）；
+              本币不渲染；图隐藏（空态）时整块随之消失 */}
+          {showTierBand &&
+            tierBoxes.map((tb, i) => (
+              <div
+                key={`tier-${tb.label}`}
+                title={`价格档位 ${tb.label}（USD）`}
+                style={{
+                  position: 'absolute',
+                  left: SLIDER_GUTTER,
+                  top: tb.top,
+                  width: TIER_BAND_W,
+                  height: tb.h,
+                  boxSizing: 'border-box',
+                  border: `1px solid ${color.hairline}`,
+                  background: i % 2 === 0 ? color.canvasSoft2 : color.canvasSoft,
+                  display: 'grid',
+                  placeItems: 'center',
+                  overflow: 'hidden',
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                }}
+              >
+                {tb.h >= 16 && (
+                  <span style={{ fontSize: 10, lineHeight: '12px', color: color.body, whiteSpace: 'nowrap' }}>
+                    {tb.label}
+                  </span>
+                )}
+              </div>
+            ))}
           {/* 锁定提示：悬停列顶部（悬停锁定列 = 点击解锁） */}
           {hoverIdx != null && hoverIdx < geom.n && (
             <div
@@ -585,11 +724,12 @@ export default function Chart(props: ChartProps) {
               }}
             />
           )}
-          {/* 系列名（第一个有值点左侧/点上方兜底，DOM 层 13px/600，前置品牌色小点；
+          {/* 系列名（起点旁 / 名称预留带兜底，DOM 层 13px/600，前置品牌色小点；
               zIndex 9 = 全图层最上，白描边保证不被任何元素遮挡） */}
           {labelPlan.names.map((nm, i) => (
             <div
               key={`nm-${i}-${nm.text}`}
+              title={nm.text}
               style={{
                 position: 'absolute',
                 left: nm.x,
@@ -605,10 +745,19 @@ export default function Chart(props: ChartProps) {
                 pointerEvents: 'none',
                 zIndex: 9,
                 textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
+                ...(nm.maxW != null ? { maxWidth: nm.maxW, overflow: 'hidden' } : null),
               }}
             >
               <BrandDot brand={brandByKey.get(nm.seriesKey) ?? ''} />
-              {nm.text}
+              <span
+                style={
+                  nm.maxW != null
+                    ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+                    : undefined
+                }
+              >
+                {nm.text}
+              </span>
             </div>
           ))}
           {/* offer 图标（仅周视图；点击浮窗） */}
@@ -644,4 +793,4 @@ export default function Chart(props: ChartProps) {
   );
 }
 
-type AvoidResultNames = { x: number; y: number; text: string; color: string; seriesKey: string };
+type AvoidResultNames = { x: number; y: number; text: string; color: string; seriesKey: string; maxW?: number };

@@ -1,42 +1,62 @@
 // ============================================================
-// §6 价格走势图共享工具：布局常量 / 桶枚举 / Y 轴计算（拖柄>档位>自动 + 滑杆控 step）/
-// 拖柄换算 / brush 平移 / 标签纵向避让
+// §6 价格走势图共享工具：布局常量 / 桶枚举 / Y 轴（自适应分段压缩刻度）/
+// 标签纵向避让 / 缺采跨接 / 几何纯公式
 // 图表负责人（Agent C，第二轮）内部实现；只依赖冻结层（src/data、theme/tokens、dataModel/types）
 // 关键决策：ECharts grid 全部用固定边距（不用 containLabel），
 // 因此绘图区像素可用纯公式复现（xPxOf/yPxOf），DOM 覆盖层与 canvas 标签共用同一几何。
-// 第二轮口径：Y 轴上下拖柄 = 调整 min/max（格数×TICK_PX = 绘图高，随拖动增减）；
-// brush 窗口可整体拖动平移，‹ › 箭头固定于轨道两端做整窗步进平移（原"扩窗"作废）。
-// 第三轮口径：brush 轨道 = 数据全集时间轴（不再 = 筛选范围）；窗口越出筛选范围时，
-// 上层把筛选范围左/右极值扩展到窗口端点（箭头/拖柄/平移拖动全部如此）。
+// ============================================================
+// 第七轮（Y 轴简化，branch feature/y-axis-adaptive）：
+// - 拖柄调 min/max（snapHandleDrag/YManualRange）整体删除：Y 轴 = 纯自适应。
+// - 刻度 12px + K/M 缩写（fmtAxisShort），刻度 gutter 按缩写后宽度估算。
+// - 高度自适应：格数 = ceil(有效跨度/interval)，跨度大 → 格数多 → 容器自动变高。
+// - 断裂轴（空白压缩）：所选产品值域中间的空白带 ≥ 阈值时压成固定高度条，
+//   轴上以虚线断轴符号表示；yPxOf 变分段线性映射（segs），ECharts 只负责画几何
+//   （数据喂归一化伪值 yNormOf，值轴隐藏），刻度线/标签/断轴符号/档位带全部 DOM 层绘制。
 // ============================================================
 import { dimTime } from '../../data';
-import type { Granularity, Series, SeriesPoint } from '../../dataModel/types';
+import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
 
 // ---------------- 布局常量（Chart 的 grid 与 DOM 覆盖层共用） ----------------
 
 /** grid 固定边距：top 预留钉顶附框行（§6.2 附框钉在绘图区上方同一水平线） */
 export const GRID = { top: 78, bottom: 36, right: 24 } as const;
 
-/** §6.6 每格像素间距恒定（拖柄/滑杆都以此为基准换算） */
+/** §6.6 每格像素间距恒定（高度自适应的基准） */
 export const TICK_PX = 46;
-/** 非 manual 档（自动/档位）的基准容器高（由此推出格数） */
-export const BASE_CHART_HEIGHT = 470;
-/** 容器高度上限（拖柄扩高的硬顶；格数上限由此推出） */
-export const MAX_CHART_HEIGHT = 960;
-
-const BASE_PLOT = BASE_CHART_HEIGHT - GRID.top - GRID.bottom;
-
-/** §6.6(新) 格数约束：用户要求 max > min + ≥4 格；上限由容器高度硬顶推出 */
+/** 格数约束：下限保可读，上限防失控（跨度再大也不超 16 格 ≈ 736px 绘图高） */
 export const MIN_CELLS = 4;
-export const MAX_CELLS = Math.floor((MAX_CHART_HEIGHT - GRID.top - GRID.bottom) / TICK_PX);
+export const MAX_CELLS = 16;
+/** 目标格数：interval 按它取 nice 值（典型图 ≈8 格；跨度大时格数自然上浮） */
+const TARGET_CELLS = 8;
 
 /** §6.5 刷选窗口最小 4 个桶 */
 export const MIN_WINDOW = 4;
 
+// ---------------- Y 轴左侧布局（第七轮） ----------------
+
+/** 最左滑杆 gutter（每格高度倍率，双击复位）宽 */
+export const SLIDER_GUTTER = 26;
+/** 产品名称预留带宽：起点贴近左缘的系列名收进这里，折线永不进入 */
+export const NAME_ZONE_W = 112;
+/** 档位带（仅 USD）宽 + 与刻度列的间距 */
+export const TIER_BAND_W = 64;
+export const TIER_BAND_GAP = 8;
+
+// ---------------- 断裂轴（空白压缩）阈值设计 ----------------
+// 空白带 = 相邻两簇价格值之间的无人区。压缩条件（三者同时满足才出断轴）：
+// 1. 空白 ≥ 总跨度 × BREAK_GAP_RATIO（20%）：小空隙不值得压，避免轴碎；
+// 2. 空白 ≥ 2×interval：至少空出两格，一格的"空"是正常留白；
+// 3. 断开后每段 ≥ 总跨度 × SEG_MIN_RATIO（8%）：防止压出读不了的窄条。
+// 最多 BREAK_MAX（2）处断轴；断轴条固定 BREAK_PX 高，段高按各自跨度占比分配。
+export const BREAK_GAP_RATIO = 0.2;
+export const BREAK_MAX = 2;
+export const SEG_MIN_RATIO = 0.08;
+export const BREAK_PX = 24;
+
 // ---------------- 钉顶卡片（第三轮 = 常驻图例卡）几何 ----------------
 
 export const CARD_GAP = 8; // 卡片间距
-export const CARD_H = 86; // 卡片固定高（明细态 4 行紧凑 / 图例态小点+名称，内容垂直居中）
+export const CARD_H = 86; // 卡片固定高（四行信息卡，内容垂直居中）
 export const CARDS_PER_ROW = 6; // 单卡 = 绘图区 1/6，一排最多 6 张，超出换排
 
 /** 单卡宽：占绘图区 1/6（扣掉 5 道缝），整组居中、从中间向外拓展 */
@@ -59,13 +79,32 @@ export function fmtInt(v: number): string {
     .replace(/\u00A0/g, ' ');
 }
 
-/** Y 轴左边距按最长刻度文本估算 + 26px 步长滑杆 gutter（滑杆常驻 Y 轴左侧） */
-export function estGridLeft(axisMax: number): number {
-  const chars = fmtInt(axisMax).length;
-  return Math.max(56, Math.round(chars * 8.6) + 18) + 26;
+/** Y 轴刻度缩写（约定俗成 K/M；≥100 万用 M、≥1000 用 K，1 位小数去尾 0）。
+ *  点上价格标签仍用 fmtInt 全值，只有轴刻度缩写。 */
+export function fmtAxisShort(v: number): string {
+  const abs = Math.abs(v);
+  const trim = (n: number): string => {
+    const s = n >= 100 ? Math.round(n).toString() : n.toFixed(1);
+    return s.replace(/\.0$/, '');
+  };
+  if (abs >= 1e6) return `${trim(v / 1e6)}M`;
+  if (abs >= 1e3) return `${trim(v / 1e3)}K`;
+  return fmtInt(v);
 }
 
-// ---------------- Y 轴（§6.6 优先级：拖柄 min/max > 档位 chips > 自动；滑杆独立控制 step） ----------------
+/** 刻度列宽：按最长缩写刻度估（12px 字号 ≈7.2px/字符）+ 两侧呼吸 */
+export function axisTickGutter(ticks: number[]): number {
+  const chars = ticks.length ? Math.max(...ticks.map((t) => fmtAxisShort(t).length)) : 3;
+  return Math.max(34, Math.round(chars * 7.2) + 12);
+}
+
+/** Y 轴总左缘 = 滑杆 gutter + [档位带(仅USD)] + 刻度列 + 名称预留带（estGridLeft 沿用旧名） */
+export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local'): number {
+  const tickW = axisTickGutter([axisMax / 2, axisMax]);
+  return SLIDER_GUTTER + (currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0) + tickW + NAME_ZONE_W;
+}
+
+// ---------------- Y 轴（第七轮：纯自适应 + 空白压缩分段刻度） ----------------
 
 /** §6.6 nice 步长：1/2/2.5/5 ×10^k */
 export function niceStep(raw: number): number {
@@ -76,142 +115,191 @@ export function niceStep(raw: number): number {
   return m * p;
 }
 
-export interface YConfig {
+/** 一个值段的真实域 + 像素区（pTop/pH 由 buildYScale 分配，含断裂带） */
+export interface ScaleSeg {
   min: number;
   max: number;
-  interval: number;
-  cells: number; // (max−min)/interval 的整数格数（决定容器高）
-  plotHeight: number; // cells × TICK_PX
-}
-
-/** 拖柄手动态的冻结状态（首次拖动时以当前自动/档位几何为起点生成） */
-export interface YManualRange {
-  min: number;
-  max: number;
-  step: number;
+  pTop: number; // 段顶像素（相对容器顶）
+  pH: number; // 段像素高
 }
 
 /**
- * 计算最终 Y 轴 min/max/interval/格数/绘图高（§6.6 第三轮口径）。
- * 刻度值域（min/max/interval）只由拖柄/档位/自动决定，滑杆**不参与**：
- * 滑杆（sliderScale）只缩放"每格像素高度"（plotHeight = 格数×TICK_PX×scale）——
- * 刻度值 90000/91000/…/96000 七个值不变，拖动只让每格之间的高度变高或变矮。
- * - manual（拖柄，优先级最高）：step/格数/min/max 全部冻结。
- * - tierRange（档位）：min/max 锁定；无上限档时 max 撑满整数格。
- * - 自动：随所选全部线值域 ±8% padding，min 向下取整格、max 向上撑满整数格。
+ * 自适应分段刻度（第七轮核心）：
+ * - min/max/interval/cells 全部由所选系列值域推导，无任何手动覆盖；
+ * - 值簇之间的空白带（≥阈值）压成 BREAK_PX 固定条 → 段像素高按跨度占比分配；
+ * - 格数 = ceil(有效跨度/interval)：跨度大 → 格数多 → 容器高自适应增大（避免曲线压扁）。
+ */
+export interface YScale {
+  min: number; // 全域下界（= 最下段.min）
+  max: number; // 全域上界（= 最上段.max）
+  interval: number;
+  cells: number; // 有效格数（不含断裂带；决定容器高）
+  plotHeight: number; // 绘图总高（含断裂带条），= cells×TICK_PX×scale + 断裂条
+  segs: ScaleSeg[]; // 自上而下（值高在上）
+  breaks: number[]; // 断裂条中心 yPx（自上而下）
+  sliderScale: number;
+}
+
+/** 收集当前显示口径下的全部价格值（两价同收：断轴/极值都以可见点为准） */
+function collectValues(series: Series[], priceTypes: { discounted: boolean; rrp: boolean }): number[] {
+  const out: number[] = [];
+  for (const s of series) {
+    for (const pt of s.points) {
+      if (priceTypes.discounted && pt.price != null) out.push(pt.price);
+      if (priceTypes.rrp && pt.rrp != null) out.push(pt.rrp);
+    }
+  }
+  return out;
+}
+
+/**
+ * 计算 Y 轴分段刻度（第七轮口径，唯一入口）。
+ * 空数据/单点退化为 0–100 单段（与旧自动口径一致，不崩）。
  */
 export function computeYAxis(params: {
   series: Series[];
   priceTypes: { discounted: boolean; rrp: boolean };
-  tierRange: { min: number; max: number | null } | null;
-  manual: YManualRange | null;
   sliderScale: number;
-}): YConfig {
-  let dMin = Number.POSITIVE_INFINITY;
-  let dMax = Number.NEGATIVE_INFINITY;
-  for (const s of params.series) {
-    for (const pt of s.points) {
-      if (params.priceTypes.discounted && pt.price != null) {
-        if (pt.price < dMin) dMin = pt.price;
-        if (pt.price > dMax) dMax = pt.price;
-      }
-      if (params.priceTypes.rrp && pt.rrp != null) {
-        if (pt.rrp < dMin) dMin = pt.rrp;
-        if (pt.rrp > dMax) dMax = pt.rrp;
-      }
+}): YScale {
+  const scale = Math.min(Math.max(params.sliderScale, 0.5), 3);
+  const end = (partial: Omit<YScale, 'sliderScale'>): YScale => ({ ...partial, sliderScale: scale });
+
+  const vals = collectValues(params.series, params.priceTypes);
+  if (!vals.length) {
+    const seg = { min: 0, max: 100, pTop: 0, pH: MIN_CELLS * TICK_PX * scale };
+    return end({ min: 0, max: 100, interval: 25, cells: MIN_CELLS, plotHeight: seg.pH, segs: [seg], breaks: [] });
+  }
+
+  const rawMin = Math.min(...vals);
+  const rawMax = Math.max(...vals);
+  const rawSpan = Math.max(1, rawMax - rawMin);
+
+  // ---- 1) 空白带检测：排序后相邻值间距 ≥ max(20% 跨度, 2×interval) 即候选断点 ----
+  const interval0 = niceStep(rawSpan / TARGET_CELLS);
+  const sorted = [...new Set(vals)].sort((a, b) => a - b);
+  const candidates: { at: number; gap: number }[] = []; // at = 空白带下缘值（簇间分割线）
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = sorted[i] - sorted[i - 1];
+    if (gap >= Math.max(rawSpan * BREAK_GAP_RATIO, interval0 * 2)) candidates.push({ at: (sorted[i - 1] + sorted[i]) / 2, gap });
+  }
+  candidates.sort((a, b) => b.gap - a.gap);
+  const cuts = candidates.slice(0, BREAK_MAX).map((c) => c.at).sort((a, b) => a - b);
+  // 段最小占比约束：切出的段至少占 8%，否则弃切（合回）
+  const validCuts: number[] = [];
+  for (const cut of cuts) {
+    const bounds = [rawMin, ...validCuts, cut, rawMax];
+    let ok = true;
+    for (let i = 1; i < bounds.length; i++) {
+      if (bounds[i] - bounds[i - 1] < rawSpan * SEG_MIN_RATIO) ok = false;
+    }
+    if (ok) validCuts.push(cut);
+  }
+
+  // ---- 2) 段域：外段外侧各留 6% padding；interval 按有效跨度取 nice；外缘吸附整格 ----
+  const bounds = [rawMin, ...validCuts, rawMax];
+  const segDomains: { min: number; max: number }[] = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const isBottom = i === 0;
+    const isTop = i === bounds.length - 2;
+    const lo = bounds[i] - (isBottom ? rawSpan * 0.06 : 0);
+    const hi = bounds[i + 1] + (isTop ? rawSpan * 0.06 : 0);
+    segDomains.push({ min: lo, max: hi });
+  }
+  const pseudoSpan0 = segDomains.reduce((acc, d) => acc + (d.max - d.min), 0);
+  const interval = niceStep(pseudoSpan0 / TARGET_CELLS);
+  // 外缘吸附：最下段.min 向下取整格、最上段.max 向上撑满整格（刻度线顶到边更整齐）
+  segDomains[0].min = Math.max(0, Math.floor(segDomains[0].min / interval) * interval);
+  segDomains[segDomains.length - 1].max = segDomains[segDomains.length - 1].min + interval * Math.ceil(
+    (segDomains[segDomains.length - 1].max - segDomains[segDomains.length - 1].min) / interval - 1e-9,
+  );
+  const pseudoSpan = segDomains.reduce((acc, d) => acc + (d.max - d.min), 0);
+  const cells = clampInt(pseudoSpan / interval, MIN_CELLS, MAX_CELLS);
+  const availPx = Math.round(cells * TICK_PX * scale);
+  const plotHeight = availPx + (segDomains.length - 1) * BREAK_PX;
+
+  // ---- 3) 像素分配：值高在上；段高 ∝ 跨度；段间插入断裂条 ----
+  const segs: ScaleSeg[] = [];
+  const breaks: number[] = [];
+  let cursor = 0; // 自顶向下累计
+  for (let i = segDomains.length - 1; i >= 0; i--) {
+    const d = segDomains[i];
+    const h = Math.max(12, Math.round(((d.max - d.min) / pseudoSpan) * availPx));
+    segs.push({ min: d.min, max: d.max, pTop: cursor, pH: h });
+    cursor += h;
+    if (i > 0) {
+      breaks.push(cursor + BREAK_PX / 2);
+      cursor += BREAK_PX;
     }
   }
-  if (!Number.isFinite(dMin)) {
-    dMin = 0;
-    dMax = 100;
-  }
-  const dataRange = Math.max(1, dMax - dMin);
 
-  // 每格像素高 = 格数 × TICK_PX × 滑杆倍率（只改间距，不改刻度值）
-  const plotHeightOf = (cells: number): number =>
-    Math.round(cells * TICK_PX * Math.min(Math.max(params.sliderScale, 0.5), 3));
-
-  // 优先级最高：拖柄手动态（step/格数/min/max 冻结）
-  const m = params.manual;
-  if (m) {
-    const step = Math.max(1, m.step);
-    const cells = clampInt((m.max - m.min) / step, MIN_CELLS, MAX_CELLS);
-    const min = Math.max(0, m.min);
-    return { min, max: min + cells * step, interval: step, cells, plotHeight: plotHeightOf(cells) };
-  }
-
-  const cells = clampInt(BASE_PLOT / TICK_PX, MIN_CELLS, MAX_CELLS); // 目标 ≈8 格
-  const tier = params.tierRange;
-  if (tier) {
-    const min = Math.max(0, tier.min);
-    const max0 = tier.max != null ? Math.max(min + 1, tier.max) : dMax + dataRange * 0.08;
-    const interval = Math.max(1, niceStep((max0 - min) / cells));
-    const max = tier.max != null ? tier.max : min + interval * Math.ceil((max0 - min) / interval - 1e-9);
-    const realCells = Math.max(1, Math.round((max - min) / interval));
-    return { min, max, interval, cells: realCells, plotHeight: plotHeightOf(realCells) };
-  }
-  // 自动：±8% padding
-  const pad = dataRange * 0.08;
-  const min0 = Math.max(0, dMin - pad);
-  const max0 = dMax + pad;
-  const interval = Math.max(1, niceStep((max0 - min0) / cells));
-  const min = Math.max(0, Math.floor(min0 / interval) * interval);
-  const max = min + interval * Math.ceil((max0 - min) / interval - 1e-9);
-  const realCells = Math.max(1, Math.round((max - min) / interval));
-  return { min, max, interval, cells: realCells, plotHeight: plotHeightOf(realCells) };
+  return end({
+    min: segDomains[0].min,
+    max: segDomains[segDomains.length - 1].max,
+    interval,
+    cells,
+    plotHeight,
+    segs,
+    breaks,
+  });
 }
 
-// ---------------- §6.6 拖柄换算（纯函数，Node 可测） ----------------
+/** 段内刻度值（interval 整数倍，升序） */
+export function segTicks(seg: ScaleSeg, interval: number): number[] {
+  const out: number[] = [];
+  for (let v = Math.ceil(seg.min / interval) * interval; v <= seg.max + 1e-9; v += interval) {
+    out.push(Math.round(v * 100) / 100);
+  }
+  return out;
+}
 
-/** 拖动换算所依据的起点几何（指针按下瞬间捕获，整个手势期间 px/价格 比例恒定） */
-export interface HandleDragBase {
-  min: number;
-  max: number;
-  interval: number;
+// ---------------- 几何（canvas 与 DOM 覆盖层共用的纯公式） ----------------
+
+export interface Geom {
+  gridLeft: number;
+  plotLeft: number;
   plotTop: number;
+  plotWidth: number;
   plotHeight: number;
+  scale: YScale;
+  n: number; // 桶数
 }
 
-/**
- * 拖柄拖动换算：把指针 y（相对图表容器顶）换算为价格并吸附到 step 整数格。
- * 上柄 → 只改 max（min 不变）；下柄 → 只改 min（max 不变）。
- * 约束：格数 ∈ [MIN_CELLS, MAX_CELLS]（即 max > min + ≥4 格）；下柄同时保证 min ≥ 0。
- * 迟滞吸附：refCells = 上一次落定的格数。指针相对基准跨满一整格才跳一格 ——
- * 若按 round 半格吸附，半格触发/整格跳动，视觉步进是指针速度的 2 倍，拖柄过快难控；
- * 迟滞后指针每格 px 与柄体步进 1:1。refCells 缺省 = 对按下点的连续格数取整
- * （锚点），供上层在 pointerdown 时算初始基准——柄体中心与绘图区边缘差半个
- * GRIP_H，若首跳也走 round，上拖刚过 9px 就会进位窜一格。
- * 返回可直接写入 manual 状态的 {min, max, step}。
- */
-export function snapHandleDrag(
-  yRel: number,
-  mode: 'top' | 'bottom',
-  base: HandleDragBase,
-  refCells?: number,
-): YManualRange {
-  const step = Math.max(1, base.interval);
-  const span = Math.max(step, base.max - base.min);
-  const v = base.max - ((yRel - base.plotTop) / Math.max(1, base.plotHeight)) * span;
-  const raw = (mode === 'top' ? v - base.min : base.max - v) / step;
-  // 迟滞：向上越过 refCells+1 取 floor、向下越过 refCells-1 取 ceil，区间内保持原格
-  const cells =
-    refCells == null
-      ? Math.round(raw)
-      : raw > refCells
-        ? Math.floor(raw)
-        : raw < refCells
-          ? Math.ceil(raw)
-          : refCells;
-  if (mode === 'top') {
-    const c = Math.min(MAX_CELLS, Math.max(MIN_CELLS, cells));
-    return { min: base.min, max: base.min + c * step, step };
-  }
-  const c = Math.min(
-    Math.min(MAX_CELLS, Math.max(MIN_CELLS, Math.floor(base.max / step))),
-    Math.max(MIN_CELLS, cells),
-  );
-  return { min: base.max - c * step, max: base.max, step };
+/** 点位置=桶中点（category + boundaryGap） */
+export function xPxOf(g: Geom, i: number): number {
+  return g.plotLeft + (g.plotWidth / g.n) * (i + 0.5);
 }
+
+/** 分段线性映射：值 → 像素 y（容器绝对坐标；断裂带内无值，越界钳到最近段缘） */
+export function yPxOf(g: Geom, v: number): number {
+  const segs = g.scale.segs;
+  let seg = segs[0];
+  for (const s of segs) {
+    seg = s;
+    if (v >= s.min) break; // segs 自上而下（值域降序），找到首个 min ≤ v 的段
+  }
+  if (v > seg.max) return g.plotTop + seg.pTop; // 高于段顶（不应发生，防御）
+  const t = (seg.max - v) / Math.max(1e-9, seg.max - seg.min);
+  return g.plotTop + seg.pTop + t * seg.pH;
+}
+
+/** ECharts 归一化伪值（0..1，ECharts 值轴自下而上）：值轴隐藏后，几何全部由分段映射决定。
+ *  数据喂伪值、DOM 用 yPxOf，两者同源恒一致（注意方向翻转：y 大 → 伪值大）。 */
+export function yNormOf(g: Geom, v: number): number {
+  return 1 - (yPxOf(g, v) - g.plotTop) / Math.max(1, g.plotHeight);
+}
+
+// ---------------- 价格档位（§7.1 tier_code 口径；左轴档位带，仅 USD） ----------------
+// tier_code 按上市价 USD 归档，档位边界固定：<200 / 200-400 / 400-600 / 600-800 / 800-1000 / 1000+。
+// 本币（RUB）映射未定义（汇率波动），故档位带只在 USD 币种下渲染。
+
+export const DEFAULT_TIERS: { label: string; min: number; max: number | null }[] = [
+  { label: '<200', min: 0, max: 200 },
+  { label: '200~400', min: 200, max: 400 },
+  { label: '400~600', min: 400, max: 600 },
+  { label: '600~800', min: 600, max: 800 },
+  { label: '800~1000', min: 800, max: 1000 },
+  { label: '1000+', min: 1000, max: null },
+];
 
 // ---------------- 桶（§6.5 刷选 / §6.3 下钻） ----------------
 
@@ -234,6 +322,11 @@ export function enumerateBuckets(g: Granularity, startId: string, endId: string)
     if (id >= startId && id <= endId && !ids.includes(id)) ids.push(id);
   }
   return ids.sort().map((id) => ({ id, xLabel: id }));
+}
+
+/** §6.5(新) 平移步长：月=1 月、季=1 季、周=4 周（箭头点击 / 拖窗口吸附均按整桶计） */
+export function panStep(g: Granularity): number {
+  return g === 'week' ? 4 : 1;
 }
 
 const bucketField = (g: Granularity): 'week_id' | 'month_id' | 'quarter_id' =>
@@ -272,6 +365,31 @@ export function dataBucketRange(g: Granularity): [string, string] {
     if (hi == null || v > hi) hi = v;
   }
   return lo != null && hi != null ? [lo, hi] : ['000001', '999999'];
+}
+
+/**
+ * §6.5(新) 窗口整体平移（拖动中间蓝色窗口）：delta=平移桶数（右正左负），
+ * clamp 在 [0, n−len]（窗口 ⊆ 筛选范围、宽度不变）。
+ */
+export function panWindow(s: number, e: number, n: number, delta: number): { s: number; e: number } {
+  const len = e - s + 1;
+  const ns = Math.min(Math.max(0, s + delta), Math.max(0, n - len));
+  return { s: ns, e: ns + len - 1 };
+}
+
+/**
+ * §6.5(新) 固定箭头步进：dir=−1 向过去（‹）、+1 向未来（›），窗口整体平移一个步长；
+ * 窗口顶到数据边界时该方向平移量为 0（调用方据此置灰）。
+ */
+export function shiftWindow(
+  s: number,
+  e: number,
+  n: number,
+  step: number,
+  dir: -1 | 1,
+): { s: number; e: number } {
+  const shift = dir === -1 ? Math.min(step, s) : Math.min(step, n - 1 - e);
+  return { s: s + dir * shift, e: e + dir * shift };
 }
 
 /**
@@ -318,36 +436,6 @@ export function normalizeWindow(
     s = Math.max(lo, e - MIN_WINDOW + 1);
   }
   return { s, e };
-}
-
-/** §6.5(新) 平移步长：月=1 月、季=1 季、周=4 周（箭头点击 / 拖窗口吸附均按整桶计） */
-export function panStep(g: Granularity): number {
-  return g === 'week' ? 4 : 1;
-}
-
-/**
- * §6.5(新) 窗口整体平移（拖动中间蓝色窗口）：delta=平移桶数（右正左负），
- * clamp 在 [0, n−len]（窗口 ⊆ 筛选范围、宽度不变）。
- */
-export function panWindow(s: number, e: number, n: number, delta: number): { s: number; e: number } {
-  const len = e - s + 1;
-  const ns = Math.min(Math.max(0, s + delta), Math.max(0, n - len));
-  return { s: ns, e: ns + len - 1 };
-}
-
-/**
- * §6.5(新) 固定箭头步进：dir=−1 向过去（‹）、+1 向未来（›），窗口整体平移一个步长；
- * 窗口顶到数据边界时该方向平移量为 0（调用方据此置灰）。
- */
-export function shiftWindow(
-  s: number,
-  e: number,
-  n: number,
-  step: number,
-  dir: -1 | 1,
-): { s: number; e: number } {
-  const shift = dir === -1 ? Math.min(step, s) : Math.min(step, n - 1 - e);
-  return { s: s + dir * shift, e: e + dir * shift };
 }
 
 /** §6.3 下钻：季桶 → 该季月桶范围（2026Q3 → 202607..202609） */
@@ -421,49 +509,14 @@ export function weekLabeledIdx(pts: SeriesPoint[], useRrp: boolean): Set<number>
 
 // ---------------- 价差（§6.2 附框） ----------------
 
-/**
- * §6.2 附框数值：两价同选只显折后价、仅勾 RRP 显 RRP（§3.2）。
- * 该桶无实际值（缺采/窗口内全缺采）→ null，调用方据此不出卡（用户反馈 #6：不再出 "—" 卡）。
- */
-export function tooltipValue(
-  p: SeriesPoint | undefined,
-  priceTypes: { discounted: boolean; rrp: boolean },
-): number | null {
-  if (!p) return null;
-  return priceTypes.discounted ? p.price : p.rrp;
-}
-
 /** 价差 =（竞品−我司）/我司；红=竞品贵、蓝=竞品便宜 */
 export function diffPct(comp: number, own: number): { text: string; tone: 'rich' | 'cheap' } | null {
   if (!(own > 0)) return null;
   const pct = ((comp - own) / own) * 100;
   if (!Number.isFinite(pct)) return null;
   const r = Math.abs(pct) < 0.05 ? 0 : Math.round(pct * 10) / 10;
-  const sign = r > 0 ? '+' : r < 0 ? '\u2212' : '±';
+  const sign = r > 0 ? '+' : r < 0 ? '−' : '±';
   return { text: `${sign}${Math.abs(r).toFixed(1)}%`, tone: r > 0 ? 'rich' : 'cheap' };
-}
-
-// ---------------- 几何（canvas 与 DOM 覆盖层共用的纯公式） ----------------
-
-export interface Geom {
-  gridLeft: number;
-  plotLeft: number;
-  plotTop: number;
-  plotWidth: number;
-  plotHeight: number;
-  min: number;
-  max: number;
-  interval: number;
-  n: number; // 桶数
-}
-
-/** 点位置=桶中点（category + boundaryGap） */
-export function xPxOf(g: Geom, i: number): number {
-  return g.plotLeft + (g.plotWidth / g.n) * (i + 0.5);
-}
-
-export function yPxOf(g: Geom, v: number): number {
-  return g.plotTop + ((g.max - v) / (g.max - g.min)) * g.plotHeight;
 }
 
 // ---------------- 标签纵向避让（§6.2 多系列标签） ----------------
@@ -480,6 +533,8 @@ export interface AvoidItem {
   color: string;
   /** 必放项（系列名 + 首末/最大/最小）：冲突时纵向推挤；非必放项冲突即隐藏 */
   pinned?: boolean;
+  /** 名称区宽度裁剪（>0 时 DOM 按此宽省略号截断，如名称预留带内） */
+  maxW?: number;
 }
 
 export interface AvoidResult {
@@ -487,7 +542,7 @@ export interface AvoidResult {
    *  只包含被保留的价格标签 —— 该 map 同时就是"可见标签集" */
   dy: Record<string, Record<number, number>>;
   /** 系列名标签（DOM 层渲染；seriesKey 用于回查品牌图标） */
-  names: { x: number; y: number; text: string; color: string; seriesKey: string }[];
+  names: { x: number; y: number; text: string; color: string; seriesKey: string; maxW?: number }[];
 }
 
 /**
@@ -528,7 +583,7 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number): AvoidRes
     if (it.kind === 'price') {
       (dy[it.seriesKey] ??= {})[it.pointIdx] = top - it.top;
     } else {
-      names.push({ x: it.left, y: top, text: it.text, color: it.color, seriesKey: it.seriesKey });
+      names.push({ x: it.left, y: top, text: it.text, color: it.color, seriesKey: it.seriesKey, maxW: it.maxW });
     }
   }
   // 第二遍：次要候选，冲突即隐藏
