@@ -31,6 +31,7 @@ import {
   DEFAULT_TIERS,
   GRID,
   NAME_ZONE_W,
+  TICK_PX,
   TIER_BAND_GAP,
   TIER_BAND_W,
   computeYAxis,
@@ -97,6 +98,10 @@ const NAME_LOGO_W = 12; // 系列名前置品牌色小点（8px）+ 间距 4，�
 const ZONE_FONT = 12; // 名称预留带内字号（小一号）+ 两行换行
 const ZONE_LINE_H = 16;
 const NO_KEYS = new Set<string>(); // hiddenKeys 缺省值
+/** 高度过渡动画（第十一轮）：高度变化超过 2 格（步长换档/换产品/伸缩大幅调整）时，
+ *  以缓动缩放过渡而不是瞬跳；≤2 格的小步（整格吸附、断裂条）即时生效保持跟手 */
+const H_ANIM_THRESHOLD_PX = 2 * TICK_PX;
+const H_ANIM_MS = 280;
 
 /** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB/TB */
 function curveNameOf(s: Series): string {
@@ -143,8 +148,53 @@ export default function Chart(props: ChartProps) {
     return next;
   }, [series, priceTypes, sliderScale]);
   const scale = props.yScale ?? selfScale;
-  // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
-  const totalH = gridTop + scale.plotHeight + GRID.bottom;
+
+  // ---- 高度过渡动画：animH = 当前视觉高度，缓动逼近目标 scale.plotHeight。
+  //      动画期间按比例 k 缩放整段纵向几何（段 pTop/pH、断裂条中心、plotHeight）——
+  //      yPxOf/yNormOf 只依赖这些字段，canvas 伪值与 DOM 覆盖层天然同源跟随 ----
+  const animHRef = useRef(scale.plotHeight);
+  const [animH, setAnimH] = useState(scale.plotHeight);
+  const animRafRef = useRef<number | null>(null);
+  useEffect(() => {
+    const to = scale.plotHeight;
+    const from = animHRef.current;
+    if (from === to) return;
+    if (Math.abs(to - from) <= H_ANIM_THRESHOLD_PX) {
+      if (animRafRef.current != null) cancelAnimationFrame(animRafRef.current);
+      animRafRef.current = null;
+      animHRef.current = to;
+      setAnimH(to);
+      return;
+    }
+    const t0 = performance.now();
+    const step = (now: number): void => {
+      const p = Math.min(1, (now - t0) / H_ANIM_MS);
+      const cur = from + (to - from) * (1 - Math.pow(1 - p, 3)); // easeOutCubic
+      animHRef.current = cur;
+      setAnimH(cur);
+      animRafRef.current = p < 1 ? requestAnimationFrame(step) : null;
+    };
+    animRafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (animRafRef.current != null) cancelAnimationFrame(animRafRef.current);
+    };
+  }, [scale.plotHeight]);
+  const k = scale.plotHeight > 0 ? animH / scale.plotHeight : 1;
+  const displayScale: YScale = useMemo(
+    () =>
+      k === 1
+        ? scale
+        : {
+            ...scale,
+            plotHeight: scale.plotHeight * k,
+            segs: scale.segs.map((s) => ({ ...s, pTop: s.pTop * k, pH: s.pH * k })),
+            breaks: scale.breaks.map((b) => b * k),
+          },
+    [scale, k],
+  );
+  // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）；
+  // 用 animH（动画中）而非目标高度，大变化时整体缓动伸缩
+  const totalH = gridTop + Math.round(animH) + GRID.bottom;
 
   // ---- 容器宽度（ResizeObserver） ----
   useEffect(() => {
@@ -174,18 +224,18 @@ export default function Chart(props: ChartProps) {
   const geom: Geom | null = useMemo(() => {
     const n = series[0]?.points.length ?? 0;
     if (!width || width < 160 || n === 0 || totalH < 160) return null;
-    const gl = props.gridLeft ?? estGridLeft(scale.max, currency);
+    const gl = props.gridLeft ?? estGridLeft(displayScale.max, currency);
     if (gl + GRID.right > width - 48) return null;
     return {
       gridLeft: gl,
       plotLeft: gl,
       plotTop: gridTop,
       plotWidth: width - gl - GRID.right,
-      plotHeight: scale.plotHeight,
-      scale,
+      plotHeight: displayScale.plotHeight,
+      scale: displayScale,
       n,
     };
-  }, [width, totalH, gridTop, series, scale, currency, props.gridLeft]);
+  }, [width, totalH, gridTop, series, displayScale, currency, props.gridLeft]);
 
   // ---- 标签避让计划（价格标签 dy + 系列名位置 + 可见集） ----
   // 自适应规则（长窗口数值防叠）：
