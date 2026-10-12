@@ -1,8 +1,6 @@
 // ============================================================
-// ProductCascader 出口（§14.2：Cascade 层牵引 / SkuModal / MeanBadge）
-// 反馈第 9 条：SkuDrawer（360px 右侧抽屉）已删除，配置 SKU 改为居中小弹框 SkuModal
+// ProductCascader 出口（第十四轮收敛：产品级联已换标准 antd Cascader multiple，
+// 自定义 CascadePanel/SkuModal/MeanBadge 随之退场——CascadePanel 仅剩平台筛选用）
 // ============================================================
 export { CascadePanel, CascadeTrigger, type CascadeRowItem } from './CascadePanel';
-export { default as MeanBadge } from './MeanBadge';
-export { default as SkuModal, type SkuModalProps } from './SkuModal';
 export * from './tree';

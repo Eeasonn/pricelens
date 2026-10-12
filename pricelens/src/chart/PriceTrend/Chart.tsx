@@ -321,6 +321,40 @@ export default function Chart(props: ChartProps) {
     return { dy: res.dy, names: res.names as AvoidResultNames[] };
   }, [geom, series, granularity, priceTypes, props.priceTypes.discounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- 端点标记（第十三轮引入、第十四轮改为 DOM 徽标）：
+  //      S = 真实开头（该段连续有值区间的首点）；E = 真实截止（其后连续两周无值，
+  //      或窗口右缘且无续接数据）；in/out = 窗口左/右缘的续接点（窗口外 2 周内仍有
+  //      数据，非真实首尾）。标记点在 canvas 上不再画默认符号，由 DOM 徽标接管 ----
+  const endpointMarks = useMemo(() => {
+    const marks = new Map<string, 'S' | 'E' | 'in' | 'out'>();
+    for (const s of series) {
+      const n = s.points.length;
+      const val = (i: number): number | null => s.points[i]?.price ?? null;
+      const isStart = (i: number): boolean => {
+        if (val(i) == null) return false;
+        if (i === 0) return !s.edgeStart;
+        if (val(i - 1) != null) return false;
+        return i === 1 || val(i - 2) == null; // 前面连续两周无值才算新开头（1 周断采视为连续）
+      };
+      const isEnd = (i: number): boolean => {
+        if (val(i) == null) return false;
+        if (i + 1 < n && val(i + 1) != null) return false; // 非段尾
+        if (i === n - 1) return !s.edgeEnd; // 触右缘：有续接=非截止
+        return val(i + 1) == null && (i + 2 < n ? val(i + 2) == null : true);
+      };
+      for (let i = 0; i < n; i++) {
+        if (val(i) == null) continue;
+        const st = isStart(i);
+        const en = isEnd(i);
+        if (i === 0 && s.edgeStart) marks.set(`${s.key}|${i}`, 'in');
+        else if (st) marks.set(`${s.key}|${i}`, 'S');
+        if (i === n - 1 && s.edgeEnd) marks.set(`${s.key}|${i}`, 'out');
+        else if (en) marks.set(`${s.key}|${i}`, 'E');
+      }
+    }
+    return marks;
+  }, [series]);
+
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值） ----
   const option = useMemo<EChartsOption | null>(() => {
     if (!geom) return null;
@@ -333,31 +367,12 @@ export default function Chart(props: ChartProps) {
     for (const s of series) {
       const dyMap = labelPlan.dy[s.key] ?? {};
       if (priceTypes.discounted) {
-        // 端点样式（第十三轮）：每段连续有值区间的「开头/截止」画实心品牌色圆点（白描边），
-        // 与普通空心点区分。截止 = 其后连续两周无值；窗口右缘有续接数据（edgeEnd）则非截止。
-        // 窗口左缘有续接（edgeStart）的点也不是真实开头，保持空心（由灰色续接线表达）。
-        const n = s.points.length;
-        const val = (i: number): number | null => s.points[i]?.price ?? null;
-        const isStart = (i: number): boolean => {
-          if (val(i) == null) return false;
-          if (i === 0) return !s.edgeStart;
-          if (val(i - 1) != null) return false;
-          return i === 1 || val(i - 2) == null; // 前面连续两周无值才算新开头（1 周断采视为连续）
-        };
-        const isEnd = (i: number): boolean => {
-          if (val(i) == null) return false;
-          if (i + 1 < n && val(i + 1) != null) return false; // 非段尾
-          if (i === n - 1) return !s.edgeEnd; // 触右缘：有续接=非截止（灰色短线），否则=真实终点
-          // 段尾：其后连续两周无值才认定截止（尾后只剩 1 桶时按截止处理）
-          return val(i + 1) == null && (i + 2 < n ? val(i + 2) == null : true);
-        };
+        // 端点（第十四轮）：带标记的点在 canvas 上不画默认符号，由 DOM 徽标接管
         const data = s.points.map((p, i) => {
-          const endpoint = p.price != null && (isStart(i) || isEnd(i));
+          const marked = endpointMarks.has(`${s.key}|${i}`);
           return {
             value: p.price != null ? yNormOf(geom, p.price) : null,
-            symbol: endpoint ? 'circle' : undefined,
-            symbolSize: endpoint ? 8.5 : undefined,
-            itemStyle: endpoint ? { color: s.color, borderColor: color.canvas, borderWidth: 1.5 } : undefined,
+            symbol: marked ? 'none' : undefined,
             label: {
               show: p.price != null && dyMap[i] !== undefined,
               position: 'top' as const,
@@ -556,33 +571,20 @@ export default function Chart(props: ChartProps) {
     return out;
   }, [props.enableOffer, geom, series]);
 
-  // ---- 边界续接短线（第十三轮）：窗口边缘点在窗口外 2 周内仍有数据时，从该点向
-  //      绘图区边界外伸出灰色虚线（越过边缘 14px），暗示"这不是终点，可拉伸时间窗口"；
-  //      右缘若已是最新时间则无短线（真实终点，端点按截止样式） ----
-  const edgeStubs = useMemo(() => {
+  // ---- 端点徽标几何（第十四轮）：S/E = 实心品牌色圆内白字（稍大于普通点）；
+  //      ‹/› = 窗口边缘续接点（白底品牌描边 + 外向箭头），替代原灰色延长线 ----
+  const endpointBadges = useMemo(() => {
     if (!geom) return [];
-    const out: { key: string; x1: number; x2: number; y: number }[] = [];
+    const out: { key: string; x: number; y: number; kind: 'S' | 'E' | 'in' | 'out'; color: string }[] = [];
     for (const s of series) {
-      const n = s.points.length;
-      if (s.edgeStart && primaryOf(s.points[0]) != null) {
-        out.push({
-          key: `${s.key}-s`,
-          x1: geom.plotLeft - 14,
-          x2: xPxOf(geom, 0) - 4,
-          y: yPxOf(geom, primaryOf(s.points[0])!),
-        });
-      }
-      if (s.edgeEnd && primaryOf(s.points[n - 1]) != null) {
-        out.push({
-          key: `${s.key}-e`,
-          x1: xPxOf(geom, n - 1) + 4,
-          x2: geom.plotLeft + geom.plotWidth + 14,
-          y: yPxOf(geom, primaryOf(s.points[n - 1])!),
-        });
-      }
+      s.points.forEach((p, i) => {
+        const kind = endpointMarks.get(`${s.key}|${i}`);
+        if (!kind || p.price == null) return;
+        out.push({ key: `${s.key}|${i}`, x: xPxOf(geom, i), y: yPxOf(geom, p.price), kind, color: s.color });
+      });
     }
     return out;
-  }, [geom, series]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [geom, series, endpointMarks]);
 
   const empty = series.length === 0;
   const brandByKey = useMemo(() => new Map(series.map((s) => [s.key, s.brand])), [series]);
@@ -913,24 +915,48 @@ export default function Chart(props: ChartProps) {
               }}
             />
           )}
-          {/* 边界续接短线（第十三轮）：灰色虚线 = 数据在窗口外延续，暗示可拉伸时间窗口 */}
-          {edgeStubs.map((st) => (
-            <div
-              key={`stub-${st.key}`}
-              title="数据在窗口外仍有延续，可拉伸时间窗口查看"
-              style={{
-                position: 'absolute',
-                left: st.x1,
-                top: Math.round(st.y) - 1,
-                width: Math.max(0, st.x2 - st.x1),
-                height: 0,
-                borderTop: `2px dashed ${color.hairlineStrong}`,
-                opacity: 0.8,
-                pointerEvents: 'none',
-                zIndex: 2,
-              }}
-            />
-          ))}
+          {/* 端点徽标（第十四轮）：S=起点、E=截止（实心品牌色圆内白字，稍大于普通点）；
+              ‹/›=窗口边缘续接点（白底品牌描边+外向箭头），数据在窗口外延续 */}
+          {endpointBadges.map((b) => {
+            const big = b.kind === 'S' || b.kind === 'E';
+            return (
+              <div
+                key={`ep-${b.key}`}
+                title={
+                  b.kind === 'S'
+                    ? 'S = 起点（该配置首个有价周）'
+                    : b.kind === 'E'
+                      ? 'E = 截止（其后连续两周无数据）'
+                      : b.kind === 'in'
+                        ? '数据在窗口左侧延续，可拉伸时间窗口查看'
+                        : '数据在窗口右侧延续，可拉伸时间窗口查看'
+                }
+                style={{
+                  position: 'absolute',
+                  left: b.x,
+                  top: b.y,
+                  width: big ? 15 : 13,
+                  height: big ? 15 : 13,
+                  transform: 'translate(-50%, -50%)',
+                  borderRadius: '50%',
+                  boxSizing: 'border-box',
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: big ? b.color : color.canvas,
+                  border: `1.5px solid ${big ? color.canvas : b.color}`,
+                  color: big ? color.canvas : b.color,
+                  fontSize: big ? 9 : 10,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  fontFamily: font.family,
+                  pointerEvents: 'none',
+                  zIndex: 8,
+                }}
+              >
+                {b.kind === 'in' ? '‹' : b.kind === 'out' ? '›' : b.kind}
+              </div>
+            );
+          })}
           {/* 系列名（起点旁 13px / 名称预留带 12px 两行换行，前置品牌色小点；
               zIndex 9 = 全图层最上，白描边保证不被任何元素遮挡） */}
           {labelPlan.names.map((nm, i) => (
