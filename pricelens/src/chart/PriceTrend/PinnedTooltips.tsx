@@ -1,17 +1,16 @@
 // ============================================================
-// §6.2 钉顶卡片（第四轮 = 常驻信息卡）：
-// - 常驻：选完产品即出现，四行内容不随状态增减——
-//   品牌+产品名 / RRP / 折后价（竞品附与我们的价差%，仅悬停/锁定列）/ 来源（平台店铺链接）。
-// - 明细态（悬停列或锁定列）= 该时间桶的值；图例态（未触发/指针在卡片区且无锁定）
-//   = 窗口内最新有值点的值（名称行右侧缀锚点日期，title 说明），两态卡高不变。
+// §6.2 钉顶卡片（第九轮口径 = 图例/明细两态）：
+// - 常驻：选完产品即出现。未悬停且未锁定 = 图例态：品牌色小点+品牌+产品名单行居中，
+//   不出明细（用户反馈：没锁定时不该展示 RRP/折后价/来源）；
+//   悬停列或锁定列 = 明细态：小点+名称、RRP、折后价（竞品附与我们的价差%）、
+//   来源（平台店铺名超链接，取证跳转）；移出后回图例态（锁定列保持明细）。
 // - 卡片即 BI 图例：点击切换选中/未选中，未选中系列折线隐藏、底色浅一档、内容减淡。
 // - 底色 = 品牌色掺灰提亮 + 80% 透明度（brandTintBg）：选中浅品牌色/未选中浅浅品牌色。
 // - 卡宽 = 绘图区 1/6（cardWidthFor），整组居中、从中间向外拓展；>6 个自动换排，
 //   排数 = ceil(N/6) 只随产品选择变化（helpers.gridTopFor 决定图顶预留，悬停不变高）。
-// - RRP/折后价两行常驻展示，不受「价格类型」勾选限制（勾选只决定图上画哪些线）。
-// - offer 不进卡片（图上 offer 小图标承载，第二轮口径不变）。
+// - offer 不进卡片（图上 offer 小图标承载）。
 // ============================================================
-import type { CurrencyMode, Series, SeriesPoint } from '../../dataModel/types';
+import type { CurrencyMode, Series } from '../../dataModel/types';
 import { color, formatPrice, radius, shadow } from '../../theme/tokens';
 import BrandDot, { brandTintBg } from '../../components/BrandMark';
 import { CARD_GAP, CARD_H, cardWidthFor, diffPct } from './helpers';
@@ -19,7 +18,7 @@ import { CARD_GAP, CARD_H, cardWidthFor, diffPct } from './helpers';
 export interface PinnedTooltipsProps {
   series: Series[]; // 全部勾选系列（含图例取消选中的——卡片常驻）
   hiddenKeys: Set<string>; // 图例未选中的系列 key（折线已隐藏）
-  index: number | null; // 钉住的桶下标；null = 图例态（显示窗口最新值）
+  index: number | null; // 钉住的桶下标；null = 图例态
   currency: CurrencyMode;
   priceTypes: { discounted: boolean; rrp: boolean };
   left: number; // 绘图区左缘
@@ -28,20 +27,11 @@ export interface PinnedTooltipsProps {
   onToggle?: (key: string) => void; // 图例点击（弹窗迷你图可不传）
 }
 
-/** 窗口内最新有值点（自尾向前找第一个两价任一非空的桶；全缺 → undefined） */
-function latestPointOf(s: Series): SeriesPoint | undefined {
-  for (let i = s.points.length - 1; i >= 0; i--) {
-    const p = s.points[i];
-    if (p.price != null || p.rrp != null) return p;
-  }
-  return undefined;
-}
-
 export default function PinnedTooltips(props: PinnedTooltipsProps) {
   const { series, hiddenKeys, index, currency, priceTypes, left, top, maxWidth, onToggle } = props;
   if (series.length === 0) return null;
 
-  // 我司基准价 = 第一个在当前桶有主价的我司系列（竞品价差锚点；仅明细态参与）
+  // 我司基准价 = 第一个在当前桶有主价的我司系列（竞品价差锚点）
   const mainVal = (s: Series): number | null => {
     if (index == null) return null;
     const pt = s.points[index];
@@ -78,20 +68,15 @@ export default function PinnedTooltips(props: PinnedTooltipsProps) {
       {series.map((s) => {
         const selected = !hiddenKeys.has(s.key);
         const detail = index != null;
-        const pt = detail ? s.points[index] : latestPointOf(s); // 明细=该桶；图例=窗口最新
+        const pt = detail ? s.points[index] : undefined;
         const main = mainVal(s);
-        const diff =
-          detail && !s.isOwn && ownVal != null && main != null ? diffPct(main, ownVal) : null;
+        const diff = detail && !s.isOwn && ownVal != null && main != null ? diffPct(main, ownVal) : null;
         return (
           <div
             key={s.key}
             role={onToggle ? 'button' : undefined}
             aria-pressed={onToggle ? !selected : undefined}
-            title={
-              onToggle
-                ? `${s.label}（点击${selected ? '隐藏' : '显示'}折线${detail ? '' : '；当前显示窗口最新价'}）`
-                : s.label
-            }
+            title={onToggle ? `${s.label}（点击${selected ? '隐藏' : '显示'}折线）` : s.label}
             onClick={
               onToggle
                 ? (e) => {
@@ -112,7 +97,7 @@ export default function PinnedTooltips(props: PinnedTooltipsProps) {
               pointerEvents: 'auto',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'center',
+              justifyContent: 'center', // 两态内容都垂直居中，卡高不变无跳动感
               gap: 2,
               overflow: 'hidden',
               opacity: selected ? 1 : 0.72,
@@ -120,91 +105,96 @@ export default function PinnedTooltips(props: PinnedTooltipsProps) {
               flexShrink: 0,
             }}
           >
-            {/* 行1：品牌小点 + 产品名；图例态右侧缀锚点日期（窗口最新价的时点） */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 16 }}>
-              <BrandDot brand={s.brand} />
+            {index == null ? (
+              /* 图例态：品牌色小点 + 品牌+产品名，单行居中（不出明细） */
               <div
-                title={s.label}
                 style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
                   fontSize: 12,
                   lineHeight: '16px',
                   fontWeight: 600,
                   color: color.ink,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
-                  textOverflow: 'ellipsis',
                 }}
               >
-                {s.label}
+                <BrandDot brand={s.brand} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
               </div>
-              {!detail && pt && (
-                <span
-                  className="tnum"
-                  title="窗口内最新有值时点"
+            ) : (
+              <>
+                {/* 明细态：小点+名称 / RRP / 折后价(+价差%) / 来源超链接 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 16 }}>
+                  <BrandDot brand={s.brand} />
+                  <div
+                    title={s.label}
+                    style={{
+                      fontSize: 12,
+                      lineHeight: '16px',
+                      fontWeight: 600,
+                      color: color.ink,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {s.label}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 12, lineHeight: '16px' }}>
+                  <span style={{ color: color.mute }}>RRP</span>
+                  <span className="tnum" style={{ color: color.body }}>
+                    {formatPrice(pt?.rrp ?? null, currency)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 13, lineHeight: '18px' }}>
+                  <span style={{ fontSize: 11, color: color.mute }}>折后价</span>
+                  <span className="tnum" style={{ fontWeight: 600, color: color.ink }}>
+                    {formatPrice(pt?.price ?? null, currency)}
+                  </span>
+                  {diff && (
+                    <span
+                      className="tnum"
+                      style={{ fontSize: 11, color: diff.tone === 'rich' ? color.error : color.link }}
+                      title="与我们的价差"
+                    >
+                      {diff.text}
+                    </span>
+                  )}
+                </div>
+                <div
                   style={{
-                    marginLeft: 'auto',
-                    flexShrink: 0,
-                    fontSize: 10,
-                    lineHeight: '14px',
-                    color: color.mute,
+                    fontSize: 12,
+                    lineHeight: '16px',
+                    color: color.body,
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 6,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
                   }}
                 >
-                  {pt.anchorDate.slice(5)}
-                </span>
-              )}
-            </div>
-            {/* 行2：RRP（常驻，不受价格类型勾选限制） */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 12, lineHeight: '16px' }}>
-              <span style={{ color: color.mute }}>RRP</span>
-              <span className="tnum" style={{ color: color.body }}>
-                {formatPrice(pt?.rrp ?? null, currency)}
-              </span>
-            </div>
-            {/* 行3：折后价（常驻；明细态竞品附与我们的价差%） */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 13, lineHeight: '18px' }}>
-              <span style={{ fontSize: 11, color: color.mute }}>折后价</span>
-              <span className="tnum" style={{ fontWeight: 600, color: color.ink }}>
-                {formatPrice(pt?.price ?? null, currency)}
-              </span>
-              {diff && (
-                <span
-                  className="tnum"
-                  style={{ fontSize: 11, color: diff.tone === 'rich' ? color.error : color.link }}
-                  title="与我们的价差"
-                >
-                  {diff.text}
-                </span>
-              )}
-            </div>
-            {/* 行4：来源（平台店铺名超链接，取证跳转） */}
-            <div
-              style={{
-                fontSize: 12,
-                lineHeight: '16px',
-                color: color.body,
-                display: 'flex',
-                alignItems: 'baseline',
-                gap: 6,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-              }}
-            >
-              <span style={{ color: color.mute, flexShrink: 0 }}>来源</span>
-              {pt?.url ? (
-                <a
-                  href={pt.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  title={`打开 ${pt.shopName ?? ''} 取证页`}
-                  style={{ color: color.link, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                >
-                  {pt.shopName ?? '—'}
-                </a>
-              ) : (
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pt?.shopName ?? '—'}</span>
-              )}
-            </div>
+                  <span style={{ color: color.mute, flexShrink: 0 }}>来源</span>
+                  {pt?.url ? (
+                    <a
+                      href={pt.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      title={`打开 ${pt.shopName ?? ''} 取证页`}
+                      style={{ color: color.link, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    >
+                      {pt.shopName ?? '—'}
+                    </a>
+                  ) : (
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pt?.shopName ?? '—'}</span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         );
       })}

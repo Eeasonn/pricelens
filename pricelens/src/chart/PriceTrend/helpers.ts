@@ -32,12 +32,10 @@ const TARGET_CELLS = 8;
 /** §6.5 刷选窗口最小 4 个桶 */
 export const MIN_WINDOW = 4;
 
-// ---------------- Y 轴左侧布局（第七轮） ----------------
+// ---------------- Y 轴左侧布局（第七轮+八轮修订） ----------------
 
-/** 最左滑杆 gutter（每格高度倍率，双击复位）宽 */
-export const SLIDER_GUTTER = 26;
-/** 产品名称预留带宽：起点贴近左缘的系列名收进这里，折线永不进入 */
-export const NAME_ZONE_W = 112;
+/** 产品名称预留带宽：起点贴近左缘的系列名收进这里（可两行换行），折线永不进入 */
+export const NAME_ZONE_W = 148;
 /** 档位带（仅 USD）宽 + 与刻度列的间距 */
 export const TIER_BAND_W = 64;
 export const TIER_BAND_GAP = 8;
@@ -98,10 +96,10 @@ export function axisTickGutter(ticks: number[]): number {
   return Math.max(34, Math.round(chars * 7.2) + 12);
 }
 
-/** Y 轴总左缘 = 滑杆 gutter + [档位带(仅USD)] + 刻度列 + 名称预留带（estGridLeft 沿用旧名） */
+/** Y 轴总左缘 = [档位带(仅USD)] + 刻度列 + 名称预留带（estGridLeft 沿用旧名；滑杆已移至工具行，不占左缘） */
 export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local'): number {
   const tickW = axisTickGutter([axisMax / 2, axisMax]);
-  return SLIDER_GUTTER + (currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0) + tickW + NAME_ZONE_W;
+  return (currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0) + tickW + NAME_ZONE_W;
 }
 
 // ---------------- Y 轴（第七轮：纯自适应 + 空白压缩分段刻度） ----------------
@@ -195,14 +193,15 @@ export function computeYAxis(params: {
     if (ok) validCuts.push(cut);
   }
 
-  // ---- 2) 段域：外段外侧各留 6% padding；interval 按有效跨度取 nice；外缘吸附整格 ----
-  const bounds = [rawMin, ...validCuts, rawMax];
+  // ---- 2) 段域紧贴数据簇（第八轮修订）：断裂内缘只让出 0.6×interval0 的呼吸位，
+  //      不再把空白带中点当边界——否则段内侧残留大片无值区和无义刻度（用户反馈）。
+  //      外缘（全域最底/最顶）留 6%，按最终 interval 吸附整格。
+  const dataBounds = [rawMin, ...validCuts, rawMax];
+  const innerPad = interval0 * 0.6;
   const segDomains: { min: number; max: number }[] = [];
-  for (let i = 0; i < bounds.length - 1; i++) {
-    const isBottom = i === 0;
-    const isTop = i === bounds.length - 2;
-    const lo = bounds[i] - (isBottom ? rawSpan * 0.06 : 0);
-    const hi = bounds[i + 1] + (isTop ? rawSpan * 0.06 : 0);
+  for (let i = 0; i < dataBounds.length - 1; i++) {
+    const lo = dataBounds[i] + (i === 0 ? -rawSpan * 0.06 : innerPad);
+    const hi = dataBounds[i + 1] - (i === dataBounds.length - 2 ? -rawSpan * 0.06 : innerPad);
     segDomains.push({ min: lo, max: hi });
   }
   const pseudoSpan0 = segDomains.reduce((acc, d) => acc + (d.max - d.min), 0);

@@ -23,6 +23,8 @@ export interface XBrushProps {
   e: number;
   granularity: 'week' | 'month' | 'quarter';
   onChange: (s: number, e: number) => void;
+  /** 拖动开始/结束（第九轮）：上层据此冻结 Y 轴自适应，松手统一重算一次 */
+  onAdjusting?: (v: boolean) => void;
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -30,7 +32,7 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 type DragKind = 'start' | 'end' | 'pan';
 
 export default function XBrush(props: XBrushProps) {
-  const { buckets, s, e, granularity, onChange } = props;
+  const { buckets, s, e, granularity, onChange, onAdjusting } = props;
   const n = buckets.length;
   const trackRef = useRef<HTMLDivElement | null>(null);
   // 拖动基准 = 按下瞬间的窗口（startS/startE），避免用中间态反馈造成漂移
@@ -48,6 +50,7 @@ export default function XBrush(props: XBrushProps) {
     ev.stopPropagation();
     dragRef.current = { kind, startX: ev.clientX, startS: s, startE: e };
     if (kind === 'pan') setPanning(true);
+    onAdjusting?.(true); // 拖动开始：上层冻结 Y 轴自适应
     ev.currentTarget.setPointerCapture(ev.pointerId);
   };
   const onDragMove = (ev: ReactPointerEvent<HTMLDivElement>) => {
@@ -68,6 +71,7 @@ export default function XBrush(props: XBrushProps) {
     if (!dragRef.current) return;
     dragRef.current = null;
     setPanning(false);
+    onAdjusting?.(false); // 松手：上层统一重算一次 Y 轴自适应
     ev.currentTarget.releasePointerCapture(ev.pointerId);
   };
 

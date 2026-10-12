@@ -1,12 +1,12 @@
 // ============================================================
 // §4.1 图卡内容 + §6 价格走势全家桶编排：
-// 第一行 = 左 [折后价|RRP 复选]；右 [汇总:平均值|最小值]（仅月/季，写回 state.agg）
-// ——档位筛选 chips 与「+自定义」已删（第七轮）：档位信息改为 Y 轴左侧档位带（仅 USD，Chart 内渲染）
-// 下方 = YAxisResizer（伸缩滑杆，只缩放每格像素高）> Chart（ECharts+覆盖层）> XBrush（重采样窗口）> PromoTable
-// Y 轴口径（第七轮）：纯自适应——min/max/interval/格数全部由所选系列值域推导
-// （computeYAxis 分段压缩刻度：空白带 ≥ 阈值自动断轴），无任何手动覆盖；
-// 滑杆只控每格像素高（0.5×–3×，双击复位）；切换产品/价格类型/币种 → 倍率复位 ×1。
-// 容器高由 Y 模型派生：格数×TICK_PX×倍率 + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
+// 第一行 = 左 [折后价|RRP 复选 / 其下横向每格高度滑杆]；右 [汇总]（仅月/季，写回 state.agg）
+// ——滑杆（第九轮）改横向移到价格类型筛选器下方，不再占 Y 轴左侧；拖动中只动握把，
+//    松手统一提交（与刷选一致，避免拖动过程图表高度实时晃动）
+// 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）> PromoTable（促销力度矩阵）
+// Y 轴口径（第七/九轮）：纯自适应分段压缩刻度，无手动覆盖；刷选拖动中冻结 Y 轴
+// （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
+// 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
 // 数据流 = useFilters().state → SeriesQuery → buildSeries → 窗口切片 → PriceTrend
 // 窗口状态为图表内部状态（初值=筛选器范围；范围变化收缩、粒度切换对齐桶边界，§6.5）
 // 第三轮口径：XBrush 轨道 = 数据全集时间轴；取数也按全集（数据量小、内存计算），
@@ -27,7 +27,7 @@ import type { ProductSelection } from '../../state/filtersTypes';
 import { color, fontSize, space } from '../../theme/tokens';
 import Chart from './Chart';
 import XBrush from './XBrush';
-import YAxisResizer from './YAxisResizer';
+import ScaleSlider from './ScaleSlider';
 import DrillModal, { type DrillInfo } from './DrillModal';
 import {
   GRID,
@@ -39,6 +39,7 @@ import {
   gridTopFor,
   normalizeWindow,
   type Bucket,
+  type YScale,
 } from './helpers';
 import PromoTable from './PromoTable';
 
@@ -46,7 +47,8 @@ export default function PriceTrend() {
   const { state, actions } = useFilters();
 
   // ---- 图表内部状态 ----
-  const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值）
+  const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值；松手才提交）
+  const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null); // null=整个筛选范围
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例卡取消选中的系列（折线隐藏）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
@@ -131,11 +133,15 @@ export default function PriceTrend() {
     });
   };
 
-  // Y 轴 = 纯自适应分段刻度（第七轮）：无 chips/拖柄，滑杆只缩放每格像素高
-  const yCfg = useMemo(
-    () => computeYAxis({ series: chartSeries, priceTypes: state.priceTypes, sliderScale }),
-    [chartSeries, state.priceTypes, sliderScale],
-  );
+  // Y 轴 = 纯自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
+  // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）
+  const scaleRef = useRef<YScale | null>(null);
+  const yCfg = useMemo(() => {
+    if (adjusting && scaleRef.current) return scaleRef.current;
+    const next = computeYAxis({ series: chartSeries, priceTypes: state.priceTypes, sliderScale });
+    scaleRef.current = next;
+    return next;
+  }, [chartSeries, state.priceTypes, sliderScale, adjusting]);
   // 图顶预留 = 常驻卡片排数（ceil(N/6)）——只随产品选择变化，悬停不变高
   const gridTop = gridTopFor(visSeries.length);
   // 容器高由 Y 模型派生：格数×TICK_PX×倍率 + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
@@ -208,24 +214,27 @@ export default function PriceTrend() {
   // ---- 渲染 ----
   return (
     <div>
-      {/* 图内筛选器行（§6.1/§4.1）：价格类型复选（左）+ 汇总（右，仅月/季） */}
+      {/* 图内筛选器行（§6.1/§4.1）：价格类型复选 + 其下横向每格高度滑杆（左）；汇总（右，仅月/季） */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           flexWrap: 'wrap',
           gap: space.md,
           marginBottom: space.md,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
-          <Checkbox checked={state.priceTypes.discounted} onChange={(e) => setPriceType('discounted', e.target.checked)}>
-            折后价
-          </Checkbox>
-          <Checkbox checked={state.priceTypes.rrp} onChange={(e) => setPriceType('rrp', e.target.checked)}>
-            RRP
-          </Checkbox>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
+            <Checkbox checked={state.priceTypes.discounted} onChange={(e) => setPriceType('discounted', e.target.checked)}>
+              折后价
+            </Checkbox>
+            <Checkbox checked={state.priceTypes.rrp} onChange={(e) => setPriceType('rrp', e.target.checked)}>
+              RRP
+            </Checkbox>
+          </div>
+          <ScaleSlider scale={sliderScale} onCommit={setSliderScale} />
         </div>
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
         {state.granularity !== 'week' && (
@@ -244,39 +253,31 @@ export default function PriceTrend() {
         )}
       </div>
 
-      {/* 图主体（Y 轴纯自适应 + 伸缩滑杆；X 刷选条在图表块之下） */}
-      <YAxisResizer
-        height={chartHeight}
-        plotTop={gridTop}
-        plotHeight={yCfg.plotHeight}
-        sliderScale={sliderScale}
-        onSliderScale={setSliderScale}
-      >
-        <Chart
-          series={chartSeries}
-          legendSeries={visSeries}
-          hiddenKeys={hiddenKeys}
-          onToggleLegend={toggleLegend}
-          granularity={state.granularity}
-          currency={state.currency}
-          priceTypes={state.priceTypes}
-          gridLeft={gridLeft}
-          gridTop={gridTop}
-          enableDrill={state.granularity !== 'week'}
-          enableJump={state.granularity === 'week'}
-          enableOffer={state.granularity === 'week'}
-          onDrill={onDrill}
-          windowKey={`${win.s}:${win.e}`}
-          emptyHint={
-            visSeries.length > 0 && chartSeries.length === 0
-              ? '所有系列已在图例中隐藏，点击顶部图例卡恢复显示'
-              : undefined
-          }
-        />
-      </YAxisResizer>
-      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 全时间轴） */}
+      {/* 图主体（Y 轴纯自适应；X 刷选条在图表块之下） */}
+      <Chart
+        series={chartSeries}
+        legendSeries={visSeries}
+        hiddenKeys={hiddenKeys}
+        onToggleLegend={toggleLegend}
+        granularity={state.granularity}
+        currency={state.currency}
+        priceTypes={state.priceTypes}
+        gridLeft={gridLeft}
+        gridTop={gridTop}
+        enableDrill={state.granularity !== 'week'}
+        enableJump={state.granularity === 'week'}
+        enableOffer={state.granularity === 'week'}
+        onDrill={onDrill}
+        windowKey={`${win.s}:${win.e}`}
+        emptyHint={
+          visSeries.length > 0 && chartSeries.length === 0
+            ? '所有系列已在图例中隐藏，点击顶部图例卡恢复显示'
+            : undefined
+        }
+      />
+      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 全时间轴；拖动中冻结 Y 轴自适应） */}
       {buckets.length > 0 && visSeries.length > 0 && (
-        <XBrush buckets={buckets} s={win.s} e={win.e} granularity={state.granularity} onChange={onWindowChange} />
+        <XBrush buckets={buckets} s={win.s} e={win.e} granularity={state.granularity} onChange={onWindowChange} onAdjusting={setAdjusting} />
       )}
 
       {/* 促销力度矩阵表（行=产品，列=窗口内每个时间节点，格=相对上市价降幅%） */}

@@ -25,7 +25,6 @@ import {
   DEFAULT_TIERS,
   GRID,
   NAME_ZONE_W,
-  SLIDER_GUTTER,
   TIER_BAND_GAP,
   TIER_BAND_W,
   computeYAxis,
@@ -82,6 +81,8 @@ const LABEL_LINE_HEIGHT = 20;
 const NAME_FONT_SIZE = 13;
 const NAME_LINE_HEIGHT = 18;
 const NAME_LOGO_W = 12; // 系列名前置品牌色小点（8px）+ 间距 4，避让宽度估算用
+const ZONE_FONT = 12; // 名称预留带内字号（小一号）+ 两行换行
+const ZONE_LINE_H = 16;
 const NO_KEYS = new Set<string>(); // hiddenKeys 缺省值
 
 export default function Chart(props: ChartProps) {
@@ -205,7 +206,7 @@ export default function Chart(props: ChartProps) {
       valIdx.forEach((i) => {
         if (!p0.has(i) && change.has(i)) pushPrice(i, false);
       });
-      // 系列名：起点旁（垂直居中于该点）；放不下 → 名称预留带内右对齐（省略号）。
+      // 系列名：起点旁（垂直居中于该点）；放不下 → 名称预留带内右对齐（12px、最多两行换行）。
       // 带内去掉品牌前缀（品牌已由色点表达），给产品名腾空间
       const fi = valIdx[0];
       const v0 = primaryOf(pts[fi]) ?? 0;
@@ -215,19 +216,21 @@ export default function Chart(props: ChartProps) {
       const useZone = besideLeft < geom.plotLeft + 2;
       const brandPrefix = `${s.brand} `;
       const zoneText = useZone && s.label.startsWith(brandPrefix) ? s.label.slice(brandPrefix.length) : s.label;
-      const zoneW = Math.min(nameW(zoneText), NAME_ZONE_W - 12);
+      const zoneTextW = NAME_LOGO_W + 4 + zoneText.length * (ZONE_FONT * 0.62);
+      const zoneBoxW = Math.min(zoneTextW, NAME_ZONE_W - 12);
+      const zoneLines = Math.max(1, Math.min(2, Math.ceil(zoneTextW / Math.max(1, NAME_ZONE_W - 12))));
       items.push({
         kind: 'name',
         seriesKey: s.key,
         pointIdx: fi,
         pinned: true,
-        left: useZone ? geom.plotLeft - 8 - zoneW : besideLeft,
+        left: useZone ? geom.plotLeft - 8 - zoneBoxW : besideLeft,
         right: useZone ? geom.plotLeft - 8 : px - 8,
-        top: py - NAME_LINE_HEIGHT / 2,
-        h: NAME_LINE_HEIGHT,
+        top: useZone ? py - (zoneLines * ZONE_LINE_H) / 2 : py - NAME_LINE_HEIGHT / 2,
+        h: useZone ? zoneLines * ZONE_LINE_H : NAME_LINE_HEIGHT,
         text: useZone ? zoneText : s.label,
         color: s.color,
-        maxW: useZone ? zoneW : undefined,
+        maxW: useZone ? zoneBoxW : undefined,
       });
     }
     const res = resolveCollisions(items, geom.plotTop);
@@ -465,10 +468,10 @@ export default function Chart(props: ChartProps) {
       : null;
 
   // ---- DOM 刻度/断轴/档位带数据 ----
-  // 左缘布局：[滑杆 gutter][档位带(仅USD)][刻度列][名称预留带][绘图区]
-  const tickW = geom
-    ? Math.max(34, geom.gridLeft - SLIDER_GUTTER - (currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0) - NAME_ZONE_W)
-    : 44;
+  // 左缘布局：[档位带(仅USD)][刻度列][名称预留带][绘图区]（滑杆已移至工具行，不占左缘）
+  const tierPart = currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0;
+  const tickW = geom ? Math.max(34, geom.gridLeft - tierPart - NAME_ZONE_W) : 44;
+  const tierLeft = geom ? geom.gridLeft - NAME_ZONE_W - tickW - TIER_BAND_GAP - TIER_BAND_W : 0;
   const tickRows = useMemo(() => {
     if (!geom) return [];
     const out: { v: number; y: number }[] = [];
@@ -478,21 +481,38 @@ export default function Chart(props: ChartProps) {
     return out;
   }, [geom]);
 
+  // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
+  const tierValues = useMemo(() => {
+    const out: number[] = [];
+    for (const s of series) {
+      for (const pt of s.points) {
+        if (priceTypes.discounted && pt.price != null) out.push(pt.price);
+        if (priceTypes.rrp && pt.rrp != null) out.push(pt.rrp);
+      }
+    }
+    return out;
+  }, [series, priceTypes]);
+
   const showTierBand = currency === 'usd' && geom != null;
+  // 档位带按段裁剪：档位只画在与其值域相交的段上（跨断裂的档不会画出"跨越"错觉）
   const tierBoxes = useMemo(() => {
     if (!showTierBand || !geom) return [];
     const out: { label: string; top: number; h: number }[] = [];
     for (const tier of DEFAULT_TIERS) {
-      const lo = Math.max(tier.min, geom.scale.min);
-      const hi = Math.min(tier.max ?? geom.scale.max, geom.scale.max);
-      if (lo >= hi - 1e-9) continue;
-      const top = yPxOf(geom, hi);
-      const h = yPxOf(geom, lo) - top;
-      if (h < 2) continue;
-      out.push({ label: tier.label, top, h });
+      const tHi = tier.max ?? Number.POSITIVE_INFINITY;
+      if (!tierValues.some((v) => v >= tier.min && v < tHi)) continue; // 无数据的档不画
+      for (const seg of geom.scale.segs) {
+        const lo = Math.max(tier.min, seg.min);
+        const hi = Math.min(tHi, seg.max); // tHi=∞（1000+ 档）时即 seg.max
+        if (lo >= hi - 1e-9) continue;
+        const top = yPxOf(geom, hi);
+        const h = yPxOf(geom, lo) - top;
+        if (h < 2) continue;
+        out.push({ label: tier.label, top, h });
+      }
     }
     return out;
-  }, [showTierBand, geom]);
+  }, [showTierBand, geom, tierValues]);
 
   // 主价线：折后价优先；仅勾 RRP 时 RRP 成为主价线（标签/下钻/跳转跟随）
   function primaryOf(p: SeriesPoint): number | null {
@@ -617,57 +637,59 @@ export default function Chart(props: ChartProps) {
               </div>
             </div>
           ))}
-          {/* 断裂轴：压缩空白条 = 双虚线 + 轴上断轴符号（第七轮阈值见 helpers 常量） */}
+          {/* 断裂轴：压缩空白条 = 绘图区极浅灰带（暗示该段值域被隐藏）+ 上下虚线边，
+              轴上为纵向省略号标注（第八轮：替代斜线符号） */}
           {geom.scale.breaks.map((b, i) => {
             const stripTop = geom.plotTop + b - BREAK_PX / 2;
             return (
               <div key={`brk-${i}`}>
-                {[stripTop, stripTop + BREAK_PX].map((ly, j) => (
-                  <div
-                    key={j}
-                    style={{
-                      position: 'absolute',
-                      left: geom.plotLeft,
-                      top: Math.round(ly) - 0.5,
-                      width: geom.plotWidth,
-                      height: 0,
-                      borderTop: `1px dashed ${color.hairlineStrong}`,
-                      opacity: 0.7,
-                      pointerEvents: 'none',
-                      zIndex: 0,
-                    }}
-                  />
-                ))}
-                {/* 轴上断轴符号：刻度列处两道斜切短线 */}
+                {/* 极浅灰带（zIndex 0 = 画在数据线之下，但断裂带内本就无数据线） */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: geom.plotLeft,
+                    top: Math.round(stripTop),
+                    width: geom.plotWidth,
+                    height: BREAK_PX,
+                    background: color.canvasSoft2,
+                    borderTop: `1px dashed ${color.hairlineStrong}`,
+                    borderBottom: `1px dashed ${color.hairlineStrong}`,
+                    opacity: 0.85,
+                    pointerEvents: 'none',
+                    zIndex: 0,
+                  }}
+                />
+                {/* 轴上纵向省略号（⋮）：刻度列居中 */}
                 <svg
                   width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
+                  height="16"
+                  viewBox="0 0 14 16"
                   style={{
                     position: 'absolute',
                     left: geom.plotLeft - NAME_ZONE_W - tickW / 2 - 7,
-                    top: geom.plotTop + b - 7,
+                    top: geom.plotTop + b - 8,
                     pointerEvents: 'none',
                     zIndex: 2,
                   }}
                   aria-hidden
                 >
-                  <path d="M2.5 9.5 L11.5 4.5" stroke={color.hairlineStrong} strokeWidth="1.4" strokeLinecap="round" />
-                  <path d="M2.5 12 L11.5 7" stroke={color.hairlineStrong} strokeWidth="1.4" strokeLinecap="round" />
+                  {[3, 8, 13].map((cy) => (
+                    <circle key={cy} cx="7" cy={cy} r="1.5" fill={color.hairlineStrong} />
+                  ))}
                 </svg>
               </div>
             );
           })}
           {/* 档位带（仅 USD）：Y 轴左侧档位框，框住对应刻度区段（如 200~400 框住 200..400）；
-              本币不渲染；图隐藏（空态）时整块随之消失 */}
+              完全无数据的档不显示；本币不渲染；图隐藏（空态）时整块随之消失 */}
           {showTierBand &&
             tierBoxes.map((tb, i) => (
               <div
-                key={`tier-${tb.label}`}
+                key={`tier-${tb.label}-${i}`}
                 title={`价格档位 ${tb.label}（USD）`}
                 style={{
                   position: 'absolute',
-                  left: SLIDER_GUTTER,
+                  left: tierLeft,
                   top: tb.top,
                   width: TIER_BAND_W,
                   height: tb.h,
@@ -724,7 +746,7 @@ export default function Chart(props: ChartProps) {
               }}
             />
           )}
-          {/* 系列名（起点旁 / 名称预留带兜底，DOM 层 13px/600，前置品牌色小点；
+          {/* 系列名（起点旁 13px / 名称预留带 12px 两行换行，前置品牌色小点；
               zIndex 9 = 全图层最上，白描边保证不被任何元素遮挡） */}
           {labelPlan.names.map((nm, i) => (
             <div
@@ -737,22 +759,29 @@ export default function Chart(props: ChartProps) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
-                fontSize: NAME_FONT_SIZE,
+                fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
                 fontWeight: 600,
-                lineHeight: `${NAME_LINE_HEIGHT}px`,
+                lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
                 color: nm.color,
                 whiteSpace: 'nowrap',
                 pointerEvents: 'none',
                 zIndex: 9,
                 textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
-                ...(nm.maxW != null ? { maxWidth: nm.maxW, overflow: 'hidden' } : null),
+                ...(nm.maxW != null ? { maxWidth: nm.maxW } : null),
               }}
             >
               <BrandDot brand={brandByKey.get(nm.seriesKey) ?? ''} />
               <span
                 style={
                   nm.maxW != null
-                    ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+                    ? {
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical' as const,
+                        WebkitLineClamp: 2,
+                        overflow: 'hidden',
+                        wordBreak: 'break-word',
+                        whiteSpace: 'normal',
+                      }
                     : undefined
                 }
               >
