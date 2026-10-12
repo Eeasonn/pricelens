@@ -1,5 +1,5 @@
 // ============================================================
-// §5.4 框四：时间 —— 时间粒度 Segmented（月/周/季，默认周）+ 时间范围 RangePicker。
+// §5.4 框四：时间 —— 时间粒度 Segmented（季/月/周，默认周）+ 时间范围 RangePicker。
 // 反馈 2.2/2.5：控件行=「粒度 + 范围」单行（高 32），标题「时间」由 FilterBar 的
 // FilterCell 统一渲染，保证各筛选器控件行底部对齐。
 // 严格照抄 antd DatePicker.RangePicker 双面板弹层范式：
@@ -60,9 +60,9 @@ export default function TimeBox() {
         value={g}
         onChange={(v) => actions.setGranularity(v as Granularity)}
         options={[
+          { label: '季', value: 'quarter' },
           { label: '月', value: 'month' },
           { label: '周', value: 'week' },
-          { label: '季', value: 'quarter' },
         ]}
       />
       <RangePicker

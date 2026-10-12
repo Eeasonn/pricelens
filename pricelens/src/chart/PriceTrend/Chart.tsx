@@ -19,7 +19,7 @@
 // - 悬停：十字竖线（DOM）+ 钉顶附框 + 周视图跳转图标 + offer 图标；ECharts tooltip 禁用
 // - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
 // ============================================================
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { Checkbox, Popover } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
 import * as echarts from 'echarts';
@@ -245,9 +245,10 @@ export default function Chart(props: ChartProps) {
   }, [width, totalH, gridTop, series, displayScale, currency, props.gridLeft]);
 
   // ---- 促销热力带对齐（第十五轮）：把绘图区横向几何原语上报给下方 PromoTable；
-  //      只按三个原语组成的 key 触发，高度过渡帧（displayScale 变）不重发 ----
+  //      只按三个原语组成的 key 触发，高度过渡帧（displayScale 变）不重发；
+  //      useLayoutEffect（第十七轮）：绘制前送达，热力带不必在过渡帧整表退场 ----
   const stripKey = geom ? `${geom.plotLeft}|${geom.plotWidth}|${geom.n}` : '';
-  useEffect(() => {
+  useLayoutEffect(() => {
     props.onGeom?.(geom ? { plotLeft: geom.plotLeft, plotWidth: geom.plotWidth, n: geom.n } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stripKey]);

@@ -12,7 +12,7 @@
 // 数据完全复用图表的 visSeries（同一 buildSeries / 窗口切片 / 汇总口径），零新增取数；
 // 上市基线来自 dim_product.launch_price（同型号+ROMRAM 各颜色造数一致，launchInfoOf 直取）。
 // ============================================================
-import { useMemo, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { CurrencyMode, Series } from '../../dataModel/types';
 import { launchInfoOf } from '../../dataModel/aggregate';
 import { color, font, fontSize, formatPrice, radius, space } from '../../theme/tokens';
@@ -92,10 +92,14 @@ export default function PromoTable({
   );
 
   const n = series[0]?.points.length ?? 0;
-  // geom 与系列必须同一窗口（n 一致）才可信；宽度/系列变化期间短暂跳过渲染
-  if (!geom || geom.n !== n || n === 0 || rows.length === 0) return null;
+  // geom 与系列必须同一窗口（n 一致）才可信；窗口切换的过渡帧沿用上一次几何继续渲染旧格，
+  // 绝不整表卸载——卸载会让页面内容高度塌缩，浏览器把滚动位置钳回顶部（拖动手柄时筛选栏闪现 bug）
+  const lastValidRef = useRef<StripGeom | null>(null);
+  if (geom && geom.n === n) lastValidRef.current = geom;
+  const g = geom && geom.n === n ? geom : lastValidRef.current;
+  if (!g || n === 0 || rows.length === 0) return null;
 
-  const bw = geom.plotWidth / n;
+  const bw = g.plotWidth / n;
   const showNum = bw >= NUM_MIN_BW;
 
   const fmtPct = (pct: number): string =>
@@ -104,7 +108,7 @@ export default function PromoTable({
   const stripLabel = (s: Series): string => s.label.replace(/\s*(GB|TB)$/i, '').trim();
 
   const nameCell: CSSProperties = {
-    width: geom.plotLeft,
+    width: g.plotLeft,
     flexShrink: 0,
     minWidth: 0,
     display: 'flex',
@@ -207,7 +211,7 @@ export default function PromoTable({
                 {r.launch != null ? formatPrice(r.launch, currency) : '—'}
               </span>
             </div>
-            <div style={{ width: geom.plotWidth, flexShrink: 0, position: 'relative' }}>
+            <div style={{ width: g.plotWidth, flexShrink: 0, position: 'relative' }}>
               {r.cells.map((c, i) => {
                 const base: ReactNode = [];
                 const left = i * bw;
