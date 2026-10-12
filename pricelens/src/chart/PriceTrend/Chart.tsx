@@ -123,6 +123,8 @@ export default function Chart(props: ChartProps) {
   const [lockedIdx, setLockedIdx] = useState<number | null>(null); // 点击锁定的时间列（跨悬停常驻）
   // Y 刻度线显隐（第十二轮）：齿轮弹层内开关，只隐藏刻度线+数字标签（档位带/断轴标记保留）
   const [showYTicks, setShowYTicks] = useState(true);
+  // 断裂带省略号（⋮）显隐（第十六轮）：齿轮弹层内开关，只隐藏轴上符号（灰带/虚线边保留）
+  const [showBreakMark, setShowBreakMark] = useState(true);
 
   // 图顶卡片区预留：缺省按 series 数量推（弹窗迷你图）
   const gridTop = props.gridTop ?? gridTopFor(Math.max(props.series.length, 1));
@@ -714,8 +716,9 @@ export default function Chart(props: ChartProps) {
       )}
       {geom && (
         <>
-          {/* 轴单位 + Y 轴显示设置（第十二轮）：币种符号与齿轮组成同组居中，
-              两种币种下符号↔齿轮间距恒为 6px；弹层内含伸缩滑杆与刻度线开关 */}
+          {/* 轴单位 + Y 轴显示设置（第十二轮起）：币种符号与齿轮组成同组居中，
+              两种币种下符号↔齿轮间距恒为 6px；弹层内含伸缩滑杆、刻度线开关与断轴省略号开关
+              （第十六轮：placement 改 bottomLeft，弹层与齿轮左对齐不再向左溢出） */}
           <div
             style={{
               position: 'absolute',
@@ -734,7 +737,7 @@ export default function Chart(props: ChartProps) {
             </span>
             <Popover
               trigger="click"
-              placement="bottom"
+              placement="bottomLeft"
               content={
                 <div style={{ width: 236 }}>
                   <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度（不改 Y 轴刻度值）</div>
@@ -744,12 +747,17 @@ export default function Chart(props: ChartProps) {
                   <Checkbox checked={showYTicks} onChange={(e) => setShowYTicks(e.target.checked)}>
                     <span style={{ fontSize: 12 }}>显示 Y 刻度线</span>
                   </Checkbox>
+                  <div style={{ marginTop: 6 }}>
+                    <Checkbox checked={showBreakMark} onChange={(e) => setShowBreakMark(e.target.checked)}>
+                      <span style={{ fontSize: 12 }}>断轴处显示省略号</span>
+                    </Checkbox>
+                  </div>
                 </div>
               }
             >
               <button
                 type="button"
-                title="Y 轴显示设置（每格高度伸缩 / 刻度线显隐）"
+                title="Y 轴显示设置（每格高度伸缩 / 刻度线与断轴省略号显隐）"
                 aria-label="Y 轴显示设置"
                 onClick={(e) => e.stopPropagation()}
                 style={{
@@ -840,24 +848,26 @@ export default function Chart(props: ChartProps) {
                     zIndex: 0,
                   }}
                 />
-                {/* 轴上纵向省略号（⋮）：刻度列居中 */}
-                <svg
-                  width="14"
-                  height="16"
-                  viewBox="0 0 14 16"
-                  style={{
-                    position: 'absolute',
-                    left: geom.plotLeft - NAME_ZONE_W - tickW / 2 - 7,
-                    top: geom.plotTop + b - 8,
-                    pointerEvents: 'none',
-                    zIndex: 2,
-                  }}
-                  aria-hidden
-                >
-                  {[3, 8, 13].map((cy) => (
-                    <circle key={cy} cx="7" cy={cy} r="1.5" fill={color.hairlineStrong} />
-                  ))}
-                </svg>
+                {/* 轴上纵向省略号（⋮）：刻度列居中（齿轮弹层可关，第十六轮） */}
+                {showBreakMark && (
+                  <svg
+                    width="14"
+                    height="16"
+                    viewBox="0 0 14 16"
+                    style={{
+                      position: 'absolute',
+                      left: geom.plotLeft - NAME_ZONE_W - tickW / 2 - 7,
+                      top: geom.plotTop + b - 8,
+                      pointerEvents: 'none',
+                      zIndex: 2,
+                    }}
+                    aria-hidden
+                  >
+                    {[3, 8, 13].map((cy) => (
+                      <circle key={cy} cx="7" cy={cy} r="1.5" fill={color.hairlineStrong} />
+                    ))}
+                  </svg>
+                )}
               </div>
             );
           })}
