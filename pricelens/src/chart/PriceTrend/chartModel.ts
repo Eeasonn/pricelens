@@ -46,6 +46,14 @@ export const NAME_LINE_HEIGHT = 18;
 const NAME_LOGO_W = 12; // 系列名前置品牌色小点（8px）+ 间距 4，避让宽度估算用
 export const ZONE_FONT = 12; // 名称预留带内字号（小一号）+ 两行换行
 export const ZONE_LINE_H = 16;
+/** 生命周期第二行占高（第三十二轮）：11px 字号 13px 行高 + 行距 1——
+ *  必须计入名称避让盒，否则相邻名称互压 ~14px（用户底线：名称互不遮挡） */
+export const LIFECYCLE_ROW_H = 14;
+/** 聚焦模式阈值（第三十二轮）：系列数 > 阈值时图面名称/生命周期行退场，
+ *  识别走「悬停折线高亮单系列」+ 钉顶图例卡——0 个常驻名称 = 0 遮挡 */
+export const FOCUS_MODE_THRESHOLD = 8;
+/** 名称被避让推离锚点超过该像素 → 画细引线连回首点（第三十二轮） */
+export const NAME_LEADER_PX = 14;
 
 /** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB/TB */
 export function curveNameOf(s: Series): string {
@@ -57,6 +65,22 @@ export function curveNameOf(s: Series): string {
 /** 主价线：折后价优先；仅勾 RRP 时 RRP 成为主价线（标签/下钻/跳转跟随） */
 export function primaryPriceOf(p: SeriesPoint, priceTypes: PriceTypes): number | null {
   return priceTypes.discounted ? p.price : p.rrp;
+}
+
+/** 月/季桶的 P1 候选（第三十二轮）：标签文案（fmtInt 口径）发生变化的首个点。
+ *  桶聚合值几乎逐桶微动，旧口径「全部点都试放」在长窗口下制造数值噪声；
+ *  与周视图 weekLabeledIdx 同构，只是比较口径 = 显示值而非原始值。 */
+export function bucketLabeledIdx(pts: SeriesPoint[], priceTypes: PriceTypes): Set<number> {
+  const out = new Set<number>();
+  let last: string | null = null;
+  pts.forEach((pt, i) => {
+    const v = primaryPriceOf(pt, priceTypes);
+    if (v == null) return;
+    const text = fmtInt(v);
+    if (last == null || text !== last) out.add(i);
+    last = text;
+  });
+  return out;
 }
 
 // ---------------- 高度过渡帧的显示模型（第十一轮动画的等比缩放） ----------------
@@ -137,10 +161,14 @@ export function buildEndpointMarks(series: Series[]): Map<string, SeriesMark> {
 
 // ---------------- 标签避让计划（价格标签 dy + 系列名位置 + 可见集） ----------------
 // 自适应规则（长窗口数值防叠）：
-// P0 必放 = 每系列首个/末个有值点 + 窗口内最大/最小（形状锚点，冲突时纵向推挤）；
-// P1 候选 = 变价点（周）/ 全部点（月/季），期望位无冲突才显示，冲突即隐藏；
-// 系列名（第十轮）= 右缘锚在起点左侧 8px、随窗口平移连续左移；滑到名称预留带左界
-// 即停驻带内（同一文案同一锚点语义，位置连续不跳变），折线永不进入预留带。
+// P0 必放 = 每系列首个/末个有值点 + 窗口内最大/最小（形状锚点，冲突时纵向推挤）+ S/E；
+//   第三十二轮：系列数超聚焦阈值时最大/最小降为 P1（冲突即隐）——多系列下
+//   每系列 4~6 个必放标签会堆出脱离曲线的数值塔；
+// P1 候选 = 变价点（周）/ 显示值变化点（月/季，第三十二轮），期望位无冲突才显示；
+// 系列名（第十轮）= 右缘锚在起点左侧 8px、随窗口平移连续左移；滑到名称预留带
+// 左界即停驻带内（同一文案同一锚点语义，位置连续不跳变），折线永不进入预留带。
+// 第三十二轮：季粒度生命周期第二行计入名称避让盒（LIFECYCLE_ROW_H），整个名称块
+// 以锚点为中心——渲染层不再自行上移 7px，计划盒 = 渲染盒。
 
 export interface LabelPlan {
   dy: Record<string, Record<number, number>>;
@@ -156,12 +184,16 @@ export function buildLabelPlan(p: {
   priceTypes: PriceTypes;
   /** 端点标记（第二十轮）：S/E 点即使不是首末/极值（段中截止的 E）也必放数值标签 */
   endpointMarks: Map<string, SeriesMark>;
+  /** 该系列是否渲染「生命周期 −X%」第二行（季粒度；第三十二轮起计入避让盒） */
+  lifecycleRow?: (seriesKey: string) => boolean;
 }): LabelPlan {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
   const items: AvoidItem[] = [];
   const nameW = (t: string): number => NAME_LOGO_W + t.length * (NAME_FONT_SIZE * 0.62) + 6;
   const priceW = (t: string): number => t.length * (fontSize.bodySm * 0.62) + 8;
+  // 多系列（超聚焦阈值）：最大/最小从必放降为候选——必放项只保留首/末/S/E
+  const demoteExtremes = series.length > FOCUS_MODE_THRESHOLD;
   for (const s of series) {
     const pts = s.points;
     const absorbed = gapAbsorbedIdx(pts); // 孤立有值周不产生数值标签（第二十四轮）
@@ -176,7 +208,11 @@ export function buildLabelPlan(p: {
       if ((primaryPriceOf(pts[i], priceTypes) ?? 0) > (primaryPriceOf(pts[maxI], priceTypes) ?? 0)) maxI = i;
       if ((primaryPriceOf(pts[i], priceTypes) ?? 0) < (primaryPriceOf(pts[minI], priceTypes) ?? 0)) minI = i;
     }
-    const p0 = new Set<number>([valIdx[0], valIdx[valIdx.length - 1], maxI, minI]);
+    const p0 = new Set<number>([valIdx[0], valIdx[valIdx.length - 1]]);
+    if (!demoteExtremes) {
+      p0.add(maxI);
+      p0.add(minI);
+    }
     // 端点标记点（S/E）必放（第二十轮）：E 是"段中真实截止"时未必是首末/极值，
     // 单独并入 P0，保证 S/E 徽标旁恒有数值
     const markOf = (i: number): SeriesMark | undefined => endpointMarks.get(`${s.key}|${i}`);
@@ -184,7 +220,13 @@ export function buildLabelPlan(p: {
       const mk = markOf(i);
       if (mk === 'S' || mk === 'E') p0.add(i);
     }
-    const change = granularity === 'week' ? weekLabeledIdx(pts, !priceTypes.discounted) : new Set<number>(valIdx);
+    const change = granularity === 'week'
+      ? weekLabeledIdx(pts, !priceTypes.discounted)
+      : bucketLabeledIdx(pts, priceTypes);
+    if (demoteExtremes) {
+      change.add(maxI);
+      change.add(minI);
+    }
     const pushPrice = (i: number, pinned: boolean, dist: number = LABEL_DISTANCE): void => {
       if (absorbed.has(i)) return;
       const v = primaryPriceOf(pts[i], priceTypes);
@@ -217,6 +259,7 @@ export function buildLabelPlan(p: {
     // 系列名（第十轮）：文案去品牌前缀 + 去容量后缀（GB/TB）——品牌由色点/图例卡表达。
     // 位置 = 右缘锚在起点左侧连续滑动；besideLeft 触到带左界 → 停驻带内（左对齐，
     // 仅当名宽超出带宽才换两行）——切换瞬间 left 恒等于 zoneLeft，无位置跳变。
+    // 第三十二轮：生命周期第二行计入盒高，整块以锚点纵向居中（含引导线所需锚点）。
     const fi = valIdx[0];
     const v0 = primaryPriceOf(pts[fi], priceTypes) ?? 0;
     const px = xPxOf(geom, fi);
@@ -228,6 +271,8 @@ export function buildLabelPlan(p: {
     const useZone = besideLeft < zoneLeft;
     const zoneBoxW = Math.min(nw, NAME_ZONE_W - 8);
     const zoneLines = nw > NAME_ZONE_W - 8 ? 2 : 1;
+    const baseH = useZone ? zoneLines * ZONE_LINE_H : NAME_LINE_HEIGHT;
+    const fullH = p.lifecycleRow?.(s.key) ? baseH + LIFECYCLE_ROW_H : baseH;
     items.push({
       kind: 'name',
       seriesKey: s.key,
@@ -235,11 +280,13 @@ export function buildLabelPlan(p: {
       pinned: true,
       left: useZone ? zoneLeft : besideLeft,
       right: useZone ? zoneLeft + zoneBoxW : px - 8,
-      top: useZone ? py - (zoneLines * ZONE_LINE_H) / 2 : py - NAME_LINE_HEIGHT / 2,
-      h: useZone ? zoneLines * ZONE_LINE_H : NAME_LINE_HEIGHT,
+      top: py - fullH / 2,
+      h: fullH,
       text: nameText,
       color: s.color,
       maxW: useZone ? zoneBoxW : undefined,
+      anchorX: px,
+      anchorY: py,
     });
   }
   const res = resolveCollisions(items, geom.plotTop);
@@ -256,17 +303,22 @@ export function buildOption(p: {
   labelPlan: LabelPlan;
   gridTop: number;
   endpointMarks: Map<string, SeriesMark>;
+  /** 聚焦模式（第三十二轮）：非聚焦系列整体降透明 0.15、数值标签隐藏；
+   *  null/缺省 = 无聚焦，输出与旧口径逐字段一致 */
+  focusKey?: string | null;
 }): EChartsOption | null {
   if (!p.geom) return null;
   const { geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks } = p;
   const first = series[0];
   if (!first) return null;
+  const focusOn = p.focusKey != null;
   const xLabels = first.points.map((pt) => pt.xLabel);
   const lineWidth = (s: Series): number => (s.isOwn ? 3 : 2);
   const sArr: Record<string, unknown>[] = [];
 
   for (const s of series) {
     const dyMap = labelPlan.dy[s.key] ?? {};
+    const dim = focusOn && s.key !== p.focusKey; // 聚焦高亮：其余系列降透明
     if (priceTypes.discounted) {
       // 端点（第十四轮徽标 + 第二十轮修复）：带标记的点不再画默认符号——改用
       // symbolSize 0 而非 symbol 'none'（ECharts 的 line 标签画在符号元素上，
@@ -279,7 +331,7 @@ export function buildOption(p: {
           value: pt.price != null ? yNormOf(geom, pt.price) : null,
           symbolSize: mark || absorbed.has(i) ? 0 : undefined,
           label: {
-            show: pt.price != null && dyMap[i] !== undefined,
+            show: pt.price != null && !dim && dyMap[i] !== undefined,
             position: 'top' as const,
             distance: mark ? endpointLabelDistance(mark) : LABEL_DISTANCE,
             offset: [0, dyMap[i] ?? 0],
@@ -300,8 +352,8 @@ export function buildOption(p: {
         connectNulls: false,
         symbol: 'circle',
         symbolSize: 7,
-        itemStyle: { color: color.canvas, borderColor: s.color, borderWidth: 2 },
-        lineStyle: { color: s.color, width: lineWidth(s) },
+        itemStyle: { color: color.canvas, borderColor: s.color, borderWidth: 2, ...(dim ? { opacity: 0.15 } : {}) },
+        lineStyle: { color: s.color, width: lineWidth(s), ...(dim ? { opacity: 0.15 } : {}) },
         z: 12,
         silent: true,
       });
@@ -321,7 +373,7 @@ export function buildOption(p: {
           smoothMonotone: 'x',
           connectNulls: true,
           symbol: 'none',
-          lineStyle: { color: s.color, width: lineWidth(s), type: [4, 4], opacity: 0.9 },
+          lineStyle: { color: s.color, width: lineWidth(s), type: [4, 4], opacity: dim ? 0.15 : 0.9 },
           z: 11,
           silent: true,
         });
@@ -332,7 +384,7 @@ export function buildOption(p: {
       const rdata = s.points.map((pt, i) => ({
         value: pt.rrp != null ? yNormOf(geom, pt.rrp) : null,
         label: {
-          show: !priceTypes.discounted && pt.rrp != null && dyMap[i] !== undefined,
+          show: !dim && !priceTypes.discounted && pt.rrp != null && dyMap[i] !== undefined,
           position: 'top' as const,
           distance: LABEL_DISTANCE,
           offset: [0, dyMap[i] ?? 0],
@@ -352,7 +404,7 @@ export function buildOption(p: {
         // 数值标签（仅 RRP 模式下一个标签都不渲染）；size 0 只隐符号
         symbolSize: 0,
         connectNulls: false,
-        lineStyle: { color: s.color, width: s.isOwn ? 2 : 1.5, type: [6, 4], opacity: 0.75 },
+        lineStyle: { color: s.color, width: s.isOwn ? 2 : 1.5, type: [6, 4], opacity: dim ? 0.15 : 0.75 },
         z: 6,
         silent: true,
       });
@@ -440,18 +492,20 @@ export function collectTierValues(series: Series[], priceTypes: PriceTypes): num
   return collectVisibleValues(series, priceTypes);
 }
 
-/** 档位带按段裁剪：档位只画在与其值域相交的段上（跨断裂的档不会画出"跨越"错觉），
- *  完全无数据的档不画（第八轮） */
+/** 档位带按段裁剪：档位只画在与其值域相交的段上（跨断裂的档不会画出"跨越"错觉）。
+ *  第三十二轮：完全无数据的档不再整档消失——标记 empty 交渲染层画虚线占位框
+ *  （第八轮"空档不画"针对的是实心框像数据区；相邻档都在时缺一档读起来像 bug，
+ *  虚线+透明占位无此歧义且保持梯子连续可读） */
 export function buildTierBoxes(p: {
   enabled: boolean;
   geom: Geom | null;
   tierValues: number[];
-}): { label: string; top: number; h: number }[] {
+}): { label: string; top: number; h: number; empty: boolean }[] {
   if (!p.enabled || !p.geom) return [];
-  const out: { label: string; top: number; h: number }[] = [];
+  const out: { label: string; top: number; h: number; empty: boolean }[] = [];
   for (const tier of DEFAULT_TIERS) {
     const tHi = tier.max ?? Number.POSITIVE_INFINITY;
-    if (!p.tierValues.some((v) => v >= tier.min && v < tHi)) continue; // 无数据的档不画
+    const hasData = p.tierValues.some((v) => v >= tier.min && v < tHi);
     for (const seg of p.geom.scale.segs) {
       const lo = Math.max(tier.min, seg.min);
       const hi = Math.min(tHi, seg.max); // tHi=∞（1000+ 档）时即 seg.max
@@ -459,7 +513,7 @@ export function buildTierBoxes(p: {
       const top = yPxOf(p.geom, hi);
       const h = yPxOf(p.geom, lo) - top;
       if (h < 2) continue;
-      out.push({ label: tier.label, top, h });
+      out.push({ label: tier.label, top, h, empty: !hasData });
     }
   }
   return out;

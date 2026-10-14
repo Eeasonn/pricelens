@@ -31,6 +31,13 @@ export const MAX_CELLS = 16;
 /** 目标格数：interval 按它取 nice 值（第十二轮 8→5，配合 TICK_PX 翻倍后总高与旧版同量级） */
 const TARGET_CELLS = 5;
 
+/** 段像素需求下限（第三十二轮）：值簇内每系列保底像素（线 + 标签呼吸位）× 伸缩倍率。
+ *  纯按值域跨度占比分配段高时，「多条系列挤在窄簇」的段会被塌缩（nova 案：8 条线
+ *  只分到 ~13% 像素）；需求下限让 plotHeight 随簇内系列数适度生长（高度自适应的
+ *  系列数维度），上限防失控。 */
+export const MIN_PX_PER_SERIES = 40;
+export const SERIES_PX_CAP = 12;
+
 /** §6.5 刷选窗口最小 4 个桶 */
 export const MIN_WINDOW = 4;
 
@@ -256,38 +263,39 @@ export function computeYAxis(params: {
   //      [min,max]，区间合并后的空隙才是候选断点。旧口径（值点集合的相邻空隙）会把
   //      单产品自身的降价/涨价过程误判为"空白"压出断轴（用户：同一产品曲线过程中
   //      不应出现任何断点）。allowBreak=false 时整段跳过——cuts 为空 → 单段连续轴。
+  //      （占用区间合并结果 mergedRanges 同时供段像素需求下限使用（第三十二轮））
   const interval0 = niceStep(rawSpanU / TARGET_CELLS);
+  const ranges: { lo: number; hi: number }[] = [];
+  for (const s of params.series) {
+    let lo: number | null = null;
+    let hi: number | null = null;
+    for (const pt of s.points) {
+      const vs = [
+        ...(params.priceTypes.discounted ? [pt.price] : []),
+        ...(params.priceTypes.rrp ? [pt.rrp] : []),
+      ];
+      for (const v of vs) {
+        if (v == null) continue;
+        const vu = v / U; // USD 等值空间
+        lo = lo == null ? vu : Math.min(lo, vu);
+        hi = hi == null ? vu : Math.max(hi, vu);
+      }
+    }
+    if (lo != null && hi != null) ranges.push({ lo, hi });
+  }
+  ranges.sort((a, b) => a.lo - b.lo);
+  const mergedRanges: { lo: number; hi: number }[] = [];
+  for (const r of ranges) {
+    const last = mergedRanges[mergedRanges.length - 1];
+    if (last != null && r.lo <= last.hi) last.hi = Math.max(last.hi, r.hi);
+    else mergedRanges.push({ ...r });
+  }
   const candidates: { at: number; gap: number }[] = []; // at = 空白带下缘值（簇间分割线）
   if (params.allowBreak !== false) {
-    const ranges: { lo: number; hi: number }[] = [];
-    for (const s of params.series) {
-      let lo: number | null = null;
-      let hi: number | null = null;
-      for (const pt of s.points) {
-        const vs = [
-          ...(params.priceTypes.discounted ? [pt.price] : []),
-          ...(params.priceTypes.rrp ? [pt.rrp] : []),
-        ];
-        for (const v of vs) {
-          if (v == null) continue;
-          const vu = v / U; // USD 等值空间
-          lo = lo == null ? vu : Math.min(lo, vu);
-          hi = hi == null ? vu : Math.max(hi, vu);
-        }
-      }
-      if (lo != null && hi != null) ranges.push({ lo, hi });
-    }
-    ranges.sort((a, b) => a.lo - b.lo);
-    const merged: { lo: number; hi: number }[] = [];
-    for (const r of ranges) {
-      const last = merged[merged.length - 1];
-      if (last != null && r.lo <= last.hi) last.hi = Math.max(last.hi, r.hi);
-      else merged.push({ ...r });
-    }
-    for (let i = 1; i < merged.length; i++) {
-      const gap = merged[i].lo - merged[i - 1].hi;
+    for (let i = 1; i < mergedRanges.length; i++) {
+      const gap = mergedRanges[i].lo - mergedRanges[i - 1].hi;
       if (gap >= Math.max(rawSpanU * BREAK_GAP_RATIO, interval0 * 2))
-        candidates.push({ at: (merged[i - 1].hi + merged[i].lo) / 2, gap });
+        candidates.push({ at: (mergedRanges[i - 1].hi + mergedRanges[i].lo) / 2, gap });
     }
     candidates.sort((a, b) => b.gap - a.gap);
   }
@@ -354,15 +362,31 @@ export function computeYAxis(params: {
   const pseudoSpan = snapped.pseudoSpan;
   const cells = clampInt(pseudoSpan / finalInterval, MIN_CELLS, MAX_CELLS);
   const availPx = Math.round(cells * TICK_PX * scale);
-  const plotHeight = availPx + (segDomains.length - 1) * BREAK_PX;
 
-  // ---- 3) 像素分配：值高在上；段高 ∝ 跨度；段间插入断裂条 ----
+  // ---- 2.5) 段像素需求下限（第三十二轮）：与段值域相交的系列数 × 每系列保底像素
+  //      （× 伸缩倍率，滑杆语义不变）。占比份额低于需求时抬升该段，plotHeight 相应
+  //      增长（高度自适应的系列数维度）；无一段触需时与旧口径逐字节一致。
+  const segBaseH = segDomains.map(
+    (d) => Math.max(12, Math.round(((d.max - d.min) / pseudoSpan) * availPx)),
+  );
+  const segFinalH = segDomains.map((d, i) => {
+    let n = 0;
+    for (const r of mergedRanges) {
+      if (r.lo <= d.max && r.hi >= d.min) n++;
+    }
+    const need = Math.min(n, SERIES_PX_CAP) * MIN_PX_PER_SERIES * scale;
+    return Math.round(need) > segBaseH[i] ? Math.round(need) : segBaseH[i];
+  });
+  const grown = segFinalH.some((h, i) => h > segBaseH[i]);
+  const plotHeight = (grown ? segFinalH.reduce((a, b) => a + b, 0) : availPx) + (segDomains.length - 1) * BREAK_PX;
+
+  // ---- 3) 像素分配：值高在上；段高 ∝ 跨度（需求下限抬升见 2.5）；段间插入断裂条 ----
   const segs: ScaleSeg[] = [];
   const breaks: number[] = [];
   let cursor = 0; // 自顶向下累计
   for (let i = segDomains.length - 1; i >= 0; i--) {
     const d = segDomains[i];
-    const h = Math.max(12, Math.round(((d.max - d.min) / pseudoSpan) * availPx));
+    const h = segFinalH[i];
     segs.push({ min: d.min, max: d.max, pTop: cursor, pH: h });
     cursor += h;
     if (i > 0) {
@@ -737,14 +761,31 @@ export interface AvoidItem {
   pinned?: boolean;
   /** 名称区宽度裁剪（>0 时 DOM 按此宽省略号截断，如名称预留带内） */
   maxW?: number;
+  /** 名称项锚点（第三十二轮）：系列首点像素位置，避让推离超阈值时画引线到这 */
+  anchorX?: number;
+  anchorY?: number;
 }
 
 export interface AvoidResult {
   /** seriesKey → pointIdx → dy（相对默认位置的纵向偏移，喂给 ECharts label.offset）。
    *  只包含被保留的价格标签 —— 该 map 同时就是"可见标签集" */
   dy: Record<string, Record<number, number>>;
-  /** 系列名标签（DOM 层渲染；seriesKey 用于回查品牌图标） */
-  names: { x: number; y: number; text: string; color: string; seriesKey: string; maxW?: number }[];
+  /** 系列名标签（DOM 层渲染；seriesKey 用于回查品牌图标）。
+   *  第三十二轮起带完整避让盒（w/h）与推离量 dy、锚点（anchorX/Y）——渲染层据此
+   *  精确复位（含生命周期第二行）并画引线；金测以"盒互不相交"不变量钉住 */
+  names: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    dy: number;
+    text: string;
+    color: string;
+    seriesKey: string;
+    maxW?: number;
+    anchorX: number;
+    anchorY: number;
+  }[];
 }
 
 /**
@@ -785,7 +826,19 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number): AvoidRes
     if (it.kind === 'price') {
       (dy[it.seriesKey] ??= {})[it.pointIdx] = top - it.top;
     } else {
-      names.push({ x: it.left, y: top, text: it.text, color: it.color, seriesKey: it.seriesKey, maxW: it.maxW });
+      names.push({
+        x: it.left,
+        y: top,
+        w: it.right - it.left,
+        h: it.h,
+        dy: top - it.top,
+        text: it.text,
+        color: it.color,
+        seriesKey: it.seriesKey,
+        maxW: it.maxW,
+        anchorX: it.anchorX ?? it.left,
+        anchorY: it.anchorY ?? top,
+      });
     }
   }
   // 第二遍：次要候选，冲突即隐藏

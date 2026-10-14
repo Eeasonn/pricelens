@@ -21,6 +21,13 @@
 // - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
 // - 第二十轮：S/E 端点数值标签必放（symbolSize 0 修复 symbol 'none' 吞标签）；
 //   齿轮弹层「Y 轴自动压缩」开关（关 = 无断轴完全连续）
+// - 第三十二轮（多系列防挤）：
+//   ① 生命周期第二行计入名称避让盒（此前盒高少算 ~14px + 渲染自行上移 7px → 名称互压）；
+//   ② 名称被避让推离锚点超 NAME_LEADER_PX → 画细引线连回首点；
+//   ③ 聚焦模式：系列数 > FOCUS_MODE_THRESHOLD 时图面名称/生命周期行退场（识别走
+//      图例卡），悬停折线（±HIT_PX）高亮该系列、其余降透明 0.15，聚焦系列名称回归；
+//   ④ 月/季 P1 标签候选改「显示值变化点」；多系列时最大/最小降 P1；
+//   ⑤ 空档位画虚线占位框（梯子连续可读）
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { Checkbox, Popover } from 'antd';
@@ -54,7 +61,9 @@ import {
 } from './helpers';
 // 纯计算层（第十八轮抽离）：几何/标签计划/端点/option/DOM 数据全部显式入参纯函数
 import {
+  FOCUS_MODE_THRESHOLD,
   NAME_FONT_SIZE,
+  NAME_LEADER_PX,
   NAME_LINE_HEIGHT,
   ZONE_FONT,
   ZONE_LINE_H,
@@ -134,6 +143,11 @@ export default function Chart(props: ChartProps) {
   const [width, setWidth] = useState(0);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [lockedIdx, setLockedIdx] = useState<number | null>(null); // 点击锁定的时间列（跨悬停常驻）
+  // 聚焦模式（第三十二轮）：多系列时名称退场，悬停折线（±HIT_PX）高亮单系列，
+  // 其余系列/徽标/标签降透明；识别职责 = 钉顶图例卡
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const focusMode = series.length > FOCUS_MODE_THRESHOLD;
+  const focusActive = focusKey != null;
   // Y 刻度线显隐（第十二轮）：齿轮弹层内开关，只隐藏刻度线+数字标签（档位带保留）
   const [showYTicks, setShowYTicks] = useState(true);
   // Y 轴自动压缩（第二十轮，语义升级）：齿轮弹层内开关。开 = 值簇空白 ≥ 阈值处断轴
@@ -268,16 +282,9 @@ export default function Chart(props: ChartProps) {
   //      语义详见 chartModel.buildEndpointMarks；canvas 不画默认符号，DOM 徽标接管 ----
   const endpointMarks = useMemo(() => buildEndpointMarks(series), [series]);
 
-  // ---- 标签避让计划（价格标签 dy + 系列名位置 + 可见集）----
-  // 规则详见 chartModel.buildLabelPlan（P0 必放首末/最大/最小 + S/E 端点（第二十轮），
-  // P1 变价点冲突即隐）
-  const labelPlan = useMemo(
-    () => buildLabelPlan({ geom, series, granularity, priceTypes, endpointMarks }),
-    [geom, series, granularity, priceTypes, endpointMarks],
-  );
-
   // ---- 生命周期调价幅度（第二十七轮：仅季粒度，系列名第二行）----
   // 恒本币、锚在数据（与窗口/显示币种无关）；完结/在售统显「生命周期 −X%」（第二十九轮：不再带「暂」）
+  // 第三十二轮：先于 labelPlan 计算——第二行高度要计入名称避让盒
   const lifecycleDeltas = useMemo(() => {
     const m = new Map<string, LifecycleDelta | null>();
     if (granularity !== 'quarter') return m;
@@ -285,10 +292,28 @@ export default function Chart(props: ChartProps) {
     return m;
   }, [series, granularity]);
 
-  // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption） ----
+  // ---- 标签避让计划（价格标签 dy + 系列名位置 + 可见集）----
+  // 规则详见 chartModel.buildLabelPlan（P0 必放首末 + S/E 端点（第二十轮），超聚焦阈值
+  // 时最大/最小降 P1（第三十二轮）；P1 = 变价点（周）/显示值变化点（月/季）冲突即隐；
+  // lifecycleRow：季粒度生命周期第二行计入名称避让盒（第三十二轮，名称互压根因修复））
+  const labelPlan = useMemo(
+    () =>
+      buildLabelPlan({
+        geom,
+        series,
+        granularity,
+        priceTypes,
+        endpointMarks,
+        lifecycleRow: (key) => lifecycleDeltas.get(key) != null,
+      }),
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas],
+  );
+
+  // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
+  // focusKey（第三十二轮聚焦模式）：非聚焦系列降透明 0.15、数值标签隐藏
   const option = useMemo(
-    () => buildOption({ geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks }),
-    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks],
+    () => buildOption({ geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey }),
+    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey],
   );
 
   // ---- setOption / resize ----
@@ -322,20 +347,39 @@ export default function Chart(props: ChartProps) {
     // 无锁定 → 卡片回图例态）
     if (hit && hit.my < gridTop) {
       setHoverIdx(null);
+      setFocusKey(null);
       if (el) el.style.cursor = 'default';
       return;
     }
     if (!hit) {
       setHoverIdx(null);
+      setFocusKey(null);
       if (el) el.style.cursor = 'default';
       return;
     }
     setHoverIdx(hit.idx);
+    // 聚焦检测（第三十二轮）：悬停列上最近的有值系列（±HIT_PX）→ 高亮该系列；
+    // 空白处悬停 = 取消聚焦（全部系列恢复常态）
+    if (focusMode && geom) {
+      let bestKey: string | null = null;
+      let bestD = Number.POSITIVE_INFINITY;
+      for (const s of series) {
+        const v = primaryPriceOf(s.points[hit.idx], priceTypes);
+        if (v == null) continue;
+        const d = Math.abs(hit.my - yPxOf(geom, v));
+        if (d < bestD) {
+          bestD = d;
+          bestKey = s.key;
+        }
+      }
+      setFocusKey(bestKey != null && bestD <= HIT_PX ? bestKey : null);
+    }
     if (el) el.style.cursor = 'pointer'; // 点击可锁定/解锁该时间列
   };
 
   const onMouseLeave = (): void => {
     setHoverIdx(null);
+    setFocusKey(null);
     if (wrapRef.current) wrapRef.current.style.cursor = 'default';
   };
 
@@ -532,6 +576,24 @@ export default function Chart(props: ChartProps) {
           >
             {granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季'}
           </div>
+          {/* 聚焦模式提示（第三十二轮）：与左侧币种/齿轮同排的右侧空白区——
+              放在 X 轴标签行会与末位桶标签重叠 */}
+          {focusMode && (
+            <div
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: Math.max(gridTop - 36, 0),
+                fontSize: fontSize.caption,
+                lineHeight: '16px',
+                color: color.mute,
+                pointerEvents: 'none',
+                zIndex: 3,
+              }}
+            >
+              已选 {series.length} 个系列 · 悬停折线聚焦单系列
+            </div>
+          )}
           {/* DOM 刻度线 + 缩写标签（12px，与时间轴同字号；ECharts 值轴已隐藏；齿轮弹层可关） */}
           {showYTicks && tickRows.map((t) => (
             <div key={`tk-${t.v}`}>
@@ -613,12 +675,12 @@ export default function Chart(props: ChartProps) {
             );
           })}
           {/* 档位带（仅 USD）：Y 轴左侧档位框，框住对应刻度区段（如 200~400 框住 200..400）；
-              完全无数据的档不显示；本币不渲染；图隐藏（空态）时整块随之消失 */}
+              无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；本币不渲染；图隐藏（空态）时整块消失 */}
           {showTierBand &&
             tierBoxes.map((tb, i) => (
               <div
                 key={`tier-${tb.label}-${i}`}
-                title={`价格档位 ${tb.label}（USD）`}
+                title={`价格档位 ${tb.label}（USD）${tb.empty ? '· 当前无产品' : ''}`}
                 style={{
                   position: 'absolute',
                   left: tierLeft,
@@ -626,8 +688,8 @@ export default function Chart(props: ChartProps) {
                   width: TIER_BAND_W,
                   height: tb.h,
                   boxSizing: 'border-box',
-                  border: `1px solid ${color.hairline}`,
-                  background: i % 2 === 0 ? color.canvasSoft2 : color.canvasSoft,
+                  border: tb.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`,
+                  background: tb.empty ? 'transparent' : i % 2 === 0 ? color.canvasSoft2 : color.canvasSoft,
                   display: 'grid',
                   placeItems: 'center',
                   overflow: 'hidden',
@@ -636,7 +698,14 @@ export default function Chart(props: ChartProps) {
                 }}
               >
                 {tb.h >= 16 && (
-                  <span style={{ fontSize: 10, lineHeight: '12px', color: color.body, whiteSpace: 'nowrap' }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      lineHeight: '12px',
+                      color: tb.empty ? color.mute : color.body,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {tb.label}
                   </span>
                 )}
@@ -679,9 +748,11 @@ export default function Chart(props: ChartProps) {
             />
           )}
           {/* 端点徽标（第十四轮）：S=起点、E=截止（实心品牌色圆内白字，稍大于普通点）；
-              ‹/›=窗口边缘续接点（白底品牌描边+外向箭头），数据在窗口外延续 */}
+              ‹/›=窗口边缘续接点（白底品牌描边+外向箭头），数据在窗口外延续。
+              聚焦模式（第三十二轮）：非聚焦系列降透明 */}
           {endpointBadges.map((b) => {
             const big = b.kind === 'S' || b.kind === 'E';
+            const dim = focusActive && b.key.split('|')[0] !== focusKey;
             return (
               <div
                 key={`ep-${b.key}`}
@@ -714,6 +785,7 @@ export default function Chart(props: ChartProps) {
                   fontFamily: font.family,
                   pointerEvents: 'none',
                   zIndex: 8,
+                  opacity: dim ? 0.15 : undefined,
                 }}
               >
                 {b.kind === 'in' ? '‹' : b.kind === 'out' ? '›' : b.kind}
@@ -722,83 +794,128 @@ export default function Chart(props: ChartProps) {
           })}
           {/* 系列名（起点旁 13px / 名称预留带 12px 两行换行，前置品牌色小点；
               zIndex 9 = 全图层最上，白描边保证不被任何元素遮挡）。
-              第二十七轮：季粒度下名称下方第二行 = 生命周期调价幅度
-              （统显「生命周期 −X%」，第二十九轮起不再带「暂」；恒本币、锚在数据） */}
-          {labelPlan.names.map((nm, i) => {
-            const delta = lifecycleDeltas.get(nm.seriesKey) ?? null;
-            const pctLabel = delta
-              ? (delta.pct < 0 ? '−' : delta.pct > 0 ? '+' : '±') + Math.abs(delta.pct * 100).toFixed(1) + '%'
-              : '';
-            const nameRow = (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <BrandDot brand={brandByKey.get(nm.seriesKey) ?? ''} />
-                <span
-                  style={
-                    nm.maxW != null
-                      ? {
-                          display: '-webkit-box',
-                          WebkitBoxOrient: 'vertical' as const,
-                          WebkitLineClamp: 2,
-                          overflow: 'hidden',
-                          wordBreak: 'break-word',
-                          whiteSpace: 'normal',
-                        }
-                      : undefined
-                  }
-                >
-                  {nm.text}
-                </span>
-              </div>
-            );
+              第二十七轮：季粒度下名称下方第二行 = 生命周期调价幅度（统显「生命周期 −X%」，
+              第二十九轮起不再带「暂」；恒本币、锚在数据）。
+              第三十二轮：①第二行计入避让盒（计划盒 = 渲染盒，不再自行上移 7px）；
+              ②聚焦模式（>FOCUS_MODE_THRESHOLD 系列）名称退场，仅聚焦系列回归 */}
+          {(() => {
+            const visibleNames = focusMode
+              ? labelPlan.names.filter((nm) => nm.seriesKey === focusKey)
+              : labelPlan.names;
             return (
-              <div
-                key={`nm-${i}-${nm.text}`}
-                title={nm.text}
-                style={{
-                  position: 'absolute',
-                  left: nm.x,
-                  top: delta ? nm.y - 7 : nm.y,
-                  display: 'flex',
-                  flexDirection: delta ? 'column' : 'row',
-                  alignItems: delta ? 'flex-start' : 'center',
-                  gap: delta ? 1 : 4,
-                  fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
-                  fontWeight: 600,
-                  lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
-                  color: nm.color,
-                  whiteSpace: 'nowrap',
-                  pointerEvents: 'none',
-                  zIndex: 9,
-                  textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
-                  ...(nm.maxW != null ? { maxWidth: nm.maxW } : null),
-                }}
-              >
-                {nameRow}
-                {delta && (
-                  <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap' }}>
-                    <span style={{ color: color.mute, fontWeight: 500 }}>
-                      生命周期{' '}
-                    </span>
-                    <span style={{ color: color.ink, fontWeight: 700, fontFamily: font.family }}>{pctLabel}</span>
-                  </span>
-                )}
-              </div>
+              <>
+                {/* 名称引线（第三十二轮）：避让推离锚点超 NAME_LEADER_PX 时画细线连回首点，
+                    消除"标签塔读不出哪条线是谁"的归属歧义（zIndex 8 = 徽标层，名称之下） */}
+                <svg
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none',
+                    zIndex: 8,
+                  }}
+                >
+                  {visibleNames
+                    .filter((nm) => Math.abs(nm.dy) > NAME_LEADER_PX)
+                    .map((nm) => (
+                      <line
+                        key={`ld-${nm.seriesKey}`}
+                        x1={nm.x + nm.w + 3}
+                        y1={nm.y + nm.h / 2}
+                        x2={nm.anchorX - 8}
+                        y2={nm.anchorY}
+                        stroke={color.hairlineStrong}
+                        strokeWidth={1}
+                        opacity={0.9}
+                      />
+                    ))}
+                </svg>
+                {visibleNames.map((nm) => {
+                  const delta = lifecycleDeltas.get(nm.seriesKey) ?? null;
+                  const pctLabel = delta
+                    ? (delta.pct < 0 ? '−' : delta.pct > 0 ? '+' : '±') + Math.abs(delta.pct * 100).toFixed(1) + '%'
+                    : '';
+                  const nameRow = (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <BrandDot brand={brandByKey.get(nm.seriesKey) ?? ''} />
+                      <span
+                        style={
+                          nm.maxW != null
+                            ? {
+                                display: '-webkit-box',
+                                WebkitBoxOrient: 'vertical' as const,
+                                WebkitLineClamp: 2,
+                                overflow: 'hidden',
+                                wordBreak: 'break-word',
+                                whiteSpace: 'normal',
+                              }
+                            : undefined
+                        }
+                      >
+                        {nm.text}
+                      </span>
+                    </div>
+                  );
+                  return (
+                    <div
+                      key={`nm-${nm.seriesKey}`}
+                      title={nm.text}
+                      style={{
+                        position: 'absolute',
+                        left: nm.x,
+                        top: nm.y, // 计划盒 = 渲染盒（含生命周期第二行），第三十二轮起不再偏移
+                        display: 'flex',
+                        flexDirection: delta ? 'column' : 'row',
+                        alignItems: delta ? 'flex-start' : 'center',
+                        gap: delta ? 1 : 4,
+                        fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
+                        fontWeight: 600,
+                        lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
+                        color: nm.color,
+                        whiteSpace: 'nowrap',
+                        pointerEvents: 'none',
+                        zIndex: 9,
+                        opacity: focusActive && nm.seriesKey !== focusKey ? 0.2 : undefined,
+                        textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
+                        ...(nm.maxW != null ? { maxWidth: nm.maxW } : null),
+                      }}
+                    >
+                      {nameRow}
+                      {delta && (
+                        <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap' }}>
+                          <span style={{ color: color.mute, fontWeight: 500 }}>
+                            生命周期{' '}
+                          </span>
+                          <span style={{ color: color.ink, fontWeight: 700, fontFamily: font.family }}>{pctLabel}</span>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
             );
-          })}
+          })()}
           {/* offer 图标（仅周视图；点击浮窗） */}
           {offerMarkers.map((m) => (
             <OfferPopover key={m.key} x={m.x} y={m.y} offer={m.offer} />
           ))}
-          {/* 悬停跳转取证（仅周视图；空心点不可跳） */}
+          {/* 悬停跳转取证（仅周视图；空心点不可跳）；聚焦模式非聚焦系列降透明 */}
           {props.enableJump &&
             hoverIdx != null &&
             series.map((s) => {
               const p = s.points[hoverIdx];
               if (!p || p.missing || p.price == null || !p.url) return null;
-              return <JumpIcon key={`jp-${s.key}`} x={xPxOf(geom, hoverIdx)} y={yPxOf(geom, p.price)} url={p.url} />;
+              const dim = focusActive && s.key !== focusKey;
+              return (
+                <span key={`jp-${s.key}`} style={{ opacity: dim ? 0.15 : undefined }}>
+                  <JumpIcon x={xPxOf(geom, hoverIdx)} y={yPxOf(geom, p.price)} url={p.url} />
+                </span>
+              );
             })}
           {/* 悬停下钻（仅月/季，第二十轮）：悬停竖线上的有值点变白底黑「下钻」图标
-              （同周视图跳转图标款式），点击 = 下钻该期间（与圈点点击同一 onDrill） */}
+              （同周视图跳转图标款式），点击 = 下钻该期间（与圈点点击同一 onDrill）；
+              聚焦模式非聚焦系列降透明 */}
           {props.enableDrill &&
             props.onDrill &&
             hoverIdx != null &&
@@ -806,14 +923,16 @@ export default function Chart(props: ChartProps) {
               const p = s.points[hoverIdx];
               const v = p ? primaryPriceOf(p, priceTypes) : null;
               if (v == null) return null;
+              const dim = focusActive && s.key !== focusKey;
               return (
-                <DrillIcon
-                  key={`dl-${s.key}`}
-                  x={xPxOf(geom, hoverIdx)}
-                  y={yPxOf(geom, v)}
-                  title={granularity === 'quarter' ? '下钻查看该季月度趋势' : '下钻查看该月周度趋势'}
-                  onClick={() => props.onDrill!(s.key, p.bucketId)}
-                />
+                <span key={`dl-${s.key}`} style={{ opacity: dim ? 0.15 : undefined }}>
+                  <DrillIcon
+                    x={xPxOf(geom, hoverIdx)}
+                    y={yPxOf(geom, v)}
+                    title={granularity === 'quarter' ? '下钻查看该季月度趋势' : '下钻查看该月周度趋势'}
+                    onClick={() => props.onDrill!(s.key, p.bucketId)}
+                  />
+                </span>
               );
             })}
         </>

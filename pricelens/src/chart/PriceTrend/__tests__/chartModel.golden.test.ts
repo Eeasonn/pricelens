@@ -8,7 +8,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import type { CurrencyMode, OfferInfo, Series, SeriesPoint } from '../../../dataModel/types';
-import { GRID, NAME_ZONE_W, adaptiveRangeOf, computeYAxis, fmtAxisTick, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, yPxOf, type Bucket, type YScale } from '../helpers';
+import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, adaptiveRangeOf, computeYAxis, fmtAxisTick, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, yPxOf, type Bucket, type YScale } from '../helpers';
 import {
   buildEndpointBadges,
   buildEndpointMarks,
@@ -18,7 +18,10 @@ import {
   buildOption,
   buildTierBoxes,
   buildTickRows,
+  bucketLabeledIdx,
   curveNameOf,
+  LIFECYCLE_ROW_H,
+  NAME_LEADER_PX,
   primaryPriceOf,
   scaleToDisplay,
 } from '../chartModel';
@@ -271,14 +274,17 @@ describe('buildTickRows / buildTierBoxes / badges / offer', () => {
     }
   });
 
-  it('档位带：有数据的档才画，框绝对坐标完整落在某一段的绝对区间内', () => {
+  it('档位带：有数据档 = 实底框；无数据档 = 虚线占位不消失（第三十二轮），框绝对坐标完整落在某一段内', () => {
     const tierValues = [...own.points.map((p) => p.price!), ...comp.points.map((p) => p.price!)];
     const boxes = buildTierBoxes({ enabled: true, geom, tierValues });
-    const labels = new Set(boxes.map((b) => b.label));
-    expect(labels.has('200~400')).toBe(true);
-    expect(labels.has('600~800')).toBe(true);
-    expect(labels.has('<200')).toBe(false);
-    expect(labels.has('1000+')).toBe(false);
+    const byLabel = (l: string) => boxes.filter((b) => b.label === l);
+    // 有数据档：实底（empty=false）——own 250..295(+300) / comp 650..725(+700)
+    expect(byLabel('200~400').length).toBeGreaterThan(0);
+    expect(byLabel('200~400').every((b) => !b.empty)).toBe(true);
+    expect(byLabel('600~800').every((b) => !b.empty)).toBe(true);
+    // 无数据且轴域无像素的档（<200 低于轴底、1000+ 高于轴顶）不产生框（几何裁剪）
+    expect(byLabel('<200')).toHaveLength(0);
+    expect(byLabel('1000+')).toHaveLength(0);
     // yPxOf 是绝对坐标（含 plotTop），seg.pTop/pH 是相对绘图区顶的相对坐标
     for (const b of boxes) {
       const inSeg = scale.segs.some(
@@ -287,6 +293,14 @@ describe('buildTickRows / buildTierBoxes / badges / offer', () => {
       );
       expect(inSeg).toBe(true);
     }
+    // 连续轴（不压缩）：400~600 空档落在轴域内 → 虚线占位框出现且不与实底框混淆
+    const contScale = computeYAxis({ series: [own, comp], priceTypes: BOTH, sliderScale: 1, allowBreak: false });
+    const contGeom = mkGeom(contScale, 1400, 10, contScale.plotHeight + 96 + GRID.bottom, 96);
+    const contBoxes = buildTierBoxes({ enabled: true, geom: contGeom, tierValues });
+    const gap400 = contBoxes.filter((b) => b.label === '400~600');
+    expect(gap400.length).toBeGreaterThan(0);
+    expect(gap400.every((b) => b.empty)).toBe(true);
+    expect(contBoxes.filter((b) => b.label === '200~400').every((b) => !b.empty)).toBe(true);
   });
 
   it('端点徽标几何与标记表一致；offer 图标按 title 去重取首周', () => {
@@ -494,6 +508,135 @@ describe('缺采跨接·孤立点吸收', () => {
     const mainData = seriesArr[0].data as { symbolSize?: number; label?: { show: boolean } }[];
     expect(mainData[2].symbolSize).toBe(0); // 孤立周不画点
     expect((plan.dy['s1'] ?? {})[2]).toBeUndefined(); // 也不放数值标签
+  });
+});
+
+// ---------------- 多系列防挤（第三十二轮：生命周期盒 / 标签减量 / 聚焦 / 需求下限） ----------------
+
+describe('名称避让·生命周期行计入盒（第三十二轮）', () => {
+  // 9 条首值挤在 2 USD 内的长名系列（×0.5 倍率再压像素）→ 名称塔必现（nova 案形态）
+  const crowd = (n: number): Series[] =>
+    Array.from({ length: n }, (_, k) =>
+      mkSeries({
+        key: `n${k}`,
+        isOwn: k === 0,
+        label: `Acme Nova Ultra ${k} 12+256GB`,
+        points: Array.from({ length: 8 }, () => PT({ price: 300 + k * 0.5 })),
+      }));
+  const scale = computeYAxis({ series: crowd(9), priceTypes: DISC_ONLY, sliderScale: 0.5 });
+  const geom = mkGeom(scale, 1400, 8, scale.plotHeight + 96 + GRID.bottom, 96);
+  const planLC = buildLabelPlan({
+    geom,
+    series: crowd(9),
+    granularity: 'quarter',
+    priceTypes: DISC_ONLY,
+    endpointMarks: new Map(),
+    lifecycleRow: () => true,
+  });
+
+  it('相邻名称盒（含生命周期第二行）互不相交——用户底线：产品名称互不遮挡', () => {
+    expect(planLC.names).toHaveLength(9);
+    const GAP = 4; // 与 resolveCollisions 内部间距一致
+    for (let i = 0; i < planLC.names.length; i++) {
+      for (let j = i + 1; j < planLC.names.length; j++) {
+        const a = planLC.names[i];
+        const b = planLC.names[j];
+        const xOverlap = a.x < b.x + b.w && b.x < a.x + a.w;
+        if (!xOverlap) continue;
+        const vDisjoint = a.y + a.h + GAP <= b.y + 1e-6 || b.y + b.h + GAP <= a.y + 1e-6;
+        expect(vDisjoint).toBe(true);
+      }
+    }
+  });
+
+  it('盒高恰多多行（LIFECYCLE_ROW_H）；推离超阈值输出 dy 与锚点（引线渲染依据）', () => {
+    const bare = buildLabelPlan({ geom, series: crowd(9), granularity: 'quarter', priceTypes: DISC_ONLY, endpointMarks: new Map() });
+    const bareByKey = new Map(bare.names.map((n) => [n.seriesKey, n]));
+    for (const n of planLC.names) {
+      expect(n.h - bareByKey.get(n.seriesKey)!.h).toBe(LIFECYCLE_ROW_H);
+      expect(Number.isFinite(n.anchorX)).toBe(true);
+      expect(Number.isFinite(n.anchorY)).toBe(true);
+    }
+    expect(planLC.names.some((n) => Math.abs(n.dy) > NAME_LEADER_PX)).toBe(true);
+  });
+});
+
+describe('多系列标签减量（第三十二轮）', () => {
+  it('bucketLabeledIdx：月/季 P1 候选 = 显示值（fmtInt 口径）变化的首个点', () => {
+    const pts = [100.2, 100.4, 100.9, 102, 102.3, null, 102.6].map((price) => PT({ price }));
+    // 文案序列：100, 100, 101, 102, 102, (null 跳过), 103 → 变化点 0/2/3/6
+    expect([...bucketLabeledIdx(pts, DISC_ONLY)]).toEqual([0, 2, 3, 6]);
+  });
+
+  it('最大/最小超阈值降 P1（冲突即隐），首/末恒必放；≤阈值时极值仍必放', () => {
+    const spike = (n: number): Series[] =>
+      Array.from({ length: n }, (_, k) =>
+        mkSeries({
+          key: `s${k}`,
+          points: [300, 300, 302, 300, 300].map((v) => PT({ price: v + k * 0.5 })),
+        }));
+    const mk = (n: number) => {
+      const sc = computeYAxis({ series: spike(n), priceTypes: DISC_ONLY, sliderScale: 0.5 });
+      const g = mkGeom(sc, 1400, 5, sc.plotHeight + 96 + GRID.bottom, 96);
+      return buildLabelPlan({ geom: g, series: spike(n), granularity: 'month', priceTypes: DISC_ONLY, endpointMarks: new Map() });
+    };
+    const plan3 = mk(3);
+    for (let k = 0; k < 3; k++) expect((plan3.dy[`s${k}`] ?? {})[2]).toBeDefined(); // 最大值点必放
+    const plan9 = mk(9);
+    const definedMax = Array.from({ length: 9 }, (_, k) => (plan9.dy[`s${k}`] ?? {})[2] !== undefined).filter(Boolean).length;
+    expect(definedMax).toBeLessThan(9); // 降 P1 后最大值点可被冲突隐藏
+    for (let k = 0; k < 9; k++) {
+      expect((plan9.dy[`s${k}`] ?? {})[0]).toBeDefined(); // 首
+      expect((plan9.dy[`s${k}`] ?? {})[4]).toBeDefined(); // 末
+    }
+  });
+});
+
+describe('聚焦模式 option（第三十二轮）', () => {
+  const trio = Array.from({ length: 3 }, (_, k) =>
+    mkSeries({ key: `n${k}`, points: Array.from({ length: 8 }, () => PT({ price: 300 + k * 10 })) }));
+  const scale = computeYAxis({ series: trio, priceTypes: DISC_ONLY, sliderScale: 1 });
+  const geom = mkGeom(scale, 1400, 8, scale.plotHeight + 96 + GRID.bottom, 96);
+  const plan = buildLabelPlan({ geom, series: trio, granularity: 'month', priceTypes: DISC_ONLY, endpointMarks: new Map() });
+  const base = buildOption({ geom, series: trio, priceTypes: DISC_ONLY, granularity: 'month', labelPlan: plan, gridTop: 96, endpointMarks: new Map() })!;
+  const focused = buildOption({ geom, series: trio, priceTypes: DISC_ONLY, granularity: 'month', labelPlan: plan, gridTop: 96, endpointMarks: new Map(), focusKey: 'n1' })!;
+  const arr = (o: ReturnType<typeof buildOption>) => (o!.series as Record<string, unknown>[]);
+
+  it('无聚焦 = 与旧口径一致（不出现 0.15 降透明字段）', () => {
+    for (const s of arr(base)) {
+      expect((s.lineStyle as { opacity?: number }).opacity).not.toBe(0.15);
+      expect((s.itemStyle as { opacity?: number } | undefined)?.opacity).not.toBe(0.15);
+    }
+  });
+
+  it('聚焦 n1：其余主线/圆点降透明 0.15 且数值标签全隐；聚焦线不透明、标签照常', () => {
+    const f = arr(focused);
+    expect(f).toHaveLength(3); // 无缺采桥、仅折后价 → 每系列 1 条主线
+    const n0 = f[0];
+    expect((n0.lineStyle as { opacity?: number }).opacity).toBe(0.15);
+    expect((n0.itemStyle as { opacity?: number }).opacity).toBe(0.15);
+    expect((n0.data as { label?: { show?: boolean } }[]).every((d) => !d.label?.show)).toBe(true);
+    const n1 = f[1];
+    expect((n1.lineStyle as { opacity?: number }).opacity).toBeUndefined();
+    expect((n1.data as { label?: { show?: boolean } }[]).some((d) => d.label?.show)).toBe(true);
+  });
+});
+
+describe('段像素需求下限（第三十二轮）', () => {
+  it('窄簇多系列：段抬升至 min(n,12)×MIN_PX_PER_SERIES×倍率，plotHeight 随之生长；需求不触及时维持旧口径', () => {
+    const low10 = Array.from({ length: 10 }, (_, k) =>
+      mkSeries({ key: `L${k}`, points: Array.from({ length: 4 }, (_, i) => PT({ price: 100 + k * 70 + i })) }));
+    const high1 = mkSeries({ key: 'H', points: Array.from({ length: 4 }, (_, i) => PT({ price: 5000 + i * 150 })) });
+    const many = computeYAxis({ series: [...low10, high1], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const few = computeYAxis({ series: [low10[0], high1], priceTypes: DISC_ONLY, sliderScale: 1 });
+    expect(many.segs.length).toBe(2);
+    const bottomMany = many.segs[many.segs.length - 1];
+    const bottomFew = few.segs[few.segs.length - 1];
+    expect(bottomMany.pH).toBeGreaterThanOrEqual(10 * MIN_PX_PER_SERIES); // 需求下限抬升
+    expect(bottomMany.pH).toBeGreaterThan(bottomFew.pH);
+    expect(many.plotHeight).toBeGreaterThan(few.plotHeight);
+    // 无一段触需 → plotHeight 仍是 旧公式 = 格数×92×倍率 + 断裂条
+    expect(few.plotHeight).toBe(few.cells * 92 + (few.segs.length - 1) * 24);
   });
 });
 
