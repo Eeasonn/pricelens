@@ -17,6 +17,7 @@ import type { CurrencyMode, Series } from '../../dataModel/types';
 import { launchInfoOf } from '../../dataModel/aggregate';
 import { color, font, fontSize, formatPrice, radius, space } from '../../theme/tokens';
 import type { StripGeom } from './helpers';
+import { curveNameOf } from './chartModel';
 
 /** 降幅分档底色（浅蓝 → 深蓝；上限档兜底）+ 溢价琥珀 */
 const DEPTH_TINTS: [number, string][] = [
@@ -105,8 +106,8 @@ export default function PromoTable({
   const fmtPct = (pct: number): string =>
     pct > 0 ? `\u2212${pct}%` : pct < 0 ? `+${Math.abs(pct)}%` : '0%';
 
-  const stripLabel = (s: Series): string => s.label.replace(/\s*(GB|TB)$/i, '').trim();
-
+  // 第十九轮反馈：名称去品牌前缀 + 去 GB/TB 后缀（与图上曲线 curveNameOf 同款）——
+  // 左列宽度有限，全名必然省略号且把上市价挤到换行；悬停 title 仍保留全名
   const nameCell: CSSProperties = {
     width: g.plotLeft,
     flexShrink: 0,
@@ -201,12 +202,12 @@ export default function PromoTable({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {stripLabel(series[ri])}
+                {curveNameOf(series[ri])}
               </span>
               <span
                 className="tnum"
                 title="上市价（促销力度基线）"
-                style={{ marginLeft: 'auto', fontSize: 10, color: color.mute }}
+                style={{ marginLeft: 'auto', fontSize: 10, color: color.mute, whiteSpace: 'nowrap', flexShrink: 0 }}
               >
                 {r.launch != null ? formatPrice(r.launch, currency) : '—'}
               </span>

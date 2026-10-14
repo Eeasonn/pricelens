@@ -13,7 +13,7 @@
 //   轴上以虚线断轴符号表示；yPxOf 变分段线性映射（segs），ECharts 只负责画几何
 //   （数据喂归一化伪值 yNormOf，值轴隐藏），刻度线/标签/断轴符号/档位带全部 DOM 层绘制。
 // ============================================================
-import { dimTime } from '../../data';
+import { dimTime, localPerUsd } from '../../data';
 import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
 
 // ---------------- 布局常量（Chart 的 grid 与 DOM 覆盖层共用） ----------------
@@ -88,7 +88,8 @@ export function fmtInt(v: number): string {
 }
 
 /** Y 轴刻度缩写（约定俗成 K/M；≥100 万用 M、≥1000 用 K，1 位小数去尾 0）。
- *  点上价格标签仍用 fmtInt 全值，只有轴刻度缩写。 */
+ *  点上价格标签仍用 fmtInt 全值，只有轴刻度缩写。
+ *  第二十二轮起轴刻度改用 fmtAxisTick（步长感知）；本函数保留为其 interval 缺省形态。 */
 export function fmtAxisShort(v: number): string {
   const abs = Math.abs(v);
   const trim = (n: number): string => {
@@ -100,19 +101,52 @@ export function fmtAxisShort(v: number): string {
   return fmtInt(v);
 }
 
+/** 步长 d 需要的小数位（使 d×10^dec 为整数）：0.05→2、0.25→2、2.5→1、5→0 */
+const decimalsOfStep = (d: number): number => {
+  if (!(d > 0)) return 1;
+  for (let dec = 0; dec <= 4; dec++) {
+    if (Math.abs(d * 10 ** dec - Math.round(d * 10 ** dec)) < 1e-6) return dec;
+  }
+  return 4;
+};
+
+/** Y 轴刻度缩写·步长感知（第二十二轮）：K/M 缩写的小数位跟随刻度步长——
+ *  固定 1 位小数时，1000 量级上 50 一档的 1050/1100/1150 会全部塌缩成「1.1K」；
+ *  步长 50 → 两位小数（1.05K/1.1K/1.15K），RUB 常规步长（≥1000）输出与旧版完全一致。
+ *  interval 缺省（≤0）退化为 fmtAxisShort。 */
+export function fmtAxisTick(v: number, interval: number): string {
+  const abs = Math.abs(v);
+  if (abs < 1e3) return fmtInt(v);
+  if (!(interval > 0)) return fmtAxisShort(v);
+  const div = abs < 1e6 ? 1e3 : 1e6;
+  const unit = abs < 1e6 ? 'K' : 'M';
+  const dec = decimalsOfStep(interval / div);
+  let s = (v / div).toFixed(dec);
+  if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  return `${s}${unit}`;
+}
+
 /** 刻度列宽：按最长缩写刻度估（12px 字号 ≈7.2px/字符）+ 两侧呼吸 */
-export function axisTickGutter(ticks: number[]): number {
-  const chars = ticks.length ? Math.max(...ticks.map((t) => fmtAxisShort(t).length)) : 3;
+export function axisTickGutter(ticks: number[], interval = 0): number {
+  const chars = ticks.length ? Math.max(...ticks.map((t) => fmtAxisTick(t, interval).length)) : 3;
   return Math.max(34, Math.round(chars * 7.2) + 12);
 }
 
-/** Y 轴总左缘 = [档位带(仅USD)] + 刻度列 + 名称预留带（estGridLeft 沿用旧名；滑杆已移至工具行，不占左缘） */
-export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local'): number {
-  const tickW = axisTickGutter([axisMax / 2, axisMax]);
+/** Y 轴总左缘 = [档位带(仅USD)] + 刻度列 + 名称预留带（estGridLeft 沿用旧名；滑杆已移至工具行，不占左缘）。
+ *  interval 传入时补采样 max−interval：步长感知的最宽文案（如 62.5K）常在轴中段而非顶点。 */
+export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local', interval = 0): number {
+  const samples = interval > 0 ? [axisMax / 2, axisMax - interval, axisMax] : [axisMax / 2, axisMax];
+  const tickW = axisTickGutter(samples.filter((v) => v > 0), interval);
   return (currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0) + tickW + NAME_ZONE_W;
 }
 
 // ---------------- Y 轴（第七轮：纯自适应 + 空白压缩分段刻度） ----------------
+
+/** 币种 → 每 1 USD 兑本币数（第二十三轮：档位锚定 USD 用，与 fact 折算同源参考汇率；
+ *  未来加币种在此登记即可，档位/格数/图高自动与 USD 呈现对齐） */
+export function perUsdOf(currency: CurrencyMode): number {
+  return currency === 'usd' ? 1 : localPerUsd;
+}
 
 /** §6.6 nice 步长：1/2/2.5/5 ×10^k。
  *  第十一轮起**就近取档**（档界 = 相邻档中点 1.5/2.25/3.75/7.5）：
@@ -144,6 +178,9 @@ export interface YScale {
   min: number; // 全域下界（= 最下段.min）
   max: number; // 全域上界（= 最上段.max）
   interval: number;
+  /** interval 的锚定基准 = USD 等值空间步长（第二十三轮）：步长滞回跨币种复现用；
+   *  perUsd=1 时与 interval 相等。本币 interval = niceStep(intervalUsd × perUsd) */
+  intervalUsd: number;
   cells: number; // 有效格数（不含断裂带；决定容器高）
   plotHeight: number; // 绘图总高（含断裂带条），= cells×TICK_PX×scale + 断裂条
   segs: ScaleSeg[]; // 自上而下（值高在上）
@@ -151,8 +188,9 @@ export interface YScale {
   sliderScale: number;
 }
 
-/** 收集当前显示口径下的全部价格值（两价同收：断轴/极值都以可见点为准） */
-function collectValues(series: Series[], priceTypes: { discounted: boolean; rrp: boolean }): number[] {
+/** 收集当前显示口径下的全部价格值（两价同收：断轴/极值都以可见点为准；
+ *  第十八轮导出共享：computeYAxis 与 Chart 档位带（collectTierValues）同一实现 */
+export function collectVisibleValues(series: Series[], priceTypes: { discounted: boolean; rrp: boolean }): number[] {
   const out: number[] = [];
   for (const s of series) {
     for (const pt of s.points) {
@@ -174,50 +212,106 @@ export function computeYAxis(params: {
   /** 上一次的 Y 轴模型（第十一轮步长滞回）：其 interval 若仍能给出合理格数则沿用，
    *  保证窗口平移/价格小漂移时 刻度步长与图高稳定（见 STICKY_* 常量） */
   prev?: YScale | null;
+  /** Y 轴自动压缩（第二十轮）：缺省开 = 值簇空白 ≥ 阈值处断轴压缩；
+   *  false = 跳过断轴检测，单段完全连续（齿轮弹层开关，关闭后不留任何断轴视觉） */
+  allowBreak?: boolean;
+  /** 每 1 USD 兑本币数（第二十三轮，perUsdOf 的产物；缺省 1 = 值已是 USD）：
+   *  档位选择锚定 USD 等值空间，换币种不改变格数/图高（见 tierLocal） */
+  perUsd?: number;
 }): YScale {
   const scale = Math.min(Math.max(params.sliderScale, 0.5), 3);
   const end = (partial: Omit<YScale, 'sliderScale'>): YScale => ({ ...partial, sliderScale: scale });
+  const perUsd = params.perUsd != null && params.perUsd > 0 ? params.perUsd : 1;
 
-  const vals = collectValues(params.series, params.priceTypes);
+  const vals = collectVisibleValues(params.series, params.priceTypes);
   if (!vals.length) {
     const seg = { min: 0, max: 100, pTop: 0, pH: MIN_CELLS * TICK_PX * scale };
-    return end({ min: 0, max: 100, interval: 25, cells: MIN_CELLS, plotHeight: seg.pH, segs: [seg], breaks: [] });
+    return end({ min: 0, max: 100, interval: 25, intervalUsd: 25, cells: MIN_CELLS, plotHeight: seg.pH, segs: [seg], breaks: [] });
   }
 
   const rawMin = Math.min(...vals);
   const rawMax = Math.max(...vals);
-  const rawSpan = Math.max(1, rawMax - rawMin);
+  // 单值/近单值退化（第二十轮起常见：RRP 稳定后，仅 RRP 视图 = 恒定价一条线）：
+  // 轴跨度至少撑到量级的 2%，否则 interval 细于刻度可分辨度，整轴刻度显示同一个数
+  const minSpan = Math.max(1, rawMax * 0.02);
+  const degenerate = rawMax - rawMin < minSpan;
+  const axisMin = degenerate ? (rawMin + rawMax) / 2 - minSpan / 2 : rawMin;
+  const axisMax = degenerate ? (rawMin + rawMax) / 2 + minSpan / 2 : rawMax;
 
-  // ---- 1) 空白带检测：排序后相邻值间距 ≥ max(20% 跨度, 2×interval) 即候选断点 ----
-  const interval0 = niceStep(rawSpan / TARGET_CELLS);
-  const sorted = [...new Set(vals)].sort((a, b) => a - b);
+  // ---- 0) 档位锚定 USD（第二十三轮）：niceStep 的档位量化对不同币种不成比例——同一数据
+  //      USD 直接取档 100，RUB 值×80 后直接取档却得 5K（=62.5 USD/格），且断轴阈值/整格
+  //      吸附随本币步长走，RUB 曾把 USD 会断的空白带吞掉（断轴消失）、格数 5→8 显"拉伸"。
+  //      修法 = 轴模型全链路（断轴检测/呼吸位/吸附/格数/像素分配）都在 USD 等值空间
+  //      计算（下述 *U 值），输出时仅两处换算回本币：段域 ×perUsd、步长 tierLocal 吸附
+  //      本币 nice 档（100×80=8000→10K）。perUsd=1 时 U 恒等 1，行为与旧版逐字节一致。
+  const U = perUsd;
+  const axisMinU = axisMin / U;
+  const axisMaxU = axisMax / U;
+  const rawSpanU = Math.max(1, axisMaxU - axisMinU);
+  /** 本币显示步长 = USD 步长 × perUsd 吸附本币 nice 档；perUsd=1 时 niceStep 是不动点 */
+  const tierLocal = (usdTier: number): number => niceStep(usdTier * U);
+
+  // ---- 1) 空白带检测（第二十一轮改口径）：断轴只允许出现在**没有任何系列轨迹经过**
+  //      的空白带——平滑曲线连续经过自身两点之间的全部中间值，因此每系列占用其自身
+  //      [min,max]，区间合并后的空隙才是候选断点。旧口径（值点集合的相邻空隙）会把
+  //      单产品自身的降价/涨价过程误判为"空白"压出断轴（用户：同一产品曲线过程中
+  //      不应出现任何断点）。allowBreak=false 时整段跳过——cuts 为空 → 单段连续轴。
+  const interval0 = niceStep(rawSpanU / TARGET_CELLS);
   const candidates: { at: number; gap: number }[] = []; // at = 空白带下缘值（簇间分割线）
-  for (let i = 1; i < sorted.length; i++) {
-    const gap = sorted[i] - sorted[i - 1];
-    if (gap >= Math.max(rawSpan * BREAK_GAP_RATIO, interval0 * 2)) candidates.push({ at: (sorted[i - 1] + sorted[i]) / 2, gap });
+  if (params.allowBreak !== false) {
+    const ranges: { lo: number; hi: number }[] = [];
+    for (const s of params.series) {
+      let lo: number | null = null;
+      let hi: number | null = null;
+      for (const pt of s.points) {
+        const vs = [
+          ...(params.priceTypes.discounted ? [pt.price] : []),
+          ...(params.priceTypes.rrp ? [pt.rrp] : []),
+        ];
+        for (const v of vs) {
+          if (v == null) continue;
+          const vu = v / U; // USD 等值空间
+          lo = lo == null ? vu : Math.min(lo, vu);
+          hi = hi == null ? vu : Math.max(hi, vu);
+        }
+      }
+      if (lo != null && hi != null) ranges.push({ lo, hi });
+    }
+    ranges.sort((a, b) => a.lo - b.lo);
+    const merged: { lo: number; hi: number }[] = [];
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (last != null && r.lo <= last.hi) last.hi = Math.max(last.hi, r.hi);
+      else merged.push({ ...r });
+    }
+    for (let i = 1; i < merged.length; i++) {
+      const gap = merged[i].lo - merged[i - 1].hi;
+      if (gap >= Math.max(rawSpanU * BREAK_GAP_RATIO, interval0 * 2))
+        candidates.push({ at: (merged[i - 1].hi + merged[i].lo) / 2, gap });
+    }
+    candidates.sort((a, b) => b.gap - a.gap);
   }
-  candidates.sort((a, b) => b.gap - a.gap);
   const cuts = candidates.slice(0, BREAK_MAX).map((c) => c.at).sort((a, b) => a - b);
   // 段最小占比约束：切出的段至少占 8%，否则弃切（合回）
   const validCuts: number[] = [];
   for (const cut of cuts) {
-    const bounds = [rawMin, ...validCuts, cut, rawMax];
+    const bounds = [axisMinU, ...validCuts, cut, axisMaxU];
     let ok = true;
     for (let i = 1; i < bounds.length; i++) {
-      if (bounds[i] - bounds[i - 1] < rawSpan * SEG_MIN_RATIO) ok = false;
+      if (bounds[i] - bounds[i - 1] < rawSpanU * SEG_MIN_RATIO) ok = false;
     }
     if (ok) validCuts.push(cut);
   }
 
   // ---- 2) 段域紧贴数据簇（第八轮修订）：断裂内缘只让出 0.6×interval0 的呼吸位，
   //      不再把空白带中点当边界——否则段内侧残留大片无值区和无义刻度（用户反馈）。
-  //      外缘（全域最底/最顶）留 6%，按最终 interval 吸附整格。
-  const dataBounds = [rawMin, ...validCuts, rawMax];
+  //      外缘（全域最底/最顶）留 6%，按最终 interval 吸附整格。（全部 USD 空间值）
+  const dataBounds = [axisMinU, ...validCuts, axisMaxU];
   const innerPad = interval0 * 0.6;
   const segDomains: { min: number; max: number }[] = [];
   for (let i = 0; i < dataBounds.length - 1; i++) {
-    const lo = dataBounds[i] + (i === 0 ? -rawSpan * 0.06 : innerPad);
-    const hi = dataBounds[i + 1] - (i === dataBounds.length - 2 ? -rawSpan * 0.06 : innerPad);
+    const lo = dataBounds[i] + (i === 0 ? -rawSpanU * 0.06 : innerPad);
+    const hi = dataBounds[i + 1] - (i === dataBounds.length - 2 ? -rawSpanU * 0.06 : innerPad);
     segDomains.push({ min: lo, max: hi });
   }
   const pseudoSpan0 = segDomains.reduce((acc, d) => acc + (d.max - d.min), 0);
@@ -237,10 +331,17 @@ export function computeYAxis(params: {
   // 步长选择（第十一轮）：就近档为基准；上一次的步长若仍能给出 STICKY 区间内的格数则沿用——
   // 窗口平移/一周价格漂移只改变吸附格数（±46px 一档），不再触发步长换档
   // （换档 = 步长翻倍 + 格数腰斩 = 图高突跳的根源，第十轮用户反馈即此）。
-  const interval = niceStep(pseudoSpan0 / TARGET_CELLS);
+  // 断轴时步长不细于连续轴档位（第二十二轮）：压缩只回收空白像素；若放任伪跨度变小
+  // 让就近档随之变细（100→50），格数反而 4.65→7.33、图高比不压缩还多 208px，
+  // 且 K 缩写下 1050/1100/1150 三个刻度全部塌缩成「1.1K」。intervalCont 复现不压缩
+  // （单段）的伪跨度 = 全域 ±6% 外缘，与断轴档取更粗者。
+  // （步长比较/吸附/滞回全部发生在 USD 空间；本币步长只在出口 tierLocal 换算一次）
+  const intervalRaw = niceStep(pseudoSpan0 / TARGET_CELLS);
+  const intervalCont = niceStep((rawSpanU * 1.12) / TARGET_CELLS);
+  const interval = segDomains.length > 1 ? Math.max(intervalRaw, intervalCont) : intervalRaw;
   let snapped = snapWith(interval);
   let finalInterval = interval;
-  const prevInterval = params.prev?.interval;
+  const prevInterval = params.prev?.intervalUsd;
   if (prevInterval && prevInterval !== interval) {
     const cand = snapWith(prevInterval);
     if (cand.cells >= STICKY_MIN_CELLS && cand.cells <= STICKY_MAX_CELLS) {
@@ -270,13 +371,16 @@ export function computeYAxis(params: {
     }
   }
 
+  // 出口换算回本币（第二十三轮）：段域/极值 ×perUsd；步长吸附本币 nice 档（tick 值
+  // 与 fmtAxisTick 用本币 interval），USD 空间步长随行带出供滞回跨币种复现
   return end({
-    min: segDomains[0].min,
-    max: segDomains[segDomains.length - 1].max,
-    interval: finalInterval,
+    min: segDomains[0].min * U,
+    max: segDomains[segDomains.length - 1].max * U,
+    interval: tierLocal(finalInterval),
+    intervalUsd: finalInterval,
     cells,
     plotHeight,
-    segs,
+    segs: segs.map((s) => ({ ...s, min: s.min * U, max: s.max * U })),
     breaks,
   });
 }
@@ -415,11 +519,11 @@ export function dataBucketRange(g: Granularity): [string, string] {
 
 /**
  * §6.5(新) 窗口整体平移（拖动中间蓝色窗口）：delta=平移桶数（右正左负），
- * clamp 在 [0, n−len]（窗口 ⊆ 筛选范围、宽度不变）。
+ * clamp 在轨道 [lo, hi]（第十九轮起轨道 = 筛选范围；窗口 ⊆ 轨道、宽度不变）。
  */
-export function panWindow(s: number, e: number, n: number, delta: number): { s: number; e: number } {
+export function panWindow(s: number, e: number, lo: number, hi: number, delta: number): { s: number; e: number } {
   const len = e - s + 1;
-  const ns = Math.min(Math.max(0, s + delta), Math.max(0, n - len));
+  const ns = Math.min(Math.max(lo, s + delta), Math.max(lo, hi - len + 1));
   return { s: ns, e: ns + len - 1 };
 }
 
@@ -484,6 +588,40 @@ export function normalizeWindow(
   return { s, e };
 }
 
+// ---------------- 时间自适应（第十九轮：自适应范围 = 所选产品数据跨度 ±2 个间隔） ----------------
+
+/**
+ * 所选系列的数据跨度（全集桶下标区间）：任一点有折后价或 RRP 即算在售。
+ * points 与全集 buckets 同长同序（buildSeries 按全集取数），下标可直接对齐。
+ * 无任何有值点 → null（调用方保持现范围不动）。
+ */
+export function seriesSpanRange(series: Series[]): [number, number] | null {
+  let lo: number | null = null;
+  let hi: number | null = null;
+  for (const s of series) {
+    const pts = s.points;
+    for (let i = 0; i < pts.length; i++) {
+      if (pts[i].price == null && pts[i].rrp == null) continue;
+      if (lo == null || i < lo) lo = i;
+      if (hi == null || i > hi) hi = i;
+    }
+  }
+  return lo != null && hi != null ? [lo, hi] : null;
+}
+
+/**
+ * 自适应可选范围 = 跨度 ±pad 个桶，钳在数据全集内：
+ * 左缘不早于数据起点、右缘不晚于数据末端（数据生成到当前时间，即"不超当前时间"）。
+ * 例：跨度 202603..202608 → 可选 202601..202610；跨度到 202610 → 右缘钳 202610。
+ * 无桶/无跨度 → null。
+ */
+export function adaptiveRangeOf(buckets: Bucket[], span: [number, number] | null, pad = 2): [string, string] | null {
+  if (!buckets.length || !span) return null;
+  const lo = Math.max(0, span[0] - pad);
+  const hi = Math.min(buckets.length - 1, span[1] + pad);
+  return [buckets[lo].id, buckets[hi].id];
+}
+
 /** §6.3 下钻：季桶 → 该季月桶范围（2026Q3 → 202607..202609） */
 export function quarterMonths(qid: string): [string, string] {
   const m = /^(\d{4})Q([1-4])$/.exec(qid);
@@ -507,14 +645,47 @@ export function monthWeeks(mid: string): [string, string] | null {
   return lo != null && hi != null ? [lo, hi] : null;
 }
 
-// ---------------- 缺采（§6.4） ----------------
+// ---------------- 缺采（§6.4；第二十四轮：仅虚线跨接，撤销空心插值点） ----------------
 
-/** 缺采连续段（两侧都有有值点才会自然跨接） */
+/**
+ * 被跨接段吸收的孤立有值点集合（第二十四轮）：某有值周的左右紧邻都是缺采时，该周
+ * 不再展示数据点/数值标签，虚线桥整段直连越过——用户口径：虚线段中间不应残留孤立点
+ * （如 iPhone 17 8+256 @202620）。系列在窗口内的首个/末个有值点不吸收（唯一/双有值点
+ * 的短系列不能整条消失）；M-o-M-o-M 链式形态迭代吸收到不动点。
+ */
+export function gapAbsorbedIdx(pts: SeriesPoint[]): Set<number> {
+  const valIdx: number[] = [];
+  pts.forEach((pt, i) => {
+    if (pt.price != null) valIdx.push(i);
+  });
+  if (valIdx.length <= 2) return new Set();
+  const first = valIdx[0];
+  const last = valIdx[valIdx.length - 1];
+  const out = new Set<number>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const i of valIdx) {
+      if (i === first || i === last || out.has(i)) continue;
+      const lGap = pts[i - 1].price == null || out.has(i - 1); // i>first ⇒ i-1 在界内
+      const rGap = pts[i + 1].price == null || out.has(i + 1); // i<last ⇒ i+1 在界内
+      if (lGap && rGap) {
+        out.add(i);
+        changed = true;
+      }
+    }
+  }
+  return out;
+}
+
+/** 缺采连续段（两侧都有有值点才会自然跨接）；被吸收的孤立有值点并入所在跨接段，
+ *  跨接桥整段直连、不在中途落点（第二十四轮） */
 export function gapRuns(pts: SeriesPoint[]): [number, number][] {
+  const absorbed = gapAbsorbedIdx(pts);
   const runs: [number, number][] = [];
   let start = -1;
   for (let i = 0; i < pts.length; i++) {
-    if (pts[i].missing) {
+    if (pts[i].missing || absorbed.has(i)) {
       if (start < 0) start = i;
     } else if (start >= 0) {
       runs.push([start, i - 1]);
@@ -523,21 +694,6 @@ export function gapRuns(pts: SeriesPoint[]): [number, number][] {
   }
   if (start >= 0) runs.push([start, pts.length - 1]);
   return runs.filter(([a, b]) => a - 1 >= 0 && b + 1 < pts.length);
-}
-
-/** 空心点位置：缺采点落在跨接段线性插值处（首尾悬空的缺采段不画） */
-export function hollowPoints(pts: SeriesPoint[]): [number, number][] {
-  const out: [number, number][] = [];
-  for (const [a, b] of gapRuns(pts)) {
-    const vp = pts[a - 1].price;
-    const vn = pts[b + 1].price;
-    if (vp == null || vn == null) continue;
-    for (let i = a; i <= b; i++) {
-      const t = (i - (a - 1)) / (b + 1 - (a - 1));
-      out.push([i, vp + (vn - vp) * t]);
-    }
-  }
-  return out;
 }
 
 /** §6.4 周视图价格标签：仅价格发生变化后的第一个点（同价连续周不标；缺采不标、不打断比较链） */

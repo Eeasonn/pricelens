@@ -1,12 +1,15 @@
 // ============================================================
 // PriceLens 造数脚本（§11 造数规范）
 // 输入：data/master/*.json（§8/§9/§10/§11.3/§11.4 转录）
-// 输出：src/data/dim_*.json + fact_price_weekly.json
+// 输出：src/data/dim_*.json + fact_price_weekly.json + fact_price_weekly_gzip.b64.txt
 // 确定性：固定 seed 20261009，同 seed 输出逐字节一致。
 // 随机数全部来自"字符串标签 → hash → mulberry32"，与遍历顺序无关。
 // 仅用 Node 内置模块。
+// fact 的 .json 供 verify.mjs / 人工核对，.b64.txt（gzip+base64）供单文件交付内嵌
+// （运行时 fflate 解压，bundle 从 ~5.7MB 降到 ~1MB 量级）
 // ============================================================
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -43,10 +46,6 @@ function mulberry32(a) {
 /** 每个标签独立、确定性地取一个 [0,1) 随机数（顺序无关） */
 function rnd(label) {
   return mulberry32(xmur3(SEED_LABEL + '|' + label)())();
-}
-/** ±span 的对称噪声 */
-function noise(label, span) {
-  return 1 + (rnd(label) * 2 - 1) * span;
 }
 
 // ---------------- 日期工具（全部 UTC，无时区漂移） ----------------
@@ -96,30 +95,13 @@ function buildDimTime() {
   return rows;
 }
 
-// ---------------- 2. 周汇率（§11.4 月均线性插值 ±1.5% seed 噪声） ----------------
-function buildWeeklyFx(fxRows, dimTime) {
-  const byMonth = new Map(fxRows.map((r) => [r.month_id, r.usd_rub_avg]));
-  const months = [...byMonth.keys()].sort();
-  function fxAtDate(ms) {
-    const d = new Date(ms);
-    const mid = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    const idx = months.indexOf(mid);
-    const cur = byMonth.get(mid);
-    if (idx < 0 || idx >= months.length - 1) return cur;
-    const next = byMonth.get(months[idx + 1]);
-    const nm = months[idx + 1];
-    const nextStart = Date.UTC(Number(nm.slice(0, 4)), Number(nm.slice(4)) - 1, 1);
-    const curStart = Date.UTC(Number(mid.slice(0, 4)), Number(mid.slice(4)) - 1, 1);
-    const t = (ms - curStart) / (nextStart - curStart);
-    return cur + (next - cur) * t;
-  }
-  const weekly = new Map();
-  for (const w of dimTime) {
-    const base = fxAtDate(parseDate(w.week_wed_date));
-    weekly.set(w.week_id, base * noise('fx|' + w.week_id, 0.015));
-  }
-  return weekly;
-}
+// ---------------- 2. USD 折算（第二十轮：固定参考汇率，价格阶梯稳定） ----------------
+// USD 序列 = ₽ ÷ 80（§A8 参考汇率 = dim_fx 终值 2026-10；dim_product.launch_price_usd
+// 与 tier_code 同源同口径）。此前按周汇率折算（月均插值 ±1.5% 噪声）导致 USD 视图下
+// RRP/折后价每周微抖（用户反馈：RRP 只能有 ≤2 次成本性涨价，不得频繁变化）；
+// 改固定汇率后 USD 与 ₽ 同阶梯：价格只在真实事件（上市溢价台阶/大促/清库台阶/RRP 上调）变价。
+// dim_fx 仍按月输出供口径参考（不再参与 fact 折算）。
+const REF_FX = 80;
 
 // ---------------- 3. 主数据装载与校验 ----------------
 const products = JSON.parse(readFileSync(join(MASTER, 'products.json'), 'utf8'));
@@ -211,7 +193,7 @@ function brandModifier(model, tier) {
   return mod;
 }
 
-function buildFact(dimTime, dimProduct, weeklyFx) {
+function buildFact(dimTime, dimProduct) {
   const wedByWeek = new Map(dimTime.map((w) => [w.week_id, w.week_wed_date]));
   const urlOf = (p) =>
     `https://www.ozon.ru/search/?text=${encodeURIComponent(`${p.brand} ${p.model_name} ${p.romram}`)}`;
@@ -317,9 +299,8 @@ function buildFact(dimTime, dimProduct, weeklyFx) {
       if (rel < lf.launchLen) launchSegRows++;
       const w = dimTime[lf.firstIdx + rel];
       const wed = w.week_wed_date;
-      const fxw = weeklyFx.get(w.week_id);
 
-      // RRP 官方价：恒定，至多一次成本性上调（第十三轮）
+      // RRP 官方价：恒定，至多一次成本性上调（第十三轮）；USD 同阶梯（固定参考汇率）
       let rrp = baseRrp;
       if (lf.rrpUpAt != null && rel >= lf.rrpUpAt) rrp *= 1 + lf.rrpUpPct;
       const rrpRub = roundRub(rrp);
@@ -332,10 +313,9 @@ function buildFact(dimTime, dimProduct, weeklyFx) {
       if (!missing) {
         const promo = promocal.find((x) => x.start_date <= wed && wed <= x.end_date);
         if (rel < lf.launchLen) {
-          // 上市段：供应紧张溢价，3 个台阶 +5% → +2% → 0（台阶内恒定，独占不与大促/清库叠价）
-          const third = Math.max(1, Math.ceil(lf.launchLen / 3));
-          const premium = rel < third ? 0.05 : rel < third * 2 ? 0.02 : 0;
-          priceRub = baseRrp * (1 + premium);
+          // 上市段：首销原价 = RRP（第二十一轮：撤「供应紧张溢价」台阶——用户口径
+          // RRP ≥ 实际价恒成立，上市溢价曾使折后价高于 RRP 达 +5%）
+          priceRub = baseRrp;
         } else {
           // 坚挺 / 大促 / 清库三段全部为"台阶恒定"价：只有段边界才变价。
           // 大促与清库重叠时取最深折扣，档期结束回弹到当前台阶基准价。
@@ -365,11 +345,11 @@ function buildFact(dimTime, dimProduct, weeklyFx) {
         week_id: w.week_id,
         sku_id: p.sku_id,
         rrp_rub: rrpRub,
-        rrp_usd: roundUsd(rrpRub / fxw),
+        rrp_usd: roundUsd(rrpRub / REF_FX),
       };
       if (priceRub != null) {
         row.discounted_price_rub = priceRub;
-        row.discounted_price_usd = roundUsd(priceRub / fxw);
+        row.discounted_price_usd = roundUsd(priceRub / REF_FX);
       }
       if (offer) {
         row.offer_title = offer.title;
@@ -393,7 +373,6 @@ function writeOut(name, data) {
 
 const dimTime = buildDimTime();
 const dimProduct = buildDimProduct();
-const weeklyFx = buildWeeklyFx(fx, dimTime);
 
 // 主数据一致性断言
 const skuIds = new Set(dimProduct.map((r) => r.sku_id));
@@ -406,7 +385,7 @@ for (const b of benchmark) {
 const benchSku = dimProduct.find((r) => r.sku_id === 'cmp-iphone-17__8+256GB__Black');
 if (!benchSku) throw new Error('基准 SKU 缺失（id 方案检查失败）');
 
-const { rows: fact, launchSegRows } = buildFact(dimTime, dimProduct, weeklyFx);
+const { rows: fact, launchSegRows } = buildFact(dimTime, dimProduct);
 
 writeOut('dim_region.json', regions);
 writeOut('dim_product.json', dimProduct);
@@ -416,6 +395,7 @@ writeOut('dim_fx.json', fx);
 writeOut('dim_promo.json', promocal);
 writeOut('dim_benchmark.json', benchmark);
 writeOut('fact_price_weekly.json', fact);
+writeFileSync(join(OUT, 'fact_price_weekly_gzip.b64.txt'), gzipSync(Buffer.from(JSON.stringify(fact)), { level: 9 }).toString('base64') + '\n');
 
 // ---------------- 摘要 ----------------
 const missingRows = fact.filter((r) => r.crawl_status === 'missing').length;

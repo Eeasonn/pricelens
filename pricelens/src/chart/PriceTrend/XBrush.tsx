@@ -1,26 +1,30 @@
 // ============================================================
-// §6.5 X 轴时间刷选器（第三轮反馈改造）：
-// - 轨道 = 数据全集时间轴（不再 = 筛选范围）：窗口可平移/拉伸到全轴任意位置，
-//   越出筛选范围时上层自动把筛选范围左/右极值扩展到窗口端点
-//   （例：筛选 2026Q2–Q4 时按 ‹ → 窗口 2026Q1–Q3，筛选器左极值随之变 2026Q1）。
-// - 中间蓝色窗口区可整体拖动平移（按桶步进吸附、clamp 在数据全集内），cursor: grab/grabbing；
-// - ‹ › 箭头固定在轨道最左/最右两端（不随窗口移动）：点击 = 窗口整体平移一个步长
-//   （周=4 周、月=1 月、季=1 季）；‹ 向过去、› 向未来；窗口顶到数据边界时对应箭头置灰禁用。
-//   （原"两端外拓窗口"语义作废。）
-// - 双端拖柄独立拖拽调窗宽语义保留（第三轮起在季度等少桶粒度下同样可拉伸——轨道不再随筛选范围缩没）。
+// §6.5 X 轴时间刷选器（第十九轮修订）：
+// - 轨道 = 上方筛选范围 [lo, hi]（不再 = 数据全集）：「下面的时间范围必须按上面
+//   所选限制」。窗口 ⊆ 轨道：整体平移/双端拖柄一律钳在轨道内，不会改变筛选范围。
+// - 例外 = ‹ › 固定箭头（轨道最左/最右两端）：点击 = 窗口整体平移一个步长
+//   （周=4 周、月=1 月、季=1 季；‹ 向过去、› 向未来）；越出轨道的那一侧把上层
+//   筛选范围极值扩展到窗口端点（RangePicker 最小/最大值随之变化，grow-only）。
+//   手动模式箭头顶到数据全集边界才置灰；自适应（frozen）模式轨道即冻结范围，
+//   箭头钳在轨道内、顶到轨道边界置灰。
+// - 中间蓝色窗口区可整体拖动平移（按桶步进吸附、clamp 在轨道内），grab/grabbing；
+// - 双端拖柄独立拖拽调窗宽（最小 4 桶；窄轨道 <4 桶时窗口 = 整个轨道）。
 // - 主体样式加高（参考 Quick BI 值轴滑杆）：16px 高轨道 + 居中加高拖柄。
-// 约束：窗口 ⊆ 数据全集 ∧ 最小 4 桶（窄筛选时 = 整个筛选范围）；
+// 约束：窗口 ⊆ 轨道 ⊆ 数据全集 ∧ 窗口最小 4 桶；
 // 无横向滚动条——窗口变化一律重采样重绘（上层按 [s,e] 切桶压满绘图宽度）。
-// 轨道宽度 = 数据全集桶数，窗口用百分比定位，无需测量像素。
 // ============================================================
 import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { color, font, radius, shadow, space } from '../../theme/tokens';
 import { MIN_WINDOW, panStep, panWindow, shiftWindow, type Bucket } from './helpers';
 
 export interface XBrushProps {
-  buckets: Bucket[]; // 数据全集时间轴（当前粒度全部桶）
-  s: number; // 窗口起止下标
+  buckets: Bucket[]; // 数据全集时间轴（当前粒度全部桶；窗口/箭头下标基于全集）
+  s: number; // 窗口起止下标（全集空间，恒 ⊆ [lo, hi]）
   e: number;
+  lo: number; // 轨道 = 筛选范围 [lo, hi]（全集下标）
+  hi: number;
+  /** 第十九轮：时间自适应开 = 范围冻结（RangePicker 不可选、箭头不外扩轨道） */
+  frozen: boolean;
   granularity: 'week' | 'month' | 'quarter';
   onChange: (s: number, e: number) => void;
   /** 拖动开始/结束（第九轮）：上层据此冻结 Y 轴自适应，松手统一重算一次 */
@@ -32,7 +36,7 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 type DragKind = 'start' | 'end' | 'pan';
 
 export default function XBrush(props: XBrushProps) {
-  const { buckets, s, e, granularity, onChange, onAdjusting } = props;
+  const { buckets, s, e, lo, hi, frozen, granularity, onChange, onAdjusting } = props;
   const n = buckets.length;
   const trackRef = useRef<HTMLDivElement | null>(null);
   // 拖动基准 = 按下瞬间的窗口（startS/startE），避免用中间态反馈造成漂移
@@ -40,10 +44,13 @@ export default function XBrush(props: XBrushProps) {
   const [panning, setPanning] = useState(false);
   if (n === 0) return null;
 
-  const pct = (i: number): number => (i / n) * 100;
+  // 百分比相对轨道 [lo, hi]（轨道 = 筛选范围，不再 = 全集）
+  const pct = (i: number): number => ((i - lo) / Math.max(1, hi - lo + 1)) * 100;
   const step = panStep(granularity);
-  const canLeft = s > 0;
-  const canRight = e < n - 1;
+  // 手动模式：箭头顶到数据全集边界才置灰（越出轨道的一侧由上层扩展范围极值）；
+  // 自适应模式：范围冻结，箭头顶到轨道边界即置灰。
+  const canLeft = frozen ? s > lo : s > 0;
+  const canRight = frozen ? e < hi : e < n - 1;
 
   const onDragDown = (kind: DragKind) => (ev: ReactPointerEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -58,14 +65,15 @@ export default function XBrush(props: XBrushProps) {
     const rect = trackRef.current?.getBoundingClientRect();
     if (!d || !rect || rect.width <= 0) return;
     if (d.kind === 'pan') {
-      const delta = Math.round(((ev.clientX - d.startX) / rect.width) * n);
-      const w = panWindow(d.startS, d.startE, n, delta);
+      const delta = Math.round(((ev.clientX - d.startX) / rect.width) * (hi - lo + 1));
+      // 平移钳在轨道 [lo, hi] 内（只有箭头能越出轨道扩展范围，第十九轮）
+      const w = panWindow(d.startS, d.startE, lo, hi, delta);
       if (w.s !== s || w.e !== e) onChange(w.s, w.e);
       return;
     }
-    const i = clamp(Math.floor(((ev.clientX - rect.left) / rect.width) * n), 0, n - 1);
-    if (d.kind === 'start') onChange(clamp(i, 0, d.startE - (MIN_WINDOW - 1)), d.startE);
-    else onChange(d.startS, clamp(i, d.startS + MIN_WINDOW - 1, n - 1));
+    const i = clamp(Math.floor(((ev.clientX - rect.left) / rect.width) * (hi - lo + 1)) + lo, lo, hi);
+    if (d.kind === 'start') onChange(clamp(i, Math.min(lo, d.startE - (MIN_WINDOW - 1)), d.startE), d.startE);
+    else onChange(d.startS, clamp(i, d.startS + MIN_WINDOW - 1, Math.max(hi, d.startS + MIN_WINDOW - 1)));
   };
   const onDragUp = (ev: ReactPointerEvent<HTMLDivElement>) => {
     if (!dragRef.current) return;
@@ -142,9 +150,9 @@ export default function XBrush(props: XBrushProps) {
           boxShadow: `inset 0 0 0 1px ${color.hairline}`,
         }}
       />
-      {/* 窗口区间高亮（中间蓝色区可整体拖动平移） */}
+      {/* 窗口区间高亮（中间蓝色区可整体拖动平移，恒在轨道=筛选范围内） */}
       <div
-        title="左右拖动：整体平移时间窗口（可越过当前筛选范围，筛选范围极值会跟着扩展）"
+        title="左右拖动：整体平移时间窗口（不会超出上方所选时间范围）"
         aria-label="拖动平移时间窗口"
         style={{
           position: 'absolute',
@@ -182,10 +190,12 @@ export default function XBrush(props: XBrushProps) {
         <span style={{ width: 2, height: 12, borderRadius: 1, background: color.hairlineStrong }} />
         <span style={{ width: 2, height: 12, borderRadius: 1, background: color.hairlineStrong }} />
       </div>
-      {/* 固定箭头：轨道最左/最右两端，点击 = 窗口整体平移一个步长（到数据边界置灰） */}
+      {/* 固定箭头：轨道最左/最右两端，点击 = 窗口整体平移一个步长。
+          手动模式越出轨道的一侧把筛选范围极值扩展到窗口端点（唯一改范围最小/最大值的入口）；
+          自适应模式范围冻结，顶到轨道即置灰 */}
       <button
         type="button"
-        title="窗口整体前移一个步长（更早）"
+        title={frozen ? '窗口整体前移一个步长（更早）' : '窗口整体前移一个步长（更早；越过范围左缘时时间筛选器左极值同步扩展）'}
         aria-label="窗口前移一个步长"
         disabled={!canLeft}
         style={{ ...btnStyle(canLeft), left: -30 }}
@@ -198,7 +208,7 @@ export default function XBrush(props: XBrushProps) {
       </button>
       <button
         type="button"
-        title="窗口整体后移一个步长（更晚）"
+        title={frozen ? '窗口整体后移一个步长（更晚）' : '窗口整体后移一个步长（更晚；越过范围右缘时时间筛选器右极值同步扩展）'}
         aria-label="窗口后移一个步长"
         disabled={!canRight}
         style={{ ...btnStyle(canRight), right: -30 }}

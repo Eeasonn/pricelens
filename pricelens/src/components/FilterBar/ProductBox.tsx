@@ -71,10 +71,17 @@ export function IndustryControl() {
 /**
  * 两个匹配按钮的显性化样式（浅蓝底 + 蓝描边 + 图标 + 600 字重）：
  * 悬停由 antd 默认接管（筛选条作用域 colorPrimary=selectAccent，蓝边蓝字加深）。
+ * 第二十八轮：统一 92px 定宽（水平居中）——「匹配上一代/匹配竞品」字数不同，
+ * 定宽保证产品/竞品两个输入框等宽、双列对称。
  */
 const MATCH_BTN_STYLE: CSSProperties = {
+  width: 92,
   height: 24,
-  padding: '0 10px',
+  padding: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
   fontSize: fontSize.caption,
   fontWeight: 600,
   color: selectSoftInk,
@@ -260,12 +267,13 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
   const [colorPanelKey, setColorPanelKey] = useState<string | null>(null);
 
   // options + 路径查询表（系列/品牌 key ↔ modelId；modelId|romram ↔ 配置节点）。
-  // 叶层 label = ROMRAM + 「颜色」按钮（按钮名 = 当前生效颜色，默认 = 最低价色）；
-  // 依赖 list：按钮文案随颜色多选即时更新。
+  // **label 一律纯字符串**（第三十轮教训：label 塞 ReactNode 会污染 rc 的展示解析，
+  //  触发器标签零宽/空串）；面板行内容（叶子颜色按钮、父级「点行=整组勾选」）
+  //  全部走 optionRender 挂载。依赖 list：按钮文案随颜色多选即时更新。
   const { options, groupKeyOfModel, romramNodeOf } = useMemo(() => {
     const gk = new Map<string, string>();
     const rn = new Map<string, RomramNode>();
-    const leafLabel = (r: RomramNode): ReactNode => {
+    const leafContent = (r: RomramNode): ReactNode => {
       const pool = r.selectableColors.length ? r.selectableColors : r.colors;
       if (!pool.length) return r.romram;
       const sel = findSelection(list, r);
@@ -302,17 +310,52 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
         </span>
       );
     };
+    /** 第三十轮：父级（系列/品牌、产品）行点击=整组勾选/取消——antd multiple
+     *  默认父级点击只能下钻（rc-cascader Column onClick 对非叶子不触发 select），
+     *  用户要求前几层可多选：行内容 span 拦截点击、按整组配置增删（半选=补齐全组，
+     *  与勾选框语义一致）；下钻走悬停展开（expandTrigger hover）或 ▸ 图标。 */
+    const groupConfigsOf = (models: { modelId: string; romrams: RomramNode[] }[]) =>
+      models.flatMap((m) => m.romrams.map((r) => ({ modelId: m.modelId, romram: r.romram })));
+    const toggleGroup = (configs: { modelId: string; romram: string }[]) => {
+      const has = (c: { modelId: string; romram: string }) =>
+        list.some((s) => s.modelId === c.modelId && s.romram === c.romram);
+      const allIn = configs.every(has);
+      const next = allIn
+        ? list.filter((s) => !configs.some((c) => c.modelId === s.modelId && c.romram === s.romram))
+        : [
+            ...list,
+            ...configs
+              .filter((c) => !has(c))
+              .map((c) => {
+                const node = rn.get(`${c.modelId}|${c.romram}`);
+                return { modelId: c.modelId, romram: c.romram, skuIds: node ? defaultColorSkuIds(node) : [] };
+              }),
+          ];
+      writeList(next);
+    };
+    const toggleSpan = (text: string, configs: { modelId: string; romram: string }[]): ReactNode => (
+      <span
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleGroup(configs);
+        }}
+      >
+        {text}
+      </span>
+    );
     const opts = tree.map((g) => ({
       value: g.key,
       label: g.title,
+      optionContent: toggleSpan(g.title, groupConfigsOf(g.models)),
       children: g.models.map((m) => {
         gk.set(m.modelId, g.key);
         return {
           value: m.modelId,
           label: m.label,
+          optionContent: toggleSpan(m.label, groupConfigsOf([m])),
           children: m.romrams.map((r) => {
             rn.set(r.key, r);
-            return { value: r.romram, label: leafLabel(r) };
+            return { value: r.romram, label: r.romram, optionContent: leafContent(r) };
           }),
         };
       }),
@@ -351,12 +394,14 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
     }
   };
 
-  // 已选标签：显产品名（倒数第二层）；同产品多配置时补 ROMRAM 后缀区分
-  const displayRender = (_labels: string[], selectedOptions?: { value?: unknown }[]): ReactNode => {
-    const modelId = String(selectedOptions?.[1]?.value ?? '');
-    const romram = String(selectedOptions?.[2]?.value ?? '');
-    const sameModel = list.filter((s) => s.modelId === modelId).length;
-    return sameModel > 1 ? `${modelNameOf(modelId)} · ${shortRomram(romram)}` : modelNameOf(modelId);
+  // 已选标签：显产品名（labels[1] = option.label = 型号名，非 modelId）；同产品
+  // 多配置时补 ROMRAM 后缀区分。<3 段的父路径兜底显示末段，杜绝空标签。
+  const displayRender = (labels: string[]): ReactNode => {
+    if (!labels || labels.length < 3) return labels?.[labels.length - 1] ?? '';
+    const name = String(labels[1] ?? '');
+    const romram = String(labels[2] ?? '');
+    const sameModel = list.filter((s) => modelNameOf(s.modelId) === name).length;
+    return sameModel > 1 ? `${name} · ${shortRomram(romram)}` : name;
   };
 
   // 颜色浮层节点（popupRender 挂到级联面板右侧）
@@ -394,7 +439,18 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
       value={value}
       onChange={onChange as unknown as (value: unknown) => void}
       multiple
+      // 第三十轮：整组勾满时 SHOW_PARENT（antd 默认）会把全部叶子路径坍缩成一个
+      // 父路径（如 ["Mate"]），displayRender 拿不到型号段 → 触发器空标签。
+      // 改 SHOW_CHILD：value 恒为叶子三段路径，标签=逐配置，与「匹配竞品」
+      // 带出的部分勾选语义一致。
+      showCheckedStrategy={Cascader.SHOW_CHILD}
+      // 第三十轮：悬停展开下级（行内容已被 optionRender 拦为「整组勾选」，
+      // 下钻不能只靠点击，悬停展开 + ▸ 图标兜底）
+      expandTrigger="hover"
       maxTagCount="responsive"
+      optionRender={(option) =>
+        (option as { optionContent?: ReactNode }).optionContent ?? String(option.label ?? '')
+      }
       placeholder={kind === 'own' ? '选择产品' : '选择竞品'}
       displayRender={displayRender}
       popupRender={(menu) => (

@@ -137,7 +137,8 @@ export default function PlatformBox() {
         </div>
       }
     >
-      <div>
+      {/* 标签「平台」由 FilterBar 的 Cell 行外统一渲染（第二十八轮） */}
+      <div style={{ width: '100%', minWidth: 0 }}>
         <CascadeTrigger labels={labels} placeholder="未筛选" open={open} />
       </div>
     </Popover>

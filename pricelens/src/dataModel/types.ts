@@ -88,7 +88,7 @@ export interface FactPriceWeekly {
   discounted_price_usd: number | null;
   offer_title: string | null; // offer 是文本不是价格
   offer_text: string | null;
-  crawl_status: 'ok' | 'missing'; // missing=该周无可抓取平台 → 图上空心点
+  crawl_status: 'ok' | 'missing'; // missing=该周无可抓取平台 → 图上不画点、仅虚线跨接（第二十四轮）
   url: string; // 取证跳转（demo=Ozon 搜索深链）
   batch_id: string;
   quality_flag: string;

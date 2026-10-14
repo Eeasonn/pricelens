@@ -1,31 +1,33 @@
 // ============================================================
-// §4.1/§4.2 筛选条（反馈 2.1–2.6 重构）：五组筛选器收进单张白底卡片，
-// 从左往右 国家｜产业｜华为产品｜竞品产品｜平台｜时间｜币种，右侧自然留白；
-// 筛选器之间仅用 1px hairline 竖线分隔（FilterDivider，不顶满卡高）；
-// 每格「标题 20 + 间距 8 + 控件 32」统一行高 → 控件行底部对齐（FilterCell）。
-// 反馈 2.1：产业收起为下拉单选（IndustryControl，~102px）。
-// 反馈 2.4：嵌套 ConfigProvider 只包筛选条，把选中/悬停/聚焦态改为浅蓝
-// （selectSoft 系 token）；components.Button 回写 colorPrimary=ink，
-// 主按钮（SKU 弹框「完成」）保持 ink 黑，不影响图表 chips 与全局。
-// 宽度预算（100% 缩放、Dashboard minWidth 1440 容器内不溢出）：
-// 卡内 120+102+226+226+132+324+104 = 1234 + 6 条分隔线（17×6=102）= 1336
-// ≤ 1344（卡片内容区）；+ 卡片 padding 48 + 外层 padding 48 = 1432 ≤ 1440。
-// 超长文字统一省略号 + Tooltip（CascadeTrigger/Select 原生）。
+// §4.1/§4.2 筛选条（反馈 2.1–2.6 重构；第二十八轮定版）：两行自然布局——
+// 筛选器名称统一为「行外前缀标签」（12px 静音灰，左缘随卡片 padding 对齐），
+// 控件吃掉单元格剩余宽度；不再使用框内绝对定位标签与 padding-left 让位。
+// 匹配按钮归位：匹配上一代紧跟产品框、匹配竞品紧跟竞品框（同格行内，
+// 统一 92px 定宽保证双列对称）。筛选器之间不用分隔线，列间距 10px、
+// 行距 12px（≥列距，两行有呼吸）。
+// 宽度预算（宽度跟随内容，第二十八轮）：
+//   第一行 min 合计 148+104+327+327+118 + 4×10 = 1064，加卡片 padding 48
+//   ≤ 1232（1280 视口 − 页面 padding 48），1280 起零溢出；
+//   弹性只归产品/竞品两格（高频主筛选），国家/产业/平台低基数定宽。
+//   第二行 时间 min 544 + 币种 160 + 10 ≤ 1232；RangePicker 弹性但上限
+//   560（内容 ~320，不再跑 1400px 空白跑道）。
+// 反馈 2.4：嵌套 ConfigProvider 只包筛选条（浅蓝选中态），components.Button 回写
+// colorPrimary=ink，主按钮保持 ink 黑。
 // 默认导出与路径不得变更（Dashboard 引用）。
 // ============================================================
+import type { CSSProperties, ReactNode } from 'react';
 import { ConfigProvider } from 'antd';
 import type { ThemeConfig } from 'antd';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
-import { FilterCell, FilterDivider } from './FilterCell';
 import CountryBox from './CountryBox';
 import PlatformBox from './PlatformBox';
 import TimeBox from './TimeBox';
 import CurrencyBox from './CurrencyBox';
 import { CompetitorControl, IndustryControl, MatchCompetitorButton, MatchPrevGenButton, OwnProductControl } from './ProductBox';
 
-/** §5.3 平台框标题感叹号说明（文案逐字照抄 spec） */
+/** §5.3 平台框说明（原感叹号文案，降级为悬停提示） */
 const INFO_PLATFORM = '当未筛选平台时，显示该国家下最低价格的平台结果';
-/** §5.2 框二华为产品标题感叹号说明（文案逐字照抄 spec） */
+/** §5.2 框二华为产品说明（原感叹号文案，降级为悬停提示） */
 const INFO_OWN = '默认筛选价格最低的产品颜色';
 
 /**
@@ -47,49 +49,88 @@ const filterBarTheme: ThemeConfig = {
   },
 };
 
-/** 筛选条（§5）；图表侧（Agent C）消费 useFilters().state */
+/** 筛选器名称：12px 静音灰前缀标签（所有筛选器统一外置于控件左侧） */
+const filterLabel: CSSProperties = { fontSize: 12, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' };
+
+/** 单元格：外置前缀标签 + 单行 32px 控件；info 降级为原生 title 悬停提示 */
+function Cell({ flex, min, label, info, children }: { flex: string; min?: number; label: string; info?: string; children: ReactNode }) {
+  return (
+    <div title={info} style={{ flex, minWidth: min ?? 0, boxSizing: 'border-box', height: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={filterLabel}>{label}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </div>
+  );
+}
+
+/** 产品格：外置前缀标签的级联 + 紧跟其后的匹配按钮（按钮 92px 定宽，见 ProductBox） */
+function ProductCell({
+  flex,
+  min,
+  label,
+  info,
+  button,
+  children,
+}: {
+  flex: string;
+  min: number;
+  label: string;
+  info?: string;
+  button: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div title={info} style={{ flex, minWidth: min ?? 0, height: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={filterLabel}>{label}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+      {button}
+    </div>
+  );
+}
+
+/** 筛选条（§5）；图表侧（Agent C）消费 useFilters().state。
+ *  第二十八轮定版：两行布局——第一行 国家｜产业｜产品+匹配上一代｜竞品+匹配竞品｜平台，
+ *  时间/币种在第二行（时间弹性、币种靠右）。标签统一行外前缀，控件左缘全行对齐。 */
 export default function FilterBar() {
   return (
     <div style={{ padding: `${space.base}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
         <section
+          className="lpl-fb"
           style={{
             background: color.canvas,
             boxShadow: shadow.l1,
             borderRadius: radius.card,
-            padding: `${space.base}px ${space.lg}px`,
+            padding: `${space.sm}px ${space.lg}px`,
             display: 'flex',
-            alignItems: 'flex-end',
-            overflow: 'hidden',
+            flexDirection: 'column',
+            rowGap: 12,
           }}
         >
-          <FilterCell title="国家" width={112}>
-            <CountryBox />
-          </FilterCell>
-          <FilterDivider />
-          <FilterCell title="产业" width={96}>
-            <IndustryControl />
-          </FilterCell>
-          <FilterDivider />
-          <FilterCell title="华为产品" info={INFO_OWN} width={226} extra={<MatchPrevGenButton />}>
-            <OwnProductControl />
-          </FilterCell>
-          <FilterDivider />
-          <FilterCell title="竞品产品" width={226} extra={<MatchCompetitorButton />}>
-            <CompetitorControl />
-          </FilterCell>
-          <FilterDivider />
-          <FilterCell title="平台" info={INFO_PLATFORM} width={124}>
-            <PlatformBox />
-          </FilterCell>
-          <FilterDivider />
-          <FilterCell title="时间" width={352}>
-            <TimeBox />
-          </FilterCell>
-          <FilterDivider />
-          <FilterCell title="币种" width={96}>
-            <CurrencyBox />
-          </FilterCell>
+          <div style={{ display: 'flex', alignItems: 'center', columnGap: 10, minWidth: 0 }}>
+            <Cell flex="0 0 148px" min={148} label="国家">
+              <CountryBox />
+            </Cell>
+            <Cell flex="0 0 104px" min={104} label="产业">
+              <IndustryControl />
+            </Cell>
+            <ProductCell flex="1 1 327px" min={327} label="产品" info={INFO_OWN} button={<MatchPrevGenButton />}>
+              <OwnProductControl />
+            </ProductCell>
+            <ProductCell flex="1 1 327px" min={327} label="竞品" button={<MatchCompetitorButton />}>
+              <CompetitorControl />
+            </ProductCell>
+            <Cell flex="0 0 118px" min={118} label="平台" info={INFO_PLATFORM}>
+              <PlatformBox />
+            </Cell>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', columnGap: 10, minWidth: 0 }}>
+            <Cell flex="1 1 544px" min={544} label="时间">
+              <TimeBox />
+            </Cell>
+            <Cell flex="0 0 160px" min={160} label="币种">
+              <CurrencyBox />
+            </Cell>
+          </div>
         </section>
       </ConfigProvider>
     </div>

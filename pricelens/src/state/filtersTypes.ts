@@ -20,12 +20,16 @@ export interface FiltersState {
   countryCode: string; // 仅 'RU' 可选
   industry: 'phone'; // 平板/穿戴/音频置灰
   own: ProductSelection[]; // 我司产品（可多选同图）
-  competitors: ProductSelection[]; // 竞品（反馈第 8 条：默认空、不随我司自动带出，点「匹配竞品」才按配置矩阵带出）
+  competitors: ProductSelection[]; // 默认视图带出我司默认产品的配置竞品（第二十五轮）；之后切换我司不自动带出，点「匹配竞品」重新匹配
   platform: PlatformSelection | null; // null=未选=可抓取平台最低价口径（§3.1 决策②）
-  granularity: Granularity; // 默认 'week'
+  granularity: Granularity; // 默认 'month'（第二十五轮）
+  /** 第十九轮：时间自适应（默认开）——开 = 范围自动 = 所选产品数据跨度 ±2 个间隔
+   *  （钳在数据全集内，右缘不超当前时间），RangePicker 冻结不可选；
+   *  关 = 回手动：RangePicker 可选，拖刷轨道钳在所选范围内，仅 ‹› 箭头可把范围极值外扩 */
+  adaptive: boolean;
   rangeStart: string; // 桶 id：周 YYYYWW / 月 YYYYMM / 季 YYYYQn
   rangeEnd: string;
-  currency: CurrencyMode; // 'local'=RUB 默认
+  currency: CurrencyMode; // 默认 'usd'（第二十五轮；参考汇率 80 折算），'local'=RUB
   priceTypes: { discounted: boolean; rrp: boolean }; // 默认仅折后价（§3.2）
   agg: AggMode; // 数据汇总，仅月/季粒度生效，默认 'avg'
 }

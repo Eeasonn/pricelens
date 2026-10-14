@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > labelPlan 1`] = `
+{
+  "dy": {
+    "cmp-iphone-17-pro__12+256GB": {
+      "0": -1,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+    },
+    "own-pura-90s-pro-max__12+256GB": {
+      "5": -1,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+    },
+  },
+  "names": [
+    {
+      "color": "#c7000b",
+      "maxW": undefined,
+      "seriesKey": "own-pura-90s-pro-max__12+256GB",
+      "text": "Pura 90s Pro Max 12+256",
+      "x": 657.6755555555555,
+      "y": 401.3978349120433,
+    },
+    {
+      "color": "#1d1d1f",
+      "maxW": undefined,
+      "seriesKey": "cmp-iphone-17-pro__12+256GB",
+      "text": "iPhone 17 Pro 12+256",
+      "x": 129.07777777777775,
+      "y": 170.80124999999998,
+    },
+  ],
+}
+`;
+
+exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > marks+types 1`] = `
+{
+  "marks": [
+    [
+      "own-pura-90s-pro-max__12+256GB|5",
+      "S",
+    ],
+    [
+      "cmp-iphone-17-pro__12+256GB|0",
+      "S",
+    ],
+  ],
+  "seriesTypes": [
+    "line",
+    "line",
+    "line",
+    "line",
+  ],
+}
+`;
+
+exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > tickRows 1`] = `
+[
+  {
+    "text": "1.6K",
+    "v": 1600,
+    "y": 196.03625,
+  },
+  {
+    "text": "1.8K",
+    "v": 1800,
+    "y": 100.53625,
+  },
+  {
+    "text": "800",
+    "v": 800,
+    "y": 488,
+  },
+  {
+    "text": "1K",
+    "v": 1000,
+    "y": 392.1948579161028,
+  },
+]
+`;

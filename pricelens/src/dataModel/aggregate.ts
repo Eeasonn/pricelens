@@ -250,18 +250,21 @@ export function buildSeries(q: SeriesQuery): Series[] {
             : present.reduce((a, b) => a + b, 0) / present.length
           : null;
 
-      // RRP：不加平台因子与噪声，组内全局一条官方阶梯（锚周取值）
+      // RRP：不加平台因子与噪声，组内全局一条官方阶梯。
+      // 第二十一轮：改桶内扫描取「最后一个有值周」——原锚周取值在上市/退市落在桶中段时
+      // 锚周无行，RRP 会留下空洞（折后价有值而 RRP 为 null），违反「RRP 覆盖 S..E」；
+      // 折后价聚合的是全桶有值周，RRP 同样扫全桶即保证 有价必有 RRP。
       let rrp: number | null = null;
       let url = '';
       let offer: OfferInfo | null = null;
-      for (const sid of rg.skuIds) {
-        const row = factRow(sid, bucket.anchorWeekId);
-        if (!row) continue;
-        if (rrp == null) {
+      for (const wid of bucket.weekIds) {
+        for (const sid of rg.skuIds) {
+          const row = factRow(sid, wid);
+          if (!row) continue;
           const v = q.currency === 'usd' ? row.rrp_usd : row.rrp_rub;
           if (v != null) rrp = v;
+          if (!url && row.url) url = row.url;
         }
-        if (!url && row.url) url = row.url;
       }
       // offer：周=该周 offer；月/季=桶内首个（按周、SKU 顺序）
       for (const wid of bucket.weekIds) {
@@ -350,6 +353,64 @@ export function launchInfoOf(skuIds: string[]): LaunchInfo | null {
     }
   }
   return null;
+}
+
+// ---------------- 生命周期调价幅度（第二十七轮：季粒度系列名第二行） ----------------
+export interface LifecycleDelta {
+  /** 末季季均折后(₽) / 首销季季均折后(₽) − 1；恒本币口径，与显示币种/刷选窗口无关 */
+  pct: number;
+  /** 生命周期进行中（eol_date 为空）；第二十九轮起展示层统显「生命周期 −X%」不再区分，仅数据语义 */
+  ongoing: boolean;
+}
+
+const quarterIdOfDate = (date: string): string => {
+  const [y, m] = date.split('-').map(Number);
+  return `${y}Q${Math.floor((m - 1) / 3) + 1}`;
+};
+const wedByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.week_wed_date]));
+const quarterByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.quarter_id]));
+
+/**
+ * 生命周期调价幅度（设计示意 07 节口径）：「首销季 → 末季」季均折后价(₽) 变化。
+ * - 首销季 = launch_date 所在季；该季无采数时（数据起点晚于上市）回退首个有值季，基准偏保守
+ * - 末季：完结产品 = eol 前最后有值季；在售产品 = 数据最后有值季（暂计）
+ * - 恒基于 ₽ 事实价（币种纪律：降幅恒本币）；与刷选窗口无关（锚在数据非窗口）
+ * - 仅季粒度消费（Chart 系列名第二行「生命周期 −X%」，第二十九轮起在售/完结统显）；周/月粒度不渲染
+ */
+export function lifecycleDeltaOf(skuIds: string[]): LifecycleDelta | null {
+  const prows = skuIds.map((id) => productById.get(id)).filter((p): p is DimProduct => !!p);
+  if (prows.length === 0) return null;
+  const launchDate = prows.map((p) => p.launch_date).sort()[0];
+  const eolDate = prows.map((p) => p.eol_date).filter((d): d is string => !!d).sort()[0] ?? null;
+  const idx = factIndex();
+  const acc = new Map<string, { s: number; n: number }>();
+  for (const id of skuIds) {
+    const byWeek = idx.get(id);
+    if (!byWeek) continue;
+    for (const [weekId, row] of byWeek) {
+      if (row.discounted_price_rub == null || row.crawl_status !== 'ok') continue;
+      const wed = wedByWeek.get(weekId);
+      if (!wed || wed < launchDate || (eolDate != null && wed > eolDate)) continue;
+      const q = quarterByWeek.get(weekId);
+      if (!q) continue;
+      const o = acc.get(q);
+      if (o) {
+        o.s += row.discounted_price_rub;
+        o.n += 1;
+      } else {
+        acc.set(q, { s: row.discounted_price_rub, n: 1 });
+      }
+    }
+  }
+  if (acc.size === 0) return null;
+  const launchQ = quarterIdOfDate(launchDate);
+  const firstQ = acc.has(launchQ) ? launchQ : [...acc.keys()].sort()[0];
+  const lastQ = [...acc.keys()].sort().reverse()[0];
+  if (lastQ === firstQ) return null;
+  const first = acc.get(firstQ)!;
+  const last = acc.get(lastQ)!;
+  if (first.s <= 0) return null;
+  return { pct: last.s / last.n / (first.s / first.n) - 1, ongoing: eolDate == null };
 }
 
 // ---------------- 追加导出：benchmark 快捷查询（配置页/级联默认勾选可用） ----------------

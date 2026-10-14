@@ -15,45 +15,65 @@
 //   Y 轴模型可由外部传入（yScale，含刷选冻结与伸缩倍率），迷你图缺省内部自算
 // - 折后价：monotone 平滑实线品牌色（我司 3px / 竞品 2px），白底圆环圈点 r≈3.5
 // - RRP：虚线 6/4 + step 阶梯（平段+调价点垂直跳变，不平滑），同色 75% 不透明度
-// - 缺采：跨接段虚线 + 空心圆点；价格标签自适应避让（resolveCollisions 两遍式）
-// - 悬停：十字竖线（DOM）+ 钉顶附框 + 周视图跳转图标 + offer 图标；ECharts tooltip 禁用
+// - 缺采：跨接段仅虚线（第二十四轮撤销空心插值点）；价格标签自适应避让（resolveCollisions 两遍式）
+// - 悬停：十字竖线（DOM）+ 钉顶附框 + 周视图跳转图标 + 月/季下钻图标（第二十轮）+ offer 图标；
+//   ECharts tooltip 禁用
 // - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
+// - 第二十轮：S/E 端点数值标签必放（symbolSize 0 修复 symbol 'none' 吞标签）；
+//   齿轮弹层「Y 轴自动压缩」开关（关 = 无断轴完全连续）
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { Checkbox, Popover } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
-import * as echarts from 'echarts';
-import type { EChartsOption } from 'echarts';
-import type { CurrencyMode, Granularity, OfferInfo, Series, SeriesPoint } from '../../dataModel/types';
+// 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
+// bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
+import * as echarts from 'echarts/core';
+import { LineChart, ScatterChart } from 'echarts/charts';
+import { GridComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+
+echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
+import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, font, fontSize } from '../../theme/tokens';
+import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import {
   BREAK_PX,
-  DEFAULT_TIERS,
   GRID,
   NAME_ZONE_W,
   TICK_PX,
   TIER_BAND_GAP,
   TIER_BAND_W,
   computeYAxis,
-  estGridLeft,
-  fmtAxisShort,
-  fmtInt,
-  gapRuns,
   gridTopFor,
-  hollowPoints,
-  resolveCollisions,
-  segTicks,
-  weekLabeledIdx,
+  perUsdOf,
   xPxOf,
-  yNormOf,
   yPxOf,
-  type AvoidItem,
   type Geom,
   type StripGeom,
   type YScale,
 } from './helpers';
+// 纯计算层（第十八轮抽离）：几何/标签计划/端点/option/DOM 数据全部显式入参纯函数
+import {
+  NAME_FONT_SIZE,
+  NAME_LINE_HEIGHT,
+  ZONE_FONT,
+  ZONE_LINE_H,
+  buildEndpointBadges,
+  buildEndpointMarks,
+  buildGeom,
+  buildLabelPlan,
+  buildOfferMarkers,
+  buildOption,
+  buildTierBoxes,
+  buildTickRows,
+  collectTierValues,
+  primaryPriceOf,
+  scaleToDisplay,
+  type SeriesNameItem,
+} from './chartModel';
 import PinnedTooltips from './PinnedTooltips';
 import JumpIcon from './JumpIcon';
+import DrillIcon from './DrillIcon';
 import OfferPopover from './OfferPopover';
 import ScaleSlider from './ScaleSlider';
 import BrandDot from '../../components/BrandMark';
@@ -75,6 +95,8 @@ export interface ChartProps {
   hiddenKeys?: Set<string>;
   /** 图例点击回调（缺省=卡片不可点，弹窗迷你图用） */
   onToggleLegend?: (key: string) => void;
+  /** 是否渲染钉顶图例卡（第二十六轮：季/月下钻弹窗不渲染，配 gridTop 收窄） */
+  showLegendCards?: boolean;
   enableDrill?: boolean; // 月/季视图圈点下钻
   enableJump?: boolean; // 周视图悬停跳转
   enableOffer?: boolean; // 周视图 offer 图标
@@ -88,30 +110,21 @@ export interface ChartProps {
   sliderScale?: number;
   /** 伸缩倍率提交（滑杆松手回调；缺省写内部状态） */
   onSliderScale?: (v: number) => void;
+  /** Y 轴自动压缩（第二十轮，受控）：开 = 值簇空白 ≥ 阈值处断轴压缩；
+   *  关 = 无断轴，Y 轴完全连续展示。缺省用内部状态，齿轮弹层在两种模式下都可用 */
+  yCompress?: boolean;
+  /** 压缩开关提交（缺省写内部状态） */
+  onYCompress?: (v: boolean) => void;
   /** 绘图区横向几何原语上报（第十五轮：促销热力带与时间轴逐像素对齐用） */
   onGeom?: (g: StripGeom | null) => void;
 }
 
 const HIT_PX = 12; // 圈点点击/悬停命中半径
-const LABEL_DISTANCE = 4;
-const LABEL_LINE_HEIGHT = 20;
-const NAME_FONT_SIZE = 13;
-const NAME_LINE_HEIGHT = 18;
-const NAME_LOGO_W = 12; // 系列名前置品牌色小点（8px）+ 间距 4，避让宽度估算用
-const ZONE_FONT = 12; // 名称预留带内字号（小一号）+ 两行换行
-const ZONE_LINE_H = 16;
 const NO_KEYS = new Set<string>(); // hiddenKeys 缺省值
 /** 高度过渡动画（第十一轮）：高度变化超过 2 格（步长换档/换产品/伸缩大幅调整）时，
  *  以缓动缩放过渡而不是瞬跳；≤2 格的小步（整格吸附、断裂条）即时生效保持跟手 */
 const H_ANIM_THRESHOLD_PX = 2 * TICK_PX;
 const H_ANIM_MS = 280;
-
-/** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB/TB */
-function curveNameOf(s: Series): string {
-  const bp = `${s.brand} `;
-  const noBrand = s.label.startsWith(bp) ? s.label.slice(bp.length) : s.label;
-  return noBrand.replace(/\s*(GB|TB)$/i, '').trim();
-}
 
 export default function Chart(props: ChartProps) {
   const { series, granularity, currency, priceTypes } = props;
@@ -121,10 +134,14 @@ export default function Chart(props: ChartProps) {
   const [width, setWidth] = useState(0);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [lockedIdx, setLockedIdx] = useState<number | null>(null); // 点击锁定的时间列（跨悬停常驻）
-  // Y 刻度线显隐（第十二轮）：齿轮弹层内开关，只隐藏刻度线+数字标签（档位带/断轴标记保留）
+  // Y 刻度线显隐（第十二轮）：齿轮弹层内开关，只隐藏刻度线+数字标签（档位带保留）
   const [showYTicks, setShowYTicks] = useState(true);
-  // 断裂带省略号（⋮）显隐（第十六轮）：齿轮弹层内开关，只隐藏轴上符号（灰带/虚线边保留）
-  const [showBreakMark, setShowBreakMark] = useState(true);
+  // Y 轴自动压缩（第二十轮，语义升级）：齿轮弹层内开关。开 = 值簇空白 ≥ 阈值处断轴
+  // 压缩（灰带/虚线边/轴上省略号随断轴出现）；关 = 不产生断轴，Y 轴完全连续展示
+  // （替代第十六轮「断轴处显示省略号」——只藏⋮不改断轴的旧语义）
+  const [innerYCompress, setInnerYCompress] = useState(true);
+  const yCompress = props.yCompress ?? innerYCompress;
+  const commitYCompress = props.onYCompress ?? setInnerYCompress;
 
   // 图顶卡片区预留：缺省按 series 数量推（弹窗迷你图）
   const gridTop = props.gridTop ?? gridTopFor(Math.max(props.series.length, 1));
@@ -150,10 +167,17 @@ export default function Chart(props: ChartProps) {
   //      selfPrevRef 传 prev 做步长滞回（第十一轮），迷你图同样获得稳定刻度 ----
   const selfPrevRef = useRef<YScale | null>(null);
   const selfScale: YScale = useMemo(() => {
-    const next = computeYAxis({ series, priceTypes, sliderScale, prev: selfPrevRef.current });
+    const next = computeYAxis({
+      series,
+      priceTypes,
+      sliderScale,
+      allowBreak: yCompress,
+      perUsd: perUsdOf(currency), // 档位锚定 USD（第二十三轮）：迷你图换币种不拉伸
+      prev: selfPrevRef.current,
+    });
     selfPrevRef.current = next;
     return next;
-  }, [series, priceTypes, sliderScale]);
+  }, [series, priceTypes, sliderScale, yCompress, currency]);
   const scale = props.yScale ?? selfScale;
 
   // ---- 高度过渡动画：animH = 当前视觉高度，缓动逼近目标 scale.plotHeight。
@@ -187,18 +211,7 @@ export default function Chart(props: ChartProps) {
     };
   }, [scale.plotHeight]);
   const k = scale.plotHeight > 0 ? animH / scale.plotHeight : 1;
-  const displayScale: YScale = useMemo(
-    () =>
-      k === 1
-        ? scale
-        : {
-            ...scale,
-            plotHeight: scale.plotHeight * k,
-            segs: scale.segs.map((s) => ({ ...s, pTop: s.pTop * k, pH: s.pH * k })),
-            breaks: scale.breaks.map((b) => b * k),
-          },
-    [scale, k],
-  );
+  const displayScale: YScale = useMemo(() => scaleToDisplay(scale, k), [scale, k]);
   // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）；
   // 用 animH（动画中）而非目标高度，大变化时整体缓动伸缩
   const totalH = gridTop + Math.round(animH) + GRID.bottom;
@@ -228,21 +241,19 @@ export default function Chart(props: ChartProps) {
   }, []);
 
   // ---- 几何（纯公式复现 grid，保证 DOM 层与 canvas 一致） ----
-  const geom: Geom | null = useMemo(() => {
-    const n = series[0]?.points.length ?? 0;
-    if (!width || width < 160 || n === 0 || totalH < 160) return null;
-    const gl = props.gridLeft ?? estGridLeft(displayScale.max, currency);
-    if (gl + GRID.right > width - 48) return null;
-    return {
-      gridLeft: gl,
-      plotLeft: gl,
-      plotTop: gridTop,
-      plotWidth: width - gl - GRID.right,
-      plotHeight: displayScale.plotHeight,
-      scale: displayScale,
-      n,
-    };
-  }, [width, totalH, gridTop, series, displayScale, currency, props.gridLeft]);
+  const geom: Geom | null = useMemo(
+    () =>
+      buildGeom({
+        width,
+        totalH,
+        gridTop,
+        series,
+        scale: displayScale,
+        currency,
+        gridLeft: props.gridLeft,
+      }),
+    [width, totalH, gridTop, series, displayScale, currency, props.gridLeft],
+  );
 
   // ---- 促销热力带对齐（第十五轮）：把绘图区横向几何原语上报给下方 PromoTable；
   //      只按三个原语组成的 key 触发，高度过渡帧（displayScale 变）不重发；
@@ -253,250 +264,32 @@ export default function Chart(props: ChartProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stripKey]);
 
-  // ---- 标签避让计划（价格标签 dy + 系列名位置 + 可见集） ----
-  // 自适应规则（长窗口数值防叠）：
-  // P0 必放 = 每系列首个/末个有值点 + 窗口内最大/最小（形状锚点，冲突时纵向推挤）；
-  // P1 候选 = 变价点（周）/ 全部点（月/季），期望位无冲突才显示，冲突即隐藏；
-  // 系列名（第十轮）= 右缘锚在起点左侧 8px、随窗口平移连续左移；滑到名称预留带左界
-  // 即停驻带内（同一文案同一锚点语义，位置连续不跳变），折线永不进入预留带。
-  const labelPlan = useMemo(() => {
-    const empty = { dy: {} as Record<string, Record<number, number>>, names: [] as AvoidResultNames[] };
-    if (!geom) return empty;
-    const items: AvoidItem[] = [];
-    const nameW = (t: string): number => NAME_LOGO_W + t.length * (NAME_FONT_SIZE * 0.62) + 6;
-    const priceW = (t: string): number => t.length * (fontSize.bodySm * 0.62) + 8;
-    for (const s of series) {
-      const pts = s.points;
-      const valIdx: number[] = [];
-      pts.forEach((p, i) => {
-        if (primaryOf(p) != null) valIdx.push(i);
-      });
-      if (valIdx.length === 0) continue;
-      let maxI = valIdx[0];
-      let minI = valIdx[0];
-      for (const i of valIdx) {
-        if ((primaryOf(pts[i]) ?? 0) > (primaryOf(pts[maxI]) ?? 0)) maxI = i;
-        if ((primaryOf(pts[i]) ?? 0) < (primaryOf(pts[minI]) ?? 0)) minI = i;
-      }
-      const p0 = new Set<number>([valIdx[0], valIdx[valIdx.length - 1], maxI, minI]);
-      const change = granularity === 'week' ? weekLabeledIdx(pts, !priceTypes.discounted) : new Set<number>(valIdx);
-      const pushPrice = (i: number, pinned: boolean): void => {
-        const v = primaryOf(pts[i]);
-        if (v == null) return;
-        const text = fmtInt(v);
-        const cx = xPxOf(geom, i);
-        const w = priceW(text);
-        items.push({
-          kind: 'price',
-          seriesKey: s.key,
-          pointIdx: i,
-          pinned,
-          left: cx - w / 2,
-          right: cx + w / 2,
-          top: yPxOf(geom, v) - LABEL_DISTANCE - LABEL_LINE_HEIGHT,
-          h: LABEL_LINE_HEIGHT,
-          text,
-          color: color.ink,
-        });
-      };
-      p0.forEach((i) => pushPrice(i, true));
-      valIdx.forEach((i) => {
-        if (!p0.has(i) && change.has(i)) pushPrice(i, false);
-      });
-      // 系列名（第十轮）：文案去品牌前缀 + 去容量后缀（GB/TB）——品牌由色点/图例卡表达。
-      // 位置 = 右缘锚在起点左侧连续滑动；besideLeft 触到带左界 → 停驻带内（左对齐，
-      // 仅当名宽超出带宽才换两行）——切换瞬间 left 恒等于 zoneLeft，无位置跳变。
-      const fi = valIdx[0];
-      const v0 = primaryOf(pts[fi]) ?? 0;
-      const px = xPxOf(geom, fi);
-      const py = yPxOf(geom, v0);
-      const nameText = curveNameOf(s);
-      const nw = nameW(nameText);
-      const zoneLeft = geom.plotLeft - NAME_ZONE_W + 4;
-      const besideLeft = px - 8 - nw;
-      const useZone = besideLeft < zoneLeft;
-      const zoneBoxW = Math.min(nw, NAME_ZONE_W - 8);
-      const zoneLines = nw > NAME_ZONE_W - 8 ? 2 : 1;
-      items.push({
-        kind: 'name',
-        seriesKey: s.key,
-        pointIdx: fi,
-        pinned: true,
-        left: useZone ? zoneLeft : besideLeft,
-        right: useZone ? zoneLeft + zoneBoxW : px - 8,
-        top: useZone ? py - (zoneLines * ZONE_LINE_H) / 2 : py - NAME_LINE_HEIGHT / 2,
-        h: useZone ? zoneLines * ZONE_LINE_H : NAME_LINE_HEIGHT,
-        text: nameText,
-        color: s.color,
-        maxW: useZone ? zoneBoxW : undefined,
-      });
-    }
-    const res = resolveCollisions(items, geom.plotTop);
-    return { dy: res.dy, names: res.names as AvoidResultNames[] };
-  }, [geom, series, granularity, priceTypes, props.priceTypes.discounted]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ---- 端点标记（S=真实起点 / E=连续 3 区间无值才确认的截止 / in·out=窗口续接点），
+  //      语义详见 chartModel.buildEndpointMarks；canvas 不画默认符号，DOM 徽标接管 ----
+  const endpointMarks = useMemo(() => buildEndpointMarks(series), [series]);
 
-  // ---- 端点标记（第十三轮引入、第十四轮改为 DOM 徽标）：
-  //      S = 真实开头（该段连续有值区间的首点）；E = 真实截止（第十五轮：其后连续
-  //      3 个区间均无值才确认——数据末端/最新批次一律不标 E）；in/out = 窗口左/右缘
-  //      的续接点（窗口外 2 周内仍有数据，非真实首尾）。
-  //      标记点在 canvas 上不再画默认符号，由 DOM 徽标接管 ----
-  const endpointMarks = useMemo(() => {
-    const marks = new Map<string, 'S' | 'E' | 'in' | 'out'>();
-    for (const s of series) {
-      const n = s.points.length;
-      const val = (i: number): number | null => s.points[i]?.price ?? null;
-      const isStart = (i: number): boolean => {
-        if (val(i) == null) return false;
-        if (i === 0) return !s.edgeStart;
-        if (val(i - 1) != null) return false;
-        return i === 1 || val(i - 2) == null; // 前面连续两周无值才算新开头（1 周断采视为连续）
-      };
-      const isEnd = (i: number): boolean => {
-        if (val(i) == null) return false;
-        if (i + 1 < n && val(i + 1) != null) return false; // 非段尾
-        // 其后连续 3 个区间都无值才确认截止；数据末端观察不足 3 个区间，不标 E
-        return i + 3 < n && val(i + 1) == null && val(i + 2) == null && val(i + 3) == null;
-      };
-      for (let i = 0; i < n; i++) {
-        if (val(i) == null) continue;
-        const st = isStart(i);
-        const en = isEnd(i);
-        if (i === 0 && s.edgeStart) marks.set(`${s.key}|${i}`, 'in');
-        else if (st) marks.set(`${s.key}|${i}`, 'S');
-        if (i === n - 1 && s.edgeEnd) marks.set(`${s.key}|${i}`, 'out');
-        else if (en) marks.set(`${s.key}|${i}`, 'E');
-      }
-    }
-    return marks;
-  }, [series]);
+  // ---- 标签避让计划（价格标签 dy + 系列名位置 + 可见集）----
+  // 规则详见 chartModel.buildLabelPlan（P0 必放首末/最大/最小 + S/E 端点（第二十轮），
+  // P1 变价点冲突即隐）
+  const labelPlan = useMemo(
+    () => buildLabelPlan({ geom, series, granularity, priceTypes, endpointMarks }),
+    [geom, series, granularity, priceTypes, endpointMarks],
+  );
 
-  // ---- ECharts option（值轴隐藏，数据喂归一化伪值） ----
-  const option = useMemo<EChartsOption | null>(() => {
-    if (!geom) return null;
-    const first = series[0];
-    if (!first) return null;
-    const xLabels = first.points.map((p) => p.xLabel);
-    const lineWidth = (s: Series): number => (s.isOwn ? 3 : 2);
-    const sArr: Record<string, unknown>[] = [];
+  // ---- 生命周期调价幅度（第二十七轮：仅季粒度，系列名第二行）----
+  // 恒本币、锚在数据（与窗口/显示币种无关）；完结/在售统显「生命周期 −X%」（第二十九轮：不再带「暂」）
+  const lifecycleDeltas = useMemo(() => {
+    const m = new Map<string, LifecycleDelta | null>();
+    if (granularity !== 'quarter') return m;
+    for (const s of series) m.set(s.key, lifecycleDeltaOf(s.skuIds));
+    return m;
+  }, [series, granularity]);
 
-    for (const s of series) {
-      const dyMap = labelPlan.dy[s.key] ?? {};
-      if (priceTypes.discounted) {
-        // 端点（第十四轮）：带标记的点在 canvas 上不画默认符号，由 DOM 徽标接管
-        const data = s.points.map((p, i) => {
-          const marked = endpointMarks.has(`${s.key}|${i}`);
-          return {
-            value: p.price != null ? yNormOf(geom, p.price) : null,
-            symbol: marked ? 'none' : undefined,
-            label: {
-              show: p.price != null && dyMap[i] !== undefined,
-              position: 'top' as const,
-              distance: LABEL_DISTANCE,
-              offset: [0, dyMap[i] ?? 0],
-              color: color.ink,
-              fontSize: fontSize.bodySm,
-              fontWeight: 400,
-              fontFamily: font.family,
-              lineHeight: LABEL_LINE_HEIGHT,
-              formatter: p.price != null ? fmtInt(p.price) : '',
-            },
-          };
-        });
-        sArr.push({
-          type: 'line',
-          data,
-          smooth: true,
-          smoothMonotone: 'x',
-          connectNulls: false,
-          symbol: 'circle',
-          symbolSize: 7,
-          itemStyle: { color: color.canvas, borderColor: s.color, borderWidth: 2 },
-          lineStyle: { color: s.color, width: lineWidth(s) },
-          z: 12,
-          silent: true,
-        });
-        // 缺采跨接段：虚线桥接 + 空心圆点（曲线自然跨接不中断）
-        for (const [a, b] of gapRuns(s.points)) {
-          const vp = s.points[a - 1].price;
-          const vn = s.points[b + 1].price;
-          if (vp == null || vn == null) continue;
-          const bridge = s.points.map((_, i) =>
-            i === a - 1 ? yNormOf(geom, vp) : i === b + 1 ? yNormOf(geom, vn) : null,
-          );
-          sArr.push({
-            type: 'line',
-            data: bridge,
-            smooth: true,
-            smoothMonotone: 'x',
-            connectNulls: true,
-            symbol: 'none',
-            lineStyle: { color: s.color, width: lineWidth(s), type: [4, 4], opacity: 0.9 },
-            z: 11,
-            silent: true,
-          });
-        }
-        const hollow = hollowPoints(s.points);
-        if (hollow.length > 0) {
-          sArr.push({
-            type: 'scatter',
-            data: hollow.map(([i, v]) => ({ value: [i, yNormOf(geom, v)] })),
-            symbol: 'circle',
-            symbolSize: 7,
-            itemStyle: { color: '#ffffff', borderColor: s.color, borderWidth: 2 },
-            z: 13,
-            silent: true,
-          });
-        }
-      }
-      if (priceTypes.rrp) {
-        // 两价同选不标 RRP（避免重复）；仅 RRP 时 = 主价线，可见集与折后价同源（避让后 dy）
-        const rdata = s.points.map((p, i) => ({
-          value: p.rrp != null ? yNormOf(geom, p.rrp) : null,
-          label: {
-            show: !priceTypes.discounted && p.rrp != null && dyMap[i] !== undefined,
-            position: 'top' as const,
-            distance: LABEL_DISTANCE,
-            offset: [0, dyMap[i] ?? 0],
-            color: color.ink,
-            fontSize: fontSize.bodySm,
-            fontWeight: 400,
-            fontFamily: font.family,
-            lineHeight: LABEL_LINE_HEIGHT,
-            formatter: p.rrp != null ? fmtInt(p.rrp) : '',
-          },
-        }));
-        sArr.push({
-          type: 'line',
-          data: rdata,
-          step: 'end',
-          symbol: 'none',
-          connectNulls: false,
-          lineStyle: { color: s.color, width: s.isOwn ? 2 : 1.5, type: [6, 4], opacity: 0.75 },
-          z: 6,
-          silent: true,
-        });
-      }
-    }
-
-    return {
-      animation: false,
-      tooltip: { show: false },
-      textStyle: { fontFamily: font.family },
-      grid: { left: geom.gridLeft, right: GRID.right, top: gridTop, bottom: GRID.bottom },
-      xAxis: {
-        type: 'category',
-        data: xLabels,
-        boundaryGap: true,
-        axisLine: { lineStyle: { color: color.hairline } },
-        axisTick: { show: false },
-        // 第十二轮：月/季标签弃 mono rich，与周视图同一字体字号（全页数字字体统一）
-        axisLabel: { interval: 'auto', hideOverlap: true, fontSize: 12, color: color.body, fontFamily: font.family },
-      },
-      // 值轴整体隐藏（第七轮）：刻度线/标签/断裂符号/档位带全部 DOM 层绘制
-      yAxis: { show: false, min: 0, max: 1 },
-      series: sArr,
-    } as unknown as EChartsOption;
-  }, [geom, series, priceTypes, granularity, labelPlan, gridTop]);
+  // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption） ----
+  const option = useMemo(
+    () => buildOption({ geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks }),
+    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks],
+  );
 
   // ---- setOption / resize ----
   useEffect(() => {
@@ -555,7 +348,7 @@ export default function Chart(props: ChartProps) {
       let bestKey: string | null = null;
       let bestD = Number.POSITIVE_INFINITY;
       for (const s of series) {
-        const v = primaryOf(s.points[hit.idx]);
+        const v = primaryPriceOf(s.points[hit.idx], priceTypes);
         if (v == null) continue;
         const d = Math.abs(hit.my - yPxOf(geom, v));
         if (d < bestD) {
@@ -571,35 +364,15 @@ export default function Chart(props: ChartProps) {
     setLockedIdx((prev) => (prev === hit.idx ? null : hit.idx));
   };
 
-  // ---- offer 图标：按 offer.title 分组取首周（窗口内） ----
-  const offerMarkers = useMemo(() => {
-    if (!props.enableOffer || !geom) return [];
-    const out: { key: string; x: number; y: number; offer: OfferInfo }[] = [];
-    for (const s of series) {
-      const seen = new Set<string>();
-      s.points.forEach((p, i) => {
-        if (!p.offer || p.price == null || seen.has(p.offer.title)) return;
-        seen.add(p.offer.title);
-        out.push({ key: `${s.key}|${p.offer.title}|${i}`, x: xPxOf(geom, i), y: yPxOf(geom, p.price), offer: p.offer });
-      });
-    }
-    return out;
-  }, [props.enableOffer, geom, series]);
-
-  // ---- 端点徽标几何（第十四轮）：S/E = 实心品牌色圆内白字（稍大于普通点）；
-  //      ‹/› = 窗口边缘续接点（白底品牌描边 + 外向箭头），替代原灰色延长线 ----
-  const endpointBadges = useMemo(() => {
-    if (!geom) return [];
-    const out: { key: string; x: number; y: number; kind: 'S' | 'E' | 'in' | 'out'; color: string }[] = [];
-    for (const s of series) {
-      s.points.forEach((p, i) => {
-        const kind = endpointMarks.get(`${s.key}|${i}`);
-        if (!kind || p.price == null) return;
-        out.push({ key: `${s.key}|${i}`, x: xPxOf(geom, i), y: yPxOf(geom, p.price), kind, color: s.color });
-      });
-    }
-    return out;
-  }, [geom, series, endpointMarks]);
+  // ---- offer 图标与端点徽标的几何（纯构建见 chartModel） ----
+  const offerMarkers = useMemo(
+    () => buildOfferMarkers({ enabled: props.enableOffer, geom, series }),
+    [props.enableOffer, geom, series],
+  );
+  const endpointBadges = useMemo(
+    () => buildEndpointBadges({ geom, series, marks: endpointMarks, priceTypes }),
+    [geom, series, endpointMarks, priceTypes],
+  );
 
   const empty = series.length === 0;
   const brandByKey = useMemo(() => new Map(series.map((s) => [s.key, s.brand])), [series]);
@@ -613,57 +386,21 @@ export default function Chart(props: ChartProps) {
         }
       : null;
 
-  // ---- DOM 刻度/断轴/档位带数据 ----
+  // ---- DOM 刻度/断轴/档位带数据（纯构建见 chartModel） ----
   // 左缘布局：[档位带(仅USD)][刻度列][名称预留带][绘图区]（滑杆已移至工具行，不占左缘）
   const tierPart = currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0;
   const tickW = geom ? Math.max(34, geom.gridLeft - tierPart - NAME_ZONE_W) : 44;
   const tierLeft = geom ? geom.gridLeft - NAME_ZONE_W - tickW - TIER_BAND_GAP - TIER_BAND_W : 0;
-  const tickRows = useMemo(() => {
-    if (!geom) return [];
-    const out: { v: number; y: number }[] = [];
-    for (const seg of geom.scale.segs) {
-      for (const v of segTicks(seg, geom.scale.interval)) out.push({ v, y: yPxOf(geom, v) });
-    }
-    return out;
-  }, [geom]);
+  const tickRows = useMemo(() => buildTickRows(geom), [geom]);
 
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
-  const tierValues = useMemo(() => {
-    const out: number[] = [];
-    for (const s of series) {
-      for (const pt of s.points) {
-        if (priceTypes.discounted && pt.price != null) out.push(pt.price);
-        if (priceTypes.rrp && pt.rrp != null) out.push(pt.rrp);
-      }
-    }
-    return out;
-  }, [series, priceTypes]);
+  const tierValues = useMemo(() => collectTierValues(series, priceTypes), [series, priceTypes]);
 
   const showTierBand = currency === 'usd' && geom != null;
-  // 档位带按段裁剪：档位只画在与其值域相交的段上（跨断裂的档不会画出"跨越"错觉）
-  const tierBoxes = useMemo(() => {
-    if (!showTierBand || !geom) return [];
-    const out: { label: string; top: number; h: number }[] = [];
-    for (const tier of DEFAULT_TIERS) {
-      const tHi = tier.max ?? Number.POSITIVE_INFINITY;
-      if (!tierValues.some((v) => v >= tier.min && v < tHi)) continue; // 无数据的档不画
-      for (const seg of geom.scale.segs) {
-        const lo = Math.max(tier.min, seg.min);
-        const hi = Math.min(tHi, seg.max); // tHi=∞（1000+ 档）时即 seg.max
-        if (lo >= hi - 1e-9) continue;
-        const top = yPxOf(geom, hi);
-        const h = yPxOf(geom, lo) - top;
-        if (h < 2) continue;
-        out.push({ label: tier.label, top, h });
-      }
-    }
-    return out;
-  }, [showTierBand, geom, tierValues]);
-
-  // 主价线：折后价优先；仅勾 RRP 时 RRP 成为主价线（标签/下钻/跳转跟随）
-  function primaryOf(p: SeriesPoint): number | null {
-    return priceTypes.discounted ? p.price : p.rrp;
-  }
+  const tierBoxes = useMemo(
+    () => buildTierBoxes({ enabled: showTierBand, geom, tierValues }),
+    [showTierBand, geom, tierValues],
+  );
 
   return (
     <div
@@ -724,7 +461,7 @@ export default function Chart(props: ChartProps) {
             style={{
               position: 'absolute',
               left: 0,
-              top: gridTop - 36,
+              top: Math.max(gridTop - 36, 0),
               width: geom.gridLeft - NAME_ZONE_W,
               display: 'flex',
               justifyContent: 'center',
@@ -749,16 +486,19 @@ export default function Chart(props: ChartProps) {
                     <span style={{ fontSize: 12 }}>显示 Y 刻度线</span>
                   </Checkbox>
                   <div style={{ marginTop: 6 }}>
-                    <Checkbox checked={showBreakMark} onChange={(e) => setShowBreakMark(e.target.checked)}>
-                      <span style={{ fontSize: 12 }}>断轴处显示省略号</span>
+                    <Checkbox checked={yCompress} onChange={(e) => commitYCompress(e.target.checked)}>
+                      <span style={{ fontSize: 12 }}>Y 轴自动压缩</span>
                     </Checkbox>
+                    <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
+                      值簇间空白压成断轴；取消后 Y 轴完全连续展示
+                    </div>
                   </div>
                 </div>
               }
             >
               <button
                 type="button"
-                title="Y 轴显示设置（每格高度伸缩 / 刻度线与断轴省略号显隐）"
+                title="Y 轴显示设置（每格高度伸缩 / 刻度线显隐 / Y 轴自动压缩）"
                 aria-label="Y 轴显示设置"
                 onClick={(e) => e.stopPropagation()}
                 style={{
@@ -823,7 +563,7 @@ export default function Chart(props: ChartProps) {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {fmtAxisShort(t.v)}
+                {t.text}
               </div>
             </div>
           ))}
@@ -849,8 +589,8 @@ export default function Chart(props: ChartProps) {
                     zIndex: 0,
                   }}
                 />
-                {/* 轴上纵向省略号（⋮）：刻度列居中（齿轮弹层可关，第十六轮） */}
-                {showBreakMark && (
+                {/* 轴上纵向省略号（⋮）：刻度列居中（「Y 轴自动压缩」关闭 = 不产生断轴，自然无符号） */}
+                {
                   <svg
                     width="14"
                     height="16"
@@ -868,7 +608,7 @@ export default function Chart(props: ChartProps) {
                       <circle key={cy} cx="7" cy={cy} r="1.5" fill={color.hairlineStrong} />
                     ))}
                   </svg>
-                )}
+                }
               </div>
             );
           })}
@@ -981,48 +721,70 @@ export default function Chart(props: ChartProps) {
             );
           })}
           {/* 系列名（起点旁 13px / 名称预留带 12px 两行换行，前置品牌色小点；
-              zIndex 9 = 全图层最上，白描边保证不被任何元素遮挡） */}
-          {labelPlan.names.map((nm, i) => (
-            <div
-              key={`nm-${i}-${nm.text}`}
-              title={nm.text}
-              style={{
-                position: 'absolute',
-                left: nm.x,
-                top: nm.y,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
-                fontWeight: 600,
-                lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
-                color: nm.color,
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none',
-                zIndex: 9,
-                textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
-                ...(nm.maxW != null ? { maxWidth: nm.maxW } : null),
-              }}
-            >
-              <BrandDot brand={brandByKey.get(nm.seriesKey) ?? ''} />
-              <span
-                style={
-                  nm.maxW != null
-                    ? {
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical' as const,
-                        WebkitLineClamp: 2,
-                        overflow: 'hidden',
-                        wordBreak: 'break-word',
-                        whiteSpace: 'normal',
-                      }
-                    : undefined
-                }
+              zIndex 9 = 全图层最上，白描边保证不被任何元素遮挡）。
+              第二十七轮：季粒度下名称下方第二行 = 生命周期调价幅度
+              （统显「生命周期 −X%」，第二十九轮起不再带「暂」；恒本币、锚在数据） */}
+          {labelPlan.names.map((nm, i) => {
+            const delta = lifecycleDeltas.get(nm.seriesKey) ?? null;
+            const pctLabel = delta
+              ? (delta.pct < 0 ? '−' : delta.pct > 0 ? '+' : '±') + Math.abs(delta.pct * 100).toFixed(1) + '%'
+              : '';
+            const nameRow = (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <BrandDot brand={brandByKey.get(nm.seriesKey) ?? ''} />
+                <span
+                  style={
+                    nm.maxW != null
+                      ? {
+                          display: '-webkit-box',
+                          WebkitBoxOrient: 'vertical' as const,
+                          WebkitLineClamp: 2,
+                          overflow: 'hidden',
+                          wordBreak: 'break-word',
+                          whiteSpace: 'normal',
+                        }
+                      : undefined
+                  }
+                >
+                  {nm.text}
+                </span>
+              </div>
+            );
+            return (
+              <div
+                key={`nm-${i}-${nm.text}`}
+                title={nm.text}
+                style={{
+                  position: 'absolute',
+                  left: nm.x,
+                  top: delta ? nm.y - 7 : nm.y,
+                  display: 'flex',
+                  flexDirection: delta ? 'column' : 'row',
+                  alignItems: delta ? 'flex-start' : 'center',
+                  gap: delta ? 1 : 4,
+                  fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
+                  fontWeight: 600,
+                  lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
+                  color: nm.color,
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                  zIndex: 9,
+                  textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
+                  ...(nm.maxW != null ? { maxWidth: nm.maxW } : null),
+                }}
               >
-                {nm.text}
-              </span>
-            </div>
-          ))}
+                {nameRow}
+                {delta && (
+                  <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: color.mute, fontWeight: 500 }}>
+                      生命周期{' '}
+                    </span>
+                    <span style={{ color: color.ink, fontWeight: 700, fontFamily: font.family }}>{pctLabel}</span>
+                  </span>
+                )}
+              </div>
+            );
+          })}
           {/* offer 图标（仅周视图；点击浮窗） */}
           {offerMarkers.map((m) => (
             <OfferPopover key={m.key} x={m.x} y={m.y} offer={m.offer} />
@@ -1035,11 +797,31 @@ export default function Chart(props: ChartProps) {
               if (!p || p.missing || p.price == null || !p.url) return null;
               return <JumpIcon key={`jp-${s.key}`} x={xPxOf(geom, hoverIdx)} y={yPxOf(geom, p.price)} url={p.url} />;
             })}
+          {/* 悬停下钻（仅月/季，第二十轮）：悬停竖线上的有值点变白底黑「下钻」图标
+              （同周视图跳转图标款式），点击 = 下钻该期间（与圈点点击同一 onDrill） */}
+          {props.enableDrill &&
+            props.onDrill &&
+            hoverIdx != null &&
+            series.map((s) => {
+              const p = s.points[hoverIdx];
+              const v = p ? primaryPriceOf(p, priceTypes) : null;
+              if (v == null) return null;
+              return (
+                <DrillIcon
+                  key={`dl-${s.key}`}
+                  x={xPxOf(geom, hoverIdx)}
+                  y={yPxOf(geom, v)}
+                  title={granularity === 'quarter' ? '下钻查看该季月度趋势' : '下钻查看该月周度趋势'}
+                  onClick={() => props.onDrill!(s.key, p.bucketId)}
+                />
+              );
+            })}
         </>
       )}
       {/* 钉顶卡片（常驻图例卡：悬停列/锁定列=该列明细态；移出后/指针在卡片区=图例态，
-          已锁定则保持锁定列明细不消失）。全系列隐藏时 geom 为 null → 用回退几何保持卡片可点（恢复入口） */}
-      {(geom || legendFallback) && (
+          已锁定则保持锁定列明细不消失）。全系列隐藏时 geom 为 null → 用回退几何保持卡片可点（恢复入口）。
+          showLegendCards=false（下钻弹窗）不渲染 */}
+      {props.showLegendCards !== false && (geom || legendFallback) && (
         <PinnedTooltips
           series={props.legendSeries ?? series}
           hiddenKeys={props.hiddenKeys ?? NO_KEYS}
@@ -1055,5 +837,3 @@ export default function Chart(props: ChartProps) {
     </div>
   );
 }
-
-type AvoidResultNames = { x: number; y: number; text: string; color: string; seriesKey: string; maxW?: number };

@@ -51,14 +51,17 @@
   .tgl input:checked + span{background:var(--sel);color:var(--sel-ink);border-color:rgba(0,112,243,.45)}
   .tgl-note{font-size:12px;color:var(--mute);margin-left:auto}
   #chartWrap{position:relative}
-  #tip{position:absolute;display:none;pointer-events:none;background:var(--canvas);border:1px solid var(--hairline);border-radius:8px;box-shadow:0 1px 1px rgba(0,0,0,.02),0 8px 16px -4px rgba(0,0,0,.06),0 24px 32px -8px rgba(0,0,0,.06);padding:10px 12px;font-size:12.5px;min-width:230px;z-index:5}
-  #tip .d{font-weight:650;margin-bottom:6px;font-variant-numeric:tabular-nums}
-  #tip .row{display:flex;align-items:center;gap:7px;margin-top:5px}
-  #tip .dot{width:8px;height:8px;border-radius:50%;background:var(--hw);flex:none}
-  #tip .dot.prev{opacity:.45}
-  #tip .lab{color:var(--body);flex:1}
-  #tip .p{font-weight:650;font-variant-numeric:tabular-nums}
-  #tip .rrp{font-size:11.5px;color:var(--mute);margin-top:1px}
+  #tip,#tip7{position:absolute;display:none;pointer-events:none;background:var(--canvas);border:1px solid var(--hairline);border-radius:8px;box-shadow:0 1px 1px rgba(0,0,0,.02),0 8px 16px -4px rgba(0,0,0,.06),0 24px 32px -8px rgba(0,0,0,.06);padding:10px 12px;font-size:12.5px;min-width:230px;z-index:5}
+  #tip .d,#tip7 .d{font-weight:650;margin-bottom:6px;font-variant-numeric:tabular-nums}
+  #tip .row,#tip7 .row{display:flex;align-items:center;gap:7px;margin-top:5px}
+  #tip .dot,#tip7 .dot{width:8px;height:8px;border-radius:50%;background:var(--hw);flex:none}
+  #tip .dot.prev,#tip7 .dot.prev{opacity:.45}
+  #tip .lab,#tip7 .lab{color:var(--body);flex:1}
+  #tip .p,#tip7 .p{font-weight:650;font-variant-numeric:tabular-nums}
+  #tip .rrp,#tip7 .rrp{font-size:11.5px;color:var(--mute);margin-top:1px}
+  .rules{margin:12px 0 0;padding-left:18px;font-size:12.5px;color:var(--body)}
+  .rules li{margin:4px 0}
+  .rules b{color:var(--ink)}
   .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12px;color:var(--body);align-items:center}
   .legend .it{display:flex;align-items:center;gap:6px}
   .lg-line{width:22px;height:0;border-top:2.4px solid var(--hw);display:inline-block}
@@ -240,6 +243,34 @@
     </div>
   </section>
 
+  <!-- ========== S7 增补：季粒度调价幅度 ========== -->
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2>增补设计：季粒度「生命周期调价幅度」· 推荐方案</h2><span class="sec-sub">完结 / 进行中统一：降幅收在折线左侧系列名下方第二行</span></div>
+    <div class="card chart-card">
+      <p class="chart-note"><b>口径</b>：同系列「首销季 → 末季」季均折后价变化，本币 %；末季完结产品取退市前最后有值季，在售产品取数据最后有值季（暂计）。与 S/E 端点徽标同源——第二行 % 就是 S、E 两个徽标数值的 delta。本例 2026Q4 仅含截稿采周 2026-10-07，作在售系列末点示意。</p>
+      <div class="toggles">
+        <label class="tgl"><input type="checkbox" id="tgl7" checked><span>调价幅度标注</span></label>
+        <span class="tgl-note">仅季粒度渲染；周 / 月粒度不画（周太密，月由 S/E 徽标承载）</span>
+      </div>
+      <div id="chartWrap7" style="position:relative">
+        <svg id="chart7" width="100%" viewBox="0 0 1160 430" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="tip7"></div>
+      </div>
+      <div class="legend">
+        <span class="it"><span class="lg-line"></span>当前代 · 季均折后价</span>
+        <span class="it"><span class="lg-line prev"></span>上代 · 季均折后价</span>
+        <span class="it"><span class="stagechip st-flat" style="font-size:10.5px">生命周期 −20.8%</span> 完结（系列名下第二行）</span>
+        <span class="it"><span class="stagechip st-flat" style="font-size:10.5px">暂 −8.9%</span> 进行中（同位置，带「暂」）</span>
+      </div>
+      <ol class="rules">
+        <li><b>位置</b>：不画末点几何箭头——在售系列末点全部贴窗口右缘会叠罗汉，完结系列的基准线也会压到别的系列线（本例 80 Pro 首销季水平恰与当前代价位重合，即"新代已降到上代开盘水平"）。降幅统一放<b>折线左侧系列名下方第二行</b>：完结 =「生命周期 −X%」，进行中 =「生命周期 暂 −X%」。</li>
+        <li><b>读数</b>：与 S/E 端点徽标同源——第二行 % 就是 S、E 两个徽标数值的 delta（首销季 → 末季，季均折后 · 本币）；悬停名字区出完整口径 tooltip。</li>
+        <li><b>避让</b>：第二行并入系列名标签本身（labelPlan P0 的名字标签），不新增浮动元素；名字标签跟随第一个有值点，窗口平移/缩放时随点走，沿用既有两遍式避让。</li>
+        <li><b>口径边界</b>：% 恒按本币；刷选窗口不含首销季时 % 不变（锚在数据非窗口）；仅季粒度渲染，周 / 月不画（月由 S/E 徽标承载）。</li>
+      </ol>
+    </div>
+  </section>
+
   <footer>独立示意稿 · 未改动看板代码与数据 · 数据取自当前演示数据集（seed 20261009，Pura 80 Pro / 90s Pro 12+256 共 6 个颜色 SKU 周价均值）· 生成于 2026-10-10</footer>
 </div>
 
@@ -418,6 +449,110 @@ svgEl.addEventListener('mousemove', ev => {
   tip.style.left = tx+'px'; tip.style.top = ty+'px';
 });
 svgEl.addEventListener('mouseleave', () => tip.style.display='none');
+</script>
+<script>
+// ---------------- S7 季粒度「生命周期调价幅度」· 推荐方案 ----------------
+(function(){
+  const W7=1160,H7=430,ML=70,MR=34,MT=30,MB=64;
+  const PW=W7-ML-MR,PH=H7-MT-MB,PB=MT+PH;
+  const QS=['2025Q1','2025Q2','2025Q3','2025Q4','2026Q1','2026Q2','2026Q3','2026Q4'];
+  const bw=PW/QS.length, QX=i=>ML+(i+.5)*bw;
+  const YMIN=52000, YMAX=76000;
+  const Y7=v=>MT+PH-(v-YMIN)/(YMAX-YMIN)*PH;
+  const qid=d=>{const p=d.split('-');return p[0]+'Q'+(Math.floor((+p[1]-1)/3)+1);};
+  const CUR=DATA.gens.current, PREV=DATA.gens.prev;
+  function qseries(g){
+    const map=new Map();
+    g.points.forEach(p=>{ if(p.price==null) return; const q=qid(p.date); const o=map.get(q)||{s:0,n:0}; o.s+=p.price; o.n++; map.set(q,o); });
+    return QS.map((q,i)=>({i, v: map.has(q)?Math.round(map.get(q).s/map.get(q).n):null}));
+  }
+  const SC=qseries(CUR), SP=qseries(PREV);
+  const firstOf=a=>a.find(p=>p.v!=null);
+  const lastOf=a=>{for(let i=a.length-1;i>=0;i--)if(a[i].v!=null)return a[i];};
+  const fC=firstOf(SC), lC=lastOf(SC), fP=firstOf(SP), lP=lastOf(SP);
+  const curPct=lC.v/fC.v-1, prevPct=lP.v/fP.v-1;
+  const fmtPct=(v,d=1)=>(v>0?'+':v<0?'−':'±')+Math.abs(v*100).toFixed(d)+'%';
+  const on7={anno:true};
+  const svg7=document.getElementById('chart7'), tip7=document.getElementById('tip7'), wrap7=document.getElementById('chartWrap7');
+  const ctx7=document.createElement('canvas').getContext('2d');
+  const tw=(t,f)=>{ctx7.font=(f||9.5)+'px Inter,"PingFang SC",sans-serif';return ctx7.measureText(t).width;};
+  let zones=[];
+  const eInfoCur=`<div class="d">生命周期调价幅度 · 进行中</div><div class="rrp">首销季 2026Q2 ${fmt(fC.v)} ₽ → 截至 2026Q4 ${fmt(lC.v)} ₽（季均折后 · 本币）</div><div class="row"><span class="dot"></span><span class="lab">Pura 90s Pro 暂计</span><span class="p">${fmtPct(curPct)}</span></div><div class="rrp">生命周期进行中 · 数据截稿 2026-10-07（2026Q4 仅 1 个采周）</div>`;
+  const eInfoPrev=`<div class="d">生命周期调价幅度 · 完结</div><div class="rrp">首销季 2025Q2 ${fmt(fP.v)} ₽ → 退市季 2026Q3 ${fmt(lP.v)} ₽（季均折后 · 本币）</div><div class="row"><span class="dot prev"></span><span class="lab">Pura 80 Pro 累计</span><span class="p">${fmtPct(prevPct)}</span></div>`;
+  function pill(cx, cy, lines, op){
+    const w=Math.max(...lines.map(t=>tw(t)))+14, h=lines.length===1?16:27, x=cx-w/2;
+    let o=`<rect x="${x}" y="${cy}" width="${w}" height="${h}" rx="7" fill="#fff" stroke="#ebebeb" opacity="${op}"/>`;
+    lines.forEach((t,k)=>{ o+=`<text x="${cx}" y="${cy+12+k*11}" font-size="9.5" text-anchor="middle" fill="${k===0?'#171717':'#4d4d4d'}" style="font-variant-numeric:tabular-nums">${t}</text>`; });
+    return o;
+  }
+  function build(){
+    let s=''; zones=[];
+    for(let v=YMIN+4000; v<=YMAX; v+=4000){
+      const y=Y7(v);
+      s+=`<line x1="${ML}" y1="${y}" x2="${ML+PW}" y2="${y}" stroke="#f0f0f0"/><text x="${ML-8}" y="${y+3.5}" font-size="10.5" fill="#888" text-anchor="end" style="font-variant-numeric:tabular-nums">${fmt(v)}</text>`;
+    }
+    QS.forEach((q,i)=>{ const x=QX(i);
+      s+=`<line x1="${x}" y1="${PB}" x2="${x}" y2="${PB+4}" stroke="#d4d4d4"/><text x="${x}" y="${PB+18}" font-size="10" fill="#888" text-anchor="middle" style="font-variant-numeric:tabular-nums">${q}</text>`;
+    });
+    s+=`<line x1="${ML}" y1="${PB}" x2="${ML+PW}" y2="${PB}" stroke="#d4d4d4"/>`;
+    const line=(a,op,w)=>{ let d='',pen=false;
+      for(const p of a){ if(p.v==null){pen=false;continue;} d+=(pen?'L':'M')+QX(p.i).toFixed(1)+' '+Y7(p.v).toFixed(1); pen=true; }
+      return `<path d="${d}" fill="none" stroke="${HW}" stroke-width="${w}" opacity="${op}" stroke-linejoin="round"/>`; };
+    s+=line(SP,.42,1.6)+line(SC,1,2.2);
+    const dots=(a,op)=>a.filter(p=>p.v!=null).map(p=>`<circle cx="${QX(p.i)}" cy="${Y7(p.v)}" r="2.6" fill="#fff" stroke="${HW}" stroke-width="1.3" opacity="${op}"/>`).join('');
+    s+=dots(SP,.5)+dots(SC,1);
+    // S 徽标（首销季锚）
+    s+=pill(QX(fP.i), Y7(fP.v)-24, ['S '+fmt(fP.v)], .8);
+    s+=pill(QX(fC.i), Y7(fC.v)-24, ['S '+fmt(fC.v)], 1);
+    // E 徽标（末季价，单行；降幅在系列名第二行）
+    const eC=QX(lC.i), eP=QX(lP.i);
+    s+=pill(eP, Y7(lP.v)+10, ['E '+fmt(lP.v)], 1);
+    zones.push({x1:eP-45, x2:eP+45, y1:Y7(lP.v)+8, y2:Y7(lP.v)+30, html:eInfoPrev});
+    s+=pill(eC, Y7(lC.v)+10, ['E '+fmt(lC.v)], 1);
+    zones.push({x1:eC-45, x2:eC+45, y1:Y7(lC.v)+8, y2:Y7(lC.v)+30, html:eInfoCur});
+    // 折线左侧系列名 + 生命周期降幅第二行（完结「生命周期 −X%」/ 进行中「生命周期 暂 −X%」）
+    const nameBlock=(gen,fst,pct,ongoing,op,info)=>{
+      const x=QX(fst.i)-12, y=Y7(fst.v);
+      const pre=ongoing?'生命周期 暂 ':'生命周期 ';
+      const nm=gen.label;
+      const w=Math.max(tw(nm,11), tw(pre+fmtPct(pct),11));
+      let o=`<text x="${x}" y="${y+14}" font-size="11" font-weight="600" fill="#171717" text-anchor="end" opacity="${op}" style="font-variant-numeric:tabular-nums">${nm}</text>`;
+      if(on7.anno){
+        o+=`<text x="${x}" y="${y+30}" font-size="11" text-anchor="end" opacity="${op}"><tspan fill="#888">${pre}</tspan><tspan fill="#171717" font-weight="700" style="font-variant-numeric:tabular-nums">${fmtPct(pct)}</tspan></text>`;
+        zones.push({x1:x-w-8, x2:x+4, y1:y-4, y2:y+34, html:info});
+      }
+      return o;
+    };
+    s+=nameBlock(PREV,fP,prevPct,false,.75,eInfoPrev);
+    s+=nameBlock(CUR,fC,curPct,true,1,eInfoCur);
+    svg7.innerHTML=s;
+  }
+  document.getElementById('tgl7').addEventListener('change', ev => { on7.anno=ev.target.checked; build(); });
+  build();
+  svg7.addEventListener('mousemove', ev => {
+    const r=svg7.getBoundingClientRect();
+    const px=(ev.clientX-r.left)/r.width*W7, py=(ev.clientY-r.top)/r.height*H7;
+    let html=null;
+    for(const z of zones){ if(px>=z.x1&&px<=z.x2&&py>=z.y1&&py<=z.y2){ html=z.html; break; } }
+    if(!html){
+      if(px<ML||px>ML+PW){ tip7.style.display='none'; return; }
+      const i=Math.min(QS.length-1, Math.max(0, Math.floor((px-ML)/bw)));
+      let rows='';
+      for(const [a,cls] of [[SC,''],[SP,'prev']]){
+        const p=a[i]; if(p.v==null) continue;
+        rows+=`<div class="row"><span class="dot ${cls}"></span><span class="lab">季均折后价</span><span class="p">${fmt(p.v)} ₽</span></div>`;
+      }
+      html=`<div class="d">${QS[i]} · 季均折后价</div>${rows||'<div class="rrp">该季无数据</div>'}`;
+    }
+    tip7.innerHTML=html; tip7.style.display='block';
+    const wr=wrap7.getBoundingClientRect();
+    let tx=ev.clientX-wr.left+16, ty=ev.clientY-wr.top+12;
+    if(tx+260>wr.width) tx=ev.clientX-wr.left-276;
+    if(ty+140>wr.height) ty=wr.height-140;
+    tip7.style.left=tx+'px'; tip7.style.top=ty+'px';
+  });
+  svg7.addEventListener('mouseleave', () => tip7.style.display='none');
+})();
 </script>
 </body>
 </html>

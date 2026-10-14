@@ -212,7 +212,8 @@ export default function Config() {
 
   return (
     <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
-      <div style={{ minWidth: 1440, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 第二十八轮：1440 → 1280，与看板同最低宽度 */}
+      <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px：与看板同铬架 */}
         <header
           style={{

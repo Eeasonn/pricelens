@@ -22,3 +22,12 @@ body {
   font-family: Geist Mono, ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+   第二十八轮：筛选条标签已全部外置（FilterBar 内联渲染，无 CSS 标签规则）——
+   仅保留级联/多选的搜索占位修正（作用域 .lpl-fb）：
+   折叠态收起搜索框（多选模式的透明输入框会把已选标签挤换行）；展开时恢复。
+   ============================================================ */
+.lpl-fb .ant-select-selection-search { min-width: 0; }
+.lpl-fb .ant-select .ant-select-selection-search { width: 0 !important; min-width: 0 !important; }
+.lpl-fb .ant-select-open .ant-select-selection-search { width: auto !important; }

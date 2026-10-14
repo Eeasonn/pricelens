@@ -171,7 +171,15 @@ export function CascadeTrigger({
             {rest > 0 ? ` 等 ${labels.length} 个` : ''}
           </span>
         ) : (
-          <span style={{ fontSize: fontSize.bodySm, color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span
+            style={{
+              fontSize: fontSize.bodySm,
+              color: color.mute,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
             {placeholder}
           </span>
         )}

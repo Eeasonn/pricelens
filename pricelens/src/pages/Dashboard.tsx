@@ -12,7 +12,8 @@ export default function Dashboard() {
   const { go } = usePage();
   return (
     <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
-      <div style={{ minWidth: 1440, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 第二十八轮：1440 → 1280，筛选条重排后 1280 视口零溢出（1280 笔记本无横向滚动） */}
+      <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px */}
         <header
           style={{

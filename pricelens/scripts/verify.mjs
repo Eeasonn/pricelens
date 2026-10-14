@@ -3,7 +3,7 @@
 // 抽查 §11 造数结果 + buildSeries 契约冒烟（用项目自带 tsc 编译临时 TS 后运行）。
 // 全部断言通过 exit 0；任何失败打印 FAIL 并 exit 1。
 // ============================================================
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -128,6 +128,10 @@ console.log('\n[2] 事实表结构与取整');
     'batch_id = B2026W41，quality_flag = synthetic',
     fact.every((r) => r.batch_id === 'B2026W41' && r.quality_flag === 'synthetic'),
   );
+  check(
+    '每行都有 RRP（第二十一条：RRP 覆盖生命周期 S..E 的数据基础）',
+    fact.every((r) => r.rrp_rub != null && r.rrp_usd != null),
+  );
   const sampleSku = dimProduct.find((p) => p.model_name === 'Pura 90s Pro' && p.romram === '12+256 GB');
   const expectUrl = 'https://www.ozon.ru/search/?text=' + encodeURIComponent(`${sampleSku.brand} ${sampleSku.model_name} ${sampleSku.romram}`);
   check('url = Ozon 搜索深链（品牌+型号+romram）', factBySku.get(sampleSku.sku_id)[0].url === expectUrl, expectUrl);
@@ -148,24 +152,27 @@ console.log('\n[3] 生命周期边界');
   }
   check('launch 前无行', launchOk);
   check('eol 周后无行', eolOk);
-  // 第十三轮：RRP = 官方价恒定，至多一次成本性上调（只涨不跌，+2~8%）
+  // 第二十轮：RRP = 官方价恒定，至多一次成本性上调（只涨不跌，+2~8%）；
+  // ₽ 与 USD（参考汇率折算）同阶梯，两币种各自都不频繁变化
   const mx6 = factBySku.get('own-mate-x6__12+512GB__Black');
   const eolWeekX6 = [...wedById.entries()].filter(([, wed]) => wed <= '2026-01-05').map(([id]) => id).sort().pop();
   let rrpMonotone = true;
   let upSkus = 0;
   for (const p of dimProduct) {
     const rows = factBySku.get(p.sku_id) ?? [];
-    const seq = [...new Set(rows.map((r) => r.rrp_rub))];
-    for (let i = 1; i < seq.length; i++) if (seq[i] < seq[i - 1]) rrpMonotone = false;
-    if (seq.length > 2) rrpMonotone = false;
-    if (seq.length === 2) {
-      upSkus++;
-      const up = seq[1] / seq[0] - 1;
-      if (up < 0.02 || up > 0.08) rrpMonotone = false;
+    for (const key of ['rrp_rub', 'rrp_usd']) {
+      const seq = [...new Set(rows.map((r) => r[key]))];
+      for (let i = 1; i < seq.length; i++) if (seq[i] < seq[i - 1]) rrpMonotone = false;
+      if (seq.length > 2) rrpMonotone = false;
+      if (seq.length === 2) {
+        const up = seq[1] / seq[0] - 1;
+        if (up < 0.02 || up > 0.08) rrpMonotone = false;
+      }
     }
+    if ([...new Set(rows.map((r) => r.rrp_rub))].length === 2) upSkus++;
   }
   check(
-    'RRP 恒定，至多一次成本性上调（只涨不跌）',
+    'RRP 恒定，至多一次成本性上调（₽ 与 USD 同阶梯，只涨不跌；用户口径：≤2 次涨价）',
     rrpMonotone,
     `${upSkus} 个 SKU 有一次上调，其余恒定`,
   );
@@ -212,10 +219,17 @@ console.log('\n[5] 价格曲线锚点');
   const launchRow = pura[0];
   const ratio = launchRow.discounted_price_rub / launchRow.rrp_rub;
   check(
-    'Pura 90s Pro · 12+256 上市周折后价 ≈ RRP（溢价 0~+5% ±1% 噪声）',
-    launchRow.week_id === '202624' && ratio >= 1.0 && ratio <= 1.07,
+    'Pura 90s Pro · 12+256 上市周折后价 = RRP（首销原价；第二十一轮撤上市溢价）',
+    launchRow.week_id === '202624' && ratio >= 0.99 && ratio <= 1.0001,
     `${launchRow.week_id}: ${launchRow.discounted_price_rub}/${launchRow.rrp_rub} = ${(ratio * 100).toFixed(1)}%`,
   );
+  // RRP ≥ 实际价（用户口径第二十一条）：全表任意行，两币种
+  const overRrp = fact.filter(
+    (r) =>
+      (r.discounted_price_rub != null && r.discounted_price_rub > r.rrp_rub) ||
+      (r.discounted_price_usd != null && r.discounted_price_usd > r.rrp_usd),
+  );
+  check('折后价 ≤ RRP（₽ 与 USD 全表逐行；含上市/大促/清库各段）', overRrp.length === 0, overRrp.length === 0 ? '无越界行' : `${overRrp.length} 行越界，样例 ${overRrp[0].sku_id} ${overRrp[0].week_id}`);
   const s25 = factBySku.get('cmp-galaxy-s25__12+256GB__Black').filter((r) => ['202544', '202545', '202546'].includes(r.week_id));
   const s25ratio = Math.min(...s25.map((r) => r.discounted_price_rub / r.rrp_rub));
   check(
@@ -237,9 +251,28 @@ console.log('\n[5] 价格曲线锚点');
     puraOffer && puraDiscount,
     `折扣 ${puraDiscount}，offer ${puraOffer}`,
   );
-  // USD 按周汇率折算
+  // USD 按参考汇率 80 折算（第二十轮：不再随周汇率抖动，与 ₽ 同阶梯）
   const usdRow = pura.find((r) => r.discounted_price_usd != null);
-  check('rrp_usd / discounted_usd 与 ₽ 同源折算且为整数', Number.isInteger(usdRow.rrp_usd) && Number.isInteger(usdRow.discounted_price_usd) && usdRow.rrp_usd > 100 && usdRow.discounted_price_usd > 100, `${usdRow.week_id}: ₽${usdRow.rrp_rub} → $${usdRow.rrp_usd}`);
+  check(
+    'USD = ₽ ÷ 80（参考汇率）四舍五入到 1$，全表一致且与周汇率无关',
+    fact.every((r) => r.rrp_usd === Math.round(r.rrp_rub / 80) && (r.discounted_price_usd == null || (r.discounted_price_rub != null && r.discounted_price_usd === Math.round(r.discounted_price_rub / 80)))) && Number.isInteger(usdRow.rrp_usd) && usdRow.rrp_usd > 100,
+    `${usdRow.week_id}: ₽${usdRow.rrp_rub} → $${usdRow.rrp_usd}`,
+  );
+  // 折后价 USD 阶梯稳定（用户反馈：不频繁变化）——变价只发生在真实事件周
+  const usdChanges = [];
+  for (const p of dimProduct) {
+    const rows = factBySku.get(p.sku_id) ?? [];
+    let changes = 0;
+    let prev = null;
+    for (const r of rows) {
+      if (r.discounted_price_usd == null) continue;
+      if (prev != null && r.discounted_price_usd !== prev) changes++;
+      prev = r.discounted_price_usd;
+    }
+    usdChanges.push(changes);
+  }
+  const usdWorst = usdChanges.slice().sort((a, b) => b - a)[0] ?? 0;
+  check('折后价 USD 全生命周期变价次数 ≤ 30（阶梯事件上限的宽松钳制）', usdWorst <= 30, `最多 SKU 变价 ${usdWorst} 次（93 周窗口内上市/大促/清库台阶合计）`);
 }
 
 // ---------------- 6. buildSeries 冒烟（临时 TS → 项目自带 tsc 编译 → node 运行） ----------------
@@ -253,7 +286,7 @@ console.log('\n[6] buildSeries 冒烟');
     const rel = (p) => JSON.stringify(relative(tmp, p).split('\\').join('/'));
     const smokeTs = `
 declare const process: { exit(code?: number): never };
-import { buildSeries, lowestPriceColorSku, defaultCompetitorSkus } from ${rel(aggPath)};
+import { buildSeries, lowestPriceColorSku, defaultCompetitorSkus, lifecycleDeltaOf } from ${rel(aggPath)};
 import { dimProduct } from ${rel(dataPath)};
 
 function assert(cond: boolean, msg: string): void {
@@ -309,12 +342,28 @@ assert(sq[0].points.length === 1 && sq[0].points[0].xLabel === '2026Q3', '季桶
 assert(sq[0].points[0].price != null, '季桶有值');
 
 assert(JSON.stringify(defaultCompetitorSkus('own-pura-90s-pro', '12+256 GB')) === JSON.stringify(['cmp-iphone-17__8+256GB__Black','cmp-galaxy-s26__12+256GB__Black']), 'defaultCompetitorSkus 按 sort 排序');
-console.log('SMOKE-JSON\t' + JSON.stringify({ lowest: sku, label: s1[0].label, weekPrice: last.price, dnsPrice: dns, usdAug: aug.price, shop: last.shopName }));
+
+// 生命周期调价幅度（第二十七轮：首销季→末季季均折后 ₽，07 节口径）
+// 金测锚（seed 20261009 + 第二十一轮撤上市溢价后）：80 Pro −10.3%（完结）、90s Pro −4.3%（暂计）
+const pura80SkuIds = dimProduct.filter(p => p.sku_id.startsWith('own-pura-80-pro__12+256GB__')).map(p => p.sku_id);
+const d80 = lifecycleDeltaOf(pura80SkuIds);
+assert(!!d80 && !d80.ongoing, '80 Pro 完结（eol 非空 → 无「暂」前缀）');
+assert(!!d80 && d80.pct < -0.09 && d80.pct > -0.12, '80 Pro 首销季→退市季 ≈ −10.3%，got ' + (d80 ? (d80.pct * 100).toFixed(1) + '%' : 'null'));
+const d90 = lifecycleDeltaOf(puraSkuIds);
+assert(!!d90 && d90.ongoing, '90s Pro 在售 → 暂计');
+assert(!!d90 && d90.pct < -0.03 && d90.pct > -0.06, '90s Pro 暂计降幅 ≈ −4.3%，got ' + (d90 ? (d90.pct * 100).toFixed(1) + '%' : 'null'));
+console.log('SMOKE-JSON\t' + JSON.stringify({ lowest: sku, label: s1[0].label, weekPrice: last.price, dnsPrice: dns, usdAug: aug.price, shop: last.shopName, d80: d80?.pct, d90: d90?.pct }));
 `;
     writeFileSync(join(tmp, 'smoke.ts'), smokeTs);
+    // 第十八轮起 data/index.ts 以 `?raw` 导入 gzip 产物（类型由 vite/client 提供）：
+    // 独立编译补一份等价环境声明；编译产物落在系统 tmp，require('fflate') 解析不到
+    // 项目依赖 → 软链 node_modules（finally 的 rmSync 递归删除会一并清掉）
+    writeFileSync(join(tmp, 'raw.d.ts'), "declare module '*?raw' { const content: string; export default content; }\n");
+    symlinkSync(join(ROOT, 'node_modules'), join(tmp, 'node_modules'), 'dir');
     const tscBin = join(ROOT, 'node_modules', '.bin', 'tsc');
     const compiled = spawnSync(tscBin, [
       join(tmp, 'smoke.ts'),
+      join(tmp, 'raw.d.ts'),
       '--outDir', join(tmp, 'out'),
       '--rootDir', '/', // 输出镜像文件系统路径：out + <tmp 相对 / 的路径>
       '--module', 'commonjs',
@@ -327,6 +376,11 @@ console.log('SMOKE-JSON\t' + JSON.stringify({ lowest: sku, label: s1[0].label, w
     if (compiled.status !== 0) {
       check('smoke.ts 编译', false, (compiled.stdout + compiled.stderr).slice(0, 500));
     } else {
+      // node 运行时同样不认识 vite 的 `?raw` 约定：CJS 解析 `./x?raw` 会依次尝试
+      // `x?raw.js`，在产物目录放一个导出 b64 字符串的 shim 即可（等价 vite ?raw 内联）
+      const outDataDir = join(tmp, 'out', relative('/', join(ROOT, 'src', 'data')));
+      const b64 = readFileSync(join(ROOT, 'src', 'data', 'fact_price_weekly_gzip.b64.txt'), 'utf8').trim();
+      writeFileSync(join(outDataDir, 'fact_price_weekly_gzip.b64.txt?raw.js'), `module.exports = ${JSON.stringify(b64)};\n`);
       const smokeJs = join(tmp, 'out', relative('/', join(tmp, 'smoke.ts')).replace(/\.ts$/, '.js'));
       const run = spawnSync(process.execPath, [smokeJs], { encoding: 'utf8' });
       const jsonLine = (run.stdout + '').split('\n').find((l) => l.startsWith('SMOKE-JSON\t'));
@@ -494,6 +548,24 @@ console.log('\n[9] 确定性（seed 20261009）');
   const h1 = run();
   const h2 = run();
   check('gen-data.mjs 连跑两遍，src/data 全部产物 shasum 一致', h1 === h2, h1.slice(0, 16) + '…');
+}
+
+// ---------------- 10. 单文件版一致性（铁律：每次构建同步根目录 PriceLens.html） ----------------
+console.log('\n[10] 单文件版一致性（PriceLens.html）');
+{
+  const singlePath = join(ROOT, '..', 'PriceLens.html');
+  const distPath = join(ROOT, 'dist', 'index.html');
+  let ok = false;
+  let detail = '';
+  try {
+    const single = readFileSync(singlePath);
+    const dist = readFileSync(distPath);
+    ok = single.length > 0 && single.equals(dist);
+    detail = `${(single.length / 1024 / 1024).toFixed(2)}MB`;
+  } catch (e) {
+    detail = `读取失败：${e.message.slice(0, 80)}`;
+  }
+  check('根目录 PriceLens.html 存在且与 pricelens/dist/index.html 逐字节一致', ok, detail);
 }
 
 // ---------------- 汇总 ----------------

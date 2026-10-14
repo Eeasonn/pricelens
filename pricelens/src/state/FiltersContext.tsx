@@ -2,7 +2,8 @@
 // 筛选状态：五框状态 + §5.6 联动 + localStorage 持久化（LPL3.filters）
 // + §13 CONFIG_CHANGED_EVENT 监听（反馈第 8 条修订：配置保存不再自动改竞品，
 //   竞品由筛选条「匹配竞品」按钮按配置矩阵带出）
-// 默认视图（§15.4-A13）：周 · 最近 13 周（2026-W29→2026-W41）· 本币 · 仅折后价
+// 默认视图（§15.4-A13，第二十五轮改）：月 · USD · 我司 Pura 90s Pro 12+256（最低价颜色）
+// + 其配置竞品（主竞品在前）· 仅折后价 · 时间自适应开
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -21,22 +22,30 @@ export const defaultFilters: FiltersState = {
   own: [],
   competitors: [],
   platform: null,
-  granularity: 'week',
-  rangeStart: '202629',
-  rangeEnd: '202641',
-  currency: 'local',
+  granularity: 'month',
+  adaptive: true, // 第十九轮：时间自适应默认开
+  rangeStart: '202607', // 与月粒度自洽的默认范围（自适应开时会被数据跨度覆盖）
+  rangeEnd: '202610',
+  currency: 'usd', // 第二十五轮：默认 USD（参考汇率 80 折算）
   priceTypes: { discounted: true, rrp: false },
   agg: 'avg',
 };
+
+/**
+ * 默认视图版本：默认态字段（粒度/币种/竞品带出等）变更时 +1。
+ * 持久化载荷带上 v；旧版本视为过期 → 本次启动直接落新默认视图（其后照常留存用户改动）。
+ */
+const DEFAULTS_V = 2;
 
 /** 我司默认产品（§5.2②：Pura 90s Pro · 12+256，其最低价颜色） */
 const DEFAULT_OWN_MODEL = 'Pura 90s Pro';
 const DEFAULT_OWN_ROMRAM_PREFIX = '12+256';
 
 /**
- * 数据就绪时的默认勾选（反馈第 8 条修订）：
+ * 数据就绪时的默认勾选（第二十五轮改）：
  * - 我司 = Pura 90s Pro · 12+256（其最低价颜色，lowestPriceColorSku）；无数据 → own=[]
- * - 竞品一律不带出（competitors 保持 []），用户点「匹配竞品」才按配置矩阵带出
+ * - 竞品 = 该我司组的配置矩阵并集（groupsFromBenchmark，主竞品在前）；
+ *   之后切换我司仍不自动带出（反馈第 8 条），点「匹配竞品」重新匹配
  */
 function computeDataDefaults(): Partial<FiltersState> {
   if (!dimProduct.length) return {};
@@ -49,21 +58,28 @@ function computeDataDefaults(): Partial<FiltersState> {
   const skuId = lowestPriceColorSku(modelId, row.romram);
   if (!skuId) return {}; // 无数据（含 fact 未生成）→ 保持 own=[]，不崩溃
   const own: ProductSelection[] = [{ modelId, romram: row.romram, skuIds: [skuId] }];
-  return { own };
+  return { own, competitors: groupsFromBenchmark(own) };
 }
 
 /**
  * 启动恢复：
- * 1) 无持久化 → A13 默认态 + 数据默认我司勾选（竞品为空，反馈第 8 条）；
- * 2) 有持久化 → competitors 照原样恢复（可能为空，不自动补竞品）；
+ * 1) 无持久化 / 持久化版本旧于 DEFAULTS_V → 新默认视图（月 · USD · 我司+配置竞品）；
+ * 2) 版本相符 → competitors 照原样恢复（可能为空，不自动补竞品）；
  *    但若我司勾选为空而数据此刻已就绪（典型：数据先生成前打开过、造数后重建），
- *    仅补默认我司产品，竞品保持恢复值不动。
+ *    仅补默认我司产品+其配置竞品。
  */
 function loadInitialState(): FiltersState {
   let restored: FiltersState | null = null;
   try {
     const raw = localStorage.getItem(LPL.filters);
-    if (raw) restored = { ...defaultFilters, ...(JSON.parse(raw) as Partial<FiltersState>) };
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<FiltersState> & { v?: number };
+      if (parsed.v === DEFAULTS_V) {
+        delete parsed.v; // 版本号只随持久化载荷走，不进内存状态
+        restored = { ...defaultFilters, ...parsed };
+      }
+      // 版本不符（含旧版无 v 字段）→ 视为无持久化，直接落新默认视图
+    }
   } catch {
     /* 忽略损坏的持久化数据 */
   }
@@ -87,10 +103,10 @@ const Ctx = createContext<FiltersCtx>({
 export function FiltersProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<FiltersState>(loadInitialState);
 
-  // 持久化：任意变更写 LPL3.filters（§15.4 默认态可按用户习惯留存）
+  // 持久化：任意变更写 LPL3.filters（§15.4 默认态可按用户习惯留存）；载荷带默认视图版本号
   useEffect(() => {
     try {
-      localStorage.setItem(LPL.filters, JSON.stringify(state));
+      localStorage.setItem(LPL.filters, JSON.stringify({ ...state, v: DEFAULTS_V }));
     } catch {
       /* 存储不可用时仅内存生效 */
     }
@@ -118,7 +134,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
        */
       switchOwnProduct: (sel) => setState((s) => ({ ...s, own: [sel] })),
 
-      /** 回到默认视图（含数据默认我司勾选；竞品为空） */
+      /** 回到默认视图（含数据默认我司勾选 + 其配置竞品） */
       reset: () => setState(loadInitialState()),
 
       /**

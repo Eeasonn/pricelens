@@ -9,8 +9,10 @@
 // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
 // 数据流 = useFilters().state → SeriesQuery → buildSeries → 窗口切片 → PriceTrend
 // 窗口状态为图表内部状态（初值=筛选器范围；范围变化收缩、粒度切换对齐桶边界，§6.5）
-// 第三轮口径：XBrush 轨道 = 数据全集时间轴；取数也按全集（数据量小、内存计算），
-// 显示仍只切窗口；窗口（箭头/拖柄/平移）越出筛选范围时把 rangeStart/End 极值扩展到窗口端点。
+// 第十九轮口径：时间自适应（默认开）= 范围自动 = 所选产品跨度 ±2 个间隔（钳当前时间），
+// RangePicker 冻结；关闭后手动选范围，拖刷轨道 = 筛选范围，平移/拖柄恒钳在轨道内，
+// 仅 ‹› 箭头可越界一步并把 rangeStart/End 极值扩展到窗口端点（grow-only，从不收缩）。
+// 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Checkbox, Segmented } from 'antd';
@@ -31,6 +33,7 @@ import XBrush from './XBrush';
 import DrillModal, { type DrillInfo } from './DrillModal';
 import {
   GRID,
+  adaptiveRangeOf,
   computeYAxis,
   convertWindowIds,
   dataBucketRange,
@@ -38,6 +41,8 @@ import {
   estGridLeft,
   gridTopFor,
   normalizeWindow,
+  perUsdOf,
+  seriesSpanRange,
   type Bucket,
   type StripGeom,
   type YScale,
@@ -49,6 +54,7 @@ export default function PriceTrend() {
 
   // ---- 图表内部状态 ----
   const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值；松手才提交）
+  const [yCompress, setYCompress] = useState<boolean>(true); // Y 轴自动压缩（第二十轮；关 = Y 轴完全连续）
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null); // null=整个筛选范围
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例卡取消选中的系列（折线隐藏）
@@ -72,8 +78,8 @@ export default function PriceTrend() {
   }, [state.granularity]);
 
   // ---- 取数：useFilters().state → SeriesQuery → buildSeries（§7.3 唯一口径） ----
-  // 第三轮起按数据全集取数（内存小数据集，成本可忽略）：窗口可在全时间轴上自由平移/拉伸，
-  // 越出筛选范围时无需等待重取数；筛选范围只决定窗口的默认值与收缩边界。
+  // 按数据全集取数（内存小数据集，成本可忽略）：跨度/自适应范围、窗口边缘续接
+  // 都要看范围外的邻点；筛选范围只决定轨道边界与窗口的默认值/收缩边界。
   const [dataStart, dataEnd] = useMemo(() => dataBucketRange(state.granularity), [state.granularity]);
 
   const query: SeriesQuery = useMemo(
@@ -101,16 +107,48 @@ export default function PriceTrend() {
     }
   }, [query]);
 
-  // 轨道桶 = 数据全集时间轴（第三轮口径，不再随筛选范围缩小）
+  // 全集桶 = 桶枚举基准（自适应跨度、窗口下标、边缘续接都基于全集下标空间）
   const buckets: Bucket[] = useMemo(
     () => enumerateBuckets(state.granularity, dataStart, dataEnd),
     [state.granularity, dataStart, dataEnd],
   );
 
+  // ---- 时间自适应（第十九轮，默认开）：范围 = 所选产品数据跨度 ±2 个间隔 ----
+  // 钳在数据全集内（右缘 = 数据末端 = 当前时间，不超）；范围变化时窗口复位为整个范围。
+  // 关键 = 跨度桶下标（含产品/平台/汇总口径变化）；粒度也参与（±2 按当前粒度间隔计）。
+  // adaptiveKey 相同即跳过；关闭时清 key —— 手动改过范围后再打开仍会重新套用自适应。
+  // 注意本 effect 声明在 granRef 联动之后：粒度切换时先换桶、自适应范围随后覆盖。
+  const span = useMemo(() => seriesSpanRange(allSeries), [allSeries]);
+  const adaptiveBounds = useMemo(
+    () => (state.adaptive ? adaptiveRangeOf(buckets, span) : null),
+    [state.adaptive, buckets, span],
+  );
+  const adaptiveKey = adaptiveBounds ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}` : '';
+  const adaptiveAppliedRef = useRef('');
+  useLayoutEffect(() => {
+    if (!adaptiveBounds) {
+      adaptiveAppliedRef.current = '';
+      return;
+    }
+    if (adaptiveAppliedRef.current === adaptiveKey) return;
+    adaptiveAppliedRef.current = adaptiveKey;
+    actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
+    setWindowIds(null); // 窗口复位 = 整个自适应范围（X 轴最小最大值即跨度±2）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adaptiveKey]);
+
   // 窗口渲染期钳入筛选范围：范围缩小时窗口收缩；ids=null = 整个筛选范围
   const win = useMemo(
     () => normalizeWindow(buckets, windowIds, [state.rangeStart, state.rangeEnd]),
     [buckets, windowIds, state.rangeStart, state.rangeEnd],
+  );
+
+  // 拖刷轨道 = 筛选范围（第十九轮口径：下面的时间范围必须按上面所选限制）。
+  // 窗口（平移/拖柄）恒钳在轨道内；仅 ‹› 箭头可越界一步，越出时 onWindowChange 把
+  // rangeStart/End 极值扩展到窗口端点（轨道随之长出）。
+  const track = useMemo(
+    () => normalizeWindow(buckets, null, [state.rangeStart, state.rangeEnd]),
+    [buckets, state.rangeStart, state.rangeEnd],
   );
 
   // §6.5 窗口内所有桶压满绘图宽度（重采样重绘，无横向滚动条）
@@ -151,15 +189,22 @@ export default function PriceTrend() {
   const scaleRef = useRef<YScale | null>(null);
   const yCfg = useMemo(() => {
     if (adjusting && scaleRef.current) return scaleRef.current;
-    const next = computeYAxis({ series: chartSeries, priceTypes: state.priceTypes, sliderScale, prev: scaleRef.current });
+    const next = computeYAxis({
+      series: chartSeries,
+      priceTypes: state.priceTypes,
+      sliderScale,
+      allowBreak: yCompress,
+      perUsd: perUsdOf(state.currency), // 档位锚定 USD（第二十三轮）：换币种格数/图高与 USD 相近
+      prev: scaleRef.current,
+    });
     scaleRef.current = next;
     return next;
-  }, [chartSeries, state.priceTypes, sliderScale, adjusting]);
+  }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
   // 图顶预留 = 常驻卡片排数（ceil(N/6)）——只随产品选择变化，悬停不变高
   const gridTop = gridTopFor(visSeries.length);
   // 容器高由 Y 模型派生：格数×TICK_PX×倍率 + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
   const chartHeight = yCfg.plotHeight + gridTop + GRID.bottom;
-  const gridLeft = estGridLeft(yCfg.max, state.currency);
+  const gridLeft = estGridLeft(yCfg.max, state.currency, yCfg.interval);
 
   // ---- 下钻（§6.3）：seriesKey → 取数组，单组重查 ----
   const selByKey = useMemo(() => {
@@ -207,9 +252,10 @@ export default function PriceTrend() {
   };
 
   /**
-   * §6.5（第三轮）：窗口的一切改动（箭头步进/双端拖柄/整体平移）统一走这里。
-   * 窗口越出筛选范围时，把筛选范围左/右极值扩展到窗口端点（grow-only，从不收缩）——
-   * 例：筛选 2026Q2–Q4 按 ‹ → 窗口 2026Q1–Q3，RangePicker 左极值随之变 2026Q1。
+   * §6.5（第十九轮修订）：窗口的一切改动统一走这里。平移/拖柄已被 XBrush 钳在轨道
+   * （= 筛选范围）内，唯一能越界的是 ‹› 箭头——窗口越出范围时把 rangeStart/End
+   * 左/右极值扩展到窗口端点（grow-only，从不收缩），即「点箭头改变时间筛选器的
+   * 最小最大值」；例：筛选 2026Q2–Q4 按 ‹ → 窗口 2026Q1–Q3，RangePicker 左极值随之变 2026Q1。
    */
   const onWindowChange = (s: number, e: number): void => {
     const bs = buckets[s];
@@ -283,15 +329,27 @@ export default function PriceTrend() {
         yScale={yCfg}
         sliderScale={sliderScale}
         onSliderScale={setSliderScale}
+        yCompress={yCompress}
+        onYCompress={setYCompress}
         emptyHint={
           visSeries.length > 0 && chartSeries.length === 0
             ? '所有系列已在图例中隐藏，点击顶部图例卡恢复显示'
             : undefined
         }
       />
-      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 全时间轴；拖动中冻结 Y 轴自适应） */}
+      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 筛选范围；自适应开 = 轨道冻结） */}
       {buckets.length > 0 && visSeries.length > 0 && (
-        <XBrush buckets={buckets} s={win.s} e={win.e} granularity={state.granularity} onChange={onWindowChange} onAdjusting={setAdjusting} />
+        <XBrush
+          buckets={buckets}
+          s={win.s}
+          e={win.e}
+          lo={track.s}
+          hi={track.e}
+          frozen={state.adaptive}
+          granularity={state.granularity}
+          onChange={onWindowChange}
+          onAdjusting={setAdjusting}
+        />
       )}
 
       {/* 促销力度热力带（第十五轮：列几何复用图表 plotLeft/plotWidth，与时间轴逐像素对齐） */}

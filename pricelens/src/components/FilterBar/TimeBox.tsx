@@ -1,7 +1,8 @@
 // ============================================================
-// §5.4 框四：时间 —— 时间粒度 Segmented（季/月/周，默认周）+ 时间范围 RangePicker。
-// 反馈 2.2/2.5：控件行=「粒度 + 范围」单行（高 32），标题「时间」由 FilterBar 的
-// FilterCell 统一渲染，保证各筛选器控件行底部对齐。
+// §5.4 框四：时间 —— 时间粒度 Segmented（季/月/周，默认周）+ 自适应按钮 + 时间范围 RangePicker。
+// 第十九轮：自适应默认开 —— 范围自动 = 所选产品数据跨度 ±2 个间隔（右缘钳在当前时间），
+// RangePicker 冻结不可选；关闭后回手动（RangePicker 可选，拖刷轨道钳在所选范围内，
+// 仅图表下 ‹› 箭头可把范围极值外扩）。范围的实际写入在图表侧（PriceTrend 自适应 effect）。
 // 严格照抄 antd DatePicker.RangePicker 双面板弹层范式：
 // 周 = 双月日历整周行选 + 左侧灰 ISO 周号列；月/季 = 双年宫格（月宫格/季宫格）；
 // 两次点选（第一下开始、第二下结束、点更早日期 = 重新开始，antd 原生语义）；
@@ -9,17 +10,32 @@
 // 写入 state 的 rangeStart/rangeEnd = 当前粒度桶 id（周 YYYYWW / 月 YYYYMM / 季 YYYYQn）。
 // 反馈 2.4：选中范围/面板选中格/聚焦边框浅蓝由 FilterBar 嵌套 ConfigProvider 生效。
 // ============================================================
-import { useMemo } from 'react';
-import { DatePicker, Segmented } from 'antd';
+import { useMemo, type CSSProperties } from 'react';
+import { DatePicker, Segmented, Tooltip } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useFilters } from '../../state/FiltersContext';
 import { computeTimeBounds, bucketIdOfDate, dateOfBucket } from './timeUtils';
-import { space } from '../../theme/tokens';
-import { CONTROL_ROW_H } from './FilterCell';
+import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
+import { CONTROL_ROW_H } from './controlHeight';
 import type { Granularity } from '../../dataModel/types';
 
 const { RangePicker } = DatePicker;
+
+/** 自适应按钮（第十九轮）：选中浅蓝底（与筛选条 Segmented 选中态同源），未选白底灰字 */
+const adaptiveBtnStyle = (on: boolean): CSSProperties => ({
+  flexShrink: 0,
+  height: CONTROL_ROW_H,
+  padding: '0 11px',
+  borderRadius: radius.control,
+  border: `1px solid ${on ? selectAccent : color.hairline}`,
+  background: on ? selectSoft : color.canvas,
+  color: on ? selectSoftInk : color.mute,
+  fontSize: fontSize.bodySm,
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+});
 
 export default function TimeBox() {
   const { state, actions } = useFilters();
@@ -65,14 +81,28 @@ export default function TimeBox() {
           { label: '周', value: 'week' },
         ]}
       />
+      {/* 自适应（第十九轮，默认开）：开 = 范围随所选产品跨度自动适配（±2 个间隔、不超当前时间），
+          范围选择框冻结；关 = 手动选择范围（图表下 ‹› 箭头仍可外扩范围极值） */}
+      <Tooltip title="开：时间范围自动适配所选产品的数据跨度（±2 个间隔，不超过当前时间），范围框冻结；关：手动选择时间范围">
+        <button
+          type="button"
+          aria-pressed={state.adaptive}
+          style={adaptiveBtnStyle(state.adaptive)}
+          onClick={() => actions.set({ adaptive: !state.adaptive })}
+        >
+          自适应
+        </button>
+      </Tooltip>
       <RangePicker
         picker={g}
         value={value}
         format={formatId}
         disabledDate={disabledDate}
+        disabled={state.adaptive}
         allowClear={false}
         order
-        style={{ flex: 1, minWidth: 0 }}
+        // 第二十九轮：上限 560→420（用户反馈仍过大；内容 ~320px，收紧富余）
+        style={{ flex: '0 1 420px', minWidth: 320 }}
         onChange={(dates) => {
           if (!dates || !dates[0] || !dates[1]) return;
           let startId = bucketIdOfDate(dates[0].toDate(), g);
