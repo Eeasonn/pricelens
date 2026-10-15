@@ -581,22 +581,38 @@ const priceOf = (row: FactPriceWeekly, currency: CurrencyMode): number | null =>
 const rrpOf = (row: FactPriceWeekly, currency: CurrencyMode): number | null =>
   currency === 'usd' ? row.rrp_usd : row.rrp_rub;
 
-/** 某 SKU 最新有值周（price 驱动）；全缺时回数据末周、值 null */
-function latestOf(skuId: string, currency: CurrencyMode): { price: number | null; rrp: number | null; weekId: string } {
+/** 某 SKU 最新有值周（price 驱动）；全缺时回数据末周、值 null。
+ *  第五十一轮起平台感知：折后价过 applyPlatform（与看板 buildSeries 同口径）；
+ *  RRP = 官方阶梯，不随平台。缺省 = OZON 基准（行为与旧版逐字节一致）。 */
+function latestOf(
+  skuId: string,
+  currency: CurrencyMode,
+  platforms: string[] = [DEFAULT_PLATFORM],
+): { price: number | null; rrp: number | null; weekId: string } {
   for (let i = timeRows.length - 1; i >= 0; i--) {
     const w = timeRows[i].week_id;
     const row = factRow(skuId, w);
     if (row == null) continue;
     const p = priceOf(row, currency);
-    if (p != null) return { price: p, rrp: rrpOf(row, currency), weekId: w };
+    if (p != null)
+      return {
+        price: p == null ? null : applyPlatform(p, skuId, w, platforms),
+        rrp: rrpOf(row, currency),
+        weekId: w,
+      };
   }
   return { price: null, rrp: null, weekId: timeRows[timeRows.length - 1].week_id };
 }
 
-function sparkPoints(skuId: string, currency: CurrencyMode): OverviewSparkPoint[] {
+function sparkPoints(skuId: string, currency: CurrencyMode, platforms: string[] = [DEFAULT_PLATFORM]): OverviewSparkPoint[] {
   return timeRows.map((w) => {
     const row = factRow(skuId, w.week_id);
-    return { weekId: w.week_id, monthId: w.month_id, price: row ? priceOf(row, currency) : null };
+    const base = row ? priceOf(row, currency) : null;
+    return {
+      weekId: w.week_id,
+      monthId: w.month_id,
+      price: base == null ? null : applyPlatform(base, skuId, w.week_id, platforms),
+    };
   });
 }
 
@@ -628,7 +644,13 @@ function extremes(points: OverviewSparkPoint[]): { maxV: number | null; maxIdx: 
  *   缺省 = dimBenchmark auto），配置对标弹窗保存后经事件刷新即时生效
  * - 空档位（当前 600-800 无产品）不输出带
  */
-export function buildOverviewMatrix(currency: CurrencyMode, bench: DimBenchmark[] = dimBenchmark): OverviewTierBand[] {
+export function buildOverviewMatrix(
+  currency: CurrencyMode,
+  bench: DimBenchmark[] = dimBenchmark,
+  /** 第五十一轮：平台筛选（与看板共享 state.platform；null = OZON 基准口径） */
+  platform: SeriesQuery['platform'] = null,
+): OverviewTierBand[] {
+  const platforms = effectivePlatforms(platform);
   // 型号索引：modelId → 产品行集
   const byModel = new Map<string, DimProduct[]>();
   for (const p of dimProduct) {
@@ -647,8 +669,8 @@ export function buildOverviewMatrix(currency: CurrencyMode, bench: DimBenchmark[
       const repSku = lowestPriceColorSku(modelId, rom);
       const romRows = prows.filter((p) => normRom(p.romram) === normRom(rom));
       const skuId = repSku ?? [...romRows].sort((a, b) => a.sku_id.localeCompare(b.sku_id))[0].sku_id;
-      const lat = latestOf(skuId, currency);
-      const points = sparkPoints(skuId, currency);
+      const lat = latestOf(skuId, currency, platforms);
+      const points = sparkPoints(skuId, currency, platforms);
       const ex = extremes(points);
       const discountPct = lat.price != null && lat.rrp != null && lat.rrp > 0 ? lat.price / lat.rrp - 1 : null;
       rows.push({
@@ -664,7 +686,7 @@ export function buildOverviewMatrix(currency: CurrencyMode, bench: DimBenchmark[
         asOfWeek: lat.weekId,
         colors: [...romRows]
           .sort((a, b) => a.sku_id.localeCompare(b.sku_id))
-          .map((p) => ({ color: p.color, skuId: p.sku_id, price: latestOf(p.sku_id, currency).price })),
+          .map((p) => ({ color: p.color, skuId: p.sku_id, price: latestOf(p.sku_id, currency, platforms).price })),
         points,
         ...ex,
       });
@@ -689,8 +711,8 @@ export function buildOverviewMatrix(currency: CurrencyMode, bench: DimBenchmark[
     for (const [skuId, agg] of compMap) {
       const p = productById.get(skuId);
       if (!p) continue;
-      const lat = latestOf(skuId, currency);
-      const points = sparkPoints(skuId, currency);
+      const lat = latestOf(skuId, currency, platforms);
+      const points = sparkPoints(skuId, currency, platforms);
       const compModelRows = byModel.get(skuId.split('__')[0]) ?? [];
       const compRomRows = compModelRows.filter((pp) => normRom(pp.romram) === normRom(p.romram));
       comps.push({
@@ -706,7 +728,7 @@ export function buildOverviewMatrix(currency: CurrencyMode, bench: DimBenchmark[
         primary: agg.primary,
         colors: [...compRomRows]
           .sort((a, b) => a.sku_id.localeCompare(b.sku_id))
-          .map((pp) => ({ color: pp.color, skuId: pp.sku_id, price: latestOf(pp.sku_id, currency).price })),
+          .map((pp) => ({ color: pp.color, skuId: pp.sku_id, price: latestOf(pp.sku_id, currency, platforms).price })),
         points,
         ...extremes(points),
       });

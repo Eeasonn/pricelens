@@ -118,4 +118,26 @@ describe('buildOverviewMatrix 金测', () => {
   it('TIER_LABELS 六档齐全', () => {
     expect(Object.keys(TIER_LABELS)).toEqual(['1000+', '800-1000', '600-800', '400-600', '200-400', '<200']);
   });
+
+  it('第五十一轮：平台筛选进矩阵口径——OZON 基准不变；DNS/M.Video 按因子抬价（与看板 buildSeries 同源）', () => {
+    const puraOf = (m: ReturnType<typeof buildOverviewMatrix>) =>
+      m[1].models.find((x) => x.modelId === 'own-pura-90s-pro')!.rows.find((r) => r.romram.startsWith('12+256'))!;
+    const ozon = puraOf(buildOverviewMatrix('usd'));
+    const dns = puraOf(buildOverviewMatrix('usd', undefined, { platforms: ['DNS'], shopIds: [] }));
+    const mv = puraOf(buildOverviewMatrix('usd', undefined, { platforms: ['M.Video'], shopIds: [] }));
+    expect(ozon.price).toBe(835); // 基准平台无因子（旧口径不变）
+    // 折后价过 applyPlatform（+0.8% / +1.5% 因子 ± 0.3% 固定 seed 抖动）；RRP 官方阶梯不随平台
+    expect(dns.price! / ozon.price!).toBeGreaterThanOrEqual(1.005);
+    expect(dns.price! / ozon.price!).toBeLessThanOrEqual(1.011);
+    expect(mv.price! / ozon.price!).toBeGreaterThanOrEqual(1.012);
+    expect(mv.price! / ozon.price!).toBeLessThanOrEqual(1.018);
+    expect(dns.rrp).toBe(ozon.rrp);
+    // 迷你图序列同长同形，数值随平台
+    expect(dns.points.length).toBe(ozon.points.length);
+    expect(dns.points.some((p, i) => p.price !== ozon.points[i].price)).toBe(true);
+    // 多平台并选取均值口径与看板一致（介于 OZON 与 M.Video 之间）
+    const all = puraOf(buildOverviewMatrix('usd', undefined, { platforms: ['OZON', 'DNS', 'M.Video'], shopIds: [] }));
+    expect(all.price!).toBeGreaterThanOrEqual(ozon.price!);
+    expect(all.price!).toBeLessThanOrEqual(mv.price!);
+  });
 });

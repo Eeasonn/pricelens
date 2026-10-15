@@ -19,12 +19,15 @@ import type { OverviewColorOpt, OverviewModel, OverviewRow, OverviewSparkPoint }
 import type { DimBenchmark } from '../dataModel/types';
 import { filterBarTheme } from '../components/FilterBar';
 import CountryBox from '../components/FilterBar/CountryBox';
+import PlatformBox from '../components/FilterBar/PlatformBox';
 import { IndustryControl, OwnProductControl } from '../components/FilterBar/ProductBox';
+import { dimChannel } from '../data';
 import { getEffectiveBenchmark } from '../state/configStore';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import BenchConfigModal from './overview/BenchConfigModal';
 import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import MatrixSpark from './overview/MatrixSpark';
+import { diffPct } from '../chart/PriceTrend/helpers';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
 const norm = (r: string): string => r.replace(/\s+/g, '');
@@ -106,13 +109,69 @@ function ColorMenu(props: {
   );
 }
 
-/** 盒内统一行栅格：主体 ｜ 价格列 ｜ 迷你图列——我司行与竞品行同构对齐（第四十轮） */
+/** 盒内统一行栅格：主体 ｜ 价格列 ｜ 价差(PID) ｜ 低·覆盖 ｜ 迷你图——我司行与竞品行同构对齐。
+ *  第五十一轮 P0：三列扩五列（价差 / 周期最低价+周 / 在售覆盖） */
 const ROW_GRID: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(0,1fr) 96px 150px',
+  gridTemplateColumns: 'minmax(0,1fr) 96px 84px 112px 150px',
   alignItems: 'center',
   columnGap: 10,
 };
+
+/** 价差读数（P0①）：红 = 行内产品贵于基准（风险），蓝 = 便宜（优势）——两行型共用同一规则。
+ *  diffPct(a, b) = (a−b)/b：我司行传 (我司, 主竞品)，竞品行传 (竞品, 我司)。 */
+function DiffCell(props: { label: string; diff: ReturnType<typeof diffPct> }) {
+  const { label, diff } = props;
+  return (
+    <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+      <span style={{ display: 'block', fontSize: 10, color: color.mute }}>{label}</span>
+      {diff ? (
+        <span
+          className="tnum"
+          title={`${label}：正 = 行内产品贵于基准（红），负 = 便宜（蓝）`}
+          style={{ fontSize: 12.5, fontWeight: 600, color: diff.tone === 'rich' ? color.error : color.link }}
+        >
+          {diff.text}
+        </span>
+      ) : (
+        <span className="tnum" style={{ fontSize: 12.5, color: color.hairlineStrong }}>
+          —
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** 低·覆盖读数（P0②④）：周期最低价+发生周（Keepa 语义）+ 在售覆盖%。
+ *  覆盖 = 在售期内有值周占比（首末有值周之间；未上市周不计入，缺采≈缺货） */
+function MinCoverCell(props: { points: OverviewSparkPoint[]; minV: number | null; minIdx: number; currency: 'usd' | 'local' }) {
+  const { points, minV, minIdx, currency } = props;
+  const valIdx = points.map((p, i) => (p.price != null ? i : -1)).filter((i) => i >= 0);
+  const span = valIdx.length ? valIdx[valIdx.length - 1] - valIdx[0] + 1 : 0;
+  const cov = span ? Math.round((valIdx.length / span) * 100) : 0;
+  const week = minIdx >= 0 ? `W${points[minIdx].weekId.slice(4)}` : null;
+  const low = cov < 90; // 全量 SKU 在售期覆盖中位 ~97%；<90% = 长缺采/退市前异常区
+  return (
+    <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+      <span className="tnum" style={{ display: 'block', fontSize: 10.5, color: color.body }}>
+        {minV != null ? (
+          <>
+            低 {formatPrice(minV, currency)} · {week}
+          </>
+        ) : (
+          '—'
+        )}
+      </span>
+      <span
+        className="tnum"
+        title="在售覆盖 = 在售期内有值周占比（首末有值周之间）；偏低 = 缺采/缺货"
+        style={{ display: 'block', fontSize: 10.5, color: low ? '#b45309' : color.mute, fontWeight: low ? 600 : 400 }}
+      >
+        覆盖 {cov}%
+      </span>
+    </span>
+  );
+}
 
 /** 共享值域：盒内我司 + 全部映射竞品的 min/max 并集（第四十轮） */
 function boxDomain(series: OverviewSparkPoint[][]): { domainMin: number; domainMax: number } | undefined {
@@ -136,18 +195,31 @@ function OwnRomRow(props: {
   currency: 'usd' | 'local';
   domainMin?: number;
   domainMax?: number;
+  /** 主竞品现价（P0① 价差基准；该 ROM 未对标 = null → 价差列 '—'） */
+  benchPrice?: number | null;
   onOpen: () => void;
   onConfigBench: () => void;
 }) {
   const { row, currency } = props;
+  // 折扣率常显（P0③）：≤−15% 保留琥珀警示胶囊，其余中性小胶囊
   const discount =
-    row.discountPct != null && row.discountPct <= -0.15 ? (
-      <span
-        className="tnum"
-        style={{ fontSize: 10.5, fontWeight: 600, color: '#b45309', background: '#fff7e6', borderRadius: radius.pill, padding: '1px 6px' }}
-      >
-        {Math.round(row.discountPct * 100)}%
-      </span>
+    row.discountPct != null ? (
+      row.discountPct <= -0.15 ? (
+        <span
+          className="tnum"
+          style={{ fontSize: 10.5, fontWeight: 600, color: '#b45309', background: '#fff7e6', borderRadius: radius.pill, padding: '1px 6px' }}
+        >
+          {Math.round(row.discountPct * 100)}%
+        </span>
+      ) : (
+        <span
+          className="tnum"
+          title="现价 / RRP − 1"
+          style={{ fontSize: 10.5, color: color.body, background: color.canvasSoft2, borderRadius: radius.pill, padding: '1px 6px' }}
+        >
+          {Math.round(row.discountPct * 100)}%
+        </span>
+      )
     ) : null;
   return (
     <div
@@ -217,6 +289,11 @@ function OwnRomRow(props: {
           </span>
         )}
       </span>
+      <DiffCell
+        label="vs 主竞品"
+        diff={row.price != null && props.benchPrice != null ? diffPct(row.price, props.benchPrice) : null}
+      />
+      <MinCoverCell points={row.points} minV={row.minV} minIdx={row.minIdx} currency={currency} />
       <MatrixSpark
         points={row.points}
         lineColor={row.lineColor}
@@ -228,7 +305,8 @@ function OwnRomRow(props: {
   );
 }
 
-/** 竞品行（映射竞品，第四十五轮起「其他」不再展示）：与我司行同栅格；行间横向分隔线 */
+/** 竞品行（映射竞品，第四十五轮起「其他」不再展示）：与我司行同栅格；行间横向分隔线。
+ *  第五十一轮 P0：价差列 = vs 我司（同 ROM 基准）；低·覆盖列同构 */
 function CompRomRow(props: {
   skuId?: string;
   brand: string;
@@ -245,6 +323,11 @@ function CompRomRow(props: {
   colors?: OverviewColorOpt[];
   tag?: string;
   tagAccent?: boolean;
+  /** 对标我司 ROM 的现价（价差基准） */
+  ownPrice?: number | null;
+  /** 周期最低价 + 下标（P0②，aggregate extremes 同源） */
+  minV?: number | null;
+  minIdx?: number;
 }) {
   return (
     <div className="lpl-ov-comp-row" style={{ ...ROW_GRID, padding: '7px 16px' }}>
@@ -285,6 +368,11 @@ function CompRomRow(props: {
           </span>
         )}
       </span>
+      <DiffCell
+        label="vs 我司"
+        diff={props.price != null && props.ownPrice != null ? diffPct(props.price, props.ownPrice) : null}
+      />
+      <MinCoverCell points={props.points} minV={props.minV ?? null} minIdx={props.minIdx ?? -1} currency={props.currency} />
       <MatrixSpark
         points={props.points}
         lineColor={props.lineColor}
@@ -308,7 +396,8 @@ export default function Overview() {
     window.addEventListener(CONFIG_CHANGED_EVENT, h);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, h);
   }, []);
-  const bands = useMemo(() => buildOverviewMatrix(currency, bench), [currency, bench]);
+  // 第五十一轮：平台筛选进入矩阵口径（applyPlatform 因子与看板同源；OZON 基准不变）
+  const bands = useMemo(() => buildOverviewMatrix(currency, bench, state.platform), [currency, bench, state.platform]);
   const [mpOpen, setMpOpen] = useState(false);
   // 第四十五轮：「添加竞品」入口下沉到 ROM 行 → 记录型号+ROM，弹窗按该 ROM 预选
   const [benchSel, setBenchSel] = useState<{ modelId: string; romram: string } | null>(null);
@@ -366,6 +455,13 @@ export default function Overview() {
     for (const b of bands) for (const m of b.models) for (const r of m.rows) if (r.asOfWeek > w) w = r.asOfWeek;
     return w === '' ? '—' : `${w.slice(0, 4)}-W${w.slice(4)}`;
   }, [bands]);
+  // 口径条平台文案（第五十一轮）：随筛选行平台选择联动（与看板共享 state.platform）
+  const platformLabel = useMemo(() => {
+    const sel = state.platform;
+    if (!sel || (sel.platforms.length === 0 && sel.shopIds.length === 0)) return '未筛选（可抓取最低价口径）';
+    const shopNameById = new Map(dimChannel.map((c) => [c.shop_id, c.shop_name]));
+    return [...sel.platforms, ...sel.shopIds.map((id) => shopNameById.get(id) ?? id)].join('、');
+  }, [state.platform]);
   const counts = useMemo(() => {
     const ms = bands.flatMap((b) => b.models);
     return { all: ms.length, own: ms.filter((m) => m.isOwn).length, comp: ms.length - ms.filter((m) => m.isOwn).length };
@@ -422,7 +518,7 @@ export default function Overview() {
             <div style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap' }}>
               <span style={{ fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>俄罗斯 · 手机竞品矩阵</span>
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-                平台 OZON（单平台口径） · 全周期 2025-W01 → {asOf}（93 周） · 在售型号 {counts.all}（我司 {counts.own} / 竞品 {counts.comp}）
+                平台 {platformLabel} · 全周期 2025-W01 → {asOf}（93 周） · 在售型号 {counts.all}（我司 {counts.own} / 竞品 {counts.comp}）
               </span>
               <span style={{ flex: 1 }} />
               <Segmented
@@ -447,6 +543,10 @@ export default function Overview() {
                 </FilterCell>
                 <FilterCell min={400} label="产品">
                   <OwnProductControl selection={prodSel} onSelectionChange={setProdSel} />
+                </FilterCell>
+                {/* 平台（第五十一轮）：看板同款级联（平台→店铺），共享 state.platform 双页联动 */}
+                <FilterCell min={180} label="平台">
+                  <PlatformBox />
                 </FilterCell>
                 <FilterCell min={280} label="价格档位">
                   <Select
@@ -512,6 +612,7 @@ export default function Overview() {
                         {/* ROM 包裹格：行组表格——我司行在上、映射竞品在下（第四十轮对齐定版） */}
                         {m.rows.map((r) => {
                           const romComps = m.comps.filter((c) => c.ownRomrams.some((x) => norm(x) === norm(r.romram)));
+                          const primaryComp = romComps.find((c) => c.primary) ?? romComps[0];
                           const domain = boxDomain([r.points, ...romComps.map((c) => c.points)]);
                           return (
                             <div
@@ -528,6 +629,7 @@ export default function Overview() {
                                 currency={currency}
                                 domainMin={domain?.domainMin}
                                 domainMax={domain?.domainMax}
+                                benchPrice={primaryComp?.price ?? null}
                                 onOpen={() => openCompare(m, r.romram)}
                                 onConfigBench={() => setBenchSel({ modelId: m.modelId, romram: r.romram })}
                               />
@@ -570,6 +672,9 @@ export default function Overview() {
                                       colors={c.colors}
                                       tag={`← ${r.romram}${c.primary ? ' · 主竞品' : ''}`}
                                       tagAccent={c.primary}
+                                      ownPrice={r.price}
+                                      minV={c.minV}
+                                      minIdx={c.minIdx}
                                     />
                                   ))
                                 )}
@@ -596,7 +701,9 @@ export default function Overview() {
           style={{ flexShrink: 0, padding: `${space.md}px ${space.lg}px`, fontSize: fontSize.caption, color: color.mute }}
         >
           口径：现价/RRP = 最新有值周（{asOf}） · 我司 ROM 行取最低价色为代表 · 迷你图 = 全周期周度折后价（●最高 ○最低） ·
-          档位按上市价（USD）归档 · 参考汇率 80₽/$（配置页可改）
+          价差 = 行内产品相对基准（vs 主竞品 / vs 我司；红 = 行内更贵） · 覆盖 = 在售期内有值周占比（低于 90% 琥珀警示） ·
+          档位按上市价（USD）归档 · 折后价 = OZON 基准 × 平台因子（DNS +0.8% / M.Video +1.5%，demo 演示口径） ·
+          参考汇率 80₽/$（配置页可改）
         </footer>
       </div>
 
