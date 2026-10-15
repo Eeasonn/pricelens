@@ -6,7 +6,7 @@
 //    系列（我司）/ 品牌（竞品）→ 产品名 → RAM+ROM（叶层），全层标准勾选传播，
 //    勾系列/产品 = 其下全部配置；自定义三列面板 / SKU 弹框 / 均值徽标已删除。
 //    勾选语义保持不变：每个勾选配置仍取默认最低价颜色（defaultColorSkuIds），
-//    匹配竞品/匹配上一代带出的组原样保留。
+//    匹配竞品带出的组原样保留（「匹配上一代」按钮第三十九轮删除）。
 // 第十五轮：① 已选标签（displayRender）显产品名——倒数第二层才可读（ROMRAM 看不懂），
 //    同产品多配置时补 ROMRAM 后缀区分；② 档位行内「颜色」小按钮（按钮名 = 当前
 //    生效颜色，默认 = 最低价色），点击在级联面板右侧弹出颜色浮层：可多选颜色
@@ -22,10 +22,8 @@
 // 两个匹配按钮均为关键功能：浅蓝底+蓝描边+图标显性化（区别于普通文字链接）。
 // ============================================================
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Button, Cascader, Checkbox, Select, Tooltip, message } from 'antd';
-import { AimOutlined, HistoryOutlined } from '@ant-design/icons';
+import { Cascader, Checkbox, Select, Switch, Tooltip } from 'antd';
 import { useFilters } from '../../state/FiltersContext';
-import { groupsFromPrevGeneration } from '../../state/configStore';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import {
   buildCompetitorTree,
@@ -91,49 +89,19 @@ const MATCH_BTN_STYLE: CSSProperties = {
   boxShadow: 'none',
 };
 
-/** 竞品产品标题旁按钮：按配置矩阵为当前已选我司产品带出默认竞品组 */
-export function MatchCompetitorButton() {
-  const { actions } = useFilters();
-  return (
-    <Tooltip title="按配置矩阵带出当前已选我司产品的默认竞品组；矩阵可在「配置」页维护">
-      <Button
-        type="default"
-        size="small"
-        icon={<AimOutlined />}
-        style={MATCH_BTN_STYLE}
-        onClick={actions.resetCompetitorsToConfig}
-      >
-        匹配竞品
-      </Button>
-    </Tooltip>
-  );
-}
-
-/** 华为产品标题旁按钮：按生效上一代关系带出上一代同配置组（追加、幂等） */
-export function MatchPrevGenButton() {
+/**
+ * 竞品格常驻开关（第三十四轮，替代原「匹配竞品」按钮——迪总「尽量减少筛选器」：
+ * 匹配从「点击式动作」升级为「常驻跟随」）：开 = 竞品完全跟随我司产品（配置矩阵并集，
+ * 换产品自动跟随、清空产品自动清空，竞品级联禁用；配置页改矩阵立即生效）；关 = 手动勾选。
+ */
+export function AutoMatchControl() {
   const { state, actions } = useFilters();
-  const onClick = () => {
-    if (!state.own.length) {
-      message.warning('请先在「华为产品」选择产品');
-      return;
-    }
-    const { added, missing } = groupsFromPrevGeneration(state.own);
-    if (added.length) {
-      actions.setOwnSelection([...state.own, ...added]);
-      const names = added.map((g) => `${modelNameOf(g.modelId)} · ${shortRomram(g.romram)}`).join('、');
-      const missNote = missing.length ? `；${missing.join('、')} 未维护上一代关系` : '';
-      message.success(`已带出上一代：${names}${missNote}`);
-    } else if (missing.length) {
-      message.warning(`未维护上一代关系：${missing.join('、')}（可在「配置」页维护）`);
-    } else {
-      message.info('上一代产品已全部在选中列表中');
-    }
-  };
   return (
-    <Tooltip title="为当前已选我司产品带出上一代型号（同配置自动勾选），用于新旧代际价格对比；上一代关系可在「配置」页维护">
-      <Button type="default" size="small" icon={<HistoryOutlined />} style={MATCH_BTN_STYLE} onClick={onClick}>
-        匹配上一代
-      </Button>
+    <Tooltip title="开启后竞品自动跟随我司产品（按配置矩阵，矩阵可在「配置」页维护）；关闭后可手动勾选竞品">
+      <div style={{ width: 92, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexShrink: 0 }}>
+        <Switch size="small" checked={state.autoMatch} onChange={(v) => actions.setAutoMatch(v)} />
+        <span style={{ fontSize: fontSize.caption, color: color.body, whiteSpace: 'nowrap' }}>自动匹配</span>
+      </div>
     </Tooltip>
   );
 }
@@ -251,12 +219,27 @@ function ColorFlyout({
  * 勾选配置的 skuIds 保持默认最低价颜色（defaultColorSkuIds），已有勾选原样保留；
  * 颜色浮层改写的 skuIds 走同一数据通道。
  */
-function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
+function ProductCascadeControl({
+  kind,
+  selection,
+  onSelectionChange,
+}: {
+  kind: 'own' | 'comp';
+  /** 第四十三轮：受控注入（总览产品筛选复用同款级联）；缺省 = 绑定 FiltersContext */
+  selection?: ProductSelection[];
+  onSelectionChange?: (next: ProductSelection[]) => void;
+}) {
   const { state, actions } = useFilters();
   const tree = useMemo(() => (kind === 'own' ? buildOwnTree() : buildCompetitorTree()), [kind]);
+  // 第三十四轮：自动匹配开启时竞品级联禁用（竞品完全跟随我司产品，见 AutoMatchControl）
+  const autoMatchLock = kind === 'comp' && state.autoMatch;
 
-  const list = kind === 'own' ? state.own : state.competitors;
+  const list = selection ?? (kind === 'own' ? state.own : state.competitors);
   const writeList = (next: ProductSelection[]): void => {
+    if (onSelectionChange) {
+      onSelectionChange(next);
+      return;
+    }
     if (kind === 'own') actions.setOwnSelection(next);
     else actions.set({ competitors: next }); // 竞品临时增删不回写配置（§5.2③/§13）
   };
@@ -439,6 +422,7 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
       value={value}
       onChange={onChange as unknown as (value: unknown) => void}
       multiple
+      disabled={autoMatchLock}
       // 第三十轮：整组勾满时 SHOW_PARENT（antd 默认）会把全部叶子路径坍缩成一个
       // 父路径（如 ["Mate"]），displayRender 拿不到型号段 → 触发器空标签。
       // 改 SHOW_CHILD：value 恒为叶子三段路径，标签=逐配置，与「匹配竞品」
@@ -451,7 +435,7 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
       optionRender={(option) =>
         (option as { optionContent?: ReactNode }).optionContent ?? String(option.label ?? '')
       }
-      placeholder={kind === 'own' ? '选择产品' : '选择竞品'}
+      placeholder={kind === 'own' ? '选择产品' : autoMatchLock ? '自动跟随我司产品' : '选择竞品'}
       displayRender={displayRender}
       popupRender={(menu) => (
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
@@ -466,8 +450,11 @@ function ProductCascadeControl({ kind }: { kind: 'own' | 'comp' }) {
   );
 }
 
-export function OwnProductControl() {
-  return <ProductCascadeControl kind="own" />;
+export function OwnProductControl(p: {
+  selection?: ProductSelection[];
+  onSelectionChange?: (next: ProductSelection[]) => void;
+} = {}) {
+  return <ProductCascadeControl kind="own" {...p} />;
 }
 
 export function CompetitorControl() {

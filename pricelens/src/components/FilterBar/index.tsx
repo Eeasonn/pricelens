@@ -2,7 +2,7 @@
 // §4.1/§4.2 筛选条（反馈 2.1–2.6 重构；第二十八轮定版）：两行自然布局——
 // 筛选器名称统一为「行外前缀标签」（12px 静音灰，左缘随卡片 padding 对齐），
 // 控件吃掉单元格剩余宽度；不再使用框内绝对定位标签与 padding-left 让位。
-// 匹配按钮归位：匹配上一代紧跟产品框、匹配竞品紧跟竞品框（同格行内，
+// 匹配按钮归位：自动匹配开关紧跟竞品框（同格行内，
 // 统一 92px 定宽保证双列对称）。筛选器之间不用分隔线，列间距 10px、
 // 行距 12px（≥列距，两行有呼吸）。
 // 宽度预算（宽度跟随内容，第二十八轮）：
@@ -23,7 +23,7 @@ import CountryBox from './CountryBox';
 import PlatformBox from './PlatformBox';
 import TimeBox from './TimeBox';
 import CurrencyBox from './CurrencyBox';
-import { CompetitorControl, IndustryControl, MatchCompetitorButton, MatchPrevGenButton, OwnProductControl } from './ProductBox';
+import { AutoMatchControl, CompetitorControl, IndustryControl, OwnProductControl } from './ProductBox';
 
 /** §5.3 平台框说明（原感叹号文案，降级为悬停提示） */
 const INFO_PLATFORM = '当未筛选平台时，显示该国家下最低价格的平台结果';
@@ -37,7 +37,8 @@ const INFO_OWN = '默认筛选价格最低的产品颜色';
  * - Segmented 组件级 itemSelectedBg/Color → 选中块浅蓝底深蓝字
  * - components.Button.colorPrimary 回写 ink：主按钮（SKU 弹框「完成」）保持黑
  */
-const filterBarTheme: ThemeConfig = {
+/** 总览筛选行复用同一浅蓝选中态（第三十八轮导出） */
+export const filterBarTheme: ThemeConfig = {
   token: {
     colorPrimary: selectAccent,
   },
@@ -75,7 +76,7 @@ function ProductCell({
   min: number;
   label: string;
   info?: string;
-  button: ReactNode;
+  button?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -88,7 +89,7 @@ function ProductCell({
 }
 
 /** 筛选条（§5）；图表侧（Agent C）消费 useFilters().state。
- *  第二十八轮定版：两行布局——第一行 国家｜产业｜产品+匹配上一代｜竞品+匹配竞品｜平台，
+ *  第二十八轮定版：两行布局——第一行 国家｜产业｜产品｜竞品+自动匹配｜平台（第三十九轮删「匹配上一代」），
  *  时间/币种在第二行（时间弹性、币种靠右）。标签统一行外前缀，控件左缘全行对齐。 */
 export default function FilterBar() {
   return (
@@ -113,10 +114,10 @@ export default function FilterBar() {
             <Cell flex="0 0 104px" min={104} label="产业">
               <IndustryControl />
             </Cell>
-            <ProductCell flex="1 1 327px" min={327} label="产品" info={INFO_OWN} button={<MatchPrevGenButton />}>
+            <ProductCell flex="1 1 327px" min={327} label="产品" info={INFO_OWN}>
               <OwnProductControl />
             </ProductCell>
-            <ProductCell flex="1 1 327px" min={327} label="竞品" button={<MatchCompetitorButton />}>
+            <ProductCell flex="1 1 327px" min={327} label="竞品" button={<AutoMatchControl />}>
               <CompetitorControl />
             </ProductCell>
             <Cell flex="0 0 118px" min={118} label="平台" info={INFO_PLATFORM}>

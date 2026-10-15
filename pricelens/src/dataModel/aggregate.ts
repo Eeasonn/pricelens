@@ -5,16 +5,21 @@
 // 禁止裸 Math.random；同输入两次调用输出逐字节一致。
 // ============================================================
 import type {
+  CurrencyMode,
+  DimBenchmark,
   DimChannel,
   DimProduct,
   DimPromo,
   DimTime,
   FactPriceWeekly,
+  OfferDetail,
   OfferInfo,
+  OfferKind,
   Series,
   SeriesPoint,
   SeriesQuery,
   SkuGroupQuery,
+  TierCode,
 } from './types';
 import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimTime, factPriceWeekly } from '../data';
 import { brandColor } from '../theme/tokens';
@@ -146,9 +151,19 @@ function resolveGroup(g: SkuGroupQuery): ResolvedGroup | null {
 }
 
 // ---------------- 平台口径 ----------------
+// 第三十六轮（迪总定口径）：demo = **单平台多产品** 场景——所有数据取自同一平台（OZON），
+// 不再模拟「未选平台时每节点取最低价平台」（跨平台择低是不合理口径，已废弃）。
+// 未来「单产品多平台」场景需要专门的展示设计（平台维度展开），届时再扩展。
+const DEFAULT_PLATFORM = 'OZON';
+// 平台因子沿用文件顶部 PLATFORM_FACTOR/PLATFORM_JITTER 声明（仅显式勾选非默认平台时生效）
+
+/** demo 单平台唯一来源店铺（OZON 首个店铺，确定性） */
+const DEFAULT_SHOP_NAME: string | null =
+  dimChannel.find((c) => c.platform === DEFAULT_PLATFORM)?.shop_name ?? null;
+
+/** 生效平台（第三十六轮单平台口径）：未选 = 默认 OZON 单平台；显式勾选 = 所选并集（未来多平台对比场景） */
 function effectivePlatforms(platform: SeriesQuery['platform']): string[] {
-  if (!platform) return [];
-  // 整平台勾选与跨平台单店勾选可并存（如 OZON 整平台 + DNS 单店），取并集做均值口径
+  if (!platform || (platform.platforms.length === 0 && platform.shopIds.length === 0)) return [DEFAULT_PLATFORM];
   const set = new Set(platform.platforms);
   for (const id of platform.shopIds) {
     const p = channelByShop.get(id)?.platform;
@@ -156,9 +171,10 @@ function effectivePlatforms(platform: SeriesQuery['platform']): string[] {
   }
   return [...set];
 }
-/** 折后价(平台) = base × (1 + factor_p ± 0.3% seed 抖动)；多选取均值 */
+/** 折后价(平台) = base × (1 + factor_p ± 0.3% seed 抖动)；多选取均值；基准平台（OZON）无因子无抖动 */
 function applyPlatform(base: number, skuId: string, weekId: string, platforms: string[]): number {
   if (platforms.length === 0) return base;
+  if (platforms.length === 1 && platforms[0] === DEFAULT_PLATFORM) return base;
   let sum = 0;
   for (const p of platforms) {
     const f = PLATFORM_FACTOR[p] ?? 0;
@@ -168,18 +184,9 @@ function applyPlatform(base: number, skuId: string, weekId: string, platforms: s
   return sum / platforms.length;
 }
 
-// ---------------- 店铺指派（演示性虚构：最低价来自哪家店铺） ----------------
-function pickShop(seed: string, platform: SeriesQuery['platform']): string | null {
-  let pool = dimChannel;
-  if (platform) {
-    if (platform.shopIds.length > 0) {
-      pool = dimChannel.filter((c) => platform.shopIds.includes(c.shop_id));
-    } else if (platform.platforms.length > 0) {
-      pool = dimChannel.filter((c) => platform.platforms.includes(c.platform));
-    }
-  }
-  if (pool.length === 0) pool = dimChannel;
-  return pool[Math.floor(rnd('shop|' + seed) * pool.length) % pool.length]?.shop_name ?? null;
+/** 来源店铺（第三十六轮）：单平台口径 = 恒默认平台唯一店铺，不再按节点随机指派「最低价店铺」 */
+function pickShop(): string | null {
+  return DEFAULT_SHOP_NAME;
 }
 
 // ---------------- offer 解析 ----------------
@@ -198,23 +205,82 @@ function parseRubInText(text: string, keyword: string): number | undefined {
   const n = Number(m[1].replace(/[\s\u00A0]/g, ''));
   return Number.isFinite(n) ? n : undefined;
 }
-function toOfferInfo(row: FactPriceWeekly, anchorDate: string, platforms: string[]): OfferInfo | null {
+/**
+ * offer 结构化解析（第四十八轮）：offer_title = "档期名 · 类型"（平台券/先享后付/赠品），
+ * offer_text 承载细节。按类型抽一眼短文案（headline）：
+ *   平台券 → 「券 −N%」（取 text 中 −N%）｜ 先享后付 → 「N 期免息」｜ 赠品 → 「赠XX」
+ * detail 剥离结构化字段（至日期/剩余天数/银行价/关税），三类权益落 OfferInfo 对应键。
+ */
+function toOfferInfo(row: FactPriceWeekly, anchorDate: string): OfferInfo | null {
   if (row.offer_title == null) return null;
   const promo = findPromoForOffer(row.offer_title, anchorDate);
   const endDate = promo?.end_date ?? anchorDate;
-  const info: OfferInfo = {
-    title: row.offer_title,
-    text: row.offer_text ?? '',
+  const text = row.offer_text ?? '';
+  const promoName = row.offer_title.split(' · ')[0] ?? row.offer_title;
+  // 「三重礼」组合（第四十九轮）：一条 text 以 " / " 分段同时承载 折扣/分期/赠品
+  if (row.offer_title.endsWith('组合')) {
+    const endDateC = endDate;
+    const mk = (kind: OfferKind, headline: string, detail: string): OfferDetail => ({
+      kind,
+      promoName,
+      headline,
+      detail: detail.replace(/，至\s*\d{2}-\d{2}/, '').trim(),
+      endDate: endDateC,
+      remainingDays: daysBetween(anchorDate, endDateC),
+    });
+    const out: OfferInfo = {};
+    for (const segRaw of text.split(' / ')) {
+      const seg = segRaw.trim();
+      let m = /平台券\s*−\s*(\d+)\s*%/.exec(seg);
+      if (m) {
+        out.discount = mk('discount', `券 −${m[1]}%`, seg);
+        continue;
+      }
+      m = /免息\s*(\d+)\s*期/.exec(seg);
+      if (m) {
+        out.installment = mk('installment', `${m[1]} 期免息`, seg);
+        continue;
+      }
+      m = /下单赠\s*([^，]+)/.exec(seg);
+      if (m) out.gift = mk('gift', `赠${m[1]}`, seg);
+    }
+    return out;
+  }
+  let kind: OfferKind;
+  let headline: string;
+  if (row.offer_title.endsWith('平台券')) {
+    kind = 'discount';
+    const m = /−\s*(\d+)\s*%/.exec(text);
+    headline = m ? `券 −${m[1]}%` : '平台券';
+  } else if (row.offer_title.endsWith('先享后付')) {
+    kind = 'installment';
+    const m = /免息\s*(\d+)\s*期/.exec(text);
+    headline = m ? `${m[1]} 期免息` : '先享后付';
+  } else {
+    kind = 'gift';
+    const m = /下单赠\s*(.+?)，/.exec(text);
+    headline = m ? `赠${m[1]}` : '赠品';
+  }
+  const det: OfferDetail = {
+    kind,
+    promoName,
+    headline,
+    detail: text
+      .replace(/，至\s*\d{2}-\d{2}/, '')
+      .replace(/\s*[·/]\s*活动剩\s*\d+天/, '')
+      .replace(/\s*银行价[\d\s\u00A0]+卢布/, '')
+      .replace(/\s*\/?\s*关税约[\d\s\u00A0]+卢布\s*\/?/, '')
+      .trim(),
     endDate,
     remainingDays: daysBetween(anchorDate, endDate),
-    platforms,
   };
-  const text = row.offer_text ?? '';
-  const bank = parseRubInText(text, '银行价');
-  if (bank != null) info.bankPriceRub = bank;
-  const tariff = parseRubInText(text, '关税约');
-  if (tariff != null) info.tariffEstRub = tariff;
-  return info;
+  if (kind === 'installment') {
+    const bank = parseRubInText(text, '银行价');
+    if (bank != null) det.bankPriceRub = bank;
+    const tariff = parseRubInText(text, '关税约');
+    if (tariff != null) det.tariffEstRub = tariff;
+  }
+  return kind === 'discount' ? { discount: det } : kind === 'installment' ? { installment: det } : { gift: det };
 }
 
 // ---------------- §7.3 取数契约唯一入口 ----------------
@@ -272,7 +338,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         for (const sid of rg.skuIds) {
           const row = factRow(sid, wid);
           if (row?.offer_title != null) {
-            found = toOfferInfo(row, bucket.anchorDate, platforms.length > 0 ? platforms : ['OZON']);
+            found = toOfferInfo(row, bucket.anchorDate);
             break;
           }
         }
@@ -291,7 +357,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         missing: price == null,
         offer,
         url,
-        shopName: pickShop(`${key}|${bucket.id}`, q.platform),
+        shopName: pickShop(),
       });
     }
     out.push({
@@ -421,4 +487,249 @@ export function defaultCompetitorSkus(ownModelId: string, ownRomram: string): st
     .filter((b) => b.own_model_id === ownModelId && normRom(b.own_romram) === norm)
     .sort((a, b) => a.sort - b.sort)
     .map((b) => b.competitor_sku_id);
+}
+
+// ============================================================
+// 国家总览矩阵（第三十七轮）：国家层面主界面的纯计算层。
+// 结构 = 档位带（tier_code 从高到低）× 型号组（左我司 / 右 ROM 级映射竞品）×
+// ROM 行（代表色 SKU + 全周期周度序列 + 极值）。与图表层零耦合：Overview 页直用。
+// ============================================================
+
+export interface OverviewSparkPoint {
+  weekId: string;
+  monthId: string; // 所属月 YYYYMM（迷你图 X 轴刻度用）
+  price: number | null; // 显示币种折后价；缺采 = null
+}
+
+export interface OverviewColorOpt {
+  color: string; // 色名（dim_product.color）
+  skuId: string;
+  price: number | null; // 该颜色最新有值周折后价（显示币种）
+}
+
+/** 一个 ROM 行 = 同型号+ROMRAM 的代表色 SKU 视角（与看板默认同一口径） */
+export interface OverviewRow {
+  skuId: string; // 代表色 SKU（RUB 最低价色，lowestPriceColorSku 同源）
+  brand: string;
+  modelName: string;
+  romram: string;
+  isOwn: boolean;
+  lineColor: string; // brandColor[brand]
+  price: number | null; // 最新有值周折后价（显示币种）
+  rrp: number | null;
+  discountPct: number | null; // price/rrp − 1（双价齐才算）
+  asOfWeek: string; // 最新有值周 YYYYWW；全缺 = 数据末周
+  colors: OverviewColorOpt[]; // 颜色次级菜单
+  points: OverviewSparkPoint[]; // 全周期周度序列（迷你图直用）
+  maxV: number | null;
+  maxIdx: number; // 无任何有值点 = -1
+  minV: number | null;
+  minIdx: number;
+}
+
+/** 竞品小表一行 = benchmark ROM 级映射的具体 SKU（含色） */
+export interface OverviewCompRow {
+  skuId: string;
+  brand: string;
+  modelName: string;
+  romram: string;
+  color: string;
+  lineColor: string;
+  price: number | null;
+  rrp: number | null;
+  ownRomrams: string[]; // 对标的我司 ROM（映射并集，升序）
+  primary: boolean; // 任一映射 sort=1（主竞品）
+  colors: OverviewColorOpt[]; // 同型号+ROMRAM 的全部颜色现价（第四十四轮：颜色下钻）
+  points: OverviewSparkPoint[];
+  maxV: number | null;
+  maxIdx: number;
+  minV: number | null;
+  minIdx: number;
+}
+
+export interface OverviewModel {
+  modelId: string;
+  modelName: string;
+  brand: string;
+  isOwn: boolean;
+  tierCode: TierCode;
+  launchPriceUsd: number;
+  lifecyclePct: number | null; // 仅我司（lifecycleDeltaOf 全模型 SKU）
+  rows: OverviewRow[]; // ROM 行，现价降序（无值沉底、同价 romram 字典序）
+  comps: OverviewCompRow[]; // benchmark 映射并集；主竞品在前，其余现价降序
+}
+
+export interface OverviewTierBand {
+  tierCode: TierCode;
+  models: OverviewModel[]; // 上市价（USD）降序
+}
+
+/** 档位显示名（tier_code 按上市价归档、归属稳定） */
+export const TIER_LABELS: Record<TierCode, string> = {
+  '1000+': '旗舰 · $1000+',
+  '800-1000': '高端 · $800–1,000',
+  '600-800': '高端 · $600–800',
+  '400-600': '中端 · $400–600',
+  '200-400': '中低 · $200–400',
+  '<200': '入门 · <$200',
+};
+
+const TIER_ORDER: TierCode[] = ['1000+', '800-1000', '600-800', '400-600', '200-400', '<200'];
+
+const priceOf = (row: FactPriceWeekly, currency: CurrencyMode): number | null =>
+  currency === 'usd' ? row.discounted_price_usd : row.discounted_price_rub;
+const rrpOf = (row: FactPriceWeekly, currency: CurrencyMode): number | null =>
+  currency === 'usd' ? row.rrp_usd : row.rrp_rub;
+
+/** 某 SKU 最新有值周（price 驱动）；全缺时回数据末周、值 null */
+function latestOf(skuId: string, currency: CurrencyMode): { price: number | null; rrp: number | null; weekId: string } {
+  for (let i = timeRows.length - 1; i >= 0; i--) {
+    const w = timeRows[i].week_id;
+    const row = factRow(skuId, w);
+    if (row == null) continue;
+    const p = priceOf(row, currency);
+    if (p != null) return { price: p, rrp: rrpOf(row, currency), weekId: w };
+  }
+  return { price: null, rrp: null, weekId: timeRows[timeRows.length - 1].week_id };
+}
+
+function sparkPoints(skuId: string, currency: CurrencyMode): OverviewSparkPoint[] {
+  return timeRows.map((w) => {
+    const row = factRow(skuId, w.week_id);
+    return { weekId: w.week_id, monthId: w.month_id, price: row ? priceOf(row, currency) : null };
+  });
+}
+
+function extremes(points: OverviewSparkPoint[]): { maxV: number | null; maxIdx: number; minV: number | null; minIdx: number } {
+  let maxV: number | null = null;
+  let maxIdx = -1;
+  let minV: number | null = null;
+  let minIdx = -1;
+  for (let i = 0; i < points.length; i++) {
+    const v = points[i].price;
+    if (v == null) continue;
+    if (maxV == null || v > maxV) {
+      maxV = v;
+      maxIdx = i; // 同值取首个（上市初最高价的语义）
+    }
+    if (minV == null || v < minV) {
+      minV = v;
+      minIdx = i;
+    }
+  }
+  return { maxV, maxIdx, minV, minIdx };
+}
+
+/**
+ * 国家总览矩阵。确定性纯函数：同 (currency, bench) 两次调用输出逐字节一致。
+ * - 我司 ROM 行代表色 = lowestPriceColorSku（RUB 口径最低价色，与看板默认视图同源）
+ * - 竞品行 = benchmark 对该型号全部 ROM 的映射并集（去重；ownRomrams 聚合）；
+ *   第四十四轮起 benchmark 可注入（总览页传 getEffectiveBenchmark() 的手动+auto 合并结果，
+ *   缺省 = dimBenchmark auto），配置对标弹窗保存后经事件刷新即时生效
+ * - 空档位（当前 600-800 无产品）不输出带
+ */
+export function buildOverviewMatrix(currency: CurrencyMode, bench: DimBenchmark[] = dimBenchmark): OverviewTierBand[] {
+  // 型号索引：modelId → 产品行集
+  const byModel = new Map<string, DimProduct[]>();
+  for (const p of dimProduct) {
+    const mid = p.sku_id.split('__')[0];
+    const arr = byModel.get(mid);
+    if (arr) arr.push(p);
+    else byModel.set(mid, [p]);
+  }
+
+  const models: OverviewModel[] = [];
+  for (const [modelId, prows] of byModel) {
+    const head = prows[0];
+    const romrams = [...new Set(prows.map((p) => p.romram))];
+    const rows: OverviewRow[] = [];
+    for (const rom of romrams) {
+      const repSku = lowestPriceColorSku(modelId, rom);
+      const romRows = prows.filter((p) => normRom(p.romram) === normRom(rom));
+      const skuId = repSku ?? [...romRows].sort((a, b) => a.sku_id.localeCompare(b.sku_id))[0].sku_id;
+      const lat = latestOf(skuId, currency);
+      const points = sparkPoints(skuId, currency);
+      const ex = extremes(points);
+      const discountPct = lat.price != null && lat.rrp != null && lat.rrp > 0 ? lat.price / lat.rrp - 1 : null;
+      rows.push({
+        skuId,
+        brand: head.brand,
+        modelName: head.model_name,
+        romram: rom,
+        isOwn: head.is_own,
+        lineColor: brandColor[head.brand] ?? '#171717',
+        price: lat.price,
+        rrp: lat.rrp,
+        discountPct,
+        asOfWeek: lat.weekId,
+        colors: [...romRows]
+          .sort((a, b) => a.sku_id.localeCompare(b.sku_id))
+          .map((p) => ({ color: p.color, skuId: p.sku_id, price: latestOf(p.sku_id, currency).price })),
+        points,
+        ...ex,
+      });
+    }
+    rows.sort((a, b) => (b.price ?? -1) - (a.price ?? -1) || a.romram.localeCompare(b.romram));
+
+    // 竞品映射并集（仅我司型号消费；去重 + ownRomrams 聚合 + 主竞品在前）
+    const compMap = new Map<string, { romrams: Set<string>; primary: boolean }>();
+    if (head.is_own) {
+      for (const b of bench) {
+        if (b.own_model_id !== modelId) continue;
+        const e = compMap.get(b.competitor_sku_id);
+        if (e) {
+          e.romrams.add(b.own_romram);
+          e.primary = e.primary || b.sort === 1;
+        } else {
+          compMap.set(b.competitor_sku_id, { romrams: new Set([b.own_romram]), primary: b.sort === 1 });
+        }
+      }
+    }
+    const comps: OverviewCompRow[] = [];
+    for (const [skuId, agg] of compMap) {
+      const p = productById.get(skuId);
+      if (!p) continue;
+      const lat = latestOf(skuId, currency);
+      const points = sparkPoints(skuId, currency);
+      const compModelRows = byModel.get(skuId.split('__')[0]) ?? [];
+      const compRomRows = compModelRows.filter((pp) => normRom(pp.romram) === normRom(p.romram));
+      comps.push({
+        skuId,
+        brand: p.brand,
+        modelName: p.model_name,
+        romram: p.romram,
+        color: p.color,
+        lineColor: brandColor[p.brand] ?? '#171717',
+        price: lat.price,
+        rrp: lat.rrp,
+        ownRomrams: [...agg.romrams].sort(),
+        primary: agg.primary,
+        colors: [...compRomRows]
+          .sort((a, b) => a.sku_id.localeCompare(b.sku_id))
+          .map((pp) => ({ color: pp.color, skuId: pp.sku_id, price: latestOf(pp.sku_id, currency).price })),
+        points,
+        ...extremes(points),
+      });
+    }
+    comps.sort((a, b) => Number(b.primary) - Number(a.primary) || (b.price ?? -1) - (a.price ?? -1));
+
+    models.push({
+      modelId,
+      modelName: head.model_name,
+      brand: head.brand,
+      isOwn: head.is_own,
+      tierCode: head.tier_code,
+      launchPriceUsd: head.launch_price_usd,
+      lifecyclePct: head.is_own ? lifecycleDeltaOf(prows.map((p) => p.sku_id))?.pct ?? null : null,
+      rows,
+      comps,
+    });
+  }
+
+  return TIER_ORDER.map((tierCode) => ({
+    tierCode,
+    models: models
+      .filter((m) => m.tierCode === tierCode)
+      .sort((a, b) => b.launchPriceUsd - a.launchPriceUsd || a.modelName.localeCompare(b.modelName)),
+  })).filter((b) => b.models.length > 0);
 }

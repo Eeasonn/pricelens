@@ -15,9 +15,10 @@
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Checkbox, Segmented } from 'antd';
+import { Checkbox, Segmented, Slider } from 'antd';
 import { useFilters } from '../../state/FiltersContext';
 import { buildSeries } from '../../dataModel/aggregate';
+import { dimPromo } from '../../data';
 import type {
   AggMode,
   Granularity,
@@ -31,15 +32,20 @@ import { color, fontSize, space } from '../../theme/tokens';
 import Chart from './Chart';
 import XBrush from './XBrush';
 import DrillModal, { type DrillInfo } from './DrillModal';
+import PriceSummary from './PriceSummary';
+import {
+  buildPriceSummary,
+  buildPromoBands,
+} from './chartModel';
 import {
   GRID,
   adaptiveRangeOf,
+  bucketSpans,
   computeYAxis,
   convertWindowIds,
   dataBucketRange,
   enumerateBuckets,
   estGridLeft,
-  gridTopFor,
   normalizeWindow,
   perUsdOf,
   seriesSpanRange,
@@ -54,12 +60,18 @@ export default function PriceTrend() {
 
   // ---- 图表内部状态 ----
   const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值；松手才提交）
-  const [yCompress, setYCompress] = useState<boolean>(true); // Y 轴自动压缩（第二十轮；关 = Y 轴完全连续）
+  const [yCompress, setYCompress] = useState<boolean>(false); // Y 轴自动压缩（第三十五轮起默认关 = 完全连续；迪总「不自动选择」）
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null); // null=整个筛选范围
-  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例卡取消选中的系列（折线隐藏）
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例取消选中的系列（折线隐藏）
   const [stripGeom, setStripGeom] = useState<StripGeom | null>(null); // 图表上报的横向几何（促销热力带对齐用）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
+  const [promoBandsOn, setPromoBandsOn] = useState(true); // 大促档期（第三十五轮：外部显式筛选器，默认选）
+  const [maxMinOn, setMaxMinOn] = useState(false); // 最高/最低价点标签（默认关）
+  // 价格变化提醒（第四十六轮挪出齿轮到标题行）：null=关；阈值=小数（0.05=5%），
+  // 滑杆 0~15% 连贯可调（0.5 步进，≥0 可选）。旧版齿轮 Select 内部默认 5 与档位
+  // 0.05 单位不一致 = 实际恒关闭，本次一并修正为真 5%。
+  const [changeThreshold, setChangeThreshold] = useState<number | null>(0.05);
 
   // §5.6/§6.6：切换产品/价格类型/币种 → 滑杆倍率复位 ×1；图例显隐一并复位
   const yAxisResetKey = JSON.stringify([state.own, state.competitors, state.priceTypes, state.currency]);
@@ -182,6 +194,18 @@ export default function PriceTrend() {
     });
   };
 
+  // ---- 价格摘要条（第三十六轮定版）：固定显示窗口内最新时点（不随悬停变换，
+  //      时点明细看悬停浮窗）；竞品与我司同款样式、来源为取证超链接 ----
+  const summary = useMemo(() => buildPriceSummary(chartSeries), [chartSeries]);
+
+  // ---- 大促背景带（第三十四轮）：dim_promo ∩ 窗口桶覆盖区间；随窗口联动 ----
+  const winBuckets = useMemo(() => buckets.slice(win.s, win.e + 1), [buckets, win]);
+  const winSpans = useMemo(() => bucketSpans(state.granularity, winBuckets), [state.granularity, winBuckets]);
+  const promoBands = useMemo(
+    () => (promoBandsOn ? buildPromoBands({ promos: dimPromo, spans: winSpans }) : []),
+    [promoBandsOn, winSpans],
+  );
+
   // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
   // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）。
   // scaleRef 同时是步长滞回的 prev（第十一轮）：存的是"上一次未冻结"的模型，
@@ -200,8 +224,8 @@ export default function PriceTrend() {
     scaleRef.current = next;
     return next;
   }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
-  // 图顶预留 = 常驻卡片排数（ceil(N/6)）——只随产品选择变化，悬停不变高
-  const gridTop = gridTopFor(visSeries.length);
+  // 图顶预留（第三十五轮）：钉顶卡片删除，36px 只保留 ₽/$+齿轮（左）与图例 chips（右）
+  const gridTop = 36;
   // 容器高由 Y 模型派生：格数×TICK_PX×倍率 + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
   const chartHeight = yCfg.plotHeight + gridTop + GRID.bottom;
   const gridLeft = estGridLeft(yCfg.max, state.currency, yCfg.interval);
@@ -292,6 +316,38 @@ export default function PriceTrend() {
         <Checkbox checked={state.priceTypes.rrp} onChange={(e) => setPriceType('rrp', e.target.checked)}>
           RRP
         </Checkbox>
+        {/* 大促档期（第三十五轮）：外部显式筛选器（迪总：不藏进齿轮），默认选 */}
+        <Checkbox checked={promoBandsOn} onChange={(e) => setPromoBandsOn(e.target.checked)}>
+          大促档期
+        </Checkbox>
+        {/* 最高/最低价参照线（第三十五轮）：窗口极值虚线（camel 三虚线画法） */}
+        <Checkbox checked={maxMinOn} onChange={(e) => setMaxMinOn(e.target.checked)}>
+          最高/最低价
+        </Checkbox>
+        {/* 价格变化提醒（第四十六轮挪出齿轮）：开关在其右，开启后出现连贯阈值滑杆
+            （0~15%、0.5 步进，≥0 可选；0 = 任何真实变化都标 ↓/↑X%） */}
+        <Checkbox
+          checked={changeThreshold != null}
+          onChange={(e) => setChangeThreshold(e.target.checked ? 0.05 : null)}
+        >
+          价格变化提醒
+        </Checkbox>
+        {changeThreshold != null && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <Slider
+              style={{ width: 112, margin: '0 2px' }}
+              min={0}
+              max={15}
+              step={0.5}
+              value={+(changeThreshold * 100).toFixed(1)}
+              onChange={(v) => setChangeThreshold(+(v as number) / 100)}
+              tooltip={{ formatter: (v) => `≥ ${v ?? 0}%` }}
+            />
+            <span className="tnum" style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>
+              ≥ {+(changeThreshold * 100).toFixed(1)}%
+            </span>
+          </span>
+        )}
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
         {state.granularity !== 'week' && (
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
@@ -308,6 +364,9 @@ export default function PriceTrend() {
           </div>
         )}
       </div>
+
+      {/* 价格摘要条（第三十四轮）：账面价划线 + 现价 + 折扣率 + 竞品差价，随窗口联动 */}
+      <PriceSummary items={summary} currency={state.currency} granularity={state.granularity} />
 
       {/* 图主体（Y 轴纯自适应；X 刷选条在图表块之下） */}
       <Chart
@@ -331,13 +390,17 @@ export default function PriceTrend() {
         onSliderScale={setSliderScale}
         yCompress={yCompress}
         onYCompress={setYCompress}
+        promoBandsOn={promoBandsOn}
+        onPromoBandsOn={setPromoBandsOn}
+        promoBands={promoBands}
+        maxMinOn={maxMinOn}
+        changeThreshold={changeThreshold}
         emptyHint={
           visSeries.length > 0 && chartSeries.length === 0
             ? '所有系列已在图例中隐藏，点击顶部图例卡恢复显示'
             : undefined
         }
-      />
-      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 筛选范围；自适应开 = 轨道冻结） */}
+      />      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 筛选范围；自适应开 = 轨道冻结） */}
       {buckets.length > 0 && visSeries.length > 0 && (
         <XBrush
           buckets={buckets}

@@ -2,6 +2,7 @@ import { Button, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { usePage, PageProvider } from './state/PageContext';
 import { FiltersProvider } from './state/FiltersContext';
+import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
 import Config from './pages/Config';
 import { color, font } from './theme/tokens';
@@ -38,5 +39,5 @@ export default function App() {
 
 function AppBody() {
   const { page } = usePage();
-  return page === 'config' ? <Config /> : <Dashboard />;
+  return page === 'overview' ? <Overview /> : page === 'config' ? <Config /> : <Dashboard />;
 }

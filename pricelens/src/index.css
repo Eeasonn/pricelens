@@ -31,3 +31,23 @@ body {
 .lpl-fb .ant-select-selection-search { min-width: 0; }
 .lpl-fb .ant-select .ant-select-selection-search { width: 0 !important; min-width: 0 !important; }
 .lpl-fb .ant-select-open .ant-select-selection-search { width: auto !important; }
+
+/* ============================================================
+   第三十七轮：国家总览矩阵（Overview）——ROM 行悬停内衬 + 颜色次级菜单 chip
+   ============================================================ */
+.lpl-ov-row:hover { background: #f5f5f5; }
+.lpl-ov-colors {
+  border: 1px solid #ebebeb;
+  background: #ffffff;
+  border-radius: 9999px;
+  height: 18px;
+  padding: 0 7px;
+  font-size: 10.5px;
+  color: #4d4d4d;
+  cursor: pointer;
+  font-family: inherit;
+}
+.lpl-ov-colors:hover { background: #f5f5f5; }
+
+/* 第三十八轮：竞品小表行间横向分隔线（包裹格子一体性的骨架） */
+.lpl-ov-comp-row + .lpl-ov-comp-row { border-top: 1px solid #ebebeb; }

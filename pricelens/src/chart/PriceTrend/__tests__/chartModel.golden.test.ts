@@ -8,14 +8,20 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import type { CurrencyMode, OfferInfo, Series, SeriesPoint } from '../../../dataModel/types';
-import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, adaptiveRangeOf, computeYAxis, fmtAxisTick, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, yPxOf, type Bucket, type YScale } from '../helpers';
+import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, yPxOf, type Bucket, type YScale } from '../helpers';
 import {
+  buildChangeMarks,
+  buildExtremeMarks,
   buildEndpointBadges,
   buildEndpointMarks,
   buildGeom,
   buildLabelPlan,
   buildOfferMarkers,
+  offerList,
+  offerSummary,
   buildOption,
+  buildPriceSummary,
+  buildPromoBands,
   buildTierBoxes,
   buildTickRows,
   bucketLabeledIdx,
@@ -246,6 +252,23 @@ describe('buildOption', () => {
     expect((option.xAxis as { type: string }).type).toBe('category');
     expect((option.grid as { top: number }).top).toBe(96);
   });
+
+  it('折线形态（第三十八轮）：默认=方形阶梯 step:end + 数据点圆点删除；smooth=曲线无 step', () => {
+    const s = mkSeries({ points: [PT({ price: 100 }), PT({ price: 110 }), PT({ price: 105 })] });
+    const scale = computeYAxis({ series: [s], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const geom = mkGeom(scale, 1200, 3, scale.plotHeight + 96 + GRID.bottom, 96);
+    const base = { geom, series: [s], priceTypes: DISC_ONLY, granularity: 'week' as const, labelPlan: { dy: {}, names: [] }, gridTop: 96, endpointMarks: new Map() };
+    const stepOpt = buildOption(base)!;
+    const stepMain = (stepOpt.series as Record<string, unknown>[])[0];
+    expect(stepMain.step).toBe('end');
+    expect(stepMain.symbolSize).toBe(0); // 第三十八轮：数据点圆点删除（悬停浮窗承担点检视）
+
+    const smoothOpt = buildOption({ ...base, lineShape: 'smooth' })!;
+    const smoothMain = (smoothOpt.series as Record<string, unknown>[])[0];
+    expect(smoothMain.step).toBeUndefined();
+    expect(smoothMain.smooth).toBe(true);
+    expect(smoothMain.smoothMonotone).toBe('x');
+  });
 });
 
 // ---------------- DOM 覆盖层数据（刻度/档位/徽标/offer） ----------------
@@ -303,15 +326,38 @@ describe('buildTickRows / buildTierBoxes / badges / offer', () => {
     expect(contBoxes.filter((b) => b.label === '200~400').every((b) => !b.empty)).toBe(true);
   });
 
-  it('端点徽标几何与标记表一致；offer 图标按 title 去重取首周', () => {
+  it('端点徽标几何与标记表一致；offer 徽章按 档期+权益签名 去重取首周（第四十八轮结构化）', () => {
     const marks = buildEndpointMarks([own]);
     const badges = buildEndpointBadges({ geom, series: [own], marks, priceTypes: BOTH });
     expect(badges).toHaveLength(marks.size);
-    const offer: OfferInfo = { title: '双11', text: 'x', endDate: '2026-11-11', remainingDays: 30, platforms: ['Ozon'] };
+    const offer: OfferInfo = {
+      discount: { kind: 'discount', promoName: '双11', headline: '券 −10%', detail: '平台券 −10%', endDate: '2026-11-11', remainingDays: 30 },
+    };
     const pts = own.points.map((p, i) => (i === 3 || i === 7 ? { ...p, offer } : p));
     const markers = buildOfferMarkers({ enabled: true, geom, series: [mkSeries({ points: pts })] });
-    expect(markers).toHaveLength(1); // 同 title 只取首周
+    expect(markers).toHaveLength(1); // 同 档期+权益 只取首周
+    expect(offerSummary(markers[0].offer)).toBe('券 −10%');
     expect(buildOfferMarkers({ enabled: false, geom, series: [mkSeries({ points: pts })] })).toHaveLength(0);
+  });
+
+  it('第四十八轮：offerList 固定 折扣→分期→赠品 次序；offerSummary 合并 headline', () => {
+    const offer: OfferInfo = {
+      gift: { kind: 'gift', promoName: '双11', headline: '赠保护壳', detail: '下单赠 保护壳', endDate: '2026-11-11', remainingDays: 3 },
+      installment: {
+        kind: 'installment',
+        promoName: '双11',
+        headline: '6 期免息',
+        detail: '先享后付免息 6 期',
+        endDate: '2026-11-11',
+        remainingDays: 3,
+        bankPriceRub: 74630,
+        tariffEstRub: 9702,
+      },
+      discount: { kind: 'discount', promoName: '双11', headline: '券 −10%', detail: '平台券 −10%', endDate: '2026-11-11', remainingDays: 3 },
+    };
+    expect(offerList(offer).map((d) => d.kind)).toEqual(['discount', 'installment', 'gift']);
+    expect(offerSummary(offer)).toBe('券 −10% · 6 期免息 · 赠保护壳');
+    expect(offerSummary(null)).toBe('');
   });
 });
 
@@ -614,7 +660,7 @@ describe('聚焦模式 option（第三十二轮）', () => {
     expect(f).toHaveLength(3); // 无缺采桥、仅折后价 → 每系列 1 条主线
     const n0 = f[0];
     expect((n0.lineStyle as { opacity?: number }).opacity).toBe(0.15);
-    expect((n0.itemStyle as { opacity?: number }).opacity).toBe(0.15);
+    expect(n0.itemStyle).toBeUndefined(); // 第三十八轮：数据点圆点删除，itemStyle 随之退场
     expect((n0.data as { label?: { show?: boolean } }[]).every((d) => !d.label?.show)).toBe(true);
     const n1 = f[1];
     expect((n1.lineStyle as { opacity?: number }).opacity).toBeUndefined();
@@ -757,5 +803,229 @@ describe('真实造数快照（seed 20261009）', () => {
     expect(buildTickRows(geom)).toMatchSnapshot('tickRows');
     expect(labelPlan).toMatchSnapshot('labelPlan');
     expect({ marks: [...marks.entries()], seriesTypes: (option!.series as Record<string, unknown>[]).map((s) => s.type) }).toMatchSnapshot('marks+types');
+  });
+});
+
+// ---------------- 第三十四轮：价格摘要条 / 大促背景带 / 桶跨度 ----------------
+
+describe('buildPriceSummary（摘要条：账面价 vs 成交价三件套）', () => {
+  it('折扣率 = 窗口内最新有值点 price/rrp−1；尾部无值点被跳过', () => {
+    const s = mkSeries({
+      points: [
+        PT({ price: 100, rrp: 120, xLabel: '01-01' }),
+        PT({ price: null, rrp: 120, xLabel: '01-08' }),
+        PT({ price: 90, rrp: 100, xLabel: '01-15' }),
+        PT({ price: null, rrp: null, xLabel: '01-22' }),
+      ],
+    });
+    const [it] = buildPriceSummary([s]);
+    expect(it.price).toBe(90);
+    expect(it.rrp).toBe(100);
+    expect(it.discount).toBeCloseTo(-0.1, 10);
+    expect(it.asOf).toBe('01-15');
+    expect(it.diffVsOwn).toBeNull();
+  });
+
+  it('RRP 缺失 → discount null；仅 RRP 有值（price null）→ price null 照常输出', () => {
+    const a = mkSeries({ points: [PT({ price: 80, rrp: null })] });
+    const b = mkSeries({ points: [PT({ price: null, rrp: 100 })] });
+    const [sa, sb] = buildPriceSummary([a, b]);
+    expect(sa.discount).toBeNull();
+    expect(sa.price).toBe(80);
+    expect(sb.price).toBeNull();
+    expect(sb.rrp).toBe(100);
+    expect(sb.discount).toBeNull();
+  });
+
+  it('全空窗口 → 全 null 项；空数组 → 空输出', () => {
+    const s = mkSeries({ points: [PT({ price: null }), PT({ price: null })] });
+    const [it] = buildPriceSummary([s]);
+    expect(it.price).toBeNull();
+    expect(it.rrp).toBeNull();
+    expect(it.asOf).toBeNull();
+    expect(buildPriceSummary([])).toEqual([]);
+  });
+
+  it('竞品 diffVsOwn 相对首个我司系列；竞品更便宜为负', () => {
+    const own = mkSeries({ key: 'own', isOwn: true, points: [PT({ price: 100, rrp: 100 })] });
+    const c1 = mkSeries({ key: 'c1', isOwn: false, points: [PT({ price: 90 })] });
+    const c2 = mkSeries({ key: 'c2', isOwn: false, points: [PT({ price: 120 })] });
+    const [o, a, b] = buildPriceSummary([own, c1, c2]);
+    expect(o.diffVsOwn).toBeNull();
+    expect(a.diffVsOwn).toBeCloseTo(-0.1, 10);
+    expect(b.diffVsOwn).toBeCloseTo(0.2, 10);
+  });
+
+  it('无我司系列 → 竞品 diffVsOwn 全 null（无水位基准）', () => {
+    const c = mkSeries({ key: 'c', isOwn: false, points: [PT({ price: 90 })] });
+    expect(buildPriceSummary([c])[0].diffVsOwn).toBeNull();
+  });
+});
+
+describe('buildPromoBands（大促背景带）', () => {
+  const SPANS = [
+    { start: '2025-11-10', end: '2025-11-16' },
+    { start: '2025-11-17', end: '2025-11-23' },
+    { start: '2025-11-24', end: '2025-11-30' },
+    { start: '2025-12-01', end: '2025-12-07' },
+  ];
+  const P = (over: Partial<{ promo_id: string; promo_name: string; start_date: string; end_date: string; depth_hint: '浅' | '中' | '深' }>) => ({
+    promo_id: 'p',
+    promo_name: '黑五 Чёрная пятница',
+    start_date: '2025-11-20',
+    end_date: '2025-12-01',
+    depth_hint: '深' as const,
+    ...over,
+  });
+
+  it('跨桶促销：startIdx/endIdx/边缘分数/weeks', () => {
+    const [b] = buildPromoBands({ promos: [P({})], spans: SPANS });
+    expect(b.startIdx).toBe(1);
+    expect(b.endIdx).toBe(3);
+    expect(b.weeks).toBe(3);
+    // 11-20 落在 idx1（11-17..23）：分数 = 天差分/(be−bs) = 3/6（约定：分母为日期差非含头尾天数）
+    expect(b.startFrac).toBeCloseTo(0.5, 6);
+    // 12-01 是 idx3 覆盖区间的第 1 天 → 分数 0
+    expect(b.endFrac).toBeCloseTo(0, 6);
+  });
+
+  it('整桶覆盖 → frac 0/1；窗口外促销被剔除', () => {
+    const full = buildPromoBands({
+      promos: [P({ promo_id: 'a', start_date: '2025-11-17', end_date: '2025-11-23' })],
+      spans: SPANS,
+    });
+    expect(full[0].startFrac).toBe(0);
+    expect(full[0].endFrac).toBe(1);
+    expect(full[0].weeks).toBe(1);
+    const outside = buildPromoBands({
+      promos: [P({ promo_id: 'b', start_date: '2025-12-10', end_date: '2025-12-20' })],
+      spans: SPANS,
+    });
+    expect(outside).toEqual([]);
+  });
+
+  it('输出按 startIdx 升序（编号锚点顺序）；shortName 取名称首段', () => {
+    const bands = buildPromoBands({
+      promos: [
+        P({ promo_id: 'late', promo_name: '新年大促 Новый год', start_date: '2025-12-05', end_date: '2025-12-06' }),
+        P({ promo_id: 'early', promo_name: '11.11 档期', start_date: '2025-11-11', end_date: '2025-11-11' }),
+      ],
+      spans: SPANS,
+    });
+    expect(bands.map((b) => b.key)).toEqual(['early', 'late']);
+    expect(bands[0].shortName).toBe('11.11');
+  });
+});
+
+describe('bucketSpans（helpers：桶覆盖区间）', () => {
+  it('周桶 = 锚周三 ±3 天', () => {
+    const spans = bucketSpans('week', [
+      { id: '202546', xLabel: '11-12' },
+      { id: '202547', xLabel: '11-19' },
+    ]);
+    expect(spans[0]).toEqual({ start: '2025-11-09', end: '2025-11-15' });
+    expect(spans[1].start).toBe('2025-11-16');
+  });
+
+  it('月桶 = 首末周周三 ±3 天（结构断言，真实跨度由造数侧覆盖）', () => {
+    const spans = bucketSpans('month', [
+      { id: '202511', xLabel: '202511' },
+      { id: '202512', xLabel: '202512' },
+    ]);
+    expect(spans).toHaveLength(2);
+    for (const s of spans) {
+      expect(s.start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(s.start <= s.end).toBe(true);
+    }
+  });
+});
+
+// ---------------- 第三十五轮：悬停时点摘要 / 特殊降价点 / 最高最低参照线 ----------------
+
+describe('buildPriceSummary · atIdx 悬停时点模式（第三十五轮）', () => {
+  const s = mkSeries({
+    points: [
+      PT({ price: 100, rrp: 120, xLabel: '01-01' }),
+      PT({ price: 90, rrp: 100, xLabel: '01-08' }),
+      PT({ price: null, rrp: null, xLabel: '01-15' }),
+    ],
+  });
+
+  it('atIdx 给定 → 固定取该下标（而非最新有值点）', () => {
+    const [it] = buildPriceSummary([s], 0);
+    expect(it.price).toBe(100);
+    expect(it.rrp).toBe(120);
+    expect(it.asOf).toBe('01-01');
+  });
+
+  it('悬停无值时点 → 全 null 项（asOf 保留，摘要条显示「—」）', () => {
+    const [it] = buildPriceSummary([s], 2);
+    expect(it.price).toBeNull();
+    expect(it.rrp).toBeNull();
+    expect(it.discount).toBeNull();
+    expect(it.asOf).toBe('01-15');
+  });
+
+  it('atIdx 越界 → 全 null；缺省仍为最新有值点', () => {
+    expect(buildPriceSummary([s], 9)[0].price).toBeNull();
+    expect(buildPriceSummary([s])[0].price).toBe(90);
+  });
+});
+
+describe('buildChangeMarks（价格变化点，第三十五轮起；第四十二轮阈值可调+含上涨）', () => {
+  it('降幅 ≥5% 标记（带符号负值），<5% 不标；首点不标；缺采后仍与前一有值点比较', () => {
+    const s = mkSeries({
+      points: [
+        PT({ price: 100 }),
+        PT({ price: 98 }), // −2% 不标
+        PT({ price: null }),
+        PT({ price: 80 }), // 相对 98 = −18.4% 标记（跨缺采）
+        PT({ price: 79 }), // −1.25% 不标
+      ],
+    });
+    const m = buildChangeMarks([s]);
+    expect(m.has('s1|0')).toBe(false);
+    expect(m.has('s1|1')).toBe(false);
+    expect(m.get('s1|3')).toBeCloseTo(80 / 98 - 1, 10);
+    expect(m.has('s1|4')).toBe(false);
+  });
+
+  it('恰好在阈值（−5%）也标记', () => {
+    const s = mkSeries({ points: [PT({ price: 100 }), PT({ price: 95 })] });
+    expect(buildChangeMarks([s]).get('s1|1')).toBeCloseTo(-0.05, 10);
+  });
+
+  it('第四十二轮：上涨 ≥阈值同样标记（带符号正值）；阈值可调', () => {
+    const up = mkSeries({ points: [PT({ price: 100 }), PT({ price: 110 })] });
+    expect(buildChangeMarks([up]).get('s1|1')).toBeCloseTo(0.1, 10);
+
+    const s = mkSeries({ points: [PT({ price: 100 }), PT({ price: 98 }), PT({ price: 96 })] });
+    const tight = buildChangeMarks([s], 0.02);
+    expect(tight.get('s1|1')).toBeCloseTo(-0.02, 10);
+    expect(tight.get('s1|2')).toBeCloseTo(96 / 98 - 1, 10); // 98→96 = −2.04%
+  });
+
+  it('第四十六轮：threshold 0 = 标出全部真实变化；价格未动仍不标；负值 = 关闭', () => {
+    const s = mkSeries({ points: [PT({ price: 100 }), PT({ price: 100 }), PT({ price: 99 }), PT({ price: 99 })] });
+    const zero = buildChangeMarks([s], 0);
+    expect(zero.size).toBe(1); // 只有 100→99 一处真实变化；首点与平盘不标
+    expect(zero.get('s1|2')).toBeCloseTo(-0.01, 10);
+    expect(buildChangeMarks([s], -1).size).toBe(0); // 负值 = 关闭
+  });
+});
+
+describe('buildExtremeMarks（最高/最低点标记，第三十六轮）', () => {
+  it('窗口极值 + 首个出现下标；全程一价不画', () => {
+    const scale = computeYAxis({ series: [], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const pts = Array.from({ length: 6 }, (_, i) => PT({ price: [100, 120, 110, 90, 105, 100][i] }));
+    const g = mkGeom(scale, 1200, 6, 800, 96);
+    const marks = buildExtremeMarks({ geom: g, series: [mkSeries({ points: pts })], priceTypes: DISC_ONLY });
+    expect(marks).toHaveLength(1);
+    expect(marks[0].maxV).toBe(120);
+    expect(marks[0].maxIdx).toBe(1);
+    expect(marks[0].minV).toBe(90);
+    expect(marks[0].minIdx).toBe(3);
+    const flat = buildExtremeMarks({ geom: g, series: [mkSeries({ key: 'flat', points: [PT({ price: 100 }), PT({ price: 100 })] })], priceTypes: DISC_ONLY });
+    expect(flat).toHaveLength(0);
   });
 });

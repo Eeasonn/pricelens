@@ -10,6 +10,8 @@
 //    主页筛选条「匹配上一代」按此带出上代同配置组
 // ③ 参考汇率：USD/RUB InputNumber，默认 80，存 LPL3.config.fx
 // ④ 自定义档位管理：列出 LPL3.config.customTiers（图表侧写入），支持删除
+// ⑤ 大促日历（第四十七轮）：只读展示 dim_promo 的起始时间与促销深度——看板大促
+//    带/事件卡的口径来源在此可见
 // 保存后 dispatchEvent(CONFIG_CHANGED_EVENT) → 主页立即生效
 // （反馈第 8 条修订：不自动改主页当前竞品选择；用户点「匹配竞品」才按最新矩阵带出）
 // ============================================================
@@ -32,7 +34,7 @@ import {
   savePrevGenOverrides,
   type CustomTierPreset,
 } from '../state/configStore';
-import { dimProduct } from '../data';
+import { dimProduct, dimPromo } from '../data';
 import type { DimBenchmark, DimProduct } from '../dataModel/types';
 import { COMPETITOR_BRANDS, modelIdOf, shortRomram, skuOptionLabel } from '../components/ProductCascader/tree';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
@@ -228,8 +230,11 @@ export default function Config() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
+            <Button size="small" style={{ height: 28 }} onClick={() => go('overview')}>
+              总览
+            </Button>
             <Button size="small" style={{ height: 28 }} onClick={() => go('dashboard')}>
-              返回看板
+              价格看板
             </Button>
             <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>配置</span>
           </div>
@@ -430,6 +435,57 @@ export default function Config() {
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无自定义档位" />
             )}
+          </Block>
+
+          {/* ⑤ 大促日历（第四十七轮）：起始时间 + 促销深度在配置界面可见（dim_promo 只读） */}
+          <Block
+            title="大促日历"
+            extra={
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>
+                促销日历口径 · 看板「大促档期」带与事件卡的来源
+              </span>
+            }
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: space.sm }}>
+              {[...dimPromo]
+                .sort((a, b) => a.start_date.localeCompare(b.start_date))
+                .map((p) => {
+                  const tone =
+                    p.depth_hint === '深'
+                      ? { dot: 'rgba(235, 87, 87, 0.75)', fg: '#c0392b', bg: 'rgba(235, 87, 87, 0.10)' }
+                      : p.depth_hint === '中'
+                        ? { dot: 'rgba(235, 87, 87, 0.5)', fg: '#b45309', bg: '#fff7e6' }
+                        : { dot: 'rgba(235, 87, 87, 0.3)', fg: color.mute, bg: color.canvasSoft };
+                  return (
+                    <div key={p.promo_id} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: fontSize.bodySm }}>
+                      <i
+                        aria-hidden
+                        style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 9999, background: tone.dot, flexShrink: 0, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)' }}
+                      />
+                      <span title={p.promo_name} style={{ color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                        {p.promo_name}
+                      </span>
+                      <span className="tnum" style={{ color: color.body, flexShrink: 0 }}>
+                        {p.start_date} ~ {p.end_date}
+                      </span>
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          padding: '1px 8px',
+                          fontSize: fontSize.caption,
+                          fontWeight: 600,
+                          lineHeight: '18px',
+                          borderRadius: radius.pill,
+                          color: tone.fg,
+                          background: tone.bg,
+                        }}
+                      >
+                        {p.depth_hint}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
           </Block>
         </main>
       </div>

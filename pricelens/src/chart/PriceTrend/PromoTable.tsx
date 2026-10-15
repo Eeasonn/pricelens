@@ -17,7 +17,9 @@ import type { CurrencyMode, Series } from '../../dataModel/types';
 import { launchInfoOf } from '../../dataModel/aggregate';
 import { color, font, fontSize, formatPrice, radius, space } from '../../theme/tokens';
 import type { StripGeom } from './helpers';
-import { curveNameOf } from './chartModel';
+import {
+  offerSummary,
+  curveNameOf } from './chartModel';
 
 /** 降幅分档底色（浅蓝 → 深蓝；上限档兜底）+ 溢价琥珀 */
 const DEPTH_TINTS: [number, string][] = [
@@ -37,7 +39,7 @@ function depthTint(depth: number): string {
 type Cell =
   | { kind: 'pre' } // 未上市
   | { kind: 'miss'; eol: boolean } // 缺采 / 已退市后无数据
-  | { kind: 'val'; depth: number; pct: number; price: number; offerTitle: string | null };
+  | { kind: 'val'; depth: number; pct: number; price: number; offerNote: string | null };
 
 interface Row {
   label: string;
@@ -78,7 +80,7 @@ export default function PromoTable({
             return { kind: 'miss', eol: eolDate != null && p.anchorDate > eolDate };
           }
           const depth = (launch - p.price) / launch;
-          return { kind: 'val', depth, pct: Math.round(depth * 100), price: p.price, offerTitle: p.offer?.title ?? null };
+          return { kind: 'val', depth, pct: Math.round(depth * 100), price: p.price, offerNote: offerSummary(p.offer) || null };
         });
         let deepest: Row['deepest'] = null;
         for (let i = 0; i < cells.length; i++) {
@@ -267,7 +269,7 @@ export default function PromoTable({
                 return (
                   <div
                     key={i}
-                    title={`折后价 ${formatPrice(c.price, currency)} · 上市价 ${r.launch != null ? formatPrice(r.launch, currency) : '—'}（促销力度 ${(c.depth * 100).toFixed(1)}%）${c.offerTitle ? ` · offer：${c.offerTitle}` : ''}`}
+                    title={`折后价 ${formatPrice(c.price, currency)} · 上市价 ${r.launch != null ? formatPrice(r.launch, currency) : '—'}（促销力度 ${(c.depth * 100).toFixed(1)}%）${c.offerNote ? ` · offer：${c.offerNote}` : ''}`}
                     style={{
                       position: 'absolute',
                       top: 1,
@@ -285,9 +287,9 @@ export default function PromoTable({
                     }}
                   >
                     {showNum ? fmtPct(c.pct) : ''}
-                    {c.offerTitle && (
+                    {c.offerNote && (
                       <span
-                        title={c.offerTitle}
+                        title={c.offerNote}
                         style={{
                           position: 'absolute',
                           top: 2,

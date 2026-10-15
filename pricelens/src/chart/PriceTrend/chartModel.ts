@@ -6,7 +6,7 @@
 // 金测（chartModel.golden.test.ts）以快照+不变量钉住 17 轮迭代沉淀的边界行为。
 // ============================================================
 import type { EChartsOption } from 'echarts';
-import type { CurrencyMode, Granularity, OfferInfo, Series, SeriesPoint } from '../../dataModel/types';
+import type { CurrencyMode, DimPromo, Granularity, OfferDetail, OfferInfo, Series, SeriesPoint } from '../../dataModel/types';
 import { color, font, fontSize } from '../../theme/tokens';
 import {
   GRID,
@@ -306,6 +306,9 @@ export function buildOption(p: {
   /** 聚焦模式（第三十二轮）：非聚焦系列整体降透明 0.15、数值标签隐藏；
    *  null/缺省 = 无聚焦，输出与旧口径逐字段一致 */
   focusKey?: string | null;
+  /** 折线形态（第三十八轮，齿轮可选）：step=方形阶梯（默认，价格在期内恒定）；
+   *  smooth=平滑曲线（最初形态）。只换线形，数据/标签/避让不受影响 */
+  lineShape?: 'step' | 'smooth';
 }): EChartsOption | null {
   if (!p.geom) return null;
   const { geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks } = p;
@@ -314,6 +317,9 @@ export function buildOption(p: {
   const focusOn = p.focusKey != null;
   const xLabels = first.points.map((pt) => pt.xLabel);
   const lineWidth = (s: Series): number => (s.isOwn ? 3 : 2);
+  const shape = p.lineShape === 'smooth'
+    ? ({ smooth: true, smoothMonotone: 'x' as const } as const)
+    : ({ step: 'end' as const } as const); // 第三十六轮：方形阶梯（Keepa 式，跳变发生在新价点横轴位置）
   const sArr: Record<string, unknown>[] = [];
 
   for (const s of series) {
@@ -335,7 +341,7 @@ export function buildOption(p: {
             position: 'top' as const,
             distance: mark ? endpointLabelDistance(mark) : LABEL_DISTANCE,
             offset: [0, dyMap[i] ?? 0],
-            color: color.ink,
+            color: s.color, // 第四十二轮：数值标签跟品牌色
             fontSize: fontSize.bodySm,
             fontWeight: 400,
             fontFamily: font.family,
@@ -347,12 +353,11 @@ export function buildOption(p: {
       sArr.push({
         type: 'line',
         data,
-        smooth: true,
-        smoothMonotone: 'x',
+        ...shape,
         connectNulls: false,
-        symbol: 'circle',
-        symbolSize: 7,
-        itemStyle: { color: color.canvas, borderColor: s.color, borderWidth: 2, ...(dim ? { opacity: 0.15 } : {}) },
+        // 数据点圆点删除（第三十八轮）：悬停浮窗承担点检视，线面更干净；
+        // symbolSize 0 而非 symbol 'none'（第二十轮教训：'none' 会吞数值标签）
+        symbolSize: 0,
         lineStyle: { color: s.color, width: lineWidth(s), ...(dim ? { opacity: 0.15 } : {}) },
         z: 12,
         silent: true,
@@ -369,8 +374,7 @@ export function buildOption(p: {
         sArr.push({
           type: 'line',
           data: bridge,
-          smooth: true,
-          smoothMonotone: 'x',
+          ...shape, // 与主价线同形态
           connectNulls: true,
           symbol: 'none',
           lineStyle: { color: s.color, width: lineWidth(s), type: [4, 4], opacity: dim ? 0.15 : 0.9 },
@@ -388,7 +392,7 @@ export function buildOption(p: {
           position: 'top' as const,
           distance: LABEL_DISTANCE,
           offset: [0, dyMap[i] ?? 0],
-          color: color.ink,
+          color: s.color, // 第四十二轮：数值标签跟品牌色
           fontSize: fontSize.bodySm,
           fontWeight: 400,
           fontFamily: font.family,
@@ -399,7 +403,7 @@ export function buildOption(p: {
       sArr.push({
         type: 'line',
         data: rdata,
-        step: 'end',
+        ...shape,
         // symbolSize 0（第二十轮修复）：原 symbol 'none' 会让 ECharts 吞掉整条系列的
         // 数值标签（仅 RRP 模式下一个标签都不渲染）；size 0 只隐符号
         symbolSize: 0,
@@ -423,7 +427,9 @@ export function buildOption(p: {
       axisLine: { lineStyle: { color: color.hairline } },
       axisTick: { show: false },
       // 第十二轮：月/季标签弃 mono rich，与周视图同一字体字号（全页数字字体统一）
-      axisLabel: { interval: 'auto', hideOverlap: true, fontSize: 12, color: color.body, fontFamily: font.family },
+      // 第四十七轮：margin 22 = 轴线下方先留出大促图标专用行（DOM 层图标带占
+      // plotBottom+4~18），标签整体下移不再与图标贴近
+      axisLabel: { interval: 'auto', hideOverlap: true, fontSize: 12, color: color.body, fontFamily: font.family, margin: 22 },
     },
     // 值轴整体隐藏（第七轮）：刻度线/标签/断裂符号/档位带全部 DOM 层绘制
     yAxis: { show: false, min: 0, max: 1 },
@@ -433,7 +439,21 @@ export function buildOption(p: {
 
 // ---------------- DOM 覆盖层数据（刻度/端点徽标/offer 图标/档位带） ----------------
 
-/** offer 图标：按 offer.title 分组取首周（窗口内） */
+/** offer 三权益展开为列表（折扣→分期→赠品固定次序，第四十八轮） */
+export function offerList(offer: OfferInfo | null | undefined): OfferDetail[] {
+  if (!offer) return [];
+  return [offer.discount, offer.installment, offer.gift].filter((d): d is OfferDetail => d != null);
+}
+
+/** 悬停摘要一行：「券 −10% · 6 期免息 · 赠无线耳机」 */
+export function offerSummary(offer: OfferInfo | null | undefined): string {
+  return offerList(offer)
+    .map((d) => d.headline)
+    .join(' · ');
+}
+
+/** offer 徽章：同一系列「同档期+同权益组合」只标首周（窗口内；原按 title 去重的口径，
+ *  结构化后签名 = 档期+headline 集合） */
 export function buildOfferMarkers(p: {
   enabled: boolean | undefined;
   geom: Geom | null;
@@ -444,9 +464,12 @@ export function buildOfferMarkers(p: {
   for (const s of p.series) {
     const seen = new Set<string>();
     s.points.forEach((pt, i) => {
-      if (!pt.offer || pt.price == null || seen.has(pt.offer.title)) return;
-      seen.add(pt.offer.title);
-      out.push({ key: `${s.key}|${pt.offer.title}|${i}`, x: xPxOf(p.geom!, i), y: yPxOf(p.geom!, pt.price), offer: pt.offer });
+      const sig = offerList(pt.offer)
+        .map((d) => `${d.promoName}|${d.headline}`)
+        .join(';');
+      if (!pt.offer || pt.price == null || seen.has(sig)) return;
+      seen.add(sig);
+      out.push({ key: `${s.key}|${sig}|${i}`, x: xPxOf(p.geom!, i), y: yPxOf(p.geom!, pt.price), offer: pt.offer });
     });
   }
   return out;
@@ -515,6 +538,222 @@ export function buildTierBoxes(p: {
       if (h < 2) continue;
       out.push({ label: tier.label, top, h, empty: !hasData });
     }
+  }
+  return out;
+}
+
+// ---------------- 价格摘要条（第三十四轮：账面价 vs 成交价三件套） ----------------
+
+/** 摘要条一项 = 一条系列某时点的三元组（折后价 / RRP / 折扣率）+ 竞品差价率 + 来源店铺 */
+export interface PriceSummaryItem {
+  key: string;
+  brand: string;
+  name: string; // curveNameOf 同款（去品牌前缀/容量后缀）
+  color: string;
+  isOwn: boolean;
+  price: number | null; // 折后价
+  rrp: number | null; // RRP（划线价）
+  /** 折扣率 = price/rrp − 1（负 = 低于账面价）；两者不全或 rrp≤0 为 null */
+  discount: number | null;
+  /** 竞品专属：price 相对首个我司系列 price 的差价率（负 = 竞品比我便宜）；无我司基准为 null */
+  diffVsOwn: number | null;
+  asOf: string | null; // 该点的 xLabel（周=MM-DD / 月=YYYYMM / 季=YYYYQn）
+  shop: string | null; // 该点来源店铺（来源口径随点走）
+  url: string; // 取证跳转链接（摘要条「来源」超链接用）
+}
+
+/**
+ * 摘要条纯计算（第三十四轮引入，第三十五轮扩展时点模式）：口径固定「折后价 vs RRP」，
+ * 与图表 priceTypes 无关。
+ * - atIdx 缺省 = 窗口内最后有值点（默认态「最新」）；
+ * - atIdx 给定 = 悬停时点模式（迪总：划过图表摘要条显示所选时点）——固定取该下标，
+ *   该时点无值的系列输出全 null 项（摘要条显示「—」）。
+ */
+export function buildPriceSummary(series: Series[], atIdx?: number | null): PriceSummaryItem[] {
+  const items: PriceSummaryItem[] = series.map((s) => {
+    let idx = -1;
+    if (atIdx != null) {
+      idx = atIdx >= 0 && atIdx < s.points.length ? atIdx : -1;
+    } else {
+      for (let i = s.points.length - 1; i >= 0; i--) {
+        if (s.points[i].price != null || s.points[i].rrp != null) {
+          idx = i;
+          break;
+        }
+      }
+    }
+    const pt = idx >= 0 ? s.points[idx] : null;
+    const price = pt?.price ?? null;
+    const rrp = pt?.rrp ?? null;
+    const discount = price != null && rrp != null && rrp > 0 ? price / rrp - 1 : null;
+    return {
+      key: s.key,
+      brand: s.brand,
+      name: curveNameOf(s),
+      color: s.color,
+      isOwn: s.isOwn,
+      price,
+      rrp,
+      discount,
+      diffVsOwn: null,
+      asOf: pt?.xLabel ?? null,
+      shop: pt?.shopName ?? null,
+      url: pt?.url ?? '',
+    };
+  });
+  const ownPrice = items.find((it) => it.isOwn && it.price != null)?.price ?? null;
+  if (ownPrice != null && ownPrice > 0) {
+    for (const it of items) {
+      if (!it.isOwn && it.price != null) it.diffVsOwn = it.price / ownPrice - 1;
+    }
+  }
+  return items;
+}
+
+// ---------------- 大促背景带（第三十四轮：俄区促销日历 → 图内时间带 + 图下事件行） ----------------
+
+export interface PromoBand {
+  key: string; // promo_id
+  name: string; // 全名（事件卡用）
+  shortName: string; // 带内缩写 = promo_name 首段（如「黑五」「11.11」「开学季」）
+  depth: DimPromo['depth_hint'];
+  startIdx: number; // 覆盖的首桶（窗口局部下标）
+  endIdx: number; // 覆盖的末桶
+  startFrac: number; // 首桶内左缘分数 [0,1)
+  endFrac: number; // 末桶内右缘分数 (0,1]
+  weeks: number; // 覆盖桶数（endIdx − startIdx + 1）
+  dateText: string; // MM.DD–MM.DD
+}
+
+/**
+ * 促销日历 → 窗口内时间带（第三十四轮）：桶覆盖区间由 bucketSpans 给出，promo 与桶按
+ * 日期区间相交判定；边缘分数 = 相交天数 / 桶跨天数，渲染层据 (idx, frac) 换算像素。
+ * 输出按 startIdx 升序（= 图内编号锚点顺序）。
+ */
+export function buildPromoBands(p: {
+  promos: Pick<DimPromo, 'promo_id' | 'promo_name' | 'start_date' | 'end_date' | 'depth_hint'>[];
+  spans: { start: string; end: string }[];
+}): PromoBand[] {
+  const DAY = 86400000;
+  const utc = (s: string): number => {
+    const [y, m, d] = s.split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  const out: PromoBand[] = [];
+  for (const promo of p.promos) {
+    const ps = utc(promo.start_date);
+    const pe = utc(promo.end_date);
+    let startIdx = -1;
+    let endIdx = -1;
+    let startFrac = 0;
+    let endFrac = 1;
+    for (let i = 0; i < p.spans.length; i++) {
+      const bs = utc(p.spans[i].start);
+      const be = utc(p.spans[i].end);
+      if (ps > be || pe < bs) continue;
+      const len = Math.max(1, be - bs);
+      if (startIdx < 0) {
+        startIdx = i;
+        startFrac = Math.min(1, Math.max(0, (ps - bs) / len));
+      }
+      endIdx = i;
+      endFrac = Math.min(1, Math.max(0, (pe - bs) / len));
+    }
+    if (startIdx < 0) continue;
+    out.push({
+      key: promo.promo_id,
+      name: promo.promo_name,
+      shortName: promo.promo_name.split(/\s+/)[0] ?? promo.promo_name,
+      depth: promo.depth_hint,
+      startIdx,
+      endIdx,
+      startFrac,
+      endFrac,
+      weeks: endIdx - startIdx + 1,
+      dateText: `${promo.start_date.slice(5).replace('-', '.')}–${promo.end_date.slice(5).replace('-', '.')}`,
+    });
+  }
+  return out.sort((a, b) => a.startIdx - b.startIdx || a.endIdx - b.endIdx);
+}
+
+/**
+ * 桶的日期覆盖区间（促销带相交判定用）已移至 helpers.bucketSpans（那边可读 dimTime）。
+ */
+
+// ---------------- 特殊降价点 / 最高最低参照线（第三十五轮） ----------------
+
+/** 降价点判定阈值：折后价相对前一个有值点下降 ≥ 5% 视为「特殊降价」
+ *  （月/季桶下 5% 已是明显异动；10% 在本数据集永不触发，demo 不可见） */
+export const DROP_THRESHOLD = 0.05;
+
+/**
+ * 特殊降价点（第三十五轮，迪总：特殊降价点显示降价幅度）：
+ * 折后价相对前一个有值点降幅 ≥ DROP_THRESHOLD 的点位；首点不标；缺采跨接后仍与前
+ * 有值点比较。key = `${seriesKey}|${idx}`，值 = 降幅正数（0.23 → 渲染 ↓23%）。
+ */
+/**
+ * 价格变化标记（第四十二轮：阈值可调 + 含上涨；第四十六轮：threshold 0 = 标出全部
+ * 真实变化——价格未动的点仍不标，关闭语义由调用方传负值/null 承担）：相较前一有值点
+ * |Δ| ≥ threshold 的点返回带符号变化率（负=降、正=升），渲染层据此出 ↓/↑ 徽标。
+ * epsilon 兜浮点边界（90/100−1 = −0.0999…98）。
+ */
+export function buildChangeMarks(series: Series[], threshold: number = DROP_THRESHOLD): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!(threshold >= 0)) return out;
+  for (const s of series) {
+    let prev: number | null = null;
+    s.points.forEach((pt, i) => {
+      if (pt.price == null) return;
+      if (prev != null && prev > 0) {
+        const chg = pt.price / prev - 1;
+        if (Math.abs(chg) > 1e-9 && Math.abs(chg) >= threshold - 1e-9) out.set(`${s.key}|${i}`, chg);
+      }
+      prev = pt.price;
+    });
+  }
+  return out;
+}
+
+export interface ExtremeMark {
+  key: string;
+  color: string;
+  maxV: number;
+  maxIdx: number; // 最高点下标（渲染层画点上方胶囊）
+  minV: number;
+  minIdx: number; // 最低点下标（渲染层画点下方胶囊 + 高亮点环，Keepa「最低价」画法）
+}
+
+/**
+ * 窗口内最高/最低价点标记（第三十六轮改口径，迪总：如 Keepa 图——标签钉在极值点旁，
+ * 不拉全宽虚线）：主价口径（primaryPriceOf）的窗口极值及其首个出现下标；
+ * maxV === minV（全程一条价）不画——标签与价格线重合无信息量。
+ */
+export function buildExtremeMarks(p: {
+  geom: Geom | null;
+  series: Series[];
+  priceTypes: PriceTypes;
+}): ExtremeMark[] {
+  if (!p.geom) return [];
+  const out: ExtremeMark[] = [];
+  for (const s of p.series) {
+    let maxV: number | null = null;
+    let minV: number | null = null;
+    let maxIdx = -1;
+    let minIdx = -1;
+    s.points.forEach((pt, i) => {
+      const v = primaryPriceOf(pt, p.priceTypes);
+      if (v == null) return;
+      if (maxV == null || v > maxV) {
+        maxV = v;
+        maxIdx = i;
+      }
+      if (minV == null || v < minV) {
+        minV = v;
+        minIdx = i;
+      }
+    });
+    if (maxV == null || minV == null || maxIdx < 0 || minIdx < 0 || maxV === minV) continue;
+    out.push({ key: s.key, color: s.color, maxV, maxIdx, minV, minIdx });
   }
   return out;
 }

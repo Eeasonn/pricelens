@@ -183,7 +183,8 @@ const MISSING_RATE = 0.04; // A9
 const OFFER_RATE = 0.6; // A11
 const LAUNCH_WEEKS = 8;
 const GIFT_ITEMS = ['无线耳机', '保护壳', '原装表带'];
-const OFFER_TYPE_NAME = { installment: '先享后付', gift: '赠品', coupon: '平台券' };
+const OFFER_TYPE_NAME = { installment: '先享后付', gift: '赠品', coupon: '平台券', combo: '组合' };
+const COMBO_RATE = 0.35; // 深档期 offer 转「三重礼」组合的比例（第四十九轮）
 
 function brandModifier(model, tier) {
   let mod = 1;
@@ -251,6 +252,11 @@ function buildFact(dimTime, dimProduct) {
   // 档期 offer（每 SKU × 档期至多一种，≥60% 概率）
   function offerOf(skuId, promo) {
     if (rnd(`offer|${skuId}|${promo.promo_id}`) >= OFFER_RATE) return null;
+    // 深档期部分 offer 为「三重礼」组合：折扣+分期+赠品并存（第四十九轮，验证多层同显）
+    if (promo.depth_hint === '深' && rnd(`combo|${skuId}|${promo.promo_id}`) < COMBO_RATE) {
+      const endMd = promo.end_date.slice(5).replace('-', '-');
+      return { type: 'combo', endMd, endDate: promo.end_date, promoName: promo.promo_name };
+    }
     const roll = rnd(`offertype|${skuId}|${promo.promo_id}`);
     const type = roll < 1 / 3 ? 'installment' : roll < 2 / 3 ? 'gift' : 'coupon';
     const endMd = promo.end_date.slice(5).replace('-', '-');
@@ -258,6 +264,12 @@ function buildFact(dimTime, dimProduct) {
   }
   function offerText(skuId, promo, off, priceRub, wedDate) {
     const remain = Math.max(0, Math.round((parseDate(promo.end_date) - parseDate(wedDate)) / DAY_MS));
+    if (off.type === 'combo') {
+      const n = rnd(`inst|${skuId}|${promo.promo_id}`) < 0.5 ? 6 : 12;
+      const item = GIFT_ITEMS[Math.floor(rnd(`gift|${skuId}|${promo.promo_id}`) * GIFT_ITEMS.length)];
+      const pct = rnd(`coup|${skuId}|${promo.promo_id}`) < 0.5 ? 5 : 10;
+      return `平台券 −${pct}% / 先享后付免息 ${n} 期 / 下单赠 ${item}，至 ${off.endMd}`;
+    }
     if (off.type === 'installment') {
       const n = rnd(`inst|${skuId}|${promo.promo_id}`) < 0.5 ? 6 : 12;
       return `先享后付免息 ${n} 期，至 ${off.endMd} 银行价 ${priceRub}卢布 / 关税约 ${Math.round(priceRub * 0.13)}卢布 / 活动剩 ${remain}天`;

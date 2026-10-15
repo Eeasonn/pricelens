@@ -6,6 +6,23 @@
 import type { CSSProperties } from 'react';
 import { brandColor } from '../theme/tokens';
 
+/** 品牌枚举值 → 展示名（第四十五轮：总览矩阵产品名带品牌；未登记品牌原样返回） */
+const BRAND_LABELS: Record<string, string> = {
+  HUAWEI: 'Huawei',
+  APPLE: 'Apple',
+  SAMSUNG: 'Samsung',
+  HONOR: 'Honor',
+  XIAOMI: 'Xiaomi',
+};
+export function brandLabelOf(brand: string): string {
+  return BRAND_LABELS[brand] ?? brand;
+}
+/** 品牌全名：型号名已含品牌词（如「Honor 600」）则不重复前缀 */
+export function fullModelName(brand: string, modelName: string): string {
+  const b = brandLabelOf(brand);
+  return modelName.toLowerCase().startsWith(b.toLowerCase()) ? modelName : `${b} ${modelName}`;
+}
+
 /** 品牌色小圆点：所有品牌名前的前置标记（筛选器触发器/级联品牌列/图上系列名/钉顶卡片） */
 export default function BrandDot({
   brand,

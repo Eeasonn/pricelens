@@ -329,7 +329,9 @@ const sm = buildSeries(qm);
 assert(sm.length === 2 && sm[0].points.length === 5, '5 个月桶');
 const aug = sm[0].points.find(p => p.bucketId === '202608')!;
 assert(aug.xLabel === '202608', '月 xLabel');
-assert(aug.offer != null && aug.offer.remainingDays >= 0, '月桶 offer 附注 + remainingDays=' + aug.offer?.remainingDays);
+const offerDet = aug.offer ? [aug.offer.discount, aug.offer.installment, aug.offer.gift].find(Boolean) : null;
+assert(offerDet != null && offerDet.remainingDays >= 0 && offerDet.headline.length > 0,
+  '月桶 offer 附注（第四十八轮结构化三权益）headline=' + (offerDet?.headline ?? '无'));
 assert(aug.price != null && aug.price < 1000, 'USD 折算取整（< $1000），got ' + aug.price);
 const qw = { ...base, granularity: 'week' as const, platform: { platforms: ['DNS'], shopIds: [] } };
 const dns = buildSeries(qw)[0].points[12].price!;

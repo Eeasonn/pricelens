@@ -2,8 +2,8 @@
 // 筛选状态：五框状态 + §5.6 联动 + localStorage 持久化（LPL3.filters）
 // + §13 CONFIG_CHANGED_EVENT 监听（反馈第 8 条修订：配置保存不再自动改竞品，
 //   竞品由筛选条「匹配竞品」按钮按配置矩阵带出）
-// 默认视图（§15.4-A13，第二十五轮改）：月 · USD · 我司 Pura 90s Pro 12+256（最低价颜色）
-// + 其配置竞品（主竞品在前）· 仅折后价 · 时间自适应开
+// 默认视图（§15.4-A13，第二十五轮起多轮演进）：周 · USD · 平台 OZON · 我司 Pura 90s Pro
+// 12+256（最低价颜色）+ 其配置竞品（主竞品在前）· 折后价+RRP · 时间自适应开 · 自动匹配开
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -21,21 +21,25 @@ export const defaultFilters: FiltersState = {
   industry: 'phone',
   own: [],
   competitors: [],
-  platform: null,
-  granularity: 'month',
+  platform: { platforms: ['OZON'], shopIds: [] }, // 第三十九轮：单平台口径定版——平台默认选中 OZON（勾选平台 = 其下全部店铺）
+  granularity: 'week', // 第四十二轮：默认周（迪总「时间默认取周」）
   adaptive: true, // 第十九轮：时间自适应默认开
-  rangeStart: '202607', // 与月粒度自洽的默认范围（自适应开时会被数据跨度覆盖）
-  rangeEnd: '202610',
+  rangeStart: '202601', // 与周粒度自洽的默认范围（自适应开时会被数据跨度覆盖）
+  rangeEnd: '202641',
   currency: 'usd', // 第二十五轮：默认 USD（参考汇率 80 折算）
-  priceTypes: { discounted: true, rrp: false },
+  priceTypes: { discounted: true, rrp: true }, // 第三十四轮：RRP 默认开（账面价常驻，虚线弱化渲染）
   agg: 'avg',
+  autoMatch: true, // 第三十四轮：自动匹配竞品默认开（竞品跟随我司产品，迪总「减少筛选器」）
 };
 
 /**
  * 默认视图版本：默认态字段（粒度/币种/竞品带出等）变更时 +1。
  * 持久化载荷带上 v；旧版本视为过期 → 本次启动直接落新默认视图（其后照常留存用户改动）。
+ * v3（2026-10-14）：+autoMatch 开关、RRP 默认开。
+ * v4（2026-10-14）：平台默认选中 OZON（第三十六轮起数据=单平台口径，筛选器显性化）。
+ * v5（2026-10-15）：时间默认取周。
  */
-const DEFAULTS_V = 2;
+const DEFAULTS_V = 5;
 
 /** 我司默认产品（§5.2②：Pura 90s Pro · 12+256，其最低价颜色） */
 const DEFAULT_OWN_MODEL = 'Pura 90s Pro';
@@ -97,7 +101,7 @@ interface FiltersCtx {
 
 const Ctx = createContext<FiltersCtx>({
   state: defaultFilters,
-  actions: { set: () => {}, switchOwnProduct: () => {}, reset: () => {}, setGranularity: () => {}, setOwnSelection: () => {}, resetCompetitorsToConfig: () => {} },
+  actions: { set: () => {}, switchOwnProduct: () => {}, reset: () => {}, setGranularity: () => {}, setOwnSelection: () => {}, resetCompetitorsToConfig: () => {}, setAutoMatch: () => {} },
 });
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
@@ -112,11 +116,12 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     }
   }, [state]);
 
-  // §13：配置页保存（CONFIG_CHANGED_EVENT）→ 保留联动监听（fx 为读取时取值，图表侧自行监听）；
-  // 反馈第 8 条修订：**不再自动改当前竞品选择**，用户点「匹配竞品」才应用新矩阵。
+  // §13：配置页保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算竞品组
+  // （第三十四轮：矩阵在配置页维护后跟随生效；关闭自动匹配则不动当前竞品）；
+  // fx 为读取时取值，图表侧自行监听。
   useEffect(() => {
     const handler = () => {
-      /* 反馈第 8 条：配置保存不自动覆盖竞品；匹配由筛选条「匹配竞品」按钮触发 */
+      setState((s) => (s.autoMatch ? { ...s, competitors: groupsFromBenchmark(s.own) } : s));
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, handler);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, handler);
@@ -129,10 +134,16 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       set: (patch) => setState((s) => ({ ...s, ...patch })),
 
       /**
-       * §5.6 切换我司产品：own 置为该产品；反馈第 8 条修订——不再自动带出竞品组。
-       * 图表侧监听 state.own 变化把档位 chips / Y 轴回自动（本 action 只保证 state 正确）。
+       * §5.6 切换我司产品：own 置为该产品。第三十四轮：autoMatch 开 = 竞品自动跟随
+       * 新产品（配置矩阵并集）；关 = 不动竞品。图表侧监听 state.own 变化把档位 chips /
+       * Y 轴回自动（本 action 只保证 state 正确）。
        */
-      switchOwnProduct: (sel) => setState((s) => ({ ...s, own: [sel] })),
+      switchOwnProduct: (sel) =>
+        setState((s) => ({
+          ...s,
+          own: [sel],
+          ...(s.autoMatch ? { competitors: groupsFromBenchmark([sel]) } : {}),
+        })),
 
       /** 回到默认视图（含数据默认我司勾选 + 其配置竞品） */
       reset: () => setState(loadInitialState()),
@@ -149,10 +160,16 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
         }),
 
       /**
-       * §5.2②：级联勾选我司产品（可多选同图）→ 反馈第 8 条修订：不动竞品（保持当前值），
-       * 用户点「匹配竞品」才按配置矩阵带出；竞品临时增删不回写配置（§5.2③/§13）。
+       * §5.2②：级联勾选我司产品（可多选同图）。第三十四轮：autoMatch 开 = 竞品自动
+       * 跟随（配置矩阵并集）；关 = 不动竞品（保持当前值，手动勾选语义）；
+       * 竞品临时增删不回写配置（§5.2③/§13）。
        */
-      setOwnSelection: (list) => setState((s) => ({ ...s, own: list })),
+      setOwnSelection: (list) =>
+        setState((s) => ({
+          ...s,
+          own: list,
+          ...(s.autoMatch ? { competitors: groupsFromBenchmark(list) } : {}),
+        })),
 
       /**
        * 「匹配竞品」（反馈第 8 条）：把竞品组置为当前所有已选我司产品的配置组并集
@@ -161,6 +178,17 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
        */
       resetCompetitorsToConfig: () =>
         setState((s) => ({ ...s, competitors: groupsFromBenchmark(s.own) })),
+
+      /**
+       * 第三十四轮：自动匹配开关。开 = 立即按配置矩阵重算当前竞品组；
+       * 关 = 保留当前竞品转为手动（可自由增删）。
+       */
+      setAutoMatch: (on) =>
+        setState((s) => ({
+          ...s,
+          autoMatch: on,
+          ...(on ? { competitors: groupsFromBenchmark(s.own) } : {}),
+        })),
     }),
     [],
   );

@@ -19,7 +19,7 @@ import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataM
 // ---------------- 布局常量（Chart 的 grid 与 DOM 覆盖层共用） ----------------
 
 /** grid 固定边距：top 预留钉顶附框行（§6.2 附框钉在绘图区上方同一水平线） */
-export const GRID = { top: 78, bottom: 36, right: 24 } as const;
+export const GRID = { top: 78, bottom: 40, right: 24 } as const; // bottom 含大促图标专用行 22px + 轴标签（第四十七轮）
 
 /** §6.6 每格像素间距恒定（高度自适应的基准）。
  *  第十二轮 46→92：×1.0 倍率下刻度密度降一倍（同高约半数刻度，如 60K~110K 直接 10K 一档），
@@ -496,6 +496,34 @@ export function enumerateBuckets(g: Granularity, startId: string, endId: string)
     if (id >= startId && id <= endId && !ids.includes(id)) ids.push(id);
   }
   return ids.sort().map((id) => ({ id, xLabel: id }));
+}
+
+/** 桶的日期覆盖区间（第三十四轮，大促背景带相交判定用）：周桶 = 锚周三 ±3 天；
+ *  月/季桶 = 首末周周三 ±3 天。dimTime 未就绪时回退桶 id 自身（不会相交于合法日期）。 */
+export function bucketSpans(g: Granularity, buckets: Bucket[]): { start: string; end: string }[] {
+  const DAY = 86400000;
+  const utc = (s: string): number => {
+    const [y, m, d] = s.split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  const iso = (t: number): string => new Date(t).toISOString().slice(0, 10);
+  const wedOf = new Map(dimTime.map((r) => [r.week_id, r.week_wed_date]));
+  const weeksOfBucket = new Map<string, string[]>();
+  if (g !== 'week') {
+    const field = g === 'month' ? 'month_id' : 'quarter_id';
+    for (const r of dimTime) {
+      const arr = weeksOfBucket.get(r[field]);
+      if (arr) arr.push(r.week_id);
+      else weeksOfBucket.set(r[field], [r.week_id]);
+    }
+  }
+  return buckets.map((b) => {
+    const ids = g === 'week' ? [b.id] : (weeksOfBucket.get(b.id) ?? []).sort();
+    const first = ids.length ? wedOf.get(ids[0]) : undefined;
+    const last = ids.length ? wedOf.get(ids[ids.length - 1]) : undefined;
+    if (!first || !last) return { start: b.id, end: b.id };
+    return { start: iso(utc(first) - 3 * DAY), end: iso(utc(last) + 3 * DAY) };
+  });
 }
 
 /** §6.5(新) 平移步长：月=1 月、季=1 季、周=4 周（箭头点击 / 拖窗口吸附均按整桶计） */

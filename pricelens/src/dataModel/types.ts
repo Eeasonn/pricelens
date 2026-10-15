@@ -100,15 +100,28 @@ export type Granularity = 'week' | 'month' | 'quarter';
 export type CurrencyMode = 'local' | 'usd';
 export type AggMode = 'avg' | 'min'; // 周→月/季 卷积方式
 
-/** offer 浮窗所需信息（文本权益，不计价） */
-export interface OfferInfo {
-  title: string;
-  text: string;
+// ---------------- offer 结构化权益（第四十八轮重构） ----------------
+// 折扣（含优惠券）/ 分期 / 赠品 三类主要信息；一个数据点的 offer = 三类权益的合集
+// （demo 数据每周每 SKU 至多一条，落三类之一；结构上可并存）。
+
+export type OfferKind = 'discount' | 'installment' | 'gift';
+
+/** 单条权益（文本权益，不计价——银行价/关税估算为分期方案的参考数字） */
+export interface OfferDetail {
+  kind: OfferKind;
+  promoName: string; // 所属档期（如「黑五 Чёрная пятница」）
+  headline: string; // 一眼短文案：「券 −10%」/「6 期免息」/「赠无线耳机」
+  detail: string; // 卡片完整权益说明（已剥离至日期/剩余天数/银行价等结构化字段）
   endDate: string; // YYYY-MM-DD
   remainingDays: number; // 相对该数据点锚日
-  platforms: string[];
-  bankPriceRub?: number;
-  tariffEstRub?: number;
+  bankPriceRub?: number; // 分期（先享后付）专属
+  tariffEstRub?: number; // 分期（先享后付）专属
+}
+
+export interface OfferInfo {
+  discount?: OfferDetail; // 折扣（含优惠券：平台券/立减）
+  installment?: OfferDetail; // 分期（先享后付免息）
+  gift?: OfferDetail; // 赠品
 }
 
 /** 图上一个数据点（币种折算与取整已完成，图表层直用） */

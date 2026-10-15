@@ -34,6 +34,9 @@ export default function Dashboard() {
             </span>
           </div>
           <div style={{ display: 'flex', gap: space.sm }}>
+            <Button size="small" style={{ height: 28 }} onClick={() => go('overview')}>
+              总览
+            </Button>
             <Button size="small" type="primary" style={{ height: 28 }}>
               价格看板
             </Button>
