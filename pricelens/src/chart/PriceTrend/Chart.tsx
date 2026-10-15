@@ -41,7 +41,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, font, fontSize, radius, shadow } from '../../theme/tokens';
+import { color, font, fontSize, formatPrice, radius, shadow } from '../../theme/tokens';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import {
   BREAK_PX,
@@ -75,7 +75,7 @@ import {
   buildGeom,
   buildLabelPlan,
   buildOfferMarkers,
-  offerSummary,
+  offerLineItems,
   buildOption,
   buildTierBoxes,
   buildTickRows,
@@ -86,7 +86,8 @@ import {
   type PromoBand,
   type SeriesNameItem,
 } from './chartModel';
-import JumpIcon from './JumpIcon';
+import SnapshotIcon from './SnapshotIcon';
+import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 import DrillIcon from './DrillIcon';
 import OfferPopover from './OfferPopover';
 import ScaleSlider from './ScaleSlider';
@@ -217,6 +218,8 @@ export default function Chart(props: ChartProps) {
   // 价格变化阈值（第四十六轮起受控于标题行开关+连贯滑杆；旧版齿轮 Select 的内部
   // 默认 5 与档位 0.05 单位不一致 = 实际恒关闭，一并修正）
   const changeThreshold = props.changeThreshold ?? null;
+  // 页面快照浮窗（第五十轮）：悬停「快照」图标点击弹出——历史点取证 = 截图，不再跳现页
+  const [snapInfo, setSnapInfo] = useState<SnapshotInfo | null>(null);
 
   // 图顶预留（第三十五轮定版）：₽/$+齿轮（左）与图例 chips（右）单行 36px；
   // 第四十二轮：大促档期图标移到时间轴与图表之间的窄条，图顶不再随大促行数增高
@@ -980,16 +983,19 @@ export default function Chart(props: ChartProps) {
                 .map((s) => ({ s, v: primaryPriceOf(s.points[hoverIdx], priceTypes) }))
                 .filter((r) => r.v != null) as { s: (typeof series)[number]; v: number }[];
               if (rows.length === 0) return null;
-              // 第四十八轮：有 offer 的系列在价格行下附琥珀摘要行（headline 合并）
-              const offerLines = rows.map((r) => offerSummary(r.s.points[hoverIdx]?.offer));
-              const nOffer = offerLines.filter(Boolean).length;
+              // 第四十八轮：有 offer 的系列在价格行下附权益行；第五十轮改结构化三字段
+              // （折扣/分期/赠品 各占一行，只出有值的字段），随「offer 权益」开关整体显隐
+              const offerRows = rows.map((r) =>
+                props.enableOffer ? offerLineItems(r.s.points[hoverIdx]?.offer) : [],
+              );
+              const nOfferLines = offerRows.reduce((acc, l) => acc + l.length, 0);
               const x0 = xPxOf(geom, hoverIdx);
               const W = 190;
               const flip = x0 + 16 + W > geom.plotLeft + geom.plotWidth;
               const left = flip ? x0 - 16 - W : x0 + 16;
               const top = Math.min(
                 Math.max(geom.plotTop + 8, 40),
-                geom.plotTop + geom.plotHeight - 36 - (rows.length * 18 + nOffer * 15),
+                geom.plotTop + geom.plotHeight - 36 - (rows.length * 18 + nOfferLines * 15),
               );
               return (
                 <div
@@ -1013,7 +1019,7 @@ export default function Chart(props: ChartProps) {
                   {rows.map(({ s, v }, ri) => {
                     const pt = s.points[hoverIdx];
                     const dim = focusActive && s.key !== focusKey;
-                    const sum = offerLines[ri];
+                    const items = offerRows[ri];
                     return (
                       <Fragment key={s.key}>
                         <div
@@ -1039,23 +1045,31 @@ export default function Chart(props: ChartProps) {
                             </span>
                           )}
                         </div>
-                        {sum && (
+                        {items.map((it) => (
                           <div
-                            title={sum}
+                            key={it.kind}
                             style={{
                               paddingLeft: 13,
                               fontSize: 10,
                               lineHeight: '15px',
-                              color: color.warning,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
+                              display: 'flex',
+                              gap: 5,
                               opacity: dim ? 0.3 : undefined,
                             }}
                           >
-                            {sum}
+                            <span style={{ color: color.mute, flexShrink: 0 }}>{it.label}</span>
+                            <span
+                              style={{
+                                color: color.warning,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {it.text}
+                            </span>
                           </div>
-                        )}
+                        ))}
                       </Fragment>
                     );
                   })}
@@ -1231,7 +1245,8 @@ export default function Chart(props: ChartProps) {
           {offerMarkers.map((m) => (
             <OfferPopover key={m.key} x={m.x} y={m.y} offer={m.offer} />
           ))}
-          {/* 悬停跳转取证（仅周视图；空心点不可跳）；聚焦模式非聚焦系列降透明 */}
+          {/* 悬停快照取证（第五十轮，替代跳转商城；仅周视图；空心点不渲染）：
+              「快照」胶囊点击弹页面快照浮窗；聚焦模式非聚焦系列降透明 */}
           {props.enableJump &&
             hoverIdx != null &&
             series.map((s) => {
@@ -1239,8 +1254,21 @@ export default function Chart(props: ChartProps) {
               if (!p || p.missing || p.price == null || !p.url) return null;
               const dim = focusActive && s.key !== focusKey;
               return (
-                <span key={`jp-${s.key}`} style={{ opacity: dim ? 0.15 : undefined }}>
-                  <JumpIcon x={xPxOf(geom, hoverIdx)} y={yPxOf(geom, p.price)} url={p.url} />
+                <span key={`snap-${s.key}`} style={{ opacity: dim ? 0.15 : undefined }}>
+                  <SnapshotIcon
+                    x={xPxOf(geom, hoverIdx)}
+                    y={yPxOf(geom, p.price)}
+                    onClick={() =>
+                      setSnapInfo({
+                        seriesLabel: curveNameOf(s),
+                        shopName: p.shopName,
+                        bucketId: p.bucketId,
+                        dateText: fmt_hoverDate(granularity, p.xLabel),
+                        priceText: formatPrice(p.price, props.currency),
+                        url: p.url,
+                      })
+                    }
+                  />
                 </span>
               );
             })}
@@ -1268,6 +1296,8 @@ export default function Chart(props: ChartProps) {
             })}
         </>
       )}
+      {/* 页面快照浮窗（第五十轮）：antd Modal 传送门渲染，居中小弹框 */}
+      <SnapshotModal info={snapInfo} onClose={() => setSnapInfo(null)} />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 // + §13 CONFIG_CHANGED_EVENT 监听（反馈第 8 条修订：配置保存不再自动改竞品，
 //   竞品由筛选条「匹配竞品」按钮按配置矩阵带出）
 // 默认视图（§15.4-A13，第二十五轮起多轮演进）：周 · USD · 平台 OZON · 我司 Pura 90s Pro
-// 12+256（最低价颜色）+ 其配置竞品（主竞品在前）· 折后价+RRP · 时间自适应开 · 自动匹配开
+// 12+256（最低价颜色）+ 其配置竞品（主竞品在前）· 仅折后价（第五十轮）· 时间自适应开 · 自动匹配开
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -27,7 +27,7 @@ export const defaultFilters: FiltersState = {
   rangeStart: '202601', // 与周粒度自洽的默认范围（自适应开时会被数据跨度覆盖）
   rangeEnd: '202641',
   currency: 'usd', // 第二十五轮：默认 USD（参考汇率 80 折算）
-  priceTypes: { discounted: true, rrp: true }, // 第三十四轮：RRP 默认开（账面价常驻，虚线弱化渲染）
+  priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
   agg: 'avg',
   autoMatch: true, // 第三十四轮：自动匹配竞品默认开（竞品跟随我司产品，迪总「减少筛选器」）
 };
@@ -38,8 +38,9 @@ export const defaultFilters: FiltersState = {
  * v3（2026-10-14）：+autoMatch 开关、RRP 默认开。
  * v4（2026-10-14）：平台默认选中 OZON（第三十六轮起数据=单平台口径，筛选器显性化）。
  * v5（2026-10-15）：时间默认取周。
+ * v6（2026-10-15）：RRP 默认不勾选（第五十轮）。
  */
-const DEFAULTS_V = 5;
+const DEFAULTS_V = 6;
 
 /** 我司默认产品（§5.2②：Pura 90s Pro · 12+256，其最低价颜色） */
 const DEFAULT_OWN_MODEL = 'Pura 90s Pro';

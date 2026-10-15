@@ -23,8 +23,9 @@ export const GRID = { top: 78, bottom: 40, right: 24 } as const; // bottom 含�
 
 /** §6.6 每格像素间距恒定（高度自适应的基准）。
  *  第十二轮 46→92：×1.0 倍率下刻度密度降一倍（同高约半数刻度，如 60K~110K 直接 10K 一档），
- *  伸缩滑杆 ×0.5 即旧版 ×1.0 的密度 */
-export const TICK_PX = 92;
+ *  伸缩滑杆 ×0.5 即旧版 ×1.0 的密度；
+ *  第五十轮 92→80：默认 ×1 每格再缩一截（迪总反馈图偏高），×0.5 档仍可读 */
+export const TICK_PX = 80;
 /** 格数约束：下限保可读，上限防失控（跨度再大也不超 16 格 ≈ 1472px 绘图高） */
 export const MIN_CELLS = 4;
 export const MAX_CELLS = 16;

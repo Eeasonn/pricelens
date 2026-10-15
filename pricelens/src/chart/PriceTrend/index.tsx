@@ -67,6 +67,7 @@ export default function PriceTrend() {
   const [stripGeom, setStripGeom] = useState<StripGeom | null>(null); // 图表上报的横向几何（促销热力带对齐用）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
   const [promoBandsOn, setPromoBandsOn] = useState(true); // 大促档期（第三十五轮：外部显式筛选器，默认选）
+  const [offersOn, setOffersOn] = useState(true); // offer 权益显隐（第五十轮）：关 = 不画徽章、浮窗不出权益行
   const [maxMinOn, setMaxMinOn] = useState(false); // 最高/最低价点标签（默认关）
   // 价格变化提醒（第四十六轮挪出齿轮到标题行）：null=关；阈值=小数（0.05=5%），
   // 滑杆 0~15% 连贯可调（0.5 步进，≥0 可选）。旧版齿轮 Select 内部默认 5 与档位
@@ -320,6 +321,10 @@ export default function PriceTrend() {
         <Checkbox checked={promoBandsOn} onChange={(e) => setPromoBandsOn(e.target.checked)}>
           大促档期
         </Checkbox>
+        {/* offer 权益显隐（第五十轮）：关 = 图上不画 offer 礼物徽章，悬停浮窗也不出权益行 */}
+        <Checkbox checked={offersOn} onChange={(e) => setOffersOn(e.target.checked)}>
+          offer 权益
+        </Checkbox>
         {/* 最高/最低价参照线（第三十五轮）：窗口极值虚线（camel 三虚线画法） */}
         <Checkbox checked={maxMinOn} onChange={(e) => setMaxMinOn(e.target.checked)}>
           最高/最低价
@@ -381,7 +386,7 @@ export default function PriceTrend() {
         gridTop={gridTop}
         enableDrill={state.granularity !== 'week'}
         enableJump={state.granularity === 'week'}
-        enableOffer={state.granularity === 'week'}
+        enableOffer={state.granularity === 'week' && offersOn}
         onDrill={onDrill}
         windowKey={`${win.s}:${win.e}`}
         onGeom={setStripGeom}

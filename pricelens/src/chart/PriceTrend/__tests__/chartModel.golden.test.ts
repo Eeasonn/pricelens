@@ -8,7 +8,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import type { CurrencyMode, OfferInfo, Series, SeriesPoint } from '../../../dataModel/types';
-import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, yPxOf, type Bucket, type YScale } from '../helpers';
+import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, yPxOf, type Bucket, type YScale } from '../helpers';
 import {
   buildChangeMarks,
   buildExtremeMarks,
@@ -17,6 +17,7 @@ import {
   buildGeom,
   buildLabelPlan,
   buildOfferMarkers,
+  offerLineItems,
   offerList,
   offerSummary,
   buildOption,
@@ -359,6 +360,29 @@ describe('buildTickRows / buildTierBoxes / badges / offer', () => {
     expect(offerSummary(offer)).toBe('券 −10% · 6 期免息 · 赠保护壳');
     expect(offerSummary(null)).toBe('');
   });
+
+  it('第五十轮：offerLineItems 结构化三字段（折扣/分期/赠品各一行，只出有值的字段）', () => {
+    const combo: OfferInfo = {
+      discount: { kind: 'discount', promoName: '黑五', headline: '券 −12%', detail: '平台券', endDate: '2026-11-28', remainingDays: 5 },
+      installment: {
+        kind: 'installment',
+        promoName: '黑五',
+        headline: '12 期免息',
+        detail: '先享后付',
+        endDate: '2026-11-28',
+        remainingDays: 5,
+      },
+      gift: { kind: 'gift', promoName: '黑五', headline: '赠保护壳', detail: '下单赠 保护壳', endDate: '2026-11-28', remainingDays: 5 },
+    };
+    expect(offerLineItems(combo)).toEqual([
+      { kind: 'discount', label: '折扣', text: '券 −12%' },
+      { kind: 'installment', label: '分期', text: '12 期免息' },
+      { kind: 'gift', label: '赠品', text: '赠保护壳' },
+    ]);
+    // 只有单类权益时只出一行
+    expect(offerLineItems({ gift: combo.gift })).toEqual([{ kind: 'gift', label: '赠品', text: '赠保护壳' }]);
+    expect(offerLineItems(null)).toEqual([]);
+  });
 });
 
 // ---------------- Y 轴稳定性（第十/十一轮用户反馈的根因回归） ----------------
@@ -681,8 +705,8 @@ describe('段像素需求下限（第三十二轮）', () => {
     expect(bottomMany.pH).toBeGreaterThanOrEqual(10 * MIN_PX_PER_SERIES); // 需求下限抬升
     expect(bottomMany.pH).toBeGreaterThan(bottomFew.pH);
     expect(many.plotHeight).toBeGreaterThan(few.plotHeight);
-    // 无一段触需 → plotHeight 仍是 旧公式 = 格数×92×倍率 + 断裂条
-    expect(few.plotHeight).toBe(few.cells * 92 + (few.segs.length - 1) * 24);
+    // 无一段触需 → plotHeight 仍是 旧公式 = 格数×TICK_PX×倍率 + 断裂条（第五十轮 TICK_PX 92→80）
+    expect(few.plotHeight).toBe(few.cells * TICK_PX + (few.segs.length - 1) * BREAK_PX);
   });
 });
 
@@ -803,6 +827,22 @@ describe('真实造数快照（seed 20261009）', () => {
     expect(buildTickRows(geom)).toMatchSnapshot('tickRows');
     expect(labelPlan).toMatchSnapshot('labelPlan');
     expect({ marks: [...marks.entries()], seriesTypes: (option!.series as Record<string, unknown>[]).map((s) => s.type) }).toMatchSnapshot('marks+types');
+  });
+});
+
+// ---------------- 第五十轮：页面快照注册表（历史点取证 = 截图） ----------------
+
+describe('snapshotFor（demo 轮转绑定）', () => {
+  it('同一 (店铺, 周) 恒定同一张；结果总在注册表内且字段齐全', async () => {
+    const { snapshotFor } = await import('../../../data/snapshots');
+    const a = snapshotFor('Ozon Россия', '202641');
+    const b = snapshotFor('Ozon Россия', '202641');
+    expect(b).toBe(a); // 确定性
+    expect(a.src.length).toBeGreaterThan(0);
+    expect(/^\d{4}-\d{2}-\d{2}$/.test(a.capturedAt)).toBe(true); // 采集日期
+    expect(a.sourceLabel.length).toBeGreaterThan(0);
+    expect(a.pageLabel.length).toBeGreaterThan(0);
+    expect(snapshotFor('TrueSmart', '202620').capturedAt).toBe(a.capturedAt); // 同批采集
   });
 });
 

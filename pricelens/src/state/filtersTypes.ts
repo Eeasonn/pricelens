@@ -30,7 +30,7 @@ export interface FiltersState {
   rangeStart: string; // 桶 id：周 YYYYWW / 月 YYYYMM / 季 YYYYQn
   rangeEnd: string;
   currency: CurrencyMode; // 默认 'usd'（第二十五轮；参考汇率 80 折算），'local'=RUB
-  priceTypes: { discounted: boolean; rrp: boolean }; // 默认折后价+RRP（第三十四轮：RRP 默认开=账面价常驻，虚线弱化渲染）
+  priceTypes: { discounted: boolean; rrp: boolean }; // 默认仅折后价（第五十轮：RRP 默认不勾选，手动勾回看账面价）
   agg: AggMode; // 数据汇总，仅月/季粒度生效，默认 'avg'
   /**
    * 第三十四轮（迪总「尽量减少筛选器」）：自动匹配竞品常驻开关（默认开）——

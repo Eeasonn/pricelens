@@ -6,7 +6,7 @@
 // 金测（chartModel.golden.test.ts）以快照+不变量钉住 17 轮迭代沉淀的边界行为。
 // ============================================================
 import type { EChartsOption } from 'echarts';
-import type { CurrencyMode, DimPromo, Granularity, OfferDetail, OfferInfo, Series, SeriesPoint } from '../../dataModel/types';
+import type { CurrencyMode, DimPromo, Granularity, OfferDetail, OfferInfo, OfferKind, Series, SeriesPoint } from '../../dataModel/types';
 import { color, font, fontSize } from '../../theme/tokens';
 import {
   GRID,
@@ -450,6 +450,18 @@ export function offerSummary(offer: OfferInfo | null | undefined): string {
   return offerList(offer)
     .map((d) => d.headline)
     .join(' · ');
+}
+
+/** 悬停浮窗结构化三字段行（第五十轮）：折扣/分期/赠品 各占一行（只出有值的字段），
+ *  label 为固定类别名，text = 该权益的一眼短文案（headline） */
+export function offerLineItems(
+  offer: OfferInfo | null | undefined,
+): { kind: OfferKind; label: string; text: string }[] {
+  return offerList(offer).map((d) => ({
+    kind: d.kind,
+    label: d.kind === 'discount' ? '折扣' : d.kind === 'installment' ? '分期' : '赠品',
+    text: d.headline,
+  }));
 }
 
 /** offer 徽章：同一系列「同档期+同权益组合」只标首周（窗口内；原按 title 去重的口径，
