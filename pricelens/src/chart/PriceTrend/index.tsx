@@ -29,7 +29,6 @@ import { useAlerts } from '../../components/AlertCenter';
 import { buildSeries, lowestPriceColorSku } from '../../dataModel/aggregate';
 import { getEffectiveBenchmark } from '../../state/configStore';
 import { dimPromo, dimProduct } from '../../data';
-import { modelNameOf } from '../../components/ProductCascader/tree';
 import type {
   AggMode,
   Granularity,
@@ -575,13 +574,7 @@ export default function PriceTrend() {
           marginBottom: space.sm,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>
-          价格走势
-          {/* 第五十四轮追补⑤批注：括号说明写实际产品名（原来「我司的这个产品」是占位话术） */}
-          <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>
-            （{entryModelId ? modelNameOf(entryModelId) : '我司的这个产品'}）
-          </span>
-        </h2>
+        {/* 第六十三轮：区名与产品名都已升格到筛选条标题级（标题融合版），此处只留 ROM 勾选 */}
         {/* ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：checkbox 样式，至少保留一个选中；
             autoMatch 开时竞品随勾选 ROM 的配置矩阵并集自动跟随 */}
         {romOptions.length > 0 && (

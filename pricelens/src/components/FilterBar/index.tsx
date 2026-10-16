@@ -1,28 +1,26 @@
 // ============================================================
-// §4.1/§4.2 筛选条（第二十八轮两行 → 第五十七轮单行 → 第五十九轮上下文条）：
-// 领导反馈「筛选器不直观、国家/产业是重要信息」——筛选框整体降格为一行
-// 可点击的上下文声明（token 式）：
-//   欧亚 / R国 · 手机 ｜ [产品 ▾] vs [竞品 ▾] ｜ [周 ▾] [USD ▾]  ⋯
-// · 国家/产业 = 常显文字上下文（当前各仅一个可选值，实为范围声明；仍在 ⋯ 内可改）
-// · 产品/竞品 = 词块点击弹原有级联；自动匹配开关在竞品弹层内
-// · 粒度/币种 = 词块点击弹 Segmented
-// · 低频（平台/时间范围+自适应）收进行尾 ⋯（偏离默认出数字角标）
+// §4.1/§4.2 筛选条（两行 → 单行 → 上下文条 → 第六十三轮标题融合版）：
+// 「分析谁」升格为页面标题级——第一行 = 价格走势 · [产品] vs [竞品]（17px/700，
+// 虚线底线词块，点击弹原级联面板）；第二行 = 口径行（12px 灰）：
+// 范围（国家·产业）｜ 粒度 · 币种（虚线词块弹 Segmented）｜ 平台 · 范围自适应
+// （弹各自面板）｜ ⋯ 口径（国家/产业低频项 + 偏离默认角标）。
+// 筛选器从「一排框」变成「页面的自我陈述」；国家/产业作为范围声明常显。
 // 反馈 2.4：嵌套 ConfigProvider 浅蓝选中态；filterBarTheme 导出给总览复用。
 // 默认导出与路径不得变更（Dashboard 引用）。
 // ============================================================
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { ConfigProvider, Popover } from 'antd';
-import { DownOutlined, MoreOutlined } from '@ant-design/icons';
+import { MoreOutlined } from '@ant-design/icons';
 import type { ThemeConfig } from 'antd';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
-import { DEFAULT_PLATFORM_SELECTION, useFilters } from '../../state/FiltersContext';
+import { useFilters } from '../../state/FiltersContext';
 import { modelNameOf } from '../ProductCascader/tree';
+import { dimChannel } from '../../data';
 import CountryBox from './CountryBox';
 import PlatformBox from './PlatformBox';
 import CurrencyBox from './CurrencyBox';
 import { GranularityControl, RangeControl } from './TimeBox';
 import { AutoMatchControl, CompetitorControl, IndustryControl, OwnProductControl } from './ProductBox';
-import type { Granularity } from '../../dataModel/types';
 
 /** §5.3 平台框说明（原感叹号文案，降级为悬停提示） */
 const INFO_PLATFORM = '当未筛选平台时，显示该国家下最低价格的平台结果';
@@ -49,10 +47,10 @@ export const filterBarTheme: ThemeConfig = {
   },
 };
 
-/** 筛选器名称：12px 静音灰前缀标签（所有筛选器统一外置于控件左侧） */
+/** 筛选器名称：12px 静音灰前缀标签（弹层内控件统一外置于控件左侧） */
 const filterLabel: CSSProperties = { fontSize: 12, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' };
 
-/** 单元格：外置前缀标签 + 单行 32px 控件；info 降级为原生 title 悬停提示 */
+/** 弹层内单元格：外置前缀标签 + 单行 32px 控件；info 降级为原生 title 悬停提示 */
 function Cell({ flex, min, label, info, children }: { flex: string; min?: number; label: string; info?: string; children: ReactNode }) {
   return (
     <div title={info} style={{ flex, minWidth: min ?? 0, boxSizing: 'border-box', height: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -62,50 +60,61 @@ function Cell({ flex, min, label, info, children }: { flex: string; min?: number
   );
 }
 
-/** 产品格：外置前缀标签 + 级联；button 给出时排在控件**之前**
- *  （第五十三轮：自动匹配开关挪到竞品级联前面——先表态「跟不跟随」，再选竞品） */
-function ProductCell({
-  flex,
-  min,
-  label,
-  info,
-  button,
-  children,
-}: {
-  flex: string;
-  min: number;
-  label: string;
-  info?: string;
-  button?: ReactNode;
-  children: ReactNode;
+/** 组间竖隔线（1×14 灰，时点页签同语言） */
+function Sep({ h = 14 }: { h?: number }) {
+  return <span aria-hidden style={{ width: 1, height: h, background: color.hairlineStrong, flexShrink: 0 }} />;
+}
+
+/** 虚线底线词块（第六十三轮）：网页链接语言的可点文字——静置灰色虚线底线，
+ *  悬停变品牌蓝实线；点击弹选择面板。big = 标题级（17px/700）。 */
+function LinkToken(props: {
+  label: ReactNode;
+  title: string;
+  big?: boolean;
+  muted?: boolean;
+  content: ReactNode;
 }) {
+  const [hover, setHover] = useState(false);
   return (
-    <div title={info} style={{ flex, minWidth: min ?? 0, height: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={filterLabel}>{label}</span>
-      {button}
-      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
-    </div>
+    <Popover trigger="click" placement="bottomLeft" content={props.content} arrow={false}>
+      <span
+        role="button"
+        title={props.title}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          fontSize: props.big ? 17 : props.muted ? 12.5 : 13,
+          fontWeight: props.big ? 700 : props.muted ? 500 : 600,
+          color: hover ? '#0070f3' : props.muted ? color.body : color.ink,
+          borderBottom: `1px ${hover ? 'solid' : 'dashed'} ${hover ? '#0070f3' : '#bfbfbf'}`,
+          paddingBottom: 1,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+        }}
+      >
+        {props.label}
+      </span>
+    </Popover>
   );
 }
 
-/** ⋯ 弹层内有偏离默认项的数量（第五十九轮）：国家≠RU / 产业≠phone / 平台≠默认官方店 / 自适应关。
- *  粒度/币种已升格为常显词块（值直接可见），不再计数。 */
+/** ⋯ 口径弹层内有偏离默认项的数量（第六十三轮起只数隐藏项：国家/产业；
+ *  粒度/币种/平台/自适应的值已常显在口径行，无需角标） */
 function useSecondaryCount(): number {
   const { state } = useFilters();
-  return useMemo(() => {
-    let n = 0;
-    if (!state.adaptive) n += 1;
-    if (state.countryCode !== 'RU') n += 1;
-    if (state.industry !== 'phone') n += 1;
-    if (JSON.stringify(state.platform) !== JSON.stringify(DEFAULT_PLATFORM_SELECTION)) n += 1;
-    return n;
-  }, [state.adaptive, state.countryCode, state.industry, state.platform]);
+  return useMemo(
+    () => (state.countryCode !== 'RU' ? 1 : 0) + (state.industry !== 'phone' ? 1 : 0),
+    [state.countryCode, state.industry],
+  );
 }
 
-/** ⋯ 口径弹层（第五十九轮）：国家/产业（低频改）/平台/时间范围+自适应 */
+/** ⋯ 口径弹层：国家/产业（低频改） */
 function MoreFilters() {
   return (
-    <div style={{ width: 424, display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 4px' }}>
+    <div style={{ width: 300, display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 4px' }}>
       <div style={{ display: 'flex', alignItems: 'center', columnGap: 10 }}>
         <Cell flex="0 0 148px" min={148} label="国家">
           <CountryBox />
@@ -114,73 +123,18 @@ function MoreFilters() {
           <IndustryControl />
         </Cell>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', columnGap: 10 }}>
-        <Cell flex="0 0 164px" min={164} label="平台" info={INFO_PLATFORM}>
-          <PlatformBox />
-        </Cell>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', columnGap: 10 }}>
-        <span style={filterLabel}>范围</span>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
-          <RangeControl />
-        </div>
-      </div>
     </div>
   );
 }
 
-/** 词块（第五十九轮）：文字 + 下拉箭头的轻量按钮——点击弹选择面板。
- *  视觉 = 行内文字的延伸（无粗框），hover 提亮描边示意可点。 */
-function Token({
-  label,
-  title,
-  muted,
-  children,
-}: {
-  label: ReactNode;
-  title: string;
-  muted?: boolean;
-  children: ReactNode;
-}) {
-  const [hover, setHover] = useState(false);
-  return (
-    <Popover trigger="click" placement="bottomLeft" content={children} arrow={false}>
-      <button
-        type="button"
-        title={title}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          height: 26,
-          padding: '0 8px',
-          borderRadius: radius.control,
-          border: `1px solid ${hover ? selectAccent : 'transparent'}`,
-          background: hover ? color.canvasSoft : 'transparent',
-          color: muted ? color.mute : color.ink,
-          fontSize: 13,
-          fontWeight: 600,
-          fontFamily: 'inherit',
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-          maxWidth: 340,
-        }}
-      >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-        <DownOutlined style={{ fontSize: 8, color: color.mute, flexShrink: 0 }} />
-      </button>
-    </Popover>
-  );
+/** 口径行静默段（不可点纯文字） */
+function Plain({ children }: { children: ReactNode }) {
+  return <span style={{ color: color.body, whiteSpace: 'nowrap' }}>{children}</span>;
 }
 
-/** 组间竖隔线（时点页签同语言：1×14 灰） */
-const Sep = <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />;
-
 /** 筛选上下文条（§5）；图表侧消费 useFilters().state。
- *  第五十九轮定版：一行可点击的上下文声明——国家/产业常显文字，产品/竞品/粒度/币种
- *  为词块（点击弹原选择面板），低频项收行尾 ⋯（偏离默认出数字角标）。 */
+ *  第六十三轮定版（方案三 · 标题融合）：第一行 = 价格走势 · 产品 vs 竞品（标题级词块），
+ *  第二行 = 口径行（范围｜粒度·币种｜平台·自适应｜⋯ 口径）。 */
 export default function FilterBar() {
   const { state } = useFilters();
   const secondaryCount = useSecondaryCount();
@@ -193,7 +147,17 @@ export default function FilterBar() {
   const compLabel = compModels.length
     ? compModels.slice(0, 3).join(' · ') + (compModels.length > 3 ? ` +${compModels.length - 3}` : '')
     : '匹配竞品';
-  const granLabel = (g: Granularity) => (g === 'week' ? '周' : g === 'month' ? '月' : '季');
+  const granLabel = state.granularity === 'week' ? '周' : state.granularity === 'month' ? '月' : '季';
+
+  // 平台口径文案：勾店铺显店铺名、勾平台显平台名、全空 = 可抓取平台最低价
+  const shopNameById = useMemo(() => new Map(dimChannel.map((c) => [c.shop_id, c.shop_name])), []);
+  const sel = state.platform;
+  const platformText = !sel || (sel.platforms.length === 0 && sel.shopIds.length === 0)
+    ? '平台最低价'
+    : sel.shopIds.length
+      ? sel.shopIds.map((id) => shopNameById.get(id) ?? id).join('、')
+      : `${sel.platforms.join('、')} 平台`;
+  const adaptiveText = state.adaptive ? '范围自适应' : '范围手动';
 
   return (
     <div style={{ padding: `${space.base}px ${space.lg}px 0` }}>
@@ -204,102 +168,133 @@ export default function FilterBar() {
             background: color.canvas,
             boxShadow: shadow.l1,
             borderRadius: radius.card,
-            padding: `8px ${space.lg}px`,
+            padding: `10px ${space.lg}px 9px`,
             display: 'flex',
-            alignItems: 'center',
-            columnGap: 12,
+            flexDirection: 'column',
+            gap: 6,
             minWidth: 0,
-            overflowX: 'auto',
           }}
         >
-          {/* 范围上下文（国家 · 产业）：常显文字，值在 ⋯ 内可改 */}
-          <span
-            title="分析范围：国家 · 产业（在行尾 ⋯ 内可调整）"
-            style={{ fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}
-          >
-            {scope}
-          </span>
-          {Sep}
-          {/* 产品 ｜ 竞品（对比关系用 vs 文字直陈） */}
-          <Token label={productLabel} title="选择我司产品与配置">
-            <div style={{ width: 384 }}>
-              <OwnProductControl />
-            </div>
-          </Token>
-          <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>vs</span>
-          <Token label={compLabel} title="选择对标竞品（自动匹配开启时随我司配置带出）" muted={state.competitors.length === 0}>
-            <div style={{ width: 384, display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 4px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>自动匹配</span>
-                <AutoMatchControl />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <CompetitorControl />
-              </div>
-            </div>
-          </Token>
-          {Sep}
-          {/* 粒度 ｜ 币种 */}
-          <Token label={granLabel(state.granularity)} title="时间粒度">
-            <div style={{ padding: '2px 2px 4px' }}>
-              <GranularityControl />
-            </div>
-          </Token>
-          <Token label={state.currency === 'usd' ? 'USD' : '本币 ₽'} title="显示币种">
-            <div style={{ padding: '2px 2px 4px' }}>
-              <CurrencyBox />
-            </div>
-          </Token>
-          {/* 行尾 ⋯：低频口径（国家/产业/平台/时间范围+自适应）+ 偏离默认角标 */}
-          <span style={{ flex: 1 }} />
-          <Popover trigger="click" placement="bottomRight" content={<MoreFilters />} arrow={false}>
-            <button
-              type="button"
-              title="国家 / 产业 / 平台 / 时间范围"
-              aria-label={`更多筛选${secondaryCount > 0 ? `（${secondaryCount} 项已调整）` : ''}`}
-              style={{
-                flexShrink: 0,
-                width: 28,
-                height: 26,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 4,
-                borderRadius: radius.control,
-                border: `1px solid ${secondaryCount > 0 ? selectAccent : 'transparent'}`,
-                background: secondaryCount > 0 ? selectSoft : 'transparent',
-                color: secondaryCount > 0 ? selectSoftInk : color.mute,
-                cursor: 'pointer',
-                position: 'relative',
-              }}
-            >
-              <MoreOutlined style={{ fontSize: 13 }} />
-              {secondaryCount > 0 && (
-                <i
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    top: -3,
-                    right: -3,
-                    minWidth: 14,
-                    height: 14,
-                    padding: '0 3px',
-                    borderRadius: 7,
-                    background: selectAccent,
-                    color: '#fff',
-                    fontSize: 9.5,
-                    fontWeight: 700,
-                    fontStyle: 'normal',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  {secondaryCount}
-                </i>
-              )}
-            </button>
-          </Popover>
+          {/* 第一行（标题级）：分析谁 */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, minWidth: 0 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>价格走势</span>
+            <span style={{ color: color.hairlineStrong }}>·</span>
+            <LinkToken
+              big
+              label={productLabel}
+              title="选择我司产品与配置"
+              content={
+                <div style={{ width: 384 }}>
+                  <OwnProductControl />
+                </div>
+              }
+            />
+            <span style={{ fontSize: 12, color: color.mute }}>vs</span>
+            <LinkToken
+              label={compLabel}
+              muted={state.competitors.length === 0}
+              title="选择对标竞品（自动匹配开启时随我司配置带出）"
+              content={
+                <div style={{ width: 384, display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>自动匹配</span>
+                    <AutoMatchControl />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <CompetitorControl />
+                  </div>
+                </div>
+              }
+            />
+          </div>
+          {/* 第二行（口径行）：怎么看的数据，全部常显 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: color.mute, minWidth: 0 }}>
+            <Plain>{scope}</Plain>
+            <Sep h={11} />
+            <LinkToken muted label={granLabel} title="时间粒度" content={<div style={{ padding: '2px 2px 4px' }}><GranularityControl /></div>} />
+            <span>·</span>
+            <LinkToken muted label={state.currency === 'usd' ? 'USD' : '本币 ₽'} title="显示币种" content={<div style={{ padding: '2px 2px 4px' }}><CurrencyBox /></div>} />
+            <Sep h={11} />
+            <LinkToken
+              muted
+              label={
+                <>
+                  平台 <Plain>{platformText}</Plain>
+                </>
+              }
+              title={INFO_PLATFORM}
+              content={
+                <div style={{ width: 348 }}>
+                  <Cell flex="1 1 auto" label="平台" info={INFO_PLATFORM}>
+                    <PlatformBox />
+                  </Cell>
+                </div>
+              }
+            />
+            <Sep h={11} />
+            <LinkToken
+              muted
+              label={<Plain>{adaptiveText}</Plain>}
+              title="开：时间范围自动适配所选产品跨度；关：手动选择时间范围"
+              content={
+                <div style={{ width: 400, display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 4px' }}>
+                  <span style={filterLabel}>时间范围</span>
+                  <RangeControl />
+                </div>
+              }
+            />
+            <span style={{ flex: 1 }} />
+            <Popover trigger="click" placement="bottomRight" content={<MoreFilters />} arrow={false}>
+              <button
+                type="button"
+                title="国家 / 产业"
+                aria-label={`更多口径${secondaryCount > 0 ? `（${secondaryCount} 项已调整）` : ''}`}
+                style={{
+                  flexShrink: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  height: 24,
+                  padding: '0 8px',
+                  borderRadius: radius.control,
+                  border: `1px solid ${secondaryCount > 0 ? selectAccent : 'transparent'}`,
+                  background: secondaryCount > 0 ? selectSoft : 'transparent',
+                  color: secondaryCount > 0 ? selectSoftInk : color.mute,
+                  fontSize: 12,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  position: 'relative',
+                }}
+              >
+                <MoreOutlined style={{ fontSize: 12 }} />
+                口径
+                {secondaryCount > 0 && (
+                  <i
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -4,
+                      minWidth: 14,
+                      height: 14,
+                      padding: '0 3px',
+                      borderRadius: 7,
+                      background: selectAccent,
+                      color: '#fff',
+                      fontSize: 9.5,
+                      fontWeight: 700,
+                      fontStyle: 'normal',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {secondaryCount}
+                  </i>
+                )}
+              </button>
+            </Popover>
+          </div>
         </section>
       </ConfigProvider>
     </div>
