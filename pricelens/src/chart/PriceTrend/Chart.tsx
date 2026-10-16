@@ -156,8 +156,6 @@ export interface ChartProps {
   onChangeThreshold?: (v: number | null) => void;
   /** 第五十六轮：打开促销力度明细抽屉（工具行「⋯ 更多」二级菜单入口） */
   onOpenPromoDetail?: () => void;
-  /** 第五十六轮追补：打开时点明细抽屉（原时点页签收进二级菜单） */
-  onOpenPointDetail?: () => void;
   // ---- 第五十四轮追补：工具行抽 ChartToolbar 共享组件；分离模式面板 chrome=false
   //      不渲染设置行，由面板网格上方的常驻工具行统一控制 ----
   /** 图顶工具行显隐（缺省 true）；false = 整行不渲染（含齿轮），gridTop 由调用方收窄 */
@@ -672,7 +670,6 @@ export default function Chart(props: ChartProps) {
                 changeThreshold={changeThreshold}
                 onChangeThreshold={props.onChangeThreshold}
                 onOpenPromoDetail={props.onOpenPromoDetail}
-                onOpenPointDetail={props.onOpenPointDetail}
               />
             </div>
           )}

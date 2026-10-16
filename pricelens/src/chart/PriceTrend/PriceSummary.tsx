@@ -23,6 +23,11 @@ function fmtAsOf(gran: Granularity, x: string | null): string {
   return x;
 }
 
+/** 时点日期格式化（第五十六轮再版导出：图右侧时点面板头部复用同一口径） */
+export function fmtPointDate(gran: Granularity, x: string | null): string {
+  return fmtAsOf(gran, x);
+}
+
 /** 折扣徽章（第四十六轮起恒显）：−X% 圆角胶囊；0% 中性；溢价 +X% 转琥珀。
  *  第五十三轮导出：总览「当前售价」列复用同一组件（用户：完全参考页签显示方式） */
 export function DiscountBadge({ discount }: { discount: number }) {
@@ -58,6 +63,7 @@ export default function PriceSummary({
   onToggleSubscribe,
   stack,
   chrome = true,
+  showHeader = true,
 }: {
   items: PriceSummaryItem[];
   currency: CurrencyMode;
@@ -74,6 +80,8 @@ export default function PriceSummary({
   stack?: boolean;
   /** false = 不渲染外层卡片壳（抽屉自备 chrome）；缺省 = 白卡+投影 */
   chrome?: boolean;
+  /** 第五十六轮再版：false = 不渲染「时点 XX-XX」头行（面板自备头部时用） */
+  showHeader?: boolean;
 }) {
   if (items.length === 0) return null;
   const asOf = items.find((it) => it.asOf != null)?.asOf ?? null;
@@ -184,12 +192,15 @@ export default function PriceSummary({
     >
       {/* 时点：左上角明显展示（第四十二轮），固定最新有值时点、不随悬停变换；
           第五十四轮追补①：pointDate 给到时恒显窗口末桶内最新周的三锚日，
-          不再随粒度显示 2026-10 / 2026Q4（用户：时点应为最新那一周对应的那一天） */}
-      <div style={{ marginBottom: 8 }}>
-        <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
-          时点 {pointDate ?? fmtAsOf(granularity, asOf)}
-        </span>
-      </div>
+          不再随粒度显示 2026-10 / 2026Q4（用户：时点应为最新那一周对应的那一天）；
+          第五十六轮再版：showHeader=false 供图右侧时点面板复用（面板自备头部） */}
+      {showHeader && (
+        <div style={{ marginBottom: 8 }}>
+          <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
+            时点 {pointDate ?? fmtAsOf(granularity, asOf)}
+          </span>
+        </div>
+      )}
       {/* 并排 3 款产品、等宽（第四十六轮）：超出 3 个自动换排，每框宽度恒一致；
           第五十六轮 stack = 单列纵向堆叠（时点明细抽屉——领导页面清洁要求，
           时点页签撤出主视觉收进二级） */}

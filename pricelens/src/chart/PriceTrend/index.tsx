@@ -6,9 +6,10 @@
 // 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）。
 // 第五十六轮（领导页面清洁要求）：促销力度热力带（原横向色格带）撤出主视觉，
 // 收进「⋯ 更多」二级菜单 → 右侧抽屉纵向表格（PromoDrawer）；最高/最低价与
-// 价格变化提醒同收二级菜单且默认关闭。追补（用户澄清）：时点页签（价格摘要条
-// ——折扣率/现价/划线RRP/来源横排）也撤出主视觉 → 时点明细抽屉（PointDrawer，
-// 纵向一行一产品框），与促销抽屉互斥；主视觉只留标题行+工具行+图。
+// 价格变化提醒同收二级菜单且默认关闭。再版（用户拍板）：时点页签（价格摘要条
+// ——折扣率/现价/划线RRP/来源横排）撤出主视觉后不埋抽屉，改图右缘书签带
+// （PointPanel，默认收起 24px 窄带）→ 图右侧原地展开 336px 内嵌面板（纵向
+// 一行一产品框，图表收窄不遮挡）；主视觉 = 标题行+工具行+图+（窄书签带）。
 // Y 轴口径（第七/九轮）：纯自适应分段压缩刻度，无手动覆盖；刷选拖动中冻结 Y 轴
 // （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
 // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
@@ -71,7 +72,7 @@ import {
   type YScale,
 } from './helpers';
 import PromoDrawer from './PromoDrawer';
-import PointDrawer from './PointDrawer';
+import PointPanel from './PointPanel';
 
 export default function PriceTrend() {
   const { state, actions } = useFilters();
@@ -92,17 +93,14 @@ export default function PriceTrend() {
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
   // 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉（纵向表格）
   const [promoDetailOpen, setPromoDetailOpen] = useState(false);
-  // 时点明细抽屉（第五十六轮追补，用户澄清：领导不想看的横排页签=时点页签）：
-  // 原主视觉「时点 XX-XX + 折扣率/现价/划线RRP/来源」整块撤出，收进「⋯ 更多」
-  // 二级抽屉纵向排布（一行一产品框，复用 PriceSummary 条目）；两抽屉互斥打开
-  const [pointDetailOpen, setPointDetailOpen] = useState(false);
+  // 时点面板（第五十六轮再版，用户拍板）：图右缘书签带（默认收起）→ 图右侧原地
+  // 展开 336px 内嵌面板（非视口抽屉——抽屉会盖住图右缘最新数据），纵向一行一
+  // 产品框；展开态不持久化（每次进页面默认收起=领导视角永远干净）；促销明细
+  // 抽屉打开时自动收起（右侧空间冲突）
+  const [pointPanelOpen, setPointPanelOpen] = useState(false);
   const openPromoDetail = (): void => {
-    setPointDetailOpen(false);
+    setPointPanelOpen(false);
     setPromoDetailOpen(true);
-  };
-  const openPointDetail = (): void => {
-    setPromoDetailOpen(false);
-    setPointDetailOpen(true);
   };
   // 齿轮弹层里的两个视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
@@ -624,28 +622,19 @@ export default function PriceTrend() {
         )}
       </div>
 
-      {/* 时点明细抽屉（第五十六轮追补）：原时点页签（折扣率/现价/划线RRP/来源横排）
-          撤出主视觉收进二级——纵向一行一产品框，订阅铃铛保留行尾；入口在工具行
-          「⋯ 更多」菜单，与促销力度明细抽屉互斥打开 */}
-      <PointDrawer
-        open={pointDetailOpen}
-        onClose={() => setPointDetailOpen(false)}
-        items={summary}
-        currency={state.currency}
-        granularity={state.granularity}
-        pointDate={pointDate}
-        alertCounts={alertCounts}
-        subscribedKeys={subscribedKeys}
-        onToggleSubscribe={toggleAlertSub}
-      />
-
-      {/* 图主体（Y 轴纯自适应；图例页签第五十四轮起移到图下方居中行）。
+      {/* 图主体 + 图右缘时点面板（第五十六轮再版，用户拍板）：flex 行 =
+          [图列 flex1][书签带 / 336px 内嵌面板]——时点摘要锚在图右侧（它就是图右缘
+          最新数据的文字版），收起 = 24px 竖排书签带（默认，领导视角只是窄灰带），
+          展开 = 原地面板纵向一行一产品（非视口抽屉，不遮图右缘），图自动收窄。
+          （Y 轴纯自适应；图例页签第五十四轮起移到图下方居中行）。
           分离显示（第五十四轮拍板）：多 ROM 勾选时主图变 2 列 N 宫格——每面板一个
           ROM+其对标竞品，共享 Y 轴（并集算一次受控传入）、X 轴各面板独立绘制；
           共享刷选条联动全部面板；热力带/图例页签分离模式下隐藏。
           第五十四轮追补：工具行不再随面板重复——面板网格上方常驻一条（ChartToolbar），
           面板 chrome=false，全部视图开关由常驻行统一控制 */}
-      {splitActive ? (
+      <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+        <div style={{ flex: '1 1 0', minWidth: 0 }}>
+          {splitActive ? (
         <>
           {/* 常驻工具行（第五十四轮追补，用户需求）：分离模式下这一行仍常驻在摘要页签
               与面板网格之间，统管底下全部分离面板——大促/offer/极值/变化提醒 + 齿轮
@@ -672,7 +661,6 @@ export default function PriceTrend() {
               changeThreshold={changeThreshold}
               onChangeThreshold={setChangeThreshold}
               onOpenPromoDetail={openPromoDetail}
-              onOpenPointDetail={openPointDetail}
             />
           </div>
           {/* 面板网格（第五十四轮追补⑤重排）：[共享轴列][卡片][卡片] 三列——
@@ -816,7 +804,6 @@ export default function PriceTrend() {
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
             onOpenPromoDetail={openPromoDetail}
-            onOpenPointDetail={openPointDetail}
             yScale={yCfg}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
@@ -847,19 +834,33 @@ export default function PriceTrend() {
         </>
       )}
       {/* X 刷选条（窗口状态为图表内部状态；轨道 = 筛选范围；自适应开 = 轨道冻结） */}
-      {!splitActive && buckets.length > 0 && visSeries.length > 0 && (
-        <XBrush
-          buckets={buckets}
-          s={win.s}
-          e={win.e}
-          lo={track.s}
-          hi={track.e}
-          frozen={state.adaptive}
+          {!splitActive && buckets.length > 0 && visSeries.length > 0 && (
+            <XBrush
+              buckets={buckets}
+              s={win.s}
+              e={win.e}
+              lo={track.s}
+              hi={track.e}
+              frozen={state.adaptive}
+              granularity={state.granularity}
+              onChange={onWindowChange}
+              onAdjusting={setAdjusting}
+            />
+          )}
+        </div>
+        {/* 图右缘时点面板（第五十六轮再版）：书签带（收起）/ 336px 纵向产品清单（展开） */}
+        <PointPanel
+          open={pointPanelOpen}
+          onToggle={() => setPointPanelOpen((v) => !v)}
+          items={summary}
+          currency={state.currency}
           granularity={state.granularity}
-          onChange={onWindowChange}
-          onAdjusting={setAdjusting}
+          pointDate={pointDate}
+          alertCounts={alertCounts}
+          subscribedKeys={subscribedKeys}
+          onToggleSubscribe={toggleAlertSub}
         />
-      )}
+      </div>
 
       {/* 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉——纵向表格
           （行=时间最新在上，列=产品），入口在工具行「⋯ 更多」菜单；分离模式传
