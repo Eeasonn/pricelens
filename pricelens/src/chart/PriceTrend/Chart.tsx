@@ -347,10 +347,12 @@ function SeriesNameLabel(props: {
               height: 15,
               flexShrink: 0,
               borderRadius: 3,
-              border: `1px solid ${color.hairline}`,
+              border: `1px solid ${hover ? selectSoftInk : color.hairline}`,
               background: color.canvas,
-              color: color.mute,
-              opacity: hover ? 1 : 0,
+              color: hover ? selectSoftInk : color.mute,
+              // 常显微标（第五十八轮，用户反馈「完全看不出来可以点」）：静置 45% 灰
+              // 可见可发现，悬停名称行升全亮+品牌蓝描边；悬停按钮本身同款高亮
+              opacity: hover ? 1 : 0.45,
               transition: 'opacity 0.12s ease',
             }}
           >
