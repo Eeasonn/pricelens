@@ -4,6 +4,8 @@
 // （圆角与大框一致），每框必含三件套：折扣率 + 折后价 + 划线 RRP（用户口径：
 // 三项恒显，0% 也不省略）；我司与竞品完全同款；来源为取证超链接。折扣徽章
 // 0% 中性蓝、≥15% 转琥珀预警、溢价 +X% 琥珀。数据 = buildPriceSummary（最新有值点）。
+// 第五十六轮（领导页面清洁要求）：时点页签撤出看板主视觉——stack/chrome 两 prop
+// 供时点明细抽屉复用（单列纵向堆叠、无外层卡壳），入口 = 工具行「⋯ 更多」菜单。
 // ============================================================
 import type { CurrencyMode, Granularity } from '../../dataModel/types';
 import BrandDot from '../../components/BrandMark';
@@ -54,6 +56,8 @@ export default function PriceSummary({
   alertCounts,
   subscribedKeys,
   onToggleSubscribe,
+  stack,
+  chrome = true,
 }: {
   items: PriceSummaryItem[];
   currency: CurrencyMode;
@@ -66,6 +70,10 @@ export default function PriceSummary({
   /** 预警订阅（第五十三轮从图表图例 chips 挪入本页签尾，「来源」之后） */
   subscribedKeys?: Set<string>;
   onToggleSubscribe?: (key: string) => void;
+  /** 第五十六轮：true = 单列纵向堆叠（时点明细抽屉用）；缺省 = 3 列等宽宫格 */
+  stack?: boolean;
+  /** false = 不渲染外层卡片壳（抽屉自备 chrome）；缺省 = 白卡+投影 */
+  chrome?: boolean;
 }) {
   if (items.length === 0) return null;
   const asOf = items.find((it) => it.asOf != null)?.asOf ?? null;
@@ -162,13 +170,17 @@ export default function PriceSummary({
 
   return (
     <div
-      style={{
-        padding: '10px 16px',
-        marginBottom: space.sm,
-        borderRadius: radius.card,
-        background: color.canvas,
-        boxShadow: shadow.l1, // 显性化（第三十六轮）：核心视觉页签，抬一层
-      }}
+      style={
+        chrome
+          ? {
+              padding: '10px 16px',
+              marginBottom: space.sm,
+              borderRadius: radius.card,
+              background: color.canvas,
+              boxShadow: shadow.l1, // 显性化（第三十六轮）：核心视觉页签，抬一层
+            }
+          : undefined
+      }
     >
       {/* 时点：左上角明显展示（第四十二轮），固定最新有值时点、不随悬停变换；
           第五十四轮追补①：pointDate 给到时恒显窗口末桶内最新周的三锚日，
@@ -178,8 +190,16 @@ export default function PriceSummary({
           时点 {pointDate ?? fmtAsOf(granularity, asOf)}
         </span>
       </div>
-      {/* 并排 3 款产品、等宽（第四十六轮）：超出 3 个自动换排，每框宽度恒一致 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 10 }}>
+      {/* 并排 3 款产品、等宽（第四十六轮）：超出 3 个自动换排，每框宽度恒一致；
+          第五十六轮 stack = 单列纵向堆叠（时点明细抽屉——领导页面清洁要求，
+          时点页签撤出主视觉收进二级） */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: stack ? 'minmax(0, 1fr)' : 'repeat(3, minmax(0,1fr))',
+          gap: stack ? 8 : 10,
+        }}
+      >
         {items.map(renderItem)}
       </div>
     </div>

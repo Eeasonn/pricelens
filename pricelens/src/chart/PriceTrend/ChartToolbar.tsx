@@ -45,6 +45,8 @@ export interface ChartToolbarProps {
   onChangeThreshold?: (v: number | null) => void;
   /** 第五十六轮：打开促销力度明细抽屉（二级）；传了才渲染「⋯ 更多」菜单 */
   onOpenPromoDetail?: () => void;
+  /** 第五十六轮追补：打开时点明细抽屉（原时点页签收进二级） */
+  onOpenPointDetail?: () => void;
 }
 
 /** 折后价/RRP 切换胶囊（第五十二轮）：图例页签同款外形，品牌色点的位置改「一条粗 /
@@ -251,7 +253,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
               <span style={{ fontSize: 12 }}>offer 权益</span>
             </Checkbox>
           </div>
-          {props.onOpenPromoDetail && (
+          {(props.onOpenPromoDetail || props.onOpenPointDetail) && (
             <Popover
               trigger="click"
               placement="bottomRight"
@@ -295,25 +297,40 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                     )}
                   </div>
                   <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: color.body }}>促销力度明细</span>
-                    <span
-                      role="button"
-                      title="打开促销力度明细抽屉（行=时间最新在上，列=产品）"
-                      onClick={props.onOpenPromoDetail}
-                      style={{ fontSize: 12, fontWeight: 600, color: '#0070f3', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      打开 ›
-                    </span>
-                  </div>
+                  {props.onOpenPointDetail && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, color: color.body }}>时点明细</span>
+                      <span
+                        role="button"
+                        title="打开时点明细抽屉（各产品最新时点的折扣率/现价/RRP/来源）"
+                        onClick={props.onOpenPointDetail}
+                        style={{ fontSize: 12, fontWeight: 600, color: '#0070f3', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        打开 ›
+                      </span>
+                    </div>
+                  )}
+                  {props.onOpenPromoDetail && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 12, color: color.body }}>促销力度明细</span>
+                      <span
+                        role="button"
+                        title="打开促销力度明细抽屉（行=时间最新在上，列=产品）"
+                        onClick={props.onOpenPromoDetail}
+                        style={{ fontSize: 12, fontWeight: 600, color: '#0070f3', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        打开 ›
+                      </span>
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                    各产品逐周促销深度（原热力带已收起）
+                    明细视图不占主版面（原时点页签 / 热力带已收起）
                   </div>
                 </div>
               }
             >
               <RoundIconButton
-                title="更多功能（最高/最低价标注 · 价格变化提醒 · 促销力度明细）"
+                title="更多功能（最高/最低价标注 · 价格变化提醒 · 时点明细 · 促销力度明细）"
                 aria-label="更多功能"
                 active={secondaryActive}
               >

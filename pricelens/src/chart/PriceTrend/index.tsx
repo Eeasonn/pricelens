@@ -6,7 +6,9 @@
 // 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）。
 // 第五十六轮（领导页面清洁要求）：促销力度热力带（原横向色格带）撤出主视觉，
 // 收进「⋯ 更多」二级菜单 → 右侧抽屉纵向表格（PromoDrawer）；最高/最低价与
-// 价格变化提醒同收二级菜单且默认关闭。
+// 价格变化提醒同收二级菜单且默认关闭。追补（用户澄清）：时点页签（价格摘要条
+// ——折扣率/现价/划线RRP/来源横排）也撤出主视觉 → 时点明细抽屉（PointDrawer，
+// 纵向一行一产品框），与促销抽屉互斥；主视觉只留标题行+工具行+图。
 // Y 轴口径（第七/九轮）：纯自适应分段压缩刻度，无手动覆盖；刷选拖动中冻结 Y 轴
 // （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
 // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
@@ -42,7 +44,6 @@ import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
 import LegendPills from './LegendPills';
 import DrillModal, { type DrillInfo } from './DrillModal';
-import PriceSummary from './PriceSummary';
 import {
   buildPriceSummary,
   buildPromoBands,
@@ -70,6 +71,7 @@ import {
   type YScale,
 } from './helpers';
 import PromoDrawer from './PromoDrawer';
+import PointDrawer from './PointDrawer';
 
 export default function PriceTrend() {
   const { state, actions } = useFilters();
@@ -90,7 +92,18 @@ export default function PriceTrend() {
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
   // 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉（纵向表格）
   const [promoDetailOpen, setPromoDetailOpen] = useState(false);
-  const openPromoDetail = (): void => setPromoDetailOpen(true);
+  // 时点明细抽屉（第五十六轮追补，用户澄清：领导不想看的横排页签=时点页签）：
+  // 原主视觉「时点 XX-XX + 折扣率/现价/划线RRP/来源」整块撤出，收进「⋯ 更多」
+  // 二级抽屉纵向排布（一行一产品框，复用 PriceSummary 条目）；两抽屉互斥打开
+  const [pointDetailOpen, setPointDetailOpen] = useState(false);
+  const openPromoDetail = (): void => {
+    setPointDetailOpen(false);
+    setPromoDetailOpen(true);
+  };
+  const openPointDetail = (): void => {
+    setPromoDetailOpen(false);
+    setPointDetailOpen(true);
+  };
   // 齿轮弹层里的两个视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
   const [showYTicks, setShowYTicks] = useState(false);
@@ -611,9 +624,12 @@ export default function PriceTrend() {
         )}
       </div>
 
-      {/* 价格摘要条（第三十四轮）：账面价划线 + 现价 + 折扣率 + 竞品差价，随窗口联动；
-          第五十三轮：来源去「来源」字样、页签尾 = 预警订阅铃铛（从图表图例小页签上移） */}
-      <PriceSummary
+      {/* 时点明细抽屉（第五十六轮追补）：原时点页签（折扣率/现价/划线RRP/来源横排）
+          撤出主视觉收进二级——纵向一行一产品框，订阅铃铛保留行尾；入口在工具行
+          「⋯ 更多」菜单，与促销力度明细抽屉互斥打开 */}
+      <PointDrawer
+        open={pointDetailOpen}
+        onClose={() => setPointDetailOpen(false)}
         items={summary}
         currency={state.currency}
         granularity={state.granularity}
@@ -656,6 +672,7 @@ export default function PriceTrend() {
               changeThreshold={changeThreshold}
               onChangeThreshold={setChangeThreshold}
               onOpenPromoDetail={openPromoDetail}
+              onOpenPointDetail={openPointDetail}
             />
           </div>
           {/* 面板网格（第五十四轮追补⑤重排）：[共享轴列][卡片][卡片] 三列——
@@ -799,6 +816,7 @@ export default function PriceTrend() {
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
             onOpenPromoDetail={openPromoDetail}
+            onOpenPointDetail={openPointDetail}
             yScale={yCfg}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
