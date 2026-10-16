@@ -234,8 +234,8 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
       style={{
         flexShrink: 0,
         padding: '0 5px',
-        fontSize: 9.5,
-        lineHeight: '14px',
+        fontSize: 10.5,
+        lineHeight: '15px',
         fontWeight: 700,
         borderRadius: radius.pill,
         color: warn ? '#b45309' : selectSoftInk,
@@ -1089,13 +1089,14 @@ export default function Chart(props: ChartProps) {
               );
               const nOfferLines = offerRows.reduce((acc, l) => acc + l.length, 0);
               const x0 = xPxOf(geom, hoverIdx);
-              // 第五十三轮：200 → 264——「Huawei Pura 90s Pro 12+512 GB」全名 + 折扣胶囊 + 双价一行放下（用户反馈产品名截断）
-              const W = 264;
+              // 第五十三轮：200 → 264（产品名截断）；第六十轮：264 → 324——折扣/现价/RRP
+              // 三列右对齐（定宽列）+ 字号对齐折线价格标签（14px）需要更多横向空间
+              const W = 324;
               const flip = x0 + 16 + W > geom.plotLeft + geom.plotWidth;
               const left = flip ? x0 - 16 - W : x0 + 16;
               const top = Math.min(
                 Math.max(geom.plotTop + 8, 40),
-                geom.plotTop + geom.plotHeight - 36 - (rows.length * 18 + nOfferLines * 15),
+                geom.plotTop + geom.plotHeight - 36 - (rows.length * 20 + nOfferLines * 16),
               );
               return (
                 <div
@@ -1113,7 +1114,7 @@ export default function Chart(props: ChartProps) {
                     zIndex: 20,
                   }}
                 >
-                  <div style={{ fontSize: 11, fontWeight: 600, color: color.ink, marginBottom: 2 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
                     {fmt_hoverDate(granularity, series[0]?.points[hoverIdx]?.xLabel ?? '')}
                   </div>
                   {rows.map(({ s, v }, ri) => {
@@ -1131,9 +1132,9 @@ export default function Chart(props: ChartProps) {
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 5,
-                            fontSize: 11,
-                            lineHeight: '18px',
+                            gap: 8,
+                            fontSize: 13,
+                            lineHeight: '20px',
                             opacity: dim ? 0.3 : undefined,
                           }}
                         >
@@ -1141,23 +1142,28 @@ export default function Chart(props: ChartProps) {
                           <span style={{ color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {curveNameOf(s)}
                           </span>
-                          {disc != null && <MiniDiscountBadge discount={disc} dim={dim} />}
-                          <span className="tnum" style={{ marginLeft: 'auto', fontWeight: 600, color: color.ink }}>
+                          {/* 第六十轮：折扣/现价/RRP 三列定宽右对齐（跨行同列对齐，表格读数）；
+                              现价字号=折线上价格标签同款 14px（用户要求图例字体对齐折线数字） */}
+                          <span className="tnum" style={{ width: 48, textAlign: 'right', flexShrink: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>
+                            {disc != null && <MiniDiscountBadge discount={disc} dim={dim} />}
+                          </span>
+                          <span className="tnum" style={{ width: 56, textAlign: 'right', flexShrink: 0, fontSize: 14, fontWeight: 600, color: color.ink }}>
                             {fmt_mm(v)}
                           </span>
-                          {pt?.rrp != null && (
-                            <span className="tnum" style={{ fontSize: 10, color: color.mute, textDecoration: 'line-through' }}>
-                              {fmt_mm(pt.rrp)}
-                            </span>
-                          )}
+                          <span
+                            className="tnum"
+                            style={{ width: 46, textAlign: 'right', flexShrink: 0, fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
+                          >
+                            {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
+                          </span>
                         </div>
                         {items.map((it) => (
                           <div
                             key={it.kind}
                             style={{
                               paddingLeft: 13,
-                              fontSize: 10,
-                              lineHeight: '15px',
+                              fontSize: 11,
+                              lineHeight: '16px',
                               display: 'flex',
                               gap: 5,
                               opacity: dim ? 0.3 : undefined,
