@@ -3,7 +3,10 @@
 // 第一行 = 左 [折后价|RRP 复选]；右 [汇总]（仅月/季，写回 state.agg）
 // ——每格高度伸缩滑杆（第十轮）收进图内币种符号旁的齿轮弹层（Popover），不占版面；
 //   倍率状态仍在本层（与刷选冻结共用 yCfg），经 yScale/sliderScale 受控传入 Chart
-// 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）> PromoTable（促销力度热力带）
+// 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）。
+// 第五十六轮（领导页面清洁要求）：促销力度热力带（原横向色格带）撤出主视觉，
+// 收进「⋯ 更多」二级菜单 → 右侧抽屉纵向表格（PromoDrawer）；最高/最低价与
+// 价格变化提醒同收二级菜单且默认关闭。
 // Y 轴口径（第七/九轮）：纯自适应分段压缩刻度，无手动覆盖；刷选拖动中冻结 Y 轴
 // （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
 // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
@@ -64,10 +67,9 @@ import {
   bucketIdOfWeek,
   NAME_ZONE_W,
   type Bucket,
-  type StripGeom,
   type YScale,
 } from './helpers';
-import PromoTable from './PromoTable';
+import PromoDrawer from './PromoDrawer';
 
 export default function PriceTrend() {
   const { state, actions } = useFilters();
@@ -78,15 +80,17 @@ export default function PriceTrend() {
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null); // null=整个筛选范围
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例取消选中的系列（折线隐藏）
-  const [stripGeom, setStripGeom] = useState<StripGeom | null>(null); // 图表上报的横向几何（促销热力带对齐用）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
   const [promoBandsOn, setPromoBandsOn] = useState(true); // 大促档期（第三十五轮：外部显式筛选器，默认选）
   const [offersOn, setOffersOn] = useState(true); // offer 权益显隐（第五十轮）：关 = 不画徽章、浮窗不出权益行
-  const [maxMinOn, setMaxMinOn] = useState(false); // 最高/最低价点标签（默认关）
-  // 价格变化提醒（第四十六轮挪出齿轮到标题行）：null=关；阈值=小数（0.05=5%），
-  // 滑杆 0~15% 连贯可调（0.5 步进，≥0 可选）。旧版齿轮 Select 内部默认 5 与档位
-  // 0.05 单位不一致 = 实际恒关闭，本次一并修正为真 5%。
-  const [changeThreshold, setChangeThreshold] = useState<number | null>(0.05);
+  // 最高/最低价 + 价格变化提醒（第五十六轮）：非主要功能——默认关，收进工具行
+  // 「⋯ 更多」二级菜单（领导页面清洁要求）；启用时 ⋯ 按钮带蓝点提示
+  const [maxMinOn, setMaxMinOn] = useState(false);
+  // 价格变化提醒：null=关；阈值=小数（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）
+  const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
+  // 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉（纵向表格）
+  const [promoDetailOpen, setPromoDetailOpen] = useState(false);
+  const openPromoDetail = (): void => setPromoDetailOpen(true);
   // 齿轮弹层里的两个视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
   const [showYTicks, setShowYTicks] = useState(false);
@@ -651,6 +655,7 @@ export default function PriceTrend() {
               onMaxMinOn={setMaxMinOn}
               changeThreshold={changeThreshold}
               onChangeThreshold={setChangeThreshold}
+              onOpenPromoDetail={openPromoDetail}
             />
           </div>
           {/* 面板网格（第五十四轮追补⑤重排）：[共享轴列][卡片][卡片] 三列——
@@ -793,7 +798,7 @@ export default function PriceTrend() {
             enableOffer={state.granularity === 'week' && offersOn}
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
-            onGeom={setStripGeom}
+            onOpenPromoDetail={openPromoDetail}
             yScale={yCfg}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
@@ -838,11 +843,16 @@ export default function PriceTrend() {
         />
       )}
 
-      {/* 促销力度热力带（第十五轮：列几何复用图表 plotLeft/plotWidth，与时间轴逐像素对齐；
-          分离模式下隐藏——列几何只对单图成立） */}
-      {!splitActive && visSeries.length > 0 && win.s <= win.e && (
-        <PromoTable series={visSeries} currency={state.currency} geom={stripGeom} />
-      )}
+      {/* 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉——纵向表格
+          （行=时间最新在上，列=产品），入口在工具行「⋯ 更多」菜单；分离模式传
+          面板并集（与屏上所见一致），单图模式传 visSeries；随窗口联动 */}
+      <PromoDrawer
+        open={promoDetailOpen}
+        onClose={() => setPromoDetailOpen(false)}
+        series={splitActive ? panelViews.flatMap((p) => p.all) : visSeries}
+        currency={state.currency}
+        granularity={state.granularity}
+      />
 
       {/* 月/季下钻弹窗 */}
       <DrillModal

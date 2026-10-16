@@ -154,6 +154,8 @@ export interface ChartProps {
   onMaxMinOn?: (v: boolean) => void;
   /** 价格变化提醒开关+阈值提交（中区圆框组；null=关） */
   onChangeThreshold?: (v: number | null) => void;
+  /** 第五十六轮：打开促销力度明细抽屉（工具行「⋯ 更多」二级菜单入口） */
+  onOpenPromoDetail?: () => void;
   // ---- 第五十四轮追补：工具行抽 ChartToolbar 共享组件；分离模式面板 chrome=false
   //      不渲染设置行，由面板网格上方的常驻工具行统一控制 ----
   /** 图顶工具行显隐（缺省 true）；false = 整行不渲染（含齿轮），gridTop 由调用方收窄 */
@@ -395,9 +397,9 @@ export default function Chart(props: ChartProps) {
     [width, totalH, gridTop, series, displayScale, currency, props.gridLeft],
   );
 
-  // ---- 促销热力带对齐（第十五轮）：把绘图区横向几何原语上报给下方 PromoTable；
-  //      只按三个原语组成的 key 触发，高度过渡帧（displayScale 变）不重发；
-  //      useLayoutEffect（第十七轮）：绘制前送达，热力带不必在过渡帧整表退场 ----
+  // ---- 绘图区横向几何原语上报（第十五轮为图下热力带对齐引入；第五十六轮热力带
+  //      收进二级抽屉后主流程不再消费，保留通用上报能力）；只按三个原语组成的
+  //      key 触发，高度过渡帧（displayScale 变）不重发 ----
   const stripKey = geom ? `${geom.plotLeft}|${geom.plotWidth}|${geom.n}` : '';
   useLayoutEffect(() => {
     props.onGeom?.(geom ? { plotLeft: geom.plotLeft, plotWidth: geom.plotWidth, n: geom.n } : null);
@@ -667,6 +669,7 @@ export default function Chart(props: ChartProps) {
                 onMaxMinOn={props.onMaxMinOn}
                 changeThreshold={changeThreshold}
                 onChangeThreshold={props.onChangeThreshold}
+                onOpenPromoDetail={props.onOpenPromoDetail}
               />
             </div>
           )}
