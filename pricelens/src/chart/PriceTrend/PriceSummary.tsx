@@ -93,7 +93,94 @@ export default function PriceSummary({
   const Sep = (
     <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
   );
-  const renderItem = (it: PriceSummaryItem): React.ReactElement => (
+  const renderItem = (it: PriceSummaryItem): React.ReactElement => {
+  // 店铺来源（取证超链接）——三区横排与窄栏两行两版共用
+  const shopNode = it.shop && (
+    <span style={{ fontSize: 10.5, lineHeight: '14px', whiteSpace: 'nowrap', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {it.url ? (
+        <a
+          href={it.url}
+          target="_blank"
+          rel="noreferrer"
+          title={`来源取证 · ${it.shop}（点击跳转）`}
+          style={{ color: color.link, textDecoration: 'none' }}
+          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+        >
+          {it.shop} ↗
+        </a>
+      ) : (
+        <span style={{ color: color.mute }}>{it.shop}</span>
+      )}
+    </span>
+  );
+  // 订阅铃铛（第五十三轮挪入；第五十四轮居中放大）＋触发黄点（追补⑨）。
+  // 预警中心重构：换统一 AlertBell 共享组件（未订阅 = 描边灰、已订阅 = 金实心
+  // + 触发金点），与总览行尾/预警页矩阵同一形态同一语义
+  const bellNode = onToggleSubscribe && (
+    <AlertBell
+      subscribed={subscribedKeys?.has(it.key) ?? false}
+      count={alertCounts?.[it.key] ?? 0}
+      onToggle={() => onToggleSubscribe(it.key)}
+    />
+  );
+
+  // 窄栏两行卡（第五十六轮再版二，用户截图批注）：图右侧时点面板 336px 塞不下
+  // 三区横排——产品名截断「Pura 90s …」、划线 RRP 与店铺链接叠字。改上下两行：
+  // 上行 = 品牌点 + 全名（整行宽度，基本不截断）+ 订阅铃铛居右；
+  // 下行 = 折扣徽章 + 现价 + 划线 RRP，来源链接推到行尾右对齐
+  if (stack) {
+    return (
+      <div
+        key={it.key}
+        style={{
+          minWidth: 0,
+          padding: '8px 10px',
+          borderRadius: radius.card,
+          background: color.canvasSoft,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <BrandDot brand={it.brand} />
+          <span
+            title={it.name}
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: color.ink,
+              flex: '1 1 0',
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {it.name}
+          </span>
+          {bellNode}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
+          {it.discount != null && <DiscountBadge discount={it.discount} />}
+          <span
+            className="tnum"
+            title={it.price != null ? undefined : '该时点无采数'}
+            style={{ fontSize: 17, lineHeight: '22px', fontWeight: 700, color: it.price != null ? color.ink : color.hairlineStrong, whiteSpace: 'nowrap' }}
+          >
+            {formatPrice(it.price, currency)}
+          </span>
+          {it.rrp != null && (
+            <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>
+              {formatPrice(it.rrp, currency)}
+            </span>
+          )}
+          <span style={{ flex: '1 1 0', minWidth: 0 }} />
+          {shopNode}
+        </div>
+      </div>
+    );
+  }
+
+  return (
     <div
       key={it.key}
       style={{
@@ -143,38 +230,12 @@ export default function PriceSummary({
       {Sep}
       {/* 右区：店铺链接 + 订阅铃铛（整体居右；铃铛第五十四轮放大改实心——更粗更显眼） */}
       <span style={{ flex: '1 1 0', minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-        {it.shop && (
-          <span style={{ fontSize: 10.5, lineHeight: '14px', whiteSpace: 'nowrap', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {it.url ? (
-              <a
-                href={it.url}
-                target="_blank"
-                rel="noreferrer"
-                title={`来源取证 · ${it.shop}（点击跳转）`}
-                style={{ color: color.link, textDecoration: 'none' }}
-                onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
-                onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
-              >
-                {it.shop} ↗
-              </a>
-            ) : (
-              <span style={{ color: color.mute }}>{it.shop}</span>
-            )}
-          </span>
-        )}
-        {/* 订阅铃铛（第五十三轮挪入；第五十四轮居中放大）＋触发黄点（追补⑨）。
-            预警中心重构：换统一 AlertBell 共享组件（未订阅 = 描边灰、已订阅 = 金实心
-            + 触发金点），与总览行尾/预警页矩阵同一形态同一语义 */}
-        {onToggleSubscribe && (
-          <AlertBell
-            subscribed={subscribedKeys?.has(it.key) ?? false}
-            count={alertCounts?.[it.key] ?? 0}
-            onToggle={() => onToggleSubscribe(it.key)}
-          />
-        )}
+        {shopNode}
+        {bellNode}
       </span>
     </div>
   );
+  };
 
   return (
     <div
