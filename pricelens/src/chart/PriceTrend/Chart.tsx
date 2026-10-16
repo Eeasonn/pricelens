@@ -248,9 +248,10 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
   );
 }
 
-/** 系列名标签（第五十七轮抽组件）：名称 = 跳转载体——悬停自显 ↗（React 态而非
- *  CSS :hover，合成事件环境同样生效），点击名称/↗ = 最新时点取证浮窗；
- *  季粒度第二行生命周期幅度照旧计入避让盒。 */
+/** 系列名标签（第五十七轮抽组件；第五十九轮再版）：名称下第二行 = 来源链接
+ *  「店铺名 ↗」链接蓝小字——目的地即文字（点击直达商城现页，取证语义见下），
+ *  名称本身点击 = 最新时点取证浮窗（快照截图 + 弱化活页次链接）。两行均计入
+ *  避让盒（buildLabelPlan sourceRow，计划盒 = 渲染盒）；季粒度生命周期第三行照旧。 */
 function SeriesNameLabel(props: {
   nm: {
     x: number;
@@ -263,23 +264,19 @@ function SeriesNameLabel(props: {
   brand: string;
   deltaPct: { pct: number } | null;
   latest: SeriesPoint | undefined;
-  currency: CurrencyMode;
   onOpen: (p: SeriesPoint, label: string) => void;
   dimmed: boolean;
 }) {
   const { nm, latest, onOpen } = props;
-  const [hover, setHover] = useState(false);
   const delta = props.deltaPct != null;
   const pct = props.deltaPct?.pct ?? 0;
   const pctLabel = props.deltaPct != null
-    ? (pct < 0 ? '−' : pct > 0 ? '+' : '±') + Math.abs(pct * 100).toFixed(1) + '%'
+    ? (pct < 0 ? '\u2212' : pct > 0 ? '+' : '\u00b1') + Math.abs(pct * 100).toFixed(1) + '%'
     : '';
   return (
     <div
       title={nm.text}
       className="lpl-nm"
-      onMouseEnter={() => latest && setHover(true)}
-      onMouseLeave={() => setHover(false)}
       onClick={
         latest
           ? (e) => {
@@ -293,17 +290,17 @@ function SeriesNameLabel(props: {
         // 钳 ≥2：分离面板 gridLeft=0（轴在外侧）时，起点贴左缘的系列名
         // 避让后可能推出容器（追补⑤）
         left: Math.max(2, nm.x),
-        top: nm.y, // 计划盒 = 渲染盒（含生命周期第二行），第三十二轮起不再偏移
+        top: nm.y, // 计划盒 = 渲染盒（含生命周期/来源行），第三十二轮起不再偏移
         display: 'flex',
-        flexDirection: delta ? 'column' : 'row',
-        alignItems: delta ? 'flex-start' : 'center',
-        gap: delta ? 1 : 4,
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 1,
         fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
         fontWeight: 600,
         lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
         color: nm.color,
         whiteSpace: 'nowrap',
-        // 名称承载跳转入口（悬停出 ↗ / 点击开取证浮窗），需要接收指针事件
+        // 名称行承载跳转（点击取证 / 来源链接直达），需要接收指针事件
         pointerEvents: latest ? 'auto' : 'none',
         cursor: latest ? 'pointer' : 'default',
         zIndex: 9,
@@ -330,36 +327,31 @@ function SeriesNameLabel(props: {
         >
           {nm.text}
         </span>
-        {latest && (
-          <span
-            role="button"
-            aria-label={`打开商城取证：${nm.text}（最新时点）`}
-            title={`打开商城取证 · ${nm.text}（最新时点）`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpen(latest, nm.text);
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 15,
-              height: 15,
-              flexShrink: 0,
-              borderRadius: 3,
-              border: `1px solid ${hover ? selectSoftInk : color.hairline}`,
-              background: color.canvas,
-              color: hover ? selectSoftInk : color.mute,
-              // 常显微标（第五十八轮，用户反馈「完全看不出来可以点」）：静置 45% 灰
-              // 可见可发现，悬停名称行升全亮+品牌蓝描边；悬停按钮本身同款高亮
-              opacity: hover ? 1 : 0.45,
-              transition: 'opacity 0.12s ease',
-            }}
-          >
-            <ExportOutlined style={{ fontSize: 8.5 }} />
-          </span>
-        )}
       </div>
+      {latest && (
+        <a
+          href={latest.url}
+          target="_blank"
+          rel="noreferrer"
+          title={`打开来源商城 · ${latest.shopName ?? '电商平台'}（现页，价格以截图为准）`}
+          onClick={(e) => e.stopPropagation()}
+          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 2,
+            fontSize: 10.5,
+            lineHeight: '13px',
+            fontWeight: 500,
+            color: color.link,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {latest.shopName ?? '来源'}
+          <ExportOutlined style={{ fontSize: 9 }} />
+        </a>
+      )}
       {delta && (
         <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap' }}>
           <span style={{ color: color.mute, fontWeight: 500 }}>
@@ -548,22 +540,8 @@ export default function Chart(props: ChartProps) {
   // 规则详见 chartModel.buildLabelPlan（P0 必放首末 + S/E 端点（第二十轮），超聚焦阈值
   // 时最大/最小降 P1（第三十二轮）；P1 = 变价点（周）/显示值变化点（月/季）冲突即隐；
   // lifecycleRow：季粒度生命周期第二行计入名称避让盒（第三十二轮，名称互压根因修复））
-  const labelPlan = useMemo(
-    () =>
-      buildLabelPlan({
-        geom,
-        series,
-        granularity,
-        priceTypes,
-        endpointMarks,
-        lifecycleRow: (key) => lifecycleDeltas.get(key) != null,
-      }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas],
-  );
-
-  // 系列名跳转载体（第五十七轮，用户拍板）：名称即入口——悬停浮现 ↗、点击名称/↗
-  // 弹该产品**最新时点**的取证浮窗（活页 = 现页链接在浮窗弱化次位，取证语义不破）。
-  // 最新点取最后一个有值且有 url 的点（退市后停在清库末点，语义仍是「该产品现页」）
+  // 系列名跳转载体（第五十七轮建；第五十九轮改直显目的地）：每系列最后一个
+  // 有值且带 url 的点（退市后停在清库末点，语义仍是「该产品现页」）
   const latestPointByKey = useMemo(() => {
     const m = new Map<string, SeriesPoint>();
     for (const s of series) {
@@ -577,6 +555,20 @@ export default function Chart(props: ChartProps) {
     }
     return m;
   }, [series]);
+
+  const labelPlan = useMemo(
+    () =>
+      buildLabelPlan({
+        geom,
+        series,
+        granularity,
+        priceTypes,
+        endpointMarks,
+        lifecycleRow: (key) => lifecycleDeltas.get(key) != null,
+        sourceRow: (key) => latestPointByKey.has(key),
+      }),
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, latestPointByKey],
+  );
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
   // focusKey（第三十二轮聚焦模式）：非聚焦系列降透明 0.15、数值标签隐藏
@@ -1323,7 +1315,6 @@ export default function Chart(props: ChartProps) {
                     brand={brandByKey.get(nm.seriesKey) ?? ''}
                     deltaPct={lifecycleDeltas.get(nm.seriesKey) ?? null}
                     latest={latestPointByKey.get(nm.seriesKey)}
-                    currency={props.currency}
                     dimmed={focusActive && nm.seriesKey !== focusKey}
                     onOpen={(p, label) =>
                       setSnapInfo({

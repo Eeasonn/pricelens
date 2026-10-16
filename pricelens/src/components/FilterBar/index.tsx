@@ -1,24 +1,28 @@
 // ============================================================
-// §4.1/§4.2 筛选条（反馈 2.1–2.6 重构；第二十八轮两行定版 → 第五十七轮单行定版）：
-// 领导反馈「筛选器太多」——主行只留高频四格：产品 ｜ 竞品（+自动匹配）｜ 季/月/周 ｜ 筛选。
-// 次级筛选项（国家/产业/平台/币种/时间范围/自适应）收进「筛选」Popover；
-// 有任一项偏离默认时按钮出数字角标（不改状态也能看出当前口径被调过）。
-// 筛选器名称统一为「行外前缀标签」（12px 静音灰）；列间距 10px。
-// 宽度预算：327+327+约150(粒度)+约92(筛选钮) + 标签/间距 ≈ 990 ≤ 1232（1280 视口）。
-// 反馈 2.4：嵌套 ConfigProvider 只包筛选条（浅蓝选中态），components.Button 回写
-// colorPrimary=ink，主按钮保持 ink 黑。
+// §4.1/§4.2 筛选条（第二十八轮两行 → 第五十七轮单行 → 第五十九轮上下文条）：
+// 领导反馈「筛选器不直观、国家/产业是重要信息」——筛选框整体降格为一行
+// 可点击的上下文声明（token 式）：
+//   欧亚 / R国 · 手机 ｜ [产品 ▾] vs [竞品 ▾] ｜ [周 ▾] [USD ▾]  ⋯
+// · 国家/产业 = 常显文字上下文（当前各仅一个可选值，实为范围声明；仍在 ⋯ 内可改）
+// · 产品/竞品 = 词块点击弹原有级联；自动匹配开关在竞品弹层内
+// · 粒度/币种 = 词块点击弹 Segmented
+// · 低频（平台/时间范围+自适应）收进行尾 ⋯（偏离默认出数字角标）
+// 反馈 2.4：嵌套 ConfigProvider 浅蓝选中态；filterBarTheme 导出给总览复用。
 // 默认导出与路径不得变更（Dashboard 引用）。
 // ============================================================
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { ConfigProvider, Popover } from 'antd';
+import { DownOutlined, MoreOutlined } from '@ant-design/icons';
 import type { ThemeConfig } from 'antd';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import { DEFAULT_PLATFORM_SELECTION, useFilters } from '../../state/FiltersContext';
+import { modelNameOf } from '../ProductCascader/tree';
 import CountryBox from './CountryBox';
 import PlatformBox from './PlatformBox';
 import CurrencyBox from './CurrencyBox';
 import { GranularityControl, RangeControl } from './TimeBox';
 import { AutoMatchControl, CompetitorControl, IndustryControl, OwnProductControl } from './ProductBox';
+import type { Granularity } from '../../dataModel/types';
 
 /** §5.3 平台框说明（原感叹号文案，降级为悬停提示） */
 const INFO_PLATFORM = '当未筛选平台时，显示该国家下最低价格的平台结果';
@@ -84,21 +88,22 @@ function ProductCell({
   );
 }
 
-/** 次级筛选有偏离默认项的数量（第五十七轮）：币种≠USD / 自适应关 / 国家≠RU / 平台≠默认官方店 */
+/** ⋯ 弹层内有偏离默认项的数量（第五十九轮）：国家≠RU / 产业≠phone / 平台≠默认官方店 / 自适应关。
+ *  粒度/币种已升格为常显词块（值直接可见），不再计数。 */
 function useSecondaryCount(): number {
   const { state } = useFilters();
   return useMemo(() => {
     let n = 0;
-    if (state.currency !== 'usd') n += 1;
     if (!state.adaptive) n += 1;
     if (state.countryCode !== 'RU') n += 1;
+    if (state.industry !== 'phone') n += 1;
     if (JSON.stringify(state.platform) !== JSON.stringify(DEFAULT_PLATFORM_SELECTION)) n += 1;
     return n;
-  }, [state.currency, state.adaptive, state.countryCode, state.platform]);
+  }, [state.adaptive, state.countryCode, state.industry, state.platform]);
 }
 
-/** 次级筛选弹层（第五十七轮）：国家/产业/平台/币种/时间范围+自适应——低频项统一收纳 */
-function SecondaryFilters() {
+/** ⋯ 口径弹层（第五十九轮）：国家/产业（低频改）/平台/时间范围+自适应 */
+function MoreFilters() {
   return (
     <div style={{ width: 424, display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 4px' }}>
       <div style={{ display: 'flex', alignItems: 'center', columnGap: 10 }}>
@@ -113,9 +118,6 @@ function SecondaryFilters() {
         <Cell flex="0 0 164px" min={164} label="平台" info={INFO_PLATFORM}>
           <PlatformBox />
         </Cell>
-        <Cell flex="0 0 160px" min={160} label="币种">
-          <CurrencyBox />
-        </Cell>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', columnGap: 10 }}>
         <span style={filterLabel}>范围</span>
@@ -127,13 +129,72 @@ function SecondaryFilters() {
   );
 }
 
-/** 筛选条（§5）；图表侧（Agent C）消费 useFilters().state。
- *  第五十七轮定版（领导反馈筛选器太多）：单行布局——产品 ｜ 竞品（+自动匹配）｜ 季/月/周 ｜ 筛选。
- *  国家/产业/平台/币种/时间范围/自适应收进「筛选」Popover；有偏离默认项时按钮带数字角标。
- *  第五十三轮：自动匹配开关在竞品级联之前；自动匹配开启时平台一并锁定置灰。 */
+/** 词块（第五十九轮）：文字 + 下拉箭头的轻量按钮——点击弹选择面板。
+ *  视觉 = 行内文字的延伸（无粗框），hover 提亮描边示意可点。 */
+function Token({
+  label,
+  title,
+  muted,
+  children,
+}: {
+  label: ReactNode;
+  title: string;
+  muted?: boolean;
+  children: ReactNode;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <Popover trigger="click" placement="bottomLeft" content={children} arrow={false}>
+      <button
+        type="button"
+        title={title}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          height: 26,
+          padding: '0 8px',
+          borderRadius: radius.control,
+          border: `1px solid ${hover ? selectAccent : 'transparent'}`,
+          background: hover ? color.canvasSoft : 'transparent',
+          color: muted ? color.mute : color.ink,
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: 'inherit',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          maxWidth: 340,
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <DownOutlined style={{ fontSize: 8, color: color.mute, flexShrink: 0 }} />
+      </button>
+    </Popover>
+  );
+}
+
+/** 组间竖隔线（时点页签同语言：1×14 灰） */
+const Sep = <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />;
+
+/** 筛选上下文条（§5）；图表侧消费 useFilters().state。
+ *  第五十九轮定版：一行可点击的上下文声明——国家/产业常显文字，产品/竞品/粒度/币种
+ *  为词块（点击弹原选择面板），低频项收行尾 ⋯（偏离默认出数字角标）。 */
 export default function FilterBar() {
+  const { state } = useFilters();
   const secondaryCount = useSecondaryCount();
-  const [open, setOpen] = useState(false);
+
+  const scope = `${state.countryCode === 'RU' ? '欧亚 / R国' : state.countryCode} · ${state.industry === 'phone' ? '手机' : state.industry}`;
+  const productLabel = state.own.length
+    ? state.own.map((s0) => `${modelNameOf(s0.modelId)} ${s0.romram}`).join('、')
+    : '选择产品';
+  const compModels = [...new Set(state.competitors.map((c) => modelNameOf(c.modelId)))];
+  const compLabel = compModels.length
+    ? compModels.slice(0, 3).join(' · ') + (compModels.length > 3 ? ` +${compModels.length - 3}` : '')
+    : '匹配竞品';
+  const granLabel = (g: Granularity) => (g === 'week' ? '周' : g === 'month' ? '月' : '季');
+
   return (
     <div style={{ padding: `${space.base}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
@@ -143,74 +204,102 @@ export default function FilterBar() {
             background: color.canvas,
             boxShadow: shadow.l1,
             borderRadius: radius.card,
-            padding: `${space.sm}px ${space.lg}px`,
+            padding: `8px ${space.lg}px`,
             display: 'flex',
-            flexDirection: 'column',
+            alignItems: 'center',
+            columnGap: 12,
+            minWidth: 0,
+            overflowX: 'auto',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', columnGap: 10, minWidth: 0 }}>
-            <ProductCell flex="1 1 327px" min={327} label="产品" info={INFO_OWN}>
+          {/* 范围上下文（国家 · 产业）：常显文字，值在 ⋯ 内可改 */}
+          <span
+            title="分析范围：国家 · 产业（在行尾 ⋯ 内可调整）"
+            style={{ fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            {scope}
+          </span>
+          {Sep}
+          {/* 产品 ｜ 竞品（对比关系用 vs 文字直陈） */}
+          <Token label={productLabel} title="选择我司产品与配置">
+            <div style={{ width: 384 }}>
               <OwnProductControl />
-            </ProductCell>
-            <ProductCell flex="1 1 327px" min={327} label="竞品" button={<AutoMatchControl />}>
-              <CompetitorControl />
-            </ProductCell>
-            <Cell flex="0 0 auto" min={0} label="时间">
+            </div>
+          </Token>
+          <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>vs</span>
+          <Token label={compLabel} title="选择对标竞品（自动匹配开启时随我司配置带出）" muted={state.competitors.length === 0}>
+            <div style={{ width: 384, display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>自动匹配</span>
+                <AutoMatchControl />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <CompetitorControl />
+              </div>
+            </div>
+          </Token>
+          {Sep}
+          {/* 粒度 ｜ 币种 */}
+          <Token label={granLabel(state.granularity)} title="时间粒度">
+            <div style={{ padding: '2px 2px 4px' }}>
               <GranularityControl />
-            </Cell>
-            <Popover
-              trigger="click"
-              placement="bottomRight"
-              open={open}
-              onOpenChange={setOpen}
-              content={<SecondaryFilters />}
-              arrow={false}
+            </div>
+          </Token>
+          <Token label={state.currency === 'usd' ? 'USD' : '本币 ₽'} title="显示币种">
+            <div style={{ padding: '2px 2px 4px' }}>
+              <CurrencyBox />
+            </div>
+          </Token>
+          {/* 行尾 ⋯：低频口径（国家/产业/平台/时间范围+自适应）+ 偏离默认角标 */}
+          <span style={{ flex: 1 }} />
+          <Popover trigger="click" placement="bottomRight" content={<MoreFilters />} arrow={false}>
+            <button
+              type="button"
+              title="国家 / 产业 / 平台 / 时间范围"
+              aria-label={`更多筛选${secondaryCount > 0 ? `（${secondaryCount} 项已调整）` : ''}`}
+              style={{
+                flexShrink: 0,
+                width: 28,
+                height: 26,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                borderRadius: radius.control,
+                border: `1px solid ${secondaryCount > 0 ? selectAccent : 'transparent'}`,
+                background: secondaryCount > 0 ? selectSoft : 'transparent',
+                color: secondaryCount > 0 ? selectSoftInk : color.mute,
+                cursor: 'pointer',
+                position: 'relative',
+              }}
             >
-              <button
-                type="button"
-                title="国家 / 产业 / 平台 / 币种 / 时间范围"
-                aria-label={`更多筛选${secondaryCount > 0 ? `（${secondaryCount} 项已调整）` : ''}`}
-                style={{
-                  flexShrink: 0,
-                  height: 32,
-                  padding: '0 12px',
-                  borderRadius: radius.control,
-                  border: `1px solid ${secondaryCount > 0 ? selectAccent : color.hairline}`,
-                  background: secondaryCount > 0 ? selectSoft : color.canvas,
-                  color: secondaryCount > 0 ? selectSoftInk : color.body,
-                  fontSize: 12.5,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                筛选
-                {secondaryCount > 0 && (
-                  <span
-                    className="tnum"
-                    style={{
-                      minWidth: 16,
-                      height: 16,
-                      padding: '0 4px',
-                      borderRadius: 8,
-                      background: selectAccent,
-                      color: '#fff',
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {secondaryCount}
-                  </span>
-                )}
-              </button>
-            </Popover>
-          </div>
+              <MoreOutlined style={{ fontSize: 13 }} />
+              {secondaryCount > 0 && (
+                <i
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    top: -3,
+                    right: -3,
+                    minWidth: 14,
+                    height: 14,
+                    padding: '0 3px',
+                    borderRadius: 7,
+                    background: selectAccent,
+                    color: '#fff',
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    fontStyle: 'normal',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {secondaryCount}
+                </i>
+              )}
+            </button>
+          </Popover>
         </section>
       </ConfigProvider>
     </div>

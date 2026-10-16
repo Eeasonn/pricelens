@@ -49,6 +49,8 @@ export const ZONE_LINE_H = 16;
 /** 生命周期第二行占高（第三十二轮）：11px 字号 13px 行高 + 行距 1——
  *  必须计入名称避让盒，否则相邻名称互压 ~14px（用户底线：名称互不遮挡） */
 export const LIFECYCLE_ROW_H = 14;
+/** 来源链接第二行高（第五十九轮：名称下方常驻「店铺名 ↗」链接，跳转入口直显目的地） */
+export const SOURCE_ROW_H = 13;
 /** 聚焦模式阈值（第三十二轮）：系列数 > 阈值时图面名称/生命周期行退场，
  *  识别走「悬停折线高亮单系列」+ 钉顶图例卡——0 个常驻名称 = 0 遮挡 */
 export const FOCUS_MODE_THRESHOLD = 8;
@@ -186,6 +188,8 @@ export function buildLabelPlan(p: {
   endpointMarks: Map<string, SeriesMark>;
   /** 该系列是否渲染「生命周期 −X%」第二行（季粒度；第三十二轮起计入避让盒） */
   lifecycleRow?: (seriesKey: string) => boolean;
+  /** 该系列是否渲染来源链接第二行（第五十九轮；计入避让盒，计划盒 = 渲染盒） */
+  sourceRow?: (seriesKey: string) => boolean;
 }): LabelPlan {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
@@ -272,7 +276,10 @@ export function buildLabelPlan(p: {
     const zoneBoxW = Math.min(nw, NAME_ZONE_W - 8);
     const zoneLines = nw > NAME_ZONE_W - 8 ? 2 : 1;
     const baseH = useZone ? zoneLines * ZONE_LINE_H : NAME_LINE_HEIGHT;
-    const fullH = p.lifecycleRow?.(s.key) ? baseH + LIFECYCLE_ROW_H : baseH;
+    const fullH =
+      baseH +
+      (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0) +
+      (p.sourceRow?.(s.key) ? SOURCE_ROW_H : 0);
     items.push({
       kind: 'name',
       seriesKey: s.key,
