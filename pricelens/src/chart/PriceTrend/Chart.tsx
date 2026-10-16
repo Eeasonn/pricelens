@@ -1089,9 +1089,18 @@ export default function Chart(props: ChartProps) {
               );
               const nOfferLines = offerRows.reduce((acc, l) => acc + l.length, 0);
               const x0 = xPxOf(geom, hoverIdx);
-              // 第五十三轮：200 → 264（产品名截断）；第六十轮：264 → 324——折扣/现价/RRP
-              // 三列右对齐（定宽列）+ 字号对齐折线价格标签（14px）需要更多横向空间
-              const W = 324;
+              // 第六十一轮：浮窗宽度随内容动态适配——三列各取本列最宽数值（ch 单位贴合
+              // tabular 数字宽），间距收紧（gap 6），不再用固定 324 留白
+              const priceCh = Math.max(...rows.map((r) => fmt_mm(r.v).length));
+              const rrpCh = Math.max(
+                2,
+                ...rows.map((r) => {
+                  const rr = r.s.points[hoverIdx].rrp;
+                  return rr != null ? fmt_mm(rr).length : 0;
+                }),
+              );
+              const nameEst = Math.max(...rows.map((r) => curveNameOf(r.s).length)) * 6.2 + 14;
+              const W = Math.ceil(20 + 6 * 6 + 2 + 38 + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst));
               const flip = x0 + 16 + W > geom.plotLeft + geom.plotWidth;
               const left = flip ? x0 - 16 - W : x0 + 16;
               const top = Math.min(
@@ -1132,7 +1141,7 @@ export default function Chart(props: ChartProps) {
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 8,
+                            gap: 6,
                             fontSize: 13,
                             lineHeight: '20px',
                             opacity: dim ? 0.3 : undefined,
@@ -1149,17 +1158,17 @@ export default function Chart(props: ChartProps) {
                           {/* 第六十轮：折扣/现价/RRP 三列定宽右对齐（跨行同列对齐，表格读数）；
                               现价字号=折线上价格标签同款 14px。第六十一轮修：span 须 inline-block
                               （inline 忽略 width，textAlign right 落空=三列没对齐）+ 列间灰短竖线 */}
-                          <span className="tnum" style={{ width: 46, textAlign: 'right', flexShrink: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>
+                          <span className="tnum" style={{ width: 38, textAlign: 'right', flexShrink: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>
                             {disc != null && <MiniDiscountBadge discount={disc} dim={dim} />}
                           </span>
                           <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
-                          <span className="tnum" style={{ width: 56, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>
+                          <span className="tnum" style={{ width: `${priceCh}ch`, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>
                             {fmt_mm(v)}
                           </span>
                           <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
                           <span
                             className="tnum"
-                            style={{ width: 46, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
+                            style={{ width: `${rrpCh}ch`, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
                           >
                             {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
                           </span>
