@@ -9,11 +9,12 @@
 // 带尾区删除（未建对标不再展示）；产品筛选器加宽。
 // 纯展示层：结构全部来自 buildOverviewMatrix（金测锚定），本文件不取数。
 // ============================================================
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Button, ConfigProvider, Segmented, Select } from 'antd';
+import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { ConfigProvider, Segmented, Select } from 'antd';
 import { SwapOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
+import { navBus } from '../state/navBus';
 import type { ProductSelection } from '../state/filtersTypes';
 import { buildOverviewMatrix, TIER_LABELS } from '../dataModel/aggregate';
 import type { OverviewModel, OverviewRow, OverviewSparkPoint } from '../dataModel/aggregate';
@@ -25,13 +26,14 @@ import { IndustryControl, OwnProductControl } from '../components/FilterBar/Prod
 import { dimChannel, dimTime } from '../data';
 import { getEffectiveBenchmark } from '../state/configStore';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
+import PageHeader from '../components/PageHeader';
 import BenchConfigModal from './overview/BenchConfigModal';
 import MultiPlatformModal from './overview/MultiPlatformModal';
 import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import BrandGlyph from '../components/BrandGlyph';
 import MatrixSpark from './overview/MatrixSpark';
-import AlertCenterButton, { SubscribeButton } from '../components/AlertCenter';
-import { seriesKeyOfSku } from '../dataModel/alerts';
+import { AlertBell, alertDigest, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
+import { groupAlertsBySeries, latestByType, seriesKeyOfSku, type AlertItem } from '../dataModel/alerts';
 import { diffPct } from '../chart/PriceTrend/helpers';
 import { DiscountBadge } from '../chart/PriceTrend/PriceSummary';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
@@ -59,8 +61,10 @@ function FilterCell({ label, min, children }: { label: string; min?: number; chi
  *  价格趋势（周期最低+日期 与 迷你图 同区）——四列，竖线全程连续
  *  （分隔线画在 Td 上、行内边距收进单元格里，行与行的线首尾相接不断开）。 */
 const ROW_GRID: CSSProperties = {
+  // 第五十五轮：预警列 100 → 216（格内直接放最新预警凝练详情，用户指定），
+  // 售价/价差/趋势三列各收一点找补；产品列 flex 吸收
   display: 'grid',
-  gridTemplateColumns: 'minmax(0,1fr) 176px 112px 252px',
+  gridTemplateColumns: 'minmax(0,1fr) 168px 96px 216px 240px',
   alignItems: 'stretch',
   columnGap: 0,
 };
@@ -157,6 +161,72 @@ function boxDomain(series: OverviewSparkPoint[][]): { domainMin: number; domainM
  *  'own' = 我司比竞品（diffPct(我司,竞品)）；切换器在我司行原「vs 主竞品」空槽位 */
 type DiffDir = 'comp' | 'own';
 
+/** 预警列单元格（第五十五轮改版，用户口径）：铃铛统一放预警格（所有行），格子只报
+ *  「最新态」——每类型最新一条的凝练详情（调价 ↓x% → $价 / 促销加深 x pp / 平台差 / 间距），
+ *  历史计数（×N）不再展示，历史在预警中心次级视图看；未订阅 = 「—」、静默 = 「监控中」 */
+function OverviewAlertCell({ items, subscribed, currency, bell, onOpen }: {
+  items: AlertItem[];
+  subscribed: boolean;
+  currency: 'usd' | 'local';
+  bell?: ReactNode;
+  onOpen: () => void;
+}) {
+  const latest = subscribed ? latestByType(items) : [];
+  const lineTitle = (a: AlertItem): string =>
+    (a.type === 'own-gap'
+      ? `${a.pairLowLabel} / ${a.pairHighLabel}：间距 ${pctText(a.ownGapPct)}（低于阈值）`
+      : `${a.brand} ${a.modelName} ${a.romram}：${TYPE_STYLE[a.type].label} ${pctText(
+          a.type === 'promo' ? a.promoDeltaPp : a.type === 'platform-gap' ? a.gapPct : a.wowPct,
+        )}`) + ` · ${a.weekLabel}（W${a.weekId.slice(4)}）— 点击进预警中心`;
+  let status: ReactNode;
+  if (!subscribed) {
+    status = <span style={{ fontSize: 11, color: color.hairlineStrong }}>—</span>;
+  } else if (latest.length === 0) {
+    status = <span style={{ fontSize: 10.5, color: '#0a7d38' }}>监控中</span>;
+  } else {
+    status = (
+      <span
+        role="button"
+        onClick={onOpen}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, cursor: 'pointer', minWidth: 0 }}
+      >
+        {latest.map((a) => (
+          <span
+            key={a.key}
+            title={lineTitle(a)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}
+          >
+            <span
+              style={{
+                flexShrink: 0,
+                padding: '0 6px',
+                fontSize: 10,
+                fontWeight: 700,
+                lineHeight: '16px',
+                borderRadius: radius.pill,
+                color: TYPE_STYLE[a.type].fg,
+                background: TYPE_STYLE[a.type].bg,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {TYPE_STYLE[a.type].short}
+            </span>
+            <span className="tnum" style={{ fontSize: 11, fontWeight: 600, color: color.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {alertDigest(a, currency)}
+            </span>
+          </span>
+        ))}
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, width: '100%' }}>
+      {bell}
+      {status}
+    </span>
+  );
+}
+
 /** 我司 ROM 行（第五十四轮定版）：主列 = 点+品牌+产品名（14/700）+ROMRAM（15/700 更大，
  *  用户：主要凸显的就是这个不同）+ 我司胶囊；行尾固定 竞品对比/多平台对比（＋添加竞品保留）。
  *  第五十四轮：整行点击进看板与行内「对比 ↗」删除（用户点名）——下钻只走「竞品对比」按钮 */
@@ -167,6 +237,10 @@ function OwnRomRow(props: {
   domainMax?: number;
   /** 竞品对比：该 ROM + 其对标竞品下钻看板（原整行点击/对比↗ 的唯一入口） */
   onCompare: () => void;
+  /** 预警列（追补⑨）：父层按系列组装好的状态单元格（第五十五轮起含订阅铃铛） */
+  alertCell?: ReactNode;
+  /** 迷你图点周（追补⑧）：带该周焦点进看板 */
+  onPickWeek?: (weekId: string) => void;
   /** 多平台对比：弹窗按该 ROM 预选 */
   onMultiPlatform: () => void;
   onConfigBench: () => void;
@@ -312,6 +386,7 @@ function OwnRomRow(props: {
           </span>
         ) : null}
       </Td>
+      <Td>{props.alertCell}</Td>
       {/* 价格趋势区（追补三）：分割线在最低价前——「低 $x · 日期」与迷你图同区 */}
       <Td last padY={9}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, width: '100%' }}>
@@ -324,6 +399,7 @@ function OwnRomRow(props: {
               width={104}
               domainMin={props.domainMin}
               domainMax={props.domainMax}
+              onPickWeek={props.onPickWeek}
             />
           </span>
         </span>
@@ -352,6 +428,10 @@ function CompRomRow(props: {
   ownPrice?: number | null;
   /** 价差方向：随我司行切换器 */
   diffDir?: DiffDir;
+  /** 预警列（追补⑨）：父层按系列组装好的状态单元格 */
+  alertCell?: ReactNode;
+  /** 迷你图点周（追补⑧）：带该周焦点进看板（上下文 = 所在 ROM 框的我司行） */
+  onPickWeek?: (weekId: string) => void;
   /** 周期最低价 + 下标（P0②，aggregate extremes 同源） */
   minV?: number | null;
   minIdx?: number;
@@ -399,6 +479,7 @@ function CompRomRow(props: {
       <Td justify="end">
         <DiffCell label={dir === 'comp' ? 'vs 我司' : 'vs 此竞品'} diff={diff} />
       </Td>
+      <Td>{props.alertCell}</Td>
       {/* 价格趋势区（追补三）：「低 $x · 日期」与迷你图同区 */}
       <Td last>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, width: '100%' }}>
@@ -411,6 +492,7 @@ function CompRomRow(props: {
               width={104}
               domainMin={props.domainMin}
               domainMax={props.domainMax}
+              onPickWeek={props.onPickWeek}
             />
           </span>
         </span>
@@ -426,6 +508,21 @@ export default function Overview() {
   // 第四十四轮：竞品映射吃「生效矩阵」（配置页/配置对标弹窗的手动快照优先，回退 auto），
   // CONFIG_CHANGED_EVENT → 重建（看板 autoMatch 开时竞品组同事件自动跟随）
   const [bench, setBench] = useState<DimBenchmark[]>(() => getEffectiveBenchmark());
+
+  // 追补⑧（总览↔看板闭环①）：看板「← 返回总览该产品」携带 modelId——挂载后滚动定位
+  // 到该型号头行（滚动容器 = [data-lpl-scroll]，延时等首帧渲染；IAB 注意事项同 openCompare）
+  useLayoutEffect(() => {
+    const target = navBus.overviewScrollTo;
+    if (!target) return;
+    navBus.overviewScrollTo = null;
+    window.setTimeout(() => {
+      const scroller = document.querySelector<HTMLElement>('[data-lpl-scroll]');
+      const el = document.querySelector<HTMLElement>(`[data-model-id="${target}"]`);
+      if (!scroller || !el) return;
+      scroller.scrollTop =
+        el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12;
+    }, 160);
+  }, []);
   useEffect(() => {
     const h = () => setBench(getEffectiveBenchmark());
     window.addEventListener(CONFIG_CHANGED_EVENT, h);
@@ -514,12 +611,13 @@ export default function Overview() {
   /** 竞品对比：型号（或单 ROM）进看板；自动匹配关时仍按配置矩阵带出该型号竞品。
    *  第五十四轮追补：切页后延时把看板滚到价格走势区——筛选器留在上方，顶部圆形 ↑ 可回。
    *  滚动在 Overview 闭包里延时执行（跨组件卸载存活；全局查滚动容器，与 StrictMode/HMR 无关） */
-  const openCompare = (m: OverviewModel, romram?: string): void => {
+  const openCompare = (m: OverviewModel, romram?: string, /** 追补⑧：携带「周期最低价周」为看板窗口焦点 */ focusWeekId?: string | null): void => {
     const rows = romram ? m.rows.filter((r) => norm(r.romram) === norm(romram)) : m.rows;
     if (rows.length === 0) return;
     const list: ProductSelection[] = rows.map((r) => ({ modelId: m.modelId, romram: r.romram, skuIds: [r.skuId] }));
     actions.setOwnSelection(list);
     if (!state.autoMatch) actions.resetCompetitorsToConfig();
+    navBus.dashboardFocusWeekId = focusWeekId ?? null;
     go('dashboard');
     // 切页后滚到价格走势区（滚动容器 = [data-lpl-scroll]，html/body 锁 100% 高、window 不滚；
     // IAB 环境 scrollTo() 无效需直接赋值）。注：IAB webview 会在切页后 ~12s 内反复清零程序
@@ -533,41 +631,36 @@ export default function Overview() {
     }, 160);
   };
 
+  // 追补⑨：总览「预警」列——按系列聚合触发（预警中心重构：收编为 alerts.ts 纯函数，
+  // own-gap 同时归属低价档与高价档，与预警页矩阵同源）。第五十五轮：铃铛统一进预警格
+  const alerts = useAlerts();
+  const alertsBySeries = useMemo(() => groupAlertsBySeries(alerts), [alerts]);
+  const alertCellFor = (skuId: string | undefined): ReactNode => {
+    if (!skuId) return null;
+    const key = seriesKeyOfSku(skuId);
+    return (
+      <OverviewAlertCell
+        items={alertsBySeries.get(key) ?? []}
+        subscribed={state.alertSubs.includes(key)}
+        currency={currency}
+        bell={
+          <AlertBell
+            subscribed={state.alertSubs.includes(key)}
+            count={alertsBySeries.get(key)?.length ?? 0}
+            onToggle={() => actions.toggleAlertSub(key)}
+          />
+        }
+        onOpen={() => go('alerts')}
+      />
+    );
+  };
+
   return (
-    <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
+    // data-lpl-scroll：追补⑧「← 返回总览」滚动定位的滚动容器标记（与看板同约定）
+    <div data-lpl-scroll style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
       <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-        {/* 顶栏 64px（与看板/配置同构） */}
-        <header
-          style={{
-            height: 64,
-            flexShrink: 0,
-            background: color.canvas,
-            boxShadow: shadow.l1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: `0 ${space.lg}px`,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md }}>
-            <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
-            <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-              欧亚 / R国 · 国家总览
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
-            <AlertCenterButton />
-            <Button size="small" type="primary" style={{ height: 28 }}>
-              总览
-            </Button>
-            <Button size="small" style={{ height: 28 }} onClick={() => go('dashboard')}>
-              价格看板
-            </Button>
-            <Button size="small" style={{ height: 28 }} onClick={() => go('config')}>
-              配置
-            </Button>
-          </div>
-        </header>
+        {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
+        <PageHeader title="国家总览" />
 
         <main style={{ flex: 1, padding: space.lg }}>
           <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg }}>
@@ -642,15 +735,16 @@ export default function Overview() {
                       我司 {ownModels.length} · 竞品 {compCount}
                     </span>
                     <span style={{ flex: 1 }} />
-                    <span style={{ fontSize: fontSize.caption, color: color.mute }}>对标 = ROM 级映射 · 配置页维护</span>
+                    <span style={{ fontSize: fontSize.caption, color: color.mute }}>对标 = ROM 级映射 · 行尾「＋添加竞品」维护</span>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
                     {ownModels.map((m) => (
                       <div key={m.modelId} style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
                         {/* 型号头行：ROM 格子的归属（品牌图标（华为=花瓣标，第五十四轮追补用户指定）
-                            +名称/生命周期/快捷按钮；第四十五轮名称带品牌名） */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: '0 2px' }}>
+                            +名称/生命周期/快捷按钮；第四十五轮名称带品牌名）。
+                            data-model-id = 看板「← 返回总览」的滚动定位锚点（追补⑧） */}
+                        <div data-model-id={m.modelId} style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: '0 2px' }}>
                           <BrandGlyph brand={m.brand} size={16} />
                           <span style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>
                             {m.modelName.toLowerCase().startsWith(brandLabelOf(m.brand).toLowerCase()) ? null : (
@@ -665,15 +759,6 @@ export default function Overview() {
                             </span>
                           )}
                           <span style={{ flex: 1 }} />
-                          {/* 订阅预警（第五十二轮）：该型号我司全部 ROM + 映射竞品一次订阅；
-                              竞品对比/多平台对比第五十四轮下沉到各 ROM 行尾 */}
-                          <SubscribeButton
-                            keys={[
-                              ...new Set(
-                                [...m.rows.map((r) => r.skuId), ...m.comps.map((c) => c.skuId)].map(seriesKeyOfSku),
-                              ),
-                            ]}
-                          />
                         </div>
                         {/* ROM 包裹格：行组表格——我司行在上、映射竞品在下（第四十轮对齐定版） */}
                         {m.rows.map((r) => {
@@ -697,6 +782,7 @@ export default function Overview() {
                                 <Th first>产品</Th>
                                 <Th>当前售价</Th>
                                 <Th>竞品对比</Th>
+                                <Th>预警</Th>
                                 <Th last>价格趋势</Th>
                               </div>
                               <OwnRomRow
@@ -708,7 +794,12 @@ export default function Overview() {
                                 onToggleDiffDir={() => toggleDiffDir(dirKey)}
                                 canToggleDiff={romComps.length > 0}
                                 dateOf={dateOf}
-                                onCompare={() => openCompare(m, r.romram)}
+                                onCompare={() =>
+                                  // 追补⑧：下钻携带周期最低价周——看板窗口直接对准「低 $x · 发生周」
+                                  openCompare(m, r.romram, r.minIdx >= 0 ? r.points[r.minIdx]?.weekId ?? null : null)
+                                }
+                                alertCell={alertCellFor(r.skuId)}
+                                onPickWeek={(w) => openCompare(m, r.romram, w)}
                                 onMultiPlatform={() => setMpSel({ model: m, romram: r.romram })}
                                 onConfigBench={() => setBenchSel({ modelId: m.modelId, romram: r.romram })}
                               />
@@ -729,7 +820,7 @@ export default function Overview() {
                                         color: color.mute,
                                       }}
                                     >
-                                      未配置对标竞品 — 可在配置页维护映射
+                                      未配置对标竞品 — 点行尾「＋添加竞品」添加
                                     </div>
                                   </div>
                                 ) : (
@@ -753,6 +844,8 @@ export default function Overview() {
                                       dateOf={dateOf}
                                       minV={c.minV}
                                       minIdx={c.minIdx}
+                                      alertCell={alertCellFor(c.skuId)}
+                                      onPickWeek={(w) => openCompare(m, r.romram, w)}
                                     />
                                   ))
                                 )}

@@ -18,6 +18,8 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { Checkbox, Segmented, Switch } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
+import { navBus } from '../../state/navBus';
+import { useAlerts } from '../../components/AlertCenter';
 import { buildSeries, lowestPriceColorSku } from '../../dataModel/aggregate';
 import { getEffectiveBenchmark } from '../../state/configStore';
 import { dimPromo, dimProduct } from '../../data';
@@ -59,6 +61,7 @@ import {
   perUsdOf,
   seriesSpanRange,
   splitAxisWidth,
+  bucketIdOfWeek,
   NAME_ZONE_W,
   type Bucket,
   type StripGeom,
@@ -166,6 +169,23 @@ export default function PriceTrend() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adaptiveKey]);
 
+  // 追补⑧（总览↔看板闭环②）：总览下钻（竞品对比/迷你图点周）携带「焦点周」——
+  // 挂载后窗口对准该周 ±8 周（月 ±2 桶、季 ±1 桶，时间跨度近似），直接回答
+  // 「这个低价是怎么发生的」。声明在自适应 effect 之后：挂载首帧自适应先落范围，
+  // 这里再聚焦（最终窗口以焦点为准）；normalizeWindow 渲染期会把窗口钳入筛选范围。
+  // 焦点周经 bucketIdOfWeek 跨粒度换算（总览给周 id，看板可能停在月/季）。navBus 一次性消费
+  useEffect(() => {
+    const wk = navBus.dashboardFocusWeekId;
+    if (!wk) return;
+    navBus.dashboardFocusWeekId = null;
+    const id = bucketIdOfWeek(state.granularity, wk);
+    const i = id != null ? buckets.findIndex((b) => b.id === id) : -1;
+    if (i < 0) return;
+    const half = state.granularity === 'week' ? 8 : state.granularity === 'month' ? 2 : 1;
+    setWindowIds([buckets[Math.max(0, i - half)].id, buckets[Math.min(buckets.length - 1, i + half)].id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 窗口渲染期钳入筛选范围：范围缩小时窗口收缩；ids=null = 整个筛选范围
   const win = useMemo(
     () => normalizeWindow(buckets, windowIds, [state.rangeStart, state.rangeEnd]),
@@ -212,9 +232,17 @@ export default function PriceTrend() {
   };
 
   // 预警订阅（第五十二轮建；第五十三轮入口上移）：时点页签（PriceSummary）尾铃铛
-  // = 按系列（modelId__romram）订阅预警中心，三类预警（调价/降促/平台价差）
+  // = 按系列（modelId__romram）订阅预警中心，四类预警（追补⑨）
+  const alerts = useAlerts();
   const subscribedKeys = useMemo(() => new Set(state.alertSubs), [state.alertSubs]);
   const toggleAlertSub = (key: string): void => actions.toggleAlertSub(key);
+
+  // 追补⑨：看板预警显示——时点页签铃铛黄点 = 该系列触发条数（与预警中心页同一引擎）
+  const alertCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const a of alerts) m[a.seriesKey] = (m[a.seriesKey] ?? 0) + 1;
+    return m;
+  }, [alerts]);
 
   // ---- ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：该我司产品的全部内存存储选项 ----
   // 默认选中 = 当前 own 里该型号的 ROM（总览「竞品对比」带入 = 点击的那个）；
@@ -586,6 +614,7 @@ export default function PriceTrend() {
         currency={state.currency}
         granularity={state.granularity}
         pointDate={pointDate}
+        alertCounts={alertCounts}
         subscribedKeys={subscribedKeys}
         onToggleSubscribe={toggleAlertSub}
       />

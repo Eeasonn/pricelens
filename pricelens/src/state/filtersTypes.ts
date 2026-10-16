@@ -3,6 +3,8 @@
 // 核心字段冻结；筛选负责人（Agent B）只许追加字段，不许改动/删除已有字段
 // ============================================================
 import type { AggMode, CurrencyMode, Granularity } from '../dataModel/types';
+import type { AlertProductRule, AlertThresholds, AlertTypeSwitches } from '../dataModel/alerts';
+export type { AlertProductRule, AlertThresholds, AlertTypeSwitches };
 
 /** 一个"产品名+ROMRAM"勾选组（默认勾选落 ROMRAM 层、自动带最低价颜色） */
 export interface ProductSelection {
@@ -41,10 +43,15 @@ export interface FiltersState {
   /**
    * 第五十二轮 预警中心：已订阅系列（seriesKey = `modelId__romram去空格`，与图表
    * 系列 key 同空间——看板图例页签、总览型号块两处入口共用一份订阅）。
+   * 追补⑨起语义 = 「启用了预警的产品」：预警中心页按产品管理四类开关与阈值。
    */
   alertSubs: string[];
-  /** 预警变化阈值（小数，0.05=5%）：促销力度变化与竞品调价共用一条阈值线 */
-  alertThreshold: number;
+  /** 追补⑨：四类预警全局开关（调价 / 折扣 / 平台价差 / 档位间距） */
+  alertTypes: AlertTypeSwitches;
+  /** 追补⑨：四类预警全局阈值（小数，0.05=5%；own-gap 为「低于」触发） */
+  alertThresholds: AlertThresholds;
+  /** 追补⑨：按产品覆写（types/thresholds 部分字段，缺省回落全局；own-gap 不参与） */
+  alertProducts: Record<string, AlertProductRule>;
 }
 
 export interface FiltersActions {
@@ -66,6 +73,11 @@ export interface FiltersActions {
   toggleAlertSub(key: string): void;
   /** 批量订阅/退订（总览型号块：我司全部 ROM + 其映射竞品一次订阅） */
   setAlertSubs(keys: string[], on: boolean): void;
-  /** 变化阈值（小数，0.05=5%） */
-  setAlertThreshold(v: number): void;
+  // ---- 追补⑨ 预警细化 ----
+  /** 四类全局开关（部分补丁） */
+  setAlertTypes(patch: Partial<AlertTypeSwitches>): void;
+  /** 四类全局阈值（部分补丁，小数） */
+  setAlertThresholds(patch: Partial<AlertThresholds>): void;
+  /** 按产品覆写（rule = null 清除覆写回落全局） */
+  setAlertProductRule(key: string, rule: AlertProductRule | null): void;
 }

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button } from 'antd';
 import { ArrowUpOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
+import { useFilters } from '../state/FiltersContext';
+import { navBus } from '../state/navBus';
+import { modelNameOf } from '../components/ProductCascader/tree';
 import FilterBar from '../components/FilterBar';
 import PriceTrend from '../chart/PriceTrend';
-import AlertCenterButton from '../components/AlertCenter';
+import PageHeader from '../components/PageHeader';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
 
 const FOOTER_TEXT =
@@ -16,8 +18,19 @@ const FOOTER_TEXT =
  *  （滚动容器 = 根 div：html/body/#root 锁 100% 高，overflowX:auto → overflowY 计算 auto） */
 export default function Dashboard() {
   const { go } = usePage();
+  const { state } = useFilters();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [showTop, setShowTop] = useState(false);
+
+  // 追补⑧（总览↔看板闭环①）：上下文条数据——入口型号 + 勾选 ROM + 对标竞品数
+  const entryModelId = state.own[0]?.modelId ?? null;
+  const analysisLabel = entryModelId
+    ? `${modelNameOf(entryModelId)} · ${state.own.map((s) => s.romram).join('、')}`
+    : '—';
+  const backToOverview = (): void => {
+    if (entryModelId) navBus.overviewScrollTo = entryModelId;
+    go('overview');
+  };
 
   const onScroll = (): void => setShowTop((rootRef.current?.scrollTop ?? 0) > 140);
   useEffect(() => {
@@ -61,38 +74,32 @@ export default function Dashboard() {
       )}
       {/* 第二十八轮：1440 → 1280，筛选条重排后 1280 视口零溢出（1280 笔记本无横向滚动） */}
       <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-        {/* 顶栏 64px */}
-        <header
-          style={{
-            height: 64,
-            flexShrink: 0,
-            background: color.canvas,
-            boxShadow: shadow.l1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: `0 ${space.lg}px`,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md }}>
-            <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
-            <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-              欧亚 / R国 · 价格看板
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
-            <AlertCenterButton />
-            <Button size="small" style={{ height: 28 }} onClick={() => go('overview')}>
-              总览
-            </Button>
-            <Button size="small" type="primary" style={{ height: 28 }}>
-              价格看板
-            </Button>
-            <Button size="small" style={{ height: 28 }} onClick={() => go('config')}>
-              配置
-            </Button>
-          </div>
-        </header>
+        {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
+        <PageHeader title="价格看板" />
+
+        {/* 追补⑧（总览↔看板闭环①）：上下文条——正在分析什么 + 回程入口
+            （点击「← 返回总览」= 回总览页并滚动定位到该产品的行组） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: space.md, padding: `10px ${space.lg}px 0` }}>
+          <span style={{ fontSize: 12.5, color: color.mute }}>
+            正在分析：<span style={{ color: color.ink, fontWeight: 600 }}>{analysisLabel}</span>
+            <span style={{ marginLeft: 8 }}>我司 {state.own.length} 个配置 · 对标竞品 {state.competitors.length} 款</span>
+          </span>
+          <span style={{ flex: 1 }} />
+          <span
+            role="button"
+            title="返回总览页并定位到该产品行组"
+            onClick={backToOverview}
+            style={{
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: '#0070f3',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ← 返回总览
+          </span>
+        </div>
 
         {/* 筛选条五框（占位 → Agent B 替换） */}
         <FilterBar />

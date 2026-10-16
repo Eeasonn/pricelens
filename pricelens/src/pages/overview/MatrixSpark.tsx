@@ -30,8 +30,10 @@ export default function MatrixSpark(props: {
   /** 共享值域（第四十轮）：同盒各行统一 min/max → 纵向位置可比 */
   domainMin?: number;
   domainMax?: number;
+  /** 点击选周（第五十四轮追补⑧，总览↔看板闭环）：点迷你图某周 = 带该周焦点进看板 */
+  onPickWeek?: (weekId: string) => void;
 }) {
-  const { points, lineColor, currency, width = 150, height = 46, domainMin, domainMax } = props;
+  const { points, lineColor, currency, width = 150, height = 46, domainMin, domainMax, onPickWeek } = props;
   const n = points.length;
   const valued = points.map((p, i) => ({ i, v: p.price })).filter((p): p is { i: number; v: number } => p.v != null);
   const x = (i: number): number => PAD.l + (i / Math.max(1, n - 1)) * (width - PAD.l - PAD.r);
@@ -82,11 +84,28 @@ export default function MatrixSpark(props: {
   }
 
   return (
-    <svg width={width} height={height} role="img" style={{ display: 'block' }}>
+    <svg
+      width={width}
+      height={height}
+      role="img"
+      style={{ display: 'block', cursor: onPickWeek ? 'pointer' : 'default' }}
+      onClick={
+        onPickWeek
+          ? (e) => {
+              // 点击横坐标 → 最近周（追补⑧）：带该周焦点进看板
+              const rect = e.currentTarget.getBoundingClientRect();
+              const frac = (e.clientX - rect.left - PAD.l) / Math.max(1, rect.width - PAD.l - PAD.r);
+              const i = Math.min(n - 1, Math.max(0, Math.round(frac * (n - 1))));
+              const wk = points[i]?.weekId;
+              if (wk) onPickWeek(wk);
+            }
+          : undefined
+      }
+    >
       <title>
-        {maxPt && minPt
+        {(maxPt && minPt
           ? `最高 ${fmtShort(maxPt.v, currency)} · 最低 ${fmtShort(minPt.v, currency)}`
-          : '暂无价格数据'}
+          : '暂无价格数据') + (onPickWeek ? ' · 点击某处可带该周进看板' : '')}
       </title>
       {/* 顶/底轴 hairline（与共享值域上下沿同高，盒子内各行天然对齐） */}
       <line x1={PAD.l} x2={width - PAD.r} y1={PAD.t} y2={PAD.t} stroke={color.hairline} strokeWidth={1} />

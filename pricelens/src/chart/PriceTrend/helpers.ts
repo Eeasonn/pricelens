@@ -530,6 +530,15 @@ export function splitAxisWidth(currency: CurrencyMode, gridLeft: number, showYTi
   return tierPart + Math.max(34, gridLeft - tierPart - NAME_ZONE_W);
 }
 
+/** 周 id → 当前粒度桶 id（追补⑧：总览下钻焦点周跨粒度换算——总览迷你图是周度序列，
+ *  看板可能停在月/季粒度，直接 findIndex 会找不到而跳过聚焦） */
+export function bucketIdOfWeek(g: Granularity, weekId: string): string | null {
+  if (g === 'week') return weekId;
+  const r = dimTime.find((x) => x.week_id === weekId);
+  if (!r) return null;
+  return g === 'month' ? r.month_id : r.quarter_id;
+}
+
 /** 桶的日期覆盖区间（第三十四轮，大促背景带相交判定用）：周桶 = 锚周三 ±3 天；
  *  月/季桶 = 首末周周三 ±3 天。dimTime 未就绪时回退桶 id 自身（不会相交于合法日期）。 */
 export function bucketSpans(g: Granularity, buckets: Bucket[]): { start: string; end: string }[] {

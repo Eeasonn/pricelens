@@ -97,7 +97,7 @@ const MATCH_BTN_STYLE: CSSProperties = {
 export function AutoMatchControl() {
   const { state, actions } = useFilters();
   return (
-    <Tooltip title="开启后竞品自动跟随我司产品（按配置矩阵，矩阵可在「配置」页维护）；关闭后可手动勾选竞品">
+    <Tooltip title="开启后竞品自动跟随我司产品（按配置矩阵，总览行尾「＋添加竞品」维护）；关闭后可手动勾选竞品">
       <div style={{ width: 92, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexShrink: 0 }}>
         <Switch size="small" checked={state.autoMatch} onChange={(v) => actions.setAutoMatch(v)} />
         <span style={{ fontSize: fontSize.caption, color: color.body, whiteSpace: 'nowrap' }}>自动匹配</span>

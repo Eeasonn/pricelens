@@ -5,9 +5,9 @@
 // 三项恒显，0% 也不省略）；我司与竞品完全同款；来源为取证超链接。折扣徽章
 // 0% 中性蓝、≥15% 转琥珀预警、溢价 +X% 琥珀。数据 = buildPriceSummary（最新有值点）。
 // ============================================================
-import { BellFilled } from '@ant-design/icons';
 import type { CurrencyMode, Granularity } from '../../dataModel/types';
 import BrandDot from '../../components/BrandMark';
+import { AlertBell } from '../../components/AlertCenter';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import type { PriceSummaryItem } from './chartModel';
 
@@ -51,6 +51,7 @@ export default function PriceSummary({
   currency,
   granularity,
   pointDate,
+  alertCounts,
   subscribedKeys,
   onToggleSubscribe,
 }: {
@@ -60,6 +61,8 @@ export default function PriceSummary({
   /** 时点日期覆盖（第五十四轮追补①）：窗口末桶内最新周的三锚日（MM-DD）——
    *  月/季粒度的条目 xLabel 是 2026-10 / 2026Q4，不是「一天」；上层给到则恒显该日 */
   pointDate?: string | null;
+  /** 预警触发展示（追补⑨）：seriesKey → 触发条数；>0 时订阅铃铛挂黄点 */
+  alertCounts?: Record<string, number>;
   /** 预警订阅（第五十三轮从图表图例 chips 挪入本页签尾，「来源」之后） */
   subscribedKeys?: Set<string>;
   onToggleSubscribe?: (key: string) => void;
@@ -143,29 +146,15 @@ export default function PriceSummary({
             )}
           </span>
         )}
-        {/* 订阅铃铛（第五十三轮挪入；第五十四轮居右放大）：三种预警（调价/降促/平台价差） */}
+        {/* 订阅铃铛（第五十三轮挪入；第五十四轮居中放大）＋触发黄点（追补⑨）。
+            预警中心重构：换统一 AlertBell 共享组件（未订阅 = 描边灰、已订阅 = 金实心
+            + 触发金点），与总览行尾/预警页矩阵同一形态同一语义 */}
         {onToggleSubscribe && (
-          <span
-            role="button"
-            title={
-              subscribedKeys?.has(it.key)
-                ? '已订阅预警（调价 / 降促 / 平台价差）· 点击取消订阅'
-                : '订阅预警（调价 / 降促 / 平台价差）'
-            }
-            onClick={() => onToggleSubscribe(it.key)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '0 1px',
-              cursor: 'pointer',
-              // 订阅态 = 黄色铃铛（第五十四轮追补⑤批注：原来沿用预警琥珀 #b45309 偏棕，
-              // 用户口径「黄色铃铛色」→ antd gold-6）
-              color: subscribedKeys?.has(it.key) ? '#faad14' : color.hairlineStrong,
-              flexShrink: 0,
-            }}
-          >
-            <BellFilled style={{ fontSize: 14 }} />
-          </span>
+          <AlertBell
+            subscribed={subscribedKeys?.has(it.key) ?? false}
+            count={alertCounts?.[it.key] ?? 0}
+            onToggle={() => onToggleSubscribe(it.key)}
+          />
         )}
       </span>
     </div>

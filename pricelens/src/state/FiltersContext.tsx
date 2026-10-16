@@ -8,13 +8,36 @@
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { FiltersActions, FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
+import type {
+  AlertProductRule,
+  AlertThresholds,
+  AlertTypeSwitches,
+  FiltersActions,
+  FiltersState,
+  PlatformSelection,
+  ProductSelection,
+} from './filtersTypes';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimChannel, dimProduct } from '../data';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
+import { readUrlOverrides, writeUrlPatch } from './urlSync';
+
+/** 追补⑨：四类预警全局缺省（阈值小数；own-gap = 低于 15% 视为档位太近） */
+export const DEFAULT_ALERT_TYPES: AlertTypeSwitches = {
+  'price-change': true,
+  promo: true,
+  'platform-gap': true,
+  'own-gap': true,
+};
+export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
+  'price-change': 0.015,
+  promo: 0.015,
+  'platform-gap': 0.015, // demo 平台因子价差上限 ~1.8%，缺省 1.5% 可触发
+  'own-gap': 0.15,
+};
 
 /** 第五十三轮：我司官方店铺（OZON 1P 首店「Ozon Россия」）——自动匹配开启时平台锁定到它 */
 export const OWN_OFFICIAL_SHOP_ID =
@@ -40,7 +63,9 @@ export const defaultFilters: FiltersState = {
   agg: 'avg',
   autoMatch: true, // 第三十四轮：自动匹配竞品默认开（竞品跟随我司产品，迪总「减少筛选器」）
   alertSubs: [], // 第五十二轮：预警中心订阅（默认空，入口 = 看板页签铃铛 / 总览型号块）
-  alertThreshold: 0.015, // 第五十三轮：默认 1.5%（三类共用；2% 下平台价差永不触发——demo 平台因子价差上限 ~1.8%）
+  alertTypes: DEFAULT_ALERT_TYPES, // 追补⑨：四类预警全局开关
+  alertThresholds: DEFAULT_ALERT_THRESHOLDS, // 追补⑨：四类全局阈值（旧版共用 1.5% 一条线）
+  alertProducts: {}, // 追补⑨：按产品覆写（预警中心页维护）
 };
 
 /**
@@ -53,8 +78,10 @@ export const defaultFilters: FiltersState = {
  * v7（2026-10-14）：+预警中心订阅/阈值字段（第五十二轮）。
  * v8（2026-10-14）：平台默认 = 我司官方店铺「Ozon Россия」单店铺（第五十三轮）；
  *   自动匹配开启时平台一并锁定（竞品+平台都跟随我司渠道）。
+ * v9（2026-10-16，追补⑨）：预警细化——alertThreshold 单阈值 → alertTypes/alertThresholds
+ *   四类开关+阈值 + alertProducts 按产品覆写；v8 持久化迁移保留订阅与旧阈值（三类同值）。
  */
-const DEFAULTS_V = 8;
+const DEFAULTS_V = 9;
 
 /** 我司默认产品（§5.2②：Pura 90s Pro · 12+256，其最低价颜色） */
 const DEFAULT_OWN_MODEL = 'Pura 90s Pro';
@@ -92,19 +119,40 @@ function loadInitialState(): FiltersState {
   try {
     const raw = localStorage.getItem(LPL.filters);
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<FiltersState> & { v?: number };
-      if (parsed.v === DEFAULTS_V) {
-        delete parsed.v; // 版本号只随持久化载荷走，不进内存状态
-        restored = { ...defaultFilters, ...parsed };
+      const parsed = JSON.parse(raw) as Partial<FiltersState> & { v?: number; alertThreshold?: number };
+      if (parsed.v === DEFAULTS_V || parsed.v === 8) {
+        const { alertThreshold, v: _v, ...rest } = parsed;
+        restored = { ...defaultFilters, ...rest };
+        // v8 → v9 迁移（追补⑨）：旧单阈值 → 三类同值；订阅保留；own-gap 落缺省 15%
+        if (parsed.v === 8 && typeof alertThreshold === 'number') {
+          restored.alertThresholds = {
+            ...DEFAULT_ALERT_THRESHOLDS,
+            'price-change': alertThreshold,
+            promo: alertThreshold,
+            'platform-gap': alertThreshold,
+          };
+        }
       }
       // 版本不符（含旧版无 v 字段）→ 视为无持久化，直接落新默认视图
     }
   } catch {
     /* 忽略损坏的持久化数据 */
   }
-  if (!restored) return { ...defaultFilters, ...computeDataDefaults() };
+  if (!restored) restored = { ...defaultFilters, ...computeDataDefaults() };
   if (!restored.own.length && dimProduct.length) {
-    return { ...restored, ...computeDataDefaults() };
+    restored = { ...restored, ...computeDataDefaults() };
+  }
+  // 追补⑩（建议③）：URL 覆写最后应用——分享链接 > 持久化 > 默认视图；
+  // own 覆写存在时竞品按现行 autoMatch 规则带出（与手选同语义）
+  const url = readUrlOverrides();
+  if (url.filters.own?.length) {
+    restored = {
+      ...restored,
+      ...url.filters,
+      ...(restored.autoMatch ? { competitors: groupsFromBenchmark(url.filters.own) } : {}),
+    };
+  } else if (Object.keys(url.filters).length > 0) {
+    restored = { ...restored, ...url.filters };
   }
   return restored;
 }
@@ -116,7 +164,7 @@ interface FiltersCtx {
 
 const Ctx = createContext<FiltersCtx>({
   state: defaultFilters,
-  actions: { set: () => {}, switchOwnProduct: () => {}, reset: () => {}, setGranularity: () => {}, setOwnSelection: () => {}, resetCompetitorsToConfig: () => {}, setAutoMatch: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertThreshold: () => {} },
+  actions: { set: () => {}, switchOwnProduct: () => {}, reset: () => {}, setGranularity: () => {}, setOwnSelection: () => {}, resetCompetitorsToConfig: () => {}, setAutoMatch: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
 });
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
@@ -131,8 +179,21 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     }
   }, [state]);
 
-  // §13：配置页保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算竞品组
-  // （第三十四轮：矩阵在配置页维护后跟随生效；关闭自动匹配则不动当前竞品）；
+  // 追补⑩（建议③）：筛选口径同步到 URL query（replaceState 不产生历史记录；
+  // 只写本 Provider 管的键，页签 p 由 PageProvider 写，互不覆盖）
+  useEffect(() => {
+    const own = state.own.map((s) => `${s.modelId}__${s.romram.replace(/\s+/g, '')}`).join(',');
+    const shop = state.platform?.shopIds[0] ?? null;
+    writeUrlPatch({
+      g: state.granularity,
+      cur: state.currency,
+      own: own || null,
+      shop: state.autoMatch ? null : shop, // 自动匹配开 = 平台锁定官方店，链接里不带
+    });
+  }, [state.granularity, state.currency, state.own, state.platform, state.autoMatch]);
+
+  // §13：对标配置保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算竞品组
+  // （第三十四轮引入；矩阵维护入口现为总览行尾「＋添加竞品」浮窗，关闭自动匹配则不动当前竞品）；
   // fx 为读取时取值，图表侧自行监听。
   useEffect(() => {
     const handler = () => {
@@ -222,8 +283,23 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           return { ...s, alertSubs: [...set] };
         }),
 
-      /** 第五十二轮：变化阈值（促销力度变化 / 竞品调价共用） */
-      setAlertThreshold: (v) => setState((s) => ({ ...s, alertThreshold: v })),
+      // ---- 追补⑨ 预警细化 ----
+      /** 四类全局开关（部分补丁） */
+      setAlertTypes: (patch) =>
+        setState((s) => ({ ...s, alertTypes: { ...s.alertTypes, ...patch } })),
+
+      /** 四类全局阈值（部分补丁，小数） */
+      setAlertThresholds: (patch) =>
+        setState((s) => ({ ...s, alertThresholds: { ...s.alertThresholds, ...patch } })),
+
+      /** 按产品覆写（rule = null 清除覆写回落全局；own-gap 不参与产品级） */
+      setAlertProductRule: (key, rule) =>
+        setState((s) => {
+          const products = { ...s.alertProducts };
+          if (rule == null) delete products[key];
+          else products[key] = rule;
+          return { ...s, alertProducts: products };
+        }),
     }),
     [],
   );

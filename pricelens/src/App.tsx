@@ -5,6 +5,7 @@ import { FiltersProvider } from './state/FiltersContext';
 import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
 import Config from './pages/Config';
+import AlertsPage from './pages/AlertsPage';
 import { color, font } from './theme/tokens';
 
 export default function App() {
@@ -39,5 +40,5 @@ export default function App() {
 
 function AppBody() {
   const { page } = usePage();
-  return page === 'overview' ? <Overview /> : page === 'config' ? <Config /> : <Dashboard />;
+  return page === 'overview' ? <Overview /> : page === 'config' ? <Config /> : page === 'alerts' ? <AlertsPage /> : <Dashboard />;
 }
