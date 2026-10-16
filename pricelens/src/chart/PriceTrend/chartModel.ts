@@ -295,6 +295,17 @@ export function buildLabelPlan(p: {
 
 // ---------------- ECharts option（值轴隐藏，数据喂归一化伪值） ----------------
 
+/** 折线形态三选一（第五十四轮追补③，齿轮）：auto = 自适应粒度——周=阶梯
+ *  （逐周跳变语义），月/季=平滑（聚合值是期内均值，方形阶梯会把均值画成平台跳变，
+ *  失真）；缺省 auto（用户定版）。step/smooth = 强制指定 */
+export type LineShapeChoice = 'auto' | 'step' | 'smooth';
+
+/** 三态选择 → buildOption 的二元形态（auto 按粒度解析） */
+export function resolveLineShape(choice: LineShapeChoice, gran: Granularity): 'step' | 'smooth' {
+  if (choice === 'auto') return gran === 'week' ? 'step' : 'smooth';
+  return choice;
+}
+
 export function buildOption(p: {
   geom: Geom | null;
   series: Series[];
@@ -408,7 +419,9 @@ export function buildOption(p: {
         // 数值标签（仅 RRP 模式下一个标签都不渲染）；size 0 只隐符号
         symbolSize: 0,
         connectNulls: false,
-        lineStyle: { color: s.color, width: s.isOwn ? 2 : 1.5, type: [6, 4], opacity: dim ? 0.15 : 0.75 },
+        // 第五十二轮：RRP 改细实线（比折后价细一档，取代虚线）——账面价作参照线
+        // 退居背景层，粗细对比表达「主价/参照」层级，不再用线型区分
+        lineStyle: { color: s.color, width: s.isOwn ? 1.5 : 1, opacity: dim ? 0.15 : 0.85 },
         z: 6,
         silent: true,
       });

@@ -14,11 +14,14 @@
 // 仅 ‹› 箭头可越界一步并把 rangeStart/End 极值扩展到窗口端点（grow-only，从不收缩）。
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // ============================================================
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Checkbox, Segmented, Slider } from 'antd';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Checkbox, Segmented, Switch } from 'antd';
+import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
-import { buildSeries } from '../../dataModel/aggregate';
-import { dimPromo } from '../../data';
+import { buildSeries, lowestPriceColorSku } from '../../dataModel/aggregate';
+import { getEffectiveBenchmark } from '../../state/configStore';
+import { dimPromo, dimProduct } from '../../data';
+import { modelNameOf } from '../../components/ProductCascader/tree';
 import type {
   AggMode,
   Granularity,
@@ -28,18 +31,24 @@ import type {
   SkuGroupQuery,
 } from '../../dataModel/types';
 import type { ProductSelection } from '../../state/filtersTypes';
-import { color, fontSize, space } from '../../theme/tokens';
+import { color, fontSize, radius, space } from '../../theme/tokens';
 import Chart from './Chart';
+import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
+import LegendPills from './LegendPills';
 import DrillModal, { type DrillInfo } from './DrillModal';
 import PriceSummary from './PriceSummary';
 import {
   buildPriceSummary,
   buildPromoBands,
+  collectTierValues,
+  type LineShapeChoice,
 } from './chartModel';
+import SplitAxisColumn from './SplitAxisColumn';
 import {
   GRID,
   adaptiveRangeOf,
+  bucketLatestWeekLabel,
   bucketSpans,
   computeYAxis,
   convertWindowIds,
@@ -49,6 +58,8 @@ import {
   normalizeWindow,
   perUsdOf,
   seriesSpanRange,
+  splitAxisWidth,
+  NAME_ZONE_W,
   type Bucket,
   type StripGeom,
   type YScale,
@@ -73,6 +84,11 @@ export default function PriceTrend() {
   // 滑杆 0~15% 连贯可调（0.5 步进，≥0 可选）。旧版齿轮 Select 内部默认 5 与档位
   // 0.05 单位不一致 = 实际恒关闭，本次一并修正为真 5%。
   const [changeThreshold, setChangeThreshold] = useState<number | null>(0.05);
+  // 齿轮弹层里的两个视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
+  // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
+  const [showYTicks, setShowYTicks] = useState(false);
+  // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑），缺省
+  const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
 
   // §5.6/§6.6：切换产品/价格类型/币种 → 滑杆倍率复位 ×1；图例显隐一并复位
   const yAxisResetKey = JSON.stringify([state.own, state.competitors, state.priceTypes, state.currency]);
@@ -195,12 +211,181 @@ export default function PriceTrend() {
     });
   };
 
+  // 预警订阅（第五十二轮建；第五十三轮入口上移）：时点页签（PriceSummary）尾铃铛
+  // = 按系列（modelId__romram）订阅预警中心，三类预警（调价/降促/平台价差）
+  const subscribedKeys = useMemo(() => new Set(state.alertSubs), [state.alertSubs]);
+  const toggleAlertSub = (key: string): void => actions.toggleAlertSub(key);
+
+  // ---- ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：该我司产品的全部内存存储选项 ----
+  // 默认选中 = 当前 own 里该型号的 ROM（总览「竞品对比」带入 = 点击的那个）；
+  // 勾选/取消 → setOwnSelection 重设该型号勾选组（最低价色代表），autoMatch 开时竞品自动并集
+  const entryModelId = state.own[0]?.modelId ?? null;
+  const romOptions = useMemo(() => {
+    if (!entryModelId) return [] as { romram: string }[];
+    const seen: string[] = [];
+    for (const p of dimProduct) {
+      if (p.sku_id.startsWith(entryModelId + '__') && !seen.includes(p.romram)) seen.push(p.romram);
+    }
+    return seen.map((romram) => ({ romram }));
+  }, [entryModelId]);
+  const selectedRoms = useMemo(
+    () => new Set(state.own.filter((s) => s.modelId === entryModelId).map((s) => s.romram)),
+    [state.own, entryModelId],
+  );
+  const toggleRom = (romram: string): void => {
+    if (!entryModelId) return;
+    const next = new Set(selectedRoms);
+    if (next.has(romram)) {
+      if (next.size <= 1) return; // 至少保留一个 ROM 在图上
+      next.delete(romram);
+    } else {
+      next.add(romram);
+    }
+    const others = state.own.filter((s) => s.modelId !== entryModelId);
+    const mine = [...next]
+      .map((r) => {
+        const sku = lowestPriceColorSku(entryModelId, r);
+        return sku ? { modelId: entryModelId, romram: r, skuIds: [sku] } : null;
+      })
+      .filter((x): x is ProductSelection => x != null);
+    actions.setOwnSelection([...others, ...mine]);
+  };
+
+  // ---- 分离显示（第五十四轮拍板）：多 ROM 勾选时主图变 2 列 N 宫格，每面板 =
+  // 一个 ROM + 其对标竞品（生效矩阵按 own_romram 取、主竞品 sort 序）；共享 Y 轴 =
+  // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
+  // 面板头 ‹ › 调展示顺序；共享刷选条联动全部面板，热力带/图例页签分离模式下隐藏
+  const [splitOn, setSplitOn] = useState(false);
+  const [panelOrder, setPanelOrder] = useState<string[]>([]); // romram 键序；空 = own 序
+  const splitActive = splitOn && state.own.length >= 2;
+
+  const panels = useMemo(() => {
+    if (!splitActive) return [];
+    const bench = getEffectiveBenchmark();
+    return state.own.map((sel) => {
+      const seen = new Set<string>();
+      const comps = bench
+        .filter((b) => b.own_model_id === sel.modelId && b.own_romram === sel.romram)
+        .sort((a, b) => a.sort - b.sort)
+        .map((b) => {
+          const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
+          if (!p) return null;
+          const skuId = b.competitor_sku_id;
+          if (seen.has(skuId)) return null;
+          seen.add(skuId);
+          return { modelId: p.sku_id.split('__')[0], romram: p.romram, skuIds: [skuId] };
+        })
+        .filter((x): x is ProductSelection => x != null);
+      return { key: `${sel.modelId}__${sel.romram.replace(/\s+/g, '')}`, sel, comps };
+    });
+  }, [splitActive, state.own]);
+
+  const panelData = useMemo(() => {
+    if (panels.length === 0) return [];
+    return panels.map(({ key, sel, comps }) => {
+      let series: Series[] = [];
+      try {
+        series = buildSeries({
+          groups: [
+            { ...sel, isOwn: true },
+            ...comps.map((c) => ({ ...c, isOwn: false })),
+          ],
+          granularity: state.granularity,
+          startBucket: dataStart,
+          endBucket: dataEnd,
+          currency: state.currency,
+          agg: state.agg,
+          platform: state.platform,
+        });
+      } catch {
+        series = []; // 空态不崩
+      }
+      return { key, sel, comps, series };
+    });
+  }, [panels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform]);
+
+  // 面板窗口切片（与单图 visSeries 同逻辑：win 切片 + 边缘续接标记）
+  const sliceVis = (list: Series[]): Series[] => {
+    if (win.s > win.e) return [];
+    const listed = (p?: SeriesPoint) => !!p && (p.price != null || p.rrp != null);
+    return list
+      .map((s) => {
+        const points = s.points.slice(win.s, win.e + 1);
+        const edgeStart = listed(points[0]) && (listed(s.points[win.s - 1]) || listed(s.points[win.s - 2]));
+        const edgeEnd = listed(points[points.length - 1]) && (listed(s.points[win.e + 1]) || listed(s.points[win.e + 2]));
+        return { ...s, points, edgeStart, edgeEnd };
+      })
+      .filter((s) => s.points.length > 0);
+  };
+  const panelViews = useMemo(
+    () =>
+      panelData.map((p) => ({
+        ...p,
+        all: sliceVis(p.series), // 全量（含被图例页签屏蔽的系列，页签要能恢复显示）
+        vis: sliceVis(p.series).filter((s) => !hiddenKeys.has(s.key)),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [panelData, win, hiddenKeys],
+  );
+
+  // 共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
+  // splitYCfg/splitGridLeft 声明在主图 gridLeft 之后（见下方）
+  const orderedPanels = useMemo(() => {
+    if (panelOrder.length === 0) return panelViews;
+    const idx = (k: string) => {
+      const i = panelOrder.indexOf(k);
+      return i === -1 ? 999 : i;
+    };
+    return [...panelViews].sort((a, b) => idx(a.key) - idx(b.key));
+  }, [panelViews, panelOrder]);
+
+  const movePanel = (key: string, dir: -1 | 1): void => {
+    const keys = orderedPanels.map((p) => p.key);
+    const i = keys.indexOf(key);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= keys.length) return;
+    const next = [...keys];
+    [next[i], next[j]] = [next[j], next[i]];
+    setPanelOrder(next);
+  };
+
+  // 面板下钻：seriesKey 在面板内查找（主图 allSeries 不含面板 series）
+  const makePanelDrill = (
+    panel: (typeof panelViews)[number],
+  ): ((seriesKey: string, bucketId: string) => void) => {
+    const groups = [
+      { ...panel.sel, isOwn: true },
+      ...panel.comps.map((c) => ({ ...c, isOwn: false })),
+    ];
+    return (seriesKey: string, bucketId: string) => {
+      if (state.granularity === 'week') return;
+      const s = panel.series.find((x) => x.key === seriesKey);
+      const grp = groups.find((g) => `${g.modelId}__${g.romram.replace(/\s+/g, '')}` === seriesKey);
+      if (!s || !grp) return;
+      setDrill({
+        group: { modelId: grp.modelId, romram: grp.romram, skuIds: s.skuIds, isOwn: grp.isOwn },
+        label: s.label,
+        originGran: state.granularity === 'quarter' ? 'quarter' : 'month',
+        originBucket: bucketId,
+      });
+    };
+  };
+
   // ---- 价格摘要条（第三十六轮定版）：固定显示窗口内最新时点（不随悬停变换，
   //      时点明细看悬停浮窗）；竞品与我司同款样式、来源为取证超链接 ----
   const summary = useMemo(() => buildPriceSummary(chartSeries), [chartSeries]);
 
   // ---- 大促背景带（第三十四轮）：dim_promo ∩ 窗口桶覆盖区间；随窗口联动 ----
   const winBuckets = useMemo(() => buckets.slice(win.s, win.e + 1), [buckets, win]);
+
+  // 时点页签日期（第五十四轮追补①）：窗口末桶内最新日历周的周三锚日（MM-DD）——
+  // 月/季粒度不再显示 2026-10 / 2026Q4（用户：时点恒为最新那一周对应的那一天；
+  // 窗口平移到过去时跟随窗口，与摘要条数值口径一致）
+  const pointDate = useMemo(() => {
+    const last = winBuckets[winBuckets.length - 1];
+    return last ? bucketLatestWeekLabel(state.granularity, last.id) : null;
+  }, [winBuckets, state.granularity]);
+
   const winSpans = useMemo(() => bucketSpans(state.granularity, winBuckets), [state.granularity, winBuckets]);
   const promoBands = useMemo(
     () => (promoBandsOn ? buildPromoBands({ promos: dimPromo, spans: winSpans }) : []),
@@ -227,9 +412,46 @@ export default function PriceTrend() {
   }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
   // 图顶预留（第三十五轮）：钉顶卡片删除，36px 只保留 ₽/$+齿轮（左）与图例 chips（右）
   const gridTop = 36;
+  // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
+  // S/E 徽标上探 7.5px、名称避让钳 plotTop+2，14px 够用；极值胶囊已在 Chart 内钳回容器
+  const panelGridTop = 14;
   // 容器高由 Y 模型派生：格数×TICK_PX×倍率 + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
   const chartHeight = yCfg.plotHeight + gridTop + GRID.bottom;
   const gridLeft = estGridLeft(yCfg.max, state.currency, yCfg.interval);
+
+  // 分离显示共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
+  // 第五十四轮追补②：补上步长滞回 prev——此前缺 prev，季粒度把促销低谷平均掉后
+  // rawSpan 收窄 706→662、跨过 niceStep 的 150 档界，步长 200→100、格数 5→9，
+  // 图高 +68%（用户：切到季度 Y 轴高度显著拉高）。带 prev 后季沿用 200（5 格 ∈ 滞回区间），
+  // 图高与周完全一致。splitScaleRef 与主图 scaleRef 各自独立（两模式互不串档）
+  const splitScaleRef = useRef<YScale | null>(null);
+  const splitYCfg = useMemo(() => {
+    if (!splitActive || panelViews.length === 0) {
+      splitScaleRef.current = null;
+      return null;
+    }
+    const next = computeYAxis({
+      series: panelViews.flatMap((p) => p.vis),
+      priceTypes: state.priceTypes,
+      sliderScale,
+      allowBreak: yCompress,
+      perUsd: perUsdOf(state.currency),
+      prev: splitScaleRef.current,
+    });
+    splitScaleRef.current = next;
+    return next;
+  }, [splitActive, panelViews, state.priceTypes, sliderScale, yCompress, state.currency]);
+  const splitGridLeft = useMemo(
+    () => (splitYCfg ? estGridLeft(splitYCfg.max, state.currency, splitYCfg.interval) : gridLeft),
+    [splitYCfg, state.currency, gridLeft],
+  );
+  // 共享轴列的档位带数据（第五十四轮追补⑤）：与面板同一份并集判定「档内有无数据」
+  const splitTierValues = useMemo(
+    () => collectTierValues(panelViews.flatMap((p) => p.vis), state.priceTypes),
+    [panelViews, state.priceTypes],
+  );
+  // 面板头行高（追补⑤重排）：轴列用同一偏移对齐面板绘图区顶（卡片 paddingTop 4 + 头 24）
+  const PANEL_HEAD_H = 24;
 
   // ---- 下钻（§6.3）：seriesKey → 取数组，单组重查 ----
   const selByKey = useMemo(() => {
@@ -298,9 +520,9 @@ export default function PriceTrend() {
   // ---- 渲染 ----
   return (
     <div>
-      {/* 标题行（第十二轮）：价格走势 + 折后价/RRP + 汇总 同排（汇总仅月/季，右对齐），
-          消除原「标题排 / 筛选排 / 页签排」三段式留下的纵向空白；
-          每格高度伸缩滑杆与刻度线开关在图内币种符号旁的齿轮弹层里 */}
+      {/* 标题行（第十二轮引入；第五十四轮追补）：标题带括号说明 + ROM 多选 chips
+          （该产品全部内存存储选项，默认选中 = 进入来源 ROM；多选 = 竞品取并集同图对比）
+          ——折后价/RRP 在图内 Y 轴齿轮旁，大促/offer/极值/变化提醒在图例行居中圆框组 */}
       <div
         style={{
           display: 'flex',
@@ -310,47 +532,34 @@ export default function PriceTrend() {
           marginBottom: space.sm,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>价格走势</h2>
-        <Checkbox checked={state.priceTypes.discounted} onChange={(e) => setPriceType('discounted', e.target.checked)}>
-          折后价
-        </Checkbox>
-        <Checkbox checked={state.priceTypes.rrp} onChange={(e) => setPriceType('rrp', e.target.checked)}>
-          RRP
-        </Checkbox>
-        {/* 大促档期（第三十五轮）：外部显式筛选器（迪总：不藏进齿轮），默认选 */}
-        <Checkbox checked={promoBandsOn} onChange={(e) => setPromoBandsOn(e.target.checked)}>
-          大促档期
-        </Checkbox>
-        {/* offer 权益显隐（第五十轮）：关 = 图上不画 offer 礼物徽章，悬停浮窗也不出权益行 */}
-        <Checkbox checked={offersOn} onChange={(e) => setOffersOn(e.target.checked)}>
-          offer 权益
-        </Checkbox>
-        {/* 最高/最低价参照线（第三十五轮）：窗口极值虚线（camel 三虚线画法） */}
-        <Checkbox checked={maxMinOn} onChange={(e) => setMaxMinOn(e.target.checked)}>
-          最高/最低价
-        </Checkbox>
-        {/* 价格变化提醒（第四十六轮挪出齿轮）：开关在其右，开启后出现连贯阈值滑杆
-            （0~15%、0.5 步进，≥0 可选；0 = 任何真实变化都标 ↓/↑X%） */}
-        <Checkbox
-          checked={changeThreshold != null}
-          onChange={(e) => setChangeThreshold(e.target.checked ? 0.05 : null)}
-        >
-          价格变化提醒
-        </Checkbox>
-        {changeThreshold != null && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Slider
-              style={{ width: 112, margin: '0 2px' }}
-              min={0}
-              max={15}
-              step={0.5}
-              value={+(changeThreshold * 100).toFixed(1)}
-              onChange={(v) => setChangeThreshold(+(v as number) / 100)}
-              tooltip={{ formatter: (v) => `≥ ${v ?? 0}%` }}
-            />
-            <span className="tnum" style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>
-              ≥ {+(changeThreshold * 100).toFixed(1)}%
-            </span>
+        <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>
+          价格走势
+          {/* 第五十四轮追补⑤批注：括号说明写实际产品名（原来「我司的这个产品」是占位话术） */}
+          <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>
+            （{entryModelId ? modelNameOf(entryModelId) : '我司的这个产品'}）
+          </span>
+        </h2>
+        {/* ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：checkbox 样式，至少保留一个选中；
+            autoMatch 开时竞品随勾选 ROM 的配置矩阵并集自动跟随 */}
+        {romOptions.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {romOptions.map(({ romram }) => {
+              const on = selectedRoms.has(romram);
+              return (
+                <Checkbox key={romram} checked={on} onChange={() => toggleRom(romram)}>
+                  <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 400, color: on ? color.ink : color.body }}>
+                    {romram}
+                  </span>
+                </Checkbox>
+              );
+            })}
+          </div>
+        )}
+        {/* 分离显示（第五十四轮拍板）：多 ROM 时可切 N 宫格（2 列），每面板一个 ROM+其竞品 */}
+        {selectedRoms.size >= 2 && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Switch size="small" checked={splitOn} onChange={setSplitOn} />
+            <span style={{ fontSize: 12.5, color: color.body, whiteSpace: 'nowrap' }}>分离显示</span>
           </span>
         )}
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
@@ -370,43 +579,223 @@ export default function PriceTrend() {
         )}
       </div>
 
-      {/* 价格摘要条（第三十四轮）：账面价划线 + 现价 + 折扣率 + 竞品差价，随窗口联动 */}
-      <PriceSummary items={summary} currency={state.currency} granularity={state.granularity} />
-
-      {/* 图主体（Y 轴纯自适应；X 刷选条在图表块之下） */}
-      <Chart
-        series={chartSeries}
-        legendSeries={visSeries}
-        hiddenKeys={hiddenKeys}
-        onToggleLegend={toggleLegend}
-        granularity={state.granularity}
+      {/* 价格摘要条（第三十四轮）：账面价划线 + 现价 + 折扣率 + 竞品差价，随窗口联动；
+          第五十三轮：来源去「来源」字样、页签尾 = 预警订阅铃铛（从图表图例小页签上移） */}
+      <PriceSummary
+        items={summary}
         currency={state.currency}
-        priceTypes={state.priceTypes}
-        gridLeft={gridLeft}
-        gridTop={gridTop}
-        enableDrill={state.granularity !== 'week'}
-        enableJump={state.granularity === 'week'}
-        enableOffer={state.granularity === 'week' && offersOn}
-        onDrill={onDrill}
-        windowKey={`${win.s}:${win.e}`}
-        onGeom={setStripGeom}
-        yScale={yCfg}
-        sliderScale={sliderScale}
-        onSliderScale={setSliderScale}
-        yCompress={yCompress}
-        onYCompress={setYCompress}
-        promoBandsOn={promoBandsOn}
-        onPromoBandsOn={setPromoBandsOn}
-        promoBands={promoBands}
-        maxMinOn={maxMinOn}
-        changeThreshold={changeThreshold}
-        emptyHint={
-          visSeries.length > 0 && chartSeries.length === 0
-            ? '所有系列已在图例中隐藏，点击顶部图例卡恢复显示'
-            : undefined
-        }
-      />      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 筛选范围；自适应开 = 轨道冻结） */}
-      {buckets.length > 0 && visSeries.length > 0 && (
+        granularity={state.granularity}
+        pointDate={pointDate}
+        subscribedKeys={subscribedKeys}
+        onToggleSubscribe={toggleAlertSub}
+      />
+
+      {/* 图主体（Y 轴纯自适应；图例页签第五十四轮起移到图下方居中行）。
+          分离显示（第五十四轮拍板）：多 ROM 勾选时主图变 2 列 N 宫格——每面板一个
+          ROM+其对标竞品，共享 Y 轴（并集算一次受控传入）、X 轴各面板独立绘制；
+          共享刷选条联动全部面板；热力带/图例页签分离模式下隐藏。
+          第五十四轮追补：工具行不再随面板重复——面板网格上方常驻一条（ChartToolbar），
+          面板 chrome=false，全部视图开关由常驻行统一控制 */}
+      {splitActive ? (
+        <>
+          {/* 常驻工具行（第五十四轮追补，用户需求）：分离模式下这一行仍常驻在摘要页签
+              与面板网格之间，统管底下全部分离面板——大促/offer/极值/变化提醒 + 齿轮
+              （每格高度/刻度线/自动压缩/折线样式）+ 折后价/RRP；面板内不再各有设置行 */}
+          <div style={{ display: 'flex', alignItems: 'center', height: 32, padding: '0 6px', marginBottom: 2 }}>
+            <ChartToolbar
+              currency={state.currency}
+              sliderScale={sliderScale}
+              onSliderScale={setSliderScale}
+              showYTicks={showYTicks}
+              onShowYTicks={setShowYTicks}
+              yCompress={yCompress}
+              onYCompress={setYCompress}
+              lineShape={lineShape}
+              onLineShape={setLineShape}
+              priceTypes={state.priceTypes}
+              onPriceTypeToggle={setPriceType}
+              promoBandsOn={promoBandsOn}
+              onPromoBandsOn={setPromoBandsOn}
+              offersOn={offersOn}
+              onOffersOn={setOffersOn}
+              maxMinOn={maxMinOn}
+              onMaxMinOn={setMaxMinOn}
+              changeThreshold={changeThreshold}
+              onChangeThreshold={setChangeThreshold}
+            />
+          </div>
+          {/* 面板网格（第五十四轮追补⑤重排）：[共享轴列][卡片][卡片] 三列——
+              Y 轴只画靠左一份且移出卡片（面板 axisChrome=false、gridLeft=0，档位带/
+              刻度标签/断轴省略号全部由轴列承担），两卡片 1fr/1fr 均分轴右侧剩余空间；
+              奇数面板行尾自然留空 */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `${splitAxisWidth(state.currency, splitGridLeft, showYTicks)}px minmax(0,1fr) minmax(0,1fr)`,
+              columnGap: space.md,
+              rowGap: space.md,
+              alignItems: 'start',
+              marginBottom: space.sm,
+            }}
+          >
+            {Array.from({ length: Math.ceil(orderedPanels.length / 2) }, (_, ri) => {
+              const row = orderedPanels.slice(ri * 2, ri * 2 + 2);
+              return (
+                <Fragment key={row[0].key}>
+                  {/* 轴列：纵向偏移 = 卡片 paddingTop 4 + 面板头行高，与面板绘图区顶逐像素对齐 */}
+                  <div style={{ paddingTop: 4 + PANEL_HEAD_H }}>
+                    {splitYCfg && (
+                      <SplitAxisColumn
+                        yScale={splitYCfg}
+                        currency={state.currency}
+                        gridLeft={splitGridLeft}
+                        panelGridTop={panelGridTop}
+                        showYTicks={showYTicks}
+                        tierValues={splitTierValues}
+                      />
+                    )}
+                  </div>
+                  {row.map((p) => {
+                    const i = orderedPanels.findIndex((x) => x.key === p.key);
+                    const first = i === 0;
+                    const last = i === orderedPanels.length - 1;
+                    return (
+                      <div
+                        key={p.key}
+                        style={{
+                          border: `1px solid ${color.hairline}`,
+                          borderRadius: radius.card,
+                          padding: '4px 8px 0',
+                          background: color.canvas,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            height: PANEL_HEAD_H, // 定高：轴列对齐基准（追补⑤）
+                            padding: '0 4px',
+                          }}
+                        >
+                          <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
+                            {p.sel.romram}
+                          </span>
+                          <span style={{ fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap' }}>我司 + 对标竞品</span>
+                          <span style={{ flex: 1 }} />
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            <span
+                              role="button"
+                              title={first ? '已在最左' : '左移该面板'}
+                              onClick={() => movePanel(p.key, -1)}
+                              style={{ cursor: first ? 'default' : 'pointer', display: 'inline-flex', padding: '2px 4px' }}
+                            >
+                              <LeftOutlined style={{ fontSize: 10, color: first ? color.hairlineStrong : color.body }} />
+                            </span>
+                            <span
+                              role="button"
+                              title={last ? '已在最右' : '右移该面板'}
+                              onClick={() => movePanel(p.key, 1)}
+                              style={{ cursor: last ? 'default' : 'pointer', display: 'inline-flex', padding: '2px 4px' }}
+                            >
+                              <RightOutlined style={{ fontSize: 10, color: last ? color.hairlineStrong : color.body }} />
+                            </span>
+                          </span>
+                        </div>
+                        <Chart
+                          series={p.vis}
+                          granularity={state.granularity}
+                          currency={state.currency}
+                          priceTypes={state.priceTypes}
+                          gridLeft={NAME_ZONE_W} // 追补⑤②：与合并模式同宽的名称预留带在面板内侧（此前 0 导致名称与折线重叠）
+                          gridTop={panelGridTop}
+                          chrome={false} // 面板不渲染设置行（第五十四轮追补）：统管权在上方常驻工具行
+                          axisChrome={false} // 面板不画轴（追补⑤）：档位带/刻度/断轴号在共享轴列
+                          enableDrill={state.granularity !== 'week'}
+                          enableJump={state.granularity === 'week'}
+                          enableOffer={state.granularity === 'week' && offersOn}
+                          onDrill={makePanelDrill(p)}
+                          windowKey={`${win.s}:${win.e}:${p.key}`}
+                          yScale={splitYCfg ?? undefined}
+                          showYTicks={showYTicks}
+                          lineShape={lineShape}
+                          promoBandsOn={promoBandsOn}
+                          promoBands={promoBands}
+                          maxMinOn={maxMinOn}
+                          changeThreshold={changeThreshold}
+                          emptyHint="该配置窗口内无数据"
+                        />
+                        {/* 面板各自的图例页签（第五十四轮追补⑥批注）：只列本面板的产品、
+                            在本卡片底部居中——不再合并成一条全局居中行 */}
+                        <LegendPills series={p.all} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />
+                      </div>
+                    );
+                  })}
+                </Fragment>
+              );
+            })}
+          </div>
+          {/* 共享刷选条：一个窗口联动全部面板 */}
+          {buckets.length > 0 && visSeries.length > 0 && (
+            <XBrush
+              buckets={buckets}
+              s={win.s}
+              e={win.e}
+              lo={track.s}
+              hi={track.e}
+              frozen={state.adaptive}
+              granularity={state.granularity}
+              onChange={onWindowChange}
+              onAdjusting={setAdjusting}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <Chart
+            series={chartSeries}
+            granularity={state.granularity}
+            currency={state.currency}
+            priceTypes={state.priceTypes}
+            gridLeft={gridLeft}
+            gridTop={gridTop}
+            enableDrill={state.granularity !== 'week'}
+            enableJump={state.granularity === 'week'}
+            enableOffer={state.granularity === 'week' && offersOn}
+            onDrill={onDrill}
+            windowKey={`${win.s}:${win.e}`}
+            onGeom={setStripGeom}
+            yScale={yCfg}
+            sliderScale={sliderScale}
+            onSliderScale={setSliderScale}
+            yCompress={yCompress}
+            onYCompress={setYCompress}
+            showYTicks={showYTicks}
+            onShowYTicks={setShowYTicks}
+            lineShape={lineShape}
+            onLineShape={setLineShape}
+            promoBandsOn={promoBandsOn}
+            onPromoBandsOn={setPromoBandsOn}
+            promoBands={promoBands}
+            maxMinOn={maxMinOn}
+            changeThreshold={changeThreshold}
+            onPriceTypeToggle={setPriceType}
+            offersOn={offersOn}
+            onOffersOn={setOffersOn}
+            onMaxMinOn={setMaxMinOn}
+            onChangeThreshold={setChangeThreshold}
+            emptyHint={
+              visSeries.length > 0 && chartSeries.length === 0
+                ? '所有系列已在图例中隐藏，点击下方页签恢复显示'
+                : undefined
+            }
+          />
+          {/* 图例页签整排（第五十四轮从图顶移出）：时间轴与拖刷条之间的居中行，点击屏蔽/恢复系列 */}
+          <LegendPills series={visSeries} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />
+        </>
+      )}
+      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 筛选范围；自适应开 = 轨道冻结） */}
+      {!splitActive && buckets.length > 0 && visSeries.length > 0 && (
         <XBrush
           buckets={buckets}
           s={win.s}
@@ -420,8 +809,9 @@ export default function PriceTrend() {
         />
       )}
 
-      {/* 促销力度热力带（第十五轮：列几何复用图表 plotLeft/plotWidth，与时间轴逐像素对齐） */}
-      {visSeries.length > 0 && win.s <= win.e && (
+      {/* 促销力度热力带（第十五轮：列几何复用图表 plotLeft/plotWidth，与时间轴逐像素对齐；
+          分离模式下隐藏——列几何只对单图成立） */}
+      {!splitActive && visSeries.length > 0 && win.s <= win.e && (
         <PromoTable series={visSeries} currency={state.currency} geom={stripGeom} />
       )}
 

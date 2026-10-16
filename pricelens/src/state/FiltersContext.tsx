@@ -2,18 +2,27 @@
 // 筛选状态：五框状态 + §5.6 联动 + localStorage 持久化（LPL3.filters）
 // + §13 CONFIG_CHANGED_EVENT 监听（反馈第 8 条修订：配置保存不再自动改竞品，
 //   竞品由筛选条「匹配竞品」按钮按配置矩阵带出）
-// 默认视图（§15.4-A13，第二十五轮起多轮演进）：周 · USD · 平台 OZON · 我司 Pura 90s Pro
-// 12+256（最低价颜色）+ 其配置竞品（主竞品在前）· 仅折后价（第五十轮）· 时间自适应开 · 自动匹配开
+// 默认视图（§15.4-A13，第二十五轮起多轮演进）：周 · USD · 平台 = 我司官方店铺 Ozon Россия
+// （第五十三轮）· 我司 Pura 90s Pro 12+256（最低价颜色）+ 其配置竞品（主竞品在前）
+// · 仅折后价（第五十轮）· 时间自适应开 · 自动匹配开（竞品+平台都跟随）
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { FiltersActions, FiltersState, ProductSelection } from './filtersTypes';
+import type { FiltersActions, FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
-import { dimProduct } from '../data';
+import { dimChannel, dimProduct } from '../data';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
+
+/** 第五十三轮：我司官方店铺（OZON 1P 首店「Ozon Россия」）——自动匹配开启时平台锁定到它 */
+export const OWN_OFFICIAL_SHOP_ID =
+  dimChannel.find((c) => c.platform === 'OZON' && c.store_type === '1P')?.shop_id ?? 'shop-001';
+
+/** 平台默认选择（第五十三轮，用户定版）：只选一个——我司在 OZON 的官方店铺「Ozon Россия」；
+ *  勾店铺而非勾整平台 = 触发器显名店铺（此前默认勾整平台 OZON，数据口径不变：OZON = 基准） */
+export const DEFAULT_PLATFORM_SELECTION: PlatformSelection = { platforms: [], shopIds: [OWN_OFFICIAL_SHOP_ID] };
 
 /** §15.4-A13 默认视图（数据相关默认勾选在 loadInitialState 里按数据就绪情况叠加） */
 export const defaultFilters: FiltersState = {
@@ -21,7 +30,7 @@ export const defaultFilters: FiltersState = {
   industry: 'phone',
   own: [],
   competitors: [],
-  platform: { platforms: ['OZON'], shopIds: [] }, // 第三十九轮：单平台口径定版——平台默认选中 OZON（勾选平台 = 其下全部店铺）
+  platform: DEFAULT_PLATFORM_SELECTION, // 第五十三轮：默认只选「Ozon Russia」官方店铺（v8；OZON 基准数据口径不变）
   granularity: 'week', // 第四十二轮：默认周（迪总「时间默认取周」）
   adaptive: true, // 第十九轮：时间自适应默认开
   rangeStart: '202601', // 与周粒度自洽的默认范围（自适应开时会被数据跨度覆盖）
@@ -30,6 +39,8 @@ export const defaultFilters: FiltersState = {
   priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
   agg: 'avg',
   autoMatch: true, // 第三十四轮：自动匹配竞品默认开（竞品跟随我司产品，迪总「减少筛选器」）
+  alertSubs: [], // 第五十二轮：预警中心订阅（默认空，入口 = 看板页签铃铛 / 总览型号块）
+  alertThreshold: 0.015, // 第五十三轮：默认 1.5%（三类共用；2% 下平台价差永不触发——demo 平台因子价差上限 ~1.8%）
 };
 
 /**
@@ -39,8 +50,11 @@ export const defaultFilters: FiltersState = {
  * v4（2026-10-14）：平台默认选中 OZON（第三十六轮起数据=单平台口径，筛选器显性化）。
  * v5（2026-10-15）：时间默认取周。
  * v6（2026-10-15）：RRP 默认不勾选（第五十轮）。
+ * v7（2026-10-14）：+预警中心订阅/阈值字段（第五十二轮）。
+ * v8（2026-10-14）：平台默认 = 我司官方店铺「Ozon Россия」单店铺（第五十三轮）；
+ *   自动匹配开启时平台一并锁定（竞品+平台都跟随我司渠道）。
  */
-const DEFAULTS_V = 6;
+const DEFAULTS_V = 8;
 
 /** 我司默认产品（§5.2②：Pura 90s Pro · 12+256，其最低价颜色） */
 const DEFAULT_OWN_MODEL = 'Pura 90s Pro';
@@ -102,7 +116,7 @@ interface FiltersCtx {
 
 const Ctx = createContext<FiltersCtx>({
   state: defaultFilters,
-  actions: { set: () => {}, switchOwnProduct: () => {}, reset: () => {}, setGranularity: () => {}, setOwnSelection: () => {}, resetCompetitorsToConfig: () => {}, setAutoMatch: () => {} },
+  actions: { set: () => {}, switchOwnProduct: () => {}, reset: () => {}, setGranularity: () => {}, setOwnSelection: () => {}, resetCompetitorsToConfig: () => {}, setAutoMatch: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertThreshold: () => {} },
 });
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
@@ -183,13 +197,33 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       /**
        * 第三十四轮：自动匹配开关。开 = 立即按配置矩阵重算当前竞品组；
        * 关 = 保留当前竞品转为手动（可自由增删）。
+       * 第五十三轮：开 = 平台一并锁定到我司官方店铺 Ozon Россия（竞品+平台都「已匹配」，
+       * 用户拍板）；关 = 平台恢复手动（保留当前值）。
        */
       setAutoMatch: (on) =>
         setState((s) => ({
           ...s,
           autoMatch: on,
-          ...(on ? { competitors: groupsFromBenchmark(s.own) } : {}),
+          ...(on ? { competitors: groupsFromBenchmark(s.own), platform: DEFAULT_PLATFORM_SELECTION } : {}),
         })),
+
+      /** 第五十二轮：单系列订阅切换（看板图例页签铃铛） */
+      toggleAlertSub: (key) =>
+        setState((s) => ({
+          ...s,
+          alertSubs: s.alertSubs.includes(key) ? s.alertSubs.filter((k) => k !== key) : [...s.alertSubs, key],
+        })),
+
+      /** 第五十二轮：批量订阅/退订（总览型号块一键订阅整组） */
+      setAlertSubs: (keys, on) =>
+        setState((s) => {
+          const set = new Set(s.alertSubs);
+          for (const k of keys) (on ? set.add(k) : set.delete(k));
+          return { ...s, alertSubs: [...set] };
+        }),
+
+      /** 第五十二轮：变化阈值（促销力度变化 / 竞品调价共用） */
+      setAlertThreshold: (v) => setState((s) => ({ ...s, alertThreshold: v })),
     }),
     [],
   );

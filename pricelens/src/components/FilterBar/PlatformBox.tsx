@@ -5,7 +5,7 @@
 // 状态形状（SeriesQuery.platform 同构）：{ platforms: 全选平台, shopIds: 部分勾选店铺 } | null
 // ============================================================
 import { useMemo, useState } from 'react';
-import { Button, Popover } from 'antd';
+import { Button, Popover, Tooltip } from 'antd';
 import { useFilters } from '../../state/FiltersContext';
 import { dimChannel } from '../../data';
 import type { DimChannel } from '../../dataModel/types';
@@ -21,6 +21,9 @@ interface PlatformRow {
 
 export default function PlatformBox() {
   const { state, actions } = useFilters();
+  // 第五十三轮：自动匹配开启 = 竞品与平台都「已匹配」——平台锁定到我司官方店铺
+  // （Ozon Russia），控件置灰不可点；关闭自动匹配后恢复手动选择
+  const locked = state.autoMatch;
   const rows = useMemo<PlatformRow[]>(() => {
     const byPlatform = new Map<string, DimChannel[]>();
     for (const c of dimChannel) {
@@ -137,10 +140,20 @@ export default function PlatformBox() {
         </div>
       }
     >
-      {/* 标签「平台」由 FilterBar 的 Cell 行外统一渲染（第二十八轮） */}
-      <div style={{ width: '100%', minWidth: 0 }}>
-        <CascadeTrigger labels={labels} placeholder="未筛选" open={open} />
-      </div>
+      {/* 标签「平台」由 FilterBar 的 Cell 行外统一渲染（第二十八轮）；
+          自动匹配开启 = 锁定置灰（第五十三轮），悬浮说明跟随语义 */}
+        <Tooltip title={locked ? '自动匹配开启：平台跟随我司官方店铺（Ozon Россия）；关闭自动匹配后可手动选择' : undefined}>
+          <div
+            style={{
+              width: '100%',
+              minWidth: 0,
+              pointerEvents: locked ? 'none' : undefined,
+              opacity: locked ? 0.45 : 1,
+            }}
+          >
+            <CascadeTrigger labels={labels} placeholder="未筛选" open={open} />
+          </div>
+        </Tooltip>
     </Popover>
   );
 }

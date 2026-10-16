@@ -14,10 +14,14 @@
 // - 第十轮：每格高度伸缩滑杆收进币种符号旁的齿轮弹层（Popover），不占任何版面；
 //   Y 轴模型可由外部传入（yScale，含刷选冻结与伸缩倍率），迷你图缺省内部自算
 // - 折后价：monotone 平滑实线品牌色（我司 3px / 竞品 2px），白底圆环圈点 r≈3.5
-// - RRP：虚线 6/4 + step 阶梯（平段+调价点垂直跳变，不平滑），同色 75% 不透明度
+// - RRP：细实线（第五十二轮，比折后价细一档取代虚线）+ step 阶梯（平段+调价点垂直
+//   跳变，不平滑），同色 85% 不透明度——粗细对比表达「主价/参照」层级
 // - 缺采：跨接段仅虚线（第二十四轮撤销空心插值点）；价格标签自适应避让（resolveCollisions 两遍式）
-// - 悬停：十字竖线（DOM）+ 钉顶附框 + 周视图跳转图标 + 月/季下钻图标（第二十轮）+ offer 图标；
-//   ECharts tooltip 禁用
+// - 悬停：十字竖线（DOM）+ 钉顶附框（含折扣率胶囊，第五十二轮）+ 月/季下钻图标 +
+//   offer 图标 + 「快照」取证胶囊（第五十轮）；ECharts tooltip 禁用
+// - 第五十二轮 图顶工具行单行三区：左 = $/齿轮 + 折后价/RRP 粗细线胶囊（挪出标题行，
+//   图例同款外形、品牌色点位改粗/细线演示）；中 = 大促档期/offer/最高最低/价格变化提醒
+//   圆框组（图例行居中，空间不足自动左靠）；右 = 系列图例页签（新增预警订阅铃铛）
 // - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
 // - 第二十轮：S/E 端点数值标签必放（symbolSize 0 修复 symbol 'none' 吞标签）；
 //   齿轮弹层「Y 轴自动压缩」开关（关 = 无断轴完全连续）
@@ -30,8 +34,8 @@
 //   ⑤ 空档位画虚线占位框（梯子连续可读）
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
-import { Checkbox, Popover, Segmented } from 'antd';
-import { SettingOutlined, TagOutlined } from '@ant-design/icons';
+import { Popover } from 'antd';
+import { TagOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -41,7 +45,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, font, fontSize, formatPrice, radius, shadow } from '../../theme/tokens';
+import { color, font, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import {
   BREAK_PX,
@@ -81,8 +85,10 @@ import {
   buildTickRows,
   collectTierValues,
   primaryPriceOf,
+  resolveLineShape,
   scaleToDisplay,
   type ExtremeMark,
+  type LineShapeChoice,
   type PromoBand,
   type SeriesNameItem,
 } from './chartModel';
@@ -90,7 +96,7 @@ import SnapshotIcon from './SnapshotIcon';
 import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 import DrillIcon from './DrillIcon';
 import OfferPopover from './OfferPopover';
-import ScaleSlider from './ScaleSlider';
+import ChartToolbar from './ChartToolbar';
 import BrandDot from '../../components/BrandMark';
 
 export interface ChartProps {
@@ -104,14 +110,8 @@ export interface ChartProps {
   gridLeft?: number;
   /** 图顶卡片区预留高；缺省按 series 数量推（gridTopFor） */
   gridTop?: number;
-  /** 钉顶卡片数据（=全部勾选系列，含图例取消选中的）；缺省用 series */
-  legendSeries?: Series[];
-  /** 图例未选中的系列 key（折线已隐藏，卡片浅色） */
-  hiddenKeys?: Set<string>;
-  /** 图例点击回调（缺省=卡片不可点，弹窗迷你图用） */
-  onToggleLegend?: (key: string) => void;
-  /** 是否渲染钉顶图例卡（第二十六轮：季/月下钻弹窗不渲染，配 gridTop 收窄） */
-  showLegendCards?: boolean;
+  // 第五十四轮：图例页签撤出图顶（legendSeries/hiddenKeys/onToggleLegend/showLegendCards 删除）——
+  // 页签整排移到时间轴与拖刷条之间的居中行（index 层 LegendPills），图顶右区不再放页签
   enableDrill?: boolean; // 月/季视图圈点下钻
   enableJump?: boolean; // 周视图悬停跳转
   enableOffer?: boolean; // 周视图 offer 图标
@@ -143,10 +143,37 @@ export interface ChartProps {
   /** 价格变化提醒阈值（第四十六轮挪出齿轮到标题行，受控）：相较前一有值点
    *  |Δ|≥阈值出 ↓/↑ 徽标；null=关闭；0=标出全部真实变化 */
   changeThreshold?: number | null;
+  // ---- 第五十二轮 图顶工具行三区（全部受控入参，缺省 = 不渲染对应区，下钻弹窗复用） ----
+  /** 折后价/RRP 显隐切换（左区粗/细线胶囊） */
+  onPriceTypeToggle?: (key: 'discounted' | 'rrp', next: boolean) => void;
+  /** offer 权益开关（中区圆框组） */
+  offersOn?: boolean;
+  /** offer 权益开关提交 */
+  onOffersOn?: (v: boolean) => void;
+  /** 最高/最低价开关提交（中区圆框组） */
+  onMaxMinOn?: (v: boolean) => void;
+  /** 价格变化提醒开关+阈值提交（中区圆框组；null=关） */
+  onChangeThreshold?: (v: number | null) => void;
+  // ---- 第五十四轮追补：工具行抽 ChartToolbar 共享组件；分离模式面板 chrome=false
+  //      不渲染设置行，由面板网格上方的常驻工具行统一控制 ----
+  /** 图顶工具行显隐（缺省 true）；false = 整行不渲染（含齿轮），gridTop 由调用方收窄 */
+  chrome?: boolean;
+  /** 轴列绘制（第五十四轮追补⑤）：false = 面板不画档位带/刻度标签/断轴省略号——
+   *  分离模式这三样由卡片外侧的共享轴列（SplitAxisColumn）统一承担，面板只留绘图区；
+   *  Y 刻度横线仍随 showYTicks 画在面板内（读数辅助属于绘图区） */
+  axisChrome?: boolean;
+  /** Y 刻度线显隐（受控；缺省内部状态——下钻弹窗等自管场景不受影响） */
+  showYTicks?: boolean;
+  onShowYTicks?: (v: boolean) => void;
+  /** 折线形态（受控；缺省内部状态）。'auto' = 按粒度自适应（第五十四轮追补③：
+   *  周=阶梯 / 月季=平滑，默认） */
+  lineShape?: LineShapeChoice;
+  onLineShape?: (v: LineShapeChoice) => void;
+  // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
+  // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
 
 const HIT_PX = 12; // 圈点点击/悬停命中半径
-const NO_KEYS = new Set<string>(); // hiddenKeys 缺省值
 
 /** 浮层/参照线数值格式（第三十五轮）：千分位整数 */
 const fmt_mm = (v: number): string => v.toLocaleString('en-US');
@@ -190,6 +217,35 @@ function PromoEventCard({ band }: { band: PromoBand }) {
 const H_ANIM_THRESHOLD_PX = 2 * TICK_PX;
 const H_ANIM_MS = 280;
 
+/** 折后价/RRP 切换胶囊已迁 ChartToolbar（第五十四轮追补，随工具行整体抽离） */
+
+/** 悬停浮窗折扣率胶囊（第五十二轮）：时点卡 DiscountBadge 同语言——0% 中性蓝、
+ *  深折扣（≤−15%）与溢价转琥珀；仅折后价口径下且双价齐全才出 */
+function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean }) {
+  const pct = Math.round(Math.abs(discount) * 100);
+  const warn = discount <= -0.15 || discount > 0.005;
+  const label = pct === 0 ? '0%' : `${discount < 0 ? '−' : '+'}${pct}%`;
+  return (
+    <span
+      className="tnum"
+      title={discount > 0.005 ? `较 RRP 高 ${pct}%（溢价）` : `较 RRP 低 ${pct}%`}
+      style={{
+        flexShrink: 0,
+        padding: '0 5px',
+        fontSize: 9.5,
+        lineHeight: '14px',
+        fontWeight: 700,
+        borderRadius: radius.pill,
+        color: warn ? '#b45309' : selectSoftInk,
+        background: warn ? color.warningSoft : selectSoft,
+        opacity: dim ? 0.3 : undefined,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function Chart(props: ChartProps) {
   const { series, granularity, currency, priceTypes } = props;
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -202,8 +258,11 @@ export default function Chart(props: ChartProps) {
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const focusMode = series.length > FOCUS_MODE_THRESHOLD;
   const focusActive = focusKey != null;
-  // Y 刻度线显隐（第十二轮）：齿轮弹层内开关。第三十五轮起默认关（迪总：不自动选择）
-  const [showYTicks, setShowYTicks] = useState(false);
+  // Y 刻度线显隐（第十二轮）：齿轮弹层内开关。第三十五轮起默认关（迪总：不自动选择）。
+  // 第五十四轮追补：可受控（分离模式下由常驻工具行统一写，全面板同值）
+  const [innerShowYTicks, setInnerShowYTicks] = useState(false);
+  const showYTicks = props.showYTicks ?? innerShowYTicks;
+  const commitShowYTicks = props.onShowYTicks ?? setInnerShowYTicks;
   // Y 轴自动压缩（第二十轮）：齿轮弹层内开关。第三十五轮起默认关 = Y 轴完全连续
   const [innerYCompress, setInnerYCompress] = useState(false);
   const yCompress = props.yCompress ?? innerYCompress;
@@ -213,8 +272,13 @@ export default function Chart(props: ChartProps) {
   const promoBandsOn = props.promoBandsOn ?? innerPromoBands;
   const commitPromoBandsOn = props.onPromoBandsOn ?? setInnerPromoBands;
   const promoBands = props.promoBands ?? [];
-  // 折线形态（第三十八轮）：齿轮可选——step=方形阶梯（默认）/ smooth=平滑曲线（最初形态）
-  const [lineShape, setLineShape] = useState<'step' | 'smooth'>('step');
+  // 中区圆框组的渲染条件已随工具行迁入 ChartToolbar（第五十四轮追补）
+  // 折线形态（第三十八轮齿轮可选；第五十四轮追补③加 auto 档并设为缺省）——
+  // auto = 按粒度自适应：周=方形阶梯（逐周跳变语义）、月/季=平滑（期内均值画阶梯=失真平台）
+  const [innerLineShape, setInnerLineShape] = useState<LineShapeChoice>('auto');
+  const lineShapeChoice = props.lineShape ?? innerLineShape;
+  const commitLineShape = props.onLineShape ?? setInnerLineShape;
+  const lineShape = resolveLineShape(lineShapeChoice, granularity);
   // 价格变化阈值（第四十六轮起受控于标题行开关+连贯滑杆；旧版齿轮 Select 的内部
   // 默认 5 与档位 0.05 单位不一致 = 实际恒关闭，一并修正）
   const changeThreshold = props.changeThreshold ?? null;
@@ -309,6 +373,12 @@ export default function Chart(props: ChartProps) {
       chartRef.current = null;
     };
   }, []);
+
+  // canvas 跟随容器宽度（第五十四轮：分离显示面板为半宽挂载/容器宽度变化时重设画布，
+  // 否则 canvas 保持 init 时刻宽度溢出面板；主图尺寸稳定时 resize 为幂等空操作）
+  useEffect(() => {
+    chartRef.current?.resize();
+  }, [width]);
 
   // ---- 几何（纯公式复现 grid，保证 DOM 层与 canvas 一致） ----
   const geom: Geom | null = useMemo(
@@ -494,7 +564,7 @@ export default function Chart(props: ChartProps) {
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
   const tierValues = useMemo(() => collectTierValues(series, priceTypes), [series, priceTypes]);
 
-  const showTierBand = currency === 'usd' && geom != null;
+  const showTierBand = currency === 'usd' && geom != null && props.axisChrome !== false;
   const tierBoxes = useMemo(
     () => buildTierBoxes({ enabled: showTierBand, geom, tierValues }),
     [showTierBand, geom, tierValues],
@@ -556,92 +626,56 @@ export default function Chart(props: ChartProps) {
       )}
       {geom && (
         <>
-          {/* 轴单位 + Y 轴显示设置（第十二轮起）：币种符号与齿轮组成同组居中，
-              两种币种下符号↔齿轮间距恒为 6px；弹层内含伸缩滑杆、刻度线开关与断轴省略号开关
-              （第十六轮：placement 改 bottomLeft，弹层与齿轮左对齐不再向左溢出） */}
-          <div
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: Math.max(gridTop - 36, 0),
-              width: geom.gridLeft - NAME_ZONE_W,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 6,
-              zIndex: 3,
-            }}
-          >
-            <span style={{ fontSize: fontSize.caption, lineHeight: '16px', color: color.mute, pointerEvents: 'none' }}>
-              {currency === 'usd' ? '$' : '₽'}
-            </span>
-            <Popover
-              trigger="click"
-              placement="bottomLeft"
-              content={
-                <div style={{ width: 236 }}>
-                  <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度（不改 Y 轴刻度值）</div>
-                  <ScaleSlider scale={sliderScale} onCommit={commitSliderScale} />
-                  <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>拖动后松手生效；双击滑杆复位 ×1.00</div>
-                  <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-                  <Checkbox checked={showYTicks} onChange={(e) => setShowYTicks(e.target.checked)}>
-                    <span style={{ fontSize: 12 }}>显示 Y 刻度线</span>
-                  </Checkbox>
-                  <div style={{ marginTop: 6 }}>
-                    <Checkbox checked={yCompress} onChange={(e) => commitYCompress(e.target.checked)}>
-                      <span style={{ fontSize: 12 }}>Y 轴自动压缩</span>
-                    </Checkbox>
-                    <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
-                      值簇间空白压成断轴；默认关 = Y 轴完全连续展示
-                    </div>
-                  </div>
-                  <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: color.mute }}>折线样式</span>
-                    <Segmented
-                      size="small"
-                      value={lineShape}
-                      onChange={(v) => setLineShape(v as 'step' | 'smooth')}
-                      options={[
-                        { label: '阶梯', value: 'step' },
-                        { label: '平滑', value: 'smooth' },
-                      ]}
-                    />
-                  </div>
-                  <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
-                    阶梯 = 方形折角（价格在期内恒定）；平滑 = 圆滑曲线（最初形态）
-                  </div>
-                  {/* 价格变化阈值（第四十六轮）挪到标题行「价格变化提醒」开关旁的连贯滑杆 */}
-                </div>
-              }
+          {/* 图顶工具行（第五十二轮单行三区 → 第五十四轮追补抽 ChartToolbar 共享组件）：
+              左 = 币种符号 + 齿轮弹层 + 折后价/RRP 胶囊；右 = 大促/offer/极值/变化提醒
+              圆框组（居右，阈值数值定宽防抖动）。分离模式面板 chrome=false 整行不渲染——
+              由面板网格上方的常驻工具行统一控制（index 层渲染同一组件） */}
+          {props.chrome !== false && (
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                height: gridTop,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 6px',
+                boxSizing: 'border-box',
+                zIndex: 3,
+              }}
             >
-              <button
-                type="button"
-                title="Y 轴显示设置（每格高度伸缩 / 刻度线显隐 / Y 轴自动压缩 / 折线样式）"
-                aria-label="Y 轴显示设置"
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  width: 20,
-                  height: 20,
-                  display: 'grid',
-                  placeItems: 'center',
-                  padding: 0,
-                  border: `1px solid ${color.hairline}`,
-                  borderRadius: 4,
-                  background: color.canvas,
-                  color: color.mute,
-                  cursor: 'pointer',
-                }}
-              >
-                <SettingOutlined style={{ fontSize: 12 }} />
-              </button>
-            </Popover>
-          </div>
+              <ChartToolbar
+                currency={currency}
+                sliderScale={sliderScale}
+                onSliderScale={commitSliderScale}
+                showYTicks={showYTicks}
+                onShowYTicks={commitShowYTicks}
+                yCompress={yCompress}
+                onYCompress={commitYCompress}
+                // 追补⑤修：必须传「原始三态」——此前传解析后的二值形态，
+                // auto 永远轮不到选中（选自适应 = 仍亮在阶梯/平滑，用户：无选中态）
+                lineShape={lineShapeChoice}
+                onLineShape={commitLineShape}
+                priceTypes={priceTypes}
+                onPriceTypeToggle={props.onPriceTypeToggle}
+                promoBandsOn={promoBandsOn}
+                onPromoBandsOn={commitPromoBandsOn}
+                offersOn={props.offersOn}
+                onOffersOn={props.onOffersOn}
+                maxMinOn={props.maxMinOn}
+                onMaxMinOn={props.onMaxMinOn}
+                changeThreshold={changeThreshold}
+                onChangeThreshold={props.onChangeThreshold}
+              />
+            </div>
+          )}
+          {/* 时间粒度角标（图右下、与轴标签同线；第四十七轮图标专用行之下） */}
           <div
             style={{
               position: 'absolute',
               right: 6,
-              top: geom.plotTop + geom.plotHeight + 22, // 与下推后的轴标签同线（第四十七轮图标专用行之下）
+              top: geom.plotTop + geom.plotHeight + 22,
               fontSize: fontSize.caption,
               lineHeight: '16px',
               color: color.mute,
@@ -651,71 +685,10 @@ export default function Chart(props: ChartProps) {
           >
             {granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季'}
           </div>
-          {/* 图例 chips（第三十五轮）：右上角小页签，点击查看/屏蔽产品（替代原钉顶卡片）；
-              隐藏态 = 虚线+降透明；chips 行独立于 geom（全隐藏时仍可点回） */}
-          {props.showLegendCards !== false && props.onToggleLegend != null && (
-            <div
-              style={{
-                position: 'absolute',
-                right: 6,
-                top: 2,
-                maxWidth: '58%',
-                display: 'flex',
-                flexWrap: 'nowrap',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: 4,
-                overflowX: 'auto',
-                zIndex: 10,
-              }}
-            >
-              {(props.legendSeries ?? series).map((s) => {
-                const hidden = props.hiddenKeys?.has(s.key) ?? false;
-                return (
-                  <span
-                    key={s.key}
-                    role="button"
-                    title={hidden ? '点击恢复显示该产品' : '点击屏蔽该产品'}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onToggleLegend?.(s.key);
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      height: 20,
-                      padding: '0 8px',
-                      fontSize: 11,
-                      lineHeight: '18px',
-                      borderRadius: radius.pill,
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                      maxWidth: 150,
-                      background: color.canvas,
-                      border: `1px ${hidden ? 'dashed' : 'solid'} ${hidden ? color.hairlineStrong : color.hairline}`,
-                      opacity: hidden ? 0.45 : 1,
-                    }}
-                  >
-                    <BrandDot brand={s.brand} />
-                    <span
-                      style={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        color: color.body,
-                      }}
-                    >
-                      {curveNameOf(s)}
-                    </span>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          {/* DOM 刻度线 + 缩写标签（12px，与时间轴同字号；ECharts 值轴已隐藏；齿轮弹层可关） */}
+          {/* DOM 刻度线 + 缩写标签（12px，与时间轴同字号；ECharts 值轴已隐藏；齿轮弹层可关）。
+              第五十四轮追补⑤：分离面板 axisChrome=false 时标签由共享轴列承担，面板只画横线 */}
           {showYTicks && tickRows.map((t) => (
-            <div key={`tk-${t.v}`}>
+            <Fragment key={`tk-${t.v}`}>
               <div
                 style={{
                   position: 'absolute',
@@ -728,25 +701,27 @@ export default function Chart(props: ChartProps) {
                   zIndex: 0,
                 }}
               />
-              <div
-                className="tnum"
-                style={{
-                  position: 'absolute',
-                  left: geom.plotLeft - NAME_ZONE_W - tickW,
-                  top: Math.round(t.y) - 8,
-                  width: tickW - 8,
-                  textAlign: 'right',
-                  fontSize: 12,
-                  lineHeight: '16px',
-                  color: color.body,
-                  pointerEvents: 'none',
-                  zIndex: 1,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t.text}
-              </div>
-            </div>
+              {props.axisChrome !== false && (
+                <div
+                  className="tnum"
+                  style={{
+                    position: 'absolute',
+                    left: geom.plotLeft - NAME_ZONE_W - tickW,
+                    top: Math.round(t.y) - 8,
+                    width: tickW - 8,
+                    textAlign: 'right',
+                    fontSize: 12,
+                    lineHeight: '16px',
+                    color: color.body,
+                    pointerEvents: 'none',
+                    zIndex: 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t.text}
+                </div>
+              )}
+            </Fragment>
           ))}
           {/* 断裂轴：压缩空白条 = 绘图区极浅灰带（暗示该段值域被隐藏）+ 上下虚线边，
               轴上为纵向省略号标注（第八轮：替代斜线符号） */}
@@ -770,8 +745,9 @@ export default function Chart(props: ChartProps) {
                     zIndex: 0,
                   }}
                 />
-                {/* 轴上纵向省略号（⋮）：刻度列居中（「Y 轴自动压缩」关闭 = 不产生断轴，自然无符号） */}
-                {
+                {/* 轴上纵向省略号（⋮）：刻度列居中（「Y 轴自动压缩」关闭 = 不产生断轴，自然无符号）；
+                    分离面板 axisChrome=false 时由共享轴列绘制 */}
+                {props.axisChrome !== false && (
                   <svg
                     width="14"
                     height="16"
@@ -789,7 +765,7 @@ export default function Chart(props: ChartProps) {
                       <circle key={cy} cx="7" cy={cy} r="1.5" fill={color.hairlineStrong} />
                     ))}
                   </svg>
-                }
+                )}
               </div>
             );
           })}
@@ -860,7 +836,9 @@ export default function Chart(props: ChartProps) {
                     style={{
                       position: 'absolute',
                       left: xPxOf(geom, m.maxIdx),
-                      top: yPxOf(geom, m.maxV) - 30,
+                      // 钳回容器内：分离面板 chrome=false 无工具行预留（gridTop 收窄到 14），
+                      // 最高点贴 plot 顶时胶囊不再越出面板压住面板头
+                      top: Math.max(2, yPxOf(geom, m.maxV) - 30),
                       transform: 'translateX(-50%)',
                       pointerEvents: 'none',
                       zIndex: 8,
@@ -868,22 +846,7 @@ export default function Chart(props: ChartProps) {
                   >
                     {pill('最高', m.maxV)}
                   </div>
-                  {/* 最低点高亮环（Keepa「最低价」圆点画法） */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: xPxOf(geom, m.minIdx),
-                      top: yPxOf(geom, m.minV),
-                      transform: 'translate(-50%, -50%)',
-                      width: 17,
-                      height: 17,
-                      borderRadius: '50%',
-                      border: `2px solid ${m.color}`,
-                      background: 'transparent',
-                      pointerEvents: 'none',
-                      zIndex: 7,
-                    }}
-                  />
+                  {/* 第五十四轮追补⑤：最低点不再画高亮环（用户：直接显示标签即可） */}
                   <div
                     style={{
                       position: 'absolute',
@@ -990,7 +953,8 @@ export default function Chart(props: ChartProps) {
               );
               const nOfferLines = offerRows.reduce((acc, l) => acc + l.length, 0);
               const x0 = xPxOf(geom, hoverIdx);
-              const W = 190;
+              // 第五十三轮：200 → 264——「Huawei Pura 90s Pro 12+512 GB」全名 + 折扣胶囊 + 双价一行放下（用户反馈产品名截断）
+              const W = 264;
               const flip = x0 + 16 + W > geom.plotLeft + geom.plotWidth;
               const left = flip ? x0 - 16 - W : x0 + 16;
               const top = Math.min(
@@ -1020,6 +984,11 @@ export default function Chart(props: ChartProps) {
                     const pt = s.points[hoverIdx];
                     const dim = focusActive && s.key !== focusKey;
                     const items = offerRows[ri];
+                    // 折扣率胶囊（第五十二轮）：与时点卡同语言（vs RRP；仅折后价口径出）
+                    const disc =
+                      priceTypes.discounted && pt?.price != null && pt?.rrp != null && pt.rrp > 0
+                        ? pt.price / pt.rrp - 1
+                        : null;
                     return (
                       <Fragment key={s.key}>
                         <div
@@ -1036,6 +1005,7 @@ export default function Chart(props: ChartProps) {
                           <span style={{ color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {curveNameOf(s)}
                           </span>
+                          {disc != null && <MiniDiscountBadge discount={disc} dim={dim} />}
                           <span className="tnum" style={{ marginLeft: 'auto', fontWeight: 600, color: color.ink }}>
                             {fmt_mm(v)}
                           </span>
@@ -1092,39 +1062,65 @@ export default function Chart(props: ChartProps) {
               }}
             />
           )}
-          {/* 端点徽标（第十四轮）：S=起点、E=截止（实心品牌色圆内白字，稍大于普通点）；
-              ‹/›=窗口边缘续接点（白底品牌描边+外向箭头），数据在窗口外延续。
+          {/* 端点徽标（第十四轮引入；第五十四轮追补④改版）：数据点圆点取消后 S/E 无需
+              再用字母承载——S=起点 / E=截止改为品牌色实心小圆点（直径 8px = 原徽标一半，
+              白描边浮在折线端点上方即可表达「开始/结束」）；‹/›=窗口边缘续接点维持
+              白底品牌描边+外向箭头（数据在窗口外延续）。
               聚焦模式（第三十二轮）：非聚焦系列降透明 */}
           {endpointBadges.map((b) => {
-            const big = b.kind === 'S' || b.kind === 'E';
+            const se = b.kind === 'S' || b.kind === 'E';
             const dim = focusActive && b.key.split('|')[0] !== focusKey;
+            if (se) {
+              return (
+                <span
+                  key={`ep-${b.key}`}
+                  title={
+                    b.kind === 'S'
+                      ? '起点（该配置首个有价周）'
+                      : '截止（其后连续数周无数据）'
+                  }
+                  style={{
+                    position: 'absolute',
+                    left: b.x,
+                    top: b.y,
+                    width: 8,
+                    height: 8,
+                    transform: 'translate(-50%, -50%)',
+                    borderRadius: '50%',
+                    boxSizing: 'border-box',
+                    background: b.color,
+                    border: '1.5px solid #fff',
+                    boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
+                    pointerEvents: 'none',
+                    zIndex: 8,
+                    opacity: dim ? 0.15 : undefined,
+                  }}
+                />
+              );
+            }
             return (
               <div
                 key={`ep-${b.key}`}
                 title={
-                  b.kind === 'S'
-                    ? 'S = 起点（该配置首个有价周）'
-                    : b.kind === 'E'
-                      ? 'E = 截止（其后连续两周无数据）'
-                      : b.kind === 'in'
-                        ? '数据在窗口左侧延续，可拉伸时间窗口查看'
-                        : '数据在窗口右侧延续，可拉伸时间窗口查看'
+                  b.kind === 'in'
+                    ? '数据在窗口左侧延续，可拉伸时间窗口查看'
+                    : '数据在窗口右侧延续，可拉伸时间窗口查看'
                 }
                 style={{
                   position: 'absolute',
                   left: b.x,
                   top: b.y,
-                  width: big ? 15 : 13,
-                  height: big ? 15 : 13,
+                  width: 13,
+                  height: 13,
                   transform: 'translate(-50%, -50%)',
                   borderRadius: '50%',
                   boxSizing: 'border-box',
                   display: 'grid',
                   placeItems: 'center',
-                  background: big ? b.color : color.canvas,
-                  border: `1.5px solid ${big ? color.canvas : b.color}`,
-                  color: big ? color.canvas : b.color,
-                  fontSize: big ? 9 : 10,
+                  background: color.canvas,
+                  border: `1.5px solid ${b.color}`,
+                  color: b.color,
+                  fontSize: 10,
                   fontWeight: 700,
                   lineHeight: 1,
                   fontFamily: font.family,
@@ -1133,7 +1129,7 @@ export default function Chart(props: ChartProps) {
                   opacity: dim ? 0.15 : undefined,
                 }}
               >
-                {b.kind === 'in' ? '‹' : b.kind === 'out' ? '›' : b.kind}
+                {b.kind === 'in' ? '‹' : '›'}
               </div>
             );
           })}
@@ -1208,7 +1204,9 @@ export default function Chart(props: ChartProps) {
                       title={nm.text}
                       style={{
                         position: 'absolute',
-                        left: nm.x,
+                        // 钳 ≥2：分离面板 gridLeft=0（轴在外侧）时，起点贴左缘的系列名
+                        // 避让后可能推出容器（追补⑤）
+                        left: Math.max(2, nm.x),
                         top: nm.y, // 计划盒 = 渲染盒（含生命周期第二行），第三十二轮起不再偏移
                         display: 'flex',
                         flexDirection: delta ? 'column' : 'row',

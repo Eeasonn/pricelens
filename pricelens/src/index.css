@@ -33,9 +33,9 @@ body {
 .lpl-fb .ant-select-open .ant-select-selection-search { width: auto !important; }
 
 /* ============================================================
-   第三十七轮：国家总览矩阵（Overview）——ROM 行悬停内衬 + 颜色次级菜单 chip
+   第三十七轮：国家总览矩阵（Overview）——ROM 行 + 颜色次级菜单 chip
+   （行悬停灰底第五十四轮追补删除：用户反馈不要 hover 变灰；行不再可点）
    ============================================================ */
-.lpl-ov-row:hover { background: #f5f5f5; }
 .lpl-ov-colors {
   border: 1px solid #ebebeb;
   background: #ffffff;

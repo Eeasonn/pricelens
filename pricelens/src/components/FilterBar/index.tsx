@@ -5,8 +5,8 @@
 // 匹配按钮归位：自动匹配开关紧跟竞品框（同格行内，
 // 统一 92px 定宽保证双列对称）。筛选器之间不用分隔线，列间距 10px、
 // 行距 12px（≥列距，两行有呼吸）。
-// 宽度预算（宽度跟随内容，第二十八轮）：
-//   第一行 min 合计 148+104+327+327+118 + 4×10 = 1064，加卡片 padding 48
+// 宽度预算（宽度跟随内容，第二十八轮；第五十三轮平台 118→164 容「Ozon Россия」14px 全名不截断）：
+//   第一行 min 合计 148+104+327+327+164 + 4×10 = 1110，加卡片 padding 48
 //   ≤ 1232（1280 视口 − 页面 padding 48），1280 起零溢出；
 //   弹性只归产品/竞品两格（高频主筛选），国家/产业/平台低基数定宽。
 //   第二行 时间 min 544 + 币种 160 + 10 ≤ 1232；RangePicker 弹性但上限
@@ -63,7 +63,8 @@ function Cell({ flex, min, label, info, children }: { flex: string; min?: number
   );
 }
 
-/** 产品格：外置前缀标签的级联 + 紧跟其后的匹配按钮（按钮 92px 定宽，见 ProductBox） */
+/** 产品格：外置前缀标签 + 级联；button 给出时排在控件**之前**
+ *  （第五十三轮：自动匹配开关挪到竞品级联前面——先表态「跟不跟随」，再选竞品） */
 function ProductCell({
   flex,
   min,
@@ -82,15 +83,17 @@ function ProductCell({
   return (
     <div title={info} style={{ flex, minWidth: min ?? 0, height: 32, display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={filterLabel}>{label}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
       {button}
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
     </div>
   );
 }
 
 /** 筛选条（§5）；图表侧（Agent C）消费 useFilters().state。
  *  第二十八轮定版：两行布局——第一行 国家｜产业｜产品｜竞品+自动匹配｜平台（第三十九轮删「匹配上一代」），
- *  时间/币种在第二行（时间弹性、币种靠右）。标签统一行外前缀，控件左缘全行对齐。 */
+ *  时间/币种在第二行（时间弹性、币种靠右）。标签统一行外前缀，控件左缘全行对齐。
+ *  第五十三轮：自动匹配开关挪到竞品级联之前；自动匹配开启时平台一并锁定置灰
+ *  （竞品与平台都视为「已匹配」——平台跟随我司官方店铺 Ozon Россия）。 */
 export default function FilterBar() {
   return (
     <div style={{ padding: `${space.base}px ${space.lg}px 0` }}>
@@ -120,7 +123,7 @@ export default function FilterBar() {
             <ProductCell flex="1 1 327px" min={327} label="竞品" button={<AutoMatchControl />}>
               <CompetitorControl />
             </ProductCell>
-            <Cell flex="0 0 118px" min={118} label="平台" info={INFO_PLATFORM}>
+            <Cell flex="0 0 164px" min={164} label="平台" info={INFO_PLATFORM}>
               <PlatformBox />
             </Cell>
           </div>

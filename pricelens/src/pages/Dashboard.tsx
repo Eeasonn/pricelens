@@ -1,17 +1,64 @@
+import { useEffect, useRef, useState } from 'react';
 import { Button } from 'antd';
+import { ArrowUpOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import FilterBar from '../components/FilterBar';
 import PriceTrend from '../chart/PriceTrend';
+import AlertCenterButton from '../components/AlertCenter';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
 
 const FOOTER_TEXT =
   '口径：RRP=官方建议零售价 · 折后价=可抓取平台最低在架价 · offer 为文本权益不计价 · 月/季=桶内均值取整 · 促销力度=折后价相对上市价的降幅（+为高于上市价） · 参考汇率 80₽/$（配置页可改）';
 
-/** 页面骨架 —— 图表负责人（Agent C）在此基础上完善（§4.1 信息架构） */
+/** 页面骨架 —— 图表负责人（Agent C）在此基础上完善（§4.1 信息架构）。
+ *  第五十四轮追补：滚过筛选器后顶部居中浮现圆形 ↑ 按钮，点击回滚到筛选器。
+ *  「竞品对比进入默认滚到价格走势区」由 Overview.openCompare 在切页后延时驱动
+ *  （滚动容器 = 根 div：html/body/#root 锁 100% 高，overflowX:auto → overflowY 计算 auto） */
 export default function Dashboard() {
   const { go } = usePage();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [showTop, setShowTop] = useState(false);
+
+  const onScroll = (): void => setShowTop((rootRef.current?.scrollTop ?? 0) > 140);
+  useEffect(() => {
+    const root = rootRef.current;
+    root?.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => root?.removeEventListener('scroll', onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
+    <div ref={rootRef} data-lpl-scroll style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
+      {/* 顶部居中圆形 ↑（第五十四轮追补）：滚过筛选器后浮现，点击平滑回滚筛选器 */}
+      {showTop && (
+        <button
+          title="回到筛选器"
+          onClick={() => {
+            if (rootRef.current) rootRef.current.scrollTop = 0; // IAB 环境 scrollTo() 无效，直接赋值
+          }}
+          style={{
+            position: 'fixed',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 60,
+            width: 34,
+            height: 34,
+            borderRadius: '50%',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: color.canvas,
+            border: `1px solid ${color.hairlineStrong}`,
+            boxShadow: shadow.l2,
+            color: color.body,
+            cursor: 'pointer',
+          }}
+        >
+          <ArrowUpOutlined style={{ fontSize: 14 }} />
+        </button>
+      )}
       {/* 第二十八轮：1440 → 1280，筛选条重排后 1280 视口零溢出（1280 笔记本无横向滚动） */}
       <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px */}
@@ -30,10 +77,11 @@ export default function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md }}>
             <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
             <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-              欧亚 / R国 · 数据批次 <span className="tnum">2026-W41</span>
+              欧亚 / R国 · 价格看板
             </span>
           </div>
-          <div style={{ display: 'flex', gap: space.sm }}>
+          <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
+            <AlertCenterButton />
             <Button size="small" style={{ height: 28 }} onClick={() => go('overview')}>
               总览
             </Button>
@@ -51,17 +99,20 @@ export default function Dashboard() {
 
         {/* 价格走势（第十二轮：标题并入 PriceTrend 首行，消除三段式纵向空白） */}
         <main style={{ flex: 1, padding: space.lg }}>
-          <section
-            style={{
-              background: color.canvas,
-              boxShadow: shadow.l1,
-              borderRadius: radius.card,
-              padding: space.lg,
-            }}
-          >
-            {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
-            <PriceTrend />
-          </section>
+          <div data-lpl-trend>
+            <section
+              style={{
+                background: color.canvas,
+                boxShadow: shadow.l1,
+                borderRadius: radius.card,
+                padding: space.lg,
+                scrollMarginTop: 12,
+              }}
+            >
+              {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
+              <PriceTrend />
+            </section>
+          </div>
         </main>
 
         {/* 页脚：全页唯一允许的说明文本 */}

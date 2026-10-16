@@ -131,8 +131,8 @@ function DrillInner(props: DrillModalProps & { info: DrillInfo }) {
       </div>
       {/* 迷你走势图（同编码；月度层可点继续下钻，周度层不再响应）。
           第七轮：容器高由 Y 模型自适应派生（Chart 内部），不再固定 320。
-          第二十六轮：下钻界面不渲染钉顶图例卡（showLegendCards=false），
-          gridTop 收窄到 36 只保留 ₽/$+齿轮行 */}
+          gridTop 收窄到 36 只保留 ₽/$+齿轮行（图例页签第五十四轮起在主图时间轴下方，
+          下钻弹窗本就不渲染） */}
       {s0 ? (
         <Chart
           series={[s0]}
@@ -140,7 +140,6 @@ function DrillInner(props: DrillModalProps & { info: DrillInfo }) {
           currency={currency}
           priceTypes={priceTypes}
           gridTop={36}
-          showLegendCards={false}
           enableDrill={cur.gran === 'month'}
           enableJump={false}
           enableOffer={false}

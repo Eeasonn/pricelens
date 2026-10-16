@@ -38,6 +38,13 @@ export interface FiltersState {
    * 竞品级联禁用）；关 = 手动勾选竞品（原有语义）。
    */
   autoMatch: boolean;
+  /**
+   * 第五十二轮 预警中心：已订阅系列（seriesKey = `modelId__romram去空格`，与图表
+   * 系列 key 同空间——看板图例页签、总览型号块两处入口共用一份订阅）。
+   */
+  alertSubs: string[];
+  /** 预警变化阈值（小数，0.05=5%）：促销力度变化与竞品调价共用一条阈值线 */
+  alertThreshold: number;
 }
 
 export interface FiltersActions {
@@ -54,4 +61,11 @@ export interface FiltersActions {
   resetCompetitorsToConfig(): void;
   /** 第三十四轮：切换自动匹配；开 = 立即按配置矩阵重算当前竞品组（关 = 保留当前竞品转为手动） */
   setAutoMatch(on: boolean): void;
+  // ---- 第五十二轮 预警中心 ----
+  /** 单系列订阅切换（看板图例页签铃铛） */
+  toggleAlertSub(key: string): void;
+  /** 批量订阅/退订（总览型号块：我司全部 ROM + 其映射竞品一次订阅） */
+  setAlertSubs(keys: string[], on: boolean): void;
+  /** 变化阈值（小数，0.05=5%） */
+  setAlertThreshold(v: number): void;
 }

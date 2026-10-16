@@ -24,8 +24,10 @@ export const GRID = { top: 78, bottom: 40, right: 24 } as const; // bottom 含�
 /** §6.6 每格像素间距恒定（高度自适应的基准）。
  *  第十二轮 46→92：×1.0 倍率下刻度密度降一倍（同高约半数刻度，如 60K~110K 直接 10K 一档），
  *  伸缩滑杆 ×0.5 即旧版 ×1.0 的密度；
- *  第五十轮 92→80：默认 ×1 每格再缩一截（迪总反馈图偏高），×0.5 档仍可读 */
-export const TICK_PX = 80;
+ *  第五十轮 92→80：默认 ×1 每格再缩一截（迪总反馈图偏高），×0.5 档仍可读；
+ *  第五十二轮 80→64：默认 ×1 一屏化——筛选器+主看板（截止促销热力带）在 ~900px
+ *  视口内完整可见（100% 缩放），×0.5 档 32px 仍保底可读 */
+export const TICK_PX = 64;
 /** 格数约束：下限保可读，上限防失控（跨度再大也不超 16 格 ≈ 1472px 绘图高） */
 export const MIN_CELLS = 4;
 export const MAX_CELLS = 16;
@@ -379,7 +381,11 @@ export function computeYAxis(params: {
     return Math.round(need) > segBaseH[i] ? Math.round(need) : segBaseH[i];
   });
   const grown = segFinalH.some((h, i) => h > segBaseH[i]);
-  const plotHeight = (grown ? segFinalH.reduce((a, b) => a + b, 0) : availPx) + (segDomains.length - 1) * BREAK_PX;
+  // 第五十四轮追补②：需求下限只准长不准缩——外缘整格吸附留下的空档使段占比
+  // ×availPx 低于 availPx 本身，原 grown 分支会让总高跌破 cells×TICK_PX
+  // （每格高度标尺失效，周→季可缩 80px）；钳回 availPx 保底。
+  const plotHeight =
+    Math.max(availPx, grown ? segFinalH.reduce((a, b) => a + b, 0) : 0) + (segDomains.length - 1) * BREAK_PX;
 
   // ---- 3) 像素分配：值高在上；段高 ∝ 跨度（需求下限抬升见 2.5）；段间插入断裂条 ----
   const segs: ScaleSeg[] = [];
@@ -497,6 +503,31 @@ export function enumerateBuckets(g: Granularity, startId: string, endId: string)
     if (id >= startId && id <= endId && !ids.includes(id)) ids.push(id);
   }
   return ids.sort().map((id) => ({ id, xLabel: id }));
+}
+
+/** 时点页签日期（第五十四轮追补①）：窗口末桶内最新日历周 → 周三锚日 MM-DD。 *  月/季粒度不再显示 2026-10 / 2026Q4——时点恒为「最新那一周对应的那一天」
+ *  （用户：时点随粒度在 10-07 / 2026-10 / 2026Q4 之间跳变，后两者不是「一天」）。
+ *  窗口平移到过去时跟随窗口（与摘要条数值口径一致），找不到回退 null。 */
+export function bucketLatestWeekLabel(g: Granularity, bucketId: string): string | null {
+  if (g === 'week') {
+    const r = dimTime.find((x) => x.week_id === bucketId);
+    return r ? r.week_wed_date.slice(5) : null;
+  }
+  let best: { week_id: string; week_wed_date: string } | null = null;
+  for (const r of dimTime) {
+    if ((g === 'month' ? r.month_id : r.quarter_id) !== bucketId) continue;
+    if (!best || r.week_id > best.week_id) best = r;
+  }
+  return best ? best.week_wed_date.slice(5) : null;
+}
+
+/** 分离共享轴列宽（第五十四轮追补⑤）：只含实际轴元素——USD = 档位带（+开刻度时的
+ *  刻度列），非 USD = 仅刻度列；不开刻度且无档位带时为 0。面板 gridLeft=0 后，
+ *  主图 gridLeft 里的名称预留带（NAME_ZONE_W）不再摊在轴列里，宽度全部让给卡片。 */
+export function splitAxisWidth(currency: CurrencyMode, gridLeft: number, showYTicks: boolean): number {
+  const tierPart = currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0;
+  if (!showYTicks) return currency === 'usd' ? TIER_BAND_W : 0;
+  return tierPart + Math.max(34, gridLeft - tierPart - NAME_ZONE_W);
 }
 
 /** 桶的日期覆盖区间（第三十四轮，大促背景带相交判定用）：周桶 = 锚周三 ±3 天；

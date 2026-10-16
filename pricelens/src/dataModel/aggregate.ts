@@ -189,6 +189,15 @@ function pickShop(): string | null {
   return DEFAULT_SHOP_NAME;
 }
 
+/** 单平台价目（第五十三轮）：同一基准价逐平台独立套用因子+抖动（与 applyPlatform 同源、
+ *  互不影响）。预警「单品牌多平台价差」与总览「多平台对比」弹窗共用；按价格升序返回。 */
+export function platformPriceSpread(base: number, skuId: string, weekId: string): { platform: string; price: number }[] {
+  const platforms = [...new Set(dimChannel.map((c) => c.platform))];
+  return platforms
+    .map((p) => ({ platform: p, price: applyPlatform(base, skuId, weekId, [p]) }))
+    .sort((a, b) => a.price - b.price);
+}
+
 // ---------------- offer 解析 ----------------
 /** offer_title = "档期名 · 类型"，用档期名前缀回查 dim_promo 得 endDate */
 function findPromoForOffer(title: string, anchorDate: string): DimPromo | undefined {

@@ -20,6 +20,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Button, Empty, InputNumber, message, Select, Tag, Tooltip } from 'antd';
 import { DownOutlined, UpOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
+import AlertCenterButton from '../components/AlertCenter';
 import {
   autoPrevModelId,
   benchmarkSkuIdsFor,
@@ -238,9 +239,12 @@ export default function Config() {
             </Button>
             <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>配置</span>
           </div>
-          <Button size="small" type="primary" style={{ height: 28 }} onClick={saveAll}>
-            保存配置
-          </Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+            <AlertCenterButton />
+            <Button size="small" type="primary" style={{ height: 28 }} onClick={saveAll}>
+              保存配置
+            </Button>
+          </div>
         </header>
 
         <main style={{ flex: 1, padding: space.lg }}>
