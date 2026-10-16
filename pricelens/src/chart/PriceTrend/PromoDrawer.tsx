@@ -123,7 +123,7 @@ export default function PromoDrawer(props: {
     >
       {/* 口径 + 色阶图例（与原热力带同文案口径） */}
       <div style={{ fontSize: fontSize.caption, color: color.mute, lineHeight: '18px' }}>
-        折后价相对上市价的降幅 · 行 = 时间（最新在上）· 列 = 产品 · 随图表窗口联动
+        各产品折后价相对上市价的降幅
       </div>
       <div
         style={{
@@ -157,12 +157,12 @@ export default function PromoDrawer(props: {
             {t}
           </span>
         ))}
-        <span>描边格 = 窗口内最深 · — = 未上市</span>
+        <span>描边 = 区间内最深 · — = 未上市</span>
       </div>
 
       {cols.length === 0 || n === 0 ? (
         <div style={{ padding: '32px 0', textAlign: 'center', fontSize: fontSize.bodySm, color: color.mute }}>
-          当前窗口无数据
+          所选时间范围内无数据
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>

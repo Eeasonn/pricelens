@@ -762,7 +762,7 @@ export default function PriceTrend() {
                           promoBands={promoBands}
                           maxMinOn={maxMinOn}
                           changeThreshold={changeThreshold}
-                          emptyHint="该配置窗口内无数据"
+                          emptyHint="该配置在所选时间范围内无数据"
                         />
                         {/* 面板各自的图例页签（第五十四轮追补⑥批注）：只列本面板的产品、
                             在本卡片底部居中——不再合并成一条全局居中行 */}

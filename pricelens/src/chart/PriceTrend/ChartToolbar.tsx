@@ -175,7 +175,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                 <span style={{ fontSize: 12 }}>Y 轴自动压缩</span>
               </Checkbox>
               <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
-                值簇间空白压成断轴；默认关 = Y 轴完全连续展示
+                差距悬殊的价格段之间自动压缩空白；默认关 = 完整连续展示
               </div>
             </div>
             <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
@@ -264,7 +264,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                     <span style={{ fontSize: 12 }}>最高/最低价标注</span>
                   </Checkbox>
                   <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                    Keepa 式极值点旁胶囊（窗口内最高/最低）
+                    在区间内最高 / 最低价点位旁标注胶囊
                   </div>
                   <div style={{ marginTop: 8 }}>
                     <Checkbox
@@ -311,7 +311,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                     </div>
                   )}
                   <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                    各产品逐周促销深度（原热力带已收起）
+                    各产品逐周促销深度
                   </div>
                 </div>
               }

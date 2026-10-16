@@ -35,7 +35,7 @@
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { Popover } from 'antd';
-import { TagOutlined } from '@ant-design/icons';
+import { ExportOutlined, TagOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -44,7 +44,7 @@ import { GridComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
-import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
+import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
 import { color, font, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import {
@@ -248,6 +248,128 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
   );
 }
 
+/** 系列名标签（第五十七轮抽组件）：名称 = 跳转载体——悬停自显 ↗（React 态而非
+ *  CSS :hover，合成事件环境同样生效），点击名称/↗ = 最新时点取证浮窗；
+ *  季粒度第二行生命周期幅度照旧计入避让盒。 */
+function SeriesNameLabel(props: {
+  nm: {
+    x: number;
+    y: number;
+    text: string;
+    color: string;
+    seriesKey: string;
+    maxW?: number;
+  };
+  brand: string;
+  deltaPct: { pct: number } | null;
+  latest: SeriesPoint | undefined;
+  currency: CurrencyMode;
+  onOpen: (p: SeriesPoint, label: string) => void;
+  dimmed: boolean;
+}) {
+  const { nm, latest, onOpen } = props;
+  const [hover, setHover] = useState(false);
+  const delta = props.deltaPct != null;
+  const pct = props.deltaPct?.pct ?? 0;
+  const pctLabel = props.deltaPct != null
+    ? (pct < 0 ? '−' : pct > 0 ? '+' : '±') + Math.abs(pct * 100).toFixed(1) + '%'
+    : '';
+  return (
+    <div
+      title={nm.text}
+      className="lpl-nm"
+      onMouseEnter={() => latest && setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={
+        latest
+          ? (e) => {
+              e.stopPropagation();
+              onOpen(latest, nm.text);
+            }
+          : undefined
+      }
+      style={{
+        position: 'absolute',
+        // 钳 ≥2：分离面板 gridLeft=0（轴在外侧）时，起点贴左缘的系列名
+        // 避让后可能推出容器（追补⑤）
+        left: Math.max(2, nm.x),
+        top: nm.y, // 计划盒 = 渲染盒（含生命周期第二行），第三十二轮起不再偏移
+        display: 'flex',
+        flexDirection: delta ? 'column' : 'row',
+        alignItems: delta ? 'flex-start' : 'center',
+        gap: delta ? 1 : 4,
+        fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
+        fontWeight: 600,
+        lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
+        color: nm.color,
+        whiteSpace: 'nowrap',
+        // 名称承载跳转入口（悬停出 ↗ / 点击开取证浮窗），需要接收指针事件
+        pointerEvents: latest ? 'auto' : 'none',
+        cursor: latest ? 'pointer' : 'default',
+        zIndex: 9,
+        opacity: props.dimmed ? 0.2 : undefined,
+        textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
+        ...(nm.maxW != null ? { maxWidth: nm.maxW } : null),
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <BrandDot brand={props.brand} />
+        <span
+          style={
+            nm.maxW != null
+              ? {
+                  display: '-webkit-box',
+                  WebkitBoxOrient: 'vertical' as const,
+                  WebkitLineClamp: 2,
+                  overflow: 'hidden',
+                  wordBreak: 'break-word',
+                  whiteSpace: 'normal',
+                }
+              : undefined
+          }
+        >
+          {nm.text}
+        </span>
+        {latest && (
+          <span
+            role="button"
+            aria-label={`打开商城取证：${nm.text}（最新时点）`}
+            title={`打开商城取证 · ${nm.text}（最新时点）`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(latest, nm.text);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 15,
+              height: 15,
+              flexShrink: 0,
+              borderRadius: 3,
+              border: `1px solid ${color.hairline}`,
+              background: color.canvas,
+              color: color.mute,
+              opacity: hover ? 1 : 0,
+              transition: 'opacity 0.12s ease',
+            }}
+          >
+            <ExportOutlined style={{ fontSize: 8.5 }} />
+          </span>
+        )}
+      </div>
+      {delta && (
+        <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap' }}>
+          <span style={{ color: color.mute, fontWeight: 500 }}>
+            生命周期{' '}
+          </span>
+          <span style={{ color: color.ink, fontWeight: 700, fontFamily: font.family }}>{pctLabel}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function Chart(props: ChartProps) {
   const { series, granularity, currency, priceTypes } = props;
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -436,6 +558,23 @@ export default function Chart(props: ChartProps) {
       }),
     [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas],
   );
+
+  // 系列名跳转载体（第五十七轮，用户拍板）：名称即入口——悬停浮现 ↗、点击名称/↗
+  // 弹该产品**最新时点**的取证浮窗（活页 = 现页链接在浮窗弱化次位，取证语义不破）。
+  // 最新点取最后一个有值且有 url 的点（退市后停在清库末点，语义仍是「该产品现页」）
+  const latestPointByKey = useMemo(() => {
+    const m = new Map<string, SeriesPoint>();
+    for (const s of series) {
+      for (let i = s.points.length - 1; i >= 0; i--) {
+        const p = s.points[i];
+        if (p.price != null && p.url) {
+          m.set(s.key, p);
+          break;
+        }
+      }
+    }
+    return m;
+  }, [series]);
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
   // focusKey（第三十二轮聚焦模式）：非聚焦系列降透明 0.15、数值标签隐藏
@@ -1175,70 +1314,27 @@ export default function Chart(props: ChartProps) {
                       />
                     ))}
                 </svg>
-                {visibleNames.map((nm) => {
-                  const delta = lifecycleDeltas.get(nm.seriesKey) ?? null;
-                  const pctLabel = delta
-                    ? (delta.pct < 0 ? '−' : delta.pct > 0 ? '+' : '±') + Math.abs(delta.pct * 100).toFixed(1) + '%'
-                    : '';
-                  const nameRow = (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <BrandDot brand={brandByKey.get(nm.seriesKey) ?? ''} />
-                      <span
-                        style={
-                          nm.maxW != null
-                            ? {
-                                display: '-webkit-box',
-                                WebkitBoxOrient: 'vertical' as const,
-                                WebkitLineClamp: 2,
-                                overflow: 'hidden',
-                                wordBreak: 'break-word',
-                                whiteSpace: 'normal',
-                              }
-                            : undefined
-                        }
-                      >
-                        {nm.text}
-                      </span>
-                    </div>
-                  );
-                  return (
-                    <div
-                      key={`nm-${nm.seriesKey}`}
-                      title={nm.text}
-                      style={{
-                        position: 'absolute',
-                        // 钳 ≥2：分离面板 gridLeft=0（轴在外侧）时，起点贴左缘的系列名
-                        // 避让后可能推出容器（追补⑤）
-                        left: Math.max(2, nm.x),
-                        top: nm.y, // 计划盒 = 渲染盒（含生命周期第二行），第三十二轮起不再偏移
-                        display: 'flex',
-                        flexDirection: delta ? 'column' : 'row',
-                        alignItems: delta ? 'flex-start' : 'center',
-                        gap: delta ? 1 : 4,
-                        fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
-                        fontWeight: 600,
-                        lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
-                        color: nm.color,
-                        whiteSpace: 'nowrap',
-                        pointerEvents: 'none',
-                        zIndex: 9,
-                        opacity: focusActive && nm.seriesKey !== focusKey ? 0.2 : undefined,
-                        textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
-                        ...(nm.maxW != null ? { maxWidth: nm.maxW } : null),
-                      }}
-                    >
-                      {nameRow}
-                      {delta && (
-                        <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap' }}>
-                          <span style={{ color: color.mute, fontWeight: 500 }}>
-                            生命周期{' '}
-                          </span>
-                          <span style={{ color: color.ink, fontWeight: 700, fontFamily: font.family }}>{pctLabel}</span>
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                {visibleNames.map((nm) => (
+                  <SeriesNameLabel
+                    key={`nm-${nm.seriesKey}`}
+                    nm={nm}
+                    brand={brandByKey.get(nm.seriesKey) ?? ''}
+                    deltaPct={lifecycleDeltas.get(nm.seriesKey) ?? null}
+                    latest={latestPointByKey.get(nm.seriesKey)}
+                    currency={props.currency}
+                    dimmed={focusActive && nm.seriesKey !== focusKey}
+                    onOpen={(p, label) =>
+                      setSnapInfo({
+                        seriesLabel: label,
+                        shopName: p.shopName,
+                        bucketId: p.bucketId,
+                        dateText: fmt_hoverDate(granularity, p.xLabel),
+                        priceText: formatPrice(p.price, props.currency),
+                        url: p.url,
+                      })
+                    }
+                  />
+                ))}
               </>
             );
           })()}

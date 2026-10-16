@@ -152,8 +152,8 @@ export default function XBrush(props: XBrushProps) {
       />
       {/* 窗口区间高亮（中间蓝色区可整体拖动平移，恒在轨道=筛选范围内） */}
       <div
-        title="左右拖动：整体平移时间窗口（不会超出上方所选时间范围）"
-        aria-label="拖动平移时间窗口"
+        title="左右拖动：平移查看的时间段（不超出上方所选时间范围）"
+        aria-label="平移时间段"
         style={{
           position: 'absolute',
           left: `${pct(s)}%`,
@@ -196,7 +196,7 @@ export default function XBrush(props: XBrushProps) {
       <button
         type="button"
         title={frozen ? '窗口整体前移一个步长（更早）' : '窗口整体前移一个步长（更早；越过范围左缘时时间筛选器左极值同步扩展）'}
-        aria-label="窗口前移一个步长"
+        aria-label="时间段前移一步"
         disabled={!canLeft}
         style={{ ...btnStyle(canLeft), left: -30 }}
         onClick={() => {
@@ -209,7 +209,7 @@ export default function XBrush(props: XBrushProps) {
       <button
         type="button"
         title={frozen ? '窗口整体后移一个步长（更晚）' : '窗口整体后移一个步长（更晚；越过范围右缘时时间筛选器右极值同步扩展）'}
-        aria-label="窗口后移一个步长"
+        aria-label="时间段后移一步"
         disabled={!canRight}
         style={{ ...btnStyle(canRight), right: -30 }}
         onClick={() => {

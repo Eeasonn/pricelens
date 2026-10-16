@@ -37,7 +37,25 @@ const adaptiveBtnStyle = (on: boolean): CSSProperties => ({
   whiteSpace: 'nowrap',
 });
 
-export default function TimeBox() {
+/** 时间粒度 Segmented（第五十七轮抽出）：主筛选行常驻——季/月/周高频切换 */
+export function GranularityControl() {
+  const { state, actions } = useFilters();
+  return (
+    <Segmented
+      style={{ flexShrink: 0 }}
+      value={state.granularity}
+      onChange={(v) => actions.setGranularity(v as Granularity)}
+      options={[
+        { label: '季', value: 'quarter' },
+        { label: '月', value: 'month' },
+        { label: '周', value: 'week' },
+      ]}
+    />
+  );
+}
+
+/** 时间范围（第五十七轮抽出）：自适应按钮 + RangePicker——收进次级「筛选」弹层 */
+export function RangeControl() {
   const { state, actions } = useFilters();
   const bounds = useMemo(() => computeTimeBounds(), []);
   const g = state.granularity;
@@ -71,16 +89,6 @@ export default function TimeBox() {
         minWidth: 0,
       }}
     >
-      <Segmented
-        style={{ flexShrink: 0 }}
-        value={g}
-        onChange={(v) => actions.setGranularity(v as Granularity)}
-        options={[
-          { label: '季', value: 'quarter' },
-          { label: '月', value: 'month' },
-          { label: '周', value: 'week' },
-        ]}
-      />
       {/* 自适应（第十九轮，默认开）：开 = 范围随所选产品跨度自动适配（±2 个间隔、不超当前时间），
           范围选择框冻结；关 = 手动选择范围（图表下 ‹› 箭头仍可外扩范围极值） */}
       <Tooltip title="开：时间范围自动适配所选产品的数据跨度（±2 个间隔，不超过当前时间），范围框冻结；关：手动选择时间范围">
@@ -112,6 +120,24 @@ export default function TimeBox() {
           actions.set({ rangeStart: startId, rangeEnd: endId });
         }}
       />
+    </div>
+  );
+}
+
+export default function TimeBox() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: space.sm,
+        alignItems: 'center',
+        height: CONTROL_ROW_H,
+        width: '100%',
+        minWidth: 0,
+      }}
+    >
+      <GranularityControl />
+      <RangeControl />
     </div>
   );
 }

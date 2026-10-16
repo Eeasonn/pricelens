@@ -107,9 +107,6 @@ export default function PointPanel(props: PointPanelProps) {
           时点 {props.pointDate ?? fmtPointDate(props.granularity, asOf)}
         </span>
       </div>
-      <div style={{ fontSize: fontSize.caption, color: color.mute, lineHeight: '16px', marginBottom: 8 }}>
-        窗口末桶最新时点 · 随图表窗口联动
-      </div>
       {/* 产品清单：纵向一行一框；多产品时纵向滚动 */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {props.items.length === 0 ? (
