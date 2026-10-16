@@ -1139,20 +1139,27 @@ export default function Chart(props: ChartProps) {
                           }}
                         >
                           <BrandDot brand={s.brand} />
-                          <span style={{ color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {/* flex 1 吸收剩余宽度：右侧三列定宽从右缘起算，跨行同列对齐 */}
+                          <span
+                            title={curveNameOf(s)}
+                            style={{ flex: '1 1 0', minWidth: 0, color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
                             {curveNameOf(s)}
                           </span>
                           {/* 第六十轮：折扣/现价/RRP 三列定宽右对齐（跨行同列对齐，表格读数）；
-                              现价字号=折线上价格标签同款 14px（用户要求图例字体对齐折线数字） */}
-                          <span className="tnum" style={{ width: 48, textAlign: 'right', flexShrink: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>
+                              现价字号=折线上价格标签同款 14px。第六十一轮修：span 须 inline-block
+                              （inline 忽略 width，textAlign right 落空=三列没对齐）+ 列间灰短竖线 */}
+                          <span className="tnum" style={{ width: 46, textAlign: 'right', flexShrink: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>
                             {disc != null && <MiniDiscountBadge discount={disc} dim={dim} />}
                           </span>
-                          <span className="tnum" style={{ width: 56, textAlign: 'right', flexShrink: 0, fontSize: 14, fontWeight: 600, color: color.ink }}>
+                          <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
+                          <span className="tnum" style={{ width: 56, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>
                             {fmt_mm(v)}
                           </span>
+                          <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
                           <span
                             className="tnum"
-                            style={{ width: 46, textAlign: 'right', flexShrink: 0, fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
+                            style={{ width: 46, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
                           >
                             {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
                           </span>
