@@ -193,17 +193,17 @@ export default function XBrush(props: XBrushProps) {
   for (let i = lo + 1; i <= hi; i += 1) {
     if (calendarYearOf(i) !== calendarYearOf(i - 1)) yearMarks.add(i);
   }
-  const tickIndexes = Array.from(new Set([
-    ...Array.from({ length: span }, (_, offset) => lo + offset).filter((i) => (i - lo) % tickStep === 0),
-    ...yearMarks,
-    hi,
-  ])).sort((a, b) => a - b).filter((i) => {
-    if (i === lo || i === hi || yearMarks.has(i)) return true;
-    // Cross-year labels carry more visual weight; leave them room before the next regular tick.
-    return !Array.from(yearMarks).some((yearIndex) => Math.abs(yearIndex - i) < (granularity === 'week' ? 3 : 1));
-  });
-  const tickParts = (i: number): { date: string; year?: string } => {
-    const yearChanged = i === lo || yearMarks.has(i);
+  // 刻度绝对等距：只按固定桶步长布点，跨年桶/末桶不再插位（插位会打乱间距）；
+  // 跨年信息由该步长刻度标签第二行的年份表达（跨年桶不在刻度上时，归到其后首个刻度）。
+  const tickIndexes: number[] = [];
+  for (let i = lo; i <= hi; i += tickStep) tickIndexes.push(i);
+  const yearChangedAt = (k: number): boolean => {
+    if (k === 0) return true;
+    const prev = tickIndexes[k - 1];
+    for (const m of yearMarks) if (m > prev && m <= tickIndexes[k]) return true;
+    return false;
+  };
+  const tickParts = (i: number, yearChanged: boolean): { date: string; year?: string } => {
     const id = buckets[i].id;
     if (granularity === 'week') return { date: buckets[i].xLabel, year: yearChanged ? id.slice(0, 4) : undefined };
     if (granularity === 'month') return { date: id.slice(4), year: yearChanged ? id.slice(0, 4) : undefined };
@@ -247,7 +247,8 @@ export default function XBrush(props: XBrushProps) {
               picker={pickerMode}
               format={pickerFormat}
               separator={<span style={{ color: color.mute }}>→</span>}
-              suffixIcon={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: color.mute }}><span>{granularityLabel[granularity]}</span><CalendarOutlined /></span>}
+              prefix={<span style={{ color: color.mute, fontSize: fontSize.caption }}>{granularityLabel[granularity]}</span>}
+              suffixIcon={<CalendarOutlined style={{ color: color.mute }} />}
               allowClear={false}
               inputReadOnly
               disabledDate={disabledDate}
@@ -279,8 +280,8 @@ export default function XBrush(props: XBrushProps) {
             onPointerDown={onDragDown('pan')} onPointerMove={onDragMove} onPointerUp={onDragUp} onPointerCancel={onDragUp}
           />
           {tickIndexes.map((i) => <span key={`tick-${i}`} aria-hidden="true" style={tickStyle(i)} />)}
-          {tickIndexes.map((i) => {
-            const tick = tickParts(i);
+          {tickIndexes.map((i, k) => {
+            const tick = tickParts(i, yearChangedAt(k));
             return (
               <span key={`label-${i}`} aria-hidden="true" style={labelStyle(i)}>
                 <span>{tick.date}</span>

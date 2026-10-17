@@ -1,12 +1,11 @@
 // ============================================================
 // 国家总览（第三十七轮施工 / 第三十八轮反馈修订）：国家层面主界面 = 竞品矩阵大表。
 // 档位带（tier_code 从高到低）× 行配对——型号与它的映射竞品同处一个包裹格子
-// （左我司 / 右竞品小表，竞品行间横向分隔线），一体性一眼可读。
-// 第三十八轮：筛选行回归（国家/产业/产品）+ 新增价格档位筛选（产品/档位为
-// 本页视图态，空 = 全部）；看板 Chart 的折线形态开关在其齿轮弹层内。
-// 第四十五轮：产品名带品牌名（Huawei Pura 90s Pro…）；「添加竞品」下沉到每个
-// ROM 行（弹窗按该 ROM 预选）；迷你图 X 刻度占位互斥自适应；「其他在售竞品」
-// 带尾区删除（未建对标不再展示）；产品筛选器加宽。
+// （我司行在上 / 映射竞品在下，竞品行浅灰底），一体性一眼可读。
+// 第六十六轮改版（用户反馈）：①产品名不再双层重复——型号头行表达品牌+产品，
+// 我司行主列只放配置 ROMRAM；②价格拆三列右对齐（折扣率｜折后价｜RRP，RRP 无划线）；
+// ③迷你图删除（总览无意义），趋势列改「周期最低」读数；④全表 7 列对齐
+// （产品｜折扣率｜折后价｜RRP｜价差｜预警｜周期最低）。
 // 纯展示层：结构全部来自 buildOverviewMatrix（金测锚定），本文件不取数。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
@@ -31,7 +30,6 @@ import BenchConfigModal from './overview/BenchConfigModal';
 import MultiPlatformModal from './overview/MultiPlatformModal';
 import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import BrandGlyph from '../components/BrandGlyph';
-import MatrixSpark from './overview/MatrixSpark';
 import { AlertBell, alertDigest, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
 import { groupAlertsBySeries, latestByType, seriesKeyOfSku, type AlertItem } from '../dataModel/alerts';
 import { diffPct } from '../chart/PriceTrend/helpers';
@@ -56,15 +54,12 @@ function FilterCell({ label, min, children }: { label: string; min?: number; chi
 /** 颜色次级菜单（第四十四轮建；第五十二轮追补三随「颜色列」删除而下线——用户定版
  *  总览行 = 看板页签式「品牌+产品名+RAMROM」一段式，颜色下钻留在看板/级联侧） */
 
-/** 盒内统一行栅格（第五十三轮定版）：产品（页签式）｜当前售价（页签同款横向三件套：
- *  折扣徽章+现价+划线 RRP，第五十二轮追补三竖排改横排并加宽）｜竞品对比（加宽）｜
- *  价格趋势（周期最低+日期 与 迷你图 同区）——四列，竖线全程连续
- *  （分隔线画在 Td 上、行内边距收进单元格里，行与行的线首尾相接不断开）。 */
+/** 盒内统一行栅格（第六十六轮定版）：产品｜折扣率｜折后价｜RRP｜价差｜预警｜周期最低
+ *  ——七列，数值列右对齐成表格读数；竖线全程连续（分隔线画在 Td 上、行内边距收进
+ *  单元格里，行与行的线首尾相接不断开）。 */
 const ROW_GRID: CSSProperties = {
-  // 第五十五轮：预警列 100 → 216（格内直接放最新预警凝练详情，用户指定），
-  // 售价/价差/趋势三列各收一点找补；产品列 flex 吸收
   display: 'grid',
-  gridTemplateColumns: 'minmax(0,1fr) 168px 96px 216px 240px',
+  gridTemplateColumns: 'minmax(0,1fr) 76px 96px 84px 112px 216px 118px',
   alignItems: 'stretch',
   columnGap: 0,
 };
@@ -93,41 +88,16 @@ function Td(props: { children?: ReactNode; first?: boolean; last?: boolean; just
   );
 }
 
-/** 列标题（表头行用）：13/700/mute，全部居中（第五十二轮追补三定居中；第五十三轮字号增大加粗） */
-function Th(props: { children?: ReactNode; first?: boolean; last?: boolean }) {
+/** 列标题（表头行用）：13/700/mute；数值列随数据右对齐，其余居中（第六十六轮起表头对齐随列） */
+function Th(props: { children?: ReactNode; first?: boolean; last?: boolean; justify?: 'start' | 'center' | 'end' }) {
   return (
-    <Td first={props.first} last={props.last} justify="center">
+    <Td first={props.first} last={props.last} justify={props.justify ?? 'center'}>
       <span style={{ fontSize: 13, fontWeight: 700, color: color.mute, whiteSpace: 'nowrap' }}>{props.children}</span>
     </Td>
   );
 }
 
-/** 价差读数（P0①）：红 = 行内产品贵于基准（风险），蓝 = 便宜（优势）。
- *  第五十二轮起仅竞品行使用：diffPct(竞品, 我司同配置)。 */
-function DiffCell(props: { label: string; diff: ReturnType<typeof diffPct> }) {
-  const { label, diff } = props;
-  return (
-    <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-      <span style={{ display: 'block', fontSize: 10, color: color.mute }}>{label}</span>
-      {diff ? (
-        <span
-          className="tnum"
-          title={`${label}：正 = 前项贵于基准（红），负 = 便宜（蓝）`}
-          style={{ fontSize: 12.5, fontWeight: 600, color: diff.tone === 'rich' ? color.error : color.link }}
-        >
-          {diff.text}
-        </span>
-      ) : (
-        <span className="tnum" style={{ fontSize: 12.5, color: color.hairlineStrong }}>
-          —
-        </span>
-      )}
-    </span>
-  );
-}
-
-/** 周期最低价读数（P0②；第五十二轮追补三简化）：低 {最低价} · {发生周三日期 MM-DD}
- *  ——并入「价格趋势」区（用户：分割线放在最小值前）；Wxx 改日期、覆盖% 删除 */
+/** 周期最低价读数（P0②；第五十二轮追补三简化）：低 {最低价} · {发生周三日期 MM-DD} */
 function MinCell(props: { points: OverviewSparkPoint[]; minV: number | null; minIdx: number; currency: 'usd' | 'local'; dateOf: (weekId: string) => string }) {
   const { points, minV, minIdx, currency, dateOf } = props;
   return (
@@ -143,22 +113,8 @@ function MinCell(props: { points: OverviewSparkPoint[]; minV: number | null; min
   );
 }
 
-/** 共享值域：盒内我司 + 全部映射竞品的 min/max 并集（第四十轮） */
-function boxDomain(series: OverviewSparkPoint[][]): { domainMin: number; domainMax: number } | undefined {
-  let min = Number.POSITIVE_INFINITY;
-  let max = Number.NEGATIVE_INFINITY;
-  for (const pts of series) {
-    for (const pt of pts) {
-      if (pt.price == null) continue;
-      if (pt.price < min) min = pt.price;
-      if (pt.price > max) max = pt.price;
-    }
-  }
-  return min === Number.POSITIVE_INFINITY ? undefined : { domainMin: min, domainMax: max };
-}
-
 /** 价差方向（第五十二轮追补，用户拍板）：'comp' = 竞品比我司（默认，diffPct(竞品,我司)）、
- *  'own' = 我司比竞品（diffPct(我司,竞品)）；切换器在我司行原「vs 主竞品」空槽位 */
+ *  'own' = 我司比竞品（diffPct(我司,竞品)）；切换器在我司行「价差」列 */
 type DiffDir = 'comp' | 'own';
 
 /** 预警列单元格（第五十五轮改版，用户口径）：铃铛统一放预警格（所有行），格子只报
@@ -227,20 +183,16 @@ function OverviewAlertCell({ items, subscribed, currency, bell, onOpen }: {
   );
 }
 
-/** 我司 ROM 行（第五十四轮定版）：主列 = 点+品牌+产品名（14/700）+ROMRAM（15/700 更大，
- *  用户：主要凸显的就是这个不同）+ 我司胶囊；行尾固定 竞品对比/多平台对比（＋添加竞品保留）。
- *  第五十四轮：整行点击进看板与行内「对比 ↗」删除（用户点名）——下钻只走「竞品对比」按钮 */
+/** 我司 ROM 行（第六十六轮改版）：品牌+产品名由上方型号头行表达，主列只放配置 ROMRAM
+ *  （15/700，用户：要凸显的就是配置差异）+行尾动作簇；价格三列右对齐
+ *  （折扣率徽章｜折后价 17/700｜RRP 无划线 12.5 mute）；「价差」列 = 方向切换器。 */
 function OwnRomRow(props: {
   row: OverviewRow;
   currency: 'usd' | 'local';
-  domainMin?: number;
-  domainMax?: number;
-  /** 竞品对比：该 ROM + 其对标竞品下钻看板（原整行点击/对比↗ 的唯一入口） */
+  /** 竞品对比：该 ROM + 其对标竞品下钻看板（唯一下钻入口） */
   onCompare: () => void;
   /** 预警列（追补⑨）：父层按系列组装好的状态单元格（第五十五轮起含订阅铃铛） */
   alertCell?: ReactNode;
-  /** 迷你图点周（追补⑧）：带该周焦点进看板 */
-  onPickWeek?: (weekId: string) => void;
   /** 多平台对比：弹窗按该 ROM 预选 */
   onMultiPlatform: () => void;
   onConfigBench: () => void;
@@ -255,18 +207,12 @@ function OwnRomRow(props: {
   return (
     <div className="lpl-ov-row" style={{ ...ROW_GRID }}>
       <Td first padY={9}>
-        {/* 撑满主列宽（第五十四轮）：动作簇 marginLeft auto 才能推到行尾空白处固定显示 */}
+        {/* 撑满主列宽：动作簇 marginLeft auto 推到主列右缘固定显示 */}
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, width: '100%' }}>
           <BrandDot brand={row.brand} />
-          {/* 第五十三轮追加：我司行显性化——名称 14px/700，ROM+RAM 再大一档 15px/700
-              （用户：主要凸显的就是 ROM+RAM 这个不同）；竞品行维持 13px/600 形成主次 */}
-          <span style={{ fontSize: 14, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-            {brandLabelOf(row.brand)} {row.modelName}
-          </span>
           <span style={{ fontSize: 15, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
             {row.romram}
           </span>
-          {/* 「我司」胶囊第五十四轮追补删除（用户圈删）：行归属已由型号头行表达 */}
           <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <span
               role="button"
@@ -291,9 +237,7 @@ function OwnRomRow(props: {
             >
               ＋ 添加竞品
             </span>
-            {/* 第五十四轮：行尾固定双按钮（原型号头 ModelActions + 行内对比↗ 收编于此）。
-                追补⑦显性化：竞品对比 = 实心蓝主按钮（下钻看板的主 CTA）、多平台对比 = 描边蓝，
-                字号 10.5→12、内边距加大一档（用户：按钮再显性一点） */}
+            {/* 竞品对比 = 实心蓝主按钮（下钻看板的主 CTA）、多平台对比 = 描边蓝 */}
             <span
               role="button"
               title="进入价格看板：该 ROM + 对标竞品走势"
@@ -337,26 +281,28 @@ function OwnRomRow(props: {
           </span>
         </span>
       </Td>
-      {/* 当前售价（第五十三轮）：完全参考看板时点页签——横向三件套 折扣徽章+现价+划线 RRP，
-          字号与页签一致（17px/700 主价、11px 划线、徽章同组件） */}
       <Td justify="end" padY={9}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-          {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
-          <span className="tnum" style={{ fontSize: 17, lineHeight: '22px', fontWeight: 700, color: color.ink }}>
-            {formatPrice(row.price, currency)}
-          </span>
-          {row.rrp != null && (
-            <span
-              className="tnum"
-              title="RRP（官方建议零售价）"
-              style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through' }}
-            >
-              {formatPrice(row.rrp, currency)}
-            </span>
-          )}
+        {row.discountPct != null ? (
+          <DiscountBadge discount={row.discountPct} />
+        ) : (
+          <span className="tnum" style={{ fontSize: 12, color: color.hairlineStrong }}>—</span>
+        )}
+      </Td>
+      <Td justify="end" padY={9}>
+        <span className="tnum" style={{ fontSize: 17, lineHeight: '22px', fontWeight: 700, color: color.ink }}>
+          {formatPrice(row.price, currency)}
         </span>
       </Td>
-      {/* 价差方向切换器（第五十二轮追补）：竞品比我司 ⇄ 我司比竞品，作用于本框竞品列 */}
+      <Td justify="end" padY={9}>
+        {row.rrp != null ? (
+          <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 12.5, color: color.mute }}>
+            {formatPrice(row.rrp, currency)}
+          </span>
+        ) : (
+          <span className="tnum" style={{ fontSize: 12, color: color.hairlineStrong }}>—</span>
+        )}
+      </Td>
+      {/* 价差方向切换器：竞品比我司 ⇄ 我司比竞品，作用于本框竞品列 */}
       <Td justify="center" padY={9}>
         {props.canToggleDiff ? (
           <span
@@ -387,30 +333,16 @@ function OwnRomRow(props: {
         ) : null}
       </Td>
       <Td>{props.alertCell}</Td>
-      {/* 价格趋势区（追补三）：分割线在最低价前——「低 $x · 日期」与迷你图同区 */}
-      <Td last padY={9}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, width: '100%' }}>
-          <MinCell points={row.points} minV={row.minV} minIdx={row.minIdx} currency={currency} dateOf={props.dateOf} />
-          <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
-            <MatrixSpark
-              points={row.points}
-              lineColor={row.lineColor}
-              currency={currency}
-              width={104}
-              domainMin={props.domainMin}
-              domainMax={props.domainMax}
-              onPickWeek={props.onPickWeek}
-            />
-          </span>
-        </span>
+      <Td last justify="end" padY={9}>
+        <MinCell points={row.points} minV={row.minV} minIdx={row.minIdx} currency={currency} dateOf={props.dateOf} />
       </Td>
     </div>
   );
 }
 
-/** 竞品行（映射竞品，第四十五轮起「其他」不再展示）：与我司行同四列栅格；行间横向分隔线。
- *  第五十二轮追补三：主列改看板页签式（点+品牌+产品名+RAMROM），主竞品保留产品名后蓝胶囊；
- *  价差方向随我司行切换器——'comp' = 竞品比我司（红=竞品贵）、'own' = 我司比竞品（红=我司贵） */
+/** 竞品行（映射竞品，第四十五轮起「其他」不再展示）：与我司行同七列栅格；行浅灰底。
+ *  第六十六轮：价格三列与我司行同构；「价差」列 = 纯读数（方向随我司行切换器，
+ *  'comp' = 竞品比我司：红=竞品贵、蓝=便宜；'own' = 我司比竞品）。 */
 function CompRomRow(props: {
   skuId?: string;
   brand: string;
@@ -418,20 +350,14 @@ function CompRomRow(props: {
   romram: string;
   price: number | null;
   rrp: number | null;
-  lineColor: string;
   points: OverviewRow['points'];
   currency: 'usd' | 'local';
-  domainMin?: number;
-  domainMax?: number;
-  primary?: boolean;
   /** 对标我司 ROM 的现价（价差基准） */
   ownPrice?: number | null;
   /** 价差方向：随我司行切换器 */
   diffDir?: DiffDir;
   /** 预警列（追补⑨）：父层按系列组装好的状态单元格 */
   alertCell?: ReactNode;
-  /** 迷你图点周（追补⑧）：带该周焦点进看板（上下文 = 所在 ROM 框的我司行） */
-  onPickWeek?: (weekId: string) => void;
   /** 周期最低价 + 下标（P0②，aggregate extremes 同源） */
   minV?: number | null;
   minIdx?: number;
@@ -451,51 +377,48 @@ function CompRomRow(props: {
       <Td first>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <BrandDot brand={props.brand} />
-          {/* 页签同款字体（第五十三轮 11px → 13px/600/ink，与我司行一致） */}
           <span style={{ fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {brandLabelOf(props.brand)} {props.name} {props.romram}
           </span>
-          {/* 「主竞品」胶囊第五十四轮追补删除（用户圈删） */}
         </span>
       </Td>
-      {/* 当前售价（第五十三轮）：页签同款横向三件套，与我司行完全一致 */}
       <Td justify="end">
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-          {discount != null && <DiscountBadge discount={discount} />}
-          <span className="tnum" style={{ fontSize: 17, lineHeight: '22px', fontWeight: 700, color: color.ink }}>
-            {formatPrice(props.price, props.currency)}
+        {discount != null ? (
+          <DiscountBadge discount={discount} />
+        ) : (
+          <span className="tnum" style={{ fontSize: 12, color: color.hairlineStrong }}>—</span>
+        )}
+      </Td>
+      <Td justify="end">
+        <span className="tnum" style={{ fontSize: 17, lineHeight: '22px', fontWeight: 700, color: color.ink }}>
+          {formatPrice(props.price, props.currency)}
+        </span>
+      </Td>
+      <Td justify="end">
+        {props.rrp != null ? (
+          <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 12.5, color: color.mute }}>
+            {formatPrice(props.rrp, props.currency)}
           </span>
-          {props.rrp != null && (
-            <span
-              className="tnum"
-              title="RRP（官方建议零售价）"
-              style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through' }}
-            >
-              {formatPrice(props.rrp, props.currency)}
-            </span>
-          )}
-        </span>
+        ) : (
+          <span className="tnum" style={{ fontSize: 12, color: color.hairlineStrong }}>—</span>
+        )}
       </Td>
       <Td justify="end">
-        <DiffCell label={dir === 'comp' ? 'vs 我司' : 'vs 此竞品'} diff={diff} />
+        {diff ? (
+          <span
+            className="tnum"
+            title="价差：正 = 前项贵于基准（红），负 = 便宜（蓝）"
+            style={{ fontSize: 12.5, fontWeight: 600, color: diff.tone === 'rich' ? color.error : color.link }}
+          >
+            {diff.text}
+          </span>
+        ) : (
+          <span className="tnum" style={{ fontSize: 12, color: color.hairlineStrong }}>—</span>
+        )}
       </Td>
       <Td>{props.alertCell}</Td>
-      {/* 价格趋势区（追补三）：「低 $x · 日期」与迷你图同区 */}
-      <Td last>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, width: '100%' }}>
-          <MinCell points={props.points} minV={props.minV ?? null} minIdx={props.minIdx ?? -1} currency={props.currency} dateOf={props.dateOf} />
-          <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
-            <MatrixSpark
-              points={props.points}
-              lineColor={props.lineColor}
-              currency={props.currency}
-              width={104}
-              domainMin={props.domainMin}
-              domainMax={props.domainMax}
-              onPickWeek={props.onPickWeek}
-            />
-          </span>
-        </span>
+      <Td last justify="end">
+        <MinCell points={props.points} minV={props.minV ?? null} minIdx={props.minIdx ?? -1} currency={props.currency} dateOf={props.dateOf} />
       </Td>
     </div>
   );
@@ -735,7 +658,7 @@ export default function Overview() {
                       我司 {ownModels.length} · 竞品 {compCount}
                     </span>
                     <span style={{ flex: 1 }} />
-                    <span style={{ fontSize: fontSize.caption, color: color.mute }}>对标 = ROM 级映射 · 行尾「＋添加竞品」维护</span>
+                    <span style={{ fontSize: fontSize.caption, color: color.mute }}>对标 = ROM 级映射 · 我司行「＋添加竞品」维护</span>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
@@ -763,7 +686,6 @@ export default function Overview() {
                         {/* ROM 包裹格：行组表格——我司行在上、映射竞品在下（第四十轮对齐定版） */}
                         {m.rows.map((r) => {
                           const romComps = m.comps.filter((c) => c.ownRomrams.some((x) => norm(x) === norm(r.romram)));
-                          const domain = boxDomain([r.points, ...romComps.map((c) => c.points)]);
                           const dirKey = `${m.modelId}__${r.romram}`;
                           const dir = diffDirs[dirKey] ?? 'comp';
                           return (
@@ -776,20 +698,19 @@ export default function Overview() {
                                 overflow: 'hidden',
                               }}
                             >
-                              {/* 表头行（第五十二轮追补三）：四列全居中——产品｜当前售价｜竞品对比｜
-                                  价格趋势（价格趋势区 = 周期最低+日期 与迷你图同区，分割线在最低价前） */}
+                              {/* 表头行（第六十六轮）：产品｜折扣率｜折后价｜RRP｜价差｜预警｜周期最低 */}
                               <div style={{ ...ROW_GRID, borderBottom: `1px solid ${color.hairline}` }}>
                                 <Th first>产品</Th>
-                                <Th>当前售价</Th>
-                                <Th>竞品对比</Th>
+                                <Th justify="end">折扣率</Th>
+                                <Th justify="end">折后价</Th>
+                                <Th justify="end">RRP</Th>
+                                <Th>价差</Th>
                                 <Th>预警</Th>
-                                <Th last>价格趋势</Th>
+                                <Th last justify="end">周期最低</Th>
                               </div>
                               <OwnRomRow
                                 row={r}
                                 currency={currency}
-                                domainMin={domain?.domainMin}
-                                domainMax={domain?.domainMax}
                                 diffDir={dir}
                                 onToggleDiffDir={() => toggleDiffDir(dirKey)}
                                 canToggleDiff={romComps.length > 0}
@@ -799,7 +720,6 @@ export default function Overview() {
                                   openCompare(m, r.romram, r.minIdx >= 0 ? r.points[r.minIdx]?.weekId ?? null : null)
                                 }
                                 alertCell={alertCellFor(r.skuId)}
-                                onPickWeek={(w) => openCompare(m, r.romram, w)}
                                 onMultiPlatform={() => setMpSel({ model: m, romram: r.romram })}
                                 onConfigBench={() => setBenchSel({ modelId: m.modelId, romram: r.romram })}
                               />
@@ -820,7 +740,7 @@ export default function Overview() {
                                         color: color.mute,
                                       }}
                                     >
-                                      未配置对标竞品 — 点行尾「＋添加竞品」添加
+                                      未配置对标竞品 — 点「＋添加竞品」添加
                                     </div>
                                   </div>
                                 ) : (
@@ -833,19 +753,14 @@ export default function Overview() {
                                       romram={c.romram}
                                       price={c.price}
                                       rrp={c.rrp}
-                                      lineColor={c.lineColor}
                                       points={c.points}
                                       currency={currency}
-                                      domainMin={domain?.domainMin}
-                                      domainMax={domain?.domainMax}
-                                      primary={c.primary}
                                       ownPrice={r.price}
                                       diffDir={dir}
                                       dateOf={dateOf}
                                       minV={c.minV}
                                       minIdx={c.minIdx}
                                       alertCell={alertCellFor(c.skuId)}
-                                      onPickWeek={(w) => openCompare(m, r.romram, w)}
                                     />
                                   ))
                                 )}
