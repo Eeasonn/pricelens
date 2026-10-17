@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUpOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
-import { modelNameOf } from '../components/ProductCascader/tree';
 import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
 import FilterBar from '../components/FilterBar';
@@ -24,9 +23,6 @@ export default function Dashboard() {
 
   // 追补⑧（总览↔看板闭环①）：上下文条数据——入口型号 + 勾选 ROM + 对标竞品数
   const entryModelId = state.own[0]?.modelId ?? null;
-  const analysisLabel = entryModelId
-    ? `${modelNameOf(entryModelId)} · ${state.own.map((s) => s.romram).join('、')}`
-    : '—';
   const backToOverview = (): void => {
     if (entryModelId) navBus.overviewScrollTo = entryModelId;
     go('overview');
@@ -77,32 +73,8 @@ export default function Dashboard() {
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader title="价格看板" />
 
-        {/* 追补⑧（总览↔看板闭环①）：上下文条——正在分析什么 + 回程入口
-            （点击「← 返回总览」= 回总览页并滚动定位到该产品的行组） */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: space.md, padding: `10px ${space.lg}px 0` }}>
-          <span style={{ fontSize: 12.5, color: color.mute }}>
-            正在分析：<span style={{ color: color.ink, fontWeight: 600 }}>{analysisLabel}</span>
-            <span style={{ marginLeft: 8 }}>我司 {state.own.length} 个配置 · 对标竞品 {state.competitors.length} 款</span>
-          </span>
-          <span style={{ flex: 1 }} />
-          <span
-            role="button"
-            title="返回总览页并定位到该产品行组"
-            onClick={backToOverview}
-            style={{
-              fontSize: 12.5,
-              fontWeight: 600,
-              color: '#0070f3',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            ← 返回总览
-          </span>
-        </div>
-
-        {/* 筛选条五框（占位 → Agent B 替换） */}
-        <FilterBar />
+        {/* 分析对象与当前对比口径 */}
+        <FilterBar onBack={backToOverview} />
 
         {/* 价格走势（第十二轮：标题并入 PriceTrend 首行，消除三段式纵向空白） */}
         <main style={{ flex: 1, padding: space.lg }}>

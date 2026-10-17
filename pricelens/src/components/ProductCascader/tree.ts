@@ -151,8 +151,8 @@ function groupModels(skus: DimProduct[]): ModelNode[] {
 }
 
 /** 我司级联树：系列 → 产品名（仅展开）→ RAM+ROM（勾选层，含前代同堂型号，§5.2②） */
-export function buildOwnTree(): GroupNode[] {
-  return [...groupBy(dimProduct.filter((p) => p.is_own), (p) => p.series).entries()].map(([series, skus]) => ({
+export function buildOwnTree(industry: DimProduct['industry'] = 'phone'): GroupNode[] {
+  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry), (p) => p.series).entries()].map(([series, skus]) => ({
     key: series,
     title: series,
     models: groupModels(skus),

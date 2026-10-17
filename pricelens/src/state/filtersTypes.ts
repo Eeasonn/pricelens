@@ -25,9 +25,8 @@ export interface FiltersState {
   competitors: ProductSelection[]; // 默认视图带出我司默认产品的配置竞品（第二十五轮）；之后切换我司不自动带出，点「匹配竞品」重新匹配
   platform: PlatformSelection | null; // null=未选=可抓取平台最低价口径（§3.1 决策②）
   granularity: Granularity; // 默认 'month'（第二十五轮）
-  /** 第十九轮：时间自适应（默认开）——开 = 范围自动 = 所选产品数据跨度 ±2 个间隔
-   *  （钳在数据全集内，右缘不超当前时间），RangePicker 冻结不可选；
-   *  关 = 回手动：RangePicker 可选，拖刷轨道钳在所选范围内，仅 ‹› 箭头可把范围极值外扩 */
+  /** 时间自适应（默认开）= 所选产品最早/最晚有效价格桶；上方筛选器手动修改即转为自定义。
+   *  底部刷选条只负责在该极值范围内缩放查看，恢复自动时重新计算范围。 */
   adaptive: boolean;
   rangeStart: string; // 桶 id：周 YYYYWW / 月 YYYYMM / 季 YYYYQn
   rangeEnd: string;

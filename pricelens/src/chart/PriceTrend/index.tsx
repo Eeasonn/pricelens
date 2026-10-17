@@ -14,16 +14,18 @@
 // （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
 // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
 // 数据流 = useFilters().state → SeriesQuery → buildSeries → 窗口切片 → PriceTrend
-// 窗口状态为图表内部状态（初值=筛选器范围；范围变化收缩、粒度切换对齐桶边界，§6.5）
-// 第十九轮口径：时间自适应（默认开）= 范围自动 = 所选产品跨度 ±2 个间隔（钳当前时间），
-// RangePicker 冻结；关闭后手动选范围，拖刷轨道 = 筛选范围，平移/拖柄恒钳在轨道内，
-// 仅 ‹› 箭头可越界一步并把 rangeStart/End 极值扩展到窗口端点（grow-only，从不收缩）。
+// 时间自适应（默认开）按所选产品最早/最晚有效价格桶确定上方极值筛选器；
+// 底部刷选轨道只在该筛选范围内提供查看窗口。
+// 上方极值筛选器手动改值即转入自定义；底部拖柄/平移只调整筛选范围内的查看窗口。
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Checkbox, Segmented, Switch } from 'antd';
+import { Checkbox, ConfigProvider, Segmented, Switch } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
+import PlatformBox from '../../components/FilterBar/PlatformBox';
+import CurrencyBox from '../../components/FilterBar/CurrencyBox';
+import { filterBarTheme } from '../../components/FilterBar';
 import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
@@ -126,7 +128,7 @@ export default function PriceTrend() {
 
   // ---- 取数：useFilters().state → SeriesQuery → buildSeries（§7.3 唯一口径） ----
   // 按数据全集取数（内存小数据集，成本可忽略）：跨度/自适应范围、窗口边缘续接
-  // 都要看范围外的邻点；筛选范围只决定轨道边界与窗口的默认值/收缩边界。
+  // 都要看范围外的邻点；当前选区决定图上可见的数据段。
   const [dataStart, dataEnd] = useMemo(() => dataBucketRange(state.granularity), [state.granularity]);
 
   const query: SeriesQuery = useMemo(
@@ -160,17 +162,23 @@ export default function PriceTrend() {
     [state.granularity, dataStart, dataEnd],
   );
 
-  // ---- 时间自适应（第十九轮，默认开）：范围 = 所选产品数据跨度 ±2 个间隔 ----
-  // 钳在数据全集内（右缘 = 数据末端 = 当前时间，不超）；范围变化时窗口复位为整个范围。
-  // 关键 = 跨度桶下标（含产品/平台/汇总口径变化）；粒度也参与（±2 按当前粒度间隔计）。
-  // adaptiveKey 相同即跳过；关闭时清 key —— 手动改过范围后再打开仍会重新套用自适应。
+  // ---- 时间自适应：上方极值筛选器 = 所选产品最早/最晚有效价格桶 ----
+  // 范围变化时窗口复位为整个范围。即使新增产品落在原有跨度内，也要重新套用一次
+  // 自动极值（例如从总览聚焦周进入后，清除局部窗口）。
+  // 关闭时清 key；用户手动刷选后的自定义范围不受产品变化影响。
   // 注意本 effect 声明在 granRef 联动之后：粒度切换时先换桶、自适应范围随后覆盖。
   const span = useMemo(() => seriesSpanRange(allSeries), [allSeries]);
   const adaptiveBounds = useMemo(
-    () => (state.adaptive ? adaptiveRangeOf(buckets, span) : null),
+    () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0) : null),
     [state.adaptive, buckets, span],
   );
-  const adaptiveKey = adaptiveBounds ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}` : '';
+  const selectedProductKey = JSON.stringify([
+    state.own.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
+    state.competitors.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
+  ]);
+  const adaptiveKey = adaptiveBounds
+    ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}|${selectedProductKey}`
+    : '';
   const adaptiveAppliedRef = useRef('');
   useLayoutEffect(() => {
     if (!adaptiveBounds) {
@@ -180,7 +188,7 @@ export default function PriceTrend() {
     if (adaptiveAppliedRef.current === adaptiveKey) return;
     adaptiveAppliedRef.current = adaptiveKey;
     actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
-    setWindowIds(null); // 窗口复位 = 整个自适应范围（X 轴最小最大值即跨度±2）
+    setWindowIds(null); // 窗口复位 = 整个自动极值范围
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adaptiveKey]);
 
@@ -201,19 +209,22 @@ export default function PriceTrend() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 窗口渲染期钳入筛选范围：范围缩小时窗口收缩；ids=null = 整个筛选范围
+  // 从总览带入焦点周时 windowIds 可暂时缩小可见段；刷选后回到完整选区。
   const win = useMemo(
     () => normalizeWindow(buckets, windowIds, [state.rangeStart, state.rangeEnd]),
     [buckets, windowIds, state.rangeStart, state.rangeEnd],
   );
+  // 左侧时间筛选器的范围 = 底部窗口轨道的范围；窗口本身仍可在轨道内缩放查看。
+  const filterBounds = useMemo<[number, number]>(() => {
+    const indexOf = (id: string, fallback: number): number => {
+      const i = buckets.findIndex((b) => b.id === id);
+      return i >= 0 ? i : fallback;
+    };
+    const start = indexOf(state.rangeStart, 0);
+    const end = indexOf(state.rangeEnd, Math.max(0, buckets.length - 1));
+    return start <= end ? [start, end] : [end, start];
+  }, [buckets, state.rangeStart, state.rangeEnd]);
 
-  // 拖刷轨道 = 筛选范围（第十九轮口径：下面的时间范围必须按上面所选限制）。
-  // 窗口（平移/拖柄）恒钳在轨道内；仅 ‹› 箭头可越界一步，越出时 onWindowChange 把
-  // rangeStart/End 极值扩展到窗口端点（轨道随之长出）。
-  const track = useMemo(
-    () => normalizeWindow(buckets, null, [state.rangeStart, state.rangeEnd]),
-    [buckets, state.rangeStart, state.rangeEnd],
-  );
 
   // §6.5 窗口内所有桶压满绘图宽度（重采样重绘，无横向滚动条）
   // 第十三轮：edgeStart/edgeEnd = 边缘点在窗口外 2 周内仍有数据（该点非真实开头/截止，
@@ -297,7 +308,7 @@ export default function PriceTrend() {
   // ---- 分离显示（第五十四轮拍板）：多 ROM 勾选时主图变 2 列 N 宫格，每面板 =
   // 一个 ROM + 其对标竞品（生效矩阵按 own_romram 取、主竞品 sort 序）；共享 Y 轴 =
   // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
-  // 面板头 ‹ › 调展示顺序；共享刷选条联动全部面板，热力带/图例页签分离模式下隐藏
+  // 面板头 ‹ › 调展示顺序；共享刷选条联动全部面板，系列页签统一放到共享工具行中央
   const [splitOn, setSplitOn] = useState(false);
   const [panelOrder, setPanelOrder] = useState<string[]>([]); // romram 键序；空 = own 序
   const splitActive = splitOn && state.own.length >= 2;
@@ -541,23 +552,21 @@ export default function PriceTrend() {
     actions.set({ priceTypes: next });
   };
 
-  /**
-   * §6.5（第十九轮修订）：窗口的一切改动统一走这里。平移/拖柄已被 XBrush 钳在轨道
-   * （= 筛选范围）内，唯一能越界的是 ‹› 箭头——窗口越出范围时把 rangeStart/End
-   * 左/右极值扩展到窗口端点（grow-only，从不收缩），即「点箭头改变时间筛选器的
-   * 最小最大值」；例：筛选 2026Q2–Q4 按 ‹ → 窗口 2026Q1–Q3，RangePicker 左极值随之变 2026Q1。
-   */
+  /** Bottom brush is the time filter: any move becomes a custom analysis range. */
   const onWindowChange = (s: number, e: number): void => {
-    const bs = buckets[s];
-    const be = buckets[e];
-    if (!bs || !be) return;
-    if (bs.id < state.rangeStart || be.id > state.rangeEnd) {
-      actions.set({
-        rangeStart: bs.id < state.rangeStart ? bs.id : state.rangeStart,
-        rangeEnd: be.id > state.rangeEnd ? be.id : state.rangeEnd,
-      });
-    }
-    setWindowIds([bs.id, be.id]);
+    if (!buckets[s] || !buckets[e]) return;
+    setWindowIds([buckets[s].id, buckets[e].id]);
+  };
+
+  /** 左侧时间筛选器：用户明确指定极值后退出自动，并重置底部窗口。 */
+  const onRangeFilterChange = (startId: string, endId: string): void => {
+    const start = buckets.findIndex((b) => b.id === startId);
+    const end = buckets.findIndex((b) => b.id === endId);
+    if (start < 0 || end < 0) return;
+    const lo = Math.min(start, end);
+    const hi = Math.max(start, end);
+    actions.set({ adaptive: false, rangeStart: buckets[lo].id, rangeEnd: buckets[hi].id });
+    setWindowIds(null);
   };
 
   // ---- 渲染 ----
@@ -604,9 +613,17 @@ export default function PriceTrend() {
             <span style={{ fontSize: 12.5, color: color.body, whiteSpace: 'nowrap' }}>分离显示</span>
           </span>
         )}
+        <ConfigProvider theme={filterBarTheme}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, color: color.mute, fontSize: 12 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              平台 <span style={{ width: 160 }}><PlatformBox /></span>
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>币种 <CurrencyBox /></span>
+          </div>
+        </ConfigProvider>
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
         {state.granularity !== 'week' && (
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
             <span>汇总：</span>
             <Segmented
               size="small"
@@ -625,10 +642,10 @@ export default function PriceTrend() {
           [图列 flex1][书签带 / 336px 内嵌面板]——时点摘要锚在图右侧（它就是图右缘
           最新数据的文字版），收起 = 24px 竖排书签带（默认，领导视角只是窄灰带），
           展开 = 原地面板纵向一行一产品（非视口抽屉，不遮图右缘），图自动收窄。
-          （Y 轴纯自适应；图例页签第五十四轮起移到图下方居中行）。
+          （Y 轴纯自适应；系列页签由工具行统一居中承载）。
           分离显示（第五十四轮拍板）：多 ROM 勾选时主图变 2 列 N 宫格——每面板一个
           ROM+其对标竞品，共享 Y 轴（并集算一次受控传入）、X 轴各面板独立绘制；
-          共享刷选条联动全部面板；热力带/图例页签分离模式下隐藏。
+          共享刷选条联动全部面板；系列页签统一放在共享工具行中央。
           第五十四轮追补：工具行不再随面板重复——面板网格上方常驻一条（ChartToolbar），
           面板 chrome=false，全部视图开关由常驻行统一控制 */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
@@ -640,6 +657,7 @@ export default function PriceTrend() {
               （每格高度/刻度线/自动压缩/折线样式）+ 折后价/RRP；面板内不再各有设置行 */}
           <div style={{ display: 'flex', alignItems: 'center', height: 32, padding: '0 6px', marginBottom: 2 }}>
             <ChartToolbar
+              legend={<LegendPills series={panelViews.flatMap((p) => p.all)} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />}
               currency={state.currency}
               sliderScale={sliderScale}
               onSliderScale={setSliderScale}
@@ -763,9 +781,6 @@ export default function PriceTrend() {
                           changeThreshold={changeThreshold}
                           emptyHint="该配置在所选时间范围内无数据"
                         />
-                        {/* 面板各自的图例页签（第五十四轮追补⑥批注）：只列本面板的产品、
-                            在本卡片底部居中——不再合并成一条全局居中行 */}
-                        <LegendPills series={p.all} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />
                       </div>
                     );
                   })}
@@ -779,11 +794,15 @@ export default function PriceTrend() {
               buckets={buckets}
               s={win.s}
               e={win.e}
-              lo={track.s}
-              hi={track.e}
-              frozen={state.adaptive}
+              lo={filterBounds[0]}
+              hi={filterBounds[1]}
+              plotLeft={splitGridLeft}
+              adaptive={state.adaptive}
               granularity={state.granularity}
               onChange={onWindowChange}
+              onRangeChange={onRangeFilterChange}
+              onGranularityChange={actions.setGranularity}
+              onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
               onAdjusting={setAdjusting}
             />
           )}
@@ -797,6 +816,7 @@ export default function PriceTrend() {
             priceTypes={state.priceTypes}
             gridLeft={gridLeft}
             gridTop={gridTop}
+            legend={<LegendPills series={visSeries} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />}
             enableDrill={state.granularity !== 'week'}
             enableJump={state.granularity === 'week'}
             enableOffer={state.granularity === 'week' && offersOn}
@@ -824,25 +844,27 @@ export default function PriceTrend() {
             onChangeThreshold={setChangeThreshold}
             emptyHint={
               visSeries.length > 0 && chartSeries.length === 0
-                ? '所有系列已在图例中隐藏，点击下方页签恢复显示'
+                ? '所有系列已在图例中隐藏，点击上方页签恢复显示'
                 : undefined
             }
           />
-          {/* 图例页签整排（第五十四轮从图顶移出）：时间轴与拖刷条之间的居中行，点击屏蔽/恢复系列 */}
-          <LegendPills series={visSeries} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />
         </>
       )}
-      {/* X 刷选条（窗口状态为图表内部状态；轨道 = 筛选范围；自适应开 = 轨道冻结） */}
+      {/* X 刷选条只调整上方极值范围内的查看窗口。 */}
           {!splitActive && buckets.length > 0 && visSeries.length > 0 && (
             <XBrush
               buckets={buckets}
               s={win.s}
               e={win.e}
-              lo={track.s}
-              hi={track.e}
-              frozen={state.adaptive}
+              lo={filterBounds[0]}
+              hi={filterBounds[1]}
+              plotLeft={gridLeft}
+              adaptive={state.adaptive}
               granularity={state.granularity}
               onChange={onWindowChange}
+              onRangeChange={onRangeFilterChange}
+              onGranularityChange={actions.setGranularity}
+              onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
               onAdjusting={setAdjusting}
             />
           )}

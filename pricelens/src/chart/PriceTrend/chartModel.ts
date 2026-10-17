@@ -447,9 +447,8 @@ export function buildOption(p: {
       axisLine: { lineStyle: { color: color.hairline } },
       axisTick: { show: false },
       // 第十二轮：月/季标签弃 mono rich，与周视图同一字体字号（全页数字字体统一）
-      // 第四十七轮：margin 22 = 轴线下方先留出大促图标专用行（DOM 层图标带占
-      // plotBottom+4~18），标签整体下移不再与图标贴近
-      axisLabel: { interval: 'auto', hideOverlap: true, fontSize: 12, color: color.body, fontFamily: font.family, margin: 22 },
+      // 时间标签由 XBrush 统一承担，图表只保留轴线和大促图标专用行，避免两组日期叠在一起。
+      axisLabel: { show: false },
     },
     // 值轴整体隐藏（第七轮）：刻度线/标签/断裂符号/档位带全部 DOM 层绘制
     yAxis: { show: false, min: 0, max: 1 },

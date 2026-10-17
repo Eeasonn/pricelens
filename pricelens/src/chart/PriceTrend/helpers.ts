@@ -681,7 +681,7 @@ export function normalizeWindow(
   return { s, e };
 }
 
-// ---------------- 时间自适应（第十九轮：自适应范围 = 所选产品数据跨度 ±2 个间隔） ----------------
+// ---------------- 时间自适应（自动极值 = 所选产品最早/最晚有效价格桶） ----------------
 
 /**
  * 所选系列的数据跨度（全集桶下标区间）：任一点有折后价或 RRP 即算在售。
@@ -703,12 +703,17 @@ export function seriesSpanRange(series: Series[]): [number, number] | null {
 }
 
 /**
- * 自适应可选范围 = 跨度 ±pad 个桶，钳在数据全集内：
+ * 自适应可选范围 = 跨度 ±pad 个桶，钳在数据全集内；看板自动模式传 pad=0，
+ * 因而上方筛选器直接显示产品最早/最晚有效价格桶：
  * 左缘不早于数据起点、右缘不晚于数据末端（数据生成到当前时间，即"不超当前时间"）。
  * 例：跨度 202603..202608 → 可选 202601..202610；跨度到 202610 → 右缘钳 202610。
  * 无桶/无跨度 → null。
  */
-export function adaptiveRangeOf(buckets: Bucket[], span: [number, number] | null, pad = 2): [string, string] | null {
+export function adaptiveRangeOf(
+  buckets: Bucket[],
+  span: [number, number] | null,
+  pad = 2,
+): [string, string] | null {
   if (!buckets.length || !span) return null;
   const lo = Math.max(0, span[0] - pad);
   const hi = Math.min(buckets.length - 1, span[1] + pad);

@@ -29,7 +29,7 @@ export const brandColor: Record<string, string> = {
 };
 
 export const font = {
-  family: 'Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
+  family: 'Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
   mono: 'Geist Mono, ui-monospace, monospace',
 } as const;
 

@@ -21,9 +21,6 @@ interface PlatformRow {
 
 export default function PlatformBox() {
   const { state, actions } = useFilters();
-  // 第五十三轮：自动匹配开启 = 竞品与平台都「已匹配」——平台锁定到我司官方店铺
-  // （Ozon Russia），控件置灰不可点；关闭自动匹配后恢复手动选择
-  const locked = state.autoMatch;
   const rows = useMemo<PlatformRow[]>(() => {
     const byPlatform = new Map<string, DimChannel[]>();
     for (const c of dimChannel) {
@@ -87,7 +84,8 @@ export default function PlatformBox() {
     actions.set({ platform: next }); // §5.6 切换平台：仅改聚合入参，不动图窗与粒度
   };
 
-  const activePlatform = active ?? rows[0]?.platform ?? null;
+  const selectedPlatform = rows.find((r) => platforms.includes(r.platform) || r.shops.some((s) => shopIds.includes(s.shop_id)))?.platform;
+  const activePlatform = active ?? selectedPlatform ?? rows[0]?.platform ?? null;
   const activeRow = rows.find((r) => r.platform === activePlatform) ?? null;
 
   const platformItems: CascadeRowItem[] = rows.map((r) => {
@@ -107,6 +105,7 @@ export default function PlatformBox() {
   const shopItems: CascadeRowItem[] = (activeRow?.shops ?? []).map((s) => ({
     key: s.shop_id,
     label: s.shop_name,
+    active: shopIds.includes(s.shop_id),
     checkState: activePlatform && isShopChecked(activePlatform, s.shop_id) ? 'checked' : 'none',
     onCheckChange: (next) => activePlatform && writeShop(activePlatform, s.shop_id, next),
     onLabelClick: () =>
@@ -120,13 +119,16 @@ export default function PlatformBox() {
     <Popover
       trigger="click"
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setActive(selectedPlatform ?? rows[0]?.platform ?? null);
+      }}
       arrow={false}
       placement="bottomLeft"
       styles={{ body: { padding: 0 } as const }}
       content={
         <div>
-          <CascadePanel columns={[{ width: 150, items: platformItems }, { width: 208, items: shopItems }]} />
+          <CascadePanel open={open} columns={[{ width: 150, items: platformItems }, { width: 208, items: shopItems }]} />
           <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
             <Button
               type="link"
@@ -140,15 +142,12 @@ export default function PlatformBox() {
         </div>
       }
     >
-      {/* 标签「平台」由 FilterBar 的 Cell 行外统一渲染（第二十八轮）；
-          自动匹配开启 = 锁定置灰（第五十三轮），悬浮说明跟随语义 */}
-        <Tooltip title={locked ? '自动匹配开启：平台跟随我司官方店铺（Ozon Россия）；关闭自动匹配后可手动选择' : undefined}>
+      {/* 平台口径独立于竞品匹配方式。 */}
+        <Tooltip title={labels.join('、') || undefined}>
           <div
             style={{
               width: '100%',
               minWidth: 0,
-              pointerEvents: locked ? 'none' : undefined,
-              opacity: locked ? 0.45 : 1,
             }}
           >
             <CascadeTrigger labels={labels} placeholder="未筛选" open={open} />

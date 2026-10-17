@@ -1,30 +1,9 @@
-// ============================================================
-// §5.2 框二：产品（反馈 2.1 + 第 1/8/9 条重构；第十四轮级联标准化；第十五轮标签/颜色）
-// ① 产业：收起为下拉单选（手机默认；平板/穿戴/音频置灰 #a1a1a1 + 🔒）
-// ② 华为产品 / ③ 竞品产品：**标准 antd Cascader multiple**（完全参考官方
-//    cascader-demo-multiple：multiple + maxTagCount="responsive"）——
-//    系列（我司）/ 品牌（竞品）→ 产品名 → RAM+ROM（叶层），全层标准勾选传播，
-//    勾系列/产品 = 其下全部配置；自定义三列面板 / SKU 弹框 / 均值徽标已删除。
-//    勾选语义保持不变：每个勾选配置仍取默认最低价颜色（defaultColorSkuIds），
-//    匹配竞品带出的组原样保留（「匹配上一代」按钮第三十九轮删除）。
-// 第十五轮：① 已选标签（displayRender）显产品名——倒数第二层才可读（ROMRAM 看不懂），
-//    同产品多配置时补 ROMRAM 后缀区分；② 档位行内「颜色」小按钮（按钮名 = 当前
-//    生效颜色，默认 = 最低价色），点击在级联面板右侧弹出颜色浮层：可多选颜色
-//    （多选时折后价取所选颜色均价——只改 skuIds 集合，下游聚合天然均值）、
-//    「恢复默认色」一键回退；按钮只开浮层、绝不改勾选——未勾选配置在浮层里勾任意
-//    颜色才创建勾选（toggleSku 原生语义），取消最后一个颜色 = 整组退场。
-// 反馈第 8 条：竞品不随我司产品自动带出；「匹配竞品」按钮点击才按配置矩阵
-// （configStore / LPL3.config.benchmark，缺省 dimBenchmark）为当前所有已选我司产品
-// 带出默认竞品组（并集、主竞品在前），再次点击重新匹配；带出后临时增删不回写配置。
-// 「匹配上一代」（第四轮新增）：按生效上一代关系（LPL3.config.prevGen 手动维护优先，
-// 回退 dim_product.prev_model_id）为当前已选我司产品带出上一代同配置组（追加不覆盖，
-// 幂等可反复点击）；上一代关系在配置页「上一代关系」块维护。
-// 两个匹配按钮均为关键功能：浅蓝底+蓝描边+图标显性化（区别于普通文字链接）。
-// ============================================================
+// 产业、我司产品与竞品控件。竞品级联始终可编辑；实际修改时退出自动匹配。
+// 产品与竞品级联默认展开到已选配置所在的最细层，颜色仍在档位浮层编辑。
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Cascader, Checkbox, Select, Switch, Tooltip } from 'antd';
+import { Cascader, Checkbox, Select, Tooltip } from 'antd';
 import { useFilters } from '../../state/FiltersContext';
-import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
+import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
   buildCompetitorTree,
   buildOwnTree,
@@ -37,6 +16,7 @@ import {
 } from '../ProductCascader/tree';
 import type { ProductSelection } from '../../state/filtersTypes';
 import type { CurrencyMode } from '../../dataModel/types';
+import { CascadePanel, type CascadeRowItem } from '../ProductCascader';
 
 // ---------------- ① 产业下拉（反馈 2.1） ----------------
 
@@ -64,44 +44,26 @@ export function IndustryControl() {
   );
 }
 
-// ---------------- 「匹配竞品」/「匹配上一代」（关键功能按钮） ----------------
+// ---------------- 竞品自动匹配模式 ----------------
 
-/**
- * 两个匹配按钮的显性化样式（浅蓝底 + 蓝描边 + 图标 + 600 字重）：
- * 悬停由 antd 默认接管（筛选条作用域 colorPrimary=selectAccent，蓝边蓝字加深）。
- * 第二十八轮：统一 92px 定宽（水平居中）——「匹配上一代/匹配竞品」字数不同，
- * 定宽保证产品/竞品两个输入框等宽、双列对称。
- */
-const MATCH_BTN_STYLE: CSSProperties = {
-  width: 92,
-  height: 24,
-  padding: 0,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-  fontSize: fontSize.caption,
-  fontWeight: 600,
-  color: selectSoftInk,
-  background: selectSoft,
-  borderColor: 'rgba(0, 112, 243, 0.40)',
-  borderRadius: radius.control,
-  boxShadow: 'none',
-};
-
-/**
- * 竞品格常驻开关（第三十四轮，替代原「匹配竞品」按钮——迪总「尽量减少筛选器」：
- * 匹配从「点击式动作」升级为「常驻跟随」）：开 = 竞品完全跟随我司产品（配置矩阵并集，
- * 换产品自动跟随、清空产品自动清空，竞品级联禁用；配置页改矩阵立即生效）；关 = 手动勾选。
- */
+/** Auto is a selectable mode, not a lock on the competitor cascader. */
 export function AutoMatchControl() {
   const { state, actions } = useFilters();
   return (
-    <Tooltip title="开启后竞品自动跟随我司产品（按配置矩阵，总览行尾「＋添加竞品」维护）；关闭后可手动勾选竞品">
-      <div style={{ width: 92, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexShrink: 0 }}>
-        <Switch size="small" checked={state.autoMatch} onChange={(v) => actions.setAutoMatch(v)} />
-        <span style={{ fontSize: fontSize.caption, color: color.body, whiteSpace: 'nowrap' }}>自动匹配</span>
-      </div>
+    <Tooltip title={state.autoMatch ? '已按我司产品自动匹配竞品；直接修改右侧竞品会退出自动模式' : '点击后按我司产品重新匹配竞品'}>
+      <button
+        type="button"
+        aria-label="自动匹配竞品"
+        aria-pressed={state.autoMatch}
+        onClick={() => actions.setAutoMatch(!state.autoMatch)}
+        style={{
+          height: 30, padding: '0 9px', flexShrink: 0, borderRadius: radius.control,
+          border: `1px solid ${state.autoMatch ? selectAccent : color.hairlineStrong}`,
+          background: state.autoMatch ? selectSoft : color.canvas,
+          color: state.autoMatch ? selectSoftInk : color.body,
+          font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        }}
+      >自动</button>
     </Tooltip>
   );
 }
@@ -210,15 +172,7 @@ function ColorFlyout({
 // 已选标签内容用 displayRender 定制（multiple 模式下它就是每个标签的文案；
 // 注意 tagRender 拿到的 value 是 rc-cascader 拼接后的标量 key，不是路径，不可用）。
 
-/**
- * 我司/竞品共用的标准级联多选（官方 cascader-demo-multiple 同款：
- * `<Cascader multiple maxTagCount="responsive" />`）。
- * options：系列（我司）/ 品牌（竞品）→ 产品名 → RAM+ROM（叶层，附「颜色」按钮）；
- * 全层标准勾选传播（勾系列/产品 = 其下全部配置），父子联动由 antd 接管。
- * value ↔ ProductSelection[] 双向映射：路径 = [系列/品牌 key, modelId, romram]，
- * 勾选配置的 skuIds 保持默认最低价颜色（defaultColorSkuIds），已有勾选原样保留；
- * 颜色浮层改写的 skuIds 走同一数据通道。
- */
+/** Cascader owns the selected tags; CascadePanel owns the open three-column path. */
 function ProductCascadeControl({
   kind,
   selection,
@@ -230,10 +184,7 @@ function ProductCascadeControl({
   onSelectionChange?: (next: ProductSelection[]) => void;
 }) {
   const { state, actions } = useFilters();
-  const tree = useMemo(() => (kind === 'own' ? buildOwnTree() : buildCompetitorTree()), [kind]);
-  // 第三十四轮：自动匹配开启时竞品级联禁用（竞品完全跟随我司产品，见 AutoMatchControl）
-  const autoMatchLock = kind === 'comp' && state.autoMatch;
-
+  const tree = useMemo(() => (kind === 'own' ? buildOwnTree(state.industry) : buildCompetitorTree()), [kind, state.industry]);
   const list = selection ?? (kind === 'own' ? state.own : state.competitors);
   const writeList = (next: ProductSelection[]): void => {
     if (onSelectionChange) {
@@ -241,111 +192,36 @@ function ProductCascadeControl({
       return;
     }
     if (kind === 'own') actions.setOwnSelection(next);
-    else actions.set({ competitors: next }); // 竞品临时增删不回写配置（§5.2③/§13）
+    else actions.set({ competitors: next, autoMatch: false }); // 手动修改竞品即退出自动模式，不回写配置
   };
 
   // 颜色浮层锚点档位（`${modelId}|${romram}`），null = 收起。
   // 未勾选配置也可弹层（第十六轮：按钮只开浮层不改勾选）；收起走显式路径：
   // 下拉关闭 / 浮层内取消最后一个颜色 / 菜单里锚点被取消勾选（含父级联动）
   const [colorPanelKey, setColorPanelKey] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // options + 路径查询表（系列/品牌 key ↔ modelId；modelId|romram ↔ 配置节点）。
-  // **label 一律纯字符串**（第三十轮教训：label 塞 ReactNode 会污染 rc 的展示解析，
-  //  触发器标签零宽/空串）；面板行内容（叶子颜色按钮、父级「点行=整组勾选」）
-  //  全部走 optionRender 挂载。依赖 list：按钮文案随颜色多选即时更新。
+  // Keep string labels for the Cascader tags. The open menu is rendered below.
   const { options, groupKeyOfModel, romramNodeOf } = useMemo(() => {
     const gk = new Map<string, string>();
     const rn = new Map<string, RomramNode>();
-    const leafContent = (r: RomramNode): ReactNode => {
-      const pool = r.selectableColors.length ? r.selectableColors : r.colors;
-      if (!pool.length) return r.romram;
-      const sel = findSelection(list, r);
-      const chosen = sel ? pool.filter((c) => sel.skuIds.includes(c.skuId)) : [];
-      const defIds = defaultColorSkuIds(r);
-      const defColor = pool.find((c) => c.skuId === defIds[0])?.color ?? pool[0].color;
-      const text =
-        chosen.length === 0
-          ? defColor
-          : chosen.length === 1
-            ? chosen[0].color
-            : `${chosen[0].color}+${chosen.length - 1}`;
-      return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span>{r.romram}</span>
-          <span
-            role="button"
-            title={`颜色 ${text} · 点击修改（可多选，多选取均价）`}
-            onClick={(e) => {
-              e.stopPropagation(); // 只弹颜色浮层，绝不触发档位勾选/取消（第十六轮反馈①）
-              e.preventDefault();
-              setColorPanelKey(r.key);
-            }}
-            onMouseDown={(e) => {
-              // 与 antd popup 同款：挡住 mousedown 默认行为（防焦点转移关弹层），
-              // 同时不冒泡给 rc 的关闭/勾选监听
-              e.stopPropagation();
-              e.preventDefault();
-            }}
-            style={COLOR_CHIP}
-          >
-            {text}
-          </span>
-        </span>
-      );
-    };
-    /** 第三十轮：父级（系列/品牌、产品）行点击=整组勾选/取消——antd multiple
-     *  默认父级点击只能下钻（rc-cascader Column onClick 对非叶子不触发 select），
-     *  用户要求前几层可多选：行内容 span 拦截点击、按整组配置增删（半选=补齐全组，
-     *  与勾选框语义一致）；下钻走悬停展开（expandTrigger hover）或 ▸ 图标。 */
-    const groupConfigsOf = (models: { modelId: string; romrams: RomramNode[] }[]) =>
-      models.flatMap((m) => m.romrams.map((r) => ({ modelId: m.modelId, romram: r.romram })));
-    const toggleGroup = (configs: { modelId: string; romram: string }[]) => {
-      const has = (c: { modelId: string; romram: string }) =>
-        list.some((s) => s.modelId === c.modelId && s.romram === c.romram);
-      const allIn = configs.every(has);
-      const next = allIn
-        ? list.filter((s) => !configs.some((c) => c.modelId === s.modelId && c.romram === s.romram))
-        : [
-            ...list,
-            ...configs
-              .filter((c) => !has(c))
-              .map((c) => {
-                const node = rn.get(`${c.modelId}|${c.romram}`);
-                return { modelId: c.modelId, romram: c.romram, skuIds: node ? defaultColorSkuIds(node) : [] };
-              }),
-          ];
-      writeList(next);
-    };
-    const toggleSpan = (text: string, configs: { modelId: string; romram: string }[]): ReactNode => (
-      <span
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleGroup(configs);
-        }}
-      >
-        {text}
-      </span>
-    );
     const opts = tree.map((g) => ({
       value: g.key,
       label: g.title,
-      optionContent: toggleSpan(g.title, groupConfigsOf(g.models)),
       children: g.models.map((m) => {
         gk.set(m.modelId, g.key);
         return {
           value: m.modelId,
           label: m.label,
-          optionContent: toggleSpan(m.label, groupConfigsOf([m])),
           children: m.romrams.map((r) => {
             rn.set(r.key, r);
-            return { value: r.romram, label: r.romram, optionContent: leafContent(r) };
+            return { value: r.romram, label: r.romram };
           }),
         };
       }),
     }));
     return { options: opts, groupKeyOfModel: gk, romramNodeOf: rn };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, list]);
+  }, [tree]);
 
   // ProductSelection[] → 勾选路径（叶 = [系列/品牌, 产品, ROMRAM]）
   const value = useMemo(
@@ -415,6 +291,76 @@ function ProductCascadeControl({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colorPanelKey, romramNodeOf, list, state.currency]);
 
+  // Multiple Cascader does not restore an active path on open. Keep its trigger/tags,
+  // but render a controlled three-column menu focused on the first selected leaf.
+  const [activePath, setActivePath] = useState<[string, string] | null>(null);
+  const firstSelection = list.find((s) => groupKeyOfModel.has(s.modelId));
+  const initialGroup = firstSelection ? groupKeyOfModel.get(firstSelection.modelId) : tree[0]?.key;
+  const group = tree.find((g) => g.key === activePath?.[0]) ?? tree.find((g) => g.key === initialGroup) ?? tree[0];
+  const model = group?.models.find((m) => m.modelId === activePath?.[1])
+    ?? group?.models.find((m) => m.modelId === firstSelection?.modelId)
+    ?? group?.models[0];
+  const configsOf = (models: typeof group.models) => models.flatMap((m) => m.romrams.map((r) => r));
+  const checkStateOf = (nodes: RomramNode[]): CascadeRowItem['checkState'] => {
+    const count = nodes.filter((r) => findSelection(list, r)).length;
+    return count === nodes.length && count > 0 ? 'checked' : count > 0 ? 'indeterminate' : 'none';
+  };
+  const updateConfigs = (nodes: RomramNode[], checked: boolean) => {
+    const keys = new Set(nodes.map((r) => r.key));
+    const next = list.filter((s) => !keys.has(`${s.modelId}|${s.romram}`));
+    if (checked) {
+      for (const r of nodes) next.push(findSelection(list, r) ?? {
+        modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r),
+      });
+    }
+    writeList(next);
+    if (colorPanelKey && !next.some((s) => `${s.modelId}|${s.romram}` === colorPanelKey)) setColorPanelKey(null);
+  };
+  const groupItems: CascadeRowItem[] = tree.map((g) => {
+    const nodes = configsOf(g.models);
+    return {
+      key: g.key, label: g.title, active: group?.key === g.key,
+      checkState: checkStateOf(nodes),
+      onActivate: () => setActivePath([g.key, g.models[0]?.modelId ?? '']),
+      onCheckChange: (checked) => updateConfigs(nodes, checked),
+      onLabelClick: () => updateConfigs(nodes, checkStateOf(nodes) !== 'checked'),
+    };
+  });
+  const modelItems: CascadeRowItem[] = (group?.models ?? []).map((m) => {
+    const nodes = m.romrams;
+    return {
+      key: m.modelId, label: m.label, active: model?.modelId === m.modelId,
+      checkState: checkStateOf(nodes),
+      onActivate: () => setActivePath([group.key, m.modelId]),
+      onCheckChange: (checked) => updateConfigs(nodes, checked),
+      onLabelClick: () => updateConfigs(nodes, checkStateOf(nodes) !== 'checked'),
+    };
+  });
+  const leafItems: CascadeRowItem[] = (model?.romrams ?? []).map((r) => {
+    const pool = r.selectableColors.length ? r.selectableColors : r.colors;
+    const chosen = findSelection(list, r);
+    const selectedColors = pool.filter((c) => chosen?.skuIds.includes(c.skuId));
+    const defaultColor = pool.find((c) => c.skuId === defaultColorSkuIds(r)[0])?.color ?? pool[0]?.color;
+    const colorLabel = selectedColors.length > 1
+      ? `${selectedColors[0].color}+${selectedColors.length - 1}`
+      : selectedColors[0]?.color ?? defaultColor;
+    return {
+      key: r.key, label: r.romram,
+      active: r.key === `${firstSelection?.modelId}|${firstSelection?.romram}` && model?.modelId === firstSelection?.modelId,
+      checkState: chosen ? 'checked' : 'none',
+      onCheckChange: (checked) => updateConfigs([r], checked),
+      onLabelClick: () => updateConfigs([r], !chosen),
+      trailing: colorLabel && (
+        <button
+          type="button" title={`颜色 ${colorLabel} · 点击修改`}
+          onClick={(e) => { e.stopPropagation(); setColorPanelKey(r.key); }}
+          onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+          style={{ ...COLOR_CHIP, width: 'auto', border: '1px solid rgba(0, 112, 243, 0.40)', fontFamily: 'inherit' }}
+        >{colorLabel}</button>
+      ),
+    };
+  });
+
   return (
     <Cascader
       style={{ width: '100%' }}
@@ -422,29 +368,28 @@ function ProductCascadeControl({
       value={value}
       onChange={onChange as unknown as (value: unknown) => void}
       multiple
-      disabled={autoMatchLock}
       // 第三十轮：整组勾满时 SHOW_PARENT（antd 默认）会把全部叶子路径坍缩成一个
       // 父路径（如 ["Mate"]），displayRender 拿不到型号段 → 触发器空标签。
       // 改 SHOW_CHILD：value 恒为叶子三段路径，标签=逐配置，与「匹配竞品」
       // 带出的部分勾选语义一致。
       showCheckedStrategy={Cascader.SHOW_CHILD}
-      // 第三十轮：悬停展开下级（行内容已被 optionRender 拦为「整组勾选」，
-      // 下钻不能只靠点击，悬停展开 + ▸ 图标兜底）
-      expandTrigger="hover"
       maxTagCount="responsive"
-      optionRender={(option) =>
-        (option as { optionContent?: ReactNode }).optionContent ?? String(option.label ?? '')
-      }
-      placeholder={kind === 'own' ? '选择产品' : autoMatchLock ? '自动跟随我司产品' : '选择竞品'}
+      placeholder={kind === 'own' ? '选择产品' : '选择竞品'}
       displayRender={displayRender}
-      popupRender={(menu) => (
+      popupRender={() => (
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
-          {menu}
+          <CascadePanel open={menuOpen} columns={[
+            { width: 145, items: groupItems },
+            { width: 190, items: modelItems },
+            { width: 190, items: leafItems },
+          ]} />
           {colorPanelNode}
         </div>
       )}
       onOpenChange={(open) => {
-        if (!open) setColorPanelKey(null);
+        setMenuOpen(open);
+        if (open) setActivePath([initialGroup ?? '', firstSelection?.modelId ?? tree[0]?.models[0]?.modelId ?? '']);
+        else setColorPanelKey(null);
       }}
     />
   );

@@ -8,8 +8,108 @@ body {
   margin: 0;
   background: #fafafa;
   color: #171717;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* 时间筛选器：沿用 Ant Design RangePicker 结构，但把周期值压到 12px，
+   让 2025-W39 → 2026-W41 在左侧窄栏里保持完整可读。 */
+.xbrush-range-picker.ant-picker {
+  padding-inline: 7px;
+}
+.xbrush-range-picker .ant-picker-input > input {
+  min-width: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.xbrush-range-picker .ant-picker-range-separator {
+  padding-inline: 2px;
+}
+.xbrush-range-picker .ant-picker-suffix {
+  margin-inline-start: 2px;
+}
+
+/* RangePicker 的周/月/季面板共用一个紧凑尺寸，季度面板不再因默认布局变高或错位。 */
+.xbrush-range-popup {
+  width: 100% !important;
+  left: 0 !important;
+}
+.xbrush-range-popup .ant-picker-panel-container {
+  border-radius: 8px;
+}
+.xbrush-range-popup .ant-picker-panel {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+.xbrush-range-popup .ant-picker-panels {
+  display: flex;
+  width: 100%;
+}
+.xbrush-range-popup .ant-picker-header {
+  min-height: 34px;
+  height: 34px;
+  padding-inline: 8px;
+  font-size: 13px;
+}
+.xbrush-range-popup .ant-picker-header-view,
+.xbrush-range-popup .ant-picker-header-super-prev-btn,
+.xbrush-range-popup .ant-picker-header-prev-btn,
+.xbrush-range-popup .ant-picker-header-next-btn,
+.xbrush-range-popup .ant-picker-header-super-next-btn {
+  line-height: 34px;
+  font-size: 13px;
+}
+.xbrush-range-popup .ant-picker-content {
+  box-sizing: border-box;
+  width: 100%;
+  margin-inline: 0;
+  padding-inline: 12px;
+}
+.xbrush-range-popup .ant-picker-content th {
+  height: 22px;
+  font-size: 11px;
+}
+.xbrush-range-popup .ant-picker-cell {
+  padding: 3px 0;
+  font-size: 11px;
+}
+.xbrush-range-popup .ant-picker-cell-inner {
+  min-width: 24px;
+  height: 24px;
+  line-height: 24px;
+  font-size: 11px;
+}
+.xbrush-range-popup .ant-picker-quarter-panel .ant-picker-cell-inner {
+  height: 28px;
+  line-height: 28px;
+}
+
+/* AntD 5.21 将自定义类挂在不同的弹层节点；下面的结构选择器确保两栏始终等宽，
+   左右内边距一致，不受周/月/季面板内部 class 差异影响。 */
+.ant-picker-dropdown .ant-picker-panels {
+  display: flex;
+  width: 100%;
+}
+.ant-picker-dropdown .ant-picker-panel {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+.ant-picker-dropdown .ant-picker-content {
+  box-sizing: border-box;
+  width: 100%;
+  margin-inline: 0;
+  padding-inline: 12px;
 }
 
 /* §3.3 数字一律 tabular-nums */

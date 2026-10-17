@@ -19,9 +19,8 @@
 // - 缺采：跨接段仅虚线（第二十四轮撤销空心插值点）；价格标签自适应避让（resolveCollisions 两遍式）
 // - 悬停：十字竖线（DOM）+ 钉顶附框（含折扣率胶囊，第五十二轮）+ 月/季下钻图标 +
 //   offer 图标 + 「快照」取证胶囊（第五十轮）；ECharts tooltip 禁用
-// - 第五十二轮 图顶工具行单行三区：左 = $/齿轮 + 折后价/RRP 粗细线胶囊（挪出标题行，
-//   图例同款外形、品牌色点位改粗/细线演示）；中 = 大促档期/offer/最高最低/价格变化提醒
-//   圆框组（图例行居中，空间不足自动左靠）；右 = 系列图例页签（新增预警订阅铃铛）
+// - 第五十二轮 图顶工具行单行三区：左 = $/齿轮 + 折后价/RRP 粗细线胶囊；中 = 系列图例页签
+//   （由看板层注入并居中）；右 = 大促档期/offer/最高最低/价格变化提醒圆框组
 // - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
 // - 第二十轮：S/E 端点数值标签必放（symbolSize 0 修复 symbol 'none' 吞标签）；
 //   齿轮弹层「Y 轴自动压缩」开关（关 = 无断轴完全连续）
@@ -33,7 +32,7 @@
 //   ④ 月/季 P1 标签候选改「显示值变化点」；多系列时最大/最小降 P1；
 //   ⑤ 空档位画虚线占位框（梯子连续可读）
 // ============================================================
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover } from 'antd';
 import { ExportOutlined, TagOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
@@ -110,8 +109,7 @@ export interface ChartProps {
   gridLeft?: number;
   /** 图顶卡片区预留高；缺省按 series 数量推（gridTopFor） */
   gridTop?: number;
-  // 第五十四轮：图例页签撤出图顶（legendSeries/hiddenKeys/onToggleLegend/showLegendCards 删除）——
-  // 页签整排移到时间轴与拖刷条之间的居中行（index 层 LegendPills），图顶右区不再放页签
+  // 系列图例页签由看板层通过 legend 注入图顶工具行中央，底部只保留时间轴。
   enableDrill?: boolean; // 月/季视图圈点下钻
   enableJump?: boolean; // 周视图悬停跳转
   enableOffer?: boolean; // 周视图 offer 图标
@@ -160,6 +158,8 @@ export interface ChartProps {
   //      不渲染设置行，由面板网格上方的常驻工具行统一控制 ----
   /** 图顶工具行显隐（缺省 true）；false = 整行不渲染（含齿轮），gridTop 由调用方收窄 */
   chrome?: boolean;
+  /** 图顶工具行中间的系列页签；用于把图例从时间区域上移到工具行中央。 */
+  legend?: ReactNode;
   /** 轴列绘制（第五十四轮追补⑤）：false = 面板不画档位带/刻度标签/断轴省略号——
    *  分离模式这三样由卡片外侧的共享轴列（SplitAxisColumn）统一承担，面板只留绘图区；
    *  Y 刻度横线仍随 showYTicks 画在面板内（读数辅助属于绘图区） */
@@ -781,6 +781,7 @@ export default function Chart(props: ChartProps) {
               }}
             >
               <ChartToolbar
+                legend={props.legend}
                 currency={currency}
                 sliderScale={sliderScale}
                 onSliderScale={commitSliderScale}
@@ -806,21 +807,6 @@ export default function Chart(props: ChartProps) {
               />
             </div>
           )}
-          {/* 时间粒度角标（图右下、与轴标签同线；第四十七轮图标专用行之下） */}
-          <div
-            style={{
-              position: 'absolute',
-              right: 6,
-              top: geom.plotTop + geom.plotHeight + 22,
-              fontSize: fontSize.caption,
-              lineHeight: '16px',
-              color: color.mute,
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            {granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季'}
-          </div>
           {/* DOM 刻度线 + 缩写标签（12px，与时间轴同字号；ECharts 值轴已隐藏；齿轮弹层可关）。
               第五十四轮追补⑤：分离面板 axisChrome=false 时标签由共享轴列承担，面板只画横线 */}
           {showYTicks && tickRows.map((t) => (

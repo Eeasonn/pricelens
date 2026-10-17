@@ -4,7 +4,7 @@
 //   竞品由筛选条「匹配竞品」按钮按配置矩阵带出）
 // 默认视图（§15.4-A13，第二十五轮起多轮演进）：周 · USD · 平台 = 我司官方店铺 Ozon Россия
 // （第五十三轮）· 我司 Pura 90s Pro 12+256（最低价颜色）+ 其配置竞品（主竞品在前）
-// · 仅折后价（第五十轮）· 时间自适应开 · 自动匹配开（竞品+平台都跟随）
+// · 仅折后价（第五十轮）· 时间自适应开 · 竞品自动匹配开
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -39,7 +39,7 @@ export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
   'own-gap': 0.15,
 };
 
-/** 第五十三轮：我司官方店铺（OZON 1P 首店「Ozon Россия」）——自动匹配开启时平台锁定到它 */
+/** 我司官方店铺（OZON 1P 首店「Ozon Россия」）——平台默认值，用户可独立调整。 */
 export const OWN_OFFICIAL_SHOP_ID =
   dimChannel.find((c) => c.platform === 'OZON' && c.store_type === '1P')?.shop_id ?? 'shop-001';
 
@@ -77,7 +77,7 @@ export const defaultFilters: FiltersState = {
  * v6（2026-10-15）：RRP 默认不勾选（第五十轮）。
  * v7（2026-10-14）：+预警中心订阅/阈值字段（第五十二轮）。
  * v8（2026-10-14）：平台默认 = 我司官方店铺「Ozon Россия」单店铺（第五十三轮）；
- *   自动匹配开启时平台一并锁定（竞品+平台都跟随我司渠道）。
+ *   本轮平台口径改为独立可选，不再随竞品匹配方式锁定。
  * v9（2026-10-16，追补⑨）：预警细化——alertThreshold 单阈值 → alertTypes/alertThresholds
  *   四类开关+阈值 + alertProducts 按产品覆写；v8 持久化迁移保留订阅与旧阈值（三类同值）。
  */
@@ -188,7 +188,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       g: state.granularity,
       cur: state.currency,
       own: own || null,
-      shop: state.autoMatch ? null : shop, // 自动匹配开 = 平台锁定官方店，链接里不带
+      shop,
     });
   }, [state.granularity, state.currency, state.own, state.platform, state.autoMatch]);
 
@@ -258,14 +258,13 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       /**
        * 第三十四轮：自动匹配开关。开 = 立即按配置矩阵重算当前竞品组；
        * 关 = 保留当前竞品转为手动（可自由增删）。
-       * 第五十三轮：开 = 平台一并锁定到我司官方店铺 Ozon Россия（竞品+平台都「已匹配」，
-       * 用户拍板）；关 = 平台恢复手动（保留当前值）。
+       * 平台现在是独立的图表口径，切换竞品匹配方式不改平台。
        */
       setAutoMatch: (on) =>
         setState((s) => ({
           ...s,
           autoMatch: on,
-          ...(on ? { competitors: groupsFromBenchmark(s.own), platform: DEFAULT_PLATFORM_SELECTION } : {}),
+          ...(on ? { competitors: groupsFromBenchmark(s.own) } : {}),
         })),
 
       /** 第五十二轮：单系列订阅切换（看板图例页签铃铛） */

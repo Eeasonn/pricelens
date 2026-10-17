@@ -22,6 +22,8 @@ import type { LineShapeChoice } from './chartModel';
 import ScaleSlider from './ScaleSlider';
 
 export interface ChartToolbarProps {
+  /** 顶部居中的系列页签（由看板层注入，避免页签占用图表底部时间区域） */
+  legend?: ReactNode;
   currency: CurrencyMode;
   sliderScale: number;
   onSliderScale: (v: number) => void;
@@ -154,7 +156,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   // 二级功能有任一开启 = ⋯ 按钮出蓝点（默认全关，第五十六轮）
   const secondaryActive = (props.maxMinOn === true) || (props.changeThreshold != null);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
       <span style={{ fontSize: fontSize.caption, lineHeight: '16px', color: color.mute, pointerEvents: 'none' }}>
         {props.currency === 'usd' ? '$' : '₽'}
       </span>
@@ -219,6 +221,17 @@ export default function ChartToolbar(props: ChartToolbarProps) {
             onToggle={(next) => props.onPriceTypeToggle!('rrp', next)}
           />
         </>
+      )}
+      {props.legend && (
+        <div
+          style={{
+            position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)',
+            maxWidth: '46%', height: 28, overflow: 'hidden', display: 'flex', alignItems: 'center',
+            zIndex: 1,
+          }}
+        >
+          {props.legend}
+        </div>
       )}
       {/* 右区：高频视图开关圆框组（第五十六轮收窄：只留大促档期/offer 权益）+
           「⋯ 更多」二级菜单（极值标注/价格变化提醒/促销力度明细抽屉入口） */}

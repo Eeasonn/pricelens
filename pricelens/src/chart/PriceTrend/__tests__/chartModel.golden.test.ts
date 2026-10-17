@@ -740,7 +740,7 @@ describe('小件', () => {
   });
 });
 
-// ---------------- 时间自适应（第十九轮：可选范围 = 所选产品跨度 ±2，钳数据全集） ----------------
+// ---------------- 时间自适应（helper 支持 padding；看板自动模式传 0） ----------------
 
 const mkBuckets = (n: number): Bucket[] =>
   Array.from({ length: n }, (_, i) => ({ id: `2026${String(i + 1).padStart(2, '0')}`, xLabel: '' }));
@@ -762,6 +762,10 @@ describe('时间自适应（seriesSpanRange / adaptiveRangeOf）', () => {
   it('无任何有值点 → null（调用方保持现范围不动）', () => {
     const s = mkSeries({ points: Array.from({ length: 12 }, () => PT({ price: null })) });
     expect(seriesSpanRange([s])).toBeNull();
+  });
+
+  it('自动极值模式不加 padding，左端就是最早有效价格桶', () => {
+    expect(adaptiveRangeOf(B12, [2, 7], 0)).toEqual(['202603', '202608']);
   });
 
   it('自适应范围 = 跨度 ±2 个桶（spec 例：202603-202608 → 可选 202601-202610）', () => {

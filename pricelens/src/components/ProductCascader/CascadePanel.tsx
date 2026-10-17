@@ -5,7 +5,7 @@
 // 反馈 2.2/2.3：触发器开启态聚焦边框浅蓝、徽标不撑破窄触发器。
 // 供 ProductBox（我司/竞品级联）与 PlatformBox（平台→店铺）复用
 // ============================================================
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Checkbox, Tooltip } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { color, fontSize, radius, selectAccent, selectSoft, space } from '../../theme/tokens';
@@ -31,9 +31,27 @@ export interface CascadeRowItem {
 
 const ROW_H = 32;
 
-function Column({ items, width, last }: { items: CascadeRowItem[]; width: number; last: boolean }) {
+function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean }) {
+  const hasActive = items.some((item) => item.active);
+  const activeKey = items.find((item) => item.active)?.key;
+  const columnRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const column = columnRef.current;
+      const selected = column?.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!column || !selected) return;
+      const bounds = column.getBoundingClientRect();
+      const row = selected.getBoundingClientRect();
+      if (row.top < bounds.top) column.scrollTop += row.top - bounds.top;
+      else if (row.bottom > bounds.bottom) column.scrollTop += row.bottom - bounds.bottom;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeKey, open]);
   return (
     <div
+      ref={columnRef}
+      role="group"
       style={{
         width,
         maxHeight: 328,
@@ -43,10 +61,37 @@ function Column({ items, width, last }: { items: CascadeRowItem[]; width: number
         flexShrink: 0,
       }}
     >
-      {items.map((item) => (
+      {items.map((item, index) => (
         <div
           key={item.key}
+          role="treeitem"
+          aria-label={item.label}
+          aria-selected={Boolean(item.active)}
+          aria-checked={item.checkState ? item.checkState === 'checked' : undefined}
+          aria-expanded={!last && item.onActivate ? Boolean(item.active) : undefined}
+          tabIndex={item.active || (!hasActive && index === 0) ? 0 : -1}
           onMouseEnter={item.onActivate}
+          onFocus={item.onActivate}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            const rows = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>(':scope > [role="treeitem"]') ?? []);
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+            } else if (event.key === 'ArrowRight' && item.onActivate) {
+              event.preventDefault();
+              const nextColumn = event.currentTarget.parentElement?.nextElementSibling;
+              item.onActivate();
+              requestAnimationFrame(() => nextColumn?.querySelector<HTMLElement>('[role="treeitem"]')?.focus());
+            } else if (event.key === 'ArrowLeft') {
+              event.preventDefault();
+              event.currentTarget.parentElement?.previousElementSibling?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+            } else if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              item.onActivate?.();
+              item.onLabelClick?.();
+            }
+          }}
           onClick={() => {
             item.onActivate?.();
             item.onLabelClick?.();
@@ -59,6 +104,7 @@ function Column({ items, width, last }: { items: CascadeRowItem[]; width: number
             padding: `0 ${space.md}px`,
             background: item.active ? selectSoft : 'transparent',
             cursor: item.onActivate ? 'pointer' : 'default',
+            outlineOffset: -2,
           }}
         >
           {item.checkState && (
@@ -100,9 +146,10 @@ function Column({ items, width, last }: { items: CascadeRowItem[]; width: number
 }
 
 /** 多列级联面板（悬停展开 + 父子联动勾选，AntD Cascader 范式） */
-export function CascadePanel({ columns }: { columns: { width: number; items: CascadeRowItem[] }[] }) {
+export function CascadePanel({ columns, open = true }: { columns: { width: number; items: CascadeRowItem[] }[]; open?: boolean }) {
   return (
     <div
+      role="tree"
       style={{
         display: 'flex',
         background: color.canvas,
@@ -112,7 +159,7 @@ export function CascadePanel({ columns }: { columns: { width: number; items: Cas
       }}
     >
       {columns.map((c, i) => (
-        <Column key={i} width={c.width} items={c.items} last={i === columns.length - 1} />
+        <Column key={`${i}-${c.items[0]?.key ?? ''}`} width={c.width} items={c.items} last={i === columns.length - 1} open={open} />
       ))}
     </div>
   );
