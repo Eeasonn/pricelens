@@ -8,6 +8,8 @@
 // 第六十七轮（用户反馈）：①「周期最低」列删除，全表六列（产品｜折扣率｜折后价｜
 // RRP｜价差｜预警）；②竞品区可折叠——型号头行「竞品 N ⌄」开关（产品级）+
 // 顶栏「收起/展开全部竞品」总开关（一国一产业全选场景的全局视角）。
+// 第六十八轮（用户反馈）：筛选条与看板拉齐——独立白卡（.lpl-fb）+ 同宽度同序
+// （国家 210｜产业 155｜我司产品 flex｜平台 160｜价格档位 flex），标签统一「我司产品」。
 // 纯展示层：结构全部来自 buildOverviewMatrix（金测锚定），本文件不取数。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
@@ -40,12 +42,13 @@ import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow
 
 const norm = (r: string): string => r.replace(/\s+/g, '');
 
-/** 总览筛选行单元格：外置前缀标签 + 32px 控件（与看板筛选条同语言） */
-function FilterCell({ label, min, children }: { label: string; min?: number; children: ReactNode }) {
+/** 总览筛选行单元格（第六十八轮与看板拉齐）：外置 12px 标签 + gap 6 + 30px 控件
+ *  （高度/字号走 filterBarTheme），width 固定 / flex 弹性两种，同 FilterBar 的 Field */
+function FilterCell(props: { label: string; width?: number; flex?: string; children: ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 32, minWidth: min ?? 0, flexShrink: 0 }}>
-      <span style={{ fontSize: 12, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: props.width, flex: props.flex, minWidth: 0, flexShrink: props.width ? 0 : undefined }}>
+      <span style={{ fontSize: 12, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{props.label}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>{props.children}</div>
     </div>
   );
 }
@@ -571,6 +574,44 @@ export default function Overview() {
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader title="国家总览" />
 
+        {/* 筛选条（第六十八轮与看板拉齐）：独立白卡 + .lpl-fb 同类名 + 同宽度同序——
+            国家｜产业｜我司产品｜平台｜价格档位；控件 30px/字号 13 走 filterBarTheme。
+            国家/产业为共享口径态；我司产品/价格档位为本页视图态（空 = 全部） */}
+        <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
+          <ConfigProvider theme={filterBarTheme}>
+            <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30, flexWrap: 'wrap' }}>
+                <FilterCell label="国家" width={210}>
+                  <CountryBox />
+                </FilterCell>
+                <FilterCell label="产业" width={155}>
+                  <IndustryControl />
+                </FilterCell>
+                <FilterCell label="我司产品" flex="1 1 285px">
+                  <OwnProductControl selection={prodSel} onSelectionChange={setProdSel} />
+                </FilterCell>
+                {/* 平台（第五十一轮）：看板同款级联（平台→店铺），共享 state.platform 双页联动；
+                    控件宽与看板图顶同款 160（外置标签另加 30） */}
+                <FilterCell label="平台" width={200}>
+                  <PlatformBox />
+                </FilterCell>
+                <FilterCell label="价格档位" flex="1 1 220px">
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    maxTagCount="responsive"
+                    placeholder="全部档位"
+                    style={{ width: '100%' }}
+                    value={selTiers}
+                    onChange={setSelTiers}
+                    options={tierOptions}
+                  />
+                </FilterCell>
+              </div>
+            </section>
+          </ConfigProvider>
+        </div>
+
         <main style={{ flex: 1, padding: space.lg }}>
           <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg }}>
             {/* 口径条：国家层面上下文 + 币种 */}
@@ -620,37 +661,6 @@ export default function Overview() {
                 ]}
               />
             </div>
-
-            {/* 筛选行（第三十八轮）：国家/产业为共享口径态；产品/价格档位为本页视图态（空 = 全部） */}
-            <ConfigProvider theme={filterBarTheme}>
-              <div style={{ display: 'flex', gap: 10, rowGap: 8, flexWrap: 'wrap', marginTop: space.base }}>
-                <FilterCell label="国家">
-                  <CountryBox />
-                </FilterCell>
-                <FilterCell label="产业">
-                  <IndustryControl />
-                </FilterCell>
-                <FilterCell min={400} label="产品">
-                  <OwnProductControl selection={prodSel} onSelectionChange={setProdSel} />
-                </FilterCell>
-                {/* 平台（第五十一轮）：看板同款级联（平台→店铺），共享 state.platform 双页联动 */}
-                <FilterCell min={180} label="平台">
-                  <PlatformBox />
-                </FilterCell>
-                <FilterCell min={280} label="价格档位">
-                  <Select
-                    mode="multiple"
-                    allowClear
-                    maxTagCount="responsive"
-                    placeholder="全部档位"
-                    style={{ width: '100%' }}
-                    value={selTiers}
-                    onChange={setSelTiers}
-                    options={tierOptions}
-                  />
-                </FilterCell>
-              </div>
-            </ConfigProvider>
 
             {/* 档位带 × 包裹格子矩阵（型号与映射竞品一体成格） */}
             {visibleBands.map(({ band, ownModels }) => {
