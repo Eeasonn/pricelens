@@ -4,25 +4,27 @@
 // （我司行在上 / 映射竞品在下，竞品行浅灰底），一体性一眼可读。
 // 第六十六轮改版（用户反馈）：①产品名不再双层重复——型号头行表达品牌+产品，
 // 我司行主列只放配置 ROMRAM；②价格拆三列右对齐（折扣率｜折后价｜RRP，RRP 无划线）；
-// ③迷你图删除（总览无意义），趋势列改「周期最低」读数；④全表 7 列对齐
-// （产品｜折扣率｜折后价｜RRP｜价差｜预警｜周期最低）。
+// ③迷你图删除（总览无意义）。
+// 第六十七轮（用户反馈）：①「周期最低」列删除，全表六列（产品｜折扣率｜折后价｜
+// RRP｜价差｜预警）；②竞品区可折叠——型号头行「竞品 N ⌄」开关（产品级）+
+// 顶栏「收起/展开全部竞品」总开关（一国一产业全选场景的全局视角）。
 // 纯展示层：结构全部来自 buildOverviewMatrix（金测锚定），本文件不取数。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { ConfigProvider, Segmented, Select } from 'antd';
-import { SwapOutlined } from '@ant-design/icons';
+import { DownOutlined, SwapOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
 import type { ProductSelection } from '../state/filtersTypes';
 import { buildOverviewMatrix, TIER_LABELS } from '../dataModel/aggregate';
-import type { OverviewModel, OverviewRow, OverviewSparkPoint } from '../dataModel/aggregate';
+import type { OverviewModel, OverviewRow } from '../dataModel/aggregate';
 import type { DimBenchmark } from '../dataModel/types';
 import { filterBarTheme } from '../components/FilterBar';
 import CountryBox from '../components/FilterBar/CountryBox';
 import PlatformBox from '../components/FilterBar/PlatformBox';
 import { IndustryControl, OwnProductControl } from '../components/FilterBar/ProductBox';
-import { dimChannel, dimTime } from '../data';
+import { dimChannel } from '../data';
 import { getEffectiveBenchmark } from '../state/configStore';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import PageHeader from '../components/PageHeader';
@@ -54,12 +56,12 @@ function FilterCell({ label, min, children }: { label: string; min?: number; chi
 /** 颜色次级菜单（第四十四轮建；第五十二轮追补三随「颜色列」删除而下线——用户定版
  *  总览行 = 看板页签式「品牌+产品名+RAMROM」一段式，颜色下钻留在看板/级联侧） */
 
-/** 盒内统一行栅格（第六十六轮定版）：产品｜折扣率｜折后价｜RRP｜价差｜预警｜周期最低
- *  ——七列，数值列右对齐成表格读数；竖线全程连续（分隔线画在 Td 上、行内边距收进
+/** 盒内统一行栅格（第六十七轮定版）：产品｜折扣率｜折后价｜RRP｜价差｜预警
+ *  ——六列，数值列右对齐成表格读数；竖线全程连续（分隔线画在 Td 上、行内边距收进
  *  单元格里，行与行的线首尾相接不断开）。 */
 const ROW_GRID: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(0,1fr) 76px 96px 84px 112px 216px 118px',
+  gridTemplateColumns: 'minmax(0,1fr) 76px 96px 84px 112px 216px',
   alignItems: 'stretch',
   columnGap: 0,
 };
@@ -94,22 +96,6 @@ function Th(props: { children?: ReactNode; first?: boolean; last?: boolean; just
     <Td first={props.first} last={props.last} justify={props.justify ?? 'center'}>
       <span style={{ fontSize: 13, fontWeight: 700, color: color.mute, whiteSpace: 'nowrap' }}>{props.children}</span>
     </Td>
-  );
-}
-
-/** 周期最低价读数（P0②；第五十二轮追补三简化）：低 {最低价} · {发生周三日期 MM-DD} */
-function MinCell(props: { points: OverviewSparkPoint[]; minV: number | null; minIdx: number; currency: 'usd' | 'local'; dateOf: (weekId: string) => string }) {
-  const { points, minV, minIdx, currency, dateOf } = props;
-  return (
-    <span className="tnum" title="周期最低价与发生周（采集锚周三）" style={{ whiteSpace: 'nowrap', fontSize: 10.5, color: color.body }}>
-      {minV != null ? (
-        <>
-          低 {formatPrice(minV, currency)} · {dateOf(points[minIdx].weekId)}
-        </>
-      ) : (
-        '—'
-      )}
-    </span>
   );
 }
 
@@ -200,8 +186,6 @@ function OwnRomRow(props: {
   onToggleDiffDir: () => void;
   /** 该 ROM 已配置对标竞品才出切换器（无竞品价差无意义） */
   canToggleDiff: boolean;
-  /** weekId → 采集锚周三日期 MM-DD */
-  dateOf: (weekId: string) => string;
 }) {
   const { row, currency } = props;
   return (
@@ -332,25 +316,20 @@ function OwnRomRow(props: {
           </span>
         ) : null}
       </Td>
-      <Td>{props.alertCell}</Td>
-      <Td last justify="end" padY={9}>
-        <MinCell points={row.points} minV={row.minV} minIdx={row.minIdx} currency={currency} dateOf={props.dateOf} />
-      </Td>
+      <Td last>{props.alertCell}</Td>
     </div>
   );
 }
 
-/** 竞品行（映射竞品，第四十五轮起「其他」不再展示）：与我司行同七列栅格；行浅灰底。
- *  第六十六轮：价格三列与我司行同构；「价差」列 = 纯读数（方向随我司行切换器，
- *  'comp' = 竞品比我司：红=竞品贵、蓝=便宜；'own' = 我司比竞品）。 */
+/** 竞品行（映射竞品，第四十五轮起「其他」不再展示）：与我司行同六列栅格；行浅灰底。
+ *  第六十七轮：「价差」列 = 纯读数（方向随我司行切换器，'comp' = 竞品比我司：
+ *  红=竞品贵、蓝=便宜；'own' = 我司比竞品）。 */
 function CompRomRow(props: {
-  skuId?: string;
   brand: string;
   name: string;
   romram: string;
   price: number | null;
   rrp: number | null;
-  points: OverviewRow['points'];
   currency: 'usd' | 'local';
   /** 对标我司 ROM 的现价（价差基准） */
   ownPrice?: number | null;
@@ -358,11 +337,6 @@ function CompRomRow(props: {
   diffDir?: DiffDir;
   /** 预警列（追补⑨）：父层按系列组装好的状态单元格 */
   alertCell?: ReactNode;
-  /** 周期最低价 + 下标（P0②，aggregate extremes 同源） */
-  minV?: number | null;
-  minIdx?: number;
-  /** weekId → 采集锚周三日期 MM-DD */
-  dateOf: (weekId: string) => string;
 }) {
   const dir = props.diffDir ?? 'comp';
   const discount = props.price != null && props.rrp != null && props.rrp > 0 ? props.price / props.rrp - 1 : null;
@@ -416,10 +390,7 @@ function CompRomRow(props: {
           <span className="tnum" style={{ fontSize: 12, color: color.hairlineStrong }}>—</span>
         )}
       </Td>
-      <Td>{props.alertCell}</Td>
-      <Td last justify="end">
-        <MinCell points={props.points} minV={props.minV ?? null} minIdx={props.minIdx ?? -1} currency={props.currency} dateOf={props.dateOf} />
-      </Td>
+      <Td last>{props.alertCell}</Td>
     </div>
   );
 }
@@ -458,13 +429,18 @@ export default function Overview() {
   const [benchSel, setBenchSel] = useState<{ modelId: string; romram: string } | null>(null);
   // 第五十二轮追补：价差方向（竞品比我司 / 我司比竞品），每 ROM 框独立，默认竞品比我司
   const [diffDirs, setDiffDirs] = useState<Record<string, DiffDir>>({});
-  // 追补三：weekId → 采集锚周三日期（MM-DD）——最低价标记由 Wxx 改日期
-  const dateOf = useMemo(() => {
-    const m = new Map(dimTime.map((w) => [w.week_id, w.week_wed_date.slice(5)]));
-    return (weekId: string): string => m.get(weekId) ?? weekId;
-  }, []);
   const toggleDiffDir = (key: string): void =>
     setDiffDirs((prev) => ({ ...prev, [key]: (prev[key] ?? 'comp') === 'comp' ? 'own' : 'comp' }));
+  // 第六十七轮：竞品区折叠（产品级）——一国一产业全选时先看我司全局，竞品按需展开；
+  // 集合语义 = 已收起的型号；空集 = 全部展开（默认，兼容原视图）。
+  const [collapsedModels, setCollapsedModels] = useState<Set<string>>(new Set());
+  const toggleModelComps = (modelId: string): void =>
+    setCollapsedModels((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
   const benchModel = useMemo(
     () => (benchSel ? bands.flatMap((b) => b.models).find((m) => m.modelId === benchSel.modelId) ?? null : null),
     [bands, benchSel],
@@ -513,6 +489,16 @@ export default function Overview() {
         .filter((x) => x.ownModels.length > 0),
     [bands, modelRomFilter, selTiers],
   );
+
+  /** 可见型号 id（随筛选）——全局折叠按钮的判定与批量目标 */
+  const visibleModelIds = useMemo(
+    () => visibleBands.flatMap((x) => x.ownModels.map((m) => m.modelId)),
+    [visibleBands],
+  );
+  const allExpanded = visibleModelIds.length > 0 && visibleModelIds.every((id) => !collapsedModels.has(id));
+  const allCollapsed = visibleModelIds.length > 0 && visibleModelIds.every((id) => collapsedModels.has(id));
+  const setAllModelComps = (collapsed: boolean): void =>
+    setCollapsedModels(collapsed ? new Set(visibleModelIds) : new Set());
 
   const asOf = useMemo(() => {
     let w = '';
@@ -594,6 +580,36 @@ export default function Overview() {
                 平台 {platformLabel} · 在售型号 {counts.all}（我司 {counts.own} / 竞品 {counts.comp}）
               </span>
               <span style={{ flex: 1 }} />
+              {/* 竞品全局开关（第六十七轮）：全选场景一键展开/收起所有型号的对标竞品区；
+                  双按钮按实际状态禁用，混合态两个动作都可用 */}
+              <button
+                type="button"
+                disabled={allExpanded}
+                title="展开所有产品的对标竞品"
+                onClick={() => setAllModelComps(false)}
+                style={{
+                  height: 24, padding: '0 10px', borderRadius: radius.control,
+                  border: `1px solid ${allExpanded ? color.hairline : color.hairlineStrong}`,
+                  background: color.canvas, color: allExpanded ? color.hairlineStrong : color.body,
+                  font: 'inherit', fontSize: 12, cursor: allExpanded ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                展开全部竞品
+              </button>
+              <button
+                type="button"
+                disabled={allCollapsed}
+                title="收起所有产品的对标竞品，只看我司价格"
+                onClick={() => setAllModelComps(true)}
+                style={{
+                  height: 24, padding: '0 10px', borderRadius: radius.control,
+                  border: `1px solid ${allCollapsed ? color.hairline : color.hairlineStrong}`,
+                  background: color.canvas, color: allCollapsed ? color.hairlineStrong : color.body,
+                  font: 'inherit', fontSize: 12, cursor: allCollapsed ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                收起全部竞品
+              </button>
               <Segmented
                 size="small"
                 value={currency}
@@ -662,10 +678,19 @@ export default function Overview() {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
-                    {ownModels.map((m) => (
+                    {ownModels.map((m) => {
+                      const visRoms = new Set(m.rows.map((r) => norm(r.romram)));
+                      const compsCollapsed = collapsedModels.has(m.modelId);
+                      // 型号头开关计数 = 映射到可见 ROM 的去重竞品型号数（与带头竞品数同口径）
+                      const modelCompCount = new Set(
+                        m.comps
+                          .filter((c) => c.ownRomrams.some((x) => visRoms.has(norm(x))))
+                          .map((c) => c.skuId.split('__')[0]),
+                      ).size;
+                      return (
                       <div key={m.modelId} style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
                         {/* 型号头行：ROM 格子的归属（品牌图标（华为=花瓣标，第五十四轮追补用户指定）
-                            +名称/生命周期/快捷按钮；第四十五轮名称带品牌名）。
+                            +名称/生命周期/竞品折叠开关；第四十五轮名称带品牌名）。
                             data-model-id = 看板「← 返回总览」的滚动定位锚点（追补⑧） */}
                         <div data-model-id={m.modelId} style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: '0 2px' }}>
                           <BrandGlyph brand={m.brand} size={16} />
@@ -679,6 +704,24 @@ export default function Overview() {
                             <span className="tnum" style={{ fontSize: 11, color: m.lifecyclePct <= -0.05 ? color.error : color.body }}>
                               生命周期 {m.lifecyclePct > 0 ? '+' : ''}
                               {(m.lifecyclePct * 100).toFixed(1)}%
+                            </span>
+                          )}
+                          {modelCompCount > 0 && (
+                            <span
+                              role="button"
+                              title={compsCollapsed ? '展开该产品的对标竞品' : '收起该产品的对标竞品'}
+                              onClick={() => toggleModelComps(m.modelId)}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '1px 8px', fontSize: 11, fontWeight: 600,
+                                color: compsCollapsed ? color.body : selectSoftInk,
+                                background: compsCollapsed ? color.canvas : selectSoft,
+                                border: `1px solid ${compsCollapsed ? color.hairlineStrong : 'rgba(0, 112, 243, 0.40)'}`,
+                                borderRadius: radius.pill, cursor: 'pointer', whiteSpace: 'nowrap',
+                              }}
+                            >
+                              <DownOutlined style={{ fontSize: 9, transform: compsCollapsed ? 'rotate(-90deg)' : undefined, transition: 'transform 0.15s' }} />
+                              竞品 {modelCompCount}
                             </span>
                           )}
                           <span style={{ flex: 1 }} />
@@ -698,15 +741,14 @@ export default function Overview() {
                                 overflow: 'hidden',
                               }}
                             >
-                              {/* 表头行（第六十六轮）：产品｜折扣率｜折后价｜RRP｜价差｜预警｜周期最低 */}
+                              {/* 表头行（第六十七轮）：产品｜折扣率｜折后价｜RRP｜价差｜预警 */}
                               <div style={{ ...ROW_GRID, borderBottom: `1px solid ${color.hairline}` }}>
                                 <Th first>产品</Th>
                                 <Th justify="end">折扣率</Th>
                                 <Th justify="end">折后价</Th>
                                 <Th justify="end">RRP</Th>
                                 <Th>价差</Th>
-                                <Th>预警</Th>
-                                <Th last justify="end">周期最低</Th>
+                                <Th last>预警</Th>
                               </div>
                               <OwnRomRow
                                 row={r}
@@ -714,62 +756,60 @@ export default function Overview() {
                                 diffDir={dir}
                                 onToggleDiffDir={() => toggleDiffDir(dirKey)}
                                 canToggleDiff={romComps.length > 0}
-                                dateOf={dateOf}
                                 onCompare={() =>
-                                  // 追补⑧：下钻携带周期最低价周——看板窗口直接对准「低 $x · 发生周」
+                                  // 追补⑧：下钻携带周期最低价周——看板窗口直接对准最低价发生周
                                   openCompare(m, r.romram, r.minIdx >= 0 ? r.points[r.minIdx]?.weekId ?? null : null)
                                 }
                                 alertCell={alertCellFor(r.skuId)}
                                 onMultiPlatform={() => setMpSel({ model: m, romram: r.romram })}
                                 onConfigBench={() => setBenchSel({ modelId: m.modelId, romram: r.romram })}
                               />
-                              <div
-                                style={{
-                                  background: color.canvasSoft,
-                                  borderTop: `1px solid ${color.hairline}`,
-                                }}
-                              >
-                                {romComps.length === 0 ? (
-                                  <div style={{ padding: '8px 16px' }}>
-                                    <div
-                                      style={{
-                                        border: `1px dashed ${color.hairlineStrong}`,
-                                        borderRadius: radius.card,
-                                        padding: '8px 12px',
-                                        fontSize: 12,
-                                        color: color.mute,
-                                      }}
-                                    >
-                                      未配置对标竞品 — 点「＋添加竞品」添加
+                              {/* 竞品区（第六十七轮起可整体折叠；未配置对标的占位不受折叠影响，保留添加入口） */}
+                              {(!compsCollapsed || romComps.length === 0) && (
+                                <div
+                                  style={{
+                                    background: color.canvasSoft,
+                                    borderTop: `1px solid ${color.hairline}`,
+                                  }}
+                                >
+                                  {romComps.length === 0 ? (
+                                    <div style={{ padding: '8px 16px' }}>
+                                      <div
+                                        style={{
+                                          border: `1px dashed ${color.hairlineStrong}`,
+                                          borderRadius: radius.card,
+                                          padding: '8px 12px',
+                                          fontSize: 12,
+                                          color: color.mute,
+                                        }}
+                                      >
+                                        未配置对标竞品 — 点「＋添加竞品」添加
+                                      </div>
                                     </div>
-                                  </div>
-                                ) : (
-                                  romComps.map((c) => (
-                                    <CompRomRow
-                                      key={c.skuId}
-                                      skuId={c.skuId}
-                                      brand={c.brand}
-                                      name={c.modelName}
-                                      romram={c.romram}
-                                      price={c.price}
-                                      rrp={c.rrp}
-                                      points={c.points}
-                                      currency={currency}
-                                      ownPrice={r.price}
-                                      diffDir={dir}
-                                      dateOf={dateOf}
-                                      minV={c.minV}
-                                      minIdx={c.minIdx}
-                                      alertCell={alertCellFor(c.skuId)}
-                                    />
-                                  ))
-                                )}
-                              </div>
+                                  ) : (
+                                    romComps.map((c) => (
+                                      <CompRomRow
+                                        key={c.skuId}
+                                        brand={c.brand}
+                                        name={c.modelName}
+                                        romram={c.romram}
+                                        price={c.price}
+                                        rrp={c.rrp}
+                                        currency={currency}
+                                        ownPrice={r.price}
+                                        diffDir={dir}
+                                        alertCell={alertCellFor(c.skuId)}
+                                      />
+                                    ))
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               );
