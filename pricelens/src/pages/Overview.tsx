@@ -627,7 +627,6 @@ function ProductDetailMatrix(props: {
             <BrandGlyph brand={model.brand} size={17} />
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, lineHeight: '20px', fontWeight: 700 }}>{model.modelName}</span>
-              <span style={{ display: 'block', marginTop: 3, color: color.mute, fontSize: 10.5, lineHeight: '15px' }}>我司产品</span>
             </span>
           </button>
           <button type="button" aria-label={`查看 ${model.modelName} 全部型号的竞品对比`} title="查看全部型号对比" onClick={(e) => { e.stopPropagation(); onCompare(model); }} style={{ flexShrink: 0, minHeight: 30, padding: '4px 11px', border: '1px solid rgba(0,112,243,.55)', borderRadius: radius.pill, background: color.link, color: '#fff', font: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>全部型号对比</button>
@@ -656,7 +655,6 @@ function ProductDetailMatrix(props: {
           <BrandGlyph brand={group.brand} size={18} />
           <div style={{ minWidth: 0 }}>
             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 700 }}>{brandLabelOf(group.brand)} {group.modelName}</div>
-            <div style={{ marginTop: 3, color: color.mute, fontSize: 10.5 }}>{representative.primary ? '主竞品' : '已配置'}</div>
           </div>
         </div>
         <div style={{ marginTop: 10 }}>
@@ -694,7 +692,6 @@ function ProductDetailMatrix(props: {
           <BrandGlyph brand={group.brand} size={18} />
           <div style={{ minWidth: 0 }}>
             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 700 }}>{brandLabelOf(group.brand)} {group.modelName}</div>
-            <div style={{ marginTop: 3, color: color.mute, fontSize: 10.5 }}>{representative.primary ? '主竞品' : '已配置'}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 11 }}>
