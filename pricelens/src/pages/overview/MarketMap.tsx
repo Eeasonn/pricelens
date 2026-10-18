@@ -4,7 +4,8 @@ import type { OverviewCompRow, OverviewModel, OverviewTierBand } from '../../dat
 import { computeYAxis, perUsdOf, yPxOf, type Geom, type YScale } from '../../chart/PriceTrend/helpers';
 import { buildTickRows, buildTierBoxes } from '../../chart/PriceTrend/chartModel';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
-import { brandColorOf, color, radius, space } from '../../theme/tokens';
+import { brandColorOf, color, formatPrice, radius, space } from '../../theme/tokens';
+import { canonicalProductName, formatAsOfWeek, groupedVisibleCompetitors, latestAsOfWeek } from './visibleData';
 
 type VisibleBand = {
   band: OverviewTierBand;
@@ -19,8 +20,6 @@ export interface MarketMapProps {
   onOpenProduct: (model: OverviewModel) => void;
 }
 
-const normRom = (value: string): string => value.replace(/\s+/g, '');
-
 function modelPrice(model: OverviewModel): { min: number | null; max: number | null; mid: number | null } {
   const values = model.rows.map((row) => row.price).filter((value): value is number => value != null);
   if (values.length === 0) return { min: null, max: null, mid: null };
@@ -29,26 +28,9 @@ function modelPrice(model: OverviewModel): { min: number | null; max: number | n
   return { min, max, mid: (min + max) / 2 };
 }
 
-function visibleComps(model: OverviewModel): OverviewCompRow[] {
-  const visibleRoms = new Set(model.rows.map((row) => normRom(row.romram)));
-  return model.comps.filter((comp) => comp.ownRomrams.some((romram) => visibleRoms.has(normRom(romram))));
-}
 
-function compGroups(model: OverviewModel): OverviewCompRow[][] {
-  const groups = new Map<string, OverviewCompRow[]>();
-  for (const comp of visibleComps(model)) {
-    const modelId = comp.skuId.split('__')[0];
-    const rows = groups.get(modelId);
-    if (rows) rows.push(comp);
-    else groups.set(modelId, [comp]);
-  }
-  return [...groups.values()].map((rows) => [...rows].sort((a, b) => Number(b.primary) - Number(a.primary) || (b.price ?? -1) - (a.price ?? -1)));
-}
 
-function modelOnly(brand: string, modelName: string): string {
-  const label = brandLabelOf(brand);
-  return modelName.toLowerCase().startsWith(`${label.toLowerCase()} `) ? modelName.slice(label.length + 1) : modelName;
-}
+
 
 const DEFAULT_BRAND_ORDER = ['APPLE', 'SAMSUNG', 'HONOR', 'XIAOMI'];
 // 1280px 设计基线：USD 轴 140px + 产品列 250px 后，4 个 180px 品牌列可完整显示；更多列横向滚动。
@@ -85,7 +67,7 @@ function scaleForValues(values: number[], currency: CurrencyMode, rowCount: numb
 
 function CompetitorCell({ rows }: { rows: OverviewCompRow[] | undefined }) {
   if (!rows || rows.length === 0) return <span style={{ color: color.hairlineStrong, fontSize: 11 }}>—</span>;
-  const names = [...new Map(rows.map((row) => [modelOnly(row.brand, row.modelName), row.brand])).entries()];
+  const names = [...new Map(rows.map((row) => [canonicalProductName(row), row.brand])).entries()];
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
       {names.map(([name, brand]) => <span key={`${brand}-${name}`} title={name} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(brand), fontSize: 11.5, fontWeight: 600 }}><BrandDot brand={brand} size={6} />{name}</span>)}
@@ -99,12 +81,12 @@ function CompetitorCell({ rows }: { rows: OverviewCompRow[] | undefined }) {
  */
 export default function MarketMap({ bands, currency, asOf, onOpenProduct }: MarketMapProps) {
   const ownModels = bands.flatMap(({ ownModels: models }) => models)
-    .map((model) => ({ model, price: modelPrice(model), comps: compGroups(model) }))
-    .sort((a, b) => (b.price.mid ?? -1) - (a.price.mid ?? -1) || a.model.modelName.localeCompare(b.model.modelName));
-  const allValues = ownModels.flatMap(({ model, comps }) => [
-    ...model.rows.map((row) => row.price),
-    ...comps.flatMap((group) => group.map((row) => row.price)),
-  ]).filter((value): value is number => value != null);
+    .map((model) => ({ model, price: modelPrice(model), comps: groupedVisibleCompetitors(model) }))
+    .sort((a, b) => (b.price.mid ?? -1) - (a.price.mid ?? -1) || canonicalProductName(a.model).localeCompare(canonicalProductName(b.model)));
+  // Competitor columns are relational only. Keep them out of the scale so a
+  // benchmark price cannot move the own-product axis without being plotted.
+  const allValues = ownModels.flatMap(({ model }) => model.rows.map((row) => row.price))
+    .filter((value): value is number => value != null);
   const competitorCount = new Set(ownModels.flatMap(({ comps }) => comps.map((group) => group[0]?.skuId.split('__')[0]).filter((value): value is string => !!value))).size;
   const scale = scaleForValues(allValues, currency, ownModels.length);
   const plotTop = 40;
@@ -153,7 +135,7 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
     <section aria-label="市场摆位概要" style={{ marginTop: space.md, padding: space.md, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>市场摆位概要</h2>
-        <span style={{ fontSize: 11, color: color.mute }}>数据截至 {asOf} · 当前价</span>
+        <span style={{ fontSize: 11, color: color.mute }}>分析范围：全分析期 · 查看窗口：最新有值周 {asOf} · 周度采样 · 纵轴 = 我司产品当前价（{currency === 'usd' ? 'USD' : '本币'}）</span>
         <span style={{ flex: 1 }} />
         <span className="tnum" style={{ fontSize: 12, color: color.body }}>我司产品 <strong style={{ color: color.ink, fontSize: 16 }}>{ownModels.length}</strong></span>
         <span style={{ color: color.hairlineStrong }}>·</span>
@@ -177,13 +159,14 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
             {label}
           </button>
         ))}
-        <span style={{ color: color.mute, fontSize: 10.5 }}>每屏最多 {MAX_VISIBLE_BRAND_COLUMNS} 个品牌列，更多品牌可横向滚动</span>
+        <span style={{ color: color.mute, fontSize: 10.5 }}>竞品列仅作对标关系，不参与纵轴刻度 · 每屏最多 {MAX_VISIBLE_BRAND_COLUMNS} 个品牌列，更多品牌可横向滚动</span>
       </div>
 
       <div style={{ marginTop: 10, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
         <div style={{ position: 'relative', minWidth: minMapWidth, height: totalHeight, background: color.canvas }}>
           {/* 与价格看板同口径的左侧 Y 轴：美元显示档位带，本币只显示刻度。 */}
-          <div style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', borderRight: `1px solid ${color.hairlineStrong}`, background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.04)' }}>
+          <div aria-label={`我司产品当前价（${currency === 'usd' ? 'USD' : '本币'}）`} style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', borderRight: `1px solid ${color.hairlineStrong}`, background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.04)' }}>
+            <span style={{ position: 'absolute', left: 8, top: 8, fontSize: 10, lineHeight: '12px', color: color.mute, whiteSpace: 'nowrap' }}>我司当前价</span>
             {tierBoxes.map((box, index) => <div key={`${box.label}-${index}`} style={{ position: 'absolute', left: 0, top: box.top, width: 64, height: box.h, boxSizing: 'border-box', border: box.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`, background: box.empty ? 'transparent' : index % 2 === 0 ? color.canvasSoft2 : color.canvasSoft, display: 'grid', placeItems: 'center', overflow: 'hidden', pointerEvents: 'none' }}>{box.h >= 16 && <span style={{ fontSize: 10, lineHeight: '12px', color: box.empty ? color.mute : color.body, whiteSpace: 'nowrap' }}>{box.label}</span>}</div>)}
             {ticks.map((tick) => <span key={tick.v} className="tnum" style={{ position: 'absolute', right: 10, top: tick.y - 8, fontSize: 12, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }}>{tick.text}</span>)}
           </div>
@@ -197,9 +180,14 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
             {ownModels.map(({ model, price, comps }) => {
               return (
                 <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: 36, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', zIndex: 1 }}>
-                  <button type="button" onClick={() => onOpenProduct(model)} title={`展开 ${model.modelName} 的型号与配置明细`} style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, height: '100%', padding: '4px 10px 4px 14px', border: 0, borderRight: `1px solid ${color.hairline}`, background: color.canvas, textAlign: 'left', font: 'inherit', cursor: 'pointer', boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>
+                  <button type="button" onClick={() => onOpenProduct(model)} title={`展开 ${canonicalProductName(model)} 的型号与配置明细`} style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, height: '100%', padding: '4px 10px 4px 14px', border: 0, borderRight: `1px solid ${color.hairline}`, background: color.canvas, textAlign: 'left', font: 'inherit', cursor: 'pointer', boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>
                     <BrandDot brand={model.brand} size={9} />
-                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(model.brand), fontSize: 13, fontWeight: 650 }}>{model.modelName}</span>
+                    <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(model.brand), fontSize: 13, fontWeight: 650 }}>{canonicalProductName(model)}</span>
+                      <span className="tnum" style={{ color: color.body, fontSize: 10.5, lineHeight: '13px', whiteSpace: 'nowrap' }}>
+                        {price.min == null ? '暂无当前价' : price.min === price.max ? formatPrice(price.min, currency) : `${formatPrice(price.min, currency)} – ${formatPrice(price.max, currency)}`} · 截至 {formatAsOfWeek(latestAsOfWeek(model))}
+                      </span>
+                    </span>
                   </button>
                   {brandColumns.map((brand, index) => {
                     const group = comps.filter((rows) => brandKeyOf(rows[0]?.brand ?? '') === brand.key).flat();

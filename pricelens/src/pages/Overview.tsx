@@ -20,7 +20,7 @@
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ConfigProvider, Dropdown, Select } from 'antd';
-import { DownOutlined, MoreOutlined, SwapOutlined } from '@ant-design/icons';
+import { MoreOutlined, SwapOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
 import { useOverviewView } from '../state/OverviewViewContext';
@@ -43,6 +43,7 @@ import PageHeader from '../components/PageHeader';
 import BenchConfigModal from './overview/BenchConfigModal';
 import MultiPlatformModal from './overview/MultiPlatformModal';
 import MarketMap from './overview/MarketMap';
+import { canonicalProductName, formatAsOfWeek, groupedVisibleCompetitors, latestAsOfWeek, selectVisibleModel, visibleCompetitors } from './overview/visibleData';
 import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import BrandGlyph from '../components/BrandGlyph';
 import { AlertBell, alertDigest, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
@@ -180,171 +181,6 @@ function OverviewAlertCell({ items, subscribed, currency, bell, onOpen }: {
       {bell}
       {status}
     </span>
-  );
-}
-
-/** 产品条（第七十轮降噪改版）：每产品一条，收起态 = 只看它——箭头+品牌图标+产品名+
- *  生命周期+N 个配置+竞品 N（展开态换成竞品折叠开关）⋯⋯右侧价区间｜预警｜竞品对比｜⋯。
- *  点击整条 = 展开/收起配置明细；条内按钮 stopPropagation 不触发折叠；
- *  data-model-id = 看板「← 返回总览」的滚动定位锚点（追补⑧）。 */
-function ProductStrip(props: {
-  model: OverviewModel;
-  expanded: boolean;
-  romCount: number;
-  /** 映射到可见 ROM 的去重竞品型号数 */
-  compCount: number;
-  compsExpanded: boolean;
-  priceMin: number | null;
-  priceMax: number | null;
-  currency: 'usd' | 'local';
-  alertChip?: ReactNode;
-  onToggle: () => void;
-  onToggleComps: () => void;
-  onCompare: () => void;
-  onMultiPlatform: () => void;
-  onConfigBench: () => void;
-}) {
-  const { model: m, expanded } = props;
-  return (
-    <div
-      data-model-id={m.modelId}
-      onClick={props.onToggle}
-      style={{
-        // 把产品信息和右侧动作拆成两个网格区。旧版所有节点都在同一条
-        // flex 行里，窄卡片会被不可收缩的产品名/生命周期撑出卡片，导致
-        // 竞品对比按钮和更多菜单跑到下一列（截图中的底部错位）。
-        display: 'grid',
-        gridTemplateColumns: 'auto auto minmax(0, 1fr) auto',
-        alignItems: 'center',
-        columnGap: 10,
-        padding: expanded ? '7px 2px' : '9px 10px',
-        border: expanded ? undefined : `1px solid ${color.hairline}`,
-        borderRadius: expanded ? undefined : radius.card,
-        background: expanded ? undefined : color.canvasSoft,
-        cursor: 'pointer',
-        minWidth: 0,
-      }}
-    >
-      <DownOutlined
-        style={{ fontSize: 10, color: color.mute, flexShrink: 0, transform: expanded ? undefined : 'rotate(-90deg)', transition: 'transform 0.15s' }}
-      />
-      <BrandGlyph brand={m.brand} size={16} />
-      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, minWidth: 0, overflow: 'hidden' }}>
-        <span
-          title={`${brandLabelOf(m.brand)} ${m.modelName}`}
-          style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 15, lineHeight: '20px', fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}
-        >
-          {m.modelName.toLowerCase().startsWith(brandLabelOf(m.brand).toLowerCase()) ? null : (
-            <span style={{ color: color.mute }}>{brandLabelOf(m.brand)} </span>
-          )}
-          {m.modelName}
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
-          {m.lifecyclePct != null && (
-            <span className="tnum" style={{ flexShrink: 0, fontSize: 11, color: m.lifecyclePct <= -0.05 ? color.error : color.body }}>
-              生命周期 {m.lifecyclePct > 0 ? '+' : ''}
-              {(m.lifecyclePct * 100).toFixed(1)}%
-            </span>
-          )}
-          <span style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>{props.romCount} 个配置</span>
-          {props.compCount > 0 &&
-            (expanded ? (
-            <button
-              type="button"
-              aria-expanded={props.compsExpanded}
-              title={props.compsExpanded ? '收起该产品的对标竞品' : '展开该产品的对标竞品'}
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onToggleComps();
-              }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                minHeight: 22, padding: '1px 8px', fontSize: 11, fontWeight: 600,
-                color: props.compsExpanded ? selectSoftInk : color.body,
-                background: props.compsExpanded ? selectSoft : color.canvas,
-                border: `1px solid ${props.compsExpanded ? 'rgba(0, 112, 243, 0.40)' : color.hairlineStrong}`,
-                borderRadius: radius.pill, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', flexShrink: 0,
-              }}
-            >
-              <DownOutlined style={{ fontSize: 9, transform: props.compsExpanded ? undefined : 'rotate(-90deg)', transition: 'transform 0.15s' }} />
-              {props.compsExpanded ? `收起竞品（${props.compCount}）` : `展开竞品（${props.compCount}）`}
-            </button>
-            ) : (
-              <span style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>竞品 {props.compCount}</span>
-            ))}
-        </span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, minWidth: 0, flexShrink: 0 }}>
-        {props.priceMin != null && (
-          <span
-            className="tnum"
-            title="该产品各配置的现价区间"
-            style={{ fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}
-          >
-            {props.priceMin === props.priceMax
-              ? formatPrice(props.priceMin, props.currency)
-              : `${formatPrice(props.priceMin, props.currency)} – ${formatPrice(props.priceMax, props.currency)}`}
-          </span>
-        )}
-        {props.alertChip}
-        <span
-          role="button"
-          title="进入价格看板：该产品全部配置与对标竞品走势"
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onCompare();
-          }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            fontSize: 12,
-            fontWeight: 600,
-            color: '#0070f3',
-            background: color.canvas,
-            border: '1px solid rgba(0, 112, 243, 0.55)',
-            borderRadius: radius.pill,
-            padding: '2px 10px',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          竞品对比
-        </span>
-        <Dropdown
-          trigger={['click']}
-          placement="bottomRight"
-          menu={{
-            items: [
-              { key: 'mp', label: '多平台对比' },
-              { key: 'bench', label: '添加竞品' },
-            ],
-            onClick: ({ key }) => (key === 'mp' ? props.onMultiPlatform() : props.onConfigBench()),
-          }}
-        >
-          <span
-            role="button"
-            title="更多动作：多平台对比 / 配置对标竞品"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 22,
-              height: 22,
-              color: color.mute,
-              borderRadius: radius.pill,
-              border: `1px solid ${color.hairline}`,
-              background: color.canvas,
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-          >
-            <MoreOutlined style={{ fontSize: 12 }} />
-          </span>
-        </Dropdown>
-      </div>
-    </div>
   );
 }
 
@@ -523,6 +359,7 @@ function ProductDetailMatrix(props: {
   productAlertChip: (model: OverviewModel) => ReactNode;
   diffDirs: Record<string, DiffDir>;
   toggleDiffDir: (key: string) => void;
+  asOf: string;
 }) {
   const {
     visibleBands,
@@ -538,6 +375,7 @@ function ProductDetailMatrix(props: {
     productAlertChip,
     diffDirs,
     toggleDiffDir,
+    asOf,
   } = props;
 
   type CompGroup = { modelId: string; brand: string; modelName: string; rows: OverviewCompRow[]; min: number | null; max: number | null };
@@ -553,27 +391,18 @@ function ProductDetailMatrix(props: {
     return min === max ? formatPrice(min, currency) : `${formatPrice(min, currency)} – ${formatPrice(max, currency)}`;
   };
 
-  const groupCompetitors = (model: OverviewModel): CompGroup[] => {
-    const groups = new Map<string, OverviewCompRow[]>();
-    for (const row of model.comps) {
-      const modelId = row.skuId.split('__')[0];
-      const rows = groups.get(modelId);
-      if (rows) rows.push(row);
-      else groups.set(modelId, [row]);
-    }
-    return [...groups.entries()].map(([modelId, rows]) => {
-      const sorted = [...rows].sort((a, b) => Number(b.primary) - Number(a.primary) || (b.price ?? -1) - (a.price ?? -1));
-      const prices = rows.map((r) => r.price).filter((p): p is number => p != null);
-      return {
-        modelId,
-        brand: sorted[0]?.brand ?? rows[0].brand,
-        modelName: sorted[0]?.modelName ?? rows[0].modelName,
-        rows: sorted,
-        min: prices.length ? Math.min(...prices) : null,
-        max: prices.length ? Math.max(...prices) : null,
-      };
-    });
-  };
+  const groupCompetitors = (model: OverviewModel): CompGroup[] => groupedVisibleCompetitors(model).map((rows) => {
+    const modelId = rows[0].skuId.split('__')[0];
+    const prices = rows.map((r) => r.price).filter((p): p is number => p != null);
+    return {
+      modelId,
+      brand: rows[0].brand,
+      modelName: rows[0].modelName,
+      rows,
+      min: prices.length ? Math.min(...prices) : null,
+      max: prices.length ? Math.max(...prices) : null,
+    };
+  });
 
   const ownPriceRange = (model: OverviewModel): string => priceRange(model.rows.map((r) => r.price));
 
@@ -612,12 +441,13 @@ function ProductDetailMatrix(props: {
           <BrandGlyph brand={model.brand} size={17} />
           <span style={{ minWidth: 0 }}>
             <span style={{ display: 'block', color: color.mute, fontSize: 10.5, lineHeight: '15px' }}>{series} 系列</span>
-            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, lineHeight: '19px', fontWeight: 700 }}>{model.modelName}</span>
+            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, lineHeight: '19px', fontWeight: 700 }}>{canonicalProductName(model)}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 5, color: color.mute, fontSize: 10.5, lineHeight: '15px' }}>
               <span>{model.rows.length} 个型号配置</span>
               {model.lifecyclePct != null && <span className="tnum" style={{ color: model.lifecyclePct <= -0.05 ? color.error : color.body }}>生命周期 {model.lifecyclePct > 0 ? '+' : ''}{(model.lifecyclePct * 100).toFixed(1)}%</span>}
-              <span style={{ color: selectSoftInk, fontWeight: 600 }}>{TIER_LABELS[model.tierCode]}</span>
+              <span style={{ color: selectSoftInk, fontWeight: 600 }}>{TIER_LABELS[model.tierCode]}（上市价）</span>
               <span className="tnum" style={{ color: color.body, fontWeight: 600 }}>{ownPriceRange(model)}</span>
+              <span style={{ color: latestAsOfWeek(model) != null && formatAsOfWeek(latestAsOfWeek(model)) !== asOf ? color.warning : color.mute }}>截至 {formatAsOfWeek(latestAsOfWeek(model))}{latestAsOfWeek(model) != null && formatAsOfWeek(latestAsOfWeek(model)) !== asOf ? ' · 数据较旧' : ''}</span>
             </span>
           </span>
         </button>
@@ -633,40 +463,6 @@ function ProductDetailMatrix(props: {
     );
   };
 
-  const ownProductCell = (model: OverviewModel, expanded: boolean, groups: CompGroup[]): ReactNode => (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        <BrandGlyph brand={model.brand} size={18} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, fontWeight: 700 }}>{brandLabelOf(model.brand)} {model.modelName}</div>
-          <div style={{ marginTop: 3, color: color.mute, fontSize: 10.5 }}>产品 · {model.rows.length} 个配置</div>
-        </div>
-      </div>
-      <div className="tnum" style={{ marginTop: 10, fontSize: 16, fontWeight: 700, color: color.ink }}>{ownPriceRange(model)}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
-        <span style={{ padding: '2px 7px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, fontSize: 10.5, fontWeight: 600 }}>{TIER_LABELS[model.tierCode]}</span>
-        <span style={{ color: color.mute, fontSize: 10.5 }}>最新有值周</span>
-        {productAlertChip(model)}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 12 }}>
-        <button type="button" onClick={(e) => { e.stopPropagation(); onCompare(model); }} style={{ minHeight: 24, padding: '2px 9px', border: '1px solid rgba(0,112,243,.45)', borderRadius: radius.pill, background: color.canvas, color: color.link, font: 'inherit', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>竞品对比</button>
-        <Dropdown
-          trigger={['click']}
-          placement="bottomRight"
-          menu={{ items: [{ key: 'mp', label: '多平台对比' }, { key: 'bench', label: '添加竞品' }], onClick: ({ key }) => key === 'mp' ? onMultiPlatform(model) : onConfigBench(model) }}
-        >
-          <button type="button" onClick={(e) => e.stopPropagation()} style={{ width: 24, height: 24, padding: 0, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.mute, cursor: 'pointer' }} title="更多动作"><MoreOutlined style={{ fontSize: 12 }} /></button>
-        </Dropdown>
-        {groups.length > 2 && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); setCompExpanded(model.modelId, !compStatus.isExpanded(model.modelId)); }} style={{ minHeight: 24, padding: '2px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: compStatus.isExpanded(model.modelId) ? selectSoft : color.canvas, color: compStatus.isExpanded(model.modelId) ? selectSoftInk : color.body, font: 'inherit', fontSize: 10.5, cursor: 'pointer' }}>
-            {compStatus.isExpanded(model.modelId) ? '收起其他竞品' : `其他竞品 ${groups.length - 2}`}
-          </button>
-        )}
-      </div>
-      {!expanded && <div style={{ marginTop: 10, color: color.mute, fontSize: 10.5 }}>点击左侧产品节点展开型号与配置</div>}
-    </div>
-  );
-
   const competitorCell = (group: CompGroup | undefined, model: OverviewModel): ReactNode => {
     if (!group) return <span style={{ color: color.hairlineStrong, fontSize: 12 }}>未配置竞品</span>;
     const representative = group.rows[0];
@@ -677,7 +473,7 @@ function ProductDetailMatrix(props: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <BrandGlyph brand={group.brand} size={18} />
           <div style={{ minWidth: 0 }}>
-            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 700 }}>{brandLabelOf(group.brand)} {group.modelName}</div>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 700 }}>{canonicalProductName({ brand: group.brand, modelName: group.modelName })}</div>
             <div style={{ marginTop: 3, color: color.mute, fontSize: 10.5 }}>{group.rows.length} 个配置 · {representative.primary ? '主竞品' : '已配置'}</div>
           </div>
         </div>
@@ -769,11 +565,11 @@ function ProductDetailMatrix(props: {
       <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
         <div style={{ minWidth: 980, display: 'grid', gridTemplateColumns: '340px repeat(2, minmax(300px, 1fr))' }}>
           <div style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 5, background: '#fbfcfd', padding: '12px 14px' }}><span style={{ fontSize: 11, color: color.mute }}>我司主列 · 固定</span><strong style={{ display: 'block', marginTop: 4, fontSize: 13 }}>产品（我司在售树）</strong><span style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: color.mute }}>系列 → 产品 → 配置型号 · 档位 · 当前价</span></div>
-          {['竞品 1', '竞品 2'].map((title) => <div key={title} style={{ ...cellBase, background: '#fbfcfd', padding: '12px 14px' }}><span style={{ fontSize: 11, color: color.mute }}>按对标关系排序</span><strong style={{ display: 'block', marginTop: 4, fontSize: 14 }}>{title}</strong><span style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: color.mute }}>代表竞品 · 价差 · RRP · 预警</span></div>)}
+          {['主竞品', '次竞品'].map((title) => <div key={title} style={{ ...cellBase, background: '#fbfcfd', padding: '12px 14px' }}><span style={{ fontSize: 11, color: color.mute }}>按对标关系排序</span><strong style={{ display: 'block', marginTop: 4, fontSize: 14 }}>{title}</strong><span style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: color.mute }}>当前价 · 价差 · RRP · 预警</span></div>)}
 
           {visibleBands.map(({ band, ownModels }) => (
             <Fragment key={band.tierCode}>
-              <div style={{ gridColumn: '1 / -1', padding: '13px 14px 8px', borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}><span style={{ fontSize: 13, fontWeight: 700, color: color.ink }}>{TIER_LABELS[band.tierCode]}</span><span style={{ marginLeft: 10, color: color.mute, fontSize: 11 }}>我司 {ownModels.length} · 点击产品节点查看型号配置</span></div>
+              <div style={{ gridColumn: '1 / -1', padding: '13px 14px 8px', borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}><span style={{ fontSize: 13, fontWeight: 700, color: color.ink }}>{TIER_LABELS[band.tierCode]}（上市价档位）</span><span style={{ marginLeft: 10, color: color.mute, fontSize: 11 }}>我司 {ownModels.length} · 点击产品节点查看型号配置</span></div>
               {ownModels.map((model) => {
                 const expanded = prodStatus.isExpanded(model.modelId);
                 const groups = groupCompetitors(model);
@@ -858,7 +654,7 @@ export default function Overview() {
   );
 
   const tierOptions = useMemo(
-    () => bands.map((b) => ({ value: b.tierCode, label: TIER_LABELS[b.tierCode] })),
+    () => bands.map((b) => ({ value: b.tierCode, label: `上市价档位 · ${TIER_LABELS[b.tierCode]}` })),
     [bands],
   );
 
@@ -883,12 +679,8 @@ export default function Overview() {
           band: b,
           ownModels: b.models
             .filter((m) => m.isOwn && (modelRomFilter === null || modelRomFilter.has(m.modelId)))
-            .map((m) =>
-              modelRomFilter !== null && modelRomFilter.has(m.modelId)
-                ? { ...m, rows: m.rows.filter((r) => modelRomFilter.get(m.modelId)!.has(norm(r.romram))) }
-                : m,
-            )
-            .filter((m) => m.rows.length > 0),
+            .map((m) => selectVisibleModel(m, modelRomFilter?.get(m.modelId) ?? null))
+            .filter((m): m is OverviewModel => m !== null),
         }))
         .filter((x) => x.ownModels.length > 0),
     [bands, modelRomFilter, selTiers],
@@ -908,9 +700,9 @@ export default function Overview() {
 
   const asOf = useMemo(() => {
     let w = '';
-    for (const b of bands) for (const m of b.models) for (const r of m.rows) if (r.asOfWeek > w) w = r.asOfWeek;
+    for (const b of visibleBands) for (const m of b.ownModels) for (const r of m.rows) if (r.asOfWeek > w) w = r.asOfWeek;
     return w === '' ? '—' : `${w.slice(0, 4)}-W${w.slice(4)}`;
-  }, [bands]);
+  }, [visibleBands]);
   // 口径条平台文案（第五十一轮）：随筛选行平台选择联动（与看板共享 state.platform）
   const platformLabel = useMemo(() => {
     const sel = state.platform;
@@ -918,11 +710,12 @@ export default function Overview() {
     const shopNameById = new Map(dimChannel.map((c) => [c.shop_id, c.shop_name]));
     return [...sel.platforms, ...sel.shopIds.map((id) => shopNameById.get(id) ?? id)].join('、');
   }, [state.platform]);
+  const fullOwnCount = useMemo(() => bands.reduce((total, band) => total + band.models.filter((model) => model.isOwn).length, 0), [bands]);
   const counts = useMemo(() => {
-    const ms = bands.flatMap((b) => b.models);
-    const ownModels = ms.filter((m) => m.isOwn);
-    return { all: ms.length, own: ownModels.length, comp: ms.length - ownModels.length };
-  }, [bands]);
+    const ownModels = visibleBands.flatMap((band) => band.ownModels);
+    const competitorIds = new Set(ownModels.flatMap((model) => visibleCompetitors(model).map((comp) => comp.skuId.split('__')[0])));
+    return { all: ownModels.length + competitorIds.size, own: ownModels.length, comp: competitorIds.size };
+  }, [visibleBands]);
 
   /** 粗粒度市场图 → 细粒度明细：先展开目标产品，再把用户带到对应产品条。 */
   const focusProduct = (model: OverviewModel): void => {
@@ -1024,9 +817,9 @@ export default function Overview() {
       onScroll={(event) => {
         scrollTop.current = event.currentTarget.scrollTop;
       }}
-      style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }}
+      style={{ height: '100%', overflowX: 'hidden', overflowY: 'auto', background: color.canvasSoft }}
     >
-      <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100%', minWidth: 0, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader title="国家总览" />
 
@@ -1076,11 +869,11 @@ export default function Overview() {
             <div style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap' }}>
               <span style={{ fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>{country} · {industry}竞品矩阵</span>
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-                平台 {platformLabel} · 在售型号 {counts.all}（我司 {counts.own} / 竞品 {counts.comp}）
+                平台 {platformLabel} · 分析范围：全分析期 · 查看窗口：最新有值周 {asOf} · 周度采样 · 在售型号 {counts.all}（我司 {counts.own} / 竞品 {counts.comp}）
               </span>
               {hasViewFilter && (
                 <span style={{ fontSize: fontSize.caption, color: selectSoftInk }}>
-                  当前显示我司 {visibleOwnCount} / 全量 {counts.own}
+                  当前显示我司 {visibleOwnCount} / 全量 {fullOwnCount}
                 </span>
               )}
               <span style={{ flex: 1 }} />
@@ -1103,38 +896,42 @@ export default function Overview() {
               </button>
             </div>
 
-            <MarketMap
-              bands={visibleBands}
-              currency={currency}
-              asOf={asOf}
-              onOpenProduct={focusProduct}
-            />
-
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: space.xl, paddingBottom: space.sm }}>
-              <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>型号与配置明细</h2>
-              <span style={{ fontSize: 11, color: color.mute }}>左侧固定产品树，右侧按产品 / 竞品列对齐</span>
-            </div>
-
-            <ProductDetailMatrix
-              visibleBands={visibleBands}
-              currency={currency}
-              prodStatus={prodStatus}
-              compStatus={compStatus}
-              setProductExpanded={setProductExpanded}
-              setCompExpanded={setCompExpanded}
-              onCompare={(model) => openCompare(model)}
-              onMultiPlatform={(model) => setMpSel({ model, romram: null })}
-              onConfigBench={(model) => setBenchSel({ modelId: model.modelId, romram: null })}
-              alertCellFor={alertCellFor}
-              productAlertChip={productAlertChip}
-              diffDirs={diffDirs}
-              toggleDiffDir={toggleDiffDir}
-            />
-
-            {visibleBands.length === 0 && (
-              <div style={{ padding: `${space.xl}px 0`, textAlign: 'center', fontSize: fontSize.bodySm, color: color.mute }}>
-                当前筛选无匹配产品 — 请调整产品或价格档位
+            {visibleBands.length === 0 ? (
+              <div role="status" style={{ marginTop: space.md, padding: `${space.xl}px ${space.md}px`, textAlign: 'center', border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.card, background: color.canvasSoft, color: color.mute }}>
+                <strong style={{ display: 'block', color: color.body, fontSize: 14 }}>当前视图没有可显示的我司产品</strong>
+                <span style={{ display: 'block', marginTop: 6, fontSize: fontSize.bodySm }}>筛选范围：{platformLabel} · 分析范围：全分析期 · 请调整我司产品或上市价档位筛选。</span>
               </div>
+            ) : (
+              <>
+                <MarketMap
+                  bands={visibleBands}
+                  currency={currency}
+                  asOf={asOf}
+                  onOpenProduct={focusProduct}
+                />
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: space.xl, paddingBottom: space.sm }}>
+                  <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>型号与配置明细</h2>
+                  <span style={{ fontSize: 11, color: color.mute }}>左侧固定产品树，右侧按产品 / 竞品列对齐</span>
+                </div>
+
+                <ProductDetailMatrix
+                  visibleBands={visibleBands}
+                  currency={currency}
+                  asOf={asOf}
+                  prodStatus={prodStatus}
+                  compStatus={compStatus}
+                  setProductExpanded={setProductExpanded}
+                  setCompExpanded={setCompExpanded}
+                  onCompare={(model) => openCompare(model)}
+                  onMultiPlatform={(model) => setMpSel({ model, romram: null })}
+                  onConfigBench={(model) => setBenchSel({ modelId: model.modelId, romram: null })}
+                  alertCellFor={alertCellFor}
+                  productAlertChip={productAlertChip}
+                  diffDirs={diffDirs}
+                  toggleDiffDir={toggleDiffDir}
+                />
+              </>
             )}
           </section>
         </main>
