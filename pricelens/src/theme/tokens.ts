@@ -28,6 +28,20 @@ export const brandColor: Record<string, string> = {
   XIAOMI: '#ff6900',
 };
 
+/**
+ * 品牌色统一入口：已登记品牌沿用价格看板的固定颜色；新国家/产业出现新品牌时，
+ * 按品牌名稳定落到扩展色板，避免回退成难以区分的黑色。
+ */
+const BRAND_EXTENDED_PALETTE = ['#7c3aed', '#0891b2', '#15803d', '#be123c', '#a16207', '#4f46e5', '#0f766e', '#c026d3'];
+export function brandColorOf(brand: string): string {
+  const key = brand.trim().toUpperCase();
+  const exact = brandColor[brand] ?? brandColor[key];
+  if (exact) return exact;
+  let hash = 0;
+  for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return BRAND_EXTENDED_PALETTE[hash % BRAND_EXTENDED_PALETTE.length];
+}
+
 export const font = {
   family: 'Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
   mono: 'Geist Mono, ui-monospace, monospace',
