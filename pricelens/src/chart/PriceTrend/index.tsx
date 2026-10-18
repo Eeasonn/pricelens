@@ -29,6 +29,7 @@ import { filterBarTheme } from '../../components/FilterBar';
 import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
+import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries, lowestPriceColorSku } from '../../dataModel/aggregate';
 import { getEffectiveBenchmark } from '../../state/configStore';
 import { dimPromo, dimProduct } from '../../data';
@@ -267,7 +268,7 @@ export default function PriceTrend() {
   // 追补⑨：看板预警显示——时点页签铃铛黄点 = 该系列触发条数（与预警中心页同一引擎）
   const alertCounts = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const a of alerts) m[a.seriesKey] = (m[a.seriesKey] ?? 0) + 1;
+    for (const [key, items] of groupAlertsBySeries(latestAlerts(alerts))) m[key] = items.length;
     return m;
   }, [alerts]);
 

@@ -17,6 +17,7 @@ export interface MarketMapProps {
   asOf: string;
   /** 点击产品行，展开并滚到底下同一产品的明细。 */
   onOpenProduct: (model: OverviewModel) => void;
+  selectedModelId?: string | null;
 }
 
 const normRom = (value: string): string => value.replace(/\s+/g, '');
@@ -83,13 +84,13 @@ function scaleForValues(values: number[], currency: CurrencyMode, rowCount: numb
   return computeYAxis({ series, priceTypes: { discounted: true, rrp: false }, sliderScale: targetScale, allowBreak: false, perUsd: perUsdOf(currency) });
 }
 
-function CompetitorCell({ rows }: { rows: OverviewCompRow[] | undefined }) {
+function CompetitorCell({ rows, onClick }: { rows: OverviewCompRow[] | undefined; onClick?: () => void }) {
   if (!rows || rows.length === 0) return <span style={{ color: color.hairlineStrong, fontSize: 11 }}>—</span>;
   const names = [...new Map(rows.map((row) => [modelOnly(row.brand, row.modelName), row.brand])).entries()];
   return (
-    <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+    <button type="button" onClick={onClick} title="查看该产品的竞品明细" style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, width: '100%', padding: 0, border: 0, background: 'transparent', textAlign: 'left', cursor: onClick ? 'pointer' : 'default', font: 'inherit' }}>
       {names.map(([name, brand]) => <span key={`${brand}-${name}`} title={name} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(brand), fontSize: 11.5, fontWeight: 600 }}><BrandDot brand={brand} size={6} />{name}</span>)}
-    </span>
+    </button>
   );
 }
 
@@ -97,7 +98,7 @@ function CompetitorCell({ rows }: { rows: OverviewCompRow[] | undefined }) {
  * 市场摆位概要：复用价格看板的连续 Y 轴和刻度，产品纵向排列，竞品横向对齐。
  * 这里只回答“在售产品有哪些、每个产品对应哪些竞品”；折扣/RRP/价差/预警留在明细表。
  */
-export default function MarketMap({ bands, currency, asOf, onOpenProduct }: MarketMapProps) {
+export default function MarketMap({ bands, currency, asOf, onOpenProduct, selectedModelId }: MarketMapProps) {
   const ownModels = bands.flatMap(({ ownModels: models }) => models)
     .map((model) => ({ model, price: modelPrice(model), comps: compGroups(model) }))
     .sort((a, b) => (b.price.mid ?? -1) - (a.price.mid ?? -1) || a.model.modelName.localeCompare(b.model.modelName));
@@ -197,13 +198,13 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
             {ownModels.map(({ model, price, comps }) => {
               return (
                 <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: 36, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', zIndex: 1 }}>
-                  <button type="button" onClick={() => onOpenProduct(model)} title={`展开 ${model.modelName} 的型号与配置明细`} style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, height: '100%', padding: '4px 10px 4px 14px', border: 0, borderRight: `1px solid ${color.hairline}`, background: color.canvas, textAlign: 'left', font: 'inherit', cursor: 'pointer', boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>
+                  <button type="button" onClick={() => onOpenProduct(model)} title={`展开 ${model.modelName} 的型号与配置明细`} style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, height: '100%', padding: '4px 10px 4px 14px', border: 0, borderRight: `1px solid ${color.hairline}`, background: selectedModelId === model.modelId ? '#f0f6ff' : color.canvas, textAlign: 'left', font: 'inherit', cursor: 'pointer', boxShadow: selectedModelId === model.modelId ? 'inset 3px 0 0 #0070f3, 2px 0 3px rgba(0,0,0,.03)' : '2px 0 3px rgba(0,0,0,.03)' }}>
                     <BrandDot brand={model.brand} size={9} />
                     <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(model.brand), fontSize: 13, fontWeight: 650 }}>{model.modelName}</span>
                   </button>
                   {brandColumns.map((brand, index) => {
                     const group = comps.filter((rows) => brandKeyOf(rows[0]?.brand ?? '') === brand.key).flat();
-                    return <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, background: color.canvas }}><CompetitorCell rows={group.length ? group : undefined} /></div>;
+                    return <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, background: selectedModelId === model.modelId ? '#f7faff' : color.canvas }}><CompetitorCell rows={group.length ? group : undefined} onClick={group.length ? () => onOpenProduct(model) : undefined} /></div>;
                   })}
                 </div>
               );

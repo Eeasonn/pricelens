@@ -13,7 +13,7 @@ import { Badge, Button } from 'antd';
 import { BellFilled, BellOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import { usePage } from '../state/PageContext';
-import { buildAlerts, type AlertItem, type AlertType } from '../dataModel/alerts';
+import { buildAlerts, latestAlerts, type AlertItem, type AlertType } from '../dataModel/alerts';
 import { color, formatPrice, radius } from '../theme/tokens';
 
 /** 类型徽标：调价 = 蓝、折扣 = 琥珀、平台价差 = 紫、档位间距 = 玫红 */
@@ -94,8 +94,9 @@ export function useAlerts(): AlertItem[] {
 export function AlertNavButton() {
   const { go, page } = usePage();
   const alerts = useAlerts();
+  const latest = useMemo(() => latestAlerts(alerts), [alerts]);
   return (
-    <Badge count={alerts.length} size="small" overflowCount={99} title={`${alerts.length} 条预警触发`}>
+    <Badge count={latest.length} size="small" overflowCount={99} title={`${latest.length} 条最新预警${alerts.length > latest.length ? `，历史 ${alerts.length} 条` : ''}`}>
       <Button
         size="small"
         type={page === 'alerts' ? 'primary' : 'default'}
@@ -111,17 +112,17 @@ export function AlertNavButton() {
 }
 
 /** 统一订阅铃铛（预警中心重构）：未订阅 = 描边弱灰铃、已订阅 = 金色实心铃（antd gold-6），
- *  外挂 Badge 金点 = 该系列有触发（悬停显条数）。点击 = 切换该系列订阅，
+ *  外挂 Badge 金点 = 该系列当前最新态有触发（悬停显条数）。点击 = 切换该系列订阅，
  *  阈值与类型在预警中心调整。受控组件：订阅态与回调由调用方给（看板/总览/预警页同语义）。 */
 export function AlertBell({ subscribed, count = 0, size = 14, onToggle }: {
   subscribed: boolean;
-  /** 该系列当前触发条数（>0 挂金点） */
+  /** 该系列当前最新态触发条数（>0 挂金点；历史条数不传入） */
   count?: number;
   size?: number;
   onToggle: () => void;
 }) {
   return (
-    <Badge dot={count > 0} color="#faad14" title={`${count} 条预警触发 · 前往预警中心查看`}>
+    <Badge dot={count > 0} color="#faad14" title={`${count} 条最新预警 · 前往预警中心查看`}>
       <span
         role="button"
         title={

@@ -9,7 +9,16 @@
 export const navBus: {
   overviewScrollTo: string | null;
   dashboardFocusWeekId: string | null;
+  /** 总览进入预警中心时携带的产品/系列/事件焦点；预警页消费后清空。 */
+  alertsFocus: {
+    modelId: string;
+    modelName?: string;
+    seriesKey?: string;
+    type?: 'price-change' | 'promo' | 'platform-gap' | 'own-gap';
+    weekId?: string;
+  } | null;
 } = {
   overviewScrollTo: null,
   dashboardFocusWeekId: null,
+  alertsFocus: null,
 };

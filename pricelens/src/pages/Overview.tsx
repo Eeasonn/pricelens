@@ -14,12 +14,12 @@
 // （箭头+品牌+名称+生命周期+N 个配置+竞品 N ⋯⋯ 价区间｜预警｜竞品对比｜⋯），
 // 一屏看清「这个国家这个产业有哪些产品」；点击产品条才展开配置（ROM）明细，
 // 单产品可见时自动展开（视图态存 Provider，切页保留）。
-// ②我司 ROM 行内三按钮（添加竞品/竞品对比/多平台对比）撤除——竞品对比升产品条
-// 主按钮（全配置下钻），次要动作收进产品条右侧「⋯」菜单；未配置对标的虚线占位删除。
+// ②竞品对比入口分两层：产品条主按钮进入全部型号，ROM 行按钮进入单型号；
+// 添加竞品/多平台对比等次要动作收进产品条右侧「⋯」菜单；未配置对标的虚线占位删除。
 // 纯展示层：结构全部来自 buildOverviewMatrix（金测锚定），本文件不取数。
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ConfigProvider, Dropdown, Select } from 'antd';
+import { ConfigProvider, Dropdown, Select, Segmented } from 'antd';
 import { DownOutlined, MoreOutlined, SwapOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
@@ -46,7 +46,7 @@ import MarketMap from './overview/MarketMap';
 import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import BrandGlyph from '../components/BrandGlyph';
 import { AlertBell, alertDigest, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
-import { groupAlertsBySeries, latestByType, seriesKeyOfSku, type AlertItem } from '../dataModel/alerts';
+import { groupAlertsBySeries, latestAlerts, latestByType, seriesKeyOfSku, type AlertItem } from '../dataModel/alerts';
 import { diffPct } from '../chart/PriceTrend/helpers';
 import { DiscountBadge } from '../chart/PriceTrend/PriceSummary';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
@@ -64,8 +64,8 @@ function FilterCell(props: { label: string; width?: number; flex?: string; child
   );
 }
 
-// 第五十四轮：型号头行「竞品对比/多平台对比」按钮（原 ModelActions）删除——两动作
-// 下沉到我司 ROM 行行尾固定显示（竞品对比 = 该 ROM 下钻看板；多平台对比 = 弹窗预选该 ROM）
+// 第五十四轮：型号头行的动作收进产品条；产品条主按钮打开全部型号对比，
+// ROM 行固定保留单型号对比入口，多平台对比由产品条右侧菜单打开。
 
 /** 颜色次级菜单（第四十四轮建；第五十二轮追补三随「颜色列」删除而下线——用户定版
  *  总览行 = 看板页签式「品牌+产品名+RAMROM」一段式，颜色下钻留在看板/级联侧） */
@@ -135,7 +135,7 @@ function OverviewAlertCell({ items, subscribed, currency, bell, onOpen }: {
   subscribed: boolean;
   currency: 'usd' | 'local';
   bell?: ReactNode;
-  onOpen: () => void;
+  onOpen: (a: AlertItem) => void;
 }) {
   const latest = subscribed ? latestByType(items) : [];
   const lineTitle = (a: AlertItem): string =>
@@ -153,7 +153,7 @@ function OverviewAlertCell({ items, subscribed, currency, bell, onOpen }: {
     status = (
       <span
         role="button"
-        onClick={onOpen}
+        onClick={() => onOpen(latest[0])}
         style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, cursor: 'pointer', minWidth: 0 }}
       >
         {latest.map((a) => (
@@ -358,7 +358,7 @@ function ProductStrip(props: {
   );
 }
 
-/** 我司 ROM 行（第六十六轮改版；第七十轮行内三按钮撤除）：品牌+产品名由上方产品条表达，
+/** 我司 ROM 行（第六十六轮改版；第七十一轮保留单型号对比入口）：品牌+产品名由上方产品条表达，
  *  主列只放配置 ROMRAM（15/700，用户：要凸显的就是配置差异）；价格三列右对齐
  *  （折扣率徽章｜折后价 17/700｜RRP 无划线 12.5 mute）；「价差」列 = 方向切换器。 */
 function OwnRomRow(props: {
@@ -533,6 +533,7 @@ function ProductDetailMatrix(props: {
   productAlertChip: (model: OverviewModel) => ReactNode;
   diffDirs: Record<string, DiffDir>;
   toggleDiffDir: (key: string) => void;
+  selectedModelId?: string | null;
 }) {
   const {
     visibleBands,
@@ -548,6 +549,7 @@ function ProductDetailMatrix(props: {
     productAlertChip,
     diffDirs,
     toggleDiffDir,
+    selectedModelId,
   } = props;
 
   type CompGroup = { modelId: string; brand: string; modelName: string; rows: OverviewCompRow[]; min: number | null; max: number | null };
@@ -663,7 +665,7 @@ function ProductDetailMatrix(props: {
   };
 
   /** 首层只显示产品级摘要；型号、RRP、折扣和价差在展开产品后再出现。 */
-  const competitorSummaryCell = (group: CompGroup | undefined): ReactNode => {
+  const competitorSummaryCell = (group: CompGroup | undefined, model: OverviewModel): ReactNode => {
     if (!group) {
       return (
         <div style={{ minHeight: 58, display: 'flex', alignItems: 'center', color: color.hairlineStrong, fontSize: 12 }}>
@@ -672,6 +674,15 @@ function ProductDetailMatrix(props: {
       );
     }
     const representative = group.rows[0];
+    const ownPrices = model.rows.map((r) => r.price).filter((p): p is number => p != null);
+    const compPrices = group.rows.map((r) => r.price).filter((p): p is number => p != null);
+    const ownMin = ownPrices.length ? Math.min(...ownPrices) : null;
+    const ownMax = ownPrices.length ? Math.max(...ownPrices) : null;
+    const compMin = compPrices.length ? Math.min(...compPrices) : null;
+    const compMax = compPrices.length ? Math.max(...compPrices) : null;
+    const relation = ownMin == null || ownMax == null || compMin == null || compMax == null
+      ? null
+      : compMin >= ownMax ? '整体高于我司' : compMax <= ownMin ? '整体低于我司' : '价位重叠';
     return (
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -685,6 +696,7 @@ function ProductDetailMatrix(props: {
           <span style={{ color: color.mute, fontSize: 11.5 }}>价格区间</span>
           <span className="tnum" style={{ fontSize: 16, lineHeight: '22px', fontWeight: 750, color: color.ink }}>{priceRange(group.rows.map((r) => r.price))}</span>
         </div>
+        {relation && <div style={{ marginTop: 4, fontSize: 11, color: relation === '整体高于我司' ? color.error : relation === '整体低于我司' ? color.link : color.mute }}>{relation}</div>}
       </div>
     );
   };
@@ -755,26 +767,21 @@ function ProductDetailMatrix(props: {
     );
   };
 
-  return (
-    <div style={{ marginTop: space.md, border: `1px solid ${color.hairline}`, borderRadius: radius.card, overflow: 'hidden', background: color.canvas }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '15px 16px 12px', borderBottom: `1px solid ${color.hairline}` }}>
-        <span style={{ fontSize: 12, color: color.mute }}>左侧产品树</span>
-        <span style={{ fontSize: 11, color: color.mute }}>产品 → 型号配置 · 点击产品行展开</span>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: color.mute }}>价格区间 · {currency === 'usd' ? 'USD' : '本币'}</span>
-      </div>
+    return (
+      <div style={{ marginTop: space.md, border: `1px solid ${color.hairline}`, borderRadius: radius.card, overflow: 'hidden', background: color.canvas }}>
       <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
         <div style={{ minWidth: 980, display: 'grid', gridTemplateColumns: '340px repeat(2, minmax(300px, 1fr))' }}>
-          <div style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 5, background: '#fbfcfd', padding: '12px 14px' }}><span style={{ fontSize: 11, color: color.mute }}>我司主列 · 固定</span><strong style={{ display: 'block', marginTop: 4, fontSize: 13 }}>产品（我司在售）</strong><span style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: color.mute }}>产品 · 型号配置 · 价格区间</span></div>
-          {['竞品 1', '竞品 2'].map((title) => <div key={title} style={{ ...cellBase, background: '#fbfcfd', padding: '12px 14px' }}><span style={{ fontSize: 11, color: color.mute }}>按对标关系排序</span><strong style={{ display: 'block', marginTop: 4, fontSize: 14 }}>{title}</strong><span style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: color.mute }}>竞品产品 · 下钻后查看型号详情</span></div>)}
+          <div style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 5, background: '#fbfcfd', padding: '12px 14px' }}><strong style={{ fontSize: 14 }}>我司产品</strong><span style={{ display: 'block', marginTop: 3, fontSize: 11, color: color.mute }}>当前价区间</span></div>
+          {['竞品 1', '竞品 2'].map((title) => <div key={title} style={{ ...cellBase, background: '#fbfcfd', padding: '12px 14px' }}><strong style={{ fontSize: 14 }}>{title}</strong><span style={{ display: 'block', marginTop: 3, fontSize: 11, color: color.mute }}>当前价区间</span></div>)}
 
           {visibleBands.flatMap(({ ownModels }) => ownModels).map((model) => {
             const expanded = prodStatus.isExpanded(model.modelId);
             const groups = groupCompetitors(model);
             return (
               <Fragment key={model.modelId}>
-                <div data-model-id={model.modelId} style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 3, background: color.canvas, padding: '14px' }}>{modelNode(model, expanded, groups)}</div>
-                <div style={cellBase}>{competitorSummaryCell(groups[0])}</div>
-                <div style={{ ...cellBase, borderRight: 0 }}>{competitorSummaryCell(groups[1])}</div>
+                <div data-model-id={model.modelId} style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 3, background: selectedModelId === model.modelId ? '#f0f6ff' : color.canvas, padding: '14px', boxShadow: selectedModelId === model.modelId ? 'inset 3px 0 0 #0070f3' : undefined }}>{modelNode(model, expanded, groups)}</div>
+                <div style={{ ...cellBase, background: selectedModelId === model.modelId ? '#f7faff' : color.canvas }}>{competitorSummaryCell(groups[0], model)}</div>
+                <div style={{ ...cellBase, borderRight: 0, background: selectedModelId === model.modelId ? '#f7faff' : color.canvas }}>{competitorSummaryCell(groups[1], model)}</div>
                 {expanded && <>
                   {configRows(model, groups)}
                   {compStatus.isExpanded(model.modelId) && groups.length > 2 && <div style={{ gridColumn: '2 / -1', padding: '11px 14px 13px', borderBottom: `1px solid ${color.hairline}`, background: '#f8fafc' }}><div style={{ marginBottom: 7, color: color.mute, fontSize: 10.5 }}>其他已配置竞品</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(230px, 1fr))', gap: 8 }}>{groups.slice(2).map((group) => <div key={group.modelId} style={{ padding: '9px 10px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas }}>{competitorCell(group, model)}</div>)}</div></div>}
@@ -805,6 +812,12 @@ export default function Overview() {
   } = useOverviewView();
   const currency = state.currency;
   const rootRef = useRef<HTMLDivElement>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  type DetailFilter = 'all' | 'comp' | 'diff' | 'alert';
+  const [detailFilter, setDetailFilter] = useState<DetailFilter>('all');
+  const alerts = useAlerts();
+  const alertsBySeries = useMemo(() => groupAlertsBySeries(alerts), [alerts]);
+  const latestAlertsBySeries = useMemo(() => groupAlertsBySeries(latestAlerts(alerts)), [alerts]);
   // 第四十四轮：竞品映射吃「生效矩阵」（配置页/配置对标弹窗的手动快照优先，回退 auto），
   // CONFIG_CHANGED_EVENT → 重建（看板 autoMatch 开时竞品组同事件自动跟随）
   const [bench, setBench] = useState<DimBenchmark[]>(() => getEffectiveBenchmark());
@@ -885,6 +898,26 @@ export default function Overview() {
     [bands, modelRomFilter, selTiers],
   );
 
+  const hasVisibleComp = (model: OverviewModel): boolean => model.comps.some((c) => c.ownRomrams.some((rom) => model.rows.some((r) => norm(r.romram) === norm(rom))));
+  const hasVisibleDiff = (model: OverviewModel): boolean => model.rows.some((row) => {
+    const own = row.price;
+    if (own == null) return false;
+    return model.comps.some((comp) => {
+      if (comp.price == null || !comp.ownRomrams.some((rom) => norm(rom) === norm(row.romram))) return false;
+      return Math.abs(comp.price - own) >= 0.01;
+    });
+  });
+  const hasVisibleAlert = (model: OverviewModel): boolean => model.rows.some((row) => {
+    const key = seriesKeyOfSku(row.skuId);
+    return (latestAlertsBySeries.get(key)?.length ?? 0) > 0;
+  });
+  const detailBands = useMemo(
+    () => visibleBands
+      .map((band) => ({ ...band, ownModels: band.ownModels.filter((model) => detailFilter === 'all' || (detailFilter === 'comp' ? hasVisibleComp(model) : detailFilter === 'diff' ? hasVisibleDiff(model) : hasVisibleAlert(model))) }))
+      .filter((band) => band.ownModels.length > 0),
+    [visibleBands, detailFilter, latestAlertsBySeries],
+  );
+
   /** 可见型号 id（随筛选）——全局折叠按钮的判定与批量目标 */
   const visibleModelIds = useMemo(
     () => visibleBands.flatMap((x) => x.ownModels.map((m) => m.modelId)),
@@ -917,6 +950,7 @@ export default function Overview() {
 
   /** 粗粒度市场图 → 细粒度明细：先展开目标产品，再把用户带到对应产品条。 */
   const focusProduct = (model: OverviewModel): void => {
+    setSelectedModelId(model.modelId);
     setProductExpanded(model.modelId, true);
     window.setTimeout(() => {
       const scroller = rootRef.current;
@@ -951,8 +985,6 @@ export default function Overview() {
 
   // 追补⑨：总览「预警」列——按系列聚合触发（预警中心重构：收编为 alerts.ts 纯函数，
   // own-gap 同时归属低价档与高价档，与预警页矩阵同源）。第五十五轮：铃铛统一进预警格
-  const alerts = useAlerts();
-  const alertsBySeries = useMemo(() => groupAlertsBySeries(alerts), [alerts]);
   const { country, industry } = scopeLabels(state);
   const alertCellFor = (skuId: string | undefined): ReactNode => {
     if (!skuId) return null;
@@ -965,22 +997,26 @@ export default function Overview() {
         bell={
           <AlertBell
             subscribed={state.alertSubs.includes(key)}
-            count={alertsBySeries.get(key)?.length ?? 0}
+            count={latestAlertsBySeries.get(key)?.length ?? 0}
             onToggle={() => actions.toggleAlertSub(key)}
           />
         }
-        onOpen={() => go('alerts')}
+        onOpen={(a) => {
+          navBus.alertsFocus = { modelId: key.split('__')[0], modelName: a.modelName, seriesKey: key, type: a.type, weekId: a.weekId };
+          go('alerts');
+        }}
       />
     );
   };
   // 第七十轮：产品条预警徽标 = 该产品已订阅系列的预警计数（无触发不占位，点击进预警中心）
   const productAlertChip = (m: OverviewModel): ReactNode => {
-    let count = 0;
+    const keys = new Set<string>();
     for (const r of m.rows) {
       const key = seriesKeyOfSku(r.skuId);
       if (!state.alertSubs.includes(key)) continue;
-      count += alertsBySeries.get(key)?.length ?? 0;
+      for (const item of latestAlertsBySeries.get(key) ?? []) keys.add(item.key);
     }
+    const count = keys.size;
     if (count === 0) return null;
     return (
       <span
@@ -988,6 +1024,7 @@ export default function Overview() {
         title="查看该产品的预警详情"
         onClick={(e) => {
           e.stopPropagation();
+          navBus.alertsFocus = { modelId: m.modelId, modelName: m.modelName };
           go('alerts');
         }}
         style={{
@@ -1099,15 +1136,27 @@ export default function Overview() {
               currency={currency}
               asOf={asOf}
               onOpenProduct={focusProduct}
+              selectedModelId={selectedModelId}
             />
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: space.xl, paddingBottom: space.sm }}>
               <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>型号与配置明细</h2>
-              <span style={{ fontSize: 11, color: color.mute }}>左侧固定产品树，右侧按产品 / 竞品列对齐</span>
+              <Segmented
+                size="small"
+                value={detailFilter}
+                onChange={(value) => setDetailFilter(value as DetailFilter)}
+                options={[
+                  { label: '全部产品', value: 'all' },
+                  { label: '有竞品', value: 'comp' },
+                  { label: '有价差', value: 'diff' },
+                  { label: '有预警', value: 'alert' },
+                ]}
+              />
+              <span style={{ fontSize: 11, color: color.mute }}>{detailBands.reduce((n, band) => n + band.ownModels.length, 0)} 个产品</span>
             </div>
 
             <ProductDetailMatrix
-              visibleBands={visibleBands}
+              visibleBands={detailBands}
               currency={currency}
               prodStatus={prodStatus}
               compStatus={compStatus}
@@ -1120,11 +1169,12 @@ export default function Overview() {
               productAlertChip={productAlertChip}
               diffDirs={diffDirs}
               toggleDiffDir={toggleDiffDir}
+              selectedModelId={selectedModelId}
             />
 
-            {visibleBands.length === 0 && (
+            {detailBands.length === 0 && (
               <div style={{ padding: `${space.xl}px 0`, textAlign: 'center', fontSize: fontSize.bodySm, color: color.mute }}>
-                当前筛选无匹配产品 — 请调整产品或价格档位
+                当前筛选无匹配产品 — 请调整筛选条件
               </div>
             )}
           </section>

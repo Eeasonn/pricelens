@@ -13,7 +13,7 @@
 // 数据 = alerts.ts 纯引擎（useAlerts 与页头徽标/总览列/看板共用一份结果）+
 //   groupAlertsBySeries / groupAlertsByWeek / latestAlerts 分组纯函数（金测锚定）。
 // ============================================================
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Button, Empty, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
@@ -120,7 +120,13 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
       <>折后价较前周 {pctText(a.wowPct)} → 现价 {formatPrice(a.price, currency)}</>
     );
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 2px', borderBottom: `1px solid ${color.hairline}` }}>
+    <div
+      data-alert-key={a.key}
+      data-alert-series-key={a.seriesKey}
+      data-alert-type={a.type}
+      data-alert-week-id={a.weekId}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 2px', borderBottom: `1px solid ${color.hairline}` }}
+    >
       <TypePill type={a.type} />
       {dirArrowOf(a)}
       <div style={{ minWidth: 0, flex: 1 }}>
@@ -161,6 +167,10 @@ export default function AlertsPage() {
   // ---- 本页视图态：类型（'all' | AlertType）+ 品牌筛选 ----
   const [typeFilter, setTypeFilter] = useState<'all' | AlertType>('all');
   const [brandFilter, setBrandFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'alerts' | 'normal'>('all');
+  const [rowSort, setRowSort] = useState<'alerts-first' | 'latest' | 'name'>('alerts-first');
+  const [modelFilter, setModelFilter] = useState<{ id: string; name: string } | null>(null);
+  const [focusAlert, setFocusAlert] = useState<{ seriesKey: string; type: AlertType; weekId: string } | null>(null);
   // 矩阵单元格展开（`${seriesKey}|${type}` → 行下展开该产品该类事件明细）；切筛选时收起
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // 历史事件 = 次级视图（第五十五轮，用户：主视觉只报最新，历史收进次级），默认折叠
@@ -176,6 +186,32 @@ export default function AlertsPage() {
     setTypeFilter(v);
     setExpanded(new Set());
   };
+
+  useEffect(() => {
+    const focus = navBus.alertsFocus;
+    if (!focus) return;
+    setModelFilter({ id: focus.modelId, name: focus.modelName ?? focus.modelId });
+    if (focus.seriesKey && focus.type && focus.weekId) {
+      setTypeFilter(focus.type);
+      setStatusFilter('all');
+      setFocusAlert({ seriesKey: focus.seriesKey, type: focus.type, weekId: focus.weekId });
+      setExpanded(new Set([`${focus.seriesKey}|${focus.type}`]));
+    }
+    navBus.alertsFocus = null;
+  }, []);
+
+  useEffect(() => {
+    if (!focusAlert) return;
+    const timer = window.setTimeout(() => {
+      const target = [...document.querySelectorAll<HTMLElement>('[data-alert-series-key]')].find(
+        (el) => el.dataset.alertSeriesKey === focusAlert.seriesKey && el.dataset.alertType === focusAlert.type && el.dataset.alertWeekId === focusAlert.weekId,
+      );
+      const row = target ?? [...document.querySelectorAll<HTMLElement>('[data-alert-series-key]')].find((el) => el.dataset.alertSeriesKey === focusAlert.seriesKey);
+      row?.scrollIntoView({ block: 'center', inline: 'nearest' });
+      setFocusAlert(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusAlert, expanded]);
 
   // ---- 订阅系列元数据，按品牌分组（我司品牌置顶，其余品牌字典序；组内按 label）----
   const brandGroups = useMemo(() => {
@@ -199,6 +235,8 @@ export default function AlertsPage() {
   const bySeries = useMemo(() => groupAlertsBySeries(alerts), [alerts]);
   // 最新态（第五十五轮，用户口径：主视觉只报最新、历史进次级）：计数与单元格都按「每系列×类型最新一条」
   const latestList = useMemo(() => latestAlerts(alerts), [alerts]);
+  const latestBySeries = useMemo(() => groupAlertsBySeries(latestList), [latestList]);
+  const latestModelCount = useMemo(() => new Set(latestList.map((a) => a.seriesKey.split('__')[0])).size, [latestList]);
   const typeCounts = useMemo(() => {
     const c: Record<AlertType, number> = { 'price-change': 0, promo: 0, 'platform-gap': 0, 'own-gap': 0 };
     for (const a of latestList) c[a.type]++;
@@ -207,7 +245,7 @@ export default function AlertsPage() {
   // own-gap 按型号归档（矩阵「型号级」单元格计数用；不受本页筛选影响）
   const gapByModel = useMemo(() => {
     const m = new Map<string, AlertItem[]>();
-    for (const a of alerts) {
+    for (const a of latestList) {
       if (a.type !== 'own-gap') continue;
       const modelId = a.seriesKey.split('__')[0];
       const arr = m.get(modelId);
@@ -215,24 +253,56 @@ export default function AlertsPage() {
       else m.set(modelId, [a]);
     }
     return m;
-  }, [alerts]);
+  }, [latestList]);
 
   const ownCount = brandGroups.filter((g) => g.isOwn).reduce((n, g) => n + g.rows.length, 0);
   const brandOptions = brandGroups.map((g) => ({ value: g.brand, label: g.isOwn ? `${g.brand}（我司）` : g.brand }));
   const matchBrand = (brand: string): boolean => brandFilter.length === 0 || brandFilter.includes(brand);
-  const visibleGroups = brandGroups.filter((g) => matchBrand(g.brand));
+  const matchModel = (key: string): boolean => !modelFilter || key.startsWith(`${modelFilter.id}__`);
+  const activeCountFor = (key: string): number => {
+    const items = latestBySeries.get(key) ?? [];
+    return typeFilter === 'all' ? items.length : items.filter((a) => a.type === typeFilter).length;
+  };
+  const matchStatus = (key: string): boolean => {
+    const active = activeCountFor(key) > 0;
+    return statusFilter === 'alerts' ? active : statusFilter === 'normal' ? !active : true;
+  };
+  const visibleGroups = brandGroups
+    .map((g) => ({
+      ...g,
+      rows: [...g.rows]
+        .filter((r) => matchModel(r.key) && matchStatus(r.key))
+        .sort((a, b) => {
+          if (rowSort === 'alerts-first') return activeCountFor(b.key) - activeCountFor(a.key) || a.meta.label.localeCompare(b.meta.label);
+          if (rowSort === 'latest') {
+            const aw = latestBySeries.get(a.key)?.[0]?.weekId ?? '';
+            const bw = latestBySeries.get(b.key)?.[0]?.weekId ?? '';
+            return bw.localeCompare(aw) || a.meta.label.localeCompare(b.meta.label);
+          }
+          return a.meta.label.localeCompare(b.meta.label);
+        }),
+    }))
+    .filter((g) => matchBrand(g.brand) && g.rows.length > 0);
 
   // 事件流 = 全量触发 → 类型+品牌筛选 → 截断 150 → 按周分组
   const filtered = useMemo(
-    () => alerts.filter((a) => (typeFilter === 'all' || a.type === typeFilter) && matchBrand(a.brand)),
-    [alerts, typeFilter, brandFilter],
+    () => alerts.filter((a) => (typeFilter === 'all' || a.type === typeFilter) && matchBrand(a.brand) && matchModel(a.seriesKey)),
+    [alerts, typeFilter, brandFilter, modelFilter],
   );
   const shown = useMemo(() => filtered.slice(0, 150), [filtered]);
   const weekGroups = useMemo(() => groupAlertsByWeek(shown), [shown]);
-  const gapItems = useMemo(
-    () => filtered.filter((a) => a.type === 'own-gap'),
-    [filtered],
+  const latestFiltered = useMemo(
+    () => latestList.filter((a) => (typeFilter === 'all' || a.type === typeFilter) && matchBrand(a.brand) && matchModel(a.seriesKey)),
+    [latestList, typeFilter, brandFilter, modelFilter],
   );
+  const gapItems = useMemo(() => latestFiltered.filter((a) => a.type === 'own-gap'), [latestFiltered]);
+  const matrixEmptyText = modelFilter
+    ? '该产品尚未启用预警监控，或当前筛选下没有匹配系列'
+    : statusFilter === 'alerts'
+      ? '当前没有触发最新预警的产品'
+      : statusFilter === 'normal'
+        ? '当前没有符合条件的正常产品'
+        : '尚未启用产品 — 在总览 / 看板点行尾 🔔，或在上方搜索添加监控';
 
   // 添加监控候选：全部系列（我司在前，按 label 字典序）
   const allSeries = useMemo(() => {
@@ -507,7 +577,7 @@ export default function AlertsPage() {
     const items = bySeries.get(key) ?? [];
     const openTs = ORDER.filter((t) => t !== 'own-gap' && expanded.has(`${key}|${t}`));
     return (
-      <div key={key} style={{ borderTop: idx > 0 ? `1px solid ${color.hairline}` : undefined }}>
+      <div key={key} data-alert-series-key={key} style={{ borderTop: idx > 0 ? `1px solid ${color.hairline}` : undefined }}>
         <div style={{ display: 'grid', gridTemplateColumns: MATRIX_COLS, alignItems: 'stretch' }}>
           <div
             style={{
@@ -535,7 +605,7 @@ export default function AlertsPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingBlock: 8 }}>
             <AlertBell
               subscribed={state.alertSubs.includes(key)}
-              count={items.length}
+              count={latestBySeries.get(key)?.length ?? 0}
               onToggle={() => actions.toggleAlertSub(key)}
             />
           </div>
@@ -560,6 +630,12 @@ export default function AlertsPage() {
         <PageHeader title="预警中心" />
 
         <main style={{ flex: 1, padding: space.lg }}>
+          {modelFilter && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.md, padding: '8px 12px', border: `1px solid ${color.link}33`, borderRadius: radius.control, background: '#f0f6ff', color: color.body, fontSize: 12 }}>
+              <span>已定位产品：<strong style={{ color: color.ink }}>{modelFilter.name}</strong></span>
+              <Button size="small" style={{ marginLeft: 'auto', height: 22, fontSize: 11 }} onClick={() => setModelFilter(null)}>查看全部产品</Button>
+            </div>
+          )}
           {/* ① 概览条（类看板摘要三件套） */}
           <section
             style={{
@@ -582,6 +658,7 @@ export default function AlertsPage() {
               </div>
               <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
                 最新触发 {latestList.length > 0 ? `W${latestList[0].weekId.slice(4)}（${latestList[0].weekLabel} 采集周）` : '—'}
+                {latestList.length > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}
                 {alerts.length !== latestList.length ? ` · 历史 ${alerts.length} 条` : ''}
               </div>
             </div>
@@ -641,6 +718,16 @@ export default function AlertsPage() {
                   ...ORDER.map((t) => ({ label: `${TYPE_STYLE[t].label} ${typeCounts[t]}`, value: t })),
                 ]}
               />
+              <Segmented
+                size="small"
+                value={statusFilter}
+                onChange={(v) => setStatusFilter(v as 'all' | 'alerts' | 'normal')}
+                options={[
+                  { label: '全部状态', value: 'all' },
+                  { label: '只看异常', value: 'alerts' },
+                  { label: '只看正常', value: 'normal' },
+                ]}
+              />
               <Select
                 mode="multiple"
                 size="small"
@@ -651,6 +738,17 @@ export default function AlertsPage() {
                 value={brandFilter}
                 onChange={setBrandFilter}
                 options={brandOptions}
+              />
+              <Select
+                size="small"
+                value={rowSort}
+                onChange={(v) => setRowSort(v as 'alerts-first' | 'latest' | 'name')}
+                style={{ width: 118 }}
+                options={[
+                  { value: 'alerts-first', label: '异常优先' },
+                  { value: 'latest', label: '最新触发' },
+                  { value: 'name', label: '产品名称' },
+                ]}
               />
               <span style={{ flex: 1 }} />
               <Select
@@ -683,11 +781,12 @@ export default function AlertsPage() {
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 style={{ padding: '28px 0' }}
-                description={<span style={{ fontSize: 12, color: color.mute }}>尚未启用产品 — 在总览 / 看板点行尾 🔔，或在上方搜索添加监控</span>}
+                description={<span style={{ fontSize: 12, color: color.mute }}>{matrixEmptyText}</span>}
               />
             ) : (
-              visibleGroups.map((g) => {
+                visibleGroups.map((g) => {
                 const showGap = g.isOwn && (typeFilter === 'all' || typeFilter === 'own-gap');
+                  const groupGapItems = gapItems.filter((a) => g.rows.some((r) => r.key === a.seriesKey || r.key === a.pairHighSeriesKey));
                 return (
                   <div key={g.brand} style={{ marginTop: space.md }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 2px 6px' }}>
@@ -714,11 +813,14 @@ export default function AlertsPage() {
                       {g.rows.map((r, i) => renderSeriesRow(r.key, r.meta, i))}
                     </div>
                     {/* 档位间距 = 型号级预警：成对细条（高档 ↔ 低档 · 间距 < 阈值） */}
-                    {showGap && gapItems.length > 0 && (
+                    {showGap && groupGapItems.length > 0 && (
                       <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {gapItems.map((a) => (
+                        {groupGapItems.map((a) => (
                           <div
                             key={a.key}
+                            data-alert-series-key={a.seriesKey}
+                            data-alert-type={a.type}
+                            data-alert-week-id={a.weekId}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -810,18 +912,6 @@ export default function AlertsPage() {
           </section>
         </main>
 
-        <footer
-          style={{
-            flexShrink: 0,
-            padding: `${space.md}px ${space.lg}px`,
-            fontSize: fontSize.caption,
-            color: color.mute,
-          }}
-        >
-          口径：周度抓取 · OZON 基准 · 按相邻有值周比较（缺采不打断比较链）。调价 = 折后价变化；折扣 = 促销力度变化；
-          平台价差 = 同周各平台独立折后价差（demo 因子）；档位间距 = 同型号相邻 ROM 档现价间距，低于阈值触发。
-          生产版由采集调度触发推送，demo 为全量回放。
-        </footer>
       </div>
     </div>
   );
