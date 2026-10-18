@@ -321,23 +321,30 @@ export default function PriceTrend() {
   const panels = useMemo(() => {
     if (!splitActive) return [];
     const bench = getEffectiveBenchmark();
+    // 分离面板必须遵循筛选条当前的竞品选择。此前这里直接读取生效对标矩阵，
+    // 即使用户在筛选条删空竞品，面板仍会把默认对标重新画出来。
+    const selectedByKey = new Map(
+      state.competitors.map((group) => [`${group.modelId}|${group.romram.replace(/\s+/g, '')}`, group]),
+    );
     return state.own.map((sel) => {
       const seen = new Set<string>();
-      const comps = bench
-        .filter((b) => b.own_model_id === sel.modelId && b.own_romram === sel.romram)
-        .sort((a, b) => a.sort - b.sort)
-        .map((b) => {
-          const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
-          if (!p) return null;
-          const skuId = b.competitor_sku_id;
-          if (seen.has(skuId)) return null;
-          seen.add(skuId);
-          return { modelId: p.sku_id.split('__')[0], romram: p.romram, skuIds: [skuId] };
-        })
-        .filter((x): x is ProductSelection => x != null);
+      const comps = state.autoMatch
+        ? bench
+            .filter((b) => b.own_model_id === sel.modelId && b.own_romram === sel.romram)
+            .sort((a, b) => a.sort - b.sort)
+            .map((b) => {
+              const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
+              if (!p) return null;
+              const group = selectedByKey.get(`${p.sku_id.split('__')[0]}|${p.romram.replace(/\s+/g, '')}`);
+              if (!group || seen.has(group.modelId + '|' + group.romram)) return null;
+              seen.add(group.modelId + '|' + group.romram);
+              return group;
+            })
+            .filter((x): x is ProductSelection => x != null)
+        : state.competitors;
       return { key: `${sel.modelId}__${sel.romram.replace(/\s+/g, '')}`, sel, comps };
     });
-  }, [splitActive, state.own]);
+  }, [splitActive, state.own, state.competitors, state.autoMatch]);
 
   const panelData = useMemo(() => {
     if (panels.length === 0) return [];
