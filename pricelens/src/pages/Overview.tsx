@@ -29,7 +29,6 @@ import { navBus } from '../state/navBus';
 import type { ProductSelection } from '../state/filtersTypes';
 import { buildOverviewMatrix, TIER_LABELS } from '../dataModel/aggregate';
 import type { OverviewCompRow, OverviewModel, OverviewRow } from '../dataModel/aggregate';
-import { buildOverviewSummary, summarizeCompetitors } from '../dataModel/overviewSummary';
 import { scopeLabels } from '../dataModel/scope';
 import type { DimBenchmark } from '../dataModel/types';
 import { filterBarTheme } from '../components/FilterBar';
@@ -43,7 +42,6 @@ import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import PageHeader from '../components/PageHeader';
 import BenchConfigModal from './overview/BenchConfigModal';
 import MultiPlatformModal from './overview/MultiPlatformModal';
-import IndustrySummary from './overview/IndustrySummary';
 import MarketMap from './overview/MarketMap';
 import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import BrandGlyph from '../components/BrandGlyph';
@@ -923,10 +921,7 @@ export default function Overview() {
   const counts = useMemo(() => {
     const ms = bands.flatMap((b) => b.models);
     const ownModels = ms.filter((m) => m.isOwn);
-    const competitorModels = new Set(
-      ownModels.flatMap((m) => m.comps.map((comp) => comp.skuId.split('__')[0])),
-    );
-    return { all: ms.length, own: ownModels.length, comp: ms.length - ownModels.length, competitorModels: competitorModels.size };
+    return { all: ms.length, own: ownModels.length, comp: ms.length - ownModels.length };
   }, [bands]);
 
   /** 粗粒度市场图 → 细粒度明细：先展开目标产品，再把用户带到对应产品条。 */
@@ -967,7 +962,6 @@ export default function Overview() {
   // own-gap 同时归属低价档与高价档，与预警页矩阵同源）。第五十五轮：铃铛统一进预警格
   const alerts = useAlerts();
   const alertsBySeries = useMemo(() => groupAlertsBySeries(alerts), [alerts]);
-  const industrySummary = useMemo(() => buildOverviewSummary(bands, alerts), [bands, alerts]);
   const { country, industry } = scopeLabels(state);
   const alertCellFor = (skuId: string | undefined): ReactNode => {
     if (!skuId) return null;
@@ -1076,8 +1070,8 @@ export default function Overview() {
           </ConfigProvider>
         </div>
 
-        <main style={{ flex: 1, padding: space.lg }}>
-          <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg }}>
+        <main style={{ flex: 1, padding: `${space.md}px ${space.lg}px ${space.lg}px` }}>
+          <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.md }}>
             {/* 口径条：国家层面上下文 + 币种 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap' }}>
               <span style={{ fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>{country} · {industry}竞品矩阵</span>
@@ -1108,8 +1102,6 @@ export default function Overview() {
                 {nextAllExpanded ? '展开全部产品' : '收起全部产品'}
               </button>
             </div>
-
-            <IndustrySummary summary={industrySummary} competitorModels={counts.competitorModels} priceBands={bands.length} />
 
             <MarketMap
               bands={visibleBands}

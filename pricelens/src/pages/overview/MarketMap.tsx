@@ -78,7 +78,8 @@ function scaleForValues(values: number[], currency: CurrencyMode, rowCount: numb
   const points = values.map((value, index) => ({ bucketId: `current-${index}`, xLabel: '', anchorDate: '', rrp: null, price: value, missing: false, offer: null, url: '', shopName: null }));
   const series: PlotSeries[] = [{ key: 'market-map', isOwn: true, brand: '', label: '', skuIds: [], color: color.ink, points }];
   const base = computeYAxis({ series, priceTypes: { discounted: true, rrp: false }, sliderScale: 1, allowBreak: false, perUsd: perUsdOf(currency) });
-  const targetScale = Math.max(1, Math.min(3, (rowCount * 48) / Math.max(1, base.plotHeight)));
+  // 概要图以“每个产品一行”为主，压缩价格看板的默认格距，避免少量产品撑出长段空白。
+  const targetScale = Math.max(0.75, Math.min(2, (rowCount * 38) / Math.max(1, base.plotHeight)));
   return computeYAxis({ series, priceTypes: { discounted: true, rrp: false }, sliderScale: targetScale, allowBreak: false, perUsd: perUsdOf(currency) });
 }
 
@@ -106,7 +107,7 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
   ]).filter((value): value is number => value != null);
   const competitorCount = new Set(ownModels.flatMap(({ comps }) => comps.map((group) => group[0]?.skuId.split('__')[0]).filter((value): value is string => !!value))).size;
   const scale = scaleForValues(allValues, currency, ownModels.length);
-  const plotTop = 46;
+  const plotTop = 40;
   const geom: Geom = { gridLeft: 0, plotLeft: 0, plotTop, plotWidth: 1, plotHeight: scale.plotHeight, scale, n: 1 };
   const ticks = buildTickRows(geom);
   const tierBoxes = buildTierBoxes({ enabled: currency === 'usd', geom, tierValues: allValues });
@@ -149,7 +150,7 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
   const totalHeight = Math.max(plotTop + scale.plotHeight + 12, lastBottom + 12);
 
   return (
-    <section aria-label="市场摆位概要" style={{ marginTop: space.lg, padding: space.lg, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas }}>
+    <section aria-label="市场摆位概要" style={{ marginTop: space.md, padding: space.md, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>市场摆位概要</h2>
         <span style={{ fontSize: 11, color: color.mute }}>数据截至 {asOf} · 当前价</span>
@@ -159,7 +160,7 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
         <span className="tnum" style={{ fontSize: 12, color: color.body }}>已配置竞品 <strong style={{ color: color.ink, fontSize: 16 }}>{competitorCount}</strong></span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
         <span style={{ color: color.mute, fontSize: 11 }}>品牌列顺序</span>
         {([
           ['default', '默认顺序'],
@@ -179,7 +180,7 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
         <span style={{ color: color.mute, fontSize: 10.5 }}>每屏最多 {MAX_VISIBLE_BRAND_COLUMNS} 个品牌列，更多品牌可横向滚动</span>
       </div>
 
-      <div style={{ marginTop: 14, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
+      <div style={{ marginTop: 10, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
         <div style={{ position: 'relative', minWidth: minMapWidth, height: totalHeight, background: color.canvas }}>
           {/* 与价格看板同口径的左侧 Y 轴：美元显示档位带，本币只显示刻度。 */}
           <div style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', borderRight: `1px solid ${color.hairlineStrong}`, background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.04)' }}>
