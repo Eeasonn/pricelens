@@ -19,7 +19,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
-import { dimProduct } from '../data';
+import { dimChannel, dimProduct } from '../data';
 import {
   alertSeriesMeta,
   groupAlertsBySeries,
@@ -35,6 +35,7 @@ import PageHeader from '../components/PageHeader';
 import BrandDot from '../components/BrandMark';
 import { AlertBell, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
 import { color, fontSize, formatPrice, radius, shadow, space } from '../theme/tokens';
+import { scopeLabels } from '../dataModel/scope';
 
 /** 四类规则的文案与滑杆量程（追补⑨定稿沿用） */
 const TYPE_RULES: Record<
@@ -163,6 +164,13 @@ export default function AlertsPage() {
   const { state, actions } = useFilters();
   const alerts = useAlerts();
   const openInDash = useOpenInDashboard();
+  const { country, industry } = scopeLabels(state);
+  const platformLabel = useMemo(() => {
+    const selection = state.platform;
+    if (!selection || (selection.platforms.length === 0 && selection.shopIds.length === 0)) return 'OZON';
+    const shopNames = new Map(dimChannel.map((c) => [c.shop_id, c.shop_name]));
+    return [...selection.platforms, ...selection.shopIds.map((id) => shopNames.get(id) ?? id)].join('、');
+  }, [state.platform]);
 
   // ---- 本页视图态：类型（'all' | AlertType）+ 品牌筛选 ----
   const [typeFilter, setTypeFilter] = useState<'all' | AlertType>('all');
@@ -630,6 +638,13 @@ export default function AlertsPage() {
         <PageHeader title="预警中心" />
 
         <main style={{ flex: 1, padding: space.lg }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.sm, color: color.mute, fontSize: 11 }}>
+            <span>{country} · {industry}</span>
+            <span aria-hidden>·</span>
+            <span>平台 {platformLabel}</span>
+            <span aria-hidden>·</span>
+            <span>{state.currency === 'usd' ? 'USD' : '本币'}</span>
+          </div>
           {modelFilter && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.md, padding: '8px 12px', border: `1px solid ${color.link}33`, borderRadius: radius.control, background: '#f0f6ff', color: color.body, fontSize: 12 }}>
               <span>已定位产品：<strong style={{ color: color.ink }}>{modelFilter.name}</strong></span>
