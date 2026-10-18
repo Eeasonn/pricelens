@@ -701,13 +701,40 @@ function ProductDetailMatrix(props: {
     );
   };
 
+  /** 首层只显示产品级摘要；型号、RRP、折扣和价差在展开产品后再出现。 */
+  const competitorSummaryCell = (group: CompGroup | undefined): ReactNode => {
+    if (!group) {
+      return (
+        <div style={{ minHeight: 58, display: 'flex', alignItems: 'center', color: color.hairlineStrong, fontSize: 12 }}>
+          未配置竞品
+        </div>
+      );
+    }
+    const representative = group.rows[0];
+    return (
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <BrandGlyph brand={group.brand} size={18} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 700 }}>{brandLabelOf(group.brand)} {group.modelName}</div>
+            <div style={{ marginTop: 3, color: color.mute, fontSize: 10.5 }}>{group.rows.length} 个配置 · {representative.primary ? '主竞品' : '已配置'}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 11 }}>
+          <span style={{ color: color.mute, fontSize: 11.5 }}>当前价</span>
+          <span className="tnum" style={{ fontSize: 16, lineHeight: '22px', fontWeight: 750, color: color.ink }}>{priceRange(group.rows.map((r) => r.price))}</span>
+        </div>
+      </div>
+    );
+  };
+
   const configRows = (model: OverviewModel, groups: CompGroup[]): ReactNode => {
     const configLine = (row: OverviewRow, showDiff = true): ReactNode => {
       const romComps = model.comps.filter((c) => c.ownRomrams.some((x) => norm(x) === norm(row.romram)));
       const dirKey = `${model.modelId}__${row.romram}`;
       const dir = diffDirs[dirKey] ?? 'comp';
       return (
-        <div key={row.romram} style={{ minHeight: 42, padding: '7px 0 8px', borderBottom: `1px dashed ${color.hairline}` }}>
+        <div key={row.romram} style={{ minHeight: 42, padding: '7px 0 8px' }}>
           <OverviewMetricLine label="折后价"><span className="tnum" style={{ fontSize: 18, lineHeight: '24px', fontWeight: 750, color: color.ink }}>{formatPrice(row.price, currency)}</span></OverviewMetricLine>
           <OverviewMetricLine label="RRP"><span className="tnum" style={{ fontSize: 14, lineHeight: '20px', color: color.body }}>{formatPrice(row.rrp, currency)}</span></OverviewMetricLine>
           <OverviewMetricLine label="折扣">{row.discountPct != null ? <DiscountBadge discount={row.discountPct} /> : <span style={{ color: color.hairlineStrong, fontSize: 12 }}>—</span>}</OverviewMetricLine>
@@ -723,7 +750,7 @@ function ProductDetailMatrix(props: {
       const diff = comp.price != null && own?.price != null ? (dir === 'comp' ? diffPct(comp.price, own.price) : diffPct(own.price, comp.price)) : null;
       const discount = comp.price != null && comp.rrp != null && comp.rrp > 0 ? comp.price / comp.rrp - 1 : null;
       return (
-        <div key={comp.skuId} style={{ minHeight: 42, padding: '7px 0 8px', borderBottom: `1px dashed ${color.hairline}` }}>
+        <div key={comp.skuId} style={{ minHeight: 42, padding: '7px 0 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, minHeight: 24 }}>
             <BrandDot brand={comp.brand} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 700 }}>{comp.romram}</span>
@@ -785,8 +812,8 @@ function ProductDetailMatrix(props: {
                 return (
                   <Fragment key={model.modelId}>
                     <div data-model-id={model.modelId} style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 3, background: color.canvas, padding: '14px' }}>{modelNode(model, expanded, groups)}</div>
-                    <div style={cellBase}>{competitorCell(groups[0], model)}</div>
-                    <div style={{ ...cellBase, borderRight: 0 }}>{competitorCell(groups[1], model)}</div>
+                    <div style={cellBase}>{competitorSummaryCell(groups[0])}</div>
+                    <div style={{ ...cellBase, borderRight: 0 }}>{competitorSummaryCell(groups[1])}</div>
                     {expanded && <>
                       {configRows(model, groups)}
                       {compStatus.isExpanded(model.modelId) && groups.length > 2 && <div style={{ gridColumn: '2 / -1', padding: '11px 14px 13px', borderBottom: `1px solid ${color.hairline}`, background: '#f8fafc' }}><div style={{ marginBottom: 7, color: color.mute, fontSize: 10.5 }}>其他已配置竞品</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(230px, 1fr))', gap: 8 }}>{groups.slice(2).map((group) => <div key={group.modelId} style={{ padding: '9px 10px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas }}>{competitorCell(group, model)}</div>)}</div></div>}
