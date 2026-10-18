@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PriceLens · 运营仪表盘草图 C</title>
+  <style>
+    :root {
+      --ink: #1b2430;
+      --muted: #6b7480;
+      --muted-2: #9aa3ad;
+      --line: #e7ebef;
+      --soft: #f6f8fa;
+      --blue: #2f6df6;
+      --blue-weak: #eaf1ff;
+      --cyan: #3eb8c9;
+      --green: #168a63;
+      --green-weak: #e7f6f0;
+      --orange: #bd6a12;
+      --orange-weak: #fff3e6;
+      --red: #c64646;
+      --red-weak: #fff0ef;
+      --shadow: 0 10px 34px rgba(40, 53, 69, .07);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4f6f8; color: var(--ink); font-size: 14px; }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 1500px; margin: 0 auto; padding: 26px 34px 52px; }
+    .topline { display:flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 26px; }
+    .brand { display:flex; align-items:center; gap: 14px; }
+    .mark { width: 35px; height: 35px; border-radius: 11px; display:grid; place-items:center; color:#fff; font-weight:800; background: linear-gradient(135deg,#376df6,#799eff); box-shadow: 0 5px 14px rgba(47,109,246,.27); }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 21px; letter-spacing: -.02em; }
+    .subhead { color: var(--muted); margin-top: 4px; font-size: 12px; }
+    .toolbar { display:flex; gap: 9px; align-items:center; }
+    .control { background:#fff; border:1px solid var(--line); height:36px; border-radius:9px; padding: 0 12px; color: var(--ink); }
+    .control:focus { outline: 2px solid #cad9ff; outline-offset: 1px; }
+    .button { height:36px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:9px; padding: 0 13px; }
+    .button.primary { color:#fff; border-color: var(--blue); background: var(--blue); box-shadow:0 4px 12px rgba(47,109,246,.2); }
+    .button.ghost { color: var(--blue); border-color:#c9d8ff; background: #f8faff; }
+    .summary { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 14px; }
+    .kpi { background:#fff; border:1px solid var(--line); border-radius: 12px; padding: 17px 18px 15px; box-shadow: var(--shadow); position:relative; overflow:hidden; }
+    .kpi::after { content:""; width:86px; height:86px; border-radius:50%; position:absolute; right:-22px; top:-28px; background:var(--blue-weak); opacity:.55; }
+    .kpi.alert::after { background:var(--red-weak); }
+    .kpi.green::after { background:var(--green-weak); }
+    .kpi.orange::after { background:var(--orange-weak); }
+    .kpi-label { color: var(--muted); font-size: 12px; }
+    .kpi-number { font-size: 27px; line-height: 1.1; margin-top: 8px; letter-spacing: -.04em; font-weight: 700; }
+    .kpi-foot { margin-top: 9px; font-size: 12px; color: var(--muted); }
+    .up { color: var(--green); } .down { color: var(--red); }
+    .dashboard { display:grid; grid-template-columns: minmax(0, 1.8fr) minmax(340px, 1fr); gap: 14px; align-items:start; }
+    .panel { background:#fff; border:1px solid var(--line); border-radius: 13px; box-shadow: var(--shadow); overflow: hidden; }
+    .panel + .panel { margin-top: 14px; }
+    .panel-head { padding: 17px 19px 0; display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
+    .panel-title { font-weight: 700; font-size: 15px; }
+    .panel-caption { color: var(--muted); font-size: 12px; margin-top: 5px; }
+    .segmented { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; flex-shrink:0; }
+    .segmented button { color:var(--muted); border:0; border-left:1px solid var(--line); background:#fff; font-size:12px; padding:7px 10px; }
+    .segmented button:first-child { border-left:0; }
+    .segmented button.active { color:var(--blue); background:var(--blue-weak); font-weight:600; }
+    .price-chart { padding: 15px 19px 19px; }
+    .chart-wrap { position: relative; height: 266px; display:flex; gap:11px; }
+    .yaxis { width: 44px; display:flex; flex-direction:column; justify-content:space-between; color:var(--muted-2); font-size:11px; padding:0 0 23px; text-align:right; }
+    .plot { position:relative; flex:1; border-left:1px solid var(--line); border-bottom:1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent 51px, #eef1f4 52px); }
+    .bars { position:absolute; inset: 9px 12px 0; display:flex; align-items:flex-end; justify-content:space-around; gap: 13px; }
+    .bar-set { height:100%; flex: 1; display:flex; align-items:flex-end; justify-content:center; gap:4px; min-width: 43px; }
+    .bar { width: 22px; min-height: 3px; border-radius:6px 6px 0 0; background: var(--blue); transition: transform .15s, filter .15s; position:relative; }
+    .bar.competitor { background:var(--cyan); }
+    .bar:hover { transform:translateY(-3px); filter:brightness(1.08); }
+    .bar .bar-tip { position:absolute; left:50%; bottom:calc(100% + 7px); transform:translateX(-50%); background:#202a36; color:white; border-radius:5px; padding:4px 6px; font-size:10px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .12s; }
+    .bar:hover .bar-tip { opacity:1; }
+    .xlabel { position:absolute; left:0; right:0; bottom:-24px; display:flex; justify-content:space-around; color:var(--muted); font-size:11px; }
+    .legend { display:flex; gap:15px; align-items:center; color:var(--muted); font-size:11px; margin-top: 31px; }
+    .dot { width:8px; height:8px; display:inline-block; border-radius:50%; margin-right:5px; background:var(--blue); vertical-align:1px; }
+    .dot.cyan { background:var(--cyan); }
+    .chart-note { color:var(--muted); font-size:11px; margin-left:auto; }
+    .landscape { padding: 16px 19px 19px; }
+    .share-row { display:flex; align-items:center; gap: 16px; }
+    .donut { width: 132px; height: 132px; border-radius:50%; flex:none; background: conic-gradient(var(--blue) 0 39%, #516377 39% 65%, #76b5bc 65% 82%, #d8dfe7 82% 100%); display:grid; place-items:center; position:relative; }
+    .donut::after { content:""; width: 78px; height:78px; background:#fff; border-radius:50%; position:absolute; }
+    .donut-center { position:relative; z-index:1; text-align:center; font-weight:700; font-size: 17px; }
+    .donut-center small { display:block; color:var(--muted); font-size:10px; font-weight:500; margin-top:3px; }
+    .share-legend { flex:1; }
+    .share-item { display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid #f0f2f4; padding: 8px 0; font-size:12px; }
+    .share-item:last-child { border-bottom:0; }
+    .share-name { display:flex; align-items:center; gap:8px; }
+    .share-color { width:9px; height:9px; border-radius:50%; }
+    .share-value { font-weight:700; }
+    .state-list { margin-top: 17px; border-top:1px solid var(--line); padding-top: 11px; }
+    .state-head, .state-line { display:grid; grid-template-columns: minmax(120px,1fr) 70px 70px; align-items:center; gap:8px; }
+    .state-head { color:var(--muted-2); font-size:11px; padding:0 0 8px; }
+    .state-line { border-top:1px solid #f0f2f4; padding: 10px 0; font-size:12px; }
+    .state { font-size:11px; border-radius:5px; padding:3px 6px; justify-self:start; }
+    .state.ok { color:var(--green); background:var(--green-weak); }
+    .state.warn { color:var(--orange); background:var(--orange-weak); }
+    .state.risk { color:var(--red); background:var(--red-weak); }
+    .trend-panel { min-height: 348px; }
+    .trend { padding: 14px 19px 18px; }
+    .selected-product { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .selected-name { font-weight:700; font-size:13px; }
+    .selected-price { color:var(--blue); font-weight:700; }
+    .trend-svg { width:100%; height: 178px; display:block; overflow:visible; }
+    .trend-meta { display:flex; align-items:center; justify-content:space-between; color:var(--muted); font-size:11px; margin-top: 3px; }
+    .alert-list { padding: 8px 19px 17px; }
+    .alert-row { display:grid; grid-template-columns: 8px minmax(0,1fr) auto; align-items:center; gap:9px; border-bottom:1px solid #f0f2f4; padding: 11px 0; }
+    .alert-row:last-child { border-bottom:0; }
+    .alert-dot { width:8px; height:8px; border-radius:50%; background:var(--red); }
+    .alert-dot.orange { background:#e18b2e; }
+    .alert-title { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .alert-sub { margin-top:3px; color:var(--muted); font-size:11px; }
+    .alert-value { font-size:12px; font-weight:700; color:var(--red); }
+    .detail { margin-top: 14px; }
+    .detail-head { padding: 17px 19px 13px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .table-wrap { overflow:auto; }
+    table { border-collapse:collapse; min-width: 730px; width:100%; }
+    th, td { text-align:left; padding: 11px 19px; border-top:1px solid var(--line); white-space:nowrap; }
+    th { color:var(--muted); background:#fbfcfd; font-size:11px; font-weight:600; }
+    td { font-size:12px; }
+    tbody tr { cursor:pointer; }
+    tbody tr:hover { background:#f7faff; }
+    .product-cell { display:flex; align-items:center; gap:9px; font-weight:600; }
+    .product-badge { width:24px; height:24px; border-radius:7px; display:grid; place-items:center; font-size:10px; font-weight:700; color:#fff; background:#6d82a3; }
+    .product-badge.h { background:#de1d3c; }
+    .trend-chip, .gap-chip { display:inline-block; border-radius:5px; padding:3px 6px; font-size:11px; font-weight:600; }
+    .trend-chip { color:var(--green); background:var(--green-weak); }
+    .gap-chip.negative { color:var(--green); background:var(--green-weak); }
+    .gap-chip.positive { color:var(--red); background:var(--red-weak); }
+    .tiny-button { border:0; color:var(--blue); background:transparent; padding:3px 0; font-size:12px; }
+    .footnote { margin-top: 15px; color: var(--muted-2); font-size: 11px; text-align:right; }
+    @media (max-width: 1080px) { .dashboard { grid-template-columns: 1fr; } .summary { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 700px) { .page { padding: 17px 14px 40px; } .topline { align-items:flex-start; flex-direction:column; } .toolbar { width:100%; flex-wrap:wrap; } .summary { grid-template-columns:1fr 1fr; } .share-row { align-items:flex-start; flex-direction:column; } .donut { width:110px; height:110px; } .donut::after { width:66px; height:66px; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topline">
+      <div class="brand">
+        <div class="mark">PL</div>
+        <div><h1>价格运营总览</h1><div class="subhead">俄罗斯 · 智能手机 · 本周 W41 · 运营视角</div></div>
+      </div>
+      <div class="toolbar">
+        <select class="control" aria-label="国家"><option>俄罗斯</option><option>哈萨克斯坦</option><option>土耳其</option></select>
+        <select class="control" aria-label="产业"><option>智能手机</option><option>平板电脑</option><option>可穿戴设备</option></select>
+        <button class="button">本币 / USD</button>
+        <button class="button primary">导出简报</button>
+      </div>
+    </header>
+
+    <section class="summary" aria-label="核心指标">
+      <article class="kpi"><div class="kpi-label">已监测产品</div><div class="kpi-number">18 <small style="font-size:13px;font-weight:600;color:var(--muted)">个型号</small></div><div class="kpi-foot"><span class="up">↑ 3</span> 较上周新增</div></article>
+      <article class="kpi green"><div class="kpi-label">我司价格低于竞品</div><div class="kpi-number">61%</div><div class="kpi-foot"><span class="up">+6.4pp</span> 环比改善</div></article>
+      <article class="kpi alert"><div class="kpi-label">需要处理的价差</div><div class="kpi-number">5 <small style="font-size:13px;font-weight:600;color:var(--muted)">项</small></div><div class="kpi-foot"><span class="down">3 项高于竞品 10%</span></div></article>
+      <article class="kpi orange"><div class="kpi-label">竞品断货 / 缺失</div><div class="kpi-number">4 <small style="font-size:13px;font-weight:600;color:var(--muted)">个型号</small></div><div class="kpi-foot">覆盖率 <span class="up">87%</span></div></article>
+    </section>
+
+    <section class="dashboard">
+      <div class="main-col">
+        <article class="panel">
+          <div class="panel-head"><div><div class="panel-title">市场价格分布</div><div class="panel-caption">按当前可售价格聚合；每组显示我司与主要竞品数量</div></div><div class="segmented" role="tablist"><button class="active" data-range="all">全部</button><button data-range="mine">我司</button><button data-range="comp">竞品</button></div></div>
+          <div class="price-chart">
+            <div class="chart-wrap"><div class="yaxis"><span>12</span><span>9</span><span>6</span><span>3</span><span>0</span></div><div class="plot"><div class="bars" id="priceBars"></div><div class="xlabel"><span>$200–400</span><span>$400–600</span><span>$600–800</span><span>$800–1K</span><span>$1K+</span></div></div></div>
+            <div class="legend"><span><i class="dot"></i>我司</span><span><i class="dot cyan"></i>竞品</span><span class="chart-note">共 18 个我司型号 · 12 个竞品型号</span></div>
+          </div>
+        </article>
+
+        <article class="panel trend-panel">
+          <div class="panel-head"><div><div class="panel-title">型号价格趋势</div><div class="panel-caption">点击下方型号表中的任意行，查看我司与竞品近 8 周的价格变化</div></div><button class="button ghost" id="openModel">打开型号详情</button></div>
+          <div class="trend">
+            <div class="selected-product"><div class="selected-name" id="selectedName">Huawei Mate 80 Pro · 12+512 GB</div><div class="selected-price" id="selectedPrice">$1,188</div></div>
+            <svg class="trend-svg" viewBox="0 0 720 178" role="img" aria-label="型号价格趋势图">
+              <g stroke="#edf0f3" stroke-width="1"><line x1="42" y1="20" x2="710" y2="20"/><line x1="42" y1="66" x2="710" y2="66"/><line x1="42" y1="112" x2="710" y2="112"/><line x1="42" y1="158" x2="710" y2="158"/></g>
+              <g fill="#9aa3ad" font-size="10"><text x="4" y="24">$1,350</text><text x="4" y="70">$1,250</text><text x="4" y="116">$1,150</text><text x="4" y="162">$1,050</text><text x="38" y="176">W34</text><text x="132" y="176">W35</text><text x="226" y="176">W36</text><text x="320" y="176">W37</text><text x="414" y="176">W38</text><text x="508" y="176">W39</text><text x="602" y="176">W40</text><text x="690" y="176">W41</text></g>
+              <polyline id="mineLine" points="42,71 136,79 230,84 324,88 418,94 512,94 606,98 700,103" fill="none" stroke="#2f6df6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline id="compLine" points="42,49 136,53 230,58 324,58 418,63 512,67 606,70 700,74" fill="none" stroke="#3eb8c9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"/>
+              <g id="minePoints" fill="#fff" stroke="#2f6df6" stroke-width="2"></g><g id="compPoints" fill="#fff" stroke="#3eb8c9" stroke-width="2"></g>
+            </svg>
+            <div class="trend-meta"><span><i class="dot"></i>我司价格</span><span><i class="dot cyan"></i>竞品均价</span><span id="trendGap">当前价差 −5.0%</span></div>
+          </div>
+        </article>
+
+        <article class="panel detail">
+          <div class="detail-head"><div><div class="panel-title">当前型号与竞品</div><div class="panel-caption">先看粗粒度价位，再下钻到配置级</div></div><div class="segmented"><button class="active">全部</button><button>我司</button><button>竞品</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>品牌 / 型号</th><th>当前价</th><th>RRP</th><th>对竞品价差</th><th>近 8 周</th><th>状态</th><th></th></tr></thead><tbody id="modelRows"></tbody></table></div>
+        </article>
+      </div>
+
+      <aside class="side-col">
+        <article class="panel">
+          <div class="panel-head"><div><div class="panel-title">竞品市场景观</div><div class="panel-caption">按监测型号数估算的可见份额</div></div><button class="tiny-button">查看全部 →</button></div>
+          <div class="landscape"><div class="share-row"><div class="donut"><div class="donut-center">18<small>监测型号</small></div></div><div class="share-legend"><div class="share-item"><div class="share-name"><i class="share-color" style="background:var(--blue)"></i>Huawei</div><b class="share-value">39%</b></div><div class="share-item"><div class="share-name"><i class="share-color" style="background:#516377"></i>Apple</div><b class="share-value">26%</b></div><div class="share-item"><div class="share-name"><i class="share-color" style="background:#76b5bc"></i>Samsung</div><b class="share-value">17%</b></div><div class="share-item"><div class="share-name"><i class="share-color" style="background:#d8dfe7"></i>其他</div><b class="share-value">18%</b></div></div></div><div class="state-list"><div class="state-head"><span>品牌</span><span>覆盖率</span><span>状态</span></div><div class="state-line"><b>Apple</b><span>100%</span><span class="state ok">稳定</span></div><div class="state-line"><b>Samsung</b><span>92%</span><span class="state warn">2 缺货</span></div><div class="state-line"><b>Honor</b><span>75%</span><span class="state risk">需跟进</span></div></div></div>
+        </article>
+        <article class="panel">
+          <div class="panel-head"><div><div class="panel-title">近期异常</div><div class="panel-caption">按影响程度排序 · 点击进入型号详情</div></div><button class="tiny-button">查看全部 →</button></div>
+          <div class="alert-list"><div class="alert-row"><i class="alert-dot"></i><div><div class="alert-title">Mate 80 Pro 高于 iPhone 17 Pro 25.8%</div><div class="alert-sub">旗舰 · 12+512 GB · 2 小时前</div></div><strong class="alert-value">+25.8%</strong></div><div class="alert-row"><i class="alert-dot"></i><div><div class="alert-title">Pura 80 Pro 竞争力持续下滑</div><div class="alert-sub">高端 · 近 4 周下降 11.2pp</div></div><strong class="alert-value">-11.2pp</strong></div><div class="alert-row"><i class="alert-dot orange"></i><div><div class="alert-title">Samsung S26+ 竞品价格缺失</div><div class="alert-sub">中高端 · 2 个渠道未采集</div></div><strong class="alert-value">缺失</strong></div><div class="alert-row"><i class="alert-dot orange"></i><div><div class="alert-title">nova 15 进入低价带边界</div><div class="alert-sub">中端 · 距离 $400 仅 $24</div></div><strong class="alert-value">$376</strong></div></div>
+        </article>
+      </aside>
+    </section>
+    <div class="footnote">数据更新时间：2026-10-18 09:30 · 价格为当前可售最低价 · 此页面为运营仪表盘方向草图</div>
+  </main>
+  <script>
+    const rows = [
+      {brand:'Huawei', model:'Mate 80 Pro · 12+512 GB', price:1188, rrp:1250, gap:'−5.0%', trend:'−2.8%', state:'我司', cls:'h', mine:[71,79,84,88,94,94,98,103], comp:[49,53,58,58,63,67,70,74]},
+      {brand:'Apple', model:'iPhone 17 Pro · 12+512 GB', price:1494, rrp:1500, gap:'+25.8%', trend:'0.0%', state:'竞品', cls:'', mine:[40,42,40,44,44,46,44,45], comp:[38,39,38,40,40,42,43,43]},
+      {brand:'Samsung', model:'Galaxy S26+ · 12+512 GB', price:1452, rrp:1500, gap:'+22.2%', trend:'−3.0%', state:'竞品', cls:'', mine:[52,55,59,63,67,69,71,74], comp:[50,51,54,57,60,63,66,69]},
+      {brand:'Honor', model:'Magic 8 Pro · 12+512 GB', price:1160, rrp:1187, gap:'−2.4%', trend:'−1.5%', state:'竞品', cls:'', mine:[82,83,88,92,96,98,101,103], comp:[74,75,79,80,83,86,89,91]},
+      {brand:'Huawei', model:'Pura 80 Pro · 12+256 GB', price:915, rrp:962, gap:'−4.9%', trend:'−5.1%', state:'我司', cls:'h', mine:[116,115,119,122,127,130,134,137], comp:[96,99,102,105,108,111,114,117]}
+    ];
+    const barsData = [[2,1],[3,2],[4,3],[6,4],[3,2]];
+    function renderBars(mode='all') {
+      const root=document.getElementById('priceBars'); root.innerHTML='';
+      barsData.forEach((set, i) => { const group=document.createElement('div'); group.className='bar-set'; set.forEach((value,j)=> { if((mode==='mine'&&j===1)||(mode==='comp'&&j===0)) return; const bar=document.createElement('div'); bar.className='bar'+(j===1?' competitor':''); bar.style.height=(value/12*100)+'%'; bar.innerHTML='<span class="bar-tip">'+(j?'竞品':'我司')+' '+value+' 个</span>'; group.appendChild(bar); }); root.appendChild(group); });
+    }
+    function renderRows() {
+      const root=document.getElementById('modelRows'); root.innerHTML=''; rows.forEach((r,i)=> { const tr=document.createElement('tr'); tr.dataset.index=i; tr.innerHTML='<td><div class="product-cell"><i class="product-badge '+r.cls+'">'+r.brand.slice(0,1)+'</i>'+r.model+'</div></td><td><b>$'+r.price.toLocaleString()+'</b></td><td>$'+r.rrp.toLocaleString()+'</td><td><span class="gap-chip '+(r.gap.startsWith('+')?'positive':'negative')+'">'+r.gap+'</span></td><td><span class="trend-chip">'+r.trend+'</span></td><td><span class="state '+(r.state==='我司'?'ok':'warn')+'">'+r.state+'</span></td><td><button class="tiny-button">看走势</button></td>'; tr.addEventListener('click',()=>selectRow(i)); root.appendChild(tr); });
+    }
+    function selectRow(i) { const r=rows[i]; document.getElementById('selectedName').textContent=r.brand+' '+r.model; document.getElementById('selectedPrice').textContent='$'+r.price.toLocaleString(); document.getElementById('trendGap').textContent='当前价差 '+r.gap; const mine=document.getElementById('mineLine'), comp=document.getElementById('compLine'); const norm=a=>a.map((v,n)=>{const min=35,max=145; return (42+n*94)+','+(158-(v-min)/(max-min)*130)}).join(' '); mine.setAttribute('points',norm(r.mine)); comp.setAttribute('points',norm(r.comp)); const mp=document.getElementById('minePoints'), cp=document.getElementById('compPoints'); mp.innerHTML='';cp.innerHTML=''; [r.mine,r.comp].forEach((a,k)=>a.forEach((v,n)=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',42+n*94); c.setAttribute('cy',158-(v-35)/(145-35)*130); c.setAttribute('r',3.5); (k?cp:mp).appendChild(c);})); }
+    document.querySelectorAll('.segmented button[data-range]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.segmented button[data-range]').forEach(x=>x.classList.remove('active'));b.classList.add('active');renderBars(b.dataset.range);}));
+    document.getElementById('openModel').addEventListener('click',()=>document.querySelector('.detail').scrollIntoView({behavior:'smooth',block:'start'}));
+    renderBars(); renderRows(); selectRow(0);
+  </script>
+</body>
+</html>

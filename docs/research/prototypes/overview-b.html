@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PriceLens · 固定列产品矩阵草图 B</title>
+  <style>
+    :root {
+      --ink: #202124;
+      --muted: #6e7480;
+      --quiet: #9298a3;
+      --line: #e5e7eb;
+      --line-strong: #d5d9df;
+      --canvas: #f6f7f9;
+      --card: #ffffff;
+      --soft: #f7f8fa;
+      --red: #c7000b;
+      --red-soft: #fff2f3;
+      --blue: #1d64d8;
+      --blue-soft: #edf4ff;
+      --amber: #a75b00;
+      --amber-soft: #fff7e9;
+      --green: #187a4d;
+      --green-soft: #eefaf3;
+      --shadow: 0 6px 20px rgba(31, 35, 41, .06);
+      --radius: 12px;
+      --font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--canvas); font-family: var(--font); font-size: 13px; }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 1510px; margin: 0 auto; padding: 28px 36px 64px; }
+    .topbar { display: flex; align-items: flex-start; gap: 18px; justify-content: space-between; margin-bottom: 22px; }
+    .eyebrow { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; letter-spacing: .05em; }
+    .eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+    h1 { margin: 8px 0 8px; font-size: 28px; line-height: 1.2; letter-spacing: -.035em; }
+    .subtitle { margin: 0; color: var(--muted); font-size: 13px; }
+    .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .pill, .selectlike { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: var(--ink); white-space: nowrap; }
+    .pill .label { color: var(--muted); font-size: 11px; }
+    .pill strong { font-size: 12px; font-weight: 650; }
+    .selectlike { border-color: #cfd7e5; color: #234a85; background: #f9fbff; }
+    .selectlike::after { content: '⌄'; color: #6981a1; margin-left: 4px; font-size: 14px; transform: translateY(-1px); }
+    .surface { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow); }
+    .intro { display: flex; gap: 24px; align-items: center; justify-content: space-between; padding: 18px 20px; margin-bottom: 18px; }
+    .intro-copy { min-width: 0; }
+    .intro-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+    .intro-copy p { margin: 0; color: var(--muted); line-height: 1.6; }
+    .intro-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .btn { border: 1px solid var(--line-strong); background: #fff; color: var(--ink); border-radius: 8px; padding: 8px 12px; line-height: 1; }
+    .btn.primary { color: #fff; border-color: var(--blue); background: var(--blue); }
+    .btn.ghost { color: var(--blue); border-color: #a8c8ff; background: var(--blue-soft); }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .metric { padding: 14px 16px; min-height: 84px; }
+    .metric-label { color: var(--muted); font-size: 12px; }
+    .metric-value { margin-top: 7px; font-size: 23px; line-height: 1; font-weight: 750; letter-spacing: -.03em; }
+    .metric-detail { margin-top: 7px; color: var(--quiet); font-size: 11px; }
+    .matrix-wrap { overflow: hidden; }
+    .matrix-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 19px 20px 16px; border-bottom: 1px solid var(--line); }
+    .matrix-heading { min-width: 0; }
+    .matrix-heading h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+    .matrix-heading p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .matrix-legend { display: flex; align-items: center; gap: 14px; flex-shrink: 0; padding-top: 2px; color: var(--muted); font-size: 11px; }
+    .legend { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+    .legend i.own { background: var(--red); }
+    .legend i.comp { background: #7183a6; }
+    .matrix-scroll { overflow-x: auto; }
+    table { width: 100%; min-width: 1160px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+    th, td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    th:last-child, td:last-child { border-right: none; }
+    thead th { position: sticky; top: 0; z-index: 3; height: 74px; padding: 11px 14px; background: #fbfcfd; text-align: left; vertical-align: top; }
+    .own-col { width: 245px; }
+    .price-col { width: 138px; }
+    .comp-col { width: 244px; }
+    .action-col { width: 92px; }
+    .sticky { position: sticky; left: 0; z-index: 4; background: #fff; }
+    thead .sticky { z-index: 6; background: #fbfcfd; }
+    .head-overline { display: block; color: var(--quiet); font-size: 10px; font-weight: 500; letter-spacing: .03em; margin-bottom: 7px; }
+    .head-name { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+    .brandmark { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; color: #fff; font-size: 11px; font-weight: 800; flex-shrink: 0; }
+    .brandmark.huawei { background: var(--red); }
+    .brandmark.apple { background: #1f2023; }
+    .brandmark.samsung { background: #1b40ab; }
+    .brandmark.honor { background: #ea7600; }
+    .head-price { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; font-weight: 500; }
+    tbody tr.main-row { background: #fff; }
+    tbody tr.main-row:hover { background: #fcfdff; }
+    tbody tr.main-row td { height: 88px; padding: 12px 14px; vertical-align: middle; }
+    tbody tr.main-row .sticky { background: #fff; }
+    tbody tr.main-row:hover .sticky { background: #fcfdff; }
+    .own-product { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .chevron { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line-strong); color: var(--muted); border-radius: 50%; background: #fff; flex-shrink: 0; font-size: 12px; transition: transform .16s ease; }
+    .chevron.open { transform: rotate(90deg); color: var(--blue); border-color: #a8c8ff; background: var(--blue-soft); }
+    .own-name { min-width: 0; }
+    .own-name strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+    .own-name span { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .price-main { font-variant-numeric: tabular-nums; font-weight: 750; font-size: 15px; white-space: nowrap; }
+    .price-sub { margin-top: 5px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .comp-cell { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+    .comp-main { min-width: 0; }
+    .comp-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 650; }
+    .comp-meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .comp-price { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 700; }
+    .gap { display: inline-flex; align-items: center; width: fit-content; margin-top: 6px; padding: 3px 6px; border-radius: 5px; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .gap.up { color: #af1e24; background: var(--red-soft); }
+    .gap.down { color: var(--green); background: var(--green-soft); }
+    .gap.flat { color: #637087; background: #f0f2f5; }
+    .state { margin-top: 7px; color: var(--muted); font-size: 10px; }
+    .action { color: var(--blue); border: 0; padding: 5px 0; background: none; font-size: 11px; white-space: nowrap; }
+    .action:hover { text-decoration: underline; }
+    .detail-row { display: none; background: #fbfcff; }
+    .detail-row.open { display: table-row; }
+    .detail-row td { padding: 0; border-bottom-color: #dbe3f1; }
+    .detail-panel { display: grid; grid-template-columns: minmax(220px, 1.15fr) repeat(3, minmax(185px, 1fr)); gap: 0; border-top: 1px solid #dbe3f1; }
+    .detail-label { padding: 14px 16px; border-right: 1px solid #dbe3f1; color: var(--muted); font-size: 11px; }
+    .detail-label strong { display: block; color: var(--ink); font-size: 12px; margin-bottom: 6px; }
+    .detail-cell { padding: 14px 15px; border-right: 1px solid #dbe3f1; min-height: 92px; }
+    .detail-cell:last-child { border-right: none; }
+    .detail-cell h4 { margin: 0 0 9px; font-size: 11px; font-weight: 700; color: var(--muted); }
+    .spec-line { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--muted); font-size: 11px; }
+    .spec-line b { color: var(--ink); font-weight: 650; }
+    .compare-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; color: var(--muted); font-size: 11px; background: #fbfcfd; }
+    .compare-footer strong { color: var(--ink); }
+    .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+    .note { padding: 15px 16px; }
+    .note h3 { margin: 0 0 8px; font-size: 13px; }
+    .note p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
+    .note.blue { border-left: 3px solid var(--blue); }
+    .note.orange { border-left: 3px solid #db8b18; }
+    @media (max-width: 900px) {
+      .page { padding: 22px 16px 48px; }
+      .topbar { flex-direction: column; }
+      .toolbar { justify-content: flex-start; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .matrix-head { flex-direction: column; }
+      .intro { flex-direction: column; align-items: flex-start; }
+      .notes { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      h1 { font-size: 23px; }
+      .metrics { grid-template-columns: 1fr; }
+      .intro-actions { width: 100%; }
+      .intro-actions .btn { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow"><span class="dot"></span>PriceLens · 总览草图 B</div>
+        <h1>固定列产品矩阵</h1>
+        <p class="subtitle">把我司产品和主要竞品放在同一行，先对齐当前价与价差，再展开配置细节。</p>
+      </div>
+      <div class="toolbar" aria-label="范围筛选">
+        <div class="pill"><span class="label">国家</span><strong>俄罗斯</strong></div>
+        <div class="pill"><span class="label">产业</span><strong>智能手机</strong></div>
+        <div class="pill"><span class="label">日期</span><strong>2026-W41</strong></div>
+        <div class="selectlike">本币 RUB</div>
+      </div>
+    </header>
+
+    <section class="surface intro" aria-label="矩阵说明">
+      <div class="intro-copy">
+        <div class="intro-title">先看产品线，再比较同一价位的竞品</div>
+        <p>左侧固定为我司型号，右侧固定显示 3 个主要竞品。点击型号可展开容量、RRP 和渠道状态；横向滚动时产品名与竞品列保持对齐。</p>
+      </div>
+      <div class="intro-actions">
+        <button class="btn ghost" type="button" id="toggleDiff">只看有价差</button>
+        <button class="btn primary" type="button" id="resetRows">展开全部</button>
+      </div>
+    </section>
+
+    <section class="metrics" aria-label="市场摘要">
+      <article class="surface metric"><div class="metric-label">我司系列 / 型号</div><div class="metric-value">4 / 8</div><div class="metric-detail">覆盖旗舰至中端</div></article>
+      <article class="surface metric"><div class="metric-label">已匹配竞品</div><div class="metric-value">12</div><div class="metric-detail">3 个品牌 · 22 个配置</div></article>
+      <article class="surface metric"><div class="metric-label">最大价差</div><div class="metric-value" style="color:var(--red)">+26%</div><div class="metric-detail">Mate 80 Pro · iPhone 17 Pro</div></article>
+      <article class="surface metric"><div class="metric-label">需要关注</div><div class="metric-value" style="color:var(--amber)">3</div><div class="metric-detail">2 个高于竞品 · 1 个缺失</div></article>
+    </section>
+
+    <section class="surface matrix-wrap" aria-label="固定列产品矩阵">
+      <div class="matrix-head">
+        <div class="matrix-heading">
+          <h2>型号与竞品对齐</h2>
+          <p>当前价为所选市场的最新有值价格；价差 = 竞品当前价相对我司当前价。</p>
+        </div>
+        <div class="matrix-legend"><span class="legend"><i class="own"></i>我司</span><span class="legend"><i class="comp"></i>竞品</span><span>共 4 行 · 点击箭头展开</span></div>
+      </div>
+      <div class="matrix-scroll">
+        <table>
+          <colgroup><col class="own-col"><col class="price-col"><col class="comp-col"><col class="comp-col"><col class="comp-col"><col class="action-col"></colgroup>
+          <thead>
+            <tr>
+              <th class="sticky"><span class="head-overline">我司系列 / 型号</span><span class="head-name"><span class="brandmark huawei">H</span>Huawei 产品线</span><span class="head-price">点击展开配置</span></th>
+              <th><span class="head-overline">我司当前价</span><span class="head-name">价格区间</span><span class="head-price">折后价 · 本币</span></th>
+              <th><span class="head-overline">竞品列 01</span><span class="head-name"><span class="brandmark apple">A</span>Apple</span><span class="head-price">固定对齐 · 代表型号</span></th>
+              <th><span class="head-overline">竞品列 02</span><span class="head-name"><span class="brandmark samsung">S</span>Samsung</span><span class="head-price">固定对齐 · 代表型号</span></th>
+              <th><span class="head-overline">竞品列 03</span><span class="head-name"><span class="brandmark honor">Ho</span>Honor</span><span class="head-price">固定对齐 · 代表型号</span></th>
+              <th><span class="head-overline">下一步</span><span class="head-name">动作</span><span class="head-price">进入详情</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="main-row" data-row="mate-xt" data-gap="false">
+              <td class="sticky"><div class="own-product"><button class="chevron" type="button" aria-label="展开 Huawei Mate XT">›</button><span class="brandmark huawei">H</span><div class="own-name"><strong>Mate XT</strong><span>旗舰 · 2 个配置 · 生命周期 -0.9%</span></div></div></td>
+              <td><div class="price-main">₽ 204,900–227,900</div><div class="price-sub">$2,281–$2,532</div></td>
+              <td><div class="comp-cell"><span class="brandmark apple">A</span><div class="comp-main"><div class="comp-title">iPhone 17 Pro Max</div><div class="comp-meta"><span class="comp-price">₽ 181,900</span><span>256 GB</span></div><div class="gap down">−11.2% · 低于我司</div><div class="state">在售 · 无促销</div></div></div></td>
+              <td><div class="comp-cell"><span class="brandmark samsung">S</span><div class="comp-main"><div class="comp-title">Galaxy Z Fold7</div><div class="comp-meta"><span class="comp-price">₽ 209,600</span><span>12+512 GB</span></div><div class="gap up">+2.3% · 高于我司</div><div class="state">在售 · 促销中</div></div></div></td>
+              <td><div class="comp-cell"><span class="brandmark honor">Ho</span><div class="comp-main"><div class="comp-title">Magic V5</div><div class="comp-meta"><span class="comp-price">₽ 145,000</span><span>16+512 GB</span></div><div class="gap down">−30.6% · 低于我司</div><div class="state">在售 · 无促销</div></div></div></td>
+              <td><button class="action" type="button">看详情 →</button></td>
+            </tr>
+            <tr class="detail-row" data-detail="mate-xt"><td colspan="6"><div class="detail-panel"><div class="detail-label"><strong>Mate XT 配置明细</strong>2 个配置 · 点击右侧价格继续下钻</div><div class="detail-cell"><h4>我司配置</h4><div class="spec-line"><span>16+512 GB</span><b>₽ 204,900</b></div><div class="spec-line"><span>16+1 TB</span><b>₽ 227,900</b></div></div><div class="detail-cell"><h4>竞品匹配</h4><div class="spec-line"><span>高置信匹配</span><b>2 / 3</b></div><div class="spec-line"><span>未匹配配置</span><b>1</b></div></div><div class="detail-cell"><h4>近 4 周</h4><div class="spec-line"><span>我司价格趋势</span><b style="color:var(--green)">−0.9%</b></div><div class="spec-line"><span>竞品变化</span><b>+1.2%</b></div></div></div></td></tr>
+
+            <tr class="main-row" data-row="mate-x7" data-gap="false">
+              <td class="sticky"><div class="own-product"><button class="chevron" type="button" aria-label="展开 Huawei Mate X7">›</button><span class="brandmark huawei">H</span><div class="own-name"><strong>Mate X7</strong><span>旗舰 · 4 个配置 · 生命周期 -0.5%</span></div></div></td>
+              <td><div class="price-main">₽ 184,900–222,900</div><div class="price-sub">$2,054–$2,468</div></td>
+              <td><div class="comp-cell"><span class="brandmark apple">A</span><div class="comp-main"><div class="comp-title">iPhone 17 Pro</div><div class="comp-meta"><span class="comp-price">₽ 132,900</span><span>12+512 GB</span></div><div class="gap down">−28.1% · 低于我司</div><div class="state">在售 · 无促销</div></div></div></td>
+              <td><div class="comp-cell"><span class="brandmark samsung">S</span><div class="comp-main"><div class="comp-title">Galaxy Z Fold7</div><div class="comp-meta"><span class="comp-price">₽ 209,600</span><span>12+512 GB</span></div><div class="gap up">+1.3% · 高于我司</div><div class="state">在售 · 促销中</div></div></div></td>
+              <td><div class="comp-cell"><span class="brandmark honor">Ho</span><div class="comp-main"><div class="comp-title">Magic V5</div><div class="comp-meta"><span class="comp-price">₽ 145,000</span><span>16+512 GB</span></div><div class="gap down">−21.5% · 低于我司</div><div class="state">在售 · 无促销</div></div></div></td>
+              <td><button class="action" type="button">看详情 →</button></td>
+            </tr>
+            <tr class="detail-row" data-detail="mate-x7"><td colspan="6"><div class="detail-panel"><div class="detail-label"><strong>Mate X7 配置明细</strong>4 个配置 · 已关联 3 个竞品</div><div class="detail-cell"><h4>我司配置</h4><div class="spec-line"><span>16+512 GB</span><b>₽ 184,900</b></div><div class="spec-line"><span>16+1 TB</span><b>₽ 222,900</b></div></div><div class="detail-cell"><h4>竞品匹配</h4><div class="spec-line"><span>高置信匹配</span><b>3 / 4</b></div><div class="spec-line"><span>待复核</span><b>1</b></div></div><div class="detail-cell"><h4>近 4 周</h4><div class="spec-line"><span>我司价格趋势</span><b style="color:var(--green)">−0.5%</b></div><div class="spec-line"><span>竞品变化</span><b>−0.8%</b></div></div></div></td></tr>
+
+            <tr class="main-row" data-row="mate-80" data-gap="true">
+              <td class="sticky"><div class="own-product"><button class="chevron" type="button" aria-label="展开 Huawei Mate 80 Pro">›</button><span class="brandmark huawei">H</span><div class="own-name"><strong>Mate 80 Pro</strong><span>高端 · 4 个配置 · 生命周期 -3.3%</span></div></div></td>
+              <td><div class="price-main">₽ 86,400–118,700</div><div class="price-sub">$960–$1,319</div></td>
+              <td><div class="comp-cell"><span class="brandmark apple">A</span><div class="comp-main"><div class="comp-title">iPhone 17 Pro</div><div class="comp-meta"><span class="comp-price">₽ 108,900</span><span>12+512 GB</span></div><div class="gap up">+25.8% · 高于我司</div><div class="state">在售 · 无促销</div></div></div></td>
+              <td><div class="comp-cell"><span class="brandmark samsung">S</span><div class="comp-main"><div class="comp-title">Galaxy S26 Ultra</div><div class="comp-meta"><span class="comp-price">₽ 106,200</span><span>12+512 GB</span></div><div class="gap up">+22.2% · 高于我司</div><div class="state">在售 · 促销中</div></div></div></td>
+              <td><div class="comp-cell"><span class="brandmark honor">Ho</span><div class="comp-main"><div class="comp-title">Magic 8 Pro</div><div class="comp-meta"><span class="comp-price">₽ 84,000</span><span>12+512 GB</span></div><div class="gap down">−2.4% · 低于我司</div><div class="state">在售 · 无促销</div></div></div></td>
+              <td><button class="action" type="button">看详情 →</button></td>
+            </tr>
+            <tr class="detail-row" data-detail="mate-80"><td colspan="6"><div class="detail-panel"><div class="detail-label"><strong>Mate 80 Pro 配置明细</strong>4 个配置 · 价差集中在旗舰配置</div><div class="detail-cell"><h4>我司配置</h4><div class="spec-line"><span>12+256 GB</span><b>₽ 86,400</b></div><div class="spec-line"><span>16+1 TB</span><b>₽ 118,700</b></div></div><div class="detail-cell"><h4>竞品匹配</h4><div class="spec-line"><span>高置信匹配</span><b>4 / 4</b></div><div class="spec-line"><span>主要价差</span><b style="color:var(--red)">+25.8%</b></div></div><div class="detail-cell"><h4>近 4 周</h4><div class="spec-line"><span>我司价格趋势</span><b style="color:var(--green)">−3.3%</b></div><div class="spec-line"><span>竞品变化</span><b>0%</b></div></div></div></td></tr>
+
+            <tr class="main-row" data-row="pura-90" data-gap="true">
+              <td class="sticky"><div class="own-product"><button class="chevron" type="button" aria-label="展开 Huawei Pura 90s Pro Max">›</button><span class="brandmark huawei">H</span><div class="own-name"><strong>Pura 90s Pro Max</strong><span>高端 · 2 个配置 · 生命周期 -2.6%</span></div></div></td>
+              <td><div class="price-main">₽ 82,300–86,400</div><div class="price-sub">$915–$960</div></td>
+              <td><div class="comp-cell"><span class="brandmark apple">A</span><div class="comp-main"><div class="comp-title">iPhone 17 Pro</div><div class="comp-meta"><span class="comp-price">₽ 143,900</span><span>12+512 GB</span></div><div class="gap up">+74.9% · 高于我司</div><div class="state">在售 · 无促销</div></div></div></td>
+              <td><div class="comp-cell"><span class="brandmark samsung">S</span><div class="comp-main"><div class="comp-title">Galaxy S26 Ultra</div><div class="comp-meta"><span class="comp-price">₽ 126,900</span><span>12+512 GB</span></div><div class="gap up">+46.9% · 高于我司</div><div class="state">在售 · 促销中</div></div></div></td>
+              <td><div class="comp-cell"><span class="brandmark honor">Ho</span><div class="comp-main"><div class="comp-title">Magic 8 Pro</div><div class="comp-meta"><span class="comp-price">₽ 84,000</span><span>12+512 GB</span></div><div class="gap flat">−1.9% · 接近我司</div><div class="state">在售 · 无促销</div></div></div></td>
+              <td><button class="action" type="button">看详情 →</button></td>
+            </tr>
+            <tr class="detail-row" data-detail="pura-90"><td colspan="6"><div class="detail-panel"><div class="detail-label"><strong>Pura 90s Pro Max 配置明细</strong>2 个配置 · 竞品价位显著分层</div><div class="detail-cell"><h4>我司配置</h4><div class="spec-line"><span>12+256 GB</span><b>₽ 82,300</b></div><div class="spec-line"><span>12+512 GB</span><b>₽ 86,400</b></div></div><div class="detail-cell"><h4>竞品匹配</h4><div class="spec-line"><span>高置信匹配</span><b>2 / 2</b></div><div class="spec-line"><span>需关注价差</span><b style="color:var(--red)">2 个</b></div></div><div class="detail-cell"><h4>近 4 周</h4><div class="spec-line"><span>我司价格趋势</span><b style="color:var(--green)">−2.6%</b></div><div class="spec-line"><span>竞品变化</span><b>+0.4%</b></div></div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="compare-footer"><span>已显示 <strong>4 个我司型号</strong> 与每个型号的 3 个主要竞品；滚动表格可查看更多竞品列。</span><button class="btn" type="button" id="addColumn">＋ 添加竞品列</button></div>
+    </section>
+
+    <section class="notes" aria-label="设计说明">
+      <article class="surface note blue"><h3>这个结构解决什么</h3><p>型号是唯一的阅读锚点，竞品永远在同一行同一列对齐；用户可以先判断“我司产品线覆盖了什么价位”，再顺着一行查看谁更贵、谁更便宜。</p></article>
+      <article class="surface note orange"><h3>下一步可下钻</h3><p>点击箭头只展开当前型号的配置和匹配状态；点击竞品价格进入近 8 周走势。真实数据接入后可把“动作”列换成改价、订阅预警或复核匹配。</p></article>
+    </section>
+  </main>
+  <script>
+    (function () {
+      const rows = Array.from(document.querySelectorAll('tr.main-row'));
+      const toggleRow = (row) => {
+        const key = row.dataset.row;
+        const detail = document.querySelector('tr.detail-row[data-detail="' + key + '"]');
+        const button = row.querySelector('.chevron');
+        const open = detail.classList.toggle('open');
+        button.classList.toggle('open', open);
+        button.setAttribute('aria-label', (open ? '收起 ' : '展开 ') + row.querySelector('.own-name strong').textContent);
+      };
+      rows.forEach((row) => {
+        row.querySelector('.chevron').addEventListener('click', (e) => { e.stopPropagation(); toggleRow(row); });
+        row.addEventListener('click', () => toggleRow(row));
+        row.querySelector('.action').addEventListener('click', (e) => { e.stopPropagation(); toggleRow(row); });
+      });
+      const reset = document.getElementById('resetRows');
+      let allOpen = false;
+      reset.addEventListener('click', () => {
+        allOpen = !allOpen;
+        rows.forEach((row) => {
+          const detail = document.querySelector('tr.detail-row[data-detail="' + row.dataset.row + '"]');
+          const button = row.querySelector('.chevron');
+          detail.classList.toggle('open', allOpen);
+          button.classList.toggle('open', allOpen);
+        });
+        reset.textContent = allOpen ? '收起全部' : '展开全部';
+      });
+      const diff = document.getElementById('toggleDiff');
+      let diffOnly = false;
+      diff.addEventListener('click', () => {
+        diffOnly = !diffOnly;
+        rows.forEach((row) => {
+          row.style.display = !diffOnly || row.dataset.gap === 'true' ? '' : 'none';
+          const detail = document.querySelector('tr.detail-row[data-detail="' + row.dataset.row + '"]');
+          if (diffOnly && row.dataset.gap !== 'true') detail.classList.remove('open');
+        });
+        diff.textContent = diffOnly ? '显示全部型号' : '只看有价差';
+      });
+      document.getElementById('addColumn').addEventListener('click', function () {
+        this.textContent = '已预留更多竞品列';
+        this.classList.add('ghost');
+      });
+    })();
+  </script>
+</body>
+</html>

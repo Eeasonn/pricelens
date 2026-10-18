@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PriceLens 总览方向草图</title>
+  <style>
+    :root { color: #171717; background: #f5f6f8; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 56px 28px 80px; }
+    h1 { margin: 0 0 10px; font-size: 30px; letter-spacing: -.03em; }
+    .lead { margin: 0 0 28px; color: #686d76; line-height: 1.7; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    article { display: flex; flex-direction: column; min-height: 255px; padding: 22px; border: 1px solid #e3e5e9; border-radius: 16px; background: #fff; box-shadow: 0 8px 24px rgba(30,35,45,.06); }
+    .tag { display: inline-flex; align-self: flex-start; padding: 4px 8px; border-radius: 999px; color: #0b5bd3; background: #edf4ff; font-size: 12px; font-weight: 700; }
+    h2 { margin: 18px 0 8px; font-size: 20px; }
+    p { margin: 0; color: #626873; line-height: 1.65; font-size: 14px; }
+    a { display: inline-flex; align-items: center; justify-content: center; margin-top: auto; min-height: 40px; border-radius: 9px; color: #fff; background: #171717; text-decoration: none; font-weight: 700; }
+    a:hover { background: #0b5bd3; }
+    .note { margin-top: 25px; padding: 14px 16px; border-radius: 10px; color: #535861; background: #fff; border: 1px solid #e3e5e9; font-size: 13px; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } main { padding: 30px 18px 50px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>PriceLens 总览方向草图</h1>
+    <p class="lead">三种结构使用同一组手机产品示例，均为只读原型。请分别打开并比较：你首先想回答什么问题、竞品是否容易定位、从总览下钻到型号是否自然。</p>
+    <section class="grid">
+      <article>
+        <span class="tag">A · 推荐候选</span>
+        <h2>系列分栏 + 价格地图</h2>
+        <p>连续价格 Y 轴，横向按 Mate / Pura / nova 系列分栏，我司与竞品节点共用坐标；点击节点查看型号摘要。</p>
+        <a href="overview-a.html">打开 A 草图</a>
+      </article>
+      <article>
+        <span class="tag">B · 固定列矩阵</span>
+        <h2>型号与竞品并排对比</h2>
+        <p>每个我司型号是一行，Apple / Samsung / Honor 固定成列，价格、价差、配置和在售状态逐列对齐；点击展开。</p>
+        <a href="overview-b.html">打开 B 草图</a>
+      </article>
+      <article>
+        <span class="tag">C · 运营仪表盘</span>
+        <h2>摘要、异常与趋势</h2>
+        <p>顶部先看动作摘要，中部看价格分布和竞品份额，下方列出异常型号并点击切换趋势。</p>
+        <a href="overview-c.html">打开 C 草图</a>
+      </article>
+    </section>
+    <div class="note">草图只用于确定信息结构和交互路径，不代表最终视觉规范。选定方向后，我会把胜出的结构重写进真实总览页面。</div>
+  </main>
+</body>
+</html>

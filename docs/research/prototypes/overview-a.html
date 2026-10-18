@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PriceLens · 草图 A · 系列分栏价格地图</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --muted: #777b84;
+    --line: #e7e9ed;
+    --soft: #f7f8fa;
+    --panel: #ffffff;
+    --brand: #df162d;
+    --brand-soft: #fff1f3;
+    --blue: #1a62d9;
+    --blue-soft: #edf4ff;
+    --violet: #6d4ad6;
+    --orange: #e87a11;
+    --green: #12836a;
+    --shadow: 0 12px 36px rgba(31, 35, 42, .08);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: #f3f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  button, select { font: inherit; }
+  .shell { max-width: 1500px; min-width: 1050px; margin: 0 auto; padding: 26px 34px 50px; }
+  .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+  .eyebrow { color: var(--brand); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 7px; }
+  h1 { font-size: 28px; line-height: 1.2; letter-spacing: -.03em; margin: 0 0 8px; }
+  .subtitle { margin: 0; color: var(--muted); font-size: 14px; }
+  .actions { display: flex; align-items: center; gap: 10px; }
+  .select, .ghost { height: 36px; border: 1px solid var(--line); border-radius: 9px; background: white; color: #393d45; padding: 0 12px; }
+  .select { min-width: 108px; }
+  .ghost { cursor: pointer; font-weight: 600; }
+  .ghost:hover { border-color: #bac6dc; color: var(--blue); }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 15px 17px; box-shadow: 0 3px 14px rgba(30,38,50,.025); }
+  .metric-label { color: var(--muted); font-size: 12px; margin-bottom: 7px; }
+  .metric-value { font-size: 22px; line-height: 1.1; font-weight: 750; letter-spacing: -.02em; }
+  .metric-note { color: var(--muted); font-size: 12px; margin-top: 7px; }
+  .metric-note.alert { color: var(--brand); }
+  .board { background: var(--panel); border: 1px solid var(--line); border-radius: 15px; box-shadow: var(--shadow); overflow: hidden; }
+  .board-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 15px; border-bottom: 1px solid var(--line); }
+  .board-title { font-size: 16px; font-weight: 750; }
+  .board-caption { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .legend { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot.own { background: var(--brand); box-shadow: 0 0 0 3px #ffe0e5; }
+  .dot.comp-a { background: #242936; }
+  .dot.comp-b { background: var(--blue); }
+  .dot.comp-c { background: var(--orange); }
+  .map-wrap { display: grid; grid-template-columns: 82px 1fr; padding: 20px 22px 22px 12px; }
+  .yaxis { position: relative; height: 620px; border-right: 1px solid #cfd3da; }
+  .tick { position: absolute; right: 11px; transform: translateY(-50%); color: #777c84; font-size: 11px; white-space: nowrap; }
+  .tick::after { content: ''; position: absolute; left: calc(100% + 10px); top: 50%; width: 9999px; height: 1px; background: var(--line); z-index: 0; pointer-events: none; }
+  .axis-label { writing-mode: vertical-rl; transform: rotate(180deg); position: absolute; left: -20px; top: 50%; color: #969aa2; font-size: 11px; letter-spacing: .08em; }
+  .plot { position: relative; height: 620px; overflow: hidden; }
+  .band { position: absolute; left: 0; right: 0; height: 25%; border-top: 1px solid rgba(216,219,225,.6); }
+  .band:first-child { border-top: 0; }
+  .band-label { position: absolute; left: 8px; top: 10px; font-size: 11px; color: #a4a8b0; background: rgba(255,255,255,.82); padding: 3px 7px; border-radius: 5px; z-index: 1; }
+  .columns { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0 7px; }
+  .column { position: relative; border-left: 1px solid #eceef1; border-right: 1px solid #eceef1; background: linear-gradient(180deg, rgba(249,250,251,.52), rgba(255,255,255,.18)); }
+  .column-head { height: 67px; padding: 12px 13px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.88); position: relative; z-index: 3; }
+  .series { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 750; }
+  .series-mark { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; color: white; background: var(--brand); font-size: 10px; font-weight: 800; }
+  .series-meta { margin-top: 5px; color: var(--muted); font-size: 11px; }
+  .node { position: absolute; left: 50%; transform: translate(-50%, -50%); min-width: 124px; max-width: 174px; border: 1px solid; border-radius: 9px; padding: 7px 10px 8px; text-align: left; cursor: pointer; background: white; z-index: 4; transition: transform .16s, box-shadow .16s, border-color .16s; }
+  .node:hover, .node.active { transform: translate(-50%, -50%) scale(1.035); box-shadow: 0 8px 20px rgba(30,35,44,.14); z-index: 7; }
+  .node.own { border-color: #f1a2ac; background: var(--brand-soft); }
+  .node.comp { border-color: #d6d9df; background: #fff; }
+  .node .name { font-size: 12px; line-height: 1.25; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .node .price { font-size: 15px; font-weight: 800; margin-top: 4px; letter-spacing: -.02em; }
+  .node .type { display: flex; align-items: center; gap: 5px; margin-top: 4px; color: var(--muted); font-size: 10px; }
+  .node .mini-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .node.own .mini-dot { background: var(--brand); }
+  .node.comp .mini-dot { background: var(--blue); }
+  .node.left { left: 32%; }
+  .node.right { left: 69%; }
+  .connector { position: absolute; height: 1px; background: #cfd5df; width: 35px; left: calc(50% - 17px); z-index: 2; opacity: .8; }
+  .connector.to-left { left: 32%; width: 18%; transform: rotate(0deg); transform-origin: left center; }
+  .connector.to-right { left: 50%; width: 19%; }
+  .detail { margin: 0 22px 22px; border: 1px solid #dce3ef; border-radius: 12px; background: #fafdff; overflow: hidden; }
+  .detail.empty { display: flex; align-items: center; justify-content: center; height: 94px; color: var(--muted); font-size: 13px; }
+  .detail-top { display: flex; justify-content: space-between; align-items: center; padding: 15px 17px 12px; border-bottom: 1px solid #e3e9f1; }
+  .detail-kicker { color: var(--blue); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+  .detail-title { font-size: 17px; font-weight: 800; }
+  .detail-price { text-align: right; font-size: 20px; font-weight: 800; }
+  .detail-price small { display: block; color: var(--muted); font-size: 11px; font-weight: 500; margin-top: 3px; }
+  .detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .detail-cell { padding: 12px 16px; border-right: 1px solid #e3e9f1; }
+  .detail-cell:last-child { border-right: 0; }
+  .detail-cell dt { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .detail-cell dd { margin: 0; font-size: 13px; font-weight: 650; }
+  .detail-footer { display: flex; justify-content: space-between; padding: 10px 16px; color: var(--muted); font-size: 11px; background: #f5f9fd; }
+  .status { color: var(--green); font-weight: 700; }
+  .footnote { padding: 0 22px 18px; color: #969aa2; font-size: 11px; }
+  @media (max-width: 1180px) { .shell { padding-left: 20px; padding-right: 20px; } .summary { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">PRICELENS · MARKET OVERVIEW / A</div>
+      <h1>系列分栏 · 价格摆位图</h1>
+      <p class="subtitle">把一个国家、一个产业的产品谱系放在同一张连续价格地图上，再沿型号下钻。</p>
+    </div>
+    <div class="actions">
+      <select class="select" aria-label="国家"><option>俄罗斯</option><option>中国</option><option>哈萨克斯坦</option></select>
+      <select class="select" aria-label="产业"><option>智能手机</option><option>平板电脑</option><option>穿戴设备</option></select>
+      <select class="select" aria-label="币种"><option>USD</option><option>本币 ₽</option></select>
+      <button class="ghost" id="reset">重置选择</button>
+    </div>
+  </header>
+
+  <section class="summary" aria-label="市场摘要">
+    <div class="metric"><div class="metric-label">我司在售型号</div><div class="metric-value">12</div><div class="metric-note">覆盖 4 个价格带</div></div>
+    <div class="metric"><div class="metric-label">已匹配竞品</div><div class="metric-value">18</div><div class="metric-note">按系列和配置关联</div></div>
+    <div class="metric"><div class="metric-label">我司均价 vs 竞品</div><div class="metric-value">−6.8%</div><div class="metric-note" style="color:var(--green)">整体更具价格优势</div></div>
+    <div class="metric"><div class="metric-label">需要关注</div><div class="metric-value">3</div><div class="metric-note alert">高于同档竞品的型号</div></div>
+  </section>
+
+  <main class="board">
+    <div class="board-head">
+      <div><div class="board-title">智能手机 · 俄罗斯 · 当前价格摆位</div><div class="board-caption">横向看产品系列，纵向看实际售价；每个节点可点击查看型号摘要。</div></div>
+      <div class="legend"><span><i class="dot own"></i>我司</span><span><i class="dot comp-a"></i>Apple</span><span><i class="dot comp-b"></i>Samsung</span><span><i class="dot comp-c"></i>Honor</span></div>
+    </div>
+    <div class="map-wrap">
+      <div class="yaxis" aria-label="价格 Y 轴">
+        <div class="axis-label">当前价 · USD</div>
+        <div class="tick" style="top:0%">$2,600</div><div class="tick" style="top:19.4%">$2,000</div><div class="tick" style="top:38.7%">$1,500</div><div class="tick" style="top:57.9%">$1,000</div><div class="tick" style="top:77.4%">$500</div><div class="tick" style="top:100%">$0</div>
+      </div>
+      <div class="plot">
+        <div class="band" style="top:0%"><span class="band-label">旗舰 · $2,000+</span></div>
+        <div class="band" style="top:25%"><span class="band-label">高端 · $1,000–2,000</span></div>
+        <div class="band" style="top:50%"><span class="band-label">中端 · $500–1,000</span></div>
+        <div class="band" style="top:75%"><span class="band-label">入门 · $0–500</span></div>
+        <div class="columns">
+          <section class="column" aria-label="Mate 系列">
+            <div class="column-head"><div class="series"><span class="series-mark">M</span>Mate 系列</div><div class="series-meta">我司 4 型号 · 竞品 6 型号</div></div>
+            <button class="node own active" style="top:10%" data-id="mate-xt"><div class="name">Huawei Mate XT</div><div class="price">$2,532</div><div class="type"><i class="mini-dot"></i>我司 · 16+1TB</div></button>
+            <button class="node comp" style="top:13.8%; left:69%" data-id="iphone-fold"><div class="name">Apple iPhone Fold</div><div class="price">$2,450</div><div class="type"><i class="mini-dot"></i>Apple · 1TB</div></button>
+            <button class="node own" style="top:27.2%; left:32%" data-id="mate-x7"><div class="name">Huawei Mate X7</div><div class="price">$2,468</div><div class="type"><i class="mini-dot"></i>我司 · 16+1TB</div></button>
+            <button class="node comp" style="top:34.5%; left:69%" data-id="galaxy-fold7"><div class="name">Galaxy Z Fold7</div><div class="price">$2,329</div><div class="type"><i class="mini-dot"></i>Samsung · 12+512GB</div></button>
+          </section>
+          <section class="column" aria-label="Pura 系列">
+            <div class="column-head"><div class="series"><span class="series-mark">P</span>Pura 系列</div><div class="series-meta">我司 4 型号 · 竞品 8 型号</div></div>
+            <button class="node own" style="top:52%" data-id="pura-80-pro"><div class="name">Huawei Pura 80 Pro</div><div class="price">$872</div><div class="type"><i class="mini-dot"></i>我司 · 12+512GB</div></button>
+            <button class="node comp" style="top:47.5%; left:69%" data-id="iphone-17"><div class="name">Apple iPhone 17</div><div class="price">$1,494</div><div class="type"><i class="mini-dot"></i>Apple · 8+512GB</div></button>
+            <button class="node own" style="top:64.7%; left:32%" data-id="pura-90s"><div class="name">Huawei Pura 90s Pro</div><div class="price">$960</div><div class="type"><i class="mini-dot"></i>我司 · 12+512GB</div></button>
+            <button class="node comp" style="top:68.1%; left:69%" data-id="galaxy-s26"><div class="name">Samsung Galaxy S26+</div><div class="price">$1,452</div><div class="type"><i class="mini-dot"></i>Samsung · 12+512GB</div></button>
+            <button class="node comp" style="top:73.8%; left:69%" data-id="honor-magic8"><div class="name">Honor Magic 8 Pro</div><div class="price">$1,160</div><div class="type"><i class="mini-dot"></i>Honor · 12+512GB</div></button>
+          </section>
+          <section class="column" aria-label="nova 系列">
+            <div class="column-head"><div class="series"><span class="series-mark">N</span>nova 系列</div><div class="series-meta">我司 4 型号 · 竞品 4 型号</div></div>
+            <button class="node own" style="top:81.8%" data-id="nova-15"><div class="name">Huawei nova 15</div><div class="price">$394</div><div class="type"><i class="mini-dot"></i>我司 · 12+256GB</div></button>
+            <button class="node comp" style="top:85.1%; left:69%" data-id="iphone-air"><div class="name">Apple iPhone Air</div><div class="price">$699</div><div class="type"><i class="mini-dot"></i>Apple · 8+256GB</div></button>
+            <button class="node own" style="top:91.2%; left:32%" data-id="nova-14"><div class="name">Huawei nova 14</div><div class="price">$388</div><div class="type"><i class="mini-dot"></i>我司 · 8+256GB</div></button>
+            <button class="node comp" style="top:89.6%; left:69%" data-id="galaxy-a57"><div class="name">Samsung Galaxy A57</div><div class="price">$499</div><div class="type"><i class="mini-dot"></i>Samsung · 8+256GB</div></button>
+          </section>
+        </div>
+      </div>
+    </div>
+    <section class="detail" id="detail" aria-live="polite"></section>
+    <div class="footnote">示意数据用于评审交互与信息层级。实际版本可切换国家、产业、平台和币种，并按当前有值周更新节点位置。</div>
+  </main>
+</div>
+<script>
+  const records = {
+    'mate-xt': { kicker: '我司 · Mate 系列 · 旗舰', title: 'Huawei Mate XT · 16+1TB', price: '$2,532', rrp: '$2,625', gap: '—', lifecycle: '上市第 41 周 · −0.9%', stock: '在售 / 2 个配置', match: '主要竞品：Apple iPhone Fold', note: '当前价格位于旗舰带上沿，较匹配竞品高 3.3%。', status: '建议关注价格差' },
+    'iphone-fold': { kicker: 'Apple · Mate 系列竞品', title: 'Apple iPhone Fold · 1TB', price: '$2,450', rrp: '$2,499', gap: '+3.3% vs 我司', lifecycle: '上市第 10 周', stock: '在售 / 3 个配置', match: '匹配我司：Huawei Mate XT', note: '同一价格带的折叠屏竞品，当前价略低于我司旗舰。', status: '竞品参考' },
+    'mate-x7': { kicker: '我司 · Mate 系列 · 旗舰', title: 'Huawei Mate X7 · 16+1TB', price: '$2,468', rrp: '$2,500', gap: '—', lifecycle: '上市第 38 周 · −0.5%', stock: '在售 / 4 个配置', match: '主要竞品：Galaxy Z Fold7、Honor Magic V5', note: '产品密度集中在 $2,300–2,500 区间，竞争最直接。', status: '价格带稳定' },
+    'galaxy-fold7': { kicker: 'Samsung · Mate 系列竞品', title: 'Samsung Galaxy Z Fold7 · 12+512GB', price: '$2,329', rrp: '$2,375', gap: '+0.4% vs 我司', lifecycle: '上市第 11 周', stock: '在售 / 2 个配置', match: '匹配我司：Huawei Mate X7', note: '配置接近，价格只高于我司 0.4%，可作为同档基准。', status: '竞品参考' },
+    'pura-80-pro': { kicker: '我司 · Pura 系列 · 高端', title: 'Huawei Pura 80 Pro · 12+512GB', price: '$872', rrp: '$962', gap: '—', lifecycle: '上市第 32 周 · −10.1%', stock: '在售 / 3 个配置', match: '主要竞品：iPhone 17、Galaxy S26+', note: '较 RRP 已有明显折价，但仍低于主要竞品 30% 以上。', status: '价格优势明显' },
+    'pura-90s': { kicker: '我司 · Pura 系列 · 高端', title: 'Huawei Pura 90s Pro · 12+512GB', price: '$960', rrp: '$1,000', gap: '—', lifecycle: '上市第 21 周 · −2.6%', stock: '在售 / 2 个配置', match: '主要竞品：Galaxy S26 Ultra', note: '位于高端价格带下沿，可观察是否需要向 $1,000 上移。', status: '价格带稳定' },
+    'iphone-17': { kicker: 'Apple · Pura 系列竞品', title: 'Apple iPhone 17 · 8+512GB', price: '$1,494', rrp: '$1,500', gap: '+25.8% vs 我司', lifecycle: '上市第 6 周', stock: '在售 / 4 个配置', match: '匹配我司：Huawei Pura 80 Pro', note: '同档竞品价显著高于我司，显示出较强的价格优势。', status: '竞品参考' },
+    'galaxy-s26': { kicker: 'Samsung · Pura 系列竞品', title: 'Samsung Galaxy S26+ · 12+512GB', price: '$1,452', rrp: '$1,500', gap: '+22.2% vs 我司', lifecycle: '上市第 5 周', stock: '在售 / 3 个配置', match: '匹配我司：Huawei Pura 80 Pro', note: '同档位价格明显高于我司，适合做市场锚点。', status: '竞品参考' },
+    'honor-magic8': { kicker: 'Honor · Pura 系列竞品', title: 'Honor Magic 8 Pro · 12+512GB', price: '$1,160', rrp: '$1,187', gap: '−2.4% vs 我司', lifecycle: '上市第 9 周', stock: '在售 / 2 个配置', match: '匹配我司：Huawei Pura 80 Pro', note: '同一高端带中，Honor 形成更接近我司的竞争参照。', status: '竞品参考' },
+    'nova-15': { kicker: '我司 · nova 系列 · 中端', title: 'Huawei nova 15 · 12+256GB', price: '$394', rrp: '$420', gap: '—', lifecycle: '上市第 24 周 · −14.9%', stock: '在售 / 2 个配置', match: '主要竞品：iPhone Air、Galaxy A57', note: '中端带产品位于价格区间下沿，价格竞争力明显。', status: '价格优势明显' },
+    'iphone-air': { kicker: 'Apple · nova 系列竞品', title: 'Apple iPhone Air · 8+256GB', price: '$699', rrp: '$720', gap: '+77.4% vs 我司', lifecycle: '上市第 7 周', stock: '在售 / 2 个配置', match: '匹配我司：Huawei nova 15', note: '竞品明显高于我司价格，定位并非完全同档。', status: '竞品参考' },
+    'nova-14': { kicker: '我司 · nova 系列 · 中端', title: 'Huawei nova 14 · 8+256GB', price: '$388', rrp: '$405', gap: '—', lifecycle: '上市第 41 周 · −15.6%', stock: '在售 / 2 个配置', match: '主要竞品：Galaxy A57', note: '接近中端带底部，可作为入门价格锚点。', status: '价格优势明显' },
+    'galaxy-a57': { kicker: 'Samsung · nova 系列竞品', title: 'Samsung Galaxy A57 · 8+256GB', price: '$499', rrp: '$529', gap: '+28.6% vs 我司', lifecycle: '上市第 13 周', stock: '在售 / 3 个配置', match: '匹配我司：Huawei nova 14', note: '价格高于我司，但配置差异需要进入型号页进一步核对。', status: '竞品参考' }
+  };
+  const detail = document.getElementById('detail');
+  function render(id) {
+    document.querySelectorAll('.node').forEach(node => node.classList.toggle('active', node.dataset.id === id));
+    const r = records[id];
+    detail.classList.remove('empty');
+    detail.innerHTML = `<div class="detail-top"><div><div class="detail-kicker">${r.kicker}</div><div class="detail-title">${r.title}</div></div><div class="detail-price">${r.price}<small>上市参考价 ${r.rrp}</small></div></div><dl class="detail-grid"><div class="detail-cell"><dt>相对价差</dt><dd>${r.gap}</dd></div><div class="detail-cell"><dt>生命周期</dt><dd>${r.lifecycle}</dd></div><div class="detail-cell"><dt>在售状态</dt><dd>${r.stock}</dd></div><div class="detail-cell"><dt>关联关系</dt><dd>${r.match}</dd></div></dl><div class="detail-footer"><span>${r.note}</span><span class="status">${r.status} · 查看型号详情 →</span></div>`;
+  }
+  document.querySelectorAll('.node').forEach(node => node.addEventListener('click', () => render(node.dataset.id)));
+  document.getElementById('reset').addEventListener('click', () => render('mate-xt'));
+  render('mate-xt');
+</script>
+</body>
+</html>
