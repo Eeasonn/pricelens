@@ -721,7 +721,7 @@ function ProductDetailMatrix(props: {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 11 }}>
-          <span style={{ color: color.mute, fontSize: 11.5 }}>当前价</span>
+          <span style={{ color: color.mute, fontSize: 11.5 }}>价格区间</span>
           <span className="tnum" style={{ fontSize: 16, lineHeight: '22px', fontWeight: 750, color: color.ink }}>{priceRange(group.rows.map((r) => r.price))}</span>
         </div>
       </div>
