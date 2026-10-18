@@ -18,6 +18,8 @@ export interface DimRegion {
 /** §7.1 SKU（颜色级）产品主数据；romram 与 color 分列 */
 export interface DimProduct {
   sku_id: string;
+  /** 生产数据接入后用于跨国家隔离；demo 数据缺省按 RU 解释。 */
+  country_code?: string;
   industry: 'phone';
   brand: string;
   is_own: boolean;
