@@ -10,11 +10,17 @@
 // 收起保留 ROM 竞品摘要，产品头与顶栏全局动作共享状态。
 // 第六十八轮（用户反馈）：筛选条与看板拉齐——独立白卡（.lpl-fb）+ 同宽度同序
 // （国家 210｜产业 155｜我司产品 flex｜平台 160｜价格档位 flex），标签统一「我司产品」。
+// 第七十轮（用户反馈：收起竞品后仍不够整洁）：①产品级折叠——默认每产品一条产品条
+// （箭头+品牌+名称+生命周期+N 个配置+竞品 N ⋯⋯ 价区间｜预警｜竞品对比｜⋯），
+// 一屏看清「这个国家这个产业有哪些产品」；点击产品条才展开配置（ROM）明细，
+// 单产品可见时自动展开（视图态存 Provider，切页保留）。
+// ②我司 ROM 行内三按钮（添加竞品/竞品对比/多平台对比）撤除——竞品对比升产品条
+// 主按钮（全配置下钻），次要动作收进产品条右侧「⋯」菜单；未配置对标的虚线占位删除。
 // 纯展示层：结构全部来自 buildOverviewMatrix（金测锚定），本文件不取数。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ConfigProvider, Segmented, Select } from 'antd';
-import { DownOutlined, SwapOutlined } from '@ant-design/icons';
+import { ConfigProvider, Dropdown, Segmented, Select } from 'antd';
+import { DownOutlined, MoreOutlined, SwapOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
 import { useOverviewView } from '../state/OverviewViewContext';
@@ -177,19 +183,157 @@ function OverviewAlertCell({ items, subscribed, currency, bell, onOpen }: {
   );
 }
 
-/** 我司 ROM 行（第六十六轮改版）：品牌+产品名由上方型号头行表达，主列只放配置 ROMRAM
- *  （15/700，用户：要凸显的就是配置差异）+行尾动作簇；价格三列右对齐
+/** 产品条（第七十轮降噪改版）：每产品一条，收起态 = 只看它——箭头+品牌图标+产品名+
+ *  生命周期+N 个配置+竞品 N（展开态换成竞品折叠开关）⋯⋯右侧价区间｜预警｜竞品对比｜⋯。
+ *  点击整条 = 展开/收起配置明细；条内按钮 stopPropagation 不触发折叠；
+ *  data-model-id = 看板「← 返回总览」的滚动定位锚点（追补⑧）。 */
+function ProductStrip(props: {
+  model: OverviewModel;
+  expanded: boolean;
+  romCount: number;
+  /** 映射到可见 ROM 的去重竞品型号数 */
+  compCount: number;
+  compsExpanded: boolean;
+  priceMin: number | null;
+  priceMax: number | null;
+  currency: 'usd' | 'local';
+  alertChip?: ReactNode;
+  onToggle: () => void;
+  onToggleComps: () => void;
+  onCompare: () => void;
+  onMultiPlatform: () => void;
+  onConfigBench: () => void;
+}) {
+  const { model: m, expanded } = props;
+  return (
+    <div
+      data-model-id={m.modelId}
+      onClick={props.onToggle}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 2px', cursor: 'pointer', minWidth: 0 }}
+    >
+      <DownOutlined
+        style={{ fontSize: 10, color: color.mute, flexShrink: 0, transform: expanded ? undefined : 'rotate(-90deg)', transition: 'transform 0.15s' }}
+      />
+      <BrandGlyph brand={m.brand} size={16} />
+      <span style={{ fontSize: 15, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
+        {m.modelName.toLowerCase().startsWith(brandLabelOf(m.brand).toLowerCase()) ? null : (
+          <span style={{ color: color.mute }}>{brandLabelOf(m.brand)} </span>
+        )}
+        {m.modelName}
+      </span>
+      {m.lifecyclePct != null && (
+        <span className="tnum" style={{ fontSize: 11, color: m.lifecyclePct <= -0.05 ? color.error : color.body }}>
+          生命周期 {m.lifecyclePct > 0 ? '+' : ''}
+          {(m.lifecyclePct * 100).toFixed(1)}%
+        </span>
+      )}
+      <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>{props.romCount} 个配置</span>
+      {props.compCount > 0 &&
+        (expanded ? (
+          <button
+            type="button"
+            aria-expanded={props.compsExpanded}
+            title={props.compsExpanded ? '收起该产品的对标竞品' : '展开该产品的对标竞品'}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onToggleComps();
+            }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              minHeight: 22, padding: '1px 8px', fontSize: 11, fontWeight: 600,
+              color: props.compsExpanded ? selectSoftInk : color.body,
+              background: props.compsExpanded ? selectSoft : color.canvas,
+              border: `1px solid ${props.compsExpanded ? 'rgba(0, 112, 243, 0.40)' : color.hairlineStrong}`,
+              borderRadius: radius.pill, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
+            }}
+          >
+            <DownOutlined style={{ fontSize: 9, transform: props.compsExpanded ? undefined : 'rotate(-90deg)', transition: 'transform 0.15s' }} />
+            {props.compsExpanded ? `收起竞品（${props.compCount}）` : `展开竞品（${props.compCount}）`}
+          </button>
+        ) : (
+          <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>竞品 {props.compCount}</span>
+        ))}
+      <span style={{ flex: 1 }} />
+      {props.priceMin != null && (
+        <span
+          className="tnum"
+          title="该产品各配置的现价区间"
+          style={{ fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}
+        >
+          {props.priceMin === props.priceMax
+            ? formatPrice(props.priceMin, props.currency)
+            : `${formatPrice(props.priceMin, props.currency)} – ${formatPrice(props.priceMax, props.currency)}`}
+        </span>
+      )}
+      {props.alertChip}
+      <span
+        role="button"
+        title="进入价格看板：该产品全部配置与对标竞品走势"
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onCompare();
+        }}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          fontSize: 12,
+          fontWeight: 600,
+          color: '#0070f3',
+          background: color.canvas,
+          border: '1px solid rgba(0, 112, 243, 0.55)',
+          borderRadius: radius.pill,
+          padding: '2px 10px',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}
+      >
+        竞品对比
+      </span>
+      <Dropdown
+        trigger={['click']}
+        placement="bottomRight"
+        menu={{
+          items: [
+            { key: 'mp', label: '多平台对比' },
+            { key: 'bench', label: '添加竞品' },
+          ],
+          onClick: ({ key }) => (key === 'mp' ? props.onMultiPlatform() : props.onConfigBench()),
+        }}
+      >
+        <span
+          role="button"
+          title="更多动作：多平台对比 / 配置对标竞品"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+            height: 22,
+            color: color.mute,
+            borderRadius: radius.pill,
+            border: `1px solid ${color.hairline}`,
+            background: color.canvas,
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <MoreOutlined style={{ fontSize: 12 }} />
+        </span>
+      </Dropdown>
+    </div>
+  );
+}
+
+/** 我司 ROM 行（第六十六轮改版；第七十轮行内三按钮撤除）：品牌+产品名由上方产品条表达，
+ *  主列只放配置 ROMRAM（15/700，用户：要凸显的就是配置差异）；价格三列右对齐
  *  （折扣率徽章｜折后价 17/700｜RRP 无划线 12.5 mute）；「价差」列 = 方向切换器。 */
 function OwnRomRow(props: {
   row: OverviewRow;
   currency: 'usd' | 'local';
-  /** 竞品对比：该 ROM + 其对标竞品下钻看板（唯一下钻入口） */
-  onCompare: () => void;
   /** 预警列（追补⑨）：父层按系列组装好的状态单元格（第五十五轮起含订阅铃铛） */
   alertCell?: ReactNode;
-  /** 多平台对比：弹窗按该 ROM 预选 */
-  onMultiPlatform: () => void;
-  onConfigBench: () => void;
   diffDir: DiffDir;
   onToggleDiffDir: () => void;
   /** 该 ROM 已配置对标竞品才出切换器（无竞品价差无意义） */
@@ -199,77 +343,10 @@ function OwnRomRow(props: {
   return (
     <div className="lpl-ov-row" style={{ ...ROW_GRID }}>
       <Td first padY={9}>
-        {/* 撑满主列宽：动作簇 marginLeft auto 推到主列右缘固定显示 */}
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, width: '100%' }}>
           <BrandDot brand={row.brand} />
           <span style={{ fontSize: 15, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
             {row.romram}
-          </span>
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span
-              role="button"
-              title="为该配置添加/调整对标竞品"
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onConfigBench();
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                fontSize: 10.5,
-                fontWeight: 600,
-                color: selectSoftInk,
-                background: selectSoft,
-                border: '1px solid rgba(0, 112, 243, 0.40)',
-                borderRadius: radius.pill,
-                padding: '1px 8px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              ＋ 添加竞品
-            </span>
-            {/* 竞品对比 = 实心蓝主按钮（下钻看板的主 CTA）、多平台对比 = 描边蓝 */}
-            <span
-              role="button"
-              title="进入价格看板：该 ROM + 对标竞品走势"
-              onClick={props.onCompare}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#ffffff',
-                background: '#0070f3',
-                border: '1px solid #0070f3',
-                borderRadius: radius.pill,
-                padding: '3px 12px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              竞品对比
-            </span>
-            <span
-              role="button"
-              title="多平台对比：该产品的价格按平台展开"
-              onClick={props.onMultiPlatform}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#0070f3',
-                background: color.canvas,
-                border: '1px solid rgba(0, 112, 243, 0.55)',
-                borderRadius: radius.pill,
-                padding: '3px 12px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              多平台对比
-            </span>
           </span>
         </span>
       </Td>
@@ -413,7 +490,9 @@ export default function Overview() {
     setSelTiers,
     compExpansion,
     setCompExpanded,
-    setAllCompExpanded,
+    productExpansion,
+    setProductExpanded,
+    setAllProductsExpanded,
     scrollTop,
   } = useOverviewView();
   const currency = state.currency;
@@ -449,9 +528,9 @@ export default function Overview() {
     () => buildOverviewMatrix(currency, bench, state.platform, state),
     [currency, bench, state.platform, state.countryCode, state.industry],
   );
-  const [mpSel, setMpSel] = useState<{ model: OverviewModel; romram: string } | null>(null); // 多平台对比弹窗（第五十三轮实装；第五十四轮按 ROM 预选）
-  // 第四十五轮：「添加竞品」入口下沉到 ROM 行 → 记录型号+ROM，弹窗按该 ROM 预选
-  const [benchSel, setBenchSel] = useState<{ modelId: string; romram: string } | null>(null);
+  const [mpSel, setMpSel] = useState<{ model: OverviewModel; romram: string | null } | null>(null); // 多平台对比弹窗（第五十三轮实装；第七十轮起产品条进入、ROM 在弹窗内切）
+  // 第四十五轮：「添加竞品」入口下沉（第七十轮起从产品条「⋯」进入）→ 记录型号，弹窗内选 ROM
+  const [benchSel, setBenchSel] = useState<{ modelId: string; romram: string | null } | null>(null);
   // 第五十二轮追补：价差方向（竞品比我司 / 我司比竞品），每 ROM 框独立，默认竞品比我司
   const [diffDirs, setDiffDirs] = useState<Record<string, DiffDir>>({});
   const toggleDiffDir = (key: string): void =>
@@ -504,7 +583,9 @@ export default function Overview() {
     [visibleBands],
   );
   const compStatus = useMemo(() => resolveCompExpansion(visibleModelIds, compExpansion), [visibleModelIds, compExpansion]);
-  const nextExpanded = !compStatus.allExpanded;
+  // 第七十轮：产品级折叠走同一套规则——单产品可见 = 自动展开，多产品 = 默认收起
+  const prodStatus = useMemo(() => resolveCompExpansion(visibleModelIds, productExpansion), [visibleModelIds, productExpansion]);
+  const nextAllExpanded = !prodStatus.allExpanded;
   const visibleOwnCount = visibleBands.reduce((total, x) => total + x.ownModels.length, 0);
   const hasViewFilter = prodSel.length > 0 || selTiers.length > 0;
 
@@ -573,6 +654,40 @@ export default function Overview() {
       />
     );
   };
+  // 第七十轮：产品条预警徽标 = 该产品已订阅系列的预警计数（无触发不占位，点击进预警中心）
+  const productAlertChip = (m: OverviewModel): ReactNode => {
+    let count = 0;
+    for (const r of m.rows) {
+      const key = seriesKeyOfSku(r.skuId);
+      if (!state.alertSubs.includes(key)) continue;
+      count += alertsBySeries.get(key)?.length ?? 0;
+    }
+    if (count === 0) return null;
+    return (
+      <span
+        role="button"
+        title="查看该产品的预警详情"
+        onClick={(e) => {
+          e.stopPropagation();
+          go('alerts');
+        }}
+        style={{
+          flexShrink: 0,
+          padding: '1px 8px',
+          fontSize: 10.5,
+          fontWeight: 700,
+          lineHeight: '16px',
+          borderRadius: radius.pill,
+          color: '#b45309',
+          background: color.warningSoft,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        预警 {count}
+      </span>
+    );
+  };
 
   return (
     <div
@@ -638,12 +753,14 @@ export default function Overview() {
                 </span>
               )}
               <span style={{ flex: 1 }} />
+              {/* 第七十轮：全局开关升产品级——收起 = 只看产品条列表，展开 = 全部进配置明细
+                  （竞品级开关保留在产品条上）；默认规则：单产品自动展开、多产品收起 */}
               <button
                 type="button"
                 disabled={visibleModelIds.length === 0}
-                aria-expanded={compStatus.allExpanded}
-                title={nextExpanded ? '展开所有产品的对标竞品' : '收起所有产品的对标竞品，只看我司价格'}
-                onClick={() => setAllCompExpanded(visibleModelIds, nextExpanded)}
+                aria-expanded={prodStatus.allExpanded}
+                title={nextAllExpanded ? '展开全部产品到配置明细' : '收起全部产品，只看产品列表'}
+                onClick={() => setAllProductsExpanded(visibleModelIds, nextAllExpanded)}
                 style={{
                   minHeight: 24, padding: '0 10px', borderRadius: radius.control,
                   border: `1px solid ${visibleModelIds.length === 0 ? color.hairline : color.hairlineStrong}`,
@@ -651,13 +768,8 @@ export default function Overview() {
                   font: 'inherit', fontSize: 12, cursor: visibleModelIds.length === 0 ? 'default' : 'pointer', whiteSpace: 'nowrap',
                 }}
               >
-                {nextExpanded ? '展开全部竞品' : '收起全部竞品'}
+                {nextAllExpanded ? '展开全部产品' : '收起全部产品'}
               </button>
-              {!compStatus.allExpanded && !compStatus.allCollapsed && visibleModelIds.length > 0 && (
-                <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>
-                  已展开 {compStatus.expandedCount} / {visibleModelIds.length} 个产品
-                </span>
-              )}
               <Segmented
                 size="small"
                 value={currency}
@@ -671,7 +783,9 @@ export default function Overview() {
 
             <IndustrySummary summary={industrySummary} />
 
-            {/* 档位带 × 包裹格子矩阵（型号与映射竞品一体成格） */}
+            {/* 档位带 × 产品条列表（第七十轮降噪改版）：默认每产品一条产品条；
+                展开的产品在条下列配置（ROM）包裹格（行组表格：我司行在上、映射竞品在下）。
+                六列明细表头只服务展开态——带内全收起时不渲染。 */}
             {visibleBands.map(({ band, ownModels }) => {
               // 第四十五轮：「其他在售竞品」带尾区删除——矩阵只呈现已建对标的竞品；
               // 竞品计数 = 可见 ROM 映射到的去重型号数
@@ -683,6 +797,7 @@ export default function Overview() {
                     .map((c) => c.skuId.split('__')[0]);
                 }),
               ).size;
+              const anyExpanded = ownModels.some((m) => prodStatus.isExpanded(m.modelId));
               return (
                 <section key={band.tierCode} style={{ marginTop: space.xl }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md, padding: `0 0 ${space.sm}px` }}>
@@ -692,85 +807,61 @@ export default function Overview() {
                     <span style={{ fontSize: fontSize.caption, color: color.mute }}>
                       我司 {ownModels.length} · 竞品 {compCount}
                     </span>
-                    <span style={{ flex: 1 }} />
-                    <span style={{ fontSize: fontSize.caption, color: color.mute }}>对标 = ROM 级映射 · 我司行「＋添加竞品」维护</span>
                   </div>
 
-                  <div
-                    style={{
-                      ...ROW_GRID,
-                      marginBottom: space.sm,
-                      border: `1px solid ${color.hairline}`,
-                      borderRadius: radius.card,
-                      background: color.canvasSoft,
-                    }}
-                  >
-                    <Th first>产品</Th>
-                    <Th justify="end">折扣率</Th>
-                    <Th justify="end">折后价</Th>
-                    <Th justify="end">RRP</Th>
-                    <Th>价差</Th>
-                    <Th last>预警</Th>
-                  </div>
+                  {anyExpanded && (
+                    <div
+                      style={{
+                        ...ROW_GRID,
+                        marginBottom: space.sm,
+                        border: `1px solid ${color.hairline}`,
+                        borderRadius: radius.card,
+                        background: color.canvasSoft,
+                      }}
+                    >
+                      <Th first>产品</Th>
+                      <Th justify="end">折扣率</Th>
+                      <Th justify="end">折后价</Th>
+                      <Th justify="end">RRP</Th>
+                      <Th>价差</Th>
+                      <Th last>预警</Th>
+                    </div>
+                  )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
                     {ownModels.map((m) => {
+                      const expanded = prodStatus.isExpanded(m.modelId);
                       const visRoms = new Set(m.rows.map((r) => norm(r.romram)));
                       const compsExpanded = compStatus.isExpanded(m.modelId);
-                      // 型号头开关计数 = 映射到可见 ROM 的去重竞品型号数（与带头竞品数同口径）
+                      // 产品条竞品计数 = 映射到可见 ROM 的去重竞品型号数（与带级竞品数同口径）
                       const modelCompCount = new Set(
                         m.comps
                           .filter((c) => c.ownRomrams.some((x) => visRoms.has(norm(x))))
                           .map((c) => c.skuId.split('__')[0]),
                       ).size;
-                      const compPanelIds = m.rows.flatMap((r, romIndex) =>
-                        m.comps.some((c) => c.ownRomrams.some((x) => norm(x) === norm(r.romram)))
-                          ? [`overview-comps-${m.modelId}-${romIndex}`]
-                          : [],
-                      );
+                      const prices = m.rows.map((r) => r.price).filter((p): p is number => p != null);
+                      const priceMin = prices.length > 0 ? Math.min(...prices) : null;
+                      const priceMax = prices.length > 0 ? Math.max(...prices) : null;
                       return (
-                      <div key={m.modelId} style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
-                        {/* 型号头行：ROM 格子的归属（品牌图标（华为=花瓣标，第五十四轮追补用户指定）
-                            +名称/生命周期/竞品折叠开关；第四十五轮名称带品牌名）。
-                            data-model-id = 看板「← 返回总览」的滚动定位锚点（追补⑧） */}
-                        <div data-model-id={m.modelId} style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: '0 2px' }}>
-                          <BrandGlyph brand={m.brand} size={16} />
-                          <span style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>
-                            {m.modelName.toLowerCase().startsWith(brandLabelOf(m.brand).toLowerCase()) ? null : (
-                              <span style={{ color: color.mute }}>{brandLabelOf(m.brand)} </span>
-                            )}
-                            {m.modelName}
-                          </span>
-                          {m.lifecyclePct != null && (
-                            <span className="tnum" style={{ fontSize: 11, color: m.lifecyclePct <= -0.05 ? color.error : color.body }}>
-                              生命周期 {m.lifecyclePct > 0 ? '+' : ''}
-                              {(m.lifecyclePct * 100).toFixed(1)}%
-                            </span>
-                          )}
-                          {modelCompCount > 0 && (
-                            <button
-                              type="button"
-                              aria-expanded={compsExpanded}
-                              aria-controls={compPanelIds.join(' ')}
-                              title={compsExpanded ? '收起该产品的对标竞品' : '展开该产品的对标竞品'}
-                              onClick={() => setCompExpanded(m.modelId, !compsExpanded)}
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                minHeight: 24, padding: '1px 8px', fontSize: 11, fontWeight: 600,
-                                color: compsExpanded ? selectSoftInk : color.body,
-                                background: compsExpanded ? selectSoft : color.canvas,
-                                border: `1px solid ${compsExpanded ? 'rgba(0, 112, 243, 0.40)' : color.hairlineStrong}`,
-                                borderRadius: radius.pill, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
-                              }}
-                            >
-                              <DownOutlined style={{ fontSize: 9, transform: compsExpanded ? undefined : 'rotate(-90deg)', transition: 'transform 0.15s' }} />
-                              {compsExpanded ? `收起竞品（${modelCompCount}）` : `展开竞品（${modelCompCount}）`}
-                            </button>
-                          )}
-                          <span style={{ flex: 1 }} />
-                        </div>
+                      <div key={m.modelId} style={{ paddingBlock: expanded ? space.sm : space.xs }}>
+                        <ProductStrip
+                          model={m}
+                          expanded={expanded}
+                          romCount={m.rows.length}
+                          compCount={modelCompCount}
+                          compsExpanded={compsExpanded}
+                          priceMin={priceMin}
+                          priceMax={priceMax}
+                          currency={currency}
+                          alertChip={productAlertChip(m)}
+                          onToggle={() => setProductExpanded(m.modelId, !expanded)}
+                          onToggleComps={() => setCompExpanded(m.modelId, !compsExpanded)}
+                          onCompare={() => openCompare(m)}
+                          onMultiPlatform={() => setMpSel({ model: m, romram: null })}
+                          onConfigBench={() => setBenchSel({ modelId: m.modelId, romram: null })}
+                        />
                         {/* ROM 包裹格：行组表格——我司行在上、映射竞品在下（第四十轮对齐定版） */}
-                        {m.rows.map((r, romIndex) => {
+                        {expanded && m.rows.map((r, romIndex) => {
                           const romComps = m.comps.filter((c) => c.ownRomrams.some((x) => norm(x) === norm(r.romram)));
                           const dirKey = `${m.modelId}__${r.romram}`;
                           const dir = diffDirs[dirKey] ?? 'comp';
@@ -779,6 +870,7 @@ export default function Overview() {
                             <div
                               key={r.romram}
                               style={{
+                                marginTop: space.xs,
                                 border: `1px solid ${color.hairline}`,
                                 borderRadius: radius.card,
                                 background: color.canvas,
@@ -791,14 +883,10 @@ export default function Overview() {
                                 diffDir={dir}
                                 onToggleDiffDir={() => toggleDiffDir(dirKey)}
                                 canToggleDiff={romComps.length > 0}
-                                onCompare={() =>
-                                  // 追补⑧：下钻携带周期最低价周——看板窗口直接对准最低价发生周
-                                  openCompare(m, r.romram, r.minIdx >= 0 ? r.points[r.minIdx]?.weekId ?? null : null)
-                                }
                                 alertCell={alertCellFor(r.skuId)}
-                                onMultiPlatform={() => setMpSel({ model: m, romram: r.romram })}
-                                onConfigBench={() => setBenchSel({ modelId: m.modelId, romram: r.romram })}
                               />
+                              {/* 未配置对标的 ROM 不再渲染竞品区（第七十轮撤虚线占位；添加竞品在产品条「⋯」） */}
+                              {romComps.length > 0 && (
                               <div
                                 id={`overview-comps-${m.modelId}-${romIndex}`}
                                 style={{
@@ -806,21 +894,7 @@ export default function Overview() {
                                   borderTop: `1px solid ${color.hairline}`,
                                 }}
                               >
-                                {romComps.length === 0 ? (
-                                  <div style={{ padding: '8px 16px' }}>
-                                    <div
-                                      style={{
-                                        border: `1px dashed ${color.hairlineStrong}`,
-                                        borderRadius: radius.card,
-                                        padding: '8px 12px',
-                                        fontSize: 12,
-                                        color: color.mute,
-                                      }}
-                                    >
-                                      未配置对标竞品 — 点「＋添加竞品」添加
-                                    </div>
-                                  </div>
-                                ) : compsExpanded ? (
+                                {compsExpanded ? (
                                   romComps.map((c) => (
                                     <CompRomRow
                                       key={c.skuId}
@@ -861,6 +935,7 @@ export default function Overview() {
                                   </div>
                                 )}
                               </div>
+                              )}
                             </div>
                           );
                         })}
@@ -891,7 +966,7 @@ export default function Overview() {
       </div>
 
       {/* 配置对标（第四十四轮）：看板同款配置存储，保存后事件刷新矩阵与看板竞品；
-          第四十五轮起由各 ROM 行进入，预选对应 ROM */}
+          第七十轮起由产品条「⋯」进入（ROM 在弹窗内切换） */}
       <BenchConfigModal
         open={benchModel != null}
         model={benchModel}

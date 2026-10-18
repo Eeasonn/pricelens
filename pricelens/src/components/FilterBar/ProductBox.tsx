@@ -29,7 +29,7 @@ export function IndustryControl() {
   return (
     <Select
       id="scope-industry"
-      aria-label="产业（必选）"
+      aria-label="产业"
       value={state.industry}
       style={{ width: '100%' }}
       popupMatchSelectWidth={false}

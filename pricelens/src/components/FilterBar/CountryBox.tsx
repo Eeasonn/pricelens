@@ -59,7 +59,7 @@ export default function CountryBox() {
   return (
     <Cascader
       id="scope-country"
-      aria-label="国家（必选）"
+      aria-label="国家"
       options={options}
       value={value}
       placeholder={current ? '选择国家' : '欧亚 / R国'}
