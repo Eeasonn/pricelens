@@ -736,26 +736,30 @@ function ProductDetailMatrix(props: {
       );
     };
 
+    // 以“每个 ROM 一行”作为同一个 CSS Grid row，同时放入我司、竞品 1、竞品 2
+    // 三个单元格。这样任一侧内容变高时，三列会共同撑高同一行，不再逐列漂移。
     return (
-      <>
-        <div style={{ ...cellBase, position: 'relative', paddingLeft: 48, background: '#fbfcff' }}>
-          <div style={{ position: 'absolute', left: 27, top: 0, bottom: 0, width: 1, background: '#dbe3f1' }} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {model.rows.map((row) => <div key={row.romram} style={{ minHeight: 42, padding: '4px 0 7px', borderBottom: `1px dashed ${color.hairline}` }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 700 }}><span style={{ color: color.hairlineStrong }}>└</span><BrandDot brand={row.brand} />{row.romram}</span>{configLine(row)}</div>)}
-          </div>
-        </div>
-        {[0, 1].map((index) => {
-          const group = groups[index];
-          return <div key={index} style={{ ...cellBase, background: '#fbfcff', borderRight: index === 1 ? 0 : `1px solid ${color.hairline}` }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {model.rows.map((row) => {
-                const matches = group?.rows.filter((comp) => comp.ownRomrams.some((x) => norm(x) === norm(row.romram))) ?? [];
-                return <div key={row.romram} style={{ minHeight: 42, padding: '4px 0 7px', borderBottom: `1px dashed ${color.hairline}` }}>{matches.length ? matches.map(compLine) : <span style={{ color: color.hairlineStrong, fontSize: 11 }}>— 未匹配该配置</span>}</div>;
-              })}
+      <div style={{ gridColumn: '1 / -1', minWidth: 980, display: 'grid', gridTemplateColumns: '340px repeat(2, minmax(300px, 1fr))' }}>
+        {model.rows.flatMap((row) => {
+          const ownCell = (
+            <div key={`own-${row.romram}`} style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 3, padding: '4px 14px 7px 48px', background: '#fbfcff' }}>
+              <div style={{ position: 'absolute', left: 27, top: 0, bottom: 0, width: 1, background: '#dbe3f1' }} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 700 }}><span style={{ color: color.hairlineStrong }}>└</span><BrandDot brand={row.brand} />{row.romram}</span>
+              {configLine(row)}
             </div>
-          </div>;
+          );
+          const competitorCells = [0, 1].map((index) => {
+            const group = groups[index];
+            const matches = group?.rows.filter((comp) => comp.ownRomrams.some((x) => norm(x) === norm(row.romram))) ?? [];
+            return (
+              <div key={`comp-${index}-${row.romram}`} style={{ ...cellBase, padding: '4px 14px 7px', background: '#fbfcff', borderRight: index === 1 ? 0 : `1px solid ${color.hairline}` }}>
+                {matches.length ? matches.map(compLine) : <div style={{ minHeight: 42, padding: '4px 0 7px', color: color.hairlineStrong, fontSize: 11 }}>— 未匹配该配置</div>}
+              </div>
+            );
+          });
+          return [ownCell, ...competitorCells];
         })}
-      </>
+      </div>
     );
   };
 
