@@ -16,6 +16,7 @@ import {
   type AlertCfg,
   type AlertItem,
 } from '../alerts';
+import { DEFAULT_DATA_SCOPE } from '../scope';
 
 /** 任取一个我司系列 key（Pura 90s Pro 首个 ROM）与一个竞品系列 key */
 const ownSku = dimProduct.find((p) => p.is_own && p.model_name === 'Pura 90s Pro')!;
@@ -173,6 +174,39 @@ describe('buildAlerts 规则边界', () => {
     if (usd.length > 0) {
       expect(rub[0].price!).toBeGreaterThan(usd[0].price!); // ₽ ≈ 80×$
     }
+  });
+
+  it('作用域与平台口径：不支持作用域恒空；显式 DNS 使用确定性平台因子，缺省仍是 OZON 基准', () => {
+    const baseCfg: AlertCfg = {
+      ...cfg([compKey], 0.0001),
+      enabled: { ...ALL_OFF, 'price-change': true },
+      scope: DEFAULT_DATA_SCOPE,
+    };
+    const base = buildAlerts(baseCfg);
+    const dnsCfg: AlertCfg = {
+      ...baseCfg,
+      platform: { platforms: ['DNS'], shopIds: [] },
+    };
+    const dns = buildAlerts(dnsCfg);
+    // 同一配置必须逐字节稳定；平台抖动也不能引入非确定性。
+    expect(dns).toEqual(buildAlerts(dnsCfg));
+    const baseByKey = new Map(base.map((a) => [a.key, a]));
+    const common = dns.filter((a) => baseByKey.has(a.key));
+    expect(common.length).toBeGreaterThan(0);
+    expect(common.some((a) => a.price !== baseByKey.get(a.key)!.price)).toBe(true);
+    expect(buildAlerts({ ...baseCfg, scope: { countryCode: 'CN', industry: 'phone' } })).toEqual([]);
+    // 显式传 null 与旧的缺省入参保持同一 OZON 基准口径。
+    expect(buildAlerts({ ...baseCfg, platform: null })).toEqual(base);
+
+    const gapCfg: AlertCfg = {
+      ...cfg([ownKey], 0.015),
+      enabled: { ...ALL_OFF, 'platform-gap': true },
+      thresholds: { 'price-change': 0, promo: 0, 'platform-gap': 0.015, 'own-gap': 0.15 },
+    };
+    const gapBase = buildAlerts(gapCfg).filter((a) => a.type === 'platform-gap');
+    const gapDns = buildAlerts({ ...gapCfg, platform: { platforms: ['DNS'], shopIds: [] } }).filter((a) => a.type === 'platform-gap');
+    expect(gapDns.map((a) => a.key)).toEqual(gapBase.map((a) => a.key));
+    expect(gapDns.map((a) => a.gapPct)).toEqual(gapBase.map((a) => a.gapPct));
   });
 
   it('排序：最新周在前（周 id 降序）', () => {
