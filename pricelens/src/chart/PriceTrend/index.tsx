@@ -19,7 +19,7 @@
 // 上方极值筛选器手动改值即转入自定义；底部拖柄/平移只调整筛选范围内的查看窗口。
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // ============================================================
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Checkbox, ConfigProvider, Segmented, Switch } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
@@ -307,11 +307,14 @@ export default function PriceTrend() {
     actions.setOwnSelection([...others, ...mine]);
   };
 
-  // ---- 分离显示（第五十四轮拍板）：多 ROM 勾选时主图变 2 列 N 宫格，每面板 =
+  // ---- 分离显示：多 ROM 勾选时主图变为同一横向滚动轨道，每面板 =
   // 一个 ROM + 其对标竞品（生效矩阵按 own_romram 取、主竞品 sort 序）；共享 Y 轴 =
   // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
   // 面板头 ‹ › 调展示顺序；共享刷选条联动全部面板，系列页签统一放到共享工具行中央
   const [splitOn, setSplitOn] = useState(false);
+  // 分离模式一行可见面板数：卡片始终横向排列，超出视口后由轨道滚动查看。
+  // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
+  const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
   const [panelOrder, setPanelOrder] = useState<string[]>([]); // romram 键序；空 = own 序
   const splitActive = splitOn && state.own.length >= 2;
 
@@ -647,7 +650,7 @@ export default function PriceTrend() {
           最新数据的文字版），收起 = 24px 竖排书签带（默认，领导视角只是窄灰带），
           展开 = 原地面板纵向一行一产品（非视口抽屉，不遮图右缘），图自动收窄。
           （Y 轴纯自适应；系列页签由工具行统一居中承载）。
-          分离显示（第五十四轮拍板）：多 ROM 勾选时主图变 2 列 N 宫格——每面板一个
+          分离显示：多 ROM 勾选时主图变为单行横向轨道——每面板一个
           ROM+其对标竞品，共享 Y 轴（并集算一次受控传入）、X 轴各面板独立绘制；
           共享刷选条联动全部面板；系列页签统一放在共享工具行中央。
           第五十四轮追补：工具行不再随面板重复——面板网格上方常驻一条（ChartToolbar），
@@ -659,138 +662,162 @@ export default function PriceTrend() {
           {/* 常驻工具行（第五十四轮追补，用户需求）：分离模式下这一行仍常驻在摘要页签
               与面板网格之间，统管底下全部分离面板——大促/offer/极值/变化提醒 + 齿轮
               （每格高度/刻度线/自动压缩/折线样式）+ 折后价/RRP；面板内不再各有设置行 */}
-          <div style={{ display: 'flex', alignItems: 'center', height: 32, padding: '0 6px', marginBottom: 2 }}>
-            <ChartToolbar
-              legend={<LegendPills series={panelViews.flatMap((p) => p.all)} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />}
-              currency={state.currency}
-              sliderScale={sliderScale}
-              onSliderScale={setSliderScale}
-              showYTicks={showYTicks}
-              onShowYTicks={setShowYTicks}
-              yCompress={yCompress}
-              onYCompress={setYCompress}
-              lineShape={lineShape}
-              onLineShape={setLineShape}
-              priceTypes={state.priceTypes}
-              onPriceTypeToggle={setPriceType}
-              promoBandsOn={promoBandsOn}
-              onPromoBandsOn={setPromoBandsOn}
-              offersOn={offersOn}
-              onOffersOn={setOffersOn}
-              maxMinOn={maxMinOn}
-              onMaxMinOn={setMaxMinOn}
-              changeThreshold={changeThreshold}
-              onChangeThreshold={setChangeThreshold}
-              onOpenPromoDetail={openPromoDetail}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 32, padding: '0 6px', marginBottom: 2 }}>
+            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+              <ChartToolbar
+                legend={<LegendPills series={panelViews.flatMap((p) => p.all)} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />}
+                currency={state.currency}
+                sliderScale={sliderScale}
+                onSliderScale={setSliderScale}
+                showYTicks={showYTicks}
+                onShowYTicks={setShowYTicks}
+                yCompress={yCompress}
+                onYCompress={setYCompress}
+                lineShape={lineShape}
+                onLineShape={setLineShape}
+                priceTypes={state.priceTypes}
+                onPriceTypeToggle={setPriceType}
+                promoBandsOn={promoBandsOn}
+                onPromoBandsOn={setPromoBandsOn}
+                offersOn={offersOn}
+                onOffersOn={setOffersOn}
+                maxMinOn={maxMinOn}
+                onMaxMinOn={setMaxMinOn}
+                changeThreshold={changeThreshold}
+                onChangeThreshold={setChangeThreshold}
+                onOpenPromoDetail={openPromoDetail}
+              />
+            </div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, color: color.mute }}>每行</span>
+              <Segmented
+                size="small"
+                value={splitColumns}
+                onChange={(v) => setSplitColumns(v as 2 | 3)}
+                options={[{ label: '2 个', value: 2 }, { label: '3 个', value: 3 }]}
+              />
+            </span>
           </div>
-          {/* 面板网格（第五十四轮追补⑤重排）：[共享轴列][卡片][卡片] 三列——
-              Y 轴只画靠左一份且移出卡片（面板 axisChrome=false、gridLeft=0，档位带/
-              刻度标签/断轴省略号全部由轴列承担），两卡片 1fr/1fr 均分轴右侧剩余空间；
-              奇数面板行尾自然留空 */}
+          {/* 分离面板：所有卡片固定在同一横向轨道；共享 Y 轴固定在左侧，轨道超出视口时横向滚动。
+              每行可见 2/3 个由用户控制，卡片保持最小宽度以避免图表与系列名拥挤。 */}
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: `${splitAxisWidth(state.currency, splitGridLeft, showYTicks)}px minmax(0,1fr) minmax(0,1fr)`,
-              columnGap: space.md,
-              rowGap: space.md,
-              alignItems: 'start',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: space.md,
               marginBottom: space.sm,
             }}
           >
-            {Array.from({ length: Math.ceil(orderedPanels.length / 2) }, (_, ri) => {
-              const row = orderedPanels.slice(ri * 2, ri * 2 + 2);
-              return (
-                <Fragment key={row[0].key}>
-                  {/* 轴列：纵向偏移 = 卡片 paddingTop 4 + 面板头行高，与面板绘图区顶逐像素对齐 */}
-                  <div style={{ paddingTop: 4 + PANEL_HEAD_H }}>
-                    {splitYCfg && (
-                      <SplitAxisColumn
-                        yScale={splitYCfg}
-                        currency={state.currency}
-                        gridLeft={splitGridLeft}
-                        panelGridTop={panelGridTop}
-                        showYTicks={showYTicks}
-                        tierValues={splitTierValues}
-                      />
-                    )}
-                  </div>
-                  {row.map((p) => {
-                    const i = orderedPanels.findIndex((x) => x.key === p.key);
-                    const first = i === 0;
-                    const last = i === orderedPanels.length - 1;
-                    return (
+            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, splitGridLeft, showYTicks)}px`, paddingTop: 4 + PANEL_HEAD_H }}>
+              {splitYCfg && (
+                <SplitAxisColumn
+                  yScale={splitYCfg}
+                  currency={state.currency}
+                  gridLeft={splitGridLeft}
+                  panelGridTop={panelGridTop}
+                  showYTicks={showYTicks}
+                  tierValues={splitTierValues}
+                />
+              )}
+            </div>
+            <div
+              style={{
+                flex: '1 1 0',
+                minWidth: 0,
+                overflowX: 'auto',
+                overflowY: 'hidden',
+                paddingBottom: 6,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'stretch',
+                  gap: space.md,
+                  width: '100%',
+                  minWidth: 0,
+                }}
+              >
+                {orderedPanels.map((p) => {
+                  const i = orderedPanels.findIndex((x) => x.key === p.key);
+                  const first = i === 0;
+                  const last = i === orderedPanels.length - 1;
+                  return (
+                    <div
+                      key={p.key}
+                      style={{
+                        flex: `0 0 calc((100% - ${(splitColumns - 1) * Number(space.md)}px) / ${splitColumns})`,
+                        // 宽度由「每行 2/3 个」控制，不设固定最小宽度；否则窄屏下
+                        // 选择 2 个时仍只能看到一张完整卡片，失去切换该视图的意义。
+                        minWidth: 0,
+                        border: `1px solid ${color.hairline}`,
+                        borderRadius: radius.card,
+                        padding: '4px 8px 0',
+                        background: color.canvas,
+                        boxSizing: 'border-box',
+                      }}
+                    >
                       <div
-                        key={p.key}
                         style={{
-                          border: `1px solid ${color.hairline}`,
-                          borderRadius: radius.card,
-                          padding: '4px 8px 0',
-                          background: color.canvas,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          height: PANEL_HEAD_H, // 定高：轴列对齐基准（追补⑤）
+                          padding: '0 4px',
                         }}
                       >
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            height: PANEL_HEAD_H, // 定高：轴列对齐基准（追补⑤）
-                            padding: '0 4px',
-                          }}
-                        >
-                          <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
-                            {p.sel.romram}
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
+                          {p.sel.romram}
+                        </span>
+                        <span style={{ fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap' }}>我司 + 对标竞品</span>
+                        <span style={{ flex: 1 }} />
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <span
+                            role="button"
+                            title={first ? '已在最左' : '左移该面板'}
+                            onClick={() => movePanel(p.key, -1)}
+                            style={{ cursor: first ? 'default' : 'pointer', display: 'inline-flex', padding: '2px 4px' }}
+                          >
+                            <LeftOutlined style={{ fontSize: 10, color: first ? color.hairlineStrong : color.body }} />
                           </span>
-                          <span style={{ fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap' }}>我司 + 对标竞品</span>
-                          <span style={{ flex: 1 }} />
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                            <span
-                              role="button"
-                              title={first ? '已在最左' : '左移该面板'}
-                              onClick={() => movePanel(p.key, -1)}
-                              style={{ cursor: first ? 'default' : 'pointer', display: 'inline-flex', padding: '2px 4px' }}
-                            >
-                              <LeftOutlined style={{ fontSize: 10, color: first ? color.hairlineStrong : color.body }} />
-                            </span>
-                            <span
-                              role="button"
-                              title={last ? '已在最右' : '右移该面板'}
-                              onClick={() => movePanel(p.key, 1)}
-                              style={{ cursor: last ? 'default' : 'pointer', display: 'inline-flex', padding: '2px 4px' }}
-                            >
-                              <RightOutlined style={{ fontSize: 10, color: last ? color.hairlineStrong : color.body }} />
-                            </span>
+                          <span
+                            role="button"
+                            title={last ? '已在最右' : '右移该面板'}
+                            onClick={() => movePanel(p.key, 1)}
+                            style={{ cursor: last ? 'default' : 'pointer', display: 'inline-flex', padding: '2px 4px' }}
+                          >
+                            <RightOutlined style={{ fontSize: 10, color: last ? color.hairlineStrong : color.body }} />
                           </span>
-                        </div>
-                        <Chart
-                          series={p.vis}
-                          granularity={state.granularity}
-                          currency={state.currency}
-                          priceTypes={state.priceTypes}
-                          gridLeft={NAME_ZONE_W} // 追补⑤②：与合并模式同宽的名称预留带在面板内侧（此前 0 导致名称与折线重叠）
-                          gridTop={panelGridTop}
-                          chrome={false} // 面板不渲染设置行（第五十四轮追补）：统管权在上方常驻工具行
-                          axisChrome={false} // 面板不画轴（追补⑤）：档位带/刻度/断轴号在共享轴列
-                          enableDrill={state.granularity !== 'week'}
-                          enableJump={state.granularity === 'week'}
-                          enableOffer={state.granularity === 'week' && offersOn}
-                          onDrill={makePanelDrill(p)}
-                          windowKey={`${win.s}:${win.e}:${p.key}`}
-                          yScale={splitYCfg ?? undefined}
-                          showYTicks={showYTicks}
-                          lineShape={lineShape}
-                          promoBandsOn={promoBandsOn}
-                          promoBands={promoBands}
-                          maxMinOn={maxMinOn}
-                          changeThreshold={changeThreshold}
-                          emptyHint="该配置在所选时间范围内无数据"
-                        />
+                        </span>
                       </div>
-                    );
-                  })}
-                </Fragment>
-              );
-            })}
+                      <Chart
+                        series={p.vis}
+                        granularity={state.granularity}
+                        currency={state.currency}
+                        priceTypes={state.priceTypes}
+                        gridLeft={NAME_ZONE_W} // 追补⑤②：与合并模式同宽的名称预留带在面板内侧（此前 0 导致名称与折线重叠）
+                        gridTop={panelGridTop}
+                        chrome={false} // 面板不渲染设置行（第五十四轮追补）：统管权在上方常驻行
+                        axisChrome={false} // 面板不画轴（追补⑤）：档位带/刻度/断轴号在共享轴列
+                        enableDrill={state.granularity !== 'week'}
+                        enableJump={state.granularity === 'week'}
+                        enableOffer={state.granularity === 'week' && offersOn}
+                        onDrill={makePanelDrill(p)}
+                        windowKey={`${win.s}:${win.e}:${p.key}`}
+                        yScale={splitYCfg ?? undefined}
+                        showYTicks={showYTicks}
+                        lineShape={lineShape}
+                        promoBandsOn={promoBandsOn}
+                        promoBands={promoBands}
+                        maxMinOn={maxMinOn}
+                        changeThreshold={changeThreshold}
+                        emptyHint="该配置在所选时间范围内无数据"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
           {/* 共享刷选条：一个窗口联动全部面板 */}
           {buckets.length > 0 && visSeries.length > 0 && (
