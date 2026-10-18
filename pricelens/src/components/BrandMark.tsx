@@ -4,7 +4,7 @@
 // logo 资产仍保留在 src/assets/brands/（当前未引用、不参与打包）。
 // ============================================================
 import type { CSSProperties } from 'react';
-import { brandColor } from '../theme/tokens';
+import { brandColorOf } from '../theme/tokens';
 
 /** 品牌枚举值 → 展示名（第四十五轮：总览矩阵产品名带品牌；未登记品牌原样返回） */
 const BRAND_LABELS: Record<string, string> = {
@@ -40,7 +40,7 @@ export default function BrandDot({
         width: size,
         height: size,
         borderRadius: 9999,
-        background: brandColor[brand] ?? '#171717',
+        background: brandColorOf(brand),
         flexShrink: 0,
         display: 'inline-block',
         ...style,
@@ -70,7 +70,7 @@ const GRAY: [number, number, number] = [155, 155, 155]; // #9b9b9b 中性灰
  */
 export function brandTintBg(brand: string, selected: boolean): string {
   if (!selected) return 'rgba(241, 241, 241, 0.8)';
-  const grayed = mixRgb(hexToRgb(brandColor[brand] ?? '#171717'), GRAY, 0.18);
+  const grayed = mixRgb(hexToRgb(brandColorOf(brand)), GRAY, 0.18);
   const [r, g, b] = mixRgb(grayed, WHITE, 0.91);
   return `rgba(${r}, ${g}, ${b}, 0.8)`;
 }
