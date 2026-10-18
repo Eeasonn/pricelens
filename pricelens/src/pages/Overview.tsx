@@ -104,6 +104,16 @@ function Td(props: { children?: ReactNode; first?: boolean; last?: boolean; just
   );
 }
 
+/** 明细信息行：左侧固定语义标签，右侧只放一个信息，避免 RRP/价差/提示互相挤在同一行。 */
+function OverviewMetricLine(props: { label: string; children?: ReactNode; align?: 'start' | 'end' }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '42px minmax(0,1fr)', alignItems: props.align === 'end' ? 'center' : 'start', columnGap: 8, minHeight: 25, padding: '2px 0' }}>
+      <span style={{ color: color.mute, fontSize: 11.5, lineHeight: '20px', whiteSpace: 'nowrap' }}>{props.label}</span>
+      <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', minHeight: 20 }}>{props.children}</div>
+    </div>
+  );
+}
+
 /** 列标题（表头行用）：13/700/mute；数值列随数据右对齐，其余居中（第六十六轮起表头对齐随列） */
 function Th(props: { children?: ReactNode; first?: boolean; last?: boolean; justify?: 'start' | 'center' | 'end' }) {
   return (
@@ -681,14 +691,11 @@ function ProductDetailMatrix(props: {
             <div style={{ marginTop: 3, color: color.mute, fontSize: 10.5 }}>{group.rows.length} 个配置 · {representative.primary ? '主竞品' : '已配置'}</div>
           </div>
         </div>
-        <div className="tnum" style={{ marginTop: 10, fontSize: 16, fontWeight: 700 }}>{priceRange(group.rows.map((r) => r.price))}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, color: color.mute, fontSize: 10.5 }}>
-          <span>RRP {priceRange(group.rows.map((r) => r.rrp))}</span>
-          <span>折扣 {group.rows.some((r) => r.price != null && r.rrp != null) ? `${Math.round(Math.min(...group.rows.filter((r) => r.price != null && r.rrp != null).map((r) => (r.price! / r.rrp!) - 1)) * 100)}% – ${Math.round(Math.max(...group.rows.filter((r) => r.price != null && r.rrp != null).map((r) => (r.price! / r.rrp!) - 1)) * 100)}%` : '—'}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 7 }}>
-          {diff ? <span className="tnum" style={{ padding: '2px 7px', borderRadius: radius.pill, background: diff.tone === 'rich' ? '#fff0f0' : '#edf5ff', color: diff.tone === 'rich' ? color.error : color.link, fontSize: 10.5, fontWeight: 700 }}>{diff.text} · {diff.tone === 'rich' ? '高于我司' : '低于我司'}</span> : <span style={{ color: color.mute, fontSize: 10.5 }}>暂无价差</span>}
-          <span style={{ color: color.mute, fontSize: 10.5 }}>当前价</span>
+        <div style={{ marginTop: 10 }}>
+          <OverviewMetricLine label="折后价"><span className="tnum" style={{ fontSize: 18, lineHeight: '24px', fontWeight: 750, color: color.ink }}>{priceRange(group.rows.map((r) => r.price))}</span></OverviewMetricLine>
+          <OverviewMetricLine label="RRP"><span className="tnum" style={{ fontSize: 14, lineHeight: '20px', color: color.body }}>{priceRange(group.rows.map((r) => r.rrp))}</span></OverviewMetricLine>
+          <OverviewMetricLine label="折扣"><span className="tnum" style={{ fontSize: 13, lineHeight: '20px', color: color.body }}>{group.rows.some((r) => r.price != null && r.rrp != null) ? `${Math.round(Math.min(...group.rows.filter((r) => r.price != null && r.rrp != null).map((r) => (r.price! / r.rrp!) - 1)) * 100)}% – ${Math.round(Math.max(...group.rows.filter((r) => r.price != null && r.rrp != null).map((r) => (r.price! / r.rrp!) - 1)) * 100)}%` : '—'}</span></OverviewMetricLine>
+          <OverviewMetricLine label="价差"><span className="tnum" style={{ padding: '3px 8px', borderRadius: radius.pill, background: diff?.tone === 'rich' ? '#fff0f0' : '#edf5ff', color: diff ? (diff.tone === 'rich' ? color.error : color.link) : color.mute, fontSize: 13, lineHeight: '18px', fontWeight: 700 }}>{diff ? `${diff.text} · ${diff.tone === 'rich' ? '高于我司' : '低于我司'}` : '暂无价差'}</span></OverviewMetricLine>
         </div>
       </div>
     );
@@ -700,16 +707,12 @@ function ProductDetailMatrix(props: {
       const dirKey = `${model.modelId}__${row.romram}`;
       const dir = diffDirs[dirKey] ?? 'comp';
       return (
-        <div key={row.romram} style={{ minHeight: 42, padding: '4px 0 7px', borderBottom: `1px dashed ${color.hairline}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {row.discountPct != null ? <DiscountBadge discount={row.discountPct} /> : <span style={{ color: color.hairlineStrong, fontSize: 11 }}>—</span>}
-            <span className="tnum" style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{formatPrice(row.price, currency)}</span>
-            <span className="tnum" style={{ color: color.mute, fontSize: 11.5, whiteSpace: 'nowrap' }}>RRP {formatPrice(row.rrp, currency)}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minHeight: 18, marginTop: 3 }}>
-            {showDiff && romComps.length > 0 && <button type="button" onClick={() => toggleDiffDir(dirKey)} style={{ padding: '1px 7px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.body, font: 'inherit', fontSize: 10, cursor: 'pointer' }}><SwapOutlined style={{ fontSize: 9 }} /> {dir === 'comp' ? '竞品比我司' : '我司比竞品'}</button>}
-            {alertCellFor(row.skuId)}
-          </div>
+        <div key={row.romram} style={{ minHeight: 42, padding: '7px 0 8px', borderBottom: `1px dashed ${color.hairline}` }}>
+          <OverviewMetricLine label="折后价"><span className="tnum" style={{ fontSize: 18, lineHeight: '24px', fontWeight: 750, color: color.ink }}>{formatPrice(row.price, currency)}</span></OverviewMetricLine>
+          <OverviewMetricLine label="RRP"><span className="tnum" style={{ fontSize: 14, lineHeight: '20px', color: color.body }}>{formatPrice(row.rrp, currency)}</span></OverviewMetricLine>
+          <OverviewMetricLine label="折扣">{row.discountPct != null ? <DiscountBadge discount={row.discountPct} /> : <span style={{ color: color.hairlineStrong, fontSize: 12 }}>—</span>}</OverviewMetricLine>
+          {showDiff && romComps.length > 0 && <OverviewMetricLine label="价差"><button type="button" onClick={() => toggleDiffDir(dirKey)} style={{ padding: '3px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, cursor: 'pointer' }}><SwapOutlined style={{ fontSize: 10 }} /> {dir === 'comp' ? '竞品比我司' : '我司比竞品'}</button></OverviewMetricLine>}
+          <OverviewMetricLine label="提示">{alertCellFor(row.skuId)}</OverviewMetricLine>
         </div>
       );
     };
@@ -720,18 +723,16 @@ function ProductDetailMatrix(props: {
       const diff = comp.price != null && own?.price != null ? (dir === 'comp' ? diffPct(comp.price, own.price) : diffPct(own.price, comp.price)) : null;
       const discount = comp.price != null && comp.rrp != null && comp.rrp > 0 ? comp.price / comp.rrp - 1 : null;
       return (
-        <div key={comp.skuId} style={{ minHeight: 42, padding: '4px 0 7px', borderBottom: `1px dashed ${color.hairline}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <div key={comp.skuId} style={{ minHeight: 42, padding: '7px 0 8px', borderBottom: `1px dashed ${color.hairline}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, minHeight: 24 }}>
             <BrandDot brand={comp.brand} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 600 }}>{comp.romram}</span>
-            <span className="tnum" style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{formatPrice(comp.price, currency)}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 700 }}>{comp.romram}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 4, color: color.mute, fontSize: 10.5 }}>
-            {discount != null && <DiscountBadge discount={discount} />}
-            <span className="tnum">RRP {formatPrice(comp.rrp, currency)}</span>
-            {diff && <span className="tnum" style={{ color: diff.tone === 'rich' ? color.error : color.link, fontWeight: 600 }}>{diff.text}</span>}
-            {alertCellFor(comp.skuId)}
-          </div>
+          <OverviewMetricLine label="折后价"><span className="tnum" style={{ fontSize: 18, lineHeight: '24px', fontWeight: 750, color: color.ink }}>{formatPrice(comp.price, currency)}</span></OverviewMetricLine>
+          <OverviewMetricLine label="RRP"><span className="tnum" style={{ fontSize: 14, lineHeight: '20px', color: color.body }}>{formatPrice(comp.rrp, currency)}</span></OverviewMetricLine>
+          <OverviewMetricLine label="折扣">{discount != null ? <DiscountBadge discount={discount} /> : <span style={{ color: color.hairlineStrong, fontSize: 12 }}>—</span>}</OverviewMetricLine>
+          <OverviewMetricLine label="价差"><span className="tnum" style={{ padding: '3px 8px', borderRadius: radius.pill, background: diff ? (diff.tone === 'rich' ? '#fff0f0' : '#edf5ff') : color.canvasSoft2, color: diff ? (diff.tone === 'rich' ? color.error : color.link) : color.mute, fontSize: 13, lineHeight: '18px', fontWeight: 700 }}>{diff ? diff.text : '暂无价差'}</span></OverviewMetricLine>
+          <OverviewMetricLine label="提示">{alertCellFor(comp.skuId)}</OverviewMetricLine>
         </div>
       );
     };
@@ -753,7 +754,7 @@ function ProductDetailMatrix(props: {
             const matches = group?.rows.filter((comp) => comp.ownRomrams.some((x) => norm(x) === norm(row.romram))) ?? [];
             return (
               <div key={`comp-${index}-${row.romram}`} style={{ ...cellBase, padding: '4px 14px 7px', background: '#fbfcff', borderRight: index === 1 ? 0 : `1px solid ${color.hairline}` }}>
-                {matches.length ? matches.map(compLine) : <div style={{ minHeight: 42, padding: '4px 0 7px', color: color.hairlineStrong, fontSize: 11 }}>— 未匹配该配置</div>}
+                {matches.length ? matches.map(compLine) : <div style={{ minHeight: 42, padding: '7px 0 8px' }}><OverviewMetricLine label="提示"><span style={{ color: color.hairlineStrong, fontSize: 12 }}>未匹配该配置</span></OverviewMetricLine></div>}
               </div>
             );
           });
