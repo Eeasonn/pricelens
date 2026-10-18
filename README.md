@@ -4,7 +4,7 @@
 
 当前默认视图为：周粒度 · USD · 我司 Pura 90s Pro 12+256 · Ozon Россия 官方店铺 · 自动匹配配置竞品。
 
-**在线版**：<https://eeasonn.github.io/pricelens/>（push `main` 或 `feature/y-axis-adaptive` 自动构建部署，见 `.github/workflows/deploy.yml`）
+**在线版**：<https://eeasonn.github.io/pricelens/>（push `main` 自动构建部署，见 `.github/workflows/deploy.yml`）
 
 ## 功能
 

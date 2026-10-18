@@ -1,10 +1,10 @@
-# PriceLens 在线发布：push 主发布分支或当前开发分支即自动构建并部署到 GitHub Pages。
+# PriceLens 在线发布：push main 即自动构建并部署到 GitHub Pages。
 # 产物 = pricelens/dist（自包含单文件，无外部资源引用，任意 base path 可用）。
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, feature/y-axis-adaptive]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
