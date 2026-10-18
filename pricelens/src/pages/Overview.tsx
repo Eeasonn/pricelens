@@ -623,7 +623,7 @@ function ProductDetailMatrix(props: {
               <span style={{ display: 'block', marginTop: 3, color: color.mute, fontSize: 10.5, lineHeight: '15px' }}>我司产品</span>
             </span>
           </button>
-          <button type="button" aria-label={`查看 ${model.modelName} 的竞品对比`} title="查看竞品对比" onClick={(e) => { e.stopPropagation(); onCompare(model); }} style={{ flexShrink: 0, minHeight: 30, padding: '4px 11px', border: '1px solid rgba(0,112,243,.55)', borderRadius: radius.pill, background: color.link, color: '#fff', font: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>查看竞品对比</button>
+          <button type="button" aria-label={`查看 ${model.modelName} 全部型号的竞品对比`} title="查看全部型号对比" onClick={(e) => { e.stopPropagation(); onCompare(model); }} style={{ flexShrink: 0, minHeight: 30, padding: '4px 11px', border: '1px solid rgba(0,112,243,.55)', borderRadius: radius.pill, background: color.link, color: '#fff', font: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>全部型号对比</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10, paddingLeft: 46 }}>
           <span style={{ color: color.mute, fontSize: 11.5 }}>价格区间</span>
