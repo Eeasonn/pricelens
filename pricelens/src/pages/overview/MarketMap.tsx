@@ -2,7 +2,8 @@ import type { CurrencyMode } from '../../dataModel/types';
 import type { OverviewCompRow, OverviewModel, OverviewTierBand } from '../../dataModel/aggregate';
 import { computeYAxis, perUsdOf, yPxOf, type Geom, type YScale } from '../../chart/PriceTrend/helpers';
 import { buildTickRows, buildTierBoxes } from '../../chart/PriceTrend/chartModel';
-import { color, formatPrice, radius, shadow, space } from '../../theme/tokens';
+import { brandLabelOf } from '../../components/BrandMark';
+import { color, radius, space } from '../../theme/tokens';
 
 type VisibleBand = {
   band: OverviewTierBand;
@@ -43,20 +44,9 @@ function compGroups(model: OverviewModel): OverviewCompRow[][] {
   return [...groups.values()].map((rows) => [...rows].sort((a, b) => Number(b.primary) - Number(a.primary) || (b.price ?? -1) - (a.price ?? -1)));
 }
 
-function priceLabel(model: OverviewModel, currency: CurrencyMode): string {
-  const { min, max } = modelPrice(model);
-  if (min == null) return '暂无现价';
-  return min === max ? formatPrice(min, currency) : `${formatPrice(min, currency)}–${formatPrice(max, currency)}`;
-}
-
-function compLabel(rows: OverviewCompRow[], currency: CurrencyMode): string {
-  const names = rows[0];
-  if (!names) return '—';
-  const prices = rows.map((row) => row.price).filter((value): value is number => value != null);
-  const min = prices.length ? Math.min(...prices) : null;
-  const max = prices.length ? Math.max(...prices) : null;
-  const price = min == null ? '' : ` · ${min === max ? formatPrice(min, currency) : `${formatPrice(min, currency)}–${formatPrice(max, currency)}`}`;
-  return `${names.modelName}${price}`;
+function modelOnly(brand: string, modelName: string): string {
+  const label = brandLabelOf(brand);
+  return modelName.toLowerCase().startsWith(`${label.toLowerCase()} `) ? modelName.slice(label.length + 1) : modelName;
 }
 
 type PlotSeries = {
@@ -77,11 +67,12 @@ function scaleForValues(values: number[], currency: CurrencyMode, rowCount: numb
   return computeYAxis({ series, priceTypes: { discounted: true, rrp: false }, sliderScale: targetScale, allowBreak: false, perUsd: perUsdOf(currency) });
 }
 
-function CompetitorCell({ rows, currency }: { rows: OverviewCompRow[] | undefined; currency: CurrencyMode }) {
+function CompetitorCell({ rows }: { rows: OverviewCompRow[] | undefined }) {
   if (!rows || rows.length === 0) return <span style={{ color: color.hairlineStrong, fontSize: 11 }}>—</span>;
+  const names = [...new Set(rows.map((row) => modelOnly(row.brand, row.modelName)))];
   return (
-    <span title={compLabel(rows, currency)} style={{ display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '4px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.body, fontSize: 11 }}>
-      {compLabel(rows, currency)}
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+      {names.map((name) => <span key={name} title={name} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.body, fontSize: 11.5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: color.hairlineStrong, flexShrink: 0 }} />{name}</span>)}
     </span>
   );
 }
@@ -106,7 +97,13 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
   const tierBoxes = buildTierBoxes({ enabled: currency === 'usd', geom, tierValues: allValues });
   const axisWidth = currency === 'usd' ? 140 : 78;
   const totalHeight = plotTop + scale.plotHeight + 12;
-  const columnTemplate = 'minmax(250px, 1.05fr) repeat(2, minmax(260px, 1fr))';
+  const brandColumns = [
+    { key: 'APPLE', label: 'APPLE' },
+    { key: 'SAMSUNG', label: 'Samsung' },
+    { key: 'HONOR', label: 'Honor' },
+    { key: 'XIAOMI', label: 'XIAOMI' },
+  ] as const;
+  const columnTemplate = 'minmax(250px, 1.05fr) repeat(4, minmax(190px, 1fr))';
   // 价格接近的产品仍需保持“一产品一行”。先按真实 Y 位置排布，再做最小行距碰撞处理；
   // 刻度和网格线保持真实价格位置，产品文字只在必要时做小幅上下让位。
   const rowTops = new Map<string, number>();
@@ -123,7 +120,7 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
   }
 
   return (
-    <section aria-label="市场摆位概要" style={{ marginTop: space.lg, padding: space.lg, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas, boxShadow: shadow.l1 }}>
+    <section aria-label="市场摆位概要" style={{ marginTop: space.lg, padding: space.lg, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>市场摆位概要</h2>
         <span style={{ fontSize: 11, color: color.mute }}>数据截至 {asOf} · 当前价</span>
@@ -134,7 +131,7 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
       </div>
 
       <div style={{ marginTop: 14, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
-        <div style={{ position: 'relative', minWidth: 940, height: totalHeight }}>
+        <div style={{ position: 'relative', minWidth: 1120, height: totalHeight, background: color.canvas }}>
           {/* 与价格看板同口径的左侧 Y 轴：美元显示档位带，本币只显示刻度。 */}
           <div style={{ position: 'absolute', left: 0, top: 0, width: axisWidth, height: totalHeight, borderRight: `1px solid ${color.hairlineStrong}` }}>
             {tierBoxes.map((box, index) => <div key={`${box.label}-${index}`} style={{ position: 'absolute', left: 0, top: box.top, width: 64, height: box.h, boxSizing: 'border-box', border: box.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`, background: box.empty ? 'transparent' : index % 2 === 0 ? color.canvasSoft2 : color.canvasSoft, display: 'grid', placeItems: 'center', overflow: 'hidden', pointerEvents: 'none' }}>{box.h >= 16 && <span style={{ fontSize: 10, lineHeight: '12px', color: box.empty ? color.mute : color.body, whiteSpace: 'nowrap' }}>{box.label}</span>}</div>)}
@@ -143,21 +140,21 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct }: Mark
 
           <div style={{ position: 'absolute', left: axisWidth, right: 0, top: 0, height: totalHeight }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: plotTop, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', borderBottom: `1px solid ${color.hairline}`, background: color.canvas }}>
-              <div style={{ paddingLeft: 14, color: color.mute, fontSize: 11 }}>产品</div>
-              <div style={{ paddingLeft: 12, color: color.mute, fontSize: 11 }}>竞品 1</div>
-              <div style={{ paddingLeft: 12, color: color.mute, fontSize: 11 }}>竞品 2</div>
+              <div style={{ paddingLeft: 14, color: color.mute, fontSize: 11, borderRight: `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center' }}>产品</div>
+              {brandColumns.map((brand) => <div key={brand.key} style={{ paddingLeft: 12, color: color.body, fontSize: 11, fontWeight: 600, borderRight: brand.key === 'XIAOMI' ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center' }}>{brand.label}</div>)}
             </div>
             {ticks.map((tick) => <div key={`line-${tick.v}`} style={{ position: 'absolute', left: 0, right: 0, top: tick.y, borderTop: `1px solid ${color.hairline}`, pointerEvents: 'none' }} />)}
             {ownModels.map(({ model, price, comps }) => {
               return (
                 <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: 36, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', zIndex: 1 }}>
-                  <button type="button" onClick={() => onOpenProduct(model)} title={`展开 ${model.modelName} 的型号与配置明细`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, padding: '4px 10px 4px 14px', border: 0, background: 'transparent', textAlign: 'left', font: 'inherit', cursor: 'pointer' }}>
+                  <button type="button" onClick={() => onOpenProduct(model)} title={`展开 ${model.modelName} 的型号与配置明细`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, height: '100%', padding: '4px 10px 4px 14px', border: 0, borderRight: `1px solid ${color.hairline}`, background: color.canvas, textAlign: 'left', font: 'inherit', cursor: 'pointer' }}>
                     <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#c7000b', flexShrink: 0 }} />
                     <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#c7000b', fontSize: 13, fontWeight: 650 }}>{model.modelName}</span>
-                    <span className="tnum" style={{ marginLeft: 'auto', flexShrink: 0, color: color.mute, fontSize: 10.5 }}>{priceLabel(model, currency)}</span>
                   </button>
-                  <div style={{ minWidth: 0, padding: '0 10px' }}><CompetitorCell rows={comps[0]} currency={currency} /></div>
-                  <div style={{ minWidth: 0, padding: '0 10px' }}><CompetitorCell rows={comps[1]} currency={currency} /></div>
+                  {brandColumns.map((brand, index) => {
+                    const group = comps.find((rows) => rows[0]?.brand === brand.key);
+                    return <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, background: color.canvas }}><CompetitorCell rows={group} /></div>;
+                  })}
                 </div>
               );
             })}
