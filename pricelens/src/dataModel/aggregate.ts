@@ -23,7 +23,7 @@ import type {
   TierCode,
 } from './types';
 import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimTime, factPriceWeekly } from '../data';
-import { brandColor } from '../theme/tokens';
+import { brandColorOf } from '../theme/tokens';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 
 // ---------------- 确定性 PRNG ----------------
@@ -304,7 +304,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
     const rg = resolveGroup(g);
     if (!rg) continue;
     const key = `${g.modelId}__${normRom(rg.romram)}`;
-    const color = brandColor[rg.brand] ?? '#171717';
+    const color = brandColorOf(rg.brand);
     const points: SeriesPoint[] = [];
     for (const bucket of buckets) {
       // 折后价：组内多 SKU 算术均值（缺采周按有值样本均值；全缺 = missing）
@@ -694,7 +694,7 @@ export function buildOverviewMatrix(
         modelName: head.model_name,
         romram: rom,
         isOwn: head.is_own,
-        lineColor: brandColor[head.brand] ?? '#171717',
+        lineColor: brandColorOf(head.brand),
         price: lat.price,
         rrp: lat.rrp,
         discountPct,
@@ -736,7 +736,7 @@ export function buildOverviewMatrix(
         modelName: p.model_name,
         romram: p.romram,
         color: p.color,
-        lineColor: brandColor[p.brand] ?? '#171717',
+        lineColor: brandColorOf(p.brand),
         price: lat.price,
         rrp: lat.rrp,
         ownRomrams: [...agg.romrams].sort(),
