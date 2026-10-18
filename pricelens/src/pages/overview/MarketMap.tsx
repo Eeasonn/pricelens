@@ -198,9 +198,8 @@ export default function MarketMap({ bands, currency, asOf, onOpenProduct, select
             {ownModels.map(({ model, price, comps }) => {
               return (
                 <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: 36, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', zIndex: 1 }}>
-                  <button type="button" onClick={() => onOpenProduct(model)} title={`展开 ${model.modelName} 的型号与配置明细`} style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, height: '100%', padding: '4px 10px 4px 14px', border: 0, borderRight: `1px solid ${color.hairline}`, background: selectedModelId === model.modelId ? '#f0f6ff' : color.canvas, textAlign: 'left', font: 'inherit', cursor: 'pointer', boxShadow: selectedModelId === model.modelId ? 'inset 3px 0 0 #0070f3, 2px 0 3px rgba(0,0,0,.03)' : '2px 0 3px rgba(0,0,0,.03)' }}>
-                    <BrandDot brand={model.brand} size={9} />
-                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(model.brand), fontSize: 13, fontWeight: 650 }}>{model.modelName}</span>
+                  <button type="button" onClick={() => onOpenProduct(model)} title={`展开 ${model.modelName} 的型号与配置明细`} style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', minWidth: 0, height: '100%', padding: '4px 10px 4px 14px', border: 0, borderRight: `1px solid ${color.hairline}`, background: selectedModelId === model.modelId ? '#f0f6ff' : color.canvas, textAlign: 'left', font: 'inherit', cursor: 'pointer', boxShadow: selectedModelId === model.modelId ? 'inset 3px 0 0 #0070f3, 2px 0 3px rgba(0,0,0,.03)' : '2px 0 3px rgba(0,0,0,.03)' }}>
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(model.brand), fontSize: 13, fontWeight: 650 }}>{modelOnly(model.brand, model.modelName)}</span>
                   </button>
                   {brandColumns.map((brand, index) => {
                     const group = comps.filter((rows) => brandKeyOf(rows[0]?.brand ?? '') === brand.key).flat();
