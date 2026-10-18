@@ -526,7 +526,7 @@ function ProductDetailMatrix(props: {
   compStatus: { isExpanded: (id: string) => boolean };
   setProductExpanded: (id: string, expanded: boolean) => void;
   setCompExpanded: (id: string, expanded: boolean) => void;
-  onCompare: (model: OverviewModel) => void;
+  onCompare: (model: OverviewModel, romram?: string) => void;
   onMultiPlatform: (model: OverviewModel) => void;
   onConfigBench: (model: OverviewModel) => void;
   alertCellFor: (skuId: string | undefined) => ReactNode;
@@ -733,7 +733,10 @@ function ProductDetailMatrix(props: {
           const ownCell = (
             <div key={`own-${row.romram}`} style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 3, padding: '4px 14px 7px 48px', background: '#fbfcff' }}>
               <div style={{ position: 'absolute', left: 27, top: 0, bottom: 0, width: 1, background: '#dbe3f1' }} />
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 700 }}><span style={{ color: color.hairlineStrong }}>└</span><BrandDot brand={row.brand} />{row.romram}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5, fontWeight: 700 }}><span style={{ color: color.hairlineStrong }}>└</span><BrandDot brand={row.brand} />{row.romram}</span>
+                <button type="button" aria-label={`查看 ${model.modelName} ${row.romram} 的竞品对比`} title="查看该型号对比" onClick={() => onCompare(model, row.romram)} style={{ flexShrink: 0, minHeight: 23, padding: '2px 8px', border: '1px solid rgba(0,112,243,.45)', borderRadius: radius.pill, background: color.canvas, color: color.link, font: 'inherit', fontSize: 10.5, fontWeight: 650, cursor: 'pointer', whiteSpace: 'nowrap' }}>查看型号对比</button>
+              </div>
               {configLine(row)}
             </div>
           );
@@ -1110,7 +1113,7 @@ export default function Overview() {
               compStatus={compStatus}
               setProductExpanded={setProductExpanded}
               setCompExpanded={setCompExpanded}
-              onCompare={(model) => openCompare(model)}
+              onCompare={(model, romram) => openCompare(model, romram)}
               onMultiPlatform={(model) => setMpSel({ model, romram: null })}
               onConfigBench={(model) => setBenchSel({ modelId: model.modelId, romram: null })}
               alertCellFor={alertCellFor}
