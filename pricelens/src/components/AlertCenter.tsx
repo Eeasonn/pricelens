@@ -85,8 +85,19 @@ export function useAlerts(): AlertItem[] {
         thresholds: state.alertThresholds,
         products: state.alertProducts,
         currency: state.currency,
+        scope: { countryCode: state.countryCode, industry: state.industry },
+        platform: state.platform,
       }),
-    [state.alertSubs, state.alertTypes, state.alertThresholds, state.alertProducts, state.currency],
+    [
+      state.alertSubs,
+      state.alertTypes,
+      state.alertThresholds,
+      state.alertProducts,
+      state.currency,
+      state.countryCode,
+      state.industry,
+      state.platform,
+    ],
   );
 }
 
