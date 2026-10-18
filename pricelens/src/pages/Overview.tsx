@@ -18,7 +18,7 @@
 // 主按钮（全配置下钻），次要动作收进产品条右侧「⋯」菜单；未配置对标的虚线占位删除。
 // 纯展示层：结构全部来自 buildOverviewMatrix（金测锚定），本文件不取数。
 // ============================================================
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { ConfigProvider, Dropdown, Select } from 'antd';
 import { DownOutlined, MoreOutlined, SwapOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
@@ -28,7 +28,7 @@ import { resolveCompExpansion } from '../state/overviewViewState';
 import { navBus } from '../state/navBus';
 import type { ProductSelection } from '../state/filtersTypes';
 import { buildOverviewMatrix, TIER_LABELS } from '../dataModel/aggregate';
-import type { OverviewModel, OverviewRow } from '../dataModel/aggregate';
+import type { OverviewCompRow, OverviewModel, OverviewRow } from '../dataModel/aggregate';
 import { buildOverviewSummary, summarizeCompetitors } from '../dataModel/overviewSummary';
 import { scopeLabels } from '../dataModel/scope';
 import type { DimBenchmark } from '../dataModel/types';
@@ -37,7 +37,7 @@ import ScopeFields from '../components/FilterBar/ScopeFields';
 import PlatformBox from '../components/FilterBar/PlatformBox';
 import CurrencyBox from '../components/FilterBar/CurrencyBox';
 import { OwnProductControl } from '../components/FilterBar/ProductBox';
-import { dimChannel } from '../data';
+import { dimChannel, dimProduct } from '../data';
 import { getEffectiveBenchmark } from '../state/configStore';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import PageHeader from '../components/PageHeader';
@@ -504,6 +504,301 @@ function CompRomRow(props: {
   );
 }
 
+/**
+ * 型号与配置明细（第七十一轮）：把旧的「字段做列、我司/竞品做行」转成
+ * 「我司产品｜竞品 1｜竞品 2」三列矩阵。左侧树固定为阅读锚点，产品行是
+ * 第一层，展开后一次看完该产品的 ROM、折扣、现价、RRP、价差和预警。
+ * 竞品列默认显示主竞品与次竞品；其余已经配置的竞品收进同一产品的下钻区，
+ * 通过「展开全部竞品」查看，避免首屏被低价值的竞品行撑高。
+ */
+function ProductDetailMatrix(props: {
+  visibleBands: { band: { tierCode: OverviewModel['tierCode']; models: OverviewModel[] }; ownModels: OverviewModel[] }[];
+  currency: 'usd' | 'local';
+  prodStatus: { isExpanded: (id: string) => boolean };
+  compStatus: { isExpanded: (id: string) => boolean };
+  setProductExpanded: (id: string, expanded: boolean) => void;
+  setCompExpanded: (id: string, expanded: boolean) => void;
+  onCompare: (model: OverviewModel) => void;
+  onMultiPlatform: (model: OverviewModel) => void;
+  onConfigBench: (model: OverviewModel) => void;
+  alertCellFor: (skuId: string | undefined) => ReactNode;
+  productAlertChip: (model: OverviewModel) => ReactNode;
+  diffDirs: Record<string, DiffDir>;
+  toggleDiffDir: (key: string) => void;
+}) {
+  const {
+    visibleBands,
+    currency,
+    prodStatus,
+    compStatus,
+    setProductExpanded,
+    setCompExpanded,
+    onCompare,
+    onMultiPlatform,
+    onConfigBench,
+    alertCellFor,
+    productAlertChip,
+    diffDirs,
+    toggleDiffDir,
+  } = props;
+
+  type CompGroup = { modelId: string; brand: string; modelName: string; rows: OverviewCompRow[]; min: number | null; max: number | null };
+
+  const seriesOf = (model: OverviewModel): string =>
+    dimProduct.find((p) => p.sku_id.startsWith(`${model.modelId}__`))?.series ?? '未分组';
+
+  const priceRange = (prices: (number | null)[]): string => {
+    const values = prices.filter((p): p is number => p != null);
+    if (values.length === 0) return '暂无价格';
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    return min === max ? formatPrice(min, currency) : `${formatPrice(min, currency)} – ${formatPrice(max, currency)}`;
+  };
+
+  const groupCompetitors = (model: OverviewModel): CompGroup[] => {
+    const groups = new Map<string, OverviewCompRow[]>();
+    for (const row of model.comps) {
+      const modelId = row.skuId.split('__')[0];
+      const rows = groups.get(modelId);
+      if (rows) rows.push(row);
+      else groups.set(modelId, [row]);
+    }
+    return [...groups.entries()].map(([modelId, rows]) => {
+      const sorted = [...rows].sort((a, b) => Number(b.primary) - Number(a.primary) || (b.price ?? -1) - (a.price ?? -1));
+      const prices = rows.map((r) => r.price).filter((p): p is number => p != null);
+      return {
+        modelId,
+        brand: sorted[0]?.brand ?? rows[0].brand,
+        modelName: sorted[0]?.modelName ?? rows[0].modelName,
+        rows: sorted,
+        min: prices.length ? Math.min(...prices) : null,
+        max: prices.length ? Math.max(...prices) : null,
+      };
+    });
+  };
+
+  const ownPriceRange = (model: OverviewModel): string => priceRange(model.rows.map((r) => r.price));
+
+  const cellBase: CSSProperties = {
+    minWidth: 0,
+    padding: '13px 14px',
+    borderRight: `1px solid ${color.hairline}`,
+    borderBottom: `1px solid ${color.hairline}`,
+    background: color.canvas,
+  };
+
+  const modelNode = (model: OverviewModel, expanded: boolean, groups: CompGroup[]): ReactNode => {
+    const series = seriesOf(model);
+    return (
+      <div style={{ minWidth: 0 }}>
+        <button
+          type="button"
+          onClick={() => setProductExpanded(model.modelId, !expanded)}
+          aria-expanded={expanded}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '20px 18px minmax(0,1fr)',
+            alignItems: 'start',
+            gap: 8,
+            width: '100%',
+            padding: 0,
+            border: 0,
+            background: 'transparent',
+            color: color.ink,
+            textAlign: 'left',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, border: `1px solid ${expanded ? 'rgba(0,112,243,.45)' : color.hairlineStrong}`, borderRadius: radius.pill, color: expanded ? selectSoftInk : color.mute, background: expanded ? selectSoft : color.canvas, fontSize: 12, lineHeight: '16px' }}>{expanded ? '−' : '+'}</span>
+          <BrandGlyph brand={model.brand} size={17} />
+          <span style={{ minWidth: 0 }}>
+            <span style={{ display: 'block', color: color.mute, fontSize: 10.5, lineHeight: '15px' }}>{series} 系列</span>
+            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, lineHeight: '19px', fontWeight: 700 }}>{model.modelName}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 5, color: color.mute, fontSize: 10.5, lineHeight: '15px' }}>
+              <span>{model.rows.length} 个型号配置</span>
+              {model.lifecyclePct != null && <span className="tnum" style={{ color: model.lifecyclePct <= -0.05 ? color.error : color.body }}>生命周期 {model.lifecyclePct > 0 ? '+' : ''}{(model.lifecyclePct * 100).toFixed(1)}%</span>}
+              <span style={{ color: selectSoftInk, fontWeight: 600 }}>{TIER_LABELS[model.tierCode]}</span>
+              <span className="tnum" style={{ color: color.body, fontWeight: 600 }}>{ownPriceRange(model)}</span>
+            </span>
+          </span>
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 11, paddingLeft: 46 }}>
+          {productAlertChip(model)}
+          <button type="button" onClick={(e) => { e.stopPropagation(); onCompare(model); }} style={{ minHeight: 24, padding: '2px 9px', border: '1px solid rgba(0,112,243,.45)', borderRadius: radius.pill, background: color.canvas, color: color.link, font: 'inherit', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>竞品对比</button>
+          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [{ key: 'mp', label: '多平台对比' }, { key: 'bench', label: '添加竞品' }], onClick: ({ key }) => key === 'mp' ? onMultiPlatform(model) : onConfigBench(model) }}>
+            <button type="button" onClick={(e) => e.stopPropagation()} style={{ width: 24, height: 24, padding: 0, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.mute, cursor: 'pointer' }} title="更多动作"><MoreOutlined style={{ fontSize: 12 }} /></button>
+          </Dropdown>
+          {groups.length > 2 && <button type="button" onClick={(e) => { e.stopPropagation(); setCompExpanded(model.modelId, !compStatus.isExpanded(model.modelId)); }} style={{ minHeight: 24, padding: '2px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: compStatus.isExpanded(model.modelId) ? selectSoft : color.canvas, color: compStatus.isExpanded(model.modelId) ? selectSoftInk : color.body, font: 'inherit', fontSize: 10.5, cursor: 'pointer' }}>{compStatus.isExpanded(model.modelId) ? '收起其他竞品' : `其他竞品 ${groups.length - 2}`}</button>}
+        </div>
+      </div>
+    );
+  };
+
+  const ownProductCell = (model: OverviewModel, expanded: boolean, groups: CompGroup[]): ReactNode => (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <BrandGlyph brand={model.brand} size={18} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, fontWeight: 700 }}>{brandLabelOf(model.brand)} {model.modelName}</div>
+          <div style={{ marginTop: 3, color: color.mute, fontSize: 10.5 }}>产品 · {model.rows.length} 个配置</div>
+        </div>
+      </div>
+      <div className="tnum" style={{ marginTop: 10, fontSize: 16, fontWeight: 700, color: color.ink }}>{ownPriceRange(model)}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
+        <span style={{ padding: '2px 7px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, fontSize: 10.5, fontWeight: 600 }}>{TIER_LABELS[model.tierCode]}</span>
+        <span style={{ color: color.mute, fontSize: 10.5 }}>最新有值周</span>
+        {productAlertChip(model)}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 12 }}>
+        <button type="button" onClick={(e) => { e.stopPropagation(); onCompare(model); }} style={{ minHeight: 24, padding: '2px 9px', border: '1px solid rgba(0,112,243,.45)', borderRadius: radius.pill, background: color.canvas, color: color.link, font: 'inherit', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>竞品对比</button>
+        <Dropdown
+          trigger={['click']}
+          placement="bottomRight"
+          menu={{ items: [{ key: 'mp', label: '多平台对比' }, { key: 'bench', label: '添加竞品' }], onClick: ({ key }) => key === 'mp' ? onMultiPlatform(model) : onConfigBench(model) }}
+        >
+          <button type="button" onClick={(e) => e.stopPropagation()} style={{ width: 24, height: 24, padding: 0, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.mute, cursor: 'pointer' }} title="更多动作"><MoreOutlined style={{ fontSize: 12 }} /></button>
+        </Dropdown>
+        {groups.length > 2 && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); setCompExpanded(model.modelId, !compStatus.isExpanded(model.modelId)); }} style={{ minHeight: 24, padding: '2px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: compStatus.isExpanded(model.modelId) ? selectSoft : color.canvas, color: compStatus.isExpanded(model.modelId) ? selectSoftInk : color.body, font: 'inherit', fontSize: 10.5, cursor: 'pointer' }}>
+            {compStatus.isExpanded(model.modelId) ? '收起其他竞品' : `其他竞品 ${groups.length - 2}`}
+          </button>
+        )}
+      </div>
+      {!expanded && <div style={{ marginTop: 10, color: color.mute, fontSize: 10.5 }}>点击左侧产品节点展开型号与配置</div>}
+    </div>
+  );
+
+  const competitorCell = (group: CompGroup | undefined, model: OverviewModel): ReactNode => {
+    if (!group) return <span style={{ color: color.hairlineStrong, fontSize: 12 }}>未配置竞品</span>;
+    const representative = group.rows[0];
+    const own = model.rows.find((r) => representative.ownRomrams.some((x) => norm(x) === norm(r.romram))) ?? model.rows[0];
+    const diff = representative.price != null && own?.price != null ? diffPct(representative.price, own.price) : null;
+    return (
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <BrandGlyph brand={group.brand} size={18} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 700 }}>{brandLabelOf(group.brand)} {group.modelName}</div>
+            <div style={{ marginTop: 3, color: color.mute, fontSize: 10.5 }}>{group.rows.length} 个配置 · {representative.primary ? '主竞品' : '已配置'}</div>
+          </div>
+        </div>
+        <div className="tnum" style={{ marginTop: 10, fontSize: 16, fontWeight: 700 }}>{priceRange(group.rows.map((r) => r.price))}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4, color: color.mute, fontSize: 10.5 }}>
+          <span>RRP {priceRange(group.rows.map((r) => r.rrp))}</span>
+          <span>折扣 {group.rows.some((r) => r.price != null && r.rrp != null) ? `${Math.round(Math.min(...group.rows.filter((r) => r.price != null && r.rrp != null).map((r) => (r.price! / r.rrp!) - 1)) * 100)}% – ${Math.round(Math.max(...group.rows.filter((r) => r.price != null && r.rrp != null).map((r) => (r.price! / r.rrp!) - 1)) * 100)}%` : '—'}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 7 }}>
+          {diff ? <span className="tnum" style={{ padding: '2px 7px', borderRadius: radius.pill, background: diff.tone === 'rich' ? '#fff0f0' : '#edf5ff', color: diff.tone === 'rich' ? color.error : color.link, fontSize: 10.5, fontWeight: 700 }}>{diff.text} · {diff.tone === 'rich' ? '高于我司' : '低于我司'}</span> : <span style={{ color: color.mute, fontSize: 10.5 }}>暂无价差</span>}
+          <span style={{ color: color.mute, fontSize: 10.5 }}>当前价</span>
+        </div>
+      </div>
+    );
+  };
+
+  const configRows = (model: OverviewModel, groups: CompGroup[]): ReactNode => {
+    const configLine = (row: OverviewRow, showDiff = true): ReactNode => {
+      const romComps = model.comps.filter((c) => c.ownRomrams.some((x) => norm(x) === norm(row.romram)));
+      const dirKey = `${model.modelId}__${row.romram}`;
+      const dir = diffDirs[dirKey] ?? 'comp';
+      return (
+        <div key={row.romram} style={{ minHeight: 42, padding: '4px 0 7px', borderBottom: `1px dashed ${color.hairline}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {row.discountPct != null ? <DiscountBadge discount={row.discountPct} /> : <span style={{ color: color.hairlineStrong, fontSize: 11 }}>—</span>}
+            <span className="tnum" style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{formatPrice(row.price, currency)}</span>
+            <span className="tnum" style={{ color: color.mute, fontSize: 11.5, whiteSpace: 'nowrap' }}>RRP {formatPrice(row.rrp, currency)}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minHeight: 18, marginTop: 3 }}>
+            {showDiff && romComps.length > 0 && <button type="button" onClick={() => toggleDiffDir(dirKey)} style={{ padding: '1px 7px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.body, font: 'inherit', fontSize: 10, cursor: 'pointer' }}><SwapOutlined style={{ fontSize: 9 }} /> {dir === 'comp' ? '竞品比我司' : '我司比竞品'}</button>}
+            {alertCellFor(row.skuId)}
+          </div>
+        </div>
+      );
+    };
+
+    const compLine = (comp: OverviewCompRow): ReactNode => {
+      const own = model.rows.find((r) => comp.ownRomrams.some((x) => norm(x) === norm(r.romram))) ?? model.rows[0];
+      const dir = diffDirs[`${model.modelId}__${own?.romram ?? ''}`] ?? 'comp';
+      const diff = comp.price != null && own?.price != null ? (dir === 'comp' ? diffPct(comp.price, own.price) : diffPct(own.price, comp.price)) : null;
+      const discount = comp.price != null && comp.rrp != null && comp.rrp > 0 ? comp.price / comp.rrp - 1 : null;
+      return (
+        <div key={comp.skuId} style={{ minHeight: 42, padding: '4px 0 7px', borderBottom: `1px dashed ${color.hairline}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <BrandDot brand={comp.brand} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 600 }}>{comp.romram}</span>
+            <span className="tnum" style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{formatPrice(comp.price, currency)}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 4, color: color.mute, fontSize: 10.5 }}>
+            {discount != null && <DiscountBadge discount={discount} />}
+            <span className="tnum">RRP {formatPrice(comp.rrp, currency)}</span>
+            {diff && <span className="tnum" style={{ color: diff.tone === 'rich' ? color.error : color.link, fontWeight: 600 }}>{diff.text}</span>}
+            {alertCellFor(comp.skuId)}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <>
+        <div style={{ ...cellBase, position: 'relative', paddingLeft: 48, background: '#fbfcff' }}>
+          <div style={{ position: 'absolute', left: 27, top: 0, bottom: 0, width: 1, background: '#dbe3f1' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {model.rows.map((row) => <div key={row.romram} style={{ minHeight: 42, padding: '4px 0 7px', borderBottom: `1px dashed ${color.hairline}` }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 700 }}><span style={{ color: color.hairlineStrong }}>└</span><BrandDot brand={row.brand} />{row.romram}</span>{configLine(row)}</div>)}
+          </div>
+        </div>
+        {[0, 1].map((index) => {
+          const group = groups[index];
+          return <div key={index} style={{ ...cellBase, background: '#fbfcff', borderRight: index === 1 ? 0 : `1px solid ${color.hairline}` }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {model.rows.map((row) => {
+                const matches = group?.rows.filter((comp) => comp.ownRomrams.some((x) => norm(x) === norm(row.romram))) ?? [];
+                return <div key={row.romram} style={{ minHeight: 42, padding: '4px 0 7px', borderBottom: `1px dashed ${color.hairline}` }}>{matches.length ? matches.map(compLine) : <span style={{ color: color.hairlineStrong, fontSize: 11 }}>— 未匹配该配置</span>}</div>;
+              })}
+            </div>
+          </div>;
+        })}
+      </>
+    );
+  };
+
+  return (
+    <div style={{ marginTop: space.md, border: `1px solid ${color.hairline}`, borderRadius: radius.card, overflow: 'hidden', background: color.canvas }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '15px 16px 12px', borderBottom: `1px solid ${color.hairline}` }}>
+        <span style={{ fontSize: 12, color: color.mute }}>左侧产品树</span>
+        <span style={{ fontSize: 11, color: color.mute }}>系列 → 产品 → 型号配置 · 点击产品行展开</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: color.mute }}>当前价 · {currency === 'usd' ? 'USD' : '本币'}</span>
+      </div>
+      <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+        <div style={{ minWidth: 980, display: 'grid', gridTemplateColumns: '340px repeat(2, minmax(300px, 1fr))' }}>
+          <div style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 5, background: '#fbfcfd', padding: '12px 14px' }}><span style={{ fontSize: 11, color: color.mute }}>我司主列 · 固定</span><strong style={{ display: 'block', marginTop: 4, fontSize: 13 }}>产品（我司在售树）</strong><span style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: color.mute }}>系列 → 产品 → 配置型号 · 档位 · 当前价</span></div>
+          {['竞品 1', '竞品 2'].map((title) => <div key={title} style={{ ...cellBase, background: '#fbfcfd', padding: '12px 14px' }}><span style={{ fontSize: 11, color: color.mute }}>按对标关系排序</span><strong style={{ display: 'block', marginTop: 4, fontSize: 14 }}>{title}</strong><span style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: color.mute }}>代表竞品 · 价差 · RRP · 预警</span></div>)}
+
+          {visibleBands.map(({ band, ownModels }) => (
+            <Fragment key={band.tierCode}>
+              <div style={{ gridColumn: '1 / -1', padding: '13px 14px 8px', borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}><span style={{ fontSize: 13, fontWeight: 700, color: color.ink }}>{TIER_LABELS[band.tierCode]}</span><span style={{ marginLeft: 10, color: color.mute, fontSize: 11 }}>我司 {ownModels.length} · 点击产品节点查看型号配置</span></div>
+              {ownModels.map((model) => {
+                const expanded = prodStatus.isExpanded(model.modelId);
+                const groups = groupCompetitors(model);
+                return (
+                  <Fragment key={model.modelId}>
+                    <div data-model-id={model.modelId} style={{ ...cellBase, position: 'sticky', left: 0, zIndex: 3, background: color.canvas, padding: '14px' }}>{modelNode(model, expanded, groups)}</div>
+                    <div style={cellBase}>{competitorCell(groups[0], model)}</div>
+                    <div style={{ ...cellBase, borderRight: 0 }}>{competitorCell(groups[1], model)}</div>
+                    {expanded && <>
+                      {configRows(model, groups)}
+                      {compStatus.isExpanded(model.modelId) && groups.length > 2 && <div style={{ gridColumn: '2 / -1', padding: '11px 14px 13px', borderBottom: `1px solid ${color.hairline}`, background: '#f8fafc' }}><div style={{ marginBottom: 7, color: color.mute, fontSize: 10.5 }}>其他已配置竞品</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(230px, 1fr))', gap: 8 }}>{groups.slice(2).map((group) => <div key={group.modelId} style={{ padding: '9px 10px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas }}>{competitorCell(group, model)}</div>)}</div></div>}
+                    </>}
+                  </Fragment>
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Overview() {
   const { go } = usePage();
   const { state, actions } = useFilters();
@@ -826,174 +1121,24 @@ export default function Overview() {
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: space.xl, paddingBottom: space.sm }}>
               <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>型号与配置明细</h2>
-              <span style={{ fontSize: 11, color: color.mute }}>按上市价档位查看产品，点击产品条展开配置与竞品</span>
+              <span style={{ fontSize: 11, color: color.mute }}>左侧固定产品树，右侧按产品 / 竞品列对齐</span>
             </div>
 
-            {visibleBands.some(({ ownModels }) => ownModels.some((model) => prodStatus.isExpanded(model.modelId))) && (
-              <div style={{ ...ROW_GRID, marginBottom: space.sm, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvasSoft }}>
-                <Th first>产品 / 配置</Th>
-                <Th justify="end">折扣率</Th>
-                <Th justify="end">折后价</Th>
-                <Th justify="end">RRP</Th>
-                <Th>价差</Th>
-                <Th last>预警</Th>
-              </div>
-            )}
-
-            {/* 档位带 × 产品条列表（第七十轮降噪改版）：默认每产品一条产品条；
-                展开的产品在条下列配置（ROM）包裹格（行组表格：我司行在上、映射竞品在下）。
-                六列明细表头只服务展开态——带内全收起时不渲染。 */}
-            {visibleBands.map(({ band, ownModels }) => {
-              // 第四十五轮：「其他在售竞品」带尾区删除——矩阵只呈现已建对标的竞品；
-              // 竞品计数 = 可见 ROM 映射到的去重型号数
-              const compCount = new Set(
-                ownModels.flatMap((m) => {
-                  const visRoms = new Set(m.rows.map((r) => norm(r.romram)));
-                  return m.comps
-                    .filter((c) => c.ownRomrams.some((x) => visRoms.has(norm(x))))
-                    .map((c) => c.skuId.split('__')[0]);
-                }),
-              ).size;
-              const anyExpanded = ownModels.some((m) => prodStatus.isExpanded(m.modelId));
-              return (
-                <section key={band.tierCode} style={{ marginTop: space.base }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md, padding: `0 0 ${space.sm}px` }}>
-                    <span style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink }}>
-                      {TIER_LABELS[band.tierCode]}
-                    </span>
-                    <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-                      我司 {ownModels.length} · 竞品 {compCount}
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      display: anyExpanded ? 'flex' : 'grid',
-                      flexDirection: anyExpanded ? 'column' : undefined,
-                      // 产品条右侧保留完整的价格区间/动作组；360px 卡片不足以
-                      // 容纳这些固定控件，改为 520px 最小轨道后在常见宽度下
-                      // 保持两列，避免内容溢出把按钮推到相邻列。
-                      gridTemplateColumns: anyExpanded ? undefined : 'repeat(auto-fit, minmax(520px, 1fr))',
-                      gap: anyExpanded ? undefined : space.sm,
-                    }}
-                  >
-                    {ownModels.map((m) => {
-                      const expanded = prodStatus.isExpanded(m.modelId);
-                      const visRoms = new Set(m.rows.map((r) => norm(r.romram)));
-                      const compsExpanded = compStatus.isExpanded(m.modelId);
-                      // 产品条竞品计数 = 映射到可见 ROM 的去重竞品型号数（与带级竞品数同口径）
-                      const modelCompCount = new Set(
-                        m.comps
-                          .filter((c) => c.ownRomrams.some((x) => visRoms.has(norm(x))))
-                          .map((c) => c.skuId.split('__')[0]),
-                      ).size;
-                      const prices = m.rows.map((r) => r.price).filter((p): p is number => p != null);
-                      const priceMin = prices.length > 0 ? Math.min(...prices) : null;
-                      const priceMax = prices.length > 0 ? Math.max(...prices) : null;
-                      return (
-                      <div key={m.modelId} style={{ minWidth: 0, paddingBlock: anyExpanded ? (expanded ? space.sm : space.xs) : 0 }}>
-                        <ProductStrip
-                          model={m}
-                          expanded={expanded}
-                          romCount={m.rows.length}
-                          compCount={modelCompCount}
-                          compsExpanded={compsExpanded}
-                          priceMin={priceMin}
-                          priceMax={priceMax}
-                          currency={currency}
-                          alertChip={productAlertChip(m)}
-                          onToggle={() => setProductExpanded(m.modelId, !expanded)}
-                          onToggleComps={() => setCompExpanded(m.modelId, !compsExpanded)}
-                          onCompare={() => openCompare(m)}
-                          onMultiPlatform={() => setMpSel({ model: m, romram: null })}
-                          onConfigBench={() => setBenchSel({ modelId: m.modelId, romram: null })}
-                        />
-                        {/* ROM 包裹格：行组表格——我司行在上、映射竞品在下（第四十轮对齐定版） */}
-                        {expanded && m.rows.map((r, romIndex) => {
-                          const romComps = m.comps.filter((c) => c.ownRomrams.some((x) => norm(x) === norm(r.romram)));
-                          const dirKey = `${m.modelId}__${r.romram}`;
-                          const dir = diffDirs[dirKey] ?? 'comp';
-                          const compSummary = summarizeCompetitors(r.price, romComps, dir);
-                          return (
-                            <div
-                              key={r.romram}
-                              style={{
-                                marginTop: space.xs,
-                                border: `1px solid ${color.hairline}`,
-                                borderRadius: radius.card,
-                                background: color.canvas,
-                                overflow: 'hidden',
-                              }}
-                            >
-                              <OwnRomRow
-                                row={r}
-                                currency={currency}
-                                diffDir={dir}
-                                onToggleDiffDir={() => toggleDiffDir(dirKey)}
-                                canToggleDiff={romComps.length > 0}
-                                alertCell={alertCellFor(r.skuId)}
-                              />
-                              {/* 未配置对标的 ROM 不再渲染竞品区（第七十轮撤虚线占位；添加竞品在产品条「⋯」） */}
-                              {romComps.length > 0 && (
-                              <div
-                                id={`overview-comps-${m.modelId}-${romIndex}`}
-                                style={{
-                                  background: color.canvasSoft,
-                                  borderTop: `1px solid ${color.hairline}`,
-                                }}
-                              >
-                                {compsExpanded ? (
-                                  romComps.map((c) => (
-                                    <CompRomRow
-                                      key={c.skuId}
-                                      brand={c.brand}
-                                      name={c.modelName}
-                                      romram={c.romram}
-                                      price={c.price}
-                                      rrp={c.rrp}
-                                      currency={currency}
-                                      ownPrice={r.price}
-                                      diffDir={dir}
-                                      alertCell={alertCellFor(c.skuId)}
-                                    />
-                                  ))
-                                ) : (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: space.lg, flexWrap: 'wrap', padding: '10px 16px', fontSize: 12, color: color.body }}>
-                                    <span style={{ fontWeight: 600, color: color.ink }}>竞品 {compSummary.count} 个</span>
-                                    <span>
-                                      现价区间{' '}
-                                      <span className="tnum">
-                                        {compSummary.minPrice == null
-                                          ? '—'
-                                          : compSummary.minPrice === compSummary.maxPrice
-                                            ? formatPrice(compSummary.minPrice, currency)
-                                            : `${formatPrice(compSummary.minPrice, currency)} – ${formatPrice(compSummary.maxPrice, currency)}`}
-                                      </span>
-                                    </span>
-                                    <span>
-                                      价差区间（{dir === 'comp' ? '竞品比我司' : '我司比竞品'}）{' '}
-                                      <span className="tnum">
-                                        {compSummary.minDiff == null
-                                          ? '—'
-                                          : compSummary.minDiff === compSummary.maxDiff
-                                            ? pctText(compSummary.minDiff)
-                                            : `${pctText(compSummary.minDiff)} – ${pctText(compSummary.maxDiff)}`}
-                                      </span>
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
+            <ProductDetailMatrix
+              visibleBands={visibleBands}
+              currency={currency}
+              prodStatus={prodStatus}
+              compStatus={compStatus}
+              setProductExpanded={setProductExpanded}
+              setCompExpanded={setCompExpanded}
+              onCompare={(model) => openCompare(model)}
+              onMultiPlatform={(model) => setMpSel({ model, romram: null })}
+              onConfigBench={(model) => setBenchSel({ modelId: model.modelId, romram: null })}
+              alertCellFor={alertCellFor}
+              productAlertChip={productAlertChip}
+              diffDirs={diffDirs}
+              toggleDiffDir={toggleDiffDir}
+            />
 
             {visibleBands.length === 0 && (
               <div style={{ padding: `${space.xl}px 0`, textAlign: 'center', fontSize: fontSize.bodySm, color: color.mute }}>
