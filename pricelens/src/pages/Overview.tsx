@@ -1116,7 +1116,6 @@ export default function Overview() {
               currency={currency}
               asOf={asOf}
               onOpenProduct={focusProduct}
-              onCompare={(model) => openCompare(model)}
             />
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: space.xl, paddingBottom: space.sm }}>
