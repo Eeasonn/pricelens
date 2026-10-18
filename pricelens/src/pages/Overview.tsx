@@ -159,8 +159,13 @@ function OverviewAlertCell({ items, subscribed, currency, bell, onOpen }: {
         {latest.map((a) => (
           <span
             key={a.key}
+            role="button"
             title={lineTitle(a)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen(a);
+            }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', cursor: 'pointer' }}
           >
             <span
               style={{
