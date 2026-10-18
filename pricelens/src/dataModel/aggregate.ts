@@ -200,6 +200,22 @@ export function platformPriceSpread(base: number, skuId: string, weekId: string)
     .sort((a, b) => a.price - b.price);
 }
 
+/**
+ * 按筛选器的单/多平台选择计算折后价。
+ *
+ * 预警引擎与看板必须共享同一套平台因子与确定性抖动；将选择口径
+ * 包装成公开纯函数，避免各数据层复制一份平台计算逻辑。未传选择、
+ * 传 null，或选择为空时均回落 OZON 基准价。
+ */
+export function platformPriceForSelection(
+  base: number,
+  skuId: string,
+  weekId: string,
+  platform: SeriesQuery['platform'] = null,
+): number {
+  return applyPlatform(base, skuId, weekId, effectivePlatforms(platform));
+}
+
 // ---------------- offer 解析 ----------------
 /** offer_title = "档期名 · 类型"，用档期名前缀回查 dim_promo 得 endDate */
 function findPromoForOffer(title: string, anchorDate: string): DimPromo | undefined {
