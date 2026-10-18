@@ -12,9 +12,10 @@
 // 配置（追补⑨）：四类各自 全局开关+阈值；订阅产品可按类型覆写开关与阈值
 // （products[key]）。确定性纯函数：同入参两次调用输出逐字节一致；金测锚定。
 // ============================================================
-import { dimProduct, dimTime, factPriceWeekly } from '../data';
-import type { CurrencyMode } from './types';
-import { platformPriceSpread } from './aggregate';
+import { dimChannel, dimProduct, dimTime, factPriceWeekly } from '../data';
+import type { CurrencyMode, DataScope } from './types';
+import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
+import { platformPriceForSelection, platformPriceSpread } from './aggregate';
 
 export type AlertType = 'price-change' | 'promo' | 'platform-gap' | 'own-gap';
 
@@ -27,6 +28,12 @@ export interface AlertProductRule {
   thresholds?: Partial<AlertThresholds>;
 }
 
+/** 与筛选器 PlatformSelection 同构；数据层不反向依赖 state。 */
+export interface AlertPlatformSelection {
+  platforms: string[];
+  shopIds: string[];
+}
+
 export interface AlertCfg {
   subs: string[]; // 启用预警的系列（modelId__romram去空格）
   enabled: AlertTypeSwitches; // 四类全局开关
@@ -34,6 +41,10 @@ export interface AlertCfg {
   /** 按产品覆写（own-gap 为型号级，不参与产品覆写） */
   products?: Record<string, AlertProductRule>;
   currency?: CurrencyMode;
+  /** 数据作用域；缺省 = 当前 demo 的 RU / phone。 */
+  scope?: DataScope;
+  /** 与看板同构的平台选择；缺省/null/空选择 = OZON 基准。 */
+  platform?: AlertPlatformSelection | null;
 }
 
 export const ALERT_TYPES: AlertType[] = ['price-change', 'promo', 'platform-gap', 'own-gap'];
@@ -80,6 +91,7 @@ export interface AlertSeriesMeta {
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 const EPS = 1e-9;
+const countryOf = (p: { country_code?: string }): string => p.country_code ?? DEFAULT_DATA_SCOPE.countryCode;
 
 // 模块内懒构建一次（aggregate.factIndex 为私有实现，此处独立建同构索引；
 // 双币种字段都留——通知币种随入参，触发判定用比值与币种无关）
@@ -113,13 +125,13 @@ function factCellIndex(): Map<string, Map<string, FactCell>> {
 const timeAsc = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : 1));
 
 /** seriesKey（modelId__romram去空格）→ 系列元数据；无产品行 = null */
-export function alertSeriesMeta(seriesKey: string): AlertSeriesMeta | null {
+export function alertSeriesMeta(seriesKey: string, scope: DataScope = DEFAULT_DATA_SCOPE): AlertSeriesMeta | null {
   const sep = seriesKey.indexOf('__');
   if (sep < 0) return null;
   const modelId = seriesKey.slice(0, sep);
   const rom = seriesKey.slice(sep + 2);
   const rows = dimProduct
-    .filter((p) => p.sku_id.startsWith(modelId + '__') && norm(p.romram) === rom)
+    .filter((p) => p.sku_id.startsWith(modelId + '__') && norm(p.romram) === rom && p.industry === scope.industry && countryOf(p) === scope.countryCode)
     .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
   if (rows.length === 0) return null;
   const head = rows[0];
@@ -156,14 +168,22 @@ function effThreshold(cfg: AlertCfg, key: string, type: AlertType): number {
  */
 export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   const currency = cfg.currency ?? 'usd';
+  const scope = cfg.scope ?? DEFAULT_DATA_SCOPE;
+  // 与其他取数入口保持一致：不支持的国家/产业不产生任何预警。
+  if (!isDataScopeSupported(scope)) return [];
   if (cfg.subs.length === 0) return [];
   const px = factCellIndex();
   const useUsd = currency === 'usd';
+  // 当前事实表价格不挂店铺明细，国家由 dimChannel 的可用渠道承载；
+  // 以可用国家作为事实数据门槛，同时按产品产业过滤，便于后续接入多国家数据。
+  const countryAvailable = dimChannel.some((c) => c.country_code === scope.countryCode);
+  if (!countryAvailable) return [];
+  const scopedProducts = dimProduct.filter((p) => p.industry === scope.industry && countryOf(p) === scope.countryCode);
   const out: AlertItem[] = [];
   for (const key of cfg.subs) {
-    const meta = alertSeriesMeta(key);
+    const meta = alertSeriesMeta(key, scope);
     if (!meta) continue;
-    const group = dimProduct
+    const group = scopedProducts
       .filter((p) => p.sku_id.startsWith(`${key.split('__')[0]}__`) && norm(p.romram) === norm(meta.romram))
       .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
     let prevPrice: number | null = null;
@@ -171,6 +191,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
     for (const w of timeAsc) {
       // 组内多色均值（与 buildSeries 组聚合同语言）；RRP = 官方阶梯组内一条，取首个有值
       let sum = 0;
+      let baseSum = 0;
       let n = 0;
       let rrp: number | null = null;
       for (const p of group) {
@@ -178,13 +199,15 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
         if (!cell) continue;
         const base = useUsd ? cell.priceUsd : cell.priceRub;
         if (base != null) {
-          sum += base;
+          baseSum += base;
+          sum += platformPriceForSelection(base, p.sku_id, w.week_id, cfg.platform);
           n++;
         }
         if (rrp == null) rrp = useUsd ? cell.rrpUsd : cell.rrpRub;
       }
       if (n === 0) continue; // 缺采：prev 跨周延续（比较链不断）
       const price = Math.round(sum / n);
+      const basePrice = Math.round(baseSum / n);
       const intensity = rrp != null && rrp > 0 ? 1 - price / rrp : null;
       const base = {
         seriesKey: key,
@@ -241,7 +264,8 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       }
       // 平台价差预警（仅我司品牌系列）：周内各平台独立价 最高/最低 − 1 ≥ 阈值（阈值 ≤0 = 关）
       if (effEnabled(cfg, key, 'platform-gap') && thr('platform-gap') > 0 && meta.isOwn) {
-        const spread = platformPriceSpread(price, meta.skuId, w.week_id);
+        // 平台价差从 OZON 基准价展开，避免在 DNS/M.Video 选择下重复套用平台因子。
+        const spread = platformPriceSpread(basePrice, meta.skuId, w.week_id);
         const low = spread[0];
         const high = spread[spread.length - 1];
         const gap = low.price > 0 ? high.price / low.price - 1 : 0;
@@ -265,9 +289,9 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   // 档位间距预警（追补⑨，型号级）：订阅内我司系列按型号分组，最新有值现价相邻对
   if (cfg.enabled['own-gap']) {
     const latestOf = (key: string): { price: number; weekId: string; weekLabel: string } | null => {
-      const meta = alertSeriesMeta(key);
+      const meta = alertSeriesMeta(key, scope);
       if (!meta || !meta.isOwn) return null;
-      const group = dimProduct
+      const group = scopedProducts
         .filter((p) => p.sku_id.startsWith(`${key.split('__')[0]}__`) && norm(p.romram) === norm(meta.romram))
         .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
       for (let i = timeAsc.length - 1; i >= 0; i--) {
@@ -278,7 +302,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
           const cell = px.get(p.sku_id)?.get(w.week_id);
           const base = cell ? (useUsd ? cell.priceUsd : cell.priceRub) : null;
           if (base != null) {
-            sum += base;
+            sum += platformPriceForSelection(base, p.sku_id, w.week_id, cfg.platform);
             n++;
           }
         }
@@ -288,7 +312,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
     };
     const byModel = new Map<string, string[]>();
     for (const key of cfg.subs) {
-      const meta = alertSeriesMeta(key);
+      const meta = alertSeriesMeta(key, scope);
       if (!meta?.isOwn) continue;
       const modelId = key.split('__')[0];
       const arr = byModel.get(modelId);
@@ -299,7 +323,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
     for (const [modelId, keys] of byModel) {
       if (keys.length < 2) continue;
       const priced = keys
-        .map((k) => ({ key: k, meta: alertSeriesMeta(k)!, px: latestOf(k) }))
+        .map((k) => ({ key: k, meta: alertSeriesMeta(k, scope)!, px: latestOf(k) }))
         .filter((x) => x.px != null && x.meta != null) as {
         key: string;
         meta: AlertSeriesMeta;
