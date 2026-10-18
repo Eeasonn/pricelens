@@ -143,8 +143,9 @@ export default function PriceTrend() {
       currency: state.currency,
       agg: state.agg,
       platform: state.platform,
+      scope: { countryCode: state.countryCode, industry: state.industry },
     }),
-    [state.own, state.competitors, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform],
+    [state.own, state.competitors, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry],
   );
 
   const allSeries: Series[] = useMemo(() => {
@@ -350,13 +351,14 @@ export default function PriceTrend() {
           currency: state.currency,
           agg: state.agg,
           platform: state.platform,
+          scope: { countryCode: state.countryCode, industry: state.industry },
         });
       } catch {
         series = []; // 空态不崩
       }
       return { key, sel, comps, series };
     });
-  }, [panels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform]);
+  }, [panels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry]);
 
   // 面板窗口切片（与单图 visSeries 同逻辑：win 切片 + 边缘续接标记）
   const sliceVis = (list: Series[]): Series[] => {
@@ -539,6 +541,7 @@ export default function PriceTrend() {
         currency: state.currency,
         agg: state.agg,
         platform: state.platform,
+        scope: { countryCode: state.countryCode, industry: state.industry },
       });
     } catch {
       return [];

@@ -42,6 +42,10 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     if (g === 'week' || g === 'month' || g === 'quarter') out.filters.granularity = g;
     const cur = q.get('cur');
     if (cur === 'usd' || cur === 'local') out.filters.currency = cur;
+    const c = q.get('c');
+    if (c) out.filters.countryCode = c;
+    const i = q.get('i');
+    if (i) out.filters.industry = i as FiltersState['industry'];
     const shop = q.get('shop');
     if (shop) out.filters.platform = { platforms: [], shopIds: [shop] } as PlatformSelection;
     const own = q.get('own');

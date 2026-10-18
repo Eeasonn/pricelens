@@ -28,6 +28,8 @@ export function IndustryControl() {
   const { state } = useFilters();
   return (
     <Select
+      id="scope-industry"
+      aria-label="产业（必选）"
       value={state.industry}
       style={{ width: '100%' }}
       popupMatchSelectWidth={false}
@@ -177,11 +179,13 @@ function ProductCascadeControl({
   kind,
   selection,
   onSelectionChange,
+  emptyPlaceholder,
 }: {
   kind: 'own' | 'comp';
   /** 第四十三轮：受控注入（总览产品筛选复用同款级联）；缺省 = 绑定 FiltersContext */
   selection?: ProductSelection[];
   onSelectionChange?: (next: ProductSelection[]) => void;
+  emptyPlaceholder?: string;
 }) {
   const { state, actions } = useFilters();
   const tree = useMemo(() => (kind === 'own' ? buildOwnTree(state.industry) : buildCompetitorTree()), [kind, state.industry]);
@@ -374,7 +378,7 @@ function ProductCascadeControl({
       // 带出的部分勾选语义一致。
       showCheckedStrategy={Cascader.SHOW_CHILD}
       maxTagCount="responsive"
-      placeholder={kind === 'own' ? '选择产品' : '选择竞品'}
+      placeholder={kind === 'own' ? (emptyPlaceholder ?? '选择产品') : '选择竞品'}
       displayRender={displayRender}
       popupRender={() => (
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
@@ -398,6 +402,7 @@ function ProductCascadeControl({
 export function OwnProductControl(p: {
   selection?: ProductSelection[];
   onSelectionChange?: (next: ProductSelection[]) => void;
+  emptyPlaceholder?: string;
 } = {}) {
   return <ProductCascadeControl kind="own" {...p} />;
 }

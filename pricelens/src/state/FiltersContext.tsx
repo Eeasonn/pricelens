@@ -24,6 +24,7 @@ import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
 import { readUrlOverrides, writeUrlPatch } from './urlSync';
+import { normalizeDataScope } from '../dataModel/scope';
 
 /** 追补⑨：四类预警全局缺省（阈值小数；own-gap = 低于 15% 视为档位太近） */
 export const DEFAULT_ALERT_TYPES: AlertTypeSwitches = {
@@ -154,6 +155,7 @@ function loadInitialState(): FiltersState {
   } else if (Object.keys(url.filters).length > 0) {
     restored = { ...restored, ...url.filters };
   }
+  restored = { ...restored, ...normalizeDataScope(restored) };
   return restored;
 }
 
@@ -185,12 +187,14 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     const own = state.own.map((s) => `${s.modelId}__${s.romram.replace(/\s+/g, '')}`).join(',');
     const shop = state.platform?.shopIds[0] ?? null;
     writeUrlPatch({
+      c: state.countryCode,
+      i: state.industry,
       g: state.granularity,
       cur: state.currency,
       own: own || null,
       shop,
     });
-  }, [state.granularity, state.currency, state.own, state.platform, state.autoMatch]);
+  }, [state.countryCode, state.industry, state.granularity, state.currency, state.own, state.platform, state.autoMatch]);
 
   // §13：对标配置保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算竞品组
   // （第三十四轮引入；矩阵维护入口现为总览行尾「＋添加竞品」浮窗，关闭自动匹配则不动当前竞品）；

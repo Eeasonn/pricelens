@@ -7,6 +7,8 @@
 import type { ReactNode } from 'react';
 import { Button } from 'antd';
 import { usePage, type Page } from '../state/PageContext';
+import { useFilters } from '../state/FiltersContext';
+import { scopeLabels } from '../dataModel/scope';
 import { AlertNavButton } from './AlertCenter';
 import { color, fontSize, shadow, space } from '../theme/tokens';
 
@@ -19,6 +21,8 @@ const TABS: { page: Page; label: string }[] = [
 
 export default function PageHeader({ title, extra }: { title: string; extra?: ReactNode }) {
   const { go, page } = usePage();
+  const { state } = useFilters();
+  const { region, country } = scopeLabels(state);
   return (
     <header
       style={{
@@ -34,7 +38,7 @@ export default function PageHeader({ title, extra }: { title: string; extra?: Re
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md }}>
         <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
-        <span style={{ fontSize: fontSize.caption, color: color.mute }}>欧亚 / R国 · {title}</span>
+        <span style={{ fontSize: fontSize.caption, color: color.mute }}>{region} / {country} · {title}</span>
       </div>
       <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
         <AlertNavButton />

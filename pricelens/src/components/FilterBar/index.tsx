@@ -2,8 +2,8 @@ import { type CSSProperties, type ReactNode } from 'react';
 import { ConfigProvider } from 'antd';
 import type { ThemeConfig } from 'antd';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
-import CountryBox from './CountryBox';
-import { AutoMatchControl, CompetitorControl, IndustryControl, OwnProductControl } from './ProductBox';
+import { AutoMatchControl, CompetitorControl, OwnProductControl } from './ProductBox';
+import ScopeFields from './ScopeFields';
 
 /** Also used by the overview's product controls. */
 export const filterBarTheme: ThemeConfig = {
@@ -43,8 +43,7 @@ export default function FilterBar({ onBack }: { onBack: () => void }) {
       <ConfigProvider theme={filterBarTheme}>
         <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30 }}>
-            <Field label="国家" width={210}><CountryBox /></Field>
-            <Field label="产业" width={155}><IndustryControl /></Field>
+            <ScopeFields />
             <div style={{ flex: '1 1 285px', minWidth: 0 }}><Field label="我司产品"><OwnProductControl /></Field></div>
             <div style={{ flex: '1 1 290px', minWidth: 0 }}><Field label="竞品"><ComparisonControl /></Field></div>
             <button

@@ -281,12 +281,14 @@ console.log('\n[6] buildSeries 冒烟');
   const tmp = mkdtempSync(join(tmpdir(), 'pl-smoke-'));
   try {
     const aggPath = join(ROOT, 'src', 'dataModel', 'aggregate');
+    const scopePath = join(ROOT, 'src', 'dataModel', 'scope');
     const dataPath = join(ROOT, 'src', 'data', 'index');
     // 路径含空格与单引号（Eason's Projects）：用 JSON.stringify 生成安全带引号的 TS 字符串字面量
     const rel = (p) => JSON.stringify(relative(tmp, p).split('\\').join('/'));
     const smokeTs = `
 declare const process: { exit(code?: number): never };
 import { buildSeries, lowestPriceColorSku, defaultCompetitorSkus, lifecycleDeltaOf } from ${rel(aggPath)};
+import { DEFAULT_DATA_SCOPE } from ${rel(scopePath)};
 import { dimProduct } from ${rel(dataPath)};
 
 function assert(cond: boolean, msg: string): void {
@@ -298,6 +300,7 @@ assert(!!sku && sku.startsWith('own-pura-90s-pro__12+256GB__'), 'lowestPriceColo
 const compSkus = dimProduct.filter(p => p.sku_id.startsWith('cmp-iphone-17__8+256GB__')).map(p => p.sku_id);
 const puraSkuIds = dimProduct.filter(p => p.sku_id.startsWith('own-pura-90s-pro__12+256GB__')).map(p => p.sku_id);
 const base = {
+  scope: DEFAULT_DATA_SCOPE,
   groups: [
     { modelId: 'own-pura-90s-pro', romram: '12+256 GB', skuIds: puraSkuIds, isOwn: true },
     { modelId: 'cmp-iphone-17', romram: '8+256 GB', skuIds: compSkus, isOwn: false },

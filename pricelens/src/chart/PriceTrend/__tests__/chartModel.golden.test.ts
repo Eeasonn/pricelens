@@ -820,6 +820,7 @@ describe('真实造数快照（seed 20261009）', () => {
       currency: 'usd',
       agg: 'avg',
       platform: null,
+      scope: { countryCode: 'RU', industry: 'phone' },
     });
     expect(series.length).toBeGreaterThan(0);
     const scale = computeYAxis({ series, priceTypes: BOTH, sliderScale: 1 });

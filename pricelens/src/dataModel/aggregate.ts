@@ -6,6 +6,7 @@
 // ============================================================
 import type {
   CurrencyMode,
+  DataScope,
   DimBenchmark,
   DimChannel,
   DimProduct,
@@ -23,6 +24,7 @@ import type {
 } from './types';
 import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimTime, factPriceWeekly } from '../data';
 import { brandColor } from '../theme/tokens';
+import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 
 // ---------------- 确定性 PRNG ----------------
 function fnv1a(str: string): number {
@@ -294,6 +296,7 @@ function toOfferInfo(row: FactPriceWeekly, anchorDate: string): OfferInfo | null
 
 // ---------------- §7.3 取数契约唯一入口 ----------------
 export function buildSeries(q: SeriesQuery): Series[] {
+  if (!isDataScopeSupported(q.scope)) return [];
   const buckets = buildBuckets(q);
   const platforms = effectivePlatforms(q.platform);
   const out: Series[] = [];
@@ -646,7 +649,7 @@ function extremes(points: OverviewSparkPoint[]): { maxV: number | null; maxIdx: 
 }
 
 /**
- * 国家总览矩阵。确定性纯函数：同 (currency, bench) 两次调用输出逐字节一致。
+ * 国家总览矩阵。确定性纯函数：同输入两次调用输出逐字节一致。
  * - 我司 ROM 行代表色 = lowestPriceColorSku（RUB 口径最低价色，与看板默认视图同源）
  * - 竞品行 = benchmark 对该型号全部 ROM 的映射并集（去重；ownRomrams 聚合）；
  *   第四十四轮起 benchmark 可注入（总览页传 getEffectiveBenchmark() 的手动+auto 合并结果，
@@ -658,11 +661,14 @@ export function buildOverviewMatrix(
   bench: DimBenchmark[] = dimBenchmark,
   /** 第五十一轮：平台筛选（与看板共享 state.platform；null = OZON 基准口径） */
   platform: SeriesQuery['platform'] = null,
+  scope: DataScope = DEFAULT_DATA_SCOPE,
 ): OverviewTierBand[] {
+  if (!isDataScopeSupported(scope)) return [];
   const platforms = effectivePlatforms(platform);
   // 型号索引：modelId → 产品行集
   const byModel = new Map<string, DimProduct[]>();
   for (const p of dimProduct) {
+    if (p.industry !== scope.industry) continue;
     const mid = p.sku_id.split('__')[0];
     const arr = byModel.get(mid);
     if (arr) arr.push(p);

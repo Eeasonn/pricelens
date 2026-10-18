@@ -152,6 +152,11 @@ export interface Series {
   edgeEnd?: boolean;
 }
 
+export interface DataScope {
+  countryCode: string;
+  industry: 'phone';
+}
+
 export interface SkuGroupQuery {
   modelId: string;
   romram: string;
@@ -161,6 +166,7 @@ export interface SkuGroupQuery {
 
 /** §7.3 取数契约唯一入口的查询参数 */
 export interface SeriesQuery {
+  scope: DataScope;
   groups: SkuGroupQuery[]; // 我司 + 竞品的勾选组
   granularity: Granularity;
   startBucket: string; // 与 granularity 同粒度的桶 id

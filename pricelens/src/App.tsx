@@ -2,6 +2,7 @@ import { Button, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { usePage, PageProvider } from './state/PageContext';
 import { FiltersProvider } from './state/FiltersContext';
+import { OverviewViewProvider } from './state/OverviewViewContext';
 import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
 import Config from './pages/Config';
@@ -31,7 +32,9 @@ export default function App() {
     >
       <PageProvider>
         <FiltersProvider>
-          <AppBody />
+          <OverviewViewProvider>
+            <AppBody />
+          </OverviewViewProvider>
         </FiltersProvider>
       </PageProvider>
     </ConfigProvider>
