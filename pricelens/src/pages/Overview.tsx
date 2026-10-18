@@ -19,7 +19,7 @@
 // 纯展示层：结构全部来自 buildOverviewMatrix（金测锚定），本文件不取数。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ConfigProvider, Dropdown, Segmented, Select } from 'antd';
+import { ConfigProvider, Dropdown, Select } from 'antd';
 import { DownOutlined, MoreOutlined, SwapOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
@@ -35,6 +35,7 @@ import type { DimBenchmark } from '../dataModel/types';
 import { filterBarTheme } from '../components/FilterBar';
 import ScopeFields from '../components/FilterBar/ScopeFields';
 import PlatformBox from '../components/FilterBar/PlatformBox';
+import CurrencyBox from '../components/FilterBar/CurrencyBox';
 import { OwnProductControl } from '../components/FilterBar/ProductBox';
 import { dimChannel } from '../data';
 import { getEffectiveBenchmark } from '../state/configStore';
@@ -43,6 +44,7 @@ import PageHeader from '../components/PageHeader';
 import BenchConfigModal from './overview/BenchConfigModal';
 import MultiPlatformModal from './overview/MultiPlatformModal';
 import IndustrySummary from './overview/IndustrySummary';
+import MarketMap from './overview/MarketMap';
 import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import BrandGlyph from '../components/BrandGlyph';
 import { AlertBell, alertDigest, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
@@ -209,7 +211,17 @@ function ProductStrip(props: {
     <div
       data-model-id={m.modelId}
       onClick={props.onToggle}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 2px', cursor: 'pointer', minWidth: 0 }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: expanded ? '7px 2px' : '9px 10px',
+        border: expanded ? undefined : `1px solid ${color.hairline}`,
+        borderRadius: expanded ? undefined : radius.card,
+        background: expanded ? undefined : color.canvasSoft,
+        cursor: 'pointer',
+        minWidth: 0,
+      }}
     >
       <DownOutlined
         style={{ fontSize: 10, color: color.mute, flexShrink: 0, transform: expanded ? undefined : 'rotate(-90deg)', transition: 'transform 0.15s' }}
@@ -597,7 +609,7 @@ export default function Overview() {
   // 口径条平台文案（第五十一轮）：随筛选行平台选择联动（与看板共享 state.platform）
   const platformLabel = useMemo(() => {
     const sel = state.platform;
-    if (!sel || (sel.platforms.length === 0 && sel.shopIds.length === 0)) return '未筛选（可抓取最低价口径）';
+    if (!sel || (sel.platforms.length === 0 && sel.shopIds.length === 0)) return '全部平台';
     const shopNameById = new Map(dimChannel.map((c) => [c.shop_id, c.shop_name]));
     return [...sel.platforms, ...sel.shopIds.map((id) => shopNameById.get(id) ?? id)].join('、');
   }, [state.platform]);
@@ -605,6 +617,17 @@ export default function Overview() {
     const ms = bands.flatMap((b) => b.models);
     return { all: ms.length, own: ms.filter((m) => m.isOwn).length, comp: ms.length - ms.filter((m) => m.isOwn).length };
   }, [bands]);
+
+  /** 粗粒度市场图 → 细粒度明细：先展开目标产品，再把用户带到对应产品条。 */
+  const focusProduct = (model: OverviewModel): void => {
+    setProductExpanded(model.modelId, true);
+    window.setTimeout(() => {
+      const scroller = rootRef.current;
+      const target = scroller?.querySelector<HTMLElement>(`[data-model-id="${model.modelId}"]`);
+      if (!scroller || !target) return;
+      scroller.scrollTop = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 18;
+    }, 0);
+  };
 
   /** 竞品对比：型号（或单 ROM）进看板；自动匹配关时仍按配置矩阵带出该型号竞品。
    *  第五十四轮追补：切页后延时把看板滚到价格走势区——筛选器留在上方，顶部圆形 ↑ 可回。
@@ -734,6 +757,9 @@ export default function Overview() {
                     options={tierOptions}
                   />
                 </FilterCell>
+                <FilterCell label="币种" width={150}>
+                  <CurrencyBox />
+                </FilterCell>
               </div>
             </section>
           </ConfigProvider>
@@ -770,18 +796,32 @@ export default function Overview() {
               >
                 {nextAllExpanded ? '展开全部产品' : '收起全部产品'}
               </button>
-              <Segmented
-                size="small"
-                value={currency}
-                onChange={(v) => actions.set({ currency: v as 'usd' | 'local' })}
-                options={[
-                  { label: 'USD $', value: 'usd' },
-                  { label: 'RUB ₽', value: 'local' },
-                ]}
-              />
             </div>
 
             <IndustrySummary summary={industrySummary} />
+
+            <MarketMap
+              bands={visibleBands}
+              currency={currency}
+              asOf={asOf}
+              onOpenProduct={focusProduct}
+              onCompare={(model) => openCompare(model)}
+            />
+
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: space.xl, paddingBottom: space.sm }}>
+              <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>型号与配置明细</h2>
+            </div>
+
+            {visibleBands.some(({ ownModels }) => ownModels.some((model) => prodStatus.isExpanded(model.modelId))) && (
+              <div style={{ ...ROW_GRID, marginBottom: space.sm, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvasSoft }}>
+                <Th first>产品 / 配置</Th>
+                <Th justify="end">折扣率</Th>
+                <Th justify="end">折后价</Th>
+                <Th justify="end">RRP</Th>
+                <Th>价差</Th>
+                <Th last>预警</Th>
+              </div>
+            )}
 
             {/* 档位带 × 产品条列表（第七十轮降噪改版）：默认每产品一条产品条；
                 展开的产品在条下列配置（ROM）包裹格（行组表格：我司行在上、映射竞品在下）。
@@ -799,7 +839,7 @@ export default function Overview() {
               ).size;
               const anyExpanded = ownModels.some((m) => prodStatus.isExpanded(m.modelId));
               return (
-                <section key={band.tierCode} style={{ marginTop: space.xl }}>
+                <section key={band.tierCode} style={{ marginTop: space.base }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md, padding: `0 0 ${space.sm}px` }}>
                     <span style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink }}>
                       {TIER_LABELS[band.tierCode]}
@@ -809,26 +849,14 @@ export default function Overview() {
                     </span>
                   </div>
 
-                  {anyExpanded && (
-                    <div
-                      style={{
-                        ...ROW_GRID,
-                        marginBottom: space.sm,
-                        border: `1px solid ${color.hairline}`,
-                        borderRadius: radius.card,
-                        background: color.canvasSoft,
-                      }}
-                    >
-                      <Th first>产品</Th>
-                      <Th justify="end">折扣率</Th>
-                      <Th justify="end">折后价</Th>
-                      <Th justify="end">RRP</Th>
-                      <Th>价差</Th>
-                      <Th last>预警</Th>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div
+                    style={{
+                      display: anyExpanded ? 'flex' : 'grid',
+                      flexDirection: anyExpanded ? 'column' : undefined,
+                      gridTemplateColumns: anyExpanded ? undefined : 'repeat(auto-fit, minmax(360px, 1fr))',
+                      gap: anyExpanded ? undefined : space.sm,
+                    }}
+                  >
                     {ownModels.map((m) => {
                       const expanded = prodStatus.isExpanded(m.modelId);
                       const visRoms = new Set(m.rows.map((r) => norm(r.romram)));
@@ -843,7 +871,7 @@ export default function Overview() {
                       const priceMin = prices.length > 0 ? Math.min(...prices) : null;
                       const priceMax = prices.length > 0 ? Math.max(...prices) : null;
                       return (
-                      <div key={m.modelId} style={{ paddingBlock: expanded ? space.sm : space.xs }}>
+                      <div key={m.modelId} style={{ paddingBlock: anyExpanded ? (expanded ? space.sm : space.xs) : 0 }}>
                         <ProductStrip
                           model={m}
                           expanded={expanded}
@@ -955,14 +983,6 @@ export default function Overview() {
           </section>
         </main>
 
-        <footer
-          style={{ flexShrink: 0, padding: `${space.md}px ${space.lg}px`, fontSize: fontSize.caption, color: color.mute }}
-        >
-          {/* 追补⑦：只留平台/业务口径，删 UI 语义解释与 demo 字样（用户：AI 解释性字眼） */}
-          口径：现价/RRP = 最新有值周（{asOf}） · 档位按上市价（USD）归档 ·
-          折后价 = OZON 基准 × 平台因子（DNS +0.8% / M.Video +1.5%） ·
-          参考汇率 80₽/$（配置页可改）
-        </footer>
       </div>
 
       {/* 配置对标（第四十四轮）：看板同款配置存储，保存后事件刷新矩阵与看板竞品；

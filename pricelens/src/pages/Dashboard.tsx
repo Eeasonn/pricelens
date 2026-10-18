@@ -6,10 +6,7 @@ import { navBus } from '../state/navBus';
 import FilterBar from '../components/FilterBar';
 import PriceTrend from '../chart/PriceTrend';
 import PageHeader from '../components/PageHeader';
-import { color, fontSize, radius, shadow, space } from '../theme/tokens';
-
-const FOOTER_TEXT =
-  '口径：RRP=官方建议零售价 · 折后价=可抓取平台最低在架价 · offer 为文本权益不计价 · 月/季=期间均值取整 · 促销力度=折后价相对上市价的降幅（+为高于上市价） · 参考汇率 80₽/$（配置页可改）';
+import { color, radius, shadow, space } from '../theme/tokens';
 
 /** 页面骨架 —— 图表负责人（Agent C）在此基础上完善（§4.1 信息架构）。
  *  第五十四轮追补：滚过筛选器后顶部居中浮现圆形 ↑ 按钮，点击回滚到筛选器。
@@ -94,17 +91,6 @@ export default function Dashboard() {
           </div>
         </main>
 
-        {/* 页脚：全页唯一允许的说明文本 */}
-        <footer
-          style={{
-            flexShrink: 0,
-            padding: `${space.md}px ${space.lg}px`,
-            fontSize: fontSize.caption,
-            color: color.mute,
-          }}
-        >
-          {FOOTER_TEXT}
-        </footer>
       </div>
     </div>
   );

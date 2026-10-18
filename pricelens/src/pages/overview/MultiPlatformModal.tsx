@@ -166,11 +166,6 @@ export default function MultiPlatformModal(props: {
               background: color.canvas,
             }}
           />
-          <div style={{ marginTop: 10, fontSize: fontSize.caption, color: color.mute, lineHeight: '18px' }}>
-            口径：基准价 = OZON 单平台周度折后价（组内多色均值）；各平台独立价 = 基准 × 平台因子（DNS +0.8% /
-            M.Video +1.5%，±0.3% 固定 seed 抖动，demo 演示口径）。真实多平台采集接入后，因子替换为实采价格，
-            本视图与「平台价差预警」共用同一数据源。
-          </div>
         </>
       )}
     </Modal>
