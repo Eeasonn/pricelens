@@ -52,6 +52,8 @@ export const DEFAULT_PLATFORM_SELECTION: PlatformSelection = { platforms: [], sh
 export const defaultFilters: FiltersState = {
   countryCode: 'RU',
   industry: 'phone',
+  subjectMode: 'product', // 主体模式默认按产品（现状行为）；档位模式为附加视角
+  tier: null,
   own: [],
   competitors: [],
   platform: DEFAULT_PLATFORM_SELECTION, // 第五十三轮：默认只选「Ozon Russia」官方店铺（v8；OZON 基准数据口径不变）
@@ -320,8 +322,11 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       cur: state.currency,
       own: own || null,
       shop,
+      // 档位模式才写主体模式参数，按产品视图的链接保持历史形态
+      m: state.subjectMode === 'tier' ? 'tier' : null,
+      t: state.subjectMode === 'tier' ? state.tier : null,
     });
-  }, [state.countryCode, state.industry, state.granularity, state.currency, state.own, state.platform, state.autoMatch]);
+  }, [state.countryCode, state.industry, state.granularity, state.currency, state.own, state.platform, state.autoMatch, state.subjectMode, state.tier]);
 
   // §13：对标配置保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算竞品组
   // （第三十四轮引入；矩阵维护入口现为总览行尾「＋添加竞品」浮窗，关闭自动匹配则不动当前竞品）；

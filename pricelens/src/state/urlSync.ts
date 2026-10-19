@@ -57,6 +57,10 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     if (c) out.filters.countryCode = c;
     const i = q.get('i');
     if (i) out.filters.industry = i as FiltersState['industry'];
+    const m = q.get('m');
+    if (m === 'tier') out.filters.subjectMode = 'tier';
+    const t = q.get('t');
+    if (t) out.filters.tier = t;
     const shop = q.get('shop');
     if (shop) out.filters.platform = { platforms: [], shopIds: [shop] } as PlatformSelection;
     const own = q.get('own');

@@ -15,11 +15,13 @@ import {
   type RomramNode,
 } from '../ProductCascader/tree';
 import type { ProductSelection } from '../../state/filtersTypes';
-import type { CurrencyMode } from '../../dataModel/types';
+import type { CurrencyMode, DimProduct } from '../../dataModel/types';
 import { CascadePanel, type CascadeRowItem } from '../ProductCascader';
 import { getFxRate } from '../../state/fx';
 import { getEffectiveBenchmark } from '../../state/configStore';
 import { dimProduct } from '../../data';
+import { TIER_LABELS } from '../../dataModel/aggregate';
+import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 
 // ---------------- ① 产业下拉（反馈 2.1） ----------------
 
@@ -177,9 +179,15 @@ function ColorFlyout({
 // 已选标签内容用 displayRender 定制（multiple 模式下它就是每个标签的文案；
 // 注意 tagRender 拿到的 value 是 rc-cascader 拼接后的标量 key，不是路径，不可用）。
 
-/** 对标预览列（仅我司级联）：跟随展开/悬停的型号，带出该产品在生效矩阵中的对标竞品
- *  名单（★=主竞品）；未配置时给一句说明。与颜色浮层互斥——浮层打开时宽度让位。 */
-function BenchPreview({ modelLabel, items }: { modelLabel: string; items: { key: string; name: string; primary: boolean }[] }) {
+/** 对标预览列（仅我司级联）：跟随展开/悬停的型号或配置——悬停型号列该型号全部映射，
+ *  悬停某配置只列该配置的精确映射；未配置时给一句说明。与颜色浮层互斥——浮层打开时宽度让位。 */
+function BenchPreview({
+  modelLabel,
+  items,
+}: {
+  modelLabel: string;
+  items: { key: string; name: string; spec: string; primary: boolean }[];
+}) {
   return (
     <div
       style={{
@@ -214,6 +222,7 @@ function BenchPreview({ modelLabel, items }: { modelLabel: string; items: { key:
             >
               {it.primary && <span style={{ color: '#b45309', flexShrink: 0 }}>★</span>}
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
+              <span style={{ color: color.mute, flexShrink: 0 }}>{it.spec}</span>
             </div>
           ))}
         </div>
@@ -259,6 +268,8 @@ function ProductCascadeControl({
   // 下拉关闭 / 浮层内取消最后一个颜色 / 菜单里锚点被取消勾选（含父级联动）
   const [colorPanelKey, setColorPanelKey] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // 配置列悬停锚点：高亮与对标预览跟随鼠标（null = 未悬停过，回退首个勾选配置）
+  const [activeLeafKey, setActiveLeafKey] = useState<string | null>(null);
 
   // Keep string labels for the Cascader tags. The open menu is rendered below.
   const { options, groupKeyOfModel, romramNodeOf } = useMemo(() => {
@@ -395,7 +406,10 @@ function ProductCascadeControl({
     return {
       key: g.key, label: g.title, active: group?.key === g.key,
       checkState: checkStateOf(nodes),
-      onActivate: () => setActivePath([g.key, g.models[0]?.modelId ?? '']),
+      onActivate: () => {
+        setActivePath([g.key, g.models[0]?.modelId ?? '']);
+        setActiveLeafKey(null);
+      },
       onCheckChange: (checked) => updateConfigs(nodes, checked),
       onLabelClick: () => updateConfigs(nodes, checkStateOf(nodes) !== 'checked'),
     };
@@ -405,7 +419,10 @@ function ProductCascadeControl({
     return {
       key: m.modelId, label: m.label, active: model?.modelId === m.modelId,
       checkState: checkStateOf(nodes),
-      onActivate: () => setActivePath([group.key, m.modelId]),
+      onActivate: () => {
+        setActivePath([group.key, m.modelId]);
+        setActiveLeafKey(null);
+      },
       onCheckChange: (checked) => updateConfigs(nodes, checked),
       onLabelClick: () => updateConfigs(nodes, checkStateOf(nodes) !== 'checked'),
     };
@@ -420,8 +437,11 @@ function ProductCascadeControl({
       : selectedColors[0]?.color ?? defaultColor;
     return {
       key: r.key, label: r.romram,
-      active: r.key === `${firstSelection?.modelId}|${firstSelection?.romram}` && model?.modelId === firstSelection?.modelId,
+      active: activeLeafKey != null
+        ? r.key === activeLeafKey
+        : r.key === `${firstSelection?.modelId}|${firstSelection?.romram}` && model?.modelId === firstSelection?.modelId,
       checkState: chosen ? 'checked' : 'none',
+      onActivate: () => setActiveLeafKey(r.key),
       onCheckChange: (checked) => updateConfigs([r], checked),
       onLabelClick: () => updateConfigs([r], !chosen),
       trailing: colorLabel && (
@@ -435,13 +455,17 @@ function ProductCascadeControl({
     };
   });
 
-  // 对标预览名单：跟随当前展开/悬停的型号（activePath 由行悬停驱动，无需新增交互态），
-  // 按生效对标矩阵取该型号全部映射竞品，★ 主竞品置顶，同竞品多配置合并展示
-  const benchItems = useMemo(() => {
-    if (kind !== 'own' || productLevel || !model) return [];
-    const seen = new Map<string, { key: string; name: string; primary: boolean }>();
+  // 对标预览名单：悬停在配置行 = 该配置的精确映射；否则 = 当前型号的全部映射。
+  // （配置列/型号列的行悬停都由 activePath/activeLeafKey 承载，无新增交互态）
+  const benchPreview = useMemo(() => {
+    if (kind !== 'own' || productLevel || !model) return null;
+    const romram = activeLeafKey != null && activeLeafKey.startsWith(`${model.modelId}|`)
+      ? activeLeafKey.slice(model.modelId.length + 1)
+      : null;
+    const seen = new Map<string, { key: string; name: string; spec: string; primary: boolean }>();
     for (const b of getEffectiveBenchmark()) {
       if (b.own_model_id !== model.modelId) continue;
+      if (romram != null && b.own_romram !== romram) continue;
       const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
       if (!p) continue;
       const prev = seen.get(p.sku_id);
@@ -451,12 +475,15 @@ function ProductCascadeControl({
       }
       seen.set(p.sku_id, {
         key: p.sku_id,
-        name: `${modelNameOf(p.sku_id.split('__')[0])} ${shortRomram(p.romram)}`.trim(),
+        name: modelNameOf(p.sku_id.split('__')[0]),
+        spec: shortRomram(p.romram),
         primary: b.sort === 1,
       });
     }
-    return [...seen.values()].sort((a, b) => Number(b.primary) - Number(a.primary));
-  }, [kind, productLevel, model]);
+    const items = [...seen.values()].sort((a, b) => Number(b.primary) - Number(a.primary));
+    const label = `${model.label}${romram != null ? ` ${shortRomram(romram)}` : ''}`;
+    return <BenchPreview modelLabel={label} items={items} />;
+  }, [kind, productLevel, model, activeLeafKey]);
 
   return (
     <Cascader
@@ -482,14 +509,19 @@ function ProductCascadeControl({
             { width: 190, items: leafItems },
           ]} />
           {/* 颜色浮层打开时占住右侧位，对标预览让位（二者互斥控宽） */}
-          {colorPanelNode ??
-            (kind === 'own' && !productLevel && model ? <BenchPreview modelLabel={model.label} items={benchItems} /> : null)}
+          {colorPanelNode ?? benchPreview}
         </div>
       )}
       onOpenChange={(open) => {
         setMenuOpen(open);
-        if (open) setActivePath([initialGroup ?? '', firstSelection?.modelId ?? tree[0]?.models[0]?.modelId ?? '']);
-        else setColorPanelKey(null);
+        if (open) {
+          setActivePath([initialGroup ?? '', firstSelection?.modelId ?? tree[0]?.models[0]?.modelId ?? '']);
+          // 配置列初始高亮 = 首个勾选配置（与旧视觉一致），悬停后跟随鼠标
+          setActiveLeafKey(firstSelection ? `${firstSelection.modelId}|${firstSelection.romram}` : null);
+        } else {
+          setColorPanelKey(null);
+          setActiveLeafKey(null);
+        }
       }}
     />
   );
@@ -506,4 +538,31 @@ export function OwnProductControl(p: {
 
 export function CompetitorControl() {
   return <ProductCascadeControl kind="comp" />;
+}
+
+/** 按档位主体模式的档位选择器：选项 = 当前产业下有我司产品的价格档位（高档在前） */
+export function TierControl() {
+  const { state, actions } = useFilters();
+  const options = useMemo(() => {
+    const tiers: DimProduct['tier_code'][] = [];
+    for (const p of dimProduct) {
+      if (!p.is_own || p.industry !== state.industry || tiers.includes(p.tier_code)) continue;
+      tiers.push(p.tier_code);
+    }
+    return tiers.map((t) => ({ value: t, label: tierLabelShort(TIER_LABELS[t]) }));
+  }, [state.industry]);
+  const value = state.tier != null && options.some((o) => o.value === state.tier) ? state.tier : undefined;
+  return (
+    <Select
+      id="subject-tier"
+      aria-label="价格档位"
+      value={value}
+      placeholder="选择价格档位"
+      style={{ width: '100%' }}
+      popupMatchSelectWidth={false}
+      onChange={(v) => actions.set({ tier: v as DimProduct['tier_code'] })}
+      options={options}
+      allowClear={false}
+    />
+  );
 }

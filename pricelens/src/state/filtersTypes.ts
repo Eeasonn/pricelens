@@ -21,6 +21,11 @@ export interface PlatformSelection {
 export interface FiltersState {
   countryCode: string; // 仅 'RU' 可选
   industry: 'phone'; // 平板/穿戴/音频置灰
+  /** 主体模式（互斥）：'product' = 按产品勾选（现状）；'tier' = 按价格档位，
+   *  图表自动集结该档全部我司配置 + 各自对标竞品（tierSubjectSelections） */
+  subjectMode: 'product' | 'tier';
+  /** 按档位模式选中的价格档位（tier_code，dim_product.tier_code）；product 模式不生效 */
+  tier: string | null;
   own: ProductSelection[]; // 我司产品（可多选同图）
   competitors: ProductSelection[]; // 默认视图带出我司默认产品的配置竞品（第二十五轮）；之后切换我司不自动带出，点「匹配竞品」重新匹配
   platform: PlatformSelection | null; // null=未选=可抓取平台最低价口径（§3.1 决策②）
