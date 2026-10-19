@@ -65,9 +65,9 @@ export default function LegendPills(props: {
   );
 }
 
-/** 页签行两侧提示性小箭头（第七十五轮，用户需求）：页签放不下时点击左右滚动，
- * 未到边缘深色可点、到边缘淡出；滚动容器隐藏系统滚动条（.lpl-pill-scroll）。
- * 外层需给收窄空间（minWidth: 0），行内容少时整体居中。 */
+/** 页签行两侧提示性小箭头（第七十五轮建；第七十六轮改显隐）：页签行显示不下时
+ * 才出现左右箭头供用户挪动查看，放得下或该侧已到边缘时隐藏（占位保留防跳动）。
+ * 滚动容器隐藏系统滚动条（.lpl-pill-scroll）；外层需给收窄空间（minWidth: 0）。 */
 export function PillRowScroller(props: { children: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [edge, setEdge] = useState({ left: false, right: false });
@@ -84,30 +84,66 @@ export function PillRowScroller(props: { children: ReactNode }) {
     sync();
     const el = scrollRef.current;
     if (!el) return;
+    el.addEventListener('scroll', sync, { passive: true });
+    window.addEventListener('resize', sync);
+    // 首帧字体/布局未稳会测到瞬态溢出：字体就绪与短延迟各补测一次
+    document.fonts?.ready?.then(sync).catch(() => {});
+    const t = window.setTimeout(sync, 350);
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
     ro?.observe(el);
     if (el.firstElementChild) ro?.observe(el.firstElementChild);
-    return () => ro?.disconnect();
+    return () => {
+      el.removeEventListener('scroll', sync);
+      window.removeEventListener('resize', sync);
+      window.clearTimeout(t);
+      ro?.disconnect();
+    };
   }, []);
+  // 渲染后兜底自校：容器宽度还会随「每行 2/3 个」切换、时点面板展开等
+  // 非窗口事件变化；IAB 环境里 ResizeObserver 也存在不派发的情况（实测）
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const max = Math.max(0, el.scrollWidth - el.clientWidth);
+    setEdge((prev) => {
+      const next = { left: el.scrollLeft > 2, right: max - el.scrollLeft > 2 };
+      return prev.left === next.left && prev.right === next.right ? prev : next;
+    });
+  });
   const nudge = (dir: -1 | 1): void =>
     scrollRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
-  const arrowStyle = (): CSSProperties => ({
+  const arrowStyle = (on: boolean): CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
     padding: '4px 3px',
-    cursor: 'pointer',
+    cursor: on ? 'pointer' : 'default',
     flexShrink: 0,
+    visibility: on ? 'visible' : 'hidden', // 该侧无可挪动内容 = 不出现（占位防跳动）
   });
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, minWidth: 0, maxWidth: '100%' }}>
-      <span role="button" aria-label="查看左侧产品" title="查看左侧产品" onClick={() => nudge(-1)} style={arrowStyle()}>
-        <LeftOutlined style={{ fontSize: 10, color: color.mute, opacity: edge.left ? 1 : 0.3 }} />
+      <span
+        role="button"
+        aria-label="查看左侧产品"
+        title="查看左侧产品"
+        aria-hidden={!edge.left}
+        onClick={() => nudge(-1)}
+        style={arrowStyle(edge.left)}
+      >
+        <LeftOutlined style={{ fontSize: 10, color: color.mute }} />
       </span>
       <div ref={scrollRef} className="lpl-pill-scroll" style={{ overflowX: 'auto', minWidth: 0 }}>
         {props.children}
       </div>
-      <span role="button" aria-label="查看右侧产品" title="查看右侧产品" onClick={() => nudge(1)} style={arrowStyle()}>
-        <RightOutlined style={{ fontSize: 10, color: color.mute, opacity: edge.right ? 1 : 0.3 }} />
+      <span
+        role="button"
+        aria-label="查看右侧产品"
+        title="查看右侧产品"
+        aria-hidden={!edge.right}
+        onClick={() => nudge(1)}
+        style={arrowStyle(edge.right)}
+      >
+        <RightOutlined style={{ fontSize: 10, color: color.mute }} />
       </span>
     </span>
   );
