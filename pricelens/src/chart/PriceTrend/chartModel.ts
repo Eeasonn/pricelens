@@ -190,6 +190,9 @@ export function buildLabelPlan(p: {
   lifecycleRow?: (seriesKey: string) => boolean;
   /** 该系列是否渲染来源链接第二行（第五十九轮；计入避让盒，计划盒 = 渲染盒） */
   sourceRow?: (seriesKey: string) => boolean;
+  /** 第七十四轮（分离显示）：true = 系列名全部固定进左侧名称预留带（空白带），
+   *  不再锚在各折线起点旁随窗口漂移；纵向仍按起点高度避让排布 */
+  forceNameZone?: boolean;
 }): LabelPlan {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
@@ -272,7 +275,7 @@ export function buildLabelPlan(p: {
     const nw = nameW(nameText);
     const zoneLeft = geom.plotLeft - NAME_ZONE_W + 4;
     const besideLeft = px - 8 - nw;
-    const useZone = besideLeft < zoneLeft;
+    const useZone = p.forceNameZone === true || besideLeft < zoneLeft;
     const zoneBoxW = Math.min(nw, NAME_ZONE_W - 8);
     const zoneLines = nw > NAME_ZONE_W - 8 ? 2 : 1;
     const baseH = useZone ? zoneLines * ZONE_LINE_H : NAME_LINE_HEIGHT;

@@ -167,6 +167,9 @@ export interface ChartProps {
   /** Y 刻度线显隐（受控；缺省内部状态——下钻弹窗等自管场景不受影响） */
   showYTicks?: boolean;
   onShowYTicks?: (v: boolean) => void;
+  /** 第七十四轮（分离面板）：true = 系列名全部固定进左侧名称预留带空白处，
+   *  不锚在各折线起点旁；主图与下钻弹窗缺省关闭维持原避让语义 */
+  namesInZone?: boolean;
   /** 折线形态（受控；缺省内部状态）。'auto' = 按粒度自适应（第五十四轮追补③：
    *  周=阶梯 / 月季=平滑，默认） */
   lineShape?: LineShapeChoice;
@@ -566,8 +569,9 @@ export default function Chart(props: ChartProps) {
         endpointMarks,
         lifecycleRow: (key) => lifecycleDeltas.get(key) != null,
         sourceRow: (key) => latestPointByKey.has(key),
+        forceNameZone: props.namesInZone === true,
       }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, latestPointByKey],
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, latestPointByKey, props.namesInZone],
   );
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----

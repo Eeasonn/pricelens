@@ -800,37 +800,63 @@ export default function PriceTrend() {
                         boxSizing: 'border-box',
                       }}
                     >
+                      {/* 面板头（第七十四轮定版）：药丸页签居中 + 两侧 ‹ › 移动箭头；
+                          页签只标该卡片对应的产品配置，不再写「我司 + 对标竞品」 */}
                       <div
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 8,
+                          justifyContent: 'center',
+                          gap: 6,
                           height: PANEL_HEAD_H, // 定高：轴列对齐基准（追补⑤）
                           padding: '0 4px',
                         }}
                       >
-                        <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
+                        <span
+                          role="button"
+                          aria-label="左移该面板"
+                          title={first ? '已在最左' : '左移该面板'}
+                          onClick={() => movePanel(p.key, -1)}
+                          style={{
+                            cursor: first ? 'default' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '4px 6px',
+                          }}
+                        >
+                          <LeftOutlined style={{ fontSize: 11, color: first ? color.hairlineStrong : color.body }} />
+                        </span>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: 22,
+                            padding: '0 20px',
+                            borderRadius: radius.pill,
+                            background: color.canvasSoft2,
+                            border: `1px solid ${color.hairline}`,
+                            fontSize: 12.5,
+                            fontWeight: 700,
+                            color: color.ink,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
                           {p.sel.romram}
                         </span>
-                        <span style={{ fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap' }}>我司 + 对标竞品</span>
-                        <span style={{ flex: 1 }} />
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <span
-                            role="button"
-                            title={first ? '已在最左' : '左移该面板'}
-                            onClick={() => movePanel(p.key, -1)}
-                            style={{ cursor: first ? 'default' : 'pointer', display: 'inline-flex', padding: '2px 4px' }}
-                          >
-                            <LeftOutlined style={{ fontSize: 10, color: first ? color.hairlineStrong : color.body }} />
-                          </span>
-                          <span
-                            role="button"
-                            title={last ? '已在最右' : '右移该面板'}
-                            onClick={() => movePanel(p.key, 1)}
-                            style={{ cursor: last ? 'default' : 'pointer', display: 'inline-flex', padding: '2px 4px' }}
-                          >
-                            <RightOutlined style={{ fontSize: 10, color: last ? color.hairlineStrong : color.body }} />
-                          </span>
+                        <span
+                          role="button"
+                          aria-label="右移该面板"
+                          title={last ? '已在最右' : '右移该面板'}
+                          onClick={() => movePanel(p.key, 1)}
+                          style={{
+                            cursor: last ? 'default' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '4px 6px',
+                          }}
+                        >
+                          <RightOutlined style={{ fontSize: 11, color: last ? color.hairlineStrong : color.body }} />
                         </span>
                       </div>
                       <Chart
@@ -848,6 +874,7 @@ export default function PriceTrend() {
                         onDrill={makePanelDrill(p)}
                         windowKey={`${win.s}:${win.e}:${p.key}`}
                         yScale={splitYCfg ?? undefined}
+                        namesInZone // 第七十四轮：系列名全部固定进面板左侧名称空白带
                         showYTicks={showYTicks}
                         lineShape={lineShape}
                         promoBandsOn={promoBandsOn}

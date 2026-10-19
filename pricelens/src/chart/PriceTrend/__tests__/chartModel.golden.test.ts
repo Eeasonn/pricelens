@@ -207,6 +207,20 @@ describe('buildLabelPlan', () => {
     expect(planLong.names[0].x).toBe(geom.plotLeft - NAME_ZONE_W + 4);
     expect(planLong.names[0].maxW).toBeDefined(); // 两行换行态
   });
+
+  it('forceNameZone（第七十四轮分离面板）：起点旁本有空间也强制停驻名称预留带', () => {
+    const pts = [PT({ price: 500 }), PT({ price: 505 })];
+    const s = mkSeries({ points: pts });
+    // 同输入不加开关：beside（起点旁，右缘锚在起点左侧）
+    const beside = buildLabelPlan({ geom, series: [s], granularity: 'month', priceTypes: DISC_ONLY, endpointMarks: new Map() });
+    expect(beside.names[0].x).toBeGreaterThan(geom.plotLeft - NAME_ZONE_W + 4);
+    // 加开关：全部固定进预留带，x = zoneLeft；锚点仍指回折线起点（引线归属）
+    const zoned = buildLabelPlan({ geom, series: [s], granularity: 'month', priceTypes: DISC_ONLY, endpointMarks: new Map(), forceNameZone: true });
+    expect(zoned.names).toHaveLength(1);
+    expect(zoned.names[0].x).toBe(geom.plotLeft - NAME_ZONE_W + 4);
+    expect(zoned.names[0].anchorX).toBeCloseTo(geom.plotLeft + (geom.plotWidth / geom.n) * 0.5, 6);
+    expect(zoned.names[0].maxW).toBeDefined();
+  });
 });
 
 // ---------------- buildOption（option 形状金测） ----------------
