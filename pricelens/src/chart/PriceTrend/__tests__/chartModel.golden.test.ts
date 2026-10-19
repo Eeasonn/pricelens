@@ -199,7 +199,7 @@ describe('buildLabelPlan', () => {
     expect(plan.names).toHaveLength(1);
     // 短名 + 起点靠内：besideLeft = px - 8 - nw ≥ zoneLeft → 停在起点旁
     const px = geom.plotLeft + (geom.plotWidth / geom.n) * 0.5;
-    const nw = 12 + plan.names[0].text.length * (13 * 0.62) + 6;
+    const nw = 12 + plan.names[0].text.length * (11 * 0.62) + 6;
     expect(plan.names[0].x).toBeCloseTo(px - 8 - nw, 6);
     // 长名（20+ 字符）：besideLeft < zoneLeft → 收进预留带，x = zoneLeft
     const long = mkSeries({ points: pts, label: 'Acme Galaxy Ultra Pro Max Plus 256GB' });

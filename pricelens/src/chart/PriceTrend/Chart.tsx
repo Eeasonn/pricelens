@@ -68,11 +68,7 @@ import {
   buildExtremeMarks,
   curveNameOf,
   FOCUS_MODE_THRESHOLD,
-  NAME_FONT_SIZE,
-  NAME_LEADER_PX,
-  NAME_LINE_HEIGHT,
-  ZONE_FONT,
-  ZONE_LINE_H,
+
   buildEndpointBadges,
   buildEndpointMarks,
   buildGeom,
@@ -170,6 +166,12 @@ export interface ChartProps {
   /** 第七十四轮（分离面板）：true = 系列名全部固定进左侧名称预留带空白处，
    *  不锚在各折线起点旁；主图与下钻弹窗缺省关闭维持原避让语义 */
   namesInZone?: boolean;
+  /** 第八十二轮：名称药丸全集（含已屏蔽系列——药丸仍渲染为虚线置灰态）；缺省 = series */
+  nameSeries?: Series[];
+  /** 屏蔽中的系列 key 集（与 nameSeries 搭配；药丸点击 → onToggleHidden 切换） */
+  hiddenKeys?: Set<string>;
+  /** 名称药丸点击的显隐切换回调；缺省 = 药丸不可切换 */
+  onToggleHidden?: (seriesKey: string) => void;
   /** 折线形态（受控；缺省内部状态）。'auto' = 按粒度自适应（第五十四轮追补③：
    *  周=阶梯 / 月季=平滑，默认） */
   lineShape?: LineShapeChoice;
@@ -251,26 +253,21 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
   );
 }
 
-/** 系列名标签（第五十七轮抽组件；第五十九轮再版）：名称下第二行 = 来源链接
- *  「店铺名 ↗」链接蓝小字——目的地即文字（点击直达商城现页，取证语义见下），
- *  名称本身点击 = 最新时点取证浮窗（快照截图 + 弱化活页次链接）。两行均计入
- *  避让盒（buildLabelPlan sourceRow，计划盒 = 渲染盒）；季粒度生命周期第三行照旧。 */
-function SeriesNameLabel(props: {
-  nm: {
-    x: number;
-    y: number;
-    text: string;
-    color: string;
-    seriesKey: string;
-    maxW?: number;
-  };
+/** 系列名称小药丸（第八十二轮再版）：顶部图例页签同款样式——统一灰字不取品牌色，
+ *  点击 = 切换该系列折线显隐（屏蔽态 = 虚线置灰，同页签语言）；来源链接斜体挂在
+ *  药丸下方，仍直达商城现页。悬停药丸 = 显示该系列的起点指引线（默认全部隐藏）。
+ *  避让盒 = 渲染盒（药丸 行高16×行数+内边距6 + 链接13 + 生命周期14）。 */
+function ZoneNamePill(props: {
+  nm: SeriesNameItem;
   brand: string;
   deltaPct: { pct: number } | null;
   latest: SeriesPoint | undefined;
-  onOpen: (p: SeriesPoint, label: string) => void;
+  hidden: boolean;
   dimmed: boolean;
+  onToggle: (seriesKey: string) => void;
+  onHover: (seriesKey: string | null) => void;
 }) {
-  const { nm, latest, onOpen } = props;
+  const { nm } = props;
   const delta = props.deltaPct != null;
   const pct = props.deltaPct?.pct ?? 0;
   const pctLabel = props.deltaPct != null
@@ -278,41 +275,40 @@ function SeriesNameLabel(props: {
     : '';
   return (
     <div
-      title={nm.text}
-      className="lpl-nm"
-      onClick={
-        latest
-          ? (e) => {
-              e.stopPropagation();
-              onOpen(latest, nm.text);
-            }
-          : undefined
-      }
       style={{
         position: 'absolute',
-        // 钳 ≥2：分离面板 gridLeft=0（轴在外侧）时，起点贴左缘的系列名
-        // 避让后可能推出容器（追补⑤）
         left: Math.max(2, nm.x),
-        top: nm.y, // 计划盒 = 渲染盒（含生命周期/来源行），第三十二轮起不再偏移
+        top: nm.y, // 计划盒 = 渲染盒
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-start',
         gap: 1,
-        fontSize: nm.maxW != null ? ZONE_FONT : NAME_FONT_SIZE,
-        fontWeight: 600,
-        lineHeight: nm.maxW != null ? `${ZONE_LINE_H}px` : `${NAME_LINE_HEIGHT}px`,
-        color: nm.color,
-        whiteSpace: 'nowrap',
-        // 名称行承载跳转（点击取证 / 来源链接直达），需要接收指针事件
-        pointerEvents: latest ? 'auto' : 'none',
-        cursor: latest ? 'pointer' : 'default',
+        opacity: props.hidden ? 0.45 : props.dimmed ? 0.2 : undefined,
         zIndex: 9,
-        opacity: props.dimmed ? 0.2 : undefined,
-        textShadow: '0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff',
-        ...(nm.maxW != null ? { maxWidth: nm.maxW } : null),
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span
+        role="button"
+        aria-pressed={props.hidden}
+        title={props.hidden ? '点击恢复显示该产品' : '点击屏蔽该产品'}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onToggle(nm.seriesKey);
+        }}
+        onMouseEnter={() => props.onHover(nm.seriesKey)}
+        onMouseLeave={() => props.onHover(null)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          maxWidth: nm.maxW ?? 200,
+          padding: '3px 8px',
+          background: color.canvas,
+          border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : color.hairline}`,
+          borderRadius: radius.pill,
+          cursor: 'pointer',
+        }}
+      >
         <BrandDot brand={props.brand} />
         <span
           style={
@@ -324,19 +320,22 @@ function SeriesNameLabel(props: {
                   overflow: 'hidden',
                   wordBreak: 'break-word',
                   whiteSpace: 'normal',
+                  fontSize: 11,
+                  lineHeight: '16px',
+                  color: color.body,
                 }
-              : undefined
+              : { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
           }
         >
           {nm.text}
         </span>
-      </div>
-      {latest && (
+      </span>
+      {props.latest && (
         <a
-          href={latest.url}
+          href={props.latest.url}
           target="_blank"
           rel="noreferrer"
-          title={`打开来源商城 · ${latest.shopName ?? '电商平台'}（现页，价格以截图为准）`}
+          title={`打开来源商城 · ${props.latest.shopName ?? '电商平台'}（现页，价格以截图为准）`}
           onClick={(e) => e.stopPropagation()}
           onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
           onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
@@ -346,17 +345,18 @@ function SeriesNameLabel(props: {
             gap: 2,
             fontSize: 10.5,
             lineHeight: '13px',
+            fontStyle: 'italic',
             fontWeight: 500,
             color: color.link,
             whiteSpace: 'nowrap',
           }}
         >
-          {latest.shopName ?? '来源'}
+          {props.latest.shopName ?? '来源'}
           <ExportOutlined style={{ fontSize: 9 }} />
         </a>
       )}
       {delta && (
-        <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap' }}>
+        <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap', opacity: props.hidden ? 0.45 : undefined }}>
           <span style={{ color: color.mute, fontWeight: 500 }}>
             生命周期{' '}
           </span>
@@ -379,6 +379,8 @@ export default function Chart(props: ChartProps) {
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const focusMode = series.length > FOCUS_MODE_THRESHOLD;
   const focusActive = focusKey != null;
+  // 悬停的名称药丸（第八十二轮）：仅该系列的起点指引线可见（默认全部隐藏）
+  const [hoverNameKey, setHoverNameKey] = useState<string | null>(null);
   // Y 刻度线显隐（第十二轮）：齿轮弹层内开关。第三十五轮起默认关（迪总：不自动选择）。
   // 第五十四轮追补：可受控（分离模式下由常驻工具行统一写，全面板同值）
   const [innerShowYTicks, setInnerShowYTicks] = useState(false);
@@ -545,9 +547,13 @@ export default function Chart(props: ChartProps) {
   // lifecycleRow：季粒度生命周期第二行计入名称避让盒（第三十二轮，名称互压根因修复））
   // 系列名跳转载体（第五十七轮建；第五十九轮改直显目的地）：每系列最后一个
   // 有值且带 url 的点（退市后停在清库末点，语义仍是「该产品现页」）
+  // 系列名跳转载体（第五十七轮建；第五十九轮改直显目的地）：每系列最后一个
+  // 有值且带 url 的点（退市后停在清库末点，语义仍是「该产品现页」）。
+  // 第八十二轮：按名称药丸全集取（已屏蔽系列药丸仍带来源链接）。
+  const nameAll = props.nameSeries ?? series;
   const latestPointByKey = useMemo(() => {
     const m = new Map<string, SeriesPoint>();
-    for (const s of series) {
+    for (const s of nameAll) {
       for (let i = s.points.length - 1; i >= 0; i--) {
         const p = s.points[i];
         if (p.price != null && p.url) {
@@ -557,7 +563,7 @@ export default function Chart(props: ChartProps) {
       }
     }
     return m;
-  }, [series]);
+  }, [nameAll]);
 
   const labelPlan = useMemo(
     () =>
@@ -570,8 +576,10 @@ export default function Chart(props: ChartProps) {
         lifecycleRow: (key) => lifecycleDeltas.get(key) != null,
         sourceRow: (key) => latestPointByKey.has(key),
         forceNameZone: props.namesInZone === true,
+        nameOnlySeries: nameAll.filter((s) => !series.some((v) => v.key === s.key)),
+        hiddenKeys: props.hiddenKeys,
       }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, latestPointByKey, props.namesInZone],
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, latestPointByKey, props.namesInZone, props.hiddenKeys, nameAll],
   );
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
@@ -691,7 +699,7 @@ export default function Chart(props: ChartProps) {
   );
 
   const empty = series.length === 0;
-  const brandByKey = useMemo(() => new Map(series.map((s) => [s.key, s.brand])), [series]);
+  const brandByKey = useMemo(() => new Map([...series, ...nameAll].map((s) => [s.key, s.brand])), [series, nameAll]);
 
   // ---- DOM 刻度/断轴/档位带数据（纯构建见 chartModel） ----
   // 左缘布局：[档位带(仅USD)][刻度列][名称预留带][绘图区]（滑杆已移至工具行，不占左缘）
@@ -1281,20 +1289,16 @@ export default function Chart(props: ChartProps) {
               </div>
             );
           })}
-          {/* 系列名（起点旁 13px / 名称预留带 12px 两行换行，前置品牌色小点；
-              zIndex 9 = 全图层最上，白描边保证不被任何元素遮挡）。
-              第二十七轮：季粒度下名称下方第二行 = 生命周期调价幅度（统显「生命周期 −X%」，
-              第二十九轮起不再带「暂」；恒本币、锚在数据）。
-              第三十二轮：①第二行计入避让盒（计划盒 = 渲染盒，不再自行上移 7px）；
-              ②聚焦模式（>FOCUS_MODE_THRESHOLD 系列）名称退场，仅聚焦系列回归 */}
+          {/* 系列名称小药丸（第八十二轮再版）：顶部图例页签同款（统一灰字不取品牌色），
+              点击 = 切换折线显隐（屏蔽态虚线置灰），取代上方图例页签职能；来源链接
+              斜体挂药丸下方；指引线默认隐藏、悬停药丸才显示该系列的起点引线。
+              zIndex 9 = 全图层最上。聚焦模式不再隐藏药丸（它们承担显隐开关职能），
+              悬停折线聚焦时非聚焦药丸降透明。 */}
           {(() => {
-            const visibleNames = focusMode
-              ? labelPlan.names.filter((nm) => nm.seriesKey === focusKey)
-              : labelPlan.names;
             return (
               <>
-                {/* 名称引线（第三十二轮）：避让推离锚点超 NAME_LEADER_PX 时画细线连回首点，
-                    消除"标签塔读不出哪条线是谁"的归属歧义（zIndex 8 = 徽标层，名称之下） */}
+                {/* 名称引线（第八十二轮）：默认全部隐藏，悬停名称药丸时画该系列
+                    起点连接线（zIndex 8，徽标层之下、药丸之下） */}
                 <svg
                   style={{
                     position: 'absolute',
@@ -1305,8 +1309,8 @@ export default function Chart(props: ChartProps) {
                     zIndex: 8,
                   }}
                 >
-                  {visibleNames
-                    .filter((nm) => Math.abs(nm.dy) > NAME_LEADER_PX)
+                  {labelPlan.names
+                    .filter((nm) => !nm.hidden && nm.seriesKey === hoverNameKey)
                     .map((nm) => (
                       <line
                         key={`ld-${nm.seriesKey}`}
@@ -1320,24 +1324,17 @@ export default function Chart(props: ChartProps) {
                       />
                     ))}
                 </svg>
-                {visibleNames.map((nm) => (
-                  <SeriesNameLabel
+                {labelPlan.names.map((nm) => (
+                  <ZoneNamePill
                     key={`nm-${nm.seriesKey}`}
                     nm={nm}
                     brand={brandByKey.get(nm.seriesKey) ?? ''}
                     deltaPct={lifecycleDeltas.get(nm.seriesKey) ?? null}
                     latest={latestPointByKey.get(nm.seriesKey)}
+                    hidden={nm.hidden ?? false}
                     dimmed={focusActive && nm.seriesKey !== focusKey}
-                    onOpen={(p, label) =>
-                      setSnapInfo({
-                        seriesLabel: label,
-                        shopName: p.shopName,
-                        bucketId: p.bucketId,
-                        dateText: fmt_hoverDate(granularity, p.xLabel),
-                        priceText: formatPrice(p.price, props.currency),
-                        url: p.url,
-                      })
-                    }
+                    onToggle={(k) => props.onToggleHidden?.(k)}
+                    onHover={setHoverNameKey}
                   />
                 ))}
               </>

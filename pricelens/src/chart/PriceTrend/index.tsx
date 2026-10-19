@@ -46,7 +46,6 @@ import { color, fontSize, radius, space } from '../../theme/tokens';
 import Chart from './Chart';
 import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
-import LegendPills, { PillRowScroller } from './LegendPills';
 import DrillModal, { type DrillInfo } from './DrillModal';
 import {
   buildPriceSummary,
@@ -856,16 +855,10 @@ export default function PriceTrend() {
                           padding: '0 4px',
                         }}
                       >
+                        {/* 卡顶图例页签已撤（第八十二轮）：名称药丸接管显隐切换职能 */}
                         <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
                           {p.sel.romram}
                         </span>
-                        {p.all.length > 0 && (
-                          <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>
-                            <PillRowScroller>
-                              <LegendPills bare series={p.all} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />
-                            </PillRowScroller>
-                          </span>
-                        )}
                       </div>
                       <Chart
                         series={p.vis}
@@ -883,6 +876,9 @@ export default function PriceTrend() {
                         windowKey={`${win.s}:${win.e}:${p.key}`}
                         yScale={splitYCfg ?? undefined}
                         namesInZone // 第七十四轮：系列名全部固定进面板左侧名称空白带
+                        nameSeries={p.all} // 第八十二轮：药丸全集（含屏蔽系列，虚线置灰）
+                        hiddenKeys={hiddenKeys}
+                        onToggleHidden={toggleLegend} // 药丸点击 = 切换折线显隐（取代顶部页签）
                         showYTicks={showYTicks}
                         lineShape={lineShape}
                         promoBandsOn={promoBandsOn}
@@ -929,13 +925,9 @@ export default function PriceTrend() {
             gridLeft={gridLeft}
             gridTop={gridTop}
             namesInZone // 第八十轮：合并模式与分离面板一致，系列名固定进 Y 轴右侧名称空白带
-            legend={
-              // 合并模式页签同样套两侧箭头（第七十八轮）：系列多时 46% 槽位放不下，
-              // 与分离卡片一致——放不下才出现左右箭头，点击滚动查看
-              <PillRowScroller>
-                <LegendPills bare series={visSeries} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />
-              </PillRowScroller>
-            }
+            nameSeries={visSeries} // 第八十二轮：药丸全集（含屏蔽系列），取代顶部图例页签
+            hiddenKeys={hiddenKeys}
+            onToggleHidden={toggleLegend}
             enableDrill={state.granularity !== 'week'}
             enableJump={state.granularity === 'week'}
             enableOffer={state.granularity === 'week' && offersOn}
@@ -963,7 +955,7 @@ export default function PriceTrend() {
             onChangeThreshold={setChangeThreshold}
             emptyHint={
               visSeries.length > 0 && chartSeries.length === 0
-                ? '所有系列已在图例中隐藏，点击上方页签恢复显示'
+                ? '所有产品已在图中屏蔽，点击名称药丸恢复显示'
                 : undefined
             }
           />

@@ -193,11 +193,16 @@ export function buildLabelPlan(p: {
   /** 第七十四轮（分离显示）：true = 系列名全部固定进左侧名称预留带（空白带），
    *  不再锚在各折线起点旁随窗口漂移；纵向仍按起点高度避让排布 */
   forceNameZone?: boolean;
+  /** 第八十二轮：折线已屏蔽、但仍需名称药丸的系列（只生成名称项，无数值标签）；
+   *  与 series 中的同 key 项以后者为准 */
+  nameOnlySeries?: Series[];
+  /** 第八十二轮：隐藏态 key 集（名称药丸虚线置灰） */
+  hiddenKeys?: Set<string>;
 }): LabelPlan {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
   const items: AvoidItem[] = [];
-  const nameW = (t: string): number => NAME_LOGO_W + t.length * (NAME_FONT_SIZE * 0.62) + 6;
+  const nameW = (t: string): number => NAME_LOGO_W + t.length * (11 * 0.62) + 6;
   const priceW = (t: string): number => t.length * (fontSize.bodySm * 0.62) + 8;
   // 多系列（超聚焦阈值）：最大/最小从必放降为候选——必放项只保留首/末/S/E
   const demoteExtremes = series.length > FOCUS_MODE_THRESHOLD;
@@ -263,10 +268,18 @@ export function buildLabelPlan(p: {
       const mk = markOf(i);
       if (change.has(i)) pushPrice(i, false, mk ? endpointLabelDistance(mk) : LABEL_DISTANCE);
     });
-    // 系列名（第十轮）：文案去品牌前缀 + 去容量后缀（GB/TB）——品牌由色点/图例卡表达。
-    // 位置 = 右缘锚在起点左侧连续滑动；besideLeft 触到带左界 → 停驻带内（左对齐，
-    // 仅当名宽超出带宽才换两行）——切换瞬间 left 恒等于 zoneLeft，无位置跳变。
-    // 第三十二轮：生命周期第二行计入盒高，整块以锚点纵向居中（含引导线所需锚点）。
+  }
+  // 系列名称小药丸（第八十二轮再版）：顶部图例页签同款——品牌点+型号名，统一
+  // 灰字不取品牌色；点击 = 切换折线显隐（取代上方页签）。位置：名称预留带内
+  // （forceNameZone）或起点旁；锚点纵向居中。块高 = 药丸（行高×行数+内边距 6）
+  // + 来源链接（斜体，挂药丸下方）+ 生命周期行；避让盒 = 渲染盒。
+  const pushNameItem = (s: Series, hidden: boolean): void => {
+    const pts = s.points;
+    const valIdx: number[] = [];
+    pts.forEach((pt, i) => {
+      if (primaryPriceOf(pt, priceTypes) != null) valIdx.push(i);
+    });
+    if (valIdx.length === 0) return;
     const fi = valIdx[0];
     const v0 = primaryPriceOf(pts[fi], priceTypes) ?? 0;
     const px = xPxOf(geom, fi);
@@ -278,11 +291,11 @@ export function buildLabelPlan(p: {
     const useZone = p.forceNameZone === true || besideLeft < zoneLeft;
     const zoneBoxW = Math.min(nw, NAME_ZONE_W - 8);
     const zoneLines = nw > NAME_ZONE_W - 8 ? 2 : 1;
-    const baseH = useZone ? zoneLines * ZONE_LINE_H : NAME_LINE_HEIGHT;
+    const baseH = zoneLines * ZONE_LINE_H + 6; // 药丸内边距上下各 3
     const fullH =
       baseH +
-      (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0) +
-      (p.sourceRow?.(s.key) ? SOURCE_ROW_H : 0);
+      (p.sourceRow?.(s.key) ? SOURCE_ROW_H + 1 : 0) +
+      (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
     items.push({
       kind: 'name',
       seriesKey: s.key,
@@ -297,7 +310,12 @@ export function buildLabelPlan(p: {
       maxW: useZone ? zoneBoxW : undefined,
       anchorX: px,
       anchorY: py,
+      hidden: hidden || undefined,
     });
+  };
+  for (const s of series) pushNameItem(s, p.hiddenKeys?.has(s.key) ?? false);
+  for (const s of p.nameOnlySeries ?? []) {
+    if (!series.some((v) => v.key === s.key)) pushNameItem(s, true);
   }
   const res = resolveCollisions(items, geom.plotTop);
   return { dy: res.dy, names: res.names };

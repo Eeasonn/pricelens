@@ -40,6 +40,10 @@ const TARGET_CELLS = 5;
  *  只分到 ~13% 像素）；需求下限让 plotHeight 随簇内系列数适度生长（高度自适应的
  *  系列数维度），上限防失控。 */
 export const MIN_PX_PER_SERIES = 40;
+/** 系列名称小药丸块高（第八十二轮）：药丸（1~2 行）+来源链接的实际块高——
+ *  段像素需求下限按 max(MIN_PX_PER_SERIES, 此值) 取，多产品时自动把段抬到
+ *  n×52px，名称药丸之间不再拥挤（真实高度不足的段才生长，否则旧口径）。 */
+export const NAME_PX_PER_SERIES = 52;
 export const SERIES_PX_CAP = 12;
 
 /** §6.5 刷选窗口最小 4 个桶 */
@@ -378,7 +382,7 @@ export function computeYAxis(params: {
     for (const r of mergedRanges) {
       if (r.lo <= d.max && r.hi >= d.min) n++;
     }
-    const need = Math.min(n, SERIES_PX_CAP) * MIN_PX_PER_SERIES * scale;
+    const need = Math.min(n, SERIES_PX_CAP) * Math.max(MIN_PX_PER_SERIES, NAME_PX_PER_SERIES) * scale;
     return Math.round(need) > segBaseH[i] ? Math.round(need) : segBaseH[i];
   });
   const grown = segFinalH.some((h, i) => h > segBaseH[i]);
@@ -839,6 +843,8 @@ export interface AvoidItem {
   /** 名称项锚点（第三十二轮）：系列首点像素位置，避让推离超阈值时画引线到这 */
   anchorX?: number;
   anchorY?: number;
+  /** 第八十二轮：名称药丸的隐藏态（折线已屏蔽 → 虚线置灰药丸） */
+  hidden?: boolean;
 }
 
 export interface AvoidResult {
@@ -860,6 +866,8 @@ export interface AvoidResult {
     maxW?: number;
     anchorX: number;
     anchorY: number;
+    /** 第八十二轮：药丸隐藏态（折线已屏蔽） */
+    hidden?: boolean;
   }[];
 }
 
@@ -913,6 +921,7 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number): AvoidRes
         maxW: it.maxW,
         anchorX: it.anchorX ?? it.left,
         anchorY: it.anchorY ?? top,
+        hidden: it.hidden,
       });
     }
   }
