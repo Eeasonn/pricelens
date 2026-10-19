@@ -259,29 +259,6 @@ function CompChip({
   );
 }
 
-/** 对比矩阵单元格：我司列突出折后价；竞品列带型号名（对位容量可能不同） */
-function MatrixCell({ row, currency, own }: { row: OverviewRow | null; currency: CurrencyMode; own: boolean }) {
-  if (!row || (row.price == null && row.rrp == null)) {
-    return (
-      <div style={{ padding: '10px 12px', background: own ? '#f3f8ff' : color.canvas, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 52 }}>
-        <span style={{ color: color.mute, fontSize: 12 }}>—</span>
-      </div>
-    );
-  }
-  return (
-    <div style={{ padding: '7px 12px', minWidth: 0, background: own ? '#f3f8ff' : color.canvas }}>
-      {!own && (
-        <div style={{ fontSize: 10.5, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
-      )}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: own ? 0 : 1 }}>
-        <span className="tnum" style={{ fontSize: own ? 14 : 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
-        {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
-      </div>
-      <div className="tnum" style={{ fontSize: 10, lineHeight: '13px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : ''}</div>
-    </div>
-  );
-}
-
 const MARKET_TIERS: [number, number, string][] = [
   [0, 200, '<200'],
   [200, 400, '200~400'],
@@ -480,11 +457,6 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
   const [collapsing, setCollapsing] = useState(false);
   const detailModel = models.find((m) => m.modelId === detailModelId) ?? null;
 
-  // 对比矩阵：行 = 我司型号（从小到大）；列 = 我司 + 各对标竞品（按映射容量同行对位）
-  const ownRowsAligned = useMemo(() => {
-    const rows = [...(detailModel?.rows ?? [])].sort((a, b) => romramSizeKey(a.romram) - romramSizeKey(b.romram));
-    return rows.map((row) => ({ romram: row.romram, key: row.romram.replace(/\s+/g, ''), own: row }));
-  }, [detailModel]);
   const compGroups = useMemo(() => {
     const groups: { modelId: string; name: string; brand: string; byOwnRom: (OverviewRow & { ownRomrams: string[] })[] }[] = [];
     const seen = new Map<string, number>();
@@ -519,7 +491,41 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     }
     return groups;
   }, [detailModel]);
-  const matrixCols = `88px repeat(${1 + compGroups.length}, minmax(0, 1fr))`;
+
+  // 明细表：直接分行——行表头=产品（分组首行显示），列 = 型号/RRP/折后价/折扣/价差；
+  // 价差 = 竞品折后价相对「其映射的我司型号」折后价（正=竞品更贵）
+  const tableRows = useMemo(() => {
+    const out: { key: string; groupFirst: boolean; brand: string; name: string; own: boolean; row: OverviewRow; diff: number | null }[] = [];
+    const ownRows = [...(detailModel?.rows ?? [])].sort((a, b) => romramSizeKey(a.romram) - romramSizeKey(b.romram));
+    ownRows.forEach((row, index) => {
+      out.push({
+        key: `own-${row.skuId}`,
+        groupFirst: index === 0,
+        brand: detailModel?.brand ?? '',
+        name: detailModel ? modelOnly(detailModel.brand, detailModel.modelName) : '',
+        own: true,
+        row,
+        diff: null,
+      });
+    });
+    for (const g of compGroups) {
+      const sorted = [...g.byOwnRom].sort((a, b) => romramSizeKey(a.romram) - romramSizeKey(b.romram));
+      sorted.forEach((row, index) => {
+        const alignedOwn = ownRows.find((r) => row.ownRomrams.some((x: string) => x.replace(/\s+/g, '') === r.romram.replace(/\s+/g, '')));
+        const diff = alignedOwn?.price != null && row.price != null && alignedOwn.price > 0 ? row.price / alignedOwn.price - 1 : null;
+        out.push({
+          key: `comp-${row.skuId}`,
+          groupFirst: index === 0,
+          brand: g.brand,
+          name: modelOnly(g.brand, g.name),
+          own: false,
+          row,
+          diff,
+        });
+      });
+    }
+    return out;
+  }, [detailModel, compGroups]);
 
   const selOf = (modelId: string, romram: string): ProductSelection => ({
     modelId,
@@ -807,32 +813,50 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                 <BrandDot brand={detailModel.brand} size={8} />
                 <span style={{ fontSize: 16, fontWeight: 700, color: color.ink }}>{detailModel.modelName}</span>
-                <span style={{ fontSize: 11, color: color.mute }}>我司各型号与对标竞品同行对位（型号从小到大）</span>
+                <span style={{ fontSize: 11, color: color.mute }}>型号从小到大 · 价差 = 竞品折后价相对同容量我司</span>
               </div>
               <div style={{ border: `1px solid ${color.hairline}`, borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: matrixCols, background: color.canvasSoft }}>
-                  <div style={{ padding: '8px 10px', fontSize: 11, color: color.mute, display: 'flex', alignItems: 'flex-end' }}>容量对位</div>
-                  <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, background: '#f3f8ff', minWidth: 0 }}>
-                    <BrandDot brand={detailModel.brand} size={6} />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: brandColorOf(detailModel.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modelOnly(detailModel.brand, detailModel.modelName)}</span>
-                    <span style={{ fontSize: 10.5, lineHeight: '16px', padding: '0 7px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, fontWeight: 600, flexShrink: 0 }}>我司</span>
-                  </div>
-                  {compGroups.map((g) => (
-                    <div key={g.modelId} style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                      <BrandDot brand={g.brand} size={6} />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: brandColorOf(g.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modelOnly(g.brand, g.name)}</span>
-                    </div>
-                  ))}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1.25fr) minmax(90px, 1fr) 92px 104px 64px 84px', background: color.canvasSoft, padding: '8px 14px', fontSize: 11, color: color.mute }}>
+                  <span>产品</span>
+                  <span>型号</span>
+                  <span className="tnum" style={{ textAlign: 'right' }}>RRP</span>
+                  <span className="tnum" style={{ textAlign: 'right' }}>折后价</span>
+                  <span style={{ textAlign: 'right' }}>折扣</span>
+                  <span className="tnum" style={{ textAlign: 'right' }}>价差</span>
                 </div>
-                {ownRowsAligned.map((slot, index) => (
-                  <div key={slot.romram} style={{ display: 'grid', gridTemplateColumns: matrixCols, borderTop: `1px solid ${color.hairline}` }}>
-                    <div style={{ padding: '10px 10px', display: 'flex', alignItems: 'center', fontSize: 11.5, fontWeight: 600, color: color.body, background: color.canvasSoft }}>{slot.romram}</div>
-                    <MatrixCell row={slot.own} currency={currency} own />
-                    {compGroups.map((g) => (
-                      <MatrixCell key={g.modelId} row={g.byOwnRom.find((x) => x.ownRomrams.some((r: string) => r.replace(/\s+/g, '') === slot.key)) ?? null} currency={currency} own={false} />
-                    ))}
-                  </div>
-                ))}
+                {tableRows.map((r, index) => {
+                  const diffText = r.diff == null ? '—' : `${r.diff > 0.005 ? '+' : ''}${Math.round(r.diff * 100)}%`;
+                  const diffColor = r.diff == null ? color.mute : r.diff > 0.005 ? '#d92d20' : r.diff < -0.005 ? color.link : color.mute;
+                  return (
+                    <div
+                      key={r.key}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(140px, 1.25fr) minmax(90px, 1fr) 92px 104px 64px 84px',
+                        alignItems: 'center',
+                        padding: '7px 14px',
+                        fontSize: 12,
+                        borderTop: index === 0 ? 'none' : `1px solid ${r.groupFirst ? color.hairlineStrong : color.hairline}`,
+                        background: r.own ? '#f3f8ff' : color.canvas,
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, visibility: r.groupFirst ? 'visible' : 'hidden' }}>
+                        <BrandDot brand={r.brand} size={6} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700, color: r.own ? brandColorOf(r.brand) : color.ink }}>{r.name}</span>
+                        {r.own && (
+                          <span style={{ fontSize: 10.5, lineHeight: '16px', padding: '0 7px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, fontWeight: 600, flexShrink: 0 }}>我司</span>
+                        )}
+                      </span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.ink, fontWeight: 600 }}>{r.row.romram}</span>
+                      <span className="tnum" style={{ textAlign: 'right', color: color.mute, textDecoration: 'line-through' }}>{r.row.rrp != null ? fmtPrice(r.row.rrp, currency) : '—'}</span>
+                      <span className="tnum" style={{ textAlign: 'right', color: color.ink, fontWeight: 700 }}>{r.row.price != null ? fmtPrice(r.row.price, currency) : '—'}</span>
+                      <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        {r.row.discountPct != null ? <DiscountBadge discount={r.row.discountPct} /> : <span style={{ color: color.mute }}>—</span>}
+                      </span>
+                      <span className="tnum" style={{ textAlign: 'right', fontWeight: 700, color: diffColor }}>{diffText}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div
