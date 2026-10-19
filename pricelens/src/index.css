@@ -123,6 +123,16 @@ select {
   white-space: nowrap;
 }
 
+/* 分离面板头的系列页签行（第七十五轮）：滚动交给两侧提示性小箭头，
+   系统滚动条隐藏（页签本体的点击/悬停不受影响）。 */
+.lpl-pill-scroll {
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.lpl-pill-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* AntD 5.21 将自定义类挂在不同的弹层节点；下面的结构选择器确保两栏始终等宽，
    左右内边距一致，不受周/月/季面板内部 class 差异影响。 */
 .ant-picker-dropdown .ant-picker-panels {

@@ -21,7 +21,6 @@
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Checkbox, ConfigProvider, Segmented, Switch } from 'antd';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import PlatformBox from '../../components/FilterBar/PlatformBox';
 import CurrencyBox from '../../components/FilterBar/CurrencyBox';
@@ -46,7 +45,7 @@ import { color, fontSize, radius, space } from '../../theme/tokens';
 import Chart from './Chart';
 import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
-import LegendPills from './LegendPills';
+import LegendPills, { PillRowScroller } from './LegendPills';
 import DrillModal, { type DrillInfo } from './DrillModal';
 import {
   buildPriceSummary,
@@ -311,19 +310,18 @@ export default function PriceTrend() {
   useEffect(() => {
     if (selectedRoms.size < 2 || !state.own.every((s) => s.modelId === entryModelId)) {
       setSplitOn(false);
-      setPanelOrder([]);
     }
   }, [entryModelId, selectedRoms.size, state.own]);
 
   // ---- 分离显示：多 ROM 勾选时主图变为同一横向滚动轨道，每面板 =
   // 一个 ROM + 其对标竞品（生效矩阵按 own_romram 取、主竞品 sort 序）；共享 Y 轴 =
   // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
-  // 面板头 ‹ › 调展示顺序；共享刷选条联动全部面板，系列页签统一放到共享工具行中央
+  // 系列页签按面板拆开、放各卡片顶部居中（第七十五轮，PillRowScroller 左右滚动）；
+  // 共享刷选条联动全部面板
   const [splitOn, setSplitOn] = useState(false);
   // 分离模式一行可见面板数：卡片始终横向排列，超出视口后由轨道滚动查看。
   // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
   const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
-  const [panelOrder, setPanelOrder] = useState<string[]>([]); // romram 键序；空 = own 序
   const splitActive = splitOn && selectedRoms.size >= 2 && state.own.length >= 2 && state.own.every((s) => s.modelId === entryModelId);
 
   const panels = useMemo(() => {
@@ -409,24 +407,6 @@ export default function PriceTrend() {
 
   // 共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
   // splitYCfg/splitGridLeft 声明在主图 gridLeft 之后（见下方）
-  const orderedPanels = useMemo(() => {
-    if (panelOrder.length === 0) return panelViews;
-    const idx = (k: string) => {
-      const i = panelOrder.indexOf(k);
-      return i === -1 ? 999 : i;
-    };
-    return [...panelViews].sort((a, b) => idx(a.key) - idx(b.key));
-  }, [panelViews, panelOrder]);
-
-  const movePanel = (key: string, dir: -1 | 1): void => {
-    const keys = orderedPanels.map((p) => p.key);
-    const i = keys.indexOf(key);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= keys.length) return;
-    const next = [...keys];
-    [next[i], next[j]] = [next[j], next[i]];
-    setPanelOrder(next);
-  };
 
   // 面板下钻：seriesKey 在面板内查找（主图 allSeries 不含面板 series）
   const makePanelDrill = (
@@ -557,7 +537,7 @@ export default function PriceTrend() {
       el.removeEventListener('scroll', sync);
       observer?.disconnect();
     };
-  }, [splitActive, orderedPanels.length, splitColumns, splitGridLeft]);
+  }, [splitActive, panelViews.length, splitColumns, splitGridLeft]);
 
   // ---- 下钻（§6.3）：seriesKey → 取数组，单组重查 ----
   const selByKey = useMemo(() => {
@@ -695,10 +675,10 @@ export default function PriceTrend() {
           [图列 flex1][书签带 / 336px 内嵌面板]——时点摘要锚在图右侧（它就是图右缘
           最新数据的文字版），收起 = 24px 竖排书签带（默认，领导视角只是窄灰带），
           展开 = 原地面板纵向一行一产品（非视口抽屉，不遮图右缘），图自动收窄。
-          （Y 轴纯自适应；系列页签由工具行统一居中承载）。
+          （Y 轴纯自适应；合并模式的系列页签仍在工具行居中承载）。
           分离显示：多 ROM 勾选时主图变为单行横向轨道——每面板一个
           ROM+其对标竞品，共享 Y 轴（并集算一次受控传入）、X 轴各面板独立绘制；
-          共享刷选条联动全部面板；系列页签统一放在共享工具行中央。
+          共享刷选条联动全部面板；系列页签按面板拆开、放各卡片顶部居中（第七十五轮）。
           第五十四轮追补：工具行不再随面板重复——面板网格上方常驻一条（ChartToolbar），
           面板 chrome=false，全部视图开关由常驻行统一控制 */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
@@ -709,9 +689,10 @@ export default function PriceTrend() {
               与面板网格之间，统管底下全部分离面板——大促/offer/极值/变化提醒 + 齿轮
               （每格高度/刻度线/自动压缩/折线样式）+ 折后价/RRP；面板内不再各有设置行 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 32, padding: '0 6px', marginBottom: 2 }}>
-            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+              {/* 系列页签不进共享工具行（第七十五轮）：分离模式下按面板拆到各卡片
+                  顶部居中，本行只保留视图开关；合并模式的页签仍在工具行中央 */}
+              <div style={{ flex: '1 1 auto', minWidth: 0 }}>
               <ChartToolbar
-                legend={<LegendPills series={panelViews.flatMap((p) => p.all)} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />}
                 currency={state.currency}
                 sliderScale={sliderScale}
                 onSliderScale={setSliderScale}
@@ -781,10 +762,7 @@ export default function PriceTrend() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, width: '100%', minWidth: 0 }}>
-                  {orderedPanels.map((p) => {
-                  const i = orderedPanels.findIndex((x) => x.key === p.key);
-                  const first = i === 0;
-                  const last = i === orderedPanels.length - 1;
+                  {panelViews.map((p) => {
                   return (
                     <div
                       key={p.key}
@@ -800,64 +778,28 @@ export default function PriceTrend() {
                         boxSizing: 'border-box',
                       }}
                     >
-                      {/* 面板头（第七十四轮定版）：药丸页签居中 + 两侧 ‹ › 移动箭头；
-                          页签只标该卡片对应的产品配置，不再写「我司 + 对标竞品」 */}
+                      {/* 面板头（第七十五轮定版）：型号留左上角；系列页签按面板拆开、
+                          顶部居中只列该卡片对应的产品，两侧提示性小箭头可滚动查看；
+                          不再写「我司 + 对标竞品」 */}
                       <div
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6,
+                          gap: 8,
                           height: PANEL_HEAD_H, // 定高：轴列对齐基准（追补⑤）
                           padding: '0 4px',
                         }}
                       >
-                        <span
-                          role="button"
-                          aria-label="左移该面板"
-                          title={first ? '已在最左' : '左移该面板'}
-                          onClick={() => movePanel(p.key, -1)}
-                          style={{
-                            cursor: first ? 'default' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '4px 6px',
-                          }}
-                        >
-                          <LeftOutlined style={{ fontSize: 11, color: first ? color.hairlineStrong : color.body }} />
-                        </span>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            height: 22,
-                            padding: '0 20px',
-                            borderRadius: radius.pill,
-                            background: color.canvasSoft2,
-                            border: `1px solid ${color.hairline}`,
-                            fontSize: 12.5,
-                            fontWeight: 700,
-                            color: color.ink,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
                           {p.sel.romram}
                         </span>
-                        <span
-                          role="button"
-                          aria-label="右移该面板"
-                          title={last ? '已在最右' : '右移该面板'}
-                          onClick={() => movePanel(p.key, 1)}
-                          style={{
-                            cursor: last ? 'default' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            padding: '4px 6px',
-                          }}
-                        >
-                          <RightOutlined style={{ fontSize: 11, color: last ? color.hairlineStrong : color.body }} />
-                        </span>
+                        {p.all.length > 0 && (
+                          <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+                            <PillRowScroller>
+                              <LegendPills bare series={p.all} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />
+                            </PillRowScroller>
+                          </span>
+                        )}
                       </div>
                       <Chart
                         series={p.vis}

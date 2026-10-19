@@ -1,7 +1,11 @@
 // ============================================================
-// 图例页签整排：由看板层注入图顶工具行中央，底部时间区域只承担时间轴和窗口调整。
+// 图例页签整排：合并模式由看板层注入图顶工具行中央，底部时间区域只承担
+// 时间轴和窗口调整；分离模式（第七十五轮）按面板拆开，放进各卡片顶部
+// 居中位置——只列该卡片对应的产品，两侧提示性小箭头可滚动查看（PillRowScroller）。
 // 点击页签 = 屏蔽/恢复该系列折线。隐藏态 = 虚线边 + 降透明（原视觉不变）。
 // ============================================================
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import type { Series } from '../../dataModel/types';
 import { curveNameOf } from './chartModel';
@@ -11,6 +15,8 @@ export default function LegendPills(props: {
   series: Series[];
   hiddenKeys: Set<string>;
   onToggle: (key: string) => void;
+  /** 第七十五轮：true = 纯行（无居中/自带滚动/内边距），交给外层 PillRowScroller 承担 */
+  bare?: boolean;
 }) {
   if (props.series.length === 0) return null;
   return (
@@ -19,10 +25,8 @@ export default function LegendPills(props: {
         display: 'flex',
         flexWrap: 'nowrap',
         alignItems: 'center',
-        justifyContent: 'center',
         gap: 4,
-        overflowX: 'auto',
-        padding: '6px 0 2px',
+        ...(props.bare ? {} : { justifyContent: 'center', overflowX: 'auto', padding: '6px 0 2px' }),
       }}
     >
       {props.series.map((s) => {
@@ -38,12 +42,12 @@ export default function LegendPills(props: {
               alignItems: 'center',
               gap: 4,
               height: 20,
-              padding: '0 8px',
+              padding: '0 10px',
               fontSize: 11,
               lineHeight: '18px',
               borderRadius: radius.pill,
               flexShrink: 0,
-              maxWidth: 170,
+              maxWidth: 200,
               background: color.canvas,
               border: `1px ${hidden ? 'dashed' : 'solid'} ${hidden ? color.hairlineStrong : color.hairline}`,
               opacity: hidden ? 0.45 : 1,
@@ -58,5 +62,53 @@ export default function LegendPills(props: {
         );
       })}
     </div>
+  );
+}
+
+/** 页签行两侧提示性小箭头（第七十五轮，用户需求）：页签放不下时点击左右滚动，
+ * 未到边缘深色可点、到边缘淡出；滚动容器隐藏系统滚动条（.lpl-pill-scroll）。
+ * 外层需给收窄空间（minWidth: 0），行内容少时整体居中。 */
+export function PillRowScroller(props: { children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [edge, setEdge] = useState({ left: false, right: false });
+  useEffect(() => {
+    const sync = (): void => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const max = Math.max(0, el.scrollWidth - el.clientWidth);
+      setEdge((prev) => {
+        const next = { left: el.scrollLeft > 2, right: max - el.scrollLeft > 2 };
+        return prev.left === next.left && prev.right === next.right ? prev : next;
+      });
+    };
+    sync();
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
+    ro?.observe(el);
+    if (el.firstElementChild) ro?.observe(el.firstElementChild);
+    return () => ro?.disconnect();
+  }, []);
+  const nudge = (dir: -1 | 1): void =>
+    scrollRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
+  const arrowStyle = (): CSSProperties => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 3px',
+    cursor: 'pointer',
+    flexShrink: 0,
+  });
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, minWidth: 0, maxWidth: '100%' }}>
+      <span role="button" aria-label="查看左侧产品" title="查看左侧产品" onClick={() => nudge(-1)} style={arrowStyle()}>
+        <LeftOutlined style={{ fontSize: 10, color: color.mute, opacity: edge.left ? 1 : 0.3 }} />
+      </span>
+      <div ref={scrollRef} className="lpl-pill-scroll" style={{ overflowX: 'auto', minWidth: 0 }}>
+        {props.children}
+      </div>
+      <span role="button" aria-label="查看右侧产品" title="查看右侧产品" onClick={() => nudge(1)} style={arrowStyle()}>
+        <RightOutlined style={{ fontSize: 10, color: color.mute, opacity: edge.right ? 1 : 0.3 }} />
+      </span>
+    </span>
   );
 }
