@@ -174,6 +174,9 @@ export interface ChartProps {
   hiddenKeys?: Set<string>;
   /** 名称药丸点击的显隐切换回调；缺省 = 药丸不可切换 */
   onToggleHidden?: (seriesKey: string) => void;
+  /** 第八十八轮：系列联动映射（竞品⇄我司）——悬停名称药丸时返回与该系列
+   *  联动高亮的系列 key 集；缺省 = 无联动（悬停只亮自身） */
+  pairingsOf?: (seriesKey: string) => string[];
   /** 折线形态（受控；缺省内部状态）。'auto' = 按粒度自适应（第五十四轮追补③：
    *  周=阶梯 / 月季=平滑，默认） */
   lineShape?: LineShapeChoice;
@@ -383,6 +386,14 @@ export default function Chart(props: ChartProps) {
   const focusActive = focusKey != null;
   // 悬停的名称药丸（第八十二轮）：仅该系列的起点指引线可见（默认全部隐藏）
   const [hoverNameKey, setHoverNameKey] = useState<string | null>(null);
+  // 第八十八轮 联动高亮集合：悬停名称药丸时 = 该系列 + 其映射系列（我司⇄竞品）；
+  // 折线悬停聚焦时 = 单系列。非空时集合外的一切（线/药丸/徽标）降透明。
+  const litKeys: string[] | null =
+    hoverNameKey != null && props.pairingsOf
+      ? [hoverNameKey, ...props.pairingsOf(hoverNameKey)]
+      : focusKey != null
+        ? [focusKey]
+        : null;
   // Y 刻度线显隐（第十二轮）：齿轮弹层内开关。第三十五轮起默认关（迪总：不自动选择）。
   // 第五十四轮追补：可受控（分离模式下由常驻工具行统一写，全面板同值）
   const [innerShowYTicks, setInnerShowYTicks] = useState(false);
@@ -587,8 +598,8 @@ export default function Chart(props: ChartProps) {
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
   // focusKey（第三十二轮聚焦模式）：非聚焦系列降透明 0.15、数值标签隐藏
   const option = useMemo(
-    () => buildOption({ geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, lineShape }),
-    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, lineShape],
+    () => buildOption({ geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, focusKeys: litKeys ?? undefined, lineShape }),
+    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, litKeys, lineShape],
   );
 
   // ---- setOption / resize ----
@@ -984,7 +995,7 @@ export default function Chart(props: ChartProps) {
               最高 = 点上方胶囊；最低 = 高亮点环 + 点下方胶囊 */}
           {props.maxMinOn &&
             extremeMarks.map((m) => {
-              const dim = focusActive && m.key !== focusKey;
+              const dim = litKeys != null && !litKeys.includes(m.key);
               const pill = (tag: string, v: number) => (
                 <span
                   className="tnum"
@@ -1045,7 +1056,7 @@ export default function Chart(props: ChartProps) {
                 if (chg == null || pt.price == null) return null;
                 const down = chg < 0;
                 const pct = Math.round(Math.abs(chg) * 100);
-                const dim = focusActive && s.key !== focusKey;
+                const dim = litKeys != null && !litKeys.includes(s.key);
                 return (
                   <span
                     key={`dp-${s.key}|${i}`}
@@ -1166,7 +1177,7 @@ export default function Chart(props: ChartProps) {
                   </div>
                   {rows.map(({ s, v }, ri) => {
                     const pt = s.points[hoverIdx];
-                    const dim = focusActive && s.key !== focusKey;
+                    const dim = litKeys != null && !litKeys.includes(s.key);
                     const items = offerRows[ri];
                     // 折扣率胶囊（第五十二轮）：与时点卡同语言（vs RRP；仅折后价口径出）
                     const disc =
@@ -1265,7 +1276,7 @@ export default function Chart(props: ChartProps) {
               聚焦模式（第三十二轮）：非聚焦系列降透明 */}
           {endpointBadges.map((b) => {
             const se = b.kind === 'S' || b.kind === 'E';
-            const dim = focusActive && b.key.split('|')[0] !== focusKey;
+            const dim = litKeys != null && !litKeys.includes(b.key.split('|')[0]);
             if (se) {
               return (
                 <span
@@ -1372,7 +1383,7 @@ export default function Chart(props: ChartProps) {
                     deltaPct={lifecycleDeltas.get(nm.seriesKey) ?? null}
                     latest={latestPointByKey.get(nm.seriesKey)}
                     hidden={nm.hidden ?? false}
-                    dimmed={focusActive && nm.seriesKey !== focusKey}
+                    dimmed={litKeys != null && !litKeys.includes(nm.seriesKey)}
                     onToggle={(k) => props.onToggleHidden?.(k)}
                     onHover={setHoverNameKey}
                   />
@@ -1391,7 +1402,7 @@ export default function Chart(props: ChartProps) {
             series.map((s) => {
               const p = s.points[hoverIdx];
               if (!p || p.missing || p.price == null || !p.url) return null;
-              const dim = focusActive && s.key !== focusKey;
+              const dim = litKeys != null && !litKeys.includes(s.key);
               return (
                 <span key={`snap-${s.key}`} style={{ opacity: dim ? 0.15 : undefined }}>
                   <SnapshotIcon
@@ -1421,7 +1432,7 @@ export default function Chart(props: ChartProps) {
               const p = s.points[hoverIdx];
               const v = p ? primaryPriceOf(p, priceTypes) : null;
               if (v == null) return null;
-              const dim = focusActive && s.key !== focusKey;
+              const dim = litKeys != null && !litKeys.includes(s.key);
               return (
                 <span key={`dl-${s.key}`} style={{ opacity: dim ? 0.15 : undefined }}>
                   <DrillIcon

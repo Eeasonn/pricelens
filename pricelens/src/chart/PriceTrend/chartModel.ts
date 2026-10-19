@@ -345,6 +345,9 @@ export function buildOption(p: {
   /** 聚焦模式（第三十二轮）：非聚焦系列整体降透明 0.15、数值标签隐藏；
    *  null/缺省 = 无聚焦，输出与旧口径逐字段一致 */
   focusKey?: string | null;
+  /** 第八十八轮：联动高亮集合（悬停我司药丸 → 其映射竞品系列同时保持高亮）；
+   *  提供时优先于 focusKey */
+  focusKeys?: string[];
   /** 折线形态（第三十八轮，齿轮可选）：step=方形阶梯（默认，价格在期内恒定）；
    *  smooth=平滑曲线（最初形态）。只换线形，数据/标签/避让不受影响 */
   lineShape?: 'step' | 'smooth';
@@ -353,7 +356,9 @@ export function buildOption(p: {
   const { geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks } = p;
   const first = series[0];
   if (!first) return null;
-  const focusOn = p.focusKey != null;
+  const focusOn = p.focusKey != null || (p.focusKeys != null && p.focusKeys.length > 0);
+  const isLit = (key: string): boolean =>
+    p.focusKeys != null && p.focusKeys.length > 0 ? p.focusKeys.includes(key) : key === p.focusKey;
   const xLabels = first.points.map((pt) => pt.xLabel);
   const lineWidth = (s: Series): number => (s.isOwn ? 3 : 2);
   const shape = p.lineShape === 'smooth'
@@ -363,7 +368,7 @@ export function buildOption(p: {
 
   for (const s of series) {
     const dyMap = labelPlan.dy[s.key] ?? {};
-    const dim = focusOn && s.key !== p.focusKey; // 聚焦高亮：其余系列降透明
+    const dim = focusOn && !isLit(s.key); // 聚焦高亮：其余系列降透明
     if (priceTypes.discounted) {
       // 端点（第十四轮徽标 + 第二十轮修复）：带标记的点不再画默认符号——改用
       // symbolSize 0 而非 symbol 'none'（ECharts 的 line 标签画在符号元素上，

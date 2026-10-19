@@ -349,6 +349,28 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     [state.own, state.competitors],
   );
   const multiProduct = new Set(configSources.map((c) => c.sel.modelId)).size > 1;
+  // 第八十八轮：竞品⇄我司联动映射（seriesKey → 联动系列 keys）——悬停名称药丸时
+  // 折线/药丸联动高亮；按生效对标矩阵构建（合并图与分离面板共用同一份）
+  const pairingsBySeries = useMemo(() => {
+    const m = new Map<string, string[]>();
+    if (state.own.length === 0) return m;
+    const bench = getEffectiveBenchmark();
+    const add = (a: string, b: string): void => {
+      m.set(a, [...(m.get(a) ?? []), b]);
+    };
+    for (const own of state.own) {
+      const ownKey = `${own.modelId}__${own.romram.replace(/\s+/g, '')}`;
+      for (const b of bench) {
+        if (b.own_model_id !== own.modelId || b.own_romram !== own.romram) continue;
+        const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
+        if (!p) continue;
+        const compKey = `${p.sku_id.split('__')[0]}__${p.romram.replace(/\s+/g, '')}`;
+        add(ownKey, compKey);
+        add(compKey, ownKey);
+      }
+    }
+    return m;
+  }, [state.own]);
   const splitActive = splitOn && configSources.length >= 2;
   // 跨产品/竞品视角分离时价位跨度天然拉大 → 进入时自动开「Y 轴自动压缩」；
   // 用户手动关闭后本段分离会话内不再强制（退出分离再进才重置）
@@ -376,9 +398,10 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
       const key = `${sel.modelId}__${sel.romram.replace(/\s+/g, '')}`;
       if (!isOwn) {
         // 竞品视角（第八十七轮）：面板 = 纯竞品配置；无我司锚点，映射语义不适用
-        return { key, sel, comps: [] as ProductSelection[], isOwn: false as const };
+        return { key, sel, comps: [] as ProductSelection[], isOwn: false as const, compTags: [] };
       }
       const seen = new Set<string>();
+      const compTags: { key: string; name: string; primary: boolean }[] = [];
       const mappedComps = bench
         .filter((b) => b.own_model_id === sel.modelId && b.own_romram === sel.romram)
         .sort((a, b) => a.sort - b.sort)
@@ -388,6 +411,11 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
           const group = selectedByKey.get(`${p.sku_id.split('__')[0]}|${p.romram.replace(/\s+/g, '')}`);
           if (!group || seen.has(group.modelId + '|' + group.romram)) return null;
           seen.add(group.modelId + '|' + group.romram);
+          // 第八十八轮：主竞品标志（sort=1）供面板头名单 ★ 标注
+          const primary = bench.some(
+            (x) => x.own_model_id === sel.modelId && x.own_romram === sel.romram && x.competitor_sku_id === p.sku_id && x.sort === 1,
+          );
+          compTags.push({ key: key, name: modelNameOf(group.modelId), primary });
           return group;
         })
         .filter((x): x is ProductSelection => x != null);
@@ -396,14 +424,17 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
       const fallbackComps = state.competitors.filter(
         (group) => group.romram.replace(/\s+/g, '') === sel.romram.replace(/\s+/g, '') && !seen.has(group.modelId + '|' + group.romram),
       );
+      for (const group of fallbackComps) {
+        compTags.push({ key: `${group.modelId}__${group.romram.replace(/\s+/g, '')}`, name: modelNameOf(group.modelId), primary: false });
+      }
       const comps = state.autoMatch ? mappedComps : [...mappedComps, ...fallbackComps];
-      return { key, sel, comps, isOwn: true as const };
+      return { key, sel, comps, isOwn: true as const, compTags };
     });
   }, [splitActive, configSources, state.competitors, state.autoMatch]);
 
   const panelData = useMemo(() => {
     if (panels.length === 0) return [];
-    return panels.map(({ key, sel, comps, isOwn }) => {
+    return panels.map(({ key, sel, comps, isOwn, compTags }) => {
       let series: Series[] = [];
       try {
         series = buildSeries({
@@ -422,7 +453,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
       } catch {
         series = []; // 空态不崩
       }
-      return { key, sel, comps, isOwn, series };
+      return { key, sel, comps, isOwn, compTags, series };
     });
   }, [panels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry]);
 
@@ -946,6 +977,14 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                           {/* 第八十七轮：跨产品/竞品视角时面板头带产品名（单我司产品维持纯 ROM） */}
                           {(multiProduct || !p.isOwn) ? `${modelNameOf(p.sel.modelId)} · ${p.sel.romram}` : p.sel.romram}
                         </span>
+                        {p.isOwn && p.compTags.length > 0 && (
+                          <span
+                            title={`该配置的对标竞品：${p.compTags.map((t) => `${t.primary ? '★' : ''}${t.name}`).join('、')}`}
+                            style={{ marginLeft: 'auto', minWidth: 0, fontSize: 10.5, lineHeight: '16px', color: color.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          >
+                            对标 {p.compTags.length}:{p.compTags.map((t) => `${t.primary ? '★' : ''}${t.name}`).join(' · ')}
+                          </span>
+                        )}
                       </div>
                       <Chart
                         series={p.vis}
@@ -963,6 +1002,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                         windowKey={`${win.s}:${win.e}:${p.key}`}
                         yScale={splitYCfg ?? undefined}
                         namesInZone // 第七十四轮：系列名全部固定进面板左侧名称空白带
+                        pairingsOf={(key) => pairingsBySeries.get(key) ?? []} // 第八十八轮：竞品⇄我司悬停联动
                         nameSeries={p.all} // 第八十二轮：药丸全集（含屏蔽系列，虚线置灰）
                         hiddenKeys={hiddenKeys}
                         onToggleHidden={toggleLegend} // 药丸点击 = 切换折线显隐（取代顶部页签）
@@ -1012,6 +1052,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
             gridLeft={gridLeft}
             gridTop={gridTop}
             namesInZone // 第八十轮：合并模式与分离面板一致，系列名固定进 Y 轴右侧名称空白带
+            pairingsOf={(key) => pairingsBySeries.get(key) ?? []} // 第八十八轮：竞品⇄我司悬停联动
             nameSeries={visSeries} // 第八十二轮：药丸全集（含屏蔽系列），取代顶部图例页签
             hiddenKeys={hiddenKeys}
             onToggleHidden={toggleLegend}
