@@ -3,7 +3,7 @@ import type { CurrencyMode } from '../../dataModel/types';
 import type { OverviewModel } from '../../dataModel/aggregate';
 import { bucketLatestWeekLabel } from '../../chart/PriceTrend/helpers';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
-import { brandColorOf, color, font, radius, space } from '../../theme/tokens';
+import { brandColorOf, color, radius, space } from '../../theme/tokens';
 
 export interface MarketMapProps {
   /** 全市场型号（我司+竞品矩阵全量）：摆位只看真实现价，不依赖竞品匹配关系（第七十七轮）。 */
@@ -172,7 +172,7 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
       })
       .filter((b): b is { label: string; top: number; h: number; empty: boolean } => b != null && b.h >= 8)
     : []);
-  const axisWidth = currency === 'usd' ? 104 : 78;
+  const axisWidth = currency === 'usd' ? 140 : 78;
   const [brandOrder, setBrandOrder] = useState<BrandOrder>('default');
   // 我司品牌固定占最左 sticky 列（主视角原则）；其余品牌按所选顺序排。
   const ownBrands = useMemo(() => [...new Set(ownModels.map((m) => brandKeyOf(m.brand)))], [ownModels]);
@@ -245,7 +245,7 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
           {/* 左侧价位轴：美元显示档位带，本币只显示刻度；域随数据裁剪 */}
           <div style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', borderRight: `1px solid ${color.hairlineStrong}`, background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.04)' }}>
             {tierBoxes.map((box, index) => <div key={`${box.label}-${index}`} style={{ position: 'absolute', left: 0, top: box.top, width: 64, height: box.h, boxSizing: 'border-box', border: box.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`, background: box.empty ? 'transparent' : index % 2 === 0 ? color.canvasSoft2 : color.canvasSoft, display: 'grid', placeItems: 'center', overflow: 'hidden', pointerEvents: 'none' }}>{box.h >= 16 && <span style={{ fontSize: 10, lineHeight: '12px', color: box.empty ? color.mute : color.body, whiteSpace: 'nowrap' }}>{box.label}</span>}</div>)}
-            {ticks.map((tick) => <span key={tick} className="tnum" style={{ position: 'absolute', left: currency === 'usd' ? 66 : 4, top: vToY(tick) - 7, fontSize: 9, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', color: color.mute, whiteSpace: 'nowrap' }}>{fmtTick(tick)}</span>)}
+            {ticks.map((tick) => <span key={tick} className="tnum" style={{ position: 'absolute', right: 10, top: vToY(tick) - 8, fontSize: 12, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }}>{fmtTick(tick)}</span>)}
           </div>
 
           <div style={{ position: 'absolute', left: axisWidth, right: 0, top: 0, height: totalHeight, overflow: 'visible' }}>

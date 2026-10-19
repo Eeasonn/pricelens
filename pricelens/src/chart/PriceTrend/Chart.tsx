@@ -840,13 +840,13 @@ export default function Chart(props: ChartProps) {
                   className="tnum"
                   style={{
                     position: 'absolute',
-                    left: geom.plotLeft - NAME_ZONE_W - tickW,
-                    top: Math.round(t.y) - 8,
-                    width: tickW - 8,
-                    textAlign: 'right',
-                    fontSize: 12,
-                    lineHeight: '16px',
-                    color: color.body,
+                    // 第八十四轮：9px 灰字（比档位带小一号、同底部时间轴颜色），
+                    // 左对齐紧贴档位带右缘（tierLeft + 带宽 + 2）
+                    left: geom.plotLeft - NAME_ZONE_W - tickW - TIER_BAND_GAP - TIER_BAND_W + 2,
+                    top: Math.round(t.y) - 7,
+                    fontSize: 9,
+                    lineHeight: '14px',
+                    color: color.mute,
                     pointerEvents: 'none',
                     zIndex: 1,
                     whiteSpace: 'nowrap',

@@ -73,7 +73,9 @@ export default function SplitAxisColumn(props: {
           )}
         </div>
       ))}
-      {/* Y 刻度标签（随「显示 Y 刻度线」开关；横线仍画在各面板绘图区内） */}
+      {/* Y 刻度标签（随「显示 Y 刻度线」开关；横线仍画在各面板绘图区内）。
+          第八十四轮定版：9px 灰字（比档位带标签小一号、同底部时间轴颜色），
+          左对齐紧贴档位带右缘 */}
       {props.showYTicks &&
         rows.map((t) => (
           <div
@@ -81,13 +83,11 @@ export default function SplitAxisColumn(props: {
             className="tnum"
             style={{
               position: 'absolute',
-              left: tierPart,
-              top: Math.round(t.y) - 8,
-              width: tickW,
-              textAlign: 'right',
-              fontSize: 12,
-              lineHeight: '16px',
-              color: color.body,
+              left: tierPart + 2,
+              top: Math.round(t.y) - 7,
+              fontSize: 9,
+              lineHeight: '14px',
+              color: color.mute,
               whiteSpace: 'nowrap',
             }}
           >
