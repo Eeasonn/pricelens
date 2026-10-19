@@ -1,3 +1,4 @@
+import { HolderOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
@@ -279,15 +280,12 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
               >
                 {currency === 'usd' && (
                   <span style={{ width: TIER_TEXT_W, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, lineHeight: '13px', color: box.empty ? color.mute : color.body, whiteSpace: 'nowrap' }}>
-                    {box.h < 30 ? (
-                      box.h >= 14 ? <span style={{ fontSize: 9.5, lineHeight: '12px' }}>{tierLabelShort(box.label)}</span> : null
-                    ) : (
-                      (() => {
-                        const parts = tierLabelShort(box.label).split('~');
-                        const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(box.label)];
-                        return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
-                      })()
-                    )}
+                    {(() => {
+                      // 恒三行竖排（第九十三轮：矮档不再退化单行——「400~600」也要换行样式）
+                      const parts = tierLabelShort(box.label).split('~');
+                      const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(box.label)];
+                      return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
+                    })()}
                   </span>
                 )}
               </div>
@@ -330,8 +328,9 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
                     setDraggingBrand(null);
                     setDropBrand(null);
                   }}
-                  style={{ boxSizing: 'border-box', padding: '0 12px', color: brandColorOf(brand.key), fontSize: 11, lineHeight: '16px', fontWeight: 700, borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap', cursor: 'grab', opacity: draggingBrand === brand.key ? 0.4 : undefined, background: dropBrand === brand.key && draggingBrand !== brand.key ? '#edf5ff' : undefined, boxShadow: dropBrand === brand.key && draggingBrand !== brand.key ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined }}
+                  style={{ boxSizing: 'border-box', padding: '0 12px', color: brandColorOf(brand.key), fontSize: 11, lineHeight: '16px', fontWeight: 700, borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', cursor: 'grab', opacity: draggingBrand === brand.key ? 0.4 : undefined, background: dropBrand === brand.key && draggingBrand !== brand.key ? '#edf5ff' : undefined, boxShadow: dropBrand === brand.key && draggingBrand !== brand.key ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined }}
                 >
+                  <HolderOutlined style={{ fontSize: 10, color: draggingBrand === brand.key ? color.link : color.mute }} />
                   {brand.label}
                 </div>
               ))}
@@ -342,13 +341,13 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
               const isOwn = model.isOwn;
               return (
                 <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: CARD_H, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', zIndex: 1 }}>
-                  <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', minWidth: 0, height: '100%', padding: '3px 10px 3px 14px', borderRight: `1px solid ${color.hairline}`, background: selected ? '#f0f6ff' : color.canvas, boxShadow: selected ? 'inset 3px 0 0 #0070f3, 2px 0 3px rgba(0,0,0,.03)' : '2px 0 3px rgba(0,0,0,.03)' }}>
+                  <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', minWidth: 0, height: '100%', padding: '0 10px 0 14px', borderRight: `1px solid ${color.hairline}`, background: selected ? '#f0f6ff' : color.canvas, boxShadow: selected ? 'inset 3px 0 0 #0070f3, 2px 0 3px rgba(0,0,0,.03)' : '2px 0 3px rgba(0,0,0,.03)' }}>
                     {isOwn && <ModelChip model={model} price={price} currency={currency} clickable onClick={() => onOpenProduct(model)} />}
                   </div>
                   {brandColumns.map((brand, index) => {
                     const here = brandKeyOf(model.brand) === brand.key && !isOwn;
                     return (
-                      <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', padding: '3px 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, background: selected ? '#f7faff' : color.canvas }}>
+                      <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, background: selected ? '#f7faff' : color.canvas }}>
                         {here && <ModelChip model={model} price={price} currency={currency} clickable={false} />}
                       </div>
                     );

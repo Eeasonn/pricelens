@@ -25,64 +25,80 @@ interface PointPanelProps {
   onToggleSubscribe?: (key: string) => void;
 }
 
-/** 收起态：图右缘书签带（竖排文字 + 展开箭头），alignSelf stretch 与图同高 */
-function BookmarkTab(props: { onToggle: () => void }) {
+export default function PointPanel(props: PointPanelProps) {
+  const open = props.open;
+  const asOf = props.items.find((it) => it.asOf != null)?.asOf ?? null;
+  // 书签带 ↔ 面板：容器宽度 24↔336 过渡 + 两层内容交叉淡入淡出（第九十三轮，
+  // 悬停自动开合频繁触发，硬切换太生硬）。容器恒渲染，收起态 overflow hidden 裁掉面板层。
   return (
     <div
-      role="button"
-      title="展开时点摘要（各产品最新折扣 / 现价 / RRP / 来源）"
-      onClick={props.onToggle}
       style={{
-        width: 24,
+        width: open ? 336 : 24,
         flexShrink: 0,
         alignSelf: 'stretch',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        cursor: 'pointer',
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: 0,
+        boxSizing: 'border-box',
         border: `1px solid ${color.hairline}`,
-        borderRadius: `0 ${radius.card}px ${radius.card}px 0`,
+        borderRadius: open ? radius.card : `0 ${radius.card}px ${radius.card}px 0`,
         background: color.canvas,
-        userSelect: 'none',
+        transition: 'width 240ms cubic-bezier(0.25, 0.8, 0.3, 1), border-radius 240ms ease',
       }}
     >
-      <RightOutlined style={{ fontSize: 10, color: color.mute }} />
-      <span
+      {/* 书签带层（收起态）：竖排文字 + 展开箭头 */}
+      <div
+        role="button"
+        aria-hidden={open}
+        title="展开时点摘要（各产品最新折扣 / 现价 / RRP / 来源）"
+        onClick={() => {
+          if (!open) props.onToggle();
+        }}
         style={{
-          writingMode: 'vertical-rl',
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: 3,
-          color: color.mute,
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          cursor: 'pointer',
+          userSelect: 'none',
+          opacity: open ? 0 : 1,
+          pointerEvents: open ? 'none' : 'auto',
+          transition: 'opacity 180ms ease',
         }}
       >
-        时点摘要
-      </span>
-    </div>
-  );
-}
-
-export default function PointPanel(props: PointPanelProps) {
-  if (!props.open) return <BookmarkTab onToggle={props.onToggle} />;
-
-  const asOf = props.items.find((it) => it.asOf != null)?.asOf ?? null;
-  return (
-    <div
-      style={{
-        width: 336,
-        flexShrink: 0,
-        alignSelf: 'stretch',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0,
-        border: `1px solid ${color.hairline}`,
-        borderRadius: radius.card,
-        background: color.canvas,
-        padding: '10px 12px',
-      }}
-    >
+        <RightOutlined style={{ fontSize: 10, color: color.mute }} />
+        <span
+          style={{
+            writingMode: 'vertical-rl',
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: 3,
+            color: color.mute,
+          }}
+        >
+          时点摘要
+        </span>
+      </div>
+      {/* 面板层（展开态）：内容淡入略滞后于容器展开，避免窄容器里内容挤压闪烁 */}
+      <div
+        aria-hidden={!open}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: 334,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          padding: '10px 12px',
+          boxSizing: 'border-box',
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+          transition: open ? 'opacity 200ms ease 90ms' : 'opacity 140ms ease',
+        }}
+      >
       {/* 头部：收起按钮 + 时点日期（与摘要条同口径：窗口末桶最新周三锚日） */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span
@@ -127,6 +143,7 @@ export default function PointPanel(props: PointPanelProps) {
             showHeader={false}
           />
         )}
+      </div>
       </div>
     </div>
   );

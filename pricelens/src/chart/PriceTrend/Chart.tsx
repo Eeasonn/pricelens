@@ -927,17 +927,12 @@ export default function Chart(props: ChartProps) {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {tb.h < 38 ? (
-                    tb.h >= 14 ? (
-                      <span style={{ fontSize: 8, lineHeight: '10px' }}>{tierLabelShort(tb.label)}</span>
-                    ) : null
-                  ) : (
-                    (() => {
-                      const parts = tierLabelShort(tb.label).split('~');
-                      const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(tb.label)];
-                      return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
-                    })()
-                  )}
+                  {(() => {
+                    // 恒三行竖排（第九十三轮：矮档不再退化单行）
+                    const parts = tierLabelShort(tb.label).split('~');
+                    const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(tb.label)];
+                    return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
+                  })()}
                 </span>
               </div>
             ))}
