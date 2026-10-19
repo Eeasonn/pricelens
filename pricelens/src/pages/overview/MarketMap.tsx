@@ -265,14 +265,17 @@ function CompChip({
   );
 }
 
-/** 对比矩阵大块：一个型号一块——型号最大字；折后价+折扣 / RRP（不划线）分层；
- *  底部其他信息：我司 = 价差方向切换按钮 + 采集时间右下；竞品 = 价差 + 采集时间右下 */
-function MatrixBlock({
+/** 对比矩阵单元格：一行 = 一条横向内容带——行内单元格以竖分隔线相连、行与行以横
+ *  分隔线区隔（不再是独立卡片），我司列浅蓝底纵向贯穿。层级：表头品牌产品名最大
+ *  → 型号 → 折后价+折扣 / RRP（不划线）；底部：我司 = 价差方向切换按钮 + 日期右下，
+ *  竞品 = 价差 + 日期右下（用户定版：日期不带「采集」字样） */
+function MatrixCell({
   row,
   currency,
   own,
   diff,
   diffDir,
+  lastCol,
   onToggleDiffDir,
 }: {
   row: (OverviewRow & { ownRomrams?: string[] }) | null;
@@ -280,38 +283,38 @@ function MatrixBlock({
   own: boolean;
   diff: number | null;
   diffDir?: 'comp' | 'own';
+  lastCol?: boolean;
   onToggleDiffDir?: () => void;
 }) {
+  const borderRight = lastCol ? 0 : `1px solid ${color.hairline}`;
   if (!row || (row.price == null && row.rrp == null)) {
-    return <div style={{ minHeight: 108, borderRadius: 10 }} />;
+    return <div style={{ minHeight: 104, borderRight, background: own ? '#f3f8ff' : undefined }} />;
   }
   const lastWeek = row.points.length > 0 ? row.points[row.points.length - 1].weekId : '';
   const dateText = lastWeek ? bucketLatestWeekLabel('week', lastWeek) ?? '' : row.asOfWeek ? bucketLatestWeekLabel('week', row.asOfWeek) ?? '' : '';
   return (
     <div
       style={{
-        minHeight: 118,
+        minHeight: 104,
         boxSizing: 'border-box',
-        borderRadius: 10,
-        padding: '12px 14px',
+        padding: '11px 14px',
+        borderRight,
         background: own ? '#f3f8ff' : color.canvas,
-        border: `1px solid ${own ? 'rgba(0, 112, 243, 0.35)' : color.hairline}`,
-        boxShadow: own ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.04)',
         display: 'flex',
         flexDirection: 'column',
       }}
     >
-      {/* 型号：卡片最大字号 */}
-      <div style={{ fontSize: 17, lineHeight: '22px', fontWeight: 800, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
+      {/* 型号：单元格内最大字（整体层级在表头产品名之下） */}
+      <div style={{ fontSize: 15, lineHeight: '20px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
       {/* 折后价 + 折扣 */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 7 }}>
         <span className="tnum" style={{ fontSize: 14.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
         {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
       </div>
       {/* RRP：独立一行，不做划线处理 */}
       <div className="tnum" style={{ marginTop: 3, fontSize: 11.5, color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</div>
       {/* 底部其他信息 */}
-      <div style={{ marginTop: 'auto', paddingTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+      <div style={{ marginTop: 'auto', paddingTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
         {own ? (
           <>
             {onToggleDiffDir && (
@@ -342,7 +345,7 @@ function MatrixBlock({
                 {diffDir === 'own' ? '我司比竞品' : '竞品比我司'}
               </button>
             )}
-            {dateText && <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{dateText} 采集</span>}
+            {dateText && <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{dateText}</span>}
           </>
         ) : (
           <>
@@ -353,7 +356,7 @@ function MatrixBlock({
             ) : (
               <span style={{ color: color.mute }}>价差 —</span>
             )}
-            {dateText && <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{dateText} 采集</span>}
+            {dateText && <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{dateText}</span>}
           </>
         )}
       </div>
@@ -891,37 +894,39 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                 <BrandDot brand={detailModel.brand} size={8} />
-                <span style={{ fontSize: 16, fontWeight: 700, color: color.ink }}>{detailModel.modelName}</span>
-                <span style={{ fontSize: 11, color: color.mute }}>型号从小到大 · 价差方向可在卡片下方切换</span>
+                <span style={{ fontSize: 17, fontWeight: 700, color: color.ink }}>{brandFullName(detailModel.brand, detailModel.modelName)}</span>
+                <span style={{ fontSize: 11, color: color.mute }}>型号从小到大 · 价差方向可在下方切换</span>
               </div>
               <div style={{ border: `1px solid ${color.hairline}`, borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${1 + compGroups.length}, minmax(0, 1fr))`, gap: 8, background: color.canvasSoft, padding: '9px 10px' }}>
+                {/* 表头：品牌+产品名 = 全浮窗最大字号（型号次之）；名称可换行不截断，我司列稍宽 */}
+                <div style={{ display: 'grid', gridTemplateColumns: compGroups.length > 0 ? `minmax(0, 1.2fr) repeat(${compGroups.length}, minmax(0, 1fr))` : 'minmax(0, 1fr)', background: color.canvasSoft, borderBottom: `1px solid ${color.hairline}` }}>
                   {(() => {
                     const own = detailModel;
                     return (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                        <BrandDot brand={own.brand} size={6} />
-                        <span style={{ fontSize: 14, fontWeight: 700, color: brandColorOf(own.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{brandFullName(own.brand, own.modelName)}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '9px 12px', borderRight: compGroups.length > 0 ? `1px solid ${color.hairline}` : 0 }}>
+                        <BrandDot brand={own.brand} size={7} />
+                        <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 16, lineHeight: '21px', fontWeight: 700, color: brandColorOf(own.brand), wordBreak: 'break-word' }}>{brandFullName(own.brand, own.modelName)}</span>
                         <span style={{ fontSize: 10.5, lineHeight: '16px', padding: '0 7px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, fontWeight: 600, flexShrink: 0 }}>我司</span>
-                      </span>
+                      </div>
                     );
                   })()}
-                  {compGroups.map((g) => (
-                    <span key={g.modelId} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                      <BrandDot brand={g.brand} size={6} />
-                      <span style={{ fontSize: 14, fontWeight: 700, color: brandColorOf(g.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
-                    </span>
+                  {compGroups.map((g, gi) => (
+                    <div key={g.modelId} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '9px 12px', borderRight: gi === compGroups.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
+                      <BrandDot brand={g.brand} size={7} />
+                      <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 16, lineHeight: '21px', fontWeight: 700, color: brandColorOf(g.brand), wordBreak: 'break-word' }}>{g.name}</span>
+                    </div>
                   ))}
                 </div>
+                {/* 数据行：一行 = 一条横向内容带（单元格相连，仅以竖/横分隔线区隔；我司列浅蓝贯穿） */}
                 {ownSorted.map((row, index) => {
                   return (
-                    <div key={row.skuId} style={{ display: 'grid', gridTemplateColumns: `repeat(${1 + compGroups.length}, minmax(0, 1fr))`, gap: 8, padding: index === 0 ? '10px 10px 8px' : '0 10px 8px' }}>
-                      <MatrixBlock row={row} currency={currency} own diff={null} diffDir={diffDir} onToggleDiffDir={() => setDiffDir((d) => (d === 'comp' ? 'own' : 'comp'))} />
-                      {compGroups.map((g) => {
+                    <div key={row.skuId} style={{ display: 'grid', gridTemplateColumns: compGroups.length > 0 ? `minmax(0, 1.2fr) repeat(${compGroups.length}, minmax(0, 1fr))` : 'minmax(0, 1fr)', borderBottom: index === ownSorted.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
+                      <MatrixCell row={row} currency={currency} own diff={null} diffDir={diffDir} lastCol={compGroups.length === 0} onToggleDiffDir={() => setDiffDir((d) => (d === 'comp' ? 'own' : 'comp'))} />
+                      {compGroups.map((g, gi) => {
                         const comp = g.byOwnRom.find((x) => x.ownRomrams.some((r: string) => r.replace(/\s+/g, '') === row.romram.replace(/\s+/g, ''))) ?? null;
                         let diff = comp?.price != null && row.price != null && row.price > 0 ? comp.price / row.price - 1 : null;
                         if (diff != null && diffDir === 'own') diff = comp?.price ? row.price != null ? row.price / comp.price - 1 : null : null;
-                        return <MatrixBlock key={g.modelId} row={comp} currency={currency} own={false} diff={diff} />;
+                        return <MatrixCell key={g.modelId} row={comp} currency={currency} own={false} diff={diff} lastCol={gi === compGroups.length - 1} />;
                       })}
                     </div>
                   );
