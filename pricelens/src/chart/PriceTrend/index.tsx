@@ -501,7 +501,8 @@ export default function PriceTrend() {
   const panelGridTop = 14;
   // 容器高由 Y 模型派生：格数×TICK_PX×倍率 + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
   const chartHeight = yCfg.plotHeight + gridTop + GRID.bottom;
-  const gridLeft = estGridLeft(yCfg.max, state.currency, yCfg.interval);
+  // 第八十三轮：关「显示 Y 刻度线」时刻度列塌缩，右侧内容左移对齐
+  const gridLeft = estGridLeft(yCfg.max, state.currency, yCfg.interval, showYTicks);
 
   // 分离显示共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
   // 第五十四轮追补②：补上步长滞回 prev——此前缺 prev，季粒度把促销低谷平均掉后
@@ -526,8 +527,8 @@ export default function PriceTrend() {
     return next;
   }, [splitActive, panelViews, state.priceTypes, sliderScale, yCompress, state.currency]);
   const splitGridLeft = useMemo(
-    () => (splitYCfg ? estGridLeft(splitYCfg.max, state.currency, splitYCfg.interval) : gridLeft),
-    [splitYCfg, state.currency, gridLeft],
+    () => (splitYCfg ? estGridLeft(splitYCfg.max, state.currency, splitYCfg.interval, showYTicks) : gridLeft),
+    [splitYCfg, state.currency, gridLeft, showYTicks],
   );
   // 共享轴列的档位带数据（第五十四轮追补⑤）：与面板同一份并集判定「档内有无数据」
   const splitTierValues = useMemo(

@@ -107,6 +107,15 @@ select {
   background: #8f939c;
 }
 
+/* 市场摆位概要产品小卡（第八十三轮）：白底描边卡片；我司可点的卡片悬停亮蓝描边 */
+.lpl-map-card {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+button.lpl-map-card:hover {
+  border-color: #0070f3;
+  box-shadow: 0 2px 8px rgba(0, 112, 243, 0.16);
+}
+
 /* 分离面板头的系列页签行（第七十五轮）：滚动交给两侧提示性小箭头，
    系统滚动条隐藏（页签本体的点击/悬停不受影响）。 */
 .lpl-pill-scroll {

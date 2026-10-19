@@ -149,10 +149,13 @@ export function axisTickGutter(ticks: number[], interval = 0): number {
 
 /** Y 轴总左缘 = [档位带(仅USD)] + 刻度列 + 名称预留带（estGridLeft 沿用旧名；滑杆已移至工具行，不占左缘）。
  *  interval 传入时补采样 max−interval：步长感知的最宽文案（如 62.5K）常在轴中段而非顶点。 */
-export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local', interval = 0): number {
+export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local', interval = 0, showYTicks = true): number {
+  const tierPart = currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0;
+  // 第八十三轮：关闭「显示 Y 刻度线」时刻度列不再占位，绘图区以左内容整体左移
+  if (!showYTicks) return tierPart + NAME_ZONE_W;
   const samples = interval > 0 ? [axisMax / 2, axisMax - interval, axisMax] : [axisMax / 2, axisMax];
   const tickW = axisTickGutter(samples.filter((v) => v > 0), interval);
-  return (currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0) + tickW + NAME_ZONE_W;
+  return tierPart + tickW + NAME_ZONE_W;
 }
 
 // ---------------- Y 轴（第七轮：纯自适应 + 空白压缩分段刻度） ----------------
