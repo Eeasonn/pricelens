@@ -52,8 +52,10 @@ import {
   NAME_ZONE_W,
   estGridLeft,
   TICK_PX,
-  TIER_BAND_GAP,
-  TIER_BAND_W,
+  AXIS_BAND_W,
+  AXIS_GAP,
+  TICK_ZONE_W,
+  TICK_DASH_W,
   computeYAxis,
   perUsdOf,
   xPxOf,
@@ -702,10 +704,11 @@ export default function Chart(props: ChartProps) {
   const brandByKey = useMemo(() => new Map([...series, ...nameAll].map((s) => [s.key, s.brand])), [series, nameAll]);
 
   // ---- DOM 刻度/断轴/档位带数据（纯构建见 chartModel） ----
-  // 左缘布局：[档位带(仅USD)][刻度列][名称预留带][绘图区]（滑杆已移至工具行，不占左缘）
-  const tierPart = currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0;
-  const tickW = geom ? Math.max(34, geom.gridLeft - tierPart - NAME_ZONE_W) : 44;
-  const tierLeft = geom ? geom.gridLeft - NAME_ZONE_W - tickW - TIER_BAND_GAP - TIER_BAND_W : 0;
+  // 左缘布局（第八十六轮定宽）：[档位带(仅USD) 40][刻度文字 44][短横线 6][名称预留带][绘图区]。
+  // 轴区总宽恒定，不随「显示 Y 刻度线」开关变化（开关只控标签/短横线/网格线显隐）；
+  // 档位带盒贴容器左缘（bandLeft = 0），刻度文字右对齐，短横线画在轴区右缘与刻度对齐。
+  const tickZoneRight = geom ? geom.plotLeft - NAME_ZONE_W : 0; // 轴区右缘（短横线起点）
+  const bandLeft = tickZoneRight - TICK_DASH_W - AXIS_GAP - AXIS_BAND_W;
   const tickRows = useMemo(() => buildTickRows(geom), [geom]);
 
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
@@ -840,10 +843,12 @@ export default function Chart(props: ChartProps) {
                   className="tnum"
                   style={{
                     position: 'absolute',
-                    // 第八十四轮：9px 灰字（比档位带小一号、同底部时间轴颜色），
-                    // 左对齐紧贴档位带右缘（tierLeft + 带宽 + 2）
-                    left: geom.plotLeft - NAME_ZONE_W - tickW - TIER_BAND_GAP - TIER_BAND_W + 2,
+                    // 第八十六轮：刻度文字右对齐、贴在档位带右界一侧（9px 灰字，
+                    // 比档位带标签小一号、同底部时间轴颜色）；宽度恒定不随开关变化
+                    left: tickZoneRight - TICK_DASH_W - TICK_ZONE_W,
                     top: Math.round(t.y) - 7,
+                    width: TICK_ZONE_W,
+                    textAlign: 'right',
                     fontSize: 9,
                     lineHeight: '14px',
                     color: color.mute,
@@ -854,6 +859,22 @@ export default function Chart(props: ChartProps) {
                 >
                   {t.text}
                 </div>
+              )}
+              {/* 刻度短横线（第八十六轮）：画在轴区右外侧、与刻度文字/绘图区刻度位对齐，
+                  表达「文字 ↔ 折线位置」关系；随「显示 Y 刻度线」开关显隐（轴宽恒定不变） */}
+              {showYTicks && props.axisChrome !== false && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: tickZoneRight - TICK_DASH_W,
+                    top: Math.round(t.y) - 0.5,
+                    width: TICK_DASH_W,
+                    height: 1,
+                    background: color.hairlineStrong,
+                    pointerEvents: 'none',
+                    zIndex: 1,
+                  }}
+                />
               )}
             </Fragment>
           ))}
@@ -888,7 +909,7 @@ export default function Chart(props: ChartProps) {
                     viewBox="0 0 14 16"
                     style={{
                       position: 'absolute',
-                      left: geom.plotLeft - NAME_ZONE_W - tickW / 2 - 7,
+                      left: tickZoneRight - TICK_DASH_W / 2 - 7,
                       top: geom.plotTop + b - 8,
                       pointerEvents: 'none',
                       zIndex: 2,
@@ -904,7 +925,9 @@ export default function Chart(props: ChartProps) {
             );
           })}
           {/* 档位带（仅 USD）：Y 轴左侧档位框，框住对应刻度区段（如 200~400 框住 200..400）；
-              无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；本币不渲染；图隐藏（空态）时整块消失 */}
+              无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；本币不渲染；图隐藏（空态）时整块消失。
+              第八十六轮：带宽压缩至 40 并贴轴区左缘（bandLeft=0）；「A~B」档位标签换行竖排居中
+              （A / ~ / B），矮档（<38px）退化为单行小字 */}
           {showTierBand &&
             tierBoxes.map((tb, i) => (
               <div
@@ -912,9 +935,9 @@ export default function Chart(props: ChartProps) {
                 title={`价格档位 ${tb.label}（USD）${tb.empty ? '· 当前无产品' : ''}`}
                 style={{
                   position: 'absolute',
-                  left: tierLeft,
+                  left: bandLeft,
                   top: tb.top,
-                  width: TIER_BAND_W,
+                  width: AXIS_BAND_W,
                   height: tb.h,
                   boxSizing: 'border-box',
                   border: tb.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`,
@@ -926,18 +949,35 @@ export default function Chart(props: ChartProps) {
                   zIndex: 1,
                 }}
               >
-                {tb.h >= 16 && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      lineHeight: '12px',
-                      color: tb.empty ? color.mute : color.body,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {tb.label}
-                  </span>
-                )}
+                {(() => {
+                  const parts = tb.label.split('~');
+                  const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tb.label];
+                  const labelColor = tb.empty ? color.mute : color.body;
+                  if (tb.h < 38) {
+                    return tb.h >= 14 ? (
+                      <span style={{ fontSize: 8, lineHeight: '10px', color: labelColor, whiteSpace: 'nowrap' }}>
+                        {tb.label}
+                      </span>
+                    ) : null;
+                  }
+                  return (
+                    <span
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        fontSize: 9,
+                        lineHeight: '12px',
+                        color: labelColor,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {lines.map((ln, k) => (
+                        <span key={`${ln}-${k}`}>{ln}</span>
+                      ))}
+                    </span>
+                  );
+                })()}
               </div>
             ))}
           {/* 最高/最低点标签（第三十六轮，Keepa 式点旁胶囊，不再拉全宽虚线）：

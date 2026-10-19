@@ -53,9 +53,23 @@ export const MIN_WINDOW = 4;
 
 /** 产品名称预留带宽：起点贴近左缘的系列名收进这里（可两行换行），折线永不进入 */
 export const NAME_ZONE_W = 148;
-/** 档位带（仅 USD）宽 + 与刻度列的间距 */
+/** 档位带（仅 USD）宽 + 与刻度列的间距（旧口径；渲染已改用下方固定轴宽常量） */
 export const TIER_BAND_W = 64;
 export const TIER_BAND_GAP = 8;
+// ---------------- 固定轴宽（第八十六轮）：[档位带 40][刻度文字 44][短横线 6] ----------------
+// 宽度恒定、不随「显示 Y 刻度线」开关变化——开关只控刻度标签/短横线/网格线显隐，
+// 彻底消除刻度线有无造成的 Y 轴宽度差异（右侧绘图区空间恒定）。
+/** 档位带宽（压缩值）：档位标签换行竖排（如 800/~/1000 三行居中），盒贴轴区左缘 */
+export const AXIS_BAND_W = 40;
+/** 档位带与刻度文字区间距 */
+export const AXIS_GAP = 4;
+/** Y 轴刻度文字区宽（右对齐，弹性自适应规则显示在档位带右界一侧） */
+export const TICK_ZONE_W = 44;
+/** 刻度短横线宽：画在轴区右外侧、与刻度文字对齐，表示「文字 ↔ 绘图区位置」关系 */
+export const TICK_DASH_W = 6;
+/** 固定轴区总宽（不含名称预留带） */
+export const axisFixedWidth = (currency: CurrencyMode): number =>
+  (currency === 'usd' ? AXIS_BAND_W + AXIS_GAP : 0) + TICK_ZONE_W + TICK_DASH_W;
 
 // ---------------- 断裂轴（空白压缩）阈值设计 ----------------
 // 空白带 = 相邻两簇价格值之间的无人区。压缩条件（三者同时满足才出断轴）：
@@ -150,12 +164,13 @@ export function axisTickGutter(ticks: number[], interval = 0): number {
 /** Y 轴总左缘 = [档位带(仅USD)] + 刻度列 + 名称预留带（estGridLeft 沿用旧名；滑杆已移至工具行，不占左缘）。
  *  interval 传入时补采样 max−interval：步长感知的最宽文案（如 62.5K）常在轴中段而非顶点。 */
 export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local', interval = 0, showYTicks = true): number {
-  const tierPart = currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0;
-  // 第八十三轮：关闭「显示 Y 刻度线」时刻度列不再占位，绘图区以左内容整体左移
-  if (!showYTicks) return tierPart + NAME_ZONE_W;
-  const samples = interval > 0 ? [axisMax / 2, axisMax - interval, axisMax] : [axisMax / 2, axisMax];
-  const tickW = axisTickGutter(samples.filter((v) => v > 0), interval);
-  return tierPart + tickW + NAME_ZONE_W;
+  // 第八十六轮：轴区宽度恒定（固定档位带+刻度文字+短横线），不再随「显示 Y 刻度线」
+  // 开关伸缩——开关只控标签/短横线/网格线显隐，右侧绘图区空间恒定。
+  // axisMax/interval/showYTicks 参数保留（调用方契约不变），不再参与宽度计算。
+  void axisMax;
+  void interval;
+  void showYTicks;
+  return axisFixedWidth(currency) + NAME_ZONE_W;
 }
 
 // ---------------- Y 轴（第七轮：纯自适应 + 空白压缩分段刻度） ----------------
@@ -533,9 +548,11 @@ export function bucketLatestWeekLabel(g: Granularity, bucketId: string): string 
  *  刻度列），非 USD = 仅刻度列；不开刻度且无档位带时为 0。面板 gridLeft=0 后，
  *  主图 gridLeft 里的名称预留带（NAME_ZONE_W）不再摊在轴列里，宽度全部让给卡片。 */
 export function splitAxisWidth(currency: CurrencyMode, gridLeft: number, showYTicks: boolean): number {
-  const tierPart = currency === 'usd' ? TIER_BAND_W + TIER_BAND_GAP : 0;
-  if (!showYTicks) return currency === 'usd' ? TIER_BAND_W : 0;
-  return tierPart + Math.max(34, gridLeft - tierPart - NAME_ZONE_W);
+  // 第八十六轮：固定轴宽（档位带+刻度文字+短横线），与主图 estGridLeft 同口径，
+  // 不随「显示 Y 刻度线」开关伸缩；gridLeft/showYTicks 参数保留（调用方契约不变）。
+  void gridLeft;
+  void showYTicks;
+  return axisFixedWidth(currency);
 }
 
 /** 周 id → 当前粒度桶 id（追补⑧：总览下钻焦点周跨粒度换算——总览迷你图是周度序列，
