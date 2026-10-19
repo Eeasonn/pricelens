@@ -18,6 +18,8 @@ import type { ProductSelection } from '../../state/filtersTypes';
 import type { CurrencyMode } from '../../dataModel/types';
 import { CascadePanel, type CascadeRowItem } from '../ProductCascader';
 import { getFxRate } from '../../state/fx';
+import { getEffectiveBenchmark } from '../../state/configStore';
+import { dimProduct } from '../../data';
 
 // ---------------- ① 产业下拉（反馈 2.1） ----------------
 
@@ -174,6 +176,53 @@ function ColorFlyout({
 
 // 已选标签内容用 displayRender 定制（multiple 模式下它就是每个标签的文案；
 // 注意 tagRender 拿到的 value 是 rc-cascader 拼接后的标量 key，不是路径，不可用）。
+
+/** 对标预览列（仅我司级联）：跟随展开/悬停的型号，带出该产品在生效矩阵中的对标竞品
+ *  名单（★=主竞品）；未配置时给一句说明。与颜色浮层互斥——浮层打开时宽度让位。 */
+function BenchPreview({ modelLabel, items }: { modelLabel: string; items: { key: string; name: string; primary: boolean }[] }) {
+  return (
+    <div
+      style={{
+        width: 196,
+        boxSizing: 'border-box',
+        flexShrink: 0,
+        borderLeft: `1px solid ${color.hairline}`,
+        background: color.canvas,
+        padding: '10px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
+        对标竞品
+        <span style={{ fontWeight: 400, color: color.mute }}> · {modelLabel}</span>
+      </div>
+      {items.length ? (
+        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', overflowY: 'auto', maxHeight: 284 }}>
+          {items.map((it) => (
+            <div
+              key={it.key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                lineHeight: '26px',
+                color: color.body,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {it.primary && <span style={{ color: '#b45309', flexShrink: 0 }}>★</span>}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ marginTop: 6, fontSize: 11, lineHeight: '16px', color: color.mute }}>该产品尚未配置对标竞品</div>
+      )}
+    </div>
+  );
+}
 
 /** Cascader owns the selected tags; CascadePanel owns the open three-column path. */
 function ProductCascadeControl({
@@ -386,6 +435,29 @@ function ProductCascadeControl({
     };
   });
 
+  // 对标预览名单：跟随当前展开/悬停的型号（activePath 由行悬停驱动，无需新增交互态），
+  // 按生效对标矩阵取该型号全部映射竞品，★ 主竞品置顶，同竞品多配置合并展示
+  const benchItems = useMemo(() => {
+    if (kind !== 'own' || productLevel || !model) return [];
+    const seen = new Map<string, { key: string; name: string; primary: boolean }>();
+    for (const b of getEffectiveBenchmark()) {
+      if (b.own_model_id !== model.modelId) continue;
+      const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
+      if (!p) continue;
+      const prev = seen.get(p.sku_id);
+      if (prev) {
+        if (b.sort === 1) prev.primary = true;
+        continue;
+      }
+      seen.set(p.sku_id, {
+        key: p.sku_id,
+        name: `${modelNameOf(p.sku_id.split('__')[0])} ${shortRomram(p.romram)}`.trim(),
+        primary: b.sort === 1,
+      });
+    }
+    return [...seen.values()].sort((a, b) => Number(b.primary) - Number(a.primary));
+  }, [kind, productLevel, model]);
+
   return (
     <Cascader
       style={{ width: '100%' }}
@@ -409,7 +481,9 @@ function ProductCascadeControl({
             { width: 190, items: modelItems },
             { width: 190, items: leafItems },
           ]} />
-          {colorPanelNode}
+          {/* 颜色浮层打开时占住右侧位，对标预览让位（二者互斥控宽） */}
+          {colorPanelNode ??
+            (kind === 'own' && !productLevel && model ? <BenchPreview modelLabel={model.label} items={benchItems} /> : null)}
         </div>
       )}
       onOpenChange={(open) => {

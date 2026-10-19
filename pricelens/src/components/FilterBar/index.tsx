@@ -49,6 +49,7 @@ export default function FilterBar({ onBack }: { onBack: () => void }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30 }}>
             <ScopeFields />
             <div style={{ flex: '1 1 285px', minWidth: 0 }}><Field label="我司产品"><OwnProductControl /></Field></div>
+            <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: color.mute }}>vs</span>
             <div style={{ flex: '1 1 290px', minWidth: 0 }}><Field label="竞品"><ComparisonControl /></Field></div>
             <button
               type="button" onClick={onBack} title="返回总览页并定位到该产品行组"
