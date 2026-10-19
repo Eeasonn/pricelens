@@ -1,16 +1,16 @@
 // ============================================================
-// 共享页头（预警中心重构）：四页统一 64px 铬架——左 = PriceLens · 页名；
-// 右 = 🔔预警（Badge = 触发条数）+ 页签按钮组（当前页 primary 高亮）。
-// 历史上四页各手写一份 header（预警页副本漏挂 AlertNavButton、按钮顺序还不同），
-// 收编到本组件后一次修正；配置页的「保存配置」走 extra 插槽。
+// 共享页头（预警中心重构）：四页统一 64px 铬架——左 = PriceLens · 分析模式页签
+// （单国家 = 现行形态；区域分析 = 多国对比的扩展方向，置灰）+ 国家选择器
+// （从各页筛选条收除，全站唯一入口在页签组）；右 = 🔔预警（Badge = 触发条数）
+// + 页签按钮组（当前页 primary 高亮）。配置页的「保存配置」走 extra 插槽。
 // ============================================================
 import type { ReactNode } from 'react';
-import { Button } from 'antd';
+import { Button, ConfigProvider, Tooltip } from 'antd';
 import { usePage, type Page } from '../state/PageContext';
-import { useFilters } from '../state/FiltersContext';
-import { scopeLabels } from '../dataModel/scope';
+import { filterBarTheme } from './FilterBar';
+import CountryBox from './FilterBar/CountryBox';
 import { AlertNavButton } from './AlertCenter';
-import { color, fontSize, shadow, space } from '../theme/tokens';
+import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
 const TABS: { page: Page; label: string }[] = [
   { page: 'overview', label: '总览' },
@@ -19,10 +19,8 @@ const TABS: { page: Page; label: string }[] = [
   { page: 'alerts', label: '预警' },
 ];
 
-export default function PageHeader({ title, extra }: { title: string; extra?: ReactNode }) {
+export default function PageHeader({ extra }: { title?: string; extra?: ReactNode }) {
   const { go, page } = usePage();
-  const { state } = useFilters();
-  const { region, country } = scopeLabels(state);
   return (
     <header
       style={{
@@ -36,9 +34,39 @@ export default function PageHeader({ title, extra }: { title: string; extra?: Re
         padding: `0 ${space.lg}px`,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: space.md }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
         <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
-        <span style={{ fontSize: fontSize.caption, color: color.mute }}>{region} / {country} · {title}</span>
+        {/* 分析模式页签：国家口径并入此处，各页筛选条不再重复国家框 */}
+        <span
+          aria-current="true"
+          style={{
+            display: 'inline-flex', alignItems: 'center', height: 28, padding: '0 12px',
+            borderRadius: radius.pill, fontSize: fontSize.caption, fontWeight: 600,
+            color: selectSoftInk, background: selectSoft, border: `1px solid ${selectAccent}`,
+          }}
+        >
+          单国家分析
+        </span>
+        <Tooltip title="多国区域对比（规划方向）">
+          <span
+            aria-disabled="true"
+            title="多国区域对比（规划方向）"
+            style={{
+              display: 'inline-flex', alignItems: 'center', height: 28, padding: '0 12px',
+              borderRadius: radius.pill, fontSize: fontSize.caption, fontWeight: 600,
+              color: color.hairlineStrong, background: color.canvas, border: `1px solid ${color.hairline}`,
+              cursor: 'not-allowed',
+            }}
+          >
+            区域分析
+          </span>
+        </Tooltip>
+        <span aria-hidden style={{ width: 1, height: 22, background: color.hairline }} />
+        <ConfigProvider theme={filterBarTheme}>
+          <div style={{ width: 190 }}>
+            <CountryBox />
+          </div>
+        </ConfigProvider>
       </div>
       <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
         <AlertNavButton />

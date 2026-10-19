@@ -36,7 +36,6 @@ import ScopeFields from '../components/FilterBar/ScopeFields';
 import PlatformBox from '../components/FilterBar/PlatformBox';
 import CurrencyBox from '../components/FilterBar/CurrencyBox';
 import { OwnProductControl } from '../components/FilterBar/ProductBox';
-import { dimChannel } from '../data';
 import { getEffectiveBenchmark } from '../state/configStore';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import PageHeader from '../components/PageHeader';
@@ -927,27 +926,6 @@ export default function Overview() {
   const compStatus = useMemo(() => resolveCompExpansion(visibleModelIds, compExpansion), [visibleModelIds, compExpansion]);
   // 第七十轮：产品级折叠走同一套规则——单产品可见 = 自动展开，多产品 = 默认收起
   const prodStatus = useMemo(() => resolveCompExpansion(visibleModelIds, productExpansion), [visibleModelIds, productExpansion]);
-  const nextAllExpanded = !prodStatus.allExpanded;
-  const visibleOwnCount = visibleBands.reduce((total, x) => total + x.ownModels.length, 0);
-  const hasViewFilter = prodSel.length > 0 || selTiers.length > 0;
-
-  const asOf = useMemo(() => {
-    let w = '';
-    for (const b of bands) for (const m of b.models) for (const r of m.rows) if (r.asOfWeek > w) w = r.asOfWeek;
-    return w === '' ? '—' : `${w.slice(0, 4)}-W${w.slice(4)}`;
-  }, [bands]);
-  // 口径条平台文案（第五十一轮）：随筛选行平台选择联动（与看板共享 state.platform）
-  const platformLabel = useMemo(() => {
-    const sel = state.platform;
-    if (!sel || (sel.platforms.length === 0 && sel.shopIds.length === 0)) return '全部平台';
-    const shopNameById = new Map(dimChannel.map((c) => [c.shop_id, c.shop_name]));
-    return [...sel.platforms, ...sel.shopIds.map((id) => shopNameById.get(id) ?? id)].join('、');
-  }, [state.platform]);
-  const counts = useMemo(() => {
-    const ms = bands.flatMap((b) => b.models);
-    const ownModels = ms.filter((m) => m.isOwn);
-    return { all: ms.length, own: ownModels.length, comp: ms.length - ownModels.length };
-  }, [bands]);
 
   /** 粗粒度市场图 → 细粒度明细：先展开目标产品，再把用户带到对应产品条。 */
   const focusProduct = (model: OverviewModel): void => {
@@ -986,7 +964,7 @@ export default function Overview() {
 
   // 追补⑨：总览「预警」列——按系列聚合触发（预警中心重构：收编为 alerts.ts 纯函数，
   // own-gap 同时归属低价档与高价档，与预警页矩阵同源）。第五十五轮：铃铛统一进预警格
-  const { country, industry } = scopeLabels(state);
+  const { industry } = scopeLabels(state);
   const alertCellFor = (skuId: string | undefined): ReactNode => {
     if (!skuId) return null;
     const key = seriesKeyOfSku(skuId);
@@ -1101,41 +1079,10 @@ export default function Overview() {
 
         <main style={{ flex: 1, padding: `${space.md}px ${space.lg}px ${space.lg}px` }}>
           <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.md }}>
-            {/* 口径条：国家层面上下文 + 币种 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>{country} · {industry}竞品矩阵</span>
-              <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-                平台 {platformLabel} · 在售型号 {counts.all}（我司 {counts.own} / 竞品 {counts.comp}）
-              </span>
-              {hasViewFilter && (
-                <span style={{ fontSize: fontSize.caption, color: selectSoftInk }}>
-                  当前显示我司 {visibleOwnCount} / 全量 {counts.own}
-                </span>
-              )}
-              <span style={{ flex: 1 }} />
-              {/* 第七十轮：全局开关升产品级——收起 = 只看产品条列表，展开 = 全部进配置明细
-                  （竞品级开关保留在产品条上）；默认规则：单产品自动展开、多产品收起 */}
-              <button
-                type="button"
-                disabled={visibleModelIds.length === 0}
-                aria-expanded={prodStatus.allExpanded}
-                title={nextAllExpanded ? '展开全部产品到配置明细' : '收起全部产品，只看产品列表'}
-                onClick={() => setAllProductsExpanded(visibleModelIds, nextAllExpanded)}
-                style={{
-                  minHeight: 24, padding: '0 10px', borderRadius: radius.control,
-                  border: `1px solid ${visibleModelIds.length === 0 ? color.hairline : color.hairlineStrong}`,
-                  background: color.canvas, color: visibleModelIds.length === 0 ? color.hairlineStrong : color.body,
-                  font: 'inherit', fontSize: 12, cursor: visibleModelIds.length === 0 ? 'default' : 'pointer', whiteSpace: 'nowrap',
-                }}
-              >
-                {nextAllExpanded ? '展开全部产品' : '收起全部产品'}
-              </button>
-            </div>
-
             <MarketMap
               models={bands.flatMap((b) => b.models)}
               currency={currency}
-              asOf={asOf}
+              industryLabel={industry}
               onOpenProduct={focusProduct}
               selectedModelId={selectedModelId}
             />

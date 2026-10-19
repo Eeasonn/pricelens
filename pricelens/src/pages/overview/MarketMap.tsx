@@ -1,6 +1,7 @@
-import { HolderOutlined } from '@ant-design/icons';
+import { HolderOutlined, ExclamationCircleFilled } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
+import { Tooltip } from 'antd';
 import type { CurrencyMode } from '../../dataModel/types';
 import type { OverviewModel } from '../../dataModel/aggregate';
 import { bucketLatestWeekLabel, tierLabelShort } from '../../chart/PriceTrend/helpers';
@@ -11,7 +12,8 @@ export interface MarketMapProps {
   /** 全市场型号（我司+竞品矩阵全量）：摆位只看真实现价，不依赖竞品匹配关系（第七十七轮）。 */
   models: OverviewModel[];
   currency: CurrencyMode;
-  asOf: string;
+  /** 产业显示名（标题前段：手机 · 市场摆位） */
+  industryLabel: string;
   /** 点击我司产品，展开并滚到底下同一产品的明细；竞品仅为市场摆位参考，不可点。 */
   onOpenProduct: (model: OverviewModel) => void;
   selectedModelId?: string | null;
@@ -139,7 +141,13 @@ const MARKET_TIERS: [number, number, string][] = [
  * 不依赖竞品匹配关系。第八十一轮：价位轴域裁到数据范围 ±4%（消顶部/底部大段空档）、
  * 刻度与档位带按同一映射就地生成；产品小卡带现价与采集周。
  */
-export default function MarketMap({ models, currency, asOf, onOpenProduct, selectedModelId }: MarketMapProps) {
+export default function MarketMap({ models, currency, industryLabel, onOpenProduct, selectedModelId }: MarketMapProps) {
+  // 标题括号内 = 全图最新采集周锚日（与卡片右上角采集日期同口径）
+  const latestDate = useMemo(() => {
+    let w = '';
+    for (const m of models) for (const r of m.rows) if (r.asOfWeek > w) w = r.asOfWeek;
+    return w ? bucketLatestWeekLabel('week', w) ?? '' : '';
+  }, [models]);
   const market = useMemo(
     () => models
       .map((model) => ({ model, price: modelPrice(model) }))
@@ -283,17 +291,18 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
   return (
     <section aria-label="市场摆位概要" style={{ marginTop: space.md, padding: space.md, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>市场摆位概要</h2>
-        <span style={{ fontSize: 11, color: color.mute }}>数据截至 {asOf} · 当前价</span>
+        <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: color.ink }}>
+          {industryLabel} · 市场摆位
+          {latestDate && <span style={{ fontWeight: 400 }}>（{latestDate}）</span>}
+        </h2>
+        {/* 操作提示收进警示图标（用户反馈：两行常驻文案太吵） */}
+        <Tooltip title={<span>拖动品牌列头可调整列顺序（自动记住）<br />每屏最多 {MAX_VISIBLE_BRAND_COLUMNS + 1} 个品牌列，更多品牌可横向滚动</span>}>
+          <ExclamationCircleFilled style={{ color: '#faad14', fontSize: 14, cursor: 'help', transform: 'translateY(-1px)' }} />
+        </Tooltip>
         <span style={{ flex: 1 }} />
         <span className="tnum" style={{ fontSize: 12, color: color.body }}>我司产品 <strong style={{ color: color.ink, fontSize: 16 }}>{ownCount}</strong></span>
         <span style={{ color: color.hairlineStrong }}>·</span>
         <span className="tnum" style={{ fontSize: 12, color: color.body }}>市场竞品 <strong style={{ color: color.ink, fontSize: 16 }}>{compCount}</strong></span>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-        <span style={{ color: color.mute, fontSize: 11 }}>拖动品牌列头可调整列顺序（自动记住）</span>
-        <span style={{ color: color.mute, fontSize: 10.5 }}>每屏最多 {MAX_VISIBLE_BRAND_COLUMNS + 1} 个品牌列，更多品牌可横向滚动</span>
       </div>
 
       <div style={{ marginTop: 10, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
