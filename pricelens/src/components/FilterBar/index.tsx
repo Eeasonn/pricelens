@@ -4,6 +4,7 @@ import type { ThemeConfig } from 'antd';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import { AutoMatchControl, CompetitorControl, OwnProductControl } from './ProductBox';
 import ScopeFields from './ScopeFields';
+import { useFilters } from '../../state/FiltersContext';
 
 /** Also used by the overview's product controls. */
 export const filterBarTheme: ThemeConfig = {
@@ -28,9 +29,12 @@ function Field({ label, width, children }: { label: string; width?: number; chil
 }
 
 function ComparisonControl() {
+  const { state } = useFilters();
+  // 第八十五轮：未选我司产品时自动匹配无锚点（空转）→ 整体隐藏，竞品池自由勾选
+  const ownSelected = state.own.length > 0;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-      <AutoMatchControl />
+      {ownSelected && <AutoMatchControl />}
       <div style={{ flex: 1, minWidth: 0 }}><CompetitorControl /></div>
     </div>
   );

@@ -86,7 +86,7 @@ export default function Dashboard() {
               }}
             >
               {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
-              <PriceTrend />
+              <PriceTrend onBackToOverview={backToOverview} />
             </section>
           </div>
         </main>

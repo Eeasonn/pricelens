@@ -77,8 +77,12 @@ import PromoDrawer from './PromoDrawer';
 import PointPanel from './PointPanel';
 import SplitScrollBar from './SplitScrollBar';
 
-export default function PriceTrend() {
+export default function PriceTrend(props: { /** 第八十五轮：竞品-only 引导带里「去总览配置对标」的回跳 */ onBackToOverview?: () => void } = {}) {
   const { state, actions } = useFilters();
+  // 第八十五轮 视角语义：竞品-only（无我司有竞品）与 无对标（有我司无竞品）
+  const compOnly = state.own.length === 0 && state.competitors.length > 0;
+  const noComp = state.own.length > 0 && state.competitors.length === 0;
+  const compModelCount = new Set(state.competitors.map((c) => c.modelId)).size;
 
   // ---- 图表内部状态 ----
   const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值；松手才提交）
@@ -624,10 +628,11 @@ export default function PriceTrend() {
         }}
       >
         <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>
-          价格走势
-          <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>
-            （{entryModelId ? modelNameOf(entryModelId) : '我司的这个产品'}）
-          </span>
+          {compOnly ? (
+            <>竞品价格走势<span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>（{compModelCount} 款）</span></>
+          ) : (
+            <>价格走势{entryModelId && <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>（{modelNameOf(entryModelId)}）</span>}</>
+          )}
         </h2>
         {/* ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：checkbox 样式，至少保留一个选中；
             autoMatch 开时竞品随勾选 ROM 的配置矩阵并集自动跟随 */}
@@ -688,6 +693,41 @@ export default function PriceTrend() {
           </div>
         )}
       </div>
+
+      {/* 降级状态引导带（第八十五轮）：竞品-only / 无对标 两种状态各给一句出口，
+          不堵死场景但保持「我司主线」的默认叙事 */}
+      {(compOnly || noComp) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            marginBottom: space.sm,
+            padding: '6px 12px',
+            border: `1px solid ${color.hairline}`,
+            borderRadius: radius.control,
+            background: color.canvasSoft,
+            fontSize: 12,
+            color: color.body,
+          }}
+        >
+          {compOnly && (
+            <span>未选择我司产品 · 当前为竞品对比视角；在上方筛选器选择我司产品后可进行对标分析</span>
+          )}
+          {noComp && (
+            <>
+              <span>未配置对标竞品 · 当前仅展示自身走势</span>
+              <button
+                type="button"
+                onClick={props.onBackToOverview}
+                style={{ border: 0, background: 'transparent', color: color.link, font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+              >
+                去总览配置对标 →
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 图主体 + 图右缘时点面板（第五十六轮再版，用户拍板）：flex 行 =
           [图列 flex1][书签带 / 336px 内嵌面板]——时点摘要锚在图右侧（它就是图右缘
