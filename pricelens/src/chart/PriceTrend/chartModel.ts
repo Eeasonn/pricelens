@@ -49,8 +49,6 @@ export const ZONE_LINE_H = 16;
 /** 生命周期第二行占高（第三十二轮）：11px 字号 13px 行高 + 行距 1——
  *  必须计入名称避让盒，否则相邻名称互压 ~14px（用户底线：名称互不遮挡） */
 export const LIFECYCLE_ROW_H = 14;
-/** 来源链接第二行高（第五十九轮：名称下方常驻「店铺名 ↗」链接，跳转入口直显目的地） */
-export const SOURCE_ROW_H = 13;
 /** 聚焦模式阈值（第三十二轮）：系列数 > 阈值时图面名称/生命周期行退场，
  *  识别走「悬停折线高亮单系列」+ 钉顶图例卡——0 个常驻名称 = 0 遮挡 */
 export const FOCUS_MODE_THRESHOLD = 8;
@@ -113,7 +111,7 @@ export function buildGeom(p: {
 }): Geom | null {
   const n = p.series[0]?.points.length ?? 0;
   if (!p.width || p.width < 160 || n === 0 || p.totalH < 160) return null;
-  const gl = p.gridLeft ?? estGridLeft(p.scale.max, p.currency, p.scale.interval);
+  const gl = p.gridLeft ?? estGridLeft(p.currency);
   if (gl + GRID.right > p.width - 48) return null;
   return {
     gridLeft: gl,
@@ -186,12 +184,11 @@ export function buildLabelPlan(p: {
   priceTypes: PriceTypes;
   /** 端点标记（第二十轮）：S/E 点即使不是首末/极值（段中截止的 E）也必放数值标签 */
   endpointMarks: Map<string, SeriesMark>;
-  /** 该系列是否渲染「生命周期 −X%」第二行（季粒度；第三十二轮起计入避让盒） */
+  /** 该系列是否渲染「生命周期 −X%」第二行（季粒度；第三十二轮起计入名称避让盒） */
   lifecycleRow?: (seriesKey: string) => boolean;
-  /** 该系列是否渲染来源链接第二行（第五十九轮；计入避让盒，计划盒 = 渲染盒） */
-  sourceRow?: (seriesKey: string) => boolean;
   /** 第七十四轮（分离显示）：true = 系列名全部固定进左侧名称预留带（空白带），
-   *  不再锚在各折线起点旁随窗口漂移；纵向仍按起点高度避让排布 */
+   *  不锚在各折线起点旁。第九十轮起名称带内改**等距分布**：按起点高度排序后
+   *  均分槽位、整组在绘图区纵向居中（不再逐个避让推挤，名称塔不溢出） */
   forceNameZone?: boolean;
   /** 第八十二轮：折线已屏蔽、但仍需名称药丸的系列（只生成名称项，无数值标签）；
    *  与 series 中的同 key 项以后者为准 */
@@ -202,6 +199,7 @@ export function buildLabelPlan(p: {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
   const items: AvoidItem[] = [];
+  const zoneItems: AvoidItem[] = [];
   const nameW = (t: string): number => NAME_LOGO_W + t.length * (11 * 0.62) + 6;
   const priceW = (t: string): number => t.length * (fontSize.bodySm * 0.62) + 8;
   // 多系列（超聚焦阈值）：最大/最小从必放降为候选——必放项只保留首/末/S/E
@@ -269,10 +267,10 @@ export function buildLabelPlan(p: {
       if (change.has(i)) pushPrice(i, false, mk ? endpointLabelDistance(mk) : LABEL_DISTANCE);
     });
   }
-  // 系列名称小药丸（第八十二轮再版）：顶部图例页签同款——品牌点+型号名，统一
-  // 灰字不取品牌色；点击 = 切换折线显隐（取代上方页签）。位置：名称预留带内
-  // （forceNameZone）或起点旁；锚点纵向居中。块高 = 药丸（行高×行数+内边距 6）
-  // + 来源链接（斜体，挂药丸下方）+ 生命周期行；避让盒 = 渲染盒。
+  // 系列名称小药丸（第八十二轮再版）：品牌点+型号名，统一灰字；点击 = 切换折线
+  // 显隐（取代上方页签）。第九十轮：来源链接行删除（跳转入口收编）；
+  // 名称带（forceNameZone）模式改为等距分布——先收集条目，最后统一排布，
+  // 不再进 resolveCollisions 推挤。
   const pushNameItem = (s: Series, hidden: boolean): void => {
     const pts = s.points;
     const valIdx: number[] = [];
@@ -287,38 +285,68 @@ export function buildLabelPlan(p: {
     const nameText = curveNameOf(s);
     const nw = nameW(nameText);
     const zoneLeft = geom.plotLeft - NAME_ZONE_W + 4;
-    const besideLeft = px - 8 - nw;
-    const useZone = p.forceNameZone === true || besideLeft < zoneLeft;
     const zoneBoxW = Math.min(nw, NAME_ZONE_W - 8);
-    const zoneLines = nw > NAME_ZONE_W - 8 ? 2 : 1;
-    const baseH = zoneLines * ZONE_LINE_H + 6; // 药丸内边距上下各 3
+    const baseH = ZONE_LINE_H + 6; // 药丸单行（名称带恒单行）+ 内边距上下各 3
     const fullH =
-      baseH +
-      (p.sourceRow?.(s.key) ? SOURCE_ROW_H + 1 : 0) +
-      (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
-    items.push({
+      baseH + (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
+    const item: AvoidItem = {
       kind: 'name',
       seriesKey: s.key,
       pointIdx: fi,
       pinned: true,
-      left: useZone ? zoneLeft : besideLeft,
-      right: useZone ? zoneLeft + zoneBoxW : px - 8,
+      left: zoneLeft,
+      right: zoneLeft + zoneBoxW,
       top: py - fullH / 2,
       h: fullH,
       text: nameText,
       color: s.color,
-      maxW: useZone ? zoneBoxW : undefined,
+      maxW: zoneBoxW,
       anchorX: px,
       anchorY: py,
       hidden: hidden || undefined,
-    });
+    };
+    if (p.forceNameZone === true) zoneItems.push(item);
+    else {
+      const besideLeft = px - 8 - nw;
+      const useZone = besideLeft < zoneLeft;
+      items.push({
+        ...item,
+        left: useZone ? zoneLeft : besideLeft,
+        right: useZone ? zoneLeft + zoneBoxW : px - 8,
+        maxW: useZone ? zoneBoxW : undefined,
+      });
+    }
   };
   for (const s of series) pushNameItem(s, p.hiddenKeys?.has(s.key) ?? false);
   for (const s of p.nameOnlySeries ?? []) {
     if (!series.some((v) => v.key === s.key)) pushNameItem(s, true);
   }
   const res = resolveCollisions(items, geom.plotTop);
-  return { dy: res.dy, names: res.names };
+  let names = res.names;
+  // 名称带等距分布（第九十轮）：按起点高度排序（名称顺序与折线位置一致，引线不交叉），
+  // 槽位均分绘图区高度、整组纵向居中；槽位下限 = 药丸高 + 呼吸（超多系列时对称外溢）
+  if (p.forceNameZone === true && zoneItems.length > 0) {
+    const sorted = [...zoneItems].sort((a, b) => a.anchorY! - b.anchorY!);
+    const minSlot = Math.max(...sorted.map((e) => e.h)) + 4;
+    const slot = Math.max(minSlot, geom.plotHeight / sorted.length);
+    const total = slot * sorted.length;
+    const y0 = geom.plotTop + Math.max(0, (geom.plotHeight - total) / 2);
+    names = sorted.map((e, i) => ({
+      x: e.left,
+      y: y0 + slot * i + (slot - e.h) / 2,
+      w: e.right - e.left,
+      h: e.h,
+      dy: 0,
+      text: e.text,
+      color: e.color,
+      seriesKey: e.seriesKey,
+      maxW: e.maxW,
+      anchorX: e.anchorX ?? e.left,
+      anchorY: e.anchorY ?? e.top,
+      hidden: e.hidden,
+    }));
+  }
+  return { dy: res.dy, names };
 }
 
 // ---------------- ECharts option（值轴隐藏，数据喂归一化伪值） ----------------

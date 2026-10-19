@@ -20,7 +20,7 @@ exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + �
   },
   "names": [
     {
-      "anchorX": 880.7222222222223,
+      "anchorX": 867.5,
       "anchorY": 322.0730717185386,
       "color": "#c7000b",
       "dy": 0,
@@ -30,11 +30,11 @@ exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + �
       "seriesKey": "own-pura-90s-pro-max__12+256GB",
       "text": "Pura 90s Pro Max 12+256",
       "w": 174.86,
-      "x": 697.8622222222223,
+      "x": 684.64,
       "y": 311.0730717185386,
     },
     {
-      "anchorX": 344.6111111111111,
+      "anchorX": 312.5,
       "anchorY": 154.35375,
       "color": "#1d1d1f",
       "dy": 0,
@@ -44,7 +44,7 @@ exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + �
       "seriesKey": "cmp-iphone-17-pro__12+256GB",
       "text": "iPhone 17 Pro 12+256",
       "w": 154.4,
-      "x": 182.21111111111108,
+      "x": 150.1,
       "y": 143.35375,
     },
   ],

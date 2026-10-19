@@ -65,14 +65,14 @@ export const TIER_BAND_GAP = 8;
 // [档位区块 = 档位文字(居左) | 灰竖线 | 刻度文字(右对齐，叠画在区块上)][短横线]
 // 宽度恒定、不随「显示 Y 刻度线」开关变化——开关只控刻度标签/短横线/网格线显隐，
 // 彻底消除刻度线有无造成的 Y 轴宽度差异（右侧绘图区空间恒定）。
-/** 档位文字区宽（单行居左；「800~1000」9px 最宽 ~42px） */
-export const TIER_LABEL_W = 52;
+/** 档位文字区宽（三行竖排「800/~/1000」居中；最宽行 9px×4 字符 ≈22px） */
+export const TIER_LABEL_W = 30;
 /** 档位区块总宽：档位文字 | 竖线分隔 | 刻度文字区（刻度覆盖在区块背景上） */
-export const AXIS_BAND_W = TIER_LABEL_W + 1 + 44;
+export const AXIS_BAND_W = TIER_LABEL_W + 1 + 32;
 /** 档位带与刻度文字区间距（旧口径；第八十九轮起两者同处一个区块，由竖线分隔） */
 export const AXIS_GAP = 0;
-/** Y 轴刻度文字区宽（右对齐；USD 时位于档位区块右段、叠在区块背景上） */
-export const TICK_ZONE_W = 44;
+/** Y 轴刻度文字区宽（右对齐 8px 字号，最宽「1.05K」≈23px；USD 时位于档位区块右段） */
+export const TICK_ZONE_W = 32;
 /** 刻度短横线宽：画在轴区右外侧、与刻度文字对齐，表示「文字 ↔ 绘图区位置」关系 */
 export const TICK_DASH_W = 6;
 /** 固定轴区总宽（不含名称预留带）：USD = 档位区块（含刻度区）+ 短横线；非 USD = 刻度文字区 + 短横线 */
@@ -169,15 +169,10 @@ export function axisTickGutter(ticks: number[], interval = 0): number {
   return Math.max(34, Math.round(chars * 7.2) + 12);
 }
 
-/** Y 轴总左缘 = [档位带(仅USD)] + 刻度列 + 名称预留带（estGridLeft 沿用旧名；滑杆已移至工具行，不占左缘）。
- *  interval 传入时补采样 max−interval：步长感知的最宽文案（如 62.5K）常在轴中段而非顶点。 */
-export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local', interval = 0, showYTicks = true): number {
-  // 第八十六轮：轴区宽度恒定（固定档位带+刻度文字+短横线），不再随「显示 Y 刻度线」
-  // 开关伸缩——开关只控标签/短横线/网格线显隐，右侧绘图区空间恒定。
-  // axisMax/interval/showYTicks 参数保留（调用方契约不变），不再参与宽度计算。
-  void axisMax;
-  void interval;
-  void showYTicks;
+/** Y 轴总左缘 = [档位区块(仅USD)] + 短横线 + 名称预留带（estGridLeft 沿用旧名；滑杆已移至工具行，不占左缘）。
+ *  第九十轮：签名收敛为 (currency)——轴区宽度恒定，「显示 Y 刻度线」开关已删（Y 轴恒显），
+ *  axisMax/interval/showYTicks 旧参数一并移除。 */
+export function estGridLeft(currency: CurrencyMode = 'local'): number {
   return axisFixedWidth(currency) + NAME_ZONE_W;
 }
 
@@ -555,14 +550,9 @@ export function bucketLatestWeekLabel(g: Granularity, bucketId: string): string 
   return best ? best.week_wed_date.slice(5) : null;
 }
 
-/** 分离共享轴列宽（第五十四轮追补⑤）：只含实际轴元素——USD = 档位带（+开刻度时的
- *  刻度列），非 USD = 仅刻度列；不开刻度且无档位带时为 0。面板 gridLeft=0 后，
- *  主图 gridLeft 里的名称预留带（NAME_ZONE_W）不再摊在轴列里，宽度全部让给卡片。 */
-export function splitAxisWidth(currency: CurrencyMode, gridLeft: number, showYTicks: boolean): number {
-  // 第八十六轮：固定轴宽（档位带+刻度文字+短横线），与主图 estGridLeft 同口径，
-  // 不随「显示 Y 刻度线」开关伸缩；gridLeft/showYTicks 参数保留（调用方契约不变）。
-  void gridLeft;
-  void showYTicks;
+/** 分离共享轴列宽（第五十四轮追补⑤）：只含实际轴元素——USD = 档位区块（含刻度区）+
+ *  短横线，非 USD = 刻度文字区 + 短横线；与主图 estGridLeft 同口径（第九十轮签名收敛）。 */
+export function splitAxisWidth(currency: CurrencyMode): number {
   return axisFixedWidth(currency);
 }
 

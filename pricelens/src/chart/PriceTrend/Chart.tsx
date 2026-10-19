@@ -34,7 +34,7 @@
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover } from 'antd';
-import { ExportOutlined, TagOutlined } from '@ant-design/icons';
+import { TagOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -43,7 +43,7 @@ import { GridComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
-import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
+import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, font, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import {
@@ -159,12 +159,9 @@ export interface ChartProps {
   /** 图顶工具行中间的系列页签；用于把图例从时间区域上移到工具行中央。 */
   legend?: ReactNode;
   /** 轴列绘制（第五十四轮追补⑤）：false = 面板不画档位带/刻度标签/断轴省略号——
-   *  分离模式这三样由卡片外侧的共享轴列（SplitAxisColumn）统一承担，面板只留绘图区；
-   *  Y 刻度横线仍随 showYTicks 画在面板内（读数辅助属于绘图区） */
+   *  分离模式这三样由卡片外侧的共享轴列（SplitAxisColumn）统一承担，面板只留绘图区。
+   *  第九十轮：「显示 Y 刻度线」开关删除——Y 轴刻度恒显、绘图区网格提示线移除 */
   axisChrome?: boolean;
-  /** Y 刻度线显隐（受控；缺省内部状态——下钻弹窗等自管场景不受影响） */
-  showYTicks?: boolean;
-  onShowYTicks?: (v: boolean) => void;
   /** 第七十四轮（分离面板）：true = 系列名全部固定进左侧名称预留带空白处，
    *  不锚在各折线起点旁；主图与下钻弹窗缺省关闭维持原避让语义 */
   namesInZone?: boolean;
@@ -258,15 +255,14 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
   );
 }
 
-/** 系列名称小药丸（第八十二轮再版）：顶部图例页签同款样式——统一灰字不取品牌色，
- *  点击 = 切换该系列折线显隐（屏蔽态 = 虚线置灰，同页签语言）；来源链接斜体挂在
- *  药丸下方，仍直达商城现页。悬停药丸 = 显示该系列的起点指引线（默认全部隐藏）。
- *  避让盒 = 渲染盒（药丸 行高16×行数+内边距6 + 链接13 + 生命周期14）。 */
+/** 系列名称小药丸（第八十二轮再版；第九十轮删来源链接行）：顶部图例页签同款样式
+ *  ——统一灰字不取品牌色，点击 = 切换该系列折线显隐（屏蔽态 = 虚线置灰，同页签语言）。
+ *  悬停药丸 = 显示该系列的起点指引线（默认全部隐藏）。
+ *  避让盒 = 渲染盒（药丸 行高16×行数+内边距6 + 生命周期14）。 */
 function ZoneNamePill(props: {
   nm: SeriesNameItem;
   brand: string;
   deltaPct: { pct: number } | null;
-  latest: SeriesPoint | undefined;
   hidden: boolean;
   dimmed: boolean;
   onToggle: (seriesKey: string) => void;
@@ -335,31 +331,6 @@ function ZoneNamePill(props: {
           {nm.text}
         </span>
       </span>
-      {props.latest && (
-        <a
-          href={props.latest.url}
-          target="_blank"
-          rel="noreferrer"
-          title={`打开来源商城 · ${props.latest.shopName ?? '电商平台'}（现页，价格以截图为准）`}
-          onClick={(e) => e.stopPropagation()}
-          onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
-          onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 2,
-            fontSize: 10.5,
-            lineHeight: '13px',
-            fontStyle: 'italic',
-            fontWeight: 500,
-            color: color.link,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {props.latest.shopName ?? '来源'}
-          <ExportOutlined style={{ fontSize: 9 }} />
-        </a>
-      )}
       {delta && (
         <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap', opacity: props.hidden ? 0.45 : undefined }}>
           <span style={{ color: color.mute, fontWeight: 500 }}>
@@ -394,11 +365,6 @@ export default function Chart(props: ChartProps) {
       : focusKey != null
         ? [focusKey]
         : null;
-  // Y 刻度线显隐（第十二轮）：齿轮弹层内开关。第三十五轮起默认关（迪总：不自动选择）。
-  // 第五十四轮追补：可受控（分离模式下由常驻工具行统一写，全面板同值）
-  const [innerShowYTicks, setInnerShowYTicks] = useState(false);
-  const showYTicks = props.showYTicks ?? innerShowYTicks;
-  const commitShowYTicks = props.onShowYTicks ?? setInnerShowYTicks;
   // Y 轴自动压缩（第二十轮）：齿轮弹层内开关。第三十五轮起默认关 = Y 轴完全连续
   const [innerYCompress, setInnerYCompress] = useState(false);
   const yCompress = props.yCompress ?? innerYCompress;
@@ -560,23 +526,7 @@ export default function Chart(props: ChartProps) {
   // lifecycleRow：季粒度生命周期第二行计入名称避让盒（第三十二轮，名称互压根因修复））
   // 系列名跳转载体（第五十七轮建；第五十九轮改直显目的地）：每系列最后一个
   // 有值且带 url 的点（退市后停在清库末点，语义仍是「该产品现页」）
-  // 系列名跳转载体（第五十七轮建；第五十九轮改直显目的地）：每系列最后一个
-  // 有值且带 url 的点（退市后停在清库末点，语义仍是「该产品现页」）。
-  // 第八十二轮：按名称药丸全集取（已屏蔽系列药丸仍带来源链接）。
   const nameAll = props.nameSeries ?? series;
-  const latestPointByKey = useMemo(() => {
-    const m = new Map<string, SeriesPoint>();
-    for (const s of nameAll) {
-      for (let i = s.points.length - 1; i >= 0; i--) {
-        const p = s.points[i];
-        if (p.price != null && p.url) {
-          m.set(s.key, p);
-          break;
-        }
-      }
-    }
-    return m;
-  }, [nameAll]);
 
   const labelPlan = useMemo(
     () =>
@@ -587,12 +537,11 @@ export default function Chart(props: ChartProps) {
         priceTypes,
         endpointMarks,
         lifecycleRow: (key) => lifecycleDeltas.get(key) != null,
-        sourceRow: (key) => latestPointByKey.has(key),
         forceNameZone: props.namesInZone === true,
         nameOnlySeries: nameAll.filter((s) => !series.some((v) => v.key === s.key)),
         hiddenKeys: props.hiddenKeys,
       }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, latestPointByKey, props.namesInZone, props.hiddenKeys, nameAll],
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.namesInZone, props.hiddenKeys, nameAll],
   );
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
@@ -810,8 +759,6 @@ export default function Chart(props: ChartProps) {
                 currency={currency}
                 sliderScale={sliderScale}
                 onSliderScale={commitSliderScale}
-                showYTicks={showYTicks}
-                onShowYTicks={commitShowYTicks}
                 yCompress={yCompress}
                 onYCompress={commitYCompress}
                 // 追补⑤修：必须传「原始三态」——此前传解析后的二值形态，
@@ -832,37 +779,25 @@ export default function Chart(props: ChartProps) {
               />
             </div>
           )}
-          {/* DOM 刻度线 + 缩写标签（12px，与时间轴同字号；ECharts 值轴已隐藏；齿轮弹层可关）。
-              第五十四轮追补⑤：分离面板 axisChrome=false 时标签由共享轴列承担，面板只画横线 */}
-          {showYTicks && tickRows.map((t) => (
+          {/* DOM 刻度标签（8px；ECharts 值轴已隐藏）。第九十轮：「显示 Y 刻度线」开关
+              删除——Y 轴刻度恒显（绘图区网格提示线随之移除）；分离面板 axisChrome=false
+              时标签/短横线由共享轴列承担 */}
+          {tickRows.map((t) => (
             <Fragment key={`tk-${t.v}`}>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: geom.plotLeft,
-                  top: Math.round(t.y) - 0.5,
-                  width: geom.plotWidth,
-                  height: 1,
-                  background: color.hairline,
-                  pointerEvents: 'none',
-                  zIndex: 0,
-                }}
-              />
               {props.axisChrome !== false && (
                 <div
                   className="tnum"
                   style={{
                     position: 'absolute',
-                    // 第八十九轮：刻度文字右对齐、叠画在档位区块背景上（区块右段，
-                    // 与档位文字以灰竖线分隔）；9px 灰字同底部时间轴颜色，
-                    // 宽度恒定不随开关变化；zIndex 2 = 盖过区块（zIndex 1）
+                    // 刻度文字右对齐、叠画在档位区块背景上（区块右段，
+                    // 与档位文字以灰竖线分隔）；8px 灰字同底部时间轴颜色
                     left: tickZoneRight - TICK_DASH_W - TICK_ZONE_W,
                     top: Math.round(t.y) - 7,
                     width: TICK_ZONE_W,
-                    paddingRight: 4,
+                    paddingRight: 3,
                     boxSizing: 'border-box',
                     textAlign: 'right',
-                    fontSize: 9,
+                    fontSize: 8,
                     lineHeight: '14px',
                     color: color.mute,
                     pointerEvents: 'none',
@@ -873,9 +808,9 @@ export default function Chart(props: ChartProps) {
                   {t.text}
                 </div>
               )}
-              {/* 刻度短横线（第八十六轮）：画在轴区右外侧、与刻度文字/绘图区刻度位对齐，
-                  表达「文字 ↔ 折线位置」关系；随「显示 Y 刻度线」开关显隐（轴宽恒定不变） */}
-              {showYTicks && props.axisChrome !== false && (
+              {/* 刻度短横线：画在轴区右外侧、与刻度文字/绘图区刻度位对齐，
+                  表达「文字 ↔ 折线位置」关系 */}
+              {props.axisChrome !== false && (
                 <div
                   style={{
                     position: 'absolute',
@@ -937,11 +872,11 @@ export default function Chart(props: ChartProps) {
               </div>
             );
           })}
-          {/* 档位区块（仅 USD）：贴容器左缘的整块竖向色带 = [档位文字居左 | 灰竖线 | 刻度文字区]，
+          {/* 档位区块（仅 USD）：贴容器左缘的整块竖向色带 = [档位文字区 | 灰竖线 | 刻度文字区]，
               刻度（zIndex 2）与短横线叠画在区块上；无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；
               本币不渲染；图隐藏（空态）时整块消失。
-              第八十九轮：区块贴左缘（与下方时间轨道左端对齐）、加宽为 TIER_LABEL_W+1+44，
-              档位标签单行居左（不再三行竖排） */}
+              第九十轮：档位文字三行竖排（800 / ~ / 1000）在左区内水平+垂直双居中，
+              区块随之压窄（30+1+32） */}
           {showTierBand &&
             tierBoxes.map((tb, i) => (
               <div
@@ -958,7 +893,6 @@ export default function Chart(props: ChartProps) {
                   background: tb.empty ? 'transparent' : i % 2 === 0 ? color.canvasSoft2 : color.canvasSoft,
                   display: 'flex',
                   alignItems: 'center',
-                  paddingLeft: 6,
                   overflow: 'hidden',
                   pointerEvents: 'none',
                   zIndex: 1,
@@ -966,13 +900,28 @@ export default function Chart(props: ChartProps) {
               >
                 <span
                   style={{
-                    fontSize: tb.h < 38 ? 8 : 9,
-                    lineHeight: '12px',
+                    width: TIER_LABEL_W,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 9,
+                    lineHeight: '11px',
                     color: tb.empty ? color.mute : color.body,
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {tb.label}
+                  {tb.h < 38 ? (
+                    tb.h >= 14 ? (
+                      <span style={{ fontSize: 8, lineHeight: '10px' }}>{tb.label}</span>
+                    ) : null
+                  ) : (
+                    (() => {
+                      const parts = tb.label.split('~');
+                      const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tb.label];
+                      return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
+                    })()
+                  )}
                 </span>
               </div>
             ))}
@@ -1382,7 +1331,6 @@ export default function Chart(props: ChartProps) {
                     nm={nm}
                     brand={brandByKey.get(nm.seriesKey) ?? ''}
                     deltaPct={lifecycleDeltas.get(nm.seriesKey) ?? null}
-                    latest={latestPointByKey.get(nm.seriesKey)}
                     hidden={nm.hidden ?? false}
                     dimmed={litKeys != null && !litKeys.includes(nm.seriesKey)}
                     onToggle={(k) => props.onToggleHidden?.(k)}

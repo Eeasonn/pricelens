@@ -30,7 +30,7 @@ import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
-import { buildSeries, lowestPriceColorSku } from '../../dataModel/aggregate';
+import { buildSeries } from '../../dataModel/aggregate';
 import { getEffectiveBenchmark } from '../../state/configStore';
 import { dimPromo, dimProduct } from '../../data';
 import type {
@@ -109,9 +109,8 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     setPointPanelOpen(false);
     setPromoDetailOpen(true);
   };
-  // 齿轮弹层里的两个视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
+  // 齿轮弹层视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
-  const [showYTicks, setShowYTicks] = useState(false);
   // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑），缺省
   const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
 
@@ -275,49 +274,6 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     for (const [key, items] of groupAlertsBySeries(latestAlerts(alerts))) m[key] = items.length;
     return m;
   }, [alerts]);
-
-  // ---- 我司配置 chips（第八十六轮分组版）：按产品分组渲染当前勾选的 ROM；
-  //      勾/去 = 增删该产品的展示配置（级联在筛选条只管产品层，ROM 粒度唯一入口在此）
-  const ownGroups = useMemo(() => {
-    const groups: { modelId: string; modelName: string; romrams: string[]; selected: Set<string> }[] = [];
-    const seenModel = new Set<string>();
-    for (const s of state.own) {
-      if (seenModel.has(s.modelId)) continue;
-      seenModel.add(s.modelId);
-      const romrams: string[] = [];
-      const seen = new Set<string>();
-      for (const p of dimProduct) {
-        if (p.sku_id.startsWith(s.modelId + '__') && !seen.has(p.romram)) {
-          seen.add(p.romram);
-          romrams.push(p.romram);
-        }
-      }
-      groups.push({
-        modelId: s.modelId,
-        modelName: modelNameOf(s.modelId),
-        romrams,
-        selected: new Set(state.own.filter((x) => x.modelId === s.modelId).map((x) => x.romram)),
-      });
-    }
-    return groups;
-  }, [state.own]);
-  const toggleModelRom = (modelId: string, romram: string): void => {
-    const selected = new Set(state.own.filter((x) => x.modelId === modelId).map((x) => x.romram));
-    if (selected.has(romram)) {
-      if (selected.size <= 1) return; // 至少保留一个配置在图上
-      selected.delete(romram);
-    } else {
-      selected.add(romram);
-    }
-    const others = state.own.filter((s) => s.modelId !== modelId);
-    const rest = [...selected]
-      .map((r) => {
-        const sku = lowestPriceColorSku(modelId, r);
-        return sku ? { modelId, romram: r, skuIds: [sku] } : null;
-      })
-      .filter((x): x is ProductSelection => x != null);
-    actions.setOwnSelection([...others, ...rest]);
-  };
 
   // 可分离面板不足 2 时收起分离视图并清理顺序（第八十七轮：面板单位放宽为
   // 「任意产品·配置」，我司/竞品视角分别以各自配置数为准）
@@ -572,7 +528,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
   // 容器高由 Y 模型派生：格数×TICK_PX×倍率 + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
   const chartHeight = yCfg.plotHeight + gridTop + GRID.bottom;
   // 第八十三轮：关「显示 Y 刻度线」时刻度列塌缩，右侧内容左移对齐
-  const gridLeft = estGridLeft(yCfg.max, state.currency, yCfg.interval, showYTicks);
+  const gridLeft = estGridLeft(state.currency);
 
   // 分离显示共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
   // 第五十四轮追补②：补上步长滞回 prev——此前缺 prev，季粒度把促销低谷平均掉后
@@ -597,8 +553,8 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     return next;
   }, [splitActive, panelViews, state.priceTypes, sliderScale, yCompress, state.currency]);
   const splitGridLeft = useMemo(
-    () => (splitYCfg ? estGridLeft(splitYCfg.max, state.currency, splitYCfg.interval, showYTicks) : gridLeft),
-    [splitYCfg, state.currency, gridLeft, showYTicks],
+    () => (splitYCfg ? estGridLeft(state.currency) : gridLeft),
+    [splitYCfg, state.currency, gridLeft],
   );
   // 共享轴列的档位带数据（第五十四轮追补⑤）：与面板同一份并集判定「档内有无数据」
   const splitTierValues = useMemo(
@@ -681,9 +637,8 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
   // ---- 渲染 ----
   return (
     <div>
-      {/* 标题行（第十二轮引入；第五十四轮追补）：标题带括号说明 + ROM 多选 chips
-          （该产品全部内存存储选项，默认选中 = 进入来源 ROM；多选 = 竞品取并集同图对比）
-          ——折后价/RRP 在图内 Y 轴齿轮旁，大促/offer/极值/变化提醒在图例行居中圆框组 */}
+      {/* 标题行（第十二轮引入）：产品与配置的选择统一在顶部筛选器级联（第九十轮，
+          chips 撤除）；分离开关与视图开关留在图上——筛选器=数据口径，图上=视图焦点 */}
       <div
         style={{
           display: 'flex',
@@ -700,31 +655,6 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
             <>价格走势</>
           )}
         </h2>
-        {/* ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：checkbox 样式，至少保留一个选中；
-            autoMatch 开时竞品随勾选 ROM 的配置矩阵并集自动跟随 */}
-        {/* 我司配置 chips（第八十六轮分组版）：按产品分组，勾/去 = 增删该产品的展示配置；
-            多产品时组头显产品名，与分离面板（产品·配置）目录一致 */}
-        {ownGroups.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            {ownGroups.map((g) => (
-              <span key={g.modelId} style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-                {ownGroups.length > 1 && (
-                  <span style={{ fontSize: 12.5, fontWeight: 650, color: color.ink, whiteSpace: 'nowrap' }}>{g.modelName}</span>
-                )}
-                {g.romrams.map((romram) => {
-                  const on = g.selected.has(romram);
-                  return (
-                    <Checkbox key={romram} checked={on} onChange={() => toggleModelRom(g.modelId, romram)}>
-                      <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 400, color: on ? color.ink : color.body }}>
-                        {romram}
-                      </span>
-                    </Checkbox>
-                  );
-                })}
-              </span>
-            ))}
-          </div>
-        )}
         {/* 分离显示（第五十四轮拍板；第七十七轮「每行几个」并入此设置、默认开；
             第八十七轮面板单位放宽为任意产品·配置，竞品视角亦可分离） */}
         {configSources.length >= 2 && (
@@ -829,8 +759,6 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                 currency={state.currency}
                 sliderScale={sliderScale}
                 onSliderScale={setSliderScale}
-                showYTicks={showYTicks}
-                onShowYTicks={setShowYTicks}
                 yCompress={yCompress}
                 onYCompress={setYCompress}
                 lineShape={lineShape}
@@ -860,14 +788,13 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
               marginBottom: space.sm,
             }}
           >
-            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, splitGridLeft, showYTicks)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H }}>
+            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H }}>
               {splitYCfg && (
                 <SplitAxisColumn
                   yScale={splitYCfg}
                   currency={state.currency}
                   gridLeft={splitGridLeft}
                   panelGridTop={panelGridTop}
-                  showYTicks={showYTicks}
                   tierValues={splitTierValues}
                 />
               )}
@@ -1005,7 +932,6 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                         nameSeries={p.all} // 第八十二轮：药丸全集（含屏蔽系列，虚线置灰）
                         hiddenKeys={hiddenKeys}
                         onToggleHidden={toggleLegend} // 药丸点击 = 切换折线显隐（取代顶部页签）
-                        showYTicks={showYTicks}
                         lineShape={lineShape}
                         promoBandsOn={promoBandsOn}
                         promoBands={promoBands}
@@ -1066,8 +992,6 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
             onSliderScale={setSliderScale}
             yCompress={yCompress}
             onYCompress={setYCompress}
-            showYTicks={showYTicks}
-            onShowYTicks={setShowYTicks}
             lineShape={lineShape}
             onLineShape={setLineShape}
             promoBandsOn={promoBandsOn}
