@@ -57,6 +57,7 @@ export default function SplitScrollBar({ trackRef }: { trackRef: RefObject<HTMLD
     const max = el.scrollWidth - el.clientWidth;
     el.scrollLeft = Math.max(0, Math.min(max, frac * max));
   };
+  // 第九十四轮：滑块与轨道调浅（#a7abb4 太重，改浅灰细条贴合整体视觉）
   const thumbStyle: CSSProperties = {
     position: 'absolute',
     top: 2,
@@ -64,7 +65,7 @@ export default function SplitScrollBar({ trackRef }: { trackRef: RefObject<HTMLD
     left: `${st.frac * (100 - thumbW)}%`,
     width: `${thumbW}%`,
     borderRadius: radius.pill,
-    background: '#a7abb4',
+    background: '#d6d9de',
     cursor: 'grab',
   };
   return (
@@ -80,7 +81,7 @@ export default function SplitScrollBar({ trackRef }: { trackRef: RefObject<HTMLD
         const rect = e.currentTarget.getBoundingClientRect();
         scrollToFraction((e.clientX - rect.left) / rect.width - st.ratio / 2);
       }}
-      style={{ position: 'relative', height: 16, marginTop: 6, borderRadius: radius.pill, background: color.canvasSoft2, border: `1px solid ${color.hairline}`, cursor: 'pointer' }}
+      style={{ position: 'relative', height: 12, marginTop: 4, borderRadius: radius.pill, background: 'rgba(15, 18, 25, 0.045)', cursor: 'pointer' }}
     >
       <div
         role="presentation"

@@ -104,12 +104,13 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
   // 展开 336px 内嵌面板（非视口抽屉——抽屉会盖住图右缘最新数据），纵向一行一
   // 产品框；展开态不持久化（每次进页面默认收起=领导视角永远干净）；促销明细
   // 抽屉打开时自动收起（右侧空间冲突）
-  const [pointPanelOpen, setPointPanelOpen] = useState(false);
   // 悬停最右（最新）列自动展开时点摘要（第九十二轮）：移入最右列展开、划回更早
-  // 时间列收起；移出图表（如去往右侧面板）不收起。手动展开（pointPanelOpen）优先
+  // 时间列收起；移出图表（如去往右侧面板）不收起。
   const [hoverLatest, setHoverLatest] = useState(false);
+  // 保持显示（第九十四轮）：开启后悬停划走也不收起；书签带点击 = 展开并保持显示
+  const [pinPanel, setPinPanel] = useState(false);
   const openPromoDetail = (): void => {
-    setPointPanelOpen(false);
+    setPinPanel(false); // 右侧空间冲突：打开促销明细时收起时点面板
     setPromoDetailOpen(true);
   };
   // 齿轮弹层视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
@@ -929,6 +930,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                         chrome={false} // 面板不渲染设置行（第五十四轮追补）：统管权在上方常驻行
                         axisChrome={false} // 面板不画轴（追补⑤）：档位带/刻度/断轴号在共享轴列
                         showYTicks={showYTicks}
+                        onLatestHover={setHoverLatest}
                         enableDrill={state.granularity !== 'week'}
                         enableJump={state.granularity === 'week'}
                         enableOffer={state.granularity === 'week' && offersOn}
@@ -1044,8 +1046,11 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
         </div>
         {/* 图右缘时点面板（第五十六轮再版）：书签带（收起）/ 336px 纵向产品清单（展开） */}
         <PointPanel
-          open={pointPanelOpen || hoverLatest}
-          onToggle={() => setPointPanelOpen((v) => !v)}
+          open={pinPanel || hoverLatest}
+          pinned={pinPanel}
+          onPinToggle={() => setPinPanel((v) => !v)}
+          onToggle={() => setPinPanel(true)}
+          onCollapse={() => setPinPanel(false)}
           items={summary}
           currency={state.currency}
           granularity={state.granularity}

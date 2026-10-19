@@ -183,3 +183,8 @@ button.lpl-map-card:hover {
 
 /* 第三十八轮：竞品小表行间横向分隔线（包裹格子一体性的骨架） */
 .lpl-ov-comp-row + .lpl-ov-comp-row { border-top: 1px solid #ebebeb; }
+
+/* 第九十四轮：分离轨道滑块 hover 加深一档（默认 #d6d9de 极浅） */
+.lpl-split-bar:hover > div[role='presentation'] {
+  background: #c3c7ce;
+}

@@ -15,7 +15,13 @@ import type { PriceSummaryItem } from './chartModel';
 
 interface PointPanelProps {
   open: boolean;
+  /** 书签带点击 = 展开并保持显示（第九十四轮语义） */
   onToggle: () => void;
+  /** 头部「收起」= 显式收起（含保持显示） */
+  onCollapse: () => void;
+  /** 保持显示（第九十四轮）：开启后悬停划走也不收起；头部按钮切换 */
+  pinned: boolean;
+  onPinToggle: () => void;
   items: PriceSummaryItem[];
   currency: CurrencyMode;
   granularity: Granularity;
@@ -99,12 +105,12 @@ export default function PointPanel(props: PointPanelProps) {
           transition: open ? 'opacity 200ms ease 90ms' : 'opacity 140ms ease',
         }}
       >
-      {/* 头部：收起按钮 + 时点日期（与摘要条同口径：窗口末桶最新周三锚日） */}
+      {/* 头部：收起按钮 + 时点日期 + 保持显示开关（与摘要条同口径：窗口末桶最新周三锚日） */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span
           role="button"
           title="收起时点摘要"
-          onClick={props.onToggle}
+          onClick={props.onCollapse}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -121,6 +127,29 @@ export default function PointPanel(props: PointPanelProps) {
         </span>
         <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
           时点 {props.pointDate ?? fmtPointDate(props.granularity, asOf)}
+        </span>
+        <span
+          role="button"
+          aria-pressed={props.pinned}
+          title={props.pinned ? '已保持显示：取消后恢复悬停最新列自动展开' : '保持显示：悬停移开后面板不再自动收起'}
+          onClick={props.onPinToggle}
+          style={{
+            marginLeft: 'auto',
+            flexShrink: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            fontSize: 11,
+            lineHeight: '18px',
+            padding: '0 8px',
+            borderRadius: radius.pill,
+            border: `1px ${props.pinned ? 'solid' : 'dashed'} ${props.pinned ? color.link : color.hairline}`,
+            color: props.pinned ? color.link : color.mute,
+            background: props.pinned ? '#edf5ff' : color.canvas,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          保持显示
         </span>
       </div>
       {/* 产品清单：纵向一行一框；多产品时纵向滚动 */}
