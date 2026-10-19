@@ -159,6 +159,31 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
   const plotTop = 34;
   const plotHeight = Math.max(market.length * 26, 320);
   const vToY = (value: number): number => plotTop + ((axisTop - value) / (axisTop - axisBottom)) * plotHeight;
+  const CARD_H = 34; // 产品小卡：单行（名称左 + 采集日期/现价右）
+  const BAND_GAP = 2; // 带内卡片行距
+  const BAND_PAD = 5; // 带内上下留白
+  // —— USD 档位分段带（用户反馈：线性轴下密集价位被迫整体下推成均匀阶梯，档位与卡片
+  // 完全脱钩——改为带高随档内产品数伸缩，卡片在所属档位带内依价排列，档位与卡片必然对齐；
+  // 本币视图无线性档位带，维持线性刻度轴）——
+  const usd = currency === 'usd';
+  const bandRects = useMemo(() => {
+    if (!usd) return [];
+    let top = plotTop;
+    const rects: { label: string; lo: number; top: number; h: number; items: typeof market }[] = [];
+    // 高档在上（与线性轴方向一致：价格自上而下递减）
+    for (const [lo, hi, label] of [...MARKET_TIERS].reverse()) {
+      const items = market.filter(({ price }) => {
+        const v = price.mid ?? price.min;
+        return v != null && v >= lo && v < hi;
+      });
+      if (items.length === 0) continue;
+      const h = Math.max(76, items.length * (CARD_H + BAND_GAP) + BAND_PAD * 2);
+      rects.push({ label, lo, top, h, items });
+      top += h;
+    }
+    return rects;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market, usd]);
   const fmtTick = (value: number): string => {
     const trim = (n: number): string => String(+(n.toFixed(1)));
     if (value >= 1e6) return `${trim(value / 1e6)}M`;
@@ -173,18 +198,14 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
   })();
   const ticks: number[] = [];
   for (let i = Math.ceil(axisBottom / tickStep); i <= Math.floor(axisTop / tickStep); i++) ticks.push(i * tickStep);
-  const tierHasValue = (lo: number, hi: number): boolean => allValues.some((v) => v >= lo && v < hi);
-  const tierBoxes = (currency === 'usd'
-    ? MARKET_TIERS
-      .map(([lo, hi, label]) => {
-        const lo2 = Math.max(lo, axisBottom);
-        const hi2 = Math.min(hi, axisTop);
-        if (lo2 >= hi2) return null;
-        const top = vToY(hi2);
-        return { label, top, h: vToY(lo2) - top, empty: !tierHasValue(lo, hi) };
-      })
-      .filter((b): b is { label: string; top: number; h: number; empty: boolean } => b != null && b.h >= 8)
-    : []);
+  // 档位带：USD = 分段带（bandRects，按档内产品数伸缩、必非空）；本币 = 不画档位带只画刻度
+  const tierBoxes = usd
+    ? bandRects.map((b) => ({ label: b.label, top: b.top, h: b.h, empty: false }))
+    : [];
+  // 轴标记：USD = 档位带边界（带底 = 该档下限，标短横线与数值）；本币 = 线性刻度
+  const axisMarks: { y: number; label: string | null }[] = usd
+    ? bandRects.map((b) => ({ y: b.top + b.h, label: b.lo > 0 ? fmtTick(b.lo) : null }))
+    : ticks.map((tick) => ({ y: vToY(tick), label: fmtTick(tick) }));
   const axisWidth = (currency === 'usd' ? AXIS_BAND_W : TICK_ZONE_W) + TICK_DASH_W;
   // 我司品牌固定占最左 sticky 列（主视角原则）；竞品品牌列 = 手动拖拽顺序
   // （第九十二轮：三个排序选项删除——默认序兜底，拖过即全以手动序为准）
@@ -236,18 +257,28 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
   };
   const columnTemplate = `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`;
   const minMapWidth = axisWidth + 250 + Math.max(brandColumns.length, 1) * 180;
-  // 价格接近的产品仍需保持“一产品一行”。先按真实 Y 位置排布，再做最小行距碰撞处理。
-  const CARD_H = 34; // 产品小卡：单行（名称左 + 采集日期/现价右）
+  // 价格接近的产品仍需保持“一产品一行”。USD 分段带下卡片在带内依价排列（天然无碰撞）；
+  // 本币线性轴沿用「真实 Y 位置 + 最小行距下推」。
   const rowTops = new Map<string, number>();
-  let lastBottom = plotTop + 2;
-  for (const item of market) {
-    const rawTop = vToY(item.price.mid ?? item.price.min ?? axisBottom) - CARD_H / 2;
-    const top = Math.max(rawTop, lastBottom + 2);
-    rowTops.set(item.model.modelId, top);
-    lastBottom = top + CARD_H;
+  let lastBottom: number;
+  if (usd) {
+    for (const band of bandRects) {
+      band.items.forEach((item, index) => {
+        rowTops.set(item.model.modelId, band.top + BAND_PAD + index * (CARD_H + BAND_GAP));
+      });
+    }
+    lastBottom = bandRects.length > 0 ? bandRects[bandRects.length - 1].top + bandRects[bandRects.length - 1].h : plotTop;
+  } else {
+    lastBottom = plotTop + 2;
+    for (const item of market) {
+      const rawTop = vToY(item.price.mid ?? item.price.min ?? axisBottom) - CARD_H / 2;
+      const top = Math.max(rawTop, lastBottom + 2);
+      rowTops.set(item.model.modelId, top);
+      lastBottom = top + CARD_H;
+    }
   }
   // 产品行只允许向下避让；如果密集产品超过价格轴高度，就增长画布，不能把第一行上移遮住表头。
-  const totalHeight = Math.max(plotTop + plotHeight + 12, lastBottom + 12);
+  const totalHeight = usd ? lastBottom + 10 : Math.max(plotTop + plotHeight + 12, lastBottom + 12);
 
   return (
     <section aria-label="市场摆位概要" style={{ marginTop: space.md, padding: space.md, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas }}>
@@ -267,8 +298,9 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
 
       <div style={{ marginTop: 10, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
         <div style={{ position: 'relative', minWidth: minMapWidth, height: totalHeight, background: color.canvas }}>
-          {/* 左侧价位轴：美元显示档位带，本币只显示刻度；域随数据裁剪 */}
-          <div style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', borderRight: `1px solid ${color.hairlineStrong}`, background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.04)' }}>
+          {/* 左侧价位轴：美元显示档位带，本币只显示刻度；域随数据裁剪。
+              不画右缘描边与投影（用户反馈：双线读作黑色边界线） */}
+          <div style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', background: color.canvas }}>
             {/* 价位轴（第九十二轮对齐看板样式）：档位区块贴左（文字竖排居中、1K 缩写），
                 刻度 10px 右对齐叠画在区块背景上，右缘短横线与刻度对齐；
                 画布比看板高 → 字号与区块宽度按比例放大（40/44/6） */}
@@ -290,17 +322,17 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
                 )}
               </div>
             ))}
-            {ticks.map((tick) => (
-              <span key={tick} className="tnum" style={{ position: 'absolute', right: TICK_DASH_W, top: vToY(tick) - 9, width: TICK_ZONE_W, paddingRight: 3, boxSizing: 'border-box', textAlign: 'right', fontSize: 10, lineHeight: '18px', color: color.mute, whiteSpace: 'nowrap', zIndex: 1 }}>{fmtTick(tick)}</span>
+            {axisMarks.map((mark, index) => (
+              <span key={`tick-${index}`} className="tnum" style={{ position: 'absolute', right: TICK_DASH_W, top: mark.y - 9, width: TICK_ZONE_W, paddingRight: 3, boxSizing: 'border-box', textAlign: 'right', fontSize: 10, lineHeight: '18px', color: color.mute, whiteSpace: 'nowrap', zIndex: 1 }}>{mark.label}</span>
             ))}
-            {ticks.map((tick) => (
-              <span key={`dash-${tick}`} style={{ position: 'absolute', right: 0, top: vToY(tick), width: TICK_DASH_W, height: 1, background: color.hairlineStrong, pointerEvents: 'none', zIndex: 1 }} />
+            {axisMarks.map((mark, index) => (
+              <span key={`dash-${index}`} style={{ position: 'absolute', right: 0, top: mark.y, width: TICK_DASH_W, height: 1, background: color.hairlineStrong, pointerEvents: 'none', zIndex: 1 }} />
             ))}
           </div>
 
           <div style={{ position: 'absolute', left: axisWidth, right: 0, top: 0, height: totalHeight, overflow: 'visible' }}>
             <div style={{ position: 'absolute', zIndex: 4, top: 0, left: 0, right: 0, height: plotTop, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', borderBottom: `1px solid ${color.hairline}`, background: color.canvas, overflow: 'visible' }}>
-              <div style={{ position: 'sticky', zIndex: 6, left: axisWidth, boxSizing: 'border-box', padding: '0 14px', color: color.mute, fontSize: 11, lineHeight: '16px', borderRight: `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>{ownBrands.map((b) => brandHeaderLabel(b)).join(' / ') || '产品'}</div>
+              <div style={{ position: 'sticky', zIndex: 6, left: axisWidth, boxSizing: 'border-box', padding: '0 14px', color: color.ink, fontSize: 13, lineHeight: '18px', fontWeight: 600, borderRight: `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>{ownBrands.map((b) => brandHeaderLabel(b)).join(' / ') || '产品'}</div>
               {brandColumns.map((brand, index) => (
                 <div
                   key={brand.key}
@@ -328,9 +360,9 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
                     setDraggingBrand(null);
                     setDropBrand(null);
                   }}
-                  style={{ boxSizing: 'border-box', padding: '0 12px', color: brandColorOf(brand.key), fontSize: 11, lineHeight: '16px', fontWeight: 700, borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', cursor: 'grab', opacity: draggingBrand === brand.key ? 0.4 : undefined, background: dropBrand === brand.key && draggingBrand !== brand.key ? '#edf5ff' : undefined, boxShadow: dropBrand === brand.key && draggingBrand !== brand.key ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined }}
+                  style={{ boxSizing: 'border-box', padding: '0 12px', color: brandColorOf(brand.key), fontSize: 13, lineHeight: '18px', fontWeight: 700, borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', cursor: 'grab', opacity: draggingBrand === brand.key ? 0.4 : undefined, background: dropBrand === brand.key && draggingBrand !== brand.key ? '#edf5ff' : undefined, boxShadow: dropBrand === brand.key && draggingBrand !== brand.key ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined }}
                 >
-                  <HolderOutlined style={{ fontSize: 10, color: draggingBrand === brand.key ? color.link : color.mute }} />
+                  <HolderOutlined style={{ fontSize: 11, color: draggingBrand === brand.key ? color.link : color.mute }} />
                   {brand.label}
                 </div>
               ))}
@@ -341,13 +373,13 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
               const isOwn = model.isOwn;
               return (
                 <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: CARD_H, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', zIndex: 1 }}>
-                  <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', minWidth: 0, height: '100%', padding: '0 10px 0 14px', borderRight: `1px solid ${color.hairline}`, background: selected ? '#f0f6ff' : color.canvas, boxShadow: selected ? 'inset 3px 0 0 #0070f3, 2px 0 3px rgba(0,0,0,.03)' : '2px 0 3px rgba(0,0,0,.03)' }}>
+                  <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', minWidth: 0, height: '100%', padding: '0 10px 0 14px', borderRight: `1px solid ${color.hairline}`, background: selected ? '#f0f6ff' : 'transparent', boxShadow: selected ? 'inset 3px 0 0 #0070f3' : undefined }}>
                     {isOwn && <ModelChip model={model} price={price} currency={currency} clickable onClick={() => onOpenProduct(model)} />}
                   </div>
                   {brandColumns.map((brand, index) => {
                     const here = brandKeyOf(model.brand) === brand.key && !isOwn;
                     return (
-                      <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, background: selected ? '#f7faff' : color.canvas }}>
+                      <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, background: selected ? '#f7faff' : 'transparent' }}>
                         {here && <ModelChip model={model} price={price} currency={currency} clickable={false} />}
                       </div>
                     );
