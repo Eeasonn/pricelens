@@ -870,7 +870,13 @@ export default function PriceTrend() {
             priceTypes={state.priceTypes}
             gridLeft={gridLeft}
             gridTop={gridTop}
-            legend={<LegendPills series={visSeries} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />}
+            legend={
+              // 合并模式页签同样套两侧箭头（第七十八轮）：系列多时 46% 槽位放不下，
+              // 与分离卡片一致——放不下才出现左右箭头，点击滚动查看
+              <PillRowScroller>
+                <LegendPills bare series={visSeries} hiddenKeys={hiddenKeys} onToggle={toggleLegend} />
+              </PillRowScroller>
+            }
             enableDrill={state.granularity !== 'week'}
             enableJump={state.granularity === 'week'}
             enableOffer={state.granularity === 'week' && offersOn}
