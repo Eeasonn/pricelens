@@ -302,10 +302,6 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     }
     return groups;
   }, [state.own]);
-  const selectedRoms = useMemo(
-    () => new Set(state.own.filter((s) => s.modelId === entryModelId).map((s) => s.romram)),
-    [state.own, entryModelId],
-  );
   const toggleModelRom = (modelId: string, romram: string): void => {
     const selected = new Set(state.own.filter((x) => x.modelId === modelId).map((x) => x.romram));
     if (selected.has(romram)) {
@@ -324,24 +320,46 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     actions.setOwnSelection([...others, ...rest]);
   };
 
-  // 切换入口产品或取消到单 ROM 后，清理不再可用的分离视图状态。
+  // 可分离面板不足 2 时收起分离视图并清理顺序（第八十七轮：面板单位放宽为
+  // 「任意产品·配置」，我司/竞品视角分别以各自配置数为准）
   useEffect(() => {
-    if (selectedRoms.size < 2 || !state.own.every((s) => s.modelId === entryModelId)) {
+    const panelable = state.own.length > 0 ? state.own.length : state.competitors.length;
+    if (panelable < 2) {
       setSplitOn(false);
       setPanelOrder([]);
     }
-  }, [entryModelId, selectedRoms.size, state.own]);
+  }, [state.own, state.competitors]);
 
   // ---- 分离显示：多 ROM 勾选时主图变为同一横向滚动轨道，每面板 =
   // 一个 ROM + 其对标竞品（生效矩阵按 own_romram 取、主竞品 sort 序）；共享 Y 轴 =
   // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
   // 系列页签按面板拆开、放各卡片顶部居中（第七十五轮，PillRowScroller 左右滚动）；
   // 共享刷选条联动全部面板
-  const [splitOn, setSplitOn] = useState(true); // 分离显示（第七十七轮起默认开；仅 ≥2 个 ROM 时生效）
+  const [splitOn, setSplitOn] = useState(true); // 分离显示（第七十七轮起默认开；可分面板 ≥2 时生效）
   // 分离模式一行可见面板数：卡片始终横向排列，超出视口后由轨道滚动查看。
   // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
   const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
-  const splitActive = splitOn && selectedRoms.size >= 2 && state.own.length >= 2 && state.own.every((s) => s.modelId === entryModelId);
+  // 第八十七轮：分离单位 = 任意「产品·配置」——同产品多配置、跨产品多选、
+  // 竞品视角（无我司、竞品 ≥2）均可分离；我司优先（有我司时竞品作对标随面板）。
+  const configSources = useMemo(
+    () =>
+      state.own.length > 0
+        ? state.own.map((sel) => ({ sel, isOwn: true as const }))
+        : state.competitors.map((sel) => ({ sel, isOwn: false as const })),
+    [state.own, state.competitors],
+  );
+  const multiProduct = new Set(configSources.map((c) => c.sel.modelId)).size > 1;
+  const splitActive = splitOn && configSources.length >= 2;
+  // 跨产品/竞品视角分离时价位跨度天然拉大 → 进入时自动开「Y 轴自动压缩」；
+  // 用户手动关闭后本段分离会话内不再强制（退出分离再进才重置）
+  const yCompressAutoRef = useRef(false);
+  useEffect(() => {
+    if (splitActive && (multiProduct || state.own.length === 0) && !yCompressAutoRef.current) {
+      yCompressAutoRef.current = true;
+      setYCompress(true);
+    }
+    if (!splitActive) yCompressAutoRef.current = false;
+  }, [splitActive, multiProduct, state.own.length]);
   // 面板顺序（第七十九轮：卡片上边线拖移把手拖拽换位，取代已移除的箭头调序）
   const [panelOrder, setPanelOrder] = useState<string[]>([]); // 面板 key 序；空 = own 序
   const [draggingPanel, setDraggingPanel] = useState<string | null>(null);
@@ -354,7 +372,12 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     const selectedByKey = new Map(
       state.competitors.map((group) => [`${group.modelId}|${group.romram.replace(/\s+/g, '')}`, group]),
     );
-    return state.own.map((sel) => {
+    return configSources.map(({ sel, isOwn }) => {
+      const key = `${sel.modelId}__${sel.romram.replace(/\s+/g, '')}`;
+      if (!isOwn) {
+        // 竞品视角（第八十七轮）：面板 = 纯竞品配置；无我司锚点，映射语义不适用
+        return { key, sel, comps: [] as ProductSelection[], isOwn: false as const };
+      }
       const seen = new Set<string>();
       const mappedComps = bench
         .filter((b) => b.own_model_id === sel.modelId && b.own_romram === sel.romram)
@@ -374,18 +397,18 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
         (group) => group.romram.replace(/\s+/g, '') === sel.romram.replace(/\s+/g, '') && !seen.has(group.modelId + '|' + group.romram),
       );
       const comps = state.autoMatch ? mappedComps : [...mappedComps, ...fallbackComps];
-      return { key: `${sel.modelId}__${sel.romram.replace(/\s+/g, '')}`, sel, comps };
+      return { key, sel, comps, isOwn: true as const };
     });
-  }, [splitActive, state.own, state.competitors, state.autoMatch]);
+  }, [splitActive, configSources, state.competitors, state.autoMatch]);
 
   const panelData = useMemo(() => {
     if (panels.length === 0) return [];
-    return panels.map(({ key, sel, comps }) => {
+    return panels.map(({ key, sel, comps, isOwn }) => {
       let series: Series[] = [];
       try {
         series = buildSeries({
           groups: [
-            { ...sel, isOwn: true },
+            { ...sel, isOwn },
             ...comps.map((c) => ({ ...c, isOwn: false })),
           ],
           granularity: state.granularity,
@@ -399,7 +422,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
       } catch {
         series = []; // 空态不崩
       }
-      return { key, sel, comps, series };
+      return { key, sel, comps, isOwn, series };
     });
   }, [panels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry]);
 
@@ -455,7 +478,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     panel: (typeof panelViews)[number],
   ): ((seriesKey: string, bucketId: string) => void) => {
     const groups = [
-      { ...panel.sel, isOwn: true },
+      { ...panel.sel, isOwn: panel.isOwn },
       ...panel.comps.map((c) => ({ ...c, isOwn: false })),
     ];
     return (seriesKey: string, bucketId: string) => {
@@ -672,9 +695,9 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
             ))}
           </div>
         )}
-        {/* 分离显示（第五十四轮拍板；第七十七轮「每行几个」并入此设置、默认开）：
-            多 ROM 时可切 N 宫格，每面板一个 ROM+其竞品 */}
-        {selectedRoms.size >= 2 && (
+        {/* 分离显示（第五十四轮拍板；第七十七轮「每行几个」并入此设置、默认开；
+            第八十七轮面板单位放宽为任意产品·配置，竞品视角亦可分离） */}
+        {configSources.length >= 2 && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Switch size="small" checked={splitOn} onChange={setSplitOn} />
             <span style={{ fontSize: 12.5, color: color.body, whiteSpace: 'nowrap' }}>分离显示</span>
@@ -920,7 +943,8 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                       >
                         {/* 卡顶图例页签已撤（第八十二轮）：名称药丸接管显隐切换职能 */}
                         <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          {p.sel.romram}
+                          {/* 第八十七轮：跨产品/竞品视角时面板头带产品名（单我司产品维持纯 ROM） */}
+                          {(multiProduct || !p.isOwn) ? `${modelNameOf(p.sel.modelId)} · ${p.sel.romram}` : p.sel.romram}
                         </span>
                       </div>
                       <Chart
