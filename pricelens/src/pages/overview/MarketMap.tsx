@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
 import type { OverviewModel } from '../../dataModel/aggregate';
+import { bucketLatestWeekLabel } from '../../chart/PriceTrend/helpers';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { brandColorOf, color, radius, space } from '../../theme/tokens';
 
@@ -14,21 +15,24 @@ export interface MarketMapProps {
   selectedModelId?: string | null;
 }
 
-/** 型号现价：ROM 行现价的 min/max（区间摆位）+ 最新采集周（YYYYWW，字典序=时间序）。 */
+/** 型号现价：现价 = 最新采集周的代表配置价；另留区间与采集周（YYYYWW）供悬浮提示。 */
 function modelPrice(model: OverviewModel): {
   min: number | null;
   max: number | null;
   mid: number | null;
+  current: number | null;
   asOf: string;
 } {
   const rows = model.rows;
   const values = rows.map((row) => row.price).filter((value): value is number => value != null);
   const weeks = rows.map((row) => row.asOfWeek).sort();
   const asOf = weeks.length > 0 ? weeks[weeks.length - 1] : '';
-  if (values.length === 0) return { min: null, max: null, mid: null, asOf };
+  // 现价 = 最新采集周里价最高的配置（rows 本身现价降序，取首个落在最新周的代表行）
+  const freshest = rows.find((row) => row.asOfWeek === asOf && row.price != null);
+  if (values.length === 0) return { min: null, max: null, mid: null, current: null, asOf };
   const min = Math.min(...values);
   const max = Math.max(...values);
-  return { min, max, mid: (min + max) / 2, asOf };
+  return { min, max, mid: (min + max) / 2, current: freshest?.price ?? null, asOf };
 }
 
 function modelOnly(brand: string, modelName: string): string {
@@ -38,9 +42,6 @@ function modelOnly(brand: string, modelName: string): string {
 
 const fmtPrice = (value: number, currency: CurrencyMode): string =>
   `${currency === 'usd' ? '$' : '₽'}${Math.round(value).toLocaleString('en-US')}`;
-
-const fmtWeek = (weekId: string): string =>
-  /^\d{6}$/.test(weekId) ? `${weekId.slice(0, 4)}-W${weekId.slice(4)}` : weekId;
 
 const DEFAULT_BRAND_ORDER = ['APPLE', 'SAMSUNG', 'HONOR', 'XIAOMI'];
 // 1280px 设计基线：USD 轴 140px + 我司列 250px 后，4 个 180px 品牌列可完整显示；更多列横向滚动。
@@ -56,42 +57,43 @@ function brandHeaderLabel(brand: string): string {
   return brandLabelOf(brand);
 }
 
-/** 产品小卡（第八十一轮）：品牌点+型号名 / 灰色小字采集周 / 现价（区间价带 –）。 */
+/** 产品小卡（第八十三轮）：左侧品牌点+型号名；右侧现价（单值），上方灰色小字
+ *  为价格采集日期（MM-DD，取最新采集周的锚日）。 */
 function ModelChip({ model, price, currency, clickable, onClick }: {
   model: OverviewModel;
-  price: { min: number | null; max: number | null; asOf: string };
+  price: { min: number | null; max: number | null; current: number | null; asOf: string };
   currency: CurrencyMode;
   clickable: boolean;
   onClick?: () => void;
 }) {
   const label = modelOnly(model.brand, model.modelName);
-  const priceText = price.min == null || price.max == null
-    ? '—'
-    : price.min === price.max
-      ? fmtPrice(price.min, currency)
-      : `${fmtPrice(price.min, currency)}–${fmtPrice(price.max, currency)}`;
-  const title = `${model.modelName}${price.min != null ? ` · 现价 ${priceText} · ${fmtWeek(price.asOf)} 采集` : ''}`;
+  const dateText = price.asOf ? bucketLatestWeekLabel('week', price.asOf) ?? '' : '';
+  const priceText = price.current != null ? fmtPrice(price.current, currency) : '—';
+  const rangeText = price.min != null && price.max != null && price.min !== price.max
+    ? ` · 区间 ${fmtPrice(price.min, currency)}–${fmtPrice(price.max, currency)}`
+    : '';
+  const title = `${model.modelName} · 现价 ${priceText}${dateText ? `（${dateText} 采集）` : ''}${rangeText}`;
   const inner = (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
         <BrandDot brand={model.brand} size={6} />
         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(model.brand), fontSize: 12, fontWeight: 650 }}>{label}</span>
-      </div>
-      {price.min != null && (
-        <>
-          <div className="tnum" style={{ fontSize: 9.5, lineHeight: '12px', color: color.mute, whiteSpace: 'nowrap' }}>{fmtWeek(price.asOf)} 采集</div>
-          <div className="tnum" style={{ fontSize: 12, lineHeight: '15px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{priceText}</div>
-        </>
+      </span>
+      {price.current != null && (
+        <span style={{ flexShrink: 0, marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+          <span className="tnum" style={{ fontSize: 9.5, lineHeight: '11px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
+          <span className="tnum" style={{ fontSize: 12, lineHeight: '15px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{priceText}</span>
+        </span>
       )}
     </>
   );
   const style = {
     display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'flex-start',
-    gap: 1,
+    alignItems: 'center',
+    gap: 8,
     minWidth: 0,
     maxWidth: '100%',
+    width: '100%',
     padding: 0,
     border: 0,
     background: 'transparent',
@@ -193,7 +195,7 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
   const columnTemplate = `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`;
   const minMapWidth = axisWidth + 250 + Math.max(brandColumns.length, 1) * 180;
   // 价格接近的产品仍需保持“一产品一行”。先按真实 Y 位置排布，再做最小行距碰撞处理。
-  const CARD_H = 46; // 产品小卡：名称 + 采集周 + 现价 三行
+  const CARD_H = 34; // 产品小卡：单行（名称左 + 采集日期/现价右）
   const rowTops = new Map<string, number>();
   let lastBottom = plotTop + 2;
   for (const item of market) {
