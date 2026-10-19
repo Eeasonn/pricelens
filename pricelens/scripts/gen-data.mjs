@@ -10,12 +10,16 @@
 // ============================================================
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MASTER = join(ROOT, 'data', 'master');
-const OUT = join(ROOT, 'src', 'data');
+// 默认仍写入仓库 src/data（npm run gen 的既有行为）；验证脚本/CI 可通过
+// PRICELENS_DATA_OUT 指向临时目录，避免只读校验原地覆盖工作树中的真实产物。
+const OUT = process.env.PRICELENS_DATA_OUT
+  ? resolve(process.env.PRICELENS_DATA_OUT)
+  : join(ROOT, 'src', 'data');
 const SEED_LABEL = 'pricelens-20261009';
 const BATCH_ID = 'B2026W41';
 const QUALITY_FLAG = 'synthetic';

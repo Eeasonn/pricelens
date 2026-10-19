@@ -9,9 +9,7 @@ import type { CurrencyMode, DimBenchmark } from '../dataModel/types';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import type { ProductSelection } from './filtersTypes';
 import { modelIdOf, shortRomram } from '../components/ProductCascader/tree';
-
-/** §13 参考汇率默认值（配置页可改） */
-export const DEFAULT_FX_RATE = 80;
+export { DEFAULT_FX_RATE, getFxRate, saveFx } from './fx';
 
 /** 图表侧保存的档位预设（§6.1 自定义档位），配置页列出可删 */
 export interface CustomTierPreset {
@@ -214,17 +212,6 @@ export function groupsFromPrevGeneration(own: ProductSelection[]): PrevGenMatchR
     if (skuIds.length) added.push({ modelId: prevMid, romram, skuIds });
   }
   return { added, missing };
-}
-
-// ---------------- 参考汇率（LPL3.config.fx，默认 80） ----------------
-
-export function getFxRate(): number {
-  const v = readJson<number>(LPL.cfgFx);
-  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : DEFAULT_FX_RATE;
-}
-
-export function saveFx(rate: number): void {
-  writeJson(LPL.cfgFx, rate);
 }
 
 // ---------------- 自定义档位（LPL3.config.customTiers，图表侧写入） ----------------

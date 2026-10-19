@@ -719,8 +719,7 @@ function ProductDetailMatrix(props: {
       );
     };
 
-    const compLine = (comp: OverviewCompRow): ReactNode => {
-      const own = model.rows.find((r) => comp.ownRomrams.some((x) => norm(x) === norm(r.romram))) ?? model.rows[0];
+    const compLine = (comp: OverviewCompRow, own: OverviewRow): ReactNode => {
       const dir = diffDirs[`${model.modelId}__${own?.romram ?? ''}`] ?? 'comp';
       const diff = comp.price != null && own?.price != null ? (dir === 'comp' ? diffPct(comp.price, own.price) : diffPct(own.price, comp.price)) : null;
       const discount = comp.price != null && comp.rrp != null && comp.rrp > 0 ? comp.price / comp.rrp - 1 : null;
@@ -759,7 +758,7 @@ function ProductDetailMatrix(props: {
             const matches = group?.rows.filter((comp) => comp.ownRomrams.some((x) => norm(x) === norm(row.romram))) ?? [];
             return (
               <div key={`comp-${index}-${row.romram}`} style={{ ...cellBase, padding: '4px 14px 7px', background: '#fbfcff', borderRight: index === 1 ? 0 : `1px solid ${color.hairline}` }}>
-                {matches.length ? matches.map(compLine) : <div style={{ minHeight: 42, padding: '7px 0 8px' }}><OverviewMetricLine label="提示"><span style={{ color: color.hairlineStrong, fontSize: 12 }}>未匹配该配置</span></OverviewMetricLine></div>}
+                {matches.length ? matches.map((comp) => compLine(comp, row)) : <div style={{ minHeight: 42, padding: '7px 0 8px' }}><OverviewMetricLine label="提示"><span style={{ color: color.hairlineStrong, fontSize: 12 }}>未匹配该配置</span></OverviewMetricLine></div>}
               </div>
             );
           });

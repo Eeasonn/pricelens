@@ -16,6 +16,8 @@ import { dimChannel, dimProduct, dimTime, factPriceWeekly } from '../data';
 import type { CurrencyMode, DataScope } from './types';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 import { platformPriceForSelection, platformPriceSpread } from './aggregate';
+import { displayLocalValue } from './currency';
+import { getFxRate } from '../state/fx';
 
 export type AlertType = 'price-change' | 'promo' | 'platform-gap' | 'own-gap';
 
@@ -93,12 +95,10 @@ const norm = (s: string): string => s.replace(/\s+/g, '');
 const EPS = 1e-9;
 const countryOf = (p: { country_code?: string }): string => p.country_code ?? DEFAULT_DATA_SCOPE.countryCode;
 
-// 模块内懒构建一次（aggregate.factIndex 为私有实现，此处独立建同构索引；
-// 双币种字段都留——通知币种随入参，触发判定用比值与币种无关）
+// 模块内懒构建一次（aggregate.factIndex 为私有实现，此处独立建同构索引）；
+// 事实层只保留本币字段，USD 按当前参考汇率在扫描时派生，避免与配置口径分叉。
 interface FactCell {
-  priceUsd: number | null;
   priceRub: number | null;
-  rrpUsd: number | null;
   rrpRub: number | null;
 }
 let cellIdx: Map<string, Map<string, FactCell>> | null = null;
@@ -112,9 +112,7 @@ function factCellIndex(): Map<string, Map<string, FactCell>> {
         cellIdx.set(row.sku_id, byWeek);
       }
       byWeek.set(row.week_id, {
-        priceUsd: row.discounted_price_usd,
         priceRub: row.discounted_price_rub,
-        rrpUsd: row.rrp_usd,
         rrpRub: row.rrp_rub,
       });
     }
@@ -173,7 +171,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   if (!isDataScopeSupported(scope)) return [];
   if (cfg.subs.length === 0) return [];
   const px = factCellIndex();
-  const useUsd = currency === 'usd';
+  const fxRate = getFxRate();
   // 当前事实表价格不挂店铺明细，国家由 dimChannel 的可用渠道承载；
   // 以可用国家作为事实数据门槛，同时按产品产业过滤，便于后续接入多国家数据。
   const countryAvailable = dimChannel.some((c) => c.country_code === scope.countryCode);
@@ -197,13 +195,13 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       for (const p of group) {
         const cell = px.get(p.sku_id)?.get(w.week_id);
         if (!cell) continue;
-        const base = useUsd ? cell.priceUsd : cell.priceRub;
+        const base = displayLocalValue(cell.priceRub, currency, fxRate);
         if (base != null) {
           baseSum += base;
           sum += platformPriceForSelection(base, p.sku_id, w.week_id, cfg.platform);
           n++;
         }
-        if (rrp == null) rrp = useUsd ? cell.rrpUsd : cell.rrpRub;
+        if (rrp == null) rrp = displayLocalValue(cell.rrpRub, currency, fxRate);
       }
       if (n === 0) continue; // 缺采：prev 跨周延续（比较链不断）
       const price = Math.round(sum / n);
@@ -300,7 +298,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
         let n = 0;
         for (const p of group) {
           const cell = px.get(p.sku_id)?.get(w.week_id);
-          const base = cell ? (useUsd ? cell.priceUsd : cell.priceRub) : null;
+          const base = cell ? displayLocalValue(cell.priceRub, currency, fxRate) : null;
           if (base != null) {
             sum += platformPriceForSelection(base, p.sku_id, w.week_id, cfg.platform);
             n++;

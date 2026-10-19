@@ -13,8 +13,9 @@
 //   轴上以虚线断轴符号表示；yPxOf 变分段线性映射（segs），ECharts 只负责画几何
 //   （数据喂归一化伪值 yNormOf，值轴隐藏），刻度线/标签/断轴符号/档位带全部 DOM 层绘制。
 // ============================================================
-import { dimTime, localPerUsd } from '../../data';
+import { dimTime } from '../../data';
 import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
+import { getFxRate } from '../../state/fx';
 
 // ---------------- 布局常量（Chart 的 grid 与 DOM 覆盖层共用） ----------------
 
@@ -155,7 +156,7 @@ export function estGridLeft(axisMax: number, currency: CurrencyMode = 'local', i
 /** 币种 → 每 1 USD 兑本币数（第二十三轮：档位锚定 USD 用，与 fact 折算同源参考汇率；
  *  未来加币种在此登记即可，档位/格数/图高自动与 USD 呈现对齐） */
 export function perUsdOf(currency: CurrencyMode): number {
-  return currency === 'usd' ? 1 : localPerUsd;
+  return currency === 'usd' ? 1 : getFxRate();
 }
 
 /** §6.6 nice 步长：1/2/2.5/5 ×10^k。

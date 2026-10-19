@@ -307,6 +307,14 @@ export default function PriceTrend() {
     actions.setOwnSelection([...others, ...mine]);
   };
 
+  // 切换入口产品或取消到单 ROM 后，清理不再可用的分离视图状态。
+  useEffect(() => {
+    if (selectedRoms.size < 2 || !state.own.every((s) => s.modelId === entryModelId)) {
+      setSplitOn(false);
+      setPanelOrder([]);
+    }
+  }, [entryModelId, selectedRoms.size, state.own]);
+
   // ---- 分离显示：多 ROM 勾选时主图变为同一横向滚动轨道，每面板 =
   // 一个 ROM + 其对标竞品（生效矩阵按 own_romram 取、主竞品 sort 序）；共享 Y 轴 =
   // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
@@ -316,7 +324,7 @@ export default function PriceTrend() {
   // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
   const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
   const [panelOrder, setPanelOrder] = useState<string[]>([]); // romram 键序；空 = own 序
-  const splitActive = splitOn && state.own.length >= 2;
+  const splitActive = splitOn && selectedRoms.size >= 2 && state.own.length >= 2 && state.own.every((s) => s.modelId === entryModelId);
 
   const panels = useMemo(() => {
     if (!splitActive) return [];
@@ -328,20 +336,24 @@ export default function PriceTrend() {
     );
     return state.own.map((sel) => {
       const seen = new Set<string>();
-      const comps = state.autoMatch
-        ? bench
-            .filter((b) => b.own_model_id === sel.modelId && b.own_romram === sel.romram)
-            .sort((a, b) => a.sort - b.sort)
-            .map((b) => {
-              const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
-              if (!p) return null;
-              const group = selectedByKey.get(`${p.sku_id.split('__')[0]}|${p.romram.replace(/\s+/g, '')}`);
-              if (!group || seen.has(group.modelId + '|' + group.romram)) return null;
-              seen.add(group.modelId + '|' + group.romram);
-              return group;
-            })
-            .filter((x): x is ProductSelection => x != null)
-        : state.competitors;
+      const mappedComps = bench
+        .filter((b) => b.own_model_id === sel.modelId && b.own_romram === sel.romram)
+        .sort((a, b) => a.sort - b.sort)
+        .map((b) => {
+          const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
+          if (!p) return null;
+          const group = selectedByKey.get(`${p.sku_id.split('__')[0]}|${p.romram.replace(/\s+/g, '')}`);
+          if (!group || seen.has(group.modelId + '|' + group.romram)) return null;
+          seen.add(group.modelId + '|' + group.romram);
+          return group;
+        })
+        .filter((x): x is ProductSelection => x != null);
+      // 手动模式没有 own-ROM 关联时，至少按同一容量匹配，避免把全局竞品
+      // 重复画到每一张 ROM 卡片；有配置映射时优先遵循映射顺序。
+      const fallbackComps = state.competitors.filter(
+        (group) => group.romram.replace(/\s+/g, '') === sel.romram.replace(/\s+/g, '') && !seen.has(group.modelId + '|' + group.romram),
+      );
+      const comps = state.autoMatch ? mappedComps : [...mappedComps, ...fallbackComps];
       return { key: `${sel.modelId}__${sel.romram.replace(/\s+/g, '')}`, sel, comps };
     });
   }, [splitActive, state.own, state.competitors, state.autoMatch]);
@@ -519,6 +531,33 @@ export default function PriceTrend() {
   );
   // 面板头行高（追补⑤重排）：轴列用同一偏移对齐面板绘图区顶（卡片 paddingTop 4 + 头 24）
   const PANEL_HEAD_H = 24;
+
+  // 分离卡片的横向轨道在面板数超过当前可见列数时才可滚动；
+  // 记录两端状态，给没有明显系统滚动条的环境补一条可见提示。
+  const splitScrollRef = useRef<HTMLDivElement | null>(null);
+  const [splitOverflow, setSplitOverflow] = useState({ left: false, right: false });
+  useLayoutEffect(() => {
+    const el = splitScrollRef.current;
+    if (!splitActive || !el) {
+      setSplitOverflow((prev) => (prev.left || prev.right ? { left: false, right: false } : prev));
+      return;
+    }
+    const sync = (): void => {
+      const max = Math.max(0, el.scrollWidth - el.clientWidth);
+      const left = el.scrollLeft > 2;
+      const right = max - el.scrollLeft > 2;
+      setSplitOverflow((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
+    };
+    sync();
+    el.addEventListener('scroll', sync, { passive: true });
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
+    observer?.observe(el);
+    if (el.firstElementChild) observer?.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener('scroll', sync);
+      observer?.disconnect();
+    };
+  }, [splitActive, orderedPanels.length, splitColumns, splitGridLeft]);
 
   // ---- 下钻（§6.3）：seriesKey → 取数组，单组重查 ----
   const selByKey = useMemo(() => {
@@ -727,25 +766,22 @@ export default function PriceTrend() {
                 />
               )}
             </div>
-            <div
-              style={{
-                flex: '1 1 0',
-                minWidth: 0,
-                overflowX: 'auto',
-                overflowY: 'hidden',
-                paddingBottom: 6,
-              }}
-            >
+            <div style={{ flex: '1 1 0', minWidth: 0 }}>
               <div
+                ref={splitScrollRef}
+                className="price-trend-split-scroll"
+                role="region"
+                aria-label="分离走势面板，可横向滚动"
+                tabIndex={0}
                 style={{
-                  display: 'flex',
-                  alignItems: 'stretch',
-                  gap: space.md,
-                  width: '100%',
-                  minWidth: 0,
+                  overflowX: 'auto',
+                  overflowY: 'hidden',
+                  scrollbarGutter: 'stable',
+                  paddingBottom: 6,
                 }}
               >
-                {orderedPanels.map((p) => {
+                <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, width: '100%', minWidth: 0 }}>
+                  {orderedPanels.map((p) => {
                   const i = orderedPanels.findIndex((x) => x.key === p.key);
                   const first = i === 0;
                   const last = i === orderedPanels.length - 1;
@@ -822,8 +858,15 @@ export default function PriceTrend() {
                       />
                     </div>
                   );
-                })}
+                  })}
+                </div>
               </div>
+              {(splitOverflow.left || splitOverflow.right) && (
+                <div className="price-trend-split-scroll-hint" aria-live="polite">
+                  {splitOverflow.left && <span>← 返回左侧</span>}
+                  {splitOverflow.right && <span>横向查看更多 →</span>}
+                </div>
+              )}
             </div>
           </div>
           {/* 共享刷选条：一个窗口联动全部面板 */}

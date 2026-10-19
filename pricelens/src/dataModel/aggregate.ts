@@ -25,6 +25,8 @@ import type {
 import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimTime, factPriceWeekly } from '../data';
 import { brandColorOf } from '../theme/tokens';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
+import { displayPriceOf, displayRrpOf } from './currency';
+import { getFxRate } from '../state/fx';
 
 // ---------------- 确定性 PRNG ----------------
 function fnv1a(str: string): number {
@@ -163,6 +165,24 @@ const DEFAULT_PLATFORM = 'OZON';
 const DEFAULT_SHOP_NAME: string | null =
   dimChannel.find((c) => c.platform === DEFAULT_PLATFORM)?.shop_name ?? null;
 
+/**
+ * 当前筛选平台的来源文案。
+ *
+ * SeriesPoint 目前只有一个 shopName 字段，而一个平台筛选可能包含整个平台、
+ * 多个店铺或多个平台，因此这里返回稳定的聚合口径文案：具体店铺优先展示店铺名，
+ * 整个平台选择展示平台名；多选时用顿号合并。未选平台仍回到 demo 默认的
+ * Ozon Россия，保持旧视图的来源文案。
+ */
+function shopNameForSelection(platform: SeriesQuery['platform']): string | null {
+  if (!platform || (platform.platforms.length === 0 && platform.shopIds.length === 0)) return DEFAULT_SHOP_NAME;
+  const labels = [
+    ...platform.platforms,
+    ...platform.shopIds.map((id) => channelByShop.get(id)?.shop_name ?? id),
+  ];
+  const unique = [...new Set(labels.filter(Boolean))];
+  return unique.length > 0 ? unique.join('、') : DEFAULT_SHOP_NAME;
+}
+
 /** 生效平台（第三十六轮单平台口径）：未选 = 默认 OZON 单平台；显式勾选 = 所选并集（未来多平台对比场景） */
 function effectivePlatforms(platform: SeriesQuery['platform']): string[] {
   if (!platform || (platform.platforms.length === 0 && platform.shopIds.length === 0)) return [DEFAULT_PLATFORM];
@@ -184,11 +204,6 @@ function applyPlatform(base: number, skuId: string, weekId: string, platforms: s
     sum += base * (1 + f + jitter);
   }
   return sum / platforms.length;
-}
-
-/** 来源店铺（第三十六轮）：单平台口径 = 恒默认平台唯一店铺，不再按节点随机指派「最低价店铺」 */
-function pickShop(): string | null {
-  return DEFAULT_SHOP_NAME;
 }
 
 /** 单平台价目（第五十三轮）：同一基准价逐平台独立套用因子+抖动（与 applyPlatform 同源、
@@ -315,6 +330,8 @@ export function buildSeries(q: SeriesQuery): Series[] {
   if (!isDataScopeSupported(q.scope)) return [];
   const buckets = buildBuckets(q);
   const platforms = effectivePlatforms(q.platform);
+  const shopName = shopNameForSelection(q.platform);
+  const fxRate = getFxRate();
   const out: Series[] = [];
   for (const g of q.groups) {
     const rg = resolveGroup(g);
@@ -329,7 +346,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         let n = 0;
         for (const sid of rg.skuIds) {
           const row = factRow(sid, wid);
-          const base = row ? (q.currency === 'usd' ? row.discounted_price_usd : row.discounted_price_rub) : null;
+          const base = row ? displayPriceOf(row, q.currency, fxRate) : null;
           if (base == null) continue;
           sum += q.platform ? applyPlatform(base, sid, wid, platforms) : base;
           n++;
@@ -355,7 +372,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         for (const sid of rg.skuIds) {
           const row = factRow(sid, wid);
           if (!row) continue;
-          const v = q.currency === 'usd' ? row.rrp_usd : row.rrp_rub;
+          const v = displayRrpOf(row, q.currency, fxRate);
           if (v != null) rrp = v;
           if (!url && row.url) url = row.url;
         }
@@ -385,7 +402,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         missing: price == null,
         offer,
         url,
-        shopName: pickShop(),
+        shopName,
       });
     }
     out.push({
@@ -604,10 +621,10 @@ export const TIER_LABELS: Record<TierCode, string> = {
 
 const TIER_ORDER: TierCode[] = ['1000+', '800-1000', '600-800', '400-600', '200-400', '<200'];
 
-const priceOf = (row: FactPriceWeekly, currency: CurrencyMode): number | null =>
-  currency === 'usd' ? row.discounted_price_usd : row.discounted_price_rub;
-const rrpOf = (row: FactPriceWeekly, currency: CurrencyMode): number | null =>
-  currency === 'usd' ? row.rrp_usd : row.rrp_rub;
+const priceOf = (row: FactPriceWeekly, currency: CurrencyMode, fxRate: number): number | null =>
+  displayPriceOf(row, currency, fxRate);
+const rrpOf = (row: FactPriceWeekly, currency: CurrencyMode, fxRate: number): number | null =>
+  displayRrpOf(row, currency, fxRate);
 
 /** 某 SKU 最新有值周（price 驱动）；全缺时回数据末周、值 null。
  *  第五十一轮起平台感知：折后价过 applyPlatform（与看板 buildSeries 同口径）；
@@ -616,26 +633,27 @@ function latestOf(
   skuId: string,
   currency: CurrencyMode,
   platforms: string[] = [DEFAULT_PLATFORM],
+  fxRate = getFxRate(),
 ): { price: number | null; rrp: number | null; weekId: string } {
   for (let i = timeRows.length - 1; i >= 0; i--) {
     const w = timeRows[i].week_id;
     const row = factRow(skuId, w);
     if (row == null) continue;
-    const p = priceOf(row, currency);
+    const p = priceOf(row, currency, fxRate);
     if (p != null)
       return {
         price: p == null ? null : applyPlatform(p, skuId, w, platforms),
-        rrp: rrpOf(row, currency),
+        rrp: rrpOf(row, currency, fxRate),
         weekId: w,
       };
   }
   return { price: null, rrp: null, weekId: timeRows[timeRows.length - 1].week_id };
 }
 
-function sparkPoints(skuId: string, currency: CurrencyMode, platforms: string[] = [DEFAULT_PLATFORM]): OverviewSparkPoint[] {
+function sparkPoints(skuId: string, currency: CurrencyMode, platforms: string[] = [DEFAULT_PLATFORM], fxRate = getFxRate()): OverviewSparkPoint[] {
   return timeRows.map((w) => {
     const row = factRow(skuId, w.week_id);
-    const base = row ? priceOf(row, currency) : null;
+    const base = row ? priceOf(row, currency, fxRate) : null;
     return {
       weekId: w.week_id,
       monthId: w.month_id,
@@ -681,6 +699,7 @@ export function buildOverviewMatrix(
 ): OverviewTierBand[] {
   if (!isDataScopeSupported(scope)) return [];
   const platforms = effectivePlatforms(platform);
+  const fxRate = getFxRate();
   // 型号索引：modelId → 产品行集
   const byModel = new Map<string, DimProduct[]>();
   for (const p of dimProduct) {
@@ -700,8 +719,8 @@ export function buildOverviewMatrix(
       const repSku = lowestPriceColorSku(modelId, rom);
       const romRows = prows.filter((p) => normRom(p.romram) === normRom(rom));
       const skuId = repSku ?? [...romRows].sort((a, b) => a.sku_id.localeCompare(b.sku_id))[0].sku_id;
-      const lat = latestOf(skuId, currency, platforms);
-      const points = sparkPoints(skuId, currency, platforms);
+      const lat = latestOf(skuId, currency, platforms, fxRate);
+      const points = sparkPoints(skuId, currency, platforms, fxRate);
       const ex = extremes(points);
       const discountPct = lat.price != null && lat.rrp != null && lat.rrp > 0 ? lat.price / lat.rrp - 1 : null;
       rows.push({
@@ -717,7 +736,7 @@ export function buildOverviewMatrix(
         asOfWeek: lat.weekId,
         colors: [...romRows]
           .sort((a, b) => a.sku_id.localeCompare(b.sku_id))
-          .map((p) => ({ color: p.color, skuId: p.sku_id, price: latestOf(p.sku_id, currency, platforms).price })),
+          .map((p) => ({ color: p.color, skuId: p.sku_id, price: latestOf(p.sku_id, currency, platforms, fxRate).price })),
         points,
         ...ex,
       });
@@ -742,8 +761,8 @@ export function buildOverviewMatrix(
     for (const [skuId, agg] of compMap) {
       const p = productById.get(skuId);
       if (!p) continue;
-      const lat = latestOf(skuId, currency, platforms);
-      const points = sparkPoints(skuId, currency, platforms);
+      const lat = latestOf(skuId, currency, platforms, fxRate);
+      const points = sparkPoints(skuId, currency, platforms, fxRate);
       const compModelRows = byModel.get(skuId.split('__')[0]) ?? [];
       const compRomRows = compModelRows.filter((pp) => normRom(pp.romram) === normRom(p.romram));
       comps.push({
@@ -759,7 +778,7 @@ export function buildOverviewMatrix(
         primary: agg.primary,
         colors: [...compRomRows]
           .sort((a, b) => a.sku_id.localeCompare(b.sku_id))
-          .map((pp) => ({ color: pp.color, skuId: pp.sku_id, price: latestOf(pp.sku_id, currency, platforms).price })),
+          .map((pp) => ({ color: pp.color, skuId: pp.sku_id, price: latestOf(pp.sku_id, currency, platforms, fxRate).price })),
         points,
         ...extremes(points),
       });

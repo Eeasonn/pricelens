@@ -19,16 +19,27 @@ const norm = (s: string): string => s.replace(/\s+/g, '');
 const PAGES: Page[] = ['overview', 'dashboard', 'config', 'alerts'];
 
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null */
-export function productSelectionOfSeriesKey(key: string): ProductSelection | null {
+function productSelectionOfSeriesKeyInternal(key: string, ownOnly: boolean): ProductSelection | null {
   const sep = key.indexOf('__');
   if (sep < 0) return null;
   const modelId = key.slice(0, sep);
   const rom = key.slice(sep + 2);
-  const row = dimProduct.find((p) => p.sku_id.startsWith(modelId + '__') && norm(p.romram) === rom);
+  // URL 是可由用户手工编辑的外部输入。只允许我司产品进入 own，
+  // 否则可构造 own=竞品 SKU，把竞品伪装成我司产品进入图表和预警口径。
+  const row = dimProduct.find((p) => (!ownOnly || p.is_own) && p.sku_id.startsWith(modelId + '__') && norm(p.romram) === rom);
   if (!row) return null;
   const skuId = lowestPriceColorSku(modelId, row.romram);
   if (!skuId) return null;
   return { modelId, romram: row.romram, skuIds: [skuId] };
+}
+
+/** URL/分享链接只能使用我司产品；页面内部跳转预警时也需要解析竞品系列。 */
+export function productSelectionOfSeriesKey(key: string): ProductSelection | null {
+  return productSelectionOfSeriesKeyInternal(key, true);
+}
+
+export function productSelectionOfAnySeriesKey(key: string): ProductSelection | null {
+  return productSelectionOfSeriesKeyInternal(key, false);
 }
 
 /** 启动时读取 URL 覆写（在持久化/默认视图之后应用） */

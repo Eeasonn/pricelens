@@ -8,6 +8,8 @@
 import { dimProduct, factPriceWeekly } from '../../data';
 import type { DimProduct } from '../../dataModel/types';
 import { lowestPriceColorSku } from '../../dataModel/aggregate';
+import { displayLocalValue } from '../../dataModel/currency';
+import { getFxRate } from '../../state/fx';
 import type { ProductSelection } from '../../state/filtersTypes';
 
 /** 竞品品牌列顺序（§13 矩阵列序一致） */
@@ -92,22 +94,24 @@ export function shortRomram(romram: string): string {
 
 // ---- 最新折后价索引（懒构建一次；数据静态于模块装载） ----
 
-let latestCache: Map<string, { rub: number | null; usd: number | null }> | null = null;
+let latestCache: { fxRate: number; values: Map<string, { rub: number | null; usd: number | null }> } | null = null;
 
 function latestPrices(): Map<string, { rub: number | null; usd: number | null }> {
-  if (latestCache) return latestCache;
-  const best = new Map<string, { weekId: string; rub: number | null; usd: number | null }>();
+  const fxRate = getFxRate();
+  if (latestCache?.fxRate === fxRate) return latestCache.values;
+  const best = new Map<string, { weekId: string; rub: number | null }>();
   for (const row of factPriceWeekly) {
-    const hasPrice = row.discounted_price_rub != null || row.discounted_price_usd != null;
+    const hasPrice = row.discounted_price_rub != null;
     if (!hasPrice) continue;
     const cur = best.get(row.sku_id);
     if (!cur || row.week_id > cur.weekId) {
-      best.set(row.sku_id, { weekId: row.week_id, rub: row.discounted_price_rub, usd: row.discounted_price_usd });
+      best.set(row.sku_id, { weekId: row.week_id, rub: row.discounted_price_rub });
     }
   }
-  latestCache = new Map();
-  for (const [skuId, v] of best) latestCache.set(skuId, { rub: v.rub, usd: v.usd });
-  return latestCache;
+  const values = new Map<string, { rub: number | null; usd: number | null }>();
+  for (const [skuId, v] of best) values.set(skuId, { rub: v.rub, usd: displayLocalValue(v.rub, 'usd', fxRate) });
+  latestCache = { fxRate, values };
+  return values;
 }
 
 function buildRomramNode(skus: DimProduct[], modelId: string, modelName: string, romram: string): RomramNode {

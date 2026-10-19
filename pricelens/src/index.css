@@ -94,6 +94,35 @@ select {
   line-height: 28px;
 }
 
+/* 分离走势：系统滚动条在 macOS 常默认悬浮且不可见，补足轨道/滑块和文字提示，
+   让用户知道右侧还有面板；卡片仍保持单行，不因提示而裁切图表。 */
+.price-trend-split-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #9b9b9b #f3f3f3;
+  overscroll-behavior-x: contain;
+}
+.price-trend-split-scroll::-webkit-scrollbar { height: 10px; }
+.price-trend-split-scroll::-webkit-scrollbar-track {
+  background: #f3f3f3;
+  border-radius: 9999px;
+}
+.price-trend-split-scroll::-webkit-scrollbar-thumb {
+  background: #9b9b9b;
+  border-radius: 9999px;
+  border: 2px solid #f3f3f3;
+}
+.price-trend-split-scroll-hint {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 18px;
+  padding: 1px 2px 0;
+  color: #777;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
 /* AntD 5.21 将自定义类挂在不同的弹层节点；下面的结构选择器确保两栏始终等宽，
    左右内边距一致，不受周/月/季面板内部 class 差异影响。 */
 .ant-picker-dropdown .ant-picker-panels {

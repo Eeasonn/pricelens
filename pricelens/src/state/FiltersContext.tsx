@@ -88,6 +88,125 @@ const DEFAULTS_V = 9;
 const DEFAULT_OWN_MODEL = 'Pura 90s Pro';
 const DEFAULT_OWN_ROMRAM_PREFIX = '12+256';
 
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isProductSelection(value: unknown): value is ProductSelection {
+  if (!isRecord(value)) return false;
+  return typeof value.modelId === 'string'
+    && typeof value.romram === 'string'
+    && isStringArray(value.skuIds);
+}
+
+function isProductSelectionArray(value: unknown): value is ProductSelection[] {
+  return Array.isArray(value) && value.every(isProductSelection);
+}
+
+function isPlatformSelection(value: unknown): value is PlatformSelection | null {
+  if (value === null) return true;
+  return isRecord(value) && isStringArray(value.platforms) && isStringArray(value.shopIds);
+}
+
+function isPriceTypes(value: unknown): value is FiltersState['priceTypes'] {
+  return isRecord(value) && typeof value.discounted === 'boolean' && typeof value.rrp === 'boolean';
+}
+
+function isAlertTypes(value: unknown): value is AlertTypeSwitches {
+  return isRecord(value)
+    && typeof value['price-change'] === 'boolean'
+    && typeof value.promo === 'boolean'
+    && typeof value['platform-gap'] === 'boolean'
+    && typeof value['own-gap'] === 'boolean';
+}
+
+function isPartialAlertTypes(value: unknown): value is Partial<AlertTypeSwitches> {
+  if (!isRecord(value)) return false;
+  return Object.entries(value).every(([key, item]) =>
+    (key === 'price-change' || key === 'promo' || key === 'platform-gap' || key === 'own-gap')
+    && typeof item === 'boolean',
+  );
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isAlertThresholds(value: unknown): value is AlertThresholds {
+  return isRecord(value)
+    && isFiniteNumber(value['price-change'])
+    && isFiniteNumber(value.promo)
+    && isFiniteNumber(value['platform-gap'])
+    && isFiniteNumber(value['own-gap']);
+}
+
+function isPartialAlertThresholds(value: unknown): value is Partial<AlertThresholds> {
+  if (!isRecord(value)) return false;
+  return Object.entries(value).every(([key, item]) =>
+    (key === 'price-change' || key === 'promo' || key === 'platform-gap' || key === 'own-gap')
+    && isFiniteNumber(item),
+  );
+}
+
+function isAlertProducts(value: unknown): value is FiltersState['alertProducts'] {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((rule) => {
+    if (!isRecord(rule)) return false;
+    if (rule.types !== undefined && !isPartialAlertTypes(rule.types)) return false;
+    if (rule.thresholds !== undefined && !isPartialAlertThresholds(rule.thresholds)) return false;
+    return true;
+  });
+}
+
+/**
+ * 仅接收可安全消费的持久化字段。
+ * localStorage 可能来自旧版本、手工编辑或损坏 JSON，不能直接 spread 到状态里，
+ * 否则 `own: null`、`platform: "..."` 等值会在渲染期间触发运行时异常。
+ */
+function readPersistedState(raw: string | null): Partial<FiltersState> & { v?: number; alertThreshold?: number } | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || (parsed.v !== DEFAULTS_V && parsed.v !== 8)) return null;
+
+    const checks: Array<[keyof FiltersState, boolean]> = [
+      ['own', isProductSelectionArray(parsed.own)],
+      ['competitors', isProductSelectionArray(parsed.competitors)],
+      ['platform', isPlatformSelection(parsed.platform)],
+      ['granularity', parsed.granularity === 'week' || parsed.granularity === 'month' || parsed.granularity === 'quarter'],
+      ['adaptive', typeof parsed.adaptive === 'boolean'],
+      ['rangeStart', typeof parsed.rangeStart === 'string'],
+      ['rangeEnd', typeof parsed.rangeEnd === 'string'],
+      ['currency', parsed.currency === 'usd' || parsed.currency === 'local'],
+      ['priceTypes', isPriceTypes(parsed.priceTypes)],
+      ['agg', parsed.agg === 'avg' || parsed.agg === 'min'],
+      ['autoMatch', typeof parsed.autoMatch === 'boolean'],
+      ['alertSubs', isStringArray(parsed.alertSubs)],
+      ['alertTypes', isAlertTypes(parsed.alertTypes)],
+      ['alertThresholds', isAlertThresholds(parsed.alertThresholds)],
+      ['alertProducts', isAlertProducts(parsed.alertProducts)],
+    ];
+    // v8 predates the split alert fields; those are supplied by defaults/migration below.
+    const required = checks.filter(([key]) => parsed.v === DEFAULTS_V || !['alertTypes', 'alertThresholds', 'alertProducts'].includes(key));
+    if (required.some(([, valid]) => !valid)) return null;
+
+    const rest: Partial<FiltersState> & { v?: number; alertThreshold?: number } = { v: parsed.v };
+    for (const [key, valid] of checks) {
+      if (valid) (rest as UnknownRecord)[key] = parsed[key];
+    }
+    if (isFiniteNumber(parsed.alertThreshold)) rest.alertThreshold = parsed.alertThreshold;
+    return rest;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 数据就绪时的默认勾选（第二十五轮改）：
  * - 我司 = Pura 90s Pro · 12+256（其最低价颜色，lowestPriceColorSku）；无数据 → own=[]
@@ -115,37 +234,41 @@ function computeDataDefaults(): Partial<FiltersState> {
  *    但若我司勾选为空而数据此刻已就绪（典型：数据先生成前打开过、造数后重建），
  *    仅补默认我司产品+其配置竞品。
  */
-function loadInitialState(): FiltersState {
+function loadBaseState(): FiltersState {
   let restored: FiltersState | null = null;
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(LPL.filters);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<FiltersState> & { v?: number; alertThreshold?: number };
-      if (parsed.v === DEFAULTS_V || parsed.v === 8) {
-        const { alertThreshold, v: _v, ...rest } = parsed;
-        restored = { ...defaultFilters, ...rest };
-        // v8 → v9 迁移（追补⑨）：旧单阈值 → 三类同值；订阅保留；own-gap 落缺省 15%
-        if (parsed.v === 8 && typeof alertThreshold === 'number') {
-          restored.alertThresholds = {
-            ...DEFAULT_ALERT_THRESHOLDS,
-            'price-change': alertThreshold,
-            promo: alertThreshold,
-            'platform-gap': alertThreshold,
-          };
-        }
-      }
-      // 版本不符（含旧版无 v 字段）→ 视为无持久化，直接落新默认视图
-    }
+    raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(LPL.filters);
   } catch {
-    /* 忽略损坏的持久化数据 */
+    // 隐私模式/受限 iframe 中 localStorage 可能可见但不可读；直接走默认状态。
+  }
+  const parsed = readPersistedState(raw);
+  if (parsed) {
+    const { alertThreshold, v: _v, ...rest } = parsed;
+    restored = { ...defaultFilters, ...rest };
+    // v8 → v9 迁移（追补⑨）：旧单阈值 → 三类同值；订阅保留；own-gap 落缺省 15%
+    if (parsed.v === 8 && typeof alertThreshold === 'number') {
+      restored.alertThresholds = {
+        ...DEFAULT_ALERT_THRESHOLDS,
+        'price-change': alertThreshold,
+        promo: alertThreshold,
+        'platform-gap': alertThreshold,
+      };
+    }
   }
   if (!restored) restored = { ...defaultFilters, ...computeDataDefaults() };
   if (!restored.own.length && dimProduct.length) {
     restored = { ...restored, ...computeDataDefaults() };
   }
+  return { ...restored, ...normalizeDataScope(restored) };
+}
+
+/** 启动时才应用 URL；运行中的 reset 使用 loadBaseState，避免 URL 覆写锁死重置结果。 */
+function applyUrlOverrides(base: FiltersState): FiltersState {
   // 追补⑩（建议③）：URL 覆写最后应用——分享链接 > 持久化 > 默认视图；
   // own 覆写存在时竞品按现行 autoMatch 规则带出（与手选同语义）
   const url = readUrlOverrides();
+  let restored = base;
   if (url.filters.own?.length) {
     restored = {
       ...restored,
@@ -157,6 +280,10 @@ function loadInitialState(): FiltersState {
   }
   restored = { ...restored, ...normalizeDataScope(restored) };
   return restored;
+}
+
+function loadInitialState(): FiltersState {
+  return applyUrlOverrides(loadBaseState());
 }
 
 interface FiltersCtx {
@@ -201,7 +328,10 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   // fx 为读取时取值，图表侧自行监听。
   useEffect(() => {
     const handler = () => {
-      setState((s) => (s.autoMatch ? { ...s, competitors: groupsFromBenchmark(s.own) } : s));
+      // Always create a new state object so chart consumers re-read configuration
+      // getters (notably the reference FX rate) even when auto matching is off.
+      // Competitor selections remain untouched in manual mode.
+      setState((s) => ({ ...s, ...(s.autoMatch ? { competitors: groupsFromBenchmark(s.own) } : {}) }));
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, handler);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, handler);
@@ -226,7 +356,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
         })),
 
       /** 回到默认视图（含数据默认我司勾选 + 其配置竞品） */
-      reset: () => setState(loadInitialState()),
+      reset: () => setState(loadBaseState()),
 
       /**
        * §5.4/§5.6 切换粒度：保持可见时间跨度只换桶。

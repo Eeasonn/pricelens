@@ -136,7 +136,7 @@ export interface SeriesPoint {
   missing: boolean;
   offer: OfferInfo | null; // 周=该周 offer；月/季=桶内首个（仅附注用）
   url: string;
-  shopName: string | null; // 最低价来源店铺（demo 演示用）
+  shopName: string | null; // 当前平台/店铺选择文案；多选时为聚合文案（demo 演示用）
 }
 
 /** 一条系列 = 一个"产品名+ROMRAM"聚合（多 SKU 已按均值聚合） */

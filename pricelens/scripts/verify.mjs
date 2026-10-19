@@ -543,16 +543,30 @@ console.log('\n[9] 确定性（seed 20261009）');
   const { execFileSync } = await import('node:child_process');
   const { readdirSync } = await import('node:fs');
   const { createHash } = await import('node:crypto');
-  const run = () => {
-    execFileSync(process.execPath, [join(ROOT, 'scripts', 'gen-data.mjs')], { cwd: ROOT, stdio: 'pipe' });
-    const files = readdirSync(join(ROOT, 'src', 'data')).filter((f) => f.endsWith('.json')).sort();
-    const hash = createHash('sha256');
-    for (const f of files) hash.update(f + ':' + createHash('sha256').update(readFileSync(join(ROOT, 'src', 'data', f))).digest('hex') + '\n');
-    return hash.digest('hex');
-  };
-  const h1 = run();
-  const h2 = run();
-  check('gen-data.mjs 连跑两遍，src/data 全部产物 shasum 一致', h1 === h2, h1.slice(0, 16) + '…');
+  // 造数脚本默认会写 src/data；验证只需要比较产物确定性，不能为了校验
+  // 改写工作树中的真实数据。两次运行共用同一个临时目录，第二次会覆盖
+  // 临时文件，哈希结果仍可直接比较，退出时整体清理。
+  const generatedDir = mkdtempSync(join(tmpdir(), 'pl-gen-'));
+  try {
+    const run = () => {
+      execFileSync(process.execPath, [join(ROOT, 'scripts', 'gen-data.mjs')], {
+        cwd: ROOT,
+        stdio: 'pipe',
+        env: { ...process.env, PRICELENS_DATA_OUT: generatedDir },
+      });
+      // 临时目录只包含 gen-data 的正式产物，连同运行时使用的 gzip+base64
+      // 文件一起纳入哈希，避免 JSON 确定但线上内嵌载荷漂移却未被发现。
+      const files = readdirSync(generatedDir).sort();
+      const hash = createHash('sha256');
+      for (const f of files) hash.update(f + ':' + createHash('sha256').update(readFileSync(join(generatedDir, f))).digest('hex') + '\n');
+      return hash.digest('hex');
+    };
+    const h1 = run();
+    const h2 = run();
+    check('gen-data.mjs 连跑两遍，临时目录全部产物 shasum 一致（不改写 src/data）', h1 === h2, h1.slice(0, 16) + '…');
+  } finally {
+    rmSync(generatedDir, { recursive: true, force: true });
+  }
 }
 
 // ---------------- 10. 单文件版一致性（铁律：每次构建同步根目录 PriceLens.html） ----------------

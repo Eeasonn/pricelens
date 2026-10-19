@@ -17,6 +17,7 @@ import {
 import type { ProductSelection } from '../../state/filtersTypes';
 import type { CurrencyMode } from '../../dataModel/types';
 import { CascadePanel, type CascadeRowItem } from '../ProductCascader';
+import { getFxRate } from '../../state/fx';
 
 // ---------------- ① 产业下拉（反馈 2.1） ----------------
 
@@ -188,7 +189,8 @@ function ProductCascadeControl({
   emptyPlaceholder?: string;
 }) {
   const { state, actions } = useFilters();
-  const tree = useMemo(() => (kind === 'own' ? buildOwnTree(state.industry) : buildCompetitorTree()), [kind, state.industry]);
+  const fxRate = getFxRate();
+  const tree = useMemo(() => (kind === 'own' ? buildOwnTree(state.industry) : buildCompetitorTree()), [kind, state.industry, fxRate]);
   const list = selection ?? (kind === 'own' ? state.own : state.competitors);
   const writeList = (next: ProductSelection[]): void => {
     if (onSelectionChange) {

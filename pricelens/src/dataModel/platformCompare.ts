@@ -8,6 +8,8 @@
 import { dimChannel, dimProduct, dimTime, factPriceWeekly } from '../data';
 import type { CurrencyMode } from './types';
 import { platformPriceSpread } from './aggregate';
+import { displayLocalValue } from './currency';
+import { getFxRate } from '../state/fx';
 
 /** 平台稳定序（dimChannel 插入序：OZON → DNS → M.Video） */
 export const PLATFORM_ORDER: string[] = [...new Set(dimChannel.map((c) => c.platform))];
@@ -44,7 +46,7 @@ export function buildPlatformCompare(
   skuIds: string[],
   currency: CurrencyMode,
 ): PlatformCompareResult {
-  const useUsd = currency === 'usd';
+  const fxRate = getFxRate();
   const norm = (s: string) => s.replace(/\s+/g, '');
   const group = dimProduct
     .filter((p) => p.sku_id.startsWith(`${modelId}__`) && norm(p.romram) === norm(romram))
@@ -53,7 +55,7 @@ export function buildPlatformCompare(
   const repSku = members[0] ?? '';
 
   // fact 索引（小数据集直接线性建；与 alerts.factCellIndex 同构但独立，保持本层无内部状态）
-  const cell = new Map<string, Map<string, { usd: number | null; rub: number | null }>>();
+  const cell = new Map<string, Map<string, { rub: number | null }>>();
   for (const row of factPriceWeekly) {
     if (!members.includes(row.sku_id)) continue;
     let byWeek = cell.get(row.sku_id);
@@ -61,7 +63,7 @@ export function buildPlatformCompare(
       byWeek = new Map();
       cell.set(row.sku_id, byWeek);
     }
-    byWeek.set(row.week_id, { usd: row.discounted_price_usd, rub: row.discounted_price_rub });
+    byWeek.set(row.week_id, { rub: row.discounted_price_rub });
   }
 
   const timeAsc = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : 1));
@@ -74,7 +76,7 @@ export function buildPlatformCompare(
     let n = 0;
     for (const sku of members) {
       const c = cell.get(sku)?.get(w.week_id);
-      const v = c == null ? null : useUsd ? c.usd : c.rub;
+      const v = c == null ? null : displayLocalValue(c.rub, currency, fxRate);
       if (v != null) {
         sum += v;
         n++;

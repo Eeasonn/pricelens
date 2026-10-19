@@ -29,9 +29,18 @@ jobs:
       - name: Install dependencies
         working-directory: pricelens
         run: npm ci
+      - name: Typecheck
+        working-directory: pricelens
+        run: npm run typecheck
+      - name: Tests
+        working-directory: pricelens
+        run: npm run test -- --run
       - name: Build (vite build + sync-single)
         working-directory: pricelens
         run: npm run build
+      - name: Verify data and build artifacts
+        working-directory: pricelens
+        run: npm run verify
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

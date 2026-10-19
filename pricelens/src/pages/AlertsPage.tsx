@@ -30,7 +30,8 @@ import {
   type AlertSeriesMeta,
   type AlertType,
 } from '../dataModel/alerts';
-import { productSelectionOfSeriesKey } from '../state/urlSync';
+import { productSelectionOfAnySeriesKey, productSelectionOfSeriesKey } from '../state/urlSync';
+import { getEffectiveBenchmark, groupsFromBenchmark } from '../state/configStore';
 import PageHeader from '../components/PageHeader';
 import BrandDot from '../components/BrandMark';
 import { AlertBell, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
@@ -154,8 +155,51 @@ function useOpenInDashboard() {
   const { state, actions } = useFilters();
   return (a: AlertItem): void => {
     navBus.dashboardFocusWeekId = a.weekId;
-    const sel = productSelectionOfSeriesKey(a.seriesKey);
-    if (sel && state.alertSubs.includes(a.seriesKey)) actions.setOwnSelection([sel]);
+    const sel = a.isOwn ? productSelectionOfSeriesKey(a.seriesKey) : productSelectionOfAnySeriesKey(a.seriesKey);
+    if (sel && state.alertSubs.includes(a.seriesKey)) {
+      if (a.isOwn) {
+        actions.setOwnSelection([sel]);
+      } else {
+        // 竞品告警不能把竞品写进 own。优先从对标矩阵反查对应我司 ROM，
+        // 这样跳看板后仍沿用“我司 + 竞品”的产品语义；找不到映射时
+        // 保留当前我司选择，只把该竞品补进手动竞品组。
+        const normalize = (value: string): string => value.replace(/\s+/g, '');
+        const competitorModelPrefix = `${sel.modelId}__`;
+        const competitorRom = normalize(sel.romram);
+        const benchmark = getEffectiveBenchmark();
+        const mapping = benchmark.find((row) => {
+          if (!row.competitor_sku_id.startsWith(competitorModelPrefix)) return false;
+          const product = dimProduct.find((p) => p.sku_id === row.competitor_sku_id);
+          return product != null && normalize(product.romram) === competitorRom;
+        });
+        const mappedOwn = mapping
+          ? productSelectionOfSeriesKey(`${mapping.own_model_id}__${normalize(mapping.own_romram)}`)
+          : null;
+        const nextOwn = mappedOwn ? [mappedOwn] : state.own;
+        const autoCompetitors = state.autoMatch && nextOwn.length ? groupsFromBenchmark(nextOwn) : [];
+        const hasTarget = autoCompetitors.some(
+          (group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom,
+        );
+        const nextCompetitors = hasTarget
+          ? autoCompetitors
+          : [
+              ...(state.autoMatch ? autoCompetitors : state.competitors),
+              ...(!state.autoMatch && state.competitors.some((group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom) ? [] : [sel]),
+            ];
+        if (
+          nextOwn.length !== state.own.length ||
+          nextOwn.some((group, index) => group.modelId !== state.own[index]?.modelId || normalize(group.romram) !== normalize(state.own[index]?.romram))
+        ) {
+          actions.setOwnSelection(nextOwn);
+        }
+        actions.set({
+          competitors: nextCompetitors,
+          // 未被当前我司配置矩阵覆盖时，显式补入竞品即转为手动模式，避免
+          // 自动按钮与实际展示集合不一致；映射命中则保留自动模式。
+          autoMatch: state.autoMatch && hasTarget,
+        });
+      }
+    }
     go('dashboard');
   };
 }

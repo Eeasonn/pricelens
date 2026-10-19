@@ -136,7 +136,9 @@ export default function BenchConfigModal(props: {
   const save = (): void => {
     // 生效矩阵整快照落 manual（getEffectiveBenchmark 为「manual 存在即整表接管」语义，
     // 只存增量会遮蔽 auto 行）；保存后广播 → 总览矩阵与看板竞品即时同步
-    saveBenchmark(draft.length > 0 ? draft.map((r) => ({ ...r, source: 'manual' as const })) : null);
+    // 空草稿也要持久化为 manual=[]：null 的语义是“清除手动配置并恢复 auto”，
+    // 如果把删光竞品误写成 null，用户刚删除的竞品会在下一次读取时重新出现。
+    saveBenchmark(draft.map((r) => ({ ...r, source: 'manual' as const })));
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
     message.success('对标配置已保存，总览矩阵与看板竞品已同步');
     onClose();
