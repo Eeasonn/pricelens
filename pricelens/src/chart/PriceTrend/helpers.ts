@@ -79,6 +79,10 @@ export const TICK_DASH_W = 6;
 export const axisFixedWidth = (currency: CurrencyMode): number =>
   (currency === 'usd' ? AXIS_BAND_W : TICK_ZONE_W) + TICK_DASH_W;
 
+/** 档位标签显示缩写（第九十一轮）：「1000」全写压成 K 缩写（1000+ → 1K+、
+ *  800~1000 → 800~/1K），与刻度的 K 缩写同语言；DEFAULT_TIERS 数据本身不动。 */
+export const tierLabelShort = (label: string): string => label.replace(/1000/g, '1K');
+
 // ---------------- 断裂轴（空白压缩）阈值设计 ----------------
 // 空白带 = 相邻两簇价格值之间的无人区。压缩条件（三者同时满足才出断轴）：
 // 1. 空白 ≥ 总跨度 × BREAK_GAP_RATIO（20%）：小空隙不值得压，避免轴碎；

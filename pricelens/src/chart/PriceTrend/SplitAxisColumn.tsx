@@ -3,8 +3,9 @@
 // Y 刻度标签（随「显示 Y 刻度线」开关）、刻度短横线、断轴省略号。全面板共享同一 yScale
 // （并集算一次受控传入），每行画一份 = 「只显示靠左的那一个」；面板卡片（axisChrome=false）
 // 不再各自包轴，宽度全部让给绘图区。
-// 第九十轮与主图完全同构：[档位区块贴左 0 = 档位文字三行竖排居中 | 灰竖线 |
-// 刻度文字 8px 右对齐叠画在区块上][短横线]，Y 轴刻度恒显、总宽恒定——主图与分离轴列逐像素同款。
+// 第九十一轮与主图完全同构：[档位区块贴左 0 = 档位文字三行竖排居中][刻度文字 8px
+// 右对齐叠画在区块上][短横线]，Y 刻度随「Y 刻度线」开关显隐（关 = 仅档位、文字居中
+// 整块）、总宽恒定——主图与分离轴列逐像素同款。
 // 纯渲染：几何 = 用与面板相同的 gridTop/plotHeight 构造的伪 Geom（plotWidth=0 即可
 // ——轴元素全部只依赖纵向几何）。
 // ============================================================
@@ -16,6 +17,7 @@ import {
   TICK_ZONE_W,
   TIER_LABEL_W,
   axisFixedWidth,
+  tierLabelShort,
   type Geom,
   type YScale,
 } from './helpers';
@@ -29,9 +31,12 @@ export default function SplitAxisColumn(props: {
   gridLeft: number;
   /** 面板 Chart 的 gridTop（面板内绘图区顶），保证纵向逐像素对齐 */
   panelGridTop: number;
+  /** Y 刻度线（第九十一轮）：缺省开 = 刻度值+短横线；关 = 仅价格档位（文字居中整块） */
+  showYTicks?: boolean;
   tierValues: number[];
 }) {
   const { yScale: scale, currency, panelGridTop } = props;
+  const showYTicks = props.showYTicks ?? true;
   void props.gridLeft; // 旧契约字段，宽度已恒定化
   const axisW = axisFixedWidth(currency);
   const tickLeft = axisW - TICK_DASH_W - TICK_ZONE_W; // 刻度文字区左缘（USD 时位于档位区块右段）
@@ -71,7 +76,8 @@ export default function SplitAxisColumn(props: {
         >
           <span
             style={{
-              width: TIER_LABEL_W,
+              // 关「Y 刻度线」时档位文字居中整个轴区宽度（第九十一轮）
+              width: showYTicks ? TIER_LABEL_W : AXIS_BAND_W,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -84,36 +90,20 @@ export default function SplitAxisColumn(props: {
           >
             {tb.h < 38 ? (
               tb.h >= 14 ? (
-                <span style={{ fontSize: 8, lineHeight: '10px' }}>{tb.label}</span>
+                <span style={{ fontSize: 8, lineHeight: '10px' }}>{tierLabelShort(tb.label)}</span>
               ) : null
             ) : (
               (() => {
-                const parts = tb.label.split('~');
-                const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tb.label];
+                const parts = tierLabelShort(tb.label).split('~');
+                const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(tb.label)];
                 return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
               })()
             )}
           </span>
         </div>
       ))}
-      {/* 档位文字 | 刻度 的灰色竖线分隔：与主图同位（TIER_LABEL_W）一整条贯穿 */}
-      {tierBoxes.length > 0 && (
-        <div
-          style={{
-            position: 'absolute',
-            left: TIER_LABEL_W,
-            top: panelGridTop,
-            width: 1,
-            height: scale.plotHeight,
-            background: color.hairlineStrong,
-            opacity: 0.55,
-            pointerEvents: 'none',
-            zIndex: 2,
-          }}
-        />
-      )}
-      {/* Y 刻度标签（恒显）：USD 时叠画在档位区块右段（zIndex 2），右对齐贴短横线一侧 */}
-      {rows.map((t) => (
+      {/* Y 刻度标签（随「Y 刻度线」开关）：USD 时叠画在档位区块右段（zIndex 2） */}
+      {showYTicks && rows.map((t) => (
           <div
             key={`tk-${t.v}`}
             className="tnum"
@@ -135,7 +125,7 @@ export default function SplitAxisColumn(props: {
             {t.text}
           </div>
         ))}
-      {rows.map((t) => (
+      {showYTicks && rows.map((t) => (
           <div
             key={`dash-${t.v}`}
             style={{

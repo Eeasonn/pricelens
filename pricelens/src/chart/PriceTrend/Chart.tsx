@@ -58,6 +58,7 @@ import {
   TIER_LABEL_W,
   computeYAxis,
   perUsdOf,
+  tierLabelShort,
   xPxOf,
   yPxOf,
   type Geom,
@@ -160,8 +161,13 @@ export interface ChartProps {
   legend?: ReactNode;
   /** 轴列绘制（第五十四轮追补⑤）：false = 面板不画档位带/刻度标签/断轴省略号——
    *  分离模式这三样由卡片外侧的共享轴列（SplitAxisColumn）统一承担，面板只留绘图区。
-   *  第九十轮：「显示 Y 刻度线」开关删除——Y 轴刻度恒显、绘图区网格提示线移除 */
+   *  绘图区网格提示线已移除（第九十轮） */
   axisChrome?: boolean;
+  /** Y 刻度线（第九十一轮恢复齿轮开关，缺省开 = 刻度值 + 短横线）；
+   *  关 = 只保留价格档位带，档位文字居中整个轴区宽度。轴区总宽恒定不随开关变化。
+   *  受控传 onShowYTicks（看板层统一写）；缺省用内部状态（下钻弹窗等自管场景） */
+  showYTicks?: boolean;
+  onShowYTicks?: (v: boolean) => void;
   /** 第七十四轮（分离面板）：true = 系列名全部固定进左侧名称预留带空白处，
    *  不锚在各折线起点旁；主图与下钻弹窗缺省关闭维持原避让语义 */
   namesInZone?: boolean;
@@ -365,6 +371,10 @@ export default function Chart(props: ChartProps) {
       : focusKey != null
         ? [focusKey]
         : null;
+  // Y 刻度线（第九十一轮）：受控开关，缺省开 = 刻度值+短横线；关 = 仅价格档位
+  const [innerShowYTicks, setInnerShowYTicks] = useState(true);
+  const showYTicks = props.showYTicks ?? innerShowYTicks;
+  const commitShowYTicks = props.onShowYTicks ?? setInnerShowYTicks;
   // Y 轴自动压缩（第二十轮）：齿轮弹层内开关。第三十五轮起默认关 = Y 轴完全连续
   const [innerYCompress, setInnerYCompress] = useState(false);
   const yCompress = props.yCompress ?? innerYCompress;
@@ -759,6 +769,8 @@ export default function Chart(props: ChartProps) {
                 currency={currency}
                 sliderScale={sliderScale}
                 onSliderScale={commitSliderScale}
+                showYTicks={showYTicks}
+                onShowYTicks={commitShowYTicks}
                 yCompress={yCompress}
                 onYCompress={commitYCompress}
                 // 追补⑤修：必须传「原始三态」——此前传解析后的二值形态，
@@ -779,18 +791,17 @@ export default function Chart(props: ChartProps) {
               />
             </div>
           )}
-          {/* DOM 刻度标签（8px；ECharts 值轴已隐藏）。第九十轮：「显示 Y 刻度线」开关
-              删除——Y 轴刻度恒显（绘图区网格提示线随之移除）；分离面板 axisChrome=false
-              时标签/短横线由共享轴列承担 */}
-          {tickRows.map((t) => (
+          {/* DOM 刻度标签（8px；ECharts 值轴已隐藏）。第九十一轮：随齿轮「Y 刻度线」
+              开关显隐（关 = 只留档位带）；绘图区网格提示线已移除（第九十轮）；
+              分离面板 axisChrome=false 时标签/短横线由共享轴列承担 */}
+          {showYTicks && tickRows.map((t) => (
             <Fragment key={`tk-${t.v}`}>
               {props.axisChrome !== false && (
                 <div
                   className="tnum"
                   style={{
                     position: 'absolute',
-                    // 刻度文字右对齐、叠画在档位区块背景上（区块右段，
-                    // 与档位文字以灰竖线分隔）；8px 灰字同底部时间轴颜色
+                    // 刻度文字右对齐、叠画在档位区块背景上（区块右段）；8px 灰字
                     left: tickZoneRight - TICK_DASH_W - TICK_ZONE_W,
                     top: Math.round(t.y) - 7,
                     width: TICK_ZONE_W,
@@ -875,8 +886,7 @@ export default function Chart(props: ChartProps) {
           {/* 档位区块（仅 USD）：贴容器左缘的整块竖向色带 = [档位文字区 | 灰竖线 | 刻度文字区]，
               刻度（zIndex 2）与短横线叠画在区块上；无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；
               本币不渲染；图隐藏（空态）时整块消失。
-              第九十轮：档位文字三行竖排（800 / ~ / 1000）在左区内水平+垂直双居中，
-              区块随之压窄（30+1+32） */}
+              第九十一轮：分界竖线删除；档位文字三行竖排居中（关「Y 刻度线」时居中整块） */}
           {showTierBand &&
             tierBoxes.map((tb, i) => (
               <div
@@ -900,7 +910,8 @@ export default function Chart(props: ChartProps) {
               >
                 <span
                   style={{
-                    width: TIER_LABEL_W,
+                    // 关「Y 刻度线」时档位文字居中整个轴区宽度（第九十一轮）
+                    width: showYTicks ? TIER_LABEL_W : AXIS_BAND_W,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -913,34 +924,18 @@ export default function Chart(props: ChartProps) {
                 >
                   {tb.h < 38 ? (
                     tb.h >= 14 ? (
-                      <span style={{ fontSize: 8, lineHeight: '10px' }}>{tb.label}</span>
+                      <span style={{ fontSize: 8, lineHeight: '10px' }}>{tierLabelShort(tb.label)}</span>
                     ) : null
                   ) : (
                     (() => {
-                      const parts = tb.label.split('~');
-                      const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tb.label];
+                      const parts = tierLabelShort(tb.label).split('~');
+                      const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(tb.label)];
                       return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
                     })()
                   )}
                 </span>
               </div>
             ))}
-          {/* 档位文字 | 刻度 的灰色竖线分隔（第八十九轮）：一整条贯穿绘图区高度 */}
-          {showTierBand && tierBoxes.length > 0 && (
-            <div
-              style={{
-                position: 'absolute',
-                left: TIER_LABEL_W,
-                top: geom.plotTop,
-                width: 1,
-                height: geom.plotHeight,
-                background: color.hairlineStrong,
-                opacity: 0.55,
-                pointerEvents: 'none',
-                zIndex: 2,
-              }}
-            />
-          )}
           {/* 最高/最低点标签（第三十六轮，Keepa 式点旁胶囊，不再拉全宽虚线）：
               最高 = 点上方胶囊；最低 = 高亮点环 + 点下方胶囊 */}
           {props.maxMinOn &&

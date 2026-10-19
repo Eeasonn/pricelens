@@ -111,6 +111,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
   };
   // 齿轮弹层视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
+  const [showYTicks, setShowYTicks] = useState(true); // Y 刻度线（第九十一轮恢复；默认开）
   // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑），缺省
   const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
 
@@ -759,6 +760,8 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                 currency={state.currency}
                 sliderScale={sliderScale}
                 onSliderScale={setSliderScale}
+                showYTicks={showYTicks}
+                onShowYTicks={setShowYTicks}
                 yCompress={yCompress}
                 onYCompress={setYCompress}
                 lineShape={lineShape}
@@ -795,6 +798,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                   currency={state.currency}
                   gridLeft={splitGridLeft}
                   panelGridTop={panelGridTop}
+                  showYTicks={showYTicks}
                   tierValues={splitTierValues}
                 />
               )}
@@ -921,6 +925,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                         gridTop={panelGridTop}
                         chrome={false} // 面板不渲染设置行（第五十四轮追补）：统管权在上方常驻行
                         axisChrome={false} // 面板不画轴（追补⑤）：档位带/刻度/断轴号在共享轴列
+                        showYTicks={showYTicks}
                         enableDrill={state.granularity !== 'week'}
                         enableJump={state.granularity === 'week'}
                         enableOffer={state.granularity === 'week' && offersOn}
@@ -981,6 +986,8 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
             nameSeries={visSeries} // 第八十二轮：药丸全集（含屏蔽系列），取代顶部图例页签
             hiddenKeys={hiddenKeys}
             onToggleHidden={toggleLegend}
+            showYTicks={showYTicks}
+            onShowYTicks={setShowYTicks}
             enableDrill={state.granularity !== 'week'}
             enableJump={state.granularity === 'week'}
             enableOffer={state.granularity === 'week' && offersOn}

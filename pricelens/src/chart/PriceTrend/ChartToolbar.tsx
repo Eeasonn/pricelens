@@ -27,6 +27,9 @@ export interface ChartToolbarProps {
   currency: CurrencyMode;
   sliderScale: number;
   onSliderScale: (v: number) => void;
+  /** Y 刻度线（第九十一轮恢复）：开 = 刻度值+短横线；关 = 仅价格档位（居中整块） */
+  showYTicks: boolean;
+  onShowYTicks: (v: boolean) => void;
   yCompress: boolean;
   onYCompress: (v: boolean) => void;
   lineShape: LineShapeChoice;
@@ -167,7 +170,13 @@ export default function ChartToolbar(props: ChartToolbarProps) {
             <ScaleSlider scale={props.sliderScale} onCommit={props.onSliderScale} />
             <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>拖动后松手生效；双击滑杆复位 ×1.00</div>
             <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-            <div style={{ marginTop: 0 }}>
+            <Checkbox checked={props.showYTicks} onChange={(e) => props.onShowYTicks(e.target.checked)}>
+              <span style={{ fontSize: 12 }}>Y 刻度线</span>
+            </Checkbox>
+            <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
+              关闭后仅保留价格档位
+            </div>
+            <div style={{ marginTop: 6 }}>
               <Checkbox checked={props.yCompress} onChange={(e) => props.onYCompress(e.target.checked)}>
                 <span style={{ fontSize: 12 }}>Y 轴自动压缩</span>
               </Checkbox>
@@ -195,7 +204,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           </div>
         }
       >
-        <RoundIconButton title="Y 轴显示设置（每格高度伸缩 / Y 轴自动压缩 / 折线样式）" aria-label="Y 轴显示设置">
+        <RoundIconButton title="Y 轴显示设置（每格高度伸缩 / Y 刻度线 / Y 轴自动压缩 / 折线样式）" aria-label="Y 轴显示设置">
           <SettingOutlined style={{ fontSize: 12 }} />
         </RoundIconButton>
       </Popover>
