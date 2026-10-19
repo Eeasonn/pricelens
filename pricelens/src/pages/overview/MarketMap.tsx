@@ -360,7 +360,8 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
   const CARD_H = 38; // 卡片高（走势图标让位后的统一行高）
   const BAND_GAP = 2;
   const BAND_PAD = 5;
-  const ROW_H = 62; // 在售产品表：一行一产品（零间距成表）
+  const ROW_H = 62; // 在售产品表：行内容高（行间留 TABLE_GAP，分隔线贯穿全宽）
+  const TABLE_GAP = 10;
 
   // —— 分段带：竞品模式 = 全市场；在售产品模式 = 仅我司产品 ——
   const activeItems = mode === 'table' ? ownItems : market;
@@ -375,7 +376,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
       });
       if (items.length === 0) continue;
       const h = mode === 'table'
-        ? items.length * ROW_H
+        ? items.length * (ROW_H + TABLE_GAP)
         : Math.max(76, items.length * (CARD_H + BAND_GAP) + BAND_PAD * 2);
       rects.push({ label, lo, top, h, items });
       top += h;
@@ -416,24 +417,33 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
 
   // —— 卡片纵向位置 ——
   const rowTops = new Map<string, number>();
+  // 行块拉伸高：槽位之间的空隙归入上一行——竞品模式我司列底色借此连续不断点
+  const rowHeights = new Map<string, number>();
   let lastBottom: number;
   if (usd) {
     for (const band of bandRects) {
-      if (mode === 'table') {
-        band.items.forEach((item, index) => rowTops.set(item.model.modelId, band.top + index * ROW_H));
-      } else {
-        band.items.forEach((item, index) => rowTops.set(item.model.modelId, band.top + BAND_PAD + index * (CARD_H + BAND_GAP)));
-      }
+      const pitch = mode === 'table' ? ROW_H + TABLE_GAP : CARD_H + BAND_GAP;
+      const pad = mode === 'table' ? 0 : BAND_PAD;
+      band.items.forEach((item, index) => {
+        const top = band.top + pad + index * pitch;
+        rowTops.set(item.model.modelId, top);
+        const bottom = index < band.items.length - 1 ? band.top + pad + (index + 1) * pitch : band.top + band.h;
+        rowHeights.set(item.model.modelId, Math.max(CARD_H, bottom - top));
+      });
     }
     lastBottom = bandRects.length > 0 ? bandRects[bandRects.length - 1].top + bandRects[bandRects.length - 1].h : plotTop;
   } else {
     lastBottom = plotTop + 2;
-    for (const item of activeItems) {
+    const ladder = activeItems.map((item) => {
       const rawTop = vToY(item.price.mid ?? item.price.min ?? axisBottom) - CARD_H / 2;
-      const top = Math.max(rawTop, lastBottom + 2);
-      rowTops.set(item.model.modelId, top);
-      lastBottom = top + CARD_H;
-    }
+      return { modelId: item.model.modelId, top: Math.max(rawTop, lastBottom + 2) };
+    });
+    ladder.forEach((slot, index) => {
+      rowTops.set(slot.modelId, slot.top);
+      const nextTop = index < ladder.length - 1 ? ladder[index + 1].top : slot.top + CARD_H;
+      rowHeights.set(slot.modelId, nextTop - slot.top);
+    });
+    lastBottom = ladder.length > 0 ? ladder[ladder.length - 1].top + CARD_H : plotTop + 2;
   }
   const totalHeight = usd ? lastBottom + 10 : Math.max(plotTop + Math.max(market.length * 26, 320) + 12, lastBottom + 12);
 
@@ -628,7 +638,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 const rangeText = (vals: number[]): string =>
                   vals.length === 0 ? '—' : vals.length === 1 ? fmtPrice(vals[0], currency) : `${fmtPrice(Math.min(...vals), currency)} – ${fmtPrice(Math.max(...vals), currency)}`;
                 return (
-                  <div key={model.modelId} style={{ position: 'absolute', left: 0, top, width: tableWidth - axisWidth, height: ROW_H, display: 'grid', gridTemplateColumns: tableTemplate, borderTop: `1px solid ${color.hairline}`, background: color.canvas }}>
+                  <div key={model.modelId} style={{ position: 'absolute', left: 0, top, width: tableWidth - axisWidth, height: ROW_H, display: 'grid', gridTemplateColumns: tableTemplate, background: color.canvas }}>
                     <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, height: '100%', padding: '7px 12px 7px 14px', boxSizing: 'border-box', background: '#f3f8ff', borderRight: `1px solid ${color.hairline}` }}>
                       <div style={{ position: 'relative' }}>
                         <TrendDot title={`只看 ${model.modelName} 的价格走势`} onClick={() => openTrend(model)} />
@@ -663,6 +673,16 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                       );
                     })}
                   </div>
+                );
+              })}
+              {/* 分隔线：每个产品行底部一条，从最左贯穿到最右（行间空隙内，不压卡片） */}
+              {tableProducts.map(({ model }) => {
+                const top = rowTops.get(model.modelId) ?? 0;
+                return (
+                  <div
+                    key={`divider-${model.modelId}`}
+                    style={{ position: 'absolute', left: 0, right: 0, top: top + ROW_H, height: 1, background: color.hairline, zIndex: 6, pointerEvents: 'none' }}
+                  />
                 );
               })}
             </div>
@@ -713,8 +733,8 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 const dimmed = litKeys != null && !litKeys.has(model.modelId);
                 const compIndex = brandColumns.findIndex((b) => b.key === brandKeyOf(model.brand));
                 return (
-                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: CARD_H, display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', zIndex: 1 }}>
-                    <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', minWidth: 0, height: '100%', padding: '0 10px 0 14px', borderRight: `1px solid ${color.hairline}`, background: '#f3f8ff' }}>
+                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, height: rowHeights.get(model.modelId) ?? CARD_H, display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', zIndex: 1 }}>
+                    <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'flex-start', minWidth: 0, height: '100%', padding: '0 10px 0 14px', borderRight: `1px solid ${color.hairline}`, background: '#f3f8ff' }}>
                       {isOwn && (
                         <OwnChip
                           model={model}
@@ -731,7 +751,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                     {brandColumns.map((brand, index) => {
                       const here = brandKeyOf(model.brand) === brand.key && !isOwn;
                       return (
-                        <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'center', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
+                        <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'flex-start', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
                           {here && compIndex >= 0 && (
                             <CompChip model={model} price={price} currency={currency} dimmed={dimmed} onOpenTrend={() => openTrend(model)} />
                           )}
