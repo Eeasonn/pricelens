@@ -48,7 +48,7 @@ export default function FilterBar({ onBack }: { onBack: () => void }) {
         <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30 }}>
             <ScopeFields />
-            <div style={{ flex: '1 1 285px', minWidth: 0 }}><Field label="我司产品"><OwnProductControl /></Field></div>
+            <div style={{ flex: '1 1 285px', minWidth: 0 }}><Field label="我司产品"><OwnProductControl productLevel /></Field></div>
             <div style={{ flex: '1 1 290px', minWidth: 0 }}><Field label="竞品"><ComparisonControl /></Field></div>
             <button
               type="button" onClick={onBack} title="返回总览页并定位到该产品行组"

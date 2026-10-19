@@ -276,39 +276,52 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     return m;
   }, [alerts]);
 
-  // ---- ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：该我司产品的全部内存存储选项 ----
-  // 默认选中 = 当前 own 里该型号的 ROM（总览「竞品对比」带入 = 点击的那个）；
-  // 勾选/取消 → setOwnSelection 重设该型号勾选组（最低价色代表），autoMatch 开时竞品自动并集
+  // ---- 我司配置 chips（第八十六轮分组版）：按产品分组渲染当前勾选的 ROM；
+  //      勾/去 = 增删该产品的展示配置（级联在筛选条只管产品层，ROM 粒度唯一入口在此）
   const entryModelId = state.own[0]?.modelId ?? null;
-  const romOptions = useMemo(() => {
-    if (!entryModelId) return [] as { romram: string }[];
-    const seen: string[] = [];
-    for (const p of dimProduct) {
-      if (p.sku_id.startsWith(entryModelId + '__') && !seen.includes(p.romram)) seen.push(p.romram);
+  const ownGroups = useMemo(() => {
+    const groups: { modelId: string; modelName: string; romrams: string[]; selected: Set<string> }[] = [];
+    const seenModel = new Set<string>();
+    for (const s of state.own) {
+      if (seenModel.has(s.modelId)) continue;
+      seenModel.add(s.modelId);
+      const romrams: string[] = [];
+      const seen = new Set<string>();
+      for (const p of dimProduct) {
+        if (p.sku_id.startsWith(s.modelId + '__') && !seen.has(p.romram)) {
+          seen.add(p.romram);
+          romrams.push(p.romram);
+        }
+      }
+      groups.push({
+        modelId: s.modelId,
+        modelName: modelNameOf(s.modelId),
+        romrams,
+        selected: new Set(state.own.filter((x) => x.modelId === s.modelId).map((x) => x.romram)),
+      });
     }
-    return seen.map((romram) => ({ romram }));
-  }, [entryModelId]);
+    return groups;
+  }, [state.own]);
   const selectedRoms = useMemo(
     () => new Set(state.own.filter((s) => s.modelId === entryModelId).map((s) => s.romram)),
     [state.own, entryModelId],
   );
-  const toggleRom = (romram: string): void => {
-    if (!entryModelId) return;
-    const next = new Set(selectedRoms);
-    if (next.has(romram)) {
-      if (next.size <= 1) return; // 至少保留一个 ROM 在图上
-      next.delete(romram);
+  const toggleModelRom = (modelId: string, romram: string): void => {
+    const selected = new Set(state.own.filter((x) => x.modelId === modelId).map((x) => x.romram));
+    if (selected.has(romram)) {
+      if (selected.size <= 1) return; // 至少保留一个配置在图上
+      selected.delete(romram);
     } else {
-      next.add(romram);
+      selected.add(romram);
     }
-    const others = state.own.filter((s) => s.modelId !== entryModelId);
-    const mine = [...next]
+    const others = state.own.filter((s) => s.modelId !== modelId);
+    const rest = [...selected]
       .map((r) => {
-        const sku = lowestPriceColorSku(entryModelId, r);
-        return sku ? { modelId: entryModelId, romram: r, skuIds: [sku] } : null;
+        const sku = lowestPriceColorSku(modelId, r);
+        return sku ? { modelId, romram: r, skuIds: [sku] } : null;
       })
       .filter((x): x is ProductSelection => x != null);
-    actions.setOwnSelection([...others, ...mine]);
+    actions.setOwnSelection([...others, ...rest]);
   };
 
   // 切换入口产品或取消到单 ROM 后，清理不再可用的分离视图状态。
@@ -636,18 +649,27 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
         </h2>
         {/* ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：checkbox 样式，至少保留一个选中；
             autoMatch 开时竞品随勾选 ROM 的配置矩阵并集自动跟随 */}
-        {romOptions.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {romOptions.map(({ romram }) => {
-              const on = selectedRoms.has(romram);
-              return (
-                <Checkbox key={romram} checked={on} onChange={() => toggleRom(romram)}>
-                  <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 400, color: on ? color.ink : color.body }}>
-                    {romram}
-                  </span>
-                </Checkbox>
-              );
-            })}
+        {/* 我司配置 chips（第八十六轮分组版）：按产品分组，勾/去 = 增删该产品的展示配置；
+            多产品时组头显产品名，与分离面板（产品·配置）目录一致 */}
+        {ownGroups.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {ownGroups.map((g) => (
+              <span key={g.modelId} style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                {ownGroups.length > 1 && (
+                  <span style={{ fontSize: 12.5, fontWeight: 650, color: color.ink, whiteSpace: 'nowrap' }}>{g.modelName}</span>
+                )}
+                {g.romrams.map((romram) => {
+                  const on = g.selected.has(romram);
+                  return (
+                    <Checkbox key={romram} checked={on} onChange={() => toggleModelRom(g.modelId, romram)}>
+                      <span style={{ fontSize: 12.5, fontWeight: on ? 700 : 400, color: on ? color.ink : color.body }}>
+                        {romram}
+                      </span>
+                    </Checkbox>
+                  );
+                })}
+              </span>
+            ))}
           </div>
         )}
         {/* 分离显示（第五十四轮拍板；第七十七轮「每行几个」并入此设置、默认开）：

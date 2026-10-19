@@ -181,12 +181,16 @@ function ProductCascadeControl({
   selection,
   onSelectionChange,
   emptyPlaceholder,
+  productLevel,
 }: {
   kind: 'own' | 'comp';
   /** 第四十三轮：受控注入（总览产品筛选复用同款级联）；缺省 = 绑定 FiltersContext */
   selection?: ProductSelection[];
   onSelectionChange?: (next: ProductSelection[]) => void;
   emptyPlaceholder?: string;
+  /** 第八十六轮：收窄到产品层——面板只留组/型号两列，勾选型号即整产品；
+   *  ROM 粒度的取舍交给看板标题行的配置 chips（消除上下重复入口） */
+  productLevel?: boolean;
 }) {
   const { state, actions } = useFilters();
   const fxRate = getFxRate();
@@ -241,16 +245,29 @@ function ProductCascadeControl({
     [list, groupKeyOfModel],
   );
 
-  // 勾选路径 → ProductSelection[]：新勾选配置默认带最低价颜色，已有勾选原样保留
+  // 勾选路径 → ProductSelection[]：新勾选配置默认带最低价颜色，已有勾选原样保留。
+  // 第八十六轮：productLevel 用 SHOW_PARENT——整产品勾满时 onChange 只给 2 段父路径
+  //（部分勾选仍是 3 段叶路径），此处按路径长度展开成全部 ROM 勾选。
   const onChange = (values: (string | number)[][]): void => {
     const next: ProductSelection[] = [];
+    const pushRom = (modelId: string, r: RomramNode): void => {
+      const keep = findSelection(list, r);
+      next.push(keep ? { ...keep } : { modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) });
+    };
     for (const path of values) {
-      const modelId = String(path[1]);
-      const romram = String(path[2]);
-      const node = romramNodeOf.get(`${modelId}|${romram}`);
-      if (!node) continue;
-      const keep = findSelection(list, node);
-      next.push(keep ? { ...keep } : { modelId, romram, skuIds: defaultColorSkuIds(node) });
+      if (path.length >= 3) {
+        const modelId = String(path[1]);
+        const romram = String(path[2]);
+        const node = romramNodeOf.get(`${modelId}|${romram}`);
+        if (node) pushRom(modelId, node);
+      } else if (productLevel && path.length === 2) {
+        const modelId = String(path[1]);
+        const model = tree.flatMap((g) => g.models).find((m) => m.modelId === modelId);
+        for (const r of model?.romrams ?? []) pushRom(modelId, r);
+      } else if (productLevel && path.length === 1) {
+        const grp = tree.find((g) => g.key === String(path[0]));
+        for (const m of grp?.models ?? []) for (const r of m.romrams) pushRom(m.modelId, r);
+      }
     }
     writeList(next);
     // 锚点档位被取消勾选（含父级联动传导）→ 同步收起颜色浮层
@@ -259,10 +276,12 @@ function ProductCascadeControl({
     }
   };
 
-  // 已选标签：显产品名（labels[1] = option.label = 型号名，非 modelId）；同产品
-  // 多配置时补 ROMRAM 后缀区分。<3 段的父路径兜底显示末段，杜绝空标签。
+  // 已选标签：显产品名（labels[1] = option.label = 型号名，非 modelId）。
+  // productLevel（SHOW_PARENT）：整产品勾满 = 2 段父路径 → 产品名；部分勾选 = 3 段
+  // 叶路径 → 产品名 · ROM（提示粒度收窄）；整组合选 = 1 段组名。杜绝空标签。
   const displayRender = (labels: string[]): ReactNode => {
-    if (!labels || labels.length < 3) return labels?.[labels.length - 1] ?? '';
+    if (!labels || labels.length === 0) return '';
+    if (productLevel) return labels.length >= 3 ? `${labels[1]} · ${shortRomram(labels[2])}` : labels[labels.length - 1];
     const name = String(labels[1] ?? '');
     const romram = String(labels[2] ?? '');
     const sameModel = list.filter((s) => modelNameOf(s.modelId) === name).length;
@@ -374,17 +393,18 @@ function ProductCascadeControl({
       value={value}
       onChange={onChange as unknown as (value: unknown) => void}
       multiple
-      // 第三十轮：整组勾满时 SHOW_PARENT（antd 默认）会把全部叶子路径坍缩成一个
-      // 父路径（如 ["Mate"]），displayRender 拿不到型号段 → 触发器空标签。
-      // 改 SHOW_CHILD：value 恒为叶子三段路径，标签=逐配置，与「匹配竞品」
-      // 带出的部分勾选语义一致。
-      showCheckedStrategy={Cascader.SHOW_CHILD}
+      // 第八十六轮：productLevel 用 SHOW_PARENT——整产品勾满坍缩成一个产品名标签
+      //（部分勾选仍逐配置显示，提示粒度收窄）；竞品级联维持 SHOW_CHILD 逐配置标签
+      showCheckedStrategy={productLevel ? Cascader.SHOW_PARENT : Cascader.SHOW_CHILD}
       maxTagCount="responsive"
       placeholder={kind === 'own' ? (emptyPlaceholder ?? '选择产品') : '选择竞品'}
       displayRender={displayRender}
       popupRender={() => (
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
-          <CascadePanel open={menuOpen} columns={[
+          <CascadePanel open={menuOpen} columns={productLevel ? [
+            { width: 175, items: groupItems },
+            { width: 215, items: modelItems },
+          ] : [
             { width: 145, items: groupItems },
             { width: 190, items: modelItems },
             { width: 190, items: leafItems },
@@ -405,6 +425,7 @@ export function OwnProductControl(p: {
   selection?: ProductSelection[];
   onSelectionChange?: (next: ProductSelection[]) => void;
   emptyPlaceholder?: string;
+  productLevel?: boolean;
 } = {}) {
   return <ProductCascadeControl kind="own" {...p} />;
 }
