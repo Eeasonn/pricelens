@@ -53,9 +53,9 @@ import {
   estGridLeft,
   TICK_PX,
   AXIS_BAND_W,
-  AXIS_GAP,
   TICK_ZONE_W,
   TICK_DASH_W,
+  TIER_LABEL_W,
   computeYAxis,
   perUsdOf,
   xPxOf,
@@ -715,11 +715,10 @@ export default function Chart(props: ChartProps) {
   const brandByKey = useMemo(() => new Map([...series, ...nameAll].map((s) => [s.key, s.brand])), [series, nameAll]);
 
   // ---- DOM 刻度/断轴/档位带数据（纯构建见 chartModel） ----
-  // 左缘布局（第八十六轮定宽）：[档位带(仅USD) 40][刻度文字 44][短横线 6][名称预留带][绘图区]。
+  // 左缘布局（第八十九轮）：[档位区块(贴左缘 0)=档位文字居左|灰竖线|刻度文字右对齐叠带上][短横线][名称预留带][绘图区]。
   // 轴区总宽恒定，不随「显示 Y 刻度线」开关变化（开关只控标签/短横线/网格线显隐）；
-  // 档位带盒贴容器左缘（bandLeft = 0），刻度文字右对齐，短横线画在轴区右缘与刻度对齐。
+  // 刻度文字叠画在档位区块背景上（zIndex 2），区块与名称预留带之间以短横线过渡。
   const tickZoneRight = geom ? geom.plotLeft - NAME_ZONE_W : 0; // 轴区右缘（短横线起点）
-  const bandLeft = tickZoneRight - TICK_DASH_W - AXIS_GAP - AXIS_BAND_W;
   const tickRows = useMemo(() => buildTickRows(geom), [geom]);
 
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
@@ -854,17 +853,20 @@ export default function Chart(props: ChartProps) {
                   className="tnum"
                   style={{
                     position: 'absolute',
-                    // 第八十六轮：刻度文字右对齐、贴在档位带右界一侧（9px 灰字，
-                    // 比档位带标签小一号、同底部时间轴颜色）；宽度恒定不随开关变化
+                    // 第八十九轮：刻度文字右对齐、叠画在档位区块背景上（区块右段，
+                    // 与档位文字以灰竖线分隔）；9px 灰字同底部时间轴颜色，
+                    // 宽度恒定不随开关变化；zIndex 2 = 盖过区块（zIndex 1）
                     left: tickZoneRight - TICK_DASH_W - TICK_ZONE_W,
                     top: Math.round(t.y) - 7,
                     width: TICK_ZONE_W,
+                    paddingRight: 4,
+                    boxSizing: 'border-box',
                     textAlign: 'right',
                     fontSize: 9,
                     lineHeight: '14px',
                     color: color.mute,
                     pointerEvents: 'none',
-                    zIndex: 1,
+                    zIndex: 2,
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -935,10 +937,11 @@ export default function Chart(props: ChartProps) {
               </div>
             );
           })}
-          {/* 档位带（仅 USD）：Y 轴左侧档位框，框住对应刻度区段（如 200~400 框住 200..400）；
-              无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；本币不渲染；图隐藏（空态）时整块消失。
-              第八十六轮：带宽压缩至 40 并贴轴区左缘（bandLeft=0）；「A~B」档位标签换行竖排居中
-              （A / ~ / B），矮档（<38px）退化为单行小字 */}
+          {/* 档位区块（仅 USD）：贴容器左缘的整块竖向色带 = [档位文字居左 | 灰竖线 | 刻度文字区]，
+              刻度（zIndex 2）与短横线叠画在区块上；无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；
+              本币不渲染；图隐藏（空态）时整块消失。
+              第八十九轮：区块贴左缘（与下方时间轨道左端对齐）、加宽为 TIER_LABEL_W+1+44，
+              档位标签单行居左（不再三行竖排） */}
           {showTierBand &&
             tierBoxes.map((tb, i) => (
               <div
@@ -946,51 +949,49 @@ export default function Chart(props: ChartProps) {
                 title={`价格档位 ${tb.label}（USD）${tb.empty ? '· 当前无产品' : ''}`}
                 style={{
                   position: 'absolute',
-                  left: bandLeft,
+                  left: 0,
                   top: tb.top,
                   width: AXIS_BAND_W,
                   height: tb.h,
                   boxSizing: 'border-box',
                   border: tb.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`,
                   background: tb.empty ? 'transparent' : i % 2 === 0 ? color.canvasSoft2 : color.canvasSoft,
-                  display: 'grid',
-                  placeItems: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  paddingLeft: 6,
                   overflow: 'hidden',
                   pointerEvents: 'none',
                   zIndex: 1,
                 }}
               >
-                {(() => {
-                  const parts = tb.label.split('~');
-                  const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tb.label];
-                  const labelColor = tb.empty ? color.mute : color.body;
-                  if (tb.h < 38) {
-                    return tb.h >= 14 ? (
-                      <span style={{ fontSize: 8, lineHeight: '10px', color: labelColor, whiteSpace: 'nowrap' }}>
-                        {tb.label}
-                      </span>
-                    ) : null;
-                  }
-                  return (
-                    <span
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        fontSize: 9,
-                        lineHeight: '12px',
-                        color: labelColor,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {lines.map((ln, k) => (
-                        <span key={`${ln}-${k}`}>{ln}</span>
-                      ))}
-                    </span>
-                  );
-                })()}
+                <span
+                  style={{
+                    fontSize: tb.h < 38 ? 8 : 9,
+                    lineHeight: '12px',
+                    color: tb.empty ? color.mute : color.body,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {tb.label}
+                </span>
               </div>
             ))}
+          {/* 档位文字 | 刻度 的灰色竖线分隔（第八十九轮）：一整条贯穿绘图区高度 */}
+          {showTierBand && tierBoxes.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                left: TIER_LABEL_W,
+                top: geom.plotTop,
+                width: 1,
+                height: geom.plotHeight,
+                background: color.hairlineStrong,
+                opacity: 0.55,
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            />
+          )}
           {/* 最高/最低点标签（第三十六轮，Keepa 式点旁胶囊，不再拉全宽虚线）：
               最高 = 点上方胶囊；最低 = 高亮点环 + 点下方胶囊 */}
           {props.maxMinOn &&

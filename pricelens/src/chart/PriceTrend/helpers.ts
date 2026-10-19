@@ -44,32 +44,40 @@ export const MIN_PX_PER_SERIES = 40;
  *  段像素需求下限按 max(MIN_PX_PER_SERIES, 此值) 取，多产品时自动把段抬到
  *  n×52px，名称药丸之间不再拥挤（真实高度不足的段才生长，否则旧口径）。 */
 export const NAME_PX_PER_SERIES = 52;
-export const SERIES_PX_CAP = 12;
+/** 段像素需求的系列数上限：16 × 52 = 832px，覆盖 23 个单行名称药丸的纵向容量
+ *  （第八十九轮 12→16：名称带加宽后药丸恒单行 36px，16 系列名称塔 576px 已在
+ *  旧上限 624 内，但 20+ 系列全选时仍会溢出绘图域下缘） */
+export const SERIES_PX_CAP = 16;
 
 /** §6.5 刷选窗口最小 4 个桶 */
 export const MIN_WINDOW = 4;
 
 // ---------------- Y 轴左侧布局（第七轮+八轮修订） ----------------
 
-/** 产品名称预留带宽：起点贴近左缘的系列名收进这里（可两行换行），折线永不进入 */
-export const NAME_ZONE_W = 148;
+/** 产品名称预留带宽：起点贴近左缘的系列名收进这里，折线永不进入。
+ *  第八十九轮 148→188：最长配置名（Pura 90s Pro Max 12+512）单行放下——
+ *  名称换行会把每个药丸垫高一行，十几条系列时名称塔整体溢出绘图域（名称超域根因） */
+export const NAME_ZONE_W = 188;
 /** 档位带（仅 USD）宽 + 与刻度列的间距（旧口径；渲染已改用下方固定轴宽常量） */
 export const TIER_BAND_W = 64;
 export const TIER_BAND_GAP = 8;
-// ---------------- 固定轴宽（第八十六轮）：[档位带 40][刻度文字 44][短横线 6] ----------------
+// ---------------- 固定轴宽（第八十六轮定宽；第八十九轮档位区块重排） ----------------
+// [档位区块 = 档位文字(居左) | 灰竖线 | 刻度文字(右对齐，叠画在区块上)][短横线]
 // 宽度恒定、不随「显示 Y 刻度线」开关变化——开关只控刻度标签/短横线/网格线显隐，
 // 彻底消除刻度线有无造成的 Y 轴宽度差异（右侧绘图区空间恒定）。
-/** 档位带宽（压缩值）：档位标签换行竖排（如 800/~/1000 三行居中），盒贴轴区左缘 */
-export const AXIS_BAND_W = 40;
-/** 档位带与刻度文字区间距 */
-export const AXIS_GAP = 4;
-/** Y 轴刻度文字区宽（右对齐，弹性自适应规则显示在档位带右界一侧） */
+/** 档位文字区宽（单行居左；「800~1000」9px 最宽 ~42px） */
+export const TIER_LABEL_W = 52;
+/** 档位区块总宽：档位文字 | 竖线分隔 | 刻度文字区（刻度覆盖在区块背景上） */
+export const AXIS_BAND_W = TIER_LABEL_W + 1 + 44;
+/** 档位带与刻度文字区间距（旧口径；第八十九轮起两者同处一个区块，由竖线分隔） */
+export const AXIS_GAP = 0;
+/** Y 轴刻度文字区宽（右对齐；USD 时位于档位区块右段、叠在区块背景上） */
 export const TICK_ZONE_W = 44;
 /** 刻度短横线宽：画在轴区右外侧、与刻度文字对齐，表示「文字 ↔ 绘图区位置」关系 */
 export const TICK_DASH_W = 6;
-/** 固定轴区总宽（不含名称预留带） */
+/** 固定轴区总宽（不含名称预留带）：USD = 档位区块（含刻度区）+ 短横线；非 USD = 刻度文字区 + 短横线 */
 export const axisFixedWidth = (currency: CurrencyMode): number =>
-  (currency === 'usd' ? AXIS_BAND_W + AXIS_GAP : 0) + TICK_ZONE_W + TICK_DASH_W;
+  (currency === 'usd' ? AXIS_BAND_W : TICK_ZONE_W) + TICK_DASH_W;
 
 // ---------------- 断裂轴（空白压缩）阈值设计 ----------------
 // 空白带 = 相邻两簇价格值之间的无人区。压缩条件（三者同时满足才出断轴）：
@@ -392,12 +400,15 @@ export function computeYAxis(params: {
   // ---- 2.5) 段像素需求下限（第三十二轮）：与段值域相交的系列数 × 每系列保底像素
   //      （× 伸缩倍率，滑杆语义不变）。占比份额低于需求时抬升该段，plotHeight 相应
   //      增长（高度自适应的系列数维度）；无一段触需时与旧口径逐字节一致。
+  //      第八十九轮修「Y 轴自适应失效」：按**每系列**区间（ranges）计数而非合并后
+  //      的 mergedRanges——多产品价格带互相重叠时合并会把 18 个系列折叠成 4 个
+  //      区间，need 被低估 4 倍，名称塔整体溢出绘图域（名称超域根因之二）
   const segBaseH = segDomains.map(
     (d) => Math.max(12, Math.round(((d.max - d.min) / pseudoSpan) * availPx)),
   );
   const segFinalH = segDomains.map((d, i) => {
     let n = 0;
-    for (const r of mergedRanges) {
+    for (const r of ranges) {
       if (r.lo <= d.max && r.hi >= d.min) n++;
     }
     const need = Math.min(n, SERIES_PX_CAP) * Math.max(MIN_PX_PER_SERIES, NAME_PX_PER_SERIES) * scale;

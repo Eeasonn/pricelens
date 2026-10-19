@@ -278,7 +278,6 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
 
   // ---- 我司配置 chips（第八十六轮分组版）：按产品分组渲染当前勾选的 ROM；
   //      勾/去 = 增删该产品的展示配置（级联在筛选条只管产品层，ROM 粒度唯一入口在此）
-  const entryModelId = state.own[0]?.modelId ?? null;
   const ownGroups = useMemo(() => {
     const groups: { modelId: string; modelName: string; romrams: string[]; selected: Set<string> }[] = [];
     const seenModel = new Set<string>();
@@ -698,7 +697,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
           {compOnly ? (
             <>竞品价格走势<span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>（{compModelCount} 款）</span></>
           ) : (
-            <>价格走势{entryModelId && <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>（{modelNameOf(entryModelId)}）</span>}</>
+            <>价格走势</>
           )}
         </h2>
         {/* ROM 多选 chips（第五十四轮追补，用户需求 5a/5b）：checkbox 样式，至少保留一个选中；
