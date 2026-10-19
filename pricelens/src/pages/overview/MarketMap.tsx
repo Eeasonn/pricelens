@@ -60,8 +60,8 @@ function scaleForValues(values: number[], currency: CurrencyMode, rowCount: numb
   const points = values.map((value, index) => ({ bucketId: `current-${index}`, xLabel: '', anchorDate: '', rrp: null, price: value, missing: false, offer: null, url: '', shopName: null }));
   const series: PlotSeries[] = [{ key: 'market-map', isOwn: true, brand: '', label: '', skuIds: [], color: color.ink, points }];
   const base = computeYAxis({ series, priceTypes: { discounted: true, rrp: false }, sliderScale: 1, allowBreak: false, perUsd: perUsdOf(currency) });
-  // 概要图以“每个产品一行”为主，压缩价格看板的默认格距，避免少量产品撑出长段空白。
-  const targetScale = Math.max(0.75, Math.min(2, (rowCount * 38) / Math.max(1, base.plotHeight)));
+  // 概要图以“每个产品一行”为主，压缩价格看板的默认格距（第七十九轮行高 24），避免少量产品撑出长段空白。
+  const targetScale = Math.max(0.75, Math.min(2, (rowCount * 24) / Math.max(1, base.plotHeight)));
   return computeYAxis({ series, priceTypes: { discounted: true, rrp: false }, sliderScale: targetScale, allowBreak: false, perUsd: perUsdOf(currency) });
 }
 
@@ -151,14 +151,14 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
   const columnTemplate = `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`;
   const minMapWidth = axisWidth + 250 + Math.max(brandColumns.length, 1) * 180;
   // 价格接近的产品仍需保持“一产品一行”。先按真实 Y 位置排布，再做最小行距碰撞处理；
-  // 刻度和网格线保持真实价格位置，产品文字只在必要时做小幅上下让位。
+  // 第七十九轮行距压到最小（行高 22 + 间距 2），40 个型号也能一屏纵览。
   const rowTops = new Map<string, number>();
-  let lastBottom = plotTop + 4;
+  let lastBottom = plotTop + 2;
   for (const item of market) {
-    const rawTop = yPxOf(geom, item.price.mid ?? item.price.min ?? 0) - 18;
-    const top = Math.max(rawTop, lastBottom + 4);
+    const rawTop = yPxOf(geom, item.price.mid ?? item.price.min ?? 0) - 11;
+    const top = Math.max(rawTop, lastBottom + 2);
     rowTops.set(item.model.modelId, top);
-    lastBottom = top + 36;
+    lastBottom = top + 22;
   }
   // 产品行只允许向下避让；如果密集产品超过价格轴高度，就增长画布，不能把第一行上移遮住表头。
   const totalHeight = Math.max(plotTop + scale.plotHeight + 12, lastBottom + 12);
@@ -212,7 +212,7 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
               const selected = selectedModelId === model.modelId;
               const isOwn = model.isOwn;
               return (
-                <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: 36, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', zIndex: 1 }}>
+                <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, minHeight: 22, display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', zIndex: 1 }}>
                   <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'center', minWidth: 0, height: '100%', padding: '4px 10px 4px 14px', borderRight: `1px solid ${color.hairline}`, background: selected ? '#f0f6ff' : color.canvas, boxShadow: selected ? 'inset 3px 0 0 #0070f3, 2px 0 3px rgba(0,0,0,.03)' : '2px 0 3px rgba(0,0,0,.03)' }}>
                     {isOwn && <ModelChip model={model} mid={price.mid} currency={currency} clickable onClick={() => onOpenProduct(model)} />}
                   </div>

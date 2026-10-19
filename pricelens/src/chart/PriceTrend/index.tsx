@@ -21,6 +21,7 @@
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Checkbox, ConfigProvider, Segmented, Switch } from 'antd';
+import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import PlatformBox from '../../components/FilterBar/PlatformBox';
 import CurrencyBox from '../../components/FilterBar/CurrencyBox';
@@ -75,6 +76,7 @@ import {
 } from './helpers';
 import PromoDrawer from './PromoDrawer';
 import PointPanel from './PointPanel';
+import SplitScrollBar from './SplitScrollBar';
 
 export default function PriceTrend() {
   const { state, actions } = useFilters();
@@ -310,6 +312,7 @@ export default function PriceTrend() {
   useEffect(() => {
     if (selectedRoms.size < 2 || !state.own.every((s) => s.modelId === entryModelId)) {
       setSplitOn(false);
+      setPanelOrder([]);
     }
   }, [entryModelId, selectedRoms.size, state.own]);
 
@@ -323,7 +326,10 @@ export default function PriceTrend() {
   // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
   const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
   const splitActive = splitOn && selectedRoms.size >= 2 && state.own.length >= 2 && state.own.every((s) => s.modelId === entryModelId);
-
+  // 面板顺序（第七十九轮：卡片上边线拖移把手拖拽换位，取代已移除的箭头调序）
+  const [panelOrder, setPanelOrder] = useState<string[]>([]); // 面板 key 序；空 = own 序
+  const [draggingPanel, setDraggingPanel] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const panels = useMemo(() => {
     if (!splitActive) return [];
     const bench = getEffectiveBenchmark();
@@ -404,6 +410,26 @@ export default function PriceTrend() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [panelData, win, hiddenKeys],
   );
+
+  // 展示顺序：拖拽把手换位后记录 key 序；空 = 数据序
+  const orderedPanels = useMemo(() => {
+    if (panelOrder.length === 0) return panelViews;
+    const idx = (k: string) => {
+      const i = panelOrder.indexOf(k);
+      return i === -1 ? 999 : i;
+    };
+    return [...panelViews].sort((a, b) => idx(a.key) - idx(b.key));
+  }, [panelViews, panelOrder]);
+  // 拖拽落点 = 把被拖面板插到目标面板当前位置
+  const movePanelTo = (dragKey: string, targetKey: string): void => {
+    if (dragKey === targetKey) return;
+    const keys = orderedPanels.map((p) => p.key);
+    const from = keys.indexOf(dragKey);
+    const to = keys.indexOf(targetKey);
+    if (from < 0 || to < 0) return;
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    setPanelOrder(keys);
+  };
 
   // 共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
   // splitYCfg/splitGridLeft 声明在主图 gridLeft 之后（见下方）
@@ -509,35 +535,15 @@ export default function PriceTrend() {
     () => collectTierValues(panelViews.flatMap((p) => p.vis), state.priceTypes),
     [panelViews, state.priceTypes],
   );
-  // 面板头行高（追补⑤重排）：轴列用同一偏移对齐面板绘图区顶（卡片 paddingTop 4 + 头 24）
+  // 面板头行高（追补⑤重排）：轴列用同一偏移对齐面板绘图区顶。
+  // 第七十九轮：卡片顶部预留拖移把手行（PANEL_GRIP_H），滚动容器再垫 SCROLL_PAD_TOP
+  // 容纳把手凸出上边线的上半——轴列偏移同步 = 三段之和。
   const PANEL_HEAD_H = 24;
+  const PANEL_GRIP_H = 14;
+  const SCROLL_PAD_TOP = 10;
 
-  // 分离卡片的横向轨道在面板数超过当前可见列数时才可滚动；
-  // 记录两端状态，给没有明显系统滚动条的环境补一条可见提示。
+  // 分离卡片横向轨道的滚动引用；溢出滑块由 SplitScrollBar 自行测量渲染。
   const splitScrollRef = useRef<HTMLDivElement | null>(null);
-  const [splitOverflow, setSplitOverflow] = useState({ left: false, right: false });
-  useLayoutEffect(() => {
-    const el = splitScrollRef.current;
-    if (!splitActive || !el) {
-      setSplitOverflow((prev) => (prev.left || prev.right ? { left: false, right: false } : prev));
-      return;
-    }
-    const sync = (): void => {
-      const max = Math.max(0, el.scrollWidth - el.clientWidth);
-      const left = el.scrollLeft > 2;
-      const right = max - el.scrollLeft > 2;
-      setSplitOverflow((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
-    };
-    sync();
-    el.addEventListener('scroll', sync, { passive: true });
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
-    observer?.observe(el);
-    if (el.firstElementChild) observer?.observe(el.firstElementChild);
-    return () => {
-      el.removeEventListener('scroll', sync);
-      observer?.disconnect();
-    };
-  }, [splitActive, panelViews.length, splitColumns, splitGridLeft]);
 
   // ---- 下钻（§6.3）：seriesKey → 取数组，单组重查 ----
   const selByKey = useMemo(() => {
@@ -739,7 +745,7 @@ export default function PriceTrend() {
               marginBottom: space.sm,
             }}
           >
-            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, splitGridLeft, showYTicks)}px`, paddingTop: 4 + PANEL_HEAD_H }}>
+            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, splitGridLeft, showYTicks)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H }}>
               {splitYCfg && (
                 <SplitAxisColumn
                   yScale={splitYCfg}
@@ -762,26 +768,82 @@ export default function PriceTrend() {
                   overflowX: 'auto',
                   overflowY: 'hidden',
                   scrollbarGutter: 'stable',
-                  paddingBottom: 6,
+                  // 顶部垫高容纳拖移把手凸出上边线的上半；原生滚动条已隐藏，
+                  // 溢出提示由下方常驻滑动块（SplitScrollBar）承担
+                  padding: `${SCROLL_PAD_TOP}px 0 6px`,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, width: '100%', minWidth: 0 }}>
-                  {panelViews.map((p) => {
+                  {orderedPanels.map((p) => {
+                  const isDragging = draggingPanel === p.key;
+                  const isDropTarget = dropTarget === p.key && !isDragging;
                   return (
                     <div
                       key={p.key}
+                      onDragOver={(e) => {
+                        if (!draggingPanel || draggingPanel === p.key) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        setDropTarget(p.key);
+                      }}
+                      onDragLeave={() => setDropTarget((t) => (t === p.key ? null : t))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggingPanel) movePanelTo(draggingPanel, p.key);
+                        setDraggingPanel(null);
+                        setDropTarget(null);
+                      }}
                       style={{
                         flex: `0 0 calc((100% - ${(splitColumns - 1) * Number(space.md)}px) / ${splitColumns})`,
                         // 宽度由「每行 2/3 个」控制，不设固定最小宽度；否则窄屏下
                         // 选择 2 个时仍只能看到一张完整卡片，失去切换该视图的意义。
                         minWidth: 0,
-                        border: `1px solid ${color.hairline}`,
+                        position: 'relative',
+                        border: `1px solid ${isDropTarget ? color.link : color.hairline}`,
+                        boxShadow: isDropTarget ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined,
                         borderRadius: radius.card,
-                        padding: '4px 8px 0',
+                        padding: `${PANEL_GRIP_H}px 8px 0`, // 顶部预留把手行（第七十九轮）
                         background: color.canvas,
                         boxSizing: 'border-box',
+                        opacity: isDragging ? 0.45 : undefined,
                       }}
                     >
+                      {/* 拖移把手（第七十九轮）：骑在上边线居中处，拖到目标卡片上松手即换位 */}
+                      <span
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggingPanel(p.key);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', p.key);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingPanel(null);
+                          setDropTarget(null);
+                        }}
+                        role="button"
+                        aria-label={`拖动调整 ${p.sel.romram} 面板位置`}
+                        title="拖动调整面板顺序"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          zIndex: 10,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '0 9px',
+                          height: 18,
+                          background: color.canvas,
+                          border: `1px solid ${draggingPanel === p.key ? color.link : color.hairline}`,
+                          borderRadius: radius.pill,
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
+                          cursor: 'grab',
+                          color: color.mute,
+                          lineHeight: '16px',
+                        }}
+                      >
+                        <HolderOutlined style={{ fontSize: 10 }} />
+                      </span>
                       {/* 面板头（第七十五轮定版）：型号留左上角；系列页签按面板拆开、
                           顶部居中只列该卡片对应的产品，两侧提示性小箭头可滚动查看；
                           不再写「我司 + 对标竞品」 */}
@@ -834,12 +896,8 @@ export default function PriceTrend() {
                   })}
                 </div>
               </div>
-              {(splitOverflow.left || splitOverflow.right) && (
-                <div className="price-trend-split-scroll-hint" aria-live="polite">
-                  {splitOverflow.left && <span>← 返回左侧</span>}
-                  {splitOverflow.right && <span>横向查看更多 →</span>}
-                </div>
-              )}
+              {/* 常驻横向滑动块（第七十九轮）：轨道溢出时出现，拖拽/点按均可移动查看 */}
+              <SplitScrollBar trackRef={splitScrollRef} />
             </div>
           </div>
           {/* 共享刷选条：一个窗口联动全部面板 */}

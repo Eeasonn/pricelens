@@ -94,33 +94,17 @@ select {
   line-height: 28px;
 }
 
-/* 分离走势：系统滚动条在 macOS 常默认悬浮且不可见，补足轨道/滑块和文字提示，
-   让用户知道右侧还有面板；卡片仍保持单行，不因提示而裁切图表。 */
+/* 分离走势：原生滚动条在 macOS 常默认悬浮且自动隐藏，用户感知不到右侧还有面板
+   ——第七十九轮起彻底隐藏，改由轨道底部的常驻滑动块（SplitScrollBar）承担提示与拖拽。 */
 .price-trend-split-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: #9b9b9b #f3f3f3;
+  scrollbar-width: none;
   overscroll-behavior-x: contain;
 }
-.price-trend-split-scroll::-webkit-scrollbar { height: 10px; }
-.price-trend-split-scroll::-webkit-scrollbar-track {
-  background: #f3f3f3;
-  border-radius: 9999px;
+.price-trend-split-scroll::-webkit-scrollbar {
+  display: none;
 }
-.price-trend-split-scroll::-webkit-scrollbar-thumb {
-  background: #9b9b9b;
-  border-radius: 9999px;
-  border: 2px solid #f3f3f3;
-}
-.price-trend-split-scroll-hint {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  min-height: 18px;
-  padding: 1px 2px 0;
-  color: #777;
-  font-size: 11px;
-  line-height: 16px;
-  white-space: nowrap;
+.lpl-split-bar:hover div {
+  background: #8f939c;
 }
 
 /* 分离面板头的系列页签行（第七十五轮）：滚动交给两侧提示性小箭头，
