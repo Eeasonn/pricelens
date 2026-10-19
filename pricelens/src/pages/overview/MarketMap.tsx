@@ -259,53 +259,25 @@ function CompChip({
   );
 }
 
-/** 对比浮窗内的一组（我司或单个竞品）：组头 = 品牌点+名称，行 = 型号从小到大 */
-function CompareGroup({ brand, name, own, rows, currency }: {
-  brand: string;
-  name: string;
-  own: boolean;
-  rows: OverviewRow[];
-  currency: CurrencyMode;
-}) {
-  const sorted = [...rows].sort((a, b) => romramSizeKey(a.romram) - romramSizeKey(b.romram));
+/** 对比矩阵单元格：我司列突出折后价；竞品列带型号名（对位容量可能不同） */
+function MatrixCell({ row, currency, own }: { row: OverviewRow | null; currency: CurrencyMode; own: boolean }) {
+  if (!row || (row.price == null && row.rrp == null)) {
+    return (
+      <div style={{ padding: '10px 12px', background: own ? '#f3f8ff' : color.canvas, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 52 }}>
+        <span style={{ color: color.mute, fontSize: 12 }}>—</span>
+      </div>
+    );
+  }
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <BrandDot brand={brand} size={7} />
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: own ? brandColorOf(brand) : color.ink }}>{name}</span>
-        {own && (
-          <span style={{ fontSize: 10.5, lineHeight: '16px', padding: '0 7px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, fontWeight: 600 }}>我司</span>
-        )}
+    <div style={{ padding: '7px 12px', minWidth: 0, background: own ? '#f3f8ff' : color.canvas }}>
+      {!own && (
+        <div style={{ fontSize: 10.5, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: own ? 0 : 1 }}>
+        <span className="tnum" style={{ fontSize: own ? 14 : 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
+        {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
       </div>
-      <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.control, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr 1fr 0.7fr', background: color.canvasSoft, padding: '5px 12px', fontSize: 11, color: color.mute }}>
-          <span>型号</span>
-          <span className="tnum" style={{ textAlign: 'right' }}>RRP</span>
-          <span className="tnum" style={{ textAlign: 'right' }}>折后价</span>
-          <span style={{ textAlign: 'right' }}>折扣</span>
-        </div>
-        {sorted.map((row, index) => (
-          <div
-            key={row.skuId}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1.25fr 1fr 1fr 0.7fr',
-              alignItems: 'center',
-              padding: '6px 12px',
-              fontSize: 12,
-              borderTop: index === 0 ? 'none' : `1px solid ${color.hairline}`,
-              background: color.canvas,
-            }}
-          >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.ink, fontWeight: 600 }}>{row.romram}</span>
-            <span className="tnum" style={{ textAlign: 'right', color: color.mute, textDecoration: 'line-through' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</span>
-            <span className="tnum" style={{ textAlign: 'right', color: color.ink, fontWeight: 700 }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
-            <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              {row.discountPct != null ? <DiscountBadge discount={row.discountPct} /> : <span style={{ color: color.mute }}>—</span>}
-            </span>
-          </div>
-        ))}
-      </div>
+      <div className="tnum" style={{ fontSize: 10, lineHeight: '13px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : ''}</div>
     </div>
   );
 }
@@ -507,6 +479,47 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
   const [detailModelId, setDetailModelId] = useState<string | null>(null);
   const [collapsing, setCollapsing] = useState(false);
   const detailModel = models.find((m) => m.modelId === detailModelId) ?? null;
+
+  // 对比矩阵：行 = 我司型号（从小到大）；列 = 我司 + 各对标竞品（按映射容量同行对位）
+  const ownRowsAligned = useMemo(() => {
+    const rows = [...(detailModel?.rows ?? [])].sort((a, b) => romramSizeKey(a.romram) - romramSizeKey(b.romram));
+    return rows.map((row) => ({ romram: row.romram, key: row.romram.replace(/\s+/g, ''), own: row }));
+  }, [detailModel]);
+  const compGroups = useMemo(() => {
+    const groups: { modelId: string; name: string; brand: string; byOwnRom: (OverviewRow & { ownRomrams: string[] })[] }[] = [];
+    const seen = new Map<string, number>();
+    for (const c of detailModel?.comps ?? []) {
+      const id = c.skuId.split('__')[0];
+      const row: OverviewRow & { ownRomrams: string[] } = {
+        skuId: c.skuId,
+        ownRomrams: c.ownRomrams,
+        brand: c.brand,
+        modelName: c.modelName,
+        romram: c.romram,
+        isOwn: false,
+        lineColor: c.lineColor,
+        price: c.price,
+        rrp: c.rrp,
+        discountPct: c.price != null && c.rrp != null && c.rrp > 0 ? c.price / c.rrp - 1 : null,
+        asOfWeek: '',
+        colors: c.colors,
+        points: c.points,
+        maxV: c.maxV,
+        maxIdx: c.maxIdx,
+        minV: c.minV,
+        minIdx: c.minIdx,
+      };
+      const at = seen.get(id);
+      if (at != null) {
+        groups[at].byOwnRom.push(row);
+      } else {
+        seen.set(id, groups.length);
+        groups.push({ modelId: id, name: c.modelName, brand: c.brand, byOwnRom: [row] });
+      }
+    }
+    return groups;
+  }, [detailModel]);
+  const matrixCols = `88px repeat(${1 + compGroups.length}, minmax(0, 1fr))`;
 
   const selOf = (modelId: string, romram: string): ProductSelection => ({
     modelId,
@@ -794,38 +807,33 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                 <BrandDot brand={detailModel.brand} size={8} />
                 <span style={{ fontSize: 16, fontWeight: 700, color: color.ink }}>{detailModel.modelName}</span>
-                <span style={{ fontSize: 11, color: color.mute }}>各型号 vs 对标竞品 · 型号从小到大</span>
+                <span style={{ fontSize: 11, color: color.mute }}>我司各型号与对标竞品同行对位（型号从小到大）</span>
               </div>
-              <CompareGroup brand={detailModel.brand} name={modelOnly(detailModel.brand, detailModel.modelName)} own rows={detailModel.rows} currency={currency} />
-              {(detailModel.comps ?? []).map((c) => (
-                <CompareGroup
-                  key={c.skuId}
-                  brand={c.brand}
-                  name={`${c.modelName} ${c.romram}`}
-                  own={false}
-                  rows={[
-                    {
-                      skuId: c.skuId,
-                      brand: c.brand,
-                      modelName: c.modelName,
-                      romram: c.romram,
-                      isOwn: false,
-                      lineColor: c.lineColor,
-                      price: c.price,
-                      rrp: c.rrp,
-                      discountPct: c.price != null && c.rrp != null && c.rrp > 0 ? c.price / c.rrp - 1 : null,
-                      asOfWeek: '',
-                      colors: c.colors,
-                      points: c.points,
-                      maxV: c.maxV,
-                      maxIdx: c.maxIdx,
-                      minV: c.minV,
-                      minIdx: c.minIdx,
-                    },
-                  ]}
-                  currency={currency}
-                />
-              ))}
+              <div style={{ border: `1px solid ${color.hairline}`, borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: matrixCols, background: color.canvasSoft }}>
+                  <div style={{ padding: '8px 10px', fontSize: 11, color: color.mute, display: 'flex', alignItems: 'flex-end' }}>容量对位</div>
+                  <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, background: '#f3f8ff', minWidth: 0 }}>
+                    <BrandDot brand={detailModel.brand} size={6} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: brandColorOf(detailModel.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modelOnly(detailModel.brand, detailModel.modelName)}</span>
+                    <span style={{ fontSize: 10.5, lineHeight: '16px', padding: '0 7px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, fontWeight: 600, flexShrink: 0 }}>我司</span>
+                  </div>
+                  {compGroups.map((g) => (
+                    <div key={g.modelId} style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <BrandDot brand={g.brand} size={6} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: brandColorOf(g.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modelOnly(g.brand, g.name)}</span>
+                    </div>
+                  ))}
+                </div>
+                {ownRowsAligned.map((slot, index) => (
+                  <div key={slot.romram} style={{ display: 'grid', gridTemplateColumns: matrixCols, borderTop: `1px solid ${color.hairline}` }}>
+                    <div style={{ padding: '10px 10px', display: 'flex', alignItems: 'center', fontSize: 11.5, fontWeight: 600, color: color.body, background: color.canvasSoft }}>{slot.romram}</div>
+                    <MatrixCell row={slot.own} currency={currency} own />
+                    {compGroups.map((g) => (
+                      <MatrixCell key={g.modelId} row={g.byOwnRom.find((x) => x.ownRomrams.some((r: string) => r.replace(/\s+/g, '') === slot.key)) ?? null} currency={currency} own={false} />
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
             <div
               role="button"
