@@ -11,7 +11,7 @@
 // 轴：USD = 档位分段带（带高随档内产品数伸缩，摆位与档位必然对齐）；
 //     本币 = 线性刻度轴（仅竞品模式）。
 // ============================================================
-import { HolderOutlined, ExclamationCircleFilled, LineChartOutlined } from '@ant-design/icons';
+import { HolderOutlined, ExclamationCircleFilled, LineChartOutlined, SwapOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { Modal, Segmented, Tooltip } from 'antd';
@@ -259,19 +259,35 @@ function CompChip({
   );
 }
 
-/** 对比矩阵大块：一个型号一块——型号+折扣 / 折后价+RRP / 底部其他信息（我司=采集时间，竞品=价差+对位容量） */
-function MatrixBlock({ row, currency, own, diff }: { row: (OverviewRow & { ownRomrams?: string[] }) | null; currency: CurrencyMode; own: boolean; diff: number | null }) {
+/** 对比矩阵大块：一个型号一块——型号最大字；折后价+折扣 / RRP（不划线）分层；
+ *  底部其他信息：我司 = 价差方向切换按钮 + 采集时间右下；竞品 = 价差 + 采集时间右下 */
+function MatrixBlock({
+  row,
+  currency,
+  own,
+  diff,
+  diffDir,
+  onToggleDiffDir,
+}: {
+  row: (OverviewRow & { ownRomrams?: string[] }) | null;
+  currency: CurrencyMode;
+  own: boolean;
+  diff: number | null;
+  diffDir?: 'comp' | 'own';
+  onToggleDiffDir?: () => void;
+}) {
   if (!row || (row.price == null && row.rrp == null)) {
-    return <div style={{ minHeight: 92, borderRadius: 10 }} />;
+    return <div style={{ minHeight: 108, borderRadius: 10 }} />;
   }
-  const dateText = row.asOfWeek ? bucketLatestWeekLabel('week', row.asOfWeek) ?? '' : '';
+  const lastWeek = row.points.length > 0 ? row.points[row.points.length - 1].weekId : '';
+  const dateText = lastWeek ? bucketLatestWeekLabel('week', lastWeek) ?? '' : row.asOfWeek ? bucketLatestWeekLabel('week', row.asOfWeek) ?? '' : '';
   return (
     <div
       style={{
-        minHeight: 92,
+        minHeight: 118,
         boxSizing: 'border-box',
         borderRadius: 10,
-        padding: '10px 12px',
+        padding: '12px 14px',
         background: own ? '#f3f8ff' : color.canvas,
         border: `1px solid ${own ? 'rgba(0, 112, 243, 0.35)' : color.hairline}`,
         boxShadow: own ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.04)',
@@ -279,26 +295,59 @@ function MatrixBlock({ row, currency, own, diff }: { row: (OverviewRow & { ownRo
         flexDirection: 'column',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5, fontWeight: 700, color: color.ink }}>{row.romram}</span>
+      {/* 型号：卡片最大字号 */}
+      <div style={{ fontSize: 17, lineHeight: '22px', fontWeight: 800, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
+      {/* 折后价 + 折扣 */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
+        <span className="tnum" style={{ fontSize: 14.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
         {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 5 }}>
-        <span className="tnum" style={{ fontSize: 17, fontWeight: 800, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
-        <span className="tnum" style={{ fontSize: 10.5, color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : ''}</span>
-      </div>
-      <div style={{ marginTop: 'auto', paddingTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+      {/* RRP：独立一行，不做划线处理 */}
+      <div className="tnum" style={{ marginTop: 3, fontSize: 11.5, color: color.mute, whiteSpace: 'nowrap' }}>RRP {row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</div>
+      {/* 底部其他信息 */}
+      <div style={{ marginTop: 'auto', paddingTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
         {own ? (
-          <span className="tnum" style={{ color: color.mute }}>{dateText ? `${dateText} 采集` : ''}</span>
+          <>
+            {onToggleDiffDir && (
+              <button
+                type="button"
+                title="切换价差方向（我司比竞品 / 竞品比我司）"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleDiffDir();
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 8px',
+                  borderRadius: radius.pill,
+                  border: '1px solid rgba(0, 112, 243, 0.40)',
+                  background: selectSoft,
+                  color: selectSoftInk,
+                  font: 'inherit',
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <SwapOutlined style={{ fontSize: 10 }} />
+                {diffDir === 'own' ? '我司比竞品' : '竞品比我司'}
+              </button>
+            )}
+            {dateText && <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{dateText} 采集</span>}
+          </>
         ) : (
           <>
-            {diff != null && (
+            {diff != null ? (
               <span className="tnum" style={{ fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute }}>
                 价差 {diff > 0.005 ? '+' : ''}{Math.round(diff * 100)}%
               </span>
+            ) : (
+              <span style={{ color: color.mute }}>价差 —</span>
             )}
-            <span style={{ color: color.hairlineStrong }}>·</span>
-            <span style={{ color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis' }}>对位我司 {row.ownRomrams?.[0] ?? ''}</span>
+            {dateText && <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{dateText} 采集</span>}
           </>
         )}
       </div>
@@ -503,6 +552,8 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
   const [detailModelId, setDetailModelId] = useState<string | null>(null);
   const [collapsing, setCollapsing] = useState(false);
   const detailModel = models.find((m) => m.modelId === detailModelId) ?? null;
+  // 价差方向（第五十二轮追补同款）：竞品比我司（默认）/ 我司比竞品，浮窗内全矩阵同步
+  const [diffDir, setDiffDir] = useState<'comp' | 'own'>('comp');
 
   const compGroups = useMemo(() => {
     const groups: { modelId: string; name: string; brand: string; byOwnRom: (OverviewRow & { ownRomrams: string[] })[] }[] = [];
@@ -831,11 +882,10 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                 <BrandDot brand={detailModel.brand} size={8} />
                 <span style={{ fontSize: 16, fontWeight: 700, color: color.ink }}>{detailModel.modelName}</span>
-                <span style={{ fontSize: 11, color: color.mute }}>型号从小到大 · 价差 = 竞品折后价相对同容量我司</span>
+                <span style={{ fontSize: 11, color: color.mute }}>型号从小到大 · 价差方向可在卡片下方切换</span>
               </div>
               <div style={{ border: `1px solid ${color.hairline}`, borderRadius: 10, overflow: 'hidden' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${1 + compGroups.length}, minmax(0, 1fr))`, gap: 8, background: color.canvasSoft, padding: '9px 10px' }}>
-                  <span style={{ fontSize: 11, color: color.mute, alignSelf: 'end' }}>容量</span>
                   {(() => {
                     const own = detailModel;
                     return (
@@ -856,10 +906,11 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 {ownSorted.map((row, index) => {
                   return (
                     <div key={row.skuId} style={{ display: 'grid', gridTemplateColumns: `repeat(${1 + compGroups.length}, minmax(0, 1fr))`, gap: 8, padding: index === 0 ? '10px 10px 8px' : '0 10px 8px' }}>
-                      <MatrixBlock row={row} currency={currency} own diff={null} />
+                      <MatrixBlock row={row} currency={currency} own diff={null} diffDir={diffDir} onToggleDiffDir={() => setDiffDir((d) => (d === 'comp' ? 'own' : 'comp'))} />
                       {compGroups.map((g) => {
                         const comp = g.byOwnRom.find((x) => x.ownRomrams.some((r: string) => r.replace(/\s+/g, '') === row.romram.replace(/\s+/g, ''))) ?? null;
-                        const diff = comp?.price != null && row.price != null && row.price > 0 ? comp.price / row.price - 1 : null;
+                        let diff = comp?.price != null && row.price != null && row.price > 0 ? comp.price / row.price - 1 : null;
+                        if (diff != null && diffDir === 'own') diff = comp?.price ? row.price != null ? row.price / comp.price - 1 : null : null;
                         return <MatrixBlock key={g.modelId} row={comp} currency={currency} own={false} diff={diff} />;
                       })}
                     </div>
