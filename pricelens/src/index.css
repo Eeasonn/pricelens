@@ -188,3 +188,10 @@ button.lpl-map-card:hover {
 .lpl-split-bar:hover > div[role='presentation'] {
   background: #c3c7ce;
 }
+
+/* 摆位概要双模式切换淡入（在售产品 ⇄ 竞品对比） */
+@keyframes lplFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.lpl-mode-fade { animation: lplFadeIn 240ms ease; }
