@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { DragEvent as ReactDragEvent } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
 import type { OverviewModel } from '../../dataModel/aggregate';
-import { bucketLatestWeekLabel } from '../../chart/PriceTrend/helpers';
+import { bucketLatestWeekLabel, tierLabelShort } from '../../chart/PriceTrend/helpers';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { brandColorOf, color, radius, space } from '../../theme/tokens';
 
@@ -44,9 +45,16 @@ const fmtPrice = (value: number, currency: CurrencyMode): string =>
   `${currency === 'usd' ? '$' : '₽'}${Math.round(value).toLocaleString('en-US')}`;
 
 const DEFAULT_BRAND_ORDER = ['APPLE', 'SAMSUNG', 'HONOR', 'XIAOMI'];
-// 1280px 设计基线：USD 轴 140px + 我司列 250px 后，4 个 180px 品牌列可完整显示；更多列横向滚动。
+// 1280px 设计基线：USD 轴 90px + 我司列 250px 后，4 个 180px 品牌列可完整显示；更多列横向滚动。
 const MAX_VISIBLE_BRAND_COLUMNS = 4;
-type BrandOrder = 'default' | 'coverage' | 'alpha';
+// 品牌列手动顺序的持久化 key（视图偏好，不进筛选器版本体系）
+const BRAND_ORDER_STORAGE_KEY = 'LPL3.map.brandOrder';
+// 价位轴布局（第九十二轮对齐看板档位区块样式；因画布更高，字号与区块宽度按比例放大）：
+// [档位区块 = 档位文字 40 居中竖排 | 刻度文字 44 右对齐叠带][短横线 6]
+const TIER_TEXT_W = 40;
+const TICK_ZONE_W = 44;
+const TICK_DASH_W = 6;
+const AXIS_BAND_W = TIER_TEXT_W + TICK_ZONE_W;
 
 function brandKeyOf(brand: string): string {
   return brand.trim().toUpperCase();
@@ -87,6 +95,8 @@ function ModelChip({ model, price, currency, clickable, onClick }: {
       )}
     </>
   );
+  // 定高 + border-box：行距按 CARD_H 预算，content-box 会让实际高度超出预算、
+  // 下一行卡片盖住上一行的下边缘（用户反馈的「卡片下边缘缺失」即此）
   const style = {
     display: 'flex',
     alignItems: 'center',
@@ -94,7 +104,9 @@ function ModelChip({ model, price, currency, clickable, onClick }: {
     minWidth: 0,
     maxWidth: '100%',
     width: '100%',
-    padding: '4px 9px',
+    height: 34,
+    boxSizing: 'border-box' as const,
+    padding: '3px 9px',
     background: color.canvas,
     border: `1px solid ${color.hairline}`,
     borderRadius: radius.control,
@@ -172,28 +184,55 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
       })
       .filter((b): b is { label: string; top: number; h: number; empty: boolean } => b != null && b.h >= 8)
     : []);
-  const axisWidth = currency === 'usd' ? 140 : 78;
-  const [brandOrder, setBrandOrder] = useState<BrandOrder>('default');
-  // 我司品牌固定占最左 sticky 列（主视角原则）；其余品牌按所选顺序排。
+  const axisWidth = (currency === 'usd' ? AXIS_BAND_W : TICK_ZONE_W) + TICK_DASH_W;
+  // 我司品牌固定占最左 sticky 列（主视角原则）；竞品品牌列 = 手动拖拽顺序
+  // （第九十二轮：三个排序选项删除——默认序兜底，拖过即全以手动序为准）
   const ownBrands = useMemo(() => [...new Set(ownModels.map((m) => brandKeyOf(m.brand)))], [ownModels]);
   const compBrands = useMemo(
     () => [...new Set(models.filter((m) => !m.isOwn).map((m) => brandKeyOf(m.brand)))],
     [models],
   );
+  const [manualOrder, setManualOrder] = useState<string[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(BRAND_ORDER_STORAGE_KEY) ?? '[]');
+      return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(BRAND_ORDER_STORAGE_KEY, JSON.stringify(manualOrder));
+    } catch {
+      /* 隐私模式等场景写入失败不阻塞 */
+    }
+  }, [manualOrder]);
   const brandColumns = useMemo(() => {
     const rank = (brand: string): number => {
       const index = DEFAULT_BRAND_ORDER.indexOf(brand);
       return index >= 0 ? index : DEFAULT_BRAND_ORDER.length;
     };
-    const countOf = (brand: string): number => models.filter((m) => brandKeyOf(m.brand) === brand).length;
-    return [...compBrands]
-      .sort((a, b) => {
-        if (brandOrder === 'alpha') return brandHeaderLabel(a).localeCompare(brandHeaderLabel(b), 'en');
-        if (brandOrder === 'coverage') return countOf(b) - countOf(a) || rank(a) - rank(b) || a.localeCompare(b);
-        return rank(a) - rank(b) || brandHeaderLabel(a).localeCompare(brandHeaderLabel(b), 'en');
-      })
+    const base = [...compBrands]
+      .sort((a, b) => rank(a) - rank(b) || brandHeaderLabel(a).localeCompare(brandHeaderLabel(b), 'en'))
       .map((key) => ({ key, label: brandHeaderLabel(key) }));
-  }, [brandOrder, compBrands, models]);
+    if (manualOrder.length === 0) return base;
+    const pos = (key: string): number => {
+      const i = manualOrder.indexOf(key);
+      return i >= 0 ? i : manualOrder.length; // 新出现的品牌排在手动序末尾
+    };
+    return [...base].sort((a, b) => pos(a.key) - pos(b.key));
+  }, [compBrands, manualOrder]);
+  const [draggingBrand, setDraggingBrand] = useState<string | null>(null);
+  const [dropBrand, setDropBrand] = useState<string | null>(null);
+  const moveBrandTo = (dragKey: string, targetKey: string): void => {
+    if (dragKey === targetKey) return;
+    const keys = brandColumns.map((c) => c.key);
+    const from = keys.indexOf(dragKey);
+    const to = keys.indexOf(targetKey);
+    if (from < 0 || to < 0) return;
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    setManualOrder(keys);
+  };
   const columnTemplate = `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`;
   const minMapWidth = axisWidth + 250 + Math.max(brandColumns.length, 1) * 180;
   // 价格接近的产品仍需保持“一产品一行”。先按真实 Y 位置排布，再做最小行距碰撞处理。
@@ -221,22 +260,7 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-        <span style={{ color: color.mute, fontSize: 11 }}>品牌列顺序</span>
-        {([
-          ['default', '默认顺序'],
-          ['coverage', '产品数量'],
-          ['alpha', '字母顺序'],
-        ] as const).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={brandOrder === value}
-            onClick={() => setBrandOrder(value)}
-            style={{ minHeight: 24, padding: '2px 9px', border: `1px solid ${brandOrder === value ? color.link : color.hairline}`, borderRadius: radius.pill, background: brandOrder === value ? '#edf5ff' : color.canvas, color: brandOrder === value ? color.link : color.body, font: 'inherit', fontSize: 10.5, fontWeight: brandOrder === value ? 700 : 500, cursor: 'pointer' }}
-          >
-            {label}
-          </button>
-        ))}
+        <span style={{ color: color.mute, fontSize: 11 }}>拖动品牌列头可调整列顺序（自动记住）</span>
         <span style={{ color: color.mute, fontSize: 10.5 }}>每屏最多 {MAX_VISIBLE_BRAND_COLUMNS + 1} 个品牌列，更多品牌可横向滚动</span>
       </div>
 
@@ -244,14 +268,73 @@ export default function MarketMap({ models, currency, asOf, onOpenProduct, selec
         <div style={{ position: 'relative', minWidth: minMapWidth, height: totalHeight, background: color.canvas }}>
           {/* 左侧价位轴：美元显示档位带，本币只显示刻度；域随数据裁剪 */}
           <div style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', borderRight: `1px solid ${color.hairlineStrong}`, background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.04)' }}>
-            {tierBoxes.map((box, index) => <div key={`${box.label}-${index}`} style={{ position: 'absolute', left: 0, top: box.top, width: 64, height: box.h, boxSizing: 'border-box', border: box.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`, background: box.empty ? 'transparent' : index % 2 === 0 ? color.canvasSoft2 : color.canvasSoft, display: 'grid', placeItems: 'center', overflow: 'hidden', pointerEvents: 'none' }}>{box.h >= 16 && <span style={{ fontSize: 10, lineHeight: '12px', color: box.empty ? color.mute : color.body, whiteSpace: 'nowrap' }}>{box.label}</span>}</div>)}
-            {ticks.map((tick) => <span key={tick} className="tnum" style={{ position: 'absolute', right: 10, top: vToY(tick) - 8, fontSize: 12, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }}>{fmtTick(tick)}</span>)}
+            {/* 价位轴（第九十二轮对齐看板样式）：档位区块贴左（文字竖排居中、1K 缩写），
+                刻度 10px 右对齐叠画在区块背景上，右缘短横线与刻度对齐；
+                画布比看板高 → 字号与区块宽度按比例放大（40/44/6） */}
+            {tierBoxes.map((box, index) => (
+              <div
+                key={`${box.label}-${index}`}
+                title={`价格档位 ${tierLabelShort(box.label)}（USD）${box.empty ? '· 当前无产品' : ''}`}
+                style={{ position: 'absolute', left: 0, top: box.top, width: currency === 'usd' ? AXIS_BAND_W : TICK_ZONE_W, height: box.h, boxSizing: 'border-box', border: box.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`, background: box.empty ? 'transparent' : index % 2 === 0 ? color.canvasSoft2 : color.canvasSoft, display: 'flex', alignItems: 'center', overflow: 'hidden', pointerEvents: 'none' }}
+              >
+                {currency === 'usd' && (
+                  <span style={{ width: TIER_TEXT_W, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, lineHeight: '13px', color: box.empty ? color.mute : color.body, whiteSpace: 'nowrap' }}>
+                    {box.h < 30 ? (
+                      box.h >= 14 ? <span style={{ fontSize: 9.5, lineHeight: '12px' }}>{tierLabelShort(box.label)}</span> : null
+                    ) : (
+                      (() => {
+                        const parts = tierLabelShort(box.label).split('~');
+                        const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(box.label)];
+                        return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
+                      })()
+                    )}
+                  </span>
+                )}
+              </div>
+            ))}
+            {ticks.map((tick) => (
+              <span key={tick} className="tnum" style={{ position: 'absolute', right: TICK_DASH_W, top: vToY(tick) - 9, width: TICK_ZONE_W, paddingRight: 3, boxSizing: 'border-box', textAlign: 'right', fontSize: 10, lineHeight: '18px', color: color.mute, whiteSpace: 'nowrap', zIndex: 1 }}>{fmtTick(tick)}</span>
+            ))}
+            {ticks.map((tick) => (
+              <span key={`dash-${tick}`} style={{ position: 'absolute', right: 0, top: vToY(tick), width: TICK_DASH_W, height: 1, background: color.hairlineStrong, pointerEvents: 'none', zIndex: 1 }} />
+            ))}
           </div>
 
           <div style={{ position: 'absolute', left: axisWidth, right: 0, top: 0, height: totalHeight, overflow: 'visible' }}>
             <div style={{ position: 'absolute', zIndex: 4, top: 0, left: 0, right: 0, height: plotTop, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: columnTemplate, alignItems: 'center', borderBottom: `1px solid ${color.hairline}`, background: color.canvas, overflow: 'visible' }}>
               <div style={{ position: 'sticky', zIndex: 6, left: axisWidth, boxSizing: 'border-box', padding: '0 14px', color: color.mute, fontSize: 11, lineHeight: '16px', borderRight: `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', background: color.canvas, boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>{ownBrands.map((b) => brandHeaderLabel(b)).join(' / ') || '产品'}</div>
-              {brandColumns.map((brand, index) => <div key={brand.key} style={{ boxSizing: 'border-box', padding: '0 12px', color: brandColorOf(brand.key), fontSize: 11, lineHeight: '16px', fontWeight: 700, borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>{brand.label}</div>)}
+              {brandColumns.map((brand, index) => (
+                <div
+                  key={brand.key}
+                  draggable
+                  title="拖动调整品牌列顺序"
+                  onDragStart={(e: ReactDragEvent<HTMLDivElement>) => {
+                    setDraggingBrand(brand.key);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', brand.key);
+                  }}
+                  onDragOver={(e: ReactDragEvent<HTMLDivElement>) => {
+                    if (!draggingBrand || draggingBrand === brand.key) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    setDropBrand(brand.key);
+                  }}
+                  onDragLeave={() => setDropBrand((t) => (t === brand.key ? null : t))}
+                  onDrop={(e: ReactDragEvent<HTMLDivElement>) => {
+                    e.preventDefault();
+                    if (draggingBrand) moveBrandTo(draggingBrand, brand.key);
+                    setDraggingBrand(null);
+                    setDropBrand(null);
+                  }}
+                  onDragEnd={() => {
+                    setDraggingBrand(null);
+                    setDropBrand(null);
+                  }}
+                  style={{ boxSizing: 'border-box', padding: '0 12px', color: brandColorOf(brand.key), fontSize: 11, lineHeight: '16px', fontWeight: 700, borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap', cursor: 'grab', opacity: draggingBrand === brand.key ? 0.4 : undefined, background: dropBrand === brand.key && draggingBrand !== brand.key ? '#edf5ff' : undefined, boxShadow: dropBrand === brand.key && draggingBrand !== brand.key ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined }}
+                >
+                  {brand.label}
+                </div>
+              ))}
             </div>
             {ticks.map((tick) => <div key={`line-${tick}`} style={{ position: 'absolute', left: 0, right: 0, top: vToY(tick), borderTop: `1px solid ${color.hairline}`, pointerEvents: 'none' }} />)}
             {market.map(({ model, price }) => {

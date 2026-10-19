@@ -105,6 +105,9 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
   // 产品框；展开态不持久化（每次进页面默认收起=领导视角永远干净）；促销明细
   // 抽屉打开时自动收起（右侧空间冲突）
   const [pointPanelOpen, setPointPanelOpen] = useState(false);
+  // 悬停最右（最新）列自动展开时点摘要（第九十二轮）：移入最右列展开、划回更早
+  // 时间列收起；移出图表（如去往右侧面板）不收起。手动展开（pointPanelOpen）优先
+  const [hoverLatest, setHoverLatest] = useState(false);
   const openPromoDetail = (): void => {
     setPointPanelOpen(false);
     setPromoDetailOpen(true);
@@ -988,6 +991,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
             onToggleHidden={toggleLegend}
             showYTicks={showYTicks}
             onShowYTicks={setShowYTicks}
+            onLatestHover={setHoverLatest}
             enableDrill={state.granularity !== 'week'}
             enableJump={state.granularity === 'week'}
             enableOffer={state.granularity === 'week' && offersOn}
@@ -1040,7 +1044,7 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
         </div>
         {/* 图右缘时点面板（第五十六轮再版）：书签带（收起）/ 336px 纵向产品清单（展开） */}
         <PointPanel
-          open={pointPanelOpen}
+          open={pointPanelOpen || hoverLatest}
           onToggle={() => setPointPanelOpen((v) => !v)}
           items={summary}
           currency={state.currency}
