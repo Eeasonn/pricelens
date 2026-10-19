@@ -1133,7 +1133,7 @@ export default function Overview() {
             </div>
 
             <MarketMap
-              bands={visibleBands}
+              models={bands.flatMap((b) => b.models)}
               currency={currency}
               asOf={asOf}
               onOpenProduct={focusProduct}

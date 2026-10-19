@@ -86,8 +86,8 @@ export default function PriceTrend() {
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null); // null=整个筛选范围
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例取消选中的系列（折线隐藏）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
-  const [promoBandsOn, setPromoBandsOn] = useState(true); // 大促档期（第三十五轮：外部显式筛选器，默认选）
-  const [offersOn, setOffersOn] = useState(true); // offer 权益显隐（第五十轮）：关 = 不画徽章、浮窗不出权益行
+  const [promoBandsOn, setPromoBandsOn] = useState(false); // 大促档期（第七十七轮起默认关）
+  const [offersOn, setOffersOn] = useState(false); // offer 权益显隐：关 = 不画徽章、浮窗不出权益行（第七十七轮起默认关）
   // 最高/最低价 + 价格变化提醒（第五十六轮）：非主要功能——默认关，收进工具行
   // 「⋯ 更多」二级菜单（领导页面清洁要求）；启用时 ⋯ 按钮带蓝点提示
   const [maxMinOn, setMaxMinOn] = useState(false);
@@ -318,7 +318,7 @@ export default function PriceTrend() {
   // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
   // 系列页签按面板拆开、放各卡片顶部居中（第七十五轮，PillRowScroller 左右滚动）；
   // 共享刷选条联动全部面板
-  const [splitOn, setSplitOn] = useState(false);
+  const [splitOn, setSplitOn] = useState(true); // 分离显示（第七十七轮起默认开；仅 ≥2 个 ROM 时生效）
   // 分离模式一行可见面板数：卡片始终横向排列，超出视口后由轨道滚动查看。
   // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
   const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
@@ -639,11 +639,23 @@ export default function PriceTrend() {
             })}
           </div>
         )}
-        {/* 分离显示（第五十四轮拍板）：多 ROM 时可切 N 宫格（2 列），每面板一个 ROM+其竞品 */}
+        {/* 分离显示（第五十四轮拍板；第七十七轮「每行几个」并入此设置、默认开）：
+            多 ROM 时可切 N 宫格，每面板一个 ROM+其竞品 */}
         {selectedRoms.size >= 2 && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Switch size="small" checked={splitOn} onChange={setSplitOn} />
             <span style={{ fontSize: 12.5, color: color.body, whiteSpace: 'nowrap' }}>分离显示</span>
+            {splitActive && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>每行</span>
+                <Segmented
+                  size="small"
+                  value={splitColumns}
+                  onChange={(v) => setSplitColumns(v as 2 | 3)}
+                  options={[{ label: '2 个', value: 2 }, { label: '3 个', value: 3 }]}
+                />
+              </span>
+            )}
           </span>
         )}
         <ConfigProvider theme={filterBarTheme}>
@@ -715,18 +727,10 @@ export default function PriceTrend() {
                 onOpenPromoDetail={openPromoDetail}
               />
             </div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}>
-              <span style={{ fontSize: 11, color: color.mute }}>每行</span>
-              <Segmented
-                size="small"
-                value={splitColumns}
-                onChange={(v) => setSplitColumns(v as 2 | 3)}
-                options={[{ label: '2 个', value: 2 }, { label: '3 个', value: 3 }]}
-              />
-            </span>
           </div>
           {/* 分离面板：所有卡片固定在同一横向轨道；共享 Y 轴固定在左侧，轨道超出视口时横向滚动。
-              每行可见 2/3 个由用户控制，卡片保持最小宽度以避免图表与系列名拥挤。 */}
+              每行可见 2/3 个由标题行「分离显示」设置控制（第七十七轮并入），卡片保持
+              最小宽度以避免图表与系列名拥挤。 */}
           <div
             style={{
               display: 'flex',
