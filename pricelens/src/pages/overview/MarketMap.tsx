@@ -36,6 +36,12 @@ export interface MarketMapProps {
 
 type MapMode = 'table' | 'market';
 
+/** 品牌全名：品牌标签 + 型号名（modelName 已含品牌时不重复拼接） */
+function brandFullName(brand: string, modelName: string): string {
+  const label = brandLabelOf(brand);
+  return modelName.toLowerCase().startsWith(`${label.toLowerCase()} `) ? modelName : `${label} ${modelName}`;
+}
+
 /** 型号现价：现价 = 最新采集周的代表配置价；另留区间与采集周（YYYYWW）供悬浮提示。 */
 function modelPrice(model: OverviewModel): {
   min: number | null;
@@ -303,7 +309,7 @@ function MatrixBlock({
         {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
       </div>
       {/* RRP：独立一行，不做划线处理 */}
-      <div className="tnum" style={{ marginTop: 3, fontSize: 11.5, color: color.mute, whiteSpace: 'nowrap' }}>RRP {row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</div>
+      <div className="tnum" style={{ marginTop: 3, fontSize: 11.5, color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</div>
       {/* 底部其他信息 */}
       <div style={{ marginTop: 'auto', paddingTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
         {own ? (
@@ -341,7 +347,7 @@ function MatrixBlock({
         ) : (
           <>
             {diff != null ? (
-              <span className="tnum" style={{ fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute }}>
+              <span className="tnum" style={{ fontSize: 12, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute }}>
                 价差 {diff > 0.005 ? '+' : ''}{Math.round(diff * 100)}%
               </span>
             ) : (
@@ -726,11 +732,11 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 const rangeText = (vals: number[]): string =>
                   vals.length === 0 ? '—' : vals.length === 1 ? fmtPrice(vals[0], currency) : `${fmtPrice(Math.min(...vals), currency)} – ${fmtPrice(Math.max(...vals), currency)}`;
                 return (
-                  <div key={model.modelId} style={{ position: 'absolute', left: 0, top, width: tableWidth - axisWidth, height: ROW_H, display: 'grid', gridTemplateColumns: tableTemplate, background: color.canvas }}>
+                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top, height: ROW_H + TABLE_GAP, display: 'grid', gridTemplateColumns: tableTemplate, background: color.canvas }}>
                     <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, height: '100%', padding: '7px 12px 7px 14px', boxSizing: 'border-box', background: '#f3f8ff', borderRight: `1px solid ${color.hairline}` }}>
                       <div style={{ position: 'relative' }}>
                         <TrendDot title={`只看 ${model.modelName} 的价格走势`} onClick={() => openTrend(model)} />
-                        <div style={{ fontSize: 12.5, fontWeight: 650, color: brandColorOf(model.brand), paddingLeft: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modelOnly(model.brand, model.modelName)}</div>
+                        <div style={{ fontSize: 13, fontWeight: 650, color: brandColorOf(model.brand), paddingLeft: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{brandFullName(model.brand, model.modelName)}</div>
                       </div>
                       <div className="tnum" style={{ marginTop: 3, fontSize: 10.5, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         RRP {rangeText(rrps)}
@@ -752,7 +758,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                                 {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
-                                <span className="tnum" style={{ fontSize: 10, color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : ''}</span>
+                                <span className="tnum" style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : ''}</span>
                                 <span className="tnum" style={{ fontSize: 12, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
                               </div>
                             </>
@@ -764,15 +770,19 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 );
               })}
               {/* 分隔线：每个产品行底部一条，从最左贯穿到最右（行间空隙内，不压卡片） */}
-              {tableProducts.map(({ model }) => {
-                const top = rowTops.get(model.modelId) ?? 0;
-                return (
-                  <div
-                    key={`divider-${model.modelId}`}
-                    style={{ position: 'absolute', left: 0, right: 0, top: top + ROW_H, height: 1, background: color.hairline, zIndex: 6, pointerEvents: 'none' }}
-                  />
-                );
-              })}
+              {bandRects.map((band) =>
+                band.items.map((item, index) => {
+                  const top = rowTops.get(item.model.modelId) ?? 0;
+                  const boundary = top + ROW_H + TABLE_GAP;
+                  const bandEnd = index === band.items.length - 1;
+                  return (
+                    <div
+                      key={`divider-${item.model.modelId}`}
+                      style={{ position: 'absolute', left: 0, right: 0, top: boundary, height: bandEnd ? 1.5 : 1, background: bandEnd ? color.hairlineStrong : color.hairline, zIndex: 6, pointerEvents: 'none' }}
+                    />
+                  );
+                }),
+              )}
             </div>
           ) : (
             /* —— 竞品对比：分段带摆位 + 品牌列 —— */
@@ -814,7 +824,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 ))}
               </div>
               {axisMarks.map((mark, index) => (
-                <div key={`line-${index}`} style={{ position: 'absolute', left: 0, right: 0, top: mark.y, borderTop: `1px solid ${color.hairline}`, pointerEvents: 'none' }} />
+                <div key={`line-${index}`} style={{ position: 'absolute', left: 0, right: 0, top: mark.y, borderTop: `1px solid ${color.hairlineStrong}`, pointerEvents: 'none' }} />
               ))}
               {market.map(({ model, price }) => {
                 const isOwn = model.isOwn;
@@ -891,7 +901,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                     return (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                         <BrandDot brand={own.brand} size={6} />
-                        <span style={{ fontSize: 12.5, fontWeight: 700, color: brandColorOf(own.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modelOnly(own.brand, own.modelName)}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: brandColorOf(own.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{brandFullName(own.brand, own.modelName)}</span>
                         <span style={{ fontSize: 10.5, lineHeight: '16px', padding: '0 7px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, fontWeight: 600, flexShrink: 0 }}>我司</span>
                       </span>
                     );
@@ -899,7 +909,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                   {compGroups.map((g) => (
                     <span key={g.modelId} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                       <BrandDot brand={g.brand} size={6} />
-                      <span style={{ fontSize: 12.5, fontWeight: 700, color: brandColorOf(g.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{modelOnly(g.brand, g.name)}</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: brandColorOf(g.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
                     </span>
                   ))}
                 </div>
