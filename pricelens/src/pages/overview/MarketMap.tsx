@@ -12,7 +12,7 @@
 //     本币 = 线性刻度轴（仅竞品模式）。
 // ============================================================
 import { CloseOutlined, HolderOutlined, ExclamationCircleFilled, LineChartOutlined, SwapOutlined } from '@ant-design/icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { Segmented, Tooltip } from 'antd';
 import type { CurrencyMode } from '../../dataModel/types';
@@ -116,12 +116,12 @@ function TrendDot({ onClick, title }: { onClick: () => void; title: string }) {
   );
 }
 
-/** 我司小卡（竞品对比模式）：浅蓝底 + 悬停后三分之一滑入「查看详情」 */
+/** 我司小卡（竞品对比模式）：白底细蓝描边（浮在我司列浅蓝底上，避免整卡重蓝）；
+ *  悬停后三分之一滑入「查看详情」（不透明浅蓝，盖住底下内容） */
 function OwnChip({
   model,
   price,
   currency,
-  dimmed,
   hovered,
   onHover,
   onOpenTrend,
@@ -130,17 +130,17 @@ function OwnChip({
   model: OverviewModel;
   price: { min: number | null; max: number | null; current: number | null; asOf: string };
   currency: CurrencyMode;
-  dimmed: boolean;
   hovered: boolean;
   onHover: (id: string | null) => void;
   onOpenTrend: () => void;
-  onOpenDetail: (el: HTMLElement) => void;
+  onOpenDetail: () => void;
 }) {
   const label = modelOnly(model.brand, model.modelName);
   const dateText = price.asOf ? bucketLatestWeekLabel('week', price.asOf) ?? '' : '';
   const priceText = price.current != null ? fmtPrice(price.current, currency) : '—';
   return (
     <span
+      data-own-chip={model.modelId}
       title={`${model.modelName} · 现价 ${priceText}${dateText ? `（${dateText} 采集）` : ''} · 悬停查看对标竞品`}
       onMouseEnter={() => onHover(model.modelId)}
       onMouseLeave={() => onHover(null)}
@@ -155,13 +155,13 @@ function OwnChip({
         height: 38,
         boxSizing: 'border-box',
         padding: '3px 9px 3px 18px',
-        background: 'rgba(0, 112, 243, 0.07)',
-        border: `1px solid rgba(0, 112, 243, 0.35)`,
+        background: color.canvas,
+        border: '1px solid rgba(0, 112, 243, 0.32)',
         borderRadius: radius.control,
         overflow: 'hidden',
         cursor: 'pointer',
-        opacity: dimmed ? 0.3 : 1,
-        transition: 'opacity 200ms ease, border-color 200ms ease',
+        transition: 'border-color 200ms ease, box-shadow 200ms ease',
+        boxShadow: hovered ? '0 2px 8px rgba(0, 112, 243, 0.16)' : 'none',
         textAlign: 'left' as const,
         font: 'inherit',
       }}
@@ -177,13 +177,13 @@ function OwnChip({
           <span className="tnum" style={{ fontSize: 12, lineHeight: '15px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{priceText}</span>
         </span>
       )}
-      {/* 后三分之一滑入「查看详情」（从右到左；弱化浅蓝底，不用高饱和实心蓝） */}
+      {/* 后三分之一滑入「查看详情」（从右到左；不透明浅蓝，避免与底下文字叠影） */}
       <span
         role="button"
         aria-label={`查看 ${model.modelName} 的竞品对比详情`}
         onClick={(e) => {
           e.stopPropagation();
-          onOpenDetail(e.currentTarget);
+          onOpenDetail();
         }}
         style={{
           position: 'absolute',
@@ -194,8 +194,8 @@ function OwnChip({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'rgba(0, 112, 243, 0.13)',
-          borderLeft: '1px solid rgba(0, 112, 243, 0.28)',
+          background: '#e3efff',
+          borderLeft: '1px solid rgba(0, 112, 243, 0.25)',
           color: selectSoftInk,
           fontSize: 11,
           fontWeight: 650,
@@ -215,13 +215,11 @@ function CompChip({
   model,
   price,
   currency,
-  dimmed,
   onOpenTrend,
 }: {
   model: OverviewModel;
   price: { min: number | null; max: number | null; current: number | null; asOf: string };
   currency: CurrencyMode;
-  dimmed: boolean;
   onOpenTrend: () => void;
 }) {
   const label = modelOnly(model.brand, model.modelName);
@@ -229,6 +227,7 @@ function CompChip({
   const priceText = price.current != null ? fmtPrice(price.current, currency) : '—';
   return (
     <span
+      data-comp-chip={model.modelId}
       title={`${model.modelName} · 现价 ${priceText}${dateText ? `（${dateText} 采集）` : ''}`}
       style={{
         position: 'relative',
@@ -245,8 +244,6 @@ function CompChip({
         border: `1px solid ${color.hairline}`,
         borderRadius: radius.control,
         boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-        opacity: dimmed ? 0.25 : 1,
-        transition: 'opacity 200ms ease',
         textAlign: 'left' as const,
         font: 'inherit',
       }}
@@ -371,19 +368,18 @@ const selOf = (modelId: string, romram: string): ProductSelection => ({
   skuIds: [lowestPriceColorSku(modelId, romram) ?? ''],
 });
 
-/** 对比明细浮层（用户定版：不再弹窗）——锚定我司卡片原地展开：浮层左上角对着卡片
- *  右下角（下方放不下自动上翻）。表头 = 品牌产品名（浮层内最大字号、不换行、
- *  无「我司」标签，我司列以浅蓝底贯穿标识）；数据行 = 行带式单元格；右侧通栏
- *  「查看价格走势」→ 内容右收动画后跳看板并展开时点摘要。 */
+/** 对比明细浮层（用户定版：不再弹窗）——锚定我司卡片，浮层在卡片**正下方、与卡片
+ *  左对齐**（下方放不下自动上翻）；打开后触发一次位置自适应：卡片+浮层整体平滑
+ *  滚动到画面垂直居中。列宽 = 表头品牌产品名实测宽度（保证每列都放得下，超宽才
+ *  退化 fr 均分）；数据行 = 行带式单元格；右侧通栏「查看价格走势」→ 内容右收
+ *  动画后跳看板并展开时点摘要。 */
 function DetailFloat({
   model,
   currency,
-  place,
   onClose,
 }: {
   model: OverviewModel;
   currency: CurrencyMode;
-  place: 'up' | 'down';
   onClose: () => void;
 }) {
   const { actions } = useFilters();
@@ -391,6 +387,9 @@ function DetailFloat({
   // 价差方向（第五十二轮追补同款）：竞品比我司（默认）/ 我司比竞品，全矩阵同步
   const [diffDir, setDiffDir] = useState<'comp' | 'own'>('comp');
   const [collapsing, setCollapsing] = useState(false);
+  // 几何（挂载后测算一次）：上翻/下展、面板宽、矩阵列模板
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [geom, setGeom] = useState<{ place: 'up' | 'down'; width: number; cols: string } | null>(null);
 
   const compGroups = useMemo(() => {
     const groups: { modelId: string; name: string; brand: string; byOwnRom: (OverviewRow & { ownRomrams: string[] })[] }[] = [];
@@ -458,18 +457,68 @@ function DetailFloat({
     }, 340);
   };
 
-  const matrixCols = compGroups.length > 0 ? `minmax(0, 1.2fr) repeat(${compGroups.length}, minmax(0, 1fr))` : 'minmax(0, 1fr)';
+  const frCols = compGroups.length > 0 ? `minmax(0, 1.2fr) repeat(${compGroups.length}, minmax(0, 1fr))` : 'minmax(0, 1fr)';
+
+  // 打开时测算：①每列宽 = 表头产品名实测（都放得下）②上翻/下展 ③卡片+浮层整体居中画面
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const wrap = root?.parentElement;
+    if (!root || !wrap) return;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.font = '700 16px system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif';
+    const nameW = (text: string): number => Math.ceil(ctx.measureText(text).width);
+    const colPad = 12 * 2 + 7 + 6 + 2; // 左右 padding + 色点 + 间距 + 余量
+    const ownW = Math.max(210, nameW(brandFullName(model.brand, model.modelName)) + colPad);
+    const compWs = compGroups.map((g) => Math.max(150, nameW(g.name) + colPad));
+    const zoneW = 54; // 「查看价格走势」通栏
+    const chromeW = 14 + 14 + 2; // 左区内 padding + 边框
+    const needed = ownW + compWs.reduce((a, b) => a + b, 0) + zoneW + chromeW;
+    const scroller = root.closest('[data-map-scroll]');
+    const srect = scroller instanceof HTMLElement ? scroller.getBoundingClientRect() : null;
+    const wr = wrap.getBoundingClientRect();
+    const availRight = Math.max((srect?.right ?? window.innerWidth - 16) - wr.left - 12, 380);
+    const clamped = needed > availRight;
+    const width = clamped ? availRight : needed;
+    const cols = clamped ? frCols : `${ownW}px${compWs.map((w) => ` ${w}px`).join('')}`;
+    const h = root.offsetHeight; // 内容不换行，高度与列宽无关
+    const place: 'up' | 'down' = wr.bottom + 8 + h + 16 > (srect?.bottom ?? window.innerHeight) ? 'up' : 'down';
+    setGeom({ place, width, cols });
+    // 位置自适应：卡片+浮层整体中心 → 画面垂直居中（平滑滚动，取纵向可滚祖先）
+    const combinedTop = place === 'down' ? wr.top : wr.top - 8 - h;
+    const combinedBottom = place === 'down' ? wr.bottom + 8 + h : wr.top - 8;
+    const delta = (combinedTop + combinedBottom) / 2 - window.innerHeight / 2;
+    if (Math.abs(delta) > 8) {
+      window.requestAnimationFrame(() => {
+        let node: HTMLElement | null = wrap.parentElement;
+        while (node && node !== document.body) {
+          const st = getComputedStyle(node);
+          if (/(auto|scroll)/.test(st.overflowY) && node.scrollHeight > node.clientHeight + 4) {
+            node.scrollBy({ top: delta, behavior: 'smooth' });
+            return;
+          }
+          node = node.parentElement;
+        }
+        window.scrollBy({ top: delta, behavior: 'smooth' });
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model]);
+
+  const matrixCols = geom?.cols ?? frCols;
 
   return (
     <div
+      ref={rootRef}
       style={{
         position: 'absolute',
-        left: 'calc(100% + 10px)',
-        ...(place === 'down' ? { top: 'calc(100% + 10px)' } : { bottom: 'calc(100% + 10px)' }),
+        left: 0,
+        ...(geom?.place === 'up' ? { bottom: 'calc(100% + 8px)' } : { top: 'calc(100% + 8px)' }),
         zIndex: 40,
         display: 'flex',
         alignItems: 'stretch',
-        width: 690,
+        width: geom?.width ?? 690,
         maxWidth: 'calc(100vw - 240px)',
         maxHeight: 'min(620px, 72vh)',
         boxSizing: 'border-box',
@@ -479,7 +528,7 @@ function DetailFloat({
         boxShadow: '0 16px 40px rgba(15, 27, 61, 0.16)',
         overflow: 'hidden',
         textAlign: 'left',
-        transformOrigin: place === 'down' ? 'top left' : 'bottom left',
+        transformOrigin: geom?.place === 'up' ? 'bottom left' : 'top left',
         animation: 'lplPanelIn 180ms ease',
         transform: collapsing ? 'translateX(60px)' : 'translateX(0)',
         opacity: collapsing ? 0 : 1,
@@ -761,21 +810,51 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     return keys;
   }, [hoverOwnId, models]);
   const [detailModelId, setDetailModelId] = useState<string | null>(null);
-  // 明细浮层锚定方向：默认卡片右下角向下展开；底部放不下自动上翻（打开时测算一次）
-  const [detailPlace, setDetailPlace] = useState<'up' | 'down'>('down');
   const mapScrollRef = useRef<HTMLDivElement | null>(null);
-  const detailOpen = (id: string, el: HTMLElement): void => {
-    if (detailModelId === id) {
-      setDetailModelId(null);
+  const detailOpen = (id: string): void => {
+    setDetailModelId((cur) => (cur === id ? null : id));
+  };
+  // 悬停连线：我司卡片 → 各对标竞品卡片的贝塞尔曲线（内容坐标，横向滚动时重算）
+  const [links, setLinks] = useState<{ d: string; x1: number; y1: number; x2: number; y2: number }[]>([]);
+  useEffect(() => {
+    const scroller = mapScrollRef.current;
+    if (!hoverOwnId || mode !== 'market' || !scroller) {
+      setLinks([]);
       return;
     }
-    const wrap = el.closest('[data-own-anchor]');
-    const cRect = mapScrollRef.current?.getBoundingClientRect();
-    const r = (wrap ?? el).getBoundingClientRect();
-    const rows = models.find((m) => m.modelId === id)?.rows.length ?? 1;
-    setDetailPlace(cRect && r.bottom + 100 + rows * 106 + 40 + 20 > cRect.bottom ? 'up' : 'down');
-    setDetailModelId(id);
-  };
+    const measure = (): void => {
+      const content = scroller.firstElementChild as HTMLElement | null;
+      const ownEl = content?.querySelector(`[data-own-chip="${hoverOwnId}"]`);
+      if (!content || !ownEl) {
+        setLinks([]);
+        return;
+      }
+      const cRect = content.getBoundingClientRect();
+      const own = ownEl.getBoundingClientRect();
+      const model = models.find((m) => m.modelId === hoverOwnId);
+      const ids = [...new Set((model?.comps ?? []).map((c) => c.skuId.split('__')[0]))];
+      const next: { d: string; x1: number; y1: number; x2: number; y2: number }[] = [];
+      for (const id of ids) {
+        const el = content.querySelector(`[data-comp-chip="${id}"]`);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const x1 = own.right - cRect.left;
+        const y1 = own.top + own.height / 2 - cRect.top;
+        const x2 = r.left - cRect.left;
+        const y2 = r.top + r.height / 2 - cRect.top;
+        const dx = Math.max(28, (x2 - x1) * 0.45);
+        next.push({ d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`, x1, y1, x2, y2 });
+      }
+      setLinks(next);
+    };
+    measure();
+    scroller.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => {
+      scroller.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+    };
+  }, [hoverOwnId, mode, models]);
   // 点击浮层与锚点卡片以外区域 / Esc = 收起
   useEffect(() => {
     if (!detailModelId) return;
@@ -853,7 +932,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
         <span className="tnum" style={{ fontSize: 12, color: color.body }}>市场竞品 <strong style={{ color: color.ink, fontSize: 16 }}>{compCount}</strong></span>
       </div>
 
-      <div ref={mapScrollRef} style={{ marginTop: 10, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
+      <div ref={mapScrollRef} data-map-scroll="1" style={{ marginTop: 10, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
         <div key={mode} className="lpl-mode-fade" style={{ position: 'relative', minWidth: mode === 'table' ? tableWidth : undefined, height: totalHeight, background: color.canvas }}>
           {/* 左侧价位轴：美元显示档位带，本币只显示刻度 */}
           <div style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', background: color.canvas }}>
@@ -989,10 +1068,11 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
               ))}
               {market.map(({ model, price }) => {
                 const isOwn = model.isOwn;
+                // 悬停聚光：仅悬停我司行 + 其对标竞品行保持，其余行（含其他我司）整体置灰
                 const dimmed = litKeys != null && !litKeys.has(model.modelId);
                 const compIndex = brandColumns.findIndex((b) => b.key === brandKeyOf(model.brand));
                 return (
-                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, height: rowHeights.get(model.modelId) ?? CARD_H, display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', zIndex: detailModelId === model.modelId ? 30 : 1 }}>
+                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, height: rowHeights.get(model.modelId) ?? CARD_H, display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', opacity: dimmed ? 0.22 : 1, transition: 'opacity 200ms ease', zIndex: detailModelId === model.modelId ? 30 : 1 }}>
                     <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'flex-start', minWidth: 0, height: '100%', padding: '0 10px 0 14px', borderRight: `1px solid ${color.hairline}`, background: '#f3f8ff' }}>
                       {isOwn && (
                         <div data-own-anchor="1" style={{ position: 'relative', width: '100%' }}>
@@ -1000,14 +1080,13 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                             model={model}
                             price={price}
                             currency={currency}
-                            dimmed={false}
                             hovered={hoverOwnId === model.modelId}
                             onHover={setHoverOwnId}
                             onOpenTrend={() => openTrend(model)}
-                            onOpenDetail={(el) => detailOpen(model.modelId, el)}
+                            onOpenDetail={() => detailOpen(model.modelId)}
                           />
                           {detailModelId === model.modelId && (
-                            <DetailFloat model={model} currency={currency} place={detailPlace} onClose={() => setDetailModelId(null)} />
+                            <DetailFloat model={model} currency={currency} onClose={() => setDetailModelId(null)} />
                           )}
                         </div>
                       )}
@@ -1017,7 +1096,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                       return (
                         <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'flex-start', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
                           {here && compIndex >= 0 && (
-                            <CompChip model={model} price={price} currency={currency} dimmed={dimmed} onOpenTrend={() => openTrend(model)} />
+                            <CompChip model={model} price={price} currency={currency} onOpenTrend={() => openTrend(model)} />
                           )}
                         </div>
                       );
@@ -1025,6 +1104,18 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                   </div>
                 );
               })}
+              {/* 悬停连线：我司卡片 → 对标竞品卡片（贝塞尔曲线，置于灰行之上、浮层之下） */}
+              {links.length > 0 && (
+                <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 20 }}>
+                  {links.map((l, index) => (
+                    <g key={index} style={{ animation: 'lplFadeIn 180ms ease' }}>
+                      <path d={l.d} fill="none" stroke={color.link} strokeWidth={1.5} strokeLinecap="round" opacity={0.8} />
+                      <circle cx={l.x1} cy={l.y1} r={2.5} fill={color.link} opacity={0.9} />
+                      <circle cx={l.x2} cy={l.y2} r={2.5} fill={color.link} opacity={0.9} />
+                    </g>
+                  ))}
+                </svg>
+              )}
             </div>
           )}
         </div>
