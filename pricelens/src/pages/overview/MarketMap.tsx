@@ -263,119 +263,6 @@ function CompChip({
   );
 }
 
-/** 对比矩阵单元格：一行 = 一条横向内容带——行内单元格以竖分隔线相连、行与行以横
- *  分隔线区隔（不再是独立卡片），我司列浅蓝底纵向贯穿。层级：表头品牌产品名最大
- *  → 型号 → 折后价+折扣 / RRP（不划线）；底部：我司 = 价差方向切换按钮 + 日期右下，
- *  竞品 = 价差 + 日期右下（用户定版：日期不带「采集」字样）。每个数值行左侧带
- *  灰色指标小标签（用户定版：消除无标签数字堆叠的混乱感），标签列纵向对齐。 */
-function MatrixCell({
-  row,
-  currency,
-  own,
-  diff,
-  diffDir,
-  lastCol,
-  onToggleDiffDir,
-}: {
-  row: (OverviewRow & { ownRomrams?: string[] }) | null;
-  currency: CurrencyMode;
-  own: boolean;
-  diff: number | null;
-  diffDir?: 'comp' | 'own';
-  lastCol?: boolean;
-  onToggleDiffDir?: () => void;
-}) {
-  const borderRight = lastCol ? 0 : `1px solid ${color.hairline}`;
-  if (!row || (row.price == null && row.rrp == null)) {
-    return <div style={{ minHeight: 96, borderRight, background: own ? '#f3f8ff' : undefined }} />;
-  }
-  const lastWeek = row.points.length > 0 ? row.points[row.points.length - 1].weekId : '';
-  const dateText = lastWeek ? bucketLatestWeekLabel('week', lastWeek) ?? '' : row.asOfWeek ? bucketLatestWeekLabel('week', row.asOfWeek) ?? '' : '';
-  // 指标名标签列：固定宽度，纵向四行对齐成列
-  const Labeled = (label: string, value: ReactNode): ReactNode => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-      <span style={{ flexShrink: 0, width: 36, fontSize: 10, lineHeight: '15px', color: color.mute }}>{label}</span>
-      <span style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>{value}</span>
-    </div>
-  );
-  return (
-    <div
-      style={{
-        minHeight: 96,
-        boxSizing: 'border-box',
-        padding: '9px 12px 9px 10px',
-        borderRight,
-        background: own ? '#f3f8ff' : color.canvas,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-      }}
-    >
-      {Labeled(
-        '型号',
-        <span style={{ fontSize: 13, lineHeight: '17px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</span>,
-      )}
-      {Labeled(
-        '折后价',
-        <>
-          <span className="tnum" style={{ fontSize: 13, lineHeight: '17px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
-          {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
-        </>,
-      )}
-      {Labeled(
-        'RRP',
-        <span className="tnum" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</span>,
-      )}
-      {Labeled(
-        '价差',
-        own ? (
-          onToggleDiffDir ? (
-            <button
-              type="button"
-              title="切换价差方向（我司比竞品 / 竞品比我司）"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleDiffDir();
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '2px 8px',
-                borderRadius: radius.pill,
-                border: '1px solid rgba(0, 112, 243, 0.40)',
-                background: selectSoft,
-                color: selectSoftInk,
-                font: 'inherit',
-                fontSize: 10.5,
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <SwapOutlined style={{ fontSize: 10 }} />
-              {diffDir === 'own' ? '我司比竞品' : '竞品比我司'}
-            </button>
-          ) : (
-            <span style={{ color: color.mute, fontSize: 11 }}>—</span>
-          )
-        ) : diff != null ? (
-          <span className="tnum" style={{ fontSize: 11.5, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute }}>
-            {diff > 0.005 ? '+' : ''}{Math.round(diff * 100)}%
-          </span>
-        ) : (
-          <span style={{ color: color.mute, fontSize: 11 }}>—</span>
-        ),
-      )}
-      {dateText && (
-        <div style={{ marginTop: 'auto', paddingTop: 3, display: 'flex', justifyContent: 'flex-end' }}>
-          <span className="tnum" style={{ fontSize: 10, lineHeight: '13px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 const selOf = (modelId: string, romram: string): ProductSelection => ({
   modelId,
   romram,
@@ -471,7 +358,7 @@ function DetailFloat({
     }, 340);
   };
 
-  const frCols = compGroups.length > 0 ? `minmax(0, 1.2fr) repeat(${compGroups.length}, minmax(0, 1fr))` : 'minmax(0, 1fr)';
+  const frCols = compGroups.length > 0 ? `56px minmax(0, 1.15fr) repeat(${compGroups.length}, minmax(0, 1fr))` : '56px minmax(0, 1fr)';
 
   // 打开时测算：①每列宽 = 表头产品名实测（都放得下）②上翻/下展 ③卡片+浮层整体居中画面
   useLayoutEffect(() => {
@@ -488,14 +375,14 @@ function DetailFloat({
     const compWs = compGroups.map((g) => Math.max(150, nameW(g.name) + colPad));
     const zoneW = 54; // 「查看价格走势」通栏
     const chromeW = 14 + 14 + 2; // 左区内 padding + 边框
-    const needed = ownW + compWs.reduce((a, b) => a + b, 0) + zoneW + chromeW;
+    const needed = 56 + ownW + compWs.reduce((a, b) => a + b, 0) + zoneW + chromeW; // 56 = 公共标签列
     const scroller = root.closest('[data-map-scroll]');
     const srect = scroller instanceof HTMLElement ? scroller.getBoundingClientRect() : null;
     const wr = wrap.getBoundingClientRect();
     const availRight = Math.max((srect?.right ?? window.innerWidth - 16) - wr.left - 12, 380);
     const clamped = needed > availRight;
     const width = clamped ? availRight : needed;
-    const cols = clamped ? frCols : `${ownW}px${compWs.map((w) => ` ${w}px`).join('')}`;
+    const cols = clamped ? frCols : `56px ${ownW}px${compWs.map((w) => ` ${w}px`).join('')}`;
     const h = root.offsetHeight; // 内容不换行，高度与列宽无关
     const place: 'up' | 'down' = wr.bottom + 8 + h + 16 > (srect?.bottom ?? window.innerHeight) ? 'up' : 'down';
     setGeom({ place, width, cols });
@@ -574,31 +461,131 @@ function DetailFloat({
           </span>
         </div>
         <div style={{ border: `1px solid ${color.hairline}`, borderRadius: 10, overflow: 'hidden' }}>
-          {/* 表头：品牌产品名 = 浮层内最大字号，不换行（超长省略） */}
+          {/* 细表：最左公共标签列（整表一份）+ 每行指标一条贯穿行线 + 产品列竖线加重区隔 */}
           <div style={{ display: 'grid', gridTemplateColumns: matrixCols, background: color.canvasSoft, borderBottom: `1px solid ${color.hairline}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '9px 12px', borderRight: compGroups.length > 0 ? `1px solid ${color.hairline}` : 0 }}>
+            <div style={{ borderRight: `1px solid ${color.hairlineStrong}` }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '9px 12px', borderRight: `1px solid ${color.hairlineStrong}` }}>
               <BrandDot brand={model.brand} size={7} />
               <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 14, lineHeight: '18px', fontWeight: 700, color: brandColorOf(model.brand), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{brandFullName(model.brand, model.modelName)}</span>
             </div>
             {compGroups.map((g, gi) => (
-              <div key={g.modelId} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '9px 12px', borderRight: gi === compGroups.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
+              <div key={g.modelId} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '9px 12px', borderRight: gi === compGroups.length - 1 ? 0 : `1px solid ${color.hairlineStrong}` }}>
                 <BrandDot brand={g.brand} size={7} />
                 <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 14, lineHeight: '18px', fontWeight: 700, color: brandColorOf(g.brand), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.name}</span>
               </div>
             ))}
           </div>
-          {/* 数据行：一行 = 一条横向内容带 */}
-          {ownSorted.map((row, index) => (
-            <div key={row.skuId} style={{ display: 'grid', gridTemplateColumns: matrixCols, borderBottom: index === ownSorted.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
-              <MatrixCell row={row} currency={currency} own diff={null} diffDir={diffDir} lastCol={compGroups.length === 0} onToggleDiffDir={() => setDiffDir((d) => (d === 'comp' ? 'own' : 'comp'))} />
-              {compGroups.map((g, gi) => {
-                const comp = g.byOwnRom.find((x) => x.ownRomrams.some((r: string) => r.replace(/\s+/g, '') === row.romram.replace(/\s+/g, ''))) ?? null;
-                let diff = comp?.price != null && row.price != null && row.price > 0 ? comp.price / row.price - 1 : null;
-                if (diff != null && diffDir === 'own') diff = comp?.price ? row.price != null ? row.price / comp.price - 1 : null : null;
-                return <MatrixCell key={g.modelId} row={comp} currency={currency} own={false} diff={diff} lastCol={gi === compGroups.length - 1} />;
-              })}
-            </div>
-          ))}
+          {ownSorted.map((row, ri) => {
+            const last = ri === ownSorted.length - 1;
+            const pairs = compGroups.map((g) => {
+              const comp = g.byOwnRom.find((x) => x.ownRomrams.some((r: string) => r.replace(/\s+/g, '') === row.romram.replace(/\s+/g, ''))) ?? null;
+              let diff = comp?.price != null && row.price != null && row.price > 0 ? comp.price / row.price - 1 : null;
+              if (diff != null && diffDir === 'own') diff = comp?.price ? row.price != null ? row.price / comp.price - 1 : null : null;
+              return { g, comp, diff };
+            });
+            const dateOf = (r: OverviewRow | null): string => {
+              if (!r) return '';
+              const w = r.points.length > 0 ? r.points[r.points.length - 1].weekId : r.asOfWeek;
+              return w ? bucketLatestWeekLabel('week', w) ?? '' : '';
+            };
+            const labelCell = (label: string): ReactNode => (
+              <div style={{ padding: '5px 12px', background: color.canvasSoft, borderRight: `1px solid ${color.hairlineStrong}`, fontSize: 10, lineHeight: '18px', color: color.mute, whiteSpace: 'nowrap' }}>{label}</div>
+            );
+            const ownCell = (node: ReactNode): ReactNode => (
+              <div style={{ padding: '5px 12px', background: '#f3f8ff', borderRight: `1px solid ${color.hairlineStrong}`, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{node}</div>
+            );
+            const compCell = (gi: number, node: ReactNode): ReactNode => (
+              <div key={pairs[gi].g.modelId} style={{ padding: '5px 12px', borderRight: gi === compGroups.length - 1 ? 0 : `1px solid ${color.hairlineStrong}`, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>{node}</div>
+            );
+            const rowLine = `1px solid ${color.hairline}`;
+            const strongLine = `1px solid ${color.hairlineStrong}`;
+            const metricRow = (label: string, ownNode: ReactNode, compNode: (comp: OverviewRow & { ownRomrams?: string[] }, diff: number | null) => ReactNode, withLine: boolean): ReactNode => (
+              <div style={{ display: 'grid', gridTemplateColumns: matrixCols, borderBottom: withLine ? rowLine : 0 }}>
+                {labelCell(label)}
+                {ownCell(ownNode)}
+                {pairs.map((p, gi) => compCell(gi, p.comp ? compNode(p.comp, p.diff) : null))}
+              </div>
+            );
+            return (
+              <div key={row.skuId}>
+                {metricRow(
+                  '型号',
+                  <span style={{ fontSize: 13, lineHeight: '18px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</span>,
+                  (comp) => <span style={{ fontSize: 13, lineHeight: '18px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{comp.romram}</span>,
+                  true,
+                )}
+                {metricRow(
+                  '折后价',
+                  <>
+                    <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
+                    {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
+                  </>,
+                  (comp) => (
+                    <>
+                      <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{comp.price != null ? fmtPrice(comp.price, currency) : '—'}</span>
+                      {comp.discountPct != null && <DiscountBadge discount={comp.discountPct} />}
+                    </>
+                  ),
+                  true,
+                )}
+                {metricRow(
+                  'RRP',
+                  <span className="tnum" style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</span>,
+                  (comp) => <span className="tnum" style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>{comp.rrp != null ? fmtPrice(comp.rrp, currency) : '—'}</span>,
+                  true,
+                )}
+                {metricRow(
+                  '价差',
+                  <button
+                    type="button"
+                    title="切换价差方向（我司比竞品 / 竞品比我司）"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDiffDir((d) => (d === 'comp' ? 'own' : 'comp'));
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 8px',
+                      borderRadius: radius.pill,
+                      border: '1px solid rgba(0, 112, 243, 0.40)',
+                      background: selectSoft,
+                      color: selectSoftInk,
+                      font: 'inherit',
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <SwapOutlined style={{ fontSize: 10 }} />
+                    {diffDir === 'own' ? '我司比竞品' : '竞品比我司'}
+                  </button>,
+                  (comp, diff) => diff != null ? (
+                    <span className="tnum" style={{ fontSize: 11.5, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute, whiteSpace: 'nowrap' }}>
+                      {diff > 0.005 ? '+' : ''}{Math.round(diff * 100)}%
+                    </span>
+                  ) : (
+                    <span style={{ color: color.mute, fontSize: 11 }}>—</span>
+                  ),
+                  false,
+                )}
+                {/* 采集行：无标签，日期右对齐；下边线 = 配置分界（加重） */}
+                <div style={{ display: 'grid', gridTemplateColumns: matrixCols, borderBottom: last ? 0 : strongLine }}>
+                  {labelCell('')}
+                  <div style={{ padding: '3px 12px 7px', background: '#f3f8ff', borderRight: `1px solid ${color.hairlineStrong}`, display: 'flex', justifyContent: 'flex-end' }}>
+                    <span className="tnum" style={{ fontSize: 10, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap' }}>{dateOf(row)}</span>
+                  </div>
+                  {pairs.map((p, gi) => (
+                    <div key={p.g.modelId} style={{ padding: '3px 12px 7px', borderRight: gi === compGroups.length - 1 ? 0 : `1px solid ${color.hairlineStrong}`, display: 'flex', justifyContent: 'flex-end' }}>
+                      <span className="tnum" style={{ fontSize: 10, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap' }}>{dateOf(p.comp)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
       <div
