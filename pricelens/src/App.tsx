@@ -5,6 +5,7 @@ import { FiltersProvider } from './state/FiltersContext';
 import { OverviewViewProvider } from './state/OverviewViewContext';
 import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
+import VolumePrice from './pages/VolumePrice';
 import Config from './pages/Config';
 import AlertsPage from './pages/AlertsPage';
 import { color, font } from './theme/tokens';
@@ -46,7 +47,17 @@ function AppBody() {
   // 三页切换轻淡入：key 换页重挂载，播放 lplPageIn（动效令牌 fast 档）
   return (
     <div key={page} className="lpl-page-fade">
-      {page === 'overview' ? <Overview /> : page === 'config' ? <Config /> : page === 'alerts' ? <AlertsPage /> : <Dashboard />}
+      {page === 'overview' ? (
+        <Overview />
+      ) : page === 'volume' ? (
+        <VolumePrice />
+      ) : page === 'config' ? (
+        <Config />
+      ) : page === 'alerts' ? (
+        <AlertsPage />
+      ) : (
+        <Dashboard />
+      )}
     </div>
   );
 }

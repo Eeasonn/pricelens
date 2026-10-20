@@ -1,0 +1,30 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`销量估算 · 真实数据不变量（RU × Pura 90s Pro Max 首配置） > 周粒度 24 周数组快照（含无事实行的 null 位） 1`] = `
+[
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  793,
+  1143,
+  892,
+  880,
+]
+`;

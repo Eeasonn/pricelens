@@ -16,7 +16,7 @@ import { lowestPriceColorSku } from '../dataModel/aggregate';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
-const PAGES: Page[] = ['overview', 'dashboard', 'config', 'alerts'];
+const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'config', 'alerts'];
 
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null */
 function productSelectionOfSeriesKeyInternal(key: string, ownOnly: boolean): ProductSelection | null {
