@@ -72,6 +72,15 @@ export const radius = {
   pill: 9999, // 圆胶囊
 } as const;
 
+/** 动效令牌：时长三档 + 入场/退场两条标准曲线，全站动画统一取值（不再即兴） */
+export const motion = {
+  fast: 160, // 悬停反馈、连线/浮层入场、置灰
+  base: 240, // 模式切换、面板宽度形变、chip 滑入
+  slow: 320, // 跨页接力收起
+  enter: 'cubic-bezier(0.25, 0.8, 0.3, 1)', // 入场（快出缓停）
+  exit: 'cubic-bezier(0.4, 0, 0.2, 1)', // 退场（匀出急停）
+} as const;
+
 /** 层叠小偏移 + inset hairline，不用单层大投影 */
 export const shadow = {
   l1: 'inset 0 0 0 1px rgba(0,0,0,.08)',

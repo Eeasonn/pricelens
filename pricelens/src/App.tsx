@@ -43,5 +43,10 @@ export default function App() {
 
 function AppBody() {
   const { page } = usePage();
-  return page === 'overview' ? <Overview /> : page === 'config' ? <Config /> : page === 'alerts' ? <AlertsPage /> : <Dashboard />;
+  // 三页切换轻淡入：key 换页重挂载，播放 lplPageIn（动效令牌 fast 档）
+  return (
+    <div key={page} className="lpl-page-fade">
+      {page === 'overview' ? <Overview /> : page === 'config' ? <Config /> : page === 'alerts' ? <AlertsPage /> : <Dashboard />}
+    </div>
+  );
 }

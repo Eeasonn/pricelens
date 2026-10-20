@@ -201,3 +201,23 @@ button.lpl-map-card:hover {
   from { opacity: 0; transform: translate(-8px, 4px); }
   to { opacity: 1; transform: none; }
 }
+
+/* 三页切换轻淡入（总览⇄看板⇄配置） */
+@keyframes lplPageIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.lpl-page-fade { animation: lplPageIn 160ms ease; }
+
+/* 减少动态效果：系统开启后全站动画/过渡降级为瞬时 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .lpl-page-fade,
+  .lpl-mode-fade {
+    animation: none !important;
+  }
+}

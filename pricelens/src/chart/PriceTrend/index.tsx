@@ -120,11 +120,13 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
   const [hoverLatest, setHoverLatest] = useState(false);
   // 保持显示（第九十四轮）：开启后悬停划走也不收起；书签带点击 = 展开并保持显示
   const [pinPanel, setPinPanel] = useState(false);
-  // 总览对比浮窗「查看价格走势」跳转携带（navBus 一次性）：挂载后展开并保持时点摘要
+  // 总览对比浮窗「查看价格走势」跳转携带（navBus 一次性）：到站动画——面板先以
+  // 收起态（书签带）挂载，稍候再展开并保持，宽度形变与总览浮层的收起动作接力
   useEffect(() => {
     if (navBus.dashboardPointPanel) {
       navBus.dashboardPointPanel = false;
-      setPinPanel(true); // open = pinned || hover，置保持显示即展开
+      const t = window.setTimeout(() => setPinPanel(true), 90);
+      return () => window.clearTimeout(t);
     }
   }, []);
   const openPromoDetail = (): void => {

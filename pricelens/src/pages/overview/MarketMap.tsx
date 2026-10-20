@@ -24,7 +24,7 @@ import { useFilters } from '../../state/FiltersContext';
 import { usePage } from '../../state/PageContext';
 import { navBus } from '../../state/navBus';
 import type { ProductSelection } from '../../state/filtersTypes';
-import { brandColorOf, color, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
+import { brandColorOf, color, motion, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 
 export interface MarketMapProps {
   /** 全市场型号（我司+竞品矩阵全量）：摆位只看真实现价，不依赖竞品匹配关系（第七十七轮）。 */
@@ -65,6 +65,9 @@ function modelOnly(brand: string, modelName: string): string {
   const label = brandLabelOf(brand);
   return modelName.toLowerCase().startsWith(`${label.toLowerCase()} `) ? modelName.slice(label.length + 1) : modelName;
 }
+
+/** 用户开启「减少动态效果」时退化为瞬时滚动 */
+const scrollBehavior = (): ScrollBehavior => (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
 const fmtPrice = (value: number, currency: CurrencyMode): string =>
   `${currency === 'usd' ? '$' : '₽'}${Math.round(value).toLocaleString('en-US')}`;
@@ -160,7 +163,7 @@ function OwnChip({
         borderRadius: radius.control,
         overflow: 'hidden',
         cursor: 'pointer',
-        transition: 'border-color 200ms ease, box-shadow 200ms ease',
+        transition: `border-color ${motion.fast}ms ease, box-shadow ${motion.fast}ms ease`,
         boxShadow: hovered ? '0 2px 8px rgba(0, 112, 243, 0.16)' : 'none',
         textAlign: 'left' as const,
         font: 'inherit',
@@ -201,7 +204,7 @@ function OwnChip({
           fontWeight: 650,
           whiteSpace: 'nowrap',
           transform: hovered ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 240ms cubic-bezier(0.25, 0.8, 0.3, 1)',
+          transition: `transform ${motion.base}ms ${motion.enter}`,
         }}
       >
         查看详情
@@ -291,6 +294,12 @@ function DetailFloat({
   // 几何（挂载后测算一次）：上翻/下展、面板宽、矩阵列模板
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [geom, setGeom] = useState<{ place: 'up' | 'down'; width: number; cols: string } | null>(null);
+  // 入场延后：先让居中平滑滚动落位，再播浮层入场，动作成套
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setEntered(true), 360);
+    return () => window.clearTimeout(t);
+  }, []);
 
   const compGroups = useMemo(() => {
     const groups: { modelId: string; name: string; brand: string; byOwnRom: (OverviewRow & { ownRomrams: string[] })[] }[] = [];
@@ -396,12 +405,12 @@ function DetailFloat({
       while (node && node !== document.body) {
         const st = getComputedStyle(node);
         if (/(auto|scroll)/.test(st.overflowY) && node.scrollHeight > node.clientHeight + 4) {
-          node.scrollBy({ top: delta, behavior: 'smooth' });
+          node.scrollBy({ top: delta, behavior: scrollBehavior() });
           return;
         }
         node = node.parentElement;
       }
-      window.scrollBy({ top: delta, behavior: 'smooth' });
+      window.scrollBy({ top: delta, behavior: scrollBehavior() });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model]);
@@ -429,10 +438,10 @@ function DetailFloat({
         overflow: 'hidden',
         textAlign: 'left',
         transformOrigin: geom?.place === 'up' ? 'bottom left' : 'top left',
-        animation: 'lplPanelIn 180ms ease',
+        opacity: entered ? (collapsing ? 0 : 1) : 0,
+        animation: entered ? `lplPanelIn ${motion.fast}ms ease` : 'none',
         transform: collapsing ? 'translateX(60px)' : 'translateX(0)',
-        opacity: collapsing ? 0 : 1,
-        transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 300ms ease',
+        transition: `transform ${motion.slow}ms ${motion.exit}, opacity ${motion.slow}ms ${motion.exit}`,
       }}
     >
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', padding: '12px 14px' }}>
@@ -788,6 +797,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     };
     return [...base].sort((a, b) => pos(a.key) - pos(b.key));
   }, [compBrands, manualOrder]);
+  const flipPrevRef = useRef<Map<string, number> | null>(null);
   const [draggingBrand, setDraggingBrand] = useState<string | null>(null);
   const [dropBrand, setDropBrand] = useState<string | null>(null);
   const moveBrandTo = (dragKey: string, targetKey: string): void => {
@@ -796,9 +806,34 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     const from = keys.indexOf(dragKey);
     const to = keys.indexOf(targetKey);
     if (from < 0 || to < 0) return;
+    // FLIP 前半段：记录换序前各品牌列的位置
+    const prev = new Map<string, number>();
+    document.querySelectorAll('[data-brand-flip]').forEach((el) => {
+      const k = el.getAttribute('data-brand-flip');
+      if (k && !prev.has(k)) prev.set(k, el.getBoundingClientRect().left);
+    });
+    flipPrevRef.current = prev;
     keys.splice(to, 0, keys.splice(from, 1)[0]);
     setManualOrder(keys);
   };
+  // FLIP 后半段：换序渲染完成后把位移差平移动画回位（同步 FLIP，不依赖 rAF）
+  useLayoutEffect(() => {
+    const prev = flipPrevRef.current;
+    if (!prev) return;
+    flipPrevRef.current = null;
+    document.querySelectorAll('[data-brand-flip]').forEach((el) => {
+      const k = el.getAttribute('data-brand-flip');
+      if (!k || !prev.has(k)) return;
+      const dx = (prev.get(k) as number) - el.getBoundingClientRect().left;
+      if (Math.abs(dx) < 1) return;
+      const html = el as HTMLElement;
+      html.style.transition = 'none';
+      html.style.transform = `translateX(${dx}px)`;
+      void html.offsetWidth;
+      html.style.transition = `transform ${motion.fast}ms ease`;
+      html.style.transform = 'translateX(0)';
+    });
+  }, [brandColumns]);
 
   // —— 交互：悬停我司 → 仅对标竞品高亮；详情浮窗；走势跳转 ——
   const [hoverOwnId, setHoverOwnId] = useState<string | null>(null);
@@ -951,7 +986,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
       </div>
 
       <div ref={mapScrollRef} data-map-scroll="1" style={{ marginTop: 10, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
-        <div key={mode} className="lpl-mode-fade" style={{ position: 'relative', minWidth: mode === 'table' ? tableWidth : undefined, height: totalHeight, background: color.canvas }}>
+        <div key={`${mode}-${currency}`} className="lpl-mode-fade" style={{ position: 'relative', minWidth: mode === 'table' ? tableWidth : undefined, height: totalHeight, background: color.canvas }}>
           {/* 左侧价位轴：美元显示档位带，本币只显示刻度 */}
           <div style={{ position: 'sticky', zIndex: 8, left: 0, width: axisWidth, height: totalHeight, boxSizing: 'border-box', background: color.canvas }}>
             {tierBoxes.map((box, index) => (
@@ -1062,6 +1097,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 {brandColumns.map((brand, index) => (
                   <div
                     key={brand.key}
+                    data-brand-flip={brand.key}
                     draggable
                     title="拖动调整品牌列顺序"
                     onDragStart={(e: ReactDragEvent<HTMLDivElement>) => {
@@ -1102,7 +1138,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 const dimmed = litKeys != null && !litKeys.has(model.modelId);
                 const compIndex = brandColumns.findIndex((b) => b.key === brandKeyOf(model.brand));
                 return (
-                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, height: rowHeights.get(model.modelId) ?? CARD_H, display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', opacity: dimmed ? 0.22 : 1, transition: 'opacity 200ms ease', zIndex: detailModelId === model.modelId ? 30 : 1 }}>
+                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, height: rowHeights.get(model.modelId) ?? CARD_H, display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', opacity: dimmed ? 0.22 : 1, transition: `opacity ${motion.fast}ms ease`, zIndex: detailModelId === model.modelId ? 30 : 1 }}>
                     <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'flex-start', minWidth: 0, height: '100%', padding: '0 10px 0 14px', borderRight: `1px solid ${color.hairline}`, background: '#f3f8ff' }}>
                       {isOwn && (
                         <div data-own-anchor="1" style={{ position: 'relative', width: '100%' }}>
@@ -1124,7 +1160,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                     {brandColumns.map((brand, index) => {
                       const here = brandKeyOf(model.brand) === brand.key && !isOwn;
                       return (
-                        <div key={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'flex-start', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
+                        <div key={brand.key} data-brand-flip={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'flex-start', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
                           {here && compIndex >= 0 && (
                             <CompChip model={model} price={price} currency={currency} onOpenTrend={() => openTrend(model)} />
                           )}
@@ -1136,9 +1172,9 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
               })}
               {/* 悬停连线：我司卡片 → 对标竞品卡片（贝塞尔曲线，置于灰行之上、浮层之下） */}
               {links.length > 0 && (
-                <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 20 }}>
+                <svg key={hoverOwnId} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 20 }}>
                   {links.map((l, index) => (
-                    <g key={index} style={{ animation: 'lplFadeIn 180ms ease' }}>
+                    <g key={index} style={{ animation: `lplFadeIn ${motion.fast}ms ease` }}>
                       <path d={l.d} fill="none" stroke="rgba(0, 112, 243, 0.42)" strokeWidth={1.5} strokeLinecap="round" />
                       <circle cx={l.x1} cy={l.y1} r={2.5} fill="rgba(0, 112, 243, 0.55)" />
                       <circle cx={l.x2} cy={l.y2} r={2.5} fill="rgba(0, 112, 243, 0.55)" />

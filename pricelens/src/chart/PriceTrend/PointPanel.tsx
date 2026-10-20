@@ -9,7 +9,7 @@
 // ============================================================
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import type { CurrencyMode, Granularity } from '../../dataModel/types';
-import { color, fontSize, radius } from '../../theme/tokens';
+import { color, fontSize, motion, radius } from '../../theme/tokens';
 import PriceSummary, { fmtPointDate } from './PriceSummary';
 import type { PriceSummaryItem } from './chartModel';
 
@@ -49,7 +49,7 @@ export default function PointPanel(props: PointPanelProps) {
         border: `1px solid ${color.hairline}`,
         borderRadius: open ? radius.card : `0 ${radius.card}px ${radius.card}px 0`,
         background: color.canvas,
-        transition: 'width 240ms cubic-bezier(0.25, 0.8, 0.3, 1), border-radius 240ms ease',
+        transition: `width ${motion.base}ms ${motion.enter}, border-radius ${motion.base}ms ease`,
       }}
     >
       {/* 书签带层（收起态）：竖排文字 + 展开箭头 */}
@@ -72,7 +72,7 @@ export default function PointPanel(props: PointPanelProps) {
           userSelect: 'none',
           opacity: open ? 0 : 1,
           pointerEvents: open ? 'none' : 'auto',
-          transition: 'opacity 180ms ease',
+          transition: `opacity ${motion.fast}ms ease`,
         }}
       >
         <RightOutlined style={{ fontSize: 10, color: color.mute }} />
@@ -102,7 +102,7 @@ export default function PointPanel(props: PointPanelProps) {
           boxSizing: 'border-box',
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'auto' : 'none',
-          transition: open ? 'opacity 200ms ease 90ms' : 'opacity 140ms ease',
+          transition: open ? `opacity ${motion.base}ms ease 90ms` : `opacity ${motion.fast}ms ease`,
         }}
       >
       {/* 头部：收起按钮 + 时点日期 + 保持显示开关（与摘要条同口径：窗口末桶最新周三锚日） */}
