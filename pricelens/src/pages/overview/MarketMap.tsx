@@ -681,7 +681,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
   const CARD_H = 38; // 卡片高（走势图标让位后的统一行高）
   const BAND_GAP = 2;
   const BAND_PAD = 5;
-  const BLOCK_H = 108; // 在售产品表：块高 = 产品头 30 + 型号/折后价/RRP 三行 × 26
+  const ROW_H = 62; // 在售产品表：行高（配置格三行堆叠：型号/折后价/RRP）
   const TABLE_GAP = 10;
 
   // —— 分段带：竞品模式 = 全市场；在售产品模式 = 仅我司产品 ——
@@ -697,7 +697,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
       });
       if (items.length === 0) continue;
       const h = mode === 'table'
-        ? items.length * (BLOCK_H + TABLE_GAP)
+        ? items.length * (ROW_H + TABLE_GAP)
         : Math.max(76, items.length * (CARD_H + BAND_GAP) + BAND_PAD * 2);
       rects.push({ label, lo, top, h, items });
       top += h;
@@ -743,7 +743,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
   let lastBottom: number;
   if (usd) {
     for (const band of bandRects) {
-      const pitch = mode === 'table' ? BLOCK_H + TABLE_GAP : CARD_H + BAND_GAP;
+      const pitch = mode === 'table' ? ROW_H + TABLE_GAP : CARD_H + BAND_GAP;
       const pad = mode === 'table' ? 0 : BAND_PAD;
       band.items.forEach((item, index) => {
         const top = band.top + pad + index * pitch;
@@ -959,8 +959,8 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     [ownItems],
   );
   const maxConfigCols = Math.max(1, ...tableProducts.map((p) => p.rows.length));
-  const tableTemplate = `56px repeat(${maxConfigCols}, minmax(0, 1fr))`;
-  const tableWidth = 56 + maxConfigCols * 176;
+  const tableTemplate = `minmax(240px, 1.15fr) repeat(${maxConfigCols}, minmax(0, 1fr))`;
+  const tableWidth = 240 + maxConfigCols * 176;
 
   return (
     <section aria-label="市场摆位概要" style={{ marginTop: space.md, padding: space.md, border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas }}>
@@ -1029,7 +1029,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 title="各产品的在售配置按容量从小到大排列"
                 style={{ position: 'absolute', zIndex: 4, top: 0, left: 0, right: 0, height: plotTop, display: 'grid', gridTemplateColumns: tableTemplate, boxSizing: 'border-box', borderBottom: `1px solid ${color.hairline}`, background: color.canvas }}
               >
-                <div style={{ position: 'sticky', zIndex: 6, left: axisWidth, boxSizing: 'border-box', color: color.mute, fontSize: 11, lineHeight: '18px', fontWeight: 600, borderRight: `1px solid ${color.hairlineStrong}`, height: '100%', display: 'flex', alignItems: 'center', background: color.canvasSoft }}>指标</div>
+                <div style={{ position: 'sticky', zIndex: 6, left: axisWidth, boxSizing: 'border-box', padding: '0 14px', color: color.ink, fontSize: 13, lineHeight: '18px', fontWeight: 600, borderRight: `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', background: '#f3f8ff', boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>{ownBrands.length === 1 ? brandHeaderLabel(ownBrands[0]) : '产品'}</div>
                 {Array.from({ length: maxConfigCols }, (_, i) => (
                   <div key={i} style={{ boxSizing: 'border-box', padding: '0 12px', color: color.body, fontSize: 12, lineHeight: '18px', fontWeight: 600, borderRight: i === maxConfigCols - 1 ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
                     配置 {i + 1}
@@ -1039,75 +1039,56 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
               {tableProducts.map(({ model, price, rows }) => {
                 const top = rowTops.get(model.modelId) ?? 0;
                 const dateText = price.asOf ? bucketLatestWeekLabel('week', price.asOf) ?? '' : '';
-                const rowGrid = (last: boolean): React.CSSProperties => ({ display: 'grid', gridTemplateColumns: tableTemplate, borderBottom: last ? 0 : `1px solid ${color.hairline}`, height: 26 });
-                const labelCell = (label: string): ReactNode => (
-                  <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, height: '100%', boxSizing: 'border-box', padding: '0 12px', background: color.canvasSoft, borderRight: `1px solid ${color.hairlineStrong}`, fontSize: 10, lineHeight: '26px', color: color.mute, whiteSpace: 'nowrap' }}>{label}</div>
-                );
-                const configCell = (i: number, row: OverviewRow | null, node: ReactNode): ReactNode => (
-                  <div key={i} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', padding: '0 12px', borderRight: i === maxConfigCols - 1 ? 0 : `1px solid ${color.hairlineStrong}`, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
-                    {row && <TrendDot right title={`只看 ${model.modelName} ${row.romram} 的价格走势`} onClick={() => openTrend(model, row)} />}
-                    {row && node}
-                  </div>
-                );
+                const priceText = price.current != null ? fmtPrice(price.current, currency) : '—';
                 return (
-                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top, height: BLOCK_H, background: color.canvas }}>
-                    {/* 产品头行：名称 + 采集日期 */}
-                    <div style={{ display: 'grid', gridTemplateColumns: tableTemplate, borderBottom: `1px solid ${color.hairline}`, height: 30 }}>
-                      <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, height: '100%', background: color.canvasSoft, borderRight: `1px solid ${color.hairlineStrong}` }} />
-                      <div style={{ gridColumn: '2 / -1', position: 'relative', display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 0 20px', minWidth: 0, background: color.canvas }}>
+                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top, height: ROW_H, display: 'grid', gridTemplateColumns: tableTemplate, background: color.canvas }}>
+                    {/* 产品卡：与竞品对比模式同款样式（高度压缩） */}
+                    <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, height: '100%', boxSizing: 'border-box', padding: '5px 12px 5px 10px', display: 'flex', alignItems: 'center', minWidth: 0, background: '#f3f8ff', borderRight: `1px solid ${color.hairline}` }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box', padding: '3px 9px 3px 18px', background: color.canvas, border: '1px solid rgba(0, 112, 243, 0.32)', borderRadius: radius.control, overflow: 'hidden' }}>
                         <TrendDot title={`只看 ${model.modelName} 的价格走势`} onClick={() => openTrend(model)} />
-                        <BrandDot brand={model.brand} size={6} />
-                        <span style={{ fontSize: 13, fontWeight: 650, color: brandColorOf(model.brand), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{brandFullName(model.brand, model.modelName)}</span>
-                        <span style={{ flex: 1 }} />
-                        <span className="tnum" style={{ fontSize: 9.5, color: color.mute, flexShrink: 0 }}>{dateText}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                          <BrandDot brand={model.brand} size={6} />
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(model.brand), fontSize: 12, fontWeight: 650 }}>{modelOnly(model.brand, model.modelName)}</span>
+                        </span>
+                        <span style={{ flexShrink: 0, marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                          <span className="tnum" style={{ fontSize: 9.5, lineHeight: '11px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
+                          <span className="tnum" style={{ fontSize: 12, lineHeight: '15px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{priceText}</span>
+                        </span>
                       </div>
                     </div>
-                    {/* 型号 */}
-                    <div style={rowGrid(false)}>
-                      {labelCell('型号')}
-                      {Array.from({ length: maxConfigCols }, (_, i) => {
-                        const row = rows[i] ?? null;
-                        return row ? configCell(i, row, <span style={{ fontSize: 12, fontWeight: 650, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.romram}</span>) : configCell(i, null, null);
-                      })}
-                    </div>
-                    {/* 折后价 */}
-                    <div style={rowGrid(false)}>
-                      {labelCell('折后价')}
-                      {Array.from({ length: maxConfigCols }, (_, i) => {
-                        const row = rows[i] ?? null;
-                        return row ? configCell(i, row, (
-                          <>
-                            <span className="tnum" style={{ fontSize: 12, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
-                            {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
-                          </>
-                        )) : configCell(i, null, null);
-                      })}
-                    </div>
-                    {/* RRP */}
-                    <div style={rowGrid(true)}>
-                      {labelCell('RRP')}
-                      {Array.from({ length: maxConfigCols }, (_, i) => {
-                        const row = rows[i] ?? null;
-                        return row ? configCell(i, row, <span className="tnum" style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</span>) : configCell(i, null, null);
-                      })}
-                    </div>
+                    {Array.from({ length: maxConfigCols }, (_, i) => {
+                      const row = rows[i] ?? null;
+                      return (
+                        <div key={i} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', padding: '5px 10px 5px 20px', borderRight: i === maxConfigCols - 1 ? 0 : `1px solid ${color.hairline}`, overflow: 'hidden' }}>
+                          {row && (
+                            <>
+                              <TrendDot right title={`只看 ${model.modelName} ${row.romram} 的价格走势`} onClick={() => openTrend(model, row)} />
+                              <div style={{ fontSize: 12, lineHeight: '17px', fontWeight: 650, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                <span className="tnum" style={{ fontSize: 12, lineHeight: '17px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
+                                {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
+                              </div>
+                              <div className="tnum" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : ''}</div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
               {/* 分隔线：每个产品行底部一条，从最左贯穿到最右（行间空隙内，不压卡片） */}
-              {bandRects.map((band) =>
-                band.items.map((item, index) => {
-                  const top = rowTops.get(item.model.modelId) ?? 0;
-                  const boundary = top + BLOCK_H + TABLE_GAP;
-                  const bandEnd = index === band.items.length - 1;
-                  return (
-                    <div
-                      key={`divider-${item.model.modelId}`}
-                      style={{ position: 'absolute', left: 0, right: 0, top: boundary, height: bandEnd ? 1.5 : 1, background: bandEnd ? color.hairlineStrong : color.hairline, zIndex: 6, pointerEvents: 'none' }}
-                    />
-                  );
-                }),
-              )}
+              {/* 档位分界线：仅带与带之间一条加重线（产品间靠卡片与间距区分） */}
+              {bandRects.map((band) => {
+                const last = band.items[band.items.length - 1];
+                const top = rowTops.get(last.model.modelId) ?? 0;
+                return (
+                  <div
+                    key={`band-end-${last.model.modelId}`}
+                    style={{ position: 'absolute', left: 0, right: 0, top: top + ROW_H + TABLE_GAP, height: 1.5, background: color.hairlineStrong, zIndex: 6, pointerEvents: 'none' }}
+                  />
+                );
+              })}
             </div>
           ) : (
             /* —— 竞品对比：分段带摆位 + 品牌列 —— */
