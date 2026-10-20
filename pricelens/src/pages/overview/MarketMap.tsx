@@ -22,7 +22,6 @@ import { DiscountBadge } from '../../chart/PriceTrend/PriceSummary';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { useFilters } from '../../state/FiltersContext';
 import { usePage } from '../../state/PageContext';
-import { navBus } from '../../state/navBus';
 import type { ProductSelection } from '../../state/filtersTypes';
 import { brandColorOf, color, motion, radius, selectSoft, selectSoftInk, space, localCurrencySymbol } from '../../theme/tokens';
 
@@ -348,7 +347,7 @@ function DetailFloat({
     [model],
   );
 
-  /** 「查看价格走势」：内容右收动画 → 跳看板并展开保持显示的时点摘要 */
+  /** 「查看价格走势」：内容右收动画 → 跳看板（第112轮：时点摘要改为看板内手动展开） */
   const collapseAndGo = (): void => {
     if (collapsing) return;
     setCollapsing(true);
@@ -368,7 +367,6 @@ function DetailFloat({
         competitors: compSels,
         autoMatch: false,
       });
-      navBus.dashboardPointPanel = true;
       go('dashboard');
       onClose();
     }, 340);

@@ -47,8 +47,8 @@ export interface ChartToolbarProps {
   changeThreshold?: number | null;
   onChangeThreshold?: (v: number | null) => void;
   /** 第五十六轮：打开促销力度明细抽屉（二级）；传了才渲染「⋯ 更多」菜单。
-   *  第五十六轮再版：时点摘要改为图右缘书签带内嵌面板（PointPanel），
-   *  ⋯ 菜单不再有时点入口（单一入口，避免分叉） */
+   *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开，
+   *  ⋯ 菜单不设时点入口（单一入口，避免分叉） */
   onOpenPromoDetail?: () => void;
 }
 

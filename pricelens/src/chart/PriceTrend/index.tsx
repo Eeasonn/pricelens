@@ -6,10 +6,10 @@
 // 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）。
 // 第五十六轮（领导页面清洁要求）：促销力度热力带（原横向色格带）撤出主视觉，
 // 收进「⋯ 更多」二级菜单 → 右侧抽屉纵向表格（PromoDrawer）；最高/最低价与
-// 价格变化提醒同收二级菜单且默认关闭。再版（用户拍板）：时点页签（价格摘要条
-// ——折扣率/现价/划线RRP/来源横排）撤出主视觉后不埋抽屉，改图右缘书签带
-// （PointPanel，默认收起 24px 窄带）→ 图右侧原地展开 336px 内嵌面板（纵向
-// 一行一产品框，图表收窄不遮挡）；主视觉 = 标题行+工具行+图+（窄书签带）。
+// 价格变化提醒同收二级菜单且默认关闭。再版（第112轮）：时点摘要（折扣率/
+// 现价/划线RRP/来源横排）唯一入口 = 标题行「时点摘要」按钮（打开态高亮），
+// 点击后图右侧原地展开 336px 内嵌面板（纵向一行一产品框，图表收窄不遮挡）；
+// 不持久化，每次进页默认收起。主视觉 = 标题行+工具行+图。
 // Y 轴口径（第七/九轮）：纯自适应分段压缩刻度，无手动覆盖；刷选拖动中冻结 Y 轴
 // （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
 // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
@@ -20,8 +20,8 @@
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Checkbox, ConfigProvider, Segmented, Switch } from 'antd';
-import { HolderOutlined } from '@ant-design/icons';
+import { Button, Checkbox, ConfigProvider, Segmented, Switch } from 'antd';
+import { HolderOutlined, ProfileOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { tierSubjectSelections } from '../../state/tierSelection';
 import PlatformBox from '../../components/FilterBar/PlatformBox';
@@ -120,26 +120,11 @@ export default function PriceTrend(props: {
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
   // 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉（纵向表格）
   const [promoDetailOpen, setPromoDetailOpen] = useState(false);
-  // 时点面板（第五十六轮再版，用户拍板）：图右缘书签带（默认收起）→ 图右侧原地
-  // 展开 336px 内嵌面板（非视口抽屉——抽屉会盖住图右缘最新数据），纵向一行一
-  // 产品框；展开态不持久化（每次进页面默认收起=领导视角永远干净）；促销明细
-  // 抽屉打开时自动收起（右侧空间冲突）
-  // 悬停最右（最新）列自动展开时点摘要（第九十二轮）：移入最右列展开、划回更早
-  // 时间列收起；移出图表（如去往右侧面板）不收起。
-  const [hoverLatest, setHoverLatest] = useState(false);
-  // 保持显示（第九十四轮）：开启后悬停划走也不收起；书签带点击 = 展开并保持显示
-  const [pinPanel, setPinPanel] = useState(false);
-  // 总览对比浮窗「查看价格走势」跳转携带（navBus 一次性）：到站动画——面板先以
-  // 收起态（书签带）挂载，稍候再展开并保持，宽度形变与总览浮层的收起动作接力
-  useEffect(() => {
-    if (navBus.dashboardPointPanel) {
-      navBus.dashboardPointPanel = false;
-      const t = window.setTimeout(() => setPinPanel(true), 90);
-      return () => window.clearTimeout(t);
-    }
-  }, []);
+  // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
+  // 不持久化（每次进页面默认收起）；促销明细抽屉打开时自动收起（右侧空间冲突）
+  const [pointPanelOpen, setPointPanelOpen] = useState(false);
   const openPromoDetail = (): void => {
-    setPinPanel(false); // 右侧空间冲突：打开促销明细时收起时点面板
+    setPointPanelOpen(false); // 右侧空间冲突：打开促销明细时收起时点面板
     setPromoDetailOpen(true);
   };
   // 齿轮弹层视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
@@ -802,6 +787,16 @@ export default function PriceTrend(props: {
               平台 <span style={{ width: 160 }}><PlatformBox /></span>
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>币种 <CurrencyBox /></span>
+            {/* 时点摘要唯一入口（第112轮）：纯手动开合，打开态 primary 高亮 */}
+            <Button
+              size="small"
+              icon={<ProfileOutlined />}
+              type={pointPanelOpen ? 'primary' : 'default'}
+              onClick={() => setPointPanelOpen((v) => !v)}
+              title="各产品最新折扣、现价、RRP 与来源"
+            >
+              时点摘要
+            </Button>
           </div>
         </ConfigProvider>
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
@@ -856,10 +851,8 @@ export default function PriceTrend(props: {
         </div>
       )}
 
-      {/* 图主体 + 图右缘时点面板（第五十六轮再版，用户拍板）：flex 行 =
-          [图列 flex1][书签带 / 336px 内嵌面板]——时点摘要锚在图右侧（它就是图右缘
-          最新数据的文字版），收起 = 24px 竖排书签带（默认，领导视角只是窄灰带），
-          展开 = 原地面板纵向一行一产品（非视口抽屉，不遮图右缘），图自动收窄。
+      {/* 图主体 + 图右侧时点面板（第112轮）：flex 行 = [图列 flex1][时点面板 336px]。
+          时点摘要仅由标题行「时点摘要」按钮手动展开，收起时面板不渲染、图占满整行。
           （Y 轴纯自适应；合并模式的系列页签仍在工具行居中承载）。
           分离显示：多 ROM 勾选时主图变为单行横向轨道——每面板一个
           ROM+其对标竞品，共享 Y 轴（并集算一次受控传入）、X 轴各面板独立绘制；
@@ -1047,7 +1040,6 @@ export default function PriceTrend(props: {
                         chrome={false} // 面板不渲染设置行（第五十四轮追补）：统管权在上方常驻行
                         axisChrome={false} // 面板不画轴（追补⑤）：档位带/刻度/断轴号在共享轴列
                         showYTicks={showYTicks}
-                        onLatestHover={setHoverLatest}
                         enableDrill={state.granularity !== 'week'}
                         enableJump={state.granularity === 'week'}
                         enableOffer={state.granularity === 'week' && offersOn}
@@ -1114,7 +1106,6 @@ export default function PriceTrend(props: {
             onToggleHidden={toggleLegend}
             showYTicks={showYTicks}
             onShowYTicks={setShowYTicks}
-            onLatestHover={setHoverLatest}
             enableDrill={state.granularity !== 'week'}
             enableJump={state.granularity === 'week'}
             enableOffer={state.granularity === 'week' && offersOn}
@@ -1165,13 +1156,10 @@ export default function PriceTrend(props: {
             />
           )}
         </div>
-        {/* 图右缘时点面板（第五十六轮再版）：书签带（收起）/ 336px 纵向产品清单（展开） */}
+        {/* 图右侧时点摘要面板（第112轮）：仅标题行按钮手动开合；收起时不渲染 */}
         <PointPanel
-          open={pinPanel || hoverLatest}
-          pinned={pinPanel}
-          onPinToggle={() => setPinPanel((v) => !v)}
-          onToggle={() => setPinPanel(true)}
-          onCollapse={() => setPinPanel(false)}
+          open={pointPanelOpen}
+          onCollapse={() => setPointPanelOpen(false)}
           items={summary}
           currency={state.currency}
           granularity={state.granularity}

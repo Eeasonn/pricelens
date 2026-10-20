@@ -9,8 +9,6 @@
 export const navBus: {
   overviewScrollTo: string | null;
   dashboardFocusWeekId: string | null;
-  /** 总览对比浮窗「查看价格走势」携带：看板挂载后展开并保持显示时点摘要（消费后清空）。 */
-  dashboardPointPanel?: boolean;
   /** 总览进入预警中心时携带的产品/系列/事件焦点；预警页消费后清空。 */
   alertsFocus: {
     modelId: string;
@@ -22,6 +20,5 @@ export const navBus: {
 } = {
   overviewScrollTo: null,
   dashboardFocusWeekId: null,
-  dashboardPointPanel: false,
   alertsFocus: null,
 };

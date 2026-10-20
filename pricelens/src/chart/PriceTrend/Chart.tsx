@@ -168,9 +168,6 @@ export interface ChartProps {
    *  受控传 onShowYTicks（看板层统一写）；缺省用内部状态（下钻弹窗等自管场景） */
   showYTicks?: boolean;
   onShowYTicks?: (v: boolean) => void;
-  /** 悬停是否落在最右（最新）一列（第九十二轮）：时点摘要面板自动展开/收起用。
-   *  只在鼠标位于绘图区时上报；移出图表不上报（去往右侧面板的路径不触发收起） */
-  onLatestHover?: (atLatest: boolean) => void;
   /** 第七十四轮（分离面板）：true = 系列名全部固定进左侧名称预留带空白处，
    *  不锚在各折线起点旁；主图与下钻弹窗缺省关闭维持原避让语义 */
   namesInZone?: boolean;
@@ -629,8 +626,6 @@ export default function Chart(props: ChartProps) {
     }
     setHoverIdx(hit.idx);
     props.onCrosshairMove?.(hit.idx); // 第110轮：上报时间列 → 其他分离面板画同列参考线
-    // 最右（最新）列悬停上报（第九十二轮）：时点摘要自动展开/收起
-    props.onLatestHover?.(geom != null && hit.idx >= geom.n - 1);
     // 聚焦检测（第三十二轮）：悬停列上最近的有值系列（±HIT_PX）→ 高亮该系列；
     // 空白处悬停 = 取消聚焦（全部系列恢复常态）
     if (focusMode && geom) {
