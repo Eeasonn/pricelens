@@ -286,14 +286,14 @@ function MatrixCell({
 }) {
   const borderRight = lastCol ? 0 : `1px solid ${color.hairline}`;
   if (!row || (row.price == null && row.rrp == null)) {
-    return <div style={{ minHeight: 104, borderRight, background: own ? '#f3f8ff' : undefined }} />;
+    return <div style={{ minHeight: 92, borderRight, background: own ? '#f3f8ff' : undefined }} />;
   }
   const lastWeek = row.points.length > 0 ? row.points[row.points.length - 1].weekId : '';
   const dateText = lastWeek ? bucketLatestWeekLabel('week', lastWeek) ?? '' : row.asOfWeek ? bucketLatestWeekLabel('week', row.asOfWeek) ?? '' : '';
   return (
     <div
       style={{
-        minHeight: 104,
+        minHeight: 92,
         boxSizing: 'border-box',
         padding: '11px 14px',
         borderRight,
@@ -303,14 +303,14 @@ function MatrixCell({
       }}
     >
       {/* 型号：单元格内最大字（整体层级在表头产品名之下） */}
-      <div style={{ fontSize: 15, lineHeight: '20px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
+      <div style={{ fontSize: 13.5, lineHeight: '18px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
       {/* 折后价 + 折扣 */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 7 }}>
-        <span className="tnum" style={{ fontSize: 14.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
+        <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
         {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
       </div>
       {/* RRP：独立一行，不做划线处理 */}
-      <div className="tnum" style={{ marginTop: 3, fontSize: 11.5, color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</div>
+      <div className="tnum" style={{ marginTop: 2, fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</div>
       {/* 底部其他信息 */}
       <div style={{ marginTop: 'auto', paddingTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
         {own ? (
@@ -348,7 +348,7 @@ function MatrixCell({
         ) : (
           <>
             {diff != null ? (
-              <span className="tnum" style={{ fontSize: 12, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute }}>
+              <span className="tnum" style={{ fontSize: 11, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute }}>
                 价差 {diff > 0.005 ? '+' : ''}{Math.round(diff * 100)}%
               </span>
             ) : (
@@ -467,7 +467,7 @@ function DetailFloat({
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.font = '700 16px system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif';
+    ctx.font = '700 14px system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif';
     const nameW = (text: string): number => Math.ceil(ctx.measureText(text).width);
     const colPad = 12 * 2 + 7 + 6 + 2; // 左右 padding + 色点 + 间距 + 余量
     const ownW = Math.max(210, nameW(brandFullName(model.brand, model.modelName)) + colPad);
@@ -565,12 +565,12 @@ function DetailFloat({
           <div style={{ display: 'grid', gridTemplateColumns: matrixCols, background: color.canvasSoft, borderBottom: `1px solid ${color.hairline}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '9px 12px', borderRight: compGroups.length > 0 ? `1px solid ${color.hairline}` : 0 }}>
               <BrandDot brand={model.brand} size={7} />
-              <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 16, lineHeight: '21px', fontWeight: 700, color: brandColorOf(model.brand), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{brandFullName(model.brand, model.modelName)}</span>
+              <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 14, lineHeight: '18px', fontWeight: 700, color: brandColorOf(model.brand), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{brandFullName(model.brand, model.modelName)}</span>
             </div>
             {compGroups.map((g, gi) => (
               <div key={g.modelId} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '9px 12px', borderRight: gi === compGroups.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
                 <BrandDot brand={g.brand} size={7} />
-                <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 16, lineHeight: '21px', fontWeight: 700, color: brandColorOf(g.brand), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.name}</span>
+                <span style={{ flex: '1 1 0', minWidth: 0, fontSize: 14, lineHeight: '18px', fontWeight: 700, color: brandColorOf(g.brand), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.name}</span>
               </div>
             ))}
           </div>
@@ -814,7 +814,9 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
   const detailOpen = (id: string): void => {
     setDetailModelId((cur) => (cur === id ? null : id));
   };
-  // 悬停连线：我司卡片 → 各对标竞品卡片的贝塞尔曲线（内容坐标，横向滚动时重算）
+  // 悬停连线：我司卡片 → 各对标竞品卡片的贝塞尔曲线。悬停期间 rAF 持续测量
+  // （不依赖 scroll/resize 事件派发，容器滚动/吸附/布局变化都能实时跟上），
+  // 坐标变化小于 0.5px 不重渲染。
   const [links, setLinks] = useState<{ d: string; x1: number; y1: number; x2: number; y2: number }[]>([]);
   useEffect(() => {
     const scroller = mapScrollRef.current;
@@ -822,38 +824,38 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
       setLinks([]);
       return;
     }
-    const measure = (): void => {
+    let raf = 0;
+    let prev = '';
+    const tick = (): void => {
       const content = scroller.firstElementChild as HTMLElement | null;
       const ownEl = content?.querySelector(`[data-own-chip="${hoverOwnId}"]`);
-      if (!content || !ownEl) {
-        setLinks([]);
-        return;
+      if (content && ownEl) {
+        const cRect = content.getBoundingClientRect();
+        const own = ownEl.getBoundingClientRect();
+        const model = models.find((m) => m.modelId === hoverOwnId);
+        const ids = [...new Set((model?.comps ?? []).map((c) => c.skuId.split('__')[0]))];
+        const next: { d: string; x1: number; y1: number; x2: number; y2: number }[] = [];
+        for (const id of ids) {
+          const el = content.querySelector(`[data-comp-chip="${id}"]`);
+          if (!el) continue;
+          const r = el.getBoundingClientRect();
+          const x1 = own.right - cRect.left;
+          const y1 = own.top + own.height / 2 - cRect.top;
+          const x2 = r.left - cRect.left;
+          const y2 = r.top + r.height / 2 - cRect.top;
+          const dx = Math.max(28, (x2 - x1) * 0.45);
+          next.push({ d: `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${(x1 + dx).toFixed(1)} ${y1.toFixed(1)}, ${(x2 - dx).toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`, x1, y1, x2, y2 });
+        }
+        const sig = next.map((l) => l.d).join('|');
+        if (sig !== prev) {
+          prev = sig;
+          setLinks(next);
+        }
       }
-      const cRect = content.getBoundingClientRect();
-      const own = ownEl.getBoundingClientRect();
-      const model = models.find((m) => m.modelId === hoverOwnId);
-      const ids = [...new Set((model?.comps ?? []).map((c) => c.skuId.split('__')[0]))];
-      const next: { d: string; x1: number; y1: number; x2: number; y2: number }[] = [];
-      for (const id of ids) {
-        const el = content.querySelector(`[data-comp-chip="${id}"]`);
-        if (!el) continue;
-        const r = el.getBoundingClientRect();
-        const x1 = own.right - cRect.left;
-        const y1 = own.top + own.height / 2 - cRect.top;
-        const x2 = r.left - cRect.left;
-        const y2 = r.top + r.height / 2 - cRect.top;
-        const dx = Math.max(28, (x2 - x1) * 0.45);
-        next.push({ d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`, x1, y1, x2, y2 });
-      }
-      setLinks(next);
+      raf = window.requestAnimationFrame(tick);
     };
-    measure();
-    scroller.addEventListener('scroll', measure, { passive: true });
-    window.addEventListener('resize', measure);
-    return () => {
-      scroller.removeEventListener('scroll', measure);
-      window.removeEventListener('resize', measure);
-    };
+    raf = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(raf);
   }, [hoverOwnId, mode, models]);
   // 点击浮层与锚点卡片以外区域 / Esc = 收起
   useEffect(() => {
@@ -1109,9 +1111,9 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 20 }}>
                   {links.map((l, index) => (
                     <g key={index} style={{ animation: 'lplFadeIn 180ms ease' }}>
-                      <path d={l.d} fill="none" stroke={color.link} strokeWidth={1.5} strokeLinecap="round" opacity={0.8} />
-                      <circle cx={l.x1} cy={l.y1} r={2.5} fill={color.link} opacity={0.9} />
-                      <circle cx={l.x2} cy={l.y2} r={2.5} fill={color.link} opacity={0.9} />
+                      <path d={l.d} fill="none" stroke="rgba(0, 112, 243, 0.42)" strokeWidth={1.5} strokeLinecap="round" />
+                      <circle cx={l.x1} cy={l.y1} r={2.5} fill="rgba(0, 112, 243, 0.55)" />
+                      <circle cx={l.x2} cy={l.y2} r={2.5} fill="rgba(0, 112, 243, 0.55)" />
                     </g>
                   ))}
                 </svg>
