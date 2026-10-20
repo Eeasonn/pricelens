@@ -13,7 +13,7 @@
 // ============================================================
 import { CloseOutlined, HolderOutlined, ExclamationCircleFilled, LineChartOutlined, SwapOutlined } from '@ant-design/icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent as ReactDragEvent } from 'react';
+import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { Segmented, Tooltip } from 'antd';
 import type { CurrencyMode } from '../../dataModel/types';
 import { lowestPriceColorSku, type OverviewModel, type OverviewRow } from '../../dataModel/aggregate';
@@ -266,7 +266,8 @@ function CompChip({
 /** 对比矩阵单元格：一行 = 一条横向内容带——行内单元格以竖分隔线相连、行与行以横
  *  分隔线区隔（不再是独立卡片），我司列浅蓝底纵向贯穿。层级：表头品牌产品名最大
  *  → 型号 → 折后价+折扣 / RRP（不划线）；底部：我司 = 价差方向切换按钮 + 日期右下，
- *  竞品 = 价差 + 日期右下（用户定版：日期不带「采集」字样） */
+ *  竞品 = 价差 + 日期右下（用户定版：日期不带「采集」字样）。每个数值行左侧带
+ *  灰色指标小标签（用户定版：消除无标签数字堆叠的混乱感），标签列纵向对齐。 */
 function MatrixCell({
   row,
   currency,
@@ -286,78 +287,91 @@ function MatrixCell({
 }) {
   const borderRight = lastCol ? 0 : `1px solid ${color.hairline}`;
   if (!row || (row.price == null && row.rrp == null)) {
-    return <div style={{ minHeight: 92, borderRight, background: own ? '#f3f8ff' : undefined }} />;
+    return <div style={{ minHeight: 96, borderRight, background: own ? '#f3f8ff' : undefined }} />;
   }
   const lastWeek = row.points.length > 0 ? row.points[row.points.length - 1].weekId : '';
   const dateText = lastWeek ? bucketLatestWeekLabel('week', lastWeek) ?? '' : row.asOfWeek ? bucketLatestWeekLabel('week', row.asOfWeek) ?? '' : '';
+  // 指标名标签列：固定宽度，纵向四行对齐成列
+  const Labeled = (label: string, value: ReactNode): ReactNode => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <span style={{ flexShrink: 0, width: 36, fontSize: 10, lineHeight: '15px', color: color.mute }}>{label}</span>
+      <span style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>{value}</span>
+    </div>
+  );
   return (
     <div
       style={{
-        minHeight: 92,
+        minHeight: 96,
         boxSizing: 'border-box',
-        padding: '11px 14px',
+        padding: '9px 12px 9px 10px',
         borderRight,
         background: own ? '#f3f8ff' : color.canvas,
         display: 'flex',
         flexDirection: 'column',
+        gap: 3,
       }}
     >
-      {/* 型号：单元格内最大字（整体层级在表头产品名之下） */}
-      <div style={{ fontSize: 13.5, lineHeight: '18px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</div>
-      {/* 折后价 + 折扣 */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-        <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
-        {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
-      </div>
-      {/* RRP：独立一行，不做划线处理 */}
-      <div className="tnum" style={{ marginTop: 2, fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</div>
-      {/* 底部其他信息 */}
-      <div style={{ marginTop: 'auto', paddingTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, whiteSpace: 'nowrap', overflow: 'hidden' }}>
-        {own ? (
-          <>
-            {onToggleDiffDir && (
-              <button
-                type="button"
-                title="切换价差方向（我司比竞品 / 竞品比我司）"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleDiffDir();
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: '2px 8px',
-                  borderRadius: radius.pill,
-                  border: '1px solid rgba(0, 112, 243, 0.40)',
-                  background: selectSoft,
-                  color: selectSoftInk,
-                  font: 'inherit',
-                  fontSize: 10.5,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <SwapOutlined style={{ fontSize: 10 }} />
-                {diffDir === 'own' ? '我司比竞品' : '竞品比我司'}
-              </button>
-            )}
-            {dateText && <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{dateText}</span>}
-          </>
+      {Labeled(
+        '型号',
+        <span style={{ fontSize: 13, lineHeight: '17px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.romram}</span>,
+      )}
+      {Labeled(
+        '折后价',
+        <>
+          <span className="tnum" style={{ fontSize: 13, lineHeight: '17px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{row.price != null ? fmtPrice(row.price, currency) : '—'}</span>
+          {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
+        </>,
+      )}
+      {Labeled(
+        'RRP',
+        <span className="tnum" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, whiteSpace: 'nowrap' }}>{row.rrp != null ? fmtPrice(row.rrp, currency) : '—'}</span>,
+      )}
+      {Labeled(
+        '价差',
+        own ? (
+          onToggleDiffDir ? (
+            <button
+              type="button"
+              title="切换价差方向（我司比竞品 / 竞品比我司）"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleDiffDir();
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                borderRadius: radius.pill,
+                border: '1px solid rgba(0, 112, 243, 0.40)',
+                background: selectSoft,
+                color: selectSoftInk,
+                font: 'inherit',
+                fontSize: 10.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <SwapOutlined style={{ fontSize: 10 }} />
+              {diffDir === 'own' ? '我司比竞品' : '竞品比我司'}
+            </button>
+          ) : (
+            <span style={{ color: color.mute, fontSize: 11 }}>—</span>
+          )
+        ) : diff != null ? (
+          <span className="tnum" style={{ fontSize: 11.5, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute }}>
+            {diff > 0.005 ? '+' : ''}{Math.round(diff * 100)}%
+          </span>
         ) : (
-          <>
-            {diff != null ? (
-              <span className="tnum" style={{ fontSize: 11, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute }}>
-                价差 {diff > 0.005 ? '+' : ''}{Math.round(diff * 100)}%
-              </span>
-            ) : (
-              <span style={{ color: color.mute }}>价差 —</span>
-            )}
-            {dateText && <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{dateText}</span>}
-          </>
-        )}
-      </div>
+          <span style={{ color: color.mute, fontSize: 11 }}>—</span>
+        ),
+      )}
+      {dateText && (
+        <div style={{ marginTop: 'auto', paddingTop: 3, display: 'flex', justifyContent: 'flex-end' }}>
+          <span className="tnum" style={{ fontSize: 10, lineHeight: '13px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
+        </div>
+      )}
     </div>
   );
 }
