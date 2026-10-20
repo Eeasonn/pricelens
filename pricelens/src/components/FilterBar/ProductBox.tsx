@@ -19,7 +19,7 @@ import type { CurrencyMode, DimProduct } from '../../dataModel/types';
 import { CascadePanel, type CascadeRowItem } from '../ProductCascader';
 import { getEffectiveBenchmark } from '../../state/configStore';
 import { dimProduct } from '../../data';
-import { TIER_LABELS, tierOrderOf } from '../../dataModel/aggregate';
+import { TIER_LABELS, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { INDUSTRY_LABELS, INDUSTRY_ORDER, industriesOfCountry } from '../../dataModel/scope';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 
@@ -547,7 +547,7 @@ export function TierControl() {
   const options = useMemo(() => {
     const present = new Set<string>();
     for (const p of dimProduct) {
-      if (p.is_own && p.industry === state.industry && p.countries.includes(state.countryCode)) present.add(p.tier_code);
+      if (p.is_own && p.industry === state.industry && p.countries.includes(state.countryCode)) present.add(tierOf(p, state.countryCode));
     }
     const order = [...tierOrderOf(state.industry)].reverse();
     return order.filter((t) => present.has(t)).map((t) => ({ value: t, label: tierLabelShort(TIER_LABELS[t] ?? t) }));

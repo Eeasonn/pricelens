@@ -83,6 +83,16 @@ console.log('\n[1] 维表完整性');
   check('industry 取值合法', badInd.length === 0);
   const badTier = dimProduct.filter((p) => !(dimTier.ladders[p.industry] || []).includes(p.tier_code));
   check('tier_code 落在本产业阶梯内', badTier.length === 0, badTier.slice(0, 3).map((p) => `${p.sku_id}:${p.tier_code}`).join(' ') || '全部命中');
+  const badTierCc = dimProduct.filter((p) => !p.tier_by_country || Object.values(p.tier_by_country).some((t) => !(dimTier.ladders[p.industry] || []).includes(t)) || !p.countries.every((cc) => p.tier_by_country[cc]));
+  check('tier_by_country 覆盖该 SKU 全部国家且代码合法（型号级映射，键可多于本 SKU 国家）', badTierCc.length === 0, badTierCc.slice(0, 3).map((p) => p.sku_id).join(' ') || '全部命中');
+  const ruPura = dimProduct.find((p) => p.model_id === 'own-huawei-pura-90s-pro-max');
+  check('R国 Pura 90s Pro Max 分国档位 = 矩阵声明 800-1000', ruPura?.tier_by_country?.RU === '800-1000', ruPura?.tier_by_country?.RU);
+  const unitDup = new Map();
+  for (const p of dimProduct) { const k = p.model_id + '|' + p.romram; const set = unitDup.get(k) ?? new Set(); set.add(p.sku_id.split('__')[1]); unitDup.set(k, set); }
+  check('同配置显示文案只对应一个配置键（1T/1TB 单位已归一）', [...unitDup.values()].every((s) => s.size === 1));
+  check('颜色列不含单位词（GB/TB）', dimProduct.every((p) => !/^(gb|tb)$/i.test(p.color)));
+  const autoBench = dimBenchmark.filter((b) => b.source === 'auto');
+  check('自动匹配对标 ≥ 1000 条且全部竞品在该国有数据', autoBench.length >= 1000 && autoBench.every((b) => productById.get(b.competitor_sku_id)?.countries.includes(b.country_code)), `${autoBench.length} 条`);
   const modelTier = new Map();
   let tierMixed = 0;
   for (const p of dimProduct) {

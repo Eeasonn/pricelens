@@ -554,6 +554,24 @@ export function bucketLatestWeekLabel(g: Granularity, bucketId: string): string 
   return best ? best.week_wed_date.slice(5) : null;
 }
 
+/** 桶锚日（第110轮，图下「核心信息明细」日期列用）：周 = 该周周三 ISO 日期；
+ *  月/季 = 桶内最后一个周三。dimTime 未就绪返回 null（渲染层显示 —）。 */
+export function bucketAnchorDate(g: Granularity, bucketId: string): string | null {
+  if (g === 'week') {
+    return dimTime.find((x) => x.week_id === bucketId)?.week_wed_date ?? null;
+  }
+  let best: string | null = null;
+  let bestWeek = '';
+  for (const r of dimTime) {
+    if ((g === 'month' ? r.month_id : r.quarter_id) !== bucketId) continue;
+    if (r.week_id > bestWeek) {
+      bestWeek = r.week_id;
+      best = r.week_wed_date;
+    }
+  }
+  return best;
+}
+
 /** 分离共享轴列宽（第五十四轮追补⑤）：只含实际轴元素——USD = 档位区块（含刻度区）+
  *  短横线，非 USD = 刻度文字区 + 短横线；与主图 estGridLeft 同口径（第九十轮签名收敛）。 */
 export function splitAxisWidth(currency: CurrencyMode): number {

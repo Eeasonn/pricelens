@@ -252,24 +252,25 @@ describe('buildAlerts 规则边界', () => {
     }
   });
 
-  it('真实数据全量锚（200 系列 @2%）：1743 条 = 调价 1408 + 平台价差 215 + 降促 120', () => {
+  it('真实数据全量锚（200 系列 @2%）：1747 条 = 调价 1408 + 平台价差 219 + 降促 120', () => {
+    // 2026-10-20 晚：裸机口径（最低价取数排除组合销售行）后平台价差 215→219
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.02));
     expect(ALL_KEYS.length).toBe(200); // RU phone 全部 系列×配置
-    expect(alerts.length).toBe(1743);
+    expect(alerts.length).toBe(1747);
     expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1408);
-    expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(215); // 真实跨平台价差普遍存在
+    expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(219); // 真实跨平台价差普遍存在
     expect(alerts.filter((a) => a.type === 'promo').length).toBe(120);
   });
 
-  it('真实数据全量锚 @5%：960 条（调价 693 + 平台价差 171 + 降促 96）；放开 own-gap 加 9 条档位间距', () => {
+  it('真实数据全量锚 @5%：964 条（调价 693 + 平台价差 175 + 降促 96）；放开 own-gap 加 9 条档位间距', () => {
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.05));
-    expect(alerts.length).toBe(960);
+    expect(alerts.length).toBe(964);
     expect(alerts.filter((a) => a.type === 'price-change').length).toBe(693);
-    expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(171);
+    expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(175);
     expect(alerts.filter((a) => a.type === 'promo').length).toBe(96);
     const withGap = buildAlerts({ ...cfg(ALL_KEYS, 0.05), enabled: { ...ALL_ON, 'own-gap': true }, thresholds: { 'price-change': 0.05, promo: 0.05, 'platform-gap': 0.05, 'own-gap': 0.15 } });
     expect(withGap.filter((a) => a.type === 'own-gap').length).toBe(9); // 多档我司机型的贴近档位对
-    expect(withGap.length).toBe(969);
+    expect(withGap.length).toBe(973);
   });
 });
 

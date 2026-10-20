@@ -187,6 +187,14 @@ export interface ChartProps {
    *  周=阶梯 / 月季=平滑，默认） */
   lineShape?: LineShapeChoice;
   onLineShape?: (v: LineShapeChoice) => void;
+  /** 第110轮（评审）：true = 本图自带时间轴日期标签（分离模式每张小图可独立
+   *  截图进 PPT）；缺省 false = 时间标签仍由底部刷选条统一承担 */
+  showXLabels?: boolean;
+  // ---- 第110轮（评审）：分离模式跨图参考线 ----
+  /** 外部受控的悬停时间列下标（其他面板悬停时本面板同列画 1px 虚线参考线）；null = 无 */
+  crosshairIdx?: number | null;
+  /** 本图悬停时间列变化上报（分离模式联动用）；移出绘图区/图顶 = null */
+  onCrosshairMove?: (idx: number | null) => void;
   // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
   // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
@@ -560,8 +568,21 @@ export default function Chart(props: ChartProps) {
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
   // focusKey（第三十二轮聚焦模式）：非聚焦系列降透明 0.15、数值标签隐藏
   const option = useMemo(
-    () => buildOption({ geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, focusKeys: litKeys ?? undefined, lineShape }),
-    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, litKeys, lineShape],
+    () =>
+      buildOption({
+        geom,
+        series,
+        priceTypes,
+        granularity,
+        labelPlan,
+        gridTop,
+        endpointMarks,
+        focusKey,
+        focusKeys: litKeys ?? undefined,
+        lineShape,
+        xLabels: props.showXLabels === true, // 第110轮：分离面板自带时间轴标签
+      }),
+    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, litKeys, lineShape, props.showXLabels],
   );
 
   // ---- setOption / resize ----
@@ -595,16 +616,19 @@ export default function Chart(props: ChartProps) {
     if (hit && hit.my < gridTop) {
       setHoverIdx(null);
       setFocusKey(null);
+      props.onCrosshairMove?.(null); // 第110轮：跨图参考线随悬停列清空
       if (el) el.style.cursor = 'default';
       return;
     }
     if (!hit) {
       setHoverIdx(null);
       setFocusKey(null);
+      props.onCrosshairMove?.(null);
       if (el) el.style.cursor = 'default';
       return;
     }
     setHoverIdx(hit.idx);
+    props.onCrosshairMove?.(hit.idx); // 第110轮：上报时间列 → 其他分离面板画同列参考线
     // 最右（最新）列悬停上报（第九十二轮）：时点摘要自动展开/收起
     props.onLatestHover?.(geom != null && hit.idx >= geom.n - 1);
     // 聚焦检测（第三十二轮）：悬停列上最近的有值系列（±HIT_PX）→ 高亮该系列；
@@ -629,6 +653,7 @@ export default function Chart(props: ChartProps) {
   const onMouseLeave = (): void => {
     setHoverIdx(null);
     setFocusKey(null);
+    props.onCrosshairMove?.(null); // 第110轮：移出图表 = 跨图参考线全部移除
     if (wrapRef.current) wrapRef.current.style.cursor = 'default';
   };
 
@@ -1043,7 +1068,10 @@ export default function Chart(props: ChartProps) {
                   style={{
                     position: 'absolute',
                     left: mid,
-                    top: geom.plotTop + geom.plotHeight + 4, // 专用行（第四十七轮）：轴标签 margin 22 下推，图标带 +4~18 独占
+                    // 专用行（第四十七轮）：轴标签 margin 22 下推，图标带 +4~18 独占；
+                    // 第110轮：小图自带时间轴标签（占 +7~19）→ 档期图标下移让位（+24~38，
+                    // 仍在 GRID.bottom=40 留白内）
+                    top: geom.plotTop + geom.plotHeight + (props.showXLabels ? 24 : 4),
                     transform: 'translateX(-50%)',
                     zIndex: 9,
                   }}
@@ -1214,6 +1242,26 @@ export default function Chart(props: ChartProps) {
               }}
             />
           )}
+          {/* 跨图参考线（第110轮，评审）：分离模式下其他面板悬停的时间列在本面板
+              同列画 1px 虚线（本面板自身悬停 = 上面的实线十字已足够，不叠画）；
+              任意面板移出即全部移除 */}
+          {props.crosshairIdx != null &&
+            props.crosshairIdx < geom.n &&
+            hoverIdx == null && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: Math.round(xPxOf(geom, props.crosshairIdx)) - 0.5,
+                  top: geom.plotTop,
+                  width: 1,
+                  height: geom.plotHeight,
+                  background: `repeating-linear-gradient(180deg, ${color.hairlineStrong} 0 4px, transparent 4px 8px)`,
+                  opacity: 0.55,
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                }}
+              />
+            )}
           {/* 端点徽标（第十四轮引入；第五十四轮追补④改版）：数据点圆点取消后 S/E 无需
               再用字母承载——S=起点 / E=截止改为品牌色实心小圆点（直径 8px = 原徽标一半，
               白描边浮在折线端点上方即可表达「开始/结束」）；‹/›=窗口边缘续接点维持

@@ -33,7 +33,7 @@ import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries } from '../../dataModel/aggregate';
 import { getEffectiveBenchmark } from '../../state/configStore';
-import { dimPromo, dimProduct, dimRegion } from '../../data';
+import { dimPromo, dimProduct, dimRegion, dimTier } from '../../data';
 import type {
   AggMode,
   Granularity,
@@ -52,6 +52,7 @@ import {
   buildPriceSummary,
   buildPromoBands,
   collectTierValues,
+  dedupeSpecText,
   type LineShapeChoice,
 } from './chartModel';
 import SplitAxisColumn from './SplitAxisColumn';
@@ -70,6 +71,7 @@ import {
   seriesSpanRange,
   splitAxisWidth,
   bucketIdOfWeek,
+  bucketAnchorDate,
   NAME_ZONE_W,
   type Bucket,
   type YScale,
@@ -78,7 +80,14 @@ import PromoDrawer from './PromoDrawer';
 import PointPanel from './PointPanel';
 import SplitScrollBar from './SplitScrollBar';
 
-export default function PriceTrend(props: { /** 第八十五轮：竞品-only 引导带里「去总览配置对标」的回跳 */ onBackToOverview?: () => void } = {}) {
+export default function PriceTrend(props: {
+  /** 第八十五轮：竞品-only 引导带里「去总览配置对标」的回跳 */
+  onBackToOverview?: () => void;
+  /** 第110轮（评审）：图下「核心信息明细」取数口——图上可见时间段 × 图上系列
+   *  （分离模式 = 各面板系列并集，同款产品去重）每次变化上报一次；页面层据此
+   *  在图卡下方渲染同源明细表（币种/平台/粒度/时间段随图联动） */
+  onSeriesWindow?: (series: Series[], buckets: { id: string; xLabel: string; anchorDate: string }[]) => void;
+} = {}) {
   const { state, actions } = useFilters();
   // 主体模式有效选择集：按产品 = 勾选原样；按档位 = 该档全部我司配置 + 各自对标竞品
   // 自动集结（tierSubjectSelections）。档位在当前产业无我司产品时回退按产品，避免空图。
@@ -302,8 +311,10 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
 
   // 可分离面板不足 2 时收起分离视图并清理顺序（第八十七轮：面板单位放宽为
   // 「任意产品·配置」，我司/竞品视角分别以各自配置数为准）。
-  // 回升 ≥2 且用户从未手动拨过开关时自动恢复（主体模式切换/加勾选时分离自动回归；
-  // 手动关闭后不再强制，与 Y 压缩同一先例）。按档位模式配置数随档位跳变，依赖此恢复。
+  // 第110轮（2026-10-20 评审）：分离显示默认关——仅当「我司配置 ≥2」且用户从未
+  // 手动拨过开关时自动分离（单规格、竞品视角默认合并图）；回到不足 2 个可分面板
+  // 自动关闭并清理顺序。手动拨过 = 尊重用户选择，此后自动语义退场（与 Y 压缩同一
+  // 先例）。按档位模式配置数随档位跳变，依赖此自动跟随。
   const splitAutoOffRef = useRef(false);
   const splitManualRef = useRef(false);
   useEffect(() => {
@@ -312,10 +323,14 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
       splitAutoOffRef.current = true;
       setSplitOn(false);
       setPanelOrder([]);
-    } else if (splitAutoOffRef.current && !splitManualRef.current) {
+      return;
+    }
+    if (splitManualRef.current) return; // 手动拨过：不再自动干预
+    if (effOwn.length >= 2) {
       splitAutoOffRef.current = false;
       setSplitOn(true);
     }
+    // 其余（我司单配置 / 竞品视角多配置）：维持默认关，不自动分离
   }, [effOwn, effComps]);
 
   // ---- 分离显示：多 ROM 勾选时主图变为同一横向滚动轨道，每面板 =
@@ -323,7 +338,8 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
   // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
   // 系列页签按面板拆开、放各卡片顶部居中（第七十五轮，PillRowScroller 左右滚动）；
   // 共享刷选条联动全部面板
-  const [splitOn, setSplitOn] = useState(true); // 分离显示（第七十七轮起默认开；可分面板 ≥2 时生效）
+  // 第110轮（评审）：默认关——我司多规格（≥2 配置）才自动分离，见上方自动逻辑
+  const [splitOn, setSplitOn] = useState(false);
   // 分离模式一行可见面板数：卡片始终横向排列，超出视口后由轨道滚动查看。
   // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
   const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
@@ -360,6 +376,9 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
     return m;
   }, [effOwn]);
   const splitActive = splitOn && configSources.length >= 2;
+  // 第110轮（评审）：分离模式跨图参考线——任一面板悬停的时间列下标共享给全部面板，
+  // 其余面板在同一时间列画 1px 虚线；任意面板移出即清空
+  const [splitHoverIdx, setSplitHoverIdx] = useState<number | null>(null);
   // 跨产品/竞品视角分离时价位跨度天然拉大 → 进入时自动开「Y 轴自动压缩」；
   // 用户手动关闭后本段分离会话内不再强制（退出分离再进才重置）
   const yCompressAutoRef = useRef(false);
@@ -516,10 +535,61 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
 
   // ---- 价格摘要条（第三十六轮定版）：固定显示窗口内最新时点（不随悬停变换，
   //      时点明细看悬停浮窗）；竞品与我司同款样式、来源为取证超链接 ----
-  const summary = useMemo(() => buildPriceSummary(chartSeries), [chartSeries]);
+  // 第110轮（评审）：时点摘要产品清单按价位档从高到低、同档按现价从高到低排列
+  //（档位 = skuIds[0] 产品维 tier_code，产业档位梯 dimTier.ladders 定序；只读维表）；
+  // 渲染期对名称做单位/叠词去重（如「16+1 TB TB」类重复文案收敛）
+  const summary = useMemo(() => {
+    const items = buildPriceSummary(chartSeries);
+    const ladder = dimTier.ladders[state.industry] ?? [];
+    const tierRank = new Map<string, number>();
+    for (const s of chartSeries) {
+      const sku = s.skuIds[0] != null ? dimProduct.find((p) => p.sku_id === s.skuIds[0]) : null;
+      const i = sku ? ladder.indexOf(sku.tier_code) : -1;
+      tierRank.set(s.key, i < 0 ? -1 : i);
+    }
+    return items
+      .map((it) => ({ ...it, name: dedupeSpecText(it.name) }))
+      .sort((a, b) => {
+        const r = (tierRank.get(b.key) ?? -1) - (tierRank.get(a.key) ?? -1);
+        if (r !== 0) return r;
+        return (b.price ?? Number.NEGATIVE_INFINITY) - (a.price ?? Number.NEGATIVE_INFINITY);
+      });
+  }, [chartSeries, state.industry]);
 
   // ---- 大促背景带（第三十四轮）：dim_promo ∩ 窗口桶覆盖区间；随窗口联动 ----
   const winBuckets = useMemo(() => buckets.slice(win.s, win.e + 1), [buckets, win]);
+
+  // ---- 图下「核心信息明细」同源取数（第110轮，评审）：合并模式 = 窗口内全部系列
+  //（含被名称药丸屏蔽者——明细表有自己的产品筛选，屏蔽只管折线）；分离模式 =
+  // 各面板系列并集（同款竞品被多张面板对标时按系列去重）。行集 = 系列 × 可见时间段，
+  // 经 onSeriesWindow 上报页面层渲染（明细表与图共享粒度/币种/平台/时间段口径）
+  const tableSeries: Series[] = useMemo(() => {
+    if (!splitActive) return visSeries;
+    const seen = new Set<string>();
+    const out: Series[] = [];
+    for (const p of panelViews) {
+      for (const s of p.all) {
+        if (seen.has(s.key)) continue;
+        seen.add(s.key);
+        out.push(s);
+      }
+    }
+    return out;
+  }, [splitActive, visSeries, panelViews]);
+  const tableBuckets = useMemo(
+    () =>
+      winBuckets.map((b) => ({
+        id: b.id,
+        xLabel: b.xLabel,
+        anchorDate: bucketAnchorDate(state.granularity, b.id) ?? '',
+      })),
+    [winBuckets, state.granularity],
+  );
+  const onSeriesWindowRef = useRef(props.onSeriesWindow);
+  onSeriesWindowRef.current = props.onSeriesWindow;
+  useEffect(() => {
+    onSeriesWindowRef.current?.(tableSeries, tableBuckets);
+  }, [tableSeries, tableBuckets]);
 
   // 时点页签日期（第五十四轮追补①）：窗口末桶内最新日历周的周三锚日（MM-DD）——
   // 月/季粒度不再显示 2026-10 / 2026Q4（用户：时点恒为最新那一周对应的那一天；
@@ -994,6 +1064,10 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
                         promoBands={promoBands}
                         maxMinOn={maxMinOn}
                         changeThreshold={changeThreshold}
+                        // 第110轮（评审）：每张小图自带时间轴日期标签（单卡可独立截图进 PPT）
+                        showXLabels
+                        crosshairIdx={splitHoverIdx}
+                        onCrosshairMove={setSplitHoverIdx}
                         emptyHint="该配置在所选时间范围内无数据"
                       />
                     </div>

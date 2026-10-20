@@ -176,14 +176,20 @@ function minPriceRow(
   channels: Set<string>,
   currency: CurrencyMode,
 ): { row: FactPriceWeekly; price: number } | null {
+  // 裸机口径：组合销售（套装）行不参与最低价比较；该周只剩套装行时才回退用套装价
   let best: { row: FactPriceWeekly; price: number } | null = null;
+  let bestBundle: { row: FactPriceWeekly; price: number } | null = null;
   for (const row of factRows(countryCode, skuId, weekId)) {
     if (!channels.has(row.channel_id)) continue;
     const v = displayPriceOf(row, currency);
     if (v == null) continue;
-    if (!best || v < best.price) best = { row, price: v };
+    if (row.bundle) {
+      if (!bestBundle || v < bestBundle.price) bestBundle = { row, price: v };
+    } else if (!best || v < best.price) {
+      best = { row, price: v };
+    }
   }
-  return best;
+  return best ?? bestBundle;
 }
 
 /** 单点取价（预警引擎与看板共享）：该国渠道选择内的最低折后价 */
@@ -556,6 +562,11 @@ export function tierOrderOf(industry: Industry): string[] {
   return dimTier.ladders[industry] ?? [];
 }
 
+/** 某国口径下的产品档位（分国档位优先，无该国记录回全局兜底） */
+export function tierOf(p: DimProduct, countryCode: string = getCurrentCountry()): string {
+  return p.tier_by_country?.[countryCode] ?? p.tier_code;
+}
+
 /** 某 SKU 在默认渠道口径下的最新有值周 */
 function latestOf(
   skuId: string,
@@ -711,7 +722,7 @@ export function buildOverviewMatrix(
       modelName: head.model_name,
       brand: head.brand,
       isOwn: head.is_own,
-      tierCode: head.tier_code,
+      tierCode: tierOf(head, cc),
       launchPriceUsd: head.ref_price_usd ?? 0,
       lifecyclePct: head.is_own ? lifecycleDeltaOf(prows.map((p) => p.sku_id), cc)?.pct ?? null : null,
       rows,

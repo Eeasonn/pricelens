@@ -5,7 +5,7 @@
 // ============================================================
 import { dimProduct } from '../data';
 import { getEffectiveBenchmark } from './configStore';
-import { lowestPriceColorSku } from '../dataModel/aggregate';
+import { lowestPriceColorSku, tierOf } from '../dataModel/aggregate';
 import { getCurrentCountry } from './currentScope';
 import type { FiltersState, ProductSelection } from './filtersTypes';
 
@@ -20,7 +20,7 @@ export function tierSubjectSelections(
   const own: ProductSelection[] = [];
   const ownKeys = new Set<string>();
   for (const p of dimProduct) {
-    if (!p.is_own || p.industry !== industry || p.tier_code !== tier || !p.countries.includes(countryCode)) continue;
+    if (!p.is_own || p.industry !== industry || !p.countries.includes(countryCode) || tierOf(p, countryCode) !== tier) continue;
     const key = `${modelIdOfSku(p.sku_id)}|${p.romram}`;
     if (ownKeys.has(key)) continue;
     ownKeys.add(key);

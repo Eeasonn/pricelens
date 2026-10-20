@@ -10,8 +10,8 @@ export const INDUSTRY_LABELS: Record<Industry, string> = {
   pc: 'PC',
 };
 
-/** 筛选器可选产业顺序（矩阵覆盖的四个产业在前；IoT/PC 有数据但无矩阵，仅作明细可查） */
-export const INDUSTRY_ORDER: Industry[] = ['phone', 'tablet', 'wearable', 'audio', 'iot', 'pc'];
+/** 筛选器可选产业（2026-10-20 评审：IoT/PC 暂不关注——数据保留在事实表，不进产业选项） */
+export const INDUSTRY_ORDER: Industry[] = ['phone', 'tablet', 'wearable', 'audio'];
 
 export const DEFAULT_DATA_SCOPE: DataScope = { countryCode: 'RU', industry: 'phone' };
 

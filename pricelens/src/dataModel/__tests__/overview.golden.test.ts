@@ -29,7 +29,8 @@ describe('buildOverviewMatrix 金测', () => {
   });
 
   it('各带型号数锚点（RU phone 实况：我司 20 + 竞品 83 = 103 型号全覆盖）', () => {
-    expect(bands.map((b) => b.models.length)).toEqual([33, 5, 12, 21, 23, 9]);
+    // 分国档位（RU 矩阵声明优先，其余按 RU RRP 推算）+ 1T/1TB 单位归一后的分布：1000+ 33 / 800-1000 11 / 600-800 6 / 400-600 23 / 200-400 23 / <200 7
+    expect(bands.map((b) => b.models.length)).toEqual([33, 11, 6, 23, 23, 7]);
     expect(flatModels.filter((m) => m.isOwn)).toHaveLength(20);
     expect(flatModels.filter((m) => !m.isOwn)).toHaveLength(83);
     // 覆盖完备：矩阵型号数 = 维表中 RU 有事实行的 phone 型号数
@@ -97,9 +98,12 @@ describe('buildOverviewMatrix 金测', () => {
     expect(c0.colors.some((c) => c.skuId === c0.skuId)).toBe(true);
   });
 
-  it('未建对标的型号 comps 为空（RU 矩阵无 Mate X6 / Pura 80 Ultra 行）；benchmark 入参可整体置空', () => {
-    expect(findModel('own-huawei-mate-x6').comps).toEqual([]);
-    expect(findModel('own-huawei-pura-80-ultra').comps).toEqual([]);
+  it('矩阵未覆盖的型号由自动匹配补齐（Mate X6 / Pura 80 Ultra 在 RU 矩阵无行 → source=auto）；benchmark 入参可整体置空', () => {
+    for (const mid of ['own-huawei-mate-x6', 'own-huawei-pura-80-ultra']) {
+      expect(findModel(mid).comps.length).toBeGreaterThan(0);
+      const sources = new Set(dimBenchmark.filter((b) => b.country_code === CC && b.own_model_id === mid).map((b) => b.source));
+      expect([...sources]).toEqual(['auto']);
+    }
     const empty = buildOverviewMatrix('usd', [], null, DEFAULT_DATA_SCOPE);
     expect(empty.flatMap((b) => b.models).find((m) => m.modelId === 'own-huawei-pura-90s-pro-max')!.comps).toEqual([]);
   });

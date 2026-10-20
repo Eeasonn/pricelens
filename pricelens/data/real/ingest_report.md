@@ -1,13 +1,15 @@
 # 真实数据接入报告（scripts/ingest_real.py）
 
-生成时间：2026-10-20T22:17:26+08:00
+生成时间：2026-10-20T23:16:59+08:00
 
 ## 一、总体
 
 - 输入文件 1 个，原始行 85,999
 - 清洗后事实行 84,845
 - 时间维 202619(2026-05-06) → 202642(2026-10-14)，共 24 周
-- 事实包 84,845 行；b64 2,883,616 B（gzip 2,162,710 B）
+- 分国档位：136 个 国家×型号 采用矩阵声明，其余按该国参考价推算
+- 自动匹配：442 个国家×我司型号补齐竞品，1903 条对标；51 个无可比对象
+- 事实包 84,845 行；b64 2,882,828 B（gzip 2,162,120 B）
 - 修正：价格单位错位(÷100) 31 行
 - 修正：品牌→HUAWEI 11 行
 - 修正：品牌→LENOVO 4 行
@@ -38,18 +40,18 @@
 | 阿根廷(AR) | 1 | 60 | 60 | Mercado Libre | Mercado Libre |
 | 秘鲁(PE) | 3 | 56 | 142 | Hiraoka | Hiraoka |
 | 巴西(BR) | 3 | 72 | 176 | Mercado Libre | Mercado Libre,Shopee,Amazon |
-| 墨西哥(MX) | 24 | 414 | 10,445 | Mercado Libre | Mercado Libre,Amazon |
+| 墨西哥(MX) | 24 | 408 | 10,445 | Mercado Libre | Mercado Libre,Amazon |
 | 南非(ZA) | 5 | 131 | 513 | TAKEALOT | TAKEALOT |
-| 沙特(SA) | 20 | 692 | 16,998 | Jarir | Jarir,eXtra,Amazon |
-| 阿联酋(AE) | 21 | 336 | 6,246 | SHARAFDG | SHARAFDG,NOON,CARREFOUR |
-| 马来西亚(MY) | 24 | 395 | 5,487 | Shopee | Shopee |
-| 印尼(ID) | 24 | 248 | 3,727 | Shopee | Shopee |
+| 沙特(SA) | 20 | 679 | 16,998 | Jarir | Jarir,eXtra,Amazon |
+| 阿联酋(AE) | 21 | 330 | 6,246 | SHARAFDG | SHARAFDG,NOON,CARREFOUR |
+| 马来西亚(MY) | 24 | 388 | 5,487 | Shopee | Shopee |
+| 印尼(ID) | 24 | 245 | 3,727 | Shopee | Shopee |
 | 日本(JP) | 7 | 37 | 249 | Amazon | Amazon |
-| 新加坡(SG) | 23 | 295 | 4,250 | Shopee | Shopee |
-| 泰国(TH) | 24 | 295 | 4,270 | Shopee | Shopee |
-| 菲律宾(PH) | 24 | 356 | 4,578 | Shopee | Shopee |
+| 新加坡(SG) | 23 | 289 | 4,250 | Shopee | Shopee |
+| 泰国(TH) | 24 | 288 | 4,270 | Shopee | Shopee |
+| 菲律宾(PH) | 24 | 350 | 4,578 | Shopee | Shopee |
 | 越南(VN) | 22 | 173 | 2,374 | Shopee | Shopee |
-| R国(RU) | 22 | 550 | 15,179 | DNS | DNS |
+| R国(RU) | 22 | 538 | 15,179 | DNS | DNS |
 
 ## 三、矩阵解析未命中清单
 
@@ -296,6 +298,126 @@
 - BR｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 1）
 - BR｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 8 40mm（sort 2）
 - BR｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 8 44mm（sort 2）
+- AR｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- AR｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- AR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- AR｜own-huawei-watch-5 46mm ← SAMSUNG Galaxy Watch 7 44mm（sort 1）
+- AR｜own-huawei-watch-5 46mm ← SAMSUNG Galaxy Watch 7 40mm（sort 2）
+- AR｜own-huawei-watch-5 46mm ← XIAOMI Watch S5 —（sort 3）
+- AR｜own-huawei-watch-5 46mm ← APPLE Watch SERIES 11 46mm GPS（sort 4）
+- AR｜own-huawei-watch-5 46mm ← APPLE Watch SERIES 11 42mm GPS（sort 5）
+- DE｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- DE｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- DE｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- DE｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- DE｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- DE｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- DE｜own-huawei-freearc — ← SOUNDCORE Liberty 5 —（sort 1）
+- DE｜own-huawei-freearc — ← SOUNDCORE P40i —（sort 2）
+- ES｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- ES｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- ES｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- ES｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- ES｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- ES｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- ES｜own-huawei-freearc — ← SOUNDCORE P40i —（sort 1）
+- ES｜own-huawei-freebuds-7i — ← SOUNDCORE P40i —（sort 1）
+- FR｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- FR｜own-huawei-band-11 — ← XIAOMI Band 11 Active —（sort 2）
+- FR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 6 Active —（sort 3）
+- FR｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- FR｜own-huawei-band-11-pro — ← XIAOMI Band 10 Pro —（sort 2）
+- FR｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 6 Lite —（sort 3）
+- FR｜own-huawei-freebuds-6 — ← APPLE AirPods 5 —（sort 1）
+- FR｜own-huawei-freebuds-6 — ← APPLE AirPods 4 —（sort 2）
+- GB｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- GB｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- GB｜own-huawei-band-11 — ← XIAOMI Redmi Watch 6 Active —（sort 3）
+- GB｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- GB｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- GB｜own-huawei-band-11-pro — ← XIAOMI Band 10 Pro —（sort 3）
+- GB｜own-huawei-freebuds-6 — ← APPLE AirPods 5 —（sort 1）
+- GB｜own-huawei-freebuds-6 — ← SOUNDCORE AeroClip 2 —（sort 2）
+- ID｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- ID｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- ID｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- ID｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- ID｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- ID｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- ID｜own-huawei-freearc — ← SHOKZ OpenFit Air —（sort 1）
+- ID｜own-huawei-freearc — ← JBL Tune Beam 2 —（sort 2）
+- IT｜own-huawei-band-11 — ← XIAOMI Redmi Watch 6 Active —（sort 1）
+- IT｜own-huawei-band-11 — ← XIAOMI Band 11 Active —（sort 2）
+- IT｜own-huawei-band-11-pro — ← XIAOMI Band 10 Pro —（sort 1）
+- IT｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 6 Lite —（sort 2）
+- IT｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 6 Active —（sort 3）
+- IT｜own-huawei-freebuds-6 — ← APPLE AirPods 5 —（sort 1）
+- IT｜own-huawei-freebuds-6 — ← APPLE AirPods 4 —（sort 2）
+- IT｜own-huawei-freebuds-7i — ← APPLE AirPods 4 ANC —（sort 1）
+- JP｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- JP｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- JP｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- JP｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- JP｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- JP｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- JP｜own-huawei-watch-d2 — ← APPLE Watch SE 3 40mm GPS（sort 1）
+- JP｜own-huawei-watch-d2 — ← APPLE Watch SERIES 11 42mm GPS（sort 2）
+- MY｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- MY｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- MY｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- MY｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- MY｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- MY｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- MY｜own-huawei-freebuds-7i — ← SOUNDCORE Liberty 5 —（sort 1）
+- MY｜own-huawei-freebuds-7i — ← SAMSUNG Galaxy Buds 4 Pro —（sort 2）
+- PE｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 1）
+- PE｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 2）
+- PE｜own-huawei-band-11 — ← XIAOMI Band 9 Active —（sort 3）
+- PE｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 1）
+- PE｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 2）
+- PE｜own-huawei-matepad-11-5-2025 11.5" WiFi 8+128 GB ← XIAOMI Redmi Pad 2 Pro 12.1" WiFi 6+128 GB（sort 1）
+- PE｜own-huawei-matepad-11-5-2025 11.5" WiFi 8+256 GB PaperMatte ← XIAOMI Redmi Pad 2 Pro 12.1" WiFi 6+128 GB（sort 1）
+- PE｜own-huawei-matepad-11-5-2025 11.5" WiFi 8+128 GB ← SAMSUNG Galaxy Tab A11+ 8.7" WiFi 4+64 GB（sort 2）
+- RO｜own-huawei-watch-d2 — ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
+- RO｜own-huawei-watch-d2 — ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 2）
+- RO｜own-huawei-watch-d2 — ← APPLE Watch SERIES 11 42mm GPS（sort 3）
+- RO｜own-huawei-watch-d2 — ← APPLE Watch SERIES 11 46mm GPS（sort 4）
+- RO｜own-huawei-watch-d3 — ← APPLE Watch SERIES 11 42mm GPS（sort 1）
+- RO｜own-huawei-watch-d3 — ← APPLE Watch SERIES 11 46mm GPS（sort 2）
+- RO｜own-huawei-watch-d3 — ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 3）
+- RO｜own-huawei-watch-d3 — ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 4）
+- SG｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- SG｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- SG｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- SG｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- SG｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- SG｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- SG｜own-huawei-freebuds-7i — ← SOUNDCORE Liberty 5 —（sort 1）
+- SG｜own-huawei-freebuds-7i — ← SAMSUNG Galaxy Buds 4 Pro —（sort 2）
+- TR｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- TR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 2）
+- TR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 6 Active —（sort 3）
+- TR｜own-huawei-freebuds-6 — ← APPLE AirPods 4 ANC —（sort 1）
+- TR｜own-huawei-freebuds-7i — ← APPLE AirPods 4 ANC —（sort 1）
+- TR｜own-huawei-freebuds-pro-5 — ← APPLE AirPods 4 ANC —（sort 1）
+- TR｜own-huawei-freeclip — ← APPLE AirPods 4 ANC —（sort 1）
+- TR｜own-huawei-freeclip-2 — ← APPLE AirPods 4 ANC —（sort 1）
+- VN｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- VN｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- VN｜own-huawei-band-11 — ← XIAOMI Band 9 Active —（sort 3）
+- VN｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
+- VN｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- VN｜own-huawei-band-11-pro — ← XIAOMI Band 10 Pro —（sort 3）
+- VN｜own-huawei-freearc — ← SHOKZ OpenFit Air —（sort 1）
+- VN｜own-huawei-freearc — ← SHOKZ OpenFit 2+ —（sort 2）
+- ZA｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
+- ZA｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
+- ZA｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
+- ZA｜own-huawei-freebuds-7i — ← APPLE AirPods 4 ANC —（sort 1）
+- ZA｜own-huawei-freebuds-7i — ← SAMSUNG Galaxy Buds3 FE —（sort 2）
+- ZA｜own-huawei-freebuds-pro-5 — ← APPLE AirPods Pro 3 —（sort 1）
+- ZA｜own-huawei-freebuds-pro-5 — ← APPLE AirPods 4 —（sort 2）
+- ZA｜own-huawei-freebuds-pro-5 — ← APPLE AirPods 4 ANC —（sort 3）
 
 ## 五、大促日历解析
 

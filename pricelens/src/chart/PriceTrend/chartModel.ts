@@ -62,6 +62,20 @@ export function curveNameOf(s: Series): string {
   return noBrand.replace(/\s*(GB|TB)$/i, '').trim();
 }
 
+/** 渲染期文案去重（第110轮，评审）：产品标签偶发单位重复（如「16+1 TB TB」）或
+ *  整串两半完全重复（如「Mate 70 Mate 70」）→ 收敛为单次。只做保守去重：
+ *  ① 相邻重复的 GB/TB 单位（词边界保护，"12+512 GB" 这类正常文案不受影响）；
+ *  ② 词数 为偶且两半完全一致时折半。对干净数据是恒等变换。 */
+export function dedupeSpecText(text: string): string {
+  const t = text.replace(/\b(GB|TB)\s+\1\b/gi, '$1').trim();
+  const words = t.split(/\s+/);
+  if (words.length >= 2 && words.length % 2 === 0) {
+    const h = words.length / 2;
+    if (words.slice(0, h).every((w, i) => w === words[h + i])) return words.slice(0, h).join(' ');
+  }
+  return t;
+}
+
 /** 主价线：折后价优先；仅勾 RRP 时 RRP 成为主价线（标签/下钻/跳转跟随） */
 export function primaryPriceOf(p: SeriesPoint, priceTypes: PriceTypes): number | null {
   return priceTypes.discounted ? p.price : p.rrp;
@@ -379,6 +393,10 @@ export function buildOption(p: {
   /** 折线形态（第三十八轮，齿轮可选）：step=方形阶梯（默认，价格在期内恒定）；
    *  smooth=平滑曲线（最初形态）。只换线形，数据/标签/避让不受影响 */
   lineShape?: 'step' | 'smooth';
+  /** 第110轮（评审）：分离模式下每张小图自带时间轴标签（单图可整卡截图进 PPT）；
+   *  缺省 false = 与旧口径一致（时间标签由底部刷选条统一承担）。开启后 ECharts
+   *  自动按宽度抽稀（hideOverlap），标签画在绘图区下缘的既有留白内 */
+  xLabels?: boolean;
 }): EChartsOption | null {
   if (!p.geom) return null;
   const { geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks } = p;
@@ -502,7 +520,18 @@ export function buildOption(p: {
       axisTick: { show: false },
       // 第十二轮：月/季标签弃 mono rich，与周视图同一字体字号（全页数字字体统一）
       // 时间标签由 XBrush 统一承担，图表只保留轴线和大促图标专用行，避免两组日期叠在一起。
-      axisLabel: { show: false },
+      // 第110轮（评审）：分离模式小图传入 xLabels → 各面板自带日期标签（可独立截图）
+      axisLabel: p.xLabels
+        ? {
+            show: true,
+            color: color.mute,
+            fontSize: 10,
+            fontFamily: font.family,
+            margin: 7,
+            hideOverlap: true,
+            interval: 'auto' as const,
+          }
+        : { show: false },
     },
     // 值轴整体隐藏（第七轮）：刻度线/标签/断裂符号/档位带全部 DOM 层绘制
     yAxis: { show: false, min: 0, max: 1 },

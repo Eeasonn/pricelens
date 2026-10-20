@@ -41,7 +41,9 @@ export interface DimProduct {
   model_name: string;
   romram: string; // 配置显示文案，如 "12+256 GB" / '11.5" WiFi 8+128 GB' / "46mm GPS" / "—"
   color: string; // 首字母大写；无颜色 "—"
-  tier_code: TierCode; // 型号级（同型号各 SKU 一致；按参考 USD 价格落产业阶梯）
+  tier_code: TierCode; // 型号级全局兜底档位（各国档位众数）；有国家上下文时用 tier_by_country
+  /** 分国档位：该国矩阵有声明用业务声明，否则按该国参考价（RRP USD 中位数）落产业阶梯 */
+  tier_by_country: Record<string, TierCode>;
   ref_price_usd: number | null; // 参考价 = 跨国官网 RRP 美元中位数（缺 RRP 时用成交价）
   launch_date: string; // 首次采集到的周三（≈上市/进入采集范围）
   eol_date: string | null; // null = 在售

@@ -5,18 +5,28 @@ import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
 import FilterBar from '../components/FilterBar';
 import PriceTrend from '../chart/PriceTrend';
+import DetailTable, { type DetailBucket } from '../chart/PriceTrend/DetailTable';
 import PageHeader from '../components/PageHeader';
+import type { Series } from '../dataModel/types';
 import { color, radius, shadow, space } from '../theme/tokens';
 
 /** 页面骨架 —— 图表负责人（Agent C）在此基础上完善（§4.1 信息架构）。
  *  第五十四轮追补：滚过筛选器后顶部居中浮现圆形 ↑ 按钮，点击回滚到筛选器。
  *  「竞品对比进入默认滚到价格走势区」由 Overview.openCompare 在切页后延时驱动
- *  （滚动容器 = 根 div：html/body/#root 锁 100% 高，overflowX:auto → overflowY 计算 auto） */
+ *  （滚动容器 = 根 div：html/body/#root 锁 100% 高，overflowX:auto → overflowY 计算 auto）
+ *  第110轮（2026-10-20 评审）：图卡下方新增「核心信息明细」独立卡——取数由
+ *  PriceTrend 经 onSeriesWindow 上报（与图上同一可见时间段 × 同一批产品系列，
+ *  币种/平台/粒度/分离模式随图联动），本层只负责卡片壳与渲染 */
 export default function Dashboard() {
   const { go } = usePage();
   const { state } = useFilters();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [showTop, setShowTop] = useState(false);
+  // 图上可见窗口的同源快照（PriceTrend 每次系列/时间段变化上报一次）
+  const [trendWindow, setTrendWindow] = useState<{ series: Series[]; buckets: DetailBucket[] }>({
+    series: [],
+    buckets: [],
+  });
 
   // 追补⑧（总览↔看板闭环①）：上下文条数据——入口型号 + 勾选 ROM + 对标竞品数
   const entryModelId = state.own[0]?.modelId ?? null;
@@ -86,8 +96,30 @@ export default function Dashboard() {
               }}
             >
               {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
-              <PriceTrend onBackToOverview={backToOverview} />
+              <PriceTrend
+                onBackToOverview={backToOverview}
+                onSeriesWindow={(series, buckets) => setTrendWindow({ series, buckets })}
+              />
             </section>
+            {/* 核心信息明细（第110轮，评审）：与图同源的取价快照表，独立卡位于图卡下方 */}
+            {trendWindow.series.length > 0 && (
+              <section
+                style={{
+                  marginTop: space.md,
+                  background: color.canvas,
+                  boxShadow: shadow.l1,
+                  borderRadius: radius.card,
+                  padding: space.lg,
+                }}
+              >
+                <DetailTable
+                  series={trendWindow.series}
+                  buckets={trendWindow.buckets}
+                  currency={state.currency}
+                  granularity={state.granularity}
+                />
+              </section>
+            )}
           </div>
         </main>
 
