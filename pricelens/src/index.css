@@ -195,3 +195,9 @@ button.lpl-map-card:hover {
   to { opacity: 1; transform: none; }
 }
 .lpl-mode-fade { animation: lplFadeIn 240ms ease; }
+
+/* 摆位对比明细浮层入场：从锚点卡片方向轻微平移淡入 */
+@keyframes lplPanelIn {
+  from { opacity: 0; transform: translate(-8px, 4px); }
+  to { opacity: 1; transform: none; }
+}
