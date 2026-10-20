@@ -73,7 +73,7 @@ export default function PromoDrawer(props: {
     () =>
       series.map((s) => {
         const info = launchInfoOf(s.skuIds);
-        const launch = info ? (currency === 'usd' ? info.launchPriceUsd : info.launchPriceRub) : null;
+        const launch = info ? (currency === 'usd' ? info.launchPriceUsd : info.launchPriceLocal) : null;
         const eolDate = info?.eolDate ?? null;
         const cells: Cell[] = s.points.map((p) => {
           // 有值必显示：月/季桶锚日可能早于上市日、但桶内后段已上市有价——与图上的点保持一致

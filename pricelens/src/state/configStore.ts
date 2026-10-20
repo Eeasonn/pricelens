@@ -9,7 +9,8 @@ import type { CurrencyMode, DimBenchmark } from '../dataModel/types';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import type { ProductSelection } from './filtersTypes';
 import { modelIdOf, shortRomram } from '../components/ProductCascader/tree';
-export { DEFAULT_FX_RATE, getFxRate, saveFx } from './fx';
+import { getCurrentCountry } from './currentScope';
+export { getFxRate } from './fx';
 
 /** 图表侧保存的档位预设（§6.1 自定义档位），配置页列出可删 */
 export interface CustomTierPreset {
@@ -60,8 +61,10 @@ export function getEffectiveBenchmark(): DimBenchmark[] {
  * 精确匹配 (own_model_id, own_romram)；无该 ROMRAM 行时回退型号级行；再无 → 空。
  * 约定：own_model_id = 型号 id（sku_id 前缀，如 `own-pura-90s-pro-max`，已对真实产物核验）。
  */
-export function benchmarkSkuIdsFor(modelId: string, romram: string): string[] {
-  const rows = getEffectiveBenchmark().filter((r) => r.own_model_id === modelId);
+export function benchmarkSkuIdsFor(modelId: string, romram: string, countryCode: string = getCurrentCountry()): string[] {
+  const rows = getEffectiveBenchmark().filter(
+    (r) => r.own_model_id === modelId && (r.country_code == null || r.country_code === countryCode),
+  );
   const exact = rows.filter((r) => r.own_romram === romram);
   const list = exact.length ? exact : rows;
   return [...list].sort((a, b) => a.sort - b.sort).map((r) => r.competitor_sku_id);

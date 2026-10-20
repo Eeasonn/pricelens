@@ -17,7 +17,7 @@ import { Checkbox, Popover, Segmented, Slider } from 'antd';
 import { MoreOutlined, SettingOutlined } from '@ant-design/icons';
 import { forwardRef, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
-import { color, fontSize, radius } from '../../theme/tokens';
+import { color, fontSize, radius, localCurrencySymbol } from '../../theme/tokens';
 import type { LineShapeChoice } from './chartModel';
 import ScaleSlider from './ScaleSlider';
 
@@ -159,7 +159,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
       <span style={{ fontSize: fontSize.caption, lineHeight: '16px', color: color.mute, pointerEvents: 'none' }}>
-        {props.currency === 'usd' ? '$' : '₽'}
+        {props.currency === 'usd' ? '$' : localCurrencySymbol()}
       </span>
       <Popover
         trigger="click"

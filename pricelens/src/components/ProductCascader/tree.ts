@@ -6,10 +6,9 @@
 // prev/next_model_id 及 aggregate 的 modelId 同一 id 空间（已对真实产物核验）
 // ============================================================
 import { dimProduct, factPriceWeekly } from '../../data';
-import type { DimProduct } from '../../dataModel/types';
-import { lowestPriceColorSku } from '../../dataModel/aggregate';
-import { displayLocalValue } from '../../dataModel/currency';
-import { getFxRate } from '../../state/fx';
+import type { DimProduct, Industry } from '../../dataModel/types';
+import { effectiveChannelIds, lowestPriceColorSku } from '../../dataModel/aggregate';
+import { getCurrentCountry } from '../../state/currentScope';
 import type { ProductSelection } from '../../state/filtersTypes';
 
 /** 竞品品牌列顺序（§13 矩阵列序一致） */
@@ -59,7 +58,7 @@ export function modelNameOf(modelId: string): string {
 export interface ColorInfo {
   skuId: string;
   color: string; // '—' = 无颜色行（§8.1，不进颜色级联展示）
-  latestRub: number | null; // 最新折后价（取该 SKU 最大 week_id 的有值行）
+  latestLocal: number | null; // 最新折后价（本币；当前国家默认电渠口径，取最大 week_id 的有值行）
   latestUsd: number | null;
 }
 
@@ -94,23 +93,24 @@ export function shortRomram(romram: string): string {
 
 // ---- 最新折后价索引（懒构建一次；数据静态于模块装载） ----
 
-let latestCache: { fxRate: number; values: Map<string, { rub: number | null; usd: number | null }> } | null = null;
+let latestCache: { cc: string; values: Map<string, { local: number | null; usd: number | null }> } | null = null;
 
-function latestPrices(): Map<string, { rub: number | null; usd: number | null }> {
-  const fxRate = getFxRate();
-  if (latestCache?.fxRate === fxRate) return latestCache.values;
-  const best = new Map<string, { weekId: string; rub: number | null }>();
+/** 当前国家默认电渠口径下各 SKU 最新有值周的最低折后价（本币/USD） */
+function latestPrices(): Map<string, { local: number | null; usd: number | null }> {
+  const cc = getCurrentCountry();
+  if (latestCache?.cc === cc) return latestCache.values;
+  const channels = new Set(effectiveChannelIds(cc, null));
+  const best = new Map<string, { weekId: string; local: number; usd: number | null }>();
   for (const row of factPriceWeekly) {
-    const hasPrice = row.discounted_price_rub != null;
-    if (!hasPrice) continue;
+    if (row.country_code !== cc || row.price_local == null || !channels.has(row.channel_id)) continue;
     const cur = best.get(row.sku_id);
-    if (!cur || row.week_id > cur.weekId) {
-      best.set(row.sku_id, { weekId: row.week_id, rub: row.discounted_price_rub });
+    if (!cur || row.week_id > cur.weekId || (row.week_id === cur.weekId && row.price_local < cur.local)) {
+      best.set(row.sku_id, { weekId: row.week_id, local: row.price_local, usd: row.price_usd });
     }
   }
-  const values = new Map<string, { rub: number | null; usd: number | null }>();
-  for (const [skuId, v] of best) values.set(skuId, { rub: v.rub, usd: displayLocalValue(v.rub, 'usd', fxRate) });
-  latestCache = { fxRate, values };
+  const values = new Map<string, { local: number | null; usd: number | null }>();
+  for (const [skuId, v] of best) values.set(skuId, { local: v.local, usd: v.usd });
+  latestCache = { cc, values };
   return values;
 }
 
@@ -119,7 +119,7 @@ function buildRomramNode(skus: DimProduct[], modelId: string, modelName: string,
   const colors: ColorInfo[] = skus.map((s) => ({
     skuId: s.sku_id,
     color: s.color,
-    latestRub: lp.get(s.sku_id)?.rub ?? null,
+    latestLocal: lp.get(s.sku_id)?.local ?? null,
     latestUsd: lp.get(s.sku_id)?.usd ?? null,
   }));
   const short = shortRomram(romram);
@@ -154,18 +154,18 @@ function groupModels(skus: DimProduct[]): ModelNode[] {
   });
 }
 
-/** 我司级联树：系列 → 产品名（仅展开）→ RAM+ROM（勾选层，含前代同堂型号，§5.2②） */
-export function buildOwnTree(industry: DimProduct['industry'] = 'phone'): GroupNode[] {
-  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry), (p) => p.series).entries()].map(([series, skus]) => ({
+/** 我司级联树（当前国家有数据的产品）：系列 → 产品名（仅展开）→ 配置（勾选层） */
+export function buildOwnTree(industry: Industry = 'phone', countryCode: string = getCurrentCountry()): GroupNode[] {
+  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry && p.countries.includes(countryCode)), (p) => p.series).entries()].map(([series, skus]) => ({
     key: series,
     title: series,
     models: groupModels(skus),
   }));
 }
 
-/** 竞品级联树：品牌（按 §13 列序，多余品牌按字母序殿后）→ 产品名（仅展开）→ RAM+ROM（勾选层） */
-export function buildCompetitorTree(): GroupNode[] {
-  const comp = dimProduct.filter((p) => !p.is_own);
+/** 竞品级联树（当前国家、同产业）：品牌（按 §13 列序，多余品牌按字母序殿后）→ 产品名 → 配置 */
+export function buildCompetitorTree(industry?: Industry, countryCode: string = getCurrentCountry()): GroupNode[] {
+  const comp = dimProduct.filter((p) => !p.is_own && p.countries.includes(countryCode) && (industry == null || p.industry === industry));
   const brandRank = (b: string): number => {
     const i = COMPETITOR_BRANDS.indexOf(b);
     return i >= 0 ? i : COMPETITOR_BRANDS.length;
@@ -196,10 +196,10 @@ export function defaultColorSkuIds(node: RomramNode): string[] {
   if (viaAggregate && node.colors.some((c) => c.skuId === viaAggregate)) return [viaAggregate];
   const pool = node.selectableColors.length ? node.selectableColors : node.colors;
   if (!pool.length) return [];
-  const priced = pool.filter((c) => c.latestRub != null || c.latestUsd != null);
+  const priced = pool.filter((c) => c.latestLocal != null || c.latestUsd != null);
   if (priced.length) {
     const lowest = priced.reduce((a, b) =>
-      ((a.latestUsd ?? a.latestRub) ?? Infinity) <= ((b.latestUsd ?? b.latestRub) ?? Infinity) ? a : b,
+      ((a.latestUsd ?? a.latestLocal) ?? Infinity) <= ((b.latestUsd ?? b.latestLocal) ?? Infinity) ? a : b,
     );
     return [lowest.skuId];
   }

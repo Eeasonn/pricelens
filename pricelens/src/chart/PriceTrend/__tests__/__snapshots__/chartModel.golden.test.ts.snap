@@ -1,65 +1,65 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > labelPlan 1`] = `
+exports[`真实数据快照（ingest 2026-10-20） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > labelPlan 1`] = `
 {
   "dy": {
-    "cmp-iphone-17-pro__12+256GB": {
+    "cmp-apple-iphone-16-pro-max__12+256GB": {
       "0": -3,
       "1": 0,
       "2": 0,
       "3": 0,
       "4": 0,
-      "7": 0,
-      "8": 0,
     },
-    "own-pura-90s-pro-max__12+256GB": {
-      "5": -3,
-      "7": 0,
-      "8": 0,
+    "own-huawei-nova-14__12+256GB": {
+      "0": -3,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
     },
   },
   "names": [
     {
-      "anchorX": 867.5,
-      "anchorY": 322.0730717185386,
+      "anchorX": 356.9,
+      "anchorY": 478.8717277486911,
       "color": "#c7000b",
       "dy": 0,
       "h": 22,
       "hidden": undefined,
       "maxW": undefined,
-      "seriesKey": "own-pura-90s-pro-max__12+256GB",
-      "text": "Pura 90s Pro Max 12+256",
-      "w": 174.86,
-      "x": 684.64,
-      "y": 311.0730717185386,
+      "seriesKey": "own-huawei-nova-14__12+256GB",
+      "text": "nova 14 12+256",
+      "w": 113.48000000000002,
+      "x": 235.41999999999996,
+      "y": 467.8717277486911,
     },
     {
-      "anchorX": 312.5,
-      "anchorY": 154.35375,
+      "anchorX": 356.9,
+      "anchorY": 172.708,
       "color": "#1d1d1f",
       "dy": 0,
       "h": 22,
       "hidden": undefined,
       "maxW": undefined,
-      "seriesKey": "cmp-iphone-17-pro__12+256GB",
-      "text": "iPhone 17 Pro 12+256",
-      "w": 154.4,
-      "x": 150.1,
-      "y": 143.35375,
+      "seriesKey": "cmp-apple-iphone-16-pro-max__12+256GB",
+      "text": "iPhone 16 Pro Max 12+256",
+      "w": 181.68,
+      "x": 167.21999999999997,
+      "y": 161.708,
     },
   ],
 }
 `;
 
-exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > marks+types 1`] = `
+exports[`真实数据快照（ingest 2026-10-20） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > marks+types 1`] = `
 {
   "marks": [
     [
-      "own-pura-90s-pro-max__12+256GB|5",
+      "own-huawei-nova-14__12+256GB|0",
       "S",
     ],
     [
-      "cmp-iphone-17-pro__12+256GB|0",
+      "cmp-apple-iphone-16-pro-max__12+256GB|0",
       "S",
     ],
   ],
@@ -72,27 +72,47 @@ exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + �
 }
 `;
 
-exports[`真实造数快照（seed 20261009） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > tickRows 1`] = `
+exports[`真实数据快照（ingest 2026-10-20） > labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价） > tickRows 1`] = `
 [
   {
-    "text": "1.6K",
-    "v": 1600,
-    "y": 165.65875,
+    "text": "1.25K",
+    "v": 1250,
+    "y": 302.756,
   },
   {
-    "text": "1.8K",
-    "v": 1800,
-    "y": 99.15875,
+    "text": "1.5K",
+    "v": 1500,
+    "y": 239.256,
   },
   {
-    "text": "800",
-    "v": 800,
-    "y": 376,
+    "text": "1.75K",
+    "v": 1750,
+    "y": 175.756,
   },
   {
-    "text": "1K",
-    "v": 1000,
-    "y": 309.4235453315291,
+    "text": "2K",
+    "v": 2000,
+    "y": 112.256,
+  },
+  {
+    "text": "0",
+    "v": 0,
+    "y": 568,
+  },
+  {
+    "text": "250",
+    "v": 250,
+    "y": 504.5183246073299,
+  },
+  {
+    "text": "500",
+    "v": 500,
+    "y": 441.0366492146597,
+  },
+  {
+    "text": "750",
+    "v": 750,
+    "y": 377.5549738219895,
   },
 ]
 `;

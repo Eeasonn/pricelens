@@ -1,143 +1,171 @@
-// 国家总览矩阵金测（第三十七轮）：锚定档位结构 / 排序 / 代表色 / 竞品映射 / 极值 / 币种
+// 国家总览矩阵金测（2026-10-20 真实数据版）：锚定档位结构 / 排序 / 代表色 / 竞品映射 / 币种 / 平台口径。
+// 作用域 = RU / phone（DEFAULT_DATA_SCOPE）。锚点优先从 factPriceWeekly / 维表独立直算；
+// 钉死的数字均注明来源（dim_product.ref_price_usd / dim_benchmark / fact 最低价行）。
 import { describe, expect, it } from 'vitest';
-import { buildOverviewMatrix, TIER_LABELS } from '../aggregate';
+import { dimBenchmark, dimChannel, dimProduct, dimTime, dimTier, factPriceWeekly } from '../../data';
+import { buildOverviewMatrix, lifecycleDeltaOf, TIER_LABELS, tierOrderOf } from '../aggregate';
+import { DEFAULT_DATA_SCOPE } from '../scope';
+
+const CC = 'RU';
+const bands = buildOverviewMatrix('usd', undefined, null, DEFAULT_DATA_SCOPE);
+const flatModels = bands.flatMap((b) => b.models);
+const findModel = (modelId: string) => flatModels.find((m) => m.modelId === modelId)!;
+
+/** fact 直算：某 SKU 某周在某平台集合内的最低 price_usd（与 latestOf 的取价口径同源、独立实现） */
+function minUsdPriceAt(skuId: string, weekId: string, platform: string | null): number | null {
+  const channels = dimChannel.filter((c) => c.country_code === CC && (platform == null || c.platform === platform));
+  const ids = new Set(channels.map((c) => c.channel_id));
+  const vals = factPriceWeekly
+    .filter((r) => r.sku_id === skuId && r.week_id === weekId && ids.has(r.channel_id) && r.price_usd != null)
+    .map((r) => r.price_usd!);
+  return vals.length ? Math.min(...vals) : null;
+}
 
 describe('buildOverviewMatrix 金测', () => {
-  const bands = buildOverviewMatrix('usd');
-
-  it('档位带：从高到低五个带，600-800 无产品不输出', () => {
-    expect(bands.map((b) => b.tierCode)).toEqual(['1000+', '800-1000', '400-600', '200-400', '<200']);
+  it('档位带：完整覆盖 phone 阶梯（真实数据六档全有产品），顺序 = 阶梯高 → 低', () => {
+    expect(bands.map((b) => b.tierCode)).toEqual([...tierOrderOf('phone')].reverse());
+    expect(bands.map((b) => b.tierCode)).toEqual(['1000+', '800-1000', '600-800', '400-600', '200-400', '<200']);
+    expect(bands.every((b) => b.models.length > 0)).toBe(true); // 空档不输出
   });
 
-  it('各带型号数锚点（我司 14 + 竞品 26 = 40 型号全覆盖）', () => {
-    expect(bands.map((b) => b.models.length)).toEqual([17, 5, 7, 10, 1]);
-    expect(bands.flatMap((b) => b.models).filter((m) => m.isOwn)).toHaveLength(14);
-    expect(bands.flatMap((b) => b.models).filter((m) => !m.isOwn)).toHaveLength(26);
+  it('各带型号数锚点（RU phone 实况：我司 20 + 竞品 83 = 103 型号全覆盖）', () => {
+    expect(bands.map((b) => b.models.length)).toEqual([33, 5, 12, 21, 23, 9]);
+    expect(flatModels.filter((m) => m.isOwn)).toHaveLength(20);
+    expect(flatModels.filter((m) => !m.isOwn)).toHaveLength(83);
+    // 覆盖完备：矩阵型号数 = 维表中 RU 有事实行的 phone 型号数
+    const ruPhoneModels = new Set(
+      dimProduct.filter((p) => p.industry === 'phone' && p.countries.includes(CC)).map((p) => p.model_id),
+    );
+    expect(flatModels).toHaveLength(ruPhoneModels.size);
   });
 
-  it('带内按上市价降序：1000+ 首位 Mate XT（$2374）', () => {
+  it('带内按上市参考价（ref_price_usd）降序：1000+ 首位 iPhone Duo（$4 023.1），首位我司 = Mate XT', () => {
     const top = bands[0].models;
-    expect(top[0].modelName).toBe('Mate XT');
-    expect(top[0].launchPriceUsd).toBe(2374);
-    expect(top.map((m) => m.modelName)).toEqual([
-      'Mate XT',
-      'Galaxy Z Fold7',
-      'Mate X7',
-      'iPhone 17 Pro',
-      'Galaxy S25 Ultra',
-      'Galaxy S26 Ultra',
-      'Magic V5',
-      'Mate X6',
-      'iPhone 16 Pro',
-      'Pura 80 Ultra',
-      'Galaxy S26+',
-      'Galaxy S25+',
-      'iPhone 17',
-      'Magic 8 Pro',
-      'Galaxy S26',
-      'iPhone 16',
-      'Magic 7 Pro',
-    ]);
+    expect(top[0].modelName).toBe('iPhone Duo');
+    expect(top[0].launchPriceUsd).toBe(4023.1); // dim_product.ref_price_usd
+    expect(top[0].isOwn).toBe(false);
+    expect(top.find((m) => m.isOwn)!.modelName).toBe('Mate XT');
+    // 排序不变量：launchPriceUsd 降序，同价按名称字典序
+    for (let i = 1; i < top.length; i++) {
+      expect(top[i - 1].launchPriceUsd).toBeGreaterThanOrEqual(top[i].launchPriceUsd);
+      if (top[i - 1].launchPriceUsd === top[i].launchPriceUsd) {
+        expect(top[i - 1].modelName.localeCompare(top[i].modelName)).toBeLessThanOrEqual(0);
+      }
+    }
   });
 
-  it('Mate X7：4 ROM 行现价降序，代表色行价格/极值锚点，序列 93 周全周期', () => {
-    const x7 = bands[0].models.find((m) => m.modelId === 'own-mate-x7')!;
-    expect(x7.rows.map((r) => r.romram)).toEqual(['16+1TB', '16+512 GB', '12+512 GB', '12+256 GB']);
-    const top = x7.rows[0];
-    expect(top.price).toBe(2468);
-    expect(top.rrp).toBe(2500);
-    expect(top.points).toHaveLength(93);
-    expect(top.maxV).toBe(2500);
-    expect(top.maxIdx).toBe(47);
-    expect(top.minV).toBe(2285);
-    expect(top.minIdx).toBe(84);
-    expect(top.lineColor).toBe('#c7000b');
+  it('Pura 90s Pro Max 12+256（RU 默认我司机型）：行现价降序、代表色行价格锚定最新周 DNS 真实最低价', () => {
+    const pura = findModel('own-huawei-pura-90s-pro-max');
+    expect(pura.isOwn).toBe(true);
+    expect(pura.rows.map((r) => r.romram)).toEqual(['12+512 GB', '12+256 GB']); // 现价降序（1142 > 1021）
+    const row = pura.rows[1];
+    expect(row.skuId).toBe('own-huawei-pura-90s-pro-max__12-256gb__black'); // 默认渠道最低价色
+    expect(row.asOfWeek).toBe('202642'); // 最新采数周
+    // 85 799 ₽ / 84.04（行内汇率）= 1 020.93 —— fact 该周 DNS 渠道行
+    expect(row.price).toBe(1020.93);
+    expect(row.rrp).toBe(1020.93); // 官网价 = 成交价（无折扣）
+    expect(row.discountPct).toBe(0);
+    expect(row.colors).toHaveLength(4); // Black / Gold / Orange / Purple 颜色次级菜单全量
+    expect(row.points).toHaveLength(dimTime.length); // 序列 = dim_time 全 24 周（缺采 = null 点）
+    expect(row.maxV!).toBeCloseTo(Math.max(...row.points.map((p) => p.price).filter((v): v is number => v != null)), 6);
+    expect(row.minV!).toBeCloseTo(Math.min(...row.points.map((p) => p.price).filter((v): v is number => v != null)), 6);
+    // 与 fact 直算同源
+    expect(row.price).toBe(minUsdPriceAt(row.skuId, '202642', 'DNS'));
   });
 
-  it('Pura 90s Pro 12+256：代表色 = 最低价色 Orange，$835/RRP $875，折扣率 ≈ −4.6%', () => {
-    const pura = bands[1].models.find((m) => m.modelId === 'own-pura-90s-pro')!;
-    const row = pura.rows.find((r) => r.romram.startsWith('12+256'))!;
-    expect(row.skuId.endsWith('__Orange')).toBe(true);
-    expect(row.price).toBe(835);
-    expect(row.rrp).toBe(875);
-    expect(row.discountPct).toBeCloseTo(835 / 875 - 1, 12);
-    expect(row.colors).toHaveLength(4); // 颜色次级菜单全量
-  });
-
-  it('竞品映射：Pura 90s Pro 并集 4 行、主竞品在前；Honor 600 跨 ROM 聚合 ownRomrams', () => {
-    const pura = bands[1].models.find((m) => m.modelId === 'own-pura-90s-pro')!;
+  it('竞品映射：Pura 90s Pro Max 并集 4 行、主竞品（iPhone 17 Pro，sort=1）在前；映射与 dim_benchmark 一致', () => {
+    const pura = findModel('own-huawei-pura-90s-pro-max');
     expect(pura.comps.map((c) => c.skuId)).toEqual([
-      'cmp-iphone-17__8+512GB__Black',
-      'cmp-iphone-17__8+256GB__Black',
-      'cmp-galaxy-s26__12+512GB__Black',
-      'cmp-galaxy-s26__12+256GB__Black',
+      'cmp-apple-iphone-17-pro__12-512gb__blue',
+      'cmp-apple-iphone-17-pro__12-256gb__blue',
+      'cmp-samsung-s26-ultra__12-512gb__black',
+      'cmp-samsung-s26-ultra__12-256gb__black',
     ]);
     expect(pura.comps[0].primary).toBe(true);
-    expect(pura.comps[0].ownRomrams).toEqual(['12+512 GB']); // 8+512 只对标我司 12+512
-
-    const nova15 = bands[2].models.find((m) => m.modelId === 'own-nova-15')!;
-    const honor = nova15.comps.find((c) => c.modelName === 'Honor 600')!;
-    expect(honor.ownRomrams).toEqual(['12+256 GB', '12+512 GB']);
-    expect(honor.primary).toBe(false);
-  });
-
-  it('未建对标的型号 comps 为空：Mate X6 / Pura 80 Ultra', () => {
-    const x6 = bands[0].models.find((m) => m.modelId === 'own-mate-x6')!;
-    const p80u = bands[0].models.find((m) => m.modelId === 'own-pura-80-ultra')!;
-    expect(x6.comps).toEqual([]);
-    expect(p80u.comps).toEqual([]);
-  });
-
-  it('生命周期锚点（模型全 SKU 口径）：Pura 80 Pro ≈ −10.1% / nova 15 ≈ −14.9%', () => {
-    const p80 = bands[1].models.find((m) => m.modelId === 'own-pura-80-pro')!;
-    const n15 = bands[2].models.find((m) => m.modelId === 'own-nova-15')!;
-    expect(+(p80.lifecyclePct! * 100).toFixed(1)).toBe(-10.1);
-    expect(+(n15.lifecyclePct! * 100).toFixed(1)).toBe(-14.9);
-    expect(bands[0].models.find((m) => m.modelId === 'cmp-galaxy-s26-ultra')!.lifecyclePct).toBeNull();
-  });
-
-  it('币种：₽ 口径 Pura 90s Pro 12+256 = 66 800（同一 SKU 两口径 ×80 汇率自洽）', () => {
-    const rub = buildOverviewMatrix('local');
-    const row = rub[1].models.find((m) => m.modelId === 'own-pura-90s-pro')!.rows.find((r) => r.romram.startsWith('12+256'))!;
-    expect(row.price).toBe(66800);
-  });
-
-  it('确定性：同币种两次调用逐字节一致', () => {
-    expect(JSON.stringify(buildOverviewMatrix('usd'))).toBe(JSON.stringify(buildOverviewMatrix('usd')));
-  });
-
-  it('第四十四轮：竞品行带颜色清单（含对标 SKU）；外部 benchmark 参数生效', () => {
-    const pura = bands[1].models.find((m) => m.modelId === 'own-pura-90s-pro')!;
+    expect(pura.comps[0].ownRomrams).toEqual(['12+512 GB']);
+    // 独立直算：comp 集合 = RU 矩阵中该型号的全部竞品 SKU；ownRomrams = 映射到的我司配置并集
+    const benchRows = dimBenchmark.filter((b) => b.country_code === CC && b.own_model_id === 'own-huawei-pura-90s-pro-max');
+    expect(new Set(pura.comps.map((c) => c.skuId))).toEqual(new Set(benchRows.map((b) => b.competitor_sku_id)));
+    for (const c of pura.comps) {
+      expect(c.ownRomrams).toEqual(
+        [...new Set(benchRows.filter((b) => b.competitor_sku_id === c.skuId).map((b) => b.own_romram))].sort(),
+      );
+    }
+    // 竞品行带颜色清单：含自身代表 SKU（颜色次级菜单）
     const c0 = pura.comps[0];
     expect(c0.colors.length).toBeGreaterThanOrEqual(2);
     expect(c0.colors.some((c) => c.skuId === c0.skuId)).toBe(true);
-    const empty = buildOverviewMatrix('usd', []);
-    expect(empty[1].models.find((m) => m.modelId === 'own-pura-90s-pro')!.comps).toEqual([]);
   });
 
-  it('TIER_LABELS 六档齐全', () => {
-    expect(Object.keys(TIER_LABELS)).toEqual(['1000+', '800-1000', '600-800', '400-600', '200-400', '<200']);
+  it('未建对标的型号 comps 为空（RU 矩阵无 Mate X6 / Pura 80 Ultra 行）；benchmark 入参可整体置空', () => {
+    expect(findModel('own-huawei-mate-x6').comps).toEqual([]);
+    expect(findModel('own-huawei-pura-80-ultra').comps).toEqual([]);
+    const empty = buildOverviewMatrix('usd', [], null, DEFAULT_DATA_SCOPE);
+    expect(empty.flatMap((b) => b.models).find((m) => m.modelId === 'own-huawei-pura-90s-pro-max')!.comps).toEqual([]);
   });
 
-  it('第五十一轮：平台筛选进矩阵口径——OZON 基准不变；DNS/M.Video 按因子抬价（与看板 buildSeries 同源）', () => {
-    const puraOf = (m: ReturnType<typeof buildOverviewMatrix>) =>
-      m[1].models.find((x) => x.modelId === 'own-pura-90s-pro')!.rows.find((r) => r.romram.startsWith('12+256'))!;
-    const ozon = puraOf(buildOverviewMatrix('usd'));
-    const dns = puraOf(buildOverviewMatrix('usd', undefined, { platforms: ['DNS'], shopIds: [] }));
-    const mv = puraOf(buildOverviewMatrix('usd', undefined, { platforms: ['M.Video'], shopIds: [] }));
-    expect(ozon.price).toBe(835); // 基准平台无因子（旧口径不变）
-    // 折后价过 applyPlatform（+0.8% / +1.5% 因子 ± 0.3% 固定 seed 抖动）；RRP 官方阶梯不随平台
-    expect(dns.price! / ozon.price!).toBeGreaterThanOrEqual(1.005);
-    expect(dns.price! / ozon.price!).toBeLessThanOrEqual(1.011);
-    expect(mv.price! / ozon.price!).toBeGreaterThanOrEqual(1.012);
-    expect(mv.price! / ozon.price!).toBeLessThanOrEqual(1.018);
-    expect(dns.rrp).toBe(ozon.rrp);
-    // 迷你图序列同长同形，数值随平台
-    expect(dns.points.length).toBe(ozon.points.length);
-    expect(dns.points.some((p, i) => p.price !== ozon.points[i].price)).toBe(true);
-    // 多平台并选取均值口径与看板一致（介于 OZON 与 M.Video 之间）
-    const all = puraOf(buildOverviewMatrix('usd', undefined, { platforms: ['OZON', 'DNS', 'M.Video'], shopIds: [] }));
-    expect(all.price!).toBeGreaterThanOrEqual(ozon.price!);
-    expect(all.price!).toBeLessThanOrEqual(mv.price!);
+  it('生命周期（模型全 SKU 口径）：等于 lifecycleDeltaOf 独立计算；真实数据口径为「首销季 → 末季季均折后价(本币)」', () => {
+    const pura = findModel('own-huawei-pura-90s-pro-max');
+    const allSkuIds = dimProduct.filter((p) => p.model_id === 'own-huawei-pura-90s-pro-max').map((p) => p.sku_id);
+    expect(pura.lifecyclePct).toBe(lifecycleDeltaOf(allSkuIds, CC)!.pct);
+    // 锚点：上市周 RRP 83 299 ₽（202631）→ 末季季均 85 0xx ₽，现价略高于首销季（+1.7%）
+    expect(+(pura.lifecyclePct! * 100).toFixed(1)).toBe(1.7);
+    // 竞品型号不出生命周期
+    expect(findModel('cmp-apple-iphone-17-pro').lifecyclePct).toBeNull();
+  });
+
+  it('币种自洽：₽ 口径 = USD 口径 × 行内汇率（85 799 / 84.04 = 1 020.93）', () => {
+    const rub = buildOverviewMatrix('local', undefined, null, DEFAULT_DATA_SCOPE);
+    const usdRow = findModel('own-huawei-pura-90s-pro-max').rows[1];
+    const rubRow = rub.flatMap((b) => b.models).find((m) => m.modelId === 'own-huawei-pura-90s-pro-max')!.rows[1];
+    expect(rubRow.price).toBe(85799); // fact price_local 直读（本币不折算）
+    const fxRow = factPriceWeekly.find(
+      (r) => r.sku_id === usdRow.skuId && r.week_id === '202642' && r.channel_id === 'RU:dns:独立站',
+    )!;
+    expect(rubRow.price!).toBeCloseTo(usdRow.price! * fxRow.fx, 1); // 行内汇率折算往返自洽
+  });
+
+  it('确定性：同币种两次调用逐字节一致', () => {
+    expect(JSON.stringify(buildOverviewMatrix('usd', undefined, null, DEFAULT_DATA_SCOPE))).toBe(
+      JSON.stringify(buildOverviewMatrix('usd', undefined, null, DEFAULT_DATA_SCOPE)),
+    );
+  });
+
+  it('平台筛选进矩阵口径 = 真实平台最低价（无因子）：Mate X7 16+512 该 M.Video 低于默认 DNS', () => {
+    const rowOf = (m: ReturnType<typeof buildOverviewMatrix>) =>
+      m.flatMap((b) => b.models).find((x) => x.modelId === 'own-huawei-mate-x7')!.rows[0]; // 16+512 GB
+    const dns = rowOf(buildOverviewMatrix('usd', undefined, null, DEFAULT_DATA_SCOPE)); // 缺省 = RU 默认平台 DNS
+    const mv = rowOf(buildOverviewMatrix('usd', undefined, { platforms: ['M.Video'], shopIds: [] }, DEFAULT_DATA_SCOPE));
+    const all = rowOf(
+      buildOverviewMatrix('usd', undefined, { platforms: ['DNS', 'M.Video'], shopIds: [] }, DEFAULT_DATA_SCOPE),
+    );
+    // 锚（202642 fact 直算）：DNS 1 588.52 / M.Video 1 570.67 —— 真实数据无固定平台高低序
+    expect(dns.price).toBe(minUsdPriceAt('own-huawei-mate-x7__16-512gb__black', '202642', 'DNS'));
+    expect(mv.price).toBe(minUsdPriceAt('own-huawei-mate-x7__16-512gb__black', '202642', 'M.Video'));
+    expect(mv.price!).toBeLessThan(dns.price!);
+    // 多平台并选取渠道内最低价：并集 = 两平台最小
+    expect(all.price).toBe(Math.min(dns.price!, mv.price!));
+    // RRP 随行（真实抓取：各渠道行自带 rrp_local）——DNS 官网价=成交价 1 588.52；
+    // M.Video 划线价 159 999₽/84.04 = 1 903.84，成交价 131 999₽ → 折扣率 <0
+    expect(dns.rrp).toBe(1588.52);
+    expect(mv.rrp).toBe(1903.84);
+    expect(mv.price!).toBeCloseTo((131999 / 84.04), 2);
+    // 迷你图同长，数值随平台不同
+    expect(mv.points.length).toBe(dns.points.length);
+    expect(mv.points.some((p, i) => p.price !== dns.points[i].price)).toBe(true);
+  });
+
+  it('TIER_LABELS 跨产业平铺（dim_tier 全部档位），tierOrderOf(phone) 为六档阶梯', () => {
+    expect(tierOrderOf('phone')).toEqual(['<200', '200-400', '400-600', '600-800', '800-1000', '1000+']);
+    const allCodes = new Set(Object.values(dimTier.ladders).flat());
+    expect(Object.keys(TIER_LABELS).sort()).toEqual([...allCodes].sort());
+    expect(TIER_LABELS['1000+']).toBe('旗舰 · $1000+');
+  });
+
+  it('作用域：不支持的国家恒空；SA（另一启用国）可出矩阵', () => {
+    expect(buildOverviewMatrix('usd', undefined, null, { countryCode: 'CN', industry: 'phone' })).toEqual([]);
+    const sa = buildOverviewMatrix('usd', undefined, null, { countryCode: 'SA', industry: 'phone' });
+    expect(sa.length).toBeGreaterThan(0);
+    expect(sa.flatMap((b) => b.models).every((m) => m.isOwn || m.modelId.includes('cmp-'))).toBe(true);
   });
 });

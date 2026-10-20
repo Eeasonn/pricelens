@@ -15,6 +15,7 @@ import { DownOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { COMPETITOR_BRANDS } from '../../components/ProductCascader/tree';
 import { TIER_LABELS } from '../../dataModel/aggregate';
+import { getCurrentCountry } from '../../state/currentScope';
 import type { OverviewModel, OverviewRow, OverviewTierBand } from '../../dataModel/aggregate';
 import type { DimBenchmark } from '../../dataModel/types';
 import { getEffectiveBenchmark, notifyConfigChanged, saveBenchmark } from '../../state/configStore';
@@ -117,7 +118,7 @@ export default function BenchConfigModal(props: {
     const nextSort = currentRows.length === 0 ? 1 : Math.max(...currentRows.map((r) => r.sort)) + 1;
     writeGroup([
       ...currentRows,
-      { own_model_id: model.modelId, own_romram: rom.romram, competitor_sku_id: skuId, sort: nextSort, source: 'manual' },
+      { country_code: getCurrentCountry(), own_model_id: model.modelId, own_romram: rom.romram, competitor_sku_id: skuId, sort: nextSort, source: 'manual' },
     ]);
   };
   const removeComp = (skuId: string): void => {

@@ -4,3 +4,6 @@ dist/
 归档.zip
 .DS_Store
 .zcodeignore
+
+# 真实爬取源表（17.8MB，内部数据）不入库；由 pricelens/data/real 产物承载
+全量数据表.xlsx

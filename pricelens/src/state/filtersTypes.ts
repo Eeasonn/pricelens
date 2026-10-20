@@ -2,7 +2,7 @@
 // 筛选状态类型（§5 五框 + 图表侧写入字段）
 // 核心字段冻结；筛选负责人（Agent B）只许追加字段，不许改动/删除已有字段
 // ============================================================
-import type { AggMode, CurrencyMode, Granularity } from '../dataModel/types';
+import type { AggMode, CurrencyMode, Granularity, Industry } from '../dataModel/types';
 import type { AlertProductRule, AlertThresholds, AlertTypeSwitches } from '../dataModel/alerts';
 export type { AlertProductRule, AlertThresholds, AlertTypeSwitches };
 
@@ -15,12 +15,12 @@ export interface ProductSelection {
 
 export interface PlatformSelection {
   platforms: string[]; // 勾选的平台（勾平台=勾其下全部店铺）
-  shopIds: string[]; // 可下钻只勾具体店铺
+  shopIds: string[]; // 可下钻只勾具体渠道（channel_id = 国家:平台:店铺类型）
 }
 
 export interface FiltersState {
-  countryCode: string; // 仅 'RU' 可选
-  industry: 'phone'; // 平板/穿戴/音频置灰
+  countryCode: string; // 有数据的国家（dim_region.enabled）
+  industry: Industry; // 手机/平板/穿戴/音频（IoT/PC 有数据无矩阵）
   /** 主体模式（互斥）：'product' = 按产品勾选（现状）；'tier' = 按价格档位，
    *  图表自动集结该档全部我司配置 + 各自对标竞品（tierSubjectSelections） */
   subjectMode: 'product' | 'tier';
@@ -28,7 +28,7 @@ export interface FiltersState {
   tier: string | null;
   own: ProductSelection[]; // 我司产品（可多选同图）
   competitors: ProductSelection[]; // 默认视图带出我司默认产品的配置竞品（第二十五轮）；之后切换我司不自动带出，点「匹配竞品」重新匹配
-  platform: PlatformSelection | null; // null=未选=可抓取平台最低价口径（§3.1 决策②）
+  platform: PlatformSelection | null; // null=未选=该国默认电渠单平台口径；渠道内多店铺取最低在架价
   granularity: Granularity; // 默认 'month'（第二十五轮）
   /** 时间自适应（默认开）= 所选产品最早/最晚有效价格桶；上方筛选器手动修改即转为自定义。
    *  底部刷选条只负责在该极值范围内缩放查看，恢复自动时重新计算范围。 */

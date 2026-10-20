@@ -24,7 +24,7 @@ import { useFilters } from '../../state/FiltersContext';
 import { usePage } from '../../state/PageContext';
 import { navBus } from '../../state/navBus';
 import type { ProductSelection } from '../../state/filtersTypes';
-import { brandColorOf, color, motion, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
+import { brandColorOf, color, motion, radius, selectSoft, selectSoftInk, space, localCurrencySymbol } from '../../theme/tokens';
 
 export interface MarketMapProps {
   /** 全市场型号（我司+竞品矩阵全量）：摆位只看真实现价，不依赖竞品匹配关系（第七十七轮）。 */
@@ -70,7 +70,7 @@ function modelOnly(brand: string, modelName: string): string {
 const scrollBehavior = (): ScrollBehavior => (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
 const fmtPrice = (value: number, currency: CurrencyMode): string =>
-  `${currency === 'usd' ? '$' : '₽'}${Math.round(value).toLocaleString('en-US')}`;
+  `${currency === 'usd' ? '$' : localCurrencySymbol()}${Math.round(value).toLocaleString('en-US')}`;
 
 /** 型号从小到大排序键：容量为主（1TB=1024）、RAM 为辅 */
 function romramSizeKey(romram: string): number {

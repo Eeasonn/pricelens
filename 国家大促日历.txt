@@ -1,0 +1,67 @@
+区域	国家	电渠	大促名称	开始时间	结束时间	促销力度（高/中/低）
+欧洲	德国	线下Only	免税日	2月中旬		大促
+欧洲	德国	亚马逊	亚马逊春促	三月		大促
+欧洲	德国	ALL	复活节	五月		大促
+欧洲	德国	亚马逊	亚马逊prime day	六月底	七月初	大促
+欧洲	德国	ALL	返校季	7月	八月	中促
+欧洲	德国	亚马逊	亚马逊prime day 2	9月底	10月初	大促
+欧洲	德国	ALL	黑五	11月		大促
+欧洲	德国	ALL	圣诞	12月		大促
+欧亚	R国	ALL	情人节-小促	2月		小促
+欧亚	R国	ALL	情人节-中促	3月		中促
+欧亚	R国	ALL	BTS返校季-预热	7月		中促
+欧亚	R国	ALL	BTS返校季	8月	9月	大促
+欧亚	R国	ALL	新年季	12月	1月	大促
+中东非	沙特		斋月大促 Ramadan	2月	3 月	
+中东非	沙特		开斋节  Eid Al-Fitr	3 月初	4月底	大促
+中东非	沙特		宰牲节  Eid Al-Adha	6月	7月	大促
+中东非	沙特		返校季  Back to School	8月初	9月底	大促
+中东非	沙特		沙特国庆日  Saudi National Day	9 月		
+中东非	沙特		白色周五  White Friday / Noon 黄五 Yellow Friday	11 月		大促
+中东非	沙特		12.12  年终促	12 月		
+中东非	沙特		节礼日  + 年终清仓	12 月底		
+中东非	南非		开斋节  Eid Al-Fitr	3 月初	4月底	大促
+中东非	南非		宰牲节  Eid Al-Adha	6月	7月	大促
+中东非	南非		返校季  Back to School	8月初	9月底	大促
+中东非	南非		白色周五  White Friday / Noon 黄五 Yellow Friday	11 月		大促
+中东非	南非	Takealot 	Fire Sale	2月底		
+中东非	南非	Takealot 	Birthday	5月底		
+中东非	南非	Takealot 	Takealotmore Days	7月底		
+亚太	马来西亚	Shopee+Lazada	元旦 1.1 Sale	1月初	1月中	低
+亚太	马来西亚	Shopee+Lazada	农历新年 Chinese New Year (2.17-18)	2月中	2月中下	中
+亚太	马来西亚	Shopee+Lazada	斋月&开斋节购物季 Ramadan-Raya (Aidilfitri 3.21-22)	2月中下	3月中	高
+亚太	马来西亚	Shopee+Lazada	5.5 Mega Sale	5月初	5月初	中
+亚太	马来西亚	Shopee+Lazada	6.6 Super Sale	6月初	6月初	中
+亚太	马来西亚	Shopee+Lazada	7.7 Mid-Year Sale	7月初	7月初	中
+亚太	马来西亚	Shopee+Lazada	8.8 Mega Sale + 国庆 Merdeka (8.31)	8月初	8月初	中
+亚太	马来西亚	Shopee+Lazada	9.9 Super Shopping Day	9月初	9月中	高
+亚太	马来西亚	Shopee+Lazada	10.10 Brands Festival	10月初	10月中	中
+亚太	马来西亚	Shopee+Lazada	屠妖节 Deepavali (11.8)	11月初	11月初	中
+亚太	马来西亚	Shopee+Lazada	11.11 Big Sale	11月初	11月中下	高
+亚太	马来西亚	Shopee+Lazada	黑五/网一 BFCM (11.27-30)	11月底	11月底	中
+亚太	马来西亚	Shopee+Lazada	12.12 Birthday Sale	12月初	12月中下	高
+亚太	马来西亚	Shopee+Lazada	圣诞节	12月初	12月中下	中
+亚太	泰国	Shopee+Lazada	元旦 1.1	1月初	1月中	低
+亚太	泰国	Shopee+Lazada	农历新年 Chinese New Year	2月中	2月中下	中
+亚太	泰国	Shopee+Lazada	宋干节 Songkran (4.13-15) 商场促销	4月中	4月底	中
+亚太	泰国	Shopee+Lazada	开学季（5.16开学）	4月底	5月底	中
+亚太	泰国	Shopee+Lazada	6.6 Mid-Year Sale	6月初	6月初	中
+亚太	泰国	Shopee+Lazada	Amazing Thailand Grand Sale 政府购物节	6月底	8月初	中
+亚太	泰国	Shopee+Lazada	8.8 + 母亲节 (8.12)	8月中	8月底	中
+亚太	泰国	Shopee+Lazada	9.9 Super Shopping Day	9月初	9月中	高
+亚太	泰国	Shopee+Lazada	水灯节 Loy Krathong (约11.23满月)	11月初	11月中下	低
+亚太	泰国	Shopee+Lazada	11.11（预售一般11.1起）	11月初	11月中下	高
+亚太	泰国	Shopee+Lazada	12.12 + 父亲节(12.5)/圣诞新年	12月初	12月中下	高
+亚太	菲律宾	Shopee+Lazada	元旦 1.1	1月初	1月中	低
+亚太	菲律宾	Shopee+Lazada	2.2 情人节 + 农历新年(2.17)	2月中	2月中下	中
+亚太	菲律宾	Shopee+Lazada	3.3 + Lazada 生日大促(3.27-31)	3月初	3月中	中
+亚太	菲律宾	Shopee+Lazada	圣周 Holy Week (4.2-4.4)	4月初	4月中下	低
+亚太	菲律宾	Shopee+Lazada	5.5 Brand Festival	5月初	5月中	中
+亚太	菲律宾	Shopee+Lazada	返校季 + 6.6 Mid-Year Sale	4月底	5月底	中
+亚太	菲律宾	Shopee+Lazada	8.8 Mega Sale	8月中	8月底	低
+亚太	菲律宾	Shopee+Lazada	9.9 Super Sale	9月初	9月中	高
+亚太	菲律宾	Shopee+Lazada	10.10 Brands Festival	10月初	10月中	中
+亚太	菲律宾	Shopee+Lazada	11.11 Mega Pamasko	11月初	11月中下	高
+亚太	菲律宾	Shopee+Lazada	黑五 BFCM (11.27-30)	11月底	11月底	中
+亚太	菲律宾	Shopee+Lazada	12.12 Year-End Sale	12月中	12月底	高
+亚太	菲律宾	Shopee+Lazada	圣诞 Simbang Gabi/Noche Buena	12月中	12月底	中

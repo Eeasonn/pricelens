@@ -3,7 +3,7 @@
 // 两类断言：
 // 1) 不变量/语义测试——手造最小 fixture，逐条断言边界行为（端点 S/E/in/out、
 //    避让 P0 必放、断轴分段、档位裁剪、option 形状、几何退化）；
-// 2) 快照金测——真实造数（buildSeries 固定查询，确定性 PRNG）喂出的
+// 2) 快照金测——真实数据（buildSeries 固定查询，确定性纯函数）喂出的
 //    labelPlan/option/刻度，toMatchSnapshot 钉死，任何行为漂移即红。
 // ============================================================
 import { describe, expect, it } from 'vitest';
@@ -809,16 +809,18 @@ describe('panWindow（第十九轮轨道边界版）', () => {
   });
 });
 
-// ---------------- 真实造数金测（快照） ----------------
-// buildSeries 固定查询（确定性 PRNG）→ 全链路纯计算输出钉快照；
+// ---------------- 真实数据金测（快照） ----------------
+// buildSeries 固定查询（真实爬取数据，确定性纯函数）→ 全链路纯计算输出钉快照；
 // 任何图表行为漂移（有意或回归）都会改快照 → diff 可审。
 
-describe('真实造数快照（seed 20261009）', () => {
+describe('真实数据快照（ingest 2026-10-20）', () => {
   // 延迟 import：让上面的单测不依赖数据层也能跑（数据层装载含解压）
   it('labelPlan + option + 刻度 + 端点 全链路快照（USD/月/两价）', async () => {
     const { buildSeries } = await import('../../../dataModel/aggregate');
     const { dimProduct } = await import('../../../data');
-    // modelId = sku_id 前缀（`own-xxx__12+256GB__Black` 的第一段）；romram 形如 "12+256 GB"
+    // modelId = sku_id 前缀（`own-xxx__12-256gb__Black` 的第一段）；romram 形如 "12+256 GB"
+    // 动态选取 = RU phone 全程在采的两个锚系列（HUAWEI nova 14 / APPLE iPhone 16 Pro Max，12+256 首色），
+    // 窗口 202601..202609 落在 dim_time 实际月份 202605..202609，五个桶全部有值。
     const modelIdOf = (skuId: string): string => skuId.split('__')[0];
     const normRom = (s: string): string => s.replace(/\s+/g, '');
     const ownSku = dimProduct.find((p) => p.is_own && normRom(p.romram) === '12+256GB')!;
@@ -978,24 +980,22 @@ describe('buildPromoBands（大促背景带）', () => {
 
 describe('bucketSpans（helpers：桶覆盖区间）', () => {
   it('周桶 = 锚周三 ±3 天', () => {
+    // dim_time 实锚：202619 周三 = 2026-05-06；202620 周三 = 2026-05-13
     const spans = bucketSpans('week', [
-      { id: '202546', xLabel: '11-12' },
-      { id: '202547', xLabel: '11-19' },
+      { id: '202619', xLabel: '05-06' },
+      { id: '202620', xLabel: '05-13' },
     ]);
-    expect(spans[0]).toEqual({ start: '2025-11-09', end: '2025-11-15' });
-    expect(spans[1].start).toBe('2025-11-16');
+    expect(spans[0]).toEqual({ start: '2026-05-03', end: '2026-05-09' });
+    expect(spans[1].start).toBe('2026-05-10');
   });
 
-  it('月桶 = 首末周周三 ±3 天（结构断言，真实跨度由造数侧覆盖）', () => {
+  it('月桶 = 首末周周三 ±3 天（dim_time 实锚：202605 = 202619..202622 / 202606 = 202623..202626）', () => {
     const spans = bucketSpans('month', [
-      { id: '202511', xLabel: '202511' },
-      { id: '202512', xLabel: '202512' },
+      { id: '202605', xLabel: '202605' },
+      { id: '202606', xLabel: '202606' },
     ]);
-    expect(spans).toHaveLength(2);
-    for (const s of spans) {
-      expect(s.start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(s.start <= s.end).toBe(true);
-    }
+    expect(spans[0]).toEqual({ start: '2026-05-03', end: '2026-05-30' }); // 05-06−3 .. 05-27+3
+    expect(spans[1]).toEqual({ start: '2026-05-31', end: '2026-06-27' }); // 06-03−3 .. 06-24+3
   });
 });
 

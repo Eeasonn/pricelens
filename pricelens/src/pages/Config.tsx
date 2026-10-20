@@ -6,29 +6,28 @@
 // ① 上一代关系（原②）：行 = 全部我司型号（型号级，与 dim_product.prev_model_id
 //    同口径），下拉选上一代型号（候选 = 上市更早的我司型号）；默认读生效关系
 //    （manual 优先 / dim_product auto 兜底），改后差异存 LPL3.config.prevGen
-// ② 参考汇率（原③）：USD/RUB InputNumber，默认 80，存 LPL3.config.fx
+// ② 汇率口径：只读——真实数据每行自带采集时汇率，USD 值按行折算；此处展示当前国家本币的月度中位汇率
 // ③ 自定义档位管理（原④）：列出 LPL3.config.customTiers（图表侧写入），支持删除
-// ④ 大促日历（原⑤，第四十七轮）：只读展示 dim_promo 的起始时间与促销深度——看板大促
-//    带/事件卡的口径来源在此可见
+// ④ 大促日历：只读展示当前国家 dim_promo 的起始时间与促销深度——看板大促带/事件卡的口径来源
 // 保存后 dispatchEvent(CONFIG_CHANGED_EVENT) → 主页立即生效
 // ============================================================
 import { useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Button, Empty, InputNumber, message, Select, Tag, Tooltip } from 'antd';
+import { Button, Empty, message, Select, Tag, Tooltip } from 'antd';
 import PageHeader from '../components/PageHeader';
 import {
   autoPrevModelId,
   effectivePrevModelId,
   getCustomTiers,
-  getFxRate,
   notifyConfigChanged,
   saveCustomTiers,
-  saveFx,
   savePrevGenOverrides,
   type CustomTierPreset,
 } from '../state/configStore';
-import { dimProduct, dimPromo } from '../data';
+import { currencyOfCountry, dimFx, dimProduct, dimPromo } from '../data';
 import { modelIdOf } from '../components/ProductCascader/tree';
+import { useFilters } from '../state/FiltersContext';
+import { getLocalCurrency } from '../state/fx';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
 
 // ---------------- ② 上一代关系（型号级，与 dim_product.prev_model_id 同口径） ----------------
@@ -80,8 +79,17 @@ export default function Config() {
   const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])),
   );
-  const [fx, setFx] = useState<number>(getFxRate);
   const [tiers, setTiers] = useState<CustomTierPreset[]>(getCustomTiers);
+  const { state } = useFilters();
+  const localCurrency = currencyOfCountry(state.countryCode);
+  const fxRows = useMemo(
+    () => dimFx.filter((f) => f.currency === localCurrency).sort((a, b) => a.month_id.localeCompare(b.month_id)),
+    [localCurrency],
+  );
+  const promos = useMemo(
+    () => dimPromo.filter((p) => p.country_code === state.countryCode).sort((a, b) => a.start_date.localeCompare(b.start_date)),
+    [state.countryCode],
+  );
 
   const saveAll = () => {
     // ① 上一代关系 → LPL3.config.prevGen（只存与 auto 的差异；无差异 = 清除手动维护）
@@ -94,8 +102,7 @@ export default function Config() {
       }
       savePrevGenOverrides(overrides);
     }
-    // ② 参考汇率 → LPL3.config.fx；③ 自定义档位 → LPL3.config.customTiers
-    saveFx(fx);
+    // ③ 自定义档位 → LPL3.config.customTiers
     saveCustomTiers(tiers);
     notifyConfigChanged();
     message.success('配置已保存，主页已生效');
@@ -182,21 +189,26 @@ export default function Config() {
             )}
           </Block>
 
-          {/* ② 参考汇率 */}
-          <Block title="参考汇率">
-            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
-              <InputNumber
-                min={1}
-                max={10000}
-                step={0.5}
-                value={fx}
-                onChange={(v) => setFx(typeof v === 'number' && Number.isFinite(v) ? v : 80)}
-                style={{ width: 160 }}
-              />
-              <span className="tnum" style={{ fontSize: fontSize.bodySm, color: color.body }}>
-                USD/RUB
+          {/* ② 汇率口径（只读）：真实数据按行折算，这里展示本币月度中位汇率 */}
+          <Block
+            title="汇率口径"
+            extra={
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>
+                USD 价格 = 本币价格 ÷ 采集时汇率（逐行）；下表为 {localCurrency} 各月中位数
               </span>
-            </div>
+            }
+          >
+            {fxRows.length ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.sm, fontSize: fontSize.bodySm }}>
+                {fxRows.map((f) => (
+                  <span key={f.month_id} className="tnum" style={{ color: color.body, padding: '2px 10px', background: color.canvasSoft, borderRadius: radius.pill }}>
+                    {f.month_id.slice(0, 4)}-{f.month_id.slice(4)} · 1 USD = {f.per_usd} {f.currency}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该国暂无汇率记录" />
+            )}
           </Block>
 
           {/* ③ 自定义档位管理（图表侧写入的档位预设） */}
@@ -210,7 +222,7 @@ export default function Config() {
                   >
                     <span style={{ color: color.ink, minWidth: 160 }}>{t.name}</span>
                     <span className="tnum" style={{ color: color.body }}>
-                      {t.min} – {t.max} · {t.currency === 'usd' ? 'USD' : '本币（RUB）'}
+                      {t.min} – {t.max} · {t.currency === 'usd' ? 'USD' : `本币（${getLocalCurrency()}）`}
                     </span>
                     <Button
                       size="small"
@@ -228,18 +240,20 @@ export default function Config() {
             )}
           </Block>
 
-          {/* ④ 大促日历（第四十七轮）：起始时间 + 促销深度在配置界面可见（dim_promo 只读） */}
+          {/* ④ 大促日历：当前国家的起始时间 + 促销深度（dim_promo 只读） */}
           <Block
             title="大促日历"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-                促销日历口径 · 看板「大促档期」带与事件卡的来源
+                当前国家促销日历 · 看板「大促档期」带与事件卡的来源
               </span>
             }
           >
+            {promos.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该国暂无大促日历" />
+            ) : null}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: space.sm }}>
-              {[...dimPromo]
-                .sort((a, b) => a.start_date.localeCompare(b.start_date))
+              {promos
                 .map((p) => {
                   const tone =
                     p.depth_hint === '深'

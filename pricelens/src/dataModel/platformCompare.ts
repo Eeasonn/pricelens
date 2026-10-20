@@ -1,18 +1,20 @@
 // ============================================================
-// 单产品多平台对比纯计算层（第五十三轮）：同一 SKU 组的价格按平台展开。
-// 口径：基准价 = fact OZON 基准组内多色均值（与 buildSeries/alerts 同源）；
-// 各平台独立价 = 基准 × 平台因子+抖动（platformPriceSpread，与 applyPlatform 同源——
-// 多平台并选均值口径互不影响）。周度全horizon（不裁窗口，弹窗侧自行缩放）。
-// 确定性纯函数：同入参两次调用输出逐字节一致；金测锚定。
+// 单产品多平台对比纯计算层：同一 SKU 组的真实价格按平台展开（分国）。
+// 口径：各平台 = 该平台全部渠道/店铺内最低在架价（platformPriceSpread 同源）；
+// 周度全 horizon（不裁窗口，弹窗侧自行缩放）。确定性纯函数。
 // ============================================================
-import { dimChannel, dimProduct, dimTime, factPriceWeekly } from '../data';
+import { dimChannel, dimProduct, dimTime } from '../data';
 import type { CurrencyMode } from './types';
 import { platformPriceSpread } from './aggregate';
-import { displayLocalValue } from './currency';
-import { getFxRate } from '../state/fx';
+import { getCurrentCountry } from '../state/currentScope';
 
-/** 平台稳定序（dimChannel 插入序：OZON → DNS → M.Video） */
-export const PLATFORM_ORDER: string[] = [...new Set(dimChannel.map((c) => c.platform))];
+/** 某国平台稳定序（dimChannel 插入序 = 行数降序） */
+export function platformOrderOf(countryCode: string): string[] {
+  return [...new Set(dimChannel.filter((c) => c.country_code === countryCode).map((c) => c.platform))];
+}
+
+/** 兼容旧引用：当前分析国的平台序 */
+export const PLATFORM_ORDER: string[] = platformOrderOf(getCurrentCountry());
 
 export interface PlatformComparePoint {
   weekId: string; // YYYYWW
@@ -21,12 +23,12 @@ export interface PlatformComparePoint {
 
 export interface PlatformCompareSeries {
   platform: string;
-  points: (number | null)[]; // 与 weeks 一一对应（该平台折后价，展示币种取整）
+  points: (number | null)[]; // 与 weeks 一一对应（该平台折后价，展示币种取整；该周无该平台 = null）
 }
 
 export interface PlatformCompareResult {
   weeks: PlatformComparePoint[];
-  series: PlatformCompareSeries[]; // PLATFORM_ORDER 序
+  series: PlatformCompareSeries[];
   latest: {
     weekId: string;
     label: string;
@@ -37,74 +39,57 @@ export interface PlatformCompareResult {
 }
 
 /**
- * 构建某型号某 ROM 的多平台周度价目（我司/竞品 SKU 组都支持；竞品用于跨品牌比价场景）。
- * @param skuIds 组内 SKU（OverviewRow.skuId 所在颜色组；传单个代表 SKU 亦可）
+ * 构建某型号某配置的多平台周度价目（组内多色取各平台最低）。
+ * @param skuIds 组内 SKU（传单个代表 SKU 亦可）
  */
 export function buildPlatformCompare(
   modelId: string,
   romram: string,
   skuIds: string[],
   currency: CurrencyMode,
+  countryCode: string = getCurrentCountry(),
 ): PlatformCompareResult {
-  const fxRate = getFxRate();
   const norm = (s: string) => s.replace(/\s+/g, '');
   const group = dimProduct
     .filter((p) => p.sku_id.startsWith(`${modelId}__`) && norm(p.romram) === norm(romram))
     .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
   const members = group.length > 0 ? group.map((p) => p.sku_id) : skuIds;
-  const repSku = members[0] ?? '';
-
-  // fact 索引（小数据集直接线性建；与 alerts.factCellIndex 同构但独立，保持本层无内部状态）
-  const cell = new Map<string, Map<string, { rub: number | null }>>();
-  for (const row of factPriceWeekly) {
-    if (!members.includes(row.sku_id)) continue;
-    let byWeek = cell.get(row.sku_id);
-    if (!byWeek) {
-      byWeek = new Map();
-      cell.set(row.sku_id, byWeek);
-    }
-    byWeek.set(row.week_id, { rub: row.discounted_price_rub });
-  }
+  const platforms = platformOrderOf(countryCode);
 
   const timeAsc = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : 1));
   const weeks: PlatformComparePoint[] = [];
-  const byPlatform: number[][] = PLATFORM_ORDER.map(() => []);
+  const byPlatform: (number | null)[][] = platforms.map(() => []);
   let latest: PlatformCompareResult['latest'] = null;
 
   for (const w of timeAsc) {
-    let sum = 0;
-    let n = 0;
+    const minByPlatform = new Map<string, number>();
     for (const sku of members) {
-      const c = cell.get(sku)?.get(w.week_id);
-      const v = c == null ? null : displayLocalValue(c.rub, currency, fxRate);
-      if (v != null) {
-        sum += v;
-        n++;
+      for (const s of platformPriceSpread(sku, w.week_id, countryCode, currency)) {
+        const cur = minByPlatform.get(s.platform);
+        if (cur == null || s.price < cur) minByPlatform.set(s.platform, s.price);
       }
     }
-    if (n === 0) {
-      // 缺采周：整周跳过（弹窗 x 轴不生成空档；与总览迷你图直连口径不同，此处聚焦可比周）
-      continue;
-    }
-    const base = sum / n;
-    const spread = platformPriceSpread(base, repSku, w.week_id);
-    const byPrice = new Map(spread.map((s) => [s.platform, s.price]));
+    if (minByPlatform.size === 0) continue; // 缺采周：整周跳过
     weeks.push({ weekId: w.week_id, label: w.week_wed_date.slice(5) });
-    PLATFORM_ORDER.forEach((p, i) => byPlatform[i].push(Math.round(byPrice.get(p) ?? base)));
-    const low = spread[0];
-    const high = spread[spread.length - 1];
+    platforms.forEach((p, i) => {
+      const v = minByPlatform.get(p);
+      byPlatform[i].push(v == null ? null : Math.round(v));
+    });
+    const sorted = [...minByPlatform.entries()].sort((a, b) => a[1] - b[1]);
+    const [lowP, lowV] = sorted[0];
+    const [highP, highV] = sorted[sorted.length - 1];
     latest = {
       weekId: w.week_id,
       label: w.week_wed_date.slice(5),
-      gapPct: low.price > 0 ? high.price / low.price - 1 : 0,
-      high: { platform: high.platform, price: Math.round(high.price) },
-      low: { platform: low.platform, price: Math.round(low.price) },
+      gapPct: lowV > 0 ? highV / lowV - 1 : 0,
+      high: { platform: highP, price: Math.round(highV) },
+      low: { platform: lowP, price: Math.round(lowV) },
     };
   }
 
   return {
     weeks,
-    series: PLATFORM_ORDER.map((p, i) => ({ platform: p, points: byPlatform[i] })),
+    series: platforms.map((p, i) => ({ platform: p, points: byPlatform[i] })),
     latest,
   };
 }

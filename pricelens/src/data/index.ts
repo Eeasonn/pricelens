@@ -1,9 +1,8 @@
 // ============================================================
-// 造数产物（scripts/gen-data.mjs → src/data/*）唯一定点装载层
-// 数据负责人（Agent A）：仅用真实产物覆盖 JSON 文件内容 / 可增加导出；
-// 不得改动下列导出名与类型断言。
-// fact 以 gzip+base64 内嵌（gen-data.mjs 同步产出 .b64.txt），模块加载时同步解压——
-// 单文件交付体积 5.7MB→268KB；.json 原件仅供 verify.mjs 与人工核对，不进 bundle。
+// 数据装载层（唯一定点）：scripts/ingest_real.py 产物 → 维表 JSON + 事实列式包
+// 事实包 = 列式 JSON（周/SKU/渠道走索引、长文本走字典）→ gzip → base64 内嵌；
+// 模块加载时同步解压并展开为 FactPriceWeekly 行对象（8.5 万行，约 100ms）。
+// 补录：把同 29 列的增量 xlsx 放到 data/real/incoming/ 后 `npm run ingest` 即可全量重建。
 // ============================================================
 import { gunzipSync, strFromU8 } from 'fflate';
 import type {
@@ -13,6 +12,7 @@ import type {
   DimProduct,
   DimPromo,
   DimRegion,
+  DimTier,
   DimTime,
   FactPriceWeekly,
 } from '../dataModel/types';
@@ -23,7 +23,8 @@ import timeJson from './dim_time.json';
 import fxJson from './dim_fx.json';
 import promoJson from './dim_promo.json';
 import benchmarkJson from './dim_benchmark.json';
-import factGzipB64 from './fact_price_weekly_gzip.b64.txt?raw';
+import tierJson from './dim_tier.json';
+import packB64 from './fact_pack_gzip.b64.txt?raw';
 
 export const dimRegion = regionJson as unknown as DimRegion[];
 export const dimProduct = productJson as unknown as DimProduct[];
@@ -32,11 +33,21 @@ export const dimTime = timeJson as unknown as DimTime[];
 export const dimFx = fxJson as unknown as DimFx[];
 export const dimPromo = promoJson as unknown as DimPromo[];
 export const dimBenchmark = benchmarkJson as unknown as DimBenchmark[];
+export const dimTier = tierJson as unknown as DimTier;
 
-/** 参考汇率（₽/$）= dim_fx 终值（gen-data REF_FX 同源，第二十轮起 fact 折算口径）。
- *  图表档位锚定 USD 用（helpers.perUsdOf，第二十三轮）；未来加币种时同型扩展：
- *  每币种一个对 USD 的参考比价（如 dim_fx 增列或换结构），本导出改为查表。 */
-export const localPerUsd = dimFx[dimFx.length - 1]?.usd_rub_avg ?? 80;
+interface FactPack {
+  v: number;
+  weeks: string[];
+  skus: string[];
+  channels: string[];
+  dict: { url: string[]; shot: string[]; inst: (string | null)[]; promo: (string | null)[]; seller: string[] };
+  cols: {
+    w: number[]; s: number[]; h: number[];
+    rrp: (number | null)[]; op: (number | null)[]; lp: (number | null)[]; p: (number | null)[];
+    fx: number[]; do: (number | null)[]; dd: (number | null)[]; da: (number | null)[];
+    b: number[]; inst: number[]; promo: number[]; url: number[]; shot: number[]; seller: number[]; t: string[];
+  };
+}
 
 function b64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -45,6 +56,57 @@ function b64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-export const factPriceWeekly = JSON.parse(
-  strFromU8(gunzipSync(b64ToBytes(factGzipB64.trim()))),
-) as unknown as FactPriceWeekly[];
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
+function decodePack(pack: FactPack): FactPriceWeekly[] {
+  const { weeks, skus, channels, dict, cols } = pack;
+  const n = cols.w.length;
+  const out: FactPriceWeekly[] = new Array(n);
+  const ccOfChannel = channels.map((c) => c.split(':')[0]);
+  for (let i = 0; i < n; i++) {
+    const fx = cols.fx[i];
+    const rrp = cols.rrp[i];
+    const price = cols.p[i];
+    out[i] = {
+      week_id: weeks[cols.w[i]],
+      sku_id: skus[cols.s[i]],
+      country_code: ccOfChannel[cols.h[i]],
+      channel_id: channels[cols.h[i]],
+      seller: dict.seller[cols.seller[i]],
+      rrp_local: rrp,
+      official_price_local: cols.op[i],
+      list_price_local: cols.lp[i],
+      price_local: price,
+      fx,
+      rrp_usd: rrp == null ? null : round2(rrp / fx),
+      price_usd: price == null ? null : round2(price / fx),
+      discount_official: cols.do[i],
+      discount_display: cols.dd[i],
+      discount_actual: cols.da[i],
+      bundle: cols.b[i] === 1,
+      installment: dict.inst[cols.inst[i]] ?? null,
+      promo_text: dict.promo[cols.promo[i]] ?? null,
+      url: dict.url[cols.url[i]],
+      screenshot: dict.shot[cols.shot[i]],
+      crawled_at: cols.t[i],
+      crawl_status: 'ok',
+    };
+  }
+  return out;
+}
+
+export const factPriceWeekly: FactPriceWeekly[] = decodePack(
+  JSON.parse(strFromU8(gunzipSync(b64ToBytes(packB64.trim())))) as FactPack,
+);
+
+/** 币种 → 最新月份汇率（本币 / USD）；未知币种回 1（即视为 USD） */
+const latestFxByCurrency = new Map<string, number>();
+for (const f of [...dimFx].sort((a, b) => (a.month_id < b.month_id ? -1 : 1))) latestFxByCurrency.set(f.currency, f.per_usd);
+export function latestPerUsd(currency: string): number {
+  return latestFxByCurrency.get(currency) ?? 1;
+}
+
+/** 国家 → 本币代码（无数据国家回 'USD'） */
+export function currencyOfCountry(countryCode: string): string {
+  return dimRegion.find((r) => r.country_code === countryCode)?.currency ?? 'USD';
+}

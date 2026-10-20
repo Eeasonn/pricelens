@@ -1,39 +1,29 @@
-// 参考汇率读取层。保持无 UI/数据聚合依赖，供图表、总览、预警和配置页共享。
-import { LPL } from './lplKeys';
+// ============================================================
+// 本币口径注册（2026-10-20 真实数据接入起）：
+// 真实事实行自带行内汇率，USD 值在装载层按行折算，不再存在「用户参考汇率」；
+// 本模块只维护「当前国家本币」这一个展示态，供图表 Y 轴档位锚定（perUsdOf）与金额格式化
+// （formatPrice 本币符号）读取。FiltersProvider 在国家变更时写入。
+// ============================================================
+import { currencyOfCountry, latestPerUsd } from '../data';
 
-export const DEFAULT_FX_RATE = 80;
+let currentLocalCurrency = 'RUB';
 
-function storage(): Storage | null {
-  try {
-    // The app runs in a browser; avoiding Node's experimental global localStorage
-    // keeps pure data-model tests side-effect free and warning-free.
-    return typeof window === 'undefined' ? null : window.localStorage;
-  } catch {
-    return null;
-  }
+/** 当前国家本币（ISO 4217） */
+export function getLocalCurrency(): string {
+  return currentLocalCurrency;
 }
 
-function readFx(): unknown {
-  try {
-    const store = storage();
-    if (!store) return null;
-    const raw = store.getItem(LPL.cfgFx);
-    return raw == null ? null : JSON.parse(raw);
-  } catch {
-    return null;
-  }
+/** 国家切换时由 FiltersProvider 调用 */
+export function setLocalCurrencyByCountry(countryCode: string): void {
+  currentLocalCurrency = currencyOfCountry(countryCode);
 }
 
-/** 当前用户参考汇率（本币 / USD），非法或未配置时回到 demo 默认值。 */
+/** 每 1 USD 兑当前本币（最新月份中位数）；USD 本币国家回 1 */
 export function getFxRate(): number {
-  const value = readFx();
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : DEFAULT_FX_RATE;
+  return latestPerUsd(currentLocalCurrency);
 }
 
-export function saveFx(rate: number): void {
-  try {
-    storage()?.setItem(LPL.cfgFx, JSON.stringify(rate));
-  } catch {
-    // 存储不可用时仅保持当前会话的默认口径。
-  }
+/** 指定币种每 1 USD 兑本币 */
+export function perUsdOfCurrency(currency: string): number {
+  return latestPerUsd(currency);
 }

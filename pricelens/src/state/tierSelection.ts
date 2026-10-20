@@ -6,6 +6,7 @@
 import { dimProduct } from '../data';
 import { getEffectiveBenchmark } from './configStore';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
+import { getCurrentCountry } from './currentScope';
 import type { FiltersState, ProductSelection } from './filtersTypes';
 
 const modelIdOfSku = (skuId: string): string => skuId.split('__')[0];
@@ -14,11 +15,12 @@ const modelIdOfSku = (skuId: string): string => skuId.split('__')[0];
 export function tierSubjectSelections(
   industry: FiltersState['industry'],
   tier: string,
+  countryCode: string = getCurrentCountry(),
 ): { own: ProductSelection[]; competitors: ProductSelection[] } | null {
   const own: ProductSelection[] = [];
   const ownKeys = new Set<string>();
   for (const p of dimProduct) {
-    if (!p.is_own || p.industry !== industry || p.tier_code !== tier) continue;
+    if (!p.is_own || p.industry !== industry || p.tier_code !== tier || !p.countries.includes(countryCode)) continue;
     const key = `${modelIdOfSku(p.sku_id)}|${p.romram}`;
     if (ownKeys.has(key)) continue;
     ownKeys.add(key);
@@ -31,6 +33,7 @@ export function tierSubjectSelections(
   const competitors: ProductSelection[] = [];
   const compKeys = new Set<string>();
   for (const b of getEffectiveBenchmark()) {
+    if (b.country_code != null && b.country_code !== countryCode) continue;
     if (!ownKeySet.has(`${b.own_model_id}|${b.own_romram}`)) continue;
     const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
     if (!p) continue;

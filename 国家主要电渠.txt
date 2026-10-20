@@ -1,0 +1,15 @@
+区域	国家	核心电渠		
+欧亚	R国	DNS		
+欧洲	波兰	Media expert	Allegro	
+欧洲	德国	亚马逊		
+欧洲	保加利亚	Yettel 手机	Technopolis其它	
+亚太	马来	Shopee	Lazada	
+亚太	泰国	Shopee	Lazada	
+亚太	菲律宾	Shopee	Lazada	
+亚太	印尼	Shopee	Lazada	Tokopedia
+拉美	墨西哥	Mercado Libre	Amazon	
+拉美	智利	Mercado Libre		
+拉美	秘鲁	Mercado Libre		
+拉美	哥伦比亚	Mercado Libre		
+拉美	巴西	Mercado Libre	Shopee	Amazon
+拉美	阿根廷	Mercado Libre

@@ -17,10 +17,10 @@ import {
 import type { ProductSelection } from '../../state/filtersTypes';
 import type { CurrencyMode, DimProduct } from '../../dataModel/types';
 import { CascadePanel, type CascadeRowItem } from '../ProductCascader';
-import { getFxRate } from '../../state/fx';
 import { getEffectiveBenchmark } from '../../state/configStore';
 import { dimProduct } from '../../data';
-import { TIER_LABELS } from '../../dataModel/aggregate';
+import { TIER_LABELS, tierOrderOf } from '../../dataModel/aggregate';
+import { INDUSTRY_LABELS, INDUSTRY_ORDER, industriesOfCountry } from '../../dataModel/scope';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 
 // ---------------- ① 产业下拉（反馈 2.1） ----------------
@@ -30,7 +30,13 @@ function lockedOption(text: string): ReactNode {
 }
 
 export function IndustryControl() {
-  const { state } = useFilters();
+  const { state, actions } = useFilters();
+  const available = useMemo(() => new Set(industriesOfCountry(state.countryCode)), [state.countryCode]);
+  const options = INDUSTRY_ORDER.map((ind) =>
+    available.has(ind)
+      ? { value: ind, label: INDUSTRY_LABELS[ind] }
+      : { value: ind, label: lockedOption(INDUSTRY_LABELS[ind]), disabled: true },
+  );
   return (
     <Select
       id="scope-industry"
@@ -38,15 +44,8 @@ export function IndustryControl() {
       value={state.industry}
       style={{ width: '100%' }}
       popupMatchSelectWidth={false}
-      onChange={() => {
-        /* 平板/穿戴/音频置灰（§5.2①），手机唯一可选 */
-      }}
-      options={[
-        { value: 'phone', label: '手机' },
-        { value: 'pad', label: lockedOption('平板'), disabled: true },
-        { value: 'wear', label: lockedOption('穿戴'), disabled: true },
-        { value: 'audio', label: lockedOption('音频'), disabled: true },
-      ]}
+      onChange={(v) => actions.set({ industry: v as typeof state.industry })}
+      options={options}
     />
   );
 }
@@ -152,7 +151,7 @@ function ColorFlyout({
             />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.color}</span>
             <span className="tnum" style={{ marginLeft: 'auto', fontSize: 11, color: color.mute }}>
-              {formatPrice(currency === 'usd' ? c.latestUsd : c.latestRub, currency)}
+              {formatPrice(currency === 'usd' ? c.latestUsd : c.latestLocal, currency)}
             </span>
           </label>
         ))}
@@ -251,8 +250,10 @@ function ProductCascadeControl({
   productLevel?: boolean;
 }) {
   const { state, actions } = useFilters();
-  const fxRate = getFxRate();
-  const tree = useMemo(() => (kind === 'own' ? buildOwnTree(state.industry) : buildCompetitorTree()), [kind, state.industry, fxRate]);
+  const tree = useMemo(
+    () => (kind === 'own' ? buildOwnTree(state.industry, state.countryCode) : buildCompetitorTree(state.industry, state.countryCode)),
+    [kind, state.industry, state.countryCode],
+  );
   const list = selection ?? (kind === 'own' ? state.own : state.competitors);
   const writeList = (next: ProductSelection[]): void => {
     if (onSelectionChange) {
@@ -544,13 +545,13 @@ export function CompetitorControl() {
 export function TierControl() {
   const { state, actions } = useFilters();
   const options = useMemo(() => {
-    const tiers: DimProduct['tier_code'][] = [];
+    const present = new Set<string>();
     for (const p of dimProduct) {
-      if (!p.is_own || p.industry !== state.industry || tiers.includes(p.tier_code)) continue;
-      tiers.push(p.tier_code);
+      if (p.is_own && p.industry === state.industry && p.countries.includes(state.countryCode)) present.add(p.tier_code);
     }
-    return tiers.map((t) => ({ value: t, label: tierLabelShort(TIER_LABELS[t]) }));
-  }, [state.industry]);
+    const order = [...tierOrderOf(state.industry)].reverse();
+    return order.filter((t) => present.has(t)).map((t) => ({ value: t, label: tierLabelShort(TIER_LABELS[t] ?? t) }));
+  }, [state.industry, state.countryCode]);
   const value = state.tier != null && options.some((o) => o.value === state.tier) ? state.tier : undefined;
   return (
     <Select

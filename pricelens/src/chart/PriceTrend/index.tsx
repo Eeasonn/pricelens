@@ -33,7 +33,7 @@ import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries } from '../../dataModel/aggregate';
 import { getEffectiveBenchmark } from '../../state/configStore';
-import { dimPromo, dimProduct } from '../../data';
+import { dimPromo, dimProduct, dimRegion } from '../../data';
 import type {
   AggMode,
   Granularity,
@@ -530,9 +530,21 @@ export default function PriceTrend(props: { /** 第八十五轮：竞品-only �
   }, [winBuckets, state.granularity]);
 
   const winSpans = useMemo(() => bucketSpans(state.granularity, winBuckets), [state.granularity, winBuckets]);
+  // 大促档期按国家取日历；标注了适用平台的档期（如亚马逊 Prime Day）只在该平台被选中/为默认电渠时显示
+  const scopedPromos = useMemo(() => {
+    const defaultPlatform = dimRegion.find((r) => r.country_code === state.countryCode)?.default_platform ?? null;
+    const selected = state.platform && (state.platform.platforms.length || state.platform.shopIds.length)
+      ? new Set([...state.platform.platforms, ...state.platform.shopIds.map((id) => id.split(':')[1] ?? '')])
+      : new Set(defaultPlatform ? [defaultPlatform] : []);
+    const selectedLower = new Set([...selected].map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, '')));
+    return dimPromo.filter(
+      (p) => p.country_code === state.countryCode
+        && (p.platforms == null || p.platforms.some((pl) => selectedLower.has(pl.toLowerCase().replace(/[^a-z0-9]/g, '')))),
+    );
+  }, [state.countryCode, state.platform]);
   const promoBands = useMemo(
-    () => (promoBandsOn ? buildPromoBands({ promos: dimPromo, spans: winSpans }) : []),
-    [promoBandsOn, winSpans],
+    () => (promoBandsOn ? buildPromoBands({ promos: scopedPromos, spans: winSpans }) : []),
+    [promoBandsOn, winSpans, scopedPromos],
   );
 
   // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），

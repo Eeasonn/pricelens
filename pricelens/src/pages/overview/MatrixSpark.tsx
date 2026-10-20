@@ -6,13 +6,13 @@
 // 全周期 93 周一次画完，纯 SVG 无 ECharts。缺采周水平直连跨接。
 // ============================================================
 import type { OverviewSparkPoint } from '../../dataModel/aggregate';
-import { color } from '../../theme/tokens';
+import { color, localCurrencySymbol } from '../../theme/tokens';
 
 const PAD = { l: 10, r: 7, t: 8, b: 13 };
 
 /** 紧凑价签（悬停 title 用）：$2,500 / ₽66.8K */
 function fmtShort(v: number, currency: 'usd' | 'local'): string {
-  const sym = currency === 'usd' ? '$' : '₽';
+  const sym = currency === 'usd' ? '$' : localCurrencySymbol();
   if (Math.abs(v) >= 10000) {
     const k = v / 1000;
     return `${sym}${k.toFixed(k >= 100 ? 0 : 1).replace(/\.0$/, '')}K`;

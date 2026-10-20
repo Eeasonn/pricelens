@@ -13,7 +13,8 @@ describe('总览产业摘要', () => {
       { key: 'new-2', weekId: '202641' },
     ] as AlertItem[];
     const summary = buildOverviewSummary(bands, alerts);
-    expect(summary.ownModels).toBe(14);
+    // 20 = RU phone 矩阵中我司型号数（真实数据锚，对应 buildOverviewMatrix 金测）
+    expect(summary.ownModels).toBe(20);
     expect(summary.mappingPct).toBeCloseTo(summary.mappedRoms / summary.ownRoms, 12);
     expect(summary.deepDiscountRoms).toBe(
       bands.flatMap((b) => b.models).filter((m) => m.isOwn).flatMap((m) => m.rows)
@@ -44,16 +45,19 @@ describe('总览竞品摘要', () => {
   const bands = buildOverviewMatrix('usd');
 
   it('按价差方向返回原始价差区间', () => {
-    const pura = bands[1].models.find((m) => m.modelId === 'own-pura-90s-pro')!;
+    // Pura 90s Pro（非 Max）在 RU 矩阵的 800-1000 带；锚其 12+256 行与矩阵竞品
+    const pura = bands[1].models.find((m) => m.modelId === 'own-huawei-pura-90s-pro')!;
     const row = pura.rows.find((r) => r.romram.startsWith('12+256'))!;
     const comps = pura.comps.filter((c) => c.ownRomrams.includes(row.romram));
     const compSummary = summarizeCompetitors(row.price, comps, 'comp');
-    const expectedDiffs = comps.map((c) => (c.price! - row.price!) / row.price!);
+    // summarizeCompetitors 只从非空价格算价差（count 仍计全部竞品行）
+    const priced = comps.filter((c) => c.price != null);
+    const expectedDiffs = priced.map((c) => (c.price! - row.price!) / row.price!);
     expect(compSummary.count).toBe(comps.length);
     expect(compSummary.minDiff).toBeCloseTo(Math.min(...expectedDiffs), 12);
     expect(compSummary.maxDiff).toBeCloseTo(Math.max(...expectedDiffs), 12);
     const ownSummary = summarizeCompetitors(row.price, comps, 'own');
-    expect(ownSummary.minDiff).toBeCloseTo(Math.min(...comps.map((c) => (row.price! - c.price!) / c.price!)), 12);
+    expect(ownSummary.minDiff).toBeCloseTo(Math.min(...priced.map((c) => (row.price! - c.price!) / c.price!)), 12);
   });
 
   it('空竞品价格只从价格与价差区间排除，并在我司价格为空时保留价格区间、留空价差', () => {

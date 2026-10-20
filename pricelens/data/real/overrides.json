@@ -1,0 +1,132 @@
+{
+  "_doc": [
+    "补录/纠偏入口（人工维护，重跑 npm run ingest 即生效；本文件是唯一需要手工编辑的映射文件）。",
+    "model_aliases：『品牌|normkey』→ 目标 normkey。把源数据里同一型号的异写并到同一型号（normkey 已自动去年份/品牌词/大小写/空格，多数情况不需要）。",
+    "matrix_aliases：矩阵单元格文本（去噪后、按行与 / 拆分后的一段，以 ingest_report.md 未命中清单里的原文为准）→ {brand, model[, spec, substitute]}：",
+    "   model = 数据里的型号原文；spec = 配置过滤子串（如 13 表示 13\" 屏）；substitute=true 表示数据里没有该竞品、用近似替代品代替（对标 source 标为 substitute，看板显示替代品真实名称）。",
+    "brand_fixes：[{model_prefix(normkey 前缀), from_brand(null=任意), to_brand}]，修源数据品牌错标。",
+    "benchmark_manual：[{country, own_model(model_id), own_romram(配置文案或 *), comp_brand, comp_model(型号原文), comp_romram(或 *), sort}]，人工追加对标。",
+    "core_platform_overrides：{国家码: [平台名…]}，补「国家主要电渠」未覆盖的国家（沙特/阿联酋等按数据行数兜底，可在此定版）。"
+  ],
+  "model_aliases": {},
+  "matrix_aliases": {
+    "Puro 90s Pro Max": {
+      "brand": "HUAWEI",
+      "model": "Pura 90s Pro Max"
+    },
+    "Apple Watch S11": {
+      "brand": "APPLE",
+      "model": "Watch SERIES 11"
+    },
+    "小米手环 9": {
+      "brand": "XIAOMI",
+      "model": "Band 9 Active"
+    },
+    "荣耀平板 X9": {
+      "brand": "HONOR",
+      "model": "Pad X9"
+    },
+    "GALAXY 11.0 TAB A11 PLUS": {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Tab A11+"
+    },
+    "Apple iPad 11 gen. 2025 Wi-Fi": {
+      "brand": "APPLE",
+      "model": "iPad A16"
+    },
+    "Tablet SAMSUNG Galaxy Tab S10 Lite 10.9 Wi-Fi Szary + rysik": {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Tab S10 Lite"
+    },
+    "Tablet LENOVO IdeaTab Matowy Ekran Wi-Fi Szary + Klawiatura + Rysik": {
+      "brand": "LENOVO",
+      "model": "Idea Tab"
+    },
+    "Honor X9b Max": {
+      "brand": "HONOR",
+      "model": "Pad X9A",
+      "substitute": true
+    },
+    "Soundcore - AeroFit Pro (Anker)": {
+      "brand": "SOUNDCORE",
+      "model": "AeroFit 2 Pro",
+      "substitute": true
+    },
+    "Apple iPad 11": {
+      "brand": "APPLE",
+      "model": "iPad A16"
+    },
+    "iPad 11": {
+      "brand": "APPLE",
+      "model": "iPad A16"
+    }
+  },
+  "brand_fixes": [
+    {
+      "model_prefix": "redmi",
+      "from_brand": "HUAWEI",
+      "to_brand": "XIAOMI"
+    },
+    {
+      "model_prefix": "matepad",
+      "from_brand": null,
+      "to_brand": "HUAWEI"
+    },
+    {
+      "model_prefix": "matebook",
+      "from_brand": null,
+      "to_brand": "HUAWEI"
+    },
+    {
+      "model_prefix": "idea tab",
+      "from_brand": "HUAWEI",
+      "to_brand": "LENOVO"
+    },
+    {
+      "model_prefix": "tab",
+      "from_brand": "HUAWEI",
+      "to_brand": "LENOVO"
+    }
+  ],
+  "benchmark_manual": [],
+  "core_platform_overrides": {
+    "SA": [
+      "Jarir",
+      "eXtra",
+      "Amazon"
+    ],
+    "AE": [
+      "SHARAFDG",
+      "NOON",
+      "CARREFOUR"
+    ],
+    "SG": [
+      "Shopee"
+    ],
+    "VN": [
+      "Shopee"
+    ],
+    "TR": [
+      "Hepsiburada",
+      "Amazon"
+    ],
+    "ES": [
+      "Amazon"
+    ],
+    "IT": [
+      "Amazon"
+    ],
+    "FR": [
+      "Amazon"
+    ],
+    "GB": [
+      "Amazon"
+    ],
+    "RO": [
+      "eMAG"
+    ],
+    "JP": [
+      "Amazon"
+    ]
+  }
+}

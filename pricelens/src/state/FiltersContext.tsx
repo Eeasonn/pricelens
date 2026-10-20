@@ -2,9 +2,9 @@
 // 筛选状态：五框状态 + §5.6 联动 + localStorage 持久化（LPL3.filters）
 // + §13 CONFIG_CHANGED_EVENT 监听（反馈第 8 条修订：配置保存不再自动改竞品，
 //   竞品由筛选条「匹配竞品」按钮按配置矩阵带出）
-// 默认视图（§15.4-A13，第二十五轮起多轮演进）：周 · USD · 平台 = 我司官方店铺 Ozon Россия
-// （第五十三轮）· 我司 Pura 90s Pro 12+256（最低价颜色）+ 其配置竞品（主竞品在前）
-// · 仅折后价（第五十轮）· 时间自适应开 · 竞品自动匹配开
+// 默认视图（2026-10-20 真实数据接入起）：周 · USD · 平台 = 该国默认电渠（「国家主要电渠」首个）
+// · 我司 = 产品竞品矩阵该国该产业首个有数型号的首个配置（最低价颜色）+ 其分国对标竞品
+// · 仅折后价 · 时间自适应开 · 竞品自动匹配开；切国家/产业时按同规则重算默认产品
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -18,8 +18,11 @@ import type {
   ProductSelection,
 } from './filtersTypes';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
-import { dimChannel, dimProduct } from '../data';
+import { dimProduct, dimRegion, dimTime } from '../data';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
+import { setCurrentCountry } from './currentScope';
+import { setLocalCurrencyByCountry } from './fx';
+import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
@@ -40,13 +43,18 @@ export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
   'own-gap': 0.15,
 };
 
-/** 我司官方店铺（OZON 1P 首店「Ozon Россия」）——平台默认值，用户可独立调整。 */
-export const OWN_OFFICIAL_SHOP_ID =
-  dimChannel.find((c) => c.platform === 'OZON' && c.store_type === '1P')?.shop_id ?? 'shop-001';
+/** 平台默认选择：null = 该国默认电渠（数据层 effectiveChannelIds 解析） */
+export const DEFAULT_PLATFORM_SELECTION: PlatformSelection | null = null;
 
-/** 平台默认选择（第五十三轮，用户定版）：只选一个——我司在 OZON 的官方店铺「Ozon Россия」；
- *  勾店铺而非勾整平台 = 触发器显名店铺（此前默认勾整平台 OZON，数据口径不变：OZON = 基准） */
-export const DEFAULT_PLATFORM_SELECTION: PlatformSelection = { platforms: [], shopIds: [OWN_OFFICIAL_SHOP_ID] };
+/** 国家切换时同步数据层缺省国家与本币注册（纯函数层无 state 访问，靠此读取当前口径） */
+function syncScopeRegistries(countryCode: string): void {
+  setCurrentCountry(countryCode);
+  setLocalCurrencyByCountry(countryCode);
+}
+syncScopeRegistries('RU');
+
+const firstWeek = dimTime[0]?.week_id ?? '202619';
+const lastWeek = dimTime[dimTime.length - 1]?.week_id ?? '202642';
 
 /** §15.4-A13 默认视图（数据相关默认勾选在 loadInitialState 里按数据就绪情况叠加） */
 export const defaultFilters: FiltersState = {
@@ -56,12 +64,12 @@ export const defaultFilters: FiltersState = {
   tier: null,
   own: [],
   competitors: [],
-  platform: DEFAULT_PLATFORM_SELECTION, // 第五十三轮：默认只选「Ozon Russia」官方店铺（v8；OZON 基准数据口径不变）
+  platform: DEFAULT_PLATFORM_SELECTION, // null = 该国默认电渠
   granularity: 'week', // 第四十二轮：默认周（迪总「时间默认取周」）
   adaptive: true, // 第十九轮：时间自适应默认开
-  rangeStart: '202601', // 与周粒度自洽的默认范围（自适应开时会被数据跨度覆盖）
-  rangeEnd: '202641',
-  currency: 'usd', // 第二十五轮：默认 USD（参考汇率 80 折算）
+  rangeStart: firstWeek, // 与周粒度自洽的默认范围（自适应开时会被数据跨度覆盖）
+  rangeEnd: lastWeek,
+  currency: 'usd', // 默认 USD（真实数据按行内汇率折算）
   priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
   agg: 'avg',
   autoMatch: true, // 第三十四轮：自动匹配竞品默认开（竞品跟随我司产品，迪总「减少筛选器」）
@@ -83,12 +91,9 @@ export const defaultFilters: FiltersState = {
  *   本轮平台口径改为独立可选，不再随竞品匹配方式锁定。
  * v9（2026-10-16，追补⑨）：预警细化——alertThreshold 单阈值 → alertTypes/alertThresholds
  *   四类开关+阈值 + alertProducts 按产品覆写；v8 持久化迁移保留订阅与旧阈值（三类同值）。
+ * v10（2026-10-20）：真实数据接入——SKU/渠道 id 空间全部更换，旧持久化整体失效落新默认。
  */
-const DEFAULTS_V = 9;
-
-/** 我司默认产品（§5.2②：Pura 90s Pro · 12+256，其最低价颜色） */
-const DEFAULT_OWN_MODEL = 'Pura 90s Pro';
-const DEFAULT_OWN_ROMRAM_PREFIX = '12+256';
+const DEFAULTS_V = 10;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -175,7 +180,7 @@ function readPersistedState(raw: string | null): Partial<FiltersState> & { v?: n
   if (!raw) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed) || (parsed.v !== DEFAULTS_V && parsed.v !== 8)) return null;
+    if (!isRecord(parsed) || parsed.v !== DEFAULTS_V) return null;
 
     const checks: Array<[keyof FiltersState, boolean]> = [
       ['own', isProductSelectionArray(parsed.own)],
@@ -210,23 +215,54 @@ function readPersistedState(raw: string | null): Partial<FiltersState> & { v?: n
 }
 
 /**
- * 数据就绪时的默认勾选（第二十五轮改）：
- * - 我司 = Pura 90s Pro · 12+256（其最低价颜色，lowestPriceColorSku）；无数据 → own=[]
- * - 竞品 = 该我司组的配置矩阵并集（groupsFromBenchmark，主竞品在前）；
- *   之后切换我司仍不自动带出（反馈第 8 条），点「匹配竞品」重新匹配
+ * 某国某产业的默认勾选：
+ * - 我司 = 产品竞品矩阵该国该产业首个有数型号（dim_region.default_own_models），取其首个配置
+ *   （配置名升序，须在该国有数据）的最低价颜色；矩阵未覆盖的国家回退该国该产业首个我司型号
+ * - 竞品 = 该我司组的分国对标并集（groupsFromBenchmark，主竞品在前）
  */
-function computeDataDefaults(): Partial<FiltersState> {
+function computeDataDefaults(countryCode: string, industry: Industry): Partial<FiltersState> {
   if (!dimProduct.length) return {};
-  const row =
-    dimProduct.find(
-      (p) => p.is_own && p.model_name === DEFAULT_OWN_MODEL && p.romram.startsWith(DEFAULT_OWN_ROMRAM_PREFIX),
-    ) ?? dimProduct.find((p) => p.is_own && p.model_name === DEFAULT_OWN_MODEL);
-  if (!row) return {};
-  const modelId = modelIdOf(row); // 型号 id = sku_id 前缀（与 benchmark/aggregate 同 id 空间）
-  const skuId = lowestPriceColorSku(modelId, row.romram);
-  if (!skuId) return {}; // 无数据（含 fact 未生成）→ 保持 own=[]，不崩溃
-  const own: ProductSelection[] = [{ modelId, romram: row.romram, skuIds: [skuId] }];
-  return { own, competitors: groupsFromBenchmark(own) };
+  syncScopeRegistries(countryCode);
+  const region = dimRegion.find((r) => r.country_code === countryCode);
+  const preferred = region?.default_own_models[industry];
+  const inCountry = (p: (typeof dimProduct)[number]) => p.is_own && p.industry === industry && p.countries.includes(countryCode);
+  let candidates = preferred ? dimProduct.filter((p) => p.model_id === preferred && inCountry(p)) : [];
+  if (!candidates.length) candidates = dimProduct.filter(inCountry);
+  if (!candidates.length) return { own: [], competitors: [] };
+  const modelId = modelIdOf(candidates[0]);
+  const romrams = [...new Set(candidates.filter((p) => p.model_id === modelId).map((p) => p.romram))].sort();
+  for (const romram of romrams) {
+    const skuId = lowestPriceColorSku(modelId, romram, countryCode);
+    if (!skuId) continue;
+    const own: ProductSelection[] = [{ modelId, romram, skuIds: [skuId] }];
+    return { own, competitors: groupsFromBenchmark(own) };
+  }
+  return { own: [], competitors: [] };
+}
+
+/** 勾选组是否仍属于该国该产业（切国家/产业后用来判定是否需要重算默认） */
+function selectionsValidFor(list: ProductSelection[], countryCode: string, industry: Industry): boolean {
+  if (!list.length) return false;
+  return list.every((sel) =>
+    dimProduct.some((p) => p.model_id === sel.modelId && p.industry === industry && p.countries.includes(countryCode)),
+  );
+}
+
+/** 口径（国家/产业）变化后的状态整理：规范作用域、平台回默认电渠、我司/竞品按新口径重算 */
+function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
+  const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
+  syncScopeRegistries(scope.countryCode);
+  const platformOk =
+    s.platform == null ||
+    s.platform.shopIds.every((id) => id.startsWith(`${scope.countryCode}:`));
+  const needOwn = force || !selectionsValidFor(s.own, scope.countryCode, scope.industry);
+  const defaults = needOwn ? computeDataDefaults(scope.countryCode, scope.industry) : {};
+  const next: FiltersState = { ...s, ...scope, platform: platformOk ? s.platform : null, ...defaults };
+  // 自动匹配开且竞品组不属于该国（链接/持久化来自别国口径）→ 按该国分国对标重算
+  if (!needOwn && next.autoMatch && next.competitors.length && !selectionsValidFor(next.competitors, scope.countryCode, scope.industry)) {
+    next.competitors = groupsFromBenchmark(next.own);
+  }
+  return next;
 }
 
 /**
@@ -258,11 +294,8 @@ function loadBaseState(): FiltersState {
       };
     }
   }
-  if (!restored) restored = { ...defaultFilters, ...computeDataDefaults() };
-  if (!restored.own.length && dimProduct.length) {
-    restored = { ...restored, ...computeDataDefaults() };
-  }
-  return { ...restored, ...normalizeDataScope(restored) };
+  if (!restored) restored = { ...defaultFilters };
+  return applyScopeDefaults(restored, false);
 }
 
 /** 启动时才应用 URL；运行中的 reset 使用 loadBaseState，避免 URL 覆写锁死重置结果。 */
@@ -271,6 +304,8 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
   // own 覆写存在时竞品按现行 autoMatch 规则带出（与手选同语义）
   const url = readUrlOverrides();
   let restored = base;
+  // 先把数据层缺省国家切到链接指定国家，再按该国对标矩阵带出竞品（否则会沿用持久化国家的对标）
+  syncScopeRegistries(url.filters.countryCode ?? base.countryCode);
   if (url.filters.own?.length) {
     restored = {
       ...restored,
@@ -280,8 +315,7 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
   } else if (Object.keys(url.filters).length > 0) {
     restored = { ...restored, ...url.filters };
   }
-  restored = { ...restored, ...normalizeDataScope(restored) };
-  return restored;
+  return applyScopeDefaults(restored, false);
 }
 
 function loadInitialState(): FiltersState {
@@ -345,8 +379,16 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   // actions 只依赖 setState（函数式更新），全量稳定，避免图表侧监听 actions 变化
   const actions = useMemo<FiltersActions>(
     () => ({
-      /** 通用补丁（平台/币种/时间范围/竞品临时增删/价格类型/agg 等直接字段） */
-      set: (patch) => setState((s) => ({ ...s, ...patch })),
+      /** 通用补丁（平台/币种/时间范围/竞品临时增删/价格类型/agg 等直接字段）；
+       *  国家/产业变化 = 口径切换：同步数据层缺省国家，平台回默认电渠，我司/竞品按矩阵重算 */
+      set: (patch) =>
+        setState((s) => {
+          const next = { ...s, ...patch };
+          const scopeChanged =
+            (patch.countryCode != null && patch.countryCode !== s.countryCode) ||
+            (patch.industry != null && patch.industry !== s.industry);
+          return scopeChanged ? applyScopeDefaults(next, true) : next;
+        }),
 
       /**
        * §5.6 切换我司产品：own 置为该产品。第三十四轮：autoMatch 开 = 竞品自动跟随

@@ -19,7 +19,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
-import { dimChannel, dimProduct } from '../data';
+import { dimChannel, dimProduct, dimRegion } from '../data';
 import {
   alertSeriesMeta,
   groupAlertsBySeries,
@@ -211,10 +211,12 @@ export default function AlertsPage() {
   const { country, industry } = scopeLabels(state);
   const platformLabel = useMemo(() => {
     const selection = state.platform;
-    if (!selection || (selection.platforms.length === 0 && selection.shopIds.length === 0)) return 'OZON';
-    const shopNames = new Map(dimChannel.map((c) => [c.shop_id, c.shop_name]));
+    if (!selection || (selection.platforms.length === 0 && selection.shopIds.length === 0)) {
+      return dimRegion.find((r) => r.country_code === state.countryCode)?.default_platform ?? '默认电渠';
+    }
+    const shopNames = new Map(dimChannel.map((c) => [c.channel_id, c.display_name]));
     return [...selection.platforms, ...selection.shopIds.map((id) => shopNames.get(id) ?? id)].join('、');
-  }, [state.platform]);
+  }, [state.platform, state.countryCode]);
 
   // ---- 本页视图态：类型（'all' | AlertType）+ 品牌筛选 ----
   const [typeFilter, setTypeFilter] = useState<'all' | AlertType>('all');

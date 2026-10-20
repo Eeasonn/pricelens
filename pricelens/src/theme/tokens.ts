@@ -1,3 +1,4 @@
+import { getLocalCurrency } from '../state/fx';
 // ============================================================
 // §4.3 视觉 token（Vercel 设计语言）—— 全项目唯一样式常量来源
 // 冻结文件：子 Agent 只许引用，不许修改
@@ -98,10 +99,28 @@ export const selectAccent = '#0070f3'; // 聚焦边框/选中强调（浅蓝系�
 
 /**
  * §3.3 数值显示规则：价格一律整数（调用方保证传入已取整数值）。
- * RUB：千分位空格 + 后缀 ₽（如 74 990 ₽）；USD：千分位逗号 + 前缀 $（如 $1,234）。
+ * USD：千分位逗号 + 前缀 $（如 $1,234）；本币：按当前国家本币格式化——
+ * RUB 沿用「千分位空格 + 后缀 ₽」（74 990 ₽），其余币种「代码 + 千分位」（SAR 3,799 / MXN 10,499），
+ * 不用窄符号以免 MX$/R$ 与 USD 混淆。
  */
 export function formatPrice(v: number | null | undefined, currency: 'local' | 'usd'): string {
   if (v == null) return '—';
   if (currency === 'usd') return '$' + v.toLocaleString('en-US');
-  return v.toLocaleString('ru-RU').replace(/\u00A0/g, ' ') + ' ₽';
+  return formatLocalMoney(v, getLocalCurrency());
+}
+
+/** 币种符号：常见币种用符号，其余用 ISO 代码（避免 MX$/R$ 与美元混淆） */
+export function currencySymbol(code: string): string {
+  return ({ RUB: '₽', USD: '$', EUR: '€', GBP: '£', JPY: '¥' } as Record<string, string>)[code] ?? code;
+}
+
+/** 当前国家本币符号（看板左上角币种徽标等处用） */
+export function localCurrencySymbol(): string {
+  return currencySymbol(getLocalCurrency());
+}
+
+export function formatLocalMoney(v: number, code: string): string {
+  if (code === 'RUB') return v.toLocaleString('ru-RU').replace(/\u00A0/g, ' ') + ' ₽';
+  if (code === 'USD') return '$' + v.toLocaleString('en-US');
+  return `${code} ${v.toLocaleString('en-US')}`;
 }

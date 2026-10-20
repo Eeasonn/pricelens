@@ -1,0 +1,367 @@
+# 真实数据接入报告（scripts/ingest_real.py）
+
+生成时间：2026-10-20T22:17:26+08:00
+
+## 一、总体
+
+- 输入文件 1 个，原始行 85,999
+- 清洗后事实行 84,845
+- 时间维 202619(2026-05-06) → 202642(2026-10-14)，共 24 周
+- 事实包 84,845 行；b64 2,883,616 B（gzip 2,162,710 B）
+- 修正：价格单位错位(÷100) 31 行
+- 修正：品牌→HUAWEI 11 行
+- 修正：品牌→LENOVO 4 行
+- 修正：品牌→XIAOMI 3 行
+- 修正：品类多数票修正 2 行
+- 修正：汇率倒挂(取倒数) 213 行
+- 修正：缺品类补齐 31 行
+- 剔除：USD 价格>20000(不可信) 1 行
+- 剔除：无周期 0 行
+- 剔除：无型号 309 行
+- 剔除：无汇率 0 行
+- 剔除：未知国家 0 行
+- 剔除：重复行(周×SKU×国×渠道×店铺) 844 行
+
+## 二、覆盖面（有数国家）
+
+| 国家 | 周数 | SKU | 事实行 | 默认电渠 | 核心电渠 |
+|---|---|---|---|---|---|
+| 法国(FR) | 12 | 127 | 1,031 | Amazon | Amazon |
+| 德国(DE) | 12 | 275 | 2,465 | Amazon | Amazon,MediaMarkt |
+| 土耳其(TR) | 16 | 146 | 1,672 | Hepsiburada | Hepsiburada,Amazon |
+| 意大利(IT) | 12 | 130 | 1,038 | Amazon | Amazon |
+| 英国(GB) | 12 | 117 | 845 | Amazon | Amazon |
+| 西班牙(ES) | 12 | 112 | 1,065 | Amazon | Amazon |
+| 罗马尼亚(RO) | 12 | 81 | 622 | eMAG | eMAG |
+| 波兰(PL) | 12 | 137 | 1,400 | MediaExpert | MediaExpert,Euro |
+| 哥伦比亚(CO) | 2 | 8 | 13 | Mercado Libre | Mercado Libre |
+| 阿根廷(AR) | 1 | 60 | 60 | Mercado Libre | Mercado Libre |
+| 秘鲁(PE) | 3 | 56 | 142 | Hiraoka | Hiraoka |
+| 巴西(BR) | 3 | 72 | 176 | Mercado Libre | Mercado Libre,Shopee,Amazon |
+| 墨西哥(MX) | 24 | 414 | 10,445 | Mercado Libre | Mercado Libre,Amazon |
+| 南非(ZA) | 5 | 131 | 513 | TAKEALOT | TAKEALOT |
+| 沙特(SA) | 20 | 692 | 16,998 | Jarir | Jarir,eXtra,Amazon |
+| 阿联酋(AE) | 21 | 336 | 6,246 | SHARAFDG | SHARAFDG,NOON,CARREFOUR |
+| 马来西亚(MY) | 24 | 395 | 5,487 | Shopee | Shopee |
+| 印尼(ID) | 24 | 248 | 3,727 | Shopee | Shopee |
+| 日本(JP) | 7 | 37 | 249 | Amazon | Amazon |
+| 新加坡(SG) | 23 | 295 | 4,250 | Shopee | Shopee |
+| 泰国(TH) | 24 | 295 | 4,270 | Shopee | Shopee |
+| 菲律宾(PH) | 24 | 356 | 4,578 | Shopee | Shopee |
+| 越南(VN) | 22 | 173 | 2,374 | Shopee | Shopee |
+| R国(RU) | 22 | 550 | 15,179 | DNS | DNS |
+
+## 三、矩阵解析未命中清单
+
+共 174 条：
+
+- [comp] SA wearable「COROS PACE Pro」：none
+- [comp] SA wearable「Samsung Galaxy Watch FE」：none
+- [comp] SA wearable「Samsung Galaxy Watch FE」：none
+- [own] SA wearable「WATCH 6 Pro」：none
+- [own] SA wearable「WATCH 6」：none
+- [own] SA wearable「KIDS X1 Pro」：none
+- [own] SA wearable「KIDS X1系列」：none
+- [own] SA wearable「KIDS 4 Pro」：none
+- [comp] SA wearable「Amazfit Band 7」：none
+- [comp] SA wearable「Amazfit Band 7」：none
+- [comp] SA audio「Shokz OpenDots 2」：none
+- [comp] SA audio「Shokz OpenDots 2」：none
+- [comp] SA audio「Shokz OpenDots 2」：none
+- [comp] SA audio「Shokz OpenDots 2」：none
+- [comp] SA audio「Sony WF-1000XM5」：none
+- [comp] SA audio「Nothing Ear (a)」：none
+- [comp] SA audio「JBL Live Buds 3」：none
+- [comp] SA audio「Soundcore Liberty 4 NC」：none
+- [comp] SA audio「Soundcore P30i」：none
+- [comp] SA phone「HONOR Magic V6」：none
+- [comp] SA phone「OPPO Find X9 Pro」：none
+- [comp] AE wearable「COROS PACE Pro」：none
+- [comp] AE wearable「Samsung Galaxy Watch FE」：none
+- [comp] AE wearable「Samsung Galaxy Watch FE」：none
+- [own] AE wearable「WATCH 6 Pro」：none
+- [own] AE wearable「WATCH 6」：none
+- [own] AE wearable「KIDS X1 Pro」：none
+- [own] AE wearable「KIDS X1系列」：none
+- [own] AE wearable「KIDS 4 Pro」：none
+- [comp] AE wearable「Amazfit Band 7」：none
+- [comp] AE wearable「Amazfit Band 7」：none
+- [comp] AE audio「Shokz OpenDots 2」：none
+- [comp] AE audio「Shokz OpenDots 2」：none
+- [comp] AE audio「Shokz OpenDots 2」：none
+- [comp] AE audio「Shokz OpenDots 2」：none
+- [comp] AE audio「Sony WF-1000XM5」：none
+- [comp] AE audio「Nothing Ear (a)」：none
+- [comp] AE audio「JBL Live Buds 3」：none
+- [comp] AE audio「Soundcore Liberty 4 NC」：none
+- [comp] AE audio「Soundcore P30i」：none
+- [comp] AE phone「HONOR Magic V6」：none
+- [comp] AE phone「OPPO Find X9 Pro」：none
+- [comp] PL phone「Smartfon REALME 16 Pro+ 5G」：none
+- [comp] PL audio「Sony LinkBuds Fit」：none
+- [comp] PL audio「shokz opendots 2」：none
+- [comp] PL audio「Sony LinkBuds Open」：none
+- [comp] PL audio「shokz opendots 2」：none
+- [comp] PL audio「JBL Live Pro 2 TWS」：none
+- [comp] PL audio「JBL Live Pro 2 TWS」：none
+- [comp] PL audio「JBL Live Pro 2 TWS」：none
+- [comp] PL audio「Xiaomi Redmi Buds 4 Pro」：none
+- [comp] RU wearable「Garmin Fenix 7 Pro」：none
+- [comp] RU wearable「Garmin Forerunner 965」：none
+- [comp] RU wearable「COROS Pace Pro」：none
+- [own] RU wearable「WATCH 6 Pro」：none
+- [own] RU wearable「WATCH 6」：none
+- [own] RU wearable「KIDS X1 Pro」：none
+- [comp] RU wearable「Aimoto Life Button」：none
+- [comp] RU wearable「Aimoto Fun」：none
+- [comp] RU wearable「Aimoto Fun」：none
+- [own] RU wearable「KIDS X1系列」：none
+- [comp] RU wearable「Aimoto Life Button」：none
+- [comp] RU wearable「Aimoto Fun」：none
+- [comp] RU wearable「Aimoto Fun」：none
+- [own] RU wearable「KIDS 4 Pro」：none
+- [comp] RU wearable「Aimoto Life Button」：none
+- [comp] RU wearable「Aimoto Fun」：none
+- [comp] RU wearable「Aimoto Fun」：none
+- [comp] RU wearable「Amazfit Band 7」：none
+- [comp] RU audio「Galaxy Buds On」：none
+- [comp] RU audio「Galaxy Buds On」：none
+- [comp] RU audio「Yandex Drop」：none
+- [comp] RU audio「Realme Buds air 8 pro」：none
+- [comp] RU phone「Samsung Galaxy Z TriFold」：none
+- [comp] PH wearable「Apple Watch Ultra 2」：none
+- [own] PH wearable「WATCH ultimate design」：none
+- [comp] PH wearable「Apple Watch Hermès」：none
+- [comp] PH wearable「Garmin MARQ Commander Gen 2」：none
+- [comp] PH wearable「TAG Heuer Connected Calibre E4」：none
+- [comp] PH wearable「Garmin Venu 3」：none
+- [comp] PH wearable「COROS Pace 3」：none
+- [comp] PH wearable「Suunto 5 Peak」：none
+- [comp] PH wearable「Garmin Venu 3」：none
+- [comp] PH wearable「Samsung Galaxy Watch6」：none
+- [comp] PH wearable「Garmin Venu 3」：none
+- [comp] PH wearable「Amazfit GTR 4」：none
+- [comp] PH wearable「Samsung Galaxy Watch FE」：none
+- [own] PH wearable「FIT 3」：none
+- [own] PH wearable「KIDS X1系列」：none
+- [comp] PH wearable「imoo Watch Phone Z7」：none
+- [comp] PH wearable「Garmin Bounce」：none
+- [comp] PH wearable「Fitbit Ace 3」：none
+- [own] PH wearable「KIDS 4 Pro」：none
+- [comp] PH wearable「imoo Watch Phone Z6」：none
+- [comp] PH wearable「Garmin Bounce」：none
+- [comp] PH wearable「Xplora X6Play」：none
+- [comp] PH wearable「realme Band 2」：none
+- [comp] PH audio「shokz opendots 2」：none
+- [comp] PH audio「shokz opendots 2」：none
+- [comp] PH audio「JBL - Soundgear Sense」：none
+- [comp] PH phone「Samsung Galaxy Z TriFold」：none
+- [comp] TH wearable「Apple Watch Ultra 2」：none
+- [comp] TH wearable「Apple Watch Ultra 2」：none
+- [comp] TH wearable「Garmin Epix Pro」：none
+- [own] TH wearable「WATCH ultimate design spring edition」：none
+- [comp] TH wearable「Apple Watch Ultra 2」：none
+- [own] TH wearable「WATCH ultimate design」：none
+- [comp] TH wearable「Apple Watch Ultra 2」：none
+- [comp] TH wearable「Garmin Epix Pro 设计款」：none
+- [comp] TH wearable「Samsung Galaxy Watch FE」：none
+- [comp] TH wearable「OPPO Watch X2」：none
+- [comp] TH wearable「Amazfit Cheetah Pro」：none
+- [comp] TH wearable「高驰 Pace 3」：none
+- [comp] TH wearable「Amazfit GTS 5」：none
+- [comp] TH wearable「荣耀手表 6」：none
+- [comp] TH wearable「Amazfit Bip 5」：none
+- [comp] TH wearable「荣耀手表 SE」：none
+- [own] TH wearable「FIT 3」：none
+- [comp] TH wearable「Amazfit Bip 3 Pro」：none
+- [comp] TH wearable「realme Watch 3」：none
+- [own] TH wearable「KIDS X1 系列」：none
+- [comp] TH wearable「imoo Watch Phone Z10（小天才）」：none
+- [comp] TH wearable「小米米兔儿童手表 S7」：none
+- [comp] TH wearable「三星 Galaxy Watch Kids 5」：none
+- [comp] TH wearable「Amazfit Band 8」：none
+- [comp] TH audio「shokz opendots 2」：none
+- [comp] TH audio「shokz opendots 2」：none
+- [comp] TH audio「JBL - Soundgear Sense」：none
+- [comp] TH phone「OPPO Find X8 Pro」：none
+- [comp] TH phone「OPPO Reno13 Pro+」：none
+- [comp] TH phone「Samsung Galaxy Z Fold6」：none
+- [comp] TH phone「Honor Magic V3」：none
+- [comp] TH phone「OPPO Find N5」：none
+- [comp] TH phone「OPPO Find X8 Pro」：none
+- [comp] TH phone「vivo V40 Pro」：none
+- [comp] TH tablet「小米 Pad 9」：none
+- [comp] TH tablet「小米 Pad 9」：none
+- [comp] TH tablet「OPPO Pad Air 2」：none
+- [comp] TH tablet「realme Pad 2」：none
+- [comp] MX wearable「Garmin Fenix 7 Pro」：none
+- [comp] MX wearable「Garmin Forerunner 965」：none
+- [comp] MX wearable「COROS Pace Pro」：none
+- [own] MX wearable「WATCH 6 Pro」：none
+- [own] MX wearable「WATCH 6」：none
+- [own] MX wearable「KIDS X1 Pro」：none
+- [comp] MX wearable「imoo Watch Phone」：none
+- [comp] MX wearable「Xiaomi Kids Watch」：none
+- [own] MX wearable「KIDS X1」：none
+- [comp] MX wearable「imoo Watch Phone」：none
+- [comp] MX wearable「Xiaomi Kids Watch」：none
+- [comp] MX wearable「Amazfit Band 7」：none
+- [comp] MX audio「shokz opendots 2」：none
+- [comp] MX audio「shokz opendots 2」：none
+- [comp] MX audio「Soundcore P30I」：none
+- [comp] MX phone「Honor Magic 18 Pro」：none
+- [comp] BR wearable「Samsung Galaxy Watch6」：none
+- [comp] BR wearable「Garmin Venu 3」：none
+- [comp] BR wearable「Garmin Forerunner 965」：none
+- [comp] BR wearable「COROS Pace Pro」：none
+- [own] BR wearable「WATCH 6 Pro」：none
+- [own] BR wearable「WATCH 6」：none
+- [own] BR wearable「KIDS X1 Pro」：none
+- [comp] BR wearable「Aimoto Life Button」：none
+- [comp] BR wearable「Aimoto Fun」：none
+- [comp] BR wearable「Aimoto Fun」：none
+- [own] BR wearable「KIDS X1」：none
+- [comp] BR wearable「Aimoto Life Button」：none
+- [comp] BR wearable「Aimoto Fun」：none
+- [comp] BR wearable「Aimoto Fun」：none
+- [comp] BR wearable「Amazfit Band 7」：none
+- [comp] BR audio「shokz opendots 2」：none
+- [comp] BR audio「shokz opendots 2」：none
+- [comp] BR audio「Soundcore P30I」：none
+- [comp] BR phone「Honor Magic 18 Pro」：none
+
+## 四、对标样例（每国前 8 条）
+
+- SA｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 GPS（sort 1）
+- SA｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 —（sort 2）
+- SA｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- SA｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 4）
+- SA｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 GPS（sort 1）
+- SA｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 —（sort 2）
+- SA｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- SA｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 4）
+- AE｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 GPS（sort 1）
+- AE｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 —（sort 2）
+- AE｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- AE｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 GPS（sort 1）
+- AE｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 —（sort 2）
+- AE｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- AE｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 11 42mm GPS（sort 1）
+- AE｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 11 46mm GPS（sort 2）
+- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← APPLE iPad A16 11" WiFi 6+256 GB（sort 1）
+- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← APPLE iPad A16 11" WiFi 6+128 GB（sort 2）
+- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 12+256 GB（sort 3）
+- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 FE+ 13.1" WiFi 12+256 GB（sort 4）
+- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 8+128 GB（sort 5）
+- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 FE+ 13.1" WiFi 8+128 GB（sort 6）
+- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← LENOVO Idea Tab Pro 12.7" WiFi 8+256 GB（sort 7）
+- PL｜own-huawei-matepad-11-5-s-2026 11.5" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 Lite 10.9" WiFi 6+128 GB（sort 1）
+- RU｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
+- RU｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 2）
+- RU｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- RU｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 GPS（sort 1）
+- RU｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 —（sort 2）
+- RU｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- RU｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 12 42mm GPS（sort 1）
+- RU｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 12 46mm GPS（sort 2）
+- PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 1）
+- PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 47mm Solar（sort 2）
+- PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 51mm AMOLED（sort 3）
+- PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 51mm Solar（sort 4）
+- PH｜own-huawei-watch-gt-7 41mm ← AMAZFIT Balance 2 —（sort 1）
+- PH｜own-huawei-watch-gt-7 46mm ← AMAZFIT Balance 2 —（sort 1）
+- PH｜own-huawei-watch-fit-5 — ← XIAOMI Band 9 Pro —（sort 1）
+- PH｜own-huawei-watch-fit-4 — ← SAMSUNG Galaxy FIT 3 —（sort 1）
+- TH｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 1）
+- TH｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 11 42mm（sort 1）
+- TH｜own-huawei-watch-gt-7 46mm ← APPLE Watch SERIES 11 46mm（sort 1）
+- TH｜own-huawei-watch-gt-7 41mm ← XIAOMI Watch S4 41mm（sort 2）
+- TH｜own-huawei-watch-gt-7 46mm ← XIAOMI Watch S4 41mm（sort 2）
+- TH｜own-huawei-watch-fit-5 — ← XIAOMI Watch S5 —（sort 1）
+- TH｜own-huawei-watch-fit-4 — ← XIAOMI Redmi Watch 6 —（sort 1）
+- TH｜own-huawei-band-11 — ← XIAOMI Band 9 Active —（sort 1）
+- MX｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
+- MX｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 2）
+- MX｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- MX｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 GPS（sort 1）
+- MX｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 —（sort 2）
+- MX｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- MX｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 12 42mm GPS（sort 1）
+- MX｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 12 46mm GPS（sort 2）
+- BR｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 12 42mm GPS（sort 1）
+- BR｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 12 46mm GPS（sort 2）
+- BR｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 3）
+- BR｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 4）
+- BR｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
+- BR｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 1）
+- BR｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 8 40mm（sort 2）
+- BR｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 8 44mm（sort 2）
+
+## 五、大促日历解析
+
+- 德国｜免税日｜2026-02-11→2026-02-20 深
+- 德国｜亚马逊春促｜2026-03-01→2026-03-31 深
+- 德国｜复活节｜2026-05-01→2026-05-31 深
+- 德国｜亚马逊prime day｜2026-06-21→2026-07-10 深
+- 德国｜返校季｜2026-07-01→2026-08-31 中
+- 德国｜亚马逊prime day 2｜2026-09-21→2026-10-10 深
+- 德国｜黑五｜2026-11-01→2026-11-30 深
+- 德国｜圣诞｜2026-12-01→2026-12-31 深
+- R国｜情人节-小促｜2026-02-01→2026-02-28 浅
+- R国｜情人节-中促｜2026-03-01→2026-03-31 中
+- R国｜BTS返校季-预热｜2026-07-01→2026-07-31 中
+- R国｜BTS返校季｜2026-08-01→2026-09-30 深
+- R国｜新年季｜2026-12-01→2027-01-31 深
+- 沙特｜斋月大促 Ramadan｜2026-02-01→2026-03-31 中
+- 沙特｜开斋节  Eid Al-Fitr｜2026-03-01→2026-04-30 深
+- 沙特｜宰牲节  Eid Al-Adha｜2026-06-01→2026-07-31 深
+- 沙特｜返校季  Back to School｜2026-08-01→2026-09-30 深
+- 沙特｜沙特国庆日  Saudi National Day｜2026-09-01→2026-09-30 中
+- 沙特｜白色周五  White Friday / Noon 黄五 Yellow Friday｜2026-11-01→2026-11-30 深
+- 沙特｜12.12  年终促｜2026-12-01→2026-12-31 中
+- 沙特｜节礼日  + 年终清仓｜2026-12-21→2026-12-31 中
+- 南非｜开斋节  Eid Al-Fitr｜2026-03-01→2026-04-30 深
+- 南非｜宰牲节  Eid Al-Adha｜2026-06-01→2026-07-31 深
+- 南非｜返校季  Back to School｜2026-08-01→2026-09-30 深
+- 南非｜白色周五  White Friday / Noon 黄五 Yellow Friday｜2026-11-01→2026-11-30 深
+- 南非｜Fire Sale｜2026-02-21→2026-02-28 中
+- 南非｜Birthday｜2026-05-21→2026-05-31 中
+- 南非｜Takealotmore Days｜2026-07-21→2026-07-31 中
+- 马来西亚｜元旦 1.1 Sale｜2026-01-01→2026-01-20 浅
+- 马来西亚｜农历新年 Chinese New Year (2.17-18)｜2026-02-11→2026-02-28 中
+- 马来西亚｜斋月&开斋节购物季 Ramadan-Raya (Aidilfitri 3.21-22)｜2026-02-11→2026-03-20 深
+- 马来西亚｜5.5 Mega Sale｜2026-05-01→2026-05-10 中
+- 马来西亚｜6.6 Super Sale｜2026-06-01→2026-06-10 中
+- 马来西亚｜7.7 Mid-Year Sale｜2026-07-01→2026-07-10 中
+- 马来西亚｜8.8 Mega Sale + 国庆 Merdeka (8.31)｜2026-08-01→2026-08-10 中
+- 马来西亚｜9.9 Super Shopping Day｜2026-09-01→2026-09-20 深
+- 马来西亚｜10.10 Brands Festival｜2026-10-01→2026-10-20 中
+- 马来西亚｜屠妖节 Deepavali (11.8)｜2026-11-01→2026-11-10 中
+- 马来西亚｜11.11 Big Sale｜2026-11-01→2026-11-30 深
+- 马来西亚｜黑五/网一 BFCM (11.27-30)｜2026-11-21→2026-11-30 中
+- 马来西亚｜12.12 Birthday Sale｜2026-12-01→2026-12-31 深
+- 马来西亚｜圣诞节｜2026-12-01→2026-12-31 中
+- 泰国｜元旦 1.1｜2026-01-01→2026-01-20 浅
+- 泰国｜农历新年 Chinese New Year｜2026-02-11→2026-02-28 中
+- 泰国｜宋干节 Songkran (4.13-15) 商场促销｜2026-04-11→2026-04-30 中
+- 泰国｜开学季（5.16开学）｜2026-04-21→2026-05-31 中
+- 泰国｜6.6 Mid-Year Sale｜2026-06-01→2026-06-10 中
+- 泰国｜Amazing Thailand Grand Sale 政府购物节｜2026-06-21→2026-08-10 中
+- 泰国｜8.8 + 母亲节 (8.12)｜2026-08-11→2026-08-31 中
+- 泰国｜9.9 Super Shopping Day｜2026-09-01→2026-09-20 深
+- 泰国｜水灯节 Loy Krathong (约11.23满月)｜2026-11-01→2026-11-30 浅
+- 泰国｜11.11（预售一般11.1起）｜2026-11-01→2026-11-30 深
+- 泰国｜12.12 + 父亲节(12.5)/圣诞新年｜2026-12-01→2026-12-31 深
+- 菲律宾｜元旦 1.1｜2026-01-01→2026-01-20 浅
+- 菲律宾｜2.2 情人节 + 农历新年(2.17)｜2026-02-11→2026-02-28 中
+- 菲律宾｜3.3 + Lazada 生日大促(3.27-31)｜2026-03-01→2026-03-20 中
+- 菲律宾｜圣周 Holy Week (4.2-4.4)｜2026-04-01→2026-04-30 浅
+- 菲律宾｜5.5 Brand Festival｜2026-05-01→2026-05-20 中
+- 菲律宾｜返校季 + 6.6 Mid-Year Sale｜2026-04-21→2026-05-31 中
+- 菲律宾｜8.8 Mega Sale｜2026-08-11→2026-08-31 浅
+- 菲律宾｜9.9 Super Sale｜2026-09-01→2026-09-20 深
+- 菲律宾｜10.10 Brands Festival｜2026-10-01→2026-10-20 中
+- 菲律宾｜11.11 Mega Pamasko｜2026-11-01→2026-11-30 深
+- 菲律宾｜黑五 BFCM (11.27-30)｜2026-11-21→2026-11-30 中
+- 菲律宾｜12.12 Year-End Sale｜2026-12-11→2026-12-31 深
+- 菲律宾｜圣诞 Simbang Gabi/Noche Buena｜2026-12-11→2026-12-31 中

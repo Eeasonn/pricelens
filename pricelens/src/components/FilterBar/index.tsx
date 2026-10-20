@@ -71,7 +71,7 @@ function ComparisonControl() {
 }
 
 /** One global row: country and industry scope, then own product and editable comparison. */
-export default function FilterBar({ onBack }: { onBack: () => void }) {
+export default function FilterBar({ onBack: _onBack }: { onBack?: () => void }) {
   const { state, actions } = useFilters();
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
@@ -94,12 +94,6 @@ export default function FilterBar({ onBack }: { onBack: () => void }) {
               <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: color.mute }}>vs</span>
             )}
             <div style={{ flex: '1 1 290px', minWidth: 0 }}><Field label="竞品"><ComparisonControl /></Field></div>
-            <button
-              type="button" onClick={onBack} title="返回总览页并定位到该产品行组"
-              style={{ flexShrink: 0, border: 0, background: 'transparent', color: color.link, font: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-            >
-              ← 返回总览
-            </button>
           </div>
         </section>
       </ConfigProvider>

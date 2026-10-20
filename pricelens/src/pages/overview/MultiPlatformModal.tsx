@@ -13,7 +13,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 import type { OverviewModel } from '../../dataModel/aggregate';
 import { buildPlatformCompare } from '../../dataModel/platformCompare';
 import type { CurrencyMode } from '../../dataModel/types';
-import { color, fontSize, radius } from '../../theme/tokens';
+import { color, fontSize, radius, localCurrencySymbol } from '../../theme/tokens';
 
 echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
@@ -63,7 +63,7 @@ export default function MultiPlatformModal(props: {
       tooltip: {
         trigger: 'axis',
         confine: true,
-        valueFormatter: (v: number | null) => (v == null ? '—' : `${isUsd ? '$' : '₽'}${v.toLocaleString('en-US')}`),
+        valueFormatter: (v: number | null) => (v == null ? '—' : `${isUsd ? '$' : localCurrencySymbol()}${v.toLocaleString('en-US')}`),
       },
       xAxis: {
         type: 'category',
@@ -79,7 +79,7 @@ export default function MultiPlatformModal(props: {
         axisLabel: {
           fontSize: 10,
           color: color.mute,
-          formatter: (v: number) => (isUsd ? `$${Math.round(v)}` : `₽${Math.round(v / 1000)}K`),
+          formatter: (v: number) => (isUsd ? `$${Math.round(v)}` : `${localCurrencySymbol()}${Math.round(v / 1000)}K`),
         },
       },
       series: result.series.map((s) => ({
@@ -106,7 +106,7 @@ export default function MultiPlatformModal(props: {
     if (props.open) setRomram(props.initialRomram ?? null);
   }, [props.open, model, props.initialRomram]);
 
-  const fmt = (v: number | null): string => (v == null ? '—' : `${currency === 'usd' ? '$' : '₽'}${v.toLocaleString('en-US')}`);
+  const fmt = (v: number | null): string => (v == null ? '—' : `${currency === 'usd' ? '$' : localCurrencySymbol()}${v.toLocaleString('en-US')}`);
   const gapPctText = (v: number): string => `${v > 0 ? '+' : ''}${(v * 100).toFixed(1)}%`;
 
   return (

@@ -5,3 +5,8 @@ dist/
 tsconfig.tsbuildinfo
 node_modules/
 dist/
+
+# 真实数据接入：源 xlsx 不入库（体量/敏感），展开 JSON 与增量目录仅本地
+data/real/fact_expanded.json
+data/real/incoming/*.xlsx
+__pycache__/

@@ -1,8 +1,8 @@
-# PriceLens · 欧亚手机市场价格看板
+# PriceLens · 多国多产业价格看板
 
-华为 vs 竞品的周度价格走势与生命周期分析看板。纯前端单文件交付：数据构建时内嵌（gzip+base64），双击 `PriceLens.html` 即可离线打开，也可访问在线版。
+华为 vs 竞品的周度价格走势与生命周期分析看板，数据为 24 国 × 手机/平板/穿戴/音频 真实电渠爬取价格（2026-05-06 → 10-14，共 24 周 8.5 万行）。纯前端单文件交付：数据构建时内嵌（列式 gzip+base64），双击 `PriceLens.html` 即可离线打开，也可访问在线版。
 
-当前默认视图为：周粒度 · USD · 我司 Pura 90s Pro 12+256 · Ozon Россия 官方店铺 · 自动匹配配置竞品。
+当前默认视图为：R国 · 手机 · 周粒度 · USD · 该国默认电渠（国家主要电渠首个，R国 = DNS）· 我司 = 产品竞品矩阵首个有数型号（Pura 90s Pro Max 12+256）· 自动匹配分国对标竞品。总览/预警两页暂置灰（随真实数据重构中）。
 
 **在线版**：<https://eeasonn.github.io/pricelens/>（push `main` 自动构建部署，见 `.github/workflows/deploy.yml`）
 
@@ -17,6 +17,16 @@
 - **下钻分析**：月/季悬停下钻弹窗、周视图跳转、端点 S/E 徽标与窗口外续接
 - **配置页**：上一代关系、竞品基准矩阵、参考汇率维护
 - **预警中心**：从看板时点页签铃铛进入，支持调价、折扣、平台价差、档位间距四类规则订阅与阈值管理
+
+## 数据接入（真实数据）
+
+```bash
+cd pricelens
+npm run ingest   # scripts/ingest_real.py：全量数据表.xlsx + 产品竞品矩阵/国家主要电渠/国家大促日历.txt → src/data/dim_*.json + fact_pack_gzip.b64.txt
+```
+
+- 增量补录：同 29 列 xlsx 放入 `pricelens/data/real/incoming/` 后重跑；人工纠偏只改 `pricelens/data/real/overrides.json`；每次产出 `data/real/ingest_report.md` 验收单。
+- 设计与评估：`docs/真实数据接入评估-2026-10-20.md`。
 
 ## 技术栈
 

@@ -9,14 +9,14 @@ import { Button, ConfigProvider, Tooltip } from 'antd';
 import { usePage, type Page } from '../state/PageContext';
 import { filterBarTheme } from './FilterBar';
 import CountryBox from './FilterBar/CountryBox';
-import { AlertNavButton } from './AlertCenter';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
-const TABS: { page: Page; label: string }[] = [
-  { page: 'overview', label: '总览' },
+/** 2026-10-20 起聚焦价格看板：总览、预警两页置灰待后续迭代（页头仅保留一处预警入口） */
+const TABS: { page: Page; label: string; disabled?: boolean; hint?: string }[] = [
+  { page: 'overview', label: '总览', disabled: true, hint: '总览页随真实数据重构中，暂不可用' },
   { page: 'dashboard', label: '价格看板' },
   { page: 'config', label: '配置' },
-  { page: 'alerts', label: '预警' },
+  { page: 'alerts', label: '预警', disabled: true, hint: '预警中心随真实数据重构中，暂不可用' },
 ];
 
 export default function PageHeader({ extra }: { title?: string; extra?: ReactNode }) {
@@ -69,18 +69,25 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
         </ConfigProvider>
       </div>
       <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
-        <AlertNavButton />
-        {TABS.map((t) => (
-          <Button
-            key={t.page}
-            size="small"
-            style={{ height: 28 }}
-            type={page === t.page ? 'primary' : 'default'}
-            onClick={page === t.page ? undefined : () => go(t.page)}
-          >
-            {t.label}
-          </Button>
-        ))}
+        {TABS.map((t) =>
+          t.disabled ? (
+            <Tooltip key={t.page} title={t.hint}>
+              <Button size="small" style={{ height: 28 }} disabled>
+                {t.label}
+              </Button>
+            </Tooltip>
+          ) : (
+            <Button
+              key={t.page}
+              size="small"
+              style={{ height: 28 }}
+              type={page === t.page ? 'primary' : 'default'}
+              onClick={page === t.page ? undefined : () => go(t.page)}
+            >
+              {t.label}
+            </Button>
+          ),
+        )}
         {extra}
       </div>
     </header>

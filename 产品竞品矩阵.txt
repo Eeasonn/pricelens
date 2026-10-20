@@ -1,0 +1,276 @@
+区域	国家	产业	系列	产品	价格挡位（USD）	品牌-竞品1	品牌-竞品2	品牌-竞品3
+中东非	沙特	穿戴	WATCH Ultimate	WATCH ultimate  2	>300	Apple Watch  Ultra 3	Samsung Galaxy  Watch Ultra	Garmin Fenix 8
+中东非	沙特			WATCH ultimate	>300	Apple  Watch Ultra 3	Samsung  Galaxy Watch Ultra	Garmin  Fenix 8
+中东非	沙特		WATCH GT	GT7  Pro	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8	Garmin  Venu 4
+中东非	沙特			GT7	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  vívoactive 6
+中东非	沙特			GT Runner 2	>300	Garmin  Forerunner 970	Garmin  Forerunner 570	COROS  PACE Pro
+中东非	沙特		WATCH FIT	FIT  5 Pro	150<300	Apple  Watch SE 3	Samsung  Galaxy Watch FE	Garmin  vívoactive 6
+中东非	沙特			FIT 5	150<300	Samsung  Galaxy Watch FE	Xiaomi  Watch S4	Amazfit  Active 2
+中东非	沙特		WATCH	D3	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Xiaomi  Watch S4
+中东非	沙特			WATCH 6 Pro	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  Venu 4
+中东非	沙特			WATCH 6	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  Venu 4
+中东非	沙特		WATCH KIDS	KIDS  X1 Pro	150<300	-		
+中东非	沙特			KIDS X1系列	150<300	-		
+中东非	沙特			KIDS 4 Pro	50<75	-		
+中东非	沙特		Band	Band  11 Pro	25<75	Xiaomi  Smart Band 10	Samsung  Galaxy Fit3	Amazfit  Band 7
+中东非	沙特			Band 11	25<75	Xiaomi  Smart Band 10	Samsung  Galaxy Fit3	Amazfit  Band 7
+中东非	沙特	音频	FreeClip	FreeClip  2 S	＞200	Shokz  OpenDots 2	Shokz  OpenDots 2	Soundcore  AeroClip
+中东非	沙特			FreeClip 2	100<200	Shokz  OpenDots 2	Shokz  OpenDots 2	Soundcore  AeroClip
+中东非	沙特		FreeBuds	FreeBuds  Pro 5	＞200	Apple  AirPods Pro 3	Sony  WF-1000XM5	Samsung  Galaxy Buds3 Pro
+中东非	沙特			FreeBuds 7i	100<200	Apple  AirPods 5	Samsung  Galaxy Buds FE	Nothing  Ear (a)
+中东非	沙特			FreeBuds Neo	100<200	Xiaomi  Redmi Buds 6 Pro	JBL  Live Buds 3	Soundcore  Liberty 4 NC
+中东非	沙特			FreeBuds SE 4 ANC	50＜100	Xiaomi  Redmi Buds 6 Lite	JBL  Wave Buds	Soundcore  P30i
+中东非	沙特	手机	Pura	Pura  90s Pro Max	800<1000	Samsung  Galaxy S26 Ultra	Apple  iPhone 18 Pro Max	Xiaomi  17 Ultra
+中东非	沙特			Pura 90s Pro	800<1000	amsung  Galaxy S26+	Apple  iPhone 18 Pro	HONOR  Magic8 Pro
+中东非	沙特		Mate	Mate  X7	＞1000	Samsung  Galaxy Z Fold 8 Ultra	HONOR  Magic V6	iPhone  Duo
+中东非	沙特			Mate XT	＞1000	-		
+中东非	沙特			Mate 80 Pro	800<1000	Samsung  Galaxy S26 Ultra	HONOR  Magic8 Pro	OPPO  Find X9 Pro
+中东非	沙特		nova	nova  16s Pro	600<800	Samsung  Galaxy S25 FE	HONOR  600 Pro	Xiaomi  15T Pro
+中东非	沙特			nova 16s	400<600	Samsung  Galaxy A57 5G	Honor  600	Xiaomi  Redmi Note 15 Pro+
+中东非	沙特			nova Y74	200<400	-	-	-
+中东非	沙特			nova 15 Max	200<400	Honor  X9D	Samsung  Galaxy A36 5G	Xiaomi  Redmi Note 15 Pro
+中东非	沙特	平板	Pro	MatePad  Pro Max	>=800	Apple  iPad Pro 13"	Samsung  Galaxy Tab S11 Ultra	HONOR  MagicPad 4
+中东非	沙特			MatePad Pro 12.2	>=800	Apple  iPad Pro 11"	Samsung  Galaxy Tab S11	HONOR  MagicPad 4
+中东非	沙特		Air	MatePad  Air	>=800	Apple  iPad Air 13"	Samsung  Galaxy Tab S10 FE+	Xiaomi  Pad 7 Pro
+中东非	沙特			MatePad 12 X	500<800	Apple  iPad Air 11"	Samsung  Galaxy Tab S10 FE	Lenovo  Idea Tab Pro
+中东非	沙特		mini	MatePad  mini	500<800	Apple  iPad mini	Xiaomi  Pad Mini	Lenovo  Legion Tab
+中东非	沙特		数字	MatePad  11.5S	350<500	Honor  Pad 10	Apple  iPad（A16）	"GALAXY 11.0 TAB A11 PLUS "
+中东非	沙特			MatePad 11.5	250<350	Honor  X9b Max	HONOR  Pad X9a	Samsung  Galaxy Tab A11+
+中东非	沙特		SE	MatePad  SE 11	150<250	HONOR  Pad X8b	Samsung  Galaxy Tab A11	Xiaomi  Redmi Pad 2
+中东非	阿联酋	穿戴	WATCH Ultimate	WATCH ultimate  2	>300	Apple Watch  Ultra 3	Samsung Galaxy  Watch Ultra	Garmin Fenix 8
+中东非	阿联酋			WATCH ultimate	>300	Apple  Watch Ultra 3	Samsung  Galaxy Watch Ultra	Garmin  Fenix 8
+中东非	阿联酋		WATCH GT	GT7  Pro	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8	Garmin  Venu 4
+中东非	阿联酋			GT7	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  vívoactive 6
+中东非	阿联酋			GT Runner 2	>300	Garmin  Forerunner 970	Garmin  Forerunner 570	COROS  PACE Pro
+中东非	阿联酋		WATCH FIT	FIT  5 Pro	150<300	Apple  Watch SE 3	Samsung  Galaxy Watch FE	Garmin  vívoactive 6
+中东非	阿联酋			FIT 5	150<300	Samsung  Galaxy Watch FE	Xiaomi  Watch S4	Amazfit  Active 2
+中东非	阿联酋		WATCH	D3	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Xiaomi  Watch S4
+中东非	阿联酋			WATCH 6 Pro	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  Venu 4
+中东非	阿联酋			WATCH 6	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  Venu 4
+中东非	阿联酋		WATCH KIDS	KIDS  X1 Pro	150<300	-		
+中东非	阿联酋			KIDS X1系列	150<300	-		
+中东非	阿联酋			KIDS 4 Pro	50<75	-		
+中东非	阿联酋		Band	Band  11 Pro	25<75	Xiaomi  Smart Band 10	Samsung  Galaxy Fit3	Amazfit  Band 7
+中东非	阿联酋			Band 11	25<75	Xiaomi  Smart Band 10	Samsung  Galaxy Fit3	Amazfit  Band 7
+中东非	阿联酋	音频	FreeClip	FreeClip  2 S	＞200	Shokz  OpenDots 2	Shokz  OpenDots 2	Soundcore  AeroClip
+中东非	阿联酋			FreeClip 2	100<200	Shokz  OpenDots 2	Shokz  OpenDots 2	Soundcore  AeroClip
+中东非	阿联酋		FreeBuds	FreeBuds  Pro 5	＞200	Apple  AirPods Pro 3	Sony  WF-1000XM5	Samsung  Galaxy Buds3 Pro
+中东非	阿联酋			FreeBuds 7i	100<200	Apple  AirPods 5	Samsung  Galaxy Buds FE	Nothing  Ear (a)
+中东非	阿联酋			FreeBuds Neo	100<200	Xiaomi  Redmi Buds 6 Pro	JBL  Live Buds 3	Soundcore  Liberty 4 NC
+中东非	阿联酋			FreeBuds SE 4 ANC	50＜100	Xiaomi  Redmi Buds 6 Lite	JBL  Wave Buds	Soundcore  P30i
+中东非	阿联酋	手机	Pura	Pura  90s Pro Max	800<1000	Samsung  Galaxy S26 Ultra	Apple  iPhone 18 Pro Max	Xiaomi  17 Ultra
+中东非	阿联酋			Pura 90s Pro	800<1000	amsung  Galaxy S26+	Apple  iPhone 18 Pro	HONOR  Magic8 Pro
+中东非	阿联酋		Mate	Mate  X7	＞1000	Samsung  Galaxy Z Fold 8 Ultra	HONOR  Magic V6	iPhone  Duo
+中东非	阿联酋			Mate XT	＞1000	-		
+中东非	阿联酋			Mate 80 Pro	800<1000	Samsung  Galaxy S26 Ultra	HONOR  Magic8 Pro	OPPO  Find X9 Pro
+中东非	阿联酋		nova	nova  16s Pro	600<800	Samsung  Galaxy S25 FE	HONOR  600 Pro	Xiaomi  15T Pro
+中东非	阿联酋			nova 16s	400<600	Samsung  Galaxy A57 5G	Honor  600	Xiaomi  Redmi Note 15 Pro+
+中东非	阿联酋			nova Y74	200<400	-	-	-
+中东非	阿联酋			nova 15 Max	200<400	Honor  X9D	Samsung  Galaxy A36 5G	Xiaomi  Redmi Note 15 Pro
+中东非	阿联酋	平板	Pro	MatePad  Pro Max	>=800	Apple  iPad Pro 13"	Samsung  Galaxy Tab S11 Ultra	HONOR  MagicPad 4
+中东非	阿联酋			MatePad Pro 12.2	>=800	Apple  iPad Pro 11"	Samsung  Galaxy Tab S11	HONOR  MagicPad 4
+中东非	阿联酋		Air	MatePad  Air	>=800	Apple  iPad Air 13"	Samsung  Galaxy Tab S10 FE+	Xiaomi  Pad 7 Pro
+中东非	阿联酋			MatePad 12 X	500<800	Apple  iPad Air 11"	Samsung  Galaxy Tab S10 FE	Lenovo  Idea Tab Pro
+中东非	阿联酋		mini	MatePad  mini	500<800	Apple  iPad mini	Xiaomi  Pad Mini	Lenovo  Legion Tab
+中东非	阿联酋		数字	MatePad  11.5S	350<500	Honor  Pad 10	Apple  iPad（A16）	"GALAXY 11.0 TAB A11 PLUS "
+中东非	阿联酋			MatePad 11.5	250<350	Honor  X9b Max	HONOR  Pad X9a	Samsung  Galaxy Tab A11+
+中东非	阿联酋		SE	MatePad  SE 11	150<250	HONOR  Pad X8b	Samsung  Galaxy Tab A11	Xiaomi  Redmi Pad 2
+欧洲	波兰	手机	Pura	Pura 90s Pro	~=1000	" iPhone 17 256GB
+SRP 4499"	"Samsung Galaxy S26 5G 12/512 Dual SIM
+SRP 4399"	"Samsung Galaxy S25 Ultra 5G 12/256GB Dual SIM
+SRP 3999"
+欧洲	波兰			Puro 90s Pro Max	1000+	"iPhone 17 512GB
+SRP 5499
+ iPhone 17 Pro 5G 256GB
+SRP 5350
+iPhone 17 Pro Max 5G 256GB
+SRP 5799
+"	"Samsung Galaxy S26 Ultra 5G 12/512 Dual SIM
+SRP 5622"	"Samsung Galaxy S26+ 5G 12/512 Dual SIM
+SRP 5439"
+欧洲	波兰		Mate	"Mate  X7"	1000+	iPhone  DUO	"SAMSUNG Galaxy Z Fold 8 5G 12/256GB
+SRP 8799"	"Samsung Galaxy Z Fold 7 5G 12/512GB
+SRP 7499"
+欧洲	波兰		nova	"nova  14系列"	400-600	Smartfon  REALME 16 Pro+ 5G 12/512GB 6.8" 144Hz	"Smartfon MOTOROLA Edge 70 5G 12/512GB 6.67" 120Hz "	"Smartfon MOTOROLA Razr 60 5G 8/256GB 6.9" 120Hz "
+欧洲	波兰	平板	MatePad PRO	"MatePad  Pro Max"	800+	Apple  iPad Pro 13"（M4）	Samsung  Galaxy Tab S11 Ultra	Galaxy  Tab S11 Ultra 14.6" 12/512
+欧洲	波兰		Air	"MatePad  Air"	800+	"iPad Air 13'' M3 Wi-Fi 128GB "	"SAMSUNG Galaxy Tab S11 11" 12/128 GB Wi-Fi +  S Pen"	SAMSUNG Galaxy  Tab S10 FE+ 13.1" 12/256 GB Wi-Fi + S Pen
+欧洲	波兰		数字	"MatePad  12X"	500-800	Apple  iPad 11" 11 gen. 2025 256 GB Wi-Fi	Tablet  SAMSUNG Galaxy Tab S10 FE 10.9" 12/256 GB Wi-Fi Szary + Rysik S Pen	Idea Tab Pro  12,7'' Matt (TB373FU) 8/256GB WiFi (ZAE40189PL) szary + KB + rysik
+欧洲	波兰			MatePad 11.5S	500-800	Tablet  SAMSUNG Galaxy Tab S10 Lite 10.9 Wi-Fi 8GB 256GB Szary + rysik S Pen	Xiaomi  Pad 8 8/256GB WiFi Gray	Lenovo  Idea Tab Plus 12,1'' Matt (TB361FU) 12/256GB WiFi (ZAG70961PL) szary + rysik  + KB
+欧洲	波兰			MatePad 11.5	450	Lenovo  Idea Tab Plus 12,1'' Matt (TB361FU) 8/256GB WiFi (ZAG70451PL) szary + rysik	Tablet  XIAOMI Redmi Pad 2 Pro 12.1" 8/256 GB Wi-Fi Szary	Tablet  LENOVO IdeaTab Matowy Ekran 11" 8/256GB Wi-Fi Szary + Klawiatura + Rysik
+欧洲	波兰	音频	FreeClip	"FreeClip  2 S"	200+	Bose Ultra Open  Earbuds	Sony LinkBuds  Fit	shokz opendots  2
+欧洲	波兰			FreeClip 2	100-200	Bose  Ultra Open Earbuds	Sony  LinkBuds Open	shokz  opendots 2
+欧洲	波兰		FreeBuds	"FreeBuds  Pro 5"	200+	Apple  AirPods Pro 3	Sony  WF-1000XM6	Samsung  Buds 4 Pro
+欧洲	波兰			FreeBuds NEO	100-200	Apple  AirPods 5	Samsung  Galaxy Buds 3 Pro	JBL  Live Pro 2 TWS
+欧洲	波兰			FreeBuds 7i	100-200	Apple  AirPods 5	Samsung  Galaxy Buds 3 Pro	JBL  Live Pro 2 TWS
+欧洲	波兰			FreeBuds 6	100-200	Apple  AirPods 5	Samsung  Galaxy Buds 3 Pro	JBL  Live Pro 2 TWS
+欧洲	波兰			FreeBuds SE 4 ANC	<100	JBL  Tune Buds	Xiaomi  Redmi Buds 4 Pro	
+欧洲	波兰		FreeArc	FreeArc	<100	JBL  Tune Buds	SHOKZ  OpenFit 2	OpenFit  Air
+欧亚	R国	穿戴	WATCH Ultimate	"WATCH ultimate  2"	>300	"Apple Watch  Ultra 4"	"Garmin Fenix 8  Pro"	"Samsung Galaxy  Watch Ultra"
+欧亚	R国			WATCH ultimate	>300	"Apple  Watch Ultra 3"	"Garmin  Fenix 7 Pro"	"Samsung  Galaxy Watch Ultra"
+欧亚	R国		WATCH GT	"GT7  Pro"	>300	"Apple  Watch Series 12"	"Samsung Galaxy Watch  9"	
+欧亚	R国			GT7	>300	"Samsung Galaxy Watch  9"	"Samsung Galaxy Watch  8"	"Xiaomi  S5"
+欧亚	R国			GT Runner 2	>300	"Garmin  Forerunner 965"	"Garmin  Forerunner 570"	"COROS  Pace Pro"
+欧亚	R国		WATCH  FIT	"FIT  5 Pro"	150<300	"Apple  Watch SE 3"	"Xiaomi  S5"	"Amazfit  Active"
+欧亚	R国			FIT 5	150<300	"Xiaomi  S5"	"Xiaomi  Band 10 Pro"	"Redmi  Watch 6"
+欧亚	R国		WATCH	D3	>300	\	\	\
+欧亚	R国			WATCH 6 Pro	>300	"Apple  Watch Series 12"	"Apple  Watch Ultra 3"	"Apple  Watch Ultra 4"
+欧亚	R国			WATCH 6	>300	"Apple  Watch Series 12"	"Samsung  Galaxy Watch 9"	
+欧亚	R国		WATCH KIDS	"KIDS  X1 Pro"	150<300	"Aimoto  Life Button"	"Aimoto  Fun"	"Aimoto  Fun"
+欧亚	R国			KIDS X1系列	150<300	"Aimoto  Life Button"	"Aimoto  Fun"	"Aimoto  Fun"
+欧亚	R国			KIDS 4 Pro	50<75	"Aimoto  Life Button"	"Aimoto  Fun"	"Aimoto  Fun"
+欧亚	R国		Band	"Band  11 Pro"	25<75	"Xiaomi  Smart Band 10"	Redmi Watch 5 lite	Xiaomi band 10 Pro
+欧亚	R国			Band 11	25<75	"Xiaomi  Smart Band 10"	Redmi Watch 5 lite	Amazfit  Band 7
+欧亚	R国	音频	FreeClip	FreeClip  2 S	＞200	Apple  AirPods 4 ANC	Apple  AirPods 5	Galaxy  Buds On
+欧亚	R国			FreeClip 2	100<200	Apple  AirPods 4 ANC	Apple  AirPods 5	Galaxy  Buds On
+欧亚	R国		FreeBuds	FreeBuds  Pro 5	＞200	Apple  AirPods Pro 3	Samsung  Galaxy Buds4 Pro	Sony  WF-1000XM6
+欧亚	R国			FreeBuds Neo	100<200	Yandex  Drop	Apple  AirPods 4 ANC	Apple  AirPods 5
+欧亚	R国			FreeBuds 7i	100<200	Samsung  Galaxy Buds FE	Realme  Buds air 8 pro	Soundcore  Liberty 5
+欧亚	R国	手机	Pura	Pura  90s Pro Max	800<1000	Apple  iPhone 17 Pro	Samsung  Galaxy S26 Ultra	
+欧亚	R国			Pura 90s Pro	800<1000	Apple  iPhone 17	Samsung  Galaxy S26	
+欧亚	R国		Mate	Mate  X7	＞1000	Samsung  Galaxy Z Fold7	Honor  Magic V5	
+欧亚	R国			Mate XT	＞1000	Samsung  Galaxy Z TriFold		
+欧亚	R国			Mate 80 Pro	800<1000	Apple  iPhone 17	Samsung  Galaxy S26+	Honor  Magic 8 Pro
+欧亚	R国		nova	nova  16s Pro	600<800	Samsung  Galaxy S26 FE	Honor  600 Pro	
+欧亚	R国			nova 16s	400<600	Samsung  Galaxy A57	Honor  600	
+欧亚	R国			nova 15	400<600	Samsung  Galaxy A57	Honor  600	
+欧亚	R国			nova Y74	200<400	Samsung  Galaxy A17	Honor  X7e	Redmi  Note 17 Pro
+欧亚	R国			nova 15 Max	200<400	Samsung  Galaxy A37	Honor  X9d	Redmi  Note 17 Pro
+欧亚	R国	平板	Pro	MatePad  Pro Max	>=800	Apple  iPad Pro M5 13"	Samsung  Galaxy Tab S11 Ultra	
+欧亚	R国			MatePad Pro 12.2	>=800	Apple  iPad Pro M5 11"	Samsung  Galaxy Tab S11	
+欧亚	R国		Air	MatePad  Air	>=800	Apple  iPad Air M4 11"	Samsung  Galaxy Tab S11	
+欧亚	R国		mini	MatePad  mini	500<800	Apple  iPad mini		
+欧亚	R国		数字	MatePad  11.5	350<500	Apple  iPad 11	Redmi  Pad 2 Pro	Honor  PAD 20
+欧亚	R国		SE	MatePad  SE 11	250<350	Redmi  Pad 2	Honor  PAD 11.5 X9A	Samsung  Galaxy Tab A9+
+亚太	菲律宾	穿戴	WATCH Ultimate	WATCH ultimate  2	>300	Apple  Watch Ultra 2	Garmin  Fenix 8	Samsung  Galaxy Watch Ultra
+亚太	菲律宾			WATCH ultimate design	>300	Apple  Watch Hermès	Garmin  MARQ Commander Gen 2	TAG Heuer  Connected Calibre E4
+亚太	菲律宾			D2	>300			
+亚太	菲律宾			WATCH 5系列	>300	Apple  Watch Series 10	Samsung  Galaxy Watch7	Garmin  Venu 3
+亚太	菲律宾		WATCH GT	GT Runner  2	>300	Garmin  Forerunner 265	COROS Pace  3	Suunto 5  Peak
+亚太	菲律宾			GT7系列	150<300	Samsung  Galaxy Watch7	Garmin  Venu 3	Amazfit  Balance
+亚太	菲律宾			GT6系列	150<300	Samsung  Galaxy Watch6	Garmin  Venu 3	Amazfit  GTR 4
+亚太	菲律宾		WATCH FIT	FIT5系列	150<300	Apple  Watch SE	Samsung  Galaxy Watch FE	Xiaomi  Smart Band 9 Pro
+亚太	菲律宾			FIT 4系列	75<150	Apple  Watch SE	Samsung  Galaxy Fit3	Xiaomi  Smart Band 9 Pro
+亚太	菲律宾			FIT 3	75<150	Apple  Watch SE	Samsung  Galaxy Fit3	Xiaomi  Smart Band 9 Pro
+亚太	菲律宾		WATCH KIDS	KIDS X1系列	50<75	imoo Watch  Phone Z7	Garmin  Bounce	Fitbit Ace  3
+亚太	菲律宾			KIDS 4 Pro	50<75	imoo Watch  Phone Z6	Garmin  Bounce	Xplora  X6Play
+亚太	菲律宾		Band	Band 11系列	25<75	Xiaomi  Smart Band 9	Samsung  Galaxy Fit3	realme  Band 2
+亚太	菲律宾	音频	FreeClip	FreeClip 2  S	＞200	Bose Ultra  Open Earbuds	shokz  opendots 2	Anker  AeroClip
+亚太	菲律宾			FreeClip 2	150<200	Bose Ultra  Open Earbuds	shokz opendots 2	Anker AeroClip
+亚太	菲律宾		FreeBuds	FreeBuds  Pro 5	＞200	Apple  AirPods Pro 3	Samsung Galaxy Buds4 Pro	Sony  WF-1000XM6
+亚太	菲律宾			FreeBuds Neo	100<150	Apple  AirPods Pro 2	Soundcore  Liberty 5	Apple  AirPods 5
+亚太	菲律宾			FreeBuds 7i	100<150	Soundcore  Liberty 5	Samsung  Galaxy Buds4 Pro	Apple  AirPods 4 ANC
+亚太	菲律宾			FreeBuds SE 4 ANC	25＜75	Soundcore  R60I NC	Soundcore  P31I	Soundcore  P40I
+亚太	菲律宾		FreeArc	FreeArc	100<200	Shokz -  OpenFit / OpenFit Air	Soundcore  - AeroFit Pro (Anker)	JBL -  Soundgear Sense
+亚太	菲律宾	手机	Pura	Pura 90s  Pro Max	800<1000	Apple iPhone 17 Pro	Samsung Galaxy S26 Ultra	
+亚太	菲律宾			Pura 90s Pro	800<1000	Apple iPhone 17	Samsung  Galaxy S26	
+亚太	菲律宾		Mate	Mate X7	＞1000	Samsung Galaxy Z Fold7	Honor  Magic V5	
+亚太	菲律宾			Mate XT	＞1000	Samsung Galaxy Z TriFold		
+亚太	菲律宾			Mate 80 Pro	800<1000	Apple iPhone 17	Samsung  Galaxy S26+	Honor  Magic 8 Pro
+亚太	菲律宾		Nova	nova Y74	200<400	Samsung Galaxy A17	Redmi Note  17	Honor X7e
+亚太	菲律宾			nova 15 Max	200<400	Samsung Galaxy A37	Redmi Note  17 Pro	Honor X9d
+亚太	菲律宾	平板	Pro	MatePad  Pro Max	>=800	iPad Pro  M5 13''	Samsung  Tab S11 Ultra	Samsung  Tab S11/S10+
+亚太	菲律宾			MatePad Pro 12.2	>=800	iPad Pro  M5 11''	Samsung  Tab S11	MI PAD 8  Pro
+亚太	菲律宾		Air	MatePad Air	>=800	iPad Air  M4 13''	Samsung  Tab S11	MI PAD 8  Pro
+亚太	菲律宾			MatePad 12 X	500<800	iPad Air  M4 11''	Samsung  Tab S10 FE+	MI PAD 8  Pro
+亚太	菲律宾		mini	MatePad mini	500<800	iPad mini	/	/
+亚太	菲律宾		数字	MatePad  11.5S	350<500	iPad 11	Samsung  Tab S10 FE	MI PAD 8
+亚太	菲律宾			MatePad 11.5	250<350	Honor PAD  10	Xiaomi  Redmi Pad 2 Pro	iPad 11
+亚太	菲律宾		SE	MatePad SE 11	150<250	Honor PAD  X9A	Xiaomi  Redmi Pad 2	Samsung  Tab A11
+亚太	泰国	穿戴	WATCH Ultimate	WATCH ultimate 2	>300	Apple  Watch Ultra 2	Samsung  Galaxy Watch Ultra	Garmin  Fenix 8 Solar
+亚太	泰国			WATCH ultimate	>300	Apple  Watch Ultra 2	Samsung  Galaxy Watch 7 Ultra	Garmin  Epix Pro
+亚太	泰国			WATCH ultimate  design spring edition	>300	Apple  Watch Ultra 2	Samsung  Galaxy Watch Ultra	Garmin  Fenix 8 蓝宝石版
+亚太	泰国			WATCH ultimate  design	>300	Apple  Watch Ultra 2	Samsung  Galaxy Watch Ultra	Garmin  Epix Pro 设计款
+亚太	泰国		创新血压表系列	Watch D2	150<300			
+亚太	泰国		数字系列	WATCH 5	150<300	Samsung  Galaxy Watch FE	OPPO Watch  X2	小米 Watch  S5 eSIM 版
+亚太	泰国		WATCH  GT系列	GT7 系列	>300	Samsung  Galaxy Watch 7 Classic	Apple  Watch S11	小米 Watch  S4
+亚太	泰国			GT  Runner 2	>300	Garmin  Forerunner 265	Amazfit  Cheetah Pro	高驰 Pace 3
+亚太	泰国		WATCH  FIT系列	FIT5 系列	>300	小米 Watch  S5 Sport	Amazfit  GTS 5	荣耀手表 6
+亚太	泰国			FIT  4 系列	>300	Redmi  Watch 6	Amazfit  Bip 5	荣耀手表 SE
+亚太	泰国			FIT  3	150<300	Redmi  Watch 5 Lite	Amazfit  Bip 3 Pro	realme  Watch 3
+亚太	泰国		Kid系列	KIDS X1 系列	75<150	imoo Watch  Phone Z10（小天才）	小米米兔儿童手表  S7	三星 Galaxy  Watch Kids 5
+亚太	泰国		Band系列	Band 11 系列	75<150	小米手环 9	Amazfit  Band 8	三星 Galaxy  Fit 3
+亚太	泰国	音频	FreeClip	FreeClip 2  S	＞200	Bose Ultra  Open Earbuds	shokz  opendots 2	Anker  AeroClip
+亚太	泰国			FreeClip 2	150<200	Bose Ultra  Open Earbuds	shokz opendots 2	Anker AeroClip
+亚太	泰国		FreeBuds	FreeBuds  Pro 5	＞200	Apple  AirPods Pro 3	Samsung Galaxy Buds4 Pro	Sony  WF-1000XM6
+亚太	泰国			FreeBuds Neo	100<150	Apple  AirPods Pro 2	Soundcore  Liberty 5	Apple  AirPods 5
+亚太	泰国			FreeBuds 7i	100<150	Soundcore  Liberty 5	Samsung  Galaxy Buds4 Pro	Apple  AirPods 4 ANC
+亚太	泰国			FreeBuds SE 4 ANC	25＜75	Soundcore  R60I NC	Soundcore  P31I	Soundcore  P40I
+亚太	泰国		FreeArc	FreeArc	100<200	Soundcore  - AeroFit Pro (Anker)	Shokz -  OpenFit / OpenFit Air	JBL -  Soundgear Sense
+亚太	泰国	手机	Pura	Pura 90 系列	800<1000	iPhone 16 Pro Max	Samsung  Galaxy S25 Ultra	OPPO Find  X8 Pro
+亚太	泰国			Pura  80 系列	＞1000	iPhone 16	Samsung  Galaxy S25+	OPPO  Reno13 Pro+
+亚太	泰国		Mate	Mate X7	＞1000	Samsung Galaxy Z Fold6	Honor  Magic V3	OPPO Find  N5
+亚太	泰国			Mate  80 Pro	800<1000	iPhone 16 Pro	Samsung  Galaxy S25 Ultra	OPPO Find  X8 Pro
+亚太	泰国		Nova	nova 14 Pro	200<400	OPPO Reno13	vivo V40  Pro	Samsung  Galaxy A56
+亚太	泰国			nova  Y74	200<400	Samsung Galaxy A16 5G	Redmi Note  14	OPPO A5  Pro
+亚太	泰国	平板	Pro系列	MatePad Pro Max	>=800	iPad Pro  13 英寸 (M5)	Samsung  Galaxy Tab S10 Ultra	小米 Pad 9  Pro
+亚太	泰国		Air&Mini系列	MatePad Air	>=800	iPad Air  13 英寸 (M4)	Samsung  Galaxy Tab S10+	OPPO Pad 3  Pro
+亚太	泰国			MatePad mini	>=800	iPad mini  7	Samsung  Galaxy Tab A9+	小米 Pad  mini
+亚太	泰国			MatePad 12 X	500<800	iPad Air  11 英寸 (M4)	Samsung  Galaxy Tab S10 FE	小米 Pad 9
+亚太	泰国		数字系列	MatePad 11.5	500<800	Samsung  Galaxy Tab S10 FE	小米 Pad 9	OPPO Pad  Air 2
+亚太	泰国		SE系列	MatePad 11.5S	350<500	Samsung  Galaxy Tab S10 FE	iPad 10 代	荣耀平板 X9
+亚太	泰国			MatePad  SE 11	250<350	Samsung  Galaxy Tab A9	Redmi Pad  SE	realme Pad  2
+拉美	墨西哥	穿戴	WATCH Ultimate	WATCH ultimate 2	>400	Apple Watch Ultra 4	Garmin Fenix 8 Pro	Samsung Galaxy Watch Ultra
+拉美	墨西哥	穿戴	WATCH Ultimate	WATCH ultimate	>400	Apple Watch Ultra 3	Garmin Fenix 7 Pro	Samsung Galaxy Watch Ultra
+拉美	墨西哥	穿戴	WATCH GT	GT7 Pro	300-400	Apple Watch Series 12	Samsung Galaxy Watch 9	
+拉美	墨西哥	穿戴	WATCH GT	GT7	300-400	Samsung Galaxy Watch 9	Samsung Galaxy Watch 8	Xiaomi S5
+拉美	墨西哥	穿戴	WATCH GT	GT Runner 2	150<300	Garmin Forerunner 965	COROS Pace Pro	
+拉美	墨西哥	穿戴	WATCH FIT	FIT 5 Pro	150-300	Apple Watch SE 3	Xiaomi Watch S5	Amazfit Active
+拉美	墨西哥	穿戴	WATCH FIT	Fit 5	150-300	Xiaomi Watch S5	Xiaomi Band 10 Pro	Redmi Watch 6
+拉美	墨西哥	穿戴	WATCH	D3	>400	/	/	/
+拉美	墨西哥	穿戴	WATCH	WATCH 6 Pro	>400	Apple Watch Series 12	Apple Watch Ultra 3	Apple Watch Ultra 4
+拉美	墨西哥	穿戴	WATCH	WATCH 6	>400	Apple Watch Series 12	Samsung Galaxy Watch 9	
+拉美	墨西哥	穿戴	WATCH KIDS	KIDS X1 Pro	50<75	imoo Watch Phone	Xiaomi Kids Watch	
+拉美	墨西哥	穿戴	WATCH KIDS	KIDS X1	50<75	imoo Watch Phone	Xiaomi Kids Watch	
+拉美	墨西哥	穿戴	Band	"Band  11 Pro"	25<75	"Xiaomi  Smart Band 10"	Redmi Watch 5 lite	Xiaomi band 10 Pro
+拉美	墨西哥	穿戴	Band	Band 11	25<75	"Xiaomi  Smart Band 10"	Redmi Watch 5 lite	"Amazfit  Band 7"
+拉美	墨西哥	音频	FreeClip	FreeClip 2 S	＞200	shokz opendots 2	Anker AeroClip	Apple AirPods 4
+拉美	墨西哥	音频	FreeClip	FreeClip 2	100<200	shokz opendots 2	Anker AeroClip	Apple AirPods 4
+拉美	墨西哥	音频	FreeBuds	FreeBuds Pro 5	＞200	Apple AirPods Pro 3	Samsung Galaxy Buds4 Pro	Sony WF-1000XM6
+拉美	墨西哥	音频	FreeBuds	FreeBuds 7i	100<200	Soundcore Liberty 5	Samsung Galaxy Buds4 Pro	Apple AirPods 4 ANC
+拉美	墨西哥	音频	FreeBuds	FreeBuds NEO	100<200	Apple AirPods Pro 2	Soundcore Liberty 5	Apple AirPods 5
+拉美	墨西哥	音频	FreeBuds	FreeBuds SE 4 ANC	50＜100	Soundcore P30I	Redmi Buds 6 Pro	
+拉美	墨西哥	手机	Pura	Pura 90s Pro Max	800<1000	Apple iPhone 17 Pro	Samsung Galaxy S26 Ultra	
+拉美	墨西哥	手机	Pura	Pura 90s Pro	800<1000	Apple iPhone 17	Samsung Galaxy S26	
+拉美	墨西哥	手机	Mate	Mate X7	＞1000	Samsung Galaxy Z Fold7	Honor Magic V5	
+拉美	墨西哥	手机	Mate	Mate 80 Pro	800<1000	Apple iPhone 17	Samsung Galaxy S26+	Honor Magic 18 Pro
+拉美	墨西哥	手机	nova	nova 16s Pro	600<800	Samsung Galaxy S26 FE	Honor 600 Pro	
+拉美	墨西哥	手机	nova	nova 16s	400<600	Samsung Galaxy A57	Honor 600	
+拉美	墨西哥	手机	nova	nova Y74	400<600	Samsung A17	Honor X7e	Redmi Note 17 Pro
+拉美	墨西哥	手机	nova	nova 15 Max	400<600	Samsung Galaxy A37	Honor X9d	Redmi Note 17 Pro
+拉美	墨西哥	平板	Pro	MatePad Pro Max	>=800	Apple iPad Pro M5 13"	Samsung Galaxy Tab S11 Ultra	Samsung Tab S11/S10+
+拉美	墨西哥	平板	Pro	MatePad Pro 12.2	>=800	Apple iPad Pro M5 11"	Samsung Galaxy Tab S11	MI PAD 8 Pro
+拉美	墨西哥	平板	Air	MatePad Air	>=800	Apple iPad Air 11	Samsung Galaxy Tab S10/S11	Xiaomi Pad 7 Pro
+拉美	墨西哥	平板	Air	MatePad 12 X	500<800	Apple iPad Air M4 11"	Samsung Galaxy Tab S10 FE+	MI PAD 8
+拉美	墨西哥	平板	mini	MatePad mini	150<250	Apple iPad mini 7		
+拉美	墨西哥	平板	数字	MatePad 11.5S	350<500	Apple iPad Air 11	Samsung Galaxy Tab S10 FE	Xiaomi Pad 7
+拉美	墨西哥	平板	数字	MatePad 11.5	250<350	Samsung Galaxy Tab S10 Lite	Redmi Pad 2	Apple iPad 11
+拉美	墨西哥	平板	数字	MatePad SE 11	250<350	Samsung Galaxy Tab A11	Lenovo Tab M11	Xiaomi Redmi Pad 2
+拉美	巴西	穿戴	WATCH Ultimate	WATCH ultimate 2	>400	Apple Watch Ultra 4	Garmin Fenix 8 Pro	Samsung Galaxy Watch Ultra
+拉美	巴西	穿戴	WATCH GT	GT7 Pro	300-400	Apple Watch Series 12	Samsung Galaxy Watch 9	
+拉美	巴西	穿戴	WATCH GT	GT7	300-400	Samsung Galaxy Watch 9	Samsung Galaxy Watch 8	Xiaomi S5
+拉美	巴西	穿戴	WATCH GT	GT6系列	150<300	Apple Watch Series 11	Samsung Galaxy Watch6	Garmin Venu 3
+拉美	巴西	穿戴	WATCH GT	GT Runner 2	300-400	Garmin Forerunner 965	Garmin Forerunner 570	COROS Pace Pro
+拉美	巴西	穿戴	WATCH FIT	FIT 5 Pro	150-300	Apple Watch SE 3	Xiaomi S5	Amazfit Active
+拉美	巴西	穿戴	WATCH FIT	Fit 5	150-300	Xiaomi S5	Xiaomi Band 10 Pro	Redmi Watch 6
+拉美	巴西	穿戴	WATCH	D3	>400	/	/	/
+拉美	巴西	穿戴	WATCH	WATCH 6 Pro	>400	Apple Watch Series 12	Apple Watch Ultra 3	Apple Watch Ultra 4
+拉美	巴西	穿戴	WATCH	WATCH 6	>400	Apple Watch Series 12	Samsung Galaxy Watch 9	
+拉美	巴西	穿戴	WATCH KIDS	KIDS X1 Pro	150-300	Aimoto Life Button	Aimoto Fun	Aimoto Fun
+拉美	巴西	穿戴	WATCH KIDS	KIDS X1	150-300	Aimoto Life Button	Aimoto Fun	Aimoto Fun
+拉美	巴西	穿戴	Band	Band 11系列	25<75	Samsung Galaxy Fit3	Xiaomi Smart Band 10	Amazfit Band 7
+拉美	巴西	音频	FreeClip	FreeClip 2 S	＞200	shokz opendots 2	Anker AeroClip	Apple AirPods 4
+拉美	巴西	音频	FreeClip	FreeClip 2	100<200	shokz opendots 2	Anker AeroClip	Apple AirPods 4
+拉美	巴西	音频	FreeBuds	FreeBuds Pro 5	＞200	Apple AirPods Pro 3	Samsung Galaxy Buds4 Pro	Sony WF-1000XM6
+拉美	巴西	音频	FreeBuds	FreeBuds 7i	100<200	Soundcore Liberty 5	Samsung Galaxy Buds4 Pro	Apple AirPods 4 ANC
+拉美	巴西	音频	FreeBuds	FreeBuds NEO	100<200	Apple AirPods Pro 2	Soundcore Liberty 5	Apple AirPods 5
+拉美	巴西	音频	FreeBuds	FreeBuds SE 4 ANC	50＜100	Soundcore P30I	Redmi Buds 6 Pro	
+拉美	巴西	手机	Pura	Pura 90s Pro Max	800<1000	Apple iPhone 17 Pro	Samsung Galaxy S26 Ultra	
+拉美	巴西	手机	Pura	Pura 90s Pro	800<1000	Apple iPhone 17	Samsung Galaxy S26	
+拉美	巴西	手机	Pura	Pura 80 Pro	800<1000	Apple iPhone 16	Samsung Galaxy S25	
+拉美	巴西	手机	Mate	Mate X7	＞1000	Samsung Galaxy Z Fold7	Honor Magic V5	
+拉美	巴西	手机	Mate	Mate 80 Pro	800<1000	Apple iPhone 17	Samsung Galaxy S26+	Honor Magic 18 Pro
+拉美	巴西	手机	nova	nova Y74	400<600	Samsung A17	Honor X7e	Redmi Note 17 Pro
+拉美	巴西	手机	nova	nova 15 Max	400<600	Samsung Galaxy A37	Honor X9d	Redmi Note 17 Pro
+拉美	巴西	平板	mini	MatePad mini	500<800	Apple iPad mini		
+拉美	巴西	平板	数字	MatePad 11.5S	350<500	Apple iPad 11	Samsung Galaxy Tab S10 FE	Redmi Pad 2 Pro
+拉美	巴西	平板	数字	MatePad 11.5	250<350	Samsung Galaxy Tab S10 Lite	Redmi Pad 2	Apple iPad 11

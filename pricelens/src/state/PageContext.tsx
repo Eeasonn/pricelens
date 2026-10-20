@@ -1,33 +1,35 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { writeUrlPatch } from './urlSync';
 
-// 第三十七轮：国家总览成为默认页（操盘主界面）；看板 = 分析视图、配置 = 主数据。
-// 追补⑨：预警中心升为独立页面（多产品阈值/开关便捷配置 + 触发列表）。
-// 追补⑩（建议③）：页签同步 URL query（?p=，默认页省略；筛选参数由 FiltersProvider 写）。
+// 2026-10-20 起：价格看板为默认页（聚焦看板呈现）；总览/预警页置灰待重构，URL 直达也回落看板。
+// 页签同步 URL query（?p=，默认页省略；筛选参数由 FiltersProvider 写）。
 export type Page = 'overview' | 'dashboard' | 'config' | 'alerts';
+
+const DISABLED_PAGES: Page[] = ['overview', 'alerts'];
 
 interface PageCtx {
   page: Page;
   go: (p: Page) => void;
 }
 
-const Ctx = createContext<PageCtx>({ page: 'overview', go: () => {} });
+const Ctx = createContext<PageCtx>({ page: 'dashboard', go: () => {} });
 
 function initialPage(): Page {
   try {
     const p = new URLSearchParams(window.location.search).get('p');
-    if (p === 'overview' || p === 'dashboard' || p === 'config' || p === 'alerts') return p;
+    if (p === 'dashboard' || p === 'config') return p;
   } catch {
     /* 无 window 忽略 */
   }
-  return 'overview';
+  return 'dashboard';
 }
 
 export function PageProvider({ children }: { children: ReactNode }) {
-  const [page, setPage] = useState<Page>(initialPage);
+  const [page, setPageRaw] = useState<Page>(initialPage);
+  const setPage = (p: Page) => setPageRaw(DISABLED_PAGES.includes(p) ? 'dashboard' : p);
 
   useEffect(() => {
-    writeUrlPatch({ p: page === 'overview' ? null : page });
+    writeUrlPatch({ p: page === 'dashboard' ? null : page });
   }, [page]);
 
   return <Ctx.Provider value={{ page, go: setPage }}>{children}</Ctx.Provider>;
