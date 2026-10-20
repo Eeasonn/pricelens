@@ -125,6 +125,7 @@ function OwnChip({
   model,
   price,
   currency,
+  dimmed,
   hovered,
   onHover,
   onOpenTrend,
@@ -133,6 +134,7 @@ function OwnChip({
   model: OverviewModel;
   price: { min: number | null; max: number | null; current: number | null; asOf: string };
   currency: CurrencyMode;
+  dimmed: boolean;
   hovered: boolean;
   onHover: (id: string | null) => void;
   onOpenTrend: () => void;
@@ -163,7 +165,8 @@ function OwnChip({
         borderRadius: radius.control,
         overflow: 'hidden',
         cursor: 'pointer',
-        transition: `border-color ${motion.fast}ms ease, box-shadow ${motion.fast}ms ease`,
+        opacity: dimmed ? 0.22 : 1,
+        transition: `opacity ${motion.fast}ms ease, border-color ${motion.fast}ms ease, box-shadow ${motion.fast}ms ease`,
         boxShadow: hovered ? '0 2px 8px rgba(0, 112, 243, 0.16)' : 'none',
         textAlign: 'left' as const,
         font: 'inherit',
@@ -218,11 +221,13 @@ function CompChip({
   model,
   price,
   currency,
+  dimmed,
   onOpenTrend,
 }: {
   model: OverviewModel;
   price: { min: number | null; max: number | null; current: number | null; asOf: string };
   currency: CurrencyMode;
+  dimmed: boolean;
   onOpenTrend: () => void;
 }) {
   const label = modelOnly(model.brand, model.modelName);
@@ -247,6 +252,8 @@ function CompChip({
         border: `1px solid ${color.hairline}`,
         borderRadius: radius.control,
         boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+        opacity: dimmed ? 0.22 : 1,
+        transition: `opacity ${motion.fast}ms ease`,
         textAlign: 'left' as const,
         font: 'inherit',
       }}
@@ -1138,7 +1145,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 const dimmed = litKeys != null && !litKeys.has(model.modelId);
                 const compIndex = brandColumns.findIndex((b) => b.key === brandKeyOf(model.brand));
                 return (
-                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, height: rowHeights.get(model.modelId) ?? CARD_H, display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', opacity: dimmed ? 0.22 : 1, transition: `opacity ${motion.fast}ms ease`, zIndex: detailModelId === model.modelId ? 30 : 1 }}>
+                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top: rowTops.get(model.modelId) ?? 0, height: rowHeights.get(model.modelId) ?? CARD_H, display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', zIndex: detailModelId === model.modelId ? 30 : 1 }}>
                     <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, display: 'flex', alignItems: 'flex-start', minWidth: 0, height: '100%', padding: '0 10px 0 14px', borderRight: `1px solid ${color.hairline}`, background: '#f3f8ff' }}>
                       {isOwn && (
                         <div data-own-anchor="1" style={{ position: 'relative', width: '100%' }}>
@@ -1146,6 +1153,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                             model={model}
                             price={price}
                             currency={currency}
+                            dimmed={hoverOwnId != null && hoverOwnId !== model.modelId}
                             hovered={hoverOwnId === model.modelId}
                             onHover={setHoverOwnId}
                             onOpenTrend={() => openTrend(model)}
@@ -1162,7 +1170,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                       return (
                         <div key={brand.key} data-brand-flip={brand.key} style={{ minWidth: 0, height: '100%', display: 'flex', alignItems: 'flex-start', padding: '0 10px', borderRight: index === brandColumns.length - 1 ? 0 : `1px solid ${color.hairline}` }}>
                           {here && compIndex >= 0 && (
-                            <CompChip model={model} price={price} currency={currency} onOpenTrend={() => openTrend(model)} />
+                            <CompChip model={model} price={price} currency={currency} dimmed={dimmed} onOpenTrend={() => openTrend(model)} />
                           )}
                         </div>
                       );
