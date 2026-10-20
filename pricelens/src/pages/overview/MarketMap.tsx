@@ -839,16 +839,18 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     }
     let prev = '';
     const measure = (): void => {
-      const content = scroller.firstElementChild as HTMLElement | null;
-      const ownEl = content?.querySelector(`[data-own-chip="${hoverOwnId}"]`);
-      if (!content || !ownEl) return;
-      const cRect = content.getBoundingClientRect();
+      // 坐标系 = 连线 SVG 所在的内容层（data-map-content，左缘已含轴宽偏移）；
+      // 若误用外层模式容器，所有线会整体右移一个轴宽
+      const layer = scroller.querySelector('[data-map-content]') as HTMLElement | null;
+      const ownEl = layer?.querySelector(`[data-own-chip="${hoverOwnId}"]`);
+      if (!layer || !ownEl) return;
+      const cRect = layer.getBoundingClientRect();
       const own = ownEl.getBoundingClientRect();
       const model = models.find((m) => m.modelId === hoverOwnId);
       const ids = [...new Set((model?.comps ?? []).map((c) => c.skuId.split('__')[0]))];
       const next: { d: string; x1: number; y1: number; x2: number; y2: number }[] = [];
       for (const id of ids) {
-        const el = content.querySelector(`[data-comp-chip="${id}"]`);
+        const el = layer.querySelector(`[data-comp-chip="${id}"]`);
         if (!el) continue;
         const r = el.getBoundingClientRect();
         const x1 = own.right - cRect.left;
@@ -1055,7 +1057,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
             </div>
           ) : (
             /* —— 竞品对比：分段带摆位 + 品牌列 —— */
-            <div style={{ position: 'absolute', left: axisWidth, right: 0, top: 0, height: totalHeight, overflow: 'visible' }}>
+            <div data-map-content="1" style={{ position: 'absolute', left: axisWidth, right: 0, top: 0, height: totalHeight, overflow: 'visible' }}>
               <div style={{ position: 'absolute', zIndex: 4, top: 0, left: 0, right: 0, height: plotTop, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: `minmax(250px, 1.05fr) repeat(${Math.max(brandColumns.length, 1)}, minmax(180px, 1fr))`, alignItems: 'center', borderBottom: `1px solid ${color.hairline}`, background: color.canvas, overflow: 'visible' }}>
                 <div style={{ position: 'sticky', zIndex: 6, left: axisWidth, boxSizing: 'border-box', padding: '0 14px', color: color.ink, fontSize: 13, lineHeight: '18px', fontWeight: 600, borderRight: `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', background: '#f3f8ff', boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>{ownBrands.map((b) => brandHeaderLabel(b)).join(' / ') || '产品'}</div>
                 {brandColumns.map((brand, index) => (
