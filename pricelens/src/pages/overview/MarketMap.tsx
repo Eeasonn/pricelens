@@ -504,18 +504,17 @@ function DetailFloat({
     const combinedBottom = place === 'down' ? wr.bottom + 8 + h : wr.top - 8;
     const delta = (combinedTop + combinedBottom) / 2 - window.innerHeight / 2;
     if (Math.abs(delta) > 8) {
-      window.requestAnimationFrame(() => {
-        let node: HTMLElement | null = wrap.parentElement;
-        while (node && node !== document.body) {
-          const st = getComputedStyle(node);
-          if (/(auto|scroll)/.test(st.overflowY) && node.scrollHeight > node.clientHeight + 4) {
-            node.scrollBy({ top: delta, behavior: 'smooth' });
-            return;
-          }
-          node = node.parentElement;
+      // 直接执行平滑滚动（不包 rAF：部分内嵌浏览环境 rAF 冻结会整段不跑）
+      let node: HTMLElement | null = wrap.parentElement;
+      while (node && node !== document.body) {
+        const st = getComputedStyle(node);
+        if (/(auto|scroll)/.test(st.overflowY) && node.scrollHeight > node.clientHeight + 4) {
+          node.scrollBy({ top: delta, behavior: 'smooth' });
+          return;
         }
-        window.scrollBy({ top: delta, behavior: 'smooth' });
-      });
+        node = node.parentElement;
+      }
+      window.scrollBy({ top: delta, behavior: 'smooth' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model]);
@@ -828,9 +827,9 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
   const detailOpen = (id: string): void => {
     setDetailModelId((cur) => (cur === id ? null : id));
   };
-  // 悬停连线：我司卡片 → 各对标竞品卡片的贝塞尔曲线。悬停期间 rAF 持续测量
-  // （不依赖 scroll/resize 事件派发，容器滚动/吸附/布局变化都能实时跟上），
-  // 坐标变化小于 0.5px 不重渲染。
+  // 悬停连线：我司卡片 → 各对标竞品卡片的贝塞尔曲线。四重测量保障：悬停立即测
+  // 一次 + 容器/页面滚动与 resize 监听 + 250ms 兜底定时器 + rAF 循环（部分内嵌
+  // 浏览环境 rAF 会被冻结，不能只依赖它）；坐标变化小于 0.5px 不重渲染。
   const [links, setLinks] = useState<{ d: string; x1: number; y1: number; x2: number; y2: number }[]>([]);
   useEffect(() => {
     const scroller = mapScrollRef.current;
@@ -838,38 +837,52 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
       setLinks([]);
       return;
     }
-    let raf = 0;
     let prev = '';
-    const tick = (): void => {
+    const measure = (): void => {
       const content = scroller.firstElementChild as HTMLElement | null;
       const ownEl = content?.querySelector(`[data-own-chip="${hoverOwnId}"]`);
-      if (content && ownEl) {
-        const cRect = content.getBoundingClientRect();
-        const own = ownEl.getBoundingClientRect();
-        const model = models.find((m) => m.modelId === hoverOwnId);
-        const ids = [...new Set((model?.comps ?? []).map((c) => c.skuId.split('__')[0]))];
-        const next: { d: string; x1: number; y1: number; x2: number; y2: number }[] = [];
-        for (const id of ids) {
-          const el = content.querySelector(`[data-comp-chip="${id}"]`);
-          if (!el) continue;
-          const r = el.getBoundingClientRect();
-          const x1 = own.right - cRect.left;
-          const y1 = own.top + own.height / 2 - cRect.top;
-          const x2 = r.left - cRect.left;
-          const y2 = r.top + r.height / 2 - cRect.top;
-          const dx = Math.max(28, (x2 - x1) * 0.45);
-          next.push({ d: `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${(x1 + dx).toFixed(1)} ${y1.toFixed(1)}, ${(x2 - dx).toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`, x1, y1, x2, y2 });
-        }
-        const sig = next.map((l) => l.d).join('|');
-        if (sig !== prev) {
-          prev = sig;
-          setLinks(next);
-        }
+      if (!content || !ownEl) return;
+      const cRect = content.getBoundingClientRect();
+      const own = ownEl.getBoundingClientRect();
+      const model = models.find((m) => m.modelId === hoverOwnId);
+      const ids = [...new Set((model?.comps ?? []).map((c) => c.skuId.split('__')[0]))];
+      const next: { d: string; x1: number; y1: number; x2: number; y2: number }[] = [];
+      for (const id of ids) {
+        const el = content.querySelector(`[data-comp-chip="${id}"]`);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const x1 = own.right - cRect.left;
+        const y1 = own.top + own.height / 2 - cRect.top;
+        const x2 = r.left - cRect.left;
+        const y2 = r.top + r.height / 2 - cRect.top;
+        const dx = Math.max(28, (x2 - x1) * 0.45);
+        next.push({ d: `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${(x1 + dx).toFixed(1)} ${y1.toFixed(1)}, ${(x2 - dx).toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`, x1, y1, x2, y2 });
       }
+      const sig = next.map((l) => l.d).join('|');
+      if (sig !== prev) {
+        prev = sig;
+        setLinks(next);
+      }
+    };
+    measure();
+    const scrollOpts: AddEventListenerOptions = { capture: true, passive: true };
+    scroller.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('scroll', measure, scrollOpts);
+    window.addEventListener('resize', measure);
+    const timer = window.setInterval(measure, 250);
+    let raf = 0;
+    const tick = (): void => {
+      measure();
       raf = window.requestAnimationFrame(tick);
     };
     raf = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(raf);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearInterval(timer);
+      scroller.removeEventListener('scroll', measure);
+      window.removeEventListener('scroll', measure, scrollOpts);
+      window.removeEventListener('resize', measure);
+    };
   }, [hoverOwnId, mode, models]);
   // 点击浮层与锚点卡片以外区域 / Esc = 收起
   useEffect(() => {
