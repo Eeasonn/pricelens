@@ -6,6 +6,7 @@ import { navBus } from '../state/navBus';
 import FilterBar from '../components/FilterBar';
 import PriceTrend from '../chart/PriceTrend';
 import DetailTable, { type DetailBucket } from '../chart/PriceTrend/DetailTable';
+import DiffPanel from '../chart/PriceTrend/DiffPanel';
 import PageHeader from '../components/PageHeader';
 import type { Series } from '../dataModel/types';
 import { color, radius, shadow, space } from '../theme/tokens';
@@ -16,7 +17,9 @@ import { color, radius, shadow, space } from '../theme/tokens';
  *  （滚动容器 = 根 div：html/body/#root 锁 100% 高，overflowX:auto → overflowY 计算 auto）
  *  第110轮（2026-10-20 评审）：图卡下方新增「核心信息明细」独立卡——取数由
  *  PriceTrend 经 onSeriesWindow 上报（与图上同一可见时间段 × 同一批产品系列，
- *  币种/平台/粒度/分离模式随图联动），本层只负责卡片壳与渲染 */
+ *  币种/平台/粒度/分离模式随图联动），本层只负责卡片壳与渲染
+ *  第112轮（2026-10-21）：图卡与明细卡之间插入「竞品价差」卡（同一 onSeriesWindow
+ *  快照同源取数，至少两个系列才渲染；卡内细节见 DiffPanel） */
 export default function Dashboard() {
   const { go } = usePage();
   const { state } = useFilters();
@@ -101,6 +104,25 @@ export default function Dashboard() {
                 onSeriesWindow={(series, buckets) => setTrendWindow({ series, buckets })}
               />
             </section>
+            {/* 竞品价差（第112轮）：图上可见时间段内的竞品×竞品 / 竞品×我司 价差，同源快照取数 */}
+            {trendWindow.series.length >= 2 && (
+              <section
+                style={{
+                  marginTop: space.md,
+                  background: color.canvas,
+                  boxShadow: shadow.l1,
+                  borderRadius: radius.card,
+                  padding: space.lg,
+                }}
+              >
+                <DiffPanel
+                  series={trendWindow.series}
+                  buckets={trendWindow.buckets}
+                  currency={state.currency}
+                  granularity={state.granularity}
+                />
+              </section>
+            )}
             {/* 核心信息明细（第110轮，评审）：与图同源的取价快照表，独立卡位于图卡下方 */}
             {trendWindow.series.length > 0 && (
               <section
