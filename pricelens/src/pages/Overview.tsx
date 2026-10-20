@@ -24,7 +24,7 @@ import { useOverviewView } from '../state/OverviewViewContext';
 import { navBus } from '../state/navBus';
 import { buildOverviewMatrix, TIER_LABELS } from '../dataModel/aggregate';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ConfigProvider, Select } from 'antd';
+import { ConfigProvider, Segmented, Select } from 'antd';
 import type { OverviewCompRow, OverviewModel, OverviewRow } from '../dataModel/aggregate';
 import { scopeLabels } from '../dataModel/scope';
 import type { DimBenchmark } from '../dataModel/types';
@@ -42,10 +42,10 @@ import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow
 
 /** 总览筛选行单元格（第六十八轮与看板拉齐）：外置 12px 标签 + gap 6 + 30px 控件
  *  （高度/字号走 filterBarTheme），width 固定 / flex 弹性两种，同 FilterBar 的 Field */
-function FilterCell(props: { label: string; width?: number; flex?: string; children: ReactNode }) {
+function FilterCell(props: { label?: string; width?: number; flex?: string; children: ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: props.width, flex: props.flex, minWidth: 0, flexShrink: props.width ? 0 : undefined }}>
-      <span style={{ fontSize: 12, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{props.label}</span>
+      {props.label != null && <span style={{ fontSize: 12, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{props.label}</span>}
       <div style={{ flex: 1, minWidth: 0 }}>{props.children}</div>
     </div>
   );
@@ -71,6 +71,9 @@ export default function Overview() {
     setSelTiers,
     scrollTop,
   } = useOverviewView();
+  // 本页视图态：按产品 = 级联多选（空 = 全部我司产品）；按档位 = 档位多选（空 = 全部档位）。
+  // 与看板同结构互斥（产品∈档位双选无信息量），切换时清空另一侧
+  const [ovSubjectMode, setOvSubjectMode] = useState<'product' | 'tier'>('product');
   const currency = state.currency;
   const rootRef = useRef<HTMLDivElement>(null);
   // 第四十四轮：竞品映射吃「生效矩阵」（配置页/配置对标弹窗的手动快照优先，回退 auto），
@@ -142,29 +145,41 @@ export default function Overview() {
             <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30, flexWrap: 'wrap' }}>
                 <ScopeFields />
-                <FilterCell label="我司产品" flex="1 1 285px">
-                  <OwnProductControl
-                    selection={prodSel}
-                    onSelectionChange={setProdSel}
-                    emptyPlaceholder="全部我司产品"
-                  />
+                {/* 分析对象（与看板同结构）：按产品 = 级联多选，按档位 = 档位多选（本页视图态） */}
+                <Segmented
+                  size="small"
+                  value={ovSubjectMode}
+                  onChange={(v) => {
+                    const mode = v as 'product' | 'tier';
+                    setOvSubjectMode(mode);
+                    if (mode === 'product') setSelTiers([]);
+                    else setProdSel([]);
+                  }}
+                  options={[{ label: '按产品', value: 'product' }, { label: '按档位', value: 'tier' }]}
+                />
+                <FilterCell flex="1 1 285px">
+                  {ovSubjectMode === 'product' ? (
+                    <OwnProductControl
+                      selection={prodSel}
+                      onSelectionChange={setProdSel}
+                      emptyPlaceholder="全部我司产品"
+                    />
+                  ) : (
+                    <Select
+                      mode="multiple"
+                      allowClear
+                      maxTagCount="responsive"
+                      placeholder="全部档位"
+                      style={{ width: '100%' }}
+                      value={selTiers}
+                      onChange={setSelTiers}
+                      options={tierOptions}
+                    />
+                  )}
                 </FilterCell>
-                {/* 平台（第五十一轮）：看板同款级联（平台→店铺），共享 state.platform 双页联动；
-                    控件宽与看板图顶同款 160（外置标签另加 30） */}
+                {/* 平台（第五十一轮）：看板同款级联（平台→店铺），共享 state.platform 双页联动 */}
                 <FilterCell label="平台" width={200}>
                   <PlatformBox />
-                </FilterCell>
-                <FilterCell label="价格档位" flex="1 1 220px">
-                  <Select
-                    mode="multiple"
-                    allowClear
-                    maxTagCount="responsive"
-                    placeholder="全部档位"
-                    style={{ width: '100%' }}
-                    value={selTiers}
-                    onChange={setSelTiers}
-                    options={tierOptions}
-                  />
                 </FilterCell>
                 <FilterCell label="币种" width={150}>
                   <CurrencyBox />

@@ -1041,7 +1041,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 const dateText = price.asOf ? bucketLatestWeekLabel('week', price.asOf) ?? '' : '';
                 const priceText = price.current != null ? fmtPrice(price.current, currency) : '—';
                 return (
-                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top, height: ROW_H, display: 'grid', gridTemplateColumns: tableTemplate, background: color.canvas }}>
+                  <div key={model.modelId} style={{ position: 'absolute', left: 0, right: 0, top, height: ROW_H + TABLE_GAP, display: 'grid', gridTemplateColumns: tableTemplate, background: color.canvas }}>
                     {/* 产品卡：与竞品对比模式同款样式（高度压缩） */}
                     <div style={{ position: 'sticky', zIndex: 5, left: axisWidth, height: '100%', boxSizing: 'border-box', padding: '5px 12px 5px 10px', display: 'flex', alignItems: 'center', minWidth: 0, background: '#f3f8ff', borderRight: `1px solid ${color.hairline}` }}>
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, width: '100%', height: '100%', boxSizing: 'border-box', padding: '3px 9px 3px 18px', background: color.canvas, border: '1px solid rgba(0, 112, 243, 0.32)', borderRadius: radius.control, overflow: 'hidden' }}>
@@ -1078,17 +1078,20 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 );
               })}
               {/* 分隔线：每个产品行底部一条，从最左贯穿到最右（行间空隙内，不压卡片） */}
-              {/* 档位分界线：仅带与带之间一条加重线（产品间靠卡片与间距区分） */}
-              {bandRects.map((band) => {
-                const last = band.items[band.items.length - 1];
-                const top = rowTops.get(last.model.modelId) ?? 0;
-                return (
-                  <div
-                    key={`band-end-${last.model.modelId}`}
-                    style={{ position: 'absolute', left: 0, right: 0, top: top + ROW_H + TABLE_GAP, height: 1.5, background: color.hairlineStrong, zIndex: 6, pointerEvents: 'none' }}
-                  />
-                );
-              })}
+              {/* 产品分隔线：行间弱线；档位分界加重（比产品线更醒目） */}
+              {bandRects.map((band) =>
+                band.items.map((item, index) => {
+                  const top = rowTops.get(item.model.modelId) ?? 0;
+                  const boundary = top + ROW_H + TABLE_GAP;
+                  const bandEnd = index === band.items.length - 1;
+                  return (
+                    <div
+                      key={`divider-${item.model.modelId}`}
+                      style={{ position: 'absolute', left: 0, right: 0, top: boundary, height: bandEnd ? 1.5 : 1, background: bandEnd ? color.hairlineStrong : color.hairline, zIndex: 6, pointerEvents: 'none' }}
+                    />
+                  );
+                }),
+              )}
             </div>
           ) : (
             /* —— 竞品对比：分段带摆位 + 品牌列 —— */
