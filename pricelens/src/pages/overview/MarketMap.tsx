@@ -982,6 +982,18 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
           {mode === 'table' ? (
             /* —— 在售产品：零间距表格（一行一产品，列 = 型号从小到大） —— */
             <div style={{ position: 'absolute', left: axisWidth, right: 0, top: 0, height: totalHeight, overflow: 'visible' }}>
+              {/* 列头：与竞品对比模式同款表头条（产品 | 配置从小到大） */}
+              <div
+                title="各产品的在售配置按容量从小到大排列"
+                style={{ position: 'absolute', zIndex: 4, top: 0, left: 0, right: 0, height: plotTop, display: 'grid', gridTemplateColumns: tableTemplate, boxSizing: 'border-box', borderBottom: `1px solid ${color.hairline}`, background: color.canvas }}
+              >
+                <div style={{ position: 'sticky', zIndex: 6, left: axisWidth, boxSizing: 'border-box', padding: '0 14px', color: color.ink, fontSize: 13, lineHeight: '18px', fontWeight: 600, borderRight: `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', background: '#f3f8ff', boxShadow: '2px 0 3px rgba(0,0,0,.03)' }}>产品</div>
+                {Array.from({ length: maxConfigCols }, (_, i) => (
+                  <div key={i} style={{ boxSizing: 'border-box', padding: '0 12px', color: color.body, fontSize: 12, lineHeight: '18px', fontWeight: 600, borderRight: i === maxConfigCols - 1 ? 0 : `1px solid ${color.hairline}`, height: '100%', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                    配置 {i + 1}
+                  </div>
+                ))}
+              </div>
               {tableProducts.map(({ model, price, rows }) => {
                 const top = rowTops.get(model.modelId) ?? 0;
                 const prices = rows.map((r) => r.price).filter((v): v is number => v != null);
@@ -1012,7 +1024,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                             <>
                               <TrendDot title={`只看 ${model.modelName} ${row.romram} 的价格走势`} onClick={() => openTrend(model, row)} />
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                                <span style={{ fontSize: 11.5, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.romram}</span>
+                                <span style={{ fontSize: 12, fontWeight: 650, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.romram}</span>
                                 {row.discountPct != null && <DiscountBadge discount={row.discountPct} />}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
