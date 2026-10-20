@@ -65,13 +65,10 @@ export default function BenchConfigModal(props: {
 
   const rom = model ? model.rows[Math.min(romIdx, model.rows.length - 1)] : undefined;
 
-  const currentRows = useMemo(
-    () =>
-      model && rom
-        ? draft.filter((r) => r.own_model_id === model.modelId && norm(r.own_romram) === norm(rom.romram))
-        : [],
-    [draft, model, rom],
-  );
+  const cc = getCurrentCountry();
+  const inGroup = (r: DimBenchmark): boolean =>
+    !!model && !!rom && (r.country_code ?? cc) === cc && r.own_model_id === model.modelId && norm(r.own_romram) === norm(rom.romram);
+  const currentRows = useMemo(() => draft.filter(inGroup), [draft, model, rom, cc]); // eslint-disable-line react-hooks/exhaustive-deps
   const sortedRows = useMemo(() => [...currentRows].sort((a, b) => a.sort - b.sort), [currentRows]);
   const mappedSkus = useMemo(() => new Set(currentRows.map((r) => r.competitor_sku_id)), [currentRows]);
 
@@ -107,11 +104,8 @@ export default function BenchConfigModal(props: {
   }, [bands, model, rom, brandSel, keyword]);
 
   const writeGroup = (rows: DimBenchmark[]): void => {
-    // 只重写本型号+当前 ROM 组，其余草稿行原样保留
-    setDraft([
-      ...draft.filter((r) => !(model && r.own_model_id === model.modelId && rom && norm(r.own_romram) === norm(rom.romram))),
-      ...rows,
-    ]);
+    // 只重写本国×本型号×当前配置组，其余草稿行（含别国）原样保留
+    setDraft([...draft.filter((r) => !inGroup(r)), ...rows]);
   };
   const addComp = (skuId: string): void => {
     if (!model || !rom) return;
@@ -139,9 +133,9 @@ export default function BenchConfigModal(props: {
     // 只存增量会遮蔽 auto 行）；保存后广播 → 总览矩阵与看板竞品即时同步
     // 空草稿也要持久化为 manual=[]：null 的语义是“清除手动配置并恢复 auto”，
     // 如果把删光竞品误写成 null，用户刚删除的竞品会在下一次读取时重新出现。
-    saveBenchmark(draft.map((r) => ({ ...r, source: 'manual' as const })));
+    saveBenchmark(draft); // 保留每行来源（矩阵/自动/替代），人工增加的行已标 manual
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
-    message.success('对标配置已保存，总览矩阵与看板竞品已同步');
+    message.success('对标配置已保存，看板竞品已同步');
     onClose();
   };
 
@@ -149,7 +143,7 @@ export default function BenchConfigModal(props: {
     saveBenchmark(null); // 清除 manual 快照，回退 dimBenchmark（auto）
     setDraft(getEffectiveBenchmark());
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
-    message.success('已恢复默认对标（auto）');
+    message.success('已恢复默认对标（矩阵 + 自动匹配）');
     onClose();
   };
 

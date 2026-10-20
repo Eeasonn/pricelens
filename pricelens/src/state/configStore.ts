@@ -49,9 +49,14 @@ function writeJson(key: string, value: unknown): void {
 export function getEffectiveBenchmark(): DimBenchmark[] {
   const manual = readJson<DimBenchmark[]>(LPL.cfgBenchmark);
   if (Array.isArray(manual)) {
-    return manual.filter(
-      (r) => r != null && typeof r === 'object' && typeof r.competitor_sku_id === 'string',
+    // 真实数据接入后 SKU/国家 id 空间全换：只认带国家码且竞品 SKU 仍存在的行；
+    // 过滤后为空（典型 = 旧造数时代的手动快照）→ 视为无手动配置，回退维表默认
+    const skuOk = new Set(dimProduct.map((p) => p.sku_id));
+    const valid = manual.filter(
+      (r) => r != null && typeof r === 'object' && typeof r.competitor_sku_id === 'string'
+        && typeof r.country_code === 'string' && skuOk.has(r.competitor_sku_id),
     );
+    if (valid.length > 0) return valid;
   }
   return dimBenchmark;
 }

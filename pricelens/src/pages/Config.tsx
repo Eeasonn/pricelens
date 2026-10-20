@@ -3,7 +3,8 @@
 // （预警中心重构：原「① 默认竞品矩阵」整块删除——与总览行尾「＋添加竞品」
 //   浮窗（BenchConfigModal）完全同一份数据、两套入口重复；浮窗已补齐
 //   品牌/搜索筛选、↑↓ 排序与「恢复 auto」，本页不再保留竞品矩阵编辑）
-// ① 上一代关系（原②）：行 = 全部我司型号（型号级，与 dim_product.prev_model_id
+// ⓪ 竞品对标配置（2026-10-20 补回）：当前国家×产业全部我司型号×配置的对标竞品（矩阵/自动/替代/人工）可查可改
+// ① 上一代关系（原②）：行 = 当前国家有数据的我司型号（型号级，与 dim_product.prev_model_id
 //    同口径），下拉选上一代型号（候选 = 上市更早的我司型号）；默认读生效关系
 //    （manual 优先 / dim_product auto 兜底），改后差异存 LPL3.config.prevGen
 // ② 汇率口径：只读——真实数据每行自带采集时汇率，USD 值按行折算；此处展示当前国家本币的月度中位汇率
@@ -28,6 +29,8 @@ import { currencyOfCountry, dimFx, dimProduct, dimPromo } from '../data';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { useFilters } from '../state/FiltersContext';
 import { getLocalCurrency } from '../state/fx';
+import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
+import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
 
 // ---------------- ② 上一代关系（型号级，与 dim_product.prev_model_id 同口径） ----------------
@@ -38,12 +41,12 @@ interface PrevGenRow {
   launch: string;
 }
 
-/** 全部我司型号行（型号级去重，按上市日排序）——上一代关系维护用 */
-function ownModelRows(): PrevGenRow[] {
+/** 当前国家有数据的我司型号行（型号级去重，按首采日排序）——上一代关系维护用 */
+function ownModelRows(countryCode: string): PrevGenRow[] {
   const seen = new Set<string>();
   const rows: PrevGenRow[] = [];
   for (const p of dimProduct) {
-    if (!p.is_own) continue;
+    if (!p.is_own || !p.countries.includes(countryCode)) continue;
     const modelId = modelIdOf(p);
     if (seen.has(modelId)) continue;
     seen.add(modelId);
@@ -75,12 +78,13 @@ function Block({ title, extra, children }: { title: string; extra?: ReactNode; c
 const cellPadding: CSSProperties = { padding: `${space.sm}px ${space.sm}px` };
 
 export default function Config() {
-  const prevRows = useMemo(ownModelRows, []);
+  const { state } = useFilters();
+  const prevRows = useMemo(() => ownModelRows(state.countryCode), [state.countryCode]);
   const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])),
   );
   const [tiers, setTiers] = useState<CustomTierPreset[]>(getCustomTiers);
-  const { state } = useFilters();
+  const labels = scopeLabels({ countryCode: state.countryCode, industry: state.industry });
   const localCurrency = currencyOfCountry(state.countryCode);
   const fxRows = useMemo(
     () => dimFx.filter((f) => f.currency === localCurrency).sort((a, b) => a.month_id.localeCompare(b.month_id)),
@@ -130,6 +134,18 @@ export default function Config() {
         />
 
         <main style={{ flex: 1, padding: space.lg }}>
+          {/* ⓪ 竞品对标配置：全部已识别的对标关系（矩阵/自动/替代/人工）在此可查可改 */}
+          <Block
+            title="竞品对标配置"
+            extra={
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>
+                {labels.country} · 国家随页头切换；看板「自动匹配」即取此处配置
+              </span>
+            }
+          >
+            <BenchmarkConfigBlock />
+          </Block>
+
           {/* ① 上一代关系 */}
           <Block
             title="上一代关系"

@@ -2,11 +2,11 @@
 // 图下「核心信息明细」（第110轮，2026-10-20 评审最重要项）：
 // 价格走势图卡下方的独立明细卡——与图上完全同源（同一可见时间段 × 同一批产品
 // 系列，币种/取数平台/粒度随图联动；分离模式 = 各面板系列并集去重）。
-// 一行 = 一个时间点 × 一个产品的取价快照：
-//   日期（周=周三 MM-DD / 月=YYYY-MM / 季=YYYYQn）｜产品（品牌色点+品牌+型号+配置）｜
-//   折后价｜RRP｜折扣率（= 折后价/RRP − 1，RRP 缺失显示 —）｜取价店铺｜
-//   Offering（促销/分期/组合权益完整原文，默认两行省略、点击展开）｜取证链接（新窗口）。
-// 默认只列有采数的行（「含缺采周」开关展开全部）；日期降序、同日按系列序（我司在前）。
+// 按产品分块（2026-10-20 评审后用户定版）：每个产品一个区块，区块标题 = 品牌色点+品牌+型号+配置，
+// 块内一行 = 一个时间点的取价快照：
+//   日期（周=周三 MM-DD / 月=YYYY-MM / 季=YYYYQn）｜折后价｜RRP（不划线）｜折扣率（= 折后价/RRP − 1）｜
+//   取价店铺｜Offering（促销/分期/组合权益完整原文，默认两行省略、点击展开）｜取证链接（新窗口）。
+// 默认只列有采数的行（「含缺采周」开关展开全部）；块内日期降序；区块顺序 = 图上系列序（我司在前）。
 // 工具行 = 标题 + 行数 + 产品筛选 chips（默认全开）+「复制为表格」（TSV 进剪贴板，
 // 可直接粘进 Excel/PPT）。零系列时不渲染（页面只有图卡）。
 // ============================================================
@@ -88,18 +88,19 @@ export default function DetailTable(props: {
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
 
-  const rows: DetailRow[] = useMemo(() => {
-    if (series.length === 0 || buckets.length === 0) return [];
-    const out: DetailRow[] = [];
-    // 日期降序 = 时间段倒序扫；同日按系列序（我司在前 = 上报序）
-    for (let bi = buckets.length - 1; bi >= 0; bi--) {
-      const bucket = buckets[bi];
-      for (const s of series) {
-        if (offKeys.has(s.key)) continue;
+  /** 按产品分块：区块顺序 = 系列序（我司在前）；块内日期降序 */
+  const groups = useMemo(() => {
+    if (series.length === 0 || buckets.length === 0) return [] as { series: Series; rows: DetailRow[] }[];
+    const out: { series: Series; rows: DetailRow[] }[] = [];
+    for (const s of series) {
+      if (offKeys.has(s.key)) continue;
+      const rows: DetailRow[] = [];
+      for (let bi = buckets.length - 1; bi >= 0; bi--) {
+        const bucket = buckets[bi];
         const pt: SeriesPoint | undefined = s.points[bi];
         if (!pt) continue;
         if (!showMissing && pt.price == null && pt.rrp == null) continue; // 缺采行默认不列
-        out.push({
+        rows.push({
           key: `${bucket.id}__${s.key}`,
           dateText: bucketDateText(granularity, pt.xLabel || bucket.xLabel),
           product: dedupeSpecText(s.label),
@@ -117,9 +118,11 @@ export default function DetailTable(props: {
           url: pt.url ?? '',
         });
       }
+      out.push({ series: s, rows });
     }
     return out;
   }, [series, buckets, offKeys, showMissing, granularity]);
+  const rows: DetailRow[] = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
 
   const toggleChip = (key: string): void => {
     setOffKeys((prev) => {
@@ -175,21 +178,6 @@ export default function DetailTable(props: {
       ),
     },
     {
-      title: '产品',
-      dataIndex: 'product',
-      key: 'product',
-      width: 250,
-      render: (v: string, r) => (
-        <span
-          title={v}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}
-        >
-          <BrandDot brand={r.brand} />
-          <span style={{ color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
-        </span>
-      ),
-    },
-    {
       title: '折后价',
       dataIndex: 'price',
       key: 'price',
@@ -214,7 +202,7 @@ export default function DetailTable(props: {
         <span
           className="tnum"
           title={v != null ? 'RRP（官方建议零售价）' : undefined}
-          style={{ color: v != null ? color.mute : color.hairlineStrong, textDecoration: v != null ? 'line-through' : 'none', whiteSpace: 'nowrap' }}
+          style={{ color: v != null ? color.body : color.hairlineStrong, whiteSpace: 'nowrap' }}
         >
           {formatPrice(v, currency)}
         </span>
@@ -366,17 +354,49 @@ export default function DetailTable(props: {
           </Button>
         </span>
       </div>
-      {/* 明细表：小号密度 + 细行线；表头在 420px 滚动区内常驻（sticky header） */}
-      <Table<DetailRow>
-        size="small"
-        rowKey="key"
-        columns={columns}
-        dataSource={rows}
-        pagination={false}
-        scroll={{ y: 420 }}
-        sticky={false}
-        style={{ background: color.canvas }}
-      />
+      {/* 分块明细：每个产品一个区块（标题 = 品牌色点+品牌+型号+配置 + 行数），块内小号表格；整卡 560px 内滚动 */}
+      <div style={{ maxHeight: 560, overflowY: 'auto', paddingRight: 2 }}>
+        {groups.map((g, gi) => (
+          <section key={g.series.key} style={{ marginTop: gi === 0 ? 0 : 14 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 10px',
+                background: g.series.isOwn ? '#f3f8ff' : color.canvasSoft,
+                borderLeft: `3px solid ${g.series.color}`,
+                borderRadius: radius.control,
+                marginBottom: 4,
+              }}
+            >
+              <BrandDot brand={g.series.brand} />
+              <span style={{ fontSize: 13, fontWeight: 650, color: color.ink }}>{dedupeSpecText(g.series.label)}</span>
+              {g.series.isOwn && (
+                <span style={{ fontSize: 10.5, fontWeight: 600, color: '#0053c2', background: '#e8f1ff', borderRadius: radius.pill, padding: '0 7px', lineHeight: '16px' }}>
+                  我司
+                </span>
+              )}
+              <span className="tnum" style={{ marginLeft: 'auto', fontSize: fontSize.caption, color: color.mute }}>
+                {g.rows.length} 行
+              </span>
+            </div>
+            {g.rows.length === 0 ? (
+              <div style={{ padding: '6px 10px', fontSize: 12, color: color.mute }}>该时间段内无采集到的价格</div>
+            ) : (
+              <Table<DetailRow>
+                size="small"
+                rowKey="key"
+                columns={columns}
+                dataSource={g.rows}
+                pagination={false}
+                showHeader={gi === 0}
+                style={{ background: color.canvas }}
+              />
+            )}
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
