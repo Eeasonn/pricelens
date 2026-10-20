@@ -753,11 +753,21 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
       });
     }
     lastBottom = bandRects.length > 0 ? bandRects[bandRects.length - 1].top + bandRects[bandRects.length - 1].h : plotTop;
+  } else if (mode === 'table') {
+    // 本币下表格无档位带：按顺序等距排列（与 USD 表格一致，只是没有档位带底纹）
+    activeItems.forEach((item, index) => {
+      rowTops.set(item.model.modelId, plotTop + index * (ROW_H + TABLE_GAP));
+      rowHeights.set(item.model.modelId, ROW_H);
+    });
+    lastBottom = plotTop + activeItems.length * (ROW_H + TABLE_GAP);
   } else {
-    lastBottom = plotTop + 2;
+    // 本币线性刻度：价位邻接的卡片逐张下移防重叠（cursor 逐张累积，旧版只对比首值会整列重叠）
+    let cursor = plotTop + 2;
     const ladder = activeItems.map((item) => {
       const rawTop = vToY(item.price.mid ?? item.price.min ?? axisBottom) - CARD_H / 2;
-      return { modelId: item.model.modelId, top: Math.max(rawTop, lastBottom + 2) };
+      const top = Math.max(rawTop, cursor);
+      cursor = top + CARD_H + 2;
+      return { modelId: item.model.modelId, top };
     });
     ladder.forEach((slot, index) => {
       rowTops.set(slot.modelId, slot.top);
@@ -1078,20 +1088,25 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 );
               })}
               {/* 分隔线：每个产品行底部一条，从最左贯穿到最右（行间空隙内，不压卡片） */}
-              {/* 产品分隔线：行间弱线；档位分界加重（比产品线更醒目） */}
-              {bandRects.map((band) =>
-                band.items.map((item, index) => {
-                  const top = rowTops.get(item.model.modelId) ?? 0;
-                  const boundary = top + ROW_H + TABLE_GAP;
-                  const bandEnd = index === band.items.length - 1;
-                  return (
-                    <div
-                      key={`divider-${item.model.modelId}`}
-                      style={{ position: 'absolute', left: 0, right: 0, top: boundary, height: bandEnd ? 1.5 : 1, background: bandEnd ? color.hairlineStrong : color.hairline, zIndex: 6, pointerEvents: 'none' }}
-                    />
-                  );
-                }),
-              )}
+              {/* 产品分隔线：行间弱线；档位分界加重（比产品线更醒目）。本币无档位带：全部弱线 */}
+              {(bandRects.length > 0
+                ? bandRects.flatMap((band) =>
+                    band.items.map((item, index) => ({
+                      key: `divider-${item.model.modelId}`,
+                      top: (rowTops.get(item.model.modelId) ?? 0) + ROW_H + TABLE_GAP,
+                      h: index === band.items.length - 1 ? 1.5 : 1,
+                      bg: index === band.items.length - 1 ? color.hairlineStrong : color.hairline,
+                    })),
+                  )
+                : tableProducts.slice(0, -1).map(({ model }) => ({
+                    key: `divider-${model.modelId}`,
+                    top: (rowTops.get(model.modelId) ?? 0) + ROW_H + TABLE_GAP,
+                    h: 1,
+                    bg: color.hairline,
+                  }))
+              ).map((d) => (
+                <div key={d.key} style={{ position: 'absolute', left: 0, right: 0, top: d.top, height: d.h, background: d.bg, zIndex: 6, pointerEvents: 'none' }} />
+              ))}
             </div>
           ) : (
             /* —— 竞品对比：分段带摆位 + 品牌列 —— */

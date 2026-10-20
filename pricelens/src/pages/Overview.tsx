@@ -114,15 +114,20 @@ export default function Overview() {
 
   const { industry } = scopeLabels(state);
 
-  /** 档位/产品筛选后的摆位图型号集（我司+竞品；市场摆位沿用同口径） */
-  const mapModels = useMemo(
-    () =>
-      bands
-        .filter((b) => selTiers.length === 0 || selTiers.includes(b.tierCode))
-        .flatMap((b) => b.models)
-        .filter((m) => prodSel.length === 0 || prodSel.some((sel) => sel.modelId === m.modelId)),
-    [bands, prodSel, selTiers],
-  );
+  /** 档位/产品筛选后的摆位图型号集（我司+竞品；市场摆位沿用同口径）。
+   *  筛选我司产品时，其生效对标竞品一并保留（竞品对比模式仍可对读） */
+  const mapModels = useMemo(() => {
+    const list = bands
+      .filter((b) => selTiers.length === 0 || selTiers.includes(b.tierCode))
+      .flatMap((b) => b.models);
+    if (prodSel.length === 0) return list;
+    const ownIds = new Set(prodSel.map((sel) => sel.modelId));
+    const compIds = new Set<string>();
+    for (const m of list) {
+      if (ownIds.has(m.modelId)) for (const c of m.comps) compIds.add(c.skuId.split('__')[0]);
+    }
+    return list.filter((m) => (m.isOwn ? ownIds.has(m.modelId) : compIds.has(m.modelId)));
+  }, [bands, prodSel, selTiers]);
 
   return (
     <div
