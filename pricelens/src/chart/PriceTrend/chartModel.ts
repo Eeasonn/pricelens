@@ -55,11 +55,12 @@ export const FOCUS_MODE_THRESHOLD = 8;
 /** 名称被避让推离锚点超过该像素 → 画细引线连回首点（第三十二轮） */
 export const NAME_LEADER_PX = 14;
 
-/** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB/TB */
+/** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB。
+ *  第一百一十五轮：TB 场景保留单位（"16+1 TB" 不缩成 "16+1"，否则容量读歧义）。 */
 export function curveNameOf(s: Series): string {
   const bp = `${s.brand} `;
   const noBrand = s.label.startsWith(bp) ? s.label.slice(bp.length) : s.label;
-  return noBrand.replace(/\s*(GB|TB)$/i, '').trim();
+  return noBrand.replace(/\s*GB$/i, '').trim();
 }
 
 /** 渲染期文案去重（第110轮，评审）：产品标签偶发单位重复（如「16+1 TB TB」）或
@@ -122,16 +123,19 @@ export function buildGeom(p: {
   scale: YScale;
   currency: CurrencyMode;
   gridLeft?: number;
+  /** 右侧留白（第一百一十五轮：量价面板预留销量轴列，缺省 GRID.right） */
+  gridRight?: number;
 }): Geom | null {
   const n = p.series[0]?.points.length ?? 0;
   if (!p.width || p.width < 160 || n === 0 || p.totalH < 160) return null;
   const gl = p.gridLeft ?? estGridLeft(p.currency);
-  if (gl + GRID.right > p.width - 48) return null;
+  const gr = p.gridRight ?? GRID.right;
+  if (gl + gr > p.width - 48) return null;
   return {
     gridLeft: gl,
     plotLeft: gl,
     plotTop: p.gridTop,
-    plotWidth: p.width - gl - GRID.right,
+    plotWidth: p.width - gl - gr,
     plotHeight: p.scale.plotHeight,
     scale: p.scale,
     n,
@@ -439,6 +443,9 @@ export function buildOption(p: {
   /** 第一百一十四轮（评审）：'compact' = 精简标签样式（白底描边胶囊，压线也留白可读）；
    *  标签集已在 buildLabelPlan 按模式裁剪（最高/最低/最新），此处只管样式与上下位 */
   labelMode?: 'detail' | 'compact';
+  /** 第一百一十五轮：ECharts grid 右留白跟随 buildGeom 的 gridRight（量价销量轴列），
+   *  缺省 GRID.right——canvas 网格与 DOM 覆盖层横向几何必须同源 */
+  gridRight?: number;
 }): EChartsOption | null {
   if (!p.geom) return null;
   const { geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks } = p;
@@ -449,7 +456,7 @@ export function buildOption(p: {
   const isLit = (key: string): boolean =>
     p.focusKeys != null && p.focusKeys.length > 0 ? p.focusKeys.includes(key) : key === p.focusKey;
   const xLabels = first.points.map((pt) => pt.xLabel);
-  const lineWidth = (s: Series): number => (s.isOwn ? 3 : 2);
+  // 第一百一十五轮（评审）：自有产品线不再加粗——全部系列同宽（粗细只表达「主价/参照」层级）
   const shape = p.lineShape === 'smooth'
     ? ({ smooth: true, smoothMonotone: 'x' as const } as const)
     : ({ step: 'end' as const } as const); // 第三十六轮：方形阶梯（Keepa 式，跳变发生在新价点横轴位置）
@@ -496,7 +503,7 @@ export function buildOption(p: {
         // 数据点圆点删除（第三十八轮）：悬停浮窗承担点检视，线面更干净；
         // symbolSize 0 而非 symbol 'none'（第二十轮教训：'none' 会吞数值标签）
         symbolSize: 0,
-        lineStyle: { color: s.color, width: lineWidth(s), ...(dim ? { opacity: 0.15 } : {}) },
+        lineStyle: { color: s.color, width: 2, ...(dim ? { opacity: 0.15 } : {}) },
         z: 12,
         silent: true,
       });
@@ -515,7 +522,7 @@ export function buildOption(p: {
           ...shape, // 与主价线同形态
           connectNulls: true,
           symbol: 'none',
-          lineStyle: { color: s.color, width: lineWidth(s), type: [4, 4], opacity: dim ? 0.15 : 0.9 },
+          lineStyle: { color: s.color, width: 2, type: [4, 4], opacity: dim ? 0.15 : 0.9 },
           z: 11,
           silent: true,
         });
@@ -551,7 +558,7 @@ export function buildOption(p: {
         connectNulls: false,
         // 第五十二轮：RRP 改细实线（比折后价细一档，取代虚线）——账面价作参照线
         // 退居背景层，粗细对比表达「主价/参照」层级，不再用线型区分
-        lineStyle: { color: s.color, width: s.isOwn ? 1.5 : 1, opacity: dim ? 0.15 : 0.85 },
+        lineStyle: { color: s.color, width: 1, opacity: dim ? 0.15 : 0.85 },
         z: 6,
         silent: true,
       });
@@ -562,7 +569,7 @@ export function buildOption(p: {
     animation: false,
     tooltip: { show: false },
     textStyle: { fontFamily: font.family },
-    grid: { left: geom.gridLeft, right: GRID.right, top: gridTop, bottom: GRID.bottom },
+    grid: { left: geom.gridLeft, right: p.gridRight ?? GRID.right, top: gridTop, bottom: GRID.bottom },
     xAxis: {
       type: 'category',
       data: xLabels,

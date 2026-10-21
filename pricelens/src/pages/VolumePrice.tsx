@@ -59,6 +59,7 @@ const SLOTS = 3;
 const PANEL_HEAD_H = 32; // 面板头定高：共享轴列的纵向对齐基准
 const PANEL_GRID_TOP = 14; // 面板图顶窄空气带（同分离模式）
 const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
+const CHART_GRID_RIGHT = 56; // 第一百一十五轮：右侧预留销量轴列（轨道线3px+右侧刻度数字+骑线拖柄）
 
 interface SlotInfo {
   isOwn: boolean;
@@ -487,6 +488,7 @@ export default function VolumePrice() {
                           currency={state.currency}
                           priceTypes={state.priceTypes}
                           gridLeft={CHART_GRID_LEFT}
+                          gridRight={CHART_GRID_RIGHT} // 第一百一十五轮：右侧预留销量轴列（轴线+刻度+拖柄不与绘图区重叠）
                           gridTop={PANEL_GRID_TOP}
                           chrome={false}
                           axisChrome={false}

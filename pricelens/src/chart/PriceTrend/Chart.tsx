@@ -13,7 +13,7 @@
 //   （品牌由色点/图例卡表达，第十轮）
 // - 第十轮：每格高度伸缩滑杆收进币种符号旁的齿轮弹层（Popover），不占任何版面；
 //   Y 轴模型可由外部传入（yScale，含刷选冻结与伸缩倍率），迷你图缺省内部自算
-// - 折后价：monotone 平滑实线品牌色（我司 3px / 竞品 2px），白底圆环圈点 r≈3.5
+// - 折后价：monotone 平滑实线品牌色（第一百一十五轮起全系列同宽 2px，自有线不再加粗）
 // - RRP：细实线（第五十二轮，比折后价细一档取代虚线）+ step 阶梯（平段+调价点垂直
 //   跳变，不平滑），同色 85% 不透明度——粗细对比表达「主价/参照」层级
 // - 缺采：跨接段仅虚线（第二十四轮撤销空心插值点）；价格标签自适应避让（resolveCollisions 两遍式）
@@ -112,6 +112,8 @@ export interface ChartProps {
   // Y 轴 = 纯自适应分段刻度（无手动覆盖）
   /** Y 轴左边距；缺省按最长刻度估算 */
   gridLeft?: number;
+  /** 第一百一十五轮：右侧留白（量价面板预留销量轴列，轴信息不与绘图区重叠）；缺省 GRID.right */
+  gridRight?: number;
   /** 图顶卡片区预留高；缺省按 series 数量推（gridTopFor） */
   gridTop?: number;
   // 系列图例页签由看板层通过 legend 注入图顶工具行中央，底部只保留时间轴。
@@ -543,9 +545,15 @@ export default function Chart(props: ChartProps) {
         scale: displayScale,
         currency,
         gridLeft: props.gridLeft,
+        gridRight: props.gridRight,
       }),
-    [width, chartH, gridTop, series, displayScale, currency, props.gridLeft],
+    [width, chartH, gridTop, series, displayScale, currency, props.gridLeft, props.gridRight],
   );
+
+  // ---- 第一百一十五轮（评审）：量价明细框条位置 = 「时间 X 轴标签底」与「容器
+  //      下边界」之间垂直居中（此前贴底偏下）；geom 未就绪时空态兜底贴 chartH ----
+  const tipBandTop = geom ? geom.plotTop + geom.plotHeight + (props.showXLabels ? 22 : 6) : chartH;
+  const tipBandH = Math.max(60, totalH - tipBandTop);
 
   // ---- 绘图区横向几何原语上报（第十五轮为图下热力带对齐引入；第五十六轮热力带
   //      收进二级抽屉后主流程不再消费，保留通用上报能力）；只按三个原语组成的
@@ -614,8 +622,9 @@ export default function Chart(props: ChartProps) {
         lineShape,
         xLabels: props.showXLabels === true, // 第110轮：分离面板自带时间轴标签
         labelMode,
+        gridRight: props.gridRight,
       }),
-    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, litKeys, lineShape, props.showXLabels, labelMode],
+    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, litKeys, lineShape, props.showXLabels, labelMode, props.gridRight],
   );
 
   // ---- setOption / resize ----
@@ -1166,10 +1175,10 @@ export default function Chart(props: ChartProps) {
                 <div
                   style={{
                     position: 'absolute',
-                    top: chartH + 2,
+                    top: tipBandTop,
                     left: 0,
                     right: 0,
-                    height: TIP_BOX_H - 2,
+                    height: tipBandH,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1330,10 +1339,10 @@ export default function Chart(props: ChartProps) {
                 <div
                   style={{
                     position: 'absolute',
-                    top: chartH + 2,
+                    top: tipBandTop,
                     left: 0,
                     right: 0,
-                    height: TIP_BOX_H - 2,
+                    height: tipBandH,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1392,10 +1401,10 @@ export default function Chart(props: ChartProps) {
             <div
               style={{
                 position: 'absolute',
-                top: chartH + 2,
+                top: tipBandTop,
                 left: 0,
                 right: 0,
-                height: TIP_BOX_H - 2,
+                height: tipBandH,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

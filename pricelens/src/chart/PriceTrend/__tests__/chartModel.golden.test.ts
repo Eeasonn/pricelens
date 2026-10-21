@@ -780,9 +780,9 @@ describe('段像素需求下限（第三十二轮）', () => {
 // ---------------- 小件 ----------------
 
 describe('小件', () => {
-  it('curveNameOf 去品牌前缀 + 去 GB/TB 后缀（容量数字保留，如 12+256）', () => {
+  it('curveNameOf 去品牌前缀 + 去 GB 后缀（TB 保留单位——第一百一十五轮："16+1 TB" 不缩成 "16+1"）', () => {
     expect(curveNameOf(mkSeries({ label: 'Acme Ultra 256GB', points: [] }))).toBe('Ultra 256');
-    expect(curveNameOf(mkSeries({ label: 'Acme Pro Max 1TB', points: [] }))).toBe('Pro Max 1');
+    expect(curveNameOf(mkSeries({ label: 'Acme Pro Max 1TB', points: [] }))).toBe('Pro Max 1TB');
     expect(curveNameOf(mkSeries({ label: 'Acme Ultra 12+256 GB', points: [] }))).toBe('Ultra 12+256');
     expect(curveNameOf(mkSeries({ label: '无品牌前缀', points: [] }))).toBe('无品牌前缀');
   });
