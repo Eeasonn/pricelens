@@ -61,6 +61,7 @@ import {
   GRID,
   NAME_ZONE_W,
   estGridLeft,
+  gapAbsorbedIdx,
   TICK_PX,
   AXIS_BAND_W,
   TICK_ZONE_W,
@@ -632,6 +633,11 @@ export default function Chart(props: ChartProps) {
   // ---- 端点标记（S=真实起点 / E=连续 3 区间无值才确认的截止 / in·out=窗口续接点），
   //      语义详见 chartModel.buildEndpointMarks；canvas 不画默认符号，DOM 徽标接管 ----
   const endpointMarks = useMemo(() => buildEndpointMarks(series), [series]);
+  // 第一百二十五轮：跨接吸收的孤立有值点集（悬停小圆点不叠画）；系列级缓存避免每次悬停重算
+  const absorbedByKey = useMemo(
+    () => new Map(series.map((s) => [s.key, gapAbsorbedIdx(s.points)])),
+    [series],
+  );
 
   // ---- 生命周期调价幅度（第二十七轮：仅季粒度，系列名第二行）----
   // 恒本币、锚在数据（与窗口/显示币种无关）；完结/在售统显「生命周期 −X%」（第二十九轮：不再带「暂」）
@@ -811,8 +817,8 @@ export default function Chart(props: ChartProps) {
 
   // ---- offer 图标与端点徽标的几何（纯构建见 chartModel） ----
   const offerMarkers = useMemo(
-    () => buildOfferMarkers({ enabled: props.enableOffer, geom, series }),
-    [props.enableOffer, geom, series],
+    () => buildOfferMarkers({ enabled: props.enableOffer, geom, series, priceTypes }),
+    [props.enableOffer, geom, series, priceTypes],
   );
   const endpointBadges = useMemo(
     () => buildEndpointBadges({ geom, series, marks: endpointMarks, priceTypes }),
@@ -1162,12 +1168,15 @@ export default function Chart(props: ChartProps) {
               );
             })}
           {/* 价格变化点（第三十五轮起；第四十二轮阈值齿轮可调、含上涨）：相较前一有值点
-              |Δ|≥阈值的点下方 ↓/↑X% 徽标（Keepa「价格下降了 30%」画法）；聚焦降透明 */}
+              |Δ|≥阈值的点下方 ↓/↑X% 徽标（Keepa「价格下降了 30%」画法）；聚焦降透明。
+              第一百二十五轮：y 锚定主价口径（primaryPriceOf）——仅 RRP 视图贴 RRP 线，
+              变化率仍按折后价比较 */}
           {geom &&
             series.map((s) =>
               s.points.map((pt, i) => {
                 const chg = changeMarks.get(`${s.key}|${i}`);
-                if (chg == null || pt.price == null) return null;
+                const v = primaryPriceOf(pt, priceTypes);
+                if (chg == null || v == null) return null;
                 const down = chg < 0;
                 const pct = Math.round(Math.abs(chg) * 100);
                 const dim = litKeys != null && !litKeys.includes(s.key);
@@ -1178,7 +1187,7 @@ export default function Chart(props: ChartProps) {
                     style={{
                       position: 'absolute',
                       left: xPxOf(geom, i),
-                      top: yPxOf(geom, pt.price) + 9,
+                      top: yPxOf(geom, v) + 9,
                       transform: 'translateX(-50%)',
                       padding: '0 5px',
                       fontSize: 10,
@@ -1777,7 +1786,7 @@ export default function Chart(props: ChartProps) {
               const v = pt ? primaryPriceOf(pt, priceTypes) : null;
               if (v == null) return null;
               const mk = endpointMarks.get(`${s.key}|${tipIdx}`);
-              if (mk) return null; // 端点徽标已在同位表达
+              if (mk || absorbedByKey.get(s.key)?.has(tipIdx)) return null; // 端点徽标已在同位表达 / 跨接孤立点无可见点
               const dim = litKeys != null && !litKeys.includes(s.key);
               return (
                 <span

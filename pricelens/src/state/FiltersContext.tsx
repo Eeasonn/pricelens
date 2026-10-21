@@ -24,7 +24,7 @@ import type {
 } from './filtersTypes';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimProduct, dimRegion, dimTime } from '../data';
-import { lowestPriceColorSku } from '../dataModel/aggregate';
+import { lowestPriceColorSku, platformSelectionValidFor } from '../dataModel/aggregate';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
@@ -289,9 +289,7 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
   syncScopeRegistries(scope.countryCode);
-  const platformOk =
-    s.platform == null ||
-    s.platform.shopIds.every((id) => id.startsWith(`${scope.countryCode}:`));
+  const platformOk = platformSelectionValidFor(scope.countryCode, s.platform);
   const needMain = force || !mainsValidFor(s.mains, scope.countryCode, scope.industry);
   const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry) : {};
   const next: FiltersState = {
@@ -325,6 +323,9 @@ function loadBaseState(): FiltersState {
     // ≤v9 一律落默认（readPersistedState 只放行 v10/11/12）
     const { v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
     restored = { ...defaultFilters, ...rest } as FiltersState;
+    // 迁移里的矩阵查询（groupsFromBenchmark）按数据层缺省国家取分国对标，须先切到载荷国家，
+    // 否则手动模式下按 'RU' 矩阵分配的对比区会被固化写回
+    syncScopeRegistries(restored.countryCode);
     // v10 → v12（第一百一十七轮起）：own/competitors → 逐配置卡
     if (parsed.v === 10) {
       restored.mains = migrateV10(legacyOwn ?? [], legacyCompetitors ?? [], restored.autoMatch);
@@ -402,14 +403,16 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     const mainKeys = state.mains.flatMap((m) =>
       m.main ? [`${m.main.modelId}__${m.main.romram.replace(/\s+/g, '')}`] : [],
     );
-    const shop = state.platform?.shopIds[0] ?? null;
+    // 平台勾选整体写入（整平台 plat + 渠道 shop，逗号列表），与 readUrlOverrides 对称——
+    // 只写首个渠道会让整平台勾选 / 多渠道勾选经链接分享后丢失
     writeUrlPatch({
       c: state.countryCode,
       i: state.industry,
       g: state.granularity,
       cur: state.currency,
       main: mainKeys.join(',') || null,
-      shop,
+      plat: state.platform?.platforms.join(',') || null,
+      shop: state.platform?.shopIds.join(',') || null,
     });
   }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform, state.autoMatch]);
 

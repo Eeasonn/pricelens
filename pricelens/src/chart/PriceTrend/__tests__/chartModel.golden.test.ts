@@ -462,10 +462,23 @@ describe('buildTickRows / buildTierBoxes / badges / offer', () => {
       discount: { kind: 'discount', promoName: '双11', headline: '券 −10%', detail: '平台券 −10%', endDate: '2026-11-11', remainingDays: 30 },
     };
     const pts = own.points.map((p, i) => (i === 3 || i === 7 ? { ...p, offer } : p));
-    const markers = buildOfferMarkers({ enabled: true, geom, series: [mkSeries({ points: pts })] });
+    const markers = buildOfferMarkers({ enabled: true, geom, series: [mkSeries({ points: pts })], priceTypes: BOTH });
     expect(markers).toHaveLength(1); // 同 档期+权益 只取首周
     expect(offerSummary(markers[0].offer)).toBe('券 −10%');
-    expect(buildOfferMarkers({ enabled: false, geom, series: [mkSeries({ points: pts })] })).toHaveLength(0);
+    expect(buildOfferMarkers({ enabled: false, geom, series: [mkSeries({ points: pts })], priceTypes: BOTH })).toHaveLength(0);
+  });
+
+  it('第一百二十五轮：offer 徽章 y 锚定主价口径——仅 RRP 时取 rrp 高度而非 price 高度', () => {
+    const RRP_ONLY: { discounted: boolean; rrp: boolean } = { discounted: false, rrp: true };
+    const offer: OfferInfo = {
+      discount: { kind: 'discount', promoName: '双11', headline: '券 −10%', detail: '平台券 −10%', endDate: '2026-11-11', remainingDays: 30 },
+    };
+    const pts = own.points.map((p, i) => (i === 2 ? { ...p, offer } : p));
+    const mk = (priceTypes: { discounted: boolean; rrp: boolean }) =>
+      buildOfferMarkers({ enabled: true, geom, series: [mkSeries({ points: pts })], priceTypes })[0];
+    expect(mk(BOTH).y).toBeCloseTo(yPxOf(geom, pts[2].price!), 6);
+    expect(mk(RRP_ONLY).y).toBeCloseTo(yPxOf(geom, pts[2].rrp!), 6);
+    expect(mk(RRP_ONLY).y).not.toBeCloseTo(yPxOf(geom, pts[2].price!), 6);
   });
 
   it('第四十八轮：offerList 固定 折扣→分期→赠品 次序；offerSummary 合并 headline', () => {

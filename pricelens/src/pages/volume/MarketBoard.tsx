@@ -225,9 +225,10 @@ export default function MarketBoard(props: {
   const plotH = CHART_H - PAD_T - PAD_B;
   const colW = n > 0 ? plotW / n : plotW;
   const barW = Math.min(64, colW * 0.55);
-  // Y 轴 = 台数：niceCeil 上限，4 等分 5 道网格线（上限不被 4 整除时改 5 等分，保持整数步长）
+  // Y 轴 = 台数：niceCeil 上限，恒 4 等分 5 道网格线（第一百二十五轮：不被 4 整除时步长
+  // 向上取整保 yMax ≥ cap——原 %5 分支会让 yMax < cap、最高柱溢出绘图区）
   const cap = niceCeil(Math.max(1, ...structures.map((s) => s.total)));
-  const yStep = cap % 4 === 0 ? cap / 4 : cap % 5 === 0 ? cap / 5 : Math.ceil(cap / 4);
+  const yStep = cap % 4 === 0 ? cap / 4 : Math.ceil(cap / 4);
   const yMax = yStep * 4;
   const yOf = (v: number): number => PAD_T + plotH - (v / yMax) * plotH;
   const rows = breakdown.rows;

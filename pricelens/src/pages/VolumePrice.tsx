@@ -258,6 +258,18 @@ export default function VolumePrice() {
     setBrushLive([null, null, null]);
   }, [win.s, win.e, state.granularity, synced]);
 
+  // 非同步下面板独立调时间轴只动 effWins，不触发上面的整体清除（共享窗口未变）——
+  // 第一百二十五轮：按面板窗口签名精确清，只清窗口变了的面板（下标随窗口平移失义）
+  const effWinSigsRef = useRef<string[] | null>(null);
+  useEffect(() => {
+    const prev = effWinSigsRef.current;
+    const next = effWins.map(([s, e]) => `${s}:${e}`);
+    effWinSigsRef.current = next;
+    if (!prev || next.every((sig, i) => sig === prev[i])) return;
+    setBrushes((cur) => cur.map((b, i) => (next[i] === prev[i] ? b : null)));
+    setBrushLive((cur) => cur.map((b, i) => (next[i] === prev[i] ? b : null)));
+  }, [effWins]);
+
   // 窗口切片（同分离模式 sliceVis：含边缘续接标记）；非同步时各面板按各自窗口切
   const sliceVis = (list: Series[], s: number, e: number): Series[] => {
     if (s > e) return [];

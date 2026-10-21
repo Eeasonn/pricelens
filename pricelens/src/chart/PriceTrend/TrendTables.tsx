@@ -397,7 +397,10 @@ export default function TrendTables(props: {
                 aria-label="组筛选"
                 placeholder="未选择组"
                 value={viewBlocks.map((b) => b.g.id)}
-                options={blocks.map((b) => ({ value: b.g.id, label: `${groupOrdinal(b.ordinal)} · ${blockTitle(b)}` }))}
+                /* 第一百二十五轮：options 与 viewBlocks 同口径只列有数据的组 */
+                options={blocks
+                  .filter((b) => b.g.series.length > 0)
+                  .map((b) => ({ value: b.g.id, label: `${groupOrdinal(b.ordinal)} · ${blockTitle(b)}` }))}
                 optionRender={(option) => (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <BrandDot brand={brandOfBlock(String(option.value))} />

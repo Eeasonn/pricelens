@@ -608,6 +608,16 @@ function LevelSwitchPopover({
       cards.push({ id: newCardId(), main: sel, compares: [] });
     }
     if (!cards.length) return;
+    // 第一百二十五轮（K2）：批量落卡不再静默丢弃当前卡对比区——对齐单点路径
+    // pickConfig→withMain 的沿用口径：首张新卡继承（剔同 selKey、截配额），
+    // 其余新卡保持空、由 setMains 的自动匹配按需补。
+    if ((ctx.kind === 'set-main' || ctx.kind === 'replace-main') && activeCard?.compares.length) {
+      const first = cards[0];
+      cards[0] = {
+        ...first,
+        compares: activeCard.compares.filter((c) => selKey(c) !== selKey(first.main!)).slice(0, cardQuota(first)),
+      };
+    }
     actions.setMains([...list, ...cards]);
     setOpen(false);
   };
@@ -637,8 +647,24 @@ function LevelSwitchPopover({
   const tierGroupAll = (): void => {
     if (!tier) return;
     const base = ctx.kind === 'set-main' && activeCard ? mains.filter((c) => c.id !== activeCard.id) : mains;
-    const next = appendTierCards(state.industry, tier, state.countryCode, base);
+    let next = appendTierCards(state.industry, tier, state.countryCode, base);
     if (next === base) return;
+    // 第一百二十五轮（K2）：set-main 批量成组不再丢弃空对先挂的对比区——不改
+    // appendTierCards（返回 base+新卡、对比区按矩阵填），在此对结果后处理：首张
+    // 新卡若未带对比区则沿用被移除空对的（剔同 selKey、截配额）；已被矩阵填好
+    // 则不覆盖。replace-main 分支本就追加不动当前卡，无需处理。
+    if (ctx.kind === 'set-main' && activeCard?.compares.length) {
+      const inherit = activeCard.compares;
+      const baseIds = new Set(base.map((c) => c.id));
+      const firstNew = next.find((c) => !baseIds.has(c.id));
+      if (firstNew && !firstNew.compares.length) {
+        next = next.map((c) =>
+          c === firstNew
+            ? { ...c, compares: inherit.filter((x) => selKey(x) !== selKey(c.main!)).slice(0, cardQuota(c)) }
+            : c,
+        );
+      }
+    }
     actions.setMains(next);
     setOpen(false);
   };
@@ -747,7 +773,12 @@ function LevelSwitchPopover({
         return {
           key: r.key,
           label: r.romram,
-          checkState: 'none' as const,
+          // 第一百二十五轮（K3）：复选框补成真控件（此前缺 onCheckChange，点了没反应）——
+          // 勾 = 已在对比区；disabled 只拦「未选中时加」，已选中仍可点掉。
+          checkState: inCompares ? 'checked' : 'none',
+          onCheckChange: () => {
+            if (inCompares || !disabled) toggleCompare(r);
+          },
           onLabelClick: () => toggleCompare(r),
           trailing: (
             <Tooltip
@@ -794,10 +825,11 @@ function LevelSwitchPopover({
       const taken = !replaceCompareCtx
         && mains.some((c) => c.main != null && selKey(c.main) === key && !('cardId' in ctx && c.id === ctx.cardId));
       const blocked = isCurrent || taken;
+      // 第一百二十五轮（K3）：主品选择为单选语义，不渲染复选框（此前是点了
+      // 没反应的摆设）；列宽的 24px 复选框预留随 checkState 缺省自动收窄。
       return {
         key: r.key,
         label: r.romram,
-        checkState: 'none' as const,
         onLabelClick: () => {
           if (!blocked) pickConfig(r);
         },
@@ -1120,7 +1152,9 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
   // ---- 最近组合 ----
   const [combos, setCombos] = useState<StoredCombo[]>(() => readCombos());
   const recordCombo = (): void => {
-    if (!mains.length) return;
+    // 第一百二十五轮（K4）：全空内容（只有空对卡、无主品无对比）不进「最近」——
+    // 签名互相碰撞且无恢复价值
+    if (!mains.some((c) => c.main || c.compares.length)) return;
     // 组合名按去重后的主品型号表述：同型号多组不带「等」（等 = 还有其他型号）
     const names = [...new Set(mains.map((c) => (c.main ? modelNameOf(c.main.modelId) : '对比产品')))];
     const label =
@@ -1371,12 +1405,29 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                 }}
               >
                 <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品</div>
+                {/* 第一百二十五轮（K1）：空对卡补删除入口——MainRow 在 main 为空时返回
+                    null，组内此前无任何删法，误建空卡永久占位；✕ 与 MainRow 行尾同款同位 */}
                 {card.main ? (
                   <MainRow card={card} />
                 ) : (
-                  <LevelSwitchPopover ctx={{ kind: 'set-main', cardId: card.id }}>
-                    <AddPill label="选择主分析产品" big />
-                  </LevelSwitchPopover>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    <LevelSwitchPopover ctx={{ kind: 'set-main', cardId: card.id }}>
+                      <AddPill label="选择主分析产品" big />
+                    </LevelSwitchPopover>
+                    <Popconfirm
+                      title="删除该组？"
+                      description="组内对比产品一并移除"
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true, size: 'small' }}
+                      cancelButtonProps={{ size: 'small' }}
+                      onConfirm={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
+                    >
+                      <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+                        <DeleteX label="删除该组" />
+                      </span>
+                    </Popconfirm>
+                  </div>
                 )}
               </div>
 

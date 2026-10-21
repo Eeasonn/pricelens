@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { Button, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { usePage, PageProvider } from './state/PageContext';
-import { FiltersProvider } from './state/FiltersContext';
+import { FiltersProvider, useFilters } from './state/FiltersContext';
 import { OverviewViewProvider } from './state/OverviewViewContext';
+import { scopeLabels } from './dataModel/scope';
 import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
 import VolumePrice from './pages/VolumePrice';
@@ -44,6 +46,12 @@ export default function App() {
 
 function AppBody() {
   const { page } = usePage();
+  const { state } = useFilters();
+  // 标签页标题随当前国家（index.html 的静态标题只是首帧占位；多国接入后不再是单一 R国）
+  const { region, country } = scopeLabels(state);
+  useEffect(() => {
+    document.title = `PriceLens · ${region} / ${country}`;
+  }, [region, country]);
   // 三页切换轻淡入：key 换页重挂载，播放 lplPageIn（动效令牌 fast 档）
   return (
     <div key={page} className="lpl-page-fade">

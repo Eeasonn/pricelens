@@ -15,8 +15,8 @@ import { CloseOutlined, HolderOutlined, ExclamationCircleFilled, LineChartOutlin
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { Segmented, Tooltip } from 'antd';
-import type { CurrencyMode } from '../../dataModel/types';
-import { lowestPriceColorSku, type OverviewModel, type OverviewRow } from '../../dataModel/aggregate';
+import type { CurrencyMode, Industry } from '../../dataModel/types';
+import { lowestPriceColorSku, tierBandsOf, type OverviewModel, type OverviewRow } from '../../dataModel/aggregate';
 import { bucketLatestWeekLabel, diffPct, tierLabelShort } from '../../chart/PriceTrend/helpers';
 import { DiscountBadge } from '../../chart/PriceTrend/PriceSummary';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
@@ -33,6 +33,8 @@ export interface MarketMapProps {
   currency: CurrencyMode;
   /** 产业显示名（标题前段：手机 · 市场摆位） */
   industryLabel: string;
+  /** 产业（第一百二十五轮：档位带随产业阶梯 tierBandsOf 取值，不再硬编码手机档） */
+  industry: Industry;
 }
 
 type MapMode = 'table' | 'market';
@@ -53,7 +55,9 @@ function modelPrice(model: OverviewModel): {
 } {
   const rows = model.rows;
   const values = rows.map((row) => row.price).filter((value): value is number => value != null);
-  const weeks = rows.map((row) => row.asOfWeek).sort();
+  // 现价锚周 = 最新「有价」行的采集周：从未有价的兜底周（= 全数据最后一周）不算——
+  // 否则锚到无价周会让现价顶成 '—' 且日期错（第一百二十五轮）
+  const weeks = rows.filter((row) => row.price != null).map((row) => row.asOfWeek).sort();
   const asOf = weeks.length > 0 ? weeks[weeks.length - 1] : '';
   const freshest = rows.find((row) => row.asOfWeek === asOf && row.price != null);
   if (values.length === 0) return { min: null, max: null, mid: null, current: null, asOf };
@@ -349,11 +353,17 @@ function DetailFloat({
     [model],
   );
 
+  // 「查看价格走势」的收起动画句柄：卸载（含 Esc 收起）时终止，不再跳看板
+  const collapseTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (collapseTimerRef.current != null) window.clearTimeout(collapseTimerRef.current);
+  }, []);
+
   /** 「查看价格走势」：内容右收动画 → 跳看板（第112轮：时点摘要改为看板内手动展开） */
   const collapseAndGo = (): void => {
     if (collapsing) return;
     setCollapsing(true);
-    window.setTimeout(() => {
+    collapseTimerRef.current = window.setTimeout(() => {
       const comps = model.comps ?? [];
       const compSels: ProductSelection[] = [];
       const seenComp = new Set<string>();
@@ -363,8 +373,9 @@ function DetailFloat({
         seenComp.add(key);
         compSels.push({ modelId: c.skuId.split('__')[0], romram: c.romram, skuIds: [c.skuId] });
       }
-      // 第一百二十轮：整组进看板 = 每配置一张主分析卡（唯一主品卡形）；
-      // 首卡带入矩阵对比区，其余卡由自动跟随按矩阵补齐（手动模式保持空）
+      // 第一百二十轮：整组进看板 = 每配置一张主分析卡（唯一主品卡形）；自动匹配开 =
+      // setMains 触发各卡按各自配置的矩阵带出对比区；手动模式 = 首卡继承浮层里的
+      // 对标并集（firstCompares），其余卡对比区保持空
       actions.setMains(
         buildCards(
           model.rows.map((r) => selOf(model.modelId, r.romram)),
@@ -637,19 +648,15 @@ function DetailFloat({
   );
 }
 
-const MARKET_TIERS: [number, number, string][] = [
-  [0, 200, '<200'],
-  [200, 400, '200~400'],
-  [400, 600, '400~600'],
-  [600, 800, '600~800'],
-  [800, 1000, '800~1000'],
-  [1000, Number.POSITIVE_INFINITY, '1000+'],
-];
-
-export default function MarketMap({ models, currency, industryLabel }: MarketMapProps) {
+export default function MarketMap({ models, currency, industryLabel, industry }: MarketMapProps) {
   const { actions } = useFilters();
   const { go } = usePage();
   const [mode, setMode] = useState<MapMode>('market');
+  // 档位带 = 产业阶梯（低→高；开区间上界转 Infinity），label 已是 '200~400' 形式
+  const marketTiers = useMemo<[number, number, string][]>(
+    () => tierBandsOf(industry).map((b) => [b.min, b.max ?? Number.POSITIVE_INFINITY, b.label]),
+    [industry],
+  );
   // 标题括号内 = 全图最新采集周锚日（与卡片右上角采集日期同口径）
   const latestDate = useMemo(() => {
     let w = '';
@@ -696,7 +703,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     if (!usd) return [];
     let top = plotTop;
     const rects: { label: string; lo: number; top: number; h: number; items: typeof activeItems }[] = [];
-    for (const [lo, hi, label] of [...MARKET_TIERS].reverse()) {
+    for (const [lo, hi, label] of [...marketTiers].reverse()) {
       const items = activeItems.filter(({ price }) => {
         const v = price.mid ?? price.min;
         return v != null && v >= lo && v < hi;
@@ -710,12 +717,12 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     }
     return rects;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeItems, usd, mode]);
+  }, [activeItems, usd, mode, marketTiers]);
 
   const tierBoxes = usd
     ? bandRects.map((b) => ({ label: b.label, top: b.top, h: b.h, empty: false }))
     : (mode === 'market'
-      ? MARKET_TIERS
+      ? marketTiers
         .map(([lo, hi, label]) => {
           const lo2 = Math.max(lo, axisBottom);
           const hi2 = Math.min(hi, axisTop);
@@ -759,6 +766,17 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
       });
     }
     lastBottom = bandRects.length > 0 ? bandRects[bandRects.length - 1].top + bandRects[bandRects.length - 1].h : plotTop;
+    // 第一百二十五轮：完全无价的型号不属任何档位带——按原顺序追加到最后一档下方
+    // （与本币模式把无价型号排到最底部一致；否则 rowTops 缺位全部堆到图顶）
+    const unplaced = activeItems.filter(({ model }) => !rowTops.has(model.modelId));
+    if (unplaced.length > 0) {
+      const extraPitch = mode === 'table' ? ROW_H + TABLE_GAP : CARD_H + BAND_GAP;
+      unplaced.forEach((item, index) => {
+        rowTops.set(item.model.modelId, lastBottom + index * extraPitch);
+        rowHeights.set(item.model.modelId, extraPitch);
+      });
+      lastBottom += unplaced.length * extraPitch;
+    }
   } else if (mode === 'table') {
     // 本币下表格无档位带：按顺序等距排列（与 USD 表格一致，只是没有档位带底纹）
     activeItems.forEach((item, index) => {

@@ -16,6 +16,7 @@ import BrandDot from '../../components/BrandMark';
 import { COMPETITOR_BRANDS } from '../../components/ProductCascader/tree';
 import { TIER_LABELS } from '../../dataModel/aggregate';
 import { getCurrentCountry } from '../../state/currentScope';
+import { useFilters } from '../../state/FiltersContext';
 import type { OverviewModel, OverviewRow, OverviewTierBand } from '../../dataModel/aggregate';
 import type { DimBenchmark } from '../../dataModel/types';
 import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark, notifyConfigChanged, saveBenchmark } from '../../state/configStore';
@@ -40,6 +41,9 @@ export default function BenchConfigModal(props: {
   onClose: () => void;
 }) {
   const { open, model, bands, initialRomram, onClose } = props;
+  // 传入 bands 的价格按全局币种构造（BenchmarkConfigBlock 同 state.currency 取数），
+  // 展示须同币种——硬编码 usd 会在本币态显示 '$' 前缀 + 本币数值（第一百二十五轮）
+  const currency = useFilters().state.currency;
   const [romIdx, setRomIdx] = useState(0);
   const [draft, setDraft] = useState<DimBenchmark[]>([]);
   // 候选区筛选（预警中心重构新增：品牌 chips + 搜索，补齐原配置页品牌视角）
@@ -175,7 +179,7 @@ export default function BenchConfigModal(props: {
           <span style={{ fontSize: 10, color: color.mute, whiteSpace: 'nowrap' }}>{c.row.romram}</span>
         </span>
         <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, textAlign: 'right' }}>
-          {formatPrice(c.row.price, 'usd')}
+          {formatPrice(c.row.price, currency)}
         </span>
         <span className="tnum" style={{ fontSize: 10, color: c.dist != null && c.dist <= 0.15 ? '#0a7d38' : color.mute, textAlign: 'right' }}>
           {c.dist != null ? `价差 ${Math.round(c.dist * 100)}%` : '—'}
@@ -239,7 +243,7 @@ export default function BenchConfigModal(props: {
               options={model.rows.map((r, i) => ({ label: r.romram, value: i }))}
             />
             <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginLeft: 'auto' }}>
-              {formatPrice(rom.price, 'usd')}
+              {formatPrice(rom.price, currency)}
             </span>
           </div>
 
@@ -289,7 +293,7 @@ export default function BenchConfigModal(props: {
                     )}
                   </span>
                   <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, textAlign: 'right' }}>
-                    {formatPrice(colorPrice, 'usd')}
+                    {formatPrice(colorPrice, currency)}
                   </span>
                   <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
                     <Button

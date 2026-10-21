@@ -280,9 +280,10 @@ export default function XBrush(props: XBrushProps) {
     }
     const i = clamp(Math.floor(((ev.clientX - rect.left) / rect.width) * (hi - lo + 1)) + lo, lo, hi);
     if (d.kind === 'start') {
-      onChange(clamp(i, Math.min(lo, d.startE - (MIN_WINDOW - 1)), d.startE), d.startE);
+      // 第一百二十五轮：起点上界 = 终点前留足 MIN_WINDOW 桶、终点不越过 hi（与键盘处理同款钳制口径）
+      onChange(clamp(i, lo, Math.max(lo, d.startE - (MIN_WINDOW - 1))), d.startE);
     } else {
-      onChange(d.startS, clamp(i, d.startS + MIN_WINDOW - 1, Math.max(hi, d.startS + MIN_WINDOW - 1)));
+      onChange(d.startS, clamp(i, Math.min(hi, d.startS + MIN_WINDOW - 1), hi));
     }
   };
   const onDragUp = (ev: ReactPointerEvent<HTMLDivElement>) => {

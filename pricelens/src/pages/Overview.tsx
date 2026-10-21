@@ -114,6 +114,12 @@ export default function Overview() {
 
   const { industry } = scopeLabels(state);
 
+  // 国家/产业切换 → 本页产品/档位视图态失效（型号集随口径重建，旧选择无对应对象）
+  useEffect(() => {
+    setProdSel([]);
+    setSelTiers([]);
+  }, [state.countryCode, state.industry]);
+
   /** 档位/产品筛选后的摆位图型号集（我司+竞品；市场摆位沿用同口径）。
    *  筛选我司产品时，其生效对标竞品一并保留（竞品对比模式仍可对读） */
   const mapModels = useMemo(() => {
@@ -200,6 +206,7 @@ export default function Overview() {
               models={mapModels}
               currency={currency}
               industryLabel={industry}
+              industry={state.industry}
             />
 
 

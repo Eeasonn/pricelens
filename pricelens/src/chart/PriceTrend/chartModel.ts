@@ -598,11 +598,13 @@ export function offerLineItems(
 }
 
 /** offer 徽章：同一系列「同档期+同权益组合」只标首周（窗口内；原按 title 去重的口径，
- *  结构化后签名 = 档期+headline 集合） */
+ *  结构化后签名 = 档期+headline 集合）。第一百二十五轮：y 锚定主价口径
+ *  （primaryPriceOf）——仅 RRP 视图贴 RRP 线，不再偏到折后价或漏出绘图区 */
 export function buildOfferMarkers(p: {
   enabled: boolean | undefined;
   geom: Geom | null;
   series: Series[];
+  priceTypes: PriceTypes;
 }): { key: string; x: number; y: number; offer: OfferInfo }[] {
   if (!p.enabled || !p.geom) return [];
   const out: { key: string; x: number; y: number; offer: OfferInfo }[] = [];
@@ -612,9 +614,10 @@ export function buildOfferMarkers(p: {
       const sig = offerList(pt.offer)
         .map((d) => `${d.promoName}|${d.headline}`)
         .join(';');
-      if (!pt.offer || pt.price == null || seen.has(sig)) return;
+      const v = primaryPriceOf(pt, p.priceTypes);
+      if (!pt.offer || v == null || seen.has(sig)) return;
       seen.add(sig);
-      out.push({ key: `${s.key}|${sig}|${i}`, x: xPxOf(p.geom!, i), y: yPxOf(p.geom!, pt.price), offer: pt.offer });
+      out.push({ key: `${s.key}|${sig}|${i}`, x: xPxOf(p.geom!, i), y: yPxOf(p.geom!, v), offer: pt.offer });
     });
   }
   return out;

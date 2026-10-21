@@ -157,6 +157,19 @@ export function effectiveChannelIds(countryCode: string, platform: PlatformQuery
   return out;
 }
 
+/** 平台勾选是否整体属于该国（渠道与整平台都按该国渠道表核对；null = 默认电渠恒合法）。
+ *  口径切换/读链接时不合法即回默认电渠——否则旧国家的整平台勾选解析成空渠道集，
+ *  所有取价落空、整页空白。 */
+export function platformSelectionValidFor(countryCode: string, platform: PlatformQuery | null): boolean {
+  if (!platform) return true;
+  const ccPlatforms = new Set<string>();
+  for (const c of dimChannel) if (c.country_code === countryCode) ccPlatforms.add(c.platform);
+  return (
+    platform.shopIds.every((id) => channelById.get(id)?.country_code === countryCode)
+    && platform.platforms.every((p) => ccPlatforms.has(p))
+  );
+}
+
 /** 取价店铺文案：渠道显示名（如 "DNS 独立站"）+ 具体店铺（有意义时） */
 function shopLabelOf(row: FactPriceWeekly): string {
   const ch = channelById.get(row.channel_id);
@@ -168,6 +181,30 @@ function shopLabelOf(row: FactPriceWeekly): string {
   return redundant ? base : `${base} · ${seller}`;
 }
 
+/** 裸机口径取最低价行：组合销售（套装）行不参与比较，仅当全部为套装时回退套装最低价；
+ *  priceOf 返回 null 的行跳过（渠道过滤也可收进 priceOf 以免分配中间数组）。
+ *  第一百二十五轮：看板取价、总览现价/火花线、代表色、平台价差、浮窗现价、量价折扣因子
+ *  全部走此函数——此前仅看板排除套装，同一 SKU 同一周跨页面出现两个价格。 */
+export function minPriceOfRows<R extends { bundle: boolean }>(
+  rows: Iterable<R>,
+  priceOf: (row: R) => number | null,
+  prefer: (cand: { row: R; price: number }, best: { row: R; price: number }) => boolean = (c, b) => c.price < b.price,
+): { row: R; price: number } | null {
+  let best: { row: R; price: number } | null = null;
+  let bestBundle: { row: R; price: number } | null = null;
+  for (const row of rows) {
+    const v = priceOf(row);
+    if (v == null) continue;
+    const cand = { row, price: v };
+    if (row.bundle) {
+      if (!bestBundle || prefer(cand, bestBundle)) bestBundle = cand;
+    } else if (!best || prefer(cand, best)) {
+      best = cand;
+    }
+  }
+  return best ?? bestBundle;
+}
+
 /** 渠道集合内取最低在架价行（折后价口径 = 可抓取渠道最低在架价） */
 function minPriceRow(
   countryCode: string,
@@ -176,20 +213,9 @@ function minPriceRow(
   channels: Set<string>,
   currency: CurrencyMode,
 ): { row: FactPriceWeekly; price: number } | null {
-  // 裸机口径：组合销售（套装）行不参与最低价比较；该周只剩套装行时才回退用套装价
-  let best: { row: FactPriceWeekly; price: number } | null = null;
-  let bestBundle: { row: FactPriceWeekly; price: number } | null = null;
-  for (const row of factRows(countryCode, skuId, weekId)) {
-    if (!channels.has(row.channel_id)) continue;
-    const v = displayPriceOf(row, currency);
-    if (v == null) continue;
-    if (row.bundle) {
-      if (!bestBundle || v < bestBundle.price) bestBundle = { row, price: v };
-    } else if (!best || v < best.price) {
-      best = { row, price: v };
-    }
-  }
-  return best ?? bestBundle;
+  return minPriceOfRows(factRows(countryCode, skuId, weekId), (row) =>
+    channels.has(row.channel_id) ? displayPriceOf(row, currency) : null,
+  );
 }
 
 /** 单点取价（预警引擎与看板共享）：该国渠道选择内的最低折后价 */
@@ -211,16 +237,20 @@ export function platformPriceSpread(
   countryCode: string,
   currency: CurrencyMode,
 ): { platform: string; price: number }[] {
-  const byPlatform = new Map<string, number>();
+  const byPlatform = new Map<string, FactPriceWeekly[]>();
   for (const row of factRows(countryCode, skuId, weekId)) {
     const ch = channelById.get(row.channel_id);
     if (!ch) continue;
-    const v = displayPriceOf(row, currency);
-    if (v == null) continue;
-    const cur = byPlatform.get(ch.platform);
-    if (cur == null || v < cur) byPlatform.set(ch.platform, v);
+    const arr = byPlatform.get(ch.platform);
+    if (arr) arr.push(row);
+    else byPlatform.set(ch.platform, [row]);
   }
-  return [...byPlatform.entries()].map(([platform, price]) => ({ platform, price })).sort((a, b) => a.price - b.price);
+  const out: { platform: string; price: number }[] = [];
+  for (const [platform, rows] of byPlatform) {
+    const hit = minPriceOfRows(rows, (row) => displayPriceOf(row, currency));
+    if (hit) out.push({ platform, price: hit.price });
+  }
+  return out.sort((a, b) => a.price - b.price);
 }
 
 // ---------------- offer 解析（真实分期/促销/组合三列 → 三类权益） ----------------
@@ -358,21 +388,16 @@ export function lowestPriceColorSku(modelId: string, romram: string, countryCode
   const rows = dimProduct.filter((p) => p.sku_id.startsWith(modelId + '__') && normRom(p.romram) === normRom(romram));
   if (rows.length === 0) return null;
   const channels = new Set(effectiveChannelIds(countryCode, null));
+  const preferCheaperThenSku = (c: { row: FactPriceWeekly; price: number }, b: { row: FactPriceWeekly; price: number }): boolean =>
+    c.price < b.price || (c.price === b.price && c.row.sku_id < b.row.sku_id);
   for (let i = timeRows.length - 1; i >= 0; i--) {
     const wid = timeRows[i].week_id;
-    let bestId: string | null = null;
-    let bestPrice = Number.POSITIVE_INFINITY;
+    const weekRows: FactPriceWeekly[] = [];
     for (const r of rows) {
-      for (const row of factRows(countryCode, r.sku_id, wid)) {
-        if (!channels.has(row.channel_id)) continue;
-        const v = row.price_local;
-        if (v != null && (v < bestPrice || (v === bestPrice && bestId != null && r.sku_id < bestId))) {
-          bestPrice = v;
-          bestId = r.sku_id;
-        }
-      }
+      for (const row of factRows(countryCode, r.sku_id, wid)) if (channels.has(row.channel_id)) weekRows.push(row);
     }
-    if (bestId != null) return bestId;
+    const hit = minPriceOfRows(weekRows, (row) => row.price_local, preferCheaperThenSku);
+    if (hit) return hit.row.sku_id;
   }
   return null;
 }
@@ -595,28 +620,25 @@ function latestOf(
 ): { price: number | null; rrp: number | null; weekId: string } {
   for (let i = timeRows.length - 1; i >= 0; i--) {
     const w = timeRows[i].week_id;
-    let price: number | null = null;
+    const weekRows = factRows(cc, skuId, w);
+    const hit = minPriceOfRows(weekRows, (row) => (channels.has(row.channel_id) ? displayPriceOf(row, currency) : null));
+    if (!hit) continue;
     let rrp: number | null = null;
-    for (const row of factRows(cc, skuId, w)) {
+    for (const row of weekRows) {
       if (!channels.has(row.channel_id)) continue;
-      const v = displayPriceOf(row, currency);
-      if (v != null && (price == null || v < price)) price = v;
       if (rrp == null) rrp = displayRrpOf(row, currency);
     }
-    if (price != null) return { price, rrp, weekId: w };
+    return { price: hit.price, rrp, weekId: w };
   }
   return { price: null, rrp: null, weekId: timeRows[timeRows.length - 1]?.week_id ?? '' };
 }
 
 function sparkPoints(skuId: string, cc: string, currency: CurrencyMode, channels: Set<string>): OverviewSparkPoint[] {
   return timeRows.map((w) => {
-    let price: number | null = null;
-    for (const row of factRows(cc, skuId, w.week_id)) {
-      if (!channels.has(row.channel_id)) continue;
-      const v = displayPriceOf(row, currency);
-      if (v != null && (price == null || v < price)) price = v;
-    }
-    return { weekId: w.week_id, monthId: w.month_id, price };
+    const hit = minPriceOfRows(factRows(cc, skuId, w.week_id), (row) =>
+      channels.has(row.channel_id) ? displayPriceOf(row, currency) : null,
+    );
+    return { weekId: w.week_id, monthId: w.month_id, price: hit?.price ?? null };
   });
 }
 

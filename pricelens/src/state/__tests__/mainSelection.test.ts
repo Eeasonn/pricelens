@@ -217,6 +217,16 @@ describe('expandV11Cards（v11 卡 configs[] → 逐配置卡）', () => {
     expect(cards.every((c) => c.main != null)).toBe(true);
   });
 
+  it('首配置卡继承对比区时剔除与主品同型号同配置项并截配额（与 withMain / buildCards 同口径）', () => {
+    // 旧 v11 对比区里混进与首配置同组的项（空格变体也算同组）
+    const sameAsMain: ProductSelection = { ...configs[0], romram: configs[0].romram.replace(/\s+/g, ' ') + ' ' };
+    const extras = Array.from({ length: MAX_LINES_PER_CHART + 2 }, (_, i) => ({ modelId: `x${i}`, romram: '8+128 GB', skuIds: [`x${i}__8+128`] }));
+    const cards = expandV11Cards([{ modelId: multiModel, configs, compares: [sameAsMain, keep, ...extras] }], false);
+    expect(cards[0].compares.some((c) => selKey(c) === selKey(configs[0]))).toBe(false);
+    expect(cards[0].compares[0]).toEqual(keep);
+    expect(cards[0].compares).toHaveLength(cardQuota(cards[0]));
+  });
+
   it('自动模式：其余配置卡按矩阵补齐；同配置去重', () => {
     const dup = [...configs, configs[0]];
     const cards = expandV11Cards([{ modelId: multiModel, configs: dup, compares: [] }], true);

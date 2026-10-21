@@ -125,7 +125,8 @@ export function cardsFromSelections(list: ProductSelection[]): MainProduct[] {
 }
 
 /** v11 → v12 持久化迁移：旧卡 configs[] 展开为逐配置卡——
- *  首配置卡继承原对比区；其余配置卡自动模式按矩阵补、手动模式落空。 */
+ *  首配置卡继承原对比区（剔除与主品同组项、截配额，与 withMain/buildCards 同口径）；
+ *  其余配置卡自动模式按矩阵补、手动模式落空。 */
 export function expandV11Cards(
   cards: { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[],
   autoMatch: boolean,
@@ -140,7 +141,9 @@ export function expandV11Cards(
       const empty: MainProduct = { id: newCardId(), main: sel, compares: [] };
       out.push({
         ...empty,
-        compares: i === 0 ? old.compares.slice(0, cardQuota(empty)) : autoMatch ? autoComparesFor(empty) : [],
+        compares: i === 0
+          ? old.compares.filter((c) => selKey(c) !== key).slice(0, cardQuota(empty))
+          : autoMatch ? autoComparesFor(empty) : [],
       });
     });
   }

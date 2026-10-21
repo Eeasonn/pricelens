@@ -11,13 +11,14 @@
 // ③ 大促日历：只读展示当前国家 dim_promo 的起始时间与促销深度——看板大促带/事件卡的口径来源
 // 保存后 dispatchEvent(CONFIG_CHANGED_EVENT) → 主页立即生效
 // ============================================================
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Button, Empty, message, Select, Tag, Tooltip } from 'antd';
 import PageHeader from '../components/PageHeader';
 import {
   autoPrevModelId,
   effectivePrevModelId,
+  getPrevGenOverrides,
   notifyConfigChanged,
   savePrevGenOverrides,
 } from '../state/configStore';
@@ -78,6 +79,11 @@ export default function Config() {
   const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])),
   );
+  // 国家切换 → prevRows 换一套型号，生效关系随口径重建（第一百二十五轮：
+  // 否则下拉仍按首渲染国家的型号解释，保存会写错行）
+  useEffect(() => {
+    setPrevMap(Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])));
+  }, [prevRows]);
   const labels = scopeLabels({ countryCode: state.countryCode, industry: state.industry });
   const localCurrency = currencyOfCountry(state.countryCode);
   const fxRows = useMemo(
@@ -93,13 +99,16 @@ export default function Config() {
   //（对标配置 = BenchConfigModal 保存；上一代关系 = 下拉变更即存差异），
   // 不再攒一次批量提交。
 
-  /** 上一代关系单行变更即存：只写与 auto 的差异（无差异 = 清除手动维护），主页即时生效 */
+  /** 上一代关系单行变更即存：只写与 auto 的差异（无差异 = 清除手动维护），主页即时生效。
+   *  覆盖表是全局单表（跨国共享）——以现存表为基底只重写当前国家各行，其他国家型号
+   *  的手动维护原样保留（第一百二十五轮） */
   const savePrevRow = (modelId: string, value: string | null): void => {
     setPrevMap((m) => ({ ...m, [modelId]: value }));
-    const overrides: Record<string, string | null> = {};
+    const overrides: Record<string, string | null> = { ...getPrevGenOverrides() };
     for (const r of prevRows) {
       const cur = (r.modelId === modelId ? value : prevMap[r.modelId]) ?? null;
       if (cur !== autoPrevModelId(r.modelId)) overrides[r.modelId] = cur;
+      else delete overrides[r.modelId];
     }
     savePrevGenOverrides(overrides);
     notifyConfigChanged();

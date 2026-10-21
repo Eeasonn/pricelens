@@ -29,7 +29,7 @@ import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
-import { buildSeries, tierOrderOf } from '../../dataModel/aggregate';
+import { buildSeries, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../state/mainSelection';
 import { dimPromo, dimProduct, dimRegion } from '../../data';
 import type {
@@ -435,7 +435,8 @@ export default function PriceTrend(props: {
   // ---- 价格摘要条（第三十六轮定版）：固定显示窗口内最新时点（不随悬停变换，
   //      时点明细看悬停浮窗）；竞品与我司同款样式、来源为取证超链接 ----
   // 第110轮（评审）：时点摘要产品清单按价位档从高到低、同档按现价从高到低排列
-  //（档位 = skuIds[0] 产品维 tier_code，产业档位梯 tierOrderOf 定序；只读维表）；
+  //（第一百二十五轮起档位 = skuIds[0] 的国别档位 tierOf（分国优先、全局兜底），
+  //  产业档位梯 tierOrderOf 定序；只读维表）；
   // 渲染期对名称做单位/叠词去重（如「16+1 TB TB」类重复文案收敛）
   const summary = useMemo(() => {
     const items = buildPriceSummary(chartSeries);
@@ -443,7 +444,7 @@ export default function PriceTrend(props: {
     const tierRank = new Map<string, number>();
     for (const s of chartSeries) {
       const sku = s.skuIds[0] != null ? dimProduct.find((p) => p.sku_id === s.skuIds[0]) : null;
-      const i = sku ? ladder.indexOf(sku.tier_code) : -1;
+      const i = sku ? ladder.indexOf(tierOf(sku, state.countryCode)) : -1;
       tierRank.set(s.key, i < 0 ? -1 : i);
     }
     return items
@@ -453,7 +454,7 @@ export default function PriceTrend(props: {
         if (r !== 0) return r;
         return (b.price ?? Number.NEGATIVE_INFINITY) - (a.price ?? Number.NEGATIVE_INFINITY);
       });
-  }, [chartSeries, state.industry]);
+  }, [chartSeries, state.industry, state.countryCode]);
 
   // ---- 大促背景带（第三十四轮）：dim_promo ∩ 窗口桶覆盖区间；随窗口联动 ----
   const winBuckets = useMemo(() => buckets.slice(win.s, win.e + 1), [buckets, win]);
@@ -508,6 +509,16 @@ export default function PriceTrend(props: {
     () => (promoBandsOn ? buildPromoBands({ promos: scopedPromos, spans: winSpans }) : []),
     [promoBandsOn, winSpans, scopedPromos],
   );
+  // 第一百二十五轮：分图促销抽屉取数 = 面板并集按 key 去重保序——同款对比被多卡对标
+  // 时在各面板重复出现，直接展开会重复列 + 重复 React key（宽表按组归组是组内语义，
+  // 不受影响）
+  const promoSeries = useMemo(
+    () =>
+      splitActive
+        ? Array.from(new Map(panelViews.flatMap((p) => p.all).map((s) => [s.key, s])).values())
+        : visSeries,
+    [splitActive, panelViews, visSeries],
+  );
 
   // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
   // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）。
@@ -548,6 +559,9 @@ export default function PriceTrend(props: {
       splitScaleRef.current = null;
       return null;
     }
+    // 第一百二十五轮：刷选拖动中冻结共享 Y 轴（与上面合并图 yCfg 同款）——
+    // 调节过程只做横向重采样，松手统一重算一次
+    if (adjusting && splitScaleRef.current) return splitScaleRef.current;
     const next = computeYAxis({
       series: panelViews.flatMap((p) => p.vis),
       priceTypes: state.priceTypes,
@@ -558,7 +572,7 @@ export default function PriceTrend(props: {
     });
     splitScaleRef.current = next;
     return next;
-  }, [splitActive, panelViews, state.priceTypes, sliderScale, yCompress, state.currency]);
+  }, [splitActive, panelViews, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
   const splitGridLeft = useMemo(
     () => (splitYCfg ? estGridLeft(state.currency) : gridLeft),
     [splitYCfg, state.currency, gridLeft],
@@ -1106,7 +1120,7 @@ export default function PriceTrend(props: {
       <PromoDrawer
         open={promoDetailOpen}
         onClose={() => setPromoDetailOpen(false)}
-        series={splitActive ? panelViews.flatMap((p) => p.all) : visSeries}
+        series={promoSeries}
         currency={state.currency}
         granularity={state.granularity}
       />

@@ -183,21 +183,35 @@ export function sortModelNodes(models: ModelNode[], mode: ModelSortMode, currenc
 
 let latestCache: { cc: string; values: Map<string, { local: number | null; usd: number | null }> } | null = null;
 
-/** 当前国家默认电渠口径下各 SKU 最新有值周的最低折后价（本币/USD） */
+/** 当前国家默认电渠口径下各 SKU 最新有值周的最低折后价（本币/USD）；
+ *  裸机口径与 aggregate.minPriceOfRows 同规则（套装行仅在该周无非套装行时才用） */
 function latestPrices(): Map<string, { local: number | null; usd: number | null }> {
   const cc = getCurrentCountry();
   if (latestCache?.cc === cc) return latestCache.values;
   const channels = new Set(effectiveChannelIds(cc, null));
-  const best = new Map<string, { weekId: string; local: number; usd: number | null }>();
+  type Px = { local: number; usd: number | null };
+  const best = new Map<string, { weekId: string; bare: Px | null; bundle: Px | null }>();
   for (const row of factPriceWeekly) {
     if (row.country_code !== cc || row.price_local == null || !channels.has(row.channel_id)) continue;
-    const cur = best.get(row.sku_id);
-    if (!cur || row.week_id > cur.weekId || (row.week_id === cur.weekId && row.price_local < cur.local)) {
-      best.set(row.sku_id, { weekId: row.week_id, local: row.price_local, usd: row.price_usd });
+    let cur = best.get(row.sku_id);
+    if (!cur || row.week_id > cur.weekId) {
+      cur = { weekId: row.week_id, bare: null, bundle: null };
+      best.set(row.sku_id, cur);
+    } else if (row.week_id < cur.weekId) {
+      continue;
+    }
+    const px: Px = { local: row.price_local, usd: row.price_usd };
+    if (row.bundle) {
+      if (!cur.bundle || px.local < cur.bundle.local) cur.bundle = px;
+    } else if (!cur.bare || px.local < cur.bare.local) {
+      cur.bare = px;
     }
   }
   const values = new Map<string, { local: number | null; usd: number | null }>();
-  for (const [skuId, v] of best) values.set(skuId, { local: v.local, usd: v.usd });
+  for (const [skuId, v] of best) {
+    const pick = v.bare ?? v.bundle;
+    if (pick) values.set(skuId, { local: pick.local, usd: pick.usd });
+  }
   latestCache = { cc, values };
   return values;
 }

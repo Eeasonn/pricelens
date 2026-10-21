@@ -11,7 +11,7 @@
 // ============================================================
 import { dimProduct, dimPromo, dimTime } from '../data';
 import type { DimProduct, FactPriceWeekly, Granularity, Industry } from './types';
-import { defaultPlatformOf, factRows, tierOf, tierOrderOf } from './aggregate';
+import { defaultPlatformOf, factRows, minPriceOfRows, tierOf, tierOrderOf } from './aggregate';
 
 const normRom = (s: string): string => s.replace(/\s+/g, '');
 
@@ -102,7 +102,8 @@ export function niceCeil(v: number): number {
 
 const shareCache = new Map<string, Map<string, number>>();
 
-/** 参考价：ref_price_usd（配置内各行同值，取首个非空）；缺 → 该国事实行 rrp_local 中位；再缺 → 排最后 */
+/** 参考价（USD）：ref_price_usd（配置内各行同值，取首个非空）；缺 → 该国事实行 rrp_usd 中位；再缺 → 排最后。
+ *  回退口径必须同为 USD——同型号内若部分配置缺 ref_price_usd，本币中位数会与美元值混排、排名全错。 */
 function refPriceOf(rows: DimProduct[], cc: string): number {
   const ref = rows.find((r) => r.ref_price_usd != null)?.ref_price_usd;
   if (ref != null) return ref;
@@ -110,7 +111,7 @@ function refPriceOf(rows: DimProduct[], cc: string): number {
   for (const r of rows) {
     for (const w of timeRows) {
       for (const row of factRows(cc, r.sku_id, w.week_id)) {
-        if (row.rrp_local != null) vals.push(row.rrp_local);
+        if (row.rrp_usd != null) vals.push(row.rrp_usd);
       }
     }
   }
@@ -189,16 +190,10 @@ export function volumeOfConfig(modelId: string, romram: string, countryCode: str
     weekly.push({ idx, weekId: t.week_id, wed: t.week_wed_date, rows: weekRows });
   });
   for (const w of weekly) {
-    // 折扣深度：该周事实行里最低 price_local 那行的价格与其 rrp_local
-    let bestPrice: number | null = null;
-    let bestRrp: number | null = null;
-    for (const row of w.rows) {
-      if (row.price_local == null) continue;
-      if (bestPrice == null || row.price_local < bestPrice) {
-        bestPrice = row.price_local;
-        bestRrp = row.rrp_local;
-      }
-    }
+    // 折扣深度：该周事实行里最低 price_local 那行的价格与其 rrp_local（裸机口径：套装行殿后）
+    const best = minPriceOfRows(w.rows, (row) => row.price_local);
+    const bestPrice = best?.price ?? null;
+    const bestRrp = best?.row.rrp_local ?? null;
     // 促销档期：周三落在区间内（country 匹配、platforms 含该国默认电渠或全渠道）；多档取最深
     let promo = 1;
     for (const p of dimPromo) {

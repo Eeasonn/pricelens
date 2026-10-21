@@ -114,10 +114,11 @@ export default function PanelTimeTrack(props: {
       return;
     }
     const i = clamp(Math.floor(((ev.clientX - rect.left) / rect.width) * n) + lo, lo, hi);
+    // 与键盘微调同钳法：起点 ≤ 终点−(MIN_WINDOW−1)、终点 ≥ 起点+MIN_WINDOW−1（第一百二十五轮）
     if (d.kind === 'start') {
-      onChange(clamp(i, Math.min(lo, d.startE - (MIN_WINDOW - 1)), d.startE), d.startE);
+      onChange(clamp(i, lo, Math.max(lo, d.startE - (MIN_WINDOW - 1))), d.startE);
     } else {
-      onChange(d.startS, clamp(i, d.startS + MIN_WINDOW - 1, Math.max(hi, d.startS + MIN_WINDOW - 1)));
+      onChange(d.startS, clamp(i, Math.min(hi, d.startS + MIN_WINDOW - 1), hi));
     }
   };
   const onDragUp = (ev: ReactPointerEvent<HTMLDivElement>) => {

@@ -17,21 +17,28 @@ import type { FiltersState, PlatformSelection, ProductSelection } from './filter
 import type { Page } from './PageContext';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { cardsFromSelections, clampMains } from './mainSelection';
+import { getCurrentCountry } from './currentScope';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
 const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'config', 'alerts'];
 
+/** 逗号列表参数 → 去空白、去空项 */
+const listParam = (q: URLSearchParams, name: string): string[] =>
+  (q.get(name) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null。
- *  第一百一十七轮：主分析可任意品牌（旧 ownOnly 白名单随之退役）。 */
-export function productSelectionOfSeriesKey(key: string): ProductSelection | null {
+ *  第一百一十七轮：主分析可任意品牌（旧 ownOnly 白名单随之退役）。
+ *  countryCode = 取代表色 SKU 的国家口径（链接自带 c= 时须显式传入：解析发生在
+ *  数据层缺省国家切换之前，按持久化国家取色会在该国无价时把主品整个丢掉）。 */
+export function productSelectionOfSeriesKey(key: string, countryCode: string = getCurrentCountry()): ProductSelection | null {
   const sep = key.indexOf('__');
   if (sep < 0) return null;
   const modelId = key.slice(0, sep);
   const rom = key.slice(sep + 2);
   const row = dimProduct.find((p) => p.sku_id.startsWith(modelId + '__') && norm(p.romram) === rom);
   if (!row) return null;
-  const skuId = lowestPriceColorSku(modelId, row.romram);
+  const skuId = lowestPriceColorSku(modelId, row.romram, countryCode);
   if (!skuId) return null;
   return { modelId, romram: row.romram, skuIds: [skuId] };
 }
@@ -55,14 +62,18 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     const i = q.get('i');
     if (i) out.filters.industry = i as FiltersState['industry'];
     // 第一百二十三轮：按档位主体模式退役，旧链接的 m=tier / t= 参数静默忽略
-    const shop = q.get('shop');
-    if (shop) out.filters.platform = { platforms: [], shopIds: [shop] } as PlatformSelection;
+    // 平台：plat = 整平台列表、shop = 渠道列表（旧链接单个 shop 同样可读）；
+    // 是否属于链接国家由 applyScopeDefaults 校验
+    const platforms = listParam(q, 'plat');
+    const shopIds = listParam(q, 'shop');
+    if (platforms.length || shopIds.length) out.filters.platform = { platforms, shopIds } as PlatformSelection;
     // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入
     const mainParam = q.get('main') ?? q.get('own');
     if (mainParam) {
+      const country = c || getCurrentCountry();
       const list = mainParam
         .split(',')
-        .map((k) => productSelectionOfSeriesKey(k.trim()))
+        .map((k) => productSelectionOfSeriesKey(k.trim(), country))
         .filter((x): x is ProductSelection => x != null);
       if (list.length > 0) out.filters.mains = clampMains(cardsFromSelections(list));
     }

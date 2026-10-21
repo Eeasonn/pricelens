@@ -31,7 +31,7 @@ export function configsInTier(
     const key = `${modelIdOfSku(p.sku_id)}|${p.romram}`;
     if (keys.has(key)) continue;
     keys.add(key);
-    const skuId = lowestPriceColorSku(modelIdOfSku(p.sku_id), p.romram);
+    const skuId = lowestPriceColorSku(modelIdOfSku(p.sku_id), p.romram, countryCode);
     out.push({ modelId: modelIdOfSku(p.sku_id), romram: p.romram, skuIds: skuId ? [skuId] : [p.sku_id] });
   }
   return out;
