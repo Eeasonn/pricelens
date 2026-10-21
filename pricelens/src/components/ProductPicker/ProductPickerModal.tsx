@@ -1,23 +1,28 @@
 // ============================================================
-// 选择产品浮窗（第一百二十一轮修订；第三次迭代基础见 git 史）：
-// 主体 = 若干「分析对」左右排布——左 = 主分析产品（唯一产品+型号+颜色，
-//   浅蓝底强调、单选感），中间分界线骑「⚡ 自动匹配竞品」按钮，右 =
-//   对比产品（弱、多选感：条目列表 + 常驻「＋ 添加对比产品」触发）。
+// 选择产品浮窗（第一百二十二轮修订；第三次迭代基础见 git 史）：
+// 主体 = 若干「组」左右排布——左 = 主分析产品（唯一产品+型号+颜色，
+//   浅蓝底强调），右 = 对比产品（无外框、条目列表 + 常驻「＋ 添加对比产品」
+//   触发）；多组时每组顶部一行「第 N 组 · 配置 · 颜色」卡级标识，同主品
+//   不同配置的多组靠它区分。
+// 自动匹配两件事分开：底部复选框「对比自动跟随主品」= 模式（开 = 主品变
+//   对比区跟着按矩阵重算）；「⚡ 自动匹配」= 一次性动作（对比区标题行按卡 /
+//   底部全局按钮按全部华为主品卡重算，不改模式），自动模式下置灰。
 // 产品树不再常驻：唯一更换入口 = 行尾「更换」→ 完整树浮窗（品牌→系列→
-//   产品→型号，预定位当前路径，搜索保留）；逐层分段点击切换退役
-//   （用户实测反馈过于抽象）。颜色不进树浮窗：点型号行即按默认最低价色
-//   落选，换色只在已选条目的色块（必须保留的可编辑项）。
-// 主品空缺 = 空对：允许先挂对比条目，补选主品后沿用（不进 URL）。
+//   产品→型号，预定位当前路径，搜索保留）。颜色不进树浮窗：点型号行即按
+//   默认最低价色落选，换色只在已选条目的色块（蓝描边 = 可编辑；只读配置
+//   chip 无描边）。
+// 主品空缺 = 空组：允许先挂对比条目，补选主品后沿用（不进 URL）。
 // 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；配额每卡
-//   1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8；即改即存。
+//   1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8（底部显性 n/8）；即改即存。
+// 破坏性动作轻确认：删整组、「最近」恢复覆盖当前已选。
 // ============================================================
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Checkbox, Input, Modal, Popover, Tooltip } from 'antd';
+import { Checkbox, Input, Modal, Popconfirm, Popover, Tooltip } from 'antd';
 import {
   CloseOutlined,
   HolderOutlined,
   PlusOutlined,
-  ReloadOutlined,
+  RollbackOutlined,
   SearchOutlined,
   SwapOutlined,
   ThunderboltFilled,
@@ -107,6 +112,13 @@ function comboSignature(cards: MainProduct[]): string {
   return cards.map((c) => (c.main ? selKey(c.main) : `~${c.compares.map(selKey).join('+')}`)).join('|');
 }
 
+/** 完整内容签名（主品 + 对比区 + 颜色）：「最近」恢复是否会覆盖当前已选的判定依据
+ *  （comboSignature 只看主品集合，是最近列表去重口径，不够严） */
+function contentSignature(cards: MainProduct[]): string {
+  const sel = (s: ProductSelection): string => `${selKey(s)}#${[...s.skuIds].sort().join(',')}`;
+  return cards.map((c) => `${c.main ? sel(c.main) : '~'}:${c.compares.map(sel).join('+')}`).join('|');
+}
+
 // ---------------- 颜色 chip（次级筛选：点开换色 / 多色均价） ----------------
 
 function colorLabelOf(node: RomramNode | undefined, skuIds: string[]): string {
@@ -152,6 +164,7 @@ function ColorChip({
     >
       <span
         title={`颜色 ${label} · 点击切换`}
+        className="lpl-pk-ghost"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -162,8 +175,8 @@ function ColorChip({
           fontSize: 11,
           fontWeight: 600,
           color: tone === 'strong' ? selectSoftInk : color.body,
-          background: tone === 'strong' ? color.canvas : color.canvasSoft,
-          border: `1px solid ${tone === 'strong' ? 'rgba(0, 112, 243, 0.40)' : color.hairline}`,
+          background: color.canvas,
+          border: `1px solid ${EDITABLE_BORDER}`,
           cursor: 'pointer',
           whiteSpace: 'nowrap',
           flexShrink: 0,
@@ -176,6 +189,9 @@ function ColorChip({
 }
 
 // ---------------- 通用小件 ----------------
+
+/** 可编辑 chip 的描边（主品/对比条目同一语言；只读配置 chip 无描边） */
+const EDITABLE_BORDER = 'rgba(0, 112, 243, 0.30)';
 
 /** 树数据索引（浮窗与条目共用；按国家/产业缓存） */
 function useTreeData() {
@@ -231,7 +247,7 @@ function RowText({
   );
 }
 
-/** 只读配置 chip（浅灰描边；与可点的颜色 chip 视觉区分） */
+/** 只读配置 chip（无描边；描边 = 可编辑，与颜色 chip 区分） */
 function RomramChip({ children }: { children: ReactNode }) {
   return (
     <span
@@ -244,8 +260,7 @@ function RomramChip({ children }: { children: ReactNode }) {
         fontSize: 11.5,
         fontWeight: 600,
         color: color.body,
-        background: color.canvas,
-        border: `1px solid ${color.hairline}`,
+        background: 'rgba(0, 0, 0, 0.06)',
         whiteSpace: 'nowrap',
         flexShrink: 0,
       }}
@@ -261,6 +276,8 @@ function AddPill({ label, onClick, disabled, big }: { label: string; onClick?: (
     <span
       role="button"
       aria-label={label}
+      aria-disabled={disabled || undefined}
+      className="lpl-pk-ghost"
       onClick={disabled ? undefined : onClick}
       style={{
         display: 'inline-flex',
@@ -291,6 +308,7 @@ function SwapPill({ label, onClick }: { label: string; onClick?: () => void }) {
       role="button"
       aria-label={label}
       title={label}
+      className="lpl-pk-ghost"
       onClick={onClick}
       style={{
         display: 'inline-flex',
@@ -313,7 +331,7 @@ function SwapPill({ label, onClick }: { label: string; onClick?: () => void }) {
   );
 }
 
-function DeleteX({ label, onClick, size = 11 }: { label: string; onClick: () => void; size?: number }) {
+function DeleteX({ label, onClick, size = 11 }: { label: string; onClick?: () => void; size?: number }) {
   return (
     <span
       role="button"
@@ -324,6 +342,57 @@ function DeleteX({ label, onClick, size = 11 }: { label: string; onClick: () => 
     >
       <CloseOutlined style={{ fontSize: size }} />
     </span>
+  );
+}
+
+/** 「⚡ 自动匹配」一次性动作 pill（中性 ghost；可点/置灰两态） */
+function MatchPill({
+  label,
+  text,
+  can,
+  tip,
+  onClick,
+  size = 'sm',
+}: {
+  label: string;
+  text: string;
+  can: boolean;
+  tip: string;
+  onClick: () => void;
+  size?: 'sm' | 'md';
+}) {
+  const md = size === 'md';
+  return (
+    <Tooltip title={tip}>
+      <span
+        role="button"
+        aria-label={label}
+        aria-disabled={!can || undefined}
+        className="lpl-pk-ghost"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (can) onClick();
+        }}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: md ? 5 : 3,
+          height: md ? 26 : 20,
+          padding: md ? '0 12px' : '0 8px',
+          borderRadius: radius.pill,
+          fontSize: md ? 12 : 11,
+          fontWeight: 600,
+          color: can ? color.body : color.mute,
+          background: color.canvas,
+          border: `1px solid ${color.hairline}`,
+          cursor: can ? 'pointer' : 'not-allowed',
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}
+      >
+        <ThunderboltFilled style={{ fontSize: md ? 11 : 10 }} /> {text}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -565,7 +634,7 @@ function LevelSwitchPopover({
                   sameAsMain && !inCompares
                     ? '主分析产品不对比自身配置'
                     : quotaFull && !inCompares
-                      ? `本图最多 ${MAX_LINES_PER_CHART} 条产品线（主品 + 对比）`
+                      ? `每图上限 ${MAX_LINES_PER_CHART} 条（含主品）`
                       : inCompares
                         ? '移除该对比'
                         : '加入对比区'
@@ -690,10 +759,19 @@ function MainRow({ card }: { card: MainProduct }) {
         <LevelSwitchPopover ctx={{ kind: 'replace-main', cardId: card.id }} initialModelId={main.modelId}>
           <SwapPill label={`更换主分析产品 ${modelNameOf(main.modelId)}`} />
         </LevelSwitchPopover>
-        <DeleteX
-          label={`删除分析对 ${modelNameOf(main.modelId)}`}
-          onClick={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
-        />
+        <Popconfirm
+          title="删除该组？"
+          description="组内对比产品一并移除"
+          okText="删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true, size: 'small' }}
+          cancelButtonProps={{ size: 'small' }}
+          onConfirm={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
+        >
+          <span style={{ display: 'inline-flex' }}>
+            <DeleteX label={`删除该组 ${modelNameOf(main.modelId)}`} />
+          </span>
+        </Popconfirm>
       </span>
     </div>
   );
@@ -754,55 +832,49 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
 
 // ---------------- 分析对部件 ----------------
 
-/** 分界线「⚡ 自动匹配竞品」（华为主品可点；空对/非华为置灰） */
-function AutoMatchButton({ card }: { card: MainProduct }) {
-  const { actions } = useFilters();
-  const label = card.main ? modelNameOf(card.main.modelId) : '';
-  const can = card.main != null && isHuaweiModel(card.main.modelId);
+/** 组顶标识（多组时显示）：左「第 N 组」，右 = 主品配置·颜色（同主品多组的差异提到卡级） */
+function CardTag({ card, index }: { card: MainProduct; index: number }) {
+  const { romramByKey } = useTreeData();
+  const node = card.main ? romramByKey.get(`${card.main.modelId}|${card.main.romram}`) : undefined;
+  const colorLabel = card.main ? colorLabelOf(node, card.main.skuIds) : '';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-      <Tooltip
-        title={
-          card.main == null
-            ? '先选择主分析产品'
-            : can
-              ? '按对标矩阵自动填充本对右侧对比区'
-              : '自动匹配基于对标矩阵，仅支持华为产品；请手动挑选对比'
-        }
-      >
-        <span
-          role="button"
-          aria-label={`自动匹配竞品${label ? ` ${label}` : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (can) actions.autoMatchCard(card.id);
-          }}
-          style={{
-            display: 'inline-flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 2,
-            width: 58,
-            height: 48,
-            borderRadius: 9,
-            boxSizing: 'border-box',
-            background: can ? selectAccent : color.canvasSoft,
-            border: `2px solid ${color.canvas}`,
-            boxShadow: can ? `0 0 0 1px ${selectAccent}` : `0 0 0 1px ${color.hairline}`,
-            color: can ? '#fff' : color.mute,
-            cursor: can ? 'pointer' : 'not-allowed',
-          }}
-        >
-          <ThunderboltFilled style={{ fontSize: 13 }} />
-          <span style={{ fontSize: 10, lineHeight: '12px', fontWeight: 600, textAlign: 'center' }}>
-            自动匹配
-            <br />
-            竞品
-          </span>
-        </span>
-      </Tooltip>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 16px 0 34px',
+        fontSize: 11,
+        color: color.mute,
+      }}
+    >
+      <span>第 {index + 1} 组</span>
+      <span className="tnum">{card.main ? `${card.main.romram}${colorLabel ? ` · ${colorLabel}` : ''}` : '未选主分析产品'}</span>
     </div>
+  );
+}
+
+/** 对比区标题行「⚡ 自动匹配」：一次性按矩阵重算本组（华为主品 + 手动模式可点；其余置灰给原因） */
+function AutoMatchInline({ card }: { card: MainProduct }) {
+  const { state, actions } = useFilters();
+  const huawei = card.main != null && isHuaweiModel(card.main.modelId);
+  const can = huawei && !state.autoMatch;
+  const tip =
+    card.main == null
+      ? '先选择主分析产品'
+      : !huawei
+        ? '自动匹配基于对标矩阵，仅支持华为产品；请手动添加'
+        : state.autoMatch
+          ? '对比区已自动跟随主品'
+          : '按对标矩阵重算本组对比区';
+  return (
+    <MatchPill
+      label={`自动匹配${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
+      text="自动匹配"
+      can={can}
+      tip={tip}
+      onClick={() => actions.autoMatchCard(card.id)}
+    />
   );
 }
 
@@ -811,7 +883,7 @@ function AddCompareTrigger({ card, autoOpen }: { card: MainProduct; autoOpen?: b
   const quota = cardQuota(card);
   const full = card.compares.length >= quota;
   return (
-    <Tooltip title={full ? `本图最多 ${MAX_LINES_PER_CHART} 条产品线（主品 + 对比）` : '挑选对比产品（可连续添加）'}>
+    <Tooltip title={full ? `每图上限 ${MAX_LINES_PER_CHART} 条（含主品）` : '挑选对比产品（可连续添加）'}>
       <span style={{ alignSelf: 'flex-start', display: 'inline-flex' }}>
         <LevelSwitchPopover ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId} openSignal={autoOpen}>
           <AddPill label="添加对比产品" disabled={full} />
@@ -847,8 +919,16 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
   const [combos, setCombos] = useState<StoredCombo[]>(() => readCombos());
   const recordCombo = (): void => {
     if (!mains.length) return;
-    const firstName = mains[0]?.main ? modelNameOf(mains[0].main.modelId) : '对比产品';
-    const label = mains.length === 1 ? firstName : `${firstName} 等 ${mains.length} 款`;
+    // 组合名按去重后的主品型号表述：同型号多组不带「等」（等 = 还有其他型号）
+    const names = [...new Set(mains.map((c) => (c.main ? modelNameOf(c.main.modelId) : '对比产品')))];
+    const label =
+      names.length === 1
+        ? mains.length === 1
+          ? names[0]
+          : `${names[0]} · ${mains.length} 组`
+        : names.length === 2
+          ? names.join('、')
+          : `${names[0]} 等 ${names.length} 款`;
     const sig = comboSignature(mains);
     const next = [{ label, cards: mains.map((c) => ({ ...c })) }, ...combos.filter((c) => comboSignature(c.cards) !== sig)].slice(0, 5);
     setCombos(next);
@@ -865,6 +945,13 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
 
   const totalCompares = new Set(mains.flatMap((c) => c.compares.map(selKey))).size;
   const lastModelId = [...mains].reverse().find((c) => c.main)?.main?.modelId;
+  const huaweiCards = mains.filter((c) => c.main != null && isHuaweiModel(c.main.modelId));
+  const currentSig = contentSignature(mains);
+
+  /** 「最近」恢复：覆盖当前已选内容（当前为空或与该组合相同时直接套用，否则轻确认） */
+  const applyCombo = (c: StoredCombo): void => {
+    actions.setMains(c.cards.map((x) => ({ ...x, id: newCardId() })));
+  };
 
   return (
     <Modal
@@ -876,7 +963,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
         <span style={{ fontSize: fontSize.displaySm }}>
           选择产品
           <span style={{ fontSize: 12, fontWeight: 400, color: color.mute, marginLeft: 10 }}>
-            每对 = 左侧 1 款主分析产品 + 右侧多款对比产品；多对自动分图
+            左侧为主分析产品，右侧为其对比产品；有多组时每组各生成一张图
           </span>
         </span>
       }
@@ -901,22 +988,26 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
       }
       styles={{ body: { paddingTop: 12 } }}
     >
-      {/* 最近组合 */}
+      {/* 最近组合（可点恢复；覆盖非空且不同的当前已选时轻确认） */}
       {combos.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>最近</span>
-          {combos.map((c, i) => (
-            <Tooltip key={i} title={c.cards.map((x) => (x.main ? modelNameOf(x.main.modelId) : '对比产品')).join('、')}>
+          {combos.map((c, i) => {
+            const needConfirm = mains.length > 0 && contentSignature(c.cards) !== currentSig;
+            const summary = c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、');
+            const chip = (
               <span
-                onClick={() => {
-                  actions.setMains(c.cards.map((x) => ({ ...x, id: newCardId() })));
-                }}
+                role="button"
+                aria-label={`恢复组合 ${c.label}`}
+                title={`恢复：${summary}`}
+                className="lpl-pk-ghost"
+                onClick={needConfirm ? undefined : () => applyCombo(c)}
                 style={{
                   height: 22,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 5,
-                  padding: '0 10px',
+                  padding: '0 9px 0 10px',
                   borderRadius: radius.pill,
                   border: `1px solid ${color.hairline}`,
                   background: color.canvas,
@@ -928,16 +1019,35 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
               >
                 {c.cards[0].main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
                 {c.label}
+                <RollbackOutlined style={{ fontSize: 10, color: color.mute }} />
               </span>
-            </Tooltip>
-          ))}
+            );
+            return needConfirm ? (
+              <Popconfirm
+                key={i}
+                title="恢复该组合？"
+                description="将替换当前已选的全部内容"
+                okText="恢复"
+                cancelText="取消"
+                okButtonProps={{ size: 'small' }}
+                cancelButtonProps={{ size: 'small' }}
+                onConfirm={() => applyCombo(c)}
+              >
+                {chip}
+              </Popconfirm>
+            ) : (
+              <span key={i} style={{ display: 'inline-flex' }}>
+                {chip}
+              </span>
+            );
+          })}
         </div>
       )}
 
       {/* 分析对列表（左右排布） */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: PAIR_LIST_MAX_H, overflowY: 'auto', padding: 1 }}>
         {mains.length === 0 && (
-          /* 默认新增状态：一对空骨架——左选主品、右可先挂对比 */
+          /* 默认新增状态：一组空骨架——左选主品、右可先挂对比 */
           <div
             style={{
               display: 'flex',
@@ -962,12 +1072,11 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                 boxSizing: 'border-box',
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品 · 单选</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品</div>
               <LevelSwitchPopover ctx={{ kind: 'add-main' }}>
                 <AddPill label="选择主分析产品" big />
               </LevelSwitchPopover>
             </div>
-            <AutoMatchButton card={{ id: 'ghost', main: null, compares: [] }} />
             <div
               style={{
                 flex: '1 1 0',
@@ -976,14 +1085,11 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                 flexDirection: 'column',
                 gap: 8,
                 padding: '10px 12px',
-                background: color.canvas,
-                border: `1px solid ${color.hairline}`,
-                borderRadius: radius.control,
                 boxSizing: 'border-box',
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, color: color.mute }}>对比产品 · 可多选</div>
-              <Tooltip title="先挑选对比产品（之后补选主分析产品即配成一对）">
+              <div style={{ fontSize: 11, fontWeight: 600, color: color.mute }}>对比产品</div>
+              <Tooltip title="先挑选对比产品（之后补选主分析产品即成一组）">
                 <span style={{ alignSelf: 'flex-start', display: 'inline-flex' }}>
                   <AddPill
                     label="添加对比产品"
@@ -998,7 +1104,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
             </div>
           </div>
         )}
-        {mains.map((card) => {
+        {mains.map((card, idx) => {
           const huawei = card.main != null && isHuaweiModel(card.main.modelId);
           return (
             <div
@@ -1018,8 +1124,8 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
               style={{
                 position: 'relative',
                 display: 'flex',
-                gap: 10,
-                alignItems: 'stretch',
+                flexDirection: 'column',
+                gap: 4,
                 padding: '6px 6px 6px 2px',
                 borderRadius: radius.card,
                 border: `1px solid ${dropCard === card.id ? color.link : color.hairline}`,
@@ -1028,6 +1134,8 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                 boxShadow: dropCard === card.id ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined,
               }}
             >
+              {mains.length > 1 && <CardTag card={card} index={idx} />}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
               {/* 拖拽把手（换序 = 分离面板顺序） */}
               <span
                 draggable
@@ -1045,7 +1153,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                 <HolderOutlined style={{ fontSize: 12 }} />
               </span>
 
-              {/* 左：主分析产品（显著 · 单选感） */}
+              {/* 左：主分析产品（显著） */}
               <div
                 style={{
                   flex: '0 0 300px',
@@ -1060,7 +1168,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                   boxSizing: 'border-box',
                 }}
               >
-                <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品 · 单选</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品</div>
                 {card.main ? (
                   <MainRow card={card} />
                 ) : (
@@ -1070,10 +1178,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                 )}
               </div>
 
-              {/* 中：分界线 + 自动匹配竞品 */}
-              <AutoMatchButton card={card} />
-
-              {/* 右：对比产品（弱 · 多选感） */}
+              {/* 右：对比产品（弱；无外框，条目行自成骨架） */}
               <div
                 style={{
                   flex: '1 1 0',
@@ -1082,22 +1187,26 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                   flexDirection: 'column',
                   gap: 5,
                   padding: '8px 10px',
-                  background: color.canvas,
-                  border: `1px solid ${color.hairline}`,
-                  borderRadius: radius.control,
                   boxSizing: 'border-box',
                 }}
               >
-                <div style={{ fontSize: 11, fontWeight: 600, color: color.mute }}>
-                  对比产品 · 可多选 <span className="tnum">{card.compares.length}/{cardQuota(card)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: color.mute }}>
+                    对比产品 <span className="tnum">{card.compares.length}/{cardQuota(card)}</span> 条
+                  </span>
+                  <span style={{ marginLeft: 'auto' }}>
+                    <AutoMatchInline card={card} />
+                  </span>
                 </div>
                 {card.compares.length === 0 && (
                   <div style={{ fontSize: 11.5, color: color.mute, lineHeight: '18px' }}>
                     {card.main == null
-                      ? '可先挑选对比产品，补选主分析产品后即配成一对'
-                      : huawei
-                        ? '点「自动匹配竞品」一键带出，或手动添加'
-                        : '该品牌暂不支持自动匹配，请手动添加'}
+                      ? '可先挑选对比产品，补选主分析产品后即成一组'
+                      : !huawei
+                        ? '该品牌暂不支持自动匹配，请手动添加'
+                        : state.autoMatch
+                          ? '对标矩阵暂无该产品的竞品，请手动添加'
+                          : '点「自动匹配」一键带出，或手动添加'}
                   </div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', maxHeight: 122 }}>
@@ -1107,46 +1216,43 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                 </div>
                 <AddCompareTrigger card={card} autoOpen={autoOpenCardId === card.id} />
               </div>
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* 全局动作行 */}
+      {/* 全局动作行：添加（显性 n/上限）· 一次性全量匹配 · 跟随模式开关 · 配额口径 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-        <Tooltip title={mains.length >= MAINS_CAP ? `最多 ${MAINS_CAP} 张主分析卡` : undefined}>
-          <span style={{ display: 'inline-flex' }}>
+        <Tooltip title={mains.length >= MAINS_CAP ? `最多 ${MAINS_CAP} 组` : undefined}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <LevelSwitchPopover ctx={{ kind: 'add-main' }} initialModelId={lastModelId}>
               <AddPill label="添加主分析产品" disabled={mains.length >= MAINS_CAP} />
             </LevelSwitchPopover>
+            <span className="tnum" style={{ fontSize: 12, color: color.mute }}>
+              {mains.length}/{MAINS_CAP}
+            </span>
           </span>
         </Tooltip>
-        <Tooltip title={state.autoMatch ? '对比区随主品配置自动跟随（当前：自动）' : '回到自动：全部华为主品卡按矩阵重算对比区'}>
-          <span
-            onClick={() => actions.setAutoMatch(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              height: 26,
-              padding: '0 12px',
-              borderRadius: radius.pill,
-              fontSize: 12,
-              fontWeight: 600,
-              color: selectSoftInk,
-              background: selectSoft,
-              border: '1px solid rgba(0, 112, 243, 0.40)',
-              cursor: 'pointer',
-            }}
-          >
-            <ReloadOutlined style={{ fontSize: 11 }} /> 全部自动匹配
-          </span>
-        </Tooltip>
+        <MatchPill
+          label="全部自动匹配"
+          text="全部自动匹配"
+          size="md"
+          can={!state.autoMatch && huaweiCards.length > 0}
+          tip={
+            state.autoMatch
+              ? '对比区已自动跟随主品'
+              : huaweiCards.length === 0
+                ? '自动匹配基于对标矩阵，仅支持华为产品'
+                : '按对标矩阵重算全部华为主品组的对比区（不改变跟随开关）'
+          }
+          onClick={() => huaweiCards.forEach((c) => actions.autoMatchCard(c.id))}
+        />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto', fontSize: 12, color: color.mute }}>
           <Checkbox checked={state.autoMatch} onChange={(e) => actions.setAutoMatch(e.target.checked)} />
           对比自动跟随主品
           <span style={{ color: color.hairlineStrong }}>｜</span>
-          每图最多 {MAX_LINES_PER_CHART} 条产品线
+          每图上限 {MAX_LINES_PER_CHART} 条（含主品）
         </span>
       </div>
     </Modal>

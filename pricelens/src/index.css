@@ -231,3 +231,9 @@ button.lpl-map-card:hover {
     animation: none !important;
   }
 }
+
+/* ============================================================
+   第一百二十二轮：选择产品浮窗可点小件悬停态（最近恢复 / ⚡自动匹配 /
+   更换 / ＋添加 / 颜色 chip 共用 ghost 形态；inline 背景需 !important 覆盖）
+   ============================================================ */
+.lpl-pk-ghost:not([aria-disabled='true']):hover { background: #f5f5f5 !important; }
