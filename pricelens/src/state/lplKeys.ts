@@ -13,6 +13,8 @@ export const LPL = {
   cfgFx: 'LPL3.config.fx',
   /** 用户自定义档位预设（Agent C 写入，配置页列出可删） */
   cfgTiers: 'LPL3.config.customTiers',
+  /** 最近使用的主分析组合（第一百一十七轮，选择产品浮窗快捷 chips；上限 5 组） */
+  uiMainCombos: 'LPL3.ui.mainCombos',
 } as const;
 
 /** 配置变更广播：配置页保存后主页立即生效（§13） */

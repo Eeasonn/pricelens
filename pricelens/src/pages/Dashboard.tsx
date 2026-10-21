@@ -35,8 +35,8 @@ export default function Dashboard() {
     full: { series: Series[]; buckets: DetailBucket[]; s: number; e: number };
   }>({ series: [], buckets: [], full: { series: [], buckets: [], s: 0, e: 0 } });
 
-  // 追补⑧（总览↔看板闭环①）：上下文条数据——入口型号 + 勾选 ROM + 对标竞品数
-  const entryModelId = state.own[0]?.modelId ?? null;
+  // 追补⑧（总览↔看板闭环①）：上下文条数据——入口主分析型号
+  const entryModelId = state.mains[0]?.modelId ?? null;
   const backToOverview = (): void => {
     if (entryModelId) navBus.overviewScrollTo = entryModelId;
     go('overview');

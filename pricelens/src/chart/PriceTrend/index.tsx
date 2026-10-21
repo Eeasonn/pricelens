@@ -13,14 +13,15 @@
 // Y 轴口径（第七/九轮）：纯自适应分段压缩刻度，无手动覆盖；刷选拖动中冻结 Y 轴
 // （onAdjusting），松手统一重算一次——调节过程只有横向重采样，体验稳定。
 // 容器高由 Y 模型派生：格数×TICK_PX + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）。
-// 数据流 = useFilters().state → SeriesQuery → buildSeries → 窗口切片 → PriceTrend
+// 数据流 = useFilters().state.mains（主分析卡）→ SeriesQuery → buildSeries → 窗口切片 → PriceTrend
+// 第一百一十七轮：面板 = 主分析卡（≥2 卡自动分离），配额在选择时收口，图上不截断
 // 时间自适应（默认开）按所选产品最早/最晚有效价格桶确定上方极值筛选器；
 // 底部刷选轨道只在该筛选范围内提供查看窗口。
 // 上方极值筛选器手动改值即转入自定义；底部拖柄/平移只调整筛选范围内的查看窗口。
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, Checkbox, ConfigProvider, Segmented, Switch, Tooltip } from 'antd';
+import { Button, Checkbox, ConfigProvider, Segmented } from 'antd';
 import { HolderOutlined, ProfileOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { tierSubjectSelections } from '../../state/tierSelection';
@@ -30,7 +31,7 @@ import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries } from '../../dataModel/aggregate';
-import { getEffectiveBenchmark } from '../../state/configStore';
+import { flatSelections } from '../../state/mainSelection';
 import { dimPromo, dimProduct, dimRegion, dimTier } from '../../data';
 import type {
   AggMode,
@@ -79,9 +80,6 @@ import PointPanel from './PointPanel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 
-/** 第一百一十五轮（评审）：单张图表同时展示的折上限数；超出 = 强制分离
- *  （分离面板 = 我司配置 + 对标竞品，常态 ≤5 条） */
-const MAX_LINES_PER_CHART = 8;
 /** 分离面板内品牌图例带高度（定高：共享轴列按此对齐面板绘图区顶） */
 const PANEL_LEGEND_H = 44;
 
@@ -100,20 +98,17 @@ export default function PriceTrend(props: {
   ) => void;
 } = {}) {
   const { state, actions } = useFilters();
-  // 主体模式有效选择集：按产品 = 勾选原样；按档位 = 该档全部我司配置 + 各自对标竞品
-  // 自动集结（tierSubjectSelections）。档位在当前产业无我司产品时回退按产品，避免空图。
-  // 页内画图/配对/面板/降级引导统一读有效集；state.own 勾选态只作为按产品模式的取值。
-  const effSelections = useMemo(() => {
-    if (state.subjectMode !== 'tier' || !state.tier) return { own: state.own, competitors: state.competitors };
-    const resolved = tierSubjectSelections(state.industry, state.tier);
-    return resolved ?? { own: state.own, competitors: state.competitors };
-  }, [state.subjectMode, state.tier, state.industry, state.own, state.competitors]);
-  const effOwn = effSelections.own;
-  const effComps = effSelections.competitors;
-  // 第八十五轮 视角语义：竞品-only（无我司有竞品）与 无对标（有我司无竞品）
-  const compOnly = effOwn.length === 0 && effComps.length > 0;
-  const noComp = effOwn.length > 0 && effComps.length === 0;
-  const compModelCount = new Set(effComps.map((c) => c.modelId)).size;
+  // 主体模式有效主分析卡：按产品 = state.mains 原样；按档位 = 该档全部华为配置
+  // 按型号成卡 + 各自对标对比区（tierSubjectSelections）。档位在当前产业无华为产品时
+  // 回退按产品，避免空图。第一百一十七轮：每张卡 = 型号 + 配置 + 它自己的对比区，
+  // 分离面板 = 直接展开卡（「我司/竞品」视角概念退役，映射在选择时已完成）。
+  const effMains = useMemo(() => {
+    if (state.subjectMode !== 'tier' || !state.tier) return state.mains;
+    return tierSubjectSelections(state.industry, state.tier) ?? state.mains;
+  }, [state.subjectMode, state.tier, state.industry, state.mains]);
+  const mainsEmpty = effMains.length === 0;
+  // 合并图（单卡）取数组：全部主品配置 + 全部对比区并集（按卡序去重）
+  const { mainSels, compareSels } = useMemo(() => flatSelections(effMains), [effMains]);
 
   // ---- 图表内部状态 ----
   const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值；松手才提交）
@@ -154,7 +149,7 @@ export default function PriceTrend(props: {
   const [panelLegendHover, setPanelLegendHover] = useState<{ panel: string; key: string } | null>(null);
 
   // §5.6/§6.6：切换产品/价格类型/币种 → 滑杆倍率复位 ×1；图例显隐一并复位
-  const yAxisResetKey = JSON.stringify([effOwn, effComps, state.priceTypes, state.currency]);
+  const yAxisResetKey = JSON.stringify([effMains, state.priceTypes, state.currency]);
   useEffect(() => {
     setSliderScale(1);
     setHiddenKeys(new Set());
@@ -176,10 +171,9 @@ export default function PriceTrend(props: {
 
   const query: SeriesQuery = useMemo(
     () => ({
-      groups: [
-        ...effOwn.map((g) => ({ ...g, isOwn: true })),
-        ...effComps.map((g) => ({ ...g, isOwn: false })),
-      ],
+      // isOwn 由数据层按型号事实判定（华为产品恒真）；主分析/对比是角色，
+      // 图上不因角色改样式（第一百一十七轮）
+      groups: [...mainSels, ...compareSels].map((g) => ({ ...g, isOwn: false })),
       granularity: state.granularity,
       startBucket: dataStart,
       endBucket: dataEnd,
@@ -188,7 +182,7 @@ export default function PriceTrend(props: {
       platform: state.platform,
       scope: { countryCode: state.countryCode, industry: state.industry },
     }),
-    [effOwn, effComps, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry],
+    [mainSels, compareSels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry],
   );
 
   const allSeries: Series[] = useMemo(() => {
@@ -217,8 +211,8 @@ export default function PriceTrend(props: {
     [state.adaptive, buckets, span],
   );
   const selectedProductKey = JSON.stringify([
-    effOwn.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
-    effComps.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
+    mainSels.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
+    compareSels.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
   ]);
   const adaptiveKey = adaptiveBounds
     ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}|${selectedProductKey}`
@@ -311,75 +305,18 @@ export default function PriceTrend(props: {
     return m;
   }, [alerts]);
 
-  // 可分离面板不足 2 时收起分离视图并清理顺序（第八十七轮：面板单位放宽为
-  // 「任意产品·配置」，我司/竞品视角分别以各自配置数为准）。
-  // 第110轮（2026-10-20 评审）：分离显示默认关——仅当「我司配置 ≥2」且用户从未
-  // 手动拨过开关时自动分离（单规格、竞品视角默认合并图）；回到不足 2 个可分面板
-  // 自动关闭并清理顺序。手动拨过 = 尊重用户选择，此后自动语义退场（与 Y 压缩同一
-  // 先例）。按档位模式配置数随档位跳变，依赖此自动跟随。
-  const splitAutoOffRef = useRef(false);
-  const splitManualRef = useRef(false);
-  // 第一百一十五轮（评审）：多我司型号对比（多品牌多型号场景），或产品线总数超过
-  // 单图上限 → 强制分离（开关锁定为开，手动关闭也不退回合并图）
-  const ownModelCount = new Set(effOwn.map((s) => s.modelId)).size;
-  const totalSelectionLines = effOwn.length + effComps.length;
-  const splitForced =
-    (effOwn.length > 0 ? effOwn.length : effComps.length) >= 2
-    && (ownModelCount >= 2 || totalSelectionLines > MAX_LINES_PER_CHART);
-  useEffect(() => {
-    const panelable = effOwn.length > 0 ? effOwn.length : effComps.length;
-    if (panelable < 2) {
-      splitAutoOffRef.current = true;
-      setSplitOn(false);
-      setPanelOrder([]);
-      return;
-    }
-    if (splitForced) {
-      splitManualRef.current = false; // 强制语义优先：此前手动拨过的状态作废
-      splitAutoOffRef.current = false;
-      setSplitOn(true);
-      return;
-    }
-    if (splitManualRef.current) return; // 手动拨过：不再自动干预
-    if (effOwn.length >= 2) {
-      splitAutoOffRef.current = false;
-      setSplitOn(true);
-    }
-    // 其余（我司单配置 / 竞品视角多配置）：维持默认关，不自动分离
-  }, [effOwn, effComps, splitForced]);
-
-  // ---- 分离显示：多 ROM 勾选时主图变为同一横向滚动轨道，每面板 =
-  // 一个 ROM + 其对标竞品（生效矩阵按 own_romram 取、主竞品 sort 序）；共享 Y 轴 =
-  // 全面板 series 并集算一次 computeYAxis 受控传入；X 轴各面板独立绘制（同窗口桶）；
-  // 系列页签按面板拆开、放各卡片顶部居中（第七十五轮，PillRowScroller 左右滚动）；
-  // 共享刷选条联动全部面板
-  // 第110轮（评审）：默认关——我司多规格（≥2 配置）才自动分离，见上方自动逻辑
-  const [splitOn, setSplitOn] = useState(false);
+  // ---- 分离显示（第一百一十七轮定版）：分离与否由主分析卡数决定——
+  // ≥2 张卡自动分离（每面板 = 一张卡：型号全部配置线 + 它自己的对比线），
+  // 单卡合并成图；手动开关与「折线超限强制分离」退役（配额已在选择时收口，
+  // 图上永远装得下）。面板顺序 = 卡序（选择浮窗内拖拽），页内把手拖拽仍可覆盖。
+  const splitActive = effMains.length >= 2;
   // 分离模式一行可见面板数：卡片始终横向排列，超出视口后由轨道滚动查看。
   // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
   const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
-  // 第八十七轮：分离单位 = 任意「产品·配置」——同产品多配置、跨产品多选、
-  // 竞品视角（无我司、竞品 ≥2）均可分离；我司优先（有我司时竞品作对标随面板）。
-  const configSources = useMemo(
-    () =>
-      effOwn.length > 0
-        ? effOwn.map((sel) => ({ sel, isOwn: true as const }))
-        : effComps.map((sel) => ({ sel, isOwn: false as const })),
-    [effOwn, effComps],
-  );
-  const multiProduct = new Set(configSources.map((c) => c.sel.modelId)).size > 1;
-  const splitActive = splitOn && configSources.length >= 2;
-  // 第一百一十五轮：合并模式单图折线 ≤ MAX_LINES_PER_CHART——超出按选择序截断
-  // （我司在前、竞品按对标序），被截断者不随屏蔽悄悄补位；分离模式面板常态 ≤5 条不截。
-  const cappedVisSeries: Series[] = useMemo(
-    () => (splitActive ? visSeries : visSeries.slice(0, MAX_LINES_PER_CHART)),
-    [visSeries, splitActive],
-  );
-  const linesCapped = !splitActive && visSeries.length > MAX_LINES_PER_CHART;
   // 图例可见系列（图例药丸取消选中的不画线；Y 轴自适应随之收缩；药丸/促销表仍显示全部）
   const chartSeries: Series[] = useMemo(
-    () => cappedVisSeries.filter((s) => !hiddenKeys.has(s.key)),
-    [cappedVisSeries, hiddenKeys],
+    () => visSeries.filter((s) => !hiddenKeys.has(s.key)),
+    [visSeries, hiddenKeys],
   );
   // 第110轮（评审）：分离模式跨图参考线——任一面板悬停的时间列下标共享给全部面板，
   // 其余面板在同一时间列画 1px 虚线；任意面板移出即清空
@@ -388,64 +325,25 @@ export default function PriceTrend(props: {
   // 用户手动关闭后本段分离会话内不再强制（退出分离再进才重置）
   const yCompressAutoRef = useRef(false);
   useEffect(() => {
-    if (splitActive && (multiProduct || effOwn.length === 0) && !yCompressAutoRef.current) {
+    if (splitActive && !yCompressAutoRef.current) {
       yCompressAutoRef.current = true;
       setYCompress(true);
     }
     if (!splitActive) yCompressAutoRef.current = false;
-  }, [splitActive, multiProduct, effOwn.length]);
+  }, [splitActive]);
   // 面板顺序（第七十九轮：卡片上边线拖移把手拖拽换位，取代已移除的箭头调序）
   const [panelOrder, setPanelOrder] = useState<string[]>([]); // 面板 key 序；空 = own 序
   const [draggingPanel, setDraggingPanel] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const panels = useMemo(() => {
-    if (!splitActive) return [];
-    const bench = getEffectiveBenchmark();
-    // 分离面板必须遵循筛选条当前的竞品选择。此前这里直接读取生效对标矩阵，
-    // 即使用户在筛选条删空竞品，面板仍会把默认对标重新画出来。
-    const selectedByKey = new Map(
-      effComps.map((group) => [`${group.modelId}|${group.romram.replace(/\s+/g, '')}`, group]),
-    );
-    return configSources.map(({ sel, isOwn }) => {
-      const key = `${sel.modelId}__${sel.romram.replace(/\s+/g, '')}`;
-      if (!isOwn) {
-        // 竞品视角（第八十七轮）：面板 = 纯竞品配置；无我司锚点，映射语义不适用
-        return { key, sel, comps: [] as ProductSelection[], isOwn: false as const };
-      }
-      const seen = new Set<string>();
-      const mappedComps = bench
-        .filter((b) => b.own_model_id === sel.modelId && b.own_romram === sel.romram)
-        .sort((a, b) => a.sort - b.sort)
-        .map((b) => {
-          const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
-          if (!p) return null;
-          const group = selectedByKey.get(`${p.sku_id.split('__')[0]}|${p.romram.replace(/\s+/g, '')}`);
-          if (!group || seen.has(group.modelId + '|' + group.romram)) return null;
-          seen.add(group.modelId + '|' + group.romram);
-          return group;
-        })
-        .filter((x): x is ProductSelection => x != null);
-      // 手动模式没有 own-ROM 关联时，至少按同一容量匹配，避免把全局竞品
-      // 重复画到每一张 ROM 卡片；有配置映射时优先遵循映射顺序。
-      const fallbackComps = effComps.filter(
-        (group) => group.romram.replace(/\s+/g, '') === sel.romram.replace(/\s+/g, '') && !seen.has(group.modelId + '|' + group.romram),
-      );
-      // 第一百一十五轮：单图折线 ≤8——面板头系列 = 我司 + 对标竞品，竞品截到 7 款
-      const comps = (state.autoMatch ? mappedComps : [...mappedComps, ...fallbackComps]).slice(0, MAX_LINES_PER_CHART - 1);
-      return { key, sel, comps, isOwn: true as const };
-    });
-  }, [splitActive, configSources, effComps, state.autoMatch]);
-
   const panelData = useMemo(() => {
-    if (panels.length === 0) return [];
-    return panels.map(({ key, sel, comps, isOwn }) => {
+    if (!splitActive) return [];
+    // 第一百一十七轮：面板 = 主分析卡直接展开（配置线 + 本卡对比线）——
+    // 矩阵映射在选择时已算进卡的对比区，渲染层不再做映射/回退/截断。
+    return effMains.map((card) => {
       let series: Series[] = [];
       try {
         series = buildSeries({
-          groups: [
-            { ...sel, isOwn },
-            ...comps.map((c) => ({ ...c, isOwn: false })),
-          ],
+          groups: [...card.configs, ...card.compares].map((g) => ({ ...g, isOwn: false })),
           granularity: state.granularity,
           startBucket: dataStart,
           endBucket: dataEnd,
@@ -457,9 +355,9 @@ export default function PriceTrend(props: {
       } catch {
         series = []; // 空态不崩
       }
-      return { key, sel, comps, isOwn, series };
+      return { key: card.modelId, card, series };
     });
-  }, [panels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry]);
+  }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry]);
 
   // 面板窗口切片（与单图 visSeries 同逻辑：win 切片 + 边缘续接标记）
   const sliceVis = (list: Series[]): Series[] => {
@@ -512,17 +410,14 @@ export default function PriceTrend(props: {
   const makePanelDrill = (
     panel: (typeof panelViews)[number],
   ): ((seriesKey: string, bucketId: string) => void) => {
-    const groups = [
-      { ...panel.sel, isOwn: panel.isOwn },
-      ...panel.comps.map((c) => ({ ...c, isOwn: false })),
-    ];
+    const groups = [...panel.card.configs, ...panel.card.compares];
     return (seriesKey: string, bucketId: string) => {
       if (state.granularity === 'week') return;
       const s = panel.series.find((x) => x.key === seriesKey);
       const grp = groups.find((g) => `${g.modelId}__${g.romram.replace(/\s+/g, '')}` === seriesKey);
       if (!s || !grp) return;
       setDrill({
-        group: { modelId: grp.modelId, romram: grp.romram, skuIds: s.skuIds, isOwn: grp.isOwn },
+        group: { modelId: grp.modelId, romram: grp.romram, skuIds: s.skuIds, isOwn: s.isOwn },
         label: s.label,
         originGran: state.granularity === 'quarter' ? 'quarter' : 'month',
         originBucket: bucketId,
@@ -723,11 +618,11 @@ export default function PriceTrend(props: {
   // ---- 下钻（§6.3）：seriesKey → 取数组，单组重查 ----
   const selByKey = useMemo(() => {
     const m = new Map<string, ProductSelection>();
-    for (const s of [...effOwn, ...effComps]) {
+    for (const s of [...mainSels, ...compareSels]) {
       m.set(`${s.modelId}__${s.romram.replace(/\s+/g, '')}`, s);
     }
     return m;
-  }, [effOwn, effComps]);
+  }, [mainSels, compareSels]);
 
   const onDrill = (seriesKey: string, bucketId: string): void => {
     const s = allSeries.find((x) => x.key === seriesKey);
@@ -798,41 +693,25 @@ export default function PriceTrend(props: {
         }}
       >
         <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>
-          {compOnly ? (
-            <>竞品价格走势<span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>（{compModelCount} 款）</span></>
-          ) : (
-            <>价格走势</>
+          价格走势
+          {splitActive && (
+            <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>
+              （{effMains.length} 个主分析分图）
+            </span>
           )}
         </h2>
-        {/* 分离显示（第五十四轮拍板；第七十七轮「每行几个」并入此设置、默认开；
-            第八十七轮面板单位放宽为任意产品·配置，竞品视角亦可分离；
-            第一百一十五轮：多我司型号 / 折线超单图上限 → 强制分离（开关锁定） */}
-        {configSources.length >= 2 && (
-          <Tooltip title={splitForced ? '多产品对比场景已自动分离显示，确保单图不超过 8 条产品线' : undefined}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: splitForced ? 'not-allowed' : undefined }}>
-              <Switch
-                size="small"
-                checked={splitOn}
-                disabled={splitForced}
-                onChange={(v) => {
-                  splitManualRef.current = true;
-                  setSplitOn(v);
-                }}
-              />
-              <span style={{ fontSize: 12.5, color: splitForced ? color.mute : color.body, whiteSpace: 'nowrap' }}>分离显示</span>
-              {splitActive && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-                  <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>每行</span>
-                  <Segmented
-                    size="small"
-                    value={splitColumns}
-                    onChange={(v) => setSplitColumns(v as 2 | 3)}
-                    options={[{ label: '2 个', value: 2 }, { label: '3 个', value: 3 }]}
-                  />
-                </span>
-              )}
-            </span>
-          </Tooltip>
+        {/* 第一百一十七轮：分离开关退役——≥2 张主分析卡自动分离；
+            「每行 2/3 个」与面板拖拽保留 */}
+        {splitActive && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+            <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>每行</span>
+            <Segmented
+              size="small"
+              value={splitColumns}
+              onChange={(v) => setSplitColumns(v as 2 | 3)}
+              options={[{ label: '2 个', value: 2 }, { label: '3 个', value: 3 }]}
+            />
+          </span>
         )}
         <ConfigProvider theme={filterBarTheme}>
           {/* 第一百一十五轮（评审）：平台/币种收进顶部筛选条，标题行不再重复 */}
@@ -880,9 +759,9 @@ export default function PriceTrend(props: {
         )}
       </div>
 
-      {/* 降级状态引导带（第八十五轮）：竞品-only / 无对标 两种状态各给一句出口，
-          不堵死场景但保持「我司主线」的默认叙事 */}
-      {(compOnly || noComp || linesCapped) && (
+      {/* 空态引导带（第一百一十七轮）：未选主分析产品时给一句出口；
+          「无对比」「超线截断」等旧引导退役（无对比是合法状态；配额已前移到选择时） */}
+      {mainsEmpty && (
         <div
           style={{
             display: 'flex',
@@ -897,27 +776,7 @@ export default function PriceTrend(props: {
             color: color.body,
           }}
         >
-          {compOnly && (
-            <span>未选择自有产品 · 当前为竞品对比视角；在上方筛选器选择自有产品后可进行对标分析</span>
-          )}
-          {noComp && (
-            <>
-              <span>未配置对标竞品 · 当前仅展示自身走势</span>
-              <button
-                type="button"
-                onClick={props.onBackToOverview}
-                style={{ border: 0, background: 'transparent', color: color.link, font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
-              >
-                去总览配置对标 →
-              </button>
-            </>
-          )}
-          {/* 第一百一十五轮：单图折线 ≤8——合并图装不下时按选择序截断并说明 */}
-          {linesCapped && (
-            <span>
-              已选 {visSeries.length} 条产品线 · 单图最多同时展示 {MAX_LINES_PER_CHART} 条（当前按选择顺序显示前 {MAX_LINES_PER_CHART} 条）；可在筛选器减少产品，或分离查看
-            </span>
-          )}
+          <span>尚未选择主分析产品 · 点击上方「选择产品」挑选 1 款或多款主分析产品及其对比产品</span>
         </div>
       )}
 
@@ -1051,7 +910,7 @@ export default function PriceTrend(props: {
                           setDropTarget(null);
                         }}
                         role="button"
-                        aria-label={`拖动调整 ${p.sel.romram} 面板位置`}
+                        aria-label={`拖动调整 ${modelNameOf(p.card.modelId)} 面板位置`}
                         title="拖动调整面板顺序"
                         style={{
                           position: 'absolute',
@@ -1074,9 +933,8 @@ export default function PriceTrend(props: {
                       >
                         <HolderOutlined style={{ fontSize: 10 }} />
                       </span>
-                      {/* 面板头（第七十五轮定版）：型号留左上角。第一百一十五轮（评审）：
-                          ①对标竞品提示文案（「对标 4:★…」）删除——竞品名单由图顶品牌图例带
-                          全量承载；②名称药丸上移图例带后，面板头下接图例带（定高对齐共享轴列） */}
+                      {/* 面板头（第一百一十七轮）：面板 = 主分析卡 = 型号；配置线
+                          由图例带药丸承载（同型号多配置时药丸带配置后缀） */}
                       <div
                         style={{
                           display: 'flex',
@@ -1086,9 +944,13 @@ export default function PriceTrend(props: {
                           padding: '0 4px',
                         }}
                       >
-                        {/* 第八十七轮：跨产品/竞品视角时面板头带产品名（单我司产品维持纯 ROM） */}
                         <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          {(multiProduct || !p.isOwn) ? `${modelNameOf(p.sel.modelId)} · ${p.sel.romram}` : p.sel.romram}
+                          {modelNameOf(p.card.modelId)}
+                          {p.card.compares.length > 0 && (
+                            <span style={{ fontWeight: 400, color: color.mute, marginLeft: 6 }} className="tnum">
+                              对比 {p.card.compares.length}
+                            </span>
+                          )}
                         </span>
                       </div>
                       {/* 品牌分组图例带（第一百一十五轮）：本面板全部系列（含屏蔽者）；

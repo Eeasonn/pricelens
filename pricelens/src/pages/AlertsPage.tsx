@@ -31,7 +31,8 @@ import {
   type AlertType,
 } from '../dataModel/alerts';
 import { productSelectionOfAnySeriesKey, productSelectionOfSeriesKey } from '../state/urlSync';
-import { getEffectiveBenchmark, groupsFromBenchmark } from '../state/configStore';
+import { getEffectiveBenchmark } from '../state/configStore';
+import { autoComparesFor } from '../state/mainSelection';
 import PageHeader from '../components/PageHeader';
 import BrandDot from '../components/BrandMark';
 import { AlertBell, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
@@ -45,7 +46,7 @@ const TYPE_RULES: Record<
 > = {
   'price-change': {
     name: '调价预警',
-    desc: '折后价相邻有值周变化 ≥ 阈值（自有 / 竞品都通知）',
+    desc: '折后价相邻有值周变化 ≥ 阈值（自有 / 其他品牌都通知）',
     min: 1,
     max: 15,
     step: 0.5,
@@ -149,55 +150,47 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
   );
 }
 
-/** 单条触发的「看板 ↗」：带周焦点下钻（我司系列同时把看板选品切到该系列） */
+/** 单条触发的「看板 ↗」：带周焦点下钻，同时把主分析卡切到该产品
+ *  （第一百一十七轮：华为产品 = 主分析卡 + 自动跟随对比；竞品告警优先从
+ *  对标矩阵反查映射的华为配置建卡（沿用「主品 + 对比」读法），矩阵未覆盖
+ *  或无映射时该竞品自身成主分析卡） */
 function useOpenInDashboard() {
   const { go } = usePage();
   const { state, actions } = useFilters();
   return (a: AlertItem): void => {
     navBus.dashboardFocusWeekId = a.weekId;
-    const sel = a.isOwn ? productSelectionOfSeriesKey(a.seriesKey) : productSelectionOfAnySeriesKey(a.seriesKey);
+    const sel = productSelectionOfSeriesKey(a.seriesKey);
     if (sel && state.alertSubs.includes(a.seriesKey)) {
+      actions.set({ subjectMode: 'product' });
       if (a.isOwn) {
-        actions.setOwnSelection([sel]);
+        actions.setMains([{ modelId: sel.modelId, configs: [sel], compares: [] }]);
       } else {
-        // 竞品告警不能把竞品写进 own。优先从对标矩阵反查对应我司 ROM，
-        // 这样跳看板后仍沿用“我司 + 竞品”的产品语义；找不到映射时
-        // 保留当前我司选择，只把该竞品补进手动竞品组。
         const normalize = (value: string): string => value.replace(/\s+/g, '');
-        const competitorModelPrefix = `${sel.modelId}__`;
         const competitorRom = normalize(sel.romram);
-        const benchmark = getEffectiveBenchmark();
-        const mapping = benchmark.find((row) => {
-          if (!row.competitor_sku_id.startsWith(competitorModelPrefix)) return false;
+        const mapping = getEffectiveBenchmark().find((row) => {
+          if (!row.competitor_sku_id.startsWith(`${sel.modelId}__`)) return false;
           const product = dimProduct.find((p) => p.sku_id === row.competitor_sku_id);
           return product != null && normalize(product.romram) === competitorRom;
         });
         const mappedOwn = mapping
           ? productSelectionOfSeriesKey(`${mapping.own_model_id}__${normalize(mapping.own_romram)}`)
           : null;
-        const nextOwn = mappedOwn ? [mappedOwn] : state.own;
-        const autoCompetitors = state.autoMatch && nextOwn.length ? groupsFromBenchmark(nextOwn) : [];
-        const hasTarget = autoCompetitors.some(
-          (group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom,
-        );
-        const nextCompetitors = hasTarget
-          ? autoCompetitors
-          : [
-              ...(state.autoMatch ? autoCompetitors : state.competitors),
-              ...(!state.autoMatch && state.competitors.some((group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom) ? [] : [sel]),
-            ];
-        if (
-          nextOwn.length !== state.own.length ||
-          nextOwn.some((group, index) => group.modelId !== state.own[index]?.modelId || normalize(group.romram) !== normalize(state.own[index]?.romram))
-        ) {
-          actions.setOwnSelection(nextOwn);
+        if (mappedOwn) {
+          const card = { modelId: mappedOwn.modelId, configs: [mappedOwn], compares: [] };
+          const auto = autoComparesFor(card);
+          const hasTarget = auto.some((group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom);
+          if (state.autoMatch && hasTarget) {
+            // 映射命中且自动开着：setMains 走跟随，目标竞品自然在对比区
+            actions.setMains([card]);
+          } else {
+            // 显式补入该竞品 → 手动模式（原「补入即转手动」语义）
+            actions.set({ autoMatch: false });
+            actions.setMains([{ ...card, compares: [sel] }]);
+          }
+        } else {
+          // 无映射：竞品自身即分析对象
+          actions.setMains([{ modelId: sel.modelId, configs: [sel], compares: [] }]);
         }
-        actions.set({
-          competitors: nextCompetitors,
-          // 未被当前我司配置矩阵覆盖时，显式补入竞品即转为手动模式，避免
-          // 自动按钮与实际展示集合不一致；映射命中则保留自动模式。
-          autoMatch: state.autoMatch && hasTarget,
-        });
       }
     }
     go('dashboard');
@@ -761,7 +754,7 @@ export default function AlertsPage() {
                 <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
               </div>
               <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                自有 {ownCount} · 竞品 {state.alertSubs.length - ownCount} · 覆写 {Object.keys(state.alertProducts).length} 项
+                自有 {ownCount} · 其他品牌 {state.alertSubs.length - ownCount} · 覆写 {Object.keys(state.alertProducts).length} 项
               </div>
             </div>
           </section>

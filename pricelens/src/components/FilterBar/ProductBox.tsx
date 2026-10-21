@@ -1,11 +1,11 @@
-// 产业、我司产品与竞品控件。竞品级联始终可编辑；实际修改时退出自动匹配。
-// 产品与竞品级联默认展开到已选配置所在的最细层，颜色仍在档位浮层编辑。
+// 产业下拉、档位下拉与「自有产品」受控级联（总览筛选行复用）。
+// 第一百一十七轮：看板侧我司/竞品级联与自动匹配按钮由「选择产品」浮窗取代，
+// 本文件只保留总览仍需要的控件；ColorFlyout 已抽至 ProductCascader/ColorFlyout。
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Cascader, Checkbox, Select, Tooltip } from 'antd';
 import { useFilters } from '../../state/FiltersContext';
 import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
-  buildCompetitorTree,
   buildOwnTree,
   defaultColorSkuIds,
   findSelection,
@@ -17,8 +17,7 @@ import {
 import type { ProductSelection } from '../../state/filtersTypes';
 import type { CurrencyMode, DimProduct } from '../../dataModel/types';
 import { CascadePanel, measureText, type CascadeRowItem } from '../ProductCascader';
-import BrandDot, { brandLabelOf } from '../BrandMark';
-import { getEffectiveBenchmark } from '../../state/configStore';
+import ColorFlyout, { COLOR_CHIP } from '../ProductCascader/ColorFlyout';
 import { dimProduct } from '../../data';
 import { TIER_LABELS, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { INDUSTRY_LABELS, INDUSTRY_ORDER, industriesOfCountry } from '../../dataModel/scope';
@@ -51,237 +50,33 @@ export function IndustryControl() {
   );
 }
 
-// ---------------- 竞品自动匹配模式 ----------------
-
-/** Auto is a selectable mode, not a lock on the competitor cascader. */
-export function AutoMatchControl() {
-  const { state, actions } = useFilters();
-  return (
-    <Tooltip title={state.autoMatch ? '已按自有产品自动匹配竞品；直接修改右侧竞品会退出自动模式' : '点击后按自有产品重新匹配竞品'}>
-      <button
-        type="button"
-        aria-label="自动匹配竞品"
-        aria-pressed={state.autoMatch}
-        onClick={() => actions.setAutoMatch(!state.autoMatch)}
-        style={{
-          height: 30, padding: '0 9px', flexShrink: 0, borderRadius: radius.control,
-          border: `1px solid ${state.autoMatch ? selectAccent : color.hairlineStrong}`,
-          background: state.autoMatch ? selectSoft : color.canvas,
-          color: state.autoMatch ? selectSoftInk : color.body,
-          font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-        }}
-      >自动</button>
-    </Tooltip>
-  );
-}
-
 // ---------------- ②③ 产品级联（标准 antd Cascader multiple） ----------------
-
-/** 档位行内「颜色」按钮：迷你版匹配按钮样式（浅蓝底蓝描边胶囊），点击弹颜色浮层 */
-const COLOR_CHIP: CSSProperties = {
-  height: 18,
-  padding: '0 7px',
-  display: 'inline-flex',
-  alignItems: 'center',
-  fontSize: 11,
-  fontWeight: 600,
-  lineHeight: '16px',
-  color: selectSoftInk,
-  background: selectSoft,
-  border: '1px solid rgba(0, 112, 243, 0.40)',
-  borderRadius: radius.pill,
-  cursor: 'pointer',
-  flexShrink: 0,
-};
-
-/** 颜色浮层（第十五轮）：档位行「颜色」按钮点击后在级联面板右侧弹出；勾选/取消颜色
- *  直接改写该勾选组的 skuIds（toggleSku：取消最后一个颜色 = 整组退场），下游聚合
- *  对 skuIds 取均值，多色即均价。列显各颜色最新折后价，辅助挑选。 */
-function ColorFlyout({
-  node,
-  list,
-  currency,
-  onToggle,
-  onReset,
-}: {
-  node: RomramNode;
-  list: ProductSelection[];
-  currency: CurrencyMode;
-  onToggle: (skuId: string, next: boolean) => void;
-  onReset: () => void;
-}) {
-  const pool = node.selectableColors.length ? node.selectableColors : node.colors;
-  const sel = findSelection(list, node);
-  // 第一百一十五轮：颜色列宽自适应（长色名完整显示），钳在 232~340
-  const rowW = pool.reduce(
-    (w, c) =>
-      Math.max(
-        w,
-        measureText(c.color) + measureText(formatPrice(currency === 'usd' ? c.latestUsd : c.latestLocal, currency) ?? ''),
-      ),
-    measureText(`${modelNameOf(node.modelId)} ${shortRomram(node.romram)}`) * (12 / 13),
-  );
-  const width = Math.min(340, Math.max(232, Math.ceil(rowW * 1.08) + 78));
-  return (
-    <div
-      style={{
-        width,
-        boxSizing: 'border-box',
-        flexShrink: 0,
-        borderLeft: `1px solid ${color.hairline}`,
-        background: color.canvas,
-        padding: '10px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-        颜色
-        <span style={{ fontWeight: 400, color: color.mute }}>
-          {' '}· {modelNameOf(node.modelId)} {shortRomram(node.romram)}
-        </span>
-      </div>
-      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', overflowY: 'auto', maxHeight: 228 }}>
-        {pool.map((c) => (
-          <label
-            key={c.skuId}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 12,
-              lineHeight: '26px',
-              color: color.body,
-              cursor: 'pointer',
-            }}
-          >
-            <Checkbox
-              checked={sel?.skuIds.includes(c.skuId) ?? false}
-              onChange={(e) => onToggle(c.skuId, e.target.checked)}
-              style={{ fontSize: 12 }}
-            />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.color}</span>
-            <span className="tnum" style={{ marginLeft: 'auto', fontSize: 11, color: color.mute }}>
-              {formatPrice(currency === 'usd' ? c.latestUsd : c.latestLocal, currency)}
-            </span>
-          </label>
-        ))}
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          paddingTop: 6,
-          borderTop: `1px solid ${color.hairline}`,
-          fontSize: 11,
-          lineHeight: '16px',
-          color: color.mute,
-        }}
-      >
-        多选颜色时，折后价取所选颜色的均价。
-        <a onClick={onReset} style={{ fontSize: 11, marginLeft: 4 }}>
-          恢复默认色
-        </a>
-      </div>
-    </div>
-  );
-}
 
 // 已选标签内容用 displayRender 定制（multiple 模式下它就是每个标签的文案；
 // 注意 tagRender 拿到的 value 是 rc-cascader 拼接后的标量 key，不是路径，不可用）。
 
-/** 对标预览列（仅我司级联，第一百一十六轮定版）：只在下钻点选「配置」后出现——
- *  产品（型号）层不显示；名单 = 当前国家该配置的生效对标（与看板实际带出的竞品
- *  同口径，按竞品「产品·配置」去重）。行样式与下方产品药丸同语言（品牌色点 +
- *  完整「品牌+产品+配置」）；列宽自适应最长行，与颜色浮层互斥——浮层打开时宽度让位。 */
-function BenchPreview({
-  modelLabel,
-  items,
-}: {
-  modelLabel: string;
-  items: { key: string; brand: string; name: string; spec: string }[];
-}) {
-  const textOf = (it: { brand: string; name: string; spec: string }): string =>
-    `${brandLabelOf(it.brand)} ${it.name} ${it.spec}`.trim();
-  const widest = Math.max(
-    measureText(`对标竞品 · ${modelLabel}`),
-    ...items.map((it) => measureText(textOf(it))),
-  );
-  const width = Math.min(420, Math.max(208, Math.ceil(widest * 1.08) + 52));
-  return (
-    <div
-      style={{
-        width,
-        boxSizing: 'border-box',
-        flexShrink: 0,
-        borderLeft: `1px solid ${color.hairline}`,
-        background: color.canvas,
-        padding: '10px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-        对标竞品
-        <span style={{ fontWeight: 400, color: color.mute }}> · {modelLabel}</span>
-      </div>
-      {items.length ? (
-        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', overflowY: 'auto', maxHeight: 284 }}>
-          {items.map((it) => (
-            <div
-              key={it.key}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                fontSize: 12,
-                lineHeight: '26px',
-                color: color.body,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <BrandDot brand={it.brand} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{textOf(it)}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ marginTop: 6, fontSize: 11, lineHeight: '16px', color: color.mute }}>该配置尚未配置对标竞品</div>
-      )}
-    </div>
-  );
-}
-
 /** Cascader owns the selected tags; CascadePanel owns the open three-column path. */
 function ProductCascadeControl({
-  kind,
   selection,
   onSelectionChange,
   emptyPlaceholder,
   productLevel,
 }: {
-  kind: 'own' | 'comp';
-  /** 第四十三轮：受控注入（总览产品筛选复用同款级联）；缺省 = 绑定 FiltersContext */
-  selection?: ProductSelection[];
-  onSelectionChange?: (next: ProductSelection[]) => void;
+  /** 受控注入（总览产品筛选复用同款级联；第一百一十七轮起必须受控） */
+  selection: ProductSelection[];
+  onSelectionChange: (next: ProductSelection[]) => void;
   emptyPlaceholder?: string;
   /** 第八十六轮：收窄到产品层——面板只留组/型号两列，勾选型号即整产品；
    *  ROM 粒度的取舍交给看板标题行的配置 chips（消除上下重复入口） */
   productLevel?: boolean;
 }) {
-  const { state, actions } = useFilters();
+  const { state } = useFilters();
   const tree = useMemo(
-    () => (kind === 'own' ? buildOwnTree(state.industry, state.countryCode) : buildCompetitorTree(state.industry, state.countryCode)),
-    [kind, state.industry, state.countryCode],
+    () => buildOwnTree(state.industry, state.countryCode),
+    [state.industry, state.countryCode],
   );
-  const list = selection ?? (kind === 'own' ? state.own : state.competitors);
-  const writeList = (next: ProductSelection[]): void => {
-    if (onSelectionChange) {
-      onSelectionChange(next);
-      return;
-    }
-    if (kind === 'own') actions.setOwnSelection(next);
-    else actions.set({ competitors: next, autoMatch: false }); // 手动修改竞品即退出自动模式，不回写配置
-  };
+  const list = selection;
+  const writeList = (next: ProductSelection[]): void => onSelectionChange(next);
 
   // 颜色浮层锚点档位（`${modelId}|${romram}`），null = 收起。
   // 未勾选配置也可弹层（第十六轮：按钮只开浮层不改勾选）；收起走显式路径：
@@ -290,9 +85,6 @@ function ProductCascadeControl({
   const [menuOpen, setMenuOpen] = useState(false);
   // 配置列悬停锚点：高亮与对标预览跟随鼠标（null = 未悬停过，回退首个勾选配置）
   const [activeLeafKey, setActiveLeafKey] = useState<string | null>(null);
-  // 第一百一十六轮：对标预览只在「点选具体配置」后出现——产品（型号）层不出现。
-  // 点配置行即视为选定该配置；回到产品层或重开面板即复位。
-  const [userDrilled, setUserDrilled] = useState(false);
 
   // Keep string labels for the Cascader tags. The open menu is rendered below.
   const { options, groupKeyOfModel, romramNodeOf } = useMemo(() => {
@@ -432,7 +224,6 @@ function ProductCascadeControl({
       onActivate: () => {
         setActivePath([g.key, g.models[0]?.modelId ?? '']);
         setActiveLeafKey(null);
-        setUserDrilled(false); // 回到产品层：对标预览退场
       },
       onCheckChange: (checked) => updateConfigs(nodes, checked),
     };
@@ -445,7 +236,6 @@ function ProductCascadeControl({
       onActivate: () => {
         setActivePath([group.key, m.modelId]);
         setActiveLeafKey(null);
-        setUserDrilled(false); // 产品层：预览等点选具体配置后再出现
       },
       onCheckChange: (checked) => updateConfigs(nodes, checked),
     };
@@ -466,7 +256,6 @@ function ProductCascadeControl({
       checkState: chosen ? 'checked' : 'none',
       onActivate: () => {
         setActiveLeafKey(r.key);
-        setUserDrilled(true);
       },
       onCheckChange: (checked) => updateConfigs([r], checked),
       onLabelClick: () => updateConfigs([r], !chosen),
@@ -493,34 +282,6 @@ function ProductCascadeControl({
   }, 0);
   const leafExtraW = Math.ceil(leafChipW + 20);
 
-  // 对标预览名单：点选具体配置后才渲染（第一百一十六轮）。名单 = 当前国家该配置的
-  // 生效对标（country_code 过滤，与 benchmarkSkuIdsFor 同口径），按竞品「产品·配置」
-  // 去重——与看板实际带出的竞品组一一对应。
-  const benchPreview = useMemo(() => {
-    if (kind !== 'own' || productLevel || !model || !userDrilled) return null;
-    if (activeLeafKey == null || !activeLeafKey.startsWith(`${model.modelId}|`)) return null;
-    const romram = activeLeafKey.slice(model.modelId.length + 1);
-    const cc = state.countryCode;
-    const seen = new Map<string, { key: string; brand: string; name: string; spec: string }>();
-    const rows = getEffectiveBenchmark()
-      .filter((b) => b.own_model_id === model.modelId && b.own_romram === romram && (b.country_code ?? cc) === cc)
-      .sort((a, b) => a.sort - b.sort);
-    for (const b of rows) {
-      const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
-      if (!p) continue;
-      const groupKey = `${p.sku_id.split('__')[0]}|${p.romram}`;
-      if (seen.has(groupKey)) continue;
-      seen.set(groupKey, {
-        key: groupKey,
-        brand: p.brand,
-        name: modelNameOf(p.sku_id.split('__')[0]),
-        spec: shortRomram(p.romram),
-      });
-    }
-    const label = `${model.label} ${shortRomram(romram)}`;
-    return <BenchPreview modelLabel={label} items={[...seen.values()]} />;
-  }, [kind, productLevel, model, activeLeafKey, userDrilled, state.countryCode]);
-
   return (
     <Cascader
       style={{ width: '100%' }}
@@ -532,7 +293,7 @@ function ProductCascadeControl({
       //（部分勾选仍逐配置显示，提示粒度收窄）；竞品级联维持 SHOW_CHILD 逐配置标签
       showCheckedStrategy={productLevel ? Cascader.SHOW_PARENT : Cascader.SHOW_CHILD}
       maxTagCount="responsive"
-      placeholder={kind === 'own' ? (emptyPlaceholder ?? '选择产品') : '选择竞品'}
+      placeholder={emptyPlaceholder ?? '选择产品'}
       displayRender={displayRender}
       popupRender={() => (
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
@@ -545,8 +306,7 @@ function ProductCascadeControl({
             { items: modelItems },
             { items: leafItems, extraW: leafExtraW },
           ]} />
-          {/* 颜色浮层打开时占住右侧位，对标预览让位（二者互斥控宽） */}
-          {colorPanelNode ?? benchPreview}
+          {colorPanelNode}
         </div>
       )}
       onOpenChange={(open) => {
@@ -555,11 +315,9 @@ function ProductCascadeControl({
           setActivePath([initialGroup ?? '', firstSelection?.modelId ?? tree[0]?.models[0]?.modelId ?? '']);
           // 配置列初始高亮 = 首个勾选配置（与旧视觉一致），悬停后跟随鼠标
           setActiveLeafKey(firstSelection ? `${firstSelection.modelId}|${firstSelection.romram}` : null);
-          setUserDrilled(false); // 重开面板回到产品层：对标预览不出现
         } else {
           setColorPanelKey(null);
           setActiveLeafKey(null);
-          setUserDrilled(false);
         }
       }}
     />
@@ -567,16 +325,12 @@ function ProductCascadeControl({
 }
 
 export function OwnProductControl(p: {
-  selection?: ProductSelection[];
-  onSelectionChange?: (next: ProductSelection[]) => void;
+  selection: ProductSelection[];
+  onSelectionChange: (next: ProductSelection[]) => void;
   emptyPlaceholder?: string;
   productLevel?: boolean;
-} = {}) {
-  return <ProductCascadeControl kind="own" {...p} />;
-}
-
-export function CompetitorControl() {
-  return <ProductCascadeControl kind="comp" />;
+}) {
+  return <ProductCascadeControl {...p} />;
 }
 
 /** 按档位主体模式的档位选择器：选项 = 当前产业下有我司产品的价格档位（高档在前） */

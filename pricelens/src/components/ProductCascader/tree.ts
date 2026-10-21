@@ -77,6 +77,12 @@ export interface ModelNode {
   modelId: string;
   label: string;
   romrams: RomramNode[];
+  /** 品牌（统一树各列同语言：品牌点 + 名称） */
+  brand: string;
+  /** 首次采集周三（≈上市）；型号列按此新→旧排序 */
+  launchDate: string;
+  /** 退市（eol_date 有值）：置底灰显、仍可勾选做历史分析 */
+  eol: boolean;
 }
 
 /** 我司层 1 = 系列；竞品层 1 = 品牌（结构通用） */
@@ -86,9 +92,52 @@ export interface GroupNode {
   models: ModelNode[];
 }
 
+/** 统一产品树（第一百一十七轮）：品牌 → 系列 → 型号 → 配置 */
+export interface SeriesNode {
+  key: string; // `${brand}|${series}`
+  title: string;
+  models: ModelNode[];
+  eol: boolean; // 全部型号退市
+  latestLaunch: string;
+}
+
+export interface BrandNode {
+  key: string; // brand
+  title: string;
+  series: SeriesNode[];
+  modelCount: number;
+}
+
 /** `12+256 GB` → `12+256`；`256 GB` → `256`；`1TB` → `1TB` */
 export function shortRomram(romram: string): string {
   return romram.replace(/\s*GB$/i, '').trim();
+}
+
+/** 配置容量解析（排序用）：`12+256 GB` → [12, 256]；`16+1 TB` → [16, 1024]；
+ *  `256 GB` → [0, 256]；无 GB/TB 单位（如 46mm GPS / —）→ [0, 0] 排最前，再按文本自然序。 */
+export function parseCapacity(romram: string): [number, number] {
+  if (!/\d\s*(gb|tb)(\b|$)/i.test(romram)) return [0, 0];
+  const tb = /\d\s*tb(\b|$)/i.test(romram);
+  const nums = (romram.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+  if (nums.length === 0) return [0, 0];
+  if (nums.length === 1) return [0, tb ? nums[0] * 1024 : nums[0]];
+  const ram = nums[nums.length - 2];
+  const rom = nums[nums.length - 1];
+  return [ram, tb ? rom * 1024 : rom];
+}
+
+/** 配置列排序：存储（ROM）升序 → 内存（RAM）升序 → 文本自然序 */
+export function compareRomram(a: string, b: string): number {
+  const [ra, oa] = parseCapacity(a);
+  const [rb, ob] = parseCapacity(b);
+  return oa - ob || ra - rb || a.localeCompare(b, undefined, { numeric: true });
+}
+
+/** 型号列排序：在售在前（退市置底）→ 上市新→旧 → 名称自然序 */
+function compareModel(a: ModelNode, b: ModelNode): number {
+  return Number(a.eol) - Number(b.eol)
+    || b.launchDate.localeCompare(a.launchDate)
+    || a.label.localeCompare(b.label, undefined, { numeric: true });
 }
 
 // ---- 最新折后价索引（懒构建一次；数据静态于模块装载） ----
@@ -147,11 +196,20 @@ function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
 function groupModels(skus: DimProduct[]): ModelNode[] {
   return [...groupBy(skus, (s) => s.model_name).entries()].map(([model, modelSkus]) => {
     const modelId = modelIdOf(modelSkus[0]);
-    const romrams = [...groupBy(modelSkus, (s) => s.romram).entries()].map(([rom, romSkus]) =>
-      buildRomramNode(romSkus, modelId, model, rom),
-    );
-    return { key: modelId, modelId, label: model, romrams };
-  });
+    const romrams = [...groupBy(modelSkus, (s) => s.romram).entries()]
+      .map(([rom, romSkus]) => buildRomramNode(romSkus, modelId, model, rom))
+      .sort((a, b) => compareRomram(a.romram, b.romram));
+    const head = modelSkus[0];
+    return {
+      key: modelId,
+      modelId,
+      label: model,
+      romrams,
+      brand: head.brand,
+      launchDate: head.launch_date,
+      eol: modelSkus.every((s) => s.eol_date != null),
+    };
+  }).sort(compareModel);
 }
 
 /** 我司级联树（当前国家有数据的产品）：系列 → 产品名（仅展开）→ 配置（勾选层） */
@@ -263,4 +321,71 @@ export function toggleSku(list: ProductSelection[], node: RomramNode, skuId: str
 /** 触发器/面板展示用：勾选组的显示名（产品名 · ROMRAM） */
 export function selectionLabel(sel: ProductSelection): string {
   return `${modelNameOf(sel.modelId)} · ${shortRomram(sel.romram)}`;
+}
+
+// ---------------- 统一产品树（第一百一十七轮，选择产品浮窗用） ----------------
+
+/** 统一产品树（全部品牌，含华为；当前国家有数据、可选传产业收窄）：
+ *  品牌（华为置顶 → §13 矩阵列序 → 型号数降序）→ 系列（在售在前、
+ *  上市新→旧；全退市置底）→ 型号（在售在前、新→旧）→ 配置（容量升序）。
+ *  竞品系列来自维表 series（scripts/series_rules.py 的「代际+产品线」规则）。 */
+export function buildProductTree(industry?: Industry, countryCode: string = getCurrentCountry()): BrandNode[] {
+  const rows = dimProduct.filter(
+    (p) => p.countries.includes(countryCode) && (industry == null || p.industry === industry),
+  );
+  const ob = ownBrand();
+  const brandRank = (b: string): number => {
+    if (b === ob) return -1;
+    const i = COMPETITOR_BRANDS.indexOf(b);
+    return i >= 0 ? i : COMPETITOR_BRANDS.length;
+  };
+  const brands = [...groupBy(rows, (p) => p.brand).entries()].map(([brand, skus]) => {
+    const models = groupModels(skus);
+    const seriesMap = new Map<string, SeriesNode>();
+    for (const m of models) {
+      const seriesTitle = skus.find((s) => modelIdOf(s) === m.modelId)?.series ?? m.label;
+      const key = `${brand}|${seriesTitle}`;
+      let node = seriesMap.get(key);
+      if (!node) {
+        node = { key, title: seriesTitle, models: [], eol: true, latestLaunch: '' };
+        seriesMap.set(key, node);
+      }
+      node.models.push(m);
+      if (!m.eol) node.eol = false;
+      if (m.launchDate > node.latestLaunch) node.latestLaunch = m.launchDate;
+    }
+    const series = [...seriesMap.values()].sort(
+      (a, b) => Number(a.eol) - Number(b.eol) || b.latestLaunch.localeCompare(a.latestLaunch) || a.title.localeCompare(b.title, undefined, { numeric: true }),
+    );
+    return { key: brand, title: brand, series, modelCount: models.length } satisfies BrandNode;
+  });
+  return brands.sort(
+    (a, b) => brandRank(a.key) - brandRank(b.key) || b.modelCount - a.modelCount || a.key.localeCompare(b.key),
+  );
+}
+
+/** 树内搜索（选择产品浮窗）：按 品牌/系列/型号名 模糊匹配（大小写不敏感），
+ *  命中型号的整条 祖先链（品牌→系列）保留；无命中返回空数组（调用方显空态）。 */
+export function searchProductTree(tree: BrandNode[], query: string): BrandNode[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return tree;
+  const out: BrandNode[] = [];
+  for (const brand of tree) {
+    const seriesOut: SeriesNode[] = [];
+    for (const s of brand.series) {
+      const hit =
+        brand.title.toLowerCase().includes(q) || s.title.toLowerCase().includes(q)
+        || s.models.some((m) => m.label.toLowerCase().includes(q));
+      if (!hit) continue;
+      const models = brand.title.toLowerCase().includes(q) || s.title.toLowerCase().includes(q)
+        ? s.models
+        : s.models.filter((m) => m.label.toLowerCase().includes(q));
+      if (!models.length) continue;
+      seriesOut.push({ ...s, models });
+    }
+    if (seriesOut.length) {
+      out.push({ ...brand, series: seriesOut, modelCount: seriesOut.reduce((n, s) => n + s.models.length, 0) });
+    }
+  }
+  return out;
 }

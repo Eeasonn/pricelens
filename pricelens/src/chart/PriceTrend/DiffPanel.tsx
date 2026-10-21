@@ -230,7 +230,7 @@ export default function DiffPanel(props: {
     <div>
       {/* 工具行：标题 + 时点 + 口径说明 + 复制为表格 */}
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>竞品价差</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>产品价差</span>
         <span className="tnum" style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap' }}>
           时点 {asOfText}
         </span>

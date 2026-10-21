@@ -1,46 +1,42 @@
 // ============================================================
 // URL query 同步（第五十四轮追补⑩，总览↔看板闭环建议③）：
-// 页签 / 粒度 / 币种 / 平台店铺 / 我司产品 写入 location.search（replaceState，
+// 页签 / 粒度 / 币种 / 平台店铺 / 主分析产品 写入 location.search（replaceState，
 // 不产生历史记录），启动时反向读取——任何页面状态都能复制链接分享/收藏。
 // 设计约束：
 // - 单一写入口 writeUrlPatch(patch)：读当前 query 合并后写，两个 Provider 各写
 //   各的键互不覆盖；
-// - own = 逗号分隔系列 key（modelId__romram去空格），恢复时反查 dimProduct 还原
-//   ProductSelection（romram 原文 + 最低价颜色 SKU），竞品按 autoMatch 现行规则带出；
+// - main = 逗号分隔配置 key（modelId__romram去空格），恢复时反查 dimProduct 还原
+//   ProductSelection（romram 原文 + 最低价颜色 SKU）并按型号成卡；对比区按
+//   autoMatch 现行规则带出；第一百一十七轮起参数名 own → main（旧链接仍可读），
+//   且任意品牌都可做主分析（角色由用户指定，不再限华为）；
 // - 参数不合法（型号不存在等）静默忽略，回退默认/持久化值。
 // ============================================================
 import { dimProduct } from '../data';
-import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
+import type { FiltersState, MainProduct, PlatformSelection, ProductSelection } from './filtersTypes';
 import type { Page } from './PageContext';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
+import { groupToCards } from './mainSelection';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
 const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'config', 'alerts'];
 
-/** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null */
-function productSelectionOfSeriesKeyInternal(key: string, ownOnly: boolean): ProductSelection | null {
+/** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null。
+ *  第一百一十七轮：主分析可任意品牌（旧 ownOnly 白名单随之退役）。 */
+export function productSelectionOfSeriesKey(key: string): ProductSelection | null {
   const sep = key.indexOf('__');
   if (sep < 0) return null;
   const modelId = key.slice(0, sep);
   const rom = key.slice(sep + 2);
-  // URL 是可由用户手工编辑的外部输入。只允许我司产品进入 own，
-  // 否则可构造 own=竞品 SKU，把竞品伪装成我司产品进入图表和预警口径。
-  const row = dimProduct.find((p) => (!ownOnly || p.is_own) && p.sku_id.startsWith(modelId + '__') && norm(p.romram) === rom);
+  const row = dimProduct.find((p) => p.sku_id.startsWith(modelId + '__') && norm(p.romram) === rom);
   if (!row) return null;
   const skuId = lowestPriceColorSku(modelId, row.romram);
   if (!skuId) return null;
   return { modelId, romram: row.romram, skuIds: [skuId] };
 }
 
-/** URL/分享链接只能使用我司产品；页面内部跳转预警时也需要解析竞品系列。 */
-export function productSelectionOfSeriesKey(key: string): ProductSelection | null {
-  return productSelectionOfSeriesKeyInternal(key, true);
-}
-
-export function productSelectionOfAnySeriesKey(key: string): ProductSelection | null {
-  return productSelectionOfSeriesKeyInternal(key, false);
-}
+// 兼容旧名（预警跳转等按系列 key 解析任意产品）
+export const productSelectionOfAnySeriesKey = productSelectionOfSeriesKey;
 
 /** 启动时读取 URL 覆写（在持久化/默认视图之后应用） */
 export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState> } {
@@ -63,13 +59,14 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     if (t) out.filters.tier = t;
     const shop = q.get('shop');
     if (shop) out.filters.platform = { platforms: [], shopIds: [shop] } as PlatformSelection;
-    const own = q.get('own');
-    if (own) {
-      const list = own
+    // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入
+    const mainParam = q.get('main') ?? q.get('own');
+    if (mainParam) {
+      const list = mainParam
         .split(',')
         .map((k) => productSelectionOfSeriesKey(k.trim()))
         .filter((x): x is ProductSelection => x != null);
-      if (list.length > 0) out.filters.own = list;
+      if (list.length > 0) out.filters.mains = groupToCards(list) as MainProduct[];
     }
   } catch {
     /* 无 window / 解析失败 = 无覆写 */

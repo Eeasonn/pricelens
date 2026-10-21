@@ -44,10 +44,9 @@ import {
 } from '../chart/PriceTrend/helpers';
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
-import { groupsFromBenchmark } from '../state/configStore';
 import { dimProduct } from '../data';
 import type { AggMode, Series, SeriesPoint } from '../dataModel/types';
-import type { ProductSelection } from '../state/filtersTypes';
+import type { MainProduct } from '../state/filtersTypes';
 import { brandColorOf, color, fontSize, radius, shadow, space } from '../theme/tokens';
 import VolumeBars, { BAND_FRAC_DEFAULT } from './volume/VolumeBars';
 import PanelHeader, { type VolumeOption } from './volume/PanelHeader';
@@ -77,25 +76,21 @@ function resolveSlot(slot: VolumeSlot, cc: string): SlotInfo | null {
   return { isOwn: rows[0].is_own === true, brand: rows[0].brand, skuIds };
 }
 
-/** 默认三槽：槽1 = 我司首选（无则竞品首选）；槽2/3 = 其对标前两个，竞品勾选补位 */
-function defaultSlots(own: ProductSelection[], competitors: ProductSelection[]): (VolumeSlot | null)[] {
-  const first = own[0] ?? competitors[0] ?? null;
+/** 默认三槽（第一百一十七轮）：槽1 = 首张主分析卡的首个配置；
+ *  槽2/3 = 该卡对比区前两个；后续卡（配置 + 对比区）依次补位 */
+function defaultSlots(mains: MainProduct[]): (VolumeSlot | null)[] {
   const picks: VolumeSlot[] = [];
   const push = (s: VolumeSlot | null): void => {
     if (!s || picks.length >= SLOTS) return;
     if (picks.some((p) => p.modelId === s.modelId && p.romram.replace(/\s+/g, '') === s.romram.replace(/\s+/g, ''))) return;
     picks.push(s);
   };
-  if (first) {
-    push({ modelId: first.modelId, romram: first.romram });
-    // 槽1 为我司时按配置矩阵带出对标（主竞品在前）；竞品视角不带
-    if (own.length > 0) {
-      for (const b of groupsFromBenchmark([{ modelId: first.modelId, romram: first.romram, skuIds: first.skuIds }])) {
-        push(b);
-      }
-    }
+  for (const card of mains) {
+    const first = card.configs[0];
+    if (first) push({ modelId: first.modelId, romram: first.romram });
+    for (const c of card.compares) push({ modelId: c.modelId, romram: c.romram });
+    if (picks.length >= SLOTS) break;
   }
-  for (const c of competitors) push({ modelId: c.modelId, romram: c.romram });
   return [0, 1, 2].map((i) => picks[i] ?? null);
 }
 
@@ -104,7 +99,7 @@ export default function VolumePrice() {
   const cc = state.countryCode;
 
   // ---- 视图状态（同价格看板口径；三面板共用） ----
-  const [slots, setSlots] = useState<(VolumeSlot | null)[]>(() => defaultSlots(state.own, state.competitors));
+  const [slots, setSlots] = useState<(VolumeSlot | null)[]>(() => defaultSlots(state.mains));
   const [sliderScale, setSliderScale] = useState(1);
   const [yCompress, setYCompress] = useState(false);
   const [showYTicks, setShowYTicks] = useState(true);
@@ -118,13 +113,13 @@ export default function VolumePrice() {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null); // 跨面板共享悬停时间列
   const [geoms, setGeoms] = useState<(StripGeom | null)[]>([null, null, null]); // 各面板绘图区横向几何
 
-  // 我司首选 / 国家 / 产业变化 → 三槽重置为默认（手选槽位此时被重置）
-  const slotResetKey = JSON.stringify([state.own[0]?.modelId ?? null, state.own[0]?.romram ?? null, cc, state.industry]);
+  // 首张主分析卡 / 国家 / 产业变化 → 三槽重置为默认（手选槽位此时被重置）
+  const slotResetKey = JSON.stringify([state.mains[0]?.modelId ?? null, state.mains[0]?.configs[0]?.romram ?? null, cc, state.industry]);
   const slotResetRef = useRef(slotResetKey);
   useEffect(() => {
     if (slotResetRef.current === slotResetKey) return;
     slotResetRef.current = slotResetKey;
-    setSlots(defaultSlots(state.own, state.competitors));
+    setSlots(defaultSlots(state.mains));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotResetKey]);
 
@@ -290,8 +285,8 @@ export default function VolumePrice() {
     const ownOpts = collect(true);
     const compOpts = collect(false);
     return ownOpts.length > 0
-      ? [{ label: ownBrand(), options: ownOpts }, { label: '竞品', options: compOpts }]
-      : [{ label: '竞品', options: compOpts }];
+      ? [{ label: ownBrand(), options: ownOpts }, { label: '其他品牌', options: compOpts }]
+      : [{ label: '其他品牌', options: compOpts }];
   }, [cc, state.industry]);
 
   // 槽位选择 / 几何上报

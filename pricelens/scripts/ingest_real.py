@@ -29,6 +29,8 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
+from series_rules import comp_series
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)          # pricelens/
 REPO = os.path.dirname(ROOT)          # 价格管理-v109/
@@ -474,6 +476,10 @@ def derive_series(p):
     for pre, name in OWN_SERIES_RULES:
         if k.startswith(pre):
             return name
+    # 第一百一十七轮：竞品按「代际+产品线」规则成组（scripts/series_rules.py，
+    # 与 patch_comp_series.py 同源）；未命中回退型号名本身（型号即系列）
+    if not p.get("is_own"):
+        return comp_series(p["brand"], p["model_name"])
     return (p["model_name"].split() or ["其他"])[0]
 
 

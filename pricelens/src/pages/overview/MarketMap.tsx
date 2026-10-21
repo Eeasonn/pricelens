@@ -361,12 +361,12 @@ function DetailFloat({
         seenComp.add(key);
         compSels.push({ modelId: c.skuId.split('__')[0], romram: c.romram, skuIds: [c.skuId] });
       }
-      actions.set({
-        subjectMode: 'product',
-        own: model.rows.map((r) => selOf(model.modelId, r.romram)),
-        competitors: compSels,
-        autoMatch: false,
-      });
+      actions.set({ subjectMode: 'product' });
+      // 第一百一十七轮：整组进看板 = 该型号一张主分析卡（全配置 + 矩阵对比区），
+      // 手动模式（原 autoMatch:false 语义）由 setCardCompares 的退出规则承接
+      actions.setMains([
+        { modelId: model.modelId, configs: model.rows.map((r) => selOf(model.modelId, r.romram)), compares: compSels },
+      ]);
       go('dashboard');
       onClose();
     }, 340);
@@ -941,18 +941,18 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     };
   }, [detailModelId]);
 
-  /** 跳看板只看该产品：我司 = 该产品（全部或单配置）；竞品 = 竞品视角单配置 */
+  /** 跳看板只看该产品：一张主分析卡（华为 = 全部或单配置；其他品牌 = 该型号成主分析） */
   const openTrend = (model: OverviewModel, row?: OverviewRow): void => {
+    actions.set({ subjectMode: 'product' });
     if (model.isOwn) {
-      const own = row ? [selOf(model.modelId, row.romram)] : model.rows.map((r) => selOf(model.modelId, r.romram));
-      actions.set({ subjectMode: 'product', own });
+      const configs = row ? [selOf(model.modelId, row.romram)] : model.rows.map((r) => selOf(model.modelId, r.romram));
+      // setMains 走自动跟随：autoMatch 开时按矩阵带出对比区（原语义）
+      actions.setMains([{ modelId: model.modelId, configs, compares: [] }]);
     } else {
       const rep = row ?? model.rows[0];
-      actions.set({
-        own: [],
-        competitors: rep ? [{ modelId: model.modelId, romram: rep.romram, skuIds: [rep.skuId] }] : [],
-        autoMatch: false,
-      });
+      if (rep) {
+        actions.setMains([{ modelId: model.modelId, configs: [{ modelId: model.modelId, romram: rep.romram, skuIds: [rep.skuId] }], compares: [] }]);
+      }
     }
     go('dashboard');
   };

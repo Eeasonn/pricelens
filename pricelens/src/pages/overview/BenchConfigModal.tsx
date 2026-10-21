@@ -140,7 +140,7 @@ export default function BenchConfigModal(props: {
     // 如果把删光竞品误写成 null，用户刚删除的竞品会在下一次读取时重新出现。
     saveBenchmark(draft); // 保留每行来源（矩阵/自动/替代），人工增加的行已标 manual
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
-    message.success('对标配置已保存，看板竞品已同步');
+    message.success('对标配置已保存，看板对比区已同步');
     onClose();
   };
 
@@ -378,7 +378,7 @@ export default function BenchConfigModal(props: {
           </div>
 
           <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: 8, lineHeight: '16px' }}>
-            保存 = 整表快照转为手动配置，可随时在左下角恢复 auto 默认；自动匹配开启时看板竞品立即跟随。
+            保存 = 整表快照转为手动配置，可随时在左下角恢复 auto 默认；自动匹配开启时看板对比区立即跟随。
           </div>
         </div>
       )}

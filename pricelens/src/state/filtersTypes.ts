@@ -1,6 +1,9 @@
 // ============================================================
 // 筛选状态类型（§5 五框 + 图表侧写入字段）
-// 核心字段冻结；筛选负责人（Agent B）只许追加字段，不许改动/删除已有字段
+// 第一百一十七轮（统一产品选择器）：own/competitors 两个并列字段退役，
+// 改为 mains——每个主分析产品一张卡：型号 + 配置若干 + 它自己的对比产品。
+// 「主分析 / 对比」是角色（用户指定），与数据层 is_own（华为产品的事实）正交：
+// 主品可任意品牌，对比区也可含华为产品。
 // ============================================================
 import type { AggMode, CurrencyMode, Granularity, Industry } from '../dataModel/types';
 import type { AlertProductRule, AlertThresholds, AlertTypeSwitches } from '../dataModel/alerts';
@@ -13,6 +16,14 @@ export interface ProductSelection {
   skuIds: string[]; // 所选颜色 SKU；1 个=该颜色；多个=均值
 }
 
+/** 主分析产品卡：一个型号一卡；配置 = 该型号勾选的 ROMRAM 组；
+ *  compares = 本主品自己的对比产品（任意品牌，含华为） */
+export interface MainProduct {
+  modelId: string;
+  configs: ProductSelection[]; // 每项 modelId === 本卡型号
+  compares: ProductSelection[]; // 本卡的对比区
+}
+
 export interface PlatformSelection {
   platforms: string[]; // 勾选的平台（勾平台=勾其下全部店铺）
   shopIds: string[]; // 可下钻只勾具体渠道（channel_id = 国家:平台:店铺类型）
@@ -21,13 +32,13 @@ export interface PlatformSelection {
 export interface FiltersState {
   countryCode: string; // 有数据的国家（dim_region.enabled）
   industry: Industry; // 手机/平板/穿戴/音频（IoT/PC 有数据无矩阵）
-  /** 主体模式（互斥）：'product' = 按产品勾选（现状）；'tier' = 按价格档位，
-   *  图表自动集结该档全部我司配置 + 各自对标竞品（tierSubjectSelections） */
+  /** 主体模式（互斥）：'product' = 按产品选主分析卡（现状）；'tier' = 按价格档位，
+   *  图表自动集结该档全部华为配置成卡 + 各自对标对比产品（tierSubjectSelections） */
   subjectMode: 'product' | 'tier';
   /** 按档位模式选中的价格档位（tier_code，dim_product.tier_code）；product 模式不生效 */
   tier: string | null;
-  own: ProductSelection[]; // 我司产品（可多选同图）
-  competitors: ProductSelection[]; // 默认视图带出我司默认产品的配置竞品（第二十五轮）；之后切换我司不自动带出，点「匹配竞品」重新匹配
+  /** 主分析产品卡列表（第一百一十七轮）：卡序 = 分离面板序；≥2 张卡看板自动分离 */
+  mains: MainProduct[];
   platform: PlatformSelection | null; // null=未选=该国默认电渠单平台口径；渠道内多店铺取最低在架价
   granularity: Granularity; // 默认 'month'（第二十五轮）
   /** 时间自适应（默认开）= 所选产品最早/最晚有效价格桶；上方筛选器手动修改即转为自定义。
@@ -39,9 +50,9 @@ export interface FiltersState {
   priceTypes: { discounted: boolean; rrp: boolean }; // 默认仅折后价（第五十轮：RRP 默认不勾选，手动勾回看账面价）
   agg: AggMode; // 数据汇总，仅月/季粒度生效，默认 'avg'
   /**
-   * 第三十四轮（迪总「尽量减少筛选器」）：自动匹配竞品常驻开关（默认开）——
-   * 开 = 竞品完全跟随我司产品（配置矩阵并集：换产品自动跟随、清空产品自动清空，
-   * 竞品级联禁用）；关 = 手动勾选竞品（原有语义）。
+   * 对比自动匹配（第三十四轮语义延续，第一百一十七轮按卡生效）：开 = 华为主品卡的
+   * 对比区随配置自动重算（对标矩阵并集，按卡配额截断）；任一卡手动改对比即退出，
+   * 非华为主品卡（矩阵无行）始终手动。
    */
   autoMatch: boolean;
   /**
@@ -60,28 +71,31 @@ export interface FiltersState {
 
 export interface FiltersActions {
   set(patch: Partial<FiltersState>): void;
-  /** §5.6：切换我司产品（反馈第 8 条修订：不再自动带出竞品组；图表侧监听 own 变化把档位/Y轴回自动） */
-  switchOwnProduct(sel: ProductSelection): void;
+  /** 回到默认视图（含数据默认主分析卡 + 其配置对比区） */
   reset(): void;
-  // ---- 以下为筛选负责人（Agent B）追加的动作（不改/不删上方已有三项） ----
+  // ---- 第一百一十七轮：主分析卡操作 ----
+  /** 卡片结构变化（增删卡/配置/换序）。autoMatch 开 = 华为主品卡对比区按矩阵重算
+   *  （配额收口）；非华为主品卡与手动退出自动后的一切对比区不动。 */
+  setMains(list: MainProduct[]): void;
+  /** 手动改某卡的对比区（增删/调色）：直接写入并退出自动匹配（原第三十四轮语义） */
+  setCardCompares(modelId: string, compares: ProductSelection[]): void;
+  /** 单卡「自动匹配」：按矩阵重算该卡对比区（不改 autoMatch 开关） */
+  autoMatchCard(modelId: string): void;
+  // ---- 粒度 ----
   /** §5.4/§5.6：切换粒度——保持可见时间跨度只换桶（dimTime 映射；空数据降级为不换算） */
   setGranularity(g: Granularity): void;
-  /** §5.2：级联勾选我司产品（可多选同图）；反馈第 8 条修订：不动竞品 */
-  setOwnSelection(list: ProductSelection[]): void;
-  /** 「匹配竞品」（反馈第 8 条）：把竞品组置为当前已选我司产品配置组的并集（主竞品在前），再次点击重新匹配 */
-  resetCompetitorsToConfig(): void;
-  /** 第三十四轮：切换自动匹配；开 = 立即按配置矩阵重算当前竞品组（关 = 保留当前竞品转为手动） */
+  /** 自动匹配开关。开 = 立即按配置矩阵重算全部华为主品卡；关 = 保留当前对比转为手动 */
   setAutoMatch(on: boolean): void;
   // ---- 第五十二轮 预警中心 ----
   /** 单系列订阅切换（看板图例页签铃铛） */
   toggleAlertSub(key: string): void;
-  /** 批量订阅/退订（总览型号块：我司全部 ROM + 其映射竞品一次订阅） */
+  /** 批量订阅/退订（总览型号块：全部 ROM + 其映射对比一次订阅） */
   setAlertSubs(keys: string[], on: boolean): void;
   // ---- 追补⑨ 预警细化 ----
   /** 四类全局开关（部分补丁） */
   setAlertTypes(patch: Partial<AlertTypeSwitches>): void;
   /** 四类全局阈值（部分补丁，小数） */
   setAlertThresholds(patch: Partial<AlertThresholds>): void;
-  /** 按产品覆写（rule = null 清除覆写回落全局） */
+  /** 按产品覆写（rule = null 清除覆写回落全局；own-gap 不参与产品级） */
   setAlertProductRule(key: string, rule: AlertProductRule | null): void;
 }

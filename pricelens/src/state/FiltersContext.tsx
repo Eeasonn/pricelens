@@ -1,10 +1,13 @@
 // ============================================================
 // 筛选状态：五框状态 + §5.6 联动 + localStorage 持久化（LPL3.filters）
-// + §13 CONFIG_CHANGED_EVENT 监听（反馈第 8 条修订：配置保存不再自动改竞品，
-//   竞品由筛选条「匹配竞品」按钮按配置矩阵带出）
+// + §13 CONFIG_CHANGED_EVENT 监听（配置保存后，自动匹配开 = 华为主品卡
+//   对比区立即按新矩阵重算）
 // 默认视图（2026-10-20 真实数据接入起）：周 · USD · 平台 = 该国默认电渠（「国家主要电渠」首个）
-// · 我司 = 产品竞品矩阵该国该产业首个有数型号的首个配置（最低价颜色）+ 其分国对标竞品
-// · 仅折后价 · 时间自适应开 · 竞品自动匹配开；切国家/产业时按同规则重算默认产品
+// · 主分析 = 产品竞品矩阵该国该产业首个有数型号的首个配置（最低价颜色）成卡
+//   + 其分国对标对比区 · 仅折后价 · 时间自适应开 · 对比自动匹配开；
+//   切国家/产业时按同规则重算默认产品
+// 第一百一十七轮（统一产品选择器）：own/competitors → mains（每主品卡自带对比区）；
+// 持久化 v11（v10 载荷自动迁移，见 mainSelection.migrateV10）。
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -14,6 +17,7 @@ import type {
   AlertTypeSwitches,
   FiltersActions,
   FiltersState,
+  MainProduct,
   PlatformSelection,
   ProductSelection,
 } from './filtersTypes';
@@ -26,6 +30,7 @@ import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
+import { autoComparesFor, migrateV10, mainsValidFor, reapplyAuto } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -62,8 +67,7 @@ export const defaultFilters: FiltersState = {
   industry: 'phone',
   subjectMode: 'product', // 主体模式默认按产品（现状行为）；档位模式为附加视角
   tier: null,
-  own: [],
-  competitors: [],
+  mains: [],
   platform: DEFAULT_PLATFORM_SELECTION, // null = 该国默认电渠
   granularity: 'week', // 第四十二轮：默认周（迪总「时间默认取周」）
   adaptive: true, // 第十九轮：时间自适应默认开
@@ -72,7 +76,7 @@ export const defaultFilters: FiltersState = {
   currency: 'usd', // 默认 USD（真实数据按行内汇率折算）
   priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
   agg: 'avg',
-  autoMatch: true, // 第三十四轮：自动匹配竞品默认开（竞品跟随我司产品，迪总「减少筛选器」）
+  autoMatch: true, // 第三十四轮：对比自动匹配默认开（对比区随华为主品跟随，迪总「减少筛选器」）
   alertSubs: [], // 第五十二轮：预警中心订阅（默认空，入口 = 看板页签铃铛 / 总览型号块）
   alertTypes: DEFAULT_ALERT_TYPES, // 追补⑨：四类预警全局开关
   alertThresholds: DEFAULT_ALERT_THRESHOLDS, // 追补⑨：四类全局阈值（旧版共用 1.5% 一条线）
@@ -92,8 +96,10 @@ export const defaultFilters: FiltersState = {
  * v9（2026-10-16，追补⑨）：预警细化——alertThreshold 单阈值 → alertTypes/alertThresholds
  *   四类开关+阈值 + alertProducts 按产品覆写；v8 持久化迁移保留订阅与旧阈值（三类同值）。
  * v10（2026-10-20）：真实数据接入——SKU/渠道 id 空间全部更换，旧持久化整体失效落新默认。
+ * v11（2026-10-21，第一百一十七轮）：own/competitors → mains（每主品卡自带对比区）；
+ *   v10 载荷读入后自动迁移（migrateV10：自动=逐卡重算、手动=按旧面板口径分配）。
  */
-const DEFAULTS_V = 10;
+const DEFAULTS_V = 11;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -114,6 +120,17 @@ function isProductSelection(value: unknown): value is ProductSelection {
 
 function isProductSelectionArray(value: unknown): value is ProductSelection[] {
   return Array.isArray(value) && value.every(isProductSelection);
+}
+
+function isMainProduct(value: unknown): value is MainProduct {
+  if (!isRecord(value)) return false;
+  return typeof value.modelId === 'string'
+    && isProductSelectionArray(value.configs)
+    && isProductSelectionArray(value.compares);
+}
+
+function isMainProductArray(value: unknown): value is MainProduct[] {
+  return Array.isArray(value) && value.every(isMainProduct);
 }
 
 function isPlatformSelection(value: unknown): value is PlatformSelection | null {
@@ -171,20 +188,30 @@ function isAlertProducts(value: unknown): value is FiltersState['alertProducts']
   });
 }
 
+/** 读出的持久化载荷：v11 载 mains；v10 载旧 own/competitors（随后迁移） */
+interface PersistedPayload extends Partial<FiltersState> {
+  v?: number;
+  alertThreshold?: number;
+  legacyOwn?: ProductSelection[];
+  legacyCompetitors?: ProductSelection[];
+}
+
 /**
  * 仅接收可安全消费的持久化字段。
  * localStorage 可能来自旧版本、手工编辑或损坏 JSON，不能直接 spread 到状态里，
- * 否则 `own: null`、`platform: "..."` 等值会在渲染期间触发运行时异常。
+ * 否则 `mains: null`、`platform: "..."` 等值会在渲染期间触发运行时异常。
  */
-function readPersistedState(raw: string | null): Partial<FiltersState> & { v?: number; alertThreshold?: number } | null {
+function readPersistedState(raw: string | null): PersistedPayload | null {
   if (!raw) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed) || parsed.v !== DEFAULTS_V) return null;
+    if (!isRecord(parsed)) return null;
+    const v = typeof parsed.v === 'number' ? parsed.v : 0;
+    if (v !== 10 && v !== 11) return null;
 
-    const checks: Array<[keyof FiltersState, boolean]> = [
-      ['own', isProductSelectionArray(parsed.own)],
-      ['competitors', isProductSelectionArray(parsed.competitors)],
+    const checks: Array<[keyof FiltersState | 'legacyOwn' | 'legacyCompetitors', boolean]> = [
+      [v === 11 ? 'mains' : 'legacyOwn', v === 11 ? isMainProductArray(parsed.mains) : isProductSelectionArray(parsed.own)],
+      [v === 11 ? ('mains' as const) : 'legacyCompetitors', v === 11 ? isMainProductArray(parsed.mains) : isProductSelectionArray(parsed.competitors)],
       ['platform', isPlatformSelection(parsed.platform)],
       ['granularity', parsed.granularity === 'week' || parsed.granularity === 'month' || parsed.granularity === 'quarter'],
       ['adaptive', typeof parsed.adaptive === 'boolean'],
@@ -199,13 +226,15 @@ function readPersistedState(raw: string | null): Partial<FiltersState> & { v?: n
       ['alertThresholds', isAlertThresholds(parsed.alertThresholds)],
       ['alertProducts', isAlertProducts(parsed.alertProducts)],
     ];
-    // v8 predates the split alert fields; those are supplied by defaults/migration below.
-    const required = checks.filter(([key]) => parsed.v === DEFAULTS_V || !['alertTypes', 'alertThresholds', 'alertProducts'].includes(key));
+    const required = checks.filter(([key]) => key !== 'alertTypes' && key !== 'alertThresholds' && key !== 'alertProducts');
     if (required.some(([, valid]) => !valid)) return null;
 
-    const rest: Partial<FiltersState> & { v?: number; alertThreshold?: number } = { v: parsed.v };
+    const rest: PersistedPayload = { v };
     for (const [key, valid] of checks) {
-      if (valid) (rest as UnknownRecord)[key] = parsed[key];
+      if (!valid) continue;
+      if (key === 'legacyOwn') rest.legacyOwn = parsed.own as ProductSelection[];
+      else if (key === 'legacyCompetitors') rest.legacyCompetitors = parsed.competitors as ProductSelection[];
+      else if (key !== 'mains' || v === 11) (rest as UnknownRecord)[key] = (parsed as UnknownRecord)[key];
     }
     if (isFiniteNumber(parsed.alertThreshold)) rest.alertThreshold = parsed.alertThreshold;
     return rest;
@@ -216,9 +245,10 @@ function readPersistedState(raw: string | null): Partial<FiltersState> & { v?: n
 
 /**
  * 某国某产业的默认勾选：
- * - 我司 = 产品竞品矩阵该国该产业首个有数型号（dim_region.default_own_models），取其首个配置
- *   （配置名升序，须在该国有数据）的最低价颜色；矩阵未覆盖的国家回退该国该产业首个我司型号
- * - 竞品 = 该我司组的分国对标并集（groupsFromBenchmark，主竞品在前）
+ * - 主分析 = 产品竞品矩阵该国该产业首个有数型号（dim_region.default_own_models），
+ *   取其首个配置（配置名升序，须在该国有数据）的最低价颜色成卡；
+ *   矩阵未覆盖的国家回退该国该产业首个华为型号
+ * - 对比区 = 该主品配置的分国对标（groupsFromBenchmark，主竞品在前）
  */
 function computeDataDefaults(countryCode: string, industry: Industry): Partial<FiltersState> {
   if (!dimProduct.length) return {};
@@ -228,52 +258,46 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
   const inCountry = (p: (typeof dimProduct)[number]) => p.is_own && p.industry === industry && p.countries.includes(countryCode);
   let candidates = preferred ? dimProduct.filter((p) => p.model_id === preferred && inCountry(p)) : [];
   if (!candidates.length) candidates = dimProduct.filter(inCountry);
-  if (!candidates.length) return { own: [], competitors: [] };
+  if (!candidates.length) return { mains: [] };
   const modelId = modelIdOf(candidates[0]);
   const romrams = [...new Set(candidates.filter((p) => p.model_id === modelId).map((p) => p.romram))].sort();
   for (const romram of romrams) {
     const skuId = lowestPriceColorSku(modelId, romram, countryCode);
     if (!skuId) continue;
-    const own: ProductSelection[] = [{ modelId, romram, skuIds: [skuId] }];
-    return { own, competitors: groupsFromBenchmark(own) };
+    const config: ProductSelection = { modelId, romram, skuIds: [skuId] };
+    const mains: MainProduct[] = [{ modelId, configs: [config], compares: groupsFromBenchmark([config]) }];
+    return { mains };
   }
-  return { own: [], competitors: [] };
+  return { mains: [] };
 }
 
-/** 勾选组是否仍属于该国该产业（切国家/产业后用来判定是否需要重算默认） */
-function selectionsValidFor(list: ProductSelection[], countryCode: string, industry: Industry): boolean {
-  if (!list.length) return false;
-  return list.every((sel) =>
-    dimProduct.some((p) => p.model_id === sel.modelId && p.industry === industry && p.countries.includes(countryCode)),
-  );
-}
-
-/** 口径（国家/产业）变化后的状态整理：规范作用域、平台回默认电渠、我司/竞品按新口径重算 */
+/** 口径（国家/产业）变化后的状态整理：规范作用域、平台回默认电渠、主分析按新口径重算；
+ *  自动匹配开时对比区随新口径矩阵重算（reapplyAuto），手动模式保留用户挑选 */
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
   syncScopeRegistries(scope.countryCode);
   const platformOk =
     s.platform == null ||
     s.platform.shopIds.every((id) => id.startsWith(`${scope.countryCode}:`));
-  const needOwn = force || !selectionsValidFor(s.own, scope.countryCode, scope.industry);
-  const defaults = needOwn ? computeDataDefaults(scope.countryCode, scope.industry) : {};
-  const next: FiltersState = { ...s, ...scope, platform: platformOk ? s.platform : null, ...defaults };
-  // 自动匹配开且竞品组不属于该国（链接/持久化来自别国口径）→ 按该国分国对标重算
-  if (!needOwn && next.autoMatch && next.competitors.length && !selectionsValidFor(next.competitors, scope.countryCode, scope.industry)) {
-    next.competitors = groupsFromBenchmark(next.own);
-  }
+  const needMain = force || !mainsValidFor(s.mains, scope.countryCode, scope.industry);
+  const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry) : {};
+  const next: FiltersState = {
+    ...s,
+    ...scope,
+    platform: platformOk ? s.platform : null,
+    ...defaults,
+    ...(needMain ? {} : s.autoMatch ? { mains: reapplyAuto(s.mains) } : {}),
+  };
   return next;
 }
 
 /**
  * 启动恢复：
- * 1) 无持久化 / 持久化版本旧于 DEFAULTS_V → 新默认视图（月 · USD · 我司+配置竞品）；
- * 2) 版本相符 → competitors 照原样恢复（可能为空，不自动补竞品）；
- *    但若我司勾选为空而数据此刻已就绪（典型：数据先生成前打开过、造数后重建），
- *    仅补默认我司产品+其配置竞品。
- * 3) 第一百一十六轮：竞品自动匹配开时，启动即按当前生效矩阵重算竞品——
- *    持久化的竞品清单可能产自旧维表（如「每配置最多 4 款」截断生效前），照原样
- *    复用会与看板实际带出口径脱节；手动模式（autoMatch 关）不动用户勾选。
+ * 1) 无持久化 / 持久化版本旧于 v10 → 新默认视图（周 · USD · 默认主分析卡 + 其配置对比）；
+ * 2) v11 → mains 照原样恢复；v10 → own/competitions 迁移成卡（migrateV10）；
+ * 3) 对比自动匹配开时，启动即按当前生效矩阵重算华为主品卡对比区——
+ *    持久化的对比清单可能产自旧维表/旧矩阵（第一百一十六轮自愈语义延续）；
+ *    手动模式（autoMatch 关）不动用户挑选。
  */
 function loadBaseState(): FiltersState {
   let restored: FiltersState | null = null;
@@ -285,8 +309,8 @@ function loadBaseState(): FiltersState {
   }
   const parsed = readPersistedState(raw);
   if (parsed) {
-    const { alertThreshold, v: _v, ...rest } = parsed;
-    restored = { ...defaultFilters, ...rest };
+    const { alertThreshold, v: _v, legacyOwn, legacyCompetitors, ...rest } = parsed;
+    restored = { ...defaultFilters, ...rest } as FiltersState;
     // v8 → v9 迁移（追补⑨）：旧单阈值 → 三类同值；订阅保留；own-gap 落缺省 15%
     if (parsed.v === 8 && typeof alertThreshold === 'number') {
       restored.alertThresholds = {
@@ -296,10 +320,14 @@ function loadBaseState(): FiltersState {
         'platform-gap': alertThreshold,
       };
     }
+    // v10 → v11（第一百一十七轮）：own/competitors → mains
+    if (parsed.v === 10) {
+      restored.mains = migrateV10(legacyOwn ?? [], legacyCompetitors ?? [], restored.autoMatch);
+    }
   }
   if (!restored) restored = { ...defaultFilters };
-  if (restored.autoMatch && restored.own.length) {
-    restored.competitors = groupsFromBenchmark(restored.own);
+  if (restored.autoMatch && restored.mains.length) {
+    restored.mains = reapplyAuto(restored.mains);
   }
   return applyScopeDefaults(restored, false);
 }
@@ -307,16 +335,16 @@ function loadBaseState(): FiltersState {
 /** 启动时才应用 URL；运行中的 reset 使用 loadBaseState，避免 URL 覆写锁死重置结果。 */
 function applyUrlOverrides(base: FiltersState): FiltersState {
   // 追补⑩（建议③）：URL 覆写最后应用——分享链接 > 持久化 > 默认视图；
-  // own 覆写存在时竞品按现行 autoMatch 规则带出（与手选同语义）
+  // 主分析覆写存在时对比区按现行 autoMatch 规则带出（与手选同语义）
   const url = readUrlOverrides();
   let restored = base;
-  // 先把数据层缺省国家切到链接指定国家，再按该国对标矩阵带出竞品（否则会沿用持久化国家的对标）
+  // 先把数据层缺省国家切到链接指定国家，再按该国对标矩阵带出对比（否则会沿用持久化国家的对标）
   syncScopeRegistries(url.filters.countryCode ?? base.countryCode);
-  if (url.filters.own?.length) {
+  if (url.filters.mains?.length) {
     restored = {
       ...restored,
       ...url.filters,
-      ...(restored.autoMatch ? { competitors: groupsFromBenchmark(url.filters.own) } : {}),
+      ...(restored.autoMatch ? { mains: reapplyAuto(url.filters.mains) } : {}),
     };
   } else if (Object.keys(url.filters).length > 0) {
     restored = { ...restored, ...url.filters };
@@ -335,7 +363,7 @@ interface FiltersCtx {
 
 const Ctx = createContext<FiltersCtx>({
   state: defaultFilters,
-  actions: { set: () => {}, switchOwnProduct: () => {}, reset: () => {}, setGranularity: () => {}, setOwnSelection: () => {}, resetCompetitorsToConfig: () => {}, setAutoMatch: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
+  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, autoMatchCard: () => {}, setGranularity: () => {}, setAutoMatch: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
 });
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
@@ -353,30 +381,31 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   // 追补⑩（建议③）：筛选口径同步到 URL query（replaceState 不产生历史记录；
   // 只写本 Provider 管的键，页签 p 由 PageProvider 写，互不覆盖）
   useEffect(() => {
-    const own = state.own.map((s) => `${s.modelId}__${s.romram.replace(/\s+/g, '')}`).join(',');
+    const mainKeys = state.mains.flatMap((m) =>
+      m.configs.map((s) => `${s.modelId}__${s.romram.replace(/\s+/g, '')}`),
+    );
     const shop = state.platform?.shopIds[0] ?? null;
     writeUrlPatch({
       c: state.countryCode,
       i: state.industry,
       g: state.granularity,
       cur: state.currency,
-      own: own || null,
+      main: mainKeys.join(',') || null,
       shop,
       // 档位模式才写主体模式参数，按产品视图的链接保持历史形态
       m: state.subjectMode === 'tier' ? 'tier' : null,
       t: state.subjectMode === 'tier' ? state.tier : null,
     });
-  }, [state.countryCode, state.industry, state.granularity, state.currency, state.own, state.platform, state.autoMatch, state.subjectMode, state.tier]);
+  }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform, state.autoMatch, state.subjectMode, state.tier]);
 
-  // §13：对标配置保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算竞品组
-  // （第三十四轮引入；矩阵维护入口现为总览行尾「＋添加竞品」浮窗，关闭自动匹配则不动当前竞品）；
-  // fx 为读取时取值，图表侧自行监听。
+  // §13：对标配置保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算
+  // 华为主品卡对比区（矩阵维护入口 = 总览「＋添加竞品」浮窗 / 配置页）；
+  // 手动模式不动用户挑选。fx 为读取时取值，图表侧自行监听。
   useEffect(() => {
     const handler = () => {
       // Always create a new state object so chart consumers re-read configuration
       // getters (notably the reference FX rate) even when auto matching is off.
-      // Competitor selections remain untouched in manual mode.
-      setState((s) => ({ ...s, ...(s.autoMatch ? { competitors: groupsFromBenchmark(s.own) } : {}) }));
+      setState((s) => ({ ...s, ...(s.autoMatch ? { mains: reapplyAuto(s.mains) } : {}) }));
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, handler);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, handler);
@@ -385,8 +414,8 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   // actions 只依赖 setState（函数式更新），全量稳定，避免图表侧监听 actions 变化
   const actions = useMemo<FiltersActions>(
     () => ({
-      /** 通用补丁（平台/币种/时间范围/竞品临时增删/价格类型/agg 等直接字段）；
-       *  国家/产业变化 = 口径切换：同步数据层缺省国家，平台回默认电渠，我司/竞品按矩阵重算 */
+      /** 通用补丁（平台/币种/时间范围/价格类型/agg 等直接字段）；
+       *  国家/产业变化 = 口径切换：同步数据层缺省国家，平台回默认电渠，主分析按矩阵重算 */
       set: (patch) =>
         setState((s) => {
           const next = { ...s, ...patch };
@@ -396,20 +425,30 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           return scopeChanged ? applyScopeDefaults(next, true) : next;
         }),
 
+      /** 回到默认视图（含数据默认主分析卡 + 其配置对比区） */
+      reset: () => setState(loadBaseState()),
+
       /**
-       * §5.6 切换我司产品：own 置为该产品。第三十四轮：autoMatch 开 = 竞品自动跟随
-       * 新产品（配置矩阵并集）；关 = 不动竞品。图表侧监听 state.own 变化把档位 chips /
-       * Y 轴回自动（本 action 只保证 state 正确）。
+       * 主分析卡结构变化（第一百一十七轮）：卡/配置增删、换序。autoMatch 开 =
+       * 华为主品卡对比区随新配置重算（配额收口）；关 = 全部保留（手动语义）。
        */
-      switchOwnProduct: (sel) =>
+      setMains: (list) =>
+        setState((s) => ({ ...s, mains: s.autoMatch ? reapplyAuto(list) : list })),
+
+      /** 手动改某卡对比区：写入即退出自动匹配（原第三十四轮语义，全局开关） */
+      setCardCompares: (modelId, compares) =>
         setState((s) => ({
           ...s,
-          own: [sel],
-          ...(s.autoMatch ? { competitors: groupsFromBenchmark([sel]) } : {}),
+          autoMatch: false,
+          mains: s.mains.map((c) => (c.modelId === modelId ? { ...c, compares } : c)),
         })),
 
-      /** 回到默认视图（含数据默认我司勾选 + 其配置竞品） */
-      reset: () => setState(loadBaseState()),
+      /** 单卡「自动匹配」：按矩阵重算该卡（不动 autoMatch 开关——手动模式下也可单卡取回） */
+      autoMatchCard: (modelId) =>
+        setState((s) => ({
+          ...s,
+          mains: s.mains.map((c) => (c.modelId === modelId ? { ...c, compares: autoComparesFor(c) } : c)),
+        })),
 
       /**
        * §5.4/§5.6 切换粒度：保持可见时间跨度只换桶。
@@ -423,36 +462,11 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
         }),
 
       /**
-       * §5.2②：级联勾选我司产品（可多选同图）。第三十四轮：autoMatch 开 = 竞品自动
-       * 跟随（配置矩阵并集）；关 = 不动竞品（保持当前值，手动勾选语义）；
-       * 竞品临时增删不回写配置（§5.2③/§13）。
-       */
-      setOwnSelection: (list) =>
-        setState((s) => ({
-          ...s,
-          own: list,
-          ...(s.autoMatch ? { competitors: groupsFromBenchmark(list) } : {}),
-        })),
-
-      /**
-       * 「匹配竞品」（反馈第 8 条）：把竞品组置为当前所有已选我司产品的配置组并集
-       * （配置页 manual 优先、回退 dimBenchmark auto；主竞品在前）。再次点击重新匹配
-       * （覆盖临时改动）；带出后临时增删走 set()，不回写配置。
-       */
-      resetCompetitorsToConfig: () =>
-        setState((s) => ({ ...s, competitors: groupsFromBenchmark(s.own) })),
-
-      /**
-       * 第三十四轮：自动匹配开关。开 = 立即按配置矩阵重算当前竞品组；
-       * 关 = 保留当前竞品转为手动（可自由增删）。
-       * 平台现在是独立的图表口径，切换竞品匹配方式不改平台。
+       * 自动匹配开关。开 = 立即按配置矩阵重算全部华为主品卡；
+       * 关 = 保留当前对比转为手动（可自由增删）。
        */
       setAutoMatch: (on) =>
-        setState((s) => ({
-          ...s,
-          autoMatch: on,
-          ...(on ? { competitors: groupsFromBenchmark(s.own) } : {}),
-        })),
+        setState((s) => ({ ...s, autoMatch: on, ...(on ? { mains: reapplyAuto(s.mains) } : {}) })),
 
       /** 第五十二轮：单系列订阅切换（看板图例页签铃铛） */
       toggleAlertSub: (key) =>
