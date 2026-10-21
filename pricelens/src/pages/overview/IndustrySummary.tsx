@@ -45,7 +45,7 @@ export default function IndustrySummary({
         marginTop: space.base,
       }}
     >
-      <SummaryCard title="我司型号" value={summary.ownModels} detail={`${summary.ownRoms} 个 ROM`} />
+      <SummaryCard title="自有型号" value={summary.ownModels} detail={`${summary.ownRoms} 个 ROM`} />
       <SummaryCard title="竞品型号" value={competitorModels} detail="已纳入当前对标关系" />
       <SummaryCard title="覆盖价位带" value={priceBands} detail="按上市价归档" />
       <SummaryCard

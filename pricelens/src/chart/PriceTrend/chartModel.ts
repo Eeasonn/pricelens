@@ -187,6 +187,10 @@ export function buildEndpointMarks(series: Series[]): Map<string, SeriesMark> {
 export interface LabelPlan {
   dy: Record<string, Record<number, number>>;
   names: SeriesNameItem[];
+  /** 第一百一十四轮（精简标签模式）：seriesKey → pointIdx → 'top' | 'bottom'。
+   *  仅 compact 模式填充（最高=点上、最低=点下、最新=按来向避线）；detail 模式
+   *  恒 'top'（buildOption 缺省），输出与旧口径逐字节一致 */
+  pos?: Record<string, Record<number, 'top' | 'bottom'>>;
 }
 
 const EMPTY_LABEL_PLAN: LabelPlan = { dy: {}, names: [] };
@@ -212,11 +216,19 @@ export function buildLabelPlan(p: {
   /** 第一百一十三轮（评审）：true = 不生成任何名称药丸（量价看板面板头已带产品名，
    *  面板内折线起点旁的药丸撤掉，空间留给绘图区） */
   hideNames?: boolean;
+  /** 第一百一十四轮（评审）：'compact' = 精简标签——每系列只标最高/最低/最新三个价，
+   *  且位置避开折线（最高=点上、最低=点下、最新=按来向反向）；不进避让推挤
+   *  （三标签几何上天然分离，白底胶囊兜底可读）。缺省 'detail' = 全量标签+避让 */
+  labelMode?: 'detail' | 'compact';
 }): LabelPlan {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
   const items: AvoidItem[] = [];
   const zoneItems: AvoidItem[] = [];
+  // 第一百一十四轮：精简标签直出表（不进避让推挤；几何天然分离 + 白底胶囊兜底）
+  const compactDy: Record<string, Record<number, number>> = {};
+  const compactPos: Record<string, Record<number, 'top' | 'bottom'>> = {};
+  const compact = p.labelMode === 'compact';
   const nameW = (t: string): number => NAME_LOGO_W + t.length * (11 * 0.62) + 6;
   const priceW = (t: string): number => t.length * (fontSize.bodySm * 0.62) + 8;
   // 多系列（超聚焦阈值）：最大/最小从必放降为候选——必放项只保留首/末/S/E
@@ -234,6 +246,26 @@ export function buildLabelPlan(p: {
     for (const i of valIdx) {
       if ((primaryPriceOf(pts[i], priceTypes) ?? 0) > (primaryPriceOf(pts[maxI], priceTypes) ?? 0)) maxI = i;
       if ((primaryPriceOf(pts[i], priceTypes) ?? 0) < (primaryPriceOf(pts[minI], priceTypes) ?? 0)) minI = i;
+    }
+    // ---- 第一百一十四轮：精简标签（评审）——每系列只标 最高/最低/最新 三个价 ----
+    // 位置避线：最高点上必空（无点更高）→ 上；最低点下必空 → 下；最新看来向
+    // （前一点在其上 → 标下方，反之上方）。其余价格标签一概不出。
+    if (compact) {
+      const lastI = valIdx[valIdx.length - 1];
+      const allowed = new Set<number>([maxI, minI, lastI]);
+      const posOf = (i: number): 'top' | 'bottom' => {
+        if (i === maxI) return 'top';
+        if (i === minI) return 'bottom';
+        const prev = primaryPriceOf(pts[valIdx[valIdx.length - 2]], priceTypes);
+        const cur = primaryPriceOf(pts[i], priceTypes);
+        return prev != null && cur != null && cur < prev ? 'bottom' : 'top';
+      };
+      for (const i of allowed) {
+        if (absorbed.has(i)) continue;
+        (compactDy[s.key] ??= {})[i] = 0;
+        (compactPos[s.key] ??= {})[i] = posOf(i);
+      }
+      continue;
     }
     const p0 = new Set<number>([valIdx[0], valIdx[valIdx.length - 1]]);
     if (!demoteExtremes) {
@@ -364,7 +396,10 @@ export function buildLabelPlan(p: {
       hidden: e.hidden,
     }));
   }
-  return { dy: res.dy, names };
+  // 精简标签直出表覆盖合并（compact 模式下 res.dy 恒空——价格项未进避让）
+  return compact
+    ? { dy: { ...res.dy, ...compactDy }, names, pos: compactPos }
+    : { dy: res.dy, names };
 }
 
 // ---------------- ECharts option（值轴隐藏，数据喂归一化伪值） ----------------
@@ -401,11 +436,15 @@ export function buildOption(p: {
    *  缺省 false = 与旧口径一致（时间标签由底部刷选条统一承担）。开启后 ECharts
    *  自动按宽度抽稀（hideOverlap），标签画在绘图区下缘的既有留白内 */
   xLabels?: boolean;
+  /** 第一百一十四轮（评审）：'compact' = 精简标签样式（白底描边胶囊，压线也留白可读）；
+   *  标签集已在 buildLabelPlan 按模式裁剪（最高/最低/最新），此处只管样式与上下位 */
+  labelMode?: 'detail' | 'compact';
 }): EChartsOption | null {
   if (!p.geom) return null;
   const { geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks } = p;
   const first = series[0];
   if (!first) return null;
+  const compact = p.labelMode === 'compact';
   const focusOn = p.focusKey != null || (p.focusKeys != null && p.focusKeys.length > 0);
   const isLit = (key: string): boolean =>
     p.focusKeys != null && p.focusKeys.length > 0 ? p.focusKeys.includes(key) : key === p.focusKey;
@@ -418,6 +457,7 @@ export function buildOption(p: {
 
   for (const s of series) {
     const dyMap = labelPlan.dy[s.key] ?? {};
+    const posMap = labelPlan.pos?.[s.key];
     const dim = focusOn && !isLit(s.key); // 聚焦高亮：其余系列降透明
     if (priceTypes.discounted) {
       // 端点（第十四轮徽标 + 第二十轮修复）：带标记的点不再画默认符号——改用
@@ -432,8 +472,8 @@ export function buildOption(p: {
           symbolSize: mark || absorbed.has(i) ? 0 : undefined,
           label: {
             show: pt.price != null && !dim && dyMap[i] !== undefined,
-            position: 'top' as const,
-            distance: mark ? endpointLabelDistance(mark) : LABEL_DISTANCE,
+            position: posMap?.[i] ?? ('top' as const),
+            distance: compact ? 6 : mark ? endpointLabelDistance(mark) : LABEL_DISTANCE,
             offset: [0, dyMap[i] ?? 0],
             color: s.color, // 第四十二轮：数值标签跟品牌色
             fontSize: fontSize.bodySm,
@@ -441,6 +481,10 @@ export function buildOption(p: {
             fontFamily: font.family,
             lineHeight: LABEL_LINE_HEIGHT,
             formatter: pt.price != null ? fmtInt(pt.price) : '',
+            // 第一百一十四轮：精简标签白底描边胶囊（Keepa 式）——即使压线也留白可读
+            ...(compact
+              ? { backgroundColor: '#fff', borderColor: s.color, borderWidth: 1, borderRadius: 3, padding: [1, 5] }
+              : {}),
           },
         };
       });
@@ -483,8 +527,8 @@ export function buildOption(p: {
         value: pt.rrp != null ? yNormOf(geom, pt.rrp) : null,
         label: {
           show: !dim && !priceTypes.discounted && pt.rrp != null && dyMap[i] !== undefined,
-          position: 'top' as const,
-          distance: LABEL_DISTANCE,
+          position: posMap?.[i] ?? ('top' as const),
+          distance: compact ? 6 : LABEL_DISTANCE,
           offset: [0, dyMap[i] ?? 0],
           color: s.color, // 第四十二轮：数值标签跟品牌色
           fontSize: fontSize.bodySm,
@@ -492,6 +536,9 @@ export function buildOption(p: {
           fontFamily: font.family,
           lineHeight: LABEL_LINE_HEIGHT,
           formatter: pt.rrp != null ? fmtInt(pt.rrp) : '',
+          ...(compact
+            ? { backgroundColor: '#fff', borderColor: s.color, borderWidth: 1, borderRadius: 3, padding: [1, 5] }
+            : {}),
         },
       }));
       sArr.push({

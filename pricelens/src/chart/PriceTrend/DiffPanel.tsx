@@ -293,11 +293,6 @@ export default function DiffPanel(props: {
                 >
                   {names[r]}
                 </span>
-                {s.isOwn && (
-                  <span style={{ fontSize: 10.5, fontWeight: 600, color: '#0053c2', background: '#e8f1ff', borderRadius: radius.pill, padding: '0 7px', lineHeight: '16px', flexShrink: 0 }}>
-                    我司
-                  </span>
-                )}
               </div>
               {series.map((sc, c) => {
                 const cell = matrix[r][c];

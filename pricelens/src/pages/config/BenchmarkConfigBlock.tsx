@@ -72,7 +72,7 @@ export default function BenchmarkConfigBlock() {
           options={industries.map((i) => ({ label: INDUSTRY_LABELS[i], value: i }))}
         />
         <span className="tnum" style={{ fontSize: fontSize.caption, color: color.mute }}>
-          {ownModels.length} 个我司型号 · {totalPairs} 条对标
+          {ownModels.length} 个自有型号 · {totalPairs} 条对标
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           {(Object.keys(SOURCE_TAG) as DimBenchmark['source'][]).map((k) => (
@@ -86,7 +86,7 @@ export default function BenchmarkConfigBlock() {
       </div>
 
       {ownModels.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该国该产业暂无我司产品数据" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该国该产业暂无自有产品数据" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
           {ownModels.map((m) => (

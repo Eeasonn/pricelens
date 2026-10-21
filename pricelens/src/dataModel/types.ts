@@ -185,6 +185,7 @@ export interface SeriesPoint {
   offer: OfferInfo | null;
   url: string;
   shopName: string | null; // 取价店铺（渠道显示名 · 店铺名）
+  platform?: string | null; // 取价平台（dim_channel.platform，随最低价行带出；明细表平台列）
 }
 
 /** 一条系列 = 一个"产品名+配置"聚合（多颜色 SKU 已按均值聚合） */

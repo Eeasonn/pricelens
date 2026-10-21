@@ -138,6 +138,11 @@ export default function PriceTrend(props: {
   const [showYTicks, setShowYTicks] = useState(true); // Y 刻度线（第九十一轮恢复；默认开）
   // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑），缺省
   const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
+  // 价格显示（第一百一十四轮，评审）：精简 = 每系列仅最高/最低/最新三价直标（默认）；
+  // 详细 = 现行全量标签口径。价格看板合并/分离两模式同值
+  const [labelMode, setLabelMode] = useState<'detail' | 'compact'>('compact');
+  // 第一百一十四轮：分离模式横向虚线（跨面板共享悬停纵向位置；与 splitHoverIdx 同机制）
+  const [splitCrossY, setSplitCrossY] = useState<number | null>(null);
 
   // §5.6/§6.6：切换产品/价格类型/币种 → 滑杆倍率复位 ×1；图例显隐一并复位
   const yAxisResetKey = JSON.stringify([effOwn, effComps, state.priceTypes, state.currency]);
@@ -830,6 +835,20 @@ export default function PriceTrend(props: {
               平台 <span style={{ width: 160 }}><PlatformBox /></span>
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>币种 <CurrencyBox /></span>
+            {/* 价格显示（第一百一十四轮，评审）：与币种切换同款控件位——精简 = 图上仅
+                最高/最低/最新三价（默认），详细 = 全量价格标签 */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              价格显示{' '}
+              <Segmented
+                size="small"
+                value={labelMode}
+                onChange={(v) => setLabelMode(v as 'detail' | 'compact')}
+                options={[
+                  { label: '精简', value: 'compact' },
+                  { label: '详细', value: 'detail' },
+                ]}
+              />
+            </span>
             {/* 时点摘要唯一入口（第112轮）：纯手动开合，打开态 primary 高亮 */}
             <Button
               size="small"
@@ -877,7 +896,7 @@ export default function PriceTrend(props: {
           }}
         >
           {compOnly && (
-            <span>未选择我司产品 · 当前为竞品对比视角；在上方筛选器选择我司产品后可进行对标分析</span>
+            <span>未选择自有产品 · 当前为竞品对比视角；在上方筛选器选择自有产品后可进行对标分析</span>
           )}
           {noComp && (
             <>
@@ -1084,7 +1103,6 @@ export default function PriceTrend(props: {
                         axisChrome={false} // 面板不画轴（追补⑤）：档位带/刻度/断轴号在共享轴列
                         showYTicks={showYTicks}
                         enableDrill={state.granularity !== 'week'}
-                        enableJump={state.granularity === 'week'}
                         enableOffer={state.granularity === 'week' && offersOn}
                         onDrill={makePanelDrill(p)}
                         windowKey={`${win.s}:${win.e}:${p.key}`}
@@ -1095,6 +1113,7 @@ export default function PriceTrend(props: {
                         hiddenKeys={hiddenKeys}
                         onToggleHidden={toggleLegend} // 药丸点击 = 切换折线显隐（取代顶部页签）
                         lineShape={lineShape}
+                        labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
                         promoBandsOn={promoBandsOn}
                         promoBands={promoBands}
                         maxMinOn={maxMinOn}
@@ -1103,6 +1122,8 @@ export default function PriceTrend(props: {
                         showXLabels
                         crosshairIdx={splitHoverIdx}
                         onCrosshairMove={setSplitHoverIdx}
+                        crosshairY={splitCrossY} // 第一百一十四轮：横向虚线跨全部面板
+                        onCrosshairYMove={setSplitCrossY}
                         emptyHint="该配置在所选时间范围内无数据"
                       />
                     </div>
@@ -1150,7 +1171,6 @@ export default function PriceTrend(props: {
             showYTicks={showYTicks}
             onShowYTicks={setShowYTicks}
             enableDrill={state.granularity !== 'week'}
-            enableJump={state.granularity === 'week'}
             enableOffer={state.granularity === 'week' && offersOn}
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
@@ -1162,6 +1182,7 @@ export default function PriceTrend(props: {
             onYCompress={setYCompress}
             lineShape={lineShape}
             onLineShape={setLineShape}
+            labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
             promoBandsOn={promoBandsOn}
             onPromoBandsOn={setPromoBandsOn}
             promoBands={promoBands}

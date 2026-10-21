@@ -223,6 +223,59 @@ describe('buildLabelPlan', () => {
   });
 });
 
+// ---------------- 第一百一十四轮：精简标签模式（labelMode='compact'） ----------------
+
+describe('buildLabelPlan compact（每系列仅 最高/最低/最新 三价，位置避线）', () => {
+  // 100,90,130,110,95：最高 130@2、最低 90@1、最新 95@4（来向 110 更高 → 标下方）
+  const pts = [100, 90, 130, 110, 95].map((v, i) => PT({ price: v, bucketId: `w${i}` }));
+  const scale = computeYAxis({ series: [mkSeries({ points: pts })], priceTypes: DISC_ONLY, sliderScale: 1 });
+  const geom = mkGeom(scale, 1200, 5, scale.plotHeight + 96 + GRID.bottom);
+
+  const planOf = (labelMode?: 'detail' | 'compact') =>
+    buildLabelPlan({ geom, series: [mkSeries({ points: pts })], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: new Map(), labelMode });
+
+  it('compact = 恰好三个标签（最高/最低/最新去重后），dy 全 0', () => {
+    const plan = planOf('compact');
+    const dy = plan.dy['s1'] ?? {};
+    expect(Object.keys(dy).sort()).toEqual(['1', '2', '4']);
+    expect(Object.values(dy).every((v) => v === 0)).toBe(true);
+  });
+
+  it('位置避线：最高=点上(top)、最低=点下(bottom)、最新看来向（下行段标下方）', () => {
+    const pos = planOf('compact').pos?.['s1'] ?? {};
+    expect(pos[2]).toBe('top'); // 最高
+    expect(pos[1]).toBe('bottom'); // 最低
+    expect(pos[4]).toBe('bottom'); // 最新 95 < 前值 110 → 下方
+  });
+
+  it('最新在上升段 → 标上方；与最高/最低同点时按极值位优先（去重不双标）', () => {
+    const rising = [90, 100, 120, 130].map((v, i) => PT({ price: v, bucketId: `w${i}` }));
+    const sScale = computeYAxis({ series: [mkSeries({ points: rising })], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const sGeom = mkGeom(sScale, 1200, 4, sScale.plotHeight + 96 + GRID.bottom);
+    const plan = buildLabelPlan({ geom: sGeom, series: [mkSeries({ points: rising })], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: new Map(), labelMode: 'compact' });
+    const dy = plan.dy['s1'] ?? {};
+    expect(Object.keys(dy).sort()).toEqual(['0', '3']); // 最高=最新=末点 130、最低=首点 90
+    expect(plan.pos?.['s1']?.[3]).toBe('top'); // 同为最高 → top 优先
+    expect(plan.pos?.['s1']?.[0]).toBe('bottom'); // 最低
+  });
+
+  it('跨接孤立点（absorbed）不产生精简标签；detail 模式不带 pos 字段（旧口径不变）', () => {
+    // M-o-M-o-M + 连续尾段：中间孤立点（90@2）被吸收，最低标签随之退场
+    const gappy2 = [100, null, 90, null, 130, 110, 108, 106].map((v, i) => PT({ price: v, bucketId: `w${i}`, missing: v == null }));
+    const gScale = computeYAxis({ series: [mkSeries({ points: gappy2 })], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const gGeom = mkGeom(gScale, 1200, 8, gScale.plotHeight + 96 + GRID.bottom);
+    const plan = buildLabelPlan({ geom: gGeom, series: [mkSeries({ points: gappy2 })], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: new Map(), labelMode: 'compact' });
+    const dy = plan.dy['s1'] ?? {};
+    expect(dy[2]).toBeUndefined(); // 孤立最低点（90）被吸收 → 不标
+    expect(plan.pos?.['s1']?.[2]).toBeUndefined();
+    expect(dy[7]).toBeDefined(); // 最新连续段末点
+    // detail 模式：无 pos 字段（与旧输出逐字段一致）
+    const detail = planOf();
+    expect(detail.pos).toBeUndefined();
+    expect(detail.dy['s1']).toBeDefined();
+  });
+});
+
 // ---------------- buildOption（option 形状金测） ----------------
 
 describe('buildOption', () => {

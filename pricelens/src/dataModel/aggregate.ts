@@ -297,6 +297,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
       let rrp: number | null = null;
       let url = '';
       let shopName: string | null = null;
+      let platform: string | null = null;
       let offer: OfferInfo | null = null;
       for (const wid of bucket.weekIds) {
         for (const sid of rg.skuIds) {
@@ -307,7 +308,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
           }
         }
       }
-      // url / 取价店铺 / offer：周 = 该周最低价所在行；月/季 = 桶内首个有值周
+      // url / 取价店铺 / offer / 平台：周 = 该周最低价所在行；月/季 = 桶内首个有值周
       for (const wid of bucket.weekIds) {
         let weekBest: { row: FactPriceWeekly; price: number } | null = null;
         for (const sid of rg.skuIds) {
@@ -317,6 +318,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         if (weekBest) {
           url = weekBest.row.url || url;
           shopName = shopLabelOf(weekBest.row);
+          platform = channelById.get(weekBest.row.channel_id)?.platform ?? null;
           offer = toOfferInfo(weekBest.row, cc, bucket.anchorDate);
           break;
         }
@@ -332,6 +334,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         offer,
         url,
         shopName,
+        platform,
       });
     }
     out.push({

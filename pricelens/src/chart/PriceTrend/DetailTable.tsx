@@ -3,30 +3,29 @@
 // 价格走势图卡下方的独立明细卡——与图上完全同源（同一可见时间段 × 同一批产品
 // 系列，币种/取数平台/粒度随图联动；分离模式 = 各面板系列并集去重）。
 // 按产品分块（2026-10-20 评审后用户定版）：每个产品一个区块，区块标题 = 品牌点+
-// 品牌+型号+配置，块内一行 = 一个时间点的取价快照：
-//   日期（周=周三 MM-DD / 月=YYYY-MM / 季=YYYYQn）｜折后价｜RRP（不划线）｜折扣率（= 折后价/RRP − 1）｜
-//   取价店铺｜Offering（促销/分期/组合权益完整原文，默认两行省略、点击展开）｜取证链接（新窗口）。
-// 默认只列有采数的行（「含缺采周」开关展开全部）；块内日期降序；区块顺序 = 图上系列序
-//（我司在前）；每个区块自带表头（第一百一十三轮，评审）。
-// 工具行（第一百一十三轮，2026-10-21 评审）= 标题 +「产品」多选下拉（与顶部筛选器
-// 同语言，取代原药丸 chips）+「时间」RangePicker（默认跟随上方图查看的时间段，可在
-// 完整范围内自选；粒度切换后自选失效回到跟随；与图不一致时可「对齐图表」一键回跟）
-// +「含缺采周」开关 +「复制为表格」（TSV 进剪贴板，可直接粘进 Excel/PPT）。
-// 完整范围数据由 index 层经 props.full 一并上报（上方极值筛选范围 × 同一批产品系列）。
-// 零系列时不渲染（页面只有图卡）。
+// 品牌+型号+配置，块内一行 = 一个时间点的取价快照。
+// 第一百一十四轮（评审）列序定版：平台｜日期｜RRP｜折后价｜折扣率｜Offering｜取证；
+// 取证列 = 页面快照图片按钮（历史时点唯一取证方式）+ 最新时点附商城现页链接。
+// 默认只列有采数的行（「含缺采周」开关展开全部）；块内日期降序；区块顺序 = 图上系列序；
+// 每个区块自带表头（第一百一十三轮，评审）。
+// 工具行（第一百一十三轮，评审）= 标题 +「产品」多选下拉 +「时间」RangePicker
+// （默认跟随上方图查看的时间段，可自选；「对齐图表」一键回跟）+「含缺采周」开关
+// +「复制为表格」。快照查看（页面截图取证）唯一入口在本表取证列（第一百一十四轮：
+// 图上悬停快照图标已撤）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import { Button, ConfigProvider, DatePicker, Select, Switch, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import zhCN from 'antd/locale/zh_CN';
-import { CalendarOutlined, CloseOutlined, CopyOutlined, ExportOutlined } from '@ant-design/icons';
+import { CalendarOutlined, CloseOutlined, CopyOutlined, ExportOutlined, PictureOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { filterBarTheme } from '../../components/FilterBar';
 import { bucketIdOfDate, dateOfBucket } from '../../components/FilterBar/timeUtils';
 import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
 import { color, formatPrice, motion, radius } from '../../theme/tokens';
 import { curveNameOf, dedupeSpecText, offerList } from './chartModel';
+import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 
 export interface DetailBucket {
   id: string;
@@ -36,16 +35,19 @@ export interface DetailBucket {
 
 interface DetailRow {
   key: string;
+  bucketId: string;
   dateText: string;
   product: string;
   brand: string;
   seriesKey: string;
+  platform: string | null;
+  shop: string | null; // 快照浮窗口径行用（列已并入平台，不再单列）
   price: number | null;
   rrp: number | null;
   discount: number | null; // = price/rrp − 1；RRP 缺失 = null
-  shop: string | null;
   offerText: string;
   url: string;
+  isLatest: boolean; // 该产品块内最新有值时点（取证列附商城现页链接；历史时点只有快照图）
 }
 
 /** 日期列：周 = MM-DD（桶 xLabel 原样）；月 = YYYY-MM；季 = 2026Q1 原样 */
@@ -104,6 +106,8 @@ export default function DetailTable(props: {
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // Offering 点击展开的行
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
+  // 页面快照浮窗（第一百一十四轮：图上悬停快照图标已撤，取证列图片按钮为唯一入口）
+  const [snapInfo, setSnapInfo] = useState<SnapshotInfo | null>(null);
   // 表内自选时间段（第一百一十三轮，评审）：s/e = 完整范围桶下标；null = 跟随上方图
   const [custom, setCustom] = useState<{ s: number; e: number } | null>(null);
   useEffect(() => {
@@ -130,12 +134,21 @@ export default function DetailTable(props: {
   );
   const brandByKey = new Map(viewSeries.map((s) => [s.key, s.brand])); // 下拉选项/药丸用品牌点
 
-  /** 按产品分块：区块顺序 = 系列序（我司在前）；块内日期降序 */
+  /** 按产品分块：区块顺序 = 系列序；块内日期降序。isLatest = 块内最新有值时点
+   *  （第一百一十四轮：取证列在最新时点附商城现页链接，历史时点只有快照图） */
   const groups = useMemo(() => {
     if (viewSeries.length === 0 || viewBuckets.length === 0) return [] as { series: Series; rows: DetailRow[] }[];
     const out: { series: Series; rows: DetailRow[] }[] = [];
     for (const s of viewSeries) {
       if (offKeys.has(s.key)) continue;
+      let latestId: string | null = null; // 自新至旧首个有值桶
+      for (let bi = viewBuckets.length - 1; bi >= 0; bi--) {
+        const pt = s.points[bi];
+        if (pt && (pt.price != null || pt.rrp != null)) {
+          latestId = viewBuckets[bi].id;
+          break;
+        }
+      }
       const rows: DetailRow[] = [];
       for (let bi = viewBuckets.length - 1; bi >= 0; bi--) {
         const bucket = viewBuckets[bi];
@@ -144,20 +157,23 @@ export default function DetailTable(props: {
         if (!showMissing && pt.price == null && pt.rrp == null) continue; // 缺采行默认不列
         rows.push({
           key: `${bucket.id}__${s.key}`,
+          bucketId: bucket.id,
           dateText: bucketDateText(granularity, pt.xLabel || bucket.xLabel),
           product: dedupeSpecText(s.label),
           brand: s.brand,
           seriesKey: s.key,
+          platform: pt.platform ?? (pt.shopName ? pt.shopName.split(' · ')[0] : null),
+          shop: pt.shopName,
           price: pt.price,
           rrp: pt.rrp,
           discount: pt.price != null && pt.rrp != null && pt.rrp > 0 ? pt.price / pt.rrp - 1 : null,
-          shop: pt.shopName,
           // Offering 完整原文：促销 / 分期 / 组合 三段按序拼接，不截断
           offerText: offerList(pt.offer)
             .map((d) => d.detail)
             .filter((t) => !!t)
             .join('；'),
           url: pt.url ?? '',
+          isLatest: bucket.id === latestId,
         });
       }
       out.push({ series: s, rows });
@@ -215,19 +231,20 @@ export default function DetailTable(props: {
     });
   };
   const onCopy = async (): Promise<void> => {
-    const head = ['日期', '产品', '折后价', 'RRP', '折扣率', '取价店铺', 'Offering', '取证链接'];
+    // TSV 含「产品」列（分块语义在 Excel 里靠它还原）；列序与表头一致（第一百一十四轮）
+    const head = ['产品', '平台', '日期', 'RRP', '折后价', '折扣率', 'Offering', '取证链接'];
     const lines = [head.join('\t')];
     for (const r of rows) {
       lines.push(
         [
-          r.dateText,
           r.product,
-          formatPrice(r.price, currency),
+          r.platform ?? '—',
+          r.dateText,
           formatPrice(r.rrp, currency),
+          formatPrice(r.price, currency),
           r.discount != null ? fmtPct(r.discount) : '—',
-          r.shop ?? '—',
           r.offerText || '—',
-          r.url || '—',
+          r.url || (r.isLatest ? '—' : ''),
         ].join('\t'),
       );
     }
@@ -241,6 +258,17 @@ export default function DetailTable(props: {
 
   const columns: ColumnsType<DetailRow> = [
     {
+      title: '平台',
+      dataIndex: 'platform',
+      key: 'platform',
+      width: 108,
+      render: (v: string | null) => (
+        <span title={v ?? undefined} style={{ color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+          {v ?? '—'}
+        </span>
+      ),
+    },
+    {
       title: '日期',
       dataIndex: 'dateText',
       key: 'date',
@@ -248,21 +276,6 @@ export default function DetailTable(props: {
       render: (v: string) => (
         <span className="tnum" style={{ color: color.body, whiteSpace: 'nowrap' }}>
           {v}
-        </span>
-      ),
-    },
-    {
-      title: '折后价',
-      dataIndex: 'price',
-      key: 'price',
-      width: 112,
-      align: 'right',
-      render: (v: number | null) => (
-        <span
-          className="tnum"
-          style={{ color: v != null ? color.ink : color.hairlineStrong, fontWeight: v != null ? 600 : 400, whiteSpace: 'nowrap' }}
-        >
-          {formatPrice(v, currency)}
         </span>
       ),
     },
@@ -283,6 +296,21 @@ export default function DetailTable(props: {
       ),
     },
     {
+      title: '折后价',
+      dataIndex: 'price',
+      key: 'price',
+      width: 112,
+      align: 'right',
+      render: (v: number | null) => (
+        <span
+          className="tnum"
+          style={{ color: v != null ? color.ink : color.hairlineStrong, fontWeight: v != null ? 600 : 400, whiteSpace: 'nowrap' }}
+        >
+          {formatPrice(v, currency)}
+        </span>
+      ),
+    },
+    {
       title: '折扣率',
       dataIndex: 'discount',
       key: 'discount',
@@ -294,17 +322,6 @@ export default function DetailTable(props: {
           style={{ color: v != null ? (v <= -0.15 ? '#b45309' : color.body) : color.hairlineStrong, whiteSpace: 'nowrap' }}
         >
           {v != null ? fmtPct(v) : '—'}
-        </span>
-      ),
-    },
-    {
-      title: '取价店铺',
-      dataIndex: 'shop',
-      key: 'shop',
-      width: 128,
-      render: (v: string | null) => (
-        <span title={v ?? undefined} style={{ color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-          {v ?? '—'}
         </span>
       ),
     },
@@ -346,24 +363,59 @@ export default function DetailTable(props: {
       },
     },
     {
+      // 取证（第一百一十四轮，评审）：页面快照图片按钮（历史时点唯一取证方式——
+      // 现页价格早已变化，活页不作历史取证）+ 最新时点附商城现页链接
       title: '取证链接',
       dataIndex: 'url',
       key: 'url',
-      width: 88,
-      render: (v: string) =>
-        v ? (
-          <a
-            href={v}
-            target="_blank"
-            rel="noreferrer"
-            title="打开取证页面（新窗口）"
-            style={{ color: color.link, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+      width: 96,
+      render: (v: string, r) => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            title="查看该时点的电商页面快照"
+            onClick={() =>
+              setSnapInfo({
+                seriesLabel: r.product,
+                shopName: r.shop,
+                bucketId: r.bucketId,
+                dateText: r.dateText,
+                priceText: formatPrice(r.price, currency),
+                url: r.url,
+              })
+            }
+            style={{
+              border: 0,
+              background: 'transparent',
+              padding: 0,
+              cursor: 'pointer',
+              color: color.link,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              font: 'inherit',
+              fontSize: 12,
+            }}
           >
-            <ExportOutlined style={{ fontSize: 12 }} />↗
-          </a>
-        ) : (
-          <span style={{ color: color.hairlineStrong }}>—</span>
-        ),
+            <PictureOutlined style={{ fontSize: 13 }} />
+            快照
+          </button>
+          {r.isLatest &&
+            (v ? (
+              <a
+                href={v}
+                target="_blank"
+                rel="noreferrer"
+                title="打开商城现页（新窗口）"
+                style={{ color: color.link, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+              >
+                <ExportOutlined style={{ fontSize: 12 }} />↗
+              </a>
+            ) : (
+              <span style={{ color: color.hairlineStrong }}>—</span>
+            ))}
+        </span>
+      ),
     },
   ];
 
@@ -484,8 +536,9 @@ export default function DetailTable(props: {
           </Button>
         </span>
       </div>
-      {/* 分块明细：每个产品一个区块（标题 = 品牌点+品牌+型号+配置 + 我司标签），块内
-          小号表格、每块自带表头（第一百一十三轮，评审）；整卡 560px 内滚动 */}
+      {/* 分块明细：每个产品一个区块（标题 = 品牌点+品牌+型号+配置；第一百一十四轮
+          铁律：不标注「我司」——品牌点+品牌名已表达归属），块内小号表格、每块自带
+          表头（第一百一十三轮，评审）；整卡 560px 内滚动 */}
       <div style={{ maxHeight: 560, overflowY: 'auto', paddingRight: 2 }}>
         {groups.map((g, gi) => (
           <section key={g.series.key} style={{ marginTop: gi === 0 ? 0 : 14 }}>
@@ -502,11 +555,6 @@ export default function DetailTable(props: {
             >
               <BrandDot brand={g.series.brand} />
               <span style={{ fontSize: 15, fontWeight: 700, color: color.ink }}>{dedupeSpecText(g.series.label)}</span>
-              {g.series.isOwn && (
-                <span style={{ fontSize: 10.5, fontWeight: 600, color: '#0053c2', background: '#e8f1ff', borderRadius: radius.pill, padding: '0 7px', lineHeight: '16px' }}>
-                  我司
-                </span>
-              )}
             </div>
             {g.rows.length === 0 ? (
               <div style={{ padding: '6px 10px', fontSize: 12, color: color.mute }}>该时间段内无采集到的价格</div>
@@ -523,6 +571,8 @@ export default function DetailTable(props: {
           </section>
         ))}
       </div>
+      {/* 页面快照浮窗（第一百一十四轮：取证列图片按钮弹出；居中小弹框） */}
+      <SnapshotModal info={snapInfo} onClose={() => setSnapInfo(null)} />
     </div>
   );
 }

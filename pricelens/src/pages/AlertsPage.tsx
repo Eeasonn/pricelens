@@ -45,7 +45,7 @@ const TYPE_RULES: Record<
 > = {
   'price-change': {
     name: '调价预警',
-    desc: '折后价相邻有值周变化 ≥ 阈值（我司 / 竞品都通知）',
+    desc: '折后价相邻有值周变化 ≥ 阈值（自有 / 竞品都通知）',
     min: 1,
     max: 15,
     step: 0.5,
@@ -59,7 +59,7 @@ const TYPE_RULES: Record<
   },
   'platform-gap': {
     name: '平台价差预警',
-    desc: '同周各平台独立折后价 最高/最低差 ≥ 阈值（仅我司品牌；demo 因子价差上限 ~1.8%）',
+    desc: '同周各平台独立折后价 最高/最低差 ≥ 阈值（仅自有品牌；demo 因子价差上限 ~1.8%）',
     min: 0.5,
     max: 3,
     step: 0.1,
@@ -310,7 +310,7 @@ export default function AlertsPage() {
   }, [latestList]);
 
   const ownCount = brandGroups.filter((g) => g.isOwn).reduce((n, g) => n + g.rows.length, 0);
-  const brandOptions = brandGroups.map((g) => ({ value: g.brand, label: g.isOwn ? `${g.brand}（我司）` : g.brand }));
+  const brandOptions = brandGroups.map((g) => ({ value: g.brand, label: g.brand }));
   const matchBrand = (brand: string): boolean => brandFilter.length === 0 || brandFilter.includes(brand);
   const matchModel = (key: string): boolean => !modelFilter || key.startsWith(`${modelFilter.id}__`);
   const activeCountFor = (key: string): number => {
@@ -366,7 +366,7 @@ export default function AlertsPage() {
       const key = `${p.sku_id.split('__')[0]}__${p.romram.replace(/\s+/g, '')}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      list.push({ key, label: `${p.is_own ? '我司 · ' : ''}${p.brand} ${p.model_name} ${p.romram}` });
+      list.push({ key, label: `${p.brand} ${p.model_name} ${p.romram}` });
     }
     return list.sort((a, b) => a.label.localeCompare(b.label));
   }, []);
@@ -761,7 +761,7 @@ export default function AlertsPage() {
                 <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
               </div>
               <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                我司 {ownCount} · 竞品 {state.alertSubs.length - ownCount} · 覆写 {Object.keys(state.alertProducts).length} 项
+                自有 {ownCount} · 竞品 {state.alertSubs.length - ownCount} · 覆写 {Object.keys(state.alertProducts).length} 项
               </div>
             </div>
           </section>
@@ -853,21 +853,6 @@ export default function AlertsPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 2px 6px' }}>
                       <BrandDot brand={g.brand} size={9} />
                       <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink }}>{g.brand}</span>
-                      {g.isOwn && (
-                        <span
-                          style={{
-                            padding: '0 7px',
-                            fontSize: 10,
-                            fontWeight: 700,
-                            lineHeight: '16px',
-                            borderRadius: radius.pill,
-                            color: selectOwnFg,
-                            background: selectOwnBg,
-                          }}
-                        >
-                          我司
-                        </span>
-                      )}
                       <span style={{ fontSize: 11, color: color.mute }}>{g.rows.length} 个系列</span>
                     </div>
                     <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas, overflow: 'hidden' }}>
@@ -982,7 +967,3 @@ export default function AlertsPage() {
 function CellSlot({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
-
-/** 「我司」品牌组胶囊配色（与类型徽标同体系：品牌蓝底） */
-const selectOwnFg = '#0053c2';
-const selectOwnBg = '#e8f1ff';

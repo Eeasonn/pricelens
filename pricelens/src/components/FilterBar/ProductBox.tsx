@@ -56,7 +56,7 @@ export function IndustryControl() {
 export function AutoMatchControl() {
   const { state, actions } = useFilters();
   return (
-    <Tooltip title={state.autoMatch ? '已按我司产品自动匹配竞品；直接修改右侧竞品会退出自动模式' : '点击后按我司产品重新匹配竞品'}>
+    <Tooltip title={state.autoMatch ? '已按自有产品自动匹配竞品；直接修改右侧竞品会退出自动模式' : '点击后按自有产品重新匹配竞品'}>
       <button
         type="button"
         aria-label="自动匹配竞品"

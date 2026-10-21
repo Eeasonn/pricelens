@@ -141,7 +141,6 @@ function DrillInner(props: DrillModalProps & { info: DrillInfo }) {
           priceTypes={priceTypes}
           gridTop={36}
           enableDrill={cur.gran === 'month'}
-          enableJump={false}
           enableOffer={false}
           onDrill={onMiniDrill}
           emptyHint="该期间无数据"

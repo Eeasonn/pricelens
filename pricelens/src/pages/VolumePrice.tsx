@@ -9,8 +9,11 @@
 // 双击复位 34%，bandFracs 随 yAxisResetKey 复位）；原标题行三档口径 Segmented、
 // 单图上限覆写药丸已删。图内不画名称药丸（产品名在面板头），图贴左缘。
 // 销量为估算口径（dataModel/volume），接入真实销量后替换。
-// 默认三槽：槽1 = 我司首个勾选（无则竞品首个）；槽2/3 = 其对标竞品前两个，
-// 不足用竞品勾选补，仍不足留空；我司首选或国家/产业变化时重置三槽。
+// 默认三槽：槽1 = 自有首个勾选（无则竞品首个）；槽2/3 = 其对标竞品前两个，
+// 不足用竞品勾选补，仍不足留空；自有首选或国家/产业变化时重置三槽。
+// 第一百一十四轮（评审）：①悬停明细改图下方居中预留框（Chart tipBox；无悬停灰色
+// 斜体提示）②横向虚线随鼠标 Y 横跨三面板（crossY 共享）③标题行「价格显示」
+// 详细/精简（默认精简）④面板头/下拉分组不再出现「自有」字样标注（铁律）。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented } from 'antd';
@@ -20,6 +23,7 @@ import PageHeader from '../components/PageHeader';
 import PlatformBox from '../components/FilterBar/PlatformBox';
 import CurrencyBox from '../components/FilterBar/CurrencyBox';
 import { filterBarTheme } from '../components/FilterBar';
+import { ownBrand } from '../components/ProductCascader/tree';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
 import XBrush from '../chart/PriceTrend/XBrush';
@@ -106,6 +110,9 @@ export default function VolumePrice() {
   const [yCompress, setYCompress] = useState(false);
   const [showYTicks, setShowYTicks] = useState(true);
   const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
+  // 第一百一十四轮（评审）：价格显示（默认精简）+ 三面板共享悬停纵向位置（横向虚线）
+  const [labelMode, setLabelMode] = useState<'detail' | 'compact'>('compact');
+  const [crossY, setCrossY] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null);
   const [bandFracs, setBandFracs] = useState<number[]>(() => new Array(SLOTS).fill(BAND_FRAC_DEFAULT)); // 各图柱区高比例（右侧拉伸柄）
@@ -265,7 +272,8 @@ export default function VolumePrice() {
   // 各图销量轴上限恒自动（niceCeil 窗口内最大值）
   const panelVMax = volumes.map((vs) => vMaxOf(vs));
 
-  // 面板头下拉选项：当前国家 × 产业去重到（型号, 配置），分组 [我司][竞品]
+  // 面板头下拉选项：当前国家 × 产业去重到（型号, 配置），分组 [自有品牌名][竞品]
+  // （第一百一十四轮铁律：不出现「我司」标注——自有组以品牌名作组名）
   const productOptions = useMemo<{ label: string; options: VolumeOption[] }[]>(() => {
     const seen = new Set<string>();
     const collect = (own: boolean): VolumeOption[] => {
@@ -283,7 +291,7 @@ export default function VolumePrice() {
     const ownOpts = collect(true);
     const compOpts = collect(false);
     return ownOpts.length > 0
-      ? [{ label: '我司', options: ownOpts }, { label: '竞品', options: compOpts }]
+      ? [{ label: ownBrand(), options: ownOpts }, { label: '竞品', options: compOpts }]
       : [{ label: '竞品', options: compOpts }];
   }, [cc, state.industry]);
 
@@ -369,6 +377,20 @@ export default function VolumePrice() {
                     平台 <span style={{ width: 160 }}><PlatformBox /></span>
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>币种 <CurrencyBox /></span>
+                  {/* 价格显示（第一百一十四轮，评审）：与币种切换同款控件位——
+                      精简 = 图上仅最高/最低/最新三价（默认），详细 = 全量价格标签 */}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    价格显示{' '}
+                    <Segmented
+                      size="small"
+                      value={labelMode}
+                      onChange={(v) => setLabelMode(v as 'detail' | 'compact')}
+                      options={[
+                        { label: '精简', value: 'compact' },
+                        { label: '详细', value: 'detail' },
+                      ]}
+                    />
+                  </span>
                 </div>
               </ConfigProvider>
               {state.granularity !== 'week' && (
@@ -443,7 +465,6 @@ export default function VolumePrice() {
                       <PanelHeader
                         slot={p.slot}
                         options={productOptions}
-                        isOwn={p.isOwn}
                         brand={p.brand}
                         volume={volumeReading(volumes[p.idx])}
                         onSelect={(key) => onSlotSelect(p.idx, key)}
@@ -471,15 +492,18 @@ export default function VolumePrice() {
                           axisChrome={false}
                           showYTicks={showYTicks}
                           enableDrill={false}
-                          enableJump={state.granularity === 'week'}
                           windowKey={`${win.s}:${win.e}:${p.key}`}
                           yScale={yCfg}
                           volumes={volumes[p.idx]}
                           hideNamePills // 第一百一十三轮（评审）：面板内不画产品药丸，产品名在面板头
                           lineShape={lineShape}
+                          labelMode={labelMode} // 第一百一十四轮（评审）：价格显示 详细/精简
+                          tipBox // 第一百一十四轮（评审）：悬停明细 = 图下方居中预留框
                           showXLabels
                           crosshairIdx={hoverIdx}
                           onCrosshairMove={setHoverIdx}
+                          crosshairY={crossY} // 第一百一十四轮（评审）：横向虚线横跨三面板
+                          onCrosshairYMove={setCrossY}
                           onGeom={onGeomOf(p.idx)}
                           emptyHint={p.slot ? '该产品在所选时间范围内无数据' : '请选择产品'}
                         />

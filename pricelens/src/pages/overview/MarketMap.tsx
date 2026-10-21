@@ -552,7 +552,7 @@ function DetailFloat({
                   '价差',
                   <button
                     type="button"
-                    title="切换价差方向（我司比竞品 / 竞品比我司）"
+                    title="切换价差方向（自有比竞品 / 竞品比自有）"
                     onClick={(e) => {
                       e.stopPropagation();
                       setDiffDir((d) => (d === 'comp' ? 'own' : 'comp'));
@@ -574,7 +574,7 @@ function DetailFloat({
                     }}
                   >
                     <SwapOutlined style={{ fontSize: 10 }} />
-                    {diffDir === 'own' ? '我司比竞品' : '竞品比我司'}
+                    {diffDir === 'own' ? '自有比竞品' : '竞品比自有'}
                   </button>,
                   (comp, diff) => diff != null ? (
                     <span className="tnum" style={{ fontSize: 11.5, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute, whiteSpace: 'nowrap' }}>
@@ -995,7 +995,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
           ]}
         />
         <span style={{ flex: 1 }} />
-        <span className="tnum" style={{ fontSize: 12, color: color.body }}>我司产品 <strong style={{ color: color.ink, fontSize: 16 }}>{ownCount}</strong></span>
+        <span className="tnum" style={{ fontSize: 12, color: color.body }}>自有产品 <strong style={{ color: color.ink, fontSize: 16 }}>{ownCount}</strong></span>
         <span style={{ color: color.hairlineStrong }}>·</span>
         <span className="tnum" style={{ fontSize: 12, color: color.body }}>市场竞品 <strong style={{ color: color.ink, fontSize: 16 }}>{compCount}</strong></span>
       </div>

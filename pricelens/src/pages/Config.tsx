@@ -201,7 +201,7 @@ export default function Config() {
                 })}
               </div>
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无我司产品数据" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无自有产品数据" />
             )}
           </Block>
 

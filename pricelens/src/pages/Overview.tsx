@@ -167,7 +167,7 @@ export default function Overview() {
                     <OwnProductControl
                       selection={prodSel}
                       onSelectionChange={setProdSel}
-                      emptyPlaceholder="全部我司产品"
+                      emptyPlaceholder="全部自有产品"
                     />
                   ) : (
                     <Select

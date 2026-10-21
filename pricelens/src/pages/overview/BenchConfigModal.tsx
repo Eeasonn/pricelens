@@ -226,7 +226,7 @@ export default function BenchConfigModal(props: {
         <div>
           {/* ROM 维度切换：映射按 own_romram 存储 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: color.mute }}>我司 ROM</span>
+            <span style={{ fontSize: 12, color: color.mute }}>自有 ROM</span>
             <Segmented
               size="small"
               value={Math.min(romIdx, model.rows.length - 1)}
