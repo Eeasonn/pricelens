@@ -20,6 +20,7 @@ import ProductPickerModal from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
 import { brandOfModel, modelNameOf, shortRomram } from '../ProductCascader/tree';
 import BrandDot from '../BrandMark';
+import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
 import type { MainProduct } from '../../state/filtersTypes';
 
 /** Also used by the overview's product controls. */
@@ -50,7 +51,7 @@ function Field({ label, width, children }: { label: string; width?: number; chil
 const groupSummaryLine = (m: MainProduct, i: number): string => {
   const mainPart = m.main
     ? `${modelNameOf(m.main.modelId)}（${shortRomram(m.main.romram)}）`
-    : '未选主分析';
+    : EMPTY_MAIN_LABEL;
   const compPart = m.compares.length
     ? `对比 ${m.compares.map((c) => `${modelNameOf(c.modelId)}（${shortRomram(c.romram)}）`).join('、')}`
     : '无对比';
@@ -82,10 +83,10 @@ function GroupChip({ card }: { card: MainProduct }) {
           <span className="tnum" style={{ fontSize: 11, color: color.mute }}>{shortRomram(card.main.romram)}</span>
         </>
       ) : (
-        <span style={{ fontSize: 11.5, color: color.mute }}>未选主分析</span>
+        <span style={{ fontSize: 11, color: color.mute }}>{EMPTY_MAIN_LABEL}</span>
       )}
       <span style={{ fontSize: 11, color: color.mute }}>vs</span>
-      <span className="tnum" style={{ fontSize: 11.5, fontWeight: 600, color: card.compares.length ? color.body : color.mute }}>
+      <span className="tnum" style={{ fontSize: 11, fontWeight: 600, color: card.compares.length ? color.body : color.mute }}>
         {card.compares.length ? card.compares.length : '无'}
       </span>
     </span>
@@ -148,7 +149,7 @@ function ProductPickerEntry() {
                       {modelNameOf(single.main.modelId)}
                     </span>
                     <span className="tnum" style={{ fontSize: 12, color: color.mute }}> · {shortRomram(single.main.romram)}</span>
-                    <span style={{ fontSize: 11.5, color: color.mute }}> vs </span>
+                    <span style={{ fontSize: 11, color: color.mute }}> vs </span>
                     <span
                       className="tnum"
                       style={{ fontSize: 12, fontWeight: 600, color: single.compares.length ? color.body : color.mute }}
@@ -157,14 +158,14 @@ function ProductPickerEntry() {
                     </span>
                   </>
                 ) : single.compares.length ? (
-                  <span style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                     <span className="tnum" style={{ fontWeight: 600, color: color.body }}>
                       对比 {single.compares.length} 款
                     </span>
-                    <span style={{ color: color.mute }}> · 未选主分析</span>
+                    <span style={{ color: color.mute }}> · {EMPTY_MAIN_LABEL}</span>
                   </span>
                 ) : (
-                  <span style={{ fontSize: 12.5, color: color.mute, whiteSpace: 'nowrap' }}>未选主分析产品</span>
+                  <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>{EMPTY_MAIN_LABEL}</span>
                 )
               ) : (
                 <>
@@ -191,7 +192,7 @@ function ProductPickerEntry() {
 /** One global row: country and industry scope, then the unified product picker,
  *  then platform and currency. 第一百一十五轮：平台与币种收进顶部筛选条（各看板
  *  标题行不再重复），整行不换行——选择产品列弹性收缩，平台/币种定宽保底。 */
-export default function FilterBar({ onBack: _onBack }: { onBack?: () => void }) {
+export default function FilterBar() {
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>

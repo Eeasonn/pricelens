@@ -13,11 +13,11 @@ import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shado
 
 /** 2026-10-20 起聚焦价格看板：总览、预警两页置灰待后续迭代（页头仅保留一处预警入口） */
 const TABS: { page: Page; label: string; disabled?: boolean; hint?: string }[] = [
-  { page: 'overview', label: '总览', disabled: true, hint: '总览页随真实数据重构中，暂不可用' },
+  { page: 'overview', label: '总览', disabled: true, hint: '当前版本暂不提供' },
   { page: 'dashboard', label: '价格看板' },
   { page: 'volume', label: '量价看板' },
   { page: 'config', label: '配置' },
-  { page: 'alerts', label: '预警', disabled: true, hint: '预警中心随真实数据重构中，暂不可用' },
+  { page: 'alerts', label: '预警', disabled: true, hint: '当前版本暂不提供' },
 ];
 
 export default function PageHeader({ extra }: { title?: string; extra?: ReactNode }) {
@@ -48,20 +48,17 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
         >
           单国家分析
         </span>
-        <Tooltip title="多国区域对比（规划方向）">
-          <span
-            aria-disabled="true"
-            title="多国区域对比（规划方向）"
-            style={{
-              display: 'inline-flex', alignItems: 'center', height: 28, padding: '0 12px',
-              borderRadius: radius.pill, fontSize: fontSize.caption, fontWeight: 600,
-              color: color.hairlineStrong, background: color.canvas, border: `1px solid ${color.hairline}`,
-              cursor: 'not-allowed',
-            }}
-          >
-            区域分析
-          </span>
-        </Tooltip>
+        <span
+          aria-disabled="true"
+          style={{
+            display: 'inline-flex', alignItems: 'center', height: 28, padding: '0 12px',
+            borderRadius: radius.pill, fontSize: fontSize.caption, fontWeight: 600,
+            color: color.hairlineStrong, background: color.canvas, border: `1px solid ${color.hairline}`,
+            cursor: 'not-allowed',
+          }}
+        >
+          区域分析
+        </span>
         <span aria-hidden style={{ width: 1, height: 22, background: color.hairline }} />
         <ConfigProvider theme={filterBarTheme}>
           <div style={{ width: 190 }}>

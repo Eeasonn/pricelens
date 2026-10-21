@@ -12,10 +12,14 @@ import {
   buildProductTree,
   compareRomram,
   filterProductTreeByTier,
+  modelEntryInfo,
   ownBrand,
   parseCapacity,
   searchProductTree,
+  sortModelNodes,
   tiersOfScope,
+  type ColorInfo,
+  type ModelNode,
 } from '../tree';
 
 describe('parseCapacity / compareRomram（配置容量数值排序）', () => {
@@ -155,5 +159,63 @@ describe('档位筛选（第一百二十三轮：tier_by_country 配置级档位
     const filtered = filterProductTreeByTier(tree, tier, 'RU');
     const searched = searchProductTree(filtered, ownBrand());
     expect(searched.some((b) => b.key === ownBrand())).toBe(true);
+  });
+});
+
+describe('型号入门价与列排序（选择产品浮窗「档位 · 现价」/ 默认|价格|名称）', () => {
+  const mkModel = (id: string, label: string, prices: (number | null)[]): ModelNode => ({
+    key: id,
+    modelId: id,
+    label,
+    brand: 'TEST',
+    launchDate: '2026-01-01',
+    eol: false,
+    romrams: prices.map((v, i) => {
+      const color: ColorInfo = { skuId: `${id}__c${i}`, color: '黑', latestLocal: v, latestUsd: v };
+      return {
+        key: `${id}|c${i}`,
+        modelId: id,
+        romram: `c${i}`,
+        shortRomram: `c${i}`,
+        label: `${label} · c${i}`,
+        colors: [color],
+        selectableColors: [color],
+      };
+    }),
+  });
+
+  it('modelEntryInfo：入门价 = 各配置默认色最新价的最低值；无有价配置 → null', () => {
+    expect(modelEntryInfo(mkModel('a', 'A', [500, 300])).price).toBe(300);
+    expect(modelEntryInfo(mkModel('b', 'B', [800])).price).toBe(800);
+    expect(modelEntryInfo(mkModel('c', 'C', [null])).price).toBeNull();
+  });
+
+  it('真实树：有价型号带配置级档位代码（可映射 TIER_LABELS 显示）', () => {
+    const models = buildProductTree('phone', 'RU').flatMap((b) => b.series).flatMap((s) => s.models);
+    const withPrice = models.find((m) => modelEntryInfo(m).price != null);
+    expect(withPrice).toBeTruthy();
+    expect(modelEntryInfo(withPrice!).tierCode).not.toBe('');
+  });
+
+  it('默认排序 = 树内现序（原引用返回）', () => {
+    const list = [mkModel('a', 'A', [1]), mkModel('b', 'B', [2])];
+    expect(sortModelNodes(list, 'default')).toBe(list);
+  });
+
+  it('价格排序：入门现价升序、无价殿后、同价按名称', () => {
+    const a = mkModel('a', 'A', [999]);
+    const b = mkModel('b', 'B', [null]);
+    const c = mkModel('c', 'C', [100]);
+    const d = mkModel('d', 'D', [null]);
+    expect(sortModelNodes([a, b, c, d], 'price').map((m) => m.modelId)).toEqual(['c', 'a', 'b', 'd']);
+    const x = mkModel('x', 'X', [100]);
+    const y = mkModel('y', 'Y', [100]);
+    expect(sortModelNodes([y, x], 'price').map((m) => m.modelId)).toEqual(['x', 'y']);
+  });
+
+  it('名称排序：型号名文本自然序', () => {
+    const m9 = mkModel('a', 'Mate 9', [1]);
+    const m10 = mkModel('b', 'Mate 10', [1]);
+    expect(sortModelNodes([m10, m9], 'name').map((m) => m.label)).toEqual(['Mate 9', 'Mate 10']);
   });
 });

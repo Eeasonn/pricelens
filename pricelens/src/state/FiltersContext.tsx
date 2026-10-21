@@ -200,7 +200,6 @@ function isAlertProducts(value: unknown): value is FiltersState['alertProducts']
 /** 读出的持久化载荷：v12 载 mains；v11 载旧卡形（随后展开）；v10 载旧 own/competitors */
 interface PersistedPayload extends Partial<FiltersState> {
   v?: number;
-  alertThreshold?: number;
   legacyOwn?: ProductSelection[];
   legacyCompetitors?: ProductSelection[];
   legacyV11Mains?: { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[];
@@ -251,7 +250,6 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
         rest.legacyV11Mains = parsed.mains as { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[];
       else if (key !== 'mains' || v === 12) (rest as UnknownRecord)[key] = (parsed as UnknownRecord)[key];
     }
-    if (isFiniteNumber(parsed.alertThreshold)) rest.alertThreshold = parsed.alertThreshold;
     return rest;
   } catch {
     return null;
@@ -324,17 +322,9 @@ function loadBaseState(): FiltersState {
   }
   const parsed = readPersistedState(raw);
   if (parsed) {
-    const { alertThreshold, v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
+    // ≤v9 一律落默认（readPersistedState 只放行 v10/11/12）
+    const { v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
     restored = { ...defaultFilters, ...rest } as FiltersState;
-    // v8 → v9 迁移（追补⑨）：旧单阈值 → 三类同值；订阅保留；own-gap 落缺省 15%
-    if (parsed.v === 8 && typeof alertThreshold === 'number') {
-      restored.alertThresholds = {
-        ...DEFAULT_ALERT_THRESHOLDS,
-        'price-change': alertThreshold,
-        promo: alertThreshold,
-        'platform-gap': alertThreshold,
-      };
-    }
     // v10 → v12（第一百一十七轮起）：own/competitors → 逐配置卡
     if (parsed.v === 10) {
       restored.mains = migrateV10(legacyOwn ?? [], legacyCompetitors ?? [], restored.autoMatch);

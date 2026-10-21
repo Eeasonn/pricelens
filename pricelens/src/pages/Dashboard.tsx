@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUpOutlined } from '@ant-design/icons';
-import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
-import { navBus } from '../state/navBus';
 import FilterBar from '../components/FilterBar';
 import PriceTrend from '../chart/PriceTrend';
 import TrendTables, { type DetailBucket, type TableGroup } from '../chart/PriceTrend/TrendTables';
@@ -21,19 +19,11 @@ import { color, radius, shadow, space } from '../theme/tokens';
  *  宽表卡（共享表头 = 图上同一时间轴，见 TrendTables），表内时间恒与图对齐
  *  第一百二十三轮：宽表按主分析组分块上报（组 = 选择浮窗卡，保持卡序） */
 export default function Dashboard() {
-  const { go } = usePage();
   const { state } = useFilters();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [showTop, setShowTop] = useState(false);
   // 图上可见窗口的同源快照（PriceTrend 每次组/时间段变化上报一次）
   const [trendWindow, setTrendWindow] = useState<{ groups: TableGroup[]; buckets: DetailBucket[] }>({ groups: [], buckets: [] });
-
-  // 追补⑧（总览↔看板闭环①）：上下文条数据——入口主分析型号
-  const entryModelId = state.mains[0]?.main?.modelId ?? null;
-  const backToOverview = (): void => {
-    if (entryModelId) navBus.overviewScrollTo = entryModelId;
-    go('overview');
-  };
 
   const onScroll = (): void => setShowTop((rootRef.current?.scrollTop ?? 0) > 140);
   useEffect(() => {
@@ -81,7 +71,7 @@ export default function Dashboard() {
         <PageHeader title="价格看板" />
 
         {/* 分析对象与当前对比口径 */}
-        <FilterBar onBack={backToOverview} />
+        <FilterBar />
 
         {/* 价格走势（第十二轮：标题并入 PriceTrend 首行，消除三段式纵向空白） */}
         <main style={{ flex: 1, padding: space.lg }}>
@@ -97,7 +87,6 @@ export default function Dashboard() {
             >
               {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
               <PriceTrend
-                onBackToOverview={backToOverview}
                 onSeriesWindow={(groups, buckets) => setTrendWindow({ groups, buckets })}
               />
             </section>

@@ -17,13 +17,14 @@ import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { Segmented, Tooltip } from 'antd';
 import type { CurrencyMode } from '../../dataModel/types';
 import { lowestPriceColorSku, type OverviewModel, type OverviewRow } from '../../dataModel/aggregate';
-import { bucketLatestWeekLabel, tierLabelShort } from '../../chart/PriceTrend/helpers';
+import { bucketLatestWeekLabel, diffPct, tierLabelShort } from '../../chart/PriceTrend/helpers';
 import { DiscountBadge } from '../../chart/PriceTrend/PriceSummary';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
+import { ownBrand } from '../../components/ProductCascader/tree';
 import { useFilters } from '../../state/FiltersContext';
 import { usePage } from '../../state/PageContext';
 import type { ProductSelection } from '../../state/filtersTypes';
-import { newCardId } from '../../state/mainSelection';
+import { buildCards } from '../../state/mainSelection';
 import { brandColorOf, color, motion, radius, selectSoft, selectSoftInk, space, localCurrencySymbol } from '../../theme/tokens';
 
 export interface MarketMapProps {
@@ -179,7 +180,7 @@ function OwnChip({
       </span>
       {price.current != null && (
         <span style={{ flexShrink: 0, marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-          <span className="tnum" style={{ fontSize: 9.5, lineHeight: '11px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
+          <span className="tnum" style={{ fontSize: 10, lineHeight: '11px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
           <span className="tnum" style={{ fontSize: 12, lineHeight: '15px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{priceText}</span>
         </span>
       )}
@@ -265,7 +266,7 @@ function CompChip({
       </span>
       {price.current != null && (
         <span style={{ flexShrink: 0, marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-          <span className="tnum" style={{ fontSize: 9.5, lineHeight: '11px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
+          <span className="tnum" style={{ fontSize: 10, lineHeight: '11px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
           <span className="tnum" style={{ fontSize: 12, lineHeight: '15px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{priceText}</span>
         </span>
       )}
@@ -365,11 +366,10 @@ function DetailFloat({
       // 第一百二十轮：整组进看板 = 每配置一张主分析卡（唯一主品卡形）；
       // 首卡带入矩阵对比区，其余卡由自动跟随按矩阵补齐（手动模式保持空）
       actions.setMains(
-        model.rows.map((r, i) => ({
-          id: newCardId(),
-          main: selOf(model.modelId, r.romram),
-          compares: i === 0 ? compSels : [],
-        })),
+        buildCards(
+          model.rows.map((r) => selOf(model.modelId, r.romram)),
+          { firstCompares: compSels },
+        ),
       );
       go('dashboard');
       onClose();
@@ -497,8 +497,12 @@ function DetailFloat({
             const last = ri === ownSorted.length - 1;
             const pairs = compGroups.map((g) => {
               const comp = g.byOwnRom.find((x) => x.ownRomrams.some((r: string) => r.replace(/\s+/g, '') === row.romram.replace(/\s+/g, ''))) ?? null;
-              let diff = comp?.price != null && row.price != null && row.price > 0 ? comp.price / row.price - 1 : null;
-              if (diff != null && diffDir === 'own') diff = comp?.price ? row.price != null ? row.price / comp.price - 1 : null : null;
+              // 价差 =（分子侧−分母侧）/ 分母侧（方向随切换互换），全站价差格式同源
+              const ownP = row.price;
+              const compP = comp?.price ?? null;
+              const diff = compP != null && ownP != null
+                ? (diffDir === 'own' ? diffPct(ownP, compP) : diffPct(compP, ownP))
+                : null;
               return { g, comp, diff };
             });
             const dateOf = (r: OverviewRow | null): string => {
@@ -517,7 +521,7 @@ function DetailFloat({
             );
             const rowLine = `1px solid ${color.hairline}`;
             const strongLine = `1px solid ${color.hairlineStrong}`;
-            const metricRow = (label: string, ownNode: ReactNode, compNode: (comp: OverviewRow & { ownRomrams?: string[] }, diff: number | null) => ReactNode, withLine: boolean): ReactNode => (
+            const metricRow = (label: string, ownNode: ReactNode, compNode: (comp: OverviewRow & { ownRomrams?: string[] }, diff: { text: string; tone: 'rich' | 'cheap' } | null) => ReactNode, withLine: boolean): ReactNode => (
               <div style={{ display: 'grid', gridTemplateColumns: matrixCols, borderBottom: withLine ? rowLine : 0 }}>
                 {labelCell(label)}
                 {ownCell(ownNode)}
@@ -556,7 +560,7 @@ function DetailFloat({
                   '价差',
                   <button
                     type="button"
-                    title="切换价差方向（自有比竞品 / 竞品比自有）"
+                    title={`切换价差方向（${ownBrand()}比竞品 / 竞品比${ownBrand()}）`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setDiffDir((d) => (d === 'comp' ? 'own' : 'comp'));
@@ -571,18 +575,18 @@ function DetailFloat({
                       background: selectSoft,
                       color: selectSoftInk,
                       font: 'inherit',
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: 600,
                       cursor: 'pointer',
                       whiteSpace: 'nowrap',
                     }}
                   >
                     <SwapOutlined style={{ fontSize: 10 }} />
-                    {diffDir === 'own' ? '自有比竞品' : '竞品比自有'}
+                    {diffDir === 'own' ? `${ownBrand()}比竞品` : `竞品比${ownBrand()}`}
                   </button>,
                   (comp, diff) => diff != null ? (
-                    <span className="tnum" style={{ fontSize: 11.5, fontWeight: 700, color: diff > 0.005 ? '#d92d20' : diff < -0.005 ? color.link : color.mute, whiteSpace: 'nowrap' }}>
-                      {diff > 0.005 ? '+' : ''}{Math.round(diff * 100)}%
+                    <span className="tnum" style={{ fontSize: 11, fontWeight: 700, color: diff.tone === 'rich' ? '#d92d20' : diff.text === '±0.0%' ? color.mute : color.link, whiteSpace: 'nowrap' }}>
+                      {diff.text}
                     </span>
                   ) : (
                     <span style={{ color: color.mute, fontSize: 11 }}>—</span>
@@ -950,11 +954,11 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     if (model.isOwn) {
       const sels = row ? [selOf(model.modelId, row.romram)] : model.rows.map((r) => selOf(model.modelId, r.romram));
       // setMains 走自动跟随：autoMatch 开时按矩阵带出对比区（原语义）
-      actions.setMains(sels.map((sel) => ({ id: newCardId(), main: sel, compares: [] })));
+      actions.setMains(buildCards(sels));
     } else {
       const rep = row ?? model.rows[0];
       if (rep) {
-        actions.setMains([{ id: newCardId(), main: { modelId: model.modelId, romram: rep.romram, skuIds: [rep.skuId] }, compares: [] }]);
+        actions.setMains(buildCards([{ modelId: model.modelId, romram: rep.romram, skuIds: [rep.skuId] }]));
       }
     }
     go('dashboard');
@@ -981,7 +985,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
           {latestDate && <span style={{ fontWeight: 400 }}>（{latestDate}）</span>}
         </h2>
         {/* 操作提示收进警示图标（用户反馈：两行常驻文案太吵） */}
-        <Tooltip title={<span>拖动品牌列头可调整列顺序（自动记住）<br />每屏最多 {MAX_VISIBLE_BRAND_COLUMNS + 1} 个品牌列，更多品牌可横向滚动<br />卡片左上角图标 = 跳看板只看该产品走势</span>}>
+        <Tooltip title={<span>拖动列头调整品牌顺序（自动记住）<br />每屏最多 {MAX_VISIBLE_BRAND_COLUMNS + 1} 列，更多可横向滚动<br />左上角折线图标跳转该产品走势</span>}>
           <ExclamationCircleFilled style={{ color: '#faad14', fontSize: 14, cursor: 'help', transform: 'translateY(-1px)' }} />
         </Tooltip>
         <span style={{ flex: 1 }} />
@@ -998,9 +1002,9 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
           ]}
         />
         <span style={{ flex: 1 }} />
-        <span className="tnum" style={{ fontSize: 12, color: color.body }}>自有产品 <strong style={{ color: color.ink, fontSize: 16 }}>{ownCount}</strong></span>
+        <span className="tnum" style={{ fontSize: 12, color: color.body }}>{ownBrand()} <strong style={{ color: color.ink, fontSize: 16 }}>{ownCount}</strong></span>
         <span style={{ color: color.hairlineStrong }}>·</span>
-        <span className="tnum" style={{ fontSize: 12, color: color.body }}>市场竞品 <strong style={{ color: color.ink, fontSize: 16 }}>{compCount}</strong></span>
+        <span className="tnum" style={{ fontSize: 12, color: color.body }}>其他品牌 <strong style={{ color: color.ink, fontSize: 16 }}>{compCount}</strong></span>
       </div>
 
       <div ref={mapScrollRef} data-map-scroll="1" style={{ marginTop: 10, overflowX: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
@@ -1014,7 +1018,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                 style={{ position: 'absolute', left: 0, top: box.top, width: usd ? 84 : 44, height: box.h, boxSizing: 'border-box', border: box.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`, background: box.empty ? 'transparent' : index % 2 === 0 ? color.canvasSoft2 : color.canvasSoft, display: 'flex', alignItems: 'center', overflow: 'hidden', pointerEvents: 'none' }}
               >
                 {usd && (
-                  <span style={{ width: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, lineHeight: '13px', color: box.empty ? color.mute : color.body, whiteSpace: 'nowrap' }}>
+                  <span style={{ width: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10, lineHeight: '13px', color: box.empty ? color.mute : color.body, whiteSpace: 'nowrap' }}>
                     {(() => {
                       const parts = tierLabelShort(box.label).split('~');
                       const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(box.label)];
@@ -1062,7 +1066,7 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
                           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: brandColorOf(model.brand), fontSize: 12, fontWeight: 650 }}>{modelOnly(model.brand, model.modelName)}</span>
                         </span>
                         <span style={{ flexShrink: 0, marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <span className="tnum" style={{ fontSize: 9.5, lineHeight: '11px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
+                          <span className="tnum" style={{ fontSize: 10, lineHeight: '11px', color: color.mute, whiteSpace: 'nowrap' }}>{dateText}</span>
                           <span className="tnum" style={{ fontSize: 12, lineHeight: '15px', fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>{priceText}</span>
                         </span>
                       </div>

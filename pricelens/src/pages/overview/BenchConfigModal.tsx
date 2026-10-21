@@ -20,7 +20,7 @@ import type { OverviewModel, OverviewRow, OverviewTierBand } from '../../dataMod
 import type { DimBenchmark } from '../../dataModel/types';
 import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark, notifyConfigChanged, saveBenchmark } from '../../state/configStore';
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
-import { color, fontSize, formatPrice, radius } from '../../theme/tokens';
+import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 
 const norm = (r: string): string => r.replace(/\s+/g, '');
 
@@ -169,19 +169,19 @@ export default function BenchConfigModal(props: {
       >
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <BrandDot brand={c.row.brand} size={7} />
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {c.row.modelName}
           </span>
-          <span style={{ fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap' }}>{c.row.romram}</span>
+          <span style={{ fontSize: 10, color: color.mute, whiteSpace: 'nowrap' }}>{c.row.romram}</span>
         </span>
         <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, textAlign: 'right' }}>
           {formatPrice(c.row.price, 'usd')}
         </span>
-        <span className="tnum" style={{ fontSize: 10.5, color: c.dist != null && c.dist <= 0.15 ? '#0a7d38' : color.mute, textAlign: 'right' }}>
+        <span className="tnum" style={{ fontSize: 10, color: c.dist != null && c.dist <= 0.15 ? '#0a7d38' : color.mute, textAlign: 'right' }}>
           {c.dist != null ? `价差 ${Math.round(c.dist * 100)}%` : '—'}
         </span>
         {mapped ? (
-          <span style={{ fontSize: 10.5, color: color.mute, padding: '0 6px' }}>已配置</span>
+          <span style={{ fontSize: 10, color: color.mute, padding: '0 6px' }}>已配置</span>
         ) : (
           <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={() => addComp(c.row.skuId)}>
             添加
@@ -194,7 +194,7 @@ export default function BenchConfigModal(props: {
   const sectionTitle = (t: string, note?: string) => (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '10px 0 4px' }}>
       <span style={{ fontSize: 12, fontWeight: 600, color: color.body }}>{t}</span>
-      {note && <span style={{ fontSize: 10.5, color: color.mute }}>{note}</span>}
+      {note && <span style={{ fontSize: 10, color: color.mute }}>{note}</span>}
     </div>
   );
 
@@ -209,13 +209,13 @@ export default function BenchConfigModal(props: {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {/* 恢复默认（auto）——原配置页独有能力收编（清 manual 快照回 auto 基准） */}
           <Popconfirm
-            title="恢复默认（auto）？"
-            description="清除手动配置，全部映射回到数据基准（auto）"
+            title="恢复默认配置？"
+            description="清除手动配置，全部恢复系统默认"
             okText="恢复"
             cancelText="取消"
             onConfirm={restoreAuto}
           >
-            <Button size="small">恢复默认（auto）</Button>
+            <Button size="small">恢复默认</Button>
           </Popconfirm>
           <span style={{ flex: 1 }} />
           <Button size="small" onClick={onClose}>
@@ -231,7 +231,7 @@ export default function BenchConfigModal(props: {
         <div>
           {/* ROM 维度切换：映射按 own_romram 存储 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: color.mute }}>自有 ROM</span>
+            <span style={{ fontSize: 12, color: color.mute }}>配置</span>
             <Segmented
               size="small"
               value={Math.min(romIdx, model.rows.length - 1)}
@@ -246,7 +246,7 @@ export default function BenchConfigModal(props: {
           {/* 已配置（当前 ROM）：首位 = 主竞品★，↑↓ 微调次序（预警中心重构收编原配置页排序能力） */}
           {sectionTitle(
             `已配置对标（${currentRows.length}/4）`,
-            '首位 = 主竞品（看板/摘要条的排序首位）· ↑↓ 调整次序',
+            '首位为主竞品 · ↑↓ 调整次序',
           )}
           {currentRows.length === 0 ? (
             <div style={{ border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.card, padding: '8px 12px', fontSize: 12, color: color.mute }}>
@@ -276,10 +276,10 @@ export default function BenchConfigModal(props: {
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     {cm && <BrandDot brand={cm.brand} size={7} />}
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {cm?.modelName ?? r.competitor_sku_id}
                     </span>
-                    <span style={{ fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 10, color: color.mute, whiteSpace: 'nowrap' }}>
                       {cRow ? `${cRow.romram} · ${colorSeg}` : colorSeg}
                     </span>
                     {i === 0 && (
@@ -331,15 +331,15 @@ export default function BenchConfigModal(props: {
                     onClick={() => setBrandSel((prev) => (active ? prev.filter((x) => x !== b) : [...prev, b]))}
                     style={{
                       padding: '1px 8px',
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: 600,
                       lineHeight: '17px',
                       borderRadius: radius.pill,
                       cursor: 'pointer',
                       whiteSpace: 'nowrap',
-                      color: active ? '#ffffff' : color.body,
-                      background: active ? '#0070f3' : color.canvasSoft2,
-                      border: `1px solid ${active ? '#0070f3' : color.hairline}`,
+                      color: active ? selectSoftInk : color.body,
+                      background: active ? selectSoft : color.canvasSoft2,
+                      border: `1px solid ${active ? selectAccent : color.hairline}`,
                     }}
                   >
                     {b}
@@ -360,7 +360,7 @@ export default function BenchConfigModal(props: {
           <div style={{ maxHeight: '40vh', overflowY: 'auto', marginTop: 4 }}>
             {sameTier.length > 0 && (
               <>
-                {sectionTitle(`同档位推荐 · ${TIER_LABELS[model.tierCode]}`, '按价差升序（推荐 + 人工确认）')}
+                {sectionTitle(`同档位推荐 · ${TIER_LABELS[model.tierCode]}`, '按价差从近到远排序')}
                 {sameTier.map(candRow)}
               </>
             )}
@@ -378,7 +378,7 @@ export default function BenchConfigModal(props: {
           </div>
 
           <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: 8, lineHeight: '16px' }}>
-            保存 = 整表快照转为手动配置，可随时在左下角恢复 auto 默认；自动匹配开启时看板对比区立即跟随。
+            保存后对标配置立即生效，可随时恢复默认；自动匹配开启时看板对比区同步更新。
           </div>
         </div>
       )}

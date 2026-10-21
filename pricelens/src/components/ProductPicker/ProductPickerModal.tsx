@@ -23,7 +23,7 @@
 // 破坏性动作轻确认：删整组、「最近」恢复覆盖当前已选。
 // ============================================================
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Checkbox, Input, Modal, Popconfirm, Popover, Select, Tooltip } from 'antd';
+import { Checkbox, Input, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
   CloseOutlined,
   HolderOutlined,
@@ -40,12 +40,15 @@ import {
   brandOfModel,
   defaultColorSkuIds,
   filterProductTreeByTier,
+  modelEntryInfo,
   modelNameOf,
   ownBrand,
   searchProductTree,
+  sortModelNodes,
   tiersOfScope,
   type BrandNode,
   type ModelNode,
+  type ModelSortMode,
   type RomramNode,
 } from '../ProductCascader/tree';
 import { autoColumnWidth, CascadePanel, measureText, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
@@ -53,18 +56,20 @@ import ColorFlyout from '../ProductCascader/ColorFlyout';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import {
   cardQuota,
+  EMPTY_MAIN_LABEL,
   isHuaweiModel,
   MAINS_CAP,
   MAX_LINES_PER_CHART,
   newCardId,
   remapSelection,
   selKey,
+  withMain,
 } from '../../state/mainSelection';
 import { appendTierCards, configsInTier } from '../../state/tierSelection';
 import { TIER_LABELS } from '../../dataModel/aggregate';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 import { LPL } from '../../state/lplKeys';
-import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 
 const POPOVER_H = 300; // 树浮窗列高（固定，不随内容跳变）
 const PAIR_LIST_MAX_H = 440; // 分析对列表区最大高（多对时纵向滚动）
@@ -229,12 +234,10 @@ const usableRomrams = (nodes: RomramNode[]): RomramNode[] =>
 function RowText({
   children,
   strong,
-  small,
   title,
 }: {
   children: ReactNode;
   strong?: boolean;
-  small?: boolean;
   title?: string;
 }) {
   return (
@@ -244,7 +247,7 @@ function RowText({
         display: 'inline-flex',
         minWidth: 0,
         maxWidth: strong ? 240 : 170,
-        fontSize: strong ? 14 : small ? 12 : 12.5,
+        fontSize: strong ? 14 : 12,
         fontWeight: strong ? 700 : 500,
         color: strong ? color.ink : color.body,
         whiteSpace: 'nowrap',
@@ -266,7 +269,7 @@ function RomramChip({ children }: { children: ReactNode }) {
         height: 20,
         padding: '0 8px',
         borderRadius: radius.pill,
-        fontSize: 11.5,
+        fontSize: 11,
         fontWeight: 600,
         color: color.body,
         background: 'rgba(0, 0, 0, 0.06)',
@@ -298,7 +301,7 @@ function AddPill({ label, onClick, disabled, big }: { label: string; onClick?: (
         justifyContent: big ? 'center' : undefined,
         borderRadius: radius.pill,
         border: `1px dashed ${disabled ? color.hairline : color.hairlineStrong}`,
-        fontSize: big ? 12.5 : 11.5,
+        fontSize: big ? 12 : 11,
         color: disabled ? color.mute : color.body,
         background: color.canvas,
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -408,7 +411,7 @@ function MatchPill({
 /** 当前/已选 灰标（树浮窗叶行尾） */
 function StateTag({ text }: { text: string }) {
   return (
-    <span style={{ fontSize: 10.5, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{text}</span>
+    <span style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{text}</span>
   );
 }
 
@@ -474,10 +477,12 @@ function LevelSwitchPopover({
 }) {
   const { state, actions } = useFilters();
   const mains = state.mains;
+  const currency = state.currency;
   const { fullTree, romramByKey } = useTreeData();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
+  const [modelSort, setModelSort] = useState<ModelSortMode>('default'); // 型号列排序
 
   useEffect(() => {
     if (openSignal) setOpen(true);
@@ -544,7 +549,7 @@ function LevelSwitchPopover({
       if (mains.length >= MAINS_CAP) return;
       actions.setMains([...mains, { id: newCardId(), main: sel, compares: [] }]);
     } else if (card) {
-      actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: sel } : c)));
+      actions.setMains(mains.map((c) => (c.id === card.id ? withMain(c, sel) : c)));
     }
     setOpen(false);
   };
@@ -657,6 +662,15 @@ function LevelSwitchPopover({
     if (replaceCompareCtx) setOpen(false);
   };
 
+  /** 型号行尾「档位缩写 · 现价」灰字（现价 = 入门配置默认色最新价，币种随筛选）；
+   *  首末档的「入门 · 」「旗舰 · 」前缀只在档位下拉里保留，行尾去掉以免与现价的 · 连成三段 */
+  const modelTagText = (m: ModelNode): string => {
+    const { tierCode, price } = modelEntryInfo(m, currency);
+    const tier = tierCode ? tierLabelShort((TIER_LABELS[tierCode] ?? tierCode).replace(/^(入门|旗舰) · /, '')) : '';
+    const priceText = price != null ? formatPrice(Math.round(price), currency) : '';
+    return [tier, priceText].filter(Boolean).join(' · ');
+  };
+
   const columns: CascadeColumnSpec[] = useMemo(() => {
     if (!brand || !series) return [];
     const brandItems: CascadeRowItem[] = tree.map((b) => ({
@@ -668,7 +682,7 @@ function LevelSwitchPopover({
         const s = b.series[0];
         setPath([b.key, s?.key ?? '', s?.models[0]?.modelId ?? '']);
       },
-      trailing: <span style={{ fontSize: 10.5, color: color.mute, flexShrink: 0 }}>{b.modelCount} 型号</span>,
+      trailing: <span style={{ fontSize: 10, color: color.mute, flexShrink: 0 }}>{b.modelCount} 型号</span>,
     }));
     const seriesItems: CascadeRowItem[] = (brand?.series ?? []).map((s) => ({
       key: s.key,
@@ -679,44 +693,49 @@ function LevelSwitchPopover({
         <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px', flexShrink: 0 }}>退市</span>
       ) : undefined,
     }));
-    const modelItems: CascadeRowItem[] = (series?.models ?? []).map((m) => ({
-      key: m.modelId,
-      label: m.label,
-      leading: <BrandDot brand={m.brand} />,
-      active: model?.modelId === m.modelId,
-      onActivate: () => setPath([brand.key, series.key, m.modelId]),
-      trailing: (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {m.eol && (
-            <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
-          )}
-          <Tooltip title={comparesCtx || replaceCompareCtx ? '该产品全部配置加入对比区' : '该产品全部配置各成一张主分析卡'}>
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                pickAllConfigs(m);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                height: 20,
-                padding: '0 8px',
-                borderRadius: radius.pill,
-                fontSize: 11,
-                color: selectSoftInk,
-                background: color.canvas,
-                border: '1px solid rgba(0, 112, 243, 0.40)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <PlusOutlined style={{ fontSize: 9 }} /> 全部型号
-            </span>
-          </Tooltip>
-        </span>
-      ),
-    }));
+    const sortedModels = sortModelNodes(series?.models ?? [], modelSort, currency);
+    const modelItems: CascadeRowItem[] = sortedModels.map((m) => {
+      const tag = modelTagText(m);
+      return {
+        key: m.modelId,
+        label: m.label,
+        leading: <BrandDot brand={m.brand} />,
+        active: model?.modelId === m.modelId,
+        onActivate: () => setPath([brand.key, series.key, m.modelId]),
+        trailing: (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {m.eol && (
+              <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
+            )}
+            <Tooltip title={comparesCtx || replaceCompareCtx ? '该产品全部配置加入对比区' : '该产品全部配置各成一张主分析卡'}>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  pickAllConfigs(m);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  height: 20,
+                  padding: '0 8px',
+                  borderRadius: radius.pill,
+                  fontSize: 11,
+                  color: selectSoftInk,
+                  background: color.canvas,
+                  border: '1px solid rgba(0, 112, 243, 0.40)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <PlusOutlined style={{ fontSize: 9 }} /> 全部型号
+              </span>
+            </Tooltip>
+            {tag && <span className="tnum" style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{tag}</span>}
+          </span>
+        ),
+      };
+    });
     const romramItems: CascadeRowItem[] = (model?.romrams ?? []).map((r) => {
       const key = nodeSelKey(r);
       if (comparesCtx && activeCard) {
@@ -736,7 +755,7 @@ function LevelSwitchPopover({
                 sameAsMain && !inCompares
                   ? '主分析产品不对比自身配置'
                   : quotaFull && !inCompares
-                    ? `每图上限 ${MAX_LINES_PER_CHART} 条（含主品）`
+                    ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）`
                     : inCompares
                       ? '移除该对比'
                       : '加入对比区'
@@ -755,8 +774,8 @@ function LevelSwitchPopover({
                   borderRadius: radius.pill,
                   fontSize: 11,
                   fontWeight: 600,
-                  color: disabled ? color.mute : inCompares ? color.canvas : selectSoftInk,
-                  background: inCompares ? selectAccent : selectSoft,
+                  color: disabled ? color.mute : selectSoftInk,
+                  background: selectSoft,
                   border: `1px solid ${inCompares ? selectAccent : 'rgba(0, 112, 243, 0.40)'}`,
                   cursor: disabled ? 'not-allowed' : 'pointer',
                   opacity: disabled ? 0.5 : 1,
@@ -788,14 +807,16 @@ function LevelSwitchPopover({
 
     // 行尾内容宽度预留（第一百二十三轮：列宽必须容纳 label + 行尾，四列信息完整
     // 可见、无省略号）——按各列行尾实际文案折算，autoColumnWidth 计入 chrome
-    const brandExtra = tree.reduce((w, b) => Math.max(w, textW(`${b.modelCount} 型号`, 10.5)), 0) + ROW_GAP;
+    const brandExtra = tree.reduce((w, b) => Math.max(w, textW(`${b.modelCount} 型号`, 10)), 0) + ROW_GAP;
     const eolPillW = textW('退市', 10) + 8; // 文本 + padding 0 6px + 边框 2px
     const seriesExtra = (brand?.series ?? []).some((s) => s.eol) ? eolPillW + ROW_GAP : 0;
     const allCfgPillW = pillW('全部型号', 11) + 12; // ＋ 图标 9 + 内间隙 3
-    const modelExtra = ((series?.models ?? []).some((m) => m.eol) ? eolPillW + 6 : 0) + allCfgPillW + ROW_GAP;
+    const modelTagW = (series?.models ?? []).reduce((w, m) => Math.max(w, textW(modelTagText(m), 10)), 0);
+    const modelExtra = ((series?.models ?? []).some((m) => m.eol) ? eolPillW + 6 : 0)
+      + allCfgPillW + 6 + modelTagW + ROW_GAP;
     const romramExtra = (comparesCtx
       ? pillW('✓ 对比', 11)
-      : Math.max(textW('当前', 10.5), textW('已选', 10.5))) + ROW_GAP;
+      : Math.max(textW('当前', 10), textW('已选', 10))) + ROW_GAP;
 
     return [
       { items: brandItems, width: autoColumnWidth(brandItems, { extraW: brandExtra, noMaxClip: true }) },
@@ -804,7 +825,7 @@ function LevelSwitchPopover({
       { items: romramItems, width: autoColumnWidth(romramItems, { extraW: romramExtra, noMaxClip: true }) },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, brand, series, model, ctx, mains, activeCard]);
+  }, [tree, brand, series, model, ctx, mains, activeCard, modelSort, currency]);
 
   // 浮窗宽 = 四列自适应宽之和 + 内边距（搜索/档位筛选改变列内容时随之变化）；
   // 上限 = min(视口 - 48, 1100)，超限由面板内横向滚动兜底
@@ -848,6 +869,17 @@ function LevelSwitchPopover({
               popupMatchSelectWidth={false}
               options={[{ value: '', label: '全部档位' }, ...tierOptions]}
             />
+            <Segmented
+              size="small"
+              aria-label="型号排序"
+              value={modelSort}
+              onChange={(v) => setModelSort(v as ModelSortMode)}
+              options={[
+                { label: '默认', value: 'default' },
+                { label: '价格', value: 'price' },
+                { label: '名称', value: 'name' },
+              ]}
+            />
           </div>
           {tier && (
             <div
@@ -874,7 +906,7 @@ function LevelSwitchPopover({
                   <TierBatchPill text="全部各成一组" disabled={tierGroupDisabled} onClick={tierGroupAll} />
                 </Tooltip>
               ) : (
-                <Tooltip title={tierCompareDisabled ? `每图上限 ${MAX_LINES_PER_CHART} 条（含主品）` : '该档位全部配置加入本组对比区'}>
+                <Tooltip title={tierCompareDisabled ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）` : '该档位全部配置加入本组对比区'}>
                   <TierBatchPill text="全部加入对比" disabled={tierCompareDisabled} onClick={tierCompareAll} />
                 </Tooltip>
               )}
@@ -966,9 +998,9 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
     >
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
         <BrandDot brand={brand} />
-        <RowText small title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
+        <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
       </span>
-      <RowText small title={`${brandLabelOf(brand)} ${modelNameOf(sel.modelId)} ${sel.romram}`}>
+      <RowText title={`${brandLabelOf(brand)} ${modelNameOf(sel.modelId)} ${sel.romram}`}>
         {modelNameOf(sel.modelId)}
       </RowText>
       <RomramChip>{sel.romram}</RomramChip>
@@ -1019,7 +1051,7 @@ function CardTag({ card, index }: { card: MainProduct; index: number }) {
       }}
     >
       <span>第 {index + 1} 组</span>
-      <span className="tnum">{card.main ? `${card.main.romram}${colorLabel ? ` · ${colorLabel}` : ''}` : '未选主分析产品'}</span>
+      <span className="tnum">{card.main ? `${card.main.romram}${colorLabel ? ` · ${colorLabel}` : ''}` : EMPTY_MAIN_LABEL}</span>
     </div>
   );
 }
@@ -1053,7 +1085,7 @@ function AddCompareTrigger({ card, autoOpen }: { card: MainProduct; autoOpen?: b
   const quota = cardQuota(card);
   const full = card.compares.length >= quota;
   return (
-    <Tooltip title={full ? `每图上限 ${MAX_LINES_PER_CHART} 条（含主品）` : '挑选对比产品（可连续添加）'}>
+    <Tooltip title={full ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）` : '挑选对比产品（可连续添加）'}>
       <span style={{ alignSelf: 'flex-start', display: 'inline-flex' }}>
         <LevelSwitchPopover ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId} openSignal={autoOpen}>
           <AddPill label="添加对比产品" disabled={full} />
@@ -1133,7 +1165,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
         <span style={{ fontSize: fontSize.displaySm }}>
           选择产品
           <span style={{ fontSize: 12, fontWeight: 400, color: color.mute, marginLeft: 10 }}>
-            左侧为主分析产品，右侧为其对比产品；有多组时每组各生成一张图
+            每组生成一张图：左侧主分析产品，右侧对比产品
           </span>
         </span>
       }
@@ -1317,7 +1349,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                   setDragCard(null);
                   setDropCard(null);
                 }}
-                title="拖动调整顺序（= 分离面板顺序）"
+                title="拖动调整顺序"
                 style={{ display: 'inline-flex', alignItems: 'center', cursor: 'grab', color: color.mute, flexShrink: 0 }}
               >
                 <HolderOutlined style={{ fontSize: 12 }} />
@@ -1369,7 +1401,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                   </span>
                 </div>
                 {card.compares.length === 0 && (
-                  <div style={{ fontSize: 11.5, color: color.mute, lineHeight: '18px' }}>
+                  <div style={{ fontSize: 11, color: color.mute, lineHeight: '18px' }}>
                     {card.main == null
                       ? '可先挑选对比产品，补选主分析产品后即成一组'
                       : !huawei
@@ -1422,7 +1454,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
           <Checkbox checked={state.autoMatch} onChange={(e) => actions.setAutoMatch(e.target.checked)} />
           对比自动跟随主品
           <span style={{ color: color.hairlineStrong }}>｜</span>
-          每图上限 {MAX_LINES_PER_CHART} 条（含主品）
+          每张图最多 {MAX_LINES_PER_CHART} 条线（含主分析产品）
         </span>
       </div>
     </Modal>

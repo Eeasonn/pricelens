@@ -20,8 +20,8 @@
 // ②悬停时间列/图内拖选高亮随同步态走：同步 = 三面板同列联动，非同步 = 各面板独立。
 // ③大盘卡时间域：同步 = 共享窗口；非同步 = 各面板生效窗口的并集。
 // 第一百二十三轮：底部共享刷选条退役——每面板底部恒渲染同一条独立时间轴（同步 =
-// 三图同段查看时间、拖任一条同步调整；非同步 = 各图独立），底部只留固定高一行的
-// 「同步」开关 + 说明，切换同步态不再改变面板高度与轨道横向位置。
+// 三图同段查看时间、拖任一条同步调整；非同步 = 各图独立），底部只留「同步」开关，
+// 切换同步态不再改变面板高度与轨道横向位置。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented } from 'antd';
@@ -426,7 +426,7 @@ export default function VolumePrice() {
       type="button"
       aria-label="同步查看时间"
       aria-pressed={synced}
-      title={synced ? '各图使用同一段查看时间' : '各图独立调整查看时间'}
+      title={synced ? '同步：三张图共用一段查看时间' : '独立：各图分别调整'}
       onClick={toggleSynced}
       style={{
         height: 30, padding: '0 9px', borderRadius: radius.control,
@@ -548,6 +548,7 @@ export default function VolumePrice() {
                 <SplitAxisColumn
                   yScale={yCfg}
                   currency={state.currency}
+                  industry={state.industry}
                   gridLeft={estGridLeft(state.currency)}
                   panelGridTop={PANEL_GRID_TOP}
                   showYTicks={showYTicks}
@@ -638,40 +639,13 @@ export default function VolumePrice() {
               </div>
             </div>
 
-            {/* 底部固定高说明行（第一百二十三轮）：共享刷选条退役——每张图底部恒有
-                时间轴（见各面板内），此处只放「同步」开关与一句说明；两种模式本行
-                结构与高度完全一致，切换只改联动行为 */}
+            {/* 底部「同步」开关（第一百二十三轮）：共享刷选条退役——每张图底部恒有
+                时间轴（见各面板内），此处只放开关，切换只改联动行为 */}
             {buckets.length > 0 && visUnion.length > 0 && (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: `${estGridLeft(state.currency)}px minmax(0, 1fr)`,
-                  height: 36,
-                  alignItems: 'center',
-                  marginTop: space.xs,
-                }}
-              >
-                <div
-                  style={{
-                    padding: '0 12px 0 0',
-                    borderRight: `1px solid ${color.hairline}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
-                >
-                  {syncToggle}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 12, fontSize: 12, color: color.mute }}>
-                  {synced
-                    ? '各图查看同一段时间：拖动任一图下方的时间轴，三张图一起调整'
-                    : '各图的时间范围相互独立：分别拖动每张图下方的时间轴单独调整'}
-                </div>
+              <div style={{ marginTop: space.xs, height: 30, display: 'flex', alignItems: 'center' }}>
+                {syncToggle}
               </div>
             )}
-
-            <div style={{ marginTop: space.xs, fontSize: 11, color: color.mute }}>
-              销量为估算口径：按折扣深度、促销档期与上市周期推算，接入销量数据后自动替换。
-            </div>
           </section>
 
           {/* 大盘分析（第118轮引入；第119轮走查会补齐）：窗口内各期大盘销量柱（绝对台数，

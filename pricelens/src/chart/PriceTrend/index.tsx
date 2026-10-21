@@ -29,9 +29,9 @@ import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
-import { buildSeries } from '../../dataModel/aggregate';
-import { flatSelections, MERGE_LINES_CAP } from '../../state/mainSelection';
-import { dimPromo, dimProduct, dimRegion, dimTier } from '../../data';
+import { buildSeries, tierOrderOf } from '../../dataModel/aggregate';
+import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../state/mainSelection';
+import { dimPromo, dimProduct, dimRegion } from '../../data';
 import type {
   AggMode,
   Granularity,
@@ -84,13 +84,13 @@ import BrandLegendStrip from './BrandLegendStrip';
  *  品牌名行退役改单行药丸带，44 → 30） */
 const PANEL_LEGEND_H = 30;
 
-/** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之 */
+/** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之。
+ *  空对组名分工：图表面板/图例保留「对比产品」（组名仍有内容），宽表组头用
+ *  EMPTY_MAIN_LABEL 显性提示未选主品（见 TrendTables）。 */
 const panelLabelOf = (card: { main: ProductSelection | null }): string =>
   card.main ? modelNameOf(card.main.modelId) : '对比产品';
 
 export default function PriceTrend(props: {
-  /** 第八十五轮：竞品-only 引导带里「去总览配置对标」的回跳 */
-  onBackToOverview?: () => void;
   /** 第110轮（评审）立、第一百二十三轮按组：图下「价差与明细」取数口——按主分析卡
    *  （选择浮窗卡序）上报各组 = 卡 id + 主品系列 key + 本卡全部系列（主品在前，含被
    *  图例屏蔽者）× 图上可见时间段，每次变化上报一次；页面层据此在图卡下方渲染
@@ -435,11 +435,11 @@ export default function PriceTrend(props: {
   // ---- 价格摘要条（第三十六轮定版）：固定显示窗口内最新时点（不随悬停变换，
   //      时点明细看悬停浮窗）；竞品与我司同款样式、来源为取证超链接 ----
   // 第110轮（评审）：时点摘要产品清单按价位档从高到低、同档按现价从高到低排列
-  //（档位 = skuIds[0] 产品维 tier_code，产业档位梯 dimTier.ladders 定序；只读维表）；
+  //（档位 = skuIds[0] 产品维 tier_code，产业档位梯 tierOrderOf 定序；只读维表）；
   // 渲染期对名称做单位/叠词去重（如「16+1 TB TB」类重复文案收敛）
   const summary = useMemo(() => {
     const items = buildPriceSummary(chartSeries);
-    const ladder = dimTier.ladders[state.industry] ?? [];
+    const ladder = tierOrderOf(state.industry);
     const tierRank = new Map<string, number>();
     for (const s of chartSeries) {
       const sku = s.skuIds[0] != null ? dimProduct.find((p) => p.sku_id === s.skuIds[0]) : null;
@@ -677,7 +677,7 @@ export default function PriceTrend(props: {
                 ? { label: '合并', value: 'merge' }
                 : {
                     label: (
-                      <Tooltip title={`合并后共 ${mergeLines} 条，超过单图上限 ${MERGE_LINES_CAP} 条`}>
+                      <Tooltip title={`合并后共 ${mergeLines} 条，超过合并上限 ${MERGE_LINES_CAP} 条（每组最多 ${MAX_LINES_PER_CHART} 条）`}>
                         <span>合并</span>
                       </Tooltip>
                     ),
@@ -730,7 +730,7 @@ export default function PriceTrend(props: {
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
         {state.granularity !== 'week' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
-            <span>汇总：</span>
+            <span>汇总</span>
             <Segmented
               size="small"
               value={state.agg}
@@ -761,7 +761,7 @@ export default function PriceTrend(props: {
             color: color.body,
           }}
         >
-          <span>尚未选择主分析产品 · 点击上方「选择产品」挑选 1 款或多款主分析产品及其对比产品</span>
+          <span>点击上方「选择产品」开始分析</span>
         </div>
       )}
 
@@ -824,6 +824,7 @@ export default function PriceTrend(props: {
                 <SplitAxisColumn
                   yScale={splitYCfg}
                   currency={state.currency}
+                  industry={state.industry}
                   gridLeft={splitGridLeft}
                   panelGridTop={panelGridTop}
                   showYTicks={showYTicks}
@@ -929,7 +930,7 @@ export default function PriceTrend(props: {
                           padding: '0 4px',
                         }}
                       >
-                        <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
                           {panelLabelOf(p.card)}
                           {p.card.compares.length > 0 && (
                             <span style={{ fontWeight: 400, color: color.mute, marginLeft: 6 }} className="tnum">
@@ -1060,7 +1061,7 @@ export default function PriceTrend(props: {
             onChangeThreshold={setChangeThreshold}
             emptyHint={
               visSeries.length > 0 && chartSeries.length === 0
-                ? '所有产品已在图中屏蔽，点击图顶产品药丸恢复显示'
+                ? '所有产品已隐藏，点击上方产品名恢复显示'
                 : undefined
             }
           />

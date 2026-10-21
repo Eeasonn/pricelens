@@ -19,6 +19,7 @@ import { filterBarTheme } from '../../components/FilterBar';
 import { dimProduct } from '../../data';
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, fontSize, formatPrice, radius } from '../../theme/tokens';
+import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
 import { diffPct } from './helpers';
 import { dedupeSpecText } from './chartModel';
 import {
@@ -180,7 +181,7 @@ export default function TrendTables(props: {
     markCopied((await copyText(lines.join('\n'))) ? 'diff' : null);
   };
   const onCopyDetail = async (): Promise<void> => {
-    const TYPES = ['RRP', '折后价', '折扣率', '取证', 'Offering'] as const;
+    const TYPES = ['RRP', '折后价', '折扣率', '取证', '权益'] as const;
     const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', ...dates].join('\t')];
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
@@ -254,7 +255,7 @@ export default function TrendTables(props: {
       <div
         key={`${keyPrefix}-conf`}
         className="tnum"
-        style={{ ...cell(1), ...frozen(1, bg), gridRow: `span ${span}`, fontSize: 11.5, color: color.body, whiteSpace: 'nowrap' }}
+        style={{ ...cell(1), ...frozen(1, bg), gridRow: `span ${span}`, fontSize: 11, color: color.body, whiteSpace: 'nowrap' }}
       >
         {sp?.romram || '—'}
       </div>,
@@ -315,14 +316,14 @@ export default function TrendTables(props: {
             </span>
             <span
               className="tnum"
-              style={{ fontSize: 11.5, color: color.body, background: 'rgba(0, 0, 0, 0.06)', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}
+              style={{ fontSize: 11, color: color.body, background: 'rgba(0, 0, 0, 0.06)', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}
             >
               {b.specByKey.get(b.base.key)?.romram || '—'}
             </span>
           </>
         ) : (
           <span style={{ fontSize: 14, fontWeight: 700, color: color.mute, whiteSpace: 'nowrap' }}>
-            {b.g.mainKey == null ? '未选择' : '所选时间范围内无数据'}
+            {b.g.mainKey == null ? EMPTY_MAIN_LABEL : '所选时间范围内无数据'}
           </span>
         )}
         <span className="tnum" style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>
@@ -385,7 +386,6 @@ export default function TrendTables(props: {
       {/* 标题行：卡标题 + 口径 + 组筛选（≥2 组才有筛选意义）+ 两表复制 */}
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
         <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>价差与明细</h2>
-        <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>时间范围与上方图表一致</span>
         {multi && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, marginLeft: 6 }}>
             <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>组</span>
@@ -453,7 +453,7 @@ export default function TrendTables(props: {
                               style={{
                                 ...cell(3 + i),
                                 justifyContent: 'flex-end',
-                                fontSize: 12.5,
+                                fontSize: 12,
                                 fontWeight: 600,
                                 color: tone,
                                 whiteSpace: 'nowrap',
@@ -512,7 +512,7 @@ export default function TrendTables(props: {
                     rows.push(
                       <div key={`${p}-price-${i}`} style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
                         {pt?.price != null ? (
-                          <span className="tnum" style={{ fontSize: 12.5, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
+                          <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
                             {formatPrice(pt.price, currency)}
                           </span>
                         ) : (
@@ -562,14 +562,14 @@ export default function TrendTables(props: {
                       </div>,
                     );
                   }
-                  // Offering 行：高度随内容自适应，全文完整显示
-                  rows.push(typeCell('Offering', main, `${p}-offer`));
+                  // 权益行：高度随内容自适应，全文完整显示
+                  rows.push(typeCell('权益', main, `${p}-offer`));
                   for (let i = 0; i < n; i++) {
                     const text = offerText(s.points[i]);
                     rows.push(
                       <div key={`${p}-offer-${i}`} style={{ ...cell(3 + i), alignItems: 'flex-start', background: bg }}>
                         {text ? (
-                          <span style={{ fontSize: 10.5, lineHeight: '13px', color: color.body, wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                          <span style={{ fontSize: 10, lineHeight: '13px', color: color.body, wordBreak: 'break-word', whiteSpace: 'normal' }}>
                             {text}
                           </span>
                         ) : (

@@ -22,6 +22,9 @@ export const MAINS_CAP = 8;
  *  系列数上限同口径（chart/PriceTrend/helpers.SERIES_PX_CAP = 16）。 */
 export const MERGE_LINES_CAP = 16;
 
+/** 空对（main=null）在入口 chip / 浮窗卡标 / 宽表组头的统一叫法；面板头作为图标题另用「对比产品」 */
+export const EMPTY_MAIN_LABEL = '未选主分析产品';
+
 let cardSeq = 0;
 
 /** 卡稳定键：跨持久化保留；同毫秒批量建卡靠自增尾号去重 */
@@ -79,17 +82,46 @@ export function reapplyAuto(mains: MainProduct[]): MainProduct[] {
   );
 }
 
-/** 勾选组逐组成卡（保序；同型号同配置去重）——URL 解析 / 纯竞品视角迁移用 */
-export function cardsFromSelections(list: ProductSelection[]): MainProduct[] {
+/** 卡片落主品（空对补选 / 换主品共用）：主品占线后对比区按新配额截断，
+ *  并剔除与新主品同型号同配置的对比项（主品与对比不重复占线）。 */
+export function withMain(card: MainProduct, sel: ProductSelection): MainProduct {
+  const key = selKey(sel);
+  return {
+    ...card,
+    main: sel,
+    compares: card.compares.filter((c) => selKey(c) !== key).slice(0, cardQuota({ main: sel })),
+  };
+}
+
+/** 跨页建卡正源（总览走势跳转 / 对比浮层进看板 / 预警看板下钻共用）：
+ *  按 selKey 去重、封顶 MAINS_CAP；首卡继承 firstCompares（剔除与主品同组、
+ *  截卡配额），其余卡 autoMatch 时按矩阵带出对比区，否则落空。 */
+export function buildCards(
+  sels: ProductSelection[],
+  opts: { firstCompares?: ProductSelection[]; autoMatch?: boolean } = {},
+): MainProduct[] {
   const out: MainProduct[] = [];
   const seen = new Set<string>();
-  for (const sel of list) {
+  for (const sel of sels) {
+    if (out.length >= MAINS_CAP) break;
     const key = selKey(sel);
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ id: newCardId(), main: sel, compares: [] });
+    const card: MainProduct = { id: newCardId(), main: sel, compares: [] };
+    if (out.length === 0 && opts.firstCompares?.length) {
+      card.compares = opts.firstCompares.filter((c) => selKey(c) !== key).slice(0, cardQuota(card));
+    } else if (opts.autoMatch) {
+      card.compares = autoComparesFor(card);
+    }
+    out.push(card);
   }
   return out;
+}
+
+/** 勾选组逐组成卡（保序；同型号同配置去重）——URL 解析 / 纯竞品视角迁移用；
+ *  buildCards 的薄封装（封顶已并入，调用方随后的 clampMains 幂等）。 */
+export function cardsFromSelections(list: ProductSelection[]): MainProduct[] {
+  return buildCards(list);
 }
 
 /** v11 → v12 持久化迁移：旧卡 configs[] 展开为逐配置卡——

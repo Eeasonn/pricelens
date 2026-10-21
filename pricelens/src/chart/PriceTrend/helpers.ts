@@ -79,7 +79,7 @@ export const axisFixedWidth = (currency: CurrencyMode): number =>
   (currency === 'usd' ? AXIS_BAND_W : TICK_ZONE_W) + TICK_DASH_W;
 
 /** 档位标签显示缩写（第九十一轮）：「1000」全写压成 K 缩写（1000+ → 1K+、
- *  800~1000 → 800~/1K），与刻度的 K 缩写同语言；DEFAULT_TIERS 数据本身不动。 */
+ *  800~1000 → 800~/1K），与刻度的 K 缩写同语言；阶梯数据本身不动。 */
 export const tierLabelShort = (label: string): string => label.replace(/1000/g, '1K');
 
 // ---------------- 断裂轴（空白压缩）阈值设计 ----------------
@@ -502,17 +502,8 @@ export function yNormOf(g: Geom, v: number): number {
 }
 
 // ---------------- 价格档位（§7.1 tier_code 口径；左轴档位带，仅 USD） ----------------
-// tier_code 按上市价 USD 归档，档位边界固定：<200 / 200-400 / 400-600 / 600-800 / 800-1000 / 1000+。
+// tier_code 按上市价 USD 归档，档位阶梯按产业取自 dimTier（aggregate.tierBandsOf）。
 // 本币（RUB）映射未定义（汇率波动），故档位带只在 USD 币种下渲染。
-
-export const DEFAULT_TIERS: { label: string; min: number; max: number | null }[] = [
-  { label: '<200', min: 0, max: 200 },
-  { label: '200~400', min: 200, max: 400 },
-  { label: '400~600', min: 400, max: 600 },
-  { label: '600~800', min: 600, max: 800 },
-  { label: '800~1000', min: 800, max: 1000 },
-  { label: '1000+', min: 1000, max: null },
-];
 
 // ---------------- 桶（§6.5 刷选 / §6.3 下钻） ----------------
 

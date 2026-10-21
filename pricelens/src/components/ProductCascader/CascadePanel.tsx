@@ -13,7 +13,7 @@
 // ============================================================
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Checkbox, Tooltip } from 'antd';
-import { DownOutlined, RightOutlined } from '@ant-design/icons';
+import { DownOutlined, LockOutlined, RightOutlined } from '@ant-design/icons';
 import { color, fontSize, radius, selectAccent, selectSoft, space } from '../../theme/tokens';
 
 export interface CascadeRowItem {
@@ -31,7 +31,7 @@ export interface CascadeRowItem {
   active?: boolean;
   /** 行尾内容（均值徽标 /「配置 SKU…」按钮），点击不触发行激活 */
   trailing?: ReactNode;
-  /** 置灰锁：#a1a1a1 文字 + 🔒，可见不可点（§4.3） */
+  /** 置灰锁：#a1a1a1 文字 + 锁图标，可见不可点（§4.3） */
   locked?: boolean;
 }
 
@@ -64,7 +64,7 @@ export function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; m
     (items.some((i) => i.leading) ? 18 : 0) + // 前置品牌点
     16 + // 父级行尾展开箭头（统一预留）
     (opts.extraW ?? 0);
-  const textW = items.reduce((w, i) => Math.max(w, measureText(i.label + (i.locked ? '🔒' : ''))), 0);
+  const textW = items.reduce((w, i) => Math.max(w, measureText(i.label) + (i.locked ? 14 : 0)), 0);
   // 行文字实际渲染字号 = fontSize.bodySm（14px），measureText 按 13px 基准测量 →
   // 折算到实际字号再计呼吸位（第一百二十三轮：label + 行尾必须完整可见）
   const min = opts.min ?? 148;
@@ -199,7 +199,7 @@ function Column({ items, width, last, open, fillFlex, height }: { items: Cascade
             }}
           >
             <span style={noClip ? undefined : { overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-            {item.locked ? '🔒' : ''}
+            {item.locked && <LockOutlined aria-hidden style={{ fontSize: 10, flexShrink: 0 }} />}
           </span>
           {item.trailing}
           {/* 父级行尾展开箭头（第一百一十五轮，对齐国家筛选器）：提示可点击下钻 */}

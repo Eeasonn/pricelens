@@ -51,7 +51,7 @@ function Pill({
     <span
       role="button"
       aria-pressed={pill.hidden}
-      title={pill.hidden ? '点击恢复显示该产品' : '点击屏蔽该产品'}
+      title={pill.hidden ? '点击恢复显示该产品' : '点击隐藏该产品'}
       onClick={(e) => {
         e.stopPropagation();
         onToggle(pill.key);

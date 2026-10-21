@@ -140,6 +140,45 @@ function compareModel(a: ModelNode, b: ModelNode): number {
     || a.label.localeCompare(b.label, undefined, { numeric: true });
 }
 
+/** 型号入门信息（选择产品浮窗型号行尾「档位 · 现价」）：现价 = 各配置默认
+ *  （最低价）颜色 SKU 最新价的最低值（入门配置口径，币种随筛选）；档位 =
+ *  该入门配置的配置级档位代码。无任何有价配置 → price 为 null。 */
+export function modelEntryInfo(m: ModelNode, currency: 'usd' | 'local' = 'usd'): { tierCode: string; price: number | null } {
+  let price: number | null = null;
+  let tierCode = '';
+  for (const r of m.romrams) {
+    const def = defaultColorSkuIds(r)[0];
+    const info = def ? r.colors.find((c) => c.skuId === def) : undefined;
+    const v = info ? (currency === 'usd' ? info.latestUsd : info.latestLocal) : null;
+    if (v == null) continue;
+    if (price == null || v < price) {
+      price = v;
+      const row = dimProduct.find((p) => modelIdOf(p) === m.modelId && p.romram === r.romram);
+      tierCode = row ? tierOf(row) : '';
+    }
+  }
+  return { tierCode, price };
+}
+
+export type ModelSortMode = 'default' | 'price' | 'name';
+
+/** 型号列排序（选择产品浮窗「默认 | 价格 | 名称」）：默认 = 树内现序（在售在前、
+ *  上市新→旧）；价格 = 入门现价升序、无价殿后、同价按名称；名称 = 型号名文本序。 */
+export function sortModelNodes(models: ModelNode[], mode: ModelSortMode, currency: 'usd' | 'local' = 'usd'): ModelNode[] {
+  const byName = (a: ModelNode, b: ModelNode): number => a.label.localeCompare(b.label, undefined, { numeric: true });
+  if (mode === 'default') return models;
+  if (mode === 'name') return [...models].sort(byName);
+  const priceOf = (m: ModelNode): number | null => modelEntryInfo(m, currency).price;
+  return [...models].sort((a, b) => {
+    const pa = priceOf(a);
+    const pb = priceOf(b);
+    if (pa == null && pb == null) return byName(a, b);
+    if (pa == null) return 1;
+    if (pb == null) return -1;
+    return pa - pb || byName(a, b);
+  });
+}
+
 // ---- 最新折后价索引（懒构建一次；数据静态于模块装载） ----
 
 let latestCache: { cc: string; values: Map<string, { local: number | null; usd: number | null }> } | null = null;

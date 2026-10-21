@@ -26,12 +26,12 @@ function OfferCard({ offer }: { offer: OfferInfo }) {
     <div style={{ width: 252 }}>
       {offerList(offer).map((d, i) => (
         <div key={d.kind} style={i > 0 ? { borderTop: `1px solid ${color.hairline}`, marginTop: space.xs, paddingTop: space.xs } : undefined}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
             <span style={{ color: color.warning, display: 'inline-flex' }}>{KIND_META[d.kind].icon}</span>
             <span style={{ color: color.ink, fontWeight: 600 }}>{d.headline}</span>
-            <span style={{ marginLeft: 'auto', fontSize: 10.5, color: color.mute }}>{KIND_META[d.kind].label}</span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: color.mute }}>{KIND_META[d.kind].label}</span>
           </div>
-          <div style={{ marginTop: 3, fontSize: 11.5, lineHeight: '16px', color: color.body }}>{d.detail || d.promoName}</div>
+          <div style={{ marginTop: 3, fontSize: 11, lineHeight: '16px', color: color.body }}>{d.detail || d.promoName}</div>
           <div className="tnum" style={{ marginTop: 2, fontSize: 11, color: color.mute }}>
             至 {d.endDate.slice(5)} · 活动剩 {d.remainingDays} 天
             {d.promoName && d.detail ? ` · ${d.promoName}` : ''}
@@ -64,7 +64,7 @@ export default function OfferPopover({ x, y, offer }: { x: number; y: number; of
             transform: 'translateX(-50%)',
             background: 'rgba(31, 31, 31, 0.92)',
             color: '#fff',
-            fontSize: 10.5,
+            fontSize: 10,
             lineHeight: '16px',
             padding: '1px 8px',
             borderRadius: radius.pill,

@@ -115,7 +115,7 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
         type="button"
         aria-label="自动时间范围"
         aria-pressed={adaptive}
-        title={adaptive ? '自动跟随所选产品的最早/最晚爬价时间' : '恢复所选产品的自动时间范围'}
+        title={adaptive ? '自动覆盖所选产品的最早～最新有价时间' : '恢复所选产品的自动时间范围'}
         onClick={onToggleAdaptive}
         style={{
           height: 30, padding: '0 9px', borderRadius: radius.control,

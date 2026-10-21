@@ -9,9 +9,9 @@
 //   - 月/季 = 桶内周求和；无任何周有值 → null；
 //   - 结果 Math.round 为非负整数；不随平台/币种变化（恒本币口径的事实行）。
 // ============================================================
-import { dimProduct, dimPromo, dimTier, dimTime } from '../data';
+import { dimProduct, dimPromo, dimTime } from '../data';
 import type { DimProduct, FactPriceWeekly, Granularity, Industry } from './types';
-import { defaultPlatformOf, factRows } from './aggregate';
+import { defaultPlatformOf, factRows, tierOf, tierOrderOf } from './aggregate';
 
 const normRom = (s: string): string => s.replace(/\s+/g, '');
 
@@ -166,8 +166,8 @@ export function volumeOfConfig(modelId: string, romram: string, countryCode: str
     return out;
   }
   const head = rows[0];
-  const ladder = dimTier.ladders[head.industry] ?? [];
-  const tierCode = head.tier_by_country?.[countryCode] ?? head.tier_code;
+  const ladder = tierOrderOf(head.industry);
+  const tierCode = tierOf(head, countryCode);
   const share = configShares(modelId, countryCode).get(head.romram) ?? 1;
   const eol = rows.map((r) => r.eol_date).filter((d): d is string => !!d).sort()[0] ?? null;
   const dp = defaultPlatformOf(countryCode);

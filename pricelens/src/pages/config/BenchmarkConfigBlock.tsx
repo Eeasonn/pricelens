@@ -85,7 +85,7 @@ export default function BenchmarkConfigBlock() {
           options={industries.map((i) => ({ label: INDUSTRY_LABELS[i], value: i }))}
         />
         <span className="tnum" style={{ fontSize: fontSize.caption, color: color.mute }}>
-          {ownModels.length} 个自有型号 · {totalPairs} 条对标 · 每配置最多 4 款
+          {ownModels.length} 个型号 · {totalPairs} 条对标 · 每配置最多 4 款
         </span>
         <Popover trigger="click" placement="bottomLeft" content={matchLogic} arrow={false}>
           <Button size="small" icon={<InfoCircleOutlined />} style={{ height: 24 }}>
@@ -95,7 +95,7 @@ export default function BenchmarkConfigBlock() {
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           {(Object.keys(SOURCE_TAG) as DimBenchmark['source'][]).map((k) => (
             <Tooltip key={k} title={SOURCE_TAG[k].hint}>
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: SOURCE_TAG[k].fg, background: SOURCE_TAG[k].bg, borderRadius: radius.pill, padding: '0 7px', lineHeight: '16px' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: SOURCE_TAG[k].fg, background: SOURCE_TAG[k].bg, borderRadius: radius.pill, padding: '0 7px', lineHeight: '16px' }}>
                 {SOURCE_TAG[k].text}
               </span>
             </Tooltip>
@@ -104,7 +104,7 @@ export default function BenchmarkConfigBlock() {
       </div>
 
       {ownModels.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该国该产业暂无自有产品数据" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该国该产业暂无产品数据" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
           {ownModels.map((m) => (
@@ -121,7 +121,7 @@ export default function BenchmarkConfigBlock() {
                     key={r.romram}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderTop: `1px solid ${color.hairline}` }}
                   >
-                    <span className="tnum" style={{ width: 150, flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: color.ink }}>
+                    <span className="tnum" style={{ width: 150, flexShrink: 0, fontSize: 12, fontWeight: 600, color: color.ink }}>
                       {r.romram}
                     </span>
                     <span style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>

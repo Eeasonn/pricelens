@@ -96,7 +96,7 @@ export default function PriceSummary({
   const renderItem = (it: PriceSummaryItem): React.ReactElement => {
   // 店铺来源（取证超链接）——三区横排与窄栏两行两版共用
   const shopNode = it.shop && (
-    <span style={{ fontSize: 10.5, lineHeight: '14px', whiteSpace: 'nowrap', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+    <span style={{ fontSize: 10, lineHeight: '14px', whiteSpace: 'nowrap', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
       {it.url ? (
         <a
           href={it.url}
@@ -163,7 +163,7 @@ export default function PriceSummary({
           {it.discount != null && <DiscountBadge discount={it.discount} />}
           <span
             className="tnum"
-            title={it.price != null ? undefined : '该时点无采数'}
+            title={it.price != null ? undefined : '该时点暂无价格'}
             style={{ fontSize: 17, lineHeight: '22px', fontWeight: 700, color: it.price != null ? color.ink : color.hairlineStrong, whiteSpace: 'nowrap' }}
           >
             {formatPrice(it.price, currency)}
@@ -216,7 +216,7 @@ export default function PriceSummary({
         {it.discount != null && <DiscountBadge discount={it.discount} />}
         <span
           className="tnum"
-          title={it.price != null ? undefined : '该时点无采数'}
+          title={it.price != null ? undefined : '该时点暂无价格'}
           style={{ fontSize: 17, lineHeight: '22px', fontWeight: 700, color: it.price != null ? color.ink : color.hairlineStrong, whiteSpace: 'nowrap' }}
         >
           {formatPrice(it.price, currency)}

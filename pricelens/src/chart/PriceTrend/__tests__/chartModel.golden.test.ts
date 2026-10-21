@@ -415,7 +415,7 @@ describe('buildTickRows / buildTierBoxes / badges / offer', () => {
 
   it('档位带：有数据档 = 实底框；无数据档 = 虚线占位不消失（第三十二轮），框绝对坐标完整落在某一段内', () => {
     const tierValues = [...own.points.map((p) => p.price!), ...comp.points.map((p) => p.price!)];
-    const boxes = buildTierBoxes({ enabled: true, geom, tierValues });
+    const boxes = buildTierBoxes({ enabled: true, geom, tierValues, industry: 'phone' });
     const byLabel = (l: string) => boxes.filter((b) => b.label === l);
     // 有数据档：实底（empty=false）——own 250..295(+300) / comp 650..725(+700)
     expect(byLabel('200~400').length).toBeGreaterThan(0);
@@ -435,11 +435,23 @@ describe('buildTickRows / buildTierBoxes / badges / offer', () => {
     // 连续轴（不压缩）：400~600 空档落在轴域内 → 虚线占位框出现且不与实底框混淆
     const contScale = computeYAxis({ series: [own, comp], priceTypes: BOTH, sliderScale: 1, allowBreak: false });
     const contGeom = mkGeom(contScale, 1400, 10, contScale.plotHeight + 96 + GRID.bottom, 96);
-    const contBoxes = buildTierBoxes({ enabled: true, geom: contGeom, tierValues });
+    const contBoxes = buildTierBoxes({ enabled: true, geom: contGeom, tierValues, industry: 'phone' });
     const gap400 = contBoxes.filter((b) => b.label === '400~600');
     expect(gap400.length).toBeGreaterThan(0);
     expect(gap400.every((b) => b.empty)).toBe(true);
     expect(contBoxes.filter((b) => b.label === '200~400').every((b) => !b.empty)).toBe(true);
+  });
+
+  it('档位带阶梯按产业：tablet 画 <150…800+ 阶梯，不再出现 phone 的 <200/1000+ 档', () => {
+    const tab = mkSeries({ points: [PT({ price: 100, rrp: 100 }), PT({ price: 900, rrp: 900 })] });
+    const tScale = computeYAxis({ series: [tab], priceTypes: BOTH, sliderScale: 1, allowBreak: false });
+    const tGeom = mkGeom(tScale, 1400, 10, tScale.plotHeight + 96 + GRID.bottom, 96);
+    const labels = buildTierBoxes({ enabled: true, geom: tGeom, tierValues: [100, 900], industry: 'tablet' }).map((b) => b.label);
+    expect(labels).toContain('<150');
+    expect(labels).toContain('150~250');
+    expect(labels).toContain('800+');
+    expect(labels).not.toContain('<200');
+    expect(labels).not.toContain('1000+');
   });
 
   it('端点徽标几何与标记表一致；offer 徽章按 档期+权益签名 去重取首周（第四十八轮结构化）', () => {
@@ -985,7 +997,6 @@ describe('buildPriceSummary（摘要条：账面价 vs 成交价三件套）', (
     expect(it.rrp).toBe(100);
     expect(it.discount).toBeCloseTo(-0.1, 10);
     expect(it.asOf).toBe('01-15');
-    expect(it.diffVsOwn).toBeNull();
   });
 
   it('RRP 缺失 → discount null；仅 RRP 有值（price null）→ price null 照常输出', () => {
@@ -1006,21 +1017,6 @@ describe('buildPriceSummary（摘要条：账面价 vs 成交价三件套）', (
     expect(it.rrp).toBeNull();
     expect(it.asOf).toBeNull();
     expect(buildPriceSummary([])).toEqual([]);
-  });
-
-  it('竞品 diffVsOwn 相对首个我司系列；竞品更便宜为负', () => {
-    const own = mkSeries({ key: 'own', isOwn: true, points: [PT({ price: 100, rrp: 100 })] });
-    const c1 = mkSeries({ key: 'c1', isOwn: false, points: [PT({ price: 90 })] });
-    const c2 = mkSeries({ key: 'c2', isOwn: false, points: [PT({ price: 120 })] });
-    const [o, a, b] = buildPriceSummary([own, c1, c2]);
-    expect(o.diffVsOwn).toBeNull();
-    expect(a.diffVsOwn).toBeCloseTo(-0.1, 10);
-    expect(b.diffVsOwn).toBeCloseTo(0.2, 10);
-  });
-
-  it('无我司系列 → 竞品 diffVsOwn 全 null（无水位基准）', () => {
-    const c = mkSeries({ key: 'c', isOwn: false, points: [PT({ price: 90 })] });
-    expect(buildPriceSummary([c])[0].diffVsOwn).toBeNull();
   });
 });
 

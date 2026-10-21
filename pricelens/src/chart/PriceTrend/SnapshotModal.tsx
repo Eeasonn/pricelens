@@ -82,10 +82,10 @@ export default function SnapshotModal({ info, onClose }: SnapshotModalProps) {
           border: `1px solid ${color.hairline}`,
         }}
       />
-      {/* 页脚：演示口径说明 + 弱化的活页次链接 */}
+      {/* 页脚：取证口径 + 弱化的活页次链接 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: space.md, marginTop: space.sm }}>
         <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-          历史时点以页面快照取证；demo 快照按店铺轮转演示，接入采集系统后逐点对应
+          历史时点以页面快照取证
         </span>
         <a
           href={info.url}

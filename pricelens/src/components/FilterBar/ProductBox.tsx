@@ -5,6 +5,7 @@
 // 档位筛选融入「选择产品」浮窗的树（ProductPickerModal.LevelSwitchPopover）。
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Cascader, Checkbox, Select, Tooltip } from 'antd';
+import { LockOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
@@ -25,7 +26,11 @@ import { INDUSTRY_LABELS, INDUSTRY_ORDER, industriesOfCountry } from '../../data
 // ---------------- ① 产业下拉（反馈 2.1） ----------------
 
 function lockedOption(text: string): ReactNode {
-  return <span style={{ color: color.hairlineStrong }}>{text} 🔒</span>;
+  return (
+    <span style={{ color: color.hairlineStrong }}>
+      {text} <LockOutlined style={{ fontSize: 10 }} />
+    </span>
+  );
 }
 
 export function IndustryControl() {

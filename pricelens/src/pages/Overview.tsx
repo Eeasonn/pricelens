@@ -71,8 +71,8 @@ export default function Overview() {
     setSelTiers,
     scrollTop,
   } = useOverviewView();
-  // 本页视图态：按产品 = 级联多选（空 = 全部我司产品）；按档位 = 档位多选（空 = 全部档位）。
-  // 与看板同结构互斥（产品∈档位双选无信息量），切换时清空另一侧
+  // 本页视图态：产品 = 级联多选（空 = 全部我司产品）；价格档位 = 档位多选（空 = 全部档位）。
+  // 两种筛选互斥（产品∈档位双选无信息量），切换时清空另一侧
   const [ovSubjectMode, setOvSubjectMode] = useState<'product' | 'tier'>('product');
   const currency = state.currency;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -150,7 +150,7 @@ export default function Overview() {
             <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30, flexWrap: 'wrap' }}>
                 <ScopeFields />
-                {/* 分析对象（与看板同结构）：按产品 = 级联多选，按档位 = 档位多选（本页视图态） */}
+                {/* 分析对象：产品 = 级联多选，价格档位 = 档位多选（本页视图态） */}
                 <Segmented
                   size="small"
                   value={ovSubjectMode}
@@ -160,14 +160,14 @@ export default function Overview() {
                     if (mode === 'product') setSelTiers([]);
                     else setProdSel([]);
                   }}
-                  options={[{ label: '按产品', value: 'product' }, { label: '按档位', value: 'tier' }]}
+                  options={[{ label: '产品', value: 'product' }, { label: '价格档位', value: 'tier' }]}
                 />
                 <FilterCell flex="1 1 285px">
                   {ovSubjectMode === 'product' ? (
                     <OwnProductControl
                       selection={prodSel}
                       onSelectionChange={setProdSel}
-                      emptyPlaceholder="全部自有产品"
+                      emptyPlaceholder="全部产品"
                     />
                   ) : (
                     <Select

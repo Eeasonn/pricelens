@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import { Cascader } from 'antd';
 import type { CascaderProps } from 'antd';
+import { LockOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { dimRegion } from '../../data';
 import type { DimRegion } from '../../dataModel/types';
@@ -38,13 +39,13 @@ function buildOptions(rows: DimRegion[]): RegionOption[] {
     }));
 }
 
-/** 选项尾缀：置灰国家带 🔒（§4.3 禁用态） */
+/** 选项尾缀：置灰国家带锁标（§4.3 禁用态） */
 const optionRender: CascaderProps<RegionOption>['optionRender'] = (option) => {
   const disabled = (option as { disabled?: boolean }).disabled;
   return (
     <span>
       {option.label}
-      {disabled ? ' 🔒' : ''}
+      {disabled ? <LockOutlined style={{ fontSize: 10 }} /> : null}
     </span>
   );
 };

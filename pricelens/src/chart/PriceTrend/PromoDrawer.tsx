@@ -107,7 +107,7 @@ export default function PromoDrawer(props: {
     pct > 0 ? `\u2212${pct}%` : pct < 0 ? `+${Math.abs(pct)}%` : '0%';
 
   const cellText = {
-    fontSize: 10.5,
+    fontSize: 10,
     fontFamily: font.family,
     fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap',
@@ -142,7 +142,7 @@ export default function PromoDrawer(props: {
             t: i === DEPTH_TINTS.length - 1 ? '>20%' : i === 0 ? '≤5%' : `${t}%`,
           })),
           { c: PREMIUM_TINT, t: '溢价' },
-          { c: MISS_TINT, t: '缺采/退市' },
+          { c: MISS_TINT, t: '未采集/已退市' },
         ].map(({ c, t }) => (
           <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
             <i
@@ -157,7 +157,7 @@ export default function PromoDrawer(props: {
             {t}
           </span>
         ))}
-        <span>描边 = 区间内最深 · — = 未上市</span>
+        <span>描边格为该列最深降幅；— 为未上市</span>
       </div>
 
       {cols.length === 0 || n === 0 ? (
@@ -218,7 +218,7 @@ export default function PromoDrawer(props: {
                       <BrandDot brand={c.brand} />
                       <span
                         style={{
-                          fontSize: 11.5,
+                          fontSize: 11,
                           fontWeight: c.isOwn ? 600 : 400,
                           color: c.isOwn ? color.ink : color.body,
                           overflow: 'hidden',
@@ -281,7 +281,7 @@ export default function PromoDrawer(props: {
                       return (
                         <td key={c.key} style={{ borderBottom: `1px solid ${color.hairline}`, padding: '3px 2px' }}>
                           <div
-                            title={cell.eol ? '已退市' : '该周缺采'}
+                            title={cell.eol ? '已退市' : '该周未采集到数据'}
                             style={{
                               height: ROW_H - 7,
                               display: 'flex',
@@ -293,7 +293,7 @@ export default function PromoDrawer(props: {
                               ...cellText,
                             }}
                           >
-                            n/a
+                            —
                           </div>
                         </td>
                       );
@@ -302,7 +302,7 @@ export default function PromoDrawer(props: {
                     return (
                       <td key={c.key} style={{ borderBottom: `1px solid ${color.hairline}`, padding: '3px 2px' }}>
                         <div
-                          title={`折后价 ${formatPrice(cell.price, currency)} · 上市价 ${c.launch != null ? formatPrice(c.launch, currency) : '—'}（促销力度 ${(cell.depth * 100).toFixed(1)}%）${cell.offerNote ? ` · offer：${cell.offerNote}` : ''}`}
+                          title={`折后价 ${formatPrice(cell.price, currency)} · 上市价 ${c.launch != null ? formatPrice(c.launch, currency) : '—'}（促销力度 ${(cell.depth * 100).toFixed(1)}%）${cell.offerNote ? ` · 权益：${cell.offerNote}` : ''}`}
                           style={{
                             height: ROW_H - 7,
                             display: 'flex',

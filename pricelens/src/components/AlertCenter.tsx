@@ -1,6 +1,5 @@
 // ============================================================
 // 预警中心入口与共享件（第五十二轮建 / 追补⑨升页面 / 预警中心重构收编）。
-// - AlertNavButton：页头铃铛（Badge = 触发条数，点击进预警中心页，四页头共用）；
 // - AlertBell：统一订阅铃铛（未订阅 = 描边灰、已订阅 = 金色实心 + 触发金点），
 //   看板时点页签 / 总览行尾与预警列 / 预警页矩阵行尾共用——原三处形态互不一致
 //   （无字实心铃 / 带字整组按钮 / 文字链接），重构后同一组件同一语义；
@@ -9,11 +8,10 @@
 // 四类预警（alerts.ts）：调价 / 折扣 / 平台价差 / 档位间距。
 // ============================================================
 import { useMemo } from 'react';
-import { Badge, Button } from 'antd';
+import { Badge } from 'antd';
 import { BellFilled, BellOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
-import { usePage } from '../state/PageContext';
-import { buildAlerts, latestAlerts, type AlertItem, type AlertType } from '../dataModel/alerts';
+import { buildAlerts, type AlertItem, type AlertType } from '../dataModel/alerts';
 import { color, formatPrice, radius } from '../theme/tokens';
 
 /** 类型徽标：调价 = 蓝、折扣 = 琥珀、平台价差 = 紫、档位间距 = 玫红 */
@@ -101,30 +99,9 @@ export function useAlerts(): AlertItem[] {
   );
 }
 
-/** 页头铃铛（四页头共用，PageHeader 内挂载）：Badge = 触发条数，点击进预警中心页 */
-export function AlertNavButton() {
-  const { go, page } = usePage();
-  const alerts = useAlerts();
-  const latest = useMemo(() => latestAlerts(alerts), [alerts]);
-  return (
-    <Badge count={latest.length} size="small" overflowCount={99} title={`${latest.length} 条最新预警${alerts.length > latest.length ? `，历史 ${alerts.length} 条` : ''}`}>
-      <Button
-        size="small"
-        type={page === 'alerts' ? 'primary' : 'default'}
-        icon={<BellOutlined />}
-        style={{ height: 28 }}
-        title="预警中心：调价 / 折扣 / 平台价差 / 档位间距"
-        onClick={() => go('alerts')}
-      >
-        预警
-      </Button>
-    </Badge>
-  );
-}
-
 /** 统一订阅铃铛（预警中心重构）：未订阅 = 描边弱灰铃、已订阅 = 金色实心铃（antd gold-6），
- *  外挂 Badge 金点 = 该系列当前最新态有触发（悬停显条数）。点击 = 切换该系列订阅，
- *  阈值与类型在预警中心调整。受控组件：订阅态与回调由调用方给（看板/总览/预警页同语义）。 */
+ *  外挂 Badge 金点 = 该系列当前最新态有触发（悬停显条数）。点击 = 切换该系列订阅。
+ *  受控组件：订阅态与回调由调用方给（看板/总览/预警页同语义）。 */
 export function AlertBell({ subscribed, count = 0, size = 14, onToggle }: {
   subscribed: boolean;
   /** 该系列当前最新态触发条数（>0 挂金点；历史条数不传入） */
@@ -133,14 +110,10 @@ export function AlertBell({ subscribed, count = 0, size = 14, onToggle }: {
   onToggle: () => void;
 }) {
   return (
-    <Badge dot={count > 0} color="#faad14" title={`${count} 条最新预警 · 前往预警中心查看`}>
+    <Badge dot={count > 0} color="#faad14" title={`${count} 条最新预警`}>
       <span
         role="button"
-        title={
-          subscribed
-            ? '已订阅预警（调价 / 折扣 / 平台价差 / 档位间距）· 点击取消订阅'
-            : '订阅预警（调价 / 折扣 / 平台价差 / 档位间距）· 阈值与类型在预警中心调整'
-        }
+        title={subscribed ? '已订阅 · 点击取消' : '订阅该产品的价格预警'}
         onClick={(e) => {
           e.stopPropagation();
           onToggle();

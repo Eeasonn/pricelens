@@ -55,6 +55,7 @@ echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, font, fontSize, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
+import { useFilters } from '../../state/FiltersContext';
 import {
   BREAK_PX,
   GRID,
@@ -289,7 +290,7 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
       style={{
         flexShrink: 0,
         padding: '0 5px',
-        fontSize: 10.5,
+        fontSize: 10,
         lineHeight: '15px',
         fontWeight: 700,
         borderRadius: radius.pill,
@@ -339,7 +340,7 @@ function ZoneNamePill(props: {
       <span
         role="button"
         aria-pressed={props.hidden}
-        title={props.hidden ? '点击恢复显示该产品' : '点击屏蔽该产品'}
+        title={props.hidden ? '点击恢复显示该产品' : '点击隐藏该产品'}
         onClick={(e) => {
           e.stopPropagation();
           props.onToggle(nm.seriesKey);
@@ -393,6 +394,9 @@ function ZoneNamePill(props: {
 
 export default function Chart(props: ChartProps) {
   const { series, granularity, currency, priceTypes } = props;
+  // 档位带阶梯随产业（tierBandsOf）——产业属全局筛选，从 FiltersContext 直取，
+  // 调用方（含量价看板/下钻弹窗）无需逐层传 prop
+  const { state: filterState } = useFilters();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const chartDivRef = useRef<HTMLDivElement | null>(null); // ECharts 挂载层（背景带之下、DOM 覆盖层之下）
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -840,8 +844,8 @@ export default function Chart(props: ChartProps) {
 
   const showTierBand = currency === 'usd' && geom != null && props.axisChrome !== false;
   const tierBoxes = useMemo(
-    () => buildTierBoxes({ enabled: showTierBand, geom, tierValues }),
-    [showTierBand, geom, tierValues],
+    () => buildTierBoxes({ enabled: showTierBand, geom, tierValues, industry: filterState.industry }),
+    [showTierBand, geom, tierValues, filterState.industry],
   );
 
   // 第一百一十三轮（评审）：明细浮层取数列 = 本图真实悬停列优先，缺省回落外部联动列
@@ -1839,8 +1843,8 @@ export default function Chart(props: ChartProps) {
                 key={`ep-${b.key}`}
                 title={
                   b.kind === 'in'
-                    ? '数据在窗口左侧延续，可拉伸时间窗口查看'
-                    : '数据在窗口右侧延续，可拉伸时间窗口查看'
+                    ? '左侧还有更早的价格数据，可拉长时间范围查看'
+                    : '右侧还有更新的价格数据，可拉长时间范围查看'
                 }
                 style={{
                   position: 'absolute',

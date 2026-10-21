@@ -565,6 +565,22 @@ export function tierOrderOf(industry: Industry): string[] {
   return dimTier.ladders[industry] ?? [];
 }
 
+/** 产业档位值域带（低 → 高）：`<200` → {0, 200}、`200-400` → {200, 400}、`1000+` → {1000, null}；
+ *  label 与 Y 轴档位带同格式（'-' → '~'，tierLabelShort 继续适用） */
+export function tierBandsOf(industry: Industry): { code: string; label: string; min: number; max: number | null }[] {
+  return tierOrderOf(industry).map((code) => {
+    const open = /^<(\d+)$/.exec(code);
+    const range = /^(\d+)-(\d+)$/.exec(code);
+    const topOpen = /^(\d+)\+$/.exec(code);
+    return {
+      code,
+      label: code.replace('-', '~'),
+      min: open ? 0 : range ? Number(range[1]) : topOpen ? Number(topOpen[1]) : 0,
+      max: open ? Number(open[1]) : range ? Number(range[2]) : null,
+    };
+  });
+}
+
 /** 某国口径下的产品档位（分国档位优先，无该国记录回全局兜底） */
 export function tierOf(p: DimProduct, countryCode: string = getCurrentCountry()): string {
   return p.tier_by_country?.[countryCode] ?? p.tier_code;

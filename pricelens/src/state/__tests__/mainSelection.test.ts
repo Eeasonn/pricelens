@@ -7,6 +7,7 @@ import { dimProduct, dimBenchmark } from '../../data';
 import type { MainProduct, ProductSelection } from '../filtersTypes';
 import {
   autoComparesFor,
+  buildCards,
   cardQuota,
   cardsFromSelections,
   clampMains,
@@ -19,6 +20,7 @@ import {
   reapplyAuto,
   remapSelection,
   selKey,
+  withMain,
 } from '../mainSelection';
 import { buildProductTree, type RomramNode } from '../../components/ProductCascader/tree';
 
@@ -38,10 +40,79 @@ const card = (main: ProductSelection | null, compares: ProductSelection[] = []):
   compares,
 });
 
+/** n 个互不同组的该国竞品勾选（按 selKey 去重收集） */
+const distinctComps = (n: number): ProductSelection[] => {
+  const out: ProductSelection[] = [];
+  const seen = new Set<string>();
+  for (const p of dimProduct) {
+    if (p.is_own || !p.countries.includes('RU')) continue;
+    const key = `${p.sku_id.split('__')[0]}|${p.romram.replace(/\s+/g, '')}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ modelId: p.sku_id.split('__')[0], romram: p.romram, skuIds: [p.sku_id] });
+    if (out.length >= n) break;
+  }
+  return out;
+};
+
 describe('cardQuota（一张图 ≤8 条产品线，选择时收口）', () => {
   it('有主品 = 7（主品占 1 线）；空对 = 8', () => {
     expect(cardQuota({ main: ownSel })).toBe(MAX_LINES_PER_CHART - 1);
     expect(cardQuota({ main: null })).toBe(MAX_LINES_PER_CHART);
+  });
+});
+
+describe('withMain（空对补选 / 换主品：对比区随新配额收口）', () => {
+  it('空对挂满 8 条对比后补主品 → 对比区截到 7 条，前 7 条原样保留', () => {
+    const comps8 = distinctComps(8);
+    expect(comps8).toHaveLength(8);
+    const out = withMain(card(null, comps8), ownSel);
+    expect(out.main).toEqual(ownSel);
+    expect(out.compares).toHaveLength(7);
+    expect(out.compares).toEqual(comps8.slice(0, 7));
+  });
+
+  it('对比区含与新主品同型号同配置的项 → 剔除后再截配额', () => {
+    const comps = distinctComps(7);
+    const out = withMain(card(null, [ownSel, ...comps]), ownSel);
+    expect(out.compares.some((c) => selKey(c) === selKey(ownSel))).toBe(false);
+    expect(out.compares).toEqual(comps);
+  });
+
+  it('换主品：与新主品同配置的旧对比项不再重复占线', () => {
+    const comps = distinctComps(2);
+    const out = withMain(card(ownSel, comps), comps[0]);
+    expect(out.main).toEqual(comps[0]);
+    expect(out.compares.some((c) => selKey(c) === selKey(comps[0]))).toBe(false);
+  });
+});
+
+describe('buildCards（跨页建卡正源：去重 / 封顶 / 首卡对比继承）', () => {
+  const synth = (i: number): ProductSelection => ({ modelId: `bm${i}`, romram: '8+128 GB', skuIds: [`bm${i}__8+128`] });
+
+  it('按 selKey 去重、保序', () => {
+    const cards = buildCards([synth(1), synth(2), synth(1)]);
+    expect(cards).toHaveLength(2);
+    expect(cards.map((c) => c.main?.modelId)).toEqual(['bm1', 'bm2']);
+  });
+
+  it('超过 MAINS_CAP 的 selection → 封顶 MAINS_CAP 张卡', () => {
+    expect(buildCards(Array.from({ length: MAINS_CAP + 4 }, (_, i) => synth(i)))).toHaveLength(MAINS_CAP);
+  });
+
+  it('首卡继承 firstCompares：9+1 条 → 截到卡配额，与主品同组者剔除；其余卡落空', () => {
+    const comps9 = distinctComps(9);
+    const cards = buildCards([ownSel, synth(1)], { firstCompares: [...comps9, ownSel] });
+    expect(cards).toHaveLength(2);
+    expect(cards[0].compares).toHaveLength(cardQuota(cards[0]));
+    expect(cards[0].compares.some((c) => selKey(c) === selKey(ownSel))).toBe(false);
+    expect(cards[1].compares).toEqual([]);
+  });
+
+  it('autoMatch：卡对比区按矩阵带出（矩阵未覆盖的型号为空）', () => {
+    const cards = buildCards([ownSel, synth(1)], { autoMatch: true });
+    expect(cards[0].compares).toEqual(autoComparesFor(cards[0]));
+    expect(cards[1].compares).toEqual([]);
   });
 });
 

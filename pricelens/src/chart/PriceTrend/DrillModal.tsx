@@ -13,6 +13,7 @@ import type { AggMode, CurrencyMode, Granularity, Series, SeriesQuery, SkuGroupQ
 import { color, font, fontSize, radius, shadow, space } from '../../theme/tokens';
 import Chart from './Chart';
 import { monthWeeks, quarterMonths } from './helpers';
+import { bucketDateText } from './tableModel';
 
 export interface DrillInfo {
   group: SkuGroupQuery; // 被点击系列的取数组（单产品）
@@ -25,6 +26,10 @@ interface StackEntry {
   gran: 'month' | 'week'; // month=显示某季的月度趋势（bucketId=季）；week=显示某月的周度趋势（bucketId=月）
   bucketId: string;
 }
+
+/** 桶文案（月桶 202608 → 2026-08；季桶原样）——月/季桶的 xLabel 即桶 id */
+const crumbTextOf = (en: StackEntry): string =>
+  bucketDateText(en.gran === 'week' ? 'month' : 'quarter', en.bucketId);
 
 export interface DrillModalProps {
   info: DrillInfo | null;
@@ -77,9 +82,9 @@ function DrillInner(props: DrillModalProps & { info: DrillInfo }) {
   }, [cur, info.group, buildRange]);
   const s0 = series[0] ?? null;
 
-  // 面包屑：已点桶 id 逐级 + 当前层类型（2026Q3 → 202608 → 周）
+  // 面包屑：已点桶逐级 + 当前层类型（2026Q3 → 2026-08 → 周）
   const crumbs: { label: string; mono: boolean; stackIdx: number | null }[] = [
-    ...stack.map((en, i) => ({ label: en.bucketId, mono: true, stackIdx: i })),
+    ...stack.map((en, i) => ({ label: crumbTextOf(en), mono: true, stackIdx: i })),
     { label: cur.gran === 'month' ? '月' : '周', mono: false, stackIdx: null },
   ];
 
@@ -93,7 +98,7 @@ function DrillInner(props: DrillModalProps & { info: DrillInfo }) {
       {/* 标题 = 产品名 · 期间 + 面包屑 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: space.xs, marginBottom: space.md }}>
         <div style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>
-          {info.label} · <span className="tnum">{cur.bucketId}</span>
+          {info.label} · <span className="tnum">{crumbTextOf(cur)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: space.xs, fontSize: fontSize.caption }}>
           {crumbs.map((c, i) => {

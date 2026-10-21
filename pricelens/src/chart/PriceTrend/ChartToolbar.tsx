@@ -166,9 +166,9 @@ export default function ChartToolbar(props: ChartToolbarProps) {
         placement="bottomLeft"
         content={
           <div style={{ width: 236 }}>
-            <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度（不改 Y 轴刻度值）</div>
+            <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度</div>
             <ScaleSlider scale={props.sliderScale} onCommit={props.onSliderScale} />
-            <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>拖动后松手生效；双击滑杆复位 ×1.00</div>
+            <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>松手生效 · 双击复位</div>
             <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
             <Checkbox checked={props.showYTicks} onChange={(e) => props.onShowYTicks(e.target.checked)}>
               <span style={{ fontSize: 12 }}>Y 刻度线</span>
@@ -267,7 +267,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
               <span style={{ fontSize: 12 }}>大促档期</span>
             </Checkbox>
             <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
-              <span style={{ fontSize: 12 }}>offer 权益</span>
+              <span style={{ fontSize: 12 }}>促销权益</span>
             </Checkbox>
           </div>
           {props.onOpenPromoDetail && (
@@ -276,7 +276,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
               placement="bottomRight"
               content={
                 <div style={{ width: 252 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 8 }}>更多功能（默认关闭）</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 8 }}>更多功能</div>
                   <Checkbox checked={props.maxMinOn === true} onChange={(e) => props.onMaxMinOn!(e.target.checked)}>
                     <span style={{ fontSize: 12 }}>最高/最低价标注</span>
                   </Checkbox>
@@ -291,7 +291,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                       <span style={{ fontSize: 12 }}>价格变化提醒</span>
                     </Checkbox>
                     <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                      相邻有值点 |Δ|≥阈值出 ↓/↑ 徽标
+                      涨跌超过阈值时在点位标注 ↓/↑
                     </div>
                     {props.changeThreshold != null && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
@@ -319,7 +319,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                       <span style={{ fontSize: 12, color: color.body }}>促销力度明细</span>
                       <span
                         role="button"
-                        title="打开促销力度明细抽屉（行=时间最新在上，列=产品）"
+                        title="打开促销力度明细"
                         onClick={props.onOpenPromoDetail}
                         style={{ fontSize: 12, fontWeight: 600, color: '#0070f3', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >

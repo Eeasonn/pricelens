@@ -1,24 +1,16 @@
 // ============================================================
 // 配置读写 + CONFIG_CHANGED_EVENT 广播（§13；键名见 lplKeys.ts）
 // 筛选与配置负责人（Agent B）。
-// 图表侧（Agent C）可只读引用：getFxRate / getCustomTiers。
+// 图表侧（Agent C）可只读引用：getFxRate。
 // ============================================================
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimBenchmark, dimProduct } from '../data';
-import type { CurrencyMode, DimBenchmark } from '../dataModel/types';
+import type { DimBenchmark } from '../dataModel/types';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import type { ProductSelection } from './filtersTypes';
 import { modelIdOf, shortRomram } from '../components/ProductCascader/tree';
 import { getCurrentCountry } from './currentScope';
 export { getFxRate } from './fx';
-
-/** 图表侧保存的档位预设（§6.1 自定义档位），配置页列出可删 */
-export interface CustomTierPreset {
-  name: string;
-  min: number;
-  max: number;
-  currency: CurrencyMode;
-}
 
 // ---------------- localStorage 基础读写（全部防御性） ----------------
 
@@ -228,26 +220,6 @@ export function groupsFromPrevGeneration(own: ProductSelection[]): PrevGenMatchR
     if (skuIds.length) added.push({ modelId: prevMid, romram, skuIds });
   }
   return { added, missing };
-}
-
-// ---------------- 自定义档位（LPL3.config.customTiers，图表侧写入） ----------------
-
-export function getCustomTiers(): CustomTierPreset[] {
-  const list = readJson<CustomTierPreset[]>(LPL.cfgTiers);
-  if (!Array.isArray(list)) return [];
-  return list.filter(
-    (t): t is CustomTierPreset =>
-      t != null &&
-      typeof t === 'object' &&
-      typeof t.name === 'string' &&
-      typeof t.min === 'number' &&
-      typeof t.max === 'number' &&
-      (t.currency === 'local' || t.currency === 'usd'),
-  );
-}
-
-export function saveCustomTiers(tiers: CustomTierPreset[]): void {
-  writeJson(LPL.cfgTiers, tiers);
 }
 
 // ---------------- 变更广播（§13：配置保存后主页立即生效） ----------------

@@ -7,9 +7,8 @@
 // ① 上一代关系（原②）：行 = 当前国家有数据的我司型号（型号级，与 dim_product.prev_model_id
 //    同口径），下拉选上一代型号（候选 = 上市更早的我司型号）；默认读生效关系
 //    （manual 优先 / dim_product auto 兜底），改后差异存 LPL3.config.prevGen
-// ② 汇率口径：只读——真实数据每行自带采集时汇率，USD 值按行折算；此处展示当前国家本币的月度中位汇率
-// ③ 自定义档位管理（原④）：列出 LPL3.config.customTiers（图表侧写入），支持删除
-// ④ 大促日历：只读展示当前国家 dim_promo 的起始时间与促销深度——看板大促带/事件卡的口径来源
+// ② 汇率：只读——真实数据每行自带采集时汇率，USD 值按行折算；此处展示当前国家本币的月度中位汇率
+// ③ 大促日历：只读展示当前国家 dim_promo 的起始时间与促销深度——看板大促带/事件卡的口径来源
 // 保存后 dispatchEvent(CONFIG_CHANGED_EVENT) → 主页立即生效
 // ============================================================
 import { useMemo, useState } from 'react';
@@ -19,16 +18,12 @@ import PageHeader from '../components/PageHeader';
 import {
   autoPrevModelId,
   effectivePrevModelId,
-  getCustomTiers,
   notifyConfigChanged,
-  saveCustomTiers,
   savePrevGenOverrides,
-  type CustomTierPreset,
 } from '../state/configStore';
 import { currencyOfCountry, dimFx, dimProduct, dimPromo } from '../data';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { useFilters } from '../state/FiltersContext';
-import { getLocalCurrency } from '../state/fx';
 import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
 import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
@@ -83,7 +78,6 @@ export default function Config() {
   const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])),
   );
-  const [tiers, setTiers] = useState<CustomTierPreset[]>(getCustomTiers);
   const labels = scopeLabels({ countryCode: state.countryCode, industry: state.industry });
   const localCurrency = currencyOfCountry(state.countryCode);
   const fxRows = useMemo(
@@ -96,7 +90,7 @@ export default function Config() {
   );
 
   // 第一百一十五轮（评审）：右上「保存配置」按钮删除——本页各明细编辑即改即存
-  //（对标配置 = BenchConfigModal 保存；上一代关系 = 下拉变更即存差异；自定义档位 = 删除即存），
+  //（对标配置 = BenchConfigModal 保存；上一代关系 = 下拉变更即存差异），
   // 不再攒一次批量提交。
 
   /** 上一代关系单行变更即存：只写与 auto 的差异（无差异 = 清除手动维护），主页即时生效 */
@@ -112,19 +106,11 @@ export default function Config() {
     message.success('上一代关系已保存，主页已生效');
   };
 
-  /** 自定义档位删除即存 */
-  const removeTier = (idx: number): void => {
-    const next = tiers.filter((_, j) => j !== idx);
-    setTiers(next);
-    saveCustomTiers(next);
-    notifyConfigChanged();
-  };
-
   const restorePrevGenDefault = () => {
     savePrevGenOverrides(null); // 清除手动维护，全部回退 dim_product auto
     setPrevMap(Object.fromEntries(prevRows.map((r) => [r.modelId, autoPrevModelId(r.modelId)])));
     notifyConfigChanged();
-    message.success('已恢复默认上一代关系（auto）');
+    message.success('已恢复默认上一代关系');
   };
 
   return (
@@ -153,7 +139,7 @@ export default function Config() {
             title="上一代关系"
             extra={
               <Button size="small" onClick={restorePrevGenDefault}>
-                恢复默认（auto）
+                恢复默认
               </Button>
             }
           >
@@ -190,12 +176,12 @@ export default function Config() {
                           .map((c) => ({ label: c.label, value: c.modelId }))}
                         onChange={(v) => savePrevRow(r.modelId, v ?? null)}
                       />
-                      <Tooltip title={manual ? '手动维护（保存后生效）' : '来自产品主数据（auto）'}>
+                      <Tooltip title={manual ? '手动维护' : '来自产品主数据'}>
                         <Tag
                           color={manual ? 'blue' : 'default'}
                           style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px', flexShrink: 0 }}
                         >
-                          {manual ? 'manual' : 'auto'}
+                          {manual ? '手动' : '自动'}
                         </Tag>
                       </Tooltip>
                     </div>
@@ -203,13 +189,13 @@ export default function Config() {
                 })}
               </div>
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无自有产品数据" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无产品数据" />
             )}
           </Block>
 
-          {/* ② 汇率口径（只读）：真实数据按行折算，这里展示本币月度中位汇率 */}
+          {/* ② 汇率（只读）：真实数据按行折算，这里展示本币月度中位汇率 */}
           <Block
-            title="汇率口径"
+            title="汇率"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
                 USD 价格 = 本币价格 ÷ 采集时汇率（逐行）；下表为 {localCurrency} 各月中位数
@@ -229,36 +215,7 @@ export default function Config() {
             )}
           </Block>
 
-          {/* ③ 自定义档位管理（图表侧写入的档位预设） */}
-          <Block title="自定义档位">
-            {tiers.length ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
-                {tiers.map((t, i) => (
-                  <div
-                    key={`${t.name}|${i}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: space.md, fontSize: fontSize.bodySm }}
-                  >
-                    <span style={{ color: color.ink, minWidth: 160 }}>{t.name}</span>
-                    <span className="tnum" style={{ color: color.body }}>
-                      {t.min} – {t.max} · {t.currency === 'usd' ? 'USD' : `本币（${getLocalCurrency()}）`}
-                    </span>
-                    <Button
-                      size="small"
-                      danger
-                      style={{ marginLeft: 'auto' }}
-                      onClick={() => setTiers((list) => list.filter((_, j) => j !== i))}
-                    >
-                      删除
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无自定义档位" />
-            )}
-          </Block>
-
-          {/* ④ 大促日历：当前国家的起始时间 + 促销深度（dim_promo 只读） */}
+          {/* ③ 大促日历：当前国家的起始时间 + 促销深度（dim_promo 只读） */}
           <Block
             title="大促日历"
             extra={

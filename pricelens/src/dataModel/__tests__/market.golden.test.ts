@@ -97,6 +97,21 @@ describe('大盘分析 · marketBrandOrder / tierStructure', () => {
     ]);
     expect(tierStructure(cs, vol2, ['200-400', '600-800'], ['ALPHA'])).toEqual([]);
   });
+
+  it('阶梯外档位殿后保留（与 tiersOfScope 同口径）：阶梯内按序在前、阶梯外按代码序追加', () => {
+    // 阶梯外档位 = 不在 phone ladder 的自定义档（如业务临时声明档）
+    const CS: DimProduct[] = [
+      prod({ sku_id: 'cmp-Z-z9__8+128 GB__Black', model_id: 'cmp-Z-z9', brand: 'BETA', model_name: 'Z9', tier_code: '3000-4000', tier_by_country: {} }),
+      prod({ sku_id: 'cmp-Y-y9__8+128 GB__Black', model_id: 'cmp-Y-y9', brand: 'BETA', model_name: 'Y9', tier_code: '2500-3000', tier_by_country: {} }),
+      prod({ sku_id: 'cmp-B-b1__8+128 GB__Black', model_id: 'cmp-B-b1', brand: 'ALPHA', model_name: 'B1', tier_code: '200-400', tier_by_country: {} }),
+    ];
+    const cs = marketConfigs(CS, 'RU', 'phone');
+    const vol = new Map<string, number | null>(cs.map((c) => [marketKeyOf(c), 100]));
+    const st = tierStructure(cs, vol, ['<200', '200-400', '400-600', '600-800', '800-1000', '1000+'], ['ALPHA', 'BETA']);
+    expect(st.map((s) => s.tierCode)).toEqual(['200-400', '2500-3000', '3000-4000']);
+    expect(st[0].total).toBe(100);
+    expect(st[2].byBrand).toEqual([{ brand: 'BETA', vol: 100 }]);
+  });
 });
 
 describe('大盘分析 · brandContribution（第一百二十三轮：必选档位 · 品牌+产品行）', () => {

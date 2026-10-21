@@ -11,8 +11,6 @@ export const LPL = {
   cfgPrevGen: 'LPL3.config.prevGen',
   /** 参考汇率 USD/RUB（Agent B，默认 80） */
   cfgFx: 'LPL3.config.fx',
-  /** 用户自定义档位预设（Agent C 写入，配置页列出可删） */
-  cfgTiers: 'LPL3.config.customTiers',
   /** 最近使用的主分析组合（第一百一十七轮，选择产品浮窗快捷 chips；上限 5 组） */
   uiMainCombos: 'LPL3.ui.mainCombos',
 } as const;

@@ -21,12 +21,14 @@ import {
   type Geom,
   type YScale,
 } from './helpers';
-import type { CurrencyMode } from '../../dataModel/types';
+import type { CurrencyMode, Industry } from '../../dataModel/types';
 import { color } from '../../theme/tokens';
 
 export default function SplitAxisColumn(props: {
   yScale: YScale;
   currency: CurrencyMode;
+  /** 档位阶梯按产业（tierBandsOf） */
+  industry: Industry;
   /** 旧契约保留（第八十六轮起不再参与宽度计算——轴宽恒定） */
   gridLeft: number;
   /** 面板 Chart 的 gridTop（面板内绘图区顶），保证纵向逐像素对齐 */
@@ -50,7 +52,7 @@ export default function SplitAxisColumn(props: {
     n: 1,
   };
   const rows = buildTickRows(geom);
-  const tierBoxes = buildTierBoxes({ enabled: currency === 'usd', geom, tierValues: props.tierValues });
+  const tierBoxes = buildTierBoxes({ enabled: currency === 'usd', geom, tierValues: props.tierValues, industry: props.industry });
   return (
     <div style={{ position: 'relative', width: axisW, height: panelGridTop + scale.plotHeight + GRID.bottom }}>
       {/* 档位区块（仅 USD）：贴轴列左缘的整块竖向色带，档位文字单行居左

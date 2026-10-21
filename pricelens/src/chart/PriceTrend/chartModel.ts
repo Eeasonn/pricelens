@@ -6,12 +6,12 @@
 // 金测（chartModel.golden.test.ts）以快照+不变量钉住 17 轮迭代沉淀的边界行为。
 // ============================================================
 import type { EChartsOption } from 'echarts';
-import type { CurrencyMode, DimPromo, Granularity, OfferDetail, OfferInfo, OfferKind, Series, SeriesPoint } from '../../dataModel/types';
+import type { CurrencyMode, DimPromo, Granularity, Industry, OfferDetail, OfferInfo, OfferKind, Series, SeriesPoint } from '../../dataModel/types';
+import { tierBandsOf } from '../../dataModel/aggregate';
 import { color, font, fontSize } from '../../theme/tokens';
 import {
   GRID,
   NAME_ZONE_W,
-  DEFAULT_TIERS,
   axisTickPlan,
   collectVisibleValues,
   estGridLeft,
@@ -661,17 +661,18 @@ export function collectTierValues(series: Series[], priceTypes: PriceTypes): num
 }
 
 /** 档位带按段裁剪：档位只画在与其值域相交的段上（跨断裂的档不会画出"跨越"错觉）。
- *  第三十二轮：完全无数据的档不再整档消失——标记 empty 交渲染层画虚线占位框
- *  （第八轮"空档不画"针对的是实心框像数据区；相邻档都在时缺一档读起来像 bug，
- *  虚线+透明占位无此歧义且保持梯子连续可读） */
+ *  阶梯按产业取自 dimTier（tierBandsOf）；第三十二轮：完全无数据的档不再整档
+ *  消失——标记 empty 交渲染层画虚线占位框（第八轮"空档不画"针对的是实心框像
+ *  数据区；相邻档都在时缺一档读起来像 bug，虚线+透明占位无此歧义且保持梯子连续可读） */
 export function buildTierBoxes(p: {
   enabled: boolean;
   geom: Geom | null;
   tierValues: number[];
+  industry: Industry;
 }): { label: string; top: number; h: number; empty: boolean }[] {
   if (!p.enabled || !p.geom) return [];
   const out: { label: string; top: number; h: number; empty: boolean }[] = [];
-  for (const tier of DEFAULT_TIERS) {
+  for (const tier of tierBandsOf(p.industry)) {
     const tHi = tier.max ?? Number.POSITIVE_INFINITY;
     const hasData = p.tierValues.some((v) => v >= tier.min && v < tHi);
     for (const seg of p.geom.scale.segs) {
@@ -689,19 +690,16 @@ export function buildTierBoxes(p: {
 
 // ---------------- 价格摘要条（第三十四轮：账面价 vs 成交价三件套） ----------------
 
-/** 摘要条一项 = 一条系列某时点的三元组（折后价 / RRP / 折扣率）+ 竞品差价率 + 来源店铺 */
+/** 摘要条一项 = 一条系列某时点的三元组（折后价 / RRP / 折扣率）+ 来源店铺 */
 export interface PriceSummaryItem {
   key: string;
   brand: string;
   name: string; // curveNameOf 同款（去品牌前缀/容量后缀）
   color: string;
-  isOwn: boolean;
   price: number | null; // 折后价
   rrp: number | null; // RRP（划线价）
   /** 折扣率 = price/rrp − 1（负 = 低于账面价）；两者不全或 rrp≤0 为 null */
   discount: number | null;
-  /** 竞品专属：price 相对首个我司系列 price 的差价率（负 = 竞品比我便宜）；无我司基准为 null */
-  diffVsOwn: number | null;
   asOf: string | null; // 该点的 xLabel（周=MM-DD / 月=YYYYMM / 季=YYYYQn）
   shop: string | null; // 该点来源店铺（来源口径随点走）
   url: string; // 取证跳转链接（摘要条「来源」超链接用）
@@ -736,22 +734,14 @@ export function buildPriceSummary(series: Series[], atIdx?: number | null): Pric
       brand: s.brand,
       name: curveNameOf(s),
       color: s.color,
-      isOwn: s.isOwn,
       price,
       rrp,
       discount,
-      diffVsOwn: null,
       asOf: pt?.xLabel ?? null,
       shop: pt?.shopName ?? null,
       url: pt?.url ?? '',
     };
   });
-  const ownPrice = items.find((it) => it.isOwn && it.price != null)?.price ?? null;
-  if (ownPrice != null && ownPrice > 0) {
-    for (const it of items) {
-      if (!it.isOwn && it.price != null) it.diffVsOwn = it.price / ownPrice - 1;
-    }
-  }
   return items;
 }
 

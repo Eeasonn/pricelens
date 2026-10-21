@@ -23,6 +23,7 @@ import { filterBarTheme } from '../../components/FilterBar';
 import { ownBrand } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
 import { bucketAnchorDate, fmtInt, tierLabelShort, type Bucket } from '../../chart/PriceTrend/helpers';
+import { bucketDateText } from '../../chart/PriceTrend/tableModel';
 import type { Granularity, Industry } from '../../dataModel/types';
 import { TIER_LABELS, tierOrderOf } from '../../dataModel/aggregate';
 import { niceCeil, volumeByBuckets } from '../../dataModel/volume';
@@ -62,17 +63,10 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** 桶时间文案：周 = MM-DD（不带周号）/ 月 = YYYY-MM / 季 = YYYYQn */
-function bucketLabel(g: Granularity, b: Bucket): string {
-  if (g === 'week') return b.xLabel;
-  if (g === 'month' && /^\d{6}$/.test(b.id)) return `${b.id.slice(0, 4)}-${b.id.slice(4)}`;
-  return b.id;
-}
-
-/** 卡头副标题里的当前期：周 = 锚日 YYYY-MM-DD（句中日期要带年份，可读优先）/ 月季同 bucketLabel */
+/** 卡头副标题里的当前期：周 = 锚日 YYYY-MM-DD（句中日期要带年份，可读优先）/ 月季同 bucketDateText */
 function periodTitle(g: Granularity, b: Bucket): string {
   if (g === 'week') return bucketAnchorDate(g, b.id) ?? b.xLabel;
-  return bucketLabel(g, b);
+  return bucketDateText(g, b.xLabel);
 }
 
 /** 档位列标签：'200-400' → '200~400'，1000+ → 1K+（与价格看板 Y 轴档位带同语言） */
@@ -252,7 +246,7 @@ export default function MarketBoard(props: {
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>大盘分析</span>
         <span style={{ fontSize: 11, color: color.mute }}>
-          {periodTitle(granularity, selBucket)} 各价格档位的大盘销量（台），堆叠 = 品牌构成
+          {periodTitle(granularity, selBucket)} 各价格档位大盘销量（台），柱内颜色为品牌构成
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>档位</span>
@@ -277,7 +271,7 @@ export default function MarketBoard(props: {
                 const i = buckets.findIndex((b) => b.id === id);
                 if (i >= winS && i <= winE) setSelIdx(i);
               }}
-              options={winBuckets.map((b) => ({ value: b.id, label: bucketLabel(granularity, b) }))}
+              options={winBuckets.map((b) => ({ value: b.id, label: bucketDateText(granularity, b.xLabel) }))}
               style={{ width: 108 }}
             />
           </ConfigProvider>
@@ -366,7 +360,7 @@ export default function MarketBoard(props: {
                       x={cx}
                       y={PAD_T + plotH + 14}
                       textAnchor="middle"
-                      fontSize={10.5}
+                      fontSize={10}
                       fontWeight={selected ? 600 : 400}
                       fill={selected ? color.ink : color.body}
                       className="tnum"
@@ -399,7 +393,7 @@ export default function MarketBoard(props: {
                   <BrandDot brand={tip.brand} />
                   {tip.brand}
                 </div>
-                <div className="tnum" style={{ marginTop: 2, fontSize: 11.5, color: color.body }}>
+                <div className="tnum" style={{ marginTop: 2, fontSize: 11, color: color.body }}>
                   {tip.vol.toLocaleString('en-US')} 台 · 占该档 {(tip.share * 100).toFixed(1)}%
                 </div>
                 <div className="tnum" style={{ fontSize: 11, color: color.mute }}>
@@ -429,7 +423,7 @@ export default function MarketBoard(props: {
           )}
           {prevBucket && selBucket && (
             <span className="tnum" style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap' }}>
-              {bucketLabel(granularity, prevBucket)} → {bucketLabel(granularity, selBucket)}
+              {bucketDateText(granularity, prevBucket.xLabel)} → {bucketDateText(granularity, selBucket.xLabel)}
             </span>
           )}
         </div>
@@ -507,14 +501,14 @@ export default function MarketBoard(props: {
                       <RowShell key={p.key}>
                         <span
                           title={p.label}
-                          style={{ fontSize: 11.5, color: color.body, paddingLeft: 22, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          style={{ fontSize: 11, color: color.body, paddingLeft: 22, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         >
                           {p.label}
                         </span>
                         <BiBar delta={p.delta} maxAbs={maxAbs} thin />
                         <span
                           className="tnum"
-                          style={{ fontSize: 11.5, fontWeight: 600, textAlign: 'right', color: p.delta > 0 ? color.link : color.error, whiteSpace: 'nowrap' }}
+                          style={{ fontSize: 11, fontWeight: 600, textAlign: 'right', color: p.delta > 0 ? color.link : color.error, whiteSpace: 'nowrap' }}
                         >
                           {fmtSignedInt(p.delta)}
                         </span>
@@ -528,7 +522,7 @@ export default function MarketBoard(props: {
         )}
       </div>
       <div style={{ marginTop: 10, fontSize: 11, color: color.mute }}>
-        销量为估算口径：按折扣深度、促销档期与上市周期推算，接入销量数据后自动替换；档位按产品在各国的声明档位归属。
+        销量为估算值（按折扣深度、促销档期与上市周期推算）；档位按产品在各国声明的价格档归属。
       </div>
     </div>
   );

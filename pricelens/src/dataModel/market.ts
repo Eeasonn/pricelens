@@ -16,6 +16,7 @@
 // 全部纯函数、无随机数，可金测。
 // ============================================================
 import type { DimProduct, Industry } from './types';
+import { tierOf } from './aggregate';
 
 /** 大盘配置（型号 × 配置粒度；同型号同配置多颜色归一） */
 export interface MarketConfig {
@@ -43,7 +44,7 @@ export function marketConfigs(products: DimProduct[], cc: string, industry: Indu
       brand: p.brand,
       modelName: p.model_name,
       label: `${p.model_name} ${p.romram}`,
-      tierCode: p.tier_by_country?.[cc] ?? p.tier_code,
+      tierCode: tierOf(p, cc),
     });
   }
   return [...groups.values()];
@@ -77,7 +78,8 @@ export interface TierStructure {
 }
 
 /** 某一期的大盘结构：档位 → 品牌台数合计（销量为 null 的配置不计入）。
- *  tierOrder = 产业阶梯（低 → 高）；只返回 total > 0 的档位，按阶梯序。
+ *  tierOrder = 产业阶梯（低 → 高）；只返回 total > 0 的档位，按阶梯序，
+ *  阶梯外档位殿后按代码序追加（与 ProductCascader.tiersOfScope 同口径，不丢弃）。
  *  第一百二十三轮起即大盘图的横轴：每档一根柱，柱内分段 = byBrand（序首 = 自有 = 视觉置底）。 */
 export function tierStructure(
   configs: MarketConfig[],
@@ -97,8 +99,11 @@ export function tierStructure(
     brands.set(c.brand, (brands.get(c.brand) ?? 0) + v);
   }
   const brandRank = new Map(brandOrder.map((b, i) => [b, i]));
-  return tierOrder
-    .filter((t) => (byTier.get(t)?.size ?? 0) > 0)
+  const ordered = [
+    ...tierOrder.filter((t) => byTier.has(t)),
+    ...[...byTier.keys()].filter((t) => !tierOrder.includes(t)).sort(),
+  ];
+  return ordered
     .map((tierCode) => {
       const brands = byTier.get(tierCode)!;
       const byBrand = [...brands.entries()]

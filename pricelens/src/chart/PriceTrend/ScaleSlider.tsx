@@ -64,7 +64,6 @@ export default function ScaleSlider({ scale, onCommit }: { scale: number; onComm
       {/* 轨道（含可点热区） */}
       <div
         ref={trackRef}
-        title="每格高度：不改变 Y 轴刻度值，只调整纵向间距（双击复位 ×1.00）"
         onDoubleClick={() => onCommit(1)}
         style={{
           position: 'relative',
@@ -107,7 +106,7 @@ export default function ScaleSlider({ scale, onCommit }: { scale: number; onComm
           aria-valuemin={SLIDER_MIN}
           aria-valuemax={SLIDER_MAX}
           aria-valuenow={scale}
-          title={`每格高度 ×${scale.toFixed(2)}（拖动调整，不改变刻度值；双击复位 ×1.00）`}
+          title={`×${scale.toFixed(2)}`}
           onPointerDown={onDown}
           onPointerMove={onMove}
           onPointerUp={onUp}

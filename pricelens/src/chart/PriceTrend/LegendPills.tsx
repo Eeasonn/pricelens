@@ -35,7 +35,7 @@ export default function LegendPills(props: {
           <span
             key={s.key}
             role="button"
-            title={hidden ? '点击恢复显示该产品' : '点击屏蔽该产品'}
+            title={hidden ? '点击恢复显示该产品' : '点击隐藏该产品'}
             onClick={() => props.onToggle(s.key)}
             style={{
               display: 'inline-flex',

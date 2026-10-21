@@ -32,7 +32,8 @@ import {
 } from '../dataModel/alerts';
 import { productSelectionOfAnySeriesKey, productSelectionOfSeriesKey } from '../state/urlSync';
 import { getEffectiveBenchmark } from '../state/configStore';
-import { autoComparesFor, newCardId } from '../state/mainSelection';
+import { autoComparesFor, buildCards } from '../state/mainSelection';
+import { ownBrand } from '../components/ProductCascader/tree';
 import PageHeader from '../components/PageHeader';
 import BrandDot from '../components/BrandMark';
 import { AlertBell, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
@@ -46,21 +47,21 @@ const TYPE_RULES: Record<
 > = {
   'price-change': {
     name: '调价预警',
-    desc: '折后价相邻有值周变化 ≥ 阈值（自有 / 其他品牌都通知）',
+    desc: '折后价较上一个有价周变化 ≥ 阈值（各品牌都通知）',
     min: 1,
     max: 15,
     step: 0.5,
   },
   promo: {
     name: '折扣预警',
-    desc: '促销力度（1 − 折后价/RRP）相邻有值周变化 ≥ 阈值',
+    desc: '促销力度较上一个有价周变化 ≥ 阈值',
     min: 1,
     max: 15,
     step: 0.5,
   },
   'platform-gap': {
     name: '平台价差预警',
-    desc: '同周各平台独立折后价 最高/最低差 ≥ 阈值（仅自有品牌；demo 因子价差上限 ~1.8%）',
+    desc: `同一周各平台折后价的最高与最低差 ≥ 阈值（仅限 ${ownBrand()}）`,
     min: 0.5,
     max: 3,
     step: 0.1,
@@ -100,6 +101,9 @@ function dirArrowOf(a: AlertItem): ReactNode {
 const romOfLabel = (label: string | null, modelName: string): string =>
   label ? label.slice(label.indexOf(modelName) + modelName.length).trim() : '';
 
+/** 周 id（YYYYWW）→ 带年份周号（2026-W43，与刷选条同口径） */
+const weekTag = (weekId: string): string => `${weekId.slice(0, 4)}-W${weekId.slice(4)}`;
+
 /** 单条触发（预警中心重构：加方向箭头；矩阵展开明细与事件流共用） */
 function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'local'; onOpen: () => void }) {
   const detail =
@@ -133,15 +137,15 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
       <TypePill type={a.type} />
       {dirArrowOf(a)}
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {a.type === 'own-gap' ? `${a.modelName}（${a.romram} × ${romOfLabel(a.pairHighLabel, a.modelName)}）` : `${a.brand} ${a.modelName} ${a.romram}`}
         </div>
-        <div className="tnum" style={{ fontSize: 11.5, color: color.body }}>
+        <div className="tnum" style={{ fontSize: 11, color: color.body }}>
           {detail}
         </div>
       </div>
       <span className="tnum" style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>
-        {a.weekLabel} · W{a.weekId.slice(4)}
+        {a.weekLabel} · {weekTag(a.weekId)}
       </span>
       <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={onOpen}>
         看板 ↗
@@ -162,7 +166,7 @@ function useOpenInDashboard() {
     const sel = productSelectionOfSeriesKey(a.seriesKey);
     if (sel && state.alertSubs.includes(a.seriesKey)) {
       if (a.isOwn) {
-        actions.setMains([{ id: newCardId(), main: sel, compares: [] }]);
+        actions.setMains(buildCards([sel]));
       } else {
         const normalize = (value: string): string => value.replace(/\s+/g, '');
         const competitorRom = normalize(sel.romram);
@@ -175,20 +179,20 @@ function useOpenInDashboard() {
           ? productSelectionOfSeriesKey(`${mapping.own_model_id}__${normalize(mapping.own_romram)}`)
           : null;
         if (mappedOwn) {
-          const card = { id: newCardId(), main: mappedOwn, compares: [] };
-          const auto = autoComparesFor(card);
-          const hasTarget = auto.some((group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom);
+          const hasTarget = autoComparesFor({ id: 'probe', main: mappedOwn, compares: [] }).some(
+            (group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom,
+          );
           if (state.autoMatch && hasTarget) {
             // 映射命中且自动开着：setMains 走跟随，目标竞品自然在对比区
-            actions.setMains([card]);
+            actions.setMains(buildCards([mappedOwn]));
           } else {
             // 显式补入该竞品 → 手动模式（原「补入即转手动」语义）
             actions.set({ autoMatch: false });
-            actions.setMains([{ ...card, compares: [sel] }]);
+            actions.setMains(buildCards([mappedOwn], { firstCompares: [sel] }));
           }
         } else {
           // 无映射：竞品自身即分析对象
-          actions.setMains([{ id: newCardId(), main: sel, compares: [] }]);
+          actions.setMains(buildCards([sel]));
         }
       }
     }
@@ -348,7 +352,7 @@ export default function AlertsPage() {
       ? '当前没有触发最新预警的产品'
       : statusFilter === 'normal'
         ? '当前没有符合条件的正常产品'
-        : '尚未启用产品 — 在总览 / 看板点行尾 🔔，或在上方搜索添加监控';
+        : '尚未添加监控产品 — 在上方搜索添加，或在看板点产品旁的铃铛';
 
   // 添加监控候选：全部系列（我司在前，按 label 字典序）
   const allSeries = useMemo(() => {
@@ -387,7 +391,7 @@ export default function AlertsPage() {
           <span style={{ fontSize: 12, fontWeight: 700, color: on ? color.mute : color.hairlineStrong, whiteSpace: 'nowrap' }}>
             {rule.name.replace('预警', '')}
             {rule.below && (
-              <span style={{ fontSize: 9.5, color: '#be123c', marginLeft: 3, fontWeight: 600 }}>低于触发</span>
+              <span style={{ fontSize: 10, color: '#be123c', marginLeft: 3, fontWeight: 600 }}>低于触发</span>
             )}
           </span>
         </span>
@@ -409,7 +413,7 @@ export default function AlertsPage() {
                   onChange={(v) => actions.setAlertThresholds({ [t]: +(v as number) / 100 })}
                   tooltip={{ formatter: (v) => (rule.below ? `< ${v}%` : `≥ ${v}%`) }}
                 />
-                <span className="tnum" style={{ fontSize: 12.5, fontWeight: 600, width: 58, whiteSpace: 'nowrap' }}>
+                <span className="tnum" style={{ fontSize: 12, fontWeight: 600, width: 58, whiteSpace: 'nowrap' }}>
                   {rule.below ? '< ' : '≥ '}
                   {val}%
                 </span>
@@ -422,7 +426,7 @@ export default function AlertsPage() {
             className="tnum"
             title={`${rule.name}全局阈值（点击调整）`}
             style={{
-              fontSize: 10.5,
+              fontSize: 10,
               color: on ? color.link : color.hairlineStrong,
               cursor: on ? 'pointer' : 'default',
               borderBottom: `1px dashed ${on ? 'rgba(0,112,243,0.5)' : 'transparent'}`,
@@ -451,7 +455,7 @@ export default function AlertsPage() {
         content={
           <div style={{ width: 240 }}>
             <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>
-              {r.name}覆写（留空跟随全局）
+              为该产品单独设置（留空跟随全局）
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <Switch
@@ -494,7 +498,7 @@ export default function AlertsPage() {
                     actions.setAlertProductRule(rowKey, { ...(rule ?? {}), thresholds: th, types: ty });
                   }}
                 >
-                  清除覆写（跟随全局 {r.below ? '<' : '≥'}
+                  恢复全局设置（{r.below ? '<' : '≥'}
                   {+(state.alertThresholds[t] * 100).toFixed(1)}%）
                 </Button>
               </div>
@@ -504,7 +508,7 @@ export default function AlertsPage() {
       >
         <span
           role="button"
-          title={`该产品此类型${thrOverridden ? '阈值已覆写' : '跟随全局，点击覆写'}`}
+          title={thrOverridden ? '已单独设置阈值' : '跟随全局，点击单独设置'}
           className="tnum"
           style={{
             fontSize: 10,
@@ -567,9 +571,9 @@ export default function AlertsPage() {
               型号级{n > 1 ? ` ×${n}` : ''}
             </span>
           ) : (
-            <span style={{ fontSize: 10.5, color: color.mute }}>型号级</span>
+            <span style={{ fontSize: 10, color: color.mute }}>型号级</span>
           )}
-          {n > 0 && <span style={{ fontSize: 9.5, color: color.hairlineStrong }}>成对明细见下</span>}
+          {n > 0 && <span style={{ fontSize: 10, color: color.hairlineStrong }}>成对明细见下</span>}
         </span>,
       );
     }
@@ -582,11 +586,11 @@ export default function AlertsPage() {
     return wrap(
       <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, maxWidth: '100%' }}>
         {!on || latest == null ? (
-          <span style={{ fontSize: 10.5, color: !on ? color.hairlineStrong : '#0a7d38' }}>{!on ? '—' : '正常'}</span>
+          <span style={{ fontSize: 10, color: !on ? color.hairlineStrong : '#0a7d38' }}>{!on ? '—' : '正常'}</span>
         ) : (
           <span
             role="button"
-            title={`${TYPE_STYLE[t].label}最新触发 · W${latest.weekId.slice(4)}（${latest.weekLabel}）· 点击${open ? '收起' : '展开历史'}`}
+            title={`${TYPE_STYLE[t].label}最新触发 · ${weekTag(latest.weekId)}（${latest.weekLabel}）· 点击${open ? '收起' : '展开历史'}`}
             onClick={() => toggleExp(expKey)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', maxWidth: '100%' }}
           >
@@ -640,7 +644,7 @@ export default function AlertsPage() {
             <BrandDot brand={meta.brand} />
             <span
               title={meta.label}
-              style={{ fontSize: 12.5, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             >
               {meta.label}
             </span>
@@ -710,7 +714,7 @@ export default function AlertsPage() {
                 <span style={{ fontSize: 12, color: color.mute }}>条最新预警</span>
               </div>
               <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                最新触发 {latestList.length > 0 ? `W${latestList[0].weekId.slice(4)}（${latestList[0].weekLabel} 采集周）` : '—'}
+                最新触发 {latestList.length > 0 ? `${weekTag(latestList[0].weekId)}（${latestList[0].weekLabel} 采集周）` : '—'}
                 {latestList.length > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}
                 {alerts.length !== latestList.length ? ` · 历史 ${alerts.length} 条` : ''}
               </div>
@@ -753,7 +757,7 @@ export default function AlertsPage() {
                 <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
               </div>
               <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                自有 {ownCount} · 其他品牌 {state.alertSubs.length - ownCount} · 覆写 {Object.keys(state.alertProducts).length} 项
+                {ownBrand()} {ownCount} · 其他品牌 {state.alertSubs.length - ownCount} · 单独设置 {Object.keys(state.alertProducts).length} 项
               </div>
             </div>
           </section>
@@ -844,7 +848,7 @@ export default function AlertsPage() {
                   <div key={g.brand} style={{ marginTop: space.md }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 2px 6px' }}>
                       <BrandDot brand={g.brand} size={9} />
-                      <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink }}>{g.brand}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: color.ink }}>{g.brand}</span>
                       <span style={{ fontSize: 11, color: color.mute }}>{g.rows.length} 个系列</span>
                     </div>
                     <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, background: color.canvas, overflow: 'hidden' }}>
@@ -873,7 +877,7 @@ export default function AlertsPage() {
                             <span style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
                               {a.modelName} 两档太近
                             </span>
-                            <span className="tnum" style={{ fontSize: 11.5, color: color.body, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span className="tnum" style={{ fontSize: 11, color: color.body, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {a.romram} {formatPrice(a.pairLowPrice, state.currency)} ↔{' '}
                               {romOfLabel(a.pairHighLabel, a.modelName)} {formatPrice(a.pairHighPrice, state.currency)}
                             </span>
@@ -899,7 +903,7 @@ export default function AlertsPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h3 style={{ margin: 0, fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>历史事件</h3>
               <span style={{ fontSize: 11, color: color.mute }}>
-                次级视图 · {filtered.length} 条{filtered.length !== alerts.length ? `（筛选自 ${alerts.length}）` : ''} · 周分组 · 最新在前
+                {filtered.length} 条 · 按周分组，最新在前
               </span>
               <span style={{ flex: 1 }} />
               {(typeFilter !== 'all' || brandFilter.length > 0) && showHistory && (
@@ -929,8 +933,8 @@ export default function AlertsPage() {
                 weekGroups.map((w) => (
                   <div key={w.weekId}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '8px 2px 3px', borderBottom: `1px solid ${color.hairline}` }}>
-                      <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700, color: color.ink }}>
-                        W{w.weekId.slice(4)}
+                      <span className="tnum" style={{ fontSize: 12, fontWeight: 700, color: color.ink }}>
+                        {weekTag(w.weekId)}
                       </span>
                       <span className="tnum" style={{ fontSize: 11, color: color.mute }}>
                         {w.weekLabel} 采集周 · {w.items.length} 条
