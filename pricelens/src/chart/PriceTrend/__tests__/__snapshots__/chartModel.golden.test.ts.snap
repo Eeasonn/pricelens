@@ -20,7 +20,7 @@ exports[`真实数据快照（ingest 2026-10-20） > labelPlan + option + 刻度
   },
   "names": [
     {
-      "anchorX": 356.9,
+      "anchorX": 200.3,
       "anchorY": 478.8717277486911,
       "color": "#c7000b",
       "dy": 0,
@@ -29,12 +29,12 @@ exports[`真实数据快照（ingest 2026-10-20） > labelPlan + option + 刻度
       "maxW": undefined,
       "seriesKey": "own-huawei-nova-14__12+256GB",
       "text": "nova 14 12+256",
-      "w": 113.48000000000002,
-      "x": 235.41999999999996,
+      "w": 113.48,
+      "x": 78.82000000000001,
       "y": 467.8717277486911,
     },
     {
-      "anchorX": 356.9,
+      "anchorX": 200.3,
       "anchorY": 172.708,
       "color": "#1d1d1f",
       "dy": 0,
@@ -44,7 +44,7 @@ exports[`真实数据快照（ingest 2026-10-20） > labelPlan + option + 刻度
       "seriesKey": "cmp-apple-iphone-16-pro-max__12+256GB",
       "text": "iPhone 16 Pro Max 12+256",
       "w": 181.68,
-      "x": 167.21999999999997,
+      "x": 10.620000000000005,
       "y": 161.708,
     },
   ],

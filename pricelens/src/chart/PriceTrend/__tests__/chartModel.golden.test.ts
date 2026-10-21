@@ -73,8 +73,8 @@ describe('buildGeom', () => {
 
   it('左缘放不下（gridLeft+right > width-48）→ null（图例卡回退几何接管）', () => {
     const scale = computeYAxis({ series: [], priceTypes: DISC_ONLY, sliderScale: 1 });
-    // width=170：estGridLeft(USD) = 64+8+tickW+148 > 170-48
-    expect(buildGeom({ width: 170, totalH: 800, gridTop: 96, series: [mkSeries({ points: [PT({ price: 1 })] })], scale, currency: 'usd' })).toBeNull();
+    // width=130：estGridLeft(USD)=83（第一百一十五轮名称带回收后）+ right > 130-48
+    expect(buildGeom({ width: 130, totalH: 800, gridTop: 96, series: [mkSeries({ points: [PT({ price: 1 })] })], scale, currency: 'usd' })).toBeNull();
   });
 
   it('几何自洽：plotWidth = width - gridLeft - right；plotTop = gridTop', () => {
@@ -192,34 +192,22 @@ describe('buildLabelPlan', () => {
     expect(buildLabelPlan({ geom: null, series: [], granularity: 'week', priceTypes: BOTH, endpointMarks: new Map() })).toEqual({ dy: {}, names: [] });
   });
 
-  it('系列名：起点旁有空间 → beside（右缘锚在起点左侧）；名宽溢出 → 停驻名称预留带', () => {
+  it('系列名：起点旁有空间 → beside（右缘锚在起点左侧）；起点太靠左 → 左缘钳到容器边', () => {
     const pts = [PT({ price: 500 }), PT({ price: 505 })];
     const s = mkSeries({ points: pts });
     const plan = buildLabelPlan({ geom, series: [s], granularity: 'month', priceTypes: DISC_ONLY, endpointMarks: new Map() });
     expect(plan.names).toHaveLength(1);
-    // 短名 + 起点靠内：besideLeft = px - 8 - nw ≥ zoneLeft → 停在起点旁
+    // 短名 + 起点靠内：besideLeft = px - 8 - nw ≥ 2 → 停在起点旁
     const px = geom.plotLeft + (geom.plotWidth / geom.n) * 0.5;
     const nw = 12 + plan.names[0].text.length * (11 * 0.62) + 6;
     expect(plan.names[0].x).toBeCloseTo(px - 8 - nw, 6);
-    // 长名（20+ 字符）：besideLeft < zoneLeft → 收进预留带，x = zoneLeft
-    const long = mkSeries({ points: pts, label: 'Acme Galaxy Ultra Pro Max Plus 256GB' });
+    // 第一百一十五轮：名称带退役——长名起点靠左时钳到容器左缘（x = 2），不再停驻预留带
+    const long = mkSeries({ points: [PT({ price: 500 }), PT({ price: 505 }), PT({ price: 505 })], label: 'Acme Galaxy Ultra Pro Max Plus 256GB' });
     const planLong = buildLabelPlan({ geom, series: [long], granularity: 'month', priceTypes: DISC_ONLY, endpointMarks: new Map() });
-    expect(planLong.names[0].x).toBe(geom.plotLeft - NAME_ZONE_W + 4);
-    expect(planLong.names[0].maxW).toBeDefined(); // 两行换行态
-  });
-
-  it('forceNameZone（第七十四轮分离面板）：起点旁本有空间也强制停驻名称预留带', () => {
-    const pts = [PT({ price: 500 }), PT({ price: 505 })];
-    const s = mkSeries({ points: pts });
-    // 同输入不加开关：beside（起点旁，右缘锚在起点左侧）
-    const beside = buildLabelPlan({ geom, series: [s], granularity: 'month', priceTypes: DISC_ONLY, endpointMarks: new Map() });
-    expect(beside.names[0].x).toBeGreaterThan(geom.plotLeft - NAME_ZONE_W + 4);
-    // 加开关：全部固定进预留带，x = zoneLeft；锚点仍指回折线起点（引线归属）
-    const zoned = buildLabelPlan({ geom, series: [s], granularity: 'month', priceTypes: DISC_ONLY, endpointMarks: new Map(), forceNameZone: true });
-    expect(zoned.names).toHaveLength(1);
-    expect(zoned.names[0].x).toBe(geom.plotLeft - NAME_ZONE_W + 4);
-    expect(zoned.names[0].anchorX).toBeCloseTo(geom.plotLeft + (geom.plotWidth / geom.n) * 0.5, 6);
-    expect(zoned.names[0].maxW).toBeDefined();
+    const pxLong = geom.plotLeft; // 首桶起点 = 绘图区左缘
+    const nwLong = 12 + planLong.names[0].text.length * (11 * 0.62) + 6;
+    expect(planLong.names[0].x).toBe(Math.max(2, pxLong - 8 - nwLong));
+    expect(planLong.names[0].maxW).toBeUndefined(); // 不换行（无预留带容量约束）
   });
 });
 

@@ -175,9 +175,6 @@ export interface ChartProps {
    *  受控传 onShowYTicks（看板层统一写）；缺省用内部状态（下钻弹窗等自管场景） */
   showYTicks?: boolean;
   onShowYTicks?: (v: boolean) => void;
-  /** 第七十四轮（分离面板）：true = 系列名全部固定进左侧名称预留带空白处，
-   *  不锚在各折线起点旁；主图与下钻弹窗缺省关闭维持原避让语义 */
-  namesInZone?: boolean;
   /** 第八十二轮：名称药丸全集（含已屏蔽系列——药丸仍渲染为虚线置灰态）；缺省 = series */
   nameSeries?: Series[];
   /** 屏蔽中的系列 key 集（与 nameSeries 搭配；药丸点击 → onToggleHidden 切换） */
@@ -187,6 +184,10 @@ export interface ChartProps {
   /** 第八十八轮：系列联动映射（竞品⇄我司）——悬停名称药丸时返回与该系列
    *  联动高亮的系列 key 集；缺省 = 无联动（悬停只亮自身） */
   pairingsOf?: (seriesKey: string) => string[];
+  /** 第一百一十五轮：顶部品牌图例带悬停的产品（受控入站）——图内联动高亮
+   *  该系列 + pairingsOf 映射系列，并在其价格线起点画竖向指引虚线；
+   *  null = 无悬停（图内名称药丸悬停态不受影响） */
+  legendHoverKey?: string | null;
   /** 折线形态（受控；缺省内部状态）。'auto' = 按粒度自适应（第五十四轮追补③：
    *  周=阶梯 / 月季=平滑，默认） */
   lineShape?: LineShapeChoice;
@@ -404,14 +405,18 @@ export default function Chart(props: ChartProps) {
   const focusActive = focusKey != null;
   // 悬停的名称药丸（第八十二轮）：仅该系列的起点指引线可见（默认全部隐藏）
   const [hoverNameKey, setHoverNameKey] = useState<string | null>(null);
-  // 第八十八轮 联动高亮集合：悬停名称药丸时 = 该系列 + 其映射系列（我司⇄竞品）；
-  // 折线悬停聚焦时 = 单系列。非空时集合外的一切（线/药丸/徽标）降透明。
+  // 第一百一十五轮：顶部品牌图例带悬停的产品（受控入站）——与图内药丸悬停同语义
+  const legendHoverKey = props.legendHoverKey ?? null;
+  // 第八十八轮 联动高亮集合：悬停名称药丸/图例药丸时 = 该系列 + 其映射系列
+  //（我司⇄竞品）；折线悬停聚焦时 = 单系列。非空时集合外的一切（线/药丸/徽标）降透明。
   const litKeys: string[] | null =
-    hoverNameKey != null && props.pairingsOf
-      ? [hoverNameKey, ...props.pairingsOf(hoverNameKey)]
-      : focusKey != null
-        ? [focusKey]
-        : null;
+    legendHoverKey != null && props.pairingsOf
+      ? [legendHoverKey, ...props.pairingsOf(legendHoverKey)]
+      : hoverNameKey != null && props.pairingsOf
+        ? [hoverNameKey, ...props.pairingsOf(hoverNameKey)]
+        : focusKey != null
+          ? [focusKey]
+          : null;
   // Y 刻度线（第九十一轮）：受控开关，缺省开 = 刻度值+短横线；关 = 仅价格档位
   const [innerShowYTicks, setInnerShowYTicks] = useState(true);
   const showYTicks = props.showYTicks ?? innerShowYTicks;
@@ -596,13 +601,12 @@ export default function Chart(props: ChartProps) {
         priceTypes,
         endpointMarks,
         lifecycleRow: (key) => lifecycleDeltas.get(key) != null,
-        forceNameZone: props.namesInZone === true,
         nameOnlySeries: nameAll.filter((s) => !series.some((v) => v.key === s.key)),
         hiddenKeys: props.hiddenKeys,
         hideNames: props.hideNamePills === true, // 第一百一十三轮：量价面板禁画名称药丸
         labelMode, // 第一百一十四轮：精简 = 仅最高/最低/最新三价
       }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.namesInZone, props.hiddenKeys, nameAll, props.hideNamePills, labelMode],
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode],
   );
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
@@ -1473,6 +1477,64 @@ export default function Chart(props: ChartProps) {
                 }}
               />
             )}
+          {/* 图例悬停指引线（第一百一十五轮）：顶部品牌图例带悬停某产品 → 图内该系列
+              价格线起点画竖向虚线（横跨绘图区）+ 起点品牌色小圆点，提示线的位置；
+              同时该系列与对标映射系列保持常态、其余降透明（litKeys 机制） */}
+          {(() => {
+            if (legendHoverKey == null || !geom) return null;
+            const target = [...series, ...nameAll].find((s) => s.key === legendHoverKey);
+            if (!target) return null;
+            let idx = -1;
+            let val: number | null = null;
+            for (let i = 0; i < target.points.length; i++) {
+              const v = primaryPriceOf(target.points[i], priceTypes);
+              if (v != null) {
+                idx = i;
+                val = v;
+                break;
+              }
+            }
+            if (idx < 0 || val == null) return null;
+            const gx = Math.round(xPxOf(geom, idx)) - 0.5;
+            const brandDot = (
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: xPxOf(geom, idx),
+                  top: yPxOf(geom, val),
+                  width: 7,
+                  height: 7,
+                  transform: 'translate(-50%, -50%)',
+                  borderRadius: '50%',
+                  boxSizing: 'border-box',
+                  background: target.color,
+                  border: '1.5px solid #fff',
+                  boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
+                  pointerEvents: 'none',
+                  zIndex: 8,
+                }}
+              />
+            );
+            return (
+              <div key="legend-guide">
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: gx,
+                    top: geom.plotTop,
+                    width: 1,
+                    height: geom.plotHeight,
+                    background: `repeating-linear-gradient(180deg, ${color.hairlineStrong} 0 4px, transparent 4px 8px)`,
+                    opacity: 0.8,
+                    pointerEvents: 'none',
+                    zIndex: 7,
+                  }}
+                />
+                {brandDot}
+              </div>
+            );
+          })()}
           {/* 悬停数据点小圆点（第一百一十四轮，评审）：悬停/联动时间列上有值的系列
               各画一枚品牌色小圆点（白描边），取代原快照/下钻悬停图标；该点已有
               S/E/‹› 端点徽标或属跨接孤立点时不叠画 */}

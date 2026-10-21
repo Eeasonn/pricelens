@@ -755,8 +755,10 @@ def main():
 
     substitute_hits = set()
 
-    def resolve_name(brand, industry, text):
-        """矩阵名 → ([model_id], status, 规范后原文)。status: exact|series|subset|reverse|none"""
+    def resolve_name(brand, industry, text, strict_own=False):
+        """矩阵名 → ([model_id], status, 规范后原文)。status: exact|series|subset|reverse|none
+        strict_own（第115轮）：我司侧解析——子集匹配时型号名多出的代际数字 token
+        （WATCH ultimate → ultimate 2）不算命中，防相邻矩阵行互相串味。"""
         txt = " ".join(str(text).split())
         spec_hint = None
         if txt in matrix_aliases:
@@ -792,6 +794,8 @@ def main():
             if series_mode and contiguous(kt, tt):
                 scored.append((2 + 0.1 * (len(tt) - len(kt)), mids))
             elif contiguous(kt, tt):
+                if strict_own and any(re.search(r"\d", e) for e in tt if e not in kt):
+                    continue  # 型号名多出代际数字（ultimate 2）→ 非本行产品
                 scored.append((3 + 0.1 * (len(tt) - len(kt)), mids))
             elif contiguous(tt, kt):
                 extra = [t for t in kt if t not in tt]
@@ -886,7 +890,7 @@ def main():
             if m["product"]:
                 unresolved.append({"kind": "own", "text": m["product"], "country": m["country"], "why": "国家/产业缺失"})
             continue
-        own_mids, st, txt = resolve_name("HUAWEI", ind, m["product"])
+        own_mids, st, txt = resolve_name("HUAWEI", ind, m["product"], strict_own=True)
         entry["own"] = [{"model_id": x, "status": st} for x in own_mids]
         declared = parse_tier_text(m["tier"])
         if declared:
@@ -1077,6 +1081,42 @@ def main():
     log["notes"].append(f"自动匹配：{len({(r['cc'], r['own']) for r in auto_rows if r['comp']})} 个国家×我司型号补齐竞品，"
                         f"{auto_bench} 条对标；{len([r for r in auto_rows if not r['comp']])} 个无可比对象")
     write_auto_list(args, auto_rows, name_of, brand_of, region_by_cc)
+
+    # ---------- 4c. 对标上限（第115轮评审拍板）：每 国家×我司型号×配置 最多 4 款竞品 ----------
+    # 来源优先级：人工 > 矩阵（列序）> 替代 > 自动；先保「每竞品型号至多一款配置」的
+    # 品牌覆盖面，槽位富余（<4）时才允许同型号第二配置补位；截断后组内 sort 重排 1..n。
+    BENCH_MAX = 4
+    bench_priority = lambda b: ({"manual": 0, "matrix": 1, "substitute": 2, "auto": 3}.get(b["source"], 4), b.get("sort", 99))
+    bench_groups = defaultdict(list)
+    for b in bench:
+        bench_groups[(b["country_code"], b["own_model_id"], b["own_romram"])].append(b)
+    capped_bench = []
+    trimmed_pairs = 0
+    for rows in bench_groups.values():
+        rows.sort(key=bench_priority)  # 稳定排序：同优先级保持矩阵列序/生成序
+        picked, picked_models = [], set()
+        for b in rows:  # 第一遍：每竞品型号取一款
+            if len(picked) >= BENCH_MAX:
+                break
+            mid = b["competitor_sku_id"].split("__")[0]
+            if mid in picked_models:
+                continue
+            picked_models.add(mid)
+            picked.append(b)
+        for b in rows:  # 第二遍：槽位富余补同型号其他配置
+            if len(picked) >= BENCH_MAX:
+                break
+            if b in picked:
+                continue
+            picked.append(b)
+        trimmed_pairs += len(rows) - len(picked)
+        for i, b in enumerate(picked):
+            b["sort"] = i + 1
+        capped_bench.extend(picked)
+    over_groups = sum(1 for rows in bench_groups.values() if len(rows) > BENCH_MAX)
+    bench = capped_bench
+    log["notes"].append(f"对标上限{BENCH_MAX}：{over_groups} 组超限截断 {trimmed_pairs} 条，"
+                        f"截断后共 {len(bench)} 条（每配置 ≤{BENCH_MAX} 款竞品）")
 
     # 每国×产业默认我司型号（矩阵序首个有数型号）
     for m, entry in zip(matrix_rows, matrix_resolution):

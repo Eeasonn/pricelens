@@ -58,12 +58,7 @@
   "series": "WATCH Ultimate",
   "tier": ">300",
   "own_raw": "WATCH ultimate",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-ultimate-2",
-    "status": "subset"
-   }
-  ],
+  "own": [],
   "comps": [
    {
     "raw": "Apple Watch Ultra 3",
@@ -1748,12 +1743,7 @@
   "series": "WATCH Ultimate",
   "tier": ">300",
   "own_raw": "WATCH ultimate",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-ultimate-2",
-    "status": "subset"
-   }
-  ],
+  "own": [],
   "comps": [
    {
     "raw": "Apple Watch Ultra 3",
@@ -4297,12 +4287,7 @@
   "series": "WATCH Ultimate",
   "tier": ">300",
   "own_raw": "WATCH ultimate",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-ultimate-2",
-    "status": "subset"
-   }
-  ],
+  "own": [],
   "comps": [
    {
     "raw": "Apple Watch Ultra 3",
@@ -7400,12 +7385,7 @@
   "series": "WATCH Ultimate",
   "tier": ">300",
   "own_raw": "WATCH ultimate",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-ultimate-2",
-    "status": "subset"
-   }
-  ],
+  "own": [],
   "comps": [
    {
     "raw": "Apple Watch Ultra 2",
@@ -8894,12 +8874,7 @@
   "series": "WATCH Ultimate",
   "tier": ">400",
   "own_raw": "WATCH ultimate",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-ultimate-2",
-    "status": "subset"
-   }
-  ],
+  "own": [],
   "comps": [
    {
     "raw": "Apple Watch Ultra 3",

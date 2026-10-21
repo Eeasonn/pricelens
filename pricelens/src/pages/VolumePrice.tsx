@@ -20,8 +20,6 @@ import { ConfigProvider, Segmented } from 'antd';
 import { useFilters } from '../state/FiltersContext';
 import FilterBar from '../components/FilterBar';
 import PageHeader from '../components/PageHeader';
-import PlatformBox from '../components/FilterBar/PlatformBox';
-import CurrencyBox from '../components/FilterBar/CurrencyBox';
 import { filterBarTheme } from '../components/FilterBar';
 import { ownBrand } from '../components/ProductCascader/tree';
 import Chart from '../chart/PriceTrend/Chart';
@@ -374,10 +372,7 @@ export default function VolumePrice() {
                     fontSize: 12,
                   }}
                 >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    平台 <span style={{ width: 160 }}><PlatformBox /></span>
-                  </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>币种 <CurrencyBox /></span>
+                  {/* 第一百一十五轮（评审）：平台/币种收进顶部筛选条，标题行不再重复 */}
                   {/* 价格显示（第一百一十四轮，评审）：与币种切换同款控件位——
                       精简 = 图上仅最高/最低/最新三价（默认），详细 = 全量价格标签 */}
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>

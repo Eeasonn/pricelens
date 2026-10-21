@@ -208,10 +208,6 @@ export function buildLabelPlan(p: {
   endpointMarks: Map<string, SeriesMark>;
   /** 该系列是否渲染「生命周期 −X%」第二行（季粒度；第三十二轮起计入名称避让盒） */
   lifecycleRow?: (seriesKey: string) => boolean;
-  /** 第七十四轮（分离显示）：true = 系列名全部固定进左侧名称预留带（空白带），
-   *  不锚在各折线起点旁。第九十轮起名称带内改**等距分布**：按起点高度排序后
-   *  均分槽位、整组在绘图区纵向居中（不再逐个避让推挤，名称塔不溢出） */
-  forceNameZone?: boolean;
   /** 第八十二轮：折线已屏蔽、但仍需名称药丸的系列（只生成名称项，无数值标签）；
    *  与 series 中的同 key 项以后者为准 */
   nameOnlySeries?: Series[];
@@ -228,7 +224,6 @@ export function buildLabelPlan(p: {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
   const items: AvoidItem[] = [];
-  const zoneItems: AvoidItem[] = [];
   // 第一百一十四轮：精简标签直出表（不进避让推挤；几何天然分离 + 白底胶囊兜底）
   const compactDy: Record<string, Record<number, number>> = {};
   const compactPos: Record<string, Record<number, 'top' | 'bottom'>> = {};
@@ -321,9 +316,9 @@ export function buildLabelPlan(p: {
     });
   }
   // 系列名称小药丸（第八十二轮再版）：品牌点+型号名，统一灰字；点击 = 切换折线
-  // 显隐（取代上方页签）。第九十轮：来源链接行删除（跳转入口收编）；
-  // 名称带（forceNameZone）模式改为等距分布——先收集条目，最后统一排布，
-  // 不再进 resolveCollisions 推挤。
+  // 显隐（取代上方页签）。第九十轮：来源链接行删除（跳转入口收编）。
+  // 第一百一十五轮：名称带（forceNameZone 等距分布）随「名称上移顶部品牌图例带」
+  // 整体退役——本函数只保留锚定模式（名称锚在折线起点旁，挤不下时左缘钳到容器边）。
   const pushNameItem = (s: Series, hidden: boolean): void => {
     if (p.hideNames === true) return; // 第一百一十三轮：整体禁画名称药丸
     const pts = s.points;
@@ -338,68 +333,31 @@ export function buildLabelPlan(p: {
     const py = yPxOf(geom, v0);
     const nameText = curveNameOf(s);
     const nw = nameW(nameText);
-    const zoneLeft = geom.plotLeft - NAME_ZONE_W + 4;
-    const zoneBoxW = Math.min(nw, NAME_ZONE_W - 8);
-    const baseH = ZONE_LINE_H + 6; // 药丸单行（名称带恒单行）+ 内边距上下各 3
-    const fullH =
-      baseH + (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
-    const item: AvoidItem = {
+    const fullH = ZONE_LINE_H + 6 + (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
+    // 起点太靠左时名称钳到容器左缘（原停驻名称预留带的分支已随名称带上移退役）
+    const left = Math.max(2, px - 8 - nw);
+    items.push({
       kind: 'name',
       seriesKey: s.key,
       pointIdx: fi,
       pinned: true,
-      left: zoneLeft,
-      right: zoneLeft + zoneBoxW,
+      left,
+      right: left + nw,
       top: py - fullH / 2,
       h: fullH,
       text: nameText,
       color: s.color,
-      maxW: zoneBoxW,
       anchorX: px,
       anchorY: py,
       hidden: hidden || undefined,
-    };
-    if (p.forceNameZone === true) zoneItems.push(item);
-    else {
-      const besideLeft = px - 8 - nw;
-      const useZone = besideLeft < zoneLeft;
-      items.push({
-        ...item,
-        left: useZone ? zoneLeft : besideLeft,
-        right: useZone ? zoneLeft + zoneBoxW : px - 8,
-        maxW: useZone ? zoneBoxW : undefined,
-      });
-    }
+    });
   };
   for (const s of series) pushNameItem(s, p.hiddenKeys?.has(s.key) ?? false);
   for (const s of p.nameOnlySeries ?? []) {
     if (!series.some((v) => v.key === s.key)) pushNameItem(s, true);
   }
   const res = resolveCollisions(items, geom.plotTop);
-  let names = res.names;
-  // 名称带等距分布（第九十轮）：按起点高度排序（名称顺序与折线位置一致，引线不交叉），
-  // 槽位均分绘图区高度、整组纵向居中；槽位下限 = 药丸高 + 呼吸（超多系列时对称外溢）
-  if (p.forceNameZone === true && zoneItems.length > 0) {
-    const sorted = [...zoneItems].sort((a, b) => a.anchorY! - b.anchorY!);
-    const minSlot = Math.max(...sorted.map((e) => e.h)) + 4;
-    const slot = Math.max(minSlot, geom.plotHeight / sorted.length);
-    const total = slot * sorted.length;
-    const y0 = geom.plotTop + Math.max(0, (geom.plotHeight - total) / 2);
-    names = sorted.map((e, i) => ({
-      x: e.left,
-      y: y0 + slot * i + (slot - e.h) / 2,
-      w: e.right - e.left,
-      h: e.h,
-      dy: 0,
-      text: e.text,
-      color: e.color,
-      seriesKey: e.seriesKey,
-      maxW: e.maxW,
-      anchorX: e.anchorX ?? e.left,
-      anchorY: e.anchorY ?? e.top,
-      hidden: e.hidden,
-    }));
-  }
+  const names = res.names;
   // 精简标签直出表覆盖合并（compact 模式下 res.dy 恒空——价格项未进避让）
   return compact
     ? { dy: { ...res.dy, ...compactDy }, names, pos: compactPos }

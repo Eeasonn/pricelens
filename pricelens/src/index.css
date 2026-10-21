@@ -126,6 +126,16 @@ button.lpl-map-card:hover {
   display: none;
 }
 
+/* 品牌分组图例带（第一百一十五轮）：块内/整排滚动都交给两侧提示性小箭头，
+   系统滚动条隐藏。 */
+.lpl-legend-scroll {
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.lpl-legend-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* AntD 5.21 将自定义类挂在不同的弹层节点；下面的结构选择器确保两栏始终等宽，
    左右内边距一致，不受周/月/季面板内部 class 差异影响。 */
 .ant-picker-dropdown .ant-picker-panels {

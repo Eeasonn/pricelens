@@ -16,7 +16,8 @@ import {
 } from '../ProductCascader/tree';
 import type { ProductSelection } from '../../state/filtersTypes';
 import type { CurrencyMode, DimProduct } from '../../dataModel/types';
-import { CascadePanel, type CascadeRowItem } from '../ProductCascader';
+import { CascadePanel, measureText, type CascadeRowItem } from '../ProductCascader';
+import BrandDot, { brandLabelOf } from '../BrandMark';
 import { getEffectiveBenchmark } from '../../state/configStore';
 import { dimProduct } from '../../data';
 import { TIER_LABELS, tierOf, tierOrderOf } from '../../dataModel/aggregate';
@@ -111,10 +112,20 @@ function ColorFlyout({
 }) {
   const pool = node.selectableColors.length ? node.selectableColors : node.colors;
   const sel = findSelection(list, node);
+  // 第一百一十五轮：颜色列宽自适应（长色名完整显示），钳在 232~340
+  const rowW = pool.reduce(
+    (w, c) =>
+      Math.max(
+        w,
+        measureText(c.color) + measureText(formatPrice(currency === 'usd' ? c.latestUsd : c.latestLocal, currency) ?? ''),
+      ),
+    measureText(`${modelNameOf(node.modelId)} ${shortRomram(node.romram)}`) * (12 / 13),
+  );
+  const width = Math.min(340, Math.max(232, Math.ceil(rowW * 1.08) + 78));
   return (
     <div
       style={{
-        width: 232,
+        width,
         boxSizing: 'border-box',
         flexShrink: 0,
         borderLeft: `1px solid ${color.hairline}`,
@@ -178,19 +189,28 @@ function ColorFlyout({
 // 已选标签内容用 displayRender 定制（multiple 模式下它就是每个标签的文案；
 // 注意 tagRender 拿到的 value 是 rc-cascader 拼接后的标量 key，不是路径，不可用）。
 
-/** 对标预览列（仅我司级联）：跟随展开/悬停的型号或配置——悬停型号列该型号全部映射，
- *  悬停某配置只列该配置的精确映射；未配置时给一句说明。与颜色浮层互斥——浮层打开时宽度让位。 */
+/** 对标预览列（仅我司级联，第一百一十五轮定版）：只在下钻到「型号」层后出现——
+ *  悬停/点击型号列某型号 = 该型号全部映射；悬停某配置只列该配置的精确映射。
+ *  行样式与下方产品药丸同语言（品牌色点 + 完整「品牌+产品+型号」），不再星标主竞品；
+ *  列宽自适应最长行，与颜色浮层互斥——浮层打开时宽度让位。 */
 function BenchPreview({
   modelLabel,
   items,
 }: {
   modelLabel: string;
-  items: { key: string; name: string; spec: string; primary: boolean }[];
+  items: { key: string; brand: string; name: string; spec: string }[];
 }) {
+  const textOf = (it: { brand: string; name: string; spec: string }): string =>
+    `${brandLabelOf(it.brand)} ${it.name} ${it.spec}`.trim();
+  const widest = Math.max(
+    measureText(`对标竞品 · ${modelLabel}`),
+    ...items.map((it) => measureText(textOf(it))),
+  );
+  const width = Math.min(420, Math.max(208, Math.ceil(widest * 1.08) + 52));
   return (
     <div
       style={{
-        width: 196,
+        width,
         boxSizing: 'border-box',
         flexShrink: 0,
         borderLeft: `1px solid ${color.hairline}`,
@@ -219,9 +239,8 @@ function BenchPreview({
                 whiteSpace: 'nowrap',
               }}
             >
-              {it.primary && <span style={{ color: '#b45309', flexShrink: 0 }}>★</span>}
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
-              <span style={{ color: color.mute, flexShrink: 0 }}>{it.spec}</span>
+              <BrandDot brand={it.brand} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{textOf(it)}</span>
             </div>
           ))}
         </div>
@@ -271,6 +290,9 @@ function ProductCascadeControl({
   const [menuOpen, setMenuOpen] = useState(false);
   // 配置列悬停锚点：高亮与对标预览跟随鼠标（null = 未悬停过，回退首个勾选配置）
   const [activeLeafKey, setActiveLeafKey] = useState<string | null>(null);
+  // 第一百一十五轮：对标预览只在「下钻到型号层」后出现——系列层不出现。
+  // 点击系列/型号行（onActivate）即视为下钻；回到系列层或重开面板即复位。
+  const [userDrilled, setUserDrilled] = useState(false);
 
   // Keep string labels for the Cascader tags. The open menu is rendered below.
   const { options, groupKeyOfModel, romramNodeOf } = useMemo(() => {
@@ -410,9 +432,9 @@ function ProductCascadeControl({
       onActivate: () => {
         setActivePath([g.key, g.models[0]?.modelId ?? '']);
         setActiveLeafKey(null);
+        setUserDrilled(false); // 回到系列层：对标预览退场
       },
       onCheckChange: (checked) => updateConfigs(nodes, checked),
-      onLabelClick: () => updateConfigs(nodes, checkStateOf(nodes) !== 'checked'),
     };
   });
   const modelItems: CascadeRowItem[] = (group?.models ?? []).map((m) => {
@@ -423,9 +445,9 @@ function ProductCascadeControl({
       onActivate: () => {
         setActivePath([group.key, m.modelId]);
         setActiveLeafKey(null);
+        setUserDrilled(true); // 下钻到型号层：对标预览出现
       },
       onCheckChange: (checked) => updateConfigs(nodes, checked),
-      onLabelClick: () => updateConfigs(nodes, checkStateOf(nodes) !== 'checked'),
     };
   });
   const leafItems: CascadeRowItem[] = (model?.romrams ?? []).map((r) => {
@@ -442,7 +464,10 @@ function ProductCascadeControl({
         ? r.key === activeLeafKey
         : r.key === `${firstSelection?.modelId}|${firstSelection?.romram}` && model?.modelId === firstSelection?.modelId,
       checkState: chosen ? 'checked' : 'none',
-      onActivate: () => setActiveLeafKey(r.key),
+      onActivate: () => {
+        setActiveLeafKey(r.key);
+        setUserDrilled(true);
+      },
       onCheckChange: (checked) => updateConfigs([r], checked),
       onLabelClick: () => updateConfigs([r], !chosen),
       trailing: colorLabel && (
@@ -455,36 +480,42 @@ function ProductCascadeControl({
       ),
     };
   });
+  // 配置列颜色胶囊的宽度预留（自适应列宽用）：最长胶囊文案按 11px 折算 + 胶囊内边距
+  const leafChipW = (model?.romrams ?? []).reduce((w, r) => {
+    const pool = r.selectableColors.length ? r.selectableColors : r.colors;
+    const chosen = findSelection(list, r);
+    const selectedColors = pool.filter((c) => chosen?.skuIds.includes(c.skuId));
+    const defaultColor = pool.find((c) => c.skuId === defaultColorSkuIds(r)[0])?.color ?? pool[0]?.color;
+    const colorLabel = selectedColors.length > 1
+      ? `${selectedColors[0].color}+${selectedColors.length - 1}`
+      : selectedColors[0]?.color ?? defaultColor;
+    return Math.max(w, measureText(colorLabel ?? '') * (11 / 13));
+  }, 0);
+  const leafExtraW = Math.ceil(leafChipW + 20);
 
-  // 对标预览名单：悬停在配置行 = 该配置的精确映射；否则 = 当前型号的全部映射。
-  // （配置列/型号列的行悬停都由 activePath/activeLeafKey 承载，无新增交互态）
+  // 对标预览名单：仅下钻到型号层后渲染（第一百一十五轮）。悬停在配置行 = 该配置的
+  // 精确映射；否则 = 当前型号的全部映射（含被 4 款上限截断后的生效名单）。
   const benchPreview = useMemo(() => {
-    if (kind !== 'own' || productLevel || !model) return null;
+    if (kind !== 'own' || productLevel || !model || !userDrilled) return null;
     const romram = activeLeafKey != null && activeLeafKey.startsWith(`${model.modelId}|`)
       ? activeLeafKey.slice(model.modelId.length + 1)
       : null;
-    const seen = new Map<string, { key: string; name: string; spec: string; primary: boolean }>();
+    const seen = new Map<string, { key: string; brand: string; name: string; spec: string }>();
     for (const b of getEffectiveBenchmark()) {
       if (b.own_model_id !== model.modelId) continue;
       if (romram != null && b.own_romram !== romram) continue;
       const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
-      if (!p) continue;
-      const prev = seen.get(p.sku_id);
-      if (prev) {
-        if (b.sort === 1) prev.primary = true;
-        continue;
-      }
+      if (!p || seen.has(p.sku_id)) continue;
       seen.set(p.sku_id, {
         key: p.sku_id,
+        brand: p.brand,
         name: modelNameOf(p.sku_id.split('__')[0]),
         spec: shortRomram(p.romram),
-        primary: b.sort === 1,
       });
     }
-    const items = [...seen.values()].sort((a, b) => Number(b.primary) - Number(a.primary));
     const label = `${model.label}${romram != null ? ` ${shortRomram(romram)}` : ''}`;
-    return <BenchPreview modelLabel={label} items={items} />;
-  }, [kind, productLevel, model, activeLeafKey]);
+    return <BenchPreview modelLabel={label} items={[...seen.values()]} />;
+  }, [kind, productLevel, model, activeLeafKey, userDrilled]);
 
   return (
     <Cascader
@@ -501,13 +532,14 @@ function ProductCascadeControl({
       displayRender={displayRender}
       popupRender={() => (
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
+          {/* 第一百一十五轮：列宽自适应（长产品名/型号完整显示），不再固定 145/190/190 */}
           <CascadePanel open={menuOpen} columns={productLevel ? [
-            { width: 175, items: groupItems },
-            { width: 215, items: modelItems },
+            { items: groupItems },
+            { items: modelItems },
           ] : [
-            { width: 145, items: groupItems },
-            { width: 190, items: modelItems },
-            { width: 190, items: leafItems },
+            { items: groupItems },
+            { items: modelItems },
+            { items: leafItems, extraW: leafExtraW },
           ]} />
           {/* 颜色浮层打开时占住右侧位，对标预览让位（二者互斥控宽） */}
           {colorPanelNode ?? benchPreview}
@@ -519,9 +551,11 @@ function ProductCascadeControl({
           setActivePath([initialGroup ?? '', firstSelection?.modelId ?? tree[0]?.models[0]?.modelId ?? '']);
           // 配置列初始高亮 = 首个勾选配置（与旧视觉一致），悬停后跟随鼠标
           setActiveLeafKey(firstSelection ? `${firstSelection.modelId}|${firstSelection.romram}` : null);
+          setUserDrilled(false); // 重开面板回到系列层：对标预览不出现
         } else {
           setColorPanelKey(null);
           setActiveLeafKey(null);
+          setUserDrilled(false);
         }
       }}
     />

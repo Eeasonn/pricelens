@@ -3,6 +3,8 @@ import { ConfigProvider, Segmented, Tooltip } from 'antd';
 import type { ThemeConfig } from 'antd';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import { AutoMatchControl, CompetitorControl, OwnProductControl, TierControl } from './ProductBox';
+import PlatformBox from './PlatformBox';
+import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
 import { useFilters } from '../../state/FiltersContext';
 import { tierSubjectSelections } from '../../state/tierSelection';
@@ -62,24 +64,29 @@ function ComparisonControl() {
       </Tooltip>
     );
   }
+  // 第一百一十五轮（评审）：选中「自动」= 竞品随我司产品自动带出，竞品筛选器
+  // 直接隐藏（退出自动才显示）；未选我司产品时维持第八十五轮的自由勾选池
+  const autoOn = ownSelected && state.autoMatch;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
       {ownSelected && <AutoMatchControl />}
-      <div style={{ flex: 1, minWidth: 0 }}><CompetitorControl /></div>
+      {!autoOn && <div style={{ flex: 1, minWidth: 0 }}><CompetitorControl /></div>}
     </div>
   );
 }
 
-/** One global row: country and industry scope, then own product and editable comparison. */
+/** One global row: country and industry scope, then own product and editable comparison.
+ *  第一百一十五轮（评审）：平台与币种收进顶部筛选条（各看板标题行不再重复），
+ *  整行不换行——我司/竞品列弹性收缩，平台/币种定宽保底。 */
 export default function FilterBar({ onBack: _onBack }: { onBack?: () => void }) {
   const { state, actions } = useFilters();
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
         <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30, flexWrap: 'nowrap' }}>
             <ScopeFields />
-            <div style={{ flex: '1 1 360px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ flex: '1 1 280px', minWidth: 220, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Segmented
                 size="small"
                 value={state.subjectMode}
@@ -93,7 +100,14 @@ export default function FilterBar({ onBack: _onBack }: { onBack?: () => void }) 
             {state.subjectMode === 'product' && (
               <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: color.mute }}>vs</span>
             )}
-            <div style={{ flex: '1 1 290px', minWidth: 0 }}><Field label="竞品"><ComparisonControl /></Field></div>
+            <div style={{ flex: '1 1 230px', minWidth: 200 }}><Field label="竞品"><ComparisonControl /></Field></div>
+            <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+            <div style={{ flexShrink: 0, width: 168 }}><Field label="平台"><PlatformBox /></Field></div>
+            <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={labelStyle}>币种</span>
+              <CurrencyBox />
+            </div>
           </div>
         </section>
       </ConfigProvider>

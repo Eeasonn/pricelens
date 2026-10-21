@@ -109,6 +109,11 @@ export default function BenchConfigModal(props: {
   };
   const addComp = (skuId: string): void => {
     if (!model || !rom) return;
+    // 第一百一十五轮（评审拍板）：每个配置最多 4 款竞品——编辑侧同步硬限
+    if (currentRows.length >= 4) {
+      message.warning('每个配置最多 4 款竞品，请先移除后再添加');
+      return;
+    }
     const nextSort = currentRows.length === 0 ? 1 : Math.max(...currentRows.map((r) => r.sort)) + 1;
     writeGroup([
       ...currentRows,
@@ -240,7 +245,7 @@ export default function BenchConfigModal(props: {
 
           {/* 已配置（当前 ROM）：首位 = 主竞品★，↑↓ 微调次序（预警中心重构收编原配置页排序能力） */}
           {sectionTitle(
-            `已配置对标（${currentRows.length}）`,
+            `已配置对标（${currentRows.length}/4）`,
             '首位 = 主竞品（看板/摘要条的排序首位）· ↑↓ 调整次序',
           )}
           {currentRows.length === 0 ? (

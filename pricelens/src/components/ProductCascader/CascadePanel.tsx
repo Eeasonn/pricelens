@@ -3,11 +3,14 @@
 // 列 = 层级；行 = 可勾选（Checkbox）/ 仅展开 / 带行尾内容（均值徽标 /「配置 SKU…」）
 // 反馈 2.4：行选中/悬停高亮（active）由深灰改为浅蓝（selectSoft）；
 // 反馈 2.2/2.3：触发器开启态聚焦边框浅蓝、徽标不撑破窄触发器。
+// 第一百一十五轮（评审，对齐国家筛选器交互）：
+//  - 父级行尾加右向小箭头；下一层只在「点击」后展开（移除悬停自动展开）；
+//  - 每列宽度自适应内容（长产品名/型号不再省略号截断；上限防列失控）。
 // 供 ProductBox（我司/竞品级联）与 PlatformBox（平台→店铺）复用
 // ============================================================
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Checkbox, Tooltip } from 'antd';
-import { DownOutlined } from '@ant-design/icons';
+import { DownOutlined, RightOutlined } from '@ant-design/icons';
 import { color, fontSize, radius, selectAccent, selectSoft, space } from '../../theme/tokens';
 
 export interface CascadeRowItem {
@@ -18,7 +21,7 @@ export interface CascadeRowItem {
   /** undefined = 本层不可勾选（如 SKU 层） */
   checkState?: 'checked' | 'indeterminate' | 'none';
   onCheckChange?: (next: boolean) => void;
-  /** hover/点击 → 展开下一列（父子联动路径） */
+  /** 点击行 → 展开下一列（父子联动路径） */
   onActivate?: () => void;
   /** 点击行文本的附加行为（如平台树：点文字=勾选）；不传则点击仅激活 */
   onLabelClick?: () => void;
@@ -30,6 +33,48 @@ export interface CascadeRowItem {
 }
 
 const ROW_H = 32;
+
+// ---------------- 文本宽度测量（列宽自适应用；懒建 canvas，缓存字体） ----------------
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+const MEASURE_FONT = '13px -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif';
+
+/** 13px 正文下单行文本像素宽（容错：无 DOM 环境按 8px/字符粗估） */
+export function measureText(s: string): number {
+  if (!s) return 0;
+  if (typeof document === 'undefined') return s.length * 8;
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return s.length * 8;
+  measureCtx.font = MEASURE_FONT;
+  return measureCtx.measureText(s).width;
+}
+
+/** 列宽自适应（第一百一十五轮）：最长行文本 + 行内 chrome（复选框/前置/箭头/行尾）
+ *  + 呼吸位；min/max 钳制。extraW = 调用方对行尾内容（颜色胶囊等）的额外预留。 */
+function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; max?: number; extraW?: number }): number {
+  const chrome =
+    2 * 10 + // 行左右 padding
+    6 + // 文本前 gap
+    (items.some((i) => i.checkState) ? 24 : 0) + // 复选框
+    (items.some((i) => i.leading) ? 18 : 0) + // 前置品牌点
+    16 + // 父级行尾展开箭头（统一预留）
+    (opts.extraW ?? 0);
+  const textW = items.reduce((w, i) => Math.max(w, measureText(i.label + (i.locked ? '🔒' : ''))), 0);
+  const min = opts.min ?? 148;
+  const max = opts.max ?? 380;
+  return Math.min(max, Math.max(min, Math.ceil(textW * 1.06) + chrome + 8));
+}
+
+export interface CascadeColumnSpec {
+  /** 固定列宽；缺省 = 按内容自适应（第一百一十五轮） */
+  width?: number;
+  items: CascadeRowItem[];
+  /** 自适应下限/上限（缺省 148 / 380） */
+  min?: number;
+  max?: number;
+  /** 行尾内容（颜色胶囊等）的宽度预留 */
+  extraW?: number;
+}
 
 function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean }) {
   const hasActive = items.some((item) => item.active);
@@ -61,16 +106,17 @@ function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: 
         flexShrink: 0,
       }}
     >
-      {items.map((item, index) => (
+      {items.map((item, index) => {
+        const expandable = !last && Boolean(item.onActivate);
+        return (
         <div
           key={item.key}
           role="treeitem"
           aria-label={item.label}
           aria-selected={Boolean(item.active)}
           aria-checked={item.checkState ? item.checkState === 'checked' : undefined}
-          aria-expanded={!last && item.onActivate ? Boolean(item.active) : undefined}
+          aria-expanded={expandable ? Boolean(item.active) : undefined}
           tabIndex={item.active || (!hasActive && index === 0) ? 0 : -1}
-          onMouseEnter={item.onActivate}
           onFocus={item.onActivate}
           onKeyDown={(event) => {
             if (event.target !== event.currentTarget) return;
@@ -103,7 +149,7 @@ function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: 
             gap: space.sm,
             padding: `0 ${space.md}px`,
             background: item.active ? selectSoft : 'transparent',
-            cursor: item.onActivate ? 'pointer' : 'default',
+            cursor: item.onActivate || item.onLabelClick ? 'pointer' : 'default',
             outlineOffset: -2,
           }}
         >
@@ -136,8 +182,13 @@ function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: 
             {item.locked ? '🔒' : ''}
           </span>
           {item.trailing}
+          {/* 父级行尾展开箭头（第一百一十五轮，对齐国家筛选器）：提示可点击下钻 */}
+          {expandable && (
+            <RightOutlined aria-hidden style={{ fontSize: 9, color: color.mute, flexShrink: 0 }} />
+          )}
         </div>
-      ))}
+        );
+      })}
       {!items.length && (
         <div style={{ padding: space.md, fontSize: fontSize.caption, color: color.mute }}>暂无数据</div>
       )}
@@ -145,8 +196,8 @@ function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: 
   );
 }
 
-/** 多列级联面板（悬停展开 + 父子联动勾选，AntD Cascader 范式） */
-export function CascadePanel({ columns, open = true }: { columns: { width: number; items: CascadeRowItem[] }[]; open?: boolean }) {
+/** 多列级联面板（点击展开 + 父子联动勾选，AntD Cascader 范式；列宽自适应） */
+export function CascadePanel({ columns, open = true }: { columns: CascadeColumnSpec[]; open?: boolean }) {
   return (
     <div
       role="tree"
@@ -159,7 +210,13 @@ export function CascadePanel({ columns, open = true }: { columns: { width: numbe
       }}
     >
       {columns.map((c, i) => (
-        <Column key={`${i}-${c.items[0]?.key ?? ''}`} width={c.width} items={c.items} last={i === columns.length - 1} open={open} />
+        <Column
+          key={`${i}-${c.items[0]?.key ?? ''}`}
+          width={c.width ?? autoColumnWidth(c.items, c)}
+          items={c.items}
+          last={i === columns.length - 1}
+          open={open}
+        />
       ))}
     </div>
   );

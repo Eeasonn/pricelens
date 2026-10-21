@@ -131,7 +131,8 @@ export default function PlatformBox() {
       styles={{ body: { padding: 0 } as const }}
       content={
         <div>
-          <CascadePanel open={open} columns={[{ width: 190, items: platformItems }, { width: 208, items: shopItems }]} />
+          {/* 第一百一十五轮：列宽自适应（长渠道/店铺名完整显示） */}
+          <CascadePanel open={open} columns={[{ items: platformItems }, { items: shopItems }]} />
           <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
             <Button
               type="link"

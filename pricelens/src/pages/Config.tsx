@@ -95,21 +95,29 @@ export default function Config() {
     [state.countryCode],
   );
 
-  const saveAll = () => {
-    // ① 上一代关系 → LPL3.config.prevGen（只存与 auto 的差异；无差异 = 清除手动维护）
-    {
-      const overrides: Record<string, string | null> = {};
-      for (const r of prevRows) {
-        if ((prevMap[r.modelId] ?? null) !== autoPrevModelId(r.modelId)) {
-          overrides[r.modelId] = prevMap[r.modelId] ?? null;
-        }
-      }
-      savePrevGenOverrides(overrides);
+  // 第一百一十五轮（评审）：右上「保存配置」按钮删除——本页各明细编辑即改即存
+  //（对标配置 = BenchConfigModal 保存；上一代关系 = 下拉变更即存差异；自定义档位 = 删除即存），
+  // 不再攒一次批量提交。
+
+  /** 上一代关系单行变更即存：只写与 auto 的差异（无差异 = 清除手动维护），主页即时生效 */
+  const savePrevRow = (modelId: string, value: string | null): void => {
+    setPrevMap((m) => ({ ...m, [modelId]: value }));
+    const overrides: Record<string, string | null> = {};
+    for (const r of prevRows) {
+      const cur = (r.modelId === modelId ? value : prevMap[r.modelId]) ?? null;
+      if (cur !== autoPrevModelId(r.modelId)) overrides[r.modelId] = cur;
     }
-    // ③ 自定义档位 → LPL3.config.customTiers
-    saveCustomTiers(tiers);
+    savePrevGenOverrides(overrides);
     notifyConfigChanged();
-    message.success('配置已保存，主页已生效');
+    message.success('上一代关系已保存，主页已生效');
+  };
+
+  /** 自定义档位删除即存 */
+  const removeTier = (idx: number): void => {
+    const next = tiers.filter((_, j) => j !== idx);
+    setTiers(next);
+    saveCustomTiers(next);
+    notifyConfigChanged();
   };
 
   const restorePrevGenDefault = () => {
@@ -123,15 +131,9 @@ export default function Config() {
     <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
       {/* 第二十八轮：1440 → 1280，与看板同最低宽度 */}
       <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-        {/* 顶栏 64px（共享 PageHeader；「保存配置」走 extra 插槽） */}
-        <PageHeader
-          title="配置"
-          extra={
-            <Button size="small" type="primary" style={{ height: 28 }} onClick={saveAll}>
-              保存配置
-            </Button>
-          }
-        />
+        {/* 顶栏 64px（共享 PageHeader；第一百一十五轮：右上「保存配置」删除——
+            各明细编辑即改即存，批量保存无实义） */}
+        <PageHeader title="配置" />
 
         <main style={{ flex: 1, padding: space.lg }}>
           {/* ⓪ 竞品对标配置：全部已识别的对标关系（矩阵/自动/替代/人工）在此可查可改 */}
@@ -186,7 +188,7 @@ export default function Config() {
                         options={prevRows
                           .filter((c) => c.launch < r.launch)
                           .map((c) => ({ label: c.label, value: c.modelId }))}
-                        onChange={(v) => setPrevMap((m) => ({ ...m, [r.modelId]: v ?? null }))}
+                        onChange={(v) => savePrevRow(r.modelId, v ?? null)}
                       />
                       <Tooltip title={manual ? '手动维护（保存后生效）' : '来自产品主数据（auto）'}>
                         <Tag

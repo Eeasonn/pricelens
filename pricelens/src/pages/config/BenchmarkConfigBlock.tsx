@@ -6,8 +6,8 @@
 // （候选区同档优先 + 品牌筛选 + ↑↓排序 + 恢复默认），保存走 manual 快照 + 事件广播。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Empty, Segmented, Tooltip } from 'antd';
-import { EditOutlined } from '@ant-design/icons';
+import { Button, Empty, Popover, Segmented, Tooltip } from 'antd';
+import { EditOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import { buildOverviewMatrix, TIER_LABELS, type OverviewModel } from '../../dataModel/aggregate';
@@ -62,6 +62,19 @@ export default function BenchmarkConfigBlock() {
 
   const totalPairs = ownModels.reduce((n, m) => n + m.rows.reduce((k, r) => k + compsOf(m.modelId, r.romram).length, 0), 0);
 
+  // 第一百一十五轮（评审）：把匹配逻辑讲清在界面上——数据从哪来、优先级、上限。
+  // 业务语义表述，不含工程细节（UI 禁解释性工程文案铁律）。
+  const matchLogic = (
+    <div style={{ maxWidth: 380, fontSize: 12, lineHeight: '20px', color: color.body }}>
+      <div style={{ fontWeight: 600, color: color.ink, marginBottom: 4 }}>竞品怎么匹配</div>
+      <div>① 以《产品竞品矩阵》为准：每个国家、每款产品按矩阵列出的竞品直配，列序即优先级。</div>
+      <div>② 矩阵未覆盖的国家和型号：优先沿用矩阵其他国家为同款产品配过的竞品；仍有空缺时，在同档位（价差 ±35% 以内）就近补齐，每个品牌先取一款。</div>
+      <div>③ 矩阵指名的竞品在该国没有在售数据时，以近似款替代。</div>
+      <div>④ 本页可人工增删与调序，人工配置优先于以上规则。</div>
+      <div style={{ marginTop: 4, fontWeight: 600, color: color.ink }}>每款产品每个配置最多 4 个竞品；超出时按 人工 → 矩阵列序 → 就近补齐 的顺序保留前 4 个，同型号多配置只占富余名额。</div>
+    </div>
+  );
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap', marginBottom: space.base }}>
@@ -72,8 +85,13 @@ export default function BenchmarkConfigBlock() {
           options={industries.map((i) => ({ label: INDUSTRY_LABELS[i], value: i }))}
         />
         <span className="tnum" style={{ fontSize: fontSize.caption, color: color.mute }}>
-          {ownModels.length} 个自有型号 · {totalPairs} 条对标
+          {ownModels.length} 个自有型号 · {totalPairs} 条对标 · 每配置最多 4 款
         </span>
+        <Popover trigger="click" placement="bottomLeft" content={matchLogic} arrow={false}>
+          <Button size="small" icon={<InfoCircleOutlined />} style={{ height: 24 }}>
+            匹配逻辑
+          </Button>
+        </Popover>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           {(Object.keys(SOURCE_TAG) as DimBenchmark['source'][]).map((k) => (
             <Tooltip key={k} title={SOURCE_TAG[k].hint}>
