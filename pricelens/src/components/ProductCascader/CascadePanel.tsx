@@ -53,8 +53,10 @@ export function measureText(s: string): number {
 }
 
 /** 列宽自适应（第一百一十五轮）：最长行文本 + 行内 chrome（复选框/前置/箭头/行尾）
- *  + 呼吸位；min/max 钳制。extraW = 调用方对行尾内容（颜色胶囊等）的额外预留。 */
-function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; max?: number; extraW?: number; noMaxClip?: boolean }): number {
+ *  + 呼吸位；min/max 钳制。extraW = 调用方对行尾内容（颜色胶囊等）的额外预留。
+ *  第一百二十三轮起导出：选择产品浮窗按「四列自适应宽之和」定浮窗宽度，
+ *  需在调用方拿到与面板一致的列宽计算。 */
+export function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; max?: number; extraW?: number; noMaxClip?: boolean }): number {
   const chrome =
     2 * 10 + // 行左右 padding
     6 + // 文本前 gap
@@ -63,9 +65,11 @@ function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; max?: nu
     16 + // 父级行尾展开箭头（统一预留）
     (opts.extraW ?? 0);
   const textW = items.reduce((w, i) => Math.max(w, measureText(i.label + (i.locked ? '🔒' : ''))), 0);
+  // 行文字实际渲染字号 = fontSize.bodySm（14px），measureText 按 13px 基准测量 →
+  // 折算到实际字号再计呼吸位（第一百二十三轮：label + 行尾必须完整可见）
   const min = opts.min ?? 148;
   const max = opts.noMaxClip ? 1600 : (opts.max ?? 380);
-  return Math.min(max, Math.max(min, Math.ceil(textW * 1.06) + chrome + 8));
+  return Math.min(max, Math.max(min, Math.ceil(textW * (fontSize.bodySm / 13) * 1.06) + chrome + 8));
 }
 
 export interface CascadeColumnSpec {
@@ -105,9 +109,9 @@ function Column({ items, width, last, open, fillFlex, height }: { items: Cascade
       role="group"
       style={fillFlex != null ? {
         // fill 模式：基础宽 = 内容自适应（flex-basis），剩余宽度按权重摊入；
-        // min-width 保持 auto（flex 默认）+ 文本 nowrap → 内容永不截断，
-        // 父容器窄时整体横向滚动兜底
-        flex: `${fillFlex} 1 ${width}px`,
+        // 不收缩（第一百二十三轮）：容器窄于列宽和时保持各列完整宽，由面板
+        // 整体横向滚动兜底——列内文本与行尾内容永不截断
+        flex: `${fillFlex} 0 ${width}px`,
         height: height ?? 348,
         overflowY: 'auto',
         borderRight: last ? undefined : `1px solid ${color.hairline}`,
@@ -194,7 +198,7 @@ function Column({ items, width, last, open, fillFlex, height }: { items: Cascade
               textOverflow: noClip ? undefined : 'ellipsis',
             }}
           >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+            <span style={noClip ? undefined : { overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
             {item.locked ? '🔒' : ''}
           </span>
           {item.trailing}

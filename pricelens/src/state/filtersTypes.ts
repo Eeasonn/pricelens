@@ -35,11 +35,8 @@ export interface PlatformSelection {
 export interface FiltersState {
   countryCode: string; // 有数据的国家（dim_region.enabled）
   industry: Industry; // 手机/平板/穿戴/音频（IoT/PC 有数据无矩阵）
-  /** 主体模式（互斥）：'product' = 按产品选主分析卡（现状）；'tier' = 按价格档位，
-   *  图表自动集结该档全部华为配置成卡 + 各自对标对比产品（tierSubjectSelections） */
-  subjectMode: 'product' | 'tier';
-  /** 按档位模式选中的价格档位（tier_code，dim_product.tier_code）；product 模式不生效 */
-  tier: string | null;
+  // 第一百二十三轮：「按档位」主体模式退役（subjectMode/tier 字段删除）——
+  // 档位有机融入「选择产品」浮窗的树筛选与批量动作，见 tierSelection.appendTierCards。
   /** 主分析产品卡列表：卡序 = 分离面板序；≥2 张卡看板自动分离 */
   mains: MainProduct[];
   platform: PlatformSelection | null; // null=未选=该国默认电渠单平台口径；渠道内多店铺取最低在架价

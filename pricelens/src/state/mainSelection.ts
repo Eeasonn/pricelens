@@ -17,6 +17,11 @@ export const MAX_LINES_PER_CHART = 8;
 /** 主分析卡数上限（= 分离面板数上限；批量动作按剩余名额截断） */
 export const MAINS_CAP = 8;
 
+/** 多组合并成一张图的折线总量上限（第一百二十三轮宽容合并）：全部组的系列去重
+ *  总数（主品 + 对比并集）超过即不可合并、回落分图。取值与图表名称避让预算的
+ *  系列数上限同口径（chart/PriceTrend/helpers.SERIES_PX_CAP = 16）。 */
+export const MERGE_LINES_CAP = 16;
+
 let cardSeq = 0;
 
 /** 卡稳定键：跨持久化保留；同毫秒批量建卡靠自增尾号去重 */

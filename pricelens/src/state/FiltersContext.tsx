@@ -66,8 +66,6 @@ const lastWeek = dimTime[dimTime.length - 1]?.week_id ?? '202642';
 export const defaultFilters: FiltersState = {
   countryCode: 'RU',
   industry: 'phone',
-  subjectMode: 'product', // 主体模式默认按产品（现状行为）；档位模式为附加视角
-  tier: null,
   mains: [],
   platform: DEFAULT_PLATFORM_SELECTION, // null = 该国默认电渠
   granularity: 'week', // 第四十二轮：默认周（迪总「时间默认取周」）
@@ -422,11 +420,8 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       cur: state.currency,
       main: mainKeys.join(',') || null,
       shop,
-      // 档位模式才写主体模式参数，按产品视图的链接保持历史形态
-      m: state.subjectMode === 'tier' ? 'tier' : null,
-      t: state.subjectMode === 'tier' ? state.tier : null,
     });
-  }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform, state.autoMatch, state.subjectMode, state.tier]);
+  }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform, state.autoMatch]);
 
   // §13：对标配置保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算
   // 华为主品卡对比区（矩阵维护入口 = 总览「＋添加竞品」浮窗 / 配置页）；

@@ -39,6 +39,9 @@ export type SeriesNameItem = AvoidResult['names'][number];
 
 export const LABEL_DISTANCE = 4;
 export const LABEL_LINE_HEIGHT = 20;
+/** 精简标签样式（第一百二十三轮）：无框、只留数字；细白描边让压线处的数字仍可读
+ *  （白底方框胶囊退役——评审：数值外侧不要方框） */
+export const COMPACT_LABEL_HALO = { textBorderColor: '#fff', textBorderWidth: 2 } as const;
 /** 端点徽标点的标签距离（第二十轮）：徽标直径 15px（S/E）/13px（‹›）大于普通符号 7px，
  *  canvas 标签需让出徽标半径再留呼吸位，否则标签下缘压进徽标 */
 export const endpointLabelDistance = (kind: SeriesMark): number => (kind === 'S' || kind === 'E' ? 12 : 10);
@@ -225,7 +228,7 @@ export function buildLabelPlan(p: {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
   const items: AvoidItem[] = [];
-  // 第一百一十四轮：精简标签直出表（不进避让推挤；几何天然分离 + 白底胶囊兜底）
+  // 第一百一十四轮：精简标签直出表（不进避让推挤；几何天然分离 + 细白描边兜底）
   const compactDy: Record<string, Record<number, number>> = {};
   const compactPos: Record<string, Record<number, 'top' | 'bottom'>> = {};
   const compact = p.labelMode === 'compact';
@@ -399,8 +402,9 @@ export function buildOption(p: {
    *  缺省 false = 与旧口径一致（时间标签由底部刷选条统一承担）。开启后 ECharts
    *  自动按宽度抽稀（hideOverlap），标签画在绘图区下缘的既有留白内 */
   xLabels?: boolean;
-  /** 第一百一十四轮（评审）：'compact' = 精简标签样式（白底描边胶囊，压线也留白可读）；
-   *  标签集已在 buildLabelPlan 按模式裁剪（最高/最低/最新），此处只管样式与上下位 */
+  /** 第一百一十四轮（评审）：'compact' = 精简标签——数字直标（第一百二十三轮：白底方框退役，
+   *  只留数字 + 细白描边保压线可读）；标签集已在 buildLabelPlan 按模式裁剪（最高/最低/最新），
+   *  此处只管样式与上下位 */
   labelMode?: 'detail' | 'compact';
   /** 第一百一十五轮：ECharts grid 右留白跟随 buildGeom 的 gridRight（量价销量轴列），
    *  缺省 GRID.right——canvas 网格与 DOM 覆盖层横向几何必须同源 */
@@ -415,8 +419,9 @@ export function buildOption(p: {
   const isLit = (key: string): boolean =>
     p.focusKeys != null && p.focusKeys.length > 0 ? p.focusKeys.includes(key) : key === p.focusKey;
   const xLabels = first.points.map((pt) => pt.xLabel);
-  // 第一百一十九轮（走查会）：时间轴左右边界完整格式（周=YYYYMMDD/月=YYYYMM/季=YYYYQn），
-  // 中间刻度省年份、跨年在换年刻度下补年份行；自控抽稀保证首末刻度恒显示（不再交给 auto）
+  // 第一百一十九轮自控抽稀（首末刻度恒显示，不交给 auto）；第一百二十三轮改口径：
+  // 刻度主行恒短格式（周=MM-DD/月=MM/季=Qn，边界也不例外），年份独立第二行——
+  // 最左显示刻度恒带年份、换年刻度带年份（见 axisTickPlan）
   const xIds = first.points.map((pt) => pt.bucketId);
   const axisPlan = axisTickPlan(granularity, xIds, Math.max(1, Math.ceil(xIds.length / 9)), xIds.length > 1 ? [0, xIds.length - 1] : [0]);
   const axisShown = new Set(axisPlan.indexes);
@@ -452,10 +457,9 @@ export function buildOption(p: {
             fontFamily: font.family,
             lineHeight: LABEL_LINE_HEIGHT,
             formatter: pt.price != null ? fmtInt(pt.price) : '',
-            // 第一百一十四轮：精简标签白底描边胶囊（Keepa 式）——即使压线也留白可读
-            ...(compact
-              ? { backgroundColor: '#fff', borderColor: s.color, borderWidth: 1, borderRadius: 3, padding: [1, 5] }
-              : {}),
+            // 第一百一十四轮精简标签白底描边胶囊 → 第一百二十三轮退役：只留数字，
+            // 以细白描边保住压线处可读（无框）
+            ...(compact ? COMPACT_LABEL_HALO : {}),
           },
         };
       });
@@ -507,9 +511,7 @@ export function buildOption(p: {
           fontFamily: font.family,
           lineHeight: LABEL_LINE_HEIGHT,
           formatter: pt.rrp != null ? fmtInt(pt.rrp) : '',
-          ...(compact
-            ? { backgroundColor: '#fff', borderColor: s.color, borderWidth: 1, borderRadius: 3, padding: [1, 5] }
-            : {}),
+          ...(compact ? COMPACT_LABEL_HALO : {}),
         },
       }));
       sArr.push({
@@ -543,7 +545,8 @@ export function buildOption(p: {
       // 第十二轮：月/季标签弃 mono rich，与周视图同一字体字号（全页数字字体统一）
       // 时间标签由 XBrush 统一承担，图表只保留轴线和大促图标专用行，避免两组日期叠在一起。
       // 第110轮（评审）：分离模式小图传入 xLabels → 各面板自带日期标签（可独立截图）
-      // 第119轮（走查会）：自控抽稀 + 边界完整格式（首末刻度 YYYYMMDD/YYYYMM/YYYYQn 恒显示）
+      // 第123轮：主行恒短格式（边界不再 YYYYMMDD 完整格式），年份走第二行
+      //（最左显示刻度恒带、换年刻度带——axisTickPlan 同源口径）
       axisLabel: p.xLabels
         ? {
             show: true,

@@ -1,14 +1,18 @@
 // ============================================================
 // 第118轮（2026-10-21）量价看板 · 大盘分析纯计算层。
+// 第一百二十三轮（2026-10-22 走查会重做）：大盘卡改「档位分布」结构——
+//   - 上方大盘图 = 某一期（默认最新）各价格档位的销量分布（tierStructure 单期口径），
+//     原期序时间堆叠 marketTimeStack 退役（连同金测删除）；
+//   - 环比贡献拆解 = 必选档位下的品牌行 + 行内展开的产品子行：
+//     brandContribution 按档位过滤、Δ 降序（拉动最上、拖累最下），
+//     原 |Δ| 排序的 contributionRows 与「品牌/产品」粒度切换一并并入本函数。
 // 口径：
 //   - 大盘 = 当前国家 × 产业下全部「型号 × 配置」（颜色聚合在配置内）；
 //   - 销量 = dataModel/volume（估算口径，台；调用方传入逐配置取数结果）；
 //   - 档位 = 分国 tier_by_country（dimTier 产业阶梯，业务声明优先）；
-//   - 堆叠结构 = 档位 × 品牌（100% 拉齐，自有品牌置底）；
-//   - 时间堆叠（第120轮走查会）= 期序大盘柱：柱高 = 该期大盘总台数（绝对量），
-//     柱内分段 = 品牌构成（序即自下而上堆叠序，brandOrder 首位品牌视觉置底）；
-//     销量 null 的配置该期不计入，全缺期 total = 0 照常输出（画空档）；
-//   - 环比贡献 = 选中期 − 上一期（台），品牌/产品两种粒度聚合，0 变化行不出。
+//   - 档位结构 = 某一期 档位 → 品牌台数合计（自有品牌置底，绝对量）；
+//   - 环比贡献 = 当前期 − 上一期（台），任一期缺采按 0 计（在架变化如实计入），
+//     两期全缺的配置跳过，Δ = 0 的行不出，品牌行与其产品子行均按 Δ 降序。
 // 全部纯函数、无随机数，可金测。
 // ============================================================
 import type { DimProduct, Industry } from './types';
@@ -23,8 +27,6 @@ export interface MarketConfig {
   label: string;
   tierCode: string;
 }
-
-export type MarketGranule = 'brand' | 'product';
 
 export const marketKeyOf = (c: MarketConfig): string => `${c.modelId}|${c.romram.replace(/\s+/g, '')}`;
 
@@ -75,7 +77,8 @@ export interface TierStructure {
 }
 
 /** 某一期的大盘结构：档位 → 品牌台数合计（销量为 null 的配置不计入）。
- *  tierOrder = 产业阶梯（低 → 高）；只返回 total > 0 的档位，按阶梯序。 */
+ *  tierOrder = 产业阶梯（低 → 高）；只返回 total > 0 的档位，按阶梯序。
+ *  第一百二十三轮起即大盘图的横轴：每档一根柱，柱内分段 = byBrand（序首 = 自有 = 视觉置底）。 */
 export function tierStructure(
   configs: MarketConfig[],
   volByKey: Map<string, number | null>,
@@ -109,103 +112,66 @@ export function tierStructure(
     });
 }
 
-export interface ContributionRow {
-  key: string; // 品牌名 或 `${modelId}|${romram去空格}`
+// ---------------- 环比贡献拆解（第一百二十三轮：必选档位 · 品牌行 + 产品子行） ----------------
+
+/** 产品子行：该品牌在所选档位下的单个「型号 × 配置」的台数变化 */
+export interface BrandProductRow {
+  /** = marketKeyOf(配置) */
+  key: string;
+  /** 型号 + 配置 */
   label: string;
-  brand: string; // 品牌点/品牌色
-  tierCode: string;
-  delta: number; // 台；正 = 拉动大盘，负 = 拖累大盘
+  delta: number; // 台；正 = 拉动，负 = 拖累
 }
 
-/** 环比贡献拆解：Δ = 选中期 − 上一期（任一期缺采按 0 计 = 在架变化如实计入）；
- *  两期全缺的配置跳过；Δ = 0 的行不出；行按 |Δ| 降序（同量标签字典序） */
-export function contributionRows(
+/** 品牌贡献行：行 = 品牌，products = 展开用的产品子行（均 Δ 降序） */
+export interface BrandContributionRow {
+  brand: string;
+  /** 品牌合计 = 子行 Δ 之和（子行先取整再求和，与展示读数严格一致） */
+  delta: number;
+  products: BrandProductRow[];
+}
+
+/** 环比贡献拆解：只看所选档位，Δ = 当前期 − 上一期（任一期缺采按 0 计 = 在架变化
+ *  如实计入）；两期全缺的配置跳过；Δ = 0 的品牌行/产品行不出；品牌行与其产品子行
+ *  均按 Δ 降序（同量标签字典序）——拉动最大在最上、拖累最大在最下。
+ *  total = 该档位全部变化的合计（= 品牌行 Δ 之和）。无该档位配置 → 空行 + 0。 */
+export function brandContribution(
   configs: MarketConfig[],
   prevVol: Map<string, number | null>,
   selVol: Map<string, number | null>,
-  granule: MarketGranule,
-): { rows: ContributionRow[]; total: number } {
-  const agg = new Map<string, ContributionRow>();
-  let total = 0;
+  tierCode: string,
+): { rows: BrandContributionRow[]; total: number } {
+  const byBrand = new Map<string, Map<string, BrandProductRow>>();
   for (const c of configs) {
+    if (c.tierCode !== tierCode) continue;
     const key = marketKeyOf(c);
     const pv = prevVol.get(key) ?? null;
     const sv = selVol.get(key) ?? null;
     if (pv == null && sv == null) continue;
-    const delta = (sv ?? 0) - (pv ?? 0);
-    total += delta;
-    const rowKey = granule === 'brand' ? c.brand : key;
-    const label = granule === 'brand' ? c.brand : c.label;
-    const hit = agg.get(rowKey);
+    const delta = Math.round((sv ?? 0) - (pv ?? 0));
+    let products = byBrand.get(c.brand);
+    if (!products) {
+      products = new Map<string, BrandProductRow>();
+      byBrand.set(c.brand, products);
+    }
+    const hit = products.get(key);
     if (hit) hit.delta += delta;
-    else agg.set(rowKey, { key: rowKey, label, brand: c.brand, tierCode: c.tierCode, delta });
+    else products.set(key, { key, label: c.label, delta });
   }
-  const rows = [...agg.values()].filter((r) => Math.round(r.delta) !== 0).map((r) => ({ ...r, delta: Math.round(r.delta) }));
-  rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || a.label.localeCompare(b.label));
-  return { rows, total: Math.round(total) };
+  const rows = [...byBrand.entries()]
+    .map(([brand, products]) => {
+      const subs = [...products.values()]
+        .filter((p) => p.delta !== 0)
+        .sort((a, b) => b.delta - a.delta || a.label.localeCompare(b.label));
+      return { brand, delta: subs.reduce((acc, p) => acc + p.delta, 0), products: subs };
+    })
+    .filter((r) => r.delta !== 0)
+    .sort((a, b) => b.delta - a.delta || a.brand.localeCompare(b.brand));
+  return { rows, total: rows.reduce((acc, r) => acc + r.delta, 0) };
 }
 
 /** 带符号整数文案：+94 / −177 / 0（U+2212 负号，全站数值同语言） */
 export function fmtSignedInt(v: number): string {
   if (v === 0) return '0';
   return (v > 0 ? '+' : '−') + Math.abs(v).toLocaleString('en-US');
-}
-
-// ---------------- 时间轴堆叠（第120轮走查会：大盘卡柱状图改期序） ----------------
-
-/** 单期大盘堆叠结构（时间柱一期的柱体） */
-export interface MarketPeriodStack {
-  /** 该期大盘合计台数（缺采配置不计入；无任何在架数据 = 0，渲染为空档） */
-  total: number;
-  /** 品牌分段，序 = 自下而上堆叠序：brandOrder 序（首位品牌视觉置底），
-   *  序外品牌殿后（量降序）；仅含 vol > 0 的品牌 */
-  byBrand: { brand: string; vol: number }[];
-}
-
-/** 期序大盘堆叠（第120轮）：横轴 = 查看范围各期，柱高 = 该期大盘总台数（绝对量），
- *  柱内分段 = 品牌构成。输入 = 调用方（组件）批量取数后展平的台数表：
- *  键 = `${marketKeyOf(c)}|${期下标}`（期下标 = 窗口内 0 起，缺项按缺采 = null 处理）；
- *  期数由键集推断（对每个配置自 0 起探测到首个缺键）。销量 null（或 ≤0）的配置该期
- *  不计入；total 为 0 的期照常输出（total 0 + 空 byBrand）以便画空档。
- *  tierFilter 非 null 时先过滤 configs 的 tierCode（无匹配配置 → 空数组）。 */
-export function marketTimeStack(
-  configs: MarketConfig[],
-  volByKeyBucket: Map<string, number | null>,
-  tierFilter: string | null,
-  brandOrder: string[],
-): MarketPeriodStack[] {
-  const use = tierFilter == null ? configs : configs.filter((c) => c.tierCode === tierFilter);
-  if (use.length === 0) return [];
-  let n = 0;
-  for (const c of use) {
-    const base = marketKeyOf(c);
-    while (volByKeyBucket.has(`${base}|${n}`)) n += 1;
-  }
-  const rank = new Map(brandOrder.map((b, i) => [b, i]));
-  const out: MarketPeriodStack[] = [];
-  for (let bi = 0; bi < n; bi++) {
-    const byBrand = new Map<string, number>();
-    let total = 0;
-    for (const c of use) {
-      const v = volByKeyBucket.get(`${marketKeyOf(c)}|${bi}`) ?? null;
-      if (v == null || v <= 0) continue;
-      total += v;
-      byBrand.set(c.brand, (byBrand.get(c.brand) ?? 0) + v);
-    }
-    const segments = [...byBrand.entries()]
-      .map(([brand, vol]) => ({ brand, vol }))
-      .sort((a, b) => {
-        const ra = rank.get(a.brand) ?? Number.MAX_SAFE_INTEGER;
-        const rb = rank.get(b.brand) ?? Number.MAX_SAFE_INTEGER;
-        return ra !== rb ? ra - rb : b.vol - a.vol;
-      });
-    out.push({ total, byBrand: segments });
-  }
-  return out;
-}
-
-/** 档位筛选选项：该国 × 产业下实际出现的价格档位（产业阶梯序，去重） */
-export function marketTierOptions(configs: MarketConfig[], tierOrder: string[]): string[] {
-  const present = new Set(configs.map((c) => c.tierCode));
-  return tierOrder.filter((t) => present.has(t));
 }

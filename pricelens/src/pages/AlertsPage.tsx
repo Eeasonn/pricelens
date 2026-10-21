@@ -161,7 +161,6 @@ function useOpenInDashboard() {
     navBus.dashboardFocusWeekId = a.weekId;
     const sel = productSelectionOfSeriesKey(a.seriesKey);
     if (sel && state.alertSubs.includes(a.seriesKey)) {
-      actions.set({ subjectMode: 'product' });
       if (a.isOwn) {
         actions.setMains([{ id: newCardId(), main: sel, compares: [] }]);
       } else {

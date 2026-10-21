@@ -5,9 +5,8 @@ import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
 import FilterBar from '../components/FilterBar';
 import PriceTrend from '../chart/PriceTrend';
-import TrendTables, { type DetailBucket } from '../chart/PriceTrend/TrendTables';
+import TrendTables, { type DetailBucket, type TableGroup } from '../chart/PriceTrend/TrendTables';
 import PageHeader from '../components/PageHeader';
-import type { Series } from '../dataModel/types';
 import { color, radius, shadow, space } from '../theme/tokens';
 
 /** 页面骨架 —— 图表负责人（Agent C）在此基础上完善（§4.1 信息架构）。
@@ -19,20 +18,15 @@ import { color, radius, shadow, space } from '../theme/tokens';
  *  币种/平台/粒度/分离模式随图联动），本层只负责卡片壳与渲染
  *  第112~113轮：图卡与明细卡之间插入「竞品价差」卡（矩阵 + 成对走势）。
  *  第118轮（2026-10-21 评审）：价差与明细两卡合并为一张「时间作列」的横向拖动
- *  宽表卡（共享表头 = 图上同一时间轴，见 TrendTables）——full 快照仍上报，
- *  表内时间恒与图对齐，不再自选时间段 */
+ *  宽表卡（共享表头 = 图上同一时间轴，见 TrendTables），表内时间恒与图对齐
+ *  第一百二十三轮：宽表按主分析组分块上报（组 = 选择浮窗卡，保持卡序） */
 export default function Dashboard() {
   const { go } = usePage();
   const { state } = useFilters();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [showTop, setShowTop] = useState(false);
-  // 图上可见窗口的同源快照（PriceTrend 每次系列/时间段变化上报一次）；
-  // full = 完整范围（上方极值筛选范围）series × buckets + 窗口在其中下标（第113轮）
-  const [trendWindow, setTrendWindow] = useState<{
-    series: Series[];
-    buckets: DetailBucket[];
-    full: { series: Series[]; buckets: DetailBucket[]; s: number; e: number };
-  }>({ series: [], buckets: [], full: { series: [], buckets: [], s: 0, e: 0 } });
+  // 图上可见窗口的同源快照（PriceTrend 每次组/时间段变化上报一次）
+  const [trendWindow, setTrendWindow] = useState<{ groups: TableGroup[]; buckets: DetailBucket[] }>({ groups: [], buckets: [] });
 
   // 追补⑧（总览↔看板闭环①）：上下文条数据——入口主分析型号
   const entryModelId = state.mains[0]?.main?.modelId ?? null;
@@ -104,12 +98,12 @@ export default function Dashboard() {
               {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
               <PriceTrend
                 onBackToOverview={backToOverview}
-                onSeriesWindow={(series, buckets, full) => setTrendWindow({ series, buckets, full })}
+                onSeriesWindow={(groups, buckets) => setTrendWindow({ groups, buckets })}
               />
             </section>
-            {/* 产品价差 + 核心信息明细（第118轮）：合并为共享时间表头的横向拖动宽表，
+            {/* 价差与明细（第118轮合并宽表；第一百二十三轮按主分析组分块）：
                 与图上同一可见时间段同源取数 */}
-            {trendWindow.series.length > 0 && (
+            {trendWindow.groups.some((g) => g.series.length > 0) && (
               <section
                 style={{
                   marginTop: space.md,
@@ -120,7 +114,7 @@ export default function Dashboard() {
                 }}
               >
                 <TrendTables
-                  series={trendWindow.series}
+                  groups={trendWindow.groups}
                   buckets={trendWindow.buckets}
                   currency={state.currency}
                   granularity={state.granularity}

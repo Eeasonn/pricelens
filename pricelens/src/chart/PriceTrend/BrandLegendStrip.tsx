@@ -1,55 +1,33 @@
 // ============================================================
-// 品牌分组图例带（第一百一十五轮，评审）：价格看板（合并/分离两模式）的
-// 产品名称从图表左侧名称带整体上移到图顶部——横向两行结构：
-// 第一行 = 品牌名（每品牌块左上角，字号略大于产品药丸）；第二行 = 产品药丸
-// （与原名称药丸同语言：品牌色点 + 名称，点击 = 屏蔽/恢复折线，悬停 = 该系列
-// 高亮 + 图内起点指引虚线）。我司品牌块恒在最左；块间灰色短竖线
-// 分隔；每品牌块最多预留两个产品的显示宽度，超出出现块内 ‹› 小箭头滚动；
-// 整排放不下时区域两侧出现 ‹› 箭头滚动。
+// 组/角色图例带（第一百一十五轮立为品牌分块，第一百二十三轮④结合产品对改版）：
+// 价格看板图顶的药丸带按主分析组分块（组 = 选择产品浮窗里的一张卡）——
+// 块内 = 主品药丸（浅蓝底 + 蓝描边 + 加粗，角色强调）→ 灰色小字 vs →
+// 对比药丸（卡内序，白底灰描边）；品牌名行退役（品牌由药丸内 BrandDot 与
+// title 全名承载）。多组时块首「第 N 组」小字，单组不显示；空对无主品药丸
+// 也不画 vs。药丸点击 = 屏蔽/恢复折线（虚线置灰态可恢复），悬停 = 该系列
+// 高亮、其余降透明。块间灰色短竖线分隔；对比药丸超过 3 个走块内 ‹› 滚动
+// （主品药丸恒可见、不参与滚动）；整排放不下时两侧 ‹› 滚动。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import BrandDot, { brandLabelOf } from '../../components/BrandMark';
-import { COMPETITOR_BRANDS } from '../../components/ProductCascader/tree';
+import BrandDot from '../../components/BrandMark';
 import { curveNameOf } from './chartModel';
-import type { Series } from '../../dataModel/types';
-import { color, radius } from '../../theme/tokens';
+import { groupOrdinal, type LegendGroup } from './tableModel';
+import { color, radius, selectSoft } from '../../theme/tokens';
 
-/** 药丸行最多并排展示的产品数（超出走块内 ‹› 滚动） */
-const PILLS_VISIBLE = 2;
-/** 单个药丸的展示宽度预算（块内滚动容器 maxWidth = 2×预算 + 间距） */
+/** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
+const COMPARES_VISIBLE = 3;
+/** 单个药丸的展示宽度预算（块内滚动容器 maxWidth = 3×预算 + 间距） */
 const PILL_W_BUDGET = 178;
+/** 主品药丸描边：与选择浮窗颜色 chip 同一「0.30 蓝描边 = 强调」语言（第一百二十二轮） */
+const MAIN_BORDER = 'rgba(0, 112, 243, 0.30)';
 
 interface PillSpec {
   key: string;
   brand: string;
   text: string;
   hidden: boolean;
-}
-
-interface BlockSpec {
-  brand: string;
-  label: string;
-  pills: PillSpec[];
-}
-
-/** 系列全集 → 品牌块（我司在前，其余按矩阵品牌序，未知品牌字母序殿后） */
-function blocksOf(series: Series[], hiddenKeys: Set<string>): BlockSpec[] {
-  const byBrand = new Map<string, PillSpec[]>();
-  const ownBrandOf = series.find((s) => s.isOwn)?.brand;
-  for (const s of series) {
-    const arr = byBrand.get(s.brand) ?? [];
-    arr.push({ key: s.key, brand: s.brand, text: curveNameOf(s), hidden: hiddenKeys.has(s.key) });
-    byBrand.set(s.brand, arr);
-  }
-  const rank = (b: string): number => {
-    if (b === ownBrandOf) return -1;
-    const i = COMPETITOR_BRANDS.indexOf(b);
-    return i >= 0 ? i : COMPETITOR_BRANDS.length;
-  };
-  return [...byBrand.entries()]
-    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
-    .map(([brand, pills]) => ({ brand, label: brandLabelOf(brand), pills }));
+  main: boolean; // 主品药丸 = 本组主分析产品（浅蓝底/描边/加粗）
 }
 
 function Pill({
@@ -63,6 +41,12 @@ function Pill({
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
 }) {
+  // 被屏蔽 = 虚线置灰态（角色强调让位，点击恢复）；主品可见态 = 浅蓝底 + 蓝描边 + 加粗
+  const look = pill.hidden
+    ? { background: color.canvas, border: `1px dashed ${color.hairlineStrong}` }
+    : pill.main
+      ? { background: selectSoft, border: `1px solid ${MAIN_BORDER}` }
+      : { background: color.canvas, border: `1px solid ${color.hairline}` };
   return (
     <span
       role="button"
@@ -80,12 +64,11 @@ function Pill({
         gap: 4,
         maxWidth: PILL_W_BUDGET,
         padding: '3px 8px',
-        background: color.canvas,
-        border: `1px ${pill.hidden ? 'dashed' : 'solid'} ${pill.hidden ? color.hairlineStrong : color.hairline}`,
         borderRadius: radius.pill,
         cursor: 'pointer',
         opacity: pill.hidden ? 0.45 : dimmed ? 0.25 : undefined,
         flexShrink: 0,
+        ...look,
       }}
     >
       <BrandDot brand={pill.brand} />
@@ -94,7 +77,8 @@ function Pill({
         style={{
           fontSize: 11,
           lineHeight: '16px',
-          color: color.body,
+          color: pill.main && !pill.hidden ? color.ink : color.body,
+          fontWeight: pill.main ? 700 : 400,
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -106,15 +90,18 @@ function Pill({
   );
 }
 
-/** 品牌块：块内 ‹› 滚动（仅当产品数 > PILLS_VISIBLE 时出现） */
-function Block({
-  block,
+/** 组块：第 N 组小字（多组时）+ 主品药丸 + vs + 对比药丸（块内 ‹› 滚动，
+ *  仅当对比数 > COMPARES_VISIBLE 时出现；主品药丸在滚动区外恒可见） */
+function GroupBlock({
+  group,
+  showOrdinal,
   hiddenKeys,
   hoverSet,
   onToggle,
   onHover,
 }: {
-  block: BlockSpec;
+  group: LegendGroup;
+  showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
   hiddenKeys: Set<string>;
   hoverSet: Set<string> | null;
   onToggle: (key: string) => void;
@@ -131,71 +118,75 @@ function Block({
   }, []);
   useEffect(() => {
     sync();
-  }, [sync, block.pills.length]);
+  }, [sync, group.series.length]);
   const scrollByPill = (dir: 1 | -1): void => {
     trackRef.current?.scrollBy({ left: dir * (PILL_W_BUDGET + 6), behavior: 'smooth' });
   };
-  const scrollable = block.pills.length > PILLS_VISIBLE;
+
+  const pills: PillSpec[] = group.series.map((s) => ({
+    key: s.key,
+    brand: s.brand,
+    text: curveNameOf(s),
+    hidden: hiddenKeys.has(s.key),
+    main: group.mainKey === s.key,
+  }));
+  const mainPill = pills.find((p) => p.main) ?? null; // 主品无数据/空对 = null（不画药丸也不画 vs）
+  const compares = pills.filter((p) => !p.main);
+  const scrollable = compares.length > COMPARES_VISIBLE;
+  const dimOf = (p: PillSpec): boolean => hoverSet != null && !hoverSet.has(p.key);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, minWidth: 0 }}>
-      <span
-        style={{
-          fontSize: 12.5,
-          lineHeight: '15px',
-          fontWeight: 700,
-          color: color.ink,
-          whiteSpace: 'nowrap',
-          letterSpacing: 0.2,
-        }}
-      >
-        {block.label}
-      </span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        {scrollable && (
-          <span
-            role="button"
-            aria-label={`${block.label} 更多产品（左）`}
-            onClick={() => scrollByPill(-1)}
-            style={{ ...ARROW_STYLE, opacity: atStart ? 0.25 : 1, cursor: atStart ? 'default' : 'pointer' }}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
+      {showOrdinal && (
+        <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {groupOrdinal(group.ordinal)}
+        </span>
+      )}
+      {mainPill && <Pill pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />}
+      {mainPill && compares.length > 0 && (
+        <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>vs</span>
+      )}
+      {compares.length > 0 && (
+        <>
+          {scrollable && (
+            <span
+              role="button"
+              aria-label="更多对比产品（左）"
+              onClick={() => scrollByPill(-1)}
+              style={{ ...ARROW_STYLE, opacity: atStart ? 0.25 : 1, cursor: atStart ? 'default' : 'pointer' }}
+            >
+              <LeftOutlined style={{ fontSize: 8 }} />
+            </span>
+          )}
+          <div
+            ref={trackRef}
+            onScroll={sync}
+            className="lpl-legend-scroll"
+            style={{
+              display: 'flex',
+              gap: 6,
+              maxWidth: COMPARES_VISIBLE * (PILL_W_BUDGET + 6),
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+              paddingTop: 1,
+              paddingBottom: 1,
+            }}
           >
-            <LeftOutlined style={{ fontSize: 8 }} />
-          </span>
-        )}
-        <div
-          ref={trackRef}
-          onScroll={sync}
-          className="lpl-legend-scroll"
-          style={{
-            display: 'flex',
-            gap: 6,
-            maxWidth: PILLS_VISIBLE * (PILL_W_BUDGET + 6),
-            overflowX: 'auto',
-            scrollbarWidth: 'none',
-            paddingTop: 1,
-            paddingBottom: 1,
-          }}
-        >
-          {block.pills.map((p) => (
-            <Pill
-              key={p.key}
-              pill={p}
-              dimmed={hoverSet != null && !hoverSet.has(p.key)}
-              onToggle={onToggle}
-              onHover={onHover}
-            />
-          ))}
-        </div>
-        {scrollable && (
-          <span
-            role="button"
-            aria-label={`${block.label} 更多产品（右）`}
-            onClick={() => scrollByPill(1)}
-            style={{ ...ARROW_STYLE, opacity: atEnd ? 0.25 : 1, cursor: atEnd ? 'default' : 'pointer' }}
-          >
-            <RightOutlined style={{ fontSize: 8 }} />
-          </span>
-        )}
-      </div>
+            {compares.map((p) => (
+              <Pill key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} />
+            ))}
+          </div>
+          {scrollable && (
+            <span
+              role="button"
+              aria-label="更多对比产品（右）"
+              onClick={() => scrollByPill(1)}
+              style={{ ...ARROW_STYLE, opacity: atEnd ? 0.25 : 1, cursor: atEnd ? 'default' : 'pointer' }}
+            >
+              <RightOutlined style={{ fontSize: 8 }} />
+            </span>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -214,18 +205,21 @@ const ARROW_STYLE = {
 } as const;
 
 export default function BrandLegendStrip({
-  series,
+  groups,
   hiddenKeys,
   onToggleHidden,
   onHover,
 }: {
-  /** 系列全集（含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复） */
-  series: Series[];
+  /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
+   *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
+   *  产品会在各组各出现一次，hidden 状态按 key 自然同步） */
+  groups: LegendGroup[];
   hiddenKeys: Set<string>;
   onToggleHidden: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
 }) {
-  const blocks = blocksOf(series, hiddenKeys);
+  const multi = groups.length >= 2;
+  const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   // 第一百一十六轮：悬停只高亮该系列自身（不再联动其对标竞品/我司）
   const hoverSet = hoverKey != null ? new Set([hoverKey]) : null;
@@ -242,7 +236,7 @@ export default function BrandLegendStrip({
   }, []);
   useLayoutEffect(() => {
     syncOuter();
-  }, [syncOuter, series]);
+  }, [syncOuter, groups]);
   useEffect(() => {
     const el = trackRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -262,7 +256,7 @@ export default function BrandLegendStrip({
       {outer.overflow && (
         <span
           role="button"
-          aria-label="更多品牌（左）"
+          aria-label="更多组（左）"
           onClick={() => scrollOuter(-1)}
           style={{ ...ARROW_STYLE, width: 16, height: 16, opacity: outer.start ? 0.25 : 1, cursor: outer.start ? 'default' : 'pointer', flexShrink: 0 }}
         >
@@ -278,14 +272,14 @@ export default function BrandLegendStrip({
         {(() => {
           // 块间灰色短竖线分隔（最后一块之后不加）
           const items: ReactNode[] = [];
-          blocks.forEach((b, i) => {
+          blocks.forEach((g, i) => {
             if (i > 0) {
               items.push(
-                <span key={`div-${i}`} aria-hidden style={{ width: 1, height: 26, background: color.hairline, flexShrink: 0, alignSelf: 'center' }} />,
+                <span key={`div-${i}`} aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0, alignSelf: 'center' }} />,
               );
             }
             items.push(
-              <Block key={b.brand} block={b} hiddenKeys={hiddenKeys} hoverSet={hoverSet} onToggle={onToggleHidden} onHover={hover} />,
+              <GroupBlock key={g.id} group={g} showOrdinal={multi} hiddenKeys={hiddenKeys} hoverSet={hoverSet} onToggle={onToggleHidden} onHover={hover} />,
             );
           });
           return items;
@@ -294,7 +288,7 @@ export default function BrandLegendStrip({
       {outer.overflow && (
         <span
           role="button"
-          aria-label="更多品牌（右）"
+          aria-label="更多组（右）"
           onClick={() => scrollOuter(1)}
           style={{ ...ARROW_STYLE, width: 16, height: 16, opacity: outer.end ? 0.25 : 1, cursor: outer.end ? 'default' : 'pointer', flexShrink: 0 }}
         >

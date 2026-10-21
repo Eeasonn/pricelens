@@ -2,19 +2,20 @@
 // §6.5 时间范围：左侧是全局时间筛选，右侧是当前筛选范围内的查看窗口。
 // 自动模式按所选产品的最早/最晚有效价格桶更新上方筛选器；窗口只负责缩放查看。
 // 第一百一十九轮（走查会）：①左侧时间筛选簇抽成 TimeRangeCluster 导出组件——
-// 量价看板可将其上移到卡顶工具行（showTimeFilter=false + leftSlot 放「同步」按钮）；
-// ②轨道刻度换 axisTickPlan：查看窗口两端完整格式（周=YYYYMMDD/月=YYYYMM/季=YYYYQn）
-// 加粗恒显示，中间刻度省年份、跨年在换年刻度下补年份行。
+// 量价看板可将其上移到卡顶工具行（showTimeFilter=false + leftSlot 占位）。
+// 第一百二十三轮：刻度主行恒短格式（周=MM-DD/月=MM/季=Qn，窗口两端拖柄标签同样
+// 短格式、只加粗区分），年份独立第二行（最左显示刻度恒带、换年刻度带）；拖柄两端
+// 标签与中间刻度改按像素区间避让（原按桶数让位在窄轨道/密周窗口下仍叠字）。
 // ============================================================
 import dayjs, { type Dayjs } from 'dayjs';
 import { CalendarOutlined } from '@ant-design/icons';
 import { ConfigProvider, DatePicker, Segmented } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { bucketIdOfDate, dateOfBucket } from '../../components/FilterBar/timeUtils';
 import { filterBarTheme } from '../../components/FilterBar';
 import type { Granularity } from '../../dataModel/types';
-import { axisTickPlan, fullBucketLabel, GRID, MIN_WINDOW, panWindow, type Bucket } from './helpers';
+import { axisTickPlan, fullBucketLabel, GRID, hideOverlappingTicks, MIN_WINDOW, panWindow, type Bucket } from './helpers';
 import { color, font, fontSize, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 
 export interface TimeRangeClusterProps {
@@ -183,6 +184,34 @@ export interface XBrushProps {
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 type DragKind = 'start' | 'end' | 'pan';
 
+/** 元素实宽（ResizeObserver；第一百二十三轮像素让位——轨道宽度决定刻度标签像素区间） */
+function useObservedWidth(): [MutableRefObject<HTMLDivElement | null>, number] {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const en of entries) setW(en.contentRect.width);
+    });
+    ro.observe(el);
+    setW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w];
+}
+
+let labelMeasureCtx: CanvasRenderingContext2D | null = null;
+/** 刻度标签单行像素宽（让位判定用；无 DOM 环境按 0.6×字号/字符粗估） */
+const measureTickText = (s: string, px: number): number => {
+  if (!s) return 0;
+  if (typeof document === 'undefined') return s.length * px * 0.6;
+  if (!labelMeasureCtx) labelMeasureCtx = document.createElement('canvas').getContext('2d');
+  if (!labelMeasureCtx) return s.length * px * 0.6;
+  labelMeasureCtx.font = `${px}px ${font.family}`;
+  return labelMeasureCtx.measureText(s).width;
+};
+
 export default function XBrush(props: XBrushProps) {
   const {
     buckets, s, e, lo, hi, plotLeft, adaptive, granularity,
@@ -195,18 +224,40 @@ export default function XBrush(props: XBrushProps) {
   const dragRef = useRef<{ kind: DragKind; startX: number; startS: number; startE: number } | null>(null);
   const [panning, setPanning] = useState(false);
   const [activeDrag, setActiveDrag] = useState<DragKind | null>(null);
+  const [widthRef, trackW] = useObservedWidth();
   if (n === 0) return null;
 
   const pct = (i: number): number => ((i - lo) / Math.max(1, hi - lo + 1)) * 100;
   const tickPct = (i: number): number => ((i - lo + 0.5) / Math.max(1, hi - lo + 1)) * 100;
   const rangeLabel = (i: number): string => fullBucketLabel(granularity, buckets[i].id);
-  // 刻度计划（第119轮）：查看窗口两端 = 完整格式边界刻度，其余按步长抽稀省年份
+  // 刻度计划（第123轮口径）：主行恒短格式；窗口两端拖柄标签 = 加粗短格式，
+  // 年份行规则同中间刻度（最左显示刻度恒带、换年刻度带）
   const domainIds = buckets.slice(lo, hi + 1).map((b) => b.id);
   const span = Math.max(1, hi - lo + 1);
   const tickStep = granularity === 'week'
     ? Math.max(4, Math.ceil(span / 8 / 4) * 4)
     : Math.max(1, Math.ceil(span / 8));
   const plan = axisTickPlan(granularity, domainIds, tickStep, [s - lo, e - lo]);
+  // 像素让位（第一百二十三轮）：拖柄两端标签像素区间 = 文本实宽 + 白底 padding；
+  // 与之相交（含 4px 间距）的中间刻度标签与刻度线整组隐藏。轨道实宽未知（首帧）
+  // 时先全显示，ResizeObserver 回调宽度后重算。
+  const EDGE_PAD = 3;
+  const labelWOf = (idx: number): number => {
+    const year = plan.yearText(idx);
+    return Math.max(measureTickText(plan.dateText(idx), 11), year ? measureTickText(year, 11) : 0);
+  };
+  const xPxOfTick = (i: number): number => ((i - lo + 0.5) / span) * trackW;
+  const edgeIdx = plan.indexes.filter((i) => plan.isEdge(i));
+  const midIdx = plan.indexes.filter((i) => !plan.isEdge(i));
+  const midHidden =
+    trackW > 0
+      ? hideOverlappingTicks(
+          midIdx.map((i) => ({ x: xPxOfTick(i + lo), w: labelWOf(i) })),
+          edgeIdx.map((i) => ({ x: xPxOfTick(i + lo), w: labelWOf(i) + EDGE_PAD * 2 })),
+          4,
+        )
+      : midIdx.map(() => false);
+  const hiddenSet = new Set(midIdx.filter((_, k) => midHidden[k]));
 
   const onDragDown = (kind: DragKind) => (ev: ReactPointerEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -260,6 +311,9 @@ export default function XBrush(props: XBrushProps) {
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
     fontSize: 11, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums',
     color: edge ? color.body : color.mute, fontWeight: edge ? 600 : 400, whiteSpace: 'nowrap',
+    // 第一百二十三轮：拖柄两端标签白底 + 左右 padding——与相邻灰色刻度叠上时兜底遮盖
+    background: edge ? color.canvas : undefined,
+    padding: edge ? '0 3px' : undefined,
   });
   const tickStyle = (edge: boolean): CSSProperties => ({
     position: 'absolute', top: 10, width: 1,
@@ -299,7 +353,13 @@ export default function XBrush(props: XBrushProps) {
 
       {/* 右侧：时间调整轴。与拖柄同高，紧贴大促标签行。 */}
       <div style={{ minWidth: 0, padding: 0 }}>
-        <div ref={trackRef} style={{ position: 'relative', height: 58, minWidth: 0 }}>
+        <div
+          ref={(el) => {
+            trackRef.current = el;
+            widthRef.current = el;
+          }}
+          style={{ position: 'relative', height: 58, minWidth: 0 }}
+        >
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 28, borderRadius: 6, background: '#edf0f4', boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
           <div
             title="拖动调整下方图表的时间范围"
@@ -314,12 +374,15 @@ export default function XBrush(props: XBrushProps) {
           {plan.indexes.map((idx) => {
             const i = idx + lo;
             const edge = plan.isEdge(idx);
+            // 像素让位：与拖柄两端标签相交的中间刻度线一并隐藏（第一百二十三轮）
+            if (hiddenSet.has(idx)) return null;
             return <span key={`tick-${idx}`} aria-hidden="true" style={{ ...tickStyle(edge), left: `${tickPct(i)}%` }} />;
           })}
           {plan.indexes.map((idx) => {
             const i = idx + lo;
             const edge = plan.isEdge(idx);
             const year = plan.yearText(idx);
+            if (hiddenSet.has(idx)) return null;
             return (
               <span key={`label-${idx}`} aria-hidden="true" style={{ ...labelStyle(i, edge) }}>
                 <span>{plan.dateText(idx)}</span>

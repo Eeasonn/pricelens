@@ -309,6 +309,66 @@ describe('buildOption', () => {
     expect((option.grid as { top: number }).top).toBe(96);
   });
 
+  it('图轴时间标签（第一百二十三轮口径）：主行恒短格式，年份独立第二行——最左刻度恒带年份、换年刻度带年份，边界不再完整格式', () => {
+    const ids = ['202509', '202510', '202511', '202512', '202601', '202602', '202603', '202604', '202605', '202606', '202607', '202608'];
+    const pts = ids.map((bucketId, i) => PT({ price: 100 + i, bucketId, xLabel: bucketId }));
+    const s = mkSeries({ points: pts });
+    const scale = computeYAxis({ series: [s], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const geom = mkGeom(scale, 1200, 12, scale.plotHeight + 96 + GRID.bottom, 96);
+    const option = buildOption({
+      geom, series: [s], priceTypes: DISC_ONLY, granularity: 'month',
+      labelPlan: { dy: {}, names: [] }, gridTop: 96, endpointMarks: new Map(), xLabels: true,
+    })!;
+    const axisLabel = ((option.xAxis as unknown as { axisLabel: { formatter: (v: string, i: number) => string; interval: (i: number) => boolean } }).axisLabel);
+    // 自控抽稀（step=2 + 首末 marks，末段相邻让位）：显示 0/2/4/6/8/11
+    expect(axisLabel.interval(0)).toBe(true);
+    expect(axisLabel.interval(1)).toBe(false);
+    expect(axisLabel.interval(11)).toBe(true);
+    // 边界不再完整格式：首刻度主行 '09' + 年份行（最左恒带）
+    expect(axisLabel.formatter('x', 0)).toBe('09\n2025');
+    // 换年刻度（202601，与上一显示刻度 202511 之间换年）
+    expect(axisLabel.formatter('x', 4)).toBe('01\n2026');
+    // 同年中间刻度只有主行
+    expect(axisLabel.formatter('x', 6)).toBe('03');
+    // 末刻度（边界）：主行短格式、无年份行
+    expect(axisLabel.formatter('x', 11)).toBe('08');
+  });
+
+  it('精简标签无框（第一百二十三轮）：compact 标签不带白底/描边方框，只留数字 + 细白描边；detail 不带描边', () => {
+    const pts = [100, 90, 130, 110, 95].map((v, i) => PT({ price: v, bucketId: `w${i}` }));
+    const s = mkSeries({ points: pts });
+    const scale = computeYAxis({ series: [s], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const geom = mkGeom(scale, 1200, 5, scale.plotHeight + 96 + GRID.bottom, 96);
+    const optOf = (labelMode: 'detail' | 'compact') =>
+      buildOption({
+        geom,
+        series: [s],
+        priceTypes: DISC_ONLY,
+        granularity: 'week',
+        labelPlan: buildLabelPlan({ geom, series: [s], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: new Map(), labelMode }),
+        gridTop: 96,
+        endpointMarks: new Map(),
+        labelMode,
+      })!;
+    type Lbl = { show: boolean; backgroundColor?: string; borderColor?: string; borderWidth?: number; padding?: unknown; textBorderColor?: string; textBorderWidth?: number };
+    const compactLabels = ((optOf('compact').series as Record<string, unknown>[])[0].data as { label: Lbl }[]).map((d) => d.label);
+    const shown = compactLabels.filter((l) => l.show);
+    expect(shown).toHaveLength(3); // 最高/最低/最新
+    for (const l of compactLabels) {
+      expect(l.backgroundColor).toBeUndefined();
+      expect(l.borderColor).toBeUndefined();
+      expect(l.borderWidth).toBeUndefined();
+      expect(l.padding).toBeUndefined();
+      expect(l.textBorderColor).toBe('#fff');
+      expect(l.textBorderWidth).toBe(2);
+    }
+    const detailLabels = ((optOf('detail').series as Record<string, unknown>[])[0].data as { label: Lbl }[]).map((d) => d.label);
+    for (const l of detailLabels) {
+      expect(l.backgroundColor).toBeUndefined();
+      expect(l.textBorderColor).toBeUndefined();
+    }
+  });
+
   it('折线形态（第三十八轮）：默认=方形阶梯 step:end + 数据点圆点删除；smooth=曲线无 step', () => {
     const s = mkSeries({ points: [PT({ price: 100 }), PT({ price: 110 }), PT({ price: 105 })] });
     const scale = computeYAxis({ series: [s], priceTypes: DISC_ONLY, sliderScale: 1 });

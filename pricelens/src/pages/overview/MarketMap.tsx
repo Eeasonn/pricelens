@@ -362,7 +362,6 @@ function DetailFloat({
         seenComp.add(key);
         compSels.push({ modelId: c.skuId.split('__')[0], romram: c.romram, skuIds: [c.skuId] });
       }
-      actions.set({ subjectMode: 'product' });
       // 第一百二十轮：整组进看板 = 每配置一张主分析卡（唯一主品卡形）；
       // 首卡带入矩阵对比区，其余卡由自动跟随按矩阵补齐（手动模式保持空）
       actions.setMains(
@@ -948,7 +947,6 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
 
   /** 跳看板只看该产品：逐配置一张主分析卡（唯一主品卡形；其他品牌 = 该配置成卡） */
   const openTrend = (model: OverviewModel, row?: OverviewRow): void => {
-    actions.set({ subjectMode: 'product' });
     if (model.isOwn) {
       const sels = row ? [selOf(model.modelId, row.romram)] : model.rows.map((r) => selOf(model.modelId, r.romram));
       // setMains 走自动跟随：autoMatch 开时按矩阵带出对比区（原语义）

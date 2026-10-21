@@ -537,12 +537,16 @@ export function enumerateBuckets(g: Granularity, startId: string, endId: string)
   return ids.sort().map((id) => ({ id, xLabel: id }));
 }
 
-// ---------------- 时间轴刻度计划（第一百一十九轮） ----------------
-// 需求（走查会）：时间轴左右边界完整显示——周 = YYYYMMDD、月 = YYYYMM、季 = YYYYQn；
-// 中间刻度省年份，跨年时在换年刻度下补年份行。三个消费方同源：图轴（chartModel）、
-// 刷选轨道（XBrush / 面板独立轨道）、大盘卡时间柱（MarketBoard）。
+// ---------------- 时间轴刻度计划（第一百一十九轮；第一百二十三轮改口径） ----------------
+// 统一格式（用户撤销第一百一十九轮的边界完整格式规定）：刻度主行恒短格式——
+// 周 = MM-DD / 月 = MM / 季 = Qn，图轴两端与查看窗口两端（marks）也不例外，只作加粗
+// 区分；年份独立成第二行——最左侧显示的刻度恒带年份，其余显示刻度与上一显示刻度
+// 之间发生换年的那根带年份。完整格式 fullBucketLabel 只保留给 aria-valuetext 等
+// 无障碍文案，视觉上不再出现。三个消费方同源：图轴（chartModel）、刷选轨道
+// （XBrush / 面板独立轨道）。
 
-/** 桶完整时间文案：周 = 锚日 YYYYMMDD / 月 = YYYYMM / 季 = YYYYQn（dimTime 未含该周时回退桶号） */
+/** 桶完整时间文案：周 = 锚日 YYYYMMDD / 月 = YYYYMM / 季 = YYYYQn（dimTime 未含该周时回退桶号）。
+ *  第一百二十三轮起视觉刻度不再使用，只留给 aria-valuetext 等无障碍文案。 */
 export function fullBucketLabel(g: Granularity, id: string): string {
   if (g === 'week') {
     const r = dimTime.find((x) => x.week_id === id);
@@ -568,18 +572,19 @@ function bucketYearOf(g: Granularity, id: string): string {
 }
 
 export interface AxisTickPlan {
-  /** 展示刻度的下标（升序；含完整格式的边界刻度） */
+  /** 展示刻度的下标（升序；含边界刻度） */
   indexes: number[];
-  /** 边界刻度（完整格式、加粗） */
+  /** 边界刻度（查看窗口两端 / 图轴两端）：恒显示，供消费方加粗/区分，不再改变文案格式 */
   isEdge: (i: number) => boolean;
-  /** 主行文案：边界 = 完整格式；中间 = 短格式 */
+  /** 主行文案：恒短格式（周 = MM-DD / 月 = MM / 季 = Qn；边界刻度同样短格式） */
   dateText: (i: number) => string;
-  /** 副行年份：仅跨年区间里「换年」的那根中间刻度有值（边界刻度年份已内联，恒 null） */
+  /** 副行年份：最左侧显示的刻度恒有值；其余刻度与上一显示刻度之间换年才有值
+   *  （第一百二十三轮：边界刻度不再例外——年份一律走第二行） */
   yearText: (i: number) => string | null;
 }
 
-/** 刻度计划：marks（图轴两端 / 查看窗口两端）恒显示且完整格式；中间按 step 抽稀；
- *  与 mark 距离 ≤1 的抽稀刻度让位，防边界完整文案与相邻短文案叠字。 */
+/** 刻度计划：marks（图轴两端 / 查看窗口两端）恒显示（加粗短格式）；中间按 step 抽稀；
+ *  与 mark 距离 ≤1 的抽稀刻度让位，防边界刻度与相邻刻度叠字。 */
 export function axisTickPlan(g: Granularity, ids: string[], step: number, marks: number[]): AxisTickPlan {
   const n = ids.length;
   const markSet = new Set(marks.filter((m) => m >= 0 && m < n));
@@ -587,21 +592,37 @@ export function axisTickPlan(g: Granularity, ids: string[], step: number, marks:
   for (let i = 0; i < n; i += Math.max(1, step)) raw.push(i);
   const candidates = [...new Set([...raw, ...markSet])].sort((a, b) => a - b);
   const indexes = candidates.filter((i) => markSet.has(i) || ![...markSet].some((m) => Math.abs(m - i) <= 1));
-  const shown = indexes;
+  const yearOf = (i: number): string => bucketYearOf(g, ids[i]);
   return {
     indexes,
     isEdge: (i) => markSet.has(i),
-    dateText: (i) => (markSet.has(i) ? fullBucketLabel(g, ids[i]) : shortBucketLabel(g, ids[i])),
+    dateText: (i) => shortBucketLabel(g, ids[i]),
     yearText: (i) => {
-      if (markSet.has(i)) return null;
-      const k = shown.indexOf(i);
-      const prev = k > 0 ? shown[k - 1] : -1;
+      const k = indexes.indexOf(i);
+      if (k < 0) return null;
+      if (k === 0) return yearOf(i); // 最左侧显示的刻度恒带年份
+      const prev = indexes[k - 1];
       for (let m = prev + 1; m <= i; m++) {
-        if (m > 0 && bucketYearOf(g, ids[m]) !== bucketYearOf(g, ids[m - 1])) return bucketYearOf(g, ids[m]);
+        if (yearOf(m) !== yearOf(m - 1)) return yearOf(m); // 与上一显示刻度之间换年
       }
-      return k === 0 ? bucketYearOf(g, ids[i]) : null;
+      return null;
     },
   };
+}
+
+/** 像素让位（第一百二十三轮）：轨道两端拖柄标签的像素区间（edges）与中间刻度标签
+ *  （labels，均 = 中心点 x + 宽 w）相交（含 gap 安全间距）时该中间刻度整组隐藏。
+ *  窄轨道下按桶数让位仍会叠字（拖柄两侧短标签压住灰色刻度），改为消费方量出
+ *  文本实宽后按像素判定；labels/edges 顺序对应返回的隐藏位数组。 */
+export interface TickPixelBox {
+  x: number;
+  w: number;
+}
+
+export function hideOverlappingTicks(labels: TickPixelBox[], edges: TickPixelBox[], gap: number): boolean[] {
+  const hit = (a: TickPixelBox, b: TickPixelBox): boolean =>
+    a.x - a.w / 2 - gap < b.x + b.w / 2 && b.x - b.w / 2 - gap < a.x + a.w / 2;
+  return labels.map((l) => edges.some((e) => hit(l, e)));
 }
 
 /** 时点页签日期（第五十四轮追补①）：窗口末桶内最新日历周 → 周三锚日 MM-DD。 *  月/季粒度不再显示 2026-10 / 2026Q4——时点恒为「最新那一周对应的那一天」

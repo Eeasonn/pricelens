@@ -1,6 +1,8 @@
-// 产业下拉、档位下拉与「自有产品」受控级联（总览筛选行复用）。
+// 产业下拉与「自有产品」受控级联（总览筛选行复用）。
 // 第一百一十七轮：看板侧我司/竞品级联与自动匹配按钮由「选择产品」浮窗取代，
 // 本文件只保留总览仍需要的控件；ColorFlyout 已抽至 ProductCascader/ColorFlyout。
+// 第一百二十三轮：TierControl（按档位模式选择器）随主体模式退役删除——
+// 档位筛选融入「选择产品」浮窗的树（ProductPickerModal.LevelSwitchPopover）。
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Cascader, Checkbox, Select, Tooltip } from 'antd';
 import { useFilters } from '../../state/FiltersContext';
@@ -15,13 +17,10 @@ import {
   type RomramNode,
 } from '../ProductCascader/tree';
 import type { ProductSelection } from '../../state/filtersTypes';
-import type { CurrencyMode, DimProduct } from '../../dataModel/types';
+import type { CurrencyMode } from '../../dataModel/types';
 import { CascadePanel, measureText, type CascadeRowItem } from '../ProductCascader';
 import ColorFlyout, { COLOR_CHIP } from '../ProductCascader/ColorFlyout';
-import { dimProduct } from '../../data';
-import { TIER_LABELS, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { INDUSTRY_LABELS, INDUSTRY_ORDER, industriesOfCountry } from '../../dataModel/scope';
-import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 
 // ---------------- ① 产业下拉（反馈 2.1） ----------------
 
@@ -331,31 +330,4 @@ export function OwnProductControl(p: {
   productLevel?: boolean;
 }) {
   return <ProductCascadeControl {...p} />;
-}
-
-/** 按档位主体模式的档位选择器：选项 = 当前产业下有我司产品的价格档位（高档在前） */
-export function TierControl() {
-  const { state, actions } = useFilters();
-  const options = useMemo(() => {
-    const present = new Set<string>();
-    for (const p of dimProduct) {
-      if (p.is_own && p.industry === state.industry && p.countries.includes(state.countryCode)) present.add(tierOf(p, state.countryCode));
-    }
-    const order = [...tierOrderOf(state.industry)].reverse();
-    return order.filter((t) => present.has(t)).map((t) => ({ value: t, label: tierLabelShort(TIER_LABELS[t] ?? t) }));
-  }, [state.industry, state.countryCode]);
-  const value = state.tier != null && options.some((o) => o.value === state.tier) ? state.tier : undefined;
-  return (
-    <Select
-      id="subject-tier"
-      aria-label="价格档位"
-      value={value}
-      placeholder="选择价格档位"
-      style={{ width: '100%' }}
-      popupMatchSelectWidth={false}
-      onChange={(v) => actions.set({ tier: v as DimProduct['tier_code'] })}
-      options={options}
-      allowClear={false}
-    />
-  );
 }

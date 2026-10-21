@@ -19,6 +19,9 @@
 // （PanelTimeTrack，互不影响），用于对齐不同上市节奏产品的可比区间。
 // ②悬停时间列/图内拖选高亮随同步态走：同步 = 三面板同列联动，非同步 = 各面板独立。
 // ③大盘卡时间域：同步 = 共享窗口；非同步 = 各面板生效窗口的并集。
+// 第一百二十三轮：底部共享刷选条退役——每面板底部恒渲染同一条独立时间轴（同步 =
+// 三图同段查看时间、拖任一条同步调整；非同步 = 各图独立），底部只留固定高一行的
+// 「同步」开关 + 说明，切换同步态不再改变面板高度与轨道横向位置。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented } from 'antd';
@@ -29,11 +32,12 @@ import { filterBarTheme } from '../components/FilterBar';
 import { ownBrand } from '../components/ProductCascader/tree';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
-import XBrush, { TimeRangeCluster } from '../chart/PriceTrend/XBrush';
+// 第一百二十三轮：底部共享刷选条退役（每面板底部恒有独立时间轴），XBrush 只留
+// TimeRangeCluster（卡顶时间筛选簇仍在用）
+import { TimeRangeCluster } from '../chart/PriceTrend/XBrush';
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
 import {
-  GRID,
   adaptiveRangeOf,
   computeYAxis,
   convertWindowIds,
@@ -414,8 +418,9 @@ export default function VolumePrice() {
 
   const cardRef = useRef<HTMLDivElement | null>(null); // 时间范围弹层挂载容器（随卡宽展开）
 
-  /** 「同步」开关（第119轮走查会）：同步 = 各图共用同一段查看时间（原行为）；
-   *  非同步 = 每张图底部出现独立时间轴，可各自调整（用于对齐不同上市节奏） */
+  /** 「同步」开关（第119轮走查会；第123轮每图底部时间轴恒在）：同步 = 各图查看
+   *  同一段时间，拖任一图的时间轴三图一起动；非同步 = 各图时间范围独立调整
+   *  （用于对齐不同上市节奏产品的可比区间） */
   const syncToggle = (
     <button
       type="button"
@@ -612,72 +617,56 @@ export default function VolumePrice() {
                           emptyHint={p.slot ? '该产品在所选时间范围内无数据' : '请选择产品'}
                         />
                       </div>
-                      {/* 非同步：本图独立时间轴（对齐绘图区左右缘） */}
-                      {!synced && (
-                        <div style={{ margin: '0 48px 6px 8px' }}>
-                          <PanelTimeTrack
-                            ids={domainIds}
-                            lo={filterBounds[0]}
-                            hi={filterBounds[1]}
-                            s={effWins[p.idx][0]}
-                            e={effWins[p.idx][1]}
-                            granularity={state.granularity}
-                            onChange={onPanelWindowChange(p.idx)}
-                            onAdjusting={setAdjusting}
-                          />
-                        </div>
-                      )}
+                      {/* 本图时间轴（第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：
+                          同步 = 三图查看同一段时间，拖任一条同步调整；非同步 = 各图独立调整。
+                          恒渲染保证切换同步只改联动行为，面板高度与轨道横向位置不变 */}
+                      <div style={{ margin: '0 48px 6px 8px' }}>
+                        <PanelTimeTrack
+                          ids={domainIds}
+                          lo={filterBounds[0]}
+                          hi={filterBounds[1]}
+                          s={synced ? win.s : effWins[p.idx][0]}
+                          e={synced ? win.e : effWins[p.idx][1]}
+                          granularity={state.granularity}
+                          onChange={synced ? onWindowChange : onPanelWindowChange(p.idx)}
+                          onAdjusting={setAdjusting}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* 第119轮（走查会）：同步 = 共享时间调整条（左位放「同步」开关，时间筛选已上移卡顶）；
-                非同步 = 各图底部独立时间轴（见各面板内），此处只留开关与说明 */}
+            {/* 底部固定高说明行（第一百二十三轮）：共享刷选条退役——每张图底部恒有
+                时间轴（见各面板内），此处只放「同步」开关与一句说明；两种模式本行
+                结构与高度完全一致，切换只改联动行为 */}
             {buckets.length > 0 && visUnion.length > 0 && (
-              synced ? (
-                <XBrush
-                  buckets={buckets}
-                  s={win.s}
-                  e={win.e}
-                  lo={filterBounds[0]}
-                  hi={filterBounds[1]}
-                  plotLeft={estGridLeft(state.currency)}
-                  adaptive={state.adaptive}
-                  granularity={state.granularity}
-                  onChange={onWindowChange}
-                  onRangeChange={onRangeFilterChange}
-                  onGranularityChange={actions.setGranularity}
-                  onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
-                  onAdjusting={setAdjusting}
-                  showTimeFilter={false}
-                  leftSlot={syncToggle}
-                />
-              ) : (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `${estGridLeft(state.currency)}px minmax(0, 1fr)`,
+                  height: 36,
+                  alignItems: 'center',
+                  marginTop: space.xs,
+                }}
+              >
                 <div
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: `${estGridLeft(state.currency)}px minmax(0, 1fr)`,
-                    margin: `0 ${GRID.right}px 0 0`,
+                    padding: '0 12px 0 0',
+                    borderRight: `1px solid ${color.hairline}`,
+                    display: 'flex',
+                    alignItems: 'center',
                   }}
                 >
-                  <div
-                    style={{
-                      padding: '0 12px 7px 0',
-                      borderRight: `1px solid ${color.hairline}`,
-                      minHeight: 44,
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
-                  >
-                    {syncToggle}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 12, fontSize: 12, color: color.mute }}>
-                    各图时间范围独立调整：拖动每张图下方的时间轴
-                  </div>
+                  {syncToggle}
                 </div>
-              )
+                <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 12, fontSize: 12, color: color.mute }}>
+                  {synced
+                    ? '各图查看同一段时间：拖动任一图下方的时间轴，三张图一起调整'
+                    : '各图的时间范围相互独立：分别拖动每张图下方的时间轴单独调整'}
+                </div>
+              </div>
             )}
 
             <div style={{ marginTop: space.xs, fontSize: 11, color: color.mute }}>

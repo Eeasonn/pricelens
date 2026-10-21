@@ -54,10 +54,7 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     if (c) out.filters.countryCode = c;
     const i = q.get('i');
     if (i) out.filters.industry = i as FiltersState['industry'];
-    const m = q.get('m');
-    if (m === 'tier') out.filters.subjectMode = 'tier';
-    const t = q.get('t');
-    if (t) out.filters.tier = t;
+    // 第一百二十三轮：按档位主体模式退役，旧链接的 m=tier / t= 参数静默忽略
     const shop = q.get('shop');
     if (shop) out.filters.platform = { platforms: [], shopIds: [shop] } as PlatformSelection;
     // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入

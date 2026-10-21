@@ -21,17 +21,16 @@
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, Checkbox, ConfigProvider, Segmented } from 'antd';
+import { Button, Checkbox, ConfigProvider, Segmented, Tooltip } from 'antd';
 import { HolderOutlined, ProfileOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
-import { tierSubjectSelections } from '../../state/tierSelection';
 import { filterBarTheme } from '../../components/FilterBar';
 import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries } from '../../dataModel/aggregate';
-import { flatSelections } from '../../state/mainSelection';
+import { flatSelections, MERGE_LINES_CAP } from '../../state/mainSelection';
 import { dimPromo, dimProduct, dimRegion, dimTier } from '../../data';
 import type {
   AggMode,
@@ -77,11 +76,13 @@ import {
 } from './helpers';
 import PromoDrawer from './PromoDrawer';
 import PointPanel from './PointPanel';
+import { groupsOfCards, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 
-/** 分离面板内品牌图例带高度（定高：共享轴列按此对齐面板绘图区顶） */
-const PANEL_LEGEND_H = 44;
+/** 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；第一百二十三轮④
+ *  品牌名行退役改单行药丸带，44 → 30） */
+const PANEL_LEGEND_H = 30;
 
 /** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之 */
 const panelLabelOf = (card: { main: ProductSelection | null }): string =>
@@ -90,26 +91,17 @@ const panelLabelOf = (card: { main: ProductSelection | null }): string =>
 export default function PriceTrend(props: {
   /** 第八十五轮：竞品-only 引导带里「去总览配置对标」的回跳 */
   onBackToOverview?: () => void;
-  /** 第110轮（评审）：图下「核心信息明细」取数口——图上可见时间段 × 图上系列
-   *  （分离模式 = 各面板系列并集，同款产品去重）每次变化上报一次；页面层据此
-   *  在图卡下方渲染同源明细表（币种/平台/粒度/时间段随图联动）
-   *  第一百一十三轮（评审）：第三参 full = 完整范围（上方极值筛选范围）数据 +
-   *  当前查看窗口在其中的下标 s/e——明细表时间筛选默认跟图，也可在完整范围内自选 */
-  onSeriesWindow?: (
-    series: Series[],
-    buckets: { id: string; xLabel: string; anchorDate: string }[],
-    full: { series: Series[]; buckets: { id: string; xLabel: string; anchorDate: string }[]; s: number; e: number },
-  ) => void;
+  /** 第110轮（评审）立、第一百二十三轮按组：图下「价差与明细」取数口——按主分析卡
+   *  （选择浮窗卡序）上报各组 = 卡 id + 主品系列 key + 本卡全部系列（主品在前，含被
+   *  图例屏蔽者）× 图上可见时间段，每次变化上报一次；页面层据此在图卡下方渲染
+   *  同源宽表（币种/平台/粒度/时间段随图联动） */
+  onSeriesWindow?: (groups: TableGroup[], buckets: DetailBucket[]) => void;
 } = {}) {
   const { state, actions } = useFilters();
-  // 主体模式有效主分析卡：按产品 = state.mains 原样；按档位 = 该档全部华为配置
-  // 按型号成卡 + 各自对标对比区（tierSubjectSelections）。档位在当前产业无华为产品时
-  // 回退按产品，避免空图。第一百一十七轮：每张卡 = 型号 + 配置 + 它自己的对比区，
-  // 分离面板 = 直接展开卡（「我司/竞品」视角概念退役，映射在选择时已完成）。
-  const effMains = useMemo(() => {
-    if (state.subjectMode !== 'tier' || !state.tier) return state.mains;
-    return tierSubjectSelections(state.industry, state.tier) ?? state.mains;
-  }, [state.subjectMode, state.tier, state.industry, state.mains]);
+  // 第一百一十七轮：每张卡 = 型号 + 配置 + 它自己的对比区，分离面板 = 直接展开卡。
+  // 第一百二十三轮：「按档位」主体模式退役（档位批量动作并入选择产品浮窗），
+  // 面板取数 = state.mains 原样。
+  const effMains = state.mains;
   const mainsEmpty = effMains.length === 0;
   // 合并图（单卡）取数组：全部主品配置 + 全部对比区并集（按卡序去重）
   const { mainSels, compareSels } = useMemo(() => flatSelections(effMains), [effMains]);
@@ -147,7 +139,7 @@ export default function PriceTrend(props: {
   const [labelMode, setLabelMode] = useState<'detail' | 'compact'>('compact');
   // 第一百一十四轮：分离模式横向虚线（跨面板共享悬停纵向位置；与 splitHoverIdx 同机制）
   const [splitCrossY, setSplitCrossY] = useState<number | null>(null);
-  // 第一百一十五轮：顶部品牌图例带悬停的产品——合并图单键；分离模式记录面板 + 系列
+  // 第一百一十五轮：顶部图例带悬停的产品——合并图单键；分离模式记录面板 + 系列
   //（悬停只作用于本图：高亮该系列 + 对标映射，其余降透明，图内起点画指引虚线）
   const [legendHoverKey, setLegendHoverKey] = useState<string | null>(null);
   const [panelLegendHover, setPanelLegendHover] = useState<{ panel: string; key: string } | null>(null);
@@ -310,10 +302,20 @@ export default function PriceTrend(props: {
   }, [alerts]);
 
   // ---- 分离显示（第一百一十七轮定版）：分离与否由主分析卡数决定——
-  // ≥2 张卡自动分离（每面板 = 一张卡：型号全部配置线 + 它自己的对比线），
+  // ≥2 张卡默认分离（每面板 = 一张卡：型号全部配置线 + 它自己的对比线），
   // 单卡合并成图；手动开关与「折线超限强制分离」退役（配额已在选择时收口，
   // 图上永远装得下）。面板顺序 = 卡序（选择浮窗内拖拽），页内把手拖拽仍可覆盖。
-  const splitActive = effMains.length >= 2;
+  // 第一百二十三轮⑥（宽容合并）：≥2 组默认分图但可切回一张图（单产品多型号等
+  // 用户认为该合并的场景）；合并可用 = 全部组系列去重总数 ≤ MERGE_LINES_CAP，
+  // 超限「合并」项置灰，选区变化致超限时自动回落分图。mergeView 不持久化。
+  const multiCards = effMains.length >= 2;
+  const [mergeView, setMergeView] = useState<boolean>(false);
+  const mergeLines = mainSels.length + compareSels.length; // 全部组系列去重总数
+  const mergeOk = mergeLines <= MERGE_LINES_CAP;
+  useEffect(() => {
+    if (mergeView && !mergeOk) setMergeView(false); // 超限回落分图；回到限内不自动回跳，由用户重选
+  }, [mergeView, mergeOk]);
+  const splitActive = multiCards && !mergeView;
   // 分离模式一行可见面板数：卡片始终横向排列，超出视口后由轨道滚动查看。
   // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
   const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
@@ -325,16 +327,17 @@ export default function PriceTrend(props: {
   // 第110轮（评审）：分离模式跨图参考线——任一面板悬停的时间列下标共享给全部面板，
   // 其余面板在同一时间列画 1px 虚线；任意面板移出即清空
   const [splitHoverIdx, setSplitHoverIdx] = useState<number | null>(null);
-  // 跨产品/竞品视角分离时价位跨度天然拉大 → 进入时自动开「Y 轴自动压缩」；
-  // 用户手动关闭后本段分离会话内不再强制（退出分离再进才重置）
+  // 跨产品/竞品视角下价位跨度天然拉大 → 多组进入时（分图或合并，第一百二十三轮⑥
+  // 起不再只看分图态）自动开「Y 轴自动压缩」；用户手动关闭后本段会话内不再强制
+  //（回到单组再进才重置）
   const yCompressAutoRef = useRef(false);
   useEffect(() => {
-    if (splitActive && !yCompressAutoRef.current) {
+    if (multiCards && !yCompressAutoRef.current) {
       yCompressAutoRef.current = true;
       setYCompress(true);
     }
-    if (!splitActive) yCompressAutoRef.current = false;
-  }, [splitActive]);
+    if (!multiCards) yCompressAutoRef.current = false;
+  }, [multiCards]);
   // 面板顺序（第七十九轮：卡片上边线拖移把手拖拽换位，取代已移除的箭头调序）
   const [panelOrder, setPanelOrder] = useState<string[]>([]); // 面板 key 序；空 = own 序
   const [draggingPanel, setDraggingPanel] = useState<string | null>(null);
@@ -455,24 +458,17 @@ export default function PriceTrend(props: {
   // ---- 大促背景带（第三十四轮）：dim_promo ∩ 窗口桶覆盖区间；随窗口联动 ----
   const winBuckets = useMemo(() => buckets.slice(win.s, win.e + 1), [buckets, win]);
 
-  // ---- 图下「核心信息明细」同源取数（第110轮，评审）：合并模式 = 窗口内全部系列
-  //（含被名称药丸屏蔽者——明细表有自己的产品筛选，屏蔽只管折线）；分离模式 =
-  // 各面板系列并集（同款竞品被多张面板对标时按系列去重）。行集 = 系列 × 可见时间段，
-  // 经 onSeriesWindow 上报页面层渲染（明细表与图共享粒度/币种/平台/时间段口径）
-  const tableSeries: Series[] = useMemo(() => {
-    if (!splitActive) return visSeries;
-    const seen = new Set<string>();
-    const out: Series[] = [];
-    for (const p of panelViews) {
-      for (const s of p.all) {
-        if (seen.has(s.key)) continue;
-        seen.add(s.key);
-        out.push(s);
-      }
-    }
-    return out;
-  }, [splitActive, visSeries, panelViews]);
-  const tableBuckets = useMemo(
+  // ---- 图下「价差与明细」同源取数（第110轮立，第一百二十三轮按组）：按主分析卡
+  // 上报各组，组序 = 卡序（选择浮窗排列；页内面板拖拽只换图位，不改表序）。
+  // 分图/合并（含单组）同口径：合并多组 = 并集系列按卡归组（不再只取第一组），
+  // 分图 = 各面板全部系列（含被图例屏蔽者——宽表有自己的组筛选，屏蔽只管折线）。
+  // 同款对比产品被多卡对标时在各组各自出现（组内语义完整）。
+  // 行集 = 组 × 可见时间段，经 onSeriesWindow 上报页面层渲染（与图共享粒度/币种/平台/时间段）
+  const tableGroups: LegendGroup[] = useMemo(
+    () => groupsOfCards(effMains, splitActive ? panelViews.flatMap((p) => p.all) : visSeries),
+    [effMains, splitActive, panelViews, visSeries],
+  );
+  const tableBuckets = useMemo<DetailBucket[]>(
     () =>
       winBuckets.map((b) => ({
         id: b.id,
@@ -481,48 +477,11 @@ export default function PriceTrend(props: {
       })),
     [winBuckets, state.granularity],
   );
-  // 第一百一十三轮（评审）：明细表自选时间段所需的完整范围数据——覆盖上方极值
-  // 筛选范围（filterBounds [lo,hi]）而非仅当前查看窗口。合并模式 = allSeries 按
-  // 筛选范围切片（含被名称药丸屏蔽者——屏蔽只管折线）；分离模式 = 各面板系列
-  // 并集去重（与 tableSeries 同序）后按筛选范围切片。边缘续接标记对表无意义，不带。
-  const fullBuckets = useMemo(
-    () =>
-      buckets.slice(filterBounds[0], filterBounds[1] + 1).map((b) => ({
-        id: b.id,
-        xLabel: b.xLabel,
-        anchorDate: bucketAnchorDate(state.granularity, b.id) ?? '',
-      })),
-    [buckets, filterBounds, state.granularity],
-  );
-  const fullTableSeries: Series[] = useMemo(() => {
-    const [lo, hi] = filterBounds;
-    const sliceRange = (list: Series[]): Series[] =>
-      list
-        .map((s) => ({ ...s, points: s.points.slice(lo, hi + 1) }))
-        .filter((s) => s.points.length > 0);
-    if (!splitActive) return sliceRange(allSeries);
-    const seen = new Set<string>();
-    const union: Series[] = [];
-    for (const p of panelData) {
-      for (const s of p.series) {
-        if (seen.has(s.key)) continue;
-        seen.add(s.key);
-        union.push(s);
-      }
-    }
-    return sliceRange(union);
-  }, [splitActive, allSeries, panelData, filterBounds]);
   const onSeriesWindowRef = useRef(props.onSeriesWindow);
   onSeriesWindowRef.current = props.onSeriesWindow;
   useEffect(() => {
-    // 窗口下标相对完整范围（full 从 filterBounds[0] 起）换算，钳到 ≥0
-    onSeriesWindowRef.current?.(tableSeries, tableBuckets, {
-      series: fullTableSeries,
-      buckets: fullBuckets,
-      s: Math.max(0, win.s - filterBounds[0]),
-      e: Math.max(0, win.e - filterBounds[0]),
-    });
-  }, [tableSeries, tableBuckets, fullTableSeries, fullBuckets, win.s, win.e, filterBounds]);
+    onSeriesWindowRef.current?.(tableGroups, tableBuckets);
+  }, [tableGroups, tableBuckets]);
 
   // 时点页签日期（第五十四轮追补①）：窗口末桶内最新日历周的周三锚日（MM-DD）——
   // 月/季粒度不再显示 2026-10 / 2026Q4（用户：时点恒为最新那一周对应的那一天；
@@ -698,14 +657,36 @@ export default function PriceTrend(props: {
       >
         <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>
           价格走势
-          {splitActive && (
+          {multiCards && (
             <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>
-              （{effMains.length} 个主分析分图）
+              （{effMains.length} 组）
             </span>
           )}
         </h2>
-        {/* 第一百一十七轮：分离开关退役——≥2 张主分析卡自动分离；
-            「每行 2/3 个」与面板拖拽保留 */}
+        {/* 第一百二十三轮⑥（宽容合并）：≥2 组时可选「分图 / 合并」——默认分图
+            （第一百一十七轮口径），合并适合单产品多型号等用户认为该同图的场景；
+            「每行 2/3 个」只在分图态出现 */}
+        {multiCards && (
+          <Segmented
+            size="small"
+            value={splitActive ? 'split' : 'merge'}
+            onChange={(v) => setMergeView(v === 'merge')}
+            options={[
+              { label: '分图', value: 'split' },
+              mergeOk
+                ? { label: '合并', value: 'merge' }
+                : {
+                    label: (
+                      <Tooltip title={`合并后共 ${mergeLines} 条，超过单图上限 ${MERGE_LINES_CAP} 条`}>
+                        <span>合并</span>
+                      </Tooltip>
+                    ),
+                    value: 'merge',
+                    disabled: true,
+                  },
+            ]}
+          />
+        )}
         {splitActive && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
             <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>每行</span>
@@ -957,11 +938,12 @@ export default function PriceTrend(props: {
                           )}
                         </span>
                       </div>
-                      {/* 品牌分组图例带（第一百一十五轮）：本面板全部系列（含屏蔽者）；
-                          悬停药丸 = 该系列高亮 + 起点指引线，点击 = 屏蔽/恢复折线 */}
+                      {/* 组/角色图例带（第一百一十五轮立，第一百二十三轮④按组）：本面板
+                          单组（主品药丸 + vs + 对比药丸，含屏蔽者）；悬停药丸 = 该系列
+                          高亮 + 起点指引线，点击 = 屏蔽/恢复折线 */}
                       <div style={{ height: PANEL_LEGEND_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
                         <BrandLegendStrip
-                          series={p.all}
+                          groups={groupsOfCards([p.card], p.all)}
                           hiddenKeys={hiddenKeys}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
@@ -983,7 +965,7 @@ export default function PriceTrend(props: {
                         onDrill={makePanelDrill(p)}
                         windowKey={`${win.s}:${win.e}:${p.key}`}
                         yScale={splitYCfg ?? undefined}
-                        hideNamePills // 第一百一十五轮：产品名在面板顶部品牌图例带，图内不再画药丸
+                        hideNamePills // 第一百一十五轮：产品名在面板顶部图例带，图内不再画药丸
                         legendHoverKey={panelLegendHover?.panel === p.key ? panelLegendHover.key : null}
                         lineShape={lineShape}
                         labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
@@ -1029,12 +1011,14 @@ export default function PriceTrend(props: {
         </>
       ) : (
         <>
-          {/* 品牌分组图例带（第一百一十五轮，评审）：产品名称从图左侧名称带上移图顶——
-              第一行品牌名（我司最左）、第二行产品药丸（点击屏蔽/恢复，悬停该系列
-              高亮 + 起点指引线）；块间灰短竖线分隔，块内/整排溢出走两侧小箭头 */}
+          {/* 组/角色图例带（第一百一十五轮立，第一百二十三轮④按组）：合并图（单组
+              或多组并回一张图）也按组出块（单组不显组号）——主品药丸 + vs + 对比
+              药丸（点击屏蔽/恢复，悬停该系列高亮 + 起点指引线）；块间灰短竖线分隔，
+              对比超 3 个走块内 ‹› 滚动（主品恒可见），整排放不下两侧 ‹› 滚动；
+              与宽表同用 groupsOfCards 取数 */}
           <div style={{ marginBottom: 6, minWidth: 0 }}>
             <BrandLegendStrip
-              series={visSeries}
+              groups={tableGroups}
               hiddenKeys={hiddenKeys}
               onToggleHidden={toggleLegend}
               onHover={setLegendHoverKey}
@@ -1047,7 +1031,7 @@ export default function PriceTrend(props: {
             priceTypes={state.priceTypes}
             gridLeft={gridLeft}
             gridTop={gridTop}
-            hideNamePills // 第一百一十五轮：产品名在图顶品牌图例带，图内不再画药丸
+            hideNamePills // 第一百一十五轮：产品名在图顶图例带，图内不再画药丸
             legendHoverKey={legendHoverKey}
             showYTicks={showYTicks}
             onShowYTicks={setShowYTicks}
@@ -1076,7 +1060,7 @@ export default function PriceTrend(props: {
             onChangeThreshold={setChangeThreshold}
             emptyHint={
               visSeries.length > 0 && chartSeries.length === 0
-                ? '所有产品已在图中屏蔽，点击名称药丸恢复显示'
+                ? '所有产品已在图中屏蔽，点击图顶产品药丸恢复显示'
                 : undefined
             }
           />

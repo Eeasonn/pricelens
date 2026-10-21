@@ -7,7 +7,7 @@
 // ============================================================
 import { dimProduct, factPriceWeekly } from '../../data';
 import type { DimProduct, Industry } from '../../dataModel/types';
-import { effectiveChannelIds, lowestPriceColorSku } from '../../dataModel/aggregate';
+import { effectiveChannelIds, lowestPriceColorSku, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { getCurrentCountry } from '../../state/currentScope';
 import type { ProductSelection } from '../../state/filtersTypes';
 
@@ -382,6 +382,51 @@ export function searchProductTree(tree: BrandNode[], query: string): BrandNode[]
         : s.models.filter((m) => m.label.toLowerCase().includes(q));
       if (!models.length) continue;
       seriesOut.push({ ...s, models });
+    }
+    if (seriesOut.length) {
+      out.push({ ...brand, series: seriesOut, modelCount: seriesOut.reduce((n, s) => n + s.models.length, 0) });
+    }
+  }
+  return out;
+}
+
+// ---------------- 档位筛选（第一百二十三轮：档位融入选择产品浮窗） ----------------
+
+/** 该国某产业实际存在的价格档位（高→低；配置行去重，阶梯外档位殿后按代码序）。
+ *  浮窗「档位」下拉的选项来源——只列有产品的档位，避免空选项。 */
+export function tiersOfScope(industry?: Industry, countryCode: string = getCurrentCountry()): string[] {
+  const present = new Set<string>();
+  for (const p of dimProduct) {
+    if (!p.countries.includes(countryCode) || (industry != null && p.industry !== industry)) continue;
+    present.add(tierOf(p, countryCode));
+  }
+  const ladder = industry == null ? [] : [...tierOrderOf(industry)].reverse(); // 阶梯序高→低
+  const rest = [...present].filter((t) => !ladder.includes(t)).sort();
+  return [...ladder.filter((t) => present.has(t)), ...rest];
+}
+
+/** 档位筛选树（配置级档位：tier_by_country 分国优先，同型号不同配置可跨档）——
+ *  品牌/系列/型号列只留含该档配置者，配置列只列该档配置；空层整链剪除。
+ *  与树内搜索可叠加（先档位后搜索，两者都是纯剪枝）。 */
+export function filterProductTreeByTier(
+  tree: BrandNode[],
+  tier: string,
+  countryCode: string = getCurrentCountry(),
+): BrandNode[] {
+  const hitKeys = new Set<string>();
+  for (const p of dimProduct) {
+    if (!p.countries.includes(countryCode)) continue;
+    if (tierOf(p, countryCode) !== tier) continue;
+    hitKeys.add(`${modelIdOf(p)}|${p.romram}`);
+  }
+  const out: BrandNode[] = [];
+  for (const brand of tree) {
+    const seriesOut: SeriesNode[] = [];
+    for (const s of brand.series) {
+      const models = s.models
+        .map((m) => ({ ...m, romrams: m.romrams.filter((r) => hitKeys.has(r.key)) }))
+        .filter((m) => m.romrams.length > 0);
+      if (models.length) seriesOut.push({ ...s, models });
     }
     if (seriesOut.length) {
       out.push({ ...brand, series: seriesOut, modelCount: seriesOut.reduce((n, s) => n + s.models.length, 0) });
