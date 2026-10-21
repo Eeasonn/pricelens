@@ -12,6 +12,7 @@ import {
   GRID,
   NAME_ZONE_W,
   DEFAULT_TIERS,
+  axisTickPlan,
   collectVisibleValues,
   estGridLeft,
   fmtAxisTick,
@@ -414,6 +415,11 @@ export function buildOption(p: {
   const isLit = (key: string): boolean =>
     p.focusKeys != null && p.focusKeys.length > 0 ? p.focusKeys.includes(key) : key === p.focusKey;
   const xLabels = first.points.map((pt) => pt.xLabel);
+  // 第一百一十九轮（走查会）：时间轴左右边界完整格式（周=YYYYMMDD/月=YYYYMM/季=YYYYQn），
+  // 中间刻度省年份、跨年在换年刻度下补年份行；自控抽稀保证首末刻度恒显示（不再交给 auto）
+  const xIds = first.points.map((pt) => pt.bucketId);
+  const axisPlan = axisTickPlan(granularity, xIds, Math.max(1, Math.ceil(xIds.length / 9)), xIds.length > 1 ? [0, xIds.length - 1] : [0]);
+  const axisShown = new Set(axisPlan.indexes);
   // 第一百一十五轮（评审）：自有产品线不再加粗——全部系列同宽（粗细只表达「主价/参照」层级）
   const shape = p.lineShape === 'smooth'
     ? ({ smooth: true, smoothMonotone: 'x' as const } as const)
@@ -537,6 +543,7 @@ export function buildOption(p: {
       // 第十二轮：月/季标签弃 mono rich，与周视图同一字体字号（全页数字字体统一）
       // 时间标签由 XBrush 统一承担，图表只保留轴线和大促图标专用行，避免两组日期叠在一起。
       // 第110轮（评审）：分离模式小图传入 xLabels → 各面板自带日期标签（可独立截图）
+      // 第119轮（走查会）：自控抽稀 + 边界完整格式（首末刻度 YYYYMMDD/YYYYMM/YYYYQn 恒显示）
       axisLabel: p.xLabels
         ? {
             show: true,
@@ -544,8 +551,13 @@ export function buildOption(p: {
             fontSize: 10,
             fontFamily: font.family,
             margin: 7,
+            lineHeight: 11,
             hideOverlap: true,
-            interval: 'auto' as const,
+            interval: (index: number) => axisShown.has(index),
+            formatter: (val: string, index: number) => {
+              const year = axisPlan.yearText(index);
+              return year ? `${axisPlan.dateText(index)}\n${year}` : axisPlan.dateText(index);
+            },
           }
         : { show: false },
     },

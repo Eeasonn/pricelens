@@ -1,56 +1,48 @@
 // ============================================================
 // §6.5 时间范围：左侧是全局时间筛选，右侧是当前筛选范围内的查看窗口。
 // 自动模式按所选产品的最早/最晚有效价格桶更新上方筛选器；窗口只负责缩放查看。
+// 第一百一十九轮（走查会）：①左侧时间筛选簇抽成 TimeRangeCluster 导出组件——
+// 量价看板可将其上移到卡顶工具行（showTimeFilter=false + leftSlot 放「同步」按钮）；
+// ②轨道刻度换 axisTickPlan：查看窗口两端完整格式（周=YYYYMMDD/月=YYYYMM/季=YYYYQn）
+// 加粗恒显示，中间刻度省年份、跨年在换年刻度下补年份行。
 // ============================================================
 import dayjs, { type Dayjs } from 'dayjs';
 import { CalendarOutlined } from '@ant-design/icons';
 import { ConfigProvider, DatePicker, Segmented } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { bucketIdOfDate, dateOfBucket } from '../../components/FilterBar/timeUtils';
 import { filterBarTheme } from '../../components/FilterBar';
 import type { Granularity } from '../../dataModel/types';
+import { axisTickPlan, fullBucketLabel, GRID, MIN_WINDOW, panWindow, type Bucket } from './helpers';
 import { color, font, fontSize, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
-import { GRID, MIN_WINDOW, panWindow, type Bucket } from './helpers';
 
-export interface XBrushProps {
+export interface TimeRangeClusterProps {
   buckets: Bucket[];
-  /** 当前查看窗口，始终位于 [lo, hi] 内。 */
-  s: number;
-  e: number;
   /** 上方极值筛选器对应的桶区间。 */
   lo: number;
   hi: number;
-  /** 与图表绘图区左缘对齐，保证轨道边界与折线边界一致。 */
-  plotLeft: number;
   adaptive: boolean;
   granularity: Granularity;
-  /** 调整下方查看窗口，不改变上方极值筛选器。 */
-  onChange: (s: number, e: number) => void;
   /** 修改上方极值筛选器，退出自动模式。 */
   onRangeChange: (startId: string, endId: string) => void;
   /** 在时间设置面板中切换图表粒度。 */
   onGranularityChange: (granularity: Granularity) => void;
   onToggleAdaptive: () => void;
-  onAdjusting?: (v: boolean) => void;
+  /** 弹层展开方向：位于页面顶部时向下展开。 */
+  placement?: 'topLeft' | 'bottomLeft';
+  /** 弹层挂载容器（缺省挂在组件自身根节点）。 */
+  popupContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
-const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
-type DragKind = 'start' | 'end' | 'pan';
-
-export default function XBrush(props: XBrushProps) {
-  const {
-    buckets, s, e, lo, hi, plotLeft, adaptive, granularity,
-    onChange, onRangeChange, onGranularityChange, onToggleAdaptive, onAdjusting,
-  } = props;
-  const n = buckets.length;
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const brushRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ kind: DragKind; startX: number; startS: number; startE: number } | null>(null);
-  const [panning, setPanning] = useState(false);
-  const [activeDrag, setActiveDrag] = useState<DragKind | null>(null);
+/** 时间筛选簇 = 「自动」跟随开关 + 时间范围选择器（粒度切换在选择器面板内）。
+ *  独立导出：底部刷选条与量价卡顶工具行共用同一交互。 */
+export function TimeRangeCluster(props: TimeRangeClusterProps) {
+  const { buckets, lo, hi, adaptive, granularity, onRangeChange, onGranularityChange, onToggleAdaptive, placement = 'topLeft', popupContainerRef } = props;
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const [rangeOpen, setRangeOpen] = useState(false);
   const reopenPickerRef = useRef(false);
+  const n = buckets.length;
   useEffect(() => {
     if (!reopenPickerRef.current) return undefined;
     reopenPickerRef.current = false;
@@ -65,14 +57,11 @@ export default function XBrush(props: XBrushProps) {
   }, [granularity]);
   if (n === 0) return null;
 
-  const pct = (i: number): number => ((i - lo) / Math.max(1, hi - lo + 1)) * 100;
-  const tickPct = (i: number): number => ((i - lo + 0.5) / Math.max(1, hi - lo + 1)) * 100;
   const formatId = (id: string): string => {
     if (granularity === 'week' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}-W${id.slice(4)}`;
     if (granularity === 'month' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}-${id.slice(4)}`;
     return id;
   };
-  const rangeLabel = (i: number): string => formatId(buckets[i].id);
   const startId = buckets[lo]?.id ?? buckets[0].id;
   const endId = buckets[hi]?.id ?? buckets[n - 1].id;
   const granularityLabel: Record<Granularity, string> = { week: '周', month: '月', quarter: '季' };
@@ -118,6 +107,106 @@ export default function XBrush(props: XBrushProps) {
       {panel}
     </div>
   );
+
+  return (
+    <div ref={rootRef} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <button
+        type="button"
+        aria-label="自动时间范围"
+        aria-pressed={adaptive}
+        title={adaptive ? '自动跟随所选产品的最早/最晚爬价时间' : '恢复所选产品的自动时间范围'}
+        onClick={onToggleAdaptive}
+        style={{
+          height: 30, padding: '0 9px', borderRadius: radius.control,
+          border: `1px solid ${adaptive ? selectAccent : color.hairlineStrong}`,
+          background: adaptive ? selectSoft : color.canvas,
+          color: adaptive ? selectSoftInk : color.body,
+          font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+        }}
+      >自动</button>
+      <ConfigProvider locale={zhCN} theme={filterBarTheme}>
+        <DatePicker.RangePicker
+          key={pickerMode}
+          aria-label="时间范围筛选器"
+          className="xbrush-range-picker"
+          dropdownClassName="xbrush-range-popup"
+          classNames={{ popup: { root: 'xbrush-range-popup' } }}
+          value={pickerValue}
+          picker={pickerMode}
+          format={pickerFormat}
+          separator={<span style={{ color: color.mute }}>→</span>}
+          prefix={<span style={{ color: color.mute, fontSize: fontSize.caption }}>{granularityLabel[granularity]}</span>}
+          suffixIcon={<CalendarOutlined style={{ color: color.mute }} />}
+          allowClear={false}
+          inputReadOnly
+          disabledDate={disabledDate}
+          open={rangeOpen}
+          onOpenChange={setRangeOpen}
+          onChange={onPickerChange}
+          panelRender={renderPickerPanel}
+          placement={placement}
+          getPopupContainer={() => popupContainerRef?.current ?? rootRef.current ?? document.body}
+          styles={{ popup: { root: { width: '100%', left: 0 } } }}
+          style={{ minWidth: 0, flex: '1 1 240px', width: 240, height: 30 }}
+        />
+      </ConfigProvider>
+    </div>
+  );
+}
+
+export interface XBrushProps {
+  buckets: Bucket[];
+  /** 当前查看窗口，始终位于 [lo, hi] 内。 */
+  s: number;
+  e: number;
+  /** 上方极值筛选器对应的桶区间。 */
+  lo: number;
+  hi: number;
+  /** 与图表绘图区左缘对齐，保证轨道边界与折线边界一致。 */
+  plotLeft: number;
+  adaptive: boolean;
+  granularity: Granularity;
+  /** 调整下方查看窗口，不改变上方极值筛选器。 */
+  onChange: (s: number, e: number) => void;
+  /** 修改上方极值筛选器，退出自动模式。 */
+  onRangeChange: (startId: string, endId: string) => void;
+  /** 在时间设置面板中切换图表粒度。 */
+  onGranularityChange: (granularity: Granularity) => void;
+  onToggleAdaptive: () => void;
+  onAdjusting?: (v: boolean) => void;
+  /** 第一百一十九轮：false = 左列不渲染时间筛选簇（上移到卡顶），由 leftSlot 占位。 */
+  showTimeFilter?: boolean;
+  /** 左列自定义内容（量价看板放「同步」开关）。 */
+  leftSlot?: ReactNode;
+}
+
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+type DragKind = 'start' | 'end' | 'pan';
+
+export default function XBrush(props: XBrushProps) {
+  const {
+    buckets, s, e, lo, hi, plotLeft, adaptive, granularity,
+    onChange, onRangeChange, onGranularityChange, onToggleAdaptive, onAdjusting,
+    showTimeFilter = true, leftSlot,
+  } = props;
+  const n = buckets.length;
+  const brushRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ kind: DragKind; startX: number; startS: number; startE: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  const [activeDrag, setActiveDrag] = useState<DragKind | null>(null);
+  if (n === 0) return null;
+
+  const pct = (i: number): number => ((i - lo) / Math.max(1, hi - lo + 1)) * 100;
+  const tickPct = (i: number): number => ((i - lo + 0.5) / Math.max(1, hi - lo + 1)) * 100;
+  const rangeLabel = (i: number): string => fullBucketLabel(granularity, buckets[i].id);
+  // 刻度计划（第119轮）：查看窗口两端 = 完整格式边界刻度，其余按步长抽稀省年份
+  const domainIds = buckets.slice(lo, hi + 1).map((b) => b.id);
+  const span = Math.max(1, hi - lo + 1);
+  const tickStep = granularity === 'week'
+    ? Math.max(4, Math.ceil(span / 8 / 4) * 4)
+    : Math.max(1, Math.ceil(span / 8));
+  const plan = axisTickPlan(granularity, domainIds, tickStep, [s - lo, e - lo]);
 
   const onDragDown = (kind: DragKind) => (ev: ReactPointerEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -166,49 +255,18 @@ export default function XBrush(props: XBrushProps) {
     background: activeDrag === kind ? selectAccent : '#4f8fe8',
     boxShadow: activeDrag === kind ? '0 1px 3px rgba(0, 112, 243, 0.28)' : undefined,
   });
-  const labelStyle = (i: number): CSSProperties => ({
+  const labelStyle = (i: number, edge: boolean): CSSProperties => ({
     position: 'absolute', left: `${tickPct(i)}%`, top: 34, transform: 'translateX(-50%)',
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
-    fontSize: 11, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', color: color.mute, whiteSpace: 'nowrap',
+    fontSize: 11, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums',
+    color: edge ? color.body : color.mute, fontWeight: edge ? 600 : 400, whiteSpace: 'nowrap',
   });
-  const tickStyle = (i: number): CSSProperties => ({
-    position: 'absolute', left: `${tickPct(i)}%`, top: 10, width: 1,
-    height: i === lo || i === hi ? 8 : 5,
-    transform: 'translateX(-50%)', background: i === lo || i === hi ? color.hairlineStrong : '#aeb8c6',
+  const tickStyle = (edge: boolean): CSSProperties => ({
+    position: 'absolute', top: 10, width: 1,
+    height: edge ? 8 : 5,
+    transform: 'translateX(-50%)', background: edge ? color.hairlineStrong : '#aeb8c6',
     pointerEvents: 'none',
   });
-  const span = Math.max(1, hi - lo + 1);
-  const tickStep = granularity === 'week'
-    ? Math.max(4, Math.ceil(span / 8 / 4) * 4)
-    : Math.max(1, Math.ceil(span / 8));
-  const yearMarks = new Set<number>();
-  const calendarYearOf = (i: number): string => {
-    const id = buckets[i].id;
-    if (granularity === 'week') {
-      const date = dateOfBucket(id, granularity);
-      return date ? String(date.getFullYear()) : id.slice(0, 4);
-    }
-    return id.slice(0, 4);
-  };
-  for (let i = lo + 1; i <= hi; i += 1) {
-    if (calendarYearOf(i) !== calendarYearOf(i - 1)) yearMarks.add(i);
-  }
-  // 刻度绝对等距：只按固定桶步长布点，跨年桶/末桶不再插位（插位会打乱间距）；
-  // 跨年信息由该步长刻度标签第二行的年份表达（跨年桶不在刻度上时，归到其后首个刻度）。
-  const tickIndexes: number[] = [];
-  for (let i = lo; i <= hi; i += tickStep) tickIndexes.push(i);
-  const yearChangedAt = (k: number): boolean => {
-    if (k === 0) return true;
-    const prev = tickIndexes[k - 1];
-    for (const m of yearMarks) if (m > prev && m <= tickIndexes[k]) return true;
-    return false;
-  };
-  const tickParts = (i: number, yearChanged: boolean): { date: string; year?: string } => {
-    const id = buckets[i].id;
-    if (granularity === 'week') return { date: buckets[i].xLabel, year: yearChanged ? id.slice(0, 4) : undefined };
-    if (granularity === 'month') return { date: id.slice(4), year: yearChanged ? id.slice(0, 4) : undefined };
-    return { date: id.slice(5), year: yearChanged ? id.slice(0, 4) : undefined };
-  };
 
   return (
     <div
@@ -219,50 +277,24 @@ export default function XBrush(props: XBrushProps) {
         zIndex: 12,
       }}
     >
-      {/* 左侧：全局时间筛选/自动跟随。它决定轨道的可用边界。 */}
+      {/* 左侧：全局时间筛选/自动跟随（量价看板已上移到卡顶，此处放「同步」开关）。它决定轨道的可用边界。 */}
       <div style={{ position: 'relative', minHeight: 58, padding: '0 12px 7px 0', borderRight: `1px solid ${color.hairline}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <button
-            type="button"
-            aria-label="自动时间范围"
-            aria-pressed={adaptive}
-            title={adaptive ? '自动跟随所选产品的最早/最晚爬价时间' : '恢复所选产品的自动时间范围'}
-            onClick={onToggleAdaptive}
-            style={{
-              height: 30, padding: '0 9px', borderRadius: radius.control,
-              border: `1px solid ${adaptive ? selectAccent : color.hairlineStrong}`,
-              background: adaptive ? selectSoft : color.canvas,
-              color: adaptive ? selectSoftInk : color.body,
-              font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-            }}
-          >自动</button>
-          <ConfigProvider locale={zhCN} theme={filterBarTheme}>
-            <DatePicker.RangePicker
-              key={pickerMode}
-              aria-label="时间范围筛选器"
-              className="xbrush-range-picker"
-              dropdownClassName="xbrush-range-popup"
-              classNames={{ popup: { root: 'xbrush-range-popup' } }}
-              value={pickerValue}
-              picker={pickerMode}
-              format={pickerFormat}
-              separator={<span style={{ color: color.mute }}>→</span>}
-              prefix={<span style={{ color: color.mute, fontSize: fontSize.caption }}>{granularityLabel[granularity]}</span>}
-              suffixIcon={<CalendarOutlined style={{ color: color.mute }} />}
-              allowClear={false}
-              inputReadOnly
-              disabledDate={disabledDate}
-              open={rangeOpen}
-              onOpenChange={setRangeOpen}
-              onChange={onPickerChange}
-              panelRender={renderPickerPanel}
-              placement="topLeft"
-              getPopupContainer={() => brushRef.current ?? document.body}
-              styles={{ popup: { root: { width: '100%', left: 0 } } }}
-              style={{ minWidth: 0, flex: '1 1 240px', width: 240, height: 30 }}
-            />
-          </ConfigProvider>
-        </div>
+        {showTimeFilter ? (
+          <TimeRangeCluster
+            buckets={buckets}
+            lo={lo}
+            hi={hi}
+            adaptive={adaptive}
+            granularity={granularity}
+            onRangeChange={onRangeChange}
+            onGranularityChange={onGranularityChange}
+            onToggleAdaptive={onToggleAdaptive}
+            placement="topLeft"
+            popupContainerRef={brushRef}
+          />
+        ) : (
+          leftSlot
+        )}
       </div>
 
       {/* 右侧：时间调整轴。与拖柄同高，紧贴大促标签行。 */}
@@ -270,7 +302,7 @@ export default function XBrush(props: XBrushProps) {
         <div ref={trackRef} style={{ position: 'relative', height: 58, minWidth: 0 }}>
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 28, borderRadius: 6, background: '#edf0f4', boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
           <div
-            title="拖动查看窗口，不改变左侧时间筛选器"
+            title="拖动调整下方图表的时间范围"
             aria-label="平移时间段"
             style={{
               position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: 28,
@@ -279,13 +311,19 @@ export default function XBrush(props: XBrushProps) {
             }}
             onPointerDown={onDragDown('pan')} onPointerMove={onDragMove} onPointerUp={onDragUp} onPointerCancel={onDragUp}
           />
-          {tickIndexes.map((i) => <span key={`tick-${i}`} aria-hidden="true" style={tickStyle(i)} />)}
-          {tickIndexes.map((i, k) => {
-            const tick = tickParts(i, yearChangedAt(k));
+          {plan.indexes.map((idx) => {
+            const i = idx + lo;
+            const edge = plan.isEdge(idx);
+            return <span key={`tick-${idx}`} aria-hidden="true" style={{ ...tickStyle(edge), left: `${tickPct(i)}%` }} />;
+          })}
+          {plan.indexes.map((idx) => {
+            const i = idx + lo;
+            const edge = plan.isEdge(idx);
+            const year = plan.yearText(idx);
             return (
-              <span key={`label-${i}`} aria-hidden="true" style={labelStyle(i)}>
-                <span>{tick.date}</span>
-                {tick.year && <em style={{ fontStyle: 'italic', color: color.mute }}>{tick.year}</em>}
+              <span key={`label-${idx}`} aria-hidden="true" style={{ ...labelStyle(i, edge) }}>
+                <span>{plan.dateText(idx)}</span>
+                {year && <em style={{ fontStyle: 'italic', color: color.mute }}>{year}</em>}
               </span>
             );
           })}

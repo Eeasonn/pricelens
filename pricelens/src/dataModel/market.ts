@@ -5,6 +5,9 @@
 //   - 销量 = dataModel/volume（估算口径，台；调用方传入逐配置取数结果）；
 //   - 档位 = 分国 tier_by_country（dimTier 产业阶梯，业务声明优先）；
 //   - 堆叠结构 = 档位 × 品牌（100% 拉齐，自有品牌置底）；
+//   - 时间堆叠（第120轮走查会）= 期序大盘柱：柱高 = 该期大盘总台数（绝对量），
+//     柱内分段 = 品牌构成（序即自下而上堆叠序，brandOrder 首位品牌视觉置底）；
+//     销量 null 的配置该期不计入，全缺期 total = 0 照常输出（画空档）；
 //   - 环比贡献 = 选中期 − 上一期（台），品牌/产品两种粒度聚合，0 变化行不出。
 // 全部纯函数、无随机数，可金测。
 // ============================================================
@@ -146,4 +149,63 @@ export function contributionRows(
 export function fmtSignedInt(v: number): string {
   if (v === 0) return '0';
   return (v > 0 ? '+' : '−') + Math.abs(v).toLocaleString('en-US');
+}
+
+// ---------------- 时间轴堆叠（第120轮走查会：大盘卡柱状图改期序） ----------------
+
+/** 单期大盘堆叠结构（时间柱一期的柱体） */
+export interface MarketPeriodStack {
+  /** 该期大盘合计台数（缺采配置不计入；无任何在架数据 = 0，渲染为空档） */
+  total: number;
+  /** 品牌分段，序 = 自下而上堆叠序：brandOrder 序（首位品牌视觉置底），
+   *  序外品牌殿后（量降序）；仅含 vol > 0 的品牌 */
+  byBrand: { brand: string; vol: number }[];
+}
+
+/** 期序大盘堆叠（第120轮）：横轴 = 查看范围各期，柱高 = 该期大盘总台数（绝对量），
+ *  柱内分段 = 品牌构成。输入 = 调用方（组件）批量取数后展平的台数表：
+ *  键 = `${marketKeyOf(c)}|${期下标}`（期下标 = 窗口内 0 起，缺项按缺采 = null 处理）；
+ *  期数由键集推断（对每个配置自 0 起探测到首个缺键）。销量 null（或 ≤0）的配置该期
+ *  不计入；total 为 0 的期照常输出（total 0 + 空 byBrand）以便画空档。
+ *  tierFilter 非 null 时先过滤 configs 的 tierCode（无匹配配置 → 空数组）。 */
+export function marketTimeStack(
+  configs: MarketConfig[],
+  volByKeyBucket: Map<string, number | null>,
+  tierFilter: string | null,
+  brandOrder: string[],
+): MarketPeriodStack[] {
+  const use = tierFilter == null ? configs : configs.filter((c) => c.tierCode === tierFilter);
+  if (use.length === 0) return [];
+  let n = 0;
+  for (const c of use) {
+    const base = marketKeyOf(c);
+    while (volByKeyBucket.has(`${base}|${n}`)) n += 1;
+  }
+  const rank = new Map(brandOrder.map((b, i) => [b, i]));
+  const out: MarketPeriodStack[] = [];
+  for (let bi = 0; bi < n; bi++) {
+    const byBrand = new Map<string, number>();
+    let total = 0;
+    for (const c of use) {
+      const v = volByKeyBucket.get(`${marketKeyOf(c)}|${bi}`) ?? null;
+      if (v == null || v <= 0) continue;
+      total += v;
+      byBrand.set(c.brand, (byBrand.get(c.brand) ?? 0) + v);
+    }
+    const segments = [...byBrand.entries()]
+      .map(([brand, vol]) => ({ brand, vol }))
+      .sort((a, b) => {
+        const ra = rank.get(a.brand) ?? Number.MAX_SAFE_INTEGER;
+        const rb = rank.get(b.brand) ?? Number.MAX_SAFE_INTEGER;
+        return ra !== rb ? ra - rb : b.vol - a.vol;
+      });
+    out.push({ total, byBrand: segments });
+  }
+  return out;
+}
+
+/** 档位筛选选项：该国 × 产业下实际出现的价格档位（产业阶梯序，去重） */
+export function marketTierOptions(configs: MarketConfig[], tierOrder: string[]): string[] {
+  const present = new Set(configs.map((c) => c.tierCode));
+  return tierOrder.filter((t) => present.has(t));
 }

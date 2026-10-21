@@ -1,5 +1,6 @@
 // ============================================================
 // 第118轮 大盘分析金测：档位×品牌结构 / 环比贡献拆解 / 排序确定性。
+// 第120轮 追加：marketTimeStack 时间轴堆叠 / marketTierOptions 档位选项。
 // 纯函数（fixture 为主）+ 真实数据不变量（RU × phone 大盘非空且配置唯一）。
 // ============================================================
 import { describe, expect, it } from 'vitest';
@@ -11,6 +12,8 @@ import {
   marketBrandOrder,
   marketConfigs,
   marketKeyOf,
+  marketTierOptions,
+  marketTimeStack,
   tierStructure,
   type MarketConfig,
 } from '../market';
@@ -150,6 +153,141 @@ describe('大盘分析 · fmtSignedInt', () => {
     expect(fmtSignedInt(94)).toBe('+94');
     expect(fmtSignedInt(-1770)).toBe('−1,770');
     expect(fmtSignedInt(0)).toBe('0');
+  });
+});
+
+describe('大盘分析 · marketTimeStack / marketTierOptions（第120轮时间轴堆叠）', () => {
+  // 多品牌多档位 fixture：HUAWEI = 自有；BETA 跨两档位；ZETA/OMEGA 刻意排在 brandOrder 序外
+  const CS6: DimProduct[] = [
+    prod({ sku_id: 'cmp-A-a1__12+256 GB__Black', model_id: 'cmp-A-a1', brand: 'HUAWEI', is_own: true, model_name: 'A1', romram: '12+256 GB', tier_by_country: { RU: '600-800' } }),
+    prod({ sku_id: 'cmp-B-b1__8+128 GB__Black', model_id: 'cmp-B-b1', brand: 'BETA', model_name: 'B1', tier_code: '200-400', tier_by_country: {} }),
+    prod({ sku_id: 'cmp-B-e1__8+256 GB__Black', model_id: 'cmp-B-e1', brand: 'BETA', model_name: 'E1', romram: '8+256 GB', tier_by_country: { RU: '400-600' } }),
+    prod({ sku_id: 'cmp-G-g1__16+512 GB__Black', model_id: 'cmp-G-g1', brand: 'GAMMA', model_name: 'G1', romram: '16+512 GB', tier_by_country: { RU: '600-800' } }),
+    prod({ sku_id: 'cmp-Z-z1__8+128 GB__Black', model_id: 'cmp-Z-z1', brand: 'ZETA', model_name: 'Z1', tier_by_country: { RU: '800-1000' } }),
+    prod({ sku_id: 'cmp-O-o1__8+128 GB__Black', model_id: 'cmp-O-o1', brand: 'OMEGA', model_name: 'O1', tier_by_country: { RU: '200-400' } }),
+  ];
+  const cs = marketConfigs(CS6, 'RU', 'phone');
+  const [cA, cB, cE, cG, cZ, cO] = cs;
+  const ORDER = ['HUAWEI', 'BETA', 'GAMMA']; // ZETA / OMEGA 不在序内
+
+  /** 展平构造 (配置 × 期下标) 台数表：键 = `${marketKeyOf(c)}|${bi}`（与组件同口径） */
+  const flat = (rows: [bi: number, c: MarketConfig, v: number | null][]): Map<string, number | null> => {
+    const m = new Map<string, number | null>();
+    for (const [bi, c, v] of rows) m.set(`${marketKeyOf(c)}|${bi}`, v);
+    return m;
+  };
+
+  it('品牌堆叠序：按 brandOrder（自有首位 = 视觉置底），序外品牌殿后按量降序；total = 各品牌合计', () => {
+    const vol = flat([
+      [0, cA, 100],
+      [0, cB, 300],
+      [0, cE, 200],
+      [0, cG, 50],
+      [0, cZ, 80],
+      [0, cO, 20],
+    ]);
+    const cols = marketTimeStack(cs, vol, null, ORDER);
+    expect(cols).toHaveLength(1);
+    expect(cols[0].total).toBe(750);
+    expect(cols[0].byBrand.map((b) => b.brand)).toEqual(['HUAWEI', 'BETA', 'GAMMA', 'ZETA', 'OMEGA']);
+    expect(cols[0].byBrand.map((b) => b.vol)).toEqual([100, 500, 50, 80, 20]);
+  });
+
+  it('tierFilter 生效：只聚合该档位配置；与「先过滤 configs 再传 null」等价；无匹配档位 → 空数组', () => {
+    const vol = flat([
+      [0, cA, 100],
+      [0, cB, 300],
+      [0, cG, 50],
+    ]);
+    const colsT = marketTimeStack(cs, vol, '600-800', ORDER);
+    expect(colsT).toHaveLength(1);
+    expect(colsT[0]).toEqual({ total: 150, byBrand: [{ brand: 'HUAWEI', vol: 100 }, { brand: 'GAMMA', vol: 50 }] });
+    const sub = cs.filter((c) => c.tierCode === '600-800');
+    expect(marketTimeStack(sub, vol, null, ORDER)).toEqual(colsT);
+    expect(marketTimeStack(cs, vol, '1000+', ORDER)).toEqual([]);
+  });
+
+  it('null 台数剔除：缺采配置不计入 total 与分段，其余配置照常聚合', () => {
+    const vol = flat([
+      [0, cA, null],
+      [0, cB, 300],
+      [0, cG, null],
+    ]);
+    const cols = marketTimeStack(cs, vol, null, ORDER);
+    expect(cols[0]).toEqual({ total: 300, byBrand: [{ brand: 'BETA', vol: 300 }] });
+  });
+
+  it('total = 0 的期照常输出（空档位），期数由键集推断', () => {
+    const vol = flat([
+      [0, cA, 100],
+      [0, cB, 300],
+      [1, cA, null],
+      [1, cB, null],
+      [1, cE, null],
+      [1, cG, null],
+      [1, cZ, null],
+      [1, cO, null],
+    ]);
+    const cols = marketTimeStack(cs, vol, null, ORDER);
+    expect(cols).toHaveLength(2);
+    expect(cols[0].total).toBe(400);
+    expect(cols[1]).toEqual({ total: 0, byBrand: [] });
+  });
+
+  it('跨多桶聚合：期与期独立、同品牌跨档位合并、缺采期与在架期交错', () => {
+    const vol = flat([
+      [0, cB, 300],
+      [0, cE, 200],
+      [0, cA, 100],
+      [1, cB, 120],
+      [1, cE, 80],
+      [1, cA, null],
+      [2, cB, 40],
+      [2, cE, 60],
+      [2, cA, 90],
+      [2, cG, 30],
+    ]);
+    const cols = marketTimeStack(cs, vol, null, ORDER);
+    expect(cols.map((c) => c.total)).toEqual([600, 200, 220]);
+    expect(cols[0].byBrand).toEqual([{ brand: 'HUAWEI', vol: 100 }, { brand: 'BETA', vol: 500 }]);
+    expect(cols[1].byBrand).toEqual([{ brand: 'BETA', vol: 200 }]);
+    expect(cols[2].byBrand).toEqual([
+      { brand: 'HUAWEI', vol: 90 },
+      { brand: 'BETA', vol: 100 },
+      { brand: 'GAMMA', vol: 30 },
+    ]);
+  });
+
+  it('档位过滤后接环比表：contributionRows 只出该档位品牌/产品行，其他档位变化不计入合计', () => {
+    const sub = cs.filter((c) => c.tierCode === '600-800'); // HUAWEI A1 + GAMMA G1
+    const prev = new Map<string, number | null>([
+      [marketKeyOf(cA), 100],
+      [marketKeyOf(cG), 50],
+      [marketKeyOf(cB), 300], // 200-400 档位：应被档位过滤挡在表外
+    ]);
+    const sel = new Map<string, number | null>([
+      [marketKeyOf(cA), 94],
+      [marketKeyOf(cG), 70],
+      [marketKeyOf(cB), 400],
+    ]);
+    const { rows, total } = contributionRows(sub, prev, sel, 'brand');
+    expect(rows.map((r) => [r.key, r.delta])).toEqual([
+      ['GAMMA', 20],
+      ['HUAWEI', -6],
+    ]);
+    expect(total).toBe(14); // BETA 的 +100 不入（档位已滤）
+    // 产品粒度同口径：两行 = 该档位的两个配置
+    const prod = contributionRows(sub, prev, sel, 'product');
+    expect(prod.rows.map((r) => [r.key, r.delta])).toEqual([
+      [marketKeyOf(cG), 20],
+      [marketKeyOf(cA), -6],
+    ]);
+  });
+
+  it('marketTierOptions：实际出现的档位按产业阶梯序去重；空配置 → 空', () => {
+    const ladder = ['<200', '200-400', '400-600', '600-800', '800-1000', '1000+'];
+    expect(marketTierOptions(cs, ladder)).toEqual(['200-400', '400-600', '600-800', '800-1000']);
+    expect(marketTierOptions([], ladder)).toEqual([]);
   });
 });
 

@@ -537,6 +537,73 @@ export function enumerateBuckets(g: Granularity, startId: string, endId: string)
   return ids.sort().map((id) => ({ id, xLabel: id }));
 }
 
+// ---------------- 时间轴刻度计划（第一百一十九轮） ----------------
+// 需求（走查会）：时间轴左右边界完整显示——周 = YYYYMMDD、月 = YYYYMM、季 = YYYYQn；
+// 中间刻度省年份，跨年时在换年刻度下补年份行。三个消费方同源：图轴（chartModel）、
+// 刷选轨道（XBrush / 面板独立轨道）、大盘卡时间柱（MarketBoard）。
+
+/** 桶完整时间文案：周 = 锚日 YYYYMMDD / 月 = YYYYMM / 季 = YYYYQn（dimTime 未含该周时回退桶号） */
+export function fullBucketLabel(g: Granularity, id: string): string {
+  if (g === 'week') {
+    const r = dimTime.find((x) => x.week_id === id);
+    return r ? r.week_wed_date.replace(/-/g, '') : id;
+  }
+  return id;
+}
+
+/** 桶短文案（省年份）：周 = MM-DD / 月 = MM / 季 = Qn */
+export function shortBucketLabel(g: Granularity, id: string): string {
+  if (g === 'week') {
+    const r = dimTime.find((x) => x.week_id === id);
+    return r ? r.week_wed_date.slice(5) : id;
+  }
+  if (g === 'month') return id.slice(4);
+  return `Q${id.slice(5)}`;
+}
+
+function bucketYearOf(g: Granularity, id: string): string {
+  if (g !== 'week') return id.slice(0, 4);
+  const r = dimTime.find((x) => x.week_id === id);
+  return r ? r.week_wed_date.slice(0, 4) : id.slice(0, 4);
+}
+
+export interface AxisTickPlan {
+  /** 展示刻度的下标（升序；含完整格式的边界刻度） */
+  indexes: number[];
+  /** 边界刻度（完整格式、加粗） */
+  isEdge: (i: number) => boolean;
+  /** 主行文案：边界 = 完整格式；中间 = 短格式 */
+  dateText: (i: number) => string;
+  /** 副行年份：仅跨年区间里「换年」的那根中间刻度有值（边界刻度年份已内联，恒 null） */
+  yearText: (i: number) => string | null;
+}
+
+/** 刻度计划：marks（图轴两端 / 查看窗口两端）恒显示且完整格式；中间按 step 抽稀；
+ *  与 mark 距离 ≤1 的抽稀刻度让位，防边界完整文案与相邻短文案叠字。 */
+export function axisTickPlan(g: Granularity, ids: string[], step: number, marks: number[]): AxisTickPlan {
+  const n = ids.length;
+  const markSet = new Set(marks.filter((m) => m >= 0 && m < n));
+  const raw: number[] = [];
+  for (let i = 0; i < n; i += Math.max(1, step)) raw.push(i);
+  const candidates = [...new Set([...raw, ...markSet])].sort((a, b) => a - b);
+  const indexes = candidates.filter((i) => markSet.has(i) || ![...markSet].some((m) => Math.abs(m - i) <= 1));
+  const shown = indexes;
+  return {
+    indexes,
+    isEdge: (i) => markSet.has(i),
+    dateText: (i) => (markSet.has(i) ? fullBucketLabel(g, ids[i]) : shortBucketLabel(g, ids[i])),
+    yearText: (i) => {
+      if (markSet.has(i)) return null;
+      const k = shown.indexOf(i);
+      const prev = k > 0 ? shown[k - 1] : -1;
+      for (let m = prev + 1; m <= i; m++) {
+        if (m > 0 && bucketYearOf(g, ids[m]) !== bucketYearOf(g, ids[m - 1])) return bucketYearOf(g, ids[m]);
+      }
+      return k === 0 ? bucketYearOf(g, ids[i]) : null;
+    },
+  };
+}
+
 /** 时点页签日期（第五十四轮追补①）：窗口末桶内最新日历周 → 周三锚日 MM-DD。 *  月/季粒度不再显示 2026-10 / 2026Q4——时点恒为「最新那一周对应的那一天」
  *  （用户：时点随粒度在 10-07 / 2026-10 / 2026Q4 之间跳变，后两者不是「一天」）。
  *  窗口平移到过去时跟随窗口（与摘要条数值口径一致），找不到回退 null。 */
