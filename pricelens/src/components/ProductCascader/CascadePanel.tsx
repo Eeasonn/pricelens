@@ -6,7 +6,10 @@
 // 第一百一十五轮（评审，对齐国家筛选器交互）：
 //  - 父级行尾加右向小箭头；下一层只在「点击」后展开（移除悬停自动展开）；
 //  - 每列宽度自适应内容（长产品名/型号不再省略号截断；上限防列失控）。
-// 供 ProductBox（我司/竞品级联）与 PlatformBox（平台→店铺）复用
+// 供 ProductBox（自有产品级联）、PlatformBox（平台→店铺）与选择产品浮窗复用。
+// 第一百一十七轮二次迭代：fill 模式——面板填满父容器宽度，列按内容基础宽 +
+// 弹性权重分配剩余宽度，行文本不再省略号截断（窄容器时整面板横向滚动兜底），
+// 高度固定（height 透传，不随内容自适应跳变）。
 // ============================================================
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Checkbox, Tooltip } from 'antd';
@@ -51,7 +54,7 @@ export function measureText(s: string): number {
 
 /** 列宽自适应（第一百一十五轮）：最长行文本 + 行内 chrome（复选框/前置/箭头/行尾）
  *  + 呼吸位；min/max 钳制。extraW = 调用方对行尾内容（颜色胶囊等）的额外预留。 */
-function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; max?: number; extraW?: number }): number {
+function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; max?: number; extraW?: number; noMaxClip?: boolean }): number {
   const chrome =
     2 * 10 + // 行左右 padding
     6 + // 文本前 gap
@@ -61,7 +64,7 @@ function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; max?: nu
     (opts.extraW ?? 0);
   const textW = items.reduce((w, i) => Math.max(w, measureText(i.label + (i.locked ? '🔒' : ''))), 0);
   const min = opts.min ?? 148;
-  const max = opts.max ?? 380;
+  const max = opts.noMaxClip ? 1600 : (opts.max ?? 380);
   return Math.min(max, Math.max(min, Math.ceil(textW * 1.06) + chrome + 8));
 }
 
@@ -69,14 +72,17 @@ export interface CascadeColumnSpec {
   /** 固定列宽；缺省 = 按内容自适应（第一百一十五轮） */
   width?: number;
   items: CascadeRowItem[];
-  /** 自适应下限/上限（缺省 148 / 380） */
+  /** 自适应下限/上限（缺省 148 / 380；fill 模式上限放开到 1600，信息优先） */
   min?: number;
   max?: number;
   /** 行尾内容（颜色胶囊等）的宽度预留 */
   extraW?: number;
+  /** fill 模式弹性权重（缺省 1）：剩余宽度按权重摊给各列 */
+  flex?: number;
 }
 
-function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean }) {
+function Column({ items, width, last, open, fillFlex, height }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean; fillFlex?: number; height?: number }) {
+  const noClip = fillFlex != null;
   const hasActive = items.some((item) => item.active);
   const activeKey = items.find((item) => item.active)?.key;
   const columnRef = useRef<HTMLDivElement>(null);
@@ -97,9 +103,19 @@ function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: 
     <div
       ref={columnRef}
       role="group"
-      style={{
+      style={fillFlex != null ? {
+        // fill 模式：基础宽 = 内容自适应（flex-basis），剩余宽度按权重摊入；
+        // min-width 保持 auto（flex 默认）+ 文本 nowrap → 内容永不截断，
+        // 父容器窄时整体横向滚动兜底
+        flex: `${fillFlex} 1 ${width}px`,
+        height: height ?? 348,
+        overflowY: 'auto',
+        borderRight: last ? undefined : `1px solid ${color.hairline}`,
+        background: color.canvas,
+        boxSizing: 'border-box',
+      } : {
         width,
-        maxHeight: 328,
+        maxHeight: height ?? 328,
         overflowY: 'auto',
         borderRight: last ? undefined : `1px solid ${color.hairline}`,
         background: color.canvas,
@@ -174,8 +190,8 @@ function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: 
               fontSize: fontSize.bodySm,
               color: item.locked ? color.hairlineStrong : color.ink,
               whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+              overflow: noClip ? 'visible' : 'hidden',
+              textOverflow: noClip ? undefined : 'ellipsis',
             }}
           >
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
@@ -196,26 +212,32 @@ function Column({ items, width, last, open }: { items: CascadeRowItem[]; width: 
   );
 }
 
-/** 多列级联面板（点击展开 + 父子联动勾选，AntD Cascader 范式；列宽自适应） */
-export function CascadePanel({ columns, open = true }: { columns: CascadeColumnSpec[]; open?: boolean }) {
+/** 多列级联面板（点击展开 + 父子联动勾选，AntD Cascader 范式；列宽自适应）。
+ *  fill = 填满父容器宽度（列弹性分配、文本不截断、整面板横滚兜底）；
+ *  height = 列固定高度（fill 模式默认 348，普通模式仍 maxHeight 328）。 */
+export function CascadePanel({ columns, open = true, fill = false, height }: { columns: CascadeColumnSpec[]; open?: boolean; fill?: boolean; height?: number }) {
   return (
     <div
       role="tree"
       style={{
         display: 'flex',
+        width: fill ? '100%' : undefined,
         background: color.canvas,
         borderRadius: radius.control,
         boxShadow: `0 0 0 1px ${color.hairline}`,
-        overflow: 'hidden',
+        overflowX: fill ? 'auto' : 'hidden',
+        overflowY: 'hidden',
       }}
     >
       {columns.map((c, i) => (
         <Column
           key={`${i}-${c.items[0]?.key ?? ''}`}
-          width={c.width ?? autoColumnWidth(c.items, c)}
+          width={c.width ?? autoColumnWidth(c.items, { ...c, noMaxClip: fill })}
           items={c.items}
           last={i === columns.length - 1}
           open={open}
+          fillFlex={fill ? (c.flex ?? 1) : undefined}
+          height={height}
         />
       ))}
     </div>

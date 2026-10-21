@@ -341,10 +341,17 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
   // 先把数据层缺省国家切到链接指定国家，再按该国对标矩阵带出对比（否则会沿用持久化国家的对标）
   syncScopeRegistries(url.filters.countryCode ?? base.countryCode);
   if (url.filters.mains?.length) {
+    // URL 只声明主品结构；对比区尽量沿用持久化里同型号卡的手动搭配
+    //（否则刷新/分享链接会清掉用户手动配好的对比），自动模式再按矩阵重算
+    const persisted = base.mains;
+    const merged = url.filters.mains.map((card) => {
+      const prev = persisted.find((p) => p.modelId === card.modelId);
+      return prev ? { ...card, compares: prev.compares } : card;
+    });
     restored = {
       ...restored,
       ...url.filters,
-      ...(restored.autoMatch ? { mains: reapplyAuto(url.filters.mains) } : {}),
+      mains: restored.autoMatch ? reapplyAuto(merged) : merged,
     };
   } else if (Object.keys(url.filters).length > 0) {
     restored = { ...restored, ...url.filters };

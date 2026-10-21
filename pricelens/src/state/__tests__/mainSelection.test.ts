@@ -12,10 +12,12 @@ import {
   flatSelections,
   groupToCards,
   isHuaweiModel,
+  mapConfigsToProduct,
   migrateV10,
   reapplyAuto,
   selKey,
 } from '../mainSelection';
+import { buildProductTree } from '../../components/ProductCascader/tree';
 
 const ruOwn = dimProduct.find((p) => p.is_own && p.countries.includes('RU'))!;
 const ruOwnModel = ruOwn.sku_id.split('__')[0];
@@ -142,5 +144,44 @@ describe('flatSelections / groupToCards / clampMains', () => {
     const clamped = clampMains([over]);
     expect(clamped[0].configs).toHaveLength(1);
     expect(clamped[0].compares.length).toBeLessThanOrEqual(cardQuota(clamped[0]));
+  });
+});
+
+describe('mapConfigsToProduct（切换主品产品的配置/颜色映射）', () => {
+  const nodeOf = (modelId: string, romram: string) =>
+    buildProductTree('phone', 'RU').flatMap((b) => b.series).flatMap((s) => s.models).find((m) => m.modelId === modelId)?.romrams.find((r) => r.romram === romram);
+
+  it('同配置保留 + 颜色映射同色 SKU、缺失回默认最低价色', () => {
+    const puraPro = dimProduct.find((p) => p.is_own && p.countries.includes('RU') && p.industry === 'phone' && p.model_name.includes('90s Pro') && !p.model_name.includes('Max'))!;
+    const proMax = dimProduct.find((p) => p.is_own && p.industry === 'phone' && p.model_name === 'Pura 90s Pro Max')!;
+    const fromId = proMax.sku_id.split('__')[0];
+    const toId = puraPro.sku_id.split('__')[0];
+    const oldRom = proMax.romram;
+    const oldNode = nodeOf(fromId, oldRom)!;
+    const oldSel: ProductSelection = { modelId: fromId, romram: oldRom, skuIds: [oldNode.colors[0].skuId] };
+    const out = mapConfigsToProduct([oldSel], fromId, toId, nodeOf, () => (nodeOf(toId, oldRom) ? [oldRom] : [(dimProduct.find((p) => p.sku_id.startsWith(toId + '__'))!.romram)]));
+    expect(out).toHaveLength(1);
+    expect(out[0].modelId).toBe(toId);
+    const newNode = nodeOf(toId, out[0].romram)!;
+    expect(newNode.colors.some((c) => c.skuId === out[0].skuIds[0])).toBe(true);
+    // 同色优先：旧色在新产品存在 → SKU 即同色
+    const oldColor = oldNode.colors[0].color.toLowerCase();
+    const mappedColor = newNode.colors.find((c) => c.skuId === out[0].skuIds[0])!.color.toLowerCase();
+    if (newNode.colors.some((c) => c.color.toLowerCase() === oldColor)) {
+      expect(mappedColor).toBe(oldColor);
+    }
+  });
+
+  it('无同配置时回退新产品首个配置，结果去重', () => {
+    const a = dimProduct.find((p) => p.is_own && p.industry === 'phone' && p.model_name === 'Pura 80 Ultra')!;
+    const b = dimProduct.find((p) => p.is_own && p.industry === 'phone' && p.model_name === 'Pura 80')!;
+    const fromId = a.sku_id.split('__')[0];
+    const toId = b.sku_id.split('__')[0];
+    const bFirst = dimProduct.find((p) => p.sku_id.startsWith(toId + '__'))!.romram;
+    const sels: ProductSelection[] = [0, 1].map(() => ({ modelId: fromId, romram: a.romram, skuIds: [a.sku_id] }));
+    const out = mapConfigsToProduct(sels, fromId, toId, nodeOf, () => [bFirst]);
+    expect(out).toHaveLength(1);
+    expect(out[0].romram).toBe(bFirst);
+    expect(out[0].modelId).toBe(toId);
   });
 });

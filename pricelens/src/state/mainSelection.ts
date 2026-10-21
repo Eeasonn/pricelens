@@ -7,7 +7,7 @@ import { dimProduct } from '../data';
 import type { DimProduct } from '../dataModel/types';
 import type { MainProduct, ProductSelection } from './filtersTypes';
 import { groupsFromBenchmark } from './configStore';
-import { modelIdOf } from '../components/ProductCascader/tree';
+import { defaultColorSkuIds, modelIdOf, type RomramNode } from '../components/ProductCascader/tree';
 
 /** 一张图（合并图 = 唯一主品卡；分离模式 = 某张面板卡）同时展示的折线数上限。
  *  第一百一十七轮：上限前移到选择时（modal 配额），呈现层不再截断。 */
@@ -129,4 +129,37 @@ export function flatSelections(mains: MainProduct[]): { mainSels: ProductSelecti
 /** 把超配额的卡收敛到配额内（迁移兜底）：配置全保留，对比区按序截断 */
 export function clampMains(mains: MainProduct[]): MainProduct[] {
   return mains.map((card) => ({ ...card, compares: card.compares.slice(0, cardQuota(card)) }));
+}
+
+/** 换产品时的配置映射（浮窗「切换」用）：每个旧配置优先映射到新产品同配置
+ *  （romram 归一相等），颜色尽量映射同色 SKU、缺失回默认最低价色；无同配置时
+ *  回退新产品首个配置；结果去重（配置数可能因映射收敛而减少）。 */
+export function mapConfigsToProduct(
+  configs: ProductSelection[],
+  fromModelId: string,
+  toModelId: string,
+  nodeOf: (modelId: string, romram: string) => RomramNode | undefined,
+  fallbackRomrams: () => string[],
+): ProductSelection[] {
+  const normRom = (s: string): string => s.replace(/\s+/g, '');
+  const out: ProductSelection[] = [];
+  for (const old of configs) {
+    const sameRom = fallbackRomrams().find((r) => normRom(r) === normRom(old.romram)) ?? fallbackRomrams()[0];
+    if (sameRom == null) continue;
+    const oldNode = nodeOf(fromModelId, old.romram);
+    const oldColors = new Set(
+      (oldNode?.colors ?? []).filter((c) => old.skuIds.includes(c.skuId)).map((c) => c.color.toLowerCase()),
+    );
+    const newNode = nodeOf(toModelId, sameRom);
+    if (!newNode) continue;
+    const mapped = newNode.colors.find((c) => oldColors.has(c.color.toLowerCase()));
+    const sel: ProductSelection = {
+      modelId: toModelId,
+      romram: sameRom,
+      skuIds: mapped ? [mapped.skuId] : defaultColorSkuIds(newNode),
+    };
+    if (!sel.skuIds.length) continue;
+    if (!out.some((c) => normRom(c.romram) === normRom(sel.romram))) out.push(sel);
+  }
+  return out;
 }
