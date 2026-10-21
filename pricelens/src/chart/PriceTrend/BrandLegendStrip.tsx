@@ -3,7 +3,7 @@
 // 产品名称从图表左侧名称带整体上移到图顶部——横向两行结构：
 // 第一行 = 品牌名（每品牌块左上角，字号略大于产品药丸）；第二行 = 产品药丸
 // （与原名称药丸同语言：品牌色点 + 名称，点击 = 屏蔽/恢复折线，悬停 = 该系列
-// 与对标联动高亮 + 图内起点指引虚线）。我司品牌块恒在最左；块间灰色短竖线
+// 高亮 + 图内起点指引虚线）。我司品牌块恒在最左；块间灰色短竖线
 // 分隔；每品牌块最多预留两个产品的显示宽度，超出出现块内 ‹› 小箭头滚动；
 // 整排放不下时区域两侧出现 ‹› 箭头滚动。
 // ============================================================
@@ -216,22 +216,19 @@ const ARROW_STYLE = {
 export default function BrandLegendStrip({
   series,
   hiddenKeys,
-  pairingsOf,
   onToggleHidden,
   onHover,
 }: {
   /** 系列全集（含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复） */
   series: Series[];
   hiddenKeys: Set<string>;
-  /** 悬停药丸时与该系列联动高亮的系列 key 集（竞品⇄我司映射，与 Chart 同源） */
-  pairingsOf?: (seriesKey: string) => string[];
   onToggleHidden: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
 }) {
   const blocks = blocksOf(series, hiddenKeys);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
-  const hoverSet =
-    hoverKey != null ? new Set([hoverKey, ...(pairingsOf?.(hoverKey) ?? [])]) : null;
+  // 第一百一十六轮：悬停只高亮该系列自身（不再联动其对标竞品/我司）
+  const hoverSet = hoverKey != null ? new Set([hoverKey]) : null;
   const trackRef = useRef<HTMLDivElement>(null);
   const [outer, setOuter] = useState({ start: true, end: true, overflow: false });
   const syncOuter = useCallback(() => {

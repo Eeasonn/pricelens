@@ -368,28 +368,6 @@ export default function PriceTrend(props: {
     [effOwn, effComps],
   );
   const multiProduct = new Set(configSources.map((c) => c.sel.modelId)).size > 1;
-  // 第八十八轮：竞品⇄我司联动映射（seriesKey → 联动系列 keys）——悬停名称药丸时
-  // 折线/药丸联动高亮；按生效对标矩阵构建（合并图与分离面板共用同一份）
-  const pairingsBySeries = useMemo(() => {
-    const m = new Map<string, string[]>();
-    if (effOwn.length === 0) return m;
-    const bench = getEffectiveBenchmark();
-    const add = (a: string, b: string): void => {
-      m.set(a, [...(m.get(a) ?? []), b]);
-    };
-    for (const own of effOwn) {
-      const ownKey = `${own.modelId}__${own.romram.replace(/\s+/g, '')}`;
-      for (const b of bench) {
-        if (b.own_model_id !== own.modelId || b.own_romram !== own.romram) continue;
-        const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
-        if (!p) continue;
-        const compKey = `${p.sku_id.split('__')[0]}__${p.romram.replace(/\s+/g, '')}`;
-        add(ownKey, compKey);
-        add(compKey, ownKey);
-      }
-    }
-    return m;
-  }, [effOwn]);
   const splitActive = splitOn && configSources.length >= 2;
   // 第一百一十五轮：合并模式单图折线 ≤ MAX_LINES_PER_CHART——超出按选择序截断
   // （我司在前、竞品按对标序），被截断者不随屏蔽悄悄补位；分离模式面板常态 ≤5 条不截。
@@ -1114,12 +1092,11 @@ export default function PriceTrend(props: {
                         </span>
                       </div>
                       {/* 品牌分组图例带（第一百一十五轮）：本面板全部系列（含屏蔽者）；
-                          悬停药丸 = 联动高亮 + 起点指引线，点击 = 屏蔽/恢复折线 */}
+                          悬停药丸 = 该系列高亮 + 起点指引线，点击 = 屏蔽/恢复折线 */}
                       <div style={{ height: PANEL_LEGEND_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
                         <BrandLegendStrip
                           series={p.all}
                           hiddenKeys={hiddenKeys}
-                          pairingsOf={(key) => pairingsBySeries.get(key) ?? []}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                         />
@@ -1142,7 +1119,6 @@ export default function PriceTrend(props: {
                         yScale={splitYCfg ?? undefined}
                         hideNamePills // 第一百一十五轮：产品名在面板顶部品牌图例带，图内不再画药丸
                         legendHoverKey={panelLegendHover?.panel === p.key ? panelLegendHover.key : null}
-                        pairingsOf={(key) => pairingsBySeries.get(key) ?? []} // 第八十八轮：竞品⇄我司悬停联动
                         lineShape={lineShape}
                         labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
                         promoBandsOn={promoBandsOn}
@@ -1188,13 +1164,12 @@ export default function PriceTrend(props: {
       ) : (
         <>
           {/* 品牌分组图例带（第一百一十五轮，评审）：产品名称从图左侧名称带上移图顶——
-              第一行品牌名（我司最左）、第二行产品药丸（点击屏蔽/恢复，悬停联动高亮 +
-              起点指引线）；块间灰短竖线分隔，块内/整排溢出走两侧小箭头 */}
+              第一行品牌名（我司最左）、第二行产品药丸（点击屏蔽/恢复，悬停该系列
+              高亮 + 起点指引线）；块间灰短竖线分隔，块内/整排溢出走两侧小箭头 */}
           <div style={{ marginBottom: 6, minWidth: 0 }}>
             <BrandLegendStrip
               series={visSeries}
               hiddenKeys={hiddenKeys}
-              pairingsOf={(key) => pairingsBySeries.get(key) ?? []}
               onToggleHidden={toggleLegend}
               onHover={setLegendHoverKey}
             />
@@ -1208,7 +1183,6 @@ export default function PriceTrend(props: {
             gridTop={gridTop}
             hideNamePills // 第一百一十五轮：产品名在图顶品牌图例带，图内不再画药丸
             legendHoverKey={legendHoverKey}
-            pairingsOf={(key) => pairingsBySeries.get(key) ?? []} // 第八十八轮：竞品⇄我司悬停联动
             showYTicks={showYTicks}
             onShowYTicks={setShowYTicks}
             enableDrill={state.granularity !== 'week'}

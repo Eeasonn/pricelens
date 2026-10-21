@@ -42,6 +42,9 @@ function writeJson(key: string, value: unknown): void {
 
 // ---------------- 默认竞品矩阵（LPL3.config.benchmark） ----------------
 
+/** 每个我司「国家×型号×配置」的生效竞品硬上限（与维表截断、配置编辑侧同一条规则） */
+export const BENCHMARK_CAP_PER_CONFIG = 4;
+
 /**
  * 生效的默认竞品矩阵：用户手动配置（source=manual，存 LPL3.config.benchmark）优先，
  * 未配置时回退 src/data 的 dimBenchmark（source=auto）。
@@ -65,6 +68,8 @@ export function getEffectiveBenchmark(): DimBenchmark[] {
  * 某我司"产品名+ROMRAM"的默认竞品 SKU 列表（按 sort 升序，第 1=主竞品）。
  * 精确匹配 (own_model_id, own_romram)；无该 ROMRAM 行时回退型号级行；再无 → 空。
  * 约定：own_model_id = 型号 id（sku_id 前缀，如 `own-pura-90s-pro-max`，已对真实产物核验）。
+ * 第一百一十六轮：输出钳在每配置 4 款内——维表已按「人工→矩阵列序→替代→自动」截断，
+ * 此处兜底早期手动配置/旧持久化等未经截断的来源。
  */
 export function benchmarkSkuIdsFor(modelId: string, romram: string, countryCode: string = getCurrentCountry()): string[] {
   const rows = getEffectiveBenchmark().filter(
@@ -72,7 +77,10 @@ export function benchmarkSkuIdsFor(modelId: string, romram: string, countryCode:
   );
   const exact = rows.filter((r) => r.own_romram === romram);
   const list = exact.length ? exact : rows;
-  return [...list].sort((a, b) => a.sort - b.sort).map((r) => r.competitor_sku_id);
+  return [...list]
+    .sort((a, b) => a.sort - b.sort)
+    .slice(0, BENCHMARK_CAP_PER_CONFIG)
+    .map((r) => r.competitor_sku_id);
 }
 
 /**

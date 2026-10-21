@@ -271,6 +271,9 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
  * 2) 版本相符 → competitors 照原样恢复（可能为空，不自动补竞品）；
  *    但若我司勾选为空而数据此刻已就绪（典型：数据先生成前打开过、造数后重建），
  *    仅补默认我司产品+其配置竞品。
+ * 3) 第一百一十六轮：竞品自动匹配开时，启动即按当前生效矩阵重算竞品——
+ *    持久化的竞品清单可能产自旧维表（如「每配置最多 4 款」截断生效前），照原样
+ *    复用会与看板实际带出口径脱节；手动模式（autoMatch 关）不动用户勾选。
  */
 function loadBaseState(): FiltersState {
   let restored: FiltersState | null = null;
@@ -295,6 +298,9 @@ function loadBaseState(): FiltersState {
     }
   }
   if (!restored) restored = { ...defaultFilters };
+  if (restored.autoMatch && restored.own.length) {
+    restored.competitors = groupsFromBenchmark(restored.own);
+  }
   return applyScopeDefaults(restored, false);
 }
 

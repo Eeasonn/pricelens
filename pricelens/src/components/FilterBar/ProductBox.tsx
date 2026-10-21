@@ -189,10 +189,10 @@ function ColorFlyout({
 // 已选标签内容用 displayRender 定制（multiple 模式下它就是每个标签的文案；
 // 注意 tagRender 拿到的 value 是 rc-cascader 拼接后的标量 key，不是路径，不可用）。
 
-/** 对标预览列（仅我司级联，第一百一十五轮定版）：只在下钻到「型号」层后出现——
- *  悬停/点击型号列某型号 = 该型号全部映射；悬停某配置只列该配置的精确映射。
- *  行样式与下方产品药丸同语言（品牌色点 + 完整「品牌+产品+型号」），不再星标主竞品；
- *  列宽自适应最长行，与颜色浮层互斥——浮层打开时宽度让位。 */
+/** 对标预览列（仅我司级联，第一百一十六轮定版）：只在下钻点选「配置」后出现——
+ *  产品（型号）层不显示；名单 = 当前国家该配置的生效对标（与看板实际带出的竞品
+ *  同口径，按竞品「产品·配置」去重）。行样式与下方产品药丸同语言（品牌色点 +
+ *  完整「品牌+产品+配置」）；列宽自适应最长行，与颜色浮层互斥——浮层打开时宽度让位。 */
 function BenchPreview({
   modelLabel,
   items,
@@ -245,7 +245,7 @@ function BenchPreview({
           ))}
         </div>
       ) : (
-        <div style={{ marginTop: 6, fontSize: 11, lineHeight: '16px', color: color.mute }}>该产品尚未配置对标竞品</div>
+        <div style={{ marginTop: 6, fontSize: 11, lineHeight: '16px', color: color.mute }}>该配置尚未配置对标竞品</div>
       )}
     </div>
   );
@@ -290,8 +290,8 @@ function ProductCascadeControl({
   const [menuOpen, setMenuOpen] = useState(false);
   // 配置列悬停锚点：高亮与对标预览跟随鼠标（null = 未悬停过，回退首个勾选配置）
   const [activeLeafKey, setActiveLeafKey] = useState<string | null>(null);
-  // 第一百一十五轮：对标预览只在「下钻到型号层」后出现——系列层不出现。
-  // 点击系列/型号行（onActivate）即视为下钻；回到系列层或重开面板即复位。
+  // 第一百一十六轮：对标预览只在「点选具体配置」后出现——产品（型号）层不出现。
+  // 点配置行即视为选定该配置；回到产品层或重开面板即复位。
   const [userDrilled, setUserDrilled] = useState(false);
 
   // Keep string labels for the Cascader tags. The open menu is rendered below.
@@ -432,7 +432,7 @@ function ProductCascadeControl({
       onActivate: () => {
         setActivePath([g.key, g.models[0]?.modelId ?? '']);
         setActiveLeafKey(null);
-        setUserDrilled(false); // 回到系列层：对标预览退场
+        setUserDrilled(false); // 回到产品层：对标预览退场
       },
       onCheckChange: (checked) => updateConfigs(nodes, checked),
     };
@@ -445,7 +445,7 @@ function ProductCascadeControl({
       onActivate: () => {
         setActivePath([group.key, m.modelId]);
         setActiveLeafKey(null);
-        setUserDrilled(true); // 下钻到型号层：对标预览出现
+        setUserDrilled(false); // 产品层：预览等点选具体配置后再出现
       },
       onCheckChange: (checked) => updateConfigs(nodes, checked),
     };
@@ -493,29 +493,33 @@ function ProductCascadeControl({
   }, 0);
   const leafExtraW = Math.ceil(leafChipW + 20);
 
-  // 对标预览名单：仅下钻到型号层后渲染（第一百一十五轮）。悬停在配置行 = 该配置的
-  // 精确映射；否则 = 当前型号的全部映射（含被 4 款上限截断后的生效名单）。
+  // 对标预览名单：点选具体配置后才渲染（第一百一十六轮）。名单 = 当前国家该配置的
+  // 生效对标（country_code 过滤，与 benchmarkSkuIdsFor 同口径），按竞品「产品·配置」
+  // 去重——与看板实际带出的竞品组一一对应。
   const benchPreview = useMemo(() => {
     if (kind !== 'own' || productLevel || !model || !userDrilled) return null;
-    const romram = activeLeafKey != null && activeLeafKey.startsWith(`${model.modelId}|`)
-      ? activeLeafKey.slice(model.modelId.length + 1)
-      : null;
+    if (activeLeafKey == null || !activeLeafKey.startsWith(`${model.modelId}|`)) return null;
+    const romram = activeLeafKey.slice(model.modelId.length + 1);
+    const cc = state.countryCode;
     const seen = new Map<string, { key: string; brand: string; name: string; spec: string }>();
-    for (const b of getEffectiveBenchmark()) {
-      if (b.own_model_id !== model.modelId) continue;
-      if (romram != null && b.own_romram !== romram) continue;
+    const rows = getEffectiveBenchmark()
+      .filter((b) => b.own_model_id === model.modelId && b.own_romram === romram && (b.country_code ?? cc) === cc)
+      .sort((a, b) => a.sort - b.sort);
+    for (const b of rows) {
       const p = dimProduct.find((r) => r.sku_id === b.competitor_sku_id);
-      if (!p || seen.has(p.sku_id)) continue;
-      seen.set(p.sku_id, {
-        key: p.sku_id,
+      if (!p) continue;
+      const groupKey = `${p.sku_id.split('__')[0]}|${p.romram}`;
+      if (seen.has(groupKey)) continue;
+      seen.set(groupKey, {
+        key: groupKey,
         brand: p.brand,
         name: modelNameOf(p.sku_id.split('__')[0]),
         spec: shortRomram(p.romram),
       });
     }
-    const label = `${model.label}${romram != null ? ` ${shortRomram(romram)}` : ''}`;
+    const label = `${model.label} ${shortRomram(romram)}`;
     return <BenchPreview modelLabel={label} items={[...seen.values()]} />;
-  }, [kind, productLevel, model, activeLeafKey, userDrilled]);
+  }, [kind, productLevel, model, activeLeafKey, userDrilled, state.countryCode]);
 
   return (
     <Cascader
@@ -551,7 +555,7 @@ function ProductCascadeControl({
           setActivePath([initialGroup ?? '', firstSelection?.modelId ?? tree[0]?.models[0]?.modelId ?? '']);
           // 配置列初始高亮 = 首个勾选配置（与旧视觉一致），悬停后跟随鼠标
           setActiveLeafKey(firstSelection ? `${firstSelection.modelId}|${firstSelection.romram}` : null);
-          setUserDrilled(false); // 重开面板回到系列层：对标预览不出现
+          setUserDrilled(false); // 重开面板回到产品层：对标预览不出现
         } else {
           setColorPanelKey(null);
           setActiveLeafKey(null);

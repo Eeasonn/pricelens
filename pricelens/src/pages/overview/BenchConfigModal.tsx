@@ -18,7 +18,7 @@ import { TIER_LABELS } from '../../dataModel/aggregate';
 import { getCurrentCountry } from '../../state/currentScope';
 import type { OverviewModel, OverviewRow, OverviewTierBand } from '../../dataModel/aggregate';
 import type { DimBenchmark } from '../../dataModel/types';
-import { getEffectiveBenchmark, notifyConfigChanged, saveBenchmark } from '../../state/configStore';
+import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark, notifyConfigChanged, saveBenchmark } from '../../state/configStore';
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
 import { color, fontSize, formatPrice, radius } from '../../theme/tokens';
 
@@ -110,8 +110,8 @@ export default function BenchConfigModal(props: {
   const addComp = (skuId: string): void => {
     if (!model || !rom) return;
     // 第一百一十五轮（评审拍板）：每个配置最多 4 款竞品——编辑侧同步硬限
-    if (currentRows.length >= 4) {
-      message.warning('每个配置最多 4 款竞品，请先移除后再添加');
+    if (currentRows.length >= BENCHMARK_CAP_PER_CONFIG) {
+      message.warning(`每个配置最多 ${BENCHMARK_CAP_PER_CONFIG} 款竞品，请先移除后再添加`);
       return;
     }
     const nextSort = currentRows.length === 0 ? 1 : Math.max(...currentRows.map((r) => r.sort)) + 1;

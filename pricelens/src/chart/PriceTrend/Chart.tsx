@@ -181,12 +181,8 @@ export interface ChartProps {
   hiddenKeys?: Set<string>;
   /** 名称药丸点击的显隐切换回调；缺省 = 药丸不可切换 */
   onToggleHidden?: (seriesKey: string) => void;
-  /** 第八十八轮：系列联动映射（竞品⇄我司）——悬停名称药丸时返回与该系列
-   *  联动高亮的系列 key 集；缺省 = 无联动（悬停只亮自身） */
-  pairingsOf?: (seriesKey: string) => string[];
-  /** 第一百一十五轮：顶部品牌图例带悬停的产品（受控入站）——图内联动高亮
-   *  该系列 + pairingsOf 映射系列，并在其价格线起点画竖向指引虚线；
-   *  null = 无悬停（图内名称药丸悬停态不受影响） */
+  /** 第一百一十五轮：顶部品牌图例带悬停的产品（受控入站）——图内高亮该系列，
+   *  并在其价格线起点画竖向指引虚线；null = 无悬停（图内名称药丸悬停态不受影响） */
   legendHoverKey?: string | null;
   /** 折线形态（受控；缺省内部状态）。'auto' = 按粒度自适应（第五十四轮追补③：
    *  周=阶梯 / 月季=平滑，默认） */
@@ -407,13 +403,14 @@ export default function Chart(props: ChartProps) {
   const [hoverNameKey, setHoverNameKey] = useState<string | null>(null);
   // 第一百一十五轮：顶部品牌图例带悬停的产品（受控入站）——与图内药丸悬停同语义
   const legendHoverKey = props.legendHoverKey ?? null;
-  // 第八十八轮 联动高亮集合：悬停名称药丸/图例药丸时 = 该系列 + 其映射系列
-  //（我司⇄竞品）；折线悬停聚焦时 = 单系列。非空时集合外的一切（线/药丸/徽标）降透明。
+  // 第一百一十六轮 联动高亮集合：悬停名称药丸/图例药丸时 = 仅该系列自身
+  //（不再联动其对标竞品/我司）；折线悬停聚焦时 = 单系列。非空时集合外的一切
+  //（线/药丸/徽标）降透明。
   const litKeys: string[] | null =
-    legendHoverKey != null && props.pairingsOf
-      ? [legendHoverKey, ...props.pairingsOf(legendHoverKey)]
-      : hoverNameKey != null && props.pairingsOf
-        ? [hoverNameKey, ...props.pairingsOf(hoverNameKey)]
+    legendHoverKey != null
+      ? [legendHoverKey]
+      : hoverNameKey != null
+        ? [hoverNameKey]
         : focusKey != null
           ? [focusKey]
           : null;
