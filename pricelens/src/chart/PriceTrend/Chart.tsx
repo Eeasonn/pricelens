@@ -31,6 +31,10 @@
 //      图例卡），悬停折线（±HIT_PX）高亮该系列、其余降透明 0.15，聚焦系列名称回归；
 //   ④ 月/季 P1 标签候选改「显示值变化点」；多系列时最大/最小降 P1；
 //   ⑤ 空档位画虚线占位框（梯子连续可读）
+// - 第一百一十三轮（评审）：明细浮层联动——浮层取数列 tipIdx = 本图悬停列 ?? 外部
+//   crosshairIdx（第110轮参考线机制的延伸）：分离模式悬停任一面板时间列，其余面板
+//   同列同步出各自的明细浮层（各显各的系列价格；十字实线/快照/下钻/offer 图标仍只
+//   跟真实鼠标）。新增 volumes 入参：量价看板浮层在价格行后追加「销量 …台」行
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover } from 'antd';
@@ -192,6 +196,13 @@ export interface ChartProps {
   crosshairIdx?: number | null;
   /** 本图悬停时间列变化上报（分离模式联动用）；移出绘图区/图顶 = null */
   onCrosshairMove?: (idx: number | null) => void;
+  // ---- 第一百一十三轮（评审）：联动明细浮层 + 销量行 ----
+  /** 量价看板传入的销量序列，与 series.points 下标对齐（同窗同长）；浮层在系列价格行后、
+   *  若该列值非 null 追加一行「销量 …台」；缺省不传或该列 null = 不渲染销量行 */
+  volumes?: (number | null)[];
+  /** 第一百一十三轮（评审）：true = 折线起点旁的系列名称药丸整体不画（量价看板：
+   *  产品名已在面板头，面板内空间留给绘图区）；缺省 false 维持原语义 */
+  hideNamePills?: boolean;
   // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
   // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
@@ -558,6 +569,7 @@ export default function Chart(props: ChartProps) {
         forceNameZone: props.namesInZone === true,
         nameOnlySeries: nameAll.filter((s) => !series.some((v) => v.key === s.key)),
         hiddenKeys: props.hiddenKeys,
+        hideNames: props.hideNamePills === true, // 第一百一十三轮：量价面板禁画名称药丸
       }),
     [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.namesInZone, props.hiddenKeys, nameAll],
   );
@@ -713,6 +725,11 @@ export default function Chart(props: ChartProps) {
     () => buildTierBoxes({ enabled: showTierBand, geom, tierValues }),
     [showTierBand, geom, tierValues],
   );
+
+  // 第一百一十三轮（评审）：明细浮层取数列 = 本图真实悬停列优先，缺省回落外部联动列
+  // （crosshairIdx，第110轮参考线机制延伸）——分离模式悬停任一面板时间列，其余面板
+  // 同列同步出各自的明细浮层。十字实线/快照/下钻图标仍只跟 hoverIdx（真实鼠标）
+  const tipIdx = hoverIdx ?? props.crosshairIdx ?? null;
 
   return (
     <div
@@ -1091,28 +1108,32 @@ export default function Chart(props: ChartProps) {
                 </div>
               );
             })}
-          {/* 悬停浮层（第三十五轮，Keepa 式）：时间 + 各产品折后价；跟随十字竖线，右缘自动左翻 */}
-          {hoverIdx != null &&
-            hoverIdx < geom.n &&
+          {/* 悬停浮层（第三十五轮，Keepa 式）：时间 + 各产品折后价；跟随十字竖线，右缘自动左翻。
+              第一百一十三轮（评审）：条件改 tipIdx（本图悬停列 ?? 外部联动列）——联动出场时
+              浮层 pointerEvents 已是 none，位置翻转/top 钳制逻辑对 tipIdx 通用直接复用 */}
+          {tipIdx != null &&
+            tipIdx < geom.n &&
             (() => {
               const rows = series
-                .map((s) => ({ s, v: primaryPriceOf(s.points[hoverIdx], priceTypes) }))
+                .map((s) => ({ s, v: primaryPriceOf(s.points[tipIdx], priceTypes) }))
                 .filter((r) => r.v != null) as { s: (typeof series)[number]; v: number }[];
               if (rows.length === 0) return null;
+              // 第一百一十三轮：量价看板传入的该列销量（与 points 同下标）；null = 不出销量行
+              const volVal = props.volumes?.[tipIdx] ?? null;
               // 第四十八轮：有 offer 的系列在价格行下附权益行；第五十轮改结构化三字段
               // （折扣/分期/赠品 各占一行，只出有值的字段），随「offer 权益」开关整体显隐
               const offerRows = rows.map((r) =>
-                props.enableOffer ? offerLineItems(r.s.points[hoverIdx]?.offer) : [],
+                props.enableOffer ? offerLineItems(r.s.points[tipIdx]?.offer) : [],
               );
               const nOfferLines = offerRows.reduce((acc, l) => acc + l.length, 0);
-              const x0 = xPxOf(geom, hoverIdx);
+              const x0 = xPxOf(geom, tipIdx);
               // 第六十一轮：浮窗宽度随内容动态适配——三列各取本列最宽数值（ch 单位贴合
               // tabular 数字宽），间距收紧（gap 6），不再用固定 324 留白
               const priceCh = Math.max(...rows.map((r) => fmt_mm(r.v).length));
               const rrpCh = Math.max(
                 2,
                 ...rows.map((r) => {
-                  const rr = r.s.points[hoverIdx].rrp;
+                  const rr = r.s.points[tipIdx].rrp;
                   return rr != null ? fmt_mm(rr).length : 0;
                 }),
               );
@@ -1122,7 +1143,7 @@ export default function Chart(props: ChartProps) {
               const left = flip ? x0 - 16 - W : x0 + 16;
               const top = Math.min(
                 Math.max(geom.plotTop + 8, 40),
-                geom.plotTop + geom.plotHeight - 36 - (rows.length * 20 + nOfferLines * 16),
+                geom.plotTop + geom.plotHeight - 36 - (rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0)),
               );
               return (
                 <div
@@ -1141,10 +1162,10 @@ export default function Chart(props: ChartProps) {
                   }}
                 >
                   <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
-                    {fmt_hoverDate(granularity, series[0]?.points[hoverIdx]?.xLabel ?? '')}
+                    {fmt_hoverDate(granularity, series[0]?.points[tipIdx]?.xLabel ?? '')}
                   </div>
                   {rows.map(({ s, v }, ri) => {
-                    const pt = s.points[hoverIdx];
+                    const pt = s.points[tipIdx];
                     const dim = litKeys != null && !litKeys.includes(s.key);
                     const items = offerRows[ri];
                     // 折扣率胶囊（第五十二轮）：与时点卡同语言（vs RRP；仅折后价口径出）
@@ -1218,6 +1239,32 @@ export default function Chart(props: ChartProps) {
                       </Fragment>
                     );
                   })}
+                  {/* 第一百一十三轮：销量行（量价看板传入 volumes 时）——价格行同语言：
+                      顶部 1px hairline 分隔、行高 18px，小灰字 label + tnum 数值右对齐；
+                      该列值 null（缺采/未传）整行不渲染 */}
+                  {volVal != null && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginTop: 2,
+                        paddingTop: 3,
+                        borderTop: `1px solid ${color.hairline}`,
+                        fontSize: 11,
+                        lineHeight: '18px',
+                      }}
+                    >
+                      <span style={{ color: color.mute, flexShrink: 0 }}>销量</span>
+                      <span
+                        className="tnum"
+                        style={{ marginLeft: 'auto', flexShrink: 0, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}
+                      >
+                        {fmt_mm(Math.round(volVal))}
+                        <span style={{ marginLeft: 2, fontWeight: 400, color: color.mute }}>台</span>
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })()}

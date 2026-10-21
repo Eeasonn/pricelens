@@ -2,21 +2,30 @@
 // 图下「核心信息明细」（第110轮，2026-10-20 评审最重要项）：
 // 价格走势图卡下方的独立明细卡——与图上完全同源（同一可见时间段 × 同一批产品
 // 系列，币种/取数平台/粒度随图联动；分离模式 = 各面板系列并集去重）。
-// 按产品分块（2026-10-20 评审后用户定版）：每个产品一个区块，区块标题 = 品牌色点+品牌+型号+配置，
-// 块内一行 = 一个时间点的取价快照：
+// 按产品分块（2026-10-20 评审后用户定版）：每个产品一个区块，区块标题 = 品牌点+
+// 品牌+型号+配置，块内一行 = 一个时间点的取价快照：
 //   日期（周=周三 MM-DD / 月=YYYY-MM / 季=YYYYQn）｜折后价｜RRP（不划线）｜折扣率（= 折后价/RRP − 1）｜
 //   取价店铺｜Offering（促销/分期/组合权益完整原文，默认两行省略、点击展开）｜取证链接（新窗口）。
-// 默认只列有采数的行（「含缺采周」开关展开全部）；块内日期降序；区块顺序 = 图上系列序（我司在前）。
-// 工具行 = 标题 + 行数 + 产品筛选 chips（默认全开）+「复制为表格」（TSV 进剪贴板，
-// 可直接粘进 Excel/PPT）。零系列时不渲染（页面只有图卡）。
+// 默认只列有采数的行（「含缺采周」开关展开全部）；块内日期降序；区块顺序 = 图上系列序
+//（我司在前）；每个区块自带表头（第一百一十三轮，评审）。
+// 工具行（第一百一十三轮，2026-10-21 评审）= 标题 +「产品」多选下拉（与顶部筛选器
+// 同语言，取代原药丸 chips）+「时间」RangePicker（默认跟随上方图查看的时间段，可在
+// 完整范围内自选；粒度切换后自选失效回到跟随；与图不一致时可「对齐图表」一键回跟）
+// +「含缺采周」开关 +「复制为表格」（TSV 进剪贴板，可直接粘进 Excel/PPT）。
+// 完整范围数据由 index 层经 props.full 一并上报（上方极值筛选范围 × 同一批产品系列）。
+// 零系列时不渲染（页面只有图卡）。
 // ============================================================
-import { useMemo, useRef, useState } from 'react';
-import { Button, Switch, Table } from 'antd';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import dayjs, { type Dayjs } from 'dayjs';
+import { Button, ConfigProvider, DatePicker, Select, Switch, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { CopyOutlined, ExportOutlined } from '@ant-design/icons';
+import zhCN from 'antd/locale/zh_CN';
+import { CalendarOutlined, CloseOutlined, CopyOutlined, ExportOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
+import { filterBarTheme } from '../../components/FilterBar';
+import { bucketIdOfDate, dateOfBucket } from '../../components/FilterBar/timeUtils';
 import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
-import { color, fontSize, formatPrice, motion, radius } from '../../theme/tokens';
+import { color, formatPrice, motion, radius } from '../../theme/tokens';
 import { curveNameOf, dedupeSpecText, offerList } from './chartModel';
 
 export interface DetailBucket {
@@ -78,25 +87,58 @@ async function copyText(text: string): Promise<boolean> {
 export default function DetailTable(props: {
   series: Series[]; // 与图上同源的系列（index 层上报）
   buckets: DetailBucket[]; // 与图上同源的可见时间段
+  /** 完整范围（上方极值筛选范围）数据 + 当前查看窗口在其中下标（第一百一十三轮，
+   *  评审）：表内时间筛选默认跟图（s/e），自选时在完整范围内切片 */
+  full: { series: Series[]; buckets: DetailBucket[]; s: number; e: number };
   currency: CurrencyMode;
   granularity: Granularity;
 }) {
   const { series, buckets, currency, granularity } = props;
-  const [offKeys, setOffKeys] = useState<Set<string>>(new Set()); // 产品筛选 chips：默认全开
+  // 完整范围兜底：full 尚未就绪（空桶）时退回窗口数据，行为与旧版一致
+  const full =
+    props.full != null && props.full.buckets.length > 0
+      ? props.full
+      : { series, buckets, s: 0, e: Math.max(0, buckets.length - 1) };
+  const [offKeys, setOffKeys] = useState<Set<string>>(new Set()); // 产品筛选：默认全开（隐藏的 key 集）
   const [showMissing, setShowMissing] = useState(false); // 「含缺采周」：默认只列有采数的行
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // Offering 点击展开的行
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
+  // 表内自选时间段（第一百一十三轮，评审）：s/e = 完整范围桶下标；null = 跟随上方图
+  const [custom, setCustom] = useState<{ s: number; e: number } | null>(null);
+  useEffect(() => {
+    setCustom(null); // 粒度切换换了桶体系，自选区间随之失效回到跟随
+  }, [granularity]);
+
+  // 生效时间段 = 自选 ?? 图上窗口（下标都相对完整范围，钳进合法区间）
+  const fbLen = full.buckets.length;
+  const range = useMemo(() => {
+    const last = fbLen - 1;
+    if (last < 0) return { s: 0, e: -1 };
+    const r = custom ?? { s: full.s, e: full.e };
+    const e = Math.min(Math.max(r.e, 0), last);
+    const s = Math.min(Math.max(r.s, 0), e);
+    return { s, e };
+  }, [custom, full.s, full.e, fbLen]);
+  const viewBuckets = useMemo(() => full.buckets.slice(range.s, range.e + 1), [full.buckets, range]);
+  const viewSeries = useMemo(
+    () =>
+      full.series
+        .map((s) => ({ ...s, points: s.points.slice(range.s, range.e + 1) }))
+        .filter((s) => s.points.length > 0),
+    [full.series, range],
+  );
+  const brandByKey = new Map(viewSeries.map((s) => [s.key, s.brand])); // 下拉选项/药丸用品牌点
 
   /** 按产品分块：区块顺序 = 系列序（我司在前）；块内日期降序 */
   const groups = useMemo(() => {
-    if (series.length === 0 || buckets.length === 0) return [] as { series: Series; rows: DetailRow[] }[];
+    if (viewSeries.length === 0 || viewBuckets.length === 0) return [] as { series: Series; rows: DetailRow[] }[];
     const out: { series: Series; rows: DetailRow[] }[] = [];
-    for (const s of series) {
+    for (const s of viewSeries) {
       if (offKeys.has(s.key)) continue;
       const rows: DetailRow[] = [];
-      for (let bi = buckets.length - 1; bi >= 0; bi--) {
-        const bucket = buckets[bi];
+      for (let bi = viewBuckets.length - 1; bi >= 0; bi--) {
+        const bucket = viewBuckets[bi];
         const pt: SeriesPoint | undefined = s.points[bi];
         if (!pt) continue;
         if (!showMissing && pt.price == null && pt.rrp == null) continue; // 缺采行默认不列
@@ -121,17 +163,49 @@ export default function DetailTable(props: {
       out.push({ series: s, rows });
     }
     return out;
-  }, [series, buckets, offKeys, showMissing, granularity]);
+  }, [viewSeries, viewBuckets, offKeys, showMissing, granularity]);
   const rows: DetailRow[] = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
 
-  const toggleChip = (key: string): void => {
-    setOffKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  // ---- 时间 RangePicker（与图上下方刷选条同款写法）：日期 ↔ 桶 id ↔ 完整范围下标 ----
+  const granularityLabel: Record<Granularity, string> = { week: '周', month: '月', quarter: '季' };
+  const pickerMode: 'week' | 'month' | 'quarter' = granularity;
+  const formatBucketId = (id: string): string => {
+    if (granularity === 'week' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}-W${id.slice(4)}`;
+    if (granularity === 'month' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}-${id.slice(4)}`;
+    return id;
   };
+  const pickerFormat = (value: Dayjs): string => formatBucketId(bucketIdOfDate(value.toDate(), granularity));
+  const pickerValue: [Dayjs, Dayjs] | null =
+    fbLen > 0 && range.e >= range.s
+      ? [
+          dayjs(dateOfBucket(full.buckets[range.s].id, granularity) ?? new Date()),
+          dayjs(dateOfBucket(full.buckets[range.e].id, granularity) ?? new Date()),
+        ]
+      : null;
+  const disabledDate = (value: Dayjs): boolean => {
+    const id = bucketIdOfDate(value.toDate(), granularity);
+    return !full.buckets.some((b) => b.id === id); // 完整范围之外的日期不可选
+  };
+  /** 日期 → 桶 id → 完整范围下标；id 不在其中时取最近存在的桶（首/尾钳制） */
+  const nearestBucketIdx = (id: string): number => {
+    const exact = full.buckets.findIndex((b) => b.id === id);
+    if (exact >= 0) return exact;
+    if (fbLen === 0) return 0;
+    if (id < full.buckets[0].id) return 0;
+    if (id > full.buckets[fbLen - 1].id) return fbLen - 1;
+    return 0;
+  };
+  const onRangePick = (values: [Dayjs | null, Dayjs | null] | null): void => {
+    const start = values?.[0];
+    const end = values?.[1];
+    if (!start || !end) return;
+    const a = nearestBucketIdx(bucketIdOfDate(start.toDate(), granularity));
+    const b = nearestBucketIdx(bucketIdOfDate(end.toDate(), granularity));
+    setCustom(a <= b ? { s: a, e: b } : { s: b, e: a });
+  };
+  // 自选生效（与图上窗口不一致）时提供「对齐图表」一键回跟随
+  const customActive = custom != null && (custom.s !== full.s || custom.e !== full.e);
+
   const toggleExpand = (key: string): void => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -295,7 +369,8 @@ export default function DetailTable(props: {
 
   return (
     <div>
-      {/* 工具行：标题 + 行数 + 产品筛选 chips + 含缺采周 + 复制为表格 */}
+      {/* 工具行：标题 + 产品筛选下拉 + 时间筛选 + 含缺采周 + 复制为表格
+          （第一百一十三轮，评审：chips/行数撤出，改为与顶部筛选器同语言的下拉控件） */}
       <div
         style={{
           display: 'flex',
@@ -306,43 +381,98 @@ export default function DetailTable(props: {
         }}
       >
         <span style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>核心信息明细</span>
-        <span className="tnum" style={{ fontSize: fontSize.caption, color: color.mute }}>
-          {rows.length} 行
+        {/* 产品筛选：多选下拉（默认全开；取消勾选 = 隐藏该产品，清空 = 全隐藏） */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>产品</span>
+          <ConfigProvider theme={filterBarTheme}>
+            <Select
+              mode="multiple"
+              size="small"
+              maxTagCount="responsive"
+              showSearch
+              optionFilterProp="label"
+              aria-label="产品筛选"
+              placeholder="未选择产品"
+              value={viewSeries.filter((s) => !offKeys.has(s.key)).map((s) => s.key)}
+              options={viewSeries.map((s) => ({ value: s.key, label: dedupeSpecText(curveNameOf(s)) }))}
+              optionRender={(option) => (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <BrandDot brand={brandByKey.get(String(option.value)) ?? ''} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{option.label}</span>
+                </span>
+              )}
+              tagRender={(tag) => (
+                <span
+                  title={typeof tag.label === 'string' ? tag.label : undefined}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    height: 18,
+                    padding: '0 4px 0 7px',
+                    fontSize: 11,
+                    lineHeight: '16px',
+                    color: color.body,
+                    background: color.canvas,
+                    border: `1px solid ${color.hairlineStrong}`,
+                    borderRadius: radius.pill,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <BrandDot brand={brandByKey.get(String(tag.value)) ?? ''} />
+                  {tag.label}
+                  {tag.closable && (
+                    <CloseOutlined
+                      aria-label="取消选择该产品"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        tag.onClose();
+                      }}
+                      style={{ fontSize: 9, color: color.mute, padding: '0 2px', cursor: 'pointer' }}
+                    />
+                  )}
+                </span>
+              )}
+              onChange={(vals: string[]) =>
+                setOffKeys(new Set(viewSeries.filter((s) => !vals.includes(s.key)).map((s) => s.key)))
+              }
+              style={{ minWidth: 170, maxWidth: 340 }}
+            />
+          </ConfigProvider>
         </span>
-        <span aria-hidden style={{ width: 1, height: 14, background: color.hairline, margin: '0 2px' }} />
-        {/* 产品筛选 chips（默认全开；点击切换该系列行显隐，样式与图上名称药丸同语言） */}
-        <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-          {series.map((s) => {
-            const off = offKeys.has(s.key);
-            return (
-              <span
-                key={s.key}
-                role="button"
-                aria-pressed={!off}
-                title={off ? '点击显示该产品' : '点击隐藏该产品'}
-                onClick={() => toggleChip(s.key)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '2px 9px',
-                  fontSize: 11,
-                  lineHeight: '16px',
-                  color: off ? color.mute : color.body,
-                  background: off ? 'transparent' : color.canvas,
-                  border: `1px ${off ? 'dashed' : 'solid'} ${off ? color.hairline : color.hairlineStrong}`,
-                  borderRadius: radius.pill,
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  whiteSpace: 'nowrap',
-                  transition: `border-color ${motion.fast}ms ease, color ${motion.fast}ms ease`,
-                }}
-              >
-                <BrandDot brand={s.brand} />
-                {dedupeSpecText(curveNameOf(s))}
-              </span>
-            );
-          })}
+        {/* 时间筛选：默认跟随上方图查看的时间段；可在完整范围内自选（粒度切换后回到跟随） */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>时间</span>
+          <ConfigProvider locale={zhCN} theme={filterBarTheme}>
+            <DatePicker.RangePicker
+              key={granularity}
+              size="small"
+              aria-label="时间筛选"
+              picker={pickerMode}
+              format={pickerFormat}
+              separator={<span style={{ color: color.mute }}>→</span>}
+              prefix={
+                <span style={{ color: color.mute, fontSize: 11 }}>{granularityLabel[granularity]}</span>
+              }
+              suffixIcon={<CalendarOutlined style={{ color: color.mute }} />}
+              allowClear={false}
+              inputReadOnly
+              disabledDate={disabledDate}
+              value={pickerValue}
+              onChange={onRangePick}
+              style={{ width: 216 }}
+            />
+          </ConfigProvider>
+          {customActive && (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => setCustom(null)}
+              style={{ padding: 0, fontSize: 12, height: 20, whiteSpace: 'nowrap' }}
+            >
+              对齐图表
+            </Button>
+          )}
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 14 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -354,7 +484,8 @@ export default function DetailTable(props: {
           </Button>
         </span>
       </div>
-      {/* 分块明细：每个产品一个区块（标题 = 品牌色点+品牌+型号+配置 + 行数），块内小号表格；整卡 560px 内滚动 */}
+      {/* 分块明细：每个产品一个区块（标题 = 品牌点+品牌+型号+配置 + 我司标签），块内
+          小号表格、每块自带表头（第一百一十三轮，评审）；整卡 560px 内滚动 */}
       <div style={{ maxHeight: 560, overflowY: 'auto', paddingRight: 2 }}>
         {groups.map((g, gi) => (
           <section key={g.series.key} style={{ marginTop: gi === 0 ? 0 : 14 }}>
@@ -365,21 +496,17 @@ export default function DetailTable(props: {
                 gap: 8,
                 padding: '6px 10px',
                 background: g.series.isOwn ? '#f3f8ff' : color.canvasSoft,
-                borderLeft: `3px solid ${g.series.color}`,
                 borderRadius: radius.control,
                 marginBottom: 4,
               }}
             >
               <BrandDot brand={g.series.brand} />
-              <span style={{ fontSize: 13, fontWeight: 650, color: color.ink }}>{dedupeSpecText(g.series.label)}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: color.ink }}>{dedupeSpecText(g.series.label)}</span>
               {g.series.isOwn && (
                 <span style={{ fontSize: 10.5, fontWeight: 600, color: '#0053c2', background: '#e8f1ff', borderRadius: radius.pill, padding: '0 7px', lineHeight: '16px' }}>
                   我司
                 </span>
               )}
-              <span className="tnum" style={{ marginLeft: 'auto', fontSize: fontSize.caption, color: color.mute }}>
-                {g.rows.length} 行
-              </span>
             </div>
             {g.rows.length === 0 ? (
               <div style={{ padding: '6px 10px', fontSize: 12, color: color.mute }}>该时间段内无采集到的价格</div>
@@ -390,7 +517,6 @@ export default function DetailTable(props: {
                 columns={columns}
                 dataSource={g.rows}
                 pagination={false}
-                showHeader={gi === 0}
                 style={{ background: color.canvas }}
               />
             )}

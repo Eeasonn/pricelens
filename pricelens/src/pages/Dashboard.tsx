@@ -19,17 +19,21 @@ import { color, radius, shadow, space } from '../theme/tokens';
  *  PriceTrend 经 onSeriesWindow 上报（与图上同一可见时间段 × 同一批产品系列，
  *  币种/平台/粒度/分离模式随图联动），本层只负责卡片壳与渲染
  *  第112轮（2026-10-21）：图卡与明细卡之间插入「竞品价差」卡（同一 onSeriesWindow
- *  快照同源取数，至少两个系列才渲染；卡内细节见 DiffPanel） */
+ *  快照同源取数，至少两个系列才渲染；卡内细节见 DiffPanel）
+ *  第113轮（2026-10-21 评审）：快照扩带 full（完整范围数据 + 当前查看窗口下标），
+ *  透传明细表支撑表内自选时间段（默认仍与图对齐） */
 export default function Dashboard() {
   const { go } = usePage();
   const { state } = useFilters();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [showTop, setShowTop] = useState(false);
-  // 图上可见窗口的同源快照（PriceTrend 每次系列/时间段变化上报一次）
-  const [trendWindow, setTrendWindow] = useState<{ series: Series[]; buckets: DetailBucket[] }>({
-    series: [],
-    buckets: [],
-  });
+  // 图上可见窗口的同源快照（PriceTrend 每次系列/时间段变化上报一次）；
+  // full = 完整范围（上方极值筛选范围）series × buckets + 窗口在其中下标（第113轮）
+  const [trendWindow, setTrendWindow] = useState<{
+    series: Series[];
+    buckets: DetailBucket[];
+    full: { series: Series[]; buckets: DetailBucket[]; s: number; e: number };
+  }>({ series: [], buckets: [], full: { series: [], buckets: [], s: 0, e: 0 } });
 
   // 追补⑧（总览↔看板闭环①）：上下文条数据——入口型号 + 勾选 ROM + 对标竞品数
   const entryModelId = state.own[0]?.modelId ?? null;
@@ -101,7 +105,7 @@ export default function Dashboard() {
               {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
               <PriceTrend
                 onBackToOverview={backToOverview}
-                onSeriesWindow={(series, buckets) => setTrendWindow({ series, buckets })}
+                onSeriesWindow={(series, buckets, full) => setTrendWindow({ series, buckets, full })}
               />
             </section>
             {/* 竞品价差（第112轮）：图上可见时间段内的竞品×竞品 / 竞品×我司 价差，同源快照取数 */}
@@ -137,6 +141,7 @@ export default function Dashboard() {
                 <DetailTable
                   series={trendWindow.series}
                   buckets={trendWindow.buckets}
+                  full={trendWindow.full}
                   currency={state.currency}
                   granularity={state.granularity}
                 />

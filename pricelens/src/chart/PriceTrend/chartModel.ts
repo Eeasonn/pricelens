@@ -209,6 +209,9 @@ export function buildLabelPlan(p: {
   nameOnlySeries?: Series[];
   /** 第八十二轮：隐藏态 key 集（名称药丸虚线置灰） */
   hiddenKeys?: Set<string>;
+  /** 第一百一十三轮（评审）：true = 不生成任何名称药丸（量价看板面板头已带产品名，
+   *  面板内折线起点旁的药丸撤掉，空间留给绘图区） */
+  hideNames?: boolean;
 }): LabelPlan {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
@@ -286,6 +289,7 @@ export function buildLabelPlan(p: {
   // 名称带（forceNameZone）模式改为等距分布——先收集条目，最后统一排布，
   // 不再进 resolveCollisions 推挤。
   const pushNameItem = (s: Series, hidden: boolean): void => {
+    if (p.hideNames === true) return; // 第一百一十三轮：整体禁画名称药丸
     const pts = s.points;
     const valIdx: number[] = [];
     pts.forEach((pt, i) => {

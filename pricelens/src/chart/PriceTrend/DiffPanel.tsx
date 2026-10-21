@@ -3,11 +3,14 @@
 // 取数与图同源（onSeriesWindow 上报的 series × buckets）：时点 = 可见时间段内
 // 最后一个有折后价的桶；矩阵 = 行产品相对列产品（红 = 行更贵 / 蓝 = 行更便宜），
 // 点格切换下方「价差走势」（方形阶梯，缺采桶断开不连）。
+// 第一百一十三轮（2026-10-21 评审）：价差走势的对改为走势标题行两个下拉直接选
+// 行/列产品（互相排除对方当前项，防止选到自己），与矩阵点格双向同步。
 // ============================================================
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import { Button } from 'antd';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { Button, ConfigProvider, Select } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
+import { filterBarTheme } from '../../components/FilterBar';
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, formatPrice, motion, radius, selectAccent, selectSoft } from '../../theme/tokens';
 import { curveNameOf, dedupeSpecText } from './chartModel';
@@ -186,6 +189,18 @@ export default function DiffPanel(props: {
 
   const asOfText = bucketDateText(granularity, buckets[idx].xLabel);
 
+  // ---- 走势对下拉（第一百一十三轮，评审）：行/列产品直接选，与矩阵点格双向同步 ----
+  const brandByKey = new Map(series.map((s) => [s.key, s.brand]));
+  /** 下拉选项 = 全部系列；disabledKey = 对方当前选中项（防止选到自己） */
+  const pairOptionsOf = (disabledKey: string) =>
+    series.map((s, i) => ({ value: s.key, label: names[i], disabled: s.key === disabledKey }));
+  const renderPairOption = (option: { value?: string | number | null; label?: ReactNode }): JSX.Element => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <BrandDot brand={brandByKey.get(String(option.value)) ?? ''} />
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{option.label}</span>
+    </span>
+  );
+
   const onCopy = async (): Promise<void> => {
     const lines = [['产品', ...names].join('\t')];
     for (let r = 0; r < series.length; r++) {
@@ -331,12 +346,39 @@ export default function DiffPanel(props: {
           ))}
         </div>
       </div>
-      {/* 价差走势：选中对逐桶百分比（方形阶梯，缺采断开）+ 最新/最低/最高 */}
+      {/* 价差走势：选中对逐桶百分比（方形阶梯，缺采断开）+ 最新/最低/最高；
+          对切换 = 行/列两个下拉（与上方矩阵点格双向同步，第一百一十三轮，评审） */}
       <div style={{ marginTop: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginBottom: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-            {names[pair[0]]} 对 {names[pair[1]]}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+          <ConfigProvider theme={filterBarTheme}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Select
+                size="small"
+                showSearch
+                optionFilterProp="label"
+                aria-label="行产品"
+                value={series[pair[0]].key}
+                options={pairOptionsOf(series[pair[1]].key)}
+                optionRender={(option) => renderPairOption(option)}
+                onChange={(key: string) => setSelKeys([key, series[pair[1]].key])}
+                popupMatchSelectWidth={false}
+                style={{ minWidth: 150, maxWidth: 240 }}
+              />
+              <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>对</span>
+              <Select
+                size="small"
+                showSearch
+                optionFilterProp="label"
+                aria-label="列产品"
+                value={series[pair[1]].key}
+                options={pairOptionsOf(series[pair[0]].key)}
+                optionRender={(option) => renderPairOption(option)}
+                onChange={(key: string) => setSelKeys([series[pair[0]].key, key])}
+                popupMatchSelectWidth={false}
+                style={{ minWidth: 150, maxWidth: 240 }}
+              />
+            </span>
+          </ConfigProvider>
           <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 18 }}>
             {stat('最新', trend.latest)}
             {stat('最低', trend.min)}

@@ -1,11 +1,13 @@
 // ============================================================
-// 第112轮（2026-10-21）量价看板：三面板并排（价格折线 + 底部销量柱）。
+// 第一百一十三轮（2026-10-21）量价看板：三面板并排（价格折线 + 底部销量柱）。
 // 面板结构照价格看板分离模式：共享 Y 轴列（SplitAxisColumn，三面板价格并集
 // 算一次 computeYAxis 受控传入，含步长滞回与刷选冻结）、共享 X 刷选条（只调
 // 查看时间段，粒度切换走 actions.setGranularity）、跨面板悬停参考线 + 面板头
 // 销量读数随悬停列联动。时间窗口 / 自适应 / 桶换算与价格看板同口径（§6.5）。
-// 销量柱：绘图区底部 34%，柱层画在价格线之下；上限口径 = 各图独立 / 三图一致 /
-// 对数（标题行 Segmented），单图可用面板头「销量轴」药丸覆写（一致模式禁用）。
+// 销量柱：绘图区底部默认 34%；上限恒为各面板自动 niceCeil(窗口内最大值)，
+// 柱高线性映射。柱区高度调节 = 每图右侧「销量轴」拉伸柄（上下拖 12%..100%、
+// 双击复位 34%，bandFracs 随 yAxisResetKey 复位）；原标题行三档口径 Segmented、
+// 单图上限覆写药丸已删。图内不画名称药丸（产品名在面板头），图贴左缘。
 // 销量为估算口径（dataModel/volume），接入真实销量后替换。
 // 默认三槽：槽1 = 我司首个勾选（无则竞品首个）；槽2/3 = 其对标竞品前两个，
 // 不足用竞品勾选补，仍不足留空；我司首选或国家/产业变化时重置三槽。
@@ -24,7 +26,6 @@ import XBrush from '../chart/PriceTrend/XBrush';
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
 import {
-  NAME_ZONE_W,
   adaptiveRangeOf,
   computeYAxis,
   convertWindowIds,
@@ -40,19 +41,20 @@ import {
   type YScale,
 } from '../chart/PriceTrend/helpers';
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
-import { niceCeil, volumeByBuckets } from '../dataModel/volume';
+import { volumeByBuckets } from '../dataModel/volume';
 import { groupsFromBenchmark } from '../state/configStore';
 import { dimProduct } from '../data';
 import type { AggMode, Series, SeriesPoint } from '../dataModel/types';
 import type { ProductSelection } from '../state/filtersTypes';
 import { brandColorOf, color, fontSize, radius, shadow, space } from '../theme/tokens';
-import VolumeBars from './volume/VolumeBars';
+import VolumeBars, { BAND_FRAC_DEFAULT } from './volume/VolumeBars';
 import PanelHeader, { type VolumeOption } from './volume/PanelHeader';
-import { vMaxOf, type VolumeAxisMode, type VolumeSlot } from './volume/volumeAxis';
+import { vMaxOf, type VolumeSlot } from './volume/volumeAxis';
 
 const SLOTS = 3;
 const PANEL_HEAD_H = 32; // 面板头定高：共享轴列的纵向对齐基准
 const PANEL_GRID_TOP = 14; // 面板图顶窄空气带（同分离模式）
+const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
 
 interface SlotInfo {
   isOwn: boolean;
@@ -106,9 +108,7 @@ export default function VolumePrice() {
   const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null);
-  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
-  const [axisMode, setAxisMode] = useState<VolumeAxisMode>('independent');
-  const [caps, setCaps] = useState<(number | null)[]>([null, null, null]); // 单图销量轴上限覆写
+  const [bandFracs, setBandFracs] = useState<number[]>(() => new Array(SLOTS).fill(BAND_FRAC_DEFAULT)); // 各图柱区高比例（右侧拉伸柄）
   const [hoverIdx, setHoverIdx] = useState<number | null>(null); // 跨面板共享悬停时间列
   const [geoms, setGeoms] = useState<(StripGeom | null)[]>([null, null, null]); // 各面板绘图区横向几何
 
@@ -122,12 +122,11 @@ export default function VolumePrice() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotResetKey]);
 
-  // 换产品/价格类型/币种 → 高度倍率、图例屏蔽与销量轴覆写复位（同看板 §5.6）
+  // 换产品/价格类型/币种 → 高度倍率与销量柱区比例复位（同看板 §5.6）
   const yAxisResetKey = JSON.stringify([slots, state.priceTypes, state.currency]);
   useEffect(() => {
     setSliderScale(1);
-    setHiddenKeys(new Set());
-    setCaps([null, null, null]);
+    setBandFracs(new Array(SLOTS).fill(BAND_FRAC_DEFAULT));
   }, [yAxisResetKey]);
 
   // 粒度切换 → 窗口端点对齐新粒度桶边界（保持同一时间跨度）
@@ -230,23 +229,10 @@ export default function VolumePrice() {
       .filter((s) => s.points.length > 0);
   };
   const panelViews = useMemo(
-    () =>
-      panelData.map((p) => ({
-        ...p,
-        all: sliceVis(p.series), // 名称药丸全集（含被屏蔽系列）
-        vis: sliceVis(p.series).filter((s) => !hiddenKeys.has(s.key)),
-      })),
+    () => panelData.map((p) => ({ ...p, vis: sliceVis(p.series) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [panelData, win, hiddenKeys],
+    [panelData, win],
   );
-  const toggleLegend = (key: string): void => {
-    setHiddenKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
 
   // ---- 共享价格 Y 轴：三面板可见系列并集算一次（步长滞回 + 刷选冻结） ----
   const visUnion = useMemo(() => panelViews.flatMap((p) => p.vis), [panelViews]);
@@ -276,13 +262,8 @@ export default function VolumePrice() {
       ),
     [panelData, cc, state.granularity, winBucketIds],
   );
-  // 三图一致 = 三面板最大值取整；独立/对数 = 各面板自算（单图覆写优先）
-  const unifiedMax = useMemo(() => {
-    let m = 0;
-    for (const vs of volumes) for (const v of vs) if (v != null && v > m) m = v;
-    return niceCeil(m);
-  }, [volumes]);
-  const panelVMax = volumes.map((vs, i) => (axisMode === 'unified' ? unifiedMax : vMaxOf(vs, caps[i])));
+  // 各图销量轴上限恒自动（niceCeil 窗口内最大值）
+  const panelVMax = volumes.map((vs) => vMaxOf(vs));
 
   // 面板头下拉选项：当前国家 × 产业去重到（型号, 配置），分组 [我司][竞品]
   const productOptions = useMemo<{ label: string; options: VolumeOption[] }[]>(() => {
@@ -370,7 +351,7 @@ export default function VolumePrice() {
               padding: space.lg,
             }}
           >
-            {/* 标题行：平台/币种/销量轴口径（右侧）+ 月季汇总 */}
+            {/* 标题行：平台/币种（右侧）+ 月季汇总 */}
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: space.md, marginBottom: space.sm }}>
               <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>量价走势</h2>
               <ConfigProvider theme={filterBarTheme}>
@@ -388,19 +369,6 @@ export default function VolumePrice() {
                     平台 <span style={{ width: 160 }}><PlatformBox /></span>
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>币种 <CurrencyBox /></span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    销量轴
-                    <Segmented
-                      size="small"
-                      value={axisMode}
-                      onChange={(v) => setAxisMode(v as VolumeAxisMode)}
-                      options={[
-                        { label: '各图独立', value: 'independent' },
-                        { label: '三图一致', value: 'unified' },
-                        { label: '对数', value: 'log' },
-                      ]}
-                    />
-                  </span>
                 </div>
               </ConfigProvider>
               {state.granularity !== 'week' && (
@@ -478,9 +446,6 @@ export default function VolumePrice() {
                         isOwn={p.isOwn}
                         brand={p.brand}
                         volume={volumeReading(volumes[p.idx])}
-                        axisMode={axisMode}
-                        cap={caps[p.idx]}
-                        onCap={(v) => setCaps((prev) => prev.map((c, k) => (k === p.idx ? v : c)))}
                         onSelect={(key) => onSlotSelect(p.idx, key)}
                       />
                       <div style={{ position: 'relative' }}>
@@ -490,16 +455,17 @@ export default function VolumePrice() {
                           plotHeight={yCfg.plotHeight}
                           values={volumes[p.idx]}
                           vMax={panelVMax[p.idx]}
-                          mode={axisMode === 'log' ? 'log' : 'linear'}
                           color={p.vis[0]?.color ?? brandColorOf(p.brand)}
                           hoverIdx={hoverIdx}
+                          bandFrac={bandFracs[p.idx] ?? BAND_FRAC_DEFAULT}
+                          onBandFrac={(v) => setBandFracs((prev) => prev.map((f, k) => (k === p.idx ? v : f)))}
                         />
                         <Chart
                           series={p.vis}
                           granularity={state.granularity}
                           currency={state.currency}
                           priceTypes={state.priceTypes}
-                          gridLeft={NAME_ZONE_W}
+                          gridLeft={CHART_GRID_LEFT}
                           gridTop={PANEL_GRID_TOP}
                           chrome={false}
                           axisChrome={false}
@@ -508,10 +474,8 @@ export default function VolumePrice() {
                           enableJump={state.granularity === 'week'}
                           windowKey={`${win.s}:${win.e}:${p.key}`}
                           yScale={yCfg}
-                          namesInZone
-                          nameSeries={p.all}
-                          hiddenKeys={hiddenKeys}
-                          onToggleHidden={toggleLegend}
+                          volumes={volumes[p.idx]}
+                          hideNamePills // 第一百一十三轮（评审）：面板内不画产品药丸，产品名在面板头
                           lineShape={lineShape}
                           showXLabels
                           crosshairIdx={hoverIdx}
