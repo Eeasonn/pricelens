@@ -50,6 +50,7 @@ import type { MainProduct } from '../state/filtersTypes';
 import { brandColorOf, color, fontSize, radius, shadow, space } from '../theme/tokens';
 import VolumeBars, { BAND_FRAC_DEFAULT } from './volume/VolumeBars';
 import PanelHeader, { type VolumeOption } from './volume/PanelHeader';
+import MarketBoard from './volume/MarketBoard';
 import { vMaxOf, type VolumeSlot } from './volume/volumeAxis';
 
 const SLOTS = 3;
@@ -112,6 +113,18 @@ export default function VolumePrice() {
   const [bandFracs, setBandFracs] = useState<number[]>(() => new Array(SLOTS).fill(BAND_FRAC_DEFAULT)); // 各图柱区高比例（右侧拉伸柄）
   const [hoverIdx, setHoverIdx] = useState<number | null>(null); // 跨面板共享悬停时间列
   const [geoms, setGeoms] = useState<(StripGeom | null)[]>([null, null, null]); // 各面板绘图区横向几何
+  // ---- 第118轮（评审）：图内拖选时间段——三面板联动高亮（brush = 已提交，
+  //      brushLive = 拖动中实时预览；高亮只做聚焦分析，不改动查看窗口）----
+  const [brush, setBrush] = useState<[number, number] | null>(null);
+  const [brushLive, setBrushLive] = useState<[number, number] | null>(null);
+  const onBrushChange = (r: [number, number] | null, committing: boolean): void => {
+    if (committing) {
+      setBrushLive(null);
+      setBrush(r);
+    } else {
+      setBrushLive(r);
+    }
+  };
 
   // 首张主分析卡 / 国家 / 产业变化 → 三槽重置为默认（手选槽位此时被重置）
   const slotResetKey = JSON.stringify([state.mains[0]?.modelId ?? null, state.mains[0]?.configs[0]?.romram ?? null, cc, state.industry]);
@@ -214,6 +227,12 @@ export default function VolumePrice() {
     const end = indexOf(state.rangeEnd, Math.max(0, buckets.length - 1));
     return start <= end ? [start, end] : [end, start];
   }, [buckets, state.rangeStart, state.rangeEnd]);
+
+  // 查看窗口/粒度变化 → 高亮时间段下标失义，自动清除（第118轮）
+  useEffect(() => {
+    setBrush(null);
+    setBrushLive(null);
+  }, [win.s, win.e, state.granularity]);
 
   // 窗口切片（同分离模式 sliceVis：含边缘续接标记）
   const sliceVis = (list: Series[]): Series[] => {
@@ -496,6 +515,8 @@ export default function VolumePrice() {
                           onCrosshairMove={setHoverIdx}
                           crosshairY={crossY} // 第一百一十四轮（评审）：横向虚线横跨三面板
                           onCrosshairYMove={setCrossY}
+                          brush={brushLive ?? brush} // 第118轮：三面板联动高亮时间段（拖选实时同步）
+                          onBrushChange={onBrushChange}
                           onGeom={onGeomOf(p.idx)}
                           emptyHint={p.slot ? '该产品在所选时间范围内无数据' : '请选择产品'}
                         />
@@ -529,6 +550,29 @@ export default function VolumePrice() {
               销量为估算口径：按折扣深度、促销档期与上市周期推算，接入销量数据后自动替换。
             </div>
           </section>
+
+          {/* 大盘分析（第118轮，评审）：档位 × 品牌 100% 堆叠柱 + 大盘环比贡献拆解
+              （by 价格档位；默认品牌粒度，可下钻产品）。时间 = 查看窗口内任选一期 */}
+          {buckets.length > 0 && (
+            <section
+              style={{
+                marginTop: space.md,
+                background: color.canvas,
+                boxShadow: shadow.l1,
+                borderRadius: radius.card,
+                padding: space.lg,
+              }}
+            >
+              <MarketBoard
+                cc={cc}
+                industry={state.industry}
+                granularity={state.granularity}
+                buckets={buckets}
+                winS={win.s}
+                winE={win.e}
+              />
+            </section>
+          )}
         </main>
       </div>
     </div>

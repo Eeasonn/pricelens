@@ -43,7 +43,7 @@
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover } from 'antd';
-import { TagOutlined } from '@ant-design/icons';
+import { TagOutlined, CloseOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -215,6 +215,13 @@ export interface ChartProps {
   /** 第一百一十四轮（评审）：'compact' = 精简标签——每系列只标最高/最低/最新三价
    *  （白底胶囊、位置避线），其余数值标签不画；缺省 'detail' = 现行全量标签口径 */
   labelMode?: 'detail' | 'compact';
+  // ---- 第118轮（评审）：图内拖选时间段（量价看板三面板联动高亮分析） ----
+  /** 已提交的高亮时间段（可见窗口桶下标 [起,止]）；null = 无。非空时：时间段外
+   *  整体降透明、悬停明细只响应时间段内、高亮区顶部显示时间范围（点 × 清除） */
+  brush?: [number, number] | null;
+  /** 拖选上报：拖动中 committing=false 实时预览；松手 committing=true 提交或清除
+   *  （拖距过小视为点击：已有高亮 = 清除，无高亮 = 忽略）。缺省 = 不启用拖选 */
+  onBrushChange?: (r: [number, number] | null, committing: boolean) => void;
   // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
   // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
@@ -401,6 +408,13 @@ export default function Chart(props: ChartProps) {
   const focusActive = focusKey != null;
   // 悬停的名称药丸（第八十二轮）：仅该系列的起点指引线可见（默认全部隐藏）
   const [hoverNameKey, setHoverNameKey] = useState<string | null>(null);
+  // ---- 第118轮：图内拖选时间段（量价看板）----
+  // 拖动数据在 ref 内逐帧变化（anchor/当前列/起点横距/是否已越过拖动阈值），
+  // dragging + brushTick 仅驱动重渲；松手提交或清除（见 window 监听 effect）
+  const [brushDragging, setBrushDragging] = useState(false);
+  const [, setBrushTick] = useState(0);
+  const brushDragRef = useRef<{ a: number; b: number; startX: number; moved: boolean } | null>(null);
+  const brushEnabled = props.onBrushChange != null && series.length > 0;
   // 第一百一十五轮：顶部品牌图例带悬停的产品（受控入站）——与图内药丸悬停同语义
   const legendHoverKey = props.legendHoverKey ?? null;
   // 第一百一十六轮 联动高亮集合：悬停名称药丸/图例药丸时 = 仅该系列自身
@@ -566,6 +580,51 @@ export default function Chart(props: ChartProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stripKey]);
 
+  // ---- 第118轮：拖选时间段的 window 级监听（拖出图面仍跟手；松手处提交/清除）----
+  const geomRef = useRef<Geom | null>(null);
+  geomRef.current = geom;
+  useEffect(() => {
+    if (!brushDragging) return;
+    const idxAt = (clientX: number): number | null => {
+      const el = wrapRef.current;
+      const g = geomRef.current;
+      if (!el || !g || g.n === 0) return null;
+      const mx = clientX - el.getBoundingClientRect().left;
+      return Math.min(g.n - 1, Math.max(0, Math.floor(((mx - g.plotLeft) / g.plotWidth) * g.n)));
+    };
+    const onMove = (ev: MouseEvent): void => {
+      const st = brushDragRef.current;
+      if (!st) return;
+      if (Math.abs(ev.clientX - st.startX) > 4) st.moved = true;
+      const idx = idxAt(ev.clientX);
+      if (idx != null && idx !== st.b) {
+        st.b = idx;
+        setBrushTick((t) => t + 1);
+      }
+      if (wrapRef.current) wrapRef.current.style.cursor = 'ew-resize';
+    };
+    const onUp = (): void => {
+      const st = brushDragRef.current;
+      brushDragRef.current = null;
+      setBrushDragging(false);
+      if (wrapRef.current) wrapRef.current.style.cursor = 'default';
+      if (!st) return;
+      if (!st.moved) {
+        // 点击（未越过拖动阈值）：已有高亮 = 清除；无高亮 = 忽略，不产生单列高亮
+        if (props.brush) props.onBrushChange?.(null, true);
+        return;
+      }
+      props.onBrushChange?.([Math.min(st.a, st.b), Math.max(st.a, st.b)], true);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brushDragging]);
+
   // ---- 端点标记（S=真实起点 / E=连续 3 区间无值才确认的截止 / in·out=窗口续接点），
   //      语义详见 chartModel.buildEndpointMarks；canvas 不画默认符号，DOM 徽标接管 ----
   const endpointMarks = useMemo(() => buildEndpointMarks(series), [series]);
@@ -701,7 +760,7 @@ export default function Chart(props: ChartProps) {
       }
       setFocusKey(bestKey != null && bestD <= HIT_PX ? bestKey : null);
     }
-    if (el) el.style.cursor = props.enableDrill ? 'pointer' : 'default';
+    if (el) el.style.cursor = brushDragging ? 'ew-resize' : brushEnabled ? 'crosshair' : props.enableDrill ? 'pointer' : 'default';
   };
 
   const onMouseLeave = (): void => {
@@ -734,6 +793,16 @@ export default function Chart(props: ChartProps) {
         props.onDrill(bestKey, series[0].points[hit.idx].bucketId);
       }
     }
+  };
+
+  // ---- 第118轮：图内按下开始拖选（绘图区内起手；图顶工具行不触发）----
+  const onBrushMouseDown = (e: ReactMouseEvent<HTMLDivElement>): void => {
+    if (!brushEnabled || !geom) return;
+    const hit = locate(e);
+    if (!hit || hit.my < gridTop) return;
+    brushDragRef.current = { a: hit.idx, b: hit.idx, startX: e.clientX, moved: false };
+    setBrushDragging(true);
+    if (wrapRef.current) wrapRef.current.style.cursor = 'ew-resize';
   };
 
   // ---- offer 图标与端点徽标的几何（纯构建见 chartModel） ----
@@ -778,7 +847,13 @@ export default function Chart(props: ChartProps) {
   // 第一百一十三轮（评审）：明细浮层取数列 = 本图真实悬停列优先，缺省回落外部联动列
   // （crosshairIdx，第110轮参考线机制延伸）——分离模式悬停任一面板时间列，其余面板
   // 同列同步出各自的明细浮层。十字实线/快照/下钻图标仍只跟 hoverIdx（真实鼠标）
-  const tipIdx = hoverIdx ?? props.crosshairIdx ?? null;
+  // 第118轮：高亮时间段提交后，悬停明细只响应时间段内（时间段外整体降透明）
+  const tipIdxRaw = hoverIdx ?? props.crosshairIdx ?? null;
+  const brushCommitted = props.brush ?? null;
+  const tipIdx =
+    brushCommitted && tipIdxRaw != null && (tipIdxRaw < brushCommitted[0] || tipIdxRaw > brushCommitted[1])
+      ? null
+      : tipIdxRaw;
 
   return (
     <div
@@ -786,6 +861,7 @@ export default function Chart(props: ChartProps) {
       style={{ position: 'relative', width: '100%', height: totalH } as CSSProperties}
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
+      onMouseDown={onBrushMouseDown}
       onClick={onClick}
     >
       {/* 背景带层（canvas 之下，第三十五轮：点击锁定的灰色列背景已删，只留大促带） */}
@@ -1474,6 +1550,161 @@ export default function Chart(props: ChartProps) {
                 }}
               />
             )}
+          {/* 图内拖选时间段（第118轮，量价看板三面板联动高亮分析）：拖动中/已提交的
+              高亮带 + 时间段外整体降透明 + 高亮区顶部时间范围胶囊（点 × 清除）；
+              无高亮悬停时出「↔ 拖动选择时间段」暗示（视觉暗示可拖选） */}
+          {(() => {
+            if (!geom || !brushEnabled) return null;
+            const drag = brushDragRef.current;
+            const range: [number, number] | null = drag
+              ? [Math.min(drag.a, drag.b), Math.max(drag.a, drag.b)]
+              : (props.brush ?? null);
+            const dateOf = (i: number): string => fmt_hoverDate(granularity, series[0]?.points[i]?.xLabel ?? '');
+            if (!range || range[1] < range[0]) {
+              if (drag || hoverIdx == null) return null;
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: geom.plotLeft + geom.plotWidth / 2,
+                    top: geom.plotTop + 6,
+                    transform: 'translateX(-50%)',
+                    zIndex: 16,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: '2px 10px',
+                      fontSize: 11,
+                      lineHeight: '16px',
+                      color: color.body,
+                      background: 'rgba(255, 255, 255, 0.92)',
+                      border: `1px solid ${color.hairline}`,
+                      borderRadius: radius.pill,
+                      boxShadow: shadow.l2,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    ↔ 拖动选择时间段
+                  </span>
+                </div>
+              );
+            }
+            const [bs, be] = range;
+            const colW = geom.plotWidth / geom.n;
+            const bandLeft = geom.plotLeft + bs * colW;
+            const bandW = (be - bs + 1) * colW;
+            const plotRight = geom.plotLeft + geom.plotWidth;
+            const chipCenter = Math.min(Math.max(bandLeft + bandW / 2, geom.plotLeft + 96), plotRight - 96);
+            return (
+              <>
+                {/* 高亮带（绘图区全高，画在数据线之上、价格标记之下） */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: bandLeft,
+                    top: geom.plotTop,
+                    width: bandW,
+                    height: geom.plotHeight,
+                    background: 'rgba(0, 112, 243, 0.08)',
+                    borderTop: '1px solid rgba(0, 112, 243, 0.5)',
+                    borderBottom: '1px solid rgba(0, 112, 243, 0.5)',
+                    pointerEvents: 'none',
+                    zIndex: 6,
+                  }}
+                />
+                {/* 时间段外降透明（白幕盖住折线/柱/价格标记，浮层与胶囊在其上） */}
+                {bandLeft - geom.plotLeft > 0.5 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: geom.plotLeft,
+                      top: geom.plotTop,
+                      width: bandLeft - geom.plotLeft,
+                      height: geom.plotHeight,
+                      background: 'rgba(255, 255, 255, 0.66)',
+                      pointerEvents: 'none',
+                      zIndex: 15,
+                    }}
+                  />
+                )}
+                {plotRight - (bandLeft + bandW) > 0.5 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: bandLeft + bandW,
+                      top: geom.plotTop,
+                      width: plotRight - (bandLeft + bandW),
+                      height: geom.plotHeight,
+                      background: 'rgba(255, 255, 255, 0.66)',
+                      pointerEvents: 'none',
+                      zIndex: 15,
+                    }}
+                  />
+                )}
+                {/* 高亮区顶部时间范围胶囊（× 清除；按下/点击不透传，避免误起拖选） */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: chipCenter,
+                    top: geom.plotTop + 4,
+                    transform: 'translateX(-50%)',
+                    zIndex: 16,
+                  }}
+                >
+                  <span
+                    onMouseDown={(ev) => ev.stopPropagation()}
+                    onClick={(ev) => ev.stopPropagation()}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '1px 6px 1px 9px',
+                      fontSize: 11,
+                      lineHeight: '17px',
+                      color: selectSoftInk,
+                      background: color.canvas,
+                      border: '1px solid rgba(0, 112, 243, 0.5)',
+                      borderRadius: radius.pill,
+                      boxShadow: shadow.l2,
+                      whiteSpace: 'nowrap',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <span className="tnum">
+                      {dateOf(bs)} – {dateOf(be)}
+                    </span>
+                    {!drag && (
+                      <span
+                        role="button"
+                        aria-label="清除时间段选择"
+                        title="清除时间段选择"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          props.onBrushChange?.(null, true);
+                        }}
+                        style={{
+                          display: 'inline-grid',
+                          placeItems: 'center',
+                          width: 14,
+                          height: 14,
+                          borderRadius: '50%',
+                          cursor: 'pointer',
+                          color: color.mute,
+                        }}
+                      >
+                        <CloseOutlined style={{ fontSize: 8 }} />
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </>
+            );
+          })()}
           {/* 图例悬停指引线（第一百一十五轮）：顶部品牌图例带悬停某产品 → 图内该系列
               价格线起点画竖向虚线（横跨绘图区）+ 起点品牌色小圆点，提示线的位置；
               同时该系列与对标映射系列保持常态、其余降透明（litKeys 机制） */}

@@ -5,8 +5,7 @@ import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
 import FilterBar from '../components/FilterBar';
 import PriceTrend from '../chart/PriceTrend';
-import DetailTable, { type DetailBucket } from '../chart/PriceTrend/DetailTable';
-import DiffPanel from '../chart/PriceTrend/DiffPanel';
+import TrendTables, { type DetailBucket } from '../chart/PriceTrend/TrendTables';
 import PageHeader from '../components/PageHeader';
 import type { Series } from '../dataModel/types';
 import { color, radius, shadow, space } from '../theme/tokens';
@@ -18,10 +17,10 @@ import { color, radius, shadow, space } from '../theme/tokens';
  *  第110轮（2026-10-20 评审）：图卡下方新增「核心信息明细」独立卡——取数由
  *  PriceTrend 经 onSeriesWindow 上报（与图上同一可见时间段 × 同一批产品系列，
  *  币种/平台/粒度/分离模式随图联动），本层只负责卡片壳与渲染
- *  第112轮（2026-10-21）：图卡与明细卡之间插入「竞品价差」卡（同一 onSeriesWindow
- *  快照同源取数，至少两个系列才渲染；卡内细节见 DiffPanel）
- *  第113轮（2026-10-21 评审）：快照扩带 full（完整范围数据 + 当前查看窗口下标），
- *  透传明细表支撑表内自选时间段（默认仍与图对齐） */
+ *  第112~113轮：图卡与明细卡之间插入「竞品价差」卡（矩阵 + 成对走势）。
+ *  第118轮（2026-10-21 评审）：价差与明细两卡合并为一张「时间作列」的横向拖动
+ *  宽表卡（共享表头 = 图上同一时间轴，见 TrendTables）——full 快照仍上报，
+ *  表内时间恒与图对齐，不再自选时间段 */
 export default function Dashboard() {
   const { go } = usePage();
   const { state } = useFilters();
@@ -108,26 +107,8 @@ export default function Dashboard() {
                 onSeriesWindow={(series, buckets, full) => setTrendWindow({ series, buckets, full })}
               />
             </section>
-            {/* 竞品价差（第112轮）：图上可见时间段内的竞品×竞品 / 竞品×我司 价差，同源快照取数 */}
-            {trendWindow.series.length >= 2 && (
-              <section
-                style={{
-                  marginTop: space.md,
-                  background: color.canvas,
-                  boxShadow: shadow.l1,
-                  borderRadius: radius.card,
-                  padding: space.lg,
-                }}
-              >
-                <DiffPanel
-                  series={trendWindow.series}
-                  buckets={trendWindow.buckets}
-                  currency={state.currency}
-                  granularity={state.granularity}
-                />
-              </section>
-            )}
-            {/* 核心信息明细（第110轮，评审）：与图同源的取价快照表，独立卡位于图卡下方 */}
+            {/* 产品价差 + 核心信息明细（第118轮）：合并为共享时间表头的横向拖动宽表，
+                与图上同一可见时间段同源取数 */}
             {trendWindow.series.length > 0 && (
               <section
                 style={{
@@ -138,10 +119,9 @@ export default function Dashboard() {
                   padding: space.lg,
                 }}
               >
-                <DetailTable
+                <TrendTables
                   series={trendWindow.series}
                   buckets={trendWindow.buckets}
-                  full={trendWindow.full}
                   currency={state.currency}
                   granularity={state.granularity}
                 />
