@@ -23,6 +23,7 @@ import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { useFilters } from '../../state/FiltersContext';
 import { usePage } from '../../state/PageContext';
 import type { ProductSelection } from '../../state/filtersTypes';
+import { newCardId } from '../../state/mainSelection';
 import { brandColorOf, color, motion, radius, selectSoft, selectSoftInk, space, localCurrencySymbol } from '../../theme/tokens';
 
 export interface MarketMapProps {
@@ -362,11 +363,15 @@ function DetailFloat({
         compSels.push({ modelId: c.skuId.split('__')[0], romram: c.romram, skuIds: [c.skuId] });
       }
       actions.set({ subjectMode: 'product' });
-      // 第一百一十七轮：整组进看板 = 该型号一张主分析卡（全配置 + 矩阵对比区），
-      // 手动模式（原 autoMatch:false 语义）由 setCardCompares 的退出规则承接
-      actions.setMains([
-        { modelId: model.modelId, configs: model.rows.map((r) => selOf(model.modelId, r.romram)), compares: compSels },
-      ]);
+      // 第一百二十轮：整组进看板 = 每配置一张主分析卡（唯一主品卡形）；
+      // 首卡带入矩阵对比区，其余卡由自动跟随按矩阵补齐（手动模式保持空）
+      actions.setMains(
+        model.rows.map((r, i) => ({
+          id: newCardId(),
+          main: selOf(model.modelId, r.romram),
+          compares: i === 0 ? compSels : [],
+        })),
+      );
       go('dashboard');
       onClose();
     }, 340);
@@ -941,17 +946,17 @@ export default function MarketMap({ models, currency, industryLabel }: MarketMap
     };
   }, [detailModelId]);
 
-  /** 跳看板只看该产品：一张主分析卡（华为 = 全部或单配置；其他品牌 = 该型号成主分析） */
+  /** 跳看板只看该产品：逐配置一张主分析卡（唯一主品卡形；其他品牌 = 该配置成卡） */
   const openTrend = (model: OverviewModel, row?: OverviewRow): void => {
     actions.set({ subjectMode: 'product' });
     if (model.isOwn) {
-      const configs = row ? [selOf(model.modelId, row.romram)] : model.rows.map((r) => selOf(model.modelId, r.romram));
+      const sels = row ? [selOf(model.modelId, row.romram)] : model.rows.map((r) => selOf(model.modelId, r.romram));
       // setMains 走自动跟随：autoMatch 开时按矩阵带出对比区（原语义）
-      actions.setMains([{ modelId: model.modelId, configs, compares: [] }]);
+      actions.setMains(sels.map((sel) => ({ id: newCardId(), main: sel, compares: [] })));
     } else {
       const rep = row ?? model.rows[0];
       if (rep) {
-        actions.setMains([{ modelId: model.modelId, configs: [{ modelId: model.modelId, romram: rep.romram, skuIds: [rep.skuId] }], compares: [] }]);
+        actions.setMains([{ id: newCardId(), main: { modelId: model.modelId, romram: rep.romram, skuIds: [rep.skuId] }, compares: [] }]);
       }
     }
     go('dashboard');

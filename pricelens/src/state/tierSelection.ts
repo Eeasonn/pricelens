@@ -1,6 +1,6 @@
 // ============================================================
-// 按档位主体模式的有效选择集：档位 → 该档全部华为配置按型号成卡，
-// 每卡对比区 = 各自配置的分国对标并集（配额收口）。
+// 按档位主体模式的有效选择集：档位 → 该档全部华为配置逐配置成卡（第一百二十轮：
+// 卡 = 唯一主品），每卡对比区 = 该配置的分国对标（配额收口）。
 // 看板与筛选条共用（看板取有效 mains 画图，筛选条取对比数做摘要），
 // 纯计算无副作用；配置 skuIds 取最低价颜色，与手动勾选的默认行为一致。
 // ============================================================
@@ -9,7 +9,7 @@ import { getEffectiveBenchmark } from './configStore';
 import { lowestPriceColorSku, tierOf } from '../dataModel/aggregate';
 import { getCurrentCountry } from './currentScope';
 import type { FiltersState, MainProduct, ProductSelection } from './filtersTypes';
-import { cardQuota, selKey } from './mainSelection';
+import { cardQuota, MAINS_CAP, selKey } from './mainSelection';
 
 const modelIdOfSku = (skuId: string): string => skuId.split('__')[0];
 
@@ -31,40 +31,28 @@ export function tierSubjectSelections(
   }
   if (configs.length === 0) return null;
 
-  // 按型号成卡（保序）
-  const cards: MainProduct[] = [];
-  const byModel = new Map<string, MainProduct>();
-  for (const sel of configs) {
-    let card = byModel.get(sel.modelId);
-    if (!card) {
-      card = { modelId: sel.modelId, configs: [], compares: [] };
-      byModel.set(sel.modelId, card);
-      cards.push(card);
-    }
-    card.configs.push(sel);
-  }
-
-  // 每卡对比区 = 该卡各配置的分国对标并集（生效矩阵，sort 序），配额截断
-  const configKeySet = keys;
+  // 逐配置成卡（保序，卡数封顶）；卡 id 用确定性键——档位模式不持久化，纯派生
   const bySku = new Map(dimProduct.map((p) => [p.sku_id, p]));
-  for (const card of cards) {
-    const ownKeys = new Set(card.configs.map(selKey));
+  const bench = getEffectiveBenchmark();
+  return configs.slice(0, MAINS_CAP).map((sel) => {
+    const card: MainProduct = { id: `tier-${selKey(sel)}`, main: sel, compares: [] };
+    const ownKey = selKey(sel);
     const seen = new Set<string>();
-    const rows = getEffectiveBenchmark()
+    const rows = bench
       .filter((b) => (b.country_code == null || b.country_code === countryCode)
-        && configKeySet.has(`${b.own_model_id}|${b.own_romram}`)
-        && ownKeys.has(`${b.own_model_id}|${b.own_romram}`))
+        && `${b.own_model_id}|${b.own_romram}` === `${sel.modelId}|${sel.romram}`)
       .sort((a, b) => a.sort - b.sort);
     for (const b of rows) {
       const p = bySku.get(b.competitor_sku_id);
       if (!p) continue;
-      const key = `${modelIdOfSku(p.sku_id)}|${p.romram}`;
-      if (seen.has(key) || ownKeys.has(key)) continue;
+      const comp: ProductSelection = { modelId: modelIdOfSku(p.sku_id), romram: p.romram, skuIds: [p.sku_id] };
+      const key = selKey(comp);
+      if (seen.has(key) || key === ownKey) continue;
       seen.add(key);
       if (card.compares.length >= cardQuota(card)) break;
-      const skuId = lowestPriceColorSku(modelIdOfSku(p.sku_id), p.romram);
-      card.compares.push({ modelId: modelIdOfSku(p.sku_id), romram: p.romram, skuIds: skuId ? [skuId] : [p.sku_id] });
+      const skuId = lowestPriceColorSku(comp.modelId, comp.romram);
+      card.compares.push({ ...comp, skuIds: skuId ? [skuId] : [p.sku_id] });
     }
-  }
-  return cards;
+    return card;
+  });
 }

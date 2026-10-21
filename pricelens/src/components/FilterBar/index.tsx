@@ -49,7 +49,7 @@ function ProductPickerEntry() {
   const { state } = useFilters();
   const [open, setOpen] = useState(false);
   const mains = state.mains;
-  const first = mains[0]?.configs[0] ?? null;
+  const first = mains[0]?.main ?? null;
   const compareCount = useMemo(() => new Set(mains.flatMap((m) => m.compares.map(selKey))).size, [mains]);
 
   return (
@@ -58,9 +58,10 @@ function ProductPickerEntry() {
         title={
           mains.length
             ? [
-                ...mains.map(
-                  (m) =>
-                    `主分析：${modelNameOf(m.modelId)}${m.configs.length > 1 ? `（${m.configs.map((c) => shortRomram(c.romram)).join('、')}）` : ''}`,
+                ...mains.map((m) =>
+                  m.main
+                    ? `主分析：${modelNameOf(m.main.modelId)}（${shortRomram(m.main.romram)}）`
+                    : '主分析：未选择（仅有对比产品）',
                 ),
                 compareCount ? `对比：共 ${compareCount} 款` : null,
               ]

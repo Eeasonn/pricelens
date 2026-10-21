@@ -84,8 +84,8 @@ function resolveSlot(slot: VolumeSlot, cc: string): SlotInfo | null {
   return { isOwn: rows[0].is_own === true, brand: rows[0].brand, skuIds };
 }
 
-/** 默认三槽（第一百一十七轮）：槽1 = 首张主分析卡的首个配置；
- *  槽2/3 = 该卡对比区前两个；后续卡（配置 + 对比区）依次补位 */
+/** 默认三槽（第一百一十七轮；第一百二十轮随单主品卡形）：槽1 = 首张主分析卡的主品；
+ *  槽2/3 = 该卡对比区前两个；后续卡（主品 + 对比区）依次补位 */
 function defaultSlots(mains: MainProduct[]): (VolumeSlot | null)[] {
   const picks: VolumeSlot[] = [];
   const push = (s: VolumeSlot | null): void => {
@@ -94,8 +94,7 @@ function defaultSlots(mains: MainProduct[]): (VolumeSlot | null)[] {
     picks.push(s);
   };
   for (const card of mains) {
-    const first = card.configs[0];
-    if (first) push({ modelId: first.modelId, romram: first.romram });
+    if (card.main) push({ modelId: card.main.modelId, romram: card.main.romram });
     for (const c of card.compares) push({ modelId: c.modelId, romram: c.romram });
     if (picks.length >= SLOTS) break;
   }
@@ -130,7 +129,7 @@ export default function VolumePrice() {
   const [brushLive, setBrushLive] = useState<([number, number] | null)[]>([null, null, null]);
 
   // 首张主分析卡 / 国家 / 产业变化 → 三槽重置为默认（手选槽位此时被重置）
-  const slotResetKey = JSON.stringify([state.mains[0]?.modelId ?? null, state.mains[0]?.configs[0]?.romram ?? null, cc, state.industry]);
+  const slotResetKey = JSON.stringify([state.mains[0]?.main?.modelId ?? null, state.mains[0]?.main?.romram ?? null, cc, state.industry]);
   const slotResetRef = useRef(slotResetKey);
   useEffect(() => {
     if (slotResetRef.current === slotResetKey) return;

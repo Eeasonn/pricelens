@@ -83,6 +83,10 @@ import BrandLegendStrip from './BrandLegendStrip';
 /** 分离面板内品牌图例带高度（定高：共享轴列按此对齐面板绘图区顶） */
 const PANEL_LEGEND_H = 44;
 
+/** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之 */
+const panelLabelOf = (card: { main: ProductSelection | null }): string =>
+  card.main ? modelNameOf(card.main.modelId) : '对比产品';
+
 export default function PriceTrend(props: {
   /** 第八十五轮：竞品-only 引导带里「去总览配置对标」的回跳 */
   onBackToOverview?: () => void;
@@ -343,7 +347,7 @@ export default function PriceTrend(props: {
       let series: Series[] = [];
       try {
         series = buildSeries({
-          groups: [...card.configs, ...card.compares].map((g) => ({ ...g, isOwn: false })),
+          groups: [...(card.main ? [card.main] : []), ...card.compares].map((g) => ({ ...g, isOwn: false })),
           granularity: state.granularity,
           startBucket: dataStart,
           endBucket: dataEnd,
@@ -355,7 +359,7 @@ export default function PriceTrend(props: {
       } catch {
         series = []; // 空态不崩
       }
-      return { key: card.modelId, card, series };
+      return { key: card.id, card, series };
     });
   }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry]);
 
@@ -410,7 +414,7 @@ export default function PriceTrend(props: {
   const makePanelDrill = (
     panel: (typeof panelViews)[number],
   ): ((seriesKey: string, bucketId: string) => void) => {
-    const groups = [...panel.card.configs, ...panel.card.compares];
+    const groups = [...(panel.card.main ? [panel.card.main] : []), ...panel.card.compares];
     return (seriesKey: string, bucketId: string) => {
       if (state.granularity === 'week') return;
       const s = panel.series.find((x) => x.key === seriesKey);
@@ -910,7 +914,7 @@ export default function PriceTrend(props: {
                           setDropTarget(null);
                         }}
                         role="button"
-                        aria-label={`拖动调整 ${modelNameOf(p.card.modelId)} 面板位置`}
+                        aria-label={`拖动调整 ${panelLabelOf(p.card)} 面板位置`}
                         title="拖动调整面板顺序"
                         style={{
                           position: 'absolute',
@@ -945,7 +949,7 @@ export default function PriceTrend(props: {
                         }}
                       >
                         <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          {modelNameOf(p.card.modelId)}
+                          {panelLabelOf(p.card)}
                           {p.card.compares.length > 0 && (
                             <span style={{ fontWeight: 400, color: color.mute, marginLeft: 6 }} className="tnum">
                               对比 {p.card.compares.length}

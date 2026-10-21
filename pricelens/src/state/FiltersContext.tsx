@@ -6,8 +6,9 @@
 // · 主分析 = 产品竞品矩阵该国该产业首个有数型号的首个配置（最低价颜色）成卡
 //   + 其分国对标对比区 · 仅折后价 · 时间自适应开 · 对比自动匹配开；
 //   切国家/产业时按同规则重算默认产品
-// 第一百一十七轮（统一产品选择器）：own/competitors → mains（每主品卡自带对比区）；
-// 持久化 v11（v10 载荷自动迁移，见 mainSelection.migrateV10）。
+// 第一百一十七轮（统一产品选择器）：own/competitors → mains（每主品卡自带对比区）。
+// 第一百二十轮（第三次迭代）：卡收敛为唯一主品（main: ProductSelection | null）；
+// 持久化 v12（v10/v11 载荷自动迁移，见 mainSelection.migrateV10/expandV11Cards）。
 // 导出名 FiltersProvider / useFilters 与返回结构 { state, actions } 不变。
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -30,7 +31,7 @@ import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
-import { autoComparesFor, migrateV10, mainsValidFor, reapplyAuto } from './mainSelection';
+import { autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, reapplyAuto, selKey } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -98,8 +99,10 @@ export const defaultFilters: FiltersState = {
  * v10（2026-10-20）：真实数据接入——SKU/渠道 id 空间全部更换，旧持久化整体失效落新默认。
  * v11（2026-10-21，第一百一十七轮）：own/competitors → mains（每主品卡自带对比区）；
  *   v10 载荷读入后自动迁移（migrateV10：自动=逐卡重算、手动=按旧面板口径分配）。
+ * v12（2026-10-21，第一百二十轮）：卡收敛为唯一主品（main: ProductSelection | null）；
+ *   v11 卡 configs[] 展开为逐配置卡（expandV11Cards：首卡继承对比区，其余按自动匹配补）。
  */
-const DEFAULTS_V = 11;
+const DEFAULTS_V = 12;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -123,6 +126,14 @@ function isProductSelectionArray(value: unknown): value is ProductSelection[] {
 }
 
 function isMainProduct(value: unknown): value is MainProduct {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && (value.main === null || isProductSelection(value.main))
+    && isProductSelectionArray(value.compares);
+}
+
+/** v11 旧卡形（modelId + configs[]）——读入后 expandV11Cards 展开 */
+function isV11MainProduct(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return typeof value.modelId === 'string'
     && isProductSelectionArray(value.configs)
@@ -188,12 +199,13 @@ function isAlertProducts(value: unknown): value is FiltersState['alertProducts']
   });
 }
 
-/** 读出的持久化载荷：v11 载 mains；v10 载旧 own/competitors（随后迁移） */
+/** 读出的持久化载荷：v12 载 mains；v11 载旧卡形（随后展开）；v10 载旧 own/competitors */
 interface PersistedPayload extends Partial<FiltersState> {
   v?: number;
   alertThreshold?: number;
   legacyOwn?: ProductSelection[];
   legacyCompetitors?: ProductSelection[];
+  legacyV11Mains?: { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[];
 }
 
 /**
@@ -207,11 +219,14 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed)) return null;
     const v = typeof parsed.v === 'number' ? parsed.v : 0;
-    if (v !== 10 && v !== 11) return null;
+    if (v !== 10 && v !== 11 && v !== 12) return null;
 
-    const checks: Array<[keyof FiltersState | 'legacyOwn' | 'legacyCompetitors', boolean]> = [
-      [v === 11 ? 'mains' : 'legacyOwn', v === 11 ? isMainProductArray(parsed.mains) : isProductSelectionArray(parsed.own)],
-      [v === 11 ? ('mains' as const) : 'legacyCompetitors', v === 11 ? isMainProductArray(parsed.mains) : isProductSelectionArray(parsed.competitors)],
+    const mainsOk = v === 12 ? isMainProductArray(parsed.mains) : v === 11
+      ? Array.isArray(parsed.mains) && parsed.mains.every(isV11MainProduct)
+      : false;
+    const checks: Array<[keyof FiltersState | 'legacyOwn' | 'legacyCompetitors' | 'legacyV11Mains', boolean]> = [
+      [v === 12 ? 'mains' : v === 11 ? ('legacyV11Mains' as const) : 'legacyOwn', v === 10 ? isProductSelectionArray(parsed.own) : mainsOk],
+      [v === 10 ? 'legacyCompetitors' : 'platform', v === 10 ? isProductSelectionArray(parsed.competitors) : isPlatformSelection(parsed.platform)],
       ['platform', isPlatformSelection(parsed.platform)],
       ['granularity', parsed.granularity === 'week' || parsed.granularity === 'month' || parsed.granularity === 'quarter'],
       ['adaptive', typeof parsed.adaptive === 'boolean'],
@@ -234,7 +249,9 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       if (!valid) continue;
       if (key === 'legacyOwn') rest.legacyOwn = parsed.own as ProductSelection[];
       else if (key === 'legacyCompetitors') rest.legacyCompetitors = parsed.competitors as ProductSelection[];
-      else if (key !== 'mains' || v === 11) (rest as UnknownRecord)[key] = (parsed as UnknownRecord)[key];
+      else if (key === 'legacyV11Mains')
+        rest.legacyV11Mains = parsed.mains as { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[];
+      else if (key !== 'mains' || v === 12) (rest as UnknownRecord)[key] = (parsed as UnknownRecord)[key];
     }
     if (isFiniteNumber(parsed.alertThreshold)) rest.alertThreshold = parsed.alertThreshold;
     return rest;
@@ -265,7 +282,7 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
     const skuId = lowestPriceColorSku(modelId, romram, countryCode);
     if (!skuId) continue;
     const config: ProductSelection = { modelId, romram, skuIds: [skuId] };
-    const mains: MainProduct[] = [{ modelId, configs: [config], compares: groupsFromBenchmark([config]) }];
+    const mains: MainProduct[] = [{ id: newCardId(), main: config, compares: groupsFromBenchmark([config]) }];
     return { mains };
   }
   return { mains: [] };
@@ -309,7 +326,7 @@ function loadBaseState(): FiltersState {
   }
   const parsed = readPersistedState(raw);
   if (parsed) {
-    const { alertThreshold, v: _v, legacyOwn, legacyCompetitors, ...rest } = parsed;
+    const { alertThreshold, v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
     restored = { ...defaultFilters, ...rest } as FiltersState;
     // v8 → v9 迁移（追补⑨）：旧单阈值 → 三类同值；订阅保留；own-gap 落缺省 15%
     if (parsed.v === 8 && typeof alertThreshold === 'number') {
@@ -320,9 +337,13 @@ function loadBaseState(): FiltersState {
         'platform-gap': alertThreshold,
       };
     }
-    // v10 → v11（第一百一十七轮）：own/competitors → mains
+    // v10 → v12（第一百一十七轮起）：own/competitors → 逐配置卡
     if (parsed.v === 10) {
       restored.mains = migrateV10(legacyOwn ?? [], legacyCompetitors ?? [], restored.autoMatch);
+    }
+    // v11 → v12（第一百二十轮）：卡 configs[] 展开为逐配置卡
+    if (parsed.v === 11 && legacyV11Mains) {
+      restored.mains = expandV11Cards(legacyV11Mains, restored.autoMatch);
     }
   }
   if (!restored) restored = { ...defaultFilters };
@@ -341,11 +362,13 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
   // 先把数据层缺省国家切到链接指定国家，再按该国对标矩阵带出对比（否则会沿用持久化国家的对标）
   syncScopeRegistries(url.filters.countryCode ?? base.countryCode);
   if (url.filters.mains?.length) {
-    // URL 只声明主品结构；对比区尽量沿用持久化里同型号卡的手动搭配
+    // URL 只声明主品结构；对比区尽量沿用持久化里同「型号×配置」卡的手动搭配
     //（否则刷新/分享链接会清掉用户手动配好的对比），自动模式再按矩阵重算
-    const persisted = base.mains;
+    const persistedByKey = new Map(
+      base.mains.flatMap((c) => (c.main ? [[selKey(c.main), c] as const] : [])),
+    );
     const merged = url.filters.mains.map((card) => {
-      const prev = persisted.find((p) => p.modelId === card.modelId);
+      const prev = card.main ? persistedByKey.get(selKey(card.main)) : undefined;
       return prev ? { ...card, compares: prev.compares } : card;
     });
     restored = {
@@ -389,7 +412,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   // 只写本 Provider 管的键，页签 p 由 PageProvider 写，互不覆盖）
   useEffect(() => {
     const mainKeys = state.mains.flatMap((m) =>
-      m.configs.map((s) => `${s.modelId}__${s.romram.replace(/\s+/g, '')}`),
+      m.main ? [`${m.main.modelId}__${m.main.romram.replace(/\s+/g, '')}`] : [],
     );
     const shop = state.platform?.shopIds[0] ?? null;
     writeUrlPatch({
@@ -443,18 +466,18 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
         setState((s) => ({ ...s, mains: s.autoMatch ? reapplyAuto(list) : list })),
 
       /** 手动改某卡对比区：写入即退出自动匹配（原第三十四轮语义，全局开关） */
-      setCardCompares: (modelId, compares) =>
+      setCardCompares: (cardId, compares) =>
         setState((s) => ({
           ...s,
           autoMatch: false,
-          mains: s.mains.map((c) => (c.modelId === modelId ? { ...c, compares } : c)),
+          mains: s.mains.map((c) => (c.id === cardId ? { ...c, compares } : c)),
         })),
 
-      /** 单卡「自动匹配」：按矩阵重算该卡（不动 autoMatch 开关——手动模式下也可单卡取回） */
-      autoMatchCard: (modelId) =>
+      /** 单卡「自动匹配竞品」：按矩阵重算该卡（不动 autoMatch 开关——手动模式下也可单卡取回） */
+      autoMatchCard: (cardId) =>
         setState((s) => ({
           ...s,
-          mains: s.mains.map((c) => (c.modelId === modelId ? { ...c, compares: autoComparesFor(c) } : c)),
+          mains: s.mains.map((c) => (c.id === cardId ? { ...c, compares: autoComparesFor(c) } : c)),
         })),
 
       /**

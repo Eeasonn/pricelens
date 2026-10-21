@@ -1,56 +1,92 @@
 // ============================================================
-// 选择产品浮窗（第一百一十七轮二次迭代）：
-// 主体 = 若干「分析对」左右排布——左 = 主分析产品（视觉显著、单选感：
-//   一个产品 + 其配置行，浅蓝底强调），中间分界线骑「⚡自动匹配」圆钮
-//   （点击填充右侧），右 = 对比产品（视觉弱、多选感：条目列表）。
-// 条目粒度 = 品牌 + 产品名 + 配置 + 颜色（历史一致：颜色为次级筛选，
-//   默认最低价色，点开可换/多选均价）；主品与对比条目均支持二次编辑——
-//   「切换」浮层内 同品牌换产品 → 同产品换配置 → 同型号换颜色 逐层快速筛。
-// 下方 = 统一产品树（填满弹窗宽度、固定高度、信息不截断；产品行「＋全部
-//   型号」快捷 = 单产品多配置一键成卡；系列行「整系列」快捷 = 多卡）。
-// 多对与快捷产生的多对视觉完全同构（无「组合」痕迹）；配额每卡 ≤8 条
-//   产品线在选择时收口；即改即存，「完成」只关窗。
+// 选择产品浮窗（第一百二十轮，第三次迭代）：
+// 主体 = 若干「分析对」左右排布——左 = 主分析产品（唯一产品+型号+颜色，
+//   浅蓝底强调、单选感），中间分界线骑「⚡ 自动匹配竞品」按钮，右 =
+//   对比产品（弱、多选感：条目列表 + 常驻「＋ 添加对比产品」触发）。
+// 产品树不再常驻：改为「更换/添加」时按需弹出的层级浮窗——条目显示文字
+//   本身分四段（品牌/产品/型号/颜色），点任一段 = 从该层向下续选的树切片
+//   （预定位当前路径）；行尾「更换」= 完整树浮窗的显性入口。
+// 颜色不进树浮窗：点型号行即按默认最低价色落选，换色只在已选条目的色块。
+// 主品空缺 = 空对：允许先挂对比条目，补选主品后沿用（不进 URL）。
+// 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；配额每卡
+//   1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8；即改即存。
 // ============================================================
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Checkbox, Input, Modal, Popover, Select, Tooltip } from 'antd';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Checkbox, Input, Modal, Popover, Tooltip } from 'antd';
 import {
+  CloseOutlined,
   HolderOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
-  ThunderboltFilled,
-  CloseOutlined,
   SwapOutlined,
+  ThunderboltFilled,
 } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
 import {
   buildProductTree,
   brandOfModel,
-  compareRomram,
   defaultColorSkuIds,
   modelNameOf,
   searchProductTree,
-  type ModelNode,
+  type BrandNode,
   type RomramNode,
 } from '../ProductCascader/tree';
 import { CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import ColorFlyout from '../ProductCascader/ColorFlyout';
 import BrandDot, { brandLabelOf } from '../BrandMark';
-import { cardQuota, isHuaweiModel, mapConfigsToProduct, MAX_LINES_PER_CHART, selKey } from '../../state/mainSelection';
+import {
+  cardQuota,
+  isHuaweiModel,
+  MAINS_CAP,
+  MAX_LINES_PER_CHART,
+  newCardId,
+  remapSelection,
+  selKey,
+} from '../../state/mainSelection';
 import { LPL } from '../../state/lplKeys';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 
-const TREE_H = 348; // 产品树固定高度（不随内容自适应跳变）
-const PAIR_LIST_MAX_H = 258; // 分析对列表区最大高（多对时纵向滚动）
+const POPOVER_H = 300; // 树浮窗列高（固定，不随内容跳变）
+const POPOVER_W = { brand: 700, product: 540, config: 240 } as const;
+const PAIR_LIST_MAX_H = 440; // 分析对列表区最大高（多对时纵向滚动）
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
+const nodeSelKey = (r: RomramNode): string => `${r.modelId}|${norm(r.romram)}`;
+
+// ---------------- 浮窗落点上下文 ----------------
+
+type PickerCtx =
+  | { kind: 'add-main' } // 新建一张主分析卡（全局动作/空对左块）
+  | { kind: 'set-main'; cardId: string } // 空对补选主品
+  | { kind: 'replace-main'; cardId: string } // 换主品（对比区保留）
+  | { kind: 'compares'; cardId: string } // 对比区增删（连点，不关浮窗）
+  | { kind: 'replace-compare'; cardId: string; sel: ProductSelection }; // 整条替换
+
+type PickerLevel = keyof typeof POPOVER_W;
 
 // ---------------- 最近使用组合（localStorage LPL3.ui.mainCombos，上限 5） ----------------
 
 interface StoredCombo {
   label: string;
   cards: MainProduct[];
+}
+
+function isSelection(v: unknown): v is ProductSelection {
+  return typeof v === 'object' && v !== null
+    && typeof (v as ProductSelection).modelId === 'string'
+    && typeof (v as ProductSelection).romram === 'string'
+    && Array.isArray((v as ProductSelection).skuIds);
+}
+
+function isStoredCard(v: unknown): v is MainProduct {
+  if (typeof v !== 'object' || v === null) return false;
+  const c = v as MainProduct;
+  return typeof c.id === 'string'
+    && (c.main === null || isSelection(c.main))
+    && Array.isArray(c.compares)
+    && c.compares.every(isSelection);
 }
 
 function readCombos(): StoredCombo[] {
@@ -61,7 +97,8 @@ function readCombos(): StoredCombo[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
       (c): c is StoredCombo =>
-        typeof c === 'object' && c !== null && typeof (c as StoredCombo).label === 'string' && Array.isArray((c as StoredCombo).cards),
+        typeof c === 'object' && c !== null && typeof (c as StoredCombo).label === 'string'
+        && Array.isArray((c as StoredCombo).cards) && (c as StoredCombo).cards.every(isStoredCard),
     );
   } catch {
     return [];
@@ -69,7 +106,7 @@ function readCombos(): StoredCombo[] {
 }
 
 function comboSignature(cards: MainProduct[]): string {
-  return cards.map((c) => `${c.modelId}:${c.configs.map((s) => s.romram).join('/')}`).join('|');
+  return cards.map((c) => (c.main ? selKey(c.main) : `~${c.compares.map(selKey).join('+')}`)).join('|');
 }
 
 // ---------------- 颜色 chip（次级筛选：点开换色 / 多色均价） ----------------
@@ -140,108 +177,666 @@ function ColorChip({
   );
 }
 
-// ---------------- 快速切换（二次编辑：同品牌换产品 / 同产品换配置） ----------------
+// ---------------- 通用小件 ----------------
 
-interface SwitchTarget {
-  brand: string;
-  modelId: string;
-  romram: string;
+/** 树数据索引（浮窗与条目共用；按国家/产业缓存） */
+function useTreeData() {
+  const { state } = useFilters();
+  const fullTree = useMemo(
+    () => buildProductTree(state.industry, state.countryCode),
+    [state.industry, state.countryCode],
+  );
+  const romramByKey = useMemo(() => {
+    const m = new Map<string, RomramNode>();
+    for (const b of fullTree) for (const s of b.series) for (const md of s.models) for (const r of md.romrams) m.set(r.key, r);
+    return m;
+  }, [fullTree]);
+  const romramsByModel = useMemo(() => {
+    const m = new Map<string, RomramNode[]>();
+    for (const b of fullTree) for (const s of b.series) for (const md of s.models) m.set(md.modelId, md.romrams);
+    return m;
+  }, [fullTree]);
+  return { fullTree, romramByKey, romramsByModel };
 }
 
-function QuickSwitch({
-  brands,
-  modelsOfBrand,
-  romramsOfModel,
-  value,
-  onChange,
-  label,
+const usableRomrams = (nodes: RomramNode[]): RomramNode[] =>
+  nodes.filter((r) => r.romram !== '—' || nodes.length === 1);
+
+/** 可点文字段（显示即入口：hover 浅蓝底提示逐层切换） */
+function Seg({
+  children,
+  onClick,
+  strong,
+  chip,
+  small,
+  title,
 }: {
-  brands: { key: string; label: string }[];
-  modelsOfBrand: (brand: string) => { key: string; label: string }[];
-  romramsOfModel: (modelId: string) => string[];
-  value: SwitchTarget;
-  onChange: (next: SwitchTarget) => void;
-  label: string;
+  children: ReactNode;
+  onClick?: () => void;
+  strong?: boolean;
+  chip?: boolean;
+  small?: boolean;
+  title?: string;
 }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <span
+      role="button"
+      title={title}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: chip ? '1px 9px' : '1px 5px',
+        borderRadius: chip ? radius.pill : 5,
+        fontSize: small ? 12 : strong ? 14 : 12.5,
+        fontWeight: strong ? 700 : chip ? 600 : small ? 500 : 400,
+        color: chip ? color.ink : color.body,
+        background: hover ? selectSoft : chip ? color.canvas : 'transparent',
+        border: `1px solid ${chip ? 'rgba(0, 112, 243, 0.40)' : 'transparent'}`,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        minWidth: 0,
+        maxWidth: small ? 170 : 250,
+      }}
+    >
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{children}</span>
+    </span>
+  );
+}
+
+/** 虚线触发 pill（「＋ 添加…」家族统一形态） */
+function AddPill({ label, onClick, disabled, big }: { label: string; onClick?: () => void; disabled?: boolean; big?: boolean }) {
+  return (
+    <span
+      role="button"
+      aria-label={label}
+      onClick={disabled ? undefined : onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        height: big ? 34 : 22,
+        padding: big ? '0 14px' : '0 9px',
+        alignSelf: big ? 'stretch' : undefined,
+        justifyContent: big ? 'center' : undefined,
+        borderRadius: radius.pill,
+        border: `1px dashed ${disabled ? color.hairline : color.hairlineStrong}`,
+        fontSize: big ? 12.5 : 11.5,
+        color: disabled ? color.mute : color.body,
+        background: color.canvas,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <PlusOutlined style={{ fontSize: 10 }} /> {label}
+    </span>
+  );
+}
+
+/** 行尾「更换」ghost pill（= 完整树浮窗的显性入口） */
+function SwapPill({ label, onClick }: { label: string; onClick?: () => void }) {
+  return (
+    <span
+      role="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        height: 20,
+        padding: '0 7px',
+        borderRadius: radius.pill,
+        fontSize: 11,
+        color: color.mute,
+        background: color.canvas,
+        border: `1px solid ${color.hairline}`,
+        cursor: 'pointer',
+        flexShrink: 0,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <SwapOutlined style={{ fontSize: 10 }} /> 更换
+    </span>
+  );
+}
+
+function DeleteX({ label, onClick, size = 11 }: { label: string; onClick: () => void; size?: number }) {
+  return (
+    <span
+      role="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      style={{ display: 'inline-flex', padding: 4, cursor: 'pointer', color: color.mute, flexShrink: 0 }}
+    >
+      <CloseOutlined style={{ fontSize: size }} />
+    </span>
+  );
+}
+
+/** 当前/已选 灰标（树浮窗叶行尾） */
+function StateTag({ text }: { text: string }) {
+  return (
+    <span style={{ fontSize: 10.5, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{text}</span>
+  );
+}
+
+// ---------------- 层级切换树浮窗（产品树的按需切片） ----------------
+
+/** 起始层级 = 条目上被点的文字段：brand = 完整树；product = 系列→产品→型号；
+ *  config = 该产品全部型号（单列）。选完型号落地；对比上下文连点不关。 */
+function LevelSwitchPopover({
+  level,
+  ctx,
+  initialModelId,
+  openSignal,
+  children,
+}: {
+  level: PickerLevel;
+  ctx: PickerCtx;
+  initialModelId?: string;
+  openSignal?: boolean;
+  children: ReactNode;
+}) {
+  const { state, actions } = useFilters();
+  const mains = state.mains;
+  const { fullTree, romramByKey, romramsByModel } = useTreeData();
   const [open, setOpen] = useState(false);
-  const selStyle = { fontSize: 12, width: '100%' };
+  const [search, setSearch] = useState('');
+  const tree = useMemo(() => searchProductTree(fullTree, search), [fullTree, search]);
+
+  useEffect(() => {
+    if (openSignal) setOpen(true);
+  }, [openSignal]);
+
+  // 打开/搜索时定位：优先当前条目的型号路径，否则首个结果
+  const [path, setPath] = useState<[string, string, string] | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const locate = (t: BrandNode[]): [string, string, string] | null => {
+      if (initialModelId) {
+        for (const b of t) {
+          for (const s of b.series) {
+            if (s.models.some((m) => m.modelId === initialModelId)) return [b.key, s.key, initialModelId];
+          }
+        }
+      }
+      const b = t[0];
+      const s = b?.series[0];
+      const m = s?.models[0];
+      return b && s && m ? [b.key, s.key, m.modelId] : null;
+    };
+    setPath(locate(search ? tree : fullTree));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, search]);
+
+  const brand = tree.find((b) => b.key === path?.[0]) ?? tree[0];
+  const series = brand?.series.find((s) => s.key === path?.[1]) ?? brand?.series[0];
+  const model = series?.models.find((m) => m.modelId === path?.[2]) ?? series?.models[0];
+  const activeCard = 'cardId' in ctx ? mains.find((c) => c.id === ctx.cardId) ?? null : null;
+  const comparesCtx = ctx.kind === 'compares';
+  const replaceCompareCtx = ctx.kind === 'replace-compare';
+
+  /** 主品落位：add-main 建卡；set-main 补选；replace-main 整卡替换（颜色同色优先） */
+  const pickConfig = (r: RomramNode): void => {
+    if (comparesCtx) return;
+    const card = activeCard;
+    if (replaceCompareCtx) {
+      if (!card || card.main?.modelId === r.modelId) return;
+      if (card.compares.some((c) => c !== ctx.sel && selKey(c) === nodeSelKey(r))) return;
+      const oldNode = romramByKey.get(`${ctx.sel.modelId}|${ctx.sel.romram}`);
+      actions.setCardCompares(
+        card.id,
+        card.compares.map((c) => (c === ctx.sel ? remapSelection(ctx.sel, oldNode, r) : c)),
+      );
+      setOpen(false);
+      return;
+    }
+    let sel: ProductSelection;
+    if (ctx.kind === 'replace-main' && card?.main) {
+      sel = remapSelection(card.main, romramByKey.get(`${card.main.modelId}|${card.main.romram}`), r);
+    } else {
+      sel = { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) };
+    }
+    if (ctx.kind === 'add-main') {
+      if (mains.some((c) => c.main && selKey(c.main) === selKey(sel))) return;
+      if (mains.length >= MAINS_CAP) return;
+      actions.setMains([...mains, { id: newCardId(), main: sel, compares: [] }]);
+    } else if (card) {
+      actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: sel } : c)));
+    }
+    setOpen(false);
+  };
+
+  /** 对比区加/移一条（连点） */
+  const toggleCompare = (r: RomramNode): void => {
+    if (ctx.kind !== 'compares' || !activeCard) return;
+    const card = activeCard;
+    const exists = card.compares.find((c) => selKey(c) === nodeSelKey(r));
+    if (exists) {
+      actions.setCardCompares(card.id, card.compares.filter((c) => c !== exists));
+      return;
+    }
+    if (card.main?.modelId === r.modelId) return;
+    if (card.compares.length >= cardQuota(card)) return;
+    actions.setCardCompares(card.id, [...card.compares, { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }]);
+  };
+
+  /** 「全部型号」：主品上下文 = 每配置一张卡；对比上下文 = 每配置一条对比 */
+  const pickAllConfigs = (modelId: string): void => {
+    const sels = usableRomrams(romramsByModel.get(modelId) ?? []).map(
+      (r): ProductSelection => ({ modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }),
+    );
+    if (!sels.length) return;
+    if (comparesCtx || replaceCompareCtx) {
+      const card = activeCard;
+      if (!card) return;
+      const base = replaceCompareCtx ? card.compares.filter((c) => c !== ctx.sel) : card.compares;
+      const seen = new Set(base.map(selKey));
+      const added = [...base];
+      for (const sel of sels) {
+        if (card.main?.modelId === sel.modelId) continue;
+        const k = selKey(sel);
+        if (seen.has(k)) continue;
+        if (added.length >= cardQuota(card)) break;
+        seen.add(k);
+        added.push(sel);
+      }
+      actions.setCardCompares(card.id, added);
+      if (replaceCompareCtx) setOpen(false);
+      return;
+    }
+    let list = mains;
+    if ((ctx.kind === 'replace-main' || ctx.kind === 'set-main') && activeCard) {
+      list = mains.filter((c) => c.id !== activeCard.id);
+    }
+    const seen = new Set(list.flatMap((c) => (c.main ? [selKey(c.main)] : [])));
+    const cards: MainProduct[] = [];
+    for (const sel of sels) {
+      const k = selKey(sel);
+      if (seen.has(k)) continue;
+      if (list.length + cards.length >= MAINS_CAP) break;
+      seen.add(k);
+      cards.push({ id: newCardId(), main: sel, compares: [] });
+    }
+    if (!cards.length) return;
+    actions.setMains([...list, ...cards]);
+    setOpen(false);
+  };
+
+  const columns: CascadeColumnSpec[] = useMemo(() => {
+    if (!brand) return [];
+    const cols: CascadeColumnSpec[] = [];
+    if (level === 'brand') {
+      cols.push({
+        items: tree.map((b) => ({
+          key: b.key,
+          label: brandLabelOf(b.key),
+          leading: <BrandDot brand={b.key} />,
+          active: brand.key === b.key,
+          onActivate: () => {
+            const s = b.series[0];
+            setPath([b.key, s?.key ?? '', s?.models[0]?.modelId ?? '']);
+          },
+          trailing: <span style={{ fontSize: 10.5, color: color.mute, flexShrink: 0 }}>{b.modelCount} 型号</span>,
+        })),
+        flex: 0.85,
+      });
+    }
+    if (level !== 'config') {
+      cols.push({
+        items: (brand?.series ?? []).map((s) => ({
+          key: s.key,
+          label: s.title,
+          active: series?.key === s.key,
+          onActivate: () => setPath([brand.key, s.key, s.models[0]?.modelId ?? '']),
+          trailing: s.eol ? (
+            <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px', flexShrink: 0 }}>退市</span>
+          ) : undefined,
+        })),
+        flex: 1.0,
+      });
+      cols.push({
+        items: (series?.models ?? []).map((m) => ({
+          key: m.modelId,
+          label: m.label,
+          leading: <BrandDot brand={m.brand} />,
+          active: model?.modelId === m.modelId,
+          onActivate: () => setPath([brand.key, series.key, m.modelId]),
+          trailing: (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {m.eol && (
+                <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
+              )}
+              <Tooltip title={comparesCtx || replaceCompareCtx ? '该产品全部配置加入对比区' : '该产品全部配置各成一张主分析卡'}>
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    pickAllConfigs(m.modelId);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                    height: 20,
+                    padding: '0 8px',
+                    borderRadius: radius.pill,
+                    fontSize: 11,
+                    color: selectSoftInk,
+                    background: color.canvas,
+                    border: '1px solid rgba(0, 112, 243, 0.40)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <PlusOutlined style={{ fontSize: 9 }} /> 全部型号
+                </span>
+              </Tooltip>
+            </span>
+          ),
+        })),
+        flex: 1.5,
+      });
+    }
+    cols.push({
+      items: (model?.romrams ?? []).map((r) => {
+        const key = nodeSelKey(r);
+        if (comparesCtx && activeCard) {
+          const card = activeCard;
+          const inCompares = card.compares.some((c) => selKey(c) === key);
+          const sameAsMain = card.main?.modelId === r.modelId;
+          const quotaFull = card.compares.length >= cardQuota(card);
+          const disabled = !inCompares && (sameAsMain || quotaFull);
+          return {
+            key: r.key,
+            label: r.romram,
+            checkState: 'none' as const,
+            onLabelClick: () => toggleCompare(r),
+            trailing: (
+              <Tooltip
+                title={
+                  sameAsMain && !inCompares
+                    ? '主分析产品不对比自身配置'
+                    : quotaFull && !inCompares
+                      ? `本图最多 ${MAX_LINES_PER_CHART} 条产品线（主品 + 对比）`
+                      : inCompares
+                        ? '移除该对比'
+                        : '加入对比区'
+                }
+              >
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!disabled) toggleCompare(r);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    height: 20,
+                    padding: '0 8px',
+                    borderRadius: radius.pill,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: disabled ? color.mute : inCompares ? color.canvas : selectSoftInk,
+                    background: inCompares ? selectAccent : selectSoft,
+                    border: `1px solid ${inCompares ? selectAccent : 'rgba(0, 112, 243, 0.40)'}`,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.5 : 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  {inCompares ? '✓ 对比' : '＋对比'}
+                </span>
+              </Tooltip>
+            ),
+          } satisfies CascadeRowItem;
+        }
+        const isCurrent = replaceCompareCtx
+          ? selKey(ctx.sel) === key
+          : ctx.kind !== 'add-main' && activeCard?.main != null && selKey(activeCard.main) === key;
+        const taken = !replaceCompareCtx
+          && mains.some((c) => c.main != null && selKey(c.main) === key && !('cardId' in ctx && c.id === ctx.cardId));
+        const blocked = isCurrent || taken;
+        return {
+          key: r.key,
+          label: r.romram,
+          checkState: 'none' as const,
+          onLabelClick: () => {
+            if (!blocked) pickConfig(r);
+          },
+          trailing: isCurrent ? <StateTag text="当前" /> : taken ? <StateTag text="已选" /> : undefined,
+        } satisfies CascadeRowItem;
+      }),
+      flex: 1.15,
+    });
+    return cols;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree, brand, series, model, level, ctx, mains, activeCard, romramsByModel]);
+
   return (
     <Popover
       trigger="click"
-      placement="bottomLeft"
       open={open}
-      onOpenChange={setOpen}
-      styles={{ body: { padding: '10px 12px', width: 360 } }}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) setSearch('');
+      }}
+      placement="bottomLeft"
+      styles={{ body: { padding: 10, width: POPOVER_W[level] } }}
       content={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>切换 · 逐层筛选</div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: color.mute }}>
-            品牌
-            <Select
+        <div>
+          {level !== 'config' && (
+            <Input
+              allowClear
               size="small"
-              style={selStyle}
-              value={value.brand}
-              options={brands}
-              onChange={(b) => {
-                const first = modelsOfBrand(b)[0];
-                if (!first) return;
-                const roms = romramsOfModel(first.key);
-                onChange({ brand: b, modelId: first.key, romram: roms[0] ?? '' });
-              }}
+              prefix={<SearchOutlined style={{ color: color.mute }} />}
+              placeholder="搜索品牌 / 系列 / 产品"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ marginBottom: 8, width: 240 }}
             />
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: color.mute }}>
-            产品
-            <Select
-              size="small"
-              style={selStyle}
-              showSearch
-              optionFilterProp="label"
-              value={value.modelId}
-              options={modelsOfBrand(value.brand)}
-              onChange={(m) => {
-                const roms = romramsOfModel(m);
-                onChange({ brand: value.brand, modelId: m, romram: roms[0] ?? '' });
-              }}
-            />
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: color.mute }}>
-            配置
-            <Select
-              size="small"
-              style={selStyle}
-              value={value.romram}
-              options={romramsOfModel(value.modelId).map((r) => ({ value: r, label: r }))}
-              onChange={(r) => onChange({ ...value, romram: r })}
-            />
-          </label>
-          <div style={{ fontSize: 11, color: color.mute }}>颜色在条目旁的色块里切换（可多色取均价）</div>
+          )}
+          <div style={{ display: 'flex' }}>
+            <CascadePanel columns={columns} fill height={POPOVER_H} />
+          </div>
         </div>
       }
     >
-      <span
-        role="button"
-        aria-label={label}
-        title={label}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          height: 20,
-          padding: '0 7px',
-          borderRadius: radius.pill,
-          fontSize: 11,
-          color: color.mute,
-          background: color.canvas,
-          border: `1px solid ${color.hairline}`,
-          cursor: 'pointer',
-          flexShrink: 0,
-        }}
-      >
-        <SwapOutlined style={{ fontSize: 10 }} /> 切换
-      </span>
+      {children}
     </Popover>
+  );
+}
+
+// ---------------- 条目行（主品 / 对比条目 同构：分段即入口） ----------------
+
+function MainRow({ card }: { card: MainProduct }) {
+  const { state, actions } = useFilters();
+  const mains = state.mains;
+  const { romramByKey } = useTreeData();
+  const main = card.main;
+  if (!main) return null;
+  const brand = brandOfModel(main.modelId);
+  const node = romramByKey.get(`${main.modelId}|${main.romram}`);
+  const ctx: PickerCtx = { kind: 'replace-main', cardId: card.id };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', minWidth: 0 }}>
+      <LevelSwitchPopover level="brand" ctx={ctx} initialModelId={main.modelId}>
+        <Seg title={`品牌 ${brandLabelOf(brand)} · 点击换品牌`}>
+          <BrandDot brand={brand} />
+          {brandLabelOf(brand)}
+        </Seg>
+      </LevelSwitchPopover>
+      <LevelSwitchPopover level="product" ctx={ctx} initialModelId={main.modelId}>
+        <Seg strong title={`${modelNameOf(main.modelId)} · 点击换产品（可跨系列）`}>
+          {modelNameOf(main.modelId)}
+        </Seg>
+      </LevelSwitchPopover>
+      <LevelSwitchPopover level="config" ctx={ctx} initialModelId={main.modelId}>
+        <Seg chip title={`${main.romram} · 点击换型号`}>
+          {main.romram}
+        </Seg>
+      </LevelSwitchPopover>
+      <ColorChip
+        node={node}
+        skuIds={main.skuIds}
+        tone="strong"
+        currency={state.currency}
+        onToggle={(skuId, next) => {
+          const skuIds = next ? [...new Set([...main.skuIds, skuId])] : main.skuIds.filter((id) => id !== skuId);
+          if (!skuIds.length) return;
+          actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: { ...main, skuIds } } : c)));
+        }}
+        onReset={() =>
+          node && actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: { ...main, skuIds: defaultColorSkuIds(node) } } : c)))
+        }
+      />
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        <LevelSwitchPopover level="brand" ctx={ctx} initialModelId={main.modelId}>
+          <SwapPill label={`更换主分析产品 ${modelNameOf(main.modelId)}`} />
+        </LevelSwitchPopover>
+        <DeleteX
+          label={`删除分析对 ${modelNameOf(main.modelId)}`}
+          onClick={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
+        />
+      </span>
+    </div>
+  );
+}
+
+function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection }) {
+  const { state, actions } = useFilters();
+  const { romramByKey } = useTreeData();
+  const node = romramByKey.get(`${sel.modelId}|${sel.romram}`);
+  const brand = brandOfModel(sel.modelId);
+  const ctx: PickerCtx = { kind: 'replace-compare', cardId: card.id, sel };
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 2,
+        padding: '2px 6px 2px 8px',
+        background: color.canvasSoft,
+        borderRadius: radius.control,
+        minWidth: 0,
+      }}
+    >
+      <LevelSwitchPopover level="brand" ctx={ctx} initialModelId={sel.modelId}>
+        <Seg small title={`品牌 ${brandLabelOf(brand)} · 点击换品牌`}>
+          <BrandDot brand={brand} />
+          {brandLabelOf(brand)}
+        </Seg>
+      </LevelSwitchPopover>
+      <LevelSwitchPopover level="product" ctx={ctx} initialModelId={sel.modelId}>
+        <Seg small title={`${brandLabelOf(brand)} ${modelNameOf(sel.modelId)} · 点击换产品（可跨系列）`}>
+          {modelNameOf(sel.modelId)}
+        </Seg>
+      </LevelSwitchPopover>
+      <LevelSwitchPopover level="config" ctx={ctx} initialModelId={sel.modelId}>
+        <Seg small chip title={`${sel.romram} · 点击换型号`}>
+          {sel.romram}
+        </Seg>
+      </LevelSwitchPopover>
+      <ColorChip
+        node={node}
+        skuIds={sel.skuIds}
+        tone="soft"
+        currency={state.currency}
+        onToggle={(skuId, next) => {
+          const skuIds = next ? [...new Set([...sel.skuIds, skuId])] : sel.skuIds.filter((id) => id !== skuId);
+          if (!skuIds.length) return;
+          actions.setCardCompares(card.id, card.compares.map((c) => (c === sel ? { ...sel, skuIds } : c)));
+        }}
+        onReset={() =>
+          node && actions.setCardCompares(card.id, card.compares.map((c) => (c === sel ? { ...sel, skuIds: defaultColorSkuIds(node) } : c)))
+        }
+      />
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        <LevelSwitchPopover level="brand" ctx={ctx} initialModelId={sel.modelId}>
+          <SwapPill label={`更换对比产品 ${modelNameOf(sel.modelId)}`} />
+        </LevelSwitchPopover>
+        <DeleteX
+          label={`移除对比 ${modelNameOf(sel.modelId)} ${sel.romram}`}
+          size={10}
+          onClick={() => actions.setCardCompares(card.id, card.compares.filter((c) => c !== sel))}
+        />
+      </span>
+    </div>
+  );
+}
+
+// ---------------- 分析对部件 ----------------
+
+/** 分界线「⚡ 自动匹配竞品」（华为主品可点；空对/非华为置灰） */
+function AutoMatchButton({ card }: { card: MainProduct }) {
+  const { actions } = useFilters();
+  const label = card.main ? modelNameOf(card.main.modelId) : '';
+  const can = card.main != null && isHuaweiModel(card.main.modelId);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+      <Tooltip
+        title={
+          card.main == null
+            ? '先选择主分析产品'
+            : can
+              ? '按对标矩阵自动填充本对右侧对比区'
+              : '自动匹配基于对标矩阵，仅支持华为产品；请手动挑选对比'
+        }
+      >
+        <span
+          role="button"
+          aria-label={`自动匹配竞品${label ? ` ${label}` : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (can) actions.autoMatchCard(card.id);
+          }}
+          style={{
+            display: 'inline-flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 2,
+            width: 58,
+            height: 48,
+            borderRadius: 9,
+            boxSizing: 'border-box',
+            background: can ? selectAccent : color.canvasSoft,
+            border: `2px solid ${color.canvas}`,
+            boxShadow: can ? `0 0 0 1px ${selectAccent}` : `0 0 0 1px ${color.hairline}`,
+            color: can ? '#fff' : color.mute,
+            cursor: can ? 'pointer' : 'not-allowed',
+          }}
+        >
+          <ThunderboltFilled style={{ fontSize: 13 }} />
+          <span style={{ fontSize: 10, lineHeight: '12px', fontWeight: 600, textAlign: 'center' }}>
+            自动匹配
+            <br />
+            竞品
+          </span>
+        </span>
+      </Tooltip>
+    </div>
+  );
+}
+
+/** 对比区常驻「＋ 添加对比产品」（空态/有态同一样式；点开完整树浮窗连点加） */
+function AddCompareTrigger({ card, autoOpen }: { card: MainProduct; autoOpen?: boolean }) {
+  const quota = cardQuota(card);
+  const full = card.compares.length >= quota;
+  return (
+    <Tooltip title={full ? `本图最多 ${MAX_LINES_PER_CHART} 条产品线（主品 + 对比）` : '挑选对比产品（可连续添加）'}>
+      <span style={{ alignSelf: 'flex-start', display: 'inline-flex' }}>
+        <LevelSwitchPopover level="brand" ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId} openSignal={autoOpen}>
+          <AddPill label="添加对比产品" disabled={full} />
+        </LevelSwitchPopover>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -251,380 +846,28 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
   const { state, actions } = useFilters();
   const mains = state.mains;
 
-  // 当前编辑对（树「＋对比」与配置勾选的落点）：null = 无卡
-  const [activeCardId, setActiveCardId] = useState<string | null>(mains[0]?.modelId ?? null);
-  useEffect(() => {
-    if (open && !mains.some((c) => c.modelId === activeCardId)) setActiveCardId(mains[0]?.modelId ?? null);
-  }, [open, mains, activeCardId]);
-
-  // ---- 树与索引 ----
-  const fullTree = useMemo(() => buildProductTree(state.industry, state.countryCode), [state.industry, state.countryCode]);
-  const romramByKey = useMemo(() => {
-    const m = new Map<string, RomramNode>();
-    for (const b of fullTree) for (const s of b.series) for (const md of s.models) for (const r of md.romrams) m.set(r.key, r);
-    return m;
-  }, [fullTree]);
-  const modelsByBrand = useMemo(() => {
-    const m = new Map<string, ModelNode[]>();
-    for (const b of fullTree) {
-      const list: ModelNode[] = [];
-      for (const s of b.series) list.push(...s.models);
-      m.set(b.key, list);
-    }
-    return m;
-  }, [fullTree]);
-  const romramsByModel = useMemo(() => {
-    const m = new Map<string, RomramNode[]>();
-    for (const b of fullTree) for (const s of b.series) for (const md of s.models) m.set(md.modelId, md.romrams);
-    return m;
-  }, [fullTree]);
-
-  const [search, setSearch] = useState('');
-  const tree = useMemo(() => searchProductTree(fullTree, search), [fullTree, search]);
-
-  // ---- 卡片写操作 ----
-  const activeCard = mains.find((c) => c.modelId === activeCardId) ?? null;
-
-  const updateCard = (modelId: string, patch: Partial<MainProduct>): void => {
-    actions.setMains(mains.map((c) => (c.modelId === modelId ? { ...c, ...patch } : c)));
-  };
-
-  const removeCard = (modelId: string): void => {
-    actions.setMains(mains.filter((c) => c.modelId !== modelId));
-    if (activeCardId === modelId) setActiveCardId(null);
-  };
-
-  /** 树配置行勾选：收进对应主品卡（无卡即建卡） */
-  const toggleConfig = (node: RomramNode): void => {
-    const existing = mains.find((c) => c.modelId === node.modelId);
-    const inCard = existing?.configs.some((c) => norm(c.romram) === norm(node.romram));
-    if (existing && inCard) {
-      updateCard(node.modelId, { configs: existing.configs.filter((c) => norm(c.romram) !== norm(node.romram)) });
-      return;
-    }
-    const sel: ProductSelection = { modelId: node.modelId, romram: node.romram, skuIds: defaultColorSkuIds(node) };
-    if (existing) {
-      updateCard(node.modelId, { configs: [...existing.configs, sel].sort((a, b) => compareRomram(a.romram, b.romram)) });
-    } else {
-      actions.setMains([...mains, { modelId: node.modelId, configs: [sel], compares: [] }]);
-    }
-    setActiveCardId(node.modelId);
-  };
-
-  /** 产品行快捷「＋全部型号」：单产品多配置一键成卡/并卡（与手选多卡视觉同构） */
-  const addAllConfigs = (modelId: string): void => {
-    const nodes = romramsByModel.get(modelId) ?? [];
-    const usable = nodes.filter((r) => r.romram !== '—' || nodes.length === 1);
-    if (!usable.length) return;
-    const existing = mains.find((c) => c.modelId === modelId);
-    if (existing) {
-      const configs = [...existing.configs];
-      for (const r of usable) {
-        if (!configs.some((c) => norm(c.romram) === norm(r.romram))) {
-          configs.push({ modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) });
-        }
-      }
-      updateCard(modelId, { configs: configs.sort((a, b) => compareRomram(a.romram, b.romram)) });
-    } else {
-      actions.setMains([
-        ...mains,
-        {
-          modelId,
-          configs: usable.map((r) => ({ modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) })),
-          compares: [],
-        },
-      ]);
-    }
-    setActiveCardId(modelId);
-  };
-
-  /** 系列行快捷「整系列设为主分析」：每型号一张卡、带入全部在售配置 */
-  const addSeriesAsMain = (models: { modelId: string }[]): void => {
-    const rest = mains.filter((c) => !models.some((m) => m.modelId === c.modelId));
-    const cards: MainProduct[] = models.map((m) => {
-      const prev = mains.find((c) => c.modelId === m.modelId);
-      const all = romramsByModel.get(m.modelId) ?? [];
-      const nodes = all.filter((r) => r.romram !== '—' || all.length === 1);
-      const configs = nodes.map(
-        (r) => prev?.configs.find((c) => norm(c.romram) === norm(r.romram)) ?? { modelId: m.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) },
-      );
-      return { modelId: m.modelId, configs, compares: prev?.compares ?? [] };
-    });
-    actions.setMains([...rest, ...cards]);
-    if (cards.length) setActiveCardId(cards[0].modelId);
-  };
-
-  const toggleCompare = (node: RomramNode): void => {
-    if (!activeCard) return;
-    const exists = activeCard.compares.find((c) => c.modelId === node.modelId && norm(c.romram) === norm(node.romram));
-    if (exists) {
-      actions.setCardCompares(
-        activeCard.modelId,
-        activeCard.compares.filter((c) => !(c.modelId === node.modelId && norm(c.romram) === norm(node.romram))),
-      );
-      return;
-    }
-    if (activeCard.modelId === node.modelId) return;
-    if (activeCard.compares.length >= cardQuota(activeCard)) return;
-    actions.setCardCompares(activeCard.modelId, [
-      ...activeCard.compares,
-      { modelId: node.modelId, romram: node.romram, skuIds: defaultColorSkuIds(node) },
-    ]);
-  };
-
-  /** 主品换产品（同品牌逐层切换）：配置/颜色映射见 mapConfigsToProduct（金测锚定） */
-  const switchMainProduct = (card: MainProduct, target: SwitchTarget): void => {
-    if (target.modelId === card.modelId) return;
-    const nodes = romramsByModel.get(target.modelId) ?? [];
-    if (!nodes.length) return;
-    const configs = mapConfigsToProduct(
-      card.configs,
-      card.modelId,
-      target.modelId,
-      (m, r) => romramByKey.get(`${m}|${r}`),
-      () => nodes.map((n) => n.romram),
-    );
-    if (!configs.length) configs.push({ modelId: target.modelId, romram: nodes[0].romram, skuIds: defaultColorSkuIds(nodes[0]) });
-    const rest = mains.filter((c) => c.modelId !== card.modelId && c.modelId !== target.modelId);
-    actions.setMains([...rest, { modelId: target.modelId, configs, compares: card.compares }]);
-    setActiveCardId(target.modelId);
-  };
-
-  /** 主品配置行换配置（同产品下快速切换型号） */
-  const switchMainConfig = (card: MainProduct, fromRom: string, toRom: string): void => {
-    if (norm(fromRom) === norm(toRom)) return;
-    if (card.configs.some((c) => norm(c.romram) === norm(toRom))) return; // 已有该配置
-    const node = romramByKey.get(`${card.modelId}|${toRom}`);
-    if (!node) return;
-    updateCard(card.modelId, {
-      configs: card.configs
-        .map((c) => (norm(c.romram) === norm(fromRom) ? { modelId: card.modelId, romram: toRom, skuIds: defaultColorSkuIds(node) } : c))
-        .sort((a, b) => compareRomram(a.romram, b.romram)),
-    });
-  };
-
-  /** 主品加配置（卡内「＋配置」：该产品其余配置快速加行） */
-  const addMainConfig = (card: MainProduct, romram: string): void => {
-    const node = romramByKey.get(`${card.modelId}|${romram}`);
-    if (!node || card.configs.some((c) => norm(c.romram) === norm(romram))) return;
-    updateCard(card.modelId, {
-      configs: [...card.configs, { modelId: card.modelId, romram, skuIds: defaultColorSkuIds(node) }].sort((a, b) => compareRomram(a.romram, b.romram)),
-    });
-  };
-
-  /** 对比条目切换（换品牌/产品/配置 = 整条替换；颜色回默认） */
-  const switchCompare = (card: MainProduct, oldSel: ProductSelection, target: SwitchTarget): void => {
-    if (target.modelId === card.modelId && norm(target.romram) === norm(oldSel.romram)) return;
-    if (target.modelId === card.modelId) return; // 不与主品同产品
-    if (card.compares.some((c) => c !== oldSel && c.modelId === target.modelId && norm(c.romram) === norm(target.romram))) return;
-    const node = romramByKey.get(`${target.modelId}|${target.romram}`);
-    if (!node) return;
-    actions.setCardCompares(
-      card.modelId,
-      card.compares.map((c) => (c === oldSel ? { modelId: target.modelId, romram: target.romram, skuIds: defaultColorSkuIds(node) } : c)),
-    );
-  };
-
-  // ---- 级联路径 ----
-  const [path, setPath] = useState<[string, string, string] | null>(null);
-  const brand = tree.find((b) => b.key === path?.[0]) ?? tree[0];
-  const series = brand?.series.find((s) => s.key === path?.[1]) ?? brand?.series[0];
-  const model = series?.models.find((m) => m.modelId === path?.[2]) ?? series?.models[0];
-  useEffect(() => {
-    if (!open) return;
-    if (search && tree.length) {
-      const b = tree[0];
-      const s = b.series[0];
-      const m = s?.models[0];
-      setPath(m ? [b.key, s.key, m.modelId] : null);
-    } else if (tree.length) {
-      const firstMain = mains[0] ? brandOfModel(mains[0].modelId) : null;
-      const b = tree.find((x) => x.key === firstMain) ?? tree[0];
-      const s = b.series[0];
-      const m = s?.models[0];
-      setPath(m ? [b.key, s.key, m.modelId] : null);
-    } else {
-      setPath(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, search, tree.length]);
-
-  const configOwner = useMemo(() => {
-    const m = new Map<string, MainProduct>();
-    for (const card of mains) for (const c of card.configs) m.set(`${c.modelId}|${norm(c.romram)}`, card);
-    return m;
-  }, [mains]);
-
-  const columns: CascadeColumnSpec[] = useMemo(() => {
-    const brandItems: CascadeRowItem[] = tree.map((b) => ({
-      key: b.key,
-      label: brandLabelOf(b.key),
-      leading: <BrandDot brand={b.key} />,
-      active: brand?.key === b.key,
-      onActivate: () => {
-        const s = b.series[0];
-        setPath([b.key, s?.key ?? '', s?.models[0]?.modelId ?? '']);
-      },
-      trailing: <span style={{ fontSize: 10.5, color: color.mute, flexShrink: 0 }}>{b.modelCount} 型号</span>,
-    }));
-    const seriesItems: CascadeRowItem[] = (brand?.series ?? []).map((s) => ({
-      key: s.key,
-      label: s.title,
-      active: series?.key === s.key,
-      onActivate: () => setPath([brand.key, s.key, s.models[0]?.modelId ?? '']),
-      trailing: (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {s.eol && (
-            <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
-          )}
-          <Tooltip title="整系列设为主分析（每型号一张卡，带入全部配置）">
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                addSeriesAsMain(s.models);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                height: 20,
-                padding: '0 8px',
-                borderRadius: radius.pill,
-                fontSize: 11,
-                fontWeight: 600,
-                color: selectSoftInk,
-                background: selectSoft,
-                border: '1px solid rgba(0, 112, 243, 0.40)',
-                cursor: 'pointer',
-              }}
-            >
-              <PlusOutlined style={{ fontSize: 9 }} /> 整系列
-            </span>
-          </Tooltip>
-        </span>
-      ),
-    }));
-    const modelItems: CascadeRowItem[] = (series?.models ?? []).map((m) => ({
-      key: m.modelId,
-      label: m.label,
-      leading: <BrandDot brand={m.brand} />,
-      active: model?.modelId === m.modelId,
-      onActivate: () => setPath([brand.key, series.key, m.modelId]),
-      trailing: (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {m.eol && (
-            <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
-          )}
-          <Tooltip title="该产品全部配置收进一张主分析卡（单产品多型号）">
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                addAllConfigs(m.modelId);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                height: 20,
-                padding: '0 8px',
-                borderRadius: radius.pill,
-                fontSize: 11,
-                color: selectSoftInk,
-                background: color.canvas,
-                border: '1px solid rgba(0, 112, 243, 0.40)',
-                cursor: 'pointer',
-              }}
-            >
-              <PlusOutlined style={{ fontSize: 9 }} /> 全部型号
-            </span>
-          </Tooltip>
-        </span>
-      ),
-    }));
-    const leafItems: CascadeRowItem[] = (model?.romrams ?? []).map((r) => {
-      const ownerCard = configOwner.get(`${r.modelId}|${norm(r.romram)}`);
-      const isMainConfig = ownerCard?.modelId === r.modelId;
-      const inActiveCompare = activeCard?.compares.some((c) => c.modelId === r.modelId && norm(c.romram) === norm(r.romram)) ?? false;
-      const sameAsActiveMain = activeCard != null && activeCard.modelId === r.modelId;
-      const quotaFull = activeCard != null && activeCard.compares.length >= cardQuota(activeCard);
-      const compareDisabled = activeCard == null || (!inActiveCompare && (sameAsActiveMain || quotaFull));
-      return {
-        key: r.key,
-        label: r.romram,
-        checkState: isMainConfig ? ('checked' as const) : ('none' as const),
-        onCheckChange: () => toggleConfig(r),
-        onLabelClick: () => toggleConfig(r),
-        trailing: (
-          <span
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!compareDisabled) toggleCompare(r);
-            }}
-          >
-            <Tooltip
-              title={
-                activeCard == null
-                  ? '先在上方点选一个分析对'
-                  : sameAsActiveMain && !inActiveCompare
-                    ? '主分析产品不对比自身配置'
-                    : quotaFull && !inActiveCompare
-                      ? `本图最多 ${MAX_LINES_PER_CHART} 条产品线（配置 + 对比）`
-                      : inActiveCompare
-                        ? '移除该对比'
-                        : `加入「${modelNameOf(activeCard.modelId)}」的对比区`
-              }
-            >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  height: 20,
-                  padding: '0 8px',
-                  borderRadius: radius.pill,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: compareDisabled ? color.mute : inActiveCompare ? color.canvas : selectSoftInk,
-                  background: inActiveCompare ? selectAccent : selectSoft,
-                  border: `1px solid ${inActiveCompare ? selectAccent : 'rgba(0, 112, 243, 0.40)'}`,
-                  cursor: compareDisabled ? 'not-allowed' : 'pointer',
-                  opacity: compareDisabled ? 0.5 : 1,
-                  flexShrink: 0,
-                }}
-              >
-                {inActiveCompare ? '✓ 对比' : '＋对比'}
-              </span>
-            </Tooltip>
-          </span>
-        ),
-      };
-    });
-    return [
-      { items: brandItems, flex: 0.85 },
-      { items: seriesItems, flex: 1.0 },
-      { items: modelItems, flex: 1.5 },
-      { items: leafItems, flex: 1.15 },
-    ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, brand, series, model, configOwner, activeCard, mains]);
+  // 空对先加对比：建卡后自动展开该卡的添加浮窗（一次性信号）
+  const [autoOpenCardId, setAutoOpenCardId] = useState<string | null>(null);
 
   // ---- 卡片拖拽换序（= 分离面板顺序） ----
   const [dragCard, setDragCard] = useState<string | null>(null);
   const [dropCard, setDropCard] = useState<string | null>(null);
   const moveCard = (from: string, to: string): void => {
     if (from === to) return;
-    const ids = mains.map((c) => c.modelId);
+    const ids = mains.map((c) => c.id);
     const i = ids.indexOf(from);
     const j = ids.indexOf(to);
     if (i < 0 || j < 0) return;
     ids.splice(j, 0, ids.splice(i, 1)[0]);
-    actions.setMains(ids.map((id) => mains.find((c) => c.modelId === id)!));
+    actions.setMains(ids.map((id) => mains.find((c) => c.id === id)!));
   };
 
   // ---- 最近组合 ----
   const [combos, setCombos] = useState<StoredCombo[]>(() => readCombos());
   const recordCombo = (): void => {
     if (!mains.length) return;
-    const label = mains.length === 1 ? modelNameOf(mains[0].modelId) : `${modelNameOf(mains[0].modelId)} 等 ${mains.length} 款`;
+    const firstName = mains[0]?.main ? modelNameOf(mains[0].main.modelId) : '对比产品';
+    const label = mains.length === 1 ? firstName : `${firstName} 等 ${mains.length} 款`;
     const sig = comboSignature(mains);
     const next = [{ label, cards: mains.map((c) => ({ ...c })) }, ...combos.filter((c) => comboSignature(c.cards) !== sig)].slice(0, 5);
     setCombos(next);
@@ -634,23 +877,19 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
       /* 存储不可用忽略 */
     }
   };
-
-  const treeRef = useRef<HTMLDivElement | null>(null);
   const handleClose = (): void => {
     recordCombo();
     onClose();
   };
 
   const totalCompares = new Set(mains.flatMap((c) => c.compares.map(selKey))).size;
-  const switchBrands = fullTree.map((b) => ({ key: b.key, label: brandLabelOf(b.key) }));
-  const modelsOpts = (b: string) => (modelsByBrand.get(b) ?? []).map((m) => ({ key: m.modelId, label: m.label }));
-  const romOpts = (mid: string) => (romramsByModel.get(mid) ?? []).map((r) => r.romram);
+  const lastModelId = [...mains].reverse().find((c) => c.main)?.main?.modelId;
 
   return (
     <Modal
       open={open}
       onCancel={handleClose}
-      width={1000}
+      width={880}
       centered
       title={
         <span style={{ fontSize: fontSize.displaySm }}>
@@ -686,11 +925,10 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>最近</span>
           {combos.map((c, i) => (
-            <Tooltip key={i} title={c.cards.map((x) => modelNameOf(x.modelId)).join('、')}>
+            <Tooltip key={i} title={c.cards.map((x) => (x.main ? modelNameOf(x.main.modelId) : '对比产品')).join('、')}>
               <span
                 onClick={() => {
-                  actions.setMains(c.cards.map((x) => ({ ...x })));
-                  setActiveCardId(c.cards[0]?.modelId ?? null);
+                  actions.setMains(c.cards.map((x) => ({ ...x, id: newCardId() })));
                 }}
                 style={{
                   height: 22,
@@ -707,7 +945,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                   whiteSpace: 'nowrap',
                 }}
               >
-                <BrandDot brand={brandOfModel(c.cards[0].modelId)} />
+                {c.cards[0].main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
                 {c.label}
               </span>
             </Tooltip>
@@ -718,60 +956,102 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
       {/* 分析对列表（左右排布） */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: PAIR_LIST_MAX_H, overflowY: 'auto', padding: 1 }}>
         {mains.length === 0 && (
+          /* 默认新增状态：一对空骨架——左选主品、右可先挂对比 */
           <div
             style={{
-              border: `1px dashed ${color.hairlineStrong}`,
+              display: 'flex',
+              gap: 10,
+              alignItems: 'stretch',
+              padding: 10,
               borderRadius: radius.card,
-              padding: '16px',
-              fontSize: 12.5,
-              color: color.mute,
-              textAlign: 'center',
+              border: `1px dashed ${color.hairlineStrong}`,
+              background: color.canvas,
             }}
           >
-            先在下方产品树选择主分析产品（点配置行即建对；产品行「全部型号」、系列行「整系列」可一键成卡）
+            <div
+              style={{
+                flex: '0 0 300px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                padding: '10px 12px',
+                background: selectSoft,
+                border: '1px solid rgba(0, 112, 243, 0.40)',
+                borderRadius: radius.control,
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品 · 单选</div>
+              <LevelSwitchPopover level="brand" ctx={{ kind: 'add-main' }}>
+                <AddPill label="选择主分析产品" big />
+              </LevelSwitchPopover>
+            </div>
+            <AutoMatchButton card={{ id: 'ghost', main: null, compares: [] }} />
+            <div
+              style={{
+                flex: '1 1 0',
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                padding: '10px 12px',
+                background: color.canvas,
+                border: `1px solid ${color.hairline}`,
+                borderRadius: radius.control,
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 600, color: color.mute }}>对比产品 · 可多选</div>
+              <Tooltip title="先挑选对比产品（之后补选主分析产品即配成一对）">
+                <span style={{ alignSelf: 'flex-start', display: 'inline-flex' }}>
+                  <AddPill
+                    label="添加对比产品"
+                    onClick={() => {
+                      const id = newCardId();
+                      actions.setMains([...mains, { id, main: null, compares: [] }]);
+                      setAutoOpenCardId(id);
+                    }}
+                  />
+                </span>
+              </Tooltip>
+            </div>
           </div>
         )}
         {mains.map((card) => {
-          const isActive = card.modelId === activeCardId;
-          const quota = cardQuota(card);
-          const huawei = isHuaweiModel(card.modelId);
-          const allRoms = romOpts(card.modelId);
-          const restConfigs = allRoms.filter((r) => !card.configs.some((c) => norm(c.romram) === norm(r)));
+          const huawei = card.main != null && isHuaweiModel(card.main.modelId);
           return (
             <div
-              key={card.modelId}
+              key={card.id}
               onDragOver={(e) => {
-                if (!dragCard || dragCard === card.modelId) return;
+                if (!dragCard || dragCard === card.id) return;
                 e.preventDefault();
-                setDropCard(card.modelId);
+                setDropCard(card.id);
               }}
-              onDragLeave={() => setDropCard((t) => (t === card.modelId ? null : t))}
+              onDragLeave={() => setDropCard((t) => (t === card.id ? null : t))}
               onDrop={(e) => {
                 e.preventDefault();
-                if (dragCard) moveCard(dragCard, card.modelId);
+                if (dragCard) moveCard(dragCard, card.id);
                 setDragCard(null);
                 setDropCard(null);
               }}
-              onClick={() => setActiveCardId(card.modelId)}
               style={{
                 position: 'relative',
                 display: 'flex',
-                gap: 12,
+                gap: 10,
                 alignItems: 'stretch',
                 padding: '6px 6px 6px 2px',
                 borderRadius: radius.card,
-                border: `1px solid ${isActive ? selectAccent : dropCard === card.modelId ? color.link : color.hairline}`,
+                border: `1px solid ${dropCard === card.id ? color.link : color.hairline}`,
                 background: color.canvas,
-                cursor: 'pointer',
-                opacity: dragCard === card.modelId ? 0.45 : undefined,
-                boxShadow: dropCard === card.modelId ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined,
+                opacity: dragCard === card.id ? 0.45 : undefined,
+                boxShadow: dropCard === card.id ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined,
               }}
             >
-              {/* 拖拽把手（换序 = 面板顺序） */}
+              {/* 拖拽把手（换序 = 分离面板顺序） */}
               <span
                 draggable
                 onDragStart={(e) => {
-                  setDragCard(card.modelId);
+                  setDragCard(card.id);
                   e.dataTransfer.effectAllowed = 'move';
                 }}
                 onDragEnd={() => {
@@ -779,7 +1059,6 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                   setDropCard(null);
                 }}
                 title="拖动调整顺序（= 分离面板顺序）"
-                onClick={(e) => e.stopPropagation()}
                 style={{ display: 'inline-flex', alignItems: 'center', cursor: 'grab', color: color.mute, flexShrink: 0 }}
               >
                 <HolderOutlined style={{ fontSize: 12 }} />
@@ -788,201 +1067,30 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
               {/* 左：主分析产品（显著 · 单选感） */}
               <div
                 style={{
-                  flex: '0 0 320px',
+                  flex: '0 0 300px',
                   minWidth: 0,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 6,
+                  gap: 8,
                   padding: '8px 10px',
                   background: selectSoft,
-                  border: `1px solid ${isActive ? selectAccent : 'rgba(0, 112, 243, 0.40)'}`,
+                  border: '1px solid rgba(0, 112, 243, 0.40)',
                   borderRadius: radius.control,
                   boxSizing: 'border-box',
                 }}
-                onClick={(e) => e.stopPropagation()}
               >
                 <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品 · 单选</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                  <BrandDot brand={brandOfModel(card.modelId)} />
-                  <span
-                    title={modelNameOf(card.modelId)}
-                    style={{ fontSize: 14.5, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', overflow: 'visible', flexShrink: 1 }}
-                  >
-                    {modelNameOf(card.modelId)}
-                  </span>
-                  <QuickSwitch
-                    label={`切换主分析产品 ${modelNameOf(card.modelId)}`}
-                    brands={switchBrands}
-                    modelsOfBrand={modelsOpts}
-                    romramsOfModel={romOpts}
-                    value={{ brand: brandOfModel(card.modelId), modelId: card.modelId, romram: card.configs[0]?.romram ?? '' }}
-                    onChange={(t) => switchMainProduct(card, t)}
-                  />
-                  <span
-                    role="button"
-                    aria-label={`删除分析对 ${modelNameOf(card.modelId)}`}
-                    title="删除整个分析对"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeCard(card.modelId);
-                    }}
-                    style={{ marginLeft: 'auto', display: 'inline-flex', padding: 4, cursor: 'pointer', color: color.mute, flexShrink: 0 }}
-                  >
-                    <CloseOutlined style={{ fontSize: 11 }} />
-                  </span>
-                </div>
-                {/* 配置行：配置（可换）+ 颜色（次级筛选）+ 删行 */}
-                {card.configs.map((sel) => {
-                  const node = romramByKey.get(`${card.modelId}|${sel.romram}`);
-                  const romOptions = allRoms.filter((r) => norm(r) !== norm(sel.romram));
-                  return (
-                    <div key={`${card.modelId}|${sel.romram}`} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                      <Popover
-                        trigger="click"
-                        placement="bottomLeft"
-                        styles={{ body: { padding: '6px 4px', minWidth: 160 } }}
-                        content={
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            {romOptions.map((r) => (
-                              <span
-                                key={r}
-                                onClick={() => switchMainConfig(card, sel.romram, r)}
-                                style={{
-                                  padding: '3px 10px',
-                                  fontSize: 12,
-                                  color: color.body,
-                                  cursor: 'pointer',
-                                  whiteSpace: 'nowrap',
-                                  borderRadius: radius.control,
-                                }}
-                              >
-                                {r}
-                              </span>
-                            ))}
-                          </div>
-                        }
-                      >
-                        <span
-                          title="点击切换配置（同产品快速换型号）"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            height: 22,
-                            padding: '0 10px',
-                            borderRadius: radius.pill,
-                            background: color.canvas,
-                            border: '1px solid rgba(0, 112, 243, 0.40)',
-                            fontSize: 12,
-                            color: color.ink,
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {sel.romram}
-                        </span>
-                      </Popover>
-                      <ColorChip
-                        node={node}
-                        skuIds={sel.skuIds}
-                        tone="strong"
-                        currency={state.currency}
-                        onToggle={(skuId, next) => {
-                          const configs = card.configs.map((c) =>
-                            c === sel
-                              ? { ...c, skuIds: next ? [...new Set([...c.skuIds, skuId])] : c.skuIds.filter((id) => id !== skuId) }
-                              : c,
-                          );
-                          updateCard(card.modelId, { configs: configs.filter((c) => c.skuIds.length > 0) });
-                        }}
-                        onReset={() => node && updateCard(card.modelId, { configs: card.configs.map((c) => (c === sel ? { ...c, skuIds: defaultColorSkuIds(node) } : c)) })}
-                      />
-                      <span
-                        role="button"
-                        aria-label={`移除配置 ${sel.romram}`}
-                        title="移除该配置"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateCard(card.modelId, { configs: card.configs.filter((c) => c !== sel) });
-                        }}
-                        style={{ display: 'inline-flex', padding: 3, cursor: 'pointer', color: color.mute }}
-                      >
-                        <CloseOutlined style={{ fontSize: 9 }} />
-                      </span>
-                    </div>
-                  );
-                })}
-                {/* ＋配置（该产品其余配置快速加行） */}
-                {restConfigs.length > 0 && (
-                  <Popover
-                    trigger="click"
-                    placement="bottomLeft"
-                    styles={{ body: { padding: '6px 4px', minWidth: 160 } }}
-                    content={
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        {restConfigs.map((r) => (
-                          <span
-                            key={r}
-                            onClick={() => addMainConfig(card, r)}
-                            style={{ padding: '3px 10px', fontSize: 12, color: color.body, cursor: 'pointer', whiteSpace: 'nowrap', borderRadius: radius.control }}
-                          >
-                            ＋ {r}
-                          </span>
-                        ))}
-                      </div>
-                    }
-                  >
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 3,
-                        alignSelf: 'flex-start',
-                        height: 20,
-                        padding: '0 9px',
-                        borderRadius: radius.pill,
-                        border: `1px dashed ${color.hairlineStrong}`,
-                        fontSize: 11,
-                        color: color.body,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <PlusOutlined style={{ fontSize: 9 }} /> 配置
-                    </span>
-                  </Popover>
+                {card.main ? (
+                  <MainRow card={card} />
+                ) : (
+                  <LevelSwitchPopover level="brand" ctx={{ kind: 'set-main', cardId: card.id }}>
+                    <AddPill label="选择主分析产品" big />
+                  </LevelSwitchPopover>
                 )}
               </div>
 
-              {/* 中：分界线 + 骑线 ⚡ 自动匹配 */}
-              <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <Tooltip
-                  title={huawei ? '按对标矩阵自动填充本对右侧对比区' : '自动匹配基于对标矩阵，仅支持华为产品；请手动挑选对比'}
-                >
-                  <span
-                    role="button"
-                    aria-label={`自动匹配对比 ${modelNameOf(card.modelId)}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (huawei) actions.autoMatchCard(card.modelId);
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 34,
-                      height: 34,
-                      borderRadius: '50%',
-                      background: huawei ? selectAccent : color.canvasSoft,
-                      border: `2px solid ${color.canvas}`,
-                      boxShadow: huawei ? `0 0 0 1px ${selectAccent}` : `0 0 0 1px ${color.hairline}`,
-                      color: huawei ? '#fff' : color.mute,
-                      cursor: huawei ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    <ThunderboltFilled style={{ fontSize: 13 }} />
-                  </span>
-                </Tooltip>
-              </div>
+              {/* 中：分界线 + 自动匹配竞品 */}
+              <AutoMatchButton card={card} />
 
               {/* 右：对比产品（弱 · 多选感） */}
               <div
@@ -991,91 +1099,32 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                   minWidth: 0,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 4,
+                  gap: 5,
                   padding: '8px 10px',
                   background: color.canvas,
                   border: `1px solid ${color.hairline}`,
                   borderRadius: radius.control,
                   boxSizing: 'border-box',
                 }}
-                onClick={(e) => e.stopPropagation()}
               >
                 <div style={{ fontSize: 11, fontWeight: 600, color: color.mute }}>
-                  对比产品 · 可多选 <span className="tnum">{card.compares.length}/{quota}</span>
+                  对比产品 · 可多选 <span className="tnum">{card.compares.length}/{cardQuota(card)}</span>
                 </div>
                 {card.compares.length === 0 && (
-                  <div style={{ fontSize: 11.5, color: color.mute, lineHeight: '20px' }}>
-                    点中间 ⚡ 自动匹配{huawei ? '' : '（该品牌暂不支持，请手动添加）'}，或在下方产品树点「＋对比」
+                  <div style={{ fontSize: 11.5, color: color.mute, lineHeight: '18px' }}>
+                    {card.main == null
+                      ? '可先挑选对比产品，补选主分析产品后即配成一对'
+                      : huawei
+                        ? '点「自动匹配竞品」一键带出，或手动添加'
+                        : '该品牌暂不支持自动匹配，请手动添加'}
                   </div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', maxHeight: 116 }}>
-                  {card.compares.map((sel) => {
-                    const node = romramByKey.get(`${sel.modelId}|${sel.romram}`);
-                    return (
-                      <div
-                        key={`${sel.modelId}|${sel.romram}`}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '2px 6px 2px 8px',
-                          background: color.canvasSoft,
-                          borderRadius: radius.control,
-                          minWidth: 0,
-                        }}
-                      >
-                        <BrandDot brand={brandOfModel(sel.modelId)} />
-                        <span
-                          title={`${brandLabelOf(brandOfModel(sel.modelId))} ${modelNameOf(sel.modelId)} ${sel.romram}`}
-                          style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap', overflow: 'visible', flexShrink: 1 }}
-                        >
-                          {modelNameOf(sel.modelId)}
-                          <span style={{ color: color.mute }}> · {sel.romram}</span>
-                        </span>
-                        <ColorChip
-                          node={node}
-                          skuIds={sel.skuIds}
-                          tone="soft"
-                          currency={state.currency}
-                          onToggle={(skuId, next) => {
-                            const compares = card.compares.map((c) =>
-                              c === sel
-                                ? { ...c, skuIds: next ? [...new Set([...c.skuIds, skuId])] : c.skuIds.filter((id) => id !== skuId) }
-                                : c,
-                            );
-                            actions.setCardCompares(card.modelId, compares.filter((c) => c.skuIds.length > 0));
-                          }}
-                          onReset={() =>
-                            node &&
-                            actions.setCardCompares(
-                              card.modelId,
-                              card.compares.map((c) => (c === sel ? { ...c, skuIds: defaultColorSkuIds(node) } : c)),
-                            )
-                          }
-                        />
-                        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                          <QuickSwitch
-                            label={`切换对比产品 ${modelNameOf(sel.modelId)}`}
-                            brands={switchBrands}
-                            modelsOfBrand={modelsOpts}
-                            romramsOfModel={romOpts}
-                            value={{ brand: brandOfModel(sel.modelId), modelId: sel.modelId, romram: sel.romram }}
-                            onChange={(t) => switchCompare(card, sel, t)}
-                          />
-                          <span
-                            role="button"
-                            aria-label={`移除对比 ${modelNameOf(sel.modelId)} ${sel.romram}`}
-                            title="移除该对比"
-                            onClick={() => actions.setCardCompares(card.modelId, card.compares.filter((c) => c !== sel))}
-                            style={{ display: 'inline-flex', padding: 3, cursor: 'pointer', color: color.mute }}
-                          >
-                            <CloseOutlined style={{ fontSize: 10 }} />
-                          </span>
-                        </span>
-                      </div>
-                    );
-                  })}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', maxHeight: 122 }}>
+                  {card.compares.map((sel) => (
+                    <CompareRow key={selKey(sel)} card={card} sel={sel} />
+                  ))}
                 </div>
+                <AddCompareTrigger card={card} autoOpen={autoOpenCardId === card.id} />
               </div>
             </div>
           );
@@ -1084,24 +1133,13 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
 
       {/* 全局动作行 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-        <span
-          onClick={() => treeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            height: 26,
-            padding: '0 12px',
-            borderRadius: radius.pill,
-            border: `1px dashed ${color.hairlineStrong}`,
-            fontSize: 12,
-            color: color.body,
-            cursor: 'pointer',
-            background: color.canvas,
-          }}
-        >
-          <PlusOutlined style={{ fontSize: 10 }} /> 新增主分析产品
-        </span>
+        <Tooltip title={mains.length >= MAINS_CAP ? `最多 ${MAINS_CAP} 张主分析卡` : undefined}>
+          <span style={{ display: 'inline-flex' }}>
+            <LevelSwitchPopover level="brand" ctx={{ kind: 'add-main' }} initialModelId={lastModelId}>
+              <AddPill label="添加主分析产品" disabled={mains.length >= MAINS_CAP} />
+            </LevelSwitchPopover>
+          </span>
+        </Tooltip>
         <Tooltip title={state.autoMatch ? '对比区随主品配置自动跟随（当前：自动）' : '回到自动：全部华为主品卡按矩阵重算对比区'}>
           <span
             onClick={() => actions.setAutoMatch(true)}
@@ -1129,21 +1167,6 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
           <span style={{ color: color.hairlineStrong }}>｜</span>
           每图最多 {MAX_LINES_PER_CHART} 条产品线
         </span>
-      </div>
-
-      {/* 产品树：填满弹窗宽度、固定高度、信息不截断 */}
-      <div ref={treeRef} style={{ marginTop: 12, borderTop: `1px solid ${color.hairline}`, paddingTop: 10 }}>
-        <Input
-          allowClear
-          prefix={<SearchOutlined style={{ color: color.mute }} />}
-          placeholder="搜索品牌 / 系列 / 产品"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ marginBottom: 8, width: 320 }}
-        />
-        <div style={{ display: 'flex' }}>
-          <CascadePanel columns={columns} fill height={TREE_H} />
-        </div>
       </div>
     </Modal>
   );

@@ -1,23 +1,26 @@
 // ============================================================
-// 主分析卡纯函数金测（第一百一十七轮）：配额、自动匹配填充、v10 迁移、并集。
+// 主分析卡纯函数金测（第一百二十轮）：配额、自动匹配填充、v10/v11 迁移、
+// 逐配置成卡、换层颜色映射。卡形 = { id, main: ProductSelection | null, compares }。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { dimProduct, dimBenchmark } from '../../data';
 import type { MainProduct, ProductSelection } from '../filtersTypes';
 import {
-  MAX_LINES_PER_CHART,
   autoComparesFor,
   cardQuota,
+  cardsFromSelections,
   clampMains,
+  expandV11Cards,
   flatSelections,
-  groupToCards,
   isHuaweiModel,
-  mapConfigsToProduct,
+  MAINS_CAP,
+  MAX_LINES_PER_CHART,
   migrateV10,
   reapplyAuto,
+  remapSelection,
   selKey,
 } from '../mainSelection';
-import { buildProductTree } from '../../components/ProductCascader/tree';
+import { buildProductTree, type RomramNode } from '../../components/ProductCascader/tree';
 
 const ruOwn = dimProduct.find((p) => p.is_own && p.countries.includes('RU'))!;
 const ruOwnModel = ruOwn.sku_id.split('__')[0];
@@ -28,22 +31,27 @@ const ownSel: ProductSelection = {
   skuIds: [ruOwn.sku_id],
 };
 
+let seq = 0;
+const card = (main: ProductSelection | null, compares: ProductSelection[] = []): MainProduct => ({
+  id: `t${(seq += 1)}`,
+  main,
+  compares,
+});
+
 describe('cardQuota（一张图 ≤8 条产品线，选择时收口）', () => {
-  it('quota = 8 - 配置数，下限 0', () => {
-    expect(cardQuota({ configs: [ownSel] })).toBe(MAX_LINES_PER_CHART - 1);
-    expect(cardQuota({ configs: [] })).toBe(MAX_LINES_PER_CHART);
-    const many = Array.from({ length: 10 }, () => ownSel);
-    expect(cardQuota({ configs: many })).toBe(0);
+  it('有主品 = 7（主品占 1 线）；空对 = 8', () => {
+    expect(cardQuota({ main: ownSel })).toBe(MAX_LINES_PER_CHART - 1);
+    expect(cardQuota({ main: null })).toBe(MAX_LINES_PER_CHART);
   });
 });
 
-describe('autoComparesFor（矩阵并集 → 剔除自身 → 配额截断）', () => {
-  it('华为配置卡产出矩阵对比且 ≤ 配额、不含主品自身配置', () => {
-    const card: MainProduct = { modelId: ruOwnModel, configs: [ownSel], compares: [] };
-    const comps = autoComparesFor(card);
+describe('autoComparesFor（矩阵 → 剔除自身 → 配额截断）', () => {
+  it('华为主品卡产出矩阵对比且 ≤ 配额、不含主品自身配置', () => {
+    const c = card(ownSel);
+    const comps = autoComparesFor(c);
     expect(comps.length).toBeGreaterThan(0);
-    expect(comps.length).toBeLessThanOrEqual(cardQuota(card));
-    expect(comps.every((c) => c.modelId !== ruOwnModel || c.romram !== ruOwnRom)).toBe(true);
+    expect(comps.length).toBeLessThanOrEqual(cardQuota(c));
+    expect(comps.every((x) => selKey(x) !== selKey(ownSel))).toBe(true);
     // 首个对比 = 该国矩阵 sort 序的主对标（country_code 过滤，与 benchmarkSkuIdsFor 同口径）
     const rows = dimBenchmark
       .filter((b) => b.own_model_id === ruOwnModel && b.own_romram === ruOwnRom && (b.country_code == null || b.country_code === 'RU'))
@@ -53,50 +61,40 @@ describe('autoComparesFor（矩阵并集 → 剔除自身 → 配额截断）', 
     }
   });
 
-  it('多配置卡：并集去重后仍受配额约束', () => {
-    const modelRows = dimProduct.filter((p) => p.sku_id.startsWith(ruOwnModel + '__'));
-    const roms = [...new Set(modelRows.map((p) => p.romram))].slice(0, 4);
-    const configs = roms.map((r) => {
-      const row = modelRows.find((p) => p.romram === r)!;
-      return { modelId: ruOwnModel, romram: r, skuIds: [row.sku_id] };
-    });
-    const card: MainProduct = { modelId: ruOwnModel, configs, compares: [] };
-    const comps = autoComparesFor(card);
-    const keys = comps.map(selKey);
-    expect(new Set(keys).size).toBe(keys.length); // 并集去重
-    expect(comps.length).toBeLessThanOrEqual(cardQuota(card));
+  it('空对（main = null）产出空对比区', () => {
+    expect(autoComparesFor(card(null))).toEqual([]);
   });
 });
 
-describe('reapplyAuto（自动跟随：华为主品卡重算、非华为主品卡不动）', () => {
-  it('华为卡对比区被矩阵产出替换；竞品卡手动对比区保留', () => {
+describe('reapplyAuto（自动跟随：华为主品卡重算、非华为主品卡与空对不动）', () => {
+  it('华为卡对比区被矩阵产出替换；竞品卡与空对的手动对比区保留', () => {
     const comp = dimProduct.find((p) => !p.is_own && p.countries.includes('RU'))!;
     const compModel = comp.sku_id.split('__')[0];
     const manualCompare: ProductSelection = { modelId: compModel, romram: comp.romram, skuIds: [comp.sku_id] };
-    const huaweiCard: MainProduct = { modelId: ruOwnModel, configs: [ownSel], compares: [manualCompare] };
-    const compCard: MainProduct = {
-      modelId: compModel,
-      configs: [{ modelId: compModel, romram: comp.romram, skuIds: [comp.sku_id] }],
-      compares: [ownSel],
-    };
-    const out = reapplyAuto([huaweiCard, compCard]);
+    const compSel: ProductSelection = { modelId: compModel, romram: comp.romram, skuIds: [comp.sku_id] };
+    const out = reapplyAuto([
+      card(ownSel, [manualCompare]),
+      card(compSel, [ownSel]),
+      card(null, [ownSel]),
+    ]);
     expect(out[0].compares.every((c) => c.modelId !== compModel)).toBe(true); // 矩阵产出替换手动挑选
     expect(out[1].compares).toEqual([ownSel]); // 非华为主品卡不动
+    expect(out[2].compares).toEqual([ownSel]); // 空对不动
     expect(isHuaweiModel(ruOwnModel)).toBe(true);
     expect(isHuaweiModel(compModel)).toBe(false);
   });
 });
 
-describe('migrateV10（own/competitors → 每主品卡自带对比区）', () => {
+describe('migrateV10（own/competitors → 逐配置卡）', () => {
   it('自动模式：逐卡按矩阵重算', () => {
-    const [cards] = [migrateV10([ownSel], [], true)];
+    const cards = migrateV10([ownSel], [], true);
     expect(cards).toHaveLength(1);
-    expect(cards[0].modelId).toBe(ruOwnModel);
+    expect(cards[0].main).toEqual(ownSel);
     expect(cards[0].compares.length).toBeGreaterThan(0);
   });
 
   it('手动模式：矩阵命中优先、同容量 fallback、卡配额截断', () => {
-    const comps = autoComparesFor({ modelId: ruOwnModel, configs: [ownSel], compares: [] });
+    const comps = autoComparesFor(card(ownSel));
     const foreign = dimProduct.find(
       (p) => !p.is_own && p.countries.includes('RU') && p.romram.replace(/\s+/g, '') === comps[0]?.romram.replace(/\s+/g, '') && !comps.some((c) => c.modelId === p.sku_id.split('__')[0]),
     );
@@ -107,81 +105,131 @@ describe('migrateV10（own/competitors → 每主品卡自带对比区）', () =
     expect(cards[0].compares.length).toBeLessThanOrEqual(cardQuota(cards[0]));
   });
 
-  it('纯竞品视角（own 空）：竞品型号各成一卡、无对比、≤8 卡', () => {
+  it('纯竞品视角（own 空）：竞品逐组成卡、无对比、卡数封顶', () => {
     const compSels: ProductSelection[] = dimProduct
       .filter((p) => !p.is_own && p.countries.includes('RU'))
       .slice(0, 12)
       .map((p) => ({ modelId: p.sku_id.split('__')[0], romram: p.romram, skuIds: [p.sku_id] }));
     const cards = migrateV10([], compSels, true);
-    expect(cards.length).toBeLessThanOrEqual(MAX_LINES_PER_CHART);
+    expect(cards.length).toBeLessThanOrEqual(MAINS_CAP);
     expect(cards.every((c) => c.compares.length === 0)).toBe(true);
+    expect(cards.every((c) => c.main != null)).toBe(true);
   });
 });
 
-describe('flatSelections / groupToCards / clampMains', () => {
-  it('并集按卡序去重，主品配置优先于对比区', () => {
+describe('expandV11Cards（v11 卡 configs[] → 逐配置卡）', () => {
+  // 取 RU 手机里首个有 ≥2 配置的华为型号（单配置型号展不开，验证不了「其余配置卡」）
+  const multiModel = (() => {
+    const byModel = new Map<string, Set<string>>();
+    for (const p of dimProduct) {
+      if (!p.is_own || !p.countries.includes('RU') || p.industry !== 'phone') continue;
+      const m = p.sku_id.split('__')[0];
+      const s = byModel.get(m) ?? new Set<string>();
+      s.add(p.romram);
+      byModel.set(m, s);
+    }
+    return [...byModel.entries()].find(([, s]) => s.size >= 2)?.[0] ?? ruOwnModel;
+  })();
+  const modelRows = dimProduct.filter((p) => p.sku_id.startsWith(multiModel + '__') && p.countries.includes('RU'));
+  const roms = [...new Set(modelRows.map((p) => p.romram))].slice(0, 3);
+  const configs = roms.map((r) => {
+    const row = modelRows.find((p) => p.romram === r)!;
+    return { modelId: multiModel, romram: r, skuIds: [row.sku_id] };
+  });
+  const keep: ProductSelection = { modelId: 'keep-x', romram: '8+128 GB', skuIds: ['keep-x__8+128'] };
+
+  it('手动模式：首配置卡继承对比区，其余配置卡落空', () => {
+    const cards = expandV11Cards([{ modelId: multiModel, configs, compares: [keep] }], false);
+    expect(cards).toHaveLength(configs.length);
+    expect(cards[0].compares).toEqual([keep]);
+    expect(cards.slice(1).every((c) => c.compares.length === 0)).toBe(true);
+    expect(cards.every((c) => c.main != null)).toBe(true);
+  });
+
+  it('自动模式：其余配置卡按矩阵补齐；同配置去重', () => {
+    const dup = [...configs, configs[0]];
+    const cards = expandV11Cards([{ modelId: multiModel, configs: dup, compares: [] }], true);
+    expect(cards).toHaveLength(configs.length);
+    expect(configs.length).toBeGreaterThan(1);
+    expect(cards[1].compares).toEqual(autoComparesFor(cards[1]));
+  });
+
+  it('卡数封顶 MAINS_CAP', () => {
+    const many = Array.from({ length: MAINS_CAP + 4 }, (_, i) => ({ modelId: `m${i}`, romram: '8+128 GB', skuIds: [`m${i}__8+128`] }));
+    expect(expandV11Cards(many.map((sel) => ({ modelId: sel.modelId, configs: [sel], compares: [] })), false)).toHaveLength(MAINS_CAP);
+  });
+});
+
+describe('cardsFromSelections / flatSelections / clampMains', () => {
+  it('勾选组逐组成卡（同组去重、保序）', () => {
+    const comp2 = dimProduct.find((p) => !p.is_own && p.countries.includes('RU') && p.sku_id !== dimProduct.find((q) => !q.is_own)!.sku_id)!;
+    const cards = cardsFromSelections([ownSel, { modelId: comp2.sku_id.split('__')[0], romram: comp2.romram, skuIds: [comp2.sku_id] }, ownSel]);
+    expect(cards).toHaveLength(2);
+    expect(cards[0].main).toEqual(ownSel);
+  });
+
+  it('合并图并集按卡序去重，主品优先于对比区', () => {
     const comp = dimProduct.find((p) => !p.is_own && p.countries.includes('RU'))!;
     const compSel: ProductSelection = { modelId: comp.sku_id.split('__')[0], romram: comp.romram, skuIds: [comp.sku_id] };
-    const cards: MainProduct[] = [
-      { modelId: ruOwnModel, configs: [ownSel], compares: [compSel] },
-      { modelId: comp.sku_id.split('__')[0], configs: [compSel], compares: [ownSel] },
-    ];
-    const { mainSels, compareSels } = flatSelections(cards);
+    const { mainSels, compareSels } = flatSelections([
+      card(ownSel, [compSel]),
+      card(compSel, [ownSel]),
+    ]);
     expect(mainSels).toHaveLength(2);
-    expect(compareSels).toHaveLength(0); // 都已作为主品配置出现
+    expect(compareSels).toHaveLength(0); // 都已作为主品出现
   });
 
-  it('groupToCards 按型号成卡保序', () => {
-    const comp2 = dimProduct.find((p) => !p.is_own && p.countries.includes('RU') && p.sku_id !== dimProduct.find((q) => !q.is_own)!.sku_id)!;
-    const cards = groupToCards([ownSel, { modelId: comp2.sku_id.split('__')[0], romram: comp2.romram, skuIds: [comp2.sku_id] }, ownSel]);
-    expect(cards).toHaveLength(2);
-    expect(cards[0].configs).toHaveLength(1); // 同型号同配置不重复
-  });
-
-  it('clampMains 只截对比区，配置全保留', () => {
-    const comps = autoComparesFor({ modelId: ruOwnModel, configs: [ownSel], compares: [] });
-    const over: MainProduct = { modelId: ruOwnModel, configs: [ownSel], compares: [...comps, ...comps, ...comps] };
+  it('clampMains 截对比区到卡配额、卡数到 MAINS_CAP', () => {
+    const comps = autoComparesFor(card(ownSel));
+    const over = card(ownSel, [...comps, ...comps, ...comps]);
     const clamped = clampMains([over]);
-    expect(clamped[0].configs).toHaveLength(1);
+    expect(clamped[0].main).toEqual(ownSel);
     expect(clamped[0].compares.length).toBeLessThanOrEqual(cardQuota(clamped[0]));
+    const many = Array.from({ length: MAINS_CAP + 3 }, () => card(ownSel));
+    expect(clampMains(many)).toHaveLength(MAINS_CAP);
   });
 });
 
-describe('mapConfigsToProduct（切换主品产品的配置/颜色映射）', () => {
-  const nodeOf = (modelId: string, romram: string) =>
-    buildProductTree('phone', 'RU').flatMap((b) => b.series).flatMap((s) => s.models).find((m) => m.modelId === modelId)?.romrams.find((r) => r.romram === romram);
+describe('remapSelection（换配置/换产品的颜色映射）', () => {
+  const treeModels = buildProductTree('phone', 'RU').flatMap((b) => b.series).flatMap((s) => s.models);
+  const nodeOf = (modelId: string, romram: string): RomramNode | undefined =>
+    treeModels.find((m) => m.modelId === modelId)?.romrams.find((r) => r.romram === romram);
 
-  it('同配置保留 + 颜色映射同色 SKU、缺失回默认最低价色', () => {
-    const puraPro = dimProduct.find((p) => p.is_own && p.countries.includes('RU') && p.industry === 'phone' && p.model_name.includes('90s Pro') && !p.model_name.includes('Max'))!;
+  it('同色名优先映射同色 SKU；无同色回默认最低价色', () => {
     const proMax = dimProduct.find((p) => p.is_own && p.industry === 'phone' && p.model_name === 'Pura 90s Pro Max')!;
     const fromId = proMax.sku_id.split('__')[0];
-    const toId = puraPro.sku_id.split('__')[0];
-    const oldRom = proMax.romram;
-    const oldNode = nodeOf(fromId, oldRom)!;
-    const oldSel: ProductSelection = { modelId: fromId, romram: oldRom, skuIds: [oldNode.colors[0].skuId] };
-    const out = mapConfigsToProduct([oldSel], fromId, toId, nodeOf, () => (nodeOf(toId, oldRom) ? [oldRom] : [(dimProduct.find((p) => p.sku_id.startsWith(toId + '__'))!.romram)]));
-    expect(out).toHaveLength(1);
-    expect(out[0].modelId).toBe(toId);
-    const newNode = nodeOf(toId, out[0].romram)!;
-    expect(newNode.colors.some((c) => c.skuId === out[0].skuIds[0])).toBe(true);
-    // 同色优先：旧色在新产品存在 → SKU 即同色
-    const oldColor = oldNode.colors[0].color.toLowerCase();
-    const mappedColor = newNode.colors.find((c) => c.skuId === out[0].skuIds[0])!.color.toLowerCase();
-    if (newNode.colors.some((c) => c.color.toLowerCase() === oldColor)) {
-      expect(mappedColor).toBe(oldColor);
+    const oldNode = nodeOf(fromId, proMax.romram)!;
+    const oldSel: ProductSelection = { modelId: fromId, romram: proMax.romram, skuIds: [oldNode.colors[0].skuId] };
+    // 同产品换配置：颜色名在新配置存在 → 同色
+    const modelNode = treeModels.find((m) => m.modelId === fromId)!;
+    const target = modelNode.romrams.find((r) => r.romram !== oldNode.romram);
+    if (target) {
+      const out = remapSelection(oldSel, oldNode, target);
+      expect(out.modelId).toBe(fromId);
+      expect(out.romram).toBe(target.romram);
+      const oldColor = oldNode.colors[0].color.toLowerCase();
+      const newNode = nodeOf(fromId, target.romram)!;
+      if (newNode.colors.some((c) => c.color.toLowerCase() === oldColor)) {
+        expect(newNode.colors.find((c) => c.skuId === out.skuIds[0])!.color.toLowerCase()).toBe(oldColor);
+      } else {
+        expect(target.selectableColors.length ? target.selectableColors : target.colors).toContainEqual(
+          expect.objectContaining({ skuId: out.skuIds[0] }),
+        );
+      }
     }
   });
 
-  it('无同配置时回退新产品首个配置，结果去重', () => {
+  it('换产品落地：型号+颜色均来自目标配置节点', () => {
     const a = dimProduct.find((p) => p.is_own && p.industry === 'phone' && p.model_name === 'Pura 80 Ultra')!;
     const b = dimProduct.find((p) => p.is_own && p.industry === 'phone' && p.model_name === 'Pura 80')!;
     const fromId = a.sku_id.split('__')[0];
     const toId = b.sku_id.split('__')[0];
-    const bFirst = dimProduct.find((p) => p.sku_id.startsWith(toId + '__'))!.romram;
-    const sels: ProductSelection[] = [0, 1].map(() => ({ modelId: fromId, romram: a.romram, skuIds: [a.sku_id] }));
-    const out = mapConfigsToProduct(sels, fromId, toId, nodeOf, () => [bFirst]);
-    expect(out).toHaveLength(1);
-    expect(out[0].romram).toBe(bFirst);
-    expect(out[0].modelId).toBe(toId);
+    const bRow = dimProduct.find((p) => p.sku_id.startsWith(toId + '__'))!;
+    const oldNode = nodeOf(fromId, a.romram)!;
+    const target = nodeOf(toId, bRow.romram)!;
+    const out = remapSelection({ modelId: fromId, romram: a.romram, skuIds: [a.sku_id] }, oldNode, target);
+    expect(out.modelId).toBe(toId);
+    expect(out.romram).toBe(bRow.romram);
+    expect(target.colors.some((c) => c.skuId === out.skuIds[0])).toBe(true);
   });
 });

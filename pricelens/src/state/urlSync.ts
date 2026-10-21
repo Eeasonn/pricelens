@@ -6,16 +6,17 @@
 // - 单一写入口 writeUrlPatch(patch)：读当前 query 合并后写，两个 Provider 各写
 //   各的键互不覆盖；
 // - main = 逗号分隔配置 key（modelId__romram去空格），恢复时反查 dimProduct 还原
-//   ProductSelection（romram 原文 + 最低价颜色 SKU）并按型号成卡；对比区按
+//   ProductSelection（romram 原文 + 最低价颜色 SKU）并逐项成卡（第一百二十轮：
+//   同型号不同配置 = 两张卡，不再按型号合并；未选主品的空对不写入 URL）；对比区按
 //   autoMatch 现行规则带出；第一百一十七轮起参数名 own → main（旧链接仍可读），
 //   且任意品牌都可做主分析（角色由用户指定，不再限华为）；
 // - 参数不合法（型号不存在等）静默忽略，回退默认/持久化值。
 // ============================================================
 import { dimProduct } from '../data';
-import type { FiltersState, MainProduct, PlatformSelection, ProductSelection } from './filtersTypes';
+import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
 import type { Page } from './PageContext';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
-import { groupToCards } from './mainSelection';
+import { cardsFromSelections, clampMains } from './mainSelection';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
@@ -66,7 +67,7 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
         .split(',')
         .map((k) => productSelectionOfSeriesKey(k.trim()))
         .filter((x): x is ProductSelection => x != null);
-      if (list.length > 0) out.filters.mains = groupToCards(list) as MainProduct[];
+      if (list.length > 0) out.filters.mains = clampMains(cardsFromSelections(list));
     }
   } catch {
     /* 无 window / 解析失败 = 无覆写 */

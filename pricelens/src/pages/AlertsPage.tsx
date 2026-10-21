@@ -32,7 +32,7 @@ import {
 } from '../dataModel/alerts';
 import { productSelectionOfAnySeriesKey, productSelectionOfSeriesKey } from '../state/urlSync';
 import { getEffectiveBenchmark } from '../state/configStore';
-import { autoComparesFor } from '../state/mainSelection';
+import { autoComparesFor, newCardId } from '../state/mainSelection';
 import PageHeader from '../components/PageHeader';
 import BrandDot from '../components/BrandMark';
 import { AlertBell, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
@@ -163,7 +163,7 @@ function useOpenInDashboard() {
     if (sel && state.alertSubs.includes(a.seriesKey)) {
       actions.set({ subjectMode: 'product' });
       if (a.isOwn) {
-        actions.setMains([{ modelId: sel.modelId, configs: [sel], compares: [] }]);
+        actions.setMains([{ id: newCardId(), main: sel, compares: [] }]);
       } else {
         const normalize = (value: string): string => value.replace(/\s+/g, '');
         const competitorRom = normalize(sel.romram);
@@ -176,7 +176,7 @@ function useOpenInDashboard() {
           ? productSelectionOfSeriesKey(`${mapping.own_model_id}__${normalize(mapping.own_romram)}`)
           : null;
         if (mappedOwn) {
-          const card = { modelId: mappedOwn.modelId, configs: [mappedOwn], compares: [] };
+          const card = { id: newCardId(), main: mappedOwn, compares: [] };
           const auto = autoComparesFor(card);
           const hasTarget = auto.some((group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom);
           if (state.autoMatch && hasTarget) {
@@ -189,7 +189,7 @@ function useOpenInDashboard() {
           }
         } else {
           // 无映射：竞品自身即分析对象
-          actions.setMains([{ modelId: sel.modelId, configs: [sel], compares: [] }]);
+          actions.setMains([{ id: newCardId(), main: sel, compares: [] }]);
         }
       }
     }

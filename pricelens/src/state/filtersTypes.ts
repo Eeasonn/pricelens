@@ -1,7 +1,10 @@
 // ============================================================
 // 筛选状态类型（§5 五框 + 图表侧写入字段）
 // 第一百一十七轮（统一产品选择器）：own/competitors 两个并列字段退役，
-// 改为 mains——每个主分析产品一张卡：型号 + 配置若干 + 它自己的对比产品。
+// 改为 mains——每个主分析产品一张卡。
+// 第一百二十轮（第三次迭代）：主分析卡收敛为「唯一产品 + 唯一型号 + 唯一颜色」；
+// 一个产品的多个型号 = 多张独立卡；`main: null` = 尚未选主品的空对
+// （允许先挂对比条目，补选主品后沿用）。
 // 「主分析 / 对比」是角色（用户指定），与数据层 is_own（华为产品的事实）正交：
 // 主品可任意品牌，对比区也可含华为产品。
 // ============================================================
@@ -16,12 +19,12 @@ export interface ProductSelection {
   skuIds: string[]; // 所选颜色 SKU；1 个=该颜色；多个=均值
 }
 
-/** 主分析产品卡：一个型号一卡；配置 = 该型号勾选的 ROMRAM 组；
- *  compares = 本主品自己的对比产品（任意品牌，含华为） */
+/** 主分析产品卡：唯一主品（含颜色）+ 它自己的对比区（任意品牌，含华为）。
+ *  id = 稳定键（拖拽换序/弹窗定位），与 modelId 解耦（同型号不同配置 = 多卡）。 */
 export interface MainProduct {
-  modelId: string;
-  configs: ProductSelection[]; // 每项 modelId === 本卡型号
-  compares: ProductSelection[]; // 本卡的对比区
+  id: string;
+  main: ProductSelection | null;
+  compares: ProductSelection[];
 }
 
 export interface PlatformSelection {
@@ -37,7 +40,7 @@ export interface FiltersState {
   subjectMode: 'product' | 'tier';
   /** 按档位模式选中的价格档位（tier_code，dim_product.tier_code）；product 模式不生效 */
   tier: string | null;
-  /** 主分析产品卡列表（第一百一十七轮）：卡序 = 分离面板序；≥2 张卡看板自动分离 */
+  /** 主分析产品卡列表：卡序 = 分离面板序；≥2 张卡看板自动分离 */
   mains: MainProduct[];
   platform: PlatformSelection | null; // null=未选=该国默认电渠单平台口径；渠道内多店铺取最低在架价
   granularity: Granularity; // 默认 'month'（第二十五轮）
@@ -50,8 +53,8 @@ export interface FiltersState {
   priceTypes: { discounted: boolean; rrp: boolean }; // 默认仅折后价（第五十轮：RRP 默认不勾选，手动勾回看账面价）
   agg: AggMode; // 数据汇总，仅月/季粒度生效，默认 'avg'
   /**
-   * 对比自动匹配（第三十四轮语义延续，第一百一十七轮按卡生效）：开 = 华为主品卡的
-   * 对比区随配置自动重算（对标矩阵并集，按卡配额截断）；任一卡手动改对比即退出，
+   * 对比自动匹配（第三十四轮语义延续，按卡生效）：开 = 华为主品卡的
+   * 对比区随配置自动重算（对标矩阵，按卡配额截断）；任一卡手动改对比即退出，
    * 非华为主品卡（矩阵无行）始终手动。
    */
   autoMatch: boolean;
@@ -73,14 +76,14 @@ export interface FiltersActions {
   set(patch: Partial<FiltersState>): void;
   /** 回到默认视图（含数据默认主分析卡 + 其配置对比区） */
   reset(): void;
-  // ---- 第一百一十七轮：主分析卡操作 ----
-  /** 卡片结构变化（增删卡/配置/换序）。autoMatch 开 = 华为主品卡对比区按矩阵重算
+  // ---- 主分析卡操作 ----
+  /** 卡片结构变化（增删卡/换主品/换序）。autoMatch 开 = 华为主品卡对比区按矩阵重算
    *  （配额收口）；非华为主品卡与手动退出自动后的一切对比区不动。 */
   setMains(list: MainProduct[]): void;
-  /** 手动改某卡的对比区（增删/调色）：直接写入并退出自动匹配（原第三十四轮语义） */
-  setCardCompares(modelId: string, compares: ProductSelection[]): void;
-  /** 单卡「自动匹配」：按矩阵重算该卡对比区（不改 autoMatch 开关） */
-  autoMatchCard(modelId: string): void;
+  /** 手动改某卡对比区（增删/调色/换条目）：直接写入并退出自动匹配（原第三十四轮语义） */
+  setCardCompares(cardId: string, compares: ProductSelection[]): void;
+  /** 单卡「自动匹配竞品」：按矩阵重算该卡对比区（不改 autoMatch 开关） */
+  autoMatchCard(cardId: string): void;
   // ---- 粒度 ----
   /** §5.4/§5.6：切换粒度——保持可见时间跨度只换桶（dimTime 映射；空数据降级为不换算） */
   setGranularity(g: Granularity): void;

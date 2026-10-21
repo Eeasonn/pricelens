@@ -1,7 +1,8 @@
 // ============================================================
-// 主分析卡纯函数（第一百一十七轮，统一产品选择器）：
-// 配额（一张图 ≤8 条产品线，选择时收口）、自动匹配填充、v10 持久化迁移、
-// 勾选组工具。UI 与 FiltersContext 共用；不持有状态。
+// 主分析卡纯函数（第一百二十轮，第三次迭代）：
+// 卡 = 唯一主品（产品+型号+颜色）+ 对比区。配额在选择时收口（每卡 1 主品
+// + ≤7 对比 = 8 条线；空对 ≤8），卡数上限 8。含自动匹配填充、v10/v11
+// 持久化迁移、勾选组工具。UI 与 FiltersContext 共用；不持有状态。
 // ============================================================
 import { dimProduct } from '../data';
 import type { DimProduct } from '../dataModel/types';
@@ -10,19 +11,30 @@ import { groupsFromBenchmark } from './configStore';
 import { defaultColorSkuIds, modelIdOf, type RomramNode } from '../components/ProductCascader/tree';
 
 /** 一张图（合并图 = 唯一主品卡；分离模式 = 某张面板卡）同时展示的折线数上限。
- *  第一百一十七轮：上限前移到选择时（modal 配额），呈现层不再截断。 */
+ *  上限前移到选择时（modal 配额），呈现层不再截断。 */
 export const MAX_LINES_PER_CHART = 8;
+
+/** 主分析卡数上限（= 分离面板数上限；批量动作按剩余名额截断） */
+export const MAINS_CAP = 8;
+
+let cardSeq = 0;
+
+/** 卡稳定键：跨持久化保留；同毫秒批量建卡靠自增尾号去重 */
+export function newCardId(): string {
+  cardSeq += 1;
+  return `card-${Date.now().toString(36)}-${cardSeq.toString(36)}`;
+}
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
-/** 勾选组键（型号|配置去空格）——卡片配置、对比区、图例系列 key 的公共成分 */
+/** 勾选组键（型号|配置去空格）——卡片、对比区、图例系列 key 的公共成分 */
 export function selKey(sel: ProductSelection): string {
   return `${sel.modelId}|${norm(sel.romram)}`;
 }
 
-/** 卡内对比区配额 = 8 - 配置数（主品配置优先占线；至少 0） */
-export function cardQuota(card: Pick<MainProduct, 'configs'>): number {
-  return Math.max(0, MAX_LINES_PER_CHART - card.configs.length);
+/** 卡内对比区配额 = 8 - 主品占线（空对 8；下限 0） */
+export function cardQuota(card: Pick<MainProduct, 'main'>): number {
+  return Math.max(0, MAX_LINES_PER_CHART - (card.main ? 1 : 0));
 }
 
 /** 型号是否华为产品（数据事实；自动匹配矩阵只覆盖华为侧） */
@@ -37,82 +49,100 @@ export function selectionValidFor(sel: ProductSelection, countryCode: string, in
   );
 }
 
-/** 主分析卡列表整体是否仍属于该国该产业（任一配置失效即 false，与旧 own 判定同语义） */
+/** 主分析卡列表整体是否仍属于该国该产业（任一主品失效即 false，与旧 own 判定同语义） */
 export function mainsValidFor(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): boolean {
-  const configs = mains.flatMap((m) => m.configs);
-  if (!configs.length) return false;
-  return configs.every((sel) => selectionValidFor(sel, countryCode, industry));
+  const sels = mains.map((m) => m.main).filter((s): s is ProductSelection => s != null);
+  if (!sels.length) return false;
+  return sels.every((sel) => selectionValidFor(sel, countryCode, industry));
 }
 
-/** 主品卡的自动匹配对比区：对标矩阵并集（主竞品在前）→
- *  剔除与主品同型号同配置的组（防御）→ 按卡配额截断。 */
+/** 主品卡的自动匹配对比区：对标矩阵（主竞品在前）→
+ *  剔除与主品同型号同配置 → 按卡配额截断。 */
 export function autoComparesFor(card: MainProduct): ProductSelection[] {
-  if (!card.configs.length) return [];
-  const ownKeys = new Set(card.configs.map(selKey));
-  return groupsFromBenchmark(card.configs).filter((c) => !ownKeys.has(selKey(c))).slice(0, cardQuota(card));
+  if (!card.main) return [];
+  const ownKey = selKey(card.main);
+  return groupsFromBenchmark([card.main])
+    .filter((c) => selKey(c) !== ownKey)
+    .slice(0, cardQuota(card));
 }
 
 /** 自动跟随重算：华为主品卡（矩阵覆盖侧）对比区 = 矩阵产出（矩阵为空即清空）；
- *  非华为主品卡无矩阵可依，手动挑选的对比区不被动清空。 */
+ *  非华为主品卡与空对无矩阵可依，手动挑选的对比区不被动清空。 */
 export function reapplyAuto(mains: MainProduct[]): MainProduct[] {
   return mains.map((card) =>
-    card.configs.length && isHuaweiModel(card.modelId)
-      ? { ...card, compares: autoComparesFor(card) }
-      : card,
+    card.main && isHuaweiModel(card.main.modelId) ? { ...card, compares: autoComparesFor(card) } : card,
   );
 }
 
-/** ProductSelection[] 按型号分组成卡（保序；compare 侧去重同型号同配置） */
-export function groupToCards(list: ProductSelection[]): MainProduct[] {
+/** 勾选组逐组成卡（保序；同型号同配置去重）——URL 解析 / 纯竞品视角迁移用 */
+export function cardsFromSelections(list: ProductSelection[]): MainProduct[] {
   const out: MainProduct[] = [];
-  const byModel = new Map<string, MainProduct>();
+  const seen = new Set<string>();
   for (const sel of list) {
-    let card = byModel.get(sel.modelId);
-    if (!card) {
-      card = { modelId: sel.modelId, configs: [], compares: [] };
-      byModel.set(sel.modelId, card);
-      out.push(card);
-    }
-    if (!card.configs.some((c) => selKey(c) === selKey(sel))) card.configs.push(sel);
+    const key = selKey(sel);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id: newCardId(), main: sel, compares: [] });
   }
   return out;
 }
 
-/** v10 → v11 持久化迁移：旧 own + competitors（全局一份）→ 每主品卡自带对比区。
- *  - autoMatch 开：逐卡按矩阵重算（复用第一百一十六轮自愈口径）；
+/** v11 → v12 持久化迁移：旧卡 configs[] 展开为逐配置卡——
+ *  首配置卡继承原对比区；其余配置卡自动模式按矩阵补、手动模式落空。 */
+export function expandV11Cards(
+  cards: { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[],
+  autoMatch: boolean,
+): MainProduct[] {
+  const out: MainProduct[] = [];
+  const seen = new Set<string>();
+  for (const old of cards) {
+    old.configs.forEach((sel, i) => {
+      const key = selKey(sel);
+      if (seen.has(key) || out.length >= MAINS_CAP) return;
+      seen.add(key);
+      const empty: MainProduct = { id: newCardId(), main: sel, compares: [] };
+      out.push({
+        ...empty,
+        compares: i === 0 ? old.compares.slice(0, cardQuota(empty)) : autoMatch ? autoComparesFor(empty) : [],
+      });
+    });
+  }
+  return out;
+}
+
+/** v10 → v12 持久化迁移：旧 own + competitors（全局一份）→ 每配置一张卡。
+ *  - autoMatch 开：逐卡按矩阵重算（自愈口径延续）；
  *  - autoMatch 关：把旧全局竞品按旧看板面板口径分配——矩阵映射命中优先、
  *    同容量 fallback 补位、截到卡配额；
- *  - 旧「纯竞品视角」（own 空有竞品）：竞品型号各成一卡（无对比区），保底 8 卡。 */
+ *  - 旧「纯竞品视角」（own 空）：竞品逐组成卡（无对比区），保底 MAINS_CAP 卡。 */
 export function migrateV10(own: ProductSelection[], competitors: ProductSelection[], autoMatch: boolean): MainProduct[] {
-  if (!own.length) {
-    return groupToCards(competitors).slice(0, MAX_LINES_PER_CHART).map((c) => ({ ...c, compares: [] }));
-  }
-  const cards = groupToCards(own);
+  if (!own.length) return clampMains(cardsFromSelections(competitors));
+  const cards = clampMains(cardsFromSelections(own));
   if (autoMatch) return cards.map((card) => ({ ...card, compares: autoComparesFor(card) }));
   const globalKeys = new Set(competitors.map(selKey));
   return cards.map((card) => {
-    const ownKeys = new Set(card.configs.map(selKey));
-    const mapped = groupsFromBenchmark(card.configs).filter((c) => globalKeys.has(selKey(c)) && !ownKeys.has(selKey(c)));
+    const ownKey = card.main ? selKey(card.main) : '';
+    const mapped = groupsFromBenchmark(card.main ? [card.main] : []).filter(
+      (c) => globalKeys.has(selKey(c)) && selKey(c) !== ownKey,
+    );
     const mappedKeys = new Set(mapped.map(selKey));
     const fallback = competitors.filter(
-      (c) => !mappedKeys.has(selKey(c)) && !ownKeys.has(selKey(c))
-        && card.configs.some((s) => norm(s.romram) === norm(c.romram)),
+      (c) => !mappedKeys.has(selKey(c)) && selKey(c) !== ownKey
+        && card.main != null && norm(c.romram) === norm(card.main.romram),
     );
     return { ...card, compares: [...mapped, ...fallback].slice(0, cardQuota(card)) };
   });
 }
 
-/** 合并图取数组：全部主品配置（按卡序）+ 全部对比区并集（按卡序去重；主品已有者不重复） */
+/** 合并图取数组：全部主品（按卡序）+ 全部对比区并集（按卡序去重；主品已有者不重复） */
 export function flatSelections(mains: MainProduct[]): { mainSels: ProductSelection[]; compareSels: ProductSelection[] } {
   const mainSels: ProductSelection[] = [];
   const compareSels: ProductSelection[] = [];
   const seen = new Set<string>();
   for (const card of mains) {
-    for (const sel of card.configs) {
-      if (!seen.has(selKey(sel))) {
-        seen.add(selKey(sel));
-        mainSels.push(sel);
-      }
+    if (card.main && !seen.has(selKey(card.main))) {
+      seen.add(selKey(card.main));
+      mainSels.push(card.main);
     }
   }
   for (const card of mains) {
@@ -126,40 +156,21 @@ export function flatSelections(mains: MainProduct[]): { mainSels: ProductSelecti
   return { mainSels, compareSels };
 }
 
-/** 把超配额的卡收敛到配额内（迁移兜底）：配置全保留，对比区按序截断 */
+/** 收敛到上限内（迁移/读档兜底）：卡数 ≤ MAINS_CAP，对比区按卡配额截断 */
 export function clampMains(mains: MainProduct[]): MainProduct[] {
-  return mains.map((card) => ({ ...card, compares: card.compares.slice(0, cardQuota(card)) }));
+  return mains.slice(0, MAINS_CAP).map((card) => ({ ...card, compares: card.compares.slice(0, cardQuota(card)) }));
 }
 
-/** 换产品时的配置映射（浮窗「切换」用）：每个旧配置优先映射到新产品同配置
- *  （romram 归一相等），颜色尽量映射同色 SKU、缺失回默认最低价色；无同配置时
- *  回退新产品首个配置；结果去重（配置数可能因映射收敛而减少）。 */
-export function mapConfigsToProduct(
-  configs: ProductSelection[],
-  fromModelId: string,
-  toModelId: string,
-  nodeOf: (modelId: string, romram: string) => RomramNode | undefined,
-  fallbackRomrams: () => string[],
-): ProductSelection[] {
-  const normRom = (s: string): string => s.replace(/\s+/g, '');
-  const out: ProductSelection[] = [];
-  for (const old of configs) {
-    const sameRom = fallbackRomrams().find((r) => normRom(r) === normRom(old.romram)) ?? fallbackRomrams()[0];
-    if (sameRom == null) continue;
-    const oldNode = nodeOf(fromModelId, old.romram);
-    const oldColors = new Set(
-      (oldNode?.colors ?? []).filter((c) => old.skuIds.includes(c.skuId)).map((c) => c.color.toLowerCase()),
-    );
-    const newNode = nodeOf(toModelId, sameRom);
-    if (!newNode) continue;
-    const mapped = newNode.colors.find((c) => oldColors.has(c.color.toLowerCase()));
-    const sel: ProductSelection = {
-      modelId: toModelId,
-      romram: sameRom,
-      skuIds: mapped ? [mapped.skuId] : defaultColorSkuIds(newNode),
-    };
-    if (!sel.skuIds.length) continue;
-    if (!out.some((c) => normRom(c.romram) === normRom(sel.romram))) out.push(sel);
-  }
-  return out;
+/** 换配置/换产品落地：颜色尽量映射同色 SKU，缺失回默认最低价色。
+ *  oldNode = 旧勾选组所在配置节点（查同色名用）；newNode = 目标配置节点。 */
+export function remapSelection(oldSel: ProductSelection, oldNode: RomramNode | undefined, newNode: RomramNode): ProductSelection {
+  const oldColors = new Set(
+    (oldNode?.colors ?? []).filter((c) => oldSel.skuIds.includes(c.skuId)).map((c) => c.color.toLowerCase()),
+  );
+  const sameColor = newNode.colors.find((c) => oldColors.has(c.color.toLowerCase()));
+  return {
+    modelId: newNode.modelId,
+    romram: newNode.romram,
+    skuIds: sameColor ? [sameColor.skuId] : defaultColorSkuIds(newNode),
+  };
 }
