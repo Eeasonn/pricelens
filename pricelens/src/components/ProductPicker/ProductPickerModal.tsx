@@ -1,12 +1,12 @@
 // ============================================================
-// 选择产品浮窗（第一百二十轮，第三次迭代）：
+// 选择产品浮窗（第一百二十一轮修订；第三次迭代基础见 git 史）：
 // 主体 = 若干「分析对」左右排布——左 = 主分析产品（唯一产品+型号+颜色，
 //   浅蓝底强调、单选感），中间分界线骑「⚡ 自动匹配竞品」按钮，右 =
 //   对比产品（弱、多选感：条目列表 + 常驻「＋ 添加对比产品」触发）。
-// 产品树不再常驻：改为「更换/添加」时按需弹出的层级浮窗——条目显示文字
-//   本身分四段（品牌/产品/型号/颜色），点任一段 = 从该层向下续选的树切片
-//   （预定位当前路径）；行尾「更换」= 完整树浮窗的显性入口。
-// 颜色不进树浮窗：点型号行即按默认最低价色落选，换色只在已选条目的色块。
+// 产品树不再常驻：唯一更换入口 = 行尾「更换」→ 完整树浮窗（品牌→系列→
+//   产品→型号，预定位当前路径，搜索保留）；逐层分段点击切换退役
+//   （用户实测反馈过于抽象）。颜色不进树浮窗：点型号行即按默认最低价色
+//   落选，换色只在已选条目的色块（必须保留的可编辑项）。
 // 主品空缺 = 空对：允许先挂对比条目，补选主品后沿用（不进 URL）。
 // 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；配额每卡
 //   1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8；即改即存。
@@ -49,7 +49,7 @@ import { LPL } from '../../state/lplKeys';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 
 const POPOVER_H = 300; // 树浮窗列高（固定，不随内容跳变）
-const POPOVER_W = { brand: 700, product: 540, config: 240 } as const;
+const POPOVER_W = 700; // 完整树浮窗（品牌→系列→产品→型号 四列）
 const PAIR_LIST_MAX_H = 440; // 分析对列表区最大高（多对时纵向滚动）
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
@@ -63,8 +63,6 @@ type PickerCtx =
   | { kind: 'replace-main'; cardId: string } // 换主品（对比区保留）
   | { kind: 'compares'; cardId: string } // 对比区增删（连点，不关浮窗）
   | { kind: 'replace-compare'; cardId: string; sel: ProductSelection }; // 整条替换
-
-type PickerLevel = keyof typeof POPOVER_W;
 
 // ---------------- 最近使用组合（localStorage LPL3.ui.mainCombos，上限 5） ----------------
 
@@ -202,48 +200,57 @@ function useTreeData() {
 const usableRomrams = (nodes: RomramNode[]): RomramNode[] =>
   nodes.filter((r) => r.romram !== '—' || nodes.length === 1);
 
-/** 可点文字段（显示即入口：hover 浅蓝底提示逐层切换） */
-function Seg({
+/** 条目只读文字（更换收口后不可点；超长省略号 + title 全称） */
+function RowText({
   children,
-  onClick,
   strong,
-  chip,
   small,
   title,
 }: {
   children: ReactNode;
-  onClick?: () => void;
   strong?: boolean;
-  chip?: boolean;
   small?: boolean;
   title?: string;
 }) {
-  const [hover, setHover] = useState(false);
   return (
     <span
-      role="button"
       title={title}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onClick={onClick}
       style={{
         display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: chip ? '1px 9px' : '1px 5px',
-        borderRadius: chip ? radius.pill : 5,
-        fontSize: small ? 12 : strong ? 14 : 12.5,
-        fontWeight: strong ? 700 : chip ? 600 : small ? 500 : 400,
-        color: chip ? color.ink : color.body,
-        background: hover ? selectSoft : chip ? color.canvas : 'transparent',
-        border: `1px solid ${chip ? 'rgba(0, 112, 243, 0.40)' : 'transparent'}`,
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
         minWidth: 0,
-        maxWidth: small ? 170 : 250,
+        maxWidth: strong ? 240 : 170,
+        fontSize: strong ? 14 : small ? 12 : 12.5,
+        fontWeight: strong ? 700 : 500,
+        color: strong ? color.ink : color.body,
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{children}</span>
+    </span>
+  );
+}
+
+/** 只读配置 chip（浅灰描边；与可点的颜色 chip 视觉区分） */
+function RomramChip({ children }: { children: ReactNode }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: 20,
+        padding: '0 8px',
+        borderRadius: radius.pill,
+        fontSize: 11.5,
+        fontWeight: 600,
+        color: color.body,
+        background: color.canvas,
+        border: `1px solid ${color.hairline}`,
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+      }}
+    >
+      {children}
     </span>
   );
 }
@@ -327,18 +334,16 @@ function StateTag({ text }: { text: string }) {
   );
 }
 
-// ---------------- 层级切换树浮窗（产品树的按需切片） ----------------
+// ---------------- 更换树浮窗（完整树：唯一更换入口） ----------------
 
-/** 起始层级 = 条目上被点的文字段：brand = 完整树；product = 系列→产品→型号；
- *  config = 该产品全部型号（单列）。选完型号落地；对比上下文连点不关。 */
+/** 完整树浮窗：品牌→系列→产品→型号四列，预定位当前条目路径；
+ *  主品上下文选完型号落地关窗；对比上下文连点不关。 */
 function LevelSwitchPopover({
-  level,
   ctx,
   initialModelId,
   openSignal,
   children,
 }: {
-  level: PickerLevel;
   ctx: PickerCtx;
   initialModelId?: string;
   openSignal?: boolean;
@@ -473,9 +478,8 @@ function LevelSwitchPopover({
   const columns: CascadeColumnSpec[] = useMemo(() => {
     if (!brand) return [];
     const cols: CascadeColumnSpec[] = [];
-    if (level === 'brand') {
-      cols.push({
-        items: tree.map((b) => ({
+    cols.push({
+      items: tree.map((b) => ({
           key: b.key,
           label: brandLabelOf(b.key),
           leading: <BrandDot brand={b.key} />,
@@ -488,10 +492,8 @@ function LevelSwitchPopover({
         })),
         flex: 0.85,
       });
-    }
-    if (level !== 'config') {
-      cols.push({
-        items: (brand?.series ?? []).map((s) => ({
+    cols.push({
+      items: (brand?.series ?? []).map((s) => ({
           key: s.key,
           label: s.title,
           active: series?.key === s.key,
@@ -543,7 +545,6 @@ function LevelSwitchPopover({
         })),
         flex: 1.5,
       });
-    }
     cols.push({
       items: (model?.romrams ?? []).map((r) => {
         const key = nodeSelKey(r);
@@ -617,7 +618,7 @@ function LevelSwitchPopover({
     });
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, brand, series, model, level, ctx, mains, activeCard, romramsByModel]);
+  }, [tree, brand, series, model, ctx, mains, activeCard, romramsByModel]);
 
   return (
     <Popover
@@ -628,20 +629,18 @@ function LevelSwitchPopover({
         if (o) setSearch('');
       }}
       placement="bottomLeft"
-      styles={{ body: { padding: 10, width: POPOVER_W[level] } }}
+      styles={{ body: { padding: 10, width: POPOVER_W } }}
       content={
         <div>
-          {level !== 'config' && (
-            <Input
-              allowClear
-              size="small"
-              prefix={<SearchOutlined style={{ color: color.mute }} />}
-              placeholder="搜索品牌 / 系列 / 产品"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ marginBottom: 8, width: 240 }}
-            />
-          )}
+          <Input
+            allowClear
+            size="small"
+            prefix={<SearchOutlined style={{ color: color.mute }} />}
+            placeholder="搜索品牌 / 系列 / 产品"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ marginBottom: 8, width: 240 }}
+          />
           <div style={{ display: 'flex' }}>
             <CascadePanel columns={columns} fill height={POPOVER_H} />
           </div>
@@ -663,25 +662,16 @@ function MainRow({ card }: { card: MainProduct }) {
   if (!main) return null;
   const brand = brandOfModel(main.modelId);
   const node = romramByKey.get(`${main.modelId}|${main.romram}`);
-  const ctx: PickerCtx = { kind: 'replace-main', cardId: card.id };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', minWidth: 0 }}>
-      <LevelSwitchPopover level="brand" ctx={ctx} initialModelId={main.modelId}>
-        <Seg title={`品牌 ${brandLabelOf(brand)} · 点击换品牌`}>
-          <BrandDot brand={brand} />
-          {brandLabelOf(brand)}
-        </Seg>
-      </LevelSwitchPopover>
-      <LevelSwitchPopover level="product" ctx={ctx} initialModelId={main.modelId}>
-        <Seg strong title={`${modelNameOf(main.modelId)} · 点击换产品（可跨系列）`}>
-          {modelNameOf(main.modelId)}
-        </Seg>
-      </LevelSwitchPopover>
-      <LevelSwitchPopover level="config" ctx={ctx} initialModelId={main.modelId}>
-        <Seg chip title={`${main.romram} · 点击换型号`}>
-          {main.romram}
-        </Seg>
-      </LevelSwitchPopover>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, minWidth: 0 }}>
+        <BrandDot brand={brand} />
+        <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
+      </span>
+      <RowText strong title={`${brandLabelOf(brand)} ${modelNameOf(main.modelId)} ${main.romram}`}>
+        {modelNameOf(main.modelId)}
+      </RowText>
+      <RomramChip>{main.romram}</RomramChip>
       <ColorChip
         node={node}
         skuIds={main.skuIds}
@@ -697,7 +687,7 @@ function MainRow({ card }: { card: MainProduct }) {
         }
       />
       <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        <LevelSwitchPopover level="brand" ctx={ctx} initialModelId={main.modelId}>
+        <LevelSwitchPopover ctx={{ kind: 'replace-main', cardId: card.id }} initialModelId={main.modelId}>
           <SwapPill label={`更换主分析产品 ${modelNameOf(main.modelId)}`} />
         </LevelSwitchPopover>
         <DeleteX
@@ -714,35 +704,26 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
   const { romramByKey } = useTreeData();
   const node = romramByKey.get(`${sel.modelId}|${sel.romram}`);
   const brand = brandOfModel(sel.modelId);
-  const ctx: PickerCtx = { kind: 'replace-compare', cardId: card.id, sel };
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 2,
+        gap: 4,
         padding: '2px 6px 2px 8px',
         background: color.canvasSoft,
         borderRadius: radius.control,
         minWidth: 0,
       }}
     >
-      <LevelSwitchPopover level="brand" ctx={ctx} initialModelId={sel.modelId}>
-        <Seg small title={`品牌 ${brandLabelOf(brand)} · 点击换品牌`}>
-          <BrandDot brand={brand} />
-          {brandLabelOf(brand)}
-        </Seg>
-      </LevelSwitchPopover>
-      <LevelSwitchPopover level="product" ctx={ctx} initialModelId={sel.modelId}>
-        <Seg small title={`${brandLabelOf(brand)} ${modelNameOf(sel.modelId)} · 点击换产品（可跨系列）`}>
-          {modelNameOf(sel.modelId)}
-        </Seg>
-      </LevelSwitchPopover>
-      <LevelSwitchPopover level="config" ctx={ctx} initialModelId={sel.modelId}>
-        <Seg small chip title={`${sel.romram} · 点击换型号`}>
-          {sel.romram}
-        </Seg>
-      </LevelSwitchPopover>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
+        <BrandDot brand={brand} />
+        <RowText small title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
+      </span>
+      <RowText small title={`${brandLabelOf(brand)} ${modelNameOf(sel.modelId)} ${sel.romram}`}>
+        {modelNameOf(sel.modelId)}
+      </RowText>
+      <RomramChip>{sel.romram}</RomramChip>
       <ColorChip
         node={node}
         skuIds={sel.skuIds}
@@ -758,7 +739,7 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
         }
       />
       <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        <LevelSwitchPopover level="brand" ctx={ctx} initialModelId={sel.modelId}>
+        <LevelSwitchPopover ctx={{ kind: 'replace-compare', cardId: card.id, sel }} initialModelId={sel.modelId}>
           <SwapPill label={`更换对比产品 ${modelNameOf(sel.modelId)}`} />
         </LevelSwitchPopover>
         <DeleteX
@@ -832,7 +813,7 @@ function AddCompareTrigger({ card, autoOpen }: { card: MainProduct; autoOpen?: b
   return (
     <Tooltip title={full ? `本图最多 ${MAX_LINES_PER_CHART} 条产品线（主品 + 对比）` : '挑选对比产品（可连续添加）'}>
       <span style={{ alignSelf: 'flex-start', display: 'inline-flex' }}>
-        <LevelSwitchPopover level="brand" ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId} openSignal={autoOpen}>
+        <LevelSwitchPopover ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId} openSignal={autoOpen}>
           <AddPill label="添加对比产品" disabled={full} />
         </LevelSwitchPopover>
       </span>
@@ -982,7 +963,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
               }}
             >
               <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品 · 单选</div>
-              <LevelSwitchPopover level="brand" ctx={{ kind: 'add-main' }}>
+              <LevelSwitchPopover ctx={{ kind: 'add-main' }}>
                 <AddPill label="选择主分析产品" big />
               </LevelSwitchPopover>
             </div>
@@ -1083,7 +1064,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
                 {card.main ? (
                   <MainRow card={card} />
                 ) : (
-                  <LevelSwitchPopover level="brand" ctx={{ kind: 'set-main', cardId: card.id }}>
+                  <LevelSwitchPopover ctx={{ kind: 'set-main', cardId: card.id }}>
                     <AddPill label="选择主分析产品" big />
                   </LevelSwitchPopover>
                 )}
@@ -1135,7 +1116,7 @@ export default function ProductPickerModal({ open, onClose }: { open: boolean; o
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
         <Tooltip title={mains.length >= MAINS_CAP ? `最多 ${MAINS_CAP} 张主分析卡` : undefined}>
           <span style={{ display: 'inline-flex' }}>
-            <LevelSwitchPopover level="brand" ctx={{ kind: 'add-main' }} initialModelId={lastModelId}>
+            <LevelSwitchPopover ctx={{ kind: 'add-main' }} initialModelId={lastModelId}>
               <AddPill label="添加主分析产品" disabled={mains.length >= MAINS_CAP} />
             </LevelSwitchPopover>
           </span>
