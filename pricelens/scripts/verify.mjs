@@ -154,8 +154,10 @@ console.log('\n[2] 事实列式包');
   const sameLen = Object.values(cols).every((arr) => arr.length === n);
   check('列式包各列等长', sameLen);
   check('周索引全部落在 dim_time', weeks.every((w) => weekIds.has(w)) && weeks.length === dimTime.length);
-  check('SKU 索引全部存在于 dim_product', skus.every((s) => productById.has(s)) && skus.length === dimProduct.length);
-  check('渠道索引全部存在于 dim_channel', channels.every((c) => channelById.has(c)));
+  // 「都在维表 + 长度相等」≠ 一一对应：包内重复索引会全部通过，
+  // 而 prefill_default_shops 的 channels.index(cid) 等隐含依赖索引唯一
+  check('SKU 索引唯一（与 dim_product 一一对应）', new Set(skus).size === skus.length && skus.every((s) => productById.has(s)) && skus.length === dimProduct.length);
+  check('渠道索引唯一且全部存在于 dim_channel', new Set(channels).size === channels.length && channels.every((c) => channelById.has(c)));
   let fxBad = 0, priceBad = 0, usdDrift = 0, usdChecked = 0;
   const keys = new Set();
   let dup = 0;

@@ -14,7 +14,7 @@ function readMap(): DefaultShopOverrides {
     const raw = localStorage.getItem(LPL.cfgDefaultShop);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as DefaultShopOverrides;
-    return parsed != null && typeof parsed === 'object' ? parsed : {};
+    return parsed != null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }

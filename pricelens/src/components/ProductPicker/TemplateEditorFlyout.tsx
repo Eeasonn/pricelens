@@ -541,6 +541,8 @@ function PairCard({
                         <PickPopover
                           ctx={{ kind: 'replace-compare', cardId: card.id, sel }}
                           currentKey={selKey(sel)}
+                          // 本卡其他对比项标「已选」：撞重复在选择前列明，点选不再静默无效
+                          blockedKeys={new Set(card.compares.filter((x) => x !== sel).map(selKey))}
                           initialModelId={sel.modelId}
                           onPick={(r) => pickInCard({ kind: 'replace-compare', cardId: card.id, sel }, r)}
                         >
@@ -618,14 +620,13 @@ export default function TemplateEditorFlyout({
     patch({ ...combo, label: d });
   };
 
-  // 外点关闭：本浮层、选择浮窗面板与各级弹层内点击不关（点选择浮窗面板
-  // 只关本浮层，主浮窗自己的白名单也会放行本浮层）
+  // 外点关闭：本浮层与各级弹层内点击不关；点选择浮窗主面板 = 只关本浮层
+  // （主浮窗自己的白名单放行本浮层，不会被连带关闭）
   useEffect(() => {
     const onDoc = (e: MouseEvent): void => {
       const t = e.target instanceof Element ? e.target : null;
       if (!t) return;
       if (t.closest('[data-lpl-template-editor]')) return;
-      if (t.closest('[data-lpl-picker-panel]')) return;
       if (t.closest('.ant-popover')) return;
       if (t.closest('.ant-popconfirm')) return;
       if (t.closest('.ant-dropdown')) return;
@@ -666,6 +667,8 @@ export default function TemplateEditorFlyout({
   );
 
   const addPair = (r: RomramNode): void => {
+    // 与主浮窗建卡同收口：触发按钮的 disabled 不拦 rc-trigger 注入的点击（树浮窗照开）
+    if (combo.cards.length >= MAINS_CAP) return;
     patch({
       ...combo,
       cards: [...combo.cards, { id: newCardId(), main: { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }, compares: [] }],

@@ -39,7 +39,8 @@ export function readCombos(): StoredCombo[] {
     return parsed.filter(
       (c): c is StoredCombo =>
         typeof c === 'object' && c !== null && typeof (c as StoredCombo).label === 'string'
-        && Array.isArray((c as StoredCombo).cards) && (c as StoredCombo).cards.every(isStoredCard),
+        && Array.isArray((c as StoredCombo).cards) && (c as StoredCombo).cards.length > 0
+        && (c as StoredCombo).cards.every(isStoredCard),
     );
   } catch {
     return [];

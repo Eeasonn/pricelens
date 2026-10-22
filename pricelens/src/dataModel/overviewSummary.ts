@@ -1,6 +1,10 @@
 import type { OverviewCompRow, OverviewTierBand } from './aggregate';
 import type { AlertItem } from './alerts';
 
+/** 与 aggregate 同规则的配置名归一（去空白）——对标 own_romram 与产品 romram
+ *  空格变体（"12+256 GB" vs "12+256GB"）不应静默漏配 */
+const normRom = (s: string): string => s.replace(/\s+/g, '');
+
 export interface OverviewSummary {
   ownModels: number;
   ownRoms: number;
@@ -20,7 +24,7 @@ export function buildOverviewSummary(
   const ownRows = ownModels.flatMap((model) => model.rows.map((row) => ({ model, row })));
   const ownRoms = ownRows.length;
   const mappedRoms = ownRows.filter(({ model, row }) =>
-    model.comps.some((comp) => comp.ownRomrams.includes(row.romram)),
+    model.comps.some((comp) => comp.ownRomrams.some((r) => normRom(r) === normRom(row.romram))),
   ).length;
   const deepDiscountRoms = ownRows.filter(
     ({ row }) => row.discountPct != null && row.discountPct <= -0.15,
@@ -66,11 +70,16 @@ export function summarizeCompetitors(
   diffDir: DiffDir,
 ): CompetitorSummary {
   const prices = comps.map((comp) => comp.price).filter((price): price is number => price != null);
-  const diffs = ownPrice === null
+  // 0 价行（爬虫脏数据）不参与价差，避免 ±Infinity 拉飞区间（与 alerts/platformCompare 的 >0 守卫对齐）
+  const diffs = ownPrice == null || ownPrice <= 0
     ? []
-    : prices.map((price) => diffDir === 'comp'
-      ? (price - ownPrice) / ownPrice
-      : (ownPrice - price) / price);
+    : prices
+      .map((price) => (price > 0
+        ? diffDir === 'comp'
+          ? (price - ownPrice) / ownPrice
+          : (ownPrice - price) / price
+        : null))
+      .filter((d): d is number => d != null);
 
   return {
     count: comps.length,

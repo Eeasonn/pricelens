@@ -177,8 +177,10 @@ export default function Config() {
     message.success('默认平台店铺已保存，看板取价即时生效');
   };
 
-  /** 平台下拉变更 = 连带选该平台首个渠道（一次操作完成配置）；店铺下拉再微调 */
+  /** 平台下拉变更 = 连带选该平台首个渠道（一次操作完成配置）；店铺下拉再微调。
+   *  重选当前生效店铺所在平台 = 无操作（不换店、不把预填态固化成人工配置） */
   const onDefaultPlatformChange = (platform: string): void => {
+    if (platform === defaultShopPlatform) return;
     const first = dimChannel.find((c) => c.country_code === state.countryCode && c.platform === platform);
     saveDefaultShop(first?.channel_id ?? null);
   };

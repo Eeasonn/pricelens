@@ -136,7 +136,9 @@ describe('buildAlerts 规则边界', () => {
         expect(a.promoDeltaPp).not.toBeNull();
         expect(Math.abs(a.promoDeltaPp!)).toBeGreaterThanOrEqual(2 - 1e-6); // 阈值 2% = 2pp
         if (a.vsRrpPct != null && a.price != null && a.rrp) {
-          expect(a.vsRrpPct).toBeCloseTo(a.price / a.rrp - 1, 6);
+          // price 为展示取整，vsRrpPct 按未取整价算（第一百三十九轮口径修复）：
+          // 容差 = 取整半步 / 价位（~$200 起 ≤ 0.00025）
+          expect(a.vsRrpPct).toBeCloseTo(a.price / a.rrp - 1, 3);
         }
       } else if (a.type === 'price-change') {
         expect(a.wowPct).not.toBeNull();
@@ -192,8 +194,9 @@ describe('buildAlerts 规则边界', () => {
     // 锚点：最新周（202642）现价 1 021 / 1 142 USD（DNS 渠道，fact 直算）
     expect(g.pairLowPrice).toBe(1021);
     expect(g.pairHighPrice).toBe(1142);
-    expect(g.ownGapPct!).toBeCloseTo(g.pairHighPrice! / g.pairLowPrice! - 1, 6);
-    expect(g.ownGapPct!).toBeCloseTo(0.1185, 3);
+    // ownGapPct 按未取整价比（第一百三十九轮），pair 价为展示取整：容差 1e-3
+    expect(g.ownGapPct!).toBeCloseTo(g.pairHighPrice! / g.pairLowPrice! - 1, 3);
+    expect(g.ownGapPct!).toBeCloseTo(0.1189, 3);
     // 方向正确：间距 ≥ 阈值不触发
     expect(buildAlerts(cfgGap(0.05)).filter((a) => a.type === 'own-gap').length).toBe(0);
   });
@@ -252,26 +255,26 @@ describe('buildAlerts 规则边界', () => {
     }
   });
 
-  it('真实数据全量锚（200 系列 @2%）：1676 条 = 调价 1380 + 平台价差 219 + 降促 77', () => {
-    // 2026-10-23：价格口径对齐代表色单 SKU（lowestPriceColorSku，与看板默认取色同源，
-    // 原全色均值口径淘汰）——调价/降促触发集随之变化；平台价差计数不变（锚系列单色）
+  it('真实数据全量锚（200 系列 @2%）：1665 条 = 调价 1379 + 平台价差 219 + 降促 67', () => {
+    // 2026-10-23：比率链改未取整价（第一百三十九轮口径修复，低价系列取整到 0
+    // 曾制造假预警/断链）——调价/降促触发集随之变化；平台价差计数不变（锚系列单色）
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.02));
     expect(ALL_KEYS.length).toBe(200); // RU phone 全部 系列×配置
-    expect(alerts.length).toBe(1676);
-    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1380);
+    expect(alerts.length).toBe(1665);
+    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1379);
     expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(219); // 真实跨平台价差普遍存在
-    expect(alerts.filter((a) => a.type === 'promo').length).toBe(77);
+    expect(alerts.filter((a) => a.type === 'promo').length).toBe(67);
   });
 
-  it('真实数据全量锚 @5%：925 条（调价 680 + 平台价差 175 + 降促 70）；放开 own-gap 加 9 条档位间距', () => {
+  it('真实数据全量锚 @5%：912 条（调价 674 + 平台价差 175 + 降促 63）；放开 own-gap 加 9 条档位间距', () => {
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.05));
-    expect(alerts.length).toBe(925);
-    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(680);
+    expect(alerts.length).toBe(912);
+    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(674);
     expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(175);
-    expect(alerts.filter((a) => a.type === 'promo').length).toBe(70);
+    expect(alerts.filter((a) => a.type === 'promo').length).toBe(63);
     const withGap = buildAlerts({ ...cfg(ALL_KEYS, 0.05), enabled: { ...ALL_ON, 'own-gap': true }, thresholds: { 'price-change': 0.05, promo: 0.05, 'platform-gap': 0.05, 'own-gap': 0.15 } });
     expect(withGap.filter((a) => a.type === 'own-gap').length).toBe(9); // 多档我司机型的贴近档位对
-    expect(withGap.length).toBe(934);
+    expect(withGap.length).toBe(921);
   });
 });
 

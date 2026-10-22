@@ -472,18 +472,23 @@ export default function Chart(props: ChartProps) {
   //      内部自算必须吃 sliderScale，第十轮修复：此前硬编码 ×1 导致滑杆提交后图表纹丝不动）。
   //      selfPrevRef 传 prev 做步长滞回（第十一轮），迷你图同样获得稳定刻度 ----
   const selfPrevRef = useRef<YScale | null>(null);
-  const selfScale: YScale = useMemo(() => {
-    const next = computeYAxis({
-      series,
-      priceTypes,
-      sliderScale,
-      allowBreak: yCompress,
-      perUsd: perUsdOf(currency), // 档位锚定 USD（第二十三轮）：迷你图换币种不拉伸
-      prev: selfPrevRef.current,
-    });
-    selfPrevRef.current = next;
-    return next;
-  }, [series, priceTypes, sliderScale, yCompress, currency]);
+  const selfScale: YScale = useMemo(
+    () =>
+      computeYAxis({
+        series,
+        priceTypes,
+        sliderScale,
+        allowBreak: yCompress,
+        perUsd: perUsdOf(currency), // 档位锚定 USD（第二十三轮）：迷你图换币种不拉伸
+        prev: selfPrevRef.current,
+      }),
+    [series, priceTypes, sliderScale, yCompress, currency],
+  );
+  // 滞回基线在渲染提交后写入——useMemo 工厂里写 ref 会被并发丢弃的渲染/StrictMode
+  // 双跑污染，被丢弃的中间刻度会成为下次滞回基线
+  useEffect(() => {
+    selfPrevRef.current = selfScale;
+  }, [selfScale]);
   const scale = props.yScale ?? selfScale;
 
   // ---- 高度过渡动画：animH = 当前视觉高度，缓动逼近目标 scale.plotHeight。

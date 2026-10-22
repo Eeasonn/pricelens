@@ -142,12 +142,15 @@ export default function VolumePrice() {
   const [brushes, setBrushes] = useState<([number, number] | null)[]>([null, null, null]);
   const [brushLive, setBrushLive] = useState<([number, number] | null)[]>([null, null, null]);
 
-  // 首张主分析卡 / 国家 / 产业变化 → 三槽重置为默认（手选槽位此时被重置）
+  // 首张主分析卡 / 国家 / 产业变化 → 三槽重置为默认（手选槽位此时被重置）。
+  // 重置基准键随槽位一并入会话态：槽位本身跨页保留，卸载期间发生的口径/主品
+  // 变化（在其他页换国家/换首卡）重挂载时也要识别——挂载期 ref 恒等于当前键，
+  // 永不触发，旧国家产品会以空序列挂进面板
   const slotResetKey = JSON.stringify([state.mains[0]?.main?.modelId ?? null, state.mains[0]?.main?.romram ?? null, cc, state.industry]);
-  const slotResetRef = useRef(slotResetKey);
+  const [slotResetSeen, setSlotResetSeen] = usePageViewState<string>('volume.slotResetKey', () => slotResetKey);
   useEffect(() => {
-    if (slotResetRef.current === slotResetKey) return;
-    slotResetRef.current = slotResetKey;
+    if (slotResetSeen === slotResetKey) return;
+    setSlotResetSeen(slotResetKey);
     setSlots(defaultSlots(state.mains));
     setPanelWins([null, null, null]);
     setBrushes([null, null, null]);
@@ -205,7 +208,8 @@ export default function VolumePrice() {
         }
         return {
           idx: i,
-          key: `${slot.modelId}__${slot.romram.replace(/\s+/g, '')}`,
+          // 前缀槽位号：两个槽选同一产品时 React key 仍唯一（同 key 面板会串挂 DOM/图表实例）
+          key: `${i}:${slot.modelId}__${slot.romram.replace(/\s+/g, '')}`,
           slot,
           isOwn: info?.isOwn ?? false,
           brand: info?.brand ?? '',
@@ -248,6 +252,7 @@ export default function VolumePrice() {
     adaptiveAppliedRef.current = adaptiveKey;
     actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
     setWindowIds(null);
+    adaptiveMountedRef.current = true; // 走重套分支同样结束守卫期（与价格看板对齐，此后产品变化严格重套）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adaptiveKey]);
 

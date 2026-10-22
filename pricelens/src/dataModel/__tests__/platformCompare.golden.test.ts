@@ -6,7 +6,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { dimChannel, dimProduct, dimTime, factPriceWeekly } from '../../data';
-import { PLATFORM_ORDER, buildPlatformCompare, platformOrderOf } from '../platformCompare';
+import { buildPlatformCompare, platformOrderOf } from '../platformCompare';
 
 // HUAWEI nova 14 12+256 GB：RU 有 DNS / OZON / M.Video / MVM 多平台真实行，覆盖 22 个采数周
 const ownSku = dimProduct.find((p) => p.sku_id === 'own-huawei-nova-14__12-256gb__black')!;
@@ -30,10 +30,9 @@ function minPlatformPrice(weekId: string, platform: string, currency: 'usd' | 'l
 }
 
 describe('buildPlatformCompare', () => {
-  it('平台稳定序 = dimChannel 插入序（RU：DNS → OZON → M.Video → MVM）；PLATFORM_ORDER 兼容导出同源', () => {
+  it('平台稳定序 = dimChannel 插入序（RU：DNS → OZON → M.Video → MVM）', () => {
     expect(platformOrderOf(CC)).toEqual([...new Set(dimChannel.filter((c) => c.country_code === CC).map((c) => c.platform))]);
     expect(platformOrderOf(CC)).toEqual(['DNS', 'OZON', 'M.Video', 'MVM']);
-    expect(PLATFORM_ORDER).toEqual(platformOrderOf('RU')); // 兼容导出 = 当前分析国（缺省 RU）
   });
 
   it('确定性：同入参两次调用逐字节一致', () => {

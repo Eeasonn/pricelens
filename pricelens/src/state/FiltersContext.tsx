@@ -31,7 +31,7 @@ import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
-import { expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
+import { clampMains, expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -225,6 +225,12 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       [v === 12 ? 'mains' : v === 11 ? ('legacyV11Mains' as const) : 'legacyOwn', v === 10 ? isProductSelectionArray(parsed.own) : mainsOk],
       [v === 10 ? 'legacyCompetitors' : 'platform', v === 10 ? isProductSelectionArray(parsed.competitors) : isPlatformSelection(parsed.platform)],
       ['platform', isPlatformSelection(parsed.platform)],
+      // 口径（国家/产业）随载荷恢复：写侧一直整包写入，读侧漏掉会让裸根链接的
+      // 新会话静默回落 RU/phone 并把旧国家选择当无效覆盖掉。值非法/缺失 =
+      // 跳过该项落默认口径（不入 required，不因此作废整包）。
+      ['countryCode', typeof parsed.countryCode === 'string' && dimRegion.some((r) => r.country_code === parsed.countryCode)],
+      ['industry', parsed.industry === 'phone' || parsed.industry === 'tablet' || parsed.industry === 'wearable'
+        || parsed.industry === 'audio' || parsed.industry === 'iot' || parsed.industry === 'pc'],
       ['granularity', parsed.granularity === 'week' || parsed.granularity === 'month' || parsed.granularity === 'quarter'],
       ['adaptive', typeof parsed.adaptive === 'boolean'],
       ['rangeStart', typeof parsed.rangeStart === 'string'],
@@ -238,7 +244,9 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       ['alertThresholds', isAlertThresholds(parsed.alertThresholds)],
       ['alertProducts', isAlertProducts(parsed.alertProducts)],
     ];
-    const required = checks.filter(([key]) => key !== 'alertTypes' && key !== 'alertThresholds' && key !== 'alertProducts');
+    const required = checks.filter(([key]) =>
+      key !== 'alertTypes' && key !== 'alertThresholds' && key !== 'alertProducts'
+      && key !== 'countryCode' && key !== 'industry');
     if (required.some(([, valid]) => !valid)) return null;
 
     const rest: PersistedPayload = { v };
@@ -293,7 +301,9 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
   syncScopeRegistries(scope.countryCode);
   const platformOk = platformSelectionValidFor(scope.countryCode, s.platform);
-  const needMain = force || !mainsValidFor(s.mains, scope.countryCode, scope.industry);
+  // 空 mains = 用户显式清空（空态），读档/读链接时不回填默认卡；口径切换
+  // 走 switchScope 的 force=true 照常重算默认卡
+  const needMain = force || (s.mains.length > 0 && !mainsValidFor(s.mains, scope.countryCode, scope.industry));
   const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry) : {};
   const next: FiltersState = {
     ...s,
@@ -310,15 +320,17 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
  *  高频的国家来回切换不再静默清空用户搭好的选择。快照会话级（关页即清），
  *  不跨会话复活旧选择。 */
 function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
-  const snapKeyOf = (cc: string) => `${LPL.filters}.mainsOf.${cc}`;
+  // 快照键含产业维度：纯产业切换同样要保住「回切后还原」，键只按国会把
+  // 当前产业的卡覆盖进该国快照，回切时校验不过即永久丢卡
+  const snapKeyOf = (cc: string, industry: string) => `${LPL.filters}.mainsOf.${cc}.${industry}`;
   try {
-    if (prev.mains.length) sessionStorage.setItem(snapKeyOf(prev.countryCode), JSON.stringify({ mains: prev.mains }));
+    if (prev.mains.length) sessionStorage.setItem(snapKeyOf(prev.countryCode, prev.industry), JSON.stringify({ mains: prev.mains }));
   } catch {
     /* 存储不可用时跳过快照，走默认重算 */
   }
   const applied = applyScopeDefaults(next, true);
   try {
-    const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode));
+    const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode, applied.industry));
     if (raw) {
       const snap = JSON.parse(raw) as { mains: unknown };
       const mains = isMainProductArray(snap.mains) ? snap.mains : null;
@@ -364,12 +376,17 @@ function loadBaseState(): FiltersState {
     if (parsed.v === 11 && legacyV11Mains) {
       restored.mains = expandV11Cards(legacyV11Mains);
     }
+    // v12 主路径同样收口卡数/对比配额（与 v10/v11/URL 三条入口对称，
+    // 手工编辑过的存储不至于把超限卡直接喂给图表）
+    if (parsed.v === 12) {
+      restored.mains = clampMains(restored.mains);
+    }
   }
   if (!restored) restored = { ...defaultFilters };
   return applyScopeDefaults(restored, false);
 }
 
-/** 启动时才应用 URL；运行中的 reset 使用 loadBaseState，避免 URL 覆写锁死重置结果。 */
+/** 启动时才应用 URL；reset 直接从默认态重建，不经此处（避免 URL 覆写锁死重置结果）。 */
 function applyUrlOverrides(base: FiltersState): FiltersState {
   // 追补⑩（建议③）：URL 覆写最后应用——分享链接 > 持久化 > 默认视图
   const url = readUrlOverrides();
@@ -496,8 +513,9 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           return scopeChanged ? switchScope(s, next) : next;
         }),
 
-      /** 回到默认视图（含数据默认主分析卡 + 其配置对比区） */
-      reset: () => setState(loadBaseState()),
+      /** 回到默认视图（含数据默认主分析卡 + 其配置对比区）。直接从默认态重建，
+       *  不读持久化——持久化里存的是「此刻的状态」，回头读等于没重置 */
+      reset: () => setState(() => applyScopeDefaults({ ...defaultFilters }, true)),
 
       /** 主分析卡结构变化（增删卡/换主品/换序）：照原样写入 */
       setMains: (list) =>

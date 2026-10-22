@@ -70,6 +70,7 @@ import {
   collectTierValues,
   dedupeSpecText,
   type LineShapeChoice,
+  type PromoBand,
 } from './chartModel';
 import SplitAxisColumn from './SplitAxisColumn';
 import {
@@ -291,6 +292,9 @@ export default function PriceTrend(props: {
     adaptiveAppliedRef.current = adaptiveKey;
     const rangeUnchanged = state.rangeStart === adaptiveBounds[0] && state.rangeEnd === adaptiveBounds[1];
     actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
+    // 本次范围变化出自自适应首跑：同步 rangeWatch 基线，否则紧随其后的 rangeWatch
+    // 会把「范围被图外改动」复位吞掉挂载焦点周刚设的查看窗口
+    rangeWatchRef.current = { gran: state.granularity, key: `${adaptiveBounds[0]}|${adaptiveBounds[1]}` };
     if (adaptiveMountedRef.current || !rangeUnchanged) {
       setWindowIds(null); // 窗口复位 = 整个自动极值范围
       setPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
@@ -590,8 +594,10 @@ export default function PriceTrend(props: {
   // 同款对比产品被多卡对标时在各组各自出现（组内语义完整）。
   // 行集 = 组 × 可见时间段，经 onSeriesWindow 上报页面层渲染（与图共享粒度/币种/平台/时间段）
   const tableGroups: LegendGroup[] = useMemo(
-    () => groupsOfCards(effMains, splitActive ? panelViews.flatMap((p) => p.all) : visSeries),
-    [effMains, splitActive, panelViews, visSeries],
+    // 宽表列头 = 共享窗口桶；独立窗口模式下各组系列也按共享窗口切片对齐——
+    // 原按各面板独立窗口切片，points[i] 与列头 buckets[i] 错位（数据错列）
+    () => groupsOfCards(effMains, splitActive ? panelData.flatMap((p) => sliceVis(p.series, win.s, win.e)) : visSeries),
+    [effMains, splitActive, panelData, win.s, win.e, visSeries],
   );
   const tableBuckets = useMemo<DetailBucket[]>(
     () =>
@@ -634,6 +640,20 @@ export default function PriceTrend(props: {
     () => (promoBandsOn ? buildPromoBands({ promos: scopedPromos, spans: winSpans }) : []),
     [promoBandsOn, winSpans, scopedPromos],
   );
+  // 各分离面板的大促带随面板生效窗口自算：startIdx/endIdx 是相对窗口的局部下标，
+  // 独立窗口下直接喂共享窗口的带会整体错位/画出绘图区（同步模式两窗口一致，结果同价）
+  const panelPromoBands = useMemo(() => {
+    const m: Record<string, PromoBand[]> = {};
+    if (!promoBandsOn) return m;
+    for (const p of panelViews) {
+      const [ps, pe] = effWins[p.key] ?? [win.s, win.e];
+      m[p.key] = buildPromoBands({
+        promos: scopedPromos,
+        spans: bucketSpans(state.granularity, buckets.slice(ps, pe + 1)),
+      });
+    }
+    return m;
+  }, [promoBandsOn, panelViews, effWins, win.s, win.e, scopedPromos, state.granularity, buckets]);
 
   // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
   // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）。
@@ -642,7 +662,7 @@ export default function PriceTrend(props: {
   const scaleRef = useRef<YScale | null>(null);
   const yCfg = useMemo(() => {
     if (adjusting && scaleRef.current) return scaleRef.current;
-    const next = computeYAxis({
+    return computeYAxis({
       series: chartSeries,
       priceTypes: state.priceTypes,
       sliderScale,
@@ -650,9 +670,11 @@ export default function PriceTrend(props: {
       perUsd: perUsdOf(state.currency), // 档位锚定 USD（第二十三轮）：换币种格数/图高与 USD 相近
       prev: scaleRef.current,
     });
-    scaleRef.current = next;
-    return next;
   }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
+  // 滞回基线在渲染提交后写入（渲染期写 ref 会被丢弃的并发渲染污染）
+  useEffect(() => {
+    if (!(adjusting && scaleRef.current)) scaleRef.current = yCfg;
+  }, [yCfg, adjusting]);
   // 图顶预留（第三十五轮）：钉顶卡片删除，36px 只保留 ₽/$+齿轮（左）与图例 chips（右）
   const gridTop = 36;
   // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
@@ -670,14 +692,11 @@ export default function PriceTrend(props: {
   // 图高与周完全一致。splitScaleRef 与主图 scaleRef 各自独立（两模式互不串档）
   const splitScaleRef = useRef<YScale | null>(null);
   const splitYCfg = useMemo(() => {
-    if (!splitActive || panelViews.length === 0) {
-      splitScaleRef.current = null;
-      return null;
-    }
+    if (!splitActive || panelViews.length === 0) return null;
     // 第一百二十五轮：刷选拖动中冻结共享 Y 轴（与上面合并图 yCfg 同款）——
     // 调节过程只做横向重采样，松手统一重算一次
     if (adjusting && splitScaleRef.current) return splitScaleRef.current;
-    const next = computeYAxis({
+    return computeYAxis({
       series: panelViews.flatMap((p) => p.vis),
       priceTypes: state.priceTypes,
       sliderScale,
@@ -685,9 +704,15 @@ export default function PriceTrend(props: {
       perUsd: perUsdOf(state.currency),
       prev: splitScaleRef.current,
     });
-    splitScaleRef.current = next;
-    return next;
   }, [splitActive, panelViews, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
+  // 滞回基线提交后写入；分离模式退出时清档（与主图 scaleRef 各自独立，两模式互不串档）
+  useEffect(() => {
+    if (!splitActive || panelViews.length === 0) {
+      splitScaleRef.current = null;
+      return;
+    }
+    if (!(adjusting && splitScaleRef.current)) splitScaleRef.current = splitYCfg;
+  }, [splitActive, panelViews.length, splitYCfg, adjusting]);
   const splitGridLeft = useMemo(
     () => (splitYCfg ? estGridLeft(state.currency) : gridLeft),
     [splitYCfg, state.currency, gridLeft],
@@ -1132,7 +1157,7 @@ export default function PriceTrend(props: {
                         lineShape={lineShape}
                         labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
                         promoBandsOn={promoBandsOn}
-                        promoBands={promoBands}
+                        promoBands={panelPromoBands[p.key] ?? []}
                         maxMinOn={maxMinOn}
                         changeThreshold={changeThreshold}
                         // 图内不再画日期标签（第110轮口径退役）：本图唯一日期层 = 图下

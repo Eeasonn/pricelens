@@ -91,9 +91,23 @@ def sku_label(r):
     return f"{r['model_name']} {r['romram']} {r['color']}".strip()
 
 
+def bare_first(rows):
+    """裸机优先（与看板取价 minPriceOfRows 同规则）：有非套装行时剔除套装行，
+    套装组合价不参与参照/线值，否则会制造假离群或掩盖真离群。"""
+    bare = [r for r in rows if not r['bundle']]
+    return bare if bare else list(rows)
+
+
+def week_ordinals(rows):
+    """周序号（按事实表全量周 id 升序）：判定相邻周连续，缺周间隔不算单周环比。"""
+    ids = sorted({r['week_id'] for r in rows})
+    return {w: i for i, w in enumerate(ids)}
+
+
 # ---------------------------------------------------------------- 规则 1：水平离群
 def rule_level(rows, ratio, min_group):
-    """按 (国家, SKU, 周) 跨渠道分组，中位数为参照；低价侧打标，高价侧仅计数。"""
+    """按 (国家, SKU, 周) 跨渠道分组（组内先裸机优先），中位数为参照；
+    低价侧打标，高价侧仅计数。"""
     groups = defaultdict(list)
     for r in rows:
         if r['price_usd'] is not None:
@@ -101,6 +115,7 @@ def rule_level(rows, ratio, min_group):
 
     flagged, high_side = [], 0
     for (_cc, _sku, _wk), grp in groups.items():
+        grp = bare_first(grp)
         if len(grp) < min_group:
             continue
         median = statistics.median(x['price_usd'] for x in grp)
@@ -119,20 +134,25 @@ def rule_level(rows, ratio, min_group):
 
 # ---------------------------------------------------------------- 规则 2：脉冲突变
 def rule_pulse(rows, drop, ret):
-    """按 (国家, SKU, 渠道) 序列（周内多行取最低价，贴合最低价口径）：
+    """按 (国家, SKU, 渠道) 序列（周内先裸机优先再取最低价，贴合 minPriceOfRows
+    最低价口径；仅相邻连续周参与，缺周间隔的跨周涨跌不算单周环比）：
     单周 |环比| >= drop 且下一周回到脉冲前 ±ret 内 → 脉冲；降价侧打标，涨价侧仅计数。"""
-    series = defaultdict(dict)
+    by_key_week = defaultdict(lambda: defaultdict(list))
     for r in rows:
         if r['price_usd'] is not None:
-            key = (r['country_code'], r['sku_id'], r['channel_id'])
-            wk = r['week_id']
-            if wk not in series[key] or r['price_usd'] < series[key][wk]['price_usd']:
-                series[key][wk] = r
+            by_key_week[(r['country_code'], r['sku_id'], r['channel_id'])][r['week_id']].append(r)
+    series = {
+        key: {wk: min(bare_first(rs), key=lambda x: x['price_usd']) for wk, rs in by_week.items()}
+        for key, by_week in by_key_week.items()
+    }
 
+    ord_of = week_ordinals(rows)
     flagged, up_count = [], 0
     for (_cc, _sku, _ch), by_week in series.items():
         wks = sorted(by_week)
         for a, b, d in zip(wks, wks[1:], wks[2:]):
+            if ord_of[b] - ord_of[a] != 1 or ord_of[d] - ord_of[b] != 1:
+                continue  # 相邻周不连续（中间缺采）：不是「单周」突变
             prev, cur, nxt = (by_week[x]['price_usd'] for x in (a, b, d))
             if prev <= 0:
                 continue

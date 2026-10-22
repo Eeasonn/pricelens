@@ -114,8 +114,14 @@ export default function Overview() {
 
   const { industry } = scopeLabels(state);
 
-  // 国家/产业切换 → 本页产品/档位视图态失效（型号集随口径重建，旧选择无对应对象）
+  // 国家/产业切换 → 本页产品/档位视图态失效（型号集随口径重建，旧选择无对应对象）。
+  // 用上次口径键比对而非直接依赖 [countryCode, industry]：后者挂载首跑必清，
+  // 会把视图态 Provider 承诺的「切页保留」击穿
+  const scopeSeenRef = useRef(`${state.countryCode}|${state.industry}`);
   useEffect(() => {
+    const cur = `${state.countryCode}|${state.industry}`;
+    if (scopeSeenRef.current === cur) return;
+    scopeSeenRef.current = cur;
     setProdSel([]);
     setSelTiers([]);
   }, [state.countryCode, state.industry]);

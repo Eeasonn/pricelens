@@ -365,35 +365,53 @@ export function buildSeries(q: SeriesQuery): Series[] {
             : present.reduce((a, b) => a + b, 0) / present.length
           : null;
 
-      // RRP：官方阶梯，不随渠道；扫全桶取最后一个有值（RRP 覆盖 S..E，有价必有 RRP）
-      let rrp: number | null = null;
-      let url = '';
-      let shopName: string | null = null;
-      let platform: string | null = null;
-      let offer: OfferInfo | null = null;
-      for (const wid of bucket.weekIds) {
-        for (const sid of rg.skuIds) {
-          for (const row of factRows(cc, sid, wid)) {
-            if (!channels.has(row.channel_id)) continue;
-            const v = displayRrpOf(row, q.currency);
-            if (v != null) rrp = v;
-          }
-        }
-      }
-      // url / 取价店铺 / offer / 平台：周 = 该周最低价所在行；月/季 = 桶内首个有值周
-      for (const wid of bucket.weekIds) {
+      // 每周最低价行（跨 SKU；minPriceRow 已按「裸机优先」排除套装行）——
+      // RRP 与 url/取价店铺/offer/平台 都随它带出：同 SKU 同周多卖家/套装行会带出
+      // 多个 RRP，各自按行序扫描会与折扣率/预警口径分叉
+      const weeklyBest: ({ row: FactPriceWeekly; price: number } | null)[] = bucket.weekIds.map((wid) => {
         let weekBest: { row: FactPriceWeekly; price: number } | null = null;
         for (const sid of rg.skuIds) {
           const hit = minPriceRow(cc, sid, wid, channels, q.currency);
           if (hit && (!weekBest || hit.price < weekBest.price)) weekBest = hit;
         }
-        if (weekBest) {
-          url = weekBest.row.url || url;
-          shopName = shopLabelOf(weekBest.row);
-          platform = channelById.get(weekBest.row.channel_id)?.platform ?? null;
-          offer = toOfferInfo(weekBest.row, cc, bucket.anchorDate);
-          break;
+        return weekBest;
+      });
+
+      // RRP：官方阶梯，不随渠道；桶内最后一个有值周的最低价行 RRP（该行无 RRP
+      // 再回退扫非套装行，仍取最后有值）
+      let rrp: number | null = null;
+      for (const best of weeklyBest) {
+        if (best) rrp = displayRrpOf(best.row, q.currency);
+      }
+      if (rrp == null) {
+        for (let i = weeklyBest.length - 1; i >= 0 && rrp == null; i--) {
+          const wid = bucket.weekIds[i];
+          if (!weeklyBest[i]) continue;
+          for (const sid of rg.skuIds) {
+            for (const row of factRows(cc, sid, wid)) {
+              if (!channels.has(row.channel_id) || row.bundle) continue;
+              const v = displayRrpOf(row, q.currency);
+              if (v != null) {
+                rrp = v;
+                break;
+              }
+            }
+            if (rrp != null) break;
+          }
         }
+      }
+
+      // url / 取价店铺 / offer / 平台：周 = 该周最低价所在行；月/季 = 桶内首个有值周
+      let url = '';
+      let shopName: string | null = null;
+      let platform: string | null = null;
+      let offer: OfferInfo | null = null;
+      const firstBest = weeklyBest.find((best): best is { row: FactPriceWeekly; price: number } => best != null);
+      if (firstBest) {
+        url = firstBest.row.url || '';
+        shopName = shopLabelOf(firstBest.row);
+        platform = channelById.get(firstBest.row.channel_id)?.platform ?? null;
+        offer = toOfferInfo(firstBest.row, cc, bucket.anchorDate);
       }
 
       points.push({
@@ -425,8 +443,15 @@ export function buildSeries(q: SeriesQuery): Series[] {
 /**
  * 某型号+配置下"最新折后价最低的颜色" sku_id（默认平台口径，缺省国家 = 当前分析国）。
  * 从最新周向前回溯，第一个"至少一个渠道行有价"的周内取最低者（同价取 sku_id 字典序最小）。
+ * 币种默认 usd = 看板/预警/总览的默认显示币种——代表色应在用户看到的币种下最便宜
+ * （行内汇率同一周可不同，本币排序在 USD 视图下可能标错最便宜色）。
  */
-export function lowestPriceColorSku(modelId: string, romram: string, countryCode: string = getCurrentCountry()): string | null {
+export function lowestPriceColorSku(
+  modelId: string,
+  romram: string,
+  countryCode: string = getCurrentCountry(),
+  currency: CurrencyMode = 'usd',
+): string | null {
   const rows = dimProduct.filter((p) => p.sku_id.startsWith(modelId + '__') && normRom(p.romram) === normRom(romram));
   if (rows.length === 0) return null;
   const channels = new Set(effectiveChannelIds(countryCode, null));
@@ -438,7 +463,7 @@ export function lowestPriceColorSku(modelId: string, romram: string, countryCode
     for (const r of rows) {
       for (const row of factRows(countryCode, r.sku_id, wid)) if (channels.has(row.channel_id)) weekRows.push(row);
     }
-    const hit = minPriceOfRows(weekRows, (row) => row.price_local, preferCheaperThenSku);
+    const hit = minPriceOfRows(weekRows, (row) => displayPriceOf(row, currency), preferCheaperThenSku);
     if (hit) return hit.row.sku_id;
   }
   return null;
@@ -665,10 +690,19 @@ function latestOf(
     const weekRows = factRows(cc, skuId, w);
     const hit = minPriceOfRows(weekRows, (row) => (channels.has(row.channel_id) ? displayPriceOf(row, currency) : null));
     if (!hit) continue;
-    let rrp: number | null = null;
-    for (const row of weekRows) {
-      if (!channels.has(row.channel_id)) continue;
-      if (rrp == null) rrp = displayRrpOf(row, currency);
+    // RRP 随最低价行带出（与看板/预警同口径，且天然避开套装组合价）；该行无 RRP
+    // 再回退扫非套装行——多卖家渠道下同 SKU 同周 RRP 有多个值，原「首个非空」
+    // 取到哪行取决于行序，折扣率会与其他页面分叉
+    let rrp = displayRrpOf(hit.row, currency);
+    if (rrp == null) {
+      for (const row of weekRows) {
+        if (!channels.has(row.channel_id) || row.bundle) continue;
+        const v = displayRrpOf(row, currency);
+        if (v != null) {
+          rrp = v;
+          break;
+        }
+      }
     }
     return { price: hit.price, rrp, weekId: w };
   }

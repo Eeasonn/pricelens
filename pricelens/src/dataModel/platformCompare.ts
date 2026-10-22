@@ -13,9 +13,6 @@ export function platformOrderOf(countryCode: string): string[] {
   return [...new Set(dimChannel.filter((c) => c.country_code === countryCode).map((c) => c.platform))];
 }
 
-/** 兼容旧引用：当前分析国的平台序 */
-export const PLATFORM_ORDER: string[] = platformOrderOf(getCurrentCountry());
-
 export interface PlatformComparePoint {
   weekId: string; // YYYYWW
   label: string; // 采集锚周三 MM-DD

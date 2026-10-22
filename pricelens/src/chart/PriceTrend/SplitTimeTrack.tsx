@@ -61,6 +61,22 @@ const measureTickText = (s: string, px: number): number => {
   return labelMeasureCtx.measureText(s).width;
 };
 
+/** 字体就绪补一拍：让位判定按 canvas 量宽，首帧 Inter 未加载会按回退字体量错——
+ * 字体换装不改轨道宽（RO 不触发），须显式重算一次 */
+function useFontsReadyTick(): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    document.fonts?.ready?.then(() => {
+      if (alive) setTick((t) => t + 1);
+    }).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return tick;
+}
+
 /** 分离面板时间轴轨道行高（共享轴列下的同步开关行按此对齐垂直居中） */
 export const SPLIT_TRACK_H = 52;
 
@@ -81,6 +97,7 @@ export default function SplitTimeTrack(props: {
   const [panning, setPanning] = useState(false);
   const [activeDrag, setActiveDrag] = useState<DragKind | null>(null);
   const [widthRef, trackW] = useObservedWidth();
+  const fontsTick = useFontsReadyTick(); // 字体就绪后让位判定重算一次
   const n = hi - lo + 1;
   if (n <= 0 || ids.length === 0) return null;
 

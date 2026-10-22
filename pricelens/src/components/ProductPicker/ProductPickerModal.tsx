@@ -308,7 +308,11 @@ function LevelSwitchPopover({
     const card = activeCard;
     if (replaceCompareCtx) {
       if (!card || card.main?.modelId === r.modelId) return;
-      if (card.compares.some((c) => c !== ctx.sel && selKey(c) === nodeSelKey(r))) return;
+      // 撞其他对比项：不再静默无效（窗关了/没反应），给出提示保持开窗
+      if (card.compares.some((c) => c !== ctx.sel && selKey(c) === nodeSelKey(r))) {
+        message.info('该配置已在对比区');
+        return;
+      }
       const oldNode = romramByKey.get(`${ctx.sel.modelId}|${ctx.sel.romram}`);
       actions.setCardCompares(
         card.id,
@@ -631,8 +635,10 @@ function LevelSwitchPopover({
       const isCurrent = replaceCompareCtx
         ? selKey(ctx.sel) === key
         : ctx.kind !== 'add-main' && activeCard?.main != null && selKey(activeCard.main) === key;
+      // 更换对比上下文：本卡其他对比项也标「已选」（撞重复在选择前列明，不再是点了没反应）
       const taken = !replaceCompareCtx
-        && mains.some((c) => c.main != null && selKey(c.main) === key && !('cardId' in ctx && c.id === ctx.cardId));
+        ? mains.some((c) => c.main != null && selKey(c.main) === key && !('cardId' in ctx && c.id === ctx.cardId))
+        : !!activeCard && activeCard.compares.some((c) => c !== ctx.sel && selKey(c) === key);
       const blocked = isCurrent || taken;
       // 第一百二十五轮（K3）：主品选择为单选语义，不渲染复选框（此前是点了
       // 没反应的摆设）；列宽的 24px 复选框预留随 checkState 缺省自动收窄。
@@ -1128,6 +1134,8 @@ function PickerPanel() {
 
   const confirmDialog = (): void => {
     if (!dialog) return;
+    // 与 OK 按钮同口径拦空名：Input 回车不感知按钮禁用，漏拦会以默认名静默保存
+    if (!dialog.value.trim()) return;
     saveTemplate(dialog.value, dialog.cards);
     setDialog(null);
   };
@@ -1228,7 +1236,7 @@ function PickerPanel() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {c.cards[0].main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
+                    {c.cards[0]?.main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
                     {c.label}
                     <span
                       role="button"
@@ -1289,7 +1297,7 @@ function PickerPanel() {
                     key: String(i),
                     label: (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                        {c.cards[0].main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
+                        {c.cards[0]?.main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
                           {c.label}
                         </span>
@@ -1564,6 +1572,12 @@ function PickerPanel() {
                 onDragStart={(e) => {
                   setDragCard(card.id);
                   e.dataTransfer.effectAllowed = 'move';
+                  // Firefox 要求至少携带一项数据才会真正启动拖拽
+                  try {
+                    e.dataTransfer.setData('text/plain', card.id);
+                  } catch {
+                    /* 只读事件对象等受限环境忽略 */
+                  }
                 }}
                 onDragEnd={() => {
                   setDragCard(null);

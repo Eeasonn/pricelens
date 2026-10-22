@@ -52,6 +52,11 @@ export interface AlertCfg {
 
 export const ALERT_TYPES: AlertType[] = ['price-change', 'promo', 'platform-gap', 'own-gap'];
 
+/** 展示价取整：≥1 取整；<1（低价配件，如 $0.3x 表带）保留两位小数，取整到 0 会误读为无价 */
+function displayRound(v: number): number {
+  return Math.abs(v) < 1 ? Math.round(v * 100) / 100 : Math.round(v);
+}
+
 export interface AlertItem {
   key: string; // `${seriesKey}|${weekId}|${type}`
   type: AlertType;
@@ -163,9 +168,10 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       // 代表色单价；RRP = 该行官方阶梯
       const hit = priceForSelection(repSkuId, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
       if (!hit) continue; // 缺采：prev 跨周延续（比较链不断）
-      const price = Math.round(hit.price);
+      // 比率链（力度/环比/对 RRP）全部用未取整值——低价系列（如 $0.3x 配件）取整到 0
+      // 会凭空算出 100% 折扣并使环比链恒假断链；取整只发生在展示字段
       const rrp = displayRrpOf(hit.row, currency);
-      const intensity = rrp != null && rrp > 0 ? 1 - price / rrp : null;
+      const intensity = rrp != null && rrp > 0 ? 1 - hit.price / rrp : null;
       const base = {
         seriesKey: key,
         brand: meta.brand,
@@ -174,10 +180,10 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
         isOwn: meta.isOwn,
         weekId: w.week_id,
         weekLabel: w.week_wed_date.slice(5),
-        price,
+        price: displayRound(hit.price),
         rrp,
-        vsRrpPct: rrp != null && rrp > 0 ? price / rrp - 1 : null,
-        wowPct: prevPrice != null && prevPrice > 0 ? price / prevPrice - 1 : null,
+        vsRrpPct: rrp != null && rrp > 0 ? hit.price / rrp - 1 : null,
+        wowPct: prevPrice != null && prevPrice > 0 ? hit.price / prevPrice - 1 : null,
         promoDeltaPp: null as number | null,
         gapPct: null as number | null,
         gapHighPlatform: null as string | null,
@@ -209,7 +215,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       }
       // 调价预警（我司/竞品都出）：|WoW| ≥ 阈值（阈值 ≤0 = 关）
       if (effEnabled(cfg, key, 'price-change') && thr('price-change') > 0 && prevPrice != null && prevPrice > 0) {
-        const wow = price / prevPrice - 1;
+        const wow = hit.price / prevPrice - 1;
         if (Math.abs(wow) >= thr('price-change') - EPS) {
           out.push({
             ...base,
@@ -240,7 +246,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
           });
         }
       }
-      prevPrice = price;
+      prevPrice = hit.price;
       prevIntensity = intensity;
     }
   }
@@ -255,7 +261,8 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       for (let i = timeAsc.length - 1; i >= 0; i--) {
         const w = timeAsc[i];
         const hit = priceForSelection(repSkuId, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
-        if (hit) return { price: Math.round(hit.price), weekId: w.week_id, weekLabel: w.week_wed_date.slice(5) };
+        // price 保持未取整：档位间距比值不吃取整误差（低价配件取整到 0 会把间距算飞）
+        if (hit) return { price: hit.price, weekId: w.week_id, weekLabel: w.week_wed_date.slice(5) };
       }
       return null;
     };
@@ -294,7 +301,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
             isOwn: true,
             weekId: high.px.weekId,
             weekLabel: high.px.weekLabel,
-            price: low.px.price,
+            price: displayRound(low.px.price),
             rrp: null,
             vsRrpPct: null,
             wowPct: null,
@@ -306,8 +313,8 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
             gapLowPrice: null,
             pairLowLabel: low.meta.label,
             pairHighLabel: high.meta.label,
-            pairLowPrice: low.px.price,
-            pairHighPrice: high.px.price,
+            pairLowPrice: displayRound(low.px.price),
+            pairHighPrice: displayRound(high.px.price),
             ownGapPct: gap,
             pairHighSeriesKey: high.key,
           });
