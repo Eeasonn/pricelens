@@ -1,15 +1,18 @@
 // ============================================================
-// 选择产品浮窗（第一百二十七轮修订）：
+// 选择产品浮窗（第一百二十八轮修订）：
 // 入口 = 筛选条「选择产品」chip，点击自 chip 向下滑出浮窗（左侧与筛选器
-//   对齐，不再是居中弹窗）；点浮窗外即收起，改动即存。
-// 主体 = 若干「组」左右排布——左 = 主分析产品（唯一产品+型号+颜色，
-//   浅蓝底强调；品牌+产品一行、型号/颜色换行居中，删除右上角、更换右下角），
-//   右 = 对比产品（条目列表 + 常驻「＋ 添加对比产品」触发）；多组时每组
-//   顶部一行「第 N 组 · 配置 · 颜色」卡级标识。
-// 自动匹配 = 纯一次性动作（第一百二十六轮：「对比自动跟随主品」模式退役）：
-//   对比区标题行居左「⚡ 自动匹配竞品」按组重算，顶栏「全部自动匹配」按全部
-//   华为主品组重算；对比区恰为现行矩阵产出时按钮点亮选中态（✓）。
-//   平时对比区完全由用户持有。
+//   对齐，不再是居中弹窗）；浮窗在页面全部内容之上，内部再弹层（树/颜色/
+//   轻确认/气泡）依次更高；点浮窗外即收起，改动即存。
+// 主体 = 若干「组」的整框——一张卡一个框，内部左右两格以分界线隔开：
+//   左格 = 主分析产品（左上角标题，格底极浅蓝；品牌+产品一行、型号/颜色
+//   换行居中，更换右下角），右格 = 对比产品（左上角标题；无对比时
+//   「自动匹配竞品 + 提示 + 添加对比产品」在格内正中居中，有对比时
+//   「自动匹配竞品」格顶居中、「添加对比产品」在已选条目下方居中）。
+//   删除整组的 ✕ 在整框右上角（更明显，轻确认后连对比区一并移除）。
+// 自动匹配 = 每卡开关（第一百二十八轮：「自动匹配竞品」/「全部自动匹配」
+//   都有选中态，代表功能的开与关）：开 = 对比区由对标矩阵驱动（立即重算，
+//   换主品 / 矩阵更新自动跟随）；关 = 对比区保留转手动；手动增删对比即关。
+//   非华为主品卡无矩阵可依，按钮置灰。
 // 产品树不再常驻：唯一更换入口 = 行尾「更换」→ 完整树浮窗（品牌→系列→
 //   产品→型号，预定位当前路径，搜索保留）。颜色不进树浮窗：点型号行即按
 //   默认最低价色落选，换色只在已选条目的色块（蓝描边 = 可编辑；只读配置
@@ -60,7 +63,6 @@ import { autoColumnWidth, CascadePanel, measureText, type CascadeColumnSpec, typ
 import ColorFlyout from '../ProductCascader/ColorFlyout';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import {
-  autoComparesFor,
   cardQuota,
   EMPTY_MAIN_LABEL,
   isHuaweiModel,
@@ -79,6 +81,12 @@ import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectS
 
 const POPOVER_H = 300; // 树浮窗列高（固定，不随内容跳变）
 const PAIR_LIST_MAX_H = 440; // 分析对列表区最大高（多对时纵向滚动）
+
+// 层级：浮窗面板压过页面全部内容；面板内再弹层（树/颜色/轻确认）更高一档，
+// 气泡提示再高一档（antd Tooltip 缺省层级低于面板，须显式抬升）
+const PANEL_Z = 1500;
+const POPOVER_Z = 1600;
+const TIP_Z = 1650;
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 const nodeSelKey = (r: RomramNode): string => `${r.modelId}|${norm(r.romram)}`;
@@ -174,6 +182,7 @@ function ColorChip({
     <Popover
       trigger="click"
       placement="bottomLeft"
+      zIndex={POPOVER_Z}
       styles={{ body: { padding: 0, width: 272 } }}
       content={
         <ColorFlyout
@@ -362,7 +371,35 @@ function DeleteX({ label, onClick, size = 11 }: { label: string; onClick?: () =>
   );
 }
 
-/** 「⚡ 自动匹配」一次性动作 pill：可点/置灰 + 选中态（对比区恰为现行矩阵产出时点亮） */
+/** 整框右上角的删组 ✕（第一百二十八轮：主品的删除 = 整组删除，入口提到
+ *  组框右上角以更明显的方式呈现；悬停红化，轻确认后连对比区一并移除） */
+function GroupDeleteX({ label }: { label: string }) {
+  return (
+    <span
+      role="button"
+      aria-label={label}
+      title={label}
+      className="lpl-pk-del"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 22,
+        height: 22,
+        borderRadius: radius.control,
+        border: `1px solid ${color.hairline}`,
+        background: color.canvas,
+        color: color.mute,
+        cursor: 'pointer',
+      }}
+    >
+      <CloseOutlined style={{ fontSize: 11 }} />
+    </span>
+  );
+}
+
+/** 「⚡ 自动匹配」开关 pill（第一百二十八轮）：选中态 = 功能开（对比区由矩阵
+ *  驱动），非选中 = 关（手动持有）；置灰 = 无矩阵可依（非华为主品/空主品） */
 function MatchPill({
   label,
   text,
@@ -382,11 +419,12 @@ function MatchPill({
 }) {
   const md = size === 'md';
   return (
-    <Tooltip title={tip}>
+    <Tooltip title={tip} zIndex={TIP_Z}>
       <span
         role="button"
         aria-label={label}
         aria-disabled={!can || undefined}
+        aria-pressed={can ? !!selected : undefined}
         className="lpl-pk-ghost"
         onClick={(e) => {
           e.stopPropagation();
@@ -409,7 +447,7 @@ function MatchPill({
           flexShrink: 0,
         }}
       >
-        <ThunderboltFilled style={{ fontSize: md ? 11 : 10 }} /> {selected ? `✓ ${text}` : text}
+        <ThunderboltFilled style={{ fontSize: md ? 11 : 10 }} /> {text}
       </span>
     </Tooltip>
   );
@@ -740,7 +778,7 @@ function LevelSwitchPopover({
             {m.eol && (
               <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
             )}
-            <Tooltip title={comparesCtx || replaceCompareCtx ? '该产品全部配置加入对比区' : '该产品全部配置各成一张主分析卡'}>
+            <Tooltip title={comparesCtx || replaceCompareCtx ? '该产品全部配置加入对比区' : '该产品全部配置各成一张主分析卡'} zIndex={TIP_Z}>
               <span
                 onClick={(e) => {
                   e.stopPropagation();
@@ -789,6 +827,7 @@ function LevelSwitchPopover({
           onLabelClick: () => toggleCompare(r),
           trailing: (
             <Tooltip
+              zIndex={TIP_Z}
               title={
                 sameAsMain && !inCompares
                   ? '主分析产品不对比自身配置'
@@ -880,6 +919,7 @@ function LevelSwitchPopover({
     <Popover
       trigger="click"
       open={open}
+      zIndex={POPOVER_Z}
       onOpenChange={(o) => {
         setOpen(o);
         setSearch('');
@@ -906,6 +946,8 @@ function LevelSwitchPopover({
               onChange={(v) => setTier(v === '' ? null : v)}
               style={{ width: 138, flexShrink: 0 }}
               popupMatchSelectWidth={false}
+              // 下拉挂在树浮层内部：层级随浮层走（高于面板），不被外层浮窗压住
+              getPopupContainer={(node) => node.closest('.ant-popover') ?? document.body}
               options={[{ value: '', label: '全部档位' }, ...tierOptions]}
             />
             <Segmented
@@ -941,11 +983,11 @@ function LevelSwitchPopover({
                   : `该档位共 ${tierAllConfigs.length} 个配置`}
               </span>
               {tierBatchCtx ? (
-                <Tooltip title={tierGroupDisabled ? `最多 ${MAINS_CAP} 组` : '该档位全部配置逐配置成组，各按对标矩阵带出对比区'}>
+                <Tooltip title={tierGroupDisabled ? `最多 ${MAINS_CAP} 组` : '该档位全部配置逐配置成组，各按对标矩阵带出对比区'} zIndex={TIP_Z}>
                   <TierBatchPill text="全部各成一组" disabled={tierGroupDisabled} onClick={tierGroupAll} />
                 </Tooltip>
               ) : (
-                <Tooltip title={tierCompareDisabled ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）` : '该档位全部配置加入本组对比区'}>
+                <Tooltip title={tierCompareDisabled ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）` : '该档位全部配置加入本组对比区'} zIndex={TIP_Z}>
                   <TierBatchPill text="全部加入对比" disabled={tierCompareDisabled} onClick={tierCompareAll} />
                 </Tooltip>
               )}
@@ -973,7 +1015,8 @@ function MainRow({ card }: { card: MainProduct }) {
   const brand = brandOfModel(main.modelId);
   const node = romramByKey.get(`${main.modelId}|${main.romram}`);
   return (
-    /* 第一百二十七轮：品牌+产品 / 型号 / 颜色 三行居中；删除右上角、更换右下角 */
+    /* 第一百二十七轮：品牌+产品 / 型号 / 颜色 三行居中；更换右下角（删除整组
+     * 的 ✕ 第一百二十八轮上移到组框右上角，见 GroupDeleteX） */
     <div
       style={{
         position: 'relative',
@@ -984,24 +1027,9 @@ function MainRow({ card }: { card: MainProduct }) {
         justifyContent: 'center',
         gap: 7,
         minWidth: 0,
-        padding: '12px 12px 30px',
+        padding: '4px 12px 30px',
       }}
     >
-      <span style={{ position: 'absolute', top: 2, right: 2, display: 'inline-flex' }}>
-        <Popconfirm
-          title="删除该组？"
-          description="组内对比产品一并移除"
-          okText="删除"
-          cancelText="取消"
-          okButtonProps={{ danger: true, size: 'small' }}
-          cancelButtonProps={{ size: 'small' }}
-          onConfirm={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
-        >
-          <span style={{ display: 'inline-flex' }}>
-            <DeleteX label={`删除该组 ${modelNameOf(main.modelId)}`} />
-          </span>
-        </Popconfirm>
-      </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
         <BrandDot brand={brand} />
         <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
@@ -1099,7 +1127,7 @@ function CardTag({ card, index }: { card: MainProduct; index: number }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 16px 0 34px',
+        padding: '4px 34px 0',
         fontSize: 11,
         color: color.mute,
       }}
@@ -1110,51 +1138,42 @@ function CardTag({ card, index }: { card: MainProduct; index: number }) {
   );
 }
 
-/** 本组对比区是否恰为现行矩阵产出（「自动匹配」选中态判定：序列 + 颜色 SKU 全等） */
-function matrixMatched(card: MainProduct): boolean {
-  if (!card.main || !isHuaweiModel(card.main.modelId)) return false;
-  const target = autoComparesFor(card);
-  if (target.length !== card.compares.length) return false;
-  const sig = (s: ProductSelection): string => `${selKey(s)}#${[...s.skuIds].sort().join(',')}`;
-  return target.every((t, i) => sig(t) === sig(card.compares[i]));
-}
-
-/** 对比区标题行居左「⚡ 自动匹配竞品」：一次性按矩阵重算本组对比区（仅华为主品可点） */
+/** 对比区「⚡ 自动匹配竞品」开关（第一百二十八轮）：选中 = 本组对比区由对标
+ *  矩阵驱动（换主品/矩阵更新自动跟随）；置灰 = 无矩阵可依（仅华为主品可开） */
 function AutoMatchInline({ card }: { card: MainProduct }) {
   const { actions } = useFilters();
   const huawei = card.main != null && isHuaweiModel(card.main.modelId);
-  const matched = matrixMatched(card);
+  const on = !!card.auto;
   const tip =
     card.main == null
       ? '先选择主分析产品'
       : !huawei
         ? '自动匹配基于对标矩阵，仅支持华为产品；请手动添加'
-        : matched
-          ? '对比区当前与对标矩阵一致；点击可重新匹配'
-          : '按对标矩阵重算本组对比区';
+        : on
+          ? '已开启：换主品或对标矩阵更新时自动重算本组对比区；点击关闭'
+          : '开启后按对标矩阵自动带出本组对比区';
   return (
     <MatchPill
       label={`自动匹配竞品${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
       text="自动匹配竞品"
       can={huawei}
-      selected={matched}
+      selected={on}
       tip={tip}
       onClick={() => actions.autoMatchCard(card.id)}
     />
   );
 }
 
-/** 对比区常驻「＋ 添加对比产品」（点开完整树浮窗连点加） */
+/** 对比区「＋ 添加对比产品」（点开完整树浮窗连点加；位置由外层决定——
+ *  无对比时在格内正中，有对比时在已选条目下方居中） */
 function AddCompareTrigger({ card }: { card: MainProduct }) {
   const quota = cardQuota(card);
   const full = card.compares.length >= quota;
   return (
-    <Tooltip title={full ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）` : '挑选对比产品（可连续添加）'}>
-      <span style={{ alignSelf: 'flex-start', display: 'inline-flex' }}>
-        <LevelSwitchPopover ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId}>
-          <AddPill label="添加对比产品" disabled={full} />
-        </LevelSwitchPopover>
-      </span>
+    <Tooltip title={full ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）` : '挑选对比产品（可连续添加）'} zIndex={TIP_Z}>
+      <LevelSwitchPopover ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId}>
+        <AddPill label="添加对比产品" disabled={full} />
+      </LevelSwitchPopover>
     </Tooltip>
   );
 }
@@ -1189,7 +1208,7 @@ export default function ProductPickerFlyout({
     return () => window.removeEventListener('resize', measure);
   }, [open]);
 
-  // 外点关闭：锚点与本浮层内的点击（含嵌套树浮窗/颜色浮层）不关
+  // 外点关闭：锚点与本浮层内的点击（含嵌套树浮窗/颜色浮层/轻确认）不关
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent): void => {
@@ -1198,6 +1217,7 @@ export default function ProductPickerFlyout({
       if (anchorRef.current?.contains(t)) return;
       if (t.closest('[data-lpl-picker-panel]')) return;
       if (t.closest('.ant-popover')) return;
+      if (t.closest('.ant-popconfirm')) return;
       onOpenChange(false);
     };
     document.addEventListener('mousedown', onDoc);
@@ -1212,24 +1232,24 @@ export default function ProductPickerFlyout({
       {open &&
         pos &&
         createPortal(
-          <div
-            data-lpl-picker-panel
-            style={{
-              position: 'fixed',
-              left: pos.left,
-              top: pos.top,
-              zIndex: 1050,
-              width: 860,
-              maxHeight: 'calc(100vh - 132px)',
-              overflowY: 'auto',
-              background: color.canvas,
-              borderRadius: radius.card,
-              border: `1px solid ${color.hairline}`,
-              boxShadow: '0 6px 24px rgba(0, 0, 0, 0.12)',
-              padding: 12,
-              boxSizing: 'border-box',
-            }}
-          >
+            <div
+              data-lpl-picker-panel
+              style={{
+                position: 'fixed',
+                left: pos.left,
+                top: pos.top,
+                zIndex: PANEL_Z,
+                width: 860,
+                maxHeight: 'calc(100vh - 132px)',
+                overflowY: 'auto',
+                background: color.canvas,
+                borderRadius: radius.card,
+                border: `1px solid ${color.hairline}`,
+                boxShadow: '0 6px 24px rgba(0, 0, 0, 0.12)',
+                padding: 12,
+                boxSizing: 'border-box',
+              }}
+            >
             <PickerPanel open={open} />
           </div>,
           document.body,
@@ -1336,6 +1356,7 @@ function PickerPanel({ open }: { open: boolean }) {
             return needConfirm ? (
               <Popconfirm
                 key={i}
+                zIndex={POPOVER_Z}
                 title="恢复该组合？"
                 description="将替换当前已选的全部内容"
                 okText="恢复"
@@ -1360,13 +1381,13 @@ function PickerPanel({ open }: { open: boolean }) {
             text="全部自动匹配"
             size="md"
             can={huaweiCards.length > 0}
-            selected={huaweiCards.length > 0 && huaweiCards.every(matrixMatched)}
+            selected={huaweiCards.length > 0 && huaweiCards.every((c) => !!c.auto)}
             tip={
               huaweiCards.length === 0
                 ? '自动匹配基于对标矩阵，仅支持华为产品'
-                : huaweiCards.every(matrixMatched)
-                  ? '全部华为主品组对比区与对标矩阵一致；点击可重新匹配'
-                  : '按对标矩阵重算全部华为主品组的对比区'
+                : huaweiCards.every((c) => !!c.auto)
+                  ? '已为全部华为主品组开启：对比区随对标矩阵自动保持；点击全部关闭'
+                  : '为全部华为主品组开启自动匹配（对比区按对标矩阵自动带出）'
             }
             onClick={() => actions.autoMatchAll()}
           />
@@ -1413,10 +1434,9 @@ function PickerPanel({ open }: { open: boolean }) {
               }}
               style={{
                 position: 'relative',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4,
-                padding: '6px 6px 6px 2px',
+                // 第一百二十八轮：一组 = 一个整框（左主品右对比，分界线隔开），
+                // 主品格不再自带蓝框；overflow 裁齐两格底色
+                overflow: 'hidden',
                 // 最后一个组向下延长放「添加主分析产品」：底边直角与延长带衔接
                 borderRadius: isLast ? `${radius.card}px ${radius.card}px 0 0` : radius.card,
                 border: `1px solid ${dropCard === card.id ? color.link : color.hairline}`,
@@ -1426,7 +1446,24 @@ function PickerPanel({ open }: { open: boolean }) {
               }}
             >
               {mains.length > 1 && <CardTag card={card} index={idx} />}
-              <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+              {/* 删组 ✕ 在整框右上角：主品的删除 = 整组删除（含对比区），更明显 */}
+              <span style={{ position: 'absolute', top: 6, right: 6, zIndex: 2, display: 'inline-flex' }}>
+                <Popconfirm
+                  zIndex={POPOVER_Z}
+                  title="删除该组？"
+                  description="组内对比产品一并移除"
+                  okText="删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true, size: 'small' }}
+                  cancelButtonProps={{ size: 'small' }}
+                  onConfirm={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
+                >
+                  <span style={{ display: 'inline-flex' }}>
+                    <GroupDeleteX label={card.main ? `删除该组 ${modelNameOf(card.main.modelId)}` : '删除该组'} />
+                  </span>
+                </Popconfirm>
+              </span>
+              <div style={{ display: 'flex', alignItems: 'stretch' }}>
               {/* 拖拽把手（换序 = 分离面板顺序） */}
               <span
                 draggable
@@ -1439,48 +1476,28 @@ function PickerPanel({ open }: { open: boolean }) {
                   setDropCard(null);
                 }}
                 title="拖动调整顺序"
-                style={{ display: 'inline-flex', alignItems: 'center', cursor: 'grab', color: color.mute, flexShrink: 0 }}
+                style={{ display: 'inline-flex', alignItems: 'center', alignSelf: 'center', cursor: 'grab', color: color.mute, flexShrink: 0, width: 16 }}
               >
                 <HolderOutlined style={{ fontSize: 12 }} />
               </span>
 
-              {/* 左：主分析产品（显著） */}
+              {/* 左格：主分析产品（极浅蓝底 + 左上角标题；与右格以分界线隔开） */}
               <div
                 style={{
                   flex: '0 0 300px',
                   minWidth: 0,
+                  position: 'relative',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8,
-                  padding: '8px 10px',
-                  background: selectSoft,
-                  border: '1px solid rgba(0, 112, 243, 0.40)',
-                  borderRadius: radius.control,
+                  background: 'rgba(0, 112, 243, 0.04)',
                   boxSizing: 'border-box',
                 }}
               >
-                <div style={{ fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品</div>
-                {/* 第一百二十五轮（K1）：空对卡补删除入口——MainRow 在 main 为空时返回
-                    null，组内此前无任何删法，误建空卡永久占位；✕ 与 MainRow 行尾同款同位 */}
+                <div style={{ padding: '8px 12px 0', fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品</div>
                 {card.main ? (
                   <MainRow card={card} />
                 ) : (
-                  <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 12px 30px' }}>
-                    <span style={{ position: 'absolute', top: 2, right: 2, display: 'inline-flex' }}>
-                      <Popconfirm
-                        title="删除该组？"
-                        description="组内对比产品一并移除"
-                        okText="删除"
-                        cancelText="取消"
-                        okButtonProps={{ danger: true, size: 'small' }}
-                        cancelButtonProps={{ size: 'small' }}
-                        onConfirm={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
-                      >
-                        <span style={{ display: 'inline-flex' }}>
-                          <DeleteX label="删除该组" />
-                        </span>
-                      </Popconfirm>
-                    </span>
+                  <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 12px 30px' }}>
                     <LevelSwitchPopover ctx={{ kind: 'set-main', cardId: card.id }}>
                       <AddPill label="选择主分析产品" big />
                     </LevelSwitchPopover>
@@ -1488,36 +1505,52 @@ function PickerPanel({ open }: { open: boolean }) {
                 )}
               </div>
 
-              {/* 右：对比产品（弱；无外框，条目行自成骨架） */}
+              {/* 分界线：主分析产品 | 对比产品 */}
+              <div aria-hidden style={{ width: 1, background: color.hairline, flexShrink: 0 }} />
+
+              {/* 右格：对比产品（标题左上；「自动匹配竞品」有对比时格顶居中、
+                  无对比时与添加入口一起格内正中；添加入口恒在已选条目下方居中） */}
               <div
                 style={{
                   flex: '1 1 0',
                   minWidth: 0,
+                  position: 'relative',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 5,
-                  padding: '8px 10px',
+                  padding: '26px 10px 10px',
                   boxSizing: 'border-box',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <AutoMatchInline card={card} />
-                </div>
-                {card.compares.length === 0 && (
-                  <div style={{ fontSize: 11, color: color.mute, lineHeight: '18px' }}>
-                    {card.main == null
-                      ? '可先挑选对比产品，补选主分析产品后即成一组'
-                      : huawei
-                        ? '点「自动匹配竞品」一键带出，或手动添加'
-                        : '该品牌暂不支持自动匹配，请手动添加'}
-                  </div>
+                <span style={{ position: 'absolute', top: 9, left: 10, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
+                {card.compares.length > 0 && (
+                  <span style={{ position: 'absolute', top: 5, left: '50%', transform: 'translateX(-50%)', display: 'inline-flex' }}>
+                    <AutoMatchInline card={card} />
+                  </span>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', maxHeight: 122 }}>
-                  {card.compares.map((sel) => (
-                    <CompareRow key={selKey(sel)} card={card} sel={sel} />
-                  ))}
-                </div>
-                <AddCompareTrigger card={card} />
+                {card.compares.length === 0 ? (
+                  <div style={{ flex: 1, minHeight: 92, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <AutoMatchInline card={card} />
+                    <div style={{ fontSize: 11, color: color.mute, lineHeight: '18px' }}>
+                      {card.main == null
+                        ? '可先挑选对比产品，补选主分析产品后即成一组'
+                        : huawei
+                          ? '点「自动匹配竞品」一键带出，或手动添加'
+                          : '该品牌暂不支持自动匹配，请手动添加'}
+                    </div>
+                    <AddCompareTrigger card={card} />
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', maxHeight: 122 }}>
+                      {card.compares.map((sel) => (
+                        <CompareRow key={selKey(sel)} card={card} sel={sel} />
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
+                      <AddCompareTrigger card={card} />
+                    </div>
+                  </>
+                )}
               </div>
               </div>
             </div>
@@ -1537,7 +1570,7 @@ function PickerPanel({ open }: { open: boolean }) {
               background: color.canvas,
             }}
           >
-            <Tooltip title={mains.length >= MAINS_CAP ? `最多 ${MAINS_CAP} 组` : '再选一款主分析产品，多组自动分图'}>
+            <Tooltip title={mains.length >= MAINS_CAP ? `最多 ${MAINS_CAP} 组` : '再选一款主分析产品，多组自动分图'} zIndex={TIP_Z}>
               <span style={{ display: 'inline-flex' }}>
                 <LevelSwitchPopover ctx={{ kind: 'add-main' }} initialModelId={lastModelId}>
                   <AddPill label="添加主分析产品" big disabled={mains.length >= MAINS_CAP} />

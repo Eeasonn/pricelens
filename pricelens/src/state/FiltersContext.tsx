@@ -31,7 +31,7 @@ import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
-import { autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, reapplyAuto, selKey } from './mainSelection';
+import { expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -126,7 +126,8 @@ function isMainProduct(value: unknown): value is MainProduct {
   if (!isRecord(value)) return false;
   return typeof value.id === 'string'
     && (value.main === null || isProductSelection(value.main))
-    && isProductSelectionArray(value.compares);
+    && isProductSelectionArray(value.compares)
+    && (value.auto === undefined || typeof value.auto === 'boolean');
 }
 
 /** v11 旧卡形（modelId + configs[]）——读入后 expandV11Cards 展开 */
@@ -284,7 +285,8 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
 }
 
 /** 口径（国家/产业）变化后的状态整理：规范作用域、平台回默认电渠、
- *  主分析失效时按新口径重算默认卡（第一百二十六轮起无自动跟随模式） */
+ *  主分析失效时按新口径重算默认卡；开启「自动匹配竞品」的组对比区随新口径
+ *  矩阵重算（矩阵分国，维表换代同样在启动读档时借此自愈） */
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
   syncScopeRegistries(scope.countryCode);
@@ -297,6 +299,7 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
     platform: platformOk ? s.platform : null,
     ...defaults,
   };
+  next.mains = next.mains.map((c) => (c.auto && c.main ? withAutoOn(c) : c));
   return next;
 }
 
@@ -350,7 +353,7 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
     );
     const merged = url.filters.mains.map((card) => {
       const prev = card.main ? persistedByKey.get(selKey(card.main)) : undefined;
-      return prev ? { ...card, compares: prev.compares } : card;
+      return prev ? { ...card, compares: prev.compares, auto: prev.auto } : card;
     });
     restored = {
       ...restored,
@@ -409,11 +412,11 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform]);
 
   // §13：对标配置保存（CONFIG_CHANGED_EVENT，入口 = 总览「＋添加竞品」浮窗 / 配置页）。
-  // 第一百二十六轮起对比区不自动跟随——新矩阵经「自动匹配竞品 / 全部自动匹配」
-  // 一次性取回。这里仅重建 state 对象，让图表侧重读配置取值（如参考汇率）。
+  // 开启「自动匹配竞品」的组随新矩阵重算（开关的「开」= 矩阵驱动）；其余组不动，
+  // 经「自动匹配竞品 / 全部自动匹配」按需取回。同时重建 state 让图表侧重读配置。
   useEffect(() => {
     const handler = () => {
-      setState((s) => ({ ...s }));
+      setState((s) => ({ ...s, mains: s.mains.map((c) => (c.auto ? withAutoOn(c) : c)) }));
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, handler);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, handler);
@@ -436,27 +439,27 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       /** 回到默认视图（含数据默认主分析卡 + 其配置对比区） */
       reset: () => setState(loadBaseState()),
 
-      /** 主分析卡结构变化（增删卡/换主品/换序）：照原样写入（无自动跟随） */
+      /** 主分析卡结构变化（增删卡/换主品/换序）：照原样写入 */
       setMains: (list) =>
         setState((s) => ({ ...s, mains: list })),
 
-      /** 手动改某卡对比区：直接写入 */
+      /** 手动改某卡对比区：直接写入，并关闭该卡「自动匹配竞品」（退出矩阵驱动） */
       setCardCompares: (cardId, compares) =>
         setState((s) => ({
           ...s,
-          mains: s.mains.map((c) => (c.id === cardId ? { ...c, compares } : c)),
+          mains: s.mains.map((c) => (c.id === cardId ? { ...c, compares, auto: false } : c)),
         })),
 
-      /** 单卡「自动匹配竞品」：一次性按矩阵重算该卡对比区 */
+      /** 单卡「自动匹配竞品」开关：开 = 按矩阵重算并保持驱动；关 = 保留转手动 */
       autoMatchCard: (cardId) =>
         setState((s) => ({
           ...s,
-          mains: s.mains.map((c) => (c.id === cardId ? { ...c, compares: autoComparesFor(c) } : c)),
+          mains: s.mains.map((c) => (c.id === cardId ? toggleCardAuto(c) : c)),
         })),
 
-      /** 全局「全部自动匹配」：一次性按矩阵重算全部华为主品卡对比区（非华为卡不动） */
+      /** 全局「全部自动匹配」开关：全部华为主品卡都在开 → 全部关；否则全部开 */
       autoMatchAll: () =>
-        setState((s) => ({ ...s, mains: reapplyAuto(s.mains) })),
+        setState((s) => ({ ...s, mains: toggleAllAuto(s.mains) })),
 
       /**
        * §5.4/§5.6 切换粒度：保持可见时间跨度只换桶。
@@ -470,8 +473,8 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
         }),
 
       /**
-       * 自动匹配开关已退役（第一百二十六轮）：自动匹配只剩一次性动作
-       * autoMatchCard / autoMatchAll，对比区平时完全由用户持有。
+       * 自动匹配的开关已下沉到每张卡（MainProduct.auto，第一百二十八轮）：
+       * autoMatchCard / autoMatchAll 切换，setCardCompares 手动编辑即退出。
        */
 
       /** 第五十二轮：单系列订阅切换（看板图例页签铃铛） */

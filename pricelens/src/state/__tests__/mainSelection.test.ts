@@ -17,9 +17,11 @@ import {
   MAINS_CAP,
   MAX_LINES_PER_CHART,
   migrateV10,
-  reapplyAuto,
   remapSelection,
   selKey,
+  toggleAllAuto,
+  toggleCardAuto,
+  withAutoOn,
   withMain,
 } from '../mainSelection';
 import { buildProductTree, type RomramNode } from '../../components/ProductCascader/tree';
@@ -132,22 +134,67 @@ describe('autoComparesFor（矩阵 → 剔除自身 → 配额截断）', () => 
   });
 });
 
-describe('reapplyAuto（autoMatchAll 纯函数核：华为主品卡重算、非华为主品卡与空对不动）', () => {
-  it('华为卡对比区被矩阵产出替换；竞品卡与空对的手动对比区保留', () => {
-    const comp = dimProduct.find((p) => !p.is_own && p.countries.includes('RU'))!;
-    const compModel = comp.sku_id.split('__')[0];
-    const manualCompare: ProductSelection = { modelId: compModel, romram: comp.romram, skuIds: [comp.sku_id] };
-    const compSel: ProductSelection = { modelId: compModel, romram: comp.romram, skuIds: [comp.sku_id] };
-    const out = reapplyAuto([
-      card(ownSel, [manualCompare]),
-      card(compSel, [ownSel]),
-      card(null, [ownSel]),
-    ]);
-    expect(out[0].compares.every((c) => c.modelId !== compModel)).toBe(true); // 矩阵产出替换手动挑选
-    expect(out[1].compares).toEqual([ownSel]); // 非华为主品卡不动
-    expect(out[2].compares).toEqual([ownSel]); // 空对不动
+describe('自动匹配开关（withAutoOn/Off + toggleCardAuto/toggleAllAuto，第一百二十八轮）', () => {
+  const comp = dimProduct.find((p) => !p.is_own && p.countries.includes('RU'))!;
+  const compModel = comp.sku_id.split('__')[0];
+  const compSel: ProductSelection = { modelId: compModel, romram: comp.romram, skuIds: [comp.sku_id] };
+
+  it('开：对比区按矩阵重算并置 auto；再点关：对比区保留转手动', () => {
     expect(isHuaweiModel(ruOwnModel)).toBe(true);
     expect(isHuaweiModel(compModel)).toBe(false);
+    const on = toggleCardAuto(card(ownSel, [compSel]));
+    expect(on.auto).toBe(true);
+    expect(on.compares).toEqual(autoComparesFor(on));
+    const off = toggleCardAuto(on);
+    expect(off.auto).toBe(false);
+    expect(off.compares).toEqual(on.compares);
+  });
+
+  it('非华为主品卡与空对无法开启（无矩阵可依，原样返回）', () => {
+    const compCard = card(compSel, [ownSel]);
+    expect(withAutoOn(compCard)).toEqual(compCard);
+    expect(withAutoOn(card(null, [ownSel])).auto).toBeUndefined();
+  });
+
+  it('toggleAllAuto：全部华为卡都在开 → 全部关；否则全部开；非华为/空对不动', () => {
+    const compCard = card(compSel, [ownSel]);
+    const nullCard = card(null, [ownSel]);
+    const on = toggleAllAuto([card(ownSel, [compSel]), card(ownSel, []), compCard, nullCard]);
+    expect(on[0].auto).toBe(true);
+    expect(on[1].auto).toBe(true);
+    expect(on[1].compares).toEqual(autoComparesFor(on[1]));
+    expect(on[2]).toEqual(compCard); // 非华为主品卡不动
+    expect(on[3]).toEqual(nullCard); // 空对不动
+    const off = toggleAllAuto(on);
+    expect(off[0].auto).toBe(false);
+    expect(off[0].compares).toEqual(on[0].compares); // 关 = 保留转手动
+    expect(off[1].auto).toBe(false);
+    expect(off[2]).toEqual(compCard);
+  });
+
+  it('withMain：自动卡换主品按新主品矩阵重算；换非华为主品退回手动', () => {
+    const autoCard = withAutoOn(card(ownSel, [compSel]));
+    const own2Row =
+      dimProduct.find((p) => p.is_own && p.countries.includes('RU') && p.sku_id.split('__')[0] !== ruOwnModel) ?? ruOwn;
+    const own2Sel: ProductSelection = {
+      modelId: own2Row.sku_id.split('__')[0],
+      romram: own2Row.romram,
+      skuIds: [own2Row.sku_id],
+    };
+    const switched = withMain(autoCard, own2Sel);
+    expect(switched.auto).toBe(true);
+    expect(switched.compares).toEqual(autoComparesFor(switched));
+    const toComp = withMain(autoCard, compSel);
+    expect(toComp.auto).toBe(false);
+  });
+
+  it('buildCards auto:true：华为主品卡建卡即开（对比区 = 矩阵产出）；非华为卡不开', () => {
+    const cards = buildCards([ownSel], { auto: true, firstCompares: [compSel] });
+    expect(cards[0].auto).toBe(true);
+    expect(cards[0].compares).toEqual(autoComparesFor(cards[0])); // auto 优先于 firstCompares
+    const compCards = buildCards([compSel], { auto: true });
+    expect(compCards[0].auto).toBeUndefined();
+    expect(compCards[0].compares).toEqual([]);
   });
 });
 

@@ -25,6 +25,10 @@ export interface MainProduct {
   id: string;
   main: ProductSelection | null;
   compares: ProductSelection[];
+  /** 「自动匹配竞品」开关（第一百二十八轮）：开 = 对比区由对标矩阵驱动
+   *  （点按钮立即重算；换主品 / 矩阵更新自动跟随）；关/缺省 = 用户手动持有。
+   *  手动改对比区即自动关闭。仅华为主品卡可开。 */
+  auto?: boolean;
 }
 
 export interface PlatformSelection {
@@ -49,8 +53,8 @@ export interface FiltersState {
   currency: CurrencyMode; // 默认 'usd'（第二十五轮；参考汇率 80 折算），'local'=RUB
   priceTypes: { discounted: boolean; rrp: boolean }; // 默认仅折后价（第五十轮：RRP 默认不勾选，手动勾回看账面价）
   agg: AggMode; // 数据汇总，仅月/季粒度生效，默认 'avg'
-  // 第一百二十六轮：「对比自动跟随主品」模式退役——自动匹配只剩一次性动作
-  // （组内「自动匹配竞品」/ 全局 autoMatchAll），对比区平时完全由用户持有。
+  // 「自动匹配」的开关在每张卡上（MainProduct.auto，第一百二十八轮）——
+  // 全局字段不再存在，是否矩阵驱动逐卡可见可切换。
   /**
    * 第五十二轮 预警中心：已订阅系列（seriesKey = `modelId__romram去空格`，与图表
    * 系列 key 同空间——看板图例页签、总览型号块两处入口共用一份订阅）。
@@ -70,14 +74,13 @@ export interface FiltersActions {
   /** 回到默认视图（含数据默认主分析卡 + 其配置对比区） */
   reset(): void;
   // ---- 主分析卡操作 ----
-  /** 卡片结构变化（增删卡/换主品/换序）：照原样写入，对比区不自动重算
-   *  （第一百二十六轮起无自动跟随模式） */
+  /** 卡片结构变化（增删卡/换主品/换序）：照原样写入，对比区不自动重算 */
   setMains(list: MainProduct[]): void;
-  /** 手动改某卡对比区（增删/调色/换条目）：直接写入 */
+  /** 手动改某卡对比区（增删/调色/换条目）：直接写入，并关闭该卡「自动匹配竞品」 */
   setCardCompares(cardId: string, compares: ProductSelection[]): void;
-  /** 单卡「自动匹配竞品」：一次性按矩阵重算该卡对比区 */
+  /** 单卡「自动匹配竞品」开关：开 = 立即按矩阵重算并保持驱动；关 = 对比区保留转手动 */
   autoMatchCard(cardId: string): void;
-  /** 全局「全部自动匹配」：一次性按矩阵重算全部华为主品卡对比区（非华为卡不动） */
+  /** 全局「全部自动匹配」开关：全部华为主品卡都在开 → 全部关；否则全部开 */
   autoMatchAll(): void;
   // ---- 粒度 ----
   /** §5.4/§5.6：切换粒度——保持可见时间跨度只换桶（dimTime 映射；空数据降级为不换算） */

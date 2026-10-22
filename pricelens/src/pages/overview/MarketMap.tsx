@@ -971,7 +971,7 @@ export default function MarketMap({ models, currency, industryLabel, industry }:
   const openTrend = (model: OverviewModel, row?: OverviewRow): void => {
     if (model.isOwn) {
       const sels = row ? [selOf(model.modelId, row.romram)] : model.rows.map((r) => selOf(model.modelId, r.romram));
-      // setMains 走自动跟随：autoMatch 开时按矩阵带出对比区（原语义）
+      // 逐配置建卡（对比区由用户在「选择产品」浮窗按需带出或开启自动匹配）
       actions.setMains(buildCards(sels));
     } else {
       const rep = row ?? model.rows[0];

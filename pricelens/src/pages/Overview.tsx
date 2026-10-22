@@ -77,7 +77,7 @@ export default function Overview() {
   const currency = state.currency;
   const rootRef = useRef<HTMLDivElement>(null);
   // 第四十四轮：竞品映射吃「生效矩阵」（配置页/配置对标弹窗的手动快照优先，回退 auto），
-  // CONFIG_CHANGED_EVENT → 重建（看板 autoMatch 开时竞品组同事件自动跟随）
+  // CONFIG_CHANGED_EVENT → 重建（看板开启「自动匹配竞品」的组同事件随矩阵重算）
   const [bench, setBench] = useState<DimBenchmark[]>(() => getEffectiveBenchmark());
 
   useLayoutEffect(() => {

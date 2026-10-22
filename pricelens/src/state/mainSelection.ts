@@ -74,31 +74,52 @@ export function autoComparesFor(card: MainProduct): ProductSelection[] {
     .slice(0, cardQuota(card));
 }
 
-/** 全量「自动匹配」重算（autoMatchAll 的纯函数核）：华为主品卡对比区 = 矩阵产出
- *  （矩阵为空即清空）；非华为主品卡与空对无矩阵可依，已有对比区不被动清空。 */
-export function reapplyAuto(mains: MainProduct[]): MainProduct[] {
-  return mains.map((card) =>
-    card.main && isHuaweiModel(card.main.modelId) ? { ...card, compares: autoComparesFor(card) } : card,
-  );
+/** 「自动匹配竞品」开（第一百二十八轮：开关语义）：对比区立即按矩阵重算，
+ *  此后换主品 / 矩阵更新自动跟随。仅华为主品卡可开（矩阵只覆盖华为侧）。 */
+export function withAutoOn(card: MainProduct): MainProduct {
+  return card.main && isHuaweiModel(card.main.modelId) ? { ...card, compares: autoComparesFor(card), auto: true } : card;
+}
+
+/** 「自动匹配竞品」关：退出矩阵驱动，当前对比区保留转手动。 */
+export function withAutoOff(card: MainProduct): MainProduct {
+  return card.auto ? { ...card, auto: false } : card;
+}
+
+/** 单卡开关切换：开 = 重算 + 置开；关 = 保留对比区转手动。 */
+export function toggleCardAuto(card: MainProduct): MainProduct {
+  return card.auto ? withAutoOff(card) : withAutoOn(card);
+}
+
+/** 全局「全部自动匹配」开关：全部华为主品卡都在开 → 全部关；否则全部开。
+ *  非华为主品卡与空对无矩阵可依，不参与也不被动清空。 */
+export function toggleAllAuto(mains: MainProduct[]): MainProduct[] {
+  const huawei = mains.filter((c) => c.main != null && isHuaweiModel(c.main.modelId));
+  if (!huawei.length) return mains;
+  const allOn = huawei.every((c) => !!c.auto);
+  return mains.map((c) => (c.main != null && isHuaweiModel(c.main.modelId) ? (allOn ? withAutoOff(c) : withAutoOn(c)) : c));
 }
 
 /** 卡片落主品（空对补选 / 换主品共用）：主品占线后对比区按新配额截断，
- *  并剔除与新主品同型号同配置的对比项（主品与对比不重复占线）。 */
+ *  并剔除与新主品同型号同配置的对比项（主品与对比不重复占线）；
+ *  自动匹配开 = 对比区按新主品重算（新主品非华为时矩阵不可依，退回手动）。 */
 export function withMain(card: MainProduct, sel: ProductSelection): MainProduct {
   const key = selKey(sel);
-  return {
+  const next: MainProduct = {
     ...card,
     main: sel,
     compares: card.compares.filter((c) => selKey(c) !== key).slice(0, cardQuota({ main: sel })),
   };
+  if (!card.auto) return next;
+  return isHuaweiModel(sel.modelId) ? { ...next, compares: autoComparesFor(next) } : { ...next, auto: false };
 }
 
 /** 跨页建卡正源（总览走势跳转 / 对比浮层进看板 / 预警看板下钻共用）：
  *  按 selKey 去重、封顶 MAINS_CAP；首卡继承 firstCompares（剔除与主品同组、
- *  截卡配额），其余卡对比区落空（自动匹配 = 一次性动作，见 autoMatchCard/autoMatchAll）。 */
+ *  截卡配额），其余卡对比区落空。auto = true 建卡即开「自动匹配竞品」
+ *  （对比区 = 矩阵产出，仅华为主品生效）。 */
 export function buildCards(
   sels: ProductSelection[],
-  opts: { firstCompares?: ProductSelection[] } = {},
+  opts: { firstCompares?: ProductSelection[]; auto?: boolean } = {},
 ): MainProduct[] {
   const out: MainProduct[] = [];
   const seen = new Set<string>();
@@ -108,7 +129,10 @@ export function buildCards(
     if (seen.has(key)) continue;
     seen.add(key);
     const card: MainProduct = { id: newCardId(), main: sel, compares: [] };
-    if (out.length === 0 && opts.firstCompares?.length) {
+    if (opts.auto && isHuaweiModel(sel.modelId)) {
+      card.auto = true;
+      card.compares = autoComparesFor(card);
+    } else if (out.length === 0 && opts.firstCompares?.length) {
       card.compares = opts.firstCompares.filter((c) => selKey(c) !== key).slice(0, cardQuota(card));
     }
     out.push(card);
