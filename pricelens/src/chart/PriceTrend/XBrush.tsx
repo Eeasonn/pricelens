@@ -163,8 +163,9 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
           font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
         }}
       >自动</button>
-      {/* 输入框再点 = 关闭：面板挂在卡片根（不在本簇子树），面板内部点击不会
-          冒泡到这里；打开态点选择器即收起，与筛选条内 Select「再点收起」同语言。
+      {/* 输入框再点 = 开↔关切换（同步 setState）：面板挂在卡片根（不在本簇子树），
+          面板内部点击不会冒泡到这里。打开/关闭都不依赖 rc-picker 内部那帧 raf
+          （受控开启同样被延迟，挂起环境里点输入框打不开），与关闭兜底同一思路。
           display:contents 不产生盒模型，选择器沿用簇内原 flex 尺寸。 */}
       <span
         onPointerDown={() => {
@@ -172,6 +173,7 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
         }}
         onClick={() => {
           if (pressOpenRef.current) setRangeOpen(false);
+          else setRangeOpen(true);
         }}
         style={{ display: 'contents' }}
       >

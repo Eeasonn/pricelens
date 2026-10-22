@@ -1,7 +1,7 @@
 // ============================================================
 // 统一产品树金测（第一百一十七轮）：品牌序（华为置顶+矩阵列序）、竞品系列层
-// （维表 series 已按「代际+产品线」规则重写）、型号排序（在售在前、上市新→旧）、
-// 配置容量数值排序（TB=1024）、搜索剪枝。
+// （维表 series：多系列品牌按产品线成组、苹果按代际——第一百三十二轮口径）、
+// 型号排序（在售在前、上市新→旧）、配置容量数值排序（TB=1024）、搜索剪枝。
 // 第一百二十三轮：+档位筛选（配置级 tier_by_country，同型号不同配置可跨档）
 // 与档位选项（该国该产业实际存在的档位，阶梯序高→低）。
 // ============================================================
@@ -47,16 +47,30 @@ describe('buildProductTree（统一产品树）', () => {
     expect(brands).toContain('SAMSUNG');
   });
 
-  it('竞品有系列层：Galaxy S25 全家（+/Ultra/FE）同系列、iPhone 16 全家同系列', () => {
+  it('竞品有系列层：三星按产品线成组（Galaxy S 含 S24 FE～S26 全家）、苹果按代际', () => {
     const samsung = tree.find((b) => b.key === 'SAMSUNG')!;
     expect(samsung).toBeTruthy();
-    const s25 = samsung.series.find((s) => s.title === 'Galaxy S25');
-    expect(s25).toBeTruthy();
-    expect(s25!.models.map((m) => m.label).sort()).toEqual(
+    const galaxyS = samsung.series.find((s) => s.title === 'Galaxy S');
+    expect(galaxyS).toBeTruthy();
+    expect(galaxyS!.models.map((m) => m.label)).toEqual(
       expect.arrayContaining(['S25', 'S25 Ultra', 'S25 FE'].filter((n) => samsung.series.some((s) => s.models.some((m) => m.label === n)))),
     );
     const apple = tree.find((b) => b.key === 'APPLE')!;
     expect(apple.series.some((s) => s.title === 'iPhone 16')).toBe(true);
+  });
+
+  it('第一百三十二轮系列口径：三星 S/A/Z 三线、荣耀 Magic/数字系列/X、小米 Redmi Note/数字系列（苹果保持代际）', () => {
+    const seriesOf = (brand: string): string[] =>
+      tree.find((b) => b.key === brand)!.series.map((s) => s.title);
+    expect(seriesOf('SAMSUNG')).toEqual(expect.arrayContaining(['Galaxy S', 'Galaxy A', 'Galaxy Z']));
+    expect(seriesOf('SAMSUNG')).not.toEqual(expect.arrayContaining([expect.stringMatching(/^Galaxy S\d/)]));
+    expect(seriesOf('HONOR')).toEqual(expect.arrayContaining(['HONOR Magic', 'HONOR X', 'HONOR 数字系列']));
+    expect(seriesOf('XIAOMI')).toEqual(expect.arrayContaining(['Redmi Note', 'Redmi 数字系列', 'Xiaomi 数字系列']));
+    expect(seriesOf('XIAOMI')).not.toEqual(expect.arrayContaining([expect.stringMatching(/^Redmi Note \d/)]));
+    // 折叠并入产品线：Galaxy Z 同收 Flip+Fold、HONOR Magic 同收 Magic V 折叠
+    const z = tree.find((b) => b.key === 'SAMSUNG')!.series.find((s) => s.title === 'Galaxy Z')!;
+    expect(z.models.some((m) => /Flip/i.test(m.label))).toBe(true);
+    expect(z.models.some((m) => /Fold/i.test(m.label))).toBe(true);
   });
 
   it('系列与型号按上市新→旧排序；型号列配置容量升序', () => {
@@ -89,7 +103,7 @@ describe('searchProductTree（搜索剪枝）', () => {
     const hit = searchProductTree(tree, 'S25 Ultra');
     expect(hit.length).toBe(1);
     expect(hit[0].key).toBe('SAMSUNG');
-    expect(hit[0].series.every((s) => s.title === 'Galaxy S25')).toBe(true);
+    expect(hit[0].series.every((s) => s.title === 'Galaxy S')).toBe(true);
   });
 
   it('系列名命中：整系列型号保留', () => {

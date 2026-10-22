@@ -100,8 +100,8 @@ OWN_SERIES_RULES = [
     ("watchultimate", "WATCH Ultimate"), ("watchgt", "WATCH GT"), ("watchfit", "WATCH FIT"),
     ("watchkids", "WATCH KIDS"), ("watchd", "WATCH"), ("watch", "WATCH"), ("band", "Band"),
     ("freeclip", "FreeClip"), ("freebuds", "FreeBuds"), ("freearc", "FreeArc"),
-    ("matepadpromax", "Pro"), ("matepadpro", "Pro"), ("matepadair", "Air"),
-    ("matepadmini", "mini"), ("matepadse", "SE"), ("matepad", "数字"), ("matebook", "MateBook"),
+    ("matepadpromax", "MatePad Pro"), ("matepadpro", "MatePad Pro"), ("matepadair", "MatePad Air"),
+    ("matepadmini", "MatePad mini"), ("matepadse", "MatePad SE"), ("matepad", "MatePad 数字系列"), ("matebook", "MateBook"),
     ("matex", "Mate"), ("mate", "Mate"), ("pura", "Pura"), ("nova", "nova"),
 ]
 AUTO_INDUSTRIES = ("phone", "tablet", "wearable", "audio")

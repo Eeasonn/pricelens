@@ -206,7 +206,7 @@ export function AddPill({ label, onClick, disabled, big }: { label: string; onCl
   );
 }
 
-/** 行尾「更换」ghost pill（= 完整树浮窗的显性入口） */
+/** 行尾「更换」ghost pill（= 完整树浮窗的显性入口）：仅图标，语义走 aria-label/title */
 export function SwapPill({ label, onClick }: { label: string; onClick?: () => void }) {
   return (
     <span
@@ -218,20 +218,17 @@ export function SwapPill({ label, onClick }: { label: string; onClick?: () => vo
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 3,
         height: 20,
-        padding: '0 7px',
+        padding: '0 6px',
         borderRadius: radius.pill,
-        fontSize: 11,
         color: color.mute,
         background: color.canvas,
         border: `1px solid ${color.hairline}`,
         cursor: 'pointer',
         flexShrink: 0,
-        whiteSpace: 'nowrap',
       }}
     >
-      <SwapOutlined style={{ fontSize: 10 }} /> 更换
+      <SwapOutlined style={{ fontSize: 11 }} />
     </span>
   );
 }
