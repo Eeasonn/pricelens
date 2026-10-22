@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Input, Popconfirm, Popover, Tooltip } from 'antd';
-import { DeleteOutlined, SearchOutlined } from '@ant-design/icons';
+import { DeleteOutlined, SearchOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
 import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import {
   defaultColorSkuIds,
@@ -31,6 +31,7 @@ import {
   ColorChip,
   DeleteX,
   GroupDeleteX,
+  innerLayerOpen,
   POPOVER_H,
   POPOVER_Z,
   RomramChip,
@@ -200,6 +201,7 @@ function PickPopover({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
+                  gap: 3,
                   height: 20,
                   padding: '0 8px',
                   borderRadius: radius.pill,
@@ -207,13 +209,13 @@ function PickPopover({
                   fontWeight: 600,
                   color: disabled ? color.mute : selectSoftInk,
                   background: selectSoft,
-                  border: `1px solid ${checked ? selectAccent : 'rgba(0, 112, 243, 0.40)'}`,
+                  border: `1px solid ${checked ? selectAccent : 'rgba(0, 112, 243, 0.35)'}`,
                   cursor: disabled ? 'not-allowed' : 'pointer',
                   opacity: disabled ? 0.5 : 1,
                   flexShrink: 0,
                 }}
               >
-                {checked ? '✓ 对比' : '＋对比'}
+                {checked ? <CheckOutlined style={{ fontSize: 11 }} /> : <PlusOutlined style={{ fontSize: 11 }} />} 对比
               </span>
             </Tooltip>
           ),
@@ -236,7 +238,8 @@ function PickPopover({
     const eolPillW = textW('退市', 10) + 8;
     const seriesExtra = (brand?.series ?? []).some((s) => s.eol) ? eolPillW + ROW_GAP : 0;
     const modelExtra = (series?.models ?? []).some((m) => m.eol) ? eolPillW + ROW_GAP : 0;
-    const romramExtra = (compareCtx ? pillW('✓ 对比', 11) : Math.max(textW('当前', 10), textW('已选', 10))) + ROW_GAP;
+    // 对比 pill = 图标 + 文案（图标 11 + 间隙 3 计入预留）
+    const romramExtra = (compareCtx ? pillW('对比', 11) + 14 : Math.max(textW('当前', 10), textW('已选', 10))) + ROW_GAP;
 
     return [
       { items: brandItems, width: autoColumnWidth(brandItems, { extraW: brandExtra, noMaxClip: true }) },
@@ -631,6 +634,18 @@ export default function TemplateEditorFlyout({
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
+  }, [onClose]);
+
+  // Esc 关闭：内层弹层（树/颜色浮层、轻确认）可见时先让内层处理，本次只让
+  // 内层收起；主浮窗的 Esc 监听对本浮层让位（[data-lpl-template-editor] 在场）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      if (innerLayerOpen()) return;
+      onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
   const patchCard = (cardId: string, f: (c: MainProduct) => MainProduct): void => {

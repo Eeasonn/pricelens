@@ -166,7 +166,7 @@ function OwnChip({
         boxSizing: 'border-box',
         padding: '3px 9px 3px 18px',
         background: color.canvas,
-        border: '1px solid rgba(0, 112, 243, 0.32)',
+        border: '1px solid rgba(0, 112, 243, 0.35)',
         borderRadius: radius.control,
         overflow: 'hidden',
         cursor: 'pointer',

@@ -8,6 +8,7 @@
 // 供时点明细抽屉复用（单列纵向堆叠、无外层卡壳），入口 = 工具行「⋯ 更多」菜单。
 // ============================================================
 import type { CurrencyMode, Granularity } from '../../dataModel/types';
+import { ExportOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { AlertBell } from '../../components/AlertCenter';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
@@ -107,7 +108,8 @@ export default function PriceSummary({
           onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
           onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
         >
-          {it.shop} ↗
+          {it.shop}
+          <ExportOutlined style={{ fontSize: 11, marginLeft: 2 }} />
         </a>
       ) : (
         <span style={{ color: color.mute }}>{it.shop}</span>

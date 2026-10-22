@@ -127,7 +127,8 @@ export default function VolumePrice() {
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
   const [crossY, setCrossY] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
-  const [windowIds, setWindowIds] = useState<[string, string] | null>(null);
+  // 查看窗口 = 会话态跨页保留（与价格看板对齐；范围改动等失义路径照旧复位）
+  const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('volume.windowIds', () => null);
   const [bandFracs, setBandFracs] = useState<number[]>(() => new Array(SLOTS).fill(BAND_FRAC_DEFAULT)); // 各图柱区高比例（右侧拉伸柄）
   // ---- 第119轮（走查会）：同步/非同步查看时间。同步 = 三面板共用窗口（原行为）；
   //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
@@ -223,12 +224,27 @@ export default function VolumePrice() {
   );
   const adaptiveKey = adaptiveBounds ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}` : '';
   const adaptiveAppliedRef = useRef('');
+  const adaptiveMountedRef = useRef(false);
   useLayoutEffect(() => {
     if (!adaptiveBounds) {
       adaptiveAppliedRef.current = '';
       return;
     }
     if (adaptiveAppliedRef.current === adaptiveKey) return;
+    // 挂载首跑守卫（跨页往返，同价格看板）：现范围仍覆盖本页任一数据桶就沿用、
+    // 不覆写全局筛选器；完全脱节（换国进入/首次为空）才重套自适应
+    if (!adaptiveMountedRef.current) {
+      const dataLo = span ? buckets[span[0]]?.id ?? null : null;
+      const dataHi = span ? buckets[span[1]]?.id ?? null : null;
+      if (
+        dataLo && dataHi && state.rangeStart && state.rangeEnd &&
+        !(state.rangeEnd < dataLo || state.rangeStart > dataHi)
+      ) {
+        adaptiveAppliedRef.current = adaptiveKey;
+        adaptiveMountedRef.current = true;
+        return;
+      }
+    }
     adaptiveAppliedRef.current = adaptiveKey;
     actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
     setWindowIds(null);

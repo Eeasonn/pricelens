@@ -32,6 +32,7 @@ import {
 } from '../dataModel/alerts';
 import { productSelectionOfAnySeriesKey, productSelectionOfSeriesKey } from '../state/urlSync';
 import { getEffectiveBenchmark } from '../state/configStore';
+import { defaultChannelOf } from '../dataModel/aggregate';
 import { autoComparesFor, buildCards } from '../state/mainSelection';
 import { ownBrand } from '../components/ProductCascader/tree';
 import PageHeader from '../components/PageHeader';
@@ -208,7 +209,10 @@ export default function AlertsPage() {
   const platformLabel = useMemo(() => {
     const selection = state.platform;
     if (!selection || (selection.platforms.length === 0 && selection.shopIds.length === 0)) {
-      return dimRegion.find((r) => r.country_code === state.countryCode)?.default_platform ?? '默认电渠';
+      // 未选 = 默认店铺链生效：人工覆盖/预填店铺归属平台，兜底国家默认平台
+      const dc = defaultChannelOf(state.countryCode);
+      const byShop = dc ? dimChannel.find((c) => c.channel_id === dc)?.platform ?? null : null;
+      return byShop ?? dimRegion.find((r) => r.country_code === state.countryCode)?.default_platform ?? '默认平台';
     }
     const shopNames = new Map(dimChannel.map((c) => [c.channel_id, c.display_name]));
     return [...selection.platforms, ...selection.shopIds.map((id) => shopNames.get(id) ?? id)].join('、');

@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Granularity } from '../../dataModel/types';
 import { axisTickPlan, hideOverlappingTicks, MIN_WINDOW, panWindow } from '../../chart/PriceTrend/helpers';
-import { color, font, radius, selectAccent } from '../../theme/tokens';
+import { color, font, radius, selectAccent, trackColors } from '../../theme/tokens';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 type DragKind = 'start' | 'end' | 'pan';
@@ -139,7 +139,7 @@ export default function PanelTimeTrack(props: {
     width: activeDrag === kind ? 5 : 3,
     height: 20,
     borderRadius: radius.pill,
-    background: activeDrag === kind ? selectAccent : '#4f8fe8',
+    background: activeDrag === kind ? selectAccent : trackColors.handle,
   });
   const midLabelStyle = (i: number): CSSProperties => ({
     position: 'absolute', left: `${pct(i + lo) + 0.5 / n}%`, top: 26, transform: 'translateX(-50%)',
@@ -165,14 +165,14 @@ export default function PanelTimeTrack(props: {
       }}
       style={{ position: 'relative', height: 52, minWidth: 0 }}
     >
-      <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 20, borderRadius: 5, background: '#edf0f4', boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 20, borderRadius: 5, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
       <div
         title="拖动本图的查看时间"
         aria-label="平移本图时间段"
         style={{
           position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: 20,
-          borderRadius: 5, background: panning ? '#c7ddff' : '#dceaff',
-          boxShadow: 'inset 0 0 0 1px #8db4f0', cursor: panning ? 'grabbing' : 'grab', touchAction: 'none', zIndex: 1,
+          borderRadius: 5, background: panning ? trackColors.fillStrong : trackColors.fill,
+          boxShadow: `inset 0 0 0 1px ${trackColors.handleSoft}`, cursor: panning ? 'grabbing' : 'grab', touchAction: 'none', zIndex: 1,
         }}
         onPointerDown={onDragDown('pan')} onPointerMove={onDragMove} onPointerUp={onDragUp} onPointerCancel={onDragUp}
       />
@@ -180,7 +180,7 @@ export default function PanelTimeTrack(props: {
         <span key={`edge-tick-${m}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(m + lo) + 0.5 / n}%`, top: 4, width: 1, height: 12, transform: 'translateX(-50%)', background: color.hairlineStrong, pointerEvents: 'none' }} />
       ))}
       {mids.map((i) => (
-        <span key={`mid-tick-${i}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(i + lo) + 0.5 / n}%`, top: 7, width: 1, height: 6, transform: 'translateX(-50%)', background: '#aeb8c6', pointerEvents: 'none' }} />
+        <span key={`mid-tick-${i}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(i + lo) + 0.5 / n}%`, top: 7, width: 1, height: 6, transform: 'translateX(-50%)', background: trackColors.tick, pointerEvents: 'none' }} />
       ))}
       {/* 两端拖柄标签（第一百二十三轮）：短格式 + 年份第二行（最左显示刻度恒带年份、
           换年刻度带）；向轨道内侧偏移避免顶到轨道边缘裁切 */}

@@ -1,15 +1,15 @@
 // ============================================================
 // 国家总览（第三十七轮施工 / 第三十八轮反馈修订）：国家层面主界面 = 竞品矩阵大表。
 // 档位带（tier_code 从高到低）× 行配对——型号与它的映射竞品同处一个包裹格子
-// （我司行在上 / 映射竞品在下，竞品行浅灰底），一体性一眼可读。
+// （本品牌行在上 / 映射竞品在下，竞品行浅灰底），一体性一眼可读。
 // 第六十六轮改版（用户反馈）：①产品名不再双层重复——型号头行表达品牌+产品，
-// 我司行主列只放配置 ROMRAM；②价格拆三列右对齐（折扣率｜折后价｜RRP，RRP 无划线）；
+// 本品牌行主列只放配置 ROMRAM；②价格拆三列右对齐（折扣率｜折后价｜RRP，RRP 无划线）；
 // ③迷你图删除（总览无意义）。
 // 第六十七轮（用户反馈）：①「周期最低」列删除，全表六列（产品｜折扣率｜折后价｜
 // RRP｜价差｜预警）；②竞品区折叠由 Provider 保存——全景默认收起、单产品默认展开，
 // 收起保留 ROM 竞品摘要，产品头与顶栏全局动作共享状态。
 // 第六十八轮（用户反馈）：筛选条与看板拉齐——独立白卡（.lpl-fb）+ 同宽度同序
-// （国家 210｜产业 155｜我司产品 flex｜平台 160｜价格档位 flex），标签统一「我司产品」。
+// （国家 210｜产业 155｜本品牌产品 flex｜平台 160｜价格档位 flex），标签统一「本品牌产品」。
 // 第七十轮（用户反馈：收起竞品后仍不够整洁）：①产品级折叠——默认每产品一条产品条
 // （箭头+品牌+名称+生命周期+N 个配置+竞品 N ⋯⋯ 价区间｜预警｜竞品对比｜⋯），
 // 一屏看清「这个国家这个产业有哪些产品」；点击产品条才展开配置（ROM）明细，
@@ -71,7 +71,7 @@ export default function Overview() {
     setSelTiers,
     scrollTop,
   } = useOverviewView();
-  // 本页视图态：产品 = 级联多选（空 = 全部我司产品）；价格档位 = 档位多选（空 = 全部档位）。
+  // 本页视图态：产品 = 级联多选（空 = 全部本品牌产品）；价格档位 = 档位多选（空 = 全部档位）。
   // 两种筛选互斥（产品∈档位双选无信息量），切换时清空另一侧
   const [ovSubjectMode, setOvSubjectMode] = useState<'product' | 'tier'>('product');
   const currency = state.currency;
@@ -120,8 +120,8 @@ export default function Overview() {
     setSelTiers([]);
   }, [state.countryCode, state.industry]);
 
-  /** 档位/产品筛选后的摆位图型号集（我司+竞品；市场摆位沿用同口径）。
-   *  筛选我司产品时，其生效对标竞品一并保留（竞品对比模式仍可对读） */
+  /** 档位/产品筛选后的摆位图型号集（本品牌+竞品；市场摆位沿用同口径）。
+   *  筛选本品牌产品时，其生效对标竞品一并保留（竞品对比模式仍可对读） */
   const mapModels = useMemo(() => {
     const list = bands
       .filter((b) => selTiers.length === 0 || selTiers.includes(b.tierCode))
@@ -149,8 +149,8 @@ export default function Overview() {
         <PageHeader title="国家总览" />
 
         {/* 筛选条（第六十八轮与看板拉齐）：独立白卡 + .lpl-fb 同类名 + 同宽度同序——
-            国家｜产业｜我司产品｜平台｜价格档位；控件 30px/字号 13 走 filterBarTheme。
-            国家/产业为共享口径态；我司产品/价格档位为本页视图态（空 = 全部） */}
+            国家｜产业｜本品牌产品｜平台｜价格档位；控件 30px/字号 13 走 filterBarTheme。
+            国家/产业为共享口径态；本品牌产品/价格档位为本页视图态（空 = 全部） */}
         <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
           <ConfigProvider theme={filterBarTheme}>
             <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
@@ -189,7 +189,7 @@ export default function Overview() {
                   )}
                 </FilterCell>
                 {/* 平台（第五十一轮）：看板同款级联（平台→店铺），共享 state.platform 双页联动 */}
-                <FilterCell label="平台" width={200}>
+                <FilterCell label="平台 / 店铺" width={200}>
                   <PlatformBox />
                 </FilterCell>
                 <FilterCell label="币种" width={150}>

@@ -34,7 +34,17 @@ export const POPOVER_H = 300; // 树浮窗列高（固定，不随内容跳变�
 export const PAIR_LIST_MAX_H = 440; // 分析对列表区最大高（多对时纵向滚动）
 
 /** 可编辑 chip 的描边（主品/对比条目同一语言；只读配置 chip 无描边） */
-export const EDITABLE_BORDER = 'rgba(0, 112, 243, 0.30)';
+export const EDITABLE_BORDER = 'rgba(0, 112, 243, 0.35)';
+
+/** Esc 让位判定（主浮窗/模板编辑浮窗共用）：页面存在可见的内层弹层
+ *  （Modal / Popover / 轻确认 / 下拉）时为真——外层浮窗的 Esc 关闭先让
+ *  内层弹层自行处理，不连带收起外层 */
+export function innerLayerOpen(): boolean {
+  if (typeof document === 'undefined') return false;
+  return !!document.querySelector(
+    '.ant-modal-root, .ant-popover:not(.ant-popover-hidden), .ant-dropdown:not(.ant-dropdown-hidden), .ant-select-dropdown:not(.ant-select-dropdown-hidden)',
+  );
+}
 
 // ---------------- 颜色 chip（次级筛选：点开换色 / 多色均价） ----------------
 

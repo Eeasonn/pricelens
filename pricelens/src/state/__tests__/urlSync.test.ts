@@ -112,3 +112,39 @@ describe('platform/shop url params write', () => {
     expect(platformUrlParamsOf({ platforms: [], shopIds: ['XX:ghost:1P'] })).toEqual({ plat: 'ghost', shop: 'XX:ghost:1P' });
   });
 });
+
+// ---------------- 时间范围 / 价格显示 / 汇总口径入链（第一百三十八轮） ----------------
+// rs/re = 手动范围（读入即退出自适应）；pt = 价格显示（d/r/dr）；agg = avg/min。
+// 分享链接带全取数上下文，参数不合法静默忽略。
+describe('range / priceTypes / agg url params', () => {
+  it('rs/re 形状合法且有序 → 固定范围 + 退出自适应（链接范围 = 手动范围语义）', () => {
+    const out = withWindowSearch('?c=RU&rs=202619&re=202636', () => readUrlOverrides());
+    expect(out.filters.rangeStart).toBe('202619');
+    expect(out.filters.rangeEnd).toBe('202636');
+    expect(out.filters.adaptive).toBe(false);
+  });
+
+  it('季桶 id（YYYYQn）可读；范围倒挂 / 形状非法静默忽略（不写 adaptive）', () => {
+    const ok = withWindowSearch('?rs=2026Q1&re=2026Q3', () => readUrlOverrides());
+    expect(ok.filters.rangeStart).toBe('2026Q1');
+    expect(ok.filters.rangeEnd).toBe('2026Q3');
+    const inverted = withWindowSearch('?rs=202640&re=202610', () => readUrlOverrides());
+    expect(inverted.filters.rangeStart).toBeUndefined();
+    expect(inverted.filters.adaptive).toBeUndefined();
+    const ugly = withWindowSearch('?rs=abc&re=202640', () => readUrlOverrides());
+    expect(ugly.filters.rangeStart).toBeUndefined();
+    expect(ugly.filters.adaptive).toBeUndefined();
+  });
+
+  it('pt=d/r/dr 三态与 agg=avg/min 读入；非法值忽略', () => {
+    expect(withWindowSearch('?pt=dr&agg=min', () => readUrlOverrides()).filters).toMatchObject({
+      priceTypes: { discounted: true, rrp: true },
+      agg: 'min',
+    });
+    expect(withWindowSearch('?pt=d', () => readUrlOverrides()).filters.priceTypes).toEqual({ discounted: true, rrp: false });
+    expect(withWindowSearch('?pt=r', () => readUrlOverrides()).filters.priceTypes).toEqual({ discounted: false, rrp: true });
+    const bad = withWindowSearch('?pt=x&agg=max', () => readUrlOverrides());
+    expect(bad.filters.priceTypes).toBeUndefined();
+    expect(bad.filters.agg).toBeUndefined();
+  });
+});

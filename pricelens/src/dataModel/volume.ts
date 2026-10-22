@@ -11,7 +11,7 @@
 // ============================================================
 import { dimProduct, dimPromo, dimTime } from '../data';
 import type { DimProduct, FactPriceWeekly, Granularity, Industry } from './types';
-import { defaultPlatformOf, factRows, minPriceOfRows, tierOf, tierOrderOf } from './aggregate';
+import { defaultPlatformAnchorOf, factRows, minPriceOfRows, tierOf, tierOrderOf } from './aggregate';
 
 const normRom = (s: string): string => s.replace(/\s+/g, '');
 
@@ -171,7 +171,8 @@ export function volumeOfConfig(modelId: string, romram: string, countryCode: str
   const tierCode = tierOf(head, countryCode);
   const share = configShares(modelId, countryCode).get(head.romram) ?? 1;
   const eol = rows.map((r) => r.eol_date).filter((d): d is string => !!d).sort()[0] ?? null;
-  const dp = defaultPlatformOf(countryCode);
+  // 促销档期平台锚点 = 默认店铺归属平台（未配置回国家默认平台）——与价格取数口径同锚
+  const dp = defaultPlatformAnchorOf(countryCode);
   const scale =
     INDUSTRY_BASE[head.industry]
     * tierFactor(ladder.indexOf(tierCode))

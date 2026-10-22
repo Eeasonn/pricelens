@@ -141,7 +141,7 @@ export default function BenchmarkConfigBlock() {
                                 border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.pill, whiteSpace: 'nowrap',
                               }}
                             >
-                              {b.sort === 1 && <span style={{ color: '#f59e0b', fontSize: 11 }}>★</span>}
+                              {b.sort === 1 && <span style={{ color: color.link, background: '#e8f1ff', borderRadius: 8, padding: '0 6px', fontSize: 11 }}>主竞品</span>}
                               <BrandDot brand={p?.brand ?? ''} />
                               {p ? `${p.model_name} · ${p.romram}` : b.competitor_sku_id}
                               <span style={{ fontSize: 10, fontWeight: 600, color: tag.fg, background: tag.bg, borderRadius: radius.pill, padding: '0 5px', lineHeight: '14px' }}>

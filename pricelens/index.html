@@ -4,9 +4,45 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PriceLens</title>
+    <style>
+      /* 首屏静态占位：数据模块同步解压期间不再是白屏；React 首次 render 会清空容器自然替换 */
+      .boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      }
+      .boot-ring {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #e8f1ff;
+        border-top-color: #0070f3;
+        border-radius: 50%;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      .boot-text {
+        font-size: 13px;
+        color: #888888;
+        letter-spacing: 0.3px;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status" aria-label="正在载入价格数据">
+        <div class="boot-ring"></div>
+        <div class="boot-text">正在载入价格数据…</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -20,7 +20,7 @@ import { bucketIdOfDate, dateOfBucket } from '../../components/FilterBar/timeUti
 import { filterBarTheme } from '../../components/FilterBar';
 import type { Granularity } from '../../dataModel/types';
 import { axisTickPlan, fullBucketLabel, GRID, hideOverlappingTicks, MIN_WINDOW, panWindow, type Bucket } from './helpers';
-import { color, font, fontSize, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { color, font, fontSize, radius, selectAccent, selectSoft, selectSoftInk, trackColors } from '../../theme/tokens';
 
 export interface TimeRangeClusterProps {
   buckets: Bucket[];
@@ -345,7 +345,7 @@ export default function XBrush(props: XBrushProps) {
     width: activeDrag === kind ? 6 : 4,
     height: 28,
     borderRadius: radius.pill,
-    background: activeDrag === kind ? selectAccent : '#4f8fe8',
+    background: activeDrag === kind ? selectAccent : trackColors.handle,
     boxShadow: activeDrag === kind ? '0 1px 3px rgba(0, 112, 243, 0.28)' : undefined,
   });
   const labelStyle = (i: number, edge: boolean): CSSProperties => ({
@@ -360,7 +360,7 @@ export default function XBrush(props: XBrushProps) {
   const tickStyle = (edge: boolean): CSSProperties => ({
     position: 'absolute', top: 10, width: 1,
     height: edge ? 8 : 5,
-    transform: 'translateX(-50%)', background: edge ? color.hairlineStrong : '#aeb8c6',
+    transform: 'translateX(-50%)', background: edge ? color.hairlineStrong : trackColors.tick,
     pointerEvents: 'none',
   });
 
@@ -383,14 +383,14 @@ export default function XBrush(props: XBrushProps) {
         }}
         style={{ position: 'relative', height: 58, minWidth: 0 }}
       >
-          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 28, borderRadius: 6, background: '#edf0f4', boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
+          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 28, borderRadius: 6, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
           <div
             title="拖动调整下方图表的时间范围"
             aria-label="平移时间段"
             style={{
               position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: 28,
-              borderRadius: 6, background: panning ? '#c7ddff' : '#dceaff',
-              boxShadow: 'inset 0 0 0 1px #8db4f0', cursor: panning ? 'grabbing' : 'grab', touchAction: 'none', zIndex: 1,
+              borderRadius: 6, background: panning ? trackColors.fillStrong : trackColors.fill,
+              boxShadow: `inset 0 0 0 1px ${trackColors.handleSoft}`, cursor: panning ? 'grabbing' : 'grab', touchAction: 'none', zIndex: 1,
             }}
             onPointerDown={onDragDown('pan')} onPointerMove={onDragMove} onPointerUp={onDragUp} onPointerCancel={onDragUp}
           />

@@ -183,6 +183,13 @@ export function sortModelNodes(models: ModelNode[], mode: ModelSortMode, currenc
 
 let latestCache: { cc: string; values: Map<string, { local: number | null; usd: number | null }> } | null = null;
 
+/** 配置变更（默认店铺覆盖保存/清除、对标矩阵更新）后由 FiltersContext 的
+ *  CONFIG_CHANGED_EVENT 处理器调用：现价索引按默认店铺口径取数，覆盖变化须重建，
+ *  否则选择产品树的行尾现价与图上折线两处数字不同步 */
+export function invalidateLatestPriceCache(): void {
+  latestCache = null;
+}
+
 /** 当前国家默认电渠口径下各 SKU 最新有值周的最低折后价（本币/USD）；
  *  裸机口径与 aggregate.minPriceOfRows 同规则（套装行仅在该周无非套装行时才用） */
 function latestPrices(): Map<string, { local: number | null; usd: number | null }> {

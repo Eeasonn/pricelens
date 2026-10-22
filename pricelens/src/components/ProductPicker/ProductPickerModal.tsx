@@ -46,8 +46,9 @@
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Dropdown, Input, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
+import { Dropdown, Input, message, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
+  CheckOutlined,
   DeleteOutlined,
   DownOutlined,
   EditOutlined,
@@ -80,6 +81,7 @@ import {
   ColorChip,
   DeleteX,
   GroupDeleteX,
+  innerLayerOpen,
   PAIR_LIST_MAX_H,
   POPOVER_H,
   POPOVER_Z,
@@ -186,7 +188,7 @@ function MatchPill({
           fontWeight: 600,
           color: !can ? color.mute : selected ? selectSoftInk : color.body,
           background: selected ? selectSoft : color.canvas,
-          border: `1px solid ${selected ? 'rgba(0, 112, 243, 0.40)' : color.hairline}`,
+          border: `1px solid ${selected ? 'rgba(0, 112, 243, 0.35)' : color.hairline}`,
           cursor: can ? 'pointer' : 'not-allowed',
           whiteSpace: 'nowrap',
           flexShrink: 0,
@@ -222,7 +224,7 @@ function TierBatchPill({ text, disabled, onClick }: { text: string; disabled?: b
         fontSize: 11,
         color: disabled ? color.mute : selectSoftInk,
         background: color.canvas,
-        border: '1px solid rgba(0, 112, 243, 0.40)',
+        border: '1px solid rgba(0, 112, 243, 0.35)',
         cursor: disabled ? 'not-allowed' : 'pointer',
         whiteSpace: 'nowrap',
         flexShrink: 0,
@@ -322,8 +324,15 @@ function LevelSwitchPopover({
       sel = { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) };
     }
     if (ctx.kind === 'add-main') {
-      if (mains.some((c) => c.main && selKey(c.main) === selKey(sel))) return;
-      if (mains.length >= MAINS_CAP) return;
+      // 命中重复/上限不再静默：给出与底部按钮 tooltip 同口径的提示
+      if (mains.some((c) => c.main && selKey(c.main) === selKey(sel))) {
+        message.info('已在看板中');
+        return;
+      }
+      if (mains.length >= MAINS_CAP) {
+        message.info(`最多 ${MAINS_CAP} 组，请先删除组`);
+        return;
+      }
       // 第一百三十一轮：建卡即默认「匹配竞品」（华为主品 = 对比区按矩阵填充
       // 并保持驱动）；非华为主品无矩阵可依，保持手动
       actions.setMains([...mains, withAutoOn({ id: newCardId(), main: sel, compares: [] })]);
@@ -379,15 +388,24 @@ function LevelSwitchPopover({
     }
     const seen = new Set(list.flatMap((c) => (c.main ? [selKey(c.main)] : [])));
     const cards: MainProduct[] = [];
+    let capped = false;
     for (const sel of sels) {
       const k = selKey(sel);
       if (seen.has(k)) continue;
-      if (list.length + cards.length >= MAINS_CAP) break;
+      if (list.length + cards.length >= MAINS_CAP) {
+        capped = true;
+        break;
+      }
       seen.add(k);
       // 第一百三十一轮：逐配置成卡同样默认「匹配竞品」（华为主品 = 矩阵填充）
       cards.push(withAutoOn({ id: newCardId(), main: sel, compares: [] }));
     }
-    if (!cards.length) return;
+    if (!cards.length) {
+      // 批量命中上限 / 全部重复：不再静默，与单点路径同口径提示
+      message.info(capped ? `最多 ${MAINS_CAP} 组，请先删除组` : '已在看板中');
+      return;
+    }
+    if (capped) message.info(`已达 ${MAINS_CAP} 组上限，其余配置未加入`);
     // 第一百二十五轮（K2）：批量落卡不再静默丢弃当前卡对比区——对齐单点路径
     // pickConfig→withMain 的沿用口径：首张新卡继承（剔同 selKey、截配额），
     // 其余新卡保持空、由 setMains 的自动匹配按需补。
@@ -538,7 +556,7 @@ function LevelSwitchPopover({
                   fontSize: 11,
                   color: selectSoftInk,
                   background: color.canvas,
-                  border: '1px solid rgba(0, 112, 243, 0.40)',
+                  border: '1px solid rgba(0, 112, 243, 0.35)',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                 }}
@@ -590,6 +608,7 @@ function LevelSwitchPopover({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
+                  gap: 3,
                   height: 20,
                   padding: '0 8px',
                   borderRadius: radius.pill,
@@ -597,13 +616,13 @@ function LevelSwitchPopover({
                   fontWeight: 600,
                   color: disabled ? color.mute : selectSoftInk,
                   background: selectSoft,
-                  border: `1px solid ${inCompares ? selectAccent : 'rgba(0, 112, 243, 0.40)'}`,
+                  border: `1px solid ${inCompares ? selectAccent : 'rgba(0, 112, 243, 0.35)'}`,
                   cursor: disabled ? 'not-allowed' : 'pointer',
                   opacity: disabled ? 0.5 : 1,
                   flexShrink: 0,
                 }}
               >
-                {inCompares ? '✓ 对比' : '＋对比'}
+                {inCompares ? <CheckOutlined style={{ fontSize: 11 }} /> : <PlusOutlined style={{ fontSize: 11 }} />} 对比
               </span>
             </Tooltip>
           ),
@@ -636,8 +655,9 @@ function LevelSwitchPopover({
     const modelTagW = (series?.models ?? []).reduce((w, m) => Math.max(w, textW(modelTagText(m), 10)), 0);
     const modelExtra = ((series?.models ?? []).some((m) => m.eol) ? eolPillW + 6 : 0)
       + allCfgPillW + 6 + modelTagW + ROW_GAP;
+    // 对比 pill = 图标 + 文案（图标 11 + 间隙 3 计入预留）
     const romramExtra = (comparesCtx
-      ? pillW('✓ 对比', 11)
+      ? pillW('对比', 11) + 14
       : Math.max(textW('当前', 10), textW('已选', 10))) + ROW_GAP;
 
     return [
@@ -949,6 +969,20 @@ export default function ProductPickerFlyout({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open, onOpenChange]);
 
+  // Esc 关闭：内层弹层（存为模板 Modal / 树·颜色浮层 / 轻确认 / 下拉）可见时
+  // 先让内层处理；模板编辑浮窗在场同样让位（其自身监听 Esc 收起自己）
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      if (document.querySelector('[data-lpl-template-editor]')) return;
+      if (innerLayerOpen()) return;
+      onOpenChange(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onOpenChange]);
+
   return (
     <>
       <span ref={anchorRef} style={{ display: 'inline-flex', flex: 1, minWidth: 0 }}>
@@ -980,6 +1014,45 @@ export default function ProductPickerFlyout({
           document.body,
         )}
     </>
+  );
+}
+
+// ---------------- 「存为模板」名称弹窗（卸载式） ----------------
+
+/** dialog 为空时整个 Modal 不挂载（防 antd5 + StrictMode 关闭后遮罩残留惯例） */
+function SaveTemplateDialog({
+  dialog,
+  onChangeValue,
+  onOk,
+  onCancel,
+}: {
+  dialog: { value: string; cards: MainProduct[]; updating: boolean } | null;
+  onChangeValue: (v: string) => void;
+  onOk: () => void;
+  onCancel: () => void;
+}) {
+  if (dialog == null) return null;
+  return (
+    <Modal
+      open
+      title={dialog.updating ? '更新模板' : '存为模板'}
+      okText="保存"
+      cancelText="取消"
+      zIndex={POPOVER_Z}
+      width={420}
+      okButtonProps={{ disabled: !dialog.value.trim() }}
+      onOk={onOk}
+      onCancel={onCancel}
+    >
+      <Input
+        value={dialog.value}
+        placeholder="模板名称"
+        maxLength={40}
+        autoFocus
+        onChange={(e) => onChangeValue(e.target.value)}
+        onPressEnter={onOk}
+      />
+    </Modal>
   );
 }
 
@@ -1596,28 +1669,14 @@ function PickerPanel() {
         )}
       </div>
 
-      {/* 名称弹窗：顶栏 / 卡级「＋模板」共用（恒弹；同签名预填现有名称=原位更新） */}
-      <Modal
-        open={dialog != null}
-        title={dialog?.updating ? '更新模板' : '存为模板'}
-        okText="保存"
-        cancelText="取消"
-        zIndex={POPOVER_Z}
-        width={420}
-        okButtonProps={{ disabled: !dialog?.value.trim() }}
+      {/* 名称弹窗：顶栏 / 卡级「＋模板」共用（恒弹；同签名预填现有名称=原位更新）。
+          卸载式（dialog 为空整树不挂载）——防 antd5 + StrictMode 关闭后遮罩残留 */}
+      <SaveTemplateDialog
+        dialog={dialog}
+        onChangeValue={(v) => setDialog((d) => (d ? { ...d, value: v } : d))}
         onOk={confirmDialog}
         onCancel={() => setDialog(null)}
-        destroyOnClose
-      >
-        <Input
-          value={dialog?.value ?? ''}
-          placeholder="模板名称"
-          maxLength={40}
-          autoFocus
-          onChange={(e) => setDialog((d) => (d ? { ...d, value: e.target.value } : d))}
-          onPressEnter={confirmDialog}
-        />
-      </Modal>
+      />
 
       {/* 模板编辑浮窗（二级层，改动即存；入口 = 模板 chip /「更多」下拉 ✎） */}
       {editing && (

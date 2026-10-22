@@ -1,6 +1,6 @@
 // ============================================================
 // 配置对标弹窗（第四十四轮施工 / 第四十五轮入口下沉 / 预警中心重构定版为唯一入口）：
-// 总览各我司 ROM 行的「＋ 添加竞品」直达（预选该 ROM）。原配置页竞品矩阵整块
+// 总览各本品牌 ROM 行的「＋ 添加竞品」直达（预选该 ROM）。原配置页竞品矩阵整块
 // 删除后，本浮窗吸收其三个独有能力：①「恢复默认（auto）」（footer 左，Popconfirm）；
 // ②候选区品牌筛选 + 搜索（原品牌分列视角）；③↑↓ 任意排序（首位 = 主竞品，
 // 语义等价取代原「设为主竞品」按钮）。
@@ -28,19 +28,28 @@ const norm = (r: string): string => r.replace(/\s+/g, '');
 interface Candidate {
   model: OverviewModel;
   row: OverviewRow;
-  /** 价差率（相对当前我司 ROM 现价）；任一侧无价 = null（沉底） */
+  /** 价差率（相对当前本品牌 ROM 现价）；任一侧无价 = null（沉底） */
   dist: number | null;
 }
 
-export default function BenchConfigModal(props: {
+export interface BenchConfigModalProps {
   open: boolean;
   model: OverviewModel | null;
   bands: OverviewTierBand[];
   /** 第四十五轮：从总览某 ROM 行进入时预选该 ROM（缺省 = 首个 ROM） */
   initialRomram?: string | null;
   onClose: () => void;
-}) {
-  const { open, model, bands, initialRomram, onClose } = props;
+}
+
+/** 卸载式渲染（同 DrillModal/SnapshotModal 惯例）：关闭即整棵卸载（含草稿态），
+ *  防 antd5 + StrictMode 下遮罩残留；父组件传参结构不变。钩子都在 Inner，
+ *  外层先行 return 不会造成钩子数漂移。 */
+export default function BenchConfigModal(props: BenchConfigModalProps) {
+  if (!props.open) return null;
+  return <BenchConfigModalInner {...props} />;
+}
+
+function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: BenchConfigModalProps) {
   // 传入 bands 的价格按全局币种构造（BenchmarkConfigBlock 同 state.currency 取数），
   // 展示须同币种——硬编码 usd 会在本币态显示 '$' 前缀 + 本币数值（第一百二十五轮）
   const currency = useFilters().state.currency;
@@ -152,7 +161,7 @@ export default function BenchConfigModal(props: {
     saveBenchmark(null); // 清除 manual 快照，回退 dimBenchmark（auto）
     setDraft(getEffectiveBenchmark());
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
-    message.success('已恢复默认对标（矩阵 + 自动匹配）');
+    message.success('已恢复默认对标（矩阵 + 匹配竞品）');
     onClose();
   };
 
@@ -206,6 +215,8 @@ export default function BenchConfigModal(props: {
     <Modal
       open={open}
       onCancel={onClose}
+      maskClosable={false}
+      keyboard={false}
       width={720}
       centered
       title={model ? `配置对标 · ${model.modelName}` : '配置对标'}
@@ -382,7 +393,7 @@ export default function BenchConfigModal(props: {
           </div>
 
           <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: 8, lineHeight: '16px' }}>
-            保存后对标配置立即生效，可随时恢复默认；自动匹配开启时看板对比区同步更新。
+            保存后对标配置立即生效，可随时恢复默认；匹配竞品开启时看板对比区同步更新。
           </div>
         </div>
       )}

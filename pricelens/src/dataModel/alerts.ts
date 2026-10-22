@@ -8,14 +8,16 @@
 //   间距 = 高价/低价 − 1 **低于** 阈值 → 两档太近、价位没有合理分开（方向与前三类相反，
 //   属型号/档位结构层，阈值为全局级不按产品覆盖）；
 // - 缺采周不打断比较链（prev 跨缺采延续，与 buildChangeMarks 同口径）；
-// - 价格恒 OZON 基准（单平台口径，与总览矩阵一致），币种随入参折算。
+// - 价格口径（第一百三十八轮对齐）= 代表色单 SKU（lowestPriceColorSku 最低价颜色，
+//   与看板默认取色/总览/多平台比价同源；原全色均值口径淘汰）；平台随 cfg.platform
+//   （与看板平台选择同构），缺省 = 默认店铺链，币种随入参折算。
 // 配置（追补⑨）：四类各自 全局开关+阈值；订阅产品可按类型覆写开关与阈值
 // （products[key]）。确定性纯函数：同入参两次调用输出逐字节一致；金测锚定。
 // ============================================================
 import { dimChannel, dimProduct, dimTime } from '../data';
 import type { CurrencyMode, DataScope } from './types';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
-import { platformPriceSpread, priceForSelection } from './aggregate';
+import { platformPriceSpread, priceForSelection, lowestPriceColorSku } from './aggregate';
 import { displayRrpOf } from './currency';
 
 export type AlertType = 'price-change' | 'promo' | 'platform-gap' | 'own-gap';
@@ -44,7 +46,7 @@ export interface AlertCfg {
   currency?: CurrencyMode;
   /** 数据作用域；缺省 = 当前 demo 的 RU / phone。 */
   scope?: DataScope;
-  /** 与看板同构的平台选择；缺省/null/空选择 = OZON 基准。 */
+  /** 与看板同构的平台选择；缺省/null/空选择 = 默认店铺链（预填/覆盖 → 默认平台）。 */
   platform?: AlertPlatformSelection | null;
 }
 
@@ -146,30 +148,23 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   // 以可用国家作为事实数据门槛，同时按产品产业过滤，便于后续接入多国家数据。
   const countryAvailable = dimChannel.some((c) => c.country_code === scope.countryCode);
   if (!countryAvailable) return [];
-  const scopedProducts = dimProduct.filter((p) => p.industry === scope.industry && p.countries.includes(scope.countryCode));
   const out: AlertItem[] = [];
   for (const key of cfg.subs) {
     const meta = alertSeriesMeta(key, scope);
     if (!meta) continue;
-    const group = scopedProducts
-      .filter((p) => p.sku_id.startsWith(`${key.split('__')[0]}__`) && norm(p.romram) === norm(meta.romram))
-      .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
+    // 代表色单 SKU（第一百三十八轮口径对齐）：lowestPriceColorSku 最低价颜色，
+    // 与看板默认取色/总览/多平台比价同源——预警「现价」与图上折线同一条线；
+    // 无代表色 = 该系列无价格数据，整系列不产预警（原全色均值口径同样全周缺采）
+    const repSkuId = lowestPriceColorSku(key.split('__')[0], meta.romram, scope.countryCode);
+    if (!repSkuId) continue;
     let prevPrice: number | null = null;
     let prevIntensity: number | null = null;
     for (const w of timeAsc) {
-      // 组内多色均值（与 buildSeries 组聚合同语言）；RRP = 官方阶梯组内一条，取首个有值
-      let sum = 0;
-      let n = 0;
-      let rrp: number | null = null;
-      for (const p of group) {
-        const hit = priceForSelection(p.sku_id, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
-        if (!hit) continue;
-        sum += hit.price;
-        n++;
-        if (rrp == null) rrp = displayRrpOf(hit.row, currency);
-      }
-      if (n === 0) continue; // 缺采：prev 跨周延续（比较链不断）
-      const price = Math.round(sum / n);
+      // 代表色单价；RRP = 该行官方阶梯
+      const hit = priceForSelection(repSkuId, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
+      if (!hit) continue; // 缺采：prev 跨周延续（比较链不断）
+      const price = Math.round(hit.price);
+      const rrp = displayRrpOf(hit.row, currency);
       const intensity = rrp != null && rrp > 0 ? 1 - price / rrp : null;
       const base = {
         seriesKey: key,
@@ -226,8 +221,9 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       }
       // 平台价差预警（仅我司品牌系列）：周内各平台独立价 最高/最低 − 1 ≥ 阈值（阈值 ≤0 = 关）
       if (effEnabled(cfg, key, 'platform-gap') && thr('platform-gap') > 0 && meta.isOwn) {
-        // 平台价差 = 该国该周各平台真实最低价的最高/最低 − 1（单平台国家无价差）
-        const spread = platformPriceSpread(meta.skuId, w.week_id, scope.countryCode, currency);
+        // 平台价差 = 该国该周各平台真实最低价的最高/最低 − 1（单平台国家无价差）；
+        // 取价 SKU = 代表色（与上文现价同一条线，原字典序首色口径已对齐淘汰）
+        const spread = platformPriceSpread(repSkuId, w.week_id, scope.countryCode, currency);
         const low = spread[0];
         const high = spread[spread.length - 1];
         const gap = spread.length >= 2 && low.price > 0 ? high.price / low.price - 1 : 0;
@@ -253,21 +249,13 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
     const latestOf = (key: string): { price: number; weekId: string; weekLabel: string } | null => {
       const meta = alertSeriesMeta(key, scope);
       if (!meta || !meta.isOwn) return null;
-      const group = scopedProducts
-        .filter((p) => p.sku_id.startsWith(`${key.split('__')[0]}__`) && norm(p.romram) === norm(meta.romram))
-        .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
+      // 档位间距同代表色口径：与上文现价/看板默认取色同一条线
+      const repSkuId = lowestPriceColorSku(key.split('__')[0], meta.romram, scope.countryCode);
+      if (!repSkuId) return null;
       for (let i = timeAsc.length - 1; i >= 0; i--) {
         const w = timeAsc[i];
-        let sum = 0;
-        let n = 0;
-        for (const p of group) {
-          const hit = priceForSelection(p.sku_id, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
-          if (hit) {
-            sum += hit.price;
-            n++;
-          }
-        }
-        if (n > 0) return { price: Math.round(sum / n), weekId: w.week_id, weekLabel: w.week_wed_date.slice(5) };
+        const hit = priceForSelection(repSkuId, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
+        if (hit) return { price: Math.round(hit.price), weekId: w.week_id, weekLabel: w.week_wed_date.slice(5) };
       }
       return null;
     };

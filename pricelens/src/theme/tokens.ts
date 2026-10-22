@@ -97,6 +97,20 @@ export const selectSoft = '#e8f1ff'; // 选中/悬停底色（浅蓝）
 export const selectSoftInk = '#0053c2'; // 选中态文字（深蓝）
 export const selectAccent = '#0070f3'; // 聚焦边框/选中强调（浅蓝系）
 
+// ============================================================
+// 时间轨道色（第一百三十三轮收敛）：价格看板刷选条（XBrush）、分离面板
+// 轨道（SplitTimeTrack）、量价面板轨道（PanelTimeTrack）三处共用的
+// 同一组色值——此前三份硬编码拷贝，此处统一出口（色值不变，仅收敛来源）
+// ============================================================
+export const trackColors = {
+  rail: '#edf0f4', // 轨道底
+  fill: '#dceaff', // 选中段底
+  fillStrong: '#c7ddff', // 拖动中的选中段底
+  handle: '#4f8fe8', // 拖柄
+  handleSoft: '#8db4f0', // 选中段内衬描边
+  tick: '#aeb8c6', // 中间刻度线
+} as const;
+
 /**
  * §3.3 数值显示规则：价格一律整数（调用方保证传入已取整数值）。
  * USD：千分位逗号 + 前缀 $（如 $1,234）；本币：按当前国家本币格式化——

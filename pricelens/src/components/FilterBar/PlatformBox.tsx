@@ -116,6 +116,9 @@ export default function PlatformBox() {
   };
 
   // 左列行：无 checkbox；点击仅切换右列（onLabelClick 不传 = 点击仅激活）
+  // 平台行小注 = 组内各渠道店铺数求和（与配置页平台下拉、多平台比价弹窗同口径）；
+  // r.shops.length 是渠道数，不是店铺数
+  const shopTotalOf = (r: { shops: DimChannel[] }): number => r.shops.reduce((a, c) => a + c.shops, 0);
   const noteW = (n: number): number => measureText(`· ${n} 店铺`) * (fontSize.caption / 13);
   const badgeW = measureText('默认') * (fontSize.caption / 13) + 10 + space.xs; // 0 5px 左右 padding + gap
   const platformItems: CascadeRowItem[] = rows.map((r) => ({
@@ -125,13 +128,13 @@ export default function PlatformBox() {
     onActivate: () => setActive(r.platform),
     trailing: (
       <RowTrailing
-        note={`· ${r.shops.length} 店铺`}
+        note={`· ${shopTotalOf(r)} 店铺`}
         badge={defaultChannelId == null && r.platform === defaultPlatform}
       />
     ),
   }));
   const platformExtraW =
-    Math.max(0, ...rows.map((r) => noteW(r.shops.length))) +
+    Math.max(0, ...rows.map((r) => noteW(shopTotalOf(r)))) +
     (defaultChannelId == null && rows.some((r) => r.platform === defaultPlatform) ? badgeW : 0) +
     space.xs;
 

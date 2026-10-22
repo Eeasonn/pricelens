@@ -322,18 +322,24 @@ export default function PlatformCompareModal({
     );
   }, [active, open, cc]);
 
-  // 「比当前」基准 = 看板当前生效取数点价（与 weeks 周序对齐）：默认店铺覆盖 →
-  // 未配置 = 国家默认平台内最低价（priceForSelection platform=null，与单点取价
-  // 预警同源）；与比价本身的全平台口径互不干扰
+  // 「比当前」基准 = 看板当前取数点价（与 weeks 周序对齐）：随筛选条所选平台/店铺
+  // （priceForSelection 传 state.platform，与看板折线同源）；未选时走默认店铺链
+  // （人工覆盖 → 预填 → 默认平台内最低价）；与比价本身的全平台口径互不干扰
   const curPrices = useMemo<(number | null)[]>(
-    () => (skuId ? weeks.map((wk) => priceForSelection(skuId, wk.id, cc, null, state.currency)?.price ?? null) : []),
-    [skuId, weeks, cc, state.currency],
+    () => (skuId ? weeks.map((wk) => priceForSelection(skuId, wk.id, cc, state.platform, state.currency)?.price ?? null) : []),
+    [skuId, weeks, cc, state.platform, state.currency],
   );
-  // 当前取数点所在平台（「当前」徽标）：默认店铺归属平台，未配置 = 国家默认平台
+  // 当前取数点所在平台（「当前」徽标）：所选店铺/平台归属平台；未选 = 默认店铺归属平台，再兜底国家默认平台
   const curPlatform = useMemo<string | null>(() => {
+    const sel = state.platform;
+    if (sel) {
+      if (sel.shopIds.length) return dimChannel.find((c) => c.channel_id === sel.shopIds[0])?.platform ?? null;
+      if (sel.platforms.length) return sel.platforms[0];
+      return null;
+    }
     const dc = defaultChannelOf(cc);
     return (dc ? dimChannel.find((c) => c.channel_id === dc)?.platform ?? null : null) ?? defaultPlatformOf(cc);
-  }, [cc]);
+  }, [cc, state.platform]);
 
   const rows = useMemo<PlatformRow[]>(() => {
     if (!skuId) return [];
@@ -424,9 +430,6 @@ export default function PlatformCompareModal({
                 <span
                   key={r.platform}
                   className="tnum"
-                  title={`${r.platform}：${r.shops} 家店铺 · 最新价 ${r.latest != null ? fmtPrice(r.latest, usd) : '范围内无价'}${
-                    r.lowest ? '（全场最低）' : r.vsLowest != null && r.vsLowest > 0.0005 ? `（比最低 +${(r.vsLowest * 100).toFixed(1)}%）` : ''
-                  }${r.current ? ' · 看板当前取数点所在平台' : r.vsCurrent != null ? ` · 比当前 ${vsCurrentText(r.vsCurrent)}` : ''}`}
                   style={{
                     display: 'inline-flex',
                     flexDirection: 'column',
@@ -492,7 +495,7 @@ export default function PlatformCompareModal({
             </div>
             <PlatformTrendChart rows={rows} weeks={weeks} curPrices={curPrices} curPlatform={curPlatform} />
             <div style={{ fontSize: 12, color: color.mute, marginTop: 8, lineHeight: '18px' }}>
-              各平台价格 = 该平台全部店铺内最低在架价（折后价口径，取所选配置的最低价颜色 SKU）；「比当前」= 与看板当前取数点（默认店铺，未配置时为默认平台内最低价）的差价率；时间范围随看板筛选。
+              各平台价格 = 该平台全部店铺内最低在架价（折后价口径，取所选配置的最低价颜色 SKU）；「比当前」= 与看板当前取数点（所选店铺/平台，未选时为默认店铺）的差价率；时间范围随看板筛选。
             </div>
           </>
         ) : (

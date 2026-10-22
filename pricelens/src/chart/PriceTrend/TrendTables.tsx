@@ -20,6 +20,7 @@ import BrandDot from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, fontSize, formatPrice, motion, radius } from '../../theme/tokens';
+import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
 import { diffPct } from './helpers';
 import { dedupeSpecText } from './chartModel';
 import {
@@ -361,7 +362,7 @@ export default function TrendTables(props: {
           </>
         ) : (
           <span style={{ fontSize: 14, fontWeight: 700, color: color.mute, whiteSpace: 'nowrap' }}>
-            {b.g.mainKey == null ? '未选主品' : '所选时间范围内无数据'}
+            {b.g.mainKey == null ? EMPTY_MAIN_LABEL : '所选时间范围内无数据'}
           </span>
         )}
       </div>,

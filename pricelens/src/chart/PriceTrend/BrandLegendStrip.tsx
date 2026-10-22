@@ -12,7 +12,7 @@
 // 并预选该组主分析产品；不传完全不渲染，向后兼容。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { LeftOutlined, RightOutlined, SwapOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { curveNameOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
@@ -22,8 +22,8 @@ import { color, radius, selectSoft } from '../../theme/tokens';
 const COMPARES_VISIBLE = 3;
 /** 单个药丸的展示宽度预算（块内滚动容器 maxWidth = 3×预算 + 间距） */
 const PILL_W_BUDGET = 178;
-/** 主品药丸描边：与选择浮窗颜色 chip 同一「0.30 蓝描边 = 强调」语言（第一百二十二轮） */
-const MAIN_BORDER = 'rgba(0, 112, 243, 0.30)';
+/** 主品药丸描边：与选择浮窗颜色 chip 同一「浅蓝描边 = 强调」语言（第一百二十二轮） */
+const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
 
 interface PillSpec {
   key: string;
@@ -167,6 +167,7 @@ function GroupBlock({
           style={{
             display: 'inline-flex',
             alignItems: 'center',
+            gap: 3,
             height: 16,
             padding: '0 6px',
             borderRadius: radius.pill,
@@ -182,7 +183,7 @@ function GroupBlock({
             opacity: blockHover ? 1 : 0.45,
           }}
         >
-          ⇄ 比价
+          <SwapOutlined style={{ fontSize: 11 }} /> 比价
         </span>
       )}
       {mainPill && <Pill pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />}

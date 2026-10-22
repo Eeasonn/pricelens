@@ -27,6 +27,9 @@ const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'config', 'alerts'];
 const listParam = (q: URLSearchParams, name: string): string[] =>
   (q.get(name) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
+/** 桶 id 形状（周 YYYYWW / 月 YYYYMM / 季 YYYYQn）；字典序 = 时间序 */
+const isBucketId = (s: string | null): s is string => !!s && /^\d{4}(\d{2}|Q[1-4])$/.test(s);
+
 /** 渠道 id → 所属平台（维表反查为主，id 三段式「国家:平台:店铺类型」兜底） */
 function platformOfShopId(shopId: string): string {
   return dimChannel.find((c) => c.channel_id === shopId)?.platform ?? shopId.split(':')[1] ?? '';
@@ -111,6 +114,22 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
         .filter((x): x is ProductSelection => x != null);
       if (list.length > 0) out.filters.mains = clampMains(cardsFromSelections(list));
     }
+    // 第一百三十八轮：时间范围 / 价格显示 / 汇总口径进链接——价格操盘最核心的上下文
+    // 就是「看哪段时间、折后价还是含 RRP、平均还是最小」。rs/re = 手动范围（形状合法
+    // 且 rs ≤ re），读入即退出自适应（链接指定范围 = 固定范围语义）；自适应态不写这些键。
+    const rs = q.get('rs');
+    const re = q.get('re');
+    if (isBucketId(rs) && isBucketId(re) && rs <= re) {
+      out.filters.rangeStart = rs;
+      out.filters.rangeEnd = re;
+      out.filters.adaptive = false;
+    }
+    const pt = q.get('pt');
+    if (pt === 'd' || pt === 'r' || pt === 'dr') {
+      out.filters.priceTypes = { discounted: pt.includes('d'), rrp: pt.includes('r') };
+    }
+    const agg = q.get('agg');
+    if (agg === 'avg' || agg === 'min') out.filters.agg = agg;
   } catch {
     /* 无 window / 解析失败 = 无覆写 */
   }

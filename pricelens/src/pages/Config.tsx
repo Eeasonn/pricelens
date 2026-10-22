@@ -13,7 +13,7 @@
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Button, Empty, message, Select, Tag, Tooltip } from 'antd';
+import { Button, Empty, message, Popconfirm, Select, Tag, Tooltip } from 'antd';
 import PageHeader from '../components/PageHeader';
 import {
   autoPrevModelId,
@@ -197,7 +197,7 @@ export default function Config() {
             title="竞品对标配置"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-                {labels.country} · 国家随页头切换；看板「自动匹配」即取此处配置
+                {labels.country} · 国家随页头切换；看板「匹配竞品」即取此处配置
               </span>
             }
           >
@@ -208,14 +208,18 @@ export default function Config() {
           <Block
             title="默认平台店铺"
             extra={
-              <Button
-                size="small"
-                onClick={() => saveDefaultShop(null)}
-                disabled={!defaultShopId}
-                title={defaultShopId ? undefined : '当前无人工配置'}
+              <Popconfirm
+                title="清除后回到预填/平台默认，确定？"
+                okText="确定"
+                cancelText="取消"
+                okButtonProps={{ size: 'small' }}
+                cancelButtonProps={{ size: 'small' }}
+                onConfirm={() => saveDefaultShop(null)}
               >
-                清除人工配置，回到{prefillShop ? '预填' : '维表默认'}
-              </Button>
+                <Button size="small" disabled={!defaultShopId} title={defaultShopId ? undefined : '当前无人工配置'}>
+                  清除人工配置，回到{prefillShop ? '预填' : '平台默认'}
+                </Button>
+              </Popconfirm>
             }
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
@@ -243,7 +247,7 @@ export default function Config() {
               />
               {defaultShopId ? (
                 <Tag color="blue" style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
-                  已配置（人工覆盖）
+                  已配置
                 </Tag>
               ) : prefillShop ? (
                 <Tag color="cyan" style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
@@ -251,14 +255,14 @@ export default function Config() {
                 </Tag>
               ) : (
                 <Tag style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
-                  维表默认：{defaultPlatformOf(state.countryCode) ?? '—'} 平台内最低价
+                  平台默认：{defaultPlatformOf(state.countryCode) ?? '—'} 平台内最低价
                 </Tag>
               )}
             </div>
             <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px' }}>
               各国默认店铺已按事实数据预填（默认平台内数据最全的主店）；此处改动即人工覆盖，清除后回到预填。
               未在筛选条选择平台时，看板所有价格按生效默认店铺取价（单店精确口径），改动立即生效。
-              预警中心「平台价差」预警仍按该国全部平台计算，不受此配置影响。
+              「平台价差」预警按该国全部平台计算，不受默认店铺影响。
             </div>
           </Block>
 
@@ -266,9 +270,16 @@ export default function Config() {
           <Block
             title="上一代关系"
             extra={
-              <Button size="small" onClick={restorePrevGenDefault}>
-                恢复默认
-              </Button>
+              <Popconfirm
+                title="将清除全部手动维护的上一代关系，确定？"
+                okText="确定"
+                cancelText="取消"
+                okButtonProps={{ size: 'small' }}
+                cancelButtonProps={{ size: 'small' }}
+                onConfirm={restorePrevGenDefault}
+              >
+                <Button size="small">恢复默认</Button>
+              </Popconfirm>
             }
           >
             {prevRows.length ? (
@@ -360,7 +371,7 @@ export default function Config() {
                 .map((p) => {
                   const tone =
                     p.depth_hint === '深'
-                      ? { dot: 'rgba(235, 87, 87, 0.75)', fg: '#c0392b', bg: 'rgba(235, 87, 87, 0.10)' }
+                      ? { dot: 'rgba(235, 87, 87, 0.75)', fg: '#d92d20', bg: 'rgba(235, 87, 87, 0.10)' }
                       : p.depth_hint === '中'
                         ? { dot: 'rgba(235, 87, 87, 0.5)', fg: '#b45309', bg: '#fff7e6' }
                         : { dot: 'rgba(235, 87, 87, 0.3)', fg: color.mute, bg: color.canvasSoft };

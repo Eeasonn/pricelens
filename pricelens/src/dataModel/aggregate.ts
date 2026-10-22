@@ -173,6 +173,15 @@ export function defaultChannelOf(countryCode: string): string | null {
   return prefillDefaultChannelOf(countryCode);
 }
 
+/** 未选平台/店铺时的「平台锚点」：默认店铺归属平台 → 未配置回国家默认平台。
+ *  促销档期（平台限定档期是否显示/生效）等按平台对齐的口径统一走这里，
+ *  与价格取数点（effectiveChannelIds）锚定同一家店所在平台。 */
+export function defaultPlatformAnchorOf(countryCode: string): string | null {
+  const dc = defaultChannelOf(countryCode);
+  if (dc) return dimChannel.find((c) => c.channel_id === dc)?.platform ?? null;
+  return defaultPlatformOf(countryCode);
+}
+
 /** 生效渠道集合：未选 = 配置的默认平台店铺（channel 级）→ 未配置再回默认平台全部渠道；
  *  显式勾选 = 平台/渠道并集（渠道级单选 = shopIds:[一个]，平台级兼容 = platforms:[一个]） */
 export function effectiveChannelIds(countryCode: string, platform: PlatformQuery | null): string[] {

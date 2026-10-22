@@ -16,7 +16,7 @@
 // ============================================================
 import { Checkbox, Popover, Segmented, Slider } from 'antd';
 import { MoreOutlined, SettingOutlined, SwapOutlined } from '@ant-design/icons';
-import { forwardRef, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { forwardRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
 import { color, fontSize, radius, localCurrencySymbol } from '../../theme/tokens';
 import type { LineShapeChoice } from './chartModel';
@@ -157,6 +157,9 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     props.onChangeThreshold != null;
   // 二级功能有任一开启 = ⋯ 按钮出蓝点（默认全关，第五十六轮）
   const secondaryActive = (props.maxMinOn === true) || (props.changeThreshold != null);
+  // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
+  // ——与每格高度滑杆「松手生效」同一语言，避免拖动全程逐帧触发提醒重算
+  const [dragThreshold, setDragThreshold] = useState<number | null>(null);
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
       <span style={{ fontSize: fontSize.caption, lineHeight: '16px', color: color.mute, pointerEvents: 'none' }}>
@@ -205,7 +208,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           </div>
         }
       >
-        <RoundIconButton title="Y 轴显示设置（每格高度伸缩 / Y 刻度线 / Y 轴自动压缩 / 折线样式）" aria-label="Y 轴显示设置">
+        <RoundIconButton title="Y 轴显示设置" aria-label="Y 轴显示设置">
           <SettingOutlined style={{ fontSize: 12 }} />
         </RoundIconButton>
       </Popover>
@@ -328,15 +331,20 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                         min={0}
                         max={15}
                         step={0.5}
-                        value={+(props.changeThreshold * 100).toFixed(1)}
-                        onChange={(v) => props.onChangeThreshold!(+(v as number) / 100)}
+                        value={dragThreshold ?? +(props.changeThreshold * 100).toFixed(1)}
+                        onChange={(v) => setDragThreshold(+(v as number))}
+                        onAfterChange={(v) => {
+                          // 松手生效：拖动值只在本地预览，此刻才写入持久配置
+                          setDragThreshold(null);
+                          props.onChangeThreshold!(+(v as number) / 100);
+                        }}
                         tooltip={{ formatter: (v) => `≥ ${v ?? 0}%` }}
                       />
                       <span
                         className="tnum"
                         style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', display: 'inline-block', width: THRESHOLD_TEXT_W }}
                       >
-                        ≥ {+(props.changeThreshold * 100).toFixed(1)}%
+                        ≥ {dragThreshold ?? +(props.changeThreshold * 100).toFixed(1)}%
                       </span>
                     </span>
                   )}

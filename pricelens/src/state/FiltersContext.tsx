@@ -29,7 +29,7 @@ import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
-import { modelIdOf } from '../components/ProductCascader/tree';
+import { modelIdOf, invalidateLatestPriceCache } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
 import { expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf } from './urlSync';
@@ -305,6 +305,33 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   return next;
 }
 
+/** 口径切换（国家/产业变化）+ 按国快照：切走前把当前整套产品卡存该国会话快照；
+ *  目的国存在本会话快照且仍有效（产品在新口径有数据）时恢复快照而非重算默认卡——
+ *  高频的国家来回切换不再静默清空用户搭好的选择。快照会话级（关页即清），
+ *  不跨会话复活旧选择。 */
+function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
+  const snapKeyOf = (cc: string) => `${LPL.filters}.mainsOf.${cc}`;
+  try {
+    if (prev.mains.length) sessionStorage.setItem(snapKeyOf(prev.countryCode), JSON.stringify({ mains: prev.mains }));
+  } catch {
+    /* 存储不可用时跳过快照，走默认重算 */
+  }
+  const applied = applyScopeDefaults(next, true);
+  try {
+    const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode));
+    if (raw) {
+      const snap = JSON.parse(raw) as { mains: unknown };
+      const mains = isMainProductArray(snap.mains) ? snap.mains : null;
+      if (mains && mains.length && mainsValidFor(mains, applied.countryCode, applied.industry)) {
+        return { ...applied, mains: mains.map((c) => (c.auto && c.main ? withAutoOn(c) : c)) };
+      }
+    }
+  } catch {
+    /* 坏 JSON / 类型不符：走默认重算 */
+  }
+  return applied;
+}
+
 /**
  * 启动恢复：
  * 1) 无持久化 / 持久化版本旧于 v10 → 新默认视图（周 · USD · 默认主分析卡 + 其配置对比）；
@@ -406,6 +433,15 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     // 仅平台级（旧兼容）只写 plat=；未选 = 双 null 删键（连同旧链接残留的 shop=）。
     // 与 readUrlOverrides 的归一化读取对称（读侧同存时 shop= 优先，数据层不动）
     const { plat, shop } = platformUrlParamsOf(state.platform);
+    // 第一百三十八轮：时间范围/价格显示/汇总口径入链（rs/re/pt/agg）——分享链接
+    // 带全取数上下文；自适应态不写范围（接收方随数据自动算），读入 rs/re 即退出自适应
+    const ptCode = state.priceTypes.discounted && state.priceTypes.rrp
+      ? 'dr'
+      : state.priceTypes.discounted
+        ? 'd'
+        : state.priceTypes.rrp
+          ? 'r'
+          : null;
     writeUrlPatch({
       c: state.countryCode,
       i: state.industry,
@@ -414,14 +450,32 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       main: mainKeys.join(',') || null,
       plat,
       shop,
+      rs: state.adaptive ? null : state.rangeStart || null,
+      re: state.adaptive ? null : state.rangeEnd || null,
+      pt: ptCode,
+      agg: state.agg,
     });
-  }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform]);
+  }, [
+    state.countryCode,
+    state.industry,
+    state.granularity,
+    state.currency,
+    state.mains,
+    state.platform,
+    state.adaptive,
+    state.rangeStart,
+    state.rangeEnd,
+    state.priceTypes,
+    state.agg,
+  ]);
 
   // §13：对标配置保存（CONFIG_CHANGED_EVENT，入口 = 总览「＋添加竞品」浮窗 / 配置页）。
   // 开启「自动匹配竞品」的组随新矩阵重算（开关的「开」= 矩阵驱动）；其余组不动，
-  // 经「自动匹配竞品 / 全部自动匹配」按需取回。同时重建 state 让图表侧重读配置。
+  // 经「自动匹配竞品 / 全部自动匹配」按需取回。同时重建 state 让图表侧重读配置，
+  // 并失效产品树现价索引（默认店铺口径变化后行尾现价须重建，与图上折线同步）。
   useEffect(() => {
     const handler = () => {
+      invalidateLatestPriceCache();
       setState((s) => ({ ...s, mains: s.mains.map((c) => (c.auto ? withAutoOn(c) : c)) }));
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, handler);
@@ -439,7 +493,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           const scopeChanged =
             (patch.countryCode != null && patch.countryCode !== s.countryCode) ||
             (patch.industry != null && patch.industry !== s.industry);
-          return scopeChanged ? applyScopeDefaults(next, true) : next;
+          return scopeChanged ? switchScope(s, next) : next;
         }),
 
       /** 回到默认视图（含数据默认主分析卡 + 其配置对比区） */

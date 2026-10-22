@@ -45,7 +45,7 @@ import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
-import { buildSeries, tierOf, tierOrderOf } from '../../dataModel/aggregate';
+import { buildSeries, defaultPlatformAnchorOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion } from '../../data';
@@ -133,9 +133,10 @@ export default function PriceTrend(props: {
   const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('dashboard.windowIds', () => null);
   // 分离模式同步/独立查看时间：同步（默认）= 全面板共用共享窗口，拖任一面板的时间轴
   // 全部联动；独立 = 各面板单独调整（panelWins 按面板 key 记窗口，未单独调整过的
-  // 面板回落共享窗口）。粒度切换/自适应重算/换卡后独立窗口整体回落共享窗口
-  const [synced, setSynced] = useState(true);
-  const [panelWins, setPanelWins] = useState<Record<string, [number, number] | null>>({});
+  // 面板回落共享窗口）。粒度切换/自适应重算/换卡后独立窗口整体回落共享窗口。
+  // 会话态跨页保留（与量价页对齐：synced/panelWins 同保留）
+  const [synced, setSynced] = usePageViewState<boolean>('dashboard.synced', () => true);
+  const [panelWins, setPanelWins] = usePageViewState<Record<string, [number, number] | null>>('dashboard.panelWins', () => ({}));
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例取消选中的系列（折线隐藏）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
   const [promoBandsOn, setPromoBandsOn] = useState(false); // 大促档期（第七十七轮起默认关）
@@ -272,6 +273,21 @@ export default function PriceTrend(props: {
       return;
     }
     if (adaptiveAppliedRef.current === adaptiveKey) return;
+    // 挂载首跑守卫（跨页往返）：顶部时间范围是全局筛选器，量价页可能已按其三槽
+    // 写入自适应范围——只要现范围仍覆盖本页任一数据桶就沿用、不覆写（切页不再
+    // 静默改用户的筛选器）；范围与本页数据完全脱节（换国进入/首次为空）才重套
+    if (!adaptiveMountedRef.current) {
+      const dataLo = span ? buckets[span[0]]?.id ?? null : null;
+      const dataHi = span ? buckets[span[1]]?.id ?? null : null;
+      if (
+        dataLo && dataHi && state.rangeStart && state.rangeEnd &&
+        !(state.rangeEnd < dataLo || state.rangeStart > dataHi)
+      ) {
+        adaptiveAppliedRef.current = adaptiveKey;
+        adaptiveMountedRef.current = true;
+        return;
+      }
+    }
     adaptiveAppliedRef.current = adaptiveKey;
     const rangeUnchanged = state.rangeStart === adaptiveBounds[0] && state.rangeEnd === adaptiveBounds[1];
     actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
@@ -601,9 +617,10 @@ export default function PriceTrend(props: {
   }, [winBuckets, state.granularity]);
 
   const winSpans = useMemo(() => bucketSpans(state.granularity, winBuckets), [state.granularity, winBuckets]);
-  // 大促档期按国家取日历；标注了适用平台的档期（如亚马逊 Prime Day）只在该平台被选中/为默认电渠时显示
+  // 大促档期按国家取日历；标注了适用平台的档期（如亚马逊 Prime Day）只在所选平台、
+  // 或未选时的默认店铺归属平台（未配置回国家默认平台）显示
   const scopedPromos = useMemo(() => {
-    const defaultPlatform = dimRegion.find((r) => r.country_code === state.countryCode)?.default_platform ?? null;
+    const defaultPlatform = defaultPlatformAnchorOf(state.countryCode);
     const selected = state.platform && (state.platform.platforms.length || state.platform.shopIds.length)
       ? new Set([...state.platform.platforms, ...state.platform.shopIds.map((id) => id.split(':')[1] ?? '')])
       : new Set(defaultPlatform ? [defaultPlatform] : []);
