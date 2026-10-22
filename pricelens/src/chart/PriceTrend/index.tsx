@@ -1174,6 +1174,7 @@ export default function PriceTrend(props: {
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
             onOpenPromoDetail={openPromoDetail}
+            onOpenPlatformCompare={() => setPlatformCompareOpen(true)}
             yScale={yCfg}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
