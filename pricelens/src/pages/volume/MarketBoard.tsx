@@ -1,11 +1,14 @@
 // ============================================================
 // 第一百二十三轮（2026-10-22 走查会重做）量价看板 · 大盘分析卡：
 // ① 档位分布柱——横轴 = 各价格档位（产业阶梯序低→高，只画当前期有销量的
-//   档位，全量直出），柱高 = 该档大盘总销量（绝对台数，niceCeil 刻度 +
-//   5 道网格线），柱内堆叠 = 品牌构成（品牌色分段，自有品牌置底，悬停分段
-//   出 品牌/台数/占该档比例）。
-//   点击柱子 = 选中该档位（选中柱描边高亮 + 列底衬带），与卡头「档位」选择
-//   双向同步（档位必选，无「全部档位」）；默认选中 = 当前期销量最大的档位，
+//   档位，全量直出）。
+//   第一百二十六轮改占比口径：每根柱归一化到 100%（柱恒等高），柱内分段 =
+//   品牌份额（段内放得下标百分比，放不下悬停兜底；悬停 tooltip 保留台数+占比，
+//   绝对台数信息不丢）；Y 轴固定 0–100%（0/50/100% 刻度），横向网格线删除；
+//   绘图高度自适应容器（容器多高图多高，最小 300），配色 = 品牌色降饱和柔和
+//   变体、自有品牌保留唯一强调色（实色），分段 1px 细描边。
+//   点击柱子 = 选中该档位（选中列浅蓝底 + 蓝描边，与卡头「档位」选择双向
+//   同步，档位必选，无「全部档位」）；默认选中 = 当前期销量最大的档位，
 //   国家/产业/当前期变化后原档位不再有数据时自动回落到销量最大者。
 // ② 卡头「时间」选择——当前期默认 = 查看范围最新一期（范围/粒度变化回最新），
 //   大盘图与贡献拆解都随它取数。
@@ -13,7 +16,8 @@
 //   行 = 品牌，按 Δ 降序（拉动最上、拖累最下）；点击品牌行行内展开该品牌在
 //   该档位下的各产品（型号+配置）Δ 子行（缩进小字、Δ 降序），再点收起，可多
 //   品牌同时展开，切换档位/当前期收起全部；顶部给 档位环比合计 + 拉动最大 /
-//   拖累最大（均按所选档位计算）。
+//   拖累最大（均按所选档位计算）。第一百二十六轮：展开的品牌区块加浅灰圆角
+//   内嵌底色，不再与下方品牌行融成一片。
 // 销量口径 = dataModel/volume（估算，台），不随平台/币种变化（见卡底脚注）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
@@ -22,11 +26,11 @@ import BrandDot from '../../components/BrandMark';
 import { filterBarTheme } from '../../components/FilterBar';
 import { ownBrand } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
-import { bucketAnchorDate, fmtInt, tierLabelShort, type Bucket } from '../../chart/PriceTrend/helpers';
+import { bucketAnchorDate, tierLabelShort, type Bucket } from '../../chart/PriceTrend/helpers';
 import { bucketDateText } from '../../chart/PriceTrend/tableModel';
 import type { Granularity, Industry } from '../../dataModel/types';
 import { TIER_LABELS, tierOrderOf } from '../../dataModel/aggregate';
-import { niceCeil, volumeByBuckets } from '../../dataModel/volume';
+import { volumeByBuckets } from '../../dataModel/volume';
 import {
   brandContribution,
   fmtSignedInt,
@@ -36,23 +40,28 @@ import {
   tierStructure,
   type BrandContributionRow,
 } from '../../dataModel/market';
-import { brandColorOf, color, fontSize, radius, selectSoft } from '../../theme/tokens';
+import { brandColorOf, color, fontSize, radius, selectAccent, selectSoft, space } from '../../theme/tokens';
 
-/** 容器实宽（堆叠柱随卡片宽度自适应） */
-function useContainerWidth(): [MutableRefObject<HTMLDivElement | null>, number] {
+/** 容器实宽实高（堆叠柱随卡片宽高自适应；高度 = 容器多高图多高，最小高见 CHART_MIN_H） */
+function useContainerSize(): [MutableRefObject<HTMLDivElement | null>, number, number] {
   const ref = useRef<HTMLDivElement | null>(null);
   const [w, setW] = useState(0);
+  const [h, setH] = useState(0);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
-      for (const e of entries) setW(e.contentRect.width);
+      for (const e of entries) {
+        setW(e.contentRect.width);
+        setH(e.contentRect.height);
+      }
     });
     ro.observe(el);
     setW(el.clientWidth);
+    setH(el.clientHeight);
     return () => ro.disconnect();
   }, []);
-  return [ref, w];
+  return [ref, w, h];
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -74,11 +83,17 @@ function tierColLabel(code: string): string {
   return tierLabelShort(code.replace('-', '~'));
 }
 
-const CHART_H = 236;
-const PAD_L = 48; // 左侧台数刻度（千分位最宽 ~7 字符）
-const PAD_R = 10;
-const PAD_T = 12;
-const PAD_B = 22; // 容纳档位标签单行
+// ---- 占比柱几何（第一百二十六轮）：高度自适应容器（最小 300），Y 轴恒 0–100% ----
+const CHART_MIN_H = 300;
+const PAD_L = 44; // 左侧百分比刻度（「100%」最宽）
+const PAD_R = 12;
+const PAD_T = 10;
+const PAD_B = 26; // 容纳档位标签单行
+/** 竞品分段降饱和：品牌色按此透明度铺在白底上成柔和变体；自有品牌保留实色强调 */
+const BRAND_SOFT_ALPHA = 0.32;
+/** 环比双向条低饱和语义色（拉动蓝 / 拖累红） */
+const PULL_COLOR = 'rgba(0, 112, 243, 0.5)';
+const DRAG_COLOR = 'rgba(238, 0, 0, 0.4)';
 
 interface TipState {
   x: number;
@@ -89,23 +104,35 @@ interface TipState {
   tier: string; // 档位文案
 }
 
-/** 拆解双向条：中轴 = 0，右 = 拉动（蓝）/ 左 = 拖累（红）；宽 = |Δ| / maxAbs
- *  （maxAbs 覆盖品牌行与产品子行，展开收起不换比例尺）；thin = 产品子行的细条 */
+/** 柱内分段填充：自有品牌 = 品牌实色（唯一强调），竞品 = 品牌色柔和变体 */
+function segFillOf(brand: string, ownBrandName: string): string {
+  return brand === ownBrandName ? brandColorOf(brand) : hexToRgba(brandColorOf(brand), BRAND_SOFT_ALPHA);
+}
+
+/** 拆解双向条：中轴 = 0（虚线弱化），右 = 拉动（柔蓝）/ 左 = 拖累（柔红）；
+ *  宽 = |Δ| / maxAbs（maxAbs 覆盖品牌行与产品子行，展开收起不换比例尺）；
+ *  thin = 产品子行的细条 */
 function BiBar({ delta, maxAbs, thin = false }: { delta: number; maxAbs: number; thin?: boolean }) {
   const w = (Math.abs(delta) / maxAbs) * 50;
   const pos = delta > 0;
   return (
     <div style={{ position: 'relative', height: 14 }}>
-      <div style={{ position: 'absolute', left: '50%', top: -2, bottom: -2, width: 1, background: color.hairline }} />
+      <div
+        style={{
+          position: 'absolute', left: '50%', top: -2, bottom: -2, width: 1,
+          backgroundImage: `linear-gradient(to bottom, ${color.hairlineStrong} 55%, transparent 55%)`,
+          backgroundSize: '1px 5px',
+        }}
+      />
       <div
         style={{
           position: 'absolute',
           top: thin ? 2 : 1,
           height: thin ? 10 : 12,
-          borderRadius: 2,
+          borderRadius: 3,
           ...(pos
-            ? { left: '50%', width: `${w}%`, background: hexToRgba(color.link, 0.85) }
-            : { right: '50%', width: `${w}%`, background: hexToRgba(color.error, 0.8) }),
+            ? { left: '50%', width: `${w}%`, background: PULL_COLOR }
+            : { right: '50%', width: `${w}%`, background: DRAG_COLOR }),
         }}
       />
     </div>
@@ -125,8 +152,8 @@ function RowShell({ onClick, children }: { onClick?: () => void; children: React
         display: 'grid',
         gridTemplateColumns: 'minmax(170px, 250px) 1fr 62px 16px',
         alignItems: 'center',
-        gap: 10,
-        padding: '3px 6px',
+        gap: 12,
+        padding: '5px 8px',
         borderRadius: radius.control,
         background: hover ? selectSoft : 'transparent',
         cursor: onClick ? 'pointer' : 'default',
@@ -150,7 +177,7 @@ export default function MarketBoard(props: {
   const [selIdxState, setSelIdx] = useState<number>(winE);
   const [selTier, setSelTier] = useState<string | null>(null); // 档位必选；null = 尚未选择（渲染期回落到销量最大档）
   const [expandedBrands, setExpandedBrands] = useState<string[]>([]); // 行内展开产品明细的品牌
-  const [boxRef, width] = useContainerWidth();
+  const [boxRef, width, boxH] = useContainerSize();
   const [tip, setTip] = useState<TipState | null>(null); // 悬停分段明细（容器坐标）
 
   // 范围/粒度变化 → 当前期回默认（范围最新一期）
@@ -219,18 +246,14 @@ export default function MarketBoard(props: {
   const winBuckets = buckets.slice(winS, winE + 1);
   const tierText = (t: string): string => TIER_LABELS[t] ?? tierColLabel(t);
 
-  // ---- 档位柱几何 ----
+  // ---- 占比柱几何（第一百二十六轮）：Y 轴恒 0–100%，每根柱归一化等高 ----
   const n = structures.length;
+  const chartH = Math.max(CHART_MIN_H, boxH || CHART_MIN_H);
   const plotW = Math.max(80, width - PAD_L - PAD_R);
-  const plotH = CHART_H - PAD_T - PAD_B;
+  const plotH = chartH - PAD_T - PAD_B;
   const colW = n > 0 ? plotW / n : plotW;
   const barW = Math.min(64, colW * 0.55);
-  // Y 轴 = 台数：niceCeil 上限，恒 4 等分 5 道网格线（第一百二十五轮：不被 4 整除时步长
-  // 向上取整保 yMax ≥ cap——原 %5 分支会让 yMax < cap、最高柱溢出绘图区）
-  const cap = niceCeil(Math.max(1, ...structures.map((s) => s.total)));
-  const yStep = cap % 4 === 0 ? cap / 4 : Math.ceil(cap / 4);
-  const yMax = yStep * 4;
-  const yOf = (v: number): number => PAD_T + plotH - (v / yMax) * plotH;
+  const ownBrandName = ownBrand();
   const rows = breakdown.rows;
   const maxAbs = Math.max(
     1,
@@ -247,7 +270,7 @@ export default function MarketBoard(props: {
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>大盘分析</span>
         <span style={{ fontSize: 11, color: color.mute }}>
-          {periodTitle(granularity, selBucket)} 各价格档位大盘销量（台），柱内颜色为品牌构成
+          {periodTitle(granularity, selBucket)} 各价格档位销量占比，柱内为品牌份额，悬停查看台数
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>档位</span>
@@ -279,28 +302,38 @@ export default function MarketBoard(props: {
         </span>
       </div>
 
-      {/* 档位分布柱：横轴 = 各价格档位（阶梯序），柱高 = 该档大盘台数（绝对量），分段 = 品牌构成（自有品牌置底） */}
-      <div ref={boxRef} style={{ position: 'relative' }}>
+      {/* 档位分布柱（占比口径）：横轴 = 各价格档位（阶梯序），每柱归一化 100%，
+          分段 = 品牌份额（自有品牌置底实色，竞品柔和变体）；高度随容器自适应 */}
+      <div ref={boxRef} style={{ position: 'relative', minHeight: CHART_MIN_H }}>
         {n === 0 ? (
-          <div style={{ height: CHART_H, display: 'grid', placeItems: 'center', fontSize: fontSize.bodySm, color: color.mute }}>
+          <div
+            style={{
+              height: CHART_MIN_H, display: 'grid', placeItems: 'center',
+              fontSize: fontSize.bodySm, color: color.mute,
+            }}
+          >
             暂无大盘销量数据
           </div>
         ) : (
           <>
-            <svg width={width} height={CHART_H} role="img" aria-label="各价格档位大盘销量与品牌构成" style={{ display: 'block' }}>
-              {/* 台数网格线（0 基线 + 4 档刻度）与左侧刻度数字 */}
-              {[0, 1, 2, 3, 4].map((k) => {
-                const y = PAD_T + plotH - (k / 4) * plotH;
-                return (
-                  <g key={k}>
-                    <line x1={PAD_L} y1={y} x2={PAD_L + plotW} y2={y} stroke={k === 0 ? color.hairlineStrong : color.hairline} strokeWidth={1} />
-                    <text x={PAD_L - 6} y={y + 3.5} textAnchor="end" fontSize={9} fill={color.mute} className="tnum">
-                      {fmtInt(k * yStep)}
-                    </text>
-                  </g>
-                );
-              })}
-              {/* 档位柱：点击选中该档位；柱体自下而上按品牌序堆叠（序首 = 自有 = 视觉置底） */}
+            <svg width={width} height={chartH} role="img" aria-label="各价格档位大盘销量占比与品牌构成" style={{ display: 'block' }}>
+              {/* Y 轴 = 占比刻度（0/50/100%，无横向网格线）；只留一条浅色零基线 */}
+              {[0, 0.5, 1].map((t) => (
+                <text
+                  key={t}
+                  x={PAD_L - 8}
+                  y={PAD_T + plotH * (1 - t) + 3.5}
+                  textAnchor="end"
+                  fontSize={fontSize.caption}
+                  fill={color.mute}
+                  className="tnum"
+                >
+                  {`${Math.round(t * 100)}%`}
+                </text>
+              ))}
+              <line x1={PAD_L} y1={PAD_T + plotH} x2={PAD_L + plotW} y2={PAD_T + plotH} stroke={color.hairline} strokeWidth={1} />
+              {/* 占比柱：点击选中该档位；柱体自下而上按品牌序堆叠（序首 = 自有 = 视觉置底），
+                  每柱恒等高（100%），段高 = 品牌占该档比例 */}
               {structures.map((st, ti) => {
                 const cx = PAD_L + colW * (ti + 0.5);
                 const selected = st.tierCode === selTierEff;
@@ -308,60 +341,81 @@ export default function MarketBoard(props: {
                 return (
                   <g key={st.tierCode} style={{ cursor: 'pointer' }} onClick={() => setSelTier(st.tierCode)}>
                     {selected && (
-                      <rect x={cx - colW / 2} y={PAD_T} width={colW} height={plotH + 16} fill={color.hairlineStrong} opacity={0.16} />
+                      <rect x={cx - colW / 2} y={PAD_T} width={colW} height={plotH + 16} fill={selectSoft} />
                     )}
                     {/* 整列点击热区（柱体上方空白与档位标签处也可选中该档） */}
                     <rect x={cx - colW / 2} y={PAD_T} width={colW} height={plotH + 16} fill="transparent" />
                     {st.byBrand.map((seg) => {
-                      const h = (seg.vol / yMax) * plotH;
+                      const h = (seg.vol / st.total) * plotH;
                       const y = PAD_T + plotH - acc - h;
                       acc += h;
                       const lit = tip == null || tip.brand === seg.brand;
+                      const isOwn = seg.brand === ownBrandName;
+                      const pctText = `${Math.round((seg.vol / st.total) * 100)}%`;
+                      const labelFits = h >= 16 && barW >= 32;
                       return (
-                        <rect
-                          key={seg.brand}
-                          x={cx - barW / 2}
-                          y={y}
-                          width={barW}
-                          height={Math.max(1, h - 0.5)}
-                          fill={brandColorOf(seg.brand)}
-                          opacity={lit ? 0.86 : 0.3}
-                          style={{ pointerEvents: 'auto', transition: 'opacity 160ms ease' }}
-                          onMouseMove={(e) => {
-                            const svg = e.currentTarget.ownerSVGElement as SVGSVGElement;
-                            const rect = svg.getBoundingClientRect();
-                            setTip({
-                              x: e.clientX - rect.left,
-                              y: e.clientY - rect.top,
-                              brand: seg.brand,
-                              vol: seg.vol,
-                              share: st.total > 0 ? seg.vol / st.total : 0,
-                              tier: tierText(st.tierCode),
-                            });
-                          }}
-                          onMouseLeave={() => setTip(null)}
-                        />
+                        <g key={seg.brand}>
+                          <rect
+                            x={cx - barW / 2}
+                            y={y}
+                            width={barW}
+                            height={Math.max(1, h - 0.5)}
+                            fill={segFillOf(seg.brand, ownBrandName)}
+                            stroke={color.canvas}
+                            strokeWidth={1}
+                            opacity={lit ? 1 : 0.3}
+                            style={{ pointerEvents: 'auto', transition: 'opacity 160ms ease' }}
+                            onMouseMove={(e) => {
+                              const svg = e.currentTarget.ownerSVGElement as SVGSVGElement;
+                              const rect = svg.getBoundingClientRect();
+                              setTip({
+                                x: e.clientX - rect.left,
+                                y: e.clientY - rect.top,
+                                brand: seg.brand,
+                                vol: seg.vol,
+                                share: st.total > 0 ? seg.vol / st.total : 0,
+                                tier: tierText(st.tierCode),
+                              });
+                            }}
+                            onMouseLeave={() => setTip(null)}
+                          />
+                          {/* 段内百分比：放得下才标（悬停 tooltip 兜底台数+占比） */}
+                          {labelFits && lit && (
+                            <text
+                              x={cx}
+                              y={y + h / 2 + 3.5}
+                              textAnchor="middle"
+                              fontSize={10}
+                              fontWeight={600}
+                              fill={isOwn ? color.onPrimary : color.ink}
+                              className="tnum"
+                              pointerEvents="none"
+                            >
+                              {pctText}
+                            </text>
+                          )}
+                        </g>
                       );
                     })}
-                    {/* 选中柱描边高亮 */}
+                    {/* 选中柱描边高亮（浅蓝底蓝描边口径） */}
                     {selected && st.total > 0 && (
                       <rect
                         x={cx - barW / 2 - 1.5}
-                        y={yOf(st.total) - 1.5}
+                        y={PAD_T - 1.5}
                         width={barW + 3}
-                        height={PAD_T + plotH - yOf(st.total) + 1.5}
+                        height={plotH + 3}
                         fill="none"
-                        stroke={color.ink}
-                        strokeWidth={1.2}
+                        stroke={selectAccent}
+                        strokeWidth={1.5}
                         pointerEvents="none"
                       />
                     )}
                     {/* X 轴档位标签：全量直出，选中档位加重 */}
                     <text
                       x={cx}
-                      y={PAD_T + plotH + 14}
+                      y={PAD_T + plotH + 17}
                       textAnchor="middle"
-                      fontSize={10}
+                      fontSize={fontSize.caption}
                       fontWeight={selected ? 600 : 400}
                       fill={selected ? color.ink : color.body}
                       className="tnum"
@@ -373,7 +427,7 @@ export default function MarketBoard(props: {
                 );
               })}
             </svg>
-            {/* 悬停分段明细 */}
+            {/* 悬停分段明细：台数 + 占比（绝对量信息不丢） */}
             {tip && (
               <div
                 style={{
@@ -402,21 +456,30 @@ export default function MarketBoard(props: {
                 </div>
               </div>
             )}
-            {/* 品牌图例（与堆叠序一致） */}
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 14px', padding: '2px 2px 0' }}>
-              {brandOrder.map((b) => (
-                <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: color.body }}>
-                  <i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: brandColorOf(b) }} />
-                  {b}
-                </span>
-              ))}
-            </div>
           </>
         )}
       </div>
+      {/* 品牌图例（与堆叠序一致；自有品牌实色、竞品柔和变体同柱内填充）。
+          放在测量容器之外：容器高 = 图高（svg），图例不再参与高度反馈 */}
+      {n > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px 16px', padding: '8px 2px 0' }}>
+          {brandOrder.map((b) => (
+            <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: fontSize.caption, color: color.body }}>
+              <i
+                style={{
+                  display: 'inline-block', width: 10, height: 10, borderRadius: 3,
+                  background: segFillOf(b, ownBrandName),
+                  boxShadow: b === ownBrandName ? 'none' : `inset 0 0 0 1px ${color.hairline}`,
+                }}
+              />
+              {b}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* 大盘环比贡献拆解：所选档位的品牌台数变化（点击品牌行展开其产品明细） */}
-      <div style={{ marginTop: 18, paddingTop: 12, borderTop: `1px solid ${color.hairline}` }}>
+      <div style={{ marginTop: space.lg, paddingTop: 16, borderTop: `1px solid ${color.hairline}` }}>
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: color.ink }}>大盘环比贡献拆解</span>
           {selTierEff != null && (
@@ -430,7 +493,7 @@ export default function MarketBoard(props: {
         </div>
         {/* 档位环比合计 + 最大拉动/拖累（行内彩色读数，均按所选档位计算） */}
         {prevId != null && rows.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 16px', marginBottom: 8, fontSize: 12, color: color.body }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 20px', marginBottom: 10, fontSize: 12, color: color.body }}>
             <span>
               档位环比
               <span
@@ -458,9 +521,9 @@ export default function MarketBoard(props: {
               </span>
             )}
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-              <i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: color.link }} />
+              <i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: PULL_COLOR }} />
               <span style={{ color: color.mute }}>拉动</span>
-              <i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: color.error }} />
+              <i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: DRAG_COLOR }} />
               <span style={{ color: color.mute }}>拖累</span>
             </span>
           </div>
@@ -478,7 +541,22 @@ export default function MarketBoard(props: {
               const toggle = () =>
                 setExpandedBrands((cur) => (cur.includes(r.brand) ? cur.filter((b) => b !== r.brand) : [...cur, r.brand]));
               return (
-                <div key={r.brand}>
+                <div
+                  key={r.brand}
+                  style={
+                    open
+                      ? {
+                          // 第一百二十六轮：展开的品牌区块 = 浅灰圆角内嵌底色（负外边距 +
+                          // 等宽内边距保持各行栅格对齐，inset 描边不占布局）
+                          background: color.canvasSoft2,
+                          borderRadius: radius.card,
+                          boxShadow: `inset 0 0 0 1px ${color.hairline}`,
+                          margin: '2px -8px',
+                          padding: '2px 8px',
+                        }
+                      : undefined
+                  }
+                >
                   {/* 品牌行：整行可点（悬停浅蓝），行尾箭头示意可展开产品明细 */}
                   <RowShell onClick={toggle}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>

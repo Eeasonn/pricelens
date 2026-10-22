@@ -102,3 +102,9 @@ export function latestIdxOf(s: Pick<Series, 'points'>, n: number): number {
 export function groupOrdinal(index: number): string {
   return `第 ${index} 组`;
 }
+
+/** 组号文案（宽表组头用，第一百三十一轮表头精简）：只留数字；
+ *  图顶图例带仍用 groupOrdinal 的「第 N 组」 */
+export function groupNumText(index: number): string {
+  return String(index);
+}

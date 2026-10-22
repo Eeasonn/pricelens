@@ -278,7 +278,9 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
     const skuId = lowestPriceColorSku(modelId, romram, countryCode);
     if (!skuId) continue;
     const config: ProductSelection = { modelId, romram, skuIds: [skuId] };
-    const mains: MainProduct[] = [{ id: newCardId(), main: config, compares: groupsFromBenchmark([config]) }];
+    // 默认卡 = 匹配竞品开（与默认视图「对比自动匹配开」的既有语义一致；
+    // 华为主品矩阵未覆盖时对比区为空、开关保持开着随矩阵更新跟随）
+    const mains: MainProduct[] = [{ id: newCardId(), main: config, compares: groupsFromBenchmark([config]), auto: true }];
     return { mains };
   }
   return { mains: [] };

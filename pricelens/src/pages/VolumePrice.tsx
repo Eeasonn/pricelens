@@ -22,6 +22,11 @@
 // 第一百二十三轮：底部共享刷选条退役——每面板底部恒渲染同一条独立时间轴（同步 =
 // 三图同段查看时间、拖任一条同步调整；非同步 = 各图独立），底部只留「同步」开关，
 // 切换同步态不再改变面板高度与轨道横向位置。
+// 第一百二十六轮：时间轴并为单层——图内 x 轴日期标签删除，面板底部 PanelTimeTrack
+// 成为唯一日期层（拖柄/平移/刻度口径不变）；「同步」开关从底部独立行挪进共享 Y 轴
+// 列正下方，与各面板时间轴同一水平线，语义不变（同步 = 三图共用窗口拖任一联动）。
+// 第一百三十一轮波2：时间筛选簇上移顶部筛选条（FilterBar showTime），卡顶工具行
+// 只剩齿轮簇；范围在页外被改时查看窗口整体复位为新范围（监听范围变化自理）。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented } from 'antd';
@@ -32,9 +37,7 @@ import { filterBarTheme } from '../components/FilterBar';
 import { ownBrand } from '../components/ProductCascader/tree';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
-// 第一百二十三轮：底部共享刷选条退役（每面板底部恒有独立时间轴），XBrush 只留
-// TimeRangeCluster（卡顶时间筛选簇仍在用）
-import { TimeRangeCluster } from '../chart/PriceTrend/XBrush';
+// 第一百三十一轮波2：卡顶时间筛选簇上移顶部筛选条，本页不再引用 XBrush/TimeRangeCluster
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
 import {
@@ -225,6 +228,20 @@ export default function VolumePrice() {
     setWindowIds(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adaptiveKey]);
+
+  // 第一百三十一轮波2：时间筛选器上移顶部筛选条后，改范围不再经过本页——
+  // 顶部时间簇手动选段（或页外改动）时查看窗口整体复位为新范围（原
+  // onRangeFilterChange 的 setWindowIds(null) 语义随迁）。粒度切换不触发：
+  // 范围端点随换粒度换算，窗口已按跨度对齐新桶（上方 granRef 联动）。
+  const rangeWatchRef = useRef({ gran: state.granularity, key: `${state.rangeStart}|${state.rangeEnd}` });
+  useEffect(() => {
+    const prev = rangeWatchRef.current;
+    const key = `${state.rangeStart}|${state.rangeEnd}`;
+    if (prev.gran === state.granularity && prev.key === key) return;
+    rangeWatchRef.current = { gran: state.granularity, key };
+    if (prev.gran !== state.granularity) return; // 换粒度：窗口已按跨度换桶
+    setWindowIds(null); // 范围在图外被改 → 窗口复位为整个新范围
+  }, [state.granularity, state.rangeStart, state.rangeEnd]);
 
   const win = useMemo(
     () => normalizeWindow(buckets, windowIds, [state.rangeStart, state.rangeEnd]),
@@ -418,21 +435,10 @@ export default function VolumePrice() {
     if (!buckets[s] || !buckets[e]) return;
     setWindowIds([buckets[s].id, buckets[e].id]);
   };
-  const onRangeFilterChange = (startId: string, endId: string): void => {
-    const start = buckets.findIndex((b) => b.id === startId);
-    const end = buckets.findIndex((b) => b.id === endId);
-    if (start < 0 || end < 0) return;
-    const lo = Math.min(start, end);
-    const hi = Math.max(start, end);
-    actions.set({ adaptive: false, rangeStart: buckets[lo].id, rangeEnd: buckets[hi].id });
-    setWindowIds(null);
-  };
 
-  const cardRef = useRef<HTMLDivElement | null>(null); // 时间范围弹层挂载容器（随卡宽展开）
-
-  /** 「同步」开关（第119轮走查会；第123轮每图底部时间轴恒在）：同步 = 各图查看
-   *  同一段时间，拖任一图的时间轴三图一起动；非同步 = 各图时间范围独立调整
-   *  （用于对齐不同上市节奏产品的可比区间） */
+  /** 「同步」开关（第119轮走查会；第126轮移到共享轴列下方、与时间轴行齐平）：
+   *  同步 = 各图查看同一段时间，拖任一图的时间轴三图一起动；非同步 = 各图时间
+   *  范围独立调整（用于对齐不同上市节奏产品的可比区间） */
   const syncToggle = (
     <button
       type="button"
@@ -454,10 +460,9 @@ export default function VolumePrice() {
     <div data-lpl-scroll style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
       <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         <PageHeader title="量价看板" />
-        <FilterBar />
+        <FilterBar showTime />
         <main style={{ flex: 1, padding: space.lg }}>
           <section
-            ref={cardRef}
             style={{
               background: color.canvas,
               boxShadow: shadow.l1,
@@ -521,7 +526,7 @@ export default function VolumePrice() {
             </div>
 
             {/* 常驻工具行：齿轮（每格高度/Y 刻度线/自动压缩/折线样式）+ 折后价/RRP 胶囊；
-                第119轮（走查会）：时间筛选簇上移到本行右端 */}
+                第131轮波2：时间筛选簇上移顶部筛选条，本行只剩齿轮簇 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 34, padding: '0 6px', marginBottom: 2 }}>
               <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                 <ChartToolbar
@@ -538,25 +543,20 @@ export default function VolumePrice() {
                   onPriceTypeToggle={setPriceType}
                 />
               </div>
-              {buckets.length > 0 && (
-                <TimeRangeCluster
-                  buckets={buckets}
-                  lo={filterBounds[0]}
-                  hi={filterBounds[1]}
-                  adaptive={state.adaptive}
-                  granularity={state.granularity}
-                  onRangeChange={onRangeFilterChange}
-                  onGranularityChange={actions.setGranularity}
-                  onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
-                  placement="bottomLeft"
-                  popupContainerRef={cardRef}
-                />
-              )}
             </div>
 
-            {/* 面板区：[共享 Y 轴列][三面板网格]；柱层在价格线之下（zIndex 0 < 1） */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: space.md, marginBottom: space.sm }}>
-              <div style={{ flex: `0 0 ${splitAxisWidth(state.currency)}px`, paddingTop: PANEL_HEAD_H }}>
+            {/* 面板区：[共享 Y 轴列][三面板网格]；柱层在价格线之下（zIndex 0 < 1）。
+                第一百二十六轮：轴列纵向撑满面板区，「同步」开关落列底、与各面板
+                时间轴同一水平线（原底部独立行删除） */}
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, marginBottom: space.sm }}>
+              <div
+                style={{
+                  flex: `0 0 ${splitAxisWidth(state.currency)}px`,
+                  paddingTop: PANEL_HEAD_H,
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
                 <SplitAxisColumn
                   yScale={yCfg}
                   currency={state.currency}
@@ -566,6 +566,16 @@ export default function VolumePrice() {
                   showYTicks={showYTicks}
                   tierValues={tierValues}
                 />
+                <div style={{ flex: 1 }} />
+                {/* 与时间轴行齐平：容器高/下边距 = PanelTimeTrack（52 + 6），按钮对准
+                    轨道带（带高 20、居中 = 上移 5px） */}
+                {buckets.length > 0 && visUnion.length > 0 && (
+                  <div style={{ height: 52, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
+                    <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
+                      {syncToggle}
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={{ flex: '1 1 0', minWidth: 0 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.md }}>
@@ -619,7 +629,7 @@ export default function VolumePrice() {
                           lineShape={lineShape}
                           labelMode={labelMode} // 第一百一十四轮（评审）：价格显示 详细/精简
                           tipBox // 第一百一十四轮（评审）：悬停明细 = 图下方居中预留框
-                          showXLabels
+                          // 第一百二十六轮：图内 x 轴日期标签删除——面板底部时间轴是唯一日期层
                           crosshairIdx={hoverIdxs[p.idx]}
                           onCrosshairMove={onHoverOf(p.idx)}
                           crosshairY={crossY} // 第一百一十四轮（评审）：横向虚线横跨三面板
@@ -651,13 +661,6 @@ export default function VolumePrice() {
               </div>
             </div>
 
-            {/* 底部「同步」开关（第一百二十三轮）：共享刷选条退役——每张图底部恒有
-                时间轴（见各面板内），此处只放开关，切换只改联动行为 */}
-            {buckets.length > 0 && visUnion.length > 0 && (
-              <div style={{ marginTop: space.xs, height: 30, display: 'flex', alignItems: 'center' }}>
-                {syncToggle}
-              </div>
-            )}
           </section>
 
           {/* 大盘分析（第118轮引入；第119轮走查会补齐）：窗口内各期大盘销量柱（绝对台数，

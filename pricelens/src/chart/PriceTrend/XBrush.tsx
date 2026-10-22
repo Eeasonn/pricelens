@@ -1,11 +1,15 @@
 // ============================================================
-// §6.5 时间范围：左侧是全局时间筛选，右侧是当前筛选范围内的查看窗口。
-// 自动模式按所选产品的最早/最晚有效价格桶更新上方筛选器；窗口只负责缩放查看。
-// 第一百一十九轮（走查会）：①左侧时间筛选簇抽成 TimeRangeCluster 导出组件——
-// 量价看板可将其上移到卡顶工具行（showTimeFilter=false + leftSlot 占位）。
+// §6.5 时间范围：时间筛选簇（TimeRangeCluster）+ 当前筛选范围内的查看窗口轨道。
+// 自动模式按所选产品的最早/最晚有效价格桶更新筛选器；窗口只负责缩放查看。
+// 第一百一十九轮（走查会）：左侧时间筛选簇抽成 TimeRangeCluster 导出组件。
 // 第一百二十三轮：刻度主行恒短格式（周=MM-DD/月=MM/季=Qn，窗口两端拖柄标签同样
 // 短格式、只加粗区分），年份独立第二行（最左显示刻度恒带、换年刻度带）；拖柄两端
 // 标签与中间刻度改按像素区间避让（原按桶数让位在窄轨道/密周窗口下仍叠字）。
+// 第一百三十一轮波2：时间筛选器统一上移顶部筛选条（FilterBar/TimeBox）——刷选条
+// 左列（时间筛选/「同步」占位）整列退役，本组件收敛为纯查看窗口轨道（价格看板
+// 合并模式专用），通栏一行、左右缘与绘图区对齐；TimeRangeCluster 仍由本文件导出
+// （顶部筛选条 TimeBox 在用）。波2修：TimeRangeCluster 弹层即时开关（不依赖
+// CSS transitionend）+ 再点输入框关闭，见 TimeRangeCluster 注。
 // ============================================================
 import dayjs, { type Dayjs } from 'dayjs';
 import { CalendarOutlined } from '@ant-design/icons';
@@ -37,12 +41,21 @@ export interface TimeRangeClusterProps {
 }
 
 /** 时间筛选簇 = 「自动」跟随开关 + 时间范围选择器（粒度切换在选择器面板内）。
- *  独立导出：底部刷选条与量价卡顶工具行共用同一交互。 */
+ *  独立导出：底部刷选条与量价卡顶工具行共用同一交互。
+ *  第一百三十一轮波2修：①弹层显隐不依赖 CSS 过渡（transitionName 置空，即时
+ *  开关）；②外点/Escape 关闭改由本组件直接 setState（rc-picker 把关闭延迟一帧
+ *  raf，在 rAF 挂起的嵌入 webview 里永不执行 → 弹层关不掉，见下方 effect 注）；
+ *  ③再点输入框 = 关闭切换（rc-picker 原生对输入框点击恒保持打开）。 */
 export function TimeRangeCluster(props: TimeRangeClusterProps) {
   const { buckets, lo, hi, adaptive, granularity, onRangeChange, onGranularityChange, onToggleAdaptive, placement = 'topLeft', popupContainerRef } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [rangeOpen, setRangeOpen] = useState(false);
   const reopenPickerRef = useRef(false);
+  // 输入框再点切换用：pointerdown 先于 focus/click 落表（focus 会把选择器打开，
+  // 点击批内再取渲染值恒为"已开"），故在按下时刻捕获打开态，点击时据此判定切换。
+  const rangeOpenRef = useRef(false);
+  rangeOpenRef.current = rangeOpen;
+  const pressOpenRef = useRef(false);
   const n = buckets.length;
   useEffect(() => {
     if (!reopenPickerRef.current) return undefined;
@@ -56,6 +69,31 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
       if (secondFrame) window.cancelAnimationFrame(secondFrame);
     };
   }, [granularity]);
+  // 关闭兜底（第一百三十一轮波2修）：rc-picker 的外点/Escape 关闭被刻意延迟一帧
+  // （useDelayState 的 raf(doUpdate)，防快速开→关抖动），在 rAF 被挂起的环境
+  // （后台/遮挡的嵌入 webview）里该帧永不执行，经其内部的关闭路径全部失效、
+  // 弹层关不掉（只有直接 setState 的"完成选择"能关）。弹层显隐跟随本组件受控
+  // open，这里监听后直接同步 setState，不再等帧。面板挂载在卡片根、不在本簇
+  // 子树内，故以 xbrush-range-popup 类白名单放行面板内部点击（选段/切粒度）。
+  useEffect(() => {
+    if (!rangeOpen) return undefined;
+    const onDocPointerDown = (e: PointerEvent): void => {
+      const path = (e.composedPath?.() ?? []) as Node[];
+      const inPopup = path.some((n2) => n2 instanceof Element && n2.classList.contains('xbrush-range-popup'));
+      const root = rootRef.current;
+      if (inPopup || (root !== null && path.includes(root))) return;
+      setRangeOpen(false);
+    };
+    const onDocKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setRangeOpen(false);
+    };
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    document.addEventListener('keydown', onDocKeyDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
+      document.removeEventListener('keydown', onDocKeyDown, true);
+    };
+  }, [rangeOpen]);
   if (n === 0) return null;
 
   const formatId = (id: string): string => {
@@ -125,32 +163,46 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
           font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
         }}
       >自动</button>
-      <ConfigProvider locale={zhCN} theme={filterBarTheme}>
-        <DatePicker.RangePicker
-          key={pickerMode}
-          aria-label="时间范围筛选器"
-          className="xbrush-range-picker"
-          dropdownClassName="xbrush-range-popup"
-          classNames={{ popup: { root: 'xbrush-range-popup' } }}
-          value={pickerValue}
-          picker={pickerMode}
-          format={pickerFormat}
-          separator={<span style={{ color: color.mute }}>→</span>}
-          prefix={<span style={{ color: color.mute, fontSize: fontSize.caption }}>{granularityLabel[granularity]}</span>}
-          suffixIcon={<CalendarOutlined style={{ color: color.mute }} />}
-          allowClear={false}
-          inputReadOnly
-          disabledDate={disabledDate}
-          open={rangeOpen}
-          onOpenChange={setRangeOpen}
-          onChange={onPickerChange}
-          panelRender={renderPickerPanel}
-          placement={placement}
-          getPopupContainer={() => popupContainerRef?.current ?? rootRef.current ?? document.body}
-          styles={{ popup: { root: { width: '100%', left: 0 } } }}
-          style={{ minWidth: 0, flex: '1 1 240px', width: 240, height: 30 }}
-        />
-      </ConfigProvider>
+      {/* 输入框再点 = 关闭：面板挂在卡片根（不在本簇子树），面板内部点击不会
+          冒泡到这里；打开态点选择器即收起，与筛选条内 Select「再点收起」同语言。
+          display:contents 不产生盒模型，选择器沿用簇内原 flex 尺寸。 */}
+      <span
+        onPointerDown={() => {
+          pressOpenRef.current = rangeOpenRef.current;
+        }}
+        onClick={() => {
+          if (pressOpenRef.current) setRangeOpen(false);
+        }}
+        style={{ display: 'contents' }}
+      >
+        <ConfigProvider locale={zhCN} theme={filterBarTheme}>
+          <DatePicker.RangePicker
+            key={pickerMode}
+            aria-label="时间范围筛选器"
+            className="xbrush-range-picker"
+            dropdownClassName="xbrush-range-popup"
+            classNames={{ popup: { root: 'xbrush-range-popup' } }}
+            value={pickerValue}
+            picker={pickerMode}
+            format={pickerFormat}
+            separator={<span style={{ color: color.mute }}>→</span>}
+            prefix={<span style={{ color: color.mute, fontSize: fontSize.caption }}>{granularityLabel[granularity]}</span>}
+            suffixIcon={<CalendarOutlined style={{ color: color.mute }} />}
+            allowClear={false}
+            inputReadOnly
+            disabledDate={disabledDate}
+            open={rangeOpen}
+            onOpenChange={setRangeOpen}
+            onChange={onPickerChange}
+            panelRender={renderPickerPanel}
+            placement={placement}
+            transitionName="" // 弹层即时开关：不依赖 CSS transitionend（嵌入 webview 不回报，见上注）
+            getPopupContainer={() => popupContainerRef?.current ?? rootRef.current ?? document.body}
+            styles={{ popup: { root: { width: '100%', left: 0 } } }}
+            style={{ minWidth: 0, flex: '1 1 240px', width: 240, height: 30 }}
+          />
+        </ConfigProvider>
+      </span>
     </div>
   );
 }
@@ -160,25 +212,15 @@ export interface XBrushProps {
   /** 当前查看窗口，始终位于 [lo, hi] 内。 */
   s: number;
   e: number;
-  /** 上方极值筛选器对应的桶区间。 */
+  /** 上方极值筛选器对应的桶区间（轨道 = 该范围）。 */
   lo: number;
   hi: number;
-  /** 与图表绘图区左缘对齐，保证轨道边界与折线边界一致。 */
+  /** 与图表绘图区左缘对齐：轨道通栏一行，左缘内缩到绘图区、右缘到容器右缘。 */
   plotLeft: number;
-  adaptive: boolean;
   granularity: Granularity;
   /** 调整下方查看窗口，不改变上方极值筛选器。 */
   onChange: (s: number, e: number) => void;
-  /** 修改上方极值筛选器，退出自动模式。 */
-  onRangeChange: (startId: string, endId: string) => void;
-  /** 在时间设置面板中切换图表粒度。 */
-  onGranularityChange: (granularity: Granularity) => void;
-  onToggleAdaptive: () => void;
   onAdjusting?: (v: boolean) => void;
-  /** 第一百一十九轮：false = 左列不渲染时间筛选簇（上移到卡顶），由 leftSlot 占位。 */
-  showTimeFilter?: boolean;
-  /** 左列自定义内容（量价看板放「同步」开关）。 */
-  leftSlot?: ReactNode;
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -214,12 +256,9 @@ const measureTickText = (s: string, px: number): number => {
 
 export default function XBrush(props: XBrushProps) {
   const {
-    buckets, s, e, lo, hi, plotLeft, adaptive, granularity,
-    onChange, onRangeChange, onGranularityChange, onToggleAdaptive, onAdjusting,
-    showTimeFilter = true, leftSlot,
+    buckets, s, e, lo, hi, plotLeft, granularity, onChange, onAdjusting,
   } = props;
   const n = buckets.length;
-  const brushRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ kind: DragKind; startX: number; startS: number; startE: number } | null>(null);
   const [panning, setPanning] = useState(false);
@@ -325,42 +364,23 @@ export default function XBrush(props: XBrushProps) {
 
   return (
     <div
-      ref={brushRef}
       style={{
-        position: 'relative', display: 'grid', gridTemplateColumns: `${plotLeft}px minmax(0, 1fr)`,
-        gap: 0, margin: `0 ${GRID.right}px 0 0`,
+        position: 'relative',
+        // 通栏一行：左缘内缩到绘图区（plotLeft）、右缘贴容器（预留 GRID.right），
+        // 轨道刻度与上方图表的横向位置逐像素对齐。
+        margin: `0 ${GRID.right}px 0 0`,
+        paddingLeft: plotLeft,
         zIndex: 12,
       }}
     >
-      {/* 左侧：全局时间筛选/自动跟随（量价看板已上移到卡顶，此处放「同步」开关）。它决定轨道的可用边界。 */}
-      <div style={{ position: 'relative', minHeight: 58, padding: '0 12px 7px 0', borderRight: `1px solid ${color.hairline}` }}>
-        {showTimeFilter ? (
-          <TimeRangeCluster
-            buckets={buckets}
-            lo={lo}
-            hi={hi}
-            adaptive={adaptive}
-            granularity={granularity}
-            onRangeChange={onRangeChange}
-            onGranularityChange={onGranularityChange}
-            onToggleAdaptive={onToggleAdaptive}
-            placement="topLeft"
-            popupContainerRef={brushRef}
-          />
-        ) : (
-          leftSlot
-        )}
-      </div>
-
-      {/* 右侧：时间调整轴。与拖柄同高，紧贴大促标签行。 */}
-      <div style={{ minWidth: 0, padding: 0 }}>
-        <div
-          ref={(el) => {
-            trackRef.current = el;
-            widthRef.current = el;
-          }}
-          style={{ position: 'relative', height: 58, minWidth: 0 }}
-        >
+      {/* 时间调整窗口轨道（第一百三十一轮波2起唯一内容；时间筛选/「同步」开关已上移）。 */}
+      <div
+        ref={(el) => {
+          trackRef.current = el;
+          widthRef.current = el;
+        }}
+        style={{ position: 'relative', height: 58, minWidth: 0 }}
+      >
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 28, borderRadius: 6, background: '#edf0f4', boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
           <div
             title="拖动调整下方图表的时间范围"
@@ -417,7 +437,6 @@ export default function XBrush(props: XBrushProps) {
           >
             <span style={handleGripStyle('end')} />
           </div>
-        </div>
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import {
   bucketDateText,
   discountOf,
   fmtPct,
+  groupNumText,
   groupOrdinal,
   groupsOfCards,
   latestIdxOf,
@@ -157,5 +158,9 @@ describe('列头日期与单元格文案', () => {
   });
   it('groupOrdinal：第 N 组', () => {
     expect(groupOrdinal(2)).toBe('第 2 组');
+  });
+  it('groupNumText：宽表组头只留数字（图例带仍用 groupOrdinal）', () => {
+    expect(groupNumText(2)).toBe('2');
+    expect(groupNumText(11)).toBe('11');
   });
 });

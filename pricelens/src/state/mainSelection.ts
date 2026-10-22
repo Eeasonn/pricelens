@@ -101,7 +101,10 @@ export function toggleAllAuto(mains: MainProduct[]): MainProduct[] {
 
 /** 卡片落主品（空对补选 / 换主品共用）：主品占线后对比区按新配额截断，
  *  并剔除与新主品同型号同配置的对比项（主品与对比不重复占线）；
- *  自动匹配开 = 对比区按新主品重算（新主品非华为时矩阵不可依，退回手动）。 */
+ *  自动匹配开 = 对比区按新主品重算（新主品非华为时矩阵不可依，退回手动）。
+ *  第一百三十一轮（匹配竞品默认开）：落主品后对比区仍为空（新卡/空对/
+ *  换主品后无手动搭配）且新主品为华为 = 自动开启（对比区 = 矩阵产出），
+ *  用户无需手动点开关；已有手动对比内容的卡不翻案，保持手动。 */
 export function withMain(card: MainProduct, sel: ProductSelection): MainProduct {
   const key = selKey(sel);
   const next: MainProduct = {
@@ -109,8 +112,10 @@ export function withMain(card: MainProduct, sel: ProductSelection): MainProduct 
     main: sel,
     compares: card.compares.filter((c) => selKey(c) !== key).slice(0, cardQuota({ main: sel })),
   };
-  if (!card.auto) return next;
-  return isHuaweiModel(sel.modelId) ? { ...next, compares: autoComparesFor(next) } : { ...next, auto: false };
+  if (card.auto) {
+    return isHuaweiModel(sel.modelId) ? { ...next, compares: autoComparesFor(next) } : { ...next, auto: false };
+  }
+  return !next.compares.length && isHuaweiModel(sel.modelId) ? withAutoOn(next) : next;
 }
 
 /** 跨页建卡正源（总览走势跳转 / 对比浮层进看板 / 预警看板下钻共用）：

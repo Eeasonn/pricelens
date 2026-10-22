@@ -87,6 +87,20 @@ describe('withMain（空对补选 / 换主品：对比区随新配额收口）',
     expect(out.main).toEqual(comps[0]);
     expect(out.compares.some((c) => selKey(c) === selKey(comps[0]))).toBe(false);
   });
+
+  it('匹配竞品默认开（第一百三十一轮）：空对（无对比）补选华为主品 = 自动开（对比区 = 矩阵产出）', () => {
+    const out = withMain(card(null), ownSel);
+    expect(out.auto).toBe(true);
+    expect(out.compares).toEqual(autoComparesFor(out));
+    expect(out.compares.length).toBeGreaterThan(0);
+  });
+
+  it('匹配竞品默认开：已有手动对比内容的卡落主品不翻案（保持手动、对比区原样）', () => {
+    const comps = distinctComps(3);
+    const out = withMain(card(null, comps), ownSel);
+    expect(out.auto).toBeUndefined();
+    expect(out.compares).toEqual(comps);
+  });
 });
 
 describe('buildCards（跨页建卡正源：去重 / 封顶 / 首卡对比继承）', () => {

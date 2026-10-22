@@ -19,6 +19,16 @@
 // 底部刷选轨道只在该筛选范围内提供查看窗口。
 // 上方极值筛选器手动改值即转入自定义；底部拖柄/平移只调整筛选范围内的查看窗口。
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
+// 分离模式时间轴体系（本轮，对齐量价看板）：每张分离面板底部各自一条独立时间轴
+// （SplitTimeTrack：轨道+拖柄+平移+键盘微调，短格式主行+年份第二行），图内日期
+// 标签退役（不再传 showXLabels）——每张图只有一层日期显示；「同步」开关默认开
+// （放在共享轴列下方、与时间轴行齐平垂直居中）= 全面板共用查看窗口、拖任一面板
+// 时间轴全部联动，关 = 各面板独立调整（panelWins，未单独设置的面板回落共享窗口），
+// 粒度切换/自适应重算/换卡后独立窗口整体回落。
+// 第一百三十一轮波2：时间筛选器统一上移顶部筛选条（FilterBar showTime）——
+// 分离模式底部共享 XBrush 退役（每面板时间轴已承担全部调整）；合并模式底部
+// XBrush 保留（单图唯一的查看窗口调整轴）但左列时间筛选簇收掉、轨道通栏。
+// 顶部筛选器改范围时查看窗口整体复位为新范围（下方 rangeWatch 联动自理）。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, ConfigProvider, Segmented, Tooltip } from 'antd';
@@ -41,10 +51,11 @@ import type {
   SkuGroupQuery,
 } from '../../dataModel/types';
 import type { ProductSelection } from '../../state/filtersTypes';
-import { color, fontSize, radius, space } from '../../theme/tokens';
+import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import Chart from './Chart';
 import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
+import SplitTimeTrack, { normalizePanelWindow, SPLIT_TRACK_H } from './SplitTimeTrack';
 import DrillModal, { type DrillInfo } from './DrillModal';
 import {
   buildPriceSummary,
@@ -111,6 +122,11 @@ export default function PriceTrend(props: {
   const [yCompress, setYCompress] = useState<boolean>(false); // Y 轴自动压缩（第三十五轮起默认关 = 完全连续；迪总「不自动选择」）
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null); // null=整个筛选范围
+  // 分离模式同步/独立查看时间：同步（默认）= 全面板共用共享窗口，拖任一面板的时间轴
+  // 全部联动；独立 = 各面板单独调整（panelWins 按面板 key 记窗口，未单独调整过的
+  // 面板回落共享窗口）。粒度切换/自适应重算/换卡后独立窗口整体回落共享窗口
+  const [synced, setSynced] = useState(true);
+  const [panelWins, setPanelWins] = useState<Record<string, [number, number] | null>>({});
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例取消选中的系列（折线隐藏）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
   const [promoBandsOn, setPromoBandsOn] = useState(false); // 大促档期（第七十七轮起默认关）
@@ -151,13 +167,15 @@ export default function PriceTrend(props: {
     setHiddenKeys(new Set());
   }, [yAxisResetKey]);
 
-  // §6.5 联动：粒度切换 → 窗口端点对齐新粒度桶边界（保持同一时间跨度）
+  // §6.5 联动：粒度切换 → 窗口端点对齐新粒度桶边界（保持同一时间跨度）；
+  // 面板独立窗口按桶号失义，一并回落共享窗口
   const granRef = useRef(state.granularity);
   useLayoutEffect(() => {
     if (granRef.current === state.granularity) return;
     const prev = granRef.current;
     granRef.current = state.granularity;
     setWindowIds((ids) => (ids ? convertWindowIds(ids, prev, state.granularity) : null));
+    setPanelWins({});
   }, [state.granularity]);
 
   // ---- 取数：useFilters().state → SeriesQuery → buildSeries（§7.3 唯一口径） ----
@@ -195,6 +213,8 @@ export default function PriceTrend(props: {
     () => enumerateBuckets(state.granularity, dataStart, dataEnd),
     [state.granularity, dataStart, dataEnd],
   );
+  // 桶 id 序（面板时间轴的全域刻度输入，与 buckets 同序）
+  const bucketIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
 
   // ---- 时间自适应：上方极值筛选器 = 所选产品最早/最晚有效价格桶 ----
   // 范围变化时窗口复位为整个范围。即使新增产品落在原有跨度内，也要重新套用一次
@@ -223,8 +243,15 @@ export default function PriceTrend(props: {
     adaptiveAppliedRef.current = adaptiveKey;
     actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
     setWindowIds(null); // 窗口复位 = 整个自动极值范围
+    setPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adaptiveKey]);
+
+  // 面板集合变化（选择浮窗增删卡）→ 独立窗口失义，整体回落共享窗口
+  const panelKeysKey = JSON.stringify(effMains.map((c) => c.id));
+  useEffect(() => {
+    setPanelWins({});
+  }, [panelKeysKey]);
 
   // 追补⑧（总览↔看板闭环②）：总览下钻（竞品对比/迷你图点周）携带「焦点周」——
   // 挂载后窗口对准该周 ±8 周（月 ±2 桶、季 ±1 桶，时间跨度近似），直接回答
@@ -242,6 +269,20 @@ export default function PriceTrend(props: {
     setWindowIds([buckets[Math.max(0, i - half)].id, buckets[Math.min(buckets.length - 1, i + half)].id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 第一百三十一轮波2：时间筛选器上移顶部筛选条后，改范围不再经过本组件——
+  // 顶部时间簇手动选段（或页外改动）时查看窗口整体复位为新范围（原
+  // onRangeFilterChange 的 setWindowIds(null) 语义随迁）。粒度切换不触发：
+  // 范围端点随换粒度换算，窗口已按跨度对齐新桶（上方 granRef 联动）。
+  const rangeWatchRef = useRef({ gran: state.granularity, key: `${state.rangeStart}|${state.rangeEnd}` });
+  useEffect(() => {
+    const prev = rangeWatchRef.current;
+    const key = `${state.rangeStart}|${state.rangeEnd}`;
+    if (prev.gran === state.granularity && prev.key === key) return;
+    rangeWatchRef.current = { gran: state.granularity, key };
+    if (prev.gran !== state.granularity) return; // 换粒度：窗口已按跨度换桶
+    setWindowIds(null); // 范围在图外被改 → 窗口复位为整个新范围
+  }, [state.granularity, state.rangeStart, state.rangeEnd]);
 
   // 从总览带入焦点周时 windowIds 可暂时缩小可见段；刷选后回到完整选区。
   const win = useMemo(
@@ -325,8 +366,10 @@ export default function PriceTrend(props: {
     [visSeries, hiddenKeys],
   );
   // 第110轮（评审）：分离模式跨图参考线——任一面板悬停的时间列下标共享给全部面板，
-  // 其余面板在同一时间列画 1px 虚线；任意面板移出即清空
+  // 其余面板在同一时间列画 1px 虚线；任意面板移出即清空。
+  // 独立查看时间下面板窗口不同、下标失义：只亮悬停面板自己（panelHoverIdxs 按面板记）
   const [splitHoverIdx, setSplitHoverIdx] = useState<number | null>(null);
+  const [panelHoverIdxs, setPanelHoverIdxs] = useState<Record<string, number | null>>({});
   // 跨产品/竞品视角下价位跨度天然拉大 → 多组进入时（分图或合并，第一百二十三轮⑥
   // 起不再只看分图态）自动开「Y 轴自动压缩」；用户手动关闭后本段会话内不再强制
   //（回到单组再进才重置）
@@ -366,28 +409,55 @@ export default function PriceTrend(props: {
     });
   }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry]);
 
-  // 面板窗口切片（与单图 visSeries 同逻辑：win 切片 + 边缘续接标记）
-  const sliceVis = (list: Series[]): Series[] => {
-    if (win.s > win.e) return [];
+  // 各面板生效窗口：同步 = 全面板共用共享窗口；独立 = 面板自己的窗口
+  //（未单独调整过回落共享窗口，越界钳回可调全域并保住最小窗口跨度）
+  const effWins = useMemo(() => {
+    const m: Record<string, [number, number]> = {};
+    for (const p of panelData) {
+      m[p.key] = normalizePanelWindow(panelWins[p.key] ?? null, win.s, win.e, filterBounds[0], filterBounds[1]);
+    }
+    return m;
+  }, [panelData, panelWins, win.s, win.e, filterBounds]);
+
+  // 「同步」开关：开→关 = 各面板以当前共享窗口为起点（此后可各自调整）；
+  // 关→开 = 全部回落共享窗口。联动行为切换后跨面板参考线的时间列下标失义，一并清空
+  const toggleSynced = (): void => {
+    if (synced) {
+      setPanelWins((prev) => {
+        const next = { ...prev };
+        for (const p of panelData) next[p.key] = [win.s, win.e];
+        return next;
+      });
+    } else {
+      setPanelWins({});
+    }
+    setSynced(!synced);
+    setSplitHoverIdx(null);
+    setPanelHoverIdxs({});
+  };
+
+  // 面板窗口切片（与单图 visSeries 同逻辑：窗口切片 + 边缘续接标记）；独立模式下
+  // 各面板按各自生效窗口切
+  const sliceVis = (list: Series[], s: number, e: number): Series[] => {
+    if (s > e) return [];
     const listed = (p?: SeriesPoint) => !!p && (p.price != null || p.rrp != null);
     return list
-      .map((s) => {
-        const points = s.points.slice(win.s, win.e + 1);
-        const edgeStart = listed(points[0]) && (listed(s.points[win.s - 1]) || listed(s.points[win.s - 2]));
-        const edgeEnd = listed(points[points.length - 1]) && (listed(s.points[win.e + 1]) || listed(s.points[win.e + 2]));
-        return { ...s, points, edgeStart, edgeEnd };
+      .map((x) => {
+        const points = x.points.slice(s, e + 1);
+        const edgeStart = listed(points[0]) && (listed(x.points[s - 1]) || listed(x.points[s - 2]));
+        const edgeEnd = listed(points[points.length - 1]) && (listed(x.points[e + 1]) || listed(x.points[e + 2]));
+        return { ...x, points, edgeStart, edgeEnd };
       })
-      .filter((s) => s.points.length > 0);
+      .filter((x) => x.points.length > 0);
   };
   const panelViews = useMemo(
     () =>
-      panelData.map((p) => ({
-        ...p,
-        all: sliceVis(p.series), // 全量（含被图例页签屏蔽的系列，页签要能恢复显示）
-        vis: sliceVis(p.series).filter((s) => !hiddenKeys.has(s.key)),
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [panelData, win, hiddenKeys],
+      panelData.map((p) => {
+        const [ps, pe] = effWins[p.key] ?? [win.s, win.e];
+        const all = sliceVis(p.series, ps, pe); // 全量（含被图例页签屏蔽的系列，页签要能恢复显示）
+        return { ...p, all, vis: all.filter((x) => !hiddenKeys.has(x.key)) };
+      }),
+    [panelData, effWins, hiddenKeys, win.s, win.e],
   );
 
   // 展示顺序：拖拽把手换位后记录 key 序；空 = 数据序
@@ -509,16 +579,31 @@ export default function PriceTrend(props: {
     () => (promoBandsOn ? buildPromoBands({ promos: scopedPromos, spans: winSpans }) : []),
     [promoBandsOn, winSpans, scopedPromos],
   );
-  // 第一百二十五轮：分图促销抽屉取数 = 面板并集按 key 去重保序——同款对比被多卡对标
-  // 时在各面板重复出现，直接展开会重复列 + 重复 React key（宽表按组归组是组内语义，
-  // 不受影响）
-  const promoSeries = useMemo(
-    () =>
-      splitActive
-        ? Array.from(new Map(panelViews.flatMap((p) => p.all).map((s) => [s.key, s])).values())
-        : visSeries,
-    [splitActive, panelViews, visSeries],
-  );
+  // 促销力度明细抽屉取数 = 面板并集按 key 去重保序——同款对比被多卡对标时在各面板
+  // 重复出现，直接展开会重复列 + 重复 React key（宽表按组归组是组内语义，不受影响）。
+  // 抽屉表行数以首列桶数为准、各列必须同长：独立查看时间下各面板生效窗口不同、
+  // 直接拼切片会长短不一（短列在深处行读到 undefined 格即整树崩），统一按全部
+  // 生效窗口的并集区间重新切片——并集恰好覆盖各面板屏上可见的时间段，同步态下
+  // 与共享窗口一致。
+  const promoSeries = useMemo(() => {
+    if (!splitActive) return visSeries;
+    let lo = Number.POSITIVE_INFINITY;
+    let hi = Number.NEGATIVE_INFINITY;
+    for (const p of panelData) {
+      const [ps, pe] = effWins[p.key] ?? [win.s, win.e];
+      lo = Math.min(lo, ps);
+      hi = Math.max(hi, pe);
+    }
+    if (!Number.isFinite(lo) || lo > hi) return [];
+    const byKey = new Map<string, Series>();
+    for (const p of panelData) {
+      for (const s of sliceVis(p.series, lo, hi)) {
+        if (!byKey.has(s.key)) byKey.set(s.key, s);
+      }
+    }
+    return [...byKey.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [splitActive, panelData, effWins, visSeries, win.s, win.e]);
 
   // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
   // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）。
@@ -644,16 +729,37 @@ export default function PriceTrend(props: {
     setWindowIds([buckets[s].id, buckets[e].id]);
   };
 
-  /** 左侧时间筛选器：用户明确指定极值后退出自动，并重置底部窗口。 */
-  const onRangeFilterChange = (startId: string, endId: string): void => {
-    const start = buckets.findIndex((b) => b.id === startId);
-    const end = buckets.findIndex((b) => b.id === endId);
-    if (start < 0 || end < 0) return;
-    const lo = Math.min(start, end);
-    const hi = Math.max(start, end);
-    actions.set({ adaptive: false, rangeStart: buckets[lo].id, rangeEnd: buckets[hi].id });
-    setWindowIds(null);
+  /** 独立模式下面板时间轴只动自己的生效窗口（共享窗口未变）。 */
+  const onPanelWindowChange = (key: string) => (s: number, e: number): void => {
+    if (!buckets[s] || !buckets[e]) return;
+    setPanelWins((prev) => ({ ...prev, [key]: [s, e] }));
   };
+
+  // 跨面板悬停参考线：同步 = 任一面板悬停的时间列广播到全部面板（同一查看窗口，
+  // 下标同义）；独立 = 各面板窗口不同，只亮本面板
+  const onPanelHoverOf = (key: string) => (v: number | null): void => {
+    if (synced) setSplitHoverIdx((cur) => (cur === v ? cur : v));
+    else setPanelHoverIdxs((prev) => (prev[key] === v ? prev : { ...prev, [key]: v }));
+  };
+
+  /** 「同步」开关：开 = 各面板查看同一段时间，拖任一面板的时间轴全部联动；
+      关 = 各面板时间范围独立调整（用于对齐不同上市节奏产品的可比区间） */
+  const syncToggle = (
+    <button
+      type="button"
+      aria-label="同步查看时间"
+      aria-pressed={synced}
+      title={synced ? '同步：各面板共用一段查看时间' : '独立：各面板分别调整'}
+      onClick={toggleSynced}
+      style={{
+        height: 30, padding: '0 9px', borderRadius: radius.control,
+        border: `1px solid ${synced ? selectAccent : color.hairlineStrong}`,
+        background: synced ? selectSoft : color.canvas,
+        color: synced ? selectSoftInk : color.body,
+        font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+      }}
+    >同步</button>
+  );
 
   // ---- 渲染 ----
   return (
@@ -833,7 +939,7 @@ export default function PriceTrend(props: {
               marginBottom: space.sm,
             }}
           >
-            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H + PANEL_LEGEND_H }}>
+            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H + PANEL_LEGEND_H, display: 'flex', flexDirection: 'column' }}>
               {splitYCfg && (
                 <SplitAxisColumn
                   yScale={splitYCfg}
@@ -844,6 +950,13 @@ export default function PriceTrend(props: {
                   showYTicks={showYTicks}
                   tierValues={splitTierValues}
                 />
+              )}
+              {/* 「同步」开关（与各面板时间轴同一水平线）：轴列体与面板绘图区同高，
+                  其下正是各面板的时间轴行——同高容器内垂直居中对齐 */}
+              {splitYCfg && (
+                <div style={{ height: SPLIT_TRACK_H, display: 'flex', alignItems: 'center' }}>
+                  {syncToggle}
+                </div>
               )}
             </div>
             <div style={{ flex: '1 1 0', minWidth: 0 }}>
@@ -866,6 +979,8 @@ export default function PriceTrend(props: {
                   {orderedPanels.map((p) => {
                   const isDragging = draggingPanel === p.key;
                   const isDropTarget = dropTarget === p.key && !isDragging;
+                  // 本面板生效窗口（同步 = 共享窗口；独立 = 面板自己的窗口）
+                  const pw = effWins[p.key] ?? ([win.s, win.e] as [number, number]);
                   return (
                     <div
                       key={p.key}
@@ -978,7 +1093,7 @@ export default function PriceTrend(props: {
                         enableDrill={state.granularity !== 'week'}
                         enableOffer={state.granularity === 'week' && offersOn}
                         onDrill={makePanelDrill(p)}
-                        windowKey={`${win.s}:${win.e}:${p.key}`}
+                        windowKey={`${pw[0]}:${pw[1]}:${p.key}`}
                         yScale={splitYCfg ?? undefined}
                         hideNamePills // 第一百一十五轮：产品名在面板顶部图例带，图内不再画药丸
                         legendHoverKey={panelLegendHover?.panel === p.key ? panelLegendHover.key : null}
@@ -988,14 +1103,29 @@ export default function PriceTrend(props: {
                         promoBands={promoBands}
                         maxMinOn={maxMinOn}
                         changeThreshold={changeThreshold}
-                        // 第110轮（评审）：每张小图自带时间轴日期标签（单卡可独立截图进 PPT）
-                        showXLabels
-                        crosshairIdx={splitHoverIdx}
-                        onCrosshairMove={setSplitHoverIdx}
+                        // 图内不再画日期标签（第110轮口径退役）：本图唯一日期层 = 图下
+                        // SplitTimeTrack 时间轴（对齐量价看板，见下方）
+                        crosshairIdx={synced ? splitHoverIdx : panelHoverIdxs[p.key] ?? null}
+                        onCrosshairMove={onPanelHoverOf(p.key)}
                         crosshairY={splitCrossY} // 第一百一十四轮：横向虚线跨全部面板
                         onCrosshairYMove={setSplitCrossY}
                         emptyHint="该配置在所选时间范围内无数据"
                       />
+                      {/* 本图时间轴：每张分离面板底部各自一条（同步 = 拖任一条全面板
+                          联动；独立 = 只调本图）。左右缘对齐绘图区 = 卡片内边距 + 图内
+                          名称带 / 右留白；拖动中冻结共享 Y 轴（onAdjusting） */}
+                      <div style={{ margin: `0 ${8 + GRID.right}px 6px ${8 + NAME_ZONE_W}px` }}>
+                        <SplitTimeTrack
+                          ids={bucketIds}
+                          lo={filterBounds[0]}
+                          hi={filterBounds[1]}
+                          s={synced ? win.s : pw[0]}
+                          e={synced ? win.e : pw[1]}
+                          granularity={state.granularity}
+                          onChange={synced ? onWindowChange : onPanelWindowChange(p.key)}
+                          onAdjusting={setAdjusting}
+                        />
+                      </div>
                     </div>
                   );
                   })}
@@ -1005,24 +1135,9 @@ export default function PriceTrend(props: {
               <SplitScrollBar trackRef={splitScrollRef} />
             </div>
           </div>
-          {/* 共享刷选条：一个窗口联动全部面板 */}
-          {buckets.length > 0 && visSeries.length > 0 && (
-            <XBrush
-              buckets={buckets}
-              s={win.s}
-              e={win.e}
-              lo={filterBounds[0]}
-              hi={filterBounds[1]}
-              plotLeft={splitGridLeft}
-              adaptive={state.adaptive}
-              granularity={state.granularity}
-              onChange={onWindowChange}
-              onRangeChange={onRangeFilterChange}
-              onGranularityChange={actions.setGranularity}
-              onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
-              onAdjusting={setAdjusting}
-            />
-          )}
+          {/* 第一百三十一轮波2：分离模式底部共享 XBrush 退役——时间筛选器已上移顶部
+              筛选条，共享/独立窗口调整由各面板底部 SplitTimeTrack（+「同步」开关）
+              全权承担，底部不再有重复的时间条 */}
         </>
       ) : (
         <>
@@ -1081,7 +1196,8 @@ export default function PriceTrend(props: {
           />
         </>
       )}
-      {/* X 刷选条只调整上方极值范围内的查看窗口。 */}
+      {/* X 刷选条（合并模式唯一底部时间轴，第一百三十一轮波2起为纯查看窗口轨道）：
+          只调整上方极值范围内的查看窗口；时间筛选在顶部筛选条。 */}
           {!splitActive && buckets.length > 0 && visSeries.length > 0 && (
             <XBrush
               buckets={buckets}
@@ -1090,12 +1206,8 @@ export default function PriceTrend(props: {
               lo={filterBounds[0]}
               hi={filterBounds[1]}
               plotLeft={gridLeft}
-              adaptive={state.adaptive}
               granularity={state.granularity}
               onChange={onWindowChange}
-              onRangeChange={onRangeFilterChange}
-              onGranularityChange={actions.setGranularity}
-              onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
               onAdjusting={setAdjusting}
             />
           )}

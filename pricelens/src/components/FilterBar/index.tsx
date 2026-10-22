@@ -7,8 +7,11 @@
 // 第一百二十三轮：「按产品 | 按档位」Segmented 退役（档位融入选择产品浮窗的
 // 树筛选与批量动作）；入口摘要改产品对语言——未选 / 单组（主品 vs 对比数）/
 // 多组（前 2 组 chip + ＋N 组），一眼读出「选了什么、比了什么」。
+// 第一百三十一轮波2：showTime 时在币种右侧渲染时间筛选簇（TimeBox 包装
+// TimeRangeCluster），两看板的时间筛选器统一上移到顶部筛选条——入口列弹性
+// 收窄让位，整行 1280 视口仍单行。
 // ============================================================
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { ConfigProvider, Tooltip } from 'antd';
 import type { ThemeConfig } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -16,6 +19,7 @@ import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space }
 import PlatformBox from './PlatformBox';
 import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
+import TimeBox from './TimeBox';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
 import { brandOfModel, modelNameOf, shortRomram } from '../ProductCascader/tree';
@@ -186,15 +190,21 @@ function ProductPickerEntry() {
 
 /** One global row: country and industry scope, then the unified product picker,
  *  then platform and currency. 第一百一十五轮：平台与币种收进顶部筛选条（各看板
- *  标题行不再重复），整行不换行——选择产品列弹性收缩，平台/币种定宽保底。 */
-export default function FilterBar() {
+ *  标题行不再重复），整行不换行——选择产品列弹性收缩，平台/币种定宽保底。
+ *  第一百三十一轮波2：showTime = 时间筛选簇（仅价格看板与量价看板传入），
+ *  币种右侧短分隔线后渲染；卡片根为 RangePicker 弹层挂载容器（向下展开）。 */
+export default function FilterBar({ showTime = false }: { showTime?: boolean } = {}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
-        <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
+        {/* position:relative：作为时间范围弹层的定位容器（left:0/宽度 100% 随卡片根） */}
+        <section ref={cardRef} className="lpl-fb" style={{ position: 'relative', background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30, flexWrap: 'nowrap' }}>
             <ScopeFields />
-            <div style={{ flex: '1 1 320px', minWidth: 240, display: 'flex', alignItems: 'center' }}>
+            {/* 入口列弹性让位（第一百三十一轮波2收窄：basis 320→260、minWidth 240→200，
+                时间簇定宽 310 入列后 1280 视口仍单行；chip 内部省略号兜底） */}
+            <div style={{ flex: '1 1 260px', minWidth: 200, display: 'flex', alignItems: 'center' }}>
               <ProductPickerEntry />
             </div>
             <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
@@ -204,6 +214,12 @@ export default function FilterBar() {
               <span style={labelStyle}>币种</span>
               <CurrencyBox />
             </div>
+            {showTime && (
+              <>
+                <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+                <TimeBox popupContainerRef={cardRef} />
+              </>
+            )}
           </div>
         </section>
       </ConfigProvider>

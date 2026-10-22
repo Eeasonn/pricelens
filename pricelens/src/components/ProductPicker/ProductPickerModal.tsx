@@ -1,46 +1,52 @@
 // ============================================================
-// 选择产品浮窗（第一百二十八轮修订）：
+// 选择产品浮窗（第一百三十一轮修订）：
 // 入口 = 筛选条「选择产品」chip，点击自 chip 向下滑出浮窗（左侧与筛选器
 //   对齐，不再是居中弹窗）；浮窗在页面全部内容之上，内部再弹层（树/颜色/
 //   轻确认/气泡）依次更高；点浮窗外即收起，改动即存。
 // 主体 = 若干「组」的整框——一张卡一个框，内部左右两格以分界线隔开：
 //   左格 = 主分析产品（左上角标题，格底极浅蓝；品牌+产品一行、型号/颜色
 //   换行居中，更换右下角），右格 = 对比产品（左上角标题；无对比时
-//   「自动匹配竞品 + 提示 + 添加对比产品」在格内正中居中，有对比时
-//   「自动匹配竞品」格顶居中、「添加对比产品」在已选条目下方居中）。
-//   删除整组的 ✕ 在整框右上角（更明显，轻确认后连对比区一并移除）。
-// 自动匹配 = 每卡开关（第一百二十八轮：「自动匹配竞品」/「全部自动匹配」
-//   都有选中态，代表功能的开与关）：开 = 对比区由对标矩阵驱动（立即重算，
-//   换主品 / 矩阵更新自动跟随）；关 = 对比区保留转手动；手动增删对比即关。
-//   非华为主品卡无矩阵可依，按钮置灰。
+//   「提示 + 添加对比产品」在格内正中居中，有对比时「添加对比产品」在
+//   已选条目下方居中）。删除整组的 ✕ 在整框右上角（更明显，轻确认后连
+//   对比区一并移除）。
+// 匹配竞品 = 每卡开关（第一百三十一轮：「自动匹配竞品」/「全部自动匹配」
+//   统一更名为「匹配竞品」，同名仅由位置区分层级——卡内 = 本产品对，
+//   顶栏 = 全部产品对；闪电图标删除）：开 = 对比区由对标矩阵驱动（立即
+//   重算，换主品 / 矩阵更新自动跟随）；关 = 对比区保留转手动；手动增删
+//   对比即关。非华为主品卡无矩阵可依，按钮置灰。
+// 匹配竞品默认开（第一百三十一轮修 BUG）：新建卡、空对补选主品、换主品
+//   （对比区已空）时，华为主品卡自动进入开启并按矩阵填充对比区——用户
+//   无需手动点开关；已有手动对比内容的卡不翻案；持久化旧卡保持原状。
 // 产品树不再常驻：唯一更换入口 = 行尾「更换」→ 完整树浮窗（品牌→系列→
 //   产品→型号，预定位当前路径，搜索保留）。颜色不进树浮窗：点型号行即按
 //   默认最低价色落选，换色只在已选条目的色块（蓝描边 = 可编辑；只读配置
 //   chip 无描边）。
-// 第一百二十三轮：档位融入树浮窗——搜索行右侧「档位」Select 按配置级档位
-//   （tier_by_country，同型号不同配置可跨档）过滤四列树，与搜索叠加；选中
-//   档位后树上方提示带给批量动作（主品上下文 = 该档全部我司配置「全部各成
-//   一组」；对比上下文 = 该档全部配置「全部加入对比」）——顶部「按档位」
-//   主体模式退役后的一键集结落点。浮窗宽度 = 四列自适应宽之和（trailing
-//   计入列宽，信息不许截断），上限 min(视口-48, 1100)，超限才横向滚动。
+// 第一百二十三轮：档位融入树浮窗——搜索行右侧「档位」Select 按配置级
+//   档位（tier_by_country，同型号不同配置可跨档）过滤四列树，与搜索叠加；
+//   选中档位后树上方提示带给批量动作（主品上下文 = 该档全部我司配置
+//   「全部各成一组」；对比上下文 = 该档全部配置「全部加入对比」）。
+//   浮窗宽度 = 四列自适应宽之和（trailing 计入列宽，信息不许截断），
+//   上限 min(视口-48, 1100)，超限才横向滚动。
 // 主品空缺 = 空组（仅历史数据可能出现；空态不提供先加对比入口）。
 // 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；配额每卡
 // 1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8；即改即存。
 // 添加主分析产品 = 最后一个组框向下延长的底边正中的显性大按钮。
-// 破坏性动作轻确认：删整组、清空全部、「最近」恢复覆盖当前已选。
-// 第一百二十九轮：组框高度自适应（列表 flex 子项禁止压缩，内容不再被裁切）；
-// 「最近」只占一行——放不下的组合收进行尾「更多」下拉，恢复覆盖已选仍轻确认。
-// 第一百三十轮：组头一行化——「主分析产品」「对比产品」标题、「自动匹配竞品」
-//   与删组 ✕ 同行垂直居中（常规文档流，不再与下方产品行重叠），卡级「配置·颜色」
-//   标识删除；顶栏新增「全部删除」（清空全部组，轻确认）；「最近」改造为「模板」
-//   ——显式保存（默认名 = 主分析产品名，可重命名；单模板 = 一个产品对，多对 =
-//   模板组），不再随浮窗收起自动记录。
+// 破坏性动作轻确认：删整组、清空全部、模板恢复覆盖当前已选。
+// 模板（第一百三十一轮增强）：顶栏与卡级「＋模板」恒弹名称窗（同内容签名
+//   已存在时预填现有名称、确认后原位更新）；卡级把该组、顶栏把当前选择分别
+//   存为模板；模板 chip 与「更多」下拉项带 ✎（编辑，进模板编辑浮窗）与
+//   「＋」（加入当前选择——逐模板卡增量：主品不在 = 整卡追加（auto 随模板
+//   带入、卡数封顶 8），主品已在 = 只把缺失对比合并进现有卡（selKey 去重、
+//   卡配额封顶，确有新增即退出自动），气泡如实反映三态）；chip 本体点击 =
+//   恢复（覆盖当前已选，非空且不同时轻确认）；✎ 打开的模板编辑
+//   浮窗（TemplateEditorFlyout）支持改名、逐对换主品/增删对比、新增一对、
+//   删除模板，改动即存。按钮簇（第一百三十一轮）：卡级组头右侧 =
+//   匹配竞品 · ＋模板 · ✕；顶栏右侧 = 匹配竞品 · ＋模板 · 清空。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Dropdown, Input, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
-  CloseOutlined,
   DeleteOutlined,
   DownOutlined,
   EditOutlined,
@@ -48,13 +54,11 @@ import {
   PlusOutlined,
   RollbackOutlined,
   SearchOutlined,
-  SwapOutlined,
-  ThunderboltFilled,
 } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
+import BrandDot, { brandLabelOf } from '../BrandMark';
 import {
-  buildProductTree,
   brandOfModel,
   defaultColorSkuIds,
   filterProductTreeByTier,
@@ -69,9 +73,44 @@ import {
   type ModelSortMode,
   type RomramNode,
 } from '../ProductCascader/tree';
-import { autoColumnWidth, CascadePanel, measureText, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
-import ColorFlyout from '../ProductCascader/ColorFlyout';
-import BrandDot, { brandLabelOf } from '../BrandMark';
+import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
+import {
+  AddPill,
+  CardTag,
+  ColorChip,
+  DeleteX,
+  GroupDeleteX,
+  PAIR_LIST_MAX_H,
+  POPOVER_H,
+  POPOVER_Z,
+  PANEL_Z,
+  RomramChip,
+  RowText,
+  StateTag,
+  SwapPill,
+  TIP_Z,
+  pillW,
+  textW,
+  useTreeData,
+  ROW_GAP,
+} from './pickerBits';
+import {
+  TEMPLATE_CAP,
+  comboSignature,
+  contentSignature,
+  defaultTemplateName,
+  planAppend,
+  readCombos,
+  writeCombos,
+  type StoredCombo,
+} from './combos';
+import TemplateEditorFlyout from './TemplateEditorFlyout';
+import {
+  appendTierCards, configsInTier,
+} from '../../state/tierSelection';
+import { TIER_LABELS } from '../../dataModel/aggregate';
+import { tierLabelShort } from '../../chart/PriceTrend/helpers';
+import { color, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
   cardQuota,
   isHuaweiModel,
@@ -80,22 +119,9 @@ import {
   newCardId,
   remapSelection,
   selKey,
+  withAutoOn,
   withMain,
 } from '../../state/mainSelection';
-import { appendTierCards, configsInTier } from '../../state/tierSelection';
-import { TIER_LABELS } from '../../dataModel/aggregate';
-import { tierLabelShort } from '../../chart/PriceTrend/helpers';
-import { LPL } from '../../state/lplKeys';
-import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
-
-const POPOVER_H = 300; // 树浮窗列高（固定，不随内容跳变）
-const PAIR_LIST_MAX_H = 440; // 分析对列表区最大高（多对时纵向滚动）
-
-// 层级：浮窗面板压过页面全部内容；面板内再弹层（树/颜色/轻确认）更高一档，
-// 气泡提示再高一档（antd Tooltip 缺省层级低于面板，须显式抬升）
-const PANEL_Z = 1500;
-const POPOVER_Z = 1600;
-const TIP_Z = 1650;
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 const nodeSelKey = (r: RomramNode): string => `${r.modelId}|${norm(r.romram)}`;
@@ -109,326 +135,17 @@ type PickerCtx =
   | { kind: 'compares'; cardId: string } // 对比区增删（连点，不关浮窗）
   | { kind: 'replace-compare'; cardId: string; sel: ProductSelection }; // 整条替换
 
-// ---------------- 最近使用组合（localStorage LPL3.ui.mainCombos，上限 5） ----------------
+// （模板存储/纯计算见 ./combos：LPL3.ui.mainCombos 读写、签名、默认名、上限 8）
 
-interface StoredCombo {
-  label: string;
-  cards: MainProduct[];
-}
-
-function isSelection(v: unknown): v is ProductSelection {
-  return typeof v === 'object' && v !== null
-    && typeof (v as ProductSelection).modelId === 'string'
-    && typeof (v as ProductSelection).romram === 'string'
-    && Array.isArray((v as ProductSelection).skuIds);
-}
-
-function isStoredCard(v: unknown): v is MainProduct {
-  if (typeof v !== 'object' || v === null) return false;
-  const c = v as MainProduct;
-  return typeof c.id === 'string'
-    && (c.main === null || isSelection(c.main))
-    && Array.isArray(c.compares)
-    && c.compares.every(isSelection);
-}
-
-function readCombos(): StoredCombo[] {
-  try {
-    const raw = localStorage.getItem(LPL.uiMainCombos);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (c): c is StoredCombo =>
-        typeof c === 'object' && c !== null && typeof (c as StoredCombo).label === 'string'
-        && Array.isArray((c as StoredCombo).cards) && (c as StoredCombo).cards.every(isStoredCard),
-    );
-  } catch {
-    return [];
-  }
-}
-
-function comboSignature(cards: MainProduct[]): string {
-  return cards.map((c) => (c.main ? selKey(c.main) : `~${c.compares.map(selKey).join('+')}`)).join('|');
-}
-
-/** 完整内容签名（主品 + 对比区 + 颜色）：「最近」恢复是否会覆盖当前已选的判定依据
- *  （comboSignature 只看主品集合，是最近列表去重口径，不够严） */
-function contentSignature(cards: MainProduct[]): string {
-  const sel = (s: ProductSelection): string => `${selKey(s)}#${[...s.skuIds].sort().join(',')}`;
-  return cards.map((c) => `${c.main ? sel(c.main) : '~'}:${c.compares.map(sel).join('+')}`).join('|');
-}
-
-/** 模板持久化（第一百三十轮起显式保存：不再随浮窗收起自动记录） */
-function writeCombos(combos: StoredCombo[]): void {
-  try {
-    localStorage.setItem(LPL.uiMainCombos, JSON.stringify(combos));
-  } catch {
-    /* 存储不可用忽略 */
-  }
-}
-
-/** 模板数上限（放不下的收进「更多」下拉；超限淘汰最旧） */
-const TEMPLATE_CAP = 8;
-
-/** 模板默认名 = 主分析产品名；同型号多组「X · N 组」，多型号「A、B」/「A 等 N 款」 */
-function defaultTemplateName(cards: MainProduct[]): string {
-  const names = [...new Set(cards.map((c) => (c.main ? modelNameOf(c.main.modelId) : '对比产品')))];
-  if (names.length === 1) return cards.length === 1 ? names[0] : `${names[0]} · ${cards.length} 组`;
-  if (names.length === 2) return names.join('、');
-  return `${names[0]} 等 ${names.length} 款`;
-}
-
-// ---------------- 颜色 chip（次级筛选：点开换色 / 多色均价） ----------------
-
-function colorLabelOf(node: RomramNode | undefined, skuIds: string[]): string {
-  if (!node) return '';
-  const pool = node.selectableColors.length ? node.selectableColors : node.colors;
-  const chosen = pool.filter((c) => skuIds.includes(c.skuId));
-  if (chosen.length > 1) return `${chosen[0].color}+${chosen.length - 1}`;
-  if (chosen.length === 1) return chosen[0].color;
-  return pool.find((c) => c.skuId === defaultColorSkuIds(node)[0])?.color ?? pool[0]?.color ?? '';
-}
-
-function ColorChip({
-  node,
-  skuIds,
-  onToggle,
-  onReset,
-  tone,
-  currency,
-}: {
-  node: RomramNode | undefined;
-  skuIds: string[];
-  onToggle: (skuId: string, next: boolean) => void;
-  onReset: () => void;
-  tone: 'strong' | 'soft';
-  currency: 'usd' | 'local';
-}) {
-  const label = colorLabelOf(node, skuIds);
-  if (!node || !label) return null;
-  return (
-    <Popover
-      trigger="click"
-      placement="bottomLeft"
-      zIndex={POPOVER_Z}
-      styles={{ body: { padding: 0, width: 272 } }}
-      content={
-        <ColorFlyout
-          node={node}
-          list={[{ modelId: node.modelId, romram: node.romram, skuIds }]}
-          currency={currency}
-          onToggle={onToggle}
-          onReset={onReset}
-        />
-      }
-    >
-      <span
-        title={`颜色 ${label} · 点击切换`}
-        className="lpl-pk-ghost"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 4,
-          height: 20,
-          padding: '0 8px',
-          borderRadius: radius.pill,
-          fontSize: 11,
-          fontWeight: 600,
-          color: tone === 'strong' ? selectSoftInk : color.body,
-          background: color.canvas,
-          border: `1px solid ${EDITABLE_BORDER}`,
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </span>
-    </Popover>
-  );
-}
-
-// ---------------- 通用小件 ----------------
-
-/** 可编辑 chip 的描边（主品/对比条目同一语言；只读配置 chip 无描边） */
-const EDITABLE_BORDER = 'rgba(0, 112, 243, 0.30)';
-
-/** 树数据索引（浮窗与条目共用；按国家/产业缓存）。
- *  第一百二十三轮：romramsByModel（全量配置索引）退役——「全部型号」在档位
- *  筛选下 = 该产品在该档位内的配置，取过滤后树节点自带的 romrams。 */
-function useTreeData() {
-  const { state } = useFilters();
-  const fullTree = useMemo(
-    () => buildProductTree(state.industry, state.countryCode),
-    [state.industry, state.countryCode],
-  );
-  const romramByKey = useMemo(() => {
-    const m = new Map<string, RomramNode>();
-    for (const b of fullTree) for (const s of b.series) for (const md of s.models) for (const r of md.romrams) m.set(r.key, r);
-    return m;
-  }, [fullTree]);
-  return { fullTree, romramByKey };
-}
-
+/** 「全部型号」成组/成卡的配置池：过滤无意义占位配置（仅剩一项时保留） */
 const usableRomrams = (nodes: RomramNode[]): RomramNode[] =>
   nodes.filter((r) => r.romram !== '—' || nodes.length === 1);
 
-/** 条目只读文字（更换收口后不可点；超长省略号 + title 全称） */
-function RowText({
-  children,
-  strong,
-  title,
-}: {
-  children: ReactNode;
-  strong?: boolean;
-  title?: string;
-}) {
-  return (
-    <span
-      title={title}
-      style={{
-        display: 'inline-flex',
-        minWidth: 0,
-        maxWidth: strong ? 240 : 170,
-        fontSize: strong ? 14 : 12,
-        fontWeight: strong ? 700 : 500,
-        color: strong ? color.ink : color.body,
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-      }}
-    >
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{children}</span>
-    </span>
-  );
-}
+// ---------------- 通用小件见 ./pickerBits（与模板编辑浮窗共用同一套视觉语言） ----------------
 
-/** 只读配置 chip（无描边；描边 = 可编辑，与颜色 chip 区分） */
-function RomramChip({ children }: { children: ReactNode }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        height: 20,
-        padding: '0 8px',
-        borderRadius: radius.pill,
-        fontSize: 11,
-        fontWeight: 600,
-        color: color.body,
-        background: 'rgba(0, 0, 0, 0.06)',
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-/** 虚线触发 pill（「＋ 添加…」家族统一形态） */
-function AddPill({ label, onClick, disabled, big }: { label: string; onClick?: () => void; disabled?: boolean; big?: boolean }) {
-  return (
-    <span
-      role="button"
-      aria-label={label}
-      aria-disabled={disabled || undefined}
-      className="lpl-pk-ghost"
-      onClick={disabled ? undefined : onClick}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        height: big ? 38 : 22,
-        padding: big ? '0 20px' : '0 9px',
-        justifyContent: big ? 'center' : undefined,
-        borderRadius: radius.pill,
-        border: `1px dashed ${disabled ? color.hairline : color.hairlineStrong}`,
-        fontSize: big ? 13 : 11,
-        color: disabled ? color.mute : color.body,
-        background: color.canvas,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <PlusOutlined style={{ fontSize: 10 }} /> {label}
-    </span>
-  );
-}
-
-/** 行尾「更换」ghost pill（= 完整树浮窗的显性入口） */
-function SwapPill({ label, onClick }: { label: string; onClick?: () => void }) {
-  return (
-    <span
-      role="button"
-      aria-label={label}
-      title={label}
-      className="lpl-pk-ghost"
-      onClick={onClick}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 3,
-        height: 20,
-        padding: '0 7px',
-        borderRadius: radius.pill,
-        fontSize: 11,
-        color: color.mute,
-        background: color.canvas,
-        border: `1px solid ${color.hairline}`,
-        cursor: 'pointer',
-        flexShrink: 0,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <SwapOutlined style={{ fontSize: 10 }} /> 更换
-    </span>
-  );
-}
-
-function DeleteX({ label, onClick, size = 11 }: { label: string; onClick?: () => void; size?: number }) {
-  return (
-    <span
-      role="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      style={{ display: 'inline-flex', padding: 4, cursor: 'pointer', color: color.mute, flexShrink: 0 }}
-    >
-      <CloseOutlined style={{ fontSize: size }} />
-    </span>
-  );
-}
-
-/** 整框右上角的删组 ✕（第一百二十八轮：主品的删除 = 整组删除，入口提到
- *  组框右上角以更明显的方式呈现；悬停红化，轻确认后连对比区一并移除） */
-function GroupDeleteX({ label }: { label: string }) {
-  return (
-    <span
-      role="button"
-      aria-label={label}
-      title={label}
-      className="lpl-pk-del"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 22,
-        height: 22,
-        borderRadius: radius.control,
-        border: `1px solid ${color.hairline}`,
-        background: color.canvas,
-        color: color.mute,
-        cursor: 'pointer',
-      }}
-    >
-      <CloseOutlined style={{ fontSize: 11 }} />
-    </span>
-  );
-}
-
-/** 「⚡ 自动匹配」开关 pill（第一百二十八轮）：选中态 = 功能开（对比区由矩阵
- *  驱动），非选中 = 关（手动持有）；置灰 = 无矩阵可依（非华为主品/空主品） */
+/** 「匹配竞品」开关 pill（第一百三十一轮更名并删除闪电图标）：选中态 =
+ *  功能开（对比区由矩阵驱动），非选中 = 关（手动持有）；置灰 = 无矩阵可依
+ *  （非华为主品/空主品） */
 function MatchPill({
   label,
   text,
@@ -476,26 +193,13 @@ function MatchPill({
           flexShrink: 0,
         }}
       >
-        <ThunderboltFilled style={{ fontSize: md ? 11 : 10 }} /> {text}
+        {text}
       </span>
     </Tooltip>
   );
 }
 
-/** 当前/已选 灰标（树浮窗叶行尾） */
-function StateTag({ text }: { text: string }) {
-  return (
-    <span style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{text}</span>
-  );
-}
-
 // ---------------- 更换树浮窗（完整树：唯一更换入口） ----------------
-
-/** 13px 基准测量 → 实际字号折算（行尾内容宽度预留用） */
-const textW = (s: string, px: number): number => measureText(s) * (px / 13);
-/** 行尾小 pill 宽（文本 + padding 0 8px + 边框 2px） */
-const pillW = (s: string, px: number): number => textW(s, px) + 18;
-const ROW_GAP = 8; // 级联行内 label ↔ 行尾间距（space.sm）
 
 /** 档位批量动作 pill（浅蓝描边 ghost，与「＋ 全部型号」同语言） */
 function TierBatchPill({ text, disabled, onClick }: { text: string; disabled?: boolean; onClick?: () => void }) {
@@ -621,7 +325,9 @@ function LevelSwitchPopover({
     if (ctx.kind === 'add-main') {
       if (mains.some((c) => c.main && selKey(c.main) === selKey(sel))) return;
       if (mains.length >= MAINS_CAP) return;
-      actions.setMains([...mains, { id: newCardId(), main: sel, compares: [] }]);
+      // 第一百三十一轮：建卡即默认「匹配竞品」（华为主品 = 对比区按矩阵填充
+      // 并保持驱动）；非华为主品无矩阵可依，保持手动
+      actions.setMains([...mains, withAutoOn({ id: newCardId(), main: sel, compares: [] })]);
     } else if (card) {
       actions.setMains(mains.map((c) => (c.id === card.id ? withMain(c, sel) : c)));
     }
@@ -679,18 +385,25 @@ function LevelSwitchPopover({
       if (seen.has(k)) continue;
       if (list.length + cards.length >= MAINS_CAP) break;
       seen.add(k);
-      cards.push({ id: newCardId(), main: sel, compares: [] });
+      // 第一百三十一轮：逐配置成卡同样默认「匹配竞品」（华为主品 = 矩阵填充）
+      cards.push(withAutoOn({ id: newCardId(), main: sel, compares: [] }));
     }
     if (!cards.length) return;
     // 第一百二十五轮（K2）：批量落卡不再静默丢弃当前卡对比区——对齐单点路径
     // pickConfig→withMain 的沿用口径：首张新卡继承（剔同 selKey、截配额），
     // 其余新卡保持空、由 setMains 的自动匹配按需补。
+    // 第一百三十一轮：来源卡矩阵驱动时首卡保持默认开（对比区 = 新主品矩阵
+    // 产出），不继承旧矩阵内容；来源手动且首卡已被默认填成矩阵时改回手动并
+    // 继承（用户搭配不丢）。
     if ((ctx.kind === 'set-main' || ctx.kind === 'replace-main') && activeCard?.compares.length) {
       const first = cards[0];
-      cards[0] = {
-        ...first,
-        compares: activeCard.compares.filter((c) => selKey(c) !== selKey(first.main!)).slice(0, cardQuota(first)),
-      };
+      if (!activeCard.auto) {
+        cards[0] = {
+          ...first,
+          auto: undefined,
+          compares: activeCard.compares.filter((c) => selKey(c) !== selKey(first.main!)).slice(0, cardQuota(first)),
+        };
+      }
     }
     actions.setMains([...list, ...cards]);
     setOpen(false);
@@ -723,18 +436,21 @@ function LevelSwitchPopover({
     const base = ctx.kind === 'set-main' && activeCard ? mains.filter((c) => c.id !== activeCard.id) : mains;
     let next = appendTierCards(state.industry, tier, state.countryCode, base);
     if (next === base) return;
+    const baseIds = new Set(base.map((c) => c.id));
+    // 第一百三十一轮：批量成组的新卡同样默认「匹配竞品」——appendTierCards 已按
+    // 矩阵填好对比区，这里补 auto 标记进入矩阵驱动（华为主品恒真，守卫照写）
+    next = next.map((c) => (!baseIds.has(c.id) && c.main && isHuaweiModel(c.main.modelId) ? withAutoOn(c) : c));
     // 第一百二十五轮（K2）：set-main 批量成组不再丢弃空对先挂的对比区——不改
     // appendTierCards（返回 base+新卡、对比区按矩阵填），在此对结果后处理：首张
     // 新卡若未带对比区则沿用被移除空对的（剔同 selKey、截配额）；已被矩阵填好
     // 则不覆盖。replace-main 分支本就追加不动当前卡，无需处理。
     if (ctx.kind === 'set-main' && activeCard?.compares.length) {
       const inherit = activeCard.compares;
-      const baseIds = new Set(base.map((c) => c.id));
       const firstNew = next.find((c) => !baseIds.has(c.id));
       if (firstNew && !firstNew.compares.length) {
         next = next.map((c) =>
           c === firstNew
-            ? { ...c, compares: inherit.filter((x) => selKey(x) !== selKey(c.main!)).slice(0, cardQuota(c)) }
+            ? { ...c, auto: undefined, compares: inherit.filter((x) => selKey(x) !== selKey(c.main!)).slice(0, cardQuota(c)) }
             : c,
         );
       }
@@ -1145,13 +861,8 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
 
 // ---------------- 分析对部件 ----------------
 
-/** 组顶标识（多组时显示）：「第 N 组」（第一百三十轮：右侧配置·颜色文本删除） */
-function CardTag({ index }: { index: number }) {
-  return <div style={{ padding: '4px 8px 0 30px', fontSize: 11, color: color.mute }}>第 {index + 1} 组</div>;
-}
-
-/** 对比区「⚡ 自动匹配竞品」开关（第一百二十八轮）：选中 = 本组对比区由对标
- *  矩阵驱动（换主品/矩阵更新自动跟随）；置灰 = 无矩阵可依（仅华为主品可开） */
+/** 「匹配竞品」开关（第一百三十一轮更名）：选中 = 本组对比区由对标矩阵驱动
+ *  （换主品/矩阵更新自动跟随）；置灰 = 无矩阵可依（仅华为主品可开） */
 function AutoMatchInline({ card }: { card: MainProduct }) {
   const { actions } = useFilters();
   const huawei = card.main != null && isHuaweiModel(card.main.modelId);
@@ -1160,14 +871,14 @@ function AutoMatchInline({ card }: { card: MainProduct }) {
     card.main == null
       ? '先选择主分析产品'
       : !huawei
-        ? '自动匹配基于对标矩阵，仅支持华为产品；请手动添加'
+        ? '按对标矩阵带出对比区，仅支持华为产品；请手动添加'
         : on
           ? '已开启：换主品或对标矩阵更新时自动重算本组对比区；点击关闭'
           : '开启后按对标矩阵自动带出本组对比区';
   return (
     <MatchPill
-      label={`自动匹配竞品${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
-      text="自动匹配竞品"
+      label={`匹配竞品${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
+      text="匹配竞品"
       can={huawei}
       selected={on}
       tip={tip}
@@ -1220,7 +931,8 @@ export default function ProductPickerFlyout({
     return () => window.removeEventListener('resize', measure);
   }, [open]);
 
-  // 外点关闭：锚点与本浮层内的点击（含嵌套树浮窗/颜色浮层/轻确认）不关
+  // 外点关闭：锚点与本浮层内的点击（含嵌套树浮窗/颜色浮层/轻确认/模板编辑
+  // 浮窗）不关——编辑浮窗是挂在 body 上的独立定位层，须显式放行
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent): void => {
@@ -1228,6 +940,7 @@ export default function ProductPickerFlyout({
       if (!t) return;
       if (anchorRef.current?.contains(t)) return;
       if (t.closest('[data-lpl-picker-panel]')) return;
+      if (t.closest('[data-lpl-template-editor]')) return;
       if (t.closest('.ant-popover')) return;
       if (t.closest('.ant-popconfirm')) return;
       if (t.closest('.ant-modal') || t.closest('.ant-modal-mask')) return;
@@ -1288,39 +1001,97 @@ function PickerPanel() {
     actions.setMains(ids.map((id) => mains.find((c) => c.id === id)!));
   };
 
-  // ---- 模板（第一百三十轮：显式保存的产品对/模板组，替代自动记录的「最近」） ----
+  // ---- 模板（显式保存的产品对/模板组；「＋模板」顶栏与卡级恒弹名称窗——
+  //      同内容签名已存在时预填现有名称、确认后原位更新；chip 尾段「＋」 =
+  //      加入当前选择：主品已在的组只补缺失对比） ----
   const [combos, setCombos] = useState<StoredCombo[]>(() => readCombos());
-  // 名称弹窗（保存新模板 / 重命名既有模板共用）
-  const [dialog, setDialog] = useState<{ mode: 'save' | 'rename'; target: StoredCombo | null; value: string } | null>(null);
+  // 「＋模板」名称弹窗（cards = 待保存的卡；updating = 同签名已存在、确认后原位更新）
+  const [dialog, setDialog] = useState<{ value: string; cards: MainProduct[]; updating: boolean } | null>(null);
+  // 模板编辑浮窗（持当前模板对象；编辑中每次改动替换该对象）
+  const [editing, setEditing] = useState<StoredCombo | null>(null);
 
-  /** 保存当前选择为模板：内容签名已存在 = 原位更新；否则插到最前，超限淘汰最旧 */
-  const saveTemplate = (label: string): void => {
-    const name = label.trim() || defaultTemplateName(mains);
-    const sig = comboSignature(mains);
-    const entry: StoredCombo = { label: name, cards: mains.map((c) => ({ ...c })) };
-    const idx = combos.findIndex((c) => comboSignature(c.cards) === sig);
-    const next = (idx >= 0 ? combos.map((c, i) => (i === idx ? entry : c)) : [entry, ...combos]).slice(0, TEMPLATE_CAP);
+  const persistCombos = (next: StoredCombo[]): void => {
     setCombos(next);
     writeCombos(next);
   };
 
-  const renameTemplate = (target: StoredCombo, label: string): void => {
-    const name = label.trim();
-    if (!name) return;
-    const next = combos.map((c) => (c === target ? { ...c, label: name } : c));
-    setCombos(next);
-    writeCombos(next);
+  /** 保存为模板：内容签名已存在 = 原位更新；否则插到最前，超限淘汰最旧 */
+  const saveTemplate = (label: string, cards: MainProduct[] = mains): void => {
+    const name = label.trim() || defaultTemplateName(cards);
+    const sig = comboSignature(cards);
+    const entry: StoredCombo = { label: name, cards: cards.map((c) => ({ ...c })) };
+    const idx = combos.findIndex((c) => comboSignature(c.cards) === sig);
+    persistCombos((idx >= 0 ? combos.map((c, i) => (i === idx ? entry : c)) : [entry, ...combos]).slice(0, TEMPLATE_CAP));
+  };
+
+  /** 「＋模板」恒弹名称窗：同内容签名已存在 = 预填其现有名称（原位更新），
+   *  否则预填默认名（整份当前选择 / 卡级单组各自按主品名等规则取默认） */
+  const openSaveDialog = (cards: MainProduct[]): void => {
+    const sig = comboSignature(cards);
+    const existing = combos.find((x) => comboSignature(x.cards) === sig);
+    setDialog({ value: existing ? existing.label : defaultTemplateName(cards), cards, updating: existing != null });
+  };
+
+  /** 模板编辑浮窗「改动即存」：写回原位置（高频改动——改名逐键、增删对比——
+   *  用函数式更新避免闭包里的 combos 过期丢补丁；写存储与状态同源） */
+  const patchCombo = (prev: StoredCombo, next: StoredCombo): void => {
+    setCombos((list) => {
+      const idx = list.findIndex((c) => c === prev);
+      if (idx < 0) return list;
+      const nextList = list.map((c, i) => (i === idx ? next : c));
+      writeCombos(nextList);
+      return nextList;
+    });
+    setEditing((e) => (e === prev ? next : e));
+  };
+
+  const removeCombo = (target: StoredCombo): void => {
+    setCombos((list) => {
+      const nextList = list.filter((c) => c !== target);
+      writeCombos(nextList);
+      return nextList;
+    });
+    setEditing((e) => (e === target ? null : e));
   };
 
   const confirmDialog = (): void => {
     if (!dialog) return;
-    if (dialog.mode === 'save') saveTemplate(dialog.value);
-    else if (dialog.target) renameTemplate(dialog.target, dialog.value);
+    saveTemplate(dialog.value, dialog.cards);
     setDialog(null);
   };
 
-  // 「最近」单行收纳（第一百二十九轮）：量出一行能放下几个 chip，放不下的
-  // 组合收进行尾「更多」下拉。隐藏的 chip 用 visibility:hidden 保位，宽度恒可测。
+  /** 「＋ 加入当前选择」执行：整卡追加（auto 随模板带入）+ 缺失对比合并进
+   *  现有卡。合并经 setCardCompares 落地 = 确有新增的卡按既有铁律退出自动
+   *  （手动改对比即关）。计划/文案见 combos.planAppend。 */
+  const appendCombo = (c: StoredCombo): void => {
+    const { fresh, merges } = planAppend(mains, c);
+    if (fresh.length) actions.setMains([...mains, ...fresh]);
+    for (const m of merges) {
+      const existing = mains.find((x) => x.id === m.cardId);
+      if (existing) actions.setCardCompares(m.cardId, [...existing.compares, ...m.compares]);
+    }
+  };
+
+  /** 「＋ 加入当前选择」气泡文案：与计划逐项对应，如实反映将发生什么 */
+  const appendTip = (c: StoredCombo): string => {
+    const { fresh, merges, overflowCards, overflowCompares } = planAppend(mains, c);
+    const totalAdds = merges.reduce((n, m) => n + m.compares.length, 0);
+    if (!fresh.length && !merges.length) {
+      if (overflowCards > 0) return `当前已选 ${MAINS_CAP} 组（上限），模板放不下`;
+      if (overflowCompares > 0) return `各对比区已配满（每张图最多 ${MAX_LINES_PER_CHART} 条线），没有可补充的对比`;
+      return '模板内产品对均已在当前选择中';
+    }
+    const parts: string[] = [];
+    if (fresh.length) parts.push(`新增 ${fresh.length} 组`);
+    if (totalAdds) parts.push(`补充 ${totalAdds} 个对比`);
+    let tip = `加入当前选择：${parts.join('、')}`;
+    if (overflowCards) tip += `；受 ${MAINS_CAP} 组上限所限，${overflowCards} 组放不下`;
+    if (overflowCompares) tip += `；${overflowCompares} 个对比超出每图条线上限放不下`;
+    return tip;
+  };
+
+  // 模板 chip 单行收纳：量出一行能放下几个 chip，放不下的收进行尾「更多」
+  // 下拉。隐藏的 chip 用 visibility:hidden 保位，宽度恒可测。
   const recentRowRef = useRef<HTMLDivElement>(null);
   const [recentVisible, setRecentVisible] = useState(combos.length);
   useEffect(() => {
@@ -1350,15 +1121,15 @@ function PickerPanel() {
   const huaweiCards = mains.filter((c) => c.main != null && isHuaweiModel(c.main.modelId));
   const currentSig = contentSignature(mains);
 
-  /** 「最近」恢复：覆盖当前已选内容（当前为空或与该组合相同时直接套用，否则轻确认） */
+  /** 模板恢复：覆盖当前已选内容（当前为空或与该模板相同时直接套用，否则轻确认） */
   const applyCombo = (c: StoredCombo): void => {
     actions.setMains(c.cards.map((x) => ({ ...x, id: newCardId() })));
   };
 
   return (
     <>
-      {/* 顶栏：「模板」（显式保存的产品对/模板组，chip 可重命名）只占一行，
-          放不下收进行尾「更多」下拉；右侧 = 保存模板 · 全部删除 · 全部自动匹配 */}
+      {/* 顶栏：「模板」（显式保存的产品对/模板组，chip 可编辑）只占一行，
+          放不下收进行尾「更多」下拉；右侧按钮簇 = 匹配竞品 · ＋模板 · 清空 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, minHeight: 26 }}>
         {combos.length > 0 && (
           <>
@@ -1396,18 +1167,41 @@ function PickerPanel() {
                     {c.label}
                     <span
                       role="button"
-                      aria-label={`重命名模板 ${c.label}`}
-                      title="重命名"
+                      aria-label={`编辑模板 ${c.label}`}
+                      title="编辑"
                       className="lpl-pk-ghost"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setDialog({ mode: 'rename', target: c, value: c.label });
+                        setEditing(c);
                       }}
                       style={{ display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer' }}
                     >
                       <EditOutlined style={{ fontSize: 10 }} />
                     </span>
                     <RollbackOutlined style={{ fontSize: 10, color: color.mute }} />
+                    {/* 尾段「＋」= 加入当前选择（增量追加，不动已有内容） */}
+                    <Tooltip title={appendTip(c)} zIndex={TIP_Z}>
+                      <span
+                        role="button"
+                        aria-label={`把模板 ${c.label} 加入当前选择`}
+                        className="lpl-pk-ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          appendCombo(c);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          marginLeft: 1,
+                          paddingLeft: 6,
+                          borderLeft: `1px solid ${color.hairline}`,
+                          color: color.mute,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <PlusOutlined style={{ fontSize: 10 }} />
+                      </span>
+                    </Tooltip>
                   </span>
                 );
                 return (
@@ -1453,14 +1247,29 @@ function PickerPanel() {
                         <span className="tnum" style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>
                           {c.cards.length} 组
                         </span>
+                        <Tooltip title={appendTip(c)} zIndex={TIP_Z}>
+                          <span
+                            role="button"
+                            aria-label={`把模板 ${c.label} 加入当前选择`}
+                            title="加入当前选择"
+                            className="lpl-pk-ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              appendCombo(c);
+                            }}
+                            style={{ display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer', flexShrink: 0 }}
+                          >
+                            <PlusOutlined style={{ fontSize: 10 }} />
+                          </span>
+                        </Tooltip>
                         <span
                           role="button"
-                          aria-label={`重命名模板 ${c.label}`}
-                          title="重命名"
+                          aria-label={`编辑模板 ${c.label}`}
+                          title="编辑"
                           className="lpl-pk-ghost"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setDialog({ mode: 'rename', target: c, value: c.label });
+                            setEditing(c);
                           }}
                           style={{ display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer', flexShrink: 0 }}
                         >
@@ -1515,15 +1324,31 @@ function PickerPanel() {
             )}
           </>
         )}
+        {/* 顶栏右侧按钮簇（第一百三十一轮）：左→右 = 匹配竞品 · ＋模板 · 清空 */}
         <span style={{ marginLeft: 'auto', paddingLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <MatchPill
+            label="匹配竞品"
+            text="匹配竞品"
+            size="md"
+            can={huaweiCards.length > 0}
+            selected={huaweiCards.length > 0 && huaweiCards.every((c) => !!c.auto)}
+            tip={
+              huaweiCards.length === 0
+                ? '按对标矩阵带出对比区，仅支持华为产品'
+                : huaweiCards.every((c) => !!c.auto)
+                  ? '已为全部华为主品组开启：对比区随对标矩阵自动保持；点击全部关闭'
+                  : '为全部华为主品组开启匹配竞品（对比区按对标矩阵自动带出）'
+            }
+            onClick={() => actions.autoMatchAll()}
+          />
           {mains.length > 0 && (
-            <Tooltip title="把当前选择保存为模板" zIndex={TIP_Z}>
+            <Tooltip title="把当前选择存为模板" zIndex={TIP_Z}>
               <span
                 role="button"
-                aria-label="保存模板"
-                title="把当前选择保存为模板"
+                aria-label="存为模板"
+                title="把当前选择存为模板"
                 className="lpl-pk-ghost"
-                onClick={() => setDialog({ mode: 'save', target: null, value: defaultTemplateName(mains) })}
+                onClick={() => openSaveDialog(mains)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1539,7 +1364,7 @@ function PickerPanel() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                <PlusOutlined style={{ fontSize: 10 }} /> 保存模板
+                <PlusOutlined style={{ fontSize: 10 }} /> 模板
               </span>
             </Tooltip>
           )}
@@ -1557,7 +1382,7 @@ function PickerPanel() {
               <span style={{ display: 'inline-flex' }}>
                 <span
                   role="button"
-                  aria-label="全部删除"
+                  aria-label="清空"
                   title="清空全部组"
                   className="lpl-pk-del"
                   style={{
@@ -1575,26 +1400,11 @@ function PickerPanel() {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  <DeleteOutlined style={{ fontSize: 11 }} /> 全部删除
+                  <DeleteOutlined style={{ fontSize: 11 }} /> 清空
                 </span>
               </span>
             </Popconfirm>
           )}
-          <MatchPill
-            label="全部自动匹配"
-            text="全部自动匹配"
-            size="md"
-            can={huaweiCards.length > 0}
-            selected={huaweiCards.length > 0 && huaweiCards.every((c) => !!c.auto)}
-            tip={
-              huaweiCards.length === 0
-                ? '自动匹配基于对标矩阵，仅支持华为产品'
-                : huaweiCards.every((c) => !!c.auto)
-                  ? '已为全部华为主品组开启：对比区随对标矩阵自动保持；点击全部关闭'
-                  : '为全部华为主品组开启自动匹配（对比区按对标矩阵自动带出）'
-            }
-            onClick={() => actions.autoMatchAll()}
-          />
         </span>
       </div>
 
@@ -1654,20 +1464,44 @@ function PickerPanel() {
               }}
             >
               {mains.length > 1 && <CardTag index={idx} />}
-              {/* 组头一行：「主分析产品」「对比产品」标题、「自动匹配竞品」（有对比时）
-                  与删组 ✕ 同行垂直居中——常规文档流，不与下方产品行重叠 */}
+              {/* 组头一行：「主分析产品」「对比产品」标题在左，右侧按钮簇 =
+                  匹配竞品 · ＋模板（存该组为模板）· 删组 ✕（从左到右） */}
               <div style={{ display: 'flex', alignItems: 'center', height: 34, paddingRight: 8, flexShrink: 0 }}>
                 <span style={{ width: 16, flexShrink: 0 }} />
                 <div style={{ flex: '0 0 300px', minWidth: 0, paddingLeft: 12, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
                 <div aria-hidden style={{ width: 1, flexShrink: 0 }} />
                 <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
                   <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
-                  {card.compares.length > 0 && (
-                    <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'inline-flex' }}>
-                      <AutoMatchInline card={card} />
-                    </span>
-                  )}
-                  <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+                  <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <AutoMatchInline card={card} />
+                    {card.main && (
+                      <Tooltip title={`把该组存为模板（默认名 = ${modelNameOf(card.main.modelId)}）`} zIndex={TIP_Z}>
+                        <span
+                          role="button"
+                          aria-label={`把该组存为模板 ${modelNameOf(card.main.modelId)}`}
+                          title={`把该组存为模板（默认名 = ${modelNameOf(card.main.modelId)}）`}
+                          className="lpl-pk-ghost"
+                          onClick={() => openSaveDialog([card])}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            height: 20,
+                            padding: '0 8px',
+                            borderRadius: radius.pill,
+                            border: `1px solid ${color.hairline}`,
+                            background: color.canvas,
+                            fontSize: 11,
+                            color: color.body,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <PlusOutlined style={{ fontSize: 9 }} /> 模板
+                        </span>
+                      </Tooltip>
+                    )}
                     <Popconfirm
                       zIndex={POPOVER_Z}
                       title="删除该组？"
@@ -1729,8 +1563,9 @@ function PickerPanel() {
               {/* 分界线：主分析产品 | 对比产品 */}
               <div aria-hidden style={{ width: 1, background: color.hairline, flexShrink: 0 }} />
 
-              {/* 右格：对比产品（标题与「自动匹配竞品」在组头行；无对比时
-                  自动匹配竞品与添加入口一起格内正中，有对比时添加入口居下中） */}
+              {/* 右格：对比产品（标题在组头行；「匹配竞品」开关固定在组头右侧
+                  按钮簇；无对比时格内正中 = 提示 + 添加入口，有对比时添加入口
+                  在已选条目下方居中） */}
               <div
                 style={{
                   flex: '1 1 0',
@@ -1744,13 +1579,12 @@ function PickerPanel() {
               >
                 {card.compares.length === 0 ? (
                   <div style={{ flex: 1, minHeight: 92, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <AutoMatchInline card={card} />
                     <div style={{ fontSize: 11, color: color.mute, lineHeight: '18px' }}>
                       {card.main == null
                         ? '可先挑选对比产品，补选主分析产品后即成一组'
                         : huawei
-                          ? '点「自动匹配竞品」一键带出，或手动添加'
-                          : '该品牌暂不支持自动匹配，请手动添加'}
+                          ? '点「匹配竞品」一键带出，或手动添加'
+                          : '该品牌暂不支持匹配竞品，请手动添加'}
                     </div>
                     <AddCompareTrigger card={card} />
                   </div>
@@ -1797,10 +1631,10 @@ function PickerPanel() {
         )}
       </div>
 
-      {/* 名称弹窗：保存新模板 / 重命名既有模板共用 */}
+      {/* 名称弹窗：顶栏 / 卡级「＋模板」共用（恒弹；同签名预填现有名称=原位更新） */}
       <Modal
         open={dialog != null}
-        title={dialog?.mode === 'save' ? '保存模板' : '重命名模板'}
+        title={dialog?.updating ? '更新模板' : '存为模板'}
         okText="保存"
         cancelText="取消"
         zIndex={POPOVER_Z}
@@ -1819,6 +1653,16 @@ function PickerPanel() {
           onPressEnter={confirmDialog}
         />
       </Modal>
+
+      {/* 模板编辑浮窗（二级层，改动即存；入口 = 模板 chip /「更多」下拉 ✎） */}
+      {editing && (
+        <TemplateEditorFlyout
+          combo={editing}
+          onPatch={(next) => patchCombo(editing, next)}
+          onDelete={() => removeCombo(editing)}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </>
   );
 }
