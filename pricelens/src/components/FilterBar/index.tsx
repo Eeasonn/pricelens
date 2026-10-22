@@ -208,7 +208,7 @@ export default function FilterBar({ showTime = false }: { showTime?: boolean } =
               <ProductPickerEntry />
             </div>
             <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-            <div style={{ flexShrink: 0, width: 168 }}><Field label="平台"><PlatformBox /></Field></div>
+            <div style={{ flexShrink: 0, width: 188 }}><Field label="平台 / 店铺"><PlatformBox /></Field></div>
             <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={labelStyle}>币种</span>

@@ -32,18 +32,32 @@ function platformOfShopId(shopId: string): string {
   return dimChannel.find((c) => c.channel_id === shopId)?.platform ?? shopId.split(':')[1] ?? '';
 }
 
-/** 平台单选归一：平台筛选器改回单选后，state.platform 只承载一个平台。
- *  旧多选形态（链接 plat=A,B / 旧持久化 platforms 多值、shopIds 渠道下钻）读入时
- *  取第一个平台归一；shop= 渠道映射为其所属平台；空选 / 解析不出平台 = null（默认电渠）。
- *  数据层 effectiveChannelIds 不动——单选就是 platforms:[一个] 的特例，全部继续兼容。 */
+/** 平台/店铺单选归一：筛选器选到「某平台下的某个店铺」，state.platform 承载
+ *  单渠道（店铺级）或单平台（旧兼容）两种形态。归一守卫沿用（多值取一；
+ *  渠道是否属于当前国家由 applyScopeDefaults 的 platformSelectionValidFor 校验，
+ *  越界渠道回落默认口径）：
+ *  - shopIds 有值 = 店铺（渠道）级单选，取第一个且**绝不同时带 platforms**——
+ *    数据层 effectiveChannelIds 为并集规则（platforms 命中即整平台渠道入池），
+ *    店铺级选择残留 platforms 会放大成整平台口径；
+ *  - 否则 platforms 取第一个 = 仅平台级（旧 plat= 链接 / 旧持久化兼容）；
+ *  - 空选 / null = null（默认口径：配置的默认平台店铺 → 默认平台全部渠道）。 */
 export function normalizePlatformSelection(platform: PlatformSelection | null): PlatformSelection | null {
   if (!platform) return null;
+  if (platform.shopIds.length > 0) return { platforms: [], shopIds: [platform.shopIds[0]] };
   if (platform.platforms.length > 0) return { platforms: [platform.platforms[0]], shopIds: [] };
-  if (platform.shopIds.length > 0) {
-    const p = platformOfShopId(platform.shopIds[0]);
-    return p ? { platforms: [p], shopIds: [] } : null;
-  }
   return null;
+}
+
+/** 状态 → URL 参数（写侧）：店铺级选择写 `plat={平台}&shop={渠道id}`（平台由
+ *  维表反查，反查不出按渠道 id 三段式兜底）；仅平台级（旧兼容）只写 plat=；
+ *  未选两者皆空（调用方写 null 即删键，连带清掉旧链接残留）。 */
+export function platformUrlParamsOf(platform: PlatformSelection | null): { plat: string | null; shop: string | null } {
+  const shopId = platform?.shopIds[0];
+  if (shopId) {
+    const p = platformOfShopId(shopId);
+    return { plat: p || null, shop: shopId };
+  }
+  return { plat: platform?.platforms[0] ?? null, shop: null };
 }
 
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null。
@@ -81,8 +95,9 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     const i = q.get('i');
     if (i) out.filters.industry = i as FiltersState['industry'];
     // 第一百二十三轮：按档位主体模式退役，旧链接的 m=tier / t= 参数静默忽略
-    // 平台单选：plat = 平台（旧多值链接取第一个）、shop = 渠道（旧链接映射为其所属平台）；
-    // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认电渠）
+    // 平台/店铺单选：plat = 平台、shop = 渠道 id（店铺级）；同存时 shop= 优先
+    // （normalizePlatformSelection 先吃 shopIds）；旧多值链接取第一个归一。
+    // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认口径）
     const platforms = listParam(q, 'plat');
     const shopIds = listParam(q, 'shop');
     if (platforms.length || shopIds.length) out.filters.platform = normalizePlatformSelection({ platforms, shopIds });

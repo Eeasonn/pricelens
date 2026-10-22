@@ -28,6 +28,7 @@ import type {
   SkuGroupQuery,
 } from './types';
 import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimRegion, dimTier, dimTime, factPriceWeekly } from '../data';
+import { defaultShopOverrideOf } from '../state/defaultShopStore';
 import { brandColorOf } from '../theme/tokens';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 import { displayPriceOf, displayRrpOf } from './currency';
@@ -143,10 +144,22 @@ export function defaultPlatformOf(countryCode: string): string | null {
     ?? null;
 }
 
-/** 生效渠道集合：未选 = 该国默认平台全部渠道；显式勾选 = 平台/渠道并集 */
+/** 国家默认平台店铺（第一百三十五轮）：配置页「默认平台店铺」覆盖（channel_id 级）；
+ *  未配置或配置的渠道不属于该国 = null（回默认平台口径） */
+export function defaultChannelOf(countryCode: string): string | null {
+  const o = defaultShopOverrideOf(countryCode);
+  if (!o) return null;
+  const hit = dimChannel.find((c) => c.country_code === countryCode && c.channel_id === o);
+  return hit ? o : null;
+}
+
+/** 生效渠道集合：未选 = 配置的默认平台店铺（channel 级）→ 未配置再回默认平台全部渠道；
+ *  显式勾选 = 平台/渠道并集（渠道级单选 = shopIds:[一个]，平台级兼容 = platforms:[一个]） */
 export function effectiveChannelIds(countryCode: string, platform: PlatformQuery | null): string[] {
   const all = dimChannel.filter((c) => c.country_code === countryCode);
   if (!platform || (platform.platforms.length === 0 && platform.shopIds.length === 0)) {
+    const dc = defaultChannelOf(countryCode);
+    if (dc) return [dc];
     const dp = defaultPlatformOf(countryCode);
     return all.filter((c) => c.platform === dp).map((c) => c.channel_id);
   }

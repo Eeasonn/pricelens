@@ -22,12 +22,18 @@ import {
   notifyConfigChanged,
   savePrevGenOverrides,
 } from '../state/configStore';
-import { currencyOfCountry, dimFx, dimProduct, dimPromo } from '../data';
+import {
+  defaultShopOverrideOf,
+  getDefaultShopOverrides,
+  saveDefaultShopOverrides,
+} from '../state/defaultShopStore';
+import { currencyOfCountry, dimChannel, dimFx, dimProduct, dimPromo } from '../data';
+import { defaultPlatformOf } from '../dataModel/aggregate';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { useFilters } from '../state/FiltersContext';
 import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
 import { scopeLabels } from '../dataModel/scope';
-import { color, fontSize, radius, shadow, space } from '../theme/tokens';
+import { color, fontSize, radius, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
 // ---------------- ② 上一代关系（型号级，与 dim_product.prev_model_id 同口径） ----------------
 
@@ -122,6 +128,52 @@ export default function Config() {
     message.success('已恢复默认上一代关系');
   };
 
+  // ---------------- 默认平台店铺（第一百三十五轮）：即改即存，主页取价即时生效 ----------------
+  const [defaultShopId, setDefaultShopId] = useState<string | null>(() => defaultShopOverrideOf(state.countryCode));
+  useEffect(() => {
+    setDefaultShopId(defaultShopOverrideOf(state.countryCode));
+  }, [state.countryCode]);
+
+  const platformRowsOfCc = useMemo(() => {
+    const shopsByPlatform = new Map<string, number>();
+    for (const c of dimChannel) {
+      if (c.country_code !== state.countryCode) continue;
+      shopsByPlatform.set(c.platform, (shopsByPlatform.get(c.platform) ?? 0) + c.shops);
+    }
+    return [...shopsByPlatform.entries()].map(([platform, shops]) => ({ platform, shops }));
+  }, [state.countryCode]);
+
+  const defaultShopChannel = useMemo(
+    () => dimChannel.find((c) => c.channel_id === defaultShopId) ?? null,
+    [defaultShopId],
+  );
+  const defaultShopPlatform = defaultShopChannel?.platform ?? null;
+  const shopRowsOfPlatform = useMemo(
+    () =>
+      defaultShopPlatform
+        ? dimChannel
+            .filter((c) => c.country_code === state.countryCode && c.platform === defaultShopPlatform)
+            .map((c) => ({ id: c.channel_id, name: c.display_name }))
+        : [],
+    [state.countryCode, defaultShopPlatform],
+  );
+
+  const saveDefaultShop = (channelId: string | null): void => {
+    setDefaultShopId(channelId);
+    const map = { ...getDefaultShopOverrides() };
+    if (channelId) map[state.countryCode] = channelId;
+    else delete map[state.countryCode];
+    saveDefaultShopOverrides(map);
+    notifyConfigChanged();
+    message.success('默认平台店铺已保存，看板取价即时生效');
+  };
+
+  /** 平台下拉变更 = 连带选该平台首个渠道（一次操作完成配置）；店铺下拉再微调 */
+  const onDefaultPlatformChange = (platform: string): void => {
+    const first = dimChannel.find((c) => c.country_code === state.countryCode && c.platform === platform);
+    saveDefaultShop(first?.channel_id ?? null);
+  };
+
   return (
     <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
       {/* 第二十八轮：1440 → 1280，与看板同最低宽度 */}
@@ -141,6 +193,54 @@ export default function Config() {
             }
           >
             <BenchmarkConfigBlock />
+          </Block>
+
+          {/* ⓪' 默认平台店铺（第一百三十五轮）：未在筛选中选择平台时，看板按此取价 */}
+          <Block
+            title="默认平台店铺"
+            extra={
+              <Button size="small" onClick={() => saveDefaultShop(null)} disabled={!defaultShopId}>
+                恢复维表默认
+              </Button>
+            }
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: fontSize.bodySm, color: color.mute, flexShrink: 0 }}>
+                {labels.country}（国家随页头切换）
+              </span>
+              <Select
+                size="small"
+                style={{ width: 170, flexShrink: 0 }}
+                aria-label="默认平台"
+                placeholder="选择平台"
+                value={defaultShopPlatform ?? undefined}
+                options={platformRowsOfCc.map((r) => ({ value: r.platform, label: `${r.platform} · ${r.shops} 店铺` }))}
+                onChange={onDefaultPlatformChange}
+              />
+              <Select
+                size="small"
+                style={{ width: 200, flexShrink: 0 }}
+                aria-label="默认店铺"
+                placeholder={defaultShopPlatform ? '选择店铺' : '先选平台'}
+                disabled={!defaultShopPlatform}
+                value={defaultShopId ?? undefined}
+                options={shopRowsOfPlatform.map((s) => ({ value: s.id, label: s.name }))}
+                onChange={(v) => saveDefaultShop(v ?? null)}
+              />
+              {defaultShopId ? (
+                <Tag color="blue" style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
+                  已配置（覆盖维表）
+                </Tag>
+              ) : (
+                <Tag style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
+                  维表默认：{defaultPlatformOf(state.countryCode) ?? '—'} 平台内最低价
+                </Tag>
+              )}
+            </div>
+            <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px' }}>
+              未在筛选条选择平台时，看板所有价格按这里的默认平台店铺取价（单店精确口径）；配置后立即生效。
+              预警中心「平台价差」预警仍按该国全部平台计算，不受此配置影响。
+            </div>
           </Block>
 
           {/* ① 上一代关系 */}
