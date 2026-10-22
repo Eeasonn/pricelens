@@ -16,7 +16,7 @@ import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space }
 import PlatformBox from './PlatformBox';
 import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
-import ProductPickerModal from '../ProductPicker/ProductPickerModal';
+import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
 import { brandOfModel, modelNameOf, shortRomram } from '../ProductCascader/tree';
 import BrandDot from '../BrandMark';
@@ -103,16 +103,13 @@ function ProductPickerEntry() {
   const single = mains.length === 1 ? mains[0] : null;
 
   return (
-    <>
-      <Tooltip
+    <ProductPickerFlyout open={open} onOpenChange={setOpen}>
+      <div
+        role="button"
+        aria-label="选择产品"
         title={mains.length ? mains.map(groupSummaryLine).join('\n') : '点击选择主分析产品与对比产品'}
-        styles={{ root: { whiteSpace: 'pre-line' } }}
-      >
-        <div
-          role="button"
-          aria-label="选择产品"
-          onClick={() => setOpen(true)}
-          style={{
+        onClick={() => setOpen((v) => !v)}
+        style={{
             height: 30,
             display: 'flex',
             alignItems: 'center',
@@ -182,10 +179,8 @@ function ProductPickerEntry() {
             </span>
           )}
           <DownOutlined style={{ marginLeft: 'auto', fontSize: 10, color: color.mute, flexShrink: 0 }} />
-        </div>
-      </Tooltip>
-      <ProductPickerModal open={open} onClose={() => setOpen(false)} />
-    </>
+      </div>
+    </ProductPickerFlyout>
   );
 }
 
