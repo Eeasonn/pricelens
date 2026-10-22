@@ -27,16 +27,23 @@
 // 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；配额每卡
 // 1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8；即改即存。
 // 添加主分析产品 = 最后一个组框向下延长的底边正中的显性大按钮。
-// 破坏性动作轻确认：删整组、「最近」恢复覆盖当前已选。
+// 破坏性动作轻确认：删整组、清空全部、「最近」恢复覆盖当前已选。
 // 第一百二十九轮：组框高度自适应（列表 flex 子项禁止压缩，内容不再被裁切）；
 // 「最近」只占一行——放不下的组合收进行尾「更多」下拉，恢复覆盖已选仍轻确认。
+// 第一百三十轮：组头一行化——「主分析产品」「对比产品」标题、「自动匹配竞品」
+//   与删组 ✕ 同行垂直居中（常规文档流，不再与下方产品行重叠），卡级「配置·颜色」
+//   标识删除；顶栏新增「全部删除」（清空全部组，轻确认）；「最近」改造为「模板」
+//   ——显式保存（默认名 = 主分析产品名，可重命名；单模板 = 一个产品对，多对 =
+//   模板组），不再随浮窗收起自动记录。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Dropdown, Input, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
   CloseOutlined,
+  DeleteOutlined,
   DownOutlined,
+  EditOutlined,
   HolderOutlined,
   PlusOutlined,
   RollbackOutlined,
@@ -67,7 +74,6 @@ import ColorFlyout from '../ProductCascader/ColorFlyout';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import {
   cardQuota,
-  EMPTY_MAIN_LABEL,
   isHuaweiModel,
   MAINS_CAP,
   MAX_LINES_PER_CHART,
@@ -151,6 +157,26 @@ function comboSignature(cards: MainProduct[]): string {
 function contentSignature(cards: MainProduct[]): string {
   const sel = (s: ProductSelection): string => `${selKey(s)}#${[...s.skuIds].sort().join(',')}`;
   return cards.map((c) => `${c.main ? sel(c.main) : '~'}:${c.compares.map(sel).join('+')}`).join('|');
+}
+
+/** 模板持久化（第一百三十轮起显式保存：不再随浮窗收起自动记录） */
+function writeCombos(combos: StoredCombo[]): void {
+  try {
+    localStorage.setItem(LPL.uiMainCombos, JSON.stringify(combos));
+  } catch {
+    /* 存储不可用忽略 */
+  }
+}
+
+/** 模板数上限（放不下的收进「更多」下拉；超限淘汰最旧） */
+const TEMPLATE_CAP = 8;
+
+/** 模板默认名 = 主分析产品名；同型号多组「X · N 组」，多型号「A、B」/「A 等 N 款」 */
+function defaultTemplateName(cards: MainProduct[]): string {
+  const names = [...new Set(cards.map((c) => (c.main ? modelNameOf(c.main.modelId) : '对比产品')))];
+  if (names.length === 1) return cards.length === 1 ? names[0] : `${names[0]} · ${cards.length} 组`;
+  if (names.length === 2) return names.join('、');
+  return `${names[0]} 等 ${names.length} 款`;
 }
 
 // ---------------- 颜色 chip（次级筛选：点开换色 / 多色均价） ----------------
@@ -1119,26 +1145,9 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
 
 // ---------------- 分析对部件 ----------------
 
-/** 组顶标识（多组时显示）：左「第 N 组」，右 = 主品配置·颜色（同主品多组的差异提到卡级） */
-function CardTag({ card, index }: { card: MainProduct; index: number }) {
-  const { romramByKey } = useTreeData();
-  const node = card.main ? romramByKey.get(`${card.main.modelId}|${card.main.romram}`) : undefined;
-  const colorLabel = card.main ? colorLabelOf(node, card.main.skuIds) : '';
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '4px 34px 0',
-        fontSize: 11,
-        color: color.mute,
-      }}
-    >
-      <span>第 {index + 1} 组</span>
-      <span className="tnum">{card.main ? `${card.main.romram}${colorLabel ? ` · ${colorLabel}` : ''}` : EMPTY_MAIN_LABEL}</span>
-    </div>
-  );
+/** 组顶标识（多组时显示）：「第 N 组」（第一百三十轮：右侧配置·颜色文本删除） */
+function CardTag({ index }: { index: number }) {
+  return <div style={{ padding: '4px 8px 0 30px', fontSize: 11, color: color.mute }}>第 {index + 1} 组</div>;
 }
 
 /** 对比区「⚡ 自动匹配竞品」开关（第一百二十八轮）：选中 = 本组对比区由对标
@@ -1221,6 +1230,7 @@ export default function ProductPickerFlyout({
       if (t.closest('[data-lpl-picker-panel]')) return;
       if (t.closest('.ant-popover')) return;
       if (t.closest('.ant-popconfirm')) return;
+      if (t.closest('.ant-modal') || t.closest('.ant-modal-mask')) return;
       onOpenChange(false);
     };
     document.addEventListener('mousedown', onDoc);
@@ -1253,7 +1263,7 @@ export default function ProductPickerFlyout({
                 boxSizing: 'border-box',
               }}
             >
-            <PickerPanel open={open} />
+            <PickerPanel />
           </div>,
           document.body,
         )}
@@ -1261,7 +1271,7 @@ export default function ProductPickerFlyout({
   );
 }
 
-function PickerPanel({ open }: { open: boolean }) {
+function PickerPanel() {
   const { state, actions } = useFilters();
   const mains = state.mains;
 
@@ -1278,36 +1288,36 @@ function PickerPanel({ open }: { open: boolean }) {
     actions.setMains(ids.map((id) => mains.find((c) => c.id === id)!));
   };
 
-  // ---- 最近组合 ----
+  // ---- 模板（第一百三十轮：显式保存的产品对/模板组，替代自动记录的「最近」） ----
   const [combos, setCombos] = useState<StoredCombo[]>(() => readCombos());
-  const recordCombo = (): void => {
-    // 第一百二十五轮（K4）：全空内容（只有空对卡、无主品无对比）不进「最近」——
-    // 签名互相碰撞且无恢复价值
-    if (!mains.some((c) => c.main || c.compares.length)) return;
-    // 组合名按去重后的主品型号表述：同型号多组不带「等」（等 = 还有其他型号）
-    const names = [...new Set(mains.map((c) => (c.main ? modelNameOf(c.main.modelId) : '对比产品')))];
-    const label =
-      names.length === 1
-        ? mains.length === 1
-          ? names[0]
-          : `${names[0]} · ${mains.length} 组`
-        : names.length === 2
-          ? names.join('、')
-          : `${names[0]} 等 ${names.length} 款`;
+  // 名称弹窗（保存新模板 / 重命名既有模板共用）
+  const [dialog, setDialog] = useState<{ mode: 'save' | 'rename'; target: StoredCombo | null; value: string } | null>(null);
+
+  /** 保存当前选择为模板：内容签名已存在 = 原位更新；否则插到最前，超限淘汰最旧 */
+  const saveTemplate = (label: string): void => {
+    const name = label.trim() || defaultTemplateName(mains);
     const sig = comboSignature(mains);
-    const next = [{ label, cards: mains.map((c) => ({ ...c })) }, ...combos.filter((c) => comboSignature(c.cards) !== sig)].slice(0, 5);
+    const entry: StoredCombo = { label: name, cards: mains.map((c) => ({ ...c })) };
+    const idx = combos.findIndex((c) => comboSignature(c.cards) === sig);
+    const next = (idx >= 0 ? combos.map((c, i) => (i === idx ? entry : c)) : [entry, ...combos]).slice(0, TEMPLATE_CAP);
     setCombos(next);
-    try {
-      localStorage.setItem(LPL.uiMainCombos, JSON.stringify(next));
-    } catch {
-      /* 存储不可用忽略 */
-    }
+    writeCombos(next);
   };
-  // 浮窗收起时记录「最近」组合（即改即存，无完成按钮）
-  useEffect(() => {
-    if (!open) recordCombo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+
+  const renameTemplate = (target: StoredCombo, label: string): void => {
+    const name = label.trim();
+    if (!name) return;
+    const next = combos.map((c) => (c === target ? { ...c, label: name } : c));
+    setCombos(next);
+    writeCombos(next);
+  };
+
+  const confirmDialog = (): void => {
+    if (!dialog) return;
+    if (dialog.mode === 'save') saveTemplate(dialog.value);
+    else if (dialog.target) renameTemplate(dialog.target, dialog.value);
+    setDialog(null);
+  };
 
   // 「最近」单行收纳（第一百二十九轮）：量出一行能放下几个 chip，放不下的
   // 组合收进行尾「更多」下拉。隐藏的 chip 用 visibility:hidden 保位，宽度恒可测。
@@ -1347,12 +1357,12 @@ function PickerPanel({ open }: { open: boolean }) {
 
   return (
     <>
-      {/* 顶栏：「最近」组合只占一行（放不下收进行尾「更多」下拉；覆盖非空且
-          不同的当前已选时仍轻确认）+ 右侧全局「全部自动匹配」（与最近行留隔） */}
+      {/* 顶栏：「模板」（显式保存的产品对/模板组，chip 可重命名）只占一行，
+          放不下收进行尾「更多」下拉；右侧 = 保存模板 · 全部删除 · 全部自动匹配 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, minHeight: 26 }}>
         {combos.length > 0 && (
           <>
-            <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>最近</span>
+            <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>模板</span>
             <div
               ref={recentRowRef}
               style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}
@@ -1363,7 +1373,7 @@ function PickerPanel({ open }: { open: boolean }) {
                 const chip = (
                   <span
                     role="button"
-                    aria-label={`恢复组合 ${c.label}`}
+                    aria-label={`恢复模板 ${c.label}`}
                     title={`恢复：${summary}`}
                     className="lpl-pk-ghost"
                     onClick={needConfirm ? undefined : () => applyCombo(c)}
@@ -1384,6 +1394,19 @@ function PickerPanel({ open }: { open: boolean }) {
                   >
                     {c.cards[0].main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
                     {c.label}
+                    <span
+                      role="button"
+                      aria-label={`重命名模板 ${c.label}`}
+                      title="重命名"
+                      className="lpl-pk-ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDialog({ mode: 'rename', target: c, value: c.label });
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer' }}
+                    >
+                      <EditOutlined style={{ fontSize: 10 }} />
+                    </span>
                     <RollbackOutlined style={{ fontSize: 10, color: color.mute }} />
                   </span>
                 );
@@ -1395,7 +1418,7 @@ function PickerPanel({ open }: { open: boolean }) {
                     {needConfirm ? (
                       <Popconfirm
                         zIndex={POPOVER_Z}
-                        title="恢复该组合？"
+                        title="恢复该模板？"
                         description="将替换当前已选的全部内容"
                         okText="恢复"
                         cancelText="取消"
@@ -1430,6 +1453,19 @@ function PickerPanel({ open }: { open: boolean }) {
                         <span className="tnum" style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>
                           {c.cards.length} 组
                         </span>
+                        <span
+                          role="button"
+                          aria-label={`重命名模板 ${c.label}`}
+                          title="重命名"
+                          className="lpl-pk-ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDialog({ mode: 'rename', target: c, value: c.label });
+                          }}
+                          style={{ display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer', flexShrink: 0 }}
+                        >
+                          <EditOutlined style={{ fontSize: 10 }} />
+                        </span>
                       </span>
                     ),
                     title: c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、'),
@@ -1439,7 +1475,7 @@ function PickerPanel({ open }: { open: boolean }) {
                     if (!c) return;
                     if (mains.length > 0 && contentSignature(c.cards) !== currentSig) {
                       Modal.confirm({
-                        title: '恢复该组合？',
+                        title: '恢复该模板？',
                         content: '将替换当前已选的全部内容',
                         okText: '恢复',
                         cancelText: '取消',
@@ -1454,8 +1490,8 @@ function PickerPanel({ open }: { open: boolean }) {
               >
                 <span
                   role="button"
-                  aria-label="更多最近组合"
-                  title="查看全部最近组合"
+                  aria-label="更多模板"
+                  title="查看全部模板"
                   className="lpl-pk-ghost"
                   style={{
                     display: 'inline-flex',
@@ -1479,7 +1515,71 @@ function PickerPanel({ open }: { open: boolean }) {
             )}
           </>
         )}
-        <span style={{ marginLeft: 'auto', paddingLeft: 12, flexShrink: 0 }}>
+        <span style={{ marginLeft: 'auto', paddingLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {mains.length > 0 && (
+            <Tooltip title="把当前选择保存为模板" zIndex={TIP_Z}>
+              <span
+                role="button"
+                aria-label="保存模板"
+                title="把当前选择保存为模板"
+                className="lpl-pk-ghost"
+                onClick={() => setDialog({ mode: 'save', target: null, value: defaultTemplateName(mains) })}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  height: 24,
+                  padding: '0 10px',
+                  borderRadius: radius.pill,
+                  border: `1px solid ${color.hairline}`,
+                  background: color.canvas,
+                  fontSize: 12,
+                  color: color.body,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <PlusOutlined style={{ fontSize: 10 }} /> 保存模板
+              </span>
+            </Tooltip>
+          )}
+          {mains.length > 0 && (
+            <Popconfirm
+              zIndex={POPOVER_Z}
+              title="清空全部组？"
+              description="将移除全部主分析产品与对比产品"
+              okText="清空"
+              cancelText="取消"
+              okButtonProps={{ danger: true, size: 'small' }}
+              cancelButtonProps={{ size: 'small' }}
+              onConfirm={() => actions.setMains([])}
+            >
+              <span style={{ display: 'inline-flex' }}>
+                <span
+                  role="button"
+                  aria-label="全部删除"
+                  title="清空全部组"
+                  className="lpl-pk-del"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    height: 24,
+                    padding: '0 10px',
+                    borderRadius: radius.pill,
+                    border: `1px solid ${color.hairline}`,
+                    background: color.canvas,
+                    fontSize: 12,
+                    color: color.mute,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <DeleteOutlined style={{ fontSize: 11 }} /> 全部删除
+                </span>
+              </span>
+            </Popconfirm>
+          )}
           <MatchPill
             label="全部自动匹配"
             text="全部自动匹配"
@@ -1553,24 +1653,38 @@ function PickerPanel({ open }: { open: boolean }) {
                 boxShadow: dropCard === card.id ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined,
               }}
             >
-              {mains.length > 1 && <CardTag card={card} index={idx} />}
-              {/* 删组 ✕ 在整框右上角：主品的删除 = 整组删除（含对比区），更明显 */}
-              <span style={{ position: 'absolute', top: 6, right: 6, zIndex: 2, display: 'inline-flex' }}>
-                <Popconfirm
-                  zIndex={POPOVER_Z}
-                  title="删除该组？"
-                  description="组内对比产品一并移除"
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true, size: 'small' }}
-                  cancelButtonProps={{ size: 'small' }}
-                  onConfirm={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
-                >
-                  <span style={{ display: 'inline-flex' }}>
-                    <GroupDeleteX label={card.main ? `删除该组 ${modelNameOf(card.main.modelId)}` : '删除该组'} />
+              {mains.length > 1 && <CardTag index={idx} />}
+              {/* 组头一行：「主分析产品」「对比产品」标题、「自动匹配竞品」（有对比时）
+                  与删组 ✕ 同行垂直居中——常规文档流，不与下方产品行重叠 */}
+              <div style={{ display: 'flex', alignItems: 'center', height: 34, paddingRight: 8, flexShrink: 0 }}>
+                <span style={{ width: 16, flexShrink: 0 }} />
+                <div style={{ flex: '0 0 300px', minWidth: 0, paddingLeft: 12, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
+                <div aria-hidden style={{ width: 1, flexShrink: 0 }} />
+                <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
+                  <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
+                  {card.compares.length > 0 && (
+                    <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'inline-flex' }}>
+                      <AutoMatchInline card={card} />
+                    </span>
+                  )}
+                  <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+                    <Popconfirm
+                      zIndex={POPOVER_Z}
+                      title="删除该组？"
+                      description="组内对比产品一并移除"
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true, size: 'small' }}
+                      cancelButtonProps={{ size: 'small' }}
+                      onConfirm={() => actions.setMains(mains.filter((c) => c.id !== card.id))}
+                    >
+                      <span style={{ display: 'inline-flex' }}>
+                        <GroupDeleteX label={card.main ? `删除该组 ${modelNameOf(card.main.modelId)}` : '删除该组'} />
+                      </span>
+                    </Popconfirm>
                   </span>
-                </Popconfirm>
-              </span>
+                </div>
+              </div>
               <div style={{ display: 'flex', alignItems: 'stretch' }}>
               {/* 拖拽把手（换序 = 分离面板顺序） */}
               <span
@@ -1589,7 +1703,7 @@ function PickerPanel({ open }: { open: boolean }) {
                 <HolderOutlined style={{ fontSize: 12 }} />
               </span>
 
-              {/* 左格：主分析产品（极浅蓝底 + 左上角标题；与右格以分界线隔开） */}
+              {/* 左格：主分析产品（极浅蓝底；标题在组头行，与右格以分界线隔开） */}
               <div
                 style={{
                   flex: '0 0 300px',
@@ -1601,7 +1715,6 @@ function PickerPanel({ open }: { open: boolean }) {
                   boxSizing: 'border-box',
                 }}
               >
-                <div style={{ padding: '8px 12px 0', fontSize: 11, fontWeight: 600, color: selectSoftInk, letterSpacing: 0.2 }}>主分析产品</div>
                 {card.main ? (
                   <MainRow card={card} />
                 ) : (
@@ -1616,25 +1729,19 @@ function PickerPanel({ open }: { open: boolean }) {
               {/* 分界线：主分析产品 | 对比产品 */}
               <div aria-hidden style={{ width: 1, background: color.hairline, flexShrink: 0 }} />
 
-              {/* 右格：对比产品（标题左上；「自动匹配竞品」有对比时格顶居中、
-                  无对比时与添加入口一起格内正中；添加入口恒在已选条目下方居中） */}
+              {/* 右格：对比产品（标题与「自动匹配竞品」在组头行；无对比时
+                  自动匹配竞品与添加入口一起格内正中，有对比时添加入口居下中） */}
               <div
                 style={{
                   flex: '1 1 0',
                   minWidth: 0,
-                  position: 'relative',
                   display: 'flex',
                   flexDirection: 'column',
-                  padding: '26px 10px 10px',
+                  gap: 6,
+                  padding: '8px 10px 10px',
                   boxSizing: 'border-box',
                 }}
               >
-                <span style={{ position: 'absolute', top: 9, left: 10, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
-                {card.compares.length > 0 && (
-                  <span style={{ position: 'absolute', top: 5, left: '50%', transform: 'translateX(-50%)', display: 'inline-flex' }}>
-                    <AutoMatchInline card={card} />
-                  </span>
-                )}
                 {card.compares.length === 0 ? (
                   <div style={{ flex: 1, minHeight: 92, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     <AutoMatchInline card={card} />
@@ -1689,6 +1796,29 @@ function PickerPanel({ open }: { open: boolean }) {
           </div>
         )}
       </div>
+
+      {/* 名称弹窗：保存新模板 / 重命名既有模板共用 */}
+      <Modal
+        open={dialog != null}
+        title={dialog?.mode === 'save' ? '保存模板' : '重命名模板'}
+        okText="保存"
+        cancelText="取消"
+        zIndex={POPOVER_Z}
+        width={420}
+        okButtonProps={{ disabled: !dialog?.value.trim() }}
+        onOk={confirmDialog}
+        onCancel={() => setDialog(null)}
+        destroyOnClose
+      >
+        <Input
+          value={dialog?.value ?? ''}
+          placeholder="模板名称"
+          maxLength={40}
+          autoFocus
+          onChange={(e) => setDialog((d) => (d ? { ...d, value: e.target.value } : d))}
+          onPressEnter={confirmDialog}
+        />
+      </Modal>
     </>
   );
 }
