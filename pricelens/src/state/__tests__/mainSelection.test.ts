@@ -100,19 +100,14 @@ describe('buildCards（跨页建卡正源：去重 / 封顶 / 首卡对比继承
     expect(buildCards(Array.from({ length: MAINS_CAP + 4 }, (_, i) => synth(i)))).toHaveLength(MAINS_CAP);
   });
 
-  it('首卡继承 firstCompares：9+1 条 → 截到卡配额，与主品同组者剔除；其余卡落空', () => {
+  it('首卡继承 firstCompares：9+1 条 → 截到卡配额，与主品同组者剔除；其余卡落空（无自动跟随，autoMatch 选项已退役）', () => {
     const comps9 = distinctComps(9);
     const cards = buildCards([ownSel, synth(1)], { firstCompares: [...comps9, ownSel] });
     expect(cards).toHaveLength(2);
     expect(cards[0].compares).toHaveLength(cardQuota(cards[0]));
     expect(cards[0].compares.some((c) => selKey(c) === selKey(ownSel))).toBe(false);
     expect(cards[1].compares).toEqual([]);
-  });
-
-  it('autoMatch：卡对比区按矩阵带出（矩阵未覆盖的型号为空）', () => {
-    const cards = buildCards([ownSel, synth(1)], { autoMatch: true });
-    expect(cards[0].compares).toEqual(autoComparesFor(cards[0]));
-    expect(cards[1].compares).toEqual([]);
+    expect(buildCards([ownSel, synth(1)])[1].compares).toEqual([]);
   });
 });
 
@@ -137,7 +132,7 @@ describe('autoComparesFor（矩阵 → 剔除自身 → 配额截断）', () => 
   });
 });
 
-describe('reapplyAuto（自动跟随：华为主品卡重算、非华为主品卡与空对不动）', () => {
+describe('reapplyAuto（autoMatchAll 纯函数核：华为主品卡重算、非华为主品卡与空对不动）', () => {
   it('华为卡对比区被矩阵产出替换；竞品卡与空对的手动对比区保留', () => {
     const comp = dimProduct.find((p) => !p.is_own && p.countries.includes('RU'))!;
     const compModel = comp.sku_id.split('__')[0];
@@ -156,24 +151,13 @@ describe('reapplyAuto（自动跟随：华为主品卡重算、非华为主品�
   });
 });
 
-describe('migrateV10（own/competitors → 逐配置卡）', () => {
-  it('自动模式：逐卡按矩阵重算', () => {
-    const cards = migrateV10([ownSel], [], true);
+describe('migrateV10（own/competitors → 逐配置卡，对比区按现行矩阵重算）', () => {
+  it('逐卡按矩阵重算', () => {
+    const cards = migrateV10([ownSel], []);
     expect(cards).toHaveLength(1);
     expect(cards[0].main).toEqual(ownSel);
+    expect(cards[0].compares).toEqual(autoComparesFor(cards[0]));
     expect(cards[0].compares.length).toBeGreaterThan(0);
-  });
-
-  it('手动模式：矩阵命中优先、同容量 fallback、卡配额截断', () => {
-    const comps = autoComparesFor(card(ownSel));
-    const foreign = dimProduct.find(
-      (p) => !p.is_own && p.countries.includes('RU') && p.romram.replace(/\s+/g, '') === comps[0]?.romram.replace(/\s+/g, '') && !comps.some((c) => c.modelId === p.sku_id.split('__')[0]),
-    );
-    const globalComps = foreign ? [comps[0], { modelId: foreign.sku_id.split('__')[0], romram: foreign.romram, skuIds: [foreign.sku_id] }] : comps;
-    const cards = migrateV10([ownSel], globalComps, false);
-    expect(cards[0].compares[0].modelId).toBe(comps[0].modelId); // 矩阵命中在前
-    expect(cards[0].compares.some((c) => c.modelId === globalComps[globalComps.length - 1].modelId)).toBe(true); // 同容量 fallback 补位
-    expect(cards[0].compares.length).toBeLessThanOrEqual(cardQuota(cards[0]));
   });
 
   it('纯竞品视角（own 空）：竞品逐组成卡、无对比、卡数封顶', () => {
@@ -181,7 +165,7 @@ describe('migrateV10（own/competitors → 逐配置卡）', () => {
       .filter((p) => !p.is_own && p.countries.includes('RU'))
       .slice(0, 12)
       .map((p) => ({ modelId: p.sku_id.split('__')[0], romram: p.romram, skuIds: [p.sku_id] }));
-    const cards = migrateV10([], compSels, true);
+    const cards = migrateV10([], compSels);
     expect(cards.length).toBeLessThanOrEqual(MAINS_CAP);
     expect(cards.every((c) => c.compares.length === 0)).toBe(true);
     expect(cards.every((c) => c.main != null)).toBe(true);
@@ -209,8 +193,8 @@ describe('expandV11Cards（v11 卡 configs[] → 逐配置卡）', () => {
   });
   const keep: ProductSelection = { modelId: 'keep-x', romram: '8+128 GB', skuIds: ['keep-x__8+128'] };
 
-  it('手动模式：首配置卡继承对比区，其余配置卡落空', () => {
-    const cards = expandV11Cards([{ modelId: multiModel, configs, compares: [keep] }], false);
+  it('首配置卡继承对比区，其余配置卡落空（无自动跟随）', () => {
+    const cards = expandV11Cards([{ modelId: multiModel, configs, compares: [keep] }]);
     expect(cards).toHaveLength(configs.length);
     expect(cards[0].compares).toEqual([keep]);
     expect(cards.slice(1).every((c) => c.compares.length === 0)).toBe(true);
@@ -221,23 +205,23 @@ describe('expandV11Cards（v11 卡 configs[] → 逐配置卡）', () => {
     // 旧 v11 对比区里混进与首配置同组的项（空格变体也算同组）
     const sameAsMain: ProductSelection = { ...configs[0], romram: configs[0].romram.replace(/\s+/g, ' ') + ' ' };
     const extras = Array.from({ length: MAX_LINES_PER_CHART + 2 }, (_, i) => ({ modelId: `x${i}`, romram: '8+128 GB', skuIds: [`x${i}__8+128`] }));
-    const cards = expandV11Cards([{ modelId: multiModel, configs, compares: [sameAsMain, keep, ...extras] }], false);
+    const cards = expandV11Cards([{ modelId: multiModel, configs, compares: [sameAsMain, keep, ...extras] }]);
     expect(cards[0].compares.some((c) => selKey(c) === selKey(configs[0]))).toBe(false);
     expect(cards[0].compares[0]).toEqual(keep);
     expect(cards[0].compares).toHaveLength(cardQuota(cards[0]));
   });
 
-  it('自动模式：其余配置卡按矩阵补齐；同配置去重', () => {
+  it('同配置去重；其余配置卡一律落空', () => {
     const dup = [...configs, configs[0]];
-    const cards = expandV11Cards([{ modelId: multiModel, configs: dup, compares: [] }], true);
+    const cards = expandV11Cards([{ modelId: multiModel, configs: dup, compares: [] }]);
     expect(cards).toHaveLength(configs.length);
     expect(configs.length).toBeGreaterThan(1);
-    expect(cards[1].compares).toEqual(autoComparesFor(cards[1]));
+    expect(cards[1].compares).toEqual([]);
   });
 
   it('卡数封顶 MAINS_CAP', () => {
     const many = Array.from({ length: MAINS_CAP + 4 }, (_, i) => ({ modelId: `m${i}`, romram: '8+128 GB', skuIds: [`m${i}__8+128`] }));
-    expect(expandV11Cards(many.map((sel) => ({ modelId: sel.modelId, configs: [sel], compares: [] })), false)).toHaveLength(MAINS_CAP);
+    expect(expandV11Cards(many.map((sel) => ({ modelId: sel.modelId, configs: [sel], compares: [] })))).toHaveLength(MAINS_CAP);
   });
 });
 

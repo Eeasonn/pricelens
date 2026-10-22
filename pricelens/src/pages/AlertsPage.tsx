@@ -155,9 +155,9 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
 }
 
 /** 单条触发的「看板 ↗」：带周焦点下钻，同时把主分析卡切到该产品
- *  （第一百一十七轮：华为产品 = 主分析卡 + 自动跟随对比；竞品告警优先从
- *  对标矩阵反查映射的华为配置建卡（沿用「主品 + 对比」读法），矩阵未覆盖
- *  或无映射时该竞品自身成主分析卡） */
+ *  （华为产品 = 主分析卡；竞品告警优先从对标矩阵反查映射的华为配置建卡并
+ *  带矩阵对比区（确保被告警的竞品在图中），矩阵未覆盖或无映射时该竞品自身
+ *  成主分析卡；第一百二十六轮起无自动跟随模式，对比区一律显式构造） */
 function useOpenInDashboard() {
   const { go } = usePage();
   const { state, actions } = useFilters();
@@ -179,17 +179,12 @@ function useOpenInDashboard() {
           ? productSelectionOfSeriesKey(`${mapping.own_model_id}__${normalize(mapping.own_romram)}`)
           : null;
         if (mappedOwn) {
-          const hasTarget = autoComparesFor({ id: 'probe', main: mappedOwn, compares: [] }).some(
+          const auto = autoComparesFor({ id: 'probe', main: mappedOwn, compares: [] });
+          const hasTarget = auto.some(
             (group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom,
           );
-          if (state.autoMatch && hasTarget) {
-            // 映射命中且自动开着：setMains 走跟随，目标竞品自然在对比区
-            actions.setMains(buildCards([mappedOwn]));
-          } else {
-            // 显式补入该竞品 → 手动模式（原「补入即转手动」语义）
-            actions.set({ autoMatch: false });
-            actions.setMains(buildCards([mappedOwn], { firstCompares: [sel] }));
-          }
+          // 映射命中：带全量矩阵对比区（目标竞品在内）；矩阵异常缺失时显式补入该竞品
+          actions.setMains(buildCards([mappedOwn], { firstCompares: hasTarget ? auto : [sel] }));
         } else {
           // 无映射：竞品自身即分析对象
           actions.setMains(buildCards([sel]));

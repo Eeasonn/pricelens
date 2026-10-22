@@ -75,7 +75,6 @@ export const defaultFilters: FiltersState = {
   currency: 'usd', // 默认 USD（真实数据按行内汇率折算）
   priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
   agg: 'avg',
-  autoMatch: true, // 第三十四轮：对比自动匹配默认开（对比区随华为主品跟随，迪总「减少筛选器」）
   alertSubs: [], // 第五十二轮：预警中心订阅（默认空，入口 = 看板页签铃铛 / 总览型号块）
   alertTypes: DEFAULT_ALERT_TYPES, // 追补⑨：四类预警全局开关
   alertThresholds: DEFAULT_ALERT_THRESHOLDS, // 追补⑨：四类全局阈值（旧版共用 1.5% 一条线）
@@ -96,9 +95,9 @@ export const defaultFilters: FiltersState = {
  *   四类开关+阈值 + alertProducts 按产品覆写；v8 持久化迁移保留订阅与旧阈值（三类同值）。
  * v10（2026-10-20）：真实数据接入——SKU/渠道 id 空间全部更换，旧持久化整体失效落新默认。
  * v11（2026-10-21，第一百一十七轮）：own/competitors → mains（每主品卡自带对比区）；
- *   v10 载荷读入后自动迁移（migrateV10：自动=逐卡重算、手动=按旧面板口径分配）。
+ *   v10 载荷读入后自动迁移（migrateV10：矩阵补对比区）。
  * v12（2026-10-21，第一百二十轮）：卡收敛为唯一主品（main: ProductSelection | null）；
- *   v11 卡 configs[] 展开为逐配置卡（expandV11Cards：首卡继承对比区，其余按自动匹配补）。
+ *   v11 卡 configs[] 展开为逐配置卡（expandV11Cards：首卡继承对比区，其余落空）。
  */
 const DEFAULTS_V = 12;
 
@@ -232,7 +231,7 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       ['currency', parsed.currency === 'usd' || parsed.currency === 'local'],
       ['priceTypes', isPriceTypes(parsed.priceTypes)],
       ['agg', parsed.agg === 'avg' || parsed.agg === 'min'],
-      ['autoMatch', typeof parsed.autoMatch === 'boolean'],
+      // 第一百二十六轮：autoMatch 键退役——旧载荷里的残留值不读不写
       ['alertSubs', isStringArray(parsed.alertSubs)],
       ['alertTypes', isAlertTypes(parsed.alertTypes)],
       ['alertThresholds', isAlertThresholds(parsed.alertThresholds)],
@@ -284,8 +283,8 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
   return { mains: [] };
 }
 
-/** 口径（国家/产业）变化后的状态整理：规范作用域、平台回默认电渠、主分析按新口径重算；
- *  自动匹配开时对比区随新口径矩阵重算（reapplyAuto），手动模式保留用户挑选 */
+/** 口径（国家/产业）变化后的状态整理：规范作用域、平台回默认电渠、
+ *  主分析失效时按新口径重算默认卡（第一百二十六轮起无自动跟随模式） */
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
   syncScopeRegistries(scope.countryCode);
@@ -297,7 +296,6 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
     ...scope,
     platform: platformOk ? s.platform : null,
     ...defaults,
-    ...(needMain ? {} : s.autoMatch ? { mains: reapplyAuto(s.mains) } : {}),
   };
   return next;
 }
@@ -305,10 +303,8 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
 /**
  * 启动恢复：
  * 1) 无持久化 / 持久化版本旧于 v10 → 新默认视图（周 · USD · 默认主分析卡 + 其配置对比）；
- * 2) v11 → mains 照原样恢复；v10 → own/competitions 迁移成卡（migrateV10）；
- * 3) 对比自动匹配开时，启动即按当前生效矩阵重算华为主品卡对比区——
- *    持久化的对比清单可能产自旧维表/旧矩阵（第一百一十六轮自愈语义延续）；
- *    手动模式（autoMatch 关）不动用户挑选。
+ * 2) v11/v12 → mains 照原样恢复；v10 → own/competitors 迁移成卡（migrateV10，矩阵补对比区）。
+ * 第一百二十六轮起无启动自愈重算——对比区以持久化为准，可用「全部自动匹配」一键取回。
  */
 function loadBaseState(): FiltersState {
   let restored: FiltersState | null = null;
@@ -324,35 +320,31 @@ function loadBaseState(): FiltersState {
     const { v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
     restored = { ...defaultFilters, ...rest } as FiltersState;
     // 迁移里的矩阵查询（groupsFromBenchmark）按数据层缺省国家取分国对标，须先切到载荷国家，
-    // 否则手动模式下按 'RU' 矩阵分配的对比区会被固化写回
+    // 否则迁移产出的对比区会被别的国家矩阵固化写回
     syncScopeRegistries(restored.countryCode);
     // v10 → v12（第一百一十七轮起）：own/competitors → 逐配置卡
     if (parsed.v === 10) {
-      restored.mains = migrateV10(legacyOwn ?? [], legacyCompetitors ?? [], restored.autoMatch);
+      restored.mains = migrateV10(legacyOwn ?? [], legacyCompetitors ?? []);
     }
     // v11 → v12（第一百二十轮）：卡 configs[] 展开为逐配置卡
     if (parsed.v === 11 && legacyV11Mains) {
-      restored.mains = expandV11Cards(legacyV11Mains, restored.autoMatch);
+      restored.mains = expandV11Cards(legacyV11Mains);
     }
   }
   if (!restored) restored = { ...defaultFilters };
-  if (restored.autoMatch && restored.mains.length) {
-    restored.mains = reapplyAuto(restored.mains);
-  }
   return applyScopeDefaults(restored, false);
 }
 
 /** 启动时才应用 URL；运行中的 reset 使用 loadBaseState，避免 URL 覆写锁死重置结果。 */
 function applyUrlOverrides(base: FiltersState): FiltersState {
-  // 追补⑩（建议③）：URL 覆写最后应用——分享链接 > 持久化 > 默认视图；
-  // 主分析覆写存在时对比区按现行 autoMatch 规则带出（与手选同语义）
+  // 追补⑩（建议③）：URL 覆写最后应用——分享链接 > 持久化 > 默认视图
   const url = readUrlOverrides();
   let restored = base;
-  // 先把数据层缺省国家切到链接指定国家，再按该国对标矩阵带出对比（否则会沿用持久化国家的对标）
+  // 先把数据层缺省国家切到链接指定国家（后续矩阵查询按它取分国对标）
   syncScopeRegistries(url.filters.countryCode ?? base.countryCode);
   if (url.filters.mains?.length) {
     // URL 只声明主品结构；对比区尽量沿用持久化里同「型号×配置」卡的手动搭配
-    //（否则刷新/分享链接会清掉用户手动配好的对比），自动模式再按矩阵重算
+    //（否则刷新/分享链接会清掉用户手动配好的对比）
     const persistedByKey = new Map(
       base.mains.flatMap((c) => (c.main ? [[selKey(c.main), c] as const] : [])),
     );
@@ -363,7 +355,7 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
     restored = {
       ...restored,
       ...url.filters,
-      mains: restored.autoMatch ? reapplyAuto(merged) : merged,
+      mains: merged,
     };
   } else if (Object.keys(url.filters).length > 0) {
     restored = { ...restored, ...url.filters };
@@ -382,7 +374,7 @@ interface FiltersCtx {
 
 const Ctx = createContext<FiltersCtx>({
   state: defaultFilters,
-  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, autoMatchCard: () => {}, setGranularity: () => {}, setAutoMatch: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
+  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, autoMatchCard: () => {}, autoMatchAll: () => {}, setGranularity: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
 });
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
@@ -414,16 +406,14 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       plat: state.platform?.platforms.join(',') || null,
       shop: state.platform?.shopIds.join(',') || null,
     });
-  }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform, state.autoMatch]);
+  }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform]);
 
-  // §13：对标配置保存（CONFIG_CHANGED_EVENT）→ 自动匹配开启时立即按新矩阵重算
-  // 华为主品卡对比区（矩阵维护入口 = 总览「＋添加竞品」浮窗 / 配置页）；
-  // 手动模式不动用户挑选。fx 为读取时取值，图表侧自行监听。
+  // §13：对标配置保存（CONFIG_CHANGED_EVENT，入口 = 总览「＋添加竞品」浮窗 / 配置页）。
+  // 第一百二十六轮起对比区不自动跟随——新矩阵经「自动匹配竞品 / 全部自动匹配」
+  // 一次性取回。这里仅重建 state 对象，让图表侧重读配置取值（如参考汇率）。
   useEffect(() => {
     const handler = () => {
-      // Always create a new state object so chart consumers re-read configuration
-      // getters (notably the reference FX rate) even when auto matching is off.
-      setState((s) => ({ ...s, ...(s.autoMatch ? { mains: reapplyAuto(s.mains) } : {}) }));
+      setState((s) => ({ ...s }));
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, handler);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, handler);
@@ -446,27 +436,27 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       /** 回到默认视图（含数据默认主分析卡 + 其配置对比区） */
       reset: () => setState(loadBaseState()),
 
-      /**
-       * 主分析卡结构变化（第一百一十七轮）：卡/配置增删、换序。autoMatch 开 =
-       * 华为主品卡对比区随新配置重算（配额收口）；关 = 全部保留（手动语义）。
-       */
+      /** 主分析卡结构变化（增删卡/换主品/换序）：照原样写入（无自动跟随） */
       setMains: (list) =>
-        setState((s) => ({ ...s, mains: s.autoMatch ? reapplyAuto(list) : list })),
+        setState((s) => ({ ...s, mains: list })),
 
-      /** 手动改某卡对比区：写入即退出自动匹配（原第三十四轮语义，全局开关） */
+      /** 手动改某卡对比区：直接写入 */
       setCardCompares: (cardId, compares) =>
         setState((s) => ({
           ...s,
-          autoMatch: false,
           mains: s.mains.map((c) => (c.id === cardId ? { ...c, compares } : c)),
         })),
 
-      /** 单卡「自动匹配竞品」：按矩阵重算该卡（不动 autoMatch 开关——手动模式下也可单卡取回） */
+      /** 单卡「自动匹配竞品」：一次性按矩阵重算该卡对比区 */
       autoMatchCard: (cardId) =>
         setState((s) => ({
           ...s,
           mains: s.mains.map((c) => (c.id === cardId ? { ...c, compares: autoComparesFor(c) } : c)),
         })),
+
+      /** 全局「全部自动匹配」：一次性按矩阵重算全部华为主品卡对比区（非华为卡不动） */
+      autoMatchAll: () =>
+        setState((s) => ({ ...s, mains: reapplyAuto(s.mains) })),
 
       /**
        * §5.4/§5.6 切换粒度：保持可见时间跨度只换桶。
@@ -480,11 +470,9 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
         }),
 
       /**
-       * 自动匹配开关。开 = 立即按配置矩阵重算全部华为主品卡；
-       * 关 = 保留当前对比转为手动（可自由增删）。
+       * 自动匹配开关已退役（第一百二十六轮）：自动匹配只剩一次性动作
+       * autoMatchCard / autoMatchAll，对比区平时完全由用户持有。
        */
-      setAutoMatch: (on) =>
-        setState((s) => ({ ...s, autoMatch: on, ...(on ? { mains: reapplyAuto(s.mains) } : {}) })),
 
       /** 第五十二轮：单系列订阅切换（看板图例页签铃铛） */
       toggleAlertSub: (key) =>

@@ -74,8 +74,8 @@ export function autoComparesFor(card: MainProduct): ProductSelection[] {
     .slice(0, cardQuota(card));
 }
 
-/** 自动跟随重算：华为主品卡（矩阵覆盖侧）对比区 = 矩阵产出（矩阵为空即清空）；
- *  非华为主品卡与空对无矩阵可依，手动挑选的对比区不被动清空。 */
+/** 全量「自动匹配」重算（autoMatchAll 的纯函数核）：华为主品卡对比区 = 矩阵产出
+ *  （矩阵为空即清空）；非华为主品卡与空对无矩阵可依，已有对比区不被动清空。 */
 export function reapplyAuto(mains: MainProduct[]): MainProduct[] {
   return mains.map((card) =>
     card.main && isHuaweiModel(card.main.modelId) ? { ...card, compares: autoComparesFor(card) } : card,
@@ -95,10 +95,10 @@ export function withMain(card: MainProduct, sel: ProductSelection): MainProduct 
 
 /** 跨页建卡正源（总览走势跳转 / 对比浮层进看板 / 预警看板下钻共用）：
  *  按 selKey 去重、封顶 MAINS_CAP；首卡继承 firstCompares（剔除与主品同组、
- *  截卡配额），其余卡 autoMatch 时按矩阵带出对比区，否则落空。 */
+ *  截卡配额），其余卡对比区落空（自动匹配 = 一次性动作，见 autoMatchCard/autoMatchAll）。 */
 export function buildCards(
   sels: ProductSelection[],
-  opts: { firstCompares?: ProductSelection[]; autoMatch?: boolean } = {},
+  opts: { firstCompares?: ProductSelection[] } = {},
 ): MainProduct[] {
   const out: MainProduct[] = [];
   const seen = new Set<string>();
@@ -110,8 +110,6 @@ export function buildCards(
     const card: MainProduct = { id: newCardId(), main: sel, compares: [] };
     if (out.length === 0 && opts.firstCompares?.length) {
       card.compares = opts.firstCompares.filter((c) => selKey(c) !== key).slice(0, cardQuota(card));
-    } else if (opts.autoMatch) {
-      card.compares = autoComparesFor(card);
     }
     out.push(card);
   }
@@ -126,10 +124,9 @@ export function cardsFromSelections(list: ProductSelection[]): MainProduct[] {
 
 /** v11 → v12 持久化迁移：旧卡 configs[] 展开为逐配置卡——
  *  首配置卡继承原对比区（剔除与主品同组项、截配额，与 withMain/buildCards 同口径）；
- *  其余配置卡自动模式按矩阵补、手动模式落空。 */
+ *  其余配置卡落空（对比区由用户点「自动匹配竞品/全部自动匹配」按需取回）。 */
 export function expandV11Cards(
   cards: { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[],
-  autoMatch: boolean,
 ): MainProduct[] {
   const out: MainProduct[] = [];
   const seen = new Set<string>();
@@ -141,37 +138,20 @@ export function expandV11Cards(
       const empty: MainProduct = { id: newCardId(), main: sel, compares: [] };
       out.push({
         ...empty,
-        compares: i === 0
-          ? old.compares.filter((c) => selKey(c) !== key).slice(0, cardQuota(empty))
-          : autoMatch ? autoComparesFor(empty) : [],
+        compares: i === 0 ? old.compares.filter((c) => selKey(c) !== key).slice(0, cardQuota(empty)) : [],
       });
     });
   }
   return out;
 }
 
-/** v10 → v12 持久化迁移：旧 own + competitors（全局一份）→ 每配置一张卡。
- *  - autoMatch 开：逐卡按矩阵重算（自愈口径延续）；
- *  - autoMatch 关：把旧全局竞品按旧看板面板口径分配——矩阵映射命中优先、
- *    同容量 fallback 补位、截到卡配额；
- *  - 旧「纯竞品视角」（own 空）：竞品逐组成卡（无对比区），保底 MAINS_CAP 卡。 */
-export function migrateV10(own: ProductSelection[], competitors: ProductSelection[], autoMatch: boolean): MainProduct[] {
+/** v10 → v12 持久化迁移：旧 own + competitors（全局一份）→ 每配置一张卡，
+ *  对比区按矩阵重算（旧全局竞品只是当时的矩阵产出，维表换代后以现行矩阵为准）；
+ *  旧「纯竞品视角」（own 空）：竞品逐组成卡（无对比区），保底 MAINS_CAP 卡。 */
+export function migrateV10(own: ProductSelection[], competitors: ProductSelection[]): MainProduct[] {
   if (!own.length) return clampMains(cardsFromSelections(competitors));
   const cards = clampMains(cardsFromSelections(own));
-  if (autoMatch) return cards.map((card) => ({ ...card, compares: autoComparesFor(card) }));
-  const globalKeys = new Set(competitors.map(selKey));
-  return cards.map((card) => {
-    const ownKey = card.main ? selKey(card.main) : '';
-    const mapped = groupsFromBenchmark(card.main ? [card.main] : []).filter(
-      (c) => globalKeys.has(selKey(c)) && selKey(c) !== ownKey,
-    );
-    const mappedKeys = new Set(mapped.map(selKey));
-    const fallback = competitors.filter(
-      (c) => !mappedKeys.has(selKey(c)) && selKey(c) !== ownKey
-        && card.main != null && norm(c.romram) === norm(card.main.romram),
-    );
-    return { ...card, compares: [...mapped, ...fallback].slice(0, cardQuota(card)) };
-  });
+  return cards.map((card) => ({ ...card, compares: autoComparesFor(card) }));
 }
 
 /** 合并图取数组：全部主品（按卡序）+ 全部对比区并集（按卡序去重；主品已有者不重复） */
