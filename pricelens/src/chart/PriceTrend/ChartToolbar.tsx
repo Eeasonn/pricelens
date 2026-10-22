@@ -2,11 +2,12 @@
 // 图顶工具行（第五十二轮单行三区 → 第五十四轮追补抽为独立组件）：
 // 左 = 币种符号 + Y 轴设置齿轮（每格高度/刻度线/自动压缩/折线样式弹层）
 //     + 折后价/RRP 粗细线胶囊；
-// 右 = 大促档期 / offer 权益 圆框组 + 「⋯ 更多」二级菜单按钮。
+// 右 = 大促档期 / offer 权益 圆框组 + 「多平台比价」胶囊按钮 + 「⋯ 更多」二级菜单。
 // 第五十六轮（领导页面清洁要求）：最高/最低价、价格变化提醒不是主要功能——
 // 从常驻圆框组撤出，收进「⋯ 更多」Popover（默认关闭；启用时 ⋯ 按钮带蓝点
-// 提示有隐藏的激活功能）；促销力度明细（原图下横向热力带）也收到该菜单，
-// 点「打开促销力度明细」弹出二级抽屉（纵向表格）。
+// 提示有隐藏的激活功能）。
+// 本轮：多平台比价从 ⋯ 菜单上浮为带文字的胶囊按钮（单一显性入口，避免分叉）；
+// ⋯ 菜单只保留最高/最低价标注与价格变化提醒两个开关。
 // 第五十四轮追补（用户反馈）：
 // ① 圆框组居右（原 margin auto 居中）——右侧空间留白可读性更好；
 // ② 阈值数值占位定宽（≥ 5% / ≥ 12.5% 同宽）——拖滑杆时组宽不再逐帧抖动；
@@ -14,7 +15,7 @@
 //    面板内不再渲染各自的设置行（Chart chrome=false）。
 // ============================================================
 import { Checkbox, Popover, Segmented, Slider } from 'antd';
-import { MoreOutlined, SettingOutlined } from '@ant-design/icons';
+import { MoreOutlined, SettingOutlined, SwapOutlined } from '@ant-design/icons';
 import { forwardRef, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
 import { color, fontSize, radius, localCurrencySymbol } from '../../theme/tokens';
@@ -46,11 +47,9 @@ export interface ChartToolbarProps {
   onMaxMinOn?: (v: boolean) => void;
   changeThreshold?: number | null;
   onChangeThreshold?: (v: number | null) => void;
-  /** 第五十六轮：打开促销力度明细抽屉（二级）；传了才渲染「⋯ 更多」菜单。
-   *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开，
-   *  ⋯ 菜单不设时点入口（单一入口，避免分叉） */
-  onOpenPromoDetail?: () => void;
-  /** 第一百三十四轮：打开多平台比价弹窗（次级功能）；价格看板传入 */
+  /** ⋯ 更多菜单只保留两个次级开关（最高/最低价标注 + 价格变化提醒）。
+   *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开 */
+  /** 打开多平台比价弹窗（本轮起为右侧独立胶囊按钮；传了才渲染） */
   onOpenPlatformCompare?: () => void;
 }
 
@@ -240,7 +239,8 @@ export default function ChartToolbar(props: ChartToolbarProps) {
         </div>
       )}
       {/* 右区：高频视图开关圆框组（第五十六轮收窄：只留大促档期/offer 权益）+
-          「⋯ 更多」二级菜单（极值标注/价格变化提醒/促销力度明细抽屉入口） */}
+          「多平台比价」胶囊按钮（本轮起显性化，单一入口）+
+          「⋯ 更多」二级菜单（仅最高/最低价标注、价格变化提醒两个开关） */}
       {toolbarOn && (
         <div
           style={{
@@ -272,97 +272,86 @@ export default function ChartToolbar(props: ChartToolbarProps) {
               <span style={{ fontSize: 12 }}>促销权益</span>
             </Checkbox>
           </div>
-          {props.onOpenPromoDetail && (
-            <Popover
-              trigger="click"
-              placement="bottomRight"
-              content={
-                <div style={{ width: 252 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 8 }}>更多功能</div>
-                  <Checkbox checked={props.maxMinOn === true} onChange={(e) => props.onMaxMinOn!(e.target.checked)}>
-                    <span style={{ fontSize: 12 }}>最高/最低价标注</span>
+          {/* 多平台比价（本轮入口显性化）：描边药丸按钮，外形语言同左侧 PriceTypePill */}
+          {props.onOpenPlatformCompare && (
+            <button
+              type="button"
+              title="单个产品在各平台的价格走势对比"
+              onClick={props.onOpenPlatformCompare}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                height: 22,
+                padding: '0 10px',
+                fontSize: 12,
+                lineHeight: '20px',
+                borderRadius: radius.pill,
+                cursor: 'pointer',
+                flexShrink: 0,
+                font: 'inherit',
+                background: color.canvas,
+                border: `1px solid ${color.hairline}`,
+                color: color.body,
+              }}
+            >
+              <SwapOutlined style={{ fontSize: 11, color: color.mute }} aria-hidden />
+              多平台比价
+            </button>
+          )}
+          <Popover
+            trigger="click"
+            placement="bottomRight"
+            content={
+              <div style={{ width: 252 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 8 }}>更多功能</div>
+                <Checkbox checked={props.maxMinOn === true} onChange={(e) => props.onMaxMinOn!(e.target.checked)}>
+                  <span style={{ fontSize: 12 }}>最高/最低价标注</span>
+                </Checkbox>
+                <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
+                  在区间内最高 / 最低价点位旁标注胶囊
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <Checkbox
+                    checked={props.changeThreshold != null}
+                    onChange={(e) => props.onChangeThreshold!(e.target.checked ? 0.05 : null)}
+                  >
+                    <span style={{ fontSize: 12 }}>价格变化提醒</span>
                   </Checkbox>
                   <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                    在区间内最高 / 最低价点位旁标注胶囊
+                    涨跌超过阈值时在点位标注 ↓/↑
                   </div>
-                  <div style={{ marginTop: 8 }}>
-                    <Checkbox
-                      checked={props.changeThreshold != null}
-                      onChange={(e) => props.onChangeThreshold!(e.target.checked ? 0.05 : null)}
-                    >
-                      <span style={{ fontSize: 12 }}>价格变化提醒</span>
-                    </Checkbox>
-                    <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                      涨跌超过阈值时在点位标注 ↓/↑
-                    </div>
-                    {props.changeThreshold != null && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <Slider
-                          style={{ width: 150, margin: '0 2px' }}
-                          min={0}
-                          max={15}
-                          step={0.5}
-                          value={+(props.changeThreshold * 100).toFixed(1)}
-                          onChange={(v) => props.onChangeThreshold!(+(v as number) / 100)}
-                          tooltip={{ formatter: (v) => `≥ ${v ?? 0}%` }}
-                        />
-                        <span
-                          className="tnum"
-                          style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', display: 'inline-block', width: THRESHOLD_TEXT_W }}
-                        >
-                          ≥ {+(props.changeThreshold * 100).toFixed(1)}%
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-                  {props.onOpenPromoDetail && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontSize: 12, color: color.body }}>促销力度明细</span>
+                  {props.changeThreshold != null && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                      <Slider
+                        style={{ width: 150, margin: '0 2px' }}
+                        min={0}
+                        max={15}
+                        step={0.5}
+                        value={+(props.changeThreshold * 100).toFixed(1)}
+                        onChange={(v) => props.onChangeThreshold!(+(v as number) / 100)}
+                        tooltip={{ formatter: (v) => `≥ ${v ?? 0}%` }}
+                      />
                       <span
-                        role="button"
-                        title="打开促销力度明细"
-                        onClick={props.onOpenPromoDetail}
-                        style={{ fontSize: 12, fontWeight: 600, color: '#0070f3', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        className="tnum"
+                        style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', display: 'inline-block', width: THRESHOLD_TEXT_W }}
                       >
-                        打开 ›
+                        ≥ {+(props.changeThreshold * 100).toFixed(1)}%
                       </span>
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                    各产品逐周促销深度
-                  </div>
-                  {props.onOpenPlatformCompare && (
-                    <>
-                      <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <span style={{ fontSize: 12, color: color.body }}>多平台比价</span>
-                        <span
-                          role="button"
-                          title="打开多平台比价"
-                          onClick={props.onOpenPlatformCompare}
-                          style={{ fontSize: 12, fontWeight: 600, color: '#0070f3', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                        >
-                          打开 ›
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                        单个产品在各平台的价格走势对比
-                      </div>
-                    </>
+                    </span>
                   )}
                 </div>
-              }
+              </div>
+            }
+          >
+            <RoundIconButton
+              title="更多功能（最高/最低价标注 · 价格变化提醒）"
+              aria-label="更多功能"
+              active={secondaryActive}
             >
-              <RoundIconButton
-                title="更多功能（最高/最低价标注 · 价格变化提醒 · 促销力度明细 · 多平台比价）"
-                aria-label="更多功能"
-                active={secondaryActive}
-              >
-                <MoreOutlined style={{ fontSize: 12 }} />
-              </RoundIconButton>
-            </Popover>
-          )}
+              <MoreOutlined style={{ fontSize: 12 }} />
+            </RoundIconButton>
+          </Popover>
         </div>
       )}
     </div>

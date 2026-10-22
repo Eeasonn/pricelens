@@ -4,9 +4,8 @@
 // ——每格高度伸缩滑杆（第十轮）收进图内币种符号旁的齿轮弹层（Popover），不占版面；
 //   倍率状态仍在本层（与刷选冻结共用 yCfg），经 yScale/sliderScale 受控传入 Chart
 // 下方 = Chart（ECharts+覆盖层）> XBrush（重采样窗口）。
-// 第五十六轮（领导页面清洁要求）：促销力度热力带（原横向色格带）撤出主视觉，
-// 收进「⋯ 更多」二级菜单 → 右侧抽屉纵向表格（PromoDrawer）；最高/最低价与
-// 价格变化提醒同收二级菜单且默认关闭。再版（第112轮）：时点摘要（折扣率/
+// 第五十六轮（领导页面清洁要求）：最高/最低价与价格变化提醒等次级开关收进
+// 「⋯ 更多」二级菜单且默认关闭。再版（第112轮）：时点摘要（折扣率/
 // 现价/划线RRP/来源横排）唯一入口 = 标题行「时点摘要」按钮（打开态高亮），
 // 点击后图右侧原地展开 336px 内嵌面板（纵向一行一产品框，图表收窄不遮挡）；
 // 不持久化，每次进页默认收起。主视觉 = 标题行+工具行+图。
@@ -85,7 +84,6 @@ import {
   type Bucket,
   type YScale,
 } from './helpers';
-import PromoDrawer from './PromoDrawer';
 import PlatformCompareModal from './PlatformCompareModal';
 import PointPanel from './PointPanel';
 import { groupsOfCards, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
@@ -137,17 +135,11 @@ export default function PriceTrend(props: {
   const [maxMinOn, setMaxMinOn] = useState(false);
   // 价格变化提醒：null=关；阈值=小数（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
-  // 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉（纵向表格）
-  const [promoDetailOpen, setPromoDetailOpen] = useState(false);
-  // 多平台比价弹窗（第一百三十四轮）：⋯ 菜单入口的次级功能（单产品各平台价格对比）
+  // 多平台比价弹窗（本轮入口上浮）：工具行「多平台比价」胶囊按钮直接打开
   const [platformCompareOpen, setPlatformCompareOpen] = useState(false);
   // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
-  // 不持久化（每次进页面默认收起）；促销明细抽屉打开时自动收起（右侧空间冲突）
+  // 不持久化（每次进页面默认收起）
   const [pointPanelOpen, setPointPanelOpen] = useState(false);
-  const openPromoDetail = (): void => {
-    setPointPanelOpen(false); // 右侧空间冲突：打开促销明细时收起时点面板
-    setPromoDetailOpen(true);
-  };
   // 齿轮弹层视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
   const [showYTicks, setShowYTicks] = useState(true); // Y 刻度线（第九十一轮恢复；默认开）
@@ -582,31 +574,6 @@ export default function PriceTrend(props: {
     () => (promoBandsOn ? buildPromoBands({ promos: scopedPromos, spans: winSpans }) : []),
     [promoBandsOn, winSpans, scopedPromos],
   );
-  // 促销力度明细抽屉取数 = 面板并集按 key 去重保序——同款对比被多卡对标时在各面板
-  // 重复出现，直接展开会重复列 + 重复 React key（宽表按组归组是组内语义，不受影响）。
-  // 抽屉表行数以首列桶数为准、各列必须同长：独立查看时间下各面板生效窗口不同、
-  // 直接拼切片会长短不一（短列在深处行读到 undefined 格即整树崩），统一按全部
-  // 生效窗口的并集区间重新切片——并集恰好覆盖各面板屏上可见的时间段，同步态下
-  // 与共享窗口一致。
-  const promoSeries = useMemo(() => {
-    if (!splitActive) return visSeries;
-    let lo = Number.POSITIVE_INFINITY;
-    let hi = Number.NEGATIVE_INFINITY;
-    for (const p of panelData) {
-      const [ps, pe] = effWins[p.key] ?? [win.s, win.e];
-      lo = Math.min(lo, ps);
-      hi = Math.max(hi, pe);
-    }
-    if (!Number.isFinite(lo) || lo > hi) return [];
-    const byKey = new Map<string, Series>();
-    for (const p of panelData) {
-      for (const s of sliceVis(p.series, lo, hi)) {
-        if (!byKey.has(s.key)) byKey.set(s.key, s);
-      }
-    }
-    return [...byKey.values()];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splitActive, panelData, effWins, visSeries, win.s, win.e]);
 
   // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
   // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）。
@@ -927,7 +894,6 @@ export default function PriceTrend(props: {
                 onMaxMinOn={setMaxMinOn}
                 changeThreshold={changeThreshold}
                 onChangeThreshold={setChangeThreshold}
-                onOpenPromoDetail={openPromoDetail}
                 onOpenPlatformCompare={() => setPlatformCompareOpen(true)}
               />
             </div>
@@ -1173,7 +1139,6 @@ export default function PriceTrend(props: {
             enableOffer={state.granularity === 'week' && offersOn}
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
-            onOpenPromoDetail={openPromoDetail}
             onOpenPlatformCompare={() => setPlatformCompareOpen(true)}
             yScale={yCfg}
             sliderScale={sliderScale}
@@ -1231,19 +1196,8 @@ export default function PriceTrend(props: {
         />
       </div>
 
-      {/* 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉——纵向表格
-          （行=时间最新在上，列=产品），入口在工具行「⋯ 更多」菜单；分离模式传
-          面板并集（与屏上所见一致），单图模式传 visSeries；随窗口联动 */}
-      <PromoDrawer
-        open={promoDetailOpen}
-        onClose={() => setPromoDetailOpen(false)}
-        series={promoSeries}
-        currency={state.currency}
-        granularity={state.granularity}
-      />
-
-      {/* 多平台比价弹窗（第一百三十四轮）：单产品各平台最低价与走势对比，数据层
-          platformPriceSpread = 全平台口径（与左上平台筛选无关）；产品取自当前看板 */}
+      {/* 多平台比价弹窗（本轮入口上浮为工具行胶囊按钮）：单产品各平台价格趋势对比，
+          数据层 platformPriceSpread = 全平台口径（与左上平台筛选无关）；产品取自当前看板 */}
       <PlatformCompareModal open={platformCompareOpen} onClose={() => setPlatformCompareOpen(false)} />
 
       {/* 月/季下钻弹窗 */}

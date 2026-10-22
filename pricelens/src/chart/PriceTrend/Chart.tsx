@@ -160,9 +160,7 @@ export interface ChartProps {
   onMaxMinOn?: (v: boolean) => void;
   /** 价格变化提醒开关+阈值提交（中区圆框组；null=关） */
   onChangeThreshold?: (v: number | null) => void;
-  /** 第五十六轮：打开促销力度明细抽屉（工具行「⋯ 更多」二级菜单入口） */
-  onOpenPromoDetail?: () => void;
-  /** 第一百三十四轮：打开多平台比价弹窗（⋯ 更多菜单入口；合并模式由本组件内部工具行承载） */
+  /** 打开多平台比价弹窗（工具行「多平台比价」胶囊按钮；合并模式由本组件内部工具行承载） */
   onOpenPlatformCompare?: () => void;
   // ---- 第五十四轮追补：工具行抽 ChartToolbar 共享组件；分离模式面板 chrome=false
   //      不渲染设置行，由面板网格上方的常驻工具行统一控制 ----
@@ -966,7 +964,6 @@ export default function Chart(props: ChartProps) {
                 onMaxMinOn={props.onMaxMinOn}
                 changeThreshold={changeThreshold}
                 onChangeThreshold={props.onChangeThreshold}
-                onOpenPromoDetail={props.onOpenPromoDetail}
                 onOpenPlatformCompare={props.onOpenPlatformCompare}
               />
             </div>
