@@ -28,12 +28,15 @@
 // 1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8；即改即存。
 // 添加主分析产品 = 最后一个组框向下延长的底边正中的显性大按钮。
 // 破坏性动作轻确认：删整组、「最近」恢复覆盖当前已选。
+// 第一百二十九轮：组框高度自适应（列表 flex 子项禁止压缩，内容不再被裁切）；
+// 「最近」只占一行——放不下的组合收进行尾「更多」下拉，恢复覆盖已选仍轻确认。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Input, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
+import { Dropdown, Input, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
   CloseOutlined,
+  DownOutlined,
   HolderOutlined,
   PlusOutlined,
   RollbackOutlined,
@@ -1306,6 +1309,33 @@ function PickerPanel({ open }: { open: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // 「最近」单行收纳（第一百二十九轮）：量出一行能放下几个 chip，放不下的
+  // 组合收进行尾「更多」下拉。隐藏的 chip 用 visibility:hidden 保位，宽度恒可测。
+  const recentRowRef = useRef<HTMLDivElement>(null);
+  const [recentVisible, setRecentVisible] = useState(combos.length);
+  useEffect(() => {
+    const el = recentRowRef.current;
+    if (!el) return;
+    const recompute = (): void => {
+      const avail = el.clientWidth;
+      if (!avail) return;
+      let acc = 0;
+      let count = 0;
+      for (const kid of el.children) {
+        const w = (kid as HTMLElement).offsetWidth;
+        const next = count === 0 ? w : acc + 6 + w;
+        if (next > avail) break;
+        acc = next;
+        count += 1;
+      }
+      setRecentVisible((prev) => (prev === count ? prev : count));
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [combos]);
+
   const lastModelId = [...mains].reverse().find((c) => c.main)?.main?.modelId;
   const huaweiCards = mains.filter((c) => c.main != null && isHuaweiModel(c.main.modelId));
   const currentSig = contentSignature(mains);
@@ -1317,65 +1347,139 @@ function PickerPanel({ open }: { open: boolean }) {
 
   return (
     <>
-      {/* 顶栏：「最近」组合（可点恢复；覆盖非空且不同的当前已选时轻确认）
-          + 全局「全部自动匹配」（显眼位，与最近齐平） */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap', minHeight: 26 }}>
+      {/* 顶栏：「最近」组合只占一行（放不下收进行尾「更多」下拉；覆盖非空且
+          不同的当前已选时仍轻确认）+ 右侧全局「全部自动匹配」（与最近行留隔） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, minHeight: 26 }}>
         {combos.length > 0 && (
           <>
             <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>最近</span>
-          {combos.map((c, i) => {
-            const needConfirm = mains.length > 0 && contentSignature(c.cards) !== currentSig;
-            const summary = c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、');
-            const chip = (
-              <span
-                role="button"
-                aria-label={`恢复组合 ${c.label}`}
-                title={`恢复：${summary}`}
-                className="lpl-pk-ghost"
-                onClick={needConfirm ? undefined : () => applyCombo(c)}
-                style={{
-                  height: 22,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '0 9px 0 10px',
-                  borderRadius: radius.pill,
-                  border: `1px solid ${color.hairline}`,
-                  background: color.canvas,
-                  fontSize: 12,
-                  color: color.body,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
+            <div
+              ref={recentRowRef}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}
+            >
+              {combos.map((c, i) => {
+                const needConfirm = mains.length > 0 && contentSignature(c.cards) !== currentSig;
+                const summary = c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、');
+                const chip = (
+                  <span
+                    role="button"
+                    aria-label={`恢复组合 ${c.label}`}
+                    title={`恢复：${summary}`}
+                    className="lpl-pk-ghost"
+                    onClick={needConfirm ? undefined : () => applyCombo(c)}
+                    style={{
+                      height: 22,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: '0 9px 0 10px',
+                      borderRadius: radius.pill,
+                      border: `1px solid ${color.hairline}`,
+                      background: color.canvas,
+                      fontSize: 12,
+                      color: color.body,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {c.cards[0].main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
+                    {c.label}
+                    <RollbackOutlined style={{ fontSize: 10, color: color.mute }} />
+                  </span>
+                );
+                return (
+                  <span
+                    key={i}
+                    style={{ display: 'inline-flex', flexShrink: 0, visibility: i < recentVisible ? 'visible' : 'hidden' }}
+                  >
+                    {needConfirm ? (
+                      <Popconfirm
+                        zIndex={POPOVER_Z}
+                        title="恢复该组合？"
+                        description="将替换当前已选的全部内容"
+                        okText="恢复"
+                        cancelText="取消"
+                        okButtonProps={{ size: 'small' }}
+                        cancelButtonProps={{ size: 'small' }}
+                        onConfirm={() => applyCombo(c)}
+                      >
+                        {chip}
+                      </Popconfirm>
+                    ) : (
+                      chip
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+            {recentVisible < combos.length && (
+              <Dropdown
+                trigger={['click']}
+                placement="bottomRight"
+                getPopupContainer={(node) => node.closest('[data-lpl-picker-panel]') ?? document.body}
+                menu={{
+                  style: { maxWidth: 420 },
+                  items: combos.map((c, i) => ({
+                    key: String(i),
+                    label: (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        {c.cards[0].main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>
+                          {c.label}
+                        </span>
+                        <span className="tnum" style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>
+                          {c.cards.length} 组
+                        </span>
+                      </span>
+                    ),
+                    title: c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、'),
+                  })),
+                  onClick: ({ key }) => {
+                    const c = combos[Number(key)];
+                    if (!c) return;
+                    if (mains.length > 0 && contentSignature(c.cards) !== currentSig) {
+                      Modal.confirm({
+                        title: '恢复该组合？',
+                        content: '将替换当前已选的全部内容',
+                        okText: '恢复',
+                        cancelText: '取消',
+                        zIndex: POPOVER_Z,
+                        onOk: () => applyCombo(c),
+                      });
+                    } else {
+                      applyCombo(c);
+                    }
+                  },
                 }}
               >
-                {c.cards[0].main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
-                {c.label}
-                <RollbackOutlined style={{ fontSize: 10, color: color.mute }} />
-              </span>
-            );
-            return needConfirm ? (
-              <Popconfirm
-                key={i}
-                zIndex={POPOVER_Z}
-                title="恢复该组合？"
-                description="将替换当前已选的全部内容"
-                okText="恢复"
-                cancelText="取消"
-                okButtonProps={{ size: 'small' }}
-                cancelButtonProps={{ size: 'small' }}
-                onConfirm={() => applyCombo(c)}
-              >
-                {chip}
-              </Popconfirm>
-            ) : (
-              <span key={i} style={{ display: 'inline-flex' }}>
-                {chip}
-              </span>
-            );
-          })}
+                <span
+                  role="button"
+                  aria-label="更多最近组合"
+                  title="查看全部最近组合"
+                  className="lpl-pk-ghost"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                    height: 22,
+                    padding: '0 8px',
+                    borderRadius: radius.pill,
+                    border: `1px solid ${color.hairline}`,
+                    background: color.canvas,
+                    fontSize: 11,
+                    color: color.mute,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  更多 {combos.length - recentVisible} <DownOutlined style={{ fontSize: 9 }} />
+                </span>
+              </Dropdown>
+            )}
           </>
         )}
-        <span style={{ marginLeft: 'auto' }}>
+        <span style={{ marginLeft: 'auto', paddingLeft: 12, flexShrink: 0 }}>
           <MatchPill
             label="全部自动匹配"
             text="全部自动匹配"
@@ -1401,6 +1505,7 @@ function PickerPanel({ open }: { open: boolean }) {
           <div
             style={{
               position: 'relative',
+              flexShrink: 0,
               borderRadius: radius.card,
               border: `1px dashed ${color.hairlineStrong}`,
               background: color.canvas,
@@ -1437,6 +1542,9 @@ function PickerPanel({ open }: { open: boolean }) {
                 // 第一百二十八轮：一组 = 一个整框（左主品右对比，分界线隔开），
                 // 主品格不再自带蓝框；overflow 裁齐两格底色
                 overflow: 'hidden',
+                // 第一百二十九轮：高度自适应——overflow 非 visible 的 flex 子项
+                // 失去最小高度保护，列表放不下时会被压缩裁切，这里显式禁压缩
+                flexShrink: 0,
                 // 最后一个组向下延长放「添加主分析产品」：底边直角与延长带衔接
                 borderRadius: isLast ? `${radius.card}px ${radius.card}px 0 0` : radius.card,
                 border: `1px solid ${dropCard === card.id ? color.link : color.hairline}`,
@@ -1561,6 +1669,7 @@ function PickerPanel({ open }: { open: boolean }) {
           <div
             style={{
               marginTop: -10,
+              flexShrink: 0,
               border: `1px solid ${color.hairline}`,
               borderTop: 'none',
               borderRadius: `0 0 ${radius.card}px ${radius.card}px`,
