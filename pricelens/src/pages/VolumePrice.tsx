@@ -27,10 +27,14 @@
 // 列正下方，与各面板时间轴同一水平线，语义不变（同步 = 三图共用窗口拖任一联动）。
 // 第一百三十一轮波2：时间筛选簇上移顶部筛选条（FilterBar showTime），卡顶工具行
 // 只剩齿轮簇；范围在页外被改时查看窗口整体复位为新范围（监听范围变化自理）。
+// 本轮（视图态跨页保留 P1-5）：slots / synced / panelWins / labelMode 改
+// usePageViewState（sessionStorage 会话态）——切价格看板再切回全部保留；刷新或
+// 新开页签回到默认（页签级会话口径）。瞬态（悬停/拖选/柱区比例/几何）不持久化。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented } from 'antd';
 import { useFilters } from '../state/FiltersContext';
+import usePageViewState from '../state/usePageViewState';
 import FilterBar from '../components/FilterBar';
 import PageHeader from '../components/PageHeader';
 import { filterBarTheme } from '../components/FilterBar';
@@ -112,22 +116,24 @@ export default function VolumePrice() {
   const { state, actions } = useFilters();
   const cc = state.countryCode;
 
-  // ---- 视图状态（同价格看板口径；三面板共用） ----
-  const [slots, setSlots] = useState<(VolumeSlot | null)[]>(() => defaultSlots(state.mains));
+  // ---- 视图状态（同价格看板口径；三面板共用）。槽位/同步态/面板独立窗口/价格
+  //      显示 = 会话态跨页保留（P1-5，usePageViewState）；其余为瞬态 ----
+  const [slots, setSlots] = usePageViewState<(VolumeSlot | null)[]>('volume.slots', () => defaultSlots(state.mains));
   const [sliderScale, setSliderScale] = useState(1);
   const [yCompress, setYCompress] = useState(false);
   const [showYTicks, setShowYTicks] = useState(true);
   const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
-  // 第一百一十四轮（评审）：价格显示（默认精简）+ 三面板共享悬停纵向位置（横向虚线）
-  const [labelMode, setLabelMode] = useState<'detail' | 'compact'>('compact');
+  // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 三面板共享悬停纵向位置（横向虚线）
+  const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
   const [crossY, setCrossY] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   const [windowIds, setWindowIds] = useState<[string, string] | null>(null);
   const [bandFracs, setBandFracs] = useState<number[]>(() => new Array(SLOTS).fill(BAND_FRAC_DEFAULT)); // 各图柱区高比例（右侧拉伸柄）
   // ---- 第119轮（走查会）：同步/非同步查看时间。同步 = 三面板共用窗口（原行为）；
-  //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）----
-  const [synced, setSynced] = useState(true);
-  const [panelWins, setPanelWins] = useState<([number, number] | null)[]>([null, null, null]);
+  //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
+  //      两项均会话态跨页保留（P1-5）----
+  const [synced, setSynced] = usePageViewState<boolean>('volume.synced', () => true);
+  const [panelWins, setPanelWins] = usePageViewState<([number, number] | null)[]>('volume.panelWins', () => [null, null, null]);
   const [hoverIdxs, setHoverIdxs] = useState<(number | null)[]>([null, null, null]); // 各面板悬停时间列（同步模式三列恒等）
   const [geoms, setGeoms] = useState<(StripGeom | null)[]>([null, null, null]); // 各面板绘图区横向几何
   // ---- 第118轮（评审）：图内拖选时间段——面板级高亮（brush = 已提交，

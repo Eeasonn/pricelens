@@ -35,6 +35,7 @@ const dimFx = SRC('dim_fx.json');
 const dimPromo = SRC('dim_promo.json');
 const dimBenchmark = SRC('dim_benchmark.json');
 const dimTier = SRC('dim_tier.json');
+const dimDefaultChannel = SRC('dim_default_channel.json');
 const packB64 = readFileSync(join(ROOT, 'src', 'data', 'fact_pack_gzip.b64.txt'), 'utf8').trim();
 const pack = JSON.parse(gunzipSync(Buffer.from(packB64, 'base64')).toString('utf8'));
 
@@ -109,6 +110,20 @@ console.log('\n[1] 维表完整性');
   const chIds = new Set(dimChannel.map((c) => c.channel_id));
   check('dim_channel channel_id 唯一且前缀 = 国家码', chIds.size === dimChannel.length && dimChannel.every((c) => c.channel_id.startsWith(c.country_code + ':')), `${dimChannel.length} 渠道`);
   check('dim_channel 店铺类型 ∈ {1P,3P,独立站}', dimChannel.every((c) => ['1P', '3P', '独立站'].includes(c.store_type)));
+
+  // 默认平台店铺预填（prefill_default_shops.py 产物；应用侧 defaultChannelOf 回退链第 2 级）
+  const prefillEntries = Object.entries(dimDefaultChannel).filter(([cc]) => !cc.startsWith('_'));
+  const prefillBad = prefillEntries.filter(([cc, cid]) => {
+    const region = regionByCc.get(cc);
+    return (
+      !region
+      || !region.enabled
+      || typeof cid !== 'string'
+      || !dimChannel.some((c) => c.country_code === cc && c.channel_id === cid && c.platform === region.default_platform)
+    );
+  });
+  check('dim_default_channel 预填：每启用国 1 条，渠道属该国且平台 = 默认平台（事实包重接后漂移报警）', prefillBad.length === 0 && prefillEntries.length === enabled.length, `${prefillEntries.length}/${enabled.length} 国${prefillBad.length ? '；坏条目 ' + prefillBad.map(([cc]) => cc).join(',') : ''}`);
+  check('dim_default_channel 预填 R国 = DNS 独立站（与应用侧默认取价锚一致）', dimDefaultChannel.RU === 'RU:dns:独立站', dimDefaultChannel.RU);
 
   check('dim_fx per_usd 全部 > 0', dimFx.every((f) => f.per_usd > 0), `${dimFx.length} 条`);
   const missFx = enabled.filter((r) => !dimFx.some((f) => f.currency === r.currency));

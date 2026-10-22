@@ -3,12 +3,16 @@
 // （单国家 = 现行形态；区域分析 = 多国对比的扩展方向，置灰）+ 国家选择器
 // （从各页筛选条收除，全站唯一入口在页签组）；右 = 🔔预警（Badge = 触发条数）
 // + 页签按钮组（当前页 primary 高亮）。配置页的「保存配置」走 extra 插槽。
+// 第一百三十七轮：右上角新增问号入口 → 数据口径说明弹窗（取价/默认店铺/
+// 比价/销量估算/数据质量等全部处理规则的业务语言说明）。
 // ============================================================
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button, ConfigProvider, Tooltip } from 'antd';
+import { QuestionCircleOutlined } from '@ant-design/icons';
 import { usePage, type Page } from '../state/PageContext';
 import { filterBarTheme } from './FilterBar';
 import CountryBox from './FilterBar/CountryBox';
+import DataHelpModal from './DataHelpModal';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
 /** 2026-10-20 起聚焦价格看板：总览、预警两页置灰待后续迭代（页头仅保留一处预警入口） */
@@ -22,6 +26,7 @@ const TABS: { page: Page; label: string; disabled?: boolean; hint?: string }[] =
 
 export default function PageHeader({ extra }: { title?: string; extra?: ReactNode }) {
   const { go, page } = usePage();
+  const [helpOpen, setHelpOpen] = useState(false);
   return (
     <header
       style={{
@@ -87,7 +92,30 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
           ),
         )}
         {extra}
+        <Tooltip title="数据口径说明">
+          <button
+            type="button"
+            aria-label="数据口径说明"
+            onClick={() => setHelpOpen(true)}
+            style={{
+              width: 24,
+              height: 24,
+              display: 'grid',
+              placeItems: 'center',
+              padding: 0,
+              border: `1px solid ${color.hairline}`,
+              borderRadius: radius.pill,
+              background: color.canvas,
+              color: color.mute,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <QuestionCircleOutlined style={{ fontSize: 13 }} />
+          </button>
+        </Tooltip>
       </div>
+      <DataHelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </header>
   );
 }

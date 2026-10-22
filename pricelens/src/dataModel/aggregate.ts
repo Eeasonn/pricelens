@@ -28,6 +28,7 @@ import type {
   SkuGroupQuery,
 } from './types';
 import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimRegion, dimTier, dimTime, factPriceWeekly } from '../data';
+import prefillJson from '../data/dim_default_channel.json';
 import { defaultShopOverrideOf } from '../state/defaultShopStore';
 import { brandColorOf } from '../theme/tokens';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
@@ -144,13 +145,32 @@ export function defaultPlatformOf(countryCode: string): string | null {
     ?? null;
 }
 
-/** 国家默认平台店铺（第一百三十五轮）：配置页「默认平台店铺」覆盖（channel_id 级）；
- *  未配置或配置的渠道不属于该国 = null（回默认平台口径） */
+/** 默认平台店铺预填表（冷启动，第一百三十七轮）：scripts/prefill_default_shops.py 按事实包统计生成——
+ *  每国默认平台（dim_region.default_platform）下有事实价行数最多的渠道（数据最全 = 主店；
+ *  并列取 channel_id 字典序最小）。键 = 国家码；"_comment" 为生成规则说明字段（非国家码，
+ *  过滤后不参与查询）。事实包重接后需重跑脚本刷新（verify.mjs 有一致性断言）。 */
+const prefillDefaultChannel = new Map<string, string>(
+  Object.entries(prefillJson as unknown as Record<string, string>).filter(([k]) => !k.startsWith('_')),
+);
+
+/** 预填默认平台店铺（channel_id 级）；未登记或预填渠道不在该国维表 = null（重接数据后漂移防御） */
+export function prefillDefaultChannelOf(countryCode: string): string | null {
+  const pre = prefillDefaultChannel.get(countryCode) ?? null;
+  if (!pre) return null;
+  return dimChannel.some((c) => c.country_code === countryCode && c.channel_id === pre) ? pre : null;
+}
+
+/** 国家默认平台店铺（第一百三十七轮回退链）：
+ *  ① 配置页「默认平台店铺」人工覆盖（LPL3.config.defaultShop，channel 级）
+ *  → ② 维表预填（数据主店，dim_default_channel.json；校验渠道属国）
+ *  → ③ null（回默认平台全部渠道口径的兜底；预填全量覆盖后理论上不触发，保留防御） */
 export function defaultChannelOf(countryCode: string): string | null {
   const o = defaultShopOverrideOf(countryCode);
-  if (!o) return null;
-  const hit = dimChannel.find((c) => c.country_code === countryCode && c.channel_id === o);
-  return hit ? o : null;
+  if (o) {
+    const hit = dimChannel.find((c) => c.country_code === countryCode && c.channel_id === o);
+    if (hit) return o;
+  }
+  return prefillDefaultChannelOf(countryCode);
 }
 
 /** 生效渠道集合：未选 = 配置的默认平台店铺（channel 级）→ 未配置再回默认平台全部渠道；

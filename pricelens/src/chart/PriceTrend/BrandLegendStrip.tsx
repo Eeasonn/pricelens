@@ -7,6 +7,9 @@
 // 也不画 vs。药丸点击 = 屏蔽/恢复折线（虚线置灰态可恢复），悬停 = 该系列
 // 高亮、其余降透明。块间灰色短竖线分隔；对比药丸超过 3 个走块内 ‹› 滚动
 // （主品药丸恒可见、不参与滚动）；整排放不下时两侧 ‹› 滚动。
+// 本轮（多平台比价深化）：可选 onCompare 传入时块头浮现「⇄ 比价」小按钮
+// （默认 0.45 弱存在、悬停浮现），点击回调该组主品系列 key = 打开多平台比价
+// 并预选该组主分析产品；不传完全不渲染，向后兼容。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
@@ -90,8 +93,9 @@ function Pill({
   );
 }
 
-/** 组块：第 N 组小字（多组时）+ 主品药丸 + vs + 对比药丸（块内 ‹› 滚动，
- *  仅当对比数 > COMPARES_VISIBLE 时出现；主品药丸在滚动区外恒可见） */
+/** 组块：第 N 组小字（多组时）+ [⇄ 比价]（onCompare 传入时；块头悬停浮现）+
+ *  主品药丸 + vs + 对比药丸（块内 ‹› 滚动，仅当对比数 > COMPARES_VISIBLE 时出现；
+ *  主品药丸在滚动区外恒可见） */
 function GroupBlock({
   group,
   showOrdinal,
@@ -99,6 +103,7 @@ function GroupBlock({
   hoverSet,
   onToggle,
   onHover,
+  onCompare,
 }: {
   group: LegendGroup;
   showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
@@ -106,10 +111,12 @@ function GroupBlock({
   hoverSet: Set<string> | null;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
+  onCompare?: (key: string) => void; // 块级比价入口：传该组主品系列 key（不传 = 不渲染按钮）
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(true);
+  const [blockHover, setBlockHover] = useState(false);
   const sync = useCallback(() => {
     const el = trackRef.current;
     if (!el) return;
@@ -135,10 +142,47 @@ function GroupBlock({
   const scrollable = compares.length > COMPARES_VISIBLE;
   const dimOf = (p: PillSpec): boolean => hoverSet != null && !hoverSet.has(p.key);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
+    <div
+      onMouseEnter={() => setBlockHover(true)}
+      onMouseLeave={() => setBlockHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}
+    >
       {showOrdinal && (
         <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', flexShrink: 0 }}>
           {groupOrdinal(group.ordinal)}
+        </span>
+      )}
+      {/* 块头「⇄ 比价」小按钮（本轮）：打开多平台比价并预选本组主分析产品——
+          默认 0.45 弱存在、块悬停浮现（opacity 不改布局，不与主品药丸的点击
+          屏蔽语义争位）；空对无主品不出 */}
+      {mainPill && onCompare && (
+        <span
+          role="button"
+          aria-label={`多平台比价：${mainPill.text}`}
+          title="打开多平台比价，预选该产品"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCompare(mainPill.key);
+          }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            height: 16,
+            padding: '0 6px',
+            borderRadius: radius.pill,
+            border: `1px solid ${blockHover ? color.hairlineStrong : color.hairline}`,
+            background: color.canvas,
+            color: color.body,
+            fontSize: 10,
+            lineHeight: '14px',
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+            userSelect: 'none',
+            flexShrink: 0,
+            opacity: blockHover ? 1 : 0.45,
+          }}
+        >
+          ⇄ 比价
         </span>
       )}
       {mainPill && <Pill pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />}
@@ -209,6 +253,7 @@ export default function BrandLegendStrip({
   hiddenKeys,
   onToggleHidden,
   onHover,
+  onCompare,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -217,6 +262,9 @@ export default function BrandLegendStrip({
   hiddenKeys: Set<string>;
   onToggleHidden: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
+  /** 可选块级比价入口（本轮）：传入时每块块头浮现「⇄ 比价」小按钮，点击回调
+   *  该组主品系列 key（打开多平台比价并预选）；不传 = 完全不渲染按钮，原样向后兼容 */
+  onCompare?: (seriesKey: string) => void;
 }) {
   const multi = groups.length >= 2;
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
@@ -279,7 +327,16 @@ export default function BrandLegendStrip({
               );
             }
             items.push(
-              <GroupBlock key={g.id} group={g} showOrdinal={multi} hiddenKeys={hiddenKeys} hoverSet={hoverSet} onToggle={onToggleHidden} onHover={hover} />,
+              <GroupBlock
+                key={g.id}
+                group={g}
+                showOrdinal={multi}
+                hiddenKeys={hiddenKeys}
+                hoverSet={hoverSet}
+                onToggle={onToggleHidden}
+                onHover={hover}
+                onCompare={onCompare}
+              />,
             );
           });
           return items;

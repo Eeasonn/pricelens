@@ -28,7 +28,7 @@ import {
   saveDefaultShopOverrides,
 } from '../state/defaultShopStore';
 import { currencyOfCountry, dimChannel, dimFx, dimProduct, dimPromo } from '../data';
-import { defaultPlatformOf } from '../dataModel/aggregate';
+import { defaultPlatformOf, prefillDefaultChannelOf } from '../dataModel/aggregate';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { useFilters } from '../state/FiltersContext';
 import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
@@ -128,11 +128,20 @@ export default function Config() {
     message.success('已恢复默认上一代关系');
   };
 
-  // ---------------- 默认平台店铺（第一百三十五轮）：即改即存，主页取价即时生效 ----------------
+  // ---------------- 默认平台店铺（第一百三十七轮）：预填 + 人工覆盖，即改即存，主页取价即时生效 ----------------
+  // defaultShopId = 人工覆盖（LPL3.config.defaultShop）；prefillShopId = 维表预填（dim_default_channel.json，
+  // 事实包统计的数据主店）。下拉显示「生效默认」= 覆盖 ?? 预填（与 aggregate.defaultChannelOf 回退链一致），
+  // Tag 区分三态：人工覆盖 / 预填 / 维表默认（预填缺失兜底）。
   const [defaultShopId, setDefaultShopId] = useState<string | null>(() => defaultShopOverrideOf(state.countryCode));
   useEffect(() => {
     setDefaultShopId(defaultShopOverrideOf(state.countryCode));
   }, [state.countryCode]);
+  const prefillShopId = useMemo(() => prefillDefaultChannelOf(state.countryCode), [state.countryCode]);
+  const prefillShop = useMemo(
+    () => dimChannel.find((c) => c.channel_id === prefillShopId) ?? null,
+    [prefillShopId],
+  );
+  const effectiveShopId = defaultShopId ?? prefillShopId;
 
   const platformRowsOfCc = useMemo(() => {
     const shopsByPlatform = new Map<string, number>();
@@ -144,8 +153,8 @@ export default function Config() {
   }, [state.countryCode]);
 
   const defaultShopChannel = useMemo(
-    () => dimChannel.find((c) => c.channel_id === defaultShopId) ?? null,
-    [defaultShopId],
+    () => dimChannel.find((c) => c.channel_id === effectiveShopId) ?? null,
+    [effectiveShopId],
   );
   const defaultShopPlatform = defaultShopChannel?.platform ?? null;
   const shopRowsOfPlatform = useMemo(
@@ -195,12 +204,17 @@ export default function Config() {
             <BenchmarkConfigBlock />
           </Block>
 
-          {/* ⓪' 默认平台店铺（第一百三十五轮）：未在筛选中选择平台时，看板按此取价 */}
+          {/* ⓪' 默认平台店铺（第一百三十七轮）：未在筛选中选择平台时，看板按生效默认店铺取价 */}
           <Block
             title="默认平台店铺"
             extra={
-              <Button size="small" onClick={() => saveDefaultShop(null)} disabled={!defaultShopId}>
-                恢复维表默认
+              <Button
+                size="small"
+                onClick={() => saveDefaultShop(null)}
+                disabled={!defaultShopId}
+                title={defaultShopId ? undefined : '当前无人工配置'}
+              >
+                清除人工配置，回到{prefillShop ? '预填' : '维表默认'}
               </Button>
             }
           >
@@ -223,13 +237,17 @@ export default function Config() {
                 aria-label="默认店铺"
                 placeholder={defaultShopPlatform ? '选择店铺' : '先选平台'}
                 disabled={!defaultShopPlatform}
-                value={defaultShopId ?? undefined}
+                value={effectiveShopId ?? undefined}
                 options={shopRowsOfPlatform.map((s) => ({ value: s.id, label: s.name }))}
                 onChange={(v) => saveDefaultShop(v ?? null)}
               />
               {defaultShopId ? (
                 <Tag color="blue" style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
-                  已配置（覆盖维表）
+                  已配置（人工覆盖）
+                </Tag>
+              ) : prefillShop ? (
+                <Tag color="cyan" style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
+                  预填 · {prefillShop.display_name}（数据主店，可改）
                 </Tag>
               ) : (
                 <Tag style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
@@ -238,7 +256,8 @@ export default function Config() {
               )}
             </div>
             <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px' }}>
-              未在筛选条选择平台时，看板所有价格按这里的默认平台店铺取价（单店精确口径）；配置后立即生效。
+              各国默认店铺已按事实数据预填（默认平台内数据最全的主店）；此处改动即人工覆盖，清除后回到预填。
+              未在筛选条选择平台时，看板所有价格按生效默认店铺取价（单店精确口径），改动立即生效。
               预警中心「平台价差」预警仍按该国全部平台计算，不受此配置影响。
             </div>
           </Block>

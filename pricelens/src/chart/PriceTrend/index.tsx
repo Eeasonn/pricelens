@@ -28,6 +28,13 @@
 // 分离模式底部共享 XBrush 退役（每面板时间轴已承担全部调整）；合并模式底部
 // XBrush 保留（单图唯一的查看窗口调整轴）但左列时间筛选簇收掉、轨道通栏。
 // 顶部筛选器改范围时查看窗口整体复位为新范围（下方 rangeWatch 联动自理）。
+// 本轮（多平台比价深化 + 视图态跨页保留）：
+// ① 比价弹窗补「比当前看板」差价率（弹窗内自理）与 initialProductKey 预选；
+// ② 图例带组块（分离/合并同款）块头「⇄ 比价」小按钮 → 打开比价弹窗并预选该组
+//    主分析产品（BrandLegendStrip onCompare 回调接线，见下方 onLegendCompare）；
+// ③ mergeView、windowIds 改 usePageViewState（sessionStorage 会话态）——切页
+//    返回保留上次分析状态；windowIds 恢复后仍走原有换算（粒度切换）/失义
+//    （范围改动 rangeWatch）路径，自适应首跑在范围未变时不再复位窗口。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, ConfigProvider, Segmented, Tooltip } from 'antd';
@@ -40,6 +47,7 @@ import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../state/mainSelection';
+import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion } from '../../data';
 import type {
   AggMode,
@@ -86,7 +94,7 @@ import {
 } from './helpers';
 import PlatformCompareModal from './PlatformCompareModal';
 import PointPanel from './PointPanel';
-import { groupsOfCards, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
+import { groupsOfCards, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 
@@ -120,7 +128,9 @@ export default function PriceTrend(props: {
   const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值；松手才提交）
   const [yCompress, setYCompress] = useState<boolean>(false); // Y 轴自动压缩（第三十五轮起默认关 = 完全连续；迪总「不自动选择」）
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
-  const [windowIds, setWindowIds] = useState<[string, string] | null>(null); // null=整个筛选范围
+  // 查看窗口（null = 整个筛选范围）：会话态跨页保留（P1-5）——切页返回恢复；
+  // 粒度切换换算 / 范围改动复位（rangeWatch）等失义路径不变
+  const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('dashboard.windowIds', () => null);
   // 分离模式同步/独立查看时间：同步（默认）= 全面板共用共享窗口，拖任一面板的时间轴
   // 全部联动；独立 = 各面板单独调整（panelWins 按面板 key 记窗口，未单独调整过的
   // 面板回落共享窗口）。粒度切换/自适应重算/换卡后独立窗口整体回落共享窗口
@@ -135,8 +145,31 @@ export default function PriceTrend(props: {
   const [maxMinOn, setMaxMinOn] = useState(false);
   // 价格变化提醒：null=关；阈值=小数（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
-  // 多平台比价弹窗（本轮入口上浮）：工具行「多平台比价」胶囊按钮直接打开
+  // 多平台比价弹窗（本轮入口上浮）：工具行「多平台比价」胶囊按钮直接打开；
+  // 图例带组块「⇄ 比价」小按钮 = 带该组主品预选打开（initialProductKey）
   const [platformCompareOpen, setPlatformCompareOpen] = useState(false);
+  const [compareInitKey, setCompareInitKey] = useState<string | null>(null);
+  // 图例块级比价入口：系列 key（modelId__配置去空格）→ 比价弹窗产品 key
+  //（modelId|配置原样，弹窗产品列表的组 key 形态）
+  const compareKeyOfSeriesKey = (seriesKey: string): string | null => {
+    for (const card of effMains) {
+      for (const sel of [card.main, ...card.compares]) {
+        if (!sel) continue;
+        if (seriesKeyOf(sel) === seriesKey) return `${sel.modelId}|${sel.romram}`;
+      }
+    }
+    return null;
+  };
+  /** 图例块「⇄ 比价」：预选该组主品并打开比价弹窗 */
+  const onLegendCompare = (seriesKey: string): void => {
+    setCompareInitKey(compareKeyOfSeriesKey(seriesKey));
+    setPlatformCompareOpen(true);
+  };
+  /** 工具行/图内比价入口：不带预选（清除上次图例入口的预选） */
+  const openPlatformCompare = (): void => {
+    setCompareInitKey(null);
+    setPlatformCompareOpen(true);
+  };
   // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
   // 不持久化（每次进页面默认收起）
   const [pointPanelOpen, setPointPanelOpen] = useState(false);
@@ -229,6 +262,10 @@ export default function PriceTrend(props: {
     ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}|${selectedProductKey}`
     : '';
   const adaptiveAppliedRef = useRef('');
+  // 本轮（视图态跨页保留）：挂载首跑若范围已与自动极值一致（会话态恢复场景，
+  // rangeStart/End 已持久化）则不复位窗口——切页返回时持久化恢复的 windowIds
+  // 不被自适应重套清掉；范围确有变化（如从总览换国进入）仍按原样复位
+  const adaptiveMountedRef = useRef(false);
   useLayoutEffect(() => {
     if (!adaptiveBounds) {
       adaptiveAppliedRef.current = '';
@@ -236,9 +273,13 @@ export default function PriceTrend(props: {
     }
     if (adaptiveAppliedRef.current === adaptiveKey) return;
     adaptiveAppliedRef.current = adaptiveKey;
+    const rangeUnchanged = state.rangeStart === adaptiveBounds[0] && state.rangeEnd === adaptiveBounds[1];
     actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
-    setWindowIds(null); // 窗口复位 = 整个自动极值范围
-    setPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
+    if (adaptiveMountedRef.current || !rangeUnchanged) {
+      setWindowIds(null); // 窗口复位 = 整个自动极值范围
+      setPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
+    }
+    adaptiveMountedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adaptiveKey]);
 
@@ -343,9 +384,11 @@ export default function PriceTrend(props: {
   // 图上永远装得下）。面板顺序 = 卡序（选择浮窗内拖拽），页内把手拖拽仍可覆盖。
   // 第一百二十三轮⑥（宽容合并）：≥2 组默认分图但可切回一张图（单产品多型号等
   // 用户认为该合并的场景）；合并可用 = 全部组系列去重总数 ≤ MERGE_LINES_CAP，
-  // 超限「合并」项置灰，选区变化致超限时自动回落分图。mergeView 不持久化。
+  // 超限「合并」项置灰，选区变化致超限时自动回落分图。mergeView 会话态跨页保留
+  //（P1-5，见下方 usePageViewState 声明）。
   const multiCards = effMains.length >= 2;
-  const [mergeView, setMergeView] = useState<boolean>(false);
+  // 合并/分图选择：会话态跨页保留（P1-5）——切页返回保持上次选择；超限回落逻辑不变
+  const [mergeView, setMergeView] = usePageViewState<boolean>('dashboard.mergeView', () => false);
   const mergeLines = mainSels.length + compareSels.length; // 全部组系列去重总数
   const mergeOk = mergeLines <= MERGE_LINES_CAP;
   useEffect(() => {
@@ -894,7 +937,7 @@ export default function PriceTrend(props: {
                 onMaxMinOn={setMaxMinOn}
                 changeThreshold={changeThreshold}
                 onChangeThreshold={setChangeThreshold}
-                onOpenPlatformCompare={() => setPlatformCompareOpen(true)}
+                onOpenPlatformCompare={openPlatformCompare}
               />
             </div>
           </div>
@@ -1040,13 +1083,15 @@ export default function PriceTrend(props: {
                       </div>
                       {/* 组/角色图例带（第一百一十五轮立，第一百二十三轮④按组）：本面板
                           单组（主品药丸 + vs + 对比药丸，含屏蔽者）；悬停药丸 = 该系列
-                          高亮 + 起点指引线，点击 = 屏蔽/恢复折线 */}
+                          高亮 + 起点指引线，点击 = 屏蔽/恢复折线；块头「⇄ 比价」=
+                          打开多平台比价并预选本组主品 */}
                       <div style={{ height: PANEL_LEGEND_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
                         <BrandLegendStrip
                           groups={groupsOfCards([p.card], p.all)}
                           hiddenKeys={hiddenKeys}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
+                          onCompare={onLegendCompare}
                         />
                       </div>
                       <Chart
@@ -1115,13 +1160,14 @@ export default function PriceTrend(props: {
               或多组并回一张图）也按组出块（单组不显组号）——主品药丸 + vs + 对比
               药丸（点击屏蔽/恢复，悬停该系列高亮 + 起点指引线）；块间灰短竖线分隔，
               对比超 3 个走块内 ‹› 滚动（主品恒可见），整排放不下两侧 ‹› 滚动；
-              与宽表同用 groupsOfCards 取数 */}
+              块头「⇄ 比价」= 打开多平台比价并预选本组主品；与宽表同用 groupsOfCards 取数 */}
           <div style={{ marginBottom: 6, minWidth: 0 }}>
             <BrandLegendStrip
               groups={tableGroups}
               hiddenKeys={hiddenKeys}
               onToggleHidden={toggleLegend}
               onHover={setLegendHoverKey}
+              onCompare={onLegendCompare}
             />
           </div>
           <Chart
@@ -1139,7 +1185,7 @@ export default function PriceTrend(props: {
             enableOffer={state.granularity === 'week' && offersOn}
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
-            onOpenPlatformCompare={() => setPlatformCompareOpen(true)}
+            onOpenPlatformCompare={openPlatformCompare}
             yScale={yCfg}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
@@ -1196,9 +1242,14 @@ export default function PriceTrend(props: {
         />
       </div>
 
-      {/* 多平台比价弹窗（本轮入口上浮为工具行胶囊按钮）：单产品各平台价格趋势对比，
-          数据层 platformPriceSpread = 全平台口径（与左上平台筛选无关）；产品取自当前看板 */}
-      <PlatformCompareModal open={platformCompareOpen} onClose={() => setPlatformCompareOpen(false)} />
+      {/* 多平台比价弹窗（本轮入口上浮为工具行胶囊按钮 + 图例块「⇄ 比价」）：
+          单产品各平台价格趋势对比 + 比当前看板差价率，数据层 platformPriceSpread =
+          全平台口径（与左上平台筛选无关）；图例入口带该组主品预选（initialProductKey） */}
+      <PlatformCompareModal
+        open={platformCompareOpen}
+        onClose={() => setPlatformCompareOpen(false)}
+        initialProductKey={compareInitKey ?? undefined}
+      />
 
       {/* 月/季下钻弹窗 */}
       <DrillModal

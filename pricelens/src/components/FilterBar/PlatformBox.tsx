@@ -9,12 +9,14 @@
 // 选择绝不能同时写 platforms，否则整平台渠道全部入池）：
 //   选店铺 = { platforms: [], shopIds: [channel_id] }；底部「恢复默认」= null。
 // 默认选中（state.platform 为 null 时，浮层与触发器都呈现解析后的默认）：
-//   默认店铺 = defaultChannelOf(cc)（配置页「默认平台店铺」覆盖，channel 级）；
-//   未配置 = 默认平台（defaultPlatformOf）但不预选具体店铺（右列无高亮行，
+//   默认店铺 = defaultChannelOf(cc)（第一百三十七轮回退链：配置页人工覆盖 → 维表预填
+//   dim_default_channel.json（事实数据主店）→ null）；
+//   仅当无具体默认店铺时 = 默认平台（defaultPlatformOf）但不预选具体店铺（右列无高亮行，
 //   取价口径 = 该平台全部店铺最低价）。默认平台/店铺行带浅蓝「默认」小徽标。
 // 触发器文案：已选店铺 = 「平台 · 店铺 display_name」（宽度放不下只显示店铺名）；
 //   旧平台级状态（plat= 链接 / 旧持久化 platforms:[p]）= 平台名；未选（默认口径）
-//   = 「默认 · 店铺名 / 平台名」占位。
+//   = 有具体默认店铺（预填或人工）时「默认 · 店铺 display_name」，仅预填缺失时
+//   才「默认 · 平台名」占位。
 // 国家切换：默认解析按 cc 自动跟随（选中态为 null 时无需额外处理）；当前选中
 //   店铺不属于新国家时由 applyScopeDefaults / platformSelectionValidFor 重置。
 // ============================================================
