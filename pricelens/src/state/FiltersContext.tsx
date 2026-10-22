@@ -32,7 +32,7 @@ import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { groupsFromBenchmark } from './configStore';
 import { expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
-import { readUrlOverrides, writeUrlPatch } from './urlSync';
+import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
 /** 追补⑨：四类预警全局缺省（阈值小数；own-gap = 低于 15% 视为档位太近） */
@@ -324,6 +324,8 @@ function loadBaseState(): FiltersState {
     // ≤v9 一律落默认（readPersistedState 只放行 v10/11/12）
     const { v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
     restored = { ...defaultFilters, ...rest } as FiltersState;
+    // 平台单选归一：旧持久化的多选形态（platforms 多值 / shopIds 渠道下钻）取第一个平台
+    restored.platform = normalizePlatformSelection(restored.platform);
     // 迁移里的矩阵查询（groupsFromBenchmark）按数据层缺省国家取分国对标，须先切到载荷国家，
     // 否则迁移产出的对比区会被别的国家矩阵固化写回
     syncScopeRegistries(restored.countryCode);
@@ -400,16 +402,16 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     const mainKeys = state.mains.flatMap((m) =>
       m.main ? [`${m.main.modelId}__${m.main.romram.replace(/\s+/g, '')}`] : [],
     );
-    // 平台勾选整体写入（整平台 plat + 渠道 shop，逗号列表），与 readUrlOverrides 对称——
-    // 只写首个渠道会让整平台勾选 / 多渠道勾选经链接分享后丢失
+    // 平台单选写入：plat 只写单值；shop= 渠道参数退役（null = 清掉旧链接残留）。
+    // 与 readUrlOverrides 的归一化读取对称（单选 = platforms:[一个] 的特例，数据层不动）
     writeUrlPatch({
       c: state.countryCode,
       i: state.industry,
       g: state.granularity,
       cur: state.currency,
       main: mainKeys.join(',') || null,
-      plat: state.platform?.platforms.join(',') || null,
-      shop: state.platform?.shopIds.join(',') || null,
+      plat: state.platform?.platforms[0] ?? null,
+      shop: null,
     });
   }, [state.countryCode, state.industry, state.granularity, state.currency, state.mains, state.platform]);
 

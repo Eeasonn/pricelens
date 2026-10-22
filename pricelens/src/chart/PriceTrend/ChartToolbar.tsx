@@ -50,6 +50,8 @@ export interface ChartToolbarProps {
    *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开，
    *  ⋯ 菜单不设时点入口（单一入口，避免分叉） */
   onOpenPromoDetail?: () => void;
+  /** 第一百三十四轮：打开多平台比价弹窗（次级功能）；价格看板传入 */
+  onOpenPlatformCompare?: () => void;
 }
 
 /** 折后价/RRP 切换胶囊（第五十二轮）：图例页签同款外形，品牌色点的位置改「一条粗 /
@@ -330,11 +332,30 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                   <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
                     各产品逐周促销深度
                   </div>
+                  {props.onOpenPlatformCompare && (
+                    <>
+                      <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 12, color: color.body }}>多平台比价</span>
+                        <span
+                          role="button"
+                          title="打开多平台比价"
+                          onClick={props.onOpenPlatformCompare}
+                          style={{ fontSize: 12, fontWeight: 600, color: '#0070f3', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          打开 ›
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
+                        单个产品在各平台的价格走势对比
+                      </div>
+                    </>
+                  )}
                 </div>
               }
             >
               <RoundIconButton
-                title="更多功能（最高/最低价标注 · 价格变化提醒 · 促销力度明细）"
+                title="更多功能（最高/最低价标注 · 价格变化提醒 · 促销力度明细 · 多平台比价）"
                 aria-label="更多功能"
                 active={secondaryActive}
               >

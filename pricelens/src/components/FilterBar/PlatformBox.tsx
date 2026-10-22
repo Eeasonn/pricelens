@@ -1,156 +1,86 @@
 // ============================================================
-// §5.3 框三：平台 —— 平台 → 渠道（店铺类型）两层级联（dimChannel，按当前国家过滤）。
-// 默认不选 = 该国默认电渠（「国家主要电渠」首个）单平台口径；勾平台 = 勾其下全部渠道；
-// 可下钻只勾具体渠道（如「OZON 1P」）；渠道内多店铺由数据层取最低在架价。
-// 状态形状（SeriesQuery.platform 同构）：{ platforms: 全选平台, shopIds: 部分勾选渠道 id } | null
+// §5.3 框三：平台 —— 单选下拉（平台筛选器从多选级联改回单选：平台口径只能单选）。
+// 选项 = 当前国家的平台列表（dimChannel 按平台去重，附「· N 店铺」小注）；
+// 未选 / 清除 = 该国默认电渠（dim_region.default_platform，R国=DNS），
+// 触发器以「默认 · DNS」业务语言占位；选中平台后直接显示平台名。
+// 状态形状（SeriesQuery.platform 同构，单选 = platforms:[一个] 的特例）：
+// { platforms: [p], shopIds: [] } | null（null = 默认电渠，数据层 effectiveChannelIds 解析）。
+// 旧的「平台→店铺」两层级联与店铺级下钻 UI 整体退役（数据层渠道级能力保留）；
+// 旧多选形态的链接 / 持久化读入时按 normalizePlatformSelection 归一为单选。
 // ============================================================
-import { useMemo, useState } from 'react';
-import { Button, Popover, Tooltip } from 'antd';
+import { useMemo } from 'react';
+import { Select } from 'antd';
 import { useFilters } from '../../state/FiltersContext';
 import { dimChannel, dimRegion } from '../../data';
-import type { DimChannel } from '../../dataModel/types';
-import { color, fontSize, space } from '../../theme/tokens';
-import { CascadePanel, CascadeTrigger } from '../ProductCascader';
-import type { CascadeRowItem } from '../ProductCascader';
-import type { PlatformSelection } from '../../state/filtersTypes';
+import { color, fontSize, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { normalizePlatformSelection } from '../../state/urlSync';
 
 interface PlatformRow {
   platform: string;
-  shops: DimChannel[];
+  shops: number; // 平台下全部渠道的店铺数合计（与旧渠道级「· N 店」同一口径）
 }
 
 export default function PlatformBox() {
   const { state, actions } = useFilters();
   const cc = state.countryCode;
   const rows = useMemo<PlatformRow[]>(() => {
-    const byPlatform = new Map<string, DimChannel[]>();
+    const shopsByPlatform = new Map<string, number>();
     for (const c of dimChannel) {
       if (c.country_code !== cc) continue;
-      const arr = byPlatform.get(c.platform) ?? [];
-      arr.push(c);
-      byPlatform.set(c.platform, arr);
+      shopsByPlatform.set(c.platform, (shopsByPlatform.get(c.platform) ?? 0) + c.shops);
     }
-    return [...byPlatform.entries()].map(([platform, shops]) => ({ platform, shops }));
+    return [...shopsByPlatform.entries()].map(([platform, shops]) => ({ platform, shops }));
   }, [cc]);
-  const shopNameById = useMemo(() => new Map(dimChannel.map((c) => [c.channel_id, c.display_name])), []);
-  const defaultPlatform = useMemo(() => dimRegion.find((r) => r.country_code === cc)?.default_platform ?? rows[0]?.platform ?? '', [cc, rows]);
+  const defaultPlatform = useMemo(
+    () => dimRegion.find((r) => r.country_code === cc)?.default_platform ?? rows[0]?.platform ?? '',
+    [cc, rows],
+  );
 
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState<string | null>(null);
+  // 单选归一读取：旧多选持久化 / 旧多值链接进来也只呈现第一个平台
+  const selectedPlatform = normalizePlatformSelection(state.platform)?.platforms[0];
 
-  const sel = state.platform;
-  const platforms = sel?.platforms ?? [];
-  const shopIds = sel?.shopIds ?? [];
-
-  const isPlatformFull = (platform: string): boolean => platforms.includes(platform);
-  const isShopChecked = (platform: string, shopId: string): boolean =>
-    isPlatformFull(platform) || shopIds.includes(shopId);
-
-  /** 勾/取消平台 = 勾/取消其下全部渠道 */
-  const writePlatform = (platform: string, next: boolean): void => {
-    const nextPlatforms = new Set(platforms);
-    const nextShops = new Set(shopIds);
-    const row = rows.find((r) => r.platform === platform);
-    row?.shops.forEach((s) => nextShops.delete(s.channel_id));
-    if (next) nextPlatforms.add(platform);
-    else nextPlatforms.delete(platform);
-    emit(nextPlatforms, nextShops);
-  };
-
-  /** 渠道级勾选：整平台已勾时再操作 → 降级为部分勾选；补齐全部渠道 → 升级为整平台 */
-  const writeShop = (platform: string, shopId: string, next: boolean): void => {
-    const shops = rows.find((r) => r.platform === platform)?.shops ?? [];
-    const nextPlatforms = new Set(platforms);
-    const nextShops = new Set(shopIds);
-    if (next) {
-      shops.forEach((s) => nextShops.delete(s.channel_id));
-      nextPlatforms.delete(platform);
-      nextShops.add(shopId);
-      if (shops.every((s) => nextShops.has(s.channel_id))) {
-        shops.forEach((s) => nextShops.delete(s.channel_id));
-        nextPlatforms.add(platform);
-      }
-    } else if (nextPlatforms.has(platform)) {
-      nextPlatforms.delete(platform);
-      shops.forEach((s) => {
-        if (s.channel_id !== shopId) nextShops.add(s.channel_id);
-      });
-    } else {
-      nextShops.delete(shopId);
-    }
-    emit(nextPlatforms, nextShops);
-  };
-
-  const emit = (nextPlatforms: Set<string>, nextShops: Set<string>): void => {
-    const next: PlatformSelection | null =
-      nextPlatforms.size || nextShops.size ? { platforms: [...nextPlatforms], shopIds: [...nextShops] } : null;
-    actions.set({ platform: next }); // §5.6 切换平台：仅改聚合入参，不动图窗与粒度
-  };
-
-  const selectedPlatform = rows.find((r) => platforms.includes(r.platform) || r.shops.some((s) => shopIds.includes(s.channel_id)))?.platform;
-  const activePlatform = active ?? selectedPlatform ?? defaultPlatform ?? rows[0]?.platform ?? null;
-  const activeRow = rows.find((r) => r.platform === activePlatform) ?? null;
-
-  const platformItems: CascadeRowItem[] = rows.map((r) => {
-    const full = isPlatformFull(r.platform);
-    const some = r.shops.some((s) => shopIds.includes(s.channel_id));
-    return {
-      key: r.platform,
-      label: r.platform === defaultPlatform ? `${r.platform}（默认电渠）` : r.platform,
-      checkState: full ? 'checked' : some ? 'indeterminate' : 'none',
-      onCheckChange: (next) => writePlatform(r.platform, next),
-      onActivate: () => setActive(r.platform),
-      onLabelClick: () => writePlatform(r.platform, !full),
-      active: activePlatform === r.platform,
-    };
-  });
-
-  const shopItems: CascadeRowItem[] = (activeRow?.shops ?? []).map((s) => ({
-    key: s.channel_id,
-    label: s.shops > 1 ? `${s.display_name} · ${s.shops} 店` : s.display_name,
-    active: shopIds.includes(s.channel_id),
-    checkState: activePlatform && isShopChecked(activePlatform, s.channel_id) ? 'checked' : 'none',
-    onCheckChange: (next) => activePlatform && writeShop(activePlatform, s.channel_id, next),
-    onLabelClick: () =>
-      activePlatform && writeShop(activePlatform, s.channel_id, !isShopChecked(activePlatform, s.channel_id)),
-  }));
-
-  // 触发器展示：全选平台名 + 部分勾选渠道名；未选 = 默认电渠
-  const labels = [...platforms, ...shopIds.map((id) => shopNameById.get(id) ?? id)];
+  const options = rows.map((r) => ({ value: r.platform, label: r.platform }));
 
   return (
-    <Popover
-      trigger="click"
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) setActive(selectedPlatform ?? defaultPlatform ?? rows[0]?.platform ?? null);
-      }}
-      arrow={false}
-      placement="bottomLeft"
-      styles={{ body: { padding: 0 } as const }}
-      content={
-        <div>
-          {/* 第一百一十五轮：列宽自适应（长渠道/店铺名完整显示） */}
-          <CascadePanel open={open} columns={[{ items: platformItems }, { items: shopItems }]} />
-          <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
-            <Button
-              type="link"
-              size="small"
-              style={{ padding: 0, height: 20, fontSize: fontSize.caption }}
-              onClick={() => actions.set({ platform: null })}
-            >
-              恢复默认电渠
-            </Button>
-          </div>
-        </div>
+    <Select
+      aria-label="平台"
+      style={{ width: '100%' }}
+      popupMatchSelectWidth={false}
+      value={selectedPlatform}
+      placeholder={defaultPlatform ? `默认 · ${defaultPlatform}` : '未筛选'}
+      allowClear
+      // 选平台 = 整平台口径（勾其下全部渠道）；清除 = 回该国默认电渠
+      onChange={(p) =>
+        actions.set({ platform: p != null ? { platforms: [p], shopIds: [] } : null }) // §5.6 切换平台：仅改聚合入参，不动图窗与粒度
       }
-    >
-      <Tooltip title={labels.join('、') || (defaultPlatform ? `默认电渠：${defaultPlatform}` : undefined)}>
-        <div style={{ width: '100%', minWidth: 0 }}>
-          <CascadeTrigger labels={labels} placeholder={defaultPlatform || '未筛选'} open={open} />
-        </div>
-      </Tooltip>
-    </Popover>
+      options={options}
+      optionRender={(opt) => {
+        const row = rows.find((r) => r.platform === opt.value);
+        const isDefault = opt.value === defaultPlatform;
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
+            <span>{opt.label}</span>
+            {row != null && (
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>· {row.shops} 店铺</span>
+            )}
+            {isDefault && (
+              <span
+                style={{
+                  fontSize: fontSize.caption,
+                  lineHeight: '16px',
+                  padding: '0 5px',
+                  borderRadius: radius.pill,
+                  background: selectSoft,
+                  color: selectSoftInk,
+                  alignSelf: 'center',
+                }}
+              >
+                默认
+              </span>
+            )}
+          </span>
+        );
+      }}
+    />
   );
 }

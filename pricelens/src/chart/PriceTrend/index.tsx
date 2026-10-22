@@ -86,6 +86,7 @@ import {
   type YScale,
 } from './helpers';
 import PromoDrawer from './PromoDrawer';
+import PlatformCompareModal from './PlatformCompareModal';
 import PointPanel from './PointPanel';
 import { groupsOfCards, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
@@ -138,6 +139,8 @@ export default function PriceTrend(props: {
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
   // 促销力度明细抽屉（第五十六轮）：原图下横向热力带收进二级抽屉（纵向表格）
   const [promoDetailOpen, setPromoDetailOpen] = useState(false);
+  // 多平台比价弹窗（第一百三十四轮）：⋯ 菜单入口的次级功能（单产品各平台价格对比）
+  const [platformCompareOpen, setPlatformCompareOpen] = useState(false);
   // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
   // 不持久化（每次进页面默认收起）；促销明细抽屉打开时自动收起（右侧空间冲突）
   const [pointPanelOpen, setPointPanelOpen] = useState(false);
@@ -925,6 +928,7 @@ export default function PriceTrend(props: {
                 changeThreshold={changeThreshold}
                 onChangeThreshold={setChangeThreshold}
                 onOpenPromoDetail={openPromoDetail}
+                onOpenPlatformCompare={() => setPlatformCompareOpen(true)}
               />
             </div>
           </div>
@@ -1236,6 +1240,10 @@ export default function PriceTrend(props: {
         currency={state.currency}
         granularity={state.granularity}
       />
+
+      {/* 多平台比价弹窗（第一百三十四轮）：单产品各平台最低价与走势对比，数据层
+          platformPriceSpread = 全平台口径（与左上平台筛选无关）；产品取自当前看板 */}
+      <PlatformCompareModal open={platformCompareOpen} onClose={() => setPlatformCompareOpen(false)} />
 
       {/* 月/季下钻弹窗 */}
       <DrillModal

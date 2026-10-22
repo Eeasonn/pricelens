@@ -12,7 +12,7 @@
 //   且任意品牌都可做主分析（角色由用户指定，不再限华为）；
 // - 参数不合法（型号不存在等）静默忽略，回退默认/持久化值。
 // ============================================================
-import { dimProduct } from '../data';
+import { dimChannel, dimProduct } from '../data';
 import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
 import type { Page } from './PageContext';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
@@ -26,6 +26,25 @@ const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'config', 'alerts'];
 /** 逗号列表参数 → 去空白、去空项 */
 const listParam = (q: URLSearchParams, name: string): string[] =>
   (q.get(name) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+
+/** 渠道 id → 所属平台（维表反查为主，id 三段式「国家:平台:店铺类型」兜底） */
+function platformOfShopId(shopId: string): string {
+  return dimChannel.find((c) => c.channel_id === shopId)?.platform ?? shopId.split(':')[1] ?? '';
+}
+
+/** 平台单选归一：平台筛选器改回单选后，state.platform 只承载一个平台。
+ *  旧多选形态（链接 plat=A,B / 旧持久化 platforms 多值、shopIds 渠道下钻）读入时
+ *  取第一个平台归一；shop= 渠道映射为其所属平台；空选 / 解析不出平台 = null（默认电渠）。
+ *  数据层 effectiveChannelIds 不动——单选就是 platforms:[一个] 的特例，全部继续兼容。 */
+export function normalizePlatformSelection(platform: PlatformSelection | null): PlatformSelection | null {
+  if (!platform) return null;
+  if (platform.platforms.length > 0) return { platforms: [platform.platforms[0]], shopIds: [] };
+  if (platform.shopIds.length > 0) {
+    const p = platformOfShopId(platform.shopIds[0]);
+    return p ? { platforms: [p], shopIds: [] } : null;
+  }
+  return null;
+}
 
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null。
  *  第一百一十七轮：主分析可任意品牌（旧 ownOnly 白名单随之退役）。
@@ -62,11 +81,11 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     const i = q.get('i');
     if (i) out.filters.industry = i as FiltersState['industry'];
     // 第一百二十三轮：按档位主体模式退役，旧链接的 m=tier / t= 参数静默忽略
-    // 平台：plat = 整平台列表、shop = 渠道列表（旧链接单个 shop 同样可读）；
-    // 是否属于链接国家由 applyScopeDefaults 校验
+    // 平台单选：plat = 平台（旧多值链接取第一个）、shop = 渠道（旧链接映射为其所属平台）；
+    // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认电渠）
     const platforms = listParam(q, 'plat');
     const shopIds = listParam(q, 'shop');
-    if (platforms.length || shopIds.length) out.filters.platform = { platforms, shopIds } as PlatformSelection;
+    if (platforms.length || shopIds.length) out.filters.platform = normalizePlatformSelection({ platforms, shopIds });
     // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入
     const mainParam = q.get('main') ?? q.get('own');
     if (mainParam) {
