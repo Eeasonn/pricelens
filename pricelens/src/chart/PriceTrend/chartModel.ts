@@ -233,7 +233,7 @@ export function buildLabelPlan(p: {
   const compactPos: Record<string, Record<number, 'top' | 'bottom'>> = {};
   const compact = p.labelMode === 'compact';
   const nameW = (t: string): number => NAME_LOGO_W + t.length * (11 * 0.62) + 6;
-  const priceW = (t: string): number => t.length * (fontSize.bodySm * 0.62) + 8;
+  const priceW = priceLabelW; // 第一百三十二轮：与 buildOption 右缘钳位同口径（提升为共享）
   // 多系列（超聚焦阈值）：最大/最小从必放降为候选——必放项只保留首/末/S/E
   const demoteExtremes = series.length > FOCUS_MODE_THRESHOLD;
   for (const s of series) {
@@ -381,6 +381,30 @@ export function resolveLineShape(choice: LineShapeChoice, gran: Granularity): 's
   return choice;
 }
 
+/** 价格标签像素宽估算（第一百三十二轮从 buildLabelPlan 的局部 priceW 提升为共享：
+ *  14px 字号 ×0.62/字符 + 8px 呼吸；buildOption 右缘钳位与避让计划同口径，
+ *  金测断言「翻转后右缘 ≤ 绘图区右缘」也复用本函数） */
+export const priceLabelW = (text: string): number => text.length * (fontSize.bodySm * 0.62) + 8;
+/** 标签右缘与绘图区右缘的安全间距（居中标签右缘越过 plotRight − PAD 才触发翻转） */
+export const LABEL_RIGHT_PAD = 4;
+
+/**
+ * 标签右缘钳位/翻转（第一百三十二轮修 GUI 走查：量价面板价格标签压进右侧销量轴列）：
+ * ECharts 折线数值标签默认以数据点为中心，末点距绘图区右缘仅半桶宽（量价面板桶宽
+ * ~7px），4 位数标签右伸 ~20px 即越过 plotRight、压进 gridRight 预留的销量轴列
+ * （轨道线/刻度数字/拉伸柄）；价格看板右缘虽只是 24px 画布留白，同样构成越界。
+ * 规则：居中标签的估算右缘（cx + w/2）> plotRight − LABEL_RIGHT_PAD 时整体左翻
+ * （dx = −w/2）——翻转后标签右缘 = 数据点 x，点恒在绘图区内（距右缘 ≥ 半桶宽），
+ * 右缘必不越界。上下位（top/bottom、dy 避让）语义不变；翻转后与折线尾段的重叠
+ * 可接受（2px 细线 + 精简标签白描边）。compact/detail 两口径、两页通用。
+ */
+export function flipLabelDxOf(p: { v: number; i: number; geom: Geom }): number {
+  const { v, i, geom } = p;
+  const w = priceLabelW(fmtInt(v));
+  if (xPxOf(geom, i) + w / 2 <= geom.plotLeft + geom.plotWidth - LABEL_RIGHT_PAD) return 0;
+  return -w / 2;
+}
+
 export function buildOption(p: {
   geom: Geom | null;
   series: Series[];
@@ -450,7 +474,8 @@ export function buildOption(p: {
             show: pt.price != null && !dim && dyMap[i] !== undefined,
             position: posMap?.[i] ?? ('top' as const),
             distance: compact ? 6 : mark ? endpointLabelDistance(mark) : LABEL_DISTANCE,
-            offset: [0, dyMap[i] ?? 0],
+            // 第一百三十二轮：锚点靠绘图区右缘的标签左翻（dx 负值），右缘不越界
+            offset: [pt.price != null ? flipLabelDxOf({ v: pt.price, i, geom }) : 0, dyMap[i] ?? 0],
             color: s.color, // 第四十二轮：数值标签跟品牌色
             fontSize: fontSize.bodySm,
             fontWeight: 400,
@@ -504,7 +529,8 @@ export function buildOption(p: {
           show: !dim && !priceTypes.discounted && pt.rrp != null && dyMap[i] !== undefined,
           position: posMap?.[i] ?? ('top' as const),
           distance: compact ? 6 : LABEL_DISTANCE,
-          offset: [0, dyMap[i] ?? 0],
+          // 第一百三十二轮：同主线——仅 RRP 视图的右缘标签同样左翻钳位
+          offset: [pt.rrp != null ? flipLabelDxOf({ v: pt.rrp, i, geom }) : 0, dyMap[i] ?? 0],
           color: s.color, // 第四十二轮：数值标签跟品牌色
           fontSize: fontSize.bodySm,
           fontWeight: 400,

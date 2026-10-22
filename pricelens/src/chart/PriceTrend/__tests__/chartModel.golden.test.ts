@@ -8,7 +8,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import type { CurrencyMode, OfferInfo, Series, SeriesPoint } from '../../../dataModel/types';
-import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, yPxOf, type Bucket, type YScale } from '../helpers';
+import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, fmtInt, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, xPxOf, yPxOf, type Bucket, type YScale } from '../helpers';
 import {
   buildChangeMarks,
   buildExtremeMarks,
@@ -29,6 +29,7 @@ import {
   curveNameOf,
   LIFECYCLE_ROW_H,
   NAME_LEADER_PX,
+  priceLabelW,
   primaryPriceOf,
   scaleToDisplay,
 } from '../chartModel';
@@ -384,6 +385,52 @@ describe('buildOption', () => {
     expect(smoothMain.step).toBeUndefined();
     expect(smoothMain.smooth).toBe(true);
     expect(smoothMain.smoothMonotone).toBe('x');
+  });
+});
+
+// ---------------- 标签右缘钳位/翻转（第一百三十二轮：量价销量轴列不再被价格标签压入） ----------------
+// GUI 走查根因：ECharts 数值标签以数据点为中心，末点距绘图区右缘仅半桶宽——量价面板
+// （gridRight=56 预留销量轴列）4 位数标签右伸 ~25px 即压进轨道线/刻度数字。
+// 修复 = buildOption 对越界标签整体左翻（右缘锚在数据点上），compact/detail 两口径一致。
+
+describe('标签右缘钳位/翻转（第一百三十二轮）', () => {
+  // 上升段 1020..1031：最高=最新=末点（compact 必标末点）；末标签文案 fmtInt → '1 031'
+  const pts = Array.from({ length: 12 }, (_, i) => PT({ price: 1020 + i, bucketId: `w${i}` }));
+  const s = mkSeries({ points: pts });
+  const scale = computeYAxis({ series: [s], priceTypes: DISC_ONLY, sliderScale: 1 });
+  const LAST = pts.length - 1;
+  const w = priceLabelW(fmtInt(1031));
+
+  const lastDxOf = (labelMode: 'detail' | 'compact', width: number, gridRight: number): { dx: number; plotRight: number; cx: number } => {
+    const geom = buildGeom({ width, totalH: scale.plotHeight + 96 + GRID.bottom, gridTop: 96, series: [s], scale, currency: 'usd', gridLeft: 8, gridRight })!;
+    const option = buildOption({
+      geom,
+      series: [s],
+      priceTypes: DISC_ONLY,
+      granularity: 'week',
+      labelPlan: buildLabelPlan({ geom, series: [s], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: new Map(), labelMode }),
+      gridTop: 96,
+      endpointMarks: new Map(),
+      labelMode,
+    })!;
+    const data = ((option.series as Record<string, unknown>[])[0].data as { label: { show: boolean; offset: [number, number] } }[]);
+    expect(data[LAST].label.show).toBe(true); // 末点标签恒在（compact=最新价；detail=末点必放）
+    return { dx: data[LAST].label.offset[0], plotRight: geom.plotLeft + geom.plotWidth, cx: xPxOf(geom, LAST) };
+  };
+
+  it('量价面板形态（窄绘图区 + 56px 销量轴列）：末点标签越界 → 左翻，翻转后右缘 ≤ 绘图区右缘', () => {
+    for (const labelMode of ['compact', 'detail'] as const) {
+      const { dx, plotRight, cx } = lastDxOf(labelMode, 380, 56);
+      expect(cx + w / 2).toBeGreaterThan(plotRight); // 前置：居中口径确实越界（bug 形态成立）
+      expect(dx).toBeLessThan(0); // 触发左翻（右缘锚在数据点上）
+      expect(cx + dx + w / 2).toBeLessThanOrEqual(plotRight); // 验收：右缘不越绘图区
+    }
+  });
+
+  it('宽绘图区 + 居中本就不越界 → 不翻转（价格看板合并图现状不回归、无无谓抖动）', () => {
+    const { dx, plotRight, cx } = lastDxOf('compact', 1200, 24);
+    expect(cx + w / 2).toBeLessThanOrEqual(plotRight - 4); // 前置：距右缘 ≥ 安全间距
+    expect(dx).toBe(0);
   });
 });
 

@@ -31,14 +31,15 @@
 // 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；配额每卡
 // 1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8；即改即存。
 // 添加主分析产品 = 最后一个组框向下延长的底边正中的显性大按钮。
-// 破坏性动作轻确认：删整组、清空全部、模板恢复覆盖当前已选。
-// 模板（第一百三十一轮增强）：顶栏与卡级「＋模板」恒弹名称窗（同内容签名
-//   已存在时预填现有名称、确认后原位更新）；卡级把该组、顶栏把当前选择分别
-//   存为模板；模板 chip 与「更多」下拉项带 ✎（编辑，进模板编辑浮窗）与
-//   「＋」（加入当前选择——逐模板卡增量：主品不在 = 整卡追加（auto 随模板
-//   带入、卡数封顶 8），主品已在 = 只把缺失对比合并进现有卡（selKey 去重、
-//   卡配额封顶，确有新增即退出自动），气泡如实反映三态）；chip 本体点击 =
-//   恢复（覆盖当前已选，非空且不同时轻确认）；✎ 打开的模板编辑
+// 破坏性动作轻确认：删整组、清空全部。
+// 模板（第一百三十一轮增强、第一百三十三轮改纯插入）：顶栏与卡级「＋模板」
+//   恒弹名称窗（同内容签名已存在时预填现有名称、确认后原位更新）；卡级把
+//   该组、顶栏把当前选择分别存为模板；模板 chip 与「更多」下拉项带 ✎（编辑，
+//   进模板编辑浮窗）与「＋」（加入当前选择——逐模板卡增量：主品不在 = 整卡
+//   追加（auto 随模板带入、卡数封顶 8），主品已在 = 只把缺失对比合并进现有卡
+//   （selKey 去重、卡配额封顶，确有新增即退出自动），气泡如实反映三态）；
+//   **chip 本体与下拉项点击 = 同样的插入（第一百三十三轮：模板一律插入不替换
+//   当前已选，恢复/替换语义与轻确认全部退役）**；✎ 打开的模板编辑
 //   浮窗（TemplateEditorFlyout）支持改名、逐对换主品/增删对比、新增一对、
 //   删除模板，改动即存。按钮簇（第一百三十一轮）：卡级组头右侧 =
 //   匹配竞品 · ＋模板 · ✕；顶栏右侧 = 匹配竞品 · ＋模板 · 清空。
@@ -52,7 +53,6 @@ import {
   EditOutlined,
   HolderOutlined,
   PlusOutlined,
-  RollbackOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
@@ -97,7 +97,6 @@ import {
 import {
   TEMPLATE_CAP,
   comboSignature,
-  contentSignature,
   defaultTemplateName,
   planAppend,
   readCombos,
@@ -1119,12 +1118,6 @@ function PickerPanel() {
 
   const lastModelId = [...mains].reverse().find((c) => c.main)?.main?.modelId;
   const huaweiCards = mains.filter((c) => c.main != null && isHuaweiModel(c.main.modelId));
-  const currentSig = contentSignature(mains);
-
-  /** 模板恢复：覆盖当前已选内容（当前为空或与该模板相同时直接套用，否则轻确认） */
-  const applyCombo = (c: StoredCombo): void => {
-    actions.setMains(c.cards.map((x) => ({ ...x, id: newCardId() })));
-  };
 
   return (
     <>
@@ -1139,15 +1132,14 @@ function PickerPanel() {
               style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}
             >
               {combos.map((c, i) => {
-                const needConfirm = mains.length > 0 && contentSignature(c.cards) !== currentSig;
                 const summary = c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、');
                 const chip = (
                   <span
                     role="button"
-                    aria-label={`恢复模板 ${c.label}`}
-                    title={`恢复：${summary}`}
+                    aria-label={`加入模板 ${c.label}`}
+                    title={`把模板加入当前选择（新增不替换）：${summary}`}
                     className="lpl-pk-ghost"
-                    onClick={needConfirm ? undefined : () => applyCombo(c)}
+                    onClick={() => appendCombo(c)}
                     style={{
                       height: 22,
                       display: 'inline-flex',
@@ -1178,8 +1170,7 @@ function PickerPanel() {
                     >
                       <EditOutlined style={{ fontSize: 10 }} />
                     </span>
-                    <RollbackOutlined style={{ fontSize: 10, color: color.mute }} />
-                    {/* 尾段「＋」= 加入当前选择（增量追加，不动已有内容） */}
+                    {/* 尾段「＋」= 加入当前选择（增量追加，不动已有内容）；chip 本体点击同义 */}
                     <Tooltip title={appendTip(c)} zIndex={TIP_Z}>
                       <span
                         role="button"
@@ -1209,22 +1200,7 @@ function PickerPanel() {
                     key={i}
                     style={{ display: 'inline-flex', flexShrink: 0, visibility: i < recentVisible ? 'visible' : 'hidden' }}
                   >
-                    {needConfirm ? (
-                      <Popconfirm
-                        zIndex={POPOVER_Z}
-                        title="恢复该模板？"
-                        description="将替换当前已选的全部内容"
-                        okText="恢复"
-                        cancelText="取消"
-                        okButtonProps={{ size: 'small' }}
-                        cancelButtonProps={{ size: 'small' }}
-                        onConfirm={() => applyCombo(c)}
-                      >
-                        {chip}
-                      </Popconfirm>
-                    ) : (
-                      chip
-                    )}
+                    {chip}
                   </span>
                 );
               })}
@@ -1282,18 +1258,7 @@ function PickerPanel() {
                   onClick: ({ key }) => {
                     const c = combos[Number(key)];
                     if (!c) return;
-                    if (mains.length > 0 && contentSignature(c.cards) !== currentSig) {
-                      Modal.confirm({
-                        title: '恢复该模板？',
-                        content: '将替换当前已选的全部内容',
-                        okText: '恢复',
-                        cancelText: '取消',
-                        zIndex: POPOVER_Z,
-                        onOk: () => applyCombo(c),
-                      });
-                    } else {
-                      applyCombo(c);
-                    }
+                    appendCombo(c);
                   },
                 }}
               >
