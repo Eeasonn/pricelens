@@ -21,14 +21,14 @@ import { platformPriceSpread } from '../aggregate';
 
 const SCOPE = { countryCode: 'RU', industry: 'phone' } as const;
 
-// 我司锚系列 = HUAWEI nova 14 12+256 GB：RU 有 DNS/OZON/M.Video 多平台真实行、22 个采数周，
+// 华为锚系列 = HUAWEI nova 14 12+256 GB：RU 有 DNS/OZON/M.Video 多平台真实行、22 个采数周，
 // 四类规则均可观察（价格波动 + 真实跨平台价差）。
 const ownSku = dimProduct.find((p) => p.sku_id === 'own-huawei-nova-14__12-256gb__black')!;
 const ownKey = seriesKeyOfSku(ownSku.sku_id); // own-huawei-nova-14__12+256GB
 // 竞品锚系列 = iPhone 17 Pro 12+256 GB（RU 矩阵主竞品之一，全周期在采）
 const compSku = dimProduct.find((p) => p.sku_id === 'cmp-apple-iphone-17-pro__12-256gb__blue')!;
 const compKey = seriesKeyOfSku(compSku.sku_id);
-// RU 默认我司机型 Pura 90s Pro Max 的两档（own-gap 结构锚：最新现价 1 021 vs 1 142 USD）
+// RU 默认华为机型 Pura 90s Pro Max 的两档（own-gap 结构锚：最新现价 1 021 vs 1 142 USD）
 const PURA_256 = seriesKeyOfSku(dimProduct.find((p) => p.sku_id === 'own-huawei-pura-90s-pro-max__12-256gb__black')!.sku_id);
 const PURA_512 = seriesKeyOfSku(dimProduct.find((p) => p.sku_id === 'own-huawei-pura-90s-pro-max__12-512gb__black')!.sku_id);
 
@@ -126,7 +126,7 @@ describe('buildAlerts 规则边界', () => {
     expect(a).toEqual(b);
   });
 
-  it('结构不变量：promo 必带力度差；price-change 必带 WoW；platform-gap 仅我司且高低平台与 spread 直算一致', () => {
+  it('结构不变量：promo 必带力度差；price-change 必带 WoW；platform-gap 仅华为且高低平台与 spread 直算一致', () => {
     const alerts = buildAlerts(cfg([ownKey, compKey], 0.02));
     expect(alerts.length).toBeGreaterThan(0);
     for (const a of alerts) {
@@ -144,7 +144,7 @@ describe('buildAlerts 规则边界', () => {
         expect(a.wowPct).not.toBeNull();
         expect(Math.abs(a.wowPct!)).toBeGreaterThanOrEqual(0.02 - 1e-6);
       } else {
-        // 平台价差：仅我司品牌系列；字段与 platformPriceSpread 独立直算一致
+        // 平台价差：仅华为品牌系列；字段与 platformPriceSpread 独立直算一致
         expect(alertSeriesMeta(a.seriesKey, SCOPE)!.isOwn).toBe(true);
         expect(a.gapPct).not.toBeNull();
         expect(a.gapPct!).toBeGreaterThanOrEqual(0.02 - 1e-6);
@@ -273,7 +273,7 @@ describe('buildAlerts 规则边界', () => {
     expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(175);
     expect(alerts.filter((a) => a.type === 'promo').length).toBe(63);
     const withGap = buildAlerts({ ...cfg(ALL_KEYS, 0.05), enabled: { ...ALL_ON, 'own-gap': true }, thresholds: { 'price-change': 0.05, promo: 0.05, 'platform-gap': 0.05, 'own-gap': 0.15 } });
-    expect(withGap.filter((a) => a.type === 'own-gap').length).toBe(9); // 多档我司机型的贴近档位对
+    expect(withGap.filter((a) => a.type === 'own-gap').length).toBe(9); // 多档华为机型的贴近档位对
     expect(withGap.length).toBe(921);
   });
 });

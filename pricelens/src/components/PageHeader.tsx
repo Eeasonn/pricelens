@@ -15,13 +15,13 @@ import CountryBox from './FilterBar/CountryBox';
 import DataHelpModal from './DataHelpModal';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
-/** 2026-10-20 起聚焦价格看板：总览、预警两页置灰待后续迭代（页头仅保留一处预警入口） */
+/** 2026-10-20 起聚焦价格看板：总览页置灰待后续迭代；预警中心 2026-10-23 恢复可达 */
 const TABS: { page: Page; label: string; disabled?: boolean; hint?: string }[] = [
   { page: 'overview', label: '总览', disabled: true, hint: '当前版本暂不提供' },
   { page: 'dashboard', label: '价格看板' },
   { page: 'volume', label: '量价看板' },
   { page: 'config', label: '配置' },
-  { page: 'alerts', label: '预警', disabled: true, hint: '当前版本暂不提供' },
+  { page: 'alerts', label: '预警' },
 ];
 
 export default function PageHeader({ extra }: { title?: string; extra?: ReactNode }) {

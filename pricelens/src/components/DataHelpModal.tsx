@@ -2,7 +2,7 @@
 // 数据口径说明（第一百三十七轮建 / 第一百三十九轮翻修）：页头右上角问号入口 → 居中弹窗。
 // 内容 = 全站对原始采集数据所做的全部处理规则的业务语言说明：
 // 取价口径 / 默认店铺 / 平台店铺筛选 / 多平台比价 / 时间粒度 / 销量估算 /
-// 汇率 / 数据质量标记 / 权益与大促档期。修改任何取数规则时同步维护本页。
+// 汇率 / 数据质量标记 / 权益与大促档期 / 价格预警。修改任何取数规则时同步维护本页。
 // 翻修要点：①顶部锚点 chip 导航（点击平滑滚动到对应节）；②口径文案与实现对齐
 // （销量估算因子全列、比当前基准随所选店铺/平台、促销日历只读）；③文案去工程词。
 // ============================================================
@@ -20,6 +20,7 @@ const ANCHORS = [
   { id: 'dhm-fx', chip: '汇率' },
   { id: 'dhm-quality', chip: '质量' },
   { id: 'dhm-promo', chip: '促销' },
+  { id: 'dhm-alerts', chip: '预警' },
 ] as const;
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
@@ -87,7 +88,7 @@ export default function DataHelpModal({ open, onClose }: { open: boolean; onClos
         </Section>
         <Section id="dhm-shop" title="二、平台 / 店铺筛选与默认口径">
           <Li>筛选可精确到<b>具体店铺</b>（单店口径）；未手动选择时，按「配置页 → 默认平台店铺」为国家设定的默认店铺取价。</Li>
-          <Li>默认店铺未手动维护的国家，由系统自动预填（该国默认电渠下数据最全的主店），配置页可随时修改并立即生效。</Li>
+          <Li>默认店铺未手动维护的国家，由系统自动预填（该国默认平台下数据最全的主店），配置页可随时修改并立即生效。</Li>
           <Li>切换国家后，若所选店铺在该国不存在，自动回退默认口径。</Li>
         </Section>
         <Section id="dhm-compare" title="三、多平台比价">
@@ -121,6 +122,11 @@ export default function DataHelpModal({ open, onClose }: { open: boolean; onClos
           <Li>促销权益 = 从商品页解析出的分期 / 赠品 / 组合销售标注，随点位展示。</Li>
           <Li>大促档期 = 内置的国别促销日历（只读维表）映射的背景档期带，与价格采集相互独立。</Li>
           <Li>平台限定档期只在选中平台显示；未选平台 / 店铺时，按默认店铺 / 默认平台显示。</Li>
+        </Section>
+        <Section id="dhm-alerts" title="九、价格预警">
+          <Li>调价 / 折扣预警取价与看板同口径：代表色现价，随所选店铺（未选时为默认店铺）。</Li>
+          <Li>平台价差按该国全部平台计算，不受默认店铺与平台筛选影响。</Li>
+          <Li>在看板产品旁的铃铛或预警中心均可添加 / 取消监控；四类预警的开关、阈值在预警中心调整，并可按产品单独设置。</Li>
         </Section>
         <div style={{ fontSize: fontSize.caption, color: color.mute, borderTop: `1px solid ${color.hairline}`, paddingTop: 10 }}>
           任何取数规则调整都会同步更新本说明；规则细节以配置页说明为准。

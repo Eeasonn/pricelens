@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { writeUrlPatch } from './urlSync';
 
-// 2026-10-20 起：价格看板为默认页（聚焦看板呈现）；总览/预警页置灰待重构，URL 直达也回落看板。
+// 2026-10-20 起：价格看板为默认页（聚焦看板呈现）；总览页置灰待重构，URL 直达也回落看板。
+// 2026-10-23（第一百三十九轮）：预警中心恢复可达（订阅/阈值/明细闭环）。
 // 页签同步 URL query（?p=，默认页省略；筛选参数由 FiltersProvider 写）。
 // 第112轮：新增 'volume'（量价看板，价格 × 估算销量三面板对比）。
 export type Page = 'overview' | 'dashboard' | 'volume' | 'config' | 'alerts';
 
-const DISABLED_PAGES: Page[] = ['overview', 'alerts'];
+const DISABLED_PAGES: Page[] = ['overview'];
 
 interface PageCtx {
   page: Page;
@@ -18,7 +19,7 @@ const Ctx = createContext<PageCtx>({ page: 'dashboard', go: () => {} });
 function initialPage(): Page {
   try {
     const p = new URLSearchParams(window.location.search).get('p');
-    if (p === 'dashboard' || p === 'volume' || p === 'config') return p;
+    if (p === 'dashboard' || p === 'volume' || p === 'config' || p === 'alerts') return p;
   } catch {
     /* 无 window 忽略 */
   }

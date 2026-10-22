@@ -1,9 +1,9 @@
 // ============================================================
 // 预警中心纯计算层（第五十二轮建 / 第五十三轮扩三类 / 追补⑨细化四类独立阈值）：
 // 订阅系列 × 周度扫描 → 规则预警。四类规则（demo，与看板/总览同源数据）：
-// - 调价预警 price-change = 相邻有值周 |折后价变化| ≥ 阈值（我司/竞品都出）；
+// - 调价预警 price-change = 相邻有值周 |折后价变化| ≥ 阈值（华为/竞品都出）；
 // - 折扣预警 promo = 促销力度 = 1 − 折后价/RRP，相邻有值周 |Δ力度| ≥ 阈值；
-// - 平台价差预警 platform-gap = 仅我司品牌：同一周各平台独立折后价最高/最低差 ≥ 阈值；
+// - 平台价差预警 platform-gap = 仅华为品牌：同一周各平台独立折后价最高/最低差 ≥ 阈值；
 // - 档位间距预警 own-gap（追补⑨新增）= 同型号相邻 ROM 档（按最新现价升序）
 //   间距 = 高价/低价 − 1 **低于** 阈值 → 两档太近、价位没有合理分开（方向与前三类相反，
 //   属型号/档位结构层，阈值为全局级不按产品覆盖）；
@@ -140,7 +140,7 @@ function effThreshold(cfg: AlertCfg, key: string, type: AlertType): number {
 
 /**
  * 订阅系列的预警扫描（唯一入口，追补⑨改配置对象入参）。
- * own-gap = 型号级结构预警：订阅内的我司系列按型号分组，组内 ≥2 档时按各档
+ * own-gap = 型号级结构预警：订阅内的华为系列按型号分组，组内 ≥2 档时按各档
  * 「最新有值周现价」升序做相邻对，间距低于阈值即报（不随产品覆写）。
  */
 export function buildAlerts(cfg: AlertCfg): AlertItem[] {
@@ -213,7 +213,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
           promoDeltaPp: (intensity - prevIntensity) * 100,
         });
       }
-      // 调价预警（我司/竞品都出）：|WoW| ≥ 阈值（阈值 ≤0 = 关）
+      // 调价预警（华为/竞品都出）：|WoW| ≥ 阈值（阈值 ≤0 = 关）
       if (effEnabled(cfg, key, 'price-change') && thr('price-change') > 0 && prevPrice != null && prevPrice > 0) {
         const wow = hit.price / prevPrice - 1;
         if (Math.abs(wow) >= thr('price-change') - EPS) {
@@ -225,7 +225,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
           });
         }
       }
-      // 平台价差预警（仅我司品牌系列）：周内各平台独立价 最高/最低 − 1 ≥ 阈值（阈值 ≤0 = 关）
+      // 平台价差预警（仅华为品牌系列）：周内各平台独立价 最高/最低 − 1 ≥ 阈值（阈值 ≤0 = 关）
       if (effEnabled(cfg, key, 'platform-gap') && thr('platform-gap') > 0 && meta.isOwn) {
         // 平台价差 = 该国该周各平台真实最低价的最高/最低 − 1（单平台国家无价差）；
         // 取价 SKU = 代表色（与上文现价同一条线，原字典序首色口径已对齐淘汰）
@@ -250,7 +250,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       prevIntensity = intensity;
     }
   }
-  // 档位间距预警（追补⑨，型号级）：订阅内我司系列按型号分组，最新有值现价相邻对
+  // 档位间距预警（追补⑨，型号级）：订阅内华为系列按型号分组，最新有值现价相邻对
   if (cfg.enabled['own-gap']) {
     const latestOf = (key: string): { price: number; weekId: string; weekLabel: string } | null => {
       const meta = alertSeriesMeta(key, scope);

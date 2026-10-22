@@ -4,17 +4,17 @@
 // 四区结构：
 // ① 概览条（类看板摘要三件套）：最新预警数+最新周 ｜ 类型分布（最新态计数，pill 可点 = 切筛选）｜ 监控范围；
 // ② 工具行：类型 Segmented（最新态计数）+ 品牌筛选 + 「＋添加监控」搜索；
-// ③ 监控矩阵（主区，类总览行组表格语言）：行 = 订阅系列按品牌分组（我司品牌置顶），
+// ③ 监控矩阵（主区，类总览行组表格语言）：行 = 订阅系列按品牌分组（华为品牌置顶），
 //    列 = 四类预警——列头即规则（全局开关 + 阈值 Popover，原「全局规则」整卡收编于此）；
 //    单元格 = 该系列该类型**最新一条**的凝练读数（调价 ↓x% → $价 / 促销加深 xpp /
 //    平台差 / 间距，alertDigest），点击行下展开该类型全部历史（次级）；小阈值 = 按产品覆写；
-//    行尾 = 统一 AlertBell；档位间距 = 型号级，在我司品牌组下方以成对细条呈现；
-// ④ 历史事件（次级，默认折叠）：周分组时间序 + 方向箭头（跌/加深琥珀↓、涨/收窄蓝↑）+ 看板↗。
+//    行尾 = 统一 AlertBell；档位间距 = 型号级，在华为品牌组下方以成对细条呈现；
+// ④ 历史事件（次级，默认折叠）：周分组时间序 + 方向箭头（跌/加深琥珀↓、涨/收窄蓝↑）+ 看板跳转。
 // 数据 = alerts.ts 纯引擎（useAlerts 与页头徽标/总览列/看板共用一份结果）+
 //   groupAlertsBySeries / groupAlertsByWeek / latestAlerts 分组纯函数（金测锚定）。
 // ============================================================
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Button, Empty, Popover, Segmented, Select, Slider, Switch } from 'antd';
+import { Button, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
@@ -30,10 +30,11 @@ import {
   type AlertSeriesMeta,
   type AlertType,
 } from '../dataModel/alerts';
-import { productSelectionOfAnySeriesKey, productSelectionOfSeriesKey } from '../state/urlSync';
+import { productSelectionOfSeriesKey } from '../state/urlSync';
 import { getEffectiveBenchmark } from '../state/configStore';
-import { defaultChannelOf } from '../dataModel/aggregate';
+import { defaultPlatformAnchorOf } from '../dataModel/aggregate';
 import { autoComparesFor, buildCards } from '../state/mainSelection';
+import usePageViewState from '../state/usePageViewState';
 import { ownBrand } from '../components/ProductCascader/tree';
 import PageHeader from '../components/PageHeader';
 import BrandDot from '../components/BrandMark';
@@ -48,21 +49,21 @@ const TYPE_RULES: Record<
 > = {
   'price-change': {
     name: '调价预警',
-    desc: '折后价较上一个有价周变化 ≥ 阈值（各品牌都通知）',
+    desc: '折后价较上一个有价周涨跌 ≥ 阈值（各品牌都通知；取代表色现价，随所选店铺，未选时为默认店铺）',
     min: 1,
     max: 15,
     step: 0.5,
   },
   promo: {
     name: '折扣预警',
-    desc: '促销力度较上一个有价周变化 ≥ 阈值',
+    desc: '促销力度较上一个有价周变化 ≥ 阈值（取价口径与调价一致）',
     min: 1,
     max: 15,
     step: 0.5,
   },
   'platform-gap': {
     name: '平台价差预警',
-    desc: `同一周各平台折后价的最高与最低差 ≥ 阈值（仅限 ${ownBrand()}）`,
+    desc: `同一周各平台折后价的最高与最低差 ≥ 阈值（仅限 ${ownBrand()}；按该国全部平台计算，不受默认店铺与平台筛选影响）`,
     min: 0.5,
     max: 3,
     step: 0.1,
@@ -77,6 +78,51 @@ const TYPE_RULES: Record<
   },
 };
 const ORDER: AlertType[] = ['price-change', 'promo', 'platform-gap', 'own-gap'];
+
+/** 阈值滑杆（松手生效）：拖动中数值只在本地预览，松手才写入配置——与看板
+ *  「每格高度 / 价格变化提醒」滑杆同语言；预警为订阅集全量扫描，逐帧提交会卡顿 */
+function ThresholdSlider({
+  min,
+  max,
+  step,
+  value,
+  disabled,
+  below,
+  onCommit,
+}: {
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  disabled?: boolean;
+  below?: boolean;
+  onCommit: (pct: number) => void;
+}) {
+  const [drag, setDrag] = useState<number | null>(null);
+  const shown = drag ?? value;
+  return (
+    <>
+      <Slider
+        style={{ flex: 1, margin: '0 2px' }}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        value={shown}
+        onChange={(v) => setDrag(+(v as number))}
+        onAfterChange={(v) => {
+          setDrag(null);
+          onCommit(+(v as number) / 100);
+        }}
+        tooltip={{ formatter: (v) => (below ? `< ${v}%` : `≥ ${v}%`) }}
+      />
+      <span className="tnum" style={{ fontSize: 12, fontWeight: 600, width: 58, whiteSpace: 'nowrap' }}>
+        {below ? '< ' : '≥ '}
+        {shown}%
+      </span>
+    </>
+  );
+}
 
 /** 矩阵列栅格：产品 ｜ 四类 ｜ 铃铛列（第五十五轮 150 → 172：格内放最新预警凝练详情） */
 const MATRIX_COLS = 'minmax(0,1fr) repeat(4, 172px) 44px';
@@ -149,15 +195,15 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
         {a.weekLabel} · {weekTag(a.weekId)}
       </span>
       <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={onOpen}>
-        看板 ↗
+        看板
       </Button>
     </div>
   );
 }
 
-/** 单条触发的「看板 ↗」：带周焦点下钻，同时把主分析卡切到该产品
+/** 单条触发的「看板」跳转：带周焦点下钻，同时把主分析卡切到该产品
  *  （华为产品 = 主分析卡；竞品告警优先从对标矩阵反查映射的华为配置建卡，
- *  带矩阵对比区并开启「自动匹配竞品」（确保被告警的竞品在图中），
+ *  带矩阵对比区并开启「匹配竞品」（确保被告警的竞品在图中），
  *  矩阵未覆盖或无映射时该竞品自身成主分析卡） */
 function useOpenInDashboard() {
   const { go } = usePage();
@@ -172,6 +218,7 @@ function useOpenInDashboard() {
         const normalize = (value: string): string => value.replace(/\s+/g, '');
         const competitorRom = normalize(sel.romram);
         const mapping = getEffectiveBenchmark().find((row) => {
+          if (row.country_code !== state.countryCode) return false; // 多国矩阵：只认当前国家的映射
           if (!row.competitor_sku_id.startsWith(`${sel.modelId}__`)) return false;
           const product = dimProduct.find((p) => p.sku_id === row.competitor_sku_id);
           return product != null && normalize(product.romram) === competitorRom;
@@ -184,7 +231,7 @@ function useOpenInDashboard() {
           const hasTarget = auto.some(
             (group) => group.modelId === sel.modelId && normalize(group.romram) === competitorRom,
           );
-          // 映射命中：矩阵对比区带出目标竞品，建卡即开「自动匹配竞品」；
+          // 映射命中：矩阵对比区带出目标竞品，建卡即开「匹配竞品」；
           // 矩阵异常缺失时显式补入该竞品（手动态）
           actions.setMains(
             hasTarget
@@ -209,26 +256,25 @@ export default function AlertsPage() {
   const platformLabel = useMemo(() => {
     const selection = state.platform;
     if (!selection || (selection.platforms.length === 0 && selection.shopIds.length === 0)) {
-      // 未选 = 默认店铺链生效：人工覆盖/预填店铺归属平台，兜底国家默认平台
-      const dc = defaultChannelOf(state.countryCode);
-      const byShop = dc ? dimChannel.find((c) => c.channel_id === dc)?.platform ?? null : null;
-      return byShop ?? dimRegion.find((r) => r.country_code === state.countryCode)?.default_platform ?? '默认平台';
+      // 未选 = 默认店铺链生效：默认店铺归属平台 → 兜底国家默认平台（defaultPlatformAnchorOf 统一出口）
+      return defaultPlatformAnchorOf(state.countryCode) ?? '默认平台';
     }
     const shopNames = new Map(dimChannel.map((c) => [c.channel_id, c.display_name]));
     return [...selection.platforms, ...selection.shopIds.map((id) => shopNames.get(id) ?? id)].join('、');
   }, [state.platform, state.countryCode]);
 
-  // ---- 本页视图态：类型（'all' | AlertType）+ 品牌筛选 ----
-  const [typeFilter, setTypeFilter] = useState<'all' | AlertType>('all');
-  const [brandFilter, setBrandFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'alerts' | 'normal'>('all');
-  const [rowSort, setRowSort] = useState<'alerts-first' | 'latest' | 'name'>('alerts-first');
+  // ---- 本页视图态：类型/品牌/状态筛选 + 排序 + 历史视图 = 会话态跨页保留
+  //（usePageViewState，与两看板同约定）；modelFilter/focusAlert/expanded 属瞬态 ----
+  const [typeFilter, setTypeFilter] = usePageViewState<'all' | AlertType>('alerts.typeFilter', () => 'all');
+  const [brandFilter, setBrandFilter] = usePageViewState<string[]>('alerts.brandFilter', () => []);
+  const [statusFilter, setStatusFilter] = usePageViewState<'all' | 'alerts' | 'normal'>('alerts.statusFilter', () => 'all');
+  const [rowSort, setRowSort] = usePageViewState<'alerts-first' | 'latest' | 'name'>('alerts.rowSort', () => 'alerts-first');
   const [modelFilter, setModelFilter] = useState<{ id: string; name: string } | null>(null);
   const [focusAlert, setFocusAlert] = useState<{ seriesKey: string; type: AlertType; weekId: string } | null>(null);
   // 矩阵单元格展开（`${seriesKey}|${type}` → 行下展开该产品该类事件明细）；切筛选时收起
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // 历史事件 = 次级视图（第五十五轮，用户：主视觉只报最新，历史收进次级），默认折叠
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = usePageViewState<boolean>('alerts.showHistory', () => false);
   const toggleExp = (k: string): void =>
     setExpanded((prev) => {
       const n = new Set(prev);
@@ -267,11 +313,13 @@ export default function AlertsPage() {
     return () => window.clearTimeout(timer);
   }, [focusAlert, expanded]);
 
-  // ---- 订阅系列元数据，按品牌分组（我司品牌置顶，其余品牌字典序；组内按 label）----
+  // ---- 订阅系列元数据，按品牌分组（华为品牌置顶，其余品牌字典序；组内按 label）----
+  // 按当前国家/产业解析（与 useAlerts 同口径）——跨国订阅在他国口径下不显示、不计入概览
   const brandGroups = useMemo(() => {
+    const scope = { countryCode: state.countryCode, industry: state.industry };
     const groups = new Map<string, { brand: string; isOwn: boolean; rows: { key: string; meta: AlertSeriesMeta }[] }>();
     for (const key of state.alertSubs) {
-      const meta = alertSeriesMeta(key);
+      const meta = alertSeriesMeta(key, scope);
       if (!meta) continue;
       let g = groups.get(meta.brand);
       if (!g) {
@@ -284,7 +332,7 @@ export default function AlertsPage() {
     return [...groups.values()]
       .map((g) => ({ ...g, rows: [...g.rows].sort((a, b) => a.meta.label.localeCompare(b.meta.label)) }))
       .sort((a, b) => (a.isOwn === b.isOwn ? a.brand.localeCompare(b.brand) : a.isOwn ? -1 : 1));
-  }, [state.alertSubs]);
+  }, [state.alertSubs, state.countryCode, state.industry]);
 
   const bySeries = useMemo(() => groupAlertsBySeries(alerts), [alerts]);
   // 最新态（第五十五轮，用户口径：主视觉只报最新、历史进次级）：计数与单元格都按「每系列×类型最新一条」
@@ -309,6 +357,8 @@ export default function AlertsPage() {
     return m;
   }, [latestList]);
 
+  // 概览计数 = 当前口径有效订阅数（跨国订阅在他国口径下不计入，与矩阵行一致）
+  const subCount = brandGroups.reduce((n, g) => n + g.rows.length, 0);
   const ownCount = brandGroups.filter((g) => g.isOwn).reduce((n, g) => n + g.rows.length, 0);
   const brandOptions = brandGroups.map((g) => ({ value: g.brand, label: g.brand }));
   const matchBrand = (brand: string): boolean => brandFilter.length === 0 || brandFilter.includes(brand);
@@ -358,18 +408,20 @@ export default function AlertsPage() {
         ? '当前没有符合条件的正常产品'
         : '尚未添加监控产品 — 在上方搜索添加，或在看板点产品旁的铃铛';
 
-  // 添加监控候选：全部系列（我司在前，按 label 字典序）
+  // 添加监控候选：当前国家/产业可分析的系列（华为在前，按 label 字典序）——
+  // 其他口径的产品在本页不产预警，不进候选
   const allSeries = useMemo(() => {
     const seen = new Set<string>();
-    const list: { key: string; label: string }[] = [];
+    const list: { key: string; label: string; isOwn: boolean }[] = [];
     for (const p of dimProduct) {
+      if (p.industry !== state.industry || !p.countries.includes(state.countryCode)) continue;
       const key = `${p.sku_id.split('__')[0]}__${p.romram.replace(/\s+/g, '')}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      list.push({ key, label: `${p.brand} ${p.model_name} ${p.romram}` });
+      list.push({ key, label: `${p.brand} ${p.model_name} ${p.romram}`, isOwn: p.is_own === true });
     }
-    return list.sort((a, b) => a.label.localeCompare(b.label));
-  }, []);
+    return list.sort((a, b) => (a.isOwn === b.isOwn ? a.label.localeCompare(b.label) : a.isOwn ? -1 : 1));
+  }, [state.countryCode, state.industry]);
 
   // ---- 矩阵列头：类型名 + 全局开关 + 阈值 Popover（「全局规则」收编于此）----
   const renderTypeHead = (t: AlertType): ReactNode => {
@@ -407,20 +459,15 @@ export default function AlertsPage() {
               <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 2 }}>{rule.name}</div>
               <div style={{ fontSize: 11, color: color.mute, marginBottom: 8, lineHeight: '15px' }}>{rule.desc}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Slider
-                  style={{ flex: 1, margin: '0 2px' }}
+                <ThresholdSlider
                   min={rule.min}
                   max={rule.max}
                   step={rule.step}
                   disabled={!on}
                   value={val}
-                  onChange={(v) => actions.setAlertThresholds({ [t]: +(v as number) / 100 })}
-                  tooltip={{ formatter: (v) => (rule.below ? `< ${v}%` : `≥ ${v}%`) }}
+                  below={rule.below}
+                  onCommit={(pct) => actions.setAlertThresholds({ [t]: pct })}
                 />
-                <span className="tnum" style={{ fontSize: 12, fontWeight: 600, width: 58, whiteSpace: 'nowrap' }}>
-                  {rule.below ? '< ' : '≥ '}
-                  {val}%
-                </span>
               </div>
             </div>
           }
@@ -472,23 +519,19 @@ export default function AlertsPage() {
                   actions.setAlertProductRule(rowKey, { ...(rule ?? {}), types: next });
                 }}
               />
-              <Slider
-                style={{ flex: 1, margin: '0 2px' }}
+              <ThresholdSlider
                 min={r.min}
                 max={r.max}
                 step={r.step}
                 value={thrVal}
-                onChange={(v) =>
+                below={r.below}
+                onCommit={(pct) =>
                   actions.setAlertProductRule(rowKey, {
                     ...(rule ?? {}),
-                    thresholds: { ...(rule?.thresholds ?? {}), [t]: +(v as number) / 100 },
+                    thresholds: { ...(rule?.thresholds ?? {}), [t]: pct },
                   })
                 }
               />
-              <span className="tnum" style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                {r.below ? '< ' : '≥ '}
-                {thrVal}%
-              </span>
             </div>
             {(thrOverridden || typeOverridden) && (
               <div style={{ marginTop: 8, textAlign: 'right' }}>
@@ -551,7 +594,7 @@ export default function AlertsPage() {
         {children}
       </div>
     );
-    // 档位间距：型号级、不参与产品覆写——我司行显「型号级 + 触发数」，竞品行「—」
+    // 档位间距：型号级、不参与产品覆写——华为行显「型号级 + 触发数」，竞品行「—」
     if (t === 'own-gap') {
       if (!meta.isOwn) {
         return wrap(<span style={{ fontSize: 11, color: color.hairlineStrong }}>—</span>);
@@ -756,12 +799,12 @@ export default function AlertsPage() {
             <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: color.ink }}>
-                  {state.alertSubs.length}
+                  {subCount}
                 </span>
                 <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
               </div>
               <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                {ownBrand()} {ownCount} · 其他品牌 {state.alertSubs.length - ownCount} · 单独设置 {Object.keys(state.alertProducts).length} 项
+                {ownBrand()} {ownCount} · 其他品牌 {subCount - ownCount} · 单独设置 {Object.keys(state.alertProducts).length} 项
               </div>
             </div>
           </section>
@@ -815,12 +858,19 @@ export default function AlertsPage() {
               <Select
                 showSearch
                 size="small"
-                placeholder="＋ 添加监控（搜索品牌 / 型号 / 容量）"
+                placeholder="＋ 添加监控（搜索品牌 / 型号 / 产品）"
                 style={{ width: 320 }}
                 value={null}
                 filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                 onChange={(key) => {
-                  if (key) actions.setAlertSubs([key as string], true);
+                  if (!key) return;
+                  actions.setAlertSubs([key as string], true);
+                  // 反馈 + 定位到新行（多品牌时新行位置不可预期，避免「加没加上」的疑惑）
+                  const label = allSeries.find((s) => s.key === key)?.label ?? '';
+                  message.success(`已添加监控：${label}`);
+                  setBrandFilter([]);
+                  setStatusFilter('all');
+                  setFocusAlert({ seriesKey: key as string, type: 'price-change', weekId: '' });
                 }}
                 options={allSeries
                   .filter((s) => !state.alertSubs.includes(s.key))
@@ -832,7 +882,7 @@ export default function AlertsPage() {
             {/* 列头 = 规则行（全局开关 + 阈值） */}
             <div style={{ display: 'grid', gridTemplateColumns: MATRIX_COLS, alignItems: 'center', borderBottom: `1px solid ${color.hairline}` }}>
               <span style={{ fontSize: 11, color: color.mute, paddingLeft: 16, paddingBlock: 8 }}>
-                监控产品（{state.alertSubs.length}）
+                监控产品（{subCount}）
               </span>
               {ORDER.map((t) => renderTypeHead(t))}
               <span />
@@ -890,7 +940,7 @@ export default function AlertsPage() {
                             </span>
                             <span style={{ flex: 1 }} />
                             <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={() => openInDash(a)}>
-                              看板 ↗
+                              看板
                             </Button>
                           </div>
                         ))}
@@ -922,7 +972,7 @@ export default function AlertsPage() {
                   清除筛选
                 </Button>
               )}
-              <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={() => setShowHistory((v) => !v)}>
+              <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={() => setShowHistory((v: boolean) => !v)}>
                 {showHistory ? '收起' : `展开（${filtered.length}）`}
               </Button>
             </div>
