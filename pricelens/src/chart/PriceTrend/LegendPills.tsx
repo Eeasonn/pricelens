@@ -5,10 +5,10 @@
 // 点击页签 = 屏蔽/恢复该系列折线。隐藏态 = 虚线边 + 降透明（原视觉不变）。
 // ============================================================
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { ExportOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import type { Series } from '../../dataModel/types';
-import { curveNameOf } from './chartModel';
+import { curveNameOf, latestLinkOf } from './chartModel';
 import { color, radius } from '../../theme/tokens';
 
 export default function LegendPills(props: {
@@ -58,6 +58,21 @@ export default function LegendPills(props: {
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.body }}>
               {curveNameOf(s)}
             </span>
+            {/* 最新商品页外链（第一百四十轮）：恒指该系列最新价所在商品页；
+                stopPropagation 防触发药丸的显隐切换 */}
+            {latestLinkOf(s) && (
+              <a
+                href={latestLinkOf(s)!.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`打开最新商品页：${curveNameOf(s)}`}
+                title={latestLinkOf(s)!.shop ? `打开最新商品页（${latestLinkOf(s)!.shop}）` : '打开最新商品页'}
+                onClick={(e) => e.stopPropagation()}
+                style={{ display: 'inline-flex', alignItems: 'center', color: color.mute, flexShrink: 0 }}
+              >
+                <ExportOutlined style={{ fontSize: 10 }} />
+              </a>
+            )}
           </span>
         );
       })}

@@ -43,7 +43,7 @@
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover } from 'antd';
-import { TagOutlined, CloseOutlined } from '@ant-design/icons';
+import { ExportOutlined, TagOutlined, CloseOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -93,6 +93,7 @@ import {
   buildTierBoxes,
   buildTickRows,
   collectTierValues,
+  latestLinkOf,
   primaryPriceOf,
   resolveLineShape,
   scaleToDisplay,
@@ -1371,6 +1372,25 @@ export default function Chart(props: ChartProps) {
                         >
                           {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
                         </span>
+                        {/* 最新商品页外链（第一百四十轮）：恒指该系列最新价所在商品页（与
+                            悬停列无关）；tip 容器 pointerEvents none 防挡图，链接单独恢复可点 */}
+                        {(() => {
+                          const link = latestLinkOf(s);
+                          if (!link) return null;
+                          return (
+                            <a
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`打开最新商品页：${curveNameOf(s)}`}
+                              title={link.shop ? `打开最新商品页（${link.shop}）` : '打开最新商品页'}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 4, color: color.mute, flexShrink: 0, pointerEvents: 'auto' }}
+                            >
+                              <ExportOutlined style={{ fontSize: 10 }} />
+                            </a>
+                          );
+                        })()}
                       </div>
                       {items.map((it) => (
                         <div
@@ -1463,7 +1483,8 @@ export default function Chart(props: ChartProps) {
             // ---- 浮层模式：跟随十字竖线，右缘自动左翻 ----
             const x0 = xPxOf(geom, tipIdx);
             const nameEst = Math.max(...rows.map((r) => curveNameOf(r.s).length)) * 6.2 + 14;
-            const W = Math.ceil(20 + 6 * 6 + 2 + 38 + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst));
+            const hasLink = rows.some((r) => latestLinkOf(r.s) != null);
+            const W = Math.ceil(20 + 6 * 6 + 2 + 38 + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasLink ? 16 : 0);
             const flip = x0 + 16 + W > geom.plotLeft + geom.plotWidth;
             const left = flip ? x0 - 16 - W : x0 + 16;
             const top = Math.min(

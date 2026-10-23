@@ -12,9 +12,9 @@
 // 并预选该组主分析产品；不传完全不渲染，向后兼容。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { LeftOutlined, RightOutlined, SwapOutlined } from '@ant-design/icons';
+import { ExportOutlined, LeftOutlined, RightOutlined, SwapOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
-import { curveNameOf } from './chartModel';
+import { curveNameOf, latestLinkOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
 import { color, radius, selectSoft } from '../../theme/tokens';
 
@@ -31,6 +31,7 @@ interface PillSpec {
   text: string;
   hidden: boolean;
   main: boolean; // 主品药丸 = 本组主分析产品（浅蓝底/描边/加粗）
+  link?: ReturnType<typeof latestLinkOf>; // 最新商品页外链（无 = 不渲染图标）
 }
 
 function Pill({
@@ -89,6 +90,21 @@ function Pill({
       >
         {pill.text}
       </span>
+      {/* 最新商品页外链（第一百四十轮）：恒指该系列最新价所在商品页；
+          stopPropagation 防触发药丸的显隐切换 */}
+      {pill.link && (
+        <a
+          href={pill.link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`打开最新商品页：${pill.text}`}
+          title={pill.link.shop ? `打开最新商品页（${pill.link.shop}）` : '打开最新商品页'}
+          onClick={(e) => e.stopPropagation()}
+          style={{ display: 'inline-flex', alignItems: 'center', color: color.mute, flexShrink: 0 }}
+        >
+          <ExportOutlined style={{ fontSize: 10 }} />
+        </a>
+      )}
     </span>
   );
 }
@@ -136,6 +152,7 @@ function GroupBlock({
     text: curveNameOf(s),
     hidden: hiddenKeys.has(s.key),
     main: group.mainKey === s.key,
+    link: latestLinkOf(s),
   }));
   const mainPill = pills.find((p) => p.main) ?? null; // 主品无数据/空对 = null（不画药丸也不画 vs）
   const compares = pills.filter((p) => !p.main);

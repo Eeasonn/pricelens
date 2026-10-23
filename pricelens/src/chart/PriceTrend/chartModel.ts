@@ -734,6 +734,22 @@ export interface PriceSummaryItem {
   url: string; // 取证跳转链接（摘要条「来源」超链接用）
 }
 
+/** 系列「最新商品页」链接（第一百四十轮）：窗口内最新有价点的取证链接与来源店铺，
+ *  图例药丸 / 悬停明细的「打开商品页」入口共用——链接恒指该系列最新价所在
+ *  商品页（与悬停位置无关）；无有价点或该点无链接 = null */
+export interface LatestLink {
+  url: string;
+  shop: string | null;
+}
+
+export function latestLinkOf(s: Series): LatestLink | null {
+  for (let i = s.points.length - 1; i >= 0; i--) {
+    const p = s.points[i];
+    if (p.price != null) return p.url ? { url: p.url, shop: p.shopName ?? null } : null;
+  }
+  return null;
+}
+
 /**
  * 摘要条纯计算（第三十四轮引入，第三十五轮扩展时点模式）：口径固定「折后价 vs RRP」，
  * 与图表 priceTypes 无关。
