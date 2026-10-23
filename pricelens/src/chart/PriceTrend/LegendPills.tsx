@@ -68,9 +68,9 @@ export default function LegendPills(props: {
                 aria-label={`打开最新商品页：${curveNameOf(s)}`}
                 title={latestLinkOf(s)!.shop ? `打开最新商品页（${latestLinkOf(s)!.shop}）` : '打开最新商品页'}
                 onClick={(e) => e.stopPropagation()}
-                style={{ display: 'inline-flex', alignItems: 'center', color: color.mute, flexShrink: 0 }}
+                style={{ display: 'inline-flex', alignItems: 'center', color: color.link, flexShrink: 0 }}
               >
-                <ExportOutlined style={{ fontSize: 10 }} />
+                <ExportOutlined style={{ fontSize: 11 }} />
               </a>
             )}
           </span>

@@ -100,9 +100,9 @@ function Pill({
           aria-label={`打开最新商品页：${pill.text}`}
           title={pill.link.shop ? `打开最新商品页（${pill.link.shop}）` : '打开最新商品页'}
           onClick={(e) => e.stopPropagation()}
-          style={{ display: 'inline-flex', alignItems: 'center', color: color.mute, flexShrink: 0 }}
+          style={{ display: 'inline-flex', alignItems: 'center', color: color.link, flexShrink: 0 }}
         >
-          <ExportOutlined style={{ fontSize: 10 }} />
+          <ExportOutlined style={{ fontSize: 11 }} />
         </a>
       )}
     </span>

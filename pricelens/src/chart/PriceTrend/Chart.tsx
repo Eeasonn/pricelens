@@ -43,7 +43,7 @@
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover } from 'antd';
-import { ExportOutlined, TagOutlined, CloseOutlined } from '@ant-design/icons';
+import { PictureOutlined, TagOutlined, CloseOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -53,7 +53,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, font, fontSize, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
+import { color, font, fontSize, radius, selectSoft, selectSoftInk, shadow , formatPrice } from '../../theme/tokens';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import { useFilters } from '../../state/FiltersContext';
 import {
@@ -93,7 +93,6 @@ import {
   buildTierBoxes,
   buildTickRows,
   collectTierValues,
-  latestLinkOf,
   primaryPriceOf,
   resolveLineShape,
   scaleToDisplay,
@@ -103,6 +102,7 @@ import {
   type SeriesNameItem,
 } from './chartModel';
 import OfferPopover from './OfferPopover';
+import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 import ChartToolbar from './ChartToolbar';
 import BrandDot from '../../components/BrandMark';
 
@@ -403,6 +403,7 @@ export default function Chart(props: ChartProps) {
   const chartDivRef = useRef<HTMLDivElement | null>(null); // ECharts 挂载层（背景带之下、DOM 覆盖层之下）
   const chartRef = useRef<echarts.ECharts | null>(null);
   const [width, setWidth] = useState(0);
+  const [snapInfo, setSnapInfo] = useState<SnapshotInfo | null>(null); // 悬停明细行尾「快照」取证弹窗
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   // 第一百一十四轮：悬停纵向位置（容器坐标，钳入绘图区）——横向虚线跟随；
   // 多面板布局经 onCrosshairYMove 上报、crosshairY 受控回灌全部面板
@@ -1372,25 +1373,30 @@ export default function Chart(props: ChartProps) {
                         >
                           {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
                         </span>
-                        {/* 最新商品页外链（第一百四十轮）：恒指该系列最新价所在商品页（与
-                            悬停列无关）；tip 容器 pointerEvents none 防挡图，链接单独恢复可点 */}
-                        {(() => {
-                          const link = latestLinkOf(s);
-                          if (!link) return null;
-                          return (
-                            <a
-                              href={link.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label={`打开最新商品页：${curveNameOf(s)}`}
-                              title={link.shop ? `打开最新商品页（${link.shop}）` : '打开最新商品页'}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 4, color: color.mute, flexShrink: 0, pointerEvents: 'auto' }}
-                            >
-                              <ExportOutlined style={{ fontSize: 10 }} />
-                            </a>
-                          );
-                        })()}
+                        {/* 该周页面快照（第一百四十轮追补）：历史时点以快照取证、不跳现页
+                            （现页价格早已变化）；该点有折后价才有快照。tip 容器 pointerEvents
+                            none 防挡图，触发器单独恢复可点 */}
+                        {pt?.price != null && (
+                          <span
+                            role="button"
+                            aria-label={`查看该周页面快照：${curveNameOf(s)}`}
+                            title={pt.shopName ? `查看该周页面快照（${pt.shopName}）` : '查看该周页面快照'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSnapInfo({
+                                seriesLabel: s.label,
+                                shopName: pt.shopName ?? null,
+                                bucketId: pt.bucketId,
+                                dateText: fmt_hoverDate(granularity, pt.xLabel || (series[0]?.points[tipIdx]?.xLabel ?? '')),
+                                priceText: formatPrice(pt.price, currency),
+                                url: pt.url ?? '',
+                              });
+                            }}
+                            style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 4, color: color.mute, flexShrink: 0, pointerEvents: 'auto', cursor: 'pointer' }}
+                          >
+                            <PictureOutlined style={{ fontSize: 10 }} />
+                          </span>
+                        )}
                       </div>
                       {items.map((it) => (
                         <div
@@ -1483,8 +1489,8 @@ export default function Chart(props: ChartProps) {
             // ---- 浮层模式：跟随十字竖线，右缘自动左翻 ----
             const x0 = xPxOf(geom, tipIdx);
             const nameEst = Math.max(...rows.map((r) => curveNameOf(r.s).length)) * 6.2 + 14;
-            const hasLink = rows.some((r) => latestLinkOf(r.s) != null);
-            const W = Math.ceil(20 + 6 * 6 + 2 + 38 + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasLink ? 16 : 0);
+            const hasSnap = rows.some((r) => r.s.points[tipIdx]?.price != null);
+            const W = Math.ceil(20 + 6 * 6 + 2 + 38 + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasSnap ? 16 : 0);
             const flip = x0 + 16 + W > geom.plotLeft + geom.plotWidth;
             const left = flip ? x0 - 16 - W : x0 + 16;
             const top = Math.min(
@@ -1962,9 +1968,11 @@ export default function Chart(props: ChartProps) {
           {offerMarkers.map((m) => (
             <OfferPopover key={m.key} x={m.x} y={m.y} offer={m.offer} />
           ))}
-          {/* 悬停快照/下钻图标已撤（第一百一十四轮，评审）：悬停列上只画品牌色小圆点；
-              快照取证入口收进图下核心信息明细的取证列（SnapshotModal 由明细表承载）；
-              月/季下钻仍由点击有值点（±HIT_PX）触发 */}
+          {/* 快照取证弹窗（第一百四十轮追补）：入口在悬停明细每行行尾（图面不画
+              图标，第一百一十四轮撤图面悬停图标的原则不变）；图下明细表取证列
+              仍各有一份入口，两路同弹窗 */} 
+          <SnapshotModal info={snapInfo} onClose={() => setSnapInfo(null)} />
+          {/* 悬停列上只画品牌色小圆点；月/季下钻仍由点击有值点（±HIT_PX）触发 */}
         </>
       )}
     </div>
