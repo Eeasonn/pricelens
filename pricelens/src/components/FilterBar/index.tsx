@@ -194,12 +194,11 @@ function ProductPickerEntry() {
  *  第一百三十一轮波2：showTime = 时间筛选簇（仅价格看板与量价看板传入），
  *  币种右侧短分隔线后渲染；卡片根为 RangePicker 弹层挂载容器（向下展开）。 */
 export default function FilterBar({ showTime = false }: { showTime?: boolean } = {}) {
-  const cardRef = useRef<HTMLDivElement | null>(null);
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
-        {/* position:relative：作为时间范围弹层的定位容器（left:0/宽度 100% 随卡片根） */}
-        <section ref={cardRef} className="lpl-fb" style={{ position: 'relative', background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
+        {/* 时间范围弹层锚定在其筛选簇自身（第一百四十二轮对齐修复），卡片根不再是定位容器 */}
+        <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30, flexWrap: 'nowrap' }}>
             <ScopeFields />
             {/* 入口列弹性让位（第一百三十一轮波2收窄：basis 320→260、minWidth 240→200，
@@ -217,7 +216,7 @@ export default function FilterBar({ showTime = false }: { showTime?: boolean } =
             {showTime && (
               <>
                 <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-                <TimeBox popupContainerRef={cardRef} />
+                <TimeBox />
               </>
             )}
           </div>

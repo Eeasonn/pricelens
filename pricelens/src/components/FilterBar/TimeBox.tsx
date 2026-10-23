@@ -7,12 +7,12 @@
 // 时渲染在币种右侧）。手动选段 = 退出自动模式；「自动」= 跟随所选产品
 // 最早/最晚有价时间。查看窗口复位由各看板监听范围变化自理。
 // ============================================================
-import { useMemo, type RefObject } from 'react';
+import { useMemo } from 'react';
 import { TimeRangeCluster } from '../../chart/PriceTrend/XBrush';
 import { dataBucketRange, enumerateBuckets, type Bucket } from '../../chart/PriceTrend/helpers';
 import { useFilters } from '../../state/FiltersContext';
 
-export default function TimeBox({ popupContainerRef }: { popupContainerRef?: RefObject<HTMLDivElement | null> }) {
+export default function TimeBox() {
   const { state, actions } = useFilters();
   // 全集桶 = 枚举基准（与看板同款：dataBucketRange 定全集、enumerateBuckets 出序列）
   const [dataStart, dataEnd] = useMemo(() => dataBucketRange(state.granularity), [state.granularity]);
@@ -54,8 +54,7 @@ export default function TimeBox({ popupContainerRef }: { popupContainerRef?: Ref
         onRangeChange={onRangeChange}
         onGranularityChange={actions.setGranularity}
         onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
-        placement="bottomLeft"
-        popupContainerRef={popupContainerRef}
+        placement="bottomRight"
       />
     </div>
   );

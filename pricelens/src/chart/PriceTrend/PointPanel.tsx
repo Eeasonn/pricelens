@@ -10,6 +10,7 @@ import { LeftOutlined } from '@ant-design/icons';
 import type { CurrencyMode, Granularity } from '../../dataModel/types';
 import { color, fontSize, radius } from '../../theme/tokens';
 import PriceSummary, { fmtPointDate } from './PriceSummary';
+import { groupOrdinal } from './tableModel';
 import type { PriceSummaryItem } from './chartModel';
 
 interface PointPanelProps {
@@ -23,6 +24,9 @@ interface PointPanelProps {
   alertCounts?: Record<string, number>;
   subscribedKeys?: Set<string>;
   onToggleSubscribe?: (key: string) => void;
+  /** ≥2 张产品卡时按卡分组（第一百四十二轮）：每卡一个小框，组序 = 卡序、
+   *  组内沿用档位/现价排序；单卡/缺省 = 平铺不分组 */
+  groups?: { ordinal: number; items: PriceSummaryItem[] }[] | null;
 }
 
 export default function PointPanel(props: PointPanelProps) {
@@ -68,12 +72,34 @@ export default function PointPanel(props: PointPanelProps) {
           时点 {props.pointDate ?? fmtPointDate(props.granularity, asOf)}
         </span>
       </div>
-      {/* 产品清单：纵向一行一框；多产品时纵向滚动 */}
+      {/* 产品清单：纵向一行一框；多产品时纵向滚动。≥2 张产品卡时每卡一个小框
+          （第 N 组同图例语言），单卡平铺 */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {props.items.length === 0 ? (
           <div style={{ padding: '32px 0', textAlign: 'center', fontSize: fontSize.bodySm, color: color.mute }}>
             当前时间段无数据
           </div>
+        ) : props.groups && props.groups.length >= 2 ? (
+          props.groups.map((g) => (
+            <div
+              key={g.ordinal}
+              style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: '8px 10px 6px', marginBottom: 6 }}
+            >
+              <div style={{ fontSize: 11, lineHeight: '15px', color: color.mute, marginBottom: 3 }}>{groupOrdinal(g.ordinal)}</div>
+              <PriceSummary
+                items={g.items}
+                currency={props.currency}
+                granularity={props.granularity}
+                pointDate={props.pointDate}
+                alertCounts={props.alertCounts}
+                subscribedKeys={props.subscribedKeys}
+                onToggleSubscribe={props.onToggleSubscribe}
+                stack
+                chrome={false}
+                showHeader={false}
+              />
+            </div>
+          ))
         ) : (
           <PriceSummary
             items={props.items}

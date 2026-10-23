@@ -35,7 +35,7 @@ export interface TimeRangeClusterProps {
   onGranularityChange: (granularity: Granularity) => void;
   onToggleAdaptive: () => void;
   /** 弹层展开方向：位于页面顶部时向下展开。 */
-  placement?: 'topLeft' | 'bottomLeft';
+  placement?: 'topLeft' | 'bottomLeft' | 'bottomRight';
   /** 弹层挂载容器（缺省挂在组件自身根节点）。 */
   popupContainerRef?: RefObject<HTMLDivElement | null>;
 }
@@ -148,7 +148,7 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
   );
 
   return (
-    <div ref={rootRef} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+    <div ref={rootRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
       <button
         type="button"
         aria-label="自动时间范围"
@@ -200,7 +200,6 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
             placement={placement}
             transitionName="" // 弹层即时开关：不依赖 CSS transitionend（嵌入 webview 不回报，见上注）
             getPopupContainer={() => popupContainerRef?.current ?? rootRef.current ?? document.body}
-            styles={{ popup: { root: { width: '100%', left: 0 } } }}
             style={{ minWidth: 0, flex: '1 1 240px', width: 240, height: 30 }}
           />
         </ConfigProvider>

@@ -38,11 +38,8 @@ select {
   margin-inline-start: 2px;
 }
 
-/* RangePicker 的周/月/季面板共用一个紧凑尺寸，季度面板不再因默认布局变高或错位。 */
-.xbrush-range-popup {
-  width: 100% !important;
-  left: 0 !important;
-}
+/* RangePicker 弹层：锚定触发簇右下（第一百四十二轮对齐修复，原整卡铺满的
+   left:0/width:100% 遗产已删）；此处只做面板紧凑尺寸，季度面板不因默认布局变高。 */
 .xbrush-range-popup .ant-picker-panel-container {
   border-radius: 8px;
 }

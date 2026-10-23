@@ -584,6 +584,30 @@ export default function PriceTrend(props: {
       });
   }, [chartSeries, state.industry, state.countryCode]);
 
+  // 时点摘要按卡分组（第一百四十二轮）：≥2 张产品卡时每组一个小框（PointPanel），
+  // 组序 = 选择浮窗卡序；组内沿用上面的档位/现价排序
+  const summaryGroups = useMemo(() => {
+    if (effMains.length < 2) return null;
+    const keyToCard = new Map<string, number>();
+    effMains.forEach((card, i) => {
+      for (const sel of [card.main, ...card.compares]) {
+        if (!sel) continue;
+        keyToCard.set(seriesKeyOf(sel), i);
+      }
+    });
+    const byCard = new Map<number, typeof summary>();
+    for (const it of summary) {
+      const card = keyToCard.get(it.key);
+      if (card == null) continue;
+      const arr = byCard.get(card);
+      if (arr) arr.push(it);
+      else byCard.set(card, [it]);
+    }
+    return [...byCard.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([card, items]) => ({ ordinal: card + 1, items }));
+  }, [summary, effMains]);
+
   // ---- 大促背景带（第三十四轮）：dim_promo ∩ 窗口桶覆盖区间；随窗口联动 ----
   const winBuckets = useMemo(() => buckets.slice(win.s, win.e + 1), [buckets, win]);
 
@@ -1275,6 +1299,7 @@ export default function PriceTrend(props: {
           open={pointPanelOpen}
           onCollapse={() => setPointPanelOpen(false)}
           items={summary}
+          groups={summaryGroups}
           currency={state.currency}
           granularity={state.granularity}
           pointDate={pointDate}
