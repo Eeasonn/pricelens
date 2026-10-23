@@ -1,21 +1,33 @@
 // ============================================================
-// 卖家（seller）细化口径单测（第一百四十一轮）：渠道内默认取全部卖家最低在架价，
-// PlatformQuery.seller 指定后取价收敛到该卖家。锚定：
+// 卖家（seller）细化口径单测（第一百四十一轮 / 追补三平台下钻）：
 //   - sellersOfChannel：覆盖周数降序、独立站渠道单卖家、OZON 3P 数百家；
 //   - priceForSelection 带 seller = 该卖家行直算一致、≥ 渠道最低价；
 //   - seller 不存在 = null（上层 applyScopeDefaults 会剥除，这里是最后防线）；
-//   - buildSeries 带 seller：折线值 = 该卖家价（现价/取证店铺随行带出）。
+//   - buildSeries 带 seller：折线值 = 该卖家价（现价/取证店铺随行带出）；
+//   - sellersOfPlatform / priceForPlatformSeller（多平台比价下钻，追补三）。
 // 作用域 RU / phone（nova 14 锚系列，与 alerts 金测同源）。
 // ============================================================
 import { describe, expect, it } from 'vitest';
-import { dimProduct, factPriceWeekly } from '../../data';
-import { buildSeries, priceForSelection, sellersOfChannel } from '../aggregate';
+import { dimChannel, dimProduct, factPriceWeekly } from '../../data';
+import { buildSeries, priceForPlatformSeller, priceForSelection, sellersOfChannel, sellersOfPlatform } from '../aggregate';
 
 const CC = 'RU';
 const CH = 'RU:ozon:3P'; // 387 家卖家的多卖家渠道
 
 const novaSku = dimProduct.find((p) => p.sku_id === 'own-huawei-nova-14__12-256gb__black')!;
 const SOME_WEEK = '202636'; // nova 14 在 OZON 3P 有真实行（barePrice 金测同域）
+
+/** 该周 nova 14 在指定平台（跨渠道）实际有价行的卖家集合 */
+const weekSellersOnPlatform = (platform: string): string[] => [
+  ...new Set(
+    factPriceWeekly
+      .filter((r) => {
+        if (r.country_code !== CC || r.week_id !== SOME_WEEK || r.sku_id !== novaSku.sku_id || r.price_local == null) return false;
+        return dimChannel.find((c) => c.channel_id === r.channel_id)?.platform === platform;
+      })
+      .map((r) => r.seller),
+  ),
+];
 
 describe('sellersOfChannel（渠道内卖家清单）', () => {
   it('OZON 3P 数百家、按覆盖周数降序；独立站渠道单卖家', () => {
@@ -40,13 +52,11 @@ describe('sellersOfChannel（渠道内卖家清单）', () => {
 describe('priceForSelection 的 seller 收敛', () => {
   it('指定卖家 = 该卖家最低行直算一致；恒 ≥ 渠道内全部卖家最低价', () => {
     // 该周该渠道实际有 nova 14 行的卖家（覆盖榜首位可能当周无此 SKU 行）
-    const weekSellers = [
-      ...new Set(
-        factPriceWeekly
-          .filter((r) => r.country_code === CC && r.channel_id === CH && r.week_id === SOME_WEEK && r.sku_id === novaSku.sku_id && r.price_local != null)
-          .map((r) => r.seller),
-      ),
-    ];
+    const weekSellers = [...new Set(
+      factPriceWeekly
+        .filter((r) => r.country_code === CC && r.channel_id === CH && r.week_id === SOME_WEEK && r.sku_id === novaSku.sku_id && r.price_local != null)
+        .map((r) => r.seller),
+    )];
     expect(weekSellers.length).toBeGreaterThan(0);
     const target = weekSellers[0];
     const chMin = priceForSelection(novaSku.sku_id, SOME_WEEK, CC, { platforms: [], shopIds: [CH] }, 'usd');
@@ -80,13 +90,11 @@ describe('priceForSelection 的 seller 收敛', () => {
 
 describe('buildSeries 的 seller 收敛', () => {
   it('带 seller 的折线值 = 单点取价（同 SKU 同周）；shopName 前缀 = 渠道 · 卖家', () => {
-    const weekSellers = [
-      ...new Set(
-        factPriceWeekly
-          .filter((r) => r.country_code === CC && r.channel_id === CH && r.week_id === SOME_WEEK && r.sku_id === novaSku.sku_id && r.price_local != null)
-          .map((r) => r.seller),
-      ),
-    ];
+    const weekSellers = [...new Set(
+      factPriceWeekly
+        .filter((r) => r.country_code === CC && r.channel_id === CH && r.week_id === SOME_WEEK && r.sku_id === novaSku.sku_id && r.price_local != null)
+        .map((r) => r.seller),
+    )];
     const target = weekSellers[0];
     const [s] = buildSeries({
       scope: { countryCode: CC, industry: 'phone' },
@@ -104,5 +112,27 @@ describe('buildSeries 的 seller 收敛', () => {
     const single = priceForSelection(novaSku.sku_id, SOME_WEEK, CC, { platforms: [], shopIds: [CH], seller: target }, 'usd');
     expect(priced!.price).toBe(Math.round(single!.price)); // SeriesPoint 价已取整
     expect(priced!.shopName).toContain(target);
+  });
+});
+
+describe('sellersOfPlatform / priceForPlatformSeller（多平台比价下钻，第一百四十二轮追补三）', () => {
+  it('平台内卖家 = 跨渠道合并（OZON ≥ 3P 单渠道家数）；覆盖周数降序', () => {
+    const ozon = sellersOfPlatform('RU', 'OZON');
+    const ozon3p = sellersOfChannel('RU', 'RU:ozon:3P');
+    expect(ozon.length).toBeGreaterThanOrEqual(ozon3p.length);
+    for (let i = 1; i < ozon.length; i++) {
+      expect(ozon[i - 1].weeks).toBeGreaterThanOrEqual(ozon[i].weeks);
+    }
+  });
+
+  it('指定卖家价 ≥ 平台全部卖家最低价；null = 与平台最低价同口径', () => {
+    const weekSellers = weekSellersOnPlatform('OZON');
+    expect(weekSellers.length).toBeGreaterThan(0);
+    const platformMin = priceForPlatformSeller('RU', novaSku.sku_id, SOME_WEEK, 'OZON', null, 'usd');
+    const sellerHit = priceForPlatformSeller('RU', novaSku.sku_id, SOME_WEEK, 'OZON', weekSellers[0], 'usd');
+    expect(platformMin).not.toBeNull();
+    expect(sellerHit).not.toBeNull();
+    expect(sellerHit!.price).toBeGreaterThanOrEqual(platformMin!.price);
+    expect(priceForPlatformSeller('RU', novaSku.sku_id, SOME_WEEK, 'OZON', '不存在的卖家', 'usd')).toBeNull();
   });
 });

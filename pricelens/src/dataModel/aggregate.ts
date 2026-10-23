@@ -311,6 +311,61 @@ export function sellerOfQuery(platform: PlatformQuery | null): string | null {
   return platform && platform.shopIds.length === 1 ? platform.seller ?? null : null;
 }
 
+let platformSellersCache: { cc: string; values: Map<string, ChannelSeller[]> } | null = null;
+
+/** 平台内卖家清单（跨该平台全部渠道合并；第一百四十二轮追补三：多平台比价下钻用）。
+ *  同名卖家跨渠道（1P/3P）取覆盖周并集；按覆盖周数降序、同数按名称。 */
+export function sellersOfPlatform(countryCode: string, platform: string): ChannelSeller[] {
+  if (platformSellersCache?.cc !== countryCode) {
+    const weeksByPlatform = new Map<string, Map<string, Set<string>>>();
+    const platformOfChannel = new Map(dimChannel.filter((c) => c.country_code === countryCode).map((c) => [c.channel_id, c.platform]));
+    for (const r of factPriceWeekly) {
+      if (r.country_code !== countryCode || r.price_local == null) continue;
+      const pf = platformOfChannel.get(r.channel_id);
+      if (!pf) continue;
+      let bySeller = weeksByPlatform.get(pf);
+      if (!bySeller) {
+        bySeller = new Map();
+        weeksByPlatform.set(pf, bySeller);
+      }
+      let w = bySeller.get(r.seller);
+      if (!w) {
+        w = new Set();
+        bySeller.set(r.seller, w);
+      }
+      w.add(r.week_id);
+    }
+    const out = new Map<string, ChannelSeller[]>();
+    for (const [pf, bySeller] of weeksByPlatform) {
+      out.set(
+        pf,
+        [...bySeller.entries()]
+          .map(([seller, w]) => ({ seller, weeks: w.size }))
+          .sort((a, b) => b.weeks - a.weeks || a.seller.localeCompare(b.seller)),
+      );
+    }
+    platformSellersCache = { cc: countryCode, values: out };
+  }
+  return platformSellersCache.values.get(platform) ?? [];
+}
+
+/** 平台（可指定卖家）周内最低折后价：多平台比价的卖家下钻取数——
+ *  seller null = 平台全部卖家取最低（与 platformPriceSpread 单平台价同口径） */
+export function priceForPlatformSeller(
+  countryCode: string,
+  skuId: string,
+  weekId: string,
+  platform: string,
+  seller: string | null,
+  currency: CurrencyMode,
+): { price: number } | null {
+  return minPriceOfRows(factRows(countryCode, skuId, weekId), (row) => {
+    if (seller != null && row.seller !== seller) return null;
+    const ch = dimChannel.find((c) => c.channel_id === row.channel_id);
+    return ch?.platform === platform ? displayPriceOf(row, currency) : null;
+  });
+}
+
 /** 单点取价（预警引擎与看板共享）：该国渠道选择内的最低折后价 */
 export function priceForSelection(
   skuId: string,

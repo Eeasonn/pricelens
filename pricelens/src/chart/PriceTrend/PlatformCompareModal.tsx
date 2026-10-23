@@ -18,7 +18,7 @@
 // 该周各平台价格与比当前差价率。
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ConfigProvider, Modal, Select } from 'antd';
+import { ConfigProvider, Input, Modal, Popover, Select } from 'antd';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
@@ -34,9 +34,13 @@ import {
   lowestPriceColorSku,
   platformPriceSpread,
   priceForSelection,
+  sellersOfPlatform,
+  priceForPlatformSeller,
 } from '../../dataModel/aggregate';
 import { bucketAnchorDate, dataBucketRange, enumerateBuckets, type Bucket } from './helpers';
-import { color, font, localCurrencySymbol, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { color, fontSize, font, localCurrencySymbol, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { CascadePanel, autoColumnWidth, measureText } from '../../components/ProductCascader';
+import type { CascadeRowItem } from '../../components/ProductCascader';
 
 echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
@@ -57,6 +61,8 @@ interface ProductOption {
 interface PlatformRow {
   platform: string;
   shops: number;
+  /** 指定的具体卖家（第一百四十二轮追补三）：null = 平台全部店铺最低价（默认） */
+  seller?: string | null;
   prices: (number | null)[]; // 与 weeks 对齐；null = 该周该平台无在架价
   latest: number | null; // 窗口内最后一个有价周
   vsLowest: number | null; // 最新价相对全场最低 +x.x
@@ -256,16 +262,100 @@ function PlatformTrendChart(props: {
   );
 }
 
+/** 平台 chip 的卖家下钻（第一百四十二轮追补三）：点平台名 → 卖家清单
+ *  （首行「全部店铺 · 最低价」= 平台最低价默认口径，下方按覆盖周数降序，
+ *  可搜索）；面板复用顶部筛选器的 CascadePanel——视觉同源 */
+function SellerPick({
+  cc,
+  platform,
+  picked,
+  onPick,
+  children,
+}: {
+  cc: string;
+  platform: string;
+  picked: string | null;
+  onPick: (seller: string | null) => void;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const sellers = useMemo(() => sellersOfPlatform(cc, platform), [cc, platform]);
+  const shops = dimChannel.filter((c) => c.country_code === cc && c.platform === platform).reduce((a, c) => a + c.shops, 0);
+  const q = query.trim().toLowerCase();
+  const visible = q ? sellers.filter((x) => x.seller.toLowerCase().includes(q)) : sellers;
+  const items: CascadeRowItem[] = [
+    {
+      key: '__all__',
+      label: '全部店铺 · 最低价',
+      active: picked == null,
+      onLabelClick: () => {
+        onPick(null);
+        setOpen(false);
+      },
+      trailing: (
+        <span style={{ fontSize: fontSize.caption, color: color.mute, flexShrink: 0 }}>· {shops} 店铺</span>
+      ),
+    },
+    ...visible.map((x) => ({
+      key: x.seller,
+      label: x.seller,
+      active: picked === x.seller,
+      onLabelClick: () => {
+        onPick(x.seller);
+        setOpen(false);
+      },
+      trailing: (
+        <span style={{ fontSize: fontSize.caption, color: color.mute, flexShrink: 0 }}>· {x.weeks} 周</span>
+      ),
+    })),
+  ];
+  const colW = useMemo(
+    () => autoColumnWidth([{ key: 'a', label: '全部店铺 · 最低价' }, ...sellers.map((x) => ({ key: x.seller, label: x.seller }))], {
+      extraW: Math.max(measureText(`· ${shops} 店铺`), measureText('· 24 周')) * (fontSize.caption / 13) + 6,
+      min: 220,
+      max: 360,
+    }),
+    [sellers, shops],
+  );
+  return (
+    <Popover
+      trigger="click"
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setQuery('');
+      }}
+      arrow={false}
+      placement="bottomLeft"
+      styles={{ body: { padding: 0 } as const }}
+      content={
+        <div>
+          <div style={{ padding: `8px 10px 6px`, borderBottom: `1px solid ${color.hairline}` }}>
+            <Input
+              size="small"
+              allowClear
+              placeholder="搜索卖家店铺"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={{ height: 24, fontSize: fontSize.caption }}
+            />
+          </div>
+          <CascadePanel open columns={[{ items, width: colW }]} height={300} />
+        </div>
+      }
+    >
+      {children}
+    </Popover>
+  );
+}
+
 export default function PlatformCompareModal({
   open,
   onClose,
-  initialProductKey,
 }: {
   open: boolean;
   onClose: () => void;
-  /** 可选预选产品（modelId|romram）：图例带「⇄ 比价」入口按该组主分析产品预选；
-   *  每次带值打开时重新套用，产品列表变化的兜底沿用 activeKey 回落现逻辑 */
-  initialProductKey?: string;
 }) {
   const { state } = useFilters();
   const cc = state.countryCode;
@@ -292,12 +382,12 @@ export default function PlatformCompareModal({
     return out;
   }, [state.mains]);
   const [picked, setPicked] = useState<string | null>(null);
-  // 图例「⇄ 比价」入口：带预选打开时套用（工具行入口不带值，保持上次所选）
-  useEffect(() => {
-    if (open && initialProductKey) setPicked(initialProductKey);
-  }, [open, initialProductKey]);
   const activeKey = picked != null && products.some((p) => p.key === picked) ? picked : products[0]?.key ?? null;
   const active = products.find((p) => p.key === activeKey) ?? null;
+  // 各平台指定的具体卖家（第一百四十二轮追补三）：null/缺省 = 平台全部店铺最低价；
+  // 切产品重置（卖家覆盖随产品变化）
+  const [sellerPicks, setSellerPicks] = useState<Record<string, string>>({});
+  useEffect(() => setSellerPicks({}), [activeKey]);
 
   // 周桶 = 看板筛选范围（rangeStart/End 为当前粒度桶 id，换算成周 id）∩ 数据全量周域
   const weeks = useMemo<Bucket[]>(() => {
@@ -359,6 +449,15 @@ export default function PlatformCompareModal({
         arr[i] = price;
       }
     });
+    // 指定了具体卖家的平台：线切到该卖家价（覆盖平台最低价；无货周断开）
+    for (const [pf, seller] of Object.entries(sellerPicks)) {
+      if (!seller) continue;
+      const arr = pricesByPlatform.get(pf);
+      if (!arr) continue;
+      for (let i = 0; i < weeks.length; i++) {
+        arr[i] = priceForPlatformSeller(cc, skuId, weeks[i].id, pf, seller, state.currency)?.price ?? null;
+      }
+    }
     const out: PlatformRow[] = [...shopsByPlatform.entries()].map(([platform, shops]) => {
       const prices = pricesByPlatform.get(platform) ?? new Array<number | null>(weeks.length).fill(null);
       let latest: number | null = null;
@@ -368,7 +467,7 @@ export default function PlatformCompareModal({
           break;
         }
       }
-      return { platform, shops, prices, latest, vsLowest: null, vsCurrent: null, lowest: false, current: false };
+      return { platform, shops, seller: sellerPicks[platform] || null, prices, latest, vsLowest: null, vsCurrent: null, lowest: false, current: false };
     });
     const priced = out.filter((r) => r.latest != null);
     const min = priced.length ? Math.min(...priced.map((r) => r.latest!)) : null;
@@ -393,7 +492,7 @@ export default function PlatformCompareModal({
       if (b.latest != null) return 1;
       return a.platform.localeCompare(b.platform);
     });
-  }, [skuId, weeks, cc, state.currency, curPrices, curPlatform]);
+  }, [skuId, weeks, cc, state.currency, curPrices, curPlatform, sellerPicks]);
 
   // 关闭即整体卸载（同 DrillModal/SnapshotModal 惯例）：antd Modal 常驻挂载、
   // 仅切 open=false 的关法在 StrictMode 开发态会留下 display:block 的透明遮罩
@@ -455,8 +554,33 @@ export default function PlatformCompareModal({
                         flexShrink: 0,
                       }}
                     />
-                    <span style={{ fontWeight: r.lowest ? 600 : 500 }}>{r.platform}</span>
-                    <span style={{ color: r.lowest ? selectSoftInk : color.mute }}>· {r.shops} 店铺</span>
+                    <SellerPick
+                      cc={cc}
+                      platform={r.platform}
+                      picked={r.seller ?? null}
+                      onPick={(seller) => setSellerPicks((prev) => ({ ...prev, [r.platform]: seller ?? '' }))}
+                    >
+                      <span
+                        role="button"
+                        aria-label={`选择 ${r.platform} 的卖家店铺`}
+                        title={r.seller ? `已指定卖家：${r.seller}（点击更换）` : `选择 ${r.platform} 内具体卖家店铺`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          fontWeight: r.lowest ? 600 : 500,
+                          color: 'inherit',
+                          cursor: 'pointer',
+                          borderBottom: `1px dashed ${r.seller ? selectAccent : 'transparent'}`,
+                        }}
+                      >
+                        {r.platform}
+                      </span>
+                    </SellerPick>
+                    <span style={{ color: r.lowest ? selectSoftInk : color.mute, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      · {r.seller || `${r.shops} 店铺`}
+                    </span>
                     <span style={{ fontWeight: 600, color: r.lowest ? selectSoftInk : color.ink }}>
                       · {r.latest != null ? fmtPrice(r.latest, usd) : '—'}
                     </span>
@@ -495,7 +619,7 @@ export default function PlatformCompareModal({
             </div>
             <PlatformTrendChart rows={rows} weeks={weeks} curPrices={curPrices} curPlatform={curPlatform} />
             <div style={{ fontSize: 12, color: color.mute, marginTop: 8, lineHeight: '18px' }}>
-              各平台价格 = 该平台全部店铺内最低在架价（折后价口径，取所选配置的最低价颜色 SKU）；「比当前」= 与看板当前取数点（所选店铺/平台，未选时为默认店铺）的差价率；时间范围随看板筛选。
+              各平台价格 = 该平台全部店铺内最低在架价（点平台名可指定具体卖家；折后价口径，取所选配置的最低价颜色 SKU）；「比当前」= 与看板当前取数点（所选店铺/平台，未选时为默认店铺）的差价率；时间范围随看板筛选。
             </div>
           </>
         ) : (

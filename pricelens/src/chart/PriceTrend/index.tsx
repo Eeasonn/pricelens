@@ -31,7 +31,7 @@
 // 本轮（多平台比价深化 + 视图态跨页保留）：
 // ① 比价弹窗补「比当前看板」差价率（弹窗内自理）与 initialProductKey 预选；
 // ② 图例带组块（分离/合并同款）块头「⇄ 比价」小按钮 → 打开比价弹窗并预选该组
-//    主分析产品（BrandLegendStrip onCompare 回调接线，见下方 onLegendCompare）；
+//    主分析产品；
 // ③ mergeView、windowIds 改 usePageViewState（sessionStorage 会话态）——切页
 //    返回保留上次分析状态；windowIds 恢复后仍走原有换算（粒度切换）/失义
 //    （范围改动 rangeWatch）路径，自适应首跑在范围未变时不再复位窗口。
@@ -150,7 +150,7 @@ export default function PriceTrend(props: {
   // 多平台比价弹窗（本轮入口上浮）：工具行「多平台比价」胶囊按钮直接打开；
   // 图例带组块「⇄ 比价」小按钮 = 带该组主品预选打开（initialProductKey）
   const [platformCompareOpen, setPlatformCompareOpen] = useState(false);
-  const [compareInitKey, setCompareInitKey] = useState<string | null>(null);
+
   // 图例块级比价入口：系列 key（modelId__配置去空格）→ 比价弹窗产品 key
   //（modelId|配置原样，弹窗产品列表的组 key 形态）
   const compareKeyOfSeriesKey = (seriesKey: string): string | null => {
@@ -162,14 +162,8 @@ export default function PriceTrend(props: {
     }
     return null;
   };
-  /** 图例块「⇄ 比价」：预选该组主品并打开比价弹窗 */
-  const onLegendCompare = (seriesKey: string): void => {
-    setCompareInitKey(compareKeyOfSeriesKey(seriesKey));
-    setPlatformCompareOpen(true);
-  };
-  /** 工具行/图内比价入口：不带预选（清除上次图例入口的预选） */
+  /** 工具行/图内比价入口：打开多平台比价弹窗 */
   const openPlatformCompare = (): void => {
-    setCompareInitKey(null);
     setPlatformCompareOpen(true);
   };
   // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
@@ -1161,7 +1155,7 @@ export default function PriceTrend(props: {
                           hiddenKeys={hiddenKeys}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
-                          onCompare={onLegendCompare}
+                         
                         />
                       </div>
                       <Chart
@@ -1237,7 +1231,7 @@ export default function PriceTrend(props: {
               hiddenKeys={hiddenKeys}
               onToggleHidden={toggleLegend}
               onHover={setLegendHoverKey}
-              onCompare={onLegendCompare}
+             
             />
           </div>
           <Chart
@@ -1319,7 +1313,6 @@ export default function PriceTrend(props: {
       <PlatformCompareModal
         open={platformCompareOpen}
         onClose={() => setPlatformCompareOpen(false)}
-        initialProductKey={compareInitKey ?? undefined}
       />
 
       {/* 月/季下钻弹窗 */}
