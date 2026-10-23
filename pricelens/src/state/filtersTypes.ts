@@ -34,6 +34,9 @@ export interface MainProduct {
 export interface PlatformSelection {
   platforms: string[]; // 勾选的平台（勾平台=勾其下全部店铺）
   shopIds: string[]; // 可下钻只勾具体渠道（channel_id = 国家:平台:店铺类型）
+  /** 第一百四十一轮：渠道内具体卖家店铺（事实行 seller）。仅在 shopIds 单渠道时
+   *  有意义；缺省/null = 该渠道全部卖家取最低在架价（默认口径）。 */
+  seller?: string | null;
 }
 
 export interface FiltersState {

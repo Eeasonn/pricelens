@@ -24,7 +24,7 @@ import type {
 } from './filtersTypes';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimProduct, dimRegion, dimTime } from '../data';
-import { lowestPriceColorSku, platformSelectionValidFor } from '../dataModel/aggregate';
+import { lowestPriceColorSku, platformSelectionValidFor, sellersOfChannel } from '../dataModel/aggregate';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
@@ -144,7 +144,12 @@ function isMainProductArray(value: unknown): value is MainProduct[] {
 
 function isPlatformSelection(value: unknown): value is PlatformSelection | null {
   if (value === null) return true;
-  return isRecord(value) && isStringArray(value.platforms) && isStringArray(value.shopIds);
+  return (
+    isRecord(value) &&
+    isStringArray(value.platforms) &&
+    isStringArray(value.shopIds) &&
+    (value.seller === undefined || value.seller === null || typeof value.seller === 'string')
+  );
 }
 
 function isPriceTypes(value: unknown): value is FiltersState['priceTypes'] {
@@ -311,6 +316,16 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
     platform: platformOk ? s.platform : null,
     ...defaults,
   };
+  // 卖家细化合法性：单渠道且该渠道确有此卖家（URL/旧持久化漂移防御）——
+  // 不合法只剥 seller，渠道选择保留（回渠道内最低价口径）
+  if (next.platform?.seller) {
+    const ch = next.platform.shopIds[0];
+    const ok =
+      next.platform.shopIds.length === 1 &&
+      ch != null &&
+      sellersOfChannel(scope.countryCode, ch).some((x) => x.seller === next.platform!.seller);
+    if (!ok) next.platform = { ...next.platform, seller: null };
+  }
   next.mains = next.mains.map((c) => (c.auto && c.main ? withAutoOn(c) : c));
   return next;
 }
@@ -449,7 +464,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     // 平台/店铺单选写入：店铺级选择 = plat={平台}&shop={渠道id}（平台由渠道反查）；
     // 仅平台级（旧兼容）只写 plat=；未选 = 双 null 删键（连同旧链接残留的 shop=）。
     // 与 readUrlOverrides 的归一化读取对称（读侧同存时 shop= 优先，数据层不动）
-    const { plat, shop } = platformUrlParamsOf(state.platform);
+    const { plat, shop, seller } = platformUrlParamsOf(state.platform);
     // 第一百三十八轮：时间范围/价格显示/汇总口径入链（rs/re/pt/agg）——分享链接
     // 带全取数上下文；自适应态不写范围（接收方随数据自动算），读入 rs/re 即退出自适应
     const ptCode = state.priceTypes.discounted && state.priceTypes.rrp
@@ -467,6 +482,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       main: mainKeys.join(',') || null,
       plat,
       shop,
+      seller,
       rs: state.adaptive ? null : state.rangeStart || null,
       re: state.adaptive ? null : state.rangeEnd || null,
       pt: ptCode,

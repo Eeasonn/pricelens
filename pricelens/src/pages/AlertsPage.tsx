@@ -260,7 +260,8 @@ export default function AlertsPage() {
       return defaultPlatformAnchorOf(state.countryCode) ?? '默认平台';
     }
     const shopNames = new Map(dimChannel.map((c) => [c.channel_id, c.display_name]));
-    return [...selection.platforms, ...selection.shopIds.map((id) => shopNames.get(id) ?? id)].join('、');
+    const base = [...selection.platforms, ...selection.shopIds.map((id) => shopNames.get(id) ?? id)].join('、');
+    return selection.seller ? `${base} · ${selection.seller}` : base;
   }, [state.platform, state.countryCode]);
 
   // ---- 本页视图态：类型/品牌/状态筛选 + 排序 + 历史视图 = 会话态跨页保留

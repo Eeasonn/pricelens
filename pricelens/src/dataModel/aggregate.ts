@@ -254,10 +254,61 @@ function minPriceRow(
   weekId: string,
   channels: Set<string>,
   currency: CurrencyMode,
+  seller: string | null = null,
 ): { row: FactPriceWeekly; price: number } | null {
   return minPriceOfRows(factRows(countryCode, skuId, weekId), (row) =>
-    channels.has(row.channel_id) ? displayPriceOf(row, currency) : null,
+    channels.has(row.channel_id) && (seller == null || row.seller === seller)
+      ? displayPriceOf(row, currency)
+      : null,
   );
+}
+
+// ---------------- 卖家店铺（第一百四十一轮：渠道内可下钻到具体卖家） ----------------
+
+export interface ChannelSeller {
+  seller: string; // 事实行 seller（源表「店铺名称」）
+  weeks: number; // 该卖家在此渠道的有价周数（覆盖越全越靠前）
+}
+
+let sellersCache: { cc: string; values: Map<string, ChannelSeller[]> } | null = null;
+
+/** 渠道内卖家清单（有价行口径）：按覆盖周数降序、同数按名称；懒构建缓存（事实静态）。
+ *  独立站类渠道通常 1 家；平台 3P 渠道可达数百——供筛选第三列与 seller 合法性校验。 */
+export function sellersOfChannel(countryCode: string, channelId: string): ChannelSeller[] {
+  if (sellersCache?.cc !== countryCode) {
+    // 单遍扫描：渠道 → 卖家 → 有价周集合（同卖家多 SKU/多行同周去重）
+    const weeksByChannel = new Map<string, Map<string, Set<string>>>();
+    for (const r of factPriceWeekly) {
+      if (r.country_code !== countryCode || r.price_local == null) continue;
+      let bySeller = weeksByChannel.get(r.channel_id);
+      if (!bySeller) {
+        bySeller = new Map();
+        weeksByChannel.set(r.channel_id, bySeller);
+      }
+      let w = bySeller.get(r.seller);
+      if (!w) {
+        w = new Set();
+        bySeller.set(r.seller, w);
+      }
+      w.add(r.week_id);
+    }
+    const out = new Map<string, ChannelSeller[]>();
+    for (const [ch, bySeller] of weeksByChannel) {
+      out.set(
+        ch,
+        [...bySeller.entries()]
+          .map(([seller, w]) => ({ seller, weeks: w.size }))
+          .sort((a, b) => b.weeks - a.weeks || a.seller.localeCompare(b.seller)),
+      );
+    }
+    sellersCache = { cc: countryCode, values: out };
+  }
+  return sellersCache.values.get(channelId) ?? [];
+}
+
+/** 平台选择中的卖家细化：仅单渠道选择时有意义（normalizePlatformSelection 保证），其余 = null */
+export function sellerOfQuery(platform: PlatformQuery | null): string | null {
+  return platform && platform.shopIds.length === 1 ? platform.seller ?? null : null;
 }
 
 /** 单点取价（预警引擎与看板共享）：该国渠道选择内的最低折后价 */
@@ -269,7 +320,7 @@ export function priceForSelection(
   currency: CurrencyMode,
 ): { price: number; row: FactPriceWeekly } | null {
   const set = new Set(effectiveChannelIds(countryCode, platform));
-  return minPriceRow(countryCode, skuId, weekId, set, currency);
+  return minPriceRow(countryCode, skuId, weekId, set, currency, sellerOfQuery(platform));
 }
 
 /** 周内各平台真实最低价（升序）：预警「平台价差」与总览「多平台对比」共用 */
@@ -337,6 +388,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
   const cc = q.scope.countryCode;
   const buckets = buildBuckets(q);
   const channels = new Set(effectiveChannelIds(cc, q.platform));
+  const seller = sellerOfQuery(q.platform);
   const out: Series[] = [];
   for (const g of q.groups) {
     const rg = resolveGroup(g);
@@ -350,7 +402,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         let sum = 0;
         let n = 0;
         for (const sid of rg.skuIds) {
-          const hit = minPriceRow(cc, sid, wid, channels, q.currency);
+          const hit = minPriceRow(cc, sid, wid, channels, q.currency, seller);
           if (!hit) continue;
           sum += hit.price;
           n++;
@@ -371,7 +423,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
       const weeklyBest: ({ row: FactPriceWeekly; price: number } | null)[] = bucket.weekIds.map((wid) => {
         let weekBest: { row: FactPriceWeekly; price: number } | null = null;
         for (const sid of rg.skuIds) {
-          const hit = minPriceRow(cc, sid, wid, channels, q.currency);
+          const hit = minPriceRow(cc, sid, wid, channels, q.currency, seller);
           if (hit && (!weekBest || hit.price < weekBest.price)) weekBest = hit;
         }
         return weekBest;

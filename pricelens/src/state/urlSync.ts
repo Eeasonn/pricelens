@@ -46,7 +46,11 @@ function platformOfShopId(shopId: string): string {
  *  - 空选 / null = null（默认口径：配置的默认平台店铺 → 默认平台全部渠道）。 */
 export function normalizePlatformSelection(platform: PlatformSelection | null): PlatformSelection | null {
   if (!platform) return null;
-  if (platform.shopIds.length > 0) return { platforms: [], shopIds: [platform.shopIds[0]] };
+  if (platform.shopIds.length > 0) {
+    // 卖家细化仅在单渠道时有意义；空串按未选处理（第一百四十一轮）
+    const seller = platform.shopIds.length === 1 && platform.seller ? platform.seller : null;
+    return { platforms: [], shopIds: [platform.shopIds[0]], seller };
+  }
   if (platform.platforms.length > 0) return { platforms: [platform.platforms[0]], shopIds: [] };
   return null;
 }
@@ -54,13 +58,15 @@ export function normalizePlatformSelection(platform: PlatformSelection | null): 
 /** 状态 → URL 参数（写侧）：店铺级选择写 `plat={平台}&shop={渠道id}`（平台由
  *  维表反查，反查不出按渠道 id 三段式兜底）；仅平台级（旧兼容）只写 plat=；
  *  未选两者皆空（调用方写 null 即删键，连带清掉旧链接残留）。 */
-export function platformUrlParamsOf(platform: PlatformSelection | null): { plat: string | null; shop: string | null } {
+export function platformUrlParamsOf(
+  platform: PlatformSelection | null,
+): { plat: string | null; shop: string | null; seller: string | null } {
   const shopId = platform?.shopIds[0];
   if (shopId) {
     const p = platformOfShopId(shopId);
-    return { plat: p || null, shop: shopId };
+    return { plat: p || null, shop: shopId, seller: shopId && platform?.seller ? platform.seller : null };
   }
-  return { plat: platform?.platforms[0] ?? null, shop: null };
+  return { plat: platform?.platforms[0] ?? null, shop: null, seller: null };
 }
 
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null。
@@ -103,7 +109,11 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认口径）
     const platforms = listParam(q, 'plat');
     const shopIds = listParam(q, 'shop');
-    if (platforms.length || shopIds.length) out.filters.platform = normalizePlatformSelection({ platforms, shopIds });
+    if (platforms.length || shopIds.length) {
+      // 卖家细化仅店铺级链接可带（shop= 单渠道）；无 shop 时静默忽略
+      const seller = shopIds.length === 1 ? q.get('seller') || null : null;
+      out.filters.platform = normalizePlatformSelection({ platforms, shopIds, seller });
+    }
     // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入
     const mainParam = q.get('main') ?? q.get('own');
     if (mainParam) {

@@ -1,6 +1,9 @@
 // ============================================================
-// §5.3 框三：平台 / 店铺 —— 「平台→店铺」两栏级联浮层，单选语义（第一百三十六轮：
-// Eason——「和之前一样是平台+店铺两层；只不过默认选到某个平台的某个店铺」。
+// §5.3 框三：平台 / 店铺 —— 「平台→渠道→卖家」三级级联浮层，单选语义（第一百三十六轮：
+// Eason——「和之前一样是平台+店铺两层；只不过默认选到某个平台的某个店铺」；
+// 第一百四十一轮加第三级：渠道行尾「›」展开该渠道的卖家（seller）清单——
+// 首行「全部店铺 · 最低价」= 渠道内取最低（默认口径，第一百四十一轮 Eason 拍板：
+// 默认取最小、想要可指定某一家），下方按覆盖周数降序列卖家，可搜索，点选提交。
 // 布局/交互骨架沿用旧版两栏级联（CascadeTrigger + Popover + CascadePanel），
 // 语义从 checkbox 多选改为单选）：
 //   点平台行 = 只切换右列店铺列表（不提交不关闭，平台行高亮）；
@@ -21,9 +24,10 @@
 //   店铺不属于新国家时由 applyScopeDefaults / platformSelectionValidFor 重置。
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, Popover } from 'antd';
+import { Button, Input, Popover } from 'antd';
+import { RightOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
-import { defaultChannelOf, defaultPlatformOf } from '../../dataModel/aggregate';
+import { defaultChannelOf, defaultPlatformOf, sellersOfChannel } from '../../dataModel/aggregate';
 import { dimChannel } from '../../data';
 import type { DimChannel } from '../../dataModel/types';
 import { color, fontSize, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
@@ -91,11 +95,19 @@ export default function PlatformBox() {
   const [open, setOpen] = useState(false);
   // 左列展开的平台（null = 跟随解析：已选店铺 → 默认 → 首个）；每次打开重置
   const [active, setActive] = useState<string | null>(null);
-  useEffect(() => setActive(null), [cc]); // 国家切换后左列回解析态
+  // 第三列展开的渠道（null = 不显示卖家列）；每次打开/切国家重置
+  const [sellerPane, setSellerPane] = useState<string | null>(null);
+  // 卖家列搜索词
+  const [sellerQuery, setSellerQuery] = useState('');
+  useEffect(() => {
+    setActive(null);
+    setSellerPane(null);
+  }, [cc]); // 国家切换后左右列回解析态
 
   // 单选归一读取：店铺级（shopIds[0]）优先；仅平台级 = 旧 plat= 链接兼容
   const sel = normalizePlatformSelection(state.platform);
   const selectedShopId = sel?.shopIds[0] ?? null;
+  const selectedSeller = selectedShopId != null ? sel?.seller ?? null : null;
   const selectedShop = selectedShopId
     ? dimChannel.find((c) => c.channel_id === selectedShopId) ?? null
     : null;
@@ -109,9 +121,15 @@ export default function PlatformBox() {
   // 右列高亮店铺：显式选中 > （未动过筛选时的）配置默认店铺；平台级兼容态不预选
   const highlightedShopId = selectedShopId ?? (selectedPlatformOnly == null ? defaultChannelId : null);
 
-  /** 选店铺 = 单渠道口径提交并关闭（绝不同时带 platforms，见文件头） */
+  /** 选渠道 = 单渠道口径（渠道内全部卖家取最低）提交并关闭（绝不同时带 platforms，见文件头） */
   const commitShop = (channel: DimChannel): void => {
-    actions.set({ platform: { platforms: [], shopIds: [channel.channel_id] } }); // §5.6 仅改聚合入参
+    actions.set({ platform: { platforms: [], shopIds: [channel.channel_id], seller: null } }); // §5.6 仅改聚合入参
+    setOpen(false);
+  };
+
+  /** 选卖家 = 渠道内指定卖家口径提交并关闭 */
+  const commitSeller = (channelId: string, seller: string | null): void => {
+    actions.set({ platform: { platforms: [], shopIds: [channelId], seller } });
     setOpen(false);
   };
 
@@ -138,16 +156,80 @@ export default function PlatformBox() {
     (defaultChannelId == null && rows.some((r) => r.platform === defaultPlatform) ? badgeW : 0) +
     space.xs;
 
-  // 右列行：点击 = 提交该店铺并关闭浮层（键盘 Enter/Space 同路径）
-  const shopItems: CascadeRowItem[] = (activeRow?.shops ?? []).map((s) => ({
-    key: s.channel_id,
-    label: s.display_name,
-    active: highlightedShopId === s.channel_id,
-    onLabelClick: () => commitShop(s),
-    trailing: (
-      <RowTrailing note={`· ${s.shops} 店铺`} badge={s.channel_id === defaultChannelId} />
-    ),
-  }));
+  // 第三列 = 展开渠道的卖家清单：首行「全部店铺 · 最低价」（渠道内取最低 = 默认口径），
+  // 下方按覆盖周数降序；搜索词过滤（OZON 3P 数百家，搜索必备）
+  const paneSellers = useMemo(
+    () => (sellerPane ? sellersOfChannel(cc, sellerPane) : []),
+    [cc, sellerPane],
+  );
+  const paneChannel = sellerPane ? dimChannel.find((c) => c.channel_id === sellerPane) ?? null : null;
+  const visibleSellers = useMemo(() => {
+    const q = sellerQuery.trim().toLowerCase();
+    return q ? paneSellers.filter((x) => x.seller.toLowerCase().includes(q)) : paneSellers;
+  }, [paneSellers, sellerQuery]);
+  const sellerItems: CascadeRowItem[] = paneChannel
+    ? [
+        {
+          key: '__all__',
+          label: '全部店铺 · 最低价',
+          active: selectedShopId === paneChannel.channel_id && selectedSeller == null,
+          onLabelClick: () => commitSeller(paneChannel.channel_id, null),
+          trailing: <RowTrailing note={`· ${paneChannel.shops} 店铺`} />,
+        },
+        ...visibleSellers.map((x) => ({
+          key: x.seller,
+          label: x.seller,
+          active: selectedShopId === paneChannel.channel_id && selectedSeller === x.seller,
+          onLabelClick: () => commitSeller(paneChannel.channel_id, x.seller),
+          trailing: <RowTrailing note={`· ${x.weeks} 周`} />,
+        })),
+      ]
+    : [];
+  const sellerExtraW = Math.max(0, ...sellerItems.map((x) => noteW(x.label.length > 24 ? 24 : 0)));
+
+  // 右列行：点击 = 提交该渠道并关闭；行尾「›」= 展开该渠道卖家列（不提交不关闭；
+  // 仅多卖家渠道出——独立站类渠道卖家唯一，下钻无意义）
+  const shopItems: CascadeRowItem[] = (activeRow?.shops ?? []).map((s) => {
+    const sellers = sellersOfChannel(cc, s.channel_id);
+    const drillable = sellers.length > 1;
+    return {
+      key: s.channel_id,
+      label: s.display_name,
+      active: highlightedShopId === s.channel_id,
+      onLabelClick: () => commitShop(s),
+      trailing: (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: space.xs, flexShrink: 0 }}>
+          <RowTrailing note={`· ${s.shops} 店铺`} badge={s.channel_id === defaultChannelId} />
+          {drillable && (
+            <span
+              role="button"
+              aria-label={`展开 ${s.display_name} 的卖家店铺`}
+              title="选择具体卖家店铺"
+              onClick={(e) => {
+                e.stopPropagation(); // 不触发行提交
+                setSellerPane((prev) => (prev === s.channel_id ? null : s.channel_id));
+                setSellerQuery('');
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 18,
+                height: 22,
+                margin: '0 -6px 0 0',
+                borderRadius: radius.control,
+                color: sellerPane === s.channel_id ? selectSoftInk : color.mute,
+                background: sellerPane === s.channel_id ? selectSoft : 'transparent',
+                cursor: 'pointer',
+              }}
+            >
+              <RightOutlined style={{ fontSize: 9 }} />
+            </span>
+          )}
+        </span>
+      ),
+    };
+  });
   const shopExtraW =
     Math.max(0, ...(activeRow?.shops ?? []).map((s) => noteW(s.shops))) +
     (defaultChannelId != null && (activeRow?.shops ?? []).some((s) => s.channel_id === defaultChannelId) ? badgeW : 0) +
@@ -168,10 +250,13 @@ export default function PlatformBox() {
     return () => ro.disconnect();
   }, []);
   const fullShopLabel = selectedShop ? `${selectedShop.platform} · ${selectedShop.display_name}` : '';
-  const shopLabelFits =
-    wrapW > 0 && measureText(fullShopLabel) * (fontSize.bodySm / 13) <= wrapW - TRIGGER_CHROME;
+  const fullSellerLabel = selectedShop && selectedSeller ? `${selectedShop.display_name} · ${selectedSeller}` : '';
+  const fits = (t: string): boolean => wrapW > 0 && measureText(t) * (fontSize.bodySm / 13) <= wrapW - TRIGGER_CHROME;
+  const shopLabelFits = fits(fullShopLabel);
   const labels = selectedShop
-    ? [shopLabelFits ? fullShopLabel : selectedShop.display_name]
+    ? selectedSeller
+      ? [fits(fullSellerLabel) ? fullSellerLabel : selectedSeller]
+      : [shopLabelFits ? fullShopLabel : selectedShop.display_name]
     : selectedPlatformOnly
       ? [selectedPlatformOnly]
       : [];
@@ -187,19 +272,37 @@ export default function PlatformBox() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) setActive(null); // 每次打开回解析态（已选/默认），不残留上次点选
+        if (next) {
+          setActive(null); // 每次打开回解析态（已选/默认），不残留上次点选
+          setSellerPane(null);
+          setSellerQuery('');
+        }
       }}
       arrow={false}
       placement="bottomLeft"
       styles={{ body: { padding: 0 } as const }}
       content={
         <div>
+          {/* 搜索行：仅卖家列展开时出现（OZON 3P 数百家，搜索必备） */}
+          {sellerPane != null && (
+            <div style={{ padding: `8px ${space.md}px 6px`, borderBottom: `1px solid ${color.hairline}` }}>
+              <Input
+                size="small"
+                allowClear
+                placeholder="搜索卖家店铺"
+                value={sellerQuery}
+                onChange={(e) => setSellerQuery(e.target.value)}
+                style={{ height: 24, fontSize: fontSize.caption }}
+              />
+            </div>
+          )}
           {/* 列宽自适应（CascadePanel 默认规格 min 148 / max 380，行尾小注经 extraW 预留） */}
           <CascadePanel
             open={open}
             columns={[
               { items: platformItems, extraW: platformExtraW },
               { items: shopItems, extraW: shopExtraW },
+              ...(sellerPane != null ? [{ items: sellerItems, extraW: sellerExtraW }] : []),
             ]}
           />
           <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>

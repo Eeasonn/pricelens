@@ -59,6 +59,7 @@ describe('platform/shop single-select normalization', () => {
     expect(normalizePlatformSelection({ platforms: [], shopIds: ['RU:ozon:1P'] })).toEqual({
       platforms: [],
       shopIds: ['RU:ozon:1P'],
+      seller: null,
     });
     // 旧多选持久化：platforms 多值 → 取第一个（平台级兼容），shopIds 清空
     const multi: PlatformSelection = { platforms: ['OZON', 'DNS'], shopIds: [] };
@@ -67,6 +68,7 @@ describe('platform/shop single-select normalization', () => {
     expect(normalizePlatformSelection({ platforms: ['DNS'], shopIds: ['RU:ozon:1P'] })).toEqual({
       platforms: [],
       shopIds: ['RU:ozon:1P'],
+      seller: null,
     });
     // 空选 / null → null（= 默认口径）；多值渠道取第一个。越界/未知渠道 id 保留原值，
     // 国家校验交给 applyScopeDefaults 的 platformSelectionValidFor（越界回落默认口径）
@@ -75,12 +77,13 @@ describe('platform/shop single-select normalization', () => {
     expect(normalizePlatformSelection({ platforms: [], shopIds: ['XX:ghost:1P', 'junk'] })).toEqual({
       platforms: [],
       shopIds: ['XX:ghost:1P'],
+      seller: null,
     });
   });
 
   it('readUrlOverrides：shop= 解析为单渠道口径（platforms 为空，不再映射平台）', () => {
     const out = withWindowSearch('?c=RU&shop=RU:ozon:1P', () => readUrlOverrides());
-    expect(out.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:1P'] });
+    expect(out.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:1P'], seller: null });
   });
 
   it('readUrlOverrides：旧多值链接 plat=OZON,DNS 取第一个归一为平台级单选', () => {
@@ -90,7 +93,7 @@ describe('platform/shop single-select normalization', () => {
 
   it('readUrlOverrides：plat 与 shop 同存时 shop 优先（单店口径）', () => {
     const out = withWindowSearch('?c=RU&plat=DNS&shop=RU:ozon:1P', () => readUrlOverrides());
-    expect(out.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:1P'] });
+    expect(out.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:1P'], seller: null });
   });
 
   it('readUrlOverrides：未带平台参数时不产生 platform 覆写', () => {
@@ -99,17 +102,62 @@ describe('platform/shop single-select normalization', () => {
   });
 });
 
+// ---------------- 卖家（seller）细化（第一百四十一轮） ----------------
+describe('seller-level platform selection', () => {
+  it('normalizePlatformSelection：单渠道保留 seller，多渠道/平台级/空串剥除', () => {
+    expect(normalizePlatformSelection({ platforms: [], shopIds: ['RU:ozon:3P'], seller: 'Epicenter Huawei Store' })).toEqual({
+      platforms: [],
+      shopIds: ['RU:ozon:3P'],
+      seller: 'Epicenter Huawei Store',
+    });
+    // 多渠道（旧多值兼容）：卖家无处附着，剥除
+    expect(normalizePlatformSelection({ platforms: [], shopIds: ['RU:ozon:3P', 'RU:ozon:1P'], seller: 'X' })).toEqual({
+      platforms: [],
+      shopIds: ['RU:ozon:3P'],
+      seller: null,
+    });
+    // 平台级：剥除
+    expect(normalizePlatformSelection({ platforms: ['OZON'], shopIds: [], seller: 'X' })).toEqual({
+      platforms: ['OZON'],
+      shopIds: [],
+    });
+    // 空串 = 未选卖家
+    expect(normalizePlatformSelection({ platforms: [], shopIds: ['RU:ozon:3P'], seller: '' })?.seller ?? null).toBeNull();
+  });
+
+  it('platformUrlParamsOf：店铺级带 seller，平台级/未选恒 null', () => {
+    expect(platformUrlParamsOf({ platforms: [], shopIds: ['RU:ozon:3P'], seller: 'Epicenter' })).toEqual({
+      plat: 'OZON',
+      shop: 'RU:ozon:3P',
+      seller: 'Epicenter',
+    });
+    expect(platformUrlParamsOf({ platforms: [], shopIds: ['RU:ozon:3P'] })).toEqual({
+      plat: 'OZON',
+      shop: 'RU:ozon:3P',
+      seller: null,
+    });
+    expect(platformUrlParamsOf({ platforms: ['DNS'], shopIds: [] }).seller).toBeNull();
+  });
+
+  it('readUrlOverrides：seller= 仅与 shop= 同存时读入；无 shop 静默忽略', () => {
+    const ok = withWindowSearch('?c=RU&shop=RU:ozon:3P&seller=Epicenter', () => readUrlOverrides());
+    expect(ok.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:3P'], seller: 'Epicenter' });
+    const noShop = withWindowSearch('?c=RU&plat=OZON&seller=Epicenter', () => readUrlOverrides());
+    expect(noShop.filters.platform).toEqual({ platforms: ['OZON'], shopIds: [] });
+  });
+});
+
 describe('platform/shop url params write', () => {
   it('platformUrlParamsOf：店铺级写 plat+shop（平台由维表反查），平台级只写 plat，未选两者皆空', () => {
     // 店铺级：plat 从 dimChannel 反查（RU:ozon:1P → OZON）
-    expect(platformUrlParamsOf({ platforms: [], shopIds: ['RU:ozon:1P'] })).toEqual({ plat: 'OZON', shop: 'RU:ozon:1P' });
+    expect(platformUrlParamsOf({ platforms: [], shopIds: ['RU:ozon:1P'] })).toEqual({ plat: 'OZON', shop: 'RU:ozon:1P', seller: null });
     // 仅平台级（旧兼容）：只写 plat=
-    expect(platformUrlParamsOf({ platforms: ['DNS'], shopIds: [] })).toEqual({ plat: 'DNS', shop: null });
+    expect(platformUrlParamsOf({ platforms: ['DNS'], shopIds: [] })).toEqual({ plat: 'DNS', shop: null, seller: null });
     // 未选：两者皆 null（写侧删键）
-    expect(platformUrlParamsOf(null)).toEqual({ plat: null, shop: null });
-    expect(platformUrlParamsOf({ platforms: [], shopIds: [] })).toEqual({ plat: null, shop: null });
+    expect(platformUrlParamsOf(null)).toEqual({ plat: null, shop: null, seller: null });
+    expect(platformUrlParamsOf({ platforms: [], shopIds: [] })).toEqual({ plat: null, shop: null, seller: null });
     // 维表查不到的渠道 id：按三段式 id 的平台段兜底反查
-    expect(platformUrlParamsOf({ platforms: [], shopIds: ['XX:ghost:1P'] })).toEqual({ plat: 'ghost', shop: 'XX:ghost:1P' });
+    expect(platformUrlParamsOf({ platforms: [], shopIds: ['XX:ghost:1P'] })).toEqual({ plat: 'ghost', shop: 'XX:ghost:1P', seller: null });
   });
 });
 

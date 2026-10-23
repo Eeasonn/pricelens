@@ -213,10 +213,13 @@ export interface SkuGroupQuery {
   isOwn: boolean;
 }
 
-/** 平台选择：platforms = 勾整平台（其下全部渠道）；shopIds = 勾到渠道（channel_id） */
+/** 平台选择：platforms = 勾整平台（其下全部渠道）；shopIds = 勾到渠道（channel_id）；
+ *  seller = 渠道内具体卖家店铺（第一百四十一轮）：仅在 shopIds 单渠道时有意义，
+ *  缺省/null = 该渠道全部卖家取最低在架价（默认口径） */
 export interface PlatformQuery {
   platforms: string[];
   shopIds: string[];
+  seller?: string | null;
 }
 
 /** §7.3 取数契约唯一入口的查询参数 */
