@@ -41,8 +41,9 @@
 //   **chip 本体与下拉项点击 = 同样的插入（第一百三十三轮：模板一律插入不替换
 //   当前已选，恢复/替换语义与轻确认全部退役）**；✎ 打开的模板编辑
 //   浮窗（TemplateEditorFlyout）支持改名、逐对换主品/增删对比、新增一对、
-//   删除模板，改动即存。按钮簇（第一百三十一轮）：卡级组头右侧 =
-//   匹配竞品 · ＋模板 · ✕；顶栏右侧 = 匹配竞品 · ＋模板 · 清空。
+//   删除模板，改动即存。按钮簇（第一百三十一轮建、第一百四十二轮追补文案区分
+//   范围）：卡级组头右侧 = 匹配竞品 · 存为模板（该组） · ✕；顶栏右侧 =
+//   匹配竞品 · 全部存为模板 · N 组（仅 ≥2 组显示，单卡与卡级等价故隐藏） · 清空。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -1050,6 +1051,14 @@ function SaveTemplateDialog({
       onOk={onOk}
       onCancel={onCancel}
     >
+      {/* 范围说明（第一百四十二轮追补）：确认前最后一眼可见「存的是什么范围」 */}
+      <div style={{ fontSize: 12, color: color.mute, marginBottom: 10 }}>
+        {dialog.cards.length > 1
+          ? `将保存当前全部 ${dialog.cards.length} 组产品对`
+          : dialog.cards[0]?.main
+            ? `将保存该组：${modelNameOf(dialog.cards[0].main.modelId)} ${dialog.cards[0].main.romram}`
+            : '将保存该组'}
+      </div>
       <Input
         value={dialog.value}
         placeholder="模板名称"
@@ -1093,13 +1102,16 @@ function PickerPanel() {
     writeCombos(next);
   };
 
-  /** 保存为模板：内容签名已存在 = 原位更新；否则插到最前，超限淘汰最旧 */
+  /** 保存为模板：内容签名已存在 = 原位更新；否则插到最前，超限淘汰最旧。
+   *  成功后轻反馈（第一百四十二轮追补）：把「按钮 → 存到模板区」的因果补上 */
   const saveTemplate = (label: string, cards: MainProduct[] = mains): void => {
     const name = label.trim() || defaultTemplateName(cards);
     const sig = comboSignature(cards);
     const entry: StoredCombo = { label: name, cards: cards.map((c) => ({ ...c })) };
     const idx = combos.findIndex((c) => comboSignature(c.cards) === sig);
     persistCombos((idx >= 0 ? combos.map((c, i) => (i === idx ? entry : c)) : [entry, ...combos]).slice(0, TEMPLATE_CAP));
+    const scope = cards.length > 1 ? ` · ${cards.length} 组` : '';
+    message.success(`${idx >= 0 ? '已更新模板' : '已存为模板'}「${name}」${scope}`);
   };
 
   /** 「＋模板」恒弹名称窗：同内容签名已存在 = 预填其现有名称（原位更新），
@@ -1387,12 +1399,14 @@ function PickerPanel() {
             }
             onClick={() => actions.autoMatchAll()}
           />
-          {mains.length > 0 && (
-            <Tooltip title="把当前选择存为模板" zIndex={TIP_Z}>
+          {/* 仅 ≥2 组显示（第一百四十二轮追补）：单卡时与卡级「存为模板」等价，
+              同屏两个模板按钮正是歧义来源；文案自带范围，不用悬停即知作用于全部 */}
+          {mains.length > 1 && (
+            <Tooltip title={`把下方全部 ${mains.length} 组产品对存为一个模板，之后可整组一键加入`} zIndex={TIP_Z}>
               <span
                 role="button"
-                aria-label="存为模板"
-                title="把当前选择存为模板"
+                aria-label={`全部存为模板（${mains.length} 组）`}
+                title={`把下方全部 ${mains.length} 组产品对存为一个模板，之后可整组一键加入`}
                 className="lpl-pk-ghost"
                 onClick={() => openSaveDialog(mains)}
                 style={{
@@ -1410,7 +1424,7 @@ function PickerPanel() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                <PlusOutlined style={{ fontSize: 10 }} /> 模板
+                全部存为模板 · {mains.length} 组
               </span>
             </Tooltip>
           )}
@@ -1544,7 +1558,7 @@ function PickerPanel() {
                             flexShrink: 0,
                           }}
                         >
-                          <PlusOutlined style={{ fontSize: 9 }} /> 模板
+                          存为模板
                         </span>
                       </Tooltip>
                     )}
