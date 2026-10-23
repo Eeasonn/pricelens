@@ -25,8 +25,9 @@ interface PointPanelProps {
   subscribedKeys?: Set<string>;
   onToggleSubscribe?: (key: string) => void;
   /** ≥2 张产品卡时按卡分组（第一百四十二轮）：每卡一个小框，组序 = 卡序、
-   *  组内沿用档位/现价排序；单卡/缺省 = 平铺不分组 */
-  groups?: { ordinal: number; items: PriceSummaryItem[] }[] | null;
+   *  组内沿用档位/现价排序；mainKey = 该卡主品系列（组内置顶 + 浅蓝强调行）；
+   *  单卡/缺省 = 平铺不分组 */
+  groups?: { ordinal: number; mainKey: string | null; items: PriceSummaryItem[] }[] | null;
 }
 
 export default function PointPanel(props: PointPanelProps) {
@@ -80,26 +81,33 @@ export default function PointPanel(props: PointPanelProps) {
             当前时间段无数据
           </div>
         ) : props.groups && props.groups.length >= 2 ? (
-          props.groups.map((g) => (
-            <div
-              key={g.ordinal}
-              style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: '8px 10px 6px', marginBottom: 6 }}
-            >
-              <div style={{ fontSize: 11, lineHeight: '15px', color: color.mute, marginBottom: 3 }}>{groupOrdinal(g.ordinal)}</div>
-              <PriceSummary
-                items={g.items}
-                currency={props.currency}
-                granularity={props.granularity}
-                pointDate={props.pointDate}
-                alertCounts={props.alertCounts}
-                subscribedKeys={props.subscribedKeys}
-                onToggleSubscribe={props.onToggleSubscribe}
-                stack
-                chrome={false}
-                showHeader={false}
-              />
-            </div>
-          ))
+          props.groups.map((g) => {
+            // 主品显性置顶（第一百四十二轮追补）：组内第一行恒为主品，其余沿用档位/现价排序
+            const ordered = g.mainKey
+              ? [...g.items.filter((x) => x.key === g.mainKey), ...g.items.filter((x) => x.key !== g.mainKey)]
+              : g.items;
+            return (
+              <div
+                key={g.ordinal}
+                style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: '8px 10px 6px', marginBottom: 6 }}
+              >
+                <div style={{ fontSize: 11, lineHeight: '15px', color: color.mute, marginBottom: 3 }}>{groupOrdinal(g.ordinal)}</div>
+                <PriceSummary
+                  items={ordered}
+                  mainKeys={g.mainKey ? new Set([g.mainKey]) : undefined}
+                  currency={props.currency}
+                  granularity={props.granularity}
+                  pointDate={props.pointDate}
+                  alertCounts={props.alertCounts}
+                  subscribedKeys={props.subscribedKeys}
+                  onToggleSubscribe={props.onToggleSubscribe}
+                  stack
+                  chrome={false}
+                  showHeader={false}
+                />
+              </div>
+            );
+          })
         ) : (
           <PriceSummary
             items={props.items}

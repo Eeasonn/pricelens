@@ -11,7 +11,7 @@ import type { CurrencyMode, Granularity } from '../../dataModel/types';
 import { ExportOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { AlertBell } from '../../components/AlertCenter';
-import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
+import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import type { PriceSummaryItem } from './chartModel';
 
 /** 深折扣预警阈值：≥15% 折扣徽章从品牌蓝转琥珀（B 端中性色原则） */
@@ -65,6 +65,7 @@ export default function PriceSummary({
   stack,
   chrome = true,
   showHeader = true,
+  mainKeys,
 }: {
   items: PriceSummaryItem[];
   currency: CurrencyMode;
@@ -83,6 +84,9 @@ export default function PriceSummary({
   chrome?: boolean;
   /** 第五十六轮再版：false = 不渲染「时点 XX-XX」头行（面板自备头部时用） */
   showHeader?: boolean;
+  /** 主品系列（第一百四十二轮追补）：stack 模式下主品行浅蓝底+描边+「主品」小标、
+   *  显性于组内首位（调用方负责把主品行排第一）；缺省无强调 */
+  mainKeys?: Set<string>;
 }) {
   if (items.length === 0) return null;
   const asOf = items.find((it) => it.asOf != null)?.asOf ?? null;
@@ -132,6 +136,7 @@ export default function PriceSummary({
   // 上行 = 品牌点 + 全名（整行宽度，基本不截断）+ 订阅铃铛居右；
   // 下行 = 折扣徽章 + 现价 + 划线 RRP，来源链接推到行尾右对齐
   if (stack) {
+    const isMain = mainKeys?.has(it.key) ?? false;
     return (
       <div
         key={it.key}
@@ -139,7 +144,8 @@ export default function PriceSummary({
           minWidth: 0,
           padding: '8px 10px',
           borderRadius: radius.card,
-          background: color.canvasSoft,
+          background: isMain ? selectSoft : color.canvasSoft,
+          border: isMain ? `1px solid rgba(0, 112, 243, 0.35)` : '1px solid transparent',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -148,9 +154,9 @@ export default function PriceSummary({
             title={it.name}
             style={{
               fontSize: 13,
-              fontWeight: 600,
+              fontWeight: isMain ? 700 : 600,
               color: color.ink,
-              flex: '1 1 0',
+              flex: '0 1 auto',
               minWidth: 0,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -159,6 +165,24 @@ export default function PriceSummary({
           >
             {it.name}
           </span>
+          {isMain && (
+            <span
+              style={{
+                flexShrink: 0,
+                fontSize: 10,
+                lineHeight: '14px',
+                padding: '0 5px',
+                borderRadius: 9999,
+                border: `1px solid ${selectAccent}`,
+                background: color.canvas,
+                color: selectSoftInk,
+                fontWeight: 600,
+              }}
+            >
+              主品
+            </span>
+          )}
+          <span style={{ flex: '1 1 0', minWidth: 0 }} />
           {bellNode}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>

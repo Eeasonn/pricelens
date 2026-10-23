@@ -605,7 +605,11 @@ export default function PriceTrend(props: {
     }
     return [...byCard.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([card, items]) => ({ ordinal: card + 1, items }));
+      .map(([card, items]) => ({
+        ordinal: card + 1,
+        mainKey: effMains[card]?.main ? seriesKeyOf(effMains[card].main!) : null,
+        items,
+      }));
   }, [summary, effMains]);
 
   // ---- 大促背景带（第三十四轮）：dim_promo ∩ 窗口桶覆盖区间；随窗口联动 ----

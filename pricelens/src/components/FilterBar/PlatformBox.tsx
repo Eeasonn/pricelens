@@ -1,9 +1,11 @@
 // ============================================================
 // §5.3 框三：平台 / 店铺 —— 「平台→渠道→卖家」三级级联浮层，单选语义（第一百三十六轮：
 // Eason——「和之前一样是平台+店铺两层；只不过默认选到某个平台的某个店铺」；
-// 第一百四十一轮加第三级：渠道行尾「›」展开该渠道的卖家（seller）清单——
+// 第一百四十一轮加第三级：渠道行整行点击展开该渠道的卖家（seller）清单（第一百四十
+// 二轮追补，Eason：不用精确点箭头，整条可点即可；中列=导航、右列=提交）——
 // 首行「全部店铺 · 最低价」= 渠道内取最低（默认口径，第一百四十一轮 Eason 拍板：
 // 默认取最小、想要可指定某一家），下方按覆盖周数降序列卖家，可搜索，点选提交。
+// 浮层锚定触发器右下（placement bottomRight）：第三列开合时右缘不动、整板不跳。
 // 布局/交互骨架沿用旧版两栏级联（CascadeTrigger + Popover + CascadePanel），
 // 语义从 checkbox 多选改为单选）：
 //   点平台行 = 只切换右列店铺列表（不提交不关闭，平台行高亮）；
@@ -25,14 +27,13 @@
 // ============================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input, Popover } from 'antd';
-import { RightOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { defaultChannelOf, defaultPlatformOf, sellersOfChannel } from '../../dataModel/aggregate';
 import { dimChannel } from '../../data';
 import type { DimChannel } from '../../dataModel/types';
 import { color, fontSize, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import { normalizePlatformSelection } from '../../state/urlSync';
-import { CascadePanel, CascadeTrigger, measureText } from '../ProductCascader';
+import { autoColumnWidth, CascadePanel, CascadeTrigger, measureText } from '../ProductCascader';
 import type { CascadeRowItem } from '../ProductCascader';
 
 /** 「默认」小徽标：平台行 / 店铺行复用（selectSoft 浅蓝底，与 134 轮同一视觉语言） */
@@ -121,13 +122,8 @@ export default function PlatformBox() {
   // 右列高亮店铺：显式选中 > （未动过筛选时的）配置默认店铺；平台级兼容态不预选
   const highlightedShopId = selectedShopId ?? (selectedPlatformOnly == null ? defaultChannelId : null);
 
-  /** 选渠道 = 单渠道口径（渠道内全部卖家取最低）提交并关闭（绝不同时带 platforms，见文件头） */
-  const commitShop = (channel: DimChannel): void => {
-    actions.set({ platform: { platforms: [], shopIds: [channel.channel_id], seller: null } }); // §5.6 仅改聚合入参
-    setOpen(false);
-  };
-
-  /** 选卖家 = 渠道内指定卖家口径提交并关闭 */
+  /** 选卖家/渠道 = 渠道内口径提交并关闭（seller null = 全部店铺取最低；
+   *  渠道提交只发生在第三列首行，中列行为纯导航） */
   const commitSeller = (channelId: string, seller: string | null): void => {
     actions.set({ platform: { platforms: [], shopIds: [channelId], seller } });
     setOpen(false);
@@ -185,48 +181,38 @@ export default function PlatformBox() {
         })),
       ]
     : [];
-  const sellerExtraW = Math.max(0, ...sellerItems.map((x) => noteW(x.label.length > 24 ? 24 : 0)));
+  // 列宽按「未过滤的全量清单」测定并显式固定：搜索过滤时宽度恒定，第三列不跳
+  const sellerColWidth = useMemo(() => {
+    if (!paneChannel) return 0;
+    const full: CascadeRowItem[] = [
+      { key: '__all__', label: '全部店铺 · 最低价' },
+      ...paneSellers.map((x) => ({ key: x.seller, label: x.seller })),
+    ];
+    const noteBudget = Math.max(measureText(`· ${paneChannel.shops} 店铺`), measureText('· 24 周'));
+    return autoColumnWidth(full, {
+      extraW: noteBudget * (fontSize.caption / 13) + space.xs,
+      min: 200,
+      max: 380,
+    });
+  }, [paneChannel, paneSellers]);
 
-  // 右列行：点击 = 提交该渠道并关闭；行尾「›」= 展开该渠道卖家列（不提交不关闭；
-  // 仅多卖家渠道出——独立站类渠道卖家唯一，下钻无意义）
+  // 右列行：整行点击 = 下钻该渠道卖家列（中列=导航，第一百四十二轮追补 Eason：
+  // 不必精确点行尾箭头）；提交只发生在第三列（「全部店铺 · 最低价」或具体卖家）。
+  // 行激活态 = 正在展开的渠道；未展开任何列时回落当前选中/默认渠道高亮
   const shopItems: CascadeRowItem[] = (activeRow?.shops ?? []).map((s) => {
-    const sellers = sellersOfChannel(cc, s.channel_id);
-    const drillable = sellers.length > 1;
+    const paneOpenHere = sellerPane === s.channel_id;
+    const fallbackActive =
+      sellerPane == null && (highlightedShopId === s.channel_id || (highlightedShopId == null && s.channel_id === defaultChannelId));
     return {
       key: s.channel_id,
       label: s.display_name,
-      active: highlightedShopId === s.channel_id,
-      onLabelClick: () => commitShop(s),
+      active: paneOpenHere || fallbackActive,
+      onActivate: () => {
+        setSellerPane(s.channel_id);
+        setSellerQuery('');
+      },
       trailing: (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: space.xs, flexShrink: 0 }}>
-          <RowTrailing note={`· ${s.shops} 店铺`} badge={s.channel_id === defaultChannelId} />
-          {drillable && (
-            <span
-              role="button"
-              aria-label={`展开 ${s.display_name} 的卖家店铺`}
-              title="选择具体卖家店铺"
-              onClick={(e) => {
-                e.stopPropagation(); // 不触发行提交
-                setSellerPane((prev) => (prev === s.channel_id ? null : s.channel_id));
-                setSellerQuery('');
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 18,
-                height: 22,
-                margin: '0 -6px 0 0',
-                borderRadius: radius.control,
-                color: sellerPane === s.channel_id ? selectSoftInk : color.mute,
-                background: sellerPane === s.channel_id ? selectSoft : 'transparent',
-                cursor: 'pointer',
-              }}
-            >
-              <RightOutlined style={{ fontSize: 9 }} />
-            </span>
-          )}
-        </span>
+        <RowTrailing note={`· ${s.shops} 店铺`} badge={s.channel_id === defaultChannelId} />
       ),
     };
   });
@@ -279,7 +265,7 @@ export default function PlatformBox() {
         }
       }}
       arrow={false}
-      placement="bottomLeft"
+      placement="bottomRight"
       styles={{ body: { padding: 0 } as const }}
       content={
         <div>
@@ -302,7 +288,7 @@ export default function PlatformBox() {
             columns={[
               { items: platformItems, extraW: platformExtraW },
               { items: shopItems, extraW: shopExtraW },
-              ...(sellerPane != null ? [{ items: sellerItems, extraW: sellerExtraW }] : []),
+              ...(sellerPane != null && sellerColWidth > 0 ? [{ items: sellerItems, width: sellerColWidth }] : []),
             ]}
           />
           <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
