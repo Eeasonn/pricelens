@@ -100,8 +100,8 @@ import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 
 /** 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；第一百二十三轮④
- *  品牌名行退役改单行药丸带，44 → 30） */
-const PANEL_LEGEND_H = 30;
+ *  单行药丸带 44 → 30，第一百四十五轮药丸固定两行（品牌行 + 产品行）30 → 40） */
+const PANEL_LEGEND_H = 40;
 
 /** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之。
  *  空对组名分工：图表面板/图例保留「对比产品」（组名仍有内容），宽表组头用

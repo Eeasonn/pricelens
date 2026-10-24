@@ -2,17 +2,18 @@
 // 组/角色图例带（第一百一十五轮立为品牌分块，第一百二十三轮④结合产品对改版）：
 // 价格看板图顶的药丸带按主分析组分块（组 = 选择产品浮窗里的一张卡）——
 // 块内 = 主品药丸（浅蓝底 + 蓝描边 + 加粗，角色强调）→ 灰色小字 vs →
-// 对比药丸（卡内序，白底灰描边）；品牌名行退役（品牌由药丸内 BrandDot 与
-// title 全名承载）。多组时块首「第 N 组」小字，单组不显示；空对无主品药丸
-// 也不画 vs。药丸点击 = 屏蔽/恢复折线（虚线置灰态可恢复），悬停 = 该系列
-// 高亮、其余降透明。块间灰色短竖线分隔；对比药丸超过 3 个走块内 ‹› 滚动
-// （主品药丸恒可见、不参与滚动）；整排放不下时两侧 ‹› 滚动。
+// 对比药丸（卡内序，白底灰描边）。药丸固定两行（第一百四十五轮，Eason：必须
+// 带品牌名）——第一行 = 品牌色点 + 品牌名，第二行 = 产品名 + 型号 + 最新页外链；
+// 多组时块首「第 N 组」小字，单组不显示；空对无主品药丸也不画 vs。药丸点击 =
+// 屏蔽/恢复折线（虚线置灰态可恢复），悬停 = 该系列高亮、其余降透明。块间灰色
+// 短竖线分隔；对比药丸超过 3 个走块内 ‹› 滚动（主品药丸恒可见、不参与滚动）；
+// 整排放不下时两侧 ‹› 滚动。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（Eason：多平台比价统一从
 // 工具行进入，图例不再承担入口）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ExportOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
-import BrandDot from '../../components/BrandMark';
+import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { curveNameOf, latestLinkOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
 import { color, radius, selectSoft } from '../../theme/tokens';
@@ -27,6 +28,7 @@ const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
 interface PillSpec {
   key: string;
   brand: string;
+  brandLabel: string; // 品牌展示名（Huawei/Apple/…，第一行；第一百四十五轮）
   text: string;
   hidden: boolean;
   main: boolean; // 主品药丸 = 本组主分析产品（浅蓝底/描边/加粗）
@@ -63,10 +65,11 @@ function Pill({
       onMouseLeave={() => onHover(null)}
       style={{
         display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 1,
         maxWidth: PILL_W_BUDGET,
-        padding: '3px 8px',
+        padding: '4px 10px 4px 8px',
         borderRadius: radius.pill,
         cursor: 'pointer',
         opacity: pill.hidden ? 0.45 : dimmed ? 0.25 : undefined,
@@ -74,36 +77,54 @@ function Pill({
         ...look,
       }}
     >
-      <BrandDot brand={pill.brand} />
-      <span
-        title={pill.text}
-        style={{
-          fontSize: 11,
-          lineHeight: '16px',
-          color: pill.main && !pill.hidden ? color.ink : color.body,
-          fontWeight: pill.main ? 700 : 400,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {pill.text}
-      </span>
-      {/* 最新商品页外链（第一百四十轮）：恒指该系列最新价所在商品页；
-          stopPropagation 防触发药丸的显隐切换 */}
-      {pill.link && (
-        <a
-          href={pill.link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`打开最新商品页：${pill.text}`}
-          title={pill.link.shop ? `打开最新商品页（${pill.link.shop}）` : '打开最新商品页'}
-          onClick={(e) => e.stopPropagation()}
-          style={{ display: 'inline-flex', alignItems: 'center', color: color.link, flexShrink: 0 }}
+      {/* 第一行：品牌色点 + 品牌名（第一百四十五轮，Eason：药丸必须带品牌） */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+        <BrandDot brand={pill.brand} />
+        <span
+          style={{
+            fontSize: 10,
+            lineHeight: '12px',
+            color: color.mute,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
         >
-          <ExportOutlined style={{ fontSize: 11 }} />
-        </a>
-      )}
+          {pill.brandLabel}
+        </span>
+      </span>
+      {/* 第二行：产品名 + 型号 + 最新商品页外链 */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+        <span
+          title={pill.text}
+          style={{
+            fontSize: 11,
+            lineHeight: '14px',
+            color: pill.main && !pill.hidden ? color.ink : color.body,
+            fontWeight: pill.main ? 700 : 400,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {pill.text}
+        </span>
+        {/* 最新商品页外链（第一百四十轮）：恒指该系列最新价所在商品页；
+            stopPropagation 防触发药丸的显隐切换 */}
+        {pill.link && (
+          <a
+            href={pill.link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`打开最新商品页：${pill.text}`}
+            title={pill.link.shop ? `打开最新商品页（${pill.link.shop}）` : '打开最新商品页'}
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: 'inline-flex', alignItems: 'center', color: color.link, flexShrink: 0 }}
+          >
+            <ExportOutlined style={{ fontSize: 11 }} />
+          </a>
+        )}
+      </span>
     </span>
   );
 }
@@ -144,6 +165,7 @@ function GroupBlock({
   const pills: PillSpec[] = group.series.map((s) => ({
     key: s.key,
     brand: s.brand,
+    brandLabel: brandLabelOf(s.brand),
     text: curveNameOf(s),
     hidden: hiddenKeys.has(s.key),
     main: group.mainKey === s.key,
@@ -306,7 +328,7 @@ export default function BrandLegendStrip({
           blocks.forEach((g, i) => {
             if (i > 0) {
               items.push(
-                <span key={`div-${i}`} aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0, alignSelf: 'center' }} />,
+                <span key={`div-${i}`} aria-hidden style={{ width: 1, height: 28, background: color.hairline, flexShrink: 0, alignSelf: 'center' }} />,
               );
             }
             items.push(
