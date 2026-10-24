@@ -770,8 +770,8 @@ export default function PriceTrend(props: {
   );
   // 面板头行高（追补⑤重排）：轴列用同一偏移对齐面板绘图区顶。
   // 第七十九轮：卡片顶部预留拖移把手行（PANEL_GRIP_H），滚动容器再垫 SCROLL_PAD_TOP
-  // 容纳把手凸出上边线的上半——轴列偏移同步 = 三段之和。
-  const PANEL_HEAD_H = 24;
+  // 容纳把手凸出上边线的上半——轴列偏移同步 = 各段之和。
+  // PANEL_HEAD_H 已随面板头删除退役（第一百四十六轮，与药丸信息重复）
   const PANEL_GRIP_H = 14;
   const SCROLL_PAD_TOP = 10;
 
@@ -1040,7 +1040,7 @@ export default function PriceTrend(props: {
               marginBottom: space.sm,
             }}
           >
-            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H + PANEL_LEGEND_H, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_LEGEND_H, display: 'flex', flexDirection: 'column' }}>
               {splitYCfg && (
                 <SplitAxisColumn
                   yScale={splitYCfg}
@@ -1149,29 +1149,11 @@ export default function PriceTrend(props: {
                       >
                         <HolderOutlined style={{ fontSize: 10 }} />
                       </span>
-                      {/* 面板头（第一百一十七轮）：面板 = 主分析卡 = 型号；配置线
-                          由图例带药丸承载（同型号多配置时药丸带配置后缀） */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          height: PANEL_HEAD_H, // 定高：轴列对齐基准（追补⑤）
-                          padding: '0 4px',
-                        }}
-                      >
-                        <span style={{ fontSize: 12, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          {panelLabelOf(p.card)}
-                          {p.card.compares.length > 0 && (
-                            <span style={{ fontWeight: 400, color: color.mute, marginLeft: 6 }} className="tnum">
-                              对比 {p.card.compares.length}
-                            </span>
-                          )}
-                        </span>
-                      </div>
                       {/* 组/角色图例带（第一百一十五轮立，第一百二十三轮④按组）：本面板
                           单组（主品药丸 + vs + 对比药丸，含屏蔽者）；悬停药丸 = 该系列
-                          高亮 + 起点指引线，点击 = 屏蔽/恢复折线 */}
+                          高亮 + 起点指引线，点击 = 屏蔽/恢复折线。第一百四十六轮面板头
+                          「型号 对比 N」行删除（Eason：与药丸信息重复）——面板内产品
+                          标识完全由两行药丸承载 */}
                       <div style={{ height: PANEL_LEGEND_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
                         <BrandLegendStrip
                           groups={groupsOfCards([p.card], p.all)}
