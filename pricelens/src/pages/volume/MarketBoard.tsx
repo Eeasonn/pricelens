@@ -180,9 +180,18 @@ export default function MarketBoard(props: {
   const [boxRef, width, boxH] = useContainerSize();
   const [tip, setTip] = useState<TipState | null>(null); // 悬停分段明细（容器坐标）
 
-  // 范围/粒度变化 → 当前期回默认（范围最新一期）
+  // 范围/粒度变化 → 当前期回默认（范围最新一期）。换粒度 = 桶号语义整体变化，恒重置；
+  // 仅范围变化时已选历史期仍在范围内则保留——非同步模式的时间域 = 各面板窗口并集，
+  // 拖任一面板都会改 winE，不能把用户所选的历史期静默跳回末期
+  const granSeenRef = useRef(granularity);
   useEffect(() => {
-    setSelIdx(winE);
+    const granChanged = granSeenRef.current !== granularity;
+    granSeenRef.current = granularity;
+    if (granChanged) {
+      setSelIdx(winE);
+      return;
+    }
+    setSelIdx((cur) => (cur >= winS && cur <= winE ? cur : winE));
   }, [winS, winE, granularity]);
 
   const selIdx = Math.min(Math.max(selIdxState, winS), Math.max(winS, winE));

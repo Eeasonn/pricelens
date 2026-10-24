@@ -13,7 +13,7 @@
 // 数据 = alerts.ts 纯引擎（useAlerts 与页头徽标/总览列/看板共用一份结果）+
 //   groupAlertsBySeries / groupAlertsByWeek / latestAlerts 分组纯函数（金测锚定）。
 // ============================================================
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
@@ -300,6 +300,17 @@ export default function AlertsPage() {
     }
     navBus.alertsFocus = null;
   }, []);
+
+  // 国家/产业切换 → 品牌筛选失效（brandFilter 会话态跨页保留，但品牌组随口径重建；
+  // 旧口径品牌残留会让矩阵全不命中、误落「尚未添加监控产品」空态）。与总览页同款
+  // 「上次口径键比对」写法：挂载首跑不清，避免击穿「切页保留」承诺
+  const scopeSeenRef = useRef(`${state.countryCode}|${state.industry}`);
+  useEffect(() => {
+    const cur = `${state.countryCode}|${state.industry}`;
+    if (scopeSeenRef.current === cur) return;
+    scopeSeenRef.current = cur;
+    setBrandFilter([]);
+  }, [state.countryCode, state.industry, setBrandFilter]);
 
   useEffect(() => {
     if (!focusAlert) return;

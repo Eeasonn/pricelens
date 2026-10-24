@@ -255,26 +255,28 @@ describe('buildAlerts 规则边界', () => {
     }
   });
 
-  it('真实数据全量锚（200 系列 @2%）：1665 条 = 调价 1379 + 平台价差 219 + 降促 67', () => {
+  it('真实数据全量锚（200 系列 @2%）：1652 条 = 调价 1367 + 平台价差 219 + 降促 66', () => {
     // 2026-10-23：比率链改未取整价（第一百三十九轮口径修复，低价系列取整到 0
-    // 曾制造假预警/断链）——调价/降促触发集随之变化；平台价差计数不变（锚系列单色）
+    // 曾制造假预警/断链）——调价/降促触发集随之变化；平台价差计数不变（锚系列单色）。
+    // 本轮：低侧异常价守卫剔除 RU W19 DNS 独立站脏批（12 个 HONOR 系列 W19 假价
+    // $1.83~$25.7），其在 W20 制造的 12 条假调价 + 1 条假降促随之消失；平台价差计数不变。
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.02));
     expect(ALL_KEYS.length).toBe(200); // RU phone 全部 系列×配置
-    expect(alerts.length).toBe(1665);
-    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1379);
+    expect(alerts.length).toBe(1652);
+    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1367);
     expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(219); // 真实跨平台价差普遍存在
-    expect(alerts.filter((a) => a.type === 'promo').length).toBe(67);
+    expect(alerts.filter((a) => a.type === 'promo').length).toBe(66);
   });
 
-  it('真实数据全量锚 @5%：912 条（调价 674 + 平台价差 175 + 降促 63）；放开 own-gap 加 9 条档位间距', () => {
+  it('真实数据全量锚 @5%：899 条（调价 662 + 平台价差 175 + 降促 62）；放开 own-gap 加 9 条档位间距', () => {
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.05));
-    expect(alerts.length).toBe(912);
-    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(674);
+    expect(alerts.length).toBe(899);
+    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(662);
     expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(175);
-    expect(alerts.filter((a) => a.type === 'promo').length).toBe(63);
+    expect(alerts.filter((a) => a.type === 'promo').length).toBe(62);
     const withGap = buildAlerts({ ...cfg(ALL_KEYS, 0.05), enabled: { ...ALL_ON, 'own-gap': true }, thresholds: { 'price-change': 0.05, promo: 0.05, 'platform-gap': 0.05, 'own-gap': 0.15 } });
     expect(withGap.filter((a) => a.type === 'own-gap').length).toBe(9); // 多档华为机型的贴近档位对
-    expect(withGap.length).toBe(921);
+    expect(withGap.length).toBe(908);
   });
 });
 

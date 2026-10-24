@@ -121,6 +121,7 @@ import {
   newCardId,
   remapSelection,
   selKey,
+  selectionValidFor,
   withAutoOn,
   withMain,
 } from '../../state/mainSelection';
@@ -308,7 +309,13 @@ function LevelSwitchPopover({
     if (comparesCtx) return;
     const card = activeCard;
     if (replaceCompareCtx) {
-      if (!card || card.main?.modelId === r.modelId) return;
+      if (!card) return;
+      // 撞主品（同型号同配置才拦，selKey 级与其余口径统一）：不再静默无效，
+      // 给出提示保持开窗（行上已标「当前」）
+      if (card.main && selKey(card.main) === nodeSelKey(r)) {
+        message.info('该配置已是主分析产品');
+        return;
+      }
       // 撞其他对比项：不再静默无效（窗关了/没反应），给出提示保持开窗
       if (card.compares.some((c) => c !== ctx.sel && selKey(c) === nodeSelKey(r))) {
         message.info('该配置已在对比区');
@@ -356,7 +363,9 @@ function LevelSwitchPopover({
       actions.setCardCompares(card.id, card.compares.filter((c) => c !== exists));
       return;
     }
-    if (card.main?.modelId === r.modelId) return;
+    // 与主品同型号同配置才拦（selKey 级，与编辑浮窗/自动匹配矩阵同口径）；
+    // 同型号不同配置允许对比，不按整型号拦
+    if (card.main && selKey(card.main) === nodeSelKey(r)) return;
     if (card.compares.length >= cardQuota(card)) return;
     actions.setCardCompares(card.id, [...card.compares, { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }]);
   };
@@ -376,7 +385,8 @@ function LevelSwitchPopover({
       const seen = new Set(base.map(selKey));
       const added = [...base];
       for (const sel of sels) {
-        if (card.main?.modelId === sel.modelId) continue;
+        // 与主品同型号同配置才跳过（selKey 级）；同型号不同配置可进对比区
+        if (card.main && selKey(card.main) === selKey(sel)) continue;
         const k = selKey(sel);
         if (seen.has(k)) continue;
         if (added.length >= cardQuota(card)) break;
@@ -427,7 +437,16 @@ function LevelSwitchPopover({
         };
       }
     }
-    actions.setMains([...list, ...cards]);
+    // 批量换主品不把当前卡挪到尾部（单点路径是 map 原位替换）：首张新卡
+    // （承接原卡对比区的那张）插回原卡下标，其余配置追加尾部
+    const originIdx = activeCard ? mains.findIndex((c) => c.id === activeCard.id) : -1;
+    if (originIdx >= 0) {
+      const arranged = [...list];
+      arranged.splice(originIdx, 0, cards[0]);
+      actions.setMains([...arranged, ...cards.slice(1)]);
+    } else {
+      actions.setMains([...list, ...cards]);
+    }
     setOpen(false);
   };
 
@@ -489,7 +508,8 @@ function LevelSwitchPopover({
     const seen = new Set(base.map(selKey));
     const added = [...base];
     for (const sel of tierAllConfigs) {
-      if (card.main?.modelId === sel.modelId) continue;
+      // 与主品同型号同配置才跳过（selKey 级）；同型号不同配置可进对比区
+      if (card.main && selKey(card.main) === selKey(sel)) continue;
       const k = selKey(sel);
       if (seen.has(k)) continue;
       if (added.length >= cardQuota(card)) break;
@@ -579,7 +599,8 @@ function LevelSwitchPopover({
       if (comparesCtx && activeCard) {
         const card = activeCard;
         const inCompares = card.compares.some((c) => selKey(c) === key);
-        const sameAsMain = card.main?.modelId === r.modelId;
+        // 与主品同型号同配置才算撞主品（selKey 级，拦截/提示/tooltip 同一口径）
+        const sameAsMain = card.main != null && selKey(card.main) === key;
         const quotaFull = card.compares.length >= cardQuota(card);
         const disabled = !inCompares && (sameAsMain || quotaFull);
         return {
@@ -633,14 +654,19 @@ function LevelSwitchPopover({
           ),
         } satisfies CascadeRowItem;
       }
+      // 更换对比上下文：与主品同型号同配置的行同样标「当前」（视觉同款），
+      // 点击不再静默无效——放行到 pickConfig 给「已是主分析产品」提示
+      const mainKey = activeCard?.main ? selKey(activeCard.main) : null;
       const isCurrent = replaceCompareCtx
-        ? selKey(ctx.sel) === key
-        : ctx.kind !== 'add-main' && activeCard?.main != null && selKey(activeCard.main) === key;
+        ? selKey(ctx.sel) === key || mainKey === key
+        : ctx.kind !== 'add-main' && mainKey === key;
       // 更换对比上下文：本卡其他对比项也标「已选」（撞重复在选择前列明，不再是点了没反应）
       const taken = !replaceCompareCtx
         ? mains.some((c) => c.main != null && selKey(c.main) === key && !('cardId' in ctx && c.id === ctx.cardId))
         : !!activeCard && activeCard.compares.some((c) => c !== ctx.sel && selKey(c) === key);
-      const blocked = isCurrent || taken;
+      // 撞主品的行点击仍进 pickConfig（提示后保持开窗），其余当前/已选行照旧拦点
+      const hitsMain = replaceCompareCtx && mainKey === key;
+      const blocked = (isCurrent || taken) && !hitsMain;
       // 第一百二十五轮（K3）：主品选择为单选语义，不渲染复选框（此前是点了
       // 没反应的摆设）；列宽的 24px 复选框预留随 checkState 缺省自动收窄。
       return {
@@ -1152,29 +1178,52 @@ function PickerPanel() {
     setDialog(null);
   };
 
+  /** 模板卡入看板前的数据收口：模板可能落后于数据换代（SKU 空间已更换），
+   *  主品已不在当前国家+产业的整卡丢弃（卡必须有主品，与存储侧约束一致），
+   *  对比项失效逐条剔除、按卡配额收口——死型号不再入卡成空线，
+   *  超配额的模板卡不再直进 */
+  const sanitizeFresh = (cards: MainProduct[]): MainProduct[] =>
+    cards
+      .filter((c) => c.main != null && selectionValidFor(c.main, state.countryCode, state.industry))
+      .map((c) => ({
+        ...c,
+        compares: c.compares
+          .filter((s) => selectionValidFor(s, state.countryCode, state.industry))
+          .slice(0, cardQuota(c)),
+      }));
+
   /** 「＋ 加入当前选择」执行：整卡追加（auto 随模板带入）+ 缺失对比合并进
    *  现有卡。合并经 setCardCompares 落地 = 确有新增的卡按既有铁律退出自动
    *  （手动改对比即关）。计划/文案见 combos.planAppend。 */
   const appendCombo = (c: StoredCombo): void => {
     const { fresh, merges } = planAppend(mains, c);
-    if (fresh.length) actions.setMains([...mains, ...fresh]);
+    const usable = sanitizeFresh(fresh);
+    if (usable.length) actions.setMains([...mains, ...usable]);
     for (const m of merges) {
       const existing = mains.find((x) => x.id === m.cardId);
-      if (existing) actions.setCardCompares(m.cardId, [...existing.compares, ...m.compares]);
+      if (!existing) continue;
+      // 合并的对比项同样剔除失效条目；全失效不落地（不为此白退自动）
+      const adds = m.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry));
+      if (adds.length) actions.setCardCompares(m.cardId, [...existing.compares, ...adds]);
     }
   };
 
-  /** 「＋ 加入当前选择」气泡文案：与计划逐项对应，如实反映将发生什么 */
+  /** 「＋ 加入当前选择」气泡文案：与实际将发生的内容逐项对应，如实反映 */
   const appendTip = (c: StoredCombo): string => {
     const { fresh, merges, overflowCards, overflowCompares } = planAppend(mains, c);
-    const totalAdds = merges.reduce((n, m) => n + m.compares.length, 0);
-    if (!fresh.length && !merges.length) {
+    const usable = sanitizeFresh(fresh);
+    const totalAdds = merges.reduce(
+      (n, m) => n + m.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry)).length,
+      0,
+    );
+    if (!usable.length && !totalAdds) {
       if (overflowCards > 0) return `当前已选 ${MAINS_CAP} 组（上限），模板放不下`;
       if (overflowCompares > 0) return `各对比区已配满（每张图最多 ${MAX_LINES_PER_CHART} 条线），没有可补充的对比`;
+      if (fresh.length || merges.length) return '模板内产品在当前范围已无数据，没有可加入的内容';
       return '模板内产品对均已在当前选择中';
     }
     const parts: string[] = [];
-    if (fresh.length) parts.push(`新增 ${fresh.length} 组`);
+    if (usable.length) parts.push(`新增 ${usable.length} 组`);
     if (totalAdds) parts.push(`补充 ${totalAdds} 个对比`);
     let tip = `加入当前选择：${parts.join('、')}`;
     if (overflowCards) tip += `；受 ${MAINS_CAP} 组上限所限，${overflowCards} 组放不下`;

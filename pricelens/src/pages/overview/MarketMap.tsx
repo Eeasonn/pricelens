@@ -329,7 +329,9 @@ function DetailFloat({
         price: c.price,
         rrp: c.rrp,
         discountPct: c.price != null && c.rrp != null && c.rrp > 0 ? c.price / c.rrp - 1 : null,
-        asOfWeek: '',
+        // 该竞品最后有价周的采集周（OverviewCompRow.asOfWeek）：sparkPoints 含缺价周、
+        // 末点不恒有价，采集行日期不能直接取末点（会恒显示数据集最后一周）
+        asOfWeek: c.asOfWeek,
         colors: c.colors,
         points: c.points,
         maxV: c.maxV,
@@ -518,7 +520,8 @@ function DetailFloat({
             });
             const dateOf = (r: OverviewRow | null): string => {
               if (!r) return '';
-              const w = r.points.length > 0 ? r.points[r.points.length - 1].weekId : r.asOfWeek;
+              // 采集周优先取「最后有价周」（与正上方卡片口径一致）；旧数据兜底才回落末点
+              const w = r.asOfWeek || (r.points.length > 0 ? r.points[r.points.length - 1].weekId : '');
               return w ? bucketLatestWeekLabel('week', w) ?? '' : '';
             };
             const labelCell = (label: string): ReactNode => (
@@ -657,10 +660,12 @@ export default function MarketMap({ models, currency, industryLabel, industry }:
     () => tierBandsOf(industry).map((b) => [b.min, b.max ?? Number.POSITIVE_INFINITY, b.label]),
     [industry],
   );
-  // 标题括号内 = 全图最新采集周锚日（与卡片右上角采集日期同口径）
+  // 标题括号内 = 全图最新采集周锚日（与卡片右上角采集日期同口径）。
+  // 只累计「有价」行的采集周：从未有价的型号其采集周兜底为全数据最后一周
+  // （latestOf 无价回退），计进来会把标题锚到无价周、与卡片日期互相矛盾
   const latestDate = useMemo(() => {
     let w = '';
-    for (const m of models) for (const r of m.rows) if (r.asOfWeek > w) w = r.asOfWeek;
+    for (const m of models) for (const r of m.rows) if (r.price != null && r.asOfWeek > w) w = r.asOfWeek;
     return w ? bucketLatestWeekLabel('week', w) ?? '' : '';
   }, [models]);
   const market = useMemo(

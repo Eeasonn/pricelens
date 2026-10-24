@@ -1,7 +1,7 @@
 // ============================================================
 // 多平台比价（本轮改版）：单产品在各平台的价格趋势对比——入口 = 价格看板
-// 工具行「多平台比价」胶囊按钮，以及图例带组块的「⇄ 比价」小按钮（块级入口，
-// 经 initialProductKey 预选该组主分析产品）。口径：各平台 = 该平台全部渠道/
+// 工具行「多平台比价」胶囊按钮（图例块级「⇄ 比价」小按钮已随第一百四十二轮
+// 追补三退役，弹窗不再带产品预选）。口径：各平台 = 该平台全部渠道/
 // 店铺内最低在架价（platformPriceSpread 同源，**与左上平台筛选无关**——比价的
 // 意义就是并列看全部平台）；SKU = 该配置的最低价代表色（lowestPriceColorSku，
 // 缺省回退该配置首个颜色 SKU）；时间 = 看板筛选范围按周展开（比价恒按周，
@@ -385,9 +385,10 @@ export default function PlatformCompareModal({
   const activeKey = picked != null && products.some((p) => p.key === picked) ? picked : products[0]?.key ?? null;
   const active = products.find((p) => p.key === activeKey) ?? null;
   // 各平台指定的具体卖家（第一百四十二轮追补三）：null/缺省 = 平台全部店铺最低价；
-  // 切产品重置（卖家覆盖随产品变化）
+  // 切产品/切国家重置——卖家名按国家各有一套，产品 key（型号|配置）跨国可复用，
+  // 只随产品重置会把旧国家的卖家继续套到新国家数据上，平台线全断（本轮体检修）
   const [sellerPicks, setSellerPicks] = useState<Record<string, string>>({});
-  useEffect(() => setSellerPicks({}), [activeKey]);
+  useEffect(() => setSellerPicks({}), [activeKey, cc]);
 
   // 周桶 = 看板筛选范围（rangeStart/End 为当前粒度桶 id，换算成周 id）∩ 数据全量周域
   const weeks = useMemo<Bucket[]>(() => {

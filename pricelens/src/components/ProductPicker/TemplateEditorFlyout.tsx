@@ -325,8 +325,9 @@ function PairCard({
       onPatchCard(ctx.cardId, (c) => {
         const nextMain = buildSel(c.main, r);
         const key = selKey(nextMain);
-        // 与主品同组的对比项不再重复占线（对齐主浮窗 withMain 口径）
-        return { ...c, main: nextMain, compares: c.compares.filter((x) => selKey(x) !== key) };
+        // 与主品同组的对比项不再重复占线，并按新主品的卡配额截断
+        //（对齐主浮窗 withMain 口径：空对挂满 8 条对比后补选主品不收口会涨成 9 条线）
+        return { ...c, main: nextMain, compares: c.compares.filter((x) => selKey(x) !== key).slice(0, cardQuota({ main: nextMain })) };
       });
       return;
     }

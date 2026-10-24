@@ -40,9 +40,14 @@ export const BENCHMARK_CAP_PER_CONFIG = 4;
 /**
  * 生效的默认竞品矩阵：用户手动配置（source=manual，存 LPL3.config.benchmark）优先，
  * 未配置时回退 src/data 的 dimBenchmark（source=auto）。
+ * 两条路径统一按「国家 × 型号 × 配置（ROMRAM 去空格归一）」截到每配置 4 款
+ * （BENCHMARK_CAP_PER_CONFIG，组内按 sort 升序、稳定）：benchmarkSkuIdsFor 的查询
+ * 路径早有此兜底，但总览矩阵 / 对标弹窗直接整表消费——旧手动快照等未经截断的
+ * 来源不在此处钳住，会出现每配置超过 4 款、与编辑侧硬限分叉。
  */
 export function getEffectiveBenchmark(): DimBenchmark[] {
   const manual = readJson<DimBenchmark[]>(LPL.cfgBenchmark);
+  let rows: DimBenchmark[];
   if (Array.isArray(manual)) {
     // 真实数据接入后 SKU/国家 id 空间全换：只认带国家码且竞品 SKU 仍存在的行；
     // 过滤后为空（典型 = 旧造数时代的手动快照）→ 视为无手动配置，回退维表默认
@@ -51,9 +56,29 @@ export function getEffectiveBenchmark(): DimBenchmark[] {
       (r) => r != null && typeof r === 'object' && typeof r.competitor_sku_id === 'string'
         && typeof r.country_code === 'string' && skuOk.has(r.competitor_sku_id),
     );
-    if (valid.length > 0) return valid;
+    if (valid.length > 0) {
+      rows = valid;
+    } else {
+      rows = dimBenchmark;
+    }
+  } else {
+    rows = dimBenchmark;
   }
-  return dimBenchmark;
+  // 组内按 sort 升序取前 4 的竞品集合，再按原表顺序过滤——不重排整表，
+  // 对标弹窗整快照保存时不产生无谓的行序变化
+  const keep = new Map<string, Set<string>>();
+  // own_romram 未在前置过滤里校验类型（旧快照可能缺字段），归一前兜底空串
+  const groupOf = (r: DimBenchmark): string => `${r.country_code}|${r.own_model_id}|${(r.own_romram ?? '').replace(/\s+/g, '')}`;
+  for (const r of [...rows].sort((a, b) => a.sort - b.sort)) {
+    const key = groupOf(r);
+    let set = keep.get(key);
+    if (!set) {
+      set = new Set();
+      keep.set(key, set);
+    }
+    if (set.size < BENCHMARK_CAP_PER_CONFIG) set.add(r.competitor_sku_id);
+  }
+  return rows.filter((r) => keep.get(groupOf(r))?.has(r.competitor_sku_id));
 }
 
 /**

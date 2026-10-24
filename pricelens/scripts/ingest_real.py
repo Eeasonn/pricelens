@@ -26,6 +26,7 @@ import re
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 import pandas as pd
 
@@ -359,6 +360,16 @@ def cc_of(name):
     return COUNTRY_CODES.get((sval(name) or "").strip().lower())
 
 
+def write_atomic(path, data):
+    """原子落盘：同目录 tmp 文件 + os.replace，避免进程中断留下半截产物。data 支持 str/bytes。"""
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    tmp = f"{path}.tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
 # ---------------------------------------------------------------- 模块级状态（管线内共享）
 DIM_PRODUCT = []
 SKU_CC_WEEKS = {}
@@ -600,7 +611,9 @@ def main():
         raw[c] = pd.to_numeric(raw[c], errors="coerce")
     raw["rrp_usd"] = (raw["官网建议零售价-本币"] / raw["汇率"]).round(2)
     raw["price_usd"] = (raw["平台成交价-本币"] / raw["汇率"]).round(2)
-    # 价格单位错位修正：同 SKU×国家 的 USD 中位数 8 倍以上、且 ÷100 后落回 0.5–2 倍区间 → 判为「少了小数点」÷100；
+    # 价格单位错位修正（双向）：以同 SKU×国家 的 USD 中位数为参照——
+    # 比 中位数×8 还高、且 ÷100 后落回 0.5–2 倍区间 → 判为「少了小数点」÷100；
+    # 比 中位数÷8 还低、且 ×100 后落回 0.5–2 倍区间 → 判为「多了小数点」×100；
     # 仍 > 20,000 USD 的行视为不可信剔除（消费电子单品不可能）
     key_cols = ["品牌", "nkey", "型号规格", "cc"]
     med = raw.groupby(key_cols)["price_usd"].transform("median")
@@ -611,6 +624,13 @@ def main():
     raw.loc[fix100, "rrp_usd"] = (raw.loc[fix100, "官网建议零售价-本币"] / raw.loc[fix100, "汇率"]).round(2)
     raw.loc[fix100, "price_usd"] = (raw.loc[fix100, "平台成交价-本币"] / raw.loc[fix100, "汇率"]).round(2)
     log["fixed"]["价格单位错位(÷100)"] = int(fix100.sum())
+    # 低侧对称修正：同款回验逻辑（×100 后落回 0.5–2 倍区间才动手）
+    fix001 = raw["price_usd"].notna() & med.notna() & (ratio < 1 / 8) & ((ratio * 100) > 0.5) & ((ratio * 100) < 2)
+    for c in ["官网建议零售价-本币", "官网成交价-本币", "平台建议零售价-本币", "平台成交价-本币"]:
+        raw.loc[fix001, c] = raw.loc[fix001, c] * 100
+    raw.loc[fix001, "rrp_usd"] = (raw.loc[fix001, "官网建议零售价-本币"] / raw.loc[fix001, "汇率"]).round(2)
+    raw.loc[fix001, "price_usd"] = (raw.loc[fix001, "平台成交价-本币"] / raw.loc[fix001, "汇率"]).round(2)
+    log["fixed"]["价格单位错位(×100)"] = int(fix001.sum())
     absurd = raw["price_usd"].notna() & (raw["price_usd"] > 20000)
     log["dropped"]["USD 价格>20000(不可信)"] = int(absurd.sum())
     raw = raw[~absurd].copy()
@@ -643,7 +663,10 @@ def main():
 
     before = len(raw)
     raw["__price"] = raw["平台成交价-本币"].fillna(raw["官网成交价-本币"]).fillna(1e18)
-    raw = raw.sort_values(["crawled_at", "__price"]).drop_duplicates(
+    # 有价行优先：同键同采集时间时缺价行(1e18)按纯价格排序会排在有价行之后被 keep="last"
+    # 保留，有价行反被丢 → 追加「有价布尔」升序键，保证同时间戳下有价行排在无价行之后。
+    raw["__has_price"] = raw["__price"].ne(1e18)
+    raw = raw.sort_values(["crawled_at", "__has_price", "__price"]).drop_duplicates(
         subset=["week_id", "sku_id", "cc", "平台", "店铺类型", "店铺名称"], keep="last")
     log["dropped"]["重复行(周×SKU×国×渠道×店铺)"] = before - len(raw)
     log["notes"].append(f"清洗后事实行 {len(raw):,}")
@@ -720,6 +743,18 @@ def main():
     rrp_med = raw.dropna(subset=["rrp_usd"]).groupby("model_id")["rrp_usd"].median()
     prc_med = raw.dropna(subset=["price_usd"]).groupby("model_id")["price_usd"].median()
     ref_price = rrp_med.combine_first(prc_med)
+    # 低侧可疑价复核：单位错位修正后仍 < 15% × 参考价（dim_product.ref_price_usd 同口径）
+    # → 仅收集进报告「低侧可疑价」清单供人工复核，不打标、不剔除（下游剔除开关待拍板）
+    _ref = raw["model_id"].map(ref_price)
+    low_sus_mask = raw["price_usd"].notna() & _ref.notna() & (raw["price_usd"] < 0.15 * _ref)
+    low_suspect = [
+        {"cc": cc, "week": wk, "model": f"{b} {mn}", "spec": sp, "price": float(p), "ref": round(float(rf), 2)}
+        for cc, wk, b, mn, sp, p, rf in zip(
+            raw.loc[low_sus_mask, "cc"], raw.loc[low_sus_mask, "week_id"], raw.loc[low_sus_mask, "品牌"],
+            raw.loc[low_sus_mask, "model_name"], raw.loc[low_sus_mask, "romram"],
+            raw.loc[low_sus_mask, "price_usd"], _ref[low_sus_mask])]
+    if low_suspect:
+        log["notes"].append(f"低侧可疑价（<15% 参考价，仅报告不剔除）{len(low_suspect)} 行")
     for sku, g in raw.groupby("sku_id"):
         head = g.iloc[0]
         mid, ind = head["model_id"], head["行业"]
@@ -1144,6 +1179,7 @@ def main():
     # ---------- 5. 大促日历 ----------
     dim_promo = []
     promo_rows = []
+    promo_unknown = []   # 渠道名未命中 PROMO_PLATFORMS → 仍按全渠道落库（行为不变），但收集进报告可观测
     with open(args.promos, encoding="utf-8-sig") as f:
         rd = csv.reader(f, delimiter="\t")
         next(rd)
@@ -1168,10 +1204,13 @@ def main():
             else:
                 end = f"2026-{ps[0]:02d}-{min(ps[2], month_days(ps[0], 2026)):02d}"
             pid_tail = slug(name) if slug(name) != "x" else hashlib.md5(name.encode("utf-8")).hexdigest()[:6]
+            plat_key = fold(channel).lower()
+            if plat_key not in PROMO_PLATFORMS and channel:
+                promo_unknown.append((country, channel, name))
             dim_promo.append({"promo_id": f"{cc}-{pid_tail}-{start}", "country_code": cc,
                               "promo_name": name, "start_date": start, "end_date": end,
                               "depth_hint": DEPTH_MAP.get(depth, "中"),
-                              "platforms": PROMO_PLATFORMS.get(fold(channel).lower()), "channel_raw": channel})
+                              "platforms": PROMO_PLATFORMS.get(plat_key), "channel_raw": channel})
             promo_rows.append((country, name, f"{start}→{end} {DEPTH_MAP.get(depth, '中')}"))
 
     # ---------- 6. 事实列式包 ----------
@@ -1227,16 +1266,13 @@ def main():
     blob = json.dumps(pack, ensure_ascii=False, separators=(",", ":"))
     gz = gzip.compress(blob.encode("utf-8"), 9)
     b64 = base64.b64encode(gz).decode("ascii")
-    with open(os.path.join(args.outdir, "fact_pack_gzip.b64.txt"), "w") as f:
-        f.write(b64)
-    with open(os.path.join(args.workdir, "fact_expanded.json"), "w", encoding="utf-8") as f:
-        f.write(blob)
+    write_atomic(os.path.join(args.outdir, "fact_pack_gzip.b64.txt"), b64)
+    write_atomic(os.path.join(args.workdir, "fact_expanded.json"), blob)
     log["notes"].append(f"事实包 {len(cols['w']):,} 行；b64 {len(b64):,} B（gzip {len(gz):,} B）")
 
     # ---------- 7. 落盘 JSON ----------
     def dump(name, obj):
-        with open(os.path.join(args.outdir, name), "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
+        write_atomic(os.path.join(args.outdir, name), json.dumps(obj, ensure_ascii=False, separators=(",", ":")))
     dump("dim_region.json", dim_region)
     dump("dim_product.json", DIM_PRODUCT)
     dump("dim_channel.json", dim_channel)
@@ -1254,11 +1290,11 @@ def main():
         ladders[ind] = codes
     dump("dim_tier.json", {"ladders": ladders,
                            "labels": {ind: {c: tier_label(ind, c) for c in codes} for ind, codes in ladders.items()}})
-    with open(os.path.join(args.workdir, "matrix_resolution.json"), "w", encoding="utf-8") as f:
-        json.dump(matrix_resolution, f, ensure_ascii=False, indent=1)
+    write_atomic(os.path.join(args.workdir, "matrix_resolution.json"),
+                 json.dumps(matrix_resolution, ensure_ascii=False, indent=1))
 
     write_report(args, log, raw, dim_region, bench, unresolved, matrix_resolution,
-                 promo_rows, len(b64), len(gz))
+                 promo_rows, promo_unknown, low_suspect, len(b64), len(gz))
     print(f"[ingest] dim_product {len(DIM_PRODUCT)} SKU / dim_benchmark {len(bench)} / "
           f"dim_promo {len(dim_promo)} / fact b64 {len(b64):,}B / 未解析 {len(unresolved)}")
 
@@ -1284,10 +1320,16 @@ def tier_label(industry, code):
 
 
 def write_auto_list(args, rows, name_of, brand_of, region_by_cc):
-    """自动匹配清单：docs/竞品自动匹配清单-<日期>.md + .xlsx（供业务讨论勾兑）。"""
+    """自动匹配清单：docs/竞品自动匹配清单-最新.md + .xlsx（固定名覆盖写保证幂等；供业务讨论勾兑）。"""
     docs = os.path.join(REPO, "docs")
     os.makedirs(docs, exist_ok=True)
     day = datetime.now().strftime("%Y-%m-%d")
+    md_name, xlsx_name = "竞品自动匹配清单-最新.md", "竞品自动匹配清单-最新.xlsx"
+    # 清理历史日期戳版本（跨天重跑不累积过期清单）；固定名「最新」不在清理范围
+    for old in (glob.glob(os.path.join(docs, "竞品自动匹配清单-*.md"))
+                + glob.glob(os.path.join(docs, "竞品自动匹配清单-*.xlsx"))):
+        if os.path.basename(old) not in (md_name, xlsx_name):
+            os.remove(old)
     ind_cn = {"phone": "手机", "tablet": "平板", "wearable": "穿戴", "audio": "音频"}
     L = [f"# 竞品自动匹配清单（{day}）", "",
          "矩阵未覆盖的「国家 × 我司型号」由规则自动配竞品：优先沿用产品竞品矩阵在其他国家给同一我司型号配过的竞品（有该国数据者），不足 3 个时按同产业、价差 ±35% 内就近补齐（品牌优先序：手机 Apple>Samsung>Xiaomi>Honor>OPPO>vivo；平板 Apple>Samsung>Xiaomi>Honor>Lenovo；穿戴 Apple>Samsung>Garmin>Xiaomi>Honor>Amazfit；音频 Apple>Samsung>Sony>Bose>Xiaomi>JBL>Soundcore），每品牌先取一个。价格 = 该国平台成交价 USD 中位数（全渠道）。",
@@ -1311,8 +1353,7 @@ def write_auto_list(args, rows, name_of, brand_of, region_by_cc):
                 comp, cp, diff = "（无）", "—", "—"
             L.append(f"| {own} | {op} | {comp} | {cp} | {diff} | {r['reason']} |")
         L.append("")
-    with open(os.path.join(docs, f"竞品自动匹配清单-{day}.md"), "w", encoding="utf-8") as f:
-        f.write("\n".join(L))
+    write_atomic(os.path.join(docs, md_name), "\n".join(L))
     try:
         from openpyxl import Workbook
         wb = Workbook()
@@ -1329,13 +1370,15 @@ def write_auto_list(args, rows, name_of, brand_of, region_by_cc):
         for col, w in zip("ABCDEFGHIJK", [10, 8, 24, 14, 12, 28, 14, 8, 30, 22, 20]):
             ws.column_dimensions[col].width = w
         ws.freeze_panes = "A2"
-        wb.save(os.path.join(docs, f"竞品自动匹配清单-{day}.xlsx"))
+        buf = BytesIO()
+        wb.save(buf)
+        write_atomic(os.path.join(docs, xlsx_name), buf.getvalue())
     except Exception as e:  # openpyxl 缺失不阻塞
         print("[ingest] xlsx 清单未生成:", e)
 
 
 def write_report(args, log, raw, dim_region, bench, unresolved, matrix_resolution,
-                 promo_rows, b64_len, gz_len):
+                 promo_rows, promo_unknown, low_suspect, b64_len, gz_len):
     L = ["# 真实数据接入报告（scripts/ingest_real.py）", "",
          f"生成时间：{datetime.now(timezone.utc).astimezone().isoformat(timespec='seconds')}", "",
          "## 一、总体", ""]
@@ -1364,9 +1407,17 @@ def write_report(args, log, raw, dim_region, bench, unresolved, matrix_resolutio
         L.append(f"- {b['country_code']}｜{b['own_model_id']} {b['own_romram']} ← {label}（sort {b['sort']}）")
     L += ["", "## 五、大促日历解析", ""]
     L += [f"- {c}｜{n}｜{st}" for c, n, st in promo_rows]
+    L += ["", "## 六、大促渠道未识别（仍按全渠道落库，待补 PROMO_PLATFORMS 映射）", ""]
+    L.append(f"共 {len(promo_unknown)} 条：")
+    L.append("")
+    L += [f"- {c}｜渠道「{ch}」｜{n}" for c, ch, n in promo_unknown]
+    L += ["", "## 七、低侧可疑价（不剔除，待人工复核）", ""]
+    L.append(f"共 {len(low_suspect)} 行：单位错位修正后仍 < 15% × dim_product 参考价（ref_price_usd），仅列示：")
+    L.append("")
+    L += [f"- {r['cc']}｜{r['week']}｜{r['model']} {r['spec']}｜${r['price']:.2f} vs 参考 ${r['ref']:,.2f}"
+          for r in low_suspect]
     rep = os.path.join(args.workdir, "ingest_report.md")
-    with open(rep, "w", encoding="utf-8") as f:
-        f.write("\n".join(L))
+    write_atomic(rep, "\n".join(L))
     print(f"[ingest] 报告 → {rep}")
 
 

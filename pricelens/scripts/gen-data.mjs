@@ -8,7 +8,7 @@
 // fact 的 .json 供 verify.mjs / 人工核对，.b64.txt（gzip+base64）供单文件交付内嵌
 // （运行时 fflate 解压，bundle 从 ~5.7MB 降到 ~1MB 量级）
 // ============================================================
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,15 @@ const MASTER = join(ROOT, 'data', 'master');
 const OUT = process.env.PRICELENS_DATA_OUT
   ? resolve(process.env.PRICELENS_DATA_OUT)
   : join(ROOT, 'src', 'data');
+// 守卫：真实数据已接入（src/data/fact_pack_gzip.b64.txt 由 npm run ingest 生成），
+// 造数脚本退役——禁止再向 src/data 覆盖写合成数据。用 PRICELENS_DATA_OUT 把输出
+// 指到临时目录做合成数据验证（本脚本注释所述用途）不受影响。
+if (existsSync(join(ROOT, 'src', 'data', 'fact_pack_gzip.b64.txt')) &&
+    resolve(OUT) === resolve(join(ROOT, 'src', 'data'))) {
+  console.error('[gen] 真实数据已接入，造数脚本已退役；重建请走 npm run ingest。');
+  console.error('[gen] （如需在临时目录做合成数据验证，请设置 PRICELENS_DATA_OUT=<目录>）');
+  process.exit(1);
+}
 const SEED_LABEL = 'pricelens-20261009';
 const BATCH_ID = 'B2026W41';
 const QUALITY_FLAG = 'synthetic';

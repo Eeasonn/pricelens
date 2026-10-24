@@ -72,8 +72,11 @@ export default function Overview() {
     scrollTop,
   } = useOverviewView();
   // 本页视图态：产品 = 级联多选（空 = 全部本品牌产品）；价格档位 = 档位多选（空 = 全部档位）。
-  // 两种筛选互斥（产品∈档位双选无信息量），切换时清空另一侧
-  const [ovSubjectMode, setOvSubjectMode] = useState<'product' | 'tier'>('product');
+  // 两种筛选互斥（产品∈档位双选无信息量），切换时清空另一侧。
+  // 模式本身是页内瞬态，但 selTiers/prodSel 在 Provider 持久化——档位模式勾选后切页
+  // 往返若恒回「产品」，档位筛选会隐式生效且无处可关；故挂载时按持久化的选择反推
+  // 初始模式（切回「产品」时清 selTiers 的既有逻辑保持两侧互斥）
+  const [ovSubjectMode, setOvSubjectMode] = useState<'product' | 'tier'>(() => (selTiers.length > 0 ? 'tier' : 'product'));
   const currency = state.currency;
   const rootRef = useRef<HTMLDivElement>(null);
   // 第四十四轮：竞品映射吃「生效矩阵」（配置页/配置对标弹窗的手动快照优先，回退 auto），

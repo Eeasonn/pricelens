@@ -84,7 +84,7 @@ export default function DataHelpModal({ open, onClose }: { open: boolean; onClos
           <Li>范围内全部为套装时，才用套装价兜底并明确标注。</Li>
           <Li><b>多颜色</b>：同一配置选择多个颜色时，取各颜色最低价后的算术平均。</Li>
           <Li>系统代表色（默认勾选、量价面板、多平台比价所用）= 最新有价周内最低价的颜色。</Li>
-          <Li>RRP（官方建议零售价）为独立参照线，不随渠道 / 颜色 / 筛选变化。</Li>
+          <Li>RRP（官方建议零售价）为独立参照线，不随渠道 / 颜色 / 筛选变化；该渠道缺官网价时取该平台的划线价兜底，此时随渠道变化。</Li>
         </Section>
         <Section id="dhm-shop" title="二、平台 / 店铺筛选与默认口径">
           <Li>筛选可精确到<b>具体店铺</b>（单店口径）；平台店铺（如 OZON 3P）内含多个卖家时，默认取该渠道全部卖家的最低在架价，也可在筛选第三列指定其中一家。</Li>
@@ -117,6 +117,7 @@ export default function DataHelpModal({ open, onClose }: { open: boolean; onClos
           <Li>单周异常跳变后回位：跌幅 ≥50% 且次周回到原水平。</Li>
           <Li>缺少商品页链接：价格记录没有取证链接。</Li>
           <Li>人工复核后，再确定是否剔除及相应阈值。</Li>
+          <Li>明显失真的超低价（低于该产品参照价 5%，如漏抓数位的标价）不参与取价与最低价计算，避免拉穿价格曲线。</Li>
           <Li>套装价天然不参与最低价口径，也不参与上述判定。</Li>
         </Section>
         <Section id="dhm-promo" title="八、促销权益与大促档期">

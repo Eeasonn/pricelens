@@ -29,9 +29,9 @@
 // XBrush 保留（单图唯一的查看窗口调整轴）但左列时间筛选簇收掉、轨道通栏。
 // 顶部筛选器改范围时查看窗口整体复位为新范围（下方 rangeWatch 联动自理）。
 // 本轮（多平台比价深化 + 视图态跨页保留）：
-// ① 比价弹窗补「比当前看板」差价率（弹窗内自理）与 initialProductKey 预选；
-// ② 图例带组块（分离/合并同款）块头「⇄ 比价」小按钮 → 打开比价弹窗并预选该组
-//    主分析产品；
+// ① 比价弹窗补「比当前看板」差价率（弹窗内自理）；比价入口 = 工具行「多平台
+//    比价」胶囊按钮（图例块级「⇄ 比价」入口已随第一百四十二轮追补三退役，
+//    弹窗不再带产品预选）；
 // ③ mergeView、windowIds 改 usePageViewState（sessionStorage 会话态）——切页
 //    返回保留上次分析状态；windowIds 恢复后仍走原有换算（粒度切换）/失义
 //    （范围改动 rangeWatch）路径，自适应首跑在范围未变时不再复位窗口。
@@ -138,6 +138,17 @@ export default function PriceTrend(props: {
   // 会话态跨页保留（与量价页对齐：synced/panelWins 同保留）
   const [synced, setSynced] = usePageViewState<boolean>('dashboard.synced', () => true);
   const [panelWins, setPanelWins] = usePageViewState<Record<string, [number, number] | null>>('dashboard.panelWins', () => ({}));
+  // 面板独立时间段的粒度戳（本轮体检补）：panelWins 存的是时间桶下标，只在写入
+  // 时的粒度下有意义——用户切去别的页面换了粒度再回来，旧下标会被新粒度错读，
+  // 面板静默显示错误时间段。写 panelWins 一律走 commitPanelWins（同步盖当前
+  // 粒度戳）；戳对不上时整体回落共享时间段（下方校验）
+  const [panelWinsGran, setPanelWinsGran] = usePageViewState<string>('dashboard.panelWinsGran', () => state.granularity);
+  const commitPanelWins = (
+    v: Record<string, [number, number] | null> | ((p: Record<string, [number, number] | null>) => Record<string, [number, number] | null>),
+  ): void => {
+    setPanelWins(v);
+    setPanelWinsGran(state.granularity);
+  };
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set()); // 图例取消选中的系列（折线隐藏）
   const [drill, setDrill] = useState<DrillInfo | null>(null);
   const [promoBandsOn, setPromoBandsOn] = useState(false); // 大促档期（第七十七轮起默认关）
@@ -147,21 +158,10 @@ export default function PriceTrend(props: {
   const [maxMinOn, setMaxMinOn] = useState(false);
   // 价格变化提醒：null=关；阈值=小数（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
-  // 多平台比价弹窗（本轮入口上浮）：工具行「多平台比价」胶囊按钮直接打开；
-  // 图例带组块「⇄ 比价」小按钮 = 带该组主品预选打开（initialProductKey）
+  // 多平台比价弹窗：唯一入口 = 工具行「多平台比价」胶囊按钮（图例块「⇄ 比价」
+  // 小按钮已随第一百四十二轮追补三退役，弹窗不再带产品预选）
   const [platformCompareOpen, setPlatformCompareOpen] = useState(false);
 
-  // 图例块级比价入口：系列 key（modelId__配置去空格）→ 比价弹窗产品 key
-  //（modelId|配置原样，弹窗产品列表的组 key 形态）
-  const compareKeyOfSeriesKey = (seriesKey: string): string | null => {
-    for (const card of effMains) {
-      for (const sel of [card.main, ...card.compares]) {
-        if (!sel) continue;
-        if (seriesKeyOf(sel) === seriesKey) return `${sel.modelId}|${sel.romram}`;
-      }
-    }
-    return null;
-  };
   /** 工具行/图内比价入口：打开多平台比价弹窗 */
   const openPlatformCompare = (): void => {
     setPlatformCompareOpen(true);
@@ -199,8 +199,17 @@ export default function PriceTrend(props: {
     const prev = granRef.current;
     granRef.current = state.granularity;
     setWindowIds((ids) => (ids ? convertWindowIds(ids, prev, state.granularity) : null));
-    setPanelWins({});
+    commitPanelWins({}); // 独立时间段按桶号失义，回落共享时间段并盖新粒度戳
   }, [state.granularity]);
+  // 面板独立时间段跨粒度自愈（本轮体检）：粒度戳与当前粒度对不上（用户在别的
+  // 页面换了粒度再回来，或页内换粒度后戳未跟上）→ 旧下标按新粒度解释会让面板
+  // 静默显示错误时间段——整体回落共享时间段并把戳对齐当前粒度。用布局 effect：
+  // 回落在首帧绘制前完成，不露错位的一闪
+  useLayoutEffect(() => {
+    if (panelWinsGran === state.granularity) return;
+    setPanelWins({});
+    setPanelWinsGran(state.granularity);
+  }, [panelWinsGran, state.granularity, setPanelWins, setPanelWinsGran]);
 
   // ---- 取数：useFilters().state → SeriesQuery → buildSeries（§7.3 唯一口径） ----
   // 按数据全集取数（内存小数据集，成本可忽略）：跨度/自适应范围、窗口边缘续接
@@ -291,7 +300,7 @@ export default function PriceTrend(props: {
     rangeWatchRef.current = { gran: state.granularity, key: `${adaptiveBounds[0]}|${adaptiveBounds[1]}` };
     if (adaptiveMountedRef.current || !rangeUnchanged) {
       setWindowIds(null); // 窗口复位 = 整个自动极值范围
-      setPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
+      commitPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
     }
     adaptiveMountedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -300,7 +309,7 @@ export default function PriceTrend(props: {
   // 面板集合变化（选择浮窗增删卡）→ 独立窗口失义，整体回落共享窗口
   const panelKeysKey = JSON.stringify(effMains.map((c) => c.id));
   useEffect(() => {
-    setPanelWins({});
+    commitPanelWins({});
   }, [panelKeysKey]);
 
   // 追补⑧（总览↔看板闭环②）：总览下钻（竞品对比/迷你图点周）携带「焦点周」——
@@ -475,13 +484,13 @@ export default function PriceTrend(props: {
   // 关→开 = 全部回落共享窗口。联动行为切换后跨面板参考线的时间列下标失义，一并清空
   const toggleSynced = (): void => {
     if (synced) {
-      setPanelWins((prev) => {
+      commitPanelWins((prev) => {
         const next = { ...prev };
         for (const p of panelData) next[p.key] = [win.s, win.e];
         return next;
       });
     } else {
-      setPanelWins({});
+      commitPanelWins({});
     }
     setSynced(!synced);
     setSplitHoverIdx(null);
@@ -635,6 +644,21 @@ export default function PriceTrend(props: {
   useEffect(() => {
     onSeriesWindowRef.current?.(tableGroups, tableBuckets);
   }, [tableGroups, tableBuckets]);
+
+  // 图例悬停键失效自愈（本轮体检）：悬停药丸期间该系列被筛选/增删产品移出集合时，
+  // BrandLegendStrip 内部会自清并回调 onHover(null)——但整条图例带卸载（分离↔合并
+  // 切换、面板随卡删除）时回调无从发出，这里残留的悬停键会让图继续错误降透明。
+  // 按当前图上键集兜底校验：合并 = 合并图例的组键集；分离 = 对应面板的系列键集
+  useEffect(() => {
+    if (legendHoverKey != null && !tableGroups.some((g) => g.series.some((s) => s.key === legendHoverKey))) {
+      setLegendHoverKey(null);
+    }
+  }, [legendHoverKey, tableGroups]);
+  useEffect(() => {
+    if (panelLegendHover == null) return;
+    const p = panelViews.find((x) => x.key === panelLegendHover.panel);
+    if (!p || !p.all.some((s) => s.key === panelLegendHover.key)) setPanelLegendHover(null);
+  }, [panelLegendHover, panelViews]);
 
   // 时点页签日期（第五十四轮追补①）：窗口末桶内最新日历周的周三锚日（MM-DD）——
   // 月/季粒度不再显示 2026-10 / 2026Q4（用户：时点恒为最新那一周对应的那一天；
@@ -809,7 +833,7 @@ export default function PriceTrend(props: {
   /** 独立模式下面板时间轴只动自己的生效窗口（共享窗口未变）。 */
   const onPanelWindowChange = (key: string) => (s: number, e: number): void => {
     if (!buckets[s] || !buckets[e]) return;
-    setPanelWins((prev) => ({ ...prev, [key]: [s, e] }));
+    commitPanelWins((prev) => ({ ...prev, [key]: [s, e] }));
   };
 
   // 跨面板悬停参考线：同步 = 任一面板悬停的时间列广播到全部面板（同一查看窗口，
@@ -1147,8 +1171,7 @@ export default function PriceTrend(props: {
                       </div>
                       {/* 组/角色图例带（第一百一十五轮立，第一百二十三轮④按组）：本面板
                           单组（主品药丸 + vs + 对比药丸，含屏蔽者）；悬停药丸 = 该系列
-                          高亮 + 起点指引线，点击 = 屏蔽/恢复折线；块头「⇄ 比价」=
-                          打开多平台比价并预选本组主品 */}
+                          高亮 + 起点指引线，点击 = 屏蔽/恢复折线 */}
                       <div style={{ height: PANEL_LEGEND_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
                         <BrandLegendStrip
                           groups={groupsOfCards([p.card], p.all)}
@@ -1224,7 +1247,7 @@ export default function PriceTrend(props: {
               或多组并回一张图）也按组出块（单组不显组号）——主品药丸 + vs + 对比
               药丸（点击屏蔽/恢复，悬停该系列高亮 + 起点指引线）；块间灰短竖线分隔，
               对比超 3 个走块内 ‹› 滚动（主品恒可见），整排放不下两侧 ‹› 滚动；
-              块头「⇄ 比价」= 打开多平台比价并预选本组主品；与宽表同用 groupsOfCards 取数 */}
+              与宽表同用 groupsOfCards 取数 */}
           <div style={{ marginBottom: 6, minWidth: 0 }}>
             <BrandLegendStrip
               groups={tableGroups}
@@ -1307,9 +1330,9 @@ export default function PriceTrend(props: {
         />
       </div>
 
-      {/* 多平台比价弹窗（本轮入口上浮为工具行胶囊按钮 + 图例块「⇄ 比价」）：
-          单产品各平台价格趋势对比 + 比当前看板差价率，数据层 platformPriceSpread =
-          全平台口径（与左上平台筛选无关）；图例入口带该组主品预选（initialProductKey） */}
+      {/* 多平台比价弹窗（入口 = 工具行「多平台比价」胶囊按钮）：单产品各平台
+          价格趋势对比 + 比当前看板差价率，数据层 platformPriceSpread = 全平台
+          口径（与左上平台筛选无关） */}
       <PlatformCompareModal
         open={platformCompareOpen}
         onClose={() => setPlatformCompareOpen(false)}

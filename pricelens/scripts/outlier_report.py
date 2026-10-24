@@ -224,7 +224,8 @@ def main():
                      and r['channel_id'].startswith(SHOWCASE['channel_prefix'])]
     showcase_keys = {(r['country_code'], r['week_id'], r['sku_id'], r['channel_id']) for r in showcase_rows}
     showcase_hit_keys = {(r['country_code'], r['week_id'], r['sku_id'], r['channel_id']) for r in level_hits}
-    showcase_ok = showcase_keys and showcase_keys <= showcase_hit_keys
+    # 案例行不存在（如脏批已被清洗）视为 PASS 而非自证失败；存在时须全部命中
+    showcase_ok = (not showcase_keys) or (showcase_keys <= showcase_hit_keys)
 
     # ---------------- 终端摘要 ----------------
     print(f"数据：{len(rows)} 行（有效价 {len(valid)}，空价 {len(rows) - len(valid)}），"

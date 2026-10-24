@@ -30,8 +30,7 @@ import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache } from '../components/ProductCascader/tree';
-import { groupsFromBenchmark } from './configStore';
-import { clampMains, expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
+import { clampMains, autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -251,7 +250,11 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
     ];
     const required = checks.filter(([key]) =>
       key !== 'alertTypes' && key !== 'alertThresholds' && key !== 'alertProducts'
-      && key !== 'countryCode' && key !== 'industry');
+      && key !== 'countryCode' && key !== 'industry'
+      // v10/v11 复用的 platform 键形随数据换代漂移（渠道 id 空间两度更换）：
+      // 不再因它作废整包——无效时跳过该字段回落默认电渠（与 countryCode 同等
+      // 宽限，可迁移的用户选择不陪葬）；v12 载荷 platform 仍在 required
+      && !(v !== 12 && key === 'platform'));
     if (required.some(([, valid]) => !valid)) return null;
 
     const rest: PersistedPayload = { v };
@@ -292,8 +295,10 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
     if (!skuId) continue;
     const config: ProductSelection = { modelId, romram, skuIds: [skuId] };
     // 默认卡 = 匹配竞品开（与默认视图「对比自动匹配开」的既有语义一致；
-    // 华为主品矩阵未覆盖时对比区为空、开关保持开着随矩阵更新跟随）
-    const mains: MainProduct[] = [{ id: newCardId(), main: config, compares: groupsFromBenchmark([config]), auto: true }];
+    // 华为主品矩阵未覆盖时对比区为空、开关保持开着随矩阵更新跟随）。
+    // 对比区与自动匹配路径同源（autoComparesFor：剔主品自身组、卡配额收口），
+    // 不再直接取矩阵行——矩阵含主品自身组时会主品/对比重复占线
+    const mains: MainProduct[] = [{ id: newCardId(), main: config, compares: autoComparesFor({ id: '', main: config, compares: [] }), auto: true }];
     return { mains };
   }
   return { mains: [] };
@@ -339,7 +344,9 @@ function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
   // 当前产业的卡覆盖进该国快照，回切时校验不过即永久丢卡
   const snapKeyOf = (cc: string, industry: string) => `${LPL.filters}.mainsOf.${cc}.${industry}`;
   try {
-    if (prev.mains.length) sessionStorage.setItem(snapKeyOf(prev.countryCode, prev.industry), JSON.stringify({ mains: prev.mains }));
+    // 无条件落盘（含清空后的空数组）：空数组 = 用户显式清空的合法快照，不写
+    // 会让清空前的旧快照残留，来回切口径时复活、显式清空被静默撤销
+    sessionStorage.setItem(snapKeyOf(prev.countryCode, prev.industry), JSON.stringify({ mains: prev.mains }));
   } catch {
     /* 存储不可用时跳过快照，走默认重算 */
   }
@@ -349,7 +356,10 @@ function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
     if (raw) {
       const snap = JSON.parse(raw) as { mains: unknown };
       const mains = isMainProductArray(snap.mains) ? snap.mains : null;
-      if (mains && mains.length && mainsValidFor(mains, applied.countryCode, applied.industry)) {
+      // 空数组也是合法快照：还原空态而非回落重算默认卡；非空快照仍须整组在新
+      // 口径有效。mainsValidFor 对空数组返回 false 的既有语义不动（读档重算
+      // 判定还依赖它），此处单独放行空快照
+      if (mains && (!mains.length || mainsValidFor(mains, applied.countryCode, applied.industry))) {
         return { ...applied, mains: mains.map((c) => (c.auto && c.main ? withAutoOn(c) : c)) };
       }
     }

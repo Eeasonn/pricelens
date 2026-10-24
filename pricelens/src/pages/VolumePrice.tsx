@@ -31,7 +31,7 @@
 // usePageViewState（sessionStorage 会话态）——切价格看板再切回全部保留；刷新或
 // 新开页签回到默认（页签级会话口径）。瞬态（悬停/拖选/柱区比例/几何）不持久化。
 // ============================================================
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented } from 'antd';
 import { useFilters } from '../state/FiltersContext';
 import usePageViewState from '../state/usePageViewState';
@@ -134,7 +134,26 @@ export default function VolumePrice() {
   //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
   //      两项均会话态跨页保留（P1-5）----
   const [synced, setSynced] = usePageViewState<boolean>('volume.synced', () => true);
-  const [panelWins, setPanelWins] = usePageViewState<([number, number] | null)[]>('volume.panelWins', () => [null, null, null]);
+  const [panelWins, setPanelWinsRaw] = usePageViewState<([number, number] | null)[]>('volume.panelWins', () => [null, null, null]);
+  // 面板独立窗口伴生粒度（跨粒度错位修复）：panelWins 存的是裸桶下标，只在本粒度
+  // 内可解释。挂载期间切粒度有下方 granRef 效果整组重置；但跨页往返（卸载期间在
+  // 别页切了粒度）再回来时 granRef 挂载即初始化、永不触发——旧粒度下标被当新粒度
+  // 解释，面板静默显示错误时间段。故写入窗口时随行记录粒度，挂载时粒度不符即整组
+  // 失效回落共享窗口。
+  const [panelWinsGran, setPanelWinsGran] = usePageViewState<string>('volume.panelWinsGran', () => state.granularity);
+  const setPanelWins = useCallback(
+    (v: ([number, number] | null)[] | ((prev: ([number, number] | null)[]) => ([number, number] | null)[])) => {
+      setPanelWinsRaw(v);
+      setPanelWinsGran(state.granularity);
+    },
+    [setPanelWinsRaw, setPanelWinsGran, state.granularity],
+  );
+  useLayoutEffect(() => {
+    if (panelWinsGran === state.granularity) return;
+    setPanelWins([null, null, null]); // 联动写伴生粒度 = 当前粒度
+    // 仅挂载期判定一次：挂载后粒度变化走 granRef 效果，重复判定会双写
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [hoverIdxs, setHoverIdxs] = useState<(number | null)[]>([null, null, null]); // 各面板悬停时间列（同步模式三列恒等）
   const [geoms, setGeoms] = useState<(StripGeom | null)[]>([null, null, null]); // 各面板绘图区横向几何
   // ---- 第118轮（评审）：图内拖选时间段——面板级高亮（brush = 已提交，

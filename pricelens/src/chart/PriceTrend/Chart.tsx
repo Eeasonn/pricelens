@@ -422,6 +422,18 @@ export default function Chart(props: ChartProps) {
   const [, setBrushTick] = useState(0);
   const brushDragRef = useRef<{ a: number; b: number; startX: number; moved: boolean } | null>(null);
   const brushEnabled = props.onBrushChange != null && series.length > 0;
+  // 窗口标识变化 = 可见列整体重采样（第七轮契约，本轮体检补真消费）：悬停列下标
+  // 按旧列号记、窗口一换继续保留会指错列；聚焦态与图内拖选草稿一并复位，避免
+  // 跨窗口残留。键未变（含首次挂载）不动作
+  const prevWindowKeyRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (prevWindowKeyRef.current === props.windowKey) return;
+    prevWindowKeyRef.current = props.windowKey;
+    setHoverIdx(null);
+    setFocusKey(null);
+    brushDragRef.current = null;
+    setBrushDragging(false);
+  }, [props.windowKey]);
   // 第一百一十五轮：顶部品牌图例带悬停的产品（受控入站）——与图内药丸悬停同语义
   const legendHoverKey = props.legendHoverKey ?? null;
   // 第一百一十六轮 联动高亮集合：悬停名称药丸/图例药丸时 = 仅该系列自身
@@ -1163,7 +1175,10 @@ export default function Chart(props: ChartProps) {
                     style={{
                       position: 'absolute',
                       left: xPxOf(geom, m.minIdx),
-                      top: yPxOf(geom, m.minV) + 26,
+                      // 钳回绘图区内（对称最高点的顶缘钳制；胶囊高约 19px，留 1px 余量）：
+                      // 吸附下轴的最低价常态贴绘图区下缘，不钳会把胶囊压进底边距、
+                      // 与日期标签/大促图标行叠压
+                      top: Math.min(yPxOf(geom, m.minV) + 26, geom.plotTop + geom.plotHeight - 20),
                       transform: 'translateX(-50%)',
                       pointerEvents: 'none',
                       zIndex: 8,

@@ -7,6 +7,8 @@
 //     渠道（平台×店铺类型）内多店铺取最低在架价，取价店铺随点带出（shopName）。
 //   - 币种：真实行自带汇率，USD 已在装载层按行折算；本币 = 源表本币。
 //   - RRP = 官网建议零售价（官方阶梯，不随平台/店铺变化；缺官网价回退平台划线价）。
+//   - 低侧异常价：零/负价、低于参照价（RRP/产品参考价）5% 的脏点不参与取最低
+//     （minPriceOfRows 行级剔除；详见该函数上方守卫注释）。
 // ============================================================
 import type {
   CurrencyMode,
@@ -227,6 +229,28 @@ function shopLabelOf(row: FactPriceWeekly): string {
  *  priceOf 返回 null 的行跳过（渠道过滤也可收进 priceOf 以免分配中间数组）。
  *  第一百二十五轮：看板取价、总览现价/火花线、代表色、平台价差、浮窗现价、量价折扣因子
  *  全部走此函数——此前仅看板排除套装，同一 SKU 同一周跨页面出现两个价格。 */
+
+/** 低侧异常价判定阈值：价格低于参照价 5% 视为采集脏点、不参与最低价比较 */
+const MIN_PLAUSIBLE_PRICE_FRACTION = 0.05;
+
+/**
+ * 低侧异常价守卫（数据正确性）：零/负价与「低于参照价 5%」的超低价不参与取最低——
+ * 脏点直插最低价线会拉穿看板 / 总览 / 预警等全部取价路径（已知脏点：RU W19 批量
+ * iPhone 折后 $6.76、Amazfit $1.83；PH/TH Shopee 十几美元的名表）。参照分两层：
+ * ① 行内 rrp_usd——抓 RRP 正常、仅价格列脏的行；
+ * ② 该 SKU 的 ref_price_usd（跨国官网 RRP 中位数）——W19 脏批整行自洽（rrp 与
+ *    price 同被污染、rrp_usd == price_usd），行内参照失效，只能靠跨行参照识别。
+ * price_usd 缺失（无法判定，部分本币行）不拦，维持原口径。
+ */
+function implausiblyLowRow(row: Partial<FactPriceWeekly>): boolean {
+  const p = row.price_usd;
+  if (p == null) return false;
+  if (p <= 0) return true;
+  if (row.rrp_usd != null && p < row.rrp_usd * MIN_PLAUSIBLE_PRICE_FRACTION) return true;
+  const ref = productById.get(row.sku_id ?? '')?.ref_price_usd;
+  return ref != null && p < ref * MIN_PLAUSIBLE_PRICE_FRACTION;
+}
+
 export function minPriceOfRows<R extends { bundle: boolean }>(
   rows: Iterable<R>,
   priceOf: (row: R) => number | null,
@@ -237,6 +261,8 @@ export function minPriceOfRows<R extends { bundle: boolean }>(
   for (const row of rows) {
     const v = priceOf(row);
     if (v == null) continue;
+    // 异常价行整行剔除（含套装兜底路径），取最低的多条路径同受益
+    if (implausiblyLowRow(row as Partial<FactPriceWeekly>)) continue;
     const cand = { row, price: v };
     if (row.bundle) {
       if (!bestBundle || prefer(cand, bestBundle)) bestBundle = cand;
@@ -725,6 +751,8 @@ export interface OverviewCompRow {
   lineColor: string;
   price: number | null;
   rrp: number | null;
+  /** 现价采集周（该竞品最后有价周）：points 含缺价周、末点不恒有价，取日期须以此为准 */
+  asOfWeek: string;
   ownRomrams: string[];
   primary: boolean;
   colors: OverviewColorOpt[];
@@ -930,6 +958,7 @@ export function buildOverviewMatrix(
         lineColor: brandColorOf(p.brand),
         price: lat.price,
         rrp: lat.rrp,
+        asOfWeek: lat.weekId,
         ownRomrams: [...agg.romrams].sort(),
         primary: agg.primary,
         colors: [...compRomRows]

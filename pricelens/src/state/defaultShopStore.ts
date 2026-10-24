@@ -4,19 +4,30 @@
 // 未配置的国家回落维表口径：dim_region.default_platform 的全部渠道内最低价
 // （effectiveChannelIds 的默认分支）。独立小模块：aggregate 取数层与配置页
 // 都要读它，避免 configStore ↔ aggregate 循环引用。
+// 读缓存：defaultChannelOf 在 aggregate 每次取价都会走到（预警全订阅扫描 =
+// 订阅数 × 周数线性放大），每次读盘 + JSON.parse 不划算——解析结果按模块缓存，
+// 保存写入与 CONFIG_CHANGED_EVENT 广播时失效（跨页签改配置的场景靠广播兜底）。
 // ============================================================
-import { LPL } from './lplKeys';
+import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 
 export type DefaultShopOverrides = Record<string, string>; // countryCode → channel_id
 
+let cachedMap: DefaultShopOverrides | null = null;
+
 function readMap(): DefaultShopOverrides {
+  if (cachedMap) return cachedMap;
   try {
     const raw = localStorage.getItem(LPL.cfgDefaultShop);
-    if (!raw) return {};
+    if (!raw) {
+      cachedMap = {};
+      return cachedMap;
+    }
     const parsed = JSON.parse(raw) as DefaultShopOverrides;
-    return parsed != null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    cachedMap = parsed != null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    return cachedMap;
   } catch {
-    return {};
+    cachedMap = {};
+    return cachedMap;
   }
 }
 
@@ -35,4 +46,13 @@ export function saveDefaultShopOverrides(map: DefaultShopOverrides): void {
   } catch {
     // 隐私模式等写入失败：静默（配置仅在当次会话内由调用方状态兜底）
   }
+  cachedMap = null; // 以实际落盘内容为准，下次读取重建缓存
+}
+
+// 配置保存广播 → 缓存失效（含别的页签/入口直接改盘后广播的场景）。
+// 模块加载即挂、重复加载天然幂等；无 window 的环境（SSR/测试）跳过
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener(CONFIG_CHANGED_EVENT, () => {
+    cachedMap = null;
+  });
 }

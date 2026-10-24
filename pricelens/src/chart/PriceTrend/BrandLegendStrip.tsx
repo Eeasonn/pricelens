@@ -160,10 +160,8 @@ function GroupBlock({
           {groupOrdinal(group.ordinal)}
         </span>
       )}
-      {/* 块头「⇄ 比价」小按钮（本轮）：打开多平台比价并预选本组主分析产品——
-          默认 0.45 弱存在、块悬停浮现（opacity 不改布局，不与主品药丸的点击
-          屏蔽语义争位）；空对无主品不出 */}
-            {mainPill && <Pill pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />}
+      {/* 主品药丸（空对无主品不出） */}
+      {mainPill && <Pill pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />}
       {mainPill && compares.length > 0 && (
         <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>vs</span>
       )}
@@ -245,6 +243,17 @@ export default function BrandLegendStrip({
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   // 第一百一十六轮：悬停只高亮该系列自身（不再联动其对标竞品/我司）
   const hoverSet = hoverKey != null ? new Set([hoverKey]) : null;
+  // 悬停残留自愈（本轮体检）：药丸的 mouseleave 是悬停态唯一清理路径——悬停期间
+  // 该系列因筛选/增删产品从集合消失时药丸直接卸载、mouseleave 不触发，整图会
+  // 永久停留在错误降透明。键集变化后校验悬停键是否仍在，不在即清本地态并上报
+  useEffect(() => {
+    if (hoverKey == null) return;
+    const stillThere = groups.some((g) => g.series.some((s) => s.key === hoverKey));
+    if (!stillThere) {
+      setHoverKey(null);
+      onHover(null);
+    }
+  }, [hoverKey, groups, onHover]);
   const trackRef = useRef<HTMLDivElement>(null);
   const [outer, setOuter] = useState({ start: true, end: true, overflow: false });
   const syncOuter = useCallback(() => {
