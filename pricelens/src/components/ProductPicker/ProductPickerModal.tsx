@@ -43,7 +43,7 @@
 //   浮窗（TemplateEditorFlyout）支持改名、逐对换主品/增删对比、新增一对、
 //   删除模板，改动即存。按钮簇（第一百三十一轮建、第一百四十二轮追补文案区分
 //   范围）：卡级组头右侧 = 匹配竞品 · 存为模板（该组） · ✕；顶栏右侧 =
-//   匹配竞品 · 全部存为模板 · N 组（仅 ≥2 组显示，单卡与卡级等价故隐藏） · 清空。
+//   匹配竞品 · 全部存为模板（仅 ≥2 组显示，单卡与卡级等价故隐藏） · 清空。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -78,7 +78,6 @@ import {
 import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import {
   AddPill,
-  CardTag,
   ColorChip,
   DeleteX,
   GroupDeleteX,
@@ -813,7 +812,10 @@ function MainRow({ card }: { card: MainProduct }) {
   const node = romramByKey.get(`${main.modelId}|${main.romram}`);
   return (
     /* 第一百二十七轮：品牌+产品 / 型号 / 颜色 三行居中；更换右下角（删除整组
-     * 的 ✕ 第一百二十八轮上移到组框右上角，见 GroupDeleteX） */
+     * 的 ✕ 第一百二十八轮上移到组框右上角，见 GroupDeleteX）。
+     * 第一百四十四轮：上下 padding 对称——原来为给右下角「更换」留位写的
+     * 30px 底 padding 把内容块顶离视觉中心，改对称后内容真正垂直居中
+     * （「更换」是绝对定位角标，不参与居中，横向与居中内容不相遇） */
     <div
       style={{
         position: 'relative',
@@ -824,7 +826,7 @@ function MainRow({ card }: { card: MainProduct }) {
         justifyContent: 'center',
         gap: 7,
         minWidth: 0,
-        padding: '4px 12px 30px',
+        padding: '4px 12px',
       }}
     >
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
@@ -1271,7 +1273,21 @@ function PickerPanel() {
             <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>模板</span>
             <div
               ref={recentRowRef}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                // 不再 flex:1 铺满整行（第一百四十四轮）：容器收缩为可见 chip 的
+                // 实际宽度，「更多」才能紧贴最后一个模板 chip；放不下仍按可用空间
+                // 收窄并触发下方收纳重算。隐藏 chip 绝对定位脱流（不占位、仍可
+                // 测 offsetWidth），容器 relative 兜住定位基准
+                flex: '0 1 auto',
+                position: 'relative',
+                minWidth: 0,
+                maxWidth: '100%',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+              }}
             >
               {combos.map((c, i) => {
                 const summary = c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、');
@@ -1340,7 +1356,13 @@ function PickerPanel() {
                 return (
                   <span
                     key={i}
-                    style={{ display: 'inline-flex', flexShrink: 0, visibility: i < recentVisible ? 'visible' : 'hidden' }}
+                    style={
+                      i < recentVisible
+                        ? { display: 'inline-flex', flexShrink: 0 }
+                        : // 收进「更多」的 chip 脱流隐藏：不占行内空间（「更多」紧贴
+                          // 可见 chip），但 offsetWidth 仍可测（收纳重算依赖）
+                          { position: 'absolute', visibility: 'hidden', pointerEvents: 'none', flexShrink: 0 }
+                    }
                   >
                     {chip}
                   </span>
@@ -1414,6 +1436,7 @@ function PickerPanel() {
                     alignItems: 'center',
                     gap: 3,
                     height: 22,
+                    // 与可见 chip 的间距一致（父行 gap 6 已提供，不加双倍）
                     padding: '0 8px',
                     borderRadius: radius.pill,
                     border: `1px solid ${color.hairline}`,
@@ -1473,7 +1496,7 @@ function PickerPanel() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                全部存为模板 · {mains.length} 组
+                全部存为模板
               </span>
             </Tooltip>
           )}
@@ -1572,15 +1595,14 @@ function PickerPanel() {
                 boxShadow: dropCard === card.id ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined,
               }}
             >
-              {mains.length > 1 && <CardTag index={idx} />}
-              {/* 组头一行：「主分析产品」「对比产品」标题在左，右侧按钮簇 =
-                  匹配竞品 · ＋模板（存该组为模板）· 删组 ✕（从左到右） */}
+              {/* 组头一行（第一百四十四轮去「第 N 组」行）：「主分析产品」「对比产品」
+                  标题在左，右侧按钮簇 = 匹配竞品 · 存为模板（该组）· 删组 ✕（从左到右） */}
               <div style={{ display: 'flex', alignItems: 'center', height: 34, paddingRight: 8, flexShrink: 0 }}>
                 <span style={{ width: 16, flexShrink: 0 }} />
-                <div style={{ flex: '0 0 300px', minWidth: 0, paddingLeft: 12, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
+                <div style={{ flex: '0 0 300px', minWidth: 0, paddingLeft: 12, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
                 <div aria-hidden style={{ width: 1, flexShrink: 0 }} />
                 <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
-                  <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
+                  <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
                   <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <AutoMatchInline card={card} />
                     {card.main && (

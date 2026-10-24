@@ -291,11 +291,6 @@ export function StateTag({ text }: { text: string }) {
   );
 }
 
-/** 组顶标识（多组时显示）：「第 N 组」 */
-export function CardTag({ index }: { index: number }) {
-  return <div style={{ padding: '4px 8px 0 30px', fontSize: 11, color: color.mute }}>第 {index + 1} 组</div>;
-}
-
 // ---------------- 树浮窗列宽预留 ----------------
 
 /** 13px 基准测量 → 实际字号折算（行尾内容宽度预留用） */

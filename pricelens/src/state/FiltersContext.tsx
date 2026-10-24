@@ -407,7 +407,11 @@ function loadBaseState(): FiltersState {
       restored.mains = clampMains(restored.mains);
     }
   }
-  if (!restored) restored = { ...defaultFilters };
+  // 无持久化 = 首次打开：强制重算默认卡（默认视图 = 默认卡 + 匹配竞品）。
+  // 只在「确有持久化载荷」时才尊重空 mains（用户显式清空态，刷新不回填）——
+  // 139 轮把 needMain 收紧为「mains 非空且失效才重算」时漏了这条首次路径，
+  // 新用户/清过存储的浏览器首屏永远空态（第 144 轮补）
+  if (!restored) return applyScopeDefaults({ ...defaultFilters }, true);
   return applyScopeDefaults(restored, false);
 }
 

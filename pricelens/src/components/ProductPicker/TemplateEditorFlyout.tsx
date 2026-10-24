@@ -27,7 +27,6 @@ import { cardQuota, MAX_LINES_PER_CHART, MAINS_CAP, newCardId, remapSelection, s
 import { color, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
   AddPill,
-  CardTag,
   ColorChip,
   DeleteX,
   GroupDeleteX,
@@ -368,14 +367,13 @@ function PairCard({
         background: color.canvas,
       }}
     >
-      {total > 1 && <CardTag index={index} />}
       {/* 组头一行：与主浮窗同构——「主分析产品」「对比产品」标题 + 右侧删对 ✕ */}
       <div style={{ display: 'flex', alignItems: 'center', height: 34, paddingRight: 8, flexShrink: 0 }}>
         <span style={{ width: 16, flexShrink: 0 }} />
-        <div style={{ flex: '0 0 300px', minWidth: 0, paddingLeft: 12, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
+        <div style={{ flex: '0 0 300px', minWidth: 0, paddingLeft: 12, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
         <div aria-hidden style={{ width: 1, flexShrink: 0 }} />
         <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
-          <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
+          <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
           <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
             <Popconfirm
               zIndex={POPOVER_Z}
