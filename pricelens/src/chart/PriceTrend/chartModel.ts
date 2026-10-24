@@ -684,6 +684,31 @@ export function buildTickRows(geom: Geom | null): { v: number; y: number; text: 
   return out;
 }
 
+/** 刻度可读最小间距 px：8px 字加呼吸余量，低于此间距相邻刻度互相叠压
+ *  （第一百四十七轮，Eason：禁止 Y 轴刻度挤到显示不下） */
+export const TICK_MIN_GAP = 16;
+
+/** 刻度抽稀：自上而下保距贪心，首、尾刻度恒保留——尾刻度放不下时顶掉与它
+ *  贴得最近的最后一个中间刻度。压缩轴最矮段处刻度互相叠压、甚至越出绘图区
+ *  下缘的守卫；正常轴刻度间距远大于阈值时原样通过 */
+export function thinTickRows(
+  rows: { v: number; y: number; text: string }[],
+  minGap: number = TICK_MIN_GAP,
+): { v: number; y: number; text: string }[] {
+  if (rows.length <= 2) return rows;
+  const kept: typeof rows = [rows[0]];
+  for (let i = 1; i < rows.length - 1; i++) {
+    if (rows[i].y - kept[kept.length - 1].y >= minGap) kept.push(rows[i]);
+  }
+  const last = rows[rows.length - 1];
+  if (last.y - kept[kept.length - 1].y >= minGap) {
+    kept.push(last);
+  } else if (kept.length > 1) {
+    kept[kept.length - 1] = last;
+  }
+  return kept;
+}
+
 /** 当前显示口径下全部价格值（两价同收，档位带有无数据以此判定） */
 export function collectTierValues(series: Series[], priceTypes: PriceTypes): number[] {
   return collectVisibleValues(series, priceTypes);

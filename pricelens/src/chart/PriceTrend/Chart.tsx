@@ -54,6 +54,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, font, fontSize, radius, selectSoft, selectSoftInk, shadow , formatPrice } from '../../theme/tokens';
+import { measureText } from '../../components/ProductCascader';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import { useFilters } from '../../state/FiltersContext';
 import {
@@ -96,6 +97,7 @@ import {
   primaryPriceOf,
   resolveLineShape,
   scaleToDisplay,
+  thinTickRows,
   type ExtremeMark,
   type LineShapeChoice,
   type PromoBand,
@@ -862,7 +864,7 @@ export default function Chart(props: ChartProps) {
   // 轴区总宽恒定，不随「显示 Y 刻度线」开关变化（开关只控标签/短横线/网格线显隐）；
   // 刻度文字叠画在档位区块背景上（zIndex 2），区块与名称预留带之间以短横线过渡。
   const tickZoneRight = geom ? geom.plotLeft - NAME_ZONE_W : 0; // 轴区右缘（短横线起点）
-  const tickRows = useMemo(() => buildTickRows(geom), [geom]);
+  const tickRows = useMemo(() => thinTickRows(buildTickRows(geom)), [geom]);
 
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
   const tierValues = useMemo(() => collectTierValues(series, priceTypes), [series, priceTypes]);
@@ -1231,46 +1233,70 @@ export default function Chart(props: ChartProps) {
                 );
               }),
             )}
-          {/* 大促档期图标（第四十二轮）：时间轴与图表之间的窄条，仅图标不换行，点击出档期卡 */}
+          {/* 大促档期标志（第四十二轮窄条）：默认纯图标（名称悬停可见）；空间够
+              （与相邻标志互不重叠、不越绘图区左右缘）时显示「图标 + 档期名」胶囊，
+              放不下自动回落纯图标（第一百四十七轮，Eason） */}
           {promoBandsOn &&
             geom &&
-            promoBands.map((b) => {
-              const midFrac = (b.startIdx + b.startFrac + b.endIdx + b.endFrac) / 2 / geom.n;
-              const mid = geom.plotLeft + midFrac * geom.plotWidth;
-              return (
-                <div
-                  key={`pm-${b.key}`}
-                  style={{
-                    position: 'absolute',
-                    left: mid,
-                    // 专用行（第四十七轮）：轴标签 margin 22 下推，图标带 +4~18 独占；
-                    // 第110轮：小图自带时间轴标签（占 +7~19）→ 档期图标下移让位（+24~38，
-                    // 仍在 GRID.bottom=40 留白内）
-                    top: geom.plotTop + geom.plotHeight + (props.showXLabels ? 24 : 4),
-                    transform: 'translateX(-50%)',
-                    zIndex: 9,
-                  }}
-                >
-                  <Popover trigger="click" placement="top" content={<PromoEventCard band={b} />}>
-                    <span
-                      role="button"
-                      title={`${b.name} ${b.dateText} · 点击看档期详情`}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        pointerEvents: 'auto',
-                        display: 'grid',
-                        placeItems: 'center',
-                        width: 16,
-                        height: 14,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <TagOutlined style={{ fontSize: 12, color: '#b45309' }} />
-                    </span>
-                  </Popover>
-                </div>
-              );
-            })}
+            (() => {
+              const items = promoBands
+                .map((b) => ({
+                  b,
+                  mid: geom.plotLeft + (((b.startIdx + b.startFrac + b.endIdx + b.endFrac) / 2 / geom.n) * geom.plotWidth),
+                }))
+                .sort((x, y) => x.mid - y.mid);
+              const ICON_W = 16;
+              const labelW = (name: string): number => ICON_W + 4 + measureText(name) * (10 / 13) + 12;
+              let lastRight = -Infinity;
+              return items.map(({ b, mid }, i) => {
+                const lo = i === 0 ? geom.plotLeft - 16 : lastRight + 8;
+                const hi = i + 1 < items.length ? items[i + 1].mid - 10 : geom.plotLeft + geom.plotWidth + 16;
+                const w = labelW(b.name);
+                const withLabel = mid - w / 2 >= lo && mid + w / 2 <= hi;
+                lastRight = mid + (withLabel ? w / 2 : ICON_W / 2);
+                return (
+                  <div
+                    key={`pm-${b.key}`}
+                    style={{
+                      position: 'absolute',
+                      left: mid,
+                      // 专用行（第四十七轮）：轴标签 margin 22 下推，图标带 +4~18 独占；
+                      // 第110轮：小图自带时间轴标签（占 +7~19）→ 档期标志下移让位（+24~38，
+                      // 仍在 GRID.bottom=40 留白内）
+                      top: geom.plotTop + geom.plotHeight + (props.showXLabels ? 24 : 4),
+                      transform: 'translateX(-50%)',
+                      zIndex: 9,
+                    }}
+                  >
+                    <Popover trigger="click" placement="top" content={<PromoEventCard band={b} />}>
+                      <span
+                        role="button"
+                        title={`${b.name} ${b.dateText} · 点击看档期详情`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          pointerEvents: 'auto',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          height: 16,
+                          padding: withLabel ? '0 7px 0 5px' : 0,
+                          borderRadius: radius.pill,
+                          border: withLabel ? '1px solid rgba(180, 83, 9, 0.3)' : undefined,
+                          background: withLabel ? color.canvas : undefined,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <TagOutlined style={{ fontSize: withLabel ? 10 : 12, color: '#b45309' }} />
+                        {withLabel && (
+                          <span style={{ fontSize: 10, lineHeight: '12px', color: '#b45309', fontWeight: 500 }}>{b.name}</span>
+                        )}
+                      </span>
+                    </Popover>
+                  </div>
+                );
+              });
+            })()}
           {/* 悬停明细（第三十五轮，Keepa 式）：时间 + 各产品折后价。
               第一百一十三轮（评审）：取数列 tipIdx = 本图悬停列 ?? 外部联动列。
               第一百一十四轮（评审）：tipBox 模式（量价看板）不画浮层——同一份明细

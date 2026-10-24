@@ -9,7 +9,7 @@
 // 纯渲染：几何 = 用与面板相同的 gridTop/plotHeight 构造的伪 Geom（plotWidth=0 即可
 // ——轴元素全部只依赖纵向几何）。
 // ============================================================
-import { buildTierBoxes, buildTickRows } from './chartModel';
+import { buildTierBoxes, buildTickRows, thinTickRows } from './chartModel';
 import {
   AXIS_BAND_W,
   GRID,
@@ -51,7 +51,8 @@ export default function SplitAxisColumn(props: {
     scale,
     n: 1,
   };
-  const rows = buildTickRows(geom);
+  // 刻度抽稀（第一百四十七轮）：压缩轴最矮段处刻度互相叠压/越出绘图区下缘的守卫
+  const rows = thinTickRows(buildTickRows(geom));
   const tierBoxes = buildTierBoxes({ enabled: currency === 'usd', geom, tierValues: props.tierValues, industry: props.industry });
   return (
     <div style={{ position: 'relative', width: axisW, height: panelGridTop + scale.plotHeight + GRID.bottom }}>
