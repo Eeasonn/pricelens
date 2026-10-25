@@ -8,15 +8,19 @@
 // 屏蔽/恢复折线（虚线置灰态可恢复），悬停 = 该系列高亮、其余降透明。块间灰色
 // 短竖线分隔；对比药丸超过 3 个走块内 ‹› 滚动（主品药丸恒可见、不参与滚动）；
 // 整排放不下时两侧 ‹› 滚动。
-// 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（Eason：多平台比价统一从
-// 工具行进入，图例不再承担入口）。
+// 第一百五十轮：药丸第二行加「多平台比价」悬停小入口（店铺图标，悬停药丸浮现
+// ）——每个产品直接发起自己的多平台比价（弹窗预选该产品，不再二次选择）；
+// 工具行「多平台比价」胶囊按钮随之退役。
+// 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
+// 第一百五十轮起入口移到药丸本位，块头不再承担）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { ExportOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { ExportOutlined, LeftOutlined, RightOutlined, ShopOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
+import { dimProduct } from '../../data';
 import { curveNameOf, latestLinkOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
-import { color, radius, selectSoft } from '../../theme/tokens';
+import { color, motion, radius, selectSoft } from '../../theme/tokens';
 
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
 const COMPARES_VISIBLE = 3;
@@ -24,6 +28,17 @@ const COMPARES_VISIBLE = 3;
 const PILL_W_BUDGET = 178;
 /** 主品药丸描边：与选择浮窗颜色 chip 同一「浅蓝描边 = 强调」语言（第一百二十二轮） */
 const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
+
+/** 系列 key（`${modelId}__${配置去空格}`）→ 比价目标（modelId + 配置原文）：
+ *  配置原文从维表反查（弹窗产品对 key 用原文 romram 匹配）；查不到 = null（不出入口） */
+function compareTargetOf(key: string): { modelId: string; romram: string } | null {
+  const sep = key.indexOf('__');
+  if (sep < 0) return null;
+  const modelId = key.slice(0, sep);
+  const rom = key.slice(sep + 2);
+  const hit = dimProduct.find((p) => p.model_id === modelId && p.romram.replace(/\s+/g, '') === rom);
+  return hit ? { modelId, romram: hit.romram } : null;
+}
 
 interface PillSpec {
   key: string;
@@ -40,11 +55,15 @@ function Pill({
   dimmed,
   onToggle,
   onHover,
+  cmp,
 }: {
   pill: PillSpec;
   dimmed: boolean;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
+  /** 多平台比价入口（第一百五十轮）：悬停药丸浮现的店铺图标，点击 = 以该产品
+   *  打开多平台比价弹窗（stopPropagation 防触发药丸的屏蔽切换） */
+  cmp?: { title: string; onClick: () => void };
 }) {
   // 被屏蔽 = 虚线置灰态（角色强调让位，点击恢复）；主品可见态 = 浅蓝底 + 蓝描边 + 加粗
   const look = pill.hidden
@@ -63,6 +82,7 @@ function Pill({
       }}
       onMouseEnter={() => onHover(pill.key)}
       onMouseLeave={() => onHover(null)}
+      className="lpl-lg-pill"
       style={{
         display: 'inline-flex',
         flexDirection: 'column',
@@ -93,7 +113,7 @@ function Pill({
           {pill.brandLabel}
         </span>
       </span>
-      {/* 第二行：产品名 + 型号 + 最新商品页外链 */}
+      {/* 第二行：产品名 + 型号 + 最新商品页外链 + 多平台比价入口（悬停浮现） */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
         <span
           title={pill.text}
@@ -124,6 +144,31 @@ function Pill({
             <ExportOutlined style={{ fontSize: 11 }} />
           </a>
         )}
+        {/* 多平台比价（第一百五十轮）：店铺图标悬停浮现，点击直进该产品的比价 */}
+        {cmp && (
+          <button
+            type="button"
+            className="lpl-pill-cmp"
+            aria-label={cmp.title}
+            title={cmp.title}
+            onClick={(e) => {
+              e.stopPropagation();
+              cmp.onClick();
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              border: 'none',
+              background: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              color: color.mute,
+              flexShrink: 0,
+            }}
+          >
+            <ShopOutlined style={{ fontSize: 11 }} />
+          </button>
+        )}
       </span>
     </span>
   );
@@ -138,6 +183,7 @@ function GroupBlock({
   hoverSet,
   onToggle,
   onHover,
+  onCompareProduct,
 }: {
   group: LegendGroup;
   showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
@@ -145,6 +191,7 @@ function GroupBlock({
   hoverSet: Set<string> | null;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
+  onCompareProduct?: (p: { modelId: string; romram: string }) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
@@ -171,6 +218,15 @@ function GroupBlock({
     main: group.mainKey === s.key,
     link: latestLinkOf(s),
   }));
+  const cmpOf = (key: string): { title: string; onClick: () => void } | undefined => {
+    if (!onCompareProduct) return undefined;
+    const target = compareTargetOf(key);
+    if (!target) return undefined;
+    return {
+      title: `多平台比价：${pills.find((p) => p.key === key)?.text ?? key}`,
+      onClick: () => onCompareProduct(target),
+    };
+  };
   const mainPill = pills.find((p) => p.main) ?? null; // 主品无数据/空对 = null（不画药丸也不画 vs）
   const compares = pills.filter((p) => !p.main);
   const scrollable = compares.length > COMPARES_VISIBLE;
@@ -183,7 +239,7 @@ function GroupBlock({
         </span>
       )}
       {/* 主品药丸（空对无主品不出） */}
-      {mainPill && <Pill pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />}
+      {mainPill && <Pill pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(mainPill.key)} />}
       {mainPill && compares.length > 0 && (
         <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>vs</span>
       )}
@@ -214,7 +270,7 @@ function GroupBlock({
             }}
           >
             {compares.map((p) => (
-              <Pill key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} />
+              <Pill key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(p.key)} />
             ))}
           </div>
           {scrollable && (
@@ -251,6 +307,7 @@ export default function BrandLegendStrip({
   hiddenKeys,
   onToggleHidden,
   onHover,
+  onCompareProduct,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -259,6 +316,9 @@ export default function BrandLegendStrip({
   hiddenKeys: Set<string>;
   onToggleHidden: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
+  /** 多平台比价入口（第一百五十轮）：传入 = 每颗药丸第二行悬停浮现店铺图标，
+   *  点击以该产品打开多平台比价弹窗（工具行胶囊按钮已退役） */
+  onCompareProduct?: (p: { modelId: string; romram: string }) => void;
 }) {
   const multi = groups.length >= 2;
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
@@ -340,6 +400,7 @@ export default function BrandLegendStrip({
                 hoverSet={hoverSet}
                 onToggle={onToggleHidden}
                 onHover={hover}
+                onCompareProduct={onCompareProduct}
               />,
             );
           });
@@ -356,6 +417,12 @@ export default function BrandLegendStrip({
           <RightOutlined style={{ fontSize: 9 }} />
         </span>
       )}
+      {/* 比价小入口悬停浮现态（内联样式无 :hover，工具类集中在此） */}
+      <style>{`
+        .lpl-pill-cmp { opacity: 0; transition: opacity ${motion.fast}ms; }
+        .lpl-lg-pill:hover .lpl-pill-cmp { opacity: 1; }
+        .lpl-pill-cmp:hover { color: ${color.link} !important; }
+      `}</style>
     </div>
   );
 }

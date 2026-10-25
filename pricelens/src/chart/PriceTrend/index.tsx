@@ -158,12 +158,16 @@ export default function PriceTrend(props: {
   const [maxMinOn, setMaxMinOn] = useState(false);
   // 价格变化提醒：null=关；阈值=小数（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
-  // 多平台比价弹窗：唯一入口 = 工具行「多平台比价」胶囊按钮（图例块「⇄ 比价」
-  // 小按钮已随第一百四十二轮追补三退役，弹窗不再带产品预选）
+  // 多平台比价弹窗：入口 = 图例药丸悬停「店铺」小按钮（第一百五十轮起，每个
+  // 产品直进自己的多平台比价、弹窗预选该产品；工具行胶囊按钮退役——原「多组
+  // 产品里再选一款」的二次选择路径删除，142 追补三的块头「⇄ 比价」结论随
+  // 入口本位迁移一并作废）
   const [platformCompareOpen, setPlatformCompareOpen] = useState(false);
+  const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
 
-  /** 工具行/图内比价入口：打开多平台比价弹窗 */
-  const openPlatformCompare = (): void => {
+  /** 图例药丸比价入口：记录发起产品并打开弹窗 */
+  const openCompareFor = (p: { modelId: string; romram: string }): void => {
+    setCompareInit(p);
     setPlatformCompareOpen(true);
   };
   // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
@@ -1030,7 +1034,6 @@ export default function PriceTrend(props: {
                 onMaxMinOn={setMaxMinOn}
                 changeThreshold={changeThreshold}
                 onChangeThreshold={setChangeThreshold}
-                onOpenPlatformCompare={openPlatformCompare}
               />
             </div>
           </div>
@@ -1169,7 +1172,7 @@ export default function PriceTrend(props: {
                           hiddenKeys={hiddenKeys}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
-                         
+                          onCompareProduct={openCompareFor}
                         />
                       </div>
                       <Chart
@@ -1245,7 +1248,7 @@ export default function PriceTrend(props: {
               hiddenKeys={hiddenKeys}
               onToggleHidden={toggleLegend}
               onHover={setLegendHoverKey}
-             
+              onCompareProduct={openCompareFor}
             />
           </div>
           <Chart
@@ -1263,7 +1266,6 @@ export default function PriceTrend(props: {
             enableOffer={state.granularity === 'week' && offersOn}
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
-            onOpenPlatformCompare={openPlatformCompare}
             yScale={yCfg}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
@@ -1321,12 +1323,13 @@ export default function PriceTrend(props: {
         />
       </div>
 
-      {/* 多平台比价弹窗（入口 = 工具行「多平台比价」胶囊按钮）：单产品各平台
-          价格趋势对比 + 比当前看板差价率，数据层 platformPriceSpread = 全平台
-          口径（与左上平台筛选无关） */}
+      {/* 多平台比价弹窗（入口 = 图例药丸悬停店铺图标，initialProduct = 发起
+          产品）：单产品各平台价格趋势对比 + 比当前看板差价率，数据层
+          platformPriceSpread = 全平台口径（与左上平台筛选无关） */}
       <PlatformCompareModal
         open={platformCompareOpen}
         onClose={() => setPlatformCompareOpen(false)}
+        initialProduct={compareInit}
       />
 
       {/* 月/季下钻弹窗 */}

@@ -15,7 +15,7 @@
 //    面板内不再渲染各自的设置行（Chart chrome=false）。
 // ============================================================
 import { Checkbox, Popover, Segmented, Slider } from 'antd';
-import { MoreOutlined, SettingOutlined, SwapOutlined } from '@ant-design/icons';
+import { MoreOutlined, SettingOutlined } from '@ant-design/icons';
 import { forwardRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
 import { color, fontSize, radius, localCurrencySymbol } from '../../theme/tokens';
@@ -49,8 +49,6 @@ export interface ChartToolbarProps {
   onChangeThreshold?: (v: number | null) => void;
   /** ⋯ 更多菜单只保留两个次级开关（最高/最低价标注 + 价格变化提醒）。
    *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开 */
-  /** 打开多平台比价弹窗（本轮起为右侧独立胶囊按钮；传了才渲染） */
-  onOpenPlatformCompare?: () => void;
 }
 
 /** 折后价/RRP 切换胶囊（第五十二轮）：图例页签同款外形，品牌色点的位置改「一条粗 /
@@ -242,8 +240,9 @@ export default function ChartToolbar(props: ChartToolbarProps) {
         </div>
       )}
       {/* 右区：高频视图开关圆框组（第五十六轮收窄：只留大促档期/offer 权益）+
-          「多平台比价」胶囊按钮（本轮起显性化，单一入口）+
-          「⋯ 更多」二级菜单（仅最高/最低价标注、价格变化提醒两个开关） */}
+          「⋯ 更多」二级菜单（仅最高/最低价标注、价格变化提醒两个开关）。
+          「多平台比价」胶囊按钮已随第一百五十轮退役——入口移到图例药丸悬停
+          店铺图标（每个产品直进自己的多平台比价，不再二次选择） */}
       {toolbarOn && (
         <div
           style={{
@@ -275,33 +274,6 @@ export default function ChartToolbar(props: ChartToolbarProps) {
               <span style={{ fontSize: 12 }}>促销权益</span>
             </Checkbox>
           </div>
-          {/* 多平台比价（本轮入口显性化）：描边药丸按钮，外形语言同左侧 PriceTypePill */}
-          {props.onOpenPlatformCompare && (
-            <button
-              type="button"
-              title="单个产品在各平台的价格走势对比"
-              onClick={props.onOpenPlatformCompare}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                height: 22,
-                padding: '0 10px',
-                fontSize: 12,
-                lineHeight: '20px',
-                borderRadius: radius.pill,
-                cursor: 'pointer',
-                flexShrink: 0,
-                font: 'inherit',
-                background: color.canvas,
-                border: `1px solid ${color.hairline}`,
-                color: color.body,
-              }}
-            >
-              <SwapOutlined style={{ fontSize: 11, color: color.mute }} aria-hidden />
-              多平台比价
-            </button>
-          )}
           <Popover
             trigger="click"
             placement="bottomRight"
