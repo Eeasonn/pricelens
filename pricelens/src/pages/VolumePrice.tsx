@@ -618,11 +618,12 @@ export default function VolumePrice() {
                   tierValues={tierValues}
                 />
                 <div style={{ flex: 1 }} />
-                {/* 与时间轴行齐平：容器高/下边距 = PanelTimeTrack（52 + 6）；第148轮
-                    按钮与整条时间轴块（轨道带 + 刻度标签两行，52px）垂直居中 = top 11 */}
+                {/* 与时间轴行齐平：容器高/下边距 = PanelTimeTrack（52 + 6）；按钮与
+                    时间轴拖柄（轨道带，高 20）中心对齐 = top -5——不含下方日期字
+                    （第一百四十九轮澄清口径，改回轨道带对齐） */}
                 {buckets.length > 0 && visUnion.length > 0 && (
                   <div style={{ height: 52, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
-                    <div style={{ position: 'absolute', left: 0, right: 0, top: 11, display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
                       {syncToggle}
                     </div>
                   </div>

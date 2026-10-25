@@ -1,30 +1,33 @@
 // ============================================================
-// 多平台比价（本轮改版）：单产品在各平台的价格趋势对比——入口 = 价格看板
-// 工具行「多平台比价」胶囊按钮（图例块级「⇄ 比价」小按钮已随第一百四十二轮
-// 追补三退役，弹窗不再带产品预选）。口径：各平台 = 该平台全部渠道/
-// 店铺内最低在架价（platformPriceSpread 同源，**与左上平台筛选无关**——比价的
-// 意义就是并列看全部平台）；SKU = 该配置的最低价代表色（lowestPriceColorSku，
-// 缺省回退该配置首个颜色 SKU）；时间 = 看板筛选范围按周展开（比价恒按周，
-// 粒度/查看窗口无关）；币种随看板。
-// 比当前看板（本轮深化）：除「比最低」外补「比当前」——与看板当前生效取数点
-// （默认店铺覆盖 → 未配置 = 国家默认平台内最低价，priceForSelection platform=null，
-// 与单点取价预警同源）的差价率：摘要 chips 每枚第二行小字（当前取数点所在平台
-// 挂「当前」徽标）、趋势图 tooltip 每行附同周差价率。
-// 布局：顶部 = 产品 Select + 「按周 · 币种」角注；其下 = 平台摘要 chips 行
-// （平台名 · 店铺数 · 最新价 · 比最低 +x.x%，第二行 = 比当前 ±x.x%，
-// 最低者浅蓝标亮）；主体 = 多平台价格阶梯趋势图（各平台一条线放同一张图，
-// 即主图的多平台版）——周度阶梯（step:'end'）与主图一致、无价周断线
-// （connectNulls:false）、圆点仅悬停显示；图例=平台名（可点击显隐）；悬停出
-// 该周各平台价格与比当前差价率。
+// 多平台比价（第一百四十九轮重设计：对齐全站视觉与图例语言；取数口径第142/143轮立）：
+// 单产品在各平台的价格趋势对比——入口 = 价格看板工具行「多平台比价」。
+// 口径不变：各平台 = 该平台全部店铺内最低在架价（platformPriceSpread 同源，
+// 与左上平台筛选无关——比价的意义就是并列看全部平台）；SKU = 该配置的最低价
+// 代表色（lowestPriceColorSku，缺省回退首个颜色）；时间 = 看板筛选范围按周
+// 展开（比价恒按周）；币种随看板。「比当前」= 与看板当前生效取数点（默认店铺
+// 覆盖 → 未配置 = 国家默认平台内最低价，priceForSelection platform=null 链）
+// 的差价率：chip 第二行 + 悬停明细每行附，当前取数点所在平台挂「当前」徽标。
+// 本轮改版（风格对齐 + 功能补齐）：
+// ①弹窗 chrome 换系统令牌（radius.modal + shadow.l5 + 自绘标题行，同 SnapshotModal
+//   惯例，关闭走自绘 ✕），产品选择收进标题行右侧、按周·币种角注随行；
+// ②平台摘要 chip 升级为唯一图例（echarts 内置图例行退役）：点击 chip 屏蔽/恢复
+//   该平台折线（虚线置灰态与看板图例药丸同语言），点平台名仍可下钻具体卖家
+//   （CascadePanel，拦截 chip 的点击切换）；全行隐藏时图上给恢复提示；
+// ③趋势图补大促档期底色（buildPromoBands 同源，深浅红晕与主图同参）+ 悬停表头
+//   档期行 + axisPointer 竖线，网格顶距收窄；
+// ④线色 / chip 色点改为按「有价平台序」稳定取色——原 chip 按全量行序、线按有价
+//   行序各取色板，有无价平台并存时色点与线错位。
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Input, Modal, Popover, Select } from 'antd';
+import { CloseOutlined } from '@ant-design/icons';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { useFilters } from '../../state/FiltersContext';
-import { dimChannel, dimProduct } from '../../data';
+import { dimChannel, dimProduct, dimPromo } from '../../data';
+import type { DimPromo } from '../../dataModel/types';
 import { filterBarTheme } from '../../components/FilterBar';
 import { bucketIdOfDate, dateOfBucket } from '../../components/FilterBar/timeUtils';
 import { brandOfModel, modelNameOf } from '../../components/ProductCascader/tree';
@@ -37,19 +40,28 @@ import {
   sellersOfPlatform,
   priceForPlatformSeller,
 } from '../../dataModel/aggregate';
-import { bucketAnchorDate, dataBucketRange, enumerateBuckets, type Bucket } from './helpers';
-import { color, fontSize, font, localCurrencySymbol, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { bucketAnchorDate, bucketSpans, dataBucketRange, enumerateBuckets, type Bucket } from './helpers';
+import { buildPromoBands, type PromoBand } from './chartModel';
+import { color, fontSize, font, localCurrencySymbol, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import { CascadePanel, autoColumnWidth, measureText } from '../../components/ProductCascader';
 import type { CascadeRowItem } from '../../components/ProductCascader';
 
-echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
+echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
 /** 平台色板（低饱和六色，与系统黑白灰+浅蓝强调的气质协调；仅本弹窗使用，
  *  不进全局 tokens——平台数超过色板长度时循环取色） */
 const PLATFORM_PALETTE = ['#4c78a8', '#c78a4b', '#6f9e6a', '#a878a8', '#9d755d', '#4fa3a5'];
 
+/** 大促档期底色（与主图 Chart 同参：红晕按深/中/浅三档） */
+const PROMO_FILL: Record<string, string> = {
+  深: 'rgba(235, 87, 87, 0.055)',
+  中: 'rgba(235, 87, 87, 0.035)',
+  浅: 'rgba(235, 87, 87, 0.018)',
+};
+const promoFillOf = (depth: DimPromo['depth_hint']): string => PROMO_FILL[depth] ?? PROMO_FILL.浅;
+
 /** 趋势图容器高（宽随弹窗，ResizeObserver 自适应） */
-const TREND_H = 312;
+const TREND_H = 316;
 
 interface ProductOption {
   key: string; // `${modelId}|${romram}`
@@ -81,17 +93,21 @@ const fmtSignedPct = (v: number): string => `${v >= 0 ? '+' : '−'}${Math.abs(v
 const vsCurrentText = (v: number | null): string =>
   v != null && Math.abs(v) > 0.0005 ? fmtSignedPct(v) : '—';
 
-/** 多平台价格阶梯趋势图：各平台一条线放同一张图（主图的多平台版，比主图简单
- *  得多——无断轴/档位带/覆盖层那套）。echarts 引入与 init/dispose/ResizeObserver
- *  模式同 src/chart/PriceTrend/Chart.tsx。tooltip 每行附「比当前」同周差价率，
- *  当前取数点所在平台挂「当前」徽标。 */
+/** 多平台价格阶梯趋势图：各平台一条线放同一张图（主图的多平台版，无断轴/档位带
+ *  那套）。echarts 引入与 init/dispose/ResizeObserver 模式同 src/chart/PriceTrend/
+ *  Chart.tsx。第一百四十九轮：图例退役（平台 chip 即图例，hidden 屏蔽线）、补大促
+ *  档期底色（markArea，与主图红晕同参）+ 悬停表头档期行 + axisPointer 竖线；
+ *  线色按「有价平台序」稳定取色（与 chip 色点同源）。tooltip 每行附「比当前」
+ *  同周差价率，当前取数点所在平台挂「当前」徽标。 */
 function PlatformTrendChart(props: {
   rows: PlatformRow[];
+  hidden: Set<string>;
   weeks: Bucket[];
   curPrices: (number | null)[];
   curPlatform: string | null;
+  bands: PromoBand[];
 }) {
-  const { rows, weeks, curPrices, curPlatform } = props;
+  const { rows, hidden, weeks, curPrices, curPlatform, bands } = props;
   const { state } = useFilters();
   const usd = state.currency === 'usd';
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -101,8 +117,8 @@ function PlatformTrendChart(props: {
 
   // 数据引用透传给 tooltip 闭包（formatter 里按下标取数，而非依赖 params 携带值
   // ——无价周在 params 里可能被省略，按周下标直查 rows 才能列出「无价 = —」）
-  const dataRef = useRef({ rows, weeks, usd, curPrices, curPlatform });
-  dataRef.current = { rows, weeks, usd, curPrices, curPlatform };
+  const dataRef = useRef({ rows, weeks, usd, curPrices, curPlatform, hidden, bands });
+  dataRef.current = { rows, weeks, usd, curPrices, curPlatform, hidden, bands };
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -130,32 +146,54 @@ function PlatformTrendChart(props: {
     chartRef.current?.resize();
   }, [width]);
 
-  // 有价平台才出线（全程无价的平台不占图例位）
+  // 有价平台才出线（全程无价的平台不占图例位）；色板按有价序稳定取色
   const priced = useMemo(() => rows.filter((r) => r.prices.some((v) => v != null)), [rows]);
+  const colorOf = useMemo(() => {
+    const m = new Map<string, string>();
+    priced.forEach((r, i) => m.set(r.platform, PLATFORM_PALETTE[i % PLATFORM_PALETTE.length]));
+    return (pf: string): string => m.get(pf) ?? PLATFORM_PALETTE[0];
+  }, [priced]);
+  const visible = useMemo(() => priced.filter((r) => !hidden.has(r.platform)), [priced, hidden]);
 
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    if (weeks.length === 0 || priced.length === 0) {
+    if (weeks.length === 0 || visible.length === 0) {
       chart.clear();
       return;
     }
     // 隔周抽稀：标签约每 1/12 个刻度出一个，防叠字
     const labelEvery = Math.max(1, Math.ceil(weeks.length / 12));
     const sym = usd ? '$' : localCurrencySymbol();
+    const series = visible.map((r, i) => ({
+      name: r.platform,
+      type: 'line' as const,
+      step: 'end' as const, // 周度阶梯，与主图折线形态一致
+      connectNulls: false as const, // 无价周断开，不臆造价格
+      showSymbol: false, // 圆点仅悬停显示
+      symbol: 'circle' as const,
+      symbolSize: 5,
+      lineStyle: { width: 1.8, color: colorOf(r.platform) },
+      itemStyle: { color: colorOf(r.platform) },
+      emphasis: { focus: 'series' },
+      data: r.prices,
+      // 大促档期底色挂在首条可见线上（markArea 需宿主 series；Fractional index 在
+      // 类目轴上按线性插值落位，与主图 DOM 叠层的 (idx+frac) 口径一致）
+      ...(i === 0 && bands.length
+        ? {
+            markArea: {
+              silent: true,
+              data: bands.map((b) => [
+                { xAxis: b.startIdx + b.startFrac, itemStyle: { color: promoFillOf(b.depth) } },
+                { xAxis: b.endIdx + b.endFrac },
+              ]),
+            },
+          }
+        : {}),
+    }));
     const option: echarts.EChartsCoreOption = {
       animationDuration: 160,
-      color: priced.map((_, i) => PLATFORM_PALETTE[i % PLATFORM_PALETTE.length]),
-      grid: { left: 8, right: 16, top: 30, bottom: 4, containLabel: true },
-      legend: {
-        top: 0,
-        left: 4,
-        icon: 'rect',
-        itemWidth: 12,
-        itemHeight: 3,
-        itemGap: 16,
-        textStyle: { fontSize: 11, color: color.body, fontFamily: font.family },
-      },
+      grid: { left: 8, right: 16, top: 14, bottom: 4, containLabel: true },
       tooltip: {
         trigger: 'axis',
         confine: true,
@@ -165,23 +203,32 @@ function PlatformTrendChart(props: {
         padding: [8, 12],
         textStyle: { fontSize: 12, color: color.body, fontFamily: font.family },
         extraCssText: 'box-shadow: 0 1px 1px rgba(0,0,0,.02), 0 8px 16px -4px rgba(0,0,0,.08);',
+        axisPointer: { type: 'line', lineStyle: { color: color.hairlineStrong, width: 1 } },
         formatter: (params: unknown) => {
           const arr = Array.isArray(params) ? params : [params];
           const first = arr[0] as { dataIndex?: number } | undefined;
           const idx = first?.dataIndex ?? 0;
           const wk = dataRef.current.weeks[idx];
           if (!wk) return '';
-          const { rows: rs, usd: isUsd, curPrices: cps, curPlatform: cp } = dataRef.current;
+          const { rows: rs, usd: isUsd, curPrices: cps, curPlatform: cp, hidden: hd, bands: bs } = dataRef.current;
           const cur = cps[idx] ?? null;
           const full = bucketAnchorDate('week', wk.id) ?? wk.xLabel;
+          const band = bs.find((b) => idx >= b.startIdx && idx <= b.endIdx);
+          const bandLine = band
+            ? `<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:${color.mute};margin:-2px 0 4px;">` +
+              `<span style="width:8px;height:8px;border-radius:2px;background:${promoFillOf(band.depth)};` +
+              `border:1px solid rgba(235, 87, 87, 0.25);flex-shrink:0;"></span>` +
+              `<span>档期 ${band.name} · ${band.dateText}</span></div>`
+            : '';
           const curBadge =
             ` <span style="display:inline-block;margin-left:2px;padding:0 4px;border-radius:9999;` +
             `border:1px solid ${selectAccent};background:${selectSoft};color:${selectSoftInk};` +
             `font-size:10px;line-height:14px;font-weight:600;vertical-align:1px;">当前</span>`;
           const lines = rs
-            .map((r, i) => {
+            .filter((r) => !hd.has(r.platform))
+            .map((r) => {
               const v = r.prices[idx];
-              const c = PLATFORM_PALETTE[i % PLATFORM_PALETTE.length];
+              const c = colorOf(r.platform);
               const ratio = v != null && cur != null ? v / cur - 1 : null;
               return (
                 `<div style="display:flex;align-items:center;gap:7px;line-height:20px;min-width:236px;">` +
@@ -194,7 +241,7 @@ function PlatformTrendChart(props: {
               );
             })
             .join('');
-          return `<div style="font-weight:600;color:#171717;margin-bottom:4px;">${full}</div>${lines}`;
+          return `<div style="font-weight:600;color:#171717;margin-bottom:4px;">${full}</div>${bandLine}${lines}`;
         },
       },
       xAxis: {
@@ -223,28 +270,18 @@ function PlatformTrendChart(props: {
           formatter: (v: number) => `${sym}${Math.round(v).toLocaleString('en-US')}`,
         },
       },
-      series: priced.map((r) => ({
-        name: r.platform,
-        type: 'line',
-        step: 'end', // 周度阶梯，与主图折线形态一致
-        connectNulls: false, // 无价周断开，不臆造价格
-        showSymbol: false, // 圆点仅悬停显示
-        symbol: 'circle',
-        symbolSize: 5,
-        lineStyle: { width: 1.8 },
-        emphasis: { focus: 'series' },
-        data: r.prices,
-      })),
+      series,
     };
     chart.resize();
     chart.setOption(option, { notMerge: true });
-  }, [priced, weeks, usd]);
+  }, [visible, priced, weeks, usd, bands, colorOf]);
 
-  const empty = weeks.length === 0 || priced.length === 0;
+  const emptyData = weeks.length === 0 || priced.length === 0;
+  const allHidden = !emptyData && visible.length === 0;
   return (
     <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: TREND_H }}>
       <div ref={chartDivRef} style={{ position: 'absolute', inset: 0 }} />
-      {empty && (
+      {emptyData && (
         <div
           style={{
             position: 'absolute',
@@ -256,6 +293,20 @@ function PlatformTrendChart(props: {
           }}
         >
           所选时间范围内无价格数据
+        </div>
+      )}
+      {allHidden && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 13,
+            color: color.mute,
+          }}
+        >
+          平台折线均已隐藏，点上方平台 chip 恢复
         </div>
       )}
     </div>
@@ -388,7 +439,12 @@ export default function PlatformCompareModal({
   // 切产品/切国家重置——卖家名按国家各有一套，产品 key（型号|配置）跨国可复用，
   // 只随产品重置会把旧国家的卖家继续套到新国家数据上，平台线全断（本轮体检修）
   const [sellerPicks, setSellerPicks] = useState<Record<string, string>>({});
-  useEffect(() => setSellerPicks({}), [activeKey, cc]);
+  // 被屏蔽的平台（第一百四十九轮：chip 即图例，点击切换）；同随产品/国家重置
+  const [hiddenPfs, setHiddenPfs] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setSellerPicks({});
+    setHiddenPfs(new Set());
+  }, [activeKey, cc]);
 
   // 周桶 = 看板筛选范围（rangeStart/End 为当前粒度桶 id，换算成周 id）∩ 数据全量周域
   const weeks = useMemo<Bucket[]>(() => {
@@ -402,6 +458,22 @@ export default function PlatformCompareModal({
     if (lo > hi) return [];
     return enumerateBuckets('week', ds, de).filter((b) => b.id >= lo && b.id <= hi);
   }, [state.rangeStart, state.rangeEnd, state.granularity]);
+
+  // 大促档期底色（第一百四十九轮）：促销日历按当前口径的平台集过滤（同主图
+  // scopedPromos 归一），与看板窗口按周展开后的桶跨度求交
+  const promoBands = useMemo<PromoBand[]>(() => {
+    if (weeks.length === 0) return [];
+    const defaultPlatform = defaultPlatformOf(cc);
+    const selected = state.platform && (state.platform.platforms.length || state.platform.shopIds.length)
+      ? new Set([...state.platform.platforms, ...state.platform.shopIds.map((id) => id.split(':')[1] ?? '')])
+      : new Set(defaultPlatform ? [defaultPlatform] : []);
+    const selectedLower = new Set([...selected].map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, '')));
+    const promos = dimPromo.filter(
+      (p) => p.country_code === cc
+        && (p.platforms == null || p.platforms.some((pl) => selectedLower.has(pl.toLowerCase().replace(/[^a-z0-9]/g, '')))),
+    );
+    return buildPromoBands({ promos, spans: bucketSpans('week', weeks) });
+  }, [weeks, cc, state.platform]);
 
   // 代表色 = 最低价颜色 SKU；无价数据回退该配置首个颜色
   const skuId = useMemo<string | null>(() => {
@@ -495,18 +567,54 @@ export default function PlatformCompareModal({
     });
   }, [skuId, weeks, cc, state.currency, curPrices, curPlatform, sellerPicks]);
 
+  // chip 色点 = 有价平台序稳定取色（与趋势图线色同源；无价平台灰点）
+  const colorByPlatform = useMemo(() => {
+    const m = new Map<string, string>();
+    let k = 0;
+    for (const r of rows) {
+      if (r.latest == null) continue;
+      m.set(r.platform, PLATFORM_PALETTE[k % PLATFORM_PALETTE.length]);
+      k += 1;
+    }
+    return m;
+  }, [rows]);
+  const swatchOf = (r: PlatformRow): string => colorByPlatform.get(r.platform) ?? color.hairlineStrong;
+
   // 关闭即整体卸载（同 DrillModal/SnapshotModal 惯例）：antd Modal 常驻挂载、
   // 仅切 open=false 的关法在 StrictMode 开发态会留下 display:block 的透明遮罩
   // 挡住整页点击——这里渲染期直接不输出 Modal，关闭路径无残留。
   if (!open) return null;
 
+  const toggleHidden = (pf: string): void => {
+    setHiddenPfs((prev) => {
+      const next = new Set(prev);
+      if (next.has(pf)) next.delete(pf);
+      else next.add(pf);
+      return next;
+    });
+  };
+
   return (
-    <Modal open onCancel={onClose} footer={null} centered width={800} title="多平台比价">
+    <Modal
+      open
+      centered
+      footer={null}
+      width={880}
+      onCancel={onClose}
+      title={null}
+      closable={false}
+      styles={{
+        content: { borderRadius: radius.modal, boxShadow: shadow.l5, padding: space.lg },
+        header: { display: 'none' },
+      }}
+    >
       <ConfigProvider theme={filterBarTheme}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0 10px' }}>
-          <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>产品</span>
+        {/* 标题行（系统标题行语言：左标题 + 右控件簇）：产品选择 + 按周·币种角注 + 关闭 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>多平台比价</span>
+          <span style={{ fontSize: 12, color: color.mute, marginLeft: 'auto', whiteSpace: 'nowrap' }}>按周 · {usd ? 'USD' : '本币'}</span>
           <Select
-            style={{ width: 420 }}
+            style={{ width: 320 }}
             value={activeKey ?? undefined}
             placeholder={products.length ? '选择产品' : '当前看板没有可选产品'}
             notFoundContent="当前看板没有可选产品"
@@ -516,111 +624,131 @@ export default function PlatformCompareModal({
             onChange={(k) => setPicked(k)}
             options={products.map((p) => ({ value: p.key, label: p.label }))}
           />
-          <span style={{ fontSize: 12, color: color.mute, marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-            按周 · {usd ? 'USD' : '本币'}
-          </span>
+          <button
+            type="button"
+            aria-label="关闭多平台比价"
+            title="关闭"
+            onClick={onClose}
+            style={{
+              width: 26,
+              height: 26,
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: 'none',
+              borderRadius: radius.control,
+              background: 'none',
+              color: color.mute,
+              cursor: 'pointer',
+            }}
+          >
+            <CloseOutlined style={{ fontSize: 13 }} />
+          </button>
         </div>
         {active ? (
           <>
-            {/* 平台摘要 chips（两行）：首行 = 平台名 · 店铺数 · 最新价 · 比最低 +x.x%
-                （最低者浅蓝标亮）；第二行小字 = 比当前 ±x.x%（与看板当前取数点的差价率，
-                当前取数点所在平台挂「当前」徽标）；色点与趋势图线色一一对应 */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {rows.map((r, i) => (
-                <span
-                  key={r.platform}
-                  className="tnum"
-                  style={{
-                    display: 'inline-flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    gap: 2,
-                    padding: '4px 9px 5px',
-                    borderRadius: radius.pill,
-                    fontSize: 12,
-                    whiteSpace: 'nowrap',
-                    background: r.lowest ? selectSoft : color.canvas,
-                    border: `1px solid ${r.lowest ? selectAccent : color.hairline}`,
-                    color: r.lowest ? selectSoftInk : color.body,
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, lineHeight: '18px' }}>
-                    <i
-                      aria-hidden
-                      style={{
-                        width: 8,
-                        height: 3,
-                        borderRadius: 2,
-                        background: PLATFORM_PALETTE[i % PLATFORM_PALETTE.length],
-                        flexShrink: 0,
-                      }}
-                    />
-                    <SellerPick
-                      cc={cc}
-                      platform={r.platform}
-                      picked={r.seller ?? null}
-                      onPick={(seller) => setSellerPicks((prev) => ({ ...prev, [r.platform]: seller ?? '' }))}
-                    >
-                      <span
-                        role="button"
-                        aria-label={`选择 ${r.platform} 的卖家店铺`}
-                        title={r.seller ? `已指定卖家：${r.seller}（点击更换）` : `选择 ${r.platform} 内具体卖家店铺`}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          fontWeight: r.lowest ? 600 : 500,
-                          color: 'inherit',
-                          cursor: 'pointer',
-                          borderBottom: `1px dashed ${r.seller ? selectAccent : 'transparent'}`,
-                        }}
+            {/* 平台 chip = 唯一图例（两行，同看板图例药丸语言）：首行 = 色点 + 平台名
+                （点平台名下钻卖家）· 店铺/卖家 · 最新价 · 比最低 +x.x%（最低者浅蓝标亮
+                挂「最低」）；第二行 = 比当前 ±x.x% / 「当前」徽标；点击 chip 整体 =
+                屏蔽/恢复该平台折线（虚线置灰态），色点与折线同源按有价序取色 */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {rows.map((r) => {
+                const off = hiddenPfs.has(r.platform);
+                return (
+                  <span
+                    key={r.platform}
+                    role="button"
+                    aria-pressed={off}
+                    title={off ? '点击恢复显示该平台折线' : '点击隐藏该平台折线'}
+                    onClick={() => toggleHidden(r.platform)}
+                    className="tnum"
+                    style={{
+                      display: 'inline-flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      gap: 2,
+                      padding: '4px 9px 5px',
+                      borderRadius: radius.pill,
+                      fontSize: 12,
+                      whiteSpace: 'nowrap',
+                      cursor: 'pointer',
+                      opacity: off ? 0.45 : undefined,
+                      background: off ? color.canvas : r.lowest ? selectSoft : color.canvas,
+                      border: `1px ${off ? 'dashed' : 'solid'} ${off ? color.hairlineStrong : r.lowest ? selectAccent : color.hairline}`,
+                      color: off ? color.mute : r.lowest ? selectSoftInk : color.body,
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, lineHeight: '18px' }}>
+                      <i aria-hidden style={{ width: 8, height: 3, borderRadius: 2, background: swatchOf(r), flexShrink: 0 }} />
+                      <SellerPick
+                        cc={cc}
+                        platform={r.platform}
+                        picked={r.seller ?? null}
+                        onPick={(seller) => setSellerPicks((prev) => ({ ...prev, [r.platform]: seller ?? '' }))}
                       >
-                        {r.platform}
+                        <span
+                          role="button"
+                          aria-label={`选择 ${r.platform} 的卖家店铺`}
+                          title={r.seller ? `已指定卖家：${r.seller}（点击更换）` : `选择 ${r.platform} 内具体卖家店铺`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 2,
+                            fontWeight: r.lowest ? 600 : 500,
+                            color: 'inherit',
+                            cursor: 'pointer',
+                            borderBottom: `1px dashed ${r.seller ? selectAccent : 'transparent'}`,
+                          }}
+                        >
+                          {r.platform}
+                        </span>
+                      </SellerPick>
+                      <span style={{ color: 'inherit', opacity: 0.75, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        · {r.seller || `${r.shops} 店铺`}
                       </span>
-                    </SellerPick>
-                    <span style={{ color: r.lowest ? selectSoftInk : color.mute, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      · {r.seller || `${r.shops} 店铺`}
+                      <span style={{ fontWeight: 600, color: off ? color.mute : r.lowest ? selectSoftInk : color.ink }}>
+                        · {r.latest != null ? fmtPrice(r.latest, usd) : '—'}
+                      </span>
+                      <span style={{ color: 'inherit', opacity: 0.75 }}>
+                        ·{' '}
+                        {r.lowest ? (
+                          <span style={{ fontWeight: 700 }}>最低</span>
+                        ) : r.vsLowest != null && r.vsLowest > 0.0005 ? (
+                          `+${(r.vsLowest * 100).toFixed(1)}%`
+                        ) : (
+                          '—'
+                        )}
+                      </span>
                     </span>
-                    <span style={{ fontWeight: 600, color: r.lowest ? selectSoftInk : color.ink }}>
-                      · {r.latest != null ? fmtPrice(r.latest, usd) : '—'}
-                    </span>
-                    <span style={{ color: r.lowest ? selectSoftInk : color.mute }}>
-                      ·{' '}
-                      {r.lowest ? (
-                        <span style={{ fontWeight: 700 }}>最低</span>
-                      ) : r.vsLowest != null && r.vsLowest > 0.0005 ? (
-                        `+${(r.vsLowest * 100).toFixed(1)}%`
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, lineHeight: '13px', color: 'inherit', opacity: 0.75 }}>
+                      {r.current ? (
+                        <span
+                          style={{
+                            padding: '0 5px',
+                            borderRadius: radius.pill,
+                            border: `1px solid ${selectAccent}`,
+                            background: color.canvas,
+                            color: selectSoftInk,
+                            fontWeight: 600,
+                            lineHeight: '15px',
+                            opacity: 1,
+                          }}
+                        >
+                          当前
+                        </span>
                       ) : (
-                        '—'
+                        <>比当前 {vsCurrentText(r.vsCurrent)}</>
                       )}
                     </span>
                   </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, lineHeight: '13px', color: r.lowest ? selectSoftInk : color.mute }}>
-                    {r.current ? (
-                      <span
-                        style={{
-                          padding: '0 5px',
-                          borderRadius: radius.pill,
-                          border: `1px solid ${selectAccent}`,
-                          background: color.canvas,
-                          color: selectSoftInk,
-                          fontWeight: 600,
-                          lineHeight: '15px',
-                        }}
-                      >
-                        当前
-                      </span>
-                    ) : (
-                      <>比当前 {vsCurrentText(r.vsCurrent)}</>
-                    )}
-                  </span>
-                </span>
-              ))}
+                );
+              })}
             </div>
-            <PlatformTrendChart rows={rows} weeks={weeks} curPrices={curPrices} curPlatform={curPlatform} />
-            <div style={{ fontSize: 12, color: color.mute, marginTop: 8, lineHeight: '18px' }}>
-              各平台价格 = 该平台全部店铺内最低在架价（点平台名可指定具体卖家；折后价口径，取所选配置的最低价颜色 SKU）；「比当前」= 与看板当前取数点（所选店铺/平台，未选时为默认店铺）的差价率；时间范围随看板筛选。
+            <PlatformTrendChart rows={rows} hidden={hiddenPfs} weeks={weeks} curPrices={curPrices} curPlatform={curPlatform} bands={promoBands} />
+            <div style={{ fontSize: 11, color: color.mute, marginTop: 10, lineHeight: '17px' }}>
+              各平台价格 = 该平台全部店铺内最低在架价（点平台名可指定具体卖家，点 chip 隐藏/恢复折线）；折后价口径，取所选配置的最低价颜色 SKU；「比当前」= 与看板当前取数点（所选店铺/平台，未选时为默认店铺）的差价率；时间范围随看板筛选，图内底色 = 大促档期。
             </div>
           </>
         ) : (

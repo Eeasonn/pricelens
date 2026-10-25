@@ -1057,11 +1057,15 @@ export default function PriceTrend(props: {
                   tierValues={splitTierValues}
                 />
               )}
-              {/* 「同步」开关（与各面板时间轴同一水平线）：轴列体与面板绘图区同高，
-                  其下正是各面板的时间轴行——同高容器内垂直居中对齐 */}
+              {/* 「时间轴同步」开关（与各面板时间轴同一水平线）：轴列体与面板绘图区同高，
+                  其下正是各面板的时间轴行——按钮与时间轴拖柄（轨道带，高 20）中心对齐，
+                  不含下方日期字（第一百四十九轮澄清口径）。top -2 = 轨道带居中（-5）再补偿
+                  SplitAxisColumn 与面板轨道行的实测 3px 恒差（面板卡 1px 边框 + chartH 取整） */}
               {splitYCfg && (
-                <div style={{ height: SPLIT_TRACK_H, display: 'flex', alignItems: 'center' }}>
-                  {syncToggle}
+                <div style={{ height: SPLIT_TRACK_H, position: 'relative', flexShrink: 0 }}>
+                  <div style={{ position: 'absolute', left: 0, right: 0, top: -2, display: 'flex', justifyContent: 'center' }}>
+                    {syncToggle}
+                  </div>
                 </div>
               )}
             </div>
