@@ -23,7 +23,7 @@ import TimeBox from './TimeBox';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
 import { brandOfModel, modelNameOf, shortRomram } from '../ProductCascader/tree';
-import BrandDot from '../BrandMark';
+import BrandDot, { brandLabelOf } from '../BrandMark';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
 import type { MainProduct } from '../../state/filtersTypes';
 
@@ -62,44 +62,69 @@ const groupSummaryLine = (m: MainProduct, i: number): string => {
   return `第 ${i + 1} 组：${mainPart} vs ${compPart}`;
 };
 
-/** 多组紧凑 chip：品牌点 + 型号 配置 + vs + 对比数（只读底色，与只读配置 chip 同语言） */
+/** 多组紧凑 chip（第一百四十八轮拉齐图例药丸设计）：固定两行带品牌——
+ *  第一行 = 品牌点 + 品牌名，第二行 = 型号 配置 vs 对比数（只读底色不变） */
 function GroupChip({ card }: { card: MainProduct }) {
   return (
     <span
       style={{
         display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5,
-        height: 20,
-        padding: '0 8px',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 1,
+        padding: '3px 8px',
         borderRadius: radius.pill,
         background: 'rgba(0, 0, 0, 0.06)',
-        whiteSpace: 'nowrap',
         flexShrink: 0,
         maxWidth: 260,
-        overflow: 'hidden',
       }}
     >
       {card.main ? (
         <>
-          <BrandDot brand={brandOfModel(card.main.modelId)} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>{modelNameOf(card.main.modelId)}</span>
-          <span className="tnum" style={{ fontSize: 11, color: color.mute }}>{shortRomram(card.main.romram)}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+            <BrandDot brand={brandOfModel(card.main.modelId)} />
+            <span
+              style={{
+                fontSize: 10, lineHeight: '12px', color: color.mute,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}
+            >
+              {brandLabelOf(brandOfModel(card.main.modelId))}
+            </span>
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', overflow: 'hidden' }}>
+            <span
+              style={{
+                fontSize: 11, lineHeight: '14px', fontWeight: 600, color: color.ink,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}
+            >
+              {modelNameOf(card.main.modelId)}
+            </span>
+            <span className="tnum" style={{ fontSize: 10, lineHeight: '14px', color: color.mute, flexShrink: 0 }}>
+              {shortRomram(card.main.romram)}
+            </span>
+            <span style={{ fontSize: 10, lineHeight: '14px', color: color.mute, flexShrink: 0 }}>vs</span>
+            <span
+              className="tnum"
+              style={{ fontSize: 10, lineHeight: '14px', fontWeight: 600, color: card.compares.length ? color.body : color.mute, flexShrink: 0 }}
+            >
+              {card.compares.length ? card.compares.length : '无'}
+            </span>
+          </span>
         </>
       ) : (
         <span style={{ fontSize: 11, color: color.mute }}>{EMPTY_MAIN_LABEL}</span>
       )}
-      <span style={{ fontSize: 11, color: color.mute }}>vs</span>
-      <span className="tnum" style={{ fontSize: 11, fontWeight: 600, color: card.compares.length ? color.body : color.mute }}>
-        {card.compares.length ? card.compares.length : '无'}
-      </span>
     </span>
   );
 }
 
 /** 统一产品选择入口：摘要 chip → 点击弹「选择产品」浮窗。
- *  摘要 = 产品对语言三态：未选择（灰字引导）/ 单组（主品 + vs + 对比数）/
- *  多组（前 2 组紧凑 chip + ＋N 组），放不下整体省略号，悬停列全量。 */
+ *  摘要 = 产品对语言三态：未选择（灰字引导）/ 单组（品牌行 + 型号行，与图例
+ *  药丸同构）/ 多组（前 2 组紧凑 chip + ＋N 组），放不下整体省略号，悬停列全量。
+ *  第一百四十八轮：单组摘要与 chip 均改两行带品牌（拉齐看板图例药丸设计），
+ *  入口盒高度 30→40 容纳两行。 */
 function ProductPickerEntry() {
   const { state } = useFilters();
   const [open, setOpen] = useState(false);
@@ -114,7 +139,7 @@ function ProductPickerEntry() {
         title={mains.length ? mains.map(groupSummaryLine).join('\n') : '点击选择主分析产品与对比产品'}
         onClick={() => setOpen((v) => !v)}
         style={{
-            height: 30,
+            minHeight: 40,
             display: 'flex',
             alignItems: 'center',
             gap: 7,
@@ -132,32 +157,42 @@ function ProductPickerEntry() {
           {mains.length === 0 ? (
             <span style={{ fontSize: 13, color: color.mute, whiteSpace: 'nowrap' }}>选择主分析产品与对比产品</span>
           ) : (
-            <span
-              style={{
-                display: 'block',
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                lineHeight: '20px',
-              }}
-            >
+            <span style={{ display: 'block', minWidth: 0, overflow: 'hidden' }}>
               {single ? (
                 single.main ? (
-                  <>
-                    <BrandDot brand={brandOfModel(single.main.modelId)} style={{ verticalAlign: 'middle', marginRight: 5 }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>
-                      {modelNameOf(single.main.modelId)}
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+                      <BrandDot brand={brandOfModel(single.main.modelId)} />
+                      <span
+                        style={{
+                          fontSize: 10, lineHeight: '12px', color: color.mute,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {brandLabelOf(brandOfModel(single.main.modelId))}
+                      </span>
                     </span>
-                    <span className="tnum" style={{ fontSize: 12, color: color.mute }}> · {shortRomram(single.main.romram)}</span>
-                    <span style={{ fontSize: 11, color: color.mute }}> vs </span>
-                    <span
-                      className="tnum"
-                      style={{ fontSize: 12, fontWeight: 600, color: single.compares.length ? color.body : color.mute }}
-                    >
-                      {single.compares.length ? `${single.compares.length} 款对比` : '无对比'}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', overflow: 'hidden' }}>
+                      <span
+                        style={{
+                          fontSize: 12, lineHeight: '15px', fontWeight: 600, color: color.ink,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {modelNameOf(single.main.modelId)}
+                      </span>
+                      <span className="tnum" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>
+                        {shortRomram(single.main.romram)}
+                      </span>
+                      <span style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>vs</span>
+                      <span
+                        className="tnum"
+                        style={{ fontSize: 11, lineHeight: '15px', fontWeight: 600, color: single.compares.length ? color.body : color.mute, flexShrink: 0 }}
+                      >
+                        {single.compares.length ? `${single.compares.length} 款对比` : '无对比'}
+                      </span>
                     </span>
-                  </>
+                  </span>
                 ) : single.compares.length ? (
                   <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                     <span className="tnum" style={{ fontWeight: 600, color: color.body }}>
@@ -169,16 +204,16 @@ function ProductPickerEntry() {
                   <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>{EMPTY_MAIN_LABEL}</span>
                 )
               ) : (
-                <>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                   {mains.slice(0, 2).map((m) => (
                     <GroupChip key={m.id} card={m} />
                   ))}
                   {mains.length > 2 && (
-                    <span className="tnum" style={{ fontSize: 12, color: color.mute, marginLeft: 6, whiteSpace: 'nowrap' }}>
+                    <span className="tnum" style={{ fontSize: 12, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>
                       ＋{mains.length - 2} 组
                     </span>
                   )}
-                </>
+                </span>
               )}
             </span>
           )}

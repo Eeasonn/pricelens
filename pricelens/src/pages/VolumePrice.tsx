@@ -482,13 +482,14 @@ export default function VolumePrice() {
     setWindowIds([buckets[s].id, buckets[e].id]);
   };
 
-  /** 「同步」开关（第119轮走查会；第126轮移到共享轴列下方、与时间轴行齐平）：
+  /** 「时间轴同步」开关（第119轮走查会；第126轮移到共享轴列下方、与时间轴行齐平；
+   *  第148轮改名「时间轴同步」两行竖排、与整条时间轴块垂直居中）：
    *  同步 = 各图查看同一段时间，拖任一图的时间轴三图一起动；非同步 = 各图时间
    *  范围独立调整（用于对齐不同上市节奏产品的可比区间） */
   const syncToggle = (
     <button
       type="button"
-      aria-label="同步查看时间"
+      aria-label="时间轴同步"
       aria-pressed={synced}
       title={synced ? '同步：三张图共用一段查看时间' : '独立：各图分别调整'}
       onClick={toggleSynced}
@@ -498,8 +499,12 @@ export default function VolumePrice() {
         background: synced ? selectSoft : color.canvas,
         color: synced ? selectSoftInk : color.body,
         font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+        lineHeight: '13px',
       }}
-    >同步</button>
+    >
+      <span style={{ display: 'block' }}>时间轴</span>
+      <span style={{ display: 'block' }}>同步</span>
+    </button>
   );
 
   return (
@@ -613,11 +618,11 @@ export default function VolumePrice() {
                   tierValues={tierValues}
                 />
                 <div style={{ flex: 1 }} />
-                {/* 与时间轴行齐平：容器高/下边距 = PanelTimeTrack（52 + 6），按钮对准
-                    轨道带（带高 20、居中 = 上移 5px） */}
+                {/* 与时间轴行齐平：容器高/下边距 = PanelTimeTrack（52 + 6）；第148轮
+                    按钮与整条时间轴块（轨道带 + 刻度标签两行，52px）垂直居中 = top 11 */}
                 {buckets.length > 0 && visUnion.length > 0 && (
                   <div style={{ height: 52, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
-                    <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ position: 'absolute', left: 0, right: 0, top: 11, display: 'flex', justifyContent: 'center' }}>
                       {syncToggle}
                     </div>
                   </div>

@@ -2,10 +2,14 @@
 // 「价差与明细」宽表（第118轮立，第一百二十三轮按主分析组重排，
 // 第一百三十一轮精简）：按主分析组（= 选择产品浮窗里的一张卡，从上到下保持
 // 其排列）分块，每块 = 组头（最左收起/展开按钮 + 序号 + 主品，收起只留组头、
-// 同会话保持、新组默认展开；组不设筛选，各组全量展示）→ 列头（产品/配置/类型
-// + 图上同一可见时间轴，每桶一列，不带周号）→ 产品价差（本组各对比产品折后价
-// 相对主分析产品的百分比；红 = 更贵、蓝 = 更便宜，与图上价差徽章同语言）→
-// 核心信息明细（每产品 5 行：RRP / 折后价 / 折扣率 / 取证 / Offering × 时间列）。
+// 同会话保持、新组默认展开；组不设筛选，各组全量展示）→ 产品价差（区块标题 +
+// 列头 + 主品基准行 + 本组各对比产品折后价相对主分析产品的百分比；红 = 更贵、
+// 蓝 = 更便宜，与图上价差徽章同语言）→ 核心信息明细（区块标题 + 列头 + 每产品
+// 5 行：RRP / 折后价 / 折扣率 / 取证 / Offering × 时间列）。
+// 列头随区块标题走（第一百四十八轮）：产品/配置/类型 + 图上同一可见时间轴
+// （每桶一列，不带周号），两个区块标题下方各一条一模一样的列头。
+// 主品基准行（第一百四十八轮）：产品价差列头下的首行 = 本组主分析产品，
+// 自己比自己无价差、时间列整行置空，浅蓝衬底与明细主品行同语言。
 // 全列竖向分界线：首列外每列左缘 1px hairline（表头/单元格统一，横向滚动对齐）。
 // 行底色按角色着色（第一百二十三轮）：主分析产品行衬浅蓝、对比产品行白底。
 // 整体一张网格：各组横向滚动同步、左缘 产品/配置/类型 三列冻结（Excel
@@ -377,11 +381,13 @@ export default function TrendTables(props: {
       <div style={{ padding: '6px 10px', fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>{title}</div>,
     );
 
-  /** 列头行：产品/配置/类型（冻结）+ 时间列（每桶一列，图上同一时间轴） */
-  const headerRow = (gid: string): JSX.Element[] => [
+  /** 列头行：产品/配置/类型（冻结）+ 时间列（每桶一列，图上同一时间轴）。
+   *  第一百四十八轮：列头随区块标题走，产品价差 / 核心信息明细标题下各渲染
+   *  一条一模一样的列头（part 区分两条列头的 React key） */
+  const headerRow = (gid: string, part: string): JSX.Element[] => [
     ...(['产品', '配置', '类型'] as const).map((t, c) => (
       <div
-        key={`${gid}-h-${t}`}
+        key={`${gid}-h-${part}-${t}`}
         style={{
           ...cell(c),
           ...frozen(c as 0 | 1 | 2, color.canvas),
@@ -396,7 +402,7 @@ export default function TrendTables(props: {
     )),
     ...dates.map((d, i) => (
       <div
-        key={`${gid}-h-${buckets[i].id}`}
+        key={`${gid}-h-${part}-${buckets[i].id}`}
         className="tnum"
         style={{
           ...cell(3 + i),
@@ -413,16 +419,28 @@ export default function TrendTables(props: {
     )),
   ];
 
-  /** 组表体：列头 + 产品价差 + 核心信息明细（组头收起时整块不渲染，第一百三十一轮） */
+  /** 组表体：产品价差（标题 + 列头 + 主品基准行 + 对比行）+ 核心信息明细
+   *  （标题 + 列头 + 每产品 5 行）；组头收起时整块不渲染（第一百三十一轮） */
   const groupBody = (b: Block): JSX.Element => {
     const hasDiff = b.base != null && b.diffRows.length > 0;
     return (
       <>
-        {headerRow(b.g.id)}
-        {/* —— 产品价差：本组各对比产品相对主分析产品（主品行不列，行白底）—— */}
+        {/* —— 产品价差：本组相对主分析产品。第一百四十八轮：列头移到区块标题下；
+            主品行补进本节首行作基准锚——自己比自己无价差、时间列整行置空，
+            浅蓝衬底与明细区主品行同语言 —— */}
         {hasDiff && (
           <>
             {captionRow('产品价差', `cap-diff-${b.g.id}`)}
+            {headerRow(b.g.id, 'diff')}
+            {b.base != null && (
+              <div key={`d-${b.g.id}-base`} style={{ display: 'contents' }}>
+                {identityCells(b.base, b.specByKey, 1, `d-${b.g.id}-base`, true)}
+                {typeCell('基准', true, `d-${b.g.id}-base-t`)}
+                {buckets.map((bk, i) => (
+                  <div key={`d-${b.g.id}-base-${bk.id}`} style={{ ...cell(3 + i), background: MAIN_TINT }} />
+                ))}
+              </div>
+            )}
             {b.diffRows.map((s) => (
               <div key={`d-${b.g.id}-${s.key}`} style={{ display: 'contents' }}>
                 {identityCells(s, b.specByKey, 1, `d-${b.g.id}-${s.key}`, false)}
@@ -455,8 +473,10 @@ export default function TrendTables(props: {
             <div style={{ gridColumn: '1 / -1', height: 14, background: color.canvas }} />
           </>
         )}
-        {/* —— 核心信息明细：每产品 5 行（RRP / 折后价 / 折扣率 / 取证 / Offering）× 时间列 —— */}
+        {/* —— 核心信息明细：列头随标题走（第一百四十八轮），每产品 5 行
+            （RRP / 折后价 / 折扣率 / 取证 / Offering）× 时间列 —— */}
         {captionRow('核心信息明细', `cap-detail-${b.g.id}`)}
+        {headerRow(b.g.id, 'detail')}
         {b.g.series.map((s) => {
           const p = `t-${b.g.id}-${s.key}`;
           // 角色着色（第一百二十三轮）：主分析产品行衬浅蓝，对比产品行白底
