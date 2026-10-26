@@ -24,8 +24,9 @@ export const color = {
 export const brandColor: Record<string, string> = {
   HUAWEI: '#c7000b',
   APPLE: '#1d1d1f',
-  SAMSUNG: '#1428a0',
-  HONOR: '#e8710a', // 刻意与 offer 琥珀 #f5a623 区分
+  SAMSUNG: '#0000cc',
+  HONOR: '#00ccff',
+  VIVO: '#2693ca',
   XIAOMI: '#ff6900',
 };
 
