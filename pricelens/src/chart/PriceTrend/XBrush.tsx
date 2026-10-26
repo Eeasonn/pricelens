@@ -10,6 +10,8 @@
 // 合并模式专用），通栏一行、左右缘与绘图区对齐；TimeRangeCluster 仍由本文件导出
 // （顶部筛选条 TimeBox 在用）。波2修：TimeRangeCluster 弹层即时开关（不依赖
 // CSS transitionend）+ 再点输入框关闭，见 TimeRangeCluster 注。
+// 第一百五十一轮修：再点输入框切换误吞面板 portal 冒泡点击（点翻月箭头整面板
+// 收起），按 DOM 包含关系过滤，见 TimeRangeCluster 内注。
 // ============================================================
 import dayjs, { type Dayjs } from 'dayjs';
 import { CalendarOutlined } from '@ant-design/icons';
@@ -163,15 +165,20 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
           font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
         }}
       >自动</button>
-      {/* 输入框再点 = 开↔关切换（同步 setState）：面板挂在卡片根（不在本簇子树），
-          面板内部点击不会冒泡到这里。打开/关闭都不依赖 rc-picker 内部那帧 raf
-          （受控开启同样被延迟，挂起环境里点输入框打不开），与关闭兜底同一思路。
-          display:contents 不产生盒模型，选择器沿用簇内原 flex 尺寸。 */}
+      {/* 输入框再点 = 开↔关切换（同步 setState）：打开/关闭都不依赖 rc-picker
+          内部那帧 raf（受控开启同样被延迟，挂起环境里点输入框打不开），与关闭
+          兜底同一思路。display:contents 不产生盒模型，选择器沿用簇内原 flex 尺寸。
+          第一百五十一轮修：弹层经 React portal 挂到簇根，但 React 合成事件沿
+          组件树冒泡——面板内点击（翻月箭头等）会从弹层一路冒进本 span，此前
+          被误判为「再点输入框」而收起面板；按 DOM 包含关系过滤（弹层 DOM 在
+          簇根下、不经过本 span），只认输入框本位点击。 */}
       <span
-        onPointerDown={() => {
+        onPointerDown={(e) => {
+          if (!e.currentTarget.contains(e.target as Node)) return;
           pressOpenRef.current = rangeOpenRef.current;
         }}
-        onClick={() => {
+        onClick={(e) => {
+          if (!e.currentTarget.contains(e.target as Node)) return;
           if (pressOpenRef.current) setRangeOpen(false);
           else setRangeOpen(true);
         }}
