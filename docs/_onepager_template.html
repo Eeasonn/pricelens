@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PriceLens 已实现功能总览 · 一页</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { background:#eef0f3; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; color:#1f2329; }
+  #stage { width:1600px; margin:0 auto; transform-origin:top center; }
+  .slide { width:1600px; height:900px; background:#fff; border-radius:4px; overflow:hidden; box-shadow:0 2px 12px rgba(15,23,42,.08); display:flex; flex-direction:column; }
+
+  /* ── 头部 ── */
+  .hd { padding:34px 48px 0; }
+  .hd h1 { font-size:27px; font-weight:700; letter-spacing:.5px; }
+  .hd h1 em { font-style:normal; color:#0053c2; }
+  .hd .sub { margin-top:8px; font-size:13px; color:#5b6472; }
+  .hd .sub b { color:#1f2329; font-weight:600; }
+
+  /* ── 口径数字带 ── */
+  .stats { display:flex; margin:16px 48px 0; border:1px solid #e8ecf2; border-radius:10px; background:#fbfcfe; }
+  .stat { flex:1; padding:12px 8px 11px; text-align:center; border-left:1px solid #eef1f6; }
+  .stat:first-child { border-left:none; }
+  .stat .n { font-size:22px; font-weight:700; color:#0053c2; line-height:1.15; font-variant-numeric:tabular-nums; }
+  .stat .n small { font-size:13px; font-weight:600; }
+  .stat .l { margin-top:2px; font-size:11px; color:#5b6472; }
+
+  /* ── 数据链路带 ── */
+  .flow { display:flex; align-items:center; gap:10px; margin:12px 48px 0; padding:9px 16px; background:#f6f9fd; border:1px solid #e6eef9; border-radius:10px; }
+  .flow .node { font-size:12.5px; font-weight:600; color:#27354a; background:#fff; border:1px solid #dbe6f5; border-radius:6px; padding:5px 12px; white-space:nowrap; }
+  .flow .arr { color:#0053c2; font-size:14px; font-weight:700; }
+  .flow .cap { margin-left:auto; font-size:11.5px; color:#7a8698; }
+
+  /* ── 六宫格 ── */
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:14px 48px 0; }
+  .card { border:1px solid #e5e8ee; border-radius:12px; padding:12px 14px 12px; background:#fff; }
+  .card .t { display:flex; align-items:center; gap:8px; }
+  .card .no { width:20px; height:20px; border-radius:6px; background:#e8f1ff; color:#0053c2; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; flex:none; }
+  .card .nm { font-size:16.5px; font-weight:700; letter-spacing:.2px; }
+  .card .v { margin-top:5px; font-size:12px; color:#0a5dc2; }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+  .chip { font-size:11px; color:#454f5c; background:#f2f4f7; border-radius:4px; padding:2.5px 8px; white-space:nowrap; }
+  .card img { margin-top:9px; width:100%; height:158px; object-fit:cover; border:1px solid #e5e8ee; border-radius:8px; display:block; background:#fafbfc; }
+
+  /* ── 页脚口径注 ── */
+  .ft { margin-top:auto; padding:9px 48px 14px; border-top:1px solid #eef1f5; display:flex; justify-content:space-between; gap:24px; }
+  .ft .note { font-size:10.5px; color:#8a94a3; line-height:1.5; }
+  .ft .sig { font-size:10.5px; color:#8a94a3; white-space:nowrap; }
+</style>
+</head>
+<body>
+<div id="stage">
+<div class="slide">
+
+  <div class="hd">
+    <h1>一台看板看清多国价格战：<em>PriceLens 已实现功能总览</em></h1>
+    <div class="sub">品牌商视角的多国街价<b>监测</b>看板｜RRP × 折后价 × 促销权益 <b>三层价格口径</b>｜周度更新 · 在线发布</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n">24 <small>国</small></div><div class="l">启用国 · 5 大区域可切换</div></div>
+    <div class="stat"><div class="n">7 <small>国</small> 66 <small>个</small></div><div class="l">真实大促档期已建档</div></div>
+    <div class="stat"><div class="n">6 <small>产业</small> 1121 <small>SKU</small></div><div class="l">手机/平板/穿戴/PC/IoT/音频</div></div>
+    <div class="stat"><div class="n">92 <small>/ 407</small></div><div class="l">我司 / 竞品型号（26 品牌）</div></div>
+    <div class="stat"><div class="n">24 <small>周</small></div><div class="l">连续区间 2026-W19→W42</div></div>
+    <div class="stat"><div class="n">4 <small>类</small></div><div class="l">异动预警规则 · 阈值可调</div></div>
+  </div>
+
+  <div class="flow">
+    <div class="node">多国电渠与官网街价</div><div class="arr">→</div>
+    <div class="node">周度自动采集</div><div class="arr">→</div>
+    <div class="node">三层价格口径统一</div><div class="arr">→</div>
+    <div class="node">总览 · 看板 · 量价 · 预警</div>
+    <div class="cap">同一份数据、同一套口径贯穿四个页签</div>
+  </div>
+
+  <div class="grid">
+
+    <div class="card">
+      <div class="t"><div class="no">1</div><div class="nm">多国价格数据底座</div></div>
+      <div class="v">支撑多国多平台价格数据的统一口径管理</div>
+      <div class="chips"><span class="chip">24 国周度采集</span><span class="chip">5 大区域切换</span><span class="chip">三层价格口径</span><span class="chip">本币 × USD 双币种</span><span class="chip">缺采不造假</span></div>
+      <img src="{{IMG:scope-countries-crop}}" style="object-position:0 0" alt="国家与产业级联选择">
+    </div>
+
+    <div class="card">
+      <div class="t"><div class="no">2</div><div class="nm">价格走势监测</div></div>
+      <div class="v">支撑各国真实价格水位与代际走势分析</div>
+      <div class="chips"><span class="chip">两价制：折后价 × RRP</span><span class="chip">生命周期端点</span><span class="chip">代际对比</span><span class="chip">价差悬殊自动压缩</span><span class="chip">周 · 月 · 季粒度</span></div>
+      <img src="{{IMG:chart-main}}" style="object-position:center 30%" alt="多产品价格走势对比">
+    </div>
+
+    <div class="card">
+      <div class="t"><div class="no">3</div><div class="nm">竞品对标与价差分析</div></div>
+      <div class="v">支撑对位竞品选择与渠道价差量化</div>
+      <div class="chips"><span class="chip">配置级对位矩阵</span><span class="chip">竞品自动匹配</span><span class="chip">多平台比价 · 分店铺口径</span><span class="chip">产品价差表</span><span class="chip">取证快照</span></div>
+      <img src="{{IMG:diff-table-crop}}" style="object-position:center 40%" alt="产品价差与核心信息明细">
+    </div>
+
+    <div class="card">
+      <div class="t"><div class="no">4</div><div class="nm">促销与大促档期分析</div></div>
+      <div class="v">支撑价格波动的档期归因与促销力度对标</div>
+      <div class="chips"><span class="chip">7 国真实档期库</span><span class="chip">档期背景带</span><span class="chip">档期事件卡</span><span class="chip">促销权益留存</span></div>
+      <img src="{{IMG:promo-event-crop}}" style="object-position:center 45%" alt="大促档期背景带与事件卡">
+    </div>
+
+    <div class="card">
+      <div class="t"><div class="no">5</div><div class="nm">量价联动分析</div></div>
+      <div class="v">支撑价格档位与销量结构的联动分析</div>
+      <div class="chips"><span class="chip">分产品量价面板</span><span class="chip">时点明细</span><span class="chip">时间轴同步</span><span class="chip">市场大盘 · 档位分布</span></div>
+      <img src="{{IMG:volume-price-crop}}" style="object-position:center 30%" alt="量价看板分产品面板与大盘分析">
+    </div>
+
+    <div class="card">
+      <div class="t"><div class="no">6</div><div class="nm">价格异动预警</div></div>
+      <div class="v">支撑竞品异动的当周发现与持续盯守</div>
+      <div class="chips"><span class="chip">调价 / 折扣 / 平台价差 / 档位间距</span><span class="chip">阈值可调</span><span class="chip">产品订阅</span><span class="chip">历史事件回看</span></div>
+      <img src="{{IMG:alerts-crop}}" style="object-position:center 20%" alt="预警中心与监控看板">
+    </div>
+
+  </div>
+
+  <div class="ft">
+    <div class="note">口径注：启用国＝看板内可切换国家；真实档期＝已录入当地大促日历的国家；SKU＝型号 × 配置 × 颜色；预警为看板内订阅与计算。页面截图均取自在线版实时渲染。</div>
+    <div class="sig">数据批次 2026-W42 ｜ 在线版 eeasonn.github.io/pricelens ｜ PriceLens 项目组 · 2026-10</div>
+  </div>
+
+</div>
+</div>
+<script>
+  (function(){
+    var s=document.getElementById('stage');
+    function fit(){ var k=Math.min(1,(window.innerWidth-24)/1600); s.style.transform='scale('+k+')'; document.body.style.height=(900*k+24)+'px'; }
+    fit(); window.addEventListener('resize',fit);
+  })();
+</script>
+</body>
+</html>
