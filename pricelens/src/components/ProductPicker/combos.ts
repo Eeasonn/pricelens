@@ -12,6 +12,25 @@ import { modelNameOf } from '../ProductCascader/tree';
 export interface StoredCombo {
   label: string;
   cards: MainProduct[];
+  /** 所属产业（第一百五十四轮：模板跟着产业走，各产业模板互相不可见）；
+   *  旧数据无此字段 = 归手机产业（历史主战场） */
+  industry?: string;
+}
+
+/** 旧数据（无 industry 字段）的归属产业 */
+export const LEGACY_COMBO_INDUSTRY = 'phone';
+
+const comboIndustryOf = (c: StoredCombo): string => c.industry ?? LEGACY_COMBO_INDUSTRY;
+
+/** 当前产业的模板（第一百五十四轮：模板跟着产业走） */
+export function readCombosOf(industry: string): StoredCombo[] {
+  return readCombos().filter((c) => comboIndustryOf(c) === industry);
+}
+
+/** 写回当前产业模板（其余产业的条目原样保留） */
+export function writeCombosOf(industry: string, list: StoredCombo[]): void {
+  const rest = readCombos().filter((c) => comboIndustryOf(c) !== industry);
+  writeCombos([...rest, ...list.map((c) => ({ ...c, industry }))]);
 }
 
 function isSelection(v: unknown): v is ProductSelection {

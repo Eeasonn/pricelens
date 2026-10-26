@@ -102,8 +102,8 @@ import {
   comboSignature,
   defaultTemplateName,
   planAppend,
-  readCombos,
-  writeCombos,
+  readCombosOf,
+  writeCombosOf,
   type StoredCombo,
 } from './combos';
 import TemplateEditorFlyout from './TemplateEditorFlyout';
@@ -847,52 +847,53 @@ function MainRow({ card }: { card: MainProduct }) {
   const brand = brandOfModel(main.modelId);
   const node = romramByKey.get(`${main.modelId}|${main.romram}`);
   return (
-    /* 第一百二十七轮：品牌+产品 / 型号 / 颜色 三行居中；更换右下角（删除整组
-     * 的 ✕ 第一百二十八轮上移到组框右上角，见 GroupDeleteX）。
-     * 第一百四十四轮：上下 padding 对称——原来为给右下角「更换」留位写的
-     * 30px 底 padding 把内容块顶离视觉中心，改对称后内容真正垂直居中
-     * （「更换」是绝对定位角标，不参与居中，横向与居中内容不相遇） */
-    <div
-      style={{
-        position: 'relative',
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 7,
-        minWidth: 0,
-        padding: '4px 12px',
-      }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
-        <BrandDot brand={brand} />
-        <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
-        <RowText strong title={[brandLabelOf(brand), modelNameOf(main.modelId), configTextOf(main.romram)].filter(Boolean).join(' ')}>
-          {modelNameOf(main.modelId)}
-        </RowText>
-      </span>
-      {configTextOf(main.romram) && <RomramChip>{main.romram}</RomramChip>}
-      <ColorChip
-        node={node}
-        skuIds={main.skuIds}
-        tone="strong"
-        currency={state.currency}
-        onToggle={(skuId, next) => {
-          const skuIds = next ? [...new Set([...main.skuIds, skuId])] : main.skuIds.filter((id) => id !== skuId);
-          if (!skuIds.length) return;
-          actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: { ...main, skuIds } } : c)));
+    /* 第一百五十四轮：「更换」按钮退役——整框即更换入口（点框内任意位置开
+     * 完整树；颜色 chip 换色不冒泡避开）。框与对比条同弧度、白底（不带灰色
+     * 底色）、与中间分界线留距；移入选中样式（.lpl-pk-edit 浅蓝底蓝描边） */
+    <LevelSwitchPopover ctx={{ kind: 'replace-main', cardId: card.id }} initialModelId={main.modelId}>
+      <div
+        className="lpl-pk-edit"
+        title="点击更换主分析产品"
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 7,
+          minWidth: 0,
+          margin: '8px 10px 10px 12px',
+          padding: '10px 12px',
+          borderRadius: radius.control,
+          background: color.canvas,
         }}
-        onReset={() =>
-          node && actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: { ...main, skuIds: defaultColorSkuIds(node) } } : c)))
-        }
-      />
-      <span style={{ position: 'absolute', bottom: 6, right: 8, display: 'inline-flex' }}>
-        <LevelSwitchPopover ctx={{ kind: 'replace-main', cardId: card.id }} initialModelId={main.modelId}>
-          <SwapPill label={`更换主分析产品 ${modelNameOf(main.modelId)}`} />
-        </LevelSwitchPopover>
-      </span>
-    </div>
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
+          <BrandDot brand={brand} />
+          <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
+          <RowText strong title={[brandLabelOf(brand), modelNameOf(main.modelId), configTextOf(main.romram)].filter(Boolean).join(' ')}>
+            {modelNameOf(main.modelId)}
+          </RowText>
+        </span>
+        <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {configTextOf(main.romram) && <RomramChip>{main.romram}</RomramChip>}
+          <ColorChip
+            node={node}
+            skuIds={main.skuIds}
+            tone="strong"
+            currency={state.currency}
+            onToggle={(skuId, next) => {
+              const skuIds = next ? [...new Set([...main.skuIds, skuId])] : main.skuIds.filter((id) => id !== skuId);
+              if (!skuIds.length) return;
+              actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: { ...main, skuIds } } : c)));
+            }}
+            onReset={() =>
+              node && actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: { ...main, skuIds: defaultColorSkuIds(node) } } : c)))
+            }
+          />
+        </span>
+      </div>
+    </LevelSwitchPopover>
   );
 }
 
@@ -902,50 +903,57 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
   const node = romramByKey.get(`${sel.modelId}|${sel.romram}`);
   const brand = brandOfModel(sel.modelId);
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '2px 6px 2px 8px',
-        background: color.canvasSoft,
-        borderRadius: radius.control,
-        minWidth: 0,
-      }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
-        <BrandDot brand={brand} />
-        <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
-      </span>
-      <RowText title={[brandLabelOf(brand), modelNameOf(sel.modelId), configTextOf(sel.romram)].filter(Boolean).join(' ')}>
-        {modelNameOf(sel.modelId)}
-      </RowText>
-      {configTextOf(sel.romram) && <RomramChip>{sel.romram}</RomramChip>}
-      <ColorChip
-        node={node}
-        skuIds={sel.skuIds}
-        tone="soft"
-        currency={state.currency}
-        onToggle={(skuId, next) => {
-          const skuIds = next ? [...new Set([...sel.skuIds, skuId])] : sel.skuIds.filter((id) => id !== skuId);
-          if (!skuIds.length) return;
-          actions.setCardCompares(card.id, card.compares.map((c) => (c === sel ? { ...sel, skuIds } : c)));
+    /* 第一百五十四轮：「更换」按钮退役——整条即更换入口（空白处点击开完整
+     * 树，移入选中样式 .lpl-pk-edit）；颜色 chip 与 ✕ 阻止冒泡避开编辑触发 */
+    <LevelSwitchPopover ctx={{ kind: 'replace-compare', cardId: card.id, sel }} initialModelId={sel.modelId}>
+      <div
+        className="lpl-pk-edit"
+        title="点击更换对比产品"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          padding: '2px 6px 2px 8px',
+          background: color.canvasSoft,
+          borderRadius: radius.control,
+          minWidth: 0,
         }}
-        onReset={() =>
-          node && actions.setCardCompares(card.id, card.compares.map((c) => (c === sel ? { ...sel, skuIds: defaultColorSkuIds(node) } : c)))
-        }
-      />
-      <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        <LevelSwitchPopover ctx={{ kind: 'replace-compare', cardId: card.id, sel }} initialModelId={sel.modelId}>
-          <SwapPill label={`更换对比产品 ${modelNameOf(sel.modelId)}`} />
-        </LevelSwitchPopover>
-        <DeleteX
-          label={`移除对比 ${[modelNameOf(sel.modelId), configTextOf(sel.romram)].filter(Boolean).join(' ')}`}
-          size={10}
-          onClick={() => actions.setCardCompares(card.id, card.compares.filter((c) => c !== sel))}
-        />
-      </span>
-    </div>
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
+          <BrandDot brand={brand} />
+          <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
+        </span>
+        <RowText title={[brandLabelOf(brand), modelNameOf(sel.modelId), configTextOf(sel.romram)].filter(Boolean).join(' ')}>
+          {modelNameOf(sel.modelId)}
+        </RowText>
+        <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {configTextOf(sel.romram) && <RomramChip>{sel.romram}</RomramChip>}
+          <ColorChip
+            node={node}
+            skuIds={sel.skuIds}
+            tone="soft"
+            currency={state.currency}
+            onToggle={(skuId, next) => {
+              const skuIds = next ? [...new Set([...sel.skuIds, skuId])] : sel.skuIds.filter((id) => id !== skuId);
+              if (!skuIds.length) return;
+              actions.setCardCompares(card.id, card.compares.map((c) => (c === sel ? { ...sel, skuIds } : c)));
+            }}
+            onReset={() =>
+              node && actions.setCardCompares(card.id, card.compares.map((c) => (c === sel ? { ...sel, skuIds: defaultColorSkuIds(node) } : c)))
+            }
+          />
+        </span>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+            <DeleteX
+              label={`移除对比 ${[modelNameOf(sel.modelId), configTextOf(sel.romram)].filter(Boolean).join(' ')}`}
+              size={10}
+              onClick={() => actions.setCardCompares(card.id, card.compares.filter((c) => c !== sel))}
+            />
+          </span>
+        </span>
+      </div>
+    </LevelSwitchPopover>
   );
 }
 
@@ -1155,7 +1163,12 @@ function PickerPanel() {
   // ---- 模板（显式保存的产品对/模板组；「＋模板」顶栏与卡级恒弹名称窗——
   //      同内容签名已存在时预填现有名称、确认后原位更新；chip 尾段「＋」 =
   //      加入当前选择：主品已在的组只补缺失对比） ----
-  const [combos, setCombos] = useState<StoredCombo[]>(() => readCombos());
+  // 模板跟着产业走（第一百五十四轮）：本列表只含当前产业的模板，切产业即重读
+  const industry = state.industry;
+  const [combos, setCombos] = useState<StoredCombo[]>(() => readCombosOf(industry));
+  useEffect(() => {
+    setCombos(readCombosOf(industry));
+  }, [industry]);
   // 「＋模板」名称弹窗（cards = 待保存的卡；updating = 同签名已存在、确认后原位更新）
   const [dialog, setDialog] = useState<{ value: string; cards: MainProduct[]; updating: boolean } | null>(null);
   // 模板编辑浮窗（持当前模板对象；编辑中每次改动替换该对象）
@@ -1163,7 +1176,7 @@ function PickerPanel() {
 
   const persistCombos = (next: StoredCombo[]): void => {
     setCombos(next);
-    writeCombos(next);
+    writeCombosOf(industry, next);
   };
 
   /** 保存为模板：内容签名已存在 = 原位更新；否则插到最前，超限淘汰最旧。
@@ -1193,7 +1206,7 @@ function PickerPanel() {
       const idx = list.findIndex((c) => c === prev);
       if (idx < 0) return list;
       const nextList = list.map((c, i) => (i === idx ? next : c));
-      writeCombos(nextList);
+      writeCombosOf(industry, nextList);
       return nextList;
     });
     setEditing((e) => (e === prev ? next : e));
@@ -1201,8 +1214,8 @@ function PickerPanel() {
 
   const removeCombo = (target: StoredCombo): void => {
     setCombos((list) => {
-      const nextList = list.filter((c) => c !== target);
-      writeCombos(nextList);
+    const nextList = list.filter((c) => c !== target);
+      writeCombosOf(industry, nextList);
       return nextList;
     });
     setEditing((e) => (e === target ? null : e));
@@ -1710,7 +1723,8 @@ function PickerPanel() {
                 <HolderOutlined style={{ fontSize: 12 }} />
               </span>
 
-              {/* 左格：主分析产品（极浅蓝底；标题在组头行，与右格以分界线隔开） */}
+              {/* 左格：主分析产品（第一百五十四轮去浅蓝底——编辑框白底自绘，
+                  标题在组头行，与右格以分界线隔开） */}
               <div
                 style={{
                   flex: '0 0 300px',
@@ -1718,7 +1732,6 @@ function PickerPanel() {
                   position: 'relative',
                   display: 'flex',
                   flexDirection: 'column',
-                  background: 'rgba(0, 112, 243, 0.04)',
                   boxSizing: 'border-box',
                 }}
               >

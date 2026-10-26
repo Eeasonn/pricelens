@@ -235,3 +235,17 @@ button.lpl-map-card:hover {
    ============================================================ */
 .lpl-pk-ghost:not([aria-disabled='true']):hover { background: #f5f5f5 !important; }
 .lpl-pk-del:hover { color: #ff4d4f; border-color: rgba(255, 77, 79, 0.45) !important; background: #fff1f0; }
+
+/* ============================================================
+   第一百五十四轮：卡片主品框 / 对比条整区点击编辑——移入显示选中样式
+   （浅蓝底 + 蓝描边，同全站选中语言；inline 底色需 !important 覆盖）
+   ============================================================ */
+.lpl-pk-edit {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.lpl-pk-edit:hover {
+  background: #e8f1ff !important;
+  border-color: rgba(0, 112, 243, 0.35) !important;
+}
