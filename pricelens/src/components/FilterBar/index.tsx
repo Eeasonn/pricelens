@@ -22,7 +22,7 @@ import ScopeFields from './ScopeFields';
 import TimeBox from './TimeBox';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
-import { brandOfModel, modelNameOf, shortRomram } from '../ProductCascader/tree';
+import { brandOfModel, configTextOf, modelNameOf } from '../ProductCascader/tree';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
 import type { MainProduct } from '../../state/filtersTypes';
@@ -53,11 +53,16 @@ function Field({ label, width, children }: { label: string; width?: number; chil
 
 /** 悬停全量摘要：每组一行「第 N 组：主品（配置） vs 对比 a（配置）、b（配置）」 */
 const groupSummaryLine = (m: MainProduct, i: number): string => {
+  // 无配置层级的产品（romram '—'，第一百五十三轮）不带「（—）」段
+  const withConfig = (modelId: string, romram: string): string => {
+    const cfg = configTextOf(romram);
+    return cfg ? `${modelNameOf(modelId)}（${cfg}）` : modelNameOf(modelId);
+  };
   const mainPart = m.main
-    ? `${modelNameOf(m.main.modelId)}（${shortRomram(m.main.romram)}）`
+    ? withConfig(m.main.modelId, m.main.romram)
     : EMPTY_MAIN_LABEL;
   const compPart = m.compares.length
-    ? `对比 ${m.compares.map((c) => `${modelNameOf(c.modelId)}（${shortRomram(c.romram)}）`).join('、')}`
+    ? `对比 ${m.compares.map((c) => withConfig(c.modelId, c.romram)).join('、')}`
     : '无对比';
   return `第 ${i + 1} 组：${mainPart} vs ${compPart}`;
 };
@@ -101,9 +106,11 @@ function GroupChip({ card }: { card: MainProduct }) {
             >
               {modelNameOf(card.main.modelId)}
             </span>
-            <span className="tnum" style={{ fontSize: 10, lineHeight: '14px', color: color.mute, flexShrink: 0 }}>
-              {shortRomram(card.main.romram)}
-            </span>
+            {configTextOf(card.main.romram) && (
+              <span className="tnum" style={{ fontSize: 10, lineHeight: '14px', color: color.mute, flexShrink: 0 }}>
+                {configTextOf(card.main.romram)}
+              </span>
+            )}
             <span style={{ fontSize: 10, lineHeight: '14px', color: color.mute, flexShrink: 0 }}>vs</span>
             <span
               className="tnum"
@@ -181,9 +188,11 @@ function ProductPickerEntry() {
                       >
                         {modelNameOf(single.main.modelId)}
                       </span>
-                      <span className="tnum" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>
-                        {shortRomram(single.main.romram)}
-                      </span>
+                      {configTextOf(single.main.romram) && (
+                        <span className="tnum" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>
+                          {configTextOf(single.main.romram)}
+                        </span>
+                      )}
                       <span style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>vs</span>
                       <span
                         className="tnum"

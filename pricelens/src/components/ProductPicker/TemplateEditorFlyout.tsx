@@ -14,6 +14,7 @@ import { Input, Popconfirm, Popover, Tooltip } from 'antd';
 import { DeleteOutlined, SearchOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
 import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import {
+  configTextOf,
   defaultColorSkuIds,
   searchProductTree,
   type BrandNode,
@@ -426,7 +427,7 @@ function PairCard({
                   {mainTitle!.model}
                 </RowText>
               </span>
-              <RomramChip>{main.romram}</RomramChip>
+              {configTextOf(main.romram) && <RomramChip>{main.romram}</RomramChip>}
               <ColorChip
                 node={nodeOf(main)}
                 skuIds={main.skuIds}
@@ -520,7 +521,7 @@ function PairCard({
                         <RowText title={t.brandLabel}>{t.brandLabel}</RowText>
                       </span>
                       <RowText title={t.full}>{t.model}</RowText>
-                      <RomramChip>{sel.romram}</RomramChip>
+                      {configTextOf(sel.romram) && <RomramChip>{sel.romram}</RomramChip>}
                       <ColorChip
                         node={nodeOf(sel)}
                         skuIds={sel.skuIds}

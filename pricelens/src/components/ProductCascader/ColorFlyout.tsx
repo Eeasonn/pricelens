@@ -9,7 +9,7 @@ import { type CSSProperties } from 'react';
 import { Checkbox } from 'antd';
 import { color, formatPrice, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import type { CurrencyMode } from '../../dataModel/types';
-import { findSelection, modelNameOf, shortRomram, type RomramNode } from './tree';
+import { configTextOf, findSelection, modelNameOf, type RomramNode } from './tree';
 import type { ProductSelection } from '../../state/filtersTypes';
 
 export const COLOR_CHIP: CSSProperties = {
@@ -57,7 +57,7 @@ export default function ColorFlyout({
       <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
         颜色
         <span style={{ fontWeight: 400, color: color.mute }}>
-          {' '}· {modelNameOf(node.modelId)} {shortRomram(node.romram)}
+          {' '}· {modelNameOf(node.modelId)}{configTextOf(node.romram) ? ` ${configTextOf(node.romram)}` : ''}
         </span>
       </div>
       <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', overflowY: 'auto', maxHeight: 228 }}>

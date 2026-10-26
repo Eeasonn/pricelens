@@ -70,6 +70,7 @@ import {
   searchProductTree,
   sortModelNodes,
   tiersOfScope,
+  configTextOf,
   type BrandNode,
   type ModelNode,
   type ModelSortMode,
@@ -551,49 +552,10 @@ function LevelSwitchPopover({
       ) : undefined,
     }));
     const sortedModels = sortModelNodes(series?.models ?? [], modelSort, currency);
-    const modelItems: CascadeRowItem[] = sortedModels.map((m) => {
-      const tag = modelTagText(m);
-      return {
-        key: m.modelId,
-        label: m.label,
-        leading: <BrandDot brand={m.brand} />,
-        active: model?.modelId === m.modelId,
-        onActivate: () => setPath([brand.key, series.key, m.modelId]),
-        trailing: (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            {m.eol && (
-              <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
-            )}
-            <Tooltip title={comparesCtx || replaceCompareCtx ? '该产品全部配置加入对比区' : '该产品全部配置各成一张主分析卡'} zIndex={TIP_Z}>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  pickAllConfigs(m);
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  height: 20,
-                  padding: '0 8px',
-                  borderRadius: radius.pill,
-                  fontSize: 11,
-                  color: selectSoftInk,
-                  background: color.canvas,
-                  border: '1px solid rgba(0, 112, 243, 0.35)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <PlusOutlined style={{ fontSize: 9 }} /> 全部型号
-              </span>
-            </Tooltip>
-            {tag && <span className="tnum" style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{tag}</span>}
-          </span>
-        ),
-      };
-    });
-    const romramItems: CascadeRowItem[] = (model?.romrams ?? []).map((r) => {
+    // 配置行构造（第一百五十三轮自 romramItems 抽出）：无配置层级的产品（可用配置
+    // 只有 '—'，如 Watch Ultimate 2）型号行即选择叶，直接复用该交互、不再出现
+    // 「—」配置列叶子
+    const romramRowOf = (r: RomramNode): CascadeRowItem => {
       const key = nodeSelKey(r);
       if (comparesCtx && activeCard) {
         const card = activeCard;
@@ -676,7 +638,77 @@ function LevelSwitchPopover({
         },
         trailing: isCurrent ? <StateTag text="当前" /> : taken ? <StateTag text="已选" /> : undefined,
       } satisfies CascadeRowItem;
+    };
+    const modelItems: CascadeRowItem[] = sortedModels.map((m) => {
+      const tag = modelTagText(m);
+      // 第一百五十三轮：无配置层级的产品（可用配置只有 '—'，如 Watch Ultimate 2）
+      // 型号行即选择叶——复用配置行的选择/对比交互与行尾状态，不再出现「—」叶子
+      const usable = usableRomrams(m.romrams);
+      const directNode = usable.length === 1 && usable[0].romram === '—' ? usable[0] : null;
+      if (directNode) {
+        const leaf = romramRowOf(directNode);
+        return {
+          key: m.modelId,
+          label: m.label,
+          leading: <BrandDot brand={m.brand} />,
+          checkState: leaf.checkState,
+          onCheckChange: leaf.onCheckChange,
+          onLabelClick: leaf.onLabelClick,
+          trailing: (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {m.eol && (
+                <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
+              )}
+              {leaf.trailing}
+              {tag && <span className="tnum" style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{tag}</span>}
+            </span>
+          ),
+        } satisfies CascadeRowItem;
+      }
+      return {
+        key: m.modelId,
+        label: m.label,
+        leading: <BrandDot brand={m.brand} />,
+        active: model?.modelId === m.modelId,
+        onActivate: () => setPath([brand.key, series.key, m.modelId]),
+        trailing: (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {m.eol && (
+              <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
+            )}
+            <Tooltip title={comparesCtx || replaceCompareCtx ? '该产品全部配置加入对比区' : '该产品全部配置各成一张主分析卡'} zIndex={TIP_Z}>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  pickAllConfigs(m);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  height: 20,
+                  padding: '0 8px',
+                  borderRadius: radius.pill,
+                  fontSize: 11,
+                  color: selectSoftInk,
+                  background: color.canvas,
+                  border: '1px solid rgba(0, 112, 243, 0.35)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <PlusOutlined style={{ fontSize: 9 }} /> 全部型号
+              </span>
+            </Tooltip>
+            {tag && <span className="tnum" style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{tag}</span>}
+          </span>
+        ),
+      };
     });
+    // 无配置层级的型号钻入后第四列留空（叶子已上提到型号行），不渲染「—」
+    const drilledUsable = model ? usableRomrams(model.romrams) : [];
+    const modelDegenerate = drilledUsable.length === 1 && drilledUsable[0].romram === '—';
+    const romramItems: CascadeRowItem[] = model && !modelDegenerate ? model.romrams.map(romramRowOf) : [];
 
     // 行尾内容宽度预留（第一百二十三轮：列宽必须容纳 label + 行尾，四列信息完整
     // 可见、无省略号）——按各列行尾实际文案折算，autoColumnWidth 计入 chrome
@@ -696,7 +728,11 @@ function LevelSwitchPopover({
       { items: brandItems, width: autoColumnWidth(brandItems, { extraW: brandExtra, noMaxClip: true }) },
       { items: seriesItems, width: autoColumnWidth(seriesItems, { extraW: seriesExtra, noMaxClip: true }) },
       { items: modelItems, width: autoColumnWidth(modelItems, { extraW: modelExtra, noMaxClip: true }) },
-      { items: romramItems, width: autoColumnWidth(romramItems, { extraW: romramExtra, noMaxClip: true }) },
+      // 无配置层级的型号（唯一配置为 '—'）整列不渲染：叶子已上提到型号行，
+      // 不出现「—」叶子行，也不留「暂无数据」空列
+      ...(modelDegenerate
+        ? []
+        : [{ items: romramItems, width: autoColumnWidth(romramItems, { extraW: romramExtra, noMaxClip: true }) }]),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, brand, series, model, ctx, mains, activeCard, modelSort, currency]);
@@ -832,11 +868,11 @@ function MainRow({ card }: { card: MainProduct }) {
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
         <BrandDot brand={brand} />
         <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
-        <RowText strong title={`${brandLabelOf(brand)} ${modelNameOf(main.modelId)} ${main.romram}`}>
+        <RowText strong title={[brandLabelOf(brand), modelNameOf(main.modelId), configTextOf(main.romram)].filter(Boolean).join(' ')}>
           {modelNameOf(main.modelId)}
         </RowText>
       </span>
-      <RomramChip>{main.romram}</RomramChip>
+      {configTextOf(main.romram) && <RomramChip>{main.romram}</RomramChip>}
       <ColorChip
         node={node}
         skuIds={main.skuIds}
@@ -881,10 +917,10 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
         <BrandDot brand={brand} />
         <RowText title={brandLabelOf(brand)}>{brandLabelOf(brand)}</RowText>
       </span>
-      <RowText title={`${brandLabelOf(brand)} ${modelNameOf(sel.modelId)} ${sel.romram}`}>
+      <RowText title={[brandLabelOf(brand), modelNameOf(sel.modelId), configTextOf(sel.romram)].filter(Boolean).join(' ')}>
         {modelNameOf(sel.modelId)}
       </RowText>
-      <RomramChip>{sel.romram}</RomramChip>
+      {configTextOf(sel.romram) && <RomramChip>{sel.romram}</RomramChip>}
       <ColorChip
         node={node}
         skuIds={sel.skuIds}
@@ -904,7 +940,7 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
           <SwapPill label={`更换对比产品 ${modelNameOf(sel.modelId)}`} />
         </LevelSwitchPopover>
         <DeleteX
-          label={`移除对比 ${modelNameOf(sel.modelId)} ${sel.romram}`}
+          label={`移除对比 ${[modelNameOf(sel.modelId), configTextOf(sel.romram)].filter(Boolean).join(' ')}`}
           size={10}
           onClick={() => actions.setCardCompares(card.id, card.compares.filter((c) => c !== sel))}
         />
@@ -1084,7 +1120,7 @@ function SaveTemplateDialog({
         {dialog.cards.length > 1
           ? `将保存当前全部 ${dialog.cards.length} 组产品对`
           : dialog.cards[0]?.main
-            ? `将保存该组：${modelNameOf(dialog.cards[0].main.modelId)} ${dialog.cards[0].main.romram}`
+            ? `将保存该组：${[modelNameOf(dialog.cards[0].main.modelId), configTextOf(dialog.cards[0].main.romram)].filter(Boolean).join(' ')}`
             : '将保存该组'}
       </div>
       <Input
@@ -1290,7 +1326,7 @@ function PickerPanel() {
               }}
             >
               {combos.map((c, i) => {
-                const summary = c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、');
+                const summary = c.cards.map((x) => (x.main ? [modelNameOf(x.main.modelId), configTextOf(x.main.romram)].filter(Boolean).join(' ') : '对比产品')).join('、');
                 const chip = (
                   <span
                     role="button"
@@ -1417,7 +1453,7 @@ function PickerPanel() {
                         </span>
                       </span>
                     ),
-                    title: c.cards.map((x) => (x.main ? `${modelNameOf(x.main.modelId)} ${x.main.romram}` : '对比产品')).join('、'),
+                    title: c.cards.map((x) => (x.main ? [modelNameOf(x.main.modelId), configTextOf(x.main.romram)].filter(Boolean).join(' ') : '对比产品')).join('、'),
                   })),
                   onClick: ({ key }) => {
                     const c = combos[Number(key)];

@@ -13,7 +13,7 @@ import {
   defaultColorSkuIds,
   findSelection,
   modelNameOf,
-  shortRomram,
+  configTextOf,
   toggleSku,
   type RomramNode,
 } from '../ProductCascader/tree';
@@ -160,11 +160,15 @@ function ProductCascadeControl({
   // 叶路径 → 产品名 · ROM（提示粒度收窄）；整组合选 = 1 段组名。杜绝空标签。
   const displayRender = (labels: string[]): ReactNode => {
     if (!labels || labels.length === 0) return '';
-    if (productLevel) return labels.length >= 3 ? `${labels[1]} · ${shortRomram(labels[2])}` : labels[labels.length - 1];
+    if (productLevel) {
+      const cfg = configTextOf(labels[2] ?? '');
+      return labels.length >= 3 && cfg ? `${labels[1]} · ${cfg}` : labels[labels.length - 1];
+    }
     const name = String(labels[1] ?? '');
     const romram = String(labels[2] ?? '');
     const sameModel = list.filter((s) => modelNameOf(s.modelId) === name).length;
-    return sameModel > 1 ? `${name} · ${shortRomram(romram)}` : name;
+    const cfg = configTextOf(romram);
+    return sameModel > 1 && cfg ? `${name} · ${cfg}` : name;
   };
 
   // 颜色浮层节点（popupRender 挂到级联面板右侧）

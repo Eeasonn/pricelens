@@ -14,6 +14,7 @@ import { color, radius, selectSoftInk } from '../../theme/tokens';
 import {
   brandOfModel,
   buildProductTree,
+  configTextOf,
   defaultColorSkuIds,
   measureText,
   modelNameOf,
@@ -308,7 +309,7 @@ export function mainTitleOf(main: { modelId: string; romram: string }): {
 } {
   const brand = brandOfModel(main.modelId);
   const model = modelNameOf(main.modelId);
-  return { brand, brandLabel: brandLabelOf(brand), model, full: `${brandLabelOf(brand)} ${model} ${main.romram}` };
+  return { brand, brandLabel: brandLabelOf(brand), model, full: [brandLabelOf(brand), model, configTextOf(main.romram)].filter(Boolean).join(' ') };
 }
 
 /** 供类型引用（编辑浮窗条目形与主卡一致） */

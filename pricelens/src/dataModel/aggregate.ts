@@ -564,7 +564,9 @@ export function buildSeries(q: SeriesQuery): Series[] {
       key,
       isOwn: rg.isOwn,
       brand: rg.brand,
-      label: `${rg.brand} ${rg.modelName} ${rg.romram}`,
+      // 无配置层级的产品（romram '—'，第一百五十三轮）系列名不带「—」尾缀
+      label: [rg.brand, rg.modelName, rg.romram === '—' ? '' : rg.romram].filter(Boolean).join(' '),
+
       skuIds: [...rg.skuIds],
       color,
       points,

@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Button } from 'antd';
 import { CopyOutlined, ExportOutlined, PictureOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
+import { configTextOf } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, fontSize, formatPrice, motion, radius } from '../../theme/tokens';
@@ -137,7 +138,7 @@ interface Block {
 function blockTitle(b: Block): string {
   if (b.base) {
     const sp = b.specByKey.get(b.base.key);
-    return sp ? `${b.base.brand} ${sp.modelName} ${sp.romram}`.trim() : dedupeSpecText(b.base.label);
+    return sp ? [b.base.brand, sp.modelName, configTextOf(sp.romram)].filter(Boolean).join(' ') : dedupeSpecText(b.base.label);
   }
   return b.g.mainKey == null ? '对比产品' : '主分析产品无数据';
 }
@@ -203,7 +204,7 @@ export default function TrendTables(props: {
           return pa != null && pb != null ? diffPct(pa, pb)?.text ?? '—' : '—';
         });
         lines.push(
-          [...(multi ? [groupOrdinal(b.ordinal)] : []), blockTitle(b), dedupeSpecText(s.label), b.specByKey.get(s.key)?.romram ?? '', ...cells].join('\t'),
+          [...(multi ? [groupOrdinal(b.ordinal)] : []), blockTitle(b), dedupeSpecText(s.label), configTextOf(b.specByKey.get(s.key)?.romram), ...cells].join('\t'),
         );
       }
     }
@@ -227,7 +228,7 @@ export default function TrendTables(props: {
             if (ty === '取证') return pt.url || '—';
             return offerText(pt) || '—';
           });
-          lines.push([...(multi ? [groupOrdinal(b.ordinal)] : []), dedupeSpecText(s.label), b.specByKey.get(s.key)?.romram ?? '', ty, ...cells].join('\t'));
+          lines.push([...(multi ? [groupOrdinal(b.ordinal)] : []), dedupeSpecText(s.label), configTextOf(b.specByKey.get(s.key)?.romram), ty, ...cells].join('\t'));
         }
       }
     }
@@ -287,7 +288,7 @@ export default function TrendTables(props: {
         className="tnum"
         style={{ ...cell(1), ...frozen(1, bg), gridRow: `span ${span}`, fontSize: 11, color: color.body, whiteSpace: 'nowrap' }}
       >
-        {sp?.romram || '—'}
+        {configTextOf(sp?.romram)}
       </div>,
     ];
   };
@@ -361,7 +362,7 @@ export default function TrendTables(props: {
             </span>
             <span aria-hidden style={{ fontSize: 13, color: color.hairlineStrong }}>·</span>
             <span className="tnum" style={{ fontSize: 11, color: color.body, whiteSpace: 'nowrap' }}>
-              {baseSpec?.romram || '—'}
+              {configTextOf(baseSpec?.romram)}
             </span>
           </>
         ) : (

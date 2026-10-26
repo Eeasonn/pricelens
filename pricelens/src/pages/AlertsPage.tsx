@@ -185,7 +185,9 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
       {dirArrowOf(a)}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {a.type === 'own-gap' ? `${a.modelName}（${a.romram} × ${romOfLabel(a.pairHighLabel, a.modelName)}）` : `${a.brand} ${a.modelName} ${a.romram}`}
+          {a.type === 'own-gap'
+            ? `${a.modelName}（${[a.romram === '—' ? '' : a.romram, romOfLabel(a.pairHighLabel, a.modelName) === '—' ? '' : romOfLabel(a.pairHighLabel, a.modelName)].filter(Boolean).join(' × ')}）`
+            : [a.brand, a.modelName, a.romram === '—' ? '' : a.romram].filter(Boolean).join(' ')}
         </div>
         <div className="tnum" style={{ fontSize: 11, color: color.body }}>
           {detail}
@@ -430,7 +432,7 @@ export default function AlertsPage() {
       const key = `${p.sku_id.split('__')[0]}__${p.romram.replace(/\s+/g, '')}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      list.push({ key, label: `${p.brand} ${p.model_name} ${p.romram}`, isOwn: p.is_own === true });
+      list.push({ key, label: [p.brand, p.model_name, p.romram === '—' ? '' : p.romram].filter(Boolean).join(' '), isOwn: p.is_own === true });
     }
     return list.sort((a, b) => (a.isOwn === b.isOwn ? a.label.localeCompare(b.label) : a.isOwn ? -1 : 1));
   }, [state.countryCode, state.industry]);
@@ -944,8 +946,8 @@ export default function AlertsPage() {
                               {a.modelName} 两档太近
                             </span>
                             <span className="tnum" style={{ fontSize: 11, color: color.body, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {a.romram} {formatPrice(a.pairLowPrice, state.currency)} ↔{' '}
-                              {romOfLabel(a.pairHighLabel, a.modelName)} {formatPrice(a.pairHighPrice, state.currency)}
+                              {[a.romram === '—' ? '' : a.romram, formatPrice(a.pairLowPrice, state.currency)].filter(Boolean).join(' ')} ↔{' '}
+                              {((): string => { const r = romOfLabel(a.pairHighLabel, a.modelName); return r === '—' ? '' : r; })()} {formatPrice(a.pairHighPrice, state.currency)}
                             </span>
                             <span className="tnum" style={{ fontSize: 11, fontWeight: 700, color: '#be123c', whiteSpace: 'nowrap' }}>
                               间距 {pctText(a.ownGapPct)} &lt; {+(state.alertThresholds['own-gap'] * 100).toFixed(1)}%

@@ -113,6 +113,12 @@ export function shortRomram(romram: string): string {
   return romram.replace(/\s*GB$/i, '').trim();
 }
 
+/** 配置展示段（第一百五十三轮）：'—' = 无配置层级（穿戴/音频等产品），展示为空——
+ *  消费方对空串整段隐藏（chip 不渲染、文本不留「· —」尾缀、表格留空格） */
+export function configTextOf(romram: string | null | undefined): string {
+  return romram && romram !== '—' ? romram : '';
+}
+
 /** 配置容量解析（排序用）：`12+256 GB` → [12, 256]；`16+1 TB` → [16, 1024]；
  *  `256 GB` → [0, 256]；无 GB/TB 单位（如 46mm GPS / —）→ [0, 0] 排最前，再按文本自然序。 */
 export function parseCapacity(romram: string): [number, number] {
@@ -295,8 +301,9 @@ export function buildCompetitorTree(industry?: Industry, countryCode: string = g
 
 /** SKU 选项（品牌内按产品分组，供 Select group 用；配置页矩阵单元格复用） */
 export function skuOptionLabel(p: DimProduct): string {
+  const config = configTextOf(p.romram);
   const colorPart = p.color === '—' ? '' : ` · ${p.color}`;
-  return `${p.model_name} · ${shortRomram(p.romram)}${colorPart}`;
+  return [p.model_name, config].filter(Boolean).join(' · ') + colorPart;
 }
 
 // ---------------- 勾选组（ProductSelection[]）纯函数 ----------------
@@ -378,9 +385,9 @@ export function toggleSku(list: ProductSelection[], node: RomramNode, skuId: str
   return list.map((s) => (s === sel ? { ...s, skuIds: rest } : s));
 }
 
-/** 触发器/面板展示用：勾选组的显示名（产品名 · ROMRAM） */
+/** 触发器/面板展示用：勾选组的显示名（产品名 · ROMRAM；无配置层级只显产品名） */
 export function selectionLabel(sel: ProductSelection): string {
-  return `${modelNameOf(sel.modelId)} · ${shortRomram(sel.romram)}`;
+  return [modelNameOf(sel.modelId), configTextOf(sel.romram)].filter(Boolean).join(' · ');
 }
 
 // ---------------- 统一产品树（第一百一十七轮，选择产品浮窗用） ----------------

@@ -524,7 +524,7 @@ export default function PlatformCompareModal({
           key,
           modelId: sel.modelId,
           romram: sel.romram,
-          label: `${brandOfModel(sel.modelId)} ${modelNameOf(sel.modelId)} ${sel.romram}`,
+          label: [brandOfModel(sel.modelId), modelNameOf(sel.modelId), sel.romram === '—' ? '' : sel.romram].filter(Boolean).join(' '),
         });
       }
     }
