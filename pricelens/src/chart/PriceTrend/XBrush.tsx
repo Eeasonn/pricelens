@@ -99,7 +99,8 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
   if (n === 0) return null;
 
   const formatId = (id: string): string => {
-    if (granularity === 'week' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}-W${id.slice(4)}`;
+    // 周 = YYYYWxx（第一百五十二轮与时间轴刻度统一口径，如 2026W24）
+    if (granularity === 'week' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}W${id.slice(4)}`;
     if (granularity === 'month' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}-${id.slice(4)}`;
     return id;
   };
@@ -298,9 +299,11 @@ export default function XBrush(props: XBrushProps) {
   // 年份行规则同中间刻度（最左显示刻度恒带、换年刻度带）
   const domainIds = buckets.slice(lo, hi + 1).map((b) => b.id);
   const span = Math.max(1, hi - lo + 1);
+  // 刻度密度（第一百五十二轮再降一档）：周 ≈ span/4（保持 4 周对齐）/ 月季 ≈ span/5——
+  // 轨道只承担拖柄首尾与跨年标注（图内时间轴恢复后中间刻度不再标日期），刻度线更稀
   const tickStep = granularity === 'week'
-    ? Math.max(4, Math.ceil(span / 8 / 4) * 4)
-    : Math.max(1, Math.ceil(span / 8));
+    ? Math.max(4, Math.ceil(span / 4 / 4) * 4)
+    : Math.max(1, Math.ceil(span / 5));
   const plan = axisTickPlan(granularity, domainIds, tickStep, [s - lo, e - lo]);
   // 像素让位（第一百二十三轮）：拖柄两端标签像素区间 = 文本实宽 + 白底 padding；
   // 与之相交（含 4px 间距）的中间刻度标签与刻度线整组隐藏。轨道实宽未知（首帧）
@@ -312,16 +315,18 @@ export default function XBrush(props: XBrushProps) {
   };
   const xPxOfTick = (i: number): number => ((i - lo + 0.5) / span) * trackW;
   const edgeIdx = plan.indexes.filter((i) => plan.isEdge(i));
-  const midIdx = plan.indexes.filter((i) => !plan.isEdge(i));
+  // 第一百五十二轮：中间刻度只画线不标日期，仅换年刻度带标签（拖柄首尾另由
+  // edge 标签恒标）；像素让位只在带标签的刻度间判定
+  const labeledMidIdx = plan.indexes.filter((i) => !plan.isEdge(i) && plan.yearText(i) !== null);
   const midHidden =
     trackW > 0
       ? hideOverlappingTicks(
-          midIdx.map((i) => ({ x: xPxOfTick(i + lo), w: labelWOf(i) })),
+          labeledMidIdx.map((i) => ({ x: xPxOfTick(i + lo), w: labelWOf(i) })),
           edgeIdx.map((i) => ({ x: xPxOfTick(i + lo), w: labelWOf(i) + EDGE_PAD * 2 })),
           4,
         )
-      : midIdx.map(() => false);
-  const hiddenSet = new Set(midIdx.filter((_, k) => midHidden[k]));
+      : labeledMidIdx.map(() => false);
+  const hiddenSet = new Set(labeledMidIdx.filter((_, k) => midHidden[k]));
 
   const onDragDown = (kind: DragKind) => (ev: ReactPointerEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -428,11 +433,14 @@ export default function XBrush(props: XBrushProps) {
             const i = idx + lo;
             const edge = plan.isEdge(idx);
             const year = plan.yearText(idx);
+            // 第一百五十二轮：只标拖柄首尾与跨年刻度，其余只画线；周标签自带
+            // 年份（YYYYWxx）不再渲染年份第二行
+            if (!edge && year === null) return null;
             if (hiddenSet.has(idx)) return null;
             return (
               <span key={`label-${idx}`} aria-hidden="true" style={{ ...labelStyle(i, edge) }}>
                 <span>{plan.dateText(idx)}</span>
-                {year && <em style={{ fontStyle: 'italic', color: color.mute }}>{year}</em>}
+                {granularity !== 'week' && year && <em style={{ fontStyle: 'italic', color: color.mute }}>{year}</em>}
               </span>
             );
           })}

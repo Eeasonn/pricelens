@@ -584,6 +584,8 @@ export function buildOption(p: {
             hideOverlap: true,
             interval: (index: number) => axisShown.has(index),
             formatter: (val: string, index: number) => {
+              // 周刻度自带年份（2026W24，第一百五十二轮），不再追加年份第二行
+              if (granularity === 'week') return axisPlan.dateText(index);
               const year = axisPlan.yearText(index);
               return year ? `${axisPlan.dateText(index)}\n${year}` : axisPlan.dateText(index);
             },

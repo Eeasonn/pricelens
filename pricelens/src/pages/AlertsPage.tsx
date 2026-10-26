@@ -148,8 +148,8 @@ function dirArrowOf(a: AlertItem): ReactNode {
 const romOfLabel = (label: string | null, modelName: string): string =>
   label ? label.slice(label.indexOf(modelName) + modelName.length).trim() : '';
 
-/** 周 id（YYYYWW）→ 带年份周号（2026-W43，与刷选条同口径） */
-const weekTag = (weekId: string): string => `${weekId.slice(0, 4)}-W${weekId.slice(4)}`;
+/** 周 id（YYYYWW）→ 带年份周号（2026W43，第一百五十二轮起与时间轴刻度同口径） */
+const weekTag = (weekId: string): string => `${weekId.slice(0, 4)}W${weekId.slice(4)}`;
 
 /** 单条触发（预警中心重构：加方向箭头；矩阵展开明细与事件流共用） */
 function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'local'; onOpen: () => void }) {

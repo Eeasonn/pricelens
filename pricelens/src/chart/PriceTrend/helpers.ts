@@ -546,20 +546,20 @@ export function fullBucketLabel(g: Granularity, id: string): string {
   return id;
 }
 
-/** 桶短文案（省年份）：周 = MM-DD / 月 = MM / 季 = Qn */
+/** 桶短文案：周 = YYYYWxx（第一百五十二轮：时间轴周刻度自带年份，如 2026W24——
+ *  刻度只保留拖柄首尾与跨年后，标签必须自证年月）；月 = MM / 季 = Qn */
 export function shortBucketLabel(g: Granularity, id: string): string {
   if (g === 'week') {
-    const r = dimTime.find((x) => x.week_id === id);
-    return r ? r.week_wed_date.slice(5) : id;
+    return /^\d{6}$/.test(id) ? `${id.slice(0, 4)}W${id.slice(4)}` : id;
   }
   if (g === 'month') return id.slice(4);
   return `Q${id.slice(5)}`;
 }
 
 function bucketYearOf(g: Granularity, id: string): string {
-  if (g !== 'week') return id.slice(0, 4);
-  const r = dimTime.find((x) => x.week_id === id);
-  return r ? r.week_wed_date.slice(0, 4) : id.slice(0, 4);
+  // 周取桶号年（第一百五十二轮：与 YYYYWxx 标签同源——原按锚日取年，W01 锚日
+  // 落上一年时跨年判定会和标签年差一拍）
+  return id.slice(0, 4);
 }
 
 export interface AxisTickPlan {

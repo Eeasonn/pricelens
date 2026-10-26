@@ -1,10 +1,9 @@
 // ============================================================
 // 面板独立时间轴（第一百一十九轮，走查会）：每张量价图底部的独立查看时间调整条
 // （第一百二十三轮起同步/非同步恒渲染——同步 = 三图同段查看时间，拖任一条同步调整）。
-// 交互与共享刷选条同源（起点/终点拖柄 + 整段平移 + 键盘微调），刻度同 axisTickPlan：
-// 主行恒短格式（周=MM-DD/月=MM/季=Qn），两端拖柄标签加粗恒显示，年份独立第二行
-// （最左显示刻度恒带、换年刻度带）。窄轨道叠字改按像素区间让位（原按桶数让位
-// 在窄面板里拖柄标签仍压住灰色刻度）。
+// 交互与共享刷选条同源（起点/终点拖柄 + 整段平移 + 键盘微调），刻度同 axisTickPlan。
+// 第一百五十二轮标注口径：周刻度 YYYYWxx 自带年份、刻度密度再降一档，中间刻度
+// 只画线，日期只标两端拖柄与跨年刻度。
 // ============================================================
 import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Granularity } from '../../dataModel/types';
@@ -66,7 +65,8 @@ export default function PanelTimeTrack(props: {
   const domainIds = ids.slice(lo, hi + 1);
   const markS = s - lo;
   const markE = e - lo;
-  const plan = axisTickPlan(granularity, domainIds, Math.max(1, Math.ceil(n / 5)), [markS, markE]);
+  // 刻度密度（第一百五十二轮再降一档）：n/5 → n/4——轨道只承担拖柄首尾与跨年标注
+  const plan = axisTickPlan(granularity, domainIds, Math.max(1, Math.ceil(n / 4)), [markS, markE]);
   // 像素让位（第一百二十三轮，替代原按桶数 guard）：两端拖柄标签的像素区间 =
   // 轨道实宽定位 + 文本实宽（含白底 padding；边界标签向轨道内侧偏移 0.38×标签宽，
   // 与下方 translateX 对应），与之相交（含 4px 间距）的中间刻度标签与刻度线整组隐藏。
@@ -77,6 +77,9 @@ export default function PanelTimeTrack(props: {
     return Math.max(measureTickText(plan.dateText(idx), 10), year ? measureTickText(year, 10) : 0);
   };
   const midIdxAll = plan.indexes.filter((i) => !plan.isEdge(i));
+  // 第一百五十二轮：中间刻度只画线不标日期，仅换年刻度带标签（拖柄首尾另由
+  // edge 标签恒标）；像素让位只在带标签的刻度间判定
+  const labeledMids = midIdxAll.filter((i) => plan.yearText(i) !== null);
   const edgeBoxes =
     trackW > 0
       ? [
@@ -87,12 +90,14 @@ export default function PanelTimeTrack(props: {
   const midHidden =
     trackW > 0
       ? hideOverlappingTicks(
-          midIdxAll.map((i) => ({ x: ((i + 0.5) / n) * trackW, w: textWOf(i) })),
+          labeledMids.map((i) => ({ x: ((i + 0.5) / n) * trackW, w: textWOf(i) })),
           edgeBoxes,
           4,
         )
-      : midIdxAll.map(() => false);
-  const mids = midIdxAll.filter((_, k) => !midHidden[k]);
+      : labeledMids.map(() => false);
+  const keptSet = new Set(labeledMids.filter((_, k) => !midHidden[k]));
+  const midLines = midIdxAll.filter((i) => !keptSet.has(i));
+  const midLabels = labeledMids.filter((_, k) => !midHidden[k]);
 
   const onDragDown = (kind: DragKind) => (ev: ReactPointerEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -179,25 +184,25 @@ export default function PanelTimeTrack(props: {
       {[markS, markE].map((m) => (
         <span key={`edge-tick-${m}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(m + lo) + 0.5 / n}%`, top: 4, width: 1, height: 12, transform: 'translateX(-50%)', background: color.hairlineStrong, pointerEvents: 'none' }} />
       ))}
-      {mids.map((i) => (
+      {midLines.map((i) => (
         <span key={`mid-tick-${i}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(i + lo) + 0.5 / n}%`, top: 7, width: 1, height: 6, transform: 'translateX(-50%)', background: trackColors.tick, pointerEvents: 'none' }} />
       ))}
-      {/* 两端拖柄标签（第一百二十三轮）：短格式 + 年份第二行（最左显示刻度恒带年份、
-          换年刻度带）；向轨道内侧偏移避免顶到轨道边缘裁切 */}
+      {/* 两端拖柄标签（第一百五十二轮：周标签自带年份 YYYYWxx 不再加年行，中间
+          刻度只画线、日期只标两端与跨年）；向轨道内侧偏移避免顶到轨道边缘裁切 */}
       <span aria-hidden="true" style={{ ...edgeLabelStyle('-12%'), left: `${pct(markS + lo)}%` }}>
         <span>{plan.dateText(markS)}</span>
-        {plan.yearText(markS) && <em style={{ fontStyle: 'italic', color: color.mute }}>{plan.yearText(markS)}</em>}
+        {granularity !== 'week' && plan.yearText(markS) && <em style={{ fontStyle: 'italic', color: color.mute }}>{plan.yearText(markS)}</em>}
       </span>
       <span aria-hidden="true" style={{ ...edgeLabelStyle('-88%'), left: `${pct(markE + lo + 1)}%` }}>
         <span>{plan.dateText(markE)}</span>
-        {plan.yearText(markE) && <em style={{ fontStyle: 'italic', color: color.mute }}>{plan.yearText(markE)}</em>}
+        {granularity !== 'week' && plan.yearText(markE) && <em style={{ fontStyle: 'italic', color: color.mute }}>{plan.yearText(markE)}</em>}
       </span>
-      {mids.map((i) => {
+      {midLabels.map((i) => {
         const year = plan.yearText(i);
         return (
           <span key={`mid-label-${i}`} aria-hidden="true" style={midLabelStyle(i)}>
             <span>{plan.dateText(i)}</span>
-            {year && <em style={{ fontStyle: 'italic', color: color.mute }}>{year}</em>}
+            {granularity !== 'week' && year && <em style={{ fontStyle: 'italic', color: color.mute }}>{year}</em>}
           </span>
         );
       })}
