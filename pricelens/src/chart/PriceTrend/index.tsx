@@ -19,8 +19,8 @@
 // 上方极值筛选器手动改值即转入自定义；底部拖柄/平移只调整筛选范围内的查看窗口。
 // 取数仍按数据全集（数据量小、内存计算）：窗口边缘的续接线需要范围外的邻点。
 // 分离模式时间轴体系（本轮，对齐量价看板）：每张分离面板底部各自一条独立时间轴
-// （SplitTimeTrack：轨道+拖柄+平移+键盘微调），图内不画日期标签（唯一日期层 =
-// 面板下方时间轴）；「同步」开关默认开
+// （SplitTimeTrack：轨道+拖柄+平移+键盘微调）；第一百五十二轮追补：分离面板图内
+// 同恢复时间轴（showXLabels，与合并主图同口径）；「同步」开关默认开
 // （放在共享轴列下方、与时间轴行齐平垂直居中）= 全面板共用查看窗口、拖任一面板
 // 时间轴全部联动，关 = 各面板独立调整（panelWins，未单独设置的面板回落共享窗口），
 // 粒度切换/自适应重算/换卡后独立窗口整体回落。
@@ -28,8 +28,8 @@
 // 分离模式底部共享 XBrush 退役（每面板时间轴已承担全部调整）；合并模式底部
 // XBrush 保留（单图唯一的查看窗口调整轴）但左列时间筛选簇收掉、轨道通栏。
 // 顶部筛选器改范围时查看窗口整体复位为新范围（下方 rangeWatch 联动自理）。
-// 第一百五十二轮（业务意见）：合并模式主图恢复图内时间轴（showXLabels 重新接线，
-// 周刻度 YYYYWxx 自带年份）；底部轨道刻度密度再降、中间刻度只画线——日期标注
+// 第一百五十二轮（业务意见）：合并主图与分离面板恢复图内时间轴（showXLabels，
+// 周刻度 YYYYWxx 自带年份）；三条轨道刻度密度再降、中间刻度只画线——日期标注
 // 只保留拖柄首尾与跨年刻度（XBrush/SplitTimeTrack/PanelTimeTrack 同口径）。
 // 本轮（多平台比价深化 + 视图态跨页保留）：
 // ① 比价弹窗补「比当前看板」差价率（弹窗内自理）；比价入口 = 工具行「多平台
@@ -1202,8 +1202,9 @@ export default function PriceTrend(props: {
                         promoBands={panelPromoBands[p.key] ?? []}
                         maxMinOn={maxMinOn}
                         changeThreshold={changeThreshold}
-                        // 图内不再画日期标签（第110轮口径退役）：本图唯一日期层 = 图下
-                        // SplitTimeTrack 时间轴（对齐量价看板，见下方）
+                        showXLabels // 第一百五十二轮追补：分离面板同恢复图内时间轴（与合并主图
+                        // 同口径——周 YYYYWxx、axisTickPlan 抽稀；下方 SplitTimeTrack 保留
+                        // 拖柄调整与首尾/跨年标注）
                         crosshairIdx={synced ? splitHoverIdx : panelHoverIdxs[p.key] ?? null}
                         onCrosshairMove={onPanelHoverOf(p.key)}
                         crosshairY={splitCrossY} // 第一百一十四轮：横向虚线跨全部面板
