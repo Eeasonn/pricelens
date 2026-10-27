@@ -79,6 +79,8 @@ PLATFORM_ALIASES = {
     "mercadolibre": "Mercado Libre", "amazon méxico": "Amazon", "amazon mexico": "Amazon",
     "amazon.sa": "Amazon", "amazon tr": "Amazon", "mediamarkt tr": "MediaMarkt",
     "vatan bilgisayar": "Vatan",
+    # 业务确认 MVM 与 M.Video 为同一平台（源表两名义互串），统一归并为 Mvideo（2026-10-27）
+    "m.video": "Mvideo", "m video": "Mvideo", "mvm": "Mvideo",
 }
 STORE_ALIASES = {"平台型零售商": "1P", "平台第三方卖家": "3P", "marketplace": "3P",
                  "跨境3p": "3P", "3p_international": "3P", "官网": "独立站"}
@@ -711,7 +713,7 @@ def main():
     for (cc, pf, st), g in raw.groupby(["cc", "平台", "店铺类型"]):
         cid = f"{cc}:{slug(pf)}:{st}"
         disp = str(g["显示店铺名称"].value_counts().index[0])
-        # 显示名须以平台名开头（源表把 MVM 标成 M.Video、unknown 等）→ 否则用「平台 店铺类型」兜底
+        # 显示名须以平台名开头（源表有 unknown、MVM 组的「M.Video …」等）→ 否则用「平台 店铺类型」兜底
         if disp.lower() in {"unknown", "—", "nan", ""} or not disp.lower().startswith(fold(pf).lower()[:3]):
             disp = f"{pf} {st}"
         dim_channel.append({"channel_id": cid, "country_code": cc, "platform": pf, "store_type": st,

@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { dimChannel, dimProduct, dimTime, factPriceWeekly } from '../../data';
 import { buildPlatformCompare, platformOrderOf } from '../platformCompare';
 
-// HUAWEI nova 14 12+256 GB：RU 有 DNS / OZON / M.Video / MVM 多平台真实行，覆盖 22 个采数周
+// HUAWEI nova 14 12+256 GB：RU 有 DNS / OZON / Mvideo 多平台真实行，覆盖 22 个采数周
+// （MVM 与 M.Video 业务确认为同一平台，2026-10-27 起源表归并为 Mvideo）
 const ownSku = dimProduct.find((p) => p.sku_id === 'own-huawei-nova-14__12-256gb__black')!;
 const modelId = ownSku.model_id;
 const romram = ownSku.romram;
@@ -30,9 +31,9 @@ function minPlatformPrice(weekId: string, platform: string, currency: 'usd' | 'l
 }
 
 describe('buildPlatformCompare', () => {
-  it('平台稳定序 = dimChannel 插入序（RU：DNS → OZON → M.Video → MVM）', () => {
+  it('平台稳定序 = dimChannel 插入序（RU：DNS → OZON → Mvideo）', () => {
     expect(platformOrderOf(CC)).toEqual([...new Set(dimChannel.filter((c) => c.country_code === CC).map((c) => c.platform))]);
-    expect(platformOrderOf(CC)).toEqual(['DNS', 'OZON', 'M.Video', 'MVM']);
+    expect(platformOrderOf(CC)).toEqual(['DNS', 'OZON', 'Mvideo']);
   });
 
   it('确定性：同入参两次调用逐字节一致', () => {
@@ -57,8 +58,8 @@ describe('buildPlatformCompare', () => {
   it('真实口径：平台无该周数据 = null 点（不再有因子兜底价），且确有平台缺采', () => {
     const res = buildPlatformCompare(modelId, romram, [ownSku.sku_id], 'usd', CC);
     const nullCounts = res.series.map((s) => s.points.filter((p) => p == null).length);
-    // 锚 SKU 实况：DNS 全程在采；OZON 缺 9 周；M.Video/MVM 仅早期零星有价
-    expect(nullCounts).toEqual([0, 9, 19, 19]);
+    // 锚 SKU 实况：DNS 全程在采；OZON 缺 9 周；Mvideo 仅早期零星有价
+    expect(nullCounts).toEqual([0, 9, 16]);
     // null 与 fact 对齐：点为 null ⇔ 该周该平台无价行
     res.series.forEach((s) => {
       s.points.forEach((p, i) => {

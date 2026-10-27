@@ -135,22 +135,22 @@ describe('buildOverviewMatrix 金测', () => {
     );
   });
 
-  it('平台筛选进矩阵口径 = 真实平台最低价（无因子）：Mate X7 16+512 该 M.Video 低于默认 DNS', () => {
+  it('平台筛选进矩阵口径 = 真实平台最低价（无因子）：Mate X7 16+512 该 Mvideo 低于默认 DNS', () => {
     const rowOf = (m: ReturnType<typeof buildOverviewMatrix>) =>
       m.flatMap((b) => b.models).find((x) => x.modelId === 'own-huawei-mate-x7')!.rows[0]; // 16+512 GB
     const dns = rowOf(buildOverviewMatrix('usd', undefined, null, DEFAULT_DATA_SCOPE)); // 缺省 = RU 默认平台 DNS
-    const mv = rowOf(buildOverviewMatrix('usd', undefined, { platforms: ['M.Video'], shopIds: [] }, DEFAULT_DATA_SCOPE));
+    const mv = rowOf(buildOverviewMatrix('usd', undefined, { platforms: ['Mvideo'], shopIds: [] }, DEFAULT_DATA_SCOPE));
     const all = rowOf(
-      buildOverviewMatrix('usd', undefined, { platforms: ['DNS', 'M.Video'], shopIds: [] }, DEFAULT_DATA_SCOPE),
+      buildOverviewMatrix('usd', undefined, { platforms: ['DNS', 'Mvideo'], shopIds: [] }, DEFAULT_DATA_SCOPE),
     );
-    // 锚（202642 fact 直算）：DNS 1 588.52 / M.Video 1 570.67 —— 真实数据无固定平台高低序
+    // 锚（202642 fact 直算）：DNS 1 588.52 / Mvideo 1 570.67 —— 真实数据无固定平台高低序
     expect(dns.price).toBe(minUsdPriceAt('own-huawei-mate-x7__16-512gb__black', '202642', 'DNS'));
-    expect(mv.price).toBe(minUsdPriceAt('own-huawei-mate-x7__16-512gb__black', '202642', 'M.Video'));
+    expect(mv.price).toBe(minUsdPriceAt('own-huawei-mate-x7__16-512gb__black', '202642', 'Mvideo'));
     expect(mv.price!).toBeLessThan(dns.price!);
     // 多平台并选取渠道内最低价：并集 = 两平台最小
     expect(all.price).toBe(Math.min(dns.price!, mv.price!));
     // RRP 随行（真实抓取：各渠道行自带 rrp_local）——DNS 官网价=成交价 1 588.52；
-    // M.Video 划线价 159 999₽/84.04 = 1 903.84，成交价 131 999₽ → 折扣率 <0
+    // Mvideo 划线价 159 999₽/84.04 = 1 903.84，成交价 131 999₽ → 折扣率 <0
     expect(dns.rrp).toBe(1588.52);
     expect(mv.rrp).toBe(1903.84);
     expect(mv.price!).toBeCloseTo((131999 / 84.04), 2);

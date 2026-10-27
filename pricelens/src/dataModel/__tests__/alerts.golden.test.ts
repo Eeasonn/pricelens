@@ -21,7 +21,7 @@ import { platformPriceSpread } from '../aggregate';
 
 const SCOPE = { countryCode: 'RU', industry: 'phone' } as const;
 
-// 华为锚系列 = HUAWEI nova 14 12+256 GB：RU 有 DNS/OZON/M.Video 多平台真实行、22 个采数周，
+// 华为锚系列 = HUAWEI nova 14 12+256 GB：RU 有 DNS/OZON/Mvideo 多平台真实行、22 个采数周，
 // 四类规则均可观察（价格波动 + 真实跨平台价差）。
 const ownSku = dimProduct.find((p) => p.sku_id === 'own-huawei-nova-14__12-256gb__black')!;
 const ownKey = seriesKeyOfSku(ownSku.sku_id); // own-huawei-nova-14__12+256GB
@@ -255,28 +255,31 @@ describe('buildAlerts 规则边界', () => {
     }
   });
 
-  it('真实数据全量锚（200 系列 @2%）：1652 条 = 调价 1367 + 平台价差 219 + 降促 66', () => {
+  it('真实数据全量锚（200 系列 @2%）：1665 条 = 调价 1379 + 平台价差 219 + 降促 67', () => {
     // 2026-10-23：比率链改未取整价（第一百三十九轮口径修复，低价系列取整到 0
     // 曾制造假预警/断链）——调价/降促触发集随之变化；平台价差计数不变（锚系列单色）。
     // 本轮：低侧异常价守卫剔除 RU W19 DNS 独立站脏批（12 个 HONOR 系列 W19 假价
     // $1.83~$25.7），其在 W20 制造的 12 条假调价 + 1 条假降促随之消失；平台价差计数不变。
+    // 2026-10-27：MVM 与 M.Video 归并为 Mvideo（RU 跨平台价差极值本就由 DNS/OZON
+    // 驱动，平台价差计数不变）；143 轮 ingest 修正（双向单位错位 + 有价优先去重）
+    // 随数据再生生效，调价/降促计数小幅上浮。
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.02));
     expect(ALL_KEYS.length).toBe(200); // RU phone 全部 系列×配置
-    expect(alerts.length).toBe(1652);
-    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1367);
+    expect(alerts.length).toBe(1665);
+    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1379);
     expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(219); // 真实跨平台价差普遍存在
-    expect(alerts.filter((a) => a.type === 'promo').length).toBe(66);
+    expect(alerts.filter((a) => a.type === 'promo').length).toBe(67);
   });
 
-  it('真实数据全量锚 @5%：899 条（调价 662 + 平台价差 175 + 降促 62）；放开 own-gap 加 9 条档位间距', () => {
+  it('真实数据全量锚 @5%：911 条（调价 673 + 平台价差 175 + 降促 63）；放开 own-gap 加 9 条档位间距', () => {
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.05));
-    expect(alerts.length).toBe(899);
-    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(662);
+    expect(alerts.length).toBe(911);
+    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(673);
     expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(175);
-    expect(alerts.filter((a) => a.type === 'promo').length).toBe(62);
+    expect(alerts.filter((a) => a.type === 'promo').length).toBe(63);
     const withGap = buildAlerts({ ...cfg(ALL_KEYS, 0.05), enabled: { ...ALL_ON, 'own-gap': true }, thresholds: { 'price-change': 0.05, promo: 0.05, 'platform-gap': 0.05, 'own-gap': 0.15 } });
     expect(withGap.filter((a) => a.type === 'own-gap').length).toBe(9); // 多档华为机型的贴近档位对
-    expect(withGap.length).toBe(908);
+    expect(withGap.length).toBe(920);
   });
 });
 
