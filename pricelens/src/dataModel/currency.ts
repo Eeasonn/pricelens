@@ -8,13 +8,10 @@ export function displayPriceOf(row: FactPriceWeekly, currency: CurrencyMode): nu
   return currency === 'usd' ? row.price_usd : row.price_local;
 }
 
-/** RRP = 官网建议零售价；缺官网价时回退平台建议零售价（划线价） */
+/** RRP = 平台划线价（2026-10-27 源表清洗后官网模拟价退役，rrp 即唯一账面价口径） */
 export function displayRrpOf(row: FactPriceWeekly, currency: CurrencyMode): number | null {
-  if (currency === 'usd') {
-    if (row.rrp_usd != null) return row.rrp_usd;
-    return row.list_price_local == null ? null : Math.round((row.list_price_local / row.fx) * 100) / 100;
-  }
-  return row.rrp_local ?? row.list_price_local;
+  if (currency === 'usd') return row.rrp_usd;
+  return row.rrp_local;
 }
 
 /** 把一个本币数值按汇率折到显示币种（事实行外的衍生值用） */

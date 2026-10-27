@@ -17,6 +17,9 @@ export interface ProductSelection {
   modelId: string; // 型号 id（同型号 SKU 共享）
   romram: string;
   skuIds: string[]; // 所选颜色 SKU；1 个=该颜色；多个=均值
+  /** 取价口径（第一百六十轮）：null/缺省 = 自动——该产品数据量足够的渠道里
+   *  日常价（中位价）最低的那家平台-店铺；显式 = 用户勾选的平台/渠道 */
+  platform?: PlatformSelection | null;
 }
 
 /** 主分析产品卡：唯一主品（含颜色）+ 它自己的对比区（任意品牌，含华为）。
@@ -85,6 +88,9 @@ export interface FiltersActions {
   autoMatchCard(cardId: string): void;
   /** 全局「全部自动匹配」开关：全部华为主品卡都在开 → 全部关；否则全部开 */
   autoMatchAll(): void;
+  /** 单个产品的取价口径（第一百六十轮）：selKey 命中的主品/对比条目全部改写；
+   *  platform = null 恢复自动（该产品日常价最低渠道） */
+  setSelectionPlatform(selKey: string, platform: PlatformSelection | null): void;
   // ---- 粒度 ----
   /** §5.4/§5.6：切换粒度——保持可见时间跨度只换桶（dimTime 映射；空数据降级为不换算） */
   setGranularity(g: Granularity): void;

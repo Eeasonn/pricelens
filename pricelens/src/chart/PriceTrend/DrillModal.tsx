@@ -9,7 +9,7 @@
 import { useMemo, useState } from 'react';
 import { Modal } from 'antd';
 import { RightOutlined } from '@ant-design/icons';
-import type { AggMode, CurrencyMode, Granularity, Series, SeriesQuery, SkuGroupQuery } from '../../dataModel/types';
+import type { AggMode, CurrencyMode, Granularity, PlatformQuery, Series, SeriesQuery, SkuGroupQuery } from '../../dataModel/types';
 import { color, font, fontSize, radius, shadow, space } from '../../theme/tokens';
 import Chart from './Chart';
 import { monthWeeks, quarterMonths } from './helpers';
@@ -36,7 +36,7 @@ export interface DrillModalProps {
   currency: CurrencyMode;
   agg: AggMode;
   priceTypes: { discounted: boolean; rrp: boolean };
-  platform: SeriesQuery['platform'];
+  platform: PlatformQuery | null; // 该组取价口径（随钻取组回显，与主页同口径）
   /** 以对应粒度重查单组（同 agg/币种/平台口径） */
   buildRange: (group: SkuGroupQuery, gran: Granularity, startBucket: string, endBucket: string) => Series[];
   onClose: () => void;

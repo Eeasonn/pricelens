@@ -1009,7 +1009,6 @@ describe('真实数据快照（ingest 2026-10-20）', () => {
       endBucket: '202609',
       currency: 'usd',
       agg: 'avg',
-      platform: null,
       scope: { countryCode: 'RU', industry: 'phone' },
     });
     expect(series.length).toBeGreaterThan(0);

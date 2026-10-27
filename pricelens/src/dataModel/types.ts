@@ -120,12 +120,8 @@ export interface FactPriceWeekly {
   country_code: string;
   channel_id: string; // → DimChannel
   seller: string; // 源表「店铺名称」；无 "—"
-  /** 官网建议零售价（本币）= 官方阶梯/账面价 */
+  /** 建议零售价（本币）= 平台划线价/账面价（2026-10-27 源表清洗后官网模拟价退役，rrp 即平台真实划线价） */
   rrp_local: number | null;
-  /** 官网成交价（本币） */
-  official_price_local: number | null;
-  /** 平台建议零售价（本币，平台划线价） */
-  list_price_local: number | null;
   /** 平台成交价（本币）= 折后价 */
   price_local: number | null;
   /** 行内汇率（本币 / USD） */
@@ -133,7 +129,6 @@ export interface FactPriceWeekly {
   rrp_usd: number | null;
   price_usd: number | null;
   /** 折扣率统一为负小数（-0.29 = 降 29%） */
-  discount_official: number | null;
   discount_display: number | null;
   discount_actual: number | null;
   bundle: boolean; // 是否组合销售
@@ -199,6 +194,11 @@ export interface Series {
   points: SeriesPoint[];
   edgeStart?: boolean;
   edgeEnd?: boolean;
+  /** 本系列的取价口径（第一百六十轮，随组解析后回显——图例渠道 chip/钻取同口径用） */
+  platform?: PlatformQuery | null;
+  /** 本系列实际取价渠道（auto = 该产品日常价最低渠道）；null = 该产品无任何渠道数据。
+   *  platforms = 渠道归属平台集（大促档期带按各线渠道平台并集过滤） */
+  channelBadge?: { label: string; auto: boolean; platforms: string[] } | null;
 }
 
 export interface DataScope {
@@ -206,11 +206,14 @@ export interface DataScope {
   industry: Industry;
 }
 
+/** 组级取价口径（第一百六十轮）：null/缺省 = 自动（该产品日常价最低的渠道）；
+ *  显式 = 用户勾选的平台/渠道。每条产品线独立，主品渠道不再牵连对比品 */
 export interface SkuGroupQuery {
   modelId: string;
   romram: string;
   skuIds: string[];
   isOwn: boolean;
+  platform?: PlatformQuery | null;
 }
 
 /** 平台选择：platforms = 勾整平台（其下全部渠道）；shopIds = 勾到渠道（channel_id）；
@@ -231,6 +234,6 @@ export interface SeriesQuery {
   endBucket: string;
   currency: CurrencyMode;
   agg: AggMode; // 仅月/季生效
-  /** null / 空 = 该国默认平台（国家主要电渠首个）；渠道内多店铺取最低在架价 */
-  platform: PlatformQuery | null;
+  // 平台口径自第一百六十轮起下沉到每组（SkuGroupQuery.platform）——看板全局
+  // 平台筛选退役（总览/预警仍用全局口径）
 }

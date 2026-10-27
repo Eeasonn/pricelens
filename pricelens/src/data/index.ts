@@ -43,8 +43,8 @@ interface FactPack {
   dict: { url: string[]; shot: string[]; inst: (string | null)[]; promo: (string | null)[]; seller: string[] };
   cols: {
     w: number[]; s: number[]; h: number[];
-    rrp: (number | null)[]; op: (number | null)[]; lp: (number | null)[]; p: (number | null)[];
-    fx: number[]; do: (number | null)[]; dd: (number | null)[]; da: (number | null)[];
+    rrp: (number | null)[]; p: (number | null)[];
+    fx: number[]; dd: (number | null)[]; da: (number | null)[];
     b: number[]; inst: number[]; promo: number[]; url: number[]; shot: number[]; seller: number[]; t: string[];
   };
 }
@@ -74,13 +74,10 @@ function decodePack(pack: FactPack): FactPriceWeekly[] {
       channel_id: channels[cols.h[i]],
       seller: dict.seller[cols.seller[i]],
       rrp_local: rrp,
-      official_price_local: cols.op[i],
-      list_price_local: cols.lp[i],
       price_local: price,
       fx,
       rrp_usd: rrp == null ? null : round2(rrp / fx),
       price_usd: price == null ? null : round2(price / fx),
-      discount_official: cols.do[i],
       discount_display: cols.dd[i],
       discount_actual: cols.da[i],
       bundle: cols.b[i] === 1,

@@ -218,7 +218,6 @@ export default function VolumePrice() {
               endBucket: dataEnd,
               currency: state.currency,
               agg: state.agg,
-              platform: state.platform,
               scope: { countryCode: cc, industry: state.industry },
             });
           } catch {
@@ -235,7 +234,7 @@ export default function VolumePrice() {
           series,
         };
       }),
-    [slots, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform],
+    [slots, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg],
   );
 
   // 时间自适应：三面板数据跨度并集 → 上方极值筛选器（同 index.tsx 写法；
@@ -511,7 +510,7 @@ export default function VolumePrice() {
     <div data-lpl-scroll style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
       <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         <PageHeader title="量价看板" />
-        <FilterBar showTime />
+        <FilterBar showTime showPlatform={false} />
         <main style={{ flex: 1, padding: space.lg }}>
           <section
             style={{

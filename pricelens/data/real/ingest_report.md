@@ -1,17 +1,17 @@
 # 真实数据接入报告（scripts/ingest_real.py）
 
-生成时间：2026-10-27T10:07:52+08:00
+生成时间：2026-10-27T11:45:52+08:00
 
 ## 一、总体
 
 - 输入文件 1 个，原始行 85,999
-- 清洗后事实行 84,845
+- 清洗后事实行 84,841
 - 时间维 202619(2026-05-06) → 202642(2026-10-14)，共 24 周
 - 低侧可疑价（<15% 参考价，仅报告不剔除）79 行
 - 分国档位：136 个 国家×型号 采用矩阵声明，其余按该国参考价推算
 - 自动匹配：442 个国家×我司型号补齐竞品，1901 条对标；51 个无可比对象
 - 对标上限4：143 组超限截断 333 条，截断后共 2135 条（每配置 ≤4 款竞品）
-- 事实包 84,845 行；b64 2,882,736 B（gzip 2,162,050 B）
+- 事实包 84,841 行；b64 2,472,748 B（gzip 1,854,560 B）
 - 修正：价格单位错位(×100) 68 行
 - 修正：价格单位错位(÷100) 31 行
 - 修正：品牌→HUAWEI 11 行
@@ -25,7 +25,7 @@
 - 剔除：无型号 309 行
 - 剔除：无汇率 0 行
 - 剔除：未知国家 0 行
-- 剔除：重复行(周×SKU×国×渠道×店铺) 844 行
+- 剔除：重复行(周×SKU×国×渠道×店铺) 848 行
 
 ## 二、覆盖面（有数国家）
 
@@ -33,7 +33,7 @@
 |---|---|---|---|---|---|
 | 法国(FR) | 12 | 127 | 1,031 | Amazon | Amazon |
 | 德国(DE) | 12 | 275 | 2,465 | Amazon | Amazon,MediaMarkt |
-| 土耳其(TR) | 16 | 146 | 1,672 | Hepsiburada | Hepsiburada,Amazon |
+| 土耳其(TR) | 16 | 146 | 1,668 | Hepsiburada | Hepsiburada,Amazon |
 | 意大利(IT) | 12 | 130 | 1,038 | Amazon | Amazon |
 | 英国(GB) | 12 | 117 | 845 | Amazon | Amazon |
 | 西班牙(ES) | 12 | 112 | 1,065 | Amazon | Amazon |
@@ -505,82 +505,82 @@
 
 共 79 行：单位错位修正后仍 < 15% × dim_product 参考价（ref_price_usd），仅列示：
 
-- PH｜202619｜APPLE Watch SERIES 11 46mm GPS｜$34.40 vs 参考 $541.86
-- PH｜202619｜APPLE Watch SERIES 11 42mm｜$39.53 vs 参考 $541.86
-- PH｜202619｜APPLE Watch SERIES 11 42mm｜$39.53 vs 参考 $541.86
-- PH｜202619｜APPLE Watch SERIES 11 46mm｜$19.98 vs 参考 $541.86
+- PH｜202619｜APPLE Watch SERIES 11 46mm GPS｜$34.40 vs 参考 $542.80
+- PH｜202619｜APPLE Watch SERIES 11 42mm｜$39.53 vs 参考 $542.80
+- PH｜202619｜APPLE Watch SERIES 11 42mm｜$39.53 vs 参考 $542.80
+- PH｜202619｜APPLE Watch SERIES 11 46mm｜$19.98 vs 参考 $542.80
 - PH｜202619｜GARMIN Instinct 3 50mm AMOLED｜$57.44 vs 参考 $597.64
 - PH｜202619｜GARMIN Venu X1 —｜$115.19 vs 参考 $858.59
-- RU｜202619｜BOSE Ultra Open —｜$29.90 vs 参考 $335.45
+- RU｜202619｜BOSE Ultra Open —｜$29.90 vs 参考 $335.78
 - RU｜202619｜APPLE iPhone 16 Pro Max 12+256 GB｜$6.76 vs 参考 $1,786.40
-- RU｜202619｜APPLE iPhone 17 8+512 GB｜$6.76 vs 参考 $1,156.98
+- RU｜202619｜APPLE iPhone 17 8+512 GB｜$6.76 vs 参考 $1,155.49
 - RU｜202619｜APPLE iPhone 17 Pro 12+256 GB｜$6.76 vs 参考 $1,628.51
 - RU｜202619｜APPLE iPhone 17 Pro 12+256 GB｜$6.76 vs 参考 $1,628.51
 - RU｜202619｜APPLE iPhone 17 Pro 12+512 GB｜$6.76 vs 参考 $1,628.51
 - RU｜202619｜APPLE iPhone 17 Pro Max 12+256 GB｜$6.76 vs 参考 $1,786.40
 - RU｜202619｜APPLE iPhone 17 Pro Max 12+256 GB｜$6.76 vs 参考 $1,786.40
-- RU｜202619｜APPLE iPhone Air 512 GB｜$6.76 vs 参考 $1,466.68
+- RU｜202619｜APPLE iPhone Air 512 GB｜$6.76 vs 参考 $1,466.72
 - RU｜202619｜XIAOMI 17 Ultra 16+512 GB｜$6.76 vs 参考 $1,599.73
-- RU｜202619｜HUAWEI nova Y73 8+128 GB｜$6.77 vs 参考 $172.31
+- RU｜202619｜HUAWEI nova Y73 8+128 GB｜$6.77 vs 参考 $174.25
 - RU｜202619｜APPLE iPhone 16 Pro 512 GB｜$6.94 vs 参考 $1,653.07
 - RU｜202619｜APPLE iPhone 16 Pro Max 12+512 GB｜$6.94 vs 参考 $1,786.40
 - RU｜202619｜APPLE iPhone 17 Pro 12+512 GB｜$6.94 vs 参考 $1,628.51
 - RU｜202619｜APPLE iPhone 17 Pro Max 12+512 GB｜$6.94 vs 参考 $1,786.40
 - RU｜202619｜APPLE iPhone 17 Pro Max 12+512 GB｜$6.94 vs 参考 $1,786.40
-- RU｜202619｜APPLE iPhone Air 1 TB｜$6.94 vs 参考 $1,466.68
+- RU｜202619｜APPLE iPhone Air 1 TB｜$6.94 vs 参考 $1,466.72
 - RU｜202619｜XIAOMI 17 Ultra 16+512 GB｜$6.94 vs 参考 $1,599.73
 - RU｜202619｜HUAWEI nova Y63 6+128 GB｜$6.94 vs 参考 $142.86
-- RU｜202619｜XIAOMI Redmi Pad 2 11" LTE 4+128 GB｜$7.25 vs 参考 $237.07
+- RU｜202619｜XIAOMI Redmi Pad 2 11" LTE 4+128 GB｜$7.25 vs 参考 $237.20
 - RU｜202619｜HONOR Pad X8B 11" WiFi 4+128 GB｜$7.37 vs 参考 $216.62
 - RU｜202619｜XIAOMI 17 Ultra 16+1 TB｜$7.40 vs 参考 $1,599.73
 - RU｜202619｜XIAOMI 17 Ultra 16+1 TB｜$7.40 vs 参考 $1,599.73
-- RU｜202619｜HONOR Pad X9A 11.5" LTE 6+128 GB｜$8.07 vs 参考 $312.00
-- RU｜202619｜HONOR Pad X9A 11.5" WiFi 6+128 GB｜$8.07 vs 参考 $312.00
-- RU｜202619｜HONOR Pad X9A 11.5" WiFi 8+256 GB｜$8.07 vs 参考 $312.00
+- RU｜202619｜HONOR Pad X9A 11.5" LTE 6+128 GB｜$8.07 vs 参考 $313.07
+- RU｜202619｜HONOR Pad X9A 11.5" WiFi 6+128 GB｜$8.07 vs 参考 $313.07
+- RU｜202619｜HONOR Pad X9A 11.5" WiFi 8+256 GB｜$8.07 vs 参考 $313.07
 - RU｜202619｜HUAWEI nova 14i 8+128 GB｜$9.21 vs 参考 $218.72
 - RU｜202619｜HUAWEI nova 14i 8+256 GB｜$9.21 vs 参考 $218.72
 - RU｜202619｜VIVO V60 Lite 12+256 GB｜$9.28 vs 参考 $319.73
-- RU｜202619｜HUAWEI nova Y73 8+256 GB｜$10.34 vs 参考 $172.31
-- RU｜202619｜SAMSUNG Galaxy Tab S10 Lite 10.9" WiFi 6+128 GB｜$12.98 vs 参考 $405.16
+- RU｜202619｜HUAWEI nova Y73 8+256 GB｜$10.34 vs 参考 $174.25
+- RU｜202619｜SAMSUNG Galaxy Tab S10 Lite 10.9" WiFi 6+128 GB｜$12.98 vs 参考 $405.66
 - RU｜202619｜APPLE iPhone 16E 128 GB｜$15.85 vs 参考 $746.40
 - RU｜202619｜SAMSUNG Galaxy Tab S11 11" WiFi 12+256 GB｜$20.32 vs 参考 $984.82
-- RU｜202619｜XIAOMI Redmi Pad SE 11" WiFi 8+256 GB｜$20.62 vs 参考 $190.33
+- RU｜202619｜XIAOMI Redmi Pad SE 11" WiFi 8+256 GB｜$20.62 vs 参考 $190.36
 - RU｜202619｜SAMSUNG Galaxy Tab A9+ 11" WiFi 8+128 GB｜$22.44 vs 参考 $225.86
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 12+256 GB｜$27.44 vs 参考 $718.71
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 8+128 GB｜$27.44 vs 参考 $718.71
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 13.1" WiFi 8+128 GB｜$27.44 vs 参考 $718.71
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 12+256 GB｜$27.44 vs 参考 $715.91
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 8+128 GB｜$27.44 vs 参考 $715.91
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 13.1" WiFi 8+128 GB｜$27.44 vs 参考 $715.91
 - RU｜202619｜SAMSUNG Galaxy Tab S9 FE+ 12.4" WiFi 12+256 GB｜$29.97 vs 参考 $903.25
-- RU｜202619｜BOSE Ultra Open —｜$31.40 vs 参考 $335.45
+- RU｜202619｜BOSE Ultra Open —｜$31.40 vs 参考 $335.78
 - RU｜202619｜HONOR Pad 10 12.1" WiFi 8+256 GB｜$43.73 vs 参考 $426.40
 - MY｜202620｜SAMSUNG Galaxy Tab S10+ 12.4" WiFi 12+256 GB｜$134.64 vs 参考 $1,266.40
-- RU｜202622｜BOSE Ultra Open —｜$25.38 vs 参考 $335.45
-- RU｜202623｜BOSE Ultra Open —｜$26.43 vs 参考 $335.45
-- ID｜202624｜HUAWEI Watch GT 6 Pro —｜$24.95 vs 参考 $358.43
-- RU｜202624｜BOSE Ultra Open —｜$18.75 vs 参考 $335.45
+- RU｜202622｜BOSE Ultra Open —｜$25.38 vs 参考 $335.78
+- RU｜202623｜BOSE Ultra Open —｜$26.43 vs 参考 $335.78
+- ID｜202624｜HUAWEI Watch GT 6 Pro —｜$24.95 vs 参考 $358.74
+- RU｜202624｜BOSE Ultra Open —｜$18.75 vs 参考 $335.78
 - SA｜202627｜XIAOMI Watch 5 —｜$45.07 vs 参考 $319.94
-- RU｜202627｜BOSE Ultra Open —｜$22.71 vs 参考 $335.45
-- PH｜202628｜HUAWEI Watch Ultimate 2 —｜$47.79 vs 参考 $893.57
-- PH｜202628｜HUAWEI Watch Ultimate 2 —｜$47.79 vs 参考 $893.57
-- TH｜202628｜HUAWEI Watch Ultimate 2 —｜$41.97 vs 参考 $893.57
-- RU｜202630｜BOSE Ultra Open —｜$45.66 vs 参考 $335.45
-- RU｜202631｜BOSE Ultra Open —｜$36.52 vs 参考 $335.45
+- RU｜202627｜BOSE Ultra Open —｜$22.71 vs 参考 $335.78
+- PH｜202628｜HUAWEI Watch Ultimate 2 —｜$47.79 vs 参考 $893.71
+- PH｜202628｜HUAWEI Watch Ultimate 2 —｜$47.79 vs 参考 $893.71
+- TH｜202628｜HUAWEI Watch Ultimate 2 —｜$41.97 vs 参考 $893.71
+- RU｜202630｜BOSE Ultra Open —｜$45.66 vs 参考 $335.78
+- RU｜202631｜BOSE Ultra Open —｜$36.52 vs 参考 $335.78
 - IT｜202632｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$333.33 vs 参考 $2,489.32
-- RU｜202632｜BOSE Ultra Open —｜$35.07 vs 参考 $335.45
-- RU｜202633｜BOSE Ultra Open —｜$30.58 vs 参考 $335.45
+- RU｜202632｜BOSE Ultra Open —｜$35.07 vs 参考 $335.78
+- RU｜202633｜BOSE Ultra Open —｜$30.58 vs 参考 $335.78
 - IT｜202633｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$333.33 vs 参考 $2,489.32
 - IT｜202634｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$337.21 vs 参考 $2,489.32
 - IT｜202635｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$337.21 vs 参考 $2,489.32
 - IT｜202636｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$318.60 vs 参考 $2,489.32
 - SA｜202637｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
 - IT｜202637｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$318.60 vs 参考 $2,489.32
-- AE｜202638｜APPLE iPhone Air 512 GB｜$206.67 vs 参考 $1,466.68
+- AE｜202638｜APPLE iPhone Air 512 GB｜$206.67 vs 参考 $1,466.72
 - SA｜202639｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
 - DE｜202639｜APPLE iPhone Duo 12+1TB｜$350.57 vs 参考 $4,023.07
 - DE｜202639｜APPLE iPhone Duo 12+2TB｜$436.78 vs 参考 $4,023.07
 - SA｜202640｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
 - SA｜202641｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
 - RO｜202641｜APPLE iPhone 17 Pro Max 12+1 TB｜$199.16 vs 参考 $1,786.40
-- BR｜202641｜APPLE Watch Ultra 3 —｜$141.43 vs 参考 $1,012.16
+- BR｜202641｜APPLE Watch Ultra 3 —｜$141.43 vs 参考 $1,015.01
 - SA｜202642｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
 - DE｜202642｜APPLE iPhone Duo 12+1TB｜$342.70 vs 参考 $4,023.07
 - DE｜202642｜APPLE iPhone Duo 12+2TB｜$426.97 vs 参考 $4,023.07

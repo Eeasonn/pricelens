@@ -519,7 +519,9 @@ def guess_brand(text):
 # ---------------------------------------------------------------- 主流程
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--xlsx", default=os.path.join(REPO, "全量数据表.xlsx"))
+    # 输入默认 = 清洗版（clean_source_excel.py 产物：五条平台归并 + 官网模拟价列已删）；
+    # 官网列自 2026-10-27 起退役——rrp/参考价一律取平台建议零售价（真实划线价）
+    ap.add_argument("--xlsx", default=os.path.join(REPO, "全量数据表-清洗版.xlsx"))
     ap.add_argument("--matrix", default=os.path.join(REPO, "产品竞品矩阵.txt"))
     ap.add_argument("--channels", default=os.path.join(REPO, "国家主要电渠.txt"))
     ap.add_argument("--promos", default=os.path.join(REPO, "国家大促日历.txt"))
@@ -609,9 +611,9 @@ def main():
     log["dropped"]["无汇率"] = int(raw["汇率"].isna().sum())
     raw = raw[raw["汇率"].notna() & (raw["汇率"] > 0)].copy()
 
-    for c in ["官网建议零售价-本币", "官网成交价-本币", "平台建议零售价-本币", "平台成交价-本币"]:
+    for c in ["平台建议零售价-本币", "平台成交价-本币"]:
         raw[c] = pd.to_numeric(raw[c], errors="coerce")
-    raw["rrp_usd"] = (raw["官网建议零售价-本币"] / raw["汇率"]).round(2)
+    raw["rrp_usd"] = (raw["平台建议零售价-本币"] / raw["汇率"]).round(2)
     raw["price_usd"] = (raw["平台成交价-本币"] / raw["汇率"]).round(2)
     # 价格单位错位修正（双向）：以同 SKU×国家 的 USD 中位数为参照——
     # 比 中位数×8 还高、且 ÷100 后落回 0.5–2 倍区间 → 判为「少了小数点」÷100；
@@ -621,22 +623,22 @@ def main():
     med = raw.groupby(key_cols)["price_usd"].transform("median")
     ratio = raw["price_usd"] / med
     fix100 = raw["price_usd"].notna() & med.notna() & (ratio > 8) & ((ratio / 100) > 0.5) & ((ratio / 100) < 2)
-    for c in ["官网建议零售价-本币", "官网成交价-本币", "平台建议零售价-本币", "平台成交价-本币"]:
+    for c in ["平台建议零售价-本币", "平台成交价-本币"]:
         raw.loc[fix100, c] = raw.loc[fix100, c] / 100
-    raw.loc[fix100, "rrp_usd"] = (raw.loc[fix100, "官网建议零售价-本币"] / raw.loc[fix100, "汇率"]).round(2)
+    raw.loc[fix100, "rrp_usd"] = (raw.loc[fix100, "平台建议零售价-本币"] / raw.loc[fix100, "汇率"]).round(2)
     raw.loc[fix100, "price_usd"] = (raw.loc[fix100, "平台成交价-本币"] / raw.loc[fix100, "汇率"]).round(2)
     log["fixed"]["价格单位错位(÷100)"] = int(fix100.sum())
     # 低侧对称修正：同款回验逻辑（×100 后落回 0.5–2 倍区间才动手）
     fix001 = raw["price_usd"].notna() & med.notna() & (ratio < 1 / 8) & ((ratio * 100) > 0.5) & ((ratio * 100) < 2)
-    for c in ["官网建议零售价-本币", "官网成交价-本币", "平台建议零售价-本币", "平台成交价-本币"]:
+    for c in ["平台建议零售价-本币", "平台成交价-本币"]:
         raw.loc[fix001, c] = raw.loc[fix001, c] * 100
-    raw.loc[fix001, "rrp_usd"] = (raw.loc[fix001, "官网建议零售价-本币"] / raw.loc[fix001, "汇率"]).round(2)
+    raw.loc[fix001, "rrp_usd"] = (raw.loc[fix001, "平台建议零售价-本币"] / raw.loc[fix001, "汇率"]).round(2)
     raw.loc[fix001, "price_usd"] = (raw.loc[fix001, "平台成交价-本币"] / raw.loc[fix001, "汇率"]).round(2)
     log["fixed"]["价格单位错位(×100)"] = int(fix001.sum())
     absurd = raw["price_usd"].notna() & (raw["price_usd"] > 20000)
     log["dropped"]["USD 价格>20000(不可信)"] = int(absurd.sum())
     raw = raw[~absurd].copy()
-    for c in ["官网折扣率", "平台显示折扣率", "平台实际折扣率"]:
+    for c in ["平台显示折扣率", "平台实际折扣率"]:
         raw[c] = raw[c].map(parse_pct)
     raw["bundle"] = raw["是否组合销售"].astype(str).str.strip().str.upper().isin(["Y", "YES", "TRUE", "是"])
     for c, fill in [("店铺名称", "—"), ("显示店铺名称", "—"), ("网址链接", ""), ("截图命名", ""),
@@ -664,7 +666,7 @@ def main():
     raw["sku_id"] = raw["model_id"] + "__" + raw["rom_key"].map(slug) + "__" + raw["color"].map(slug)
 
     before = len(raw)
-    raw["__price"] = raw["平台成交价-本币"].fillna(raw["官网成交价-本币"]).fillna(1e18)
+    raw["__price"] = raw["平台成交价-本币"].fillna(1e18)
     # 有价行优先：同键同采集时间时缺价行(1e18)按纯价格排序会排在有价行之后被 keep="last"
     # 保留，有价行反被丢 → 追加「有价布尔」升序键，保证同时间戳下有价行排在无价行之后。
     raw["__has_price"] = raw["__price"].ne(1e18)
@@ -1217,9 +1219,8 @@ def main():
 
     # ---------- 6. 事实列式包 ----------
     raw = raw.sort_values(["cc", "sku_id", "week_id", "平台", "店铺类型"])
-    pk = raw.rename(columns={"官网建议零售价-本币": "rrp", "官网成交价-本币": "op",
-                             "平台建议零售价-本币": "lp", "平台成交价-本币": "p",
-                             "官网折扣率": "do", "平台显示折扣率": "dd", "平台实际折扣率": "da",
+    pk = raw.rename(columns={"平台建议零售价-本币": "rrp", "平台成交价-本币": "p",
+                             "平台显示折扣率": "dd", "平台实际折扣率": "da",
                              "分期付款": "inst", "促销政策": "promo", "网址链接": "url",
                              "截图命名": "shot", "店铺名称": "seller"})
     wk_idx = {w: i for i, w in enumerate(week_ids)}
@@ -1249,11 +1250,8 @@ def main():
         cols["s"].append(sku_idx[r.sku_id])
         cols["h"].append(ch_idx[cid])
         cols["rrp"].append(nd(r.rrp))
-        cols["op"].append(nd(r.op))
-        cols["lp"].append(nd(r.lp))
         cols["p"].append(nd(r.p))
         cols["fx"].append(round(float(r.汇率), 4))
-        cols["do"].append(nd(r.do))
         cols["dd"].append(nd(r.dd))
         cols["da"].append(nd(r.da))
         cols["b"].append(1 if r.bundle else 0)

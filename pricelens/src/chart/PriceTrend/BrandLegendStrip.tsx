@@ -11,16 +11,23 @@
 // 第一百五十轮：药丸第二行加「多平台比价」悬停小入口（店铺图标，悬停药丸浮现
 // ）——每个产品直接发起自己的多平台比价（弹窗预选该产品，不再二次选择）；
 // 工具行「多平台比价」胶囊按钮随之退役。
+// 第一百六十轮：药丸第二行加「取价渠道 chip」——显示该产品当前取价渠道
+// （自动态带「·自动」角标），点击弹渠道选择浮层（自动/各平台-渠道，带中位价
+// 与覆盖周数）。平台口径自本轮起按产品线独立，主品渠道不再牵连对比品。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Popover } from 'antd';
+import ChannelSelectPopover from './ChannelSelectPopover';
 import { ExportOutlined, LeftOutlined, RightOutlined, ShopOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import { curveNameOf, latestLinkOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
 import { color, motion, radius, selectSoft } from '../../theme/tokens';
+import type { CurrencyMode } from '../../dataModel/types';
+import type { PlatformSelection } from '../../state/filtersTypes';
 
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
 const COMPARES_VISIBLE = 3;
@@ -48,6 +55,15 @@ interface PillSpec {
   hidden: boolean;
   main: boolean; // 主品药丸 = 本组主分析产品（浅蓝底/描边/加粗）
   link?: ReturnType<typeof latestLinkOf>; // 最新商品页外链（无 = 不渲染图标）
+  /** 取价渠道（第一百六十轮）：badge = 图上渠道名/自动角标；ctl = 选择浮层入参 */
+  channel?: { label: string; auto: boolean } | null;
+  channelCtl?: {
+    cc: string;
+    currency: CurrencyMode;
+    skuIds: string[];
+    current: PlatformSelection | null;
+    onPick: (sel: PlatformSelection | null) => void;
+  };
 }
 
 function Pill({
@@ -129,6 +145,51 @@ function Pill({
         >
           {pill.text}
         </span>
+        {/* 取价渠道 chip（第一百六十轮）：点击弹渠道选择浮层；stopPropagation
+            防触发药丸的显隐切换。自动态带「·自动」角标（色彩弱化）。 */}
+        {pill.channel && pill.channelCtl && (
+          <Popover
+            trigger="click"
+            placement="bottomLeft"
+            arrow={false}
+            styles={{ body: { padding: 4, borderRadius: radius.control } }}
+            content={
+              <ChannelSelectPopover
+                cc={pill.channelCtl.cc}
+                skuIds={pill.channelCtl.skuIds}
+                current={pill.channelCtl.current}
+                currency={pill.channelCtl.currency}
+                onPick={pill.channelCtl.onPick}
+              />
+            }
+          >
+            <span
+              role="button"
+              aria-label={`取价渠道：${pill.channel.label}${pill.channel.auto ? '（自动）' : ''}，点击更换`}
+              title={`取价渠道：${pill.channel.label}${pill.channel.auto ? '（自动 = 日常价最低的店铺）' : ''}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                maxWidth: 96,
+                padding: '0 5px',
+                borderRadius: radius.pill,
+                background: color.canvas,
+                border: `1px solid ${color.hairline}`,
+                fontSize: 10,
+                lineHeight: '14px',
+                color: color.mute,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                flexShrink: 0,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
+              {pill.channel.auto && <span style={{ color: color.link, flexShrink: 0 }}>·自动</span>}
+            </span>
+          </Popover>
+        )}
         {/* 最新商品页外链（第一百四十轮）：恒指该系列最新价所在商品页；
             stopPropagation 防触发药丸的显隐切换 */}
         {pill.link && (
@@ -184,6 +245,7 @@ function GroupBlock({
   onToggle,
   onHover,
   onCompareProduct,
+  channelCtl,
 }: {
   group: LegendGroup;
   showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
@@ -192,6 +254,12 @@ function GroupBlock({
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
   onCompareProduct?: (p: { modelId: string; romram: string }) => void;
+  /** 取价渠道选择（第一百六十轮）：cc/币种 + 回写动作（按系列 key 定位选择项） */
+  channelCtl?: {
+    cc: string;
+    currency: CurrencyMode;
+    onPick: (seriesKey: string, sel: PlatformSelection | null) => void;
+  };
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
@@ -217,6 +285,16 @@ function GroupBlock({
     hidden: hiddenKeys.has(s.key),
     main: group.mainKey === s.key,
     link: latestLinkOf(s),
+    channel: channelCtl ? s.channelBadge ?? null : undefined,
+    channelCtl: channelCtl
+      ? {
+          cc: channelCtl.cc,
+          currency: channelCtl.currency,
+          skuIds: s.skuIds,
+          current: s.platform ?? null,
+          onPick: (sel) => channelCtl.onPick(s.key, sel),
+        }
+      : undefined,
   }));
   const cmpOf = (key: string): { title: string; onClick: () => void } | undefined => {
     if (!onCompareProduct) return undefined;
@@ -308,6 +386,7 @@ export default function BrandLegendStrip({
   onToggleHidden,
   onHover,
   onCompareProduct,
+  channelCtl,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -319,6 +398,13 @@ export default function BrandLegendStrip({
   /** 多平台比价入口（第一百五十轮）：传入 = 每颗药丸第二行悬停浮现店铺图标，
    *  点击以该产品打开多平台比价弹窗（工具行胶囊按钮已退役） */
   onCompareProduct?: (p: { modelId: string; romram: string }) => void;
+  /** 取价渠道选择（第一百六十轮）：传入 = 每颗药丸第二行出渠道 chip，点击弹
+   *  渠道选择浮层；onPick 按系列 key 回写该产品的取价口径 */
+  channelCtl?: {
+    cc: string;
+    currency: CurrencyMode;
+    onPick: (seriesKey: string, sel: PlatformSelection | null) => void;
+  };
 }) {
   const multi = groups.length >= 2;
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
@@ -401,6 +487,7 @@ export default function BrandLegendStrip({
                 onToggle={onToggleHidden}
                 onHover={hover}
                 onCompareProduct={onCompareProduct}
+                channelCtl={channelCtl}
               />,
             );
           });

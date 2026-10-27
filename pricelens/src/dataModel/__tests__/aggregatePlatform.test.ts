@@ -3,10 +3,12 @@
 // - 真实数据无平台因子：shopName = 所选渠道的显示名 · 店铺，取价 = 渠道集合内最低在架价；
 // - 参考汇率已删（fact 行内汇率）：getFxRate() = 当前国家本币的最新 per-USD 中位数。
 // 锚点均从 factPriceWeekly / dimChannel 独立直算，随数据重生成自动对齐。
+// 第一百六十轮：平台口径下沉到每组——显式勾选随组传入；组缺省 = 自动最优渠道
+// （数据量足够渠道里中位价最低者，channelBadge.auto = true）。
 // ============================================================
 import { afterEach, describe, expect, it } from 'vitest';
 import { dimChannel, dimProduct, factPriceWeekly, latestPerUsd } from '../../data';
-import { buildSeries } from '../aggregate';
+import { autoChannelOf, buildSeries, channelStatsOf } from '../aggregate';
 import { getFxRate, getLocalCurrency, setLocalCurrencyByCountry } from '../../state/fx';
 import { perUsdOf } from '../../chart/PriceTrend/helpers';
 
@@ -40,11 +42,18 @@ const channelsOfPlatform = (platform: string): string[] =>
 describe('aggregate platform/source口径', () => {
   it('来源文案跟随渠道选择：缺省 = 该国默认平台（DNS），显式 OZON / 单渠道 shopId 各随其渠道', () => {
     const pt = (platform: { platforms: string[]; shopIds: [] | string[] } | null) =>
-      buildSeries({ ...baseQuery, platform })[0].points[0];
+      buildSeries({ ...baseQuery, groups: baseQuery.groups.map((g) => ({ ...g, platform })) })[0].points[0];
 
-    // 缺省 = RU 默认平台 DNS（dim_region.core_platforms[0]）。
-    // 店铺名 'DNS' 已含在渠道显示名 'DNS 独立站' 内 → 冗余后缀省略，只显示渠道名。
-    expect(pt(null)!.shopName).toBe('DNS 独立站');
+    // 缺省 = 自动最优渠道（第一百六十轮）：该产品数据量足够渠道里中位价最低者。
+    // nova 14 的自动渠道随数据自对齐（锚 = channelStatsOf 首位），badge.auto = true。
+    const autoPts = buildSeries({ ...baseQuery })[0];
+    const autoCh = autoChannelOf('RU', [anchorSku.sku_id])!;
+    expect(autoPts.channelBadge).toEqual({
+      label: dimChannel.find((c) => c.channel_id === autoCh)!.display_name,
+      auto: true,
+      platforms: [dimChannel.find((c) => c.channel_id === autoCh)!.platform],
+    });
+    expect(pt(null)!.shopName).toContain(dimChannel.find((c) => c.channel_id === autoCh)!.display_name);
     // 显式 OZON → 该平台最低价行（3P 渠道）文案以 OZON 开头（卖家名 UNREADABLE 不冗余，带出）
     expect(pt({ platforms: ['OZON'], shopIds: [] })!.shopName).toMatch(/^OZON/);
     // 勾到具体渠道（channel_id）→ 同渠道文案
@@ -56,9 +65,27 @@ describe('aggregate platform/source口径', () => {
     expect(union.shopName).toBe(pt({ platforms: ['OZON'], shopIds: [] })!.shopName);
   });
 
+  it('自动口径 = 数据量足够渠道里中位价最低（channelBadge/渠道集自洽），显式勾选恒压过自动', () => {
+    const autoCh = autoChannelOf('RU', [anchorSku.sku_id])!;
+    const stats = channelStatsOf('RU', [anchorSku.sku_id]);
+    // 自动候选池 = 覆盖 ≥ max(3, 最佳覆盖一半) 的渠道，取中位价最低 → 统计表首位命中
+    const bestCover = Math.max(...stats.map((x) => x.weeks));
+    const pool = stats.filter((x) => x.weeks >= Math.max(3, bestCover / 2));
+    expect(autoCh).toBe((pool.length ? pool : stats)[0].channelId);
+    // 自动线取价 = 该渠道集合内最低在架价（fact 直算对拍）
+    const s = buildSeries({ ...baseQuery })[0];
+    expect(s.points[0].price).toBe(Math.round(minUsdPrice(anchorSku.sku_id, ANCHOR_WEEK, [autoCh])!));
+    // 显式勾选（哪怕更高价渠道）压过自动
+    const dns = buildSeries({
+      ...baseQuery,
+      groups: baseQuery.groups.map((g) => ({ ...g, platform: { platforms: ['DNS'], shopIds: [] } })),
+    })[0];
+    expect(dns.channelBadge).toEqual({ label: 'DNS 独立站', auto: false, platforms: ['DNS'] });
+  });
+
   it('取价 = 渠道集合内真实最低在架价（无平台因子）：单平台选择锚到 fact 直算', () => {
-    const dns = buildSeries({ ...baseQuery, platform: { platforms: ['DNS'], shopIds: [] } })[0].points[0];
-    const ozon = buildSeries({ ...baseQuery, platform: { platforms: ['OZON'], shopIds: [] } })[0].points[0];
+    const dns = buildSeries({ ...baseQuery, groups: baseQuery.groups.map((g) => ({ ...g, platform: { platforms: ['DNS'], shopIds: [] } })) })[0].points[0];
+    const ozon = buildSeries({ ...baseQuery, groups: baseQuery.groups.map((g) => ({ ...g, platform: { platforms: ['OZON'], shopIds: [] } })) })[0].points[0];
     expect(dns!.price).toBe(Math.round(minUsdPrice(anchorSku.sku_id, ANCHOR_WEEK, channelsOfPlatform('DNS'))!));
     expect(ozon!.price).toBe(Math.round(minUsdPrice(anchorSku.sku_id, ANCHOR_WEEK, channelsOfPlatform('OZON'))!));
     // 锚周真实数据：OZON 明显低于 DNS（202640：22099₽ vs 28999₽），不应再有任何固定因子序
@@ -90,11 +117,12 @@ describe('reference FX getter', () => {
 
   it('USD 折算恒为行内汇率，不随本币注册变化：切国前后同一查询 USD 值逐字节一致', () => {
     setLocalCurrencyByCountry('RU');
-    const usdBefore = buildSeries({ ...baseQuery, currency: 'usd', platform: null })[0].points[0].price;
-    const localBefore = buildSeries({ ...baseQuery, currency: 'local', platform: null })[0].points[0].price;
+    const dnsGroup = baseQuery.groups.map((g) => ({ ...g, platform: { platforms: ['DNS'], shopIds: [] } }));
+    const usdBefore = buildSeries({ ...baseQuery, currency: 'usd', groups: dnsGroup })[0].points[0].price;
+    const localBefore = buildSeries({ ...baseQuery, currency: 'local', groups: dnsGroup })[0].points[0].price;
     setLocalCurrencyByCountry('SA'); // 只改展示态，不得影响数据层折算
-    expect(buildSeries({ ...baseQuery, currency: 'usd', platform: null })[0].points[0].price).toBe(usdBefore);
-    expect(buildSeries({ ...baseQuery, currency: 'local', platform: null })[0].points[0].price).toBe(localBefore);
+    expect(buildSeries({ ...baseQuery, currency: 'usd', groups: dnsGroup })[0].points[0].price).toBe(usdBefore);
+    expect(buildSeries({ ...baseQuery, currency: 'local', groups: dnsGroup })[0].points[0].price).toBe(localBefore);
     // 本币锚点：nova 14 12+256 DNS @202640 = 28 999 ₽（fact price_local 直读）
     expect(localBefore).toBe(28999);
   });

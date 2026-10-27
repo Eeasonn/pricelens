@@ -71,7 +71,7 @@ export default function Dashboard() {
         <PageHeader title="价格看板" />
 
         {/* 分析对象与当前对比口径；showTime = 时间筛选簇（第一百三十一轮波2上移） */}
-        <FilterBar showTime />
+        <FilterBar showTime showPlatform={false} />
 
         {/* 价格走势（第十二轮：标题并入 PriceTrend 首行，消除三段式纵向空白） */}
         <main style={{ flex: 1, padding: space.lg }}>

@@ -99,11 +99,10 @@ describe('buildSeries 的 seller 收敛', () => {
     const [s] = buildSeries({
       scope: { countryCode: CC, industry: 'phone' },
       granularity: 'week',
-      groups: [{ modelId: novaSku.model_id, romram: novaSku.romram, skuIds: [novaSku.sku_id], isOwn: true }],
+      groups: [{ modelId: novaSku.model_id, romram: novaSku.romram, skuIds: [novaSku.sku_id], isOwn: true, platform: { platforms: [], shopIds: [CH], seller: target } }],
       startBucket: '202619',
       endBucket: '202642',
       agg: 'avg',
-      platform: { platforms: [], shopIds: [CH], seller: target },
       currency: 'usd',
     });
     expect(s).toBeDefined();

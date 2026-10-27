@@ -237,7 +237,15 @@ function ProductPickerEntry() {
  *  标题行不再重复），整行不换行——选择产品列弹性收缩，平台/币种定宽保底。
  *  第一百三十一轮波2：showTime = 时间筛选簇（仅价格看板与量价看板传入），
  *  币种右侧短分隔线后渲染；卡片根为 RangePicker 弹层挂载容器（向下展开）。 */
-export default function FilterBar({ showTime = false }: { showTime?: boolean } = {}) {
+export default function FilterBar({
+  showTime = false,
+  showPlatform = true,
+}: {
+  showTime?: boolean;
+  /** 第一百六十轮：平台口径下沉到每条产品线（图例渠道 chip）后，价格看板与量价页
+   *  不再渲染全局「平台 / 店铺」（false）；总览页矩阵筛选保留 */
+  showPlatform?: boolean;
+} = {}) {
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
@@ -250,8 +258,12 @@ export default function FilterBar({ showTime = false }: { showTime?: boolean } =
             <div style={{ flex: '1 1 260px', minWidth: 200, display: 'flex', alignItems: 'center' }}>
               <ProductPickerEntry />
             </div>
-            <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-            <div style={{ flexShrink: 0, width: 188 }}><Field label="平台 / 店铺"><PlatformBox /></Field></div>
+            {showPlatform && (
+              <>
+                <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+                <div style={{ flexShrink: 0, width: 188 }}><Field label="平台 / 店铺"><PlatformBox /></Field></div>
+              </>
+            )}
             <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={labelStyle}>币种</span>

@@ -39,7 +39,7 @@
 //    返回保留上次分析状态；windowIds 恢复后仍走原有换算（粒度切换）/失义
 //    （范围改动 rangeWatch）路径，自适应首跑在范围未变时不再复位窗口。
 // ============================================================
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, ConfigProvider, Segmented, Tooltip } from 'antd';
 import { HolderOutlined, ProfileOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
@@ -60,7 +60,7 @@ import type {
   SeriesQuery,
   SkuGroupQuery,
 } from '../../dataModel/types';
-import type { ProductSelection } from '../../state/filtersTypes';
+import type { PlatformSelection, ProductSelection } from '../../state/filtersTypes';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import Chart from './Chart';
 import ChartToolbar from './ChartToolbar';
@@ -169,6 +169,17 @@ export default function PriceTrend(props: {
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
 
   /** 图例药丸比价入口：记录发起产品并打开弹窗 */
+  // 第一百六十轮：图例渠道 chip 回写——seriesKey（modelId__配置去空格）与
+  // selKey（modelId|配置去空格）同口径，剥出两段拼 selKey 定位选择项
+  const pickChannel = useCallback(
+    (seriesKey: string, sel: PlatformSelection | null) => {
+      const idx = seriesKey.indexOf('__');
+      if (idx <= 0) return;
+      actions.setSelectionPlatform(`${seriesKey.slice(0, idx)}|${seriesKey.slice(idx + 2)}`, sel);
+    },
+    [actions],
+  );
+
   const openCompareFor = (p: { modelId: string; romram: string }): void => {
     setCompareInit(p);
     setPlatformCompareOpen(true);
@@ -233,10 +244,9 @@ export default function PriceTrend(props: {
       endBucket: dataEnd,
       currency: state.currency,
       agg: state.agg,
-      platform: state.platform,
       scope: { countryCode: state.countryCode, industry: state.industry },
     }),
-    [mainSels, compareSels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry],
+    [mainSels, compareSels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry],
   );
 
   const allSeries: Series[] = useMemo(() => {
@@ -467,7 +477,6 @@ export default function PriceTrend(props: {
           endBucket: dataEnd,
           currency: state.currency,
           agg: state.agg,
-          platform: state.platform,
           scope: { countryCode: state.countryCode, industry: state.industry },
         });
       } catch {
@@ -475,7 +484,7 @@ export default function PriceTrend(props: {
       }
       return { key: card.id, card, series };
     });
-  }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.platform, state.countryCode, state.industry]);
+  }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry]);
 
   // 各面板生效窗口：同步 = 全面板共用共享窗口；独立 = 面板自己的窗口
   //（未单独调整过回落共享窗口，越界钳回可调全域并保住最小窗口跨度）
@@ -679,16 +688,20 @@ export default function PriceTrend(props: {
   // 大促档期按国家取日历；标注了适用平台的档期（如亚马逊 Prime Day）只在所选平台、
   // 或未选时的默认店铺归属平台（未配置回国家默认平台）显示
   const scopedPromos = useMemo(() => {
-    const defaultPlatform = defaultPlatformAnchorOf(state.countryCode);
-    const selected = state.platform && (state.platform.platforms.length || state.platform.shopIds.length)
-      ? new Set([...state.platform.platforms, ...state.platform.shopIds.map((id) => id.split(':')[1] ?? '')])
-      : new Set(defaultPlatform ? [defaultPlatform] : []);
-    const selectedLower = new Set([...selected].map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, '')));
+    // 第一百六十轮：平台口径下沉到每条产品线后，档期带 = 各线取价渠道平台的并集
+    // （任一产品的渠道命中即显示）；无线可归时回默认店铺归属平台
+    const fromSeries = new Set<string>();
+    for (const s of allSeries) for (const pl of s.channelBadge?.platforms ?? []) fromSeries.add(pl);
+    if (fromSeries.size === 0) {
+      const dp = defaultPlatformAnchorOf(state.countryCode);
+      if (dp) fromSeries.add(dp);
+    }
+    const selectedLower = new Set([...fromSeries].map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, '')));
     return dimPromo.filter(
       (p) => p.country_code === state.countryCode
         && (p.platforms == null || p.platforms.some((pl) => selectedLower.has(pl.toLowerCase().replace(/[^a-z0-9]/g, '')))),
     );
-  }, [state.countryCode, state.platform]);
+  }, [state.countryCode, allSeries]);
   const promoBands = useMemo(
     () => (promoBandsOn ? buildPromoBands({ promos: scopedPromos, spans: winSpans }) : []),
     [promoBandsOn, winSpans, scopedPromos],
@@ -798,7 +811,7 @@ export default function PriceTrend(props: {
     const s = allSeries.find((x) => x.key === seriesKey);
     const sel = selByKey.get(seriesKey);
     if (!s || !sel || state.granularity === 'week') return;
-    const group: SkuGroupQuery = { modelId: sel.modelId, romram: sel.romram, skuIds: s.skuIds, isOwn: s.isOwn };
+    const group: SkuGroupQuery = { modelId: sel.modelId, romram: sel.romram, skuIds: s.skuIds, isOwn: s.isOwn, platform: s.platform ?? null };
     setDrill({
       group,
       label: s.label,
@@ -816,7 +829,6 @@ export default function PriceTrend(props: {
         endBucket,
         currency: state.currency,
         agg: state.agg,
-        platform: state.platform,
         scope: { countryCode: state.countryCode, industry: state.industry },
       });
     } catch {
@@ -1176,6 +1188,7 @@ export default function PriceTrend(props: {
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                           onCompareProduct={openCompareFor}
+                          channelCtl={{ cc: state.countryCode, currency: state.currency, onPick: pickChannel }}
                         />
                       </div>
                       <Chart
@@ -1253,6 +1266,7 @@ export default function PriceTrend(props: {
               onToggleHidden={toggleLegend}
               onHover={setLegendHoverKey}
               onCompareProduct={openCompareFor}
+              channelCtl={{ cc: state.countryCode, currency: state.currency, onPick: pickChannel }}
             />
           </div>
           <Chart
@@ -1344,7 +1358,7 @@ export default function PriceTrend(props: {
         currency={state.currency}
         agg={state.agg}
         priceTypes={state.priceTypes}
-        platform={state.platform}
+        platform={drill?.group.platform ?? null}
         buildRange={buildRange}
         onClose={() => setDrill(null)}
       />

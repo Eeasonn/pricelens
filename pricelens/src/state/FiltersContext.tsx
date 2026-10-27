@@ -454,7 +454,7 @@ interface FiltersCtx {
 
 const Ctx = createContext<FiltersCtx>({
   state: defaultFilters,
-  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, autoMatchCard: () => {}, autoMatchAll: () => {}, setGranularity: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
+  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, autoMatchCard: () => {}, autoMatchAll: () => {}, setSelectionPlatform: () => {}, setGranularity: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
 });
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
@@ -568,6 +568,18 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       /** 全局「全部自动匹配」开关：全部华为主品卡都在开 → 全部关；否则全部开 */
       autoMatchAll: () =>
         setState((s) => ({ ...s, mains: toggleAllAuto(s.mains) })),
+
+      /** 单个产品的取价口径（第一百六十轮）：selKey 命中的主品/对比条目全部改写
+       *  （同组多处出现保持一致）；platform = null 恢复自动（日常价最低渠道） */
+      setSelectionPlatform: (selKeyStr, platform) =>
+        setState((s) => ({
+          ...s,
+          mains: s.mains.map((c) => ({
+            ...c,
+            main: c.main && selKey(c.main) === selKeyStr ? { ...c.main, platform } : c.main,
+            compares: c.compares.map((sel) => (selKey(sel) === selKeyStr ? { ...sel, platform } : sel)),
+          })),
+        })),
 
       /**
        * §5.4/§5.6 切换粒度：保持可见时间跨度只换桶。
