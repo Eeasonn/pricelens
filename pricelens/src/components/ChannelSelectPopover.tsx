@@ -1,7 +1,7 @@
 // ============================================================
 // 产品级取价渠道级联浮层（第一百六十一轮立三层级联；第一百六十二轮改自动语义；
-// 第一百六十四轮搜索改全局）——「平台→渠道→卖家」三级级联（与全局 PlatformBox
-// 同构，复用 CascadePanel），单选：
+// 第一百六十四轮搜索改全局、加平台域模式）——「平台→渠道→卖家」三级级联
+// （与全局 PlatformBox 同构，复用 CascadePanel），单选：
 //   点平台行 = 只切换右列渠道列表；点渠道行 = 展开该渠道卖家列；提交在第三列。
 // 两颗「自动」胶囊（Eason：类似匹配竞品的开关胶囊 + 问号说明）：
 //   底部「自动」= 整个产品不锁渠道，显示每周最低价平台-店铺（问号同文）；
@@ -10,7 +10,9 @@
 // 顶部固定搜索行（第一百六十四轮，Eason：像产品筛选一样固定一行，且能搜到
 // 任何平台下的任何店铺，不再只能在某个渠道内搜）——输入即跨全部平台匹配渠道
 // 显示名 / 平台名 / 卖家店铺名，点结果行直接落为该渠道（或渠道内该卖家）口径。
-// 入口 = 图例每款产品药丸上方的平台小药丸（BrandLegendStrip）。
+// scope='platform'（第一百六十四轮，多平台对比页签的店铺 chip 修改入口）：
+//   底部「自动」改指「该平台内每周最低价店铺」（scopePlatform），产品级自动
+//   不出现。入口 = 图例每款产品药丸上方的平台小药丸（BrandLegendStrip）。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import { Input, Tooltip } from 'antd';
@@ -97,12 +99,18 @@ export default function ChannelSelectPopover({
   skuIds,
   current,
   onPick,
+  scope = 'product',
+  scopePlatform,
 }: {
   cc: string;
   skuIds: string[];
   /** 当前口径：null = 自动 */
   current: PlatformSelection | null;
   onPick: (sel: PlatformSelection | null) => void;
+  /** product（缺省）= 底部「自动」= 产品级每周最低价平台-店铺；
+   *  platform = 底部「自动」= scopePlatform 平台内每周最低价店铺（店铺 chip 修改入口） */
+  scope?: 'product' | 'platform';
+  scopePlatform?: string;
 }) {
   // 平台 → 渠道（仅当前国家）：组内渠道保持维表序，组序 = 平台首次出现序
   const rows = useMemo<{ platform: string; shops: DimChannel[] }[]>(() => {
@@ -117,6 +125,13 @@ export default function ChannelSelectPopover({
   }, [cc]);
 
   const isAuto = current == null || ((current.platforms?.length ?? 0) === 0 && (current.shopIds?.length ?? 0) === 0);
+  // platform 域：底部「自动」= 该平台内每周最低价店铺（chip 已是平台自动时置灰）
+  const isPlatformAuto =
+    scope === 'platform'
+      ? (current?.platforms?.length ?? 0) === 1
+        && (current?.shopIds?.length ?? 0) === 0
+        && current?.platforms[0] === scopePlatform
+      : false;
 
   // 左列展开的平台（null = 跟随解析：已选渠道 → 首个）；切国家/产品重置
   const [active, setActive] = useState<string | null>(null);
@@ -307,14 +322,24 @@ export default function ChannelSelectPopover({
           ]}
         />
       )}
-      {/* 底部「自动」= 整个产品不锁渠道，每周取最低价平台-店铺 */}
+      {/* 底部「自动」：product 域 = 整个产品不锁渠道，每周取最低价平台-店铺；
+          platform 域（店铺 chip 修改入口）= 该平台内每周最低价店铺 */}
       <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
-        <AutoTogglePill
-          pressed={isAuto}
-          hint="显示每周最低价平台-店铺"
-          disabled={isAuto}
-          onClick={() => onPick(null)}
-        />
+        {scope === 'platform' ? (
+          <AutoTogglePill
+            pressed={isPlatformAuto}
+            hint="该平台内每周最低价店铺"
+            disabled={isPlatformAuto}
+            onClick={() => onPick({ platforms: [scopePlatform ?? ''], shopIds: [] })}
+          />
+        ) : (
+          <AutoTogglePill
+            pressed={isAuto}
+            hint="显示每周最低价平台-店铺"
+            disabled={isAuto}
+            onClick={() => onPick(null)}
+          />
+        )}
       </div>
     </div>
   );
