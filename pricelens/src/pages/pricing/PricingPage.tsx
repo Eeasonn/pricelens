@@ -1,20 +1,18 @@
 // ============================================================
-// 定价推演页（第一百六十五轮波2，Eason「有理有据」）：每个测算数字都有
-// 证据出处——大盘卡（12 季实际 + 环比幅度 + 未来 4 季预估带，同比与区间
-// 可调）→ 方案的大盘系数；成本卡（24 个月实际 + 环比幅度 + 未来 12 个月
-// 预估带，可调）→ 方案的成本曲线；量价证据卡 + 响应推导卡（两款产品 ×
-// 两场景：上市前按上一代 3 次调价推导系数，上市后按本品 2 次 + 上一代
-// 3 次，系数可改）→ 方案的价格响应；方案区三卡消费以上全部证据，任何
-// 数字点开依据抽屉逐行复述计算链。数据全模拟（mockData），界面克制：
-// 无解释性文案段落，出处进抽屉与卡片控件行。
+// 定价推演页（第一百六十五轮波3，Eason 四点）：①量价证据图全宽、量价看板
+// 同款语言（价格折线在上 + 周销柱贴底带 + 参照虚线 + 调价锚点）②调价事件
+// 卡按锚点位置对齐到量价图正下方，系数推导（区间/建议/当前取拖柄）同卡收口
+// ③全部参数可视化拖柄：大盘同比/区间、成本同比/区间、响应系数、拟定价
+// ④撤三方案卡——专门的销量趋势预测图（实际线 + 预估中枢虚线 + P10–P90 带
+// + 上一代同期参照），拟定价拖柄即调即算，参数组合「保存方案」成 chips
+// 可回滚对比。数据全模拟（mockData），界面克制，出处进抽屉。
 // ============================================================
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Button, Drawer, InputNumber, Segmented, Select, Tooltip } from 'antd';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Button, Drawer, Segmented, Select, Slider, Tooltip } from 'antd';
 import PageHeader from '../../components/PageHeader';
 import usePageViewState from '../../state/usePageViewState';
 import { color, fontSize, radius, shadow, space } from '../../theme/tokens';
 import {
-  COMPETITORS,
   COMP_SCENARIOS,
   COST_DEFAULTS,
   CUR_PRODUCT_STATUS,
@@ -23,13 +21,14 @@ import {
   UNCERTAINTY_BAND,
   type CompScenario,
 } from './mockData';
-import { CostChart, EvidenceChart, MarketChart, SchemeCompareChart } from './SchemeCharts';
+import { CostChart, EVIDENCE_GRID, EvidenceChart, ForecastChart, MarketChart } from './SchemeCharts';
 import {
-  computeAll,
   COST_BASE,
+  computeScheme,
   costForecast,
   elasticityRange,
   evidenceRows,
+  forecastSeries,
   marketForecast,
   productOf,
   suggestedElasticity,
@@ -64,7 +63,7 @@ function SourceTag({ label, hint }: { label: string; hint?: string }) {
 /** 卡片头：标题 + 来源徽标 + 右侧插槽 */
 function CardHead({ title, source, hint, extra }: { title: string; source?: string; hint?: string; extra?: ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: space.xs, minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.md, paddingBottom: space.xs, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, minWidth: 0 }}>
         <span style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>{title}</span>
         {source && <SourceTag label={source} hint={hint} />}
@@ -74,22 +73,25 @@ function CardHead({ title, source, hint, extra }: { title: string; source?: stri
   );
 }
 
-/** 卡片底部控件行：标签 + 数字输入（% 口径） */
-function PctInput({ value, min, max, onChange, width = 92 }: { value: number; min: number; max: number; onChange: (v: number) => void; width?: number }) {
+/** 可视化拖柄参数行：名称 + Slider + 数值 */
+function SliderRow({
+  label, value, min, max, step, onChange, format, sliderWidth,
+}: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; format: (v: number) => string; sliderWidth?: number }) {
   return (
-    <InputNumber
-      style={{ width }} size="small" value={value} min={min} max={max} step={1}
-      formatter={(v) => `${v}%`} parser={(t) => Number(String(t).replace(/%|,/g, ''))}
-      onChange={(v) => onChange(v ?? 0)}
-    />
+    <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, minWidth: 0 }}>
+      <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap', width: 78 }}>{label}</span>
+      <Slider
+        style={{ flex: 1, minWidth: 0, margin: '0 2px' }} value={value} min={min} max={max} step={step}
+        onChange={(v) => onChange(v)} tooltip={{ formatter: (v) => format(v ?? value) }} styles={{ handle: { width: 12, height: 12 } }}
+      />
+      <span style={{ fontSize: fontSize.caption, color: color.ink, fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: sliderWidth ?? 48, textAlign: 'right', whiteSpace: 'nowrap' }}>
+        {format(value)}
+      </span>
+    </div>
   );
 }
 
-function ControlLabel({ children }: { children: ReactNode }) {
-  return <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>{children}</span>;
-}
-
-/** 方案卡指标（点击展开依据抽屉） */
+/** 读数（点击展开依据抽屉） */
 function Metric({ label, value, sub, onOpen }: { label: string; value: string; sub?: string; onOpen: () => void }) {
   return (
     <div style={{ minWidth: 0, cursor: 'pointer' }} onClick={onOpen} role="button" tabIndex={0} onKeyDown={onOpen}>
@@ -130,42 +132,28 @@ function DrawerSection({ title, children }: { title: string; children: ReactNode
   );
 }
 
-/** 响应推导卡：事件表（列宽 48/44/58/66/1fr/44） */
-const RESP_GRID = '52px 44px 58px 66px minmax(0,1fr) 44px';
-
-function ResponseTable({ productKey, scenario }: { productKey: string; scenario: Scenario }) {
-  const product = productOf(productKey);
-  const rows = evidenceRows(product, scenario);
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: RESP_GRID, gap: `0 ${space.sm}px`, padding: `2px 0`, borderBottom: `1px solid ${color.hairline}` }}>
-        {['来源', '时间', '调价', '量变化', '背景 · 归因', '系数'].map((h) => (
-          <span key={h} style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>{h}</span>
-        ))}
-      </div>
-      {rows.map(({ group, event }) => (
-        <div
-          key={group + event.week}
-          style={{
-            display: 'grid', gridTemplateColumns: RESP_GRID, gap: `0 ${space.sm}px`, alignItems: 'baseline',
-            padding: `4px 0`, borderBottom: `1px solid ${color.hairline}`,
-            background: group === 'cur' ? '#f4f8ff' : undefined,
-            fontSize: fontSize.caption, color: color.body, fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          <span style={{ color: group === 'cur' ? '#0053c2' : color.mute, whiteSpace: 'nowrap' }}>{group === 'cur' ? '本品' : '上一代'}</span>
-          <span>W{event.week}</span>
-          <span>{fmtPct(event.changePct)}</span>
-          <span>{fmtPct(event.soPct)}</span>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {event.context} · 归因 {fmtPct(event.attributedPct)}
-          </span>
-          <span style={{ fontWeight: 600, color: color.ink }}>{(Math.abs(event.attributedPct / event.changePct)).toFixed(2)}</span>
-        </div>
-      ))}
-    </div>
-  );
+/** 保存的方案（参数快照 + 当时读数） */
+interface SavedScheme {
+  id: number;
+  label: string;
+  productKey: string;
+  scenario: Scenario;
+  price: number;
+  marketYoy: number;
+  marketBand: number;
+  costYoy: number;
+  costBand: number;
+  elasticity: number;
+  comp: CompScenario;
+  soWan: number;
+  p10Wan: number;
+  p90Wan: number;
+  marginYi: number;
 }
+
+// 抽屉竞品行经 chain.compChangePct 反查标签
+const compKeyOf = (r: SchemeResult): CompScenario =>
+  COMP_SCENARIOS.find((s) => s.changePct === r.chain.compChangePct)?.key ?? 'hold';
 
 function EvidenceDrawer({
   result, marketYoYPct, costYoyPct, elasticity, productKey, onClose,
@@ -176,7 +164,7 @@ function EvidenceDrawer({
   const product = productOf(productKey);
   const range = r ? elasticityRange(product, r.chain.scenario) : null;
   return (
-    <Drawer open={r != null} onClose={onClose} width={480} title={r ? `${r.scheme.name} · 测算依据` : ''}>
+    <Drawer open={r != null} onClose={onClose} width={480} title={r ? `当前测算 · 拟定价 $${fmtInt(r.scheme.price)} · 依据` : ''}>
       {r && (
         <div style={{ paddingBottom: space.lg }}>
           <DrawerSection title="首年预期 SO">
@@ -235,10 +223,6 @@ function EvidenceDrawer({
   );
 }
 
-// 抽屉竞品行需要当前 comp；SchemeResult 未携带，经 chain.compChangePct 反查标签
-const compKeyOf = (r: SchemeResult): CompScenario =>
-  COMP_SCENARIOS.find((s) => s.changePct === r.chain.compChangePct)?.key ?? 'hold';
-
 export default function PricingPage() {
   const [productKey, setProductKey] = usePageViewState<string>('pricing.product', () => 'std');
   const [scenario, setScenario] = usePageViewState<Scenario>('pricing.scenario', () => 'pre');
@@ -249,13 +233,22 @@ export default function PricingPage() {
   const [costBand, setCostBand] = usePageViewState<number>('pricing.costBand', () => COST_DEFAULTS.bandPct);
   const [elasticityOverride, setElasticityOverride] = usePageViewState<number | null>('pricing.elasticity', () => null);
   const [priceEdits, setPriceEdits] = usePageViewState<Record<string, number>>('pricing.prices', () => ({}));
-  const [drawerKey, setDrawerKey] = useState<string | null>(null);
+  const [saved, setSaved] = usePageViewState<SavedScheme[]>('pricing.saved', () => []);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const restoringRef = useRef(false);
 
   const product = productOf(productKey);
   const suggested = suggestedElasticity(product, scenario);
   const elasticity = elasticityOverride ?? suggested;
-  // 换产品/换场景后，系数回到该证据集的建议值
+  const priceKey = `${productKey}.${scenario}`;
+  const price = priceEdits[priceKey] ?? product.schemes[scenario][1].price;
+
+  // 换产品/换场景后，系数回到该证据集的建议值（恢复保存方案时跳过一次）
   useEffect(() => {
+    if (restoringRef.current) {
+      restoringRef.current = false;
+      return;
+    }
     setElasticityOverride(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productKey, scenario]);
@@ -263,24 +256,17 @@ export default function PricingPage() {
   const fcMarket = useMemo(() => marketForecast(marketYoy, marketBand), [marketYoy, marketBand]);
   const fcCost = useMemo(() => costForecast(costYoy, costBand), [costYoy, costBand]);
 
-  const schemes = useMemo(
-    () =>
-      product.schemes[scenario].map((s) => {
-        const edit = priceEdits[`${productKey}.${scenario}.${s.key}`];
-        return edit != null ? { ...s, price: edit } : s;
-      }),
-    [product, scenario, priceEdits, productKey],
-  );
   const ctx: PlanContext = useMemo(
     () => ({ scenario, marketYoYPct: marketYoy, costYoyPct: costYoy, elasticity, comp }),
     [scenario, marketYoy, costYoy, elasticity, comp],
   );
-  const results = useMemo(() => computeAll(schemes, ctx, product), [schemes, ctx, product]);
-  const drawerResult = results.find((r) => r.scheme.key === drawerKey) ?? null;
+  const result = useMemo(
+    () => computeScheme({ key: 'W', name: '当前测算', tagline: '', price }, ctx, product),
+    [price, ctx, product],
+  );
+  const fSeries = useMemo(() => forecastSeries(ctx, product, price), [ctx, product, price]);
 
-  const setPrice = (key: string, price: number): void => {
-    setPriceEdits({ ...priceEdits, [`${productKey}.${scenario}.${key}`]: price });
-  };
+  const setPrice = (v: number): void => setPriceEdits({ ...priceEdits, [priceKey]: v });
   const resetAll = (): void => {
     setMarketYoy(MARKET_DEFAULTS.yoyPct);
     setMarketBand(MARKET_DEFAULTS.bandPct);
@@ -290,15 +276,41 @@ export default function PricingPage() {
     setElasticityOverride(null);
     setPriceEdits({});
   };
+  const saveScheme = (): void => {
+    const id = Date.now();
+    setSaved([
+      ...saved.slice(-7),
+      {
+        id, label: `方案 ${saved.length + 1}`, productKey, scenario, price,
+        marketYoy, marketBand, costYoy, costBand, elasticity, comp,
+        soWan: result.firstYearSoWan, p10Wan: result.p10Wan, p90Wan: result.p90Wan, marginYi: result.marginTotalYi,
+      },
+    ]);
+  };
+  const restoreScheme = (s: SavedScheme): void => {
+    if (s.productKey !== productKey || s.scenario !== scenario) restoringRef.current = true;
+    setProductKey(s.productKey);
+    setScenario(s.scenario);
+    setMarketYoy(s.marketYoy);
+    setMarketBand(s.marketBand);
+    setCostYoy(s.costYoy);
+    setCostBand(s.costBand);
+    setComp(s.comp);
+    setElasticityOverride(s.elasticity);
+    setPriceEdits((prev) => ({ ...prev, [`${s.productKey}.${s.scenario}`]: s.price }));
+  };
 
   const marketSum = fcMarket.reduce((s, f) => s + f.mid, 0);
   const range = elasticityRange(product, scenario);
+  const anchorLabel = scenario === 'pre' ? `较上一代开盘 ${fmtPct(result.chain.priceDeltaPct)}` : `较本品现价 ${fmtPct(result.chain.priceDeltaPct)}`;
+  const nWeeks = scenario === 'pre' ? 52 : product.cur.weeks.length;
+  const stripEvents = scenario === 'pre' ? product.prev.events : product.cur.events;
 
   return (
     <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
       <PageHeader />
       <main style={{ flex: 1, padding: space.lg, display: 'flex', flexDirection: 'column', gap: space.base, minWidth: 0 }}>
-        {/* 页头：标题 + 模拟徽章 ｜ 情景 chips ｜ 产品 / 场景 / 竞品 / 重置 */}
+        {/* 页头：标题 + 模拟徽章 ｜ 产品 / 场景 / 竞品 / 重置 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.base, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
             <span style={{ fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>上市定价推演</span>
@@ -334,103 +346,141 @@ export default function PricingPage() {
           </div>
         </div>
 
-        {/* 证据行 1：大盘 + 成本 */}
-        <div style={{ display: 'flex', gap: space.base, height: 252 }}>
+        {/* 证据行 1：大盘 + 成本（拖柄可调） */}
+        <div style={{ display: 'flex', gap: space.base, height: 236 }}>
           <div style={{ ...CARD, flex: 1, minWidth: 0, padding: `${space.md}px ${space.lg}px ${space.sm}px`, display: 'flex', flexDirection: 'column' }}>
             <CardHead
               title="大盘 · 分价格档容量" source="外部预估"
-              hint="季度容量为示例市场分价格档口径；预估带随下方假设调整，方案测算的大盘系数即取此同比"
+              hint="季度容量为示例市场分价格档口径；预估带随下方拖柄调整，方案测算的大盘系数即取此同比"
+              extra={<span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>预估四季合计 {fmtInt(marketSum)} 万部（{fmtPct(marketYoy)}）</span>}
             />
             <div style={{ flex: 1, minHeight: 0 }}><MarketChart forecast={fcMarket} /></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: space.md, paddingTop: space.xs }}>
-              <ControlLabel>未来四季同比</ControlLabel>
-              <PctInput value={marketYoy} min={-40} max={40} onChange={setMarketYoy} />
-              <ControlLabel>预估区间</ControlLabel>
-              <PctInput value={marketBand} min={0} max={30} onChange={setMarketBand} />
-              <span style={{ fontSize: fontSize.caption, color: color.mute, marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                预估四季合计 {fmtInt(marketSum)} 万部（{fmtPct(marketYoy)}）
-              </span>
-            </div>
+            <SliderRow label="未来四季同比" value={marketYoy} min={-40} max={20} step={1} onChange={setMarketYoy} format={(v) => `${fmtPct(v)}`} />
+            <SliderRow label="预估区间" value={marketBand} min={0} max={30} step={1} onChange={setMarketBand} format={(v) => `±${v}%`} />
           </div>
           <div style={{ ...CARD, flex: 1, minWidth: 0, padding: `${space.md}px ${space.lg}px ${space.sm}px`, display: 'flex', flexDirection: 'column' }}>
-            <CardHead title="成本 · 单台全成本" source="产品线" hint="月度成本为产品线口径；预估带随下方假设调整，方案测算按此曲线逐周计销毛" />
+            <CardHead
+              title="成本 · 单台全成本" source="产品线"
+              hint="月度成本为产品线口径；预估带随下方拖柄调整，方案按此曲线逐周计销毛"
+              extra={<span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>上市月 ${COST_BASE} → 12 月后 ${fmtInt(fcCost[fcCost.length - 1].mid)}</span>}
+            />
             <div style={{ flex: 1, minHeight: 0 }}><CostChart forecast={fcCost} /></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: space.md, paddingTop: space.xs }}>
-              <ControlLabel>未来 12 月同比</ControlLabel>
-              <PctInput value={costYoy} min={-20} max={30} onChange={setCostYoy} />
-              <ControlLabel>预估区间</ControlLabel>
-              <PctInput value={costBand} min={0} max={30} onChange={setCostBand} />
-              <span style={{ fontSize: fontSize.caption, color: color.mute, marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                上市月 ${COST_BASE} → 12 月后 ${fmtInt(fcCost[fcCost.length - 1].mid)}
+            <SliderRow label="未来 12 月同比" value={costYoy} min={-20} max={30} step={1} onChange={setCostYoy} format={(v) => `${fmtPct(v)}`} />
+            <SliderRow label="预估区间" value={costBand} min={0} max={30} step={1} onChange={setCostBand} format={(v) => `±${v}%`} />
+          </div>
+        </div>
+
+        {/* 证据行 2：量价证据图（全宽 · 量价看板语言）+ 调价事件卡对齐锚点 + 系数拖柄 */}
+        <div style={{ ...CARD, padding: `${space.md}px ${space.lg}px ${space.sm}px`, display: 'flex', flexDirection: 'column' }}>
+          <CardHead
+            title={scenario === 'pre' ? `上一代同期参照（${product.prev.name} · 52 周）` : `本品上市以来（${product.cur.name} · ${product.cur.weeks.length} 周）`}
+            source={scenario === 'pre' ? '上一代' : '本品实际'}
+            hint="成交价折线 + 周销柱贴底带（量价看板同款）；虚线锚点①②③为调价事件，对应下方事件卡"
+          />
+          <div style={{ height: 196, minWidth: 0 }}><EvidenceChart product={product} scenario={scenario} /></div>
+          {/* 事件卡按锚点周龄横向对齐（与图 grid 左右留白一致） */}
+          <div style={{ position: 'relative', height: 46, margin: `0 ${EVIDENCE_GRID.right}px` }}>
+            {stripEvents.map((e) => (
+              <div
+                key={e.week}
+                style={{
+                  position: 'absolute', left: `${(e.week / (nWeeks - 1)) * 100}%`, top: 4, transform: 'translateX(-50%)',
+                  display: 'flex', flexDirection: 'column', gap: 1, padding: '3px 8px', whiteSpace: 'nowrap',
+                  border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas,
+                }}
+              >
+                <span style={{ fontSize: fontSize.caption, color: color.ink, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                  {e.anchor} W{e.week} {fmtPct(e.changePct)} → 后 {e.window} 周 {fmtPct(e.soPct)}
+                </span>
+                <span style={{ fontSize: fontSize.caption, color: color.mute, fontVariantNumeric: 'tabular-nums' }}>
+                  {e.context} · 归因 {fmtPct(e.attributedPct)} · 系数 {(Math.abs(e.attributedPct / e.changePct)).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.md, paddingTop: 2 }}>
+            <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>
+              参照区间 {range.min}–{range.max} · 建议 {suggested}（{scenario === 'pre' ? '上一代均值' : '本品均值'}）
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>价格响应系数</span>
+              <Slider
+                style={{ flex: 1, minWidth: 0, margin: '0 2px', maxWidth: 320 }} value={elasticity} min={0.8} max={2.6} step={0.05}
+                onChange={(v) => setElasticityOverride(v)} tooltip={{ formatter: (v) => String(v) }}
+              />
+              <span style={{ fontSize: fontSize.caption, color: color.ink, fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: 32, textAlign: 'right' }}>
+                {elasticity.toFixed(2)}
               </span>
             </div>
+            <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>来源：历史复盘</span>
           </div>
         </div>
 
-        {/* 证据行 2：量价证据图 + 响应推导 */}
-        <div style={{ display: 'flex', gap: space.base, height: 268 }}>
+        {/* 决策行：销量趋势预测图（拟定价拖柄即调即算）+ 参数/保存方案 */}
+        <div style={{ display: 'flex', gap: space.base, flex: 1, minHeight: 264 }}>
           <div style={{ ...CARD, flex: 3, minWidth: 0, padding: `${space.md}px ${space.lg}px ${space.sm}px`, display: 'flex', flexDirection: 'column' }}>
             <CardHead
-              title={scenario === 'pre' ? `上一代同期参照（${product.prev.name} · 52 周）` : `本品上市以来（${product.cur.name} · ${product.cur.weeks.length} 周）`}
-              source={scenario === 'pre' ? '上一代' : '本品实际'}
+              title="销量趋势预测"
+              source="测算"
+              hint="实际周销（实线）+ 预估中枢（虚线）与 P10–P90 区间带；灰线为上一代同期参照；随右侧拟定价与各证据卡拖柄即时重画"
+              extra={<span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>区间 ±{Math.round(UNCERTAINTY_BAND * 100)}%</span>}
             />
-            <div style={{ flex: 1, minHeight: 0 }}><EvidenceChart product={product} scenario={scenario} /></div>
+            <div style={{ flex: 1, minHeight: 0 }}><ForecastChart series={fSeries} /></div>
           </div>
-          <div style={{ ...CARD, flex: 2, minWidth: 0, padding: `${space.md}px ${space.lg}px ${space.sm}px`, display: 'flex', flexDirection: 'column' }}>
-            <CardHead
-              title="价格响应系数推导" source="历史复盘"
-              hint="每次调价取归因量变化（扣除同期档期）÷ 调价幅度为系数；上市后本品事件优先给建议值"
-              extra={
-                <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
-                  <ControlLabel>当前取</ControlLabel>
-                  <InputNumber
-                    style={{ width: 76 }} size="small" value={elasticity} min={0} max={3} step={0.1}
-                    onChange={(v) => setElasticityOverride(v ?? suggested)}
-                  />
-                </div>
-              }
+          <div style={{ ...CARD, flex: 1.2, minWidth: 300, padding: `${space.md}px ${space.lg}px`, display: 'flex', flexDirection: 'column', gap: space.sm }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm }}>
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>拟定价</span>
+              <span style={{ fontSize: fontSize.displaySm, fontWeight: 700, color: color.ink, fontVariantNumeric: 'tabular-nums' }}>${fmtInt(price)}</span>
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>{anchorLabel}</span>
+            </div>
+            <Slider
+              value={price} min={799} max={1499} step={10}
+              onChange={setPrice} tooltip={{ formatter: (v) => '$' + fmtInt(Number(v)) }}
+              marks={{ 999: '', 1099: { label: '$1,099', style: { fontSize: 10, color: color.mute } }, 1249: '' }}
             />
-            <ResponseTable productKey={productKey} scenario={scenario} />
-            <div style={{ fontSize: fontSize.caption, color: color.mute, paddingTop: space.xs, whiteSpace: 'nowrap' }}>
-              参照区间 {range.min}–{range.max} · 建议 {suggested}（{scenario === 'pre' ? '上一代均值' : '本品均值'}）
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: `${space.xs}px ${space.base}px`, paddingTop: space.xs }}>
+              <Metric label="首年预期 SO" value={fmtWan(result.firstYearSoWan)} sub={`区间 ${result.p10Wan.toFixed(1)}–${result.p90Wan.toFixed(1)} 万台`} onOpen={() => setDrawerOpen(true)} />
+              <Metric label="单台销毛 · 上市月" value={`$${result.launchUnitMargin}`} onOpen={() => setDrawerOpen(true)} />
+              <Metric label="首年销毛贡献" value={fmtYi(result.marginTotalYi)} onOpen={() => setDrawerOpen(true)} />
+              <Metric label="较上一代同期 SO" value={fmtPct(result.vsPrevSoPct)} onOpen={() => setDrawerOpen(true)} />
             </div>
-          </div>
-        </div>
-
-        {/* 方案行：三方案卡 + 对比图 */}
-        <div style={{ display: 'flex', gap: space.base, flex: 1, minHeight: 218 }}>
-          {results.map((r) => (
-            <div key={r.scheme.key} style={{ ...CARD, flex: 1, minWidth: 0, padding: `${space.md}px ${space.lg}px`, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: space.sm }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: space.md }}>
-                <span style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>{r.scheme.name}</span>
-                <span style={{ fontSize: fontSize.caption, color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.scheme.tagline}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: space.lg, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: fontSize.caption, color: color.mute, paddingBottom: 2 }}>拟定价</div>
-                  <InputNumber
-                    style={{ width: 108 }} size="small" value={r.scheme.price} min={799} max={1499} step={10}
-                    prefix="$" onChange={(v) => setPrice(r.scheme.key, v ?? r.scheme.price)}
-                  />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: `${space.xs}px ${space.base}px`, flex: 1, minWidth: 240 }}>
-                  <Metric label="首年预期 SO" value={fmtWan(r.firstYearSoWan)} sub={`区间 ${r.p10Wan.toFixed(1)}–${r.p90Wan.toFixed(1)} 万台`} onOpen={() => setDrawerKey(r.scheme.key)} />
-                  <Metric label="单台销毛 · 上市月" value={`$${r.launchUnitMargin}`} onOpen={() => setDrawerKey(r.scheme.key)} />
-                  <Metric label="首年销毛贡献" value={fmtYi(r.marginTotalYi)} onOpen={() => setDrawerKey(r.scheme.key)} />
-                  <Metric label="较上一代同期 SO" value={fmtPct(r.vsPrevSoPct)} onOpen={() => setDrawerKey(r.scheme.key)} />
-                </div>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: space.xs }}>
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>已保存 {saved.length} 个方案</span>
+              <Button size="small" type="primary" onClick={saveScheme}>保存方案</Button>
             </div>
-          ))}
-          <div style={{ ...CARD, flex: 1.35, minWidth: 0, padding: `${space.md}px ${space.lg}px ${space.sm}px`, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink, paddingBottom: space.xs }}>三方案测算对比</div>
-            <div style={{ flex: 1, minHeight: 0 }}><SchemeCompareChart results={results} /></div>
+            {saved.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.xs, paddingTop: 2, maxHeight: 96, overflowY: 'auto' }}>
+                {saved.map((s) => (
+                  <span
+                    key={s.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => restoreScheme(s)}
+                    onKeyDown={() => restoreScheme(s)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 4px 0 10px',
+                      borderRadius: radius.pill, fontSize: fontSize.caption, color: color.body,
+                      background: color.canvas, border: `1px solid ${color.hairline}`, cursor: 'pointer',
+                      fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {s.label} · ${fmtInt(s.price)} · {s.soWan.toFixed(1)}万 · {fmtYi(s.marginYi)}
+                    <span
+                      onClick={(ev) => { ev.stopPropagation(); setSaved(saved.filter((x) => x.id !== s.id)); }}
+                      style={{ display: 'grid', placeItems: 'center', width: 16, height: 16, borderRadius: 999, color: color.mute, fontSize: 11 }}
+                    >
+                      ✕
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </main>
       <EvidenceDrawer
-        result={drawerResult} marketYoYPct={marketYoy} costYoyPct={costYoy}
-        elasticity={elasticity} productKey={productKey} onClose={() => setDrawerKey(null)}
+        result={drawerOpen ? result : null} marketYoYPct={marketYoy} costYoyPct={costYoy}
+        elasticity={elasticity} productKey={productKey} onClose={() => setDrawerOpen(false)}
       />
     </div>
   );

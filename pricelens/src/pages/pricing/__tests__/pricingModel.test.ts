@@ -13,6 +13,8 @@ import {
   costForecast,
   deriveElasticity,
   elasticityRange,
+  forecastSeries,
+  buildWeekly,
   marketForecast,
   priceFactorOf,
   productOf,
@@ -158,6 +160,46 @@ describe('定价推演 · 上市后滚动金测（默认假设，系数取本品
   it('方案 A 回调 $1099 / C 降价 $999：SO 32.8 / 36.1 万台（价升量降）', () => {
     expect(results[0].firstYearSoWan).toBe(32.8);
     expect(results[2].firstYearSoWan).toBe(36.1);
+  });
+});
+
+describe('定价推演 · 销量趋势预测序列', () => {
+  it('上市后：前 14 周为实际、之后为预估，衔接点连通，区间带只在预估段', () => {
+    const ctx = ctxOf({ scenario: 'post', elasticity: 1.6 });
+    const fs = forecastSeries(ctx, std, 1049);
+    expect(fs.weeks).toHaveLength(52);
+    const actualCount = fs.actual.filter((v) => v != null).length;
+    expect(actualCount).toBe(14);
+    for (let i = 0; i < 14; i++) expect(fs.actual[i]).not.toBeNull();
+    for (let i = 14; i < 52; i++) expect(fs.actual[i]).toBeNull();
+    expect(fs.center[12]).toBeNull(); // 实际段中枢为空
+    expect(fs.center[13]).not.toBeNull(); // 衔接点填实际值
+    expect(fs.center[14]).not.toBeNull();
+    expect(fs.low[13]).toBeNull(); // 区间带从预估段起
+    expect(fs.low[14]).not.toBeNull();
+    for (let i = 14; i < 52; i++) {
+      expect(fs.low[i]!).toBeLessThan(fs.center[i]!);
+      expect(fs.high[i]!).toBeGreaterThan(fs.center[i]!);
+    }
+    expect(fs.prevRef).toHaveLength(52);
+  });
+
+  it('上市前：无实际段，中枢即为测算周序列（P10–P90 对称 ±12%）', () => {
+    const fs = forecastSeries(ctxOf({ scenario: 'pre', elasticity: 1.8 }), std, 1099);
+    expect(fs.actual.every((v) => v === null)).toBe(true);
+    expect(fs.center[0]).not.toBeNull();
+    expect(fs.low[1]).toBeCloseTo(Math.round(fs.center[1]! * 0.88 * 10) / 10, 5);
+    expect(fs.high[1]).toBeCloseTo(Math.round(fs.center[1]! * 1.12 * 10) / 10, 5);
+  });
+
+  it('buildWeekly 与 computeScheme 同源：首年合计一致；拟定价升高周序列整体下移', () => {
+    const ctx = ctxOf({ scenario: 'post', elasticity: 1.6 });
+    const r = computeScheme({ key: 'W', name: 'w', tagline: '', price: 1049 }, ctx, std);
+    const w = buildWeekly(ctx, std, 1049);
+    expect(w.weekly.reduce((s, v) => s + v, 0) / 10).toBeCloseTo(r.firstYearSoWan, 1);
+    const higher = buildWeekly(ctx, std, 1149);
+    expect(higher.weekly[30]).toBeLessThan(w.weekly[30]); // 预估段下移
+    expect(higher.weekly[5]).toBe(w.weekly[5]); // 实际段不动
   });
 });
 

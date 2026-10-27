@@ -30,7 +30,7 @@ export interface PricingEvent {
 }
 
 export interface Scheme {
-  key: 'A' | 'B' | 'C';
+  key: string;
   name: string;
   tagline: string;
   price: number;

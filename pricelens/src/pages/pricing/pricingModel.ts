@@ -188,6 +188,50 @@ export function productOf(key: string): ProductCase {
   return PRODUCTS.find((p) => p.key === key) ?? PRODUCTS[0];
 }
 
+/** 周序列构建（computeScheme 与预测图共用）：返回 52 周销量序列与实际段长度
+ *  （上市前 actualCount=0 全为测算；上市后前 curLen 周为实际，剩余为测算） */
+export function buildWeekly(ctx: PlanContext, product: ProductCase, price: number): { weekly: number[]; actualCount: number } {
+  const marketFactor = Math.max(0.2, 1 + ctx.marketYoYPct / 100);
+  const compFactor = compFactorOf(ctx.comp);
+  if (ctx.scenario === 'pre') {
+    const anchorPrice = product.prev.launchPrice;
+    const factor = marketFactor * priceFactorOf(price, ctx.elasticity, anchorPrice) * compFactor;
+    return { weekly: product.prev.weeks.map((w) => w.so * factor), actualCount: 0 };
+  }
+  const anchorPrice = product.cur.currentPrice;
+  const curLen = product.cur.weeks.length;
+  const relFactor = totalWan(product.cur.weeks) / totalWan(product.prev.weeks.slice(0, curLen));
+  const factor = marketFactor * priceFactorOf(price, ctx.elasticity, anchorPrice) * compFactor;
+  return {
+    weekly: [...product.cur.weeks.map((w) => w.so), ...product.prev.weeks.slice(curLen).map((w) => w.so * relFactor * factor)],
+    actualCount: curLen,
+  };
+}
+
+/** 销量趋势预测图数据：实际线（已销段）+ 预估中枢虚线 + P10–P90 区间带 +
+ *  上一代同期参照线（灰色），全 52 周口径 */
+export interface ForecastSeries {
+  weeks: string[];
+  actual: (number | null)[];
+  center: (number | null)[];
+  low: (number | null)[];
+  high: (number | null)[];
+  prevRef: number[];
+}
+
+export function forecastSeries(ctx: PlanContext, product: ProductCase, price: number): ForecastSeries {
+  const { weekly, actualCount } = buildWeekly(ctx, product, price);
+  const r1v = (v: number): number => Math.round(v * 10) / 10;
+  return {
+    weeks: weekly.map((_, i) => 'W' + i),
+    actual: weekly.map((v, i) => (i < actualCount ? r1v(v) : null)),
+    center: weekly.map((v, i) => (i >= actualCount ? r1v(v) : i === actualCount - 1 ? r1v(v) : null)),
+    low: weekly.map((v, i) => (i >= Math.max(actualCount, 1) ? r1v(v * (1 - UNCERTAINTY_BAND)) : null)),
+    high: weekly.map((v, i) => (i >= Math.max(actualCount, 1) ? r1v(v * (1 + UNCERTAINTY_BAND)) : null)),
+    prevRef: product.prev.weeks.map((w) => w.so),
+  };
+}
+
 export function computeScheme(scheme: Scheme, ctx: PlanContext, product: ProductCase): SchemeResult {
   const marketFactor = Math.max(0.2, 1 + ctx.marketYoYPct / 100);
   const compFactor = compFactorOf(ctx.comp);
