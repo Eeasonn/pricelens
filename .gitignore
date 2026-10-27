@@ -7,3 +7,5 @@ dist/
 
 # 真实爬取源表（17.8MB，内部数据）不入库；由 pricelens/data/real 产物承载
 全量数据表.xlsx
+# 清洗交付版（clean_source_excel.py 产物，22MB，同样仅本地）
+全量数据表-清洗版.xlsx
