@@ -5,7 +5,7 @@
 // 同会话保持、新组默认展开；组不设筛选，各组全量展示）→ 产品价差（区块标题 +
 // 列头 + 主品基准行 + 本组各对比产品折后价相对主分析产品的百分比；红 = 更贵、
 // 蓝 = 更便宜，与图上价差徽章同语言）→ 核心信息明细（区块标题 + 列头 + 每产品
-// 5 行：RRP / 折后价 / 折扣率 / 取证 / Offering × 时间列）。
+// 6 行：RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer × 时间列）。
 // 列头随区块标题走（第一百四十八轮）：产品/配置/类型 + 图上同一可见时间轴
 // （每桶一列，不带周号），两个区块标题下方各一条一模一样的列头。
 // 主品基准行（第一百四十八轮）：产品价差列头下的首行 = 本组主分析产品，
@@ -52,8 +52,8 @@ const W_TIME = 100;
 /** 主分析产品行底色（浅蓝；第一百二十三轮按角色着色——主品行衬浅蓝、对比行白底，
  *  与图例带主品药丸同语言，不再按品牌归属着色） */
 const MAIN_TINT = '#f3f8ff';
-/** 明细每产品行数（RRP / 折后价 / 折扣率 / 取证 / Offering） */
-const DETAIL_SPAN = 5;
+/** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer） */
+const DETAIL_SPAN = 6;
 
 /** 组头收起/展开按钮（第一百三十一轮）：chevron 居中，命中区 24px 见方；
  *  悬停衬底与聚焦圈在文件底部工具类（.tt-fold） */
@@ -211,7 +211,7 @@ export default function TrendTables(props: {
     markCopied((await copyText(lines.join('\n'))) ? 'diff' : null);
   };
   const onCopyDetail = async (): Promise<void> => {
-    const TYPES = ['RRP', '折后价', '折扣率', '取证', '权益'] as const;
+    const TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
     const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', ...dates].join('\t')];
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
@@ -225,6 +225,7 @@ export default function TrendTables(props: {
               const disc = discountOf(pt);
               return disc != null ? fmtPct(disc) : '—';
             }
+            if (ty === '平台-店铺') return pt.channelName ?? '—';
             if (ty === '取证') return pt.url || '—';
             return offerText(pt) || '—';
           });
@@ -474,8 +475,8 @@ export default function TrendTables(props: {
             <div style={{ gridColumn: '1 / -1', height: 14, background: color.canvas }} />
           </>
         )}
-        {/* —— 核心信息明细：列头随标题走（第一百四十八轮），每产品 5 行
-            （RRP / 折后价 / 折扣率 / 取证 / Offering）× 时间列 —— */}
+        {/* —— 核心信息明细：列头随标题走（第一百四十八轮），每产品 6 行
+            （RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer）× 时间列 —— */}
         {captionRow('核心信息明细', `cap-detail-${b.g.id}`)}
         {headerRow(b.g.id, 'detail')}
         {b.g.series.map((s) => {
@@ -544,6 +545,23 @@ export default function TrendTables(props: {
               </div>,
             );
           }
+          // 平台-店铺行（第一百六十二轮，Eason）：该时点取数来源；自动口径每周可随
+          // 最低价来源变化，逐列说明
+          rows.push(typeCell('平台-店铺', main, `${p}-chan`));
+          for (let i = 0; i < n; i++) {
+            const chan = s.points[i]?.channelName ?? null;
+            rows.push(
+              <div key={`${p}-chan-${i}`} style={{ ...cell(3 + i), background: bg }}>
+                {chan ? (
+                  <span title={`该时点取数渠道：${chan}`} style={{ fontSize: 11, color: color.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {chan}
+                  </span>
+                ) : (
+                  emptyCell
+                )}
+              </div>,
+            );
+          }
           // 取证行：该时点页面快照入口 + 最新时点商城现页
           rows.push(typeCell('取证', main, `${p}-evid`));
           for (let i = 0; i < n; i++) {
@@ -569,8 +587,8 @@ export default function TrendTables(props: {
               </div>,
             );
           }
-          // 权益行：高度随内容自适应，全文完整显示
-          rows.push(typeCell('权益', main, `${p}-offer`));
+          // offer 行（第一百六十二轮更名，原「权益」）：高度随内容自适应，全文完整显示
+          rows.push(typeCell('offer', main, `${p}-offer`));
           for (let i = 0; i < n; i++) {
             const text = offerText(s.points[i]);
             rows.push(

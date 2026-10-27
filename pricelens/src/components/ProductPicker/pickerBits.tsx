@@ -9,8 +9,6 @@ import { Popover } from 'antd';
 import { CloseOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import ColorFlyout from '../ProductCascader/ColorFlyout';
-import ChannelSelectPopover from '../ChannelSelectPopover';
-import { dimChannel } from '../../data';
 import { brandLabelOf } from '../BrandMark';
 import { color, radius, selectSoftInk } from '../../theme/tokens';
 import {
@@ -114,79 +112,6 @@ export function ColorChip({
         }}
       >
         {label}
-      </span>
-    </Popover>
-  );
-}
-
-// ---------------- 渠道 chip（次级筛选：每款产品的取价平台-店铺，第一百六十一轮） ----------------
-
-/** 当前口径的展示名：null = 自动（图上取日常价最低渠道）；显式 = 渠道显示名（·卖家）/ 平台并集 */
-export function channelLabelOf(
-  current: { platforms: string[]; shopIds: string[]; seller?: string | null } | null | undefined,
-): string {
-  if (!current || (current.platforms.length === 0 && current.shopIds.length === 0)) return '自动';
-  if (current.shopIds.length === 1) {
-    const name = dimChannel.find((c) => c.channel_id === current.shopIds[0])?.display_name ?? current.shopIds[0];
-    return current.seller ? `${name} · ${current.seller}` : name;
-  }
-  const plats = [...new Set(current.platforms)];
-  if (plats.length) return plats.join('/');
-  return current.shopIds.length + ' 渠道';
-}
-
-export function ChannelChip({
-  cc,
-  skuIds,
-  current,
-  onPick,
-  tone,
-}: {
-  cc: string;
-  skuIds: string[];
-  current: { platforms: string[]; shopIds: string[]; seller?: string | null } | null | undefined;
-  onPick: (sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
-  tone: 'strong' | 'soft';
-}) {
-  const label = channelLabelOf(current);
-  return (
-    <Popover
-      trigger="click"
-      placement="bottomLeft"
-      zIndex={POPOVER_Z}
-      styles={{ body: { padding: 0 } }}
-      content={
-        <ChannelSelectPopover
-          cc={cc}
-          skuIds={skuIds}
-          current={current ?? null}
-          onPick={onPick}
-        />
-      }
-    >
-      <span
-        title={`取价渠道 ${label} · 点击切换`}
-        className="lpl-pk-ghost"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 4,
-          height: 20,
-          padding: '0 8px',
-          borderRadius: radius.pill,
-          fontSize: 11,
-          fontWeight: 600,
-          color: tone === 'strong' ? selectSoftInk : color.body,
-          background: color.canvas,
-          border: `1px solid ${color.hairline}`,
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-          flexShrink: 0,
-          maxWidth: 132,
-          overflow: 'hidden',
-        }}
-      >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       </span>
     </Popover>
   );

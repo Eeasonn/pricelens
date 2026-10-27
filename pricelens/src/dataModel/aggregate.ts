@@ -404,72 +404,6 @@ export function priceForSelection(
   return minPriceRow(countryCode, skuId, weekId, set, currency, sellerOfQuery(platform));
 }
 
-// ---------------- 第一百六十轮：产品级取价口径（每条产品线独立选平台-店铺） ----------------
-
-/** 单渠道取价统计：某组 SKU（型号+配置的颜色集）在该渠道的裸机成交价中位数 + 有价周数。
- *  渠道选择浮层与自动口径共用一份数据（同序：中位价低 → 覆盖周多 → 渠道字典序）。 */
-export interface ChannelPriceStat {
-  channelId: string;
-  displayName: string;
-  platform: string;
-  medianLocal: number; // 本币中位价（裸机行）
-  medianUsd: number;
-  weeks: number; // 有价周数
-}
-
-const channelStatsCache = new Map<string, ChannelPriceStat[]>();
-
-export function channelStatsOf(countryCode: string, skuIds: string[]): ChannelPriceStat[] {
-  const key = countryCode + '|' + [...skuIds].sort().join(',');
-  const hit = channelStatsCache.get(key);
-  if (hit) return hit;
-  const ids = new Set(skuIds);
-  const byCh = new Map<string, { local: number[]; usd: number[]; weeks: Set<string> }>();
-  for (const r of factPriceWeekly) {
-    if (r.country_code !== countryCode || r.bundle || !ids.has(r.sku_id)) continue;
-    if (r.price_local == null) continue;
-    let e = byCh.get(r.channel_id);
-    if (!e) {
-      e = { local: [], usd: [], weeks: new Set() };
-      byCh.set(r.channel_id, e);
-    }
-    e.local.push(r.price_local);
-    if (r.price_usd != null) e.usd.push(r.price_usd);
-    e.weeks.add(r.week_id);
-  }
-  const mid = (arr: number[]): number => {
-    if (arr.length === 0) return NaN;
-    const s = [...arr].sort((a, b) => a - b);
-    return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
-  };
-  const out: ChannelPriceStat[] = [];
-  for (const [channelId, e] of byCh) {
-    const ch = channelById.get(channelId);
-    if (!ch) continue;
-    out.push({
-      channelId,
-      displayName: ch.display_name,
-      platform: ch.platform,
-      medianLocal: Math.round(mid(e.local)),
-      medianUsd: Math.round(mid(e.usd)),
-      weeks: e.weeks.size,
-    });
-  }
-  out.sort((a, b) => a.medianLocal - b.medianLocal || b.weeks - a.weeks || a.channelId.localeCompare(b.channelId));
-  channelStatsCache.set(key, out);
-  return out;
-}
-
-/** 自动取价渠道：数据量足够的渠道（覆盖 ≥ max(3, 最佳覆盖一半)）里日常价（中位价）
- *  最低的那家；没有渠道达阈值时退全部候选。null = 该产品在该国无任何有价行。 */
-export function autoChannelOf(countryCode: string, skuIds: string[]): string | null {
-  const stats = channelStatsOf(countryCode, skuIds);
-  if (stats.length === 0) return null;
-  const bestCover = Math.max(...stats.map((s) => s.weeks));
-  const pool = stats.filter((s) => s.weeks >= Math.max(3, bestCover / 2));
-  return (pool.length ? pool : stats)[0].channelId;
-}
-
 /** 周内各平台真实最低价（升序）：预警「平台价差」与总览「多平台对比」共用 */
 export function platformPriceSpread(
   skuId: string,
@@ -538,8 +472,9 @@ export function buildSeries(q: SeriesQuery): Series[] {
   for (const g of q.groups) {
     const rg = resolveGroup(g);
     if (!rg) continue;
-    // 第一百六十轮：每组独立取价口径——显式勾选按平台/渠道并集解析；
-    // 缺省 = 自动（该产品数据量足够的渠道里日常价最低的那家），主品渠道不再牵连对比品
+    // 每组独立取价口径（第一百六十轮起；第一百六十二轮自动语义改每周动态）——
+    // 显式勾选按平台/渠道并集解析；缺省 = 自动：每周取该国全部平台-店铺的最低价
+    // （哪家最低显示哪家，取证随行），主品渠道不再牵连对比品
     const explicit = g.platform ?? null;
     const explicitOn = explicit != null && (explicit.platforms.length > 0 || explicit.shopIds.length > 0);
     let channels: Set<string>;
@@ -548,22 +483,10 @@ export function buildSeries(q: SeriesQuery): Series[] {
       channels = new Set(effectiveChannelIds(cc, explicit));
       const chs = dimChannel.filter((c) => channels.has(c.channel_id));
       const platforms = [...new Set(chs.map((c) => c.platform))];
-      badge = {
-        label: chs.length === 1 ? chs[0].display_name : platforms.join('/') || '已选渠道',
-        auto: false,
-        platforms,
-      };
+      badge = { label: platforms.join('/') || '已选渠道', auto: false, platforms };
     } else {
-      const auto = autoChannelOf(cc, rg.skuIds);
-      if (auto) {
-        channels = new Set([auto]);
-        const autoCh = channelById.get(auto);
-        badge = { label: autoCh?.display_name ?? auto, auto: true, platforms: autoCh ? [autoCh.platform] : [] };
-      } else {
-        // 产品在该国无任何有价行：回默认渠道兜底（画不出点，不炸）
-        channels = new Set(effectiveChannelIds(cc, null));
-        badge = null;
-      }
+      channels = new Set(dimChannel.filter((c) => c.country_code === cc).map((c) => c.channel_id));
+      badge = { label: '自动', auto: true, platforms: [...new Set([...channels].map((id) => channelById.get(id)?.platform ?? ''))] };
     }
     const seller = sellerOfQuery(explicitOn ? explicit : null);
     const key = `${g.modelId}__${normRom(rg.romram)}`;
@@ -626,7 +549,8 @@ export function buildSeries(q: SeriesQuery): Series[] {
         }
       }
 
-      // url / 取价店铺 / offer / 平台：周 = 该周最低价所在行；月/季 = 桶内首个有值周
+      // url / 取价店铺 / offer / 平台：周 = 该周最低价所在行；月/季 = 桶内首个有值周。
+      // 渠道名（平台-店铺）逐列独立：自动口径每周来源可变，明细表按列说明取数来源
       let url = '';
       let shopName: string | null = null;
       let platform: string | null = null;
@@ -638,6 +562,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         platform = channelById.get(firstBest.row.channel_id)?.platform ?? null;
         offer = toOfferInfo(firstBest.row, cc, bucket.anchorDate);
       }
+      const channelName = firstBest ? (channelById.get(firstBest.row.channel_id)?.display_name ?? null) : null;
 
       points.push({
         bucketId: bucket.id,
@@ -649,6 +574,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
         offer,
         url,
         shopName,
+        channelName,
         platform,
       });
     }

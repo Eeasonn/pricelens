@@ -3,12 +3,13 @@
 // - 真实数据无平台因子：shopName = 所选渠道的显示名 · 店铺，取价 = 渠道集合内最低在架价；
 // - 参考汇率已删（fact 行内汇率）：getFxRate() = 当前国家本币的最新 per-USD 中位数。
 // 锚点均从 factPriceWeekly / dimChannel 独立直算，随数据重生成自动对齐。
-// 第一百六十轮：平台口径下沉到每组——显式勾选随组传入；组缺省 = 自动最优渠道
-// （数据量足够渠道里中位价最低者，channelBadge.auto = true）。
+// 第一百六十轮：平台口径下沉到每组——显式勾选随组传入。第一百六十二轮自动
+// 语义改每周动态：组缺省 = 每周取该国全部平台-店铺最低价（channelBadge =
+// 「自动」+ 全平台集），badge 显式态 label = 平台名。
 // ============================================================
 import { afterEach, describe, expect, it } from 'vitest';
 import { dimChannel, dimProduct, factPriceWeekly, latestPerUsd } from '../../data';
-import { autoChannelOf, buildSeries, channelStatsOf } from '../aggregate';
+import { buildSeries } from '../aggregate';
 import { getFxRate, getLocalCurrency, setLocalCurrencyByCountry } from '../../state/fx';
 import { perUsdOf } from '../../chart/PriceTrend/helpers';
 
@@ -44,16 +45,14 @@ describe('aggregate platform/source口径', () => {
     const pt = (platform: { platforms: string[]; shopIds: [] | string[] } | null) =>
       buildSeries({ ...baseQuery, groups: baseQuery.groups.map((g) => ({ ...g, platform })) })[0].points[0];
 
-    // 缺省 = 自动最优渠道（第一百六十轮）：该产品数据量足够渠道里中位价最低者。
-    // nova 14 的自动渠道随数据自对齐（锚 = channelStatsOf 首位），badge.auto = true。
-    const autoPts = buildSeries({ ...baseQuery })[0];
-    const autoCh = autoChannelOf('RU', [anchorSku.sku_id])!;
-    expect(autoPts.channelBadge).toEqual({
-      label: dimChannel.find((c) => c.channel_id === autoCh)!.display_name,
-      auto: true,
-      platforms: [dimChannel.find((c) => c.channel_id === autoCh)!.platform],
-    });
-    expect(pt(null)!.shopName).toContain(dimChannel.find((c) => c.channel_id === autoCh)!.display_name);
+    // 缺省 = 自动（第一百六十二轮）：每周取该国全部平台-店铺最低价，
+    // badge = 「自动」+ 全平台集；首点店铺随该周最低价渠道。
+    const autoSeries = buildSeries({ ...baseQuery })[0];
+    const allPlatforms = [...new Set(dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.platform))]; // 渠道表插入序
+    expect(autoSeries.channelBadge).toEqual({ label: '自动', auto: true, platforms: allPlatforms });
+    // 首点价 = 该周全渠道最低价（fact 直算对拍）
+    const allChannels = dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.channel_id);
+    expect(autoSeries.points[0].price).toBe(Math.round(minUsdPrice(anchorSku.sku_id, ANCHOR_WEEK, allChannels)!));
     // 显式 OZON → 该平台最低价行（3P 渠道）文案以 OZON 开头（卖家名 UNREADABLE 不冗余，带出）
     expect(pt({ platforms: ['OZON'], shopIds: [] })!.shopName).toMatch(/^OZON/);
     // 勾到具体渠道（channel_id）→ 同渠道文案
@@ -65,22 +64,32 @@ describe('aggregate platform/source口径', () => {
     expect(union.shopName).toBe(pt({ platforms: ['OZON'], shopIds: [] })!.shopName);
   });
 
-  it('自动口径 = 数据量足够渠道里中位价最低（channelBadge/渠道集自洽），显式勾选恒压过自动', () => {
-    const autoCh = autoChannelOf('RU', [anchorSku.sku_id])!;
-    const stats = channelStatsOf('RU', [anchorSku.sku_id]);
-    // 自动候选池 = 覆盖 ≥ max(3, 最佳覆盖一半) 的渠道，取中位价最低 → 统计表首位命中
-    const bestCover = Math.max(...stats.map((x) => x.weeks));
-    const pool = stats.filter((x) => x.weeks >= Math.max(3, bestCover / 2));
-    expect(autoCh).toBe((pool.length ? pool : stats)[0].channelId);
-    // 自动线取价 = 该渠道集合内最低在架价（fact 直算对拍）
+  it('自动 = 每周全渠道最低价且渠道名随周变（channelName）；显式勾选压过自动且 label 为平台名', () => {
     const s = buildSeries({ ...baseQuery })[0];
-    expect(s.points[0].price).toBe(Math.round(minUsdPrice(anchorSku.sku_id, ANCHOR_WEEK, [autoCh])!));
-    // 显式勾选（哪怕更高价渠道）压过自动
+    const allChannels = dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.channel_id);
+    // 每个有价点 = 该周全渠道最低价；渠道名随最低价来源（点列独立）
+    for (let i = 0; i < s.points.length; i++) {
+      const pt = s.points[i];
+      const wk = pt.bucketId;
+      const expectV = minUsdPrice(anchorSku.sku_id, wk, allChannels);
+      if (expectV == null) {
+        expect(pt.price).toBeNull();
+        continue;
+      }
+      expect(pt.price).toBe(Math.round(expectV));
+      const nameById = new Map(dimChannel.map((c) => [c.channel_id, c.display_name]));
+      const bestCh = allChannels
+        .map((id) => ({ id, v: minUsdPrice(anchorSku.sku_id, wk, [id]) }))
+        .filter((x) => x.v != null)
+        .sort((a, b) => a.v! - b.v!)[0];
+      expect(pt.channelName).toBe(nameById.get(bestCh.id));
+    }
+    // 显式勾选（哪怕更高价渠道）压过自动；label = 平台名（第一百六十二轮）
     const dns = buildSeries({
       ...baseQuery,
       groups: baseQuery.groups.map((g) => ({ ...g, platform: { platforms: ['DNS'], shopIds: [] } })),
     })[0];
-    expect(dns.channelBadge).toEqual({ label: 'DNS 独立站', auto: false, platforms: ['DNS'] });
+    expect(dns.channelBadge).toEqual({ label: 'DNS', auto: false, platforms: ['DNS'] });
   });
 
   it('取价 = 渠道集合内真实最低在架价（无平台因子）：单平台选择锚到 fact 直算', () => {

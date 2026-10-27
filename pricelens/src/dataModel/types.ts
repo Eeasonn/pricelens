@@ -180,6 +180,8 @@ export interface SeriesPoint {
   offer: OfferInfo | null;
   url: string;
   shopName: string | null; // 取价店铺（渠道显示名 · 店铺名）
+  /** 取数渠道（平台-店铺显示名，如 OZON 3P；自动口径每周随最低价来源变化） */
+  channelName?: string | null;
   platform?: string | null; // 取价平台（dim_channel.platform，随最低价行带出；明细表平台列）
 }
 

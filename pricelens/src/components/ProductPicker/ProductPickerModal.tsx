@@ -79,7 +79,6 @@ import {
 import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import {
   AddPill,
-  ChannelChip,
   ColorChip,
   DeleteX,
   GroupDeleteX,
@@ -892,15 +891,6 @@ function MainRow({ card }: { card: MainProduct }) {
               node && actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: { ...main, skuIds: defaultColorSkuIds(node) } } : c)))
             }
           />
-          <ChannelChip
-            cc={state.countryCode}
-            skuIds={main.skuIds}
-            current={main.platform}
-            tone="strong"
-            onPick={(sel) =>
-              actions.setMains(mains.map((c) => (c.id === card.id ? { ...c, main: { ...main, platform: sel } } : c)))
-            }
-          />
         </span>
       </div>
     </LevelSwitchPopover>
@@ -950,21 +940,6 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
             }}
             onReset={() =>
               node && actions.setCardCompares(card.id, card.compares.map((c) => (c === sel ? { ...sel, skuIds: defaultColorSkuIds(node) } : c)))
-            }
-          />
-          <ChannelChip
-            cc={state.countryCode}
-            skuIds={sel.skuIds}
-            current={sel.platform}
-            tone="soft"
-            onPick={(pick) =>
-              // 渠道口径不是对比区内容编辑——走 setMains 原样写入，
-              // 不触发 setCardCompares 的「退出匹配竞品」副作用
-              actions.setMains(
-                state.mains.map((c) =>
-                  c.id === card.id ? { ...c, compares: c.compares.map((x) => (x === sel ? { ...sel, platform: pick } : x)) } : c,
-                ),
-              )
             }
           />
         </span>

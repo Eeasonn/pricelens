@@ -18,12 +18,14 @@
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Popover } from 'antd';
+import ChannelSelectPopover from '../../components/ChannelSelectPopover';
 import { ExportOutlined, LeftOutlined, RightOutlined, ShopOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import { curveNameOf, latestLinkOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
-import { color, motion, radius, selectSoft } from '../../theme/tokens';
+import { color, motion, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
 const COMPARES_VISIBLE = 3;
@@ -51,8 +53,15 @@ interface PillSpec {
   hidden: boolean;
   main: boolean; // 主品药丸 = 本组主分析产品（浅蓝底/描边/加粗）
   link?: ReturnType<typeof latestLinkOf>; // 最新商品页外链（无 = 不渲染图标）
-  /** 取价渠道（第一百六十轮）：图上渠道名 / 自动角标（纯展示） */
+  /** 取价平台（第一百六十二轮）：平台名 / 「自动」（药丸上方小药丸显示） */
   channel?: { label: string; auto: boolean } | null;
+  /** 平台筛选入口：小药丸点击弹三级渠道浮层 */
+  channelCtl?: {
+    cc: string;
+    skuIds: string[];
+    current: { platforms: string[]; shopIds: string[]; seller?: string | null } | null;
+    onPick: (sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
+  };
 }
 
 function Pill({
@@ -102,6 +111,53 @@ function Pill({
         ...look,
       }}
     >
+      {/* 第零行：取价平台小药丸（第一百六十二轮）：平台层级（DNS/OZON/Mvideo），
+          自动态显示「自动」；选中态 = 浅蓝（显式选择）；点击弹渠道筛选浮层。
+          stopPropagation 防触发药丸的显隐切换 */}
+      {pill.channel && pill.channelCtl && (
+        <Popover
+          trigger="click"
+          placement="bottomLeft"
+          arrow={false}
+          styles={{ body: { padding: 0 } }}
+          content={
+            <ChannelSelectPopover
+              cc={pill.channelCtl.cc}
+              skuIds={pill.channelCtl.skuIds}
+              current={pill.channelCtl.current}
+              onPick={pill.channelCtl.onPick}
+            />
+          }
+        >
+          <span
+            role="button"
+            aria-pressed={!pill.channel.auto}
+            aria-label={`取价平台：${pill.channel.label}，点击筛选平台-店铺`}
+            title={pill.channel.auto ? '取价平台：自动（显示每周最低价平台-店铺），点击筛选' : `取价平台：${pill.channel.label}，点击筛选`}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              alignSelf: 'flex-start',
+              height: 16,
+              padding: '0 7px',
+              borderRadius: radius.pill,
+              fontSize: 10,
+              lineHeight: '14px',
+              fontWeight: 600,
+              color: pill.channel.auto ? color.mute : selectSoftInk,
+              background: pill.channel.auto ? color.canvas : selectSoft,
+              border: `1px solid ${pill.channel.auto ? color.hairline : 'rgba(0, 112, 243, 0.35)'}`,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              flexShrink: 0,
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
+          </span>
+        </Popover>
+      )}
       {/* 第一行：品牌色点 + 品牌名（第一百四十五轮，Eason：药丸必须带品牌） */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
         <BrandDot brand={pill.brand} />
@@ -175,25 +231,6 @@ function Pill({
           </button>
         )}
       </span>
-      {/* 第三行：取价渠道（第一百六十一轮，Eason：平台名换行、不与产品名挤一行，
-          只显示平台名字不带「自动」；筛选入口在产品筛选器，药丸只做展示） */}
-      {pill.channel && (
-        <span
-          title={`取价渠道：${pill.channel.label}`}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            maxWidth: '100%',
-            fontSize: 10,
-            lineHeight: '12px',
-            color: color.mute,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-          }}
-        >
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
-        </span>
-      )}
     </span>
   );
 }
@@ -208,6 +245,7 @@ function GroupBlock({
   onToggle,
   onHover,
   onCompareProduct,
+  channelCtl,
 }: {
   group: LegendGroup;
   showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
@@ -216,6 +254,11 @@ function GroupBlock({
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
   onCompareProduct?: (p: { modelId: string; romram: string }) => void;
+  /** 平台筛选（第一百六十二轮）：cc + 回写动作（按系列 key 定位选择项） */
+  channelCtl?: {
+    cc: string;
+    onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
+  };
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
@@ -242,6 +285,9 @@ function GroupBlock({
     main: group.mainKey === s.key,
     link: latestLinkOf(s),
     channel: s.channelBadge ?? null,
+    channelCtl: channelCtl
+      ? { cc: channelCtl.cc, skuIds: s.skuIds, current: s.platform ?? null, onPick: (sel) => channelCtl.onPick(s.key, sel) }
+      : undefined,
   }));
   const cmpOf = (key: string): { title: string; onClick: () => void } | undefined => {
     if (!onCompareProduct) return undefined;
@@ -333,6 +379,7 @@ export default function BrandLegendStrip({
   onToggleHidden,
   onHover,
   onCompareProduct,
+  channelCtl,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -344,6 +391,12 @@ export default function BrandLegendStrip({
   /** 多平台比价入口（第一百五十轮）：传入 = 每颗药丸第二行悬停浮现店铺图标，
    *  点击以该产品打开多平台比价弹窗（工具行胶囊按钮已退役） */
   onCompareProduct?: (p: { modelId: string; romram: string }) => void;
+  /** 平台筛选（第一百六十二轮）：传入 = 每颗药丸上方出平台小药丸，点击弹
+   *  三级渠道浮层；onPick 按系列 key 回写该产品的取价口径 */
+  channelCtl?: {
+    cc: string;
+    onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
+  };
 }) {
   const multi = groups.length >= 2;
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
@@ -426,6 +479,7 @@ export default function BrandLegendStrip({
                 onToggle={onToggleHidden}
                 onHover={hover}
                 onCompareProduct={onCompareProduct}
+                channelCtl={channelCtl}
               />,
             );
           });
