@@ -20,6 +20,7 @@ const TABS: { page: Page; label: string; disabled?: boolean; hint?: string }[] =
   { page: 'overview', label: '总览', disabled: true, hint: '当前版本暂不提供' },
   { page: 'dashboard', label: '价格看板' },
   { page: 'volume', label: '量价看板' },
+  { page: 'pricing', label: '定价推演' },
   { page: 'config', label: '配置' },
   { page: 'alerts', label: '预警' },
 ];

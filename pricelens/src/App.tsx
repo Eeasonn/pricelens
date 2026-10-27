@@ -8,6 +8,7 @@ import { scopeLabels } from './dataModel/scope';
 import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
 import VolumePrice from './pages/VolumePrice';
+import PricingPage from './pages/pricing/PricingPage';
 import Config from './pages/Config';
 import AlertsPage from './pages/AlertsPage';
 import { color, font } from './theme/tokens';
@@ -59,6 +60,8 @@ function AppBody() {
         <Overview />
       ) : page === 'volume' ? (
         <VolumePrice />
+      ) : page === 'pricing' ? (
+        <PricingPage />
       ) : page === 'config' ? (
         <Config />
       ) : page === 'alerts' ? (
