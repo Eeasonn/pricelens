@@ -39,7 +39,7 @@
 //    返回保留上次分析状态；windowIds 恢复后仍走原有换算（粒度切换）/失义
 //    （范围改动 rangeWatch）路径，自适应首跑在范围未变时不再复位窗口。
 // ============================================================
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, ConfigProvider, Segmented, Tooltip } from 'antd';
 import { HolderOutlined, ProfileOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
@@ -60,7 +60,7 @@ import type {
   SeriesQuery,
   SkuGroupQuery,
 } from '../../dataModel/types';
-import type { PlatformSelection, ProductSelection } from '../../state/filtersTypes';
+import type { ProductSelection } from '../../state/filtersTypes';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import Chart from './Chart';
 import ChartToolbar from './ChartToolbar';
@@ -104,7 +104,8 @@ import BrandLegendStrip from './BrandLegendStrip';
 
 /** 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；第一百二十三轮④
  *  单行药丸带 44 → 30，第一百四十五轮药丸固定两行（品牌行 + 产品行）30 → 40） */
-const PANEL_LEGEND_H = 40;
+// 52 = 三行药丸（品牌 12 + 产品 14 + 渠道 12 + 行距与内边距；第一百六十一轮渠道行独立）
+const PANEL_LEGEND_H = 52;
 
 /** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之。
  *  空对组名分工：图表面板/图例保留「对比产品」（组名仍有内容），宽表组头用
@@ -169,17 +170,6 @@ export default function PriceTrend(props: {
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
 
   /** 图例药丸比价入口：记录发起产品并打开弹窗 */
-  // 第一百六十轮：图例渠道 chip 回写——seriesKey（modelId__配置去空格）与
-  // selKey（modelId|配置去空格）同口径，剥出两段拼 selKey 定位选择项
-  const pickChannel = useCallback(
-    (seriesKey: string, sel: PlatformSelection | null) => {
-      const idx = seriesKey.indexOf('__');
-      if (idx <= 0) return;
-      actions.setSelectionPlatform(`${seriesKey.slice(0, idx)}|${seriesKey.slice(idx + 2)}`, sel);
-    },
-    [actions],
-  );
-
   const openCompareFor = (p: { modelId: string; romram: string }): void => {
     setCompareInit(p);
     setPlatformCompareOpen(true);
@@ -1188,7 +1178,6 @@ export default function PriceTrend(props: {
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                           onCompareProduct={openCompareFor}
-                          channelCtl={{ cc: state.countryCode, currency: state.currency, onPick: pickChannel }}
                         />
                       </div>
                       <Chart
@@ -1266,7 +1255,6 @@ export default function PriceTrend(props: {
               onToggleHidden={toggleLegend}
               onHover={setLegendHoverKey}
               onCompareProduct={openCompareFor}
-              channelCtl={{ cc: state.countryCode, currency: state.currency, onPick: pickChannel }}
             />
           </div>
           <Chart
