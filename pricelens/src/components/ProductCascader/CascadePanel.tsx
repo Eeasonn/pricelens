@@ -75,6 +75,8 @@ export function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; m
 export interface CascadeColumnSpec {
   /** 固定列宽；缺省 = 按内容自适应（第一百一十五轮） */
   width?: number;
+  /** 列头（第一百六十二轮）：渲染在该列顶部、不随行滚动（如卖家列的「自动」胶囊） */
+  header?: ReactNode;
   items: CascadeRowItem[];
   /** 自适应下限/上限（缺省 148 / 380；fill 模式上限放开到 1600，信息优先） */
   min?: number;
@@ -85,7 +87,7 @@ export interface CascadeColumnSpec {
   flex?: number;
 }
 
-function Column({ items, width, last, open, fillFlex, height }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean; fillFlex?: number; height?: number }) {
+function Column({ items, width, last, open, fillFlex, height, header }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean; fillFlex?: number; height?: number; header?: ReactNode }) {
   const noClip = fillFlex != null;
   const hasActive = items.some((item) => item.active);
   const activeKey = items.find((item) => item.active)?.key;
@@ -126,6 +128,23 @@ function Column({ items, width, last, open, fillFlex, height }: { items: Cascade
         flexShrink: 0,
       }}
     >
+      {header != null && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: space.xs,
+            padding: `8px ${space.sm}px 6px`,
+            borderBottom: `1px solid ${color.hairline}`,
+            position: 'sticky',
+            top: 0,
+            background: color.canvas,
+            zIndex: 1,
+          }}
+        >
+          {header}
+        </div>
+      )}
       {items.map((item, index) => {
         const expandable = !last && Boolean(item.onActivate);
         return (
@@ -198,7 +217,8 @@ function Column({ items, width, last, open, fillFlex, height }: { items: Cascade
               textOverflow: noClip ? undefined : 'ellipsis',
             }}
           >
-            <span style={noClip ? undefined : { overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+            <span style={noClip ? undefined : { overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {item.label}</span>
             {item.locked && <LockOutlined aria-hidden style={{ fontSize: 10, flexShrink: 0 }} />}
           </span>
           {item.trailing}
@@ -238,6 +258,7 @@ export function CascadePanel({ columns, open = true, fill = false, height }: { c
           key={`${i}-${c.items[0]?.key ?? ''}`}
           width={c.width ?? autoColumnWidth(c.items, { ...c, noMaxClip: fill })}
           items={c.items}
+          header={c.header}
           last={i === columns.length - 1}
           open={open}
           fillFlex={fill ? (c.flex ?? 1) : undefined}

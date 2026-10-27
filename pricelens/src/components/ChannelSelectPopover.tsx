@@ -180,39 +180,35 @@ export default function ChannelSelectPopover({
 
   return (
     <div>
-      {sellerPane != null && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: space.sm,
-            padding: `8px ${space.md}px 6px`,
-            borderBottom: `1px solid ${color.hairline}`,
-          }}
-        >
-          {/* 渠道内「自动」= 不锁卖家，每周取该渠道内最低价店铺 */}
-          <AutoTogglePill
-            pressed={selectedShopId === sellerPane && selectedSeller == null}
-            hint="显示每周最低价店铺"
-            onClick={() => commitSeller(sellerPane, null)}
-          />
-          <Input
-            size="small"
-            allowClear
-            placeholder="搜索卖家店铺"
-            value={sellerQuery}
-            onChange={(e) => setSellerQuery(e.target.value)}
-            style={{ height: 24, fontSize: fontSize.caption, width: 150 }}
-          />
-        </div>
-      )}
       <CascadePanel
         open
         columns={[
           { items: platformItems, extraW: platformExtraW },
           { items: shopItems, extraW: shopExtraW },
-          ...(sellerPane != null && sellerColWidth > 0 ? [{ items: sellerItems, width: sellerColWidth }] : []),
+          ...(sellerPane != null && sellerColWidth > 0
+            ? [{
+                items: sellerItems,
+                width: sellerColWidth,
+                // 第一百六十二轮（Eason）：渠道内「自动」放店铺列顶部（不放整卡左上角）
+                header: (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.xs }}>
+                    <AutoTogglePill
+                      pressed={selectedShopId === sellerPane && selectedSeller == null}
+                      hint="显示每周最低价店铺"
+                      onClick={() => commitSeller(sellerPane, null)}
+                    />
+                    <Input
+                      size="small"
+                      allowClear
+                      placeholder="搜索卖家店铺"
+                      value={sellerQuery}
+                      onChange={(e) => setSellerQuery(e.target.value)}
+                      style={{ height: 22, fontSize: fontSize.caption, width: 108 }}
+                    />
+                  </div>
+                ),
+              }]
+            : []),
         ]}
       />
       {/* 底部「自动」= 整个产品不锁渠道，每周取最低价平台-店铺 */}

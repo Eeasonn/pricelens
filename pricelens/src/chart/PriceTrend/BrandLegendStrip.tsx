@@ -69,15 +69,11 @@ function Pill({
   dimmed,
   onToggle,
   onHover,
-  cmp,
 }: {
   pill: PillSpec;
   dimmed: boolean;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
-  /** 多平台比价入口（第一百五十轮）：悬停药丸浮现的店铺图标，点击 = 以该产品
-   *  打开多平台比价弹窗（stopPropagation 防触发药丸的屏蔽切换） */
-  cmp?: { title: string; onClick: () => void };
 }) {
   // 被屏蔽 = 虚线置灰态（角色强调让位，点击恢复）；主品可见态 = 浅蓝底 + 蓝描边 + 加粗
   const look = pill.hidden
@@ -111,53 +107,6 @@ function Pill({
         ...look,
       }}
     >
-      {/* 第零行：取价平台小药丸（第一百六十二轮）：平台层级（DNS/OZON/Mvideo），
-          自动态显示「自动」；选中态 = 浅蓝（显式选择）；点击弹渠道筛选浮层。
-          stopPropagation 防触发药丸的显隐切换 */}
-      {pill.channel && pill.channelCtl && (
-        <Popover
-          trigger="click"
-          placement="bottomLeft"
-          arrow={false}
-          styles={{ body: { padding: 0 } }}
-          content={
-            <ChannelSelectPopover
-              cc={pill.channelCtl.cc}
-              skuIds={pill.channelCtl.skuIds}
-              current={pill.channelCtl.current}
-              onPick={pill.channelCtl.onPick}
-            />
-          }
-        >
-          <span
-            role="button"
-            aria-pressed={!pill.channel.auto}
-            aria-label={`取价平台：${pill.channel.label}，点击筛选平台-店铺`}
-            title={pill.channel.auto ? '取价平台：自动（显示每周最低价平台-店铺），点击筛选' : `取价平台：${pill.channel.label}，点击筛选`}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              alignSelf: 'flex-start',
-              height: 16,
-              padding: '0 7px',
-              borderRadius: radius.pill,
-              fontSize: 10,
-              lineHeight: '14px',
-              fontWeight: 600,
-              color: pill.channel.auto ? color.mute : selectSoftInk,
-              background: pill.channel.auto ? color.canvas : selectSoft,
-              border: `1px solid ${pill.channel.auto ? color.hairline : 'rgba(0, 112, 243, 0.35)'}`,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              flexShrink: 0,
-              cursor: 'pointer',
-            }}
-          >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
-          </span>
-        </Popover>
-      )}
       {/* 第一行：品牌色点 + 品牌名（第一百四十五轮，Eason：药丸必须带品牌） */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
         <BrandDot brand={pill.brand} />
@@ -205,32 +154,130 @@ function Pill({
             <ExportOutlined style={{ fontSize: 11 }} />
           </a>
         )}
-        {/* 多平台比价（第一百五十轮）：店铺图标悬停浮现，点击直进该产品的比价 */}
-        {cmp && (
-          <button
-            type="button"
-            className="lpl-pill-cmp"
-            aria-label={cmp.title}
-            title={cmp.title}
-            onClick={(e) => {
-              e.stopPropagation();
-              cmp.onClick();
-            }}
+      </span>
+    </span>
+  );
+}
+
+/** 药丸单元（第一百六十二轮，Eason）：上行 = 平台小药丸（独立元素）+ 比价入口
+ *  居右常驻；下行 = 产品药丸。两行互相独立、不嵌套，点击互不干扰 */
+function PillUnit({
+  pill,
+  dimmed,
+  onToggle,
+  onHover,
+  cmp,
+}: {
+  pill: PillSpec;
+  dimmed: boolean;
+  onToggle: (key: string) => void;
+  onHover: (key: string | null) => void;
+  cmp?: { title: string; onClick: () => void };
+}) {
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch', gap: 2, flexShrink: 0, minWidth: 0 }}>
+      <PlatformRow pill={pill} dimmed={dimmed} cmp={cmp} />
+      <Pill pill={pill} dimmed={dimmed} onToggle={onToggle} onHover={onHover} />
+    </span>
+  );
+}
+
+/** 平台行（第一百六十二轮，Eason）：平台小药丸独立一行（不嵌在产品药丸内；
+ *  自动态显示最新有价周的实际平台名）+ 多平台比价入口（同行居右、常驻显示） */
+function PlatformRow({
+  pill,
+  dimmed,
+  cmp,
+}: {
+  pill: PillSpec;
+  dimmed: boolean;
+  cmp?: { title: string; onClick: () => void };
+}) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 4,
+        width: '100%',
+        maxWidth: PILL_W_BUDGET,
+        opacity: pill.hidden ? 0.45 : dimmed ? 0.25 : undefined,
+      }}
+    >
+      {pill.channel && pill.channelCtl ? (
+        <Popover
+          trigger="click"
+          placement="bottomLeft"
+          arrow={false}
+          styles={{ body: { padding: 0 } }}
+          content={
+            <ChannelSelectPopover
+              cc={pill.channelCtl.cc}
+              skuIds={pill.channelCtl.skuIds}
+              current={pill.channelCtl.current}
+              onPick={pill.channelCtl.onPick}
+            />
+          }
+        >
+          <span
+            role="button"
+            aria-pressed={!pill.channel.auto}
+            aria-label={`取价平台：${pill.channel.label}，点击筛选平台-店铺`}
+            title={
+              pill.channel.auto
+                ? `取价平台：${pill.channel.label}（自动 = 显示每周最低价平台-店铺），点击筛选`
+                : `取价平台：${pill.channel.label}，点击筛选`
+            }
+            onClick={(e) => e.stopPropagation()}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              border: 'none',
-              background: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              color: color.mute,
+              height: 16,
+              padding: '0 7px',
+              borderRadius: radius.pill,
+              fontSize: 10,
+              lineHeight: '14px',
+              fontWeight: 600,
+              color: pill.channel.auto ? color.mute : selectSoftInk,
+              background: pill.channel.auto ? color.canvas : selectSoft,
+              border: `1px solid ${pill.channel.auto ? color.hairline : 'rgba(0, 112, 243, 0.35)'}`,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
               flexShrink: 0,
+              cursor: 'pointer',
             }}
           >
-            <ShopOutlined style={{ fontSize: 11 }} />
-          </button>
-        )}
-      </span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
+          </span>
+        </Popover>
+      ) : (
+        <span style={{ flexShrink: 0 }} />
+      )}
+      {/* 多平台比价入口（第一百六十二轮，Eason）：同行居右、常驻显示 */}
+      {cmp && (
+        <button
+          type="button"
+          aria-label={cmp.title}
+          title={cmp.title}
+          onClick={(e) => {
+            e.stopPropagation();
+            cmp.onClick();
+          }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            border: 'none',
+            background: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            color: color.mute,
+            flexShrink: 0,
+          }}
+        >
+          <ShopOutlined style={{ fontSize: 11 }} />
+        </button>
+      )}
     </span>
   );
 }
@@ -310,7 +357,7 @@ function GroupBlock({
         </span>
       )}
       {/* 主品药丸（空对无主品不出） */}
-      {mainPill && <Pill pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(mainPill.key)} />}
+      {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(mainPill.key)} />}
       {mainPill && compares.length > 0 && (
         <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>vs</span>
       )}
@@ -341,7 +388,7 @@ function GroupBlock({
             }}
           >
             {compares.map((p) => (
-              <Pill key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(p.key)} />
+              <PillUnit key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(p.key)} />
             ))}
           </div>
           {scrollable && (

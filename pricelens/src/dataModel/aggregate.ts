@@ -486,7 +486,11 @@ export function buildSeries(q: SeriesQuery): Series[] {
       badge = { label: platforms.join('/') || '已选渠道', auto: false, platforms };
     } else {
       channels = new Set(dimChannel.filter((c) => c.country_code === cc).map((c) => c.channel_id));
-      badge = { label: '自动', auto: true, platforms: [...new Set([...channels].map((id) => channelById.get(id)?.platform ?? ''))] };
+      badge = {
+        label: '自动', // 自动态在 weeklyBest 求出后回填为最新有价周的实际平台名
+        auto: true,
+        platforms: [...new Set([...channels].map((id) => channelById.get(id)?.platform ?? ''))],
+      };
     }
     const seller = sellerOfQuery(explicitOn ? explicit : null);
     const key = `${g.modelId}__${normRom(rg.romram)}`;
@@ -563,6 +567,19 @@ export function buildSeries(q: SeriesQuery): Series[] {
         offer = toOfferInfo(firstBest.row, cc, bucket.anchorDate);
       }
       const channelName = firstBest ? (channelById.get(firstBest.row.channel_id)?.display_name ?? null) : null;
+      // 自动态平台小药丸显示具体平台名（第一百六十二轮，Eason）：取最新有价周的实际
+      // 取数平台（口径本身仍是每周动态跟随最低价）
+      if (badge != null && badge.auto) {
+        for (let i = weeklyBest.length - 1; i >= 0; i--) {
+          const b = weeklyBest[i];
+          if (!b) continue;
+          const pf = channelById.get(b.row.channel_id)?.platform;
+          if (pf) {
+            badge.label = pf;
+            break;
+          }
+        }
+      }
 
       points.push({
         bucketId: bucket.id,

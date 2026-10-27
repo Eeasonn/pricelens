@@ -45,11 +45,17 @@ describe('aggregate platform/source口径', () => {
     const pt = (platform: { platforms: string[]; shopIds: [] | string[] } | null) =>
       buildSeries({ ...baseQuery, groups: baseQuery.groups.map((g) => ({ ...g, platform })) })[0].points[0];
 
-    // 缺省 = 自动（第一百六十二轮）：每周取该国全部平台-店铺最低价，
-    // badge = 「自动」+ 全平台集；首点店铺随该周最低价渠道。
+    // 缺省 = 自动（第一百六十二轮）：每周取该国全部平台-店铺最低价，badge.platforms
+    // = 全平台集（渠道表插入序）；label = 最新有价周的实际取数平台（自动态不显示「自动」）。
     const autoSeries = buildSeries({ ...baseQuery })[0];
-    const allPlatforms = [...new Set(dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.platform))]; // 渠道表插入序
-    expect(autoSeries.channelBadge).toEqual({ label: '自动', auto: true, platforms: allPlatforms });
+    const allPlatforms = [...new Set(dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.platform))];
+    const channelById = new Map(dimChannel.map((c) => [c.channel_id, c]));
+    const lastPriced = [...autoSeries.points].reverse().find((p) => p.price != null)!;
+    const bestRow = factPriceWeekly
+      .filter((r) => r.country_code === 'RU' && r.sku_id === anchorSku.sku_id && r.week_id === lastPriced.bucketId && r.price_usd != null && !r.bundle)
+      .sort((a, b) => a.price_usd! - b.price_usd!)[0];
+    const lastPlatform = channelById.get(bestRow.channel_id)!.platform;
+    expect(autoSeries.channelBadge).toEqual({ label: lastPlatform, auto: true, platforms: allPlatforms });
     // 首点价 = 该周全渠道最低价（fact 直算对拍）
     const allChannels = dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.channel_id);
     expect(autoSeries.points[0].price).toBe(Math.round(minUsdPrice(anchorSku.sku_id, ANCHOR_WEEK, allChannels)!));
