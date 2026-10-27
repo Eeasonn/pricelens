@@ -96,7 +96,7 @@ import {
   type Bucket,
   type YScale,
 } from './helpers';
-import PlatformCompareModal from './PlatformCompareModal';
+import PlatformCompareView from './PlatformCompareView';
 import PointPanel from './PointPanel';
 import { groupsOfCards, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
@@ -162,11 +162,10 @@ export default function PriceTrend(props: {
   const [maxMinOn, setMaxMinOn] = useState(false);
   // 价格变化提醒：null=关；阈值=小数（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
-  // 多平台比价弹窗：入口 = 图例药丸悬停「店铺」小按钮（第一百五十轮起，每个
-  // 产品直进自己的多平台比价、弹窗预选该产品；工具行胶囊按钮退役——原「多组
-  // 产品里再选一款」的二次选择路径删除，142 追补三的块头「⇄ 比价」结论随
-  // 入口本位迁移一并作废）
-  const [platformCompareOpen, setPlatformCompareOpen] = useState(false);
+  // 多平台对比页签（第一百六十四轮，Eason）：页签主动进入 = 不带产品筛选（进来
+  // 自己选）；图例药丸比价按钮进入 = 带上该产品（compareInit）。页签态会话保留。
+  // 原 PlatformCompareModal 弹窗形态随本次改版退役（图表改用主界面同款 Chart）。
+  const [compareTab, setCompareTab] = usePageViewState<boolean>('dashboard.compareTab', () => false);
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
 
   /** 图例药丸比价入口：记录发起产品并打开弹窗 */
@@ -183,7 +182,8 @@ export default function PriceTrend(props: {
 
   const openCompareFor = (p: { modelId: string; romram: string }): void => {
     setCompareInit(p);
-    setPlatformCompareOpen(true);
+    setCompareTab(true);
+    setPointPanelOpen(false);
   };
   // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
   // 不持久化（每次进页面默认收起）
@@ -909,10 +909,25 @@ export default function PriceTrend(props: {
             </span>
           )}
         </h2>
+        {/* 多平台对比页签（第一百六十四轮，Eason）：「产品对比」= 主视图；
+            「多平台对比」= 次级界面（单产品 × 多平台-店铺线，图表与主界面同款） */}
+        <Segmented
+          size="small"
+          value={compareTab ? 'compare' : 'main'}
+          onChange={(v) => {
+            const next = v === 'compare';
+            setCompareTab(next);
+            if (next) setPointPanelOpen(false);
+          }}
+          options={[
+            { label: '产品对比', value: 'main' },
+            { label: '多平台对比', value: 'compare' },
+          ]}
+        />
         {/* 第一百二十三轮⑥（宽容合并）：≥2 组时可选「分图 / 合并」——默认分图
             （第一百一十七轮口径），合并适合单产品多型号等用户认为该同图的场景；
             「每行 2/3 个」只在分图态出现 */}
-        {multiCards && (
+        {!compareTab && multiCards && (
           <Segmented
             size="small"
             value={splitActive ? 'split' : 'merge'}
@@ -933,7 +948,7 @@ export default function PriceTrend(props: {
             ]}
           />
         )}
-        {splitActive && (
+        {!compareTab && splitActive && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
             <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>每行</span>
             <Segmented
@@ -961,16 +976,19 @@ export default function PriceTrend(props: {
                 ]}
               />
             </span>
-            {/* 时点摘要唯一入口（第112轮）：纯手动开合，打开态 primary 高亮 */}
-            <Button
-              size="small"
-              icon={<ProfileOutlined />}
-              type={pointPanelOpen ? 'primary' : 'default'}
-              onClick={() => setPointPanelOpen((v) => !v)}
-              title="各产品最新折扣、现价、RRP 与来源"
-            >
-              时点摘要
-            </Button>
+            {/* 时点摘要唯一入口（第112轮）：纯手动开合，打开态 primary 高亮；
+                多平台对比页签下不出现（次级界面无产品对语义） */}
+            {!compareTab && (
+              <Button
+                size="small"
+                icon={<ProfileOutlined />}
+                type={pointPanelOpen ? 'primary' : 'default'}
+                onClick={() => setPointPanelOpen((v) => !v)}
+                title="各产品最新折扣、现价、RRP 与来源"
+              >
+                时点摘要
+              </Button>
+            )}
           </div>
         </ConfigProvider>
         {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
@@ -1021,7 +1039,38 @@ export default function PriceTrend(props: {
           面板 chrome=false，全部视图开关由常驻行统一控制 */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
         <div style={{ flex: '1 1 0', minWidth: 0 }}>
-          {splitActive ? (
+          {/* 多平台对比页签（第一百六十四轮）：次级界面 = 单产品筛选器 + 店铺
+              chips + 主界面同款 Chart；时间窗/视图开关与主图共用，页签互切不重置 */}
+          {compareTab ? (
+            <PlatformCompareView
+              preset={compareInit}
+              buckets={buckets}
+              win={win}
+              filterBounds={filterBounds}
+              adjusting={adjusting}
+              onWindowChange={onWindowChange}
+              onAdjusting={setAdjusting}
+              sliderScale={sliderScale}
+              onSliderScale={setSliderScale}
+              yCompress={yCompress}
+              onYCompress={setYCompress}
+              showYTicks={showYTicks}
+              onShowYTicks={setShowYTicks}
+              lineShape={lineShape}
+              onLineShape={setLineShape}
+              labelMode={labelMode}
+              priceTypes={state.priceTypes}
+              onPriceTypeToggle={setPriceType}
+              promoBandsOn={promoBandsOn}
+              onPromoBandsOn={setPromoBandsOn}
+              offersOn={offersOn}
+              onOffersOn={setOffersOn}
+              maxMinOn={maxMinOn}
+              onMaxMinOn={setMaxMinOn}
+              changeThreshold={changeThreshold}
+              onChangeThreshold={setChangeThreshold}
+            />
+          ) : splitActive ? (
         <>
           {/* 常驻工具行（第五十四轮追补，用户需求）：分离模式下这一行仍常驻在摘要页签
               与面板网格之间，统管底下全部分离面板——大促/offer/极值/变化提醒 + 齿轮
@@ -1315,7 +1364,7 @@ export default function PriceTrend(props: {
       )}
       {/* X 刷选条（合并模式唯一底部时间轴，第一百三十一轮波2起为纯查看窗口轨道）：
           只调整上方极值范围内的查看窗口；时间筛选在顶部筛选条。 */}
-          {!splitActive && buckets.length > 0 && visSeries.length > 0 && (
+          {!compareTab && !splitActive && buckets.length > 0 && visSeries.length > 0 && (
             <XBrush
               buckets={buckets}
               s={win.s}
@@ -1329,29 +1378,26 @@ export default function PriceTrend(props: {
             />
           )}
         </div>
-        {/* 图右侧时点摘要面板（第112轮）：仅标题行按钮手动开合；收起时不渲染 */}
-        <PointPanel
-          open={pointPanelOpen}
-          onCollapse={() => setPointPanelOpen(false)}
-          items={summary}
-          groups={summaryGroups}
-          currency={state.currency}
-          granularity={state.granularity}
-          pointDate={pointDate}
-          alertCounts={alertCounts}
-          subscribedKeys={subscribedKeys}
-          onToggleSubscribe={toggleAlertSub}
-        />
+        {/* 图右侧时点摘要面板（第112轮）：仅标题行按钮手动开合；收起/多平台对比
+            页签下不渲染 */}
+        {!compareTab && (
+          <PointPanel
+            open={pointPanelOpen}
+            onCollapse={() => setPointPanelOpen(false)}
+            items={summary}
+            groups={summaryGroups}
+            currency={state.currency}
+            granularity={state.granularity}
+            pointDate={pointDate}
+            alertCounts={alertCounts}
+            subscribedKeys={subscribedKeys}
+            onToggleSubscribe={toggleAlertSub}
+          />
+        )}
       </div>
 
-      {/* 多平台比价弹窗（入口 = 图例药丸悬停店铺图标，initialProduct = 发起
-          产品）：单产品各平台价格趋势对比 + 比当前看板差价率，数据层
-          platformPriceSpread = 全平台口径（与左上平台筛选无关） */}
-      <PlatformCompareModal
-        open={platformCompareOpen}
-        onClose={() => setPlatformCompareOpen(false)}
-        initialProduct={compareInit}
-      />
+      {/* 多平台对比已收进标题行页签（第一百六十四轮）：原 PlatformCompareModal
+          弹窗退役——页签主动进入不带产品筛选，图例药丸店铺按钮进入带上该产品 */}
 
       {/* 月/季下钻弹窗 */}
       <DrillModal
