@@ -6,10 +6,11 @@
 // ① 单产品筛选器：与产品选择同款四列树（品牌→系列→产品→配置，带搜索），
 //    触发器为白底圆角框（同主品框视觉）；单选语义，选完即关。
 // ② 店铺多选 chips（概念同对比产品区，无主品）：默认 = 每个平台一条「自动」
-//    线（平台内每周最低价店铺，chip 只写平台名不缀「自动」——第一百六十四轮）；
-//    「＋ 添加店铺」弹三级级联（平台→店铺→卖家，行尾 ＋/✓ 即加即撤、连点不关）
-//    增减具体店铺/卖家；chip 点击 = 弹同款级联改选该线取数店铺（平台自动/具体
-//    店铺/卖家互切，底部「自动」= 回平台内每周最低价），✕ 移除该条。
+//    线（平台内每周最低价店铺，chip 只写平台名不缀「自动」）；热区分离（追补
+//    拍板）——chip 本体点击 = 屏蔽/恢复折线（虚线置灰，同主图产品药丸语言），
+//    行尾常驻筛选小图标 = 弹级联改选该线取数店铺（平台自动/具体店铺/卖家互切，
+//    底部「自动」= 回平台内每周最低价），✕ 移除该条；「＋ 添加店铺」弹三级
+//    级联（平台→店铺→卖家，行尾 ＋/✓ 即加即撤、连点不关）增减具体店铺/卖家。
 // ③ 图表 = 主界面完全同款：Chart（工具行/大促档期底色/悬停明细/价格标签/端点
 //    标记全部同参）+ 底部查看窗口毛刷（XBrush），时间窗/视图开关与主图共用
 //    同一份状态（页签切换互不重置）。每条店铺线覆写 key/名称/线色（同产品
@@ -17,7 +18,7 @@
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button, Input, Popover } from 'antd';
-import { CheckOutlined, DownOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckOutlined, DownOutlined, FilterOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { dimChannel, dimPromo, dimProduct } from '../../data';
 import type { Series, SeriesPoint, SkuGroupQuery } from '../../dataModel/types';
@@ -491,22 +492,37 @@ export default function PlatformCompareView(props: {
   const [picked, setPicked] = useState<ProductPick | null>(null);
   useEffect(() => setPicked(null), [props.preset]);
   const product = picked ?? props.preset;
+  const productKey = product ? `${product.modelId}|${normRom(product.romram)}` : '';
 
   // 店铺多选：默认 = 各平台自动；换国家重置（渠道/卖家名按国家各有一套）。
-  // chip 点击 = 弹级联改选（第一百六十四轮：已有店铺也走筛选器），✕ = 移除
+  // chip 本体点击 = 屏蔽/恢复折线（图例显隐，同主图产品药丸语言）；
+  // chip 行尾筛选小图标 = 弹级联改选口径（第一百六十四轮追补拍板：热区分离）；✕ = 移除
   const [shops, setShops] = useState<ShopLine[]>(() => defaultShopsOf(cc));
   const [editId, setEditId] = useState<string | null>(null); // 正在改选的店铺 chip
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set()); // 屏蔽中的线（chip 虚线置灰）
   useEffect(() => {
     setShops(defaultShopsOf(cc));
     setEditId(null);
+    setHiddenIds(new Set());
   }, [cc]);
+  useEffect(() => {
+    setHiddenIds(new Set());
+  }, [productKey]);
 
   const toggleShop = (line: ShopLine): void => {
     setShops((prev) => (prev.some((s) => s.id === line.id) ? prev.filter((s) => s.id !== line.id) : [...prev, line]));
   };
   const restoreDefault = (): void => {
     setShops(defaultShopsOf(cc));
+    setHiddenIds(new Set());
   };
+  const toggleHidden = (id: string): void =>
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   /** chip 级联改选：把该 chip 的线替换为新口径（原地替换，撞已有 chip 的去重；
    *  id 口径与「添加店铺」一致：pf:/ch:/sl:） */
   const applyChipPick = (chip: ShopLine, sel: PlatformSelection | null): void => {
@@ -588,7 +604,7 @@ export default function PlatformCompareView(props: {
       })
       .filter((s) => s.points.length > 0);
   }, [shopSeries, props.win.s, props.win.e]);
-  const shownSeries = winSeries; // chip 点击 = 改选口径（不再做图例屏蔽）
+  const shownSeries = useMemo(() => winSeries.filter((s) => !hiddenIds.has(s.key)), [winSeries, hiddenIds]);
 
   // Y 轴自适应（与主图同参：刷选拖动中冻结 + 步长滞回）
   const scaleRef = useRef<YScale | null>(null);
@@ -621,7 +637,7 @@ export default function PlatformCompareView(props: {
     [props.promoBandsOn, scopedPromos, state.granularity, winBuckets],
   );
 
-  // chip 悬停 = 图上高亮该线（与主图例药丸同语义）
+  // chip 悬停/改选中 = 图上高亮该线（与主图例药丸同语义；弹层开着时该线保持高亮）
   const [hoverKey, setHoverKey] = useState<string | null>(null);
 
   const gridLeft = estGridLeft(state.currency);
@@ -640,7 +656,9 @@ export default function PlatformCompareView(props: {
       ? '点击「＋ 添加店铺」选择要对比的平台 / 店铺'
       : winSeries.length === 0
         ? '该产品在所选店铺暂无价格数据'
-        : undefined;
+        : shownSeries.length === 0
+          ? '店铺折线均已隐藏，点击上方店铺恢复显示'
+          : undefined;
 
   return (
     <div>
@@ -651,68 +669,91 @@ export default function PlatformCompareView(props: {
         <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
           {shops.map((sh, i) => {
+            const off = hiddenIds.has(sh.id);
             const line = seriesById.get(sh.id);
             const latest = line ? latestOf(line) : null;
             const hasData = shopSeries.some((s) => s.key === sh.id && s.points.some((p) => p.price != null));
             return (
-              <Popover
+              <span
                 key={sh.id}
-                trigger="click"
-                open={editId === sh.id}
-                onOpenChange={(o) => setEditId(o ? sh.id : null)}
-                arrow={false}
-                placement="bottomLeft"
-                destroyTooltipOnHide
-                styles={{ body: { padding: 0 } as const }}
-                content={
-                  <ChannelSelectPopover
-                    cc={cc}
-                    skuIds={repSkuId ? [repSkuId] : []}
-                    current={chipQueryOf(sh)}
-                    scope="platform"
-                    scopePlatform={sh.platform}
-                    onPick={(sel) => {
-                      applyChipPick(sh, sel);
-                      setEditId(null);
-                    }}
-                  />
-                }
+                role="button"
+                aria-pressed={off}
+                aria-label={`取数店铺：${shopLabelOf(sh)}，点击隐藏/恢复折线`}
+                title={off ? '点击恢复显示该店铺折线' : '点击隐藏该店铺折线'}
+                onMouseEnter={() => setHoverKey(sh.id)}
+                onMouseLeave={() => setHoverKey(null)}
+                onClick={() => toggleHidden(sh.id)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  height: 24,
+                  padding: '0 6px 0 9px',
+                  borderRadius: radius.pill,
+                  fontSize: 12,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  opacity: off ? 0.45 : hasData ? undefined : 0.6,
+                  background: color.canvas,
+                  border: `1px ${off ? 'dashed' : 'solid'} ${off ? color.hairlineStrong : color.hairline}`,
+                  color: off ? color.mute : color.body,
+                }}
               >
-                {/* 店铺 chip（不缀「自动」二字，第一百六十四轮）：点击 = 弹级联改选
-                    该线的取数店铺（平台自动 → 具体店铺 / 卖家互切），✕ = 移除 */}
-                <span
-                  role="button"
-                  aria-label={`取数店铺：${shopLabelOf(sh)}，点击修改`}
-                  title="点击修改取数店铺"
-                  onMouseEnter={() => setHoverKey(sh.id)}
-                  onMouseLeave={() => setHoverKey(null)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    height: 24,
-                    padding: '0 6px 0 9px',
-                    borderRadius: radius.pill,
-                    fontSize: 12,
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                    opacity: hasData ? undefined : 0.6,
-                    background: color.canvas,
-                    border: `1px solid ${color.hairline}`,
-                    color: color.body,
-                  }}
-                >
-                  <i aria-hidden style={{ width: 12, height: 3, borderRadius: 2, background: PLATFORM_PALETTE[i % PLATFORM_PALETTE.length], flexShrink: 0 }} />
-                  <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shopLabelOf(sh)}</span>
-                  <span className="tnum" style={{ fontWeight: 600, color: color.ink }}>
-                    · {latest != null ? formatPrice(latest, state.currency) : '—'}
-                  </span>
-                  {!hasData && <span style={{ fontSize: 10, color: color.mute }}>· 无数据</span>}
-                  <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
-                    <DeleteX label={`移除 ${shopLabelOf(sh)}`} size={10} onClick={() => toggleShop(sh)} />
-                  </span>
+                <i aria-hidden style={{ width: 12, height: 3, borderRadius: 2, background: PLATFORM_PALETTE[i % PLATFORM_PALETTE.length], flexShrink: 0 }} />
+                <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shopLabelOf(sh)}</span>
+                <span className="tnum" style={{ fontWeight: 600, color: off ? color.mute : color.ink }}>
+                  · {latest != null ? formatPrice(latest, state.currency) : '—'}
                 </span>
-              </Popover>
+                {!hasData && <span style={{ fontSize: 10, color: color.mute }}>· 无数据</span>}
+                {/* 筛选小图标（第一百六十四轮追补拍板：热区分离——本体管显隐，这里管
+                    改选口径；常驻显示不悬停藏，同 163 轮比价图标口径） */}
+                <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+                  <Popover
+                    trigger="click"
+                    open={editId === sh.id}
+                    onOpenChange={(o) => setEditId(o ? sh.id : null)}
+                    arrow={false}
+                    placement="bottomLeft"
+                    destroyTooltipOnHide
+                    styles={{ body: { padding: 0 } as const }}
+                    content={
+                      <ChannelSelectPopover
+                        cc={cc}
+                        skuIds={repSkuId ? [repSkuId] : []}
+                        current={chipQueryOf(sh)}
+                        scope="platform"
+                        scopePlatform={sh.platform}
+                        onPick={(sel) => {
+                          applyChipPick(sh, sel);
+                          setEditId(null);
+                        }}
+                      />
+                    }
+                  >
+                    <span
+                      role="button"
+                      aria-label={`修改取数店铺：${shopLabelOf(sh)}`}
+                      title="点击修改取数店铺（平台 / 店铺 / 卖家）"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 18,
+                        height: 18,
+                        borderRadius: radius.pill,
+                        color: color.mute,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <FilterOutlined style={{ fontSize: 11 }} />
+                    </span>
+                  </Popover>
+                </span>
+                <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+                  <DeleteX label={`移除 ${shopLabelOf(sh)}`} size={10} onClick={() => toggleShop(sh)} />
+                </span>
+              </span>
             );
           })}
           <AddShopPill cc={cc} shops={shops} onToggle={toggleShop} onRestoreDefault={restoreDefault} />
@@ -730,7 +771,7 @@ export default function PlatformCompareView(props: {
         gridTop={36}
         showXLabels
         hideNamePills
-        legendHoverKey={hoverKey}
+        legendHoverKey={hoverKey ?? editId}
         showYTicks={props.showYTicks}
         onShowYTicks={props.onShowYTicks}
         enableDrill={false}
@@ -771,7 +812,7 @@ export default function PlatformCompareView(props: {
       )}
       {/* 口径注（业务语） */}
       <div style={{ fontSize: 11, color: color.mute, marginTop: 8, lineHeight: '17px' }}>
-        平台 chip = 该平台内每周最低价店铺；点店铺 chip 可改选具体店铺 / 卖家，「＋ 添加店铺」增减对比线，✕ 移除。折后价口径，取所选配置的最低价颜色 SKU；时间范围随看板筛选，图内底色 = 大促档期。
+        平台 chip = 该平台内每周最低价店铺；点 chip 隐藏/恢复折线，行尾筛选图标改选具体店铺 / 卖家，「＋ 添加店铺」增减对比线，✕ 移除。折后价口径，取所选配置的最低价颜色 SKU；时间范围随看板筛选，图内底色 = 大促档期。
       </div>
     </div>
   );
