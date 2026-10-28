@@ -257,6 +257,12 @@ export function computeYAxis(params: {
   /** 每 1 USD 兑本币数（第二十三轮，perUsdOf 的产物；缺省 1 = 值已是 USD）：
    *  档位选择锚定 USD 等值空间，换币种不改变格数/图高（见 tierLocal） */
   perUsd?: number;
+  /** 用户上下限（第一百六十六轮，Eason）：Y 轴上下限拖柄的受控覆盖（显示币种值，
+   *  null = 该侧自动跟随数据）。只替换端点，吸附/断轴/格数链路不变——上限仍向上
+   *  吸附整格、下限向下吸附整格（snapWith），「两端刻度顶边」语义保持；两侧交叉
+   *  等非法覆盖整体回自动 */
+  yMin?: number | null;
+  yMax?: number | null;
 }): YScale {
   const scale = Math.min(Math.max(params.sliderScale, 0.5), 3);
   const end = (partial: Omit<YScale, 'sliderScale'>): YScale => ({ ...partial, sliderScale: scale });
@@ -274,8 +280,24 @@ export function computeYAxis(params: {
   // 轴跨度至少撑到量级的 2%，否则 interval 细于刻度可分辨度，整轴刻度显示同一个数
   const minSpan = Math.max(1, rawMax * 0.02);
   const degenerate = rawMax - rawMin < minSpan;
-  const axisMin = degenerate ? (rawMin + rawMax) / 2 - minSpan / 2 : rawMin;
-  const axisMax = degenerate ? (rawMin + rawMax) / 2 + minSpan / 2 : rawMax;
+  const autoMin = degenerate ? (rawMin + rawMax) / 2 - minSpan / 2 : rawMin;
+  const autoMax = degenerate ? (rawMin + rawMax) / 2 + minSpan / 2 : rawMax;
+  // 用户上下限覆盖（第一百六十六轮）：拖柄值直接替换端点；交叉/非有限值整体回自动
+  //（合法性由拖柄侧钳制保证，这里是模型层兜底）。生效与否统一收敛到 yMinOv/yMaxOv，
+  // 后续外缘垫/吸附分支全部看这两个变量（回自动 = 垫与吸附也回自动）
+  const yMinRaw = params.yMin != null && Number.isFinite(params.yMin) ? params.yMin : null;
+  const yMaxRaw = params.yMax != null && Number.isFinite(params.yMax) ? params.yMax : null;
+  let yMinOv = yMinRaw;
+  let yMaxOv = yMaxRaw;
+  let axisMin = yMinOv ?? autoMin;
+  let axisMax = yMaxOv ?? autoMax;
+  if (!(axisMax > axisMin)) {
+    // 交叉等非法覆盖：整组失效（含外缘垫/吸附分支），不是只换端点
+    yMinOv = null;
+    yMaxOv = null;
+    axisMin = autoMin;
+    axisMax = autoMax;
+  }
 
   // ---- 0) 档位锚定 USD（第二十三轮）：niceStep 的档位量化对不同币种不成比例——同一数据
   //      USD 直接取档 100，RUB 值×80 后直接取档却得 5K（=62.5 USD/格），且断轴阈值/整格
@@ -346,24 +368,31 @@ export function computeYAxis(params: {
   // ---- 2) 段域紧贴数据簇（第八轮修订）：断裂内缘只让出 0.6×interval0 的呼吸位，
   //      不再把空白带中点当边界——否则段内侧残留大片无值区和无义刻度（用户反馈）。
   //      外缘（全域最底/最顶）留 6%，按最终 interval 吸附整格。（全部 USD 空间值）
+  //      第一百六十六轮：该侧有用户限位时外缘不再加垫、不再吸附——拖柄值已按
+  //      interval 整格吸附（提交侧同口径），轴缘 = 用户值精确落边，否则 6% 垫 +
+  //      向上取整会把拖到的上限又顶回原位（拖了没动，真机验收发现）
   const dataBounds = [axisMinU, ...validCuts, axisMaxU];
   const innerPad = interval0 * 0.6;
+  const padLo = yMinOv != null ? 0 : -rawSpanU * 0.06;
+  const padHi = yMaxOv != null ? 0 : -rawSpanU * 0.06;
   const segDomains: { min: number; max: number }[] = [];
   for (let i = 0; i < dataBounds.length - 1; i++) {
-    const lo = dataBounds[i] + (i === 0 ? -rawSpanU * 0.06 : innerPad);
-    const hi = dataBounds[i + 1] - (i === dataBounds.length - 2 ? -rawSpanU * 0.06 : innerPad);
+    const lo = dataBounds[i] + (i === 0 ? padLo : innerPad);
+    const hi = dataBounds[i + 1] - (i === dataBounds.length - 2 ? padHi : innerPad);
     segDomains.push({ min: lo, max: hi });
   }
   const pseudoSpan0 = segDomains.reduce((acc, d) => acc + (d.max - d.min), 0);
   // 外缘吸附评估：给定步长做"最下段.min 向下取整格、最上段.max 向上撑满整格"，
   // 返回吸附后的伪跨度与格数。顶格锚点 = 单段时取吸附后的底（全域保持整格数，两端刻度都顶边）；
   // 多段时取末段自身下缘（与旧实现一致）。中段域不变，伪跨度按首末差值修正。
+  // 第一百六十六轮：该侧有用户限位时不做外缘吸附——用户值即整格边界（提交侧
+  // 已按 interval 吸附），吸附反而会把拖到的值顶回去（见 segDomains 处注）
   const snapWith = (cand: number): { lo: number; hi: number; pseudoSpan: number; cells: number } => {
     const first = segDomains[0];
     const last = segDomains[segDomains.length - 1];
-    const lo = Math.max(0, Math.floor(first.min / cand) * cand);
+    const lo = yMinOv != null ? Math.max(0, first.min) : Math.max(0, Math.floor(first.min / cand) * cand);
     const anchorMin = segDomains.length === 1 ? lo : last.min;
-    const hi = anchorMin + cand * Math.ceil((last.max - anchorMin) / cand - 1e-9);
+    const hi = yMaxOv != null ? last.max : anchorMin + cand * Math.ceil((last.max - anchorMin) / cand - 1e-9);
     // 两端向外吸附扩展都使跨度变大（底缘下移 + 顶缘上移）
     const pseudoSpan = pseudoSpan0 + (first.min - lo) + (hi - last.max);
     return { lo, hi, pseudoSpan, cells: clampInt(pseudoSpan / cand, MIN_CELLS, MAX_CELLS) };

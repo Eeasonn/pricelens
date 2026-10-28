@@ -15,16 +15,19 @@
 // 第一百六十轮：药丸第二行加「取价渠道 chip」——显示该产品当前取价渠道
 // （自动态带「·自动」角标），点击弹渠道选择浮层（自动/各平台-渠道，带中位价
 // 与覆盖周数）。平台口径自本轮起按产品线独立，主品渠道不再牵连对比品。
+// 第一百六十六轮（Eason）：药丸内的「最新商品页」外链跳转退役——外链图标
+// （ExportOutlined）与跳转一并删除，悬停明细/价格摘要条的取证入口不受影响；
+// latestLinkOf 随唯一调用方退役删除。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
 import ChannelSelectPopover from '../../components/ChannelSelectPopover';
-import { ExportOutlined, LeftOutlined, RightOutlined, ShopOutlined } from '@ant-design/icons';
+import { LeftOutlined, RightOutlined, ShopOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
-import { curveNameOf, latestLinkOf } from './chartModel';
+import { curveNameOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
 import { color, motion, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 
@@ -53,7 +56,6 @@ interface PillSpec {
   text: string;
   hidden: boolean;
   main: boolean; // 主品药丸 = 本组主分析产品（浅蓝底/描边/加粗）
-  link?: ReturnType<typeof latestLinkOf>; // 最新商品页外链（无 = 不渲染图标）
   /** 取价平台（第一百六十二轮）：平台名 / 「自动」（药丸上方小药丸显示） */
   channel?: { label: string; auto: boolean } | null;
   /** 平台筛选入口：小药丸点击弹三级渠道浮层 */
@@ -124,7 +126,7 @@ function Pill({
           {pill.brandLabel}
         </span>
       </span>
-      {/* 第二行：产品名 + 型号 + 最新商品页外链 + 多平台比价入口（悬停浮现） */}
+      {/* 第二行：产品名 + 型号（外链跳转已于第一百六十六轮退役） */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
         <span
           title={pill.text}
@@ -140,21 +142,6 @@ function Pill({
         >
           {pill.text}
         </span>
-        {/* 最新商品页外链（第一百四十轮）：恒指该系列最新价所在商品页；
-            stopPropagation 防触发药丸的显隐切换 */}
-        {pill.link && (
-          <a
-            href={pill.link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`打开最新商品页：${pill.text}`}
-            title={pill.link.shop ? `打开最新商品页（${pill.link.shop}）` : '打开最新商品页'}
-            onClick={(e) => e.stopPropagation()}
-            style={{ display: 'inline-flex', alignItems: 'center', color: color.link, flexShrink: 0 }}
-          >
-            <ExportOutlined style={{ fontSize: 11 }} />
-          </a>
-        )}
       </span>
     </span>
   );
@@ -331,7 +318,6 @@ function GroupBlock({
     text: curveNameOf(s),
     hidden: hiddenKeys.has(s.key),
     main: group.mainKey === s.key,
-    link: latestLinkOf(s),
     channel: s.channelBadge ?? null,
     channelCtl: channelCtl
       ? { cc: channelCtl.cc, skuIds: s.skuIds, current: s.platform ?? null, onPick: (sel) => channelCtl.onPick(s.key, sel) }

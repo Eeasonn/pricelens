@@ -106,6 +106,7 @@ import {
 import OfferPopover from './OfferPopover';
 import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 import ChartToolbar from './ChartToolbar';
+import YLimitHandles, { type YLimitState } from './YLimitHandles';
 import BrandDot from '../../components/BrandMark';
 
 export interface ChartProps {
@@ -139,6 +140,11 @@ export interface ChartProps {
   yCompress?: boolean;
   /** 压缩开关提交（缺省写内部状态） */
   onYCompress?: (v: boolean) => void;
+  /** Y 轴上下限（第一百六十六轮，Eason）：上下限拖柄的受控值（null = 该侧自动）。
+   *  传入 onYLimit 才渲染拖柄——迷你图/下钻弹窗等自管场景不传不渲染 */
+  yLimit?: YLimitState;
+  /** 限位提交：拖动中实时（未吸附原值，模型层吸附整格）/ 双击传 null 恢复该侧自动 */
+  onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
   /** 绘图区横向几何原语上报（第十五轮：促销热力带与时间轴逐像素对齐用） */
   onGeom?: (g: StripGeom | null) => void;
   /** 大促背景带开关（第三十四轮，受控，缺省内部状态 true）：俄区促销档期在绘图区着色 */
@@ -495,8 +501,10 @@ export default function Chart(props: ChartProps) {
         allowBreak: yCompress,
         perUsd: perUsdOf(currency), // 档位锚定 USD（第二十三轮）：迷你图换币种不拉伸
         prev: selfPrevRef.current,
+        yMin: props.yLimit?.min ?? null, // 上下限拖柄（第一百六十六轮）：内部自算路径同样吃覆盖
+        yMax: props.yLimit?.max ?? null,
       }),
-    [series, priceTypes, sliderScale, yCompress, currency],
+    [series, priceTypes, sliderScale, yCompress, currency, props.yLimit],
   );
   // 滞回基线在渲染提交后写入——useMemo 工厂里写 ref 会被并发丢弃的渲染/StrictMode
   // 双跑污染，被丢弃的中间刻度会成为下次滞回基线
@@ -1126,6 +1134,19 @@ export default function Chart(props: ChartProps) {
                 </span>
               </div>
             ))}
+          {/* Y 轴上下限拖柄（第一百六十六轮，Eason）：轴区上/下缘细拖柄，拖动自定义
+              价格上限/下限；传入 onYLimit 才渲染（分离面板 chrome=false 不渲染——
+              共享轴列 SplitAxisColumn 承担），双击恢复自动 */}
+          {props.onYLimit && geom && props.axisChrome !== false && (
+            <YLimitHandles
+              scale={displayScale}
+              plotTop={geom.plotTop}
+              plotHeight={geom.plotHeight}
+              trackWidth={tickZoneRight}
+              limit={props.yLimit ?? { min: null, max: null }}
+              onLimit={props.onYLimit}
+            />
+          )}
           {/* 最高/最低点标签（第三十六轮，Keepa 式点旁胶囊，不再拉全宽虚线）：
               最高 = 点上方胶囊；最低 = 高亮点环 + 点下方胶囊。
               第一百一十四轮：精简标签模式下三价标签已含最高/最低（数值直标），

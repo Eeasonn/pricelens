@@ -23,6 +23,7 @@ import {
 } from './helpers';
 import type { CurrencyMode, Industry } from '../../dataModel/types';
 import { color } from '../../theme/tokens';
+import YLimitHandles, { type YLimitState } from './YLimitHandles';
 
 export default function SplitAxisColumn(props: {
   yScale: YScale;
@@ -36,6 +37,10 @@ export default function SplitAxisColumn(props: {
   /** Y 刻度线（第九十一轮）：缺省开 = 刻度值+短横线；关 = 仅价格档位（文字居中整块） */
   showYTicks?: boolean;
   tierValues: number[];
+  /** Y 轴上下限（第一百六十六轮，Eason）：拖柄受控值与提交——共享轴列是分离模式
+   *  唯一画轴处，拖柄挂这里（面板卡 chrome=false 不再各挂） */
+  yLimit?: YLimitState;
+  onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
 }) {
   const { yScale: scale, currency, panelGridTop } = props;
   const showYTicks = props.showYTicks ?? true;
@@ -157,6 +162,18 @@ export default function SplitAxisColumn(props: {
           ))}
         </svg>
       ))}
+      {/* Y 轴上下限拖柄（第一百六十六轮）：轴区上/下缘细拖柄，拖动自定义价格上限/下限，
+          双击恢复自动；未传 onYLimit 不渲染（下钻弹窗等自管场景） */}
+      {props.onYLimit && (
+        <YLimitHandles
+          scale={scale}
+          plotTop={panelGridTop}
+          plotHeight={scale.plotHeight}
+          trackWidth={axisW}
+          limit={props.yLimit ?? { min: null, max: null }}
+          onLimit={props.onYLimit}
+        />
+      )}
     </div>
   );
 }

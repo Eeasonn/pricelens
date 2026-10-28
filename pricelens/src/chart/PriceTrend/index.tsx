@@ -76,6 +76,8 @@ import {
   type PromoBand,
 } from './chartModel';
 import SplitAxisColumn from './SplitAxisColumn';
+import type { YLimitState } from './YLimitHandles';
+import { contentSignature } from '../../components/ProductPicker/combos';
 import {
   GRID,
   adaptiveRangeOf,
@@ -133,6 +135,14 @@ export default function PriceTrend(props: {
   const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值；松手才提交）
   const [yCompress, setYCompress] = useState<boolean>(false); // Y 轴自动压缩（第三十五轮起默认关 = 完全连续；迪总「不自动选择」）
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
+  // Y 轴上下限（第一百六十六轮，Eason）：拖柄自定义价格上限/下限，null = 该侧自动。
+  // 只在所选产品不变的期间有效——产品集或币种变化即整体回自动（对比基准变了，
+  // 旧限位只会误裁新数据；内容签名含主品+对比区+渠道）
+  const [yLimit, setYLimit] = useState<YLimitState>({ min: null, max: null });
+  const limitScopeSig = useMemo(() => `${contentSignature(effMains)}#${state.currency}`, [effMains, state.currency]);
+  useEffect(() => {
+    setYLimit({ min: null, max: null });
+  }, [limitScopeSig]);
   // 查看窗口（null = 整个筛选范围）：会话态跨页保留（P1-5）——切页返回恢复；
   // 粒度切换换算 / 范围改动复位（rangeWatch）等失义路径不变
   const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('dashboard.windowIds', () => null);
@@ -736,8 +746,26 @@ export default function PriceTrend(props: {
       allowBreak: yCompress,
       perUsd: perUsdOf(state.currency), // 档位锚定 USD（第二十三轮）：换币种格数/图高与 USD 相近
       prev: scaleRef.current,
+      yMin: yLimit.min, // 上下限拖柄（第一百六十六轮）：null = 该侧自动
+      yMax: yLimit.max,
     });
-  }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
+  }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimit]);
+  // 限位提交（第一百六十六轮）：拖柄实时回传。钳制 = 与对侧至少保留一个刻度格
+  // （防拖越对侧把轴挤翻）、下限不为负；null = 该侧恢复自动。落库前按方向吸附整格
+  // （上限向上取整格、下限向下取整格，与 computeYAxis.snapWith 外缘吸附同口径）——
+  // aria 读数 = 吸附后的轴缘值，拖柄/轴缘不错位，下次拖动起点也不再跳变
+  const commitYLimit = (kind: 'min' | 'max', v: number | null): void => {
+    if (v == null || !Number.isFinite(v)) {
+      setYLimit((p) => ({ ...p, [kind]: null }));
+      return;
+    }
+    const step = yCfg.interval;
+    let next = v;
+    next = kind === 'max' ? Math.ceil(next / step) * step : Math.floor(next / step) * step;
+    if (kind === 'max') next = Math.max(next, yCfg.min + step);
+    else next = Math.min(Math.max(next, 0), Math.max(0, yCfg.max - step));
+    setYLimit((p) => ({ ...p, [kind]: next }));
+  };
   // 滞回基线在渲染提交后写入（渲染期写 ref 会被丢弃的并发渲染污染）
   useEffect(() => {
     if (!(adjusting && scaleRef.current)) scaleRef.current = yCfg;
@@ -770,8 +798,10 @@ export default function PriceTrend(props: {
       allowBreak: yCompress,
       perUsd: perUsdOf(state.currency),
       prev: splitScaleRef.current,
+      yMin: yLimit.min, // 上下限拖柄（第一百六十六轮）：分离共享轴与合并图同一份限位
+      yMax: yLimit.max,
     });
-  }, [splitActive, panelViews, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
+  }, [splitActive, panelViews, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimit]);
   // 滞回基线提交后写入；分离模式退出时清档（与主图 scaleRef 各自独立，两模式互不串档）
   useEffect(() => {
     if (!splitActive || panelViews.length === 0) {
@@ -1123,6 +1153,8 @@ export default function PriceTrend(props: {
                   panelGridTop={panelGridTop}
                   showYTicks={showYTicks}
                   tierValues={splitTierValues}
+                  yLimit={yLimit}
+                  onYLimit={commitYLimit}
                 />
               )}
               {/* 「时间轴同步」开关（与各面板时间轴同一水平线）：轴列体与面板绘图区同高，
@@ -1337,6 +1369,8 @@ export default function PriceTrend(props: {
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
             yScale={yCfg}
+            yLimit={yLimit}
+            onYLimit={commitYLimit}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
             yCompress={yCompress}

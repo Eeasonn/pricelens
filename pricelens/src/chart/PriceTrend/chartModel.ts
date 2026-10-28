@@ -674,7 +674,11 @@ export function buildEndpointBadges(p: {
 }
 
 /** DOM 刻度线行：各段的 interval 整数倍刻度 + 绝对 y 像素 + 步长感知缩写文案
- *  （第二十二轮：50 步长在 K 级曾是 1.05K/1.1K/1.15K 三档同显 1.1K） */
+ *  （第二十二轮：50 步长在 K 级曾是 1.05K/1.1K/1.15K 三档同显 1.1K）。
+ *  第一百六十六轮修：输出恒按 y 升序（自上而下）——segTicks 按值升序产出、而像素
+ *  纵轴向下，直接产出是「值升序 = y 降序」，thinTickRows 的保距贪心按 y 升序判距，
+ *  乱序输入会把同段相邻刻度全部判成负间距丢弃（一百四十七轮起线上每段只剩段底
+ *  一个刻度，Eason 截图报「价格刻度显示缺失」即此） */
 export function buildTickRows(geom: Geom | null): { v: number; y: number; text: string }[] {
   if (!geom) return [];
   const out: { v: number; y: number; text: string }[] = [];
@@ -683,7 +687,7 @@ export function buildTickRows(geom: Geom | null): { v: number; y: number; text: 
       out.push({ v, y: yPxOf(geom, v), text: fmtAxisTick(v, geom.scale.interval) });
     }
   }
-  return out;
+  return out.sort((a, b) => a.y - b.y);
 }
 
 /** 刻度可读最小间距 px：8px 字加呼吸余量，低于此间距相邻刻度互相叠压
@@ -761,21 +765,6 @@ export interface PriceSummaryItem {
   url: string; // 取证跳转链接（摘要条「来源」超链接用）
 }
 
-/** 系列「最新商品页」链接（第一百四十轮）：窗口内最新有价点的取证链接与来源店铺，
- *  图例药丸 / 悬停明细的「打开商品页」入口共用——链接恒指该系列最新价所在
- *  商品页（与悬停位置无关）；无有价点或该点无链接 = null */
-export interface LatestLink {
-  url: string;
-  shop: string | null;
-}
-
-export function latestLinkOf(s: Series): LatestLink | null {
-  for (let i = s.points.length - 1; i >= 0; i--) {
-    const p = s.points[i];
-    if (p.price != null) return p.url ? { url: p.url, shop: p.shopName ?? null } : null;
-  }
-  return null;
-}
 
 /**
  * 摘要条纯计算（第三十四轮引入，第三十五轮扩展时点模式）：口径固定「折后价 vs RRP」，

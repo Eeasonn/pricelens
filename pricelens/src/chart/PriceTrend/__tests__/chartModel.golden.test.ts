@@ -22,7 +22,6 @@ import {
   offerSummary,
   buildOption,
   buildPriceSummary,
-  latestLinkOf,
   buildPromoBands,
   buildTierBoxes,
   buildTickRows,
@@ -1077,28 +1076,6 @@ describe('buildPriceSummary（摘要条：账面价 vs 成交价三件套）', (
     expect(it.rrp).toBeNull();
     expect(it.asOf).toBeNull();
     expect(buildPriceSummary([])).toEqual([]);
-  });
-});
-
-describe('latestLinkOf（最新商品页链接，第一百四十轮：图例/悬停明细外链共用）', () => {
-  it('恒指窗口内最新有价点的取证链接（尾部无价点被跳过），带来源店铺', () => {
-    const s = mkSeries({
-      points: [
-        PT({ price: 100, url: 'https://a.test/w1', shopName: 'DNS 独立站' }),
-        PT({ price: null, url: 'https://a.test/w2' }),
-        PT({ price: 90, url: 'https://a.test/w3', shopName: 'OZON 3P' }),
-      ],
-    });
-    expect(latestLinkOf(s)).toEqual({ url: 'https://a.test/w3', shop: 'OZON 3P' });
-  });
-
-  it('仅 RRP 有值不算有价点；最新有价点无链接 / 全空窗口 → null', () => {
-    const rrpOnly = mkSeries({ points: [PT({ price: null, rrp: 100, url: 'https://a.test' })] });
-    expect(latestLinkOf(rrpOnly)).toBeNull();
-    const noUrl = mkSeries({ points: [PT({ price: 90, url: '' })] });
-    expect(latestLinkOf(noUrl)).toBeNull();
-    const empty = mkSeries({ points: [PT({ price: null }), PT({ price: null })] });
-    expect(latestLinkOf(empty)).toBeNull();
   });
 });
 
