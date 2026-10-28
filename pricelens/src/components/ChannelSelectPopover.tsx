@@ -135,8 +135,10 @@ export default function ChannelSelectPopover({
 
   // 左列展开的平台（null = 跟随解析：已选渠道 → 首个）；切国家/产品重置
   const [active, setActive] = useState<string | null>(null);
-  // 第三列展开的渠道（null = 不显示卖家列）
-  const [sellerPane, setSellerPane] = useState<string | null>(null);
+  // 第三列展开的渠道（null = 不显示卖家列）。第一百七十轮（Eason）：浮层打开即
+  // 展开全部层级——默认回落首个渠道，不再需要点一次渠道才出卖家列；手动点选
+  // 其它渠道后跟随手选；切平台时手选渠道若不属于新平台则回落新平台首渠道
+  const [sellerPanePicked, setSellerPane] = useState<string | null>(null);
   // 全局搜索词（第一百六十四轮：固定首行，跨平台搜渠道/店铺）
   const [query, setQuery] = useState('');
   useEffect(() => {
@@ -152,6 +154,12 @@ export default function ChannelSelectPopover({
 
   const activePlatform = active ?? selectedShop?.platform ?? selectedPlatformOnly ?? rows[0]?.platform ?? null;
   const activeRow = rows.find((r) => r.platform === activePlatform) ?? null;
+  // 第三列展开的渠道：手选优先（且须属于当前展开平台），否则默认当前平台首渠道
+  // ——打开浮层即三列全展开（第一百七十轮）
+  const sellerPane =
+    sellerPanePicked != null && activeRow?.shops.some((s) => s.channel_id === sellerPanePicked)
+      ? sellerPanePicked
+      : activeRow?.shops[0]?.channel_id ?? null;
   // 右列高亮：仅显式选中（自动 = 不锁渠道/卖家，无高亮行）
 
   const commitSeller = (channelId: string, seller: string | null): void => {

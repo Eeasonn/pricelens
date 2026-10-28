@@ -21,6 +21,10 @@
 // 第一百六十七轮（Eason）：块首新增「仅查看主产品」按钮（时间范围「自动」按钮
 // 同款配色语言的小型版）——一键隐藏本组全部对比品（折线批量屏蔽），激活态浅蓝
 // 再点整组恢复；仅在该组有对比品时渲染。
+// 第一百七十轮（Eason 四点）：①按钮与产品药丸间距拉大（4 → 12）②按钮上方新增
+// 「同步平台筛选」（onSyncPlatform）：一键把全部产品的取价平台改成与主产品一致
+// （全局操作，index 层实现）③产品药丸宽度预算 178 → 220，避免过于紧凑。
+// 两按钮垂直成组（同步平台筛选在上）。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
 // ============================================================
@@ -36,8 +40,9 @@ import { color, motion, radius, selectAccent, selectSoft, selectSoftInk } from '
 
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
 const COMPARES_VISIBLE = 3;
-/** 单个药丸的展示宽度预算（块内滚动容器 maxWidth = 3×预算 + 间距） */
-const PILL_W_BUDGET = 178;
+/** 单个药丸的展示宽度预算（块内滚动容器 maxWidth = 3×预算 + 间距）
+ *  第一百七十轮：178 → 220（Eason：药丸过于紧凑） */
+const PILL_W_BUDGET = 220;
 /** 主品药丸描边：与选择浮窗颜色 chip 同一「浅蓝描边 = 强调」语言（第一百二十二轮） */
 const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
 
@@ -273,8 +278,9 @@ function PlatformRow({
   );
 }
 
-/** 组块：第 N 组小字（多组时）+ 主品药丸 + vs + 对比药丸（块内 ‹› 滚动，
- *  仅当对比数 > COMPARES_VISIBLE 时出现；主品药丸在滚动区外恒可见） */
+/** 组块：第 N 组小字（多组时）+ 按钮组（同步平台筛选/仅查看主产品，第一百七十轮
+ *  起垂直成组）+ 主品药丸 + vs + 对比药丸（块内 ‹› 滚动，仅当对比数 > COMPARES_VISIBLE
+ *  时出现；主品药丸在滚动区外恒可见） */
 function GroupBlock({
   group,
   showOrdinal,
@@ -284,6 +290,7 @@ function GroupBlock({
   onHover,
   onCompareProduct,
   channelCtl,
+  onSyncPlatform,
 }: {
   group: LegendGroup;
   showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
@@ -297,6 +304,9 @@ function GroupBlock({
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
   };
+  /** 同步平台筛选（第一百七十轮，Eason）：全部产品的取价平台改成与主产品一致
+   *  （全局操作，index 层实现）；传入才渲染按钮 */
+  onSyncPlatform?: () => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
@@ -354,35 +364,67 @@ function GroupBlock({
           {groupOrdinal(group.ordinal)}
         </span>
       )}
-      {/* 仅查看主产品（第一百六十七轮，Eason）：一键关闭本组全部对比品/整组恢复，
-          时间范围「自动」按钮同款配色语言的小型版；无对比品不渲染 */}
-      {mainPill && compares.length > 0 && (
-        <button
-          type="button"
-          aria-pressed={onlyMain}
-          title={onlyMain ? '已只看主产品，点击恢复对比产品' : '只看主产品（隐藏全部对比产品）'}
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleOnlyMain();
-          }}
-          style={{
-            height: 20,
-            padding: '0 8px',
-            borderRadius: radius.control,
-            border: `1px solid ${onlyMain ? selectAccent : color.hairlineStrong}`,
-            background: onlyMain ? selectSoft : color.canvas,
-            color: onlyMain ? selectSoftInk : color.body,
-            font: 'inherit',
-            fontSize: 11,
-            fontWeight: 600,
-            lineHeight: '18px',
-            cursor: 'pointer',
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          仅查看主产品
-        </button>
+      {/* 按钮组（第一百七十轮，Eason）：「同步平台筛选」在上、「仅查看主产品」在下，
+          垂直成组；与右侧产品药丸的间距拉大（12px）。「同步平台筛选」= 全局操作
+          （全部产品取价平台与主产品一致），传入 onSyncPlatform 才渲染；
+          「仅查看主产品」仅该组有对比品时渲染 */}
+      {(mainPill && (compares.length > 0 || onSyncPlatform)) && (
+        <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch', gap: 4, flexShrink: 0, marginRight: 12 }}>
+          {mainPill && onSyncPlatform && (
+            <button
+              type="button"
+              title="全部产品的取价平台改成与主产品一致"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSyncPlatform();
+              }}
+              style={{
+                height: 18,
+                padding: '0 8px',
+                borderRadius: radius.control,
+                border: `1px solid ${color.hairlineStrong}`,
+                background: color.canvas,
+                color: color.body,
+                font: 'inherit',
+                fontSize: 10,
+                fontWeight: 600,
+                lineHeight: '16px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              同步平台筛选
+            </button>
+          )}
+          {mainPill && compares.length > 0 && (
+            <button
+              type="button"
+              aria-pressed={onlyMain}
+              title={onlyMain ? '已只看主产品，点击恢复对比产品' : '只看主产品（隐藏全部对比产品）'}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleOnlyMain();
+              }}
+              style={{
+                height: 20,
+                padding: '0 8px',
+                borderRadius: radius.control,
+                border: `1px solid ${onlyMain ? selectAccent : color.hairlineStrong}`,
+                background: onlyMain ? selectSoft : color.canvas,
+                color: onlyMain ? selectSoftInk : color.body,
+                font: 'inherit',
+                fontSize: 11,
+                fontWeight: 600,
+                lineHeight: '18px',
+                cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              仅查看主产品
+            </button>
+          )}
+        </span>
       )}
       {/* 主品药丸（空对无主品不出） */}
       {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(mainPill.key)} />}
@@ -455,6 +497,7 @@ export default function BrandLegendStrip({
   onHover,
   onCompareProduct,
   channelCtl,
+  onSyncPlatform,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -472,6 +515,9 @@ export default function BrandLegendStrip({
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
   };
+  /** 同步平台筛选（第一百七十轮，Eason）：传入 = 每组按钮组上方出「同步平台筛选」
+   *  按钮，点击把全部产品的取价平台改成与主产品一致（全局操作，index 层实现） */
+  onSyncPlatform?: () => void;
 }) {
   const multi = groups.length >= 2;
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
@@ -555,6 +601,7 @@ export default function BrandLegendStrip({
                 onHover={hover}
                 onCompareProduct={onCompareProduct}
                 channelCtl={channelCtl}
+                onSyncPlatform={onSyncPlatform}
               />,
             );
           });

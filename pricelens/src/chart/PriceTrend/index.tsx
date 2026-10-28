@@ -191,6 +191,20 @@ export default function PriceTrend(props: {
     [actions],
   );
 
+  /** 同步平台筛选（第一百七十轮，Eason）：把全部产品（各卡主品 + 对比区）的取价
+   *  平台改成与主产品（首张含主品卡的主品）一致——源未自选过（自动）则全部回落
+   *  自动；setMains 一次性整组写回 */
+  const syncPlatformFilter = useCallback(() => {
+    const src = effMains.find((c) => c.main)?.main?.platform ?? null;
+    actions.setMains(
+      effMains.map((c) => ({
+        ...c,
+        main: c.main ? { ...c.main, platform: src } : c.main,
+        compares: c.compares.map((s) => ({ ...s, platform: src })),
+      })),
+    );
+  }, [effMains, actions]);
+
   const openCompareFor = (p: { modelId: string; romram: string }): void => {
     setCompareInit(p);
     setCompareTab(true);
@@ -1308,6 +1322,7 @@ export default function PriceTrend(props: {
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                           onCompareProduct={openCompareFor}
                           channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
+                          onSyncPlatform={syncPlatformFilter}
                         />
                       </div>
                       <Chart
@@ -1386,6 +1401,7 @@ export default function PriceTrend(props: {
               onHover={setLegendHoverKey}
               onCompareProduct={openCompareFor}
               channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
+              onSyncPlatform={syncPlatformFilter}
             />
           </div>
           <Chart
