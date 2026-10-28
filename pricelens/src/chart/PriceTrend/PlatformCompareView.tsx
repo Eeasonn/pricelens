@@ -701,10 +701,19 @@ export default function PlatformCompareView(props: {
               >
                 <i aria-hidden style={{ width: 12, height: 3, borderRadius: 2, background: PLATFORM_PALETTE[i % PLATFORM_PALETTE.length], flexShrink: 0 }} />
                 <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shopLabelOf(sh)}</span>
-                <span className="tnum" style={{ fontWeight: 600, color: off ? color.mute : color.ink }}>
-                  · {latest != null ? formatPrice(latest, state.currency) : '—'}
-                </span>
-                {!hasData && <span style={{ fontSize: 10, color: color.mute }}>· 无数据</span>}
+                {/* 整条无数据 = 只标「无数据」（第一百七十四轮，Eason：短划线去掉）；
+                    有数据但所选时间窗内无价 = 仍以「—」占位 */}
+                {!hasData ? (
+                  <span style={{ fontSize: 10, color: color.mute }}>无数据</span>
+                ) : (
+                  <span className="tnum" style={{ fontWeight: 600, color: off ? color.mute : color.ink }}>
+                    · {latest != null ? formatPrice(latest, state.currency) : '—'}
+                  </span>
+                )}
+                {/* 竖分割线（第一百七十四轮，Eason）：线以左 = chip 本体点击（显示/隐藏
+                    折线）；线以右 = 筛选（改选口径）/✕（移除）各自独立功能——
+                    视觉上把「显隐」与「改选/移除」分成两段，降低理解负担 */}
+                <span aria-hidden style={{ width: 1, height: 12, background: color.hairline, flexShrink: 0 }} />
                 {/* 筛选小图标（第一百六十四轮追补拍板：热区分离——本体管显隐，这里管
                     改选口径；常驻显示不悬停藏，同 163 轮比价图标口径） */}
                 <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
@@ -812,7 +821,7 @@ export default function PlatformCompareView(props: {
       )}
       {/* 口径注（业务语） */}
       <div style={{ fontSize: 11, color: color.mute, marginTop: 8, lineHeight: '17px' }}>
-        平台 chip = 该平台内每周最低价店铺；点 chip 隐藏/恢复折线，行尾筛选图标改选具体店铺 / 卖家，「＋ 添加店铺」增减对比线，✕ 移除。折后价口径，取所选配置的最低价颜色 SKU；时间范围随看板筛选，图内底色 = 大促档期。
+        平台 chip = 该平台内每周最低价店铺；点 chip 本体（竖线以左）隐藏/恢复折线，行尾筛选图标改选具体店铺 / 卖家，「＋ 添加店铺」增减对比线，✕ 移除。折后价口径，取所选配置的最低价颜色 SKU；时间范围随看板筛选，图内底色 = 大促档期。
       </div>
     </div>
   );
