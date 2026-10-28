@@ -965,14 +965,18 @@ export default function Chart(props: ChartProps) {
                 height: gridTop,
                 width: '100%',
                 display: 'flex',
-                alignItems: 'center',
+                // 第一百七十九轮（Eason）：注入 legend（产品药丸带）时改上下两行——
+                // 工具行（含大促/权益/⋯）整行在上、药丸带独立整行在下（与分离模式
+                // 「共享工具行 → 面板药丸带」同构），药丸带拿到完整一行空间；
+                // 无 legend 保持单行工具行
+                flexDirection: props.legend ? 'column' : 'row',
+                alignItems: props.legend ? 'stretch' : 'center',
                 padding: '0 6px',
                 boxSizing: 'border-box',
                 zIndex: 3,
               }}
             >
               <ChartToolbar
-                legend={props.legend}
                 priceTypesAfter={props.priceTypesAfter}
                 currency={currency}
                 sliderScale={sliderScale}
@@ -996,6 +1000,13 @@ export default function Chart(props: ChartProps) {
                 changeThreshold={changeThreshold}
                 onChangeThreshold={props.onChangeThreshold}
               />
+              {/* 药丸带整行（第一百七十九轮）：工具行之下的完整一行（左起满宽，
+                  垂直居中于剩余高度）；横向超出隐匿（药丸带自带块内滚动） */}
+              {props.legend && (
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+                  {props.legend}
+                </div>
+              )}
             </div>
           )}
           {/* DOM 刻度标签（8px；ECharts 值轴已隐藏）。第九十一轮：随齿轮「Y 刻度线」

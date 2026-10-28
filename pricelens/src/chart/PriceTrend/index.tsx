@@ -864,8 +864,9 @@ export default function PriceTrend(props: {
   useEffect(() => {
     if (!(adjusting && scaleRef.current)) scaleRef.current = yCfg;
   }, [yCfg, adjusting]);
-  // 图顶预留（第三十五轮）：钉顶卡片删除，36px 只保留 ₽/$+齿轮（左）与图例 chips（右）
-  const gridTop = 36;
+  // 图顶预留（第三十五轮 36px 单工具行；第一百七十九轮改两行=工具行 + 产品药丸带
+  // 整行，Eason：工具行含大促/权益整行上移，药丸带拿完整一行，与分离模式同构）
+  const gridTop = 90;
   // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
   // S/E 徽标上探 7.5px、名称避让钳 plotTop+2，14px 够用；极值胶囊已在 Chart 内钳回容器
   const panelGridTop = 14;
