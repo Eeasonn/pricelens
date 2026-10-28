@@ -714,7 +714,7 @@ export default function PriceTrend(props: {
     onSeriesWindowRef.current?.(tableGroups, tableBuckets);
   }, [tableGroups, tableBuckets]);
 
-  // 全局「仅查看主产品」（第一百七十四轮，Eason）：按钮上移「价格走势」标题行、
+  // 全局「仅查看主产品」（第一百七十四轮立；第一百七十八轮挪入工具行 RRP 之后）：
   // 跨组同时生效——隐藏/恢复全部组（各卡）的对比产品折线。激活态 = 全部对比
   // 系列都在屏蔽集；恢复 = 整批出屏蔽集（与原组级按钮同语义，升全局口径）。
   // 依赖 tableGroups（组内跳过无数据系列），故在 tableGroups 之后声明
@@ -731,6 +731,20 @@ export default function PriceTrend(props: {
       return next;
     });
   }, [tableGroups]);
+  // 工具行 RRP 之后的控件（短竖线 + 按钮；合并/分离两种模式的工具行都渲染）
+  const onlyMainCtl = (
+    <>
+      <span aria-hidden style={{ width: 1, height: 14, background: color.hairline, flexShrink: 0 }} />
+      <Button
+        size="small"
+        type={onlyMain.active ? 'primary' : 'default'}
+        onClick={toggleOnlyMainAll}
+        title={onlyMain.active ? '已只看主产品，点击恢复全部对比产品' : '只看主产品（隐藏全部组的对比产品）'}
+      >
+        仅查看主产品
+      </Button>
+    </>
+  );
 
   // 图例悬停键失效自愈（本轮体检）：悬停药丸期间该系列被筛选/增删产品移出集合时，
   // BrandLegendStrip 内部会自清并回调 onHover(null)——但整条图例带卸载（分离↔合并
@@ -1029,19 +1043,8 @@ export default function PriceTrend(props: {
             </span>
           )}
         </h2>
-        {/* 全局「仅查看主产品」（第一百七十四轮，Eason）：公共功能从图例块首上移
-            标题行——跨组同时生效（隐藏/恢复全部组的对比产品），形状与「时点摘要」
-            同款（antd small Button，打开态 primary 高亮）；无对比产品不出 */}
-        {!compareTab && onlyMain.hasCompares && (
-          <Button
-            size="small"
-            type={onlyMain.active ? 'primary' : 'default'}
-            onClick={toggleOnlyMainAll}
-            title={onlyMain.active ? '已只看主产品，点击恢复全部对比产品' : '只看主产品（隐藏全部组的对比产品）'}
-          >
-            仅查看主产品
-          </Button>
-        )}
+        {/* 全局「仅查看主产品」（第一百七十八轮挪出标题行）：进工具行 RRP 之后
+            （onlyMainCtl），标题行只留 页签 + 价格显示/时点摘要 */}
         {/* 多平台对比页签（第一百六十四轮，Eason）：「产品对比」= 主视图；
             「多平台对比」= 次级界面（单产品 × 多平台-店铺线，图表与主界面同款）。
             第一百六十九轮：页签主动切进来默认选上主品（首张卡的主分析产品，无主品
@@ -1219,6 +1222,7 @@ export default function PriceTrend(props: {
                   顶部居中，本行只保留视图开关；合并模式的页签仍在工具行中央 */}
               <div style={{ flex: '1 1 auto', minWidth: 0 }}>
               <ChartToolbar
+                priceTypesAfter={onlyMainCtl}
                 currency={state.currency}
                 sliderScale={sliderScale}
                 onSliderScale={setSliderScale}
@@ -1448,23 +1452,23 @@ export default function PriceTrend(props: {
         </>
       ) : (
         <>
-          {/* 组/角色图例带（第一百一十五轮立，第一百二十三轮④按组）：合并图（单组
-              或多组并回一张图）也按组出块（单组不显组号）——主品药丸 + vs + 对比
-              药丸（点击屏蔽/恢复，悬停该系列高亮 + 起点指引线）；块间灰短竖线分隔，
-              对比超 3 个走块内 ‹› 滚动（主品恒可见），整排放不下两侧 ‹› 滚动；
-              与宽表同用 groupsOfCards 取数 */}
-          <div style={{ marginBottom: 6, minWidth: 0 }}>
-            <BrandLegendStrip
-              groups={tableGroups}
-              hiddenKeys={hiddenKeys}
-              onToggleHidden={toggleLegend}
-              onHover={setLegendHoverKey}
-              channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
-              onSyncPlatform={togglePlatformSync}
-              syncActive={platformSyncOn}
-            />
-          </div>
+          {/* 产品药丸带（第一百七十八轮改版，Eason）：不再独立成行——注入合并图
+              工具行中区（ChartToolbar legend 槽，行内居中、底部与 RRP 对齐），
+              工具行升级为「齿轮+折后价/RRP + 竖线+仅查看主产品 | 药丸带 | 大促/权益/⋯」
+              单行三区；与分离模式（共享工具行 + 各面板药丸带）同一视觉节奏 */}
           <Chart
+            legend={
+              <BrandLegendStrip
+                groups={tableGroups}
+                hiddenKeys={hiddenKeys}
+                onToggleHidden={toggleLegend}
+                onHover={setLegendHoverKey}
+                channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
+                onSyncPlatform={togglePlatformSync}
+                syncActive={platformSyncOn}
+              />
+            }
+            priceTypesAfter={onlyMainCtl}
             series={chartSeries}
             granularity={state.granularity}
             currency={state.currency}

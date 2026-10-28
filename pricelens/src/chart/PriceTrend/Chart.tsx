@@ -173,8 +173,11 @@ export interface ChartProps {
   //      不渲染设置行，由面板网格上方的常驻工具行统一控制 ----
   /** 图顶工具行显隐（缺省 true）；false = 整行不渲染（含齿轮），gridTop 由调用方收窄 */
   chrome?: boolean;
-  /** 图顶工具行中间的系列页签；用于把图例从时间区域上移到工具行中央。 */
+  /** 图顶工具行中间的系列页签；用于把图例从时间区域上移到工具行中央。
+   *  第一百七十八轮起 = 看板合并模式注入产品药丸带（工具行中区常驻居中） */
   legend?: ReactNode;
+  /** RRP 胶囊之后的插槽（第一百七十八轮）：短竖线 + 全局「仅查看主产品」 */
+  priceTypesAfter?: ReactNode;
   /** 轴列绘制（第五十四轮追补⑤）：false = 面板不画档位带/刻度标签/断轴省略号——
    *  分离模式这三样由卡片外侧的共享轴列（SplitAxisColumn）统一承担，面板只留绘图区。
    *  绘图区网格提示线已移除（第九十轮） */
@@ -970,6 +973,7 @@ export default function Chart(props: ChartProps) {
             >
               <ChartToolbar
                 legend={props.legend}
+                priceTypesAfter={props.priceTypesAfter}
                 currency={currency}
                 sliderScale={sliderScale}
                 onSliderScale={commitSliderScale}

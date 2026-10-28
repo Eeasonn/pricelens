@@ -18,12 +18,14 @@ import { Checkbox, Popover, Segmented, Slider } from 'antd';
 import { MoreOutlined, SettingOutlined } from '@ant-design/icons';
 import { forwardRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
-import { color, fontSize, radius, localCurrencySymbol } from '../../theme/tokens';
+import { color, radius } from '../../theme/tokens';
 import type { LineShapeChoice } from './chartModel';
 import ScaleSlider from './ScaleSlider';
 
 export interface ChartToolbarProps {
-  /** 顶部居中的系列页签（由看板层注入，避免页签占用图表底部时间区域） */
+  /** 顶部居中的系列页签（由看板层注入，避免页签占用图表底部时间区域）。
+   *  第一百七十八轮起 = 看板合并模式把产品药丸带注入工具行中区（行内居中、
+   *  底部与折后价/RRP 对齐），不再是绝对定位浮层 */
   legend?: ReactNode;
   currency: CurrencyMode;
   sliderScale: number;
@@ -38,6 +40,9 @@ export interface ChartToolbarProps {
   /** 折后价/RRP 显隐切换（传 onPriceTypeToggle 才渲染左区粗/细线胶囊） */
   priceTypes: { discounted: boolean; rrp: boolean };
   onPriceTypeToggle?: (key: 'discounted' | 'rrp', next: boolean) => void;
+  /** RRP 胶囊之后的插槽（第一百七十八轮，Eason）：短竖线 + 全局「仅查看主产品」
+   *  由看板层传入（标题行不再承担） */
+  priceTypesAfter?: ReactNode;
   /** 中区圆框组：四个回调全传才渲染（下钻弹窗等不传 = 不渲染） */
   promoBandsOn?: boolean;
   onPromoBandsOn?: (v: boolean) => void;
@@ -159,10 +164,10 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   // ——与每格高度滑杆「松手生效」同一语言，避免拖动全程逐帧触发提醒重算
   const [dragThreshold, setDragThreshold] = useState<number | null>(null);
   return (
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-      <span style={{ fontSize: fontSize.caption, lineHeight: '16px', color: color.mute, pointerEvents: 'none' }}>
-        {props.currency === 'usd' ? '$' : localCurrencySymbol()}
-      </span>
+    // 底部对齐（第一百七十八轮，Eason）：中区产品药丸带比左右控件高，行内所有
+    // 元素底缘对齐 = 药丸带底部与 RRP 胶囊底部同线
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 8, width: '100%' }}>
+      {/* 币种符号随第一百七十八轮退役（Eason：金钱标志删除，齿轮左对齐 Y 轴） */}
       <Popover
         trigger="click"
         placement="bottomLeft"
@@ -228,12 +233,19 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           />
         </>
       )}
+      {/* RRP 之后的插槽（第一百七十八轮，Eason）：竖线 + 全局「仅查看主产品」 */}
+      {props.onPriceTypeToggle && props.priceTypesAfter}
       {props.legend && (
+        // 中区（第一百七十八轮改常驻流内）：产品药丸带由看板层注入，占左区与右区
+        // 之间的剩余宽度居中放；底部与折后价/RRP 对齐（行 alignItems flex-end）
         <div
           style={{
-            position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)',
-            maxWidth: '46%', height: 28, overflow: 'hidden', display: 'flex', alignItems: 'center',
-            zIndex: 1,
+            flex: '1 1 auto',
+            minWidth: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+            overflow: 'hidden',
           }}
         >
           {props.legend}
