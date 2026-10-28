@@ -100,7 +100,7 @@ import {
 } from './helpers';
 import PlatformCompareView from './PlatformCompareView';
 import PointPanel from './PointPanel';
-import { groupsOfCards, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
+import { compareKeysOfGroups, groupsOfCards, onlyMainState, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 import { applySyncedPlatforms, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from './platformSync';
@@ -710,6 +710,24 @@ export default function PriceTrend(props: {
     onSeriesWindowRef.current?.(tableGroups, tableBuckets);
   }, [tableGroups, tableBuckets]);
 
+  // 全局「仅查看主产品」（第一百七十四轮，Eason）：按钮上移「价格走势」标题行、
+  // 跨组同时生效——隐藏/恢复全部组（各卡）的对比产品折线。激活态 = 全部对比
+  // 系列都在屏蔽集；恢复 = 整批出屏蔽集（与原组级按钮同语义，升全局口径）。
+  // 依赖 tableGroups（组内跳过无数据系列），故在 tableGroups 之后声明
+  const onlyMain = useMemo(() => onlyMainState(tableGroups, hiddenKeys), [tableGroups, hiddenKeys]);
+  const toggleOnlyMainAll = useCallback(() => {
+    const keys = compareKeysOfGroups(tableGroups);
+    setHiddenKeys((prev) => {
+      const next = new Set(prev);
+      const activate = keys.some((k) => !prev.has(k)); // 还有没藏的对比 = 藏全部；否则整批恢复
+      for (const k of keys) {
+        if (activate) next.add(k);
+        else next.delete(k);
+      }
+      return next;
+    });
+  }, [tableGroups]);
+
   // 图例悬停键失效自愈（本轮体检）：悬停药丸期间该系列被筛选/增删产品移出集合时，
   // BrandLegendStrip 内部会自清并回调 onHover(null)——但整条图例带卸载（分离↔合并
   // 切换、面板随卡删除）时回调无从发出，这里残留的悬停键会让图继续错误降透明。
@@ -1007,6 +1025,19 @@ export default function PriceTrend(props: {
             </span>
           )}
         </h2>
+        {/* 全局「仅查看主产品」（第一百七十四轮，Eason）：公共功能从图例块首上移
+            标题行——跨组同时生效（隐藏/恢复全部组的对比产品），形状与「时点摘要」
+            同款（antd small Button，打开态 primary 高亮）；无对比产品不出 */}
+        {!compareTab && onlyMain.hasCompares && (
+          <Button
+            size="small"
+            type={onlyMain.active ? 'primary' : 'default'}
+            onClick={toggleOnlyMainAll}
+            title={onlyMain.active ? '已只看主产品，点击恢复全部对比产品' : '只看主产品（隐藏全部组的对比产品）'}
+          >
+            仅查看主产品
+          </Button>
+        )}
         {/* 多平台对比页签（第一百六十四轮，Eason）：「产品对比」= 主视图；
             「多平台对比」= 次级界面（单产品 × 多平台-店铺线，图表与主界面同款）。
             第一百六十九轮：页签主动切进来默认选上主品（首张卡的主分析产品，无主品
@@ -1260,7 +1291,7 @@ export default function PriceTrend(props: {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, width: '100%', minWidth: 0 }}>
-                  {orderedPanels.map((p) => {
+                  {orderedPanels.map((p, pi) => {
                   const isDragging = draggingPanel === p.key;
                   const isDropTarget = dropTarget === p.key && !isDragging;
                   // 本面板生效窗口（同步 = 共享窗口；独立 = 面板自己的窗口）
@@ -1345,7 +1376,9 @@ export default function PriceTrend(props: {
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                           onCompareProduct={openCompareFor}
                           channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
-                          onSyncPlatform={togglePlatformSync}
+                          // 同步平台筛选（第一百七十四轮移位）：按钮在主品平台小药丸左侧，
+                          // 分离模式只在首面板渲染（全局操作一处入口）
+                          onSyncPlatform={pi === 0 ? togglePlatformSync : undefined}
                           syncActive={platformSyncOn}
                         />
                       </div>

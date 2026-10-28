@@ -108,3 +108,25 @@ export function groupOrdinal(index: number): string {
 export function groupNumText(index: number): string {
   return String(index);
 }
+
+/** 全局「仅查看主产品」的对比系列 key（第一百七十四轮，Eason：按钮上移标题行、
+ *  跨组同时生效）——全部组（各卡）的对比系列并集，不含各卡主品 */
+export function compareKeysOfGroups(groups: LegendGroup[]): string[] {
+  const out: string[] = [];
+  for (const g of groups) {
+    for (const s of g.series) {
+      if (s.key !== g.mainKey) out.push(s.key);
+    }
+  }
+  return out;
+}
+
+/** 全局「仅查看主产品」按钮态：有无对比可管 + 是否已全局只看主品
+ *  （= 全部对比系列都在屏蔽集；空对/无对比 = 无可管） */
+export function onlyMainState(
+  groups: LegendGroup[],
+  hiddenKeys: Set<string>,
+): { hasCompares: boolean; active: boolean } {
+  const keys = compareKeysOfGroups(groups);
+  return { hasCompares: keys.length > 0, active: keys.length > 0 && keys.every((k) => hiddenKeys.has(k)) };
+}

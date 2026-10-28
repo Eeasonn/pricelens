@@ -29,6 +29,11 @@
 // 浅蓝（与仅查看主产品同语言）、全部产品跟随主产品，再点取消并还原同步前快照
 // （快照/收敛/还原纯函数在 platformSync.ts，index 层持开关态）；
 // 172 轮的「全一致即置灰」口径退役。
+// 第一百七十四轮（Eason 三点）：①块首按钮列退役——「仅查看主产品」全局化上移
+// 价格走势标题行（跨组同时生效，index 层实现，见 tableModel.onlyMainState）；
+// ②「同步平台筛选」移到首组主品平台筛选小药丸左侧（syncCtl 只传首个含主品的块；
+// 分离模式仅首面板传）③药丸宽度自适应——去 minWidth 190，宽随内容收放，
+// PILL_W_BUDGET 240 仅作上限。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
 // ============================================================
@@ -113,8 +118,7 @@ function Pill({
         flexDirection: 'column',
         alignItems: 'flex-start',
         gap: 1,
-        maxWidth: PILL_W_BUDGET,
-        minWidth: 190, // 第一百七十二轮：短名药丸也保持宽度（Eason：药丸再宽一点）
+        maxWidth: PILL_W_BUDGET, // 自适应宽（第一百七十四轮，Eason）：宽随内容收放，240 只作上限防长名失控
         padding: '4px 10px 4px 8px',
         borderRadius: radius.pill,
         cursor: 'pointer',
@@ -161,38 +165,45 @@ function Pill({
 }
 
 /** 药丸单元（第一百六十二轮，Eason）：上行 = 平台小药丸（独立元素）+ 比价入口
- *  居右常驻；下行 = 产品药丸。两行互相独立、不嵌套，点击互不干扰 */
+ *  居右常驻；下行 = 产品药丸。两行互相独立、不嵌套，点击互不干扰。
+ *  第一百七十四轮：syncCtl（同步平台筛选按钮）渲染在主品平台小药丸左侧 */
 function PillUnit({
   pill,
   dimmed,
   onToggle,
   onHover,
   cmp,
+  syncCtl,
 }: {
   pill: PillSpec;
   dimmed: boolean;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
   cmp?: { title: string; onClick: () => void };
+  syncCtl?: { active: boolean; onToggle: () => void };
 }) {
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch', gap: 2, flexShrink: 0, minWidth: 0 }}>
-      <PlatformRow pill={pill} dimmed={dimmed} cmp={cmp} />
+      <PlatformRow pill={pill} dimmed={dimmed} cmp={cmp} syncCtl={syncCtl} />
       <Pill pill={pill} dimmed={dimmed} onToggle={onToggle} onHover={onHover} />
     </span>
   );
 }
 
 /** 平台行（第一百六十二轮，Eason）：平台小药丸独立一行（不嵌在产品药丸内；
- *  自动态显示最新有价周的实际平台名）+ 多平台比价入口（同行居右、常驻显示） */
+ *  自动态显示最新有价周的实际平台名）+ 多平台比价入口（同行居右、常驻显示）。
+ *  第一百七十四轮（Eason）：「同步平台筛选」按钮（syncCtl，全局操作）移到
+ *  主品平台筛选框左侧——按钮列退役后药丸行不再为其留位 */
 function PlatformRow({
   pill,
   dimmed,
   cmp,
+  syncCtl,
 }: {
   pill: PillSpec;
   dimmed: boolean;
   cmp?: { title: string; onClick: () => void };
+  syncCtl?: { active: boolean; onToggle: () => void };
 }) {
   return (
     <span
@@ -206,6 +217,39 @@ function PlatformRow({
         opacity: pill.hidden ? 0.45 : dimmed ? 0.25 : undefined,
       }}
     >
+      {/* 同步平台筛选（第一百七十四轮移位）：主品平台筛选框左侧，按压态浅蓝同语言；
+          hover 反馈（lpl-lg-act）由块尾 <style> 承担（内联无 :hover） */}
+      {syncCtl && (
+        <button
+          type="button"
+          className="lpl-lg-act"
+          aria-pressed={!!syncCtl.active}
+          title={syncCtl.active
+            ? '已同步：全部产品取价平台与主产品一致，点击取消并恢复同步前状态'
+            : '全部产品的取价平台改成与主产品一致'}
+          onClick={(e) => {
+            e.stopPropagation();
+            syncCtl.onToggle();
+          }}
+          style={{
+            height: 16,
+            padding: '0 6px',
+            borderRadius: radius.pill,
+            border: `1px solid ${syncCtl.active ? selectAccent : color.hairlineStrong}`,
+            background: syncCtl.active ? selectSoft : color.canvas,
+            color: syncCtl.active ? selectSoftInk : color.mute,
+            font: 'inherit',
+            fontSize: 10,
+            fontWeight: 600,
+            lineHeight: '14px',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          同步平台筛选
+        </button>
+      )}
       {pill.channel && pill.channelCtl ? (
         <Popover
           trigger="click"
@@ -283,9 +327,10 @@ function PlatformRow({
   );
 }
 
-/** 组块：第 N 组小字（多组时）+ 按钮组（同步平台筛选/仅查看主产品，第一百七十轮
- *  起垂直成组）+ 主品药丸 + vs + 对比药丸（块内 ‹› 滚动，仅当对比数 > COMPARES_VISIBLE
- *  时出现；主品药丸在滚动区外恒可见） */
+/** 组块：第 N 组小字（多组时）+ 主品药丸 + vs + 对比药丸（块内 ‹› 滚动，仅当对比数 > COMPARES_VISIBLE
+ *  时出现；主品药丸在滚动区外恒可见）。第一百七十四轮：块首按钮列退役——
+ *  「仅查看主产品」全局化上移标题行（index 层）、「同步平台筛选」进首组主品
+ *  平台小药丸左侧（syncCtl 只传首个含主品的块） */
 function GroupBlock({
   group,
   showOrdinal,
@@ -295,8 +340,7 @@ function GroupBlock({
   onHover,
   onCompareProduct,
   channelCtl,
-  onSyncPlatform,
-  syncActive,
+  syncCtl,
 }: {
   group: LegendGroup;
   showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
@@ -310,11 +354,9 @@ function GroupBlock({
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
   };
-  /** 同步平台筛选（第一百七十轮，Eason）：全部产品的取价平台改成与主产品一致
-   *  （全局操作，index 层实现）；传入才渲染按钮 */
-  onSyncPlatform?: () => void;
-  /** 同步进行中（第一百七十三轮改开关语义）：按钮按压态；再点取消并还原 */
-  syncActive?: boolean;
+  /** 同步平台筛选（第一百七十四轮移位）：渲染在首组主品平台小药丸左侧；
+   *  全局操作（index 层实现），上层只传给第一个块 */
+  syncCtl?: { active: boolean; onToggle: () => void };
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
@@ -357,14 +399,6 @@ function GroupBlock({
   const compares = pills.filter((p) => !p.main);
   const scrollable = compares.length > COMPARES_VISIBLE;
   const dimOf = (p: PillSpec): boolean => hoverSet != null && !hoverSet.has(p.key);
-  // 仅查看主产品（第一百六十七轮）：本组全部对比品都在屏蔽集 = 激活态（再点整组
-  // 恢复）；否则点击 = 批量隐藏全部对比品（逐个 toggle，上层为函数式 setState 可安全连发）
-  const onlyMain = compares.length > 0 && compares.every((p) => p.hidden);
-  const toggleOnlyMain = (): void => {
-    for (const p of compares) {
-      if (onlyMain ? p.hidden : !p.hidden) onToggle(p.key);
-    }
-  };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
       {showOrdinal && (
@@ -372,89 +406,9 @@ function GroupBlock({
           {groupOrdinal(group.ordinal)}
         </span>
       )}
-      {/* 按钮组（第一百七十轮立、第一百七十二轮对齐）：「同步平台筛选」对齐平台
-          小药丸行、「仅查看主产品」对齐产品药丸行底部——按钮组 stretch 拉满药丸
-          列高度、space-between 上下贴齐；与右侧产品药丸的间距 12px。
-          「同步平台筛选」= 全局操作（全部产品取价平台与主产品一致），传入
-          onSyncPlatform 才渲染；「仅查看主产品」仅该组有对比品时渲染。
-          hover 反馈（lpl-lg-act）由块尾 <style> 承担（内联无 :hover） */}
-      {(mainPill && (compares.length > 0 || onSyncPlatform)) && (
-        <span
-          className="lpl-lg-btns"
-          style={{
-            display: 'inline-flex',
-            flexDirection: 'column',
-            alignItems: 'stretch',
-            justifyContent: 'space-between',
-            gap: 4,
-            flexShrink: 0,
-            marginRight: 12,
-            alignSelf: 'stretch',
-          }}
-        >
-          {mainPill && onSyncPlatform && (
-            <button
-              type="button"
-              className="lpl-lg-act"
-              aria-pressed={!!syncActive}
-              title={syncActive
-                ? '已同步：全部产品取价平台与主产品一致，点击取消并恢复同步前状态'
-                : '全部产品的取价平台改成与主产品一致'}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSyncPlatform();
-              }}
-              style={{
-                height: 18,
-                padding: '0 8px',
-                borderRadius: radius.control,
-                border: `1px solid ${syncActive ? selectAccent : color.hairlineStrong}`,
-                background: syncActive ? selectSoft : color.canvas,
-                color: syncActive ? selectSoftInk : color.body,
-                font: 'inherit',
-                fontSize: 10,
-                fontWeight: 600,
-                lineHeight: '16px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              同步平台筛选
-            </button>
-          )}
-          {mainPill && compares.length > 0 && (
-            <button
-              type="button"
-              className="lpl-lg-act"
-              aria-pressed={onlyMain}
-              title={onlyMain ? '已只看主产品，点击恢复对比产品' : '只看主产品（隐藏全部对比产品）'}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleOnlyMain();
-              }}
-              style={{
-                height: 20,
-                padding: '0 8px',
-                borderRadius: radius.control,
-                border: `1px solid ${onlyMain ? selectAccent : color.hairlineStrong}`,
-                background: onlyMain ? selectSoft : color.canvas,
-                color: onlyMain ? selectSoftInk : color.body,
-                font: 'inherit',
-                fontSize: 11,
-                fontWeight: 600,
-                lineHeight: '18px',
-                cursor: 'pointer',
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              仅查看主产品
-            </button>
-          )}
-        </span>
-      )}
-      {/* 主品药丸（空对无主品不出） */}
-      {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(mainPill.key)} />}
+      {/* 主品药丸（空对无主品不出）；同步平台筛选（第一百七十四轮移位）渲染在
+          其平台小药丸左侧，仅上层传入 syncCtl 的首组出现 */}
+      {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(mainPill.key)} syncCtl={syncCtl} />}
       {mainPill && compares.length > 0 && (
         <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>vs</span>
       )}
@@ -612,7 +566,9 @@ export default function BrandLegendStrip({
         style={{ display: 'flex', alignItems: 'stretch', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', minWidth: 0, padding: '2px 0' }}
       >
         {(() => {
-          // 块间灰色短竖线分隔（最后一块之后不加）
+          // 块间灰色短竖线分隔（最后一块之后不加）；同步平台筛选（第一百七十四轮）
+          // 只随首个含主品的块渲染（全局操作，按钮在主品平台小药丸左侧）
+          let syncPlaced = !onSyncPlatform;
           const items: ReactNode[] = [];
           blocks.forEach((g, i) => {
             if (i > 0) {
@@ -620,6 +576,9 @@ export default function BrandLegendStrip({
                 <span key={`div-${i}`} aria-hidden style={{ width: 1, height: 28, background: color.hairline, flexShrink: 0, alignSelf: 'center' }} />,
               );
             }
+            const hasMain = g.series.some((s) => s.key === g.mainKey);
+            const passSync = !syncPlaced && hasMain;
+            if (passSync) syncPlaced = true;
             items.push(
               <GroupBlock
                 key={g.id}
@@ -631,8 +590,7 @@ export default function BrandLegendStrip({
                 onHover={hover}
                 onCompareProduct={onCompareProduct}
                 channelCtl={channelCtl}
-                onSyncPlatform={onSyncPlatform}
-                syncActive={syncActive}
+                syncCtl={passSync ? { active: !!syncActive, onToggle: () => onSyncPlatform?.() } : undefined}
               />,
             );
           });

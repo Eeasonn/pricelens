@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { Series, SeriesPoint } from '../../../dataModel/types';
 import type { MainProduct, ProductSelection } from '../../../state/filtersTypes';
 import {
+  compareKeysOfGroups,
   baseKeyOf,
   bucketDateText,
   discountOf,
@@ -15,6 +16,7 @@ import {
   groupNumText,
   groupOrdinal,
   groupsOfCards,
+  onlyMainState,
   latestIdxOf,
   offerText,
   seriesKeyOf,
@@ -162,5 +164,34 @@ describe('列头日期与单元格文案', () => {
   it('groupNumText：宽表组头只留数字（图例带仍用 groupOrdinal）', () => {
     expect(groupNumText(2)).toBe('2');
     expect(groupNumText(11)).toBe('11');
+  });
+});
+
+describe('全局「仅查看主产品」（第一百七十四轮上移标题行、跨组生效）', () => {
+  const sel = (modelId: string): ProductSelection => ({ modelId, romram: '12+256 GB', skuIds: [] });
+  const K = (m: string): string => seriesKeyOf(sel(m));
+  const card = (id: string, main: string | null, compares: string[] = []): MainProduct => ({
+    id,
+    main: main == null ? null : sel(main),
+    compares: compares.map(sel),
+  });
+
+  it('compareKeysOfGroups：全部组的对比系列并集，不含各卡主品', () => {
+    const gs = groupsOfCards([card('c1', 'a', ['b', 'c']), card('c2', 'd', ['b'])], [mk(K('a')), mk(K('b')), mk(K('c')), mk(K('d'))]);
+    expect(compareKeysOfGroups(gs)).toEqual([K('b'), K('c'), K('b')]);
+  });
+
+  it('空对（mainKey null）组内系列全部算对比', () => {
+    const gs = groupsOfCards([card('c0', null, ['b'])], [mk(K('b'))]);
+    expect(compareKeysOfGroups(gs)).toEqual([K('b')]);
+  });
+
+  it('onlyMainState：全藏 = active；有没藏的 = 未激活；无对比 = hasCompares false', () => {
+    const gs = groupsOfCards([card('c1', 'a', ['b', 'c'])], [mk(K('a')), mk(K('b')), mk(K('c'))]);
+    expect(onlyMainState(gs, new Set())).toEqual({ hasCompares: true, active: false });
+    expect(onlyMainState(gs, new Set([K('b')]))).toEqual({ hasCompares: true, active: false });
+    expect(onlyMainState(gs, new Set([K('b'), K('c')]))).toEqual({ hasCompares: true, active: true });
+    const noCmp = groupsOfCards([card('c1', 'a')], [mk(K('a'))]);
+    expect(onlyMainState(noCmp, new Set())).toEqual({ hasCompares: false, active: false });
   });
 });
