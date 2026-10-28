@@ -1,15 +1,15 @@
 // ============================================================
 // Y 轴上下限拖柄（第一百六十六轮，Eason）：轴区上/下缘的细拖柄，拖动自定义
 // 价格上限/下限——所选产品不变期间有效（换产品/换币种由看板层整体回自动）。
-// 视觉与时间轴拖柄同语言（4px 圆角短棒、拖动中变蓝加宽），方向转 90°：
-// 水平短棒、上下拖动；某侧处于自定义态时短棒常驻蓝色提示。双击 = 该侧恢复
-// 自动；键盘 ↑/↓ = 步进一个刻度格。合并模式挂在 Chart 轴区、分离模式挂在
-// 共享轴列（SplitAxisColumn），两处共用本组件。
+// 视觉与时间轴拖柄同构（4px 圆角短棒、拖动中加宽），颜色走灰色系（第一百六十七
+// 轮，Eason：与轴区灰白语言更匹配——常态 = 时间轴刻度灰，拖动中/自定义态加深），
+// 方向转 90°：水平短棒、上下拖动。双击 = 该侧恢复自动；键盘 ↑/↓ = 步进一个刻度格。
+// 合并模式挂在 Chart 轴区、分离模式挂在共享轴列（SplitAxisColumn），两处共用本组件。
 // 纯交互壳：值/像素换算用最外侧段的线性映射，拖动中父层重算 Y 模型，拖柄
 // 位置恒贴最新绘图区上下缘（跟随吸附后的整格边缘，与时间轴按桶吸附同手感）。
 // ============================================================
 import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import { radius, selectAccent, trackColors } from '../../theme/tokens';
+import { color, radius, trackColors } from '../../theme/tokens';
 import type { YScale } from './helpers';
 
 export interface YLimitState {
@@ -98,8 +98,10 @@ export default function YLimitHandles(props: {
     width: active === kind ? GRIP_W + 2 : GRIP_W,
     height: active === kind ? 6 : 4,
     borderRadius: radius.pill,
-    background: active === kind || limit[kind] != null ? selectAccent : trackColors.handle,
-    boxShadow: active === kind ? '0 1px 3px rgba(0, 112, 243, 0.28)' : undefined,
+    // 灰色系（第一百六十七轮，Eason：风格更匹配轴区的灰白语言）——常态 = 时间轴
+    // 中间刻度灰（trackColors.tick），拖动中/自定义态加深一档（color.mute）示状态
+    background: active === kind || limit[kind] != null ? color.mute : trackColors.tick,
+    boxShadow: active === kind ? '0 1px 2px rgba(0, 0, 0, 0.18)' : undefined,
     pointerEvents: 'none',
   });
 

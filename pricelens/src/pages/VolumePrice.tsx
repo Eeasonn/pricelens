@@ -30,6 +30,11 @@
 // 本轮（视图态跨页保留 P1-5）：slots / synced / panelWins / labelMode 改
 // usePageViewState（sessionStorage 会话态）——切价格看板再切回全部保留；刷新或
 // 新开页签回到默认（页签级会话口径）。瞬态（悬停/拖选/柱区比例/几何）不持久化。
+// 第一百六十七轮（Eason）：面板改为跟随顶部筛选器所选产品铺开——顶部「选择产品」
+// 筛选器选了哪些产品（各卡主品+对比区，依次去重），底下就每产品一个面板全量铺开；
+// 面板头的独立产品下拉退役（PanelHeader 转纯展示），原三槽 slots 机制
+// （defaultSlots/手选槽位/槽位重置键）一并退役。同步/独立时间轴、悬停联动、
+// 图内拖选高亮按面板数动态生效，语义不变。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented } from 'antd';
@@ -38,7 +43,6 @@ import usePageViewState from '../state/usePageViewState';
 import FilterBar from '../components/FilterBar';
 import PageHeader from '../components/PageHeader';
 import { filterBarTheme } from '../components/FilterBar';
-import { ownBrand } from '../components/ProductCascader/tree';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
 // 第一百三十一轮波2：卡顶时间筛选簇上移顶部筛选条，本页不再引用 XBrush/TimeRangeCluster
@@ -63,15 +67,13 @@ import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
 import type { AggMode, Series, SeriesPoint } from '../dataModel/types';
-import type { MainProduct } from '../state/filtersTypes';
 import { brandColorOf, color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 import VolumeBars, { BAND_FRAC_DEFAULT } from './volume/VolumeBars';
-import PanelHeader, { type VolumeOption } from './volume/PanelHeader';
+import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
 import MarketBoard from './volume/MarketBoard';
 import { normalizePanelWindow, vMaxOf, type VolumeSlot } from './volume/volumeAxis';
 
-const SLOTS = 3;
 const PANEL_HEAD_H = 32; // 面板头定高：共享轴列的纵向对齐基准
 const PANEL_GRID_TOP = 14; // 面板图顶窄空气带（同分离模式）
 const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
@@ -80,10 +82,12 @@ const CHART_GRID_RIGHT = 56; // 第一百一十五轮：右侧预留销量轴列
 interface SlotInfo {
   isOwn: boolean;
   brand: string;
+  name: string;
   skuIds: string[];
 }
 
-/** 槽位 → 取数信息：代表 SKU = 最低价颜色（无价数据回退该配置全部颜色 SKU） */
+/** 槽位 → 取数信息：代表 SKU = 最低价颜色（无价数据回退该配置全部颜色 SKU）；
+ *  name = 「型号 + 配置」展示文本（无配置层级产品不带「—」） */
 function resolveSlot(slot: VolumeSlot, cc: string): SlotInfo | null {
   const norm = slot.romram.replace(/\s+/g, '');
   const rows = dimProduct.filter((p) => p.model_id === slot.modelId && p.romram.replace(/\s+/g, '') === norm);
@@ -92,49 +96,70 @@ function resolveSlot(slot: VolumeSlot, cc: string): SlotInfo | null {
   const skuPool = pool.length ? pool : rows;
   const low = lowestPriceColorSku(slot.modelId, slot.romram, cc);
   const skuIds = low != null && skuPool.some((p) => p.sku_id === low) ? [low] : skuPool.map((p) => p.sku_id);
-  return { isOwn: rows[0].is_own === true, brand: rows[0].brand, skuIds };
+  return {
+    isOwn: rows[0].is_own === true,
+    brand: rows[0].brand,
+    name: `${rows[0].model_name}${rows[0].romram !== '—' ? ` ${rows[0].romram}` : ''}`,
+    skuIds,
+  };
 }
 
-/** 默认三槽（第一百一十七轮；第一百二十轮随单主品卡形）：槽1 = 首张主分析卡的主品；
- *  槽2/3 = 该卡对比区前两个；后续卡（主品 + 对比区）依次补位 */
-function defaultSlots(mains: MainProduct[]): (VolumeSlot | null)[] {
-  const picks: VolumeSlot[] = [];
-  const push = (s: VolumeSlot | null): void => {
-    if (!s || picks.length >= SLOTS) return;
-    if (picks.some((p) => p.modelId === s.modelId && p.romram.replace(/\s+/g, '') === s.romram.replace(/\s+/g, ''))) return;
-    picks.push(s);
-  };
-  for (const card of mains) {
-    if (card.main) push({ modelId: card.main.modelId, romram: card.main.romram });
-    for (const c of card.compares) push({ modelId: c.modelId, romram: c.romram });
-    if (picks.length >= SLOTS) break;
-  }
-  return [0, 1, 2].map((i) => picks[i] ?? null);
+/** 量价面板取数清单（第一百六十七轮）：顶部筛选器所选产品 = 各卡「主品 + 对比区」
+ *  依次铺开去重；每产品一面板，国家变化时 SKU 口径随 resolveSlot 重算 */
+interface PanelSpec {
+  key: string;
+  modelId: string;
+  romram: string;
+  isOwn: boolean;
+  brand: string;
+  name: string;
+  skuIds: string[];
 }
 
 export default function VolumePrice() {
   const { state, actions } = useFilters();
   const cc = state.countryCode;
 
-  // ---- 视图状态（同价格看板口径；三面板共用）。槽位/同步态/面板独立窗口/价格
+  // ---- 面板清单：顶部筛选器所选产品铺开（第一百六十七轮）----
+  const panelSpecs = useMemo<PanelSpec[]>(() => {
+    const out: PanelSpec[] = [];
+    const seen = new Set<string>();
+    for (const card of state.mains) {
+      const items: VolumeSlot[] = [];
+      if (card.main) items.push({ modelId: card.main.modelId, romram: card.main.romram });
+      for (const c of card.compares) items.push({ modelId: c.modelId, romram: c.romram });
+      for (const slot of items) {
+        const norm = slot.romram.replace(/\s+/g, '');
+        const key = `${slot.modelId}__${norm}`;
+        if (seen.has(key)) continue;
+        const info = resolveSlot(slot, cc);
+        if (!info || info.skuIds.length === 0) continue;
+        seen.add(key);
+        out.push({ key, modelId: slot.modelId, romram: slot.romram, ...info });
+      }
+    }
+    return out;
+  }, [state.mains, cc]);
+  const panelCount = panelSpecs.length;
+
+  // ---- 视图状态（同价格看板口径；全部面板共用）。同步态/面板独立窗口/价格
   //      显示 = 会话态跨页保留（P1-5，usePageViewState）；其余为瞬态 ----
-  const [slots, setSlots] = usePageViewState<(VolumeSlot | null)[]>('volume.slots', () => defaultSlots(state.mains));
   const [sliderScale, setSliderScale] = useState(1);
   const [yCompress, setYCompress] = useState(false);
   const [showYTicks, setShowYTicks] = useState(true);
   const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
-  // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 三面板共享悬停纵向位置（横向虚线）
+  // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 全面板共享悬停纵向位置（横向虚线）
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
   const [crossY, setCrossY] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   // 查看窗口 = 会话态跨页保留（与价格看板对齐；范围改动等失义路径照旧复位）
   const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('volume.windowIds', () => null);
-  const [bandFracs, setBandFracs] = useState<number[]>(() => new Array(SLOTS).fill(BAND_FRAC_DEFAULT)); // 各图柱区高比例（右侧拉伸柄）
-  // ---- 第119轮（走查会）：同步/非同步查看时间。同步 = 三面板共用窗口（原行为）；
+  const [bandFracs, setBandFracs] = useState<number[]>(() => panelSpecs.map(() => BAND_FRAC_DEFAULT)); // 各图柱区高比例（右侧拉伸柄）
+  // ---- 第119轮（走查会）：同步/非同步查看时间。同步 = 全部面板共用窗口（原行为）；
   //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
   //      两项均会话态跨页保留（P1-5）----
   const [synced, setSynced] = usePageViewState<boolean>('volume.synced', () => true);
-  const [panelWins, setPanelWinsRaw] = usePageViewState<([number, number] | null)[]>('volume.panelWins', () => [null, null, null]);
+  const [panelWins, setPanelWinsRaw] = usePageViewState<([number, number] | null)[]>('volume.panelWins', () => panelSpecs.map(() => null));
   // 面板独立窗口伴生粒度（跨粒度错位修复）：panelWins 存的是裸桶下标，只在本粒度
   // 内可解释。挂载期间切粒度有下方 granRef 效果整组重置；但跨页往返（卸载期间在
   // 别页切了粒度）再回来时 granRef 挂载即初始化、永不触发——旧粒度下标被当新粒度
@@ -150,40 +175,33 @@ export default function VolumePrice() {
   );
   useLayoutEffect(() => {
     if (panelWinsGran === state.granularity) return;
-    setPanelWins([null, null, null]); // 联动写伴生粒度 = 当前粒度
+    setPanelWins(panelSpecs.map(() => null)); // 联动写伴生粒度 = 当前粒度
     // 仅挂载期判定一次：挂载后粒度变化走 granRef 效果，重复判定会双写
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [hoverIdxs, setHoverIdxs] = useState<(number | null)[]>([null, null, null]); // 各面板悬停时间列（同步模式三列恒等）
-  const [geoms, setGeoms] = useState<(StripGeom | null)[]>([null, null, null]); // 各面板绘图区横向几何
+  const [hoverIdxs, setHoverIdxs] = useState<(number | null)[]>(() => panelSpecs.map(() => null)); // 各面板悬停时间列（同步模式恒等）
+  const [geoms, setGeoms] = useState<(StripGeom | null)[]>(() => panelSpecs.map(() => null)); // 各面板绘图区横向几何
   // ---- 第118轮（评审）：图内拖选时间段——面板级高亮（brush = 已提交，
   //      brushLive = 拖动中实时预览；高亮只做聚焦分析，不改动查看时间）----
-  const [brushes, setBrushes] = useState<([number, number] | null)[]>([null, null, null]);
-  const [brushLive, setBrushLive] = useState<([number, number] | null)[]>([null, null, null]);
+  const [brushes, setBrushes] = useState<([number, number] | null)[]>(() => panelSpecs.map(() => null));
+  const [brushLive, setBrushLive] = useState<([number, number] | null)[]>(() => panelSpecs.map(() => null));
 
-  // 首张主分析卡 / 国家 / 产业变化 → 三槽重置为默认（手选槽位此时被重置）。
-  // 重置基准键随槽位一并入会话态：槽位本身跨页保留，卸载期间发生的口径/主品
-  // 变化（在其他页换国家/换首卡）重挂载时也要识别——挂载期 ref 恒等于当前键，
-  // 永不触发，旧国家产品会以空序列挂进面板
-  const slotResetKey = JSON.stringify([state.mains[0]?.main?.modelId ?? null, state.mains[0]?.main?.romram ?? null, cc, state.industry]);
-  const [slotResetSeen, setSlotResetSeen] = usePageViewState<string>('volume.slotResetKey', () => slotResetKey);
-  useEffect(() => {
-    if (slotResetSeen === slotResetKey) return;
-    setSlotResetSeen(slotResetKey);
-    setSlots(defaultSlots(state.mains));
-    setPanelWins([null, null, null]);
-    setBrushes([null, null, null]);
-    setBrushLive([null, null, null]);
-    setHoverIdxs([null, null, null]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slotResetKey]);
-
+  // 面板数变化（顶部筛选器增删产品）→ 各面板态数组随动（保旧值补空位）；
   // 换产品/价格类型/币种 → 高度倍率与销量柱区比例复位（同看板 §5.6）
-  const yAxisResetKey = JSON.stringify([slots, state.priceTypes, state.currency]);
+  useEffect(() => {
+    const fit = <T,>(fill: T) => (prev: T[]): T[] => Array.from({ length: panelCount }, (_, i) => prev[i] ?? fill);
+    setHoverIdxs(fit<number | null>(null));
+    setGeoms(fit<StripGeom | null>(null));
+    setBrushes(fit<[number, number] | null>(null));
+    setBrushLive(fit<[number, number] | null>(null));
+    setBandFracs(fit<number>(BAND_FRAC_DEFAULT));
+    setPanelWins(fit<[number, number] | null>(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelCount]);
   useEffect(() => {
     setSliderScale(1);
-    setBandFracs(new Array(SLOTS).fill(BAND_FRAC_DEFAULT));
-  }, [yAxisResetKey]);
+    setBandFracs(panelSpecs.map(() => BAND_FRAC_DEFAULT));
+  }, [panelSpecs, state.priceTypes, state.currency]);
 
   // 粒度切换 → 窗口端点对齐新粒度桶边界（保持同一时间跨度）；面板独立时间轴按桶号
   // 失义回落共享窗口（第119轮）
@@ -193,7 +211,7 @@ export default function VolumePrice() {
     const prev = granRef.current;
     granRef.current = state.granularity;
     setWindowIds((ids) => (ids ? convertWindowIds(ids, prev, state.granularity) : null));
-    setPanelWins([null, null, null]);
+    setPanelWins((prev) => prev.map(() => null));
   }, [state.granularity]);
 
   // ---- 取数：每面板独立 buildSeries（数据全集，窗口切片照分离模式） ----
@@ -205,14 +223,12 @@ export default function VolumePrice() {
 
   const panelData = useMemo(
     () =>
-      slots.map((slot, i) => {
-        if (!slot) return { idx: i, key: `empty-${i}`, slot: null, isOwn: false, brand: '', series: [] as Series[] };
-        const info = resolveSlot(slot, cc);
+      panelSpecs.map((spec, i) => {
         let series: Series[] = [];
-        if (info && info.skuIds.length > 0) {
+        if (spec.skuIds.length > 0) {
           try {
             series = buildSeries({
-              groups: [{ modelId: slot.modelId, romram: slot.romram, skuIds: info.skuIds, isOwn: info.isOwn }],
+              groups: [{ modelId: spec.modelId, romram: spec.romram, skuIds: spec.skuIds, isOwn: spec.isOwn }],
               granularity: state.granularity,
               startBucket: dataStart,
               endBucket: dataEnd,
@@ -226,15 +242,16 @@ export default function VolumePrice() {
         }
         return {
           idx: i,
-          // 前缀槽位号：两个槽选同一产品时 React key 仍唯一（同 key 面板会串挂 DOM/图表实例）
-          key: `${i}:${slot.modelId}__${slot.romram.replace(/\s+/g, '')}`,
-          slot,
-          isOwn: info?.isOwn ?? false,
-          brand: info?.brand ?? '',
+          // 前缀面板号：两个面板出现同一产品时 React key 仍唯一（同 key 面板会串挂 DOM/图表实例）
+          key: `${i}:${spec.key}`,
+          spec,
+          isOwn: spec.isOwn,
+          brand: spec.brand,
+          name: spec.name,
           series,
         };
       }),
-    [slots, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg],
+    [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg],
   );
 
   // 时间自适应：三面板数据跨度并集 → 上方极值筛选器（同 index.tsx 写法；
@@ -302,23 +319,30 @@ export default function VolumePrice() {
     return start <= end ? [start, end] : [end, start];
   }, [buckets, state.rangeStart, state.rangeEnd]);
 
-  // ---- 第119轮（走查会）：各面板生效窗口。同步 = 三面板共用共享窗口（原行为）；
+  // ---- 第119轮（走查会）：各面板生效窗口。同步 = 全部面板共用共享窗口（原行为）；
   //      非同步 = 各面板独立窗口（未单独调整过的回落共享窗口，越界钳回可调全域）----
   const effWins = useMemo<[number, number][]>(
-    () => [0, 1, 2].map((i) => normalizePanelWindow(panelWins[i], win.s, win.e, filterBounds[0], filterBounds[1])),
-    [panelWins, win.s, win.e, filterBounds],
+    () => panelSpecs.map((_, i) => normalizePanelWindow(panelWins[i] ?? null, win.s, win.e, filterBounds[0], filterBounds[1])),
+    [panelSpecs, panelWins, win.s, win.e, filterBounds],
   );
   const toggleSynced = (): void => {
-    if (synced) setPanelWins([0, 1, 2].map(() => [win.s, win.e] as [number, number]));
-    else setPanelWins([null, null, null]);
+    if (synced) setPanelWins(panelSpecs.map(() => [win.s, win.e] as [number, number]));
+    else setPanelWins(panelSpecs.map(() => null));
     setSynced(!synced);
   };
 
   // 查看窗口/粒度/同步切换 → 高亮时间段下标失义，自动清除（第118/119轮）
   useEffect(() => {
-    setBrushes([null, null, null]);
-    setBrushLive([null, null, null]);
+    setBrushes((prev) => prev.map(() => null));
+    setBrushLive((prev) => prev.map(() => null));
   }, [win.s, win.e, state.granularity, synced]);
+
+  // 换产品清单（顶部筛选器增删产品）→ 悬停列/高亮段随面板重置
+  useEffect(() => {
+    setHoverIdxs(panelSpecs.map(() => null));
+    setBrushes(panelSpecs.map(() => null));
+    setBrushLive(panelSpecs.map(() => null));
+  }, [panelSpecs]);
 
   // 非同步下面板独立调时间轴只动 effWins，不触发上面的整体清除（共享窗口未变）——
   // 第一百二十五轮：按面板窗口签名精确清，只清窗口变了的面板（下标随窗口平移失义）
@@ -374,9 +398,8 @@ export default function VolumePrice() {
   const volumes = useMemo(
     () =>
       panelData.map((p, i) => {
-        if (!p.slot) return [];
         const ids = domainIds.slice(effWins[i][0], effWins[i][1] + 1);
-        return volumeByBuckets(p.slot.modelId, p.slot.romram, cc, state.granularity, ids);
+        return volumeByBuckets(p.spec.modelId, p.spec.romram, cc, state.granularity, ids);
       }),
     [panelData, domainIds, effWins, cc, state.granularity],
   );
@@ -395,40 +418,7 @@ export default function VolumePrice() {
     return [Math.max(0, s), Math.min(Math.max(0, buckets.length - 1), e)];
   }, [synced, win.s, win.e, effWins, buckets.length]);
 
-  // 面板头下拉选项：当前国家 × 产业去重到（型号, 配置），分组 [自有品牌名][竞品]
-  // （第一百一十四轮铁律：不出现「我司」标注——自有组以品牌名作组名）
-  const productOptions = useMemo<{ label: string; options: VolumeOption[] }[]>(() => {
-    const seen = new Set<string>();
-    const collect = (own: boolean): VolumeOption[] => {
-      const out: VolumeOption[] = [];
-      for (const p of dimProduct) {
-        if (p.industry !== state.industry || !p.countries.includes(cc) || p.is_own !== own) continue;
-        const key = `${p.model_id}|${p.romram}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({ value: key, label: `${p.brand} ${p.model_name} ${p.romram}` });
-      }
-      out.sort((a, b) => a.label.localeCompare(b.label));
-      return out;
-    };
-    const ownOpts = collect(true);
-    const compOpts = collect(false);
-    return ownOpts.length > 0
-      ? [{ label: ownBrand(), options: ownOpts }, { label: '其他品牌', options: compOpts }]
-      : [{ label: '其他品牌', options: compOpts }];
-  }, [cc, state.industry]);
-
-  // 槽位选择 / 几何上报
-  const onSlotSelect = (i: number, key: string | null): void => {
-    setSlots((prev) =>
-      prev.map((s, k) => {
-        if (k !== i) return s;
-        if (key == null) return null;
-        const sep = key.indexOf('|');
-        return { modelId: key.slice(0, sep), romram: key.slice(sep + 1) };
-      }),
-    );
-  };
+  // 几何上报（面板头下拉与槽位选择已随第一百六十七轮退役）
   const onGeomOf = (i: number) => (g: StripGeom | null): void => {
     setGeoms((prev) => {
       const cur = prev[i];
@@ -452,20 +442,20 @@ export default function VolumePrice() {
     if (!buckets[s2] || !buckets[e2]) return;
     setPanelWins((prev) => prev.map((x, k) => (k === idx ? [s2, e2] : x)));
   };
-  // 悬停时间列：同步 = 三面板同列（原行为）；非同步 = 只亮本面板
+  // 悬停时间列：同步 = 全面板同列（原行为）；非同步 = 只亮本面板
   const onHoverOf = (idx: number) => (v: number | null): void => {
     setHoverIdxs((prev) => {
-      if (synced) return prev.every((x) => x === v) ? prev : [v, v, v];
+      if (synced) return prev.every((x) => x === v) ? prev : prev.map(() => v);
       return prev.map((x, k) => (k === idx ? v : x));
     });
   };
-  // 图内拖选时间段（第118轮）：同步 = 三面板联动；非同步 = 各面板独立高亮
+  // 图内拖选时间段（第118轮）：同步 = 全面板联动；非同步 = 各面板独立高亮
   const onBrushChangeOf = (idx: number) => (r: [number, number] | null, committing: boolean): void => {
     if (committing) {
-      setBrushLive([null, null, null]);
-      setBrushes((prev) => (synced ? [r, r, r] : prev.map((x, k) => (k === idx ? r : x))));
+      setBrushLive((prev) => prev.map(() => null));
+      setBrushes((prev) => (synced ? prev.map(() => r) : prev.map((x, k) => (k === idx ? r : x))));
     } else {
-      setBrushLive((prev) => (synced ? [r, r, r] : prev.map((x, k) => (k === idx ? r : x))));
+      setBrushLive((prev) => (synced ? prev.map(() => r) : prev.map((x, k) => (k === idx ? r : x))));
     }
   };
 
@@ -629,86 +619,99 @@ export default function VolumePrice() {
                 )}
               </div>
               <div style={{ flex: '1 1 0', minWidth: 0 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.md }}>
-                  {panelViews.map((p) => (
-                    <div
-                      key={p.key}
-                      style={{
-                        border: `1px solid ${color.hairline}`,
-                        borderRadius: radius.card,
-                        background: color.canvas,
-                        padding: '0 8px 0',
-                        position: 'relative',
-                        isolation: 'isolate',
-                      }}
-                    >
-                      <PanelHeader
-                        slot={p.slot}
-                        options={productOptions}
-                        brand={p.brand}
-                        volume={volumeReading(volumes[p.idx], hoverIdxs[p.idx])}
-                        onSelect={(key) => onSlotSelect(p.idx, key)}
-                      />
-                      <div style={{ position: 'relative' }}>
-                        <VolumeBars
-                          geom={geoms[p.idx]}
-                          plotTop={PANEL_GRID_TOP}
-                          plotHeight={yCfg.plotHeight}
-                          values={volumes[p.idx]}
-                          vMax={panelVMax[p.idx]}
-                          color={p.vis[0]?.color ?? brandColorOf(p.brand)}
-                          hoverIdx={hoverIdxs[p.idx]}
-                          bandFrac={bandFracs[p.idx] ?? BAND_FRAC_DEFAULT}
-                          onBandFrac={(v) => setBandFracs((prev) => prev.map((f, k) => (k === p.idx ? v : f)))}
+                {panelCount === 0 ? (
+                  <div
+                    style={{
+                      padding: '48px 0',
+                      textAlign: 'center',
+                      fontSize: fontSize.bodySm,
+                      color: color.mute,
+                      border: `1px dashed ${color.hairline}`,
+                      borderRadius: radius.card,
+                    }}
+                  >
+                    在上方筛选器选择产品后，这里按所选产品铺开量价走势
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${panelCount}, minmax(0, 1fr))`, gap: space.md }}>
+                    {panelViews.map((p) => (
+                      <div
+                        key={p.key}
+                        style={{
+                          border: `1px solid ${color.hairline}`,
+                          borderRadius: radius.card,
+                          background: color.canvas,
+                          padding: '0 8px 0',
+                          position: 'relative',
+                          isolation: 'isolate',
+                        }}
+                      >
+                        <PanelHeader
+                          brand={p.brand}
+                          name={p.name}
+                          volume={volumeReading(volumes[p.idx], hoverIdxs[p.idx] ?? null)}
                         />
-                        <Chart
-                          series={p.vis}
-                          granularity={state.granularity}
-                          currency={state.currency}
-                          priceTypes={state.priceTypes}
-                          gridLeft={CHART_GRID_LEFT}
-                          gridRight={CHART_GRID_RIGHT} // 第一百一十五轮：右侧预留销量轴列（轴线+刻度+拖柄不与绘图区重叠）
-                          gridTop={PANEL_GRID_TOP}
-                          chrome={false}
-                          axisChrome={false}
-                          showYTicks={showYTicks}
-                          enableDrill={false}
-                          windowKey={`${effWins[p.idx][0]}:${effWins[p.idx][1]}:${p.key}`}
-                          yScale={yCfg}
-                          volumes={volumes[p.idx]}
-                          hideNamePills // 第一百一十三轮（评审）：面板内不画产品药丸，产品名在面板头
-                          lineShape={lineShape}
-                          labelMode={labelMode} // 第一百一十四轮（评审）：价格显示 详细/精简
-                          tipBox // 第一百一十四轮（评审）：悬停明细 = 图下方居中预留框
-                          // 第一百二十六轮：图内 x 轴日期标签删除——面板底部时间轴是唯一日期层
-                          crosshairIdx={hoverIdxs[p.idx]}
-                          onCrosshairMove={onHoverOf(p.idx)}
-                          crosshairY={crossY} // 第一百一十四轮（评审）：横向虚线横跨三面板
-                          onCrosshairYMove={setCrossY}
-                          brush={brushLive[p.idx] ?? brushes[p.idx]} // 第118/119轮：拖选高亮随同步态联动或独立
-                          onBrushChange={onBrushChangeOf(p.idx)}
-                          onGeom={onGeomOf(p.idx)}
-                          emptyHint={p.slot ? '该产品在所选时间范围内无数据' : '请选择产品'}
-                        />
+                        <div style={{ position: 'relative' }}>
+                          <VolumeBars
+                            geom={geoms[p.idx] ?? null}
+                            plotTop={PANEL_GRID_TOP}
+                            plotHeight={yCfg.plotHeight}
+                            values={volumes[p.idx]}
+                            vMax={panelVMax[p.idx]}
+                            color={p.vis[0]?.color ?? brandColorOf(p.brand)}
+                            hoverIdx={hoverIdxs[p.idx] ?? null}
+                            bandFrac={bandFracs[p.idx] ?? BAND_FRAC_DEFAULT}
+                            onBandFrac={(v) => setBandFracs((prev) => prev.map((f, k) => (k === p.idx ? v : f)))}
+                          />
+                          <Chart
+                            series={p.vis}
+                            granularity={state.granularity}
+                            currency={state.currency}
+                            priceTypes={state.priceTypes}
+                            gridLeft={CHART_GRID_LEFT}
+                            gridRight={CHART_GRID_RIGHT} // 第一百一十五轮：右侧预留销量轴列（轴线+刻度+拖柄不与绘图区重叠）
+                            gridTop={PANEL_GRID_TOP}
+                            chrome={false}
+                            axisChrome={false}
+                            showYTicks={showYTicks}
+                            enableDrill={false}
+                            windowKey={`${effWins[p.idx][0]}:${effWins[p.idx][1]}:${p.key}`}
+                            yScale={yCfg}
+                            volumes={volumes[p.idx]}
+                            hideNamePills // 第一百一十三轮（评审）：面板内不画产品药丸，产品名在面板头
+                            lineShape={lineShape}
+                            labelMode={labelMode} // 第一百一十四轮（评审）：价格显示 详细/精简
+                            tipBox // 第一百一十四轮（评审）：悬停明细 = 图下方居中预留框
+                            // 第一百二十六轮：图内 x 轴日期标签删除——面板底部时间轴是唯一日期层
+                            crosshairIdx={hoverIdxs[p.idx] ?? null}
+                            onCrosshairMove={onHoverOf(p.idx)}
+                            crosshairY={crossY} // 第一百一十四轮（评审）：横向虚线横跨全部面板
+                            onCrosshairYMove={setCrossY}
+                            brush={brushLive[p.idx] ?? brushes[p.idx] ?? null} // 第118/119轮：拖选高亮随同步态联动或独立
+                            onBrushChange={onBrushChangeOf(p.idx)}
+                            onGeom={onGeomOf(p.idx)}
+                            emptyHint="该产品在所选时间范围内无数据"
+                          />
+                        </div>
+                        {/* 本图时间轴（第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：
+                            同步 = 全图查看同一段时间，拖任一条同步调整；非同步 = 各图独立调整。
+                            恒渲染保证切换同步只改联动行为，面板高度与轨道横向位置不变 */}
+                        <div style={{ margin: '0 48px 6px 8px' }}>
+                          <PanelTimeTrack
+                            ids={domainIds}
+                            lo={filterBounds[0]}
+                            hi={filterBounds[1]}
+                            s={synced ? win.s : effWins[p.idx][0]}
+                            e={synced ? win.e : effWins[p.idx][1]}
+                            granularity={state.granularity}
+                            onChange={synced ? onWindowChange : onPanelWindowChange(p.idx)}
+                            onAdjusting={setAdjusting}
+                          />
+                        </div>
                       </div>
-                      {/* 本图时间轴（第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：
-                          同步 = 三图查看同一段时间，拖任一条同步调整；非同步 = 各图独立调整。
-                          恒渲染保证切换同步只改联动行为，面板高度与轨道横向位置不变 */}
-                      <div style={{ margin: '0 48px 6px 8px' }}>
-                        <PanelTimeTrack
-                          ids={domainIds}
-                          lo={filterBounds[0]}
-                          hi={filterBounds[1]}
-                          s={synced ? win.s : effWins[p.idx][0]}
-                          e={synced ? win.e : effWins[p.idx][1]}
-                          granularity={state.granularity}
-                          onChange={synced ? onWindowChange : onPanelWindowChange(p.idx)}
-                          onAdjusting={setAdjusting}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

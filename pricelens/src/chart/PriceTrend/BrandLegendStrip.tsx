@@ -18,6 +18,9 @@
 // 第一百六十六轮（Eason）：药丸内的「最新商品页」外链跳转退役——外链图标
 // （ExportOutlined）与跳转一并删除，悬停明细/价格摘要条的取证入口不受影响；
 // latestLinkOf 随唯一调用方退役删除。
+// 第一百六十七轮（Eason）：块首新增「仅查看主产品」按钮（时间范围「自动」按钮
+// 同款配色语言的小型版）——一键隐藏本组全部对比品（折线批量屏蔽），激活态浅蓝
+// 再点整组恢复；仅在该组有对比品时渲染。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
 // ============================================================
@@ -29,7 +32,7 @@ import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import { curveNameOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
-import { color, motion, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { color, motion, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
 const COMPARES_VISIBLE = 3;
@@ -336,12 +339,50 @@ function GroupBlock({
   const compares = pills.filter((p) => !p.main);
   const scrollable = compares.length > COMPARES_VISIBLE;
   const dimOf = (p: PillSpec): boolean => hoverSet != null && !hoverSet.has(p.key);
+  // 仅查看主产品（第一百六十七轮）：本组全部对比品都在屏蔽集 = 激活态（再点整组
+  // 恢复）；否则点击 = 批量隐藏全部对比品（逐个 toggle，上层为函数式 setState 可安全连发）
+  const onlyMain = compares.length > 0 && compares.every((p) => p.hidden);
+  const toggleOnlyMain = (): void => {
+    for (const p of compares) {
+      if (onlyMain ? p.hidden : !p.hidden) onToggle(p.key);
+    }
+  };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
       {showOrdinal && (
         <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', flexShrink: 0 }}>
           {groupOrdinal(group.ordinal)}
         </span>
+      )}
+      {/* 仅查看主产品（第一百六十七轮，Eason）：一键关闭本组全部对比品/整组恢复，
+          时间范围「自动」按钮同款配色语言的小型版；无对比品不渲染 */}
+      {mainPill && compares.length > 0 && (
+        <button
+          type="button"
+          aria-pressed={onlyMain}
+          title={onlyMain ? '已只看主产品，点击恢复对比产品' : '只看主产品（隐藏全部对比产品）'}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleOnlyMain();
+          }}
+          style={{
+            height: 20,
+            padding: '0 8px',
+            borderRadius: radius.control,
+            border: `1px solid ${onlyMain ? selectAccent : color.hairlineStrong}`,
+            background: onlyMain ? selectSoft : color.canvas,
+            color: onlyMain ? selectSoftInk : color.body,
+            font: 'inherit',
+            fontSize: 11,
+            fontWeight: 600,
+            lineHeight: '18px',
+            cursor: 'pointer',
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          仅查看主产品
+        </button>
       )}
       {/* 主品药丸（空对无主品不出） */}
       {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(mainPill.key)} />}
