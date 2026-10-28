@@ -32,6 +32,21 @@ export function applySyncedPlatforms(mains: MainProduct[], src: PlatformSelectio
   }));
 }
 
+/** 主品自动口径的钉定解析（第一百七十四轮，Eason：「同步了之后三星还是 Mvideo」）：
+ *  自动 = 每周动态解平台，直接把 null 同步给全员时各产品仍会各自解到不同平台
+ *  （三星最低价在 Mvideo 就显示 Mvideo），显示上「没同步」。故主品未自选时取其
+ *  最新有价周的实际取价平台（= 平台小药丸显示的名字，badge 回填）钉成平台级
+ *  显式选择，全员的显示与取价才真正一致；主品已显式选择 = 原样透传；
+ *  解析不出（主品无数据，label 仍为占位「自动」）= 回落 null 全员自动 */
+export function pinnedSelectionFromBadge(
+  badge: { label: string; auto: boolean } | null | undefined,
+  explicit: PlatformSelection | null,
+): PlatformSelection | null {
+  if (explicit != null) return explicit;
+  if (badge?.auto && badge.label && badge.label !== '自动') return { platforms: [badge.label], shopIds: [] };
+  return null;
+}
+
 /** 取消同步：按卡 id + selKey 匹配还原触发前平台；匹配不上的选择项
  *  （同步期间换品/自动匹配新增的对比）保持现状不动 */
 export function restorePlatformSync(mains: MainProduct[], snap: PlatformSyncCardSnap[]): MainProduct[] {

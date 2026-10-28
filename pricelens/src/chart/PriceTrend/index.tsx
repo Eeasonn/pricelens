@@ -103,7 +103,7 @@ import PointPanel from './PointPanel';
 import { compareKeysOfGroups, groupsOfCards, onlyMainState, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
-import { applySyncedPlatforms, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from './platformSync';
+import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from './platformSync';
 
 /** 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；第一百二十三轮④
  *  单行药丸带 44 → 30，第一百四十五轮药丸固定两行（品牌行 + 产品行）30 → 40） */
@@ -207,26 +207,13 @@ export default function PriceTrend(props: {
   );
 
   // 同步平台筛选（第一百七十三轮改开关语义，Eason）：随时可点——触发 = 快照
-  // 当前全部产品平台并收敛到主产品（首张含主品卡，未自选 = 自动口径全员自动）；
-  // 再点取消 = 按快照整体还原触发前状态。会话态不持久化；同步期间任何平台改动
-  // 经 pickChannel 全员生效。ref 持开关镜像供 pickChannel 回调免依赖读值。
+  // 当前全部产品平台并收敛到主产品；再点取消 = 按快照整体还原触发前状态。
+  // 会话态不持久化；同步期间任何平台改动经 pickChannel 全员生效。ref 持开关
+  // 镜像供 pickChannel 回调免依赖读值。togglePlatformSync 依赖 visSeries
+  // （主品自动口径要解析实际取价平台），在 visSeries 声明之后定义（见下）。
   const [platformSyncOn, setPlatformSyncOn] = useState(false);
   const platformSyncOnRef = useRef(false);
   const platformSyncSnapRef = useRef<PlatformSyncCardSnap[] | null>(null);
-  const togglePlatformSync = useCallback(() => {
-    if (platformSyncOnRef.current) {
-      actions.setMains(restorePlatformSync(effMains, platformSyncSnapRef.current ?? []));
-      platformSyncSnapRef.current = null;
-      platformSyncOnRef.current = false;
-      setPlatformSyncOn(false);
-      return;
-    }
-    platformSyncSnapRef.current = snapshotPlatformSync(effMains);
-    const src = effMains.find((c) => c.main)?.main?.platform ?? null;
-    actions.setMains(applySyncedPlatforms(effMains, src));
-    platformSyncOnRef.current = true;
-    setPlatformSyncOn(true);
-  }, [effMains, actions]);
 
   const openCompareFor = (p: { modelId: string; romram: string }): void => {
     setCompareInit(p);
@@ -444,6 +431,28 @@ export default function PriceTrend(props: {
   }, [allSeries, win]);
 
   // 图例可见系列：声明下移至 cappedVisSeries 之后（见 splitActive 段）
+
+  // 同步平台筛选触发（第一百七十三轮立、第一百七十四轮补钉定解析）：依赖 visSeries，
+  // 故在 visSeries 声明之后定义。主品自动口径 = 先经 pinnedSelectionFromBadge 取其
+  // 最新有价周的实际取价平台（与平台小药丸显示同名）钉成显式选择再同步全员——
+  // 否则全员自动时各产品各自解到不同平台（三星最低价在 Mvideo 就显示 Mvideo），
+  // 显示上「没同步」；主品已显式选择 = 原样同步；主品无数据解析不出 = 回落全员自动
+  const togglePlatformSync = useCallback(() => {
+    if (platformSyncOnRef.current) {
+      actions.setMains(restorePlatformSync(effMains, platformSyncSnapRef.current ?? []));
+      platformSyncSnapRef.current = null;
+      platformSyncOnRef.current = false;
+      setPlatformSyncOn(false);
+      return;
+    }
+    platformSyncSnapRef.current = snapshotPlatformSync(effMains);
+    const main = effMains.find((c) => c.main)?.main ?? null;
+    const badge = main ? visSeries.find((s) => s.key === seriesKeyOf(main))?.channelBadge ?? null : null;
+    const src = pinnedSelectionFromBadge(badge, main?.platform ?? null);
+    actions.setMains(applySyncedPlatforms(effMains, src));
+    platformSyncOnRef.current = true;
+    setPlatformSyncOn(true);
+  }, [effMains, visSeries, actions]);
 
   const toggleLegend = (key: string): void => {
     setHiddenKeys((prev) => {

@@ -1,6 +1,6 @@
 // 同步平台筛选开关语义（第一百七十三轮）：快照/收敛/还原纯函数单测
 import { describe, expect, it } from 'vitest';
-import { applySyncedPlatforms, restorePlatformSync, snapshotPlatformSync } from '../platformSync';
+import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync } from '../platformSync';
 import type { MainProduct, PlatformSelection, ProductSelection } from '../../../state/filtersTypes';
 
 const dns: PlatformSelection = { platforms: ['DNS'], shopIds: ['RU:DNS:STORE'] };
@@ -87,5 +87,23 @@ describe('restorePlatformSync', () => {
 
   it('空快照 = 原样返回内容（每卡映射不到即原卡）', () => {
     expect(restorePlatformSync(mains, [])).toEqual(mains);
+  });
+});
+
+describe('pinnedSelectionFromBadge（第一百七十四轮：主品自动口径的钉定解析）', () => {
+  it('主品显式选择 = 原样透传（badge 不看）', () => {
+    expect(pinnedSelectionFromBadge({ label: 'DNS', auto: false }, ozon)).toBe(ozon);
+    expect(pinnedSelectionFromBadge(null, dns)).toBe(dns);
+  });
+
+  it('主品自动 + 有实际取价平台 = 钉成平台级显式选择（与平台小药丸同名）', () => {
+    expect(pinnedSelectionFromBadge({ label: 'DNS', auto: true }, null)).toEqual({ platforms: ['DNS'], shopIds: [] });
+    expect(pinnedSelectionFromBadge({ label: 'Mvideo', auto: true }, null)).toEqual({ platforms: ['Mvideo'], shopIds: [] });
+  });
+
+  it('主品自动但无数据（label 仍为占位「自动」/badge 缺）= 回落 null 全员自动', () => {
+    expect(pinnedSelectionFromBadge({ label: '自动', auto: true }, null)).toBeNull();
+    expect(pinnedSelectionFromBadge(null, null)).toBeNull();
+    expect(pinnedSelectionFromBadge(undefined, null)).toBeNull();
   });
 });
