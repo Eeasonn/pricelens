@@ -263,11 +263,12 @@ export function computeYAxis(params: {
    *  等非法覆盖整体回自动 */
   yMin?: number | null;
   yMax?: number | null;
-  /** 冻结自适应（第一百六十八轮，Eason）：传入 = 步长与格数直接沿用（intervalUsd
-   *  恒 freeze.intervalUsd、cells 恒 freeze.cells，跳过 niceStep 选档与步长滞回），
-   *  段域/断轴/像素分配照常——上下限拖动、窗口平移、每格高度伸缩不再触发自适应，
-   *  图高与每格值跨度恒定；自适应只在产品集/筛选口径变化时由调用方解冻 */
-  freeze?: { intervalUsd: number; cells: number };
+  /** 冻结步长（第一百六十八轮立、第一百六十九轮修正语义）：传入 = 刻度步长直接
+   *  沿用 freeze.intervalUsd（跳过 niceStep 选档与步长滞回），段域/断轴/像素分配
+   *  照常，格数仍按范围自然伸缩（cells = span/interval）——拖动上下限改范围时
+   *  只增减格数（Y 轴整体变高/变矮），每格像素高度恒定、线的纵向比例完全不变形；
+   *  步长只在产品集/筛选口径变化时由调用方解冻 */
+  freeze?: { intervalUsd: number };
 }): YScale {
   const scale = Math.min(Math.max(params.sliderScale, 0.5), 3);
   const end = (partial: Omit<YScale, 'sliderScale'>): YScale => ({ ...partial, sliderScale: scale });
@@ -427,9 +428,10 @@ export function computeYAxis(params: {
   segDomains[0].min = snapped.lo;
   segDomains[segDomains.length - 1].max = snapped.hi;
   const pseudoSpan = snapped.pseudoSpan;
-  // 冻结自适应（第一百六十八轮）：格数恒冻结值——上下限拖动/窗口平移/伸缩只改
-  // 段域映射与像素分配占比，图高（cells×TICK_PX）与每格值跨度恒定
-  const cells = params.freeze ? params.freeze.cells : clampInt(pseudoSpan / finalInterval, MIN_CELLS, MAX_CELLS);
+  // 步长冻结（第一百六十九轮修正）：格数恒按范围自然伸缩（cells = span/步长）——
+  // 拖动上下限加宽/收窄范围时 Y 轴整体变高/变矮，每格像素高（TICK_PX×伸缩倍率）
+  // 恒定，线的纵向比例完全不变形
+  const cells = clampInt(pseudoSpan / finalInterval, MIN_CELLS, MAX_CELLS);
   const availPx = Math.round(cells * TICK_PX * scale);
 
   // ---- 2.5) 段像素需求下限（第三十二轮）：与段值域相交的系列数 × 每系列保底像素

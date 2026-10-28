@@ -123,39 +123,41 @@ describe('computeYAxis 用户上下限覆盖（YLimitHandles 契约）', () => {
   });
 });
 
-describe('computeYAxis 冻结自适应（第一百六十八轮：自适应仅在产品/筛选变化时发生）', () => {
-  it('freeze：步长与格数沿用冻结值，数据漂移只动段域、图高恒定', () => {
+describe('computeYAxis 冻结步长（第一百六十八轮立、第一百六十九轮修正：每格像素恒定，格数随范围伸缩）', () => {
+  it('freeze：步长沿用冻结值；范围加宽时格数增多、每格像素不变（线不变形）', () => {
     const base = computeYAxis({ series: [mkSeries('a', [650, 980])], ...BASE, allowBreak: false });
-    // 窗口平移后数据漂到 700~1300（超出原域）：不冻结时步长/格数会重算
+    // 拖动上下限把范围加宽到 300~1300：步长恒定、格数按新范围自然增多
     const s = computeYAxis({
-      series: [mkSeries('a', [700, 1300])],
+      series: [mkSeries('a', [650, 980])],
       ...BASE,
       allowBreak: false,
-      freeze: { intervalUsd: base.intervalUsd, cells: base.cells },
+      freeze: { intervalUsd: base.intervalUsd },
+      yMin: 300,
+      yMax: 1300,
     });
     expect(s.intervalUsd).toBe(base.intervalUsd);
-    expect(s.cells).toBe(base.cells);
-    expect(s.plotHeight).toBe(base.plotHeight);
+    expect(s.cells).toBeGreaterThan(base.cells); // 范围加宽 → Y 轴整体变高
+    // 每格像素恒定 = 线的纵向比例不变形
+    expect(s.plotHeight).toBe(s.cells * 64);
+    expect(s.plotHeight / s.cells).toBeCloseTo(base.plotHeight / base.cells, 6);
   });
 
-  it('freeze + 上下限拖动：范围覆盖生效且步长/格数/图高全部不变', () => {
+  it('freeze + 范围收窄：格数减少、图变矮，步长与每格像素仍恒定', () => {
     const base = computeYAxis({ series: [mkSeries('a', [650, 980])], ...BASE, allowBreak: false });
     const s = computeYAxis({
       series: [mkSeries('a', [650, 980])],
       ...BASE,
       allowBreak: false,
-      freeze: { intervalUsd: base.intervalUsd, cells: base.cells },
+      freeze: { intervalUsd: base.intervalUsd },
       yMin: 650,
       yMax: 700,
     });
-    expect(s.min).toBe(650);
-    expect(s.max).toBe(700);
     expect(s.intervalUsd).toBe(base.intervalUsd);
-    expect(s.cells).toBe(base.cells);
-    expect(s.plotHeight).toBe(base.plotHeight);
+    expect(s.cells).toBeLessThan(base.cells); // 范围收窄 → Y 轴整体变矮
+    expect(s.plotHeight).toBe(s.cells * 64);
   });
 
-  it('freeze 期间伸缩每格高度只等比缩放像素，步长/格数不变', () => {
+  it('freeze 期间伸缩每格高度只等比缩放像素，步长不变', () => {
     const base = computeYAxis({ series: [mkSeries('a', [650, 980])], ...BASE, allowBreak: false });
     const s = computeYAxis({
       series: [mkSeries('a', [650, 980])],
@@ -163,10 +165,9 @@ describe('computeYAxis 冻结自适应（第一百六十八轮：自适应仅在
       sliderScale: 1.5,
       perUsd: 1,
       allowBreak: false,
-      freeze: { intervalUsd: base.intervalUsd, cells: base.cells },
+      freeze: { intervalUsd: base.intervalUsd },
     });
     expect(s.intervalUsd).toBe(base.intervalUsd);
-    expect(s.cells).toBe(base.cells);
-    expect(s.plotHeight).toBe(Math.round(base.cells * 64 * 1.5));
+    expect(s.plotHeight).toBe(Math.round(s.cells * 64 * 1.5));
   });
 });

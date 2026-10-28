@@ -747,12 +747,12 @@ export default function PriceTrend(props: {
     state.currency, state.granularity, state.rangeStart, state.rangeEnd,
     yCompress,
   ]);
-  const yBaseRef = useRef<{ key: string; intervalUsd: number; cells: number } | null>(null);
+  const yBaseRef = useRef<{ key: string; intervalUsd: number } | null>(null);
   const yCfg = useMemo(() => {
     if (adjusting && scaleRef.current) return scaleRef.current;
     const frozen =
       yBaseRef.current && yBaseRef.current.key === yAdaptKey
-        ? { intervalUsd: yBaseRef.current.intervalUsd, cells: yBaseRef.current.cells }
+        ? { intervalUsd: yBaseRef.current.intervalUsd }
         : undefined;
     return computeYAxis({
       series: chartSeries,
@@ -763,12 +763,12 @@ export default function PriceTrend(props: {
       prev: scaleRef.current,
       yMin: yLimit.min, // 上下限拖柄（第一百六十六轮）：null = 该侧自动
       yMax: yLimit.max,
-      freeze: frozen, // 非触发时机冻结步长/格数（第一百六十八轮）
+      freeze: frozen, // 非触发时机冻结步长（第一百六十八轮；169 轮格数随范围自然伸缩）
     });
   }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimit, yAdaptKey]);
   // 自适应基线在渲染提交后写入（渲染期写 ref 会被并发渲染污染）
   useEffect(() => {
-    yBaseRef.current = { key: yAdaptKey, intervalUsd: yCfg.intervalUsd, cells: yCfg.cells };
+    yBaseRef.current = { key: yAdaptKey, intervalUsd: yCfg.intervalUsd };
   }, [yAdaptKey, yCfg]);
   // 限位提交（第一百六十六轮）：拖柄实时回传。钳制 = 与对侧至少保留一个刻度格
   // （防拖越对侧把轴挤翻）、下限不为负；null = 该侧恢复自动。落库前按方向吸附整格
@@ -806,8 +806,8 @@ export default function PriceTrend(props: {
   // 图高 +68%（用户：切到季度 Y 轴高度显著拉高）。带 prev 后季沿用 200（5 格 ∈ 滞回区间），
   // 图高与周完全一致。splitScaleRef 与主图 scaleRef 各自独立（两模式互不串档）
   const splitScaleRef = useRef<YScale | null>(null);
-  // 分离共享轴与合并图同一套自适应触发键（第一百六十八轮）：非触发时机冻结步长/格数
-  const splitYBaseRef = useRef<{ key: string; intervalUsd: number; cells: number } | null>(null);
+  // 分离共享轴与合并图同一套自适应触发键（第一百六十八轮）：非触发时机冻结步长
+  const splitYBaseRef = useRef<{ key: string; intervalUsd: number } | null>(null);
   const splitYCfg = useMemo(() => {
     if (!splitActive || panelViews.length === 0) return null;
     // 第一百二十五轮：刷选拖动中冻结共享 Y 轴（与上面合并图 yCfg 同款）——
@@ -815,7 +815,7 @@ export default function PriceTrend(props: {
     if (adjusting && splitScaleRef.current) return splitScaleRef.current;
     const frozen =
       splitYBaseRef.current && splitYBaseRef.current.key === yAdaptKey
-        ? { intervalUsd: splitYBaseRef.current.intervalUsd, cells: splitYBaseRef.current.cells }
+        ? { intervalUsd: splitYBaseRef.current.intervalUsd }
         : undefined;
     return computeYAxis({
       series: panelViews.flatMap((p) => p.vis),
@@ -826,11 +826,11 @@ export default function PriceTrend(props: {
       prev: splitScaleRef.current,
       yMin: yLimit.min, // 上下限拖柄（第一百六十六轮）：分离共享轴与合并图同一份限位
       yMax: yLimit.max,
-      freeze: frozen, // 非触发时机冻结步长/格数（第一百六十八轮）
+      freeze: frozen, // 非触发时机冻结步长（格数随范围自然伸缩，第一百六十九轮）
     });
   }, [splitActive, panelViews, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimit, yAdaptKey]);
   useEffect(() => {
-    if (splitYCfg) splitYBaseRef.current = { key: yAdaptKey, intervalUsd: splitYCfg.intervalUsd, cells: splitYCfg.cells };
+    if (splitYCfg) splitYBaseRef.current = { key: yAdaptKey, intervalUsd: splitYCfg.intervalUsd };
   }, [yAdaptKey, splitYCfg]);
   // 滞回基线提交后写入；分离模式退出时清档（与主图 scaleRef 各自独立，两模式互不串档）
   useEffect(() => {
