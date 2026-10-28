@@ -475,8 +475,8 @@ export default function TrendTables(props: {
             <div style={{ gridColumn: '1 / -1', height: 14, background: color.canvas }} />
           </>
         )}
-        {/* —— 核心信息明细：列头随标题走（第一百四十八轮），每产品 6 行
-            （RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer）× 时间列 —— */}
+        {/* —— 核心信息明细：列头随标题走（第一百四十八轮），每产品 7 行
+            （RRP / 折后价 / 折扣率 / 近4周环比 / 平台-店铺 / 取证 / offer）× 时间列 —— */}
         {captionRow('核心信息明细', `cap-detail-${b.g.id}`)}
         {headerRow(b.g.id, 'detail')}
         {b.g.series.map((s) => {
@@ -538,6 +538,31 @@ export default function TrendTables(props: {
                 {disc != null ? (
                   <span className="tnum" style={{ fontSize: 12, color: disc <= -0.15 ? '#b45309' : color.body, whiteSpace: 'nowrap' }}>
                     {fmtPct(disc)}
+                  </span>
+                ) : (
+                  emptyCell
+                )}
+              </div>,
+            );
+          }
+          // 近4周环比行（第一百八十轮，Eason）：只填最后 4 列——每列折后价相对
+          // 上一列的涨跌；更早列留空。跌 = 蓝（更便宜，与价差同语言）、涨 = 红
+          rows.push(typeCell('近4周环比', main, `${p}-wow`));
+          for (let i = 0; i < n; i++) {
+            const cur = s.points[i]?.price ?? null;
+            const prev = i > 0 ? s.points[i - 1]?.price ?? null : null;
+            const inLast4 = i >= n - 4;
+            const wow = inLast4 && cur != null && prev != null && prev > 0 ? (cur - prev) / prev : null;
+            rows.push(
+              <div key={`${p}-wow-${i}`} style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
+                {wow != null ? (
+                  <span
+                    className="tnum"
+                    title="折后价较上一周期涨跌（近 4 个周期）"
+                    style={{ fontSize: 12, fontWeight: 600, color: wow > 0.005 ? color.error : wow < -0.005 ? color.link : color.body, whiteSpace: 'nowrap' }}
+                  >
+                    {wow > 0 ? '+' : wow < 0 ? '−' : '±'}
+                    {Math.abs(Math.round(wow * 1000) / 10)}%
                   </span>
                 ) : (
                   emptyCell

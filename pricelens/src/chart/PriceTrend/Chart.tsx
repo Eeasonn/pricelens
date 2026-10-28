@@ -178,6 +178,9 @@ export interface ChartProps {
   legend?: ReactNode;
   /** RRP 胶囊之后的插槽（第一百七十八轮）：短竖线 + 全局「仅查看主产品」 */
   priceTypesAfter?: ReactNode;
+  /** 悬停小页签比率口径（第一百八十轮）：discount = 折扣率（vs RRP，缺省）；
+   *  wow = 周环比（vs 上一周期） */
+  tipMode?: 'discount' | 'wow';
   /** 轴列绘制（第五十四轮追补⑤）：false = 面板不画档位带/刻度标签/断轴省略号——
    *  分离模式这三样由卡片外侧的共享轴列（SplitAxisColumn）统一承担，面板只留绘图区。
    *  绘图区网格提示线已移除（第九十轮） */
@@ -1009,6 +1012,8 @@ export default function Chart(props: ChartProps) {
               )}
             </div>
           )}
+          {/* 悬停小页签的比率口径（第一百八十轮，Eason）：discount=折扣率（vs RRP，
+              缺省）；wow=周环比（vs 上一周期折后价）——由标题行「页签显示」开关控制 */}
           {/* DOM 刻度标签（8px；ECharts 值轴已隐藏）。第九十一轮：随齿轮「Y 刻度线」
               开关显隐（关 = 只留档位带）；绘图区网格提示线已移除（第九十轮）；
               分离面板 axisChrome=false 时标签/短横线由共享轴列承担 */}
@@ -1398,6 +1403,11 @@ export default function Chart(props: ChartProps) {
             );
             const body = (
               <>
+                {/* 比率口径标题（第一百八十轮，Eason）：小页签最上方一排标题，
+                    随「页签显示」开关切换（折扣率 / 周环比） */}
+                <div style={{ fontSize: 10, lineHeight: '13px', fontWeight: 600, color: color.mute, marginBottom: 2 }}>
+                  {props.tipMode === 'wow' ? '周环比' : '折扣率'}
+                </div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
                   {fmt_hoverDate(granularity, series[0]?.points[tipIdx]?.xLabel ?? '')}
                 </div>
@@ -1405,6 +1415,9 @@ export default function Chart(props: ChartProps) {
                   const pt = s.points[tipIdx];
                   const dim = litKeys != null && !litKeys.includes(s.key);
                   const items = offerRows[ri];
+                  // 周环比（第一百八十轮）：本列折后价相对上一列；首列/缺采 = null
+                  const prevV = tipIdx > 0 ? primaryPriceOf(s.points[tipIdx - 1], priceTypes) : null;
+                  const wow = prevV != null && prevV > 0 && v != null ? v / prevV - 1 : null;
                   // 折扣率胶囊（第五十二轮）：与时点卡同语言（vs RRP；仅折后价口径出）
                   const disc =
                     priceTypes.discounted && pt?.price != null && pt?.rrp != null && pt.rrp > 0
@@ -1434,7 +1447,17 @@ export default function Chart(props: ChartProps) {
                             现价字号=折线上价格标签同款 14px。第六十一轮修：span 须 inline-block
                             （inline 忽略 width，textAlign right 落空=三列没对齐）+ 列间灰短竖线 */}
                         <span className="tnum" style={{ width: 38, textAlign: 'right', flexShrink: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>
-                          {disc != null && <MiniDiscountBadge discount={disc} dim={dim} />}
+                          {props.tipMode === 'wow'
+                            ? (wow != null && (
+                                <span
+                                  className="tnum"
+                                  title={`折后价较上一周期${wow > 0 ? `+${Math.round(Math.abs(wow) * 1000) / 10}%` : wow < 0 ? `−${Math.round(Math.abs(wow) * 1000) / 10}%` : '持平'}`}
+                                  style={{ flexShrink: 0, padding: '0 5px', fontSize: 10, lineHeight: '15px', fontWeight: 700, borderRadius: radius.pill, color: wow > 0.005 ? '#b45309' : wow < -0.005 ? color.link : selectSoftInk, background: selectSoft, opacity: dim ? 0.3 : undefined }}
+                                >
+                                  {wow > 0 ? '+' : wow < 0 ? '−' : '±'}{Math.round(Math.abs(wow) * 1000) / 10}%
+                                </span>
+                              ))
+                            : (disc != null && <MiniDiscountBadge discount={disc} dim={dim} />)}
                         </span>
                         <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
                         <span className="tnum" style={{ width: `${priceCh}ch`, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>

@@ -633,7 +633,18 @@ export default function VolumePrice() {
                     在上方筛选器选择产品后，这里按所选产品铺开量价走势
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${panelCount}, minmax(0, 1fr))`, gap: space.md }}>
+                  // 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
+                  // 均分一行；>3 个不折行，横向拖动查看（轨道宽 = N/3 × 100%，每格
+                  // 恒为视口 1/3 宽）
+                  <div style={{ overflowX: 'auto' }}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${panelCount}, minmax(0, 1fr))`,
+                        gap: space.md,
+                        width: `${(panelCount / Math.min(panelCount, 3)) * 100}%`,
+                      }}
+                    >
                     {panelViews.map((p) => (
                       <div
                         key={p.key}
@@ -710,6 +721,7 @@ export default function VolumePrice() {
                         </div>
                       </div>
                     ))}
+                    </div>
                   </div>
                 )}
               </div>

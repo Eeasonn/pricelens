@@ -226,6 +226,9 @@ export default function PriceTrend(props: {
   // 价格显示（第一百一十四轮，评审）：精简 = 每系列仅最高/最低/最新三价直标（默认）；
   // 详细 = 现行全量标签口径。价格看板合并/分离两模式同值
   const [labelMode, setLabelMode] = useState<'detail' | 'compact'>('compact');
+  // 悬停小页签比率口径（第一百八十轮，Eason）：折扣率（vs RRP，默认）/ 周环比
+  //（vs 上一周期折后价）；「页签显示」开关控制，合并/分离两模式同值
+  const [tipMode, setTipMode] = useState<'discount' | 'wow'>('discount');
   // 第一百一十四轮：分离模式横向虚线（跨面板共享悬停纵向位置；与 splitHoverIdx 同机制）
   const [splitCrossY, setSplitCrossY] = useState<number | null>(null);
   // 第一百一十五轮：顶部图例带悬停的产品——合并图单键；分离模式记录面板 + 系列
@@ -1105,6 +1108,20 @@ export default function PriceTrend(props: {
         <ConfigProvider theme={filterBarTheme}>
           {/* 第一百一十五轮（评审）：平台/币种收进顶部筛选条，标题行不再重复 */}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, color: color.mute, fontSize: 12 }}>
+            {/* 页签显示（第一百八十轮，Eason）：悬停小页签比率口径——折扣率（vs RRP，
+                默认）/ 周环比（vs 上一周期）；价格显示同款风格，居其左侧 */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              页签显示{' '}
+              <Segmented
+                size="small"
+                value={tipMode}
+                onChange={(v) => setTipMode(v as 'discount' | 'wow')}
+                options={[
+                  { label: '折扣率', value: 'discount' },
+                  { label: '周环比', value: 'wow' },
+                ]}
+              />
+            </span>
             {/* 价格显示（第一百一十四轮，评审）：与币种切换同款控件位——精简 = 图上仅
                 最高/最低/最新三价（默认），详细 = 全量价格标签 */}
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1395,6 +1412,7 @@ export default function PriceTrend(props: {
                         granularity={state.granularity}
                         currency={state.currency}
                         priceTypes={state.priceTypes}
+                        tipMode={tipMode}
                         gridLeft={NAME_ZONE_W // 第一百一十五轮：名称药丸上移图顶后左缘只留呼吸带（原 188px 名称带回收）
                         }
                         gridTop={panelGridTop}
@@ -1470,6 +1488,7 @@ export default function PriceTrend(props: {
               />
             }
             priceTypesAfter={onlyMainCtl}
+            tipMode={tipMode}
             series={chartSeries}
             granularity={state.granularity}
             currency={state.currency}
