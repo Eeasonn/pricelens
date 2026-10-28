@@ -25,6 +25,10 @@
 // 「同步平台筛选」（onSyncPlatform）：一键把全部产品的取价平台改成与主产品一致
 // （全局操作，index 层实现）③产品药丸宽度预算 178 → 220，避免过于紧凑。
 // 两按钮垂直成组（同步平台筛选在上）。
+// 第一百七十三轮（Eason）：「同步平台筛选」改开关语义——随时可点，触发后按压态
+// 浅蓝（与仅查看主产品同语言）、全部产品跟随主产品，再点取消并还原同步前快照
+// （快照/收敛/还原纯函数在 platformSync.ts，index 层持开关态）；
+// 172 轮的「全一致即置灰」口径退役。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
 // ============================================================
@@ -292,7 +296,7 @@ function GroupBlock({
   onCompareProduct,
   channelCtl,
   onSyncPlatform,
-  syncDisabled,
+  syncActive,
 }: {
   group: LegendGroup;
   showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
@@ -309,9 +313,8 @@ function GroupBlock({
   /** 同步平台筛选（第一百七十轮，Eason）：全部产品的取价平台改成与主产品一致
    *  （全局操作，index 层实现）；传入才渲染按钮 */
   onSyncPlatform?: () => void;
-  /** 无可同步差异（全部产品的平台已与主品一致）时置灰按钮（第一百七十二轮）——
-   *  此前点击无任何可见变化，被误读为「不可点击」 */
-  syncDisabled?: boolean;
+  /** 同步进行中（第一百七十三轮改开关语义）：按钮按压态；再点取消并还原 */
+  syncActive?: boolean;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
@@ -393,8 +396,10 @@ function GroupBlock({
             <button
               type="button"
               className="lpl-lg-act"
-              disabled={syncDisabled}
-              title={syncDisabled ? '全部产品的取价平台已与主产品一致' : '全部产品的取价平台改成与主产品一致'}
+              aria-pressed={!!syncActive}
+              title={syncActive
+                ? '已同步：全部产品取价平台与主产品一致，点击取消并恢复同步前状态'
+                : '全部产品的取价平台改成与主产品一致'}
               onClick={(e) => {
                 e.stopPropagation();
                 onSyncPlatform();
@@ -403,14 +408,14 @@ function GroupBlock({
                 height: 18,
                 padding: '0 8px',
                 borderRadius: radius.control,
-                border: `1px solid ${color.hairlineStrong}`,
-                background: color.canvas,
-                color: color.body,
+                border: `1px solid ${syncActive ? selectAccent : color.hairlineStrong}`,
+                background: syncActive ? selectSoft : color.canvas,
+                color: syncActive ? selectSoftInk : color.body,
                 font: 'inherit',
                 fontSize: 10,
                 fontWeight: 600,
                 lineHeight: '16px',
-                cursor: syncDisabled ? 'default' : 'pointer',
+                cursor: 'pointer',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -520,7 +525,7 @@ export default function BrandLegendStrip({
   onCompareProduct,
   channelCtl,
   onSyncPlatform,
-  syncDisabled,
+  syncActive,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -541,8 +546,8 @@ export default function BrandLegendStrip({
   /** 同步平台筛选（第一百七十轮，Eason）：传入 = 每组按钮组上方出「同步平台筛选」
    *  按钮，点击把全部产品的取价平台改成与主产品一致（全局操作，index 层实现） */
   onSyncPlatform?: () => void;
-  /** 无可同步差异时置灰（第一百七十二轮） */
-  syncDisabled?: boolean;
+  /** 同步进行中（第一百七十三轮改开关语义）：按钮按压态；再点取消并还原 */
+  syncActive?: boolean;
 }) {
   const multi = groups.length >= 2;
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
@@ -627,7 +632,7 @@ export default function BrandLegendStrip({
                 onCompareProduct={onCompareProduct}
                 channelCtl={channelCtl}
                 onSyncPlatform={onSyncPlatform}
-                syncDisabled={syncDisabled}
+                syncActive={syncActive}
               />,
             );
           });
@@ -650,8 +655,7 @@ export default function BrandLegendStrip({
         .lpl-pill-cmp { opacity: 0; transition: opacity ${motion.fast}ms; }
         .lpl-lg-pill:hover .lpl-pill-cmp { opacity: 1; }
         .lpl-pill-cmp:hover { color: ${color.link} !important; }
-        .lpl-lg-act:not(:disabled):hover { border-color: ${color.hairlineStrong} !important; background: ${color.canvasSoft} !important; }
-        .lpl-lg-act:disabled { opacity: 0.4; cursor: default; }
+        .lpl-lg-act:not(:disabled):not([aria-pressed="true"]):hover { border-color: ${color.hairlineStrong} !important; background: ${color.canvasSoft} !important; }
       `}</style>
     </div>
   );

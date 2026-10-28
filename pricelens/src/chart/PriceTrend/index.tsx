@@ -103,6 +103,7 @@ import PointPanel from './PointPanel';
 import { groupsOfCards, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
+import { applySyncedPlatforms, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from './platformSync';
 
 /** 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；第一百二十三轮④
  *  单行药丸带 44 → 30，第一百四十五轮药丸固定两行（品牌行 + 产品行）30 → 40） */
@@ -186,34 +187,46 @@ export default function PriceTrend(props: {
     (seriesKey: string, sel: PlatformSelection | null) => {
       const idx = seriesKey.indexOf('__');
       if (idx <= 0) return;
-      actions.setSelectionPlatform(`${seriesKey.slice(0, idx)}|${seriesKey.slice(idx + 2)}`, sel);
+      const key = `${seriesKey.slice(0, idx)}|${seriesKey.slice(idx + 2)}`;
+      // 同步中（第一百七十三轮）：任一产品的平台改动都施加到全部产品——
+      // 保持「所有产品与主产品一致」不变式（改主品改对比效果相同）；
+      // 取消同步时整体还原触发前快照，不受影响
+      if (platformSyncOnRef.current) {
+        actions.setMains(
+          effMains.map((c) => ({
+            ...c,
+            main: c.main ? { ...c.main, platform: sel } : c.main,
+            compares: c.compares.map((s) => ({ ...s, platform: sel })),
+          })),
+        );
+        return;
+      }
+      actions.setSelectionPlatform(key, sel);
     },
-    [actions],
+    [actions, effMains],
   );
 
-  /** 同步平台筛选（第一百七十轮，Eason）：把全部产品（各卡主品 + 对比区）的取价
-   *  平台改成与主产品（首张含主品卡的主品）一致——源未自选过（自动）则全部回落
-   *  自动；setMains 一次性整组写回 */
-  const syncPlatformFilter = useCallback(() => {
+  // 同步平台筛选（第一百七十三轮改开关语义，Eason）：随时可点——触发 = 快照
+  // 当前全部产品平台并收敛到主产品（首张含主品卡，未自选 = 自动口径全员自动）；
+  // 再点取消 = 按快照整体还原触发前状态。会话态不持久化；同步期间任何平台改动
+  // 经 pickChannel 全员生效。ref 持开关镜像供 pickChannel 回调免依赖读值。
+  const [platformSyncOn, setPlatformSyncOn] = useState(false);
+  const platformSyncOnRef = useRef(false);
+  const platformSyncSnapRef = useRef<PlatformSyncCardSnap[] | null>(null);
+  const togglePlatformSync = useCallback(() => {
+    if (platformSyncOnRef.current) {
+      actions.setMains(restorePlatformSync(effMains, platformSyncSnapRef.current ?? []));
+      platformSyncSnapRef.current = null;
+      platformSyncOnRef.current = false;
+      setPlatformSyncOn(false);
+      return;
+    }
+    platformSyncSnapRef.current = snapshotPlatformSync(effMains);
     const src = effMains.find((c) => c.main)?.main?.platform ?? null;
-    actions.setMains(
-      effMains.map((c) => ({
-        ...c,
-        main: c.main ? { ...c.main, platform: src } : c.main,
-        compares: c.compares.map((s) => ({ ...s, platform: src })),
-      })),
-    );
+    actions.setMains(applySyncedPlatforms(effMains, src));
+    platformSyncOnRef.current = true;
+    setPlatformSyncOn(true);
   }, [effMains, actions]);
-  // 全部产品的平台已与主品一致 = 无可同步差异，按钮置灰（第一百七十二轮）——
-  // 此前该状态点击无任何可见变化，被误读为「不可点击」
-  const syncDisabled = useMemo(() => {
-    const key = (p: PlatformSelection | null | undefined): string => JSON.stringify(p ?? null);
-    const src = effMains.find((c) => c.main)?.main?.platform ?? null;
-    const srcKey = key(src);
-    return effMains.every(
-      (c) => (!c.main || key(c.main.platform) === srcKey) && c.compares.every((s) => key(s.platform) === srcKey),
-    );
-  }, [effMains]);
 
   const openCompareFor = (p: { modelId: string; romram: string }): void => {
     setCompareInit(p);
@@ -1332,8 +1345,8 @@ export default function PriceTrend(props: {
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                           onCompareProduct={openCompareFor}
                           channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
-                          onSyncPlatform={syncPlatformFilter}
-                          syncDisabled={syncDisabled}
+                          onSyncPlatform={togglePlatformSync}
+                          syncActive={platformSyncOn}
                         />
                       </div>
                       <Chart
@@ -1412,8 +1425,8 @@ export default function PriceTrend(props: {
               onHover={setLegendHoverKey}
               onCompareProduct={openCompareFor}
               channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
-              onSyncPlatform={syncPlatformFilter}
-              syncDisabled={syncDisabled}
+              onSyncPlatform={togglePlatformSync}
+              syncActive={platformSyncOn}
             />
           </div>
           <Chart
