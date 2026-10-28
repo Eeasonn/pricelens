@@ -172,8 +172,9 @@ export default function PriceTrend(props: {
   const [maxMinOn, setMaxMinOn] = useState(false);
   // 价格变化提醒：null=关；阈值=小数（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
-  // 多平台对比页签（第一百六十四轮，Eason）：页签主动进入 = 不带产品筛选（进来
-  // 自己选）；图例药丸比价按钮进入 = 带上该产品（compareInit）。页签态会话保留。
+  // 多平台对比页签（第一百六十四轮，Eason）：图例药丸比价按钮进入 = 带上该产品
+  // （compareInit）；页签主动进入 = 默认选上主品（第一百六十九轮，原为不带产品进来
+  // 自己选）。页签态会话保留。
   // 原 PlatformCompareModal 弹窗形态随本次改版退役（图表改用主界面同款 Chart）。
   const [compareTab, setCompareTab] = usePageViewState<boolean>('dashboard.compareTab', () => false);
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
@@ -970,14 +971,20 @@ export default function PriceTrend(props: {
           )}
         </h2>
         {/* 多平台对比页签（第一百六十四轮，Eason）：「产品对比」= 主视图；
-            「多平台对比」= 次级界面（单产品 × 多平台-店铺线，图表与主界面同款） */}
+            「多平台对比」= 次级界面（单产品 × 多平台-店铺线，图表与主界面同款）。
+            第一百六十九轮：页签主动切进来默认选上主品（首张卡的主分析产品，无主品
+            不预置）——同时清掉上次药丸带入的残留 preset；药丸按钮进入仍带该产品 */}
         <Segmented
           size="small"
           value={compareTab ? 'compare' : 'main'}
           onChange={(v) => {
             const next = v === 'compare';
             setCompareTab(next);
-            if (next) setPointPanelOpen(false);
+            if (next) {
+              setPointPanelOpen(false);
+              const main = effMains.find((c) => c.main)?.main ?? null;
+              setCompareInit(main ? { modelId: main.modelId, romram: main.romram } : null);
+            }
           }}
           options={[
             { label: '产品对比', value: 'main' },
