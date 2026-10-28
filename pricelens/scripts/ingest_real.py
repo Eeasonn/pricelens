@@ -410,9 +410,14 @@ def cfg_features(industry, romram):
 
 
 def pair_configs(own_cfgs, comp_cfgs, industry):
-    """SKU 级配置匹配（2026-10-20 拍板）：
-    手机/平板 ROM+RAM，优先 ROM；华为 1 配置 vs 友商多配置 → 友商全显；
-    华为多配置 vs 友商 1 配置 → 全部对友商该配置；都多 → 一一对应（同 ROM 优先同 RAM，其次 ROM 就近；平板叠尺寸就近）。
+    """SKU 级配置匹配（2026-10-20 拍板；2026-10-29 Eason 修订两点）：
+    手机/平板 ROM+RAM，优先 ROM；
+    手机「我司 1 配置 vs 友商多配置」不再全显（2026-10-29）——优先同 ROM（全部
+    同 ROM 变体，通常 1 个）；友商无同 ROM = 就近只配一个；
+    华为多配置 vs 友商 1 配置 → 全部对友商该配置；
+    都多 → 一一对应（同 ROM 同 RAM > 同 ROM > ROM 就近；平板叠尺寸就近），
+    2026-10-29 起改全局贪心（每轮取剩余最优 (我司,友商) 对）——修复按我司字典序
+    贪心的挤出（12+512 抢走友商唯一 16+512，16+512 只剩 12+1TB）。
     穿戴：表盘尺寸档（<43mm 小 / ≥43mm 大）+ 蜂窝偏好一致 + 尺寸就近；友商 1 配置 → 全对。
     音频/IoT/PC：1:1。"""
     if not own_cfgs or not comp_cfgs:
@@ -420,7 +425,15 @@ def pair_configs(own_cfgs, comp_cfgs, industry):
     if industry in ("phone", "tablet"):
         if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
             if industry == "phone":
-                return [(own_cfgs[0], c) for c in comp_cfgs]
+                # 2026-10-29 拍板：优先同 ROM（全部同 ROM 变体）；无同 ROM = 就近一个
+                o = cfg_features(industry, own_cfgs[0])
+                same = [c for c in comp_cfgs if o["rom"] and cfg_features(industry, c)["rom"] == o["rom"]]
+                if same:
+                    return [(own_cfgs[0], c) for c in same]
+                def close1(c):
+                    f = cfg_features(industry, c)
+                    return (abs((f["rom"] or 0) - (o["rom"] or 0)), c)
+                return [(own_cfgs[0], sorted(comp_cfgs, key=close1)[0])]
             # 平板变体多（尺寸×内存×联网），按就近排序后最多取 4 个
             o = cfg_features(industry, own_cfgs[0])
             def close(c):
@@ -432,26 +445,29 @@ def pair_configs(own_cfgs, comp_cfgs, industry):
             return [(o, comp_cfgs[0]) for o in own_cfgs]
         of = [cfg_features(industry, c) for c in own_cfgs]
         cf = [cfg_features(industry, c) for c in comp_cfgs]
-        used, pairs = set(), []
-        for i, o in enumerate(of):
-            best = None
-            for j, c in enumerate(cf):
-                if j in used:
-                    continue
-                if o["rom"] and c["rom"]:
-                    if o["rom"] == c["rom"]:
-                        sc = 0 if o["ram"] == c["ram"] else 1 + abs((o["ram"] or 0) - (c["ram"] or 0)) / 100
-                    else:
-                        sc = 2 + abs((o["rom"] or 0) - (c["rom"] or 0)) / max(o["rom"], c["rom"])
+
+        def score(o, c):
+            if o["rom"] and c["rom"]:
+                if o["rom"] == c["rom"]:
+                    sc = 0 if o["ram"] == c["ram"] else 1 + abs((o["ram"] or 0) - (c["ram"] or 0)) / 100
                 else:
-                    sc = 5
-                if industry == "tablet" and o["in"] and c["in"]:
-                    sc += abs(o["in"] - c["in"]) / 10
-                if best is None or sc < best[0]:
-                    best = (sc, j)
-            if best:
-                pairs.append((own_cfgs[i], comp_cfgs[best[1]]))
-                used.add(best[1])
+                    sc = 2 + abs((o["rom"] or 0) - (c["rom"] or 0)) / max(o["rom"], c["rom"])
+            else:
+                sc = 5
+            if industry == "tablet" and o["in"] and c["in"]:
+                sc += abs(o["in"] - c["in"]) / 10
+            return sc
+
+        # 全局贪心（2026-10-29）：每轮取剩余配对里得分最低的 (我司,友商)，同分按
+        # 我司/友商序稳定——修复按我司序贪心的挤出（12+512 先抢友商唯一 16+512）
+        cand = sorted((score(o, c), i, j) for i, o in enumerate(of) for j, c in enumerate(cf))
+        used_o, used_c, pairs = set(), set(), []
+        for sc, i, j in cand:
+            if i in used_o or j in used_c:
+                continue
+            pairs.append((own_cfgs[i], comp_cfgs[j]))
+            used_o.add(i)
+            used_c.add(j)
         return pairs
     if industry == "wearable":
         if len(comp_cfgs) == 1:
