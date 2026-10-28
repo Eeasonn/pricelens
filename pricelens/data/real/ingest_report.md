@@ -1,6 +1,6 @@
 # 真实数据接入报告（scripts/ingest_real.py）
 
-生成时间：2026-10-29T00:22:18+08:00
+生成时间：2026-10-29T07:41:55+08:00
 
 ## 一、总体
 
@@ -9,8 +9,8 @@
 - 时间维 202619(2026-05-06) → 202642(2026-10-14)，共 24 周
 - 低侧可疑价（<15% 参考价，仅报告不剔除）79 行
 - 分国档位：136 个 国家×型号 采用矩阵声明，其余按该国参考价推算
-- 自动匹配：442 个国家×我司型号补齐竞品，1719 条对标；51 个无可比对象
-- 对标上限4：85 组超限截断 183 条，截断后共 2052 条（每配置 ≤4 款竞品）
+- 自动匹配：442 个国家×我司型号补齐竞品，1635 条对标；51 个无可比对象
+- 对标上限4：54 组超限截断 83 条，截断后共 2024 条（每配置 ≤4 款竞品）
 - 事实包 84,841 行；b64 2,472,748 B（gzip 1,854,560 B）
 - 修正：价格单位错位(×100) 68 行
 - 修正：价格单位错位(÷100) 31 行
@@ -261,7 +261,7 @@
 - PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← APPLE iPad A16 11" WiFi 6+256 GB（sort 1）
 - PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 12+256 GB（sort 2）
 - PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← LENOVO Idea Tab Pro 12.7" WiFi 8+256 GB（sort 3）
-- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← APPLE iPad A16 11" WiFi 6+128 GB（sort 4）
+- PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 FE+ 13.1" WiFi 12+256 GB（sort 4）
 - PL｜own-huawei-matepad-11-5-s-2026 11.5" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 Lite 10.9" WiFi 6+128 GB（sort 1）
 - PL｜own-huawei-matepad-11-5-s-2026 11.5" WiFi 12+256 GB PaperMatte ← XIAOMI Pad 8 11.2" WiFi 8+256 GB（sort 2）
 - PL｜own-huawei-matepad-11-5-s-2026 11.5" WiFi 12+256 GB PaperMatte ← LENOVO Idea Tab 11" WiFi 8+256 GB（sort 3）

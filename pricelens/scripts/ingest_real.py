@@ -424,23 +424,23 @@ def pair_configs(own_cfgs, comp_cfgs, industry):
         return []
     if industry in ("phone", "tablet"):
         if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
-            if industry == "phone":
-                # 2026-10-29 拍板：优先同 ROM（全部同 ROM 变体）；无同 ROM = 就近一个
-                o = cfg_features(industry, own_cfgs[0])
-                same = [c for c in comp_cfgs if o["rom"] and cfg_features(industry, c)["rom"] == o["rom"]]
-                if same:
-                    return [(own_cfgs[0], c) for c in same]
-                def close1(c):
-                    f = cfg_features(industry, c)
-                    return (abs((f["rom"] or 0) - (o["rom"] or 0)), c)
-                return [(own_cfgs[0], sorted(comp_cfgs, key=close1)[0])]
-            # 平板变体多（尺寸×内存×联网），按就近排序后最多取 4 个
+            # 2026-10-29 平板同手机原则（Eason）：优先同 ROM（联网一致优先、尺寸就近，
+            # 最多 4）；友商无同 ROM = 就近只配一个（尺寸就近 → ROM 就近）
             o = cfg_features(industry, own_cfgs[0])
+            feats = {c: cfg_features(industry, c) for c in comp_cfgs}
+
+            def in_key(c):
+                f = feats[c]
+                return (0 if (o["in"] and f["in"] and f["in"] == o["in"]) else 1,
+                        abs((f["in"] or 0) - (o["in"] or 0)) if o["in"] and f["in"] else 1)
+
+            same = [c for c in comp_cfgs if o["rom"] and feats[c]["rom"] == o["rom"]]
+            if same:
+                return [(own_cfgs[0], c) for c in sorted(same, key=in_key)[:4]]
             def close(c):
-                f = cfg_features(industry, c)
-                return (abs((f["in"] or 0) - (o["in"] or 0)) if o["in"] and f["in"] else 1,
-                        abs((f["rom"] or 0) - (o["rom"] or 0)), c)
-            return [(own_cfgs[0], c) for c in sorted(comp_cfgs, key=close)[:4]]
+                f = feats[c]
+                return (in_key(c), abs((f["rom"] or 0) - (o["rom"] or 0)), c)
+            return [(own_cfgs[0], sorted(comp_cfgs, key=close)[0])]
         if len(comp_cfgs) == 1:
             return [(o, comp_cfgs[0]) for o in own_cfgs]
         of = [cfg_features(industry, c) for c in own_cfgs]
