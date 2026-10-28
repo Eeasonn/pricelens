@@ -89,7 +89,9 @@ export default function YLimitHandles(props: {
     top: kind === 'max' ? plotTop - ZONE_H / 2 : plotTop + plotHeight - ZONE_H / 2,
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
+    // 居左对齐（第一百六十八轮，Eason）：短棒贴轴区左缘（档位带上），与轴列元素同基线
+    justifyContent: 'flex-start',
+    paddingLeft: 2,
     cursor: 'ns-resize',
     touchAction: 'none',
     zIndex: 6,

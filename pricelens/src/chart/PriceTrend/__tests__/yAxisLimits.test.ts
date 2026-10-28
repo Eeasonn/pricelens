@@ -122,3 +122,51 @@ describe('computeYAxis 用户上下限覆盖（YLimitHandles 契约）', () => {
     expect(bad).toEqual(auto);
   });
 });
+
+describe('computeYAxis 冻结自适应（第一百六十八轮：自适应仅在产品/筛选变化时发生）', () => {
+  it('freeze：步长与格数沿用冻结值，数据漂移只动段域、图高恒定', () => {
+    const base = computeYAxis({ series: [mkSeries('a', [650, 980])], ...BASE, allowBreak: false });
+    // 窗口平移后数据漂到 700~1300（超出原域）：不冻结时步长/格数会重算
+    const s = computeYAxis({
+      series: [mkSeries('a', [700, 1300])],
+      ...BASE,
+      allowBreak: false,
+      freeze: { intervalUsd: base.intervalUsd, cells: base.cells },
+    });
+    expect(s.intervalUsd).toBe(base.intervalUsd);
+    expect(s.cells).toBe(base.cells);
+    expect(s.plotHeight).toBe(base.plotHeight);
+  });
+
+  it('freeze + 上下限拖动：范围覆盖生效且步长/格数/图高全部不变', () => {
+    const base = computeYAxis({ series: [mkSeries('a', [650, 980])], ...BASE, allowBreak: false });
+    const s = computeYAxis({
+      series: [mkSeries('a', [650, 980])],
+      ...BASE,
+      allowBreak: false,
+      freeze: { intervalUsd: base.intervalUsd, cells: base.cells },
+      yMin: 650,
+      yMax: 700,
+    });
+    expect(s.min).toBe(650);
+    expect(s.max).toBe(700);
+    expect(s.intervalUsd).toBe(base.intervalUsd);
+    expect(s.cells).toBe(base.cells);
+    expect(s.plotHeight).toBe(base.plotHeight);
+  });
+
+  it('freeze 期间伸缩每格高度只等比缩放像素，步长/格数不变', () => {
+    const base = computeYAxis({ series: [mkSeries('a', [650, 980])], ...BASE, allowBreak: false });
+    const s = computeYAxis({
+      series: [mkSeries('a', [650, 980])],
+      priceTypes: { discounted: true, rrp: false },
+      sliderScale: 1.5,
+      perUsd: 1,
+      allowBreak: false,
+      freeze: { intervalUsd: base.intervalUsd, cells: base.cells },
+    });
+    expect(s.intervalUsd).toBe(base.intervalUsd);
+    expect(s.cells).toBe(base.cells);
+    expect(s.plotHeight).toBe(Math.round(base.cells * 64 * 1.5));
+  });
+});

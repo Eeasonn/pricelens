@@ -263,6 +263,11 @@ export function computeYAxis(params: {
    *  等非法覆盖整体回自动 */
   yMin?: number | null;
   yMax?: number | null;
+  /** 冻结自适应（第一百六十八轮，Eason）：传入 = 步长与格数直接沿用（intervalUsd
+   *  恒 freeze.intervalUsd、cells 恒 freeze.cells，跳过 niceStep 选档与步长滞回），
+   *  段域/断轴/像素分配照常——上下限拖动、窗口平移、每格高度伸缩不再触发自适应，
+   *  图高与每格值跨度恒定；自适应只在产品集/筛选口径变化时由调用方解冻 */
+  freeze?: { intervalUsd: number; cells: number };
 }): YScale {
   const scale = Math.min(Math.max(params.sliderScale, 0.5), 3);
   const end = (partial: Omit<YScale, 'sliderScale'>): YScale => ({ ...partial, sliderScale: scale });
@@ -407,11 +412,12 @@ export function computeYAxis(params: {
   // （步长比较/吸附/滞回全部发生在 USD 空间；本币步长只在出口 tierLocal 换算一次）
   const intervalRaw = niceStep(pseudoSpan0 / TARGET_CELLS);
   const intervalCont = niceStep((rawSpanU * 1.12) / TARGET_CELLS);
-  const interval = segDomains.length > 1 ? Math.max(intervalRaw, intervalCont) : intervalRaw;
+  // 冻结自适应（第一百六十八轮）：步长直接沿用冻结值，不再选档、不再滞回
+  let interval = params.freeze ? params.freeze.intervalUsd : segDomains.length > 1 ? Math.max(intervalRaw, intervalCont) : intervalRaw;
   let snapped = snapWith(interval);
   let finalInterval = interval;
   const prevInterval = params.prev?.intervalUsd;
-  if (prevInterval && prevInterval !== interval) {
+  if (!params.freeze && prevInterval && prevInterval !== interval) {
     const cand = snapWith(prevInterval);
     if (cand.cells >= STICKY_MIN_CELLS && cand.cells <= STICKY_MAX_CELLS) {
       snapped = cand;
@@ -421,7 +427,9 @@ export function computeYAxis(params: {
   segDomains[0].min = snapped.lo;
   segDomains[segDomains.length - 1].max = snapped.hi;
   const pseudoSpan = snapped.pseudoSpan;
-  const cells = clampInt(pseudoSpan / finalInterval, MIN_CELLS, MAX_CELLS);
+  // 冻结自适应（第一百六十八轮）：格数恒冻结值——上下限拖动/窗口平移/伸缩只改
+  // 段域映射与像素分配占比，图高（cells×TICK_PX）与每格值跨度恒定
+  const cells = params.freeze ? params.freeze.cells : clampInt(pseudoSpan / finalInterval, MIN_CELLS, MAX_CELLS);
   const availPx = Math.round(cells * TICK_PX * scale);
 
   // ---- 2.5) 段像素需求下限（第三十二轮）：与段值域相交的系列数 × 每系列保底像素
