@@ -215,11 +215,6 @@ export default function PriceTrend(props: {
   const platformSyncOnRef = useRef(false);
   const platformSyncSnapRef = useRef<PlatformSyncCardSnap[] | null>(null);
 
-  const openCompareFor = (p: { modelId: string; romram: string }): void => {
-    setCompareInit(p);
-    setCompareTab(true);
-    setPointPanelOpen(false);
-  };
   // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
   // 不持久化（每次进页面默认收起）
   const [pointPanelOpen, setPointPanelOpen] = useState(false);
@@ -1383,7 +1378,6 @@ export default function PriceTrend(props: {
                           hiddenKeys={hiddenKeys}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
-                          onCompareProduct={openCompareFor}
                           channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
                           // 同步平台筛选（第一百七十四轮移位）：按钮在主品平台小药丸左侧，
                           // 分离模式只在首面板渲染（全局操作一处入口）
@@ -1465,7 +1459,6 @@ export default function PriceTrend(props: {
               hiddenKeys={hiddenKeys}
               onToggleHidden={toggleLegend}
               onHover={setLegendHoverKey}
-              onCompareProduct={openCompareFor}
               channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
               onSyncPlatform={togglePlatformSync}
               syncActive={platformSyncOn}

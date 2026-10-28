@@ -36,16 +36,19 @@
 // PILL_W_BUDGET 240 仅作上限。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
+// 第一百七十六轮追补（Eason）：药丸上的多平台比价入口（店铺图标）整体退役——
+// 比价页签只从标题行「产品对比 | 多平台对比」页签进（主动进入默认主品）；
+// 平台小药丸改为行内居右显示。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
 import ChannelSelectPopover from '../../components/ChannelSelectPopover';
-import { LeftOutlined, RightOutlined, ShopOutlined } from '@ant-design/icons';
+import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import { curveNameOf } from './chartModel';
 import { groupOrdinal, type LegendGroup } from './tableModel';
-import { color, motion, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { color, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
 const COMPARES_VISIBLE = 3;
@@ -54,17 +57,6 @@ const COMPARES_VISIBLE = 3;
 const PILL_W_BUDGET = 240;
 /** 主品药丸描边：与选择浮窗颜色 chip 同一「浅蓝描边 = 强调」语言（第一百二十二轮） */
 const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
-
-/** 系列 key（`${modelId}__${配置去空格}`）→ 比价目标（modelId + 配置原文）：
- *  配置原文从维表反查（弹窗产品对 key 用原文 romram 匹配）；查不到 = null（不出入口） */
-function compareTargetOf(key: string): { modelId: string; romram: string } | null {
-  const sep = key.indexOf('__');
-  if (sep < 0) return null;
-  const modelId = key.slice(0, sep);
-  const rom = key.slice(sep + 2);
-  const hit = dimProduct.find((p) => p.model_id === modelId && p.romram.replace(/\s+/g, '') === rom);
-  return hit ? { modelId, romram: hit.romram } : null;
-}
 
 interface PillSpec {
   key: string;
@@ -164,27 +156,25 @@ function Pill({
   );
 }
 
-/** 药丸单元（第一百六十二轮，Eason）：上行 = 平台小药丸（独立元素）+ 比价入口
- *  居右常驻；下行 = 产品药丸。两行互相独立、不嵌套，点击互不干扰。
- *  第一百七十四轮：syncCtl（同步平台筛选按钮）渲染在主品平台小药丸左侧 */
+/** 药丸单元（第一百六十二轮，Eason）：上行 = 平台小药丸（独立元素，居右）；下行 =
+ *  产品药丸。两行互相独立、不嵌套，点击互不干扰。第一百七十四轮：syncCtl（同步
+ *  平台筛选按钮）渲染在主品平台小药丸左侧；第一百七十六轮追补：比价入口退役 */
 function PillUnit({
   pill,
   dimmed,
   onToggle,
   onHover,
-  cmp,
   syncCtl,
 }: {
   pill: PillSpec;
   dimmed: boolean;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
-  cmp?: { title: string; onClick: () => void };
   syncCtl?: { active: boolean; onToggle: () => void };
 }) {
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch', gap: 2, flexShrink: 0, minWidth: 0 }}>
-      <PlatformRow pill={pill} dimmed={dimmed} cmp={cmp} syncCtl={syncCtl} />
+      <PlatformRow pill={pill} dimmed={dimmed} syncCtl={syncCtl} />
       <Pill pill={pill} dimmed={dimmed} onToggle={onToggle} onHover={onHover} />
     </span>
   );
@@ -193,16 +183,16 @@ function PillUnit({
 /** 平台行（第一百六十二轮，Eason）：平台小药丸独立一行（不嵌在产品药丸内；
  *  自动态显示最新有价周的实际平台名）+ 多平台比价入口（同行居右、常驻显示）。
  *  第一百七十四轮（Eason）：「同步平台筛选」按钮（syncCtl，全局操作）移到
- *  主品平台筛选框左侧——按钮列退役后药丸行不再为其留位 */
+ *  主品平台筛选框左侧——按钮列退役后药丸行不再为其留位。
+ *  第一百七十六轮追补（Eason）：多平台比价入口（店铺图标）随药丸退役——比价页签
+ *  只从标题行页签进（默认主品）；平台小药丸改为行内居右 */
 function PlatformRow({
   pill,
   dimmed,
-  cmp,
   syncCtl,
 }: {
   pill: PillSpec;
   dimmed: boolean;
-  cmp?: { title: string; onClick: () => void };
   syncCtl?: { active: boolean; onToggle: () => void };
 }) {
   return (
@@ -210,7 +200,7 @@ function PlatformRow({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: syncCtl ? 'space-between' : 'flex-end', // 平台小药丸居右（第一百七十六轮追补）；主品行同步按钮居左
         gap: 4,
         width: '100%',
         maxWidth: PILL_W_BUDGET,
@@ -299,30 +289,6 @@ function PlatformRow({
       ) : (
         <span style={{ flexShrink: 0 }} />
       )}
-      {/* 多平台对比页签入口（第一百六十四轮）：平台小药丸同行居右、常驻显示 */}
-      {cmp && (
-        <button
-          type="button"
-          aria-label={cmp.title}
-          title={cmp.title}
-          onClick={(e) => {
-            e.stopPropagation();
-            cmp.onClick();
-          }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            border: 'none',
-            background: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            color: color.mute,
-            flexShrink: 0,
-          }}
-        >
-          <ShopOutlined style={{ fontSize: 11 }} />
-        </button>
-      )}
     </span>
   );
 }
@@ -338,7 +304,6 @@ function GroupBlock({
   hoverSet,
   onToggle,
   onHover,
-  onCompareProduct,
   channelCtl,
   syncCtl,
 }: {
@@ -348,7 +313,6 @@ function GroupBlock({
   hoverSet: Set<string> | null;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
-  onCompareProduct?: (p: { modelId: string; romram: string }) => void;
   /** 平台筛选（第一百六十二轮）：cc + 回写动作（按系列 key 定位选择项） */
   channelCtl?: {
     cc: string;
@@ -386,15 +350,6 @@ function GroupBlock({
       ? { cc: channelCtl.cc, skuIds: s.skuIds, current: s.platform ?? null, onPick: (sel) => channelCtl.onPick(s.key, sel) }
       : undefined,
   }));
-  const cmpOf = (key: string): { title: string; onClick: () => void } | undefined => {
-    if (!onCompareProduct) return undefined;
-    const target = compareTargetOf(key);
-    if (!target) return undefined;
-    return {
-      title: `多平台对比：${pills.find((p) => p.key === key)?.text ?? key}`,
-      onClick: () => onCompareProduct(target),
-    };
-  };
   const mainPill = pills.find((p) => p.main) ?? null; // 主品无数据/空对 = null（不画药丸也不画 vs）
   const compares = pills.filter((p) => !p.main);
   const scrollable = compares.length > COMPARES_VISIBLE;
@@ -408,7 +363,7 @@ function GroupBlock({
       )}
       {/* 主品药丸（空对无主品不出）；同步平台筛选（第一百七十四轮移位）渲染在
           其平台小药丸左侧，仅上层传入 syncCtl 的首组出现 */}
-      {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(mainPill.key)} syncCtl={syncCtl} />}
+      {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} syncCtl={syncCtl} />}
       {mainPill && compares.length > 0 && (
         <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>vs</span>
       )}
@@ -439,7 +394,7 @@ function GroupBlock({
             }}
           >
             {compares.map((p) => (
-              <PillUnit key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} cmp={cmpOf(p.key)} />
+              <PillUnit key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} />
             ))}
           </div>
           {scrollable && (
@@ -476,7 +431,6 @@ export default function BrandLegendStrip({
   hiddenKeys,
   onToggleHidden,
   onHover,
-  onCompareProduct,
   channelCtl,
   onSyncPlatform,
   syncActive,
@@ -488,11 +442,8 @@ export default function BrandLegendStrip({
   hiddenKeys: Set<string>;
   onToggleHidden: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
-  /** 多平台比价入口（第一百五十轮）：传入 = 每颗药丸第二行悬停浮现店铺图标，
-   *  点击以该产品打开多平台比价弹窗（工具行胶囊按钮已退役） */
-  onCompareProduct?: (p: { modelId: string; romram: string }) => void;
-  /** 平台筛选（第一百六十二轮）：传入 = 每颗药丸上方出平台小药丸，点击弹
-   *  三级渠道浮层；onPick 按系列 key 回写该产品的取价口径 */
+  /** 平台筛选（第一百六十二轮）：传入 = 每颗药丸上方出平台小药丸（第一百七十六轮
+   *  追补起居右），点击弹三级渠道浮层；onPick 按系列 key 回写该产品的取价口径 */
   channelCtl?: {
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
@@ -588,7 +539,6 @@ export default function BrandLegendStrip({
                 hoverSet={hoverSet}
                 onToggle={onToggleHidden}
                 onHover={hover}
-                onCompareProduct={onCompareProduct}
                 channelCtl={channelCtl}
                 syncCtl={passSync ? { active: !!syncActive, onToggle: () => onSyncPlatform?.() } : undefined}
               />,
@@ -607,12 +557,10 @@ export default function BrandLegendStrip({
           <RightOutlined style={{ fontSize: 9 }} />
         </span>
       )}
-      {/* 比价小入口/按钮组 hover 态（内联样式无 :hover，工具类集中在此）：
-          lpl-lg-act = 同步平台筛选/仅查看主产品按钮悬停描边加深，给可点感知 */}
+      {/* 按钮悬停态（内联样式无 :hover，工具类集中在此）：
+          lpl-lg-act = 同步平台筛选按钮悬停描边加深，给可点感知（比价小入口的
+          lpl-pill-cmp 工具类随入口退役，第一百七十六轮追补） */}
       <style>{`
-        .lpl-pill-cmp { opacity: 0; transition: opacity ${motion.fast}ms; }
-        .lpl-lg-pill:hover .lpl-pill-cmp { opacity: 1; }
-        .lpl-pill-cmp:hover { color: ${color.link} !important; }
         .lpl-lg-act:not(:disabled):not([aria-pressed="true"]):hover { border-color: ${color.hairlineStrong} !important; background: ${color.canvasSoft} !important; }
       `}</style>
     </div>
