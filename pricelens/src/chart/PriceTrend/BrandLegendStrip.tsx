@@ -41,8 +41,8 @@ import { color, motion, radius, selectAccent, selectSoft, selectSoftInk } from '
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
 const COMPARES_VISIBLE = 3;
 /** 单个药丸的展示宽度预算（块内滚动容器 maxWidth = 3×预算 + 间距）
- *  第一百七十轮：178 → 220（Eason：药丸过于紧凑） */
-const PILL_W_BUDGET = 220;
+ *  第一百七十轮：178 → 220；第一百七十二轮：220 → 240（Eason：再宽一点） */
+const PILL_W_BUDGET = 240;
 /** 主品药丸描边：与选择浮窗颜色 chip 同一「浅蓝描边 = 强调」语言（第一百二十二轮） */
 const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
 
@@ -110,6 +110,7 @@ function Pill({
         alignItems: 'flex-start',
         gap: 1,
         maxWidth: PILL_W_BUDGET,
+        minWidth: 190, // 第一百七十二轮：短名药丸也保持宽度（Eason：药丸再宽一点）
         padding: '4px 10px 4px 8px',
         borderRadius: radius.pill,
         cursor: 'pointer',
@@ -291,6 +292,7 @@ function GroupBlock({
   onCompareProduct,
   channelCtl,
   onSyncPlatform,
+  syncDisabled,
 }: {
   group: LegendGroup;
   showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
@@ -307,6 +309,9 @@ function GroupBlock({
   /** 同步平台筛选（第一百七十轮，Eason）：全部产品的取价平台改成与主产品一致
    *  （全局操作，index 层实现）；传入才渲染按钮 */
   onSyncPlatform?: () => void;
+  /** 无可同步差异（全部产品的平台已与主品一致）时置灰按钮（第一百七十二轮）——
+   *  此前点击无任何可见变化，被误读为「不可点击」 */
+  syncDisabled?: boolean;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
@@ -364,16 +369,32 @@ function GroupBlock({
           {groupOrdinal(group.ordinal)}
         </span>
       )}
-      {/* 按钮组（第一百七十轮，Eason）：「同步平台筛选」在上、「仅查看主产品」在下，
-          垂直成组；与右侧产品药丸的间距拉大（12px）。「同步平台筛选」= 全局操作
-          （全部产品取价平台与主产品一致），传入 onSyncPlatform 才渲染；
-          「仅查看主产品」仅该组有对比品时渲染 */}
+      {/* 按钮组（第一百七十轮立、第一百七十二轮对齐）：「同步平台筛选」对齐平台
+          小药丸行、「仅查看主产品」对齐产品药丸行底部——按钮组 stretch 拉满药丸
+          列高度、space-between 上下贴齐；与右侧产品药丸的间距 12px。
+          「同步平台筛选」= 全局操作（全部产品取价平台与主产品一致），传入
+          onSyncPlatform 才渲染；「仅查看主产品」仅该组有对比品时渲染。
+          hover 反馈（lpl-lg-act）由块尾 <style> 承担（内联无 :hover） */}
       {(mainPill && (compares.length > 0 || onSyncPlatform)) && (
-        <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch', gap: 4, flexShrink: 0, marginRight: 12 }}>
+        <span
+          className="lpl-lg-btns"
+          style={{
+            display: 'inline-flex',
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            justifyContent: 'space-between',
+            gap: 4,
+            flexShrink: 0,
+            marginRight: 12,
+            alignSelf: 'stretch',
+          }}
+        >
           {mainPill && onSyncPlatform && (
             <button
               type="button"
-              title="全部产品的取价平台改成与主产品一致"
+              className="lpl-lg-act"
+              disabled={syncDisabled}
+              title={syncDisabled ? '全部产品的取价平台已与主产品一致' : '全部产品的取价平台改成与主产品一致'}
               onClick={(e) => {
                 e.stopPropagation();
                 onSyncPlatform();
@@ -389,7 +410,7 @@ function GroupBlock({
                 fontSize: 10,
                 fontWeight: 600,
                 lineHeight: '16px',
-                cursor: 'pointer',
+                cursor: syncDisabled ? 'default' : 'pointer',
                 whiteSpace: 'nowrap',
               }}
             >
@@ -399,6 +420,7 @@ function GroupBlock({
           {mainPill && compares.length > 0 && (
             <button
               type="button"
+              className="lpl-lg-act"
               aria-pressed={onlyMain}
               title={onlyMain ? '已只看主产品，点击恢复对比产品' : '只看主产品（隐藏全部对比产品）'}
               onClick={(e) => {
@@ -498,6 +520,7 @@ export default function BrandLegendStrip({
   onCompareProduct,
   channelCtl,
   onSyncPlatform,
+  syncDisabled,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -518,6 +541,8 @@ export default function BrandLegendStrip({
   /** 同步平台筛选（第一百七十轮，Eason）：传入 = 每组按钮组上方出「同步平台筛选」
    *  按钮，点击把全部产品的取价平台改成与主产品一致（全局操作，index 层实现） */
   onSyncPlatform?: () => void;
+  /** 无可同步差异时置灰（第一百七十二轮） */
+  syncDisabled?: boolean;
 }) {
   const multi = groups.length >= 2;
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
@@ -602,6 +627,7 @@ export default function BrandLegendStrip({
                 onCompareProduct={onCompareProduct}
                 channelCtl={channelCtl}
                 onSyncPlatform={onSyncPlatform}
+                syncDisabled={syncDisabled}
               />,
             );
           });
@@ -618,11 +644,14 @@ export default function BrandLegendStrip({
           <RightOutlined style={{ fontSize: 9 }} />
         </span>
       )}
-      {/* 比价小入口悬停浮现态（内联样式无 :hover，工具类集中在此） */}
+      {/* 比价小入口/按钮组 hover 态（内联样式无 :hover，工具类集中在此）：
+          lpl-lg-act = 同步平台筛选/仅查看主产品按钮悬停描边加深，给可点感知 */}
       <style>{`
         .lpl-pill-cmp { opacity: 0; transition: opacity ${motion.fast}ms; }
         .lpl-lg-pill:hover .lpl-pill-cmp { opacity: 1; }
         .lpl-pill-cmp:hover { color: ${color.link} !important; }
+        .lpl-lg-act:not(:disabled):hover { border-color: ${color.hairlineStrong} !important; background: ${color.canvasSoft} !important; }
+        .lpl-lg-act:disabled { opacity: 0.4; cursor: default; }
       `}</style>
     </div>
   );

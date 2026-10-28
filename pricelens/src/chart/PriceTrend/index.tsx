@@ -204,6 +204,16 @@ export default function PriceTrend(props: {
       })),
     );
   }, [effMains, actions]);
+  // 全部产品的平台已与主品一致 = 无可同步差异，按钮置灰（第一百七十二轮）——
+  // 此前该状态点击无任何可见变化，被误读为「不可点击」
+  const syncDisabled = useMemo(() => {
+    const key = (p: PlatformSelection | null | undefined): string => JSON.stringify(p ?? null);
+    const src = effMains.find((c) => c.main)?.main?.platform ?? null;
+    const srcKey = key(src);
+    return effMains.every(
+      (c) => (!c.main || key(c.main.platform) === srcKey) && c.compares.every((s) => key(s.platform) === srcKey),
+    );
+  }, [effMains]);
 
   const openCompareFor = (p: { modelId: string; romram: string }): void => {
     setCompareInit(p);
@@ -1323,6 +1333,7 @@ export default function PriceTrend(props: {
                           onCompareProduct={openCompareFor}
                           channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
                           onSyncPlatform={syncPlatformFilter}
+                          syncDisabled={syncDisabled}
                         />
                       </div>
                       <Chart
@@ -1402,6 +1413,7 @@ export default function PriceTrend(props: {
               onCompareProduct={openCompareFor}
               channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
               onSyncPlatform={syncPlatformFilter}
+              syncDisabled={syncDisabled}
             />
           </div>
           <Chart
