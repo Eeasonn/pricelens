@@ -1403,13 +1403,23 @@ export default function Chart(props: ChartProps) {
             );
             const body = (
               <>
-                {/* 比率口径标题（第一百八十轮，Eason）：小页签最上方一排标题，
-                    随「页签显示」开关切换（折扣率 / 周环比） */}
-                <div style={{ fontSize: 10, lineHeight: '13px', fontWeight: 600, color: color.mute, marginBottom: 2 }}>
-                  {props.tipMode === 'wow' ? '周环比' : '折扣率'}
-                </div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
                   {fmt_hoverDate(granularity, series[0]?.points[tipIdx]?.xLabel ?? '')}
+                </div>
+                {/* 列标题行（第一百八十轮，Eason：完整表头在第一行数据上方）——
+                    产品 / 周环比|折扣率（随「页签显示」切换）/ 折后价 / RRP，
+                    列位与数据行一一对齐（同 gap、同定宽） */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, lineHeight: '13px', fontWeight: 600, color: color.mute, marginBottom: 2 }}>
+                  <span style={{ width: 8, flexShrink: 0 }} />
+                  <span style={{ flex: '1 1 0', minWidth: 0 }}>产品</span>
+                  <span style={{ width: 38, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {props.tipMode === 'wow' ? '周环比' : '折扣率'}
+                  </span>
+                  <span aria-hidden style={{ width: 1, height: 10, background: color.hairlineStrong, flexShrink: 0 }} />
+                  <span className="tnum" style={{ width: `${priceCh}ch`, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>折后价</span>
+                  <span aria-hidden style={{ width: 1, height: 10, background: color.hairlineStrong, flexShrink: 0 }} />
+                  <span className="tnum" style={{ width: `${rrpCh}ch`, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>RRP</span>
+                  <span style={{ width: 14, flexShrink: 0 }} />
                 </div>
                 {rows.map(({ s, v }, ri) => {
                   const pt = s.points[tipIdx];
