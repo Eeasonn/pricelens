@@ -55,7 +55,7 @@ import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries, defaultPlatformAnchorOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
-import { dimPromo, dimProduct, dimRegion } from '../../data';
+import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
 import type {
   AggMode,
   Granularity,
@@ -104,7 +104,7 @@ import {
 } from './helpers';
 import PlatformCompareView from './PlatformCompareView';
 import PointPanel from './PointPanel';
-import { compareKeysOfGroups, groupsOfCards, onlyMainState, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
+import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from './platformSync';
@@ -128,8 +128,12 @@ export default function PriceTrend(props: {
   /** 第110轮（评审）立、第一百二十三轮按组：图下「价差与明细」取数口——按主分析卡
    *  （选择浮窗卡序）上报各组 = 卡 id + 主品系列 key + 本卡全部系列（主品在前，含被
    *  图例屏蔽者）× 图上可见时间段，每次变化上报一次；页面层据此在图卡下方渲染
-   *  同源宽表（币种/平台/粒度/时间段随图联动） */
-  onSeriesWindow?: (groups: TableGroup[], buckets: DetailBucket[]) => void;
+   *  同源宽表（币种/平台/粒度/时间段随图联动）。近 4 周变化另走周序列，不随月/季汇总失真。 */
+  onSeriesWindow?: (
+    groups: TableGroup[],
+    buckets: DetailBucket[],
+    fourWeekChanges: ReadonlyMap<string, number | null>,
+  ) => void;
 } = {}) {
   const { state, actions } = useFilters();
   // 第一百一十七轮：每张卡 = 型号 + 配置 + 它自己的对比区，分离面板 = 直接展开卡。
@@ -315,6 +319,17 @@ export default function PriceTrend(props: {
     }
   }, [query]);
   const allSeries = allSeriesRes.series;
+  // 明细「近 4 周环比」固定使用周序列；月/季视图另取同筛选口径的周数据。
+  const weeklySeries = useMemo<Series[]>(() => {
+    if (state.granularity === 'week') return allSeries;
+    if (query.groups.length === 0) return [];
+    const [startBucket, endBucket] = dataBucketRange('week');
+    try {
+      return buildSeries({ ...query, granularity: 'week', startBucket, endBucket });
+    } catch {
+      return [];
+    }
+  }, [allSeries, query, state.granularity]);
 
   // 全集桶 = 桶枚举基准（自适应跨度、窗口下标、边缘续接都基于全集下标空间）
   const buckets: Bucket[] = useMemo(
@@ -739,11 +754,29 @@ export default function PriceTrend(props: {
       })),
     [winBuckets, state.granularity],
   );
+  const tableEndWeekId = useMemo<string | null>(() => {
+    const endBucket = winBuckets[winBuckets.length - 1];
+    if (!endBucket) return null;
+    if (state.granularity === 'week') return endBucket.id;
+    let endWeek: string | null = null;
+    for (const row of dimTime) {
+      if ((state.granularity === 'month' ? row.month_id : row.quarter_id) !== endBucket.id) continue;
+      if (endWeek == null || row.week_id > endWeek) endWeek = row.week_id;
+    }
+    return endWeek;
+  }, [winBuckets, state.granularity]);
+  const fourWeekChanges = useMemo<ReadonlyMap<string, number | null>>(
+    () => new Map<string, number | null>(weeklySeries.map((s): [string, number | null] => [
+      s.key,
+      recentFourWeekChange(tableEndWeekId == null ? [] : s.points.filter((pt) => pt.bucketId <= tableEndWeekId)),
+    ])),
+    [weeklySeries, tableEndWeekId],
+  );
   const onSeriesWindowRef = useRef(props.onSeriesWindow);
   onSeriesWindowRef.current = props.onSeriesWindow;
   useEffect(() => {
-    onSeriesWindowRef.current?.(tableGroups, tableBuckets);
-  }, [tableGroups, tableBuckets]);
+    onSeriesWindowRef.current?.(tableGroups, tableBuckets, fourWeekChanges);
+  }, [tableGroups, tableBuckets, fourWeekChanges]);
 
   // 全局「隐藏对比品」（原「仅查看主产品」，第一百八十三轮改名，Eason；第一百七十
   // 四轮立、第一百七十八轮挪入工具行）：跨组同时生效——隐藏/恢复全部组（各卡）的
@@ -763,7 +796,9 @@ export default function PriceTrend(props: {
     });
   }, [tableGroups]);
   // 工具行左簇（齿轮之后）的「隐藏对比产品」：风格与「时间轴同步」开关一致
-  //（白底灰描边，按压态浅蓝底 + 蓝描边；本轮 Eason）——隐藏/恢复全部组对比产品
+  //（白底描边，按压态浅蓝底 + 蓝描边）——隐藏/恢复全部组对比产品。
+  // 第一百八十八轮（Eason）：高度 30→24 与同排按钮（齿轮/⋯/大促组）齐线；
+  // 非激活描边从 hairlineStrong 降为 hairline，与大促档期组框一致不再抢眼
   const onlyMainCtl = (
     <button
       type="button"
@@ -772,10 +807,10 @@ export default function PriceTrend(props: {
       onClick={toggleOnlyMainAll}
       className="lpl-only-main"
       style={{
-        height: 30,
+        height: 24,
         padding: '0 10px',
         borderRadius: radius.control,
-        border: `1px solid ${onlyMain.active ? selectAccent : color.hairlineStrong}`,
+        border: `1px solid ${onlyMain.active ? selectAccent : color.hairline}`,
         background: onlyMain.active ? selectSoft : color.canvas,
         color: onlyMain.active ? selectSoftInk : color.body,
         font: 'inherit',

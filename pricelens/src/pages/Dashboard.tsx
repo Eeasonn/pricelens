@@ -20,8 +20,12 @@ import { color, radius, shadow, space } from '../theme/tokens';
  *  第一百二十三轮：宽表按主分析组分块上报（组 = 选择浮窗卡，保持卡序） */
 export default function Dashboard() {
   const { state } = useFilters();
-  // 图上可见窗口的同源快照（PriceTrend 每次组/时间段变化上报一次）
-  const [trendWindow, setTrendWindow] = useState<{ groups: TableGroup[]; buckets: DetailBucket[] }>({ groups: [], buckets: [] });
+  // 图上可见窗口的同源快照 + 独立于展示粒度的近 4 周价格变化
+  const [trendWindow, setTrendWindow] = useState<{
+    groups: TableGroup[];
+    buckets: DetailBucket[];
+    fourWeekChanges: ReadonlyMap<string, number | null>;
+  }>({ groups: [], buckets: [], fourWeekChanges: new Map() });
 
   return (
     <>
@@ -45,7 +49,7 @@ export default function Dashboard() {
           <div style={{ padding: space.lg, overflowX: 'auto' }}>
             <div style={{ minWidth: 880 }}>
               <PriceTrend
-                onSeriesWindow={(groups, buckets) => setTrendWindow({ groups, buckets })}
+                onSeriesWindow={(groups, buckets, fourWeekChanges) => setTrendWindow({ groups, buckets, fourWeekChanges })}
               />
             </div>
           </div>
@@ -65,6 +69,7 @@ export default function Dashboard() {
             <TrendTables
               groups={trendWindow.groups}
               buckets={trendWindow.buckets}
+              fourWeekChanges={trendWindow.fourWeekChanges}
               currency={state.currency}
               granularity={state.granularity}
             />

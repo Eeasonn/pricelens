@@ -80,6 +80,18 @@ export function discountOf(pt: Pick<SeriesPoint, 'price' | 'rrp'> | undefined): 
   return pt.price / pt.rrp - 1;
 }
 
+/** 最近 4 周均价相对此前 4 周均价；窗口内忽略缺价周，任一窗口无有效价为 null */
+export function recentFourWeekChange(points: ReadonlyArray<Pick<SeriesPoint, 'price'>>): number | null {
+  const mean = (part: ReadonlyArray<Pick<SeriesPoint, 'price'>>): number | null => {
+    const values = part.map((pt) => pt.price).filter((v): v is number => v != null && Number.isFinite(v) && v >= 0);
+    return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
+  };
+  const recentStart = Math.max(0, points.length - 4);
+  const previous = mean(points.slice(Math.max(0, recentStart - 4), recentStart));
+  const recent = mean(points.slice(recentStart));
+  return previous == null || recent == null || previous <= 0 ? null : (recent - previous) / previous;
+}
+
 /** Offering 单元格全文：折扣/分期/赠品明细以「；」连接；无权益为空串 */
 export function offerText(pt: Pick<SeriesPoint, 'offer'> | undefined): string {
   if (!pt) return '';

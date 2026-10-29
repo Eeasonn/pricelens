@@ -21,6 +21,7 @@ import {
   offerText,
   seriesKeyOf,
 } from '../tableModel';
+import * as tableModel from '../tableModel';
 
 const PT = (price: number | null, rrp: number | null = null): SeriesPoint => ({
   bucketId: '202601',
@@ -42,6 +43,27 @@ const mk = (key: string, isOwn = false): Series => ({
   skuIds: [key],
   color: '#000',
   points: [PT(100, 120), PT(null), PT(90, 120)],
+});
+
+describe('recentFourWeekChange：最近 4 周均价对比此前 4 周均价', () => {
+  const changeOf = (prices: (number | null)[]): number | null | undefined => {
+    const fn = (tableModel as typeof tableModel & {
+      recentFourWeekChange?: (points: ReadonlyArray<Pick<SeriesPoint, 'price'>>) => number | null;
+    }).recentFourWeekChange;
+    return fn?.(prices.map((price) => PT(price)));
+  };
+
+  it('两个窗口各取均价，不退化为最新两周涨跌', () => {
+    expect(changeOf([100, 120, 80, 100, 110, 120, 130, 140])).toBeCloseTo(0.25, 10);
+  });
+
+  it('窗口内忽略缺价周，按各自有效周均价计算', () => {
+    expect(changeOf([100, null, 80, 120, 110, null, 130, 150])).toBeCloseTo(0.3, 10);
+  });
+
+  it('此前窗口完全无有效价格时返回 null', () => {
+    expect(changeOf([null, null, null, null, 100, 110, 120, 130])).toBeNull();
+  });
 });
 
 describe('seriesKeyOf：勾选组 → 系列 key 与 buildSeries 同构', () => {

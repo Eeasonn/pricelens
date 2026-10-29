@@ -1370,18 +1370,21 @@ export default function Chart(props: ChartProps) {
                   {fmt_hoverDate(granularity, series[0]?.points[tipIdx]?.xLabel ?? '')}
                 </div>
                 {/* 列标题行（第一百八十轮立完整表头；第一百八十四轮，Eason：列序改
-                    RRP → 折后价 → 周环比|折扣率，表头与数据列同宽同居中） */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, lineHeight: '13px', fontWeight: 600, color: color.mute, marginBottom: 2 }}>
+                    RRP → 折后价 → 周环比|折扣率，表头与数据列同宽同居中）。
+                    第一百八十八轮（Eason）：标题改墨色、与数据行紧贴，列间竖线
+                    满行高——表头(13)接数据行(20)首尾相续成一条贯穿线，不再断线 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, lineHeight: '13px', fontWeight: 600, color: color.ink }}>
                   <span style={{ width: 8, flexShrink: 0 }} />
                   <span style={{ flex: '1 1 0', minWidth: 0 }}>产品</span>
                   <span className="tnum" style={{ width: rrpW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>RRP</span>
-                  <span aria-hidden style={{ width: 1, height: 10, background: color.hairlineStrong, flexShrink: 0 }} />
+                  <span aria-hidden style={{ width: 1, height: 13, background: color.hairlineStrong, flexShrink: 0 }} />
                   <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>折后价</span>
-                  <span aria-hidden style={{ width: 1, height: 10, background: color.hairlineStrong, flexShrink: 0 }} />
+                  <span aria-hidden style={{ width: 1, height: 13, background: color.hairlineStrong, flexShrink: 0 }} />
                   <span style={{ width: 38, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     {props.tipMode === 'discount' ? '折扣率' : '周环比'}
                   </span>
-                  <span style={{ width: 14, flexShrink: 0 }} />
+                  {/* 尾部快照占位已随快照入口一并删除（188 轮）：两侧 flex 分配必须
+                      对称，否则数据行名称列比表头宽、整列右移错位 */}
                 </div>
                 {rows.map(({ s, v }, ri) => {
                   const pt = s.points[tipIdx];
@@ -1425,11 +1428,12 @@ export default function Chart(props: ChartProps) {
                         >
                           {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
                         </span>
-                        <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
+                        {/* 竖线满行高（188 轮）：相邻行首尾相续、上接表头线 = 一条贯穿 */}
+                        <span aria-hidden style={{ width: 1, height: 20, background: color.hairlineStrong, flexShrink: 0 }} />
                         <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>
                           {fmt_mm(v)}
                         </span>
-                        <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
+                        <span aria-hidden style={{ width: 1, height: 20, background: color.hairlineStrong, flexShrink: 0 }} />
                         <span style={{ width: 38, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}>
                           {props.tipMode !== 'discount'
                             ? (wow != null && (
