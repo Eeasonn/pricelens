@@ -40,9 +40,10 @@
 //    （范围改动 rangeWatch）路径，自适应首跑在范围未变时不再复位窗口。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Button, Checkbox, ConfigProvider, Segmented, Tooltip } from 'antd';
-import { HolderOutlined, ProfileOutlined } from '@ant-design/icons';
+import { ConfigProvider, Segmented, Tooltip } from 'antd';
+import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
+import { useChartContent } from '../../state/chartContent';
 import { filterBarTheme } from '../../components/FilterBar';
 import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
@@ -61,7 +62,7 @@ import type {
   SkuGroupQuery,
 } from '../../dataModel/types';
 import type { PlatformSelection, ProductSelection } from '../../state/filtersTypes';
-import { color, fontSize, localCurrencySymbol, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
+import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import Chart from './Chart';
 import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
@@ -104,11 +105,6 @@ import { compareKeysOfGroups, groupsOfCards, onlyMainState, seriesKeyOf, type De
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from './platformSync';
-
-/** 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；第一百二十三轮④
- *  单行药丸带 44 → 30，第一百四十五轮药丸固定两行（品牌行 + 产品行）30 → 40） */
-// 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（第一百六十二轮：渠道行改药丸上方平台行）
-const PANEL_LEGEND_H = 54;
 
 /** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之。
  *  空对组名分工：图表面板/图例保留「对比产品」（组名仍有内容），宽表组头用
@@ -168,36 +164,39 @@ export default function PriceTrend(props: {
   const [drill, setDrill] = useState<DrillInfo | null>(null);
   const [promoBandsOn, setPromoBandsOn] = useState(false); // 大促档期（第七十七轮起默认关）
   const [offersOn, setOffersOn] = useState(false); // offer 权益显隐：关 = 不画徽章、浮窗不出权益行（第七十七轮起默认关）
-  // 最高/最低价 + 价格变化提醒（第五十六轮）：非主要功能——默认关，收进工具行
-  // 「⋯ 更多」二级菜单（领导页面清洁要求）；启用时 ⋯ 按钮带蓝点提示
-  const [maxMinOn, setMaxMinOn] = useState(false);
-  // 价格变化提醒：null=关；阈值=小数（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）
+  // 价格变化提醒（最高/最低价标注已删，本轮 Eason）：null=关；阈值=小数
+  //（0.05=5%），滑杆 0~15% 连贯可调（0.5 步进）；启用时 ⋯ 按钮带蓝点提示
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
-  // 多平台对比页签（第一百六十四轮，Eason）：图例药丸比价按钮进入 = 带上该产品
-  // （compareInit）；页签主动进入 = 默认选上主品（第一百六十九轮，原为不带产品进来
-  // 自己选）。页签态会话保留。
-  // 原 PlatformCompareModal 弹窗形态随本次改版退役（图表改用主界面同款 Chart）。
-  const [compareTab, setCompareTab] = usePageViewState<boolean>('dashboard.compareTab', () => false);
+  // 多平台对比由筛选栏下方的呈现切换驱动（chartContent，会话保留）。
+  // 进入该视图时默认落在已选产品里的主品上（compareInit）。
+  const { priceSubview } = useChartContent();
+  const compareTab = priceSubview === 'platforms';
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
 
   /** 图例药丸比价入口：记录发起产品并打开弹窗 */
   // 第一百六十二轮：药丸上方平台小药丸的回写——seriesKey（modelId__配置去空格）
-  // 与 selKey（modelId|配置去空格）同口径，剥出两段拼 selKey 定位选择项
+  // 与 selKey（modelId|配置去空格）同口径，剥出两段拼 selKey 定位选择项。
+  // 第一百八十四轮（Eason）：「同步平台筛选」改组内语义——平台改动只施加到
+  // 所属组的全部产品（保持「本组与主产品一致」不变式），各组互相独立
   const pickChannel = useCallback(
     (seriesKey: string, sel: PlatformSelection | null) => {
       const idx = seriesKey.indexOf('__');
       if (idx <= 0) return;
       const key = `${seriesKey.slice(0, idx)}|${seriesKey.slice(idx + 2)}`;
-      // 同步中（第一百七十三轮）：任一产品的平台改动都施加到全部产品——
-      // 保持「所有产品与主产品一致」不变式（改主品改对比效果相同）；
-      // 取消同步时整体还原触发前快照，不受影响
-      if (platformSyncOnRef.current) {
+      const owner = effMains.find((c) =>
+        [c.main, ...c.compares].some((s) => s && seriesKeyOf(s) === seriesKey),
+      );
+      if (owner && platformSyncMapRef.current[owner.id]) {
         actions.setMains(
-          effMains.map((c) => ({
-            ...c,
-            main: c.main ? { ...c.main, platform: sel } : c.main,
-            compares: c.compares.map((s) => ({ ...s, platform: sel })),
-          })),
+          effMains.map((c) =>
+            c.id === owner.id
+              ? {
+                  ...c,
+                  main: c.main ? { ...c.main, platform: sel } : c.main,
+                  compares: c.compares.map((s) => ({ ...s, platform: sel })),
+                }
+              : c,
+          ),
         );
         return;
       }
@@ -206,18 +205,29 @@ export default function PriceTrend(props: {
     [actions, effMains],
   );
 
-  // 同步平台筛选（第一百七十三轮改开关语义，Eason）：随时可点——触发 = 快照
-  // 当前全部产品平台并收敛到主产品；再点取消 = 按快照整体还原触发前状态。
-  // 会话态不持久化；同步期间任何平台改动经 pickChannel 全员生效。ref 持开关
-  // 镜像供 pickChannel 回调免依赖读值。togglePlatformSync 依赖 visSeries
+  // 组内同步平台筛选（第一百八十四轮改语义，原全局单开关）：按卡（组）独立——
+  // 触发 = 快照本组平台并收敛到本组主产品；取消 = 按快照还原本组。ref 持镜像供
+  // pickChannel 免依赖读值；快照按卡存。togglePlatformSyncOf 依赖 visSeries
   // （主品自动口径要解析实际取价平台），在 visSeries 声明之后定义（见下）。
-  const [platformSyncOn, setPlatformSyncOn] = useState(false);
-  const platformSyncOnRef = useRef(false);
-  const platformSyncSnapRef = useRef<PlatformSyncCardSnap[] | null>(null);
+  const [platformSyncMap, setPlatformSyncMap] = useState<Record<string, boolean>>({});
+  const platformSyncMapRef = useRef<Record<string, boolean>>({});
+  const platformSyncSnapRef = useRef<Record<string, PlatformSyncCardSnap[] | null>>({});
+  const setCardSync = (cardId: string, on: boolean): void => {
+    platformSyncMapRef.current = { ...platformSyncMapRef.current, [cardId]: on };
+    setPlatformSyncMap(platformSyncMapRef.current);
+  };
 
-  // 时点摘要面板（第112轮）：唯一入口 = 标题行「时点摘要」按钮，纯手动开合；
-  // 不持久化（每次进页面默认收起）
+  // 时点摘要：入口在工具行 ⋯ 内，默认收起，不持久化
   const [pointPanelOpen, setPointPanelOpen] = useState(false);
+  const compareEntered = useRef(false);
+  useEffect(() => {
+    if (compareTab && !compareEntered.current) {
+      setPointPanelOpen(false);
+      const main = effMains.find((c) => c.main)?.main ?? null;
+      setCompareInit(main ? { modelId: main.modelId, romram: main.romram } : null);
+    }
+    compareEntered.current = compareTab;
+  }, [compareTab, effMains]);
   // 齿轮弹层视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
   const [showYTicks, setShowYTicks] = useState(true); // Y 刻度线（第九十一轮恢复；默认开）
@@ -226,9 +236,8 @@ export default function PriceTrend(props: {
   // 价格显示（第一百一十四轮，评审）：精简 = 每系列仅最高/最低/最新三价直标（默认）；
   // 详细 = 现行全量标签口径。价格看板合并/分离两模式同值
   const [labelMode, setLabelMode] = useState<'detail' | 'compact'>('compact');
-  // 悬停小页签比率口径（第一百八十轮，Eason）：折扣率（vs RRP，默认）/ 周环比
-  //（vs 上一周期折后价）；「页签显示」开关控制，合并/分离两模式同值
-  const [tipMode, setTipMode] = useState<'discount' | 'wow'>('discount');
+  // 悬停小页签比率：默认周环比；「页签显示」在工具行 ⋯ 内
+  const [tipMode, setTipMode] = useState<'discount' | 'wow'>('wow');
   // 第一百一十四轮：分离模式横向虚线（跨面板共享悬停纵向位置；与 splitHoverIdx 同机制）
   const [splitCrossY, setSplitCrossY] = useState<number | null>(null);
   // 第一百一十五轮：顶部图例带悬停的产品——合并图单键；分离模式记录面板 + 系列
@@ -430,27 +439,30 @@ export default function PriceTrend(props: {
 
   // 图例可见系列：声明下移至 cappedVisSeries 之后（见 splitActive 段）
 
-  // 同步平台筛选触发（第一百七十三轮立、第一百七十四轮补钉定解析）：依赖 visSeries，
-  // 故在 visSeries 声明之后定义。主品自动口径 = 先经 pinnedSelectionFromBadge 取其
-  // 最新有价周的实际取价平台（与平台小药丸显示同名）钉成显式选择再同步全员——
-  // 否则全员自动时各产品各自解到不同平台（三星最低价在 Mvideo 就显示 Mvideo），
-  // 显示上「没同步」；主品已显式选择 = 原样同步；主品无数据解析不出 = 回落全员自动
-  const togglePlatformSync = useCallback(() => {
-    if (platformSyncOnRef.current) {
-      actions.setMains(restorePlatformSync(effMains, platformSyncSnapRef.current ?? []));
-      platformSyncSnapRef.current = null;
-      platformSyncOnRef.current = false;
-      setPlatformSyncOn(false);
-      return;
-    }
-    platformSyncSnapRef.current = snapshotPlatformSync(effMains);
-    const main = effMains.find((c) => c.main)?.main ?? null;
-    const badge = main ? visSeries.find((s) => s.key === seriesKeyOf(main))?.channelBadge ?? null : null;
-    const src = pinnedSelectionFromBadge(badge, main?.platform ?? null);
-    actions.setMains(applySyncedPlatforms(effMains, src));
-    platformSyncOnRef.current = true;
-    setPlatformSyncOn(true);
-  }, [effMains, visSeries, actions]);
+  // 组内同步平台筛选（原全局 togglePlatformSync，第一百八十四轮改按卡）：主品
+  // 自动口径 = 先经 pinnedSelectionFromBadge 取其最新有价周的实际取价平台（与
+  // 平台小药丸显示同名）钉成显式选择再同步本组——否则自动时各产品仍各自解到
+  // 不同平台，显示上「没同步」；主品已显式选择 = 原样同步；解析不出 = 回落自动
+  const togglePlatformSyncOf = useCallback(
+    (cardId: string) => () => {
+      const card = effMains.find((c) => c.id === cardId);
+      if (!card) return;
+      if (platformSyncMapRef.current[cardId]) {
+        const restored = restorePlatformSync([card], platformSyncSnapRef.current[cardId] ?? [])[0] ?? card;
+        actions.setMains(effMains.map((c) => (c.id === cardId ? restored : c)));
+        platformSyncSnapRef.current[cardId] = null;
+        setCardSync(cardId, false);
+        return;
+      }
+      platformSyncSnapRef.current[cardId] = snapshotPlatformSync([card]);
+      const badge = card.main ? visSeries.find((s) => s.key === seriesKeyOf(card.main!))?.channelBadge ?? null : null;
+      const src = pinnedSelectionFromBadge(badge, card.main?.platform ?? null);
+      const synced = applySyncedPlatforms([card], src)[0] ?? card;
+      actions.setMains(effMains.map((c) => (c.id === cardId ? synced : c)));
+      setCardSync(cardId, true);
+    },
+    [effMains, visSeries, actions],
+  );
 
   const toggleLegend = (key: string): void => {
     setHiddenKeys((prev) => {
@@ -491,9 +503,8 @@ export default function PriceTrend(props: {
     if (mergeView && !mergeOk) setMergeView(false); // 超限回落分图；回到限内不自动回跳，由用户重选
   }, [mergeView, mergeOk]);
   const splitActive = multiCards && !mergeView;
-  // 分离模式一行可见面板数：卡片始终横向排列，超出视口后由轨道滚动查看。
-  // 默认 2 个兼顾图表可读性；3 个适合宽屏快速扫读。
-  const [splitColumns, setSplitColumns] = useState<2 | 3>(2);
+  // 分离模式一行可见面板数：按面板数量自适应，最多 3 个；不再提供手动 2/3 切换。
+  const splitColumns = Math.min(3, Math.max(1, effMains.length));
   // 图例可见系列（图例药丸取消选中的不画线；Y 轴自适应随之收缩；药丸/促销表仍显示全部）
   const chartSeries: Series[] = useMemo(
     () => visSeries.filter((s) => !hiddenKeys.has(s.key)),
@@ -717,10 +728,10 @@ export default function PriceTrend(props: {
     onSeriesWindowRef.current?.(tableGroups, tableBuckets);
   }, [tableGroups, tableBuckets]);
 
-  // 全局「仅查看主产品」（第一百七十四轮立；第一百七十八轮挪入工具行 RRP 之后）：
-  // 跨组同时生效——隐藏/恢复全部组（各卡）的对比产品折线。激活态 = 全部对比
-  // 系列都在屏蔽集；恢复 = 整批出屏蔽集（与原组级按钮同语义，升全局口径）。
-  // 依赖 tableGroups（组内跳过无数据系列），故在 tableGroups 之后声明
+  // 全局「隐藏对比品」（原「仅查看主产品」，第一百八十三轮改名，Eason；第一百七十
+  // 四轮立、第一百七十八轮挪入工具行）：跨组同时生效——隐藏/恢复全部组（各卡）的
+  // 对比产品折线。激活态 = 全部对比系列都在屏蔽集；恢复 = 整批出屏蔽集（与原组级
+  // 按钮同语义，升全局口径）。依赖 tableGroups（组内跳过无数据系列）
   const onlyMain = useMemo(() => onlyMainState(tableGroups, hiddenKeys), [tableGroups, hiddenKeys]);
   const toggleOnlyMainAll = useCallback(() => {
     const keys = compareKeysOfGroups(tableGroups);
@@ -734,19 +745,34 @@ export default function PriceTrend(props: {
       return next;
     });
   }, [tableGroups]);
-  // 工具行 RRP 之后的控件（短竖线 + 按钮；合并/分离两种模式的工具行都渲染）
+  // 工具行左簇（齿轮之后）的「隐藏对比产品」：风格与「时间轴同步」开关一致
+  //（白底灰描边，按压态浅蓝底 + 蓝描边；本轮 Eason）——隐藏/恢复全部组对比产品
   const onlyMainCtl = (
-    <>
-      <span aria-hidden style={{ width: 1, height: 14, background: color.hairline, flexShrink: 0 }} />
-      <Button
-        size="small"
-        type={onlyMain.active ? 'primary' : 'default'}
-        onClick={toggleOnlyMainAll}
-        title={onlyMain.active ? '已只看主产品，点击恢复全部对比产品' : '只看主产品（隐藏全部组的对比产品）'}
-      >
-        仅查看主产品
-      </Button>
-    </>
+    <button
+      type="button"
+      aria-pressed={onlyMain.active}
+      title={onlyMain.active ? '已隐藏对比产品，点击恢复显示' : '隐藏全部组的对比产品，只看主产品'}
+      onClick={toggleOnlyMainAll}
+      className="lpl-only-main"
+      style={{
+        height: 30,
+        padding: '0 10px',
+        borderRadius: radius.control,
+        border: `1px solid ${onlyMain.active ? selectAccent : color.hairlineStrong}`,
+        background: onlyMain.active ? selectSoft : color.canvas,
+        color: onlyMain.active ? selectSoftInk : color.body,
+        font: 'inherit',
+        fontSize: fontSize.caption,
+        fontWeight: 600,
+        lineHeight: '13px',
+        cursor: 'pointer',
+        flexShrink: 0,
+        whiteSpace: 'nowrap',
+        transition: 'border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease',
+      }}
+    >
+      隐藏对比产品
+    </button>
   );
 
   // 图例悬停键失效自愈（本轮体检）：悬停药丸期间该系列被筛选/增删产品移出集合时，
@@ -867,14 +893,12 @@ export default function PriceTrend(props: {
   useEffect(() => {
     if (!(adjusting && scaleRef.current)) scaleRef.current = yCfg;
   }, [yCfg, adjusting]);
-  // 图顶预留（第三十五轮 36px 单工具行；第一百七十九轮改两行=工具行 + 产品药丸带
-  // 整行，Eason：工具行含大促/权益整行上移，药丸带拿完整一行，与分离模式同构）
-  const gridTop = 90;
   // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
   // S/E 徽标上探 7.5px、名称避让钳 plotTop+2，14px 够用；极值胶囊已在 Chart 内钳回容器
   const panelGridTop = 14;
-  // 容器高由 Y 模型派生：格数×TICK_PX×倍率 + 断裂条 + 图顶卡片区 + 底边距（跨度大 → 自动变高）
-  const chartHeight = yCfg.plotHeight + gridTop + GRID.bottom;
+  // 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；本轮拍板回归面板内）：
+  // 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（渠道行改药丸上方平台行）
+  const PANEL_LEGEND_H = 54;
   // 第八十三轮：关「显示 Y 刻度线」时刻度列塌缩，右侧内容左移对齐
   const gridLeft = estGridLeft(state.currency);
 
@@ -1028,153 +1052,125 @@ export default function PriceTrend(props: {
   // ---- 渲染 ----
   return (
     <div>
-      {/* 标题行（第十二轮引入）：产品与配置的选择统一在顶部筛选器级联（第九十轮，
-          chips 撤除）；分离开关与视图开关留在图上——筛选器=数据口径，图上=视图焦点 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: space.md,
-          marginBottom: space.sm,
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>
-          价格走势
-          {/* 单位标识（第一百八十二轮评审）：纵轴口径一眼可读——USD / 当前国家本币符号 */}
-          <span
-            className="tnum"
-            title={state.currency === 'usd' ? '当前显示币种：USD' : `当前显示币种：本币（${localCurrencySymbol()}）`}
-            style={{ fontSize: 13, fontWeight: 500, color: color.mute, marginLeft: 8 }}
-          >
-            价格（{state.currency === 'usd' ? 'USD' : localCurrencySymbol()}）
-          </span>
-          {multiCards && (
-            <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>
-              （{effMains.length} 组）
-            </span>
-          )}
-        </h2>
-        {/* 全局「仅查看主产品」（第一百七十八轮挪出标题行）：进工具行 RRP 之后
-            （onlyMainCtl），标题行只留 页签 + 价格显示/时点摘要 */}
-        {/* 多平台对比页签（第一百六十四轮，Eason）：「产品对比」= 主视图；
-            「多平台对比」= 次级界面（单产品 × 多平台-店铺线，图表与主界面同款）。
-            第一百六十九轮：页签主动切进来默认选上主品（首张卡的主分析产品，无主品
-            不预置）——同时清掉上次药丸带入的残留 preset；药丸按钮进入仍带该产品 */}
-        <Segmented
-          size="small"
-          value={compareTab ? 'compare' : 'main'}
-          onChange={(v) => {
-            const next = v === 'compare';
-            setCompareTab(next);
-            if (next) {
-              setPointPanelOpen(false);
-              const main = effMains.find((c) => c.main)?.main ?? null;
-              setCompareInit(main ? { modelId: main.modelId, romram: main.romram } : null);
-            }
+      {/* 工具行（本轮拍板定版）：左簇 = 齿轮 + 隐藏对比产品（其后 = 分图/合并 +
+          月/季汇总），右侧 = 大促/权益/⋯。合并模式在其下保留一条药丸行（药丸居中）；
+          分离模式药丸带回归各面板内（见下），不再有共享药丸行。 */}
+      {!compareTab && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            columnGap: space.md,
+            rowGap: 6,
+            minHeight: 32,
+            marginBottom: space.sm,
+            padding: '0 6px',
           }}
-          options={[
-            { label: '产品对比', value: 'main' },
-            { label: '多平台对比', value: 'compare' },
-          ]}
-        />
-        {/* 第一百二十三轮⑥（宽容合并）：≥2 组时可选「分图 / 合并」——默认分图
-            （第一百一十七轮口径），合并适合单产品多型号等用户认为该同图的场景；
-            「每行 2/3 个」只在分图态出现 */}
-        {!compareTab && multiCards && (
-          <Segmented
-            size="small"
-            value={splitActive ? 'split' : 'merge'}
-            onChange={(v) => setMergeView(v === 'merge')}
-            options={[
-              { label: '分图', value: 'split' },
-              mergeOk
-                ? { label: '合并', value: 'merge' }
-                : {
-                    label: (
-                      <Tooltip title={`合并后共 ${mergeLines} 条，超过合并上限 ${MERGE_LINES_CAP} 条（每组最多 ${MAX_LINES_PER_CHART} 条）`}>
-                        <span>合并</span>
-                      </Tooltip>
-                    ),
-                    value: 'merge',
-                    disabled: true,
-                  },
-            ]}
-          />
-        )}
-        {!compareTab && splitActive && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-            <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>每行</span>
-            <Segmented
-              size="small"
-              value={splitColumns}
-              onChange={(v) => setSplitColumns(v as 2 | 3)}
-              options={[{ label: '2 个', value: 2 }, { label: '3 个', value: 3 }]}
+        >
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            <ChartToolbar
+              mode="cluster"
+              currency={state.currency}
+              sliderScale={sliderScale}
+              onSliderScale={setSliderScale}
+              showYTicks={showYTicks}
+              onShowYTicks={setShowYTicks}
+              yCompress={yCompress}
+              onYCompress={setYCompress}
+              lineShape={lineShape}
+              onLineShape={setLineShape}
+              priceTypesAfter={onlyMainCtl}
             />
-          </span>
-        )}
-        <ConfigProvider theme={filterBarTheme}>
-          {/* 第一百一十五轮（评审）：平台/币种收进顶部筛选条，标题行不再重复 */}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, color: color.mute, fontSize: 12 }}>
-            {/* 页签显示（第一百八十轮，Eason）：悬停小页签比率口径——折扣率（vs RRP，
-                默认）/ 周环比（vs 上一周期）；价格显示同款风格，居其左侧 */}
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              页签显示{' '}
+          </div>
+          <ConfigProvider theme={filterBarTheme}>
+            {multiCards && (
               <Segmented
                 size="small"
-                value={tipMode}
-                onChange={(v) => setTipMode(v as 'discount' | 'wow')}
+                value={splitActive ? 'split' : 'merge'}
+                onChange={(v) => setMergeView(v === 'merge')}
                 options={[
-                  { label: '折扣率', value: 'discount' },
-                  { label: '周环比', value: 'wow' },
+                  { label: '分图', value: 'split' },
+                  mergeOk
+                    ? { label: '合并', value: 'merge' }
+                    : {
+                        label: (
+                          <Tooltip title={`合并后共 ${mergeLines} 条，超过合并上限 ${MERGE_LINES_CAP} 条（每组最多 ${MAX_LINES_PER_CHART} 条）`}>
+                            <span>合并</span>
+                          </Tooltip>
+                        ),
+                        value: 'merge',
+                        disabled: true,
+                      },
                 ]}
               />
-            </span>
-            {/* 价格显示（第一百一十四轮，评审）：与币种切换同款控件位——精简 = 图上仅
-                最高/最低/最新三价（默认），详细 = 全量价格标签 */}
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              价格显示{' '}
-              <Segmented
-                size="small"
-                value={labelMode}
-                onChange={(v) => setLabelMode(v as 'detail' | 'compact')}
-                options={[
-                  { label: '精简', value: 'compact' },
-                  { label: '详细', value: 'detail' },
-                ]}
-              />
-            </span>
-            {/* 时点摘要唯一入口（第112轮）：纯手动开合，打开态 primary 高亮；
-                多平台对比页签下不出现（次级界面无产品对语义） */}
-            {!compareTab && (
-              <Button
-                size="small"
-                icon={<ProfileOutlined />}
-                type={pointPanelOpen ? 'primary' : 'default'}
-                onClick={() => setPointPanelOpen((v) => !v)}
-                title="各产品最新折扣、现价、RRP 与来源"
-              >
-                时点摘要
-              </Button>
             )}
-          </div>
-        </ConfigProvider>
-        {/* 数据汇总：仅月/季粒度出现（§6.1），写回 state.agg */}
-        {state.granularity !== 'week' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
-            <span>汇总</span>
-            <Segmented
-              size="small"
-              value={state.agg}
-              onChange={(v) => actions.set({ agg: v as AggMode })}
-              options={[
-                { label: '平均值', value: 'avg' },
-                { label: '最小值', value: 'min' },
-              ]}
+            {state.granularity !== 'week' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
+                <span>汇总</span>
+                <Segmented
+                  size="small"
+                  value={state.agg}
+                  onChange={(v) => actions.set({ agg: v as AggMode })}
+                  options={[
+                    { label: '平均值', value: 'avg' },
+                    { label: '最小值', value: 'min' },
+                  ]}
+                />
+              </div>
+            )}
+          </ConfigProvider>
+          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            <ChartToolbar
+              mode="actions"
+              currency={state.currency}
+              sliderScale={sliderScale}
+              onSliderScale={setSliderScale}
+              showYTicks={showYTicks}
+              onShowYTicks={setShowYTicks}
+              yCompress={yCompress}
+              onYCompress={setYCompress}
+              lineShape={lineShape}
+              onLineShape={setLineShape}
+              priceTypes={state.priceTypes}
+              onPriceTypeToggle={setPriceType}
+              tipMode={tipMode}
+              onTipMode={setTipMode}
+              labelMode={labelMode}
+              onLabelMode={setLabelMode}
+              pointPanelOpen={pointPanelOpen}
+              onPointPanelToggle={() => setPointPanelOpen((v) => !v)}
+              promoBandsOn={promoBandsOn}
+              onPromoBandsOn={setPromoBandsOn}
+              offersOn={offersOn}
+              onOffersOn={setOffersOn}
+              changeThreshold={changeThreshold}
+              onChangeThreshold={setChangeThreshold}
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      {/* 药丸行（仅合并模式）：产品药丸居中；分离模式药丸在各面板内，不渲染本行 */}
+      {!compareTab && !splitActive && (
+        <div style={{ marginBottom: space.md, padding: '0 6px' }}>
+          <ChartToolbar
+            mode="pills"
+            legend={(
+              <BrandLegendStrip
+                groups={tableGroups}
+                hiddenKeys={hiddenKeys}
+                onToggleHidden={toggleLegend}
+                onHover={setLegendHoverKey}
+                channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
+                syncCtlOf={(g) => ({
+                  active: platformSyncMap[g.id] ?? false,
+                  onToggle: togglePlatformSyncOf(g.id),
+                })}
+              />
+            )}
+          />
+        </div>
+      )}
 
       {/* 空态引导带（第一百一十七轮）：未选主分析产品时给一句出口；
           「无对比」「超线截断」等旧引导退役（无对比是合法状态；配额已前移到选择时） */}
@@ -1227,53 +1223,22 @@ export default function PriceTrend(props: {
               lineShape={lineShape}
               onLineShape={setLineShape}
               labelMode={labelMode}
+              onLabelMode={setLabelMode}
+              tipMode={tipMode}
+              onTipMode={setTipMode}
               priceTypes={state.priceTypes}
               onPriceTypeToggle={setPriceType}
               promoBandsOn={promoBandsOn}
               onPromoBandsOn={setPromoBandsOn}
               offersOn={offersOn}
               onOffersOn={setOffersOn}
-              maxMinOn={maxMinOn}
-              onMaxMinOn={setMaxMinOn}
               changeThreshold={changeThreshold}
               onChangeThreshold={setChangeThreshold}
             />
           ) : splitActive ? (
         <>
-          {/* 常驻工具行（第五十四轮追补，用户需求）：分离模式下这一行仍常驻在摘要页签
-              与面板网格之间，统管底下全部分离面板——大促/offer/极值/变化提醒 + 齿轮
-              （每格高度/刻度线/自动压缩/折线样式）+ 折后价/RRP；面板内不再各有设置行 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 32, padding: '0 6px', marginBottom: 2 }}>
-              {/* 系列页签不进共享工具行（第七十五轮）：分离模式下按面板拆到各卡片
-                  顶部居中，本行只保留视图开关；合并模式的页签仍在工具行中央 */}
-              <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-              <ChartToolbar
-                priceTypesAfter={onlyMainCtl}
-                currency={state.currency}
-                sliderScale={sliderScale}
-                onSliderScale={setSliderScale}
-                showYTicks={showYTicks}
-                onShowYTicks={setShowYTicks}
-                yCompress={yCompress}
-                onYCompress={setYCompress}
-                lineShape={lineShape}
-                onLineShape={setLineShape}
-                priceTypes={state.priceTypes}
-                onPriceTypeToggle={setPriceType}
-                promoBandsOn={promoBandsOn}
-                onPromoBandsOn={setPromoBandsOn}
-                offersOn={offersOn}
-                onOffersOn={setOffersOn}
-                maxMinOn={maxMinOn}
-                onMaxMinOn={setMaxMinOn}
-                changeThreshold={changeThreshold}
-                onChangeThreshold={setChangeThreshold}
-              />
-            </div>
-          </div>
           {/* 分离面板：所有卡片固定在同一横向轨道；共享 Y 轴固定在左侧，轨道超出视口时横向滚动。
-              每行可见 2/3 个由标题行「分离显示」设置控制（第七十七轮并入），卡片保持
-              最小宽度以避免图表与系列名拥挤。 */}
+              每行最多 3 个，按所选面板数自适应，卡片保持最小宽度以避免图表与系列名拥挤。 */}
           <div
             style={{
               display: 'flex',
@@ -1325,7 +1290,7 @@ export default function PriceTrend(props: {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, width: '100%', minWidth: 0 }}>
-                  {orderedPanels.map((p, pi) => {
+                  {orderedPanels.map((p) => {
                   const isDragging = draggingPanel === p.key;
                   const isDropTarget = dropTarget === p.key && !isDragging;
                   // 本面板生效窗口（同步 = 共享窗口；独立 = 面板自己的窗口）
@@ -1348,9 +1313,9 @@ export default function PriceTrend(props: {
                       }}
                       style={{
                         flex: `0 0 calc((100% - ${(splitColumns - 1) * Number(space.md)}px) / ${splitColumns})`,
-                        // 宽度由「每行 2/3 个」控制，不设固定最小宽度；否则窄屏下
-                        // 选择 2 个时仍只能看到一张完整卡片，失去切换该视图的意义。
-                        minWidth: 0,
+                        // 宽度由面板数量自适应，最多 3 个并排；窄屏时仍由外层轨道承载横向查看。
+                        // 给每个面板保留可读宽度，避免三列在小视口中把图例和刻度压扁。
+                        minWidth: 300,
                         position: 'relative',
                         border: `1px solid ${isDropTarget ? color.link : color.hairline}`,
                         boxShadow: isDropTarget ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined,
@@ -1397,11 +1362,10 @@ export default function PriceTrend(props: {
                       >
                         <HolderOutlined style={{ fontSize: 10 }} />
                       </span>
-                      {/* 组/角色图例带（第一百一十五轮立，第一百二十三轮④按组）：本面板
-                          单组（主品药丸 + vs + 对比药丸，含屏蔽者）；悬停药丸 = 该系列
-                          高亮 + 起点指引线，点击 = 屏蔽/恢复折线。第一百四十六轮面板头
-                          「型号 对比 N」行删除（Eason：与药丸信息重复）——面板内产品
-                          标识完全由两行药丸承载 */}
+                      {/* 组/角色图例带（本轮拍板回归面板内，Eason：药丸在面板框里，
+                          不在共享行加小框）：本面板单组（主品药丸 + vs + 对比药丸，
+                          含屏蔽者）；悬停药丸 = 该系列高亮、点击 = 屏蔽/恢复折线；
+                          「同步平台筛选」随本卡主品的平台筛选浮层（组内同步） */}
                       <div style={{ height: PANEL_LEGEND_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
                         <BrandLegendStrip
                           groups={groupsOfCards([p.card], p.all)}
@@ -1409,10 +1373,7 @@ export default function PriceTrend(props: {
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                           channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
-                          // 同步平台筛选（第一百七十四轮移位）：按钮在主品平台小药丸左侧，
-                          // 分离模式只在首面板渲染（全局操作一处入口）
-                          onSyncPlatform={pi === 0 ? togglePlatformSync : undefined}
-                          syncActive={platformSyncOn}
+                          syncCtlOf={() => ({ active: platformSyncMap[p.key] ?? false, onToggle: togglePlatformSyncOf(p.key) })}
                         />
                       </div>
                       <Chart
@@ -1438,7 +1399,6 @@ export default function PriceTrend(props: {
                         labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
                         promoBandsOn={promoBandsOn}
                         promoBands={panelPromoBands[p.key] ?? []}
-                        maxMinOn={maxMinOn}
                         changeThreshold={changeThreshold}
                         showXLabels // 第一百五十二轮追补：分离面板同恢复图内时间轴（与合并主图
                         // 同口径——周 YYYYWxx、axisTickPlan 抽稀；下方 SplitTimeTrack 保留
@@ -1479,30 +1439,20 @@ export default function PriceTrend(props: {
         </>
       ) : (
         <>
-          {/* 产品药丸带（第一百七十八轮改版，Eason）：不再独立成行——注入合并图
-              工具行中区（ChartToolbar legend 槽，行内居中、底部与 RRP 对齐），
-              工具行升级为「齿轮+折后价/RRP + 竖线+仅查看主产品 | 药丸带 | 大促/权益/⋯」
-              单行三区；与分离模式（共享工具行 + 各面板药丸带）同一视觉节奏 */}
+          {/* 产品药丸与工具行已在图主体外统一渲染；图表本身只保留绘图区。 */}
           <Chart
-            legend={
-              <BrandLegendStrip
-                groups={tableGroups}
-                hiddenKeys={hiddenKeys}
-                onToggleHidden={toggleLegend}
-                onHover={setLegendHoverKey}
-                channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
-                onSyncPlatform={togglePlatformSync}
-                syncActive={platformSyncOn}
-              />
-            }
-            priceTypesAfter={onlyMainCtl}
+            chrome={false}
             tipMode={tipMode}
+            onTipMode={setTipMode}
+            onLabelMode={setLabelMode}
+            pointPanelOpen={pointPanelOpen}
+            onPointPanelToggle={() => setPointPanelOpen((v) => !v)}
             series={chartSeries}
             granularity={state.granularity}
             currency={state.currency}
             priceTypes={state.priceTypes}
             gridLeft={gridLeft}
-            gridTop={gridTop}
+            gridTop={panelGridTop}
             showXLabels // 第一百五十二轮：图内恢复独立时间轴（业务意见）——周刻度 YYYYWxx、
             // 密度按 axisTickPlan 抽稀；底部轨道收敛为拖柄/跨年标注的查看窗口毛刷
             hideNamePills // 第一百一十五轮：产品名在图顶图例带，图内不再画药丸
@@ -1526,12 +1476,10 @@ export default function PriceTrend(props: {
             promoBandsOn={promoBandsOn}
             onPromoBandsOn={setPromoBandsOn}
             promoBands={promoBands}
-            maxMinOn={maxMinOn}
             changeThreshold={changeThreshold}
             onPriceTypeToggle={setPriceType}
             offersOn={offersOn}
             onOffersOn={setOffersOn}
-            onMaxMinOn={setMaxMinOn}
             onChangeThreshold={setChangeThreshold}
             emptyHint={
               visSeries.length > 0 && chartSeries.length === 0

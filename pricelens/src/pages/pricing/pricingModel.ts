@@ -39,12 +39,20 @@ export interface ForecastPoint {
   high: number;
 }
 
-export function marketForecast(yoyPct: number, bandPct: number): ForecastPoint[] {
+/** Optional per-node overrides keyed by the forecast label. */
+export interface ForecastOverrides {
+  yoyPctByLabel?: Record<string, number | undefined>;
+  bandPctByLabel?: Record<string, number | undefined>;
+}
+
+export function marketForecast(yoyPct: number, bandPct: number, overrides?: ForecastOverrides): ForecastPoint[] {
   const hist = MARKET_HISTORY;
   return MARKET_FUTURE_LABELS.map((label, i) => {
     const same = hist[hist.length - 4 + i].value;
-    const mid = r1(same * (1 + yoyPct / 100));
-    return { label, mid, low: r1(mid * (1 - bandPct / 100)), high: r1(mid * (1 + bandPct / 100)) };
+    const nodeYoy = overrides?.yoyPctByLabel?.[label] ?? yoyPct;
+    const nodeBand = overrides?.bandPctByLabel?.[label] ?? bandPct;
+    const mid = r1(same * (1 + nodeYoy / 100));
+    return { label, mid, low: r1(mid * (1 - nodeBand / 100)), high: r1(mid * (1 + nodeBand / 100)) };
   });
 }
 
@@ -59,10 +67,12 @@ export function marketQoQ(forecast: ForecastPoint[]): (number | null)[] {
 /** 单台全成本基准 = 产品线最新月报价 */
 export const COST_BASE = COST_HISTORY[COST_HISTORY.length - 1].value;
 
-export function costForecast(yoyPct: number, bandPct: number): ForecastPoint[] {
+export function costForecast(yoyPct: number, bandPct: number, overrides?: ForecastOverrides): ForecastPoint[] {
   return COST_FUTURE_LABELS.map((label, i) => {
-    const mid = r0(COST_BASE * Math.pow(1 + yoyPct / 100, (i + 1) / 12));
-    return { label, mid, low: r0(mid * (1 - bandPct / 100)), high: r0(mid * (1 + bandPct / 100)) };
+    const nodeYoy = overrides?.yoyPctByLabel?.[label] ?? yoyPct;
+    const nodeBand = overrides?.bandPctByLabel?.[label] ?? bandPct;
+    const mid = r0(COST_BASE * Math.pow(1 + nodeYoy / 100, (i + 1) / 12));
+    return { label, mid, low: r0(mid * (1 - nodeBand / 100)), high: r0(mid * (1 + nodeBand / 100)) };
   });
 }
 
@@ -136,6 +146,11 @@ export interface PlanContext {
   /** 响应推导卡：当前取值 */
   elasticity: number;
   comp: CompScenario;
+  /** Optional quarter/month node overrides from the scenario editor. */
+  marketQuarterValues?: number[];
+  costMonthValues?: number[];
+  /** Optional week-level simulated prices (USD). When omitted, the plan price is reused. */
+  weeklyPrices?: number[];
 }
 
 export function priceFactorOf(price: number, elasticity: number, anchorPrice: number): number {
@@ -145,6 +160,26 @@ export function priceFactorOf(price: number, elasticity: number, anchorPrice: nu
 /** 单台销毛：拟定价 ×（1−激励率）− 当周成本（成本预估曲线） */
 export function unitMarginOf(price: number, week: number, costYoyPct: number): number {
   return price * (1 - INCENTIVE_RATE) - costAtWeek(week, costYoyPct);
+}
+
+export function costAtWeekWithNodes(week: number, costYoyPct: number, values?: number[]): number {
+  if (!values || values.length === 0) return costAtWeek(week, costYoyPct);
+  // Values include the current-month anchor followed by one node per forecast
+  // month. Thus 13 values represent 12 intervals across the 52-week horizon.
+  const span = values.length > 1 ? 52 / (values.length - 1) : 52;
+  const month = Math.min(values.length - 1, Math.max(0, Math.floor(week / span)));
+  const next = Math.min(values.length - 1, month + 1);
+  const t = next === month ? 0 : (week - month * span) / span;
+  return values[month] + (values[next] - values[month]) * Math.max(0, Math.min(1, t));
+}
+
+export function marketFactorAtWeek(ctx: PlanContext, week: number, offsetWeeks = 0): number {
+  if (!ctx.marketQuarterValues || ctx.marketQuarterValues.length === 0) {
+    return Math.max(0.2, 1 + ctx.marketYoYPct / 100);
+  }
+  const quarter = Math.min(ctx.marketQuarterValues.length - 1, Math.max(0, Math.floor(Math.max(0, week - offsetWeeks) / 13)));
+  const baseline = MARKET_HISTORY[MARKET_HISTORY.length - 4 + quarter]?.value ?? MARKET_HISTORY[MARKET_HISTORY.length - 1].value;
+  return Math.max(0.2, ctx.marketQuarterValues[quarter] / baseline);
 }
 
 export interface SchemeChain {
@@ -191,19 +226,27 @@ export function productOf(key: string): ProductCase {
 /** 周序列构建（computeScheme 与预测图共用）：返回 52 周销量序列与实际段长度
  *  （上市前 actualCount=0 全为测算；上市后前 curLen 周为实际，剩余为测算） */
 export function buildWeekly(ctx: PlanContext, product: ProductCase, price: number): { weekly: number[]; actualCount: number } {
-  const marketFactor = Math.max(0.2, 1 + ctx.marketYoYPct / 100);
   const compFactor = compFactorOf(ctx.comp);
+  const simulatedPrice = (week: number): number => ctx.weeklyPrices?.[week] ?? price;
   if (ctx.scenario === 'pre') {
     const anchorPrice = product.prev.launchPrice;
-    const factor = marketFactor * priceFactorOf(price, ctx.elasticity, anchorPrice) * compFactor;
-    return { weekly: product.prev.weeks.map((w) => w.so * factor), actualCount: 0 };
+    return {
+      weekly: product.prev.weeks.map((w, week) => {
+        const factor = marketFactorAtWeek(ctx, week) * priceFactorOf(simulatedPrice(week), ctx.elasticity, anchorPrice) * compFactor;
+        return w.so * factor;
+      }),
+      actualCount: 0,
+    };
   }
   const anchorPrice = product.cur.currentPrice;
   const curLen = product.cur.weeks.length;
-  const relFactor = totalWan(product.cur.weeks) / totalWan(product.prev.weeks.slice(0, curLen));
-  const factor = marketFactor * priceFactorOf(price, ctx.elasticity, anchorPrice) * compFactor;
+  const relFactor = r2(totalWan(product.cur.weeks) / totalWan(product.prev.weeks.slice(0, curLen)));
   return {
-    weekly: [...product.cur.weeks.map((w) => w.so), ...product.prev.weeks.slice(curLen).map((w) => w.so * relFactor * factor)],
+    weekly: product.prev.weeks.map((w, week) => {
+      if (week < curLen) return product.cur.weeks[week].so;
+      const factor = marketFactorAtWeek(ctx, week, curLen) * priceFactorOf(simulatedPrice(week), ctx.elasticity, anchorPrice) * compFactor;
+      return w.so * relFactor * factor;
+    }),
     actualCount: curLen,
   };
 }
@@ -233,11 +276,15 @@ export function forecastSeries(ctx: PlanContext, product: ProductCase, price: nu
 }
 
 export function computeScheme(scheme: Scheme, ctx: PlanContext, product: ProductCase): SchemeResult {
-  const marketFactor = Math.max(0.2, 1 + ctx.marketYoYPct / 100);
+  const marketFactor = ctx.marketQuarterValues?.length
+    ? ctx.marketQuarterValues.reduce((sum, value, i) => {
+        const baseline = MARKET_HISTORY[MARKET_HISTORY.length - 4 + i]?.value ?? MARKET_HISTORY[MARKET_HISTORY.length - 1].value;
+        return sum + value / baseline;
+      }, 0) / ctx.marketQuarterValues.length
+    : Math.max(0.2, 1 + ctx.marketYoYPct / 100);
   const compFactor = compFactorOf(ctx.comp);
   const prevTotal = totalWan(product.prev.weeks);
 
-  let weekly: number[];
   let anchorPrice: number;
   let curTotal: number | null = null;
   let relFactor: number | null = null;
@@ -246,8 +293,6 @@ export function computeScheme(scheme: Scheme, ctx: PlanContext, product: Product
 
   if (ctx.scenario === 'pre') {
     anchorPrice = product.prev.launchPrice;
-    const factor = marketFactor * priceFactorOf(scheme.price, ctx.elasticity, anchorPrice) * compFactor;
-    weekly = product.prev.weeks.map((w) => w.so * factor);
   } else {
     anchorPrice = product.cur.currentPrice;
     const curLen = product.cur.weeks.length;
@@ -255,14 +300,18 @@ export function computeScheme(scheme: Scheme, ctx: PlanContext, product: Product
     relFactor = r2(curTotal / totalWan(product.prev.weeks.slice(0, curLen)));
     prevRemain = totalWan(product.prev.weeks.slice(curLen));
     remainBase = r1(prevRemain * relFactor);
-    const factor = marketFactor * priceFactorOf(scheme.price, ctx.elasticity, anchorPrice) * compFactor;
-    weekly = [...product.cur.weeks.map((w) => w.so), ...product.prev.weeks.slice(curLen).map((w) => w.so * relFactor! * factor)];
   }
 
+  const weekly = buildWeekly(ctx, product, scheme.price).weekly;
+  const forecastStartPrice = ctx.weeklyPrices?.[ctx.scenario === 'post' ? product.cur.weeks.length : 0] ?? scheme.price;
+  const launchPrice = ctx.weeklyPrices?.[0] ?? scheme.price;
   const firstYearSoWan = r1(weekly.reduce((s, v) => s + v, 0) / 10);
-  const launchUnitMargin = Math.round(unitMarginOf(scheme.price, 0, ctx.costYoyPct));
-  const marginTotalYi = weekly.reduce((s, so, w) => s + so * unitMarginOf(scheme.price, w, ctx.costYoyPct), 0) / 1e5;
-  const priceFactor = priceFactorOf(scheme.price, ctx.elasticity, anchorPrice);
+  const launchUnitMargin = Math.round(launchPrice * (1 - INCENTIVE_RATE) - costAtWeekWithNodes(0, ctx.costYoyPct, ctx.costMonthValues));
+  const marginTotalYi = weekly.reduce((s, so, w) => {
+    const weekPrice = ctx.weeklyPrices?.[w] ?? scheme.price;
+    return s + so * (weekPrice * (1 - INCENTIVE_RATE) - costAtWeekWithNodes(w, ctx.costYoyPct, ctx.costMonthValues));
+  }, 0) / 1e5;
+  const priceFactor = priceFactorOf(forecastStartPrice, ctx.elasticity, anchorPrice);
 
   return {
     scheme,
@@ -282,11 +331,11 @@ export function computeScheme(scheme: Scheme, ctx: PlanContext, product: Product
       remainBaseWan: remainBase,
       marketFactor: r3(marketFactor),
       priceFactor: r3(priceFactor),
-      priceDeltaPct: r1((scheme.price / anchorPrice - 1) * 100),
+      priceDeltaPct: r1((forecastStartPrice / anchorPrice - 1) * 100),
       compFactor: r3(compFactor),
       compChangePct: compChangePctOf(ctx.comp),
-      launchCost: Math.round(costAtWeek(0, ctx.costYoyPct)),
-      yearEndCost: Math.round(costAtWeek(51, ctx.costYoyPct)),
+      launchCost: Math.round(costAtWeekWithNodes(0, ctx.costYoyPct, ctx.costMonthValues)),
+      yearEndCost: Math.round(costAtWeekWithNodes(51, ctx.costYoyPct, ctx.costMonthValues)),
     },
   };
 }

@@ -40,8 +40,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ConfigProvider, Segmented } from 'antd';
 import { useFilters } from '../state/FiltersContext';
 import usePageViewState from '../state/usePageViewState';
-import FilterBar from '../components/FilterBar';
-import PageHeader from '../components/PageHeader';
+import ChartContentBar from '../components/ChartContentBar';
 import { filterBarTheme } from '../components/FilterBar';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
@@ -150,6 +149,8 @@ export default function VolumePrice() {
   const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
   // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 全面板共享悬停纵向位置（横向虚线）
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
+  // 悬停页签比率：默认周环比（与价格看板同一默认）
+  const [tipMode, setTipMode] = useState<'discount' | 'wow'>('wow');
   const [crossY, setCrossY] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   // 查看窗口 = 会话态跨页保留（与价格看板对齐；范围改动等失义路径照旧复位）
@@ -430,13 +431,6 @@ export default function VolumePrice() {
     });
   };
 
-  // 面板头销量读数：悬停列优先，无悬停取最新有值期
-  const volumeReading = (vs: (number | null)[], hov: number | null): number | null => {
-    if (hov != null) return vs[hov] ?? null;
-    for (let i = vs.length - 1; i >= 0; i--) if (vs[i] != null) return vs[i];
-    return null;
-  };
-
   // 面板独立窗口调整（非同步）：只动自己的生效窗口
   const onPanelWindowChange = (idx: number) => (s2: number, e2: number): void => {
     if (!buckets[s2] || !buckets[e2]) return;
@@ -497,52 +491,24 @@ export default function VolumePrice() {
   );
 
   return (
-    <div data-lpl-scroll style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
-      {/* 第一百八十二轮：整页 minWidth 撤除——页头/筛选条换行，面板区卡内横向滚动 */}
-      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-        <PageHeader title="量价看板" />
-        <FilterBar showTime showPlatform={false} />
-        <main style={{ flex: 1, padding: space.lg, minWidth: 0 }}>
-          <section
-            style={{
-              background: color.canvas,
-              boxShadow: shadow.l1,
-              borderRadius: radius.card,
-              padding: space.lg,
-            }}
-          >
-            {/* 标题行：平台/币种（右侧）+ 月季汇总 */}
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: space.md, marginBottom: space.sm }}>
-              <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>量价走势</h2>
+    <>
+      {/* 页面壳（页头/筛选条/滚动容器）第一百八十四轮上移 App.AnalysisShell 共享——
+          本组件只负责图表卡与大盘卡，价格走势↔量价走势切页不再整页重挂。 */}
+      <section
+        style={{
+          background: color.canvas,
+          boxShadow: shadow.l1,
+          borderRadius: radius.card,
+          padding: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <ChartContentBar />
+        <div style={{ padding: space.lg }}>
+            {/* 月/季汇总 */}
+            {state.granularity !== 'week' && (
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: space.md, marginBottom: space.sm }}>
               <ConfigProvider theme={filterBarTheme}>
-                <div
-                  style={{
-                    marginLeft: 'auto',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    color: color.mute,
-                    fontSize: 12,
-                  }}
-                >
-                  {/* 第一百一十五轮（评审）：平台/币种收进顶部筛选条，标题行不再重复 */}
-                  {/* 价格显示（第一百一十四轮，评审）：与币种切换同款控件位——
-                      精简 = 图上仅最高/最低/最新三价（默认），详细 = 全量价格标签 */}
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    价格显示{' '}
-                    <Segmented
-                      size="small"
-                      value={labelMode}
-                      onChange={(v) => setLabelMode(v as 'detail' | 'compact')}
-                      options={[
-                        { label: '精简', value: 'compact' },
-                        { label: '详细', value: 'detail' },
-                      ]}
-                    />
-                  </span>
-                </div>
-              </ConfigProvider>
-              {state.granularity !== 'week' && (
                 <div
                   style={{
                     display: 'flex',
@@ -563,12 +529,13 @@ export default function VolumePrice() {
                     ]}
                   />
                 </div>
-              )}
-            </div>
+              </ConfigProvider>
+              </div>
+            )}
 
             {/* 常驻工具行：齿轮（每格高度/Y 刻度线/自动压缩/折线样式）+ 折后价/RRP 胶囊；
                 第131轮波2：时间筛选簇上移顶部筛选条，本行只剩齿轮簇 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 34, padding: '0 6px', marginBottom: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 32, padding: '4px 6px 0', marginBottom: 16 }}>
               <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                 <ChartToolbar
                   currency={state.currency}
@@ -582,6 +549,10 @@ export default function VolumePrice() {
                   onLineShape={setLineShape}
                   priceTypes={state.priceTypes}
                   onPriceTypeToggle={setPriceType}
+                  tipMode={tipMode}
+                  onTipMode={setTipMode}
+                  labelMode={labelMode}
+                  onLabelMode={setLabelMode}
                 />
               </div>
             </div>
@@ -660,11 +631,7 @@ export default function VolumePrice() {
                           isolation: 'isolate',
                         }}
                       >
-                        <PanelHeader
-                          brand={p.brand}
-                          name={p.name}
-                          volume={volumeReading(volumes[p.idx], hoverIdxs[p.idx] ?? null)}
-                        />
+                        <PanelHeader brand={p.brand} name={p.name} />
                         <div style={{ position: 'relative' }}>
                           <VolumeBars
                             geom={geoms[p.idx] ?? null}
@@ -682,6 +649,7 @@ export default function VolumePrice() {
                             granularity={state.granularity}
                             currency={state.currency}
                             priceTypes={state.priceTypes}
+                            tipMode={tipMode}
                             gridLeft={CHART_GRID_LEFT}
                             gridRight={CHART_GRID_RIGHT} // 第一百一十五轮：右侧预留销量轴列（轴线+刻度+拖柄不与绘图区重叠）
                             gridTop={PANEL_GRID_TOP}
@@ -727,37 +695,36 @@ export default function VolumePrice() {
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
-            </div>
-
-          </section>
-
-          {/* 大盘分析（第118轮引入；第119轮走查会补齐）：窗口内各期大盘销量柱（绝对台数，
-              堆叠 = 品牌构成）+ 档位筛选 + 点击柱子选期下钻 + 大盘环比贡献拆解。
-              时间域：同步 = 共享窗口；非同步 = 各面板生效窗口的并集 */}
-          {buckets.length > 0 && (
-            <section
-              style={{
-                marginTop: space.md,
-                background: color.canvas,
-                boxShadow: shadow.l1,
-                borderRadius: radius.card,
-                padding: space.lg,
-              }}
-            >
-              <MarketBoard
-                cc={cc}
-                industry={state.industry}
-                granularity={state.granularity}
-                buckets={buckets}
-                winS={marketWin[0]}
-                winE={marketWin[1]}
-              />
-            </section>
-          )}
-        </main>
+          </div>
       </div>
-    </div>
+      </div>
+      </div>
+
+      </section>
+
+      {/* 大盘分析（第118轮引入；第119轮走查会补齐）：窗口内各期大盘销量柱（绝对台数，
+          堆叠 = 品牌构成）+ 档位筛选 + 点击柱子选期下钻 + 大盘环比贡献拆解。
+          时间域：同步 = 共享窗口；非同步 = 各面板生效窗口的并集 */}
+      {buckets.length > 0 && (
+        <section
+          style={{
+            marginTop: space.md,
+            background: color.canvas,
+            boxShadow: shadow.l1,
+            borderRadius: radius.card,
+            padding: space.lg,
+          }}
+        >
+          <MarketBoard
+            cc={cc}
+            industry={state.industry}
+            granularity={state.granularity}
+            buckets={buckets}
+            winS={marketWin[0]}
+            winE={marketWin[1]}
+          />
+        </section>
+      )}
+    </>
   );
 }

@@ -117,8 +117,8 @@ export default function ChannelSelectPopover({
    *  platform = 底部「自动」= scopePlatform 平台内每周最低价店铺（店铺 chip 修改入口） */
   scope?: 'product' | 'platform';
   scopePlatform?: string;
-  /** 同步平台筛选（第一百七十八轮，Eason）：传入 = 浮层左上角出开关——
-   *  仅主品的浮层传入（看板层全局操作：全部产品取价平台与主产品一致） */
+  /** 同步平台筛选（第一百七十八轮立，第一百八十四轮改组内语义）：传入 =
+   *  本组主品的浮层出开关——同步只作用于本组（本组对比品跟随本组主产品） */
   syncCtl?: { active: boolean; onToggle: () => void };
 }) {
   // 平台 → 渠道（仅当前国家）：组内渠道保持维表序，组序 = 平台首次出现序
@@ -292,21 +292,33 @@ export default function ChannelSelectPopover({
 
   return (
     <div>
-      {/* 同步平台筛选（第一百七十八轮，Eason）：浮层左上角——仅主品的浮层传入；
-          开关联动全局（触发全员跟随主产品/取消还原），不影响本浮层的口径选择 */}
-      {syncCtl && (
-        <div style={{ padding: `8px ${space.md}px 0` }}>
+      {/* 顶部固定搜索行（第一百六十四轮，Eason：像产品筛选一样固定一行，跨平台可搜）。
+          同步平台筛选与搜索并排同行（第一百八十四轮，Eason：不再单独占一行）；
+          开关只作用于本组（本组对比品跟随本组主产品） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: `8px ${space.md}px 6px`, borderBottom: `1px solid ${color.hairline}` }}>
+        <Input
+          size="small"
+          allowClear
+          prefix={<SearchOutlined style={{ color: color.mute }} />}
+          placeholder="搜索平台 / 店铺"
+          aria-label="搜索平台 / 店铺"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ height: 24, fontSize: fontSize.caption, width: 232 }}
+        />
+        {syncCtl && (
           <button
             type="button"
             aria-pressed={!!syncCtl.active}
             title={syncCtl.active
-              ? '已同步：全部产品取价平台与主产品一致，点击取消并恢复同步前状态'
-              : '全部产品的取价平台改成与主产品一致'}
+              ? '已同步：本组产品取价平台与主产品一致，点击取消并恢复同步前状态'
+              : '本组产品的取价平台改成与主产品一致（只影响本组）'}
             onClick={(e) => {
               e.stopPropagation();
               syncCtl.onToggle();
             }}
             style={{
+              flexShrink: 0,
               display: 'inline-flex',
               alignItems: 'center',
               height: 20,
@@ -325,20 +337,7 @@ export default function ChannelSelectPopover({
           >
             同步平台筛选
           </button>
-        </div>
-      )}
-      {/* 顶部固定搜索行（第一百六十四轮，Eason：像产品筛选一样固定一行，跨平台可搜） */}
-      <div style={{ padding: syncCtl ? `6px ${space.md}px 6px` : `8px ${space.md}px 6px`, borderBottom: `1px solid ${color.hairline}` }}>
-        <Input
-          size="small"
-          allowClear
-          prefix={<SearchOutlined style={{ color: color.mute }} />}
-          placeholder="搜索平台 / 店铺"
-          aria-label="搜索平台 / 店铺"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{ height: 24, fontSize: fontSize.caption, width: 232 }}
-        />
+        )}
       </div>
       {q ? (
         <>

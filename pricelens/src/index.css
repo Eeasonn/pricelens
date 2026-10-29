@@ -158,6 +158,26 @@ button.lpl-map-card:hover {
   display: none;
 }
 
+/* 顶部工具与产品药丸统一轻量悬停反馈：只改变表面层次，不造成布局跳动。 */
+.lpl-toolbar-icon:hover,
+.lpl-only-main:hover {
+  border-color: rgba(0, 112, 243, 0.35) !important;
+  background: #f7faff !important;
+  box-shadow: 0 1px 3px rgba(0, 112, 243, 0.12);
+}
+.lpl-lg-pill:hover {
+  border-color: rgba(0, 112, 243, 0.35) !important;
+  box-shadow: 0 1px 3px rgba(0, 112, 243, 0.1);
+}
+.lpl-chart-tab:hover:not([aria-disabled='true']),
+.lpl-view-switch-option:hover {
+  color: #171717;
+}
+/* 管理页站点徽标 = 返回看板入口：悬停变蓝（与分析页签悬停同语言） */
+.lpl-logo-home:hover {
+  color: #0070f3;
+}
+
 /* AntD 5.21 将自定义类挂在不同的弹层节点；下面的结构选择器确保两栏始终等宽，
    左右内边距一致，不受周/月/季面板内部 class 差异影响。 */
 .ant-picker-dropdown .ant-picker-panels {

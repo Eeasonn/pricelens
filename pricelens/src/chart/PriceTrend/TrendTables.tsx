@@ -1,25 +1,21 @@
 // ============================================================
-// 「价差与明细」宽表（第118轮立，第一百二十三轮按主分析组重排，
-// 第一百三十一轮精简）：按主分析组（= 选择产品浮窗里的一张卡，从上到下保持
-// 其排列）分块，每块 = 组头（最左收起/展开按钮 + 序号 + 主品，收起只留组头、
-// 同会话保持、新组默认展开；组不设筛选，各组全量展示）→ 产品价差（区块标题 +
-// 列头 + 主品基准行 + 本组各对比产品折后价相对主分析产品的百分比；红 = 更贵、
-// 蓝 = 更便宜，与图上价差徽章同语言）→ 核心信息明细（区块标题 + 列头 + 每产品
-// 6 行：RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer × 时间列）。
-// 列头随区块标题走（第一百四十八轮）：产品/配置/类型 + 图上同一可见时间轴
-// （每桶一列，不带周号），两个区块标题下方各一条一模一样的列头。
-// 主品基准行（第一百四十八轮）：产品价差列头下的首行 = 本组主分析产品，
-// 自己比自己无价差、时间列整行置空，浅蓝衬底与明细主品行同语言。
-// 全列竖向分界线：首列外每列左缘 1px hairline（表头/单元格统一，横向滚动对齐）。
-// 行底色按角色着色（第一百二十三轮）：主分析产品行衬浅蓝、对比产品行白底。
-// 整体一张网格：各组横向滚动同步、左缘 产品/配置/类型 三列冻结（Excel
-// 冻结窗格语义）；高度随内容伸展，只横向滚动、不出纵向滚动条。
+// 「价差与明细」宽表（第118轮立，第一百二十三轮按主分析组重排）。
+// 本轮（Eason 七点）改版：①组别页签——顶部页签切换主分析组（风格同图表卡
+// 页签行），一次只渲染一组的表体，不再各组纵向堆叠（组头/收起随之退役）；
+// ②近4周环比改「类型后」的冻结列，只显示最新筛选时点的环比（不再是历史一行）；
+// ③时间列倒序（最新在左）；列头周号字体与日期统一（去 mono）。
+// 每组表体 = 产品价差（区块标题 + 列头 + 主品基准行 + 对比产品折后价相对主分析
+// 产品的百分比；红 = 更贵、蓝 = 更便宜）→ 核心信息明细（区块标题 + 列头 +
+// 每产品 6 行：RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer × 时间列）。
+// 冻结列 = 产品 / 配置 / 类型 / 近4周环比 四列（Excel 冻结窗格语义）；首列外
+// 每列左缘 1px hairline 竖向分界线。行底色按角色：主分析产品行衬浅蓝。
+// 时间列与图上同一可见时间段（每桶一列，周号＋日期双行列头），倒序排列。
 // 取证行 = 该时点电商页面快照入口（SnapshotModal）+ 最新时点商城现页链接。
 // 取数与图同源（onSeriesWindow 按卡上报的组 × 桶）；纯计算在 tableModel。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from 'antd';
-import { CopyOutlined, ExportOutlined, PictureOutlined, RightOutlined } from '@ant-design/icons';
+import { CopyOutlined, ExportOutlined, PictureOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { configTextOf } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
@@ -33,7 +29,6 @@ import {
   bucketDateText,
   discountOf,
   fmtPct,
-  groupNumText,
   groupOrdinal,
   latestIdxOf,
   offerText,
@@ -51,32 +46,18 @@ function weekIdText(id: string): string {
   return m ? `${m[1]}W${Number(m[2])}` : id;
 }
 
-// ---- 列宽（左缘冻结三列 + 时间列） ----
+// ---- 列宽（左缘冻结四列：产品/配置/类型/近4周环比 + 时间列） ----
 const W_PROD = 236;
 const W_CONF = 96;
 const W_TYPE = 76;
+const W_WOW = 88;
 const W_TIME = 100;
 /** 主分析产品行底色（浅蓝；第一百二十三轮按角色着色——主品行衬浅蓝、对比行白底，
  *  与图例带主品药丸同语言，不再按品牌归属着色） */
 const MAIN_TINT = '#f3f8ff';
-/** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer） */
+/** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer；
+ *  近4周环比本轮起为冻结列，不再是行） */
 const DETAIL_SPAN = 6;
-
-/** 组头收起/展开按钮（第一百三十一轮）：chevron 居中，命中区 24px 见方；
- *  悬停衬底与聚焦圈在文件底部工具类（.tt-fold） */
-const FOLD_STYLE: CSSProperties = {
-  flex: 'none',
-  width: 24,
-  height: 24,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 0,
-  border: 'none',
-  borderRadius: radius.control,
-  background: 'none',
-  cursor: 'pointer',
-};
 
 /** 取证行小件样式：图标 + 文字，链接色（button / a 共用） */
 const EVID_STYLE: CSSProperties = {
@@ -157,20 +138,12 @@ export default function TrendTables(props: {
   granularity: Granularity;
 }) {
   const { groups, buckets, currency, granularity } = props;
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set()); // 收起的组 id 集（同会话保持；新组不在集内 = 默认展开）
+  // 组别页签选中态（本轮）：值 = 组 id；组集变化后找不到时回落第一组
+  const [activeGid, setActiveGid] = useState<string | null>(null);
   const [copied, setCopied] = useState<'diff' | 'detail' | null>(null);
   const copiedTimer = useRef<number | null>(null);
   const [snapInfo, setSnapInfo] = useState<SnapshotInfo | null>(null);
   useEffect(() => () => { if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current); }, []);
-
-  const toggleCollapsed = (id: string): void => {
-    setCollapsedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const blocks = useMemo<Block[]>(
     () =>
@@ -190,7 +163,11 @@ export default function TrendTables(props: {
   const multi = groups.length >= 2;
   // 第一百三十一轮：组筛选删除，有数据的组全量展示
   const viewBlocks = useMemo(() => blocks.filter((b) => b.g.series.length > 0), [blocks]);
+  // 页签当前组：activeGid 失配（换品/删组）时回落第一组
+  const active = viewBlocks.find((b) => b.g.id === activeGid) ?? viewBlocks[0] ?? null;
   const dates = useMemo(() => buckets.map((b) => bucketDateText(granularity, b.xLabel)), [buckets, granularity]);
+  // 时间列倒序（本轮，Eason）：最新一列在最左。ci.i = 升序内容下标（points 对位）
+  const cols = useMemo(() => buckets.map((b, i) => ({ bk: b, i })).slice().reverse(), [buckets]);
 
   const markCopied = (which: 'diff' | 'detail' | null): void => {
     setCopied(which);
@@ -198,14 +175,23 @@ export default function TrendTables(props: {
     if (which != null) copiedTimer.current = window.setTimeout(() => setCopied(null), 1600);
   };
 
-  // ---- 复制为表格（TSV；列序与表头一致；多组时首列带组号） ----
+  /** 最新时点环比（本轮）：最新筛选时点折后价相对上一时点；用于近4周环比列 */
+  const wowTextOf = (s: Series): string => {
+    const cur = s.points[n - 1]?.price ?? null;
+    const prev = n > 1 ? s.points[n - 2]?.price ?? null : null;
+    if (cur == null || prev == null || prev <= 0) return '—';
+    const wow = (cur - prev) / prev;
+    return `${wow > 0.005 ? '+' : wow < -0.005 ? '−' : '±'}${Math.abs(Math.round(wow * 1000) / 10)}%`;
+  };
+
+  // ---- 复制为表格（TSV；列序与表头一致 = 时间倒序；多组时首列带组号） ----
   const onCopyDiff = async (): Promise<void> => {
-    const lines = [[...(multi ? ['组'] : []), '主分析产品', '产品', '配置', ...dates].join('\t')];
+    const lines = [[...(multi ? ['组'] : []), '主分析产品', '产品', '配置', ...dates.slice().reverse()].join('\t')];
     for (const b of viewBlocks) {
       if (!b.base) continue;
       const base = b.base;
       for (const s of b.diffRows) {
-        const cells = buckets.map((_, i) => {
+        const cells = cols.map(({ i }) => {
           const pa = s.points[i]?.price ?? null;
           const pb = base.points[i]?.price ?? null;
           return pa != null && pb != null ? diffPct(pa, pb)?.text ?? '—' : '—';
@@ -219,11 +205,12 @@ export default function TrendTables(props: {
   };
   const onCopyDetail = async (): Promise<void> => {
     const TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
-    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', ...dates].join('\t')];
+    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', '近4周环比', ...dates.slice().reverse()].join('\t')];
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
+        const wow = wowTextOf(s);
         for (const ty of TYPES) {
-          const cells = buckets.map((_, i) => {
+          const cells = cols.map(({ i }) => {
             const pt = s.points[i];
             if (!pt) return '—';
             if (ty === 'RRP') return formatPrice(pt.rrp, currency);
@@ -236,7 +223,7 @@ export default function TrendTables(props: {
             if (ty === '取证') return pt.url || '—';
             return offerText(pt) || '—';
           });
-          lines.push([...(multi ? [groupOrdinal(b.ordinal)] : []), dedupeSpecText(s.label), configTextOf(b.specByKey.get(s.key)?.romram), ty, ...cells].join('\t'));
+          lines.push([...(multi ? [groupOrdinal(b.ordinal)] : []), dedupeSpecText(s.label), configTextOf(b.specByKey.get(s.key)?.romram), ty, wow, ...cells].join('\t'));
         }
       }
     }
@@ -246,8 +233,8 @@ export default function TrendTables(props: {
   if (groups.length === 0 || buckets.length === 0) return null;
 
   const n = buckets.length;
-  const gridCols = `${W_PROD}px ${W_CONF}px ${W_TYPE}px repeat(${n}, ${W_TIME}px)`;
-  const frozenW = W_PROD + W_CONF + W_TYPE;
+  const gridCols = `${W_PROD}px ${W_CONF}px ${W_TYPE}px ${W_WOW}px repeat(${n}, ${W_TIME}px)`;
+  const frozenW = W_PROD + W_CONF + W_TYPE + W_WOW;
 
   /** 单元格通用样式；c = 网格列号（0 起）：首列外每列左缘 1px hairline
    *  竖向分界线（第一百三十一轮改全列——产品/配置/类型与每个时间列之间都有线） */
@@ -261,10 +248,10 @@ export default function TrendTables(props: {
   });
   /** 左缘冻结列定位（sticky left 随列累计）。
    *  gridColumn 显式指定——否则自动排布会把下一行的单元格补进整行区块的空位 */
-  const frozen = (c: 0 | 1 | 2, bg?: string): CSSProperties => ({
+  const frozen = (c: 0 | 1 | 2 | 3, bg?: string): CSSProperties => ({
     position: 'sticky',
     gridColumn: String(c + 1),
-    left: [0, W_PROD, W_PROD + W_CONF][c],
+    left: [0, W_PROD, W_PROD + W_CONF, W_PROD + W_CONF + W_TYPE][c],
     background: bg ?? color.canvas,
     zIndex: 2,
   });
@@ -331,62 +318,6 @@ export default function TrendTables(props: {
     </div>
   );
 
-  /** 组头（第一百三十一轮精简）：最左收起/展开按钮，标题 = 序号（多组时）
-   *  + 主品 品牌+型号+配置，角色说明词（主分析产品 / 对比产品 N 款）不再出现；
-   *  空对/主品无数据给兜底文案。点击按钮收起该组表体，只留组头 */
-  const groupHeader = (b: Block): JSX.Element => {
-    const collapsed = collapsedIds.has(b.g.id);
-    const baseSpec = b.base != null ? b.specByKey.get(b.base.key) : undefined;
-    return fullRow(
-      `g-${b.g.id}`,
-      { background: color.canvasSoft, borderBottom: `1px solid ${color.hairlineStrong}` },
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px' }}>
-        <button
-          type="button"
-          className="tt-fold"
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? '展开此组表格' : '收起此组表格'}
-          title={collapsed ? '展开此组表格' : '收起此组表格'}
-          onClick={() => toggleCollapsed(b.g.id)}
-          style={FOLD_STYLE}
-        >
-          <RightOutlined
-            style={{
-              fontSize: 11,
-              color: color.mute,
-              transform: collapsed ? undefined : 'rotate(90deg)',
-              transition: `transform ${motion.fast}ms`,
-            }}
-          />
-        </button>
-        {multi && (
-          <>
-            <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.mute }}>
-              {groupNumText(b.ordinal)}
-            </span>
-            <span aria-hidden style={{ fontSize: 13, color: color.hairlineStrong }}>·</span>
-          </>
-        )}
-        {b.base ? (
-          <>
-            <BrandDot brand={b.base.brand} />
-            <span style={{ fontSize: 14, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
-              {b.base.brand} {baseSpec?.modelName ?? dedupeSpecText(b.base.label)}
-            </span>
-            <span aria-hidden style={{ fontSize: 13, color: color.hairlineStrong }}>·</span>
-            <span className="tnum" style={{ fontSize: 11, color: color.body, whiteSpace: 'nowrap' }}>
-              {configTextOf(baseSpec?.romram)}
-            </span>
-          </>
-        ) : (
-          <span style={{ fontSize: 14, fontWeight: 700, color: color.mute, whiteSpace: 'nowrap' }}>
-            {b.g.mainKey == null ? EMPTY_MAIN_LABEL : '所选时间范围内无数据'}
-          </span>
-        )}
-      </div>,
-    );
-  };
-
   /** 区块标题行（产品价差 / 核心信息明细） */
   const captionRow = (title: string, key: string) =>
     fullRow(
@@ -395,21 +326,21 @@ export default function TrendTables(props: {
       <div style={{ padding: '6px 10px', fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>{title}</div>,
     );
 
-  /** 列头行：产品/配置/类型（冻结）+ 时间列（每桶一列，图上同一时间轴）。
-   *  第一百四十八轮：列头随区块标题走，产品价差 / 核心信息明细标题下各渲染
-   *  一条一模一样的列头（part 区分两条列头的 React key）。
-   *  第一百八十二轮：周粒度列头 = 「周号＋日期」双行（2026W19 + 05-06），
-   *  消除图上 W 号、表内只有日期的口径换算成本 */
+  /** 列头行：产品/配置/类型/近4周环比（冻结）+ 时间列（每桶一列，图上同一时间轴，
+   *  本轮起倒序 = 最新在左）。列头随区块标题走（第一百四十八轮），产品价差 /
+   *  核心信息明细标题下各渲染一条（part 区分 React key）。
+   *  周粒度列头 = 「周号＋日期」双行（第一百八十二轮）；本轮周号字体与日期统一
+   *  （去 mono、同 11px），消除同栏两行字体不一致 */
   const headerRow = (gid: string, part: string): JSX.Element[] => [
-    ...(['产品', '配置', '类型'] as const).map((t, c) => (
+    ...(['产品', '配置', '类型', '近4周环比'] as const).map((t, c) => (
       <div
         key={`${gid}-h-${part}-${t}`}
         role="columnheader"
         style={{
           ...cell(c),
-          ...frozen(c as 0 | 1 | 2, color.canvas),
+          ...frozen(c as 0 | 1 | 2 | 3, color.canvas),
           borderBottom: `1px solid ${color.hairlineStrong}`,
-          justifyContent: c === 2 ? 'flex-end' : 'flex-start',
+          justifyContent: c >= 2 ? 'flex-end' : 'flex-start',
           fontSize: 11,
           color: color.mute,
         }}
@@ -417,16 +348,17 @@ export default function TrendTables(props: {
         {t}
       </div>
     )),
-    ...dates.map((d, i) => {
-      const wk = granularity === 'week' ? weekIdText(buckets[i].id) : null;
+    ...cols.map(({ bk, i }, ri) => {
+      const d = dates[i];
+      const wk = granularity === 'week' ? weekIdText(bk.id) : null;
       return (
         <div
-          key={`${gid}-h-${part}-${buckets[i].id}`}
+          key={`${gid}-h-${part}-${bk.id}`}
           role="columnheader"
           className="tnum"
           title={wk ? `${wk} · ${d}` : undefined}
           style={{
-            ...cell(3 + i),
+            ...cell(4 + ri), gridColumn: String(5 + ri),
             background: color.canvas,
             borderBottom: `1px solid ${color.hairlineStrong}`,
             justifyContent: 'center',
@@ -437,8 +369,8 @@ export default function TrendTables(props: {
         >
           {wk ? (
             <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: '13px' }}>
-              <span className="mono" style={{ fontSize: 10, color: color.mute }}>{wk}</span>
-              <span>{d}</span>
+              <span style={{ fontSize: 11, color: color.mute }}>{wk}</span>
+              <span style={{ fontSize: 11, color: color.body }}>{d}</span>
             </span>
           ) : (
             d
@@ -449,14 +381,13 @@ export default function TrendTables(props: {
   ];
 
   /** 组表体：产品价差（标题 + 列头 + 主品基准行 + 对比行）+ 核心信息明细
-   *  （标题 + 列头 + 每产品 5 行）；组头收起时整块不渲染（第一百三十一轮） */
+   *  （标题 + 列头 + 每产品 6 行）；本轮起一次只渲染页签选中的一组 */
   const groupBody = (b: Block): JSX.Element => {
     const hasDiff = b.base != null && b.diffRows.length > 0;
     return (
       <>
-        {/* —— 产品价差：本组相对主分析产品。第一百四十八轮：列头移到区块标题下；
-            主品行补进本节首行作基准锚——自己比自己无价差、时间列整行置空，
-            浅蓝衬底与明细区主品行同语言 —— */}
+        {/* —— 产品价差：本组相对主分析产品。列头随区块标题走；主品行补进本节
+            首行作基准锚——自己比自己无价差、时间列整行置空，浅蓝衬底 —— */}
         {hasDiff && (
           <>
             {captionRow('产品价差', `cap-diff-${b.g.id}`)}
@@ -465,8 +396,10 @@ export default function TrendTables(props: {
               <div key={`d-${b.g.id}-base`} role="row" style={{ display: 'contents' }}>
                 {identityCells(b.base, b.specByKey, 1, `d-${b.g.id}-base`, true)}
                 {typeCell('基准', true, `d-${b.g.id}-base-t`)}
-                {buckets.map((bk, i) => (
-                  <div key={`d-${b.g.id}-base-${bk.id}`} role="cell" style={{ ...cell(3 + i), background: MAIN_TINT }} />
+                {/* 近4周环比列在价差区不承载（占位防空位回填） */}
+                <div key={`d-${b.g.id}-base-w`} role="cell" style={{ ...cell(3), gridColumn: '4', background: MAIN_TINT }} />
+                {cols.map(({ bk }, ri) => (
+                  <div key={`d-${b.g.id}-base-${bk.id}`} role="cell" style={{ ...cell(4 + ri), gridColumn: String(5 + ri), background: MAIN_TINT }} />
                 ))}
               </div>
             )}
@@ -474,7 +407,8 @@ export default function TrendTables(props: {
               <div key={`d-${b.g.id}-${s.key}`} role="row" style={{ display: 'contents' }}>
                 {identityCells(s, b.specByKey, 1, `d-${b.g.id}-${s.key}`, false)}
                 {typeCell('价差', false, `d-${b.g.id}-${s.key}-t`)}
-                {buckets.map((bk, i) => {
+                <div key={`d-${b.g.id}-${s.key}-w`} role="cell" style={{ ...cell(3), gridColumn: '4' }} />
+                {cols.map(({ bk, i }, ri) => {
                   const pa = s.points[i]?.price ?? null;
                   const pb = b.base?.points[i]?.price ?? null;
                   const d = pa != null && pb != null ? diffPct(pa, pb) : null;
@@ -485,7 +419,7 @@ export default function TrendTables(props: {
                       role="cell"
                       className="tnum"
                       style={{
-                        ...cell(3 + i),
+                        ...cell(4 + ri), gridColumn: String(5 + ri),
                         justifyContent: 'flex-end',
                         fontSize: 12,
                         fontWeight: 600,
@@ -503,8 +437,9 @@ export default function TrendTables(props: {
             <div aria-hidden style={{ gridColumn: '1 / -1', height: 14, background: color.canvas }} />
           </>
         )}
-        {/* —— 核心信息明细：列头随标题走（第一百四十八轮），每产品 7 行
-            （RRP / 折后价 / 折扣率 / 近4周环比 / 平台-店铺 / 取证 / offer）× 时间列 —— */}
+        {/* —— 核心信息明细：列头随标题走，每产品 6 行（RRP / 折后价 / 折扣率 /
+            平台-店铺 / 取证 / offer）× 时间列（倒序）；近4周环比 = 类型后冻结列，
+            只显示最新筛选时点的环比（本轮，Eason） —— */}
         {captionRow('核心信息明细', `cap-detail-${b.g.id}`)}
         {headerRow(b.g.id, 'detail')}
         {b.g.series.map((s) => {
@@ -513,6 +448,11 @@ export default function TrendTables(props: {
           const main = b.base != null && s.key === b.base.key;
           const bg = main ? MAIN_TINT : undefined;
           const latestIdx = latestIdxOf(s, n);
+          const wow = (() => {
+            const cur = s.points[n - 1]?.price ?? null;
+            const prev = n > 1 ? s.points[n - 2]?.price ?? null : null;
+            return cur != null && prev != null && prev > 0 ? (cur - prev) / prev : null;
+          })();
           const openSnap = (i: number): void => {
             const pt = s.points[i];
             setSnapInfo({
@@ -525,137 +465,147 @@ export default function TrendTables(props: {
             });
           };
           const rows: JSX.Element[] = [...identityCells(s, b.specByKey, DETAIL_SPAN, p, main)];
+          // 近4周环比冻结列（类型之后）：本列 = 最新筛选时点折后价较上一时点涨跌，
+          // 跌 = 蓝（更便宜，与价差同语言）、涨 = 红；该组首行起跨全部明细行
+          rows.push(
+            <div
+              key={`${p}-wow`}
+              role="cell"
+              aria-rowspan={DETAIL_SPAN}
+              style={{ ...cell(3), ...frozen(3, main ? MAIN_TINT : color.canvas), gridRow: `span ${DETAIL_SPAN}`, justifyContent: 'flex-end' }}
+            >
+              {wow != null ? (
+                <span
+                  className="tnum"
+                  title="折后价较上一周期涨跌（最新时点）"
+                  style={{ fontSize: 12, fontWeight: 600, color: wow > 0.005 ? color.error : wow < -0.005 ? color.link : color.body, whiteSpace: 'nowrap' }}
+                >
+                  {wow > 0 ? '+' : wow < 0 ? '−' : '±'}
+                  {Math.abs(Math.round(wow * 1000) / 10)}%
+                </span>
+              ) : (
+                emptyCell
+              )}
+            </div>,
+          );
           // RRP 行
           rows.push(typeCell('RRP', main, `${p}-rrp`));
-          for (let i = 0; i < n; i++) {
-            const pt = s.points[i];
-            rows.push(
-              <div key={`${p}-rrp-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
-                {pt?.rrp != null ? (
-                  <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap' }}>
-                    {formatPrice(pt.rrp, currency)}
-                  </span>
-                ) : (
-                  emptyCell
-                )}
-              </div>,
-            );
-          }
+          rows.push(
+            ...cols.map(({ bk, i }, ri) => {
+              const pt = s.points[i];
+              return (
+                <div key={`${p}-rrp-${bk.id}`} role="cell" style={{ ...cell(4 + ri), gridColumn: String(5 + ri), justifyContent: 'flex-end', background: bg }}>
+                  {pt?.rrp != null ? (
+                    <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap' }}>
+                      {formatPrice(pt.rrp, currency)}
+                    </span>
+                  ) : (
+                    emptyCell
+                  )}
+                </div>
+              );
+            }),
+          )
           // 折后价行
           rows.push(typeCell('折后价', main, `${p}-price`));
-          for (let i = 0; i < n; i++) {
-            const pt = s.points[i];
-            rows.push(
-              <div key={`${p}-price-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
-                {pt?.price != null ? (
-                  <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-                    {formatPrice(pt.price, currency)}
-                  </span>
-                ) : (
-                  emptyCell
-                )}
-              </div>,
-            );
-          }
+          rows.push(
+            ...cols.map(({ bk, i }, ri) => {
+              const pt = s.points[i];
+              return (
+                <div key={`${p}-price-${bk.id}`} role="cell" style={{ ...cell(4 + ri), gridColumn: String(5 + ri), justifyContent: 'flex-end', background: bg }}>
+                  {pt?.price != null ? (
+                    <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
+                      {formatPrice(pt.price, currency)}
+                    </span>
+                  ) : (
+                    emptyCell
+                  )}
+                </div>
+              );
+            }),
+          )
           // 折扣率行
           rows.push(typeCell('折扣率', main, `${p}-disc`));
-          for (let i = 0; i < n; i++) {
-            const disc = discountOf(s.points[i]);
-            rows.push(
-              <div key={`${p}-disc-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
-                {disc != null ? (
-                  <span className="tnum" style={{ fontSize: 12, color: disc <= -0.15 ? '#b45309' : color.body, whiteSpace: 'nowrap' }}>
-                    {fmtPct(disc)}
-                  </span>
-                ) : (
-                  emptyCell
-                )}
-              </div>,
-            );
-          }
-          // 近4周环比行（第一百八十轮，Eason）：只填最后 4 列——每列折后价相对
-          // 上一列的涨跌；更早列留空。跌 = 蓝（更便宜，与价差同语言）、涨 = 红
-          rows.push(typeCell('近4周环比', main, `${p}-wow`));
-          for (let i = 0; i < n; i++) {
-            const cur = s.points[i]?.price ?? null;
-            const prev = i > 0 ? s.points[i - 1]?.price ?? null : null;
-            const inLast4 = i >= n - 4;
-            const wow = inLast4 && cur != null && prev != null && prev > 0 ? (cur - prev) / prev : null;
-            rows.push(
-              <div key={`${p}-wow-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
-                {wow != null ? (
-                  <span
-                    className="tnum"
-                    title="折后价较上一周期涨跌（近 4 个周期）"
-                    style={{ fontSize: 12, fontWeight: 600, color: wow > 0.005 ? color.error : wow < -0.005 ? color.link : color.body, whiteSpace: 'nowrap' }}
-                  >
-                    {wow > 0 ? '+' : wow < 0 ? '−' : '±'}
-                    {Math.abs(Math.round(wow * 1000) / 10)}%
-                  </span>
-                ) : (
-                  emptyCell
-                )}
-              </div>,
-            );
-          }
+          rows.push(
+            ...cols.map(({ bk, i }, ri) => {
+              const disc = discountOf(s.points[i]);
+              return (
+                <div key={`${p}-disc-${bk.id}`} role="cell" style={{ ...cell(4 + ri), gridColumn: String(5 + ri), justifyContent: 'flex-end', background: bg }}>
+                  {disc != null ? (
+                    <span className="tnum" style={{ fontSize: 12, color: disc <= -0.15 ? '#b45309' : color.body, whiteSpace: 'nowrap' }}>
+                      {fmtPct(disc)}
+                    </span>
+                  ) : (
+                    emptyCell
+                  )}
+                </div>
+              );
+            }),
+          )
           // 平台-店铺行（第一百六十二轮，Eason）：该时点取数来源；自动口径每周可随
           // 最低价来源变化，逐列说明
           rows.push(typeCell('平台-店铺', main, `${p}-chan`));
-          for (let i = 0; i < n; i++) {
-            const chan = s.points[i]?.channelName ?? null;
-            rows.push(
-              <div key={`${p}-chan-${i}`} role="cell" style={{ ...cell(3 + i), background: bg }}>
-                {chan ? (
-                  <span title={`该时点取数渠道：${chan}`} style={{ fontSize: 11, color: color.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {chan}
-                  </span>
-                ) : (
-                  emptyCell
-                )}
-              </div>,
-            );
-          }
+          rows.push(
+            ...cols.map(({ bk, i }, ri) => {
+              const chan = s.points[i]?.channelName ?? null;
+              return (
+                <div key={`${p}-chan-${bk.id}`} role="cell" style={{ ...cell(4 + ri), gridColumn: String(5 + ri), background: bg }}>
+                  {chan ? (
+                    <span title={`该时点取数渠道：${chan}`} style={{ fontSize: 11, color: color.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {chan}
+                    </span>
+                  ) : (
+                    emptyCell
+                  )}
+                </div>
+              );
+            }),
+          )
           // 取证行：该时点页面快照入口 + 最新时点商城现页
           rows.push(typeCell('取证', main, `${p}-evid`));
-          for (let i = 0; i < n; i++) {
-            const url = s.points[i]?.url || '';
-            rows.push(
-              <div key={`${p}-evid-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', gap: 8, background: bg }}>
-                {url ? (
-                  <>
-                    <button type="button" className="tt-evi" title="查看该时点的电商页面快照" onClick={() => openSnap(i)} style={EVID_STYLE}>
-                      <PictureOutlined style={{ fontSize: 11 }} />
-                      快照
-                    </button>
-                    {i === latestIdx && (
-                      <a className="tt-evi" href={url} target="_blank" rel="noreferrer" title="打开商城现页" style={EVID_STYLE}>
-                        <ExportOutlined style={{ fontSize: 11 }} />
-                        现页
-                      </a>
-                    )}
-                  </>
-                ) : (
-                  emptyCell
-                )}
-              </div>,
-            );
-          }
+          rows.push(
+            ...cols.map(({ bk, i }, ri) => {
+              const url = s.points[i]?.url || '';
+              return (
+                <div key={`${p}-evid-${bk.id}`} role="cell" style={{ ...cell(4 + ri), gridColumn: String(5 + ri), justifyContent: 'flex-end', gap: 8, background: bg }}>
+                  {url ? (
+                    <>
+                      <button type="button" className="tt-evi" title="查看该时点的电商页面快照" onClick={() => openSnap(i)} style={EVID_STYLE}>
+                        <PictureOutlined style={{ fontSize: 11 }} />
+                        快照
+                      </button>
+                      {i === latestIdx && (
+                        <a className="tt-evi" href={url} target="_blank" rel="noreferrer" title="打开商城现页" style={EVID_STYLE}>
+                          <ExportOutlined style={{ fontSize: 11 }} />
+                          现页
+                        </a>
+                      )}
+                    </>
+                  ) : (
+                    emptyCell
+                  )}
+                </div>
+              );
+            }),
+          )
           // offer 行（第一百六十二轮更名，原「权益」）：高度随内容自适应，全文完整显示
           rows.push(typeCell('offer', main, `${p}-offer`));
-          for (let i = 0; i < n; i++) {
-            const text = offerText(s.points[i]);
-            rows.push(
-              <div key={`${p}-offer-${i}`} role="cell" style={{ ...cell(3 + i), alignItems: 'flex-start', background: bg }}>
-                {text ? (
-                  <span style={{ fontSize: 10, lineHeight: '13px', color: color.body, wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                    {text}
-                  </span>
-                ) : (
-                  emptyCell
-                )}
-              </div>,
-            );
-          }
+          rows.push(
+            ...cols.map(({ bk, i }, ri) => {
+              const text = offerText(s.points[i]);
+              return (
+                <div key={`${p}-offer-${bk.id}`} role="cell" style={{ ...cell(4 + ri), gridColumn: String(5 + ri), alignItems: 'flex-start', background: bg }}>
+                  {text ? (
+                    <span style={{ fontSize: 10, lineHeight: '13px', color: color.body, wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                      {text}
+                    </span>
+                  ) : (
+                    emptyCell
+                  )}
+                </div>
+              );
+            }),
+          )
           return (
             <div key={p} role="row" style={{ display: 'contents' }}>
               {rows}
@@ -668,7 +618,7 @@ export default function TrendTables(props: {
 
   return (
     <div>
-      {/* 标题行：卡标题 + 两表复制（第一百三十一轮：组筛选下拉删除，各组全量展示） */}
+      {/* 标题行：卡标题 + 两表复制（复制含全部组；页签只管看哪一组） */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>价差与明细</h2>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -683,33 +633,61 @@ export default function TrendTables(props: {
         </span>
       </div>
 
-      {/* 横向滚动区：整张网格只横向滚动、高度随内容伸展（无纵向滚动条）。
+      {/* 组别页签（本轮，Eason）：一次看一组，替代原纵向堆叠；风格 = 图表卡页签
+          （文字 + 当前组墨色下划线）。单组不渲染页签 */}
+      {viewBlocks.length >= 2 && active != null && (
+        <div role="tablist" aria-label="产品组" style={{ display: 'flex', alignItems: 'flex-end', gap: 18, marginBottom: 12, borderBottom: `1px solid ${color.hairline}` }}>
+          {viewBlocks.map((b) => {
+            const on = b.g.id === active.g.id;
+            return (
+              <button
+                key={b.g.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setActiveGid(b.g.id)}
+                className="lpl-chart-tab"
+                style={{
+                  height: 32,
+                  marginBottom: -1,
+                  padding: '0 2px',
+                  border: 'none',
+                  borderBottom: `2px solid ${on ? color.ink : 'transparent'}`,
+                  background: 'transparent',
+                  font: 'inherit',
+                  fontSize: 13,
+                  fontWeight: on ? 600 : 400,
+                  color: on ? color.ink : color.body,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'color 160ms ease, border-color 160ms ease, background-color 160ms ease',
+                }}
+              >
+                {blockTitle(b)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 横向滚动区：只渲染页签选中组的表体；整张网格只横向滚动（无纵向滚动条）。
           ARIA（第一百八十二轮）：div 网格补全 table 语义——row/cell/列头/行头，
           读屏按行列关系朗读，冻结列与合并单元格经 aria-rowspan 表达 */}
       <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}>
-        <div role="table" aria-label="价差与明细" style={{ display: 'grid', gridTemplateColumns: gridCols, minWidth: frozenW + n * W_TIME, alignItems: 'stretch' }}>
-          {viewBlocks.map((b, bi) => (
-            <div key={b.g.id} role="rowgroup" style={{ display: 'contents' }}>
-              {/* 组间隔（首组不加） */}
-              {bi > 0 && <div aria-hidden style={{ gridColumn: '1 / -1', height: 26, background: color.canvas }} />}
-              {groupHeader(b)}
-              {/* 收起（第一百三十一轮）：只留组头，表体整块不渲染 */}
-              {!collapsedIds.has(b.g.id) && groupBody(b)}
-            </div>
-          ))}
-        </div>
+        {active != null && (
+          <div role="table" aria-label="价差与明细" style={{ display: 'grid', gridTemplateColumns: gridCols, gridAutoFlow: 'row dense', minWidth: frozenW + n * W_TIME, alignItems: 'stretch' }}>
+            {groupBody(active)}
+          </div>
+        )}
         {viewBlocks.length === 0 && (
           <div style={{ padding: '14px 10px', fontSize: 12, color: color.mute }}>暂无可展示的数据</div>
         )}
       </div>
       {/* 页面快照浮窗（居中小弹框） */}
       <SnapshotModal info={snapInfo} onClose={() => setSnapInfo(null)} />
-      {/* 取证小件悬停态 + 组头收起按钮悬停/聚焦态（内联样式无 :hover，工具类集中在此） */}
+      {/* 取证小件悬停态（内联样式无 :hover，工具类集中在此） */}
       <style>{`
         .tt-evi:hover { text-decoration: underline; }
-        .tt-fold { transition: background ${motion.fast}ms; }
-        .tt-fold:hover { background: rgba(0, 0, 0, 0.06); }
-        .tt-fold:focus-visible { outline: 2px solid ${color.link}; outline-offset: -2px; }
       `}</style>
     </div>
   );

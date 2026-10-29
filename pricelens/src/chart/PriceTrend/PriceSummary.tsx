@@ -1,8 +1,8 @@
 // ============================================================
 // 价格摘要条（第三十六轮定版 / 第四十六轮改版）：核心视觉页签——固定显示窗口内
 // 最新时点（不随悬停变换，时点明细看悬停浮窗）。条目 = 并排 3 个等宽小框
-// （圆角与大框一致），每框必含三件套：折扣率 + 折后价 + 划线 RRP（用户口径：
-// 三项恒显，0% 也不省略）；我司与竞品完全同款；来源为取证超链接。折扣徽章
+// （圆角与大框一致），每框必含三件套：RRP + 折后价 + 折扣率（第一百八十四轮改序，
+// 与悬停小卡同序；三项恒显，0% 也不省略）；我司与竞品完全同款；来源为取证超链接。折扣徽章
 // 0% 中性蓝、≥15% 转琥珀预警、溢价 +X% 琥珀。数据 = buildPriceSummary（最新有值点）。
 // 第五十六轮（领导页面清洁要求）：时点页签撤出看板主视觉——stack/chrome 两 prop
 // 供时点明细抽屉复用（单列纵向堆叠、无外层卡壳），入口 = 工具行「⋯ 更多」菜单。
@@ -186,7 +186,12 @@ export default function PriceSummary({
           {bellNode}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-          {it.discount != null && <DiscountBadge discount={it.discount} />}
+          {/* 列序（第一百八十四轮，Eason）：RRP → 折后价 → 比率，与悬停小卡同序 */}
+          {it.rrp != null && (
+            <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>
+              {formatPrice(it.rrp, currency)}
+            </span>
+          )}
           <span
             className="tnum"
             title={it.price != null ? undefined : '该时点暂无价格'}
@@ -194,11 +199,7 @@ export default function PriceSummary({
           >
             {formatPrice(it.price, currency)}
           </span>
-          {it.rrp != null && (
-            <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>
-              {formatPrice(it.rrp, currency)}
-            </span>
-          )}
+          {it.discount != null && <DiscountBadge discount={it.discount} />}
           <span style={{ flex: '1 1 0', minWidth: 0 }} />
           {shopNode}
         </div>
@@ -237,9 +238,13 @@ export default function PriceSummary({
         </span>
       </span>
       {Sep}
-      {/* 中区：价格信息（折扣率+现价+RRP，居中） */}
+      {/* 中区：价格信息（RRP → 现价 → 折扣率，第一百八十四轮改序与悬停小卡同序） */}
       <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-        {it.discount != null && <DiscountBadge discount={it.discount} />}
+        {it.rrp != null && (
+          <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>
+            {formatPrice(it.rrp, currency)}
+          </span>
+        )}
         <span
           className="tnum"
           title={it.price != null ? undefined : '该时点暂无价格'}
@@ -247,11 +252,7 @@ export default function PriceSummary({
         >
           {formatPrice(it.price, currency)}
         </span>
-        {it.rrp != null && (
-          <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>
-            {formatPrice(it.rrp, currency)}
-          </span>
-        )}
+        {it.discount != null && <DiscountBadge discount={it.discount} />}
       </span>
       {Sep}
       {/* 右区：店铺链接 + 订阅铃铛（整体居右；铃铛第五十四轮放大改实心——更粗更显眼） */}

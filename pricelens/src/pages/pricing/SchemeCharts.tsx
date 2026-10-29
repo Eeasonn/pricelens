@@ -281,18 +281,18 @@ export function ForecastChart({ series }: { series: ForecastSeries }) {
       legend: {
         top: 0, right: 0, itemWidth: 14, itemHeight: 8, icon: 'roundRect',
         textStyle: { fontSize: fontSize.caption, color: color.body, fontFamily: font.family },
-        data: ['实际周销', '预估中枢', '上一代同期'],
+        data: ['实际周销', '预估中枢', '上一代同期基线'],
       },
       tooltip: {
         ...TOOLTIP, trigger: 'axis',
         formatter: (ps: { axisValue: string; seriesName: string; value: number | null; marker: string }[]) => {
           const actual = ps.find((p) => p.seriesName === '实际周销');
           const mid = ps.find((p) => p.seriesName === '预估中枢');
-          const prevRef = ps.find((p) => p.seriesName === '上一代同期');
+          const prevRef = ps.find((p) => p.seriesName === '上一代同期基线');
           return `<div style="font-weight:600;color:${color.ink};margin-bottom:4px">${ps[0]?.axisValue ?? ''}</div>` +
             (actual?.value != null ? `<div>实际周销 ${actual.value.toFixed(1)} 千台</div>` : '') +
             (mid?.value != null ? `<div>预估中枢 ${mid.value.toFixed(1)} 千台（区间 ±${Math.round((mid.value * 0.12) * 10) / 10}）</div>` : '') +
-            (prevRef?.value != null ? `<div>上一代同期 ${prevRef.value.toFixed(1)} 千台</div>` : '');
+            (prevRef?.value != null ? `<div>上一代同期基线 ${prevRef.value.toFixed(1)} 千台</div>` : '');
         },
       },
       xAxis: {
@@ -318,7 +318,7 @@ export function ForecastChart({ series }: { series: ForecastSeries }) {
           lineStyle: { width: 2, type: 'dashed', color: color.link }, itemStyle: { color: color.link }, z: 3,
         },
         {
-          name: '上一代同期', type: 'line', data: series.prevRef, symbol: 'none', smooth: true,
+          name: '上一代同期基线', type: 'line', data: series.prevRef, symbol: 'none', smooth: true,
           lineStyle: { width: 1.2, color: color.hairlineStrong }, itemStyle: { color: color.hairlineStrong }, z: 2,
         },
       ],

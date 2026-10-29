@@ -11,7 +11,6 @@ import type { CurrencyMode, OfferInfo, Series, SeriesPoint } from '../../../data
 import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, fmtInt, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, xPxOf, yPxOf, type Bucket, type YScale } from '../helpers';
 import {
   buildChangeMarks,
-  buildExtremeMarks,
   buildEndpointBadges,
   buildEndpointMarks,
   buildGeom,
@@ -1229,18 +1228,3 @@ describe('buildChangeMarks（价格变化点，第三十五轮起；第四十二
   });
 });
 
-describe('buildExtremeMarks（最高/最低点标记，第三十六轮）', () => {
-  it('窗口极值 + 首个出现下标；全程一价不画', () => {
-    const scale = computeYAxis({ series: [], priceTypes: DISC_ONLY, sliderScale: 1 });
-    const pts = Array.from({ length: 6 }, (_, i) => PT({ price: [100, 120, 110, 90, 105, 100][i] }));
-    const g = mkGeom(scale, 1200, 6, 800, 96);
-    const marks = buildExtremeMarks({ geom: g, series: [mkSeries({ points: pts })], priceTypes: DISC_ONLY });
-    expect(marks).toHaveLength(1);
-    expect(marks[0].maxV).toBe(120);
-    expect(marks[0].maxIdx).toBe(1);
-    expect(marks[0].minV).toBe(90);
-    expect(marks[0].minIdx).toBe(3);
-    const flat = buildExtremeMarks({ geom: g, series: [mkSeries({ key: 'flat', points: [PT({ price: 100 }), PT({ price: 100 })] })], priceTypes: DISC_ONLY });
-    expect(flat).toHaveLength(0);
-  });
-});

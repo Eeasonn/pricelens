@@ -43,7 +43,7 @@
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover } from 'antd';
-import { PictureOutlined, TagOutlined, CloseOutlined } from '@ant-design/icons';
+import { TagOutlined, CloseOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -53,7 +53,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, font, fontSize, radius, selectSoft, selectSoftInk, shadow , formatPrice } from '../../theme/tokens';
+import { color, font, fontSize, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 import { measureText } from '../../components/ProductCascader';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import { useFilters } from '../../state/FiltersContext';
@@ -80,7 +80,6 @@ import {
 // 纯计算层（第十八轮抽离）：几何/标签计划/端点/option/DOM 数据全部显式入参纯函数
 import {
   buildChangeMarks,
-  buildExtremeMarks,
   curveNameOf,
   FOCUS_MODE_THRESHOLD,
 
@@ -98,13 +97,11 @@ import {
   resolveLineShape,
   scaleToDisplay,
   thinTickRows,
-  type ExtremeMark,
   type LineShapeChoice,
   type PromoBand,
   type SeriesNameItem,
 } from './chartModel';
 import OfferPopover from './OfferPopover';
-import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 import ChartToolbar from './ChartToolbar';
 import YLimitHandles, { type YLimitState } from './YLimitHandles';
 import BrandDot from '../../components/BrandMark';
@@ -153,8 +150,6 @@ export interface ChartProps {
   onPromoBandsOn?: (v: boolean) => void;
   /** 促销带数据（index 层按窗口算好；空 = 无带） */
   promoBands?: PromoBand[];
-  /** 最高/最低价点标签（第三十六轮改口径：Keepa 式点旁胶囊；标题行开关） */
-  maxMinOn?: boolean;
   /** 价格变化提醒阈值（第四十六轮挪出齿轮到标题行，受控）：相较前一有值点
    *  |Δ|≥阈值出 ↓/↑ 徽标；null=关闭；0=标出全部真实变化 */
   changeThreshold?: number | null;
@@ -165,8 +160,6 @@ export interface ChartProps {
   offersOn?: boolean;
   /** offer 权益开关提交 */
   onOffersOn?: (v: boolean) => void;
-  /** 最高/最低价开关提交（中区圆框组） */
-  onMaxMinOn?: (v: boolean) => void;
   /** 价格变化提醒开关+阈值提交（中区圆框组；null=关） */
   onChangeThreshold?: (v: number | null) => void;
   // ---- 第五十四轮追补：工具行抽 ChartToolbar 共享组件；分离模式面板 chrome=false
@@ -178,9 +171,13 @@ export interface ChartProps {
   legend?: ReactNode;
   /** RRP 胶囊之后的插槽（第一百七十八轮）：短竖线 + 全局「仅查看主产品」 */
   priceTypesAfter?: ReactNode;
-  /** 悬停小页签比率口径（第一百八十轮）：discount = 折扣率（vs RRP，缺省）；
-   *  wow = 周环比（vs 上一周期） */
+  /** 悬停小页签比率口径：wow = 周环比（默认）；discount = 折扣率（vs RRP） */
   tipMode?: 'discount' | 'wow';
+  onTipMode?: (v: 'discount' | 'wow') => void;
+  onLabelMode?: (v: 'detail' | 'compact') => void;
+  /** 时点摘要开合（工具行 ⋯ 菜单；不传 = 菜单里不出现） */
+  pointPanelOpen?: boolean;
+  onPointPanelToggle?: () => void;
   /** 轴列绘制（第五十四轮追补⑤）：false = 面板不画档位带/刻度标签/断轴省略号——
    *  分离模式这三样由卡片外侧的共享轴列（SplitAxisColumn）统一承担，面板只留绘图区。
    *  绘图区网格提示线已移除（第九十轮） */
@@ -417,7 +414,6 @@ export default function Chart(props: ChartProps) {
   const chartDivRef = useRef<HTMLDivElement | null>(null); // ECharts 挂载层（背景带之下、DOM 覆盖层之下）
   const chartRef = useRef<echarts.ECharts | null>(null);
   const [width, setWidth] = useState(0);
-  const [snapInfo, setSnapInfo] = useState<SnapshotInfo | null>(null); // 悬停明细行尾「快照」取证弹窗
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   // 第一百一十四轮：悬停纵向位置（容器坐标，钳入绘图区）——横向虚线跟随；
   // 多面板布局经 onCrosshairYMove 上报、crosshairY 受控回灌全部面板
@@ -864,12 +860,6 @@ export default function Chart(props: ChartProps) {
     () => (changeThreshold == null ? new Map<string, number>() : buildChangeMarks(series, changeThreshold)),
     [series, changeThreshold],
   );
-  // 最高/最低极值点（第三十六轮点标签口径；主价口径窗口极值及首个出现下标）
-  const extremeMarks: ExtremeMark[] = useMemo(
-    () => buildExtremeMarks({ geom, series, priceTypes }),
-    [geom, series, priceTypes],
-  );
-
   const empty = series.length === 0;
   const brandByKey = useMemo(() => new Map([...series, ...nameAll].map((s) => [s.key, s.brand])), [series, nameAll]);
 
@@ -970,13 +960,12 @@ export default function Chart(props: ChartProps) {
                 height: gridTop,
                 width: '100%',
                 display: 'flex',
-                // 第一百七十九轮（Eason）：注入 legend（产品药丸带）时改上下两行——
-                // 工具行（含大促/权益/⋯）整行在上、药丸带独立整行在下（与分离模式
-                // 「共享工具行 → 面板药丸带」同构），药丸带拿到完整一行空间；
-                // 无 legend 保持单行工具行
+                // 功能键一行在上，产品药丸一行在下；两行之间、药丸与绘图区之间留出间距
                 flexDirection: props.legend ? 'column' : 'row',
                 alignItems: props.legend ? 'stretch' : 'center',
-                padding: '0 6px',
+                justifyContent: 'flex-start',
+                gap: props.legend ? 20 : 0,
+                padding: props.legend ? '8px 6px 20px' : '0 6px',
                 boxSizing: 'border-box',
                 zIndex: 3,
               }}
@@ -996,19 +985,23 @@ export default function Chart(props: ChartProps) {
                 onLineShape={commitLineShape}
                 priceTypes={priceTypes}
                 onPriceTypeToggle={props.onPriceTypeToggle}
+                tipMode={props.tipMode}
+                onTipMode={props.onTipMode}
+                labelMode={props.labelMode}
+                onLabelMode={props.onLabelMode}
+                pointPanelOpen={props.pointPanelOpen}
+                onPointPanelToggle={props.onPointPanelToggle}
                 promoBandsOn={promoBandsOn}
                 onPromoBandsOn={commitPromoBandsOn}
                 offersOn={props.offersOn}
                 onOffersOn={props.onOffersOn}
-                maxMinOn={props.maxMinOn}
-                onMaxMinOn={props.onMaxMinOn}
                 changeThreshold={changeThreshold}
                 onChangeThreshold={props.onChangeThreshold}
               />
               {/* 药丸带整行（第一百七十九轮）：工具行之下的完整一行（左起满宽，
                   垂直居中于剩余高度）；横向超出隐匿（药丸带自带块内滚动） */}
               {props.legend && (
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+                <div style={{ minHeight: 0, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
                   {props.legend}
                 </div>
               )}
@@ -1173,68 +1166,6 @@ export default function Chart(props: ChartProps) {
               onLimit={props.onYLimit}
             />
           )}
-          {/* 最高/最低点标签（第三十六轮，Keepa 式点旁胶囊，不再拉全宽虚线）：
-              最高 = 点上方胶囊；最低 = 高亮点环 + 点下方胶囊。
-              第一百一十四轮：精简标签模式下三价标签已含最高/最低（数值直标），
-              胶囊不再叠画（同信息双份） */}
-          {props.maxMinOn &&
-            labelMode !== 'compact' &&
-            extremeMarks.map((m) => {
-              const dim = litKeys != null && !litKeys.includes(m.key);
-              const pill = (tag: string, v: number) => (
-                <span
-                  className="tnum"
-                  style={{
-                    display: 'inline-block',
-                    padding: '1px 7px',
-                    fontSize: 10,
-                    lineHeight: '15px',
-                    fontWeight: 700,
-                    color: m.color,
-                    background: color.canvas,
-                    border: `1px solid ${m.color}`,
-                    borderRadius: radius.pill,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {tag} {fmt_mm(v)}
-                </span>
-              );
-              return (
-                <div key={`xm-${m.key}`} style={{ opacity: dim ? 0.15 : undefined }}>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: xPxOf(geom, m.maxIdx),
-                      // 钳回容器内：分离面板 chrome=false 无工具行预留（gridTop 收窄到 14），
-                      // 最高点贴 plot 顶时胶囊不再越出面板压住面板头
-                      top: Math.max(2, yPxOf(geom, m.maxV) - 30),
-                      transform: 'translateX(-50%)',
-                      pointerEvents: 'none',
-                      zIndex: 8,
-                    }}
-                  >
-                    {pill('最高', m.maxV)}
-                  </div>
-                  {/* 第五十四轮追补⑤：最低点不再画高亮环（用户：直接显示标签即可） */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: xPxOf(geom, m.minIdx),
-                      // 钳回绘图区内（对称最高点的顶缘钳制；胶囊高约 19px，留 1px 余量）：
-                      // 吸附下轴的最低价常态贴绘图区下缘，不钳会把胶囊压进底边距、
-                      // 与日期标签/大促图标行叠压
-                      top: Math.min(yPxOf(geom, m.minV) + 26, geom.plotTop + geom.plotHeight - 20),
-                      transform: 'translateX(-50%)',
-                      pointerEvents: 'none',
-                      zIndex: 8,
-                    }}
-                  >
-                    {pill('最低', m.minV)}
-                  </div>
-                </div>
-              );
-            })}
           {/* 价格变化点（第三十五轮起；第四十二轮阈值齿轮可调、含上涨）：相较前一有值点
               |Δ|≥阈值的点下方 ↓/↑X% 徽标（Keepa「价格下降了 30%」画法）；聚焦降透明。
               第一百二十五轮：y 锚定主价口径（primaryPriceOf）——仅 RRP 视图贴 RRP 线，
@@ -1400,8 +1331,10 @@ export default function Chart(props: ChartProps) {
               props.enableOffer ? offerLineItems(r.s.points[tipIdx]?.offer) : [],
             );
             const nOfferLines = offerRows.reduce((acc, l) => acc + l.length, 0);
-            // 第六十一轮：浮窗宽度随内容动态适配——三列各取本列最宽数值（ch 单位贴合
-            // tabular 数字宽），间距收紧（gap 6），不再用固定 324 留白
+            // 第六十一轮：浮窗宽度随内容动态适配——三列各取本列最宽数值，间距收紧
+            //（gap 6），不再用固定 324 留白。第一百八十四轮：列宽换算成 px 供表头
+            // 与数据行共用（ch 随字号变化，10px 表头与 13/14px 数值同 ch 数不同宽 =
+            // 此前表头与列错位的根因），表头与数值一律列内居中
             const priceCh = Math.max(...rows.map((r) => fmt_mm(r.v).length));
             const rrpCh = Math.max(
               2,
@@ -1410,24 +1343,25 @@ export default function Chart(props: ChartProps) {
                 return rr != null ? fmt_mm(rr).length : 0;
               }),
             );
+            const priceW = Math.round(priceCh * 8.4) + 8; // 数值 14px tabular：数字 ≈0.6em
+            const rrpW = Math.max(30, Math.round(rrpCh * 7.2) + 8); // 数值 12px tabular
             const body = (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
                   {fmt_hoverDate(granularity, series[0]?.points[tipIdx]?.xLabel ?? '')}
                 </div>
-                {/* 列标题行（第一百八十轮，Eason：完整表头在第一行数据上方）——
-                    产品 / 周环比|折扣率（随「页签显示」切换）/ 折后价 / RRP，
-                    列位与数据行一一对齐（同 gap、同定宽） */}
+                {/* 列标题行（第一百八十轮立完整表头；第一百八十四轮，Eason：列序改
+                    RRP → 折后价 → 周环比|折扣率，表头与数据列同宽同居中） */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, lineHeight: '13px', fontWeight: 600, color: color.mute, marginBottom: 2 }}>
                   <span style={{ width: 8, flexShrink: 0 }} />
                   <span style={{ flex: '1 1 0', minWidth: 0 }}>产品</span>
-                  <span style={{ width: 38, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    {props.tipMode === 'wow' ? '周环比' : '折扣率'}
+                  <span className="tnum" style={{ width: rrpW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>RRP</span>
+                  <span aria-hidden style={{ width: 1, height: 10, background: color.hairlineStrong, flexShrink: 0 }} />
+                  <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>折后价</span>
+                  <span aria-hidden style={{ width: 1, height: 10, background: color.hairlineStrong, flexShrink: 0 }} />
+                  <span style={{ width: 38, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {props.tipMode === 'discount' ? '折扣率' : '周环比'}
                   </span>
-                  <span aria-hidden style={{ width: 1, height: 10, background: color.hairlineStrong, flexShrink: 0 }} />
-                  <span className="tnum" style={{ width: `${priceCh}ch`, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>折后价</span>
-                  <span aria-hidden style={{ width: 1, height: 10, background: color.hairlineStrong, flexShrink: 0 }} />
-                  <span className="tnum" style={{ width: `${rrpCh}ch`, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>RRP</span>
                   <span style={{ width: 14, flexShrink: 0 }} />
                 </div>
                 {rows.map(({ s, v }, ri) => {
@@ -1462,11 +1396,23 @@ export default function Chart(props: ChartProps) {
                         >
                           {curveNameOf(s)}
                         </span>
-                        {/* 第六十轮：折扣/现价/RRP 三列定宽右对齐（跨行同列对齐，表格读数）；
-                            现价字号=折线上价格标签同款 14px。第六十一轮修：span 须 inline-block
-                            （inline 忽略 width，textAlign right 落空=三列没对齐）+ 列间灰短竖线 */}
-                        <span className="tnum" style={{ width: 38, textAlign: 'right', flexShrink: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>
-                          {props.tipMode === 'wow'
+                        {/* 三列定宽列内居中（第一百八十四轮：同 px 宽与表头共列，居中
+                            对齐；原右对齐 + 表头 ch 宽随字号缩水导致表头错位）。
+                            现价字号=折线上价格标签同款 14px；span 用 inline-block 使
+                            width+textAlign 生效 */}
+                        <span
+                          className="tnum"
+                          style={{ width: rrpW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
+                        >
+                          {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
+                        </span>
+                        <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
+                        <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>
+                          {fmt_mm(v)}
+                        </span>
+                        <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
+                        <span style={{ width: 38, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}>
+                          {props.tipMode !== 'discount'
                             ? (wow != null && (
                                 <span
                                   className="tnum"
@@ -1478,42 +1424,7 @@ export default function Chart(props: ChartProps) {
                               ))
                             : (disc != null && <MiniDiscountBadge discount={disc} dim={dim} />)}
                         </span>
-                        <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
-                        <span className="tnum" style={{ width: `${priceCh}ch`, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>
-                          {fmt_mm(v)}
-                        </span>
-                        <span aria-hidden style={{ width: 1, height: 14, background: color.hairlineStrong, flexShrink: 0 }} />
-                        <span
-                          className="tnum"
-                          style={{ width: `${rrpCh}ch`, textAlign: 'right', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
-                        >
-                          {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
-                        </span>
-                        {/* 该周页面快照（第一百四十轮追补）：历史时点以快照取证、不跳现页
-                            （现页价格早已变化）；该点有折后价才有快照。tip 容器 pointerEvents
-                            none 防挡图，触发器单独恢复可点 */}
-                        {pt?.price != null && (
-                          <button
-                            type="button"
-                            aria-label={`查看该周页面快照：${curveNameOf(s)}`}
-                            title={pt.shopName ? `查看该周页面快照（${pt.shopName}）` : '查看该周页面快照'}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSnapInfo({
-                                seriesLabel: s.label,
-                                shopName: pt.shopName ?? null,
-                                bucketId: pt.bucketId,
-                                dateText: fmt_hoverDate(granularity, pt.xLabel || (series[0]?.points[tipIdx]?.xLabel ?? '')),
-                                priceText: formatPrice(pt.price, currency),
-                                url: pt.url ?? '',
-                              });
-                            }}
-                            className="lpl-hit"
-                            style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: 4, color: color.mute, flexShrink: 0, pointerEvents: 'auto', cursor: 'pointer' }}
-                          >
-                            <PictureOutlined style={{ fontSize: 10 }} />
-                          </button>
-                        )}
+                        {/* 快照入口已删除（本轮，Eason）：悬停小卡只读；取证走明细表快照列 */}
                       </div>
                       {items.map((it) => (
                         <div
@@ -2090,7 +2001,6 @@ export default function Chart(props: ChartProps) {
           {/* 快照取证弹窗（第一百四十轮追补）：入口在悬停明细每行行尾（图面不画
               图标，第一百一十四轮撤图面悬停图标的原则不变）；图下明细表取证列
               仍各有一份入口，两路同弹窗 */} 
-          <SnapshotModal info={snapInfo} onClose={() => setSnapInfo(null)} />
           {/* 悬停列上只画品牌色小圆点；月/季下钻仍由点击有值点（±HIT_PX）触发 */}
         </>
       )}

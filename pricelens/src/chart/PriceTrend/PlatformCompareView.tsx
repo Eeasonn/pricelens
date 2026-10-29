@@ -3,8 +3,7 @@
 // 页签——页签主动进入（不带产品筛选，进来自己选）；图例药丸比价按钮进入则带上
 // 该产品。退役原 PlatformCompareModal 弹窗形态（第一百四十九~一百五十轮）。
 // 页内三层：
-// ① 单产品筛选器：与产品选择同款四列树（品牌→系列→产品→配置，带搜索），
-//    触发器为白底圆角框（同主品框视觉）；单选语义，选完即关。
+// ① 产品切换：只在顶部筛选器已选的产品之间换（主品在前），不再另开全量产品树。
 // ② 店铺多选 chips（概念同对比产品区，无主品）：默认 = 每个平台一条「自动」
 //    线（平台内每周最低价店铺，chip 只写平台名不缀「自动」）；热区分离（追补
 //    拍板）——chip 本体点击 = 屏蔽/恢复折线（虚线置灰，同主图产品药丸语言），
@@ -17,21 +16,21 @@
 //    多条线，品牌键与品牌色都会撞），线色用低饱和平台色板（原弹窗色板沿用）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Button, Input, Popover } from 'antd';
-import { CheckOutlined, DownOutlined, FilterOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { Button, Popover } from 'antd';
+import { CheckOutlined, DownOutlined, FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { dimChannel, dimPromo, dimProduct } from '../../data';
 import type { Series, SeriesPoint, SkuGroupQuery } from '../../dataModel/types';
 import { buildSeries, lowestPriceColorSku, sellersOfChannel } from '../../dataModel/aggregate';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
-import { brandOfModel, configTextOf, modelNameOf, searchProductTree } from '../../components/ProductCascader/tree';
-import type { BrandNode, RomramNode } from '../../components/ProductCascader/tree';
+import { brandOfModel, configTextOf, modelNameOf } from '../../components/ProductCascader/tree';
 import { autoColumnWidth, CascadePanel, measureText } from '../../components/ProductCascader';
 import type { CascadeRowItem } from '../../components/ProductCascader';
 import ChannelSelectPopover from '../../components/ChannelSelectPopover';
 import type { PlatformSelection } from '../../state/filtersTypes';
 import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
-import { DeleteX, POPOVER_H, POPOVER_Z, StateTag, useTreeData } from '../../components/ProductPicker/pickerBits';
+import { DeleteX } from '../../components/ProductPicker/pickerBits';
+import { preferredSelectedProduct, selectedProductsOf, type SelectedProductPick } from './selectedProducts';
 import Chart from './Chart';
 import XBrush from './XBrush';
 import {
@@ -92,181 +91,115 @@ function chipQueryOf(sh: ShopLine): PlatformSelection {
   return { platforms: [], shopIds: [sh.channelId!], seller: sh.seller ?? null };
 }
 
-// ---------------- ① 单产品筛选器（同款四列树 + 主品框视觉触发器） ----------------
+// ---------------- ① 已选产品切换（只在顶部筛选器的产品之间换） ----------------
 
-/** 无配置层级产品（唯一可用配置为「—」）型号行即选择叶 */
-const usableRomramsOf = (nodes: RomramNode[]): RomramNode[] =>
-  nodes.filter((r) => r.romram !== '—' || nodes.length === 1);
+const samePick = (a: SelectedProductPick, b: SelectedProductPick): boolean =>
+  a.modelId === b.modelId && normRom(a.romram) === normRom(b.romram);
 
-function SingleProductBox({
+function ProductIdentity({ value }: { value: SelectedProductPick }) {
+  const cfg = configTextOf(value.romram);
+  return (
+    <>
+      <BrandDot brand={brandOfModel(value.modelId)} />
+      <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>{brandLabelOf(brandOfModel(value.modelId))}</span>
+      <span style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {modelNameOf(value.modelId)}
+      </span>
+      {cfg && (
+        <span style={{ fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, flexShrink: 0 }}>
+          {value.romram}
+        </span>
+      )}
+    </>
+  );
+}
+
+function SelectedProductSwitch({
+  options,
   value,
   onChange,
 }: {
-  value: ProductPick | null;
-  onChange: (p: ProductPick) => void;
+  options: SelectedProductPick[];
+  value: SelectedProductPick | null;
+  onChange: (p: SelectedProductPick) => void;
 }) {
-  const { fullTree } = useTreeData();
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const tree = useMemo(() => searchProductTree(fullTree, search), [fullTree, search]);
-
-  // 打开/搜索时定位：优先当前产品的型号路径，否则首个结果
-  const [path, setPath] = useState<[string, string, string] | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const locate = (t: BrandNode[]): [string, string, string] | null => {
-      if (value) {
-        for (const b of t) {
-          for (const s of b.series) {
-            if (s.models.some((m) => m.modelId === value.modelId)) return [b.key, s.key, value.modelId];
-          }
-        }
-      }
-      const b = t[0];
-      const s = b?.series[0];
-      const m = s?.models[0];
-      return b && s && m ? [b.key, s.key, m.modelId] : null;
-    };
-    setPath(locate(tree));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, search]);
-
-  const brand = tree.find((b) => b.key === path?.[0]) ?? tree[0];
-  const series = brand?.series.find((s) => s.key === path?.[1]) ?? brand?.series[0];
-  const model = series?.models.find((m) => m.modelId === path?.[2]) ?? series?.models[0];
-  const currentKey = value ? `${value.modelId}|${normRom(value.romram)}` : '';
-
-  const pick = (r: RomramNode): void => {
-    onChange({ modelId: r.modelId, romram: r.romram });
-    setOpen(false);
-  };
-
-  const eolPill = (on: boolean): CascadeRowItem['trailing'] =>
-    on ? (
-      <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px', flexShrink: 0 }}>退市</span>
-    ) : undefined;
-  const eolPillW = measureText('退市') * (10 / 13) + 12 + 8;
-
-  const romramRow = (r: RomramNode): CascadeRowItem => ({
-    key: r.key,
-    label: r.romram,
-    onLabelClick: () => pick(r),
-    trailing: currentKey === `${r.modelId}|${normRom(r.romram)}` ? <StateTag text="当前" /> : undefined,
-  });
-
-  const drilledUsable = model ? usableRomramsOf(model.romrams) : [];
-  const modelDegenerate = drilledUsable.length === 1 && drilledUsable[0].romram === '—';
-
-  const colItems: CascadeRowItem[][] = [
-    tree.map((b) => ({
-      key: b.key,
-      label: brandLabelOf(b.key),
-      leading: <BrandDot brand={b.key} />,
-      active: brand?.key === b.key,
-      onActivate: () => {
-        const s = b.series[0];
-        setPath([b.key, s?.key ?? '', s?.models[0]?.modelId ?? '']);
-      },
-      trailing: <span style={{ fontSize: 10, color: color.mute, flexShrink: 0 }}>{b.modelCount} 型号</span>,
-    })),
-    (brand?.series ?? []).map((s) => ({
-      key: s.key,
-      label: s.title,
-      active: series?.key === s.key,
-      onActivate: () => setPath(brand ? [brand.key, s.key, s.models[0]?.modelId ?? ''] : null),
-      trailing: eolPill(!!s.eol),
-    })),
-    (series?.models ?? []).map((m) => {
-      const usable = usableRomramsOf(m.romrams);
-      // 无配置层级的型号（唯一配置「—」）行即选择叶（与选择产品浮窗同口径）
-      if (usable.length === 1 && usable[0].romram === '—') {
-        const leaf = romramRow(usable[0]);
-        return { ...leaf, key: m.modelId, label: m.label, leading: <BrandDot brand={m.brand} /> };
-      }
-      return {
-        key: m.modelId,
-        label: m.label,
-        leading: <BrandDot brand={m.brand} />,
-        active: model?.modelId === m.modelId,
-        onActivate: () => setPath(brand && series ? [brand.key, series.key, m.modelId] : null),
-        trailing: eolPill(!!m.eol),
-      };
-    }),
-    // 无配置层级的型号钻入后第四列留空（叶子已上提到型号行），不渲染「—」
-    model && !modelDegenerate ? drilledUsable.map(romramRow) : [],
-  ];
-  const columns = colItems.map((items) => ({ items, width: autoColumnWidth(items, { extraW: eolPillW, noMaxClip: true }) }));
-  const panelW = columns.reduce((w, c) => w + (c.width ?? 0), 0);
-  const bodyW = Math.max(360, Math.min(panelW + 20, Math.min(typeof window === 'undefined' ? 1148 : window.innerWidth - 48, 1100)));
-
-  const cfg = value ? configTextOf(value.romram) : '';
+  if (options.length === 0 || !value) {
+    return <span style={{ fontSize: fontSize.bodySm, color: color.mute }}>请先在上方选择产品</span>;
+  }
+  const canSwitch = options.length > 1;
+  const face = (
+    <span
+      style={{
+        height: 32,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '0 10px',
+        borderRadius: radius.control,
+        border: `1px solid ${open ? selectAccent : color.hairline}`,
+        background: color.canvas,
+        minWidth: 240,
+        maxWidth: 420,
+      }}
+    >
+      <ProductIdentity value={value} />
+      {canSwitch && <DownOutlined style={{ marginLeft: 'auto', fontSize: 10, color: color.mute, flexShrink: 0 }} />}
+    </span>
+  );
+  if (!canSwitch) return face;
   return (
     <Popover
       trigger="click"
       open={open}
-      zIndex={POPOVER_Z}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (!o) setSearch('');
-      }}
+      onOpenChange={setOpen}
       arrow={false}
       placement="bottomLeft"
-      styles={{ body: { padding: 10, width: bodyW } }}
+      styles={{ body: { padding: 6, width: 320 } }}
       content={
-        <div>
-          <Input
-            allowClear
-            size="small"
-            prefix={<SearchOutlined style={{ color: color.mute }} />}
-            placeholder="搜索品牌 / 系列 / 产品"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ marginBottom: 8 }}
-          />
-          <div style={{ display: 'flex' }}>
-            <CascadePanel columns={columns} fill height={POPOVER_H} />
-          </div>
+        <div role="listbox" aria-label="已选产品" style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 320, overflowY: 'auto' }}>
+          {options.map((opt) => {
+            const on = samePick(opt, value);
+            return (
+              <button
+                key={`${opt.modelId}|${normRom(opt.romram)}`}
+                type="button"
+                role="option"
+                aria-selected={on}
+                onClick={() => {
+                  onChange(opt);
+                  setOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  width: '100%',
+                  minHeight: 32,
+                  padding: '4px 8px',
+                  border: 'none',
+                  borderRadius: radius.control,
+                  background: on ? selectSoft : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <ProductIdentity value={opt} />
+              </button>
+            );
+          })}
         </div>
       }
     >
-      {/* 触发器：白底圆角框（同主品框视觉），品牌点 + 品牌 + 型号 + 配置 chip */}
       <button
         type="button"
-        aria-label={value ? `对比产品：${[brandLabelOf(brandOfModel(value.modelId)), modelNameOf(value.modelId), cfg].filter(Boolean).join(' ')}，点击更换` : '选择产品'}
-        aria-haspopup="dialog"
+        aria-label={`对比产品：${[brandLabelOf(brandOfModel(value.modelId)), modelNameOf(value.modelId), configTextOf(value.romram)].filter(Boolean).join(' ')}，在已选产品间切换`}
+        aria-haspopup="listbox"
         aria-expanded={open}
-        title={value ? '点击更换产品' : '点击选择产品'}
-        style={{
-          height: 32,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '0 10px',
-          borderRadius: radius.control,
-          border: `1px solid ${open ? selectAccent : color.hairline}`,
-          background: color.canvas,
-          cursor: 'pointer',
-          minWidth: 240,
-          maxWidth: 420,
-        }}
+        title="在上方已选的产品间切换"
+        style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
       >
-        {value ? (
-          <>
-            <BrandDot brand={brandOfModel(value.modelId)} />
-            <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>{brandLabelOf(brandOfModel(value.modelId))}</span>
-            <span style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {modelNameOf(value.modelId)}
-            </span>
-            {cfg && (
-              <span style={{ fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: radius.pill, background: selectSoft, color: selectSoftInk, flexShrink: 0 }}>
-                {value.romram}
-              </span>
-            )}
-          </>
-        ) : (
-          <span style={{ fontSize: fontSize.bodySm, color: color.mute }}>选择产品</span>
-        )}
-        <DownOutlined style={{ marginLeft: 'auto', fontSize: 10, color: color.mute, flexShrink: 0 }} />
+        {face}
       </button>
     </Popover>
   );
@@ -477,24 +410,27 @@ export default function PlatformCompareView(props: {
   lineShape: LineShapeChoice;
   onLineShape: (v: LineShapeChoice) => void;
   labelMode: 'detail' | 'compact';
+  onLabelMode: (v: 'detail' | 'compact') => void;
+  tipMode: 'discount' | 'wow';
+  onTipMode: (v: 'discount' | 'wow') => void;
   priceTypes: { discounted: boolean; rrp: boolean };
   onPriceTypeToggle: (key: 'discounted' | 'rrp', val: boolean) => void;
   promoBandsOn: boolean;
   onPromoBandsOn: (v: boolean) => void;
   offersOn: boolean;
   onOffersOn: (v: boolean) => void;
-  maxMinOn: boolean;
-  onMaxMinOn: (v: boolean) => void;
   changeThreshold: number | null;
   onChangeThreshold: (v: number | null) => void;
 }) {
   const { state } = useFilters();
   const cc = state.countryCode;
 
-  // 产品：药丸按钮每次发起都落到该产品；页签主动进入保持上次手选（首次 = 未选）
+  // 产品只在顶部已选清单里切换。手选优先；否则用进入时带入的主品；再否则清单里的主品。
+  const options = useMemo(() => selectedProductsOf(state.mains), [state.mains]);
   const [picked, setPicked] = useState<ProductPick | null>(null);
-  useEffect(() => setPicked(null), [props.preset]);
-  const product = picked ?? props.preset;
+  const matchOption = (p: ProductPick | null): SelectedProductPick | undefined =>
+    p ? options.find((o) => samePick(o, p)) : undefined;
+  const product = matchOption(picked) ?? matchOption(props.preset) ?? preferredSelectedProduct(state.mains, options);
   const productKey = product ? `${product.modelId}|${normRom(product.romram)}` : '';
 
   // 店铺多选：默认 = 各平台自动；换国家重置（渠道/卖家名按国家各有一套）。
@@ -654,7 +590,7 @@ export default function PlatformCompareView(props: {
   const seriesById = useMemo(() => new Map(winSeries.map((s) => [s.key, s])), [winSeries]);
 
   const emptyHint = !product
-    ? '点击上方「选择产品」开始多平台对比'
+    ? '请先在上方筛选器选择产品，再做多平台对比'
     : shops.length === 0
       ? '点击「＋ 添加店铺」选择要对比的平台 / 店铺'
       : winSeries.length === 0
@@ -666,9 +602,9 @@ export default function PlatformCompareView(props: {
   return (
     <div>
       {/* ① 单产品筛选器 + ② 店铺 chips（chip 即图例：点击屏蔽/恢复，✕ 移除） */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>产品</span>
-        <SingleProductBox value={product} onChange={setPicked} />
+        <SelectedProductSwitch options={options} value={product} onChange={setPicked} />
         <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
           {shops.map((sh, i) => {
@@ -793,7 +729,7 @@ export default function PlatformCompareView(props: {
         currency={state.currency}
         priceTypes={state.priceTypes}
         gridLeft={gridLeft}
-        gridTop={36}
+        gridTop={48}
         showXLabels
         hideNamePills
         legendHoverKey={hoverKey ?? editId}
@@ -809,15 +745,16 @@ export default function PlatformCompareView(props: {
         lineShape={props.lineShape}
         onLineShape={props.onLineShape}
         labelMode={props.labelMode}
+        onLabelMode={props.onLabelMode}
+        tipMode={props.tipMode}
+        onTipMode={props.onTipMode}
         promoBandsOn={props.promoBandsOn}
         onPromoBandsOn={props.onPromoBandsOn}
         promoBands={promoBands}
-        maxMinOn={props.maxMinOn}
         changeThreshold={props.changeThreshold}
         onPriceTypeToggle={props.onPriceTypeToggle}
         offersOn={props.offersOn}
         onOffersOn={props.onOffersOn}
-        onMaxMinOn={props.onMaxMinOn}
         onChangeThreshold={props.onChangeThreshold}
         emptyHint={emptyHint}
       />

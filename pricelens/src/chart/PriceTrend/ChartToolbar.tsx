@@ -13,46 +13,64 @@
 // ② 阈值数值占位定宽（≥ 5% / ≥ 12.5% 同宽）——拖滑杆时组宽不再逐帧抖动；
 // ③ 分离模式下本行在面板网格上方常驻一条（index 层渲染），统一控制全部面板，
 //    面板内不再渲染各自的设置行（Chart chrome=false）。
+// 第一百八十三轮（Eason，两行定版）：pills 模式 = 药丸行专属——药丸区居中。
+// 本轮（Eason 拍板回退+上移）：①齿轮与「隐藏对比产品」上移到工具行（大促/权益
+// 那一行）居左——新增 cluster 模式（只出左簇）；②分离模式药丸带回归各面板内
+// （index 层），pills 模式只在合并模式渲染、仅承载药丸；③圆形图标钮 20 → 24，
+// 与 small 按钮/Segmented 同高（隐藏对比产品此前 61px 过高，改 24）。
 // ============================================================
-import { Checkbox, Popover, Segmented, Slider } from 'antd';
-import { MoreOutlined, SettingOutlined } from '@ant-design/icons';
+import { Button, Checkbox, ConfigProvider, Popover, Segmented, Slider } from 'antd';
+import { MoreOutlined, ProfileOutlined, SettingOutlined } from '@ant-design/icons';
 import { forwardRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
+import { filterBarTheme } from '../../components/FilterBar';
 import { color, radius } from '../../theme/tokens';
 import type { LineShapeChoice } from './chartModel';
 import ScaleSlider from './ScaleSlider';
 
 export interface ChartToolbarProps {
+  /** 布局槽位：all = 单行全套（齿轮+插槽 左、大促/⋯ 右，量价/多平台图表内用）；
+   *  actions = 只显示右侧功能；cluster = 只显示左簇（齿轮+隐藏对比产品）；
+   *  pills = 药丸行（合并模式专用，仅居中图例）。 */
+  mode?: 'all' | 'actions' | 'pills' | 'cluster';
   /** 顶部居中的系列页签（由看板层注入，避免页签占用图表底部时间区域）。
    *  第一百七十八轮起 = 看板合并模式把产品药丸带注入工具行中区（行内居中、
    *  底部与折后价/RRP 对齐），不再是绝对定位浮层 */
   legend?: ReactNode;
-  currency: CurrencyMode;
-  sliderScale: number;
-  onSliderScale: (v: number) => void;
+  /** 以下齿轮弹层所需项仅在渲染齿轮的模式（all/cluster）必传；pills 纯药丸行可省 */
+  currency?: CurrencyMode;
+  sliderScale?: number;
+  onSliderScale?: (v: number) => void;
   /** Y 刻度线（第九十一轮恢复）：开 = 刻度值+短横线；关 = 仅价格档位（居中整块） */
-  showYTicks: boolean;
-  onShowYTicks: (v: boolean) => void;
-  yCompress: boolean;
-  onYCompress: (v: boolean) => void;
-  lineShape: LineShapeChoice;
-  onLineShape: (v: LineShapeChoice) => void;
-  /** 折后价/RRP 显隐切换（传 onPriceTypeToggle 才渲染左区粗/细线胶囊） */
-  priceTypes: { discounted: boolean; rrp: boolean };
+  showYTicks?: boolean;
+  onShowYTicks?: (v: boolean) => void;
+  yCompress?: boolean;
+  onYCompress?: (v: boolean) => void;
+  lineShape?: LineShapeChoice;
+  onLineShape?: (v: LineShapeChoice) => void;
+  /** 折后价/RRP 显隐（收进 ⋯ 菜单，控件外形与原先工具行胶囊一致；默认只显示折后价） */
+  priceTypes?: { discounted: boolean; rrp: boolean };
   onPriceTypeToggle?: (key: 'discounted' | 'rrp', next: boolean) => void;
-  /** RRP 胶囊之后的插槽（第一百七十八轮，Eason）：短竖线 + 全局「仅查看主产品」
-   *  由看板层传入（标题行不再承担） */
+  /** 齿轮之后的插槽：全局「隐藏对比产品」（cluster/all 模式下与齿轮同簇） */
   priceTypesAfter?: ReactNode;
-  /** 中区圆框组：四个回调全传才渲染（下钻弹窗等不传 = 不渲染） */
+  /** 悬停页签比率（收进 ⋯；默认周环比） */
+  tipMode?: 'discount' | 'wow';
+  onTipMode?: (v: 'discount' | 'wow') => void;
+  /** 图上价格标签密度（收进 ⋯；默认精简） */
+  labelMode?: 'detail' | 'compact';
+  onLabelMode?: (v: 'detail' | 'compact') => void;
+  /** 时点摘要（收进 ⋯；默认隐藏）。不传 onPointPanelToggle = 菜单里不出现 */
+  pointPanelOpen?: boolean;
+  onPointPanelToggle?: () => void;
+  /** 中区圆框组：三个回调全传才渲染（下钻弹窗等不传 = 不渲染）。
+   *  最高/最低价标注删除（本轮，Eason） */
   promoBandsOn?: boolean;
   onPromoBandsOn?: (v: boolean) => void;
   offersOn?: boolean;
   onOffersOn?: (v: boolean) => void;
-  maxMinOn?: boolean;
-  onMaxMinOn?: (v: boolean) => void;
   changeThreshold?: number | null;
   onChangeThreshold?: (v: number | null) => void;
-  /** ⋯ 更多菜单只保留两个次级开关（最高/最低价标注 + 价格变化提醒）。
+  /** ⋯ 更多菜单只保留价格变化提醒开关。
    *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开 */
 }
 
@@ -85,6 +103,7 @@ function PriceTypePill(props: { on: boolean; thick?: boolean; label: string; tit
         background: color.canvas,
         border: `1px ${props.on ? 'solid' : 'dashed'} ${props.on ? color.hairline : color.hairlineStrong}`,
         opacity: props.on ? 1 : 0.45,
+        transition: 'border-color 160ms ease, background-color 160ms ease, opacity 160ms ease, box-shadow 160ms ease',
       }}
     >
       <span
@@ -120,9 +139,10 @@ const RoundIconButton = forwardRef<HTMLButtonElement, {
       title={props.title}
       aria-label={props['aria-label']}
       onClick={props.onClick ?? ((e: ReactMouseEvent) => e.stopPropagation())}
+      className="lpl-toolbar-icon"
       style={{
-        width: 20,
-        height: 20,
+        width: 24,
+        height: 24, // 本轮起与 small 按钮/Segmented 同高（原 20，与邻按钮不齐）
         display: 'grid',
         placeItems: 'center',
         padding: 0,
@@ -133,6 +153,7 @@ const RoundIconButton = forwardRef<HTMLButtonElement, {
         cursor: 'pointer',
         position: 'relative',
         flexShrink: 0,
+        transition: 'border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease',
       }}
     >
       {props.children}
@@ -156,198 +177,258 @@ const RoundIconButton = forwardRef<HTMLButtonElement, {
 });
 
 export default function ChartToolbar(props: ChartToolbarProps) {
-  const toolbarOn =
-    props.onPromoBandsOn != null &&
-    props.onOffersOn != null &&
-    props.onMaxMinOn != null &&
-    props.onChangeThreshold != null;
-  // 二级功能有任一开启 = ⋯ 按钮出蓝点（默认全关，第五十六轮）
-  const secondaryActive = (props.maxMinOn === true) || (props.changeThreshold != null);
+  const mode = props.mode ?? 'all';
+  const showLeft = mode === 'all' || mode === 'cluster';
+  const showRight = mode === 'all' || mode === 'actions';
+  const showPromo = props.onPromoBandsOn != null && props.onOffersOn != null;
+  const showMarks = props.onChangeThreshold != null;
+  const hasDisplay =
+    props.onPriceTypeToggle != null ||
+    props.onTipMode != null ||
+    props.onLabelMode != null ||
+    props.onPointPanelToggle != null;
+  const showMore = hasDisplay || showMarks;
+  // 收进 ⋯ 的项离开默认值，或标注开关打开 = 按钮右上角蓝点
+  const secondaryActive =
+    (props.onPriceTypeToggle != null && props.priceTypes != null && (!props.priceTypes.discounted || props.priceTypes.rrp)) ||
+    (props.onTipMode != null && props.tipMode === 'discount') ||
+    (props.onLabelMode != null && props.labelMode === 'detail') ||
+    props.pointPanelOpen === true ||
+    props.changeThreshold != null;
   // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
   // ——与每格高度滑杆「松手生效」同一语言，避免拖动全程逐帧触发提醒重算
   const [dragThreshold, setDragThreshold] = useState<number | null>(null);
-  return (
-    // 底部对齐（第一百七十八轮，Eason）：中区产品药丸带比左右控件高，行内所有
-    // 元素底缘对齐 = 药丸带底部与 RRP 胶囊底部同线
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', gap: 8, width: '100%' }}>
-      {/* 币种符号随第一百七十八轮退役（Eason：金钱标志删除，齿轮左对齐 Y 轴） */}
-      <Popover
-        trigger="click"
-        placement="bottomLeft"
-        content={
-          <div style={{ width: 236 }}>
-            <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度</div>
-            <ScaleSlider scale={props.sliderScale} onCommit={props.onSliderScale} />
-            <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>松手生效 · 双击复位</div>
-            <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-            <Checkbox checked={props.showYTicks} onChange={(e) => props.onShowYTicks(e.target.checked)}>
-              <span style={{ fontSize: 12 }}>Y 刻度线</span>
+  // 左区齿轮弹层（每格高度/刻度线/自动压缩/折线样式）；pills 模式下与「隐藏对比品」
+  // 按钮同簇渲染（下方分支），其余模式原地渲染
+  const gearCtl = (
+    <Popover
+      trigger="click"
+      placement="bottomLeft"
+      content={
+        <div style={{ width: 236 }}>
+          <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度</div>
+          <ScaleSlider scale={props.sliderScale ?? 1} onCommit={props.onSliderScale ?? (() => {})} />
+          <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>松手生效 · 双击复位</div>
+          <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
+          <Checkbox checked={props.showYTicks ?? true} onChange={(e) => props.onShowYTicks?.(e.target.checked)}>
+            <span style={{ fontSize: 12 }}>Y 刻度线</span>
+          </Checkbox>
+          <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
+            关闭后仅保留价格档位
+          </div>
+          <div style={{ marginTop: 6 }}>
+            <Checkbox checked={props.yCompress ?? false} onChange={(e) => props.onYCompress?.(e.target.checked)}>
+              <span style={{ fontSize: 12 }}>Y 轴自动压缩</span>
             </Checkbox>
-            <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-              关闭后仅保留价格档位
-            </div>
-            <div style={{ marginTop: 6 }}>
-              <Checkbox checked={props.yCompress} onChange={(e) => props.onYCompress(e.target.checked)}>
-                <span style={{ fontSize: 12 }}>Y 轴自动压缩</span>
-              </Checkbox>
-              <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
-                差距悬殊的价格段之间自动压缩空白；默认关 = 完整连续展示
-              </div>
-            </div>
-            <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontSize: 12, color: color.mute }}>折线样式</span>
-              <Segmented
-                size="small"
-                value={props.lineShape}
-                onChange={(v) => props.onLineShape(v as LineShapeChoice)}
-                options={[
-                  { label: '自适应', value: 'auto' },
-                  { label: '阶梯', value: 'step' },
-                  { label: '平滑', value: 'smooth' },
-                ]}
-              />
-            </div>
             <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
-              自适应 = 周度阶梯、月/季平滑（默认）；阶梯 = 方形折角；平滑 = 圆滑曲线
+              差距悬殊的价格段之间自动压缩空白；默认关 = 完整连续展示
             </div>
           </div>
-        }
-      >
-        <RoundIconButton title="Y 轴显示设置" aria-label="Y 轴显示设置">
-          <SettingOutlined style={{ fontSize: 12 }} />
-        </RoundIconButton>
-      </Popover>
-      {/* 左区：折后价/RRP 粗细线胶囊（第五十二轮挪入图内，替代标题行复选框） */}
-      {props.onPriceTypeToggle && (
+          <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 12, color: color.mute }}>折线样式</span>
+            <Segmented
+              size="small"
+              value={props.lineShape ?? 'auto'}
+              onChange={(v) => props.onLineShape?.(v as LineShapeChoice)}
+              options={[
+                { label: '自适应', value: 'auto' },
+                { label: '阶梯', value: 'step' },
+                { label: '平滑', value: 'smooth' },
+              ]}
+            />
+          </div>
+          <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
+            自适应 = 周度阶梯、月/季平滑（默认）；阶梯 = 方形折角；平滑 = 圆滑曲线
+          </div>
+        </div>
+      }
+    >
+      <RoundIconButton title="Y 轴显示设置" aria-label="Y 轴显示设置">
+        <SettingOutlined style={{ fontSize: 12 }} />
+      </RoundIconButton>
+    </Popover>
+  );
+  return (
+    <div
+      className="lpl-toolbar"
+      style={{
+        position: 'relative',
+        display: 'flex',
+        columnGap: 8,
+        alignItems: 'center',
+        width: '100%',
+        minHeight: props.legend ? 54 : 32,
+        justifyContent: mode === 'actions' ? 'flex-end' : undefined,
+      }}
+    >
+      {/* 币种符号随第一百七十八轮退役（Eason：金钱标志删除，齿轮左对齐 Y 轴） */}
+      {showLeft && (
         <>
-          <PriceTypePill
-            on={props.priceTypes.discounted}
-            thick
-            label="折后价"
-            title="折后价 = 可抓取平台最低在架价（主价线，粗）"
-            onToggle={(next) => props.onPriceTypeToggle!('discounted', next)}
-          />
-          <PriceTypePill
-            on={props.priceTypes.rrp}
-            label="RRP"
-            title="RRP = 官方建议零售价（参照线，细实线）"
-            onToggle={(next) => props.onPriceTypeToggle!('rrp', next)}
-          />
+          {gearCtl}
+          {/* 齿轮之后：隐藏对比产品（折后价/RRP 已收进 ⋯） */}
+          {props.priceTypesAfter}
         </>
       )}
-      {/* RRP 之后的插槽（第一百七十八轮，Eason）：竖线 + 全局「仅查看主产品」 */}
-      {props.onPriceTypeToggle && props.priceTypesAfter}
       {props.legend && (
-        // 中区（第一百七十八轮改常驻流内）：产品药丸带由看板层注入，占左区与右区
-        // 之间的剩余宽度居中放；底部与折后价/RRP 对齐（行 alignItems flex-end）
+        // 中区：产品药丸带占余宽居中（左右各留边界）。pills 模式 = 合并模式的
+        // 药丸行（本轮起不再带齿轮/按钮——已上移工具行左簇）
         <div
           style={{
             flex: '1 1 auto',
             minWidth: 0,
             display: 'flex',
             justifyContent: 'center',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             overflow: 'hidden',
+            padding: '0 16px',
           }}
         >
           {props.legend}
         </div>
       )}
-      {/* 右区：高频视图开关圆框组（第五十六轮收窄：只留大促档期/offer 权益）+
-          「⋯ 更多」二级菜单（仅最高/最低价标注、价格变化提醒两个开关）。
-          「多平台比价」胶囊按钮已随第一百五十轮退役——入口移到图例药丸悬停
-          店铺图标（每个产品直进自己的多平台比价，不再二次选择） */}
-      {toolbarOn && (
+      {/* 功能键同一排：大促档期、促销权益，然后 ⋯。折后价/页签/价格显示/时点摘要在 ⋯ 内，
+          控件外形与原先露在外面时一致。 */}
+      {showRight && showPromo && (
         <div
           style={{
-            marginLeft: 'auto',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
+            padding: '2px 10px',
+            border: `1px solid ${color.hairline}`,
+            borderRadius: radius.pill,
+            background: color.canvas,
             flexShrink: 0,
             whiteSpace: 'nowrap',
+            marginLeft: 'auto',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '2px 10px',
-              border: `1px solid ${color.hairline}`,
-              borderRadius: radius.pill,
-              background: color.canvas,
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
-              <span style={{ fontSize: 12 }}>大促档期</span>
-            </Checkbox>
-            <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
-              <span style={{ fontSize: 12 }}>促销权益</span>
-            </Checkbox>
-          </div>
-          <Popover
-            trigger="click"
-            placement="bottomRight"
-            content={
-              <div style={{ width: 252 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 8 }}>更多功能</div>
-                <Checkbox checked={props.maxMinOn === true} onChange={(e) => props.onMaxMinOn!(e.target.checked)}>
-                  <span style={{ fontSize: 12 }}>最高/最低价标注</span>
-                </Checkbox>
-                <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                  在区间内最高 / 最低价点位旁标注胶囊
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <Checkbox
-                    checked={props.changeThreshold != null}
-                    onChange={(e) => props.onChangeThreshold!(e.target.checked ? 0.05 : null)}
-                  >
-                    <span style={{ fontSize: 12 }}>价格变化提醒</span>
-                  </Checkbox>
-                  <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-                    涨跌超过阈值时在点位标注 ↓/↑
-                  </div>
-                  {props.changeThreshold != null && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                      <Slider
-                        style={{ width: 150, margin: '0 2px' }}
-                        min={0}
-                        max={15}
-                        step={0.5}
-                        value={dragThreshold ?? +(props.changeThreshold * 100).toFixed(1)}
-                        onChange={(v) => setDragThreshold(+(v as number))}
-                        onAfterChange={(v) => {
-                          // 松手生效：拖动值只在本地预览，此刻才写入持久配置
-                          setDragThreshold(null);
-                          props.onChangeThreshold!(+(v as number) / 100);
-                        }}
-                        tooltip={{ formatter: (v) => `≥ ${v ?? 0}%` }}
-                      />
-                      <span
-                        className="tnum"
-                        style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', display: 'inline-block', width: THRESHOLD_TEXT_W }}
-                      >
-                        ≥ {dragThreshold ?? +(props.changeThreshold * 100).toFixed(1)}%
-                      </span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            }
-          >
-            <RoundIconButton
-              title="更多功能（最高/最低价标注 · 价格变化提醒）"
-              aria-label="更多功能"
-              active={secondaryActive}
-            >
-              <MoreOutlined style={{ fontSize: 12 }} />
-            </RoundIconButton>
-          </Popover>
+          <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
+            <span style={{ fontSize: 12 }}>大促档期</span>
+          </Checkbox>
+          <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
+            <span style={{ fontSize: 12 }}>促销权益</span>
+          </Checkbox>
         </div>
+      )}
+      {showRight && showMore && (
+        // 无中区圆框组的页面（量价/部分内嵌图）⋯ 靠右收尾，与看板第一行同构；
+        // 有圆框组时它已带 marginLeft auto，⋯ 自然跟在其后
+        <span style={{ marginLeft: showPromo ? undefined : 'auto', display: 'inline-flex', flexShrink: 0 }}>
+        <Popover
+          trigger="click"
+          placement="bottomLeft"
+          content={
+            <ConfigProvider theme={filterBarTheme}>
+              <div style={{ width: 280, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+                {props.onPriceTypeToggle && props.priceTypes != null && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <PriceTypePill
+                      on={props.priceTypes.discounted}
+                      thick
+                      label="折后价"
+                      title="折后价 = 可抓取平台最低在架价（主价线，粗）"
+                      onToggle={(next) => props.onPriceTypeToggle!('discounted', next)}
+                    />
+                    <PriceTypePill
+                      on={props.priceTypes.rrp}
+                      label="RRP"
+                      title="RRP = 官方建议零售价（参照线，细实线）"
+                      onToggle={(next) => props.onPriceTypeToggle!('rrp', next)}
+                    />
+                  </span>
+                )}
+                {props.onTipMode && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: color.mute, fontSize: 12 }}>
+                    页签显示{' '}
+                    <Segmented
+                      size="small"
+                      value={props.tipMode ?? 'wow'}
+                      onChange={(v) => props.onTipMode!(v as 'discount' | 'wow')}
+                      options={[
+                        { label: '折扣率', value: 'discount' },
+                        { label: '周环比', value: 'wow' },
+                      ]}
+                    />
+                  </span>
+                )}
+                {props.onLabelMode && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: color.mute, fontSize: 12 }}>
+                    价格显示{' '}
+                    <Segmented
+                      size="small"
+                      value={props.labelMode ?? 'compact'}
+                      onChange={(v) => props.onLabelMode!(v as 'detail' | 'compact')}
+                      options={[
+                        { label: '精简', value: 'compact' },
+                        { label: '详细', value: 'detail' },
+                      ]}
+                    />
+                  </span>
+                )}
+                {props.onPointPanelToggle && (
+                  <Button
+                    size="small"
+                    icon={<ProfileOutlined />}
+                    type={props.pointPanelOpen ? 'primary' : 'default'}
+                    onClick={props.onPointPanelToggle}
+                    title="各产品最新折扣、现价、RRP 与来源"
+                  >
+                    时点摘要
+                  </Button>
+                )}
+                {showMarks && (
+                  <div style={{ width: '100%', borderTop: hasDisplay ? `1px solid ${color.hairline}` : undefined, paddingTop: hasDisplay ? 10 : 0 }}>
+                    <div>
+                      <Checkbox
+                        checked={props.changeThreshold != null}
+                        onChange={(e) => props.onChangeThreshold!(e.target.checked ? 0.05 : null)}
+                      >
+                        <span style={{ fontSize: 12 }}>价格变化提醒</span>
+                      </Checkbox>
+                      <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
+                        涨跌超过阈值时在点位标注 ↓/↑
+                      </div>
+                      {props.changeThreshold != null && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                          <Slider
+                            style={{ width: 150, margin: '0 2px' }}
+                            min={0}
+                            max={15}
+                            step={0.5}
+                            value={dragThreshold ?? +(props.changeThreshold * 100).toFixed(1)}
+                            onChange={(v) => setDragThreshold(+(v as number))}
+                            onAfterChange={(v) => {
+                              setDragThreshold(null);
+                              props.onChangeThreshold!(+(v as number) / 100);
+                            }}
+                            tooltip={{ formatter: (v) => `≥ ${v ?? 0}%` }}
+                          />
+                          <span
+                            className="tnum"
+                            style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', display: 'inline-block', width: THRESHOLD_TEXT_W }}
+                          >
+                            ≥ {dragThreshold ?? +(props.changeThreshold * 100).toFixed(1)}%
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ConfigProvider>
+          }
+        >
+          <RoundIconButton
+            title="折后价 / 页签显示 / 价格显示 / 时点摘要"
+            aria-label="更多显示选项"
+            active={secondaryActive}
+          >
+            <MoreOutlined style={{ fontSize: 12 }} />
+          </RoundIconButton>
+        </Popover>
+        </span>
       )}
     </div>
   );

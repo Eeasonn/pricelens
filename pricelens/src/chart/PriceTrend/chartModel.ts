@@ -910,46 +910,4 @@ export function buildChangeMarks(series: Series[], threshold: number = DROP_THRE
   return out;
 }
 
-export interface ExtremeMark {
-  key: string;
-  color: string;
-  maxV: number;
-  maxIdx: number; // 最高点下标（渲染层画点上方胶囊）
-  minV: number;
-  minIdx: number; // 最低点下标（渲染层画点下方胶囊 + 高亮点环，Keepa「最低价」画法）
-}
-
-/**
- * 窗口内最高/最低价点标记（第三十六轮改口径，迪总：如 Keepa 图——标签钉在极值点旁，
- * 不拉全宽虚线）：主价口径（primaryPriceOf）的窗口极值及其首个出现下标；
- * maxV === minV（全程一条价）不画——标签与价格线重合无信息量。
- */
-export function buildExtremeMarks(p: {
-  geom: Geom | null;
-  series: Series[];
-  priceTypes: PriceTypes;
-}): ExtremeMark[] {
-  if (!p.geom) return [];
-  const out: ExtremeMark[] = [];
-  for (const s of p.series) {
-    let maxV: number | null = null;
-    let minV: number | null = null;
-    let maxIdx = -1;
-    let minIdx = -1;
-    s.points.forEach((pt, i) => {
-      const v = primaryPriceOf(pt, p.priceTypes);
-      if (v == null) return;
-      if (maxV == null || v > maxV) {
-        maxV = v;
-        maxIdx = i;
-      }
-      if (minV == null || v < minV) {
-        minV = v;
-        minIdx = i;
-      }
-    });
-    if (maxV == null || minV == null || maxIdx < 0 || minIdx < 0 || maxV === minV) continue;
-    out.push({ key: s.key, color: s.color, maxV, maxIdx, minV, minIdx });
-  }
-  return out;
-}
+ // 最高/最低价点标记（buildExtremeMarks）已随功能删除（本轮，Eason）。

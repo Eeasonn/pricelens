@@ -44,6 +44,9 @@
 // RRP 后（短竖线分隔），标题行撤 ③「同步平台筛选」撤出行内——进主品平台-店铺
 // 筛选浮层左上角（channelCtl.syncCtl → ChannelSelectPopover）④药丸第二行参考
 // 多平台对比产品框：产品名墨色加粗 + 型号浅蓝底 chip（无配置层级不出 chip）。
+// 第一百八十三轮（Eason，药丸带独立成行定版）：「第 N 组」块首小字退役（组界
+// 由分隔线表达）。本轮拍板再回退：分离模式药丸带回归各面板内（index 层渲染），
+// 共享药丸行只在合并模式出现；组界恒为块间灰色短竖线（不加框）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
@@ -52,7 +55,7 @@ import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import { curveNameOf } from './chartModel';
-import { groupOrdinal, type LegendGroup } from './tableModel';
+import type { LegendGroup } from './tableModel';
 import { color, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
@@ -137,6 +140,7 @@ function Pill({
         cursor: 'pointer',
         opacity: pill.hidden ? 0.45 : dimmed ? 0.25 : undefined,
         flexShrink: 0,
+        transition: 'border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease',
         ...look,
       }}
     >
@@ -223,7 +227,9 @@ function PillUnit({
  *  第一百七十四轮：行内「同步平台筛选」按钮（后随第一百七十八轮撤出——改进
  *  主品平台-店铺筛选浮层左上角，经 channelCtl.syncCtl 传入浮层）。
  *  第一百七十六轮追补（Eason）：多平台比价入口（店铺图标）随药丸退役——比价页签
- *  只从标题行页签进（默认主品）；平台小药丸改为行内居右 */
+ *  只从标题行页签进（默认主品）；平台小药丸改为行内居右。
+ *  第一百八十四轮（Eason）：改行首居左；外形从圆胶囊改小圆角矩形标签（参考
+ *  图标圆角钮同款 4px 曲率），与底下的圆胶囊产品药丸拉开层次 */
 function PlatformRow({
   pill,
   dimmed,
@@ -236,7 +242,7 @@ function PlatformRow({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        justifyContent: 'flex-end', // 平台小药丸居右（第一百七十六轮追补）
+        justifyContent: 'flex-start', // 居左（第一百八十四轮，原居右）
         gap: 4,
         width: '100%',
         maxWidth: PILL_W_BUDGET,
@@ -276,13 +282,14 @@ function PlatformRow({
               alignItems: 'center',
               height: 16,
               padding: '0 7px',
-              borderRadius: radius.pill,
+              borderRadius: 4, // 圆角矩形标签（区别于底下圆胶囊产品药丸）
               fontSize: 10,
               lineHeight: '14px',
               fontWeight: 600,
-              color: pill.channel.auto ? color.mute : selectSoftInk,
-              background: pill.channel.auto ? color.canvas : selectSoft,
-              border: `1px solid ${pill.channel.auto ? color.hairline : 'rgba(0, 112, 243, 0.35)'}`,
+              // 恒白底（本轮，Eason）：筛选/同步后不再转浅蓝态，标签外观恒定
+              color: color.mute,
+              background: color.canvas,
+              border: `1px solid ${color.hairline}`,
               whiteSpace: 'nowrap',
               overflow: 'visible',
               flexShrink: 0,
@@ -299,13 +306,12 @@ function PlatformRow({
   );
 }
 
-/** 组块：第 N 组小字（多组时）+ 主品药丸 + vs + 对比药丸（块内 ‹› 滚动，仅当对比数 > COMPARES_VISIBLE
+/** 组块：主品药丸 + vs + 对比药丸（块内 ‹› 滚动，仅当对比数 > COMPARES_VISIBLE
  *  时出现；主品药丸在滚动区外恒可见）。第一百七十四轮：块首按钮列退役——
- *  「仅查看主产品」全局化上移标题行（index 层）、「同步平台筛选」进首组主品
- *  平台小药丸左侧（syncCtl 只传首个含主品的块） */
+ *  「隐藏对比品」全局化（index 层，原「仅查看主产品」）、「同步平台筛选」进首组
+ *  主品平台小药丸浮层；「第 N 组」块首小字随药丸带独立成行退役（第一百八十三轮） */
 function GroupBlock({
   group,
-  showOrdinal,
   hiddenKeys,
   hoverSet,
   onToggle,
@@ -314,7 +320,6 @@ function GroupBlock({
   syncCtl,
 }: {
   group: LegendGroup;
-  showOrdinal: boolean; // 多组时块首「第 N 组」，单组不显示
   hiddenKeys: Set<string>;
   hoverSet: Set<string> | null;
   onToggle: (key: string) => void;
@@ -324,8 +329,9 @@ function GroupBlock({
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
   };
-  /** 同步平台筛选（第一百七十四轮移位）：渲染在首组主品平台小药丸左侧；
-   *  全局操作（index 层实现），上层只传给第一个块 */
+  /** 同步平台筛选（第一百七十四轮移位；第一百八十四轮改按组）：渲染在主品
+   *  平台-店铺筛选浮层左上角；只作用于本组（本组主品+对比品跟随本组主产品），
+   *  上层按组注入 */
   syncCtl?: { active: boolean; onToggle: () => void };
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -380,11 +386,6 @@ function GroupBlock({
   const dimOf = (p: PillSpec): boolean => hoverSet != null && !hoverSet.has(p.key);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
-      {showOrdinal && (
-        <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', flexShrink: 0 }}>
-          {groupOrdinal(group.ordinal)}
-        </span>
-      )}
       {/* 主品药丸（空对无主品不出）；其平台-店铺筛选浮层左上角出「同步平台筛选」
           （syncCtl 经 channelCtl 注入，仅上层传给首组） */}
       {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />}
@@ -459,8 +460,7 @@ export default function BrandLegendStrip({
   onToggleHidden,
   onHover,
   channelCtl,
-  onSyncPlatform,
-  syncActive,
+  syncCtlOf,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -475,13 +475,11 @@ export default function BrandLegendStrip({
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
   };
-  /** 同步平台筛选（第一百七十轮，Eason）：传入 = 每组按钮组上方出「同步平台筛选」
-   *  按钮，点击把全部产品的取价平台改成与主产品一致（全局操作，index 层实现） */
-  onSyncPlatform?: () => void;
-  /** 同步进行中（第一百七十三轮改开关语义）：按钮按压态；再点取消并还原 */
-  syncActive?: boolean;
+  /** 同步平台筛选（第一百七十轮立，第一百八十四轮改按组）：传入 = 返回该组的
+   *  开关态与回调（在有主品的组的主品筛选浮层左上角出现）；同步只作用于本组
+   *  （本组主品+对比品跟随本组主产品），各组互相独立（index 层实现） */
+  syncCtlOf?: (group: LegendGroup) => { active: boolean; onToggle: () => void } | undefined;
 }) {
-  const multi = groups.length >= 2;
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   // 第一百一十六轮：悬停只高亮该系列自身（不再联动其对标竞品/我司）
@@ -526,7 +524,7 @@ export default function BrandLegendStrip({
     trackRef.current?.scrollBy({ left: dir * 260, behavior: 'smooth' });
   };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, minWidth: 0, width: '100%', padding: '0 8px', boxSizing: 'border-box' }}>
       {outer.overflow && (
         <ArrowButton dir="left" label="更多组（左）" onClick={() => scrollOuter(-1)} size={16} dim={outer.start} />
       )}
@@ -537,9 +535,9 @@ export default function BrandLegendStrip({
         style={{ display: 'flex', alignItems: 'stretch', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', minWidth: 0, padding: '2px 0' }}
       >
         {(() => {
-          // 块间灰色短竖线分隔（最后一块之后不加）；同步平台筛选（第一百七十四轮）
-          // 只随首个含主品的块渲染（全局操作，按钮在主品平台小药丸左侧）
-          let syncPlaced = !onSyncPlatform;
+          // 块间灰色短竖线分隔（最后一块之后不加）；同步平台筛选（第一百八十四轮
+          // 改按组）：凡含主品的组各拿各的 syncCtl（同步只作用于本组，开关出现在
+          // 本组主品的筛选浮层左上角）
           const items: ReactNode[] = [];
           blocks.forEach((g, i) => {
             if (i > 0) {
@@ -548,20 +546,19 @@ export default function BrandLegendStrip({
               );
             }
             const hasMain = g.series.some((s) => s.key === g.mainKey);
-            const passSync = !syncPlaced && hasMain;
-            if (passSync) syncPlaced = true;
+            const sync = hasMain ? syncCtlOf?.(g) : undefined;
             items.push(
-              <GroupBlock
-                key={g.id}
-                group={g}
-                showOrdinal={multi}
-                hiddenKeys={hiddenKeys}
-                hoverSet={hoverSet}
-                onToggle={onToggleHidden}
-                onHover={hover}
-                channelCtl={channelCtl}
-                syncCtl={passSync ? { active: !!syncActive, onToggle: () => onSyncPlatform?.() } : undefined}
-              />,
+              <div key={g.id} style={{ display: 'flex', flexShrink: 0, minWidth: 0 }}>
+                <GroupBlock
+                  group={g}
+                  hiddenKeys={hiddenKeys}
+                  hoverSet={hoverSet}
+                  onToggle={onToggleHidden}
+                  onHover={hover}
+                  channelCtl={channelCtl}
+                  syncCtl={sync}
+                />
+              </div>,
             );
           });
           return items;
