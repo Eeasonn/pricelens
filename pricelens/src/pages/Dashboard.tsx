@@ -45,8 +45,9 @@ export default function Dashboard() {
         >
           <ChartContentBar />
           {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻）；
-              内层 minWidth 保住图表可读下限，窄视口卡内横向拖动 */}
-          <div style={{ padding: space.lg, overflowX: 'auto' }}>
+              内层 minWidth 保住图表可读下限，窄视口卡内横向拖动
+              （lpl-card-scroll = 189 轮：恒显横向滚动条，窄屏不误以为内容被裁） */}
+          <div className="lpl-card-scroll" style={{ padding: space.lg, overflowX: 'auto' }}>
             <div style={{ minWidth: 880 }}>
               <PriceTrend
                 onSeriesWindow={(groups, buckets, fourWeekChanges) => setTrendWindow({ groups, buckets, fourWeekChanges })}

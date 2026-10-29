@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Button, Popover } from 'antd';
 import { CheckOutlined, DownOutlined, FilterOutlined, PlusOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
+import { useChartContent } from '../../state/chartContent';
 import { dimChannel, dimPromo, dimProduct } from '../../data';
 import type { Series, SeriesPoint, SkuGroupQuery } from '../../dataModel/types';
 import { buildSeries, lowestPriceColorSku, sellersOfChannel } from '../../dataModel/aggregate';
@@ -73,6 +74,16 @@ interface ProductPick {
   modelId: string;
   romram: string;
 }
+
+// 多平台对比的会话内状态（第一百八十九轮定版：切回多产品再进，恢复此前产品/
+// 店铺/屏蔽选择；时间窗本就与主图共享，无需另存）。模块级单例——组件随视图
+// 切换卸载后仍在；换国家时 cc 失配整体作废，落回各平台「自动」默认线。
+let pcSession: {
+  cc: string;
+  picked: ProductPick | null;
+  shops: ShopLine[];
+  hiddenIds: ReadonlySet<string>;
+} | null = null;
 
 const normRom = (s: string): string => s.replace(/\s+/g, '');
 
@@ -434,27 +445,40 @@ export default function PlatformCompareView(props: {
   onChangeThreshold: (v: number | null) => void;
 }) {
   const { state } = useFilters();
+  const { setPriceSubview } = useChartContent();
   const cc = state.countryCode;
 
   // 产品只在顶部已选清单里切换。手选优先；否则用进入时带入的主品；再否则清单里的主品。
+  // 手选跨卸载保留（189 定版：会话内再进恢复），初值从模块级快照取（同国家才有效）。
   const options = useMemo(() => selectedProductsOf(state.mains), [state.mains]);
-  const [picked, setPicked] = useState<ProductPick | null>(null);
+  const [picked, setPicked] = useState<ProductPick | null>(() =>
+    pcSession && pcSession.cc === cc ? pcSession.picked : null,
+  );
   const matchOption = (p: ProductPick | null): SelectedProductPick | undefined =>
     p ? options.find((o) => samePick(o, p)) : undefined;
   const product = matchOption(picked) ?? matchOption(props.preset) ?? preferredSelectedProduct(state.mains, options);
   const productKey = product ? `${product.modelId}|${normRom(product.romram)}` : '';
 
-  // 店铺多选：默认 = 各平台自动；换国家重置（渠道/卖家名按国家各有一套）。
-  // chip 本体点击 = 屏蔽/恢复折线（图例显隐，同主图产品药丸语言）；
-  // chip 行尾筛选小图标 = 弹级联改选口径（第一百六十四轮追补拍板：热区分离）；✕ = 移除
-  const [shops, setShops] = useState<ShopLine[]>(() => defaultShopsOf(cc));
+  // 店铺多选：默认 = 各平台自动；换国家重置（渠道/卖家名按国家各有一套）；
+  // 会话快照同国家则恢复（189 定版）。chip 本体点击 = 屏蔽/恢复折线（图例显隐，
+  // 同主图产品药丸语言）；chip 行尾筛选小图标 = 弹级联改选口径（第一百六十四轮
+  // 追补拍板：热区分离）；✕ = 移除
+  const [shops, setShops] = useState<ShopLine[]>(() =>
+    pcSession && pcSession.cc === cc ? pcSession.shops : defaultShopsOf(cc),
+  );
   const [editId, setEditId] = useState<string | null>(null); // 正在改选的店铺 chip
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set()); // 屏蔽中的线（chip 虚线置灰）
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(
+    () => (pcSession && pcSession.cc === cc ? new Set(pcSession.hiddenIds) : new Set()), // 屏蔽中的线（chip 虚线置灰）
+  );
   useEffect(() => {
     setShops(defaultShopsOf(cc));
     setEditId(null);
     setHiddenIds(new Set());
   }, [cc]);
+  // 会话快照落盘：任何变更即写，切回多产品（组件卸载）后仍在
+  useEffect(() => {
+    pcSession = { cc, picked, shops, hiddenIds };
+  }, [cc, picked, shops, hiddenIds]);
   useEffect(() => {
     setHiddenIds(new Set());
   }, [productKey]);
@@ -621,7 +645,7 @@ export default function PlatformCompareView(props: {
             : undefined;
 
   return (
-    <div>
+    <div className="lpl-fade-in">
       {/* ① 单产品筛选器 + ② 店铺 chips（chip 即图例：点击屏蔽/恢复，✕ 移除） */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>产品</span>
@@ -739,6 +763,28 @@ export default function PlatformCompareView(props: {
             );
           })}
           <AddShopPill cc={cc} shops={shops} onToggle={toggleShop} onRestoreDefault={restoreDefault} />
+          {/* 返回入口（189 定版）：进入多平台后，工具行原位入口在此变为返回钮——
+              主导航仍只有「价格走势」选中，不出现第二处页签高亮 */}
+          <span style={{ marginLeft: 'auto', flexShrink: 0, display: 'inline-flex' }}>
+            <button
+              type="button"
+              className="lpl-text-entry"
+              title="回到多产品对比（多产品 × 主品基准）"
+              onClick={() => setPriceSubview('products')}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                font: 'inherit',
+                fontSize: 12,
+                color: color.body,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                padding: '4px 2px',
+              }}
+            >
+              ← 返回多产品对比
+            </button>
+          </span>
         </div>
       </div>
 

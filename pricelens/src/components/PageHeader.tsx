@@ -98,12 +98,14 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
         ) : (
           <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
         )}
-        {/* 分析范围徽标：国家口径并入此处，各页筛选条不再重复国家框 */}
+        {/* 分析范围徽标：国家口径并入此处，各页筛选条不再重复国家框。
+            不换行不收缩（189 轮窄屏：禁止「单国家分 / 析」词内断行） */}
         <span
           style={{
             display: 'inline-flex', alignItems: 'center', height: 28, padding: '0 12px',
             borderRadius: radius.pill, fontSize: fontSize.caption, fontWeight: 600,
             color: selectSoftInk, background: selectSoft, border: `1px solid ${selectAccent}`,
+            whiteSpace: 'nowrap', flexShrink: 0,
           }}
         >
           单国家分析

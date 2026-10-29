@@ -561,7 +561,7 @@ export default function VolumePrice() {
                 第一百二十六轮：轴列纵向撑满面板区，「同步」开关落列底、与各面板
                 时间轴同一水平线（原底部独立行删除）。
                 第一百八十二轮：窄视口在卡内横向拖动（内层 minWidth 880 保面板可读下限） */}
-            <div style={{ overflowX: 'auto', marginBottom: space.sm }}>
+            <div className="lpl-card-scroll" style={{ overflowX: 'auto', marginBottom: space.sm }}>
             <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, minWidth: 880, width: '100%' }}>
               <div
                 style={{
@@ -610,7 +610,7 @@ export default function VolumePrice() {
                   // 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
                   // 均分一行；>3 个不折行，横向拖动查看（轨道宽 = N/3 × 100%，每格
                   // 恒为视口 1/3 宽）
-                  <div style={{ overflowX: 'auto' }}>
+                  <div className="lpl-card-scroll" style={{ overflowX: 'auto' }}>
                     <div
                       style={{
                         display: 'grid',

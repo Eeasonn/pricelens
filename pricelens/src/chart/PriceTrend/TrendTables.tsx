@@ -6,6 +6,9 @@
 // 时间列与图上同一可见时间段（每桶一列，周号＋日期双行列头），倒序排列。
 // 取证行 = 电商页面快照入口 + 最新时点商城现页链接；复制成功/失败均有短暂反馈。
 // 窄视口只冻结产品首列，其余列随表滚动，保证时间列始终可见。
+// 第一百八十九轮（Eason 定版收敛）：窄屏（<640px）冻结产品列 236→168px；复制
+// 明细 TSV 的近 4 周环比从产品格拆出、独立成列（「类型」后，仅每个产品首行
+// 有值，价差区 TSV 不含）；环比无值「—」用最弱灰（mute）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from 'antd';
@@ -22,6 +25,7 @@ import {
   baseKeyOf,
   bucketDateText,
   discountOf,
+  fourWeekChangeText,
   fmtPct,
   groupOrdinal,
   latestIdxOf,
@@ -42,6 +46,10 @@ function weekIdText(id: string): string {
 
 // ---- 列宽（左缘冻结三列：产品/配置/类型 + 时间列） ----
 const W_PROD = 236;
+/** 窄视口（<640px）冻结产品列收窄宽（第一百八十九轮，Eason 定版收敛）：
+ *  宽屏冻结三列合计 408px，窄屏产品列收至 168px 让时间列更早可见；
+ *  两个区块在同一张 grid 上共用这份列宽定义，收窄后逐列仍对齐 */
+const W_PROD_NARROW = 168;
 const W_CONF = 96;
 const W_TYPE = 76;
 const W_TIME = 100;
@@ -182,11 +190,9 @@ export default function TrendTables(props: {
     copiedTimer.current = window.setTimeout(() => setCopied(null), 1600);
   };
 
-  const fourWeekTextOf = (s: Series): string => {
-    const change = fourWeekChanges.get(s.key);
-    if (change == null) return '—';
-    return `${change > 0 ? '+' : change < 0 ? '−' : '±'}${Math.abs(Math.round(change * 1000) / 10)}%`;
-  };
+  /** 近 4 周环比文案（复制明细 TSV 用）：表内产品格走同一 fourWeekChangeText，
+   *  剪贴板与表内同格式（第一百八十九轮） */
+  const fourWeekTextOf = (s: Series): string => fourWeekChangeText(fourWeekChanges.get(s.key) ?? null);
 
   // ---- 复制为表格（TSV；列序与表头一致 = 时间倒序；多组时首列带组号） ----
   const onCopyDiff = async (): Promise<void> => {
@@ -209,10 +215,11 @@ export default function TrendTables(props: {
   };
   const onCopyDetail = async (): Promise<void> => {
     const TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
-    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', ...dates.slice().reverse()].join('\t')];
+    // 近 4 周环比独立成列（第一百八十九轮，Eason 定版收敛）：表头在「类型」后，
+    // 与表同列结构；只随每个产品首行（RRP 行）输出一次，其余行留空串
+    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', '近4周环比', ...dates.slice().reverse()].join('\t')];
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
-        const product = dedupeSpecText(s.label);
         const change = fourWeekTextOf(s);
         for (const ty of TYPES) {
           const cells = cols.map(({ i }) => {
@@ -228,8 +235,16 @@ export default function TrendTables(props: {
             if (ty === '取证') return pt.url || '—';
             return offerText(pt) || '—';
           });
-          const productCell = ty === 'RRP' ? `${product}｜近4周环比 ${change}` : product;
-          lines.push([...(multi ? [groupOrdinal(b.ordinal)] : []), productCell, configTextOf(b.specByKey.get(s.key)?.romram), ty, ...cells].join('\t'));
+          lines.push(
+            [
+              ...(multi ? [groupOrdinal(b.ordinal)] : []),
+              dedupeSpecText(s.label),
+              configTextOf(b.specByKey.get(s.key)?.romram),
+              ty,
+              ty === 'RRP' ? change : '',
+              ...cells,
+            ].join('\t'),
+          );
         }
       }
     }
@@ -239,8 +254,11 @@ export default function TrendTables(props: {
   if (groups.length === 0 || buckets.length === 0) return null;
 
   const n = buckets.length;
-  const gridCols = `${W_PROD}px ${W_CONF}px ${W_TYPE}px repeat(${n}, ${W_TIME}px)`;
-  const frozenW = W_PROD + W_CONF + W_TYPE;
+  // 产品列宽随视口收窄（第一百八十九轮）；两区块在同一张 grid 上，列宽单一来源
+  // 天然逐列对齐。宽屏 prodW = W_PROD，行为逐像素不变
+  const prodW = narrowViewport ? W_PROD_NARROW : W_PROD;
+  const gridCols = `${prodW}px ${W_CONF}px ${W_TYPE}px repeat(${n}, ${W_TIME}px)`;
+  const frozenW = prodW + W_CONF + W_TYPE;
 
   /** 单元格通用样式；c = 网格列号（0 起）：首列外每列左缘 1px hairline
    *  竖向分界线（第一百三十一轮改全列——产品/配置/类型与每个时间列之间都有线） */
@@ -290,7 +308,9 @@ export default function TrendTables(props: {
     return [
       <div key={`${keyPrefix}-prod`} role="rowheader" aria-rowspan={span} style={{ ...cell(0), ...frozen(0, bg), gridRow: `span ${span}`, gap: 6 }}>
         <BrandDot brand={s.brand} />
-        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {/* minWidth 0 + overflow hidden：窄屏产品列收窄（168px）后名称省略、
+            环比行不外溢破格（第一百八十九轮） */}
+        <div style={{ minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span
             title={name}
             style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -308,7 +328,7 @@ export default function TrendTables(props: {
                 style={{
                   fontWeight: 600,
                   color: fourWeekChange == null
-                    ? color.hairlineStrong
+                    ? color.mute
                     : fourWeekChange > 0.005
                       ? color.link
                       : fourWeekChange < -0.005
@@ -316,9 +336,7 @@ export default function TrendTables(props: {
                         : color.body,
                 }}
               >
-                {fourWeekChange == null
-                  ? '—'
-                  : `${fourWeekChange > 0 ? '+' : fourWeekChange < 0 ? '−' : '±'}${Math.abs(Math.round(fourWeekChange * 1000) / 10)}%`}
+                {fourWeekChangeText(fourWeekChange)}
               </span>
             </span>
           )}

@@ -185,7 +185,7 @@ export default function PriceTrend(props: {
   const [changeThreshold, setChangeThreshold] = useState<number | null>(null);
   // 多平台对比由筛选栏下方的呈现切换驱动（chartContent，会话保留）。
   // 进入该视图时默认落在已选产品里的主品上（compareInit）。
-  const { priceSubview } = useChartContent();
+  const { priceSubview, setPriceSubview } = useChartContent();
   const compareTab = priceSubview === 'platforms';
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
 
@@ -1102,6 +1102,29 @@ export default function PriceTrend(props: {
   );
 
   // ---- 渲染 ----
+  // 多平台对比入口（第一百八十九轮定版）：主导航收敛后唯一入口 = 工具行右端
+  // 轻量文字钮（多产品视图）；进入多平台后入口原位变「← 返回多产品对比」，
+  // 渲染在 PlatformCompareView 顶部行尾。不用胶囊样式、不收进 ⋯，保持可发现。
+  const platformCtl = (
+    <button
+      type="button"
+      className="lpl-text-entry"
+      title="切到多平台对比：单产品 × 多店铺取数对比"
+      onClick={() => setPriceSubview('platforms')}
+      style={{
+        border: 'none',
+        background: 'transparent',
+        font: 'inherit',
+        fontSize: 12,
+        color: color.body,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        padding: '4px 2px',
+      }}
+    >
+      多平台对比 →
+    </button>
+  );
   return (
     <div>
       {/* 工具行（本轮拍板定版）：左簇 = 齿轮 + 隐藏对比产品（其后 = 分图/合并 +
@@ -1198,6 +1221,7 @@ export default function PriceTrend(props: {
               onOffersOn={setOffersOn}
               changeThreshold={changeThreshold}
               onChangeThreshold={setChangeThreshold}
+              compareEntry={platformCtl}
             />
           </div>
         </div>
@@ -1288,9 +1312,10 @@ export default function PriceTrend(props: {
               onChangeThreshold={setChangeThreshold}
             />
           ) : splitActive ? (
-        <>
+        <div className="lpl-fade-in">
           {/* 分离面板：所有卡片固定在同一横向轨道；共享 Y 轴固定在左侧，轨道超出视口时横向滚动。
-              每行最多 3 个，按所选面板数自适应，卡片保持最小宽度以避免图表与系列名拥挤。 */}
+              每行最多 3 个，按所选面板数自适应，卡片保持最小宽度以避免图表与系列名拥挤。
+              （189 定版：多产品/多平台互切用轻微淡入——分支根挂 lpl-fade-in，重挂即重放） */}
           <div
             style={{
               display: 'flex',
@@ -1488,9 +1513,9 @@ export default function PriceTrend(props: {
           {/* 第一百三十一轮波2：分离模式底部共享 XBrush 退役——时间筛选器已上移顶部
               筛选条，共享/独立窗口调整由各面板底部 SplitTimeTrack（+「同步」开关）
               全权承担，底部不再有重复的时间条 */}
-        </>
+        </div>
       ) : (
-        <>
+        <div className="lpl-fade-in">
           {/* 产品药丸与工具行已在图主体外统一渲染；图表本身只保留绘图区。 */}
           <Chart
             chrome={false}
@@ -1543,7 +1568,7 @@ export default function PriceTrend(props: {
                   : undefined
             }
           />
-        </>
+        </div>
       )}
       {/* X 刷选条（合并模式唯一底部时间轴，第一百三十一轮波2起为纯查看窗口轨道）：
           只调整上方极值范围内的查看窗口；时间筛选在顶部筛选条。 */}

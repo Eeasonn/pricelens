@@ -3,6 +3,9 @@
 // （主品在组内才是基准；空对/主品无数据不出价差）、按卡归组（groupsOfCards：
 // 卡序/主品在前/空对/缺数据跳过/同一对比被多卡引用各组各出）、系列 key 同构、
 // 日期列文案、折扣率/最新时点/Offering 文案。
+// 第一百八十九轮（Eason 定版收敛）：环比冻结列退役后测试无环比列断言残留；
+// 新增 fourWeekChangeText 三态用例（涨/跌/null）——近 4 周环比文案为表内
+// 产品身份格与复制明细 TSV 共用的同一格式源。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import type { Series, SeriesPoint } from '../../../dataModel/types';
@@ -12,6 +15,7 @@ import {
   baseKeyOf,
   bucketDateText,
   discountOf,
+  fourWeekChangeText,
   fmtPct,
   groupNumText,
   groupOrdinal,
@@ -63,6 +67,21 @@ describe('recentFourWeekChange：最近 4 周均价对比此前 4 周均价', ()
 
   it('此前窗口完全无有效价格时返回 null', () => {
     expect(changeOf([null, null, null, null, 100, 110, 120, 130])).toBeNull();
+  });
+});
+
+describe('fourWeekChangeText：近 4 周环比文案（第一百八十九轮，表内与复制明细 TSV 同源）', () => {
+  it('涨 = 加号一位小数', () => {
+    expect(fourWeekChangeText(0.0123)).toBe('+1.2%');
+  });
+  it('跌 = U+2212 负号一位小数', () => {
+    expect(fourWeekChangeText(-0.023)).toBe('−2.3%');
+  });
+  it('null（任一窗口无有效价）=「—」', () => {
+    expect(fourWeekChangeText(null)).toBe('—');
+  });
+  it('持平 = ± 号（与表内现有格式一致，不补 0.0）', () => {
+    expect(fourWeekChangeText(0)).toBe('±0%');
   });
 });
 

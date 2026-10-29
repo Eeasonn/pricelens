@@ -317,3 +317,20 @@ button.lpl-map-card:hover {
   to { opacity: 1; }
 }
 .lpl-fade-in-o { animation: lplFadeIn 160ms ease; }
+
+/* ============================================================
+   第一百八十九轮（Eason 定版）：多平台对比入口/返回钮——轻量文字样式，
+   悬停变墨；不用胶囊选中形态，不与主导航争视觉层级
+   ============================================================ */
+.lpl-text-entry { transition: color 160ms ease; }
+.lpl-text-entry:hover { color: #171717; }
+
+/* ============================================================
+   第一百八十九轮（窄屏可发现性）：卡内横向滚动容器——滚动条常显可拖
+   （macOS 默认 overlay 滚动条不可见，窄屏会误以为内容被裁切）
+   ============================================================ */
+.lpl-card-scroll { scrollbar-width: thin; scrollbar-color: #c8c8c8 transparent; }
+.lpl-card-scroll::-webkit-scrollbar { height: 8px; }
+.lpl-card-scroll::-webkit-scrollbar-track { background: transparent; }
+.lpl-card-scroll::-webkit-scrollbar-thumb { background: #d6d6d6; border-radius: 4px; }
+.lpl-card-scroll::-webkit-scrollbar-thumb:hover { background: #bdbdbd; }

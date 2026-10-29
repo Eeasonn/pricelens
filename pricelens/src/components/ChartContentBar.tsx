@@ -1,47 +1,42 @@
-// 图表卡片上沿的页签行（第一百八十三轮立；第一百八十四轮改版，Eason）：
-// 「价格走势」与其子视图切换（多产品对比 / 多平台对比）包进同一组、共用一条
-// 墨色下划线表达从属；子视图切换常驻——停在量价走势时仍显示价格走势当前的
-// 子视图，点按即带子视图跳回。量价走势、定价推演为同级独立页签。
-// 多产品对比、多平台对比是价格走势内部的两种看法；定价推演暂缓（并行改造中）。
-// 第一百八十五轮（Eason）：子视图去灰底胶囊改二级文字选项——当前项只以字重
-// 和颜色区分，任意时刻全行只有页签下划线一处强选中态；停在量价走势时子视图
-// 整体静默（不抢高亮），点按仍带子视图跳回价格走势。
-import type { ReactNode } from 'react';
+// 图表卡片上沿的导航行：价格走势 / 量价走势 / 定价推演 三个平级页签。
+// 第一百八十九轮定版（Eason，收敛此前双层页签讨论）：价格走势默认承载多产品
+// 对比，常驻「多产品对比」子页签退役；多平台对比降为图表工具行右端的轻量文字
+// 入口（ChartToolbar.compareEntry），进入后原位变「← 返回多产品对比」——主导航
+// 任意时刻只有一处选中（墨色 + 600 字重 + 墨色下划线），不再有父子双高亮。
+// 点「价格走势」永远落回多产品对比；在多平台对比中主导航仍只有「价格走势」选中。
+// 定价推演暂缓（并行改造中）。语义 = 导航 + 当前页状态，不再用 tablist 嵌 radiogroup。
 import { usePage } from '../state/PageContext';
-import { useChartContent, type PriceSubview } from '../state/chartContent';
+import { useChartContent } from '../state/chartContent';
 import { color, space } from '../theme/tokens';
 
-/** 页签文字（bare = 自带下划线让位给外层组，由组容器画线） */
+/** 导航页签：文字 + 墨色下划线表达当前项（aria-current，不依赖颜色单一表达） */
 function Tab({
   active,
   disabled,
-  bare,
   onClick,
   children,
   title,
 }: {
   active?: boolean;
   disabled?: boolean;
-  bare?: boolean;
   onClick?: () => void;
-  children: ReactNode;
+  children: string;
   title?: string;
 }) {
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={disabled ? undefined : !!active}
+      aria-current={active && !disabled ? 'page' : undefined}
       aria-disabled={disabled || undefined}
       title={title}
       onClick={disabled ? undefined : onClick}
       className="lpl-chart-tab"
       style={{
         height: 32,
-        marginBottom: bare ? 0 : -1,
+        marginBottom: -1,
         padding: '0 2px',
         border: 'none',
-        borderBottom: bare ? '2px solid transparent' : `2px solid ${active && !disabled ? color.ink : 'transparent'}`,
+        borderBottom: `2px solid ${active && !disabled ? color.ink : 'transparent'}`,
         background: 'transparent',
         color: disabled ? color.hairlineStrong : active ? color.ink : color.body,
         font: 'inherit',
@@ -49,7 +44,7 @@ function Tab({
         fontWeight: active && !disabled ? 600 : 400,
         cursor: disabled ? 'not-allowed' : 'pointer',
         whiteSpace: 'nowrap',
-        transition: 'color 160ms ease, border-color 160ms ease, background-color 160ms ease',
+        transition: 'color 160ms ease, border-color 160ms ease',
       }}
     >
       {children}
@@ -57,109 +52,36 @@ function Tab({
   );
 }
 
-/** 价格走势子视图切换（多产品对比 / 多平台对比）：二级文字选项——无底、无框，
- *  当前项只以字重和颜色区分（lit=false 即不在价格走势页时全部静默）。 */
-function PriceViewSwitch({
-  value,
-  onChange,
-  lit,
-}: {
-  value: PriceSubview;
-  onChange: (v: PriceSubview) => void;
-  lit: boolean;
-}) {
-  const options: { value: PriceSubview; label: string }[] = [
-    { value: 'products', label: '多产品对比' },
-    { value: 'platforms', label: '多平台对比' },
-  ];
-  return (
-    <div
-      role="radiogroup"
-      aria-label="价格走势"
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}
-    >
-      {options.map((opt) => {
-        const on = lit && value === opt.value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={value === opt.value}
-            onClick={() => onChange(opt.value)}
-            className="lpl-view-switch-option"
-            style={{
-              height: 22,
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              color: on ? color.ink : color.mute,
-              font: 'inherit',
-              fontSize: 12,
-              fontWeight: on ? 600 : 400,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              transition: 'color 160ms ease',
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 export default function ChartContentBar() {
   const { page, go } = usePage();
-  const { priceSubview, setPriceSubview } = useChartContent();
-  const onPrice = page === 'dashboard';
+  const { setPriceSubview } = useChartContent();
+  const priceOn = page === 'dashboard';
   const volumeOn = page === 'volume';
 
   const openPrice = (): void => {
+    // 恒落回多产品对比（189 定版状态规则）：从量价走势返回、在多平台对比中点
+    // 主导航，都回到多产品视图；多平台自身的筛选由入口/返回钮管理
+    setPriceSubview('products');
     if (page !== 'dashboard') go('dashboard');
   };
   const openVolume = (): void => {
     if (page !== 'volume') go('volume');
   };
-  const pickPriceView = (v: PriceSubview): void => {
-    setPriceSubview(v);
-    if (page !== 'dashboard') go('dashboard');
-  };
 
   return (
-    <div>
-      <div
-        role="tablist"
-        aria-label="图表内容"
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: 22,
-          padding: `10px ${space.lg}px 0`,
-          borderBottom: `1px solid ${color.hairline}`,
-        }}
-      >
-        {/* 价格走势 + 子视图切换同组（第一百八十四轮）：组容器画墨色下划线表达
-            「多产品/多平台对比属于价格走势」；子视图常驻，停在量价时点按即带回 */}
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 10,
-            marginBottom: -1,
-            borderBottom: `2px solid ${onPrice ? color.ink : 'transparent'}`,
-            transition: 'border-color 160ms ease',
-          }}
-        >
-          <Tab bare active={onPrice} onClick={openPrice}>价格走势</Tab>
-          <span style={{ display: 'inline-flex', alignItems: 'center', paddingBottom: 3 }}>
-            <PriceViewSwitch value={priceSubview} onChange={pickPriceView} lit={onPrice} />
-          </span>
-        </span>
-        <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
-        <Tab disabled title="即将开放">定价推演</Tab>
-      </div>
-    </div>
+    <nav
+      aria-label="图表内容"
+      style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 22,
+        padding: `10px ${space.lg}px 0`,
+        borderBottom: `1px solid ${color.hairline}`,
+      }}
+    >
+      <Tab active={priceOn} onClick={openPrice}>价格走势</Tab>
+      <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
+      <Tab disabled title="即将开放">定价推演</Tab>
+    </nav>
   );
 }

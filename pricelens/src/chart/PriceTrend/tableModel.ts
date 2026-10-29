@@ -4,6 +4,8 @@
 // 组分块（组 = 选择产品浮窗里的一张卡，保持卡序），每组价差 = 本组各对比产品
 // 相对本组主分析产品；无主品的组不出价差。
 // 不含 React/antd，可被金测直接引用。
+// 第一百八十九轮（Eason 定版收敛）：新增 fourWeekChangeText——近 4 周环比文案，
+// 宽表产品身份格与复制明细 TSV 同源同格式。
 // ============================================================
 import type { Granularity, Series, SeriesPoint } from '../../dataModel/types';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
@@ -90,6 +92,14 @@ export function recentFourWeekChange(points: ReadonlyArray<Pick<SeriesPoint, 'pr
   const previous = mean(points.slice(Math.max(0, recentStart - 4), recentStart));
   const recent = mean(points.slice(recentStart));
   return previous == null || recent == null || previous <= 0 ? null : (recent - previous) / previous;
+}
+
+/** 近 4 周环比文案（第一百八十九轮，Eason 定版收敛）：+1.2% / −1.2% / ±0%，
+ *  无值 =「—」（U+2212 负号，与 fmtPct 同语言）。宽表产品身份格与复制明细
+ *  TSV 同源同格式；涨跌着色属视图层，留在 TrendTables */
+export function fourWeekChangeText(change: number | null): string {
+  if (change == null) return '—';
+  return `${change > 0 ? '+' : change < 0 ? '−' : '±'}${Math.abs(Math.round(change * 1000) / 10)}%`;
 }
 
 /** Offering 单元格全文：折扣/分期/赠品明细以「；」连接；无权益为空串 */

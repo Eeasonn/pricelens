@@ -53,6 +53,9 @@ export interface ChartToolbarProps {
   onPriceTypeToggle?: (key: 'discounted' | 'rrp', next: boolean) => void;
   /** 齿轮之后的插槽：全局「隐藏对比产品」（cluster/all 模式下与齿轮同簇） */
   priceTypesAfter?: ReactNode;
+  /** 行尾次级入口插槽（第一百八十九轮定版）：多平台对比入口/返回钮——分隔线 +
+      轻量文字钮，与大促/权益显示设置同排但不混入 ⋯ 菜单，保证可发现性 */
+  compareEntry?: ReactNode;
   /** 悬停页签比率（收进 ⋯；默认周环比） */
   tipMode?: 'discount' | 'wow';
   onTipMode?: (v: 'discount' | 'wow') => void;
@@ -429,6 +432,14 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           </RoundIconButton>
         </Popover>
         </span>
+      )}
+      {showRight && props.compareEntry && (
+        // 第一百八十九轮（Eason 定版）：多平台对比入口收在工具行最右端——
+        // 与显示设置之间一根 hairline 分隔线，保持次级功能的可发现性
+        <>
+          <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+          {props.compareEntry}
+        </>
       )}
     </div>
   );
