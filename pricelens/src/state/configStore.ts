@@ -2,6 +2,9 @@
 // 配置读写 + CONFIG_CHANGED_EVENT 广播（§13；键名见 lplKeys.ts）
 // 筛选与配置负责人（Agent B）。
 // 图表侧（Agent C）可只读引用：getFxRate。
+// 第一百八十五轮（外部 UX 审计落地）：新增窄域恢复 API——
+// clearBenchmarkEntry（单个配置的对标回默认）与 clearPrevGenOverridesForModels
+// （按型号清单清上一代覆盖），避免「恢复默认」误伤其他国家/型号的人工配置。
 // ============================================================
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimBenchmark, dimProduct } from '../data';
@@ -137,6 +140,38 @@ export function saveBenchmark(rows: DimBenchmark[] | null): void {
   writeJson(LPL.cfgBenchmark, rows);
 }
 
+/**
+ * 第一百八十五轮（外部 UX 审计落地）：只把一个「国家×型号×配置」的对标恢复为系统
+ * 默认，其他国家/型号/配置的行原样保留。手动快照是「存在即整表接管」语义
+ * （getEffectiveBenchmark），单纯删掉该组的行会让它变成空白而不是回退默认——
+ * 因此以当前生效矩阵为基底移除该组，再把维表默认行原样补回（与编辑弹窗整快照
+ * 保存的既有设计一致，行来源 matrix/auto/substitute 随维表保留）；基底为空
+ * （该组无任何对标）则整键清除，全表回默认。无手动快照时本就处于默认口径，
+ * 直接返回，不凭空建快照。配置键与读取侧同样按去空格归一比较。
+ */
+export function clearBenchmarkEntry(countryCode: string, modelId: string, romram: string): void {
+  const manual = readJson<DimBenchmark[]>(LPL.cfgBenchmark);
+  if (!Array.isArray(manual)) return;
+  const key = romram.replace(/\s+/g, '');
+  const sameEntry = (r: DimBenchmark): boolean =>
+    (r.country_code ?? countryCode) === countryCode &&
+    r.own_model_id === modelId &&
+    (r.own_romram ?? '').replace(/\s+/g, '') === key;
+  const next = [
+    ...getEffectiveBenchmark().filter((r) => !sameEntry(r)),
+    ...dimBenchmark.filter(sameEntry),
+  ];
+  if (next.length === 0) {
+    try {
+      localStorage.removeItem(LPL.cfgBenchmark);
+    } catch {
+      /* 忽略 */
+    }
+    return;
+  }
+  writeJson(LPL.cfgBenchmark, next);
+}
+
 // ---------------- 上一代关系（LPL3.config.prevGen；「匹配上一代」的数据源） ----------------
 
 /** 上一代关系手动覆盖表：modelId → prevModelId（null = 显式置空；缺省键 = 回退 auto） */
@@ -165,6 +200,29 @@ export function savePrevGenOverrides(map: PrevGenOverrides | null): void {
     return;
   }
   writeJson(LPL.cfgPrevGen, map);
+}
+
+/**
+ * 第一百八十五轮（外部 UX 审计落地）：只清除指定型号的上一代人工覆盖（配置页传
+ * 当前国家可见的型号清单），其余型号原样保留；清空则整键移除（全部回 auto）。
+ * 覆盖表按型号 id 全局单表存储（同型号在多国共用一份关系），按型号清单收窄已是
+ * 该结构下最细的粒度。返回实际清除的条数，供调用方在提示里写明范围。
+ */
+export function clearPrevGenOverridesForModels(modelIds: readonly string[]): number {
+  const raw = readJson<PrevGenOverrides>(LPL.cfgPrevGen);
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return 0;
+  const targets = new Set(modelIds);
+  const rest: PrevGenOverrides = {};
+  let removed = 0;
+  for (const [k, v] of Object.entries(raw)) {
+    if (targets.has(k)) {
+      removed += 1;
+      continue;
+    }
+    rest[k] = v;
+  }
+  if (removed > 0) savePrevGenOverrides(Object.keys(rest).length > 0 ? rest : null);
+  return removed;
 }
 
 /** auto 口径：dim_product.prev_model_id（型号级前后代，同型号各 SKU 共享；行可能缺键） */

@@ -9,6 +9,9 @@
 // 入口不再长期占据主导航，功能随迭代回归时再上架）②描边按钮页签改安静的文字
 // 页签 + 当前页唯一下划线指示，降低控制面板感 ③分析页签与管理页签之间加短
 // 竖线轻微分组 ④当前页 aria-current="page" ⑤页头允许换行（窄视口不再横向裁切）。
+// 第一百八十五轮（外部 UX 审计落地）：管理页返回入口从「仅站点徽标可点」补上
+// 可见的「返回看板」轻量文字按钮——徽标自身不表意，纯图标/文字化名不可发现；
+// 文字按钮紧随徽标、同行为（回看板），分析页不显示。
 // ============================================================
 import { useState, type ReactNode } from 'react';
 import { ConfigProvider, Tooltip } from 'antd';
@@ -48,26 +51,50 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
         {page === 'config' || page === 'alerts' ? (
           // 管理页的返回入口：分析页签已移至图表卡页签行（ChartContentBar），
           // 这里以站点徽标承担「回看板」（悬停变蓝给出可点反馈）
-          <button
-            type="button"
-            onClick={() => go('dashboard')}
-            title="返回价格走势"
-            aria-label="返回价格走势"
-            className="lpl-logo-home"
-            style={{
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              font: 'inherit',
-              fontSize: fontSize.bodyMd,
-              fontWeight: 600,
-              color: color.ink,
-              cursor: 'pointer',
-              transition: 'color 160ms ease',
-            }}
-          >
-            PriceLens
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => go('dashboard')}
+              title="返回价格走势"
+              aria-label="返回价格走势"
+              className="lpl-logo-home"
+              style={{
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                font: 'inherit',
+                fontSize: fontSize.bodyMd,
+                fontWeight: 600,
+                color: color.ink,
+                cursor: 'pointer',
+                transition: 'color 160ms ease',
+              }}
+            >
+              PriceLens
+            </button>
+            {/* 第一百八十五轮（外部 UX 审计落地）：可见的返回文字——徽标可点但
+                不表意，补一枚轻量文字按钮（与徽标同行为）；文字本身即可访问名，
+                悬停变蓝走 .lpl-back-home（与徽标悬停同语言） */}
+            <button
+              type="button"
+              onClick={() => go('dashboard')}
+              title="返回价格走势"
+              className="lpl-back-home"
+              style={{
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                font: 'inherit',
+                fontSize: 12,
+                color: color.mute,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'color 160ms ease',
+              }}
+            >
+              返回看板
+            </button>
+          </>
         ) : (
           <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
         )}

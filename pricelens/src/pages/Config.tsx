@@ -10,6 +10,9 @@
 // ② 汇率：只读——真实数据每行自带采集时汇率，USD 值按行折算；此处展示当前国家本币的月度中位汇率
 // ③ 大促日历：只读展示当前国家 dim_promo 的起始时间与促销深度——看板大促带/事件卡的口径来源
 // 保存后 dispatchEvent(CONFIG_CHANGED_EVENT) → 主页立即生效
+// 第一百八十五轮（外部 UX 审计落地）：上一代关系「恢复默认」收窄为只清当前国家
+// 型号的人工维护（clearPrevGenOverridesForModels，其他国家原样保留）；默认平台
+// 店铺的取价说明与实际回退链对齐（自动 = 每周最低在架价：默认店铺→预填主店→默认平台）。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -17,6 +20,7 @@ import { Button, Empty, message, Popconfirm, Select, Tag, Tooltip } from 'antd';
 import PageHeader from '../components/PageHeader';
 import {
   autoPrevModelId,
+  clearPrevGenOverridesForModels,
   effectivePrevModelId,
   getPrevGenOverrides,
   notifyConfigChanged,
@@ -121,11 +125,19 @@ export default function Config() {
     message.success('上一代关系已保存，主页已生效');
   };
 
+  // 第一百八十五轮（外部 UX 审计落地）：当前国家人工维护的型号数——「恢复默认」
+  // 的确认范围与按钮空态都以此为据（覆盖表全局单表，此页只动当前国家的型号）
+  const manualPrevCount = prevRows.filter(
+    (r) => (prevMap[r.modelId] ?? null) !== autoPrevModelId(r.modelId),
+  ).length;
+
+  /** 「恢复默认」收窄（第一百八十五轮）：只清除当前国家型号的人工维护，
+   *  其他国家型号原样保留（原实现清整份跨国覆盖表，不可撤销） */
   const restorePrevGenDefault = () => {
-    savePrevGenOverrides(null); // 清除手动维护，全部回退 dim_product auto
+    const removed = clearPrevGenOverridesForModels(prevRows.map((r) => r.modelId));
     setPrevMap(Object.fromEntries(prevRows.map((r) => [r.modelId, autoPrevModelId(r.modelId)])));
     notifyConfigChanged();
-    message.success('已恢复默认上一代关系');
+    message.success(`已恢复${labels.country} ${removed} 个型号的默认上一代关系`);
   };
 
   // ---------------- 默认平台店铺（第一百三十七轮）：预填 + 人工覆盖，即改即存，主页取价即时生效 ----------------
@@ -257,13 +269,13 @@ export default function Config() {
                 </Tag>
               ) : (
                 <Tag style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
-                  平台默认：{defaultPlatformOf(state.countryCode) ?? '—'} 平台内最低价
+                  平台默认：{defaultPlatformOf(state.countryCode) ?? '—'} 平台内最低在架价
                 </Tag>
               )}
             </div>
             <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px' }}>
+              未在筛选条选择平台时，看板取「自动」价 = 每周最低在架价：优先取默认店铺；未设置时取预填主店；仍无则取默认平台。改动即时生效。
               各国默认店铺已按事实数据预填（默认平台内数据最全的主店）；此处改动即人工覆盖，清除后回到预填。
-              未在筛选条选择平台时，看板所有价格按生效默认店铺取价（单店精确口径），改动立即生效。
               「平台价差」预警按该国全部平台计算，不受默认店铺影响。
             </div>
           </Block>
@@ -273,14 +285,21 @@ export default function Config() {
             title="上一代关系"
             extra={
               <Popconfirm
-                title="将清除全部手动维护的上一代关系，确定？"
+                title={`仅清除${labels.country} ${manualPrevCount} 个型号的人工关系？`}
+                description="其他国家的型号不受影响，清除后回到产品主数据的默认关系"
                 okText="确定"
                 cancelText="取消"
                 okButtonProps={{ size: 'small' }}
                 cancelButtonProps={{ size: 'small' }}
                 onConfirm={restorePrevGenDefault}
               >
-                <Button size="small">恢复默认</Button>
+                <Button
+                  size="small"
+                  disabled={manualPrevCount === 0}
+                  title={manualPrevCount === 0 ? '当前国家没有人工维护的上一代关系' : undefined}
+                >
+                  恢复默认
+                </Button>
               </Popconfirm>
             }
           >

@@ -44,6 +44,15 @@
 //   删除模板，改动即存。按钮簇（第一百三十一轮建、第一百四十二轮追补文案区分
 //   范围）：卡级组头右侧 = 匹配竞品 · 存为模板（该组） · ✕；顶栏右侧 =
 //   匹配竞品 · 全部存为模板（仅 ≥2 组显示，单卡与卡级等价故隐藏） · 清空。
+// 第一百八十五轮（外部 UX 审计落地）：①窄屏钳制——浮窗宽改
+//   min(860px, calc(100vw - 48px))，落点经 clampPanelPos 钳进视口（左右至少
+//   24px 边距；底边由 maxHeight 按钳制后 top 收口，不越视口）；②键盘可达——
+//   主品/对比条「点击即更换」整框改 div + role="button"（内嵌颜色/✕ 原生
+//   按钮，button 不能套 button，182 轮模板 chip 外壳同款做法，Enter/Space
+//   同点击且内层控件持有焦点时不代答）；模板 chip 外壳键盘 handler 补同一
+//   guard（修复内层 ✎ 的 Enter 被外壳截走的潜伏问题）；③dialog 语义——
+//   浮窗根容器 role="dialog" aria-modal + 可访问名「选择产品」，打开时焦点
+//   移入、关闭（含 Esc/外点）时经 captureFocusRestore 还给页内触发器。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -92,9 +101,12 @@ import {
   StateTag,
   SwapPill,
   TIP_Z,
+  clampPanelPos,
+  captureFocusRestore,
   pillW,
   textW,
   useTreeData,
+  PICKER_EDGE,
   ROW_GAP,
 } from './pickerBits';
 import {
@@ -849,11 +861,25 @@ function MainRow({ card }: { card: MainProduct }) {
   return (
     /* 第一百五十四轮：「更换」按钮退役——整框即更换入口（点框内任意位置开
      * 完整树；颜色 chip 换色不冒泡避开）。框与对比条同弧度、白底（不带灰色
-     * 底色）、与中间分界线留距；移入选中样式（.lpl-pk-edit 浅蓝底蓝描边） */
+     * 底色）、与中间分界线留距；移入选中样式（.lpl-pk-edit 浅蓝底蓝描边）。
+     * 第一百八十五轮：框内嵌颜色 chip/配置等原生按钮，button 不能套 button，
+     * 外壳用 div + role="button"（182 轮模板 chip 外壳同款）——Tab 可达，
+     * Enter/Space 同点击；onKeyDown 只在外壳自身持有焦点时代答，内层控件
+     * （颜色 chip 等）的键盘操作不被截走 */
     <LevelSwitchPopover ctx={{ kind: 'replace-main', cardId: card.id }} initialModelId={main.modelId}>
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={`更换主分析产品 ${modelNameOf(main.modelId)}`}
         className="lpl-pk-edit"
         title="点击更换主分析产品"
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.currentTarget.click(); // rc-trigger 挂在壳上的点击 → 开完整树浮窗
+          }
+        }}
         style={{
           flex: 1,
           display: 'flex',
@@ -904,11 +930,23 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
   const brand = brandOfModel(sel.modelId);
   return (
     /* 第一百五十四轮：「更换」按钮退役——整条即更换入口（空白处点击开完整
-     * 树，移入选中样式 .lpl-pk-edit）；颜色 chip 与 ✕ 阻止冒泡避开编辑触发 */
+     * 树，移入选中样式 .lpl-pk-edit）；颜色 chip 与 ✕ 阻止冒泡避开编辑触发。
+     * 第一百八十五轮：条内嵌颜色 chip/移除 ✕ 原生按钮，外壳同主品框改
+     * div + role="button"，Enter/Space 同点击、内层控件持有焦点时不代答 */
     <LevelSwitchPopover ctx={{ kind: 'replace-compare', cardId: card.id, sel }} initialModelId={sel.modelId}>
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={`更换对比产品 ${[modelNameOf(sel.modelId), configTextOf(sel.romram)].filter(Boolean).join(' ')}`}
         className="lpl-pk-edit"
         title="点击更换对比产品"
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.currentTarget.click(); // rc-trigger 挂在壳上的点击 → 开完整树浮窗
+          }
+        }}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -1012,22 +1050,49 @@ export default function ProductPickerFlyout({
   children: ReactNode;
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  // 焦点只随浮窗首次落位移入一次（resize 跟随重算落点时不抢回焦点）
+  const didFocusRef = useRef(false);
 
-  // 打开时测量锚点位置（随窗口尺寸跟进）
+  // 打开时测量锚点位置并钳进视口（随窗口尺寸跟进）。第一百八十五轮：
+  // 宽度走 CSS min(860px, calc(100vw - 48px))（与钳制用的同一宽度算式），
+  // 左右至少留 24px 边距、顶边不越界；底边由渲染处 maxHeight 按钳制后
+  // top 收口——任何落点下浮窗都不越视口。
   useEffect(() => {
     if (!open) {
       setPos(null);
+      didFocusRef.current = false;
       return;
     }
     const measure = (): void => {
       const r = anchorRef.current?.getBoundingClientRect();
-      if (r) setPos({ left: r.left, top: r.bottom + 6 });
+      if (!r) return;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const w = Math.min(860, vw - 48); // 与下方 style.width 的 min() 同式
+      setPos(clampPanelPos(r.left, r.bottom + 6, w, vw, vh));
     };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [open]);
+
+  // 焦点归还（第一百八十五轮）：打开时记下触发器（页内「选择产品」钮），
+  // 关闭——含 Esc / 外点，走同一卸载路径——时把焦点还回去；触发器已不在
+  // 文档中则跳过
+  useEffect(() => {
+    if (!open) return;
+    const restore = captureFocusRestore();
+    return () => restore();
+  }, [open]);
+
+  // 浮窗落位后焦点移入容器（dialog 语义：进入即落在可访问名上）；只执行一次
+  useEffect(() => {
+    if (!open || !pos || didFocusRef.current) return;
+    didFocusRef.current = true;
+    panelRef.current?.focus();
+  }, [open, pos]);
 
   // 外点关闭：锚点与本浮层内的点击（含嵌套树浮窗/颜色浮层/轻确认/模板编辑
   // 浮窗）不关——编辑浮窗是挂在 body 上的独立定位层，须显式放行
@@ -1071,14 +1136,22 @@ export default function ProductPickerFlyout({
         pos &&
         createPortal(
             <div
+              ref={panelRef}
               data-lpl-picker-panel
+              className="lpl-fade-in"
+              /* 第一百八十五轮：dialog 语义 + 焦点入口（tabIndex=-1 供编程聚焦）；
+               * maxHeight 按钳制后 top 动态收口，底边恒在视口内（24px 边距） */
+              role="dialog"
+              aria-modal="true"
+              aria-label="选择产品"
+              tabIndex={-1}
               style={{
                 position: 'fixed',
                 left: pos.left,
                 top: pos.top,
                 zIndex: PANEL_Z,
-                width: 860,
-                maxHeight: 'calc(100vh - 132px)',
+                width: 'min(860px, calc(100vw - 48px))',
+                maxHeight: `calc(100vh - ${Math.round(pos.top) + PICKER_EDGE}px)`,
                 overflowY: 'auto',
                 background: color.canvas,
                 borderRadius: radius.card,
@@ -1349,7 +1422,10 @@ function PickerPanel() {
                     className="lpl-pk-ghost"
                     onClick={() => appendCombo(c)}
                     onKeyDown={(e) => {
-                      // chip 内嵌编辑/＋两个原生按钮，本体外壳用 span：键盘 Enter/Space 同点击
+                      // chip 内嵌编辑/＋两个原生按钮，本体外壳用 span：键盘 Enter/Space 同点击。
+                      // 第一百八十五轮补 guard：内层按钮持有焦点时不代答——否则
+                      // Enter 会被外壳截走（preventDefault 吞掉原生点击），✎ 键盘失灵
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         appendCombo(c);

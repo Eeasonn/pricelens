@@ -12,6 +12,11 @@
 // ④ 历史事件（次级，默认折叠）：周分组时间序 + 方向箭头（跌/加深琥珀↓、涨/收窄蓝↑）+ 看板跳转。
 // 数据 = alerts.ts 纯引擎（useAlerts 与页头徽标/总览列/看板共用一份结果）+
 //   groupAlertsBySeries / groupAlertsByWeek / latestAlerts 分组纯函数（金测锚定）。
+// 第一百八十五轮（外部 UX 审计落地）：
+// ① 键盘可达——表头全局阈值、单品阈值触发器 span → 原生 button（Enter/Space 原生支持）；
+//    最新触发单元格保留 span 外壳（表格布局敏感），补 tabIndex + Enter/Space 键盘等价；
+// ② 对比度——阈值等可点文字 10px/#a1a1a1(2.58:1) → 11px/color.mute(4.7:1)，
+//    页内 10px 可读文字统一升 11px（pill 徽标与禁用态「—」占位除外）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
@@ -461,7 +466,7 @@ export default function AlertsPage() {
           <span style={{ fontSize: 12, fontWeight: 700, color: on ? color.mute : color.hairlineStrong, whiteSpace: 'nowrap' }}>
             {rule.name.replace('预警', '')}
             {rule.below && (
-              <span style={{ fontSize: 10, color: '#be123c', marginLeft: 3, fontWeight: 600 }}>低于触发</span>
+              <span style={{ fontSize: 11, color: '#be123c', marginLeft: 3, fontWeight: 600 }}>低于触发</span>
             )}
           </span>
         </span>
@@ -486,13 +491,15 @@ export default function AlertsPage() {
             </div>
           }
         >
-          <span
-            role="button"
+          {/* 第一百八十五轮：span → 原生 button（键盘 Enter/Space 原生可达）；
+              关断态文字 hairlineStrong → color.mute（可点文字不用 hairlineStrong，2.58:1 → 4.7:1） */}
+          <button
+            type="button"
             className="tnum"
             title={`${rule.name}全局阈值（点击调整）`}
             style={{
-              fontSize: 10,
-              color: on ? color.link : color.hairlineStrong,
+              fontSize: 11,
+              color: on ? color.link : color.mute,
               cursor: on ? 'pointer' : 'default',
               borderBottom: `1px dashed ${on ? 'rgba(0,112,243,0.5)' : 'transparent'}`,
               whiteSpace: 'nowrap',
@@ -500,7 +507,7 @@ export default function AlertsPage() {
           >
             {rule.below ? '<' : '≥'}
             {val}% ⌄
-          </span>
+          </button>
         </Popover>
       </div>
     );
@@ -567,14 +574,16 @@ export default function AlertsPage() {
           </div>
         }
       >
-        <span
-          role="button"
+        {/* 第一百八十五轮：span → 原生 button（键盘 Enter/Space 原生可达）；
+            未覆写态 hairlineStrong → color.mute、10px → 11px（2.58:1 → 4.7:1，可读性达标） */}
+        <button
+          type="button"
           title={thrOverridden ? '已单独设置阈值' : '跟随全局，点击单独设置'}
           className="tnum"
           style={{
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: thrOverridden ? 700 : 400,
-            color: thrOverridden ? '#0070f3' : color.hairlineStrong,
+            color: thrOverridden ? '#0070f3' : color.mute,
             cursor: 'pointer',
             whiteSpace: 'nowrap',
             borderBottom: thrOverridden ? '1px dashed #0070f3' : 'none',
@@ -582,7 +591,7 @@ export default function AlertsPage() {
         >
           {r.below ? '<' : '≥'}
           {thrVal}%{thrOverridden ? ' *' : ''}
-        </span>
+        </button>
       </Popover>
     );
   };
@@ -632,9 +641,9 @@ export default function AlertsPage() {
               型号级{n > 1 ? ` ×${n}` : ''}
             </span>
           ) : (
-            <span style={{ fontSize: 10, color: color.mute }}>型号级</span>
+            <span style={{ fontSize: 11, color: color.mute }}>型号级</span>
           )}
-          {n > 0 && <span style={{ fontSize: 10, color: color.hairlineStrong }}>成对明细见下</span>}
+          {n > 0 && <span style={{ fontSize: 11, color: color.mute }}>成对明细见下</span>}
         </span>,
       );
     }
@@ -647,12 +656,20 @@ export default function AlertsPage() {
     return wrap(
       <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, maxWidth: '100%' }}>
         {!on || latest == null ? (
-          <span style={{ fontSize: 10, color: !on ? color.hairlineStrong : '#0a7d38' }}>{!on ? '—' : '正常'}</span>
+          <span style={{ fontSize: 11, color: !on ? color.hairlineStrong : '#0a7d38' }}>{!on ? '—' : '正常'}</span>
         ) : (
           <span
             role="button"
+            tabIndex={0}
             title={`${TYPE_STYLE[t].label}最新触发 · ${weekTag(latest.weekId)}（${latest.weekLabel}）· 点击${open ? '收起' : '展开历史'}`}
             onClick={() => toggleExp(expKey)}
+            onKeyDown={(e) => {
+              // 第一百八十五轮（键盘可达）：表格单元格内布局敏感保留 span 外壳，
+              // Enter / Space 触发与点击等价（Space 阻止默认滚动）
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              toggleExp(expKey);
+            }}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', maxWidth: '100%' }}
           >
             <span

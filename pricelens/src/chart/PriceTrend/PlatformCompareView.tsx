@@ -14,6 +14,8 @@
 //    标记全部同参）+ 底部查看窗口毛刷（XBrush），时间窗/视图开关与主图共用
 //    同一份状态（页签切换互不重置）。每条店铺线覆写 key/名称/线色（同产品
 //    多条线，品牌键与品牌色都会撞），线色用低饱和平台色板（原弹窗色板沿用）。
+// 第一百八十五轮（外部 UX 审计落地）：店铺线取数异常 ≠ 空态——不再静默回落
+// 「暂无数据」，failed 标记走「数据加载异常 / 请刷新重试」（沿用空态排版）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button, Popover } from 'antd';
@@ -46,6 +48,15 @@ import { buildPromoBands, type LineShapeChoice, type PromoBand } from './chartMo
 
 /** 店铺线色板（低饱和六色，原多平台比价弹窗色板沿用；超出循环取色） */
 const PLATFORM_PALETTE = ['#4c78a8', '#c78a4b', '#6f9e6a', '#a878a8', '#9d755d', '#4fa3a5'];
+
+/** 取数异常占位（第一百八十五轮，外部 UX 审计）：异常 ≠ 空态——主句 + 副句，
+ *  样式沿用 Chart 空态居中排版（灰字），与「暂无数据」明确区分 */
+const LOAD_ERROR_HINT = (
+  <>
+    数据加载异常
+    <div style={{ marginTop: 4, fontSize: fontSize.caption }}>请刷新重试</div>
+  </>
+);
 
 /** 一条店铺线 = chips 里的一项：
  *  platform = 平台自动（平台内每周最低价店铺）；channel = 具体店铺（渠道）；
@@ -493,9 +504,11 @@ export default function PlatformCompareView(props: {
     );
   }, [product, cc, state.currency]);
 
-  // 每条店铺线一组：buildSeries 后覆写 key/名称/线色（同产品多线，品牌键/品牌色会撞）
-  const shopSeries = useMemo<Series[]>(() => {
-    if (!product || !repSkuId || shops.length === 0) return [];
+  // 每条店铺线一组：buildSeries 后覆写 key/名称/线色（同产品多线，品牌键/品牌色会撞）。
+  // 第一百八十五轮（外部 UX 审计）：取数异常 ≠ 空态——failed 标记随结果上交，
+  // 渲染层改显「数据加载异常」，不再静默伪装成「暂无数据」
+  const shopSeriesRes = useMemo<{ series: Series[]; failed: boolean }>(() => {
+    if (!product || !repSkuId || shops.length === 0) return { series: [], failed: false };
     const [dataStart, dataEnd] = dataBucketRange(state.granularity);
     const groups = shops.map(
       (sh): SkuGroupQuery => ({
@@ -507,6 +520,7 @@ export default function PlatformCompareView(props: {
       }),
     );
     let built: Series[] = [];
+    let failed = false;
     try {
       built = buildSeries({
         groups,
@@ -518,16 +532,20 @@ export default function PlatformCompareView(props: {
         scope: { countryCode: cc, industry: state.industry },
       });
     } catch {
-      built = []; // 空态不崩
+      failed = true;
     }
-    if (built.length !== shops.length) return [];
-    return built.map((s, i) => ({
-      ...s,
-      key: shops[i].id,
-      label: shopLabelOf(shops[i]),
-      color: PLATFORM_PALETTE[i % PLATFORM_PALETTE.length],
-    }));
+    if (!failed && built.length !== shops.length) return { series: [], failed: false };
+    return {
+      series: built.map((s, i) => ({
+        ...s,
+        key: shops[i].id,
+        label: shopLabelOf(shops[i]),
+        color: PLATFORM_PALETTE[i % PLATFORM_PALETTE.length],
+      })),
+      failed,
+    };
   }, [product, repSkuId, shops, state.granularity, state.currency, state.agg, cc, state.industry]);
+  const shopSeries = shopSeriesRes.series;
 
   // 窗口切片 + 边缘续接标记（与主图 visSeries 同逻辑）
   const winSeries = useMemo<Series[]>(() => {
@@ -589,15 +607,18 @@ export default function PlatformCompareView(props: {
   };
   const seriesById = useMemo(() => new Map(winSeries.map((s) => [s.key, s])), [winSeries]);
 
-  const emptyHint = !product
-    ? '请先在上方筛选器选择产品，再做多平台对比'
-    : shops.length === 0
-      ? '点击「＋ 添加店铺」选择要对比的平台 / 店铺'
-      : winSeries.length === 0
-        ? '该产品在所选店铺暂无价格数据'
-        : shownSeries.length === 0
-          ? '店铺折线均已隐藏，点击上方店铺恢复显示'
-          : undefined;
+  // 空态/异常提示（第一百八十五轮：取数异常优先于全部空态文案）
+  const emptyHint = shopSeriesRes.failed
+    ? LOAD_ERROR_HINT
+    : !product
+      ? '请先在上方筛选器选择产品，再做多平台对比'
+      : shops.length === 0
+        ? '点击「＋ 添加店铺」选择要对比的平台 / 店铺'
+        : winSeries.length === 0
+          ? '该产品在所选店铺暂无价格数据'
+          : shownSeries.length === 0
+            ? '店铺折线均已隐藏，点击上方店铺恢复显示'
+            : undefined;
 
   return (
     <div>

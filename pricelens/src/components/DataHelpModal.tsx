@@ -5,10 +5,15 @@
 // 汇率 / 数据质量标记 / 权益与大促档期 / 价格预警。修改任何取数规则时同步维护本页。
 // 翻修要点：①顶部锚点 chip 导航（点击平滑滚动到对应节）；②口径文案与实现对齐
 // （销量估算因子全列、比当前基准随所选店铺/平台、促销日历只读）；③文案去工程词。
+// 第一百八十五轮（外部 UX 审计落地）：①「自动」口径文案与 effectiveChannelIds /
+// defaultChannelOf 的真实回退链对齐（默认店铺 → 预填主店 → 默认平台，取每周最低
+// 在架价），与渠道选择浮层的胶囊说明同句；②锚点滚动接入 scrollBehaviorOf()，
+// 系统开启「减少动态效果」时退回瞬时跳转。
 // ============================================================
 import { useRef } from 'react';
 import { Modal } from 'antd';
 import { color, fontSize, radius, selectSoft, selectSoftInk } from '../theme/tokens';
+import { scrollBehaviorOf } from '../theme/motion';
 
 /** 锚点节（每节一枚 chip）：id 落在节标题上，点击平滑滚动 */
 const ANCHORS = [
@@ -43,13 +48,14 @@ const Li = ({ children }: { children: React.ReactNode }) => (
 
 export default function DataHelpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  /** 只滚动弹窗内容区（不动弹窗外的页面），顶部留出锚点导航条的高度 */
+  /** 只滚动弹窗内容区（不动弹窗外的页面），顶部留出锚点导航条的高度；
+   *  滚动行为走 scrollBehaviorOf()（减少动态效果时瞬时跳转） */
   const jumpTo = (id: string): void => {
     const box = scrollRef.current;
     const el = document.getElementById(id);
     if (!box || !el) return;
     const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top;
-    box.scrollTo({ top: box.scrollTop + delta - 42, behavior: 'smooth' });
+    box.scrollTo({ top: box.scrollTop + delta - 42, behavior: scrollBehaviorOf() });
   };
 
   return (
@@ -88,7 +94,7 @@ export default function DataHelpModal({ open, onClose }: { open: boolean; onClos
         </Section>
         <Section id="dhm-shop" title="二、每个产品的取价渠道（平台 / 店铺）">
           <Li><b>每个产品单独选择取价渠道</b>：图上每条产品线自成口径，主品的渠道不再牵连对比产品——避免「按主品渠道取价，对比产品在该渠道没有价格」的断线。入口 = 图上每款产品药丸上方的<b>平台小药丸</b>。</Li>
-          <Li>默认「自动」= 不锁渠道，<b>显示每周最低价的平台-店铺</b>（取数来源随周变化，明细表「平台-店铺」行逐周说明）；点击小药丸可改选固定平台 → 渠道 → 卖家，底部「自动」胶囊随时恢复。</Li>
+          <Li><b>自动 = 每周最低在架价：优先取默认店铺；未设置时取预填主店；仍无则取默认平台。</b>（取数来源随周变化，明细表「平台-店铺」行逐周说明）；点击小药丸可改选固定平台 → 渠道 → 卖家，底部「自动」胶囊随时恢复。</Li>
           <Li>改选只影响该产品自己的价格线；取证链接与「取价店铺」随所选渠道带出。</Li>
           <Li>切换国家后，所选渠道在新国家不存在时自动回退「自动」口径。</Li>
         </Section>

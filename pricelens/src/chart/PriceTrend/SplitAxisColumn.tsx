@@ -3,13 +3,13 @@
 // Y 刻度标签（随「显示 Y 刻度线」开关）、刻度短横线、断轴省略号。全面板共享同一 yScale
 // （并集算一次受控传入），每行画一份 = 「只显示靠左的那一个」；面板卡片（axisChrome=false）
 // 不再各自包轴，宽度全部让给绘图区。
-// 第九十一轮与主图完全同构：[档位区块贴左 0 = 档位文字三行竖排居中][刻度文字 8px
-// 右对齐叠画在区块上][短横线]，Y 刻度随「Y 刻度线」开关显隐（关 = 仅档位、文字居中
+// 第九十一轮与主图完全同构：[档位区块贴左 0 = 档位文字三行竖排居中][刻度文字
+// Y_TICK_FONT（185 轮 8→10，与主图同源）右对齐叠画在区块上][短横线]，Y 刻度随「Y 刻度线」开关显隐（关 = 仅档位、文字居中
 // 整块）、总宽恒定——主图与分离轴列逐像素同款。
 // 纯渲染：几何 = 用与面板相同的 gridTop/plotHeight 构造的伪 Geom（plotWidth=0 即可
 // ——轴元素全部只依赖纵向几何）。
 // ============================================================
-import { buildTierBoxes, buildTickRows, thinTickRows } from './chartModel';
+import { buildTierBoxes, buildTickRows, thinTickRows, Y_TICK_FONT } from './chartModel';
 import {
   AXIS_BAND_W,
   GRID,
@@ -118,7 +118,8 @@ export default function SplitAxisColumn(props: {
               paddingRight: 3,
               boxSizing: 'border-box',
               textAlign: 'right',
-              fontSize: 8,
+              /* 第一百八十五轮：8→10，与主图同源（Y_TICK_FONT；行盒 14px 不变，几何不动） */
+              fontSize: Y_TICK_FONT,
               lineHeight: '14px',
               color: color.mute,
               whiteSpace: 'nowrap',

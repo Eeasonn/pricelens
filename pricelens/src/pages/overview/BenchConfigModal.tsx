@@ -8,6 +8,9 @@
 // Pricefx）——候选区按同档位优先、价差升序排（v0 置信度 = 价差%），人工添加/移除/排序；
 // 保存走 configStore.manual 快照 + CONFIG_CHANGED_EVENT 广播（矩阵与看板竞品即时同步）。
 // 映射粒度 = ROM 级（own_model_id × own_romram → competitor_sku_id）。
+// 第一百八十五轮（外部 UX 审计落地）：「恢复默认」收窄为只恢复当前正在编辑的这条
+// 配置（clearBenchmarkEntry），不再清整份跨国快照；去掉 keyboard={false}，
+// Esc 关闭 = 取消（草稿不保存），与其他弹窗一致。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Modal, Popconfirm, Segmented, message } from 'antd';
@@ -19,7 +22,7 @@ import { getCurrentCountry } from '../../state/currentScope';
 import { useFilters } from '../../state/FiltersContext';
 import type { OverviewModel, OverviewRow, OverviewTierBand } from '../../dataModel/aggregate';
 import type { DimBenchmark } from '../../dataModel/types';
-import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark, notifyConfigChanged, saveBenchmark } from '../../state/configStore';
+import { BENCHMARK_CAP_PER_CONFIG, clearBenchmarkEntry, getEffectiveBenchmark, notifyConfigChanged, saveBenchmark } from '../../state/configStore';
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
 import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 
@@ -158,10 +161,13 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
   };
 
   const restoreAuto = (): void => {
-    saveBenchmark(null); // 清除 manual 快照，回退 dimBenchmark（auto）
+    // 第一百八十五轮（外部 UX 审计落地）：只恢复当前正在编辑的这条（国家×型号×配置）
+    // 回系统默认，其他国家/型号/配置的人工对标原样保留（原实现清整份快照，不可撤销）；
+    // 草稿按落盘后的生效矩阵重建——未保存的其他改动不随恢复落盘
+    if (model && rom) clearBenchmarkEntry(getCurrentCountry(), model.modelId, rom.romram);
     setDraft(getEffectiveBenchmark());
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
-    message.success('已恢复默认对标（矩阵 + 匹配竞品）');
+    message.success('已恢复当前配置的默认对标，其他配置未受影响');
     onClose();
   };
 
@@ -216,16 +222,15 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
       open={open}
       onCancel={onClose}
       maskClosable={false}
-      keyboard={false}
       width={720}
       centered
       title={model ? `配置对标 · ${model.modelName}` : '配置对标'}
       footer={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* 恢复默认（auto）——原配置页独有能力收编（清 manual 快照回 auto 基准） */}
+          {/* 恢复默认（auto）——第一百八十五轮收窄：只恢复当前配置，不动其他国家/配置 */}
           <Popconfirm
-            title="恢复默认配置？"
-            description="清除手动配置，全部恢复系统默认"
+            title="恢复默认对标？"
+            description="仅恢复当前配置的对标，其他配置不受影响"
             okText="恢复"
             cancelText="取消"
             onConfirm={restoreAuto}

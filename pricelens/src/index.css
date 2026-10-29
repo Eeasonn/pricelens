@@ -173,8 +173,11 @@ button.lpl-map-card:hover {
 .lpl-view-switch-option:hover {
   color: #171717;
 }
-/* 管理页站点徽标 = 返回看板入口：悬停变蓝（与分析页签悬停同语言） */
-.lpl-logo-home:hover {
+/* 管理页站点徽标 = 返回看板入口：悬停变蓝（与分析页签悬停同语言）。
+   第一百八十五轮：徽标旁新增的「返回看板」轻量文字按钮（.lpl-back-home）
+   共用同款悬停反馈。 */
+.lpl-logo-home:hover,
+.lpl-back-home:hover {
   color: #0070f3;
 }
 
@@ -294,3 +297,23 @@ button.lpl-map-card:hover {
   background: #e8f1ff !important;
   border-color: rgba(0, 112, 243, 0.35) !important;
 }
+
+/* ============================================================
+   第一百八十五轮（外部 UX 审计落地）：自定义浮层入场工具类——轻微上移淡入
+   （160ms = 动效 fast 档），供自绘浮层挂类名做入场（浮层组件只挂类名，
+   动画定义集中在这里）。系统开启「减少动态效果」时由上方全局降级块
+   （animation-duration: 0.01ms）覆盖，无需单独处理。
+   ============================================================ */
+@keyframes lplFadeInUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.lpl-fade-in { animation: lplFadeInUp 160ms ease; }
+
+/* 纯淡入版（不带位移）：给自带 transform 定位的浮层用（如模板编辑浮窗
+   translateX(-50%) 居中），避免入场动画的 transform 覆盖定位 transform */
+@keyframes lplFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.lpl-fade-in-o { animation: lplFadeIn 160ms ease; }

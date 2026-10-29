@@ -38,6 +38,9 @@
 // ③ mergeView、windowIds 改 usePageViewState（sessionStorage 会话态）——切页
 //    返回保留上次分析状态；windowIds 恢复后仍走原有换算（粒度切换）/失义
 //    （范围改动 rangeWatch）路径，自适应首跑在范围未变时不再复位窗口。
+// 第一百八十五轮（外部 UX 审计落地）：取数异常 ≠ 空态——合并图与分离面板的
+// buildSeries 异常不再静默回落「暂无数据」，改带 failed 标记并渲染
+// 「数据加载异常 / 请刷新重试」（沿用空态居中排版，不弹全局报错）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented, Tooltip } from 'antd';
@@ -111,6 +114,15 @@ import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, sn
  *  EMPTY_MAIN_LABEL 显性提示未选主品（见 TrendTables）。 */
 const panelLabelOf = (card: { main: ProductSelection | null }): string =>
   card.main ? modelNameOf(card.main.modelId) : '对比产品';
+
+/** 取数异常占位（第一百八十五轮，外部 UX 审计）：异常 ≠ 空态——主句 + 副句，
+ *  样式沿用 Chart 空态居中排版（灰字），与「暂无数据」明确区分 */
+const LOAD_ERROR_HINT = (
+  <>
+    数据加载异常
+    <div style={{ marginTop: 4, fontSize: fontSize.caption }}>请刷新重试</div>
+  </>
+);
 
 export default function PriceTrend(props: {
   /** 第110轮（评审）立、第一百二十三轮按组：图下「价差与明细」取数口——按主分析卡
@@ -292,14 +304,17 @@ export default function PriceTrend(props: {
     [mainSels, compareSels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry],
   );
 
-  const allSeries: Series[] = useMemo(() => {
-    if (query.groups.length === 0) return [];
+  // 取数异常 ≠ 空态（第一百八十五轮，外部 UX 审计）：异常不再静默回落空数组
+  // 伪装「暂无数据」，failed 标记随结果上交，渲染层改显「数据加载异常」
+  const allSeriesRes = useMemo<{ series: Series[]; failed: boolean }>(() => {
+    if (query.groups.length === 0) return { series: [], failed: false };
     try {
-      return buildSeries(query);
+      return { series: buildSeries(query), failed: false };
     } catch {
-      return []; // 空态不崩
+      return { series: [], failed: true };
     }
   }, [query]);
+  const allSeries = allSeriesRes.series;
 
   // 全集桶 = 桶枚举基准（自适应跨度、窗口下标、边缘续接都基于全集下标空间）
   const buckets: Bucket[] = useMemo(
@@ -536,6 +551,8 @@ export default function PriceTrend(props: {
     // 矩阵映射在选择时已算进卡的对比区，渲染层不再做映射/回退/截断。
     return effMains.map((card) => {
       let series: Series[] = [];
+      // 第一百八十五轮（外部 UX 审计）：面板取数异常 ≠ 空态，failed 标记随面板上交
+      let failed = false;
       try {
         series = buildSeries({
           groups: [...(card.main ? [card.main] : []), ...card.compares].map((g) => ({ ...g, isOwn: false })),
@@ -547,9 +564,9 @@ export default function PriceTrend(props: {
           scope: { countryCode: state.countryCode, industry: state.industry },
         });
       } catch {
-        series = []; // 空态不崩
+        failed = true;
       }
-      return { key: card.id, card, series };
+      return { key: card.id, card, series, failed };
     });
   }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry]);
 
@@ -1407,7 +1424,7 @@ export default function PriceTrend(props: {
                         onCrosshairMove={onPanelHoverOf(p.key)}
                         crosshairY={splitCrossY} // 第一百一十四轮：横向虚线跨全部面板
                         onCrosshairYMove={setSplitCrossY}
-                        emptyHint="该配置在所选时间范围内无数据"
+                        emptyHint={p.failed ? LOAD_ERROR_HINT : '该配置在所选时间范围内无数据'}
                       />
                       {/* 本图时间轴：每张分离面板底部各自一条（同步 = 拖任一条全面板
                           联动；独立 = 只调本图）。左右缘对齐绘图区 = 卡片内边距 + 图内
@@ -1482,9 +1499,13 @@ export default function PriceTrend(props: {
             onOffersOn={setOffersOn}
             onChangeThreshold={setChangeThreshold}
             emptyHint={
-              visSeries.length > 0 && chartSeries.length === 0
-                ? '所有产品已隐藏，点击上方产品名恢复显示'
-                : undefined
+              // 第一百八十五轮（外部 UX 审计）：取数异常显「数据加载异常」，
+              // 不再伪装成「暂无数据，请先在上方筛选器选择产品」
+              allSeriesRes.failed
+                ? LOAD_ERROR_HINT
+                : visSeries.length > 0 && chartSeries.length === 0
+                  ? '所有产品已隐藏，点击上方产品名恢复显示'
+                  : undefined
             }
           />
         </>

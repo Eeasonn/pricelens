@@ -1,10 +1,12 @@
 // ============================================================
-// 产品级取价渠道级联浮层（第一百六十一轮立三层级联；第一百六十二轮改自动语义；
-// 第一百六十四轮搜索改全局、加平台域模式）——「平台→渠道→卖家」三级级联
+// ChannelSelectPopover（第一百六十一轮立三层级联；第一百六十二轮改自动语义；
+// 第一百六十四轮搜索改全局、加平台域模式；第一百八十五轮统一自动口径文案）
+// ——「平台→渠道→卖家」三级级联
 // （与全局 PlatformBox 同构，复用 CascadePanel），单选：
 //   点平台行 = 只切换右列渠道列表；点渠道行 = 展开该渠道卖家列；提交在第三列。
 // 两颗「自动」胶囊（Eason：类似匹配竞品的开关胶囊 + 问号说明）：
-//   底部「自动」= 整个产品不锁渠道，显示每周最低价平台-店铺（问号同文）；
+//   底部「自动」= 产品级每周最低在架价：优先取默认店铺；未设置时取预填主店；
+//   仍无则取默认平台（第一百八十五轮与数据口径说明弹窗统一同句，问号同文）；
 //   第三列顶部「自动」= 该渠道内不锁卖家，显示每周最低价店铺（替代原
 //   「全部店铺 · 最低价」选项行）。
 // 顶部固定搜索行（第一百六十四轮，Eason：像产品筛选一样固定一行，且能搜到
@@ -113,8 +115,9 @@ export default function ChannelSelectPopover({
   /** 当前口径：null = 自动 */
   current: PlatformSelection | null;
   onPick: (sel: PlatformSelection | null) => void;
-  /** product（缺省）= 底部「自动」= 产品级每周最低价平台-店铺；
-   *  platform = 底部「自动」= scopePlatform 平台内每周最低价店铺（店铺 chip 修改入口） */
+  /** product（缺省）= 底部「自动」= 产品级每周最低在架价（默认店铺 → 预填主店
+   *  → 默认平台，见底部胶囊说明）；platform = 底部「自动」= scopePlatform 平台内
+   *  每周最低价店铺（店铺 chip 修改入口） */
   scope?: 'product' | 'platform';
   scopePlatform?: string;
   /** 同步平台筛选（第一百七十八轮立，第一百八十四轮改组内语义）：传入 =
@@ -373,7 +376,8 @@ export default function ChannelSelectPopover({
           ]}
         />
       )}
-      {/* 底部「自动」：product 域 = 整个产品不锁渠道，每周取最低价平台-店铺；
+      {/* 底部「自动」：product 域 = 产品级每周最低在架价（默认店铺 → 预填主店
+          → 默认平台，口径与数据口径说明弹窗同句，第一百八十五轮统一）；
           platform 域（店铺 chip 修改入口）= 该平台内每周最低价店铺 */}
       <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
         {scope === 'platform' ? (
@@ -386,7 +390,7 @@ export default function ChannelSelectPopover({
         ) : (
           <AutoTogglePill
             pressed={isAuto}
-            hint="显示每周最低价平台-店铺"
+            hint="每周最低在架价：优先取默认店铺；未设置时取预填主店；仍无则取默认平台。"
             disabled={isAuto}
             onClick={() => onPick(null)}
           />

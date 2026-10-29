@@ -7,6 +7,11 @@
 // 删除模板（轻确认）。改动即存：每次编辑立即经 onPatch 写回
 // LPL3.ui.mainCombos 原位置。外点关闭（白名单 = 本浮层、选择浮窗面板、
 // 各级弹层），点选择浮窗面板只关本浮层不关主浮窗。
+// 第一百八十五轮（外部 UX 审计落地）：①根容器补 dialog 语义（role="dialog"
+//   aria-modal + 可访问名「编辑模板」），挂载时焦点移入、关闭/卸载时经
+//   captureFocusRestore 还给打开它的触发器（模板 chip 的 ✎ /「更多」下拉
+//   编辑钮）——焦点回到主浮窗内，不丢到 body；②删最后一组（= 删整个模板）
+//   的轻确认文案对齐「删除该模板」语义并写明模板名，非最后一组维持「删除该组」。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -31,6 +36,7 @@ import {
   ColorChip,
   DeleteX,
   GroupDeleteX,
+  captureFocusRestore,
   innerLayerOpen,
   POPOVER_H,
   POPOVER_Z,
@@ -296,6 +302,7 @@ function PairCard({
   index,
   total,
   cards,
+  templateName,
   onPatchCard,
   onDeleteCard,
 }: {
@@ -303,6 +310,8 @@ function PairCard({
   index: number;
   total: number;
   cards: MainProduct[];
+  /** 模板名（第一百八十五轮：删最后一组 = 删整个模板，确认文案要写明） */
+  templateName: string;
   onPatchCard: (cardId: string, patch: (c: MainProduct) => MainProduct) => void;
   onDeleteCard: (cardId: string) => void;
 }) {
@@ -356,6 +365,9 @@ function PairCard({
   const main = card.main;
   const mainTitle = main ? mainTitleOf(main) : null;
   const checkedKeys = useMemo(() => new Set(card.compares.map(selKey)), [card.compares]);
+  // 第一百八十五轮：只剩最后一组时，删组动作实际删的是整个模板（见
+  // deleteCard 的 onDelete 分支）——确认文案同步对齐「删除该模板」语义
+  const isLastGroup = total <= 1;
 
   return (
     <div
@@ -378,16 +390,30 @@ function PairCard({
           <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
             <Popconfirm
               zIndex={POPOVER_Z}
-              title="删除该组？"
-              description="组内对比产品一并移除"
-              okText="删除"
+              /* 第一百八十五轮：最后一组的确认文案 = 删整个模板（行为本就如此，
+               * 此前「删除该组」文案与实际后果不符） */
+              title={isLastGroup ? '删除该模板？' : '删除该组？'}
+              description={
+                isLastGroup
+                  ? `将删除整个模板「${templateName}」，删除后不可恢复`
+                  : '组内对比产品一并移除'
+              }
+              okText={isLastGroup ? '删除模板' : '删除'}
               cancelText="取消"
               okButtonProps={{ danger: true, size: 'small' }}
               cancelButtonProps={{ size: 'small' }}
               onConfirm={() => onDeleteCard(card.id)}
             >
               <span style={{ display: 'inline-flex' }}>
-                <GroupDeleteX label={main ? `删除该组 ${mainTitle?.model ?? ''}` : '删除该组'} />
+                <GroupDeleteX
+                  label={
+                    isLastGroup
+                      ? `删除模板 ${templateName}`
+                      : main
+                        ? `删除该组 ${mainTitle?.model ?? ''}`
+                        : '删除该组'
+                  }
+                />
               </span>
             </Popconfirm>
           </span>
@@ -666,6 +692,17 @@ export default function TemplateEditorFlyout({
     [combo.cards],
   );
 
+  // 焦点管理（第一百八十五轮）：挂载时记下打开它的触发器（模板 chip 的 ✎ /
+  // 「更多」下拉编辑钮）并把焦点移入浮窗容器，关闭/卸载时归还——焦点回到
+  // 主浮窗内的触发器上，不丢到 body。触发器已随主浮窗一并卸载时
+  // （isConnected 为假）跳过，由主浮窗自己的归还逻辑把焦点还给页内按钮。
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const restore = captureFocusRestore();
+    rootRef.current?.focus();
+    return restore;
+  }, []);
+
   const addPair = (r: RomramNode): void => {
     // 与主浮窗建卡同收口：触发按钮的 disabled 不拦 rc-trigger 注入的点击（树浮窗照开）
     if (combo.cards.length >= MAINS_CAP) return;
@@ -677,7 +714,14 @@ export default function TemplateEditorFlyout({
 
   return createPortal(
     <div
+      ref={rootRef}
       data-lpl-template-editor
+      className="lpl-fade-in-o"
+      /* 第一百八十五轮：dialog 语义 + 焦点入口（tabIndex=-1 供编程聚焦） */
+      role="dialog"
+      aria-modal="true"
+      aria-label="编辑模板"
+      tabIndex={-1}
       style={{
         position: 'fixed',
         top: 72,
@@ -778,6 +822,7 @@ export default function TemplateEditorFlyout({
             index={idx}
             total={combo.cards.length}
             cards={combo.cards}
+            templateName={combo.label}
             onPatchCard={patchCard}
             onDeleteCard={deleteCard}
           />

@@ -40,6 +40,10 @@
 //   （crosshairY 受控联动，与竖向参考线同机制）；③tipBox=true 时浮层改为图下方
 //   居中预留框（量价看板；无悬停显灰色斜体提示）；④labelMode='compact' 精简标签
 //   （每系列仅最高/最低/最新三价，白底胶囊避线）
+// - 第一百八十五轮（外部 UX 审计落地）：悬停浮层周环比徽章翻转为「涨蓝跌琥珀」
+//   （与图上变化标记同一口径，全站唯一）；Y 轴刻度字号 8px → 10px（Y_TICK_FONT）；
+//   高度动画在系统「减少动态效果」开启时跳过直接落终值；emptyHint 放宽为 ReactNode
+//   供调用方区分「暂无数据」与「数据加载异常」
 // ============================================================
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover } from 'antd';
@@ -57,6 +61,8 @@ import { color, font, fontSize, radius, selectSoft, selectSoftInk, shadow } from
 import { measureText } from '../../components/ProductCascader';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 import { useFilters } from '../../state/FiltersContext';
+// 第一百八十五轮（外部 UX 审计）：JS 动画统一吃系统「减少动态效果」设置
+import { prefersReducedMotion } from '../../theme/motion';
 import {
   BREAK_PX,
   GRID,
@@ -82,6 +88,7 @@ import {
   buildChangeMarks,
   curveNameOf,
   FOCUS_MODE_THRESHOLD,
+  Y_TICK_FONT, // 第一百八十五轮（外部 UX 审计）：Y 轴刻度字号 8px → 10px（共享常量）
 
   buildEndpointBadges,
   buildEndpointMarks,
@@ -123,7 +130,9 @@ export interface ChartProps {
   enableDrill?: boolean; // 月/季视图圈点下钻
   enableOffer?: boolean; // 周视图 offer 图标
   onDrill?: (seriesKey: string, bucketId: string) => void;
-  emptyHint?: string;
+  /** 空态文案（第一百八十五轮放宽为 ReactNode：调用方可用「主句 + 副句」节点
+   *  区分「暂无数据」与「数据加载异常」，沿用同一居中排版） */
+  emptyHint?: ReactNode;
   /** 窗口标识（起止下标）；变化 = 重采样换列，锁定列下标失义 → 复位 */
   windowKey?: string;
   /** 外部计算的 Y 轴模型（主图传入，含刷选拖动冻结与伸缩倍率）；缺省内部自适应（迷你图） */
@@ -527,6 +536,15 @@ export default function Chart(props: ChartProps) {
     const to = scale.plotHeight;
     const from = animHRef.current;
     if (from === to) return;
+    // 第一百八十五轮（外部 UX 审计）：系统开启「减少动态效果」时跳过 280ms 缓动，
+    // 直接落终值（与 CSS 侧 prefers-reduced-motion 全局降级同语义）
+    if (prefersReducedMotion()) {
+      if (animRafRef.current != null) cancelAnimationFrame(animRafRef.current);
+      animRafRef.current = null;
+      animHRef.current = to;
+      setAnimH(to);
+      return;
+    }
     if (Math.abs(to - from) <= H_ANIM_THRESHOLD_PX) {
       if (animRafRef.current != null) cancelAnimationFrame(animRafRef.current);
       animRafRef.current = null;
@@ -1019,14 +1037,15 @@ export default function Chart(props: ChartProps) {
                   className="tnum"
                   style={{
                     position: 'absolute',
-                    // 刻度文字右对齐、叠画在档位区块背景上（区块右段）；8px 灰字
+                    // 刻度文字右对齐、叠画在档位区块背景上（区块右段）；第一百八十五轮
+                    // 起字号取共享常量 Y_TICK_FONT=10（原 8px 过小不可读）
                     left: tickZoneRight - TICK_DASH_W - TICK_ZONE_W,
                     top: Math.round(t.y) - 7,
                     width: TICK_ZONE_W,
                     paddingRight: 3,
                     boxSizing: 'border-box',
                     textAlign: 'right',
-                    fontSize: 8,
+                    fontSize: Y_TICK_FONT,
                     lineHeight: '14px',
                     color: color.mute,
                     pointerEvents: 'none',
@@ -1417,7 +1436,20 @@ export default function Chart(props: ChartProps) {
                                 <span
                                   className="tnum"
                                   title={`折后价较上一周期${wow > 0 ? `+${Math.round(Math.abs(wow) * 1000) / 10}%` : wow < 0 ? `−${Math.round(Math.abs(wow) * 1000) / 10}%` : '持平'}`}
-                                  style={{ flexShrink: 0, padding: '0 5px', fontSize: 10, lineHeight: '15px', fontWeight: 700, borderRadius: radius.pill, color: wow > 0.005 ? '#b45309' : wow < -0.005 ? color.link : selectSoftInk, background: selectSoft, opacity: dim ? 0.3 : undefined }}
+                                  // 第一百八十五轮（外部 UX 审计）：时间涨跌全站唯一口径
+                                  // = 涨蓝（color.link）跌琥珀（#b45309），原「涨琥珀跌蓝」翻转；
+                                  // 琥珀态底色随 MiniDiscountBadge 同款 warningSoft，保证小字对比度
+                                  style={{
+                                    flexShrink: 0,
+                                    padding: '0 5px',
+                                    fontSize: 10,
+                                    lineHeight: '15px',
+                                    fontWeight: 700,
+                                    borderRadius: radius.pill,
+                                    color: wow > 0.005 ? color.link : wow < -0.005 ? '#b45309' : selectSoftInk,
+                                    background: wow < -0.005 ? color.warningSoft : selectSoft,
+                                    opacity: dim ? 0.3 : undefined,
+                                  }}
                                 >
                                   {wow > 0 ? '+' : wow < 0 ? '−' : '±'}{Math.round(Math.abs(wow) * 1000) / 10}%
                                 </span>

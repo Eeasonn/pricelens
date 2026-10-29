@@ -3,6 +3,10 @@
 // 代码原样搬运不改行为）：层级常量、颜色 chip、条目文本/配置 chip、
 // 各类 pill、删组 ✕、树数据索引。模板编辑浮窗（TemplateEditorFlyout）
 // 与主浮窗共用同一套视觉语言。
+// 第一百八十五轮（外部 UX 审计落地）：①颜色 chip 可点 span 改原生 button
+//   （Tab 可达、Enter/Space 可切，182 轮 AddPill 同款做法）；②新增浮窗
+//   落点视口钳制纯函数 clampPanelPos（窄屏浮窗不越视口）与焦点归还小件
+//   captureFocusRestore（浮窗关闭把焦点还给触发器，主浮窗/编辑浮窗共用）。
 // ============================================================
 import { useMemo, type ReactNode } from 'react';
 import { Popover } from 'antd';
@@ -33,6 +37,42 @@ export const TIP_Z = 1650;
 
 export const POPOVER_H = 300; // 树浮窗列高（固定，不随内容跳变）
 export const PAIR_LIST_MAX_H = 440; // 分析对列表区最大高（多对时纵向滚动）
+
+// ---------------- 窄屏视口钳制（第一百八十五轮） ----------------
+
+/** 视口安全边距：钳制后浮窗至少离视口左/右/上缘这么远 */
+export const PICKER_EDGE = 24;
+/** 底边露出的最小可见高度：锚点滚到视口底部时浮窗至少还露出这么多 */
+export const PICKER_MIN_VISIBLE = 52;
+
+/** 浮窗落点视口钳制（纯函数，金测见 __tests__/viewport.test.ts）：
+ *  左缘钳进 [24, vw-24-panelW]（右缘不越 24px 边距），顶边钳进
+ *  [24, vh-76]；底边不越界由调用方的 maxHeight = 100vh - top - 24 收口。 */
+export function clampPanelPos(
+  left: number,
+  top: number,
+  panelW: number,
+  vw: number,
+  vh: number,
+): { left: number; top: number } {
+  const leftMax = Math.max(PICKER_EDGE, vw - PICKER_EDGE - panelW);
+  const topMax = Math.max(PICKER_EDGE, vh - PICKER_EDGE - PICKER_MIN_VISIBLE);
+  return {
+    left: Math.min(Math.max(left, PICKER_EDGE), leftMax),
+    top: Math.min(Math.max(top, PICKER_EDGE), topMax),
+  };
+}
+
+/** 浮窗焦点归还（主浮窗 / 模板编辑浮窗共用）：调用时记下当前焦点元素
+ *  （= 打开浮窗的触发器），返回的函数在浮窗关闭/卸载时把焦点还回去；
+ *  触发器已不在文档中（随外层浮窗一并卸载）则跳过，由更外层继续归还。 */
+export function captureFocusRestore(): () => void {
+  const prev =
+    typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+  return () => {
+    if (prev && prev.isConnected) prev.focus();
+  };
+}
 
 /** 可编辑 chip 的描边（主品/对比条目同一语言；只读配置 chip 无描边） */
 export const EDITABLE_BORDER = 'rgba(0, 112, 243, 0.35)';
@@ -91,8 +131,12 @@ export function ColorChip({
         />
       }
     >
-      <span
+      {/* 第一百八十五轮：可点 span 改原生 button——Tab 可达、Enter/Space 可开
+          换色浮层（全局 button 外观重置已剥默认样式，视觉与 span 版一致） */}
+      <button
+        type="button"
         title={`颜色 ${label} · 点击切换`}
+        aria-label={`颜色 ${label}，点击切换`}
         className="lpl-pk-ghost"
         style={{
           display: 'inline-flex',
@@ -112,7 +156,7 @@ export function ColorChip({
         }}
       >
         {label}
-      </span>
+      </button>
     </Popover>
   );
 }

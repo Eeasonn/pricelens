@@ -4,6 +4,8 @@
 // 纯函数（无 hooks、无副作用、同输入同输出），Chart.tsx 只做 useMemo 调用与渲染。
 // 抽离为机械搬移：逐行对应原 Chart.tsx 的同名 useMemo，行为不变；
 // 金测（chartModel.golden.test.ts）以快照+不变量钉住 17 轮迭代沉淀的边界行为。
+// 第一百八十五轮（外部 UX 审计落地）：新增 Y 轴刻度字号共享常量 Y_TICK_FONT
+//（8px → 10px 可读性修正），图内时间刻度字号 10px → 11px。
 // ============================================================
 import type { EChartsOption } from 'echarts';
 import type { CurrencyMode, DimPromo, Granularity, Industry, OfferDetail, OfferInfo, OfferKind, Series, SeriesPoint } from '../../dataModel/types';
@@ -58,6 +60,9 @@ export const LIFECYCLE_ROW_H = 14;
 export const FOCUS_MODE_THRESHOLD = 8;
 /** 名称被避让推离锚点超过该像素 → 画细引线连回首点（第三十二轮） */
 export const NAME_LEADER_PX = 14;
+/** Y 轴刻度标签字号（第一百八十五轮，外部 UX 审计）：8px 过小不可读 → 10px。
+ *  主图 DOM 刻度与分离面板共享轴列同款取值，避免两处字号漂移 */
+export const Y_TICK_FONT = 10;
 
 /** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB。
  *  第一百一十五轮：TB 场景保留单位（"16+1 TB" 不缩成 "16+1"，否则容量读歧义）。 */
@@ -577,10 +582,11 @@ export function buildOption(p: {
         ? {
             show: true,
             color: color.mute,
-            fontSize: 10,
+            // 第一百八十五轮（外部 UX 审计）：10px 过小 → 11px，行高同步放宽防两行年份贴字
+            fontSize: 11,
             fontFamily: font.family,
             margin: 7,
-            lineHeight: 11,
+            lineHeight: 13,
             hideOverlap: true,
             interval: (index: number) => axisShown.has(index),
             formatter: (val: string, index: number) => {

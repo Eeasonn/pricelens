@@ -47,6 +47,9 @@
 // 第一百八十三轮（Eason，药丸带独立成行定版）：「第 N 组」块首小字退役（组界
 // 由分隔线表达）。本轮拍板再回退：分离模式药丸带回归各面板内（index 层渲染），
 // 共享药丸行只在合并模式出现；组界恒为块间灰色短竖线（不加框）。
+// 第一百八十五轮（外部 UX 审计落地）：①块内/整排 ‹› 滚动接入 scrollBehaviorOf()
+// （系统开启「减少动态效果」时退回瞬时滚动）；②平台小药丸的「自动」提示文案与
+// 数据口径说明弹窗、渠道选择浮层统一同句（默认店铺 → 预填主店 → 默认平台）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
@@ -57,6 +60,7 @@ import { dimProduct } from '../../data';
 import { curveNameOf } from './chartModel';
 import type { LegendGroup } from './tableModel';
 import { color, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { scrollBehaviorOf } from '../../theme/motion';
 
 /** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
 const COMPARES_VISIBLE = 3;
@@ -271,7 +275,8 @@ function PlatformRow({
             aria-label={`取价平台：${pill.channel.label}，点击筛选平台-店铺`}
             title={
               pill.channel.auto
-                ? `取价平台：${pill.channel.label}（自动 = 显示每周最低价平台-店铺），点击筛选`
+                ? // 「自动」口径文案与数据口径说明弹窗/渠道浮层同句（第一百八十五轮统一）
+                  `取价平台：${pill.channel.label}（自动 = 每周最低在架价：优先取默认店铺；未设置时取预填主店；仍无则取默认平台），点击筛选`
                 : `取价平台：${pill.channel.label}，点击筛选`
             }
             onClick={(e) => e.stopPropagation()}
@@ -347,7 +352,8 @@ function GroupBlock({
     sync();
   }, [sync, group.series.length]);
   const scrollByPill = (dir: 1 | -1): void => {
-    trackRef.current?.scrollBy({ left: dir * (PILL_W_BUDGET + 6), behavior: 'smooth' });
+    // 滚动行为走 scrollBehaviorOf()（减少动态效果时瞬时跳转，第一百八十五轮）
+    trackRef.current?.scrollBy({ left: dir * (PILL_W_BUDGET + 6), behavior: scrollBehaviorOf() });
   };
 
   const pills: PillSpec[] = group.series.map((s) => {
@@ -521,7 +527,8 @@ export default function BrandLegendStrip({
     onHover(key);
   };
   const scrollOuter = (dir: 1 | -1): void => {
-    trackRef.current?.scrollBy({ left: dir * 260, behavior: 'smooth' });
+    // 滚动行为走 scrollBehaviorOf()（减少动态效果时瞬时跳转，第一百八十五轮）
+    trackRef.current?.scrollBy({ left: dir * 260, behavior: scrollBehaviorOf() });
   };
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, minWidth: 0, width: '100%', padding: '0 8px', boxSizing: 'border-box' }}>

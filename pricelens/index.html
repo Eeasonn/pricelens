@@ -26,7 +26,9 @@
       }
       .boot-text {
         font-size: 13px;
-        color: #888888;
+        /* 第一百八十五轮（外部 UX 审计落地）：#888888 在 #fafafa 底上对比不足
+           4.5:1，加深至 #737373（与全局次要文字色一致，约 4.5:1） */
+        color: #737373;
         letter-spacing: 0.3px;
       }
       @keyframes boot-spin {

@@ -2,16 +2,21 @@
 // 「价差与明细」宽表（第118轮立，第一百二十三轮按主分析组重排）。
 // 本轮（Eason 七点）改版：①组别页签——顶部页签切换主分析组（风格同图表卡
 // 页签行），一次只渲染一组的表体，不再各组纵向堆叠（组头/收起随之退役）；
-// ②近4周环比改「类型后」的冻结列，只显示最新筛选时点的环比（不再是历史一行）；
+// ②环比改「类型后」的冻结列，只显示最新筛选时点的环比（不再是历史一行）；
+//   第一百八十五轮：环比列头随粒度（周环比/月环比/季环比），色随涨跌口径；
 // ③时间列倒序（最新在左）；列头周号字体与日期统一（去 mono）。
 // 每组表体 = 产品价差（区块标题 + 列头 + 主品基准行 + 对比产品折后价相对主分析
 // 产品的百分比；红 = 更贵、蓝 = 更便宜）→ 核心信息明细（区块标题 + 列头 +
 // 每产品 6 行：RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer × 时间列）。
-// 冻结列 = 产品 / 配置 / 类型 / 近4周环比 四列（Excel 冻结窗格语义）；首列外
+// 冻结列 = 产品 / 配置 / 类型 / 环比 四列（Excel 冻结窗格语义）；首列外
 // 每列左缘 1px hairline 竖向分界线。行底色按角色：主分析产品行衬浅蓝。
 // 时间列与图上同一可见时间段（每桶一列，周号＋日期双行列头），倒序排列。
 // 取证行 = 该时点电商页面快照入口（SnapshotModal）+ 最新时点商城现页链接。
 // 取数与图同源（onSeriesWindow 按卡上报的组 × 桶）；纯计算在 tableModel。
+// 第一百八十五轮（外部 UX 审计落地）：①环比冻结列翻转为「涨蓝跌琥珀」（时间涨跌
+// 全站唯一口径，与图上变化标记一致）；②环比列头随粒度（周环比/月环比/季环比，
+// 原「近4周环比」月/季粒度下名不副实）；③复制失败短暂显「复制失败」（原静默）；
+// ④窄视口（<640px）只冻结产品首列，其余列取消 sticky，保证时间列始终可见。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from 'antd';
@@ -46,7 +51,7 @@ function weekIdText(id: string): string {
   return m ? `${m[1]}W${Number(m[2])}` : id;
 }
 
-// ---- 列宽（左缘冻结四列：产品/配置/类型/近4周环比 + 时间列） ----
+// ---- 列宽（左缘冻结四列：产品/配置/类型/环比 + 时间列） ----
 const W_PROD = 236;
 const W_CONF = 96;
 const W_TYPE = 76;
@@ -56,7 +61,7 @@ const W_TIME = 100;
  *  与图例带主品药丸同语言，不再按品牌归属着色） */
 const MAIN_TINT = '#f3f8ff';
 /** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer；
- *  近4周环比本轮起为冻结列，不再是行） */
+ *  环比列（列头随粒度）本轮起为冻结列，不再是行） */
 const DETAIL_SPAN = 6;
 
 /** 取证行小件样式：图标 + 文字，链接色（button / a 共用） */
@@ -140,9 +145,23 @@ export default function TrendTables(props: {
   const { groups, buckets, currency, granularity } = props;
   // 组别页签选中态（本轮）：值 = 组 id；组集变化后找不到时回落第一组
   const [activeGid, setActiveGid] = useState<string | null>(null);
-  const [copied, setCopied] = useState<'diff' | 'detail' | null>(null);
+  // 复制反馈（第一百八十五轮，外部 UX 审计）：成功「已复制」、失败「复制失败」
+  // ——同为短暂态（1.6s 自动复位），失败不再静默
+  const [copied, setCopied] = useState<'diff' | 'detail' | 'diff-fail' | 'detail-fail' | null>(null);
   const copiedTimer = useRef<number | null>(null);
   const [snapInfo, setSnapInfo] = useState<SnapshotInfo | null>(null);
+  // 窄视口（第一百八十五轮，外部 UX 审计）：冻结四列合计 496px，视口窄于 640px 时
+  // 时间列会被完全遮死——只冻结产品首列，其余列取消 sticky 随表横向滚动
+  const [narrowViewport, setNarrowViewport] = useState(
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639.98px)').matches,
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 639.98px)');
+    const onChange = (): void => setNarrowViewport(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
   useEffect(() => () => { if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current); }, []);
 
   const blocks = useMemo<Block[]>(
@@ -169,13 +188,18 @@ export default function TrendTables(props: {
   // 时间列倒序（本轮，Eason）：最新一列在最左。ci.i = 升序内容下标（points 对位）
   const cols = useMemo(() => buckets.map((b, i) => ({ bk: b, i })).slice().reverse(), [buckets]);
 
-  const markCopied = (which: 'diff' | 'detail' | null): void => {
-    setCopied(which);
+  const markCopied = (which: 'diff' | 'detail', ok: boolean): void => {
+    // 第一百八十五轮（外部 UX 审计）：失败同样给短暂反馈（「复制失败」），不再静默
+    setCopied(ok ? which : `${which}-fail`);
     if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
-    if (which != null) copiedTimer.current = window.setTimeout(() => setCopied(null), 1600);
+    copiedTimer.current = window.setTimeout(() => setCopied(null), 1600);
   };
 
-  /** 最新时点环比（本轮）：最新筛选时点折后价相对上一时点；用于近4周环比列 */
+  // 环比列头随粒度（第一百八十五轮，外部 UX 审计）：列口径 = 最新时点相对上一时点
+  // 的涨跌，原「近4周环比」在月/季粒度下名不副实 → 改「周环比 / 月环比 / 季环比」
+  const wowLabel = granularity === 'week' ? '周环比' : granularity === 'month' ? '月环比' : '季环比';
+
+  /** 最新时点环比（本轮）：最新筛选时点折后价相对上一时点；用于环比冻结列 */
   const wowTextOf = (s: Series): string => {
     const cur = s.points[n - 1]?.price ?? null;
     const prev = n > 1 ? s.points[n - 2]?.price ?? null : null;
@@ -201,11 +225,11 @@ export default function TrendTables(props: {
         );
       }
     }
-    markCopied((await copyText(lines.join('\n'))) ? 'diff' : null);
+    markCopied('diff', await copyText(lines.join('\n')));
   };
   const onCopyDetail = async (): Promise<void> => {
     const TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
-    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', '近4周环比', ...dates.slice().reverse()].join('\t')];
+    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', wowLabel, ...dates.slice().reverse()].join('\t')];
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
         const wow = wowTextOf(s);
@@ -227,7 +251,7 @@ export default function TrendTables(props: {
         }
       }
     }
-    markCopied((await copyText(lines.join('\n'))) ? 'detail' : null);
+    markCopied('detail', await copyText(lines.join('\n')));
   };
 
   if (groups.length === 0 || buckets.length === 0) return null;
@@ -247,13 +271,20 @@ export default function TrendTables(props: {
     ...extra,
   });
   /** 左缘冻结列定位（sticky left 随列累计）。
-   *  gridColumn 显式指定——否则自动排布会把下一行的单元格补进整行区块的空位 */
+   *  gridColumn 显式指定——否则自动排布会把下一行的单元格补进整行区块的空位。
+   *  第一百八十五轮（外部 UX 审计）：窄视口（<640px）只冻结产品首列——冻结四列
+   *  合计 496px，窄屏下时间列会被完全遮死；配置/类型/环比列取消 sticky 随表滚动，
+   *  时间列始终可见 */
   const frozen = (c: 0 | 1 | 2 | 3, bg?: string): CSSProperties => ({
-    position: 'sticky',
+    ...(narrowViewport && c > 0
+      ? {}
+      : {
+          position: 'sticky',
+          left: [0, W_PROD, W_PROD + W_CONF, W_PROD + W_CONF + W_TYPE][c],
+          zIndex: 2,
+        }),
     gridColumn: String(c + 1),
-    left: [0, W_PROD, W_PROD + W_CONF, W_PROD + W_CONF + W_TYPE][c],
     background: bg ?? color.canvas,
-    zIndex: 2,
   });
 
   const emptyCell = (
@@ -326,13 +357,14 @@ export default function TrendTables(props: {
       <div style={{ padding: '6px 10px', fontSize: 13, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>{title}</div>,
     );
 
-  /** 列头行：产品/配置/类型/近4周环比（冻结）+ 时间列（每桶一列，图上同一时间轴，
+  /** 列头行：产品/配置/类型/环比（冻结；环比列头随粒度——周环比/月环比/季环比，
+   *  第一百八十五轮）+ 时间列（每桶一列，图上同一时间轴，
    *  本轮起倒序 = 最新在左）。列头随区块标题走（第一百四十八轮），产品价差 /
    *  核心信息明细标题下各渲染一条（part 区分 React key）。
    *  周粒度列头 = 「周号＋日期」双行（第一百八十二轮）；本轮周号字体与日期统一
    *  （去 mono、同 11px），消除同栏两行字体不一致 */
   const headerRow = (gid: string, part: string): JSX.Element[] => [
-    ...(['产品', '配置', '类型', '近4周环比'] as const).map((t, c) => (
+    ...(['产品', '配置', '类型', wowLabel] as const).map((t, c) => (
       <div
         key={`${gid}-h-${part}-${t}`}
         role="columnheader"
@@ -396,7 +428,7 @@ export default function TrendTables(props: {
               <div key={`d-${b.g.id}-base`} role="row" style={{ display: 'contents' }}>
                 {identityCells(b.base, b.specByKey, 1, `d-${b.g.id}-base`, true)}
                 {typeCell('基准', true, `d-${b.g.id}-base-t`)}
-                {/* 近4周环比列在价差区不承载（占位防空位回填） */}
+                {/* 环比列在价差区不承载（占位防空位回填） */}
                 <div key={`d-${b.g.id}-base-w`} role="cell" style={{ ...cell(3), gridColumn: '4', background: MAIN_TINT }} />
                 {cols.map(({ bk }, ri) => (
                   <div key={`d-${b.g.id}-base-${bk.id}`} role="cell" style={{ ...cell(4 + ri), gridColumn: String(5 + ri), background: MAIN_TINT }} />
@@ -438,7 +470,7 @@ export default function TrendTables(props: {
           </>
         )}
         {/* —— 核心信息明细：列头随标题走，每产品 6 行（RRP / 折后价 / 折扣率 /
-            平台-店铺 / 取证 / offer）× 时间列（倒序）；近4周环比 = 类型后冻结列，
+            平台-店铺 / 取证 / offer）× 时间列（倒序）；环比（列头随粒度）= 类型后冻结列，
             只显示最新筛选时点的环比（本轮，Eason） —— */}
         {captionRow('核心信息明细', `cap-detail-${b.g.id}`)}
         {headerRow(b.g.id, 'detail')}
@@ -465,8 +497,9 @@ export default function TrendTables(props: {
             });
           };
           const rows: JSX.Element[] = [...identityCells(s, b.specByKey, DETAIL_SPAN, p, main)];
-          // 近4周环比冻结列（类型之后）：本列 = 最新筛选时点折后价较上一时点涨跌，
-          // 跌 = 蓝（更便宜，与价差同语言）、涨 = 红；该组首行起跨全部明细行
+          // 环比冻结列（类型之后；第一百八十五轮翻转为时间涨跌全站唯一口径：
+          // 涨 = 蓝 color.link、跌 = 琥珀 #b45309，与图上变化标记一致；
+          // 原「涨红跌蓝」是价差语义误用）该组首行起跨全部明细行
           rows.push(
             <div
               key={`${p}-wow`}
@@ -478,7 +511,7 @@ export default function TrendTables(props: {
                 <span
                   className="tnum"
                   title="折后价较上一周期涨跌（最新时点）"
-                  style={{ fontSize: 12, fontWeight: 600, color: wow > 0.005 ? color.error : wow < -0.005 ? color.link : color.body, whiteSpace: 'nowrap' }}
+                  style={{ fontSize: 12, fontWeight: 600, color: wow > 0.005 ? color.link : wow < -0.005 ? '#b45309' : color.body, whiteSpace: 'nowrap' }}
                 >
                   {wow > 0 ? '+' : wow < 0 ? '−' : '±'}
                   {Math.abs(Math.round(wow * 1000) / 10)}%
@@ -624,11 +657,25 @@ export default function TrendTables(props: {
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {viewBlocks.some((b) => b.diffRows.length > 0) && (
             <Button size="small" icon={<CopyOutlined />} onClick={onCopyDiff}>
-              {copied === 'diff' ? '已复制' : '复制价差'}
+              {/* 第一百八十五轮（外部 UX 审计）：复制失败短暂显「复制失败」（红色），
+                  与「已复制」同一短暂态节奏，不再静默 */}
+              {copied === 'diff' ? (
+                '已复制'
+              ) : copied === 'diff-fail' ? (
+                <span style={{ color: color.error }}>复制失败</span>
+              ) : (
+                '复制价差'
+              )}
             </Button>
           )}
           <Button size="small" icon={<CopyOutlined />} onClick={onCopyDetail}>
-            {copied === 'detail' ? '已复制' : '复制明细'}
+            {copied === 'detail' ? (
+              '已复制'
+            ) : copied === 'detail-fail' ? (
+              <span style={{ color: color.error }}>复制失败</span>
+            ) : (
+              '复制明细'
+            )}
           </Button>
         </span>
       </div>
