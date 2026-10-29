@@ -111,14 +111,18 @@ export function AlertBell({ subscribed, count = 0, size = 14, onToggle }: {
 }) {
   return (
     <Badge dot={count > 0} color="#faad14" title={`${count} 条最新预警`}>
-      <span
-        role="button"
+      <button
+        type="button"
+        aria-label={subscribed ? '已订阅 · 点击取消订阅该产品的价格预警' : '订阅该产品的价格预警'}
+        aria-pressed={subscribed}
         title={subscribed ? '已订阅 · 点击取消' : '订阅该产品的价格预警'}
         onClick={(e) => {
           e.stopPropagation();
           onToggle();
         }}
+        className="lpl-hit"
         style={{
+          position: 'relative',
           display: 'inline-flex',
           alignItems: 'center',
           padding: '0 1px',
@@ -129,7 +133,7 @@ export function AlertBell({ subscribed, count = 0, size = 14, onToggle }: {
         }}
       >
         {subscribed ? <BellFilled style={{ fontSize: size }} /> : <BellOutlined style={{ fontSize: size }} />}
-      </span>
+      </button>
     </Badge>
   );
 }

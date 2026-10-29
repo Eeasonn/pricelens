@@ -65,8 +65,10 @@ export default function Dashboard() {
           <ArrowUpOutlined style={{ fontSize: 14 }} />
         </button>
       )}
-      {/* 第二十八轮：1440 → 1280，筛选条重排后 1280 视口零溢出（1280 笔记本无横向滚动） */}
-      <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 第二十八轮：1440 → 1280 单行；第一百八十二轮：整页 minWidth 撤除——
+          筛选条/页头允许换行，图表卡内横向滚动（内层 minWidth 880 保图可用下限），
+          窄视口不再把整页撑出横向裁切 */}
+      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader title="价格看板" />
 
@@ -74,7 +76,7 @@ export default function Dashboard() {
         <FilterBar showTime showPlatform={false} />
 
         {/* 价格走势（第十二轮：标题并入 PriceTrend 首行，消除三段式纵向空白） */}
-        <main style={{ flex: 1, padding: space.lg }}>
+        <main style={{ flex: 1, padding: space.lg, minWidth: 0 }}>
           <div data-lpl-trend>
             <section
               style={{
@@ -83,12 +85,16 @@ export default function Dashboard() {
                 borderRadius: radius.card,
                 padding: space.lg,
                 scrollMarginTop: 12,
+                overflowX: 'auto',
               }}
             >
-              {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻） */}
-              <PriceTrend
-                onSeriesWindow={(groups, buckets) => setTrendWindow({ groups, buckets })}
-              />
+              {/* 图表全家桶（§6：标题+价格类型/汇总 + 图主体 + 刷选 + 下钻）；
+                  内层 minWidth 保住图表可读下限，窄视口卡内横向拖动 */}
+              <div style={{ minWidth: 880 }}>
+                <PriceTrend
+                  onSeriesWindow={(groups, buckets) => setTrendWindow({ groups, buckets })}
+                />
+              </div>
             </section>
             {/* 价差与明细（第118轮合并宽表；第一百二十三轮按主分析组分块）：
                 与图上同一可见时间段同源取数 */}

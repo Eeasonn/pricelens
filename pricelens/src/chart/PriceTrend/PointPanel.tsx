@@ -51,8 +51,8 @@ export default function PointPanel(props: PointPanelProps) {
     >
       {/* 头部：收起按钮 + 时点日期（与摘要条同口径：窗口末桶最新周三锚日） */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span
-          role="button"
+        <button
+          type="button"
           title="收起时点摘要"
           onClick={props.onCollapse}
           style={{
@@ -68,7 +68,7 @@ export default function PointPanel(props: PointPanelProps) {
         >
           <LeftOutlined style={{ fontSize: 10 }} />
           收起
-        </span>
+        </button>
         <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: color.ink, whiteSpace: 'nowrap' }}>
           时点 {props.pointDate ?? fmtPointDate(props.granularity, asOf)}
         </span>

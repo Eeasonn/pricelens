@@ -12,7 +12,7 @@ export const color = {
   hairlineStrong: '#a1a1a1', // 强分隔/禁用文字
   ink: '#171717', // 主文字/主按钮（唯一主 CTA 色）
   body: '#4d4d4d', // 次级文字
-  mute: '#888888', // 占位/最弱文字
+  mute: '#737373', // 占位/最弱文字（第一百八十二轮：#888888 白底对比 3.5:1 不足，加深至 4.7:1）
   link: '#0070f3', // 链接；语义色"竞品贵于我/我便宜"
   error: '#ee0000', // 语义色"我贵于竞品"；错误
   warning: '#f5a623', // offer 图标/浮窗强调（琥珀）
@@ -20,12 +20,14 @@ export const color = {
   onPrimary: '#ffffff', // ink 表面上的文字
 } as const;
 
-/** 品牌数据色（图表线色，恒定不换）：我司线永远 HUAWEI 色且最粗 */
+/** 品牌数据色（图表线色，恒定不换）：我司线永远 HUAWEI 色且最粗。
+ *  第一百八十二轮：HONOR #00ccff 白底对比仅 1.9:1，加深至 #0099cc（3.3:1，
+ *  达到图形对象 3:1 底线）；其余品牌已达标不动 */
 export const brandColor: Record<string, string> = {
   HUAWEI: '#c7000b',
   APPLE: '#1d1d1f',
   SAMSUNG: '#0000cc',
-  HONOR: '#00ccff',
+  HONOR: '#0099cc',
   VIVO: '#2693ca',
   XIAOMI: '#ff6900',
 };

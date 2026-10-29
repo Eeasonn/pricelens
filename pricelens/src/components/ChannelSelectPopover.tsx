@@ -48,12 +48,14 @@ function AutoTogglePill({
 }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <span
-        role="button"
+      <button
+        type="button"
         aria-pressed={pressed}
         aria-label={`自动：${hint}`}
         onClick={() => !disabled && onClick()}
+        className="lpl-hit"
         style={{
+          position: 'relative',
           display: 'inline-flex',
           alignItems: 'center',
           height: 20,
@@ -70,13 +72,16 @@ function AutoTogglePill({
         }}
       >
         自动
-      </span>
+      </button>
       <Tooltip title={hint} trigger="click">
-        <QuestionCircleOutlined
-          role="button"
+        <button
+          type="button"
           aria-label="口径说明"
-          style={{ fontSize: 11, color: color.mute, cursor: 'pointer', flexShrink: 0 }}
-        />
+          className="lpl-hit"
+          style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'pointer', flexShrink: 0, color: color.mute }}
+        >
+          <QuestionCircleOutlined style={{ fontSize: 11 }} />
+        </button>
       </Tooltip>
     </span>
   );

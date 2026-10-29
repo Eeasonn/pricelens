@@ -351,8 +351,8 @@ function ZoneNamePill(props: {
         zIndex: 9,
       }}
     >
-      <span
-        role="button"
+      <button
+        type="button"
         aria-pressed={props.hidden}
         title={props.hidden ? '点击恢复显示该产品' : '点击隐藏该产品'}
         onClick={(e) => {
@@ -361,6 +361,8 @@ function ZoneNamePill(props: {
         }}
         onMouseEnter={() => props.onHover(nm.seriesKey)}
         onMouseLeave={() => props.onHover(null)}
+        onFocus={() => props.onHover(nm.seriesKey)}
+        onBlur={() => props.onHover(null)}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -393,7 +395,7 @@ function ZoneNamePill(props: {
         >
           {nm.text}
         </span>
-      </span>
+      </button>
       {delta && (
         <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap', opacity: props.hidden ? 0.45 : undefined }}>
           <span style={{ color: color.mute, fontWeight: 500 }}>
@@ -1083,21 +1085,25 @@ export default function Chart(props: ChartProps) {
                   }}
                 />
                 {/* 轴上纵向省略号（⋮）：刻度列居中（「Y 轴自动压缩」关闭 = 不产生断轴，自然无符号）；
-                    分离面板 axisChrome=false 时由共享轴列绘制 */}
+                    分离面板 axisChrome=false 时由共享轴列绘制。第一百八十二轮：悬停提示 +
+                    role=img 明示「刻度非连续」，避免把压缩段读成连续坐标 */}
                 {props.axisChrome !== false && (
                   <svg
                     width="14"
                     height="16"
                     viewBox="0 0 14 16"
+                    role="img"
+                    aria-label="刻度非连续：段与段之间的值域已压缩"
                     style={{
                       position: 'absolute',
                       left: tickZoneRight - TICK_DASH_W / 2 - 7,
                       top: geom.plotTop + b - 8,
-                      pointerEvents: 'none',
+                      pointerEvents: 'auto',
+                      cursor: 'help',
                       zIndex: 2,
                     }}
-                    aria-hidden
                   >
+                    <title>刻度非连续：段与段之间的值域已压缩</title>
                     {[3, 8, 13].map((cy) => (
                       <circle key={cy} cx="7" cy={cy} r="1.5" fill={color.hairlineStrong} />
                     ))}
@@ -1307,17 +1313,20 @@ export default function Chart(props: ChartProps) {
                     }}
                   >
                     <Popover trigger="click" placement="top" content={<PromoEventCard band={b} />}>
-                      <span
-                        role="button"
+                      <button
+                        type="button"
+                        aria-label={`${b.name} ${b.dateText}，点击看档期详情`}
                         title={`${b.name} ${b.dateText} · 点击看档期详情`}
                         onClick={(e) => e.stopPropagation()}
+                        className="lpl-hit"
                         style={{
+                          position: 'relative',
                           pointerEvents: 'auto',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 4,
                           height: 16,
-                          padding: withLabel ? '0 7px 0 5px' : 0,
+                          padding: withLabel ? '0 7px 0 5px' : '0 2px',
                           borderRadius: radius.pill,
                           border: withLabel ? '1px solid rgba(180, 83, 9, 0.3)' : undefined,
                           background: withLabel ? color.canvas : undefined,
@@ -1329,7 +1338,7 @@ export default function Chart(props: ChartProps) {
                         {withLabel && (
                           <span style={{ fontSize: 10, lineHeight: '12px', color: '#b45309', fontWeight: 500 }}>{b.name}</span>
                         )}
-                      </span>
+                      </button>
                     </Popover>
                   </div>
                 );
@@ -1484,8 +1493,8 @@ export default function Chart(props: ChartProps) {
                             （现页价格早已变化）；该点有折后价才有快照。tip 容器 pointerEvents
                             none 防挡图，触发器单独恢复可点 */}
                         {pt?.price != null && (
-                          <span
-                            role="button"
+                          <button
+                            type="button"
                             aria-label={`查看该周页面快照：${curveNameOf(s)}`}
                             title={pt.shopName ? `查看该周页面快照（${pt.shopName}）` : '查看该周页面快照'}
                             onClick={(e) => {
@@ -1499,10 +1508,11 @@ export default function Chart(props: ChartProps) {
                                 url: pt.url ?? '',
                               });
                             }}
-                            style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 4, color: color.mute, flexShrink: 0, pointerEvents: 'auto', cursor: 'pointer' }}
+                            className="lpl-hit"
+                            style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: 4, color: color.mute, flexShrink: 0, pointerEvents: 'auto', cursor: 'pointer' }}
                           >
                             <PictureOutlined style={{ fontSize: 10 }} />
-                          </span>
+                          </button>
                         )}
                       </div>
                       {items.map((it) => (
@@ -1831,15 +1841,17 @@ export default function Chart(props: ChartProps) {
                       {dateOf(bs)} – {dateOf(be)}
                     </span>
                     {!drag && (
-                      <span
-                        role="button"
+                      <button
+                        type="button"
                         aria-label="清除时间段选择"
                         title="清除时间段选择"
                         onClick={(ev) => {
                           ev.stopPropagation();
                           props.onBrushChange?.(null, true);
                         }}
+                        className="lpl-hit"
                         style={{
+                          position: 'relative',
                           display: 'inline-grid',
                           placeItems: 'center',
                           width: 14,
@@ -1850,7 +1862,7 @@ export default function Chart(props: ChartProps) {
                         }}
                       >
                         <CloseOutlined style={{ fontSize: 8 }} />
-                      </span>
+                      </button>
                     )}
                   </span>
                 </div>

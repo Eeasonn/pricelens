@@ -169,8 +169,8 @@ function MatchPill({
   const md = size === 'md';
   return (
     <Tooltip title={tip} zIndex={TIP_Z}>
-      <span
-        role="button"
+      <button
+        type="button"
         aria-label={label}
         aria-disabled={!can || undefined}
         aria-pressed={can ? !!selected : undefined}
@@ -197,7 +197,7 @@ function MatchPill({
         }}
       >
         {text}
-      </span>
+      </button>
     </Tooltip>
   );
 }
@@ -207,8 +207,8 @@ function MatchPill({
 /** 档位批量动作 pill（浅蓝描边 ghost，与「＋ 全部型号」同语言） */
 function TierBatchPill({ text, disabled, onClick }: { text: string; disabled?: boolean; onClick?: () => void }) {
   return (
-    <span
-      role="button"
+    <button
+      type="button"
       aria-label={text}
       aria-disabled={disabled || undefined}
       className="lpl-pk-ghost"
@@ -233,7 +233,7 @@ function TierBatchPill({ text, disabled, onClick }: { text: string; disabled?: b
       }}
     >
       <PlusOutlined style={{ fontSize: 9 }} /> {text}
-    </span>
+    </button>
   );
 }
 
@@ -1343,10 +1343,18 @@ function PickerPanel() {
                 const chip = (
                   <span
                     role="button"
+                    tabIndex={0}
                     aria-label={`加入模板 ${c.label}`}
                     title={`把模板加入当前选择（新增不替换）：${summary}`}
                     className="lpl-pk-ghost"
                     onClick={() => appendCombo(c)}
+                    onKeyDown={(e) => {
+                      // chip 内嵌编辑/＋两个原生按钮，本体外壳用 span：键盘 Enter/Space 同点击
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        appendCombo(c);
+                      }
+                    }}
                     style={{
                       height: 22,
                       display: 'inline-flex',
@@ -1364,8 +1372,8 @@ function PickerPanel() {
                   >
                     {c.cards[0]?.main && <BrandDot brand={brandOfModel(c.cards[0].main.modelId)} />}
                     {c.label}
-                    <span
-                      role="button"
+                    <button
+                      type="button"
                       aria-label={`编辑模板 ${c.label}`}
                       title="编辑"
                       className="lpl-pk-ghost"
@@ -1376,18 +1384,19 @@ function PickerPanel() {
                       style={{ display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer' }}
                     >
                       <EditOutlined style={{ fontSize: 10 }} />
-                    </span>
+                    </button>
                     {/* 尾段「＋」= 加入当前选择（增量追加，不动已有内容）；chip 本体点击同义 */}
                     <Tooltip title={appendTip(c)} zIndex={TIP_Z}>
-                      <span
-                        role="button"
+                      <button
+                        type="button"
                         aria-label={`把模板 ${c.label} 加入当前选择`}
-                        className="lpl-pk-ghost"
+                        className="lpl-pk-ghost lpl-hit"
                         onClick={(e) => {
                           e.stopPropagation();
                           appendCombo(c);
                         }}
                         style={{
+                          position: 'relative',
                           display: 'inline-flex',
                           alignItems: 'center',
                           marginLeft: 1,
@@ -1398,7 +1407,7 @@ function PickerPanel() {
                         }}
                       >
                         <PlusOutlined style={{ fontSize: 10 }} />
-                      </span>
+                      </button>
                     </Tooltip>
                   </span>
                 );
@@ -1437,33 +1446,33 @@ function PickerPanel() {
                           {c.cards.length} 组
                         </span>
                         <Tooltip title={appendTip(c)} zIndex={TIP_Z}>
-                          <span
-                            role="button"
+                          <button
+                            type="button"
                             aria-label={`把模板 ${c.label} 加入当前选择`}
                             title="加入当前选择"
-                            className="lpl-pk-ghost"
+                            className="lpl-pk-ghost lpl-hit"
                             onClick={(e) => {
                               e.stopPropagation();
                               appendCombo(c);
                             }}
-                            style={{ display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer', flexShrink: 0 }}
+                            style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer', flexShrink: 0 }}
                           >
                             <PlusOutlined style={{ fontSize: 10 }} />
-                          </span>
+                          </button>
                         </Tooltip>
-                        <span
-                          role="button"
+                        <button
+                          type="button"
                           aria-label={`编辑模板 ${c.label}`}
                           title="编辑"
-                          className="lpl-pk-ghost"
+                          className="lpl-pk-ghost lpl-hit"
                           onClick={(e) => {
                             e.stopPropagation();
                             setEditing(c);
                           }}
-                          style={{ display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer', flexShrink: 0 }}
+                          style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', padding: 2, color: color.mute, cursor: 'pointer', flexShrink: 0 }}
                         >
                           <EditOutlined style={{ fontSize: 10 }} />
-                        </span>
+                        </button>
                       </span>
                     ),
                     title: c.cards.map((x) => (x.main ? [modelNameOf(x.main.modelId), configTextOf(x.main.romram)].filter(Boolean).join(' ') : '对比产品')).join('、'),
@@ -1475,8 +1484,8 @@ function PickerPanel() {
                   },
                 }}
               >
-                <span
-                  role="button"
+                <button
+                  type="button"
                   aria-label="更多模板"
                   title="查看全部模板"
                   className="lpl-pk-ghost"
@@ -1498,7 +1507,7 @@ function PickerPanel() {
                   }}
                 >
                   更多 {combos.length - recentVisible} <DownOutlined style={{ fontSize: 9 }} />
-                </span>
+                </button>
               </Dropdown>
             )}
           </>
@@ -1524,8 +1533,8 @@ function PickerPanel() {
               同屏两个模板按钮正是歧义来源；文案自带范围，不用悬停即知作用于全部 */}
           {mains.length > 1 && (
             <Tooltip title={`把下方全部 ${mains.length} 组产品对存为一个模板，之后可整组一键加入`} zIndex={TIP_Z}>
-              <span
-                role="button"
+              <button
+                type="button"
                 aria-label={`全部存为模板（${mains.length} 组）`}
                 title={`把下方全部 ${mains.length} 组产品对存为一个模板，之后可整组一键加入`}
                 className="lpl-pk-ghost"
@@ -1546,7 +1555,7 @@ function PickerPanel() {
                 }}
               >
                 全部存为模板
-              </span>
+              </button>
             </Tooltip>
           )}
           {mains.length > 0 && (
@@ -1561,8 +1570,8 @@ function PickerPanel() {
               onConfirm={() => actions.setMains([])}
             >
               <span style={{ display: 'inline-flex' }}>
-                <span
-                  role="button"
+                <button
+                  type="button"
                   aria-label="清空"
                   title="清空全部组"
                   className="lpl-pk-del"
@@ -1582,7 +1591,7 @@ function PickerPanel() {
                   }}
                 >
                   <DeleteOutlined style={{ fontSize: 11 }} /> 清空
-                </span>
+                </button>
               </span>
             </Popconfirm>
           )}
@@ -1656,8 +1665,8 @@ function PickerPanel() {
                     <AutoMatchInline card={card} />
                     {card.main && (
                       <Tooltip title={`把该组存为模板（默认名 = ${modelNameOf(card.main.modelId)}）`} zIndex={TIP_Z}>
-                        <span
-                          role="button"
+                        <button
+                          type="button"
                           aria-label={`把该组存为模板 ${modelNameOf(card.main.modelId)}`}
                           title={`把该组存为模板（默认名 = ${modelNameOf(card.main.modelId)}）`}
                           className="lpl-pk-ghost"
@@ -1679,7 +1688,7 @@ function PickerPanel() {
                           }}
                         >
                           存为模板
-                        </span>
+                        </button>
                       </Tooltip>
                     )}
                     <Popconfirm

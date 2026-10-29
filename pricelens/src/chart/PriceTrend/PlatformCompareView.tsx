@@ -230,9 +230,11 @@ function SingleProductBox({
       }
     >
       {/* 触发器：白底圆角框（同主品框视觉），品牌点 + 品牌 + 型号 + 配置 chip */}
-      <div
-        role="button"
+      <button
+        type="button"
         aria-label={value ? `对比产品：${[brandLabelOf(brandOfModel(value.modelId)), modelNameOf(value.modelId), cfg].filter(Boolean).join(' ')}，点击更换` : '选择产品'}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         title={value ? '点击更换产品' : '点击选择产品'}
         style={{
           height: 32,
@@ -265,7 +267,7 @@ function SingleProductBox({
           <span style={{ fontSize: fontSize.bodySm, color: color.mute }}>选择产品</span>
         )}
         <DownOutlined style={{ marginLeft: 'auto', fontSize: 10, color: color.mute, flexShrink: 0 }} />
-      </div>
+      </button>
     </Popover>
   );
 }
@@ -348,18 +350,19 @@ function AddShopPill({
       onActivate: () => setPane(c.channel_id),
       trailing: (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span
-            role="button"
+          <button
+            type="button"
             aria-label={`${on ? '移除' : '添加'}店铺 ${c.display_name}`}
             title={on ? '点击移除该店铺线' : '添加该店铺线（店铺内每周最低价）'}
             onClick={(e) => {
               e.stopPropagation();
               onToggle({ id: `ch:${c.channel_id}`, kind: 'channel', platform: c.platform, channelId: c.channel_id });
             }}
-            style={addPillOf(on)}
+            className="lpl-hit"
+            style={{ position: 'relative', ...addPillOf(on) }}
           >
             {on ? <CheckOutlined style={{ fontSize: 11 }} /> : <PlusOutlined style={{ fontSize: 11 }} />} 店铺
-          </span>
+          </button>
           <span style={{ fontSize: 10, color: color.mute, flexShrink: 0 }}>· {c.shops} 店铺</span>
         </span>
       ),
@@ -427,8 +430,8 @@ function AddShopPill({
         </div>
       }
     >
-      <span
-        role="button"
+      <button
+        type="button"
         aria-label="添加店铺"
         title="添加平台 / 店铺 / 卖家对比线"
         style={{
@@ -448,7 +451,7 @@ function AddShopPill({
         }}
       >
         <PlusOutlined style={{ fontSize: 10 }} /> 添加店铺
-      </span>
+      </button>
     </Popover>
   );
 }
@@ -677,11 +680,22 @@ export default function PlatformCompareView(props: {
               <span
                 key={sh.id}
                 role="button"
+                tabIndex={0}
                 aria-pressed={off}
                 aria-label={`取数店铺：${shopLabelOf(sh)}，点击隐藏/恢复折线`}
                 title={off ? '点击恢复显示该店铺折线' : '点击隐藏该店铺折线'}
                 onMouseEnter={() => setHoverKey(sh.id)}
                 onMouseLeave={() => setHoverKey(null)}
+                onFocus={() => setHoverKey(sh.id)}
+                onBlur={() => setHoverKey(null)}
+                onKeyDown={(e) => {
+                  // chip 内嵌「修改取数店铺」「移除」两个原生按钮，外壳用 span：
+                  // 键盘 Enter/Space 同点击（嵌套 button 非法）
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleHidden(sh.id);
+                  }
+                }}
                 onClick={() => toggleHidden(sh.id)}
                 style={{
                   display: 'inline-flex',
@@ -739,11 +753,13 @@ export default function PlatformCompareView(props: {
                       />
                     }
                   >
-                    <span
-                      role="button"
+                    <button
+                      type="button"
                       aria-label={`修改取数店铺：${shopLabelOf(sh)}`}
                       title="点击修改取数店铺（平台 / 店铺 / 卖家）"
+                      className="lpl-hit"
                       style={{
+                        position: 'relative',
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -756,7 +772,7 @@ export default function PlatformCompareView(props: {
                       }}
                     >
                       <FilterOutlined style={{ fontSize: 11 }} />
-                    </span>
+                    </button>
                   </Popover>
                 </span>
                 <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>

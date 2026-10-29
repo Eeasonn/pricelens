@@ -61,14 +61,17 @@ export interface ChartToolbarProps {
  *  与图上两级线宽一一对应；关闭态 = 虚线边 + 降透明（与图例隐藏态同语言） */
 function PriceTypePill(props: { on: boolean; thick?: boolean; label: string; title: string; onToggle: (next: boolean) => void }) {
   return (
-    <span
-      role="button"
+    <button
+      type="button"
+      aria-pressed={props.on}
       title={props.title}
       onClick={(e) => {
         e.stopPropagation();
         props.onToggle(!props.on);
       }}
+      className="lpl-hit"
       style={{
+        position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
         gap: 5,
@@ -89,7 +92,7 @@ function PriceTypePill(props: { on: boolean; thick?: boolean; label: string; tit
         style={{ width: 14, height: 0, borderTop: props.thick ? '3px solid #171717' : '1.5px solid #6b6b6b', borderRadius: 2 }}
       />
       <span style={{ color: color.body }}>{props.label}</span>
-    </span>
+    </button>
   );
 }
 

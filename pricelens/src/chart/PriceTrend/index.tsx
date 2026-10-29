@@ -61,7 +61,7 @@ import type {
   SkuGroupQuery,
 } from '../../dataModel/types';
 import type { PlatformSelection, ProductSelection } from '../../state/filtersTypes';
-import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
+import { color, fontSize, localCurrencySymbol, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import Chart from './Chart';
 import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
@@ -1041,6 +1041,14 @@ export default function PriceTrend(props: {
       >
         <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>
           价格走势
+          {/* 单位标识（第一百八十二轮评审）：纵轴口径一眼可读——USD / 当前国家本币符号 */}
+          <span
+            className="tnum"
+            title={state.currency === 'usd' ? '当前显示币种：USD' : `当前显示币种：本币（${localCurrencySymbol()}）`}
+            style={{ fontSize: 13, fontWeight: 500, color: color.mute, marginLeft: 8 }}
+          >
+            价格（{state.currency === 'usd' ? 'USD' : localCurrencySymbol()}）
+          </span>
           {multiCards && (
             <span style={{ fontSize: 14, fontWeight: 600, color: color.mute, marginLeft: 2 }}>
               （{effMains.length} 组）

@@ -44,6 +44,13 @@ import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 
 export type { DetailBucket, TableGroup } from './tableModel';
 
+/** 周桶 id（202631）→「2026W31」：明细表头第一行与图上轴标签同语言（第一百八十二轮：
+ *  图上 2026W19、表内只写 05-06 的口径割裂改为「周号＋日期」双行） */
+function weekIdText(id: string): string {
+  const m = /^(\d{4})(\d{1,2})$/.exec(id);
+  return m ? `${m[1]}W${Number(m[2])}` : id;
+}
+
 // ---- 列宽（左缘冻结三列 + 时间列） ----
 const W_PROD = 236;
 const W_CONF = 96;
@@ -269,13 +276,14 @@ export default function TrendTables(props: {
   );
 
   /** 产品身份单元格（产品块首行渲染，gridRow span 合并视觉）；span = 块内行数；
-   *  main = 是否本组主分析产品（浅蓝衬底，第一百二十三轮角色着色） */
+   *  main = 是否本组主分析产品（浅蓝衬底，第一百二十三轮角色着色）。
+   *  ARIA（第一百八十二轮）：产品 = 行头（rowheader）+ aria-rowspan，配置 = 跨行 cell */
   const identityCells = (s: Series, specByKey: Map<string, Spec>, span: number, keyPrefix: string, main: boolean): JSX.Element[] => {
     const bg = main ? MAIN_TINT : color.canvas;
     const sp = specByKey.get(s.key);
     const name = sp ? `${s.brand} ${sp.modelName}` : dedupeSpecText(s.label);
     return [
-      <div key={`${keyPrefix}-prod`} style={{ ...cell(0), ...frozen(0, bg), gridRow: `span ${span}`, gap: 6 }}>
+      <div key={`${keyPrefix}-prod`} role="rowheader" aria-rowspan={span} style={{ ...cell(0), ...frozen(0, bg), gridRow: `span ${span}`, gap: 6 }}>
         <BrandDot brand={s.brand} />
         <span
           title={name}
@@ -286,6 +294,8 @@ export default function TrendTables(props: {
       </div>,
       <div
         key={`${keyPrefix}-conf`}
+        role="cell"
+        aria-rowspan={span}
         className="tnum"
         style={{ ...cell(1), ...frozen(1, bg), gridRow: `span ${span}`, fontSize: 11, color: color.body, whiteSpace: 'nowrap' }}
       >
@@ -294,10 +304,12 @@ export default function TrendTables(props: {
     ];
   };
 
-  /** 类型列小字（冻结区第三列）；main = 是否本组主分析产品行（浅蓝衬底随角色） */
+  /** 类型列小字（冻结区第三列）；main = 是否本组主分析产品行（浅蓝衬底随角色）。
+   *  ARIA：行头（RRP / 折后价 / … 描述本行） */
   const typeCell = (text: string, main: boolean, rowKey: string) => (
     <div
       key={rowKey}
+      role="rowheader"
       style={{
         ...cell(2),
         ...frozen(2, main ? MAIN_TINT : color.canvas),
@@ -312,10 +324,10 @@ export default function TrendTables(props: {
   );
 
   /** 整行区块（组头 / 区块标题）：外层整行占位（阻断自动排布补位，底色/分隔线满行），
-   *  内层内容盒钉在左缘、横向滚动始终可见 */
+   *  内层内容盒钉在左缘、横向滚动始终可见。ARIA：外层 = row、内层 = 跨全列的列头 */
   const fullRow = (key: string, outer: CSSProperties, inner: JSX.Element) => (
-    <div key={key} style={{ gridColumn: '1 / -1', ...outer }}>
-      <div style={{ position: 'sticky', left: 0, width: 'max-content', maxWidth: '100%', zIndex: 3 }}>{inner}</div>
+    <div key={key} role="row" style={{ gridColumn: '1 / -1', ...outer }}>
+      <div role="columnheader" aria-colspan={3 + n} style={{ position: 'sticky', left: 0, width: 'max-content', maxWidth: '100%', zIndex: 3 }}>{inner}</div>
     </div>
   );
 
@@ -385,11 +397,14 @@ export default function TrendTables(props: {
 
   /** 列头行：产品/配置/类型（冻结）+ 时间列（每桶一列，图上同一时间轴）。
    *  第一百四十八轮：列头随区块标题走，产品价差 / 核心信息明细标题下各渲染
-   *  一条一模一样的列头（part 区分两条列头的 React key） */
+   *  一条一模一样的列头（part 区分两条列头的 React key）。
+   *  第一百八十二轮：周粒度列头 = 「周号＋日期」双行（2026W19 + 05-06），
+   *  消除图上 W 号、表内只有日期的口径换算成本 */
   const headerRow = (gid: string, part: string): JSX.Element[] => [
     ...(['产品', '配置', '类型'] as const).map((t, c) => (
       <div
         key={`${gid}-h-${part}-${t}`}
+        role="columnheader"
         style={{
           ...cell(c),
           ...frozen(c as 0 | 1 | 2, color.canvas),
@@ -402,23 +417,35 @@ export default function TrendTables(props: {
         {t}
       </div>
     )),
-    ...dates.map((d, i) => (
-      <div
-        key={`${gid}-h-${part}-${buckets[i].id}`}
-        className="tnum"
-        style={{
-          ...cell(3 + i),
-          background: color.canvas,
-          borderBottom: `1px solid ${color.hairlineStrong}`,
-          justifyContent: 'center',
-          fontSize: 11,
-          color: color.body,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {d}
-      </div>
-    )),
+    ...dates.map((d, i) => {
+      const wk = granularity === 'week' ? weekIdText(buckets[i].id) : null;
+      return (
+        <div
+          key={`${gid}-h-${part}-${buckets[i].id}`}
+          role="columnheader"
+          className="tnum"
+          title={wk ? `${wk} · ${d}` : undefined}
+          style={{
+            ...cell(3 + i),
+            background: color.canvas,
+            borderBottom: `1px solid ${color.hairlineStrong}`,
+            justifyContent: 'center',
+            fontSize: 11,
+            color: color.body,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {wk ? (
+            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: '13px' }}>
+              <span className="mono" style={{ fontSize: 10, color: color.mute }}>{wk}</span>
+              <span>{d}</span>
+            </span>
+          ) : (
+            d
+          )}
+        </div>
+      );
+    }),
   ];
 
   /** 组表体：产品价差（标题 + 列头 + 主品基准行 + 对比行）+ 核心信息明细
@@ -435,16 +462,16 @@ export default function TrendTables(props: {
             {captionRow('产品价差', `cap-diff-${b.g.id}`)}
             {headerRow(b.g.id, 'diff')}
             {b.base != null && (
-              <div key={`d-${b.g.id}-base`} style={{ display: 'contents' }}>
+              <div key={`d-${b.g.id}-base`} role="row" style={{ display: 'contents' }}>
                 {identityCells(b.base, b.specByKey, 1, `d-${b.g.id}-base`, true)}
                 {typeCell('基准', true, `d-${b.g.id}-base-t`)}
                 {buckets.map((bk, i) => (
-                  <div key={`d-${b.g.id}-base-${bk.id}`} style={{ ...cell(3 + i), background: MAIN_TINT }} />
+                  <div key={`d-${b.g.id}-base-${bk.id}`} role="cell" style={{ ...cell(3 + i), background: MAIN_TINT }} />
                 ))}
               </div>
             )}
             {b.diffRows.map((s) => (
-              <div key={`d-${b.g.id}-${s.key}`} style={{ display: 'contents' }}>
+              <div key={`d-${b.g.id}-${s.key}`} role="row" style={{ display: 'contents' }}>
                 {identityCells(s, b.specByKey, 1, `d-${b.g.id}-${s.key}`, false)}
                 {typeCell('价差', false, `d-${b.g.id}-${s.key}-t`)}
                 {buckets.map((bk, i) => {
@@ -455,6 +482,7 @@ export default function TrendTables(props: {
                   return (
                     <div
                       key={`d-${b.g.id}-${s.key}-${bk.id}`}
+                      role="cell"
                       className="tnum"
                       style={{
                         ...cell(3 + i),
@@ -472,7 +500,7 @@ export default function TrendTables(props: {
               </div>
             ))}
             {/* 价差区与明细区之间的间隔 */}
-            <div style={{ gridColumn: '1 / -1', height: 14, background: color.canvas }} />
+            <div aria-hidden style={{ gridColumn: '1 / -1', height: 14, background: color.canvas }} />
           </>
         )}
         {/* —— 核心信息明细：列头随标题走（第一百四十八轮），每产品 7 行
@@ -502,7 +530,7 @@ export default function TrendTables(props: {
           for (let i = 0; i < n; i++) {
             const pt = s.points[i];
             rows.push(
-              <div key={`${p}-rrp-${i}`} style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
+              <div key={`${p}-rrp-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
                 {pt?.rrp != null ? (
                   <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap' }}>
                     {formatPrice(pt.rrp, currency)}
@@ -518,7 +546,7 @@ export default function TrendTables(props: {
           for (let i = 0; i < n; i++) {
             const pt = s.points[i];
             rows.push(
-              <div key={`${p}-price-${i}`} style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
+              <div key={`${p}-price-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
                 {pt?.price != null ? (
                   <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
                     {formatPrice(pt.price, currency)}
@@ -534,7 +562,7 @@ export default function TrendTables(props: {
           for (let i = 0; i < n; i++) {
             const disc = discountOf(s.points[i]);
             rows.push(
-              <div key={`${p}-disc-${i}`} style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
+              <div key={`${p}-disc-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
                 {disc != null ? (
                   <span className="tnum" style={{ fontSize: 12, color: disc <= -0.15 ? '#b45309' : color.body, whiteSpace: 'nowrap' }}>
                     {fmtPct(disc)}
@@ -554,7 +582,7 @@ export default function TrendTables(props: {
             const inLast4 = i >= n - 4;
             const wow = inLast4 && cur != null && prev != null && prev > 0 ? (cur - prev) / prev : null;
             rows.push(
-              <div key={`${p}-wow-${i}`} style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
+              <div key={`${p}-wow-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', background: bg }}>
                 {wow != null ? (
                   <span
                     className="tnum"
@@ -576,7 +604,7 @@ export default function TrendTables(props: {
           for (let i = 0; i < n; i++) {
             const chan = s.points[i]?.channelName ?? null;
             rows.push(
-              <div key={`${p}-chan-${i}`} style={{ ...cell(3 + i), background: bg }}>
+              <div key={`${p}-chan-${i}`} role="cell" style={{ ...cell(3 + i), background: bg }}>
                 {chan ? (
                   <span title={`该时点取数渠道：${chan}`} style={{ fontSize: 11, color: color.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {chan}
@@ -592,7 +620,7 @@ export default function TrendTables(props: {
           for (let i = 0; i < n; i++) {
             const url = s.points[i]?.url || '';
             rows.push(
-              <div key={`${p}-evid-${i}`} style={{ ...cell(3 + i), justifyContent: 'flex-end', gap: 8, background: bg }}>
+              <div key={`${p}-evid-${i}`} role="cell" style={{ ...cell(3 + i), justifyContent: 'flex-end', gap: 8, background: bg }}>
                 {url ? (
                   <>
                     <button type="button" className="tt-evi" title="查看该时点的电商页面快照" onClick={() => openSnap(i)} style={EVID_STYLE}>
@@ -617,7 +645,7 @@ export default function TrendTables(props: {
           for (let i = 0; i < n; i++) {
             const text = offerText(s.points[i]);
             rows.push(
-              <div key={`${p}-offer-${i}`} style={{ ...cell(3 + i), alignItems: 'flex-start', background: bg }}>
+              <div key={`${p}-offer-${i}`} role="cell" style={{ ...cell(3 + i), alignItems: 'flex-start', background: bg }}>
                 {text ? (
                   <span style={{ fontSize: 10, lineHeight: '13px', color: color.body, wordBreak: 'break-word', whiteSpace: 'normal' }}>
                     {text}
@@ -629,7 +657,7 @@ export default function TrendTables(props: {
             );
           }
           return (
-            <div key={p} style={{ display: 'contents' }}>
+            <div key={p} role="row" style={{ display: 'contents' }}>
               {rows}
             </div>
           );
@@ -655,13 +683,15 @@ export default function TrendTables(props: {
         </span>
       </div>
 
-      {/* 横向滚动区：整张网格只横向滚动、高度随内容伸展（无纵向滚动条） */}
+      {/* 横向滚动区：整张网格只横向滚动、高度随内容伸展（无纵向滚动条）。
+          ARIA（第一百八十二轮）：div 网格补全 table 语义——row/cell/列头/行头，
+          读屏按行列关系朗读，冻结列与合并单元格经 aria-rowspan 表达 */}
       <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, minWidth: frozenW + n * W_TIME, alignItems: 'stretch' }}>
+        <div role="table" aria-label="价差与明细" style={{ display: 'grid', gridTemplateColumns: gridCols, minWidth: frozenW + n * W_TIME, alignItems: 'stretch' }}>
           {viewBlocks.map((b, bi) => (
-            <div key={b.g.id} style={{ display: 'contents' }}>
+            <div key={b.g.id} role="rowgroup" style={{ display: 'contents' }}>
               {/* 组间隔（首组不加） */}
-              {bi > 0 && <div style={{ gridColumn: '1 / -1', height: 26, background: color.canvas }} />}
+              {bi > 0 && <div aria-hidden style={{ gridColumn: '1 / -1', height: 26, background: color.canvas }} />}
               {groupHeader(b)}
               {/* 收起（第一百三十一轮）：只留组头，表体整块不渲染 */}
               {!collapsedIds.has(b.g.id) && groupBody(b)}

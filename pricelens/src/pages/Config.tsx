@@ -188,7 +188,7 @@ export default function Config() {
   return (
     <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
       {/* 第二十八轮：1440 → 1280，与看板同最低宽度 */}
-      <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader；第一百一十五轮：右上「保存配置」删除——
             各明细编辑即改即存，批量保存无实义） */}
         <PageHeader title="配置" />

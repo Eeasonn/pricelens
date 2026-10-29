@@ -153,7 +153,7 @@ export default function Overview() {
       }}
       style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }}
     >
-      <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader title="国家总览" />
 

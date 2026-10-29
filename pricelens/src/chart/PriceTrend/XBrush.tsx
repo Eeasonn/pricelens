@@ -150,6 +150,15 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
     </div>
   );
 
+  // 第一百八十二轮（评审）：RangePicker 的两个输入框可访问名区分开始/结束
+  // （antd 只支持整簇一个 aria-label，读屏无法分辨正在填哪一端）
+  useEffect(() => {
+    const inputs = rootRef.current?.querySelectorAll<HTMLInputElement>('.xbrush-range-picker input');
+    if (!inputs) return;
+    inputs[0]?.setAttribute('aria-label', `时间范围开始（${granularityLabel[granularity]}）`);
+    inputs[1]?.setAttribute('aria-label', `时间范围结束（${granularityLabel[granularity]}）`);
+  });
+
   return (
     <div ref={rootRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
       <button

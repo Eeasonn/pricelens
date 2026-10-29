@@ -187,11 +187,11 @@ export function RomramChip({ children }: { children: ReactNode }) {
   );
 }
 
-/** 虚线触发 pill（「＋ 添加…」家族统一形态） */
+/** 虚线触发 pill（「＋ 添加…」家族统一形态）。第一百八十二轮：原生 button（键盘可达） */
 export function AddPill({ label, onClick, disabled, big }: { label: string; onClick?: () => void; disabled?: boolean; big?: boolean }) {
   return (
-    <span
-      role="button"
+    <button
+      type="button"
       aria-label={label}
       aria-disabled={disabled || undefined}
       className="lpl-pk-ghost"
@@ -213,15 +213,15 @@ export function AddPill({ label, onClick, disabled, big }: { label: string; onCl
       }}
     >
       <PlusOutlined style={{ fontSize: 10 }} /> {label}
-    </span>
+    </button>
   );
 }
 
 /** 行尾「更换」ghost pill（= 完整树浮窗的显性入口）：仅图标，语义走 aria-label/title */
 export function SwapPill({ label, onClick }: { label: string; onClick?: () => void }) {
   return (
-    <span
-      role="button"
+    <button
+      type="button"
       aria-label={label}
       title={label}
       className="lpl-pk-ghost"
@@ -240,21 +240,22 @@ export function SwapPill({ label, onClick }: { label: string; onClick?: () => vo
       }}
     >
       <SwapOutlined style={{ fontSize: 11 }} />
-    </span>
+    </button>
   );
 }
 
 export function DeleteX({ label, onClick, size = 11 }: { label: string; onClick?: () => void; size?: number }) {
   return (
-    <span
-      role="button"
+    <button
+      type="button"
       aria-label={label}
       title={label}
       onClick={onClick}
-      style={{ display: 'inline-flex', padding: 4, cursor: 'pointer', color: color.mute, flexShrink: 0 }}
+      className="lpl-hit"
+      style={{ position: 'relative', display: 'inline-flex', padding: 4, cursor: 'pointer', color: color.mute, flexShrink: 0 }}
     >
       <CloseOutlined style={{ fontSize: size }} />
-    </span>
+    </button>
   );
 }
 
@@ -262,12 +263,13 @@ export function DeleteX({ label, onClick, size = 11 }: { label: string; onClick?
  *  方式呈现；悬停红化，轻确认后连对比区一并移除） */
 export function GroupDeleteX({ label }: { label: string }) {
   return (
-    <span
-      role="button"
+    <button
+      type="button"
       aria-label={label}
       title={label}
-      className="lpl-pk-del"
+      className="lpl-pk-del lpl-hit"
       style={{
+        position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -281,7 +283,7 @@ export function GroupDeleteX({ label }: { label: string }) {
       }}
     >
       <CloseOutlined style={{ fontSize: 11 }} />
-    </span>
+    </button>
   );
 }
 

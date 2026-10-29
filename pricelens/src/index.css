@@ -21,6 +21,31 @@ select {
   font: inherit;
 }
 
+/* 第一百八十二轮（可及性）：原生 button 当 role="button" 的替身——重置浏览器
+   默认外观，行为与 span 版完全一致（antd 组件按钮走 .ant-btn 类样式，不受影响） */
+button {
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* 键盘焦点环（Tab 可达性）：仅 focus-visible（鼠标点击不出现），全站统一蓝色 */
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #0070f3;
+  outline-offset: 1px;
+}
+
+/* 16~20px 高的小 pill 命中区扩展：::after 透明层外扩 6px（元素需 position:relative） */
+.lpl-hit::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+
 /* 时间筛选器：沿用 Ant Design RangePicker 结构，但把周期值压到 12px，
    让 2025-W39 → 2026-W41 在左侧窄栏里保持完整可读。 */
 .xbrush-range-picker.ant-picker {

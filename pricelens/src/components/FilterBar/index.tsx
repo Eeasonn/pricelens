@@ -140,9 +140,11 @@ function ProductPickerEntry() {
 
   return (
     <ProductPickerFlyout open={open} onOpenChange={setOpen}>
-      <div
-        role="button"
+      <button
+        type="button"
         aria-label="选择产品"
+        aria-haspopup="dialog"
+        aria-expanded={open}
         title={mains.length ? mains.map(groupSummaryLine).join('\n') : '点击选择主分析产品与对比产品'}
         onClick={() => setOpen((v) => !v)}
         style={{
@@ -158,6 +160,7 @@ function ProductPickerEntry() {
             minWidth: 0,
             flex: '1 1 auto',
             overflow: 'hidden',
+            textAlign: 'left',
             boxShadow: open ? `0 0 0 1px ${selectAccent}` : undefined,
           }}
         >
@@ -227,7 +230,7 @@ function ProductPickerEntry() {
             </span>
           )}
           <DownOutlined style={{ marginLeft: 'auto', fontSize: 10, color: color.mute, flexShrink: 0 }} />
-      </div>
+      </button>
     </ProductPickerFlyout>
   );
 }
@@ -251,7 +254,9 @@ export default function FilterBar({
       <ConfigProvider theme={filterBarTheme}>
         {/* 时间范围弹层锚定在其筛选簇自身（第一百四十二轮对齐修复），卡片根不再是定位容器 */}
         <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 30, flexWrap: 'nowrap' }}>
+          {/* 第一百八十二轮：行允许换行（rowGap 8）——≥1280 视口仍单行不变；
+              窄视口筛选簇折行而非把整页撑出横向裁切 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, rowGap: 8, minHeight: 30, flexWrap: 'wrap' }}>
             <ScopeFields />
             {/* 入口列弹性让位（第一百三十一轮波2收窄：basis 320→260、minWidth 240→200，
                 时间簇定宽 310 入列后 1280 视口仍单行；chip 内部省略号兜底） */}

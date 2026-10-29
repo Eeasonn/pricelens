@@ -723,8 +723,8 @@ export default function TemplateEditorFlyout({
             onConfirm={onDelete}
           >
             <span style={{ display: 'inline-flex' }}>
-              <span
-                role="button"
+              <button
+                type="button"
                 aria-label="删除模板"
                 title="删除模板"
                 className="lpl-pk-del"
@@ -744,7 +744,7 @@ export default function TemplateEditorFlyout({
                 }}
               >
                 <DeleteOutlined style={{ fontSize: 11 }} /> 删除模板
-              </span>
+              </button>
             </span>
           </Popconfirm>
           <DeleteX label="关闭" size={12} onClick={onClose} />

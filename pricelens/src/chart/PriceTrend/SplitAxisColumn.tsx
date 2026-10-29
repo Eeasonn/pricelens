@@ -142,21 +142,25 @@ export default function SplitAxisColumn(props: {
             }}
           />
         ))}
-      {/* 断轴省略号（⋮）：短横线列居中（「Y 轴自动压缩」关闭 = 不产生断轴，自然无符号） */}
+      {/* 断轴省略号（⋮）：短横线列居中（「Y 轴自动压缩」关闭 = 不产生断轴，自然无符号）。
+          第一百八十二轮：悬停提示 + role=img 明示「刻度非连续」 */}
       {scale.breaks.map((b, i) => (
         <svg
           key={`brk-${i}`}
           width="14"
           height="16"
           viewBox="0 0 14 16"
+          role="img"
+          aria-label="刻度非连续：段与段之间的值域已压缩"
           style={{
             position: 'absolute',
             left: axisW - TICK_DASH_W / 2 - 7,
             top: panelGridTop + b - 8,
-            pointerEvents: 'none',
+            pointerEvents: 'auto',
+            cursor: 'help',
           }}
-          aria-hidden
         >
+          <title>刻度非连续：段与段之间的值域已压缩</title>
           {[3, 8, 13].map((cy) => (
             <circle key={cy} cx="7" cy={cy} r="1.5" fill={color.hairlineStrong} />
           ))}

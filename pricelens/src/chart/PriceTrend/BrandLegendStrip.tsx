@@ -113,8 +113,8 @@ function Pill({
       ? { background: selectSoft, border: `1px solid ${MAIN_BORDER}` }
       : { background: color.canvas, border: `1px solid ${color.hairline}` };
   return (
-    <span
-      role="button"
+    <button
+      type="button"
       aria-pressed={pill.hidden}
       title={pill.hidden ? '点击恢复显示该产品' : '点击隐藏该产品'}
       onClick={(e) => {
@@ -123,6 +123,8 @@ function Pill({
       }}
       onMouseEnter={() => onHover(pill.key)}
       onMouseLeave={() => onHover(null)}
+      onFocus={() => onHover(pill.key)} // 键盘焦点 = 悬停同效（高亮该系列、其余降透明）
+      onBlur={() => onHover(null)}
       className="lpl-lg-pill"
       style={{
         display: 'inline-flex',
@@ -190,7 +192,7 @@ function Pill({
           </span>
         )}
       </span>
-    </span>
+    </button>
   );
 }
 
@@ -257,8 +259,8 @@ function PlatformRow({
             />
           }
         >
-          <span
-            role="button"
+          <button
+            type="button"
             aria-pressed={!pill.channel.auto}
             aria-label={`取价平台：${pill.channel.label}，点击筛选平台-店铺`}
             title={
@@ -267,7 +269,9 @@ function PlatformRow({
                 : `取价平台：${pill.channel.label}，点击筛选`
             }
             onClick={(e) => e.stopPropagation()}
+            className="lpl-hit"
             style={{
+              position: 'relative',
               display: 'inline-flex',
               alignItems: 'center',
               height: 16,
@@ -280,13 +284,13 @@ function PlatformRow({
               background: pill.channel.auto ? color.canvas : selectSoft,
               border: `1px solid ${pill.channel.auto ? color.hairline : 'rgba(0, 112, 243, 0.35)'}`,
               whiteSpace: 'nowrap',
-              overflow: 'hidden',
+              overflow: 'visible',
               flexShrink: 0,
               cursor: 'pointer',
             }}
           >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
-          </span>
+            <span style={{ minWidth: 0, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
+          </button>
         </Popover>
       ) : (
         <span style={{ flexShrink: 0 }} />
@@ -390,14 +394,7 @@ function GroupBlock({
       {compares.length > 0 && (
         <>
           {scrollable && (
-            <span
-              role="button"
-              aria-label="更多对比产品（左）"
-              onClick={() => scrollByPill(-1)}
-              style={{ ...ARROW_STYLE, opacity: atStart ? 0.25 : 1, cursor: atStart ? 'default' : 'pointer' }}
-            >
-              <LeftOutlined style={{ fontSize: 8 }} />
-            </span>
+            <ArrowButton dir="left" label="更多对比产品（左）" onClick={() => scrollByPill(-1)} dim={atStart} />
           )}
           <div
             ref={trackRef}
@@ -418,14 +415,7 @@ function GroupBlock({
             ))}
           </div>
           {scrollable && (
-            <span
-              role="button"
-              aria-label="更多对比产品（右）"
-              onClick={() => scrollByPill(1)}
-              style={{ ...ARROW_STYLE, opacity: atEnd ? 0.25 : 1, cursor: atEnd ? 'default' : 'pointer' }}
-            >
-              <RightOutlined style={{ fontSize: 8 }} />
-            </span>
+            <ArrowButton dir="right" label="更多对比产品（右）" onClick={() => scrollByPill(1)} dim={atEnd} />
           )}
         </>
       )}
@@ -434,6 +424,7 @@ function GroupBlock({
 }
 
 const ARROW_STYLE = {
+  position: 'relative' as const,
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -445,6 +436,22 @@ const ARROW_STYLE = {
   color: color.body,
   flexShrink: 0,
 } as const;
+
+/** role="button" 箭头的原生按钮化统一包装（第一百八十二轮）：type=button +
+ *  aria-label；「更多组/更多对比」两侧的小箭头命中区经 .lpl-hit 外扩 */
+function ArrowButton({ dir, label, onClick, size = 14, dim }: { dir: 'left' | 'right'; label: string; onClick: () => void; size?: number; dim?: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="lpl-hit"
+      style={{ ...ARROW_STYLE, width: size, height: size, opacity: dim ? 0.25 : 1, cursor: dim ? 'default' : 'pointer' }}
+    >
+      {dir === 'left' ? <LeftOutlined style={{ fontSize: 8 }} /> : <RightOutlined style={{ fontSize: 8 }} />}
+    </button>
+  );
+}
 
 export default function BrandLegendStrip({
   groups,
@@ -521,14 +528,7 @@ export default function BrandLegendStrip({
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
       {outer.overflow && (
-        <span
-          role="button"
-          aria-label="更多组（左）"
-          onClick={() => scrollOuter(-1)}
-          style={{ ...ARROW_STYLE, width: 16, height: 16, opacity: outer.start ? 0.25 : 1, cursor: outer.start ? 'default' : 'pointer', flexShrink: 0 }}
-        >
-          <LeftOutlined style={{ fontSize: 9 }} />
-        </span>
+        <ArrowButton dir="left" label="更多组（左）" onClick={() => scrollOuter(-1)} size={16} dim={outer.start} />
       )}
       <div
         ref={trackRef}
@@ -568,14 +568,7 @@ export default function BrandLegendStrip({
         })()}
       </div>
       {outer.overflow && (
-        <span
-          role="button"
-          aria-label="更多组（右）"
-          onClick={() => scrollOuter(1)}
-          style={{ ...ARROW_STYLE, width: 16, height: 16, opacity: outer.end ? 0.25 : 1, cursor: outer.end ? 'default' : 'pointer', flexShrink: 0 }}
-        >
-          <RightOutlined style={{ fontSize: 9 }} />
-        </span>
+        <ArrowButton dir="right" label="更多组（右）" onClick={() => scrollOuter(1)} size={16} dim={outer.end} />
       )}
     </div>
   );

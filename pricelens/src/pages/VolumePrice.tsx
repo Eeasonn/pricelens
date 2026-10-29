@@ -498,10 +498,11 @@ export default function VolumePrice() {
 
   return (
     <div data-lpl-scroll style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
-      <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 第一百八十二轮：整页 minWidth 撤除——页头/筛选条换行，面板区卡内横向滚动 */}
+      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         <PageHeader title="量价看板" />
         <FilterBar showTime showPlatform={false} />
-        <main style={{ flex: 1, padding: space.lg }}>
+        <main style={{ flex: 1, padding: space.lg, minWidth: 0 }}>
           <section
             style={{
               background: color.canvas,
@@ -587,8 +588,10 @@ export default function VolumePrice() {
 
             {/* 面板区：[共享 Y 轴列][三面板网格]；柱层在价格线之下（zIndex 0 < 1）。
                 第一百二十六轮：轴列纵向撑满面板区，「同步」开关落列底、与各面板
-                时间轴同一水平线（原底部独立行删除） */}
-            <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, marginBottom: space.sm }}>
+                时间轴同一水平线（原底部独立行删除）。
+                第一百八十二轮：窄视口在卡内横向拖动（内层 minWidth 880 保面板可读下限） */}
+            <div style={{ overflowX: 'auto', marginBottom: space.sm }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, minWidth: 880, width: '100%' }}>
               <div
                 style={{
                   flex: `0 0 ${splitAxisWidth(state.currency)}px`,
@@ -725,6 +728,7 @@ export default function VolumePrice() {
                   </div>
                 )}
               </div>
+            </div>
             </div>
 
           </section>

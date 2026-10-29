@@ -15,7 +15,7 @@
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { BellOutlined, PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
@@ -734,9 +734,39 @@ export default function AlertsPage() {
     );
   };
 
+  /** 添加监控入口（第一百八十二轮抽公用）：工具行与零监控空状态各渲染一份；
+   *  选中即订阅 + 反馈 + 定位到新行（多品牌时新行位置不可预期，避免「加没加上」的疑惑） */
+  const renderAddMonitor = (width: number): JSX.Element => (
+    <Select
+      showSearch
+      size="small"
+      placeholder="＋ 添加监控（搜索品牌 / 型号 / 产品）"
+      style={{ width }}
+      value={null}
+      filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+      onChange={(key) => {
+        if (!key) return;
+        actions.setAlertSubs([key as string], true);
+        const label = allSeries.find((s) => s.key === key)?.label ?? '';
+        message.success(`已添加监控：${label}`);
+        setBrandFilter([]);
+        setStatusFilter('all');
+        setFocusAlert({ seriesKey: key as string, type: 'price-change', weekId: '' });
+      }}
+      options={allSeries
+        .filter((s) => !state.alertSubs.includes(s.key))
+        .map((s) => ({ value: s.key, label: s.label }))}
+      suffixIcon={<PlusOutlined />}
+    />
+  );
+
+  // 零监控首启态（第一百八十二轮评审）：概览条零统计、无效筛选、阈值表头、历史事件
+  // 全部退场，空看板正中一句说明 + 添加入口；加上第一个监控后恢复完整界面
+  const emptyMode = subCount === 0;
+
   return (
     <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }} data-lpl-scroll>
-      <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader title="预警中心" />
 
@@ -754,77 +784,60 @@ export default function AlertsPage() {
               <Button size="small" style={{ marginLeft: 'auto', height: 22, fontSize: 11 }} onClick={() => setModelFilter(null)}>查看全部产品</Button>
             </div>
           )}
-          {/* ① 概览条（类看板摘要三件套） */}
-          <section
-            style={{
-              background: color.canvas,
-              boxShadow: shadow.l1,
-              borderRadius: radius.card,
-              padding: space.base,
-              marginBottom: space.md,
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, minmax(0,1fr))',
-              gap: 10,
-            }}
-          >
-            <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: latestList.length > 0 ? color.ink : color.hairlineStrong }}>
-                  {latestList.length}
-                </span>
-                <span style={{ fontSize: 12, color: color.mute }}>条最新预警</span>
+          {/* ① 概览条（类看板摘要；第一百八十二轮：类型分布卡撤除——工具行类型筛选
+              同口径重复，统计保留两件套；零监控时整条隐藏） */}
+          {!emptyMode && (
+            <section
+              style={{
+                background: color.canvas,
+                boxShadow: shadow.l1,
+                borderRadius: radius.card,
+                padding: space.base,
+                marginBottom: space.md,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0,1fr))',
+                gap: 10,
+              }}
+            >
+              <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: latestList.length > 0 ? color.ink : color.hairlineStrong }}>
+                    {latestList.length}
+                  </span>
+                  <span style={{ fontSize: 12, color: color.mute }}>条最新预警</span>
+                </div>
+                <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
+                  最新触发 {latestList.length > 0 ? `${weekTag(latestList[0].weekId)}（${latestList[0].weekLabel} 采集周）` : '—'}
+                  {latestList.length > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}
+                  {alerts.length !== latestList.length ? ` · 历史 ${alerts.length} 条` : ''}
+                </div>
               </div>
-              <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                最新触发 {latestList.length > 0 ? `${weekTag(latestList[0].weekId)}（${latestList[0].weekLabel} 采集周）` : '—'}
-                {latestList.length > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}
-                {alerts.length !== latestList.length ? ` · 历史 ${alerts.length} 条` : ''}
+              <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: color.ink }}>
+                    {subCount}
+                  </span>
+                  <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
+                </div>
+                <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
+                  {ownBrand()} {ownCount} · 其他品牌 {subCount - ownCount} · 单独设置 {Object.keys(state.alertProducts).length} 项
+                </div>
               </div>
-            </div>
-            <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: color.mute, marginBottom: 6 }}>类型分布（点击筛选）</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {ORDER.map((t) => {
-                  const active = typeFilter === t;
-                  return (
-                    <span
-                      key={t}
-                      role="button"
-                      onClick={() => applyTypeFilter(active ? 'all' : t)}
-                      style={{
-                        padding: '1px 8px',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        lineHeight: '18px',
-                        borderRadius: radius.pill,
-                        color: TYPE_STYLE[t].fg,
-                        background: TYPE_STYLE[t].bg,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        opacity: typeFilter !== 'all' && !active ? 0.4 : 1,
-                        boxShadow: active ? `0 0 0 1.5px ${TYPE_STYLE[t].fg}` : undefined,
-                      }}
-                    >
-                      {TYPE_STYLE[t].label} {typeCounts[t]}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: color.ink }}>
-                  {subCount}
-                </span>
-                <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
-              </div>
-              <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                {ownBrand()} {ownCount} · 其他品牌 {subCount - ownCount} · 单独设置 {Object.keys(state.alertProducts).length} 项
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
 
-          {/* ②③ 监控矩阵（工具行 + 列头规则 + 品牌分组行 + own-gap 成对条） */}
+          {/* ②③ 监控矩阵（工具行 + 列头规则 + 品牌分组行 + own-gap 成对条）。
+              零监控首启态：正中说明 + 添加入口，工具行/阈值表头/矩阵全部退场 */}
           <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg, marginBottom: space.md }}>
+            {emptyMode ? (
+              <div style={{ padding: '44px 16px 48px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <BellOutlined style={{ fontSize: 30, color: color.hairlineStrong }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>尚未监控任何产品</div>
+                <div style={{ fontSize: 12, color: color.mute }}>添加监控后，这里按周汇总调价、折扣、平台价差与档位间距预警</div>
+                {renderAddMonitor(380)}
+              </div>
+            ) : (
+              <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
               <h3 style={{ margin: 0, fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>监控看板</h3>
               <Segmented
@@ -869,30 +882,13 @@ export default function AlertsPage() {
                 ]}
               />
               <span style={{ flex: 1 }} />
-              <Select
-                showSearch
-                size="small"
-                placeholder="＋ 添加监控（搜索品牌 / 型号 / 产品）"
-                style={{ width: 320 }}
-                value={null}
-                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                onChange={(key) => {
-                  if (!key) return;
-                  actions.setAlertSubs([key as string], true);
-                  // 反馈 + 定位到新行（多品牌时新行位置不可预期，避免「加没加上」的疑惑）
-                  const label = allSeries.find((s) => s.key === key)?.label ?? '';
-                  message.success(`已添加监控：${label}`);
-                  setBrandFilter([]);
-                  setStatusFilter('all');
-                  setFocusAlert({ seriesKey: key as string, type: 'price-change', weekId: '' });
-                }}
-                options={allSeries
-                  .filter((s) => !state.alertSubs.includes(s.key))
-                  .map((s) => ({ value: s.key, label: s.label }))}
-                suffixIcon={<PlusOutlined />}
-              />
+              {renderAddMonitor(320)}
             </div>
 
+            {/* 列头与矩阵共用横向滚动容器（第一百八十二轮：窄视口只在卡内拖动，
+                页面不再整幅横向裁切） */}
+            <div style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: 880 }}>
             {/* 列头 = 规则行（全局开关 + 阈值） */}
             <div style={{ display: 'grid', gridTemplateColumns: MATRIX_COLS, alignItems: 'center', borderBottom: `1px solid ${color.hairline}` }}>
               <span style={{ fontSize: 11, color: color.mute, paddingLeft: 16, paddingBlock: 8 }}>
@@ -964,9 +960,15 @@ export default function AlertsPage() {
                 );
               })
             )}
+            </div>
+            </div>
+              </>
+            )}
           </section>
 
-          {/* ④ 历史事件（次级视图，默认折叠——第五十五轮用户口径：主视觉只报最新态） */}
+          {/* ④ 历史事件（次级视图，默认折叠——第五十五轮用户口径：主视觉只报最新态；
+              第一百八十二轮：零监控时整体退场，不占首屏） */}
+          {!emptyMode && (
           <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h3 style={{ margin: 0, fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>历史事件</h3>
@@ -1020,6 +1022,7 @@ export default function AlertsPage() {
               </div>
             )}
           </section>
+          )}
         </main>
 
       </div>
