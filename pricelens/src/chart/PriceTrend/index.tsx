@@ -154,13 +154,17 @@ export default function PriceTrend(props: {
   const { mainSels, compareSels } = useMemo(() => flatSelections(effMains), [effMains]);
 
   // ---- 图表内部状态 ----
-  const [sliderScale, setSliderScale] = useState<number>(1); // 每格高度倍率（不改刻度值；松手才提交）
-  const [yCompress, setYCompress] = useState<boolean>(false); // Y 轴自动压缩（第三十五轮起默认关 = 完全连续；迪总「不自动选择」）
+  // 第一百九十二轮（Eason）：Y 轴设置改会话态（usePageViewState）——切看板
+  // （价格↔量价）图表主体卸载重挂，普通 useState 会把设置清掉；会话态跨页
+  // 保留（本页 windowIds/同步开关同约定）。yLimit 的「产品集/币种变化即回
+  // 自动」契约由下方 limitScopeSig 效果继续承担，不受持久化影响。
+  const [sliderScale, setSliderScale] = usePageViewState<number>('dashboard.sliderScale', () => 1); // 每格高度倍率（不改刻度值；松手才提交）
+  const [yCompress, setYCompress] = usePageViewState<boolean>('dashboard.yCompress', () => false); // Y 轴自动压缩（第三十五轮起默认关 = 完全连续；迪总「不自动选择」）
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中（冻结 Y 轴自适应）
   // Y 轴上下限（第一百六十六轮，Eason）：拖柄自定义价格上限/下限，null = 该侧自动。
   // 只在所选产品不变的期间有效——产品集或币种变化即整体回自动（对比基准变了，
-  // 旧限位只会误裁新数据；内容签名含主品+对比区+渠道）
-  const [yLimit, setYLimit] = useState<YLimitState>({ min: null, max: null });
+  // 旧限位只会误裁新数据；内容签名含主品+对比区+渠道）；跨看板切换保留（192 轮）
+  const [yLimit, setYLimit] = usePageViewState<YLimitState>('dashboard.yLimit', () => ({ min: null, max: null }));
   const limitScopeSig = useMemo(() => `${contentSignature(effMains)}#${state.currency}`, [effMains, state.currency]);
   useEffect(() => {
     setYLimit({ min: null, max: null });
@@ -227,15 +231,16 @@ export default function PriceTrend(props: {
     compareEntered.current = compareTab;
   }, [compareTab, effMains]);
   // 齿轮弹层视图开关（第五十四轮追补上提到本层）：分离模式下由常驻工具行
-  // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）
-  const [showYTicks, setShowYTicks] = useState(true); // Y 刻度线（第九十一轮恢复；默认开）
+  // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）。
+  // 第一百九十二轮：改会话态——与 Y 轴设置同批，切看板不再被清
+  const [showYTicks, setShowYTicks] = usePageViewState<boolean>('dashboard.showYTicks', () => true); // Y 刻度线（第九十一轮恢复；默认开）
   // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑），缺省
-  const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
+  const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('dashboard.lineShape', () => 'auto');
   // 价格显示（第一百一十四轮，评审）：精简 = 每系列仅最高/最低/最新三价直标（默认）；
-  // 详细 = 现行全量标签口径。价格看板合并/分离两模式同值
-  const [labelMode, setLabelMode] = useState<'detail' | 'compact'>('compact');
-  // 悬停小页签比率：默认周环比；「页签显示」在工具行 ⋯ 内
-  const [tipMode, setTipMode] = useState<'discount' | 'wow'>('wow');
+  // 详细 = 现行全量标签口径。价格看板合并/分离两模式同值；会话态跨页保留（192 轮）
+  const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('dashboard.labelMode', () => 'compact');
+  // 悬停小页签比率：默认周环比；「页签显示」在工具行 ⋯ 内；会话态跨页保留（192 轮）
+  const [tipMode, setTipMode] = usePageViewState<'discount' | 'wow'>('dashboard.tipMode', () => 'wow');
   // 第一百一十四轮：分离模式横向虚线（跨面板共享悬停纵向位置；与 splitHoverIdx 同机制）
   const [splitCrossY, setSplitCrossY] = useState<number | null>(null);
   // 第一百一十五轮：顶部图例带悬停的产品——合并图单键；分离模式记录面板 + 系列
@@ -611,16 +616,16 @@ export default function PriceTrend(props: {
   const [splitHoverIdx, setSplitHoverIdx] = useState<number | null>(null);
   const [panelHoverIdxs, setPanelHoverIdxs] = useState<Record<string, number | null>>({});
   // 跨产品/竞品视角下价位跨度天然拉大 → 多组进入时（分图或合并，第一百二十三轮⑥
-  // 起不再只看分图态）自动开「Y 轴自动压缩」；用户手动关闭后本段会话内不再强制
-  //（回到单组再进才重置）
-  const yCompressAutoRef = useRef(false);
+  // 起不再只看分图态）自动开「Y 轴自动压缩」。第一百九十二轮：yCompress 改会话态
+  // 后，自动开启哨兵一并会话化（useRef 每次重挂即清零，切看板回来会在用户已手动
+  // 关闭的情况下再次强制打开）——本会话只自动开一次，之后尊重用户设置
+  const [yCompressAutoDone, setYCompressAutoDone] = usePageViewState<boolean>('dashboard.yCompressAuto', () => false);
   useEffect(() => {
-    if (multiCards && !yCompressAutoRef.current) {
-      yCompressAutoRef.current = true;
+    if (multiCards && !yCompressAutoDone) {
+      setYCompressAutoDone(true);
       setYCompress(true);
     }
-    if (!multiCards) yCompressAutoRef.current = false;
-  }, [multiCards]);
+  }, [multiCards, yCompressAutoDone, setYCompressAutoDone, setYCompress]);
   // 面板顺序（第七十九轮：卡片上边线拖移把手拖拽换位，取代已移除的箭头调序）
   const [panelOrder, setPanelOrder] = useState<string[]>([]); // 面板 key 序；空 = own 序
   const [draggingPanel, setDraggingPanel] = useState<string | null>(null);

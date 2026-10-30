@@ -189,15 +189,17 @@ export default function VolumePrice() {
   const panelCount = panelSpecs.length;
 
   // ---- 视图状态（同价格看板口径；全部面板共用）。同步态/面板独立窗口/价格
-  //      显示 = 会话态跨页保留（P1-5，usePageViewState）；其余为瞬态 ----
-  const [sliderScale, setSliderScale] = useState(1);
-  const [yCompress, setYCompress] = useState(false);
-  const [showYTicks, setShowYTicks] = useState(true);
-  const [lineShape, setLineShape] = useState<LineShapeChoice>('auto');
+  //      显示 = 会话态跨页保留（P1-5，usePageViewState）；其余为瞬态。
+  //      第一百九十二轮（Eason）：Y 轴设置四件套（每格高度/自动压缩/Y 刻度线/
+  //      折线样式）与页签显示一并转会话态——切价格看板再切回不再被清 ----
+  const [sliderScale, setSliderScale] = usePageViewState<number>('volume.sliderScale', () => 1);
+  const [yCompress, setYCompress] = usePageViewState<boolean>('volume.yCompress', () => false);
+  const [showYTicks, setShowYTicks] = usePageViewState<boolean>('volume.showYTicks', () => true);
+  const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('volume.lineShape', () => 'auto');
   // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 全面板共享悬停纵向位置（横向虚线）
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
-  // 悬停页签比率：默认周环比（与价格看板同一默认）
-  const [tipMode, setTipMode] = useState<'discount' | 'wow'>('wow');
+  // 悬停页签比率：默认周环比（与价格看板同一默认）；会话态跨页保留（192 轮）
+  const [tipMode, setTipMode] = usePageViewState<'discount' | 'wow'>('volume.tipMode', () => 'wow');
   const [crossY, setCrossY] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   // 查看窗口 = 会话态跨页保留（与价格看板对齐；范围改动等失义路径照旧复位）
