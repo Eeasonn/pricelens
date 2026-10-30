@@ -1,6 +1,8 @@
 // ============================================================
 // ChannelSelectPopover（第一百六十一轮立三层级联；第一百六十二轮改自动语义；
-// 第一百六十四轮搜索改全局、加平台域模式；第一百八十五轮统一自动口径文案）
+// 第一百六十四轮搜索改全局、加平台域模式；第一百八十五轮统一自动口径文案；
+// 第一百九十一轮（Eason 五点）每颗「自动」胶囊右侧显示语境小注——渠道名 /
+// 解析到的平台名，多颗「自动」并排时分得清谁是谁）
 // ——「平台→渠道→卖家」三级级联
 // （与全局 PlatformBox 同构，复用 CascadePanel），单选：
 //   点平台行 = 只切换右列渠道列表；点渠道行 = 展开该渠道卖家列；提交在第三列。
@@ -42,11 +44,15 @@ function AutoTogglePill({
   hint,
   onClick,
   disabled,
+  context,
 }: {
   pressed: boolean;
   hint: string;
   onClick: () => void;
   disabled?: boolean;
+  /** 胶囊右侧语境小注（第一百九十一轮，Eason 五点）：这颗「自动」当前对应的
+   *  渠道名 / 解析到的平台名；不传不渲染 */
+  context?: string;
 }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -75,6 +81,11 @@ function AutoTogglePill({
       >
         自动
       </button>
+      {/* 语境小注（第一百九十一轮，Eason 五点）：自动按钮旁显示对应的平台-分类-
+          店铺语境，否则多颗「自动」分不清谁是谁 */}
+      {context ? (
+        <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap', flexShrink: 0 }}>· {context}</span>
+      ) : null}
       <Tooltip title={hint} trigger="click">
         <button
           type="button"
@@ -109,6 +120,7 @@ export default function ChannelSelectPopover({
   scope = 'product',
   scopePlatform,
   syncCtl,
+  autoLabel,
 }: {
   cc: string;
   skuIds: string[];
@@ -123,6 +135,9 @@ export default function ChannelSelectPopover({
   /** 同步平台筛选（第一百七十八轮立，第一百八十四轮改组内语义）：传入 =
    *  本组主品的浮层出开关——同步只作用于本组（本组对比品跟随本组主产品） */
   syncCtl?: { active: boolean; onToggle: () => void };
+  /** 产品级自动当前解析到的平台名（第一百九十一轮，Eason 五点：自动态才传；
+   *  调用方见 BrandLegendStrip channelCtl.autoLabel）——底部「自动」胶囊旁的语境 */
+  autoLabel?: string;
 }) {
   // 平台 → 渠道（仅当前国家）：组内渠道保持维表序，组序 = 平台首次出现序
   const rows = useMemo<{ platform: string; shops: DimChannel[] }[]>(() => {
@@ -364,9 +379,12 @@ export default function ChannelSelectPopover({
                   // 第一百六十二轮（Eason）：渠道内「自动」放店铺列顶部（不放整卡左上角）
                   header: (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.xs }}>
+                      {/* 语境 = 对应渠道名（第一百九十一轮，Eason 五点：店铺层级的
+                          「自动」旁要知道是哪个渠道的自动） */}
                       <AutoTogglePill
                         pressed={selectedShopId === sellerPane && selectedSeller == null}
                         hint="显示每周最低价店铺"
+                        context={paneChannel?.display_name ?? undefined}
                         onClick={() => commitSeller(sellerPane, null)}
                       />
                     </div>
@@ -385,6 +403,7 @@ export default function ChannelSelectPopover({
             pressed={isPlatformAuto}
             hint="该平台内每周最低价店铺"
             disabled={isPlatformAuto}
+            context={scopePlatform}
             onClick={() => onPick({ platforms: [scopePlatform ?? ''], shopIds: [] })}
           />
         ) : (
@@ -392,6 +411,7 @@ export default function ChannelSelectPopover({
             pressed={isAuto}
             hint="每周最低在架价：优先取默认店铺；未设置时取预填主店；仍无则取默认平台。"
             disabled={isAuto}
+            context={autoLabel}
             onClick={() => onPick(null)}
           />
         )}

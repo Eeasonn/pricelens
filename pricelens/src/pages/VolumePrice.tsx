@@ -36,14 +36,26 @@
 // （defaultSlots/手选槽位/槽位重置键）一并退役。同步/独立时间轴、悬停联动、
 // 图内拖选高亮按面板数动态生效，语义不变。
 // ============================================================
+// 第一百九十一轮（Eason 五点）：面板头升级为价格页分离面板同构 [拖柄][产品药丸]——
+// ①拖柄照价格页范式（拖到目标面板松手换位，dragover 描边 + 拖动降透明反馈）；
+// 换序只记本地会话态 panelOrder（不落盘），面板渲染序 = panelOrder 优先、缺省回落
+// 数据序。②产品药丸 = BrandLegendStrip 导出的 PillUnit（上行 16px 平台小药丸 =
+// 该产品取价渠道徽标，点击弹渠道选择浮层，onPick 回写 setSelectionPlatform 后
+// 量价取数随所选平台重算；下行两行产品药丸 = 品牌行 + 名称加粗 + 配置浅蓝底 chip）。
+// 原纯文字面板头退役（信息已由药丸承载），面板头定高随药丸加高并与共享轴列对齐。
+// 屏蔽/悬停联动量价页没有，onToggle/onHover 传 no-op。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented } from 'antd';
+import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import usePageViewState from '../state/usePageViewState';
+import type { PlatformSelection, ProductSelection } from '../state/filtersTypes';
 import ChartContentBar from '../components/ChartContentBar';
 import { filterBarTheme } from '../components/FilterBar';
+import { brandLabelOf } from '../components/BrandMark';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
+import { PillUnit } from '../chart/PriceTrend/BrandLegendStrip';
 // 第一百三十一轮波2：卡顶时间筛选簇上移顶部筛选条，本页不再引用 XBrush/TimeRangeCluster
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
@@ -68,12 +80,14 @@ import { dimProduct } from '../data';
 import type { AggMode, Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 import VolumeBars, { BAND_FRAC_DEFAULT } from './volume/VolumeBars';
-import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
 import MarketBoard from './volume/MarketBoard';
 import { normalizePanelWindow, vMaxOf, type VolumeSlot } from './volume/volumeAxis';
 
-const PANEL_HEAD_H = 32; // 面板头定高：共享轴列的纵向对齐基准
+// 面板头定高（第一百九十一轮，Eason 五点）：面板头改 [拖柄][PillUnit] 后随药丸
+// 加高——16px 平台小药丸 + 2px 间距 + 两行产品药丸（约 53px），定高 54 与价格页
+// 分离面板图例行（PANEL_LEGEND_H）一致，仍是共享轴列的纵向对齐基准
+const PANEL_HEAD_H = 54;
 const PANEL_GRID_TOP = 14; // 面板图顶窄空气带（同分离模式）
 const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
 const CHART_GRID_RIGHT = 56; // 第一百一十五轮：右侧预留销量轴列（轨道线3px+右侧刻度数字+骑线拖柄）
@@ -103,6 +117,36 @@ function resolveSlot(slot: VolumeSlot, cc: string): SlotInfo | null {
   };
 }
 
+/** 面板 key（modelId__配置去空格）→ 选择项键（modelId|配置去空格）——与筛选状态
+ *  selKey 同口径，setSelectionPlatform 按它定位选择项（同价格页 pickChannel 的
+ *  非同步分支） */
+function selKeyOfPanel(panelKey: string): string {
+  const i = panelKey.indexOf('__');
+  return i <= 0 ? panelKey : `${panelKey.slice(0, i)}|${panelKey.slice(i + 2)}`;
+}
+
+/** 面板头产品药丸规格（第一百九十一轮，Eason 五点）：与 BrandLegendStrip 的
+ *  PillSpec 同构的本地结构（该类型未导出，跨页传 props 走 TS 结构化兼容） */
+interface PanelPillSpec {
+  key: string;
+  brand: string;
+  brandLabel: string;
+  text: string;
+  nameText: string;
+  romText: string;
+  hidden: boolean;
+  main: boolean;
+  channel?: { label: string; auto: boolean } | null;
+  channelCtl?: {
+    cc: string;
+    skuIds: string[];
+    current: PlatformSelection | null;
+    onPick: (sel: PlatformSelection | null) => void;
+    syncCtl?: { active: boolean; onToggle: () => void };
+    autoLabel?: string;
+  };
+}
+
 /** 量价面板取数清单（第一百六十七轮）：顶部筛选器所选产品 = 各卡「主品 + 对比区」
  *  依次铺开去重；每产品一面板，国家变化时 SKU 口径随 resolveSlot 重算 */
 interface PanelSpec {
@@ -113,6 +157,7 @@ interface PanelSpec {
   brand: string;
   name: string;
   skuIds: string[];
+  platform: PlatformSelection | null; // 该产品取价口径（null = 自动，第一百九十一轮随渠道徽标接入）
 }
 
 export default function VolumePrice() {
@@ -120,21 +165,23 @@ export default function VolumePrice() {
   const cc = state.countryCode;
 
   // ---- 面板清单：顶部筛选器所选产品铺开（第一百六十七轮）----
+  // 第一百九十一轮（Eason 五点）：随行带上各选择项的取价口径 platform——
+  // buildSeries 按它解析渠道（曲线真的跟随面板头渠道徽标的选择），药丸也据它回显
   const panelSpecs = useMemo<PanelSpec[]>(() => {
     const out: PanelSpec[] = [];
     const seen = new Set<string>();
     for (const card of state.mains) {
-      const items: VolumeSlot[] = [];
-      if (card.main) items.push({ modelId: card.main.modelId, romram: card.main.romram });
-      for (const c of card.compares) items.push({ modelId: c.modelId, romram: c.romram });
-      for (const slot of items) {
-        const norm = slot.romram.replace(/\s+/g, '');
-        const key = `${slot.modelId}__${norm}`;
+      const items: ProductSelection[] = [];
+      if (card.main) items.push(card.main);
+      for (const c of card.compares) items.push(c);
+      for (const sel of items) {
+        const norm = sel.romram.replace(/\s+/g, '');
+        const key = `${sel.modelId}__${norm}`;
         if (seen.has(key)) continue;
-        const info = resolveSlot(slot, cc);
+        const info = resolveSlot(sel, cc);
         if (!info || info.skuIds.length === 0) continue;
         seen.add(key);
-        out.push({ key, modelId: slot.modelId, romram: slot.romram, ...info });
+        out.push({ key, modelId: sel.modelId, romram: sel.romram, ...info, platform: sel.platform ?? null });
       }
     }
     return out;
@@ -229,7 +276,9 @@ export default function VolumePrice() {
         if (spec.skuIds.length > 0) {
           try {
             series = buildSeries({
-              groups: [{ modelId: spec.modelId, romram: spec.romram, skuIds: spec.skuIds, isOwn: spec.isOwn }],
+              // 第一百九十一轮（Eason 五点）：组级取价口径随选择项接入——选了平台/
+              // 渠道后量价曲线真的跟随重算（buildSeries 按组解析渠道；null = 自动）
+              groups: [{ modelId: spec.modelId, romram: spec.romram, skuIds: spec.skuIds, isOwn: spec.isOwn, platform: spec.platform }],
               granularity: state.granularity,
               startBucket: dataStart,
               endBucket: dataEnd,
@@ -375,6 +424,61 @@ export default function VolumePrice() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [panelData, effWins],
   );
+
+  // ---- 面板顺序拖拽换位（第一百九十一轮，Eason 五点；同价格页分离面板范式）：
+  //      本地会话态不落盘，换序只影响显示顺序。panelOrder 记面板 key（PanelSpec.key
+  //      = modelId__配置去空格，跨增删产品稳定；React key 另带下标前缀防重挂）序，
+  //      null = 数据序；面板态数组仍按下标挂各自面板，重排不串态 ----
+  const [panelOrder, setPanelOrder] = useState<string[] | null>(null);
+  const [draggingPanel, setDraggingPanel] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  // 展示顺序：拖拽换位后记录 key 序；null = 数据序（同价格页 orderedPanels）
+  const orderedPanels = useMemo(() => {
+    if (!panelOrder || panelOrder.length === 0) return panelViews;
+    const idx = (k: string) => {
+      const i = panelOrder.indexOf(k);
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return [...panelViews].sort((a, b) => idx(a.spec.key) - idx(b.spec.key));
+  }, [panelViews, panelOrder]);
+  // 拖拽落点 = 把被拖面板插到目标面板当前位置（同价格页 movePanelTo）
+  const movePanelTo = (dragKey: string, targetKey: string): void => {
+    if (dragKey === targetKey) return;
+    const keys = orderedPanels.map((p) => p.spec.key);
+    const from = keys.indexOf(dragKey);
+    const to = keys.indexOf(targetKey);
+    if (from < 0 || to < 0) return;
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    setPanelOrder(keys);
+  };
+
+  // 面板头产品药丸（第一百九十一轮，Eason 五点）：key = 面板 key；名称/配置拆自
+  // 面板规格（name =「型号 + 配置」，nameText 去配置后缀、'—' 出空）；渠道徽标与
+  // 浮层语境直接用 buildSeries 回显的 channelBadge（选平台=平台名、自动=最新有价周
+  // 实际平台名）。量价页无屏蔽/悬停联动，onToggle/onHover 传 no-op；onPick 回写
+  // setSelectionPlatform（selKey 定位）→ panelSpecs 重算 → 量价曲线随所选平台重取
+  const pillOf = (p: (typeof panelViews)[number]): PanelPillSpec => {
+    const rom = p.spec.romram !== '—' ? p.spec.romram : '';
+    const badge = p.series[0]?.channelBadge ?? null;
+    return {
+      key: p.spec.key,
+      brand: p.brand,
+      brandLabel: brandLabelOf(p.brand),
+      text: p.name,
+      nameText: rom && p.name.endsWith(rom) ? p.name.slice(0, p.name.length - rom.length).trim() : p.name,
+      romText: rom,
+      hidden: false,
+      main: false,
+      channel: badge ? { label: badge.label, auto: badge.auto } : null,
+      channelCtl: {
+        cc,
+        skuIds: p.spec.skuIds,
+        current: p.spec.platform,
+        onPick: (sel) => actions.setSelectionPlatform(selKeyOfPanel(p.spec.key), sel),
+        autoLabel: badge?.auto ? badge.label : undefined,
+      },
+    };
+  };
 
   // ---- 共享价格 Y 轴：三面板可见系列并集算一次（步长滞回 + 刷选冻结） ----
   const visUnion = useMemo(() => panelViews.flatMap((p) => p.vis), [panelViews]);
@@ -619,19 +723,78 @@ export default function VolumePrice() {
                         width: `${(panelCount / Math.min(panelCount, 3)) * 100}%`,
                       }}
                     >
-                    {panelViews.map((p) => (
+                    {/* 第一百九十一轮（Eason 五点）：渲染序 = 拖拽换位序（orderedPanels，
+                        panelOrder 缺省回落数据序）；拖柄拖到目标面板松手换位 */}
+                    {orderedPanels.map((p) => (
                       <div
                         key={p.key}
+                        onDragOver={(e) => {
+                          if (!draggingPanel || draggingPanel === p.spec.key) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          setDropTarget(p.spec.key);
+                        }}
+                        onDragLeave={() => setDropTarget((t) => (t === p.spec.key ? null : t))}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggingPanel) movePanelTo(draggingPanel, p.spec.key);
+                          setDraggingPanel(null);
+                          setDropTarget(null);
+                        }}
                         style={{
-                          border: `1px solid ${color.hairline}`,
+                          // 落点目标 = 蓝描边 + 内描边高亮；拖动中的面板降透明（同价格页反馈）
+                          border: `1px solid ${dropTarget === p.spec.key && draggingPanel !== p.spec.key ? color.link : color.hairline}`,
+                          boxShadow:
+                            dropTarget === p.spec.key && draggingPanel !== p.spec.key
+                              ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)'
+                              : undefined,
                           borderRadius: radius.card,
                           background: color.canvas,
                           padding: '0 8px 0',
                           position: 'relative',
                           isolation: 'isolate',
+                          opacity: draggingPanel === p.spec.key ? 0.45 : undefined,
                         }}
                       >
-                        <PanelHeader brand={p.brand} name={p.name} />
+                        {/* 面板头（第一百九十一轮，Eason 五点）：[拖柄][产品药丸] 同价格页
+                            分离面板头——拖柄拖到目标面板松手换位（title 同款）；药丸 =
+                            上行平台小药丸（取价渠道，点击弹渠道浮层）+ 下行两行产品药丸，
+                            信息承载原纯文字面板头（PanelHeader 退役） */}
+                        <div style={{ height: PANEL_HEAD_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          <span
+                            draggable
+                            onDragStart={(e) => {
+                              setDraggingPanel(p.spec.key);
+                              e.dataTransfer.effectAllowed = 'move';
+                              e.dataTransfer.setData('text/plain', p.spec.key);
+                            }}
+                            onDragEnd={() => {
+                              setDraggingPanel(null);
+                              setDropTarget(null);
+                            }}
+                            role="button"
+                            aria-label={`拖动调整 ${p.name} 面板位置`}
+                            title="拖动调整面板顺序"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 18,
+                              height: 18,
+                              flexShrink: 0,
+                              background: color.canvas,
+                              border: `1px solid ${draggingPanel === p.spec.key ? color.link : color.hairline}`,
+                              borderRadius: radius.pill,
+                              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
+                              cursor: 'grab',
+                              color: color.mute,
+                              lineHeight: '16px',
+                            }}
+                          >
+                            <HolderOutlined style={{ fontSize: 10 }} />
+                          </span>
+                          <PillUnit pill={pillOf(p)} dimmed={false} onToggle={() => {}} onHover={() => {}} />
+                        </div>
                         <div style={{ position: 'relative' }}>
                           <VolumeBars
                             geom={geoms[p.idx] ?? null}

@@ -50,6 +50,11 @@
 // 第一百八十五轮（外部 UX 审计落地）：①块内/整排 ‹› 滚动接入 scrollBehaviorOf()
 // （系统开启「减少动态效果」时退回瞬时滚动）；②平台小药丸的「自动」提示文案与
 // 数据口径说明弹窗、渠道选择浮层统一同句（默认店铺 → 预填主店 → 默认平台）。
+// 第一百九十一轮（Eason 五点）：①两行产品药丸圆胶囊 → 圆角矩形（10px 曲率，
+// 与平台小药丸的 4px 标签、卡片控件同一家族；单行小 pill 不动）——两行内容配
+// 圆胶囊外形确实怪（Eason 拍板问询后采纳圆角矩形）；②Pill/PlatformRow/PillUnit
+// 导出供量价走势面板头复用（两页产品药丸显示统一）；③channelCtl 增加
+// autoLabel（产品级自动当前解析到的平台名）——渠道浮层「自动」胶囊旁显示语境。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
@@ -92,17 +97,20 @@ interface PillSpec {
   /** 取价平台（第一百六十二轮）：平台名 / 「自动」（药丸上方小药丸显示） */
   channel?: { label: string; auto: boolean } | null;
   /** 平台筛选入口：小药丸点击弹三级渠道浮层；syncCtl 仅主品传入（浮层左上角
-   *  出「同步平台筛选」，第一百七十八轮） */
+   *  同步平台筛选，第一百七十八轮）；autoLabel = 自动态当前解析到的平台名
+   *  （第一百九十一轮：浮层「自动」胶囊旁的语境显示） */
   channelCtl?: {
     cc: string;
     skuIds: string[];
     current: { platforms: string[]; shopIds: string[]; seller?: string | null } | null;
     onPick: (sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
     syncCtl?: { active: boolean; onToggle: () => void };
+    autoLabel?: string;
   };
 }
 
-function Pill({
+/** 两行产品药丸（第一百九十一轮导出供量价走势面板头复用） */
+export function Pill({
   pill,
   dimmed,
   onToggle,
@@ -140,7 +148,9 @@ function Pill({
         gap: 1,
         maxWidth: PILL_W_BUDGET, // 自适应宽（第一百七十四轮，Eason）：宽随内容收放，240 只作上限防长名失控
         padding: '4px 10px 4px 8px',
-        borderRadius: radius.pill,
+        // 圆角矩形（第一百九十一轮，Eason）：两行内容配圆胶囊外形突兀，改 10px
+        // 曲率——与平台小药丸 4px 标签、卡片/控件圆角同一大家族；单行小 pill 不动
+        borderRadius: 10,
         cursor: 'pointer',
         opacity: pill.hidden ? 0.45 : dimmed ? 0.25 : undefined,
         flexShrink: 0,
@@ -206,8 +216,9 @@ function Pill({
 
 /** 药丸单元（第一百六十二轮，Eason）：上行 = 平台小药丸（独立元素，居右）；下行 =
  *  产品药丸（名称加粗 + 型号蓝底 chip）。两行互相独立、不嵌套，点击互不干扰。
- *  第一百七十六轮追补：比价入口退役；第一百七十八轮：行内同步按钮撤出（进浮层） */
-function PillUnit({
+ *  第一百七十六轮追补：比价入口退役；第一百七十八轮：行内同步按钮撤出（进浮层）
+ *  第一百九十一轮导出供量价走势面板头复用（两页产品药丸显示统一） */
+export function PillUnit({
   pill,
   dimmed,
   onToggle,
@@ -233,8 +244,9 @@ function PillUnit({
  *  第一百七十六轮追补（Eason）：多平台比价入口（店铺图标）随药丸退役——比价页签
  *  只从标题行页签进（默认主品）；平台小药丸改为行内居右。
  *  第一百八十四轮（Eason）：改行首居左；外形从圆胶囊改小圆角矩形标签（参考
- *  图标圆角钮同款 4px 曲率），与底下的圆胶囊产品药丸拉开层次 */
-function PlatformRow({
+ *  图标圆角钮同款 4px 曲率），与底下的圆胶囊产品药丸拉开层次
+ *  第一百九十一轮导出供量价走势面板头复用 */
+export function PlatformRow({
   pill,
   dimmed,
 }: {
@@ -266,6 +278,7 @@ function PlatformRow({
               current={pill.channelCtl.current}
               onPick={pill.channelCtl.onPick}
               syncCtl={pill.channelCtl.syncCtl}
+              autoLabel={pill.channelCtl.autoLabel}
             />
           }
         >
@@ -382,6 +395,8 @@ function GroupBlock({
           onPick: (sel) => channelCtl.onPick(s.key, sel),
           // 同步平台筛选（第一百七十八轮）：只随主品药丸的浮层出现（浮层左上角）
           syncCtl: group.mainKey === s.key ? syncCtl : undefined,
+          // 自动态解析平台名（第一百九十一轮）：浮层「自动」胶囊旁的语境显示
+          autoLabel: s.channelBadge?.auto ? s.channelBadge.label : undefined,
         }
       : undefined,
     };

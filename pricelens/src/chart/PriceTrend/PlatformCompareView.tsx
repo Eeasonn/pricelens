@@ -727,6 +727,9 @@ export default function PlatformCompareView(props: {
                         current={chipQueryOf(sh)}
                         scope="platform"
                         scopePlatform={sh.platform}
+                        // 第一百九十一轮（Eason 五点）：platform 域不出产品级「自动」
+                        // （底部胶囊 = 本平台内最低价店铺，语境由 scopePlatform 承担），
+                        // 本视图没有产品级自动的解析平台名，autoLabel 不传
                         onPick={(sel) => {
                           applyChipPick(sh, sel);
                           setEditId(null);

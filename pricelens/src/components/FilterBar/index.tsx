@@ -82,7 +82,8 @@ function GroupChip({ card }: { card: MainProduct }) {
         alignItems: 'flex-start',
         gap: 1,
         padding: '3px 8px',
-        borderRadius: radius.pill,
+        // 圆角矩形（第一百九十一轮，Eason：两行内容配圆胶囊突兀，改圆角矩形）
+        borderRadius: 10,
         background: 'rgba(0, 0, 0, 0.06)',
         flexShrink: 0,
         maxWidth: 260,

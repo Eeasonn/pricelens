@@ -203,38 +203,6 @@ export default function PriceTrend(props: {
   const compareTab = priceSubview === 'platforms';
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
 
-  /** 图例药丸比价入口：记录发起产品并打开弹窗 */
-  // 第一百六十二轮：药丸上方平台小药丸的回写——seriesKey（modelId__配置去空格）
-  // 与 selKey（modelId|配置去空格）同口径，剥出两段拼 selKey 定位选择项。
-  // 第一百八十四轮（Eason）：「同步平台筛选」改组内语义——平台改动只施加到
-  // 所属组的全部产品（保持「本组与主产品一致」不变式），各组互相独立
-  const pickChannel = useCallback(
-    (seriesKey: string, sel: PlatformSelection | null) => {
-      const idx = seriesKey.indexOf('__');
-      if (idx <= 0) return;
-      const key = `${seriesKey.slice(0, idx)}|${seriesKey.slice(idx + 2)}`;
-      const owner = effMains.find((c) =>
-        [c.main, ...c.compares].some((s) => s && seriesKeyOf(s) === seriesKey),
-      );
-      if (owner && platformSyncMapRef.current[owner.id]) {
-        actions.setMains(
-          effMains.map((c) =>
-            c.id === owner.id
-              ? {
-                  ...c,
-                  main: c.main ? { ...c.main, platform: sel } : c.main,
-                  compares: c.compares.map((s) => ({ ...s, platform: sel })),
-                }
-              : c,
-          ),
-        );
-        return;
-      }
-      actions.setSelectionPlatform(key, sel);
-    },
-    [actions, effMains],
-  );
-
   // 组内同步平台筛选（第一百八十四轮改语义，原全局单开关）：按卡（组）独立——
   // 触发 = 快照本组平台并收敛到本组主产品；取消 = 按快照还原本组。ref 持镜像供
   // pickChannel 免依赖读值；快照按卡存。togglePlatformSyncOf 依赖 visSeries
@@ -503,6 +471,66 @@ export default function PriceTrend(props: {
       })
       .filter((s) => s.points.length > 0);
   }, [allSeries, win]);
+
+  /** 图例药丸比价入口：记录发起产品并打开弹窗 */
+  // 第一百六十二轮：药丸上方平台小药丸的回写——seriesKey（modelId__配置去空格）
+  // 与 selKey（modelId|配置去空格）同口径，剥出两段拼 selKey 定位选择项。
+  // 第一百八十四轮（Eason）：「同步平台筛选」改组内语义——平台改动只施加到
+  // 所属组的全部产品（保持「本组与主产品一致」不变式），各组互相独立。
+  // 第一百九十一轮（Eason 五点）：整体下移到 visSeries 之后（同步分支要读主品
+  // 系列的平台徽标，依赖数组补 visSeries）；修真机 bug——同步中点浮层底部「自动」
+  // 不再把整组置 null 散伙：主品回 null（底部胶囊回按下态），对比品统一钉到
+  // 主品当前口径解析出的平台（pinnedSelectionFromBadge，badge + 主品当前显式
+  // 选择，与开启同步的钉定同源同函数，对照第一百七十四轮「三星还是 Mvideo」
+  // 问题：null 直发全员会各解各的平台），同步标志与快照都不动——同步状态不因
+  // 点自动被消除；显式选了平台/渠道仍全员同写。
+  const pickChannel = useCallback(
+    (seriesKey: string, sel: PlatformSelection | null) => {
+      const idx = seriesKey.indexOf('__');
+      if (idx <= 0) return;
+      const key = `${seriesKey.slice(0, idx)}|${seriesKey.slice(idx + 2)}`;
+      const owner = effMains.find((c) =>
+        [c.main, ...c.compares].some((s) => s && seriesKeyOf(s) === seriesKey),
+      );
+      if (owner && platformSyncMapRef.current[owner.id]) {
+        // 同步中点「自动」（第一百九十一轮，Eason 五点）：主品回自动，对比品钉定
+        // 继续跟随。钉定与开启同步（togglePlatformSyncOf）同源同函数，第二参 =
+        // 主品当前显式选择：主品已显式（开启同步后的常态）= 原样透传；主品本就
+        // 自动 = null 落到徽标解析实际平台。不能直传 null——开启同步后主品徽标
+        // auto=false，解析出 null 会整组散伙，同步名存实亡
+        if (sel == null) {
+          const badge = owner.main ? visSeries.find((s) => s.key === seriesKeyOf(owner.main!))?.channelBadge ?? null : null;
+          const pinned = pinnedSelectionFromBadge(badge, owner.main?.platform ?? null);
+          actions.setMains(
+            effMains.map((c) =>
+              c.id === owner.id
+                ? {
+                    ...c,
+                    main: c.main ? { ...c.main, platform: null } : c.main,
+                    compares: c.compares.map((s) => ({ ...s, platform: pinned })),
+                  }
+                : c,
+            ),
+          );
+          return;
+        }
+        actions.setMains(
+          effMains.map((c) =>
+            c.id === owner.id
+              ? {
+                  ...c,
+                  main: c.main ? { ...c.main, platform: sel } : c.main,
+                  compares: c.compares.map((s) => ({ ...s, platform: sel })),
+                }
+              : c,
+          ),
+        );
+        return;
+      }
+      actions.setSelectionPlatform(key, sel);
+    },
+    [actions, effMains, visSeries],
+  );
 
   // 图例可见系列：声明下移至 cappedVisSeries 之后（见 splitActive 段）
 

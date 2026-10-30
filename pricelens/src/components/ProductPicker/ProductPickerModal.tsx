@@ -983,7 +983,7 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
      * 树，移入选中样式 .lpl-pk-edit）；颜色 chip 与 ✕ 阻止冒泡避开编辑触发。
      * 第一百八十五轮：条内嵌颜色 chip/移除 ✕ 原生按钮，外壳同主品框改
      * div + role="button"，Enter/Space 同点击、内层控件持有焦点时不代答 */
-    <LevelSwitchPopover ctx={{ kind: 'replace-compare', cardId: card.id, sel }} initialModelId={sel.modelId} fit="row">
+    <LevelSwitchPopover ctx={{ kind: 'replace-compare', cardId: card.id, sel }} initialModelId={sel.modelId} fit="fill">
       <div
         role="button"
         tabIndex={0}
@@ -1291,6 +1291,17 @@ function PickerPanel() {
   // ---- 卡片拖拽换序（= 分离面板顺序） ----
   const [dragCard, setDragCard] = useState<string | null>(null);
   const [dropCard, setDropCard] = useState<string | null>(null);
+  // ---- 对比条目拖拽换序（第一百九十一轮，Eason）：只在本组对比区内换位 ----
+  const [dragCompare, setDragCompare] = useState<{ cardId: string; index: number } | null>(null);
+  const [dropCompare, setDropCompare] = useState<{ cardId: string; index: number } | null>(null);
+  const moveCompare = (cardId: string, from: number, to: number): void => {
+    if (from === to) return;
+    const card = mains.find((c) => c.id === cardId);
+    if (!card || from < 0 || to < 0 || from >= card.compares.length || to >= card.compares.length) return;
+    const ids = [...card.compares];
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    actions.setCardCompares(cardId, ids);
+  };
   const moveCard = (from: string, to: string): void => {
     if (from === to) return;
     const ids = mains.map((c) => c.id);
@@ -1929,10 +1940,68 @@ function PickerPanel() {
                   </div>
                 ) : (
                   <>
+                    {/* 第一百九十一轮（Eason 五点）：对比条目加组卡同款拖柄——
+                        拖动调整本组对比区顺序（组框拖柄只换组序，条目拖序只在
+                        本组内换位；拖拽事件 stopPropagation 不与组框拖序串线） */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto', maxHeight: 122 }}>
-                      {card.compares.map((sel) => (
-                        <CompareRow key={selKey(sel)} card={card} sel={sel} />
-                      ))}
+                      {card.compares.map((sel, ci) => {
+                        const isDragSrc = dragCompare?.cardId === card.id && dragCompare.index === ci;
+                        const isDropTarget = dropCompare?.cardId === card.id && dropCompare.index === ci;
+                        return (
+                          <div
+                            key={selKey(sel)}
+                            onDragOver={(e) => {
+                              if (!dragCompare || dragCompare.cardId !== card.id || dragCompare.index === ci) return; // 卡片拖序放行给组框
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDropCompare({ cardId: card.id, index: ci });
+                            }}
+                            onDragLeave={() => {
+                              setDropCompare((t) => (t && t.cardId === card.id && t.index === ci ? null : t));
+                            }}
+                            onDrop={(e) => {
+                              if (!dragCompare) return; // 卡片拖序：放行给组框 onDrop
+                              e.preventDefault();
+                              e.stopPropagation();
+                              moveCompare(card.id, dragCompare.index, ci);
+                              setDragCompare(null);
+                              setDropCompare(null);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              minWidth: 0,
+                              borderRadius: radius.control,
+                              border: `1px solid ${isDropTarget ? color.link : 'transparent'}`,
+                              boxShadow: isDropTarget ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)' : undefined,
+                              opacity: isDragSrc ? 0.45 : undefined,
+                            }}
+                          >
+                            <span
+                              draggable
+                              onDragStart={(e) => {
+                                setDragCompare({ cardId: card.id, index: ci });
+                                e.dataTransfer.effectAllowed = 'move';
+                                // Firefox 要求至少携带一项数据才会真正启动拖拽
+                                try {
+                                  e.dataTransfer.setData('text/plain', selKey(sel));
+                                } catch {
+                                  /* 只读事件对象等受限环境忽略 */
+                                }
+                              }}
+                              onDragEnd={() => {
+                                setDragCompare(null);
+                                setDropCompare(null);
+                              }}
+                              title="拖动调整对比产品顺序"
+                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', cursor: 'grab', color: color.mute, flexShrink: 0, width: 16 }}
+                            >
+                              <HolderOutlined style={{ fontSize: 12 }} />
+                            </span>
+                            <CompareRow card={card} sel={sel} />
+                          </div>
+                        );
+                      })}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
                       <AddCompareTrigger card={card} />
