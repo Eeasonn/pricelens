@@ -16,6 +16,8 @@ import PageHeader from './components/PageHeader';
 import FilterBar from './components/FilterBar';
 import { ChartContentProvider } from './state/chartContent';
 import { color, font, shadow, space } from './theme/tokens';
+import { AgentProvider } from './state/AgentContext';
+import AgentPanel from './components/Copilot/AgentPanel';
 
 export default function App() {
   return (
@@ -42,7 +44,9 @@ export default function App() {
         <FiltersProvider>
           <OverviewViewProvider>
             <ChartContentProvider>
-              <AppBody />
+              <AgentProvider>
+                <AppBody />
+              </AgentProvider>
             </ChartContentProvider>
           </OverviewViewProvider>
         </FiltersProvider>
@@ -76,6 +80,7 @@ function AppBody() {
       ) : (
         <AlertsPage />
       )}
+      <AgentPanel />
     </div>
   );
 }

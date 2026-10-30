@@ -21,6 +21,7 @@ import { filterBarTheme } from './FilterBar';
 import CountryBox from './FilterBar/CountryBox';
 import DataHelpModal from './DataHelpModal';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
+import AgentLauncher from './Copilot/AgentLauncher';
 
 /** 页头只留管理页签。图表内容的切换在筛选栏下方。 */
 const TABS: { page: Page; label: string }[] = [
@@ -118,6 +119,7 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
         </ConfigProvider>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+        <AgentLauncher />
         <nav aria-label="页面" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {TABS.map((t) => (
             <span key={t.page} style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>

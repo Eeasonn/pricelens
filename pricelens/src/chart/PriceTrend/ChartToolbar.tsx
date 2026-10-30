@@ -56,6 +56,8 @@ export interface ChartToolbarProps {
   /** 行尾次级入口插槽（第一百八十九轮定版）：多平台对比入口/返回钮——分隔线 +
       轻量文字钮，与大促/权益显示设置同排但不混入 ⋯ 菜单，保证可发现性 */
   compareEntry?: ReactNode;
+  /** 页面上下文入口：把当前图表口径带入 Copilot */
+  askEntry?: ReactNode;
   /** 悬停页签比率（收进 ⋯；默认周环比） */
   tipMode?: 'discount' | 'wow';
   onTipMode?: (v: 'discount' | 'wow') => void;
@@ -439,6 +441,12 @@ export default function ChartToolbar(props: ChartToolbarProps) {
         <>
           <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
           {props.compareEntry}
+        </>
+      )}
+      {showRight && props.askEntry && (
+        <>
+          <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+          {props.askEntry}
         </>
       )}
     </div>

@@ -46,6 +46,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ConfigProvider, Segmented, Tooltip } from 'antd';
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
+import { useAgent } from '../../state/AgentContext';
 import { useChartContent } from '../../state/chartContent';
 import { filterBarTheme } from '../../components/FilterBar';
 import { navBus } from '../../state/navBus';
@@ -136,6 +137,7 @@ export default function PriceTrend(props: {
   ) => void;
 } = {}) {
   const { state, actions } = useFilters();
+  const { openAgent } = useAgent();
   // 第一百一十七轮：每张卡 = 型号 + 配置 + 它自己的对比区，分离面板 = 直接展开卡。
   // 第一百二十三轮：「按档位」主体模式退役（档位批量动作并入选择产品浮窗），
   // 面板取数 = state.mains 原样。
@@ -1125,6 +1127,15 @@ export default function PriceTrend(props: {
       多平台对比 →
     </button>
   );
+  const askChartCtl = (
+    <button
+      type="button"
+      onClick={() => openAgent('dock', '分析当前价格走势，比较最新有价周和平台价差')}
+      style={{ height: 24, padding: '0 7px', color: color.link, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+    >
+      问此图
+    </button>
+  );
   return (
     <div>
       {/* 工具行（本轮拍板定版）：左簇 = 齿轮 + 隐藏对比产品（其后 = 分图/合并 +
@@ -1222,6 +1233,7 @@ export default function PriceTrend(props: {
               changeThreshold={changeThreshold}
               onChangeThreshold={setChangeThreshold}
               compareEntry={platformCtl}
+              askEntry={askChartCtl}
             />
           </div>
         </div>
