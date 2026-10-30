@@ -3,7 +3,8 @@
 // 两个区块的时间轴始终对齐。核心明细每产品 6 行（RRP / 折后价 / 折扣率 /
 // 平台-店铺 / 取证 / offer）；近 4 周环比收进产品单元格，随产品跨行只显示一次。
 // 环比固定由上游周序列计算，月/季展示粒度不会把它变成 4 个月或 4 个季度。
-// 时间列与图上同一可见时间段（每桶一列，周号＋日期双行列头），倒序排列。
+// 时间列与图上同一可见时间段（每桶一列，周号＋日期双行列头），时间正序排列
+// （早→晚从左到右，与图上时间轴同向；第一百九十三轮，Eason）。
 // 取证行 = 电商页面快照入口 + 最新时点商城现页链接；复制成功/失败均有短暂反馈。
 // 窄视口只冻结产品首列，其余列随表滚动，保证时间列始终可见。
 // 第一百八十九轮（Eason 定版收敛）：窄屏（<640px）冻结产品列 236→168px；复制
@@ -177,8 +178,9 @@ export default function TrendTables(props: {
   // 页签当前组：activeGid 失配（换品/删组）时回落第一组
   const active = viewBlocks.find((b) => b.g.id === activeGid) ?? viewBlocks[0] ?? null;
   const dates = useMemo(() => buckets.map((b) => bucketDateText(granularity, b.xLabel)), [buckets, granularity]);
-  // 时间列倒序（本轮，Eason）：最新一列在最左。ci.i = 升序内容下标（points 对位）
-  const cols = useMemo(() => buckets.map((b, i) => ({ bk: b, i })).slice().reverse(), [buckets]);
+  // 时间列正序（第一百九十三轮，Eason）：早→晚从左到右，与图上时间轴同向；
+  // ci.i = 升序内容下标（points 对位）
+  const cols = useMemo(() => buckets.map((b, i) => ({ bk: b, i })), [buckets]);
 
   const markCopied = (which: 'diff' | 'detail', ok: boolean): void => {
     // 第一百八十五轮（外部 UX 审计）：失败同样给短暂反馈（「复制失败」），不再静默
@@ -191,9 +193,9 @@ export default function TrendTables(props: {
    *  剪贴板与表内同格式（第一百八十九轮） */
   const fourWeekTextOf = (s: Series): string => fourWeekChangeText(fourWeekChanges.get(s.key) ?? null);
 
-  // ---- 复制为表格（TSV；列序与表头一致 = 时间倒序；多组时首列带组号） ----
+  // ---- 复制为表格（TSV；列序与表头一致 = 时间正序，第一百九十三轮；多组时首列带组号） ----
   const onCopyDiff = async (): Promise<void> => {
-    const lines = [[...(multi ? ['组'] : []), '主分析产品', '产品', '配置', ...dates.slice().reverse()].join('\t')];
+    const lines = [[...(multi ? ['组'] : []), '主分析产品', '产品', '配置', ...dates].join('\t')];
     for (const b of viewBlocks) {
       if (!b.base) continue;
       const base = b.base;
@@ -214,7 +216,7 @@ export default function TrendTables(props: {
     const TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
     // 近 4 周环比独立成列（第一百八十九轮，Eason 定版收敛）：表头在「类型」后，
     // 与表同列结构；只随每个产品首行（RRP 行）输出一次，其余行留空串
-    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', '近4周环比', ...dates.slice().reverse()].join('\t')];
+    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', '近4周环比', ...dates].join('\t')];
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
         const change = fourWeekTextOf(s);
@@ -302,17 +304,35 @@ export default function TrendTables(props: {
     const bg = main ? MAIN_TINT : color.canvas;
     const sp = specByKey.get(s.key);
     const name = sp ? `${s.brand} ${sp.modelName}` : dedupeSpecText(s.label);
+    // 产品链接（第一百九十三轮，Eason）：最新有价时点的商城现页 URL，名称后
+    // 外链小图标直达；无取数时点不出链接
+    const prodUrl = s.points[latestIdxOf(s, s.points.length)]?.url ?? '';
     return [
       <div key={`${keyPrefix}-prod`} role="rowheader" aria-rowspan={span} style={{ ...cell(0), ...frozen(0, bg), gridRow: `span ${span}`, gap: 6 }}>
         <BrandDot brand={s.brand} />
         {/* minWidth 0 + overflow hidden：窄屏产品列收窄（168px）后名称省略、
             环比行不外溢破格（第一百八十九轮） */}
         <div style={{ minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span
-            title={name}
-            style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-          >
-            {name}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <span
+              title={name}
+              style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {name}
+            </span>
+            {prodUrl && (
+              <a
+                href={prodUrl}
+                target="_blank"
+                rel="noreferrer"
+                title="打开商城页面"
+                aria-label={`打开 ${name} 的商城页面`}
+                className="tt-evi"
+                style={{ ...EVID_STYLE, flexShrink: 0 }}
+              >
+                <ExportOutlined style={{ fontSize: 11 }} />
+              </a>
+            )}
           </span>
           {fourWeekChange !== undefined && (
             <span
