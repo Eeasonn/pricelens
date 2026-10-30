@@ -429,6 +429,9 @@ export default function PlatformCompareView(props: {
   onYCompress: (v: boolean) => void;
   showYTicks: boolean;
   onShowYTicks: (v: boolean) => void;
+  /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立 */
+  showTiers: boolean;
+  onShowTiers: (v: boolean) => void;
   lineShape: LineShapeChoice;
   onLineShape: (v: LineShapeChoice) => void;
   labelMode: 'detail' | 'compact';
@@ -805,6 +808,7 @@ export default function PlatformCompareView(props: {
         legendHoverKey={hoverKey ?? editId}
         showYTicks={props.showYTicks}
         onShowYTicks={props.onShowYTicks}
+        showTiers={props.showTiers}
         enableDrill={false}
         windowKey={`pfcmp:${props.win.s}:${props.win.e}`}
         yScale={yCfg}

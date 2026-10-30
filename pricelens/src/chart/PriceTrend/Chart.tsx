@@ -201,6 +201,9 @@ export interface ChartProps {
    *  受控传 onShowYTicks（看板层统一写）；缺省用内部状态（下钻弹窗等自管场景） */
   showYTicks?: boolean;
   onShowYTicks?: (v: boolean) => void;
+  /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立——两个轴
+   *  （数值刻度 / 价格档位）各自可显隐；关 = 轴列不画档位带，轴区总宽恒定不变 */
+  showTiers?: boolean;
   /** 第八十二轮：名称药丸全集（含已屏蔽系列——药丸仍渲染为虚线置灰态）；缺省 = series */
   nameSeries?: Series[];
   /** 屏蔽中的系列 key 集（与 nameSeries 搭配；药丸点击 → onToggleHidden 切换） */
@@ -900,7 +903,7 @@ export default function Chart(props: ChartProps) {
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
   const tierValues = useMemo(() => collectTierValues(series, priceTypes), [series, priceTypes]);
 
-  const showTierBand = currency === 'usd' && geom != null && props.axisChrome !== false;
+  const showTierBand = currency === 'usd' && geom != null && props.axisChrome !== false && props.showTiers !== false;
   const tierBoxes = useMemo(
     () => buildTierBoxes({ enabled: showTierBand, geom, tierValues, industry: filterState.industry }),
     [showTierBand, geom, tierValues, filterState.industry],

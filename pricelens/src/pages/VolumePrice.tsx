@@ -195,6 +195,8 @@ export default function VolumePrice() {
   const [sliderScale, setSliderScale] = usePageViewState<number>('volume.sliderScale', () => 1);
   const [yCompress, setYCompress] = usePageViewState<boolean>('volume.yCompress', () => false);
   const [showYTicks, setShowYTicks] = usePageViewState<boolean>('volume.showYTicks', () => true);
+  // 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立
+  const [showTiers, setShowTiers] = usePageViewState<boolean>('volume.showTiers', () => true);
   const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('volume.lineShape', () => 'auto');
   // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 全面板共享悬停纵向位置（横向虚线）
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
@@ -648,6 +650,8 @@ export default function VolumePrice() {
                   sliderScale={sliderScale}
                   onSliderScale={setSliderScale}
                   showYTicks={showYTicks}
+                  showTiers={showTiers}
+                  onShowTiers={setShowTiers}
                   onShowYTicks={setShowYTicks}
                   yCompress={yCompress}
                   onYCompress={setYCompress}
@@ -684,6 +688,7 @@ export default function VolumePrice() {
                   gridLeft={estGridLeft(state.currency)}
                   panelGridTop={PANEL_GRID_TOP}
                   showYTicks={showYTicks}
+                  showTiers={showTiers}
                   tierValues={tierValues}
                 />
                 <div style={{ flex: 1 }} />
@@ -821,6 +826,7 @@ export default function VolumePrice() {
                             chrome={false}
                             axisChrome={false}
                             showYTicks={showYTicks}
+                            showTiers={showTiers}
                             enableDrill={false}
                             windowKey={`${effWins[p.idx][0]}:${effWins[p.idx][1]}:${p.key}`}
                             yScale={yCfg}

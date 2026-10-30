@@ -234,6 +234,8 @@ export default function PriceTrend(props: {
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）。
   // 第一百九十二轮：改会话态——与 Y 轴设置同批，切看板不再被清
   const [showYTicks, setShowYTicks] = usePageViewState<boolean>('dashboard.showYTicks', () => true); // Y 刻度线（第九十一轮恢复；默认开）
+  // 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，两个轴各自显隐
+  const [showTiers, setShowTiers] = usePageViewState<boolean>('dashboard.showTiers', () => true);
   // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑），缺省
   const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('dashboard.lineShape', () => 'auto');
   // 价格显示（第一百一十四轮，评审）：精简 = 每系列仅最高/最低/最新三价直标（默认）；
@@ -1239,6 +1241,8 @@ export default function PriceTrend(props: {
               sliderScale={sliderScale}
               onSliderScale={setSliderScale}
               showYTicks={showYTicks}
+              showTiers={showTiers}
+              onShowTiers={setShowTiers}
               onShowYTicks={setShowYTicks}
               yCompress={yCompress}
               onYCompress={setYCompress}
@@ -1291,6 +1295,8 @@ export default function PriceTrend(props: {
               sliderScale={sliderScale}
               onSliderScale={setSliderScale}
               showYTicks={showYTicks}
+              showTiers={showTiers}
+              onShowTiers={setShowTiers}
               onShowYTicks={setShowYTicks}
               yCompress={yCompress}
               onYCompress={setYCompress}
@@ -1384,6 +1390,8 @@ export default function PriceTrend(props: {
               yCompress={yCompress}
               onYCompress={setYCompress}
               showYTicks={showYTicks}
+              showTiers={showTiers}
+              onShowTiers={setShowTiers}
               onShowYTicks={setShowYTicks}
               lineShape={lineShape}
               onLineShape={setLineShape}
@@ -1422,6 +1430,7 @@ export default function PriceTrend(props: {
                   gridLeft={splitGridLeft}
                   panelGridTop={panelGridTop}
                   showYTicks={showYTicks}
+                  showTiers={showTiers}
                   tierValues={splitTierValues}
                   yLimit={yLimit}
                   onYLimit={commitYLimit}
@@ -1554,6 +1563,7 @@ export default function PriceTrend(props: {
                         chrome={false} // 面板不渲染设置行（第五十四轮追补）：统管权在上方常驻行
                         axisChrome={false} // 面板不画轴（追补⑤）：档位带/刻度/断轴号在共享轴列
                         showYTicks={showYTicks}
+                        showTiers={showTiers}
                         enableDrill={state.granularity !== 'week'}
                         enableOffer={state.granularity === 'week' && offersOn}
                         onDrill={makePanelDrill(p)}
@@ -1625,6 +1635,7 @@ export default function PriceTrend(props: {
             hideNamePills // 第一百一十五轮：产品名在图顶图例带，图内不再画药丸
             legendHoverKey={legendHoverKey}
             showYTicks={showYTicks}
+            showTiers={showTiers}
             onShowYTicks={setShowYTicks}
             enableDrill={state.granularity !== 'week'}
             enableOffer={state.granularity === 'week' && offersOn}

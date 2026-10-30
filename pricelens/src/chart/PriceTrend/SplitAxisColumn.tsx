@@ -36,6 +36,8 @@ export default function SplitAxisColumn(props: {
   panelGridTop: number;
   /** Y 刻度线（第九十一轮）：缺省开 = 刻度值+短横线；关 = 仅价格档位（文字居中整块） */
   showYTicks?: boolean;
+  /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，关 = 不画档位区块 */
+  showTiers?: boolean;
   tierValues: number[];
   /** Y 轴上下限（第一百六十六轮，Eason）：拖柄受控值与提交——共享轴列是分离模式
    *  唯一画轴处，拖柄挂这里（面板卡 chrome=false 不再各挂） */
@@ -58,7 +60,7 @@ export default function SplitAxisColumn(props: {
   };
   // 刻度抽稀（第一百四十七轮）：压缩轴最矮段处刻度互相叠压/越出绘图区下缘的守卫
   const rows = thinTickRows(buildTickRows(geom));
-  const tierBoxes = buildTierBoxes({ enabled: currency === 'usd', geom, tierValues: props.tierValues, industry: props.industry });
+  const tierBoxes = buildTierBoxes({ enabled: currency === 'usd' && props.showTiers !== false, geom, tierValues: props.tierValues, industry: props.industry });
   return (
     <div style={{ position: 'relative', width: axisW, height: panelGridTop + scale.plotHeight + GRID.bottom }}>
       {/* 档位区块（仅 USD）：贴轴列左缘的整块竖向色带，档位文字单行居左

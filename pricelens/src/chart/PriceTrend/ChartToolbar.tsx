@@ -48,6 +48,9 @@ export interface ChartToolbarProps {
   /** Y 刻度线（第九十一轮恢复）：开 = 刻度值+短横线；关 = 仅价格档位（居中整块） */
   showYTicks?: boolean;
   onShowYTicks?: (v: boolean) => void;
+  /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，两个轴各自显隐 */
+  showTiers?: boolean;
+  onShowTiers?: (v: boolean) => void;
   yCompress?: boolean;
   onYCompress?: (v: boolean) => void;
   lineShape?: LineShapeChoice;
@@ -229,8 +232,12 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           <Checkbox checked={props.showYTicks ?? true} onChange={(e) => props.onShowYTicks?.(e.target.checked)}>
             <span style={{ fontSize: 12 }}>Y 刻度线</span>
           </Checkbox>
+          {/* 价格档位独立开关（第一百九十三轮，Eason）：数值刻度 / 价格档位两个轴各自显隐 */}
+          <Checkbox checked={props.showTiers ?? true} onChange={(e) => props.onShowTiers?.(e.target.checked)}>
+            <span style={{ fontSize: 12 }}>价格档位</span>
+          </Checkbox>
           <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-            关闭后仅保留价格档位
+            数值刻度与价格档位可分别显示
           </div>
           <div style={{ marginTop: 6 }}>
             <Checkbox checked={props.yCompress ?? false} onChange={(e) => props.onYCompress?.(e.target.checked)}>
