@@ -99,6 +99,7 @@ export interface AgentResponse {
   citations: AgentCitation[];
   suggestions: string[];
   contextFingerprint: string;
+  provider?: { name: string; model: string };
 }
 
 export interface FilterValidationResult {

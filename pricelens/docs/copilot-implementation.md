@@ -16,7 +16,7 @@
 - 上下文 chips、运行步骤摘要、图表/表格/预警解释卡；
 - 筛选预览、显式应用、精确撤销；
 - 输入框 Enter 发送、Shift+Enter 换行、停止运行；
-- 浏览器语音输入；配置 `VITE_ARK_VOICE_PROXY` 后优先使用同源方舟 Agent Plan 语音代理；
+- 浏览器语音输入；语音代理地址可通过 `VITE_ARK_VOICE_PROXY` 接入单独部署的 ASR 服务；
 - 旧版页面仍由原分支提供，新版开发文件位于独立 worktree。
 
 ## 方舟语音代理边界
@@ -27,11 +27,13 @@
 { "transcript": "查看最近八周价格", "confidence": 0.96 }
 ```
 
-代理服务负责调用方舟 Agent Plan ASR，并从服务端环境变量读取凭证。不要把 API Key 写进 `VITE_*` 变量或浏览器代码。
+本分支自带的 `agent-server.mjs` 负责文本 Agent，不包含 ASR WebSocket 代理；需要方舟 ASR 时应部署独立代理并从服务端环境变量读取凭证。不要把 API Key 写进 `VITE_*` 变量或浏览器代码。
 
 ## 接入真实 Agent 服务
 
-当前未配置服务端时，前端使用确定性的本地 adapter，方便离线演示和回归测试。将 `src/agent/core.ts` 的 `runAgent` 替换为 POST `/agent/runs` 的 SSE 客户端时，沿用 `AgentResponse`、`AgentStep`、`AgentResultCard` 和 `FilterPatch` 契约即可；服务端仍需实现权限、数据版本、审计和写操作确认。
+`server/agent-server.mjs` 已实现同源 `POST /api/agent/runs`：服务端从 `ARK_API_KEY` 读取凭证，调用方舟 Agent Plan Responses 接口，模型只改写结论和建议；数字卡片仍由本地确定性引擎生成。上游不可用时返回基线结果，前端继续可用。
+
+生产构建已默认指向 `/api/agent`，页面需要从代理提供的 HTTP 地址打开；双击 `file://` 单文件时会自动回退到本地 adapter。
 
 ## 验证命令
 

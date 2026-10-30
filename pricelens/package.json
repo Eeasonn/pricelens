@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build && node scripts/sync-single.mjs",
     "preview": "vite preview",
+    "agent-server": "node server/agent-server.mjs",
     "gen": "echo '[deprecated] 造数脚本已被真实数据接入取代：npm run ingest' && node scripts/gen-data.mjs",
     "typecheck": "tsc --noEmit",
     "verify": "node scripts/verify.mjs",

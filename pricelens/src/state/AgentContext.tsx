@@ -4,6 +4,7 @@ import { useFilters } from './FiltersContext';
 import { useAlerts } from '../components/AlertCenter';
 import {
   buildAgentContext,
+  defaultAgentClient,
   defaultVoiceAdapter,
   runAgent,
   validateFilterPatch,
@@ -84,6 +85,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const [appliedFilterIds, setAppliedFilterIds] = useState<ReadonlySet<string>>(new Set());
   const [undoSnapshot, setUndoSnapshot] = useState<FiltersState | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const agentClient = useMemo(() => defaultAgentClient(), []);
   const voice = useMemo<VoiceInputAdapter>(() => defaultVoiceAdapter(), []);
   const context = useMemo(() => buildAgentContext(page, state, alertRecords(alerts)), [alerts, page, state]);
 
@@ -101,12 +103,13 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const run = new AbortController();
     controller.current = run; setRunning(true); setOpen(true);
     try {
-      const response = await runAgent(text, context, run.signal);
+      const baseline = await runAgent(text, context, run.signal);
+      const response = await agentClient.run({ text, context, clientRequestId: messageId('run'), baseline }, run.signal);
       setMessages((prev) => [...prev, { id: messageId('assistant'), role: 'assistant', text: response.summary, response, createdAt: new Date().toISOString() }]);
     } catch (error) {
       if ((error as Error).name !== 'AbortError') setMessages((prev) => [...prev, { id: messageId('assistant'), role: 'assistant', text: '这次运行没有完成，请重试。', createdAt: new Date().toISOString() }]);
     } finally { controller.current = null; setRunning(false); }
-  }, [context, draft, running]);
+  }, [agentClient, context, draft, running]);
 
   const stop = useCallback(() => controller.current?.abort(), []);
   const newConversation = useCallback(() => { if (!running) { setMessages([]); setDraft(''); setUndoSnapshot(null); setAppliedFilterIds(new Set()); } }, [running]);
