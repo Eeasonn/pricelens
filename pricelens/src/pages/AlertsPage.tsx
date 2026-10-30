@@ -22,6 +22,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import { BellOutlined, PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
+import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
 import { dimChannel, dimProduct, dimRegion } from '../data';
@@ -157,7 +158,7 @@ const romOfLabel = (label: string | null, modelName: string): string =>
 const weekTag = (weekId: string): string => `${weekId.slice(0, 4)}W${weekId.slice(4)}`;
 
 /** 单条触发（预警中心重构：加方向箭头；矩阵展开明细与事件流共用） */
-function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'local'; onOpen: () => void }) {
+function AlertRow({ a, currency, onOpen, onExplain }: { a: AlertItem; currency: 'usd' | 'local'; onOpen: () => void; onExplain: () => void }) {
   const detail =
     a.type === 'promo' ? (
       <>
@@ -201,9 +202,10 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
       <span className="tnum" style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>
         {a.weekLabel} · {weekTag(a.weekId)}
       </span>
-      <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={onOpen}>
-        看板
-      </Button>
+      <div style={{ display: 'inline-flex', gap: 4, flexShrink: 0 }}>
+        <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={onExplain}>解释</Button>
+        <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={onOpen}>看板</Button>
+      </div>
     </div>
   );
 }
@@ -257,6 +259,7 @@ function useOpenInDashboard() {
 
 export default function AlertsPage() {
   const { state, actions } = useFilters();
+  const { openAgent } = useAgent();
   const alerts = useAlerts();
   const openInDash = useOpenInDashboard();
   const { country, industry } = scopeLabels(state);
@@ -743,7 +746,7 @@ export default function AlertsPage() {
             {openTs
               .flatMap((t) => items.filter((a) => a.type === t))
               .map((a) => (
-                <AlertRow key={a.key} a={a} currency={state.currency} onOpen={() => openInDash(a)} />
+                <AlertRow key={a.key} a={a} currency={state.currency} onOpen={() => openInDash(a)} onExplain={() => openAgent('dock', `解释预警：${a.modelName} ${a.weekLabel} ${a.type}`)} />
               ))}
           </div>
         )}
@@ -1028,7 +1031,7 @@ export default function AlertsPage() {
                       </span>
                     </div>
                     {w.items.map((a) => (
-                      <AlertRow key={a.key} a={a} currency={state.currency} onOpen={() => openInDash(a)} />
+                      <AlertRow key={a.key} a={a} currency={state.currency} onOpen={() => openInDash(a)} onExplain={() => openAgent('dock', `解释预警：${a.modelName} ${a.weekLabel} ${a.type}`)} />
                     ))}
                   </div>
                 ))

@@ -7,11 +7,23 @@ npm install        # 安装依赖（已执行过则跳过）
 npm run gen        # 造数：scripts/gen-data.mjs → src/data/*.json + fact 的 gzip+base64（seed 20261009，可复现）
 npm run dev        # 本地开发
 npm run build      # 产出单文件 dist/index.html 并同步覆盖仓库根 PriceLens.html（铁律：单文件版永远最新）
+npm run agent-server # 启动同源真实方舟 Agent 代理（需先设置 ARK_API_KEY）
 npm run typecheck  # tsc --noEmit
 npm run verify     # 造数 + 聚合契约断言 + 单文件一致性（scripts/verify.mjs，47 项）
 npm run test       # vitest：chartModel 纯计算层金测（快照钉住图表行为）
 npm run check      # typecheck + verify + test + build 全链路
 ```
+
+## 真实方舟 Agent
+
+Copilot 的数值卡片继续由本地价格聚合引擎计算，服务端把当前口径和基线结果交给方舟 Agent 做意图理解与中文解释。API Key 只从服务端环境变量读取，不进入 `VITE_*`、单文件产物或日志。
+
+```bash
+VITE_AGENT_API_BASE_URL=/api/agent npm run build
+ARK_API_KEY='<你的方舟 Agent Plan Key>' npm run agent-server
+```
+
+然后打开 `http://127.0.0.1:8787/`。可用 `GET /api/agent/health` 检查代理是否已配置 Key；模型默认使用已验证可调用的 `doubao-seed-evolving`，也可通过 `ARK_MODEL` 覆盖。生产环境应把同一代理部署在静态页面的同源服务端。
 
 ## 提交前防线（pre-commit hook）
 
