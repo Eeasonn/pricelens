@@ -14,3 +14,8 @@ export function prefersReducedMotion(): boolean {
 export function scrollBehaviorOf(): 'smooth' | 'auto' {
   return prefersReducedMotion() ? 'auto' : 'smooth';
 }
+
+/** 自绘浮层退场时长（第一百九十轮，外部 UX 审计）：与 160ms 入场对称的
+ *  140ms 淡出；浮层组件关闭时先挂 .lpl-fade-out 播完再卸载（开启减少动态
+ *  效果时调用方经 prefersReducedMotion() 归零等待，退场同样瞬时）。 */
+export const PANEL_EXIT_MS = 140;

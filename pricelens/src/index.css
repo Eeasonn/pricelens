@@ -244,12 +244,14 @@ button.lpl-map-card:hover {
   background: #c3c7ce;
 }
 
-/* 摆位概要双模式切换淡入（在售产品 ⇄ 竞品对比） */
-@keyframes lplFadeIn {
+/* 摆位概要双模式切换淡入（在售产品 ⇄ 竞品对比）。第一百九十轮：原 lplFadeIn
+   与 315 行纯淡入版重名、后者覆盖前者致位移入场失效——改名 lplFadeInRise，
+   两份 keyframes 各归其主 */
+@keyframes lplFadeInRise {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-.lpl-mode-fade { animation: lplFadeIn 240ms ease; }
+.lpl-mode-fade { animation: lplFadeInRise 240ms ease; }
 
 /* 摆位对比明细浮层入场：从锚点卡片方向轻微平移淡入 */
 @keyframes lplPanelIn {
@@ -311,12 +313,44 @@ button.lpl-map-card:hover {
 .lpl-fade-in { animation: lplFadeInUp 160ms ease; }
 
 /* 纯淡入版（不带位移）：给自带 transform 定位的浮层用（如模板编辑浮窗
-   translateX(-50%) 居中），避免入场动画的 transform 覆盖定位 transform */
-@keyframes lplFadeIn {
+   translateX(-50%) 居中），避免入场动画的 transform 覆盖定位 transform。
+   第一百九十轮：keyframes 与 248 行的重名版各自更名，不再互相覆盖 */
+@keyframes lplFadeInPure {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.lpl-fade-in-o { animation: lplFadeIn 160ms ease; }
+.lpl-fade-in-o { animation: lplFadeInPure 160ms ease; }
+
+/* ============================================================
+   第一百九十轮（外部 UX 审计落地）：自绘浮层退场——与 160ms 入场对称的
+   140ms 淡出（组件层先挂类、PANEL_EXIT_MS 后卸载；reduced-motion 由上方
+   全局降级块与组件层 prefersReducedMotion() 双保险）。
+   ============================================================ */
+@keyframes lplFadeOutSink {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(4px); }
+}
+@keyframes lplFadeOutPure {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.lpl-fade-out { animation: lplFadeOutSink 140ms ease forwards; }
+.lpl-fade-out-o { animation: lplFadeOutPure 140ms ease forwards; }
+
+/* ============================================================
+   第一百九十轮（外部 UX 审计落地）：窄屏（<640px）信息层级——预警概览条
+   两栏改一栏、事件行允许换行（产品名不再过度截断）；配置页竞品对标行
+   纵向重排（配置独占一行、竞品区换行、编辑入口右侧独立占位）。
+   ============================================================ */
+.lpl-alert-ov { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lpl-bm-row { flex-wrap: wrap; row-gap: 6px; }
+.lpl-bm-cfg { width: 150px; flex-shrink: 0; }
+@media (max-width: 639.98px) {
+  .lpl-alert-ov { grid-template-columns: 1fr; }
+  .lpl-alert-row { flex-wrap: wrap; row-gap: 2px; }
+  .lpl-alert-row .lpl-alert-name { white-space: normal; }
+  .lpl-bm-cfg { width: 100%; }
+}
 
 /* ============================================================
    第一百八十九轮（Eason 定版）：多平台对比入口/返回钮——轻量文字样式，

@@ -159,6 +159,11 @@ export interface ChartProps {
   onPromoBandsOn?: (v: boolean) => void;
   /** 促销带数据（index 层按窗口算好；空 = 无带） */
   promoBands?: PromoBand[];
+  /** 预警事件焦点带（第一百九十轮，外部 UX 审计落地）：预警页跳转携带的事件周
+   *  在绘图区着色——相对可见窗口的局部下标区间（预警触发周 = 单桶，startIdx =
+   *  endIdx）；null/缺省 = 不画。视觉与大促带同构但用蓝色系（浅蓝底 + 顶缘细蓝线），
+   *  不与大促带的红色档期语言混淆；带内放得下时另出「预警触发周」小标签 */
+  focusBand?: { startIdx: number; endIdx: number } | null;
   /** 价格变化提醒阈值（第四十六轮挪出齿轮到标题行，受控）：相较前一有值点
    *  |Δ|≥阈值出 ↓/↑ 徽标；null=关闭；0=标出全部真实变化 */
   changeThreshold?: number | null;
@@ -252,6 +257,9 @@ const HIT_PX = 12; // 圈点点击/悬停命中半径
 const TIP_BOX_H = 84;
 /** 悬停数据点小圆点直径（第一百一十四轮：替代快照/下钻悬停图标） */
 const HOVER_DOT_PX = 7;
+/** 预警事件焦点带小标签（第一百九十轮，外部 UX 审计）：预警页跳转带来的触发周，
+ *  图上焦点带顶缘的归属标注（业务语义，不带工程词） */
+const FOCUS_BAND_LABEL = '预警触发周';
 
 /** 浮层/参照线数值格式（第三十五轮）：千分位整数 */
 const fmt_mm = (v: number): string => v.toLocaleString('en-US');
@@ -479,6 +487,7 @@ export default function Chart(props: ChartProps) {
   const promoBandsOn = props.promoBandsOn ?? innerPromoBands;
   const commitPromoBandsOn = props.onPromoBandsOn ?? setInnerPromoBands;
   const promoBands = props.promoBands ?? [];
+  const focusBand = props.focusBand ?? null; // 预警事件焦点带（第一百九十轮）；null = 不画
   // 中区圆框组的渲染条件已随工具行迁入 ChartToolbar（第五十四轮追补）
   // 折线形态（第三十八轮齿轮可选；第五十四轮追补③加 auto 档并设为缺省）——
   // auto = 按粒度自适应：周=方形阶梯（逐周跳变语义）、月/季=平滑（期内均值画阶梯=失真平台）
@@ -917,7 +926,8 @@ export default function Chart(props: ChartProps) {
       onMouseDown={onBrushMouseDown}
       onClick={onClick}
     >
-      {/* 背景带层（canvas 之下，第三十五轮：点击锁定的灰色列背景已删，只留大促带） */}
+      {/* 背景带层（canvas 之下，第三十五轮：点击锁定的灰色列背景已删，只留大促带。
+          第一百九十轮追补：预警事件焦点带与 promoBands 同通路着色，蓝色系区分档期语义） */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
         {geom &&
           promoBandsOn &&
@@ -947,6 +957,27 @@ export default function Chart(props: ChartProps) {
               </div>
             );
           })}
+        {/* 预警事件焦点带（第一百九十轮）：浅蓝底 + 顶缘细蓝线（inset 阴影不占布局，
+            与大促带同为纯背景色块）；下标越出可见窗口（外部换算兜底失败）则不画 */}
+        {geom && focusBand != null && focusBand.startIdx >= 0 && focusBand.endIdx < geom.n && (() => {
+          const bw = geom.plotWidth / geom.n;
+          const left = geom.plotLeft + focusBand.startIdx * bw;
+          const right = geom.plotLeft + (focusBand.endIdx + 1) * bw;
+          return (
+            <div
+              key="focus-band"
+              style={{
+                position: 'absolute',
+                left,
+                top: geom.plotTop,
+                width: Math.max(2, right - left),
+                height: geom.plotHeight,
+                background: 'rgba(0, 112, 243, 0.10)',
+                boxShadow: 'inset 0 2px 0 rgba(0, 112, 243, 0.5)',
+              }}
+            />
+          );
+        })()}
       </div>
       {/* ECharts 挂载层（第一百一十四轮：高度不含 tipBox 预留框——canvas 网格仍止于底边距） */}
       <div ref={chartDivRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: chartH, zIndex: 1 }} />
@@ -1294,6 +1325,38 @@ export default function Chart(props: ChartProps) {
                 );
               });
             })()}
+          {/* 预警事件周小标签（第一百九十轮）：贴焦点带顶缘居中；带内放不下时不出
+              （与大促标志「放不下回落纯图标」同一克制的兜底策略），蓝带自身仍在 */}
+          {geom && focusBand != null && focusBand.startIdx >= 0 && focusBand.endIdx < geom.n && (() => {
+            const bw = geom.plotWidth / geom.n;
+            const mid = geom.plotLeft + ((focusBand.startIdx + focusBand.endIdx + 1) / 2) * bw;
+            const labelW = measureText(FOCUS_BAND_LABEL) * (10 / 13) + 12;
+            const bandW = bw * (focusBand.endIdx - focusBand.startIdx + 1);
+            if (bandW < labelW + 8) return null;
+            return (
+              <span
+                style={{
+                  position: 'absolute',
+                  left: mid,
+                  top: geom.plotTop + 2,
+                  transform: 'translateX(-50%)',
+                  zIndex: 8,
+                  pointerEvents: 'none',
+                  padding: '0 6px',
+                  fontSize: 10,
+                  lineHeight: '14px',
+                  fontWeight: 600,
+                  color: color.link,
+                  background: color.canvas,
+                  border: '1px solid rgba(0, 112, 243, 0.35)',
+                  borderRadius: radius.pill,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {FOCUS_BAND_LABEL}
+              </span>
+            );
+          })()}
           {/* 悬停明细（第三十五轮，Keepa 式）：时间 + 各产品折后价。
               第一百一十三轮（评审）：取数列 tipIdx = 本图悬停列 ?? 外部联动列。
               第一百一十四轮（评审）：tipBox 模式（量价看板）不画浮层——同一份明细

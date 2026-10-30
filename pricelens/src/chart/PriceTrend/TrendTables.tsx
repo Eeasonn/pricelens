@@ -9,6 +9,9 @@
 // 第一百八十九轮（Eason 定版收敛）：窄屏（<640px）冻结产品列 236→168px；复制
 // 明细 TSV 的近 4 周环比从产品格拆出、独立成列（「类型」后，仅每个产品首行
 // 有值，价差区 TSV 不含）；环比无值「—」用最弱灰（mute）。
+// 第一百九十轮（外部 UX 审计落地）：窄视口检测抽共享钩子 useNarrowViewport
+// （与主图窄屏默认可见段同一来源，行为不变）；冻结产品列 168→140，窄屏明细
+// 首屏可见数据列 +1。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button } from 'antd';
@@ -19,6 +22,7 @@ import { dimProduct } from '../../data';
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, fontSize, formatPrice, motion, radius } from '../../theme/tokens';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
+import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { diffPct } from './helpers';
 import { dedupeSpecText } from './chartModel';
 import {
@@ -46,10 +50,11 @@ function weekIdText(id: string): string {
 
 // ---- 列宽（左缘冻结三列：产品/配置/类型 + 时间列） ----
 const W_PROD = 236;
-/** 窄视口（<640px）冻结产品列收窄宽（第一百八十九轮，Eason 定版收敛）：
- *  宽屏冻结三列合计 408px，窄屏产品列收至 168px 让时间列更早可见；
- *  两个区块在同一张 grid 上共用这份列宽定义，收窄后逐列仍对齐 */
-const W_PROD_NARROW = 168;
+/** 窄视口（<640px）冻结产品列收窄宽（第一百八十九轮，Eason 定版收敛；第一百九十轮
+ *  （外部 UX 审计落地）：168→140，窄屏明细首屏可见数据列 +1）：宽屏冻结三列合计
+ *  408px，窄屏产品列收至 140px 让时间列更早可见；两个区块在同一张 grid 上共用
+ *  这份列宽定义（gridCols/frozenW 均由本常量同源派生），收窄后逐列仍对齐 */
+const W_PROD_NARROW = 140;
 const W_CONF = 96;
 const W_TYPE = 76;
 const W_TIME = 100;
@@ -146,17 +151,9 @@ export default function TrendTables(props: {
   const [copied, setCopied] = useState<'diff' | 'detail' | 'diff-fail' | 'detail-fail' | null>(null);
   const copiedTimer = useRef<number | null>(null);
   const [snapInfo, setSnapInfo] = useState<SnapshotInfo | null>(null);
-  // 窄视口只冻结产品首列，配置/类型随表横向滚动，避免冻区遮死时间列
-  const [narrowViewport, setNarrowViewport] = useState(
-    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639.98px)').matches,
-  );
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(max-width: 639.98px)');
-    const onChange = (): void => setNarrowViewport(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
+  // 窄视口只冻结产品首列，配置/类型随表横向滚动，避免冻区遮死时间列。
+  // 检测改共享钩子（第一百九十轮）：与主图窄屏默认可见段同一来源，行为不变
+  const narrowViewport = useNarrowViewport();
   useEffect(() => () => { if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current); }, []);
 
   const blocks = useMemo<Block[]>(

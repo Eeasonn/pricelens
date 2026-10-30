@@ -17,6 +17,11 @@
 //    最新触发单元格保留 span 外壳（表格布局敏感），补 tabIndex + Enter/Space 键盘等价；
 // ② 对比度——阈值等可点文字 10px/#a1a1a1(2.58:1) → 11px/color.mute(4.7:1)，
 //    页内 10px 可读文字统一升 11px（pill 徽标与禁用态「—」占位除外）。
+// 第一百九十轮（外部 UX 审计落地）：
+// ① 可访问名称——全部可操作控件补 aria-label（矩阵行/间距条「看板」、列头总开关、
+//    单品开关、全局/单品阈值触发器、阈值滑杆、品牌筛选/排序/添加监控下拉）；
+// ② 窄屏信息层级——概览条、预警行、产品名挂 lpl-alert-* 类（窄屏单列/换行/不截断，桌面观感不变）；
+// ③ 零监控空态——添加监控入口 prominent 化（中号 + 白底），不再像禁用输入框。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
@@ -93,6 +98,7 @@ function ThresholdSlider({
   value,
   disabled,
   below,
+  label,
   onCommit,
 }: {
   min: number;
@@ -101,6 +107,7 @@ function ThresholdSlider({
   value: number;
   disabled?: boolean;
   below?: boolean;
+  label?: string;
   onCommit: (pct: number) => void;
 }) {
   const [drag, setDrag] = useState<number | null>(null);
@@ -113,6 +120,7 @@ function ThresholdSlider({
         max={max}
         step={step}
         disabled={disabled}
+        ariaLabelForHandle={label}
         value={shown}
         onChange={(v) => setDrag(+(v as number))}
         onAfterChange={(v) => {
@@ -178,8 +186,10 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
     ) : (
       <>折后价较前周 {pctText(a.wowPct)} → 现价 {formatPrice(a.price, currency)}</>
     );
+  // 第一百九十轮（外部 UX 审计落地）：挂 lpl-alert-row（窄屏换行，桌面样式不变）
   return (
     <div
+      className="lpl-alert-row"
       data-alert-key={a.key}
       data-alert-series-key={a.seriesKey}
       data-alert-type={a.type}
@@ -189,7 +199,8 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
       <TypePill type={a.type} />
       {dirArrowOf(a)}
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {/* 第一百九十轮（外部 UX 审计落地）：挂 lpl-alert-name（窄屏不截断换行，桌面 ellipsis 不变） */}
+        <div className="lpl-alert-name" style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {a.type === 'own-gap'
             ? `${a.modelName}（${[a.romram === '—' ? '' : a.romram, romOfLabel(a.pairHighLabel, a.modelName) === '—' ? '' : romOfLabel(a.pairHighLabel, a.modelName)].filter(Boolean).join(' × ')}）`
             : [a.brand, a.modelName, a.romram === '—' ? '' : a.romram].filter(Boolean).join(' ')}
@@ -201,7 +212,12 @@ function AlertRow({ a, currency, onOpen }: { a: AlertItem; currency: 'usd' | 'lo
       <span className="tnum" style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>
         {a.weekLabel} · {weekTag(a.weekId)}
       </span>
-      <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={onOpen}>
+      <Button
+        size="small"
+        style={{ height: 22, fontSize: 11 }}
+        aria-label={`在看板查看 ${[a.brand, a.modelName, a.romram === '—' ? '' : a.romram].filter(Boolean).join(' ')} 的 ${weekTag(a.weekId)} 事件`}
+        onClick={onOpen}
+      >
         看板
       </Button>
     </div>
@@ -462,7 +478,7 @@ export default function AlertsPage() {
         }}
       >
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <Switch size="small" checked={on} onChange={(v) => actions.setAlertTypes({ [t]: v })} />
+          <Switch size="small" checked={on} aria-label={`${rule.name}总开关`} onChange={(v) => actions.setAlertTypes({ [t]: v })} />
           <span style={{ fontSize: 12, fontWeight: 700, color: on ? color.mute : color.hairlineStrong, whiteSpace: 'nowrap' }}>
             {rule.name.replace('预警', '')}
             {rule.below && (
@@ -485,6 +501,7 @@ export default function AlertsPage() {
                   disabled={!on}
                   value={val}
                   below={rule.below}
+                  label={`${rule.name}阈值滑杆`}
                   onCommit={(pct) => actions.setAlertThresholds({ [t]: pct })}
                 />
               </div>
@@ -497,6 +514,7 @@ export default function AlertsPage() {
             type="button"
             className="tnum"
             title={`${rule.name}全局阈值（点击调整）`}
+            aria-label={`${rule.name}全局阈值（当前 ${val}%，点击调整）`}
             style={{
               fontSize: 11,
               color: on ? color.link : color.mute,
@@ -514,7 +532,7 @@ export default function AlertsPage() {
   };
 
   // ---- 单元格阈值覆写触发器（蓝虚线 = 已覆写；Popover 内 开关+滑杆+清除覆写）----
-  const renderOverride = (rowKey: string, rule: AlertProductRule | undefined, t: AlertType): ReactNode => {
+  const renderOverride = (rowKey: string, rule: AlertProductRule | undefined, t: AlertType, seriesLabel: string): ReactNode => {
     const r = TYPE_RULES[t];
     const on = rule?.types?.[t] ?? state.alertTypes[t];
     const thrVal = +((rule?.thresholds?.[t] ?? state.alertThresholds[t]) * 100).toFixed(1);
@@ -533,6 +551,7 @@ export default function AlertsPage() {
               <Switch
                 size="small"
                 checked={on}
+                aria-label={`${seriesLabel} ${r.name}开关`}
                 onChange={(v) => {
                   const next = { ...(rule?.types ?? {}), [t]: v };
                   // 回落全局时清掉覆写（勾选态 = 全局态则删除键）
@@ -546,6 +565,7 @@ export default function AlertsPage() {
                 step={r.step}
                 value={thrVal}
                 below={r.below}
+                label={`${seriesLabel} ${r.name}阈值滑杆`}
                 onCommit={(pct) =>
                   actions.setAlertProductRule(rowKey, {
                     ...(rule ?? {}),
@@ -579,6 +599,7 @@ export default function AlertsPage() {
         <button
           type="button"
           title={thrOverridden ? '已单独设置阈值' : '跟随全局，点击单独设置'}
+          aria-label={`${seriesLabel} ${r.name}阈值（当前 ${thrVal}%${thrOverridden ? '，已单独设置' : ''}，点击调整）`}
           className="tnum"
           style={{
             fontSize: 11,
@@ -695,7 +716,7 @@ export default function AlertsPage() {
             </span>
           </span>
         )}
-        {renderOverride(rowKey, rule, t)}
+        {renderOverride(rowKey, rule, t, meta.label)}
       </span>,
     );
   };
@@ -753,12 +774,15 @@ export default function AlertsPage() {
 
   /** 添加监控入口（第一百八十二轮抽公用）：工具行与零监控空状态各渲染一份；
    *  选中即订阅 + 反馈 + 定位到新行（多品牌时新行位置不可预期，避免「加没加上」的疑惑） */
-  const renderAddMonitor = (width: number): JSX.Element => (
+  // 第一百九十轮（外部 UX 审计落地）：prominent = 零监控空态主操作（中号 + 白底），
+  // 与工具行小号入口区分——空态下不再像禁用输入框
+  const renderAddMonitor = (width: number, prominent?: boolean): JSX.Element => (
     <Select
       showSearch
-      size="small"
+      size={prominent ? 'middle' : 'small'}
       placeholder="＋ 添加监控（搜索品牌 / 型号 / 产品）"
-      style={{ width }}
+      aria-label="添加监控产品"
+      style={{ width, ...(prominent ? { background: '#ffffff' } : {}) }}
       value={null}
       filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
       onChange={(key) => {
@@ -804,16 +828,15 @@ export default function AlertsPage() {
           {/* ① 概览条（类看板摘要；第一百八十二轮：类型分布卡撤除——工具行类型筛选
               同口径重复，统计保留两件套；零监控时整条隐藏） */}
           {!emptyMode && (
+            // 第一百九十轮（外部 UX 审计落地）：栅格样式移入 lpl-alert-ov（窄屏一列，桌面不变）
             <section
+              className="lpl-alert-ov"
               style={{
                 background: color.canvas,
                 boxShadow: shadow.l1,
                 borderRadius: radius.card,
                 padding: space.base,
                 marginBottom: space.md,
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(0,1fr))',
-                gap: 10,
               }}
             >
               <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
@@ -851,7 +874,7 @@ export default function AlertsPage() {
                 <BellOutlined style={{ fontSize: 30, color: color.hairlineStrong }} />
                 <div style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>尚未监控任何产品</div>
                 <div style={{ fontSize: 12, color: color.mute }}>添加监控后，这里按周汇总调价、折扣、平台价差与档位间距预警</div>
-                {renderAddMonitor(380)}
+                {renderAddMonitor(380, true)}
               </div>
             ) : (
               <>
@@ -882,6 +905,7 @@ export default function AlertsPage() {
                 allowClear
                 maxTagCount="responsive"
                 placeholder="全部品牌"
+                aria-label="按品牌筛选"
                 style={{ minWidth: 160, maxWidth: 240 }}
                 value={brandFilter}
                 onChange={setBrandFilter}
@@ -891,6 +915,7 @@ export default function AlertsPage() {
                 size="small"
                 value={rowSort}
                 onChange={(v) => setRowSort(v as 'alerts-first' | 'latest' | 'name')}
+                aria-label="排序方式"
                 style={{ width: 118 }}
                 options={[
                   { value: 'alerts-first', label: '异常优先' },
@@ -966,7 +991,12 @@ export default function AlertsPage() {
                               间距 {pctText(a.ownGapPct)} &lt; {+(state.alertThresholds['own-gap'] * 100).toFixed(1)}%
                             </span>
                             <span style={{ flex: 1 }} />
-                            <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={() => openInDash(a)}>
+                            <Button
+                              size="small"
+                              style={{ height: 22, fontSize: 11 }}
+                              aria-label={`在看板查看 ${a.modelName} 档位间距事件`}
+                              onClick={() => openInDash(a)}
+                            >
                               看板
                             </Button>
                           </div>

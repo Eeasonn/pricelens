@@ -4,6 +4,9 @@
 // 来源标签：矩阵（产品竞品矩阵直配）/ 自动（矩阵未覆盖时按同款/同档就近自动匹配）/
 // 替代（矩阵竞品无数据用近似品）/ 人工（本页编辑）。「编辑」复用 BenchConfigModal
 // （候选区同档优先 + 品牌筛选 + ↑↓排序 + 恢复默认），保存走 manual 快照 + 事件广播。
+// 第一百九十轮（外部 UX 审计落地）：竞品行挂 .lpl-bm-row、配置名列挂 .lpl-bm-cfg
+// （窄屏自动换行重排，修复 390px 下竞品 chips 被裁切、「编辑」覆盖内容）；
+// 「编辑」补 aria-label（图标按钮无可见文字，读屏需要上下文名称）。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Empty, Popover, Segmented, Tooltip } from 'antd';
@@ -116,12 +119,15 @@ export default function BenchmarkConfigBlock() {
               </div>
               {m.rows.map((r) => {
                 const comps = compsOf(m.modelId, r.romram);
+                // 第一百九十轮：挂 .lpl-bm-row——窄屏下整行自动换行，chips 不再被「编辑」挤压裁切
                 return (
                   <div
+                    className="lpl-bm-row"
                     key={r.romram}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderTop: `1px solid ${color.hairline}` }}
                   >
-                    <span className="tnum" style={{ width: 150, flexShrink: 0, fontSize: 12, fontWeight: 600, color: color.ink }}>
+                    {/* 配置名列：宽度/不收缩交给 .lpl-bm-cfg（窄屏独占一行），仅保留字重与排版 */}
+                    <span className="tnum lpl-bm-cfg" style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>
                       {r.romram}
                     </span>
                     <span style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -152,7 +158,13 @@ export default function BenchmarkConfigBlock() {
                         })
                       )}
                     </span>
-                    <Button size="small" icon={<EditOutlined />} onClick={() => setEditing({ model: m, rom: r.romram })}>
+                    {/* 图标按钮无可见文字：读屏念「编辑」需带型号 + 配置上下文（第一百九十轮） */}
+                    <Button
+                      size="small"
+                      icon={<EditOutlined />}
+                      aria-label={`编辑 ${m.modelName} ${r.romram} 的竞品对标`}
+                      onClick={() => setEditing({ model: m, rom: r.romram })}
+                    >
                       编辑
                     </Button>
                   </div>

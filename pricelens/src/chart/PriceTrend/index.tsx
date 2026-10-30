@@ -41,6 +41,12 @@
 // 第一百八十五轮（外部 UX 审计落地）：取数异常 ≠ 空态——合并图与分离面板的
 // buildSeries 异常不再静默回落「暂无数据」，改带 failed 标记并渲染
 // 「数据加载异常 / 请刷新重试」（沿用空态居中排版，不弹全局报错）。
+// 第一百九十轮（外部 UX 审计落地）：①预警事件周图上高亮——预警页跳转带的
+//   navBus 焦点周留存为 focusWeekId，图上按大促带同通路画蓝色焦点带 +「预警
+//   触发周」小标签（分离模式逐面板换算，同 promoBands 范式）；用户主动改查看
+//   窗口（刷选 / 分离轨道拖动点选 / 时间筛选器变化）即清除，纯程序性复位不清；
+// ②窄屏默认收窄可见段：<640px 视口 + 周粒度 + 未手动设过窗口时，默认可见段
+//   取筛选范围末端 12 个周桶（点距过密改善；宽屏/月季/手动窗口行为不变）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfigProvider, Segmented, Tooltip } from 'antd';
@@ -93,15 +99,18 @@ import {
   enumerateBuckets,
   estGridLeft,
   normalizeWindow,
+  NARROW_DEFAULT_BUCKETS,
   perUsdOf,
   seriesSpanRange,
   splitAxisWidth,
   bucketIdOfWeek,
   bucketAnchorDate,
+  tailWindowIds,
   NAME_ZONE_W,
   type Bucket,
   type YScale,
 } from './helpers';
+import { useNarrowViewport } from '../../state/useNarrowViewport';
 import PlatformCompareView from './PlatformCompareView';
 import PointPanel from './PointPanel';
 import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
@@ -159,6 +168,11 @@ export default function PriceTrend(props: {
   // 查看窗口（null = 整个筛选范围）：会话态跨页保留（P1-5）——切页返回恢复；
   // 粒度切换换算 / 范围改动复位（rangeWatch）等失义路径不变
   const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('dashboard.windowIds', () => null);
+  // 预警事件焦点周（第一百九十轮，外部 UX 审计落地）：预警页跳转经 navBus 一次性
+  // 消费后留存触发周 id——图上画焦点带标注「预警触发周」；用户主动改查看窗口即清
+  // （刷选提交 / 分离轨道拖动点选 / 时间筛选器变化三类入口，见下方交互回调）。
+  // 纯会话内瞬态，不落 sessionStorage（刷新后无焦点 = 合理初始态）
+  const [focusWeekId, setFocusWeekId] = useState<string | null>(null);
   // 分离模式同步/独立查看时间：同步（默认）= 全面板共用共享窗口，拖任一面板的时间轴
   // 全部联动；独立 = 各面板单独调整（panelWins 按面板 key 记窗口，未单独调整过的
   // 面板回落共享窗口）。粒度切换/自适应重算/换卡后独立窗口整体回落共享窗口。
@@ -414,6 +428,9 @@ export default function PriceTrend(props: {
     const id = bucketIdOfWeek(state.granularity, wk);
     const i = id != null ? buckets.findIndex((b) => b.id === id) : -1;
     if (i < 0) return;
+    // 本轮起留存焦点周（第一百九十轮）：图上画「预警触发周」焦点带，直到用户
+    // 主动改动查看窗口（窗口本身仍按 ±8 周/±2 月/±1 季对准该周，逻辑不变）
+    setFocusWeekId(wk);
     const half = state.granularity === 'week' ? 8 : state.granularity === 'month' ? 2 : 1;
     setWindowIds([buckets[Math.max(0, i - half)].id, buckets[Math.min(buckets.length - 1, i + half)].id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -431,13 +448,9 @@ export default function PriceTrend(props: {
     rangeWatchRef.current = { gran: state.granularity, key };
     if (prev.gran !== state.granularity) return; // 换粒度：窗口已按跨度换桶
     setWindowIds(null); // 范围在图外被改 → 窗口复位为整个新范围
+    setFocusWeekId(null); // 时间筛选器变化 = 焦点周完成使命（第一百九十轮）
   }, [state.granularity, state.rangeStart, state.rangeEnd]);
 
-  // 从总览带入焦点周时 windowIds 可暂时缩小可见段；刷选后回到完整选区。
-  const win = useMemo(
-    () => normalizeWindow(buckets, windowIds, [state.rangeStart, state.rangeEnd]),
-    [buckets, windowIds, state.rangeStart, state.rangeEnd],
-  );
   // 左侧时间筛选器的范围 = 底部窗口轨道的范围；窗口本身仍可在轨道内缩放查看。
   const filterBounds = useMemo<[number, number]>(() => {
     const indexOf = (id: string, fallback: number): number => {
@@ -449,6 +462,30 @@ export default function PriceTrend(props: {
     return start <= end ? [start, end] : [end, start];
   }, [buckets, state.rangeStart, state.rangeEnd]);
 
+  // 从总览带入焦点周时 windowIds 可暂时缩小可见段；刷选后回到完整选区。
+  // 窄屏默认收窄（第一百九十轮，外部 UX 审计落地 P1-5）：窄视口 + 周粒度 + 用户
+  // 未手动设过窗口时，默认可见段取筛选范围末端 12 个周桶——一屏周次过多点距过密，
+  // 先看最近一段；宽屏 / 月季粒度 / 手动窗口行为与现状完全一致（windowIds 不因此
+  // 落库，纯渲染期默认值，拖动刷选才真正写入）
+  const narrowViewport = useNarrowViewport();
+  const win = useMemo(
+    () =>
+      normalizeWindow(
+        buckets,
+        windowIds ??
+          (narrowViewport && state.granularity === 'week'
+            ? tailWindowIds(bucketIds.slice(filterBounds[0], filterBounds[1] + 1), NARROW_DEFAULT_BUCKETS)
+            : null),
+        [state.rangeStart, state.rangeEnd],
+      ),
+    [buckets, windowIds, narrowViewport, state.granularity, bucketIds, filterBounds, state.rangeStart, state.rangeEnd],
+  );
+  // 预警事件焦点周 → 当前粒度桶下标（第一百九十轮）：跨粒度换算后对位全集桶，
+  // 切换粒度自动跟随（换算天然生效）；找不到（不在数据范围）= -1 视为无焦点
+  const focusIdx = useMemo(
+    () => (focusWeekId == null ? -1 : buckets.findIndex((b) => b.id === bucketIdOfWeek(state.granularity, focusWeekId))),
+    [buckets, state.granularity, focusWeekId],
+  );
 
   // §6.5 窗口内所有桶压满绘图宽度（重采样重绘，无横向滚动条）
   // 第十三轮：edgeStart/edgeEnd = 边缘点在窗口外 2 周内仍有数据（该点非真实开头/截止，
@@ -872,6 +909,12 @@ export default function PriceTrend(props: {
     () => (promoBandsOn ? buildPromoBands({ promos: scopedPromos, spans: winSpans }) : []),
     [promoBandsOn, winSpans, scopedPromos],
   );
+  // 预警事件焦点带（合并主图，第一百九十轮）：焦点周落在当前可见窗口内才画，
+  // 换算为相对窗口的局部下标（单桶）；窗口外不画
+  const focusBand = useMemo(
+    () => (focusIdx >= win.s && focusIdx <= win.e ? { startIdx: focusIdx - win.s, endIdx: focusIdx - win.s } : null),
+    [focusIdx, win.s, win.e],
+  );
   // 各分离面板的大促带随面板生效窗口自算：startIdx/endIdx 是相对窗口的局部下标，
   // 独立窗口下直接喂共享窗口的带会整体错位/画出绘图区（同步模式两窗口一致，结果同价）
   const panelPromoBands = useMemo(() => {
@@ -886,6 +929,17 @@ export default function PriceTrend(props: {
     }
     return m;
   }, [promoBandsOn, panelViews, effWins, win.s, win.e, scopedPromos, state.granularity, buckets]);
+  // 焦点带逐面板换算（与大促带同一范式，第一百九十轮）：仅覆盖该周的面板出带
+  //（独立窗口下面板可能看不到事件周——不画，不强行挪进窗口）
+  const panelFocusBands = useMemo(() => {
+    const m: Record<string, { startIdx: number; endIdx: number } | null> = {};
+    if (focusIdx < 0) return m;
+    for (const p of panelViews) {
+      const [ps, pe] = effWins[p.key] ?? [win.s, win.e];
+      m[p.key] = focusIdx >= ps && focusIdx <= pe ? { startIdx: focusIdx - ps, endIdx: focusIdx - ps } : null;
+    }
+    return m;
+  }, [focusIdx, panelViews, effWins, win.s, win.e]);
 
   // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
   // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）。
@@ -1061,12 +1115,14 @@ export default function PriceTrend(props: {
   /** Bottom brush is the time filter: any move becomes a custom analysis range. */
   const onWindowChange = (s: number, e: number): void => {
     if (!buckets[s] || !buckets[e]) return;
+    setFocusWeekId(null); // 用户主动刷选 = 焦点带完成使命（第一百九十轮）
     setWindowIds([buckets[s].id, buckets[e].id]);
   };
 
   /** 独立模式下面板时间轴只动自己的生效窗口（共享窗口未变）。 */
   const onPanelWindowChange = (key: string) => (s: number, e: number): void => {
     if (!buckets[s] || !buckets[e]) return;
+    setFocusWeekId(null); // 分离轨道拖动/点选同样清除焦点周（第一百九十轮）
     commitPanelWins((prev) => ({ ...prev, [key]: [s, e] }));
   };
 
@@ -1476,6 +1532,7 @@ export default function PriceTrend(props: {
                         labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
                         promoBandsOn={promoBandsOn}
                         promoBands={panelPromoBands[p.key] ?? []}
+                        focusBand={panelFocusBands[p.key] ?? null} // 预警触发周（第一百九十轮）：覆盖该周的面板画焦点带
                         changeThreshold={changeThreshold}
                         showXLabels // 第一百五十二轮追补：分离面板同恢复图内时间轴（与合并主图
                         // 同口径——周 YYYYWxx、axisTickPlan 抽稀；下方 SplitTimeTrack 保留
@@ -1553,6 +1610,7 @@ export default function PriceTrend(props: {
             promoBandsOn={promoBandsOn}
             onPromoBandsOn={setPromoBandsOn}
             promoBands={promoBands}
+            focusBand={focusBand} // 预警触发周（第一百九十轮）：窗口内画蓝色焦点带 + 小标签
             changeThreshold={changeThreshold}
             onPriceTypeToggle={setPriceType}
             offersOn={offersOn}

@@ -13,10 +13,11 @@
 //   编辑钮）——焦点回到主浮窗内，不丢到 body；②删最后一组（= 删整个模板）
 //   的轻确认文案对齐「删除该模板」语义并写明模板名，非最后一组维持「删除该组」。
 // ============================================================
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Input, Popconfirm, Popover, Tooltip } from 'antd';
 import { DeleteOutlined, SearchOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
+import { PANEL_EXIT_MS, prefersReducedMotion } from '../../theme/motion';
 import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import {
   configTextOf,
@@ -621,6 +622,16 @@ export default function TemplateEditorFlyout({
 }) {
   // 模板名受控输入：每次击键实时写入（空名不写；失焦/回车空值回默认名）
   const [name, setName] = useState(combo.label);
+  // 第一百九十轮（外部 UX 审计落地）：退场动画——Esc/外点/关闭钮先进入
+  // closing 态播 140ms 淡出（lpl-fade-out-o），播完才回调 onClose 让父级卸载；
+  // 入场 lpl-fade-in-o 与退场对称。开启减少动态效果时等待归零（瞬时卸载）。
+  const [closing, setClosing] = useState(false);
+  const requestClose = useCallback((): void => setClosing(true), []);
+  useEffect(() => {
+    if (!closing) return;
+    const t = window.setTimeout(onClose, prefersReducedMotion() ? 0 : PANEL_EXIT_MS);
+    return () => window.clearTimeout(t);
+  }, [closing, onClose]);
   // combo 引用变化 = 外部切换了编辑目标（非本浮窗产出的改动）→ 名称跟随复位
   const lastProduced = useRef<StoredCombo | null>(null);
   useEffect(() => {
@@ -657,11 +668,11 @@ export default function TemplateEditorFlyout({
       if (t.closest('.ant-popconfirm')) return;
       if (t.closest('.ant-dropdown')) return;
       if (t.closest('.ant-modal') || t.closest('.ant-modal-mask')) return;
-      onClose();
+      requestClose();
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
-  }, [onClose]);
+  }, [requestClose]);
 
   // Esc 关闭：内层弹层（树/颜色浮层、轻确认）可见时先让内层处理，本次只让
   // 内层收起；主浮窗的 Esc 监听对本浮层让位（[data-lpl-template-editor] 在场）
@@ -669,11 +680,11 @@ export default function TemplateEditorFlyout({
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
       if (innerLayerOpen()) return;
-      onClose();
+      requestClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [requestClose]);
 
   const patchCard = (cardId: string, f: (c: MainProduct) => MainProduct): void => {
     patch({ ...combo, cards: combo.cards.map((c) => (c.id === cardId ? f(c) : c)) });
@@ -716,7 +727,7 @@ export default function TemplateEditorFlyout({
     <div
       ref={rootRef}
       data-lpl-template-editor
-      className="lpl-fade-in-o"
+      className={closing ? 'lpl-fade-out-o' : 'lpl-fade-in-o'}
       /* 第一百八十五轮：dialog 语义 + 焦点入口（tabIndex=-1 供编程聚焦） */
       role="dialog"
       aria-modal="true"
@@ -791,7 +802,7 @@ export default function TemplateEditorFlyout({
               </button>
             </span>
           </Popconfirm>
-          <DeleteX label="关闭" size={12} onClick={onClose} />
+          <DeleteX label="关闭" size={12} onClick={requestClose} />
         </span>
       </div>
 

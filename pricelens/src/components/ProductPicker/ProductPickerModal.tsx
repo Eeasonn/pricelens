@@ -54,7 +54,7 @@
 //   浮窗根容器 role="dialog" aria-modal + 可访问名「选择产品」，打开时焦点
 //   移入、关闭（含 Esc/外点）时经 captureFocusRestore 还给页内触发器。
 // ============================================================
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Dropdown, Input, message, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
@@ -101,14 +101,17 @@ import {
   StateTag,
   SwapPill,
   TIP_Z,
+  cascadePlacementOf,
   clampPanelPos,
   captureFocusRestore,
   pillW,
   textW,
+  useTopEscClose,
   useTreeData,
   PICKER_EDGE,
   ROW_GAP,
 } from './pickerBits';
+import { PANEL_EXIT_MS, prefersReducedMotion } from '../../theme/motion';
 import {
   TEMPLATE_CAP,
   comboSignature,
@@ -256,16 +259,24 @@ function TierBatchPill({ text, disabled, onClick }: { text: string; disabled?: b
  *  关窗回「全部档位」；②选中档位后树上方批量动作带（主品上下文 =
  *  该档全部我司配置「全部各成一组」；对比上下文 = 该档全部配置
  *  「全部加入对比」）；③浮窗宽 = 四列自适应宽之和（行尾计入列宽），
- *  上限 min(视口-48, 1100)，超限面板内横向滚动。 */
+ *  上限 min(视口-48, 1100)，超限面板内横向滚动。
+ *  第一百九十轮（外部 UX 审计落地）：①Esc 分层关闭——本浮层此前不响应
+ *  Esc（外层浮窗的监听让位给内层、内层自己不接，死区）；useTopEscClose
+ *  每次 Esc 只关最上层并归还触发器焦点；②落位翻转——动态宽浮层固定
+ *  bottomLeft 在锚点靠右时整体顶出视口右缘（antd 只平移不翻转），打开时
+ *  量测锚点、cascadePlacementOf 决定锚左缘或右缘；fit 控制触发器外壳的
+ *  布局占位（fill = 主品整框 flex:1，row = 对比条整行，其余 = 内容宽）。 */
 function LevelSwitchPopover({
   ctx,
   initialModelId,
   openSignal,
+  fit,
   children,
 }: {
   ctx: PickerCtx;
   initialModelId?: string;
   openSignal?: boolean;
+  fit?: 'fill' | 'row';
   children: ReactNode;
 }) {
   const { state, actions } = useFilters();
@@ -276,6 +287,29 @@ function LevelSwitchPopover({
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
   const [modelSort, setModelSort] = useState<ModelSortMode>('default'); // 型号列排序
+  // 锚点量测（第一百九十轮）：打开与视口变化时记录左右缘，供落位翻转判定
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const [trigX, setTrigX] = useState<{ left: number; right: number } | null>(null);
+  const closeAll = useCallback((): void => {
+    setOpen(false);
+    setSearch('');
+    setTier(null); // 关窗档位筛选回「全部档位」
+  }, []);
+  useTopEscClose(open, closeAll);
+
+  useEffect(() => {
+    if (!open) {
+      setTrigX(null);
+      return;
+    }
+    const measure = (): void => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) setTrigX({ left: r.left, right: r.right });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
 
   useEffect(() => {
     if (openSignal) setOpen(true);
@@ -754,6 +788,8 @@ function LevelSwitchPopover({
   const panelW = columns.reduce((w, c) => w + (c.width ?? 0), 0);
   const widthCap = Math.min(typeof window === 'undefined' ? 1148 : window.innerWidth - 48, 1100);
   const bodyW = Math.max(360, Math.min(panelW + 20, widthCap));
+  // 落位翻转（第一百九十轮）：锚点左侧放不下浮层宽 → 改锚右缘向左展开
+  const placement = trigX ? cascadePlacementOf(trigX.left, bodyW, typeof window === 'undefined' ? 1280 : window.innerWidth) : 'bottomLeft';
   // set-main 的空组卡在批量动作中会被移除，封顶判定按移除后的基数算
   const tierBase = ctx.kind === 'set-main' && activeCard ? mains.filter((c) => c.id !== activeCard.id) : mains;
   const tierGroupDisabled = tierBase.length >= MAINS_CAP || tierOwnConfigs.length === 0;
@@ -769,11 +805,12 @@ function LevelSwitchPopover({
         setSearch('');
         if (!o) setTier(null); // 关窗档位筛选回「全部档位」
       }}
-      placement="bottomLeft"
+      placement={placement}
       styles={{ body: { padding: 10, width: bodyW } }}
       content={
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          {/* 第一百九十轮：窄浮层下搜索行换行——搜索框独占一行不再挤压占位文案 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
             <Input
               allowClear
               size="small"
@@ -781,7 +818,7 @@ function LevelSwitchPopover({
               placeholder="搜索品牌 / 系列 / 产品"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: 1, minWidth: 0 }}
+              style={{ flex: '1 1 150px', minWidth: 0 }}
             />
             <Select
               size="small"
@@ -843,7 +880,20 @@ function LevelSwitchPopover({
         </div>
       }
     >
-      {children}
+      {/* 第一百九十轮：触发器外壳——量测锚点位置（落位翻转）；fit 决定外壳
+          占位形态，避免内层 flex 布局（主品整框 flex:1 / 对比条整行 / 居中 pill）走样 */}
+      <span
+        ref={triggerRef}
+        style={
+          fit === 'fill'
+            ? { display: 'flex', flex: 1, minWidth: 0 }
+            : fit === 'row'
+              ? { display: 'flex', minWidth: 0 }
+              : { display: 'inline-flex' }
+        }
+      >
+        {children}
+      </span>
     </Popover>
   );
 }
@@ -866,7 +916,7 @@ function MainRow({ card }: { card: MainProduct }) {
      * 外壳用 div + role="button"（182 轮模板 chip 外壳同款）——Tab 可达，
      * Enter/Space 同点击；onKeyDown 只在外壳自身持有焦点时代答，内层控件
      * （颜色 chip 等）的键盘操作不被截走 */
-    <LevelSwitchPopover ctx={{ kind: 'replace-main', cardId: card.id }} initialModelId={main.modelId}>
+    <LevelSwitchPopover ctx={{ kind: 'replace-main', cardId: card.id }} initialModelId={main.modelId} fit="fill">
       <div
         role="button"
         tabIndex={0}
@@ -933,7 +983,7 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
      * 树，移入选中样式 .lpl-pk-edit）；颜色 chip 与 ✕ 阻止冒泡避开编辑触发。
      * 第一百八十五轮：条内嵌颜色 chip/移除 ✕ 原生按钮，外壳同主品框改
      * div + role="button"，Enter/Space 同点击、内层控件持有焦点时不代答 */
-    <LevelSwitchPopover ctx={{ kind: 'replace-compare', cardId: card.id, sel }} initialModelId={sel.modelId}>
+    <LevelSwitchPopover ctx={{ kind: 'replace-compare', cardId: card.id, sel }} initialModelId={sel.modelId} fit="row">
       <div
         role="button"
         tabIndex={0}
@@ -1054,17 +1104,35 @@ export default function ProductPickerFlyout({
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 焦点只随浮窗首次落位移入一次（resize 跟随重算落点时不抢回焦点）
   const didFocusRef = useRef(false);
+  // 第一百九十轮（外部 UX 审计落地）：退场动画——open 变假先挂 .lpl-fade-out
+  // 播 140ms 淡出再卸载（与 160ms 入场对称，克制的同款动效语言）；开启减少
+  // 动态效果时等待归零，退场瞬时。closing 期间保留最后一帧落位。
+  const [renderState, setRenderState] = useState<'closed' | 'open' | 'closing'>('closed');
+  useEffect(() => {
+    if (open) {
+      setRenderState('open');
+      return;
+    }
+    setRenderState((s) => (s === 'open' ? 'closing' : s));
+  }, [open]);
+  useEffect(() => {
+    if (renderState !== 'closing') return;
+    const t = window.setTimeout(() => setRenderState('closed'), prefersReducedMotion() ? 0 : PANEL_EXIT_MS);
+    return () => window.clearTimeout(t);
+  }, [renderState]);
+  // 完全关闭后清理落点与焦点标记
+  useEffect(() => {
+    if (renderState !== 'closed') return;
+    setPos(null);
+    didFocusRef.current = false;
+  }, [renderState]);
 
   // 打开时测量锚点位置并钳进视口（随窗口尺寸跟进）。第一百八十五轮：
   // 宽度走 CSS min(860px, calc(100vw - 48px))（与钳制用的同一宽度算式），
   // 左右至少留 24px 边距、顶边不越界；底边由渲染处 maxHeight 按钳制后
   // top 收口——任何落点下浮窗都不越视口。
   useEffect(() => {
-    if (!open) {
-      setPos(null);
-      didFocusRef.current = false;
-      return;
-    }
+    if (!open) return;
     const measure = (): void => {
       const r = anchorRef.current?.getBoundingClientRect();
       if (!r) return;
@@ -1132,13 +1200,13 @@ export default function ProductPickerFlyout({
       <span ref={anchorRef} style={{ display: 'inline-flex', flex: 1, minWidth: 0 }}>
         {children}
       </span>
-      {open &&
+      {renderState !== 'closed' &&
         pos &&
         createPortal(
             <div
               ref={panelRef}
               data-lpl-picker-panel
-              className="lpl-fade-in"
+              className={renderState === 'closing' ? 'lpl-fade-out' : 'lpl-fade-in'}
               /* 第一百八十五轮：dialog 语义 + 焦点入口（tabIndex=-1 供编程聚焦）；
                * maxHeight 按钳制后 top 动态收口，底边恒在视口内（24px 边距） */
               role="dialog"

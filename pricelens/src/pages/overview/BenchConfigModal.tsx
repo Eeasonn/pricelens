@@ -11,6 +11,9 @@
 // 第一百八十五轮（外部 UX 审计落地）：「恢复默认」收窄为只恢复当前正在编辑的这条
 // 配置（clearBenchmarkEntry），不再清整份跨国快照；去掉 keyboard={false}，
 // Esc 关闭 = 取消（草稿不保存），与其他弹窗一致。
+// 第一百九十轮（外部 UX 审计落地）：产品名改两行截断（窄屏不再只剩一个字）、
+// 「★ 主竞品」徽标禁逐字竖排、10px 信息文字升 11px；品牌筛选改原生 button
+// （键盘可达 + aria-pressed）；↑↓/移除/添加/搜索补上下文可访问名称。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Modal, Popconfirm, Segmented, message } from 'antd';
@@ -186,23 +189,37 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
           background: mapped ? '#f5f5f5' : undefined,
         }}
       >
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        {/* 第一百九十轮：外壳允许换行，窄屏下容量段自然落到名称下一行，不再互相挤压 */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, flexWrap: 'wrap' }}>
           <BrandDot brand={c.row.brand} size={7} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {/* 产品名两行截断（原单行省略在窄屏只剩一个字）；title 兜底完整名称 */}
+          <span
+            title={c.row.modelName}
+            style={{
+              fontSize: 12, fontWeight: 600, color: color.ink,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+              overflow: 'hidden', overflowWrap: 'anywhere',
+            }}
+          >
             {c.row.modelName}
           </span>
-          <span style={{ fontSize: 10, color: color.mute, whiteSpace: 'nowrap' }}>{c.row.romram}</span>
+          <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>{c.row.romram}</span>
         </span>
         <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, textAlign: 'right' }}>
           {formatPrice(c.row.price, currency)}
         </span>
-        <span className="tnum" style={{ fontSize: 10, color: c.dist != null && c.dist <= 0.15 ? '#0a7d38' : color.mute, textAlign: 'right' }}>
+        <span className="tnum" style={{ fontSize: 11, color: c.dist != null && c.dist <= 0.15 ? '#0a7d38' : color.mute, textAlign: 'right' }}>
           {c.dist != null ? `价差 ${Math.round(c.dist * 100)}%` : '—'}
         </span>
         {mapped ? (
           <span style={{ fontSize: 10, color: color.mute, padding: '0 6px' }}>已配置</span>
         ) : (
-          <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={() => addComp(c.row.skuId)}>
+          <Button
+            size="small"
+            style={{ height: 22, fontSize: 11 }}
+            aria-label={`添加 ${c.row.modelName} ${c.row.romram} 为对标竞品`}
+            onClick={() => addComp(c.row.skuId)}
+          >
             添加
           </Button>
         )}
@@ -213,7 +230,7 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
   const sectionTitle = (t: string, note?: string) => (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '10px 0 4px' }}>
       <span style={{ fontSize: 12, fontWeight: 600, color: color.body }}>{t}</span>
-      {note && <span style={{ fontSize: 10, color: color.mute }}>{note}</span>}
+      {note && <span style={{ fontSize: 11, color: color.mute }}>{note}</span>}
     </div>
   );
 
@@ -294,16 +311,26 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
                     marginBottom: 4,
                   }}
                 >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  {/* 第一百九十轮：外壳允许换行——窄屏下 ROM·颜色段换到名称下一行，不再逐字竖排挤压 */}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, flexWrap: 'wrap' }}>
                     {cm && <BrandDot brand={cm.brand} size={7} />}
-                    <span style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {/* 产品名两行截断（原单行省略在窄屏只剩 iPho…）；title 兜底完整名称 */}
+                    <span
+                      title={cm?.modelName ?? r.competitor_sku_id}
+                      style={{
+                        fontSize: 12, fontWeight: 600, color: color.ink,
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden', overflowWrap: 'anywhere',
+                      }}
+                    >
                       {cm?.modelName ?? r.competitor_sku_id}
                     </span>
-                    <span style={{ fontSize: 10, color: color.mute, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>
                       {cRow ? `${cRow.romram} · ${colorSeg}` : colorSeg}
                     </span>
+                    {/* 徽标禁收缩禁断行：根治「★ 主竞品」被挤成逐字竖排 */}
                     {i === 0 && (
-                      <span style={{ fontSize: 10, color: color.link, background: '#e8f1ff', borderRadius: radius.pill, padding: '0 6px' }}>
+                      <span style={{ fontSize: 10, color: color.link, background: '#e8f1ff', borderRadius: radius.pill, padding: '0 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                         ★ 主竞品
                       </span>
                     )}
@@ -319,6 +346,7 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
                       icon={<UpOutlined style={{ fontSize: 10 }} />}
                       style={{ height: 22, width: 22, padding: 0 }}
                       title="上移（移到首位 = 设为主竞品）"
+                      aria-label={`上移 ${cm?.modelName ?? r.competitor_sku_id}`}
                       onClick={() => moveComp(r.competitor_sku_id, -1)}
                     />
                     <Button
@@ -328,9 +356,15 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
                       icon={<DownOutlined style={{ fontSize: 10 }} />}
                       style={{ height: 22, width: 22, padding: 0 }}
                       title="下移"
+                      aria-label={`下移 ${cm?.modelName ?? r.competitor_sku_id}`}
                       onClick={() => moveComp(r.competitor_sku_id, 1)}
                     />
-                    <Button size="small" style={{ height: 22, fontSize: 11 }} onClick={() => removeComp(r.competitor_sku_id)}>
+                    <Button
+                      size="small"
+                      style={{ height: 22, fontSize: 11 }}
+                      aria-label={`移除 ${cm?.modelName ?? r.competitor_sku_id} 的对标`}
+                      onClick={() => removeComp(r.competitor_sku_id)}
+                    >
                       移除
                     </Button>
                   </span>
@@ -344,10 +378,12 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
             <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
               {brandOptions.map((b) => {
                 const active = brandSel.includes(b);
+                // 第一百九十轮：span role="button" 改原生 button——键盘可达 + aria-pressed 播报选中态（样式原样保留）
                 return (
-                  <span
+                  <button
                     key={b}
-                    role="button"
+                    type="button"
+                    aria-pressed={active}
                     onClick={() => setBrandSel((prev) => (active ? prev.filter((x) => x !== b) : [...prev, b]))}
                     style={{
                       padding: '1px 8px',
@@ -363,13 +399,14 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
                     }}
                   >
                     {b}
-                  </span>
+                  </button>
                 );
               })}
             </span>
             <Input
               size="small"
               allowClear
+              aria-label="搜索型号或容量"
               prefix={<SearchOutlined style={{ fontSize: 11, color: color.mute }} />}
               placeholder="搜索型号 / 容量"
               value={keyword}

@@ -18,12 +18,16 @@
 // 那一行）居左——新增 cluster 模式（只出左簇）；②分离模式药丸带回归各面板内
 // （index 层），pills 模式只在合并模式渲染、仅承载药丸；③圆形图标钮 20 → 24，
 // 与 small 按钮/Segmented 同高（隐藏对比产品此前 61px 过高，改 24）。
+// 第一百九十轮（外部 UX 审计落地）：齿轮「Y 轴显示设置」与「⋯ 更多」两处弹层
+// 改受控 + useTopEscClose——此前非受控 trigger="click" 自身不响应 Esc（外层
+// 浮窗又已让位给它），Esc 成死区；现每次 Esc 只关最上层弹层、焦点归还触发按钮。
 // ============================================================
 import { Button, Checkbox, ConfigProvider, Popover, Segmented, Slider } from 'antd';
 import { MoreOutlined, ProfileOutlined, SettingOutlined } from '@ant-design/icons';
 import { forwardRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { CurrencyMode } from '../../dataModel/types';
 import { filterBarTheme } from '../../components/FilterBar';
+import { useTopEscClose } from '../../components/ProductPicker/pickerBits';
 import { color, radius } from '../../theme/tokens';
 import type { LineShapeChoice } from './chartModel';
 import ScaleSlider from './ScaleSlider';
@@ -201,11 +205,20 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
   // ——与每格高度滑杆「松手生效」同一语言，避免拖动全程逐帧触发提醒重算
   const [dragThreshold, setDragThreshold] = useState<number | null>(null);
+  // 第一百九十轮（外部 UX 审计落地）：两处弹层改受控并接 Esc 分层关闭——
+  // useTopEscClose 仅栈顶浮层响应 Esc（多浮层叠加时不连关），关闭时焦点
+  // 归还触发按钮。状态提升到组件体顶层（gearCtl/moreCtl 只是内联 JSX 常量）
+  const [gearOpen, setGearOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  useTopEscClose(gearOpen, () => setGearOpen(false));
+  useTopEscClose(moreOpen, () => setMoreOpen(false));
   // 左区齿轮弹层（每格高度/刻度线/自动压缩/折线样式）；pills 模式下与「隐藏对比品」
   // 按钮同簇渲染（下方分支），其余模式原地渲染
   const gearCtl = (
     <Popover
       trigger="click"
+      open={gearOpen}
+      onOpenChange={setGearOpen}
       placement="bottomLeft"
       content={
         <div style={{ width: 236 }}>
@@ -321,6 +334,8 @@ export default function ChartToolbar(props: ChartToolbarProps) {
         <span style={{ marginLeft: showPromo ? undefined : 'auto', display: 'inline-flex', flexShrink: 0 }}>
         <Popover
           trigger="click"
+          open={moreOpen}
+          onOpenChange={setMoreOpen}
           placement="bottomLeft"
           content={
             <ConfigProvider theme={filterBarTheme}>

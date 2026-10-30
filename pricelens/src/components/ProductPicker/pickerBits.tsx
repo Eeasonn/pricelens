@@ -7,8 +7,12 @@
 //   （Tab 可达、Enter/Space 可切，182 轮 AddPill 同款做法）；②新增浮窗
 //   落点视口钳制纯函数 clampPanelPos（窄屏浮窗不越视口）与焦点归还小件
 //   captureFocusRestore（浮窗关闭把焦点还给触发器，主浮窗/编辑浮窗共用）。
+// 第一百九十轮（外部 UX 审计落地）：①useTopEscClose——浮层 Esc 分层关闭
+//   （每次 Esc 只关最上层、焦点归还触发器），树级联/颜色 chip/图表工具行
+//   浮层共用，补掉「外层让位、内层不响应」的死区；②cascadePlacementOf——
+//   级联浮层动态宽的落位翻转纯函数（锚点右侧放不下改锚右缘，不再顶出视口）。
 // ============================================================
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
 import { CloseOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
@@ -77,6 +81,69 @@ export function captureFocusRestore(): () => void {
 /** 可编辑 chip 的描边（主品/对比条目同一语言；只读配置 chip 无描边） */
 export const EDITABLE_BORDER = 'rgba(0, 112, 243, 0.35)';
 
+// ---------------- Esc 分层关闭（第一百九十轮，外部 UX 审计） ----------------
+
+/** 打开中的浮层栈：后开者在栈顶。Esc 只由栈顶（最上层浮层）响应，
+ *  关一层；同一事件经 capture 拦截 + stopPropagation，不再落到外层浮窗的
+ *  document 监听上（外层原有的 innerLayerOpen 让位机制继续兜底非本栈浮层）。 */
+const escLayerStack: symbol[] = [];
+
+/** antd 自管 Esc 的弹层在场则让位：Modal / Select 下拉 / Dropdown 自己响应
+ *  Escape，本次 Esc 先关它们，下一次再关本层（避免一次 Esc 连关两层）。 */
+function antdEscLayerOpen(): boolean {
+  if (typeof document === 'undefined') return false;
+  return !!document.querySelector(
+    '.ant-modal-root, .ant-select-dropdown:not(.ant-select-dropdown-hidden), .ant-dropdown:not(.ant-dropdown-hidden)',
+  );
+}
+
+/** 浮层 Esc 关闭：open 期间挂 document capture keydown。仅当自己是栈顶
+ *  （最上层）才响应 Escape——焦点先归还触发器（captureFocusRestore，外点
+ *  关闭等其他退出路径同样归还），再 onClose。供树级联浮层、颜色 chip、
+ *  图表工具行浮层等内层 antd Popover 使用：这些弹层自身不响应 Esc，此前
+ *  外层让位、内层不接，形成「谁都不关闭」的死区。 */
+export function useTopEscClose(open: boolean, onClose: () => void): void {
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    if (!open) return;
+    const id = Symbol('lpl-esc-layer');
+    escLayerStack.push(id);
+    const restore = captureFocusRestore();
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      if (escLayerStack[escLayerStack.length - 1] !== id) return; // 只关最上层
+      if (antdEscLayerOpen()) return; // Modal/下拉自管 Esc：让位
+      e.preventDefault();
+      e.stopPropagation();
+      restore();
+      closeRef.current();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      const i = escLayerStack.indexOf(id);
+      if (i >= 0) escLayerStack.splice(i, 1);
+      restore();
+    };
+  }, [open]);
+}
+
+/** 级联浮层落位（纯函数，金测见 __tests__/viewport.test.ts）：树浮层宽度
+ *  动态（最宽 ≈ 视口 - 48），固定 bottomLeft 在锚点靠右时整体顶出右缘——
+ *  antd 只会平移不会翻转。锚点左侧放不下即改 bottomRight（右缘对齐锚点、
+ *  向左展开）；两侧都放不下（浮层宽 ≈ 视口）时 bottomRight 配合 antd 平移
+ *  收益仍更大。 */
+export function cascadePlacementOf(
+  triggerLeft: number,
+  bodyW: number,
+  vw: number,
+): 'bottomLeft' | 'bottomRight' {
+  return triggerLeft + bodyW + PICKER_EDGE <= vw ? 'bottomLeft' : 'bottomRight';
+}
+
 /** Esc 让位判定（主浮窗/模板编辑浮窗共用）：页面存在可见的内层弹层
  *  （Modal / Popover / 轻确认 / 下拉）时为真——外层浮窗的 Esc 关闭先让
  *  内层弹层自行处理，不连带收起外层 */
@@ -114,10 +181,16 @@ export function ColorChip({
   currency: 'usd' | 'local';
 }) {
   const label = colorLabelOf(node, skuIds);
+  // 第一百九十轮：改受控 + useTopEscClose——换色浮层此前不响应 Esc（外层
+  // 浮窗让位给它、它自己不接），Esc 死区；现每次 Esc 只关最上层并还焦触发器
+  const [open, setOpen] = useState(false);
+  useTopEscClose(open, () => setOpen(false));
   if (!node || !label) return null;
   return (
     <Popover
       trigger="click"
+      open={open}
+      onOpenChange={setOpen}
       placement="bottomLeft"
       zIndex={POPOVER_Z}
       styles={{ body: { padding: 0, width: 272 } }}

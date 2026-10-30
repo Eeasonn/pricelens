@@ -10,6 +10,9 @@
 // 第一百三十一轮波2：showTime 时在币种右侧渲染时间筛选簇（TimeBox 包装
 // TimeRangeCluster），两看板的时间筛选器统一上移到顶部筛选条——入口列弹性
 // 收窄让位，整行 1280 视口仍单行。
+// 第一百九十轮（外部 UX 审计落地）：多平台对比子视图下主图已按店铺画多条线，
+// 单组摘要 chip 第二行不再写「无对比」，改示「平台对比」（悬停全量摘要保持
+// 产品对语义不动——细节仍真实）；产品对比子视图行为与现状完全一致。
 // ============================================================
 import { useRef, useState, type ReactNode } from 'react';
 import { ConfigProvider, Tooltip } from 'antd';
@@ -22,6 +25,7 @@ import ScopeFields from './ScopeFields';
 import TimeBox from './TimeBox';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
+import { useChartContent } from '../../state/chartContent';
 import { brandOfModel, configTextOf, modelNameOf } from '../ProductCascader/tree';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
@@ -134,6 +138,10 @@ function GroupChip({ card }: { card: MainProduct }) {
  *  入口盒高度 30→40 容纳两行。 */
 function ProductPickerEntry() {
   const { state } = useFilters();
+  // 多平台对比子视图（第一百九十轮）：主图按店铺画多条线，摘要不再写「无对比」。
+  // 本组件在 ChartContentProvider 内（App 全局包裹），直接取呈现切换上下文
+  const { priceSubview } = useChartContent();
+  const platformCompare = priceSubview === 'platforms';
   const [open, setOpen] = useState(false);
   const mains = state.mains;
   const single = mains.length === 1 ? mains[0] : null;
@@ -197,11 +205,16 @@ function ProductPickerEntry() {
                         </span>
                       )}
                       <span style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>vs</span>
+                      {/* 第一百九十轮（外部 UX 审计）：多平台子视图下无对比产品时示
+                          「平台对比」（主图已按店铺画线）；产品对比子视图维持「无对比」 */}
                       <span
                         className="tnum"
-                        style={{ fontSize: 11, lineHeight: '15px', fontWeight: 600, color: single.compares.length ? color.body : color.mute, flexShrink: 0 }}
+                        style={{
+                          fontSize: 11, lineHeight: '15px', fontWeight: 600,
+                          color: single.compares.length || platformCompare ? color.body : color.mute, flexShrink: 0,
+                        }}
                       >
-                        {single.compares.length ? `${single.compares.length} 款对比` : '无对比'}
+                        {single.compares.length ? `${single.compares.length} 款对比` : platformCompare ? '平台对比' : '无对比'}
                       </span>
                     </span>
                   </span>

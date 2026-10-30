@@ -39,3 +39,40 @@ describe('clampPanelPos（浮窗落点视口钳制）', () => {
     expect(clampPanelPos(1000, 500, 400, 500, 60)).toEqual({ left: 76, top: PICKER_EDGE });
   });
 });
+
+// ============================================================
+// 级联浮层落位翻转金测（cascadePlacementOf，第一百九十轮）：
+// 树浮层动态宽（最宽 ≈ 视口-48），锚点靠右时固定 bottomLeft 会整体顶出
+// 视口右缘——锚点左侧放不下即改 bottomRight（右缘对齐锚点、向左展开）。
+// 「外层浮窗＋内层级联」的视口回归场景：主浮窗宽 min(860, vw-48)、
+// 级联宽 min(1100, vw-48)，1152 桌面与 390 窄屏都有用例。
+// ============================================================
+import { cascadePlacementOf } from '../pickerBits';
+
+describe('cascadePlacementOf（级联浮层落位翻转）', () => {
+  it('1152 桌面、锚点靠左（浮窗左缘 24）→ bottomLeft 原位向右展开', () => {
+    // 24 + 1104 + 24 ≤ 1152 → 放得下
+    expect(cascadePlacementOf(24, 1104, 1152)).toBe('bottomLeft');
+  });
+
+  it('1152 桌面、锚点靠右（对比区添加钮）→ bottomRight 翻转向左展开', () => {
+    // 800 + 1104 + 24 > 1152 → 左侧放不下即翻
+    expect(cascadePlacementOf(800, 1104, 1152)).toBe('bottomRight');
+  });
+
+  it('1152 桌面、小浮层（搜索收窄列后）在右侧锚点也放得下 → 不翻', () => {
+    expect(cascadePlacementOf(700, 420, 1152)).toBe('bottomLeft');
+  });
+
+  it('390 窄屏（浮层宽 = vw-48 = 342）→ 任何锚点都翻转收边', () => {
+    // 锚点左缘 24：24 + 342 + 24 = 390 ≤ 390 恰好放下 → bottomLeft
+    expect(cascadePlacementOf(24, 342, 390)).toBe('bottomLeft');
+    // 锚点再靠右一点就放不下 → bottomRight
+    expect(cascadePlacementOf(60, 342, 390)).toBe('bottomRight');
+  });
+
+  it('两侧都放不下（浮层宽 ≈ 视口）→ bottomRight 配合 antd 平移收益更大', () => {
+    // vw=1152、bodyW=1104、锚点右缘 1104：左侧 1104-1104-24 < 0 也放不下
+    expect(cascadePlacementOf(636, 1104, 1152)).toBe('bottomRight');
+  });
+});

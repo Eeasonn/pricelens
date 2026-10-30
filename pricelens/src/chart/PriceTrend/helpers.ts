@@ -846,6 +846,23 @@ export function normalizeWindow(
   return { s, e };
 }
 
+// ---------------- 窄屏默认可见段（第一百九十轮，外部 UX 审计落地） ----------------
+
+/** 窄屏默认可见段桶数：<640px 视口 + 周粒度 + 用户未手动设过窗口时，
+ *  主图默认只看范围末端最近这么多个周桶——一屏周次过多时点距过密、触屏点选困难
+ *  （审计 P1-5）。宽屏 / 月季粒度 / 手动窗口不经过本常量，行为与现状一致 */
+export const NARROW_DEFAULT_BUCKETS = 12;
+
+/**
+ * 范围末端默认窗口（纯函数，单测见 __tests__/tailWindowIds.test.ts）：取桶 id 序
+ * 末端 N 个桶的首尾 id（起点不足 N 个时钳到首桶 = 全量）。空序 / 非法段长 → null
+ * （调用方回落「整个范围」现状行为）。
+ */
+export function tailWindowIds(ids: string[], len: number): [string, string] | null {
+  if (ids.length === 0 || len <= 0) return null;
+  return [ids[Math.max(0, ids.length - len)], ids[ids.length - 1]];
+}
+
 // ---------------- 时间自适应（自动极值 = 所选产品最早/最晚有效价格桶） ----------------
 
 /**
