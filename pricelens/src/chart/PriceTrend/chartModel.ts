@@ -60,9 +60,8 @@ export const LIFECYCLE_ROW_H = 14;
 export const FOCUS_MODE_THRESHOLD = 8;
 /** 名称被避让推离锚点超过该像素 → 画细引线连回首点（第三十二轮） */
 export const NAME_LEADER_PX = 14;
-/** Y 轴刻度标签字号（第一百八十五轮，外部 UX 审计）：8px 过小不可读 → 10px。
- *  主图 DOM 刻度与分离面板共享轴列同款取值，避免两处字号漂移 */
-export const Y_TICK_FONT = 10;
+/** Y 轴刻度标签字号。主图 DOM 刻度与分离面板共享轴列同款取值，避免两处字号漂移。 */
+export const Y_TICK_FONT = 12;
 
 /** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB。
  *  第一百一十五轮：TB 场景保留单位（"16+1 TB" 不缩成 "16+1"，否则容量读歧义）。 */
@@ -582,11 +581,10 @@ export function buildOption(p: {
         ? {
             show: true,
             color: color.mute,
-            // 第一百八十五轮（外部 UX 审计）：10px 过小 → 11px，行高同步放宽防两行年份贴字
-            fontSize: 11,
+            fontSize: 13,
             fontFamily: font.family,
-            margin: 7,
-            lineHeight: 13,
+            margin: 6,
+            lineHeight: 16,
             hideOverlap: true,
             interval: (index: number) => axisShown.has(index),
             formatter: (val: string, index: number) => {

@@ -18,8 +18,8 @@
 // 「暂无数据」，failed 标记走「数据加载异常 / 请刷新重试」（沿用空态排版）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Button, Popover } from 'antd';
-import { CheckOutlined, DownOutlined, FilterOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Input, Popover } from 'antd';
+import { CheckOutlined, DownOutlined, FilterOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { useChartContent } from '../../state/chartContent';
 import { dimChannel, dimPromo, dimProduct } from '../../data';
@@ -28,6 +28,8 @@ import { buildSeries, lowestPriceColorSku, sellersOfChannel } from '../../dataMo
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { brandOfModel, configTextOf, modelNameOf } from '../../components/ProductCascader/tree';
 import { autoColumnWidth, CascadePanel, measureText } from '../../components/ProductCascader';
+import { searchShopCatalog, SHOP_SEARCH_CAP } from '../../components/shopSearch';
+import { useNarrowViewport } from '../../state/useNarrowViewport';
 import type { CascadeRowItem } from '../../components/ProductCascader';
 import ChannelSelectPopover from '../../components/ChannelSelectPopover';
 import type { PlatformSelection } from '../../state/filtersTypes';
@@ -240,12 +242,15 @@ function AddShopPill({
   onToggle: (line: ShopLine) => void;
   onRestoreDefault: () => void;
 }) {
+  const narrow = useNarrowViewport();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null); // 左列展开的平台
   const [pane, setPane] = useState<string | null>(null); // 第三列展开的渠道
+  const [query, setQuery] = useState('');
   useEffect(() => {
     setActive(null);
     setPane(null);
+    setQuery('');
   }, [cc, open]);
 
   const rows = useMemo(() => {
@@ -352,6 +357,31 @@ function AddShopPill({
 
   const defaults = useMemo(() => defaultShopsOf(cc), [cc]);
   const isDefault = shops.length === defaults.length && defaults.every((d) => has(d.id));
+  const q = query.trim();
+  const found = useMemo(() => searchShopCatalog(cc, q), [cc, q]);
+  const hitItems: CascadeRowItem[] = found.hits.map((h) => {
+    const id = h.seller == null ? `ch:${h.channelId}` : `sl:${h.channelId}:${h.seller}`;
+    const on = has(id);
+    return {
+      key: h.key,
+      label: h.label,
+      active: on,
+      onLabelClick: () =>
+        onToggle(
+          h.seller == null
+            ? { id, kind: 'channel', platform: h.platform, channelId: h.channelId }
+            : { id, kind: 'seller', platform: h.platform, channelId: h.channelId, seller: h.seller },
+        ),
+      trailing: (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span style={addPillOf(on)}>
+            {on ? <CheckOutlined style={{ fontSize: 11 }} /> : <PlusOutlined style={{ fontSize: 11 }} />} {h.seller == null ? '店铺' : '卖家'}
+          </span>
+          <span style={{ fontSize: 10, color: color.mute }}>{h.note}</span>
+        </span>
+      ),
+    };
+  });
 
   return (
     <Popover
@@ -359,27 +389,60 @@ function AddShopPill({
       open={open}
       arrow={false}
       placement="bottomLeft"
+      destroyTooltipOnHide
+      classNames={{ root: 'lpl-cascade-popover' }}
       styles={{ body: { padding: 0 } as const }}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery('');
+      }}
       content={
-        <div>
-          <CascadePanel
-            open
-            columns={[
-              { items: platformItems, extraW: platformExtraW },
-              ...(activeRow ? [{ items: channelItems, extraW: channelExtraW }] : []),
-              ...(paneChannel && sellerColW > 0 ? [{ items: sellerItems, width: sellerColW }] : []),
-            ]}
-          />
+        <div style={narrow ? { width: 'min(420px, calc(100vw - 48px))', maxWidth: '100%' } : undefined}>
+          <div style={{ padding: `8px ${space.md}px 6px`, borderBottom: `1px solid ${color.hairline}` }}>
+            <Input
+              allowClear
+              size={narrow ? 'middle' : 'small'}
+              prefix={<SearchOutlined style={{ color: color.mute }} />}
+              placeholder="搜索平台 / 渠道 / 卖家"
+              aria-label="搜索平台、渠道或卖家"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={{ width: '100%', height: narrow ? 44 : 24 }}
+            />
+          </div>
+          {q ? (
+            <>
+              <CascadePanel open fill rowHeight={narrow ? 44 : undefined} columns={[{ items: hitItems }]} />
+              {found.total > found.hits.length && (
+                <div style={{ padding: `5px ${space.md}px 2px`, fontSize: 11, color: color.mute }}>
+                  共 {found.total} 个匹配，仅显示前 {SHOP_SEARCH_CAP} 个，可继续输入缩小范围
+                </div>
+              )}
+            </>
+          ) : null}
+          <div style={{ display: q ? 'none' : undefined }}>
+            <CascadePanel
+              open
+              stepped={narrow}
+              levelLabels={['平台', '渠道', '卖家']}
+              columns={[
+                { items: platformItems, extraW: platformExtraW },
+                ...(activeRow ? [{ items: channelItems, extraW: channelExtraW }] : []),
+                ...(paneChannel && sellerColW > 0 ? [{ items: sellerItems, width: sellerColW }] : []),
+              ]}
+            />
+          </div>
           <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
             <Button
               type="link"
-              size="small"
-              style={{ padding: 0, height: 20, fontSize: 12 }}
+              size={narrow ? 'middle' : 'small'}
+              style={{ padding: 0, height: narrow ? 44 : 20, fontSize: 12 }}
               disabled={isDefault}
+              aria-label="回到自动"
+              title="回到各平台每周最低价店铺"
               onClick={onRestoreDefault}
             >
-              恢复默认（各平台自动）
+              回到自动
             </Button>
           </div>
         </div>
@@ -722,6 +785,7 @@ export default function PlatformCompareView(props: {
                     arrow={false}
                     placement="bottomLeft"
                     destroyTooltipOnHide
+                    classNames={{ root: 'lpl-cascade-popover' }}
                     styles={{ body: { padding: 0 } as const }}
                     content={
                       <ChannelSelectPopover
@@ -809,6 +873,7 @@ export default function PlatformCompareView(props: {
         showYTicks={props.showYTicks}
         onShowYTicks={props.onShowYTicks}
         showTiers={props.showTiers}
+        onShowTiers={props.onShowTiers}
         enableDrill={false}
         windowKey={`pfcmp:${props.win.s}:${props.win.e}`}
         yScale={yCfg}

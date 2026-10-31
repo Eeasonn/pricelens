@@ -12,9 +12,13 @@ import VolumePrice from './pages/VolumePrice';
 import PricingPage from './pages/pricing/PricingPage';
 import Config from './pages/Config';
 import AlertsPage from './pages/AlertsPage';
+import IntelligenceCenter from './pages/IntelligenceCenter';
+import ForecastPage from './pages/ForecastPage';
 import PageHeader from './components/PageHeader';
 import FilterBar from './components/FilterBar';
 import { ChartContentProvider } from './state/chartContent';
+import { AgentProvider } from './state/AgentContext';
+import AgentPanel from './components/Copilot/AgentPanel';
 import { color, font, shadow, space } from './theme/tokens';
 
 export default function App() {
@@ -40,11 +44,14 @@ export default function App() {
     >
       <PageProvider>
         <FiltersProvider>
-          <OverviewViewProvider>
-            <ChartContentProvider>
-              <AppBody />
-            </ChartContentProvider>
-          </OverviewViewProvider>
+          <AgentProvider>
+            <OverviewViewProvider>
+              <ChartContentProvider>
+                <AppBody />
+                <AgentPanel />
+              </ChartContentProvider>
+            </OverviewViewProvider>
+          </AgentProvider>
         </FiltersProvider>
       </PageProvider>
     </ConfigProvider>
@@ -73,6 +80,10 @@ function AppBody() {
         </AnalysisShell>
       ) : page === 'config' ? (
         <Config />
+      ) : page === 'intelligence' ? (
+        <IntelligenceCenter />
+      ) : page === 'forecast' ? (
+        <ForecastPage />
       ) : (
         <AlertsPage />
       )}
@@ -96,7 +107,7 @@ function AnalysisShell({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div ref={rootRef} data-lpl-scroll style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
+    <div ref={rootRef} data-lpl-scroll style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }}>
       {/* 顶部居中圆形 ↑（第五十四轮追补）：滚过筛选器后浮现，点击平滑回滚筛选器 */}
       {showTop && (
         <button

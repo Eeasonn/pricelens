@@ -67,6 +67,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
+import { useNarrowViewport } from '../../state/useNarrowViewport';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import {
@@ -282,6 +283,7 @@ function LevelSwitchPopover({
   const { state, actions } = useFilters();
   const mains = state.mains;
   const currency = state.currency;
+  const narrow = useNarrowViewport();
   const { fullTree, romramByKey } = useTreeData();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -787,7 +789,7 @@ function LevelSwitchPopover({
   // 上限 = min(视口 - 48, 1100)，超限由面板内横向滚动兜底
   const panelW = columns.reduce((w, c) => w + (c.width ?? 0), 0);
   const widthCap = Math.min(typeof window === 'undefined' ? 1148 : window.innerWidth - 48, 1100);
-  const bodyW = Math.max(360, Math.min(panelW + 20, widthCap));
+  const bodyW = narrow ? Math.max(280, widthCap) : Math.max(360, Math.min(panelW + 20, widthCap));
   // 落位翻转（第一百九十轮）：锚点左侧放不下浮层宽 → 改锚右缘向左展开
   const placement = trigX ? cascadePlacementOf(trigX.left, bodyW, typeof window === 'undefined' ? 1280 : window.innerWidth) : 'bottomLeft';
   // set-main 的空组卡在批量动作中会被移除，封顶判定按移除后的基数算
@@ -800,6 +802,8 @@ function LevelSwitchPopover({
       trigger="click"
       open={open}
       zIndex={POPOVER_Z}
+      destroyTooltipOnHide
+      classNames={{ root: 'lpl-cascade-popover' }}
       onOpenChange={(o) => {
         setOpen(o);
         setSearch('');
@@ -810,29 +814,30 @@ function LevelSwitchPopover({
       content={
         <div>
           {/* 第一百九十轮：窄浮层下搜索行换行——搜索框独占一行不再挤压占位文案 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'stretch' : 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
             <Input
               allowClear
-              size="small"
+              size={narrow ? 'middle' : 'small'}
               prefix={<SearchOutlined style={{ color: color.mute }} />}
-              placeholder="搜索品牌 / 系列 / 产品"
+              placeholder="搜索品牌 / 系列 / 型号 / 容量"
+              aria-label="搜索品牌、系列、型号或容量"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: '1 1 150px', minWidth: 0 }}
+              style={{ flex: narrow ? undefined : '1 1 150px', width: narrow ? '100%' : undefined, minWidth: 0, height: narrow ? 44 : undefined }}
             />
             <Select
-              size="small"
+              size={narrow ? 'middle' : 'small'}
               aria-label="价格档位"
               value={tier ?? ''}
               onChange={(v) => setTier(v === '' ? null : v)}
-              style={{ width: 138, flexShrink: 0 }}
+              style={{ width: narrow ? '100%' : 138, flexShrink: 0, height: narrow ? 44 : undefined }}
               popupMatchSelectWidth={false}
               // 下拉挂在树浮层内部：层级随浮层走（高于面板），不被外层浮窗压住
               getPopupContainer={(node) => node.closest('.ant-popover') ?? document.body}
               options={[{ value: '', label: '全部档位' }, ...tierOptions]}
             />
             <Segmented
-              size="small"
+              size={narrow ? 'middle' : 'small'}
               aria-label="型号排序"
               value={modelSort}
               onChange={(v) => setModelSort(v as ModelSortMode)}
@@ -874,8 +879,14 @@ function LevelSwitchPopover({
               )}
             </div>
           )}
-          <div style={{ display: 'flex' }}>
-            <CascadePanel columns={columns} fill height={POPOVER_H} />
+          <div style={{ display: 'flex', minWidth: 0 }}>
+            <CascadePanel
+              columns={columns}
+              fill={!narrow}
+              height={POPOVER_H}
+              stepped={narrow}
+              levelLabels={['品牌', '系列', '型号', '配置']}
+            />
           </div>
         </div>
       }
@@ -1063,8 +1074,8 @@ function AutoMatchInline({ card }: { card: MainProduct }) {
           : '开启后按对标矩阵自动带出本组对比区';
   return (
     <MatchPill
-      label={`匹配竞品${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
-      text="匹配竞品"
+      label={`自动匹配竞品${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
+      text="自动匹配竞品"
       can={huawei}
       selected={on}
       tip={tip}
@@ -1287,6 +1298,7 @@ function SaveTemplateDialog({
 function PickerPanel() {
   const { state, actions } = useFilters();
   const mains = state.mains;
+  const narrow = useNarrowViewport();
 
   // ---- 卡片拖拽换序（= 分离面板顺序） ----
   const [dragCard, setDragCard] = useState<string | null>(null);
@@ -1468,7 +1480,7 @@ function PickerPanel() {
     <>
       {/* 顶栏：「模板」（显式保存的产品对/模板组，chip 可编辑）只占一行，
           放不下收进行尾「更多」下拉；右侧按钮簇 = 匹配竞品 · ＋模板 · 清空 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, minHeight: 26 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, minHeight: 26, flexWrap: 'wrap' }}>
         {combos.length > 0 && (
           <>
             <span style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>模板</span>
@@ -1670,8 +1682,8 @@ function PickerPanel() {
         {/* 顶栏右侧按钮簇（第一百三十一轮）：左→右 = 匹配竞品 · ＋模板 · 清空 */}
         <span style={{ marginLeft: 'auto', paddingLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <MatchPill
-            label="匹配竞品"
-            text="匹配竞品"
+            label="自动匹配竞品"
+            text="自动匹配竞品"
             size="md"
             can={huaweiCards.length > 0}
             selected={huaweiCards.length > 0 && huaweiCards.every((c) => !!c.auto)}
@@ -1679,8 +1691,8 @@ function PickerPanel() {
               huaweiCards.length === 0
                 ? '按对标矩阵带出对比区，仅支持华为产品'
                 : huaweiCards.every((c) => !!c.auto)
-                  ? '已为全部华为主品组开启：对比区随对标矩阵自动保持；点击全部关闭'
-                  : '为全部华为主品组开启匹配竞品（对比区按对标矩阵自动带出）'
+                  ? '已为全部华为主品组开启自动匹配竞品；点击全部关闭'
+                  : '为全部华为主品组开启自动匹配竞品（对比区按对标矩阵自动带出）'
             }
             onClick={() => actions.autoMatchAll()}
           />
@@ -1727,8 +1739,8 @@ function PickerPanel() {
               <span style={{ display: 'inline-flex' }}>
                 <button
                   type="button"
-                  aria-label="清空"
-                  title="清空全部组"
+                  aria-label="清空选择"
+                  title="清空全部主分析产品与对比产品"
                   className="lpl-pk-del"
                   style={{
                     display: 'inline-flex',
@@ -1745,7 +1757,7 @@ function PickerPanel() {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  <DeleteOutlined style={{ fontSize: 11 }} /> 清空
+                  <DeleteOutlined style={{ fontSize: 11 }} /> 清空选择
                 </button>
               </span>
             </Popconfirm>
@@ -1810,11 +1822,11 @@ function PickerPanel() {
             >
               {/* 组头一行（第一百四十四轮去「第 N 组」行）：「主分析产品」「对比产品」
                   标题在左，右侧按钮簇 = 匹配竞品 · 存为模板（该组）· 删组 ✕（从左到右） */}
-              <div style={{ display: 'flex', alignItems: 'center', height: 34, paddingRight: 8, flexShrink: 0 }}>
-                <span style={{ width: 16, flexShrink: 0 }} />
-                <div style={{ flex: '0 0 300px', minWidth: 0, paddingLeft: 12, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
-                <div aria-hidden style={{ width: 1, flexShrink: 0 }} />
-                <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
+              <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'stretch' : 'center', height: narrow ? 'auto' : 34, paddingRight: 8, flexShrink: 0 }}>
+                <span style={{ width: 16, flexShrink: 0, display: narrow ? 'none' : undefined }} />
+                <div style={{ flex: narrow ? '0 0 auto' : '0 0 300px', width: narrow ? '100%' : undefined, minWidth: 0, padding: narrow ? '8px 12px 0' : '0 0 0 12px', fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
+                <div aria-hidden style={{ width: narrow ? undefined : 1, flexShrink: 0 }} />
+                <div style={{ flex: narrow ? '0 0 auto' : '1 1 0', width: narrow ? '100%' : undefined, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', minHeight: narrow ? 36 : '100%', flexWrap: 'wrap', gap: 6 }}>
                   <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
                   <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <AutoMatchInline card={card} />
@@ -1863,7 +1875,7 @@ function PickerPanel() {
                   </span>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'stretch' }}>
+              <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: 'stretch' }}>
               {/* 拖拽把手（换序 = 分离面板顺序） */}
               <span
                 draggable
@@ -1891,7 +1903,8 @@ function PickerPanel() {
                   标题在组头行，与右格以分界线隔开） */}
               <div
                 style={{
-                  flex: '0 0 300px',
+                  flex: narrow ? '1 1 auto' : '0 0 300px',
+                  width: narrow ? '100%' : undefined,
                   minWidth: 0,
                   position: 'relative',
                   display: 'flex',
@@ -1911,14 +1924,15 @@ function PickerPanel() {
               </div>
 
               {/* 分界线：主分析产品 | 对比产品 */}
-              <div aria-hidden style={{ width: 1, background: color.hairline, flexShrink: 0 }} />
+              <div aria-hidden style={narrow ? { height: 1, background: color.hairline, flexShrink: 0 } : { width: 1, background: color.hairline, flexShrink: 0 }} />
 
               {/* 右格：对比产品（标题在组头行；「匹配竞品」开关固定在组头右侧
                   按钮簇；无对比时格内正中 = 提示 + 添加入口，有对比时添加入口
                   在已选条目下方居中） */}
               <div
                 style={{
-                  flex: '1 1 0',
+                  flex: narrow ? '1 1 auto' : '1 1 0',
+                  width: narrow ? '100%' : undefined,
                   minWidth: 0,
                   display: 'flex',
                   flexDirection: 'column',
@@ -1929,7 +1943,7 @@ function PickerPanel() {
               >
                 {card.compares.length === 0 ? (
                   <div style={{ flex: 1, minHeight: 92, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <div style={{ fontSize: 11, color: color.mute, lineHeight: '18px' }}>
+                    <div style={{ fontSize: 11, color: color.mute, lineHeight: '18px', textAlign: 'center', maxWidth: '100%', padding: '0 8px' }}>
                       {card.main == null
                         ? '可先挑选对比产品，补选主分析产品后即成一组'
                         : huawei

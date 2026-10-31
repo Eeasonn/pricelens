@@ -431,22 +431,32 @@ export function buildProductTree(industry?: Industry, countryCode: string = getC
   );
 }
 
-/** 树内搜索（选择产品浮窗）：按 品牌/系列/型号名 模糊匹配（大小写不敏感），
- *  命中型号的整条 祖先链（品牌→系列）保留；无命中返回空数组（调用方显空态）。 */
+const compact = (s: string): string => s.toLowerCase().replace(/\s+/g, '');
+
+/** 容量文案命中：原文包含，或忽略空格后包含（「256GB」对得上「12+256 GB」） */
+function romramHit(romram: string, query: string, queryCompact: string): boolean {
+  const raw = romram.toLowerCase();
+  return raw.includes(query) || compact(romram).includes(queryCompact);
+}
+
+/** 树内搜索（选择产品浮窗）：按 品牌 / 系列 / 型号名 / 容量 模糊匹配（大小写不敏感）。
+ *  命中型号的整条祖先链（品牌→系列）保留；只命中容量时配置列收窄到匹配项。
+ *  无命中返回空数组（调用方显空态）。 */
 export function searchProductTree(tree: BrandNode[], query: string): BrandNode[] {
   const q = query.trim().toLowerCase();
   if (!q) return tree;
+  const qCompact = compact(q);
   const out: BrandNode[] = [];
   for (const brand of tree) {
+    const brandHit = brand.title.toLowerCase().includes(q);
     const seriesOut: SeriesNode[] = [];
     for (const s of brand.series) {
-      const hit =
-        brand.title.toLowerCase().includes(q) || s.title.toLowerCase().includes(q)
-        || s.models.some((m) => m.label.toLowerCase().includes(q));
-      if (!hit) continue;
-      const models = brand.title.toLowerCase().includes(q) || s.title.toLowerCase().includes(q)
-        ? s.models
-        : s.models.filter((m) => m.label.toLowerCase().includes(q));
+      const seriesHit = brandHit || s.title.toLowerCase().includes(q);
+      const models = s.models.flatMap((m) => {
+        if (seriesHit || m.label.toLowerCase().includes(q)) return [m];
+        const romrams = m.romrams.filter((r) => romramHit(r.romram, q, qCompact));
+        return romrams.length ? [{ ...m, romrams }] : [];
+      });
       if (!models.length) continue;
       seriesOut.push({ ...s, models });
     }

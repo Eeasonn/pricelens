@@ -1,10 +1,10 @@
-// 图表卡片上沿的导航行：价格走势 / 量价走势 / 定价推演 三个平级页签。
+// 图表卡片上沿的导航行：价格走势 / 量价走势 / 量价预测 三个平级页签。
 // 第一百八十九轮定版（Eason，收敛此前双层页签讨论）：价格走势默认承载多产品
 // 对比，常驻「多产品对比」子页签退役；多平台对比降为图表工具行右端的轻量文字
 // 入口（ChartToolbar.compareEntry），进入后原位变「← 返回多产品对比」——主导航
 // 任意时刻只有一处选中（墨色 + 600 字重 + 墨色下划线），不再有父子双高亮。
 // 点「价格走势」永远落回多产品对比；在多平台对比中主导航仍只有「价格走势」选中。
-// 定价推演暂缓（并行改造中）。语义 = 导航 + 当前页状态，不再用 tablist 嵌 radiogroup。
+// 量价预测沿用独立页面承载，保留在图表导航中作为快捷入口。
 import { usePage } from '../state/PageContext';
 import { useChartContent } from '../state/chartContent';
 import { color, space } from '../theme/tokens';
@@ -57,6 +57,7 @@ export default function ChartContentBar() {
   const { setPriceSubview } = useChartContent();
   const priceOn = page === 'dashboard';
   const volumeOn = page === 'volume';
+  const forecastOn = page === 'forecast';
 
   const openPrice = (): void => {
     // 恒落回多产品对比（189 定版状态规则）：从量价走势返回、在多平台对比中点
@@ -66,6 +67,10 @@ export default function ChartContentBar() {
   };
   const openVolume = (): void => {
     if (page !== 'volume') go('volume');
+  };
+
+  const openForecast = (): void => {
+    if (page !== 'forecast') go('forecast');
   };
 
   return (
@@ -81,7 +86,7 @@ export default function ChartContentBar() {
     >
       <Tab active={priceOn} onClick={openPrice}>价格走势</Tab>
       <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
-      <Tab disabled title="即将开放">定价推演</Tab>
+      <Tab active={forecastOn} onClick={openForecast}>量价预测</Tab>
     </nav>
   );
 }

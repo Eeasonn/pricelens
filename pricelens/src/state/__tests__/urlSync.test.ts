@@ -196,3 +196,10 @@ describe('range / priceTypes / agg url params', () => {
     expect(bad.filters.agg).toBeUndefined();
   });
 });
+
+describe('new product tabs url entry', () => {
+  it('restores intelligence and forecast tabs from shared links', () => {
+    expect(withWindowSearch('?p=intelligence', () => readUrlOverrides()).page).toBe('intelligence');
+    expect(withWindowSearch('?p=forecast', () => readUrlOverrides()).page).toBe('forecast');
+  });
+});

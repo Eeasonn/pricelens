@@ -1,5 +1,21 @@
 # PriceLens · 单国价格看板打样
 
+## Agent 入口
+
+`http://localhost:5174/` 是唯一产品入口：完整看板和 PriceLens Agent 在同一页，页头的「问 PriceLens」按钮会打开 Agent 面板。Agent 请求通过 Vite 的 `/api/agent` 代理转发到本地 Agent 服务，密钥只在服务端读取，不写入前端或仓库。
+
+启动开发环境：
+
+```bash
+# 终端 1：真实看板
+npm run dev -- --port 5174 --strictPort
+
+# 终端 2：Agent 服务（使用你自己的密钥）
+ARK_API_KEY="<your-ark-api-key>" npm run agent-server
+```
+
+旧的 `price-agent-demo.html` 和 `price-agent-recorder.html` 是录制阶段的独立模拟页，已不再作为产品入口；录制素材仍保留在 `src/roadshowDemo` 和 `src/roadshowRecorder`。
+
 需求基线：`../PriceLens-单国打样-自包含落地方案.md`（唯一事实来源）
 
 ```bash

@@ -28,6 +28,8 @@ import { color, fontSize, radius, selectSoft, selectSoftInk, space } from '../th
 import { autoColumnWidth, CascadePanel, measureText } from './ProductCascader';
 import type { CascadeRowItem } from './ProductCascader';
 import type { PlatformSelection } from '../state/filtersTypes';
+import { useNarrowViewport } from '../state/useNarrowViewport';
+import { searchShopCatalog, SHOP_SEARCH_CAP } from './shopSearch';
 
 /** 行尾小注（「· N 店铺」/「· N 周」） */
 function RowTrailing({ note }: { note: string }) {
@@ -45,6 +47,8 @@ function AutoTogglePill({
   onClick,
   disabled,
   context,
+  label,
+  tall,
 }: {
   pressed: boolean;
   hint: string;
@@ -53,21 +57,25 @@ function AutoTogglePill({
   /** 胶囊右侧语境小注（第一百九十一轮，Eason 五点）：这颗「自动」当前对应的
    *  渠道名 / 解析到的平台名；不传不渲染 */
   context?: string;
+  /** 作用域名称：自动取价 / 平台自动 / 渠道自动 */
+  label: string;
+  tall?: boolean;
 }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       <button
         type="button"
         aria-pressed={pressed}
-        aria-label={`自动：${hint}`}
+        aria-label={`${label}：${hint}`}
         onClick={() => !disabled && onClick()}
         className="lpl-hit"
         style={{
           position: 'relative',
           display: 'inline-flex',
           alignItems: 'center',
-          height: 20,
-          padding: '0 10px',
+          justifyContent: 'center',
+          height: tall ? 44 : 20,
+          padding: tall ? '0 14px' : '0 10px',
           borderRadius: radius.pill,
           fontSize: 11,
           fontWeight: 600,
@@ -79,7 +87,7 @@ function AutoTogglePill({
           flexShrink: 0,
         }}
       >
-        自动
+        {label}
       </button>
       {/* 语境小注（第一百九十一轮，Eason 五点）：自动按钮旁显示对应的平台-分类-
           店铺语境，否则多颗「自动」分不清谁是谁 */}
@@ -99,18 +107,6 @@ function AutoTogglePill({
     </span>
   );
 }
-
-/** 搜索结果行（第一百六十四轮）：渠道命中 / 卖家命中统一为一条可点结果 */
-interface SearchHit {
-  key: string;
-  channelId: string;
-  seller: string | null; // null = 渠道口径（渠道内全部店铺每周最低价）
-  label: string;
-  note: string; // 行尾语境小注（渠道命中 = 平台 + 店铺数；卖家命中 = 渠道 + 平台 + 覆盖周数）
-  active: boolean;
-}
-
-const SEARCH_CAP = 50;
 
 export default function ChannelSelectPopover({
   cc,
@@ -139,6 +135,7 @@ export default function ChannelSelectPopover({
    *  调用方见 BrandLegendStrip channelCtl.autoLabel）——底部「自动」胶囊旁的语境 */
   autoLabel?: string;
 }) {
+  const narrow = useNarrowViewport();
   // 平台 → 渠道（仅当前国家）：组内渠道保持维表序，组序 = 平台首次出现序
   const rows = useMemo<{ platform: string; shops: DimChannel[] }[]>(() => {
     const byPlatform = new Map<string, DimChannel[]>();
@@ -196,57 +193,16 @@ export default function ChannelSelectPopover({
   const shopTotalOf = (r: { shops: DimChannel[] }): number => r.shops.reduce((a, c) => a + c.shops, 0);
   const noteW = (n: number): number => measureText(`· ${n} 店铺`) * (fontSize.caption / 13);
 
-  // ---- 全局搜索（第一百六十四轮）：渠道显示名 / 平台名 / 卖家店铺名 跨平台匹配 ----
-  const q = query.trim().toLowerCase();
-  const hits = useMemo<SearchHit[]>(() => {
-    if (!q) return [];
-    const out: SearchHit[] = [];
-    for (const r of rows) {
-      for (const c of r.shops) {
-        if (c.display_name.toLowerCase().includes(q) || r.platform.toLowerCase().includes(q)) {
-          out.push({
-            key: `ch:${c.channel_id}`,
-            channelId: c.channel_id,
-            seller: null,
-            label: c.display_name,
-            note: `· ${r.platform} · ${c.shops} 店铺`,
-            active: selectedShopId === c.channel_id && selectedSeller == null,
-          });
-        }
-        for (const s of sellersOfChannel(cc, c.channel_id)) {
-          if (!s.seller.toLowerCase().includes(q)) continue;
-          out.push({
-            key: `sl:${c.channel_id}:${s.seller}`,
-            channelId: c.channel_id,
-            seller: s.seller,
-            label: s.seller,
-            note: `· ${c.display_name} · ${r.platform} · ${s.weeks} 周`,
-            active: selectedShopId === c.channel_id && selectedSeller === s.seller,
-          });
-        }
-        if (out.length >= SEARCH_CAP) return out.slice(0, SEARCH_CAP);
-      }
-    }
-    return out;
-  }, [q, rows, cc, selectedShopId, selectedSeller]);
-  const hitTotal = useMemo(() => {
-    if (!q) return 0;
-    let n = 0;
-    for (const r of rows) {
-      for (const c of r.shops) {
-        if (c.display_name.toLowerCase().includes(q) || r.platform.toLowerCase().includes(q)) n += 1;
-        for (const s of sellersOfChannel(cc, c.channel_id)) {
-          if (s.seller.toLowerCase().includes(q)) n += 1;
-        }
-      }
-    }
-    return n;
-  }, [q, rows, cc]);
+  // 跨平台搜索：渠道显示名 / 平台名 / 卖家名。修改店铺单选，点结果即替换。
+  const q = query.trim();
+  const found = useMemo(() => searchShopCatalog(cc, q), [cc, q]);
+  const hits = found.hits;
+  const hitTotal = found.total;
 
   const hitItems: CascadeRowItem[] = hits.map((h) => ({
     key: h.key,
     label: h.label,
-    active: h.active,
+    active: selectedShopId === h.channelId && selectedSeller === h.seller,
     onLabelClick: () => commitSeller(h.channelId, h.seller),
     trailing: <RowTrailing note={h.note} />,
   }));
@@ -308,21 +264,19 @@ export default function ChannelSelectPopover({
   });
   const shopExtraW = Math.max(0, ...(activeRow?.shops ?? []).map((s) => noteW(s.shops))) + space.xs;
 
+  const panelWidth = narrow ? 'min(420px, calc(100vw - 48px))' : undefined;
   return (
-    <div>
-      {/* 顶部固定搜索行（第一百六十四轮，Eason：像产品筛选一样固定一行，跨平台可搜）。
-          同步平台筛选与搜索并排同行（第一百八十四轮，Eason：不再单独占一行）；
-          开关只作用于本组（本组对比品跟随本组主产品） */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: `8px ${space.md}px 6px`, borderBottom: `1px solid ${color.hairline}` }}>
+    <div style={{ width: panelWidth, maxWidth: '100%', minWidth: 0 }}>
+      <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'stretch' : 'center', gap: 8, padding: `8px ${space.md}px 6px`, borderBottom: `1px solid ${color.hairline}` }}>
         <Input
-          size="small"
+          size={narrow ? 'middle' : 'small'}
           allowClear
           prefix={<SearchOutlined style={{ color: color.mute }} />}
-          placeholder="搜索平台 / 店铺"
-          aria-label="搜索平台 / 店铺"
+          placeholder="搜索平台 / 渠道 / 卖家"
+          aria-label="搜索平台、渠道或卖家"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ height: 24, fontSize: fontSize.caption, width: 232 }}
+          style={{ height: narrow ? 44 : 24, fontSize: narrow ? fontSize.bodySm : fontSize.caption, width: narrow ? '100%' : 232 }}
         />
         {syncCtl && (
           <button
@@ -339,14 +293,15 @@ export default function ChannelSelectPopover({
               flexShrink: 0,
               display: 'inline-flex',
               alignItems: 'center',
-              height: 20,
-              padding: '0 8px',
+              justifyContent: 'center',
+              height: narrow ? 44 : 20,
+              padding: narrow ? '0 12px' : '0 8px',
               borderRadius: radius.pill,
               border: `1px solid ${syncCtl.active ? '#0070f3' : color.hairlineStrong}`,
               background: syncCtl.active ? selectSoft : color.canvas,
               color: syncCtl.active ? selectSoftInk : color.mute,
               font: 'inherit',
-              fontSize: 11,
+              fontSize: narrow ? 13 : 11,
               fontWeight: 600,
               lineHeight: '18px',
               cursor: 'pointer',
@@ -359,16 +314,19 @@ export default function ChannelSelectPopover({
       </div>
       {q ? (
         <>
-          <CascadePanel open columns={[{ items: hitItems, width: hitColWidth }]} />
+          <CascadePanel open fill={narrow} rowHeight={narrow ? 44 : undefined} columns={[{ items: hitItems, width: narrow ? undefined : hitColWidth }]} />
           {hitTotal > hits.length && (
             <div style={{ padding: `5px ${space.md}px 2px`, fontSize: fontSize.caption, color: color.mute }}>
-              共 {hitTotal} 个匹配，仅显示前 {SEARCH_CAP} 个，可继续输入缩小范围
+              共 {hitTotal} 个匹配，仅显示前 {SHOP_SEARCH_CAP} 个，可继续输入缩小范围
             </div>
           )}
         </>
-      ) : (
+      ) : null}
+      <div style={{ display: q ? 'none' : undefined }}>
         <CascadePanel
           open
+          stepped={narrow}
+          levelLabels={['平台', '渠道', '卖家']}
           columns={[
             { items: platformItems, extraW: platformExtraW },
             { items: shopItems, extraW: shopExtraW },
@@ -376,14 +334,13 @@ export default function ChannelSelectPopover({
               ? [{
                   items: sellerItems,
                   width: sellerColWidth,
-                  // 第一百六十二轮（Eason）：渠道内「自动」放店铺列顶部（不放整卡左上角）
                   header: (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.xs }}>
-                      {/* 语境 = 对应渠道名（第一百九十一轮，Eason 五点：店铺层级的
-                          「自动」旁要知道是哪个渠道的自动） */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.xs, width: '100%' }}>
                       <AutoTogglePill
+                        label="渠道自动"
+                        tall={narrow}
                         pressed={selectedShopId === sellerPane && selectedSeller == null}
-                        hint="显示每周最低价店铺"
+                        hint="显示该渠道内每周最低价卖家"
                         context={paneChannel?.display_name ?? undefined}
                         onClick={() => commitSeller(sellerPane, null)}
                       />
@@ -393,13 +350,12 @@ export default function ChannelSelectPopover({
               : []),
           ]}
         />
-      )}
-      {/* 底部「自动」：product 域 = 产品级每周最低在架价（默认店铺 → 预填主店
-          → 默认平台，口径与数据口径说明弹窗同句，第一百八十五轮统一）；
-          platform 域（店铺 chip 修改入口）= 该平台内每周最低价店铺 */}
+      </div>
       <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
         {scope === 'platform' ? (
           <AutoTogglePill
+            label="平台自动"
+            tall={narrow}
             pressed={isPlatformAuto}
             hint="该平台内每周最低价店铺"
             disabled={isPlatformAuto}
@@ -408,6 +364,8 @@ export default function ChannelSelectPopover({
           />
         ) : (
           <AutoTogglePill
+            label="自动取价"
+            tall={narrow}
             pressed={isAuto}
             hint="每周最低在架价：优先取默认店铺；未设置时取预填主店；仍无则取默认平台。"
             disabled={isAuto}

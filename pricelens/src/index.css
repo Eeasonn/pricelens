@@ -46,6 +46,33 @@ a:focus-visible,
   inset: -6px;
 }
 
+/* 平台入口：无框，透明外扩把约 16px 的视觉高度扩到 44px 触控 */
+.lpl-platform-entry:hover {
+  color: #171717 !important;
+}
+.lpl-platform-entry::after {
+  content: '';
+  position: absolute;
+  inset: -14px -8px;
+}
+
+button:hover .lpl-group-chip {
+  background: #f4f8ff;
+}
+.lpl-group-chip {
+  container-type: inline-size;
+}
+@container (max-width: 168px) {
+  .lpl-compare-count { display: none; }
+}
+
+.lpl-period-summary { container-type: inline-size; }
+.lpl-period-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
 /* 时间筛选器：沿用 Ant Design RangePicker 结构，但把周期值压到 12px，
    让 2025-W39 → 2026-W41 在左侧窄栏里保持完整可读。 */
 .xbrush-range-picker.ant-picker {
@@ -347,9 +374,51 @@ button.lpl-map-card:hover {
 .lpl-bm-cfg { width: 150px; flex-shrink: 0; }
 @media (max-width: 639.98px) {
   .lpl-alert-ov { grid-template-columns: 1fr; }
+  .lpl-alert-toolbar { align-items: stretch !important; }
+  .lpl-alert-toolbar > h3 { flex: 0 0 100%; }
+  .lpl-alert-toolbar .lpl-alert-add-monitor { width: 100% !important; min-width: 0 !important; }
+  .lpl-alert-toolbar .ant-segmented { max-width: 100%; overflow-x: auto; }
+  .lpl-alert-toolbar .ant-select { max-width: 100% !important; }
   .lpl-alert-row { flex-wrap: wrap; row-gap: 2px; }
   .lpl-alert-row .lpl-alert-name { white-space: normal; }
   .lpl-bm-cfg { width: 100%; }
+
+  /* 级联浮层按触发器右缘展开时会超出左边界。只收这类浮层，Popconfirm 仍跟触发器。 */
+  .ant-popover.lpl-cascade-popover {
+    left: 8px !important;
+    right: auto !important;
+    max-width: calc(100vw - 16px) !important;
+  }
+  /* 时间面板：窄屏只留一张日历，并限制弹层不超过视口 */
+  .xbrush-range-popup {
+    max-width: calc(100vw - 16px) !important;
+  }
+  .xbrush-range-popup .ant-picker-panel-container {
+    max-width: calc(100vw - 16px);
+  }
+  .xbrush-range-popup .ant-picker-panels > .ant-picker-panel ~ .ant-picker-panel {
+    display: none !important;
+  }
+  .xbrush-range-popup .ant-picker-panel {
+    width: 100% !important;
+  }
+  .xbrush-range-popup .ant-picker-header {
+    min-height: 44px;
+    height: 44px;
+  }
+  .xbrush-range-popup .ant-picker-header button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .xbrush-range-popup .ant-picker-cell-inner {
+    min-width: 36px;
+    height: 40px;
+    line-height: 40px;
+  }
+  .xbrush-range-popup .ant-segmented-item {
+    min-height: 44px;
+    line-height: 44px;
+  }
 }
 
 /* ============================================================
@@ -368,3 +437,13 @@ button.lpl-map-card:hover {
 .lpl-card-scroll::-webkit-scrollbar-track { background: transparent; }
 .lpl-card-scroll::-webkit-scrollbar-thumb { background: #d6d6d6; border-radius: 4px; }
 .lpl-card-scroll::-webkit-scrollbar-thumb:hover { background: #bdbdbd; }
+
+/* Agent 在平板/手机上占用完整工作区，避免固定窄抽屉遮住筛选器；桌面保留 dock。 */
+@media (max-width: 1023.98px) {
+  .lpl-agent-panel { top: 0 !important; width: 100vw !important; border-left: none !important; }
+}
+
+/* 新增情报与预测页的两栏内容在窄屏自动改为单列。 */
+@media (max-width: 760px) {
+  [data-lpl-forecast-grid] { grid-template-columns: 1fr !important; }
+}

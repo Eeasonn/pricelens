@@ -202,8 +202,11 @@ export interface ChartProps {
   showYTicks?: boolean;
   onShowYTicks?: (v: boolean) => void;
   /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立——两个轴
-   *  （数值刻度 / 价格档位）各自可显隐；关 = 轴列不画档位带，轴区总宽恒定不变 */
+   *  （数值刻度 / 价格档位）各自可显隐；关 = 轴列不画档位带，轴区总宽恒定不变。
+   *  受控传 onShowTiers；缺省用内部状态（多平台对比等自带工具行的场景必须接上，
+   *  否则勾选恒为开、点击无效）。 */
   showTiers?: boolean;
+  onShowTiers?: (v: boolean) => void;
   /** 第八十二轮：名称药丸全集（含已屏蔽系列——药丸仍渲染为虚线置灰态）；缺省 = series */
   nameSeries?: Series[];
   /** 屏蔽中的系列 key 集（与 nameSeries 搭配；药丸点击 → onToggleHidden 切换） */
@@ -307,6 +310,19 @@ const H_ANIM_THRESHOLD_PX = 2 * TICK_PX;
 const H_ANIM_MS = 280;
 
 /** 折后价/RRP 切换胶囊已迁 ChartToolbar（第五十四轮追补，随工具行整体抽离） */
+
+/** 周环比 / 折扣率徽章文案。列宽按它估算，避免「+12.5%」超出 38px 槽位。 */
+function fmtSignedPct(v: number): string {
+  const n = Math.round(Math.abs(v) * 1000) / 10;
+  return `${v > 0 ? '+' : v < 0 ? '−' : '±'}${n}%`;
+}
+
+/** 表头三个汉字与徽章里较长的一边，再加左右内边距。 */
+function rateColWidth(label: string, values: string[]): number {
+  const labelW = label.length * 11 + 6;
+  const valueW = values.reduce((max, text) => Math.max(max, text ? Math.round(text.length * 6.6) + 14 : 0), 0);
+  return Math.max(52, labelW, valueW);
+}
 
 /** 悬停浮窗折扣率胶囊（第五十二轮）：时点卡 DiscountBadge 同语言——0% 中性蓝、
  *  深折扣（≤−15%）与溢价转琥珀；仅折后价口径下且双价齐全才出 */
@@ -481,6 +497,9 @@ export default function Chart(props: ChartProps) {
   const [innerShowYTicks, setInnerShowYTicks] = useState(true);
   const showYTicks = props.showYTicks ?? innerShowYTicks;
   const commitShowYTicks = props.onShowYTicks ?? setInnerShowYTicks;
+  const [innerShowTiers, setInnerShowTiers] = useState(true);
+  const showTiers = props.showTiers ?? innerShowTiers;
+  const commitShowTiers = props.onShowTiers ?? setInnerShowTiers;
   // Y 轴自动压缩（第二十轮）：齿轮弹层内开关。第三十五轮起默认关 = Y 轴完全连续
   const [innerYCompress, setInnerYCompress] = useState(false);
   const yCompress = props.yCompress ?? innerYCompress;
@@ -903,7 +922,7 @@ export default function Chart(props: ChartProps) {
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
   const tierValues = useMemo(() => collectTierValues(series, priceTypes), [series, priceTypes]);
 
-  const showTierBand = currency === 'usd' && geom != null && props.axisChrome !== false && props.showTiers !== false;
+  const showTierBand = currency === 'usd' && geom != null && props.axisChrome !== false && showTiers;
   const tierBoxes = useMemo(
     () => buildTierBoxes({ enabled: showTierBand, geom, tierValues, industry: filterState.industry }),
     [showTierBand, geom, tierValues, filterState.industry],
@@ -1029,6 +1048,8 @@ export default function Chart(props: ChartProps) {
                 onSliderScale={commitSliderScale}
                 showYTicks={showYTicks}
                 onShowYTicks={commitShowYTicks}
+                showTiers={showTiers}
+                onShowTiers={commitShowTiers}
                 yCompress={yCompress}
                 onYCompress={commitYCompress}
                 // 追补⑤修：必须传「原始三态」——此前传解析后的二值形态，
@@ -1074,13 +1095,13 @@ export default function Chart(props: ChartProps) {
                     // 刻度文字右对齐、叠画在档位区块背景上（区块右段）；第一百八十五轮
                     // 起字号取共享常量 Y_TICK_FONT=10（原 8px 过小不可读）
                     left: tickZoneRight - TICK_DASH_W - TICK_ZONE_W,
-                    top: Math.round(t.y) - 7,
+                    top: Math.round(t.y) - 8,
                     width: TICK_ZONE_W,
                     paddingRight: 3,
                     boxSizing: 'border-box',
                     textAlign: 'right',
                     fontSize: Y_TICK_FONT,
-                    lineHeight: '14px',
+                    lineHeight: '16px',
                     color: color.mute,
                     pointerEvents: 'none',
                     zIndex: 2,
@@ -1430,6 +1451,20 @@ export default function Chart(props: ChartProps) {
             );
             const priceW = Math.round(priceCh * 8.4) + 8; // 数值 14px tabular：数字 ≈0.6em
             const rrpW = Math.max(30, Math.round(rrpCh * 7.2) + 8); // 数值 12px tabular
+            const rateLabel = props.tipMode === 'discount' ? '折扣率' : '周环比';
+            const rateValues = rows.map(({ s, v }) => {
+              const pt = s.points[tipIdx];
+              if (props.tipMode === 'discount') {
+                const disc = priceTypes.discounted && pt?.price != null && pt?.rrp != null && pt.rrp > 0 ? pt.price / pt.rrp - 1 : null;
+                if (disc == null) return '';
+                const pct = Math.round(Math.abs(disc) * 100);
+                return pct === 0 ? '0%' : `${disc < 0 ? '−' : '+'}${pct}%`;
+              }
+              const prevV = tipIdx > 0 ? primaryPriceOf(s.points[tipIdx - 1], priceTypes) : null;
+              const wow = prevV != null && prevV > 0 && v != null ? v / prevV - 1 : null;
+              return wow == null ? '' : fmtSignedPct(wow);
+            });
+            const rateW = rateColWidth(rateLabel, rateValues);
             const body = (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
@@ -1446,8 +1481,8 @@ export default function Chart(props: ChartProps) {
                   <span aria-hidden style={{ width: 1, height: 13, background: color.hairlineStrong, flexShrink: 0 }} />
                   <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>折后价</span>
                   <span aria-hidden style={{ width: 1, height: 13, background: color.hairlineStrong, flexShrink: 0 }} />
-                  <span style={{ width: 38, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    {props.tipMode === 'discount' ? '折扣率' : '周环比'}
+                  <span style={{ width: rateW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {rateLabel}
                   </span>
                   {/* 尾部快照占位已随快照入口一并删除（188 轮）：两侧 flex 分配必须
                       对称，否则数据行名称列比表头宽、整列右移错位 */}
@@ -1500,17 +1535,18 @@ export default function Chart(props: ChartProps) {
                           {fmt_mm(v)}
                         </span>
                         <span aria-hidden style={{ width: 1, height: 20, background: color.hairlineStrong, flexShrink: 0 }} />
-                        <span style={{ width: 38, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}>
+                        <span style={{ width: rateW, flexShrink: 0, display: 'inline-flex', justifyContent: 'center', overflow: 'hidden' }}>
                           {props.tipMode !== 'discount'
                             ? (wow != null && (
                                 <span
                                   className="tnum"
-                                  title={`折后价较上一周期${wow > 0 ? `+${Math.round(Math.abs(wow) * 1000) / 10}%` : wow < 0 ? `−${Math.round(Math.abs(wow) * 1000) / 10}%` : '持平'}`}
+                                  title={`折后价较上一周期${fmtSignedPct(wow)}`}
                                   // 第一百八十五轮（外部 UX 审计）：时间涨跌全站唯一口径
                                   // = 涨蓝（color.link）跌琥珀（#b45309），原「涨琥珀跌蓝」翻转；
                                   // 琥珀态底色随 MiniDiscountBadge 同款 warningSoft，保证小字对比度
                                   style={{
                                     flexShrink: 0,
+                                    maxWidth: '100%',
                                     padding: '0 5px',
                                     fontSize: 10,
                                     lineHeight: '15px',
@@ -1519,9 +1555,10 @@ export default function Chart(props: ChartProps) {
                                     color: wow > 0.005 ? color.link : wow < -0.005 ? '#b45309' : selectSoftInk,
                                     background: wow < -0.005 ? color.warningSoft : selectSoft,
                                     opacity: dim ? 0.3 : undefined,
+                                    whiteSpace: 'nowrap',
                                   }}
                                 >
-                                  {wow > 0 ? '+' : wow < 0 ? '−' : '±'}{Math.round(Math.abs(wow) * 1000) / 10}%
+                                  {fmtSignedPct(wow)}
                                 </span>
                               ))
                             : (disc != null && <MiniDiscountBadge discount={disc} dim={dim} />)}
@@ -1620,7 +1657,7 @@ export default function Chart(props: ChartProps) {
             const x0 = xPxOf(geom, tipIdx);
             const nameEst = Math.max(...rows.map((r) => curveNameOf(r.s).length)) * 6.2 + 14;
             const hasSnap = rows.some((r) => r.s.points[tipIdx]?.price != null);
-            const W = Math.ceil(20 + 6 * 6 + 2 + 38 + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasSnap ? 16 : 0);
+            const W = Math.ceil(20 + 6 * 6 + 2 + rateW + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasSnap ? 16 : 0);
             const flip = x0 + 16 + W > geom.plotLeft + geom.plotWidth;
             const left = flip ? x0 - 16 - W : x0 + 16;
             const top = Math.min(

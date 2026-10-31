@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject,
 import type { Granularity } from '../../dataModel/types';
 import { axisTickPlan, hideOverlappingTicks, MIN_WINDOW, panWindow } from '../../chart/PriceTrend/helpers';
 import { color, font, radius, selectAccent, trackColors } from '../../theme/tokens';
+import { ViewWindowCaption } from '../../chart/PriceTrend/XBrush';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 type DragKind = 'start' | 'end' | 'pan';
@@ -74,7 +75,7 @@ export default function PanelTimeTrack(props: {
   const EDGE_PAD = 3;
   const textWOf = (idx: number): number => {
     const year = plan.yearText(idx);
-    return Math.max(measureTickText(plan.dateText(idx), 10), year ? measureTickText(year, 10) : 0);
+    return Math.max(measureTickText(plan.dateText(idx), 12), year ? measureTickText(year, 12) : 0);
   };
   const midIdxAll = plan.indexes.filter((i) => !plan.isEdge(i));
   // 第一百五十二轮：中间刻度只画线不标日期，仅换年刻度带标签（拖柄首尾另由
@@ -149,20 +150,21 @@ export default function PanelTimeTrack(props: {
   const midLabelStyle = (i: number): CSSProperties => ({
     position: 'absolute', left: `${pct(i + lo) + 0.5 / n}%`, top: 26, transform: 'translateX(-50%)',
     display: 'flex', flexDirection: 'column', alignItems: 'center',
-    fontSize: 10, lineHeight: '12px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums',
+    fontSize: 12, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums',
     color: color.mute, whiteSpace: 'nowrap', pointerEvents: 'none',
   });
 
   const edgeLabelStyle = (translate: string): CSSProperties => ({
     position: 'absolute', top: 26, transform: `translateX(${translate})`,
     display: 'flex', flexDirection: 'column', alignItems: 'center',
-    fontSize: 10, lineHeight: '12px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums',
+    fontSize: 12, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums',
     color: color.body, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none',
     // 第一百二十三轮：白底 + 左右 padding——与相邻灰色刻度叠上时兜底遮盖
     background: color.canvas, padding: '0 3px',
   });
 
   return (
+    <div>
     <div
       ref={(el) => {
         trackRef.current = el;
@@ -172,7 +174,7 @@ export default function PanelTimeTrack(props: {
     >
       <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 20, borderRadius: 5, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
       <div
-        title="拖动本图的查看时间"
+        title="拖动调整查看窗口，不改变筛选范围"
         aria-label="平移本图时间段"
         style={{
           position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: 20,
@@ -232,6 +234,8 @@ export default function PanelTimeTrack(props: {
       >
         <span style={gripStyle('end')} />
       </div>
+    </div>
+    <ViewWindowCaption />
     </div>
   );
 }

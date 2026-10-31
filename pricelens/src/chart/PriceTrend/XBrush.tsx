@@ -20,7 +20,8 @@ import zhCN from 'antd/locale/zh_CN';
 import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { bucketIdOfDate, dateOfBucket } from '../../components/FilterBar/timeUtils';
 import { filterBarTheme } from '../../components/FilterBar';
-import type { Granularity } from '../../dataModel/types';
+import type { AggMode, Granularity } from '../../dataModel/types';
+import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { axisTickPlan, fullBucketLabel, GRID, hideOverlappingTicks, MIN_WINDOW, panWindow, type Bucket } from './helpers';
 import { color, font, fontSize, radius, selectAccent, selectSoft, selectSoftInk, trackColors } from '../../theme/tokens';
 
@@ -36,6 +37,9 @@ export interface TimeRangeClusterProps {
   /** 在时间设置面板中切换图表粒度。 */
   onGranularityChange: (granularity: Granularity) => void;
   onToggleAdaptive: () => void;
+  /** 月/季聚合。周粒度不展示；不传则面板里不出现聚合方式。 */
+  agg?: AggMode;
+  onAggChange?: (agg: AggMode) => void;
   /** 弹层展开方向：位于页面顶部时向下展开。 */
   placement?: 'topLeft' | 'bottomLeft' | 'bottomRight';
   /** 弹层挂载容器（缺省挂在组件自身根节点）。 */
@@ -49,7 +53,8 @@ export interface TimeRangeClusterProps {
  *  raf，在 rAF 挂起的嵌入 webview 里永不执行 → 弹层关不掉，见下方 effect 注）；
  *  ③再点输入框 = 关闭切换（rc-picker 原生对输入框点击恒保持打开）。 */
 export function TimeRangeCluster(props: TimeRangeClusterProps) {
-  const { buckets, lo, hi, adaptive, granularity, onRangeChange, onGranularityChange, onToggleAdaptive, placement = 'topLeft', popupContainerRef } = props;
+  const { buckets, lo, hi, adaptive, granularity, onRangeChange, onGranularityChange, onToggleAdaptive, agg, onAggChange, placement = 'topLeft', popupContainerRef } = props;
+  const narrow = useNarrowViewport();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [rangeOpen, setRangeOpen] = useState(false);
   const reopenPickerRef = useRef(false);
@@ -96,6 +101,20 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
       document.removeEventListener('keydown', onDocKeyDown, true);
     };
   }, [rangeOpen]);
+  // 窄屏双日历会把左侧年月挤出视口。隐藏第二张之后，再把弹层左缘拉回屏幕内。
+  useEffect(() => {
+    if (!rangeOpen || !narrow) return undefined;
+    const fit = (): void => {
+      const popup = document.querySelector<HTMLElement>('.xbrush-range-popup');
+      if (!popup) return;
+      const rect = popup.getBoundingClientRect();
+      const left = parseFloat(popup.style.left || '0');
+      if (rect.left < 8) popup.style.left = `${left + (8 - rect.left)}px`;
+      else if (rect.right > window.innerWidth - 8) popup.style.left = `${left - (rect.right - (window.innerWidth - 8))}px`;
+    };
+    const frame = window.requestAnimationFrame(fit);
+    return () => window.cancelAnimationFrame(frame);
+  }, [rangeOpen, narrow, granularity]);
   if (n === 0) return null;
 
   const formatId = (id: string): string => {
@@ -136,15 +155,34 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
     onGranularityChange(next);
   };
   const renderPickerPanel = (panel: ReactNode): ReactNode => (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 10px 5px', borderBottom: `1px solid ${color.hairline}` }}>
-        <span style={{ color: color.body, fontSize: fontSize.caption, fontWeight: 600 }}>时间范围</span>
-        <Segmented
-          size="small"
-          value={granularity}
-          options={[{ label: '周', value: 'week' }, { label: '月', value: 'month' }, { label: '季', value: 'quarter' }]}
-          onChange={(value) => handleGranularityChange(value as Granularity)}
-        />
+    <div style={{ display: 'flex', flexDirection: 'column', maxWidth: narrow ? 'calc(100vw - 16px)' : undefined }}>
+      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px 6px', borderBottom: `1px solid ${color.hairline}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ color: color.body, fontSize: fontSize.caption, fontWeight: 600 }}>筛选范围</span>
+          <Segmented
+            size={narrow ? 'middle' : 'small'}
+            aria-label="时间粒度"
+            value={granularity}
+            options={[{ label: '周', value: 'week' }, { label: '月', value: 'month' }, { label: '季', value: 'quarter' }]}
+            onChange={(value) => handleGranularityChange(value as Granularity)}
+          />
+        </div>
+        {granularity !== 'week' && onAggChange && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: color.body, fontSize: fontSize.caption, fontWeight: 600 }}>聚合方式</span>
+            <Segmented
+              size={narrow ? 'middle' : 'small'}
+              aria-label="价格聚合方式"
+              value={agg ?? 'avg'}
+              options={[{ label: '平均价', value: 'avg' }, { label: '最低价', value: 'min' }]}
+              onChange={(value) => onAggChange(value as AggMode)}
+            />
+            <span style={{ color: color.mute, fontSize: 11 }}>按周聚合</span>
+          </div>
+        )}
+        <div style={{ color: color.mute, fontSize: 11, lineHeight: '16px' }}>
+          跟随产品有效价格范围；手动选择后退出自动
+        </div>
       </div>
       {panel}
     </div>
@@ -160,21 +198,21 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
   });
 
   return (
-    <div ref={rootRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+    <div ref={rootRef} style={{ position: 'relative', display: 'flex', alignItems: narrow ? 'stretch' : 'center', flexDirection: narrow ? 'column' : 'row', gap: 6, minWidth: 0, width: narrow ? '100%' : undefined }}>
       <button
         type="button"
-        aria-label="自动时间范围"
+        aria-label={adaptive ? '自动时间' : '回到自动时间'}
         aria-pressed={adaptive}
-        title={adaptive ? '自动覆盖所选产品的最早～最新有价时间' : '恢复所选产品的自动时间范围'}
+        title={adaptive ? '自动时间：跟随产品有效价格范围；手动选择后退出自动' : '回到自动时间范围'}
         onClick={onToggleAdaptive}
         style={{
-          height: 30, padding: '0 9px', borderRadius: radius.control,
+          height: narrow ? 44 : 30, padding: narrow ? '0 12px' : '0 9px', borderRadius: radius.control,
           border: `1px solid ${adaptive ? selectAccent : color.hairlineStrong}`,
           background: adaptive ? selectSoft : color.canvas,
           color: adaptive ? selectSoftInk : color.body,
           font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
         }}
-      >自动</button>
+      >{adaptive ? '自动时间' : '回到自动'}</button>
       {/* 输入框再点 = 开↔关切换（同步 setState）：打开/关闭都不依赖 rc-picker
           内部那帧 raf（受控开启同样被延迟，挂起环境里点输入框打不开），与关闭
           兜底同一思路。display:contents 不产生盒模型，选择器沿用簇内原 flex 尺寸。
@@ -217,7 +255,7 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
             placement={placement}
             transitionName="" // 弹层即时开关：不依赖 CSS transitionend（嵌入 webview 不回报，见上注）
             getPopupContainer={() => popupContainerRef?.current ?? rootRef.current ?? document.body}
-            style={{ minWidth: 0, flex: '1 1 240px', width: 240, height: 30 }}
+            style={{ minWidth: 0, flex: '1 1 180px', width: narrow ? '100%' : 240, height: narrow ? 44 : 30 }}
           />
         </ConfigProvider>
       </span>
@@ -320,7 +358,7 @@ export default function XBrush(props: XBrushProps) {
   const EDGE_PAD = 3;
   const labelWOf = (idx: number): number => {
     const year = plan.yearText(idx);
-    return Math.max(measureTickText(plan.dateText(idx), 11), year ? measureTickText(year, 11) : 0);
+    return Math.max(measureTickText(plan.dateText(idx), 12), year ? measureTickText(year, 12) : 0);
   };
   const xPxOfTick = (i: number): number => ((i - lo + 0.5) / span) * trackW;
   const edgeIdx = plan.indexes.filter((i) => plan.isEdge(i));
@@ -388,7 +426,7 @@ export default function XBrush(props: XBrushProps) {
   const labelStyle = (i: number, edge: boolean): CSSProperties => ({
     position: 'absolute', left: `${tickPct(i)}%`, top: 34, transform: 'translateX(-50%)',
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
-    fontSize: 11, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums',
+    fontSize: 12, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums',
     color: edge ? color.body : color.mute, fontWeight: edge ? 600 : 400, whiteSpace: 'nowrap',
     // 第一百二十三轮：拖柄两端标签白底 + 左右 padding——与相邻灰色刻度叠上时兜底遮盖
     background: edge ? color.canvas : undefined,
@@ -422,7 +460,7 @@ export default function XBrush(props: XBrushProps) {
       >
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 28, borderRadius: 6, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
           <div
-            title="拖动调整下方图表的时间范围"
+            title="拖动调整查看窗口，不改变筛选范围"
             aria-label="平移时间段"
             style={{
               position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: 28,
@@ -480,6 +518,19 @@ export default function XBrush(props: XBrushProps) {
             <span style={handleGripStyle('end')} />
           </div>
       </div>
+      <ViewWindowCaption />
+    </div>
+  );
+}
+
+/** 说明行占位：marginTop 2 + lineHeight 16。量价页同步按钮按这个高度让开轨道带。 */
+export const VIEW_WINDOW_CAPTION_H = 18;
+
+/** 图下查看窗口的常驻说明。轨道本身只缩放显示，不改顶部筛选范围。 */
+export function ViewWindowCaption() {
+  return (
+    <div style={{ fontSize: 11, lineHeight: '16px', color: color.mute, marginTop: 2 }}>
+      查看窗口，仅缩放显示，不改变筛选范围
     </div>
   );
 }

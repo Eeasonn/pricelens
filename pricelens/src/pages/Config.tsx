@@ -198,7 +198,7 @@ export default function Config() {
   };
 
   return (
-    <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }}>
+    <div style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }} data-lpl-scroll>
       {/* 第二十八轮：1440 → 1280，与看板同最低宽度 */}
       <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader；第一百一十五轮：右上「保存配置」删除——
@@ -329,6 +329,7 @@ export default function Config() {
                         size="small"
                         allowClear
                         placeholder="未维护"
+                        aria-label={`上一代关系：${r.label}`}
                         style={{ width: 170, flexShrink: 0 }}
                         value={prevMap[r.modelId] ?? undefined}
                         options={prevRows
@@ -341,7 +342,7 @@ export default function Config() {
                           color={manual ? 'blue' : 'default'}
                           style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px', flexShrink: 0 }}
                         >
-                          {manual ? '手动' : '自动'}
+                          {manual ? '手动' : '自动来源'}
                         </Tag>
                       </Tooltip>
                     </div>

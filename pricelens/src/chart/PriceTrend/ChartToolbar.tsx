@@ -205,6 +205,12 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     (props.onLabelMode != null && props.labelMode === 'detail') ||
     props.pointPanelOpen === true ||
     props.changeThreshold != null;
+  const gearDirty =
+    (props.sliderScale != null && Math.abs(props.sliderScale - 1) > 0.001) ||
+    props.showYTicks === false ||
+    props.showTiers === false ||
+    props.yCompress === true ||
+    (props.lineShape != null && props.lineShape !== 'auto');
   // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
   // ——与每格高度滑杆「松手生效」同一语言，避免拖动全程逐帧触发提醒重算
   const [dragThreshold, setDragThreshold] = useState<number | null>(null);
@@ -267,7 +273,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
         </div>
       }
     >
-      <RoundIconButton title="Y 轴显示设置" aria-label="Y 轴显示设置">
+      <RoundIconButton title={gearDirty ? 'Y 轴显示设置（已修改）' : 'Y 轴显示设置'} aria-label="Y 轴显示设置" active={gearDirty}>
         <SettingOutlined style={{ fontSize: 12 }} />
       </RoundIconButton>
     </Popover>

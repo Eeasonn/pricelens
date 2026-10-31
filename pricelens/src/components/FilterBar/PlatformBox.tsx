@@ -32,6 +32,7 @@ import { defaultChannelOf, defaultPlatformOf, sellersOfChannel } from '../../dat
 import { dimChannel } from '../../data';
 import type { DimChannel } from '../../dataModel/types';
 import { color, fontSize, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
+import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { normalizePlatformSelection } from '../../state/urlSync';
 import { autoColumnWidth, CascadePanel, CascadeTrigger, measureText } from '../ProductCascader';
 import type { CascadeRowItem } from '../ProductCascader';
@@ -72,6 +73,7 @@ const TRIGGER_CHROME = 2 * (space.sm + 4) + space.sm + 10 + 4;
 export default function PlatformBox() {
   const { state, actions } = useFilters();
   const cc = state.countryCode;
+  const narrow = useNarrowViewport();
 
   // 平台 → 渠道（仅当前国家）：组内渠道保持维表序，组序 = 平台首次出现序
   const rows = useMemo<{ platform: string; shops: DimChannel[] }[]>(() => {
@@ -266,40 +268,61 @@ export default function PlatformBox() {
       }}
       arrow={false}
       placement="bottomRight"
+      destroyTooltipOnHide
+      classNames={{ root: 'lpl-cascade-popover' }}
       styles={{ body: { padding: 0 } as const }}
       content={
-        <div>
-          {/* 搜索行：仅卖家列展开时出现（OZON 3P 数百家，搜索必备） */}
-          {sellerPane != null && (
+        <div style={{ width: narrow ? 'min(420px, calc(100vw - 48px))' : undefined, maxWidth: '100%' }}>
+          {!narrow && sellerPane != null && (
             <div style={{ padding: `8px ${space.md}px 6px`, borderBottom: `1px solid ${color.hairline}` }}>
               <Input
                 size="small"
                 allowClear
                 placeholder="搜索卖家店铺"
+                aria-label="搜索当前渠道的卖家"
                 value={sellerQuery}
                 onChange={(e) => setSellerQuery(e.target.value)}
                 style={{ height: 24, fontSize: fontSize.caption }}
               />
             </div>
           )}
-          {/* 列宽自适应（CascadePanel 默认规格 min 148 / max 380，行尾小注经 extraW 预留） */}
           <CascadePanel
             open={open}
+            stepped={narrow}
+            levelLabels={['平台', '渠道', '卖家']}
             columns={[
               { items: platformItems, extraW: platformExtraW },
               { items: shopItems, extraW: shopExtraW },
-              ...(sellerPane != null && sellerColWidth > 0 ? [{ items: sellerItems, width: sellerColWidth }] : []),
+              ...(sellerPane != null && sellerColWidth > 0
+                ? [{
+                    items: sellerItems,
+                    width: sellerColWidth,
+                    header: narrow ? (
+                      <Input
+                        size="middle"
+                        allowClear
+                        placeholder="搜索卖家店铺"
+                        aria-label="搜索当前渠道的卖家"
+                        value={sellerQuery}
+                        onChange={(e) => setSellerQuery(e.target.value)}
+                        style={{ width: '100%', height: 44, fontSize: fontSize.bodySm }}
+                      />
+                    ) : undefined,
+                  }]
+                : []),
             ]}
           />
           <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}` }}>
             <Button
               type="link"
-              size="small"
-              style={{ padding: 0, height: 20, fontSize: fontSize.caption }}
+              size={narrow ? 'middle' : 'small'}
+              style={{ padding: 0, height: narrow ? 44 : 20, fontSize: narrow ? fontSize.bodySm : fontSize.caption }}
               disabled={sel == null}
-              onClick={() => actions.set({ platform: null })} // §5.6 回默认口径（默认店铺 → 默认平台）
+              aria-label="回到自动"
+              title="回到默认店铺或默认平台的自动取价"
+              onClick={() => actions.set({ platform: null })}
             >
-              恢复默认
+              回到自动
             </Button>
           </div>
         </div>

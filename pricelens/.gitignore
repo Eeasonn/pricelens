@@ -6,6 +6,11 @@ tsconfig.tsbuildinfo
 node_modules/
 dist/
 
+# 本地环境文件不入库（线上构建无此文件时 Agent 自动回退本地适配器）；契约示例见 .env.example
+.env
+.env.development
+.env.production
+
 # 真实数据接入：源 xlsx 不入库（体量/敏感），展开 JSON 与增量目录仅本地
 data/real/fact_expanded.json
 data/real/incoming/*.xlsx

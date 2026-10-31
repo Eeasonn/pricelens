@@ -6,7 +6,7 @@ import { writeUrlPatch } from './urlSync';
 // 页签同步 URL query（?p=，默认页省略；筛选参数由 FiltersProvider 写）。
 // 第112轮：新增 'volume'（量价看板，价格 × 估算销量三面板对比）。
 // 第一百六十五轮：新增 'pricing'（定价推演——上市定价 what-if 玻璃盒，全模拟数据）。
-export type Page = 'overview' | 'dashboard' | 'volume' | 'pricing' | 'config' | 'alerts';
+export type Page = 'overview' | 'dashboard' | 'volume' | 'pricing' | 'intelligence' | 'forecast' | 'config' | 'alerts';
 
 // pricing：入口已改为图表页签上的置灰项，页面暂不开放，URL 直达也回落看板。
 const DISABLED_PAGES: Page[] = ['overview', 'pricing'];
@@ -21,7 +21,7 @@ const Ctx = createContext<PageCtx>({ page: 'dashboard', go: () => {} });
 function initialPage(): Page {
   try {
     const p = new URLSearchParams(window.location.search).get('p');
-    if (p === 'dashboard' || p === 'volume' || p === 'config' || p === 'alerts') return p;
+    if (p === 'dashboard' || p === 'volume' || p === 'intelligence' || p === 'forecast' || p === 'config' || p === 'alerts') return p;
   } catch {
     /* 无 window 忽略 */
   }

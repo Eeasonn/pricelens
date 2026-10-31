@@ -337,12 +337,13 @@ export default function TrendTables(props: {
           {fourWeekChange !== undefined && (
             <span
               title="最近4周折后价均价相比此前4周均价"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, whiteSpace: 'nowrap' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, minWidth: 0, maxWidth: '100%' }}
             >
-              <span style={{ color: color.mute }}>近4周环比</span>
+              <span style={{ color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>近4周环比</span>
               <span
                 className="tnum"
                 style={{
+                  flexShrink: 0,
                   fontWeight: 600,
                   color: fourWeekChange == null
                     ? color.mute
@@ -439,15 +440,15 @@ export default function TrendTables(props: {
             background: color.canvas,
             borderBottom: `1px solid ${color.hairlineStrong}`,
             justifyContent: 'center',
-            fontSize: 11,
+            fontSize: 12,
             color: color.body,
             whiteSpace: 'nowrap',
           }}
         >
           {wk ? (
-            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: '13px' }}>
-              <span style={{ fontSize: 11, color: color.mute }}>{wk}</span>
-              <span style={{ fontSize: 11, color: color.body }}>{d}</span>
+            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: '15px', fontSize: 12, fontWeight: 500, color: color.body }}>
+              <span>{wk}</span>
+              <span>{d}</span>
             </span>
           ) : (
             d

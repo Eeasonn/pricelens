@@ -115,14 +115,13 @@ export default function SplitAxisColumn(props: {
             style={{
               position: 'absolute',
               left: tickLeft,
-              top: Math.round(t.y) - 7,
+              top: Math.round(t.y) - 8,
               width: TICK_ZONE_W,
               paddingRight: 3,
               boxSizing: 'border-box',
               textAlign: 'right',
-              /* 第一百八十五轮：8→10，与主图同源（Y_TICK_FONT；行盒 14px 不变，几何不动） */
               fontSize: Y_TICK_FONT,
-              lineHeight: '14px',
+              lineHeight: '16px',
               color: color.mute,
               whiteSpace: 'nowrap',
               zIndex: 2,

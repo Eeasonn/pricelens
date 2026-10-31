@@ -29,6 +29,7 @@ import {
 } from '../ProductCascader';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import { useFilters } from '../../state/FiltersContext';
+import { useNarrowViewport } from '../../state/useNarrowViewport';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
 import { cardQuota, MAX_LINES_PER_CHART, MAINS_CAP, newCardId, remapSelection, selKey } from '../../state/mainSelection';
 import { color, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
@@ -98,6 +99,7 @@ function PickPopover({
   children: ReactNode;
 }) {
   const { fullTree } = useTreeData();
+  const narrow = useNarrowViewport();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const tree = useMemo(() => searchProductTree(fullTree, search), [fullTree, search]);
@@ -259,13 +261,15 @@ function PickPopover({
 
   const panelW = columns.reduce((w, c) => w + (c.width ?? 0), 0);
   const widthCap = Math.min(typeof window === 'undefined' ? 1148 : window.innerWidth - 48, 1100);
-  const bodyW = Math.max(360, Math.min(panelW + 20, widthCap));
+  const bodyW = narrow ? Math.max(280, widthCap) : Math.max(360, Math.min(panelW + 20, widthCap));
 
   return (
     <Popover
       trigger="click"
       open={open}
       zIndex={POPOVER_Z}
+      destroyTooltipOnHide
+      classNames={{ root: 'lpl-cascade-popover' }}
       onOpenChange={(o) => {
         setOpen(o);
         setSearch('');
@@ -277,16 +281,23 @@ function PickPopover({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Input
               allowClear
-              size="small"
+              size={narrow ? 'middle' : 'small'}
               prefix={<SearchOutlined style={{ color: color.mute }} />}
-              placeholder="搜索品牌 / 系列 / 产品"
+              placeholder="搜索品牌 / 系列 / 型号 / 容量"
+              aria-label="搜索品牌、系列、型号或容量"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: 1, minWidth: 0 }}
+              style={{ flex: 1, minWidth: 0, width: narrow ? '100%' : undefined, height: narrow ? 44 : undefined }}
             />
           </div>
-          <div style={{ display: 'flex' }}>
-            <CascadePanel columns={columns} fill height={POPOVER_H} />
+          <div style={{ display: 'flex', minWidth: 0 }}>
+            <CascadePanel
+              columns={columns}
+              fill={!narrow}
+              height={POPOVER_H}
+              stepped={narrow}
+              levelLabels={['品牌', '系列', '型号', '配置']}
+            />
           </div>
         </div>
       }
@@ -317,6 +328,7 @@ function PairCard({
   onDeleteCard: (cardId: string) => void;
 }) {
   const { state } = useFilters();
+  const narrow = useNarrowViewport();
   const { romramByKey } = useTreeData();
   const nodeOf = (sel: ProductSelection): RomramNode | undefined => romramByKey.get(`${sel.modelId}|${sel.romram}`);
   const takenMainKeys = useMemo(
@@ -382,11 +394,11 @@ function PairCard({
       }}
     >
       {/* 组头一行：与主浮窗同构——「主分析产品」「对比产品」标题 + 右侧删对 ✕ */}
-      <div style={{ display: 'flex', alignItems: 'center', height: 34, paddingRight: 8, flexShrink: 0 }}>
-        <span style={{ width: 16, flexShrink: 0 }} />
-        <div style={{ flex: '0 0 300px', minWidth: 0, paddingLeft: 12, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
-        <div aria-hidden style={{ width: 1, flexShrink: 0 }} />
-        <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', height: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'stretch' : 'center', height: narrow ? 'auto' : 34, paddingRight: 8, flexShrink: 0 }}>
+        <span style={{ width: 16, flexShrink: 0, display: narrow ? 'none' : undefined }} />
+        <div style={{ flex: narrow ? '0 0 auto' : '0 0 300px', width: narrow ? '100%' : undefined, minWidth: 0, padding: narrow ? '8px 12px 0' : '0 0 0 12px', fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>主分析产品</div>
+        <div aria-hidden style={{ width: narrow ? undefined : 1, flexShrink: 0 }} />
+        <div style={{ flex: narrow ? '0 0 auto' : '1 1 0', width: narrow ? '100%' : undefined, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', minHeight: narrow ? 36 : '100%' }}>
           <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
           <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
             <Popconfirm
@@ -420,11 +432,12 @@ function PairCard({
           </span>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+      <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: 'stretch' }}>
         {/* 左格：主分析产品（极浅蓝底） */}
         <div
           style={{
-            flex: '0 0 300px',
+            flex: narrow ? '1 1 auto' : '0 0 300px',
+            width: narrow ? '100%' : undefined,
             minWidth: 0,
             position: 'relative',
             display: 'flex',
@@ -496,12 +509,13 @@ function PairCard({
         </div>
 
         {/* 分界线：主分析产品 | 对比产品 */}
-        <div aria-hidden style={{ width: 1, background: color.hairline, flexShrink: 0 }} />
+        <div aria-hidden style={narrow ? { height: 1, background: color.hairline, flexShrink: 0 } : { width: 1, background: color.hairline, flexShrink: 0 }} />
 
         {/* 右格：对比产品 */}
         <div
           style={{
-            flex: '1 1 0',
+            flex: narrow ? '1 1 auto' : '1 1 0',
+            width: narrow ? '100%' : undefined,
             minWidth: 0,
             display: 'flex',
             flexDirection: 'column',

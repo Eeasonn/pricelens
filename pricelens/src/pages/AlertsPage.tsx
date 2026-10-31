@@ -27,6 +27,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import { BellOutlined, PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
+import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
 import { dimChannel, dimProduct, dimRegion } from '../data';
@@ -273,6 +274,7 @@ function useOpenInDashboard() {
 
 export default function AlertsPage() {
   const { state, actions } = useFilters();
+  const { openAgent } = useAgent();
   const alerts = useAlerts();
   const openInDash = useOpenInDashboard();
   const { country, industry } = scopeLabels(state);
@@ -373,12 +375,67 @@ export default function AlertsPage() {
   // 最新态（第五十五轮，用户口径：主视觉只报最新、历史进次级）：计数与单元格都按「每系列×类型最新一条」
   const latestList = useMemo(() => latestAlerts(alerts), [alerts]);
   const latestBySeries = useMemo(() => groupAlertsBySeries(latestList), [latestList]);
-  const latestModelCount = useMemo(() => new Set(latestList.map((a) => a.seriesKey.split('__')[0])).size, [latestList]);
+  const scopedLatest = useMemo(() => {
+    const matchBrand = (brand: string): boolean => brandFilter.length === 0 || brandFilter.includes(brand);
+    const matchModel = (key: string): boolean => !modelFilter || key.startsWith(`${modelFilter.id}__`);
+    // 与矩阵 activeCountFor 同一口径：是否「有预警」按当前类型判断。
+    // 旧实现看系列是否在 latestList 里出现过，入选条目恒为真，「只看正常」把概览清成 0。
+    const activeFor = (key: string, type: 'all' | AlertType): boolean => {
+      const items = latestBySeries.get(key) ?? [];
+      return type === 'all' ? items.length > 0 : items.some((a) => a.type === type);
+    };
+    return latestList.filter((a) => {
+      if (!matchBrand(a.brand) || !matchModel(a.seriesKey)) return false;
+      if (typeFilter !== 'all' && a.type !== typeFilter) return false;
+      if (statusFilter === 'all') return true;
+      const active = activeFor(a.seriesKey, typeFilter);
+      return statusFilter === 'alerts' ? active : !active;
+    });
+  }, [latestList, latestBySeries, brandFilter, modelFilter, statusFilter, typeFilter]);
+  const latestModelCount = useMemo(() => new Set(scopedLatest.map((a) => a.seriesKey.split('__')[0])).size, [scopedLatest]);
+  // 类型芯片各自计数，不因「当前选中的类型」把其余芯片清零。
+  // 「只看正常」数的是没有该类型最新预警的系列，与矩阵行一致，不再是恒 0 的预警条数。
   const typeCounts = useMemo(() => {
     const c: Record<AlertType, number> = { 'price-change': 0, promo: 0, 'platform-gap': 0, 'own-gap': 0 };
-    for (const a of latestList) c[a.type]++;
+    const matchBrand = (brand: string): boolean => brandFilter.length === 0 || brandFilter.includes(brand);
+    const matchModel = (key: string): boolean => !modelFilter || key.startsWith(`${modelFilter.id}__`);
+    const activeFor = (key: string, type: AlertType): boolean =>
+      (latestBySeries.get(key) ?? []).some((a) => a.type === type);
+    if (statusFilter === 'normal') {
+      for (const g of brandGroups) {
+        if (!matchBrand(g.brand)) continue;
+        for (const row of g.rows) {
+          if (!matchModel(row.key)) continue;
+          for (const t of ORDER) if (!activeFor(row.key, t)) c[t] += 1;
+        }
+      }
+      return c;
+    }
+    for (const a of latestList) {
+      if (!matchBrand(a.brand) || !matchModel(a.seriesKey)) continue;
+      c[a.type] += 1;
+    }
     return c;
-  }, [latestList]);
+  }, [latestList, latestBySeries, brandGroups, brandFilter, modelFilter, statusFilter]);
+  const allChipCount = useMemo(() => {
+    const matchBrand = (brand: string): boolean => brandFilter.length === 0 || brandFilter.includes(brand);
+    const matchModel = (key: string): boolean => !modelFilter || key.startsWith(`${modelFilter.id}__`);
+    if (statusFilter === 'normal') {
+      let n = 0;
+      for (const g of brandGroups) {
+        if (!matchBrand(g.brand)) continue;
+        for (const row of g.rows) {
+          if (!matchModel(row.key)) continue;
+          if ((latestBySeries.get(row.key)?.length ?? 0) === 0) n += 1;
+        }
+      }
+      return n;
+    }
+    let n = 0;
+    for (const a of latestList) if (matchBrand(a.brand) && matchModel(a.seriesKey)) n += 1;
+    return n;
+  }, [latestList, latestBySeries, brandGroups, brandFilter, modelFilter, statusFilter]);
+  const scopedLatestCount = scopedLatest.length;
   // own-gap 按型号归档（矩阵「型号级」单元格计数用；不受本页筛选影响）
   const gapByModel = useMemo(() => {
     const m = new Map<string, AlertItem[]>();
@@ -422,11 +479,25 @@ export default function AlertsPage() {
         }),
     }))
     .filter((g) => matchBrand(g.brand) && g.rows.length > 0);
+  const overviewCount = statusFilter === 'normal'
+    ? visibleGroups.reduce((n, g) => n + g.rows.length, 0)
+    : scopedLatestCount;
+  const overviewUnit = statusFilter === 'normal' ? '个正常系列' : '条最新预警';
 
   // 事件流 = 全量触发 → 类型+品牌筛选 → 截断 150 → 按周分组
   const filtered = useMemo(
-    () => alerts.filter((a) => (typeFilter === 'all' || a.type === typeFilter) && matchBrand(a.brand) && matchModel(a.seriesKey)),
-    [alerts, typeFilter, brandFilter, modelFilter],
+    () => {
+      // 历史事件只承载已触发的异常；「只看正常」时不应继续展示异常历史，
+      // 否则历史区与矩阵状态筛选口径相反。
+      if (statusFilter === 'normal') return [];
+      return alerts.filter(
+        (a) =>
+          (typeFilter === 'all' || a.type === typeFilter) &&
+          matchBrand(a.brand) &&
+          matchModel(a.seriesKey),
+      );
+    },
+    [alerts, typeFilter, brandFilter, modelFilter, statusFilter],
   );
   const shown = useMemo(() => filtered.slice(0, 150), [filtered]);
   const weekGroups = useMemo(() => groupAlertsByWeek(shown), [shown]);
@@ -442,6 +513,9 @@ export default function AlertsPage() {
       : statusFilter === 'normal'
         ? '当前没有符合条件的正常产品'
         : '尚未添加监控产品 — 在上方搜索添加，或在看板点产品旁的铃铛';
+  const alertStatusLabel = statusFilter === 'alerts' ? '只看异常' : statusFilter === 'normal' ? '只看正常' : '全部状态';
+  const alertTypeLabel = typeFilter === 'all' ? '全部类型' : TYPE_STYLE[typeFilter].label;
+  const agentAlertPrompt = `解释预警中心当前筛选下的最新预警：${alertTypeLabel}、${alertStatusLabel}${brandFilter.length ? `、品牌 ${brandFilter.join('、')}` : ''}${modelFilter ? `、产品 ${modelFilter.name}` : ''}。请列出触发事实、证据关联和下一步核查动作。`;
 
   // 添加监控候选：当前国家/产业可分析的系列（华为在前，按 label 字典序）——
   // 其他口径的产品在本页不产预警，不进候选
@@ -502,7 +576,10 @@ export default function AlertsPage() {
                   value={val}
                   below={rule.below}
                   label={`${rule.name}阈值滑杆`}
-                  onCommit={(pct) => actions.setAlertThresholds({ [t]: pct })}
+                  onCommit={(pct) => {
+                    actions.setAlertThresholds({ [t]: pct });
+                    message.success(`${rule.name}阈值已保存`, 1.2);
+                  }}
                 />
               </div>
             </div>
@@ -566,12 +643,13 @@ export default function AlertsPage() {
                 value={thrVal}
                 below={r.below}
                 label={`${seriesLabel} ${r.name}阈值滑杆`}
-                onCommit={(pct) =>
-                  actions.setAlertProductRule(rowKey, {
-                    ...(rule ?? {}),
-                    thresholds: { ...(rule?.thresholds ?? {}), [t]: pct },
-                  })
-                }
+                  onCommit={(pct) => {
+                    actions.setAlertProductRule(rowKey, {
+                      ...(rule ?? {}),
+                      thresholds: { ...(rule?.thresholds ?? {}), [t]: pct },
+                    });
+                    message.success(`${seriesLabel}的${r.name}阈值已保存`, 1.2);
+                  }}
               />
             </div>
             {(thrOverridden || typeOverridden) && (
@@ -778,6 +856,7 @@ export default function AlertsPage() {
   // 与工具行小号入口区分——空态下不再像禁用输入框
   const renderAddMonitor = (width: number, prominent?: boolean): JSX.Element => (
     <Select
+      className="lpl-alert-add-monitor"
       showSearch
       size={prominent ? 'middle' : 'small'}
       placeholder="＋ 添加监控（搜索品牌 / 型号 / 产品）"
@@ -806,7 +885,7 @@ export default function AlertsPage() {
   const emptyMode = subCount === 0;
 
   return (
-    <div style={{ height: '100%', overflowX: 'auto', background: color.canvasSoft }} data-lpl-scroll>
+    <div style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }} data-lpl-scroll>
       <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader title="预警中心" />
@@ -818,6 +897,10 @@ export default function AlertsPage() {
             <span>平台 {platformLabel}</span>
             <span aria-hidden>·</span>
             <span>{state.currency === 'usd' ? 'USD' : '本币'}</span>
+            <span aria-hidden>·</span>
+            <span title="当前页面数据覆盖的最新采集周">最新采集 {latestList[0] ? weekTag(latestList[0].weekId) : '—'}</span>
+            <span aria-hidden>·</span>
+            <span style={{ color: color.body }}>演示数据</span>
           </div>
           {modelFilter && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.md, padding: '8px 12px', border: `1px solid ${color.link}33`, borderRadius: radius.control, background: '#f0f6ff', color: color.body, fontSize: 12 }}>
@@ -841,15 +924,21 @@ export default function AlertsPage() {
             >
               <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: latestList.length > 0 ? color.ink : color.hairlineStrong }}>
-                    {latestList.length}
+                  <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: overviewCount > 0 ? color.ink : color.hairlineStrong }}>
+                    {overviewCount}
                   </span>
-                  <span style={{ fontSize: 12, color: color.mute }}>条最新预警</span>
+                  <span style={{ fontSize: 12, color: color.mute }}>{overviewUnit}</span>
                 </div>
                 <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                  最新触发 {latestList.length > 0 ? `${weekTag(latestList[0].weekId)}（${latestList[0].weekLabel} 采集周）` : '—'}
-                  {latestList.length > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}
-                  {alerts.length !== latestList.length ? ` · 历史 ${alerts.length} 条` : ''}
+                  {statusFilter === 'normal'
+                    ? '这些系列在当前类型下没有最新预警'
+                    : (
+                      <>
+                        最新触发 {scopedLatestCount > 0 ? `${weekTag(scopedLatest[0].weekId)}（${scopedLatest[0].weekLabel} 采集周）` : '—'}
+                        {scopedLatestCount > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}
+                      </>
+                    )}
+                  {filtered.length !== latestFiltered.length ? ` · 历史 ${filtered.length} 条` : ''}
                 </div>
               </div>
               <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
@@ -866,6 +955,14 @@ export default function AlertsPage() {
             </section>
           )}
 
+          {!emptyMode && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: space.md }}>
+              <Button size="small" onClick={() => openAgent('dock', agentAlertPrompt)}>
+                让 Agent 解释最新预警
+              </Button>
+            </div>
+          )}
+
           {/* ②③ 监控矩阵（工具行 + 列头规则 + 品牌分组行 + own-gap 成对条）。
               零监控首启态：正中说明 + 添加入口，工具行/阈值表头/矩阵全部退场 */}
           <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg, marginBottom: space.md }}>
@@ -875,21 +972,24 @@ export default function AlertsPage() {
                 <div style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>尚未监控任何产品</div>
                 <div style={{ fontSize: 12, color: color.mute }}>添加监控后，这里按周汇总调价、折扣、平台价差与档位间距预警</div>
                 {renderAddMonitor(380, true)}
+                <Button size="small" onClick={() => openAgent('dock', `帮我设置预警监控（${country} · ${industry}），建议先监控哪些产品并说明原因`)}>让 Agent 帮我设置</Button>
               </div>
             ) : (
               <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div className="lpl-alert-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
               <h3 style={{ margin: 0, fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>监控看板</h3>
               <Segmented
+                aria-label="按预警类型筛选"
                 size="small"
                 value={typeFilter}
                 onChange={(v) => applyTypeFilter(v as 'all' | AlertType)}
                 options={[
-                  { label: `全部 ${latestList.length}`, value: 'all' },
+                  { label: `全部 ${allChipCount}`, value: 'all' },
                   ...ORDER.map((t) => ({ label: `${TYPE_STYLE[t].label} ${typeCounts[t]}`, value: t })),
                 ]}
               />
               <Segmented
+                aria-label="按预警状态筛选"
                 size="small"
                 value={statusFilter}
                 onChange={(v) => setStatusFilter(v as 'all' | 'alerts' | 'normal')}
@@ -924,6 +1024,7 @@ export default function AlertsPage() {
                 ]}
               />
               <span style={{ flex: 1 }} />
+              <span aria-hidden style={{ width: 1, height: 22, background: color.hairline, flexShrink: 0 }} />
               {renderAddMonitor(320)}
             </div>
 
@@ -1023,13 +1124,15 @@ export default function AlertsPage() {
                 {filtered.length} 条 · 按周分组，最新在前
               </span>
               <span style={{ flex: 1 }} />
-              {(typeFilter !== 'all' || brandFilter.length > 0) && showHistory && (
+              {(typeFilter !== 'all' || brandFilter.length > 0 || modelFilter != null || statusFilter !== 'all') && showHistory && (
                 <Button
                   size="small"
                   style={{ height: 22, fontSize: 11 }}
                   onClick={() => {
                     setTypeFilter('all');
                     setBrandFilter([]);
+                    setModelFilter(null);
+                    setStatusFilter('all');
                   }}
                 >
                   清除筛选

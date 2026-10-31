@@ -14,7 +14,7 @@
 // 单组摘要 chip 第二行不再写「无对比」，改示「平台对比」（悬停全量摘要保持
 // 产品对语义不动——细节仍真实）；产品对比子视图行为与现状完全一致。
 // ============================================================
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConfigProvider, Tooltip } from 'antd';
 import type { ThemeConfig } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -25,6 +25,7 @@ import ScopeFields from './ScopeFields';
 import TimeBox from './TimeBox';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
+import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { useChartContent } from '../../state/chartContent';
 import { brandOfModel, configTextOf, modelNameOf } from '../ProductCascader/tree';
 import BrandDot, { brandLabelOf } from '../BrandMark';
@@ -71,62 +72,74 @@ const groupSummaryLine = (m: MainProduct, i: number): string => {
   return `第 ${i + 1} 组：${mainPart} vs ${compPart}`;
 };
 
-/** 多组紧凑 chip（第一百四十八轮拉齐图例药丸设计）：固定两行带品牌——
- *  第一行 = 品牌点 + 品牌名，第二行 = 型号 配置 vs 对比数（只读底色不变） */
+/** 多组摘要：品牌在上、产品与型号在下；对比数量独立在右侧，默认无灰底。
+ *  芯片可被压窄，但文字必须停在芯片内：型号先省略，配置随后省略，不能盖住「＋N 组」。 */
 function GroupChip({ card }: { card: MainProduct }) {
+  const compareText = card.compares.length ? `对比 ${card.compares.length} 款` : '无对比';
+  const config = card.main ? configTextOf(card.main.romram) : '';
   return (
     <span
+      className="lpl-group-chip"
       style={{
         display: 'inline-flex',
         flexDirection: 'column',
-        alignItems: 'flex-start',
+        alignItems: 'stretch',
         gap: 1,
-        padding: '3px 8px',
-        // 圆角矩形（第一百九十一轮，Eason：两行内容配圆胶囊突兀，改圆角矩形）
-        borderRadius: 10,
-        background: 'rgba(0, 0, 0, 0.06)',
-        flexShrink: 0,
-        maxWidth: 260,
+        padding: '2px 2px',
+        borderRadius: 8,
+        background: 'transparent',
+        flex: '1 1 120px',
+        minWidth: 0,
+        maxWidth: 240,
+        overflow: 'hidden',
       }}
     >
       {card.main ? (
         <>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
-            <BrandDot brand={brandOfModel(card.main.modelId)} />
-            <span
-              style={{
-                fontSize: 10, lineHeight: '12px', color: color.mute,
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}
-            >
-              {brandLabelOf(brandOfModel(card.main.modelId))}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', overflow: 'hidden' }}>
+              <BrandDot brand={brandOfModel(card.main.modelId)} />
+              <span
+                style={{
+                  fontSize: 10, lineHeight: '12px', fontWeight: 400, color: color.mute,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
+                }}
+              >
+                {brandLabelOf(brandOfModel(card.main.modelId))}
+              </span>
+            </span>
+            <span className="lpl-compare-count" style={{ flexShrink: 0, fontSize: 10, lineHeight: '12px', color: color.mute }}>
+              {compareText}
             </span>
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', overflow: 'hidden' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, paddingLeft: 12, overflow: 'hidden' }}>
             <span
               style={{
-                fontSize: 11, lineHeight: '14px', fontWeight: 600, color: color.ink,
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                flex: '1 100 auto',
+                fontSize: 12, lineHeight: '15px', fontWeight: 600, color: color.ink,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
               }}
             >
               {modelNameOf(card.main.modelId)}
             </span>
-            {configTextOf(card.main.romram) && (
-              <span className="tnum" style={{ fontSize: 10, lineHeight: '14px', color: color.mute, flexShrink: 0 }}>
-                {configTextOf(card.main.romram)}
+            {config && (
+              <span
+                className="tnum"
+                style={{
+                  flex: '0 1 auto',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  fontSize: 11, lineHeight: '15px', color: color.mute,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
+                · {config}
               </span>
             )}
-            <span style={{ fontSize: 10, lineHeight: '14px', color: color.mute, flexShrink: 0 }}>vs</span>
-            <span
-              className="tnum"
-              style={{ fontSize: 10, lineHeight: '14px', fontWeight: 600, color: card.compares.length ? color.body : color.mute, flexShrink: 0 }}
-            >
-              {card.compares.length ? card.compares.length : '无'}
-            </span>
           </span>
         </>
       ) : (
-        <span style={{ fontSize: 11, color: color.mute }}>{EMPTY_MAIN_LABEL}</span>
+        <span style={{ fontSize: 11, color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{EMPTY_MAIN_LABEL}</span>
       )}
     </span>
   );
@@ -143,9 +156,23 @@ function ProductPickerEntry() {
   // 本组件在 ChartContentProvider 内（App 全局包裹），直接取呈现切换上下文
   const { priceSubview } = useChartContent();
   const platformCompare = priceSubview === 'platforms';
+  const narrow = useNarrowViewport();
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // 入口自己的宽度，不是视口。时间簇把产品列挤窄时，两张芯片会把配置挤到「＋N 组」上。
+  const [fitsTwo, setFitsTwo] = useState(true);
+  useEffect(() => {
+    const el = buttonRef.current;
+    if (!el) return;
+    const measure = () => setFitsTwo(el.clientWidth >= 440);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const mains = state.mains;
   const single = mains.length === 1 ? mains[0] : null;
+  const visibleGroups = narrow || !fitsTwo ? 1 : 2;
 
   return (
     <ProductPickerFlyout open={open} onOpenChange={setOpen}>
@@ -155,6 +182,7 @@ function ProductPickerEntry() {
         aria-haspopup="dialog"
         aria-expanded={open}
         title={mains.length ? mains.map(groupSummaryLine).join('\n') : '点击选择主分析产品与对比产品'}
+        ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
         style={{
             minHeight: 40,
@@ -176,10 +204,10 @@ function ProductPickerEntry() {
           {mains.length === 0 ? (
             <span style={{ fontSize: 13, color: color.mute, whiteSpace: 'nowrap' }}>选择主分析产品与对比产品</span>
           ) : (
-            <span style={{ display: 'block', minWidth: 0, overflow: 'hidden' }}>
+            <span style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>
               {single ? (
                 single.main ? (
-                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, minWidth: 0, width: '100%', overflow: 'hidden' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
                       <BrandDot brand={brandOfModel(single.main.modelId)} />
                       <span
@@ -191,9 +219,11 @@ function ProductPickerEntry() {
                         {brandLabelOf(brandOfModel(single.main.modelId))}
                       </span>
                     </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', overflow: 'hidden' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', minWidth: 0, overflow: 'hidden' }}>
                       <span
                         style={{
+                          flex: '1 100 auto',
+                          minWidth: 0,
                           fontSize: 12, lineHeight: '15px', fontWeight: 600, color: color.ink,
                           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                         }}
@@ -230,13 +260,16 @@ function ProductPickerEntry() {
                   <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>{EMPTY_MAIN_LABEL}</span>
                 )
               ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  {mains.slice(0, 2).map((m) => (
-                    <GroupChip key={m.id} card={m} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, width: '100%', overflow: 'hidden' }}>
+                  {mains.slice(0, visibleGroups).map((m, i) => (
+                    <span key={m.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 120px', maxWidth: 240, overflow: 'hidden' }}>
+                      {i > 0 && <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: color.hairline, flexShrink: 0 }} />}
+                      <GroupChip card={m} />
+                    </span>
                   ))}
-                  {mains.length > 2 && (
-                    <span className="tnum" style={{ fontSize: 12, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                      ＋{mains.length - 2} 组
+                  {mains.length > visibleGroups && (
+                    <span style={{ fontSize: 12, lineHeight: '16px', color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      ＋{mains.length - visibleGroups} 组
                     </span>
                   )}
                 </span>

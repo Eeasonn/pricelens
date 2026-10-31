@@ -44,19 +44,18 @@
 // 量价取数随所选平台重算；下行两行产品药丸 = 品牌行 + 名称加粗 + 配置浅蓝底 chip）。
 // 原纯文字面板头退役（信息已由药丸承载），面板头定高随药丸加高并与共享轴列对齐。
 // 屏蔽/悬停联动量价页没有，onToggle/onHover 传 no-op。
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ConfigProvider, Segmented } from 'antd';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import usePageViewState from '../state/usePageViewState';
 import type { PlatformSelection, ProductSelection } from '../state/filtersTypes';
 import ChartContentBar from '../components/ChartContentBar';
-import { filterBarTheme } from '../components/FilterBar';
 import { brandLabelOf } from '../components/BrandMark';
 import Chart from '../chart/PriceTrend/Chart';
+import { VIEW_WINDOW_CAPTION_H } from '../chart/PriceTrend/XBrush';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
 import { PillUnit } from '../chart/PriceTrend/BrandLegendStrip';
-// 第一百三十一轮波2：卡顶时间筛选簇上移顶部筛选条，本页不再引用 XBrush/TimeRangeCluster
+// 卡顶时间筛选簇在顶部筛选条。这里只取查看窗口说明行高度，用来对齐同步按钮。
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
 import {
@@ -77,10 +76,11 @@ import {
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
-import type { AggMode, Series, SeriesPoint } from '../dataModel/types';
+import type { Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 import VolumeBars, { BAND_FRAC_DEFAULT } from './volume/VolumeBars';
 import PanelTimeTrack from './volume/PanelTimeTrack';
+import PeriodVolumePriceSummary, { PERIOD_SUMMARY_HEIGHT } from './volume/PeriodVolumePriceSummary';
 import MarketBoard from './volume/MarketBoard';
 import { normalizePanelWindow, vMaxOf, type VolumeSlot } from './volume/volumeAxis';
 
@@ -88,7 +88,17 @@ import { normalizePanelWindow, vMaxOf, type VolumeSlot } from './volume/volumeAx
 // 加高——16px 平台小药丸 + 2px 间距 + 两行产品药丸（约 53px），定高 54 与价格页
 // 分离面板图例行（PANEL_LEGEND_H）一致，仍是共享轴列的纵向对齐基准
 const PANEL_HEAD_H = 54;
+// 与价格走势分离卡片同一套：拖柄骑在上边线正中，上半凸出卡片；滚动区垫高避免裁切
+const PANEL_GRIP_H = 14;
+const SCROLL_PAD_TOP = 10;
 const PANEL_GRID_TOP = 14; // 面板图顶窄空气带（同分离模式）
+const LOAD_ERROR_HINT: ReactNode = (
+  <>
+    数据加载异常
+    <div style={{ marginTop: 4, fontSize: 12 }}>请刷新重试</div>
+  </>
+);
+
 const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
 const CHART_GRID_RIGHT = 56; // 第一百一十五轮：右侧预留销量轴列（轨道线3px+右侧刻度数字+骑线拖柄）
 
@@ -250,10 +260,19 @@ export default function VolumePrice() {
     setPanelWins(fit<[number, number] | null>(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelCount]);
+  // 换产品/价格类型/币种才复位。比较稳定键，而不是 panelSpecs 的数组引用：
+  // 每次挂载引用都是新的，无条件 setSliderScale(1) 会覆写会话里的每格高度。
+  const scaleResetKey = JSON.stringify([panelSpecs.map((p) => p.key), state.priceTypes, state.currency]);
+  const scaleResetSeenRef = useRef<string | null>(null);
   useEffect(() => {
+    if (scaleResetSeenRef.current === null || scaleResetSeenRef.current === scaleResetKey) {
+      scaleResetSeenRef.current = scaleResetKey;
+      return;
+    }
+    scaleResetSeenRef.current = scaleResetKey;
     setSliderScale(1);
     setBandFracs(panelSpecs.map(() => BAND_FRAC_DEFAULT));
-  }, [panelSpecs, state.priceTypes, state.currency]);
+  }, [scaleResetKey, panelSpecs]);
 
   // 粒度切换 → 窗口端点对齐新粒度桶边界（保持同一时间跨度）；面板独立时间轴按桶号
   // 失义回落共享窗口（第119轮）
@@ -277,6 +296,7 @@ export default function VolumePrice() {
     () =>
       panelSpecs.map((spec, i) => {
         let series: Series[] = [];
+        let failed = false;
         if (spec.skuIds.length > 0) {
           try {
             series = buildSeries({
@@ -291,10 +311,12 @@ export default function VolumePrice() {
               scope: { countryCode: cc, industry: state.industry },
             });
           } catch {
-            series = []; // 空态不崩
+            series = [];
+            failed = true;
           }
         }
         return {
+          failed,
           idx: i,
           // 前缀面板号：两个面板出现同一产品时 React key 仍唯一（同 key 面板会串挂 DOM/图表实例）
           key: `${i}:${spec.key}`,
@@ -512,8 +534,28 @@ export default function VolumePrice() {
       }),
     [panelData, domainIds, effWins, cc, state.granularity],
   );
+  const summaryVolumes = useMemo(
+    () =>
+      panelData.map((p) => volumeByBuckets(p.spec.modelId, p.spec.romram, cc, state.granularity, domainIds)),
+    [panelData, domainIds, cc, state.granularity],
+  );
   // 各图销量轴上限恒自动（niceCeil 窗口内最大值）
   const panelVMax = volumes.map((vs) => vMaxOf(vs));
+  const summaryLive = orderedPanels.map((p) => {
+    const [start, end] = effWins[p.idx] ?? [0, 0];
+    return {
+      key: p.key,
+      failed: p.failed,
+      prices: (p.series[0]?.points ?? []).map((pt) => pt.price),
+      volumes: summaryVolumes[p.idx] ?? [],
+      startId: domainIds[start],
+      endId: domainIds[end],
+      periodCount: Math.max(0, end - start + 1),
+      windowStart: start,
+      windowEnd: end,
+    };
+  });
+  const summaryRows = summaryLive;
 
   // 大盘卡时间域（第119轮）：同步 = 共享窗口；非同步 = 各面板生效窗口的并集
   const marketWin = useMemo<[number, number]>(() => {
@@ -612,38 +654,10 @@ export default function VolumePrice() {
         }}
       >
         <ChartContentBar />
-        <div style={{ padding: space.lg }}>
-            {/* 月/季汇总 */}
-            {state.granularity !== 'week' && (
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: space.md, marginBottom: space.sm }}>
-              <ConfigProvider theme={filterBarTheme}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: space.sm,
-                    fontSize: fontSize.bodySm,
-                    color: color.body,
-                  }}
-                >
-                  <span>汇总：</span>
-                  <Segmented
-                    size="small"
-                    value={state.agg}
-                    onChange={(v) => actions.set({ agg: v as AggMode })}
-                    options={[
-                      { label: '平均值', value: 'avg' },
-                      { label: '最小值', value: 'min' },
-                    ]}
-                  />
-                </div>
-              </ConfigProvider>
-              </div>
-            )}
-
+        <div style={{ padding: `${space.sm}px ${space.lg}px ${space.md}px` }}>
             {/* 常驻工具行：齿轮（每格高度/Y 刻度线/自动压缩/折线样式）+ 折后价/RRP 胶囊；
                 第131轮波2：时间筛选簇上移顶部筛选条，本行只剩齿轮簇 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 32, padding: '4px 6px 0', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 32, padding: '0 6px', marginBottom: 8 }}>
               <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                 <ChartToolbar
                   currency={state.currency}
@@ -676,7 +690,7 @@ export default function VolumePrice() {
               <div
                 style={{
                   flex: `0 0 ${splitAxisWidth(state.currency)}px`,
-                  paddingTop: PANEL_HEAD_H,
+                  paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H + PERIOD_SUMMARY_HEIGHT,
                   display: 'flex',
                   flexDirection: 'column',
                 }}
@@ -692,11 +706,11 @@ export default function VolumePrice() {
                   tierValues={tierValues}
                 />
                 <div style={{ flex: 1 }} />
-                {/* 与时间轴行齐平：容器高/下边距 = PanelTimeTrack（52 + 6）；按钮与
-                    时间轴拖柄（轨道带，高 20）中心对齐 = top -5——不含下方日期字
-                    （第一百四十九轮澄清口径，改回轨道带对齐） */}
+                {/* 与时间轴轨道带齐平：轨道高 52，其下是说明行 VIEW_WINDOW_CAPTION_H。
+                    槽位仍高 52、按钮 top -5 对准轨道带中心；下边距加上说明行高度，
+                    否则按钮会比轨道带低出一整行说明。 */}
                 {buckets.length > 0 && visUnion.length > 0 && (
-                  <div style={{ height: 52, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
+                  <div style={{ height: 52, marginBottom: 6 + VIEW_WINDOW_CAPTION_H, position: 'relative', flexShrink: 0 }}>
                     <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
                       {syncToggle}
                     </div>
@@ -721,7 +735,7 @@ export default function VolumePrice() {
                   // 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
                   // 均分一行；>3 个不折行，横向拖动查看（轨道宽 = N/3 × 100%，每格
                   // 恒为视口 1/3 宽）
-                  <div className="lpl-card-scroll" style={{ overflowX: 'auto' }}>
+                  <div className="lpl-card-scroll" style={{ overflowX: 'auto', overflowY: 'hidden', padding: `${SCROLL_PAD_TOP}px 0 0` }}>
                     <div
                       style={{
                         display: 'grid',
@@ -757,51 +771,67 @@ export default function VolumePrice() {
                               : undefined,
                           borderRadius: radius.card,
                           background: color.canvas,
-                          padding: '0 8px 0',
+                          padding: `${PANEL_GRIP_H}px 8px 0`,
                           position: 'relative',
                           isolation: 'isolate',
                           opacity: draggingPanel === p.spec.key ? 0.45 : undefined,
                         }}
                       >
-                        {/* 面板头（第一百九十一轮，Eason 五点）：[拖柄][产品药丸] 同价格页
-                            分离面板头——拖柄拖到目标面板松手换位（title 同款）；药丸 =
-                            上行平台小药丸（取价渠道，点击弹渠道浮层）+ 下行两行产品药丸，
-                            信息承载原纯文字面板头（PanelHeader 退役） */}
-                        <div style={{ height: PANEL_HEAD_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                          <span
-                            draggable
-                            onDragStart={(e) => {
-                              setDraggingPanel(p.spec.key);
-                              e.dataTransfer.effectAllowed = 'move';
-                              e.dataTransfer.setData('text/plain', p.spec.key);
-                            }}
-                            onDragEnd={() => {
-                              setDraggingPanel(null);
-                              setDropTarget(null);
-                            }}
-                            role="button"
-                            aria-label={`拖动调整 ${p.name} 面板位置`}
-                            title="拖动调整面板顺序"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: 18,
-                              height: 18,
-                              flexShrink: 0,
-                              background: color.canvas,
-                              border: `1px solid ${draggingPanel === p.spec.key ? color.link : color.hairline}`,
-                              borderRadius: radius.pill,
-                              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
-                              cursor: 'grab',
-                              color: color.mute,
-                              lineHeight: '16px',
-                            }}
-                          >
-                            <HolderOutlined style={{ fontSize: 10 }} />
-                          </span>
+                        <span
+                          draggable
+                          onDragStart={(e) => {
+                            setDraggingPanel(p.spec.key);
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', p.spec.key);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingPanel(null);
+                            setDropTarget(null);
+                          }}
+                          role="button"
+                          aria-label={`拖动调整 ${p.name} 面板位置`}
+                          title="拖动调整面板顺序"
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 10,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '0 9px',
+                            height: 18,
+                            background: color.canvas,
+                            border: `1px solid ${draggingPanel === p.spec.key ? color.link : color.hairline}`,
+                            borderRadius: radius.pill,
+                            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
+                            cursor: 'grab',
+                            color: color.mute,
+                            lineHeight: '16px',
+                          }}
+                        >
+                          <HolderOutlined style={{ fontSize: 10 }} />
+                        </span>
+                        <div style={{ height: PANEL_HEAD_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
                           <PillUnit pill={pillOf(p)} dimmed={false} onToggle={() => {}} onHover={() => {}} />
                         </div>
+                        {(() => {
+                          const row = summaryRows.find((item) => item.key === p.key);
+                          if (!row || row.failed) return null;
+                          return (
+                            <PeriodVolumePriceSummary
+                              prices={row.prices}
+                              volumes={row.volumes}
+                              granularity={state.granularity}
+                              startId={row.startId}
+                              endId={row.endId}
+                              currency={state.currency}
+                              periodCount={row.periodCount}
+                              windowStart={row.windowStart}
+                              windowEnd={row.windowEnd}
+                            />
+                          );
+                        })()}
                         <div style={{ position: 'relative' }}>
                           <VolumeBars
                             geom={geoms[p.idx] ?? null}
@@ -843,7 +873,7 @@ export default function VolumePrice() {
                             brush={brushLive[p.idx] ?? brushes[p.idx] ?? null} // 第118/119轮：拖选高亮随同步态联动或独立
                             onBrushChange={onBrushChangeOf(p.idx)}
                             onGeom={onGeomOf(p.idx)}
-                            emptyHint="该产品在所选时间范围内无数据"
+                            emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
                           />
                         </div>
                         {/* 本图时间轴（第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：

@@ -9,4 +9,12 @@ export default defineConfig({
     target: 'es2020',
     chunkSizeWarningLimit: 8000,
   },
+  server: {
+    proxy: {
+      '/api/agent': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
+    },
+  },
 });

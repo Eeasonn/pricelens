@@ -11,7 +11,7 @@
 // 弹性权重分配剩余宽度，行文本不再省略号截断（窄容器时整面板横向滚动兜底），
 // 高度固定（height 透传，不随内容自适应跳变）。
 // ============================================================
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Checkbox, Tooltip } from 'antd';
 import { DownOutlined, LockOutlined, RightOutlined } from '@ant-design/icons';
 import { color, fontSize, radius, selectAccent, selectSoft, space } from '../../theme/tokens';
@@ -28,6 +28,8 @@ export interface CascadeRowItem {
   onActivate?: () => void;
   /** 点击行文本的附加行为（如平台树：点文字=勾选）；不传则点击仅激活 */
   onLabelClick?: () => void;
+  /** 窄屏单列：可下钻行在点击 / → 时进入下一级。焦点不触发，避免连跳两级 */
+  onDrill?: () => void;
   active?: boolean;
   /** 行尾内容（均值徽标 /「配置 SKU…」按钮），点击不触发行激活 */
   trailing?: ReactNode;
@@ -87,13 +89,14 @@ export interface CascadeColumnSpec {
   flex?: number;
 }
 
-function Column({ items, width, last, open, fillFlex, height, header }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean; fillFlex?: number; height?: number; header?: ReactNode }) {
-  const noClip = fillFlex != null;
+function Column({ items, width, last, open, fillFlex, height, header, rowHeight, fluid, showExpandArrow, scrollEpoch }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean; fillFlex?: number; height?: number; header?: ReactNode; rowHeight?: number; fluid?: boolean; showExpandArrow?: boolean; scrollEpoch?: number }) {
+  const noClip = fillFlex != null && !fluid;
+  const rowH = rowHeight ?? ROW_H;
   const hasActive = items.some((item) => item.active);
   const activeKey = items.find((item) => item.active)?.key;
   const columnRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!open) return;
+    if (!open || scrollEpoch != null) return;
     const frame = requestAnimationFrame(() => {
       const column = columnRef.current;
       const selected = column?.querySelector<HTMLElement>('[aria-selected="true"]');
@@ -104,12 +107,25 @@ function Column({ items, width, last, open, fillFlex, height, header }: { items:
       else if (row.bottom > bounds.bottom) column.scrollTop += row.bottom - bounds.bottom;
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeKey, open]);
+  }, [activeKey, open, scrollEpoch]);
+  useEffect(() => {
+    if (!open || scrollEpoch == null) return;
+    const column = columnRef.current;
+    if (column) column.scrollTop = 0;
+  }, [scrollEpoch, open]);
   return (
     <div
       ref={columnRef}
       role="group"
-      style={fillFlex != null ? {
+      style={fluid ? {
+        width: '100%',
+        minWidth: 0,
+        height: height ?? 348,
+        overflowX: 'hidden',
+        overflowY: 'auto',
+        background: color.canvas,
+        boxSizing: 'border-box',
+      } : fillFlex != null ? {
         // fill 模式：基础宽 = 内容自适应（flex-basis），剩余宽度按权重摊入；
         // 不收缩（第一百二十三轮）：容器窄于列宽和时保持各列完整宽，由面板
         // 整体横向滚动兜底——列内文本与行尾内容永不截断
@@ -134,6 +150,8 @@ function Column({ items, width, last, open, fillFlex, height, header }: { items:
             display: 'flex',
             alignItems: 'center',
             gap: space.xs,
+            width: '100%',
+            boxSizing: 'border-box',
             padding: `8px ${space.sm}px 6px`,
             borderBottom: `1px solid ${color.hairline}`,
             position: 'sticky',
@@ -146,7 +164,7 @@ function Column({ items, width, last, open, fillFlex, height, header }: { items:
         </div>
       )}
       {items.map((item, index) => {
-        const expandable = !last && Boolean(item.onActivate);
+        const expandable = Boolean(item.onActivate) && (showExpandArrow || !last);
         return (
         <div
           key={item.key}
@@ -167,6 +185,7 @@ function Column({ items, width, last, open, fillFlex, height, header }: { items:
               event.preventDefault();
               const nextColumn = event.currentTarget.parentElement?.nextElementSibling;
               item.onActivate();
+              item.onDrill?.();
               requestAnimationFrame(() => nextColumn?.querySelector<HTMLElement>('[role="treeitem"]')?.focus());
             } else if (event.key === 'ArrowLeft') {
               event.preventDefault();
@@ -175,14 +194,16 @@ function Column({ items, width, last, open, fillFlex, height, header }: { items:
               event.preventDefault();
               item.onActivate?.();
               item.onLabelClick?.();
+              if (item.onActivate) item.onDrill?.();
             }
           }}
           onClick={() => {
             item.onActivate?.();
             item.onLabelClick?.();
+            if (item.onActivate) item.onDrill?.();
           }}
           style={{
-            height: ROW_H,
+            height: rowH,
             display: 'flex',
             alignItems: 'center',
             gap: space.sm,
@@ -236,10 +257,137 @@ function Column({ items, width, last, open, fillFlex, height, header }: { items:
   );
 }
 
+const STEP_ROW_H = 44;
+
+/** 窄屏单列：一次只显示一级，顶部面包屑可返回或跳回已选层级。桌面多列不走这里。 */
+function SteppedCascade({
+  columns,
+  open,
+  height,
+  levelLabels,
+}: {
+  columns: CascadeColumnSpec[];
+  open: boolean;
+  height?: number;
+  levelLabels?: string[];
+}) {
+  const [step, setStep] = useState(0);
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (open && !wasOpen.current) setStep(0);
+    wasOpen.current = open;
+  }, [open]);
+  const count = columns.length;
+  const safe = count === 0 ? 0 : Math.min(step, count - 1);
+  if (count === 0) {
+    return <div style={{ padding: space.md, fontSize: fontSize.caption, color: color.mute }}>暂无数据</div>;
+  }
+  const col = columns[safe];
+  const crumbs = columns.slice(0, safe).flatMap((c, index) => {
+    const label = c.items.find((it) => it.active)?.label ?? levelLabels?.[index] ?? '';
+    return label ? [{ index, label }] : [];
+  });
+  const items = col.items.map((item) => (item.onActivate ? { ...item, onDrill: () => setStep((s) => s + 1) } : item));
+  const canDrill = col.items.some((item) => item.onActivate);
+  return (
+    <div style={{ width: '100%', minWidth: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          minHeight: STEP_ROW_H,
+          padding: '4px 8px',
+          borderBottom: `1px solid ${color.hairline}`,
+          background: color.canvas,
+        }}
+      >
+        {safe > 0 && (
+          <button
+            type="button"
+            aria-label="返回上一级"
+            onClick={() => setStep(safe - 1)}
+            style={{
+              height: STEP_ROW_H,
+              padding: '0 12px',
+              borderRadius: radius.control,
+              border: `1px solid ${color.hairline}`,
+              background: color.canvas,
+              color: color.body,
+              font: 'inherit',
+              fontSize: fontSize.bodySm,
+              fontWeight: 600,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            返回
+          </button>
+        )}
+        <nav aria-label="选择路径" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, minWidth: 0, flex: 1 }}>
+          {crumbs.map((c) => (
+            <button
+              key={c.index}
+              type="button"
+              onClick={() => setStep(c.index)}
+              style={{
+                minHeight: STEP_ROW_H,
+                padding: '0 6px',
+                border: 'none',
+                background: 'transparent',
+                color: color.mute,
+                font: 'inherit',
+                fontSize: fontSize.caption,
+                cursor: 'pointer',
+              }}
+            >
+              {c.label}
+            </button>
+          ))}
+          <span style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink, padding: '0 4px' }}>
+            {levelLabels?.[safe] ? `选择${levelLabels[safe]}` : '请选择'}
+          </span>
+        </nav>
+      </div>
+      <Column
+        items={items}
+        width={0}
+        last
+        open={open}
+        fluid
+        height={height ?? 348}
+        header={col.header}
+        rowHeight={STEP_ROW_H}
+        showExpandArrow={canDrill}
+        scrollEpoch={safe}
+      />
+    </div>
+  );
+}
+
 /** 多列级联面板（点击展开 + 父子联动勾选，AntD Cascader 范式；列宽自适应）。
  *  fill = 填满父容器宽度（列弹性分配、文本不截断、整面板横滚兜底）；
- *  height = 列固定高度（fill 模式默认 348，普通模式仍 maxHeight 328）。 */
-export function CascadePanel({ columns, open = true, fill = false, height }: { columns: CascadeColumnSpec[]; open?: boolean; fill?: boolean; height?: number }) {
+ *  height = 列固定高度（fill 模式默认 348，普通模式仍 maxHeight 328）。
+ *  stepped = 窄屏单列逐级（面包屑 + 返回）；桌面不传，多列布局不变。 */
+export function CascadePanel({
+  columns,
+  open = true,
+  fill = false,
+  height,
+  stepped = false,
+  levelLabels,
+  rowHeight,
+}: {
+  columns: CascadeColumnSpec[];
+  open?: boolean;
+  fill?: boolean;
+  height?: number;
+  stepped?: boolean;
+  levelLabels?: string[];
+  /** 非逐级模式的行高。窄屏搜索结果不是逐级面板，但仍要 44px 触达。 */
+  rowHeight?: number;
+}) {
+  if (stepped) return <SteppedCascade columns={columns} open={open} height={height} levelLabels={levelLabels} />;
   return (
     <div
       role="tree"
@@ -263,6 +411,7 @@ export function CascadePanel({ columns, open = true, fill = false, height }: { c
           open={open}
           fillFlex={fill ? (c.flex ?? 1) : undefined}
           height={height}
+          rowHeight={rowHeight}
         />
       ))}
     </div>

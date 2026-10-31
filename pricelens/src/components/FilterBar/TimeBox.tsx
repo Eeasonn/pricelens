@@ -42,15 +42,17 @@ export default function TimeBox() {
     actions.set({ adaptive: false, rangeStart: buckets[first].id, rangeEnd: buckets[last].id });
   };
 
-  // 定宽一行：「自动」+ 范围选择器；选择器在簇内弹性充满（1280 视口由产品入口列让位）
+  // 桌面定宽一行；窄屏拉满当前行，避免范围选择器被裁切
   return (
-    <div style={{ flexShrink: 0, width: 310, minWidth: 0 }}>
+    <div style={{ flex: '1 1 280px', width: 'auto', maxWidth: 460, minWidth: 0 }}>
       <TimeRangeCluster
         buckets={buckets}
         lo={lo}
         hi={hi}
         adaptive={state.adaptive}
         granularity={state.granularity}
+        agg={state.agg}
+        onAggChange={(agg) => actions.set({ agg })}
         onRangeChange={onRangeChange}
         onGranularityChange={actions.setGranularity}
         onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}

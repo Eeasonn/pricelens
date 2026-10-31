@@ -63,7 +63,6 @@ import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../stat
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
 import type {
-  AggMode,
   Granularity,
   Series,
   SeriesPoint,
@@ -250,9 +249,17 @@ export default function PriceTrend(props: {
   const [legendHoverKey, setLegendHoverKey] = useState<string | null>(null);
   const [panelLegendHover, setPanelLegendHover] = useState<{ panel: string; key: string } | null>(null);
 
-  // §5.6/§6.6：切换产品/价格类型/币种 → 滑杆倍率复位 ×1；图例显隐一并复位
+  // §5.6/§6.6：切换产品/价格类型/币种 → 滑杆倍率复位 ×1；图例显隐一并复位。
+  // 只在键相对「上次见到的值」变化时复位。挂载时键总会算出来，若无条件 setSliderScale(1)
+  // 会把会话里恢复的每格高度覆写成 1。布尔首跑守卫在开发模式双调用 effect 时会失效。
   const yAxisResetKey = JSON.stringify([effMains, state.priceTypes, state.currency]);
+  const yAxisResetSeenRef = useRef<string | null>(null);
   useEffect(() => {
+    if (yAxisResetSeenRef.current === null || yAxisResetSeenRef.current === yAxisResetKey) {
+      yAxisResetSeenRef.current = yAxisResetKey;
+      return;
+    }
+    yAxisResetSeenRef.current = yAxisResetKey;
     setSliderScale(1);
     setHiddenKeys(new Set());
   }, [yAxisResetKey]);
@@ -871,7 +878,8 @@ export default function PriceTrend(props: {
   //（白底描边，按压态浅蓝底 + 蓝描边）——隐藏/恢复全部组对比产品。
   // 第一百八十八轮（Eason）：高度 30→24 与同排按钮（齿轮/⋯/大促组）齐线；
   // 非激活描边从 hairlineStrong 降为 hairline，与大促档期组框一致不再抢眼
-  const onlyMainCtl = (
+  const hasCompares = state.mains.some((card) => card.compares.length > 0);
+  const onlyMainCtl = hasCompares ? (
     <button
       type="button"
       aria-pressed={onlyMain.active}
@@ -897,7 +905,7 @@ export default function PriceTrend(props: {
     >
       隐藏对比产品
     </button>
-  );
+  ) : null;
 
   // 图例悬停键失效自愈（本轮体检）：悬停药丸期间该系列被筛选/增删产品移出集合时，
   // BrandLegendStrip 内部会自清并回调 onHover(null)——但整条图例带卸载（分离↔合并
@@ -1273,20 +1281,6 @@ export default function PriceTrend(props: {
                 ]}
               />
             )}
-            {state.granularity !== 'week' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, fontSize: fontSize.bodySm, color: color.body }}>
-                <span>汇总</span>
-                <Segmented
-                  size="small"
-                  value={state.agg}
-                  onChange={(v) => actions.set({ agg: v as AggMode })}
-                  options={[
-                    { label: '平均值', value: 'avg' },
-                    { label: '最小值', value: 'min' },
-                  ]}
-                />
-              </div>
-            )}
           </ConfigProvider>
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
             <ChartToolbar
@@ -1333,10 +1327,14 @@ export default function PriceTrend(props: {
                 onToggleHidden={toggleLegend}
                 onHover={setLegendHoverKey}
                 channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
-                syncCtlOf={(g) => ({
-                  active: platformSyncMap[g.id] ?? false,
-                  onToggle: togglePlatformSyncOf(g.id),
-                })}
+                syncCtlOf={(g) => {
+                  const card = state.mains.find((c) => c.id === g.id);
+                  if (!card || card.compares.length === 0) return undefined;
+                  return {
+                    active: platformSyncMap[g.id] ?? false,
+                    onToggle: togglePlatformSyncOf(g.id),
+                  };
+                }}
               />
             )}
           />
@@ -1548,7 +1546,11 @@ export default function PriceTrend(props: {
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                           channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
-                          syncCtlOf={() => ({ active: platformSyncMap[p.key] ?? false, onToggle: togglePlatformSyncOf(p.key) })}
+                          syncCtlOf={() => (
+                            p.card.compares.length === 0
+                              ? undefined
+                              : { active: platformSyncMap[p.key] ?? false, onToggle: togglePlatformSyncOf(p.key) }
+                          )}
                         />
                       </div>
                       <Chart

@@ -116,6 +116,33 @@ describe('searchProductTree（搜索剪枝）', () => {
     expect(searchProductTree(tree, '不存在的产品')).toEqual([]);
     expect(searchProductTree(tree, '  ')).toBe(tree);
   });
+
+  it('容量命中：型号名不含搜索词时，只保留匹配的配置', () => {
+    const sample = tree
+      .flatMap((b) => b.series)
+      .flatMap((s) => s.models)
+      .find((m) => m.romrams.some((r) => r.romram !== '—' && /\d/.test(r.romram) && !m.label.toLowerCase().includes(r.romram.toLowerCase())));
+    expect(sample).toBeTruthy();
+    const rom = sample!.romrams.find((r) => r.romram !== '—' && /\d/.test(r.romram))!;
+    const q = rom.romram.replace(/\s+/g, '');
+    const hit = searchProductTree(tree, q);
+    expect(hit.length).toBeGreaterThan(0);
+    let sawConfigMatch = false;
+    for (const b of hit) {
+      for (const s of b.series) {
+        for (const m of s.models) {
+          const nameHit = b.title.toLowerCase().includes(q.toLowerCase())
+            || s.title.toLowerCase().includes(q.toLowerCase())
+            || m.label.toLowerCase().includes(q.toLowerCase());
+          if (nameHit) continue;
+          sawConfigMatch = true;
+          expect(m.romrams.length).toBeGreaterThan(0);
+          expect(m.romrams.every((r) => r.romram.toLowerCase().replace(/\s+/g, '').includes(q.toLowerCase()))).toBe(true);
+        }
+      }
+    }
+    expect(sawConfigMatch).toBe(true);
+  });
 });
 
 describe('档位筛选（第一百二十三轮：tier_by_country 配置级档位）', () => {

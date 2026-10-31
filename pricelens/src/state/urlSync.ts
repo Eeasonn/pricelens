@@ -21,7 +21,7 @@ import { getCurrentCountry } from './currentScope';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
-const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'pricing', 'config', 'alerts'];
+const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'pricing', 'intelligence', 'forecast', 'config', 'alerts'];
 
 /** 逗号列表参数 → 去空白、去空项 */
 const listParam = (q: URLSearchParams, name: string): string[] =>

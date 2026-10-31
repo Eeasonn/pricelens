@@ -20,10 +20,13 @@ import { usePage, type Page } from '../state/PageContext';
 import { filterBarTheme } from './FilterBar';
 import CountryBox from './FilterBar/CountryBox';
 import DataHelpModal from './DataHelpModal';
+import AgentLauncher from './Copilot/AgentLauncher';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
 /** 页头只留管理页签。图表内容的切换在筛选栏下方。 */
 const TABS: { page: Page; label: string }[] = [
+  { page: 'intelligence', label: '情报中心' },
+  { page: 'forecast', label: '量价预测' },
   { page: 'config', label: '配置' },
   { page: 'alerts', label: '预警' },
 ];
@@ -31,6 +34,7 @@ const TABS: { page: Page; label: string }[] = [
 export default function PageHeader({ extra }: { title?: string; extra?: ReactNode }) {
   const { go, page } = usePage();
   const [helpOpen, setHelpOpen] = useState(false);
+  const managementPage = page === 'config' || page === 'alerts' || page === 'intelligence' || page === 'forecast';
   return (
     <header
       style={{
@@ -48,7 +52,7 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: space.md, minWidth: 0 }}>
-        {page === 'config' || page === 'alerts' ? (
+        {managementPage ? (
           // 管理页的返回入口：分析页签已移至图表卡页签行（ChartContentBar），
           // 这里以站点徽标承担「回看板」（悬停变蓝给出可点反馈）
           <>
@@ -118,6 +122,7 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
         </ConfigProvider>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+        <AgentLauncher />
         <nav aria-label="页面" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {TABS.map((t) => (
             <span key={t.page} style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>

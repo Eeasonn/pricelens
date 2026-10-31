@@ -59,7 +59,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
 import ChannelSelectPopover from '../../components/ChannelSelectPopover';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { DownOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import { curveNameOf } from './chartModel';
@@ -270,6 +270,8 @@ export function PlatformRow({
           trigger="click"
           placement="bottomLeft"
           arrow={false}
+          destroyTooltipOnHide
+          classNames={{ root: 'lpl-cascade-popover' }}
           styles={{ body: { padding: 0 } }}
           content={
             <ChannelSelectPopover
@@ -288,26 +290,26 @@ export function PlatformRow({
             aria-label={`取价平台：${pill.channel.label}，点击筛选平台-店铺`}
             title={
               pill.channel.auto
-                ? // 「自动」口径文案与数据口径说明弹窗/渠道浮层同句（第一百八十五轮统一）
-                  `取价平台：${pill.channel.label}（自动 = 每周最低在架价：优先取默认店铺；未设置时取预填主店；仍无则取默认平台），点击筛选`
-                : `取价平台：${pill.channel.label}，点击筛选`
+                ? `自动取价。当前主要来源平台：${pill.channel.label}。点击修改平台、店铺或卖家`
+                : `取价平台：${pill.channel.label}。点击修改平台、店铺或卖家`
             }
             onClick={(e) => e.stopPropagation()}
-            className="lpl-hit"
+            className="lpl-platform-entry"
             style={{
               position: 'relative',
               display: 'inline-flex',
               alignItems: 'center',
+              gap: 4,
               height: 16,
-              padding: '0 7px',
-              borderRadius: 4, // 圆角矩形标签（区别于底下圆胶囊产品药丸）
+              padding: 0,
+              border: '1px solid transparent',
+              borderRadius: 4,
+              background: 'transparent',
+              font: 'inherit',
               fontSize: 10,
               lineHeight: '14px',
               fontWeight: 600,
-              // 恒白底（本轮，Eason）：筛选/同步后不再转浅蓝态，标签外观恒定
               color: color.mute,
-              background: color.canvas,
-              border: `1px solid ${color.hairline}`,
               whiteSpace: 'nowrap',
               overflow: 'visible',
               flexShrink: 0,
@@ -315,6 +317,7 @@ export function PlatformRow({
             }}
           >
             <span style={{ minWidth: 0, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
+            <DownOutlined aria-hidden style={{ fontSize: 8, color: 'currentColor' }} />
           </button>
         </Popover>
       ) : (
