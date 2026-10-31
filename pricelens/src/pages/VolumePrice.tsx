@@ -86,7 +86,6 @@ import PanelTimeTrack from './volume/PanelTimeTrack';
 import MarginCostBand from './volume/MarginCostBand';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
 import PeriodVolumePriceSummary, { PERIOD_SUMMARY_HEIGHT } from './volume/PeriodVolumePriceSummary';
-import MarketBoard from './volume/MarketBoard';
 import { commitVolumeAxisLimit, normalizePanelWindow, vMaxOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
 import { resolveSelectedWindow } from './volume/periodSummary';
 
@@ -633,18 +632,6 @@ export default function VolumePrice() {
   });
   const summaryRows = summaryLive;
 
-  // 大盘卡时间域（第119轮）：同步 = 共享窗口；非同步 = 各面板生效窗口的并集
-  const marketWin = useMemo<[number, number]>(() => {
-    if (synced) return [win.s, win.e];
-    let s = Infinity;
-    let e = -Infinity;
-    for (const [a, b] of effWins) {
-      s = Math.min(s, a);
-      e = Math.max(e, b);
-    }
-    return [Math.max(0, s), Math.min(Math.max(0, buckets.length - 1), e)];
-  }, [synced, win.s, win.e, effWins, buckets.length]);
-
   // 几何上报（面板头下拉与槽位选择已随第一百六十七轮退役）
   const onGeomOf = (i: number) => (g: StripGeom | null): void => {
     setGeoms((prev) => {
@@ -1043,30 +1030,6 @@ export default function VolumePrice() {
       </div>
 
       </section>
-
-      {/* 大盘分析（第118轮引入；第119轮走查会补齐）：窗口内各期大盘销量柱（绝对台数，
-          堆叠 = 品牌构成）+ 档位筛选 + 点击柱子选期下钻 + 大盘环比贡献拆解。
-          时间域：同步 = 共享窗口；非同步 = 各面板生效窗口的并集 */}
-      {buckets.length > 0 && (
-        <section
-          style={{
-            marginTop: space.md,
-            background: color.canvas,
-            boxShadow: shadow.l1,
-            borderRadius: radius.card,
-            padding: space.lg,
-          }}
-        >
-          <MarketBoard
-            cc={cc}
-            industry={state.industry}
-            granularity={state.granularity}
-            buckets={buckets}
-            winS={marketWin[0]}
-            winE={marketWin[1]}
-          />
-        </section>
-      )}
     </>
   );
 }
