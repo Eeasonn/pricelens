@@ -1,4 +1,6 @@
-# PriceLens · 单国价格看板打样
+# PriceLens · 统一版开发说明
+
+PriceLens 只有一个统一产品版本：价格看板、量价走势、量价预测、情报中心、预警中心与 PriceLens Agent 同在 `src/App.tsx` 一个应用内，不维护「Copilot 版 / 非 Copilot 版」两套前端或两个站点。产品口径基线：`../PriceLens-产品说明.md`（v0.4 统一版）；`../PriceLens-单国打样-自包含落地方案.md` 为单国打样期历史稿。
 
 ## Agent 入口
 
@@ -16,16 +18,14 @@ ARK_API_KEY="<your-ark-api-key>" npm run agent-server
 
 旧的 `price-agent-demo.html` 和 `price-agent-recorder.html` 是录制阶段的独立模拟页，已不再作为产品入口；录制素材仍保留在 `src/roadshowDemo` 和 `src/roadshowRecorder`。
 
-需求基线：`../PriceLens-单国打样-自包含落地方案.md`（唯一事实来源）
-
 ```bash
 npm install        # 安装依赖（已执行过则跳过）
-npm run gen        # 造数：scripts/gen-data.mjs → src/data/*.json + fact 的 gzip+base64（seed 20261009，可复现）
+npm run ingest     # 真实数据接入：scripts/ingest_real.py（数据再生须连跑 patch_comp_series.py + prefill_default_shops.py）
 npm run dev        # 本地开发
 npm run build      # 产出单文件 dist/index.html 并同步覆盖仓库根 PriceLens.html（铁律：单文件版永远最新）
 npm run typecheck  # tsc --noEmit
-npm run verify     # 造数 + 聚合契约断言 + 单文件一致性（scripts/verify.mjs，47 项）
-npm run test       # vitest：chartModel 纯计算层金测（快照钉住图表行为）
+npm run verify     # 聚合契约断言 + 单文件一致性（scripts/verify.mjs，47 项）
+npm run test       # vitest 金测（快照钉住图表行为）
 npm run check      # typecheck + verify + test + build 全链路
 ```
 
@@ -43,9 +43,10 @@ verify 末项检查根目录 `PriceLens.html` 与 `dist/index.html` 逐字节一
 
 ## 当前默认视图：周 · USD · 我司 + 配置竞品
 
-- `defaultFilters` 当前默认粒度为 `week`，币种为 `usd`，自适应跟随开启；默认范围为
-  `202601→202641`，我司默认选中 Pura 90s Pro · 12+256，竞品由配置矩阵带出
-  iPhone 17 · 8+256 与 Galaxy S26 · 12+256。
+- `defaultFilters` 当前默认粒度为 `week`，币种为 `usd`，自适应跟随开启；默认范围 = 数据跨度
+  `202619→202642`（24 周），华为默认选中 Pura 80 · 12+256（取自 `dim_region`
+  的 `default_own_models`），竞品由配置矩阵自动匹配带出（当前 R国 = iPhone 16 · 256、
+  Galaxy S25 · 12+256、小米 15T · 12+256）。
 - 时间筛选器采用 Ant Design RangePicker 风格：自动跟随按钮与自定义范围输入并排，
   周/月/季粒度集中在弹层顶部；手动调整范围会关闭自动跟随，切换粒度保留当前可见跨度。
 - 下方 XBrush 只负责窗口平移和双端拖柄调整，轨道与绘图区左右边界对齐；时间刻度使用
@@ -53,7 +54,7 @@ verify 末项检查根目录 `PriceLens.html` 与 `dist/index.html` 逐字节一
 - 当前视觉基线：正文 14px / 行高 1.5，筛选控件 30px、小型控件 24px；时间值使用 11px
   等宽数字；选中态沿用顶部筛选器的浅蓝色（`#e8f1ff` / `#0053c2`），外层间距按
   4 / 8 / 12 / 16px 节奏收敛。
-- 持久化默认版本当前为 `DEFAULTS_V=9`，并包含四类预警开关/阈值与预警订阅状态；铃铛入口
+- 持久化默认版本当前为 `DEFAULTS_V=12`，并包含四类预警开关/阈值与预警订阅状态；铃铛入口
   位于看板时点摘要页签尾部。
 
 ## 默认视图历史：月 · USD · 我司 + 配置竞品（第二十五轮）
