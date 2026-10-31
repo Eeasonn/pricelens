@@ -253,8 +253,9 @@ export interface ChartProps {
   /** 拖选上报：拖动中 committing=false 实时预览；松手 committing=true 提交或清除
    *  （拖距过小视为点击：已有高亮 = 清除，无高亮 = 忽略）。缺省 = 不启用拖选 */
   onBrushChange?: (r: [number, number] | null, committing: boolean) => void;
-  /** 量价区间极差：当前选择区间的折后价极值。toward=left 朝左缘，缺省朝右缘。缺省不画。 */
-  rangeMarks?: readonly { index: number; value: number; label: string; toward?: 'left' | 'right' }[] | null;
+  /** 量价区间极差：当前选择区间的折后价极值。toward=left 朝左缘，缺省朝右缘。toX =
+   *  引导线终点（极差卡近缘，留缝后传入）；缺省画到绘图区边缘。缺省不画。 */
+  rangeMarks?: readonly { index: number; value: number; label: string; toward?: 'left' | 'right'; toX?: number }[] | null;
   /** 量价页用左右极差卡表达数值，不再在图中显示「拖动选择时间段」提示。缺省保留。 */
   showBrushHint?: boolean;
   /** 选择区间以外是否盖白幕。量价页关掉，避免卡片和折线上面再蒙一层。缺省盖上。 */
@@ -1017,13 +1018,17 @@ export default function Chart(props: ChartProps) {
               if (mark.index < 0 || mark.index >= geom.n) return null;
               const x = xPxOf(geom, mark.index);
               const y = yPxOf(geom, mark.value);
+              // 引导线只画「极值点 → 极差卡」这一段（toX = 卡近缘）；没给卡位时退回画到绘图区边缘
               const edge = mark.toward === 'left' ? geom.plotLeft : geom.plotLeft + geom.plotWidth;
-              const x1 = Math.min(x, edge);
-              const x2 = Math.max(x, edge);
+              const toX = mark.toX ?? edge;
+              const x1 = Math.min(x, toX);
+              const x2 = Math.max(x, toX);
               return (
                 <g key={`${mark.index}-${mark.label}`}>
-                  <line x1={x1} x2={x2} y1={y} y2={y} stroke={color.ink} strokeOpacity={0.55} strokeDasharray="3 3" strokeWidth={1} />
-                  <circle cx={x} cy={y} r={3.5} fill={color.canvas} stroke={color.ink} strokeWidth={1.5} />
+                  {x2 - x1 > 2 && (
+                    <line x1={x1} x2={x2} y1={y} y2={y} stroke={color.ink} strokeOpacity={0.3} strokeDasharray="2 4" strokeWidth={1} />
+                  )}
+                  <circle cx={x} cy={y} r={3} fill={color.canvas} stroke={color.ink} strokeOpacity={0.45} strokeWidth={1.25} />
                 </g>
               );
             })}

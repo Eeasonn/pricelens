@@ -138,8 +138,8 @@ export default function VolumeBars(props: {
   hoverIdx: number | null;
   axisLimits: VolumeAxisLimits;
   onAxisLimit: (kind: 'max', value: number | null) => void;
-  /** 当前选择区间的销量极值。按销量轴定位，从点画到绘图区右缘。 */
-  rangeMarks?: readonly { index: number; value: number; label: string }[] | null;
+  /** 当前选择区间的销量极值。按销量轴定位，引导线画到极差卡近缘（toX）；缺省画到绘图区右缘。 */
+  rangeMarks?: readonly { index: number; value: number; label: string; toX?: number }[] | null;
 }) {
   const { geom, values, vMax } = props;
   if (!geom || geom.n <= 0 || !(props.plotHeight > 0) || !(vMax > 0)) return null;
@@ -206,10 +206,15 @@ export default function VolumeBars(props: {
               const x = geom.plotLeft + colW * (mark.index + 0.5);
               const y = yOfVolume(mark.value);
               const edge = geom.plotLeft + geom.plotWidth;
+              const toX = mark.toX ?? edge;
+              const x1 = Math.min(x, toX);
+              const x2 = Math.max(x, toX);
               return (
                 <g key={`${mark.index}-${mark.label}`}>
-                  <line x1={Math.min(x, edge)} x2={Math.max(x, edge)} y1={y} y2={y} stroke={color.ink} strokeOpacity={0.55} strokeDasharray="3 3" strokeWidth={1} />
-                  <circle cx={x} cy={y} r={3.5} fill={color.canvas} stroke={color.ink} strokeWidth={1.5} />
+                  {x2 - x1 > 2 && (
+                    <line x1={x1} x2={x2} y1={y} y2={y} stroke={color.ink} strokeOpacity={0.3} strokeDasharray="2 4" strokeWidth={1} />
+                  )}
+                  <circle cx={x} cy={y} r={3} fill={color.canvas} stroke={color.ink} strokeOpacity={0.45} strokeWidth={1.25} />
                 </g>
               );
             })}

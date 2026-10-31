@@ -937,6 +937,20 @@ export default function VolumePrice() {
                             : null,
                         })
                         : null;
+                      // 引导线只画「极值点 → 极差卡」一段：价格线到价格卡右缘、销量线到销量卡左缘，
+                      // 各留 4px 缝；点落在卡片后方（x 在卡区间内/外侧）时不画线只留点
+                      const priceCardRight = cardPlan ? cardPlan.price.left + cardPlan.price.width : null;
+                      const volumeCardLeft = cardPlan ? cardPlan.volume.left : null;
+                      const priceMarkViews = priceMarks.map((mark) => {
+                        const x = markXOf(mark.index);
+                        const toX = priceCardRight != null && x > priceCardRight ? priceCardRight + 4 : x;
+                        return { ...mark, toward: 'left' as const, toX };
+                      });
+                      const volumeMarkViews = volumeMarks.map((mark) => {
+                        const x = markXOf(mark.index);
+                        const toX = volumeCardLeft != null && x < volumeCardLeft ? volumeCardLeft - 4 : x;
+                        return { ...mark, toX };
+                      });
                       return (
                       <div
                         key={p.key}
@@ -1062,7 +1076,7 @@ export default function VolumePrice() {
                             hoverIdx={hoverIdxs[p.idx] ?? null}
                             axisLimits={volumeLimits[p.idx] ?? { max: null }}
                             onAxisLimit={(kind, value) => onVolumeAxisLimit(p.idx, kind, value)}
-                            rangeMarks={panelHidden ? [] : volumeMarks}
+                            rangeMarks={panelHidden ? [] : volumeMarkViews}
                           />
                           <Chart
                             series={panelHidden ? [] : p.vis}
@@ -1097,7 +1111,7 @@ export default function VolumePrice() {
                             showBrushHint={false}
                             dimOutsideBrush={false}
                             onBrushChange={onBrushChangeOf(p.idx)}
-                            rangeMarks={priceMarks.map((mark) => ({ ...mark, toward: 'left' as const }))}
+                            rangeMarks={priceMarkViews}
                             onGeom={onGeomOf(p.idx)}
                             emptyHint={panelHidden ? '已隐藏，点击产品名恢复显示' : p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
                           />
