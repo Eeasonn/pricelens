@@ -1,20 +1,6 @@
-// 区间量价摘要：只描述当前查看窗口内的折后价与销量事实。
-// 不跨产品汇总，不把首尾变化解释为弹性或因果关系。
-import type { Granularity } from '../../dataModel/types';
-import { formatPrice } from '../../theme/tokens';
-
-export type MoveDirection = 'up' | 'down' | 'flat' | 'none';
-export type MoveTone = 'up' | 'down' | 'flat' | 'none';
-
-export interface ChangeStats {
-  validCount: number;
-  start: number | null;
-  end: number | null;
-  delta: number | null;
-  /** 期初为 0 或有效点不足 2 个时为 null，不用无穷大代替 */
-  pct: number | null;
-  direction: MoveDirection;
-}
+// 区间极差：只描述当前选择区间内折后价与销量的最高、最低。
+// 不跨产品汇总，不把极差解释成涨跌方向。
+// 数值的文字组合在 spreadCards 里做；本文件只负责找极值与换算下标。
 
 const isFiniteNumber = (v: number | null | undefined): v is number => v != null && Number.isFinite(v);
 
@@ -27,47 +13,95 @@ export function volumePointValid(v: number | null | undefined): v is number {
   return isFiniteNumber(v);
 }
 
-function directionFrom(pct: number | null, delta: number | null, validCount: number): MoveDirection {
-  if (validCount < 2 || delta == null) return 'none';
-  if (pct != null) {
-    if (Math.abs(pct) < 1) return 'flat';
-    return pct > 0 ? 'up' : 'down';
-  }
-  if (delta === 0) return 'flat';
-  return delta > 0 ? 'up' : 'down';
+export interface RangeExtremePoint {
+  index: number;
+  value: number;
 }
 
-export function changeOf(values: readonly (number | null)[], valid: (v: number | null | undefined) => v is number): ChangeStats {
-  const points = values.filter(valid);
-  const validCount = points.length;
-  if (validCount === 0) {
-    return { validCount: 0, start: null, end: null, delta: null, pct: null, direction: 'none' };
-  }
-  const start = points[0];
-  const end = points[points.length - 1];
-  if (validCount < 2) {
-    return { validCount, start, end, delta: null, pct: null, direction: 'none' };
-  }
-  const delta = end - start;
-  const pct = start > 0 ? (delta / start) * 100 : null;
-  return { validCount, start, end, delta, pct, direction: directionFrom(pct, delta, validCount) };
+export interface RangeSpread {
+  validCount: number;
+  min: RangeExtremePoint | null;
+  max: RangeExtremePoint | null;
+  spread: number | null;
+  /** 百分比。最低值为 0 或没有有效点时为 null */
+  rate: number | null;
+  samePoint: boolean;
 }
 
-export function volumeTotalOf(values: readonly (number | null)[]): number | null {
-  let total = 0;
-  let any = false;
-  for (const v of values) {
-    if (!volumePointValid(v)) continue;
-    total += v;
-    any = true;
+export interface RangeMark {
+  index: number;
+  value: number;
+  label: string;
+  /** max/min = 最高/最低点；same = 只���一个有效点或全部相同，最高＝最低合成一个标记 */
+  kind: 'max' | 'min' | 'same';
+}
+
+/** 区间内最早的最高点与最早的最低点。并列时不改用更晚的点。 */
+export function rangeSpreadOf(
+  values: readonly (number | null | undefined)[],
+  valid: (v: number | null | undefined) => v is number,
+): RangeSpread {
+  let min: RangeExtremePoint | null = null;
+  let max: RangeExtremePoint | null = null;
+  let validCount = 0;
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if (!valid(value)) continue;
+    validCount += 1;
+    if (!min || value < min.value) min = { index, value };
+    if (!max || value > max.value) max = { index, value };
   }
-  return any ? total : null;
+  if (!min || !max) {
+    return { validCount: 0, min: null, max: null, spread: null, rate: null, samePoint: false };
+  }
+  const spread = max.value - min.value;
+  return {
+    validCount,
+    min,
+    max,
+    spread,
+    rate: min.value > 0 ? (spread / min.value) * 100 : null,
+    samePoint: min.index === max.index,
+  };
+}
+
+export function rangeMarkLabels(spread: RangeSpread, formatValue: (value: number) => string): RangeMark[] {
+  if (!spread.min || !spread.max) return [];
+  if (spread.samePoint) {
+    return [{
+      index: spread.min.index,
+      value: spread.min.value,
+      label: `最高＝最低 ${formatValue(spread.min.value)}`,
+      kind: 'same',
+    }];
+  }
+  return [
+    { index: spread.max.index, value: spread.max.value, label: `最高 ${formatValue(spread.max.value)}`, kind: 'max' },
+    { index: spread.min.index, value: spread.min.value, label: `最低 ${formatValue(spread.min.value)}`, kind: 'min' },
+  ];
+}
+
+/** 选择区间内的极值，下标换成当前视图桶下标，方便直接画在图上。 */
+export function rangeMarksInView(
+  values: readonly (number | null | undefined)[],
+  selStart: number,
+  selEnd: number,
+  viewStart: number,
+  valid: (v: number | null | undefined) => v is number,
+  formatValue: (value: number) => string,
+): RangeMark[] {
+  const start = Math.max(0, Math.min(selStart, selEnd));
+  const end = Math.max(selStart, selEnd);
+  const offset = start - viewStart;
+  return rangeMarkLabels(rangeSpreadOf(values.slice(start, end + 1), valid), formatValue).map((mark) => ({
+    ...mark,
+    index: mark.index + offset,
+  }));
 }
 
 /**
  * 将图内拖选返回的“当前查看窗口内下标”还原为全量时间桶下标。
- * 图表本身只渲染 effWins 切片，摘要则使用完整序列；两者必须共享同一
- * 个生效区间，否则拖选 07-15—09-16 后摘要仍会显示整段 W19—W42。
+ * 图表本身只渲染查看窗口切片，摘要与极值使用完整序列上的同一区间。
  */
 export function resolveSelectedWindow(
   viewStart: number,
@@ -83,38 +117,7 @@ export function resolveSelectedWindow(
   return [clamp(lo + brushLo), clamp(lo + brushHi)];
 }
 
-const SIDE: Record<Exclude<MoveDirection, 'none'>, { price: string; volume: string }> = {
-  up: { price: '价升', volume: '量升' },
-  down: { price: '价降', volume: '量降' },
-  flat: { price: '价稳', volume: '量稳' },
-};
-
-export function directionLabelOf(price: MoveDirection, volume: MoveDirection): string | null {
-  const parts = [
-    price === 'none' ? '' : SIDE[price].price,
-    volume === 'none' ? '' : SIDE[volume].volume,
-  ].filter(Boolean);
-  return parts.length ? parts.join('') : null;
-}
-
-export function formatWindowLabel(granularity: Granularity, startId: string | undefined, endId: string | undefined): string {
-  const one = (id: string | undefined): string => {
-    if (!id) return '—';
-    if (granularity === 'week' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}W${id.slice(4)}`;
-    return id;
-  };
-  const start = one(startId);
-  const end = one(endId);
-  return start === end ? start : `${start}–${end}`;
-}
-
-export function periodUnit(granularity: Granularity, count: number): string {
-  if (granularity === 'month') return `${count}个月`;
-  if (granularity === 'quarter') return `${count}个季度`;
-  return `${count}周`;
-}
-
-/** 与起止值同一量级：任一侧达到 1 万则全部用「万」，否则千分位 */
+/** 与极值同一量级：任一侧达到 1 万则全部用「万」，否则千分位 */
 export function formatVolumeAmount(n: number, wan: boolean): string {
   const negative = n < 0;
   const abs = Math.abs(n);
@@ -122,83 +125,4 @@ export function formatVolumeAmount(n: number, wan: boolean): string {
     ? `${(abs / 10000).toFixed(1).replace(/\.0$/, '')}万`
     : Math.round(abs).toLocaleString('en-US');
   return negative ? `−${body}` : body;
-}
-
-function signedAmount(n: number, format: (v: number) => string): string {
-  if (n > 0) return `+${format(n)}`;
-  if (n < 0) return `−${format(Math.abs(n))}`;
-  return format(0);
-}
-
-export function formatPct(pct: number): string {
-  const abs = Math.abs(pct).toFixed(1);
-  if (pct < 0) return `−${abs}%`;
-  if (pct > 0) return `+${abs}%`;
-  return '0.0%';
-}
-
-export interface PeriodSummaryModel {
-  empty: boolean;
-  windowLabel: string;
-  directionLabel: string | null;
-  pricePct: string | null;
-  priceDetail: string | null;
-  priceTone: MoveTone;
-  volumePct: string | null;
-  volumeDetail: string | null;
-  volumeTotalText: string | null;
-  volumeTone: MoveTone;
-}
-
-export function buildPeriodSummary(input: {
-  prices: readonly (number | null)[];
-  volumes: readonly (number | null)[];
-  granularity: Granularity;
-  startId?: string;
-  endId?: string;
-  currency: 'local' | 'usd';
-  /** 查看窗口包含的桶数；缺省 = 价格与销量序列中较长的一条 */
-  periodCount?: number;
-  /** 完整序列对应的当前查看窗口下标；省略时使用传入序列全部点。 */
-  windowStart?: number;
-  windowEnd?: number;
-}): PeriodSummaryModel {
-  const hasWindow = input.windowStart != null || input.windowEnd != null;
-  const windowStart = Math.max(0, input.windowStart ?? 0);
-  const windowEnd = Math.max(windowStart, input.windowEnd ?? Math.max(input.prices.length, input.volumes.length) - 1);
-  const prices = hasWindow ? input.prices.slice(windowStart, windowEnd + 1) : input.prices;
-  const volumes = hasWindow ? input.volumes.slice(windowStart, windowEnd + 1) : input.volumes;
-  const price = changeOf(prices, pricePointValid);
-  const volume = changeOf(volumes, volumePointValid);
-  const total = volumeTotalOf(volumes);
-  const periodCount = input.periodCount ?? Math.max(prices.length, volumes.length);
-  const windowLabel = formatWindowLabel(input.granularity, input.startId, input.endId);
-  const empty = price.validCount === 0 && volume.validCount === 0 && total == null;
-  const money = (v: number): string => formatPrice(Math.round(v), input.currency);
-  const wan = [volume.start, volume.end, volume.delta, total].some((v) => v != null && Math.abs(v) >= 10000);
-  const vol = (v: number): string => formatVolumeAmount(v, wan);
-
-  const priceDetail = price.validCount === 0 || price.start == null
-    ? null
-    : price.validCount < 2 || price.end == null || price.delta == null
-      ? money(price.start)
-      : `${money(price.start)} → ${money(price.end)}（${signedAmount(price.delta, money)}）`;
-  const volumeDetail = volume.validCount === 0 || volume.start == null
-    ? null
-    : volume.validCount < 2 || volume.end == null || volume.delta == null
-      ? vol(volume.start)
-      : `${vol(volume.start)} → ${vol(volume.end)}（${signedAmount(volume.delta, vol)}）`;
-
-  return {
-    empty,
-    windowLabel,
-    directionLabel: empty ? null : directionLabelOf(price.direction, volume.direction),
-    pricePct: price.pct == null ? null : formatPct(price.pct),
-    priceDetail,
-    priceTone: price.direction,
-    volumePct: volume.pct == null ? null : formatPct(volume.pct),
-    volumeDetail,
-    volumeTotalText: total == null ? null : `${vol(total)} · ${periodUnit(input.granularity, periodCount)}`,
-    volumeTone: volume.direction,
-  };
 }

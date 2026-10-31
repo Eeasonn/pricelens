@@ -245,6 +245,8 @@ describe('buildLabelPlan compact（每系列仅 最高/最低/最新 三价，�
     expect(Object.keys(dy).sort()).toEqual(['0', '3']); // 最高=最新=末点 130、最低=首点 90
     expect(plan.pos?.['s1']?.[3]).toBe('top'); // 同为最高 → top 优先
     expect(plan.pos?.['s1']?.[0]).toBe('bottom'); // 最低
+    const resting = buildLabelPlan({ geom: sGeom, series: [mkSeries({ points: rising })], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: new Map(), labelMode: 'compact', markExtremes: false });
+    expect(Object.keys(resting.dy['s1'] ?? {}).sort()).toEqual(['3']);
   });
 
   it('跨接孤立点（absorbed）不产生精简标签；detail 模式不带 pos 字段（旧口径不变）', () => {

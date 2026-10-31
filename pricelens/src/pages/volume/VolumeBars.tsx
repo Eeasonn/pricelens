@@ -138,6 +138,8 @@ export default function VolumeBars(props: {
   hoverIdx: number | null;
   axisLimits: VolumeAxisLimits;
   onAxisLimit: (kind: 'max', value: number | null) => void;
+  /** 当前选择区间的销量极值。按销量轴定位，从点画到绘图区右缘。 */
+  rangeMarks?: readonly { index: number; value: number; label: string }[] | null;
 }) {
   const { geom, values, vMax } = props;
   if (!geom || geom.n <= 0 || !(props.plotHeight > 0) || !(vMax > 0)) return null;
@@ -166,6 +168,11 @@ export default function VolumeBars(props: {
     };
   });
 
+  const yOfVolume = (value: number): number => {
+    const ratio = Math.min(1, Math.max(0, (value - axisMin) / axisSpan));
+    return plotBottom - ratio * props.plotHeight;
+  };
+  const volumeMarks = (props.rangeMarks ?? []).filter((mark) => mark.index >= 0 && mark.index < geom.n);
   const axisX = geom.plotLeft + geom.plotWidth + 10;
   const commit = (value: number | null): void => {
     props.onAxisLimit('max', commitVolumeAxisLimit(props.axisLimits, 'max', value, vMax).max);
@@ -192,6 +199,23 @@ export default function VolumeBars(props: {
           </rect>
         ))}
       </svg>
+      {volumeMarks.length > 0 && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 16 }}>
+          <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
+            {volumeMarks.map((mark) => {
+              const x = geom.plotLeft + colW * (mark.index + 0.5);
+              const y = yOfVolume(mark.value);
+              const edge = geom.plotLeft + geom.plotWidth;
+              return (
+                <g key={`${mark.index}-${mark.label}`}>
+                  <line x1={Math.min(x, edge)} x2={Math.max(x, edge)} y1={y} y2={y} stroke={color.ink} strokeOpacity={0.55} strokeDasharray="3 3" strokeWidth={1} />
+                  <circle cx={x} cy={y} r={3.5} fill={color.canvas} stroke={color.ink} strokeWidth={1.5} />
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
         <div style={{ position: 'absolute', left: axisX, top: props.plotTop, width: 1, height: props.plotHeight, background: color.hairline }} />
         <div style={{ position: 'absolute', left: axisX + 8, top: props.plotTop, color: color.mute, fontSize: 10, lineHeight: '12px', whiteSpace: 'nowrap' }}>销量（台）</div>

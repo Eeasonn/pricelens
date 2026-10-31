@@ -244,6 +244,8 @@ export interface ChartProps {
   /** 第一百一十四轮（评审）：'compact' = 精简标签——每系列只标最高/最低/最新三价
    *  （数字直标无框、位置避线），其余数值标签不画；缺省 'detail' = 现行全量标签口径 */
   labelMode?: 'detail' | 'compact';
+  /** compact 时是否标最高/最低。缺省标出。量价常驻传 false，只留最新价。 */
+  markExtremes?: boolean;
   // ---- 第118轮（评审）：图内拖选时间段（量价看板三面板联动高亮分析） ----
   /** 已提交的高亮时间段（可见窗口桶下标 [起,止]）；null = 无。非空时：时间段外
    *  整体降透明、悬停明细只响应时间段内、高亮区顶部显示时间范围（点 × 清除） */
@@ -251,6 +253,14 @@ export interface ChartProps {
   /** 拖选上报：拖动中 committing=false 实时预览；松手 committing=true 提交或清除
    *  （拖距过小视为点击：已有高亮 = 清除，无高亮 = 忽略）。缺省 = 不启用拖选 */
   onBrushChange?: (r: [number, number] | null, committing: boolean) => void;
+  /** 量价区间极差：当前选择区间的折后价极值。toward=left 朝左缘，缺省朝右缘。缺省不画。 */
+  rangeMarks?: readonly { index: number; value: number; label: string; toward?: 'left' | 'right' }[] | null;
+  /** 量价页用左右极差卡表达数值，不再在图中显示「拖动选择时间段」提示。缺省保留。 */
+  showBrushHint?: boolean;
+  /** 选择区间以外是否盖白幕。量价页关掉，避免卡片和折线上面再蒙一层。缺省盖上。 */
+  dimOutsideBrush?: boolean;
+  /** 量价页：竖线从绘图区顶延伸到图表容器底，与下方成本销毛带的同列竖线相接。 */
+  extendCrosshair?: boolean;
   // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
   // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
@@ -748,8 +758,9 @@ export default function Chart(props: ChartProps) {
         hiddenKeys: props.hiddenKeys,
         hideNames: props.hideNamePills === true, // 第一百一十三轮：量价面板禁画名称药丸
         labelMode, // 第一百一十四轮：精简 = 仅最高/最低/最新三价
+        markExtremes: props.markExtremes,
       }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode],
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes],
   );
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
@@ -999,6 +1010,26 @@ export default function Chart(props: ChartProps) {
       </div>
       {/* ECharts 挂载层（第一百一十四轮：高度不含 tipBox 预留框——canvas 网格仍止于底边距） */}
       <div ref={chartDivRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: chartH, zIndex: 1 }} />
+      {geom && props.rangeMarks && props.rangeMarks.length > 0 && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 16, pointerEvents: 'none' }}>
+          <svg width="100%" height={chartH} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }}>
+            {props.rangeMarks.map((mark) => {
+              if (mark.index < 0 || mark.index >= geom.n) return null;
+              const x = xPxOf(geom, mark.index);
+              const y = yPxOf(geom, mark.value);
+              const edge = mark.toward === 'left' ? geom.plotLeft : geom.plotLeft + geom.plotWidth;
+              const x1 = Math.min(x, edge);
+              const x2 = Math.max(x, edge);
+              return (
+                <g key={`${mark.index}-${mark.label}`}>
+                  <line x1={x1} x2={x2} y1={y} y2={y} stroke={color.ink} strokeOpacity={0.55} strokeDasharray="3 3" strokeWidth={1} />
+                  <circle cx={x} cy={y} r={3.5} fill={color.canvas} stroke={color.ink} strokeWidth={1.5} />
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
       {empty && (
         <div
           style={{
@@ -1701,8 +1732,23 @@ export default function Chart(props: ChartProps) {
               </span>
             </div>
           )}
-          {/* 十字竖线（DOM 层，替代 ECharts axisPointer） */}
-          {hoverIdx != null && hoverIdx < geom.n && (
+          {/* 十字竖线（DOM 层，替代 ECharts axisPointer）。量价页延伸到容器底，与成本销毛带同列相接。 */}
+          {props.extendCrosshair && (hoverIdx ?? props.crosshairIdx) != null && (hoverIdx ?? props.crosshairIdx)! < geom.n && (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: Math.round(xPxOf(geom, (hoverIdx ?? props.crosshairIdx)!)) - 0.5,
+                top: geom.plotTop,
+                width: 1,
+                height: Math.max(0, totalH - geom.plotTop),
+                background: color.hairlineStrong,
+                pointerEvents: 'none',
+                zIndex: 6,
+              }}
+            />
+          )}
+          {!props.extendCrosshair && hoverIdx != null && hoverIdx < geom.n && (
             <div
               style={{
                 position: 'absolute',
@@ -1720,7 +1766,7 @@ export default function Chart(props: ChartProps) {
           {/* 跨图参考线（第110轮，评审）：分离模式下其他面板悬停的时间列在本面板
               同列画 1px 虚线（本面板自身悬停 = 上面的实线十字已足够，不叠画）；
               任意面板移出即全部移除 */}
-          {props.crosshairIdx != null &&
+          {!props.extendCrosshair && props.crosshairIdx != null &&
             props.crosshairIdx < geom.n &&
             hoverIdx == null && (
               <div
@@ -1768,7 +1814,7 @@ export default function Chart(props: ChartProps) {
               : (props.brush ?? null);
             const dateOf = (i: number): string => fmt_hoverDate(granularity, series[0]?.points[i]?.xLabel ?? '');
             if (!range || range[1] < range[0]) {
-              if (drag || hoverIdx == null) return null;
+              if (drag || hoverIdx == null || props.showBrushHint === false) return null;
               return (
                 <div
                   style={{
@@ -1825,7 +1871,7 @@ export default function Chart(props: ChartProps) {
                   }}
                 />
                 {/* 时间段外降透明（白幕盖住折线/柱/价格标记，浮层与胶囊在其上） */}
-                {bandLeft - geom.plotLeft > 0.5 && (
+                {props.dimOutsideBrush !== false && bandLeft - geom.plotLeft > 0.5 && (
                   <div
                     style={{
                       position: 'absolute',
@@ -1839,7 +1885,7 @@ export default function Chart(props: ChartProps) {
                     }}
                   />
                 )}
-                {plotRight - (bandLeft + bandW) > 0.5 && (
+                {props.dimOutsideBrush !== false && plotRight - (bandLeft + bandW) > 0.5 && (
                   <div
                     style={{
                       position: 'absolute',

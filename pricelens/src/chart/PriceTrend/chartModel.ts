@@ -228,6 +228,8 @@ export function buildLabelPlan(p: {
    *  且位置避开折线（最高=点上、最低=点下、最新=按来向反向）；不进避让推挤
    *  （三标签几何上天然分离，白底胶囊兜底可读）。缺省 'detail' = 全量标签+避让 */
   labelMode?: 'detail' | 'compact';
+  /** compact 时是否标最高/最低。缺省标出。量价常驻只留最新价。 */
+  markExtremes?: boolean;
 }): LabelPlan {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
@@ -259,7 +261,7 @@ export function buildLabelPlan(p: {
     // （前一点在其上 → 标下方，反之上方）。其余价格标签一概不出。
     if (compact) {
       const lastI = valIdx[valIdx.length - 1];
-      const allowed = new Set<number>([maxI, minI, lastI]);
+      const allowed = new Set<number>(p.markExtremes === false ? [lastI] : [maxI, minI, lastI]);
       const posOf = (i: number): 'top' | 'bottom' => {
         if (i === maxI) return 'top';
         if (i === minI) return 'bottom';

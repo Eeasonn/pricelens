@@ -49,11 +49,11 @@ import { useFilters } from '../state/FiltersContext';
 import usePageViewState from '../state/usePageViewState';
 import type { PlatformSelection, ProductSelection } from '../state/filtersTypes';
 import ChartContentBar from '../components/ChartContentBar';
-import { brandLabelOf } from '../components/BrandMark';
+import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import Chart from '../chart/PriceTrend/Chart';
 import { VIEW_WINDOW_CAPTION_H } from '../chart/PriceTrend/XBrush';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
-import { PillUnit } from '../chart/PriceTrend/BrandLegendStrip';
+import { PillUnit, PlatformRow } from '../chart/PriceTrend/BrandLegendStrip';
 // 卡顶时间筛选簇在顶部筛选条。这里只取查看窗口说明行高度，用来对齐同步按钮。
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
@@ -71,13 +71,14 @@ import {
   type Bucket,
   type StripGeom,
   type YScale,
+  yPxOf,
 } from '../chart/PriceTrend/helpers';
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
 import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
 import type { Series, SeriesPoint } from '../dataModel/types';
-import { brandColorOf, color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
+import { brandColorOf, color, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 import { volumeAdaptiveSeries } from './volume/volumeAdaptive';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
 import VolumeBars from './volume/VolumeBars';
@@ -85,9 +86,11 @@ import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
 import MarginCostBand from './volume/MarginCostBand';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
-import PeriodVolumePriceSummary, { PERIOD_SUMMARY_HEIGHT } from './volume/PeriodVolumePriceSummary';
-import { commitVolumeAxisLimit, normalizePanelWindow, vMaxOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
-import { resolveSelectedWindow } from './volume/periodSummary';
+import { lastValidMarginIndex, marginFocusIndex } from './volume/marginCostGeometry';
+import SpreadRangeCard from './volume/SpreadRangeCard';
+import { spreadCardModel, spreadCardPlan } from './volume/spreadCards';
+import { commitVolumeAxisLimit, normalizePanelWindow, vMaxOf, volumeRangeOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
+import { formatVolumeAmount, pricePointValid, rangeMarksInView, rangeSpreadOf, resolveSelectedWindow, volumePointValid } from './volume/periodSummary';
 
 // 面板头定高（第一百九十一轮，Eason 五点）：面板头改 [拖柄][PillUnit] 后随药丸
 // 加高——可换行的平台小药丸（28px）+ 2px 间距 + 两行产品药丸，另给店铺同步按钮
@@ -183,6 +186,7 @@ export default function VolumePrice() {
   // 主产品经营视图是量价卡内的瞬态：切走再回来回到默认主产品，不写入筛选器或 URL。
   const [viewMode, setViewMode] = useState<VolumeViewMode>({ kind: 'mains' });
   const safeViewMode = validVolumeViewMode(state.mains, viewMode);
+  const reading = safeViewMode.kind === 'mains';
   useEffect(() => {
     if (safeViewMode !== viewMode) setViewMode(safeViewMode);
   }, [safeViewMode, viewMode]);
@@ -240,6 +244,8 @@ export default function VolumePrice() {
   //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
   //      两项均会话态跨页保留（P1-5）----
   const [synced, setSynced] = usePageViewState<boolean>('volume.synced', () => true);
+  // 主产品视图没有「时间轴同步」开关，各图固定共用一段查看时间。
+  const timeSynced = reading || synced;
   const [panelWins, setPanelWinsRaw] = usePageViewState<([number, number] | null)[]>('volume.panelWins', () => panelSpecs.map(() => null));
   // 面板独立窗口伴生粒度（跨粒度错位修复）：panelWins 存的是裸桶下标，只在本粒度
   // 内可解释。挂载期间切粒度有下方 granRef 效果整组重置；但跨页往返（卸载期间在
@@ -438,7 +444,7 @@ export default function VolumePrice() {
   useEffect(() => {
     setBrushes((prev) => prev.map(() => null));
     setBrushLive((prev) => prev.map(() => null));
-  }, [win.s, win.e, state.granularity, synced]);
+  }, [win.s, win.e, state.granularity, timeSynced]);
 
   // 换产品清单（顶部筛选器增删产品）→ 悬停列/高亮段随面板重置
   useEffect(() => {
@@ -483,17 +489,18 @@ export default function VolumePrice() {
   //      = modelId__配置去空格，跨增删产品稳定；React key 另带下标前缀防重挂）序，
   //      null = 数据序；面板态数组仍按下标挂各自面板，重排不串态 ----
   const [panelOrder, setPanelOrder] = useState<string[] | null>(null);
+  const [hiddenPanelKeys, setHiddenPanelKeys] = useState<Set<string>>(() => new Set());
   const [draggingPanel, setDraggingPanel] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // 展示顺序：拖拽换位后记录 key 序；null = 数据序（同价格页 orderedPanels）
   const orderedPanels = useMemo(() => {
-    if (!panelOrder || panelOrder.length === 0) return panelViews;
+    if (safeViewMode.kind === 'mains' || !panelOrder || panelOrder.length === 0) return panelViews;
     const idx = (k: string) => {
       const i = panelOrder.indexOf(k);
       return i === -1 ? Number.MAX_SAFE_INTEGER : i;
     };
     return [...panelViews].sort((a, b) => idx(a.spec.key) - idx(b.spec.key));
-  }, [panelViews, panelOrder]);
+  }, [panelViews, panelOrder, safeViewMode]);
   // 拖拽落点 = 把被拖面板插到目标面板当前位置（同价格页 movePanelTo）
   const movePanelTo = (dragKey: string, targetKey: string): void => {
     if (dragKey === targetKey) return;
@@ -652,7 +659,7 @@ export default function VolumePrice() {
   // 悬停时间列：同步 = 全面板同列（原行为）；非同步 = 只亮本面板
   const onHoverOf = (idx: number) => (v: number | null): void => {
     setHoverIdxs((prev) => {
-      if (synced) return prev.every((x) => x === v) ? prev : prev.map(() => v);
+      if (timeSynced) return prev.every((x) => x === v) ? prev : prev.map(() => v);
       return prev.map((x, k) => (k === idx ? v : x));
     });
   };
@@ -660,9 +667,9 @@ export default function VolumePrice() {
   const onBrushChangeOf = (idx: number) => (r: [number, number] | null, committing: boolean): void => {
     if (committing) {
       setBrushLive((prev) => prev.map(() => null));
-      setBrushes((prev) => (synced ? prev.map(() => r) : prev.map((x, k) => (k === idx ? r : x))));
+      setBrushes((prev) => (timeSynced ? prev.map(() => r) : prev.map((x, k) => (k === idx ? r : x))));
     } else {
-      setBrushLive((prev) => (synced ? prev.map(() => r) : prev.map((x, k) => (k === idx ? r : x))));
+      setBrushLive((prev) => (timeSynced ? prev.map(() => r) : prev.map((x, k) => (k === idx ? r : x))));
     }
   };
 
@@ -703,6 +710,8 @@ export default function VolumePrice() {
     </button>
   );
 
+  const panelLead = reading ? 0 : SCROLL_PAD_TOP + PANEL_GRIP_H;
+
   return (
     <>
       {/* 页面壳（页头/筛选条/滚动容器）第一百八十四轮上移 App.AnalysisShell 共享——
@@ -710,8 +719,8 @@ export default function VolumePrice() {
       <section
         style={{
           background: color.canvas,
-          boxShadow: shadow.l1,
-          borderRadius: radius.card,
+          boxShadow: reading ? undefined : shadow.l1,
+          borderRadius: reading ? 0 : radius.card,
           padding: 0,
           overflow: 'hidden',
         }}
@@ -789,7 +798,7 @@ export default function VolumePrice() {
               <div
                 style={{
                   flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers)}px`,
-                  paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H + PERIOD_SUMMARY_HEIGHT,
+                  paddingTop: panelLead + PANEL_HEAD_H,
                   display: 'flex',
                   flexDirection: 'column',
                 }}
@@ -810,9 +819,11 @@ export default function VolumePrice() {
                     否则按钮会比轨道带低出一整行说明。 */}
                 {buckets.length > 0 && visUnion.length > 0 && (
                   <div style={{ height: 52, marginBottom: 6 + VIEW_WINDOW_CAPTION_H, position: 'relative', flexShrink: 0 }}>
-                    <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
-                      {syncToggle}
-                    </div>
+                    {!reading && (
+                      <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
+                        {syncToggle}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -834,35 +845,121 @@ export default function VolumePrice() {
                   // 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
                   // 均分一行；>3 个不折行，横向拖动查看（轨道宽 = N/3 × 100%，每格
                   // 恒为视口 1/3 宽）
-                  <div className="lpl-card-scroll" style={{ overflowX: 'auto', overflowY: 'hidden', padding: `${SCROLL_PAD_TOP}px 0 0` }}>
+                  <div className="lpl-card-scroll" style={{ overflowX: 'auto', overflowY: 'hidden', padding: `${reading ? 0 : SCROLL_PAD_TOP}px 0 0` }}>
                     <div
                       style={{
                         display: 'grid',
                         gridTemplateColumns: `repeat(${panelCount}, minmax(0, 1fr))`,
-                        gap: space.md,
+                        gap: reading ? 0 : space.md,
                         width: `${(panelCount / Math.min(panelCount, 3)) * 100}%`,
                       }}
                     >
                     {/* 第一百九十一轮（Eason 五点）：渲染序 = 拖拽换位序（orderedPanels，
                         panelOrder 缺省回落数据序）；拖柄拖到目标面板松手换位 */}
-                    {orderedPanels.map((p) => (
+                    {orderedPanels.map((p, panelIndex) => {
+                      const pill = pillOf(p);
+                      const panelHidden = !reading && hiddenPanelKeys.has(p.spec.key);
+                      const toggleHidden = (): void => {
+                        setHiddenPanelKeys((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(p.spec.key)) next.delete(p.spec.key);
+                          else next.add(p.spec.key);
+                          return next;
+                        });
+                      };
+                      const row = summaryRows.find((item) => item.key === p.key);
+                      const viewStart = effWins[p.idx]?.[0] ?? 0;
+                      const brush = brushLive[p.idx] ?? brushes[p.idx] ?? null;
+                      const ranged = brush != null && !!row && !row.failed && !panelHidden;
+                      const priceMarks = ranged && row
+                        ? rangeMarksInView(row.prices, row.windowStart, row.windowEnd, viewStart, pricePointValid, (value) => formatPrice(Math.round(value), state.currency))
+                        : [];
+                      const volumeSlice = row ? row.volumes.slice(Math.min(row.windowStart, row.windowEnd), Math.max(row.windowStart, row.windowEnd) + 1) : [];
+                      const volumeWan = volumeSlice.some((value) => value != null && Math.abs(value) >= 10000);
+                      const volumeMarks = ranged && row
+                        ? rangeMarksInView(row.volumes, row.windowStart, row.windowEnd, viewStart, volumePointValid, (value) => formatVolumeAmount(value, volumeWan))
+                        : [];
+                      const windowLo = row ? Math.min(row.windowStart, row.windowEnd) : 0;
+                      const windowHi = row ? Math.max(row.windowStart, row.windowEnd) : -1;
+                      const priceSpread = ranged && row
+                        ? rangeSpreadOf(row.prices.slice(windowLo, windowHi + 1), pricePointValid)
+                        : null;
+                      const volumeSpread = ranged && row
+                        ? rangeSpreadOf(row.volumes.slice(windowLo, windowHi + 1), volumePointValid)
+                        : null;
+                      const priceCard = priceSpread
+                        ? spreadCardModel(priceSpread, (value) => formatPrice(Math.round(value), state.currency), '价格')
+                        : null;
+                      const volumeCard = volumeSpread
+                        ? spreadCardModel(volumeSpread, (value) => formatVolumeAmount(value, volumeWan), '销量')
+                        : null;
+                      const strip = geoms[p.idx];
+                      const slot = strip && strip.n > 0 ? strip.plotWidth / strip.n : 0;
+                      const [volumeAxisMin, volumeAxisMax] = volumeRangeOf(volumeLimits[p.idx], panelVMax[p.idx] ?? 1);
+                      const volumeAxisSpan = Math.max(1, volumeAxisMax - volumeAxisMin);
+                      const volumeY = (value: number): number => {
+                        const ratio = Math.min(1, Math.max(0, (value - volumeAxisMin) / volumeAxisSpan));
+                        return PANEL_GRID_TOP + yCfg.plotHeight - ratio * yCfg.plotHeight;
+                      };
+                      const priceY = (value: number): number => yPxOf({
+                        gridLeft: CHART_GRID_LEFT,
+                        plotLeft: strip?.plotLeft ?? CHART_GRID_LEFT,
+                        plotTop: PANEL_GRID_TOP,
+                        plotWidth: strip?.plotWidth ?? 1,
+                        plotHeight: yCfg.plotHeight,
+                        scale: yCfg,
+                        n: strip?.n ?? 1,
+                      }, value);
+                      const markXOf = (index: number): number => (strip ? strip.plotLeft + slot * (index + 0.5) : 0);
+                      const extremeMarks = strip
+                        ? [
+                          ...priceMarks.map((mark) => ({
+                            x: markXOf(mark.index),
+                            y: priceY(mark.value),
+                            label: mark.kind === 'min' ? ('below' as const) : ('above' as const),
+                          })),
+                          ...volumeMarks.map((mark) => ({ x: markXOf(mark.index), y: volumeY(mark.value) })),
+                        ]
+                        : [];
+                      const cardPlan = strip && (priceCard?.visible || volumeCard?.visible)
+                        ? spreadCardPlan({
+                          plotLeft: strip.plotLeft,
+                          plotTop: PANEL_GRID_TOP,
+                          plotWidth: strip.plotWidth,
+                          plotHeight: yCfg.plotHeight,
+                          extremeMarks,
+                          frameRight: strip.plotLeft + strip.plotWidth + CHART_GRID_RIGHT - 8,
+                          priceBandY: priceSpread?.min && priceSpread.max
+                            ? [priceY(priceSpread.max.value), priceY(priceSpread.min.value)]
+                            : null,
+                          volumeBandY: volumeSpread?.min && volumeSpread.max
+                            ? [volumeY(volumeSpread.max.value), volumeY(volumeSpread.min.value)]
+                            : null,
+                        })
+                        : null;
+                      return (
                       <div
                         key={p.key}
-                        onDragOver={(e) => {
+                        onDragOver={reading ? undefined : (e) => {
                           if (!draggingPanel || draggingPanel === p.spec.key) return;
                           e.preventDefault();
                           e.dataTransfer.dropEffect = 'move';
                           setDropTarget(p.spec.key);
                         }}
-                        onDragLeave={() => setDropTarget((t) => (t === p.spec.key ? null : t))}
-                        onDrop={(e) => {
+                        onDragLeave={reading ? undefined : () => setDropTarget((t) => (t === p.spec.key ? null : t))}
+                        onDrop={reading ? undefined : (e) => {
                           e.preventDefault();
                           if (draggingPanel) movePanelTo(draggingPanel, p.spec.key);
                           setDraggingPanel(null);
                           setDropTarget(null);
                         }}
-                        style={{
-                          // 落点目标 = 蓝描边 + 内描边高亮；拖动中的面板降透明（同价格页反馈）
+                        style={reading ? {
+                          background: 'transparent',
+                          padding: '0 12px',
+                          position: 'relative',
+                          minWidth: 0,
+                          borderLeft: panelIndex > 0 ? `1px solid ${color.hairline}` : undefined,
+                        } : {
                           border: `1px solid ${dropTarget === p.spec.key && draggingPanel !== p.spec.key ? color.link : color.hairline}`,
                           boxShadow:
                             dropTarget === p.spec.key && draggingPanel !== p.spec.key
@@ -876,6 +973,7 @@ export default function VolumePrice() {
                           opacity: draggingPanel === p.spec.key ? 0.45 : undefined,
                         }}
                       >
+                        {!reading && (
                         <span
                           draggable
                           onDragStart={(e) => {
@@ -911,8 +1009,26 @@ export default function VolumePrice() {
                         >
                           <HolderOutlined style={{ fontSize: 10 }} />
                         </span>
+                        )}
                         <div style={{ height: PANEL_HEAD_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, minWidth: 0 }}>
-                          <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: reading ? 'flex-start' : 'center' }}>
+                          {reading ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0, maxWidth: '100%' }}>
+                              <PlatformRow pill={pill} dimmed={false} />
+                              <div style={{ minWidth: 0, maxWidth: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                                  <BrandDot brand={p.brand} size={6} />
+                                  <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pill.brandLabel}</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, marginTop: 1 }}>
+                                  <span style={{ fontSize: 12, lineHeight: '16px', fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pill.nameText}</span>
+                                  {pill.romText && (
+                                    <span className="tnum" style={{ flexShrink: 0, fontSize: 10, lineHeight: '14px', fontWeight: 600, padding: '0 6px', borderRadius: radius.pill, color: selectSoftInk, background: selectSoft, fontFamily: font.family, fontVariantNumeric: 'tabular-nums' }}>{pill.romText}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
                           <PanelHeader
                             brand={p.brand}
                             name={p.name}
@@ -920,8 +1036,9 @@ export default function VolumePrice() {
                             syncActive={storeSyncMap[p.spec.cardId] === true}
                             onStoreSync={p.spec.isMain ? () => toggleStoreSync(p) : undefined}
                           >
-                            <PillUnit pill={pillOf(p)} dimmed={false} onToggle={() => {}} onHover={() => {}} />
+                            <PillUnit pill={{ ...pill, hidden: panelHidden }} dimmed={false} onToggle={toggleHidden} onHover={() => {}} />
                           </PanelHeader>
+                          )}
                           </div>
                           {safeViewMode.kind === 'mains' && p.spec.isMain && (state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0) > 0 && (
                             <button
@@ -934,37 +1051,21 @@ export default function VolumePrice() {
                             </button>
                           )}
                         </div>
-                        {(() => {
-                          const row = summaryRows.find((item) => item.key === p.key);
-                          if (!row || row.failed) return null;
-                          return (
-                            <PeriodVolumePriceSummary
-                              prices={row.prices}
-                              volumes={row.volumes}
-                              granularity={state.granularity}
-                              startId={row.startId}
-                              endId={row.endId}
-                              currency={state.currency}
-                              periodCount={row.periodCount}
-                              windowStart={row.windowStart}
-                              windowEnd={row.windowEnd}
-                            />
-                          );
-                        })()}
                         <div style={{ position: 'relative' }}>
                           <VolumeBars
                             geom={geoms[p.idx] ?? null}
                             plotTop={PANEL_GRID_TOP}
                             plotHeight={yCfg.plotHeight}
-                            values={volumes[p.idx]}
+                            values={panelHidden ? [] : volumes[p.idx]}
                             vMax={panelVMax[p.idx]}
                             color={p.vis[0]?.color ?? brandColorOf(p.brand)}
                             hoverIdx={hoverIdxs[p.idx] ?? null}
                             axisLimits={volumeLimits[p.idx] ?? { max: null }}
                             onAxisLimit={(kind, value) => onVolumeAxisLimit(p.idx, kind, value)}
+                            rangeMarks={panelHidden ? [] : volumeMarks}
                           />
                           <Chart
-                            series={p.vis}
+                            series={panelHidden ? [] : p.vis}
                             granularity={state.granularity}
                             currency={state.currency}
                             priceTypes={state.priceTypes}
@@ -983,23 +1084,39 @@ export default function VolumePrice() {
                             hideNamePills // 第一百一十三轮（评审）：面板内不画产品药丸，产品名在面板头
                             lineShape={lineShape}
                             labelMode={labelMode} // 第一百一十四轮（评审）：价格显示 详细/精简
+                            markExtremes={brush != null}
                             tipBox // 第一百一十四轮（评审）：悬停明细 = 图下方居中预留框
                             // 与价格走势分离面板一致，图内保留周刻度；底部时间轴继续承载窗口拖拽。
                             showXLabels
-                            crosshairIdx={hoverIdxs[p.idx] ?? null}
+                            crosshairIdx={marginFocusIndex((marginCosts[p.idx] ?? []).length, hoverIdxs[p.idx] ?? null, lastValidMarginIndex(marginCosts[p.idx] ?? []))}
                             onCrosshairMove={onHoverOf(p.idx)}
                             crosshairY={crossY} // 第一百一十四轮（评审）：横向虚线横跨全部面板
                             onCrosshairYMove={setCrossY}
                             brush={brushLive[p.idx] ?? brushes[p.idx] ?? null} // 第118/119轮：拖选高亮随同步态联动或独立
+                            extendCrosshair
+                            showBrushHint={false}
+                            dimOutsideBrush={false}
                             onBrushChange={onBrushChangeOf(p.idx)}
+                            rangeMarks={priceMarks.map((mark) => ({ ...mark, toward: 'left' as const }))}
                             onGeom={onGeomOf(p.idx)}
-                            emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
+                            emptyHint={panelHidden ? '已隐藏，点击产品名恢复显示' : p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
                           />
+                          {cardPlan && (
+                            <>
+                              {priceCard?.visible && (
+                                <SpreadRangeCard title="价格" model={priceCard} style={{ position: 'absolute', left: cardPlan.price.left, top: cardPlan.price.top, height: cardPlan.price.height, zIndex: 17, boxShadow: 'none' }} />
+                              )}
+                              {volumeCard?.visible && (
+                                <SpreadRangeCard title="销量" model={volumeCard} style={{ position: 'absolute', left: cardPlan.volume.left, top: cardPlan.volume.top, height: cardPlan.volume.height, zIndex: 17, boxShadow: 'none' }} />
+                              )}
+                            </>
+                          )}
                         </div>
                         <MarginCostBand
                           geom={geoms[p.idx] ?? null}
                           points={marginCosts[p.idx] ?? []}
                           currency={state.currency}
+                          seriesColor={p.vis[0]?.color ?? brandColorOf(p.brand)}
                           hoverIdx={hoverIdxs[p.idx] ?? null}
                           onHover={onHoverOf(p.idx)}
                           empty={marginCostAvailabilityOf(p.spec.isOwn, marginCosts[p.idx] ?? []) === 'empty'}
@@ -1012,15 +1129,16 @@ export default function VolumePrice() {
                             ids={domainIds}
                             lo={filterBounds[0]}
                             hi={filterBounds[1]}
-                            s={synced ? win.s : effWins[p.idx][0]}
-                            e={synced ? win.e : effWins[p.idx][1]}
+                            s={timeSynced ? win.s : effWins[p.idx][0]}
+                            e={timeSynced ? win.e : effWins[p.idx][1]}
                             granularity={state.granularity}
-                            onChange={synced ? onWindowChange : onPanelWindowChange(p.idx)}
+                            onChange={timeSynced ? onWindowChange : onPanelWindowChange(p.idx)}
                             onAdjusting={setAdjusting}
                           />
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                     </div>
                   </div>
                 )}
