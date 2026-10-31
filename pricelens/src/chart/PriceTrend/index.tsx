@@ -85,7 +85,7 @@ import {
   type PromoBand,
 } from './chartModel';
 import SplitAxisColumn from './SplitAxisColumn';
-import type { YLimitState } from './YLimitHandles';
+import { Y_LIMIT_EDITOR_H, type YLimitState } from './YLimitHandles';
 import { contentSignature } from '../../components/ProductPicker/combos';
 import {
   GRID,
@@ -165,8 +165,17 @@ export default function PriceTrend(props: {
   // 旧限位只会误裁新数据；内容签名含主品+对比区+渠道）；跨看板切换保留（192 轮）
   const [yLimit, setYLimit] = usePageViewState<YLimitState>('dashboard.yLimit', () => ({ min: null, max: null }));
   const limitScopeSig = useMemo(() => `${contentSignature(effMains)}#${state.currency}`, [effMains, state.currency]);
-  useEffect(() => {
-    setYLimit({ min: null, max: null });
+  // 币种或产品集一变，旧限位还停在上一币种的数字上。若等 effect 再清，
+  // 这一帧会用错的端点算出过细的步长，并被冻结进后续自适应（USD→本币时刻度炸开）。
+  const limitScopeSeenRef = useRef<string | null>(null);
+  const yLimitStale = limitScopeSeenRef.current !== null && limitScopeSeenRef.current !== limitScopeSig;
+  const yLimitLive = yLimitStale ? { min: null, max: null } : yLimit;
+  useLayoutEffect(() => {
+    const prev = limitScopeSeenRef.current;
+    limitScopeSeenRef.current = limitScopeSig;
+    if (prev !== null && prev !== limitScopeSig) {
+      setYLimit((p) => (p.min == null && p.max == null ? p : { min: null, max: null }));
+    }
   }, [limitScopeSig]);
   // 查看窗口（null = 整个筛选范围）：会话态跨页保留（P1-5）——切页返回恢复；
   // 粒度切换换算 / 范围改动复位（rangeWatch）等失义路径不变
@@ -1013,11 +1022,11 @@ export default function PriceTrend(props: {
       allowBreak: yCompress,
       perUsd: perUsdOf(state.currency), // 档位锚定 USD（第二十三轮）：换币种格数/图高与 USD 相近
       prev: scaleRef.current,
-      yMin: yLimit.min, // 上下限拖柄（第一百六十六轮）：null = 该侧自动
-      yMax: yLimit.max,
+      yMin: yLimitLive.min, // 上下限：null = 该侧自动。币种切换当帧不用上一币种的旧值
+      yMax: yLimitLive.max,
       freeze: frozen, // 非触发时机冻结步长（第一百六十八轮；169 轮格数随范围自然伸缩）
     });
-  }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimit, yAdaptKey]);
+  }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimitLive, yAdaptKey]);
   // 自适应基线在渲染提交后写入（渲染期写 ref 会被并发渲染污染）
   useEffect(() => {
     yBaseRef.current = { key: yAdaptKey, intervalUsd: yCfg.intervalUsd };
@@ -1031,9 +1040,10 @@ export default function PriceTrend(props: {
       setYLimit((p) => ({ ...p, [kind]: null }));
       return;
     }
+    // 箭头和手输都按百位收口，不再吸附到整格刻度（整格会把 +100 吞掉）。
+    const hundred = 100;
+    let next = kind === 'max' ? Math.ceil(v / hundred) * hundred : Math.floor(v / hundred) * hundred;
     const step = yCfg.interval;
-    let next = v;
-    next = kind === 'max' ? Math.ceil(next / step) * step : Math.floor(next / step) * step;
     if (kind === 'max') next = Math.max(next, yCfg.min + step);
     else next = Math.min(Math.max(next, 0), Math.max(0, yCfg.max - step));
     setYLimit((p) => ({ ...p, [kind]: next }));
@@ -1044,12 +1054,15 @@ export default function PriceTrend(props: {
   }, [yCfg, adjusting]);
   // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
   // S/E 徽标上探 7.5px、名称避让钳 plotTop+2，14px 够用；极值胶囊已在 Chart 内钳回容器
-  const panelGridTop = 14;
+  // 刻度和档位都关掉时，上下限框一起收起，图顶不再留那一块。
+  const yAxisVisible = showYTicks || (state.currency === 'usd' && showTiers);
+  // Y_LIMIT_EDITOR_H 已含控件高度、顶边留白，以及盒底到 Y 轴的空隙。
+  const panelGridTop = yAxisVisible ? Y_LIMIT_EDITOR_H : 8;
   // 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；本轮拍板回归面板内）：
   // 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（渠道行改药丸上方平台行）
   const PANEL_LEGEND_H = 54;
   // 第八十三轮：关「显示 Y 刻度线」时刻度列塌缩，右侧内容左移对齐
-  const gridLeft = estGridLeft(state.currency);
+  const gridLeft = estGridLeft(state.currency, showYTicks, showTiers);
 
   // 分离显示共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
   // 第五十四轮追补②：补上步长滞回 prev——此前缺 prev，季粒度把促销低谷平均掉后
@@ -1075,11 +1088,11 @@ export default function PriceTrend(props: {
       allowBreak: yCompress,
       perUsd: perUsdOf(state.currency),
       prev: splitScaleRef.current,
-      yMin: yLimit.min, // 上下限拖柄（第一百六十六轮）：分离共享轴与合并图同一份限位
-      yMax: yLimit.max,
+      yMin: yLimitLive.min,
+      yMax: yLimitLive.max,
       freeze: frozen, // 非触发时机冻结步长（格数随范围自然伸缩，第一百六十九轮）
     });
-  }, [splitActive, panelViews, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimit, yAdaptKey]);
+  }, [splitActive, panelViews, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimitLive, yAdaptKey]);
   useEffect(() => {
     if (splitYCfg) splitYBaseRef.current = { key: yAdaptKey, intervalUsd: splitYCfg.intervalUsd };
   }, [yAdaptKey, splitYCfg]);
@@ -1092,8 +1105,8 @@ export default function PriceTrend(props: {
     if (!(adjusting && splitScaleRef.current)) splitScaleRef.current = splitYCfg;
   }, [splitActive, panelViews.length, splitYCfg, adjusting]);
   const splitGridLeft = useMemo(
-    () => (splitYCfg ? estGridLeft(state.currency) : gridLeft),
-    [splitYCfg, state.currency, gridLeft],
+    () => (splitYCfg ? estGridLeft(state.currency, showYTicks, showTiers) : gridLeft),
+    [splitYCfg, state.currency, showYTicks, showTiers, gridLeft],
   );
   // 共享轴列的档位带数据（第五十四轮追补⑤）：与面板同一份并集判定「档内有无数据」
   const splitTierValues = useMemo(
@@ -1419,7 +1432,7 @@ export default function PriceTrend(props: {
               marginBottom: space.sm,
             }}
           >
-            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_LEGEND_H, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_LEGEND_H, display: 'flex', flexDirection: 'column' }}>
               {splitYCfg && (
                 <SplitAxisColumn
                   yScale={splitYCfg}
@@ -1538,7 +1551,7 @@ export default function PriceTrend(props: {
                       {/* 组/角色图例带（本轮拍板回归面板内，Eason：药丸在面板框里，
                           不在共享行加小框）：本面板单组（主品药丸 + vs + 对比药丸，
                           含屏蔽者）；悬停药丸 = 该系列高亮、点击 = 屏蔽/恢复折线；
-                          「同步平台筛选」随本卡主品的平台筛选浮层（组内同步） */}
+                          「店铺同步」固定在本卡主品左侧（组内同步） */}
                       <div style={{ height: PANEL_LEGEND_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
                         <BrandLegendStrip
                           groups={groupsOfCards([p.card], p.all)}

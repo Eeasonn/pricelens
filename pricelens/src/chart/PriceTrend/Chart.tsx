@@ -66,14 +66,11 @@ import { prefersReducedMotion } from '../../theme/motion';
 import {
   BREAK_PX,
   GRID,
-  NAME_ZONE_W,
-  estGridLeft,
   gapAbsorbedIdx,
   TICK_PX,
-  AXIS_BAND_W,
-  TICK_ZONE_W,
   TICK_DASH_W,
   TIER_LABEL_W,
+  axisChrome,
   computeYAxis,
   perUsdOf,
   tierLabelShort,
@@ -146,10 +143,10 @@ export interface ChartProps {
   yCompress?: boolean;
   /** 压缩开关提交（缺省写内部状态） */
   onYCompress?: (v: boolean) => void;
-  /** Y 轴上下限（第一百六十六轮，Eason）：上下限拖柄的受控值（null = 该侧自动）。
-   *  传入 onYLimit 才渲染拖柄——迷你图/下钻弹窗等自管场景不传不渲染 */
+  /** Y 轴上下限：输入框的受控值（null = 该侧自动）。传入 onYLimit 才渲染编辑器，
+   * 迷你图/下钻弹窗等自管场景不传不渲染。 */
   yLimit?: YLimitState;
-  /** 限位提交：拖动中实时（未吸附原值，模型层吸附整格）/ 双击传 null 恢复该侧自动 */
+  /** 限位提交：输入框提交；传 null 恢复该侧自动 */
   onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
   /** 绘图区横向几何原语上报（第十五轮：促销热力带与时间轴逐像素对齐用） */
   onGeom?: (g: StripGeom | null) => void;
@@ -913,10 +910,9 @@ export default function Chart(props: ChartProps) {
   const brandByKey = useMemo(() => new Map([...series, ...nameAll].map((s) => [s.key, s.brand])), [series, nameAll]);
 
   // ---- DOM 刻度/断轴/档位带数据（纯构建见 chartModel） ----
-  // 左缘布局（第八十九轮）：[档位区块(贴左缘 0)=档位文字居左|灰竖线|刻度文字右对齐叠带上][短横线][名称预留带][绘图区]。
-  // 轴区总宽恒定，不随「显示 Y 刻度线」开关变化（开关只控标签/短横线/网格线显隐）；
-  // 刻度文字叠画在档位区块背景上（zIndex 2），区块与名称预留带之间以短横线过渡。
-  const tickZoneRight = geom ? geom.plotLeft - NAME_ZONE_W : 0; // 轴区右缘（短横线起点）
+  // 左缘布局：[档位色块 | 刻度文字叠在色块右段][短横线][名称预留带][绘图区]。
+  // 刻度线、价格档位各自开关，关掉的部分不占宽，绘图区跟着左移。
+  const chrome = axisChrome(currency, showYTicks, showTiers);
   const tickRows = useMemo(() => thinTickRows(buildTickRows(geom)), [geom]);
 
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
@@ -1094,9 +1090,9 @@ export default function Chart(props: ChartProps) {
                     position: 'absolute',
                     // 刻度文字右对齐、叠画在档位区块背景上（区块右段）；第一百八十五轮
                     // 起字号取共享常量 Y_TICK_FONT=10（原 8px 过小不可读）
-                    left: tickZoneRight - TICK_DASH_W - TICK_ZONE_W,
+                    left: chrome.tickLeft,
                     top: Math.round(t.y) - 8,
-                    width: TICK_ZONE_W,
+                    width: chrome.tickWidth,
                     paddingRight: 3,
                     boxSizing: 'border-box',
                     textAlign: 'right',
@@ -1117,7 +1113,7 @@ export default function Chart(props: ChartProps) {
                 <div
                   style={{
                     position: 'absolute',
-                    left: tickZoneRight - TICK_DASH_W,
+                    left: chrome.dashLeft,
                     top: Math.round(t.y) - 0.5,
                     width: TICK_DASH_W,
                     height: 1,
@@ -1163,7 +1159,7 @@ export default function Chart(props: ChartProps) {
                     aria-label="刻度非连续：段与段之间的值域已压缩"
                     style={{
                       position: 'absolute',
-                      left: tickZoneRight - TICK_DASH_W / 2 - 7,
+                      left: (showYTicks ? chrome.dashLeft + TICK_DASH_W / 2 : chrome.tierWidth / 2) - 7,
                       top: geom.plotTop + b - 8,
                       pointerEvents: 'auto',
                       cursor: 'help',
@@ -1192,7 +1188,7 @@ export default function Chart(props: ChartProps) {
                   position: 'absolute',
                   left: 0,
                   top: tb.top,
-                  width: AXIS_BAND_W,
+                  width: chrome.tierWidth,
                   height: tb.h,
                   boxSizing: 'border-box',
                   border: tb.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`,
@@ -1207,7 +1203,7 @@ export default function Chart(props: ChartProps) {
                 <span
                   style={{
                     // 关「Y 刻度线」时档位文字居中整个轴区宽度（第九十一轮）
-                    width: showYTicks ? TIER_LABEL_W : AXIS_BAND_W,
+                    width: showYTicks ? TIER_LABEL_W : chrome.tierWidth,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -1227,15 +1223,14 @@ export default function Chart(props: ChartProps) {
                 </span>
               </div>
             ))}
-          {/* Y 轴上下限拖柄（第一百六十六轮，Eason）：轴区上/下缘细拖柄，拖动自定义
-              价格上限/下限；传入 onYLimit 才渲染（分离面板 chrome=false 不渲染——
-              共享轴列 SplitAxisColumn 承担），双击恢复自动 */}
-          {props.onYLimit && geom && props.axisChrome !== false && (
+          {/* Y 轴上下限输入（替代旧拖拽拉伸）：传入 onYLimit 才渲染；分离面板
+              chrome=false 不渲染，由共享轴列 SplitAxisColumn 承担。 */}
+          {props.onYLimit && geom && props.axisChrome !== false && chrome.visible && (
             <YLimitHandles
               scale={displayScale}
               plotTop={geom.plotTop}
               plotHeight={geom.plotHeight}
-              trackWidth={tickZoneRight}
+              trackWidth={chrome.editorWidth}
               limit={props.yLimit ?? { min: null, max: null }}
               onLimit={props.onYLimit}
             />

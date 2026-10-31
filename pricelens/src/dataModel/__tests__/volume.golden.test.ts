@@ -13,8 +13,11 @@ import {
   lifecycleFactor,
   niceCeil,
   promoFactor,
+  promoPhaseFactor,
+  promoPhaseOf,
   tierFactor,
   volumeByBuckets,
+  volumeNoiseOf,
   volumeOfConfig,
 } from '../volume';
 
@@ -79,6 +82,36 @@ describe('销量估算 · 因子函数边界', () => {
     expect(niceCeil(950)).toBe(2000); // 1045 → 2×1000
     expect(niceCeil(0)).toBe(1);
     expect(niceCeil(-5)).toBe(1);
+  });
+});
+
+describe('销量模拟 · 大促阶段与微扰', () => {
+  const promo = { start_date: '2026-11-11', end_date: '2026-11-18' };
+
+  it('预热、正式、结束后一周与无事件阶段明确', () => {
+    expect(promoPhaseOf('2026-11-05', [promo])).toBe('preheat');
+    expect(promoPhaseOf('2026-11-11', [promo])).toBe('peak');
+    expect(promoPhaseOf('2026-11-20', [promo])).toBe('aftermath');
+    expect(promoPhaseOf('2026-12-01', [promo])).toBeNull();
+  });
+
+  it('正式期不重复叠加阶段系数，结束后允许需求透支', () => {
+    expect(promoPhaseFactor('preheat')).toBe(1.05);
+    expect(promoPhaseFactor('peak')).toBe(1);
+    expect(promoPhaseFactor('aftermath')).toBe(0.9);
+    expect(promoPhaseFactor(null)).toBe(1);
+  });
+
+  it('噪声确定且限制在 ±3%', () => {
+    const v = volumeNoiseOf('RU|model|rom|202631');
+    expect(v).toBe(volumeNoiseOf('RU|model|rom|202631'));
+    expect(v).toBeGreaterThanOrEqual(0.97);
+    expect(v).toBeLessThanOrEqual(1.03);
+  });
+
+  it('可比条件下 Apple 与 Samsung 品牌基线均大于 Huawei', () => {
+    expect(brandFactor('APPLE')).toBeGreaterThan(brandFactor('HUAWEI'));
+    expect(brandFactor('SAMSUNG')).toBeGreaterThan(brandFactor('HUAWEI'));
   });
 });
 

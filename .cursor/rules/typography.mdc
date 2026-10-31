@@ -1,0 +1,19 @@
+---
+description: 价格和界面数字用 UI 字体加 tabular-nums，禁止用等宽字体
+alwaysApply: true
+---
+
+# 数字字体
+
+价格、销量、轴上下限、表格和输入框里的数字，用 `font.family`（Inter / 苹方），并加 `font-variant-numeric: tabular-nums`（class `tnum`）。
+
+不要用 `font.mono`、Geist Mono 或 `.mono`。等宽字体只用于技术标记：周次 `W41`、`202607`、`2026Q1`、批次号。
+
+数字输入框要显式写上界面字体。全局 `input { font: inherit }` 挡不住组件里另写的 `fontFamily: font.mono`。
+
+```tsx
+fontFamily: font.family,
+fontVariantNumeric: 'tabular-nums',
+```
+
+本仓库没有 `design.md`。不要套用外界稿里「数字用等宽」的习惯。以 `PriceLens-单国打样-自包含落地方案.md` 的字体表，以及 `pricelens/src/index.css` 的 `.tnum` / `.mono` 为准。

@@ -60,10 +60,9 @@ export const NAME_ZONE_W = 14;
 /** 档位带（仅 USD）宽 + 与刻度列的间距（旧口径；渲染已改用下方固定轴宽常量） */
 export const TIER_BAND_W = 64;
 export const TIER_BAND_GAP = 8;
-// ---------------- 固定轴宽（第八十六轮定宽；第八十九轮档位区块重排） ----------------
-// [档位区块 = 档位文字(居左) | 灰竖线 | 刻度文字(右对齐，叠画在区块上)][短横线]
-// 宽度恒定、不随「显示 Y 刻度线」开关变化——开关只控刻度标签/短横线/网格线显隐，
-// 彻底消除刻度线有无造成的 Y 轴宽度差异（右侧绘图区空间恒定）。
+// ---------------- 轴宽（随刻度线 / 价格档位显隐收回） ----------------
+// [档位区块 = 档位文字(居左) | 刻度文字(右对齐，叠画在区块上)][短横线]
+// 关掉刻度线就去掉刻度列和短横线；关掉价格档位就去掉色块。本币没有档位。
 /** 档位文字区宽（三行竖排「800/~/1000」居中；最宽行 9px×4 字符 ≈22px） */
 export const TIER_LABEL_W = 30;
 /** 档位区块总宽：档位文字 | 竖线分隔 | 刻度文字区（刻度覆盖在区块背景上） */
@@ -74,9 +73,65 @@ export const AXIS_GAP = 0;
 export const TICK_ZONE_W = 32;
 /** 刻度短横线宽：画在轴区右外侧、与刻度文字对齐，表示「文字 ↔ 绘图区位置」关系 */
 export const TICK_DASH_W = 6;
-/** 固定轴区总宽（不含名称预留带）：USD = 档位区块（含刻度区）+ 短横线；非 USD = 刻度文字区 + 短横线 */
-export const axisFixedWidth = (currency: CurrencyMode): number =>
-  (currency === 'usd' ? AXIS_BAND_W : TICK_ZONE_W) + TICK_DASH_W;
+/** 当前显隐下的轴列几何。刻度线和价格档位各自占宽，关掉就收回，绘图区跟着变宽。
+ *  本币没有价格档位。上下限框只跟色块（或仅刻度时的刻度列）对齐，不含右侧短横线。 */
+export interface AxisChrome {
+  visible: boolean;
+  /** 轴列总宽（含短横线） */
+  width: number;
+  /** 上下限框宽：有档位色块时与色块右缘对齐；仅刻度时与刻度列对齐 */
+  editorWidth: number;
+  tickLeft: number;
+  tickWidth: number;
+  dashLeft: number;
+  tierWidth: number;
+}
+
+/** 仅刻度时的列宽。12px 的「151.6K」再加上上下限里的百位箭头。 */
+const TICK_COL_W = 64;
+
+export function axisChrome(currency: CurrencyMode, showYTicks = true, showTiers = true): AxisChrome {
+  const tiers = currency === 'usd' && showTiers;
+  const ticks = showYTicks;
+  if (tiers && ticks) {
+    return {
+      visible: true,
+      width: AXIS_BAND_W + TICK_DASH_W,
+      editorWidth: AXIS_BAND_W,
+      tickLeft: AXIS_BAND_W - TICK_ZONE_W,
+      tickWidth: TICK_ZONE_W,
+      dashLeft: AXIS_BAND_W,
+      tierWidth: AXIS_BAND_W,
+    };
+  }
+  if (tiers) {
+    return {
+      visible: true,
+      width: TIER_LABEL_W,
+      editorWidth: TIER_LABEL_W,
+      tickLeft: 0,
+      tickWidth: 0,
+      dashLeft: 0,
+      tierWidth: TIER_LABEL_W,
+    };
+  }
+  if (ticks) {
+    return {
+      visible: true,
+      width: TICK_COL_W + TICK_DASH_W,
+      editorWidth: TICK_COL_W,
+      tickLeft: 0,
+      tickWidth: TICK_COL_W,
+      dashLeft: TICK_COL_W,
+      tierWidth: 0,
+    };
+  }
+  return { visible: false, width: 0, editorWidth: 0, tickLeft: 0, tickWidth: 0, dashLeft: 0, tierWidth: 0 };
+}
+
+/** 轴区总宽（不含名称预留带）。显隐缺省全开，与旧的固定宽一致。 */
+export const axisFixedWidth = (currency: CurrencyMode, showYTicks = true, showTiers = true): number =>
+  axisChrome(currency, showYTicks, showTiers).width;
 
 /** 档位标签显示缩写（第九十一轮）：「1000」全写压成 K 缩写（1000+ → 1K+、
  *  800~1000 → 800~/1K），与刻度的 K 缩写同语言；阶梯数据本身不动。 */
@@ -172,11 +227,9 @@ export function axisTickGutter(ticks: number[], interval = 0): number {
   return Math.max(34, Math.round(chars * 7.2) + 12);
 }
 
-/** Y 轴总左缘 = [档位区块(仅USD)] + 短横线 + 名称预留带（estGridLeft 沿用旧名；滑杆已移至工具行，不占左缘）。
- *  第九十轮：签名收敛为 (currency)——轴区宽度恒定，「显示 Y 刻度线」开关已删（Y 轴恒显），
- *  axisMax/interval/showYTicks 旧参数一并移除。 */
-export function estGridLeft(currency: CurrencyMode = 'local'): number {
-  return axisFixedWidth(currency) + NAME_ZONE_W;
+/** Y 轴总左缘 = 当前显隐下的轴列 + 名称预留带。刻度或档位关掉后左缘收回，绘图区变宽。 */
+export function estGridLeft(currency: CurrencyMode = 'local', showYTicks = true, showTiers = true): number {
+  return axisFixedWidth(currency, showYTicks, showTiers) + NAME_ZONE_W;
 }
 
 // ---------------- Y 轴（第七轮：纯自适应 + 空白压缩分段刻度） ----------------
@@ -691,8 +744,8 @@ export function bucketAnchorDate(g: Granularity, bucketId: string): string | nul
 
 /** 分离共享轴列宽（第五十四轮追补⑤）：只含实际轴元素——USD = 档位区块（含刻度区）+
  *  短横线，非 USD = 刻度文字区 + 短横线；与主图 estGridLeft 同口径（第九十轮签名收敛）。 */
-export function splitAxisWidth(currency: CurrencyMode): number {
-  return axisFixedWidth(currency);
+export function splitAxisWidth(currency: CurrencyMode, showYTicks = true, showTiers = true): number {
+  return axisFixedWidth(currency, showYTicks, showTiers);
 }
 
 /** 周 id → 当前粒度桶 id（追补⑧：总览下钻焦点周跨粒度换算——总览迷你图是周度序列，

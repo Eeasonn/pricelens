@@ -208,7 +208,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   const gearDirty =
     (props.sliderScale != null && Math.abs(props.sliderScale - 1) > 0.001) ||
     props.showYTicks === false ||
-    props.showTiers === false ||
+    (props.currency === 'usd' && props.showTiers === false) ||
     props.yCompress === true ||
     (props.lineShape != null && props.lineShape !== 'auto');
   // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
@@ -238,12 +238,14 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           <Checkbox checked={props.showYTicks ?? true} onChange={(e) => props.onShowYTicks?.(e.target.checked)}>
             <span style={{ fontSize: 12 }}>Y 刻度线</span>
           </Checkbox>
-          {/* 价格档位独立开关（第一百九十三轮，Eason）：数值刻度 / 价格档位两个轴各自显隐 */}
-          <Checkbox checked={props.showTiers ?? true} onChange={(e) => props.onShowTiers?.(e.target.checked)}>
-            <span style={{ fontSize: 12 }}>价格档位</span>
-          </Checkbox>
+          {/* 价格档位只存在于 USD。本币没有这根轴，开关也不出现。 */}
+          {props.currency === 'usd' && (
+            <Checkbox checked={props.showTiers ?? true} onChange={(e) => props.onShowTiers?.(e.target.checked)}>
+              <span style={{ fontSize: 12 }}>价格档位</span>
+            </Checkbox>
+          )}
           <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-            数值刻度与价格档位可分别显示
+            {props.currency === 'usd' ? '数值刻度与价格档位可分别显示' : '关闭后 Y 轴刻度与上下限一起收起'}
           </div>
           <div style={{ marginTop: 6 }}>
             <Checkbox checked={props.yCompress ?? false} onChange={(e) => props.onYCompress?.(e.target.checked)}>

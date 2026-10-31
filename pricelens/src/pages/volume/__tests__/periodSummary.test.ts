@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPeriodSummary, changeOf, directionLabelOf, pricePointValid, volumePointValid } from '../periodSummary';
+import { buildPeriodSummary, changeOf, directionLabelOf, pricePointValid, resolveSelectedWindow, volumePointValid } from '../periodSummary';
 
 const usd = { granularity: 'week' as const, currency: 'usd' as const, startId: '202619', endId: '202642', periodCount: 24 };
 
@@ -128,5 +128,12 @@ describe('区间量价摘要', () => {
     expect(model.pricePct).toBe('+9.1%');
     expect(model.volumePct).toBe('+50.0%');
     expect(model.windowLabel).toBe('2026W20–2026W21');
+  });
+
+  it('将图内拖选区间映射回完整时间轴', () => {
+    expect(resolveSelectedWindow(8, 19, [2, 8])).toEqual([10, 16]);
+    expect(resolveSelectedWindow(8, 19, [10, 2])).toEqual([10, 18]);
+    expect(resolveSelectedWindow(8, 19, [-2, 20])).toEqual([8, 19]);
+    expect(resolveSelectedWindow(8, 19, null)).toEqual([8, 19]);
   });
 });

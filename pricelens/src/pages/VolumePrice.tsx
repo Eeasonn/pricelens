@@ -4,10 +4,9 @@
 // 算一次 computeYAxis 受控传入，含步长滞回与刷选冻结）、共享 X 刷选条（只调
 // 查看时间段，粒度切换走 actions.setGranularity）、跨面板悬停参考线 + 面板头
 // 销量读数随悬停列联动。时间窗口 / 自适应 / 桶换算与价格看板同口径（§6.5）。
-// 销量柱：绘图区底部默认 34%；上限恒为各面板自动 niceCeil(窗口内最大值)，
-// 柱高线性映射。柱区高度调节 = 每图右侧「销量轴」拉伸柄（上下拖 12%..100%、
-// 双击复位 34%，bandFracs 随 yAxisResetKey 复位）；原标题行三档口径 Segmented、
-// 单图上限覆写药丸已删。图内不画名称药丸（产品名在面板头），图贴左缘。
+// 销量柱：上限默认各面板自动 niceCeil(窗口内最大值)，轴顶提供「最高值」输入，
+// 下限固定为 0；柱高按 0→最高值线性映射，越界值钳在轴缘，不保留旧拉伸柄几何。
+// 图内不画名称药丸（产品名在面板头），图贴左缘。
 // 销量为估算口径（dataModel/volume），接入真实销量后替换。
 // 默认三槽：槽1 = 自有首个勾选（无则竞品首个）；槽2/3 = 其对标竞品前两个，
 // 不足用竞品勾选补，仍不足留空；自有首选或国家/产业变化时重置三槽。
@@ -76,18 +75,24 @@ import {
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
+import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
 import type { Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
-import VolumeBars, { BAND_FRAC_DEFAULT } from './volume/VolumeBars';
+import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
+import VolumeBars from './volume/VolumeBars';
+import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
+import MarginCostBand from './volume/MarginCostBand';
+import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
 import PeriodVolumePriceSummary, { PERIOD_SUMMARY_HEIGHT } from './volume/PeriodVolumePriceSummary';
 import MarketBoard from './volume/MarketBoard';
-import { normalizePanelWindow, vMaxOf, type VolumeSlot } from './volume/volumeAxis';
+import { commitVolumeAxisLimit, normalizePanelWindow, vMaxOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
+import { resolveSelectedWindow } from './volume/periodSummary';
 
 // 面板头定高（第一百九十一轮，Eason 五点）：面板头改 [拖柄][PillUnit] 后随药丸
-// 加高——16px 平台小药丸 + 2px 间距 + 两行产品药丸（约 53px），定高 54 与价格页
-// 分离面板图例行（PANEL_LEGEND_H）一致，仍是共享轴列的纵向对齐基准
-const PANEL_HEAD_H = 54;
+// 加高——可换行的平台小药丸（28px）+ 2px 间距 + 两行产品药丸，另给店铺同步按钮
+// 留出同高空间；共享轴列和面板图从这里统一对齐。
+const PANEL_HEAD_H = 68;
 // 与价格走势分离卡片同一套：拖柄骑在上边线正中，上半凸出卡片；滚动区垫高避免裁切
 const PANEL_GRIP_H = 14;
 const SCROLL_PAD_TOP = 10;
@@ -100,7 +105,7 @@ const LOAD_ERROR_HINT: ReactNode = (
 );
 
 const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
-const CHART_GRID_RIGHT = 56; // 第一百一十五轮：右侧预留销量轴列（轨道线3px+右侧刻度数字+骑线拖柄）
+const CHART_GRID_RIGHT = 78; // 右侧预留销量轴列（轴线 + 最高值输入框）
 
 interface SlotInfo {
   isOwn: boolean;
@@ -146,13 +151,13 @@ interface PanelPillSpec {
   romText: string;
   hidden: boolean;
   main: boolean;
+  wrapChannelLabel?: boolean;
   channel?: { label: string; auto: boolean } | null;
   channelCtl?: {
     cc: string;
     skuIds: string[];
     current: PlatformSelection | null;
     onPick: (sel: PlatformSelection | null) => void;
-    syncCtl?: { active: boolean; onToggle: () => void };
     autoLabel?: string;
   };
 }
@@ -161,9 +166,11 @@ interface PanelPillSpec {
  *  依次铺开去重；每产品一面板，国家变化时 SKU 口径随 resolveSlot 重算 */
 interface PanelSpec {
   key: string;
+  cardId: string;
   modelId: string;
   romram: string;
   isOwn: boolean;
+  isMain: boolean;
   brand: string;
   name: string;
   skuIds: string[];
@@ -173,30 +180,42 @@ interface PanelSpec {
 export default function VolumePrice() {
   const { state, actions } = useFilters();
   const cc = state.countryCode;
+  // 主产品经营视图是量价卡内的瞬态：切走再回来回到默认主产品，不写入筛选器或 URL。
+  const [viewMode, setViewMode] = useState<VolumeViewMode>({ kind: 'mains' });
+  const safeViewMode = validVolumeViewMode(state.mains, viewMode);
+  useEffect(() => {
+    if (safeViewMode !== viewMode) setViewMode(safeViewMode);
+  }, [safeViewMode, viewMode]);
 
-  // ---- 面板清单：顶部筛选器所选产品铺开（第一百六十七轮）----
-  // 第一百九十一轮（Eason 五点）：随行带上各选择项的取价口径 platform——
-  // buildSeries 按它解析渠道（曲线真的跟随面板头渠道徽标的选择），药丸也据它回显
+  // ---- 面板清单：默认只铺各卡主品；组内对比才展开该卡的主品与竞品 ----
   const panelSpecs = useMemo<PanelSpec[]>(() => {
     const out: PanelSpec[] = [];
     const seen = new Set<string>();
-    for (const card of state.mains) {
-      const items: ProductSelection[] = [];
-      if (card.main) items.push(card.main);
-      for (const c of card.compares) items.push(c);
-      for (const sel of items) {
-        const norm = sel.romram.replace(/\s+/g, '');
-        const key = `${sel.modelId}__${norm}`;
-        if (seen.has(key)) continue;
-        const info = resolveSlot(sel, cc);
-        if (!info || info.skuIds.length === 0) continue;
-        seen.add(key);
-        out.push({ key, modelId: sel.modelId, romram: sel.romram, ...info, platform: sel.platform ?? null });
-      }
+    for (const ref of volumeProductRefs(state.mains, safeViewMode)) {
+      const sel = ref.selection;
+      const norm = sel.romram.replace(/\s+/g, '');
+      const key = `${sel.modelId}__${norm}`;
+      if (seen.has(key)) continue;
+      const info = resolveSlot(sel, cc);
+      if (!info || info.skuIds.length === 0) continue;
+      seen.add(key);
+      out.push({
+        key,
+        cardId: ref.cardId,
+        modelId: sel.modelId,
+        romram: sel.romram,
+        isMain: ref.isMain,
+        ...info,
+        platform: sel.platform ?? null,
+      });
     }
     return out;
-  }, [state.mains, cc]);
+  }, [state.mains, cc, safeViewMode]);
   const panelCount = panelSpecs.length;
+  // 量价页把同步入口放在每个主产品面板左侧；状态按卡保存，避免把一个主产品
+  // 的店铺口径误传给另一张主产品卡。快照用于再次点击时恢复同步前的选择。
+  const [storeSyncMap, setStoreSyncMap] = useState<Record<string, boolean>>({});
+  const storeSyncSnapshotsRef = useRef<Record<string, PlatformSyncCardSnap | null>>({});
 
   // ---- 视图状态（同价格看板口径；全部面板共用）。同步态/面板独立窗口/价格
   //      显示 = 会话态跨页保留（P1-5，usePageViewState）；其余为瞬态。
@@ -216,7 +235,7 @@ export default function VolumePrice() {
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   // 查看窗口 = 会话态跨页保留（与价格看板对齐；范围改动等失义路径照旧复位）
   const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('volume.windowIds', () => null);
-  const [bandFracs, setBandFracs] = useState<number[]>(() => panelSpecs.map(() => BAND_FRAC_DEFAULT)); // 各图柱区高比例（右侧拉伸柄）
+  const [volumeLimits, setVolumeLimits] = useState<VolumeAxisLimits[]>(() => panelSpecs.map(() => ({ max: null })));
   // ---- 第119轮（走查会）：同步/非同步查看时间。同步 = 全部面板共用窗口（原行为）；
   //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
   //      两项均会话态跨页保留（P1-5）----
@@ -243,20 +262,20 @@ export default function VolumePrice() {
   }, []);
   const [hoverIdxs, setHoverIdxs] = useState<(number | null)[]>(() => panelSpecs.map(() => null)); // 各面板悬停时间列（同步模式恒等）
   const [geoms, setGeoms] = useState<(StripGeom | null)[]>(() => panelSpecs.map(() => null)); // 各面板绘图区横向几何
-  // ---- 第118轮（评审）：图内拖选时间段——面板级高亮（brush = 已提交，
-  //      brushLive = 拖动中实时预览；高亮只做聚焦分析，不改动查看时间）----
+  // ---- 图内拖选时间段：面板级高亮（brush = 已提交，brushLive = 拖动中实时预览）。
+  //      摘要卡与高亮区间同源；未拖选时回退到本图查看窗口。 ----
   const [brushes, setBrushes] = useState<([number, number] | null)[]>(() => panelSpecs.map(() => null));
   const [brushLive, setBrushLive] = useState<([number, number] | null)[]>(() => panelSpecs.map(() => null));
 
   // 面板数变化（顶部筛选器增删产品）→ 各面板态数组随动（保旧值补空位）；
-  // 换产品/价格类型/币种 → 高度倍率与销量柱区比例复位（同看板 §5.6）
+  // 换产品/价格类型/币种 → 价格高度倍率与销量轴限位复位（同看板 §5.6）
   useEffect(() => {
     const fit = <T,>(fill: T) => (prev: T[]): T[] => Array.from({ length: panelCount }, (_, i) => prev[i] ?? fill);
     setHoverIdxs(fit<number | null>(null));
     setGeoms(fit<StripGeom | null>(null));
     setBrushes(fit<[number, number] | null>(null));
     setBrushLive(fit<[number, number] | null>(null));
-    setBandFracs(fit<number>(BAND_FRAC_DEFAULT));
+    setVolumeLimits(fit<VolumeAxisLimits>({ max: null }));
     setPanelWins(fit<[number, number] | null>(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelCount]);
@@ -271,7 +290,7 @@ export default function VolumePrice() {
     }
     scaleResetSeenRef.current = scaleResetKey;
     setSliderScale(1);
-    setBandFracs(panelSpecs.map(() => BAND_FRAC_DEFAULT));
+    setVolumeLimits(panelSpecs.map(() => ({ max: null })));
   }, [scaleResetKey, panelSpecs]);
 
   // 粒度切换 → 窗口端点对齐新粒度桶边界（保持同一时间跨度）；面板独立时间轴按桶号
@@ -495,6 +514,7 @@ export default function VolumePrice() {
       romText: rom,
       hidden: false,
       main: false,
+      wrapChannelLabel: true,
       channel: badge ? { label: badge.label, auto: badge.auto } : null,
       channelCtl: {
         cc,
@@ -504,6 +524,27 @@ export default function VolumePrice() {
         autoLabel: badge?.auto ? badge.label : undefined,
       },
     };
+  };
+
+  const toggleStoreSync = (p: (typeof panelViews)[number]): void => {
+    if (!p.spec.isMain) return;
+    const card = state.mains.find((item) => item.id === p.spec.cardId);
+    if (!card?.main) return;
+    const cardId = card.id;
+    if (storeSyncMap[cardId]) {
+      const snap = storeSyncSnapshotsRef.current[cardId];
+      if (snap) actions.setMains(restorePlatformSync(state.mains, [snap]));
+      storeSyncSnapshotsRef.current[cardId] = null;
+      setStoreSyncMap((prev) => ({ ...prev, [cardId]: false }));
+      return;
+    }
+    const snap = snapshotPlatformSync([card])[0] ?? null;
+    const source = pinnedSelectionFromBadge(p.series[0]?.channelBadge ?? null, card.main.platform ?? null);
+    const syncedCard = applySyncedPlatforms([card], source)[0];
+    if (!syncedCard) return;
+    actions.setMains(state.mains.map((item) => (item.id === cardId ? syncedCard : item)));
+    storeSyncSnapshotsRef.current[cardId] = snap;
+    setStoreSyncMap((prev) => ({ ...prev, [cardId]: true }));
   };
 
   // ---- 共享价格 Y 轴：三面板可见系列并集算一次（步长滞回 + 刷选冻结） ----
@@ -539,10 +580,36 @@ export default function VolumePrice() {
       panelData.map((p) => volumeByBuckets(p.spec.modelId, p.spec.romram, cc, state.granularity, domainIds)),
     [panelData, domainIds, cc, state.granularity],
   );
+  const marginCosts = useMemo(
+    () => panelData.map((panel, i) => {
+      const ids = domainIds.slice(effWins[i][0], effWins[i][1] + 1);
+      return marginCostOf({
+        modelId: panel.spec.modelId,
+        romram: panel.spec.romram,
+        countryCode: cc,
+        points: panel.series.flatMap((series) => series.points),
+        bucketIds: ids,
+      });
+    }),
+    [panelData, domainIds, effWins, cc],
+  );
   // 各图销量轴上限恒自动（niceCeil 窗口内最大值）
   const panelVMax = volumes.map((vs) => vMaxOf(vs));
+  const onVolumeAxisLimit = (idx: number, kind: 'max', value: number | null): void => {
+    setVolumeLimits((prev) => {
+      const next = [...prev];
+      const current = next[idx] ?? { max: null };
+      next[idx] = commitVolumeAxisLimit(current, kind, value, panelVMax[idx] ?? 1);
+      return next;
+    });
+  };
   const summaryLive = orderedPanels.map((p) => {
-    const [start, end] = effWins[p.idx] ?? [0, 0];
+    const [viewStart, viewEnd] = effWins[p.idx] ?? [0, 0];
+    // Chart 接收的是本图查看窗口切片，brush 下标从 0 开始；摘要使用全量
+    // domain 的序列，因此需要把拖选区间平移回全量桶下标。拖动中优先采用
+    // brushLive，让上方区间变化随着当前选择即时更新；没有高亮时沿用查看窗口。
+    const selectedBrush = brushLive[p.idx] ?? brushes[p.idx];
+    const [start, end] = resolveSelectedWindow(viewStart, viewEnd, selectedBrush);
     return {
       key: p.key,
       failed: p.failed,
@@ -681,6 +748,42 @@ export default function VolumePrice() {
               </div>
             </div>
 
+            {/* 组内对比是同一量价卡内的次级视图，一次只看一组。 */}
+            {safeViewMode.kind === 'group' && (
+              <nav aria-label="组内对比切换" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: space.sm }}>
+                <button
+                  type="button"
+                  onClick={() => setViewMode({ kind: 'mains' })}
+                  style={{ border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 12, cursor: 'pointer' }}
+                >
+                  ← 返回主产品视图
+                </button>
+                {state.mains.filter((card) => card.main).map((card, index) => {
+                  const active = safeViewMode.cardId === card.id;
+                  return (
+                    <button
+                      key={card.id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setViewMode({ kind: 'group', cardId: card.id })}
+                      style={{
+                        height: 24,
+                        padding: '0 8px',
+                        border: `1px solid ${active ? color.link : color.hairline}`,
+                        borderRadius: radius.control,
+                        background: active ? selectSoft : color.canvas,
+                        color: active ? selectSoftInk : color.body,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      第 {index + 1} 组
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
+
             {/* 面板区：[共享 Y 轴列][三面板网格]；柱层在价格线之下（zIndex 0 < 1）。
                 第一百二十六轮：轴列纵向撑满面板区，「同步」开关落列底、与各面板
                 时间轴同一水平线（原底部独立行删除）。
@@ -689,7 +792,7 @@ export default function VolumePrice() {
             <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, minWidth: 880, width: '100%' }}>
               <div
                 style={{
-                  flex: `0 0 ${splitAxisWidth(state.currency)}px`,
+                  flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers)}px`,
                   paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_HEAD_H + PERIOD_SUMMARY_HEIGHT,
                   display: 'flex',
                   flexDirection: 'column',
@@ -699,7 +802,7 @@ export default function VolumePrice() {
                   yScale={yCfg}
                   currency={state.currency}
                   industry={state.industry}
-                  gridLeft={estGridLeft(state.currency)}
+                  gridLeft={estGridLeft(state.currency, showYTicks, showTiers)}
                   panelGridTop={PANEL_GRID_TOP}
                   showYTicks={showYTicks}
                   showTiers={showTiers}
@@ -812,8 +915,28 @@ export default function VolumePrice() {
                         >
                           <HolderOutlined style={{ fontSize: 10 }} />
                         </span>
-                        <div style={{ height: PANEL_HEAD_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
-                          <PillUnit pill={pillOf(p)} dimmed={false} onToggle={() => {}} onHover={() => {}} />
+                        <div style={{ height: PANEL_HEAD_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, minWidth: 0 }}>
+                          <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <PanelHeader
+                            brand={p.brand}
+                            name={p.name}
+                            isMain={p.spec.isMain}
+                            syncActive={storeSyncMap[p.spec.cardId] === true}
+                            onStoreSync={p.spec.isMain ? () => toggleStoreSync(p) : undefined}
+                          >
+                            <PillUnit pill={pillOf(p)} dimmed={false} onToggle={() => {}} onHover={() => {}} />
+                          </PanelHeader>
+                          </div>
+                          {safeViewMode.kind === 'mains' && p.spec.isMain && (state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0) > 0 && (
+                            <button
+                              type="button"
+                              aria-label={`查看 ${p.name} 所在组的 ${state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0} 款对比产品`}
+                              onClick={() => setViewMode({ kind: 'group', cardId: p.spec.cardId })}
+                              style={{ flex: '0 0 auto', border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 11, lineHeight: '14px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            >
+                              本组对比（{state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0}）
+                            </button>
+                          )}
                         </div>
                         {(() => {
                           const row = summaryRows.find((item) => item.key === p.key);
@@ -841,8 +964,8 @@ export default function VolumePrice() {
                             vMax={panelVMax[p.idx]}
                             color={p.vis[0]?.color ?? brandColorOf(p.brand)}
                             hoverIdx={hoverIdxs[p.idx] ?? null}
-                            bandFrac={bandFracs[p.idx] ?? BAND_FRAC_DEFAULT}
-                            onBandFrac={(v) => setBandFracs((prev) => prev.map((f, k) => (k === p.idx ? v : f)))}
+                            axisLimits={volumeLimits[p.idx] ?? { max: null }}
+                            onAxisLimit={(kind, value) => onVolumeAxisLimit(p.idx, kind, value)}
                           />
                           <Chart
                             series={p.vis}
@@ -851,7 +974,7 @@ export default function VolumePrice() {
                             priceTypes={state.priceTypes}
                             tipMode={tipMode}
                             gridLeft={CHART_GRID_LEFT}
-                            gridRight={CHART_GRID_RIGHT} // 第一百一十五轮：右侧预留销量轴列（轴线+刻度+拖柄不与绘图区重叠）
+                            gridRight={CHART_GRID_RIGHT} // 右侧预留销量轴列（轴线+最高值输入框不与绘图区重叠）
                             gridTop={PANEL_GRID_TOP}
                             chrome={false}
                             axisChrome={false}
@@ -865,7 +988,8 @@ export default function VolumePrice() {
                             lineShape={lineShape}
                             labelMode={labelMode} // 第一百一十四轮（评审）：价格显示 详细/精简
                             tipBox // 第一百一十四轮（评审）：悬停明细 = 图下方居中预留框
-                            // 第一百二十六轮：图内 x 轴日期标签删除——面板底部时间轴是唯一日期层
+                            // 与价格走势分离面板一致，图内保留周刻度；底部时间轴继续承载窗口拖拽。
+                            showXLabels
                             crosshairIdx={hoverIdxs[p.idx] ?? null}
                             onCrosshairMove={onHoverOf(p.idx)}
                             crosshairY={crossY} // 第一百一十四轮（评审）：横向虚线横跨全部面板
@@ -876,10 +1000,18 @@ export default function VolumePrice() {
                             emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
                           />
                         </div>
+                        <MarginCostBand
+                          geom={geoms[p.idx] ?? null}
+                          points={marginCosts[p.idx] ?? []}
+                          currency={state.currency}
+                          hoverIdx={hoverIdxs[p.idx] ?? null}
+                          onHover={onHoverOf(p.idx)}
+                          empty={marginCostAvailabilityOf(p.spec.isOwn, marginCosts[p.idx] ?? []) === 'empty'}
+                        />
                         {/* 本图时间轴（第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：
                             同步 = 全图查看同一段时间，拖任一条同步调整；非同步 = 各图独立调整。
                             恒渲染保证切换同步只改联动行为，面板高度与轨道横向位置不变 */}
-                        <div style={{ margin: '0 48px 6px 8px' }}>
+                        <div style={{ margin: `0 ${CHART_GRID_RIGHT}px 6px 8px` }}>
                           <PanelTimeTrack
                             ids={domainIds}
                             lo={filterBounds[0]}

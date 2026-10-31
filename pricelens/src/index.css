@@ -446,4 +446,5 @@ button.lpl-map-card:hover {
 /* 新增情报与预测页的两栏内容在窄屏自动改为单列。 */
 @media (max-width: 760px) {
   [data-lpl-forecast-grid] { grid-template-columns: 1fr !important; }
+  [data-lpl-intelligence-grid] { grid-template-columns: 1fr !important; }
 }

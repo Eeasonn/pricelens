@@ -687,7 +687,7 @@ export default function PlatformCompareView(props: {
   // chip 悬停/改选中 = 图上高亮该线（与主图例药丸同语义；弹层开着时该线保持高亮）
   const [hoverKey, setHoverKey] = useState<string | null>(null);
 
-  const gridLeft = estGridLeft(state.currency);
+  const gridLeft = estGridLeft(state.currency, props.showYTicks, props.showTiers);
   const latestOf = (s: Series): number | null => {
     for (let i = s.points.length - 1; i >= 0; i--) {
       const v = s.points[i]?.price;

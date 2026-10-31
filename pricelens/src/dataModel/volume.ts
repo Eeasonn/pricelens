@@ -78,6 +78,37 @@ export function promoFactor(depth: '浅' | '中' | '深'): number {
   return depth === '深' ? 1.6 : depth === '中' ? 1.35 : 1.15;
 }
 
+export type PromoPhase = 'preheat' | 'peak' | 'aftermath';
+export interface PromoWindow { start_date: string; end_date: string }
+
+/** 大促阶段：正式期前 6 天预热，区间内为峰值，结束后 7 天允许需求透支。先命中的档期生效。 */
+export function promoPhaseOf(weekWed: string, promos: readonly PromoWindow[]): PromoPhase | null {
+  const t = Date.parse(`${weekWed}T00:00:00Z`);
+  if (!Number.isFinite(t)) return null;
+  const day = 86_400_000;
+  for (const promo of promos) {
+    const start = Date.parse(`${promo.start_date}T00:00:00Z`);
+    const end = Date.parse(`${promo.end_date}T00:00:00Z`);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (t >= start - 6 * day && t < start) return 'preheat';
+    if (t >= start && t <= end) return 'peak';
+    if (t > end && t <= end + 7 * day) return 'aftermath';
+  }
+  return null;
+}
+
+export function promoPhaseFactor(phase: PromoPhase | null): number {
+  if (phase === 'preheat') return 1.05;
+  if (phase === 'peak') return 1;
+  if (phase === 'aftermath') return 0.9;
+  return 1;
+}
+
+/** 确定性微扰，收窄到约 ±3%，避免噪声盖过大促形状。 */
+export function volumeNoiseOf(key: string): number {
+  return 0.97 + 0.06 * hash01(key);
+}
+
 /** FNV-1a 32 位 → [0,1)：确定性微扰源（同 key 恒同值） */
 export function hash01(key: string): number {
   let h = 0x811c9dc5;
@@ -195,14 +226,17 @@ export function volumeOfConfig(modelId: string, romram: string, countryCode: str
     const best = minPriceOfRows(w.rows, (row) => row.price_local);
     const bestPrice = best?.price ?? null;
     const bestRrp = best?.row.rrp_local ?? null;
-    // 促销档期：周三落在区间内（country 匹配、platforms 含该国默认电渠或全渠道）；多档取最深
+    // 促销档期：周三落在正式区间内才叠深度系数；预热/尾声按阶段系数，不在正式期再叠一层。
     let promo = 1;
+    const applicablePromos: PromoWindow[] = [];
     for (const p of dimPromo) {
-      if (p.country_code !== countryCode || p.start_date > w.wed || w.wed > p.end_date) continue;
+      if (p.country_code !== countryCode) continue;
       if (p.platforms != null && (dp == null || !p.platforms.includes(dp))) continue;
-      promo = Math.max(promo, promoFactor(p.depth_hint));
+      applicablePromos.push({ start_date: p.start_date, end_date: p.end_date });
+      if (p.start_date <= w.wed && w.wed <= p.end_date) promo = Math.max(promo, promoFactor(p.depth_hint));
     }
-    const noise = 0.92 + 0.16 * hash01(`${countryCode}|${modelId}|${romram}|${w.weekId}`);
+    promo *= promoPhaseFactor(promoPhaseOf(w.wed, applicablePromos));
+    const noise = volumeNoiseOf(`${countryCode}|${modelId}|${romram}|${w.weekId}`);
     const v =
       scale
       * lifecycleFactor(w.idx - firstIdx, eol != null && w.wed > eol)

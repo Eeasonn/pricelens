@@ -25,8 +25,8 @@ import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shado
 
 /** 页头只留管理页签。图表内容的切换在筛选栏下方。 */
 const TABS: { page: Page; label: string }[] = [
-  { page: 'intelligence', label: '情报中心' },
-  { page: 'forecast', label: '量价预测' },
+  { page: 'intelligence', label: '情报中心（施工中🚧）' },
+  { page: 'forecast', label: '量价预测（施工中🚧）' },
   { page: 'config', label: '配置' },
   { page: 'alerts', label: '预警' },
 ];

@@ -11,12 +11,10 @@
 // ============================================================
 import { buildTierBoxes, buildTickRows, thinTickRows, Y_TICK_FONT } from './chartModel';
 import {
-  AXIS_BAND_W,
   GRID,
   TICK_DASH_W,
-  TICK_ZONE_W,
   TIER_LABEL_W,
-  axisFixedWidth,
+  axisChrome,
   tierLabelShort,
   type Geom,
   type YScale,
@@ -39,16 +37,17 @@ export default function SplitAxisColumn(props: {
   /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，关 = 不画档位区块 */
   showTiers?: boolean;
   tierValues: number[];
-  /** Y 轴上下限（第一百六十六轮，Eason）：拖柄受控值与提交——共享轴列是分离模式
-   *  唯一画轴处，拖柄挂这里（面板卡 chrome=false 不再各挂） */
+  /** Y 轴上下限受控值与提交——共享轴列是分离模式唯一画轴处，编辑器挂这里
+   *  （面板卡 chrome=false 不再各挂）。 */
   yLimit?: YLimitState;
   onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
 }) {
   const { yScale: scale, currency, panelGridTop } = props;
   const showYTicks = props.showYTicks ?? true;
-  void props.gridLeft; // 旧契约字段，宽度已恒定化
-  const axisW = axisFixedWidth(currency);
-  const tickLeft = axisW - TICK_DASH_W - TICK_ZONE_W; // 刻度文字区左缘（USD 时位于档位区块右段）
+  const showTiers = props.showTiers !== false;
+  void props.gridLeft; // 旧契约字段，宽度由显隐决定
+  const chrome = axisChrome(currency, showYTicks, showTiers);
+  const axisW = chrome.width;
   const geom: Geom = {
     gridLeft: axisW,
     plotLeft: axisW,
@@ -60,7 +59,7 @@ export default function SplitAxisColumn(props: {
   };
   // 刻度抽稀（第一百四十七轮）：压缩轴最矮段处刻度互相叠压/越出绘图区下缘的守卫
   const rows = thinTickRows(buildTickRows(geom));
-  const tierBoxes = buildTierBoxes({ enabled: currency === 'usd' && props.showTiers !== false, geom, tierValues: props.tierValues, industry: props.industry });
+  const tierBoxes = buildTierBoxes({ enabled: chrome.tierWidth > 0, geom, tierValues: props.tierValues, industry: props.industry });
   return (
     <div style={{ position: 'relative', width: axisW, height: panelGridTop + scale.plotHeight + GRID.bottom }}>
       {/* 档位区块（仅 USD）：贴轴列左缘的整块竖向色带，档位文字单行居左
@@ -73,7 +72,7 @@ export default function SplitAxisColumn(props: {
             position: 'absolute',
             left: 0,
             top: tb.top,
-            width: AXIS_BAND_W,
+            width: chrome.tierWidth,
             height: tb.h,
             boxSizing: 'border-box',
             border: tb.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`,
@@ -87,7 +86,7 @@ export default function SplitAxisColumn(props: {
           <span
             style={{
               // 关「Y 刻度线」时档位文字居中整个轴区宽度（第九十一轮）
-              width: showYTicks ? TIER_LABEL_W : AXIS_BAND_W,
+              width: showYTicks ? TIER_LABEL_W : chrome.tierWidth,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -114,9 +113,9 @@ export default function SplitAxisColumn(props: {
             className="tnum"
             style={{
               position: 'absolute',
-              left: tickLeft,
+              left: chrome.tickLeft,
               top: Math.round(t.y) - 8,
-              width: TICK_ZONE_W,
+              width: chrome.tickWidth,
               paddingRight: 3,
               boxSizing: 'border-box',
               textAlign: 'right',
@@ -135,7 +134,7 @@ export default function SplitAxisColumn(props: {
             key={`dash-${t.v}`}
             style={{
               position: 'absolute',
-              left: axisW - TICK_DASH_W,
+              left: chrome.dashLeft,
               top: Math.round(t.y) - 0.5,
               width: TICK_DASH_W,
               height: 1,
@@ -156,7 +155,7 @@ export default function SplitAxisColumn(props: {
           aria-label="刻度非连续：段与段之间的值域已压缩"
           style={{
             position: 'absolute',
-            left: axisW - TICK_DASH_W / 2 - 7,
+            left: (showYTicks ? chrome.dashLeft + TICK_DASH_W / 2 : chrome.tierWidth / 2) - 7,
             top: panelGridTop + b - 8,
             pointerEvents: 'auto',
             cursor: 'help',
@@ -168,14 +167,14 @@ export default function SplitAxisColumn(props: {
           ))}
         </svg>
       ))}
-      {/* Y 轴上下限拖柄（第一百六十六轮）：轴区上/下缘细拖柄，拖动自定义价格上限/下限，
-          双击恢复自动；未传 onYLimit 不渲染（下钻弹窗等自管场景） */}
-      {props.onYLimit && (
+      {/* Y 轴上下限输入（替代旧拖拽拉伸）：上限/下限固定在轴上方，清空输入恢复自动；
+          未传 onYLimit 不渲染（下钻弹窗等自管场景）。 */}
+      {props.onYLimit && chrome.visible && (
         <YLimitHandles
           scale={scale}
           plotTop={panelGridTop}
           plotHeight={scale.plotHeight}
-          trackWidth={axisW}
+          trackWidth={chrome.editorWidth}
           limit={props.yLimit ?? { min: null, max: null }}
           onLimit={props.onYLimit}
         />

@@ -115,7 +115,6 @@ export default function ChannelSelectPopover({
   onPick,
   scope = 'product',
   scopePlatform,
-  syncCtl,
   autoLabel,
 }: {
   cc: string;
@@ -128,9 +127,6 @@ export default function ChannelSelectPopover({
    *  每周最低价店铺（店铺 chip 修改入口） */
   scope?: 'product' | 'platform';
   scopePlatform?: string;
-  /** 同步平台筛选（第一百七十八轮立，第一百八十四轮改组内语义）：传入 =
-   *  本组主品的浮层出开关——同步只作用于本组（本组对比品跟随本组主产品） */
-  syncCtl?: { active: boolean; onToggle: () => void };
   /** 产品级自动当前解析到的平台名（第一百九十一轮，Eason 五点：自动态才传；
    *  调用方见 BrandLegendStrip channelCtl.autoLabel）——底部「自动」胶囊旁的语境 */
   autoLabel?: string;
@@ -278,39 +274,6 @@ export default function ChannelSelectPopover({
           onChange={(e) => setQuery(e.target.value)}
           style={{ height: narrow ? 44 : 24, fontSize: narrow ? fontSize.bodySm : fontSize.caption, width: narrow ? '100%' : 232 }}
         />
-        {syncCtl && (
-          <button
-            type="button"
-            aria-pressed={!!syncCtl.active}
-            title={syncCtl.active
-              ? '已同步：本组产品取价平台与主产品一致，点击取消并恢复同步前状态'
-              : '本组产品的取价平台改成与主产品一致（只影响本组）'}
-            onClick={(e) => {
-              e.stopPropagation();
-              syncCtl.onToggle();
-            }}
-            style={{
-              flexShrink: 0,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: narrow ? 44 : 20,
-              padding: narrow ? '0 12px' : '0 8px',
-              borderRadius: radius.pill,
-              border: `1px solid ${syncCtl.active ? '#0070f3' : color.hairlineStrong}`,
-              background: syncCtl.active ? selectSoft : color.canvas,
-              color: syncCtl.active ? selectSoftInk : color.mute,
-              font: 'inherit',
-              fontSize: narrow ? 13 : 11,
-              fontWeight: 600,
-              lineHeight: '18px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            同步平台筛选
-          </button>
-        )}
       </div>
       {q ? (
         <>

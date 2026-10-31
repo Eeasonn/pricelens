@@ -86,7 +86,7 @@ export default function ChartContentBar() {
     >
       <Tab active={priceOn} onClick={openPrice}>价格走势</Tab>
       <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
-      <Tab active={forecastOn} onClick={openForecast}>量价预测</Tab>
+      <Tab active={forecastOn} onClick={openForecast}>量价预测（施工中🚧）</Tab>
     </nav>
   );
 }

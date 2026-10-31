@@ -21,18 +21,8 @@
 // 第一百六十七轮（Eason）：块首新增「仅查看主产品」按钮（时间范围「自动」按钮
 // 同款配色语言的小型版）——一键隐藏本组全部对比品（折线批量屏蔽），激活态浅蓝
 // 再点整组恢复；仅在该组有对比品时渲染。
-// 第一百七十轮（Eason 四点）：①按钮与产品药丸间距拉大（4 → 12）②按钮上方新增
-// 「同步平台筛选」（onSyncPlatform）：一键把全部产品的取价平台改成与主产品一致
-// （全局操作，index 层实现）③产品药丸宽度预算 178 → 220，避免过于紧凑。
-// 两按钮垂直成组（同步平台筛选在上）。
-// 第一百七十三轮（Eason）：「同步平台筛选」改开关语义——随时可点，触发后按压态
-// 浅蓝（与仅查看主产品同语言）、全部产品跟随主产品，再点取消并还原同步前快照
-// （快照/收敛/还原纯函数在 platformSync.ts，index 层持开关态）；
-// 172 轮的「全一致即置灰」口径退役。
-// 第一百七十四轮（Eason 三点）：①块首按钮列退役——「仅查看主产品」全局化上移
-// 价格走势标题行（跨组同时生效，index 层实现，见 tableModel.onlyMainState）；
-// ②「同步平台筛选」移到首组主品平台筛选小药丸左侧（syncCtl 只传首个含主品的块；
-// 分离模式仅首面板传）③药丸宽度自适应——去 minWidth 190，宽随内容收放，
+// 第一百七十轮起：主品同步动作支持按压态与快照恢复；当前入口固定在每个主品左侧
+// 的「店铺同步」按钮，平台-店铺筛选弹层只负责选择口径。产品药丸宽度自适应，
 // PILL_W_BUDGET 240 仅作上限。
 // 第一百四十二轮追补三：块头「⇄ 比价」小按钮删除（当时的比价入口在工具行；
 // 第一百五十轮起入口移到药丸本位，块头不再承担）。
@@ -41,8 +31,8 @@
 // 平台小药丸改为行内居右显示。
 // 第一百七十八轮（Eason 六点，看板合并模式工具行改版）：①药丸带注入工具行中区
 // （index 层经 Chart legend 槽），行内底部与 RRP 对齐 ②「仅查看主产品」挪工具行
-// RRP 后（短竖线分隔），标题行撤 ③「同步平台筛选」撤出行内——进主品平台-店铺
-// 筛选浮层左上角（channelCtl.syncCtl → ChannelSelectPopover）④药丸第二行参考
+// RRP 后（短竖线分隔），标题行撤 ③「同步平台筛选」改为每个主品左侧的「店铺同步」
+// 按钮，平台-店铺筛选浮层只保留筛选本身 ④药丸第二行参考
 // 多平台对比产品框：产品名墨色加粗 + 型号浅蓝底 chip（无配置层级不出 chip）。
 // 第一百八十三轮（Eason，药丸带独立成行定版）：「第 N 组」块首小字退役（组界
 // 由分隔线表达）。本轮拍板再回退：分离模式药丸带回归各面板内（index 层渲染），
@@ -96,15 +86,16 @@ interface PillSpec {
   main: boolean; // 主品药丸 = 本组主分析产品（浅蓝底/描边/加粗）
   /** 取价平台（第一百六十二轮）：平台名 / 「自动」（药丸上方小药丸显示） */
   channel?: { label: string; auto: boolean } | null;
-  /** 平台筛选入口：小药丸点击弹三级渠道浮层；syncCtl 仅主品传入（浮层左上角
-   *  同步平台筛选，第一百七十八轮）；autoLabel = 自动态当前解析到的平台名
+  /** 量价面板：店铺名称允许换行；价格走势维持单行省略。 */
+  wrapChannelLabel?: boolean;
+  /** 平台筛选入口：小药丸点击弹三级渠道浮层；同步开关已移到主品左侧，
+   *  autoLabel = 自动态当前解析到的平台名
    *  （第一百九十一轮：浮层「自动」胶囊旁的语境显示） */
   channelCtl?: {
     cc: string;
     skuIds: string[];
     current: { platforms: string[]; shopIds: string[]; seller?: string | null } | null;
     onPick: (sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
-    syncCtl?: { active: boolean; onToggle: () => void };
     autoLabel?: string;
   };
 }
@@ -239,8 +230,8 @@ export function PillUnit({
 
 /** 平台行（第一百六十二轮，Eason）：平台小药丸独立一行（不嵌在产品药丸内；
  *  自动态显示最新有价周的实际平台名）。
- *  第一百七十四轮：行内「同步平台筛选」按钮（后随第一百七十八轮撤出——改进
- *  主品平台-店铺筛选浮层左上角，经 channelCtl.syncCtl 传入浮层）。
+ *  第一百七十四轮：行内「同步平台筛选」按钮（现改为主品左侧「店铺同步」按钮，
+ *  平台-店铺筛选浮层不再承载同步开关）。
  *  第一百七十六轮追补（Eason）：多平台比价入口（店铺图标）随药丸退役——比价页签
  *  只从标题行页签进（默认主品）；平台小药丸改为行内居右。
  *  第一百八十四轮（Eason）：改行首居左；外形从圆胶囊改小圆角矩形标签（参考
@@ -253,6 +244,7 @@ export function PlatformRow({
   pill: PillSpec;
   dimmed: boolean;
 }) {
+  const channelLines = pill.channel?.label.split(' · ', 2) ?? [];
   return (
     <span
       style={{
@@ -279,7 +271,6 @@ export function PlatformRow({
               skuIds={pill.channelCtl.skuIds}
               current={pill.channelCtl.current}
               onPick={pill.channelCtl.onPick}
-              syncCtl={pill.channelCtl.syncCtl}
               autoLabel={pill.channelCtl.autoLabel}
             />
           }
@@ -300,7 +291,7 @@ export function PlatformRow({
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
-              height: 16,
+              height: pill.wrapChannelLabel ? 28 : 16,
               padding: 0,
               border: '1px solid transparent',
               borderRadius: 4,
@@ -316,7 +307,24 @@ export function PlatformRow({
               cursor: 'pointer',
             }}
           >
-            <span style={{ minWidth: 0, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
+            <span
+              style={{
+                minWidth: 0,
+                maxWidth: pill.wrapChannelLabel ? 104 : 150,
+                overflow: pill.wrapChannelLabel ? 'visible' : 'hidden',
+                textOverflow: pill.wrapChannelLabel ? 'clip' : 'ellipsis',
+                whiteSpace: pill.wrapChannelLabel ? 'normal' : 'nowrap',
+                lineHeight: pill.wrapChannelLabel ? '12px' : undefined,
+                wordBreak: pill.wrapChannelLabel ? 'break-word' : undefined,
+              }}
+            >
+              {pill.wrapChannelLabel && channelLines.length > 1 ? (
+                <>
+                  <span style={{ display: 'block' }}>{channelLines[0]}</span>
+                  <span style={{ display: 'block' }}>{channelLines[1]}</span>
+                </>
+              ) : pill.channel.label}
+            </span>
             <DownOutlined aria-hidden style={{ fontSize: 8, color: 'currentColor' }} />
           </button>
         </Popover>
@@ -329,8 +337,8 @@ export function PlatformRow({
 
 /** 组块：主品药丸 + vs + 对比药丸（块内 ‹› 滚动，仅当对比数 > COMPARES_VISIBLE
  *  时出现；主品药丸在滚动区外恒可见）。第一百七十四轮：块首按钮列退役——
- *  「隐藏对比品」全局化（index 层，原「仅查看主产品」）、「同步平台筛选」进首组
- *  主品平台小药丸浮层；「第 N 组」块首小字随药丸带独立成行退役（第一百八十三轮） */
+ *  「隐藏对比品」全局化（index 层，原「仅查看主产品」）；「店铺同步」在主品左侧；
+ *  「第 N 组」块首小字随药丸带独立成行退役（第一百八十三轮） */
 function GroupBlock({
   group,
   hiddenKeys,
@@ -350,9 +358,8 @@ function GroupBlock({
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
   };
-  /** 同步平台筛选（第一百七十四轮移位；第一百八十四轮改按组）：渲染在主品
-   *  平台-店铺筛选浮层左上角；只作用于本组（本组主品+对比品跟随本组主产品），
-   *  上层按组注入 */
+  /** 店铺同步：渲染在主品左侧；只作用于本组（本组主品+对比品跟随本组主产品），
+   *  上层按组注入。 */
   syncCtl?: { active: boolean; onToggle: () => void };
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -396,8 +403,6 @@ function GroupBlock({
           skuIds: s.skuIds,
           current: s.platform ?? null,
           onPick: (sel) => channelCtl.onPick(s.key, sel),
-          // 同步平台筛选（第一百七十八轮）：只随主品药丸的浮层出现（浮层左上角）
-          syncCtl: group.mainKey === s.key ? syncCtl : undefined,
           // 自动态解析平台名（第一百九十一轮）：浮层「自动」胶囊旁的语境显示
           autoLabel: s.channelBadge?.auto ? s.channelBadge.label : undefined,
         }
@@ -410,9 +415,45 @@ function GroupBlock({
   const dimOf = (p: PillSpec): boolean => hoverSet != null && !hoverSet.has(p.key);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
-      {/* 主品药丸（空对无主品不出）；其平台-店铺筛选浮层左上角出「同步平台筛选」
-          （syncCtl 经 channelCtl 注入，仅上层传给首组） */}
-      {mainPill && <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />}
+      {/* 主品左侧固定放店铺同步按钮；平台筛选浮层只负责选平台/店铺。 */}
+      {mainPill && (
+        <div style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+          {syncCtl && (
+            <button
+              type="button"
+              aria-pressed={syncCtl.active}
+              aria-label={syncCtl.active ? '取消店铺同步' : '店铺同步'}
+              title={syncCtl.active ? '已同步：本组对比产品跟随主产品店铺，点击取消' : '将本组对比产品的店铺同步为主产品店铺'}
+              onClick={(e) => {
+                e.stopPropagation();
+                syncCtl.onToggle();
+              }}
+              style={{
+                flex: '0 0 36px',
+                width: 36,
+                height: 36,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                border: `1px solid ${syncCtl.active ? color.link : color.hairline}`,
+                borderRadius: radius.control,
+                background: syncCtl.active ? selectSoft : color.canvas,
+                color: syncCtl.active ? selectSoftInk : color.body,
+                font: 'inherit',
+                fontSize: 10,
+                fontWeight: 600,
+                lineHeight: '13px',
+                cursor: 'pointer',
+                whiteSpace: 'normal',
+              }}
+            >
+              <span>店铺<br />同步</span>
+            </button>
+          )}
+          <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />
+        </div>
+      )}
       {mainPill && compares.length > 0 && (
         <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>vs</span>
       )}
@@ -499,8 +540,8 @@ export default function BrandLegendStrip({
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
   };
-  /** 同步平台筛选（第一百七十轮立，第一百八十四轮改按组）：传入 = 返回该组的
-   *  开关态与回调（在有主品的组的主品筛选浮层左上角出现）；同步只作用于本组
+  /** 店铺同步（按组）：传入 = 返回该组的开关态与回调（在有主品的组的主品左侧
+   *  出现）；同步只作用于本组
    *  （本组主品+对比品跟随本组主产品），各组互相独立（index 层实现） */
   syncCtlOf?: (group: LegendGroup) => { active: boolean; onToggle: () => void } | undefined;
 }) {
@@ -560,9 +601,8 @@ export default function BrandLegendStrip({
         style={{ display: 'flex', alignItems: 'stretch', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', minWidth: 0, padding: '2px 0' }}
       >
         {(() => {
-          // 块间灰色短竖线分隔（最后一块之后不加）；同步平台筛选（第一百八十四轮
-          // 改按组）：凡含主品的组各拿各的 syncCtl（同步只作用于本组，开关出现在
-          // 本组主品的筛选浮层左上角）
+          // 块间灰色短竖线分隔（最后一块之后不加）；凡含主品的组各拿各的 syncCtl，
+          // 同步只作用于本组，开关显示在本组主品左侧。
           const items: ReactNode[] = [];
           blocks.forEach((g, i) => {
             if (i > 0) {

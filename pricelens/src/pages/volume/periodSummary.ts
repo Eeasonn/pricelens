@@ -64,6 +64,25 @@ export function volumeTotalOf(values: readonly (number | null)[]): number | null
   return any ? total : null;
 }
 
+/**
+ * 将图内拖选返回的“当前查看窗口内下标”还原为全量时间桶下标。
+ * 图表本身只渲染 effWins 切片，摘要则使用完整序列；两者必须共享同一
+ * 个生效区间，否则拖选 07-15—09-16 后摘要仍会显示整段 W19—W42。
+ */
+export function resolveSelectedWindow(
+  viewStart: number,
+  viewEnd: number,
+  brush: readonly [number, number] | null | undefined,
+): [number, number] {
+  const lo = Math.min(viewStart, viewEnd);
+  const hi = Math.max(viewStart, viewEnd);
+  if (!brush) return [lo, hi];
+  const brushLo = Math.min(brush[0], brush[1]);
+  const brushHi = Math.max(brush[0], brush[1]);
+  const clamp = (value: number): number => Math.min(hi, Math.max(lo, value));
+  return [clamp(lo + brushLo), clamp(lo + brushHi)];
+}
+
 const SIDE: Record<Exclude<MoveDirection, 'none'>, { price: string; volume: string }> = {
   up: { price: '价升', volume: '量升' },
   down: { price: '价降', volume: '量降' },
