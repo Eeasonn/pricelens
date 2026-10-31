@@ -78,6 +78,7 @@ import { dimProduct } from '../data';
 import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
 import type { Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
+import { volumeAdaptiveSeries } from './volume/volumeAdaptive';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
 import VolumeBars from './volume/VolumeBars';
 import PanelHeader from './volume/PanelHeader';
@@ -349,14 +350,26 @@ export default function VolumePrice() {
     [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg],
   );
 
-  // 时间自适应：三面板数据跨度并集 → 上方极值筛选器（同 index.tsx 写法；
-  // 本 effect 声明在粒度换算之后：切粒度先换桶，自适应范围随后覆盖）
-  const span = useMemo(() => seriesSpanRange(panelData.flatMap((p) => p.series)), [panelData]);
+  // 时间自适应：只按当前画面上的产品重套上方极值。
+  // 默认主产品视图不含对比产品，不能沿用价格页按主品+对比产品算出的更宽范围。
+  // 组内对比才把该组正在显示的竞品算进跨度。
+  // 本 effect 声明在粒度换算之后：切粒度先换桶，自适应范围随后覆盖。
+  const adaptiveSeries = useMemo(
+    () => volumeAdaptiveSeries(
+      panelData.map((panel) => ({ isMain: panel.spec.isMain, series: panel.series })),
+      safeViewMode,
+    ),
+    [panelData, safeViewMode],
+  );
+  const span = useMemo(() => seriesSpanRange(adaptiveSeries), [adaptiveSeries]);
   const adaptiveBounds = useMemo(
     () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0) : null),
     [state.adaptive, buckets, span],
   );
-  const adaptiveKey = adaptiveBounds ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}` : '';
+  const adaptiveProductKey = adaptiveSeries.map((series) => series.key).join('|');
+  const adaptiveKey = adaptiveBounds
+    ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}|${adaptiveProductKey}`
+    : '';
   const adaptiveAppliedRef = useRef('');
   const adaptiveMountedRef = useRef(false);
   useLayoutEffect(() => {
@@ -365,24 +378,20 @@ export default function VolumePrice() {
       return;
     }
     if (adaptiveAppliedRef.current === adaptiveKey) return;
-    // 挂载首跑守卫（跨页往返，同价格看板）：现范围仍覆盖本页任一数据桶就沿用、
-    // 不覆写全局筛选器；完全脱节（换国进入/首次为空）才重套自适应
-    if (!adaptiveMountedRef.current) {
-      const dataLo = span ? buckets[span[0]]?.id ?? null : null;
-      const dataHi = span ? buckets[span[1]]?.id ?? null : null;
-      if (
-        dataLo && dataHi && state.rangeStart && state.rangeEnd &&
-        !(state.rangeEnd < dataLo || state.rangeStart > dataHi)
-      ) {
-        adaptiveAppliedRef.current = adaptiveKey;
-        adaptiveMountedRef.current = true;
-        return;
-      }
-    }
+    // 端点与本页跨度不一致就重套，即使现范围仍盖住主产品数据。
+    // 挂载时端点已经一致：保留会话里的查看窗口。
     adaptiveAppliedRef.current = adaptiveKey;
-    actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
-    setWindowIds(null);
-    adaptiveMountedRef.current = true; // 走重套分支同样结束守卫期（与价格看板对齐，此后产品变化严格重套）
+    const rangeUnchanged = state.rangeStart === adaptiveBounds[0] && state.rangeEnd === adaptiveBounds[1];
+    if (!rangeUnchanged) {
+      actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
+      rangeWatchRef.current = { gran: state.granularity, key: `${adaptiveBounds[0]}|${adaptiveBounds[1]}` };
+      setWindowIds(null);
+      setPanelWins((prev) => prev.map(() => null));
+    } else if (adaptiveMountedRef.current) {
+      setWindowIds(null);
+      setPanelWins((prev) => prev.map(() => null));
+    }
+    adaptiveMountedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adaptiveKey]);
 

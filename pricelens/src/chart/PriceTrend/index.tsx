@@ -372,27 +372,16 @@ export default function PriceTrend(props: {
       return;
     }
     if (adaptiveAppliedRef.current === adaptiveKey) return;
-    // 挂载首跑守卫（跨页往返）：顶部时间范围是全局筛选器，量价页可能已按其三槽
-    // 写入自适应范围——只要现范围仍覆盖本页任一数据桶就沿用、不覆写（切页不再
-    // 静默改用户的筛选器）；范围与本页数据完全脱节（换国进入/首次为空）才重套
-    if (!adaptiveMountedRef.current) {
-      const dataLo = span ? buckets[span[0]]?.id ?? null : null;
-      const dataHi = span ? buckets[span[1]]?.id ?? null : null;
-      if (
-        dataLo && dataHi && state.rangeStart && state.rangeEnd &&
-        !(state.rangeEnd < dataLo || state.rangeStart > dataHi)
-      ) {
-        adaptiveAppliedRef.current = adaptiveKey;
-        adaptiveMountedRef.current = true;
-        return;
-      }
-    }
+    // 自适应开着时，范围以本页画面上的产品为准。价格页含对比产品，量价默认只有主产品，
+    // 两端点不一致就要重套。不能因为现范围仍盖住一部分数据，就沿用另一页算出的跨度。
+    // 挂载时端点已经一致：保留会话里的查看窗口。范围若变化，先同步 rangeWatch 基线，
+    // 避免紧随其后的 rangeWatch 清掉挂载焦点周刚设的查看窗口。
     adaptiveAppliedRef.current = adaptiveKey;
     const rangeUnchanged = state.rangeStart === adaptiveBounds[0] && state.rangeEnd === adaptiveBounds[1];
-    actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
-    // 本次范围变化出自自适应首跑：同步 rangeWatch 基线，否则紧随其后的 rangeWatch
-    // 会把「范围被图外改动」复位吞掉挂载焦点周刚设的查看窗口
-    rangeWatchRef.current = { gran: state.granularity, key: `${adaptiveBounds[0]}|${adaptiveBounds[1]}` };
+    if (!rangeUnchanged) {
+      actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
+      rangeWatchRef.current = { gran: state.granularity, key: `${adaptiveBounds[0]}|${adaptiveBounds[1]}` };
+    }
     if (adaptiveMountedRef.current || !rangeUnchanged) {
       setWindowIds(null); // 窗口复位 = 整个自动极值范围
       commitPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
