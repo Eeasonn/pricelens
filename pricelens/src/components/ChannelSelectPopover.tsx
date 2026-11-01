@@ -161,11 +161,15 @@ export default function ChannelSelectPopover({
   const [sellerPanePicked, setSellerPane] = useState<string | null>(null);
   // 全局搜索词（第一百六十四轮：固定首行，跨平台搜渠道/店铺）
   const [query, setQuery] = useState('');
+  // 重置依赖按内容签名而非数组引用：skuIds 若来自内联数组（每次渲染新引用），
+  // 弹层打开期间父组件任何 re-render（如 chip 悬停高亮 setState）都会触发重置，
+  // 清空用户已输入的搜索词与已展开的平台/卖家列；内容真变（切产品）才重置
+  const skuKey = skuIds.join('|');
   useEffect(() => {
     setActive(null);
     setSellerPane(null);
     setQuery('');
-  }, [cc, skuIds]);
+  }, [cc, skuKey]);
 
   const selectedShopId = current?.shopIds[0] ?? null;
   const selectedSeller = selectedShopId != null ? current?.seller ?? null : null;

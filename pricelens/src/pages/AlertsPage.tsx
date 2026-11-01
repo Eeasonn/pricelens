@@ -938,7 +938,9 @@ export default function AlertsPage() {
                         {scopedLatestCount > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}
                       </>
                     )}
-                  {filtered.length !== latestFiltered.length ? ` · 历史 ${filtered.length} 条` : ''}
+                  {/* 「只看正常」时历史被口径刻意隐藏（filtered 早退为 []），此时
+                      尾注「历史 0 条」会误读为无历史记录——该分支不显示历史尾注 */}
+                  {statusFilter !== 'normal' && filtered.length !== latestFiltered.length ? ` · 历史 ${filtered.length} 条` : ''}
                 </div>
               </div>
               <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>

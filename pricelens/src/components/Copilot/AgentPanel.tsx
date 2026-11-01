@@ -13,6 +13,7 @@ import {
 } from '@ant-design/icons';
 import { Button, Input, Tooltip } from 'antd';
 import { useAgent } from '../../state/AgentContext';
+import { INDUSTRY_LABELS } from '../../dataModel/scope';
 import type { AgentResponse, AgentResultCard, AlertResultCard, ChartResultCard, FilterResultCard, TableResultCard } from '../../agent';
 import { color, motion, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 
@@ -22,8 +23,15 @@ function ContextChips() {
   const { context } = useAgent();
   const { state } = context;
   const productCount = state.mains.reduce((n, card) => n + (card.main ? 1 : 0) + card.compares.length, 0);
-  const formatBucket = (id: string): string => state.granularity === 'week' && /^\d{6}$/.test(id) ? `${id.slice(0, 4)}W${id.slice(4)}` : id;
-  const chips = [`当前页 · ${context.pageLabel ?? context.page}`, `${state.countryCode} · ${state.industry === 'phone' ? '手机' : state.industry}`, productCount ? `${productCount} 个产品` : '未选产品', `${formatBucket(state.rangeStart)}–${formatBucket(state.rangeEnd)}`, state.currency === 'usd' ? 'USD' : '本币', state.priceTypes.rrp ? '含 RRP' : '仅折后价'];
+  // 桶 id 显示格式随粒度（周 2026W19 / 月 2026-05；季 id 本身带 Q 原样）——
+  // 与 AnomalyQualityChip.anomalyBucketTextOf 同口径，月粒度不再裸显 202605
+  const formatBucket = (id: string): string => {
+    if (!/^\d{6}$/.test(id)) return id;
+    if (state.granularity === 'week') return `${id.slice(0, 4)}W${id.slice(4)}`;
+    if (state.granularity === 'month') return `${id.slice(0, 4)}-${id.slice(4)}`;
+    return id;
+  };
+  const chips = [`当前页 · ${context.pageLabel ?? context.page}`, `${state.countryCode} · ${INDUSTRY_LABELS[state.industry] ?? state.industry}`, productCount ? `${productCount} 个产品` : '未选产品', `${formatBucket(state.rangeStart)}–${formatBucket(state.rangeEnd)}`, state.currency === 'usd' ? 'USD' : '本币', state.priceTypes.rrp ? '含 RRP' : '仅折后价'];
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '9px 16px', borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}>{chips.map((chip, index) => <span key={chip} style={{ fontSize: 11, color: index === 0 ? selectSoftInk : color.body, border: `1px solid ${index === 0 ? selectSoftInk : color.hairline}`, borderRadius: radius.pill, padding: '3px 8px', background: index === 0 ? selectSoft : color.canvas }}>{chip}</span>)}</div>;
 }
 

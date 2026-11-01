@@ -597,6 +597,10 @@ export default function PlatformCompareView(props: {
       ?? null
     );
   }, [product, cc, state.currency]);
+  // 渠道选择浮层的 skuIds 必须是稳定引用（ChannelSelectPopover 以其为重置 effect 依赖）：
+  // 内联 `[repSkuId]` 每次渲染新数组，弹层打开期间任何父渲染（如店铺 chip 悬停
+  // 高亮 setState）都会触发重置，清空用户已输入的搜索词与已展开的平台/卖家列
+  const repSkuIds = useMemo<string[]>(() => (repSkuId ? [repSkuId] : []), [repSkuId]);
 
   // 每条店铺线一组：buildSeries 后覆写 key/名称/线色（同产品多线，品牌键/品牌色会撞）。
   // 第一百八十五轮（外部 UX 审计）：取数异常 ≠ 空态——failed 标记随结果上交，
@@ -811,7 +815,7 @@ export default function PlatformCompareView(props: {
                     content={
                       <ChannelSelectPopover
                         cc={cc}
-                        skuIds={repSkuId ? [repSkuId] : []}
+                        skuIds={repSkuIds}
                         current={chipQueryOf(sh)}
                         scope="platform"
                         scopePlatform={sh.platform}

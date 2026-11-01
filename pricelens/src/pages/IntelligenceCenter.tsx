@@ -6,7 +6,6 @@ import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { usePage } from '../state/PageContext';
 import { dimTime } from '../data';
-import { getLocalCurrency } from '../state/fx';
 import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
@@ -140,9 +139,14 @@ function StatusBadge({ status }: { status: DataStatus }) {
 }
 
 function rangeLabel(granularity: string, start: string, end: string): string {
-  const format = (id: string): string => granularity === 'week' && /^\d{6}$/.test(id)
-    ? `${id.slice(0, 4)}W${id.slice(4)}`
-    : id;
+  // 周 = 2026W19、月 = 2026-05（与看板/AgentPanel 的桶文案同口径，月不再裸显 202605）；
+  // 季 id 自带 Q 原样输出
+  const format = (id: string): string => {
+    if (!/^\d{6}$/.test(id)) return id;
+    if (granularity === 'week') return `${id.slice(0, 4)}W${id.slice(4)}`;
+    if (granularity === 'month') return `${id.slice(0, 4)}-${id.slice(4)}`;
+    return id;
+  };
   const first = format(start);
   const last = format(end);
   return first === last ? first : `${first}–${last}`;
@@ -181,7 +185,10 @@ export default function IntelligenceCenter() {
   const labels = useMemo(() => scopeLabels(state), [state]);
   const scope = `${labels.country} · ${labels.industry}`;
   const selectedRange = useMemo(() => rangeLabel(state.granularity, state.rangeStart, state.rangeEnd), [state.granularity, state.rangeEnd, state.rangeStart]);
-  const fxCurrency = getLocalCurrency();
+  // 演示序列（FX_WEEKLY）是 R国 CBR 的 RUB 周度数据——币种标签必须与序列一致：
+  // 若随当前国家拼接（DE 下显示「USD / EUR 80.87」）会把 RUB 数值错标成 EUR。
+  // 多国真实汇率序列接入后再随国家切换。
+  const fxCurrency = 'RUB';
   const fxPair = `USD / ${fxCurrency}`;
   const [fxStartIdx, fxEndIdx] = useMemo(() => rangeIndexes(state.granularity, state.rangeStart, state.rangeEnd), [state.granularity, state.rangeEnd, state.rangeStart]);
   const fxStart = FX_WEEKLY[fxStartIdx];
