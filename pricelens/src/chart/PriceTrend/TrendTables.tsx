@@ -38,6 +38,7 @@ import {
   type DetailBucket,
   type TableGroup,
 } from './tableModel';
+import { readAnomalyRule } from '../../dataModel/anomaly';
 import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 
 export type { DetailBucket, TableGroup } from './tableModel';
@@ -553,16 +554,34 @@ export default function TrendTables(props: {
               );
             }),
           )
-          // 折后价行
+          // 折后价行（事实层：原值永远照显；异常守卫打标点加琥珀「疑」角标——
+          // title 带环比与规则，计算行（折扣率/近4周环比）另走可信链）
           rows.push(typeCell('折后价', main, `${p}-price`));
           rows.push(
             ...cols.map(({ bk, i }, ri) => {
               const pt = s.points[i];
+              const suspect = pt?.suspect;
+              const suspectText = suspect === 'quarantined'
+                ? (pt?.suspectReason === 'manual' ? '已人工标记异常' : `相邻观测点变化超过 ${readAnomalyRule().thresholdPct}% 后回落`)
+                : suspect === 'pending'
+                  ? '价格变化超过阈值，待核对（计算照常）'
+                  : '已人工确认为真实价格';
+              const wowText = pt?.suspectWow != null
+                ? `，较上一有值点${pt.suspectWow > 0 ? '上涨' : '下跌'} ${Math.round(Math.abs(pt.suspectWow) * 100)}%`
+                : '';
               return (
                 <div key={`${p}-price-${bk.id}`} role="cell" style={{ ...cell(3 + ri), gridColumn: String(4 + ri), justifyContent: 'flex-end', background: bg }}>
                   {pt?.price != null ? (
                     <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
                       {formatPrice(pt.price, currency)}
+                      {suspect && (
+                        <sup
+                          title={`${suspectText}${wowText}${suspect === 'quarantined' ? '：已隔离，不参与计算' : ''}`}
+                          style={{ marginLeft: 2, fontSize: 9, fontWeight: 700, color: suspect === 'exempted' ? undefined : '#b45309' }}
+                        >
+                          {suspect === 'exempted' ? '✓' : '疑'}
+                        </sup>
+                      )}
                     </span>
                   ) : (
                     emptyCell

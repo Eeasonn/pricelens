@@ -36,6 +36,7 @@ import { defaultPlatformOf, prefillDefaultChannelOf } from '../dataModel/aggrega
 import { modelIdOf } from '../components/ProductCascader/tree';
 import { useFilters } from '../state/FiltersContext';
 import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
+import DataQualityBlock from './config/DataQualityBlock';
 import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
@@ -278,6 +279,18 @@ export default function Config() {
               各国默认店铺已按事实数据预填（默认平台内数据最全的主店）；此处改动即人工覆盖，清除后回到预填。
               「平台价差」预警按该国全部平台计算，不受默认店铺影响。
             </div>
+          </Block>
+
+          {/* ⓪'' 数据质量（2026-11-01 异常价格守卫）：全局口径唯一写入口——阈值 + 人工裁定清单 */}
+          <Block
+            title="数据质量"
+            extra={
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>
+                异常价格守卫 · 全站统一口径；不随分享链接携带
+              </span>
+            }
+          >
+            <DataQualityBlock />
           </Block>
 
           {/* ① 上一代关系 */}

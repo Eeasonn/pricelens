@@ -21,6 +21,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Button, Input, Popover } from 'antd';
 import { CheckOutlined, DownOutlined, FilterOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
+import { useConfigVersion } from '../../state/configStore';
+import AnomalyQualityChip, { anomalyBucketTextOf, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
 import { useChartContent } from '../../state/chartContent';
 import { dimChannel, dimPromo, dimProduct } from '../../data';
 import type { Series, SeriesPoint, SkuGroupQuery } from '../../dataModel/types';
@@ -511,6 +513,8 @@ export default function PlatformCompareView(props: {
   onChangeThreshold: (v: number | null) => void;
 }) {
   const { state } = useFilters();
+  // 配置版本（2026-11-01 异常守卫）：配置保存后店铺线重算
+  const configVersion = useConfigVersion();
   const { setPriceSubview } = useChartContent();
   const cc = state.countryCode;
 
@@ -634,7 +638,7 @@ export default function PlatformCompareView(props: {
       })),
       failed,
     };
-  }, [product, repSkuId, shops, state.granularity, state.currency, state.agg, cc, state.industry]);
+  }, [product, repSkuId, shops, state.granularity, state.currency, state.agg, cc, state.industry, configVersion]);
   const shopSeries = shopSeriesRes.series;
 
   // 窗口切片 + 边缘续接标记（与主图 visSeries 同逻辑）
@@ -652,6 +656,22 @@ export default function PlatformCompareView(props: {
       .filter((s) => s.points.length > 0);
   }, [shopSeries, props.win.s, props.win.e]);
   const shownSeries = useMemo(() => winSeries.filter((s) => !hiddenIds.has(s.key)), [winSeries, hiddenIds]);
+  // 异常价格守卫（2026-11-01）：本页可见店铺线的隔离点清单（chip 计数 + Popover）
+  const anomalyIsolated = useMemo<AnomalyChipPoint[]>(() => {
+    const out: AnomalyChipPoint[] = [];
+    for (const s of shownSeries) {
+      for (const pt of s.points) {
+        if (pt.suspect !== 'quarantined' || pt.price == null) continue;
+        out.push({
+          label: s.label,
+          bucketText: anomalyBucketTextOf(state.granularity, pt.bucketId),
+          price: formatPrice(pt.price, state.currency),
+          wow: pt.suspectWow != null ? `${pt.suspectWow > 0.005 ? '+' : pt.suspectWow < -0.005 ? '−' : '±'}${Math.round(Math.abs(pt.suspectWow) * 100)}%` : null,
+        });
+      }
+    }
+    return out;
+  }, [shownSeries, state.granularity]);
 
   // Y 轴自适应（与主图同参：刷选拖动中冻结 + 步长滞回）
   const scaleRef = useRef<YScale | null>(null);
@@ -835,7 +855,9 @@ export default function PlatformCompareView(props: {
           <AddShopPill cc={cc} shops={shops} onToggle={toggleShop} onRestoreDefault={restoreDefault} />
           {/* 返回入口（189 定版）：进入多平台后，工具行原位入口在此变为返回钮——
               主导航仍只有「价格走势」选中，不出现第二处页签高亮 */}
-          <span style={{ marginLeft: 'auto', flexShrink: 0, display: 'inline-flex' }}>
+          <span style={{ marginLeft: 'auto', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {/* 数据质量只读 chip（2026-11-01 异常守卫）：本页（可见窗口店铺线）隔离数 */}
+            <AnomalyQualityChip isolated={anomalyIsolated} />
             <button
               type="button"
               className="lpl-text-entry"
@@ -891,6 +913,7 @@ export default function PlatformCompareView(props: {
         onPromoBandsOn={props.onPromoBandsOn}
         promoBands={promoBands}
         changeThreshold={props.changeThreshold}
+        anomalyActions
         onPriceTypeToggle={props.onPriceTypeToggle}
         offersOn={props.offersOn}
         onOffersOn={props.onOffersOn}

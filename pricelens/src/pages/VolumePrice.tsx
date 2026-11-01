@@ -56,6 +56,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
+import { useConfigVersion } from '../state/configStore';
+import AnomalyQualityChip, { anomalyBucketTextOf, type AnomalyChipPoint } from '../components/AnomalyQualityChip';
+import { addAnomalyMark } from '../dataModel/anomaly';
+import { useNarrowViewport } from '../state/useNarrowViewport';
 import usePageViewState from '../state/usePageViewState';
 import type { PlatformSelection, ProductSelection } from '../state/filtersTypes';
 import ChartContentBar from '../components/ChartContentBar';
@@ -103,7 +107,7 @@ import SpreadRangeCard from './volume/SpreadRangeCard';
 import WeekDetailCard from './volume/WeekDetailCard';
 import PointerShield from './volume/PointerShield';
 import { detailDateOf, weekDetailModel } from './volume/weekDetail';
-import { spreadCardModel, spreadCardRow } from './volume/spreadCards';
+import { spreadCardEmptyModel, spreadCardModel, spreadCardRow } from './volume/spreadCards';
 import { commitVolumeAxisLimit, fitVolumeLimitsByKey, normalizePanelWindow, vMaxOf, volumeRangeOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
 import { formatVolumeAmount, pricePointValid, rangeBandInView, rangeSpreadOf, resolveSelectedWindow, shouldUseWanUnits, volumePointValid } from './volume/periodSummary';
 
@@ -248,6 +252,9 @@ interface PanelSpec {
 export default function VolumePrice() {
   const { state, actions } = useFilters();
   const cc = state.countryCode;
+  // 配置版本（2026-11-01 异常守卫）：守卫规则/人工裁定保存后面板取数立即重算
+  const configVersion = useConfigVersion();
+  const narrowViewport = useNarrowViewport();
   // 主产品经营视图是量价卡内的瞬态：切走再回来回到默认主产品，不写入筛选器或 URL。
   const [viewMode, setViewMode] = useState<VolumeViewMode>({ kind: 'mains' });
   const safeViewMode = validVolumeViewMode(state.mains, viewMode);
@@ -463,7 +470,7 @@ export default function VolumePrice() {
           series,
         };
       }),
-    [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg],
+    [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg, configVersion],
   );
 
   // 时间自适应：只按当前画面上的产品重套上方极值。
@@ -713,6 +720,46 @@ export default function VolumePrice() {
     setStoreSyncMap((prev) => ({ ...prev, [cardId]: true }));
   };
 
+  // 异常守卫人工裁定（2026-11-01）：单周明细卡「确认真实价格 / 标记异常」→
+  // addAnomalyMark 留痕 + CONFIG_CHANGED_EVENT 广播（configVersion 使面板重取数）
+  const markPanelPoint = (
+    panel: (typeof panelViews)[number],
+    point: SeriesPoint | null,
+    action: 'exempt' | 'isolate',
+  ): void => {
+    if (!point || point.bucketId === '') return;
+    addAnomalyMark({
+      countryCode: cc,
+      seriesKey: panel.spec.key,
+      bucketId: point.bucketId,
+      action,
+      label: panel.name,
+      price: point.price,
+      wow: point.suspectWow ?? null,
+      ts: Date.now(),
+    });
+  };
+
+  // 异常守卫（2026-11-01）：本页（可见面板 × 可见窗口）隔离点清单——工具行只读 chip
+  const anomalyIsolated = useMemo<AnomalyChipPoint[]>(() => {
+    const out: AnomalyChipPoint[] = [];
+    for (const panel of visiblePanels) {
+      for (const series of panel.vis) {
+        for (const pt of series.points) {
+          if (pt.suspect !== 'quarantined' || pt.price == null) continue;
+          const wow = pt.suspectWow;
+          out.push({
+            label: panel.name,
+            bucketText: anomalyBucketTextOf(state.granularity, pt.bucketId),
+            price: formatPrice(pt.price, state.currency),
+            wow: wow != null ? `${wow > 0.005 ? '+' : wow < -0.005 ? '−' : '±'}${Math.round(Math.abs(wow) * 100)}%` : null,
+          });
+        }
+      }
+    }
+    return out;
+  }, [visiblePanels, state.granularity, state.currency]);
+
   // ---- 共享价格 Y 轴：可见面板系列并集算一次（步长滞回 + 刷选冻结）。
   //      被隐藏面板不进并集（设计 §5.3：隐藏即退出并集、刻度收缩，与价格页口径一致） ----
   const visUnion = useMemo(
@@ -757,7 +804,8 @@ export default function VolumePrice() {
         modelId: panel.spec.modelId,
         romram: panel.spec.romram,
         countryCode: cc,
-        points: panel.series.flatMap((series) => series.points),
+        // 异常守卫（2026-11-01）：隔离周价格不进月均收入（不造销毛的口径起点）
+        points: panel.series.flatMap((series) => series.points).filter((pt) => pt.suspect !== 'quarantined'),
         bucketIds: ids,
       });
     }),
@@ -779,6 +827,8 @@ export default function VolumePrice() {
       key: p.key,
       failed: p.failed,
       prices: (p.series[0]?.points ?? []).map((pt) => pt.price),
+      // 异常守卫（2026-11-01）：隔离标记随价格序列并行携带（可信链极差用）
+      suspects: (p.series[0]?.points ?? []).map((pt) => pt.suspect),
       volumes: summaryVolumes[p.idx] ?? [],
       startId: domainIds[start],
       endId: domainIds[end],
@@ -901,6 +951,8 @@ export default function VolumePrice() {
                   onLabelMode={setLabelMode}
                 />
               </div>
+              {/* 数据质量只读 chip（2026-11-01 异常守卫）：本页隔离数，点击查看口径 */}
+              <AnomalyQualityChip isolated={anomalyIsolated} narrow={narrowViewport} />
             </div>
 
             {/* 组内对比是同一量价卡内的次级视图，一次只看一组。 */}
@@ -1055,20 +1107,30 @@ export default function VolumePrice() {
                       // 万单位档：区间内非空值全部 ≥1 万才开（混合量级开万档会把小值抹成「0万」）
                       const volumeWan = shouldUseWanUnits(volumeSlice);
                       const formatVolume = (value: number) => formatVolumeAmount(value, volumeWan);
+                      // 可信链极差（2026-11-01 异常守卫）：隔离周不进极差/标注尺；
+                      // 区间内有价格但全被隔离 → 空卡「区间内无可信价格」
+                      const trustedPrices = row
+                        ? row.prices.map((v, i) => (row.suspects[i] === 'quarantined' ? null : v))
+                        : [];
+                      const priceSliceHasAny = ranged && row
+                        ? row.prices.slice(windowLo, windowHi + 1).some(pricePointValid)
+                        : false;
                       const priceSpread = ranged && row
-                        ? rangeSpreadOf(row.prices.slice(windowLo, windowHi + 1), pricePointValid)
+                        ? rangeSpreadOf(trustedPrices.slice(windowLo, windowHi + 1), pricePointValid)
                         : null;
                       const volumeSpread = ranged && row
                         ? rangeSpreadOf(row.volumes.slice(windowLo, windowHi + 1), volumePointValid)
                         : null;
                       const priceCard = priceSpread
                         ? spreadCardModel(priceSpread, (value) => formatPrice(Math.round(value), state.currency), '价格')
-                        : null;
+                        : priceSliceHasAny
+                          ? spreadCardEmptyModel('价格')
+                          : null;
                       const volumeCard = volumeSpread
                         ? spreadCardModel(volumeSpread, formatVolume, '销量')
                         : null;
                       const priceBand = ranged && row
-                        ? rangeBandInView(row.prices, row.windowStart, row.windowEnd, viewStart, pricePointValid)
+                        ? rangeBandInView(trustedPrices, row.windowStart, row.windowEnd, viewStart, pricePointValid)
                         : null;
                       const volumeBand = ranged && row
                         ? rangeBandInView(row.volumes, row.windowStart, row.windowEnd, viewStart, volumePointValid)
@@ -1091,18 +1153,42 @@ export default function VolumePrice() {
                       // ---- 图下单周明细卡：缺采显示 —，环比只跟上一桶比，不借用相邻值。
                       //      上一桶取全量域（视图切片首桶的前一周在域内可能有值，
                       //      按切片取会把窗口首周误显成缺采「—」）。
+                      // 环比对上一**可信**点（2026-11-01 异常守卫）：只跨隔离周回看
+                      //（缺采周仍显示 —，维持「不借用相邻周」的既有口径），跨过时
+                      // 明细卡环比旁加「跨 N 隔离周」小注
+                      let prevTrustedPrice: number | null = null;
+                      let wowSkip = 0;
+                      const wowSkipBuckets: string[] = [];
+                      if (activeIdx != null) {
+                        const allPts = p.series[0]?.points ?? [];
+                        for (let k = viewStart + activeIdx - 1; k >= 0; k--) {
+                          const pk = allPts[k];
+                          if (pk == null) break;
+                          if (pk.price == null) break; // 上一桶缺采：环比 —
+                          if (pk.suspect === 'quarantined') {
+                            wowSkip += 1;
+                            wowSkipBuckets.push(pk.bucketId);
+                            continue;
+                          }
+                          prevTrustedPrice = pk.price;
+                          break;
+                        }
+                      }
                       const detail = weekDetailModel({
                         granularity: state.granularity,
                         bucketId: activePoint?.bucketId ?? '',
                         xLabel: activePoint?.xLabel ?? '',
                         price: activePoint?.price ?? null,
                         rrp: activePoint?.rrp ?? null,
-                        prevPrice: activeIdx != null ? p.series[0]?.points[viewStart + activeIdx - 1]?.price ?? null : null,
+                        prevPrice: prevTrustedPrice,
                         volume: activeIdx != null ? volumes[p.idx]?.[activeIdx] ?? null : null,
                         marginPoint,
                         marginUnavailable,
                         formatMoney: (value) => formatPrice(Math.round(value), state.currency),
                         formatVolume,
+                        wowSkip,
+                        wowSkipBuckets,
+                        priceSuspect: activePoint?.suspect,
                       });
                       // ---- 尺寸标注尺几何：价格尺在选区左侧、销量尺在选区右侧（demo 同位），
                       //      水平引线从极值点引到尺，极值点画空心圆
@@ -1441,7 +1527,9 @@ export default function VolumePrice() {
                           </div>
                           <MarginCostBand
                             geom={geoms[p.idx] ?? null}
-                            points={marginPoints}
+                            points={p.vis[0]?.points
+                              ? marginPoints.map((mp, mi) => (p.vis[0]?.points[mi]?.suspect === 'quarantined' ? null : mp))
+                              : marginPoints}
                             currency={state.currency}
                             seriesColor={seriesColor}
                             hoverIdx={hoverIdxs[p.idx] ?? null}
@@ -1456,7 +1544,22 @@ export default function VolumePrice() {
                           )}
                         </div>
                         {/* 图下方单周明细卡（视觉 demo：detail-card 三栏网格） */}
-                        <WeekDetailCard model={detail} brand={p.brand} nameText={pill.nameText} romText={pill.romText} />
+                        <WeekDetailCard
+                          model={detail}
+                          brand={p.brand}
+                          nameText={pill.nameText}
+                          romText={pill.romText}
+                          onExempt={
+                            activePoint?.suspect && activePoint.suspect !== 'exempted' && activePoint.price != null
+                              ? () => markPanelPoint(p, activePoint, 'exempt')
+                              : undefined
+                          }
+                          onIsolate={
+                            activePoint?.suspect === 'pending' && activePoint.price != null
+                              ? () => markPanelPoint(p, activePoint, 'isolate')
+                              : undefined
+                          }
+                        />
                         {/* 脚注行：交互提示 + 口径说明 */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 12, color: color.mute, fontSize: 11, lineHeight: '16px' }}>
                           <span style={{ whiteSpace: 'nowrap' }}>拖动选择区间 · 移动鼠标查看单周明细</span>

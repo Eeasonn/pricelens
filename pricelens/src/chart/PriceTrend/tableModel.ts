@@ -82,10 +82,16 @@ export function discountOf(pt: Pick<SeriesPoint, 'price' | 'rrp'> | undefined): 
   return pt.price / pt.rrp - 1;
 }
 
-/** 最近 4 周均价相对此前 4 周均价；窗口内忽略缺价周，任一窗口无有效价为 null */
-export function recentFourWeekChange(points: ReadonlyArray<Pick<SeriesPoint, 'price'>>): number | null {
-  const mean = (part: ReadonlyArray<Pick<SeriesPoint, 'price'>>): number | null => {
-    const values = part.map((pt) => pt.price).filter((v): v is number => v != null && Number.isFinite(v) && v >= 0);
+/** 最近 4 周均价相对此前 4 周均价；窗口内忽略缺价周，任一窗口无有效价为 null。
+ *  异常价格守卫（2026-11-01）：已隔离周不进均值（同缺价周处理）；隔离周原值
+ *  照显在宽表事实行（带「疑」角标），只有派生计算走可信链。 */
+export function recentFourWeekChange(
+  points: ReadonlyArray<Pick<SeriesPoint, 'price' | 'suspect'>>,
+): number | null {
+  const mean = (part: ReadonlyArray<Pick<SeriesPoint, 'price' | 'suspect'>>): number | null => {
+    const values = part
+      .map((pt) => (pt.suspect === 'quarantined' ? null : pt.price))
+      .filter((v): v is number => v != null && Number.isFinite(v) && v >= 0);
     return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
   };
   const recentStart = Math.max(0, points.length - 4);

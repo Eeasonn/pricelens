@@ -6,6 +6,7 @@
 // clearBenchmarkEntry（单个配置的对标回默认）与 clearPrevGenOverridesForModels
 // （按型号清单清上一代覆盖），避免「恢复默认」误伤其他国家/型号的人工配置。
 // ============================================================
+import { useEffect, useState } from 'react';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimBenchmark, dimProduct } from '../data';
 import type { DimBenchmark } from '../dataModel/types';
@@ -310,4 +311,19 @@ export function groupsFromPrevGeneration(own: ProductSelection[]): PrevGenMatchR
 /** 配置页保存成功后调用；FiltersContext 监听后重置竞品默认组 */
 export function notifyConfigChanged(): void {
   window.dispatchEvent(new CustomEvent(CONFIG_CHANGED_EVENT));
+}
+
+/** 配置版本号（2026-11-01 异常价格守卫随广播引入）：任何配置（默认店铺/异常守卫
+ *  规则/人工裁定…）保存后自增。buildSeries 结果被 useMemo 缓存的页面（价格走势/
+ *  量价/多平台/预警）把该版本号加进 memo 依赖，配置一改立即重算——无需各自另设
+ *  监听。node 测试环境无 window，恒 0（不影响确定性）。 */
+export function useConfigVersion(): number {
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const bump = (): void => setVersion((v) => v + 1);
+    window.addEventListener(CONFIG_CHANGED_EVENT, bump);
+    return () => window.removeEventListener(CONFIG_CHANGED_EVENT, bump);
+  }, []);
+  return version;
 }

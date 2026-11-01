@@ -172,7 +172,7 @@ export interface OfferInfo {
 /** 图上一个数据点（币种折算与取整已完成，图表层直用） */
 export interface SeriesPoint {
   bucketId: string; // 周 YYYYWW / 月 YYYYMM / 季 YYYYQn
-  xLabel: string; // 周=周三 MM-DD / 月=202607 / 季=2026Q1
+  xLabel: string; // 周=周三 MM-DD / 月=YYYYMM / 季=YYYYQ1
   anchorDate: string; // ISO 日期
   rrp: number | null; // 显示币种、已取整；官网建议零售价
   price: number | null; // 折后价（显示币种、已取整）；missing 为 null
@@ -183,6 +183,17 @@ export interface SeriesPoint {
   /** 取数渠道（平台-店铺显示名，如 OZON 3P；自动口径每周随最低价来源变化） */
   channelName?: string | null;
   platform?: string | null; // 取价平台（dim_channel.platform，随最低价行带出；明细表平台列）
+  /**
+   * 异常价格守卫（2026-11-01 数据质量口径，buildSeries 取数层打标）：
+   * quarantined = 已隔离（瞬态超阈 / 人工标记异常）——原值保留但不参与派生计算；
+   * pending = 待核对（持续位移）/ 待确认（序列末端），计算照常；
+   * exempted = 人工确认真实价格。缺省 = 可信。
+   */
+  suspect?: 'quarantined' | 'pending' | 'exempted';
+  /** pending 细分：transient 瞬态 / shift 持续位移 / tail 末端候选 / manual 人工 */
+  suspectReason?: 'transient' | 'shift' | 'tail' | 'manual';
+  /** 打标时相对上一原始有值点的环比（胶囊「疑 −61%」用；无 prev 为空） */
+  suspectWow?: number | null;
 }
 
 /** 一条系列 = 一个"产品名+配置"聚合（多颜色 SKU 已按均值聚合） */

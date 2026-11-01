@@ -247,7 +247,8 @@ export function buildLabelPlan(p: {
     const absorbed = gapAbsorbedIdx(pts); // 孤立有值周不产生数值标签（第二十四轮）
     const valIdx: number[] = [];
     pts.forEach((pt, i) => {
-      if (primaryPriceOf(pt, priceTypes) != null) valIdx.push(i);
+      // 已隔离点不进标签候选（计算层走可信链；原值经 tooltip/表格/胶囊可见）
+      if (primaryPriceOf(pt, priceTypes) != null && pt.suspect !== 'quarantined') valIdx.push(i);
     });
     if (valIdx.length === 0) continue;
     let maxI = valIdx[0];
@@ -473,11 +474,13 @@ export function buildOption(p: {
       const absorbed = gapAbsorbedIdx(s.points);
       const data = s.points.map((pt, i) => {
         const mark = endpointMarks.get(`${s.key}|${i}`);
+        // 已隔离点：主线在此断开（不参与可信链渲染；原值由空心点/胶囊/表格承载）
+        const quarantined = pt.suspect === 'quarantined';
         return {
-          value: pt.price != null ? yNormOf(geom, pt.price) : null,
+          value: pt.price != null && !quarantined ? yNormOf(geom, pt.price) : null,
           symbolSize: mark || absorbed.has(i) ? 0 : undefined,
           label: {
-            show: pt.price != null && !dim && dyMap[i] !== undefined,
+            show: pt.price != null && !quarantined && !dim && dyMap[i] !== undefined,
             position: posMap?.[i] ?? ('top' as const),
             distance: compact ? 6 : mark ? endpointLabelDistance(mark) : LABEL_DISTANCE,
             // 第一百三十二轮：锚点靠绘图区右缘的标签左翻（dx 负值），右缘不越界
@@ -925,3 +928,67 @@ export function buildChangeMarks(series: Series[], threshold: number = DROP_THRE
 }
 
  // 最高/最低价点标记（buildExtremeMarks）已随功能删除（本轮，Eason）。
+
+// ---------------- 异常价格守卫（2026-11-01 数据质量口径）：隔离态徽标 ----------------
+
+export interface SuspectBadge {
+  /** `${seriesKey}|${idx}` */
+  key: string;
+  seriesKey: string;
+  idx: number;
+  state: 'quarantined' | 'pending' | 'exempted';
+  reason: 'transient' | 'shift' | 'tail' | 'manual';
+  /** 相对上一原始有值点的环比（胶囊「疑 −61%」） */
+  wow: number | null;
+  /** 点原值（豁免 Popconfirm 预览 / 取证入口用） */
+  price: number | null;
+  url: string;
+  xLabel: string;
+  bucketId: string;
+}
+
+/** 图上隔离态徽标数据（Chart DOM 覆盖层渲染；打标来自 buildSeries 取数层） */
+export function buildSuspectBadges(series: Series[]): SuspectBadge[] {
+  const out: SuspectBadge[] = [];
+  for (const s of series) {
+    s.points.forEach((pt, i) => {
+      if (!pt.suspect || pt.price == null) return;
+      out.push({
+        key: `${s.key}|${i}`,
+        seriesKey: s.key,
+        idx: i,
+        state: pt.suspect,
+        reason: pt.suspectReason ?? 'shift',
+        wow: pt.suspectWow ?? null,
+        price: pt.price,
+        url: pt.url,
+        xLabel: pt.xLabel,
+        bucketId: pt.bucketId,
+      });
+    });
+  }
+  return out;
+}
+
+/** 徽标胶囊文案：隔离 = 疑 ±X% / 人工隔离 = 已隔离 · ±X%；待核对（持续位移）、
+ *  待确认（末端候选）；已人工确认。全部业务语，禁工程词。 */
+export function suspectBadgeText(b: Pick<SuspectBadge, 'state' | 'reason' | 'wow'>): string {
+  if (b.state === 'exempted') return '已确认';
+  const pct = b.wow != null ? `${Math.round(Math.abs(b.wow) * 100)}%` : '';
+  const sign = b.wow != null && b.wow > 0.005 ? '+' : b.wow != null && b.wow < -0.005 ? '−' : '';
+  if (b.state === 'pending') return b.reason === 'tail' ? `待确认${pct ? ` ${sign}${pct}` : ''}` : `待核对${pct ? ` ${sign}${pct}` : ''}`;
+  const prefix = b.reason === 'manual' ? '已隔离' : '疑';
+  return `${prefix}${pct ? ` ${sign}${pct}` : ''}`;
+}
+
+/** 打标点的业务说明（title / 无障碍文案）：规则一句话 + 数值 */
+export function suspectTitleText(b: Pick<SuspectBadge, 'state' | 'reason' | 'wow'>, thresholdPct: number): string {
+  if (b.state === 'exempted') return '已人工确认为真实价格：参与计算';
+  const wow = b.wow != null ? `，较上一有值点${b.wow > 0 ? '上涨' : '下跌'} ${Math.round(Math.abs(b.wow) * 100)}%` : '';
+  if (b.state === 'quarantined') {
+    const how = b.reason === 'manual' ? '人工标记异常' : `相邻观测点变化超过 ${thresholdPct}% 后回落`;
+    return `${how}${wow}：已隔离，保留原值但不参与计算`;
+  }
+  const why = b.reason === 'tail' ? '最新观测点变化超过阈值，待后续数据确认' : `价格变化超过 ${thresholdPct}% 且新水平延续：疑似真实变化，计算照常`;
+  return `${why}${wow}`;
+}

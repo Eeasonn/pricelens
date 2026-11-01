@@ -27,6 +27,14 @@ export interface WeekDetailModel {
   rrp: string | null;
   price: string | null;
   wow: WeekWow | null;
+  /** 环比跨过的隔离周数（>0 时环比对上一可信点；小注「跨 N 个隔离周」） */
+  wowSkip: number;
+  /** 被跨过的桶号清单（title 说明跳过了哪周） */
+  wowSkipBuckets: string[];
+  /** 异常价格守卫打标（2026-11-01）：隔离/待核对/已确认；缺省 = 可信 */
+  priceSuspect?: 'quarantined' | 'pending' | 'exempted';
+  /** 被隔离周不造销毛：三格改显「价格不可信」 */
+  marginMasked: boolean;
   volume: string | null;
   margin: { kind: 'empty' | 'gap' | 'ready'; cost: string; margin: string; rate: string };
 }
@@ -88,6 +96,11 @@ export function weekDetailModel(input: {
   marginUnavailable: boolean;
   formatMoney: (value: number) => string;
   formatVolume: (value: number) => string;
+  /** 环比跨过的隔离周数与被跨桶号（对上一可信点；2026-11-01 异常守卫） */
+  wowSkip?: number;
+  wowSkipBuckets?: string[];
+  /** 该点打标状态（隔离/待核对/已确认） */
+  priceSuspect?: 'quarantined' | 'pending' | 'exempted';
 }): WeekDetailModel {
   const hasAny = input.price != null || input.rrp != null || input.volume != null;
   if (!input.bucketId && !input.xLabel && !hasAny) {
@@ -95,6 +108,7 @@ export function weekDetailModel(input: {
       visible: false, date: '', period: '', wowLabel: detailWowLabelOf(input.granularity),
       volumeLabel: detailVolumeLabelOf(input.granularity),
       rrp: null, price: null, wow: null, volume: null,
+      wowSkip: 0, wowSkipBuckets: [], marginMasked: false,
       margin: { kind: 'empty', cost: '', margin: '', rate: '' },
     };
   }
@@ -115,7 +129,12 @@ export function weekDetailModel(input: {
     volumeLabel: detailVolumeLabelOf(input.granularity),
     rrp: input.rrp != null && input.rrp > 0 ? input.formatMoney(input.rrp) : null,
     price: input.price != null && input.price > 0 ? input.formatMoney(input.price) : null,
-    wow: wowOf(input.price, input.prevPrice),
+    // 观察周本身被隔离：不计环比（原值可见）——环比行显示「已隔离，不计环比」
+    wow: input.priceSuspect === 'quarantined' ? null : wowOf(input.price, input.prevPrice),
+    wowSkip: input.wowSkip ?? 0,
+    wowSkipBuckets: input.wowSkipBuckets ?? [],
+    priceSuspect: input.priceSuspect,
+    marginMasked: input.priceSuspect === 'quarantined',
     volume: input.volume != null ? input.formatVolume(input.volume) : null,
     margin,
   };

@@ -54,11 +54,38 @@ function WowBadge(props: { text: string; dir: 'up' | 'down' | 'flat' }) {
 
 const MISSING = '—';
 
+/** 异常守卫小徽标（2026-11-01）：隔离/待核对/已确认——琥珀/蓝，文字承载状态 */
+function SuspectTag(props: { kind: 'quarantined' | 'pending' | 'exempted' }) {
+  const text = props.kind === 'quarantined' ? '已隔离' : props.kind === 'pending' ? '待核对' : '已确认';
+  const blue = props.kind === 'exempted';
+  return (
+    <span
+      style={{
+        flexShrink: 0,
+        marginLeft: 6,
+        padding: '1px 6px',
+        fontSize: 10,
+        lineHeight: '14px',
+        fontWeight: 700,
+        borderRadius: radius.pill,
+        color: blue ? selectSoftInk : '#b45309',
+        background: blue ? selectSoft : color.warningSoft,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
 export default function WeekDetailCard(props: {
   model: WeekDetailModel;
   brand: string;
   nameText: string;
   romText: string;
+  /** 异常守卫裁定入口（2026-11-01）：观察点打标时出现（已确认态不再出） */
+  onExempt?: () => void;
+  onIsolate?: () => void;
 }) {
   if (!props.model.visible) return null;
   const m = props.model;
@@ -118,9 +145,58 @@ export default function WeekDetailCard(props: {
         <Metric label="RRP">
           <span style={{ color: color.mute, fontWeight: 400 }}>{m.rrp ?? MISSING}</span>
         </Metric>
-        <Metric label="折后价">{m.price ?? MISSING}</Metric>
+        <Metric label="折后价">
+          {m.price != null ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', minWidth: 0 }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.price}</span>
+              {m.priceSuspect && <SuspectTag kind={m.priceSuspect} />}
+            </span>
+          ) : MISSING}
+          {/* 被隔离/待核对点：原值保留 + 人工裁定入口（预览-确认-记录-撤销） */}
+          {m.priceSuspect && m.priceSuspect !== 'exempted' && (props.onExempt || props.onIsolate) && (
+            <span style={{ display: 'inline-flex', gap: 6, marginTop: 4 }}>
+              {props.onExempt && (
+                <button
+                  type="button"
+                  onClick={props.onExempt}
+                  title="确认该价格为真实价格：参与计算并留痕（配置页可撤销）"
+                  style={{ height: 20, padding: '0 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  确认真实价格
+                </button>
+              )}
+              {props.onIsolate && m.priceSuspect === 'pending' && (
+                <button
+                  type="button"
+                  onClick={props.onIsolate}
+                  title="标记该价格为异常：退出计算（原值保留），配置页可撤销"
+                  style={{ height: 20, padding: '0 8px', border: '1px solid rgba(235, 87, 87, 0.4)', borderRadius: radius.control, background: color.canvas, color: '#b45309', font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  标记异常
+                </button>
+              )}
+            </span>
+          )}
+        </Metric>
         <Metric label={m.wowLabel}>
-          {m.wow ? <WowBadge text={m.wow.text} dir={m.wow.dir} /> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
+          {m.wow ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              <WowBadge text={m.wow.text} dir={m.wow.dir} />
+              {m.wowSkip > 0 && (
+                <span
+                  className="tnum"
+                  title={`环比对上一可信点，跨过 ${m.wowSkip} 个已隔离周（${m.wowSkipBuckets.join('、')}）`}
+                  style={{ flexShrink: 0, fontSize: 10, lineHeight: '13px', color: color.mute, whiteSpace: 'nowrap' }}
+                >
+                  跨{m.wowSkip}隔离周
+                </span>
+              )}
+            </span>
+          ) : m.priceSuspect === 'quarantined' ? (
+            <span style={{ color: '#b45309', fontWeight: 400, fontSize: 13 }}>已隔离，不计环比</span>
+          ) : (
+            <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>
+          )}
         </Metric>
         <Metric label={m.volumeLabel}>
           {m.volume != null ? <>{m.volume}<span style={{ marginLeft: 3, fontSize: 11, fontWeight: 400, color: color.mute }}>台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
@@ -130,15 +206,24 @@ export default function WeekDetailCard(props: {
         className="lpl-volume-detail-monthly"
         style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', alignItems: 'center', paddingLeft: 16 }}
       >
-        <Metric label="当月成本 · 模拟">
-          {m.margin.kind === 'ready' ? <>{m.margin.cost}<span style={{ marginLeft: 2, fontSize: 11, fontWeight: 400, color: color.mute }}>/台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
-        </Metric>
-        <Metric label="单台销毛 · 模拟">
-          {m.margin.kind === 'ready' ? <>{m.margin.margin}<span style={{ marginLeft: 2, fontSize: 11, fontWeight: 400, color: color.mute }}>/台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
-        </Metric>
-        <Metric label="销毛率 · 模拟">
-          {m.margin.kind === 'ready' ? m.margin.rate : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
-        </Metric>
+        {m.marginMasked ? (
+          // 被隔离周不造销毛（2026-11-01 异常守卫）：三格合并显「价格不可信」提示
+          <div style={{ gridColumn: '1 / -1', color: color.mute, fontSize: 12, lineHeight: '18px' }}>
+            价格不可信<span style={{ marginLeft: 6, fontSize: 11 }}>该周已隔离，不计算销毛</span>
+          </div>
+        ) : (
+          <>
+            <Metric label="当月成本 · 模拟">
+              {m.margin.kind === 'ready' ? <>{m.margin.cost}<span style={{ marginLeft: 2, fontSize: 11, fontWeight: 400, color: color.mute }}>/台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
+            </Metric>
+            <Metric label="单台销毛 · 模拟">
+              {m.margin.kind === 'ready' ? <>{m.margin.margin}<span style={{ marginLeft: 2, fontSize: 11, fontWeight: 400, color: color.mute }}>/台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
+            </Metric>
+            <Metric label="销毛率 · 模拟">
+              {m.margin.kind === 'ready' ? m.margin.rate : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
+            </Metric>
+          </>
+        )}
       </div>
     </article>
   );

@@ -32,11 +32,20 @@ export default function SpreadRangeCard(props: {
         <span aria-hidden style={{ flexShrink: 0, width: 10, height: 2, background: props.accent ?? color.hairlineStrong }} />
         {props.title}
       </div>
-      <div className="tnum" style={{ marginTop: 2, fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 22, lineHeight: '26px', fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>{props.model.primary}</div>
-      <div className="tnum" style={{ marginTop: 1, fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 13, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }}>
-        {rateMissing ? props.model.secondary : <><span aria-hidden>↕ </span>{props.model.secondary}</>}
-      </div>
-      <div className="tnum" style={{ marginTop: 2, fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 11, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap' }}>{props.model.span}</div>
+      {props.model.emptyText ? (
+        // 空态（2026-11-01 异常守卫）：区间内价格全被隔离——极差不按隔离点计算
+        <div style={{ marginTop: 4, fontSize: 12, lineHeight: '18px', color: color.mute }}>{props.model.emptyText}</div>
+      ) : (
+        <div className="tnum" style={{ marginTop: 2, fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 22, lineHeight: '26px', fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>{props.model.primary}</div>
+      )}
+      {!props.model.emptyText && (
+        <>
+          <div className="tnum" style={{ marginTop: 1, fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 13, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }}>
+            {rateMissing ? props.model.secondary : <><span aria-hidden>↕ </span>{props.model.secondary}</>}
+          </div>
+          <div className="tnum" style={{ marginTop: 2, fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 11, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap' }}>{props.model.span}</div>
+        </>
+      )}
     </div>
   );
 }

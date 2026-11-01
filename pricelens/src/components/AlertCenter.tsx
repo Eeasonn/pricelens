@@ -11,6 +11,7 @@ import { useMemo } from 'react';
 import { Badge } from 'antd';
 import { BellFilled, BellOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
+import { useConfigVersion } from '../state/configStore';
 import { buildAlerts, type AlertItem, type AlertType } from '../dataModel/alerts';
 import { color, formatPrice, radius } from '../theme/tokens';
 
@@ -75,6 +76,8 @@ export function alertDigest(a: AlertItem, currency: 'usd' | 'local'): string {
 /** 预警引擎统一入参（state → AlertCfg）：预警页 / 页头徽标 / 总览列 / 看板共用 */
 export function useAlerts(): AlertItem[] {
   const { state } = useFilters();
+  // 配置版本（2026-11-01 异常守卫）：守卫规则/人工裁定保存后预警立即按可信链重扫
+  const configVersion = useConfigVersion();
   return useMemo(
     () =>
       buildAlerts({
@@ -95,6 +98,7 @@ export function useAlerts(): AlertItem[] {
       state.countryCode,
       state.industry,
       state.platform,
+      configVersion,
     ],
   );
 }

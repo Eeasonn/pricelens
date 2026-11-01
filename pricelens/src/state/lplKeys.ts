@@ -13,6 +13,10 @@ export const LPL = {
   cfgFx: 'LPL3.config.fx',
   /** 各国默认平台店铺（第一百三十五轮，配置页维护；cc → channel_id） */
   cfgDefaultShop: 'LPL3.config.defaultShop',
+  /** 异常价格守卫规则（2026-11-01 数据质量口径：{ enabled, thresholdPct }，配置页维护） */
+  cfgAnomalyRule: 'LPL3.config.anomalyRule',
+  /** 异常价格人工裁定清单（图上逐点「确认真实价格 / 标记异常」的留痕，可撤销） */
+  cfgAnomalyMarks: 'LPL3.config.anomalyMarks',
   /** 最近使用的主分析组合（第一百一十七轮，选择产品浮窗快捷 chips；上限 5 组） */
   uiMainCombos: 'LPL3.ui.mainCombos',
 } as const;

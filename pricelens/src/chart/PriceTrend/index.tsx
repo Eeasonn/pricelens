@@ -70,7 +70,7 @@ import type {
   SkuGroupQuery,
 } from '../../dataModel/types';
 import type { PlatformSelection, ProductSelection } from '../../state/filtersTypes';
-import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
+import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import Chart from './Chart';
 import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
@@ -110,6 +110,8 @@ import {
   type YScale,
 } from './helpers';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
+import { useConfigVersion } from '../../state/configStore';
+import AnomalyQualityChip, { anomalyBucketTextOf, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
 import PlatformCompareView from './PlatformCompareView';
 import PointPanel from './PointPanel';
 import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
@@ -144,6 +146,9 @@ export default function PriceTrend(props: {
   ) => void;
 } = {}) {
   const { state, actions } = useFilters();
+  // 配置版本（2026-11-01 异常守卫）：任何配置保存（默认店铺/守卫规则/人工裁定）后
+  // buildSeries 立即重算——版本号进下方各取数 memo 依赖
+  const configVersion = useConfigVersion();
   // 第一百一十七轮：每张卡 = 型号 + 配置 + 它自己的对比区，分离面板 = 直接展开卡。
   // 第一百二十三轮：「按档位」主体模式退役（档位批量动作并入选择产品浮窗），
   // 面板取数 = state.mains 原样。
@@ -353,7 +358,7 @@ export default function PriceTrend(props: {
     } catch {
       return { series: [], failed: true };
     }
-  }, [query]);
+  }, [query, configVersion]);
   const allSeries = allSeriesRes.series;
   // 明细「近 4 周环比」固定使用周序列；月/季视图另取同筛选口径的周数据。
   const weeklySeries = useMemo<Series[]>(() => {
@@ -365,7 +370,7 @@ export default function PriceTrend(props: {
     } catch {
       return [];
     }
-  }, [allSeries, query, state.granularity]);
+  }, [allSeries, query, state.granularity, configVersion]);
 
   // 全集桶 = 桶枚举基准（自适应跨度、窗口下标、边缘续接都基于全集下标空间）
   const buckets: Bucket[] = useMemo(
@@ -691,7 +696,7 @@ export default function PriceTrend(props: {
       }
       return { key: card.id, card, series, failed };
     });
-  }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry]);
+  }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry, configVersion]);
 
   // 各面板生效窗口：同步 = 全面板共用共享窗口；独立 = 面板自己的窗口
   //（未单独调整过回落共享窗口，越界钳回可调全域并保住最小窗口跨度）
@@ -1143,6 +1148,25 @@ export default function PriceTrend(props: {
   // 分离卡片横向轨道的滚动引用；溢出滑块由 SplitScrollBar 自行测量渲染。
   const splitScrollRef = useRef<HTMLDivElement | null>(null);
 
+  // ---- 异常价格守卫（2026-11-01）：本页（当前窗口可见序列）隔离点清单——
+  //      工具行只读 chip 的计数与 Popover 列表（图上另有逐点胶囊） ----
+  const anomalyIsolated = useMemo<AnomalyChipPoint[]>(() => {
+    const src = splitActive ? panelViews.flatMap((p) => p.vis) : chartSeries;
+    const out: AnomalyChipPoint[] = [];
+    for (const s of src) {
+      for (const pt of s.points) {
+        if (pt.suspect !== 'quarantined' || pt.price == null) continue;
+        out.push({
+          label: s.label,
+          bucketText: anomalyBucketTextOf(state.granularity, pt.bucketId),
+          price: formatPrice(pt.price, state.currency),
+          wow: pt.suspectWow != null ? `${pt.suspectWow > 0.005 ? '+' : pt.suspectWow < -0.005 ? '−' : '±'}${Math.round(Math.abs(pt.suspectWow) * 100)}%` : null,
+        });
+      }
+    }
+    return out;
+  }, [splitActive, panelViews, chartSeries, state.granularity, state.currency]);
+
   // ---- 下钻（§6.3）：seriesKey → 取数组，单组重查 ----
   const selByKey = useMemo(() => {
     const m = new Map<string, ProductSelection>();
@@ -1315,7 +1339,7 @@ export default function PriceTrend(props: {
               />
             )}
           </ConfigProvider>
-          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+          <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <ChartToolbar
               mode="actions"
               currency={state.currency}
@@ -1345,6 +1369,7 @@ export default function PriceTrend(props: {
               onChangeThreshold={setChangeThreshold}
               compareEntry={platformCtl}
             />
+            <AnomalyQualityChip isolated={anomalyIsolated} narrow={narrowViewport} />
           </div>
         </div>
       )}
@@ -1612,6 +1637,7 @@ export default function PriceTrend(props: {
                         promoBands={panelPromoBands[p.key] ?? []}
                         focusBand={panelFocusBands[p.key] ?? null} // 预警触发周（第一百九十轮）：覆盖该周的面板画焦点带
                         changeThreshold={changeThreshold}
+                        anomalyActions
                         showXLabels // 第一百五十二轮追补：分离面板同恢复图内时间轴（与合并主图
                         // 同口径——周 YYYYWxx、axisTickPlan 抽稀；下方 SplitTimeTrack 保留
                         // 拖柄调整与首尾/跨年标注）
@@ -1691,6 +1717,7 @@ export default function PriceTrend(props: {
             promoBands={promoBands}
             focusBand={focusBand} // 预警触发周（第一百九十轮）：窗口内画蓝色焦点带 + 小标签
             changeThreshold={changeThreshold}
+            anomalyActions
             onPriceTypeToggle={setPriceType}
             offersOn={offersOn}
             onOffersOn={setOffersOn}

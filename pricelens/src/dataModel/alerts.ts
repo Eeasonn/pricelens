@@ -18,6 +18,7 @@ import { dimChannel, dimProduct, dimTime } from '../data';
 import type { CurrencyMode, DataScope } from './types';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 import { platformPriceSpread, priceForSelection, lowestPriceColorSku } from './aggregate';
+import { anomalyManualOf, detectSuspects, promoBandHitOf, readAnomalyRule } from './anomaly';
 import { displayRrpOf } from './currency';
 
 export type AlertType = 'price-change' | 'promo' | 'platform-gap' | 'own-gap';
@@ -154,6 +155,8 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   const countryAvailable = dimChannel.some((c) => c.country_code === scope.countryCode);
   if (!countryAvailable) return [];
   const out: AlertItem[] = [];
+  // 各系列被隔离的周（own-gap「最新有值且可信周」同走可信链）
+  const quarantinedBySeries = new Map<string, Set<string>>();
   for (const key of cfg.subs) {
     const meta = alertSeriesMeta(key, scope);
     if (!meta) continue;
@@ -162,16 +165,38 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
     // 无代表色 = 该系列无价格数据，整系列不产预警（原全色均值口径同样全周缺采）
     const repSkuId = lowestPriceColorSku(key.split('__')[0], meta.romram, scope.countryCode);
     if (!repSkuId) continue;
+    // ---- 异常价格守卫（2026-11-01 数据质量口径）：先整链取数 → 与 buildSeries 同一
+    //      判定纯函数 → 隔离周不触发任何预警、也不进 prev 链（对上一**可信**点比较——
+    //      脏点回弹的 ±60% 假「调价」预警正是本守卫要消灭的现实缺陷）。扫描链为
+    //      代表色单 SKU 周价（与图面组均值链各自独立判定，同一规则同一公式）。 ----
+    const weekRows: { w: (typeof timeAsc)[number]; price: number; rrp: number | null }[] = [];
+    for (const w of timeAsc) {
+      const hit = priceForSelection(repSkuId, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
+      if (!hit) continue; // 缺采：跳过（prev 跨周延续由下方的链式遍历承担）
+      weekRows.push({ w, price: hit.price, rrp: displayRrpOf(hit.row, currency) });
+    }
+    const verdicts = detectSuspects(
+      weekRows.map((r) => ({ bucketId: r.w.week_id, price: r.price, rrp: r.rrp, anchorDate: r.w.week_wed_date })),
+      {
+        rule: readAnomalyRule(),
+        manual: anomalyManualOf(scope.countryCode, key),
+        promoHit: promoBandHitOf(scope.countryCode),
+      },
+    );
+    const quarantinedWeeks = new Set<string>();
+    verdicts.forEach((v, i) => {
+      if (v.state === 'quarantined' && weekRows[i]) quarantinedWeeks.add(weekRows[i].w.week_id);
+    });
+    quarantinedBySeries.set(key, quarantinedWeeks);
     let prevPrice: number | null = null;
     let prevIntensity: number | null = null;
-    for (const w of timeAsc) {
-      // 代表色单价；RRP = 该行官方阶梯
-      const hit = priceForSelection(repSkuId, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
-      if (!hit) continue; // 缺采：prev 跨周延续（比较链不断）
+    for (const row of weekRows) {
+      const w = row.w;
+      if (quarantinedWeeks.has(w.week_id)) continue; // 隔离周：不触发预警、不进 prev 链
       // 比率链（力度/环比/对 RRP）全部用未取整值——低价系列（如 $0.3x 配件）取整到 0
       // 会凭空算出 100% 折扣并使环比链恒假断链；取整只发生在展示字段
-      const rrp = displayRrpOf(hit.row, currency);
-      const intensity = rrp != null && rrp > 0 ? 1 - hit.price / rrp : null;
+      const rrp = row.rrp;
+      const intensity = rrp != null && rrp > 0 ? 1 - row.price / rrp : null;
       const base = {
         seriesKey: key,
         brand: meta.brand,
@@ -180,10 +205,10 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
         isOwn: meta.isOwn,
         weekId: w.week_id,
         weekLabel: w.week_wed_date.slice(5),
-        price: displayRound(hit.price),
+        price: displayRound(row.price),
         rrp,
-        vsRrpPct: rrp != null && rrp > 0 ? hit.price / rrp - 1 : null,
-        wowPct: prevPrice != null && prevPrice > 0 ? hit.price / prevPrice - 1 : null,
+        vsRrpPct: rrp != null && rrp > 0 ? row.price / rrp - 1 : null,
+        wowPct: prevPrice != null && prevPrice > 0 ? row.price / prevPrice - 1 : null,
         promoDeltaPp: null as number | null,
         gapPct: null as number | null,
         gapHighPlatform: null as string | null,
@@ -215,7 +240,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       }
       // 调价预警（华为/竞品都出）：|WoW| ≥ 阈值（阈值 ≤0 = 关）
       if (effEnabled(cfg, key, 'price-change') && thr('price-change') > 0 && prevPrice != null && prevPrice > 0) {
-        const wow = hit.price / prevPrice - 1;
+        const wow = row.price / prevPrice - 1;
         if (Math.abs(wow) >= thr('price-change') - EPS) {
           out.push({
             ...base,
@@ -246,7 +271,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
           });
         }
       }
-      prevPrice = hit.price;
+      prevPrice = row.price;
       prevIntensity = intensity;
     }
   }
@@ -258,8 +283,11 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       // 档位间距同代表色口径：与上文现价/看板默认取色同一条线
       const repSkuId = lowestPriceColorSku(key.split('__')[0], meta.romram, scope.countryCode);
       if (!repSkuId) return null;
+      // 异常守卫（2026-11-01）：取最新「有值且可信」周（隔离周不算现价）
+      const quarantined = quarantinedBySeries.get(key);
       for (let i = timeAsc.length - 1; i >= 0; i--) {
         const w = timeAsc[i];
+        if (quarantined?.has(w.week_id)) continue;
         const hit = priceForSelection(repSkuId, w.week_id, scope.countryCode, cfg.platform ?? null, currency);
         // price 保持未取整：档位间距比值不吃取整误差（低价配件取整到 0 会把间距算飞）
         if (hit) return { price: hit.price, weekId: w.week_id, weekLabel: w.week_wed_date.slice(5) };

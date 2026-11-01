@@ -36,11 +36,14 @@ import { brandColorOf } from '../theme/tokens';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 import { displayPriceOf, displayRrpOf } from './currency';
 import { getCurrentCountry } from '../state/currentScope';
+import { anomalyManualOf, detectSuspects, promoBandHitOf, readAnomalyRule, type AnomalyMarkAction, type SuspectSourcePoint } from './anomaly';
 
 // ---------------- 基础工具 ----------------
 const normRom = (s: string): string => s.replace(/\s+/g, '');
 const daysBetween = (from: string, to: string): number =>
   Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
+/** 周锚日（周三）速查：异常判定促销带豁免按锚日比对 */
+const wedByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.week_wed_date]));
 
 // ---------------- 装载索引（模块内懒构建一次） ----------------
 const timeRows: DimTime[] = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : a.week_id > b.week_id ? 1 : 0));
@@ -495,21 +498,61 @@ export function buildSeries(q: SeriesQuery): Series[] {
     const seller = sellerOfQuery(explicitOn ? explicit : null);
     const key = `${g.modelId}__${normRom(rg.romram)}`;
     const color = brandColorOf(rg.brand);
-    const points: SeriesPoint[] = [];
+
+    // ---- 异常价格守卫（2026-11-01 数据质量口径）：本系列判定上下文。规则每次
+    //      调用现读配置（无新增缓存面）；人工裁定按点生效（周 id 裁定命中其构成
+    //      月/季桶）；促销带按锚日任意档期。周粒度在最终序列点判定；月/季先在
+    //      构成周序列判一道（隔离周不进桶聚合）、桶级点再判一道（双保险）。 ----
+    const anomalyRule = readAnomalyRule();
+    const manualRaw = anomalyManualOf(cc, key);
+    const promoHit = promoBandHitOf(cc);
+
+    // 周级取数预计算（整段范围一次）：桶循环复用，周级判定同源
+    const weekVal = new Map<string, number | null>();
+    const weekBest = new Map<string, { row: FactPriceWeekly; price: number } | null>();
     for (const bucket of buckets) {
-      // 折后价：组内多 SKU（颜色）算术均值，各 SKU 取渠道内最低在架价；全缺 = missing
-      const weeklyVals: (number | null)[] = bucket.weekIds.map((wid) => {
+      for (const wid of bucket.weekIds) {
         let sum = 0;
-        let n = 0;
+        let cnt = 0;
+        let best: { row: FactPriceWeekly; price: number } | null = null;
         for (const sid of rg.skuIds) {
           const hit = minPriceRow(cc, sid, wid, channels, q.currency, seller);
           if (!hit) continue;
           sum += hit.price;
-          n++;
+          cnt++;
+          if (!best || hit.price < best.price) best = hit;
         }
-        return n > 0 ? sum / n : null;
+        weekVal.set(wid, cnt > 0 ? sum / cnt : null);
+        weekBest.set(wid, best);
+      }
+    }
+
+    // 月/季：构成周序列上的隔离集（隔离周不进桶聚合）
+    let quarantinedWeeks: Set<string> | null = null;
+    if (q.granularity !== 'week' && anomalyRule.enabled) {
+      const src: SuspectSourcePoint[] = [];
+      for (const bucket of buckets) {
+        for (const wid of bucket.weekIds) {
+          src.push({ bucketId: wid, price: weekVal.get(wid) ?? null, anchorDate: wedByWeek.get(wid) });
+        }
+      }
+      const weeklyVerdicts = detectSuspects(src, { rule: anomalyRule, manual: manualRaw, promoHit });
+      quarantinedWeeks = new Set<string>();
+      for (const [i, v] of weeklyVerdicts) {
+        if (v.state === 'quarantined' && src[i]) quarantinedWeeks.add(src[i].bucketId);
+      }
+    }
+
+    const points: SeriesPoint[] = [];
+    for (const bucket of buckets) {
+      // 折后价：组内多 SKU（颜色）算术均值，各 SKU 取渠道内最低在架价；全缺 = missing；
+      // 月/季桶聚合剔除被隔离周（行级 5% 守卫拦绝对离谱、周级守卫拦相对形态，两层互补）
+      const weeklyVals: (number | null)[] = bucket.weekIds.map((wid) => weekVal.get(wid) ?? null);
+      const present: number[] = [];
+      bucket.weekIds.forEach((wid, wi) => {
+        const v = weeklyVals[wi];
+        if (v != null && !(quarantinedWeeks?.has(wid))) present.push(v);
       });
-      const present = weeklyVals.filter((v): v is number => v != null);
       const price =
         present.length > 0
           ? q.granularity !== 'week' && q.agg === 'min'
@@ -520,14 +563,7 @@ export function buildSeries(q: SeriesQuery): Series[] {
       // 每周最低价行（跨 SKU；minPriceRow 已按「裸机优先」排除套装行）——
       // RRP 与 url/取价店铺/offer/平台 都随它带出：同 SKU 同周多卖家/套装行会带出
       // 多个 RRP，各自按行序扫描会与折扣率/预警口径分叉
-      const weeklyBest: ({ row: FactPriceWeekly; price: number } | null)[] = bucket.weekIds.map((wid) => {
-        let weekBest: { row: FactPriceWeekly; price: number } | null = null;
-        for (const sid of rg.skuIds) {
-          const hit = minPriceRow(cc, sid, wid, channels, q.currency, seller);
-          if (hit && (!weekBest || hit.price < weekBest.price)) weekBest = hit;
-        }
-        return weekBest;
-      });
+      const weeklyBest: ({ row: FactPriceWeekly; price: number } | null)[] = bucket.weekIds.map((wid) => weekBest.get(wid) ?? null);
 
       // RRP：官方阶梯，不随渠道；桶内最后一个有值周的最低价行 RRP（该行无 RRP
       // 再回退扫非套装行，仍取最后有值）
@@ -594,6 +630,31 @@ export function buildSeries(q: SeriesQuery): Series[] {
         channelName,
         platform,
       });
+    }
+    // ---- 最终序列点级判定（周粒度主战场；月/季桶级双保险）：隔离 ≠ 删除——
+    //      原值留在点结构里（不吞点），suspect 只作为下游可信链的退出信号 ----
+    if (anomalyRule.enabled || manualRaw.size > 0) {
+      // 人工裁定按点桶解析（周 id 裁定命中其构成月/季桶）
+      const manual = new Map<string, AnomalyMarkAction>();
+      if (manualRaw.size > 0) {
+        for (const bucket of buckets) {
+          const direct = manualRaw.get(bucket.id);
+          const viaWeek = bucket.weekIds.length > 1
+            ? bucket.weekIds.map((wid) => manualRaw.get(wid)).find((v) => v != null)
+            : undefined;
+          const action = direct ?? viaWeek;
+          if (action) manual.set(bucket.id, action);
+        }
+      }
+      const verdicts = detectSuspects(
+        points.map((pt) => ({ bucketId: pt.bucketId, price: pt.price, rrp: pt.rrp, anchorDate: pt.anchorDate })),
+        { rule: anomalyRule, manual, promoHit },
+      );
+      for (const [i, v] of verdicts) {
+        points[i].suspect = v.state;
+        points[i].suspectReason = v.reason;
+        points[i].suspectWow = v.wow;
+      }
     }
     out.push({
       key,

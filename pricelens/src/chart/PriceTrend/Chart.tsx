@@ -45,8 +45,8 @@
 //   高度动画在系统「减少动态效果」开启时跳过直接落终值；emptyHint 放宽为 ReactNode
 //   供调用方区分「暂无数据」与「数据加载异常」
 // ============================================================
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { Popover } from 'antd';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { Popover, Popconfirm } from 'antd';
 import { TagOutlined, CloseOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
@@ -82,8 +82,11 @@ import TierBand from './TierBand';
 // 纯计算层（第十八轮抽离）：几何/标签计划/端点/option/DOM 数据全部显式入参纯函数
 import {
   buildChangeMarks,
+  buildSuspectBadges,
   curveNameOf,
   FOCUS_MODE_THRESHOLD,
+  suspectBadgeText,
+  suspectTitleText,
   Y_TICK_FONT, // 第一百八十五轮（外部 UX 审计）：Y 轴刻度字号 8px → 10px（共享常量）
 
   buildEndpointBadges,
@@ -103,7 +106,10 @@ import {
   type LineShapeChoice,
   type PromoBand,
   type SeriesNameItem,
+  type SuspectBadge,
 } from './chartModel';
+import { addAnomalyMark, readAnomalyRule } from '../../dataModel/anomaly';
+import { formatPrice } from '../../theme/tokens';
 import OfferPopover from './OfferPopover';
 import ChartToolbar from './ChartToolbar';
 import YLimitHandles, { type YLimitState } from './YLimitHandles';
@@ -260,6 +266,10 @@ export interface ChartProps {
   dimOutsideBrush?: boolean;
   /** 量价页：竖线从绘图区顶延伸到图表容器底，与下方成本销毛带的同列竖线相接。 */
   extendCrosshair?: boolean;
+  /** 异常价格守卫（2026-11-01）：true = 图上隔离态胶囊可点（弹裁定浮层，写人工
+   *  豁免/隔离留痕）。价格走势/多平台视图传；量价页指针层接管图面、裁定入口在
+   *  单周明细卡，不传 = 胶囊只读展示。 */
+  anomalyActions?: boolean;
   // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
   // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
@@ -916,6 +926,25 @@ export default function Chart(props: ChartProps) {
     () => (changeThreshold == null ? new Map<string, number>() : buildChangeMarks(series, changeThreshold)),
     [series, changeThreshold],
   );
+  // ---- 异常价格守卫（2026-11-01）：隔离态徽标（空心点 + 胶囊）----
+  const suspectBadges = useMemo(() => buildSuspectBadges(series), [series]);
+  const anomalyRule = useMemo(() => readAnomalyRule(), [series]);
+  const markAnomaly = useCallback(
+    (b: SuspectBadge, action: 'exempt' | 'isolate') => {
+      const s = series.find((x) => x.key === b.seriesKey);
+      addAnomalyMark({
+        countryCode: filterState.countryCode,
+        seriesKey: b.seriesKey,
+        bucketId: b.bucketId,
+        action,
+        label: s?.label ?? b.seriesKey,
+        price: b.price,
+        wow: b.wow,
+        ts: Date.now(),
+      });
+    },
+    [series, filterState.countryCode],
+  );
   const empty = series.length === 0;
   const brandByKey = useMemo(() => new Map([...series, ...nameAll].map((s) => [s.key, s.brand])), [series, nameAll]);
 
@@ -1251,6 +1280,183 @@ export default function Chart(props: ChartProps) {
                 );
               }),
             )}
+          {/* 异常价格守卫（2026-11-01 数据质量口径）：隔离态 = 主线断开 + 空心灰点
+              （mute 描边白芯）+ 琥珀胶囊「疑 ±X%」；待核对/待确认（持续位移/末端）=
+              实线不断 + 琥珀空心点 + 胶囊；已人工确认 = 实线 + 蓝「已确认」小标。
+              原值保留在 tooltip / 宽表 / 明细卡（不吞点）；anomalyActions 时胶囊可点
+              弹裁定浮层（确认真实价格 / 标记异常，人工留痕可撤销） */}
+          {geom &&
+            suspectBadges.map((b) => {
+              const s = series.find((x) => x.key === b.seriesKey);
+              if (!s) return null;
+              const v = b.price;
+              if (v == null) return null;
+              const dim = litKeys != null && !litKeys.includes(b.seriesKey);
+              const text = suspectBadgeText(b);
+              const title = suspectTitleText(b, anomalyRule.thresholdPct);
+              const x = xPxOf(geom, b.idx);
+              const y = yPxOf(geom, v);
+              const amber = b.state !== 'exempted';
+              const dotColor = b.state === 'quarantined' ? color.mute : '#b45309';
+              const capsule = (
+                <span
+                  className="tnum"
+                  title={title}
+                  style={{
+                    position: 'absolute',
+                    left: x,
+                    top: y + 9,
+                    transform: 'translateX(-50%)',
+                    padding: '0 5px',
+                    fontSize: 10,
+                    lineHeight: '14px',
+                    fontWeight: 700,
+                    color: amber ? '#b45309' : color.link,
+                    background: color.canvas,
+                    border: `1px solid ${amber ? 'rgba(180, 83, 9, 0.4)' : 'rgba(0, 112, 243, 0.35)'}`,
+                    borderRadius: radius.pill,
+                    pointerEvents: 'none',
+                    zIndex: 8,
+                    opacity: dim ? 0.15 : undefined,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {text}
+                </span>
+              );
+              const interactive = props.anomalyActions === true && b.state !== 'exempted';
+              return (
+                <div key={`sp-${b.key}`}>
+                  {/* 空心点：隔离 = 灰描边白芯；待核对/待确认 = 琥珀描边白芯（实线不断） */}
+                  {b.state !== 'exempted' && (
+                    <span
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        left: x,
+                        top: y,
+                        width: 9,
+                        height: 9,
+                        transform: 'translate(-50%, -50%)',
+                        borderRadius: '50%',
+                        boxSizing: 'border-box',
+                        background: color.canvas,
+                        border: `1.5px solid ${dotColor}`,
+                        pointerEvents: 'none',
+                        zIndex: 8,
+                        opacity: dim ? 0.15 : undefined,
+                      }}
+                    />
+                  )}
+                  {interactive ? (
+                    <Popover
+                      trigger="click"
+                      placement="top"
+                      arrow={false}
+                      content={
+                        <div style={{ width: 224 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>{title}</div>
+                          <div className="tnum" style={{ marginTop: 4, fontSize: 12, color: color.body }}>
+                            原值 {formatPrice(Math.round(v), currency)}
+                            {b.wow != null ? ` · 较上一有值点 ${b.wow > 0 ? '+' : '−'}${Math.round(Math.abs(b.wow) * 100)}%` : ''}
+                          </div>
+                          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <Popconfirm
+                              title="确认该价格为真实价格？"
+                              description="确认后该点参与计算并保留「已确认」标注，可在配置页撤销"
+                              okText="确认"
+                              cancelText="取消"
+                              okButtonProps={{ size: 'small' }}
+                              cancelButtonProps={{ size: 'small' }}
+                              onConfirm={() => markAnomaly(b, 'exempt')}
+                            >
+                              <button
+                                type="button"
+                                className="lpl-hit"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  height: 24, padding: '0 10px', borderRadius: radius.control,
+                                  border: `1px solid ${color.hairline}`, background: color.canvas, color: color.body,
+                                  font: 'inherit', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
+                                }}
+                              >
+                                确认真实价格
+                              </button>
+                            </Popconfirm>
+                            {b.state === 'pending' && (
+                              <Popconfirm
+                                title="标记该价格为异常？"
+                                description="标记后该点退出计算（原值保留），可在配置页撤销"
+                                okText="标记"
+                                cancelText="取消"
+                                okButtonProps={{ size: 'small', danger: true }}
+                                cancelButtonProps={{ size: 'small' }}
+                                onConfirm={() => markAnomaly(b, 'isolate')}
+                              >
+                                <button
+                                  type="button"
+                                  className="lpl-hit"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    height: 24, padding: '0 10px', borderRadius: radius.control,
+                                    border: `1px solid rgba(235, 87, 87, 0.4)`, background: color.canvas, color: '#b45309',
+                                    font: 'inherit', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  标记异常
+                                </button>
+                              </Popconfirm>
+                            )}
+                            {b.url ? (
+                              <a
+                                href={b.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ fontSize: 12, color: color.link, whiteSpace: 'nowrap' }}
+                              >
+                                查看商品页
+                              </a>
+                            ) : null}
+                          </div>
+                        </div>
+                      }
+                    >
+                      <button
+                        type="button"
+                        aria-label={`${s.label} ${b.xLabel} ${text}，点击裁定`}
+                        title={`${title}，点击裁定`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        className="lpl-hit"
+                        style={{
+                          position: 'absolute',
+                          left: x,
+                          top: y + 9,
+                          transform: 'translateX(-50%)',
+                          padding: '0 5px',
+                          fontSize: 10,
+                          lineHeight: '14px',
+                          fontWeight: 700,
+                          color: '#b45309',
+                          background: color.canvas,
+                          border: '1px solid rgba(180, 83, 9, 0.4)',
+                          borderRadius: radius.pill,
+                          cursor: 'pointer',
+                          zIndex: 9,
+                          opacity: dim ? 0.15 : undefined,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {text}
+                      </button>
+                    </Popover>
+                  ) : (
+                    capsule
+                  )}
+                </div>
+              );
+            })}
           {/* 大促档期标志（第四十二轮窄条）：默认纯图标（名称悬停可见）；空间够
               （与相邻标志互不重叠、不越绘图区左右缘）时显示「图标 + 档期名」胶囊，
               放不下自动回落纯图标（第一百四十七轮，Eason） */}
@@ -1534,31 +1740,54 @@ export default function Chart(props: ChartProps) {
                         </span>
                         {/* 快照入口已删除（本轮，Eason）：悬停小卡只读；取证走明细表快照列 */}
                       </div>
-                      {items.map((it) => (
-                        <div
-                          key={it.kind}
+                    {items.map((it) => (
+                      <div
+                        key={it.kind}
+                        style={{
+                          paddingLeft: 13,
+                          fontSize: 11,
+                          lineHeight: '16px',
+                          display: 'flex',
+                          gap: 5,
+                          opacity: dim ? 0.3 : undefined,
+                        }}
+                      >
+                        <span style={{ color: color.mute, flexShrink: 0 }}>{it.label}</span>
+                        <span
                           style={{
-                            paddingLeft: 13,
-                            fontSize: 11,
-                            lineHeight: '16px',
-                            display: 'flex',
-                            gap: 5,
-                            opacity: dim ? 0.3 : undefined,
+                            color: color.warning,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
                           }}
                         >
-                          <span style={{ color: color.mute, flexShrink: 0 }}>{it.label}</span>
-                          <span
-                            style={{
-                              color: color.warning,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}
-                          >
-                            {it.text}
-                          </span>
-                        </div>
-                      ))}
+                          {it.text}
+                        </span>
+                      </div>
+                    ))}
+                    {/* 异常价格守卫（2026-11-01）：该列价格点的隔离/待核对状态（事实层
+                        打标说明，数值行不受影响；裁定入口在图上胶囊） */}
+                    {pt?.suspect && (
+                      <div
+                        style={{
+                          paddingLeft: 13,
+                          fontSize: 11,
+                          lineHeight: '16px',
+                          opacity: dim ? 0.3 : undefined,
+                        }}
+                      >
+                        <span style={{ color: pt.suspect === 'exempted' ? color.link : '#b45309', fontWeight: 600 }}>
+                          {suspectBadgeText({
+                            state: pt.suspect,
+                            reason: pt.suspectReason ?? 'shift',
+                            wow: pt.suspectWow ?? null,
+                          })}
+                        </span>
+                        <span style={{ color: color.mute }}>
+                          ：{suspectTitleText({ state: pt.suspect, reason: pt.suspectReason ?? 'shift', wow: pt.suspectWow ?? null }, anomalyRule.thresholdPct)}
+                        </span>
+                      </div>
+                    )}
                     </Fragment>
                   );
                 })}

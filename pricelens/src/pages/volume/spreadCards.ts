@@ -13,6 +13,8 @@ export interface SpreadCardModel {
   /** 最低—最高，最小字号。 */
   span: string;
   ariaLabel: string;
+  /** 空态文案（2026-11-01 异常守卫：区间内价格全被隔离时「区间内无可信价格」） */
+  emptyText?: string;
 }
 
 export function spreadCardModel(
@@ -44,6 +46,11 @@ export function spreadCardModel(
     span,
     ariaLabel: `${name}极差率 ${rate}，极差 ${delta}，最低 ${low}，最高 ${high}`,
   };
+}
+
+/** 空态卡（区间内有价格但全被隔离）：极差不按隔离点计算，显式说明而非消失 */
+export function spreadCardEmptyModel(name: string, emptyText = '区间内无可信价格'): SpreadCardModel {
+  return { visible: true, primary: '', secondary: '', span: '', ariaLabel: `${name}${emptyText}`, emptyText };
 }
 
 /** 图下左右两张卡：贴住绘图区左右缘，同宽同高；放不下时一起缩小，避免叠在一起。 */
