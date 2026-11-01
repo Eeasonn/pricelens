@@ -237,7 +237,7 @@ const CAUSES: Cause[] = [
 ];
 
 const causeTone: Record<Cause['tone'], { background: string; border: string; text: string }> = {
-  strong: { background: color.warningSoft, border: '#ead2a8', text: '#805b00' },
+  strong: { background: color.warningSoft, border: '#ead2a8', text: color.warningInk },
   medium: { background: selectSoft, border: '#c7ddff', text: selectSoftInk },
   pending: { background: color.canvasSoft2, border: color.hairline, text: color.body },
 };

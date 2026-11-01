@@ -9,3 +9,24 @@ dist/
 全量数据表.xlsx
 # 清洗交付版（clean_source_excel.py 产物，22MB，同样仅本地）
 全量数据表-清洗版.xlsx
+
+# Impeccable：只保留团队共享的 config / design sidecar / review 文档，
+# 忽略运行时缓存、截图、临时会话和本地覆盖。
+**/.impeccable/config.local.json
+**/.impeccable/hook.cache.json
+**/.impeccable/hook.pending.json
+**/.impeccable/*.png
+**/.impeccable/review/
+**/.impeccable/questions/
+**/.impeccable/mocks/worlds/
+**/.impeccable/live/server.json
+**/.impeccable/live/sessions/
+**/.impeccable/live/previews/
+**/.impeccable/live/annotations/
+**/.impeccable/live/cache/
+**/.impeccable/live/manual-edit-apply-transaction.json
+**/.impeccable/live/manual-edit-events.jsonl
+**/.impeccable/live/manual-edit-evidence/
+**/.impeccable/live/pending-manual-edits.json
+**/.impeccable/live/deferred-svelte-component-accepts.json
+**/.impeccable/live/*.png

@@ -29,6 +29,12 @@ jobs:
       - name: Install dependencies
         working-directory: pricelens
         run: npm ci
+      - name: Design system contract
+        working-directory: pricelens
+        run: npm run design:check
+      - name: Design system lint
+        working-directory: pricelens
+        run: npm run design:lint
       - name: Typecheck
         working-directory: pricelens
         run: npm run typecheck

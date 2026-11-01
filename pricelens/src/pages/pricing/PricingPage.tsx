@@ -401,7 +401,7 @@ export default function PricingPage() {
             <span
               style={{
                 display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 10px', borderRadius: radius.pill,
-                fontSize: fontSize.caption, fontWeight: 600, color: color.ink, background: '#ffefcf', border: '1px solid #f5a623',
+                fontSize: fontSize.caption, fontWeight: 600, color: color.warningInk, background: color.warningSoft, border: `1px solid ${color.warning}`,
               }}
             >
               模拟数据

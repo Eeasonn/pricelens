@@ -130,7 +130,7 @@ function toneColor(tone: SignalTone): string {
 
 function statusColor(status: DataStatus): { color: string; background: string } {
   if (status === '真实') return { color: selectSoftInk, background: selectSoft };
-  if (status === '混合') return { color: '#805b00', background: color.warningSoft };
+  if (status === '混合') return { color: color.warningInk, background: color.warningSoft };
   return { color: color.mute, background: color.canvasSoft2 };
 }
 

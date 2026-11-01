@@ -2,6 +2,8 @@
 
 PriceLens 只有一个统一产品版本：价格看板、量价走势、量价预测、情报中心、预警中心与 PriceLens Agent 同在 `src/App.tsx` 一个应用内，不维护「Copilot 版 / 非 Copilot 版」两套前端或两个站点。产品口径基线：`../PriceLens-产品说明.md`（v0.4 统一版）；`../PriceLens-单国打样-自包含落地方案.md` 为单国打样期历史稿。
 
+本轮 Agent、预警、UI/UX 与缺陷优化的规划、验收口径和已落地项见：[`../docs/PriceLens-platform-optimization-roadmap-2026-11.md`](../docs/PriceLens-platform-optimization-roadmap-2026-11.md)。
+
 ## Agent 入口
 
 `http://localhost:5174/` 是唯一产品入口：完整看板和 PriceLens Agent 在同一页，页头的「问 PriceLens」按钮会打开 Agent 面板。Agent 请求通过 Vite 的 `/api/agent` 代理转发到本地 Agent 服务，密钥只在服务端读取，不写入前端或仓库。
@@ -26,8 +28,15 @@ npm run build      # 产出单文件 dist/index.html 并同步覆盖仓库根 Pr
 npm run typecheck  # tsc --noEmit
 npm run verify     # 聚合契约断言 + 单文件一致性（scripts/verify.mjs，47 项）
 npm run test       # vitest 金测（快照钉住图表行为）
-npm run check      # typecheck + verify + test + build 全链路
+npm run design:check # 设计契约、产品上下文、token 和 Impeccable 配置
+npm run design:lint  # Google DESIGN.md linter
+npm run design:detect # Impeccable detector（未安装时安全跳过）
+npm run check      # design + typecheck + verify + test + build 全链路
 ```
+
+## 设计执行
+
+正式页面遵循 [`DESIGN.md`](./DESIGN.md)，运行时 token 统一来自 `src/theme/tokens.ts`。新增页面先阅读根目录 [`PRODUCT.md`](../PRODUCT.md)、[`AGENTS.md`](../AGENTS.md) 和 [`设计执行交接文档`](../docs/PRICE-LENS-DESIGN-HANDOFF.md)，再按页面在 `.impeccable/surfaces/` 记录局部决策；历史 roadshow 和录制面不反向定义正式产品视觉。提交前至少运行 `npm run design:check`、`npm run design:lint` 和 `npm run typecheck`。
 
 ## 提交前防线（pre-commit hook）
 

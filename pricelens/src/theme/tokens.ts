@@ -16,6 +16,7 @@ export const color = {
   link: '#0070f3', // 链接；语义色"竞品贵于我/我便宜"
   error: '#ee0000', // 语义色"我贵于竞品"；错误
   warning: '#f5a623', // offer 图标/浮窗强调（琥珀）
+  warningInk: '#805b00', // warningSoft 上的文字/徽标文字
   warningSoft: '#ffefcf', // offer 浮窗内衬
   onPrimary: '#ffffff', // ink 表面上的文字
 } as const;

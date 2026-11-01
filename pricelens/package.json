@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit",
     "verify": "node scripts/verify.mjs",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run verify && npm run test && npm run build",
+    "design:check": "node scripts/design-check.mjs",
+    "design:lint": "node scripts/design-lint.mjs",
+    "design:detect": "node scripts/impeccable-detect.mjs",
+    "check": "npm run design:check && npm run design:lint && npm run typecheck && npm run verify && npm run test && npm run build",
     "ingest": "python3 scripts/ingest_real.py"
   },
   "dependencies": {
@@ -24,9 +27,11 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@google/design.md": "0.4.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "impeccable": "4.8.0",
     "typescript": "^5.5.4",
     "vite": "^5.4.3",
     "vite-plugin-singlefile": "^2.0.2",

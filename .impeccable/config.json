@@ -1,0 +1,31 @@
+{
+  "projectRoots": [
+    "pricelens"
+  ],
+  "detector": {
+    "designSystem": {
+      "enabled": true
+    },
+    "ignoreRules": [],
+    "ignoreFiles": [
+      "pricelens/src/roadshowDemo/**",
+      "pricelens/src/roadshowRecorder/**"
+    ],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "Inter",
+        "reason": "PriceLens brand font"
+      },
+      {
+        "rule": "overused-font",
+        "value": "Geist Mono",
+        "reason": "PriceLens tabular data font"
+      }
+    ]
+  },
+  "hook": {
+    "enabled": true,
+    "quiet": true
+  }
+}

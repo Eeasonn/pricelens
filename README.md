@@ -38,8 +38,17 @@ npm run dev -- --port 5174 --strictPort   # http://localhost:5174（5173 留给�
 # 可选：真实方舟 Agent 服务（密钥只在服务端，不写入前端或仓库）
 ARK_API_KEY="<your-ark-api-key>" npm run agent-server
 
-npm run check    # typecheck + verify(47 项数据断言) + vitest 金测 + build(自动同步根 PriceLens.html)
+npm run check    # design + typecheck + verify(47 项数据断言) + vitest 金测 + build(自动同步根 PriceLens.html)
 ```
+
+## 设计治理
+
+- `PRODUCT.md`：产品定位、核心任务、业务边界和术语；供实现与 Agent 建立正确上下文。
+- `pricelens/DESIGN.md`：正式 UI 设计语言、token 语义、组件和图表规则；`pricelens/src/theme/tokens.ts` 是运行时 token 真源。
+- `docs/PRICE-LENS-DESIGN-HANDOFF.md`：后续 Agent 的设计执行步骤、例外处理和提交前验收清单；入口见根目录 `AGENTS.md`。
+- `npm --prefix pricelens run design:check`：检查产品上下文、设计契约、token 导出和 Impeccable 配置。
+- `npm --prefix pricelens run design:lint`：运行已固定版本的 Google `DESIGN.md` linter。
+- `npm --prefix pricelens run design:detect`：在本地安装 Impeccable CLI 后扫描颜色、圆角、字号等视觉漂移；当前默认将历史 roadshow 面排除。
 
 不提交 `pricelens/.env.production` / `.env.development`（已列 `.gitignore`）：线上构建无此文件时 Agent 自动回退本地确定性适配器，页面功能完整可用；契约示例见 `pricelens/.env.example`。
 
