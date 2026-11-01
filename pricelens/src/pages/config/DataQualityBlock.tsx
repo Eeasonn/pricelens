@@ -132,7 +132,7 @@ export default function DataQualityBlock() {
                 if (e.key === 'Enter') commitCustom();
               }}
               onBlur={commitCustom}
-              className="tnum"
+              className="tnum lpl-raw-input"
               style={{
                 width: 56,
                 height: 24,
@@ -142,7 +142,6 @@ export default function DataQualityBlock() {
                 font: 'inherit',
                 fontSize: fontSize.caption,
                 color: color.ink,
-                outline: 'none',
               }}
             />
             <span style={{ fontSize: fontSize.caption, color: color.mute }}>%</span>

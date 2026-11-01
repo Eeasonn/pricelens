@@ -52,6 +52,13 @@ a:focus-visible,
   outline-offset: 1px;
 }
 
+/* 裸 input（非 antd）键盘焦点环：与全站 button/a 同款；antd 输入框自带焦点样式不加此类
+   （2026-11-01 控制台卫生·焦点小补：此前裸 input 要么 outline:none 无环、要么浏览器默认环） */
+input.lpl-raw-input:focus-visible {
+  outline: 2px solid #0070f3;
+  outline-offset: 1px;
+}
+
 /* 16~20px 高的小 pill 命中区扩展：::after 透明层外扩 6px（元素需 position:relative） */
 .lpl-hit::after {
   content: '';

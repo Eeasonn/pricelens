@@ -78,7 +78,7 @@ function VolumeAxisLimit(props: {
   return (
     <input
       autoFocus
-      className="tnum"
+      className="tnum lpl-raw-input"
       type="number"
       inputMode="numeric"
       step={100}
@@ -121,7 +121,6 @@ function VolumeAxisLimit(props: {
         lineHeight: '18px',
         textAlign: 'right',
         fontVariantNumeric: 'tabular-nums',
-        outline: 'none',
       }}
     />
   );
