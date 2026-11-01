@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>异常价格阈值配置 · 低保真示意（2026-11-01）</title>
+<link rel="icon" href="data:,">
+<style>
+  :root{
+    --canvas:#ffffff; --canvas-soft:#fafafa; --canvas-soft-2:#f5f5f5;
+    --hairline:#ebebeb; --hairline-strong:#a1a1a1;
+    --ink:#171717; --body:#4d4d4d; --mute:#737373;
+    --link:#0070f3; --amber:#b45309; --amber-bg:#fff7e6;
+    --hw:#c7000b; --select-soft:#e8f1ff; --select-ink:#0053c2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    background:var(--canvas-soft);color:var(--ink);font-size:14px;line-height:20px;padding:24px}
+  .note{background:var(--amber-bg);color:var(--amber);border:1px solid #f0d9a8;border-radius:6px;
+    padding:8px 12px;margin-bottom:16px;font-size:12px}
+  h1{font-size:18px;font-weight:600;margin-bottom:4px}
+  .sub{color:var(--mute);font-size:12px;margin-bottom:16px}
+  .tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .tab{border:1px solid var(--hairline);background:var(--canvas);border-radius:6px;padding:6px 14px;
+    cursor:pointer;font-size:14px;color:var(--body)}
+  .tab[aria-selected="true"]{background:var(--select-soft);color:var(--select-ink);border-color:#c4dcff;font-weight:600}
+  .panel{display:none}
+  .panel.active{display:block}
+  .card{background:var(--canvas);border:1px solid var(--hairline);border-radius:8px;padding:20px;margin-bottom:16px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .card h2{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .card h2 .tag{font-size:11px;color:var(--mute);font-weight:400}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+  .row>.card{flex:1 1 460px;margin-bottom:0}
+  .stack>.card{margin-bottom:16px}
+  .lbl{font-size:12px;color:var(--mute);margin-bottom:6px}
+  /* 配置块控件 */
+  .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+  .switch input{accent-color:var(--ink);width:16px;height:16px}
+  .seg{display:inline-flex;border:1px solid var(--hairline);border-radius:6px;overflow:hidden}
+  .seg button{border:0;background:var(--canvas);padding:5px 14px;font-size:13px;color:var(--body);cursor:pointer;
+    border-right:1px solid var(--hairline)}
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:var(--select-soft);color:var(--select-ink);font-weight:600}
+  .numin{display:none;align-items:center;gap:4px;margin-left:8px}
+  .numin.show{display:inline-flex}
+  .numin input{width:56px;border:1px solid var(--hairline);border-radius:6px;padding:4px 8px;font-size:13px;
+    font-variant-numeric:tabular-nums}
+  .numin span{color:var(--mute)}
+  .desc{margin-top:10px;color:var(--body);font-size:13px;background:var(--canvas-soft);
+    border:1px solid var(--hairline);border-radius:6px;padding:10px 12px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th{color:var(--mute);font-weight:400;text-align:left;padding:6px 10px;border-bottom:1px solid var(--hairline);
+    font-size:12px;white-space:nowrap}
+  td{padding:7px 10px;border-bottom:1px solid var(--hairline);font-variant-numeric:tabular-nums;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .op{color:var(--link);background:none;border:0;cursor:pointer;font-size:13px;padding:0}
+  .op.ghost{color:var(--mute);text-decoration:underline;text-underline-offset:3px}
+  .tscroll{overflow-x:auto}
+  /* 工具行与 chip */
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--hairline)}
+  .tb-item{color:var(--body);font-size:13px}
+  .spacer{flex:1}
+  .chip{position:relative}
+  .chip>button{border:1px solid var(--hairline);background:var(--canvas);border-radius:9999px;padding:4px 12px;
+    font-size:12px;color:var(--body);cursor:pointer}
+  .chip>button b{color:var(--amber);font-weight:600}
+  .pop{display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;background:var(--canvas);
+    border:1px solid var(--hairline);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.10);padding:12px;z-index:5}
+  .chip.open .pop{display:block}
+  .pop .r{font-size:12px;color:var(--body);margin-bottom:8px}
+  .pop .li{display:flex;gap:8px;justify-content:space-between;font-size:12px;padding:5px 0;border-top:1px solid var(--hairline)}
+  .pop .li em{font-style:normal;color:var(--amber)}
+  /* tooltip 卡 */
+  .tt{border:1px solid var(--hairline);border-radius:8px;padding:12px;width:300px;background:var(--canvas)}
+  .tt h3{font-size:13px;font-weight:600;margin-bottom:8px}
+  .tt .kv{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}
+  .tt .kv span:first-child{color:var(--mute)}
+  .tt .verdict{margin:8px 0;padding:6px 8px;background:var(--amber-bg);color:var(--amber);border-radius:6px;font-size:12px}
+  .tt .btns{display:flex;gap:8px;margin-top:8px}
+  .btn{border:1px solid var(--hairline);background:var(--canvas);border-radius:6px;padding:5px 10px;font-size:12px;
+    cursor:pointer;color:var(--body)}
+  .btn.pri{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btn:disabled{color:var(--mute);cursor:default;background:var(--canvas-soft-2)}
+  /* 图例 */
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin-top:8px}
+  .legend i{display:inline-block;width:16px;height:0;border-top:2px solid var(--hw);vertical-align:middle;margin-right:4px}
+  .legend i.dash{border-top-style:dashed}
+  .legend i.gray{border-top-style:dotted;border-top-color:var(--mute)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--mute);background:#fff;
+    vertical-align:middle;margin-right:4px}
+  .dot.a{border-color:var(--amber)}
+  /* 明细卡 / 极差卡 */
+  .mini{border:1px solid var(--hairline);border-radius:6px;padding:10px 12px;font-size:13px}
+  .mini .t{font-size:12px;color:var(--mute);margin-bottom:6px}
+  .mini .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+  .mini .s{font-size:12px;color:var(--mute);margin-top:2px}
+  .iso{color:var(--amber)}
+  .mut{color:var(--mute)}
+  /* 筛选条 / URL */
+  .fchips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .fchip{border:1px solid var(--hairline);border-radius:6px;padding:5px 12px;font-size:13px;color:var(--body);
+    background:var(--canvas)}
+  .fchip.hot{border-color:#e4c48c;background:var(--amber-bg);color:var(--amber)}
+  .url{font-family:ui-monospace,"Geist Mono",monospace;font-size:12px;background:var(--canvas-soft);
+    border:1px solid var(--hairline);border-radius:6px;padding:8px 10px;word-break:break-all;margin-top:10px}
+  .url b{color:var(--amber);font-weight:600}
+  .slider{width:140px;accent-color:var(--ink)}
+  ul.tips{padding-left:18px;color:var(--body);font-size:13px}
+  ul.tips li{margin:4px 0}
+  ul.tips li b.bad{color:var(--amber)}
+  .cmp td:first-child{color:var(--mute)}
+  .cmp .win{color:var(--select-ink);font-weight:600}
+  footer{color:var(--mute);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>异常价格阈值配置 · 低保真示意</h1>
+<div class="sub">任务：docs/briefs/2026-11-01-price-anomaly-threshold.md · 只设计不实现</div>
+<div class="note">低保真示意：全部数值为示意，非真实数据；视觉为近似还原，最终以 tokens.ts 与实现为准。</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-p="a">方案 A · 全局数据质量口径（推荐）</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="b">方案 B · 筛选条入口</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="c">方案 C · 工具条滑杆</button>
+</div>
+
+<!-- ============ 方案 A ============ -->
+<div class="panel active" id="p-a">
+  <div class="stack">
+
+    <div class="card">
+      <h2>① 配置页 ·「数据质量」块 <span class="tag">套现有 Block 壳，即改即存 + 广播</span></h2>
+      <div class="lbl">异常价格守卫</div>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+        <label class="switch"><input type="checkbox" checked> 开启</label>
+        <div class="seg" id="seg">
+          <button>关闭</button><button>30%</button><button class="on">50%</button><button data-custom>自定义</button>
+        </div>
+        <span class="numin" id="numin"><input value="45" inputmode="numeric"><span>%（10–90）</span></span>
+      </div>
+      <div class="desc">相邻两个观测点的折后价变化幅度超过阈值时，该点标记为异常价格：图上保留原值，但不参与极差、环比、均价与预警计算。真实大促与官方调价自动放行，也可在图上逐点确认。</div>
+      <div class="lbl" style="margin-top:14px">人工裁定清单（只记人工操作，可撤销）</div>
+      <div class="tscroll"><table id="marks">
+        <thead><tr><th>产品</th><th>周</th><th>原值</th><th>环比</th><th>动作</th><th>时间</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Pura 80 Pro</td><td>2026W37</td><td>USD 479</td><td>−52%</td><td>确认真实价格</td><td>10-30 14:02</td>
+            <td><button class="op ghost">撤销</button></td></tr>
+          <tr><td>Mate 80</td><td>2026W22</td><td>USD 2,399</td><td>+98%</td><td>标记异常</td><td>10-28 09:15</td>
+            <td><button class="op ghost">撤销</button></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>② 分析页工具行 · 只读状态 chip <span class="tag">价格走势 / 量价 / 多平台三页同款</span></h2>
+      <div class="toolbar">
+        <span class="tb-item">平均价</span><span class="tb-item">｜</span>
+        <span class="tb-item">隐藏对比产品</span><span class="tb-item">｜</span>
+        <span class="tb-item">齿轮</span>
+        <span class="spacer"></span>
+        <span class="chip" id="chip">
+          <button>数据质量 ≥50% · 本页隔离 <b id="chipN">1</b> 点 ⌄</button>
+          <span class="pop">
+            <span class="r">异常价格守卫：相邻观测点变化 ≥50% 判为异常，图上保留原值、不参与计算。</span>
+            <span class="li"><span>Pura 80 Pro · 2026W31</span><span>USD 389 <em>−61%</em></span></span>
+            <span class="li" style="border-top:1px solid var(--hairline);justify-content:center">
+              <button class="op">查看配置</button></span>
+          </span>
+        </span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h2>③ 价格走势 · 隔离态视觉 <span class="tag">示意 24 周 · 可点空心点</span></h2>
+        <svg id="chart" viewBox="0 0 920 300" width="100%" role="img" aria-label="价格走势示意：含缺采桥、隔离点、已确认点与末端待确认点"></svg>
+        <div class="legend">
+          <span><i></i>可信（实线）</span>
+          <span><i class="dash"></i>缺采跨接（虚线桥）</span>
+          <span><span class="dot"></span>已隔离（空心灰点 · 断线）</span>
+          <span><span class="dot a"></span>待核对 / 待确认</span>
+          <span style="color:var(--link)">已确认（人工豁免）</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>④ 隔离点 tooltip <span class="tag">原值 · 依据 · 取证 · 豁免闭环</span></h2>
+        <div class="tt">
+          <h3>Pura 80 Pro · 2026W31</h3>
+          <div class="kv"><span>原值</span><span>USD 389</span></div>
+          <div class="kv"><span>对上一有值点（W30）</span><span>−61%</span></div>
+          <div class="kv"><span>取证</span><span>商品页 · 暂无快照</span></div>
+          <div class="verdict" id="ttVerdict">判定：瞬态超阈（≥50%）→ 已隔离，不参与计算</div>
+          <div class="btns">
+            <button class="btn">查看商品页</button>
+            <button class="btn pri" id="ttConfirm">确认真实价格</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h2>⑤ 宽表打标 <span class="tag">事实层显示原值 + 角标</span></h2>
+        <div class="tscroll"><table>
+          <thead><tr><th>产品 / 指标</th><th>W30</th><th>W31</th><th>W32</th><th>近4周环比</th></tr></thead>
+          <tbody>
+            <tr><td>Pura 80 Pro · 折后价</td><td>999</td>
+              <td>389 <span class="iso" title="环比 −61%，已按 ≥50% 口径隔离">疑</span></td>
+              <td>1,029</td><td class="mut">—（隔离周不进均值）</td></tr>
+            <tr><td>Pura 80 Pro · 折扣率</td><td>17%</td>
+              <td class="mut">—</td><td>14%</td><td class="mut">—</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h2>⑥ 量价页 · 明细卡与极差卡 <span class="tag">计算走可信链</span></h2>
+        <div class="row" style="gap:12px">
+          <div class="mini" style="flex:1">
+            <div class="t">单周明细 · 观察周 2026W31</div>
+            <div class="kv"><span>RRP</span><span>USD 1,199</span></div>
+            <div class="kv"><span>折后价</span><span class="iso">已隔离 · 原值 USD 389</span></div>
+            <div class="kv"><span>环比</span><span class="iso">已隔离</span></div>
+            <div class="kv"><span>销量</span><span>12.4 万（不受影响）</span></div>
+            <div class="kv"><span>单台销毛</span><span class="mut">价格不可信</span></div>
+          </div>
+          <div class="mini" style="flex:1">
+            <div class="t">价格极差（当前区间）</div>
+            <div class="v">15.0%</div>
+            <div class="s">USD 999 – 1,149</div>
+            <div class="s iso" style="margin-top:6px">区间内已隔离 1 点（不参与极差）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ 方案 B ============ -->
+<div class="panel" id="p-b">
+  <div class="card">
+    <h2>筛选条口径 chip <span class="tag">随 LPL3.filters 持久化 + 进 URL</span></h2>
+    <div class="fchips">
+      <span class="fchip">国家 德国</span><span class="fchip">产业 手机</span><span class="fchip">产品 2</span>
+      <span class="fchip">平台 全部</span><span class="fchip">粒度 周</span><span class="fchip">币种 USD</span>
+      <span class="fchip hot">异常价 ≥50% ⌄</span>
+    </div>
+    <div class="url">price_lens/?c=DE&amp;i=phone&amp;g=week&amp;cur=USD&amp;main=hwp80p&amp;agg=avg&amp;<b>aq=50</b></div>
+    <ul class="tips" style="margin-top:12px">
+      <li>就近分析场景、即点即生效；口径随链接分享，双方数字一致。</li>
+      <li class="bad">筛选条再进一条口径项，认知负担加重；「谁能改」扩大到所有人，多人多阈值 → 同一报表数字不可比。</li>
+      <li class="bad">影响面远大于入口暗示：预警、宽表、量价、多平台全部跟着变（下图），用户在筛选条上感知不到。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>受影响面示意 · 预警中心 <span class="tag">口径变化会静默改变预警结果</span></h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>来源</th><th>预警 · 调价</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>当前（无守卫）</td><td>Pura 80 Pro · W31 · −61%</td><td class="iso">假预警（脏点触发，阈值 1.5%）</td></tr>
+        <tr><td>方案 B（aq=50）</td><td>Pura 80 Pro · W31</td><td class="mut">该周价格已隔离，未触发</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ============ 方案 C ============ -->
+<div class="panel" id="p-c">
+  <div class="card">
+    <h2>图表工具条滑杆 <span class="tag">复刻「价格变化提醒」语言 · 仅标注</span></h2>
+    <div class="toolbar">
+      <label class="switch"><input type="checkbox" checked> 异常价格</label>
+      <input type="range" class="slider" min="30" max="90" value="50">
+      <span class="tb-item">≥ 50%</span>
+    </div>
+    <svg viewBox="0 0 920 160" width="100%" role="img" aria-label="仅标注示意：超阈点画琥珀胶囊，但线仍连续、计算不变">
+      <line x1="50" y1="130" x2="870" y2="130" stroke="#ebebeb"/>
+      <path d="M50 90 L120 84 L190 92 L260 86 L330 95 L470 70 L540 88 L610 84 L680 90 L750 86 L870 96"
+        fill="none" stroke="#c7000b" stroke-width="2"/>
+      <circle cx="400" cy="118" r="4.5" fill="#fff" stroke="#737373" stroke-width="1.5"/>
+      <line x1="330" y1="95" x2="400" y2="118" stroke="#737373" stroke-width="2" stroke-dasharray="2 3"/>
+      <line x1="400" y1="118" x2="470" y2="70" stroke="#737373" stroke-width="2" stroke-dasharray="2 3"/>
+      <g><rect x="372" y="98" width="56" height="16" rx="8" fill="#fff" stroke="#f0d9a8"/>
+        <text x="400" y="110" text-anchor="middle" font-size="11" fill="#b45309">疑 −61%</text></g>
+    </svg>
+    <ul class="tips">
+      <li>实现最小（半天级）、与既有滑杆零学习成本、零口径风险。</li>
+      <li class="bad">不解决核心诉求：极差 / 环比 / 均价 / 预警仍吃脏点；与「价格变化提醒」功能重复。</li>
+      <li class="bad">视图态各页各调各的，违反「价格走势 / 量价 / 预测 / 多平台一致表现」的硬要求。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ 对照表 ============ -->
+<div class="card">
+  <h2>三方案对照</h2>
+  <div class="tscroll"><table class="cmp">
+    <thead><tr><th>维度</th><th>A 全局口径 + 隔离态（推荐）</th><th>B 筛选条 + URL</th><th>C 工具条滑杆</th></tr></thead>
+    <tbody>
+      <tr><td>影响计算</td><td class="win">全部按可信链</td><td>全部按可信链</td><td>不影响</td></tr>
+      <tr><td>跨页一致</td><td class="win">取数层单点保证</td><td>单点但易被随手改</td><td>各页独立</td></tr>
+      <tr><td>口径治理</td><td class="win">配置页集中 + 留痕</td><td>漂移风险高</td><td>视图态无治理</td></tr>
+      <tr><td>URL 携带口径</td><td>否（默认店铺先例）</td><td>是（aq 参数）</td><td>否</td></tr>
+      <tr><td>实现成本</td><td>中（2–3 天）</td><td>中低</td><td class="win">低（半天）</td></tr>
+      <tr><td>解决核心诉求</td><td class="win">完整</td><td>完整但治理差</td><td>否（仅标注）</td></tr>
+    </tbody>
+  </table></div>
+</div>
+
+<footer>docs/design/2026-11-01-price-anomaly-threshold-demo.html · 数值为示意非真实数据 · 只设计不实现，待拍板</footer>
+
+<script>
+(function(){
+  // ---------- 标签页 ----------
+  var tabs=document.querySelectorAll('.tab');
+  tabs.forEach(function(t){t.addEventListener('click',function(){
+    tabs.forEach(function(x){x.setAttribute('aria-selected',String(x===t))});
+    document.querySelectorAll('.panel').forEach(function(p){p.classList.toggle('active',p.id==='p-'+t.dataset.p)});
+  })});
+
+  // ---------- 档位 Segmented / 自定义输入（轻交互） ----------
+  var seg=document.getElementById('seg'),numin=document.getElementById('numin');
+  seg.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){
+    seg.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b)});
+    numin.classList.toggle('show',b.hasAttribute('data-custom'));
+  })});
+
+  // ---------- chip Popover ----------
+  var chip=document.getElementById('chip');
+  chip.querySelector('button').addEventListener('click',function(e){e.stopPropagation();chip.classList.toggle('open')});
+  document.addEventListener('click',function(){chip.classList.remove('open')});
+  chip.addEventListener('click',function(e){e.stopPropagation()});
+
+  // ---------- 示意图（数值为示意） ----------
+  var NS='http://www.w3.org/2000/svg',svg=document.getElementById('chart');
+  var P=[1149,1129,1149,1099,1099,1129,1129,null,1049,1029,1029,999,389,1029,1049,1049,1029,999,479,499,499,499,499,819];
+  var st=[];for(var i=0;i<24;i++)st.push('ok');
+  st[7]='missing';st[12]='quar';st[18]='exempt';st[23]='pending';
+  function X(i){return 50+i*35.7}
+  function Y(p){return 230-(p-300)*0.2}
+  function el(t,a){var e=document.createElementNS(NS,t);for(var k in a)e.setAttribute(k,a[k]);return e}
+  function txt(x,y,s,fill,anchor,size){var t=el('text',{x:x,y:y,fill:fill||'#737373','font-size':size||11,
+    'text-anchor':anchor||'start'});t.textContent=s;return t}
+  function capsule(x,y,s,amber){var w=s.length*11+14,g=el('g',{});
+    g.appendChild(el('rect',{x:x-w/2,y:y-8,width:w,height:16,rx:8,fill:'#fff',stroke:amber?'#f0d9a8':'#c4dcff'}));
+    g.appendChild(txt(x,y+4,s,amber?'#b45309':'#0053c2','middle',11));return g}
+  function render(){
+    while(svg.firstChild)svg.removeChild(svg.firstChild);
+    [300,600,900,1200].forEach(function(p){var y=Y(p);
+      svg.appendChild(el('line',{x1:50,y1:y,x2:870,y2:y,stroke:'#ebebeb'}));
+      svg.appendChild(txt(42,y+4,p,'mute','end'))});
+    // 缺采桥（彩色虚线，跨接两侧可信点）
+    svg.appendChild(el('line',{x1:X(6),y1:Y(P[6]),x2:X(8),y2:Y(P[8]),stroke:'#c7000b',
+      'stroke-width':2,'stroke-dasharray':'4 4',opacity:.9}));
+    // 主实线：可信段（隔离点断开；末端待确认点在线上）
+    var seg=[],cur=[];
+    for(var i=0;i<24;i++){
+      var ok=st[i]==='ok'||st[i]==='exempt'||st[i]==='pending';
+      if(ok)cur.push(i);else{if(cur.length>1)seg.push(cur);cur=[]}
+    }
+    if(cur.length>1)seg.push(cur);
+    seg.forEach(function(run){var d='M'+X(run[0])+' '+Y(P[run[0]]);
+      for(var k=1;k<run.length;k++)d+=' L'+X(run[k])+' '+Y(P[run[k]]);
+      svg.appendChild(el('path',{d:d,fill:'none',stroke:'#c7000b','stroke-width':2}))});
+    // 点位与徽标
+    for(var i=0;i<24;i++){
+      var x=X(i),y=Y(P[i]);
+      if(st[i]==='quar'){
+        svg.appendChild(el('circle',{cx:x,cy:y,r:5,fill:'#fff',stroke:'#737373','stroke-width':1.5,cursor:'pointer'}));
+        svg.appendChild(capsule(x,y-18,'疑 −61%',true));
+      }else if(st[i]==='pending'){
+        svg.appendChild(el('circle',{cx:x,cy:y,r:5,fill:'#fff',stroke:'#b45309','stroke-width':1.5}));
+        svg.appendChild(capsule(x,y+22,'待确认 +64%',true));
+      }else if(st[i]==='exempt'){
+        svg.appendChild(el('circle',{cx:x,cy:y,r:3.5,fill:'#c7000b'}));
+        svg.appendChild(capsule(x,y-18,'已确认',false));
+      }
+    }
+    // 周刻度（抽稀）
+    for(var i=0;i<24;i+=3)svg.appendChild(txt(X(i),250,'W'+(19+i)));
+    svg.appendChild(txt(50,272,'缺采：虚线桥、无点 · 隔离：空心灰点、断线 · 末端候选：琥珀空心、不隔离','#737373','start',11));
+  }
+  render();
+
+  // ---------- 豁免闭环（W31：隔离 ⇄ 已确认） ----------
+  var confirmBtn=document.getElementById('ttConfirm'),verdict=document.getElementById('ttVerdict'),
+      chipN=document.getElementById('chipN'),marks=document.getElementById('marks').tBodies[0];
+  var liveRow=null;
+  function setW31(exempted){
+    st[12]=exempted?'exempt':'quar';render();
+    var n=0;st.forEach(function(s){if(s==='quar')n++});
+    chipN.textContent=n;
+    confirmBtn.disabled=exempted;confirmBtn.textContent=exempted?'已确认':'确认真实价格';
+    verdict.textContent=exempted?'判定：人工确认真实价格（已豁免，参与计算）':'判定：瞬态超阈（≥50%）→ 已隔离，不参与计算';
+    if(exempted&&!liveRow){
+      liveRow=document.createElement('tr');
+      liveRow.innerHTML='<td>Pura 80 Pro</td><td>2026W31</td><td>USD 389</td><td>−61%</td><td>确认真实价格</td><td>刚刚</td><td></td>';
+      var undo=document.createElement('button');undo.className='op ghost';undo.textContent='撤销';
+      undo.addEventListener('click',function(){liveRow.remove();liveRow=null;setW31(false)});
+      liveRow.lastElementChild.appendChild(undo);marks.insertBefore(liveRow,marks.firstChild);
+    }
+  }
+  confirmBtn.addEventListener('click',function(){setW31(true)});
+  // 图上空心点也可触发确认（示意）
+  svg.addEventListener('click',function(e){
+    if(e.target.getAttribute('stroke')==='#737373'&&st[12]==='quar')setW31(true)});
+})();
+</script>
+</body>
+</html>
