@@ -94,12 +94,27 @@ export function lastValidMarginIndex(points: readonly (unknown | null)[]): numbe
   return null;
 }
 
-/** 悬停到有效点用该点；悬停到空桶不用别的点顶上；移出后回到最后一个有效点。 */
-export function marginReadoutIndex(points: readonly (unknown | null)[], hoverIdx: number | null): number | null {
-  if (hoverIdx != null) {
-    return hoverIdx >= 0 && hoverIdx < points.length && points[hoverIdx] != null ? hoverIdx : null;
-  }
-  return lastValidMarginIndex(points);
+export interface MarginTipModel {
+  kind: 'empty' | 'gap' | 'ready';
+  cost?: string;
+  margin?: string;
+  rate?: string;
+}
+
+/** 明细卡里的成本销毛。竞品整段无数据是 empty；悬停到空桶是 gap，不借用别的月。 */
+export function marginTipModel(input: {
+  unavailable: boolean;
+  point: { unitCost: number; unitMargin: number; marginRate: number } | null;
+  formatMoney: (value: number) => string;
+}): MarginTipModel {
+  if (input.unavailable) return { kind: 'empty' };
+  if (!input.point) return { kind: 'gap' };
+  return {
+    kind: 'ready',
+    cost: input.formatMoney(input.point.unitCost),
+    margin: input.formatMoney(input.point.unitMargin),
+    rate: `${(input.point.marginRate * 100).toFixed(1)}%`,
+  };
 }
 
 /** 悬停时竖线跟着手；移出后竖线回到最后一个有效点。 */

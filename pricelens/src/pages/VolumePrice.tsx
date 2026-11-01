@@ -35,6 +35,16 @@
 // （defaultSlots/手选槽位/槽位重置键）一并退役。同步/独立时间轴、悬停联动、
 // 图内拖选高亮按面板数动态生效，语义不变。
 // ============================================================
+// 量价改版收口（视觉 demo：design-proposals/pricelens-volume-spread-layout-demo.html，
+// 局部决策见 .impeccable/surfaces/volume-main-product.md）：把 demo 的区间阅读语言落到
+// 每个面板——①元信息行（图例 + 所选区间胶囊/拖选提示）；②双极差卡上移到主图上方并排；
+// ③选区 = 浅蓝底带 + 双侧竖线，区间极值改画尺寸标注尺（垂直双箭头 + Δ 标签 + 白底标签框
+// + 水平引线 + 极值空心圆），替代原「极值横线带」；④时点读数从图内 tipBox 浮层改为图下
+// 单周明细卡（三栏：锚日/产品 | RRP/折后价/环比/销量 | 当月成本/单台销毛/销毛率·模拟）；
+// ⑤脚注行补口径说明。指针交互（悬停列/拖选区间/横向参考位）由面板自绘 PointerShield
+// 统一接管，图表层不再出跟随浮层；观察列 = 悬停 ?? 区间末周 ?? 窗口末桶，十字线贯穿
+// 主图 + 成本销毛带，键盘 ←/→/Home/End 切换。缺采仍显示 — 不插值；涨蓝跌琥珀不变。
+// ============================================================
 // 第一百九十一轮（Eason 五点）：面板头升级为价格页分离面板同构 [拖柄][产品药丸]——
 // ①拖柄照价格页范式（拖到目标面板松手换位，dragover 描边 + 拖动降透明反馈）；
 // 换序只记本地会话态 panelOrder（不落盘），面板渲染序 = panelOrder 优先、缺省回落
@@ -43,7 +53,7 @@
 // 量价取数随所选平台重算；下行两行产品药丸 = 品牌行 + 名称加粗 + 配置浅蓝底 chip）。
 // 原纯文字面板头退役（信息已由药丸承载），面板头定高随药丸加高并与共享轴列对齐。
 // 屏蔽/悬停联动量价页没有，onToggle/onHover 传 no-op。
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import usePageViewState from '../state/usePageViewState';
@@ -58,6 +68,7 @@ import { PillUnit, PlatformRow } from '../chart/PriceTrend/BrandLegendStrip';
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
 import {
+  GRID,
   adaptiveRangeOf,
   computeYAxis,
   convertWindowIds,
@@ -68,16 +79,16 @@ import {
   perUsdOf,
   seriesSpanRange,
   splitAxisWidth,
+  yPxOf,
   type Bucket,
   type StripGeom,
   type YScale,
-  yPxOf,
 } from '../chart/PriceTrend/helpers';
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
 import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
-import type { Series, SeriesPoint } from '../dataModel/types';
+import type { Granularity, Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 import { volumeAdaptiveSeries } from './volume/volumeAdaptive';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
@@ -86,11 +97,14 @@ import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
 import MarginCostBand from './volume/MarginCostBand';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
-import { lastValidMarginIndex, marginFocusIndex } from './volume/marginCostGeometry';
+import { marginCrossX } from './volume/marginCostGeometry';
 import SpreadRangeCard from './volume/SpreadRangeCard';
-import { spreadCardModel, spreadCardPlan } from './volume/spreadCards';
+import WeekDetailCard from './volume/WeekDetailCard';
+import PointerShield from './volume/PointerShield';
+import { detailDateOf, weekDetailModel } from './volume/weekDetail';
+import { spreadCardModel, spreadCardRow } from './volume/spreadCards';
 import { commitVolumeAxisLimit, normalizePanelWindow, vMaxOf, volumeRangeOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
-import { formatVolumeAmount, pricePointValid, rangeMarksInView, rangeSpreadOf, resolveSelectedWindow, volumePointValid } from './volume/periodSummary';
+import { formatVolumeAmount, pricePointValid, rangeBandInView, rangeSpreadOf, resolveSelectedWindow, volumePointValid } from './volume/periodSummary';
 
 // 面板头定高（第一百九十一轮，Eason 五点）：面板头改 [拖柄][PillUnit] 后随药丸
 // 加高——可换行的平台小药丸（28px）+ 2px 间距 + 两行产品药丸，另给店铺同步按钮
@@ -109,6 +123,44 @@ const LOAD_ERROR_HINT: ReactNode = (
 
 const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
 const CHART_GRID_RIGHT = 78; // 右侧预留销量轴列（轴线 + 最高值输入框）
+
+/** 粒度名词（周/月/季）：脚注与无障碍文案随粒度换字，不把「周」硬套在月/季视图 */
+const granNounOf = (granularity: Granularity): string => (granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季');
+
+/** 尺寸标注尺（视觉 demo：dimensionRuler）：垂直双箭头 + Δ 标签 + 白底标签框。
+ *  最高＝最低（高度差不足 2px）时没有可量的距离，不画。 */
+function dimensionRuler(input: { x: number; yTop: number; yBottom: number; color: string; label: string; side: 'left' | 'right'; key: string }) {
+  if (input.yBottom - input.yTop < 2) return null;
+  const midY = (input.yTop + input.yBottom) / 2;
+  const labelW = Math.max(30, input.label.length * 6 + 8);
+  const rectX = input.side === 'right' ? input.x + 6 : input.x - labelW - 6;
+  const textX = input.side === 'right' ? input.x + 10 : input.x - 10;
+  return (
+    <g key={input.key}>
+      <line x1={input.x} x2={input.x} y1={input.yTop} y2={input.yBottom} stroke={input.color} strokeWidth={1.2} />
+      <path
+        d={`M${input.x - 3},${input.yTop + 5} L${input.x},${input.yTop} L${input.x + 3},${input.yTop + 5} M${input.x - 3},${input.yBottom - 5} L${input.x},${input.yBottom} L${input.x + 3},${input.yBottom - 5}`}
+        fill="none"
+        stroke={input.color}
+        strokeWidth={1.2}
+      />
+      <rect x={rectX} y={midY - 9} width={labelW} height={18} rx={4} fill={color.canvas} />
+      <text
+        x={textX}
+        y={midY}
+        textAnchor={input.side === 'right' ? 'start' : 'end'}
+        dominantBaseline="middle"
+        fill={input.color}
+        fontSize={11}
+        fontWeight={600}
+        fontFamily={font.family}
+        style={{ fontVariantNumeric: 'tabular-nums' }}
+      >
+        {input.label}
+      </text>
+    </g>
+  );
+}
 
 interface SlotInfo {
   isOwn: boolean;
@@ -871,16 +923,11 @@ export default function VolumePrice() {
                       const viewStart = effWins[p.idx]?.[0] ?? 0;
                       const brush = brushLive[p.idx] ?? brushes[p.idx] ?? null;
                       const ranged = brush != null && !!row && !row.failed && !panelHidden;
-                      const priceMarks = ranged && row
-                        ? rangeMarksInView(row.prices, row.windowStart, row.windowEnd, viewStart, pricePointValid, (value) => formatPrice(Math.round(value), state.currency))
-                        : [];
-                      const volumeSlice = row ? row.volumes.slice(Math.min(row.windowStart, row.windowEnd), Math.max(row.windowStart, row.windowEnd) + 1) : [];
-                      const volumeWan = volumeSlice.some((value) => value != null && Math.abs(value) >= 10000);
-                      const volumeMarks = ranged && row
-                        ? rangeMarksInView(row.volumes, row.windowStart, row.windowEnd, viewStart, volumePointValid, (value) => formatVolumeAmount(value, volumeWan))
-                        : [];
                       const windowLo = row ? Math.min(row.windowStart, row.windowEnd) : 0;
                       const windowHi = row ? Math.max(row.windowStart, row.windowEnd) : -1;
+                      const volumeSlice = row ? row.volumes.slice(windowLo, windowHi + 1) : [];
+                      const volumeWan = volumeSlice.some((value) => value != null && Math.abs(value) >= 10000);
+                      const formatVolume = (value: number) => formatVolumeAmount(value, volumeWan);
                       const priceSpread = ranged && row
                         ? rangeSpreadOf(row.prices.slice(windowLo, windowHi + 1), pricePointValid)
                         : null;
@@ -891,17 +938,48 @@ export default function VolumePrice() {
                         ? spreadCardModel(priceSpread, (value) => formatPrice(Math.round(value), state.currency), '价格')
                         : null;
                       const volumeCard = volumeSpread
-                        ? spreadCardModel(volumeSpread, (value) => formatVolumeAmount(value, volumeWan), '销量')
+                        ? spreadCardModel(volumeSpread, formatVolume, '销量')
+                        : null;
+                      const priceBand = ranged && row
+                        ? rangeBandInView(row.prices, row.windowStart, row.windowEnd, viewStart, pricePointValid)
+                        : null;
+                      const volumeBand = ranged && row
+                        ? rangeBandInView(row.volumes, row.windowStart, row.windowEnd, viewStart, volumePointValid)
                         : null;
                       const strip = geoms[p.idx];
+                      const seriesColor = p.vis[0]?.color ?? brandColorOf(p.brand);
+                      const cardRow = strip ? spreadCardRow(strip.plotLeft, strip.plotWidth) : null;
+                      const marginPoints = marginCosts[p.idx] ?? [];
+                      const marginUnavailable = marginCostAvailabilityOf(p.spec.isOwn, marginPoints) === 'empty';
+                      // ---- 观察列（demo：activeIndex）：悬停列 ?? 所选区间末周 ?? 窗口末桶。
+                      //      十字线、明细卡、销量柱/销毛柱高亮、成本点全部跟同一列。
+                      const viewLen = strip?.n ?? p.vis[0]?.points.length ?? 0;
+                      const brushEnd = brush ? Math.max(brush[0], brush[1]) : null;
+                      const activeIdx = viewLen > 0
+                        ? Math.min(viewLen - 1, Math.max(0, hoverIdxs[p.idx] ?? brushEnd ?? viewLen - 1))
+                        : null;
+                      const activePoint = activeIdx != null ? p.vis[0]?.points[activeIdx] ?? null : null;
+                      const marginPoint = activeIdx != null ? marginPoints[activeIdx] ?? null : null;
+                      const crossX = strip && activeIdx != null ? marginCrossX(strip, activeIdx) : null;
+                      // ---- 图下单周明细卡：缺采显示 —，环比只跟上一桶比，不借用相邻值
+                      const detail = weekDetailModel({
+                        granularity: state.granularity,
+                        bucketId: activePoint?.bucketId ?? '',
+                        xLabel: activePoint?.xLabel ?? '',
+                        price: activePoint?.price ?? null,
+                        rrp: activePoint?.rrp ?? null,
+                        prevPrice: activeIdx != null && activeIdx > 0 ? p.vis[0]?.points[activeIdx - 1]?.price ?? null : null,
+                        volume: activeIdx != null ? volumes[p.idx]?.[activeIdx] ?? null : null,
+                        marginPoint,
+                        marginUnavailable,
+                        formatMoney: (value) => formatPrice(Math.round(value), state.currency),
+                        formatVolume,
+                      });
+                      // ---- 尺寸标注尺几何：价格尺在选区左侧、销量尺在选区右侧（demo 同位），
+                      //      水平引线从极值点引到尺，极值点画空心圆
                       const slot = strip && strip.n > 0 ? strip.plotWidth / strip.n : 0;
-                      const [volumeAxisMin, volumeAxisMax] = volumeRangeOf(volumeLimits[p.idx], panelVMax[p.idx] ?? 1);
-                      const volumeAxisSpan = Math.max(1, volumeAxisMax - volumeAxisMin);
-                      const volumeY = (value: number): number => {
-                        const ratio = Math.min(1, Math.max(0, (value - volumeAxisMin) / volumeAxisSpan));
-                        return PANEL_GRID_TOP + yCfg.plotHeight - ratio * yCfg.plotHeight;
-                      };
-                      const priceY = (value: number): number => yPxOf({
+                      const xAt = (index: number): number => (strip?.plotLeft ?? 0) + slot * (index + 0.5);
+                      const priceYOf = (value: number): number => yPxOf({
                         gridLeft: CHART_GRID_LEFT,
                         plotLeft: strip?.plotLeft ?? CHART_GRID_LEFT,
                         plotTop: PANEL_GRID_TOP,
@@ -910,50 +988,17 @@ export default function VolumePrice() {
                         scale: yCfg,
                         n: strip?.n ?? 1,
                       }, value);
-                      const markXOf = (index: number): number => (strip ? strip.plotLeft + slot * (index + 0.5) : 0);
-                      const extremeMarks = strip
-                        ? [
-                          ...priceMarks.map((mark) => ({
-                            x: markXOf(mark.index),
-                            y: priceY(mark.value),
-                            label: mark.kind === 'min' ? ('below' as const) : ('above' as const),
-                          })),
-                          ...volumeMarks.map((mark) => ({ x: markXOf(mark.index), y: volumeY(mark.value) })),
-                        ]
-                        : [];
-                      const cardPlan = strip && (priceCard?.visible || volumeCard?.visible)
-                        ? spreadCardPlan({
-                          plotLeft: strip.plotLeft,
-                          plotTop: PANEL_GRID_TOP,
-                          plotWidth: strip.plotWidth,
-                          plotHeight: yCfg.plotHeight,
-                          extremeMarks,
-                          frameRight: strip.plotLeft + strip.plotWidth + CHART_GRID_RIGHT - 8,
-                          priceBandY: priceSpread?.min && priceSpread.max
-                            ? [priceY(priceSpread.max.value), priceY(priceSpread.min.value)]
-                            : null,
-                          volumeBandY: volumeSpread?.min && volumeSpread.max
-                            ? [volumeY(volumeSpread.max.value), volumeY(volumeSpread.min.value)]
-                            : null,
-                        })
-                        : null;
-                      // 引导线只画「极值点 → 极差卡」一段：价格线到价格卡右缘、销量线到销量卡左缘，
-                      // 各留 4px 缝；点落在卡片后方（x 在卡区间内/外侧）时不画线只留点
-                      const priceCardRight = cardPlan ? cardPlan.price.left + cardPlan.price.width : null;
-                      const volumeCardLeft = cardPlan ? cardPlan.volume.left : null;
-                      const priceMarkViews = priceMarks.map((mark) => {
-                        const x = markXOf(mark.index);
-                        const toX = priceCardRight != null && x > priceCardRight ? priceCardRight + 4 : x;
-                        return { ...mark, toward: 'left' as const, toX };
-                      });
-                      const volumeMarkViews = volumeMarks.map((mark) => {
-                        const x = markXOf(mark.index);
-                        const toX = volumeCardLeft != null && x < volumeCardLeft ? volumeCardLeft - 4 : x;
-                        return { ...mark, toX };
-                      });
+                      const [volumeAxisMin, volumeAxisMax] = volumeRangeOf(volumeLimits[p.idx] ?? { max: null }, panelVMax[p.idx] ?? 1);
+                      const volumeAxisSpan = Math.max(1, volumeAxisMax - volumeAxisMin);
+                      const volumeYOf = (value: number): number => {
+                        const ratio = Math.min(1, Math.max(0, (value - volumeAxisMin) / volumeAxisSpan));
+                        return PANEL_GRID_TOP + yCfg.plotHeight - ratio * yCfg.plotHeight;
+                      };
+                      const granNoun = granNounOf(state.granularity);
                       return (
                       <div
                         key={p.key}
+                        className="lpl-volume-panel"
                         onDragOver={reading ? undefined : (e) => {
                           if (!draggingPanel || draggingPanel === p.spec.key) return;
                           e.preventDefault();
@@ -1065,27 +1110,107 @@ export default function VolumePrice() {
                             </button>
                           )}
                         </div>
+                        {/* 图表元信息行（视觉 demo：chart-meta）：左 = 图例，右 = 所选区间
+                            胶囊（含清除）或「拖动图表选择区间」提示（无选区时） */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 28, padding: '0 4px', margin: '4px 0 8px' }}>
+                          <div aria-label="图例" style={{ display: 'flex', alignItems: 'center', gap: 14, color: color.mute, fontSize: 11, lineHeight: '14px', flexWrap: 'wrap', minWidth: 0 }}>
+                            {state.priceTypes.discounted && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                <span aria-hidden style={{ width: 16, height: 2, background: seriesColor }} />
+                                折后价
+                              </span>
+                            )}
+                            {state.priceTypes.rrp && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                <span aria-hidden style={{ width: 16, height: 1, background: seriesColor, opacity: 0.85 }} />
+                                RRP
+                              </span>
+                            )}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                              <span aria-hidden style={{ width: 8, height: 9, borderRadius: 1, background: seriesColor, opacity: 0.22 }} />
+                              销量
+                            </span>
+                          </div>
+                          {ranged && brush && row ? (
+                            <span
+                              className="tnum"
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, minHeight: 24, padding: '2px 4px 2px 10px',
+                                border: '1px solid rgba(0, 112, 243, 0.35)', borderRadius: radius.pill,
+                                background: selectSoft, color: selectSoftInk, fontSize: 11, lineHeight: '16px',
+                                fontFamily: font.family, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {detailDateOf(state.granularity, p.vis[0]?.points[Math.min(brush[0], brush[1])]?.xLabel ?? '')} — {detailDateOf(state.granularity, p.vis[0]?.points[Math.max(brush[0], brush[1])]?.xLabel ?? '')}
+                              <button
+                                type="button"
+                                aria-label="清除所选区间"
+                                title="清除所选区间"
+                                className="lpl-hit"
+                                onClick={() => onBrushChangeOf(p.idx)(null, true)}
+                                style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, padding: 0, border: 0, borderRadius: radius.pill, background: 'transparent', color: selectSoftInk, fontSize: 12, lineHeight: 1, cursor: 'pointer' }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ) : (
+                            !panelHidden && !p.failed && row && (
+                              <span style={{ color: color.mute, fontSize: 11, lineHeight: '14px', whiteSpace: 'nowrap' }}>拖动图表选择区间</span>
+                            )
+                          )}
+                        </div>
+                        {/* 双极差卡并排（视觉 demo：range-cards）：贴绘图区左右缘，图上方 */}
+                        {(priceCard?.visible || volumeCard?.visible) && strip && cardRow && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, margin: `0 0 10px ${strip.plotLeft}px` }}>
+                            {priceCard?.visible
+                              ? <SpreadRangeCard title="价格极差" accent={seriesColor} model={priceCard} style={{ width: cardRow.width }} />
+                              : <span />}
+                            {volumeCard?.visible
+                              ? <SpreadRangeCard title="销量极差" accent={seriesColor} model={volumeCard} style={{ width: cardRow.width }} />
+                              : <span />}
+                          </div>
+                        )}
+                        {/* 主图 + 成本销毛带同一相对容器：十字线贯穿两图（demo：crosshair） */}
                         <div style={{ position: 'relative' }}>
+                          <div
+                            className="lpl-volume-stack"
+                            tabIndex={0}
+                            role="group"
+                            aria-label={`${p.name}量价与成本销毛对照图。左右方向键切换观察${granNoun}，拖动鼠标选择区间。`}
+                            onKeyDown={(event) => {
+                              if (viewLen <= 0 || activeIdx == null) return;
+                              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                              event.preventDefault();
+                              const next = event.key === 'Home'
+                                ? 0
+                                : event.key === 'End'
+                                  ? viewLen - 1
+                                  : event.key === 'ArrowLeft'
+                                    ? Math.max(0, activeIdx - 1)
+                                    : Math.min(viewLen - 1, activeIdx + 1);
+                              onHoverOf(p.idx)(next);
+                            }}
+                            style={{ position: 'relative' }}
+                          >
                           <VolumeBars
                             geom={geoms[p.idx] ?? null}
                             plotTop={PANEL_GRID_TOP}
                             plotHeight={yCfg.plotHeight}
                             values={panelHidden ? [] : volumes[p.idx]}
                             vMax={panelVMax[p.idx]}
-                            color={p.vis[0]?.color ?? brandColorOf(p.brand)}
-                            hoverIdx={hoverIdxs[p.idx] ?? null}
+                            color={seriesColor}
+                            hoverIdx={activeIdx}
                             axisLimits={volumeLimits[p.idx] ?? { max: null }}
                             onAxisLimit={(kind, value) => onVolumeAxisLimit(p.idx, kind, value)}
-                            rangeMarks={panelHidden ? [] : volumeMarkViews}
+                            selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
                           />
                           <Chart
                             series={panelHidden ? [] : p.vis}
                             granularity={state.granularity}
                             currency={state.currency}
                             priceTypes={state.priceTypes}
-                            tipMode={tipMode}
                             gridLeft={CHART_GRID_LEFT}
-                            gridRight={CHART_GRID_RIGHT} // 右侧预留销量轴列（轴线+最高值输入框不与绘图区重叠）
+                            gridRight={CHART_GRID_RIGHT}
                             gridTop={PANEL_GRID_TOP}
                             chrome={false}
                             axisChrome={false}
@@ -1094,47 +1219,120 @@ export default function VolumePrice() {
                             enableDrill={false}
                             windowKey={`${effWins[p.idx][0]}:${effWins[p.idx][1]}:${p.key}`}
                             yScale={yCfg}
-                            volumes={volumes[p.idx]}
-                            hideNamePills // 第一百一十三轮（评审）：面板内不画产品药丸，产品名在面板头
+                            hideNamePills
                             lineShape={lineShape}
-                            labelMode={labelMode} // 第一百一十四轮（评审）：价格显示 详细/精简
-                            markExtremes={brush != null}
-                            tipBox // 第一百一十四轮（评审）：悬停明细 = 图下方居中预留框
-                            // 与价格走势分离面板一致，图内保留周刻度；底部时间轴继续承载窗口拖拽。
+                            labelMode={labelMode}
+                            markExtremes={false}
                             showXLabels
-                            crosshairIdx={marginFocusIndex((marginCosts[p.idx] ?? []).length, hoverIdxs[p.idx] ?? null, lastValidMarginIndex(marginCosts[p.idx] ?? []))}
-                            onCrosshairMove={onHoverOf(p.idx)}
-                            crosshairY={crossY} // 第一百一十四轮（评审）：横向虚线横跨全部面板
-                            onCrosshairYMove={setCrossY}
-                            brush={brushLive[p.idx] ?? brushes[p.idx] ?? null} // 第118/119轮：拖选高亮随同步态联动或独立
-                            extendCrosshair
-                            showBrushHint={false}
-                            dimOutsideBrush={false}
-                            onBrushChange={onBrushChangeOf(p.idx)}
-                            rangeMarks={priceMarkViews}
+                            crosshairY={crossY}
+                            externalCrosshair
                             onGeom={onGeomOf(p.idx)}
                             emptyHint={panelHidden ? '已隐藏，点击产品名恢复显示' : p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
                           />
-                          {cardPlan && (
-                            <>
-                              {priceCard?.visible && (
-                                <SpreadRangeCard title="价格" model={priceCard} style={{ position: 'absolute', left: cardPlan.price.left, top: cardPlan.price.top, height: cardPlan.price.height, zIndex: 17, boxShadow: 'none' }} />
+                          {/* 指针承接层：悬停列 / 拖选区间 / 横向参考位统一从面板接管 */}
+                          {strip && !panelHidden && !p.failed && viewLen > 0 && (
+                            <PointerShield
+                              plotLeft={strip.plotLeft}
+                              plotTop={PANEL_GRID_TOP}
+                              plotWidth={strip.plotWidth}
+                              plotHeight={yCfg.plotHeight}
+                              extraBottom={GRID.bottom}
+                              n={viewLen}
+                              onHover={onHoverOf(p.idx)}
+                              onBrush={onBrushChangeOf(p.idx)}
+                              onCrossY={setCrossY}
+                            />
+                          )}
+                          {/* 尺寸标注尺（视觉 demo：dimensionRuler）：价格尺贴选区左、销量尺贴
+                              选区右；水平引线从极值点引到尺；极值点与观察点画空心圆 */}
+                          {strip && ranged && slot > 0 && (
+                            <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2, overflow: 'visible' }}>
+                              {priceBand && !priceBand.flat && priceSpread?.spread != null && (() => {
+                                const bandStartX = strip.plotLeft + Math.min(priceBand.startIndex, priceBand.endIndex) * slot;
+                                const compact = strip.plotWidth < 640;
+                                const rulerX = Math.max(strip.plotLeft + 4, bandStartX - (compact ? 16 : 44));
+                                return (
+                                  <>
+                                    {priceBand.dots.map((dot) => {
+                                      const px = xAt(dot.index);
+                                      const x1 = Math.min(px, rulerX);
+                                      const x2 = Math.max(px, rulerX);
+                                      if (x2 - x1 <= 2) return null;
+                                      return <line key={`pl-${dot.index}`} x1={x1} x2={x2} y1={priceYOf(dot.value)} y2={priceYOf(dot.value)} stroke={seriesColor} strokeOpacity={0.48} strokeWidth={1} />;
+                                    })}
+                                    {dimensionRuler({
+                                      x: rulerX,
+                                      yTop: priceYOf(priceBand.high),
+                                      yBottom: priceYOf(priceBand.low),
+                                      color: seriesColor,
+                                      label: `Δ ${formatPrice(Math.round(priceSpread.spread), state.currency)}`,
+                                      side: 'right',
+                                      key: 'price-ruler',
+                                    })}
+                                    {priceBand.dots.map((dot) => (
+                                      <circle key={`pd-${dot.index}`} cx={xAt(dot.index)} cy={priceYOf(dot.value)} r={3.8} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
+                                    ))}
+                                  </>
+                                );
+                              })()}
+                              {volumeBand && !volumeBand.flat && volumeSpread?.spread != null && (() => {
+                                const bandEndX = strip.plotLeft + (Math.max(volumeBand.startIndex, volumeBand.endIndex) + 1) * slot;
+                                const plotRight = strip.plotLeft + strip.plotWidth;
+                                const compact = strip.plotWidth < 640;
+                                const rulerX = Math.min(plotRight - 4, bandEndX + (compact ? 16 : 44));
+                                return (
+                                  <>
+                                    {volumeBand.dots.map((dot) => {
+                                      const px = xAt(dot.index);
+                                      const x1 = Math.min(px, rulerX);
+                                      const x2 = Math.max(px, rulerX);
+                                      if (x2 - x1 <= 2) return null;
+                                      return <line key={`vl-${dot.index}`} x1={x1} x2={x2} y1={volumeYOf(dot.value)} y2={volumeYOf(dot.value)} stroke={seriesColor} strokeOpacity={0.58} strokeWidth={1} />;
+                                    })}
+                                    {dimensionRuler({
+                                      x: rulerX,
+                                      yTop: volumeYOf(volumeBand.high),
+                                      yBottom: volumeYOf(volumeBand.low),
+                                      color: seriesColor,
+                                      label: `Δ ${formatVolume(volumeSpread.spread)}`,
+                                      side: 'left',
+                                      key: 'volume-ruler',
+                                    })}
+                                    {volumeBand.dots.map((dot) => (
+                                      <circle key={`vd-${dot.index}`} cx={xAt(dot.index)} cy={volumeYOf(dot.value)} r={3.8} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
+                                    ))}
+                                  </>
+                                );
+                              })()}
+                              {activePoint?.price != null && activeIdx != null && (
+                                <circle cx={xAt(activeIdx)} cy={priceYOf(activePoint.price)} r={4} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
                               )}
-                              {volumeCard?.visible && (
-                                <SpreadRangeCard title="销量" model={volumeCard} style={{ position: 'absolute', left: cardPlan.volume.left, top: cardPlan.volume.top, height: cardPlan.volume.height, zIndex: 17, boxShadow: 'none' }} />
-                              )}
-                            </>
+                            </svg>
+                          )}
+                          </div>
+                          <MarginCostBand
+                            geom={geoms[p.idx] ?? null}
+                            points={marginPoints}
+                            currency={state.currency}
+                            seriesColor={seriesColor}
+                            hoverIdx={hoverIdxs[p.idx] ?? null}
+                            onHover={onHoverOf(p.idx)}
+                            empty={marginUnavailable}
+                            externalCrosshair
+                            focusIndex={activeIdx}
+                            selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
+                          />
+                          {crossX != null && (
+                            <div aria-hidden style={{ position: 'absolute', left: Math.round(crossX) - 0.5, top: PANEL_GRID_TOP, bottom: 0, width: 1, background: color.hairlineStrong, pointerEvents: 'none', zIndex: 4 }} />
                           )}
                         </div>
-                        <MarginCostBand
-                          geom={geoms[p.idx] ?? null}
-                          points={marginCosts[p.idx] ?? []}
-                          currency={state.currency}
-                          seriesColor={p.vis[0]?.color ?? brandColorOf(p.brand)}
-                          hoverIdx={hoverIdxs[p.idx] ?? null}
-                          onHover={onHoverOf(p.idx)}
-                          empty={marginCostAvailabilityOf(p.spec.isOwn, marginCosts[p.idx] ?? []) === 'empty'}
-                        />
+                        {/* 图下方单周明细卡（视觉 demo：detail-card 三栏网格） */}
+                        <WeekDetailCard model={detail} brand={p.brand} nameText={pill.nameText} romText={pill.romText} />
+                        {/* 脚注行：交互提示 + 口径说明 */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 12, color: color.mute, fontSize: 11, lineHeight: '16px' }}>
+                          <span style={{ whiteSpace: 'nowrap' }}>拖动选择区间 · 移动鼠标查看单周明细</span>
+                          <span style={{ whiteSpace: 'nowrap' }}>{`价格 / 销量为${granNoun}数据，成本 / 销毛为当月模拟值`}</span>
+                        </div>
                         {/* 本图时间轴（第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：
                             同步 = 全图查看同一段时间，拖任一条同步调整；非同步 = 各图独立调整。
                             恒渲染保证切换同步只改联动行为，面板高度与轨道横向位置不变 */}

@@ -28,14 +28,6 @@ export interface RangeSpread {
   samePoint: boolean;
 }
 
-export interface RangeMark {
-  index: number;
-  value: number;
-  label: string;
-  /** max/min = 最高/最低点；same = 只���一个有效点或全部相同，最高＝最低合成一个标记 */
-  kind: 'max' | 'min' | 'same';
-}
-
 /** 区间内最早的最高点与最早的最低点。并列时不改用更晚的点。 */
 export function rangeSpreadOf(
   values: readonly (number | null | undefined)[],
@@ -65,38 +57,59 @@ export function rangeSpreadOf(
   };
 }
 
-export function rangeMarkLabels(spread: RangeSpread, formatValue: (value: number) => string): RangeMark[] {
-  if (!spread.min || !spread.max) return [];
-  if (spread.samePoint) {
-    return [{
-      index: spread.min.index,
-      value: spread.min.value,
-      label: `最高＝最低 ${formatValue(spread.min.value)}`,
-      kind: 'same',
-    }];
-  }
-  return [
-    { index: spread.max.index, value: spread.max.value, label: `最高 ${formatValue(spread.max.value)}`, kind: 'max' },
-    { index: spread.min.index, value: spread.min.value, label: `最低 ${formatValue(spread.min.value)}`, kind: 'min' },
-  ];
+export interface RangeBand {
+  /** 选择区间在当前视图中的起止桶，含两端。填充只铺这段，不向选区外延伸。 */
+  startIndex: number;
+  endIndex: number;
+  high: number;
+  low: number;
+  /** 最高＝最低：只画一条细线，不做有高度的填充。 */
+  flat: boolean;
+  dots: { index: number; value: number }[];
 }
 
-/** 选择区间内的极值，下标换成当前视图桶下标，方便直接画在图上。 */
-export function rangeMarksInView(
+/** 选择区间的上下界。下标已换成当前视图桶下标。 */
+export function rangeBandInView(
   values: readonly (number | null | undefined)[],
   selStart: number,
   selEnd: number,
   viewStart: number,
   valid: (v: number | null | undefined) => v is number,
-  formatValue: (value: number) => string,
-): RangeMark[] {
+): RangeBand | null {
   const start = Math.max(0, Math.min(selStart, selEnd));
   const end = Math.max(selStart, selEnd);
+  const spread = rangeSpreadOf(values.slice(start, end + 1), valid);
+  if (!spread.min || !spread.max || spread.spread == null) return null;
   const offset = start - viewStart;
-  return rangeMarkLabels(rangeSpreadOf(values.slice(start, end + 1), valid), formatValue).map((mark) => ({
-    ...mark,
-    index: mark.index + offset,
-  }));
+  const dots = spread.min.index === spread.max.index
+    ? [{ index: spread.min.index + offset, value: spread.min.value }]
+    : [
+      { index: spread.max.index + offset, value: spread.max.value },
+      { index: spread.min.index + offset, value: spread.min.value },
+    ];
+  return {
+    startIndex: offset,
+    endIndex: end - viewStart,
+    high: spread.max.value,
+    low: spread.min.value,
+    flat: spread.spread === 0,
+    dots,
+  };
+}
+
+/** 区间带的横向范围：从选择起点的桶左缘到终点的桶右缘。 */
+export function rangeBandFrame(
+  plotLeft: number,
+  plotWidth: number,
+  n: number,
+  startIndex: number,
+  endIndex: number,
+): { x: number; width: number } {
+  if (n <= 0 || plotWidth <= 0) return { x: plotLeft, width: 0 };
+  const slot = plotWidth / n;
+  const start = Math.max(0, Math.min(Math.min(startIndex, endIndex), n - 1));
+  const end = Math.max(0, Math.min(Math.max(startIndex, endIndex), n - 1));
+  return { x: plotLeft + start * slot, width: (end - start + 1) * slot };
 }
 
 /**

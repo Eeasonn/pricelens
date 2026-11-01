@@ -1,7 +1,8 @@
 import { useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import type { StripGeom } from '../../chart/PriceTrend/helpers';
-import { color, font, formatPrice } from '../../theme/tokens';
+import { color, font, formatPrice, radius, selectAccent } from '../../theme/tokens';
 import type { MarginCostPoint } from './marginCost';
+import { rangeBandFrame } from './periodSummary';
 import {
   contiguousSegmentRuns,
   costStepPolyline,
@@ -12,7 +13,6 @@ import {
   marginCostDomainOf,
   marginCrossX,
   marginFocusIndex,
-  marginReadoutIndex,
   monthStepSegmentsOf,
   signedBarBox,
   type MonthStepSegment,
@@ -51,12 +51,6 @@ function segmentsOf(points: readonly (MarginCostPoint | null)[]): MonthStepSegme
   })));
 }
 
-function monthLabel(monthId: string): string {
-  const match = /^(\d{4})(\d{2})$/.exec(monthId);
-  if (!match) return monthId;
-  return `${match[1]}年${Number(match[2])}月`;
-}
-
 export default function MarginCostBand(props: {
   geom: StripGeom | null;
   points: readonly (MarginCostPoint | null)[];
@@ -66,6 +60,13 @@ export default function MarginCostBand(props: {
   hoverIdx: number | null;
   onHover: (index: number | null) => void;
   empty?: boolean;
+  /** 垂直定位线由面板统一绘制。 */
+  externalCrosshair?: boolean;
+  /** 面板统一的观察列（悬停列 ?? 区间末周）：传入时覆盖内部「最后有效点」回落，
+   *  让成本点、销毛柱高亮与主图十字线/明细卡始终同列。 */
+  focusIndex?: number | null;
+  /** 与主图同一选择区间的浅蓝背景带（只铺底色，不带边线）。 */
+  selectionBand?: { startIndex: number; endIndex: number } | null;
 }) {
   const showEmpty = props.empty || props.geom == null || lastValidMarginIndex(props.points) == null;
   const domain = useMemo(
@@ -75,9 +76,9 @@ export default function MarginCostBand(props: {
   const segments = useMemo(() => segmentsOf(props.points), [props.points]);
   const columns = useMemo(() => marginColumnMarks(props.points), [props.points]);
   const ticks = useMemo(() => marginAxisTicks(domain), [domain]);
-  const readoutIndex = marginReadoutIndex(props.points, props.hoverIdx);
-  const readout = readoutIndex == null ? null : props.points[readoutIndex] ?? null;
-  const focusIndex = marginFocusIndex(props.points.length, props.hoverIdx, lastValidMarginIndex(props.points));
+  const focusIndex = props.focusIndex !== undefined
+    ? props.focusIndex
+    : marginFocusIndex(props.points.length, props.hoverIdx, lastValidMarginIndex(props.points));
 
   const onMove = (event: ReactMouseEvent<HTMLElement>): void => {
     const geom = props.geom;
@@ -105,7 +106,7 @@ export default function MarginCostBand(props: {
         position: 'relative',
       }}
     >
-      {!showEmpty && focusIndex != null && props.geom && (
+      {!props.externalCrosshair && !showEmpty && focusIndex != null && props.geom && (
         <div
           aria-hidden
           style={{
@@ -121,7 +122,10 @@ export default function MarginCostBand(props: {
         />
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 8px 0', fontSize: 12, lineHeight: '16px', color: color.body }}>
-        <span>成本与销毛（模拟） · 金额/台</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 16 }}>
+          成本与销毛 · 金额/台
+          <span style={{ padding: '1px 6px', borderRadius: radius.pill, background: color.canvasSoft2, color: color.body, fontSize: 11, lineHeight: '14px', whiteSpace: 'nowrap' }}>模拟</span>
+        </span>
         {!showEmpty && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, color: color.mute, fontSize: 10, flexShrink: 0 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -137,22 +141,10 @@ export default function MarginCostBand(props: {
       </div>
       {showEmpty ? (
         <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: color.mute, fontSize: 12 }}>
-          可显示，当前无数据
+          暂无成本 / 销毛数据
         </div>
       ) : (
         <>
-          <div className="tnum" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 8, padding: '2px 8px 0', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 11, lineHeight: '16px', color: color.body }}>
-            {readout ? (
-              <>
-                <span>{monthLabel(readout.monthId)}</span>
-                <span>成本 {formatPrice(Math.round(readout.unitCost), props.currency)}</span>
-                <span>单台销毛 {formatPrice(Math.round(readout.unitMargin), props.currency)}</span>
-                <span>销毛率 {(readout.marginRate * 100).toFixed(1)}%</span>
-              </>
-            ) : (
-              <span style={{ color: color.mute }}>—</span>
-            )}
-          </div>
           <svg
             role="img"
             aria-label="成本阶梯线与销毛独立柱"
@@ -175,8 +167,14 @@ export default function MarginCostBand(props: {
               const crossX = focusIndex == null ? null : marginCrossX(props.geom, focusIndex);
               const focusPoint = focusIndex == null ? null : props.points[focusIndex] ?? null;
               const negative = domain.min < 0;
+              const selBand = props.selectionBand
+                ? rangeBandFrame(props.geom.plotLeft, props.geom.plotWidth, props.geom.n, props.selectionBand.startIndex, props.selectionBand.endIndex)
+                : null;
               return (
                 <>
+                  {selBand && (
+                    <rect x={selBand.x} y={plotTop} width={selBand.width} height={plotHeight} fill={selectAccent} fillOpacity={0.05} />
+                  )}
                   <line x1={plotRight} x2={plotRight} y1={plotTop} y2={plotTop + plotHeight} stroke={color.hairline} strokeWidth={1} />
                   {ticks.map((tick) => {
                     const y = yAt(tick);

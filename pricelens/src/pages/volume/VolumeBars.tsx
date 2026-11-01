@@ -5,8 +5,9 @@
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import type { StripGeom } from '../../chart/PriceTrend/helpers';
-import { color, font } from '../../theme/tokens';
+import { color, font, selectAccent } from '../../theme/tokens';
 import { commitVolumeAxisLimit, volumeAxisClipOf, volumeRangeOf, type VolumeAxisLimits } from './volumeAxis';
+import { rangeBandFrame } from './periodSummary';
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -138,8 +139,8 @@ export default function VolumeBars(props: {
   hoverIdx: number | null;
   axisLimits: VolumeAxisLimits;
   onAxisLimit: (kind: 'max', value: number | null) => void;
-  /** 当前选择区间的销量极值。按销量轴定位，引导线画到极差卡近缘（toX）；缺省画到绘图区右缘。 */
-  rangeMarks?: readonly { index: number; value: number; label: string; toX?: number }[] | null;
+  /** 当前选择区间的背景带（视觉 demo：浅蓝底 + 双侧竖线），铺绘图区全高、只盖选区桶。 */
+  selectionBand?: { startIndex: number; endIndex: number } | null;
 }) {
   const { geom, values, vMax } = props;
   if (!geom || geom.n <= 0 || !(props.plotHeight > 0) || !(vMax > 0)) return null;
@@ -168,12 +169,9 @@ export default function VolumeBars(props: {
     };
   });
 
-  const yOfVolume = (value: number): number => {
-    const ratio = Math.min(1, Math.max(0, (value - axisMin) / axisSpan));
-    return plotBottom - ratio * props.plotHeight;
-  };
-  const volumeMarks = (props.rangeMarks ?? []).filter((mark) => mark.index >= 0 && mark.index < geom.n);
   const axisX = geom.plotLeft + geom.plotWidth + 10;
+  const band = props.selectionBand;
+  const bandFrame = band ? rangeBandFrame(geom.plotLeft, geom.plotWidth, geom.n, band.startIndex, band.endIndex) : null;
   const commit = (value: number | null): void => {
     props.onAxisLimit('max', commitVolumeAxisLimit(props.axisLimits, 'max', value, vMax).max);
   };
@@ -185,6 +183,20 @@ export default function VolumeBars(props: {
   return (
     <>
       <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}>
+        {band && bandFrame && (() => (
+          <g>
+            <rect
+              x={bandFrame.x}
+              y={props.plotTop}
+              width={bandFrame.width}
+              height={props.plotHeight}
+              fill={selectAccent}
+              fillOpacity={0.05}
+            />
+            <line x1={bandFrame.x} x2={bandFrame.x} y1={props.plotTop} y2={plotBottom} stroke={selectAccent} strokeOpacity={0.3} strokeWidth={1} />
+            <line x1={bandFrame.x + bandFrame.width} x2={bandFrame.x + bandFrame.width} y1={props.plotTop} y2={plotBottom} stroke={selectAccent} strokeOpacity={0.3} strokeWidth={1} />
+          </g>
+        ))()}
         {bars.map((bar) => bar == null ? null : (
           <rect
             key={bar.index}
@@ -199,28 +211,6 @@ export default function VolumeBars(props: {
           </rect>
         ))}
       </svg>
-      {volumeMarks.length > 0 && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 16 }}>
-          <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
-            {volumeMarks.map((mark) => {
-              const x = geom.plotLeft + colW * (mark.index + 0.5);
-              const y = yOfVolume(mark.value);
-              const edge = geom.plotLeft + geom.plotWidth;
-              const toX = mark.toX ?? edge;
-              const x1 = Math.min(x, toX);
-              const x2 = Math.max(x, toX);
-              return (
-                <g key={`${mark.index}-${mark.label}`}>
-                  {x2 - x1 > 2 && (
-                    <line x1={x1} x2={x2} y1={y} y2={y} stroke={color.ink} strokeOpacity={0.3} strokeDasharray="2 4" strokeWidth={1} />
-                  )}
-                  <circle cx={x} cy={y} r={3} fill={color.canvas} stroke={color.ink} strokeOpacity={0.45} strokeWidth={1.25} />
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      )}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
         <div style={{ position: 'absolute', left: axisX, top: props.plotTop, width: 1, height: props.plotHeight, background: color.hairline }} />
         <div style={{ position: 'absolute', left: axisX + 8, top: props.plotTop, color: color.mute, fontSize: 10, lineHeight: '12px', whiteSpace: 'nowrap' }}>销量（台）</div>

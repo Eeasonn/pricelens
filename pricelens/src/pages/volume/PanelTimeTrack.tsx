@@ -9,7 +9,6 @@ import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject,
 import type { Granularity } from '../../dataModel/types';
 import { axisTickPlan, hideOverlappingTicks, MIN_WINDOW, panWindow } from '../../chart/PriceTrend/helpers';
 import { color, font, radius, selectAccent, trackColors } from '../../theme/tokens';
-import { ViewWindowCaption } from '../../chart/PriceTrend/XBrush';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 type DragKind = 'start' | 'end' | 'pan';
@@ -174,7 +173,7 @@ export default function PanelTimeTrack(props: {
     >
       <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 20, borderRadius: 5, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
       <div
-        title="拖动调整查看窗口，不改变筛选范围"
+        title="拖动调整查看范围，不改变筛选范围"
         aria-label="平移本图时间段"
         style={{
           position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: 20,
@@ -235,7 +234,12 @@ export default function PanelTimeTrack(props: {
         <span style={gripStyle('end')} />
       </div>
     </div>
-    <ViewWindowCaption />
+    {/* 说明行：与 XBrush 的 ViewWindowCaption 同款度量（marginTop 2 + 行高 16 =
+        VIEW_WINDOW_CAPTION_H，量价页同步按钮按这个高度让位），文案用「查看范围」——
+        「窗口」是工程语，不进 UI 文案 */}
+    <div style={{ fontSize: 11, lineHeight: '16px', color: color.mute, marginTop: 2 }}>
+      查看范围，仅缩放显示，不改变筛选范围
+    </div>
     </div>
   );
 }

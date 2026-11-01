@@ -253,9 +253,8 @@ export interface ChartProps {
   /** 拖选上报：拖动中 committing=false 实时预览；松手 committing=true 提交或清除
    *  （拖距过小视为点击：已有高亮 = 清除，无高亮 = 忽略）。缺省 = 不启用拖选 */
   onBrushChange?: (r: [number, number] | null, committing: boolean) => void;
-  /** 量价区间极差：当前选择区间的折后价极值。toward=left 朝左缘，缺省朝右缘。toX =
-   *  引导线终点（极差卡近缘，留缝后传入）；缺省画到绘图区边缘。缺省不画。 */
-  rangeMarks?: readonly { index: number; value: number; label: string; toward?: 'left' | 'right'; toX?: number }[] | null;
+  /** 垂直定位线由面板统一绘制，图内不再另画一条。 */
+  externalCrosshair?: boolean;
   /** 量价页用左右极差卡表达数值，不再在图中显示「拖动选择时间段」提示。缺省保留。 */
   showBrushHint?: boolean;
   /** 选择区间以外是否盖白幕。量价页关掉，避免卡片和折线上面再蒙一层。缺省盖上。 */
@@ -1011,30 +1010,6 @@ export default function Chart(props: ChartProps) {
       </div>
       {/* ECharts 挂载层（第一百一十四轮：高度不含 tipBox 预留框——canvas 网格仍止于底边距） */}
       <div ref={chartDivRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: chartH, zIndex: 1 }} />
-      {geom && props.rangeMarks && props.rangeMarks.length > 0 && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 16, pointerEvents: 'none' }}>
-          <svg width="100%" height={chartH} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }}>
-            {props.rangeMarks.map((mark) => {
-              if (mark.index < 0 || mark.index >= geom.n) return null;
-              const x = xPxOf(geom, mark.index);
-              const y = yPxOf(geom, mark.value);
-              // 引导线只画「极值点 → 极差卡」这一段（toX = 卡近缘）；没给卡位时退回画到绘图区边缘
-              const edge = mark.toward === 'left' ? geom.plotLeft : geom.plotLeft + geom.plotWidth;
-              const toX = mark.toX ?? edge;
-              const x1 = Math.min(x, toX);
-              const x2 = Math.max(x, toX);
-              return (
-                <g key={`${mark.index}-${mark.label}`}>
-                  {x2 - x1 > 2 && (
-                    <line x1={x1} x2={x2} y1={y} y2={y} stroke={color.ink} strokeOpacity={0.3} strokeDasharray="2 4" strokeWidth={1} />
-                  )}
-                  <circle cx={x} cy={y} r={3} fill={color.canvas} stroke={color.ink} strokeOpacity={0.45} strokeWidth={1.25} />
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      )}
       {empty && (
         <div
           style={{
@@ -1738,7 +1713,7 @@ export default function Chart(props: ChartProps) {
             </div>
           )}
           {/* 十字竖线（DOM 层，替代 ECharts axisPointer）。量价页延伸到容器底，与成本销毛带同列相接。 */}
-          {props.extendCrosshair && (hoverIdx ?? props.crosshairIdx) != null && (hoverIdx ?? props.crosshairIdx)! < geom.n && (
+          {!props.externalCrosshair && props.extendCrosshair && (hoverIdx ?? props.crosshairIdx) != null && (hoverIdx ?? props.crosshairIdx)! < geom.n && (
             <div
               aria-hidden
               style={{
@@ -1753,7 +1728,7 @@ export default function Chart(props: ChartProps) {
               }}
             />
           )}
-          {!props.extendCrosshair && hoverIdx != null && hoverIdx < geom.n && (
+          {!props.externalCrosshair && !props.extendCrosshair && hoverIdx != null && hoverIdx < geom.n && (
             <div
               style={{
                 position: 'absolute',
@@ -1771,7 +1746,7 @@ export default function Chart(props: ChartProps) {
           {/* 跨图参考线（第110轮，评审）：分离模式下其他面板悬停的时间列在本面板
               同列画 1px 虚线（本面板自身悬停 = 上面的实线十字已足够，不叠画）；
               任意面板移出即全部移除 */}
-          {!props.extendCrosshair && props.crosshairIdx != null &&
+          {!props.externalCrosshair && !props.extendCrosshair && props.crosshairIdx != null &&
             props.crosshairIdx < geom.n &&
             hoverIdx == null && (
               <div

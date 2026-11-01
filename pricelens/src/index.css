@@ -438,6 +438,11 @@ button.lpl-map-card:hover {
 .lpl-card-scroll::-webkit-scrollbar-thumb { background: #d6d6d6; border-radius: 4px; }
 .lpl-card-scroll::-webkit-scrollbar-thumb:hover { background: #bdbdbd; }
 
+/* AgentShell 三种工作形态：dock 保持上下文，drawer 给多卡结果更多空间，full 用于长报告。 */
+.lpl-agent-panel[data-agent-mode='dock'] { width: min(440px, 100vw); }
+.lpl-agent-panel[data-agent-mode='drawer'] { width: min(640px, 100vw); }
+.lpl-agent-panel[data-agent-mode='full'] { width: 100vw; }
+
 /* Agent 在平板/手机上占用完整工作区，避免固定窄抽屉遮住筛选器；桌面保留 dock。 */
 @media (max-width: 1023.98px) {
   .lpl-agent-panel { top: 0 !important; width: 100vw !important; border-left: none !important; }
@@ -448,3 +453,45 @@ button.lpl-map-card:hover {
   [data-lpl-forecast-grid] { grid-template-columns: 1fr !important; }
   [data-lpl-intelligence-grid] { grid-template-columns: 1fr !important; }
 }
+
+/* ============================================================
+   量价走势面板（视觉 demo：pricelens-volume-spread-layout-demo）。
+   面板自身是容器查询的容器：同一页面里主产品视图宽、组内对比窄，
+   折叠按面板实际宽度触发，而不是整页视口。
+   ============================================================ */
+.lpl-volume-panel { container-type: inline-size; }
+
+/* 明细卡三栏：面板 <640px 改单列（demo <760px 同语义，按面板宽触发） */
+@container (max-width: 640px) {
+  .lpl-volume-detail { grid-template-columns: 1fr !important; }
+  .lpl-volume-detail-product {
+    padding: 0 0 12px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #ebebeb;
+  }
+  .lpl-volume-detail-sub { display: none; }
+  .lpl-volume-detail-weekly {
+    padding: 12px 0 !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #ebebeb;
+  }
+  .lpl-volume-detail-monthly { padding: 12px 0 0 !important; }
+}
+
+/* 量价图组可聚焦（键盘 ←/→/Home/End 切换观察周）：焦点环与全站按钮同款蓝色 */
+.lpl-volume-stack:focus-visible {
+  outline: 2px solid #0070f3;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* 极差卡入场（demo card-in）：仅系统未开启「减少动态效果」时播放；
+   减少动效下由上方全局规则把动画时长压到 0.01ms，状态变化本身保留 */
+@media (prefers-reduced-motion: no-preference) {
+  .lpl-spread-card { animation: lpl-spread-card-in 160ms cubic-bezier(0.25, 0.8, 0.3, 1); }
+}
+@keyframes lpl-spread-card-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+

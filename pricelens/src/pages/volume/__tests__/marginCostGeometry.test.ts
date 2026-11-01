@@ -9,7 +9,7 @@ import {
   marginCostDomainOf,
   marginCrossX,
   marginFocusIndex,
-  marginReadoutIndex,
+  marginTipModel,
   monthStepSegmentsOf,
   signedBarBox,
 } from '../marginCostGeometry';
@@ -78,12 +78,9 @@ describe('margin cost geometry', () => {
     expect(marginCrossX({ plotLeft: 8, plotWidth: 240, n: 4 }, 3)).toBe(218);
   });
 
-  it('未悬停时读数回到最后一个有效点，悬停空桶不借用别的点', () => {
+  it('未悬停时焦点回到最后一个有效点，悬停空桶仍指该列', () => {
     const points = [null, { id: 1 }, null, { id: 2 }, null];
     expect(lastValidMarginIndex(points)).toBe(3);
-    expect(marginReadoutIndex(points, null)).toBe(3);
-    expect(marginReadoutIndex(points, 1)).toBe(1);
-    expect(marginReadoutIndex(points, 2)).toBeNull();
     expect(marginFocusIndex(points.length, null, 3)).toBe(3);
     expect(marginFocusIndex(points.length, 2, 3)).toBe(2);
   });
@@ -98,12 +95,22 @@ describe('margin cost geometry', () => {
 
   it('空序列没有有效点，单点域仍包含 0', () => {
     expect(lastValidMarginIndex([null, null])).toBeNull();
-    expect(marginReadoutIndex([null], null)).toBeNull();
     const domain = marginCostDomainOf([{ unitCost: 80, unitMargin: 20 }]);
     expect(domain.min).toBeLessThanOrEqual(0);
     expect(domain.max).toBeGreaterThanOrEqual(80);
     expect(marginAxisTicks(domain)).toContain(0);
     expect(marginAxisTicks(domain).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('竞品无成本时明细只标空，悬停空桶不借用上一笔', () => {
+    const money = (value: number) => `$${value}`;
+    expect(marginTipModel({ unavailable: true, point: null, formatMoney: money })).toEqual({ kind: 'empty' });
+    expect(marginTipModel({ unavailable: false, point: null, formatMoney: money })).toEqual({ kind: 'gap' });
+    expect(marginTipModel({
+      unavailable: false,
+      point: { unitCost: 412, unitMargin: 201, marginRate: 0.328 },
+      formatMoney: money,
+    })).toEqual({ kind: 'ready', cost: '$412', margin: '$201', rate: '32.8%' });
   });
 
   it('负销毛柱从零基线向下，正销毛柱向上', () => {
