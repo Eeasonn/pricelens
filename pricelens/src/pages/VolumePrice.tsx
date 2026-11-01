@@ -59,11 +59,11 @@ import { useFilters } from '../state/FiltersContext';
 import usePageViewState from '../state/usePageViewState';
 import type { PlatformSelection, ProductSelection } from '../state/filtersTypes';
 import ChartContentBar from '../components/ChartContentBar';
-import BrandDot, { brandLabelOf } from '../components/BrandMark';
+import { brandLabelOf } from '../components/BrandMark';
 import Chart from '../chart/PriceTrend/Chart';
 import { VIEW_WINDOW_CAPTION_H } from '../chart/PriceTrend/XBrush';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
-import { PillUnit, PlatformRow } from '../chart/PriceTrend/BrandLegendStrip';
+import { PillUnit } from '../chart/PriceTrend/BrandLegendStrip';
 // 卡顶时间筛选簇在顶部筛选条。这里只取查看窗口说明行高度，用来对齐同步按钮。
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
@@ -95,6 +95,7 @@ import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './v
 import VolumeBars from './volume/VolumeBars';
 import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
+import HiddenTray, { type HiddenTrayItem } from './volume/HiddenTray';
 import MarginCostBand from './volume/MarginCostBand';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
 import { marginCrossX } from './volume/marginCostGeometry';
@@ -255,6 +256,43 @@ export default function VolumePrice() {
     if (safeViewMode !== viewMode) setViewMode(safeViewMode);
   }, [safeViewMode, viewMode]);
 
+  // ---- 产品显隐（2026-11-01 设计方案 A：移除式隐藏 + 暂存条）：
+  //      点击面板头药丸 = 该产品面板整体移出网格，被隐藏产品收进面板区下方的
+  //      「已隐藏」暂存条；会话态跨页保留、不进 URL；视图模式切换与
+  //      产品清单/价格类型/币种变化清空（挂进下方 scaleResetKey 复位效果） ----
+  const [hiddenPanels, setHiddenPanels] = usePageViewState<string[]>('volume.hiddenPanels', () => []);
+  const hiddenSet = useMemo(() => new Set(hiddenPanels), [hiddenPanels]);
+  // 视图模式切换（阅读 ↔ 组内对比 / 换组）即清空隐藏集：两视图面板集不同，
+  // 「一次看一组」的心智下从空集开始
+  const switchViewMode = (mode: VolumeViewMode): void => {
+    setViewMode(mode);
+    setHiddenPanels((prev) => (prev.length === 0 ? prev : []));
+  };
+  // 焦点承接（设计 §5.5）：隐藏后药丸随面板卸载，焦点移到暂存条对应迷你药丸；
+  // 迷你药丸恢复后焦点回该面板头药丸；「全部恢复」后落到第一个恢复面板的药丸
+  const pendingFocusRef = useRef<{ where: 'tray' | 'panel'; key: string } | null>(null);
+  const trayItemRefs = useRef(new Map<string, HTMLButtonElement>());
+  const panelPillHostRefs = useRef(new Map<string, HTMLSpanElement>());
+  const registerTrayItem = (key: string, el: HTMLButtonElement | null): void => {
+    if (el) trayItemRefs.current.set(key, el);
+    else trayItemRefs.current.delete(key);
+  };
+  const registerPanelPillHost = (key: string, el: HTMLSpanElement | null): void => {
+    if (el) panelPillHostRefs.current.set(key, el);
+    else panelPillHostRefs.current.delete(key);
+  };
+  useLayoutEffect(() => {
+    const pending = pendingFocusRef.current;
+    if (!pending) return;
+    pendingFocusRef.current = null;
+    if (pending.where === 'tray') {
+      trayItemRefs.current.get(pending.key)?.focus();
+      return;
+    }
+    const pill = panelPillHostRefs.current.get(pending.key)?.querySelector('button.lpl-lg-pill');
+    if (pill instanceof HTMLElement) pill.focus();
+  });
+
   // ---- 面板清单：默认只铺各卡主品；组内对比才展开该卡的主品与竞品 ----
   const panelSpecs = useMemo<PanelSpec[]>(() => {
     const out: PanelSpec[] = [];
@@ -368,6 +406,8 @@ export default function VolumePrice() {
     scaleResetSeenRef.current = scaleResetKey;
     setSliderScale(1);
     setVolumeLimits({});
+    // 产品清单/价格类型/币种变化 → 隐藏集清空（与价格页 hiddenKeys 复位时机对齐）
+    setHiddenPanels((prev) => (prev.length === 0 ? prev : []));
   }, [scaleResetKey, panelSpecs]);
 
   // 粒度切换 → 窗口端点对齐新粒度桶边界（保持同一时间跨度）；面板独立时间轴按桶号
@@ -429,13 +469,17 @@ export default function VolumePrice() {
   // 时间自适应：只按当前画面上的产品重套上方极值。
   // 默认主产品视图不含对比产品，不能沿用价格页按主品+对比产品算出的更宽范围。
   // 组内对比才把该组正在显示的竞品算进跨度。
+  // 产品显隐（2026-11-01 设计 §5.3）：被隐藏面板不进自适应范围——高价长周期
+  // 竞品隐藏后查看范围随之收缩（刻度/范围只看可见面板）。
   // 本 effect 声明在粒度换算之后：切粒度先换桶，自适应范围随后覆盖。
   const adaptiveSeries = useMemo(
     () => volumeAdaptiveSeries(
-      panelData.map((panel) => ({ isMain: panel.spec.isMain, series: panel.series })),
+      panelData
+        .filter((panel) => !hiddenSet.has(panel.spec.key))
+        .map((panel) => ({ isMain: panel.spec.isMain, series: panel.series })),
       safeViewMode,
     ),
-    [panelData, safeViewMode],
+    [panelData, safeViewMode, hiddenSet],
   );
   const span = useMemo(() => seriesSpanRange(adaptiveSeries), [adaptiveSeries]);
   const adaptiveBounds = useMemo(
@@ -566,7 +610,6 @@ export default function VolumePrice() {
   //      = modelId__配置去空格，跨增删产品稳定；React key 另带下标前缀防重挂）序，
   //      null = 数据序；面板态数组仍按下标挂各自面板，重排不串态 ----
   const [panelOrder, setPanelOrder] = useState<string[] | null>(null);
-  const [hiddenPanelKeys, setHiddenPanelKeys] = useState<Set<string>>(() => new Set());
   const [draggingPanel, setDraggingPanel] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // 展示顺序：拖拽换位后记录 key 序；null = 数据序（同价格页 orderedPanels）
@@ -578,6 +621,24 @@ export default function VolumePrice() {
     };
     return [...panelViews].sort((a, b) => idx(a.spec.key) - idx(b.spec.key));
   }, [panelViews, panelOrder, safeViewMode]);
+  // ---- 渲染层过滤（设计 §7 核心手法）：面板态数组（hoverIdxs/geoms/brushes/
+  //      brushLive/volumeLimits/panelWins）全按下标挂全量面板、一律不动；只在
+  //      orderedPanels 之后按隐藏集过滤出可见面板再渲染，天然避免下标错位 ----
+  const visiblePanels = useMemo(() => orderedPanels.filter((p) => !hiddenSet.has(p.spec.key)), [orderedPanels, hiddenSet]);
+  const visibleCount = visiblePanels.length;
+  const hidePanel = (key: string): void => {
+    setHiddenPanels((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    pendingFocusRef.current = { where: 'tray', key };
+  };
+  const restorePanel = (key: string): void => {
+    setHiddenPanels((prev) => prev.filter((k) => k !== key));
+    pendingFocusRef.current = { where: 'panel', key };
+  };
+  const restoreAllPanels = (): void => {
+    const first = (visibleCount > 0 ? orderedPanels.find((p) => hiddenSet.has(p.spec.key)) : orderedPanels[0])?.spec.key;
+    setHiddenPanels((prev) => (prev.length === 0 ? prev : []));
+    if (first) pendingFocusRef.current = { where: 'panel', key: first };
+  };
   // 拖拽落点 = 把被拖面板插到目标面板当前位置（同价格页 movePanelTo）
   const movePanelTo = (dragKey: string, targetKey: string): void => {
     if (dragKey === targetKey) return;
@@ -618,6 +679,19 @@ export default function VolumePrice() {
     };
   };
 
+  // 暂存条清单：跟随当前展示序（拖拽换位序优先）；产品已从筛选器移除的隐藏项
+  // 不再出现（面板 key 不在清单里即随暂存条消失）。全隐藏时空态承担恢复，
+  // 暂存条不重复渲染（设计 §4.A.5）。
+  const trayItems = useMemo<HiddenTrayItem[]>(() => {
+    if (panelCount > 0 && visibleCount === 0) return [];
+    return orderedPanels
+      .filter((p) => hiddenSet.has(p.spec.key))
+      .map((p) => {
+        const pill = pillOf(p);
+        return { key: p.spec.key, brand: p.brand, nameText: pill.nameText, romText: pill.romText };
+      });
+  }, [orderedPanels, hiddenSet, panelCount, visibleCount]);
+
   const toggleStoreSync = (p: (typeof panelViews)[number]): void => {
     if (!p.spec.isMain) return;
     const card = state.mains.find((item) => item.id === p.spec.cardId);
@@ -639,8 +713,12 @@ export default function VolumePrice() {
     setStoreSyncMap((prev) => ({ ...prev, [cardId]: true }));
   };
 
-  // ---- 共享价格 Y 轴：三面板可见系列并集算一次（步长滞回 + 刷选冻结） ----
-  const visUnion = useMemo(() => panelViews.flatMap((p) => p.vis), [panelViews]);
+  // ---- 共享价格 Y 轴：可见面板系列并集算一次（步长滞回 + 刷选冻结）。
+  //      被隐藏面板不进并集（设计 §5.3：隐藏即退出并集、刻度收缩，与价格页口径一致） ----
+  const visUnion = useMemo(
+    () => panelViews.filter((p) => !hiddenSet.has(p.spec.key)).flatMap((p) => p.vis),
+    [panelViews, hiddenSet],
+  );
   const scaleRef = useRef<YScale | null>(null);
   const yCfg = useMemo(() => {
     if (adjusting && scaleRef.current) return scaleRef.current;
@@ -830,7 +908,7 @@ export default function VolumePrice() {
               <nav aria-label="组内对比切换" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: space.sm }}>
                 <button
                   type="button"
-                  onClick={() => setViewMode({ kind: 'mains' })}
+                  onClick={() => switchViewMode({ kind: 'mains' })}
                   style={{ border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 12, cursor: 'pointer' }}
                 >
                   ← 返回主产品视图
@@ -842,7 +920,7 @@ export default function VolumePrice() {
                       key={card.id}
                       type="button"
                       aria-pressed={active}
-                      onClick={() => setViewMode({ kind: 'group', cardId: card.id })}
+                      onClick={() => switchViewMode({ kind: 'group', cardId: card.id })}
                       style={{
                         height: 24,
                         padding: '0 8px',
@@ -913,36 +991,64 @@ export default function VolumePrice() {
                   >
                     在上方筛选器选择产品后，这里按所选产品铺开量价走势
                   </div>
+                ) : visibleCount === 0 ? (
+                  // 全隐藏空态（设计 §4.A.5）：允许隐藏到零，虚线框空态 + 居中「全部恢复」
+                  // 出口；此时暂存条不再重复渲染
+                  <div
+                    style={{
+                      padding: '48px 0',
+                      textAlign: 'center',
+                      fontSize: fontSize.bodySm,
+                      color: color.mute,
+                      border: `1px dashed ${color.hairline}`,
+                      borderRadius: radius.card,
+                    }}
+                  >
+                    已隐藏全部产品
+                    <div style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        onClick={restoreAllPanels}
+                        style={{
+                          height: 28,
+                          padding: '0 16px',
+                          border: `1px solid ${color.hairline}`,
+                          borderRadius: radius.control,
+                          background: color.canvas,
+                          color: color.ink,
+                          font: 'inherit',
+                          fontSize: fontSize.caption,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        全部恢复
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   // 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
                   // 均分一行；>3 个不折行，横向拖动查看（轨道宽 = N/3 × 100%，每格
-                  // 恒为视口 1/3 宽）
+                  // 恒为视口 1/3 宽）。隐藏后按可见数重算
                   <div className="lpl-card-scroll" style={{ overflowX: 'auto', overflowY: 'hidden', padding: `${reading ? 0 : SCROLL_PAD_TOP}px 0 0` }}>
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: `repeat(${panelCount}, minmax(0, 1fr))`,
+                        gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))`,
                         gap: reading ? 0 : space.md,
-                        width: `${(panelCount / Math.min(panelCount, 3)) * 100}%`,
+                        width: `${(visibleCount / Math.min(visibleCount, 3)) * 100}%`,
                       }}
                     >
                     {/* 第一百九十一轮（Eason 五点）：渲染序 = 拖拽换位序（orderedPanels，
-                        panelOrder 缺省回落数据序）；拖柄拖到目标面板松手换位 */}
-                    {orderedPanels.map((p, panelIndex) => {
+                        panelOrder 缺省回落数据序）；拖柄拖到目标面板松手换位。
+                        2026-11-01 显隐改版：渲染前按隐藏集过滤（渲染层过滤），grid 列数
+                        与轨道宽按可见数重算 */}
+                    {visiblePanels.map((p, panelIndex) => {
                       const pill = pillOf(p);
-                      const panelHidden = !reading && hiddenPanelKeys.has(p.spec.key);
-                      const toggleHidden = (): void => {
-                        setHiddenPanelKeys((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(p.spec.key)) next.delete(p.spec.key);
-                          else next.add(p.spec.key);
-                          return next;
-                        });
-                      };
                       const row = summaryRows.find((item) => item.key === p.key);
                       const viewStart = effWins[p.idx]?.[0] ?? 0;
                       const brush = brushLive[p.idx] ?? brushes[p.idx] ?? null;
-                      const ranged = brush != null && !!row && !row.failed && !panelHidden;
+                      const ranged = brush != null && !!row && !row.failed;
                       const windowLo = row ? Math.min(row.windowStart, row.windowEnd) : 0;
                       const windowHi = row ? Math.max(row.windowStart, row.windowEnd) : -1;
                       const volumeSlice = row ? row.volumes.slice(windowLo, windowHi + 1) : [];
@@ -1094,39 +1200,37 @@ export default function VolumePrice() {
                         )}
                         <div style={{ height: PANEL_HEAD_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, minWidth: 0 }}>
                           <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: reading ? 'flex-start' : 'center' }}>
-                          {reading ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0, maxWidth: '100%' }}>
-                              <PlatformRow pill={pill} dimmed={false} />
-                              <div style={{ minWidth: 0, maxWidth: '100%' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                                  <BrandDot brand={p.brand} size={6} />
-                                  <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pill.brandLabel}</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, marginTop: 1 }}>
-                                  <span style={{ fontSize: 12, lineHeight: '16px', fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pill.nameText}</span>
-                                  {pill.romText && (
-                                    <span className="tnum" style={{ flexShrink: 0, fontSize: 10, lineHeight: '14px', fontWeight: 600, padding: '0 6px', borderRadius: radius.pill, color: selectSoftInk, background: selectSoft, fontFamily: font.family, fontVariantNumeric: 'tabular-nums' }}>{pill.romText}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                          <PanelHeader
-                            brand={p.brand}
-                            name={p.name}
-                            isMain={p.spec.isMain}
-                            syncActive={storeSyncMap[p.spec.cardId] === true}
-                            onStoreSync={p.spec.isMain ? () => toggleStoreSync(p) : undefined}
-                          >
-                            <PillUnit pill={{ ...pill, hidden: panelHidden }} dimmed={false} onToggle={toggleHidden} onHover={() => {}} />
-                          </PanelHeader>
-                          )}
+                            {reading ? (
+                              // 阅读视图面板头药丸化（2026-11-01 设计 §4.A.1）：信息结构不变
+                              //（平台行 + 品牌行 + 名称行 + 配置 chip），点击 = 隐藏该产品面板
+                              <span
+                                ref={(el) => registerPanelPillHost(p.spec.key, el)}
+                                style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0, maxWidth: '100%' }}
+                              >
+                                <PillUnit pill={pill} dimmed={false} onToggle={hidePanel} onHover={() => {}} />
+                              </span>
+                            ) : (
+                              <PanelHeader
+                                brand={p.brand}
+                                name={p.name}
+                                isMain={p.spec.isMain}
+                                syncActive={storeSyncMap[p.spec.cardId] === true}
+                                onStoreSync={p.spec.isMain ? () => toggleStoreSync(p) : undefined}
+                              >
+                                <span
+                                  ref={(el) => registerPanelPillHost(p.spec.key, el)}
+                                  style={{ display: 'inline-flex', minWidth: 0 }}
+                                >
+                                  <PillUnit pill={pill} dimmed={false} onToggle={hidePanel} onHover={() => {}} />
+                                </span>
+                              </PanelHeader>
+                            )}
                           </div>
                           {safeViewMode.kind === 'mains' && p.spec.isMain && (state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0) > 0 && (
                             <button
                               type="button"
                               aria-label={`查看 ${p.name} 所在组的 ${state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0} 款对比产品`}
-                              onClick={() => setViewMode({ kind: 'group', cardId: p.spec.cardId })}
+                              onClick={() => switchViewMode({ kind: 'group', cardId: p.spec.cardId })}
                               style={{ flex: '0 0 auto', border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 11, lineHeight: '14px', cursor: 'pointer', whiteSpace: 'nowrap' }}
                             >
                               本组对比（{state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0}）
@@ -1177,7 +1281,7 @@ export default function VolumePrice() {
                               </button>
                             </span>
                           ) : (
-                            !panelHidden && !p.failed && row && (
+                            !p.failed && row && (
                               <span style={{ color: color.mute, fontSize: 11, lineHeight: '14px', whiteSpace: 'nowrap' }}>拖动图表选择区间</span>
                             )
                           )}
@@ -1219,7 +1323,7 @@ export default function VolumePrice() {
                             geom={geoms[p.idx] ?? null}
                             plotTop={PANEL_GRID_TOP}
                             plotHeight={yCfg.plotHeight}
-                            values={panelHidden ? [] : volumes[p.idx]}
+                            values={volumes[p.idx]}
                             vMax={panelVMax[p.idx]}
                             color={seriesColor}
                             hoverIdx={activeIdx}
@@ -1228,7 +1332,7 @@ export default function VolumePrice() {
                             selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
                           />
                           <Chart
-                            series={panelHidden ? [] : p.vis}
+                            series={p.vis}
                             granularity={state.granularity}
                             currency={state.currency}
                             priceTypes={state.priceTypes}
@@ -1250,10 +1354,10 @@ export default function VolumePrice() {
                             crosshairY={crossY}
                             externalCrosshair
                             onGeom={onGeomOf(p.idx)}
-                            emptyHint={panelHidden ? '已隐藏，点击产品名恢复显示' : p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
+                            emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
                           />
                           {/* 指针承接层：悬停列 / 拖选区间 / 横向参考位统一从面板接管 */}
-                          {strip && !panelHidden && !p.failed && viewLen > 0 && (
+                          {strip && !p.failed && viewLen > 0 && (
                             <PointerShield
                               plotLeft={strip.plotLeft}
                               plotTop={PANEL_GRID_TOP}
@@ -1380,10 +1484,15 @@ export default function VolumePrice() {
                   </div>
                 )}
           </div>
-      </div>
+          </div>
       </div>
       </div>
 
+      {/* 已隐藏暂存条（设计 §4.A.3）：面板区下方、卡内底部，不入横滚区——
+          被隐藏产品的恢复入口；无隐藏或全隐藏（空态承担）时不渲染 */}
+      {trayItems.length > 0 && (
+        <HiddenTray items={trayItems} onRestore={restorePanel} onRestoreAll={restoreAllPanels} registerItem={registerTrayItem} />
+      )}
       </section>
     </>
   );
