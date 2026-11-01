@@ -72,3 +72,24 @@
 - 静态链：design:check ✅、design:lint 0-0 ✅、typecheck ✅、test 536/536 ✅、verify 46/47（唯一 fail = 根目录 PriceLens.html 未与 dist 一致——工作区含并行 WIP 不可 build，提交时按干净树重建后即过）。
 - 浏览器审计（Playwright + Chromium 1219 内核，1440/390 双视口）：价格走势/量价走势/量价预测/配置/预警/情报中心全页无横向溢出、无 pageerror；预测页三页签导航、币种 chip、无「我司」、华为份额压力文案、档位小标、标注尺贴边全区间钳制均实测通过；点击选单周/键盘切观察周/拖选/清除交互逐项复验通过；图像审查确认档位小标可见且与刻度区分、标注尺标签框在绘图区内。
 - 审查排除项：overview/pricing 两页当前在 PageContext.DISABLED_PAGES 中不可达，其死代码路径问题未计入。
+
+## 五·二、追修记录（2026-11-01 晚 · 第三节未修问题 7 项收口）
+
+> 在 dfd1482 之上继续（期间并行会话追加了 2235a89 / 12f91a2 两笔纯设计文档提交，与本次改动零交集）。
+> 边界：并行会话 WIP（agent/**、AlertCenter、Copilot/**、DataHelpModal、PageHeader、App、index.css、tokens、FiltersContext、navBus、alerts、AlertsPage、server/**、docs/briefs/、docs/design/、竞品自动匹配清单删除）一律未动未混入；只本地 commit，未推送。PriceLens.html 按干净树（HEAD 12f91a2 + 本次补丁）重建。
+
+| # | 问题 | 处理结果 |
+|---|---|---|
+| 1 | P2 预测页双导航同页两个 aria-current="page" | ✅ **已修（ChartContentBar 侧降级，未碰 PageHeader WIP）**：预测页签保留视觉选中（墨色下划线 + 600 字重）但省略 aria-current，同页唯一程序化当前页标记 = 页头那枚；新增 Tab suppressCurrent 属性 + 代码注释，surface brief 例外记录同步。浏览器实测：预测页 aria-current 仅 1 处且在页头；dashboard / 量价页仍各唯一。WIP 落地退役页头页签后还原（brief 已记） |
+| 2 | P3 antd 弃用告警 ×2 + favicon 404 | ✅ **已修**：① `destroyTooltipOnHide` → `destroyOnHidden`（antd 5.29 实测安装版 API，6 处：PlatformCompareView ×2、BrandLegendStrip、PlatformBox、ProductPickerModal、TemplateEditorFlyout）；② XBrush RangePicker 删冗余 `dropdownClassName`（`classNames.popup.root` 原本已在用，删后弹层类名不变）；③ index.html 内联 data-URI favicon（墨底白 P，离线单文件自包含，无外部资源）。浏览器实测：控制台零 antd 告警、零 404、零 pageerror |
+| 3 | P3 What-if 风险周不含库存穿零周 | ✅ **已修（按建议，用户已同意）**：`riskWeeks` 扩为 `{week, kind: 'stockout' \| 'negative'}`，风险周 = 截断周 ∪ 期末库存 < 0 周（同周并存按截断归组，与主账「截断」标签一致）；What-if 读数分两行「草稿下风险周 · 截断 / · 库存穿零」，超 6 周显式计数「等 N 周」（不静默截断）；顺手移除该卡从未渲染的 `signed` 死字段。surface brief 例外记录 + 模型测试 +2 组。浏览器实测四态：基准 = 暂无/暂无；供给 −20% → 截断 13 周、穿零暂无；价 −10% + 供给 +20% → 截断暂无、穿零 W20–W24 |
+| 4 | P3 volumeLimits 按下标存（删中间面板错位） | ✅ **已修**：改按面板 key（`modelId__配置`）Record 存储；新 `fitVolumeLimitsByKey`（保已有键限位 / 新键补自动 / 移除键清除 / 无变化返回原引用），独立 effect 按面板 key 签名收纳（同数换成员也覆盖）；换产品 / 价格类型 / 币种的整表复位（scaleResetKey）保留。纯函数测试 +3 组（删中键 / 引用稳定 / 空表首收） |
+| 5 | P3 Chart 与 SplitAxisColumn 档位带人工同款 | ✅ **已修**：抽 `TierBand.tsx` 公共组件（梯子区块 + 顶部「价格档位」小标），chartModel 导出 `TierBox` 类型；逐像素一致由构造保证——两组渲染的样式对象原样迁移，唯一口径差异 = 主图小标补 `Math.max(0, ·)` 钳制与显式 `height: 13`（主图 plotTop ≥ 13，渲染无变化），差异已在组件头注说明。浏览器实测：dashboard 主图与量价页分离轴列小标 + 梯子均在位（各 2 档区块） |
+| 6 | P3 PointerShield / 量价交互层无组件级测试 | ✅ **已建基建并补测**：devDeps 新增 jsdom 30 + @testing-library/react 16（+ @testing-library/dom）；新增 `PointerShield.test.tsx` 7 组（悬停列换算 / 参考位钳绘图区 / 点击=单周 / 拖选提交 / 反向拖选有序闭区间 / pointerCancel 回滚 / 越缘钳边缘桶不冻结）与 `VolumeBars.test.tsx` 7 组（缺采桶不画柱 / 悬停列加亮 / 手动上限超限提示 / 编辑器 Enter 提交 / 清空恢复自动 / Escape 取消保快照 / 自动手动标签）。注：VolumePrice 整页挂载依赖 Chart 实测几何上报（jsdom 无布局），交互层以 PointerShield + VolumeBars（= volumeLimits 交互面）直测覆盖 |
+| 7 | P3 预测页 24 行表无虚拟化 | **保持现状**（第三节结论：数据量固定 24 周、性能无压力、极窄面板局部横滚为既有设计） |
+
+**追修后全套静态链**：design:check ✅、design:lint 0 error 0 warning ✅、typecheck ✅、test **554/554** ✅（536 → 554，+18）、verify **47/47** ✅（PriceLens.html 干净树重建后逐字节一致，5.50MB）、build ✅（devDeps 变更含 jsdom/RTL，不影响产物体积口径外的运行时）。
+
+**追修后浏览器复验**（Playwright + 本机 Chrome，1440/390 双视口）：dashboard / 量价预测 / 量价走势三页均无横向溢出、无 pageerror、无 404、控制台无 antd 弃用告警；预测页 aria-current 唯一（页头）且图表页签视觉选中保留（600 字重 + 墨色下划线实测）；量价页档位带双路径（Chart / SplitAxisColumn）在位，销量轴限位「输入 500 → 手动 + 超出当前上限 → 清空恢复自动」实测通过。
+
+**遗留与环境**：/tmp/pl-clean 临时 worktree 因会话权限未能 `git worktree remove`（目录在 /tmp，重启自清；如需即刻清理：`git worktree remove --force /tmp/pl-clean`）；5174 dev server 留跑。

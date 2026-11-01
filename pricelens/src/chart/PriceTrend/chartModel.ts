@@ -726,6 +726,14 @@ export function collectTierValues(series: Series[], priceTypes: PriceTypes): num
   return collectVisibleValues(series, priceTypes);
 }
 
+/** 档位带区块（TierBand 渲染契约）：top/h 为调用方坐标系内的绝对定位值。 */
+export interface TierBox {
+  label: string;
+  top: number;
+  h: number;
+  empty: boolean;
+}
+
 /** 档位带按段裁剪：档位只画在与其值域相交的段上（跨断裂的档不会画出"跨越"错觉）。
  *  阶梯按产业取自 dimTier（tierBandsOf）；第三十二轮：完全无数据的档不再整档
  *  消失——标记 empty 交渲染层画虚线占位框（第八轮"空档不画"针对的是实心框像
@@ -735,9 +743,9 @@ export function buildTierBoxes(p: {
   geom: Geom | null;
   tierValues: number[];
   industry: Industry;
-}): { label: string; top: number; h: number; empty: boolean }[] {
+}): TierBox[] {
   if (!p.enabled || !p.geom) return [];
-  const out: { label: string; top: number; h: number; empty: boolean }[] = [];
+  const out: TierBox[] = [];
   for (const tier of tierBandsOf(p.industry)) {
     const tHi = tier.max ?? Number.POSITIVE_INFINITY;
     const hasData = p.tierValues.some((v) => v >= tier.min && v < tHi);

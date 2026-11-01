@@ -237,7 +237,6 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
             key={pickerMode}
             aria-label="时间范围筛选器"
             className="xbrush-range-picker"
-            dropdownClassName="xbrush-range-popup"
             classNames={{ popup: { root: 'xbrush-range-popup' } }}
             value={pickerValue}
             picker={pickerMode}

@@ -60,6 +60,27 @@ export function commitVolumeAxisLimit(
   return next;
 }
 
+/** 销量轴限位表按面板 key 收纳（2026-11-01 审计 P3，替代按下标存）：面板成员
+ *  变化时保留已有键的限位、新键补自动、已移除面板的键清除——删中间面板不再
+ *  把限位平移到下一张。键集与值都未变化时返回原引用，避免无谓重渲染。 */
+export function fitVolumeLimitsByKey(
+  prev: Record<string, VolumeAxisLimits>,
+  keys: readonly string[],
+): Record<string, VolumeAxisLimits> {
+  const next: Record<string, VolumeAxisLimits> = {};
+  let changed = false;
+  for (const key of keys) {
+    const current = prev[key];
+    if (current) next[key] = current;
+    else {
+      next[key] = { max: null };
+      changed = true;
+    }
+  }
+  if (!changed && Object.keys(prev).length === keys.length) return prev;
+  return next;
+}
+
 export interface VolumeAxisClip {
   clipped: boolean;
   dataMax: number;

@@ -13,12 +13,11 @@ import { buildTierBoxes, buildTickRows, thinTickRows, Y_TICK_FONT } from './char
 import {
   GRID,
   TICK_DASH_W,
-  TIER_LABEL_W,
   axisChrome,
-  tierLabelShort,
   type Geom,
   type YScale,
 } from './helpers';
+import TierBand from './TierBand';
 import type { CurrencyMode, Industry } from '../../dataModel/types';
 import { color } from '../../theme/tokens';
 import YLimitHandles, { type YLimitState } from './YLimitHandles';
@@ -62,72 +61,16 @@ export default function SplitAxisColumn(props: {
   const tierBoxes = buildTierBoxes({ enabled: chrome.tierWidth > 0, geom, tierValues: props.tierValues, industry: props.industry });
   return (
     <div style={{ position: 'relative', width: axisW, height: panelGridTop + scale.plotHeight + GRID.bottom }}>
-      {/* 价格档位常驻小标（2026-11-01 审计 P2-3）：贴绘图区顶上方，把档位梯子与
-          右侧 Y 刻度数字区分开（此前只有悬停 title 可知这是档位带）。不能放轴列
-          顶部空气带——分离模式那里被 Y 轴上下限输入盒（不透明底 zIndex 8）盖住
-          （2026-11-01 审查 P2）；与 Chart.tsx 主图轴区同口径定位。 */}
-      {tierBoxes.length > 0 && (
-        <span
-          title="价格档位（USD）"
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: Math.max(0, panelGridTop - 13),
-            height: 13,
-            lineHeight: '13px',
-            fontSize: 8,
-            color: color.mute,
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none',
-          }}
-        >
-          价格档位
-        </span>
-      )}
-      {/* 档位区块（仅 USD）：贴轴列左缘的整块竖向色带，档位文字单行居左
-          （实心 = 档内有数据，虚线 = 空档占位）——与主图同款 */}
-      {tierBoxes.map((tb, i) => (
-        <div
-          key={`tier-${tb.label}-${i}`}
-          title={`价格档位 ${tb.label}（USD）${tb.empty ? '· 当前无产品' : ''}`}
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: tb.top,
-            width: chrome.tierWidth,
-            height: tb.h,
-            boxSizing: 'border-box',
-            border: tb.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`,
-            background: tb.empty ? 'transparent' : i % 2 === 0 ? color.canvasSoft2 : color.canvasSoft,
-            display: 'flex',
-            alignItems: 'center',
-            overflow: 'hidden',
-            pointerEvents: 'none',
-          }}
-        >
-          <span
-            style={{
-              // 关「Y 刻度线」时档位文字居中整个轴区宽度（第九十一轮）
-              width: showYTicks ? TIER_LABEL_W : chrome.tierWidth,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 9,
-              lineHeight: '11px',
-              color: tb.empty ? color.mute : color.body,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {(() => {
-              // 恒三行竖排（第九十三轮：矮档不再退化单行）
-              const parts = tierLabelShort(tb.label).split('~');
-              const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(tb.label)];
-              return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
-            })()}
-          </span>
-        </div>
-      ))}
+      {/* 价格档位带（梯子 + 顶部小标）：与主图 Chart.tsx 共用 TierBand 公共组件
+          （2026-11-01 审计 P3 抽取，两处逐像素同款由构造保证）。小标贴绘图区顶
+          上方——不放轴列顶部空气带，分离模式那里被 Y 轴上下限输入盒（不透明底
+          zIndex 8）盖住（2026-11-01 审查 P2）；与主图轴区同口径定位。 */}
+      <TierBand
+        tierBoxes={tierBoxes}
+        tierWidth={chrome.tierWidth}
+        showYTicks={showYTicks}
+        plotTop={panelGridTop}
+      />
       {/* Y 刻度标签（随「Y 刻度线」开关）：USD 时叠画在档位区块右段（zIndex 2） */}
       {showYTicks && rows.map((t) => (
           <div

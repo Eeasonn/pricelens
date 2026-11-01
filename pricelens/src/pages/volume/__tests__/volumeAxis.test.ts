@@ -3,7 +3,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { MIN_WINDOW } from '../../../chart/PriceTrend/helpers';
-import { commitVolumeAxisLimit, fmtVolume, normalizePanelWindow, volumeAxisClipOf, volumeRangeOf, vMaxOf } from '../volumeAxis';
+import { commitVolumeAxisLimit, fitVolumeLimitsByKey, fmtVolume, normalizePanelWindow, volumeAxisClipOf, volumeRangeOf, vMaxOf } from '../volumeAxis';
 
 describe('normalizePanelWindow', () => {
   it('未单独调整过（null）→ 回落共享窗口（钳入可调全域）', () => {
@@ -42,6 +42,28 @@ describe('volumeAxisClipOf', () => {
 
   it('空数据不提示截断', () => {
     expect(volumeAxisClipOf([null], { max: 1000 }, 2000).clipped).toBe(false);
+  });
+});
+
+describe('fitVolumeLimitsByKey（限位表按面板 key 收纳，2026-11-01 审计 P3）', () => {
+  it('删中间面板：余下键各留各的限位，被删键清除，新键补自动', () => {
+    const prev = { a: { max: 100 }, b: { max: 200 }, c: { max: null } };
+    // 删除中间面板 b
+    expect(fitVolumeLimitsByKey(prev, ['a', 'c'])).toEqual({ a: { max: 100 }, c: { max: null } });
+    // 新增面板 d
+    expect(fitVolumeLimitsByKey(prev, ['a', 'b', 'c', 'd'])).toEqual({ a: { max: 100 }, b: { max: 200 }, c: { max: null }, d: { max: null } });
+    // 同数置换成员（换产品）：旧键全清、新键自动
+    expect(fitVolumeLimitsByKey(prev, ['x', 'y', 'z'])).toEqual({ x: { max: null }, y: { max: null }, z: { max: null } });
+  });
+
+  it('键集与值未变化时返回原引用（避免无谓重渲染）', () => {
+    const prev = { a: { max: 100 }, b: { max: null } };
+    expect(fitVolumeLimitsByKey(prev, ['a', 'b'])).toBe(prev);
+    expect(fitVolumeLimitsByKey({}, [])).toEqual({});
+  });
+
+  it('空表面板成员首次收纳：全部补自动', () => {
+    expect(fitVolumeLimitsByKey({}, ['a', 'b'])).toEqual({ a: { max: null }, b: { max: null } });
   });
 });
 

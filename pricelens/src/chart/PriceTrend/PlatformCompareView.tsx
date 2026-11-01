@@ -389,7 +389,7 @@ function AddShopPill({
       open={open}
       arrow={false}
       placement="bottomLeft"
-      destroyTooltipOnHide
+      destroyOnHidden
       classNames={{ root: 'lpl-cascade-popover' }}
       styles={{ body: { padding: 0 } as const }}
       onOpenChange={(next) => {
@@ -784,7 +784,7 @@ export default function PlatformCompareView(props: {
                     onOpenChange={(o) => setEditId(o ? sh.id : null)}
                     arrow={false}
                     placement="bottomLeft"
-                    destroyTooltipOnHide
+                    destroyOnHidden
                     classNames={{ root: 'lpl-cascade-popover' }}
                     styles={{ body: { padding: 0 } as const }}
                     content={

@@ -71,6 +71,23 @@ describe('简单版量价预测模型 · 供给截断与库存链', () => {
     const stressed = computeForecast(forecastFixture, { priceDeltaPct: -10, promoDeltaPct: 15, supplyDeltaPct: -20 });
     expect(stressed.weeks.every((week) => week.so <= week.available)).toBe(true);
     expect(stressed.scenario.riskWeeks.length).toBeGreaterThan(0);
+    expect(stressed.scenario.riskWeeks.every((entry) => entry.week.startsWith('W'))).toBe(true);
+  });
+
+  it('风险周读数并入库存穿零周（2026-11-01 拍板）：截断与期末库存 < 0 的预测周都进入，同周并存按截断归组', () => {
+    const oversold = computeForecast(forecastFixture, { priceDeltaPct: -10, promoDeltaPct: 0, supplyDeltaPct: 20 });
+    const negativeWeeks = oversold.weeks.slice(current + 1).filter((week) => week.inventory < 0).map((week) => week.week);
+    expect(negativeWeeks.length).toBeGreaterThan(0);
+    expect(oversold.scenario.riskWeeks.filter((entry) => entry.kind === 'negative').map((entry) => entry.week)).toEqual(negativeWeeks);
+    // 每条风险周都能回到主账事实：截断 = stockout 成立，穿零 = inventory < 0
+    for (const entry of oversold.scenario.riskWeeks) {
+      const week = oversold.weeks.find((item) => item.week === entry.week);
+      expect(week).toBeDefined();
+      if (entry.kind === 'stockout') expect(week?.stockout).toBe(true);
+      else expect(week?.inventory).toBeLessThan(0);
+    }
+    // 基准（无草稿）预测窗口无截断周时读数为空
+    expect(baseline.scenario.riskWeeks.filter((entry) => entry.kind === 'stockout')).toEqual([]);
   });
 });
 

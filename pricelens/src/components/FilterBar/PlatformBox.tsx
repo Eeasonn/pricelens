@@ -268,7 +268,7 @@ export default function PlatformBox() {
       }}
       arrow={false}
       placement="bottomRight"
-      destroyTooltipOnHide
+      destroyOnHidden
       classNames={{ root: 'lpl-cascade-popover' }}
       styles={{ body: { padding: 0 } as const }}
       content={

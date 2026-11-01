@@ -50,6 +50,13 @@ const SLIDERS: SliderSpec[] = [
   },
 ];
 
+/** 风险周读数：最多列 6 周，超出显式计数（不静默截断）；空 = 暂无。 */
+const fmtRiskWeeks = (weeks: string[]): string => {
+  if (weeks.length === 0) return '暂无';
+  if (weeks.length <= 6) return weeks.join('、');
+  return `${weeks.slice(0, 6).join('、')} 等 ${weeks.length} 周`;
+};
+
 export default function WhatIfDraft({
   draft,
   scenario,
@@ -94,9 +101,12 @@ export default function WhatIfDraft({
       ))}
       <div style={{ display: 'grid', gap: 6, padding: `${space.md - 2}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
         {[
-          { label: `剩余预测 SO（${forecastRangeLabel}）`, value: `${fmtUnits(scenario.forecastSo)} 台`, signed: `${scenario.soDelta > 0 ? '+' : scenario.soDelta < 0 ? '−' : ''}${fmtUnits(Math.abs(scenario.soDelta))} 台 vs 基准` },
-          { label: '剩余预测销毛变化', value: `${scenario.marginDelta > 0 ? '+' : scenario.marginDelta < 0 ? '−' : ''}${fmtMoney(Math.abs(scenario.marginDelta))}`, signed: `基准 ${fmtMoney(scenario.baselineMargin)}` },
-          { label: '草稿下风险周', value: scenario.riskWeeks.length ? scenario.riskWeeks.slice(0, 6).join('、') : '暂无', signed: '可供量低于无约束需求的预测周' },
+          { label: `剩余预测 SO（${forecastRangeLabel}）`, value: `${fmtUnits(scenario.forecastSo)} 台` },
+          { label: '剩余预测销毛变化', value: `${scenario.marginDelta > 0 ? '+' : scenario.marginDelta < 0 ? '−' : ''}${fmtMoney(Math.abs(scenario.marginDelta))}` },
+          // 风险周分组读数（2026-11-01 Eason 拍板并入库存穿零周）：截断 = 可供量
+          // 低于无约束需求；库存穿零 = 期末库存 < 0（供给欠配，主账标红同源）。
+          { label: '草稿下风险周 · 截断', value: fmtRiskWeeks(scenario.riskWeeks.filter((w) => w.kind === 'stockout').map((w) => w.week)) },
+          { label: '草稿下风险周 · 库存穿零', value: fmtRiskWeeks(scenario.riskWeeks.filter((w) => w.kind === 'negative').map((w) => w.week)) },
         ].map((row) => (
           <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12 }}>
             <span style={{ color: color.mute }}>{row.label}</span>

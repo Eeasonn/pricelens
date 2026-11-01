@@ -182,6 +182,13 @@ export interface DriverContribution {
   status: FactorStatus;
 }
 
+/** What-if 风险周：截断（可供量低于无约束需求）或库存穿零（期末库存 < 0，
+ *  供给欠配信号）的预测周；同周并存按截断归组（与主账「截断」标签一致）。 */
+export interface RiskWeek {
+  week: string;
+  kind: 'stockout' | 'negative';
+}
+
 export interface ScenarioSummary {
   active: boolean;
   forecastSo: number;
@@ -190,7 +197,7 @@ export interface ScenarioSummary {
   forecastMargin: number;
   baselineMargin: number;
   marginDelta: number;
-  riskWeeks: string[];
+  riskWeeks: RiskWeek[];
 }
 
 export interface ForecastComputation {
@@ -438,7 +445,11 @@ export function computeForecast(dataset: ForecastDataset, draft: ScenarioDraft =
       forecastMargin,
       baselineMargin,
       marginDelta: forecastMargin - baselineMargin,
-      riskWeeks: forecastWeeks.filter((week) => week.stockout).map((week) => week.week),
+      // 风险周 = 截断周 ∪ 库存穿零周（2026-11-01 Eason 拍板并入）：按周序去重，
+      // 同周并存优先标截断（当周可观测信号优先，与主账一致）。
+      riskWeeks: forecastWeeks
+        .filter((week) => week.stockout || week.inventory < 0)
+        .map((week) => ({ week: week.week, kind: week.stockout ? ('stockout' as const) : ('negative' as const) })),
     },
   };
 }

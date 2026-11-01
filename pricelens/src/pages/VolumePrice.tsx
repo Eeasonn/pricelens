@@ -103,7 +103,7 @@ import WeekDetailCard from './volume/WeekDetailCard';
 import PointerShield from './volume/PointerShield';
 import { detailDateOf, weekDetailModel } from './volume/weekDetail';
 import { spreadCardModel, spreadCardRow } from './volume/spreadCards';
-import { commitVolumeAxisLimit, normalizePanelWindow, vMaxOf, volumeRangeOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
+import { commitVolumeAxisLimit, fitVolumeLimitsByKey, normalizePanelWindow, vMaxOf, volumeRangeOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
 import { formatVolumeAmount, pricePointValid, rangeBandInView, rangeSpreadOf, resolveSelectedWindow, shouldUseWanUnits, volumePointValid } from './volume/periodSummary';
 
 // 面板头定高（第一百九十一轮，Eason 五点）：面板头改 [拖柄][PillUnit] 后随药丸
@@ -303,7 +303,9 @@ export default function VolumePrice() {
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   // 查看窗口 = 会话态跨页保留（与价格看板对齐；范围改动等失义路径照旧复位）
   const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('volume.windowIds', () => null);
-  const [volumeLimits, setVolumeLimits] = useState<VolumeAxisLimits[]>(() => panelSpecs.map(() => ({ max: null })));
+  // 销量轴限位按面板 key 存（2026-11-01 审计 P3）：删中间面板不再把限位平移到
+  // 下一张（原按下标存依赖 scaleResetKey 兜底复位）；成员变化由 fitVolumeLimitsByKey 收纳。
+  const [volumeLimits, setVolumeLimits] = useState<Record<string, VolumeAxisLimits>>({});
   // ---- 第119轮（走查会）：同步/非同步查看时间。同步 = 全部面板共用窗口（原行为）；
   //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
   //      两项均会话态跨页保留（P1-5）----
@@ -345,10 +347,15 @@ export default function VolumePrice() {
     setGeoms(fit<StripGeom | null>(null));
     setBrushes(fit<[number, number] | null>(null));
     setBrushLive(fit<[number, number] | null>(null));
-    setVolumeLimits(fit<VolumeAxisLimits>({ max: null }));
     setPanelWins(fit<[number, number] | null>(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelCount]);
+  // 面板成员变化（增删/换成员，含同数置换）→ 销量轴限位表按 key 收纳（见上注）
+  const panelKeysSig = JSON.stringify(panelSpecs.map((p) => p.key));
+  useEffect(() => {
+    setVolumeLimits((prev) => fitVolumeLimitsByKey(prev, panelSpecs.map((p) => p.key)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelKeysSig]);
   // 换产品/价格类型/币种才复位。比较稳定键，而不是 panelSpecs 的数组引用：
   // 每次挂载引用都是新的，无条件 setSliderScale(1) 会覆写会话里的每格高度。
   const scaleResetKey = JSON.stringify([panelSpecs.map((p) => p.key), state.priceTypes, state.currency]);
@@ -360,7 +367,7 @@ export default function VolumePrice() {
     }
     scaleResetSeenRef.current = scaleResetKey;
     setSliderScale(1);
-    setVolumeLimits(panelSpecs.map(() => ({ max: null })));
+    setVolumeLimits({});
   }, [scaleResetKey, panelSpecs]);
 
   // 粒度切换 → 窗口端点对齐新粒度桶边界（保持同一时间跨度）；面板独立时间轴按桶号
@@ -680,13 +687,8 @@ export default function VolumePrice() {
   );
   // 各图销量轴上限恒自动（niceCeil 窗口内最大值）
   const panelVMax = volumes.map((vs) => vMaxOf(vs));
-  const onVolumeAxisLimit = (idx: number, kind: 'max', value: number | null): void => {
-    setVolumeLimits((prev) => {
-      const next = [...prev];
-      const current = next[idx] ?? { max: null };
-      next[idx] = commitVolumeAxisLimit(current, kind, value, panelVMax[idx] ?? 1);
-      return next;
-    });
+  const onVolumeAxisLimit = (key: string, kind: 'max', value: number | null, autoMax: number): void => {
+    setVolumeLimits((prev) => ({ ...prev, [key]: commitVolumeAxisLimit(prev[key], kind, value, autoMax) }));
   };
   const summaryLive = orderedPanels.map((p) => {
     const [viewStart, viewEnd] = effWins[p.idx] ?? [0, 0];
@@ -1009,7 +1011,7 @@ export default function VolumePrice() {
                         scale: yCfg,
                         n: strip?.n ?? 1,
                       }, value);
-                      const [volumeAxisMin, volumeAxisMax] = volumeRangeOf(volumeLimits[p.idx] ?? { max: null }, panelVMax[p.idx] ?? 1);
+                      const [volumeAxisMin, volumeAxisMax] = volumeRangeOf(volumeLimits[p.key] ?? { max: null }, panelVMax[p.idx] ?? 1);
                       const volumeAxisSpan = Math.max(1, volumeAxisMax - volumeAxisMin);
                       const volumeYOf = (value: number): number => {
                         const ratio = Math.min(1, Math.max(0, (value - volumeAxisMin) / volumeAxisSpan));
@@ -1221,8 +1223,8 @@ export default function VolumePrice() {
                             vMax={panelVMax[p.idx]}
                             color={seriesColor}
                             hoverIdx={activeIdx}
-                            axisLimits={volumeLimits[p.idx] ?? { max: null }}
-                            onAxisLimit={(kind, value) => onVolumeAxisLimit(p.idx, kind, value)}
+                            axisLimits={volumeLimits[p.key] ?? { max: null }}
+                            onAxisLimit={(kind, value) => onVolumeAxisLimit(p.key, kind, value, panelVMax[p.idx] ?? 1)}
                             selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
                           />
                           <Chart

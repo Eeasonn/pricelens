@@ -9,15 +9,20 @@ import { usePage } from '../state/PageContext';
 import { useChartContent } from '../state/chartContent';
 import { color, space } from '../theme/tokens';
 
-/** 导航页签：文字 + 墨色下划线表达当前项（aria-current，不依赖颜色单一表达） */
+/** 导航页签：文字 + 墨色下划线表达当前项（aria-current，不依赖颜色单一表达）。
+ *  suppressCurrent：同页已存在另一处 aria-current="page"（页头管理页签组也含
+ *  量价预测，PageHeader 为并行会话 WIP 不可动）时省略本处的 aria-current，避免
+ *  同页双 current；视觉选中态（墨色下划线 + 600 字重）保留。页头页签退役后移除。 */
 function Tab({
   active,
+  suppressCurrent,
   disabled,
   onClick,
   children,
   title,
 }: {
   active?: boolean;
+  suppressCurrent?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   children: string;
@@ -26,7 +31,7 @@ function Tab({
   return (
     <button
       type="button"
-      aria-current={active && !disabled ? 'page' : undefined}
+      aria-current={active && !disabled && !suppressCurrent ? 'page' : undefined}
       aria-disabled={disabled || undefined}
       title={title}
       onClick={disabled ? undefined : onClick}
@@ -86,7 +91,9 @@ export default function ChartContentBar() {
     >
       <Tab active={priceOn} onClick={openPrice}>价格走势</Tab>
       <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
-      <Tab active={forecastOn} onClick={openForecast}>量价预测</Tab>
+      {/* 预测页页头管理页签（PageHeader WIP）同枚页签也标 aria-current="page"，
+          这里省略程序化标记只留视觉选中，同页唯一 current（2026-11-01 审计 P2） */}
+      <Tab active={forecastOn} suppressCurrent onClick={openForecast}>量价预测</Tab>
     </nav>
   );
 }

@@ -69,17 +69,16 @@ import {
   gapAbsorbedIdx,
   TICK_PX,
   TICK_DASH_W,
-  TIER_LABEL_W,
   axisChrome,
   computeYAxis,
   perUsdOf,
-  tierLabelShort,
   xPxOf,
   yPxOf,
   type Geom,
   type StripGeom,
   type YScale,
 } from './helpers';
+import TierBand from './TierBand';
 // 纯计算层（第十八轮抽离）：几何/标签计划/端点/option/DOM 数据全部显式入参纯函数
 import {
   buildChangeMarks,
@@ -1186,74 +1185,18 @@ export default function Chart(props: ChartProps) {
               </div>
             );
           })}
-          {/* 价格档位常驻小标（2026-11-01 审计 P2-3）：画在梯子顶部空气带内，
-              把档位带与 Y 刻度数字区分开（此前只有悬停 title）。与分离轴列
-              SplitAxisColumn 同款。 */}
-          {showTierBand && tierBoxes.length > 0 && (
-            <span
-              title="价格档位（USD）"
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: (geom?.plotTop ?? 0) - 13,
-                fontSize: 8,
-                lineHeight: '13px',
-                color: color.mute,
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none',
-              }}
-            >
-              价格档位
-            </span>
+          {/* 价格档位带（梯子 + 顶部小标）：与分离轴列 SplitAxisColumn 共用 TierBand
+              公共组件（2026-11-01 审计 P3 抽取，两处逐像素同款由构造保证）；
+              showTierBand 关（本币/开关关/无轴区/空态）时 tierBoxes 为空、整带消失 */}
+          {showTierBand && (
+            <TierBand
+              tierBoxes={tierBoxes}
+              tierWidth={chrome.tierWidth}
+              showYTicks={showYTicks}
+              plotTop={geom?.plotTop ?? 0}
+              boxZIndex={1}
+            />
           )}
-          {/* 档位区块（仅 USD）：贴容器左缘的整块竖向色带 = [档位文字区 | 灰竖线 | 刻度文字区]，
-              刻度（zIndex 2）与短横线叠画在区块上；无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；
-              本币不渲染；图隐藏（空态）时整块消失。
-              第九十一轮：分界竖线删除；档位文字三行竖排居中（关「Y 刻度线」时居中整块） */}
-          {showTierBand &&
-            tierBoxes.map((tb, i) => (
-              <div
-                key={`tier-${tb.label}-${i}`}
-                title={`价格档位 ${tb.label}（USD）${tb.empty ? '· 当前无产品' : ''}`}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: tb.top,
-                  width: chrome.tierWidth,
-                  height: tb.h,
-                  boxSizing: 'border-box',
-                  border: tb.empty ? `1px dashed ${color.hairline}` : `1px solid ${color.hairline}`,
-                  background: tb.empty ? 'transparent' : i % 2 === 0 ? color.canvasSoft2 : color.canvasSoft,
-                  display: 'flex',
-                  alignItems: 'center',
-                  overflow: 'hidden',
-                  pointerEvents: 'none',
-                  zIndex: 1,
-                }}
-              >
-                <span
-                  style={{
-                    // 关「Y 刻度线」时档位文字居中整个轴区宽度（第九十一轮）
-                    width: showYTicks ? TIER_LABEL_W : chrome.tierWidth,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 9,
-                    lineHeight: '11px',
-                    color: tb.empty ? color.mute : color.body,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {(() => {
-                    // 恒三行竖排（第九十三轮：矮档不再退化单行）
-                    const parts = tierLabelShort(tb.label).split('~');
-                    const lines = parts.length === 2 ? [parts[0], '~', parts[1]] : [tierLabelShort(tb.label)];
-                    return lines.map((ln, k) => <span key={`${ln}-${k}`}>{ln}</span>);
-                  })()}
-                </span>
-              </div>
-            ))}
           {/* Y 轴上下限输入（替代旧拖拽拉伸）：传入 onYLimit 才渲染；分离面板
               chrome=false 不渲染，由共享轴列 SplitAxisColumn 承担。 */}
           {props.onYLimit && geom && props.axisChrome !== false && chrome.visible && (

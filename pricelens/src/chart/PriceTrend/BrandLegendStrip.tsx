@@ -271,7 +271,7 @@ export function PlatformRow({
           trigger="click"
           placement="bottomLeft"
           arrow={false}
-          destroyTooltipOnHide
+          destroyOnHidden
           classNames={{ root: 'lpl-cascade-popover' }}
           styles={{ body: { padding: 0 } }}
           content={

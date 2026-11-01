@@ -268,7 +268,7 @@ function PickPopover({
       trigger="click"
       open={open}
       zIndex={POPOVER_Z}
-      destroyTooltipOnHide
+      destroyOnHidden
       classNames={{ root: 'lpl-cascade-popover' }}
       onOpenChange={(o) => {
         setOpen(o);
