@@ -4,6 +4,7 @@
 // 环比涨跌用涨蓝跌琥珀（第一百八十七轮定案）；缺采显示 —，不借用相邻周。
 // 窄容器时改单列（index.css 的容器查询 .lpl-volume-detail）。
 import type { CSSProperties, ReactNode } from 'react';
+import { Popconfirm } from 'antd';
 import BrandDot from '../../components/BrandMark';
 import { color, font, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import type { WeekDetailModel } from './weekDetail';
@@ -152,31 +153,6 @@ export default function WeekDetailCard(props: {
               {m.priceSuspect && <SuspectTag kind={m.priceSuspect} />}
             </span>
           ) : MISSING}
-          {/* 被隔离/待核对点：原值保留 + 人工裁定入口（预览-确认-记录-撤销） */}
-          {m.priceSuspect && m.priceSuspect !== 'exempted' && (props.onExempt || props.onIsolate) && (
-            <span style={{ display: 'inline-flex', gap: 6, marginTop: 4 }}>
-              {props.onExempt && (
-                <button
-                  type="button"
-                  onClick={props.onExempt}
-                  title="确认该价格为真实价格：参与计算并留痕（配置页可撤销）"
-                  style={{ height: 20, padding: '0 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                  确认真实价格
-                </button>
-              )}
-              {props.onIsolate && m.priceSuspect === 'pending' && (
-                <button
-                  type="button"
-                  onClick={props.onIsolate}
-                  title="标记该价格为异常：退出计算（原值保留），配置页可撤销"
-                  style={{ height: 20, padding: '0 8px', border: '1px solid rgba(235, 87, 87, 0.4)', borderRadius: radius.control, background: color.canvas, color: '#b45309', font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                  标记异常
-                </button>
-              )}
-            </span>
-          )}
         </Metric>
         <Metric label={m.wowLabel}>
           {m.wow ? (
@@ -193,7 +169,7 @@ export default function WeekDetailCard(props: {
               )}
             </span>
           ) : m.priceSuspect === 'quarantined' ? (
-            <span style={{ color: '#b45309', fontWeight: 400, fontSize: 13 }}>已隔离，不计环比</span>
+            <span title="该周价格已隔离，不计算环比（原值可见）" style={{ color: '#b45309', fontWeight: 400, fontSize: 12, whiteSpace: 'normal', lineHeight: '16px' }}>已隔离<br />不计环比</span>
           ) : (
             <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>
           )}
@@ -201,6 +177,50 @@ export default function WeekDetailCard(props: {
         <Metric label={m.volumeLabel}>
           {m.volume != null ? <>{m.volume}<span style={{ marginLeft: 3, fontSize: 11, fontWeight: 400, color: color.mute }}>台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
         </Metric>
+        {/* 被隔离/待核对点：原值保留 + 人工裁定入口（预览-确认-记录-撤销）。
+            独立整行——放指标格内会在窄面板被邻列长文本（跨N隔离周等）压住点不到 */}
+        {m.priceSuspect && m.priceSuspect !== 'exempted' && (props.onExempt || props.onIsolate) && (
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+            {props.onExempt && (
+              <Popconfirm
+                title="确认该价格为真实价格？"
+                description="确认后该点参与计算并保留「已确认」标注，可在配置页撤销"
+                okText="确认"
+                cancelText="取消"
+                okButtonProps={{ size: 'small' }}
+                cancelButtonProps={{ size: 'small' }}
+                onConfirm={props.onExempt}
+              >
+                <button
+                  type="button"
+                  title="确认该价格为真实价格：参与计算并留痕（配置页可撤销）"
+                  style={{ height: 20, padding: '0 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  确认真实价格
+                </button>
+              </Popconfirm>
+            )}
+            {props.onIsolate && m.priceSuspect === 'pending' && (
+              <Popconfirm
+                title="标记该价格为异常？"
+                description="标记后该点退出计算（原值保留），可在配置页撤销"
+                okText="标记"
+                cancelText="取消"
+                okButtonProps={{ size: 'small', danger: true }}
+                cancelButtonProps={{ size: 'small' }}
+                onConfirm={props.onIsolate}
+              >
+                <button
+                  type="button"
+                  title="标记该价格为异常：退出计算（原值保留），配置页可撤销"
+                  style={{ height: 20, padding: '0 8px', border: '1px solid rgba(235, 87, 87, 0.4)', borderRadius: radius.control, background: color.canvas, color: '#b45309', font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  标记异常
+                </button>
+              </Popconfirm>
+            )}
+          </div>
+        )}
       </div>
       <div
         className="lpl-volume-detail-monthly"

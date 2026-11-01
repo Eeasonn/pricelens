@@ -1121,7 +1121,9 @@ export default function VolumePrice() {
                       const volumeSpread = ranged && row
                         ? rangeSpreadOf(row.volumes.slice(windowLo, windowHi + 1), volumePointValid)
                         : null;
-                      const priceCard = priceSpread
+                      // rangeSpreadOf 恒返回对象（无可信点时 min/max/spread 为 null），
+                      // 可信极差判定必须看字段而不是对象真值——否则空卡分支不可达
+                      const priceCard = priceSpread?.min != null && priceSpread.spread != null
                         ? spreadCardModel(priceSpread, (value) => formatPrice(Math.round(value), state.currency), '价格')
                         : priceSliceHasAny
                           ? spreadCardEmptyModel('价格')

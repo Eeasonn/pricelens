@@ -1375,6 +1375,7 @@ export default function Chart(props: ChartProps) {
                                 className="lpl-hit"
                                 onClick={(e) => e.stopPropagation()}
                                 style={{
+                                  position: 'relative',
                                   height: 24, padding: '0 10px', borderRadius: radius.control,
                                   border: `1px solid ${color.hairline}`, background: color.canvas, color: color.body,
                                   font: 'inherit', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
@@ -1398,6 +1399,7 @@ export default function Chart(props: ChartProps) {
                                   className="lpl-hit"
                                   onClick={(e) => e.stopPropagation()}
                                   style={{
+                                    position: 'relative',
                                     height: 24, padding: '0 10px', borderRadius: radius.control,
                                     border: `1px solid rgba(235, 87, 87, 0.4)`, background: color.canvas, color: '#b45309',
                                     font: 'inherit', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',

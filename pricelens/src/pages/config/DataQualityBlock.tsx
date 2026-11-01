@@ -40,11 +40,15 @@ export default function DataQualityBlock() {
   const [tick, setTick] = useState(0);
   const [customDraft, setCustomDraft] = useState<string>('');
   const [customError, setCustomError] = useState<string | null>(null);
+  // 自定义模式：点「自定义」即进入（输入当前档预填），提交/选回预设档才退出——
+  // 否则选中态会被 rule 值拉回预设档，输入框一闪即逝
+  const [customMode, setCustomMode] = useState(false);
 
   // 广播后重读（图上逐点裁定 / 本块保存都会广播；幂等）
   useEffect(() => {
     const reread = (): void => {
       setRule(readAnomalyRule());
+      setCustomMode(false);
       setTick((t) => t + 1);
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, reread);
@@ -56,7 +60,7 @@ export default function DataQualityBlock() {
     setRule(next);
   };
 
-  const segValue = !rule.enabled ? 'off' : rule.thresholdPct === 30 ? '30' : rule.thresholdPct === 50 ? '50' : 'custom';
+  const segValue = !rule.enabled ? 'off' : customMode ? 'custom' : rule.thresholdPct === 30 ? '30' : rule.thresholdPct === 50 ? '50' : 'custom';
 
   const commitCustom = (): void => {
     const n = Math.round(Number(customDraft));
@@ -66,6 +70,7 @@ export default function DataQualityBlock() {
     }
     setCustomError(null);
     commit({ enabled: true, thresholdPct: n });
+    setCustomMode(true); // 提交成功后停在自定义档（输入框保留显示当前值）
   };
 
   const marks = useMemo(() => listAnomalyMarks(), [tick]);
@@ -85,10 +90,17 @@ export default function DataQualityBlock() {
           value={segValue}
           onChange={(v) => {
             const val = v as string;
-            if (val === 'off') commit({ enabled: false, thresholdPct: rule.thresholdPct });
-            else if (val === '30') commit({ enabled: true, thresholdPct: 30 });
-            else if (val === '50') commit({ enabled: true, thresholdPct: 50 });
-            else {
+            if (val === 'off') {
+              setCustomMode(false);
+              commit({ enabled: false, thresholdPct: rule.thresholdPct });
+            } else if (val === '30') {
+              setCustomMode(false);
+              commit({ enabled: true, thresholdPct: 30 });
+            } else if (val === '50') {
+              setCustomMode(false);
+              commit({ enabled: true, thresholdPct: 50 });
+            } else {
+              setCustomMode(true);
               setCustomDraft(String(rule.thresholdPct));
               setCustomError(null);
             }

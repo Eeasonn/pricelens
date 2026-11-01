@@ -57,6 +57,7 @@ export default function HiddenTray(props: {
           onClick={() => props.onRestore(item.key)}
           className="lpl-hit"
           style={{
+            position: 'relative', // .lpl-hit::after 挂在本体上外扩命中区（缺省会把 ::after 放到页级祖先）
             display: 'inline-flex',
             alignItems: 'center',
             gap: 5,
