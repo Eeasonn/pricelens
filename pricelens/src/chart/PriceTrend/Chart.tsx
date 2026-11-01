@@ -930,7 +930,13 @@ export default function Chart(props: ChartProps) {
   );
   // ---- 异常价格守卫（2026-11-01）：隔离态徽标（空心点 + 胶囊）----
   const suspectBadges = useMemo(() => buildSuspectBadges(series), [series]);
-  const suspectBadgeKeys = useMemo(() => new Set(suspectBadges.map((b) => b.key)), [suspectBadges]);
+  // 变化胶囊的压制集：quarantined/pending 的守卫胶囊自带 ±X% 幅度（叠压 + 信息重复）；
+  // exempted（人工确认真实价）的胶囊只有「已确认」三字、不带幅度——放行 ↓/↑ 徽标，
+  // 裁定后不丢变化读数
+  const changeSuppressedKeys = useMemo(
+    () => new Set(suspectBadges.filter((b) => b.state !== 'exempted').map((b) => b.key)),
+    [suspectBadges],
+  );
   const anomalyRule = useMemo(() => readAnomalyRule(), [series]);
   const markAnomaly = useCallback(
     (b: SuspectBadge, action: 'exempt' | 'isolate') => {
@@ -1253,8 +1259,9 @@ export default function Chart(props: ChartProps) {
                 const chg = changeMarks.get(`${s.key}|${i}`);
                 const v = primaryPriceOf(pt, priceTypes);
                 // 异常守卫打标点不出变化胶囊：两者同画在 y+9 会完全叠压，
-                // 且「疑/待核对 ±X%」已承载同一幅度信息
-                if (chg == null || v == null || suspectBadgeKeys.has(`${s.key}|${i}`)) return null;
+                // 且「疑/待核对 ±X%」已承载同一幅度信息；exempted（已确认）胶囊
+                // 不带幅度，不在压制集内——确认真实价后 ↓/↑ 徽标照常保留
+                if (chg == null || v == null || changeSuppressedKeys.has(`${s.key}|${i}`)) return null;
                 const down = chg < 0;
                 const pct = Math.round(Math.abs(chg) * 100);
                 const dim = litKeys != null && !litKeys.includes(s.key);

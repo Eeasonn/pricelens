@@ -783,7 +783,9 @@ export default function PriceTrend(props: {
       const grp = groups.find((g) => `${g.modelId}__${g.romram.replace(/\s+/g, '')}` === seriesKey);
       if (!s || !grp) return;
       setDrill({
-        group: { modelId: grp.modelId, romram: grp.romram, skuIds: s.skuIds, isOwn: s.isOwn },
+        // platform 随系列带出（与合并图 onDrill 同口径）：钉定平台/店铺的面板线
+        // 下钻后弹窗取数与面板折线同一渠道，不回落自动全渠道最低价
+        group: { modelId: grp.modelId, romram: grp.romram, skuIds: s.skuIds, isOwn: s.isOwn, platform: s.platform ?? null },
         label: s.label,
         originGran: state.granularity === 'quarter' ? 'quarter' : 'month',
         originBucket: bucketId,

@@ -222,7 +222,8 @@ export default function SplitTimeTrack(props: {
         }}
         onPointerDown={onDragDown('pan')} onPointerMove={onDragMove} onPointerUp={onDragUp} onPointerCancel={onDragUp}
       />
-      {[markS, markE].map((m) => (
+      {/* 单桶窗口（s===e）时 markS===markE，去重防 React 同 key 兄弟节点 */}
+      {[...new Set([markS, markE])].map((m) => (
         <span key={`edge-tick-${m}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(m + lo) + 0.5 / n}%`, top: 4, width: 1, height: 12, transform: 'translateX(-50%)', background: color.hairlineStrong, pointerEvents: 'none' }} />
       ))}
       {midLines.map((i) => (

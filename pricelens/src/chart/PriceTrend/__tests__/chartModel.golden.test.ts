@@ -1228,5 +1228,29 @@ describe('buildChangeMarks（价格变化点，第三十五轮起；第四十二
     expect(zero.get('s1|2')).toBeCloseTo(-0.01, 10);
     expect(buildChangeMarks([s], -1).size).toBe(0); // 负值 = 关闭
   });
+
+  it('异常守卫渗透（2026-11-02 审计）：隔离点不产徽标、不进 prev 基线链', () => {
+    // 100 → 500(quarantined 瞬态尖峰) → 101 恢复：恢复点按 500 算会得 −79.8% 的
+    // 误导徽标；守卫契约下应相对上一可信点 100 → +1% 不标
+    const s = mkSeries({
+      points: [
+        PT({ price: 100 }),
+        PT({ price: 500, suspect: 'quarantined' }),
+        PT({ price: 101 }),
+        PT({ price: 90 }), // 相对 101 = −10.9% 标记（基线链已跳过隔离点）
+      ],
+    });
+    const m = buildChangeMarks([s]);
+    expect(m.has('s1|1')).toBe(false); // 隔离点自身无徽标
+    expect(m.has('s1|2')).toBe(false); // 恢复点相对可信基线仅 +1%，不标
+    expect(m.get('s1|3')).toBeCloseTo(90 / 101 - 1, 10);
+    // exempted（人工确认）与 pending（待核对）照常参与基线链——只有隔离退出计算
+    const ex = mkSeries({
+      points: [PT({ price: 100 }), PT({ price: 50, suspect: 'exempted' }), PT({ price: 49 })],
+    });
+    const mex = buildChangeMarks([ex]);
+    expect(mex.get('s1|1')).toBeCloseTo(-0.5, 10); // 50 相对 100 = −50% 标记
+    expect(mex.has('s1|2')).toBe(false); // 49 相对 50 = −2% < 5% 不标
+  });
 });
 

@@ -909,6 +909,9 @@ export const DROP_THRESHOLD = 0.05;
  * 真实变化——价格未动的点仍不标，关闭语义由调用方传负值/null 承担）：相较前一有值点
  * |Δ| ≥ threshold 的点返回带符号变化率（负=降、正=升），渲染层据此出 ↓/↑ 徽标。
  * epsilon 兜浮点边界（90/100−1 = −0.0999…98）。
+ * 异常守卫（2026-11-01 口径渗透）：隔离点不产徽标、也不进 prev 基线链——恢复点
+ * 相对「上一可信点」比较（与 detectSuspects 的 lastTrusted 同语义），否则恢复点
+ * 会按 真实价/被隔离价−1 算出大幅 ↓X% 的误导徽标。
  */
 export function buildChangeMarks(series: Series[], threshold: number = DROP_THRESHOLD): Map<string, number> {
   const out = new Map<string, number>();
@@ -917,6 +920,7 @@ export function buildChangeMarks(series: Series[], threshold: number = DROP_THRE
     let prev: number | null = null;
     s.points.forEach((pt, i) => {
       if (pt.price == null) return;
+      if (pt.suspect === 'quarantined') return; // 隔离点：不标变化、不进基线链
       if (prev != null && prev > 0) {
         const chg = pt.price / prev - 1;
         if (Math.abs(chg) > 1e-9 && Math.abs(chg) >= threshold - 1e-9) out.set(`${s.key}|${i}`, chg);
