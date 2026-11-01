@@ -270,6 +270,8 @@ export interface ChartProps {
    *  豁免/隔离留痕）。价格走势/多平台视图传；量价页指针层接管图面、裁定入口在
    *  单周明细卡，不传 = 胶囊只读展示。 */
   anomalyActions?: boolean;
+  /** 异常价格守卫状态行（2026-11-01 晚反馈：收进 ⋯ 菜单）——透传给图顶工具行 */
+  anomalySlot?: ReactNode;
   // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
   // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
@@ -1101,6 +1103,7 @@ export default function Chart(props: ChartProps) {
                 onLabelMode={props.onLabelMode}
                 pointPanelOpen={props.pointPanelOpen}
                 onPointPanelToggle={props.onPointPanelToggle}
+                anomalySlot={props.anomalySlot}
                 promoBandsOn={promoBandsOn}
                 onPromoBandsOn={commitPromoBandsOn}
                 offersOn={props.offersOn}

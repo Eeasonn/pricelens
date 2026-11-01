@@ -305,6 +305,8 @@ export default function TrendTables(props: {
     keyPrefix: string,
     main: boolean,
     fourWeekChange?: number | null,
+    /** 2026-11-01 晚反馈：整名链接只在核心信息明细区；价差区纯展示 */
+    withLink?: boolean,
   ): JSX.Element[] => {
     const bg = main ? MAIN_TINT : color.canvas;
     const sp = specByKey.get(s.key);
@@ -320,9 +322,9 @@ export default function TrendTables(props: {
             环比行不外溢破格（第一百八十九轮） */}
         <div style={{ minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-            {prodUrl ? (
-              // 整名链接（2026-11-01 晚 Eason 反馈）：名称 + 外链图标同一命中区，
-              // 悬停变蓝下划线；价差区/核心明细两区的产品格共用本渲染
+            {withLink && prodUrl ? (
+              // 整名链接（2026-11-01 晚反馈定稿）：只在核心信息明细区；外链小图标
+              // 退役（整名即命中区），悬停变蓝下划线
               <a
                 href={prodUrl}
                 target="_blank"
@@ -330,12 +332,9 @@ export default function TrendTables(props: {
                 title={`${name} · 打开商城页面`}
                 aria-label={`打开 ${name} 的商城页面`}
                 className="tt-prod-link"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}
+                style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
-                <span style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {name}
-                </span>
-                <ExportOutlined style={{ fontSize: 11, flexShrink: 0, opacity: 0.55 }} />
+                {name}
               </a>
             ) : (
               <span
@@ -545,7 +544,7 @@ export default function TrendTables(props: {
             });
           };
           const rows: JSX.Element[] = [
-            ...identityCells(s, b.specByKey, DETAIL_SPAN, p, main, fourWeekChanges.get(s.key) ?? null),
+            ...identityCells(s, b.specByKey, DETAIL_SPAN, p, main, fourWeekChanges.get(s.key) ?? null, true),
           ];
           // RRP 行
           rows.push(typeCell('RRP', main, `${p}-rrp`));

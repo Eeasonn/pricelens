@@ -30,6 +30,11 @@ button {
   padding: 0;
 }
 
+/* 异常价格守卫 ⋯ 菜单状态行（2026-11-01 晚反馈：chip 收进更多菜单）：悬停内衬 */
+.lpl-quality-row:hover {
+  background: #f5f5f5;
+}
+
 /* 宽表产品整名链接（2026-11-01 晚 Eason 反馈）：常态与正文同色，悬停变蓝下划线 */
 .tt-prod-link {
   color: #171717;

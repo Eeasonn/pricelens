@@ -80,6 +80,9 @@ export interface ChartToolbarProps {
   onOffersOn?: (v: boolean) => void;
   changeThreshold?: number | null;
   onChangeThreshold?: (v: number | null) => void;
+  /** 异常价格守卫状态行（2026-11-01 晚反馈：收进 ⋯ 菜单）——调用方传入
+   *  AnomalyQualityChip（menuRow 形态），渲染在 ⋯ 弹层底部（hairline 分隔） */
+  anomalySlot?: ReactNode;
   /** ⋯ 更多菜单只保留价格变化提醒开关。
    *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开 */
 }
@@ -447,6 +450,11 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                         </span>
                       )}
                     </div>
+                  </div>
+                )}
+                {props.anomalySlot && (
+                  <div style={{ width: '100%', borderTop: `1px solid ${color.hairline}`, paddingTop: 10, marginTop: 10 }}>
+                    {props.anomalySlot}
                   </div>
                 )}
               </div>

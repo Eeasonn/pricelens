@@ -1,16 +1,44 @@
 // ============================================================
-// 异常价格只读状态 chip（2026-11-01 异常价格守卫 · 设计方案 A；2026-11-01 晚
-// Eason 反馈：「数据质量」抽象难懂，改名「异常价格」——与图上 疑/待核对/已隔离
-// 同一族语言，chip 即该守卫的口径状态）：
-// 价格走势 / 量价 / 多平台对比三页工具行右端常驻——提示当前全局口径与本页
-// 隔离数；点击弹只读 Popover（规则一句话 + 本页隔离点清单 + 「查看配置」）。
-// 口径唯一写入口 = 配置页（chip 不改全局值）；预测页为模拟数据不放 chip。
+// 异常价格守卫状态行（2026-11-01 异常价格守卫 · 设计方案 A；2026-11-01 晚
+// Eason 两轮反馈定稿：①「数据质量」抽象难懂 → 改名「异常价格」族；②工具行
+// 常驻 chip 太显眼 → 收进工具行「⋯ 更多显示选项」菜单作一行状态，点击弹只读
+// Popover（规则一句话 + 本页隔离点清单 + 「查看配置」）：
+// 价格走势 / 量价 / 多平台对比三页 ⋯ 菜单内常驻；口径唯一写入口 = 配置页；
+// 预测页为模拟数据不放。
 // ============================================================
+import { useSyncExternalStore } from 'react';
 import { Popover } from 'antd';
 import { usePage } from '../state/PageContext';
 import { readAnomalyRule } from '../dataModel/anomaly';
 import { color, fontSize, radius, selectSoft, selectSoftInk } from '../theme/tokens';
 
+// ---------------- 本页隔离点注册表（自持数据源） ----------------
+// 2026-11-01 晚实测（三重探针）：打开中的 ⋯ Popover portal 不随父级 props 更新
+// （父级渲染、isolated 已重算为 0，portal 内组件却不被调用）——状态行改用
+// useSyncExternalStore：页面在 memo 内注册最新清单，引用变化即广播轻量事件，
+// chip 自行重渲染读最新数组，完全不依赖 props 流。
+const isolatedStore = new Map<string, AnomalyChipPoint[]>();
+const EMPTY: AnomalyChipPoint[] = [];
+const ISOLATED_EVENT = 'lpl-anomaly-isolated-changed';
+
+/** 页面在计算 anomalyIsolated 的 memo 内注册（渲染期调用；引用不变不广播）。
+ *  广播走微任务——渲染期同步 dispatch 会触发「渲染中 setState」警告 */
+export function registerAnomalyIsolated(page: AnomalyChipPage, list: AnomalyChipPoint[]): void {
+  if (isolatedStore.get(page) === list) return;
+  isolatedStore.set(page, list);
+  if (typeof window === 'undefined') return;
+  queueMicrotask(() => window.dispatchEvent(new Event(ISOLATED_EVENT)));
+}
+
+const subscribeIsolated = (cb: () => void): (() => void) => {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(ISOLATED_EVENT, cb);
+  return () => window.removeEventListener(ISOLATED_EVENT, cb);
+};
+
+export type AnomalyChipPage = 'price' | 'volume' | 'platform';
+
+/** 状态行数据点（⋯ 菜单内一行（label + 状态），点击弹只读 Popover（placement 右上）） */
 export interface AnomalyChipPoint {
   /** 产品显示名（品牌 型号 配置） */
   label: string;
@@ -29,14 +57,13 @@ export function anomalyBucketTextOf(granularity: 'week' | 'month' | 'quarter', b
 }
 
 export default function AnomalyQualityChip(props: {
-  /** 本页（当前窗口序列）被隔离的点；空 = 无隔离 */
-  isolated: AnomalyChipPoint[];
-  /** 窄屏短文案（390px：异常价 ≥50% · 隔离 2） */
-  narrow?: boolean;
+  /** 页面键：读注册表中该页最新隔离清单 */
+  page: AnomalyChipPage;
 }) {
   const { go } = usePage();
   const rule = readAnomalyRule();
-  const count = props.isolated.length;
+  const isolated = useSyncExternalStore(subscribeIsolated, () => isolatedStore.get(props.page) ?? EMPTY);
+  const count = isolated.length;
   const pct = `≥${rule.thresholdPct}%`;
   const ruleText = rule.enabled
     ? `相邻两个观测点的折后价变化超过 ${rule.thresholdPct}% 时，该点标记为异常价格：图上保留原值但不参与计算。真实大促与官方调价自动放行，也可在图上逐点确认。`
@@ -44,7 +71,7 @@ export default function AnomalyQualityChip(props: {
   return (
     <Popover
       trigger="click"
-      placement="bottomRight"
+      placement="rightTop"
       arrow={false}
       content={
         <div style={{ width: 300 }}>
@@ -56,7 +83,7 @@ export default function AnomalyQualityChip(props: {
                 本页隔离 {count} 点<span style={{ marginLeft: 6, fontWeight: 400, color: color.mute }}>原值保留，未参与计算</span>
               </div>
               <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 168, overflowY: 'auto' }}>
-                {props.isolated.slice(0, 12).map((p, i) => (
+                {isolated.slice(0, 12).map((p, i) => (
                   <div
                     key={`${p.label}|${p.bucketText}|${i}`}
                     className="tnum"
@@ -99,47 +126,39 @@ export default function AnomalyQualityChip(props: {
         type="button"
         aria-haspopup="dialog"
         title="异常价格守卫：当前判定口径与本页隔离数，点击查看"
-        className="lpl-quality-chip"
+        className="lpl-quality-chip lpl-quality-row"
+        data-ts={Date.now()}
         style={{
-          height: 24,
-          padding: '0 10px',
+          width: '100%',
+          height: 30,
+          padding: '0 8px',
+          border: 'none',
           borderRadius: radius.control,
-          border: `1px solid ${count > 0 && rule.enabled ? 'rgba(180, 83, 9, 0.4)' : color.hairline}`,
-          background: color.canvas,
+          background: 'transparent',
           color: color.body,
           font: 'inherit',
           fontSize: fontSize.caption,
           lineHeight: '13px',
           fontWeight: 600,
           cursor: 'pointer',
-          flexShrink: 0,
           whiteSpace: 'nowrap',
-          display: 'inline-flex',
+          display: 'flex',
           alignItems: 'center',
           gap: 6,
+          textAlign: 'left',
         }}
       >
-        {props.narrow ? '异常价' : '异常价格'}
-        {rule.enabled ? (
-          <span
-            className="tnum"
-            style={{
-              color: count > 0 ? '#b45309' : selectSoftInk,
-              background: count > 0 ? undefined : selectSoft,
-              borderRadius: radius.pill,
-              padding: count > 0 ? undefined : '0 6px',
-            }}
-          >
-            {pct}
-          </span>
-        ) : (
-          <span style={{ color: color.mute }}>关</span>
-        )}
-        {rule.enabled && count > 0 && (
-          <span className="tnum" style={{ color: '#b45309' }}>
-            · 隔离 {count}
-          </span>
-        )}
+        异常价格守卫
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }} className="tnum">
+          {rule.enabled ? (
+            <span style={{ color: count > 0 ? '#b45309' : selectSoftInk }}>
+              {pct}
+              {count > 0 ? ` · 隔离 ${count}` : ''}
+            </span>
+          ) : (
+            <span style={{ color: color.mute }}>已关闭</span>
+          )}
+        </span>
       </button>
     </Popover>
   );

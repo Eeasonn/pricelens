@@ -111,7 +111,7 @@ import {
 } from './helpers';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { useConfigVersion } from '../../state/configStore';
-import AnomalyQualityChip, { anomalyBucketTextOf, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
+import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
 import PlatformCompareView from './PlatformCompareView';
 import PointPanel from './PointPanel';
 import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
@@ -1164,6 +1164,7 @@ export default function PriceTrend(props: {
         });
       }
     }
+    registerAnomalyIsolated('price', out);
     return out;
   }, [splitActive, panelViews, chartSeries, state.granularity, state.currency]);
 
@@ -1342,6 +1343,7 @@ export default function PriceTrend(props: {
           <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <ChartToolbar
               mode="actions"
+              anomalySlot={<AnomalyQualityChip page="price" />}
               currency={state.currency}
               sliderScale={sliderScale}
               onSliderScale={setSliderScale}
@@ -1369,7 +1371,6 @@ export default function PriceTrend(props: {
               onChangeThreshold={setChangeThreshold}
               compareEntry={platformCtl}
             />
-            <AnomalyQualityChip isolated={anomalyIsolated} narrow={narrowViewport} />
           </div>
         </div>
       )}

@@ -57,9 +57,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import { useConfigVersion } from '../state/configStore';
-import AnomalyQualityChip, { anomalyBucketTextOf, type AnomalyChipPoint } from '../components/AnomalyQualityChip';
+import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../components/AnomalyQualityChip';
 import { addAnomalyMark } from '../dataModel/anomaly';
-import { useNarrowViewport } from '../state/useNarrowViewport';
 import usePageViewState from '../state/usePageViewState';
 import type { PlatformSelection, ProductSelection } from '../state/filtersTypes';
 import ChartContentBar from '../components/ChartContentBar';
@@ -131,53 +130,6 @@ const CHART_GRID_RIGHT = 78; // 右侧预留销量轴列（轴线 + 最高值输
 
 /** 粒度名词（周/月/季）：脚注与无障碍文案随粒度换字，不把「周」硬套在月/季视图 */
 const granNounOf = (granularity: Granularity): string => (granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季');
-
-/** 标注尺标签框宽（dimensionRuler 同式抽取：钳制与绘制共用一式） */
-const rulerLabelW = (label: string): number => Math.max(30, label.length * 6 + 8);
-
-/** 标注尺 x 钳制（2026-11-01 审计 P2-4）：白底标签框整体留在绘图区内——选区贴
- *  右缘时价格尺标签不再压销量轴列、贴左缘时销量尺标签不溢出面板左缘。 */
-const clampRulerX = (x: number, side: 'left' | 'right', label: string, plotLeft: number, plotRight: number): number => {
-  const w = rulerLabelW(label);
-  return side === 'right'
-    ? Math.max(plotLeft + 4, Math.min(x, plotRight - w - 6))
-    : Math.min(plotRight - 4, Math.max(x, plotLeft + w + 6));
-};
-
-/** 尺寸标注尺（视觉 demo：dimensionRuler）：垂直双箭头 + Δ 标签 + 白底标签框。
- *  最高＝最低（高度差不足 2px）时没有可量的距离，不画。 */
-function dimensionRuler(input: { x: number; yTop: number; yBottom: number; color: string; label: string; side: 'left' | 'right'; key: string }) {
-  if (input.yBottom - input.yTop < 2) return null;
-  const midY = (input.yTop + input.yBottom) / 2;
-  const labelW = rulerLabelW(input.label);
-  const rectX = input.side === 'right' ? input.x + 6 : input.x - labelW - 6;
-  const textX = input.side === 'right' ? input.x + 10 : input.x - 10;
-  return (
-    <g key={input.key}>
-      <line x1={input.x} x2={input.x} y1={input.yTop} y2={input.yBottom} stroke={input.color} strokeWidth={1.2} />
-      <path
-        d={`M${input.x - 3},${input.yTop + 5} L${input.x},${input.yTop} L${input.x + 3},${input.yTop + 5} M${input.x - 3},${input.yBottom - 5} L${input.x},${input.yBottom} L${input.x + 3},${input.yBottom - 5}`}
-        fill="none"
-        stroke={input.color}
-        strokeWidth={1.2}
-      />
-      <rect x={rectX} y={midY - 9} width={labelW} height={18} rx={4} fill={color.canvas} />
-      <text
-        x={textX}
-        y={midY}
-        textAnchor={input.side === 'right' ? 'start' : 'end'}
-        dominantBaseline="middle"
-        fill={input.color}
-        fontSize={11}
-        fontWeight={600}
-        fontFamily={font.family}
-        style={{ fontVariantNumeric: 'tabular-nums' }}
-      >
-        {input.label}
-      </text>
-    </g>
-  );
-}
 
 interface SlotInfo {
   isOwn: boolean;
@@ -254,7 +206,6 @@ export default function VolumePrice() {
   const cc = state.countryCode;
   // 配置版本（2026-11-01 异常守卫）：守卫规则/人工裁定保存后面板取数立即重算
   const configVersion = useConfigVersion();
-  const narrowViewport = useNarrowViewport();
   // 主产品经营视图是量价卡内的瞬态：切走再回来回到默认主产品，不写入筛选器或 URL。
   const [viewMode, setViewMode] = useState<VolumeViewMode>({ kind: 'mains' });
   const safeViewMode = validVolumeViewMode(state.mains, viewMode);
@@ -766,6 +717,7 @@ export default function VolumePrice() {
         }
       }
     }
+    registerAnomalyIsolated('volume', out);
     return out;
   }, [visiblePanels, state.granularity, state.currency]);
 
@@ -958,10 +910,9 @@ export default function VolumePrice() {
                   onTipMode={setTipMode}
                   labelMode={labelMode}
                   onLabelMode={setLabelMode}
+                  anomalySlot={<AnomalyQualityChip page="volume" />}
                 />
               </div>
-              {/* 数据质量只读 chip（2026-11-01 异常守卫）：本页隔离数，点击查看口径 */}
-              <AnomalyQualityChip isolated={anomalyIsolated} narrow={narrowViewport} />
             </div>
 
             {/* 组内对比是同一量价卡内的次级视图，一次只看一组。 */}
@@ -1472,69 +1423,37 @@ export default function VolumePrice() {
                               onCrossY={setCrossY}
                             />
                           )}
-                          {/* 尺寸标注尺（视觉 demo：dimensionRuler）：价格尺贴选区左、销量尺贴
-                              选区右；水平引线从极值点引到尺；极值点与观察点画空心圆 */}
+                          {/* 极值点标识（2026-11-01 晚反馈定稿）：大卡保留 Δ 读数，图内
+                              只留极值位置的点——价格 = 同心双环（外空心环 + 内实心点），
+                              销量 = 白芯菱形；两种形状区分量纲，不再画水平引线与双向箭头尺
+                              （辅助线全部退役，悬停浮窗照常给出数值） */}
                           {strip && ranged && slot > 0 && (
                             <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2, overflow: 'visible' }}>
-                              {priceBand && !priceBand.flat && priceSpread?.spread != null && (() => {
-                                const bandStartX = strip.plotLeft + Math.min(priceBand.startIndex, priceBand.endIndex) * slot;
-                                const compact = strip.plotWidth < 640;
-                                const label = `Δ ${formatPrice(Math.round(priceSpread.spread), state.currency)}`;
-                                const rulerX = clampRulerX(bandStartX - (compact ? 16 : 44), 'right', label, strip.plotLeft, strip.plotLeft + strip.plotWidth);
+                              {priceBand && !priceBand.flat && priceSpread?.spread != null && priceBand.dots.map((dot) => {
+                                const cx = xAt(dot.index);
+                                const cy = priceYOf(dot.value);
                                 return (
-                                  <>
-                                    {priceBand.dots.map((dot) => {
-                                      const px = xAt(dot.index);
-                                      const x1 = Math.min(px, rulerX);
-                                      const x2 = Math.max(px, rulerX);
-                                      if (x2 - x1 <= 2) return null;
-                                      return <line key={`pl-${dot.index}`} x1={x1} x2={x2} y1={priceYOf(dot.value)} y2={priceYOf(dot.value)} stroke={seriesColor} strokeOpacity={0.48} strokeWidth={1} />;
-                                    })}
-                                    {dimensionRuler({
-                                      x: rulerX,
-                                      yTop: priceYOf(priceBand.high),
-                                      yBottom: priceYOf(priceBand.low),
-                                      color: seriesColor,
-                                      label,
-                                      side: 'right',
-                                      key: 'price-ruler',
-                                    })}
-                                    {priceBand.dots.map((dot) => (
-                                      <circle key={`pd-${dot.index}`} cx={xAt(dot.index)} cy={priceYOf(dot.value)} r={3.8} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
-                                    ))}
-                                  </>
+                                  <g key={`pd-${dot.index}`}>
+                                    <title>{`价格极值 ${formatPrice(Math.round(dot.value), state.currency)}`}</title>
+                                    <circle cx={cx} cy={cy} r={5.5} fill="none" stroke={seriesColor} strokeWidth={1.6} />
+                                    <circle cx={cx} cy={cy} r={2.1} fill={seriesColor} />
+                                  </g>
                                 );
-                              })()}
-                              {volumeBand && !volumeBand.flat && volumeSpread?.spread != null && (() => {
-                                const bandEndX = strip.plotLeft + (Math.max(volumeBand.startIndex, volumeBand.endIndex) + 1) * slot;
-                                const plotRight = strip.plotLeft + strip.plotWidth;
-                                const compact = strip.plotWidth < 640;
-                                const label = `Δ ${formatVolume(volumeSpread.spread)}`;
-                                const rulerX = clampRulerX(bandEndX + (compact ? 16 : 44), 'left', label, strip.plotLeft, plotRight);
+                              })}
+                              {volumeBand && !volumeBand.flat && volumeSpread?.spread != null && volumeBand.dots.map((dot) => {
+                                const cx = xAt(dot.index);
+                                const cy = volumeYOf(dot.value);
                                 return (
-                                  <>
-                                    {volumeBand.dots.map((dot) => {
-                                      const px = xAt(dot.index);
-                                      const x1 = Math.min(px, rulerX);
-                                      const x2 = Math.max(px, rulerX);
-                                      if (x2 - x1 <= 2) return null;
-                                      return <line key={`vl-${dot.index}`} x1={x1} x2={x2} y1={volumeYOf(dot.value)} y2={volumeYOf(dot.value)} stroke={seriesColor} strokeOpacity={0.58} strokeWidth={1} />;
-                                    })}
-                                    {dimensionRuler({
-                                      x: rulerX,
-                                      yTop: volumeYOf(volumeBand.high),
-                                      yBottom: volumeYOf(volumeBand.low),
-                                      color: seriesColor,
-                                      label,
-                                      side: 'left',
-                                      key: 'volume-ruler',
-                                    })}
-                                    {volumeBand.dots.map((dot) => (
-                                      <circle key={`vd-${dot.index}`} cx={xAt(dot.index)} cy={volumeYOf(dot.value)} r={3.8} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
-                                    ))}
-                                  </>
+                                  <g key={`vd-${dot.index}`}>
+                                    <title>{`销量极值 ${formatVolume(dot.value)}`}</title>
+                                    <rect
+                                      x={cx - 4.4} y={cy - 4.4} width={8.8} height={8.8} rx={1.6}
+                                      transform={`rotate(45 ${cx} ${cy})`}
+                                      fill={color.canvas} stroke={seriesColor} strokeWidth={1.6}
+                                    />
+                                  </g>
                                 );
-                              })()}
+                              })}
                               {activePoint?.price != null && activeIdx != null && (
                                 <circle cx={xAt(activeIdx)} cy={priceYOf(activePoint.price)} r={4} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
                               )}

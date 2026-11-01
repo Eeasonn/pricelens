@@ -22,7 +22,7 @@ import { Button, Input, Popover } from 'antd';
 import { CheckOutlined, DownOutlined, FilterOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { useConfigVersion } from '../../state/configStore';
-import AnomalyQualityChip, { anomalyBucketTextOf, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
+import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
 import { useChartContent } from '../../state/chartContent';
 import { dimChannel, dimPromo, dimProduct } from '../../data';
 import type { Series, SeriesPoint, SkuGroupQuery } from '../../dataModel/types';
@@ -670,6 +670,7 @@ export default function PlatformCompareView(props: {
         });
       }
     }
+    registerAnomalyIsolated('platform', out);
     return out;
   }, [shownSeries, state.granularity]);
 
@@ -856,8 +857,6 @@ export default function PlatformCompareView(props: {
           {/* 返回入口（189 定版）：进入多平台后，工具行原位入口在此变为返回钮——
               主导航仍只有「价格走势」选中，不出现第二处页签高亮 */}
           <span style={{ marginLeft: 'auto', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            {/* 数据质量只读 chip（2026-11-01 异常守卫）：本页（可见窗口店铺线）隔离数 */}
-            <AnomalyQualityChip isolated={anomalyIsolated} />
             <button
               type="button"
               className="lpl-text-entry"
@@ -915,6 +914,7 @@ export default function PlatformCompareView(props: {
         onPromoBandsOn={props.onPromoBandsOn}
         promoBands={promoBands}
         changeThreshold={props.changeThreshold}
+        anomalySlot={<AnomalyQualityChip page="platform" />}
         onPriceTypeToggle={props.onPriceTypeToggle}
         offersOn={props.offersOn}
         onOffersOn={props.onOffersOn}
