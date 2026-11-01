@@ -12,6 +12,7 @@
 import { dimProduct, dimPromo, dimTime } from '../data';
 import type { DimProduct, FactPriceWeekly, Granularity, Industry } from './types';
 import { defaultPlatformAnchorOf, factRows, minPriceOfRows, tierOf, tierOrderOf } from './aggregate';
+import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 
 const normRom = (s: string): string => s.replace(/\s+/g, '');
 
@@ -182,6 +183,15 @@ function configShares(modelId: string, cc: string): Map<string, number> {
 // ---------------- 周销量估算 ----------------
 
 const volCache = new Map<string, Map<string, number>>();
+
+// 默认平台店铺配置变化 → 促销档期的平台锚点（defaultPlatformAnchorOf）随之变化，
+// 缓存整包失效（2026-11-01 审查；Config 页承诺「看板取价即时生效」，不失效会让
+// 量价页销量估算沿用旧平台口径一整个会话）。node 测试环境无 window，守卫跳过。
+if (typeof window !== 'undefined') {
+  window.addEventListener(CONFIG_CHANGED_EVENT, () => {
+    volCache.clear();
+  });
+}
 
 /**
  * 某型号 × 配置（汇总全部颜色 SKU）在某国的周销量估算。

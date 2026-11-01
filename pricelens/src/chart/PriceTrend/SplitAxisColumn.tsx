@@ -62,6 +62,28 @@ export default function SplitAxisColumn(props: {
   const tierBoxes = buildTierBoxes({ enabled: chrome.tierWidth > 0, geom, tierValues: props.tierValues, industry: props.industry });
   return (
     <div style={{ position: 'relative', width: axisW, height: panelGridTop + scale.plotHeight + GRID.bottom }}>
+      {/* 价格档位常驻小标（2026-11-01 审计 P2-3）：贴绘图区顶上方，把档位梯子与
+          右侧 Y 刻度数字区分开（此前只有悬停 title 可知这是档位带）。不能放轴列
+          顶部空气带——分离模式那里被 Y 轴上下限输入盒（不透明底 zIndex 8）盖住
+          （2026-11-01 审查 P2）；与 Chart.tsx 主图轴区同口径定位。 */}
+      {tierBoxes.length > 0 && (
+        <span
+          title="价格档位（USD）"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: Math.max(0, panelGridTop - 13),
+            height: 13,
+            lineHeight: '13px',
+            fontSize: 8,
+            color: color.mute,
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+          }}
+        >
+          价格档位
+        </span>
+      )}
       {/* 档位区块（仅 USD）：贴轴列左缘的整块竖向色带，档位文字单行居左
           （实心 = 档内有数据，虚线 = 空档占位）——与主图同款 */}
       {tierBoxes.map((tb, i) => (
@@ -144,8 +166,9 @@ export default function SplitAxisColumn(props: {
           />
         ))}
       {/* 断轴省略号（⋮）：短横线列居中（「Y 轴自动压缩」关闭 = 不产生断轴，自然无符号）。
-          第一百八十二轮：悬停提示 + role=img 明示「刻度非连续」 */}
-      {scale.breaks.map((b, i) => (
+          第一百八十二轮：悬停提示 + role=img 明确「刻度非连续」。
+          轴列宽 0（本币 + 关「Y 刻度线」）时不渲染——负偏移会压到右侧面板（2026-11-01 审查）。 */}
+      {chrome.visible && scale.breaks.map((b, i) => (
         <svg
           key={`brk-${i}`}
           width="14"

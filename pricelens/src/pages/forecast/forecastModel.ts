@@ -22,6 +22,8 @@ export interface ForecastWeek {
   price: number;
   rrp: number;
   promoIntensity: number;
+  /** 促销事件名（活动窗口 + 活动后一周透支期内携带；主账事件列据此归因回落周）。 */
+  promoEvent?: string;
   competitorPressure: number;
   competitorEvent?: string;
   unconstrainedDemand: number;
@@ -309,6 +311,8 @@ export function computeForecast(dataset: ForecastDataset, draft: ScenarioDraft =
     const companyNetRevenue = Math.round(price * (1 - params.channelFeeRate));
     const unitGrossMargin = companyNetRevenue - input.cost;
     const promoWindow = dataset.promoWindows.find((item) => index + 1 >= item.start && index + 1 <= item.end);
+    // 事件窗口含活动后一周（与 promoFactorAt 的透支口径一致），供主账归因。
+    const promoEventWindow = dataset.promoWindows.find((item) => index + 1 >= item.start && index + 1 <= item.end + 1);
 
     weeks.push({
       week: input.week,
@@ -319,6 +323,7 @@ export function computeForecast(dataset: ForecastDataset, draft: ScenarioDraft =
       price,
       rrp: input.rrp,
       promoIntensity: promoWindow ? promoWindow.depth : 0,
+      promoEvent: promoEventWindow?.label,
       competitorPressure: roundTo(pressure, 4),
       competitorEvent: competitorEventAt(dataset, index),
       unconstrainedDemand,

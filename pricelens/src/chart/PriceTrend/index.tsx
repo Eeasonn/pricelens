@@ -164,7 +164,18 @@ export default function PriceTrend(props: {
   // 只在所选产品不变的期间有效——产品集或币种变化即整体回自动（对比基准变了，
   // 旧限位只会误裁新数据；内容签名含主品+对比区+渠道）；跨看板切换保留（192 轮）
   const [yLimit, setYLimit] = usePageViewState<YLimitState>('dashboard.yLimit', () => ({ min: null, max: null }));
-  const limitScopeSig = useMemo(() => `${contentSignature(effMains)}#${state.currency}`, [effMains, state.currency]);
+  // 限位作用域签名（2026-11-01 审查补：contentSignature 只含产品与 SKU，漏渠道——
+  // 经平台小药丸/店铺同步换渠道后价格水平可能整体移动，旧限位要跟着回自动）：
+  // 追加各组选择项的取价渠道 + 币种。
+  const platformSig = useMemo(
+    () => effMains
+      .flatMap((card) => [card.main, ...card.compares])
+      .filter((sel): sel is NonNullable<typeof sel> => sel != null)
+      .map((sel) => (sel.platform ? `${sel.platform.platforms.join('|')}::${sel.platform.shopIds.join('|')}::${sel.platform.seller ?? ''}` : '-'))
+      .join(','),
+    [effMains],
+  );
+  const limitScopeSig = useMemo(() => `${contentSignature(effMains)}#${platformSig}#${state.currency}`, [effMains, platformSig, state.currency]);
   // 币种或产品集一变，旧限位还停在上一币种的数字上。若等 effect 再清，
   // 这一帧会用错的端点算出过细的步长，并被冻结进后续自适应（USD→本币时刻度炸开）。
   const limitScopeSeenRef = useRef<string | null>(null);
@@ -179,7 +190,18 @@ export default function PriceTrend(props: {
   }, [limitScopeSig]);
   // 查看窗口（null = 整个筛选范围）：会话态跨页保留（P1-5）——切页返回恢复；
   // 粒度切换换算 / 范围改动复位（rangeWatch）等失义路径不变
-  const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('dashboard.windowIds', () => null);
+  const [windowIds, setWindowIdsRaw] = usePageViewState<[string, string] | null>('dashboard.windowIds', () => null);
+  // 查看窗口的粒度戳（2026-11-01 审查 P1）：windowIds 存桶 id，只在写入时的粒度下
+  // 有意义——用户在别的页面换了粒度再回来，旧 id 会被字符串序兜底错读（周/月/季
+  // id 字典序不可比，落到错误桶或被钳到端点）。写入一律走 commitWindowIds 盖当前
+  // 粒度戳；挂载时戳对不上 → 整体复位（与下方 panelWinsGran 同款自愈）
+  const [windowIdsGran, setWindowIdsGran] = usePageViewState<string>('dashboard.windowIdsGran', () => state.granularity);
+  const commitWindowIds = (
+    v: [string, string] | null | ((p: [string, string] | null) => [string, string] | null),
+  ): void => {
+    setWindowIdsRaw(v);
+    setWindowIdsGran(state.granularity);
+  };
   // 预警事件焦点周（第一百九十轮，外部 UX 审计落地）：预警页跳转经 navBus 一次性
   // 消费后留存触发周 id——图上画焦点带标注「预警触发周」；用户主动改查看窗口即清
   // （刷选提交 / 分离轨道拖动点选 / 时间筛选器变化三类入口，见下方交互回调）。
@@ -280,7 +302,8 @@ export default function PriceTrend(props: {
     if (granRef.current === state.granularity) return;
     const prev = granRef.current;
     granRef.current = state.granularity;
-    setWindowIds((ids) => (ids ? convertWindowIds(ids, prev, state.granularity) : null));
+    setWindowIdsRaw((ids) => (ids ? convertWindowIds(ids, prev, state.granularity) : null));
+    setWindowIdsGran(state.granularity); // 页内换算后窗口仍有效，直接盖新粒度戳
     commitPanelWins({}); // 独立时间段按桶号失义，回落共享时间段并盖新粒度戳
   }, [state.granularity]);
   // 面板独立时间段跨粒度自愈（本轮体检）：粒度戳与当前粒度对不上（用户在别的
@@ -292,6 +315,14 @@ export default function PriceTrend(props: {
     setPanelWins({});
     setPanelWinsGran(state.granularity);
   }, [panelWinsGran, state.granularity, setPanelWins, setPanelWinsGran]);
+  // 查看窗口跨粒度自愈（2026-11-01 审查 P1）：粒度戳与当前粒度对不上（用户在别的
+  // 页面换了粒度再回来）→ 旧桶 id 被新粒度字符串序兜底错读——复位为整个筛选范围。
+  // 用布局 effect：回落在首帧绘制前完成，不露错位的一闪
+  useLayoutEffect(() => {
+    if (windowIdsGran === state.granularity) return;
+    setWindowIdsRaw(null);
+    setWindowIdsGran(state.granularity);
+  }, [windowIdsGran, state.granularity, setWindowIdsRaw, setWindowIdsGran]);
 
   // ---- 取数：useFilters().state → SeriesQuery → buildSeries（§7.3 唯一口径） ----
   // 按数据全集取数（内存小数据集，成本可忽略）：跨度/自适应范围、窗口边缘续接
@@ -383,7 +414,7 @@ export default function PriceTrend(props: {
       rangeWatchRef.current = { gran: state.granularity, key: `${adaptiveBounds[0]}|${adaptiveBounds[1]}` };
     }
     if (adaptiveMountedRef.current || !rangeUnchanged) {
-      setWindowIds(null); // 窗口复位 = 整个自动极值范围
+      commitWindowIds(null); // 窗口复位 = 整个自动极值范围
       commitPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
     }
     adaptiveMountedRef.current = true;
@@ -412,7 +443,7 @@ export default function PriceTrend(props: {
     // 主动改动查看窗口（窗口本身仍按 ±8 周/±2 月/±1 季对准该周，逻辑不变）
     setFocusWeekId(wk);
     const half = state.granularity === 'week' ? 8 : state.granularity === 'month' ? 2 : 1;
-    setWindowIds([buckets[Math.max(0, i - half)].id, buckets[Math.min(buckets.length - 1, i + half)].id]);
+    commitWindowIds([buckets[Math.max(0, i - half)].id, buckets[Math.min(buckets.length - 1, i + half)].id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -427,7 +458,7 @@ export default function PriceTrend(props: {
     if (prev.gran === state.granularity && prev.key === key) return;
     rangeWatchRef.current = { gran: state.granularity, key };
     if (prev.gran !== state.granularity) return; // 换粒度：窗口已按跨度换桶
-    setWindowIds(null); // 范围在图外被改 → 窗口复位为整个新范围
+    commitWindowIds(null); // 范围在图外被改 → 窗口复位为整个新范围
     setFocusWeekId(null); // 时间筛选器变化 = 焦点周完成使命（第一百九十轮）
   }, [state.granularity, state.rangeStart, state.rangeEnd]);
 
@@ -1161,7 +1192,7 @@ export default function PriceTrend(props: {
   const onWindowChange = (s: number, e: number): void => {
     if (!buckets[s] || !buckets[e]) return;
     setFocusWeekId(null); // 用户主动刷选 = 焦点带完成使命（第一百九十轮）
-    setWindowIds([buckets[s].id, buckets[e].id]);
+    commitWindowIds([buckets[s].id, buckets[e].id]);
   };
 
   /** 独立模式下面板时间轴只动自己的生效窗口（共享窗口未变）。 */

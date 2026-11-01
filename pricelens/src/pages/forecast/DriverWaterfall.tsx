@@ -21,7 +21,7 @@ export default function DriverWaterfall({ computation }: { computation: Forecast
   const toUnconstrained = withoutSupply.reduce((total, driver) => total + driver.value, 0);
   return (
     <div style={{ display: 'grid', gap: space.md }}>
-      <div style={{ display: 'grid', gap: space.md }} aria-label={`${current.week} 预测变化因子拆解`}>
+      <div role="group" aria-label={`${current.week} 预测变化因子拆解`} style={{ display: 'grid', gap: space.md }}>
         {drivers.map((driver) => {
           const width = Math.max(driver.key === 'baseline' ? 6 : 2, (Math.abs(driver.value) / maxAbs) * 100);
           return (
@@ -48,7 +48,7 @@ export default function DriverWaterfall({ computation }: { computation: Forecast
         本拆解供业务核对，方向性条目不代表因果证明。
       </div>
       <div style={{ padding: '9px 11px', borderLeft: `2px solid ${color.warning}`, background: color.warningSoft, borderRadius: `0 ${radius.control} ${radius.control} 0`, fontSize: 12, lineHeight: 1.65, color: color.warningInk }}>
-        <strong>竞品上市 · 方向性判断：</strong>简单版只将其作为我司份额压力，扩盘比例待验证。默认上市后 6 周冲击逐周递减（当前周压力 {fmtSignedPct(current.competitorPressure * 100)}）。
+        <strong>竞品上市 · 方向性判断：</strong>简单版只将其作为华为份额压力，扩盘比例待验证。默认上市后 6 周冲击逐周递减（当前周压力 {fmtSignedPct(current.competitorPressure * 100)}）。
       </div>
     </div>
   );

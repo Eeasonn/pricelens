@@ -6,6 +6,7 @@ import {
   rangeBandInView,
   rangeSpreadOf,
   resolveSelectedWindow,
+  shouldUseWanUnits,
   volumePointValid,
 } from '../periodSummary';
 
@@ -94,5 +95,31 @@ describe('区间极差', () => {
     expect(formatVolumeAmount(12000, true)).toBe('1.2万');
     expect(formatVolumeAmount(10000, true)).toBe('1万');
     expect(formatVolumeAmount(-2500, false)).toBe('−2,500');
+  });
+});
+
+describe('万单位档位判定 shouldUseWanUnits（2026-11-01 审查：混合量级不开万档）', () => {
+  it('全部非空值 ≥ 1 万才开万档', () => {
+    expect(shouldUseWanUnits([10000, 15000])).toBe(true);
+    expect(shouldUseWanUnits([12000])).toBe(true);
+  });
+
+  it('混合量级（小值 + 万级）不开万档——避免 300 被抹成「0万」', () => {
+    expect(shouldUseWanUnits([300, 15000])).toBe(false);
+    expect(shouldUseWanUnits([9500, 12000])).toBe(false);
+  });
+
+  it('全小值 / 空数组 / 全缺采不开万档；缺采周不参与判定', () => {
+    expect(shouldUseWanUnits([300, 8000])).toBe(false);
+    expect(shouldUseWanUnits([])).toBe(false);
+    expect(shouldUseWanUnits([null, null])).toBe(false);
+    expect(shouldUseWanUnits([null, 12000, null])).toBe(true);
+  });
+
+  it('与格式化函数组合：混合量级走千分位不失真', () => {
+    const values = [300, 15000];
+    const wan = shouldUseWanUnits(values);
+    expect(wan).toBe(false);
+    expect(values.map((value) => formatVolumeAmount(value, wan))).toEqual(['300', '15,000']);
   });
 });

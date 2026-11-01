@@ -37,6 +37,8 @@ const tdStyle = {
 };
 
 export default function WeeklyLedger({ weeks, currentWeekIndex }: { weeks: ComputedWeek[]; currentWeekIndex: number }) {
+  // 净收入率从账面周数据推导（公司净收入 / 价格），不写死 86%——fixture 调渠道费率后脚注随之更新。
+  const netRatePct = weeks.length && weeks[0].price > 0 ? Math.round((weeks[0].companyNetRevenue / weeks[0].price) * 100) : 86;
   return (
     <div style={{ display: 'grid', gap: space.sm }}>
       <div style={{ overflowX: 'auto', borderRadius: radius.control, border: `1px solid ${color.hairline}` }}>
@@ -76,10 +78,15 @@ export default function WeeklyLedger({ weeks, currentWeekIndex }: { weeks: Compu
                     {week.stockout && <span style={{ marginLeft: 5, fontSize: 10, color: color.error }}>截断</span>}
                   </td>
                   <td style={{ ...tdStyle, color: color.ink, fontWeight: 600 }}>{fmtUnits(week.so)}</td>
-                  <td style={tdStyle}>{fmtUnits(week.inventory)}</td>
+                  <td style={{ ...tdStyle, color: week.inventory < 0 ? color.error : undefined }}>
+                    <span className="tnum" title={week.inventory < 0 ? '负期末库存：该情景下 Sell-in 计划低于成交（供给欠配），非数据错误' : undefined}>{fmtUnits(week.inventory)}</span>
+                  </td>
                   <td style={tdStyle}>{fmtMoney(week.unitGrossMargin)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'left', color: week.competitorEvent || week.promoIntensity > 0 ? color.body : color.mute }}>
-                    {week.competitorEvent ?? (week.promoIntensity > 0 ? '促销窗口' : '—')}
+                  <td style={{ ...tdStyle, textAlign: 'left', color: week.competitorEvent || week.promoEvent ? color.body : color.mute }}>
+                    {week.competitorEvent
+                      ?? (week.promoEvent
+                        ? (week.promoIntensity > 0 ? `促销 · ${week.promoEvent}` : `促销后回落 · ${week.promoEvent}`)
+                        : '—')}
                   </td>
                 </tr>
               );
@@ -89,7 +96,8 @@ export default function WeeklyLedger({ weeks, currentWeekIndex }: { weeks: Compu
       </div>
       <div style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}>
         期末库存 = 期初库存 + Sell-in − SO（逐周递推）；DOS = 期末库存 ÷ 当周无约束需求 × 7 天。「截断」= 可供量低于无约束需求，SO 按可供量成交，不代表需求下降。
-        单台销毛 = 公司净收入（价格 × 86%）− 单台成本；W15 起成本上调只影响销毛链。
+        期末库存为负 = 该情景（含 What-if 草稿）下 Sell-in 计划跟不上成交，是供给欠配信号而非数据错误。
+        单台销毛 = 公司净收入（价格 × {netRatePct}%）− 单台成本；W15 起成本上调只影响销毛链。
       </div>
     </div>
   );

@@ -34,8 +34,10 @@ const SLIDERS: SliderSpec[] = [
     ariaLabel: '促销强度增量（百分点，仅预测窗口生效）',
     min: 0,
     max: 15,
-    hints: ['无增量', '当前基准', '+15'],
-    format: (value) => `+${value}`,
+    // 基准在最左端 0（量程 0..15），中位提示标实际值 +8 而非「当前基准」——
+    // 与另两条基准居中的滑杆不同，避免把用户引到非基准值上。
+    hints: ['基准 · 无增量', '+8', '+15'],
+    format: (value) => (value === 0 ? '0' : `+${value}`),
   },
   {
     key: 'supplyDeltaPct',

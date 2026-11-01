@@ -207,3 +207,63 @@ describe('简单版量价预测模型 · 摘要与拆解', () => {
     expect(baseline.current.unconstrainedDemand).toBeLessThan(baseline.current.baseDemand);
   });
 });
+
+describe('简单版量价预测模型 · 极端草稿与钳制不变量（2026-11-01 审查补测）', () => {
+  const finiteFields = (week: (typeof baseline.weeks)[number]): number[] => [
+    week.baseDemand, week.price, week.unconstrainedDemand, week.available,
+    week.so, week.inventory, week.companyNetRevenue, week.unitGrossMargin,
+    week.weeklyGrossMargin, week.dos,
+  ];
+
+  it('程序化极值草稿（价格 −100% / 供给 −100% / 促销 −100pp）下全字段有限、不产生 NaN/Infinity', () => {
+    const extreme = computeForecast(forecastFixture, { priceDeltaPct: -100, promoDeltaPct: -100, supplyDeltaPct: -100 });
+    for (const week of extreme.weeks) {
+      for (const value of finiteFields(week)) {
+        expect(Number.isFinite(value)).toBe(true);
+      }
+    }
+  });
+
+  it('促销响应钳到 0：promoDelta 足够负（−120，盖过 8% 窗口的 1.128 基准）时预测窗需求与 SO 全 0、库存只增', () => {
+    const zeroed = computeForecast(forecastFixture, { priceDeltaPct: 0, promoDeltaPct: -120, supplyDeltaPct: 0 });
+    const forecastWeeks = zeroed.weeks.slice(current + 1);
+    expect(forecastWeeks.every((week) => week.unconstrainedDemand === 0 && week.so === 0)).toBe(true);
+    expect(forecastWeeks.every((week) => week.inventory >= 0)).toBe(true);
+  });
+
+  it('竞品压力钳制（1+pressure ≥ 0）只在压力 ≤ −1 的周清零，压力衰减后恢复（无跨周传染）', () => {
+    const dataset: ForecastDataset = {
+      ...forecastFixture,
+      competitorLaunches: [{ id: 'cmp-crush', label: '强竞品上市', week: 12, impact: -1.5, windowWeeks: 6, halfLifeWeeks: 6 }],
+    };
+    const crushed = computeForecast(dataset, BASELINE_DRAFT);
+    // impact 1.5、半衰期 6：age ≤ 2 时压力仍 ≤ −1（W12–W14 连续清零，属衰减窗口而非传染）
+    expect(crushed.weeks[11].unconstrainedDemand).toBe(0);
+    expect(crushed.weeks[13].unconstrainedDemand).toBe(0);
+    // age = 3 时压力 1.5·e^(−0.5) ≈ 0.91 < 1，需求恢复为正——下一周独立重算
+    expect(crushed.weeks[14].unconstrainedDemand).toBeGreaterThan(0);
+  });
+
+  it('UI 可达滑杆极值组合下 SO ≤ 可供量、全字段有限；供给放大组合可把期末库存推负（恒等式保留）', () => {
+    const combos: ScenarioDraft[] = [
+      { priceDeltaPct: -10, promoDeltaPct: 15, supplyDeltaPct: -20 },
+      { priceDeltaPct: 10, promoDeltaPct: 15, supplyDeltaPct: 20 },
+    ];
+    for (const draft of combos) {
+      const result = computeForecast(forecastFixture, draft);
+      expect(result.weeks.every((week) => week.so <= week.available)).toBe(true);
+      expect(result.weeks.every((week) => week.inventory >= 0)).toBe(true);
+      expect(result.weeks.every((week) => finiteFields(week).every(Number.isFinite))).toBe(true);
+    }
+    // 供给 +20% × 降价 −10%：截断解除、SO 上行越过 Sell-in 流入，期末库存下穿 0
+    //（实测最低 −878）。模型保留「期末 = 期初 + SI − SO」恒等式，负值按供给欠配
+    // 信号呈现（主账标红 + 脚注），不静默钳 0。
+    const oversold = computeForecast(forecastFixture, { priceDeltaPct: -10, promoDeltaPct: 0, supplyDeltaPct: 20 });
+    expect(Math.min(...oversold.weeks.map((week) => week.inventory))).toBeLessThan(0);
+    expect(oversold.weeks.every((week) => week.so <= week.available)).toBe(true);
+  });
+
+  it('基准与可达草稿下 DOS 恒有限且为正（除零保护 Math.max(1, 需求)）', () => {
+    expect(baseline.weeks.every((week) => Number.isFinite(week.dos) && week.dos >= 0)).toBe(true);
+  });
+});

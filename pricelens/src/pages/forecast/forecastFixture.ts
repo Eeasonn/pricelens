@@ -101,7 +101,7 @@ export const forecastFixture: ForecastDataset = {
     { id: 'E01', weekLabel: 'W1', type: 'lifecycle', label: '当前产品上市', shape: '爬坡后平台', detail: '建立首销与生命周期基线' },
     { id: 'E02', weekLabel: 'W6–W7', type: 'promo', label: '夏季大促', shape: '平台脉冲', detail: '活动强度 14%，活动后一周透支回落，不永久外推' },
     { id: 'E03', weekLabel: 'W8–W9', type: 'supply', label: '供应波动', shape: '供给上限', detail: '无约束需求保留，SO 按可供量截断' },
-    { id: 'E04', weekLabel: 'W10', type: 'competitor', label: '竞品新品上市', shape: '首周冲击后递减', detail: '简单版只将其作为我司份额压力，扩盘比例待验证' },
+    { id: 'E04', weekLabel: 'W10', type: 'competitor', label: '竞品新品上市', shape: '首周冲击后递减', detail: '简单版只将其作为华为份额压力，扩盘比例待验证' },
     { id: 'E05', weekLabel: 'W12', type: 'competitor', label: '竞品促销', shape: '单周脉冲', detail: '在上市递减窗口上叠加一周份额压力' },
     { id: 'E06', weekLabel: 'W15', type: 'cost', label: '成本上调', shape: '成本阶跃', detail: '只影响销毛和价格底线，不修改需求' },
     { id: 'E07', weekLabel: 'W19–W20', type: 'promo', label: '年末清库促销', shape: '平台脉冲', detail: '活动强度 8%，促进成交与库存消化' },
@@ -146,7 +146,7 @@ export const forecastFixture: ForecastDataset = {
       status: '方向性判断',
       evidence: '竞品事件 + 可比价格',
       confidence: '低',
-      boundary: '简单版只将其作为我司份额压力，扩盘比例待验证',
+      boundary: '简单版只将其作为华为份额压力，扩盘比例待验证',
     },
     {
       key: 'supply',

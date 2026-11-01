@@ -11,6 +11,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { RobotOutlined } from '@ant-design/icons';
 import { Button, Drawer } from 'antd';
 import PageHeader from '../components/PageHeader';
+import ChartContentBar from '../components/ChartContentBar';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { scopeLabels } from '../dataModel/scope';
@@ -56,12 +57,16 @@ export default function ForecastPage() {
   const firstForecastWeek = computation.weeks[forecastFixture.params.currentWeekIndex + 1];
   const lastWeek = computation.weeks[computation.weeks.length - 1];
   const forecastRangeLabel = `${firstForecastWeek.week}–${lastWeek.week}`;
-  const currencyText = state.currency === 'usd' ? 'USD' : '本币';
 
   return (
     <div style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }} data-lpl-scroll>
       <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         <PageHeader />
+        {/* 图表三页签（与价格走势/量价走势同款）：预测页也能一键切回另两个图表页。
+            币种不跟全局筛选：本页数据固定 USD（下方范围行显式标注），全局币种不再展示。 */}
+        <div style={{ background: color.canvas, flexShrink: 0 }}>
+          <ChartContentBar />
+        </div>
         <main style={{ flex: 1, padding: `${space.lg}px`, maxWidth: 1280, width: '100%', margin: '0 auto', boxSizing: 'border-box', display: 'grid', gap: space.md }}>
           {/* ① 范围与状态 */}
           <section style={forecastCardStyle}>
@@ -80,8 +85,9 @@ export default function ForecastPage() {
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', marginTop: space.md, padding: `${space.md - 2}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, fontSize: 12, color: color.body }}>
               {[
-                ['全局筛选范围', `${labels.country} · ${labels.industry} · 币种 ${currencyText}`],
+                ['全局筛选范围', `${labels.country} · ${labels.industry}`],
                 ['演示口径', `${context.country} · ${context.channel} · ${context.product}`],
+                ['币种', `${meta.currency}（固定）`],
                 ['价格档', context.priceBand],
                 ['当前周', `${context.currentWeek}（实际）· 预测 ${forecastRangeLabel}`],
                 ['对照竞品', context.competitors.join(' / ')],

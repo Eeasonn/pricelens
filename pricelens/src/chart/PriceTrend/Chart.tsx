@@ -1186,6 +1186,26 @@ export default function Chart(props: ChartProps) {
               </div>
             );
           })}
+          {/* 价格档位常驻小标（2026-11-01 审计 P2-3）：画在梯子顶部空气带内，
+              把档位带与 Y 刻度数字区分开（此前只有悬停 title）。与分离轴列
+              SplitAxisColumn 同款。 */}
+          {showTierBand && tierBoxes.length > 0 && (
+            <span
+              title="价格档位（USD）"
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: (geom?.plotTop ?? 0) - 13,
+                fontSize: 8,
+                lineHeight: '13px',
+                color: color.mute,
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+              }}
+            >
+              价格档位
+            </span>
+          )}
           {/* 档位区块（仅 USD）：贴容器左缘的整块竖向色带 = [档位文字区 | 灰竖线 | 刻度文字区]，
               刻度（zIndex 2）与短横线叠画在区块上；无数据的档 = 虚线占位（第三十二轮，梯子连续可读）；
               本币不渲染；图隐藏（空态）时整块消失。

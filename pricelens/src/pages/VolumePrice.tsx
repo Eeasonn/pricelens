@@ -104,7 +104,7 @@ import PointerShield from './volume/PointerShield';
 import { detailDateOf, weekDetailModel } from './volume/weekDetail';
 import { spreadCardModel, spreadCardRow } from './volume/spreadCards';
 import { commitVolumeAxisLimit, normalizePanelWindow, vMaxOf, volumeRangeOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
-import { formatVolumeAmount, pricePointValid, rangeBandInView, rangeSpreadOf, resolveSelectedWindow, volumePointValid } from './volume/periodSummary';
+import { formatVolumeAmount, pricePointValid, rangeBandInView, rangeSpreadOf, resolveSelectedWindow, shouldUseWanUnits, volumePointValid } from './volume/periodSummary';
 
 // 面板头定高（第一百九十一轮，Eason 五点）：面板头改 [拖柄][PillUnit] 后随药丸
 // 加高——可换行的平台小药丸（28px）+ 2px 间距 + 两行产品药丸，另给店铺同步按钮
@@ -127,12 +127,24 @@ const CHART_GRID_RIGHT = 78; // 右侧预留销量轴列（轴线 + 最高值输
 /** 粒度名词（周/月/季）：脚注与无障碍文案随粒度换字，不把「周」硬套在月/季视图 */
 const granNounOf = (granularity: Granularity): string => (granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季');
 
+/** 标注尺标签框宽（dimensionRuler 同式抽取：钳制与绘制共用一式） */
+const rulerLabelW = (label: string): number => Math.max(30, label.length * 6 + 8);
+
+/** 标注尺 x 钳制（2026-11-01 审计 P2-4）：白底标签框整体留在绘图区内——选区贴
+ *  右缘时价格尺标签不再压销量轴列、贴左缘时销量尺标签不溢出面板左缘。 */
+const clampRulerX = (x: number, side: 'left' | 'right', label: string, plotLeft: number, plotRight: number): number => {
+  const w = rulerLabelW(label);
+  return side === 'right'
+    ? Math.max(plotLeft + 4, Math.min(x, plotRight - w - 6))
+    : Math.min(plotRight - 4, Math.max(x, plotLeft + w + 6));
+};
+
 /** 尺寸标注尺（视觉 demo：dimensionRuler）：垂直双箭头 + Δ 标签 + 白底标签框。
  *  最高＝最低（高度差不足 2px）时没有可量的距离，不画。 */
 function dimensionRuler(input: { x: number; yTop: number; yBottom: number; color: string; label: string; side: 'left' | 'right'; key: string }) {
   if (input.yBottom - input.yTop < 2) return null;
   const midY = (input.yTop + input.yBottom) / 2;
-  const labelW = Math.max(30, input.label.length * 6 + 8);
+  const labelW = rulerLabelW(input.label);
   const rectX = input.side === 'right' ? input.x + 6 : input.x - labelW - 6;
   const textX = input.side === 'right' ? input.x + 10 : input.x - 10;
   return (
@@ -481,10 +493,13 @@ export default function VolumePrice() {
   }, [buckets, state.rangeStart, state.rangeEnd]);
 
   // ---- 第119轮（走查会）：各面板生效窗口。同步 = 全部面板共用共享窗口（原行为）；
-  //      非同步 = 各面板独立窗口（未单独调整过的回落共享窗口，越界钳回可调全域）----
+  //      非同步 = 各面板独立窗口（未单独调整过的回落共享窗口，越界钳回可调全域）。
+  //      timeSynced（主产品阅读视图或开同步）恒用共享窗口——此前组内对比关过同步
+  //      留下的独立窗口残留会把阅读视图的图冻结在旧窗口（时间轴显示共享窗、拖动
+  //      图不动），按「同步 = 共用窗口」口径直接忽略（2026-11-01 审查 P1）。----
   const effWins = useMemo<[number, number][]>(
-    () => panelSpecs.map((_, i) => normalizePanelWindow(panelWins[i] ?? null, win.s, win.e, filterBounds[0], filterBounds[1])),
-    [panelSpecs, panelWins, win.s, win.e, filterBounds],
+    () => panelSpecs.map((_, i) => normalizePanelWindow(timeSynced ? null : panelWins[i] ?? null, win.s, win.e, filterBounds[0], filterBounds[1])),
+    [panelSpecs, timeSynced, panelWins, win.s, win.e, filterBounds],
   );
   const toggleSynced = (): void => {
     if (synced) setPanelWins(panelSpecs.map(() => [win.s, win.e] as [number, number]));
@@ -498,11 +513,14 @@ export default function VolumePrice() {
     setBrushLive((prev) => prev.map(() => null));
   }, [win.s, win.e, state.granularity, timeSynced]);
 
-  // 换产品清单（顶部筛选器增删产品）→ 悬停列/高亮段随面板重置
+  // 换产品清单（顶部筛选器增删产品）→ 悬停列/高亮段随面板重置；独立窗口按面板
+  // 挂在数组下标上，中间删面板会错位串到下一张面板（2026-11-01 审查 P2），一并清。
   useEffect(() => {
     setHoverIdxs(panelSpecs.map(() => null));
     setBrushes(panelSpecs.map(() => null));
     setBrushLive(panelSpecs.map(() => null));
+    setPanelWins(panelSpecs.map(() => null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelSpecs]);
 
   // 非同步下面板独立调时间轴只动 effWins，不触发上面的整体清除（共享窗口未变）——
@@ -926,7 +944,8 @@ export default function VolumePrice() {
                       const windowLo = row ? Math.min(row.windowStart, row.windowEnd) : 0;
                       const windowHi = row ? Math.max(row.windowStart, row.windowEnd) : -1;
                       const volumeSlice = row ? row.volumes.slice(windowLo, windowHi + 1) : [];
-                      const volumeWan = volumeSlice.some((value) => value != null && Math.abs(value) >= 10000);
+                      // 万单位档：区间内非空值全部 ≥1 万才开（混合量级开万档会把小值抹成「0万」）
+                      const volumeWan = shouldUseWanUnits(volumeSlice);
                       const formatVolume = (value: number) => formatVolumeAmount(value, volumeWan);
                       const priceSpread = ranged && row
                         ? rangeSpreadOf(row.prices.slice(windowLo, windowHi + 1), pricePointValid)
@@ -961,14 +980,16 @@ export default function VolumePrice() {
                       const activePoint = activeIdx != null ? p.vis[0]?.points[activeIdx] ?? null : null;
                       const marginPoint = activeIdx != null ? marginPoints[activeIdx] ?? null : null;
                       const crossX = strip && activeIdx != null ? marginCrossX(strip, activeIdx) : null;
-                      // ---- 图下单周明细卡：缺采显示 —，环比只跟上一桶比，不借用相邻值
+                      // ---- 图下单周明细卡：缺采显示 —，环比只跟上一桶比，不借用相邻值。
+                      //      上一桶取全量域（视图切片首桶的前一周在域内可能有值，
+                      //      按切片取会把窗口首周误显成缺采「—」）。
                       const detail = weekDetailModel({
                         granularity: state.granularity,
                         bucketId: activePoint?.bucketId ?? '',
                         xLabel: activePoint?.xLabel ?? '',
                         price: activePoint?.price ?? null,
                         rrp: activePoint?.rrp ?? null,
-                        prevPrice: activeIdx != null && activeIdx > 0 ? p.vis[0]?.points[activeIdx - 1]?.price ?? null : null,
+                        prevPrice: activeIdx != null ? p.series[0]?.points[viewStart + activeIdx - 1]?.price ?? null : null,
                         volume: activeIdx != null ? volumes[p.idx]?.[activeIdx] ?? null : null,
                         marginPoint,
                         marginUnavailable,
@@ -1250,7 +1271,8 @@ export default function VolumePrice() {
                               {priceBand && !priceBand.flat && priceSpread?.spread != null && (() => {
                                 const bandStartX = strip.plotLeft + Math.min(priceBand.startIndex, priceBand.endIndex) * slot;
                                 const compact = strip.plotWidth < 640;
-                                const rulerX = Math.max(strip.plotLeft + 4, bandStartX - (compact ? 16 : 44));
+                                const label = `Δ ${formatPrice(Math.round(priceSpread.spread), state.currency)}`;
+                                const rulerX = clampRulerX(bandStartX - (compact ? 16 : 44), 'right', label, strip.plotLeft, strip.plotLeft + strip.plotWidth);
                                 return (
                                   <>
                                     {priceBand.dots.map((dot) => {
@@ -1265,7 +1287,7 @@ export default function VolumePrice() {
                                       yTop: priceYOf(priceBand.high),
                                       yBottom: priceYOf(priceBand.low),
                                       color: seriesColor,
-                                      label: `Δ ${formatPrice(Math.round(priceSpread.spread), state.currency)}`,
+                                      label,
                                       side: 'right',
                                       key: 'price-ruler',
                                     })}
@@ -1279,7 +1301,8 @@ export default function VolumePrice() {
                                 const bandEndX = strip.plotLeft + (Math.max(volumeBand.startIndex, volumeBand.endIndex) + 1) * slot;
                                 const plotRight = strip.plotLeft + strip.plotWidth;
                                 const compact = strip.plotWidth < 640;
-                                const rulerX = Math.min(plotRight - 4, bandEndX + (compact ? 16 : 44));
+                                const label = `Δ ${formatVolume(volumeSpread.spread)}`;
+                                const rulerX = clampRulerX(bandEndX + (compact ? 16 : 44), 'left', label, strip.plotLeft, plotRight);
                                 return (
                                   <>
                                     {volumeBand.dots.map((dot) => {
@@ -1294,7 +1317,7 @@ export default function VolumePrice() {
                                       yTop: volumeYOf(volumeBand.high),
                                       yBottom: volumeYOf(volumeBand.low),
                                       color: seriesColor,
-                                      label: `Δ ${formatVolume(volumeSpread.spread)}`,
+                                      label,
                                       side: 'left',
                                       key: 'volume-ruler',
                                     })}

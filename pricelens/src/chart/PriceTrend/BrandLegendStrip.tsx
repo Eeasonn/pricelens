@@ -65,11 +65,20 @@ const PILL_W_BUDGET = 240;
 /** 主品药丸描边：与选择浮窗颜色 chip 同一「浅蓝描边 = 强调」语言（第一百二十二轮） */
 const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
 
-/** 系列 key 前缀（modelId）→ 配置原文（第一百七十八轮：型号蓝底 chip 用；
- *  维表反查查不到 / 无配置层级（'—'）返回 ''，药丸第二行不出 chip） */
+/** 系列 key → 配置原文（第一百七十八轮：型号蓝底 chip 用；维表反查查不到 /
+ *  无配置层级（'—'）返回 ''，药丸第二行不出 chip）。
+ *  2026-11-01 审查 P1 修复：key 后缀 = 本系列自己的配置（去空格），必须按它反查——
+ *  原实现取型号维表首行 romram，多配置型号的非首配置系列会挂错 chip（如
+ *  12+512 系列显示首行 12+256）。 */
 function romTextOf(key: string): string {
-  const modelId = key.slice(0, key.indexOf('__'));
-  const rom = dimProduct.find((p) => p.model_id === modelId)?.romram ?? '';
+  const sep = key.indexOf('__');
+  const modelId = sep <= 0 ? key : key.slice(0, sep);
+  const normRom = sep <= 0 ? '' : key.slice(sep + 2);
+  const rows = dimProduct.filter((p) => p.model_id === modelId);
+  const row = normRom
+    ? rows.find((p) => p.romram.replace(/\s+/g, '') === normRom) ?? rows[0]
+    : rows[0];
+  const rom = row?.romram ?? '';
   return rom === '—' ? '' : rom;
 }
 

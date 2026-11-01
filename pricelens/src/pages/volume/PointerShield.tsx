@@ -56,8 +56,19 @@ export default function PointerShield(props: {
   };
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    const index = idxAt(event.clientX);
-    if (index == null) return;
+    let index = idxAt(event.clientX);
+    if (index == null) {
+      // 拖选中指针越出绘图区：钳到边缘桶继续预览，不冻结在缘内最后一列
+      // （2026-11-01 审查；悬停（非拖动）仍要求指针在绘图区内）。
+      if (!drag.current || props.n <= 0) return;
+      const el = ref.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      if (x < 0 && drag.current.anchor <= 0) return; // 起点已在最左列，左侧无可选
+      if (x > props.plotWidth && drag.current.anchor >= props.n - 1) return; // 同理最右
+      index = Math.min(props.n - 1, Math.max(0, Math.floor(Math.min(Math.max(0, x), props.plotWidth) / (props.plotWidth / props.n))));
+    }
     props.onHover(index);
     const y = yAt(event.clientY);
     if (y != null) props.onCrossY(y);

@@ -139,3 +139,16 @@ export function formatVolumeAmount(n: number, wan: boolean): string {
     : Math.round(abs).toLocaleString('en-US');
   return negative ? `−${body}` : body;
 }
+
+/** 万单位档位判定（2026-11-01 审查）：只有全部非空值都 ≥ 1 万才开万档——
+ *  混合量级（如 300 与 15,000 同区间）时开万档会把小值抹成「0万」失真，
+ *  千分位对两端都可读。 */
+export function shouldUseWanUnits(values: readonly (number | null)[]): boolean {
+  let hasBig = false;
+  for (const value of values) {
+    if (value == null) continue;
+    if (Math.abs(value) >= 10000) hasBig = true;
+    else return false;
+  }
+  return hasBig;
+}
