@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>量价页产品显隐交互 · 低保真示意（2026-11-01）</title>
+<style>
+  :root {
+    --canvas: #ffffff;
+    --canvas-soft: #fafafa;
+    --canvas-soft-2: #f5f5f5;
+    --hairline: #ebebeb;
+    --hairline-strong: #a1a1a1;
+    --ink: #171717;
+    --body: #4d4d4d;
+    --mute: #737373;
+    --link: #0070f3;
+    --select-soft: #e8f1ff;
+    --select-soft-ink: #0053c2;
+    --huawei: #c7000b;
+    --samsung: #0000cc;
+    --apple: #1d1d1f;
+    --warn-soft: #ffefcf;
+    --warn-ink: #805b00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--canvas-soft);
+    color: var(--ink);
+    font: 14px/1.6 Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header { padding: 28px 32px 12px; }
+  header h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
+  header p { margin: 0; color: var(--mute); font-size: 13px; max-width: 860px; }
+  .tabs { display: flex; gap: 8px; padding: 12px 32px 0; flex-wrap: wrap; }
+  .tabs button {
+    font: inherit; font-size: 13px; font-weight: 600;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--hairline); background: var(--canvas); color: var(--body);
+  }
+  .tabs button[aria-pressed="true"] { background: var(--select-soft); border-color: var(--link); color: var(--select-soft-ink); }
+  .tabnote { padding: 14px 32px 0; max-width: 980px; }
+  .tabnote .lead { margin: 0 0 6px; font-size: 13px; color: var(--body); }
+  .tabnote .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 9999px; border: 1px solid var(--hairline); color: var(--mute); background: var(--canvas); }
+  .chip.good { color: var(--select-soft-ink); border-color: rgba(0,112,243,.35); background: var(--select-soft); }
+  .chip.bad { color: var(--warn-ink); border-color: rgba(245,166,35,.5); background: var(--warn-soft); }
+  main { padding: 18px 32px 8px; }
+  .card {
+    background: var(--canvas); border: 1px solid var(--hairline);
+    border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    padding: 14px 16px 16px; max-width: 1180px;
+  }
+  .card-caption { font-size: 12px; color: var(--mute); margin: 0 0 10px; }
+  .board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
+  .yaxis { flex: 0 0 64px; display: flex; flex-direction: column; justify-content: space-between; padding: 76px 0 118px; font-size: 10px; color: var(--mute); text-align: right; font-variant-numeric: tabular-nums; }
+  .yaxis .tag { font-size: 8px; border: 1px solid var(--hairline); border-radius: 3px; padding: 0 3px; color: var(--mute); }
+  .grid { display: grid; gap: 12px; min-width: 0; flex: 1; }
+  .panel { border: 1px solid var(--hairline); border-radius: 8px; padding: 8px 8px 10px; background: var(--canvas); position: relative; min-width: 240px; }
+  .panel.soloed { border-color: rgba(0,112,243,.35); box-shadow: inset 0 0 0 2px rgba(0,112,243,.18); }
+  .phead { display: flex; align-items: center; gap: 8px; padding: 2px 4px 6px; min-height: 44px; }
+  .pill {
+    display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    padding: 4px 10px 4px 8px; border-radius: 10px; cursor: pointer;
+    background: var(--canvas); border: 1px solid var(--hairline);
+    font: inherit; text-align: left; transition: border-color 160ms ease, background-color 160ms ease, opacity 160ms ease;
+  }
+  .pill:hover { border-color: var(--hairline-strong); }
+  .pill:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+  .pill .brandline { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--mute); line-height: 12px; white-space: nowrap; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .pill .nameline { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+  .pill .name { font-size: 11px; font-weight: 600; color: var(--ink); line-height: 14px; white-space: nowrap; }
+  .pill .rom { font-size: 10px; font-weight: 600; color: var(--select-soft-ink); background: var(--select-soft); border-radius: 9999px; padding: 0 6px; line-height: 14px; white-space: nowrap; }
+  .pill .platform { font-size: 10px; color: var(--mute); line-height: 12px; }
+  .pill.hidden-look { background: var(--canvas); border: 1px dashed var(--hairline-strong); opacity: .6; }
+  .pill .hint { font-size: 9px; color: var(--mute); line-height: 11px; }
+  .grip { position: absolute; top: 0; left: 50%; transform: translate(-50%,-50%); font-size: 10px; color: var(--mute); background: var(--canvas); border: 1px solid var(--hairline); border-radius: 9999px; padding: 0 8px; height: 16px; line-height: 15px; }
+  .meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 20px; padding: 0 4px; margin: 2px 0 6px; font-size: 10px; color: var(--mute); }
+  .meta .legend { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .meta .legend span { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
+  .swatch-line { width: 14px; height: 2px; display: inline-block; }
+  .swatch-bar { width: 7px; height: 8px; border-radius: 1px; opacity: .25; display: inline-block; }
+  .range-pill { font-size: 10px; color: var(--select-soft-ink); background: var(--select-soft); border: 1px solid rgba(0,112,243,.35); border-radius: 9999px; padding: 1px 4px 1px 9px; display: inline-flex; gap: 6px; align-items: center; font-variant-numeric: tabular-nums; }
+  .range-pill button { border: 0; background: none; color: inherit; cursor: pointer; font-size: 11px; padding: 0 2px; }
+  .spread-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; padding: 0 4px; }
+  .spread { flex: 1; border: 1px solid var(--hairline); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+  .spread .t { font-size: 10px; color: var(--mute); display: flex; align-items: center; gap: 5px; }
+  .spread .t i { width: 12px; height: 2px; display: inline-block; }
+  .spread .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .spread .s { font-size: 9px; color: var(--mute); font-variant-numeric: tabular-nums; }
+  .chartbox { position: relative; }
+  .chartbox svg { display: block; width: 100%; height: auto; }
+  .detail { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 6px; border: 1px solid var(--hairline); border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
+  .detail .col .k { font-size: 9px; color: var(--mute); }
+  .detail .col .v { font-size: 10px; color: var(--body); font-variant-numeric: tabular-nums; }
+  .timetrack { display: flex; align-items: center; gap: 8px; margin: 10px 4px 0; font-size: 9px; color: var(--mute); }
+  .timetrack .rail { flex: 1; height: 6px; border-radius: 3px; background: #edf0f4; position: relative; }
+  .timetrack .rail i { position: absolute; top: 0; bottom: 0; left: 18%; width: 56%; border-radius: 3px; background: #dceaff; border: 1px solid rgba(79,143,232,.8); }
+  .collapsedbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    border: 1px dashed var(--hairline-strong); border-radius: 8px;
+    padding: 6px 10px; min-height: 44px; background: var(--canvas-soft);
+  }
+  .collapsedbar .sum { font-size: 11px; color: var(--body); font-variant-numeric: tabular-nums; }
+  .collapsedbar .sum b { color: var(--ink); }
+  .collapsedbar .grow { flex: 1; }
+  .btn-restore { font: inherit; font-size: 11px; font-weight: 600; color: var(--link); background: none; border: 1px solid var(--hairline); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  .btn-restore:hover { border-color: var(--link); }
+  .tray {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 12px; padding: 8px 12px; max-width: 1180px;
+    background: var(--canvas); border: 1px solid var(--hairline); border-radius: 8px;
+  }
+  .tray .label { font-size: 11px; color: var(--mute); flex-shrink: 0; }
+  .minipill {
+    display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 11px;
+    padding: 3px 10px; border-radius: 9999px; cursor: pointer;
+    border: 1px dashed var(--hairline-strong); background: var(--canvas); color: var(--body);
+    transition: border-color 160ms ease, background-color 160ms ease;
+  }
+  .minipill:hover { border-color: var(--link); color: var(--select-soft-ink); background: var(--select-soft); }
+  .minipill:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+  .minipill .name { font-weight: 600; }
+  .empty {
+    border: 1px dashed var(--hairline-strong); border-radius: 8px;
+    padding: 42px 0; text-align: center; color: var(--mute); font-size: 13px;
+  }
+  .empty .btn-restore { margin-left: 10px; }
+  footer { padding: 14px 32px 40px; color: var(--mute); font-size: 11px; max-width: 980px; }
+  footer p { margin: 4px 0; }
+  @media (max-width: 640px) {
+    header, .tabs, .tabnote, main, footer { padding-left: 16px; padding-right: 16px; }
+    .yaxis { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>量价页 · 产品显隐交互 —— 三方案低保真示意</h1>
+  <p>价格走势页的产品药丸（点击隐藏折线、虚线置灰可恢复）在量价页没有对应物：量价页一个产品 = 一整个面板（价格线 + 销量柱 + 成本销毛带 + 极差卡 + 明细卡 + 时间轴），照搬「隐藏一条线」语义不通。本页演示三个候选方案，可直接点击面板头药丸体验。完整分析见 <code>docs/design/2026-11-01-volume-price-pill-toggle.md</code>。</p>
+</header>
+<nav class="tabs" aria-label="方案切换">
+  <button type="button" data-tab="A" aria-pressed="true">方案 A · 移除式隐藏（暂存条恢复）</button>
+  <button type="button" data-tab="B" aria-pressed="false">方案 B · 原位折叠成摘要行</button>
+  <button type="button" data-tab="C" aria-pressed="false">方案 C · 聚焦 solo</button>
+</nav>
+<div class="tabnote" id="tabnote"></div>
+<main id="stage"></main>
+<footer>
+  <p>低保真示意：面板内容为压缩 mock（真实面板含成本销毛带、键盘 ←/→ 观察列等，此处从简）；数值为演示示意，非真实数据。色值取自 pricelens/src/theme/tokens.ts。</p>
+  <p>所有药丸 / 恢复按钮均为原生 button（键盘可达、focus-visible 蓝环），与正式产品一致。</p>
+</footer>
+<script>
+'use strict';
+
+var PRODUCTS = [
+  {
+    id: 'pura', brand: 'Huawei', brandColor: '#c7000b', brandLabel: 'HUAWEI',
+    name: 'Pura 80 Pro', rom: '12+512 GB', platform: '自动 · 平台A',
+    pricePts: '10,40 32,36 54,44 76,42 98,50 120,47 142,54 164,52 186,58 208,55 230,62 252,60',
+    volHeights: [34, 40, 28, 44, 52, 38, 30, 46, 58, 42, 36, 50],
+    priceSpread: 'Δ 100', priceSpreadSub: '899 — 999 · −10.0%',
+    volSpread: 'Δ 1.2万', volSpreadSub: '2.1万 — 3.3万',
+    rangeLabel: '09-01 — 10-13'
+  },
+  {
+    id: 'galaxy', brand: 'Samsung', brandColor: '#0000cc', brandLabel: 'SAMSUNG',
+    name: 'Galaxy S25 Ultra', rom: '12+256 GB', platform: '平台B · 官方店',
+    pricePts: '10,30 32,33 54,29 76,36 98,34 120,40 142,38 164,44 186,41 208,47 230,45 252,50',
+    volHeights: [22, 26, 30, 24, 34, 28, 20, 32, 26, 30, 38, 24],
+    priceSpread: 'Δ 130', priceSpreadSub: '1,049 — 1,179 · −11.0%',
+    volSpread: 'Δ 0.8万', volSpreadSub: '1.4万 — 2.2万',
+    rangeLabel: '09-01 — 10-13'
+  },
+  {
+    id: 'iphone', brand: 'Apple', brandColor: '#1d1d1f', brandLabel: 'APPLE',
+    name: 'iPhone 16 Pro Max', rom: '8+256 GB', platform: '平台C',
+    pricePts: '10,20 32,24 54,22 76,28 98,26 120,32 142,30 164,36 186,33 208,39 230,37 252,42',
+    volHeights: [18, 22, 16, 24, 20, 26, 30, 22, 18, 24, 20, 28],
+    priceSpread: 'Δ 150', priceSpreadSub: '1,099 — 1,249 · −12.0%',
+    volSpread: 'Δ 0.6万', volSpreadSub: '0.9万 — 1.5万',
+    rangeLabel: '09-01 — 10-13'
+  }
+];
+
+var TAB_NOTES = {
+  A: {
+    lead: '点击面板头药丸 = 隐藏该产品：面板移出网格、其余面板立即变宽重排；被隐藏产品收进面板区下方「已隐藏」暂存条（单行迷你药丸，虚线态与价格走势页同语言），点击恢复原位，「全部恢复」一键回满。共享 Y 轴与时间自适应范围只按可见面板计算。',
+    chips: [
+      { t: '与价格页药丸行为一致', k: 'good' },
+      { t: '空间真正释放（面板变宽）', k: 'good' },
+      { t: 'Y 轴收缩解决量级拉爆', k: 'good' },
+      { t: '重排有位移（240ms 过渡）', k: 'bad' },
+      { t: '依赖暂存条可发现性', k: 'bad' }
+    ]
+  },
+  B: {
+    lead: '点击面板头药丸 = 折叠该面板：面板在原列位收成一行摘要条（虚线态药丸 + 区间 Δ 读数 + 恢复按钮），位置不动、其余面板宽度不变；点击摘要条恢复完整面板。',
+    chips: [
+      { t: '无重排跳动，位置恒定', k: 'good' },
+      { t: '摘要行保留关键读数', k: 'good' },
+      { t: '横向空间零释放', k: 'bad' },
+      { t: '与价格页「隐藏=消失」语义不同', k: 'bad' },
+      { t: '摘要读数口径需另定', k: 'bad' }
+    ]
+  },
+  C: {
+    lead: '不做任意隐藏，改「聚焦」：点击药丸 = 本页只保留该产品面板（满宽），其余收进暂存条；再次点击（或「显示全部」）恢复。注意：无法只看 A+B 而不看 C——任意组合的能力缺失是本方案的根本限制。',
+    chips: [
+      { t: '语义直白，状态最简单', k: 'good' },
+      { t: '单产品满宽阅读体验好', k: 'good' },
+      { t: '不能任意组合多选', k: 'bad' },
+      { t: '与价格页心智不一致', k: 'bad' },
+      { t: 'solo 后跨面板联动失效', k: 'bad' }
+    ]
+  }
+};
+
+var state = { tab: 'A', hidden: {}, collapsed: {}, solo: null, lastFocus: null };
+
+function byId(id) { return PRODUCTS.filter(function (p) { return p.id === id; })[0]; }
+
+function pillHTML(p, opts) {
+  opts = opts || {};
+  return '' +
+    '<button type="button" class="pill' + (opts.dashed ? ' hidden-look' : '') + '" data-act="pill" data-id="' + p.id + '"' +
+    ' title="' + (opts.dashed ? '点击恢复显示该产品' : '点击隐藏该产品') + '" aria-pressed="' + (opts.dashed ? 'true' : 'false') + '">' +
+      '<span class="brandline"><i class="dot" style="background:' + p.brandColor + '"></i>' + p.brandLabel + '</span>' +
+      '<span class="nameline"><span class="name">' + p.name + '</span><span class="rom">' + p.rom + '</span></span>' +
+      '<span class="platform">' + p.platform + '</span>' +
+      (opts.hint ? '<span class="hint">' + opts.hint + '</span>' : '') +
+    '</button>';
+}
+
+function miniPillHTML(p) {
+  return '<button type="button" class="minipill" data-act="restore" data-id="' + p.id + '"' +
+    ' title="恢复显示该产品" aria-label="恢复显示 ' + p.name + '">' +
+    '<i class="dot" style="background:' + p.brandColor + ';width:6px;height:6px;border-radius:50%;display:inline-block"></i>' +
+    '<span class="name">' + p.name + '</span><span style="color:var(--mute)">' + p.rom + '</span></button>';
+}
+
+function chartSVG(p) {
+  var bars = p.volHeights.map(function (h, i) {
+    var x = 8 + i * 21.5;
+    return '<rect x="' + x + '" y="' + (96 - h) + '" width="12" height="' + h + '" rx="1" fill="' + p.brandColor + '" opacity="0.18"></rect>';
+  }).join('');
+  return '<svg viewBox="0 0 262 100" role="img" aria-label="' + p.name + ' 价格与销量示意">' +
+    bars +
+    '<polyline points="' + p.pricePts + '" fill="none" stroke="' + p.brandColor + '" stroke-width="2"></polyline>' +
+    '</svg>';
+}
+
+function panelHTML(p, mode) {
+  if (mode === 'collapsed') {
+    return '<div class="panel" data-panel="' + p.id + '">' +
+      '<div class="collapsedbar">' +
+        pillHTML(p, { dashed: true }) +
+        '<span class="sum">区间 <b>' + p.priceSpread + '</b> 价格 · <b>' + p.volSpread + '</b> 销量 · ' + p.rangeLabel + '</span>' +
+        '<span class="grow"></span>' +
+        '<button type="button" class="btn-restore" data-act="restore" data-id="' + p.id + '">展开面板</button>' +
+      '</div></div>';
+  }
+  var soloed = state.tab === 'C' && state.solo === p.id;
+  return '<div class="panel' + (soloed ? ' soloed' : '') + '" data-panel="' + p.id + '">' +
+    (state.tab !== 'C' ? '<span class="grip" aria-hidden="true">⠿</span>' : '') +
+    '<div class="phead">' + pillHTML(p, {
+      dashed: false,
+      hint: state.tab === 'C' ? (soloed ? '聚焦中 · 点击退出' : '点击聚焦只看本产品') : ''
+    }) + '</div>' +
+    '<div class="meta"><span class="legend">' +
+      '<span><i class="swatch-line" style="background:' + p.brandColor + '"></i>折后价</span>' +
+      '<span><i class="swatch-line" style="background:' + p.brandColor + ';height:1px;opacity:.85"></i>RRP</span>' +
+      '<span><i class="swatch-bar" style="background:' + p.brandColor + '"></i>销量</span>' +
+    '</span><span class="range-pill">' + p.rangeLabel + '<button type="button" data-act="noop" aria-label="清除所选区间">×</button></span></div>' +
+    '<div class="spread-row">' +
+      '<div class="spread"><div class="t"><i style="background:' + p.brandColor + '"></i>价格极差</div><div class="v">' + p.priceSpread + '</div><div class="s">' + p.priceSpreadSub + '</div></div>' +
+      '<div class="spread"><div class="t"><i style="background:' + p.brandColor + '"></i>销量极差</div><div class="v">' + p.volSpread + '</div><div class="s">' + p.volSpreadSub + '</div></div>' +
+    '</div>' +
+    '<div class="chartbox">' + chartSVG(p) + '</div>' +
+    '<div class="detail">' +
+      '<div class="col"><div class="k">观察周</div><div class="v">W41 · 10-06</div></div>' +
+      '<div class="col"><div class="k">折后价 / 环比</div><div class="v">899 / −2.2%</div></div>' +
+      '<div class="col"><div class="k">单台销毛 · 模拟</div><div class="v">128</div></div>' +
+    '</div>' +
+    '<div class="timetrack"><span>09-01</span><span class="rail"><i></i></span><span>11-03</span></div>' +
+  '</div>';
+}
+
+function trayHTML(ids, verb) {
+  if (!ids.length) return '';
+  var pills = ids.map(function (id) { return miniPillHTML(byId(id)); }).join('');
+  return '<div class="tray" role="group" aria-label="已隐藏产品，' + ids.length + ' 个">' +
+    '<span class="label">已' + verb + '（' + ids.length + '）：</span>' + pills +
+    '<span style="flex:1"></span>' +
+    '<button type="button" class="btn-restore" data-act="restoreAll">全部恢复</button>' +
+  '</div>';
+}
+
+function render() {
+  // tab notes
+  var note = TAB_NOTES[state.tab];
+  document.getElementById('tabnote').innerHTML =
+    '<p class="lead">' + note.lead + '</p>' +
+    '<div class="chips">' + note.chips.map(function (c) {
+      return '<span class="chip ' + c.k + '">' + c.t + '</span>';
+    }).join('') + '</div>';
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.setAttribute('aria-pressed', b.dataset.tab === state.tab ? 'true' : 'false');
+  });
+
+  var stage = document.getElementById('stage');
+  var visible = [];
+  var trayIds = [];
+  var boardHTML = '';
+  var tray = '';
+  var empty = '';
+
+  if (state.tab === 'A') {
+    PRODUCTS.forEach(function (p) { if (!state.hidden[p.id]) visible.push(p.id); });
+    PRODUCTS.forEach(function (p) { if (state.hidden[p.id]) trayIds.push(p.id); });
+    if (!visible.length) {
+      empty = '<div class="empty">已隐藏全部产品<button type="button" class="btn-restore" data-act="restoreAll">全部恢复</button></div>';
+    }
+  } else if (state.tab === 'B') {
+    PRODUCTS.forEach(function (p) { visible.push(p.id); });
+  } else {
+    if (state.solo) { visible.push(state.solo); PRODUCTS.forEach(function (p) { if (p.id !== state.solo) trayIds.push(p.id); }); }
+    else PRODUCTS.forEach(function (p) { visible.push(p.id); });
+  }
+
+  if (visible.length) {
+    var panels = visible.map(function (id) {
+      var p = byId(id);
+      var mode = state.tab === 'B' && state.collapsed[id] ? 'collapsed' : 'full';
+      return panelHTML(p, mode);
+    }).join('');
+    var cols = Math.min(visible.length, 3);
+    boardHTML = '<div class="card"><p class="card-caption">面板区（共享 Y 轴列 + ' + (state.tab === 'C' && state.solo ? '聚焦面板满宽' : '面板网格 ≤3 均分') + '）</p>' +
+      '<div class="board">' +
+        '<div class="yaxis" aria-hidden="true"><span class="tag">价格档位</span><span>1,200</span><span>1,000</span><span>800</span><span>600</span><span>USD</span></div>' +
+        '<div class="grid" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">' + panels + '</div>' +
+      '</div></div>';
+  } else {
+    boardHTML = '<div class="card">' + empty + '</div>';
+  }
+
+  if (state.tab === 'A') tray = trayHTML(trayIds, '隐藏');
+  if (state.tab === 'C' && state.solo) tray = trayHTML(trayIds, '收起');
+
+  stage.innerHTML = boardHTML + tray;
+
+  // 焦点管理：切换后把焦点送回「引发变化的恢复控件」（模拟正式实现中的焦点承接）
+  if (state.lastFocus) {
+    var target = null;
+    if (state.lastFocus.kind === 'restore') {
+      target = stage.querySelector('.panel[data-panel="' + state.lastFocus.id + '"] .pill, .panel[data-panel="' + state.lastFocus.id + '"] .collapsedbar .pill');
+    } else if (state.lastFocus.kind === 'tray') {
+      target = stage.querySelector('.minipill[data-id="' + state.lastFocus.id + '"]');
+    }
+    if (target) target.focus({ preventScroll: false });
+    state.lastFocus = null;
+  }
+}
+
+document.addEventListener('click', function (e) {
+  var el = e.target.closest('[data-act]');
+  if (!el) return;
+  var act = el.dataset.act;
+  var id = el.dataset.id;
+  if (act === 'noop') return;
+  if (act === 'pill') {
+    if (state.tab === 'A') {
+      state.hidden[id] = true;
+      state.lastFocus = { kind: 'tray', id: id };
+    } else if (state.tab === 'B') {
+      state.collapsed[id] = true;
+      state.lastFocus = { kind: 'restore', id: id };
+    } else {
+      state.solo = state.solo === id ? null : id;
+      state.lastFocus = { kind: 'restore', id: id };
+    }
+    render();
+  } else if (act === 'restore') {
+    if (state.tab === 'A') delete state.hidden[id];
+    if (state.tab === 'B') delete state.collapsed[id];
+    if (state.tab === 'C') state.solo = null;
+    state.lastFocus = { kind: 'restore', id: id };
+    render();
+  } else if (act === 'restoreAll') {
+    state.hidden = {};
+    state.collapsed = {};
+    state.solo = null;
+    render();
+  }
+});
+
+document.querySelectorAll('.tabs button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    state.tab = b.dataset.tab;
+    state.hidden = {};
+    state.collapsed = {};
+    state.solo = null;
+    render();
+  });
+});
+
+render();
+</script>
+</body>
+</html>
