@@ -145,6 +145,10 @@ export default function TrendTables(props: {
   currency: CurrencyMode;
   granularity: Granularity;
 }) {
+  // 异常守卫阈值（「疑」角标 title 用）：一次读取供全表单元格复用——
+  // 原实现每个折后价单元格各读一次 localStorage（行×列量级），无谓重复解析
+  const anomalyThresholdPct = readAnomalyRule().thresholdPct;
+
   const { groups, buckets, fourWeekChanges, currency, granularity } = props;
   // 组别页签选中态（本轮）：值 = 组 id；组集变化后找不到时回落第一组
   const [activeGid, setActiveGid] = useState<string | null>(null);
@@ -562,7 +566,7 @@ export default function TrendTables(props: {
               const pt = s.points[i];
               const suspect = pt?.suspect;
               const suspectText = suspect === 'quarantined'
-                ? (pt?.suspectReason === 'manual' ? '已人工标记异常' : `相邻观测点变化超过 ${readAnomalyRule().thresholdPct}% 后回落`)
+                ? (pt?.suspectReason === 'manual' ? '已人工标记异常' : `相邻观测点变化超过 ${anomalyThresholdPct}% 后回落`)
                 : suspect === 'pending'
                   ? '价格变化超过阈值，待核对（计算照常）'
                   : '已人工确认为真实价格';

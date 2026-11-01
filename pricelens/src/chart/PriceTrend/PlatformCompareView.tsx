@@ -881,7 +881,9 @@ export default function PlatformCompareView(props: {
       </div>
 
       {/* ③ 图表 = 主界面完全同款（工具行随 Chart chrome 渲染，开关与主图共用；
-          店铺线不走月/季圈点下钻——下钻取数组按产品对定位，店铺线无对应口径） */}
+          店铺线不走月/季圈点下钻——下钻取数组按产品对定位，店铺线无对应口径）。
+          异常守卫胶囊在此只读：多平台线 key 是店铺键（pf:/ch:/sl:），据此写入的人工
+          裁定不参与任何判定（静默无效）；逐点裁定入口 = 价格页胶囊 / 量价明细卡 */}
       <Chart
         series={shownSeries}
         granularity={state.granularity}
@@ -913,7 +915,6 @@ export default function PlatformCompareView(props: {
         onPromoBandsOn={props.onPromoBandsOn}
         promoBands={promoBands}
         changeThreshold={props.changeThreshold}
-        anomalyActions
         onPriceTypeToggle={props.onPriceTypeToggle}
         offersOn={props.offersOn}
         onOffersOn={props.onOffersOn}

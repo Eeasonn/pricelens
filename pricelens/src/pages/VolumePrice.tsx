@@ -1006,6 +1006,9 @@ export default function VolumePrice() {
                 第一百八十二轮：窄视口在卡内横向拖动（内层 minWidth 880 保面板可读下限） */}
             <div className="lpl-card-scroll" style={{ overflowX: 'auto', marginBottom: space.sm }}>
             <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, minWidth: 880, width: '100%' }}>
+              {/* 共享 Y 轴列（可见面板 > 0 才渲染——全隐藏空态时 computeYAxis 走
+                  0-100 空数据兜底，无信息量的默认刻度与空态并排反而误导） */}
+              {visibleCount > 0 && (
               <div
                 style={{
                   flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers)}px`,
@@ -1038,6 +1041,7 @@ export default function VolumePrice() {
                   </div>
                 )}
               </div>
+              )}
               <div style={{ flex: '1 1 0', minWidth: 0 }}>
                 {panelCount === 0 ? (
                   <div
