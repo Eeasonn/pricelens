@@ -281,12 +281,13 @@ export default function Config() {
             </div>
           </Block>
 
-          {/* ⓪'' 数据质量（2026-11-01 异常价格守卫）：全局口径唯一写入口——阈值 + 人工裁定清单 */}
+          {/* ⓪'' 异常价格守卫（2026-11-01 异常价格守卫；晚前反馈「数据质量」难懂改此名）：
+              全局口径唯一写入口——阈值 + 人工裁定清单 */}
           <Block
-            title="数据质量"
+            title="异常价格守卫"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-                异常价格守卫 · 全站统一口径；不随分享链接携带
+                全站统一口径；不随分享链接携带
               </span>
             }
           >

@@ -30,6 +30,19 @@ button {
   padding: 0;
 }
 
+/* 宽表产品整名链接（2026-11-01 晚 Eason 反馈）：常态与正文同色，悬停变蓝下划线 */
+.tt-prod-link {
+  color: #171717;
+  text-decoration: none;
+}
+.tt-prod-link:hover {
+  color: #0070f3;
+  text-decoration: underline;
+}
+.tt-prod-link:focus-visible {
+  color: #0070f3;
+}
+
 /* 键盘焦点环（Tab 可达性）：仅 focus-visible（鼠标点击不出现），全站统一蓝色 */
 button:focus-visible,
 a:focus-visible,

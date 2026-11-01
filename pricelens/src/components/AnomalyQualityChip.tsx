@@ -1,5 +1,7 @@
 // ============================================================
-// 数据质量只读状态 chip（2026-11-01 异常价格守卫 · 设计方案 A）：
+// 异常价格只读状态 chip（2026-11-01 异常价格守卫 · 设计方案 A；2026-11-01 晚
+// Eason 反馈：「数据质量」抽象难懂，改名「异常价格」——与图上 疑/待核对/已隔离
+// 同一族语言，chip 即该守卫的口径状态）：
 // 价格走势 / 量价 / 多平台对比三页工具行右端常驻——提示当前全局口径与本页
 // 隔离数；点击弹只读 Popover（规则一句话 + 本页隔离点清单 + 「查看配置」）。
 // 口径唯一写入口 = 配置页（chip 不改全局值）；预测页为模拟数据不放 chip。
@@ -29,7 +31,7 @@ export function anomalyBucketTextOf(granularity: 'week' | 'month' | 'quarter', b
 export default function AnomalyQualityChip(props: {
   /** 本页（当前窗口序列）被隔离的点；空 = 无隔离 */
   isolated: AnomalyChipPoint[];
-  /** 窄屏短文案（390px：质量 ≥50% · 隔离 2） */
+  /** 窄屏短文案（390px：异常价 ≥50% · 隔离 2） */
   narrow?: boolean;
 }) {
   const { go } = usePage();
@@ -96,7 +98,7 @@ export default function AnomalyQualityChip(props: {
       <button
         type="button"
         aria-haspopup="dialog"
-        title="异常价格守卫：当前数据质量口径与本页隔离数，点击查看"
+        title="异常价格守卫：当前判定口径与本页隔离数，点击查看"
         className="lpl-quality-chip"
         style={{
           height: 24,
@@ -117,7 +119,7 @@ export default function AnomalyQualityChip(props: {
           gap: 6,
         }}
       >
-        {props.narrow ? '质量' : '数据质量'}
+        {props.narrow ? '异常价' : '异常价格'}
         {rule.enabled ? (
           <span
             className="tnum"

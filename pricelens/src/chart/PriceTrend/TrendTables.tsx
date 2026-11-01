@@ -309,8 +309,9 @@ export default function TrendTables(props: {
     const bg = main ? MAIN_TINT : color.canvas;
     const sp = specByKey.get(s.key);
     const name = sp ? `${s.brand} ${sp.modelName}` : dedupeSpecText(s.label);
-    // 产品链接（第一百九十三轮，Eason）：最新有价时点的商城现页 URL，名称后
-    // 外链小图标直达；无取数时点不出链接
+    // 产品链接（第一百九十三轮立：名称后外链小图标；2026-11-01 晚 Eason 反馈升级：
+    // 整个产品名可点（价差区与核心明细两区同为此入口，不再只有小图标），图标
+    // 收进链接内作视觉提示；无取数时点不出链接
     const prodUrl = s.points[latestIdxOf(s, s.points.length)]?.url ?? '';
     return [
       <div key={`${keyPrefix}-prod`} role="rowheader" aria-rowspan={span} style={{ ...cell(0), ...frozen(0, bg), gridRow: `span ${span}`, gap: 6 }}>
@@ -319,24 +320,30 @@ export default function TrendTables(props: {
             环比行不外溢破格（第一百八十九轮） */}
         <div style={{ minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-            <span
-              title={name}
-              style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-            >
-              {name}
-            </span>
-            {prodUrl && (
+            {prodUrl ? (
+              // 整名链接（2026-11-01 晚 Eason 反馈）：名称 + 外链图标同一命中区，
+              // 悬停变蓝下划线；价差区/核心明细两区的产品格共用本渲染
               <a
                 href={prodUrl}
                 target="_blank"
                 rel="noreferrer"
-                title="打开商城页面"
+                title={`${name} · 打开商城页面`}
                 aria-label={`打开 ${name} 的商城页面`}
-                className="tt-evi"
-                style={{ ...EVID_STYLE, flexShrink: 0 }}
+                className="tt-prod-link"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}
               >
-                <ExportOutlined style={{ fontSize: 11 }} />
+                <span style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {name}
+                </span>
+                <ExportOutlined style={{ fontSize: 11, flexShrink: 0, opacity: 0.55 }} />
               </a>
+            ) : (
+              <span
+                title={name}
+                style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
+                {name}
+              </span>
             )}
           </span>
           {fourWeekChange !== undefined && (

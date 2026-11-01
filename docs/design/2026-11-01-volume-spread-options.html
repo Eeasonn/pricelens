@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>量价页 极差表达 6 版方案（2026-11-01，供挑选）</title>
+<style>
+  :root {
+    --canvas:#ffffff; --soft:#fafafa; --soft2:#f5f5f5; --hair:#ebebeb; --hairS:#a1a1a1;
+    --ink:#171717; --body:#4d4d4d; --mute:#737373; --link:#0070f3; --linkInk:#0053c2;
+    --sel:#e8f1ff; --amber:#b45309; --amberSoft:#ffefcf; --hw:#c7000b; --hwSoft:rgba(199,0,11,.16);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--soft); color:var(--ink);
+    font:14px/1.55 Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+  .wrap { max-width:1080px; margin:0 auto; padding:28px 24px 80px; }
+  h1 { font-size:20px; margin:0 0 6px; }
+  .sub { color:var(--mute); font-size:13px; margin-bottom:18px; }
+  .tabs { position:sticky; top:0; z-index:9; background:var(--soft); padding:10px 0 12px; display:flex; gap:8px; flex-wrap:wrap; border-bottom:1px solid var(--hair); margin-bottom:20px; }
+  .tabs button { height:30px; padding:0 14px; border:1px solid var(--hair); border-radius:6px; background:#fff; color:var(--body); font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+  .tabs button.on { border-color:var(--link); background:var(--sel); color:var(--linkInk); }
+  section { display:none; background:#fff; border:1px solid var(--hair); border-radius:8px; padding:22px 24px 26px; }
+  section.on { display:block; }
+  h2 { font-size:17px; margin:0 0 2px; }
+  .tagline { color:var(--linkInk); font-size:13px; font-weight:600; margin:0 0 10px; }
+  .why { display:flex; gap:24px; flex-wrap:wrap; margin:12px 0 4px; font-size:13px; }
+  .why div { flex:1 1 380px; }
+  .why b { display:block; font-size:12px; color:var(--mute); font-weight:600; margin-bottom:3px; }
+  .mock { border:1px solid var(--hair); border-radius:8px; background:#fff; margin-top:14px; }
+  .note { font-size:12px; color:var(--mute); margin-top:10px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin-top:14px; }
+  th,td { border:1px solid var(--hair); padding:7px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--soft2); font-weight:600; white-space:nowrap; }
+  td.yes { color:var(--linkInk); } td.no { color:var(--amber); }
+  .rec { margin-top:18px; padding:12px 14px; border:1px solid rgba(0,112,243,.35); background:var(--sel); border-radius:8px; font-size:13px; }
+  .rec b { color:var(--linkInk); }
+  svg text { font-family:inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>量价页 · 极差表达 6 版方案</h1>
+  <div class="sub">2026-11-01 · 反馈「价差和销量差太乱」：现状 = 两张大卡 + 图内竖直标注尺 + 选区带 + 极值圈，同一组数字出现两遍、尺线跨图穿柱。以下 6 版都基于同一底图（Pura 80 · 选区 06-24–08-26 · 价格 Δ$146 / 27.4% / $532–678 · 销量 Δ1,962 / 92.2% / 2,127–4,089）。点击顶部切换。</div>
+  <div class="tabs" id="tabs"></div>
+  <div id="panels"></div>
+</div>
+<script>
+'use strict';
+/* ---------- 底图（共同）：阶梯价线 + 粉销量柱 + 蓝选区带 + 极值圈 ---------- */
+const W = 980, H = 392, L = 10, R = 76, T = 62, Bm = 36; // 顶部 62px 留给信息带/瘦身卡（B/E），chips 落底行
+const PW = W - L - R, PH = H - T - Bm;
+const N = 24, P0 = 532, P1 = 678;           // 价格域
+const band = [5, 15];                        // 06-24–08-26
+const price = [560,678,660,640,600,560,532,540,552,548,556,560,556,552,558,566,570,586,592,596,600,604,602,598];
+const vol   = [1.2,4.2,3.9,3.4,3.1,2.6,2.3,2.6,2.9,3.1,3.3,3.5,3.4,3.6,4.4,3.9,3.5,3.3,3.0,2.8,2.9,2.7,2.4,2.1]; // 千台
+const pHi = 2, pLo = 6, vHi = 14, vLo = 5;
+const x = i => L + (i + .5) * (PW / N);
+const yP = v => T + (P1 - v) / (P1 - P0 + 60) * PH * .92 + PH * .06;
+const yV = v => T + PH - v / 5 * PH;
+const fmt = n => n.toLocaleString('en-US');
+function base() {
+  let s = '';
+  for (let i = 0; i < N; i++) {
+    const w = PW / N * .58, bx = x(i) - w / 2, by = yV(vol[i]);
+    s += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${w.toFixed(1)}" height="${(T + PH - by).toFixed(1)}" fill="rgba(199,0,11,.14)"/>`;
+  }
+  const bs = band[0] * PW / N + L, be = (band[1] + 1) * PW / N + L;
+  s += `<rect x="${bs}" y="${T}" width="${be - bs}" height="${PH}" fill="rgba(0,112,243,.07)" stroke="rgba(0,112,243,.35)" stroke-width="1"/>`;
+  let d = '';
+  for (let i = 0; i < N; i++) {
+    const px = x(i), py = yP(price[i]);
+    d += i === 0 ? `M${px} ${py}` : `H${px} V${py}`;
+  }
+  s += `<path d="${d}" fill="none" stroke="#c7000b" stroke-width="2"/>`;
+  const dot = (i, v) => `<circle cx="${x(i)}" cy="${yP(v)}" r="3.6" fill="#fff" stroke="#c7000b" stroke-width="1.5"/>`;
+  s += dot(pHi, price[pHi]) + dot(pLo, price[pLo]);
+  return s;
+}
+const chip = (x0, y0, w, label, value, sub) =>
+  `<rect x="${x0}" y="${y0}" width="${w}" height="46" rx="6" fill="#fff" stroke="#ebebeb"/>`
+  + `<text x="${x0 + 12}" y="${y0 + 15}" font-size="10.5" fill="#737373">${label}</text>`
+  + `<text x="${x0 + 12}" y="${y0 + 32}" font-size="14" font-weight="700" fill="#171717">${value}</text>`
+  + (sub ? `<text x="${x0 + w - 10}" y="${y0 + 31}" font-size="11" fill="#4d4d4d" text-anchor="end">${sub}</text>` : '');
+function ruler(x0, yTop, yBot, color, label, side) {
+  const lx = side === 'r' ? x0 + 8 : x0 - 8, anc = side === 'r' ? 'start' : 'end';
+  return `<line x1="${x0}" x2="${x0}" y1="${yTop}" y2="${yBot}" stroke="${color}" stroke-width="1.2"/>`
+    + `<path d="M${x0 - 3} ${yTop + 5} L${x0} ${yTop} L${x0 + 3} ${yTop + 5} M${x0 - 3} ${yBot - 5} L${x0} ${yBot} L${x0 + 3} ${yBot - 5}" fill="none" stroke="${color}" stroke-width="1.2"/>`
+    + `<rect x="${side === 'r' ? x0 + 6 : x0 - 58}" y="${(yTop + yBot) / 2 - 9}" width="52" height="18" rx="4" fill="#fff"/>`
+    + `<text x="${lx}" y="${(yTop + yBot) / 2 + 3.5}" font-size="10.5" font-weight="600" fill="${color}" text-anchor="${anc}">${label}</text>`;
+}
+const OPTS = [
+  {
+    id: 'A', name: 'A · 摘要行芯片（撤图内尺与大卡）', tag: '最干净：数字只出现一遍，全收进选区行',
+    why: ['<b>做法</b>两张大卡与图内竖尺全部退役；「06-24 — 08-26 ×」区间胶囊扩展为同一行三枚 chip：区间 · 价格 Δ$146 (27.4%) · 销量 Δ1,962 (92.2%)。悬停 chip 在图内高亮对应极值两点。', '<b>代价</b>极值的 $532–678 原值退到悬停/提示；一眼只有 Δ。'],
+    draw: () => chip(300, H - 56, 150, '所选区间', '06-24 — 08-26')
+      + chip(458, H - 56, 148, '价格极差', 'Δ $146 · 27.4%')
+      + chip(614, H - 56, 158, '销量极差', 'Δ 1,962 · 92.2%'),
+  },
+  {
+    id: 'B', name: 'B · 一体化信息带（卡顶单条三段）', tag: '大卡压成一条带：区间｜价格｜销量 三段式，一眼三读数',
+    why: ['<b>做法</b>两张大卡合并为卡顶一条浅灰信息带（左=区间，中=价格极差，右=销量极差），分隔线分段；图内撤竖尺，只留极值空心点。', '<b>代价</b>仍占卡顶一行；信息密度高于 A。'],
+    draw: () => {
+      const by = 10, bh = 40, cy = by + 25;
+      let s = `<rect x="${L}" y="${by}" width="${PW}" height="${bh}" rx="6" fill="#fafafa" stroke="#ebebeb"/>`
+        + `<text x="${L + 12}" y="${cy}" font-size="11.5" fill="#4d4d4d">06-24 — 08-26</text>`
+        + `<line x1="${L + 136}" x2="${L + 136}" y1="${by + 6}" y2="${by + bh - 6}" stroke="#ebebeb"/>`
+        + `<text x="${L + 150}" y="${cy}" font-size="11" fill="#737373">价格极差</text>`
+        + `<text x="${L + 202}" y="${cy}" font-size="12.5" font-weight="700" fill="#171717">27.4% · Δ$146 · $532–678</text>`
+        + `<line x1="${L + 424}" x2="${L + 424}" y1="${by + 6}" y2="${by + bh - 6}" stroke="#ebebeb"/>`
+        + `<text x="${L + 438}" y="${cy}" font-size="11" fill="#737373">销量极差</text>`
+        + `<text x="${L + 490}" y="${cy}" font-size="12.5" font-weight="700" fill="#171717">92.2% · Δ1,962 · 2,127–4,089</text>`;
+      return s;
+    },
+  },
+  {
+    id: 'C', name: 'C · 图内角标读数框（撤大卡）', tag: '读数贴图：绘图区左上角一个小框，两行 Δ；极值点留在图上',
+    why: ['<b>做法</b>撤大卡与竖尺；绘图区左上角一个白底小读数框（价格 Δ 一行、销量 Δ 一行，各带色点），极值圈保留但不拉线。', '<b>代价</b>框压住图面左上一角（该处通常无数据）；原值区间仍需悬停。'],
+    draw: () => `<rect x="${L + 8}" y="${T + 8}" width="188" height="46" rx="6" fill="#fff" stroke="#ebebeb"/>`
+      + `<circle cx="${L + 20}" cy="${T + 22}" r="3.5" fill="#c7000b"/><text x="${L + 30}" y="${T + 26}" font-size="11.5" font-weight="700">价格 Δ$146 · 27.4%</text>`
+      + `<circle cx="${L + 20}" cy="${T + 40}" r="3.5" fill="rgba(199,0,11,.45)"/><text x="${L + 30}" y="${T + 44}" font-size="11.5" font-weight="700">销量 Δ1,962 · 92.2%</text>`,
+  },
+  {
+    id: 'D', name: 'D · 右缘统计块（并入销量轴列）', tag: '图面零遮挡：两个小 stat 挂在右轴列上方，图内只留极值点',
+    why: ['<b>做法</b>撤大卡与竖尺；价格/销量极差读数各占右缘一小块（对齐销量轴列），绘图区完全不加标注，只留选区带与极值圈。', '<b>代价</b>读数离图形远一档；窄屏右缘拥挤。'],
+    draw: () => {
+      const rx = W - R + 6;
+      return `<rect x="${rx}" y="${T}" width="64" height="44" rx="6" fill="#fff" stroke="#ebebeb"/>`
+        + `<text x="${rx + 8}" y="${T + 14}" font-size="9.5" fill="#737373">价格极差</text>`
+        + `<text x="${rx + 8}" y="${T + 30}" font-size="12" font-weight="700">27.4%</text>`
+        + `<text x="${rx + 8}" y="${T + 41}" font-size="9" fill="#4d4d4d">Δ$146</text>`
+        + `<rect x="${rx}" y="${T + 50}" width="64" height="44" rx="6" fill="#fff" stroke="#ebebeb"/>`
+        + `<text x="${rx + 8}" y="${T + 64}" font-size="9.5" fill="#737373">销量极差</text>`
+        + `<text x="${rx + 8}" y="${T + 80}" font-size="12" font-weight="700">92.2%</text>`
+        + `<text x="${rx + 8}" y="${T + 91}" font-size="9" fill="#4d4d4d">Δ1,962</text>`;
+    },
+  },
+  {
+    id: 'E', name: 'E · 瘦身单行卡 + 图内水平极值线', tag: '保留「卡」的形态但减半：单行 chip；竖尺换成 hi/lo 两条短水平虚线',
+    why: ['<b>做法</b>大卡压成单行（价格极差 27.4% · $532–678 一行排开）；图内不画竖直尺，改在极值价画两条短水平虚线 + 小标签，视线沿水平线扫到点即可。', '<b>代价</b>图内仍有一层标注（两条虚线），但不再跨图穿柱。'],
+    draw: () => {
+      const yh = yP(678), yl = yP(532);
+      return chip(L + 2, 10, 236, '价格极差', '27.4%', '$532–678 · Δ$146')
+        + chip(L + 246, 10, 250, '销量极差', '92.2%', '2,127–4,089 · Δ1,962')
+        + `<line x1="${L + band[0] * PW / N}" x2="${L + (band[1] + 1) * PW / N}" y1="${yh}" y2="${yh}" stroke="rgba(199,0,11,.5)" stroke-width="1" stroke-dasharray="3 3"/>`
+        + `<line x1="${L + band[0] * PW / N}" x2="${L + (band[1] + 1) * PW / N}" y1="${yl}" y2="${yl}" stroke="rgba(199,0,11,.5)" stroke-width="1" stroke-dasharray="3 3"/>`
+        + `<text x="${L + (band[1] + 1) * PW / N - 4}" y="${yh - 4}" font-size="10" fill="#b45309" text-anchor="end">$678</text>`
+        + `<text x="${L + (band[1] + 1) * PW / N - 4}" y="${yl + 12}" font-size="10" fill="#b45309" text-anchor="end">$532</text>`;
+    },
+  },
+  {
+    id: 'F', name: 'F · 渐进披露（默认一行，悬停出标注）', tag: '默认 = A 的干净；需要定位时悬停 chip，图内临时浮现极值尺',
+    why: ['<b>做法</b>默认同 A（选区行三枚 chip，图内零标注）；悬停「价格极差」chip 时该 chip 高亮且图内浮现对应极值尺与两点，移开即隐。销量同理。', '<b>代价</b>多一层交互；截图/投屏时默认态无图内标注（可接受，标注本就是辅助）。'],
+    draw: () => chip(300, H - 56, 150, '所选区间', '06-24 — 08-26')
+      + `<g><rect x="458" y="${H - 56}" width="148" height="46" rx="6" fill="#e8f1ff" stroke="rgba(0,112,243,.4)"/>`
+      + `<text x="470" y="${H - 41}" font-size="10.5" fill="#0053c2">价格极差（悬停预览）</text>`
+      + `<text x="470" y="${H - 24}" font-size="14" font-weight="700" fill="#0053c2">Δ $146 · 27.4%</text></g>`
+      + chip(614, H - 56, 158, '销量极差', 'Δ 1,962 · 92.2%')
+      + ruler(x(pHi), yP(678), yP(532), 'rgba(0,112,243,.8)', 'Δ $146', 'r'),
+  },
+];
+const root = document.getElementById('panels');
+root.innerHTML = OPTS.map((o, i) => `
+<section data-i="${i}" class="${i === 0 ? 'on' : ''}">
+  <h2>方案 ${o.name.slice(4)}</h2>
+  <p class="tagline">${o.tag}</p>
+  <div class="mock"><svg viewBox="0 0 ${W} ${H}" width="100%">${base()}${o.draw()}</svg></div>
+  <div class="why">${o.why.map(w => `<div>${w}</div>`).join('')}</div>
+</section>`).join('');
+const tabs = document.getElementById('tabs');
+tabs.innerHTML = OPTS.map((o, i) => `<button data-i="${i}" class="${i === 0 ? 'on' : ''}">${o.name.split(' · ')[0]} ${o.name.split(' · ')[1]}</button>`).join('')
+  + `<button data-i="6">对照表</button>`;
+tabs.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const i = b.dataset.i;
+  [...tabs.children].forEach(x => x.classList.toggle('on', x === b));
+  if (i === '6') { showCmp(); return; }
+  document.getElementById('cmp')?.remove();
+  [...root.children].forEach(s => s.classList.toggle('on', s.dataset.i === i));
+});
+function showCmp() {
+  [...root.children].forEach(s => s.classList.remove('on'));
+  document.getElementById('cmp')?.remove();
+  const d = document.createElement('div');
+  d.id = 'cmp';
+  d.innerHTML = `<section class="on" style="display:block">
+  <h2>六版对照</h2>
+  <table>
+    <tr><th>维度</th><th>A 摘要行</th><th>B 信息带</th><th>C 角标框</th><th>D 右缘块</th><th>E 瘦身卡+横线</th><th>F 渐进披露</th></tr>
+    <tr><td>图面干净度</td><td class="yes">最优（零图内标注）</td><td class="yes">优</td><td>角标压一角</td><td class="yes">优</td><td>两条水平虚线</td><td class="yes">最优（默认）</td></tr>
+    <tr><td>数字完整度（Δ/率/原值区间）</td><td class="no">Δ+率，原值悬停</td><td class="yes">全量一行三段</td><td class="no">Δ+率</td><td class="no">Δ+率</td><td class="yes">全量</td><td class="no">同 A</td></tr>
+    <tr><td>与选区带的配合</td><td class="yes">同行（数字贴着区间）</td><td>分离（带上/图下）</td><td>分离</td><td class="no">最远（右缘）</td><td>卡在图顶</td><td class="yes">同行 + 悬停联动</td></tr>
+    <tr><td>实现量</td><td>小（改胶囊行）</td><td>小</td><td>小</td><td>中（右轴列改造）</td><td>中（新横线层）</td><td>中（hover 联动）</td></tr>
+    <tr><td>390 窄屏</td><td class="yes">chip 换行即可</td><td>带内横向挤</td><td class="yes">好</td><td class="no">右缘挤</td><td>卡换行</td><td class="yes">好</td></tr>
+    <tr><td>截图/投屏信息量</td><td>中</td><td class="yes">高</td><td>中</td><td>中</td><td class="yes">高</td><td class="no">低（默认态）</td></tr>
+  </table>
+  <div class="rec"><b>推荐 A，次选 E。</b>「乱」的根源是同一组数字出现两遍 + 竖尺跨图穿柱：A 把数字收进选区行、图面完全让给数据线，是减法最彻底的一版；若舍不得「原值区间常驻」，E 在保留卡片形态的前提下把竖尺换成不穿柱的水平短线。F 可作为 A 落地后的增强（悬停回显），不必单独选。</div>
+  </section>`;
+  root.parentElement.appendChild(d);
+}
+</script>
+</body>
+</html>
