@@ -279,6 +279,7 @@ export default function VolumePrice() {
   // 迷你药丸恢复后焦点回该面板头药丸；「全部恢复」后落到第一个恢复面板的药丸
   const pendingFocusRef = useRef<{ where: 'tray' | 'panel'; key: string } | null>(null);
   const trayItemRefs = useRef(new Map<string, HTMLButtonElement>());
+  const emptyRestoreRef = useRef<HTMLButtonElement | null>(null);
   const panelPillHostRefs = useRef(new Map<string, HTMLSpanElement>());
   const registerTrayItem = (key: string, el: HTMLButtonElement | null): void => {
     if (el) trayItemRefs.current.set(key, el);
@@ -293,7 +294,14 @@ export default function VolumePrice() {
     if (!pending) return;
     pendingFocusRef.current = null;
     if (pending.where === 'tray') {
-      trayItemRefs.current.get(pending.key)?.focus();
+      const mini = trayItemRefs.current.get(pending.key);
+      if (mini) {
+        mini.focus();
+        return;
+      }
+      // 藏到零时暂存条不渲染（空态承担恢复）——焦点落到空态「全部恢复」，
+      // 键盘用户的 Tab 流不断、可直接回滚
+      emptyRestoreRef.current?.focus();
       return;
     }
     const pill = panelPillHostRefs.current.get(pending.key)?.querySelector('button.lpl-lg-pill');
@@ -733,10 +741,11 @@ export default function VolumePrice() {
       seriesKey: panel.spec.key,
       bucketId: point.bucketId,
       action,
-      label: panel.name,
+      label: `${panel.brand} ${panel.name}`,
       price: point.price,
       wow: point.suspectWow ?? null,
       ts: Date.now(),
+      granularity: state.granularity, // 清单桶文案按粒度显示
     });
   };
 
@@ -749,7 +758,7 @@ export default function VolumePrice() {
           if (pt.suspect !== 'quarantined' || pt.price == null) continue;
           const wow = pt.suspectWow;
           out.push({
-            label: panel.name,
+            label: `${panel.brand} ${panel.name}`,
             bucketText: anomalyBucketTextOf(state.granularity, pt.bucketId),
             price: formatPrice(pt.price, state.currency),
             wow: wow != null ? `${wow > 0.005 ? '+' : wow < -0.005 ? '−' : '±'}${Math.round(Math.abs(wow) * 100)}%` : null,
@@ -1060,6 +1069,7 @@ export default function VolumePrice() {
                     <div style={{ marginTop: 12 }}>
                       <button
                         type="button"
+                        ref={emptyRestoreRef}
                         onClick={restoreAllPanels}
                         style={{
                           height: 28,

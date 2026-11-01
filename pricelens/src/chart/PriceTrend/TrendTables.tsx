@@ -577,7 +577,7 @@ export default function TrendTables(props: {
                       {suspect && (
                         <sup
                           title={`${suspectText}${wowText}${suspect === 'quarantined' ? '：已隔离，不参与计算' : ''}`}
-                          style={{ marginLeft: 2, fontSize: 9, fontWeight: 700, color: suspect === 'exempted' ? undefined : '#b45309' }}
+                          style={{ marginLeft: 2, fontSize: 9, fontWeight: 700, color: suspect === 'exempted' ? color.link : '#b45309' }}
                         >
                           {suspect === 'exempted' ? '✓' : '疑'}
                         </sup>

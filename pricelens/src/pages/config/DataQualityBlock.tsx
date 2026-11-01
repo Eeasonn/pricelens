@@ -22,9 +22,14 @@ import {
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
 import { color, fontSize, radius, space } from '../../theme/tokens';
 
-/** 桶 id → 业务文案（周 2026W22；月/季原样） */
-const bucketText = (bucketId: string): string =>
-  /^\d{6}$/.test(bucketId) ? `${bucketId.slice(0, 4)}W${bucketId.slice(4)}` : bucketId;
+/** 桶 id → 业务文案：按裁定时的粒度（周 2026W39 / 月 2026-10 / 季原样）。
+ *  注意周/月 id 同为 6 位数字（YYYYWW vs YYYYMM），不看粒度会把月裁定错显成「2026W10」。 */
+const bucketText = (bucketId: string, granularity?: 'week' | 'month' | 'quarter'): string => {
+  const gran = granularity ?? 'week';
+  if (gran === 'week' && /^\d{6}$/.test(bucketId)) return `${bucketId.slice(0, 4)}W${bucketId.slice(4)}`;
+  if (gran === 'month' && /^\d{6}$/.test(bucketId)) return `${bucketId.slice(0, 4)}-${bucketId.slice(4)}`;
+  return bucketId;
+};
 
 const fmtTime = (ts: number): string => {
   const d = new Date(ts);
@@ -106,7 +111,7 @@ export default function DataQualityBlock() {
             }
           }}
           options={[
-            { label: '关闭', value: 'off', disabled: !rule.enabled && rule.thresholdPct !== 30 && rule.thresholdPct !== 50 ? false : false },
+            { label: '关闭', value: 'off' },
             { label: '30%', value: '30' },
             { label: '50%', value: '50' },
             { label: '自定义', value: 'custom' },
@@ -183,7 +188,7 @@ export default function DataQualityBlock() {
                 <span title={`${m.label}（${m.countryCode}）`} style={{ color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {m.label}
                 </span>
-                <span className="tnum" style={{ color: color.body }}>{bucketText(m.bucketId)}</span>
+                <span className="tnum" style={{ color: color.body }}>{bucketText(m.bucketId, m.granularity)}</span>
                 <span className="tnum" style={{ color: color.body }}>{m.price != null ? Math.round(m.price).toLocaleString('en-US') : '—'}</span>
                 <span className="tnum" style={{ color: m.action === 'isolate' ? '#b45309' : color.body }}>{fmtPct(m.wow)}</span>
                 <span>

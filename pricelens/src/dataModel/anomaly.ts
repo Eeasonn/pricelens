@@ -31,6 +31,8 @@ export const ANOMALY_CUSTOM_MAX = 90;
 /** 人工裁定动作：exempt = 确认真实价格；isolate = 标记异常（手动隔离） */
 export type AnomalyMarkAction = 'exempt' | 'isolate';
 
+export type AnomalyGranularity = 'week' | 'month' | 'quarter';
+
 export interface AnomalyMark {
   countryCode: string;
   /** 系列 key = modelId__配置去空格（与图例/预警同空间） */
@@ -38,6 +40,8 @@ export interface AnomalyMark {
   /** 裁定时的桶 id（周 YYYYWW 为主口径；月/季点裁定存该桶 id，命中按构成周扩散） */
   bucketId: string;
   action: AnomalyMarkAction;
+  /** 裁定时粒度（清单桶文案按它显示：周 2026W39 / 月 2026-10 / 季原样；旧记录缺省按周） */
+  granularity?: AnomalyGranularity;
   /** 留痕快照（清单展示用，避免回查口径漂移） */
   label: string;
   price: number | null;

@@ -76,6 +76,15 @@ describe('DataQualityBlock · 档位交互', () => {
     expect(readAnomalyRule().thresholdPct).toBe(30); // 未被非法值覆写
   });
 
+  it('R2-3 回归：月粒度裁定显示 2026-09（周/月桶 id 同为 6 位数字，须按裁定粒度区分）', () => {
+    window.localStorage.setItem('LPL3.config.anomalyMarks', JSON.stringify([
+      { countryCode: 'DE', seriesKey: 'k1', bucketId: '202609', action: 'isolate', label: 'XIAOMI Band 10', price: 40, wow: -0.4, ts: 1, granularity: 'month' },
+    ]));
+    render(<DataQualityBlock />);
+    expect(screen.getByText('2026-09')).toBeDefined();
+    expect(screen.queryByText('2026W09')).toBeNull(); // 修复前月 id 会被错显成周号
+  });
+
   it('开关即改即存并广播 CONFIG_CHANGED_EVENT', () => {
     const fired = vi.fn();
     window.addEventListener('lpl3-config-changed', fired);

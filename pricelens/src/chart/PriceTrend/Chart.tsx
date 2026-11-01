@@ -928,6 +928,7 @@ export default function Chart(props: ChartProps) {
   );
   // ---- 异常价格守卫（2026-11-01）：隔离态徽标（空心点 + 胶囊）----
   const suspectBadges = useMemo(() => buildSuspectBadges(series), [series]);
+  const suspectBadgeKeys = useMemo(() => new Set(suspectBadges.map((b) => b.key)), [suspectBadges]);
   const anomalyRule = useMemo(() => readAnomalyRule(), [series]);
   const markAnomaly = useCallback(
     (b: SuspectBadge, action: 'exempt' | 'isolate') => {
@@ -941,9 +942,10 @@ export default function Chart(props: ChartProps) {
         price: b.price,
         wow: b.wow,
         ts: Date.now(),
+        granularity, // 配置页清单按粒度显示桶文案（周 2026W39 / 月 2026-10）
       });
     },
-    [series, filterState.countryCode],
+    [series, filterState.countryCode, granularity],
   );
   const empty = series.length === 0;
   const brandByKey = useMemo(() => new Map([...series, ...nameAll].map((s) => [s.key, s.brand])), [series, nameAll]);
@@ -1247,7 +1249,9 @@ export default function Chart(props: ChartProps) {
               s.points.map((pt, i) => {
                 const chg = changeMarks.get(`${s.key}|${i}`);
                 const v = primaryPriceOf(pt, priceTypes);
-                if (chg == null || v == null) return null;
+                // 异常守卫打标点不出变化胶囊：两者同画在 y+9 会完全叠压，
+                // 且「疑/待核对 ±X%」已承载同一幅度信息
+                if (chg == null || v == null || suspectBadgeKeys.has(`${s.key}|${i}`)) return null;
                 const down = chg < 0;
                 const pct = Math.round(Math.abs(chg) * 100);
                 const dim = litKeys != null && !litKeys.includes(s.key);
