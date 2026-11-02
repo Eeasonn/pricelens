@@ -15,7 +15,7 @@
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Input, Popconfirm, Popover, Tooltip } from 'antd';
+import { Input, message, Popconfirm, Popover, Tooltip } from 'antd';
 import { DeleteOutlined, SearchOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
 import { PANEL_EXIT_MS, prefersReducedMotion } from '../../theme/motion';
 import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
@@ -31,7 +31,7 @@ import BrandDot, { brandLabelOf } from '../BrandMark';
 import { useFilters } from '../../state/FiltersContext';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
-import { cardQuota, MAX_LINES_PER_CHART, MAINS_CAP, newCardId, remapSelection, selKey } from '../../state/mainSelection';
+import { cardQuota, COMPARE_CAP_HINT, MAINS_CAP, newCardId, remapSelection, selKey } from '../../state/mainSelection';
 import { color, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
   AddPill,
@@ -136,7 +136,12 @@ function PickPopover({
     if (blockedKeys?.has(k)) return;
     if (compareCtx) {
       const checked = checkedKeys?.has(k) ?? false;
-      if (!checked && (quotaFull || mainSelKey === k)) return;
+      if (!checked && mainSelKey === k) return;
+      // 每组对比硬上限：点行名称加第 4 款给出同句提示（与主浮窗同口径）
+      if (!checked && quotaFull) {
+        message.info(COMPARE_CAP_HINT);
+        return;
+      }
     }
     onPick(r);
     if (!keepOpen) setOpen(false);
@@ -196,7 +201,7 @@ function PickPopover({
                 sameAsMain && !checked
                   ? '主分析产品不对比自身配置'
                   : full
-                    ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）`
+                    ? COMPARE_CAP_HINT
                     : checked
                       ? '移除该对比'
                       : '加入对比区'
@@ -348,7 +353,7 @@ function PairCard({
         const nextMain = buildSel(c.main, r);
         const key = selKey(nextMain);
         // 与主品同组的对比项不再重复占线，并按新主品的卡配额截断
-        //（对齐主浮窗 withMain 口径：空对挂满 8 条对比后补选主品不收口会涨成 9 条线）
+        //（对齐主浮窗 withMain 口径：空对挂满对比后补选主品不收口会超每组对比上限）
         return { ...c, main: nextMain, compares: c.compares.filter((x) => selKey(x) !== key).slice(0, cardQuota({ main: nextMain })) };
       });
       return;
@@ -600,17 +605,23 @@ function PairCard({
                 })}
               </div>
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
-                <PickPopover
-                  ctx={{ kind: 'compare', cardId: card.id }}
-                  checkedKeys={checkedKeys}
-                  quotaFull={full}
-                  mainSelKey={main ? selKey(main) : undefined}
-                  initialModelId={main?.modelId}
-                  keepOpen
-                  onPick={(r) => pickInCard({ kind: 'compare', cardId: card.id }, r)}
-                >
-                  <AddPill label="添加对比产品" disabled={full} />
-                </PickPopover>
+                {/* 配满（每组 3 款）时按钮置灰并给出同句提示；气泡挂在 DOM 外壳上
+                    （PickPopover 为函数组件，不转发气泡的悬停事件） */}
+                <Tooltip title={full ? COMPARE_CAP_HINT : undefined} zIndex={TIP_Z}>
+                  <span style={{ display: 'inline-flex' }}>
+                    <PickPopover
+                      ctx={{ kind: 'compare', cardId: card.id }}
+                      checkedKeys={checkedKeys}
+                      quotaFull={full}
+                      mainSelKey={main ? selKey(main) : undefined}
+                      initialModelId={main?.modelId}
+                      keepOpen
+                      onPick={(r) => pickInCard({ kind: 'compare', cardId: card.id }, r)}
+                    >
+                      <AddPill label="添加对比产品" disabled={full} />
+                    </PickPopover>
+                  </span>
+                </Tooltip>
               </div>
             </>
           )}

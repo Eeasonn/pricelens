@@ -637,22 +637,8 @@ button.lpl-map-card:hover {
    ============================================================ */
 .lpl-volume-panel { container-type: inline-size; }
 
-/* 明细卡三栏：面板 ≤780px 改单列（2026-11-02 反馈⑤：双主品并排时单面板
-   ≈660-700px，旧 640 阈值恰好漏过导致月度三格标签互压；按面板宽触发） */
-@container (max-width: 780px) {
-  .lpl-volume-detail { grid-template-columns: 1fr !important; }
-  .lpl-volume-detail-product {
-    padding: 0 0 12px !important;
-    border-right: 0 !important;
-    border-bottom: 1px solid #ebebeb;
-  }
-  .lpl-volume-detail-weekly {
-    padding: 12px 0 !important;
-    border-right: 0 !important;
-    border-bottom: 1px solid #ebebeb;
-  }
-  .lpl-volume-detail-monthly { padding: 12px 0 0 !important; }
-}
+/* 明细卡 2026-11-02 起为「头部一行 + 指标一行」flex 结构，窄卡指标按 minWidth
+   自动换行，不再需要 ≤780px 容器查询断点（旧三栏网格与该断点一并退役） */
 
 /* 量价图组可聚焦（键盘 ←/→/Home/End 切换观察周）：焦点环与全站按钮同款蓝色 */
 .lpl-volume-stack:focus-visible {

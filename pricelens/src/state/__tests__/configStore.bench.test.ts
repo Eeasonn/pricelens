@@ -1,6 +1,7 @@
-// 生效对标取数单测（第一百一十六轮）：分国过滤、每配置 4 款硬上限、分组去重。
+// 生效对标取数单测（第一百一十六轮）：分国过滤、每配置硬上限（BENCHMARK_CAP_PER_CONFIG，
+// 2026-11-02 起 = 3，与每组对比硬上限同值）、分组去重。
 // 真实数据锚（dim_benchmark RU）对应用户评审案例：R 国 Pura 90s Pro 12+256 = 2 款竞品、
-// Pura 80 Ultra 16+512 = 4 款；手动快照超限（旧版本遗留）时 benchmarkSkuIdsFor 兜底截断。
+// Pura 80 Ultra 16+512 = 3 款；手动快照超限（旧版本遗留）时 benchmarkSkuIdsFor 兜底截断。
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   BENCHMARK_CAP_PER_CONFIG,

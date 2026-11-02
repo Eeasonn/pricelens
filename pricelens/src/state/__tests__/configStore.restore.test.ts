@@ -57,6 +57,9 @@ const realSku = (i: number): string =>
 
 describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
   it('只把目标配置回退维表默认，其他国家/型号/配置的行原样保留', () => {
+    // 无快照 = 维表默认的生效视图（每配置截到 BENCHMARK_CAP_PER_CONFIG 款；维表按旧上限
+    // 4 生成，2026-11-02 上限降到 3 后第 4 款在生效口径里被截掉，不再与维表逐行相等）
+    const baseline = getEffectiveBenchmark();
     // 模拟用户改过目标组：竞品换成另两款真实竞品、来源标人工；其余组 = 整份维表
     const modified = targetRows.map((r, i) => ({ ...r, competitor_sku_id: realSku(i), source: 'manual' as const }));
     saveBenchmark([...dimBenchmark.filter((r) => !isTarget(r)).map((r) => ({ ...r })), ...modified]);
@@ -67,8 +70,8 @@ describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
     const after = rawBench() ?? [];
     // 目标组 = 维表默认行（SKU/sort/来源/备注逐字段一致）
     expect(after.filter(isTarget)).toEqual(targetRows);
-    // 非目标行与维表逐行一致（顺序 = 维表原序）
-    expect(after.filter((r) => !isTarget(r))).toEqual(dimBenchmark.filter((r) => !isTarget(r)));
+    // 非目标行与维表默认生效视图逐行一致（顺序 = 维表原序，每配置截到上限）
+    expect(after.filter((r) => !isTarget(r))).toEqual(baseline.filter((r) => !isTarget(r)));
     // 读取口径同步回到默认取数
     expect(benchmarkSkuIdsFor(MID, ROM, CC)).toEqual(targetRows.map((r) => r.competitor_sku_id));
   });
@@ -94,6 +97,7 @@ describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
   });
 
   it('快照因此删空则整键清除（全表回默认）', () => {
+    const baseline = getEffectiveBenchmark(); // 无快照的默认生效视图（见上一用例注释）
     // 维表里没有默认行的「幽灵组」，清掉后快照无行可剩 → 键应被移除
     const ghost: DimBenchmark = {
       country_code: CC,
@@ -109,7 +113,7 @@ describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
     clearBenchmarkEntry(CC, 'own-ghost-model', '1+1 GB');
 
     expect(mem.get(LPL.cfgBenchmark)).toBeUndefined();
-    expect(getEffectiveBenchmark()).toEqual(dimBenchmark);
+    expect(getEffectiveBenchmark()).toEqual(baseline);
   });
 
   it('无手动快照时是空操作（本就是默认口径，不凭空建快照）', () => {

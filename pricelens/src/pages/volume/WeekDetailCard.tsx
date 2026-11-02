@@ -1,10 +1,11 @@
-// 图下方单周明细卡（视觉 demo：detail-card 三栏网格）。
-// 左 = 身份区（2026-11-02 Eason：面板头并入明细卡首行——价格页同款 PillUnit：平台小药丸
-//      = 店铺筛选、产品药丸点击隐藏）+ 日期/桶号行（右挂本组对比 / 店铺同步轻量动作）；
-// 中 = RRP / 折后价 / 环比 / 销量；右 = 当月成本 / 单台销毛 / 销毛率（三格都显式带「模拟」）。
+// 图下方单周明细卡（2026-11-02 Eason 三轮收敛后的最终形态）：
+// 头部一行 = 价格页同款 PillUnit（平台小药丸 = 店铺筛选、产品药丸点击隐藏；组内对比主品
+//   左侧挂 36×36「店铺同步」）+ 日期/桶号（对齐药丸名行）+ 右挂「本组对比（N）」——
+//   原「药丸行 + 日期行」两行合并为一行（Eason：药丸行可以删，与日期行同一行）；
+// 指标一行 = RRP / 折后价 / 环比 / 销量（+ 开销毛成本时：当月成本 / 单台销毛 / 销毛率，
+//   三格都显式带「模拟」；竖 hairline 分组）。窄卡片指标自动换行（flexWrap + minWidth）。
 // 环比涨跌用涨蓝跌琥珀（第一百八十七轮定案）；缺采显示 —，不借用相邻周。
-// 无观察点（范围内无数据）时身份区照常渲染（隐藏/店铺入口不能随卡消失），指标区合并显提示。
-// 窄容器时改单列（index.css 的容器查询 .lpl-volume-detail）。
+// 无观察点（范围内无数据）时头部照常渲染（隐藏/店铺入口不能随卡消失），指标区显提示。
 import type { CSSProperties, ReactNode } from 'react';
 import { Popconfirm } from 'antd';
 import { color, font, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
@@ -23,7 +24,7 @@ const VALUE_FONT: CSSProperties = {
 
 function Metric(props: { label: string; children: ReactNode }) {
   return (
-    <div style={{ minWidth: 0 }}>
+    <div style={{ flex: '1 1 0', minWidth: 76 }}>
       <div style={{ color: color.mute, fontSize: 11, lineHeight: '15px', whiteSpace: 'nowrap' }}>{props.label}</div>
       <div className="tnum" style={VALUE_FONT}>{props.children}</div>
     </div>
@@ -81,61 +82,67 @@ function SuspectTag(props: { kind: 'quarantined' | 'pending' | 'exempted' }) {
 }
 
 const CARD_STYLE: CSSProperties = {
-  display: 'grid',
-  // 身份列 200：药丸 + 「10-14 2026W42」(13px) + 右挂「本组对比（N）」一行放得下（176 时互相压盖）；
-  // ≤780px 容器查询整卡改单列（index.css）
-  gridTemplateColumns: '200px minmax(0, 1.25fr) minmax(0, 1fr)',
-  gap: 0,
+  display: 'flex',
+  flexDirection: 'column',
   marginTop: 6, // 工具行只剩齿轮后卡片再上提（Eason：第一行空出来了）
-  padding: '12px 16px',
+  padding: '10px 16px 12px',
   border: `1px solid ${color.hairline}`,
   borderRadius: radius.card,
   background: color.canvas,
+  minWidth: 0,
+};
+
+/** 日期块：13px（Eason：层级 = 产品药丸 > 指标值 16 > 日期 13 > 桶号 11），
+ *  paddingBottom 对齐 PillUnit 第二行（产品药丸名行） */
+const DATE_STYLE: CSSProperties = {
+  flex: '0 0 auto',
+  paddingBottom: 9,
+  paddingLeft: 2,
+  fontFamily: font.family,
+  fontVariantNumeric: 'tabular-nums',
+  fontSize: 13,
+  lineHeight: '18px',
+  fontWeight: 600,
+  color: color.ink,
+  whiteSpace: 'nowrap',
 };
 
 export default function WeekDetailCard(props: {
   model: WeekDetailModel;
-  /** 身份区（2026-11-02 Eason：面板头并入明细卡首行）：价格页同款 PillUnit 宿主 */
+  /** 身份区（2026-11-02 Eason：面板头并入明细卡头部）：价格页同款 PillUnit 宿主
+   *  （组内对比主品含左侧 36×36 店铺同步） */
   identity: ReactNode;
-  /** 日期行右侧轻量动作：阅读视图主品 = 本组对比入口；组内对比主品 = 店铺同步开关 */
+  /** 头部右端轻量动作：阅读视图主品 = 本组对比入口 */
   identityActions?: ReactNode;
   /** 异常守卫裁定入口（2026-11-01）：观察点打标时出现（已确认态不再出） */
   onExempt?: () => void;
   onIsolate?: () => void;
   /** ARIA：卡片标题元素 id（codex 会话：可访问名关联） */
   summaryId?: string;
+  /** 销毛成本开关（2026-11-02 Eason）：关 / 组内对比时不显示成本销毛三格 */
+  showMargin?: boolean;
 }) {
   const m = props.model;
-  const identityCol = (
-    <div
-      className="lpl-volume-detail-product"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        minWidth: 0,
-        paddingRight: 16,
-        borderRight: `1px solid ${color.hairline}`,
-      }}
-    >
+  const showMargin = props.showMargin !== false;
+  const dateBlock = (
+    <div className="tnum" style={DATE_STYLE}>
+      {m.visible ? m.date || MISSING : MISSING}
+      {m.visible && m.period && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, color: color.mute }}>{m.period}</span>}
+    </div>
+  );
+  const header = (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', columnGap: 12, rowGap: 4, minWidth: 0 }}>
       {props.identity}
-      {/* 日期行：右挂动作放不下时折到下一行（flexWrap），绝不压盖日期 */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', columnGap: 8, rowGap: 2, marginTop: 6, width: '100%', minWidth: 0 }}>
-        {/* 日期 13px（Eason：原 16px 与指标值同级显得过大）——层级：产品药丸 > 指标值 16 > 日期 13 > 桶号 11 */}
-        <div className="tnum" style={{ flex: '0 0 auto', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 13, lineHeight: '18px', fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-          {m.visible ? m.date || MISSING : MISSING}
-          {m.visible && m.period && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, color: color.mute }}>{m.period}</span>}
-        </div>
-        {props.identityActions}
-      </div>
+      {dateBlock}
+      <div style={{ flex: '1 1 0' }} />
+      {props.identityActions && <div style={{ flex: '0 0 auto', paddingBottom: 8 }}>{props.identityActions}</div>}
     </div>
   );
   if (!m.visible) {
     return (
       <article className="lpl-volume-detail" id={props.summaryId} aria-label="当前观察点详细数值" style={CARD_STYLE}>
-        {identityCol}
-        <div className="lpl-volume-detail-weekly" style={{ gridColumn: '2 / -1', display: 'flex', alignItems: 'center', paddingInline: 16, color: color.mute, fontSize: 12, lineHeight: '18px' }}>
+        {header}
+        <div style={{ borderTop: `1px solid ${color.hairline}`, marginTop: 8, paddingTop: 10, color: color.mute, fontSize: 12, lineHeight: '18px' }}>
           该时间范围内无数据
         </div>
       </article>
@@ -148,17 +155,9 @@ export default function WeekDetailCard(props: {
       aria-label="当前观察点详细数值"
       style={CARD_STYLE}
     >
-      {identityCol}
-      <div
-        className="lpl-volume-detail-weekly"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          alignItems: 'center',
-          paddingInline: 16,
-          borderRight: `1px solid ${color.hairline}`,
-        }}
-      >
+      {header}
+      {/* 指标行：周口径四格（+ 开销毛成本时月口径三格，竖 hairline 分组）；窄卡自动换行 */}
+      <div style={{ borderTop: `1px solid ${color.hairline}`, marginTop: 8, padding: '10px 0 0', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', rowGap: 8, minWidth: 0 }}>
         <Metric label="RRP">
           <span style={{ color: color.mute, fontWeight: 400 }}>{m.rrp ?? MISSING}</span>
         </Metric>
@@ -193,10 +192,31 @@ export default function WeekDetailCard(props: {
         <Metric label={m.volumeLabel}>
           {m.volume != null ? <>{m.volume}<span style={{ marginLeft: 3, fontSize: 11, fontWeight: 400, color: color.mute }}>台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
         </Metric>
-        {/* 被隔离/待核对点：原值保留 + 人工裁定入口（预览-确认-记录-撤销）。
-            独立整行——放指标格内会在窄面板被邻列长文本（跨N隔离周等）压住点不到 */}
+        {showMargin && (
+          <div style={{ flex: '2 1 220px', minWidth: 220, borderLeft: `1px solid ${color.hairline}`, paddingLeft: 14, display: 'flex' }}>
+            {m.marginMasked ? (
+              // 被隔离周不造销毛（2026-11-01 异常守卫）：三格合并显「价格不可信」提示
+              <div style={{ color: color.mute, fontSize: 12, lineHeight: '18px', alignSelf: 'center' }}>
+                价格不可信<span style={{ marginLeft: 6, fontSize: 11 }}>该周已隔离，不计算销毛</span>
+              </div>
+            ) : (
+              <>
+                <Metric label="当月成本 · 模拟">
+                  {m.margin.kind === 'ready' ? <>{m.margin.cost}<span style={{ marginLeft: 2, fontSize: 11, fontWeight: 400, color: color.mute }}>/台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
+                </Metric>
+                <Metric label="单台销毛 · 模拟">
+                  {m.margin.kind === 'ready' ? <>{m.margin.margin}<span style={{ marginLeft: 2, fontSize: 11, fontWeight: 400, color: color.mute }}>/台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
+                </Metric>
+                <Metric label="销毛率 · 模拟">
+                  {m.margin.kind === 'ready' ? m.margin.rate : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
+                </Metric>
+              </>
+            )}
+          </div>
+        )}
+        {/* 被隔离/待核对点：人工裁定入口（预览-确认-记录-撤销），独立整行不被指标格挤压 */}
         {m.priceSuspect && m.priceSuspect !== 'exempted' && (props.onExempt || props.onIsolate) && (
-          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 100%', display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
             {props.onExempt && (
               <Popconfirm
                 title="确认该价格为真实价格？"
@@ -236,29 +256,6 @@ export default function WeekDetailCard(props: {
               </Popconfirm>
             )}
           </div>
-        )}
-      </div>
-      <div
-        className="lpl-volume-detail-monthly"
-        style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', alignItems: 'center', paddingLeft: 16 }}
-      >
-        {m.marginMasked ? (
-          // 被隔离周不造销毛（2026-11-01 异常守卫）：三格合并显「价格不可信」提示
-          <div style={{ gridColumn: '1 / -1', color: color.mute, fontSize: 12, lineHeight: '18px' }}>
-            价格不可信<span style={{ marginLeft: 6, fontSize: 11 }}>该周已隔离，不计算销毛</span>
-          </div>
-        ) : (
-          <>
-            <Metric label="当月成本 · 模拟">
-              {m.margin.kind === 'ready' ? <>{m.margin.cost}<span style={{ marginLeft: 2, fontSize: 11, fontWeight: 400, color: color.mute }}>/台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
-            </Metric>
-            <Metric label="单台销毛 · 模拟">
-              {m.margin.kind === 'ready' ? <>{m.margin.margin}<span style={{ marginLeft: 2, fontSize: 11, fontWeight: 400, color: color.mute }}>/台</span></> : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
-            </Metric>
-            <Metric label="销毛率 · 模拟">
-              {m.margin.kind === 'ready' ? m.margin.rate : <span style={{ color: color.mute, fontWeight: 400 }}>{MISSING}</span>}
-            </Metric>
-          </>
         )}
       </div>
     </article>

@@ -59,7 +59,7 @@ import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries, defaultPlatformAnchorOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
-import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../state/mainSelection';
+import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART, COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
 import type {
@@ -1332,7 +1332,7 @@ export default function PriceTrend(props: {
                     ? { label: '合并', value: 'merge' }
                     : {
                         label: (
-                          <Tooltip title={`合并后共 ${mergeLines} 条，超过合并上限 ${MERGE_LINES_CAP} 条（每组最多 ${MAX_LINES_PER_CHART} 条）`}>
+                          <Tooltip title={`合并后共 ${mergeLines} 条，超过合并上限 ${MERGE_LINES_CAP} 条（每组最多 ${COMPARES_PER_CARD_CAP + 1} 条：主品 + 对比产品）`}>
                             <span>合并</span>
                           </Tooltip>
                         ),

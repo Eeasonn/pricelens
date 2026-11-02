@@ -38,16 +38,18 @@ function writeJson(key: string, value: unknown): void {
 
 // ---------------- 默认竞品矩阵（LPL3.config.benchmark） ----------------
 
-/** 每个我司「国家×型号×配置」的生效竞品硬上限（与维表截断、配置编辑侧同一条规则） */
-export const BENCHMARK_CAP_PER_CONFIG = 4;
+/** 每个我司「国家×型号×配置」的生效竞品硬上限（与维表截断、配置编辑侧同一条规则）。
+ *  2026-11-02（Eason）：4 → 3，与每组对比产品硬上限（mainSelection.COMPARES_PER_CARD_CAP）
+ *  同值——自动匹配带出的竞品不会超过一组能放下的对比数。 */
+export const BENCHMARK_CAP_PER_CONFIG = 3;
 
 /**
  * 生效的默认竞品矩阵：用户手动配置（source=manual，存 LPL3.config.benchmark）优先，
  * 未配置时回退 src/data 的 dimBenchmark（source=auto）。
- * 两条路径统一按「国家 × 型号 × 配置（ROMRAM 去空格归一）」截到每配置 4 款
+ * 两条路径统一按「国家 × 型号 × 配置（ROMRAM 去空格归一）」截到每配置 3 款
  * （BENCHMARK_CAP_PER_CONFIG，组内按 sort 升序、稳定）：benchmarkSkuIdsFor 的查询
  * 路径早有此兜底，但总览矩阵 / 对标弹窗直接整表消费——旧手动快照等未经截断的
- * 来源不在此处钳住，会出现每配置超过 4 款、与编辑侧硬限分叉。
+ * 来源不在此处钳住，会出现每配置超过上限、与编辑侧硬限分叉。
  */
 export function getEffectiveBenchmark(): DimBenchmark[] {
   const manual = readJson<DimBenchmark[]>(LPL.cfgBenchmark);
@@ -68,7 +70,7 @@ export function getEffectiveBenchmark(): DimBenchmark[] {
   } else {
     rows = dimBenchmark;
   }
-  // 组内按 sort 升序取前 4 的竞品集合，再按原表顺序过滤——不重排整表，
+  // 组内按 sort 升序取前 BENCHMARK_CAP_PER_CONFIG 款的竞品集合，再按原表顺序过滤——不重排整表，
   // 对标弹窗整快照保存时不产生无谓的行序变化
   const keep = new Map<string, Set<string>>();
   // own_romram 未在前置过滤里校验类型（旧快照可能缺字段），归一前兜底空串
@@ -89,7 +91,7 @@ export function getEffectiveBenchmark(): DimBenchmark[] {
  * 某我司"产品名+ROMRAM"的默认竞品 SKU 列表（按 sort 升序，第 1=主竞品）。
  * 精确匹配 (own_model_id, own_romram)；无该 ROMRAM 行时回退型号级行；再无 → 空。
  * 约定：own_model_id = 型号 id（sku_id 前缀，如 `own-pura-90s-pro-max`，已对真实产物核验）。
- * 第一百一十六轮：输出钳在每配置 4 款内——维表已按「人工→矩阵列序→替代→自动」截断，
+ * 第一百一十六轮：输出钳在每配置上限内（BENCHMARK_CAP_PER_CONFIG，现为 3）——维表已按「人工→矩阵列序→替代→自动」截断，
  * 此处兜底早期手动配置/旧持久化等未经截断的来源。
  */
 export function benchmarkSkuIdsFor(modelId: string, romram: string, countryCode: string = getCurrentCountry()): string[] {

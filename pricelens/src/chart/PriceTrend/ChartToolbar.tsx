@@ -361,6 +361,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           trigger="click"
           open={moreOpen}
           onOpenChange={setMoreOpen}
+          destroyOnHidden
           placement="bottomLeft"
           content={
             <ConfigProvider theme={filterBarTheme}>

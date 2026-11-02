@@ -229,11 +229,22 @@ export default function VolumePrice() {
   //      产品清单/价格类型/币种变化清空（挂进下方 scaleResetKey 复位效果） ----
   const [hiddenPanels, setHiddenPanels] = usePageViewState<string[]>('volume.hiddenPanels', () => []);
   const hiddenSet = useMemo(() => new Set(hiddenPanels), [hiddenPanels]);
-  // 呈现方式（2026-11-02 新方案）：经典 = 折线+销量柱+成本销毛带；成本柱 = 柱高折后价
-  // + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱。默认成本柱（Eason）；切换收进 ⋯ 菜单。
-  // 会话态跨页保留
+  // 销毛成本开关（2026-11-02 Eason）：关 = 经典呈现且不画成本销毛带（回到最初的量价图）；
+  // 开 = 默认切成本柱呈现（⋯ 菜单仍可切回经典，此时经典带着成本销毛带）。
+  // 组内对比下不允许显示销毛成本（对比时放在下方不合理）：强制关、开关禁用。会话态跨页保留
+  const [showMargin, setShowMargin] = usePageViewState<boolean>('volume.showMargin', () => false);
+  const marginLocked = safeViewMode.kind === 'group';
+  const marginOn = showMargin && !marginLocked;
+  // 呈现方式（2026-11-02 新方案）：经典 = 折线+销量柱（+成本销毛带）；成本柱 = 柱高折后价
+  // + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱。只在销毛成本开启时有意义；切换收进 ⋯ 菜单
   const [priceMode, setPriceMode] = usePageViewState<'classic' | 'costbar'>('volume.priceMode', () => 'costbar');
-  const costbar = priceMode === 'costbar';
+  const costbar = marginOn && priceMode === 'costbar';
+  const toggleMargin = (): void => {
+    if (marginLocked) return;
+    const next = !showMargin;
+    setShowMargin(next);
+    setPriceMode(next ? 'costbar' : 'classic');
+  };
 
   // 视图模式切换（阅读 ↔ 组内对比 / 换组）即清空隐藏集：两视图面板集不同，
   // 「一次看一组」的心智下从空集开始
@@ -1207,17 +1218,30 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               </>
                             )}
                           </div>
-                          {ranged && brush && row ? (
+                        </div>
+                        {/* 主图 + 成本销毛带同一相对容器：十字线贯穿两图（demo：crosshair） */}
+                        <div style={{ position: 'relative' }}>
+                        {/* 所选区间胶囊（含清除）：居中悬浮在所选区间顶部（2026-11-02 Eason：原放元信息行
+                            右上角太隐晦）；横向钳在绘图区内，zIndex 压过极差卡，可点 */}
+                        {ranged && brush && row && strip && (() => {
+                          const slot = strip.plotWidth / Math.max(1, strip.n);
+                          const lo = Math.min(brush[0], brush[1]);
+                          const hi = Math.max(brush[0], brush[1]);
+                          const half = 76;
+                          const cx = Math.min(strip.plotLeft + strip.plotWidth - half, Math.max(strip.plotLeft + half, strip.plotLeft + slot * ((lo + hi + 1) / 2)));
+                          return (
                             <span
-                              className="tnum"
+                              className="tnum lpl-brush-capsule"
                               style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, minHeight: 24, padding: '2px 4px 2px 10px',
+                                position: 'absolute', top: -2, left: cx, transform: 'translateX(-50%)', zIndex: 31,
+                                display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 24, padding: '2px 4px 2px 10px',
                                 border: '1px solid rgba(0, 112, 243, 0.35)', borderRadius: radius.pill,
                                 background: selectSoft, color: selectSoftInk, fontSize: 11, lineHeight: '16px',
                                 fontFamily: font.family, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
                               }}
                             >
-                              {detailDateOf(state.granularity, p.vis[0]?.points[Math.min(brush[0], brush[1])]?.xLabel ?? '')} — {detailDateOf(state.granularity, p.vis[0]?.points[Math.max(brush[0], brush[1])]?.xLabel ?? '')}
+                              {detailDateOf(state.granularity, p.vis[0]?.points[lo]?.xLabel ?? '')} — {detailDateOf(state.granularity, p.vis[0]?.points[hi]?.xLabel ?? '')}
                               <button
                                 type="button"
                                 aria-label="清除所选区间"
@@ -1229,14 +1253,12 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                                 ×
                               </button>
                             </span>
-                          ) : null}
-                        </div>
-                        {/* 主图 + 成本销毛带同一相对容器：十字线贯穿两图（demo：crosshair） */}
-                        <div style={{ position: 'relative' }}>
+                          );
+                        })()}
                         {/* 双极差卡（2026-11-02 反馈④）：悬浮在图表顶部表面、不占布局高度——
-                            absolute 贴绘图区顶缘，pointerEvents 关闭以免挡住下方拖选/悬停 */}
+                            absolute 贴绘图区顶缘下让出胶囊一行，pointerEvents 关闭以免挡住下方拖选/悬停 */}
                         {(priceCard?.visible || volumeCard?.visible) && strip && cardRow && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, position: 'absolute', top: PANEL_GRID_TOP, left: strip.plotLeft, zIndex: 30, pointerEvents: 'none' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, position: 'absolute', top: PANEL_GRID_TOP + 14, left: strip.plotLeft, zIndex: 30, pointerEvents: 'none' }}>
                             {priceCard?.visible
                               ? <SpreadRangeCard title="价格极差" accent={seriesColor} model={priceCard} style={{ width: cardRow.width }} />
                               : <span />}
@@ -1377,7 +1399,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             </svg>
                           )}
                           </div>
-                          {!costbar && (
+                          {!costbar && marginOn && (
                           <MarginCostBand
                             waterline={state.granularity === 'week'}
                             granularity={state.granularity}
@@ -1412,38 +1434,62 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             <WeekDetailCard
                             model={detail}
                             identity={
-                              <span ref={(el) => registerPanelPillHost(p.spec.key, el)} style={{ display: 'inline-flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%' }}>
-                                <PillUnit pill={pill} dimmed={false} onToggle={hidePanel} onHover={() => {}} />
+                              <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 4, minWidth: 0, maxWidth: '100%' }}>
+                                {/* 店铺同步（组内对比主品）：与价格走势页药丸条的按钮逐像素同款
+                                    （36×36 两行字、边框/浅蓝按压态），放主品药丸左侧同一位置 */}
+                                {!reading && p.spec.isMain && (
+                                  <button
+                                    type="button"
+                                    aria-pressed={synced}
+                                    aria-label={synced ? `取消 ${p.name} 的店铺同步` : `同步 ${p.name} 的店铺`}
+                                    title={synced ? '已同步：本组对比产品跟随主产品店铺，点击取消' : '将本组对比产品的店铺同步为主产品店铺'}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleStoreSync(p);
+                                    }}
+                                    style={{
+                                      flex: '0 0 36px',
+                                      width: 36,
+                                      height: 36,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      textAlign: 'center',
+                                      border: `1px solid ${synced ? color.link : color.hairline}`,
+                                      borderRadius: radius.control,
+                                      background: synced ? selectSoft : color.canvas,
+                                      color: synced ? selectSoftInk : color.body,
+                                      font: 'inherit',
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      lineHeight: '13px',
+                                      cursor: 'pointer',
+                                      whiteSpace: 'normal',
+                                    }}
+                                  >
+                                    <span>店铺<br />同步</span>
+                                  </button>
+                                )}
+                                <span ref={(el) => registerPanelPillHost(p.spec.key, el)} style={{ display: 'inline-flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%' }}>
+                                  <PillUnit pill={pill} dimmed={false} onToggle={hidePanel} onHover={() => {}} />
+                                </span>
                               </span>
                             }
                             identityActions={
                               reading && compareCount > 0 ? (
+                                // 定尺（Eason：原忽大忽小）：font 重置 + 固定高/行高，任何卡片同一尺寸
                                 <button
                                   type="button"
                                   aria-label={`查看 ${p.name} 所在组的 ${compareCount} 款对比产品`}
                                   onClick={() => switchViewMode({ kind: 'group', cardId: p.spec.cardId })}
-                                  style={{ flex: '0 0 auto', border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 11, lineHeight: '16px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                  style={{ flex: '0 0 auto', height: 20, border: 'none', background: 'none', padding: 0, margin: 0, color: color.link, font: 'inherit', fontSize: 11, lineHeight: '20px', fontWeight: 400, cursor: 'pointer', whiteSpace: 'nowrap' }}
                                 >
                                   本组对比（{compareCount}）
-                                </button>
-                              ) : !reading && p.spec.isMain ? (
-                                <button
-                                  type="button"
-                                  aria-pressed={synced}
-                                  aria-label={synced ? `取消 ${p.name} 的店铺同步` : `同步 ${p.name} 的店铺`}
-                                  title={synced ? '已同步：本主产品卡内的对比产品跟随主产品店铺，点击取消' : '本主产品卡内的对比产品跟随主产品店铺'}
-                                  onClick={() => toggleStoreSync(p)}
-                                  style={{
-                                    flex: '0 0 auto', border: 'none', padding: synced ? '0 6px' : 0, borderRadius: radius.pill,
-                                    background: synced ? selectSoft : 'none', color: synced ? selectSoftInk : color.link,
-                                    font: 'inherit', fontSize: 11, lineHeight: '16px', fontWeight: synced ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {synced ? '店铺已同步' : '店铺同步'}
                                 </button>
                               ) : undefined
                             }
                             summaryId={`volume-detail-${p.idx}`}
+                            showMargin={marginOn}
                             onExempt={
                               activePoint?.suspect && activePoint.suspect !== 'exempted' && activePoint.price != null
                                 ? () => markPanelPoint(p, activePoint, 'exempt')
@@ -1522,7 +1568,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   labelMode={labelMode}
                   onLabelMode={setLabelMode}
                   anomalySlot={<AnomalyQualityChip page="volume" />}
-                  presentationSlot={
+                  presentationSlot={marginOn ? (
                     <Segmented
                       size="small"
                       aria-label="图表呈现方式"
@@ -1533,7 +1579,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                         { label: '成本柱', value: 'costbar' },
                       ]}
                     />
-                  }
+                  ) : undefined}
                 />
               </div>
               {/* 中段：组内对比切换（仅组视图）——同一量价卡内的次级视图，一次只看一组 */}
@@ -1630,17 +1676,47 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                       </div>
                     ) : (
                       <>
-                        {/* 明细信息行（2026-11-02 反馈③）：紧跟工具行，每面板一张明细卡正对其面板 */}
+                        {/* 明细信息行（2026-11-02 反馈③）：紧跟工具行，每面板一张明细卡正对其面板。
+                            左侧轴列宽留白里放「销毛成本」开关（Eason：齿轮与 ⋯ 的下方） */}
                         {detailCards.size > 0 && (
-                          <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: gridGap, marginLeft: lead, marginBottom: space.sm }}>
-                            {[...detailCards.values()].map((card, i) => (
-                              <div
-                                key={visiblePanels[i]?.spec.key ?? i}
-                                style={{ containerType: 'inline-size', minWidth: 0, padding: reading ? '0 12px' : 0 }}
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: space.md, marginBottom: space.sm }}>
+                            <div style={{ flex: `0 0 ${axisW}px`, boxSizing: 'border-box', display: 'flex', justifyContent: 'flex-start', paddingLeft: 6, paddingTop: 6 }}>
+                              <button
+                                type="button"
+                                aria-pressed={marginOn}
+                                aria-label={marginOn ? '隐藏销毛成本' : '显示销毛成本'}
+                                aria-disabled={marginLocked || undefined}
+                                title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：成本柱呈现（⋯ 菜单可切回经典 + 成本销毛带）；点击隐藏回到经典量价图' : '显示销毛成本：切到成本柱呈现'}
+                                onClick={toggleMargin}
+                                style={{
+                                  height: 24,
+                                  padding: '0 8px',
+                                  border: `1px solid ${marginOn ? color.link : color.hairline}`,
+                                  borderRadius: radius.control,
+                                  background: marginOn ? selectSoft : color.canvas,
+                                  color: marginLocked ? color.mute : marginOn ? selectSoftInk : color.body,
+                                  font: 'inherit',
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  lineHeight: '22px',
+                                  cursor: marginLocked ? 'not-allowed' : 'pointer',
+                                  whiteSpace: 'nowrap',
+                                  opacity: marginLocked ? 0.55 : 1,
+                                }}
                               >
-                                {card}
-                              </div>
-                            ))}
+                                销毛成本
+                              </button>
+                            </div>
+                            <div style={{ flex: '1 1 0', minWidth: 0, display: 'grid', gridTemplateColumns: gridCols, gap: gridGap }}>
+                              {[...detailCards.values()].map((card, i) => (
+                                <div
+                                  key={visiblePanels[i]?.spec.key ?? i}
+                                  style={{ containerType: 'inline-size', minWidth: 0, padding: reading ? '0 12px' : 0 }}
+                                >
+                                  {card}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                         <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md }}>

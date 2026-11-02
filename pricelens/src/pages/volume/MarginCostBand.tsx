@@ -81,12 +81,9 @@ export default function MarginCostBand(props: {
     () => costAxisDomainOf(validPoints),
     [validPoints],
   );
-  // 销毛率域（2026-11-02 反馈：右轴从销毛金额改为销毛率 %；0 → 上取整 10% 档）
-  const marginDomain = useMemo(() => {
-    const rates = validPoints.map((p2) => p2.marginRate).filter((r): r is number => r != null && Number.isFinite(r));
-    const max = rates.length ? Math.max(...rates, 0.05) : 0.1;
-    return { min: 0, max: Math.min(1, Math.ceil((max * 100) / 10) * 10 / 100) };
-  }, [validPoints]);
+  // 销毛率域（2026-11-02 反馈②：固定 0–100%，30% 线落在带高的 30% 处，不再随数据自适应；
+  // 柱模式与水位线共用同一比例尺。axisTicksOf 对 {0,1} 产出 100% / 50% / 0% 三档，适配 224px 带高）
+  const marginDomain = useMemo(() => ({ min: 0, max: 1 }), []);
   const segments = useMemo(() => segmentsOf(props.points), [props.points]);
   const costTicks = useMemo(() => axisTicksOf(costDomain), [costDomain]);
   const marginTicks = useMemo(() => axisTicksOf(marginDomain), [marginDomain]);
@@ -254,8 +251,7 @@ export default function MarginCostBand(props: {
                       </g>
                     );
                   })}
-                  <text x={props.geom!.plotLeft - 8} y={plotTop - 2} textAnchor="end" fill={color.mute} fontSize={9}>成本</text>
-                  <text x={plotRight + 8} y={plotTop - 2} fill={color.mute} fontSize={9}>销毛率</text>
+                  {/* 两侧轴名已删（2026-11-02 Eason：图上不要解释性用语；带头图例已标成本/销毛率） */}
                   {/* 独立时间轴：与主图共享桶顺序和观察列，但不借用主图的轴线。 */}
                   <line x1={props.geom!.plotLeft} x2={plotRight} y1={plotTop + plotHeight} y2={plotTop + plotHeight} stroke={color.hairlineStrong} strokeWidth={1} />
                   {(() => {
@@ -274,7 +270,8 @@ export default function MarginCostBand(props: {
                   })()}
                   {props.waterline ? (
                     // 水位模式（周粒度）：成本 = 纯半透明面积（无上缘描线）；
-                    // 销毛率 = 细虚线（1.25px，比价格线 2px 细一档，右轴 % 刻度）。无柱。
+                    // 销毛率 = 细阶梯虚线（2026-11-02 反馈①：段内水平、段间垂直跳变，
+                    // 1.25px，比价格线 2px 细一档，右轴 % 刻度）。无柱。
                     (() => {
                       const baseline = plotTop + plotHeight;
                       const stepPath = segments.map((seg, i) => {
@@ -284,7 +281,10 @@ export default function MarginCostBand(props: {
                         const rate = rateByMonth.get(seg.monthId) ?? 0;
                         const yRate = yAt(rate, 'margin');
                         const head = i === 0 ? `M${x1} ${yCost}` : `L${x1} ${yCost}`;
-                        return { head: `${head} L${x2} ${yCost}`, rate: `${head} L${x2} ${yRate}` };
+                        // 阶梯线：每段从自身率高 yRate 起笔（首段 M / 后续 L——x1 与上一段
+                        // x2 重合，故 L x1 yRate 即为垂直跳变），再水平走到 x2。
+                        const rateHead = i === 0 ? `M${x1} ${yRate}` : `L${x1} ${yRate}`;
+                        return { head: `${head} L${x2} ${yCost}`, rate: `${rateHead} L${x2} ${yRate}` };
                       });
                       const marginLine = stepPath.map((p) => p.rate).join(' ');
                       const first = segments[0];
