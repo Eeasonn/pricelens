@@ -139,12 +139,14 @@ export default function MarginCostBand(props: {
         {!showEmpty && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, color: color.mute, fontSize: 10, flexShrink: 0 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span aria-hidden style={{ width: 14, height: props.waterline ? 4 : 2, borderRadius: 2, background: props.waterline ? hexToRgba(props.seriesColor, 0.45) : props.seriesColor }} />
+              {props.waterline
+                ? <span aria-hidden style={{ width: 12, height: 8, borderRadius: 2, background: hexToRgba(props.seriesColor, 0.16), boxShadow: `inset 0 0 0 1px ${hexToRgba(props.seriesColor, 0.8)}` }} />
+                : <span aria-hidden style={{ width: 14, height: 2, background: props.seriesColor }} />}
               成本
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               {props.waterline
-                ? <span aria-hidden style={{ width: 14, height: 4, borderRadius: 2, background: hexToRgba(props.seriesColor, 0.2) }} />
+                ? <span aria-hidden style={{ width: 14, height: 1.5, background: props.seriesColor }} />
                 : <span aria-hidden style={{ width: 8, height: 8, borderRadius: 1, background: hexToRgba(props.seriesColor, 0.28) }} />}
               销毛
             </span>
@@ -159,7 +161,7 @@ export default function MarginCostBand(props: {
         <>
           <svg
             role="img"
-            aria-label={props.waterline ? "成本与销毛水位线" : "成本阶梯线与销毛独立柱"}
+            aria-label={props.waterline ? "成本面积与销毛线" : "成本阶梯线与销毛独立柱"}
             width="100%"
             height={PLOT_SVG_H}
             style={{ display: 'block' }}
@@ -248,30 +250,31 @@ export default function MarginCostBand(props: {
                     );
                   })()}
                   {props.waterline ? (
-                    // 水位线模式（周粒度）：成本/销毛按月段画半透明横线（水位），无柱。
-                    // 线段宽度覆盖该月全部周桶，换月跳变、缺月自然断开。
-                    segments.map((segment, segIndex) => {
-                      const x1 = props.geom!.plotLeft + segment.startIndex * slot;
-                      const x2 = props.geom!.plotLeft + (segment.startIndex + segment.count) * slot;
+                    // 水位模式（周粒度）：成本 = 半透明带色面积（水位到轴基线的阶梯面积），
+                    // 销毛 = 细线（1.25px，比价格线 2px 细一档）。无柱；换月阶梯跳变、缺月断开。
+                    (() => {
+                      const baseline = plotTop + plotHeight;
+                      const stepPath = segments.map((seg, i) => {
+                        const x1 = props.geom!.plotLeft + seg.startIndex * slot;
+                        const x2 = props.geom!.plotLeft + (seg.startIndex + seg.count) * slot;
+                        const yCost = yAt(seg.unitCost, 'cost');
+                        const yMargin = yAt(seg.unitMargin, 'margin');
+                        const head = i === 0 ? `M${x1} ${yCost}` : `L${x1} ${yCost}`;
+                        return { head: `${head} L${x2} ${yCost}`, margin: `${head} L${x2} ${yMargin}` };
+                      });
+                      const costLine = stepPath.map((p) => p.head).join(' ');
+                      const marginLine = stepPath.map((p) => p.margin).join(' ');
+                      const first = segments[0];
+                      const last = segments[segments.length - 1];
+                      const areaPath = `${costLine} L${props.geom!.plotLeft + (last.startIndex + last.count) * slot} ${baseline} L${props.geom!.plotLeft + first.startIndex * slot} ${baseline} Z`;
                       return (
-                        <g key={`water-${segIndex}`}>
-                          <line
-                            x1={x1} x2={x2}
-                            y1={yAt(segment.unitCost, 'cost')} y2={yAt(segment.unitCost, 'cost')}
-                            stroke={hexToRgba(props.seriesColor, 0.45)}
-                            strokeWidth={4}
-                            strokeLinecap="round"
-                          />
-                          <line
-                            x1={x1} x2={x2}
-                            y1={yAt(segment.unitMargin, 'margin')} y2={yAt(segment.unitMargin, 'margin')}
-                            stroke={hexToRgba(props.seriesColor, 0.2)}
-                            strokeWidth={4}
-                            strokeLinecap="round"
-                          />
+                        <g>
+                          <path d={areaPath} fill={hexToRgba(props.seriesColor, 0.16)} />
+                          <path d={costLine} fill="none" stroke={props.seriesColor} strokeWidth={2} />
+                          <path d={marginLine} fill="none" stroke={props.seriesColor} strokeWidth={1.25} strokeDasharray="4 3" />
                         </g>
                       );
-                    })
+                    })()
                   ) : (
                     <>
                       {columns.map((column) => {
