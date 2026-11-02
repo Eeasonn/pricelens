@@ -4,17 +4,25 @@ import { useFilters } from './FiltersContext';
 import { useAlerts } from '../components/AlertCenter';
 import {
   buildAgentContext,
+  contextFingerprint as agentContextFingerprint,
   defaultAgentClient,
   defaultVoiceAdapter,
   runAgent,
   validateFilterPatch,
   type AgentContextSnapshot,
+  type AgentIntent,
+  type AgentAlertRecord,
+  type AgentRun,
+  type AgentRunStatus,
   type AgentResponse,
   type AgentResultCard,
+  type ForecastContextInput,
+  type ForecastDraftInput,
   type FilterResultCard,
   type VoiceInputAdapter,
 } from '../agent';
 import type { FiltersState } from './filtersTypes';
+import { materializeAlertRecords, alertAgentContextOf } from '../dataModel/alertLifecycle';
 
 export interface AgentMessage {
   id: string;
@@ -23,17 +31,20 @@ export interface AgentMessage {
   response?: AgentResponse;
   createdAt: string;
   /** 用于把系统提醒与普通对话区分开，旧消息默认仍按 assistant 展示。 */
-  kind?: 'conversation' | 'proactive' | 'error';
+  kind?: 'conversation' | 'clarification' | 'system' | 'scenario' | 'proactive' | 'error';
   unread?: boolean;
   contextFingerprint?: string;
   /** 原始请求，用于错误结果一键重试。 */
   prompt?: string;
+  alert?: AgentAlertRecord;
 }
 
 interface AgentContextValue {
   open: boolean;
-  mode: 'dock' | 'full';
+  mode: 'dock' | 'drawer' | 'full';
   running: boolean;
+  runStatus: AgentRunStatus;
+  activeRun: AgentRun | null;
   voiceListening: boolean;
   voiceAvailable: boolean;
   messages: AgentMessage[];
@@ -41,16 +52,19 @@ interface AgentContextValue {
   context: AgentContextSnapshot;
   appliedFilterIds: ReadonlySet<string>;
   canUndo: boolean;
+  canRedo: boolean;
+  contextStale: boolean;
   unreadCount: number;
   setDraft: (value: string) => void;
-  openAgent: (mode?: 'dock' | 'full', prompt?: string) => void;
+  openAgent: (mode?: 'dock' | 'drawer' | 'full', prompt?: string | ({ text: string; intent?: AgentIntent; forecastDraft?: ForecastDraftInput } & ForecastContextInput)) => void;
   closeAgent: () => void;
-  setMode: (mode: 'dock' | 'full') => void;
-  send: (text?: string) => Promise<void>;
+  setMode: (mode: 'dock' | 'drawer' | 'full') => void;
+  send: (text?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput) => Promise<void>;
   stop: () => void;
   newConversation: () => void;
   applyFilter: (card: FilterResultCard) => { ok: boolean; error?: string };
   undoFilter: () => void;
+  redoFilter: () => void;
   markRead: () => void;
   startVoice: () => Promise<void>;
 }
@@ -59,25 +73,50 @@ const Ctx = createContext<AgentContextValue | null>(null);
 
 const messageId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-function alertRecords(alerts: ReturnType<typeof useAlerts>) {
-  return alerts.map((a) => ({
-    key: a.key,
-    type: a.type,
-    brand: a.brand,
-    modelName: a.modelName,
-    romram: a.romram,
-    weekLabel: a.weekLabel,
-    weekId: a.weekId,
-    price: a.price ?? 0,
-    wowPct: a.wowPct,
-    promoDeltaPp: a.promoDeltaPp,
-    gapPct: a.gapPct,
-    gapLowPlatform: a.gapLowPlatform,
-    gapHighPlatform: a.gapHighPlatform,
-    gapLowPrice: a.gapLowPrice,
-    gapHighPrice: a.gapHighPrice,
-    isOwn: a.isOwn,
-  }));
+function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState, page: string) {
+  const cfg = {
+    subs: state.alertSubs,
+    enabled: state.alertTypes,
+    thresholds: state.alertThresholds,
+    products: state.alertProducts,
+    currency: state.currency,
+    scope: { countryCode: state.countryCode, industry: state.industry },
+    platform: state.platform,
+  };
+  const fingerprint = agentContextFingerprint(state, page);
+  return materializeAlertRecords(alerts, cfg, {}, { contextFingerprint: fingerprint }).map((record) => {
+    const structured = alertAgentContextOf(record);
+    return {
+      key: record.key,
+      alertId: structured.alertId,
+      seriesKey: record.seriesKey,
+      type: record.type,
+      brand: record.brand,
+      modelName: record.modelName,
+      romram: record.romram,
+      weekLabel: record.weekLabel,
+      weekId: record.weekId,
+      // 缺价保持 null；0 是有效的数值语义，不能拿来冒充“暂无价格”。
+      price: record.price ?? null,
+      wowPct: record.wowPct,
+      promoDeltaPp: record.promoDeltaPp,
+      gapPct: record.gapPct,
+      gapLowPlatform: record.gapLowPlatform,
+      gapHighPlatform: record.gapHighPlatform,
+      gapLowPrice: record.gapLowPrice,
+      gapHighPrice: record.gapHighPrice,
+      isOwn: record.isOwn,
+      lifecycle: structured.lifecycle,
+      priority: structured.priority,
+      priorityScore: record.priorityScore,
+      threshold: structured.threshold,
+      ruleVersion: structured.ruleVersion,
+      dataVersion: structured.dataVersion,
+      contextFingerprint: structured.contextFingerprint,
+      evidenceIds: structured.evidenceIds,
+      evidenceStatus: record.evidenceStatus,
+    };
+  });
 }
 
 function alertTypeLabel(type: string): string {
@@ -89,62 +128,153 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const { state, actions } = useFilters();
   const alerts = useAlerts();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'dock' | 'full'>('dock');
+  const [mode, setMode] = useState<'dock' | 'drawer' | 'full'>('dock');
   const [running, setRunning] = useState(false);
+  const [runStatus, setRunStatus] = useState<AgentRunStatus>('idle');
+  const [activeRun, setActiveRun] = useState<AgentRun | null>(null);
   const [voiceListening, setVoiceListening] = useState(false);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [appliedFilterIds, setAppliedFilterIds] = useState<ReadonlySet<string>>(new Set());
   const [undoSnapshots, setUndoSnapshots] = useState<FiltersState[]>([]);
+  const [redoSnapshots, setRedoSnapshots] = useState<FiltersState[]>([]);
   const controller = useRef<AbortController | null>(null);
+  const contextRef = useRef<AgentContextSnapshot | null>(null);
+  // 远端服务即使收到 abort 也可能晚到；序号让旧响应无法覆盖新会话。
+  const runSequence = useRef(0);
   const cancelRequested = useRef(false);
+  const pendingIntent = useRef<AgentIntent | undefined>(undefined);
+  const pendingForecastDraft = useRef<ForecastDraftInput | undefined>(undefined);
+  const pendingForecastContext = useRef<ForecastContextInput | undefined>(undefined);
   const seenProactiveAlerts = useRef<Set<string>>(new Set());
   const agentClient = useMemo(() => defaultAgentClient(), []);
   const voice = useMemo<VoiceInputAdapter>(() => defaultVoiceAdapter(), []);
-  const context = useMemo(() => buildAgentContext(page, state, alertRecords(alerts)), [alerts, page, state]);
+  const context = useMemo(() => buildAgentContext(page, state, alertRecords(alerts, state, page)), [alerts, page, state]);
+  useEffect(() => { contextRef.current = context; }, [context]);
+  const appendMessage = useCallback((message: AgentMessage) => {
+    // 长时间使用面板时保留最近 100 条，避免对话和证据卡无限增长。
+    setMessages((prev) => [...prev, message].slice(-100));
+  }, []);
 
-  // 预警页只对每个事件推送一次轻量提醒；打开 Agent 后可继续追问，避免重复打扰。
+  // 任意页面都把每个新事件推送到同一条 Agent 消息流；面板关闭时只增加未读数。
   useEffect(() => {
-    if (page !== 'alerts') return;
-    const latest = alertRecords(alerts)[0];
+    const latest = alertRecords(alerts, state, page)[0];
     if (!latest || seenProactiveAlerts.current.has(latest.key)) return;
     seenProactiveAlerts.current.add(latest.key);
-    setMessages((prev) => [...prev, { id: messageId('proactive'), role: 'assistant', text: `检测到新的${alertTypeLabel(latest.type)}预警：${latest.brand} ${latest.modelName} · ${latest.weekLabel}。输入“解释最新预警”查看触发事实和证据。`, kind: 'proactive', unread: !open, contextFingerprint: context.fingerprint, createdAt: new Date().toISOString() }]);
-  }, [alerts, context.fingerprint, open, page]);
+    appendMessage({
+      id: messageId('proactive'),
+      role: 'assistant',
+      text: `检测到新的${alertTypeLabel(latest.type)}预警：${latest.brand} ${latest.modelName} · ${latest.weekLabel}。现价 ${latest.price ?? '—'}${latest.threshold != null ? ` · 阈值 ${latest.threshold * 100}%` : ''} · ${latest.evidenceStatus === 'verified' ? '证据已核验' : '证据待核查'}。`,
+      kind: 'proactive',
+      alert: latest,
+      unread: !open,
+      contextFingerprint: context.fingerprint,
+      createdAt: new Date().toISOString(),
+    });
+  }, [alerts, appendMessage, context.fingerprint, open, page, state]);
 
-  const openAgent = useCallback((nextMode: 'dock' | 'full' = 'dock', prompt?: string) => {
+  const openAgent = useCallback((nextMode: 'dock' | 'drawer' | 'full' = 'dock', prompt?: string | ({ text: string; intent?: AgentIntent; forecastDraft?: ForecastDraftInput } & ForecastContextInput)) => {
     setMode(nextMode); setOpen(true);
     setMessages((prev) => prev.map((message) => message.unread ? { ...message, unread: false } : message));
-    if (prompt) setDraft(prompt);
+    pendingIntent.current = undefined;
+    pendingForecastDraft.current = undefined;
+    pendingForecastContext.current = undefined;
+    if (prompt) {
+      pendingIntent.current = typeof prompt === 'string' ? undefined : prompt.intent;
+      pendingForecastDraft.current = typeof prompt === 'string' ? undefined : prompt.forecastDraft;
+      pendingForecastContext.current = typeof prompt === 'string' ? undefined : { forecastSnapshot: prompt.forecastSnapshot, forecastDataset: prompt.forecastDataset };
+      setDraft(typeof prompt === 'string' ? prompt : prompt.text);
+    }
   }, []);
   // 允许运行中折叠面板，查询继续在后台执行；launcher 会保留运行指示。
   const closeAgent = useCallback(() => { setOpen(false); }, []);
 
-  const send = useCallback(async (value?: string) => {
+  const send = useCallback(async (value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput) => {
     const text = (value ?? draft).trim();
     if (!text || running) return;
     setDraft('');
     const requestContextFingerprint = context.fingerprint;
-    setMessages((prev) => [...prev, { id: messageId('user'), role: 'user', text, prompt: text, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() }]);
+    appendMessage({ id: messageId('user'), role: 'user', text, prompt: text, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() });
+    const explicitIntent = pendingIntent.current;
+    const explicitForecastDraft = forecastDraft ?? pendingForecastDraft.current;
+    const explicitForecastContext = forecastContext ?? pendingForecastContext.current;
+    pendingIntent.current = undefined;
+    pendingForecastDraft.current = undefined;
+    pendingForecastContext.current = undefined;
     const run = new AbortController();
-    controller.current = run; cancelRequested.current = false; setRunning(true); setOpen(true);
+    const runId = ++runSequence.current;
+    const agentRunId = messageId('run');
+    const startedAt = new Date().toISOString();
+    controller.current = run; cancelRequested.current = false; setRunning(true); setOpen(true); setRunStatus('parsing');
+    setActiveRun({ id: agentRunId, requestId: messageId('request'), status: 'parsing', startedAt, updatedAt: startedAt, context, events: [{ id: messageId('event'), runId: agentRunId, sequence: 1, type: 'run.started', status: 'parsing', timestamp: startedAt, message: '已接收请求', provenance: context.provenance }] });
     try {
-      const baseline = await runAgent(text, context, run.signal);
-      const response = await agentClient.run({ text, context, clientRequestId: messageId('run'), baseline }, run.signal);
-      setMessages((prev) => [...prev, { id: messageId('assistant'), role: 'assistant', text: response.summary, response, prompt: text, kind: 'conversation', unread: true, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() }]);
+      setRunStatus('tool_running');
+      setActiveRun((prev) => prev ? { ...prev, status: 'tool_running', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'step.started', status: 'tool_running', timestamp: new Date().toISOString(), message: '正在读取确定性价格工具', tool: 'series.query', provenance: context.provenance }] } : prev);
+      const baseline = await runAgent(text, context, run.signal, explicitIntent, explicitForecastDraft, explicitForecastContext?.forecastSnapshot, explicitForecastContext?.forecastDataset);
+      setRunStatus('planning');
+      setActiveRun((prev) => prev ? { ...prev, status: 'planning', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status', status: 'planning', timestamp: new Date().toISOString(), message: '正在编排确定性工具', provenance: context.provenance }] } : prev);
+      const response = await agentClient.run({ text, context, clientRequestId: messageId('run'), runId: agentRunId, intent: explicitIntent, forecastDraft: explicitForecastDraft, forecastSnapshot: explicitForecastContext?.forecastSnapshot, forecastDataset: explicitForecastContext?.forecastDataset, baseline }, run.signal, (event) => {
+        if (runSequence.current !== runId) return;
+        setActiveRun((prev) => prev ? { ...prev, status: event.status ?? prev.status, updatedAt: event.timestamp, events: [...prev.events, event] } : prev);
+        if (event.status && event.status !== 'completed') setRunStatus(event.status);
+      });
+      if (runSequence.current !== runId) return;
+      const stale = contextRef.current ? contextRef.current.fingerprint !== requestContextFingerprint : false;
+      const nextStatus: AgentRunStatus = stale ? 'stale_context' : response.intent === 'clarify' ? 'clarification_required' : 'completed';
+      setRunStatus(nextStatus);
+      setActiveRun((prev) => {
+        if (!prev) return prev;
+        const completionEvent = stale || response.intent === 'clarify' ? null : { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.completed' as const, status: nextStatus, timestamp: new Date().toISOString(), message: '运行完成', provenance: response.provenance ?? context.provenance };
+        const events = completionEvent && prev.events.some((event) => event.type === 'run.completed') ? prev.events : completionEvent ? [...prev.events, completionEvent] : [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status' as const, status: nextStatus, timestamp: new Date().toISOString(), message: stale ? '筛选上下文已变化，结果可查看但需要重新确认口径' : '需要补充查询口径', provenance: response.provenance ?? context.provenance }];
+        return { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), response, events };
+      });
+      const messageKind: AgentMessage['kind'] = response.intent === 'clarify' ? 'clarification' : /量价预测|预测|情景/.test(text) ? 'scenario' : 'conversation';
+      appendMessage({ id: messageId('assistant'), role: 'assistant', text: response.summary, response, prompt: text, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() });
     } catch (error) {
-      const aborted = (error as Error).name === 'AbortError';
-      setMessages((prev) => [...prev, { id: messageId('assistant'), role: 'assistant', text: aborted || cancelRequested.current ? '已取消这次查询。' : `这次运行没有完成：${(error as Error).message || 'Agent 服务暂时不可用。'}`, prompt: text, kind: 'error', unread: true, createdAt: new Date().toISOString() }]);
-    } finally { controller.current = null; setRunning(false); }
-  }, [agentClient, context, draft, running]);
+      if (runSequence.current !== runId) return;
+      const aborted = error instanceof Error && error.name === 'AbortError';
+      const messageText = error instanceof Error && error.message ? error.message : 'Agent 服务暂时不可用。';
+      const nextStatus: AgentRunStatus = aborted || cancelRequested.current ? 'cancelled' : 'failed';
+      setRunStatus(nextStatus);
+      setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: aborted || cancelRequested.current ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: context.provenance }] } : prev);
+      appendMessage({ id: messageId('assistant'), role: 'assistant', text: aborted || cancelRequested.current ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, prompt: text, kind: aborted || cancelRequested.current ? 'system' : 'error', unread: true, createdAt: new Date().toISOString() });
+    } finally {
+      if (runSequence.current === runId) { controller.current = null; setRunning(false); }
+    }
+  }, [agentClient, appendMessage, context, draft, running]);
 
-  const stop = useCallback(() => { cancelRequested.current = true; controller.current?.abort(); }, []);
-  const newConversation = useCallback(() => { if (!running) { setMessages([]); setDraft(''); setUndoSnapshots([]); setAppliedFilterIds(new Set()); } }, [running]);
+  const stop = useCallback(() => {
+    cancelRequested.current = true;
+    runSequence.current += 1;
+    controller.current?.abort();
+    controller.current = null;
+    // 立刻允许下一次提问；被取消的旧响应由 runSequence 丢弃。
+    setRunning(false);
+    setRunStatus('cancelled');
+    setActiveRun((prev) => prev ? {
+      ...prev,
+      status: 'cancelled',
+      updatedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      events: [...prev.events, {
+        id: messageId('event'),
+        runId: prev.id,
+        sequence: prev.events.length + 1,
+        type: 'run.cancelled' as const,
+        status: 'cancelled' as const,
+        timestamp: new Date().toISOString(),
+        message: '用户取消运行',
+        provenance: prev.context.provenance,
+      }],
+    } : prev);
+  }, []);
+  const newConversation = useCallback(() => { if (!running) { setMessages([]); setDraft(''); setUndoSnapshots([]); setRedoSnapshots([]); setAppliedFilterIds(new Set()); setActiveRun(null); setRunStatus('idle'); } }, [running]);
 
   const applyFilter = useCallback((card: FilterResultCard) => {
     const validation = validateFilterPatch(card.patch);
     if (!validation.valid) return { ok: false, error: validation.errors.join('；') };
     setUndoSnapshots((prev) => [...prev, state].slice(-5));
+    setRedoSnapshots([]);
     actions.set(card.patch);
     setAppliedFilterIds((prev) => new Set([...prev, card.id]));
     return { ok: true };
@@ -155,7 +285,16 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     if (!snapshot) return;
     actions.set(snapshot);
     setUndoSnapshots(undoSnapshots.slice(0, -1));
-  }, [actions, undoSnapshots]);
+    setRedoSnapshots((prev) => [...prev, state].slice(-5));
+  }, [actions, state, undoSnapshots]);
+
+  const redoFilter = useCallback(() => {
+    const snapshot = redoSnapshots[redoSnapshots.length - 1];
+    if (!snapshot) return;
+    setUndoSnapshots((prev) => [...prev, state].slice(-5));
+    actions.set(snapshot);
+    setRedoSnapshots(redoSnapshots.slice(0, -1));
+  }, [actions, redoSnapshots, state]);
 
   const markRead = useCallback(() => {
     setMessages((prev) => prev.some((message) => message.unread) ? prev.map((message) => ({ ...message, unread: false })) : prev);
@@ -165,9 +304,14 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     if (!voice.available || voiceListening || running) return;
     setVoiceListening(true);
     try { const result = await voice.listen(); setDraft((prev) => `${prev}${prev ? ' ' : ''}${result.transcript}`); }
-    catch (error) { if ((error as Error).name !== 'AbortError') setMessages((prev) => [...prev, { id: messageId('assistant'), role: 'assistant', text: `语音输入失败：${(error as Error).message || '浏览器未返回语音结果。'}`, kind: 'error', unread: true, createdAt: new Date().toISOString() }]); }
+    catch (error) {
+      if (!(error instanceof Error && error.name === 'AbortError')) {
+        const detail = error instanceof Error && error.message ? error.message : '浏览器未返回语音结果。';
+        appendMessage({ id: messageId('assistant'), role: 'assistant', text: `语音输入失败：${detail}`, kind: 'error', unread: true, createdAt: new Date().toISOString() });
+      }
+    }
     finally { setVoiceListening(false); }
-  }, [running, voice, voiceListening]);
+  }, [appendMessage, running, voice, voiceListening]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -179,9 +323,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   }, [open, running, openAgent]);
 
   const value: AgentContextValue = {
-    open, mode, running, voiceListening, voiceAvailable: voice.available, messages, draft, context, appliedFilterIds, canUndo: undoSnapshots.length > 0,
+    open, mode, running, runStatus, activeRun, voiceListening, voiceAvailable: voice.available, messages, draft, context, appliedFilterIds, canUndo: undoSnapshots.length > 0, canRedo: redoSnapshots.length > 0,
+    contextStale: messages.some((message) => Boolean(message.contextFingerprint && message.contextFingerprint !== context.fingerprint)),
     unreadCount: messages.filter((message) => message.unread).length,
-    setDraft, openAgent, closeAgent, setMode, send, stop, newConversation, applyFilter, undoFilter, markRead, startVoice,
+    setDraft, openAgent, closeAgent, setMode, send, stop, newConversation, applyFilter, undoFilter, redoFilter, markRead, startVoice,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -2,12 +2,12 @@
 // 量价预测 · 24 周模拟数据 fixture（typed adapter，状态 simulated）
 // 造数依据 docs/lifecycle-os-mvp/02-simple-demo-simulation-data.md：
 //   范围：R国 · 直营电商 · HUAWEI Pura 90 Pro 12+256GB · 生命周期 W1–W24
-//   （W1–W10 实际，W11–W24 预测，当前周 W10），来源 demo_seed。
+//   （W1–W10 历史段（模拟），W11–W24 预测，当前周 W10），来源 demo_seed。
 // 规则落点：
 //   1. 基线先爬坡后缓慢下降，无随机跳点；
 //   2. 价格仅在 W6 / W10 / W15 少量阶跃，不与促销周同时发生；
 //   3. 大促只影响活动窗口及活动后一周（透支回落），不永久外推；
-//   4. 竞品上市（W10）首周冲击后按 exp(-age/6) 逐周递减，窗口 6 周，
+//   4. 竞品上市（W10）首周冲击后按真正半衰期 6 周递减，窗口共 6 周（含上市周），
 //      竞品促销（W12）单周脉冲叠加；简单版只作为我司份额压力；
 //   5. W8–W9 可供量低于无约束需求，形成可解释缺货截断；
 //   6. 库存恒等式 / 销毛链由 forecastModel 计算，不在 fixture 存派生值；
@@ -15,9 +15,10 @@
 // 这里只存输入事实（不含 unconstrained_demand_truth 等验模真值）。
 // ============================================================
 import type { ForecastDataset, ForecastInputWeek, LifecyclePhase, WeekStatus } from './forecastModel';
+import { DEMO_FORECAST_PROVENANCE } from '../../dataModel/provenance';
 
 const WEEK_COUNT = 24;
-const ACTUAL_WEEKS = 10; // W1–W10 实际，W11–W24 预测
+const ACTUAL_WEEKS = 10; // W1–W10 历史段（模拟），W11–W24 预测
 
 /** 生命周期周起始日期（模拟，与独立 Demo 对齐：2026-01-05 起每周一档）。 */
 function weekDate(index: number): string {
@@ -52,6 +53,24 @@ const SI = [680, 780, 860, 900, 940, 1080, 1060, 560, 650, 780, 860, 880, 840, 8
 /** 单台成本（USD）：W15 起上调 680→700（规则 7）。 */
 const COST = [...Array<number>(14).fill(680), ...Array<number>(WEEK_COUNT - 14).fill(700)];
 
+/**
+ * 历史段观测 SO（模拟）：W8–W9 为供给删失周，观测值等于可供量；W1–W7、W10
+ * 作为未删失观测保留。预测段不填 observedSO，避免把模型输出伪装成历史事实。
+ * 这些值与首期确定性造数规则一致，后续替换真实 Adapter 时不应继续复用。
+ */
+const OBSERVED_SO: Array<number | undefined> = [
+  520, 620, 710, 770, 810, 1010, 1050, 650, 670, 720,
+  ...Array<number | undefined>(WEEK_COUNT - ACTUAL_WEEKS).fill(undefined),
+];
+
+const SO_STATUS: Array<'observed' | 'censored' | undefined> = [
+  'observed', 'observed', 'observed', 'observed', 'observed', 'observed', 'observed', 'censored', 'censored', 'observed',
+  ...Array<'observed' | 'censored' | undefined>(WEEK_COUNT - ACTUAL_WEEKS).fill(undefined),
+];
+
+/** 单台即时激励费用（USD）：促销活动期扣减销毛，活动后一周不再延续。 */
+const INCENTIVE = [0, 0, 0, 0, 0, 42, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 24, 0, 0, 0, 0];
+
 const weeks: ForecastInputWeek[] = Array.from({ length: WEEK_COUNT }, (_, index) => {
   const week = index + 1;
   return {
@@ -62,9 +81,13 @@ const weeks: ForecastInputWeek[] = Array.from({ length: WEEK_COUNT }, (_, index)
     baseDemand: BASE_DEMAND[index],
     price: PRICE[index],
     rrp: RRP,
+    dataStatus: 'simulated',
+    observedSO: OBSERVED_SO[index],
+    soStatus: SO_STATUS[index],
     available: AVAILABLE[index],
     si: SI[index],
     cost: COST[index],
+    incentive: INCENTIVE[index],
   };
 });
 
@@ -77,9 +100,11 @@ export const forecastFixture: ForecastDataset = {
     generatedAt: '2026-11-01',
     currency: 'USD',
     note: '模拟数据，仅用于演示简单版量价预测闭环，不代表真实市场、销量或利润。',
+    provenance: DEMO_FORECAST_PROVENANCE,
   },
   context: {
     country: 'R国',
+    industry: 'phone',
     channel: '直营电商',
     product: 'HUAWEI Pura 90 Pro 12+256GB',
     competitors: ['Apple iPhone 17 8+256GB', 'Samsung S26 12+256GB'],
@@ -93,8 +118,18 @@ export const forecastFixture: ForecastDataset = {
     { id: 'promo-yearend', label: '年末清库促销', start: 19, end: 20, depth: 0.08 },
   ],
   competitorLaunches: [
-    // 上市后 6 周递减：压力 = -12% × exp(-age / 6)，不改变市场总量。
-    { id: 'cmp-launch-w10', label: '竞品新品上市', week: 10, impact: -0.12, windowWeeks: 6, halfLifeWeeks: 6 },
+    // 上市窗口共 6 周（含上市周）：压力 = -12% × 0.5^(age / 6)，不改变市场总量。
+    {
+      id: 'cmp-launch-w10',
+      label: '竞品新品上市',
+      week: 10,
+      impact: -0.12,
+      windowWeeks: 6,
+      halfLifeWeeks: 6,
+      marketEffect: 'unknown',
+      simpleAssumption: 'neutral_market_size',
+      missingEvidence: ['market_size_units', 'competitor_sellout', 'control_market'],
+    },
   ],
   competitorPulses: [{ id: 'cmp-promo-w12', label: '竞品促销', week: 12, impact: -0.05 }],
   events: [
@@ -113,19 +148,27 @@ export const forecastFixture: ForecastDataset = {
       scope: '需求',
       window: 'W1–W24',
       shape: '趋势 + 季节 + 生命周期爬坡 / 衰减',
-      status: '模型学习',
-      evidence: '上一代同期 + 当前实际（模拟）',
+      status: '固定先验',
+      evidence: '上一代同期 + 当前历史段（模拟）',
       confidence: '中',
+      sampleCount: 8,
+      fitWindow: 'W1–W10',
+      fallback: true,
+      exclusions: { censored: 2, confounded: 0, missing: 0 },
     },
     {
       key: 'price',
       label: '消费者感知价格',
       scope: '需求',
-      window: '调价周起持续生效',
-      shape: '价格阶跃 × 弹性 −1.70（可学习）',
-      status: '模型学习',
-      evidence: '历史调价周（模拟）',
+      window: '调价后一周起持续生效',
+      shape: '价格阶跃 × 1 周滞后 × 弹性 −1.70',
+      status: '固定先验',
+      evidence: '历史调价周（模拟）· lag=1',
       confidence: '中',
+      sampleCount: 8,
+      fitWindow: 'W1–W10',
+      fallback: true,
+      exclusions: { censored: 2, confounded: 0, missing: 0 },
     },
     {
       key: 'promo',
@@ -136,17 +179,25 @@ export const forecastFixture: ForecastDataset = {
       status: '业务假设',
       evidence: '促销日历 / 活动强度',
       confidence: '中',
+      sampleCount: 8,
+      fitWindow: 'W1–W10',
+      fallback: true,
+      exclusions: { censored: 2, confounded: 0, missing: 0 },
     },
     {
       key: 'competitor',
       label: '竞品压力',
       scope: '份额压力',
-      window: '上市后 6 周',
-      shape: '首周冲击后逐周递减（半衰期 6 周）',
+      window: '上市窗口共 6 周（含上市周）',
+      shape: '首周冲击后按真正半衰期 6 周逐周递减',
       status: '方向性判断',
       evidence: '竞品事件 + 可比价格',
       confidence: '低',
       boundary: '简单版只将其作为华为份额压力，扩盘比例待验证',
+      sampleCount: 8,
+      fitWindow: 'W1–W10',
+      fallback: true,
+      exclusions: { censored: 2, confounded: 0, missing: 0 },
     },
     {
       key: 'supply',
@@ -157,6 +208,10 @@ export const forecastFixture: ForecastDataset = {
       status: '确定性计算',
       evidence: '供应计划 / 配额（模拟）',
       confidence: '高',
+      sampleCount: 10,
+      fitWindow: 'W1–W10',
+      fallback: false,
+      exclusions: { censored: 0, confounded: 0, missing: 0 },
     },
   ],
   params: {
@@ -167,5 +222,6 @@ export const forecastFixture: ForecastDataset = {
     channelFeeRate: 0.14,
     initialInventory: 460,
     currentWeekIndex: 9, // W10
+    effectivePriceLagWeeks: 1,
   },
 };

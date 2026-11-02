@@ -19,6 +19,7 @@ import type { CurrencyMode, DataScope } from './types';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 import { platformPriceSpread, priceForSelection, lowestPriceColorSku } from './aggregate';
 import { displayRrpOf } from './currency';
+import { errorProvenance, REAL_ALERT_PROVENANCE, type DataProvenance, type DataResult } from './provenance';
 
 export type AlertType = 'price-change' | 'promo' | 'platform-gap' | 'own-gap';
 
@@ -35,6 +36,8 @@ export interface AlertProductRule {
 export interface AlertPlatformSelection {
   platforms: string[];
   shopIds: string[];
+  /** 仅在单渠道选择时生效；与筛选器 PlatformSelection 对齐。 */
+  seller?: string | null;
 }
 
 export interface AlertCfg {
@@ -48,6 +51,8 @@ export interface AlertCfg {
   scope?: DataScope;
   /** 与看板同构的平台选择；缺省/null/空选择 = 默认店铺链（预填/覆盖 → 默认平台）。 */
   platform?: AlertPlatformSelection | null;
+  /** Optional adapter-provided source contract; defaults to the real price fact batch. */
+  provenance?: DataProvenance;
 }
 
 export const ALERT_TYPES: AlertType[] = ['price-change', 'promo', 'platform-gap', 'own-gap'];
@@ -85,6 +90,8 @@ export interface AlertItem {
   pairHighPrice: number | null;
   ownGapPct: number | null; // 高/低 − 1（**低于**阈值 = 档位太近）
   pairHighSeriesKey: string | null; // 高价档系列（低价档 = seriesKey 本身）
+  /** Source and as-of metadata carried with every trigger for Agent / detail views. */
+  provenance: DataProvenance;
 }
 
 export interface AlertSeriesMeta {
@@ -99,7 +106,55 @@ export interface AlertSeriesMeta {
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 const EPS = 1e-9;
-const timeAsc = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : 1));
+const timeAsc = [...dimTime].sort((a, b) => a.week_id.localeCompare(b.week_id));
+
+/** 阈值来自可持久化状态，运行时仍需防御 NaN/Infinity/负数。 */
+function positiveThreshold(value: number | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function platformCacheKey(platform: AlertPlatformSelection | null | undefined): string {
+  if (!platform) return 'default';
+  return `${[...platform.platforms].sort().join(',')}|${[...platform.shopIds].sort().join(',')}|${platform.seller ?? ''}`;
+}
+
+/**
+ * 代表色取价与看板保持同一选择口径。
+ * 默认店铺链直接复用 aggregate 的成熟实现；显式平台/渠道时逐 SKU 取最新有价周最低者，
+ * 避免预警仍按默认平台选色而与用户当前看板渠道不一致。
+ */
+function representativeSkuForSelection(
+  modelId: string,
+  romram: string,
+  scope: DataScope,
+  currency: CurrencyMode,
+  platform: AlertPlatformSelection | null | undefined,
+): string | null {
+  const isDefault = !platform || (platform.platforms.length === 0 && platform.shopIds.length === 0 && !platform.seller);
+  if (isDefault) return lowestPriceColorSku(modelId, romram, scope.countryCode, currency);
+  const rows = dimProduct
+    .filter(
+      (p) =>
+        p.sku_id.startsWith(modelId + '__') &&
+        norm(p.romram) === norm(romram) &&
+        p.industry === scope.industry &&
+        p.countries.includes(scope.countryCode),
+    )
+    .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
+  for (let i = timeAsc.length - 1; i >= 0; i--) {
+    const weekId = timeAsc[i].week_id;
+    let best: { skuId: string; price: number } | null = null;
+    for (const row of rows) {
+      const hit = priceForSelection(row.sku_id, weekId, scope.countryCode, platform, currency);
+      if (!hit) continue;
+      if (!best || hit.price < best.price - EPS || (Math.abs(hit.price - best.price) <= EPS && row.sku_id < best.skuId)) {
+        best = { skuId: row.sku_id, price: hit.price };
+      }
+    }
+    if (best) return best.skuId;
+  }
+  return null;
+}
 
 /** seriesKey（modelId__romram去空格）→ 系列元数据；无产品行 = null */
 export function alertSeriesMeta(seriesKey: string, scope: DataScope = DEFAULT_DATA_SCOPE): AlertSeriesMeta | null {
@@ -146,21 +201,39 @@ function effThreshold(cfg: AlertCfg, key: string, type: AlertType): number {
 export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   const currency = cfg.currency ?? 'usd';
   const scope = cfg.scope ?? DEFAULT_DATA_SCOPE;
+  const provenance = cfg.provenance ?? REAL_ALERT_PROVENANCE;
   // 与其他取数入口保持一致：不支持的国家/产业不产生任何预警。
   if (!isDataScopeSupported(scope)) return [];
-  if (cfg.subs.length === 0) return [];
+  // 持久化状态或外部调用可能带重复/空 key；重复订阅会导致重复事件，且 own-gap
+  // 会把同一档位当成两档参与排序。先归一化一次，保证结果稳定且幂等。
+  const subs = [...new Set(cfg.subs.filter((key): key is string => typeof key === 'string' && key.length > 0))];
+  if (subs.length === 0) return [];
   // 当前事实表价格不挂店铺明细，国家由 dimChannel 的可用渠道承载；
   // 以可用国家作为事实数据门槛，同时按产品产业过滤，便于后续接入多国家数据。
   const countryAvailable = dimChannel.some((c) => c.country_code === scope.countryCode);
   if (!countryAvailable) return [];
   const out: AlertItem[] = [];
-  for (const key of cfg.subs) {
-    const meta = alertSeriesMeta(key, scope);
+  const metaCache = new Map<string, AlertSeriesMeta | null>();
+  const repSkuCache = new Map<string, string | null>();
+  const spreadCache = new Map<string, { platform: string; price: number }[]>();
+  const metaOf = (key: string): AlertSeriesMeta | null => {
+    if (!metaCache.has(key)) metaCache.set(key, alertSeriesMeta(key, scope));
+    return metaCache.get(key) ?? null;
+  };
+  const repOf = (key: string, meta: AlertSeriesMeta): string | null => {
+    const cacheKey = `${key}|${scope.countryCode}|${scope.industry}|${currency}|${platformCacheKey(cfg.platform)}`;
+    if (!repSkuCache.has(cacheKey)) {
+      repSkuCache.set(cacheKey, representativeSkuForSelection(key.split('__')[0], meta.romram, scope, currency, cfg.platform));
+    }
+    return repSkuCache.get(cacheKey) ?? null;
+  };
+  for (const key of subs) {
+    const meta = metaOf(key);
     if (!meta) continue;
     // 代表色单 SKU（第一百三十八轮口径对齐）：lowestPriceColorSku 最低价颜色，
     // 与看板默认取色/总览/多平台比价同源——预警「现价」与图上折线同一条线；
     // 无代表色 = 该系列无价格数据，整系列不产预警（原全色均值口径同样全周缺采）
-    const repSkuId = lowestPriceColorSku(key.split('__')[0], meta.romram, scope.countryCode);
+    const repSkuId = repOf(key, meta);
     if (!repSkuId) continue;
     let prevPrice: number | null = null;
     let prevIntensity: number | null = null;
@@ -196,15 +269,19 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
         pairHighPrice: null as number | null,
         ownGapPct: null as number | null,
         pairHighSeriesKey: null as string | null,
+        provenance,
       };
       const thr = (t: AlertType): number => effThreshold(cfg, key, t);
+      const promoThreshold = positiveThreshold(thr('promo'));
+      const priceThreshold = positiveThreshold(thr('price-change'));
+      const platformThreshold = positiveThreshold(thr('platform-gap'));
       // 折扣预警（促销力度变化，双价齐全且前周也有力度）：|Δ力度| ≥ 阈值（阈值 ≤0 = 关）
       if (
         effEnabled(cfg, key, 'promo') &&
-        thr('promo') > 0 &&
+        promoThreshold != null &&
         intensity != null &&
         prevIntensity != null &&
-        Math.abs(intensity - prevIntensity) >= thr('promo') - EPS
+        Math.abs(intensity - prevIntensity) >= promoThreshold - EPS
       ) {
         out.push({
           ...base,
@@ -214,9 +291,9 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
         });
       }
       // 调价预警（华为/竞品都出）：|WoW| ≥ 阈值（阈值 ≤0 = 关）
-      if (effEnabled(cfg, key, 'price-change') && thr('price-change') > 0 && prevPrice != null && prevPrice > 0) {
+      if (effEnabled(cfg, key, 'price-change') && priceThreshold != null && prevPrice != null && prevPrice > 0) {
         const wow = hit.price / prevPrice - 1;
-        if (Math.abs(wow) >= thr('price-change') - EPS) {
+        if (Math.abs(wow) >= priceThreshold - EPS) {
           out.push({
             ...base,
             key: `${key}|${w.week_id}|price-change`,
@@ -226,14 +303,16 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
         }
       }
       // 平台价差预警（仅华为品牌系列）：周内各平台独立价 最高/最低 − 1 ≥ 阈值（阈值 ≤0 = 关）
-      if (effEnabled(cfg, key, 'platform-gap') && thr('platform-gap') > 0 && meta.isOwn) {
+      if (effEnabled(cfg, key, 'platform-gap') && platformThreshold != null && meta.isOwn) {
         // 平台价差 = 该国该周各平台真实最低价的最高/最低 − 1（单平台国家无价差）；
         // 取价 SKU = 代表色（与上文现价同一条线，原字典序首色口径已对齐淘汰）
-        const spread = platformPriceSpread(repSkuId, w.week_id, scope.countryCode, currency);
+        const spreadKey = `${repSkuId}|${w.week_id}|${scope.countryCode}|${currency}`;
+        const spread = spreadCache.get(spreadKey) ?? platformPriceSpread(repSkuId, w.week_id, scope.countryCode, currency);
+        spreadCache.set(spreadKey, spread);
         const low = spread[0];
         const high = spread[spread.length - 1];
         const gap = spread.length >= 2 && low.price > 0 ? high.price / low.price - 1 : 0;
-        if (gap >= thr('platform-gap') - EPS) {
+        if (gap >= platformThreshold - EPS) {
           out.push({
             ...base,
             key: `${key}|${w.week_id}|platform-gap`,
@@ -251,12 +330,13 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
     }
   }
   // 档位间距预警（追补⑨，型号级）：订阅内华为系列按型号分组，最新有值现价相邻对
-  if (cfg.enabled['own-gap']) {
+  const ownGapThreshold = positiveThreshold(cfg.thresholds['own-gap']);
+  if (cfg.enabled['own-gap'] && ownGapThreshold != null) {
     const latestOf = (key: string): { price: number; weekId: string; weekLabel: string } | null => {
-      const meta = alertSeriesMeta(key, scope);
+      const meta = metaOf(key);
       if (!meta || !meta.isOwn) return null;
       // 档位间距同代表色口径：与上文现价/看板默认取色同一条线
-      const repSkuId = lowestPriceColorSku(key.split('__')[0], meta.romram, scope.countryCode);
+      const repSkuId = repOf(key, meta);
       if (!repSkuId) return null;
       for (let i = timeAsc.length - 1; i >= 0; i--) {
         const w = timeAsc[i];
@@ -267,19 +347,18 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       return null;
     };
     const byModel = new Map<string, string[]>();
-    for (const key of cfg.subs) {
-      const meta = alertSeriesMeta(key, scope);
+    for (const key of subs) {
+      const meta = metaOf(key);
       if (!meta?.isOwn) continue;
       const modelId = key.split('__')[0];
       const arr = byModel.get(modelId);
       if (arr) arr.push(key);
       else byModel.set(modelId, [key]);
     }
-    const thr = cfg.thresholds['own-gap'];
     for (const [modelId, keys] of byModel) {
       if (keys.length < 2) continue;
       const priced = keys
-        .map((k) => ({ key: k, meta: alertSeriesMeta(k, scope)!, px: latestOf(k) }))
+        .map((k) => ({ key: k, meta: metaOf(k)!, px: latestOf(k) }))
         .filter((x) => x.px != null && x.meta != null) as {
         key: string;
         meta: AlertSeriesMeta;
@@ -290,7 +369,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
         const low = priced[i - 1];
         const high = priced[i];
         const gap = low.px.price > 0 ? high.px.price / low.px.price - 1 : 0;
-        if (gap < thr - EPS) {
+        if (gap < ownGapThreshold - EPS) {
           out.push({
             key: `own-gap|${modelId}|${low.key}|${high.key}`,
             type: 'own-gap',
@@ -317,6 +396,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
             pairHighPrice: displayRound(high.px.price),
             ownGapPct: gap,
             pairHighSeriesKey: high.key,
+            provenance,
           });
         }
       }
@@ -329,6 +409,39 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
       a.type.localeCompare(b.type) ||
       a.seriesKey.localeCompare(b.seriesKey),
   );
+}
+
+/** Adapter-facing wrapper: callers can distinguish no scope, no triggers and
+ * a failed calculation instead of treating every empty array as the same. */
+export function buildAlertResult(cfg: AlertCfg): DataResult<AlertItem[]> {
+  const provenance = cfg.provenance ?? REAL_ALERT_PROVENANCE;
+  const scope = cfg.scope ?? DEFAULT_DATA_SCOPE;
+  if (!isDataScopeSupported(scope)) {
+    return {
+      state: 'empty',
+      provenance: { ...provenance, freshness: 'missing', asOf: null },
+      reason: 'out_of_scope',
+      message: '当前国家或产业没有可用的价格事实，暂时无法生成预警。',
+    };
+  }
+  if (!cfg.subs.some((key) => typeof key === 'string' && key.length > 0)) {
+    return {
+      state: 'empty',
+      provenance,
+      reason: 'not_configured',
+      message: '尚未配置监控产品，暂时没有可计算的预警范围。',
+    };
+  }
+  try {
+    return { state: 'ready', data: buildAlerts(cfg), provenance };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '预警计算失败。';
+    return {
+      state: 'error',
+      provenance: errorProvenance(provenance.source, message),
+      error: { code: 'ALERT_ENGINE_FAILED', message: '预警计算失败，请刷新后重试。', retryable: true },
+    };
+  }
 }
 
 // ============================================================
@@ -404,3 +517,32 @@ export function latestByType(items: AlertItem[]): AlertItem[] {
   }
   return out;
 }
+
+// 处理层契约从独立模块 re-export，旧的 alerts.ts 单一入口调用方无需迁移。
+export {
+  alertAgentContextOf,
+  alertIdOf,
+  alertPriorityOf,
+  alertPriorityScore,
+  alertRuleVersionOf,
+  bulkTransitionAlertRecords,
+  contextFingerprintOf,
+  evidenceOf,
+  materializeAlertRecords,
+  ruleSnapshotOf,
+  summarizeAlertRecords,
+  toAlertRecord,
+  transitionAlertRecord,
+} from './alertLifecycle';
+export type {
+  AlertAction,
+  AlertActivity,
+  AlertAgentContext,
+  AlertEvidence,
+  AlertEvidenceStatus,
+  AlertLifecycle,
+  AlertPriority,
+  AlertRecord,
+  AlertResolutionCode,
+  AlertRuleSnapshot,
+} from './alertLifecycle';

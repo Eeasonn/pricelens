@@ -16,7 +16,7 @@
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Button, Empty, message, Popconfirm, Select, Tag, Tooltip } from 'antd';
+import { Button, Empty, Input, message, Popconfirm, Select, Tag, Tooltip } from 'antd';
 import PageHeader from '../components/PageHeader';
 import {
   autoPrevModelId,
@@ -61,18 +61,20 @@ function ownModelRows(countryCode: string): PrevGenRow[] {
   return rows.sort((a, b) => a.launch.localeCompare(b.launch) || a.label.localeCompare(b.label));
 }
 
-function Block({ title, extra, children }: { title: string; extra?: ReactNode; children: ReactNode }) {
+function Block({ id, title, extra, children }: { id?: string; title: string; extra?: ReactNode; children: ReactNode }) {
   return (
     <section
+      id={id}
       style={{
         background: color.canvas,
         boxShadow: shadow.l1,
         borderRadius: radius.card,
         padding: space.lg,
         marginBottom: space.base,
+        scrollMarginTop: 76,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.base }}>
+      <div className="lpl-config-block-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.base }}>
         <h3 style={{ margin: 0, fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>{title}</h3>
         {extra}
       </div>
@@ -86,6 +88,7 @@ const cellPadding: CSSProperties = { padding: `${space.sm}px ${space.sm}px` };
 export default function Config() {
   const { state } = useFilters();
   const prevRows = useMemo(() => ownModelRows(state.countryCode), [state.countryCode]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])),
   );
@@ -130,6 +133,10 @@ export default function Config() {
   const manualPrevCount = prevRows.filter(
     (r) => (prevMap[r.modelId] ?? null) !== autoPrevModelId(r.modelId),
   ).length;
+  const normalizedSearch = searchTerm.trim().toLocaleLowerCase();
+  const visiblePrevRows = normalizedSearch
+    ? prevRows.filter((row) => `${row.label} ${row.modelId}`.toLocaleLowerCase().includes(normalizedSearch))
+    : prevRows;
 
   /** 「恢复默认」收窄（第一百八十五轮）：只清除当前国家型号的人工维护，
    *  其他国家型号原样保留（原实现清整份跨国覆盖表，不可撤销） */
@@ -206,8 +213,29 @@ export default function Config() {
         <PageHeader title="配置" />
 
         <main style={{ flex: 1, padding: space.lg }}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md, padding: `${space.sm}px ${space.md}px`, background: color.canvas, border: `1px solid ${color.hairline}`, borderRadius: radius.control, boxShadow: shadow.l1 }}>
+            <nav aria-label="配置分区" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {[
+                ['benchmark', '竞品对标'],
+                ['default-shop', '默认店铺'],
+                ['prev-gen', '上一代关系'],
+                ['fx', '汇率'],
+                ['promo', '大促日历'],
+              ].map(([id, label]) => <a key={id} href={`#${id}`} style={{ color: color.link, fontSize: 11, textDecoration: 'none', padding: '3px 7px', borderRadius: radius.pill }}>{label}</a>)}
+            </nav>
+            <Input
+              allowClear
+              size="small"
+              aria-label="配置搜索"
+              placeholder="搜索上一代关系型号"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              style={{ width: 220, marginLeft: 'auto' }}
+            />
+          </div>
           {/* ⓪ 竞品对标配置：全部已识别的对标关系（矩阵/自动/替代/人工）在此可查可改 */}
           <Block
+            id="benchmark"
             title="竞品对标配置"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
@@ -220,6 +248,7 @@ export default function Config() {
 
           {/* ⓪' 默认平台店铺（第一百三十七轮）：未在筛选中选择平台时，看板按生效默认店铺取价 */}
           <Block
+            id="default-shop"
             title="默认平台店铺"
             extra={
               <Popconfirm
@@ -282,6 +311,7 @@ export default function Config() {
 
           {/* ① 上一代关系 */}
           <Block
+            id="prev-gen"
             title="上一代关系"
             extra={
               <Popconfirm
@@ -303,9 +333,9 @@ export default function Config() {
               </Popconfirm>
             }
           >
-            {prevRows.length ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: space.sm }}>
-                {prevRows.map((r) => {
+            {visiblePrevRows.length ? (
+              <div className="lpl-config-prev-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: space.sm }}>
+                {visiblePrevRows.map((r) => {
                   const auto = autoPrevModelId(r.modelId);
                   const manual = (prevMap[r.modelId] ?? null) !== auto;
                   return (
@@ -350,12 +380,14 @@ export default function Config() {
                 })}
               </div>
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无产品数据" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={normalizedSearch ? '没有匹配的型号' : '暂无产品数据'} />
             )}
+            {normalizedSearch && <div style={{ marginTop: space.sm, fontSize: fontSize.caption, color: color.mute }}>搜索仅筛选上一代关系型号；清空搜索可恢复当前国家全部型号。</div>}
           </Block>
 
           {/* ② 汇率（只读）：真实数据按行折算，这里展示本币月度中位汇率 */}
           <Block
+            id="fx"
             title="汇率"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
@@ -378,6 +410,7 @@ export default function Config() {
 
           {/* ③ 大促日历：当前国家的起始时间 + 促销深度（dim_promo 只读） */}
           <Block
+            id="promo"
             title="大促日历"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
@@ -388,20 +421,20 @@ export default function Config() {
             {promos.length === 0 ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该国暂无大促日历" />
             ) : null}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: space.sm }}>
+            <div className="lpl-config-promo-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: space.sm }}>
               {promos
                 .map((p) => {
                   const tone =
                     p.depth_hint === '深'
-                      ? { dot: 'rgba(235, 87, 87, 0.75)', fg: '#d92d20', bg: 'rgba(235, 87, 87, 0.10)' }
+                      ? { dot: color.alert.ownGap.fg, fg: color.alert.ownGap.fg, bg: color.alert.ownGap.bg }
                       : p.depth_hint === '中'
-                        ? { dot: 'rgba(235, 87, 87, 0.5)', fg: '#b45309', bg: '#fff7e6' }
-                        : { dot: 'rgba(235, 87, 87, 0.3)', fg: color.mute, bg: color.canvasSoft };
+                        ? { dot: color.alert.promo.fg, fg: color.alert.promo.fg, bg: color.alert.promo.bg }
+                        : { dot: color.mute, fg: color.mute, bg: color.canvasSoft };
                   return (
                     <div key={p.promo_id} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: fontSize.bodySm }}>
                       <i
                         aria-hidden
-                        style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 9999, background: tone.dot, flexShrink: 0, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)' }}
+                        style={{ display: 'inline-block', width: 8, height: 8, borderRadius: radius.pill, background: tone.dot, flexShrink: 0, boxShadow: shadow.l1 }}
                       />
                       <span title={p.promo_name} style={{ color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                         {p.promo_name}

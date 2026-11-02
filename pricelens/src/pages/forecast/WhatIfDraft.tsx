@@ -63,12 +63,14 @@ export default function WhatIfDraft({
   forecastRangeLabel,
   onChange,
   onReset,
+  currency = 'USD',
 }: {
   draft: ScenarioDraft;
   scenario: ScenarioSummary;
   forecastRangeLabel: string;
   onChange: (patch: Partial<ScenarioDraft>) => void;
   onReset: () => void;
+  currency?: string;
 }) {
   return (
     <div style={{ display: 'grid', gap: space.md, alignContent: 'start' }}>
@@ -76,7 +78,7 @@ export default function WhatIfDraft({
         <span style={{ fontSize: 11, fontWeight: 600, color: scenario.active ? color.warningInk : color.mute, background: scenario.active ? color.warningSoft : color.canvasSoft2, padding: '2px 8px', borderRadius: radius.pill }}>
           {scenario.active ? '本地草稿已修改' : '本地草稿'}
         </span>
-        <span style={{ fontSize: 11, color: color.mute }}>作用于预测窗口 {forecastRangeLabel}，实际周不可改写</span>
+        <span style={{ fontSize: 11, color: color.mute }}>作用于预测窗口 {forecastRangeLabel}，历史段不可改写</span>
       </div>
       {SLIDERS.map((slider) => (
         <div key={slider.key} style={{ display: 'grid', gap: 3 }}>
@@ -102,7 +104,7 @@ export default function WhatIfDraft({
       <div style={{ display: 'grid', gap: 6, padding: `${space.md - 2}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
         {[
           { label: `剩余预测 SO（${forecastRangeLabel}）`, value: `${fmtUnits(scenario.forecastSo)} 台` },
-          { label: '剩余预测销毛变化', value: `${scenario.marginDelta > 0 ? '+' : scenario.marginDelta < 0 ? '−' : ''}${fmtMoney(Math.abs(scenario.marginDelta))}` },
+          { label: '剩余预测销毛变化', value: `${scenario.marginDelta > 0 ? '+' : scenario.marginDelta < 0 ? '−' : ''}${fmtMoney(Math.abs(scenario.marginDelta), currency)}` },
           // 风险周分组读数（2026-11-01 Eason 拍板并入库存穿零周）：截断 = 可供量
           // 低于无约束需求；库存穿零 = 期末库存 < 0（供给欠配，主账标红同源）。
           { label: '草稿下风险周 · 截断', value: fmtRiskWeeks(scenario.riskWeeks.filter((w) => w.kind === 'stockout').map((w) => w.week)) },

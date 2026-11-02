@@ -59,12 +59,14 @@ export default function WeekDetailCard(props: {
   brand: string;
   nameText: string;
   romText: string;
+  summaryId?: string;
 }) {
   if (!props.model.visible) return null;
   const m = props.model;
   return (
     <article
       className="lpl-volume-detail"
+      id={props.summaryId}
       aria-label="当前观察点详细数值"
       style={{
         display: 'grid',

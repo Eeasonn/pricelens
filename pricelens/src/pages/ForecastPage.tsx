@@ -3,25 +3,26 @@
 // 交接：docs/lifecycle-os-mvp/03-量价预测界面替换交接文档.md
 // 页面自挂一套 PageHeader + data-lpl-scroll 滚动容器（不进 AnalysisShell）；
 // 四个需求因子（基线 / 感知价格 / 促销 / 竞品压力），供给为 SO 上限，
-// 成本只进销毛链；数据为 24 周模拟（W1–W10 实际 + W11–W24 预测）。
+// 成本只进销毛链；数据为 24 周模拟（W1–W10 历史段（模拟） + W11–W24 预测）。
 // What-if 只作本地草稿；保留 useFilters 范围显示与 useAgent 解释入口。
 // 局部决策见 pricelens/.impeccable/surfaces/forecast-simple-v1.md。
 // ============================================================
 import { useMemo, useState, type ReactNode } from 'react';
 import { RobotOutlined } from '@ant-design/icons';
-import { Button, Drawer } from 'antd';
+import { Button, Drawer, Empty } from 'antd';
 import PageHeader from '../components/PageHeader';
 import ChartContentBar from '../components/ChartContentBar';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { scopeLabels } from '../dataModel/scope';
+import { provenanceSummary } from '../dataModel/provenance';
 import { color, fontSize, radius, space } from '../theme/tokens';
 import {
   BASELINE_DRAFT,
-  computeForecast,
   type ScenarioDraft,
 } from './forecast/forecastModel';
-import { forecastFixture } from './forecast/forecastFixture';
+import { resolveForecastDataset } from './forecast/forecastDatasetRegistry';
+import { createForecastSnapshot } from './forecast/forecastSnapshot';
 import { DataStatusBadge, forecastCardStyle } from './forecast/ForecastBits';
 import ForecastKpiStrip from './forecast/ForecastKpiStrip';
 import ForecastChart from './forecast/ForecastChart';
@@ -47,12 +48,27 @@ function SectionHead({ title, hint, extra }: { title: string; hint?: string; ext
 
 export default function ForecastPage() {
   const { state } = useFilters();
-  const { openAgent } = useAgent();
+  const { openAgent, send, context: agentContext } = useAgent();
   const labels = scopeLabels(state);
   const [draft, setDraft] = useState<ScenarioDraft>(BASELINE_DRAFT);
   const [pathOpen, setPathOpen] = useState(false);
 
-  const computation = useMemo(() => computeForecast(forecastFixture, draft), [draft]);
+  const forecastLookup = useMemo(() => resolveForecastDataset({ modelId: 'simple-demo-v1' }), []);
+  const forecastFixture = forecastLookup.status === 'ready' ? forecastLookup.dataset : null;
+  const snapshot = useMemo(() => forecastFixture ? createForecastSnapshot(forecastFixture, draft, agentContext.fingerprint) : null, [agentContext.fingerprint, draft, forecastFixture]);
+  if (!forecastFixture || !snapshot) {
+    return (
+      <div style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }} data-lpl-scroll>
+        <PageHeader />
+        <main style={{ padding: `${space.xl}px ${space.lg}px`, maxWidth: 1280, margin: '0 auto' }}>
+          <div style={{ ...forecastCardStyle, minHeight: 260, display: 'grid', placeItems: 'center' }}>
+            <Empty description={forecastLookup.status === 'empty' ? forecastLookup.message : '当前预测数据暂不可用'} />
+          </div>
+        </main>
+      </div>
+    );
+  }
+  const computation = snapshot.computation;
   const { context, meta } = forecastFixture;
   const firstForecastWeek = computation.weeks[forecastFixture.params.currentWeekIndex + 1];
   const lastWeek = computation.weeks[computation.weeks.length - 1];
@@ -80,7 +96,11 @@ export default function ForecastPage() {
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
                 <DataStatusBadge status={meta.status} />
                 <span className="mono" style={{ fontSize: 11, color: color.body, padding: '2px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control }}>{meta.modelVersion}</span>
-                <Button icon={<RobotOutlined />} onClick={() => openAgent('full', '解释当前简单版预测的关键假设、证据和风险')}>让 Agent 解释</Button>
+                <Button icon={<RobotOutlined />} onClick={() => {
+                  const prompt = '解释当前简单版预测的关键假设、证据和风险';
+                  openAgent('full', { intent: 'forecast_explain', forecastDraft: draft, forecastSnapshot: snapshot, forecastDataset: forecastFixture, text: prompt });
+                  void send(prompt, draft, { forecastSnapshot: snapshot, forecastDataset: forecastFixture });
+                }}>让 Agent 解释</Button>
               </div>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', marginTop: space.md, padding: `${space.md - 2}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, fontSize: 12, color: color.body }}>
@@ -89,7 +109,7 @@ export default function ForecastPage() {
                 ['演示口径', `${context.country} · ${context.channel} · ${context.product}`],
                 ['币种', `${meta.currency}（固定）`],
                 ['价格档', context.priceBand],
-                ['当前周', `${context.currentWeek}（实际）· 预测 ${forecastRangeLabel}`],
+                ['当前周', `${context.currentWeek}（历史段（模拟））· 预测 ${forecastRangeLabel}`],
                 ['对照竞品', context.competitors.join(' / ')],
               ].map(([label, value]) => (
                 // 第一百九十轮窄屏审计 P1-1：去掉 nowrap，长值（演示口径 / 对照竞品）在窄容器换行，不推宽整页。
@@ -100,18 +120,18 @@ export default function ForecastPage() {
               ))}
             </div>
             <div style={{ marginTop: space.sm, fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-              本页为模拟演示（来源 {meta.source}，生成 {meta.generatedAt}）：范围固定为演示口径，不随全局国家 / 币种筛选变化；真实价格事实截止 2026-W42，预测窗口以模拟状态呈现。缺数周不插值。
+              本页为固定演示范围（{provenanceSummary(snapshot.provenance)}，生成 {meta.generatedAt}）：计算固定为演示口径，不随全局国家 / 币种筛选变化；全局筛选仅作为上下文展示。历史段为模拟观测，历史段截至 {context.currentWeek}，预测窗口为模型点估计。预警中心使用独立采集源，最新周以其页面标注为准；缺数周不插值。
             </div>
           </section>
 
           {/* ② 经营摘要 */}
-          <ForecastKpiStrip computation={computation} />
+          <ForecastKpiStrip computation={computation} currency={meta.currency} />
 
           {/* ③④ 逐周需求与成交图 + 事件时间轴 */}
           <section style={forecastCardStyle}>
             <SectionHead
               title="逐周需求与成交"
-              hint="实际周实线、预测周虚线；无约束需求 / SO / 可供量三条主线，缺货只表现为 SO 被可供量截断。"
+              hint="历史段（模拟）实线、预测周虚线；无约束需求 / SO / 可供量三条主线，缺货只表现为 SO 被可供量截断。"
               extra={<Button onClick={() => setPathOpen(true)}>查看计算路径</Button>}
             />
             <ForecastChart weeks={computation.weeks} currentWeekIndex={forecastFixture.params.currentWeekIndex} />
@@ -127,8 +147,8 @@ export default function ForecastPage() {
               <DriverWaterfall computation={computation} />
             </div>
             <div style={{ ...forecastCardStyle }}>
-              <SectionHead title="周度经营主账" hint="输入事实 → 简单版确定性计算 → 结果与证据状态。" extra={<DataStatusBadge status={meta.status} />} />
-              <WeeklyLedger weeks={computation.weeks} currentWeekIndex={forecastFixture.params.currentWeekIndex} />
+              <SectionHead title="周度经营主账" hint="输入事实 → 历史观测 / 模型估计 → 预测结果与证据状态。" extra={<DataStatusBadge status={meta.status} />} />
+              <WeeklyLedger weeks={computation.weeks} currentWeekIndex={forecastFixture.params.currentWeekIndex} currency={meta.currency} />
             </div>
           </section>
 
@@ -142,11 +162,12 @@ export default function ForecastPage() {
                 forecastRangeLabel={forecastRangeLabel}
                 onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch }))}
                 onReset={() => setDraft(BASELINE_DRAFT)}
+                currency={meta.currency}
               />
             </div>
             <div style={forecastCardStyle}>
-              <SectionHead title="因子与证据" hint="模型学习、业务假设与确定性计算分开呈现；每个因子保留窗口、形状与来源。" extra={<span className="mono" style={{ fontSize: 11, color: color.mute }}>factor-set: simple-v1</span>} />
-              <FactorEvidence factorProfiles={forecastFixture.factorProfiles} />
+              <SectionHead title="因子与证据" hint="固定先验、业务假设与确定性计算分开呈现；每个因子保留窗口、形状与来源。" extra={<span className="mono" style={{ fontSize: 11, color: color.mute }}>factor-set: simple-demo-v1</span>} />
+              <FactorEvidence factorProfiles={snapshot.factors} fit={snapshot.fit} />
             </div>
           </section>
         </main>

@@ -9,6 +9,7 @@ export default function AgentLauncher() {
       type="button"
       aria-label="打开 PriceLens Agent"
       aria-pressed={open}
+      aria-controls="pricelens-agent-panel"
       onClick={() => openAgent('dock')}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px',

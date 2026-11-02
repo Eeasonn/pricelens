@@ -38,11 +38,12 @@ export default function CalculationPath({ dataset, computation }: { dataset: For
       title: '输入事实（模拟 · demo_seed）',
       lines: [
         { label: '需求基线', value: `${fmtUnits(current.baseDemand)} 台` },
-        { label: '消费者感知价格 / 参考价', value: `$${current.price} / $${current.rrp}` },
+        { label: '标价 / 生效价 / 参考价', value: `${fmtMoney(current.price, dataset.meta.currency)} / ${fmtMoney(current.effectivePrice, dataset.meta.currency)} / ${fmtMoney(current.rrp, dataset.meta.currency)}` },
         { label: '促销强度（活动期）', value: current.promoIntensity > 0 ? `${Math.round(current.promoIntensity * 100)}%` : '无窗口' },
         { label: '竞品压力', value: current.competitorPressure < 0 ? fmtPressure(current.competitorPressure) : '无事件' },
-        { label: '可供量 / Sell-in', value: `${fmtUnits(current.available)} / ${fmtUnits(current.si)} 台` },
-        { label: '单台成本', value: fmtMoney(current.cost) },
+        { label: '可供量 / Sell-in / 观测 SO', value: `${fmtUnits(current.available)} / ${fmtUnits(current.si)} / ${current.observedSO == null ? '—' : fmtUnits(current.observedSO)} 台` },
+        { label: '单台成本', value: fmtMoney(current.cost, dataset.meta.currency) },
+        { label: '即时激励 / 台', value: current.incentive > 0 ? fmtMoney(current.incentive, dataset.meta.currency) : '无' },
       ],
     },
     {
@@ -70,9 +71,9 @@ export default function CalculationPath({ dataset, computation }: { dataset: For
       title: '库存 / DOS / 销毛',
       lines: [
         { label: '期末库存 = 期初 + Sell-in − SO', value: `${fmtUnits(current.inventory)} 台` },
-        { label: 'DOS = 期末库存 ÷ 当周需求 × 7', value: `${kpi.dos} 天` },
-        { label: `单台销毛 = 净收入（$${current.companyNetRevenue}）− 成本（$${current.cost}）`, value: fmtMoney(current.unitGrossMargin) },
-        { label: '周销毛 = SO × 单台销毛', value: fmtMoney(current.weeklyGrossMargin) },
+        { label: `DOS = 期末库存 ÷ 滚动 4 周需求（${fmtUnits(current.rolling4wDemand)}）× 7`, value: `${kpi.dos} 天` },
+        { label: `单台销毛 = 净收入（${fmtMoney(current.companyNetRevenue, dataset.meta.currency)}）− 成本（${fmtMoney(current.cost, dataset.meta.currency)}）− 激励（${fmtMoney(current.incentive, dataset.meta.currency)}）`, value: fmtMoney(current.unitGrossMargin, dataset.meta.currency) },
+        { label: '周销毛 = SO × 单台销毛', value: fmtMoney(current.weeklyGrossMargin, dataset.meta.currency) },
       ],
     },
   ];
@@ -84,10 +85,10 @@ export default function CalculationPath({ dataset, computation }: { dataset: For
         <span style={{ fontSize: 11, color: color.mute }}>来源 {dataset.meta.source} · 生成 {dataset.meta.generatedAt}</span>
       </div>
       <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: color.body }}>
-        以当前周 {current.week}（{current.status === 'actual' ? '实际周' : '预测周'}）为例，展示从输入事实到销毛的完整计算路径。价格、促销、竞品为可解释因子；供给只作 SO 上限；成本只进入销毛链，不修改需求。
+        以当前周 {current.week}（{current.status === 'actual' ? '历史段（模拟）' : '预测周'}）为例，展示从输入事实到销毛的完整计算路径。价格、促销、竞品为可解释因子；供给只作 SO 上限；成本只进入销毛链，不修改需求。
       </p>
       {steps.map((step, index) => <StepBlock key={step.title} index={index + 1} step={step} />)}
-      <p style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: color.mute }}>{dataset.meta.note}预测区间来源为历史残差带，未做分位数校准；简单版不自动判断竞品上市是扩盘还是分流。</p>
+      <p style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: color.mute }}>{dataset.meta.note}当前只输出模型点估计，没有经过校准的分位数区间；简单版不自动判断竞品上市是扩盘还是分流，市场效应状态为“待验证”。</p>
     </div>
   );
 }

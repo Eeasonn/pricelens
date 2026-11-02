@@ -25,7 +25,7 @@ import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shado
 
 /** 页头只留管理页签。图表内容的切换在筛选栏下方。 */
 const TABS: { page: Page; label: string }[] = [
-  { page: 'intelligence', label: '情报中心（施工中🚧）' },
+  { page: 'intelligence', label: '情报中心' },
   { page: 'forecast', label: '量价预测' },
   { page: 'config', label: '配置' },
   { page: 'alerts', label: '预警' },
@@ -37,6 +37,7 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
   const managementPage = page === 'config' || page === 'alerts' || page === 'intelligence' || page === 'forecast';
   return (
     <header
+      className="lpl-page-header"
       style={{
         minHeight: 64,
         flexShrink: 0,
@@ -51,7 +52,7 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
         boxSizing: 'border-box',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: space.md, minWidth: 0 }}>
+      <div className="lpl-page-header-main" style={{ display: 'flex', alignItems: 'center', gap: space.md, minWidth: 0 }}>
         {managementPage ? (
           // 管理页的返回入口：分析页签已移至图表卡页签行（ChartContentBar），
           // 这里以站点徽标承担「回看板」（悬停变蓝给出可点反馈）
@@ -121,9 +122,9 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
           </div>
         </ConfigProvider>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+      <div className="lpl-page-header-actions" style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
         <AgentLauncher />
-        <nav aria-label="页面" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <nav className="lpl-page-nav" aria-label="页面" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {TABS.map((t) => (
             <span key={t.page} style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
               <button

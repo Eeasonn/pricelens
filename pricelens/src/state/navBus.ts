@@ -11,6 +11,8 @@ export const navBus: {
   dashboardFocusWeekId: string | null;
   /** 总览进入预警中心时携带的产品/系列/事件焦点；预警页消费后清空。 */
   alertsFocus: {
+    alertId?: string;
+    contextFingerprint?: string;
     modelId: string;
     modelName?: string;
     seriesKey?: string;

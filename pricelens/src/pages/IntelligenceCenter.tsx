@@ -8,6 +8,7 @@ import { usePage } from '../state/PageContext';
 import { dimTime } from '../data';
 import { getLocalCurrency } from '../state/fx';
 import { scopeLabels } from '../dataModel/scope';
+import { DEMO_INTELLIGENCE_PROVENANCE, provenanceSummary } from '../dataModel/provenance';
 import { color, fontSize, radius, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
 type SignalTone = 'neutral' | 'warning' | 'positive';
@@ -208,7 +209,8 @@ export default function IntelligenceCenter() {
         <main style={{ flex: 1, padding: `${space.lg}px`, maxWidth: 1440, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: space.md, flexWrap: 'wrap' }}>
             <div><div style={{ fontSize: 11, color: color.mute, letterSpacing: '.04em' }}>INTELLIGENCE CENTER / {state.countryCode}</div><h1 style={{ margin: '3px 0 0', fontSize: fontSize.displaySm, color: color.ink }}>情报中心</h1><div style={{ marginTop: 5, fontSize: 12, color: color.mute }}>{scope} · 汇率、产业大盘、上游成本和新品事件 · 截至 {selectedRange}</div></div>
-            <Tag color="blue" style={{ marginLeft: 'auto' }}>演示数据</Tag>
+            <Tag color="blue" style={{ marginLeft: 'auto' }} title={provenanceSummary(DEMO_INTELLIGENCE_PROVENANCE)}>演示数据</Tag>
+            <span style={{ fontSize: 11, color: color.mute }}>{DEMO_INTELLIGENCE_PROVENANCE.source.label} · 截至 {DEMO_INTELLIGENCE_PROVENANCE.asOf}</span>
             <Button onClick={() => go('forecast')}>进入量价预测</Button>
             <Button icon={<RobotOutlined />} onClick={() => openAgent('full', `总结当前情报中心的关键变化，并指出对价格和库存的影响（区间：${selectedRange}）`)}>让 Agent 总结</Button>
           </div>
@@ -267,7 +269,7 @@ export default function IntelligenceCenter() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.md }}><div><h2 style={{ margin: 0, fontSize: 16, color: color.ink }}>事件流</h2><div style={{ marginTop: 4, fontSize: 12, color: color.mute }}>按发生周查看可能影响价格的事件</div></div><span style={{ flex: 1 }} /><button type="button" onClick={() => openAgent('dock', '解释情报中心最近一条事件对当前产品价格的影响')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', color: color.link, cursor: 'pointer', fontSize: 12 }}>解释这组事件 <ArrowRightOutlined /></button></div>
             <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', minWidth: 680, borderCollapse: 'collapse', fontSize: 12 }}><thead><tr>{['周次', '来源', '对象', '事件', '判断'].map((head) => <th key={head} style={{ textAlign: 'left', padding: '8px 6px', color: color.mute, fontWeight: 500, borderBottom: `1px solid ${color.hairline}` }}>{head}</th>)}</tr></thead><tbody>{EVENTS.map((event) => <tr key={`${event[0]}-${event[1]}-${event[2]}`}>{event.map((cell, index) => <td key={`${event[0]}-${index}`} style={{ padding: '10px 6px', color: index === 4 ? color.ink : color.body, borderBottom: `1px solid ${color.hairline}`, fontWeight: index === 4 ? 600 : 400 }}>{cell}</td>)}</tr>)}</tbody></table></div>
           </section>
-          <div style={{ marginTop: space.md, fontSize: 11, color: color.mute }}>口径说明：本页内容为演示情报，进入真实接入后会显示来源、采集时间和证据链接。</div>
+          <div style={{ marginTop: space.md, fontSize: 11, color: color.mute }}>口径说明：{provenanceSummary(DEMO_INTELLIGENCE_PROVENANCE)}。进入真实接入后会显示来源、采集时间和证据链接。</div>
         </main>
       </div>
     </div>
