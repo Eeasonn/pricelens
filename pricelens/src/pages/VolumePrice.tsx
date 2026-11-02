@@ -65,7 +65,6 @@ import type { PlatformSelection, ProductSelection } from '../state/filtersTypes'
 import ChartContentBar from '../components/ChartContentBar';
 import { brandLabelOf } from '../components/BrandMark';
 import Chart from '../chart/PriceTrend/Chart';
-import { VIEW_WINDOW_CAPTION_H } from '../chart/PriceTrend/XBrush';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
 import { PillUnit } from '../chart/PriceTrend/BrandLegendStrip';
 // 卡顶时间筛选簇在顶部筛选条。这里只取查看窗口说明行高度，用来对齐同步按钮。
@@ -231,8 +230,9 @@ export default function VolumePrice() {
   const [hiddenPanels, setHiddenPanels] = usePageViewState<string[]>('volume.hiddenPanels', () => []);
   const hiddenSet = useMemo(() => new Set(hiddenPanels), [hiddenPanels]);
   // 呈现方式（2026-11-02 新方案）：经典 = 折线+销量柱+成本销毛带；成本柱 = 柱高折后价
-  // + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱。会话态跨页保留
-  const [priceMode, setPriceMode] = usePageViewState<'classic' | 'costbar'>('volume.priceMode', () => 'classic');
+  // + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱。默认成本柱（Eason）；切换收进 ⋯ 菜单。
+  // 会话态跨页保留
+  const [priceMode, setPriceMode] = usePageViewState<'classic' | 'costbar'>('volume.priceMode', () => 'costbar');
   const costbar = priceMode === 'costbar';
 
   // 视图模式切换（阅读 ↔ 组内对比 / 换组）即清空隐藏集：两视图面板集不同，
@@ -1163,7 +1163,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                         </span>
                         )}
                         {/* 图表元信息行（视觉 demo：chart-meta）：左 = 图例，右 = 所选区间
-                            胶囊（含清除）或「拖动图表选择区间」提示（无选区时）。定高
+                            胶囊（含清除）；无选区时右侧留空（拖动提示语已删，2026-11-02 Eason）。定高
                             PANEL_META_ROW_H——共享轴列按同一常量上偏移，刻度才与绘图区对齐 */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: PANEL_META_ROW_H, overflow: 'hidden', padding: '0 4px', margin: '4px 0 8px' }}>
                           <div aria-label="图例" style={{ display: 'flex', alignItems: 'center', gap: 14, color: color.mute, fontSize: 11, lineHeight: '14px', flexWrap: 'nowrap', minWidth: 0, overflow: 'hidden' }}>
@@ -1229,11 +1229,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                                 ×
                               </button>
                             </span>
-                          ) : (
-                            !p.failed && row && (
-                              <span style={{ color: color.mute, fontSize: 11, lineHeight: '14px', whiteSpace: 'nowrap' }}>拖动图表选择区间</span>
-                            )
-                          )}
+                          ) : null}
                         </div>
                         {/* 主图 + 成本销毛带同一相对容器：十字线贯穿两图（demo：crosshair） */}
                         <div style={{ position: 'relative' }}>
@@ -1462,15 +1458,11 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                           );
                           return null;
                         })()}
-                        {/* 脚注行：交互提示 + 口径说明 */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 12, color: color.mute, fontSize: 11, lineHeight: '16px' }}>
-                          <span style={{ whiteSpace: 'nowrap' }}>拖动选择区间 · 移动鼠标查看单周明细</span>
-                          <span style={{ whiteSpace: 'nowrap' }}>{`价格 / 销量为${granNoun}数据，成本 / 销毛为当月模拟值`}</span>
-                        </div>
-                        {/* 本图时间轴（第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：
+                        {/* 脚注行已删（2026-11-02 Eason：图上不要解释性用语）；本图时间轴
+                            （第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：
                             同步 = 全图查看同一段时间，拖任一条同步调整；非同步 = 各图独立调整。
                             恒渲染保证切换同步只改联动行为，面板高度与轨道横向位置不变 */}
-                        <div style={{ margin: `0 ${CHART_GRID_RIGHT}px 6px 8px` }}>
+                        <div style={{ margin: `12px ${CHART_GRID_RIGHT}px 6px 8px` }}>
                           <PanelTimeTrack
                             ids={domainIds}
                             lo={filterBounds[0]}
@@ -1506,9 +1498,9 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                 <HiddenTray items={trayItems} onRestore={restorePanel} onRestoreAll={restoreAllPanels} registerItem={registerTrayItem} />
               </div>
             )}
-            {/* 工具行（2026-11-02 反馈②）：齿轮左 · 经典/成本柱右。产品药丸/店铺筛选/隐藏
-                三件套已并入下一行明细卡身份区（Eason：不占两个位置） */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 6px', marginBottom: 8 }}>
+            {/* 工具行（2026-11-02 反馈②）：只留齿轮（左）与组内切换（中段，仅组视图）。
+                产品药丸/店铺筛选/隐藏并入明细卡身份区；经典/成本柱收进 ⋯ 菜单（默认成本柱） */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 6px', marginBottom: 2 }}>
               <div style={{ flex: '0 0 auto' }}>
                 <ChartToolbar
                   currency={state.currency}
@@ -1530,6 +1522,18 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   labelMode={labelMode}
                   onLabelMode={setLabelMode}
                   anomalySlot={<AnomalyQualityChip page="volume" />}
+                  presentationSlot={
+                    <Segmented
+                      size="small"
+                      aria-label="图表呈现方式"
+                      value={priceMode}
+                      onChange={(v) => setPriceMode(v as 'classic' | 'costbar')}
+                      options={[
+                        { label: '经典', value: 'classic' },
+                        { label: '成本柱', value: 'costbar' },
+                      ]}
+                    />
+                  }
                 />
               </div>
               {/* 中段：组内对比切换（仅组视图）——同一量价卡内的次级视图，一次只看一组 */}
@@ -1568,20 +1572,6 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                     })}
                   </nav>
                 )}
-              </div>
-              {/* 呈现方式切换（2026-11-02 新方案）：经典 = 折线+销量柱；成本柱 = 柱高
-                  折后价 + 成本灰线 + 销量右轴细线 + 销毛率下垂。会话态跨页保留 */}
-              <div style={{ flex: '0 0 auto' }}>
-                <Segmented
-                  size="small"
-                  aria-label="图表呈现方式"
-                  value={priceMode}
-                  onChange={(v) => setPriceMode(v as 'classic' | 'costbar')}
-                  options={[
-                    { label: '经典', value: 'classic' },
-                    { label: '成本柱', value: 'costbar' },
-                  ]}
-                />
               </div>
             </div>
             {/* 面板区（2026-11-02 结构重排，Eason 三条反馈）：单一横滚容器内两行——
@@ -1678,14 +1668,12 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               showTiers={effShowTiers}
                               tierValues={tierValues}
                               belowTicks={costbar ? costRateTicks : undefined}
-                              belowTitle={costbar ? '销毛率' : undefined}
                             />
                             <div style={{ flex: 1 }} />
-                            {/* 与时间轴轨道带齐平：轨道高 52，其下是说明行 VIEW_WINDOW_CAPTION_H。
-                                槽位仍高 52、按钮 top -5 对准轨道带中心；下边距加上说明行高度，
-                                否则按钮会比轨道带低出一整行说明。 */}
+                            {/* 与时间轴轨道带齐平：轨道高 52、按钮 top -5 对准轨道带中心
+                                （轨道下说明行已删，2026-11-02 Eason：图上不要解释性用语） */}
                             {buckets.length > 0 && visUnion.length > 0 && (
-                              <div style={{ height: 52, marginBottom: 6 + VIEW_WINDOW_CAPTION_H, position: 'relative', flexShrink: 0 }}>
+                              <div style={{ height: 52, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
                                 {!reading && (
                                   <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
                                     {syncToggle}

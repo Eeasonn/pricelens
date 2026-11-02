@@ -517,19 +517,7 @@ export default function XBrush(props: XBrushProps) {
             <span style={handleGripStyle('end')} />
           </div>
       </div>
-      <ViewWindowCaption />
     </div>
   );
 }
 
-/** 说明行占位：marginTop 2 + lineHeight 16。量价页同步按钮按这个高度让开轨道带。 */
-export const VIEW_WINDOW_CAPTION_H = 18;
-
-/** 图下查看窗口的常驻说明。轨道本身只缩放显示，不改顶部筛选范围。 */
-export function ViewWindowCaption() {
-  return (
-    <div style={{ fontSize: 11, lineHeight: '16px', color: color.mute, marginTop: 2 }}>
-      查看窗口，仅缩放显示，不改变筛选范围
-    </div>
-  );
-}

@@ -85,6 +85,9 @@ export interface ChartToolbarProps {
   /** 异常价格守卫状态行（2026-11-01 晚反馈：收进 ⋯ 菜单）——调用方传入
    *  AnomalyQualityChip（menuRow 形态），渲染在 ⋯ 弹层底部（hairline 分隔） */
   anomalySlot?: ReactNode;
+  /** 呈现方式切换（2026-11-02 Eason：经典/成本柱收进 ⋯ 菜单首行，不再占工具行）——
+   *  传入即在 ⋯ 弹层最上方以「呈现 [控件]」一行渲染 */
+  presentationSlot?: ReactNode;
   /** ⋯ 更多菜单只保留价格变化提醒开关。
    *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开 */
 }
@@ -202,7 +205,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     props.onTipMode != null ||
     props.onLabelMode != null ||
     props.onPointPanelToggle != null;
-  const showMore = hasDisplay || showMarks;
+  const showMore = hasDisplay || showMarks || props.presentationSlot != null;
   // 收进 ⋯ 的项离开默认值，或标注开关打开 = 按钮右上角蓝点
   const secondaryActive =
     (props.onPriceTypeToggle != null && props.priceTypes != null && (!props.priceTypes.discounted || props.priceTypes.rrp)) ||
@@ -362,6 +365,12 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           content={
             <ConfigProvider theme={filterBarTheme}>
               <div style={{ width: 280, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+                {props.presentationSlot && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: color.mute, fontSize: 12 }}>
+                    呈现{' '}
+                    {props.presentationSlot}
+                  </span>
+                )}
                 {props.onPriceTypeToggle && props.priceTypes != null && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <PriceTypePill

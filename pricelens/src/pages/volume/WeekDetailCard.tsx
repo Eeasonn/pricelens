@@ -82,12 +82,12 @@ function SuspectTag(props: { kind: 'quarantined' | 'pending' | 'exempted' }) {
 
 const CARD_STYLE: CSSProperties = {
   display: 'grid',
-  // 身份列 210：药丸 + 「10-14 2026W42」+ 右挂「本组对比（N）」一行放得下（176 时互相压盖）；
+  // 身份列 200：药丸 + 「10-14 2026W42」(13px) + 右挂「本组对比（N）」一行放得下（176 时互相压盖）；
   // ≤780px 容器查询整卡改单列（index.css）
-  gridTemplateColumns: '210px minmax(0, 1.25fr) minmax(0, 1fr)',
+  gridTemplateColumns: '200px minmax(0, 1.25fr) minmax(0, 1fr)',
   gap: 0,
-  marginTop: 12,
-  padding: '14px 16px',
+  marginTop: 6, // 工具行只剩齿轮后卡片再上提（Eason：第一行空出来了）
+  padding: '12px 16px',
   border: `1px solid ${color.hairline}`,
   borderRadius: radius.card,
   background: color.canvas,
@@ -122,7 +122,8 @@ export default function WeekDetailCard(props: {
       {props.identity}
       {/* 日期行：右挂动作放不下时折到下一行（flexWrap），绝不压盖日期 */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', columnGap: 8, rowGap: 2, marginTop: 6, width: '100%', minWidth: 0 }}>
-        <div className="tnum" style={{ flex: '0 0 auto', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 16, lineHeight: '22px', fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
+        {/* 日期 13px（Eason：原 16px 与指标值同级显得过大）——层级：产品药丸 > 指标值 16 > 日期 13 > 桶号 11 */}
+        <div className="tnum" style={{ flex: '0 0 auto', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 13, lineHeight: '18px', fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
           {m.visible ? m.date || MISSING : MISSING}
           {m.visible && m.period && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, color: color.mute }}>{m.period}</span>}
         </div>

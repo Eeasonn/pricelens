@@ -2,7 +2,7 @@
 // 量价面板 · 成本柱呈现（2026-11-02 新方案，参考竞品柱图改造）：
 // - 每周一根从 $0 到折后价的柱（不悬空），柱顶价格帽线；成本位置一条灰线横贯柱面
 // - 销量 = 右轴细线 + 点（参考图蓝线语言，单蓝强调）；右侧销量轴与经典 VolumeBars
-//   同语言（细竖线 + 「销量（台）」标题 + 上/中/0 三刻度，上限 = 页面传入的 nice 上限）
+//   同语言（细竖线 + 上/中/0 三刻度，无轴名——Eason：图上不要解释性用语；上限 = 页面传入的 nice 上限）
 // - 销毛率 = 从 $0 基线向下长的半透明琥珀柱，深度按页面级共享上限（rateAxisMax）缩放
 //   ——同一行所有面板同一比例可直接比深浅；% 轴画在共享轴列绘图区正下方（SplitAxisColumn
 //   belowTicks），0 与价格轴共用基线
@@ -209,7 +209,6 @@ export default function CostBarChart(props: {
             )}
             <g aria-hidden>
               <line x1={axisX} x2={axisX} y1={props.plotTop} y2={baseline} stroke={color.hairline} strokeWidth={1} />
-              <text x={axisX + 4} y={props.plotTop - 6} fill={color.mute} fontSize={10} fontFamily={font.family}>销量（台）</text>
               {volTicks.map((tk) => (
                 <g key={`vt-${tk.v}`}>
                   <line x1={axisX - 4} x2={axisX} y1={tk.y} y2={tk.y} stroke={color.hairlineStrong} strokeWidth={1} />
