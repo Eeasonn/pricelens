@@ -51,6 +51,17 @@ export function yoyInk(pct: number | null): string {
   return pct >= 0 ? '#0053c2' : '#b45309';
 }
 
+/**
+ * 图 3 同比曲线的横向落点（GFK 同构：曲线 x 位置编码同比幅度）。
+ * 同比钳在 [-100%, +300%] 映射到 [0.52, 0.88]×轴上限；新增（同期无量）画在最右；
+ * 返回 null 表示本期同期皆无（曲线在此断开）。
+ */
+export function yoyCurveX(yoy: number | null, axisMax: number, hasData: boolean): number | null {
+  if (!hasData) return null;
+  const norm = yoy == null ? 1 : (Math.max(-100, Math.min(300, yoy)) + 100) / 400;
+  return axisMax * (0.52 + 0.36 * norm);
+}
+
 export function yoyPct(cur: number, prev: number): number | null {
   if (prev <= 0) return null;
   return ((cur - prev) / prev) * 100;

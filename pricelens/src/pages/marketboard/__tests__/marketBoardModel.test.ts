@@ -25,6 +25,7 @@ import {
   trendSeries,
   trendSummary,
   volumeAt,
+  yoyCurveX,
   yoyInk,
   yoyPct,
 } from '../marketBoardModel';
@@ -138,6 +139,15 @@ describe('同比与摘要', () => {
     expect(yoyInk(null)).toBe('#737373');
     expect(yoyInk(10)).toBe('#0053c2');
     expect(yoyInk(-10)).toBe('#b45309');
+  });
+
+  it('同比曲线落点：钳制映射、新增画在最右、双零断开', () => {
+    expect(yoyCurveX(0, 100, true)).toBeCloseTo(61, 6);
+    expect(yoyCurveX(-100, 100, true)).toBeCloseTo(52, 6);
+    expect(yoyCurveX(300, 100, true)).toBeCloseTo(88, 6);
+    expect(yoyCurveX(99999, 100, true)).toBeCloseTo(88, 6); // 超幅钳制
+    expect(yoyCurveX(null, 100, true)).toBeCloseTo(88, 6); // 新增（同期无量）
+    expect(yoyCurveX(null, 100, false)).toBeNull(); // 本期同期皆无 → 断开
   });
 
   it('摘要文案非空且不含「我司」', () => {

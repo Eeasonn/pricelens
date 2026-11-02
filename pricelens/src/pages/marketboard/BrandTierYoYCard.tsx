@@ -2,7 +2,8 @@
 // 大盘图表③ · 各品牌核心档位结构同比变化（GFK IMG_9371 复刻）
 // 品牌列横滚网格（大盘整体列打头、hairline 分隔），档位标签仅在首列出现一次
 // （与 GFK 同构，其余列把宽度留给柱与数值）。每档位一对横柱：本期实色 /
-// 同期浅灰，各自标值；右缘为同比（涨蓝 / 跌琥珀 / 新增灰）。
+// 同期浅灰，各自标值；右半区为同比曲线（细灰线穿档位行，x 位置编码同比
+// 幅度，点旁涨蓝/跌琥珀/新增灰标注；本期同期皆无的档位曲线断开、不标注）。
 // 柱长为列内独立缩放（GFK 同构），跨列比较看列头绝对值与同比。
 // ============================================================
 import { color, fontSize } from '../../theme/tokens';
@@ -14,6 +15,7 @@ import {
   round1,
   tierYoyColumns,
   tierYoySummary,
+  yoyCurveX,
   yoyInk,
   type TierYoyRow,
 } from './marketBoardModel';
@@ -32,7 +34,12 @@ function columnFill(colorKey: string): string {
   return brandColorFor(colorKey);
 }
 
-/** 单品牌列：本期/同期成对横柱 + 右缘同比标注；showTierAxis 仅首列为 true */
+/** 同比标注文案：本期同期皆无的档位留空（显示「新增」是错误语义） */
+function yoyCellText(row: TierYoyRow): string {
+  return row.cur <= 0 && row.prev <= 0 ? '' : fmtYoy(row.yoy);
+}
+
+/** 单品牌列：本期/同期成对横柱 + 同比曲线；showTierAxis 仅首列为 true */
 function BrandColumn({ colorKey, label, cur, prev, yoy, rows, axisMax, showTierAxis, sep }: {
   colorKey: string;
   label: string;
@@ -44,10 +51,9 @@ function BrandColumn({ colorKey, label, cur, prev, yoy, rows, axisMax, showTierA
   showTierAxis: boolean;
   sep: boolean;
 }) {
-  const gutter = axisMax * 0.9; // 同比标注落点（轴上限内，不被裁剪）
   const chart = useEChart(
     () => ({
-      grid: { left: showTierAxis ? TIER_AXIS_W + 4 : 8, right: 62, top: 10, bottom: 10 },
+      grid: { left: showTierAxis ? TIER_AXIS_W + 4 : 8, right: 44, top: 10, bottom: 10 },
       tooltip: {
         ...MB_TOOLTIP,
         trigger: 'item',
@@ -107,27 +113,29 @@ function BrandColumn({ colorKey, label, cur, prev, yoy, rows, axisMax, showTierA
         },
         {
           name: '同比',
-          type: 'scatter',
-          symbolSize: 0,
-          silent: true,
-          tooltip: { show: false },
-          data: rows.map((r, i) => ({
-            value: [gutter, i],
+          type: 'line',
+          data: rows.map((r) => ({
+            value: yoyCurveX(r.yoy, axisMax, r.cur > 0 || r.prev > 0),
             label: {
               show: true,
               position: 'right',
+              distance: 4,
               fontSize: 11,
               fontWeight: 600,
               color: yoyInk(r.yoy),
-              formatter: fmtYoy(r.yoy),
+              formatter: yoyCellText(r),
             },
           })),
-          itemStyle: { color: 'transparent' },
-          z: 4,
+          smooth: 0.45,
+          symbol: 'circle',
+          symbolSize: 4,
+          lineStyle: { width: 1.5, color: color.hairlineStrong },
+          itemStyle: { color: '#ffffff', borderColor: color.hairlineStrong, borderWidth: 1.5 },
+          z: 6,
         },
       ],
     }),
-    [rows, axisMax, gutter, showTierAxis, label],
+    [rows, axisMax, showTierAxis, label],
     { width: '100%', height: CHART_H },
   );
 
@@ -161,9 +169,9 @@ function BrandColumn({ colorKey, label, cur, prev, yoy, rows, axisMax, showTierA
 
 export default function BrandTierYoYCard({ data }: { data: MarketIndustryData }) {
   const columns = tierYoyColumns(data);
-  // 列内独立缩放（GFK 同构）：每列按自身最大值 × 1.5 定轴上限，右缘留出数值 + 同比标注带；
-  // 跨列比较看列头绝对值与同比，不靠柱长
-  const axisMaxOf = (rows: TierYoyRow[]) => Math.max(...rows.map((r) => Math.max(r.cur, r.prev)), 0.1) * 1.5;
+  // 列内独立缩放（GFK 同构）：每列按自身最大值 × 2 定轴上限（柱约占左半区，
+  // 右半区留给同比曲线），跨列比较看列头绝对值与同比，不靠柱长
+  const axisMaxOf = (rows: TierYoyRow[]) => Math.max(...rows.map((r) => Math.max(r.cur, r.prev)), 0.1) * 2;
   const periodText = `${monthLabel(data.yoyMonths[0])} vs ${monthLabel(data.yoyMonths[1])}`;
   const minWidth = TIER_AXIS_W + columns.length * (COL_W + COL_GAP);
 
@@ -198,7 +206,7 @@ export default function BrandTierYoYCard({ data }: { data: MarketIndustryData })
           ))}
         </div>
       </MBScroll>
-      <MBSummaryLine>{'每档位一对横柱：实色为本期、浅灰为去年同期，柱端为万台数值（柱长按列内缩放，跨品牌比较看数值与同比）；右缘百分比为同比，蓝色增长、琥珀下滑、灰色为同期无量的新增。'}</MBSummaryLine>
+      <MBSummaryLine>{'每档位一对横柱：实色为本期、浅灰为去年同期，柱端为万台数值（柱长按列内缩放，跨品牌比较看数值与同比）；灰色细线为各档位同比曲线，点旁百分比为同比——蓝色增长、琥珀下滑、灰色为同期无量的新增。'}</MBSummaryLine>
     </section>
   );
 }

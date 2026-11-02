@@ -92,9 +92,10 @@ export default function TierBrandShareCard({ data }: { data: MarketIndustryData 
       });
 
       return {
+        // 顶部条带（容量+档位名）与主图之间留足呼吸：档位名一行独立于 100% 刻度线
         grid: [
-          { left: 56, right: 16, top: 18, height: 12 },
-          { left: 56, right: 16, top: 44, bottom: legendRows * 18 + 26 },
+          { left: 56, right: 16, top: 12, height: 12 },
+          { left: 56, right: 16, top: 62, bottom: legendRows * 18 + 26 },
         ],
         legend: {
           bottom: 0,
@@ -138,7 +139,7 @@ export default function TierBrandShareCard({ data }: { data: MarketIndustryData 
             axisTick: { show: false },
             axisLabel: {
               interval: 0,
-              margin: 4,
+              margin: 10,
               fontSize: 12,
               fontWeight: 600,
               color: color.ink,
@@ -174,7 +175,7 @@ export default function TierBrandShareCard({ data }: { data: MarketIndustryData 
       };
     },
     [data],
-    { width: '100%', height: 400 },
+    { width: '100%', height: 420 },
   );
 
   return (
