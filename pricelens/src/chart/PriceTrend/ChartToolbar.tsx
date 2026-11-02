@@ -51,6 +51,8 @@ export interface ChartToolbarProps {
   /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，两个轴各自显隐 */
   showTiers?: boolean;
   onShowTiers?: (v: boolean) => void;
+  /** 档位开关是否可用（2026-11-02）：量价成本柱模式档位无意义、强制不画，开关隐藏并改提示 */
+  showTiersToggle?: boolean;
   yCompress?: boolean;
   onYCompress?: (v: boolean) => void;
   lineShape?: LineShapeChoice;
@@ -241,14 +243,16 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           <Checkbox checked={props.showYTicks ?? true} onChange={(e) => props.onShowYTicks?.(e.target.checked)}>
             <span style={{ fontSize: 12 }}>Y 刻度线</span>
           </Checkbox>
-          {/* 价格档位只存在于 USD。本币没有这根轴，开关也不出现。 */}
-          {props.currency === 'usd' && (
+          {/* 价格档位只存在于 USD。本币没有这根轴，开关也不出现；成本柱模式强制不画档位，开关隐藏 */}
+          {props.currency === 'usd' && props.showTiersToggle !== false && (
             <Checkbox checked={props.showTiers ?? true} onChange={(e) => props.onShowTiers?.(e.target.checked)}>
               <span style={{ fontSize: 12 }}>价格档位</span>
             </Checkbox>
           )}
           <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-            {props.currency === 'usd' ? '数值刻度与价格档位可分别显示' : '关闭后 Y 轴刻度与上下限一起收起'}
+            {props.currency === 'usd'
+              ? props.showTiersToggle === false ? '成本柱模式只显示价格刻度，不显示价格档位' : '数值刻度与价格档位可分别显示'
+              : '关闭后 Y 轴刻度与上下限一起收起'}
           </div>
           <div style={{ marginTop: 6 }}>
             <Checkbox checked={props.yCompress ?? false} onChange={(e) => props.onYCompress?.(e.target.checked)}>

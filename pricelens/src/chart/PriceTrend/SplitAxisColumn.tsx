@@ -40,6 +40,11 @@ export default function SplitAxisColumn(props: {
    *  （面板卡 chrome=false 不再各挂）。 */
   yLimit?: YLimitState;
   onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
+  /** 绘图区下方的附加刻度（2026-11-02 成本柱模式销毛率轴）：y = 相对绘图区底缘（X 轴
+   *  基线）的向下像素偏移，与价格刻度同款文字/短横线；0 不重复出（与价格轴共用基线上的 0） */
+  belowTicks?: { y: number; text: string }[];
+  /** 附加刻度的轴名（贴在最下一个刻度下方，右对齐） */
+  belowTitle?: string;
 }) {
   const { yScale: scale, currency, panelGridTop } = props;
   const showYTicks = props.showYTicks ?? true;
@@ -59,8 +64,11 @@ export default function SplitAxisColumn(props: {
   // 刻度抽稀（第一百四十七轮）：压缩轴最矮段处刻度互相叠压/越出绘图区下缘的守卫
   const rows = thinTickRows(buildTickRows(geom));
   const tierBoxes = buildTierBoxes({ enabled: chrome.tierWidth > 0, geom, tierValues: props.tierValues, industry: props.industry });
+  const plotBottom = panelGridTop + scale.plotHeight;
+  const belowTicks = showYTicks && props.belowTicks && props.belowTicks.length > 0 ? props.belowTicks : [];
+  const belowExtra = belowTicks.length > 0 ? Math.max(...belowTicks.map((t) => t.y)) + (props.belowTitle ? 24 : 10) : 0;
   return (
-    <div style={{ position: 'relative', width: axisW, height: panelGridTop + scale.plotHeight + GRID.bottom }}>
+    <div style={{ position: 'relative', width: axisW, height: plotBottom + Math.max(GRID.bottom, belowExtra) }}>
       {/* 价格档位带（梯子 + 顶部小标）：与主图 Chart.tsx 共用 TierBand 公共组件
           （2026-11-01 审计 P3 抽取，两处逐像素同款由构造保证）。小标贴绘图区顶
           上方——不放轴列顶部空气带，分离模式那里被 Y 轴上下限输入盒（不透明底
@@ -108,6 +116,62 @@ export default function SplitAxisColumn(props: {
             }}
           />
         ))}
+      {/* 绘图区下方附加刻度（成本柱销毛率轴）：复用价格刻度的文字列/短横线几何 */}
+      {belowTicks.map((t) => (
+        <div
+          key={`bt-${t.text}`}
+          className="tnum"
+          style={{
+            position: 'absolute',
+            left: chrome.tickLeft,
+            top: Math.round(plotBottom + t.y) - 8,
+            width: chrome.tickWidth,
+            paddingRight: 3,
+            boxSizing: 'border-box',
+            textAlign: 'right',
+            fontSize: Y_TICK_FONT,
+            lineHeight: '16px',
+            color: color.mute,
+            whiteSpace: 'nowrap',
+            zIndex: 2,
+          }}
+        >
+          {t.text}
+        </div>
+      ))}
+      {belowTicks.map((t) => (
+        <div
+          key={`bd-${t.text}`}
+          style={{
+            position: 'absolute',
+            left: chrome.dashLeft,
+            top: Math.round(plotBottom + t.y) - 0.5,
+            width: TICK_DASH_W,
+            height: 1,
+            background: color.hairlineStrong,
+            pointerEvents: 'none',
+          }}
+        />
+      ))}
+      {belowTicks.length > 0 && props.belowTitle && (
+        <div
+          style={{
+            position: 'absolute',
+            left: chrome.tickLeft,
+            top: Math.round(plotBottom + Math.max(...belowTicks.map((t) => t.y))) + 8,
+            width: chrome.tickWidth,
+            paddingRight: 3,
+            boxSizing: 'border-box',
+            textAlign: 'right',
+            fontSize: 9,
+            lineHeight: '12px',
+            color: color.mute,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {props.belowTitle}
+        </div>
+      )}
       {/* 断轴省略号（⋮）：短横线列居中（「Y 轴自动压缩」关闭 = 不产生断轴，自然无符号）。
           第一百八十二轮：悬停提示 + role=img 明确「刻度非连续」。
           轴列宽 0（本币 + 关「Y 刻度线」）时不渲染——负偏移会压到右侧面板（2026-11-01 审查）。 */}

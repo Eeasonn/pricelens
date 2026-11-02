@@ -1,11 +1,12 @@
 // 图下方单周明细卡（视觉 demo：detail-card 三栏网格）。
-// 左 = 日期/桶号 + 产品名与配置 + 观察点说明；中 = RRP / 折后价 / 环比 / 销量；
-// 右 = 当月成本 / 单台销毛 / 销毛率（三格都显式带「模拟」）。
+// 左 = 身份区（2026-11-02 Eason：面板头并入明细卡首行——价格页同款 PillUnit：平台小药丸
+//      = 店铺筛选、产品药丸点击隐藏）+ 日期/桶号行（右挂本组对比 / 店铺同步轻量动作）；
+// 中 = RRP / 折后价 / 环比 / 销量；右 = 当月成本 / 单台销毛 / 销毛率（三格都显式带「模拟」）。
 // 环比涨跌用涨蓝跌琥珀（第一百八十七轮定案）；缺采显示 —，不借用相邻周。
+// 无观察点（范围内无数据）时身份区照常渲染（隐藏/店铺入口不能随卡消失），指标区合并显提示。
 // 窄容器时改单列（index.css 的容器查询 .lpl-volume-detail）。
 import type { CSSProperties, ReactNode } from 'react';
 import { Popconfirm } from 'antd';
-import BrandDot from '../../components/BrandMark';
 import { color, font, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import type { WeekDetailModel } from './weekDetail';
 
@@ -79,60 +80,74 @@ function SuspectTag(props: { kind: 'quarantined' | 'pending' | 'exempted' }) {
   );
 }
 
+const CARD_STYLE: CSSProperties = {
+  display: 'grid',
+  // 身份列 210：药丸 + 「10-14 2026W42」+ 右挂「本组对比（N）」一行放得下（176 时互相压盖）；
+  // ≤780px 容器查询整卡改单列（index.css）
+  gridTemplateColumns: '210px minmax(0, 1.25fr) minmax(0, 1fr)',
+  gap: 0,
+  marginTop: 12,
+  padding: '14px 16px',
+  border: `1px solid ${color.hairline}`,
+  borderRadius: radius.card,
+  background: color.canvas,
+};
+
 export default function WeekDetailCard(props: {
   model: WeekDetailModel;
-  brand: string;
-  nameText: string;
-  romText: string;
+  /** 身份区（2026-11-02 Eason：面板头并入明细卡首行）：价格页同款 PillUnit 宿主 */
+  identity: ReactNode;
+  /** 日期行右侧轻量动作：阅读视图主品 = 本组对比入口；组内对比主品 = 店铺同步开关 */
+  identityActions?: ReactNode;
   /** 异常守卫裁定入口（2026-11-01）：观察点打标时出现（已确认态不再出） */
   onExempt?: () => void;
   onIsolate?: () => void;
   /** ARIA：卡片标题元素 id（codex 会话：可访问名关联） */
   summaryId?: string;
 }) {
-  if (!props.model.visible) return null;
   const m = props.model;
+  const identityCol = (
+    <div
+      className="lpl-volume-detail-product"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        minWidth: 0,
+        paddingRight: 16,
+        borderRight: `1px solid ${color.hairline}`,
+      }}
+    >
+      {props.identity}
+      {/* 日期行：右挂动作放不下时折到下一行（flexWrap），绝不压盖日期 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', columnGap: 8, rowGap: 2, marginTop: 6, width: '100%', minWidth: 0 }}>
+        <div className="tnum" style={{ flex: '0 0 auto', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 16, lineHeight: '22px', fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
+          {m.visible ? m.date || MISSING : MISSING}
+          {m.visible && m.period && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, color: color.mute }}>{m.period}</span>}
+        </div>
+        {props.identityActions}
+      </div>
+    </div>
+  );
+  if (!m.visible) {
+    return (
+      <article className="lpl-volume-detail" id={props.summaryId} aria-label="当前观察点详细数值" style={CARD_STYLE}>
+        {identityCol}
+        <div className="lpl-volume-detail-weekly" style={{ gridColumn: '2 / -1', display: 'flex', alignItems: 'center', paddingInline: 16, color: color.mute, fontSize: 12, lineHeight: '18px' }}>
+          该时间范围内无数据
+        </div>
+      </article>
+    );
+  }
   return (
     <article
       className="lpl-volume-detail"
       id={props.summaryId}
       aria-label="当前观察点详细数值"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '176px minmax(0, 1.25fr) minmax(0, 1fr)',
-        gap: 0,
-        marginTop: 12,
-        padding: '14px 16px',
-        border: `1px solid ${color.hairline}`,
-        borderRadius: radius.card,
-        background: color.canvas,
-      }}
+      style={CARD_STYLE}
     >
-      <div
-        className="lpl-volume-detail-product"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          minWidth: 0,
-          paddingRight: 16,
-          borderRight: `1px solid ${color.hairline}`,
-        }}
-      >
-        <div className="tnum" style={{ fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 16, lineHeight: '22px', fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-          {m.date || MISSING}
-          {m.period && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, color: color.mute }}>{m.period}</span>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, lineHeight: '16px', color: color.body, minWidth: 0, whiteSpace: 'nowrap' }}>
-          <BrandDot brand={props.brand} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{props.nameText}</span>
-          {props.romText && (
-            <span className="tnum" style={{ flexShrink: 0, fontSize: 10, lineHeight: '14px', fontWeight: 600, padding: '0 6px', borderRadius: radius.pill, color: selectSoftInk, background: selectSoft, fontFamily: font.family, fontVariantNumeric: 'tabular-nums' }}>
-              {props.romText}
-            </span>
-          )}
-        </div>
-      </div>
+      {identityCol}
       <div
         className="lpl-volume-detail-weekly"
         style={{

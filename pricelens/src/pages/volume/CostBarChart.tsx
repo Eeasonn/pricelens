@@ -1,10 +1,13 @@
 // ============================================================
 // 量价面板 · 成本柱呈现（2026-11-02 新方案，参考竞品柱图改造）：
 // - 每周一根从 $0 到折后价的柱（不悬空），柱顶价格帽线；成本位置一条灰线横贯柱面
-// - 销量 = 右轴细线 + 点（参考图蓝线语言，单蓝强调）
-// - 销毛率 = 从 $0 基线向下长的半透明琥珀柱（独立比例缩放到固定深度，共 X 轴）
+// - 销量 = 右轴细线 + 点（参考图蓝线语言，单蓝强调）；右侧销量轴与经典 VolumeBars
+//   同语言（细竖线 + 「销量（台）」标题 + 上/中/0 三刻度，上限 = 页面传入的 nice 上限）
+// - 销毛率 = 从 $0 基线向下长的半透明琥珀柱，深度按页面级共享上限（rateAxisMax）缩放
+//   ——同一行所有面板同一比例可直接比深浅；% 轴画在共享轴列绘图区正下方（SplitAxisColumn
+//   belowTicks），0 与价格轴共用基线
 // - 价格/成本/销毛率标签在列宽足够时显示；缺采周空柱；隔离周价格帽变灰虚线
-// - Y 轴从 0 起（由页面级 yCfgCost 传入，与共享档位轴列同刻度）
+// - Y 轴从 0 起（由页面级 yCfgCost 传入，与共享轴列同刻度；档位带在本模式不画）
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -13,9 +16,13 @@ import { yPxOf } from '../../chart/PriceTrend/helpers';
 import type { YScale } from '../../chart/PriceTrend/helpers';
 import type { SeriesPoint } from '../../dataModel/types';
 import type { MarginCostPoint } from './marginCost';
-import { color, font, formatPrice, radius, selectAccent } from '../../theme/tokens';
+import { fmtVolume } from './volumeAxis';
+import { color, font, formatPrice, selectAccent } from '../../theme/tokens';
 
-const MARGIN_ZONE_H = 52; // 销毛率下垂区高度
+/** 销毛率下垂柱满深度（= 共享 % 轴上限对应像素；轴列 belowTicks 用同一常量定位） */
+export const COST_RATE_H = 38;
+/** 销毛率下垂区总高（满深度 + 柱下 % 标签） */
+export const COST_MARGIN_ZONE_H = COST_RATE_H + 18;
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -24,6 +31,14 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** 共享销毛率轴上限（页面级，可见面板最大销毛率向上取整到 10% 档；无数据 = 0 不画轴） */
+export function costRateAxisMaxOf(rates: readonly (number | null | undefined)[]): number {
+  let m = 0;
+  for (const r of rates) if (r != null && r > m) m = r;
+  if (m <= 0) return 0;
+  return Math.ceil(m * 10 - 1e-9) / 10;
 }
 
 export default function CostBarChart(props: {
@@ -36,6 +51,10 @@ export default function CostBarChart(props: {
   points: SeriesPoint[];
   costPoints: readonly (MarginCostPoint | null)[];
   volumes: readonly (number | null)[];
+  /** 销量右轴上限（页面级 nice 上限 / 用户上限，与经典模式同源） */
+  volumeAxisMax: number;
+  /** 销毛率共享轴上限（costRateAxisMaxOf；0 = 无销毛数据，不画下垂区刻度） */
+  rateAxisMax: number;
   currency: 'local' | 'usd';
   seriesColor: string;
   focusIdx: number | null;
@@ -75,16 +94,12 @@ export default function CostBarChart(props: {
 
   const empty = props.points.length === 0 || geom == null;
   const baseline = props.plotTop + props.plotHeight;
-
-  // 销量右轴域
-  const maxVol = Math.max(0, ...props.volumes.filter((v): v is number => v != null));
-  // 销毛率域（视图内最大）
-  const maxRate = Math.max(0, ...props.costPoints.filter((p): p is MarginCostPoint => p != null).map((p) => p.marginRate));
+  const totalH = props.plotTop + props.plotHeight + COST_MARGIN_ZONE_H;
 
   const hasAny = props.points.some((pt) => pt.price != null) || props.volumes.some((v) => v != null);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: props.plotTop + props.plotHeight + MARGIN_ZONE_H + 8 }}>
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: totalH }}>
       {empty && (
         <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: color.mute, fontSize: 14 }}>
           {props.emptyHint ?? '暂无数据'}
@@ -103,8 +118,9 @@ export default function CostBarChart(props: {
         const showLabels = slot >= 56;
         const rateLabels = slot >= 44;
         const focus = props.focusIdx;
-        const volMax = Math.max(1, maxVol);
-        const rateMax = Math.max(0.01, maxRate);
+        const volMax = Math.max(1, props.volumeAxisMax);
+        const rateMax = props.rateAxisMax > 0 ? props.rateAxisMax : 0;
+        const volY = (v: number): number => props.plotTop + props.plotHeight * (1 - Math.min(1, Math.max(0, v / volMax)));
         const cols: ReactNode[] = [];
         const volPts: string[] = [];
         for (let i = 0; i < n; i++) {
@@ -154,16 +170,16 @@ export default function CostBarChart(props: {
             }
           }
           if (vol != null) {
-            volPts.push(`${cx},${props.plotTop + props.plotHeight * (1 - vol / volMax)}`);
+            volPts.push(`${cx},${volY(vol)}`);
           }
-          if (rate != null && rate > 0) {
-            const h = Math.max(2, (rate / rateMax) * (MARGIN_ZONE_H - 14));
+          if (rate != null && rate > 0 && rateMax > 0) {
+            // 0% 贴 X 轴基线向下生长（与价格轴共用 0 基线），满深度 = 共享上限
+            const h = Math.max(2, Math.min(1, rate / rateMax) * COST_RATE_H);
             cols.push(
               <g key={`rate-${i}`}>
-                <rect x={cx - barW * 0.3} y={baseline + 4} width={barW * 0.6} height={h} fill={hexToRgba('#f5a623', 0.32)} />
-                <line x1={cx - barW * 0.3} x2={cx + barW * 0.3} y1={baseline + 4} y2={baseline + 4} stroke={hexToRgba('#f5a623', 0.8)} strokeWidth={1} />
+                <rect x={cx - barW * 0.3} y={baseline} width={barW * 0.6} height={h} fill={hexToRgba('#f5a623', 0.32)} />
                 {rateLabels && (
-                  <text x={cx} y={baseline + 4 + h + 9} textAnchor="middle" fill={color.mute} fontSize={8.5} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <text x={cx} y={baseline + h + 10} textAnchor="middle" fill={color.mute} fontSize={8.5} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {Math.round(rate * 100)}%
                   </text>
                 )}
@@ -171,9 +187,15 @@ export default function CostBarChart(props: {
             );
           }
         }
-        const volMaxLabel = `${Math.round(volMax).toLocaleString('en-US')} 台`;
+        // 右侧销量轴（与经典 VolumeBars 同语言）：细竖线 + 标题 + 上/中/0 三刻度
+        const axisX = GRID_L + geom.plotWidth + 10;
+        const volTicks = [
+          { v: volMax, y: props.plotTop },
+          { v: volMax / 2, y: props.plotTop + props.plotHeight / 2 },
+          { v: 0, y: baseline },
+        ];
         return (
-          <svg role="img" aria-label={`${props.name} 成本柱量价图：柱高为折后价，灰线为成本，蓝线为销量，下垂柱为销毛率`} width="100%" height={props.plotTop + props.plotHeight + MARGIN_ZONE_H + 8} style={{ display: 'block' }}>
+          <svg role="img" aria-label={`${props.name} 成本柱量价图：柱高为折后价，灰线为成本，蓝线为销量，下垂柱为销毛率`} width="100%" height={totalH} style={{ display: 'block' }}>
             <line x1={GRID_L} x2={GRID_L + geom.plotWidth} y1={baseline} y2={baseline} stroke={color.hairlineStrong} strokeWidth={1} />
             {cols}
             {volPts.length > 0 && (
@@ -183,11 +205,20 @@ export default function CostBarChart(props: {
                   const [x, y] = ptStr.split(',');
                   return <circle key={`vol-${i}`} cx={x} cy={y} r={2.5} fill={color.canvas} stroke={selectAccent} strokeWidth={1.2} />;
                 })}
-                <text x={GRID_L + geom.plotWidth + 8} y={props.plotTop + 8} fill={color.mute} fontSize={9} fontFamily={font.family}>{volMaxLabel}</text>
-                <text x={GRID_L + geom.plotWidth + 8} y={baseline - 2} fill={color.mute} fontSize={9} fontFamily={font.family}>0</text>
               </>
             )}
-            <text x={GRID_L + 2} y={baseline + 14} fill={color.mute} fontSize={9} fontFamily={font.family}>销毛率（下垂）</text>
+            <g aria-hidden>
+              <line x1={axisX} x2={axisX} y1={props.plotTop} y2={baseline} stroke={color.hairline} strokeWidth={1} />
+              <text x={axisX + 4} y={props.plotTop - 6} fill={color.mute} fontSize={10} fontFamily={font.family}>销量（台）</text>
+              {volTicks.map((tk) => (
+                <g key={`vt-${tk.v}`}>
+                  <line x1={axisX - 4} x2={axisX} y1={tk.y} y2={tk.y} stroke={color.hairlineStrong} strokeWidth={1} />
+                  <text x={axisX + 4} y={tk.y + 3.5} fill={color.mute} fontSize={10} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtVolume(tk.v)}
+                  </text>
+                </g>
+              ))}
+            </g>
           </svg>
         );
       })()}
