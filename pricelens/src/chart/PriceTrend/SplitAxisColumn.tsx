@@ -20,7 +20,6 @@ import {
 import TierBand from './TierBand';
 import type { CurrencyMode, Industry } from '../../dataModel/types';
 import { color } from '../../theme/tokens';
-import YLimitHandles, { type YLimitState } from './YLimitHandles';
 
 export default function SplitAxisColumn(props: {
   yScale: YScale;
@@ -36,10 +35,6 @@ export default function SplitAxisColumn(props: {
   /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，关 = 不画档位区块 */
   showTiers?: boolean;
   tierValues: number[];
-  /** Y 轴上下限受控值与提交——共享轴列是分离模式唯一画轴处，编辑器挂这里
-   *  （面板卡 chrome=false 不再各挂）。 */
-  yLimit?: YLimitState;
-  onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
   /** 绘图区下方的附加刻度（2026-11-02 成本柱模式销毛率轴）：y = 相对绘图区底缘（X 轴
    *  基线）的向下像素偏移，与价格刻度同款文字/短横线；0 不重复出（与价格轴共用基线上的 0） */
   belowTicks?: { y: number; text: string }[];
@@ -69,8 +64,8 @@ export default function SplitAxisColumn(props: {
     <div style={{ position: 'relative', width: axisW, height: plotBottom + Math.max(GRID.bottom, belowExtra) }}>
       {/* 价格档位带（梯子 + 顶部小标）：与主图 Chart.tsx 共用 TierBand 公共组件
           （2026-11-01 审计 P3 抽取，两处逐像素同款由构造保证）。小标贴绘图区顶
-          上方——不放轴列顶部空气带，分离模式那里被 Y 轴上下限输入盒（不透明底
-          zIndex 8）盖住（2026-11-01 审查 P2）；与主图轴区同口径定位。 */}
+          上方——A1 收口后图顶带 16px，正好容纳 13px 小标（原「被输入盒盖住」
+          的问题随编辑器移驻一并消解）；与主图轴区同口径定位。 */}
       <TierBand
         tierBoxes={tierBoxes}
         tierWidth={chrome.tierWidth}
@@ -176,18 +171,9 @@ export default function SplitAxisColumn(props: {
           ))}
         </svg>
       ))}
-      {/* Y 轴上下限输入（替代旧拖拽拉伸）：上限/下限固定在轴上方，清空输入恢复自动；
-          未传 onYLimit 不渲染（下钻弹窗等自管场景）。 */}
-      {props.onYLimit && chrome.visible && (
-        <YLimitHandles
-          scale={scale}
-          plotTop={panelGridTop}
-          plotHeight={scale.plotHeight}
-          trackWidth={chrome.editorWidth}
-          limit={props.yLimit ?? { min: null, max: null }}
-          onLimit={props.onYLimit}
-        />
-      )}
+      {/* Y 轴上下限编辑器（A1 收口，2026-11-02）：已移驻常驻工具行（ChartToolbar
+          左簇 YLimitInputs），轴列不再挂载——原卡片撑起 126px 图顶带只占 63px 宽。
+          档位带顶部小标因此不再有被输入盒盖住的问题（2026-11-01 审查 P2 一并消解）。 */}
     </div>
   );
 }

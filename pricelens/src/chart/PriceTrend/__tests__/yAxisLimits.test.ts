@@ -79,7 +79,7 @@ describe('buildTickRows 行序（第一百六十六轮刻度缺失回归）', ()
   });
 });
 
-describe('computeYAxis 用户上下限覆盖（YLimitHandles 契约）', () => {
+describe('computeYAxis 用户上下限覆盖（YLimitInputs 契约，原 YLimitHandles）', () => {
   it('yMax 抬顶：上限 = 拖柄值精确落边（不加外缘垫、不吸附顶回），下侧不受牵连', () => {
     const auto = computeYAxis({ series: [mkSeries('a', [650, 980])], ...BASE, allowBreak: false });
     const s = computeYAxis({ series: [mkSeries('a', [650, 980])], ...BASE, allowBreak: false, yMax: 1200 });

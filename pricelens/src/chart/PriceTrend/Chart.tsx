@@ -112,7 +112,6 @@ import { addAnomalyMark, readAnomalyRule } from '../../dataModel/anomaly';
 import { formatPrice } from '../../theme/tokens';
 import OfferPopover from './OfferPopover';
 import ChartToolbar from './ChartToolbar';
-import YLimitHandles, { type YLimitState } from './YLimitHandles';
 import BrandDot from '../../components/BrandMark';
 
 export interface ChartProps {
@@ -148,11 +147,6 @@ export interface ChartProps {
   yCompress?: boolean;
   /** 压缩开关提交（缺省写内部状态） */
   onYCompress?: (v: boolean) => void;
-  /** Y 轴上下限：输入框的受控值（null = 该侧自动）。传入 onYLimit 才渲染编辑器，
-   * 迷你图/下钻弹窗等自管场景不传不渲染。 */
-  yLimit?: YLimitState;
-  /** 限位提交：输入框提交；传 null 恢复该侧自动 */
-  onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
   /** 绘图区横向几何原语上报（第十五轮：促销热力带与时间轴逐像素对齐用） */
   onGeom?: (g: StripGeom | null) => void;
   /** 大促背景带开关（第三十四轮，受控，缺省内部状态 true）：俄区促销档期在绘图区着色 */
@@ -563,10 +557,8 @@ export default function Chart(props: ChartProps) {
         allowBreak: yCompress,
         perUsd: perUsdOf(currency), // 档位锚定 USD（第二十三轮）：迷你图换币种不拉伸
         prev: selfPrevRef.current,
-        yMin: props.yLimit?.min ?? null, // 上下限拖柄（第一百六十六轮）：内部自算路径同样吃覆盖
-        yMax: props.yLimit?.max ?? null,
       }),
-    [series, priceTypes, sliderScale, yCompress, currency, props.yLimit],
+    [series, priceTypes, sliderScale, yCompress, currency],
   );
   // 滞回基线在渲染提交后写入——useMemo 工厂里写 ref 会被并发丢弃的渲染/StrictMode
   // 双跑污染，被丢弃的中间刻度会成为下次滞回基线
@@ -1237,18 +1229,8 @@ export default function Chart(props: ChartProps) {
               boxZIndex={1}
             />
           )}
-          {/* Y 轴上下限输入（替代旧拖拽拉伸）：传入 onYLimit 才渲染；分离面板
-              chrome=false 不渲染，由共享轴列 SplitAxisColumn 承担。 */}
-          {props.onYLimit && geom && props.axisChrome !== false && chrome.visible && (
-            <YLimitHandles
-              scale={displayScale}
-              plotTop={geom.plotTop}
-              plotHeight={geom.plotHeight}
-              trackWidth={chrome.editorWidth}
-              limit={props.yLimit ?? { min: null, max: null }}
-              onLimit={props.onYLimit}
-            />
-          )}
+          {/* Y 轴上下限编辑器（A1 收口，2026-11-02）：已移驻常驻工具行（ChartToolbar
+              左簇 YLimitInputs），图内不再挂载——原卡片撑起 126px 图顶带只占 63px 宽。 */}
           {/* 价格变化点（第三十五轮起；第四十二轮阈值齿轮可调、含上涨）：相较前一有值点
               |Δ|≥阈值的点下方 ↓/↑X% 徽标（Keepa「价格下降了 30%」画法）；聚焦降透明。
               第一百二十五轮：y 锚定主价口径（primaryPriceOf）——仅 RRP 视图贴 RRP 线，

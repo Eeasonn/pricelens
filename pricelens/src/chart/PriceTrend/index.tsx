@@ -85,7 +85,7 @@ import {
   type PromoBand,
 } from './chartModel';
 import SplitAxisColumn from './SplitAxisColumn';
-import { Y_LIMIT_EDITOR_H, type YLimitState } from './YLimitHandles';
+import type { YLimitState } from './YLimitInputs';
 import { contentSignature } from '../../components/ProductPicker/combos';
 import {
   GRID,
@@ -1082,10 +1082,13 @@ export default function PriceTrend(props: {
   }, [yCfg, adjusting]);
   // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
   // S/E 徽标上探 7.5px、名称避让钳 plotTop+2，14px 够用；极值胶囊已在 Chart 内钳回容器
-  // 刻度和档位都关掉时，上下限框一起收起，图顶不再留那一块。
+  // 刻度和档位都关掉时，一起收起，图顶不再留那一块。
   const yAxisVisible = showYTicks || (state.currency === 'usd' && showTiers);
-  // Y_LIMIT_EDITOR_H 已含控件高度、顶边留白，以及盒底到 Y 轴的空隙。
-  const panelGridTop = yAxisVisible ? Y_LIMIT_EDITOR_H : 8;
+  // A1 收口（2026-11-02 Eason 拍板）：Y 轴范围编辑器移驻常驻工具行后，图顶带只剩
+  // 档位小标 13px 与顶格刻度字上探 8px——原 Y_LIMIT_EDITOR_H（126px，其中卡片只占
+  // 左侧 63px 宽）退役，收到 16px，合并/分图的整条空白一并归零。
+  const Y_AXIS_TOP_BAND = 16;
+  const panelGridTop = yAxisVisible ? Y_AXIS_TOP_BAND : 8;
   // 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；本轮拍板回归面板内）：
   // 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（渠道行改药丸上方平台行）
   const PANEL_LEGEND_H = 54;
@@ -1318,6 +1321,9 @@ export default function PriceTrend(props: {
               lineShape={lineShape}
               onLineShape={setLineShape}
               priceTypesAfter={onlyMainCtl}
+              yLimit={yLimitLive} // A1 收口：显示画面实际生效值（范围过期时呈现自动）
+              onYLimit={commitYLimit}
+              yRangeScale={splitActive ? splitYCfg : yCfg}
             />
           </div>
           <ConfigProvider theme={filterBarTheme}>
@@ -1492,8 +1498,6 @@ export default function PriceTrend(props: {
                   showYTicks={showYTicks}
                   showTiers={showTiers}
                   tierValues={splitTierValues}
-                  yLimit={yLimit}
-                  onYLimit={commitYLimit}
                 />
               )}
               {/* 「时间轴同步」开关（与各面板时间轴同一水平线）：轴列体与面板绘图区同高，
@@ -1707,8 +1711,6 @@ export default function PriceTrend(props: {
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
             yScale={yCfg}
-            yLimit={yLimit}
-            onYLimit={commitYLimit}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
             yCompress={yCompress}

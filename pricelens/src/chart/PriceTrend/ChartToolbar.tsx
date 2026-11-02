@@ -21,6 +21,9 @@
 // 第一百九十轮（外部 UX 审计落地）：齿轮「Y 轴显示设置」与「⋯ 更多」两处弹层
 // 改受控 + useTopEscClose——此前非受控 trigger="click" 自身不响应 Esc（外层
 // 浮窗又已让位给它），Esc 成死区；现每次 Esc 只关最上层弹层、焦点归还触发按钮。
+// A1 收口（2026-11-02 Eason 拍板）：Y 轴上限/下限/自适应从轴列顶部竖排卡片
+// 移驻本行左簇（YLimitInputs 横排）——原卡片撑起 126px 图顶带却只占 63px 宽，
+// 其余整条空白；移驻后图顶带只剩档位小标与顶格刻度，收到 16px。
 // ============================================================
 import { Button, Checkbox, ConfigProvider, Popover, Segmented, Slider } from 'antd';
 import { MoreOutlined, ProfileOutlined, SettingOutlined } from '@ant-design/icons';
@@ -31,6 +34,7 @@ import { useTopEscClose } from '../../components/ProductPicker/pickerBits';
 import { color, radius } from '../../theme/tokens';
 import type { LineShapeChoice } from './chartModel';
 import ScaleSlider from './ScaleSlider';
+import YLimitInputs, { type YLimitState } from './YLimitInputs';
 
 export interface ChartToolbarProps {
   /** 布局槽位：all = 单行全套（齿轮+插槽 左、大促/⋯ 右，量价/多平台图表内用）；
@@ -62,6 +66,13 @@ export interface ChartToolbarProps {
   onPriceTypeToggle?: (key: 'discounted' | 'rrp', next: boolean) => void;
   /** 齿轮之后的插槽：全局「隐藏对比产品」（cluster/all 模式下与齿轮同簇） */
   priceTypesAfter?: ReactNode;
+  /** Y 轴范围控件（A1 收口，2026-11-02 Eason）：上限/下限/自适应横排进驻工具行，
+   *  替代原轴列顶部竖排卡片——图顶带 126px 只剩档位小标与顶格刻度，收到 16px。
+   *  onYLimit + yRangeScale 同时传入才渲染（量价页等无 Y 范围编辑的调用方不传 = 零影响） */
+  yLimit?: YLimitState;
+  onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
+  /** 当前生效共享轴（合并图 yCfg 或分图 splitYCfg）：自动值与刻度缩写来源；空 = 不渲染 */
+  yRangeScale?: { min: number; max: number; interval: number } | null;
   /** 行尾次级入口插槽（第一百八十九轮定版）：多平台对比入口/返回钮——分隔线 +
       轻量文字钮，与大促/权益显示设置同排但不混入 ⋯ 菜单，保证可发现性 */
   compareEntry?: ReactNode;
@@ -309,6 +320,13 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           {gearCtl}
           {/* 齿轮之后：隐藏对比产品（折后价/RRP 已收进 ⋯） */}
           {props.priceTypesAfter}
+          {/* Y 轴范围（A1 收口）：分隔线 + 横排控件，仅合并/分图主工具行传入时渲染 */}
+          {props.onYLimit && props.yRangeScale && (
+            <>
+              <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
+              <YLimitInputs scale={props.yRangeScale} limit={props.yLimit ?? { min: null, max: null }} onLimit={props.onYLimit} />
+            </>
+          )}
         </>
       )}
       {props.legend && (
