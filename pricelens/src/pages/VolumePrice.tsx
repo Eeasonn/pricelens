@@ -1298,7 +1298,7 @@ export default function VolumePrice() {
                         </div>
                         {/* 图表元信息行（视觉 demo：chart-meta）：左 = 图例，右 = 所选区间
                             胶囊（含清除）或「拖动图表选择区间」提示（无选区时） */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 28, padding: '0 4px', margin: '4px 0 8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 30, padding: '0 4px', margin: '4px 0 8px' }}>
                           <div aria-label="图例" style={{ display: 'flex', alignItems: 'center', gap: 14, color: color.mute, fontSize: 11, lineHeight: '14px', flexWrap: 'wrap', minWidth: 0 }}>
                             {state.priceTypes.discounted && (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
@@ -1345,9 +1345,12 @@ export default function VolumePrice() {
                             )
                           )}
                         </div>
-                        {/* 双极差卡并排（视觉 demo：range-cards）：贴绘图区左右缘，图上方 */}
+                        {/* 主图 + 成本销毛带同一相对容器：十字线贯穿两图（demo：crosshair） */}
+                        <div style={{ position: 'relative' }}>
+                        {/* 双极差卡（2026-11-02 反馈④）：悬浮在图表顶部表面、不占布局高度——
+                            absolute 贴绘图区顶缘，pointerEvents 关闭以免挡住下方拖选/悬停 */}
                         {(priceCard?.visible || volumeCard?.visible) && strip && cardRow && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, margin: `0 0 10px ${strip.plotLeft}px`, position: 'sticky', top: 0, zIndex: 6, padding: '4px 0', background: color.canvas, boxShadow: `0 1px 0 ${color.hairline}` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, position: 'absolute', top: PANEL_GRID_TOP, left: strip.plotLeft, zIndex: 6, pointerEvents: 'none' }}>
                             {priceCard?.visible
                               ? <SpreadRangeCard title="价格极差" accent={seriesColor} model={priceCard} style={{ width: cardRow.width }} />
                               : <span />}
@@ -1356,8 +1359,6 @@ export default function VolumePrice() {
                               : <span />}
                           </div>
                         )}
-                        {/* 主图 + 成本销毛带同一相对容器：十字线贯穿两图（demo：crosshair） */}
-                        <div style={{ position: 'relative' }}>
                           <div
                             className="lpl-volume-stack"
                             tabIndex={0}

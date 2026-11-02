@@ -78,6 +78,8 @@ button {
   text-decoration: underline;
 }
 .tt-prod-link:focus-visible {
+  color: #0070f3;
+}
 
 /* ---- 以下为预测/Agent 会话（codex）全站 UIUX 追加 ---- */
 
@@ -635,15 +637,15 @@ button.lpl-map-card:hover {
    ============================================================ */
 .lpl-volume-panel { container-type: inline-size; }
 
-/* 明细卡三栏：面板 <640px 改单列（demo <760px 同语义，按面板宽触发） */
-@container (max-width: 640px) {
+/* 明细卡三栏：面板 ≤780px 改单列（2026-11-02 反馈⑤：双主品并排时单面板
+   ≈660-700px，旧 640 阈值恰好漏过导致月度三格标签互压；按面板宽触发） */
+@container (max-width: 780px) {
   .lpl-volume-detail { grid-template-columns: 1fr !important; }
   .lpl-volume-detail-product {
     padding: 0 0 12px !important;
     border-right: 0 !important;
     border-bottom: 1px solid #ebebeb;
   }
-  .lpl-volume-detail-sub { display: none; }
   .lpl-volume-detail-weekly {
     padding: 12px 0 !important;
     border-right: 0 !important;

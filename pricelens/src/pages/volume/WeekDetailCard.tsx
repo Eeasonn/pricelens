@@ -132,9 +132,6 @@ export default function WeekDetailCard(props: {
             </span>
           )}
         </div>
-        <div className="lpl-volume-detail-sub" style={{ marginTop: 4, color: color.mute, fontSize: 11, lineHeight: '14px' }}>
-          当前观察点 · 移出图表回到区间末周
-        </div>
       </div>
       <div
         className="lpl-volume-detail-weekly"
