@@ -3,7 +3,7 @@
 // 颜色全部来自 src/theme/tokens.ts，状态一律「文字 + 色」双通道表达。
 // ============================================================
 import type { CSSProperties } from 'react';
-import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
+import { color, fontSize, formatLocalMoney, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import type { DataStatus, FactorStatus } from './forecastModel';
 
 /** 页面白卡通用样式（L1 阴影 + 8px 圆角）。 */
@@ -37,13 +37,14 @@ export function DataStatusBadge({ status }: { status: DataStatus }) {
 }
 
 const factorStatusStyle: Record<FactorStatus, CSSProperties> = {
-  模型学习: { background: selectSoft, color: selectSoftInk },
+  固定先验: { background: color.canvasSoft2, color: color.body },
+  待学习: { background: selectSoft, color: selectSoftInk },
   业务假设: { background: color.warningSoft, color: color.warningInk },
   方向性判断: { background: color.canvasSoft2, color: color.body },
   确定性计算: { background: color.canvas, color: color.ink, border: `1px solid ${color.hairlineStrong}` },
 };
 
-/** 因子状态徽标：模型学习 / 业务假设 / 方向性判断 / 确定性计算。 */
+/** 因子状态徽标：固定先验 / 待学习 / 业务假设 / 方向性判断 / 确定性计算。 */
 export function FactorStatusBadge({ status }: { status: FactorStatus }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', height: 18, padding: '0 7px', borderRadius: radius.pill, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', ...factorStatusStyle[status] }}>
@@ -55,8 +56,13 @@ export function FactorStatusBadge({ status }: { status: FactorStatus }) {
 /** 台数：千分位，不带单位（列头带单位）。 */
 export const fmtUnits = (value: number): string => value.toLocaleString('en-US');
 
-/** 金额（演示 fixture 为 USD）。 */
-export const fmtMoney = (value: number): string => formatPrice(Math.round(value), 'usd');
+/** 金额：按当前预测数据集货币展示，默认值只兼容旧调用方。 */
+export const fmtMoney = (value: number, currency = 'USD'): string => {
+  const normalized = currency.toUpperCase();
+  return normalized === 'USD'
+    ? formatPrice(Math.round(value), 'usd')
+    : formatLocalMoney(Math.round(value), normalized);
+};
 
 /** 带符号百分比：+5.0% / −12.0%。 */
 export const fmtSignedPct = (value: number, digits = 1): string =>

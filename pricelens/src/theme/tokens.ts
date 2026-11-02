@@ -19,6 +19,25 @@ export const color = {
   warningInk: '#805b00', // warningSoft 上的文字/徽标文字
   warningSoft: '#ffefcf', // offer 浮窗内衬
   onPrimary: '#ffffff', // ink 表面上的文字
+  /** Alert type/status colors are centralized so chips, inbox rows and drawers stay aligned. */
+  alert: {
+    priceChange: { fg: '#0053c2', bg: '#e8f1ff' },
+    promo: { fg: '#b45309', bg: '#fff7e6' },
+    platformGap: { fg: '#6d28d9', bg: '#f5f3ff' },
+    ownGap: { fg: '#be123c', bg: '#fff1f2' },
+    lifecycle: {
+      new: { fg: '#0053c2', bg: '#e8f1ff' },
+      acknowledged: { fg: '#475569', bg: '#f1f5f9' },
+      investigating: { fg: '#6d28d9', bg: '#f5f3ff' },
+      actionRequired: { fg: '#b45309', bg: '#fff7e6' },
+      resolved: { fg: '#15803d', bg: '#f0fdf4' },
+      snoozed: { fg: '#64748b', bg: '#f8fafc' },
+      dismissed: { fg: '#64748b', bg: '#f8fafc' },
+    },
+    priority: { P1: '#b42318', P2: '#b45309', P3: '#737373' },
+    evidence: { verified: '#15803d', pending: '#b45309' },
+    bell: '#faad14',
+  },
 } as const;
 
 /** 品牌数据色（图表线色，恒定不换）：我司线永远 HUAWEI 色且最粗。
@@ -82,6 +101,7 @@ export const motion = {
   fast: 160, // 悬停反馈、连线/浮层入场、置灰
   base: 240, // 模式切换、面板宽度形变、chip 滑入
   slow: 320, // 跨页接力收起
+  agentFull: 720, // Agent 全屏与 dock 的同壳体连续收窄，给用户确认和空间重排时间
   enter: 'cubic-bezier(0.25, 0.8, 0.3, 1)', // 入场（快出缓停）
   exit: 'cubic-bezier(0.4, 0, 0.2, 1)', // 退场（匀出急停）
 } as const;

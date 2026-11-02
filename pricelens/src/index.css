@@ -4,6 +4,19 @@ body,
   height: 100%;
 }
 
+/* 分析页的滚动发生在 #lpl-analysis-scroll。它写了 height:100% + overscroll-behavior:contain。
+   中间层若高度随内容长开，这个 100% 不会落在视口上，外壳比窗口更高却不再产生滚动，
+   滚轮又被 contain 吃掉，页面就滑不下去。把 #root 和主内容锁在视口高度里，外壳才是滚动容器。 */
+#root {
+  overflow: hidden;
+}
+
+#lpl-main-content {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   background: #fafafa;
@@ -19,6 +32,26 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+/* 统一动效可访问性：系统开启「减少动态效果」时，过渡和动画立即收敛，
+   仍保留状态变化本身，避免焦点/加载提示被完全隐藏。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 键盘和触屏入口的最小命中区；视觉尺寸仍由组件自身控制。 */
+.lpl-hit,
+.lpl-toolbar-icon,
+.lpl-back-home {
+  touch-action: manipulation;
 }
 
 /* 第一百八十二轮（可及性）：原生 button 当 role="button" 的替身——重置浏览器
@@ -45,7 +78,86 @@ button {
   text-decoration: underline;
 }
 .tt-prod-link:focus-visible {
-  color: #0070f3;
+
+/* ---- 以下为预测/Agent 会话（codex）全站 UIUX 追加 ---- */
+
+button:disabled,
+button[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+/* 键盘用户进入页面后可直接越过统一页头与筛选区。默认移出视觉流，
+   聚焦时固定在左上角，避免被 sticky/fixed 元素遮住。 */
+.lpl-skip-link {
+  position: fixed;
+  z-index: 1000;
+  top: 8px;
+  left: 8px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: #171717;
+  color: #fff;
+  font-size: 12px;
+  text-decoration: none;
+  transform: translateY(-180%);
+  transition: transform 160ms ease;
+}
+.lpl-skip-link:focus,
+.lpl-skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* 跨页后跳过链接的目标是壳容器；不要让程序化 focus 留下额外边框。 */
+#lpl-main-content:focus { outline: none; }
+
+.lpl-analysis-shell {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.lpl-scroll-top {
+  transition: color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.lpl-scroll-top:hover {
+  color: #0070f3 !important;
+  border-color: rgba(0, 112, 243, 0.45) !important;
+}
+
+/* 页头在桌面保持一行；窄屏将品牌/范围与操作区拆成两行，导航在自己的
+   可横向滚动带中保留完整标签，避免把内容区挤出视口。 */
+@media (max-width: 720px) {
+  .lpl-page-header {
+    align-items: flex-start !important;
+    gap: 6px 10px !important;
+    padding: 8px 12px !important;
+  }
+  .lpl-page-header-main {
+    flex: 1 1 100%;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px 10px !important;
+  }
+  .lpl-page-header-main > div[style*='width: 190px'] {
+    flex: 1 1 180px;
+  }
+  .lpl-page-header-actions {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-end;
+    padding-top: 6px;
+    border-top: 1px solid #ebebeb;
+  }
+  .lpl-page-nav {
+    min-width: 0;
+    max-width: 100%;
+    flex: 1 1 auto;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .lpl-page-nav::-webkit-scrollbar { display: none; }
+  .lpl-page-nav button { min-height: 34px; }
 }
 
 /* 键盘焦点环（Tab 可达性）：仅 focus-visible（鼠标点击不出现），全站统一蓝色 */
@@ -408,6 +520,25 @@ button.lpl-map-card:hover {
   .lpl-alert-row .lpl-alert-name { white-space: normal; }
   .lpl-bm-cfg { width: 100%; }
 
+  /* 配置页两组卡片在手机上占满容器；桌面仍保留每项的可读最小宽度，
+     避免 380/400px 的网格最小值把整页撑出横向滚动。 */
+  .lpl-config-prev-grid,
+  .lpl-config-promo-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .lpl-config-prev-grid > *,
+  .lpl-config-promo-grid > * {
+    min-width: 0;
+  }
+  .lpl-config-block-head {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .lpl-config-block-head > * {
+    max-width: 100%;
+  }
+
   /* 级联浮层按触发器右缘展开时会超出左边界。只收这类浮层，Popconfirm 仍跟触发器。 */
   .ant-popover.lpl-cascade-popover {
     left: 8px !important;
@@ -467,6 +598,24 @@ button.lpl-map-card:hover {
 .lpl-agent-panel[data-agent-mode='dock'] { width: min(440px, 100vw); }
 .lpl-agent-panel[data-agent-mode='drawer'] { width: min(640px, 100vw); }
 .lpl-agent-panel[data-agent-mode='full'] { width: 100vw; }
+
+/* Agent 结果卡在小屏保持可读：标题徽标可换行，解释卡的双列指标改成单列，
+   filter 预览的 before/after 也不再把内容压成不可读的四列。 */
+@media (max-width: 639.98px) {
+  .lpl-agent-card-title {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+  }
+  .lpl-agent-filter-change {
+    grid-template-columns: minmax(60px, auto) 1fr auto !important;
+  }
+  .lpl-agent-filter-change strong {
+    grid-column: 2 / -1;
+  }
+  .lpl-agent-explanation-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
 
 /* Agent 在平板/手机上占用完整工作区，避免固定窄抽屉遮住筛选器；桌面保留 dock。 */
 @media (max-width: 1023.98px) {

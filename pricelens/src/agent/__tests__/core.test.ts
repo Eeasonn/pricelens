@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
-import { buildAgentContext, buildFilterCard, buildFilterPatch, classifyIntent, resolveAgentEntities, runAgent } from '../core';
-import { validateFilterPatch } from '../contracts';
+import { buildAgentContext, buildFilterCard, buildFilterPatch, clarificationReasonForQuery, classifyIntent, resolveAgentEntities, runAgent } from '../core';
+import { isContextStale, validateFilterPatch } from '../contracts';
+import { simpleFullDataset } from '../../pages/forecast/forecastDatasetRegistry';
+import { createForecastSnapshot } from '../../pages/forecast/forecastSnapshot';
 
 const state = { ...defaultFilters, rangeStart: '202619', rangeEnd: '202642' };
 
@@ -11,6 +13,7 @@ describe('PriceLens Agent deterministic core', () => {
     expect(classifyIntent('最近有价周哪个平台最便宜？')).toBe('query');
     expect(classifyIntent('解释当前预警为什么触发')).toBe('alert');
     expect(classifyIntent('我要看 巴西的 Pura 90s 情况')).toBe('query');
+    expect(classifyIntent('解释当前简单版预测的关键假设、证据和风险')).toBe('forecast_explain');
   });
 
   it('resolves an explicit country and product instead of using the page selection', () => {
@@ -27,6 +30,25 @@ describe('PriceLens Agent deterministic core', () => {
     expect(response.summary).toContain('巴西');
     expect(response.summary).toContain('没有可用的价格数据');
     expect(response.cards[0]?.kind).toBe('table');
+  });
+
+  it('asks for a product before answering an underspecified cheapest query', async () => {
+    expect(clarificationReasonForQuery('最近有价周哪个平台最便宜？', state)).toBe('产品');
+    const response = await runAgent('最近有价周哪个平台最便宜？', buildAgentContext('dashboard', state, []));
+    expect(response.intent).toBe('clarify');
+    expect(response.summary).toContain('确认产品');
+    expect(response.suggestions).toContain('选择一个主品或竞品');
+  });
+
+  it('asks for an explicit range when the product context exists but time is vague', async () => {
+    const currentPage = {
+      ...state,
+      mains: [{ id: 'current', main: { modelId: 'own-huawei-nova-14', romram: '12+256 GB', skuIds: ['own-huawei-nova-14__12-256gb__black'] }, compares: [] }],
+    };
+    expect(clarificationReasonForQuery('近期价格趋势怎么样？', currentPage)).toBe('时间范围');
+    const response = await runAgent('近期价格趋势怎么样？', buildAgentContext('dashboard', currentPage, []));
+    expect(response.intent).toBe('clarify');
+    expect(response.summary).toContain('时间范围');
   });
 
   it('queries the requested Mate X7 series rather than current page products', async () => {
@@ -49,10 +71,32 @@ describe('PriceLens Agent deterministic core', () => {
     expect(buildFilterCard('最近 8 周，USD，带上 RRP', state)?.kind).toBe('filter');
   });
 
+  it('marks an already-applied filter preview instead of pretending there is a change', () => {
+    const card = buildFilterCard('USD', { ...state, currency: 'usd' });
+    expect(card?.changes).toHaveLength(0);
+    expect(card?.warning).toContain('无需应用');
+  });
+
+  it('uses the last week inside the active range for platform comparison', async () => {
+    const currentPage = {
+      ...state,
+      rangeStart: '202619',
+      rangeEnd: '202640',
+      mains: [{ id: 'current', main: { modelId: 'own-huawei-nova-14', romram: '12+256 GB', skuIds: ['own-huawei-nova-14__12-256gb__black'] }, compares: [] }],
+    };
+    const response = await runAgent('最近有价周哪个平台最便宜？', buildAgentContext('dashboard', currentPage, []));
+    const table = response.cards.find((card) => card.kind === 'table');
+    expect(table?.kind).toBe('table');
+    if (table?.kind === 'table') expect(table.note).toContain('202640');
+  });
+
   it('rejects writes outside the filter allowlist', () => {
     expect(validateFilterPatch({ currency: 'usd', alertThresholds: {} }).valid).toBe(false);
     expect(validateFilterPatch({ currency: 'usd', priceTypes: { discounted: true, rrp: false } }).valid).toBe(true);
     expect(validateFilterPatch({ mains: [{ id: 'bad', main: { modelId: 'x' }, compares: [] }] }).valid).toBe(false);
+    expect(validateFilterPatch({ rangeStart: '202642', rangeEnd: '202619' }).valid).toBe(false);
+    expect(validateFilterPatch({ platform: { platforms: ['OZON'], shopIds: ['RU:ozon:1P'], seller: 1 } }).valid).toBe(false);
+    expect(validateFilterPatch({ platform: { platforms: ['OZON'], shopIds: ['RU:ozon:1P'], seller: null } }).valid).toBe(true);
   });
 
   it('returns an auditable response with plan steps', async () => {
@@ -63,9 +107,71 @@ describe('PriceLens Agent deterministic core', () => {
   });
 
   it('answers the forecast page with price-demand scenarios', async () => {
-    const response = await runAgent('如果价格下调 5% 会怎样？', buildAgentContext('forecast', state, []));
+    const context = buildAgentContext('forecast', state, []);
+    const response = await runAgent('如果价格下调 5% 会怎样？', context);
     expect(response.intent).toBe('query');
     expect(response.cards[0]?.kind).toBe('table');
     expect(response.summary).toContain('5%');
+    expect(response.cards[0]?.kind === 'table' && response.cards[0].actions?.every((action) => action.target?.contextFingerprint === context.fingerprint)).toBe(true);
+  });
+
+  it('returns a structured forecast explanation backed by the forecast fixture', async () => {
+    const context = buildAgentContext('forecast', state, []);
+    const response = await runAgent('解释当前简单版预测的关键假设、证据和风险', context);
+    expect(response.intent).toBe('forecast_explain');
+    const card = response.cards[0];
+    expect(card?.kind).toBe('forecast_explanation');
+    if (card?.kind === 'forecast_explanation') {
+      expect(card.scope.modelVersion).toBe('simple-demo-v1');
+      expect(card.contextFingerprint).toBe(context.fingerprint);
+      expect(card.fitWindow).toContain('W1–W10');
+      expect(card.sampleCount).toBe(7);
+      expect(card.dataStatus).toBe('simulated');
+      expect(card.fitAppliedToForecast).toBe(false);
+      expect(card.intervalCalibrated).toBe(false);
+      expect(card.current.week).toBe('W10');
+      expect(card.current.unconstrainedDemand).toBeGreaterThan(0);
+      expect(card.factors.map((factor) => factor.key)).toEqual(['baseline', 'price', 'promo', 'competitor', 'supply']);
+      expect(card.actions?.every((action) => action.target?.contextFingerprint === context.fingerprint)).toBe(true);
+    }
+    expect(JSON.stringify(response)).not.toContain('4600');
+    expect(JSON.stringify(response)).not.toContain('1.85');
+    expect(JSON.stringify(response)).not.toContain('7200');
+  });
+
+  it('keeps forecast explanation aligned with an active What-if draft', async () => {
+    const context = buildAgentContext('forecast', state, []);
+    const response = await runAgent('解释当前简单版预测的关键假设、证据和风险', context, undefined, 'forecast_explain', { priceDeltaPct: -5, promoDeltaPct: 0, supplyDeltaPct: 0 });
+    const card = response.cards[0];
+    expect(card?.kind).toBe('forecast_explanation');
+    if (card?.kind === 'forecast_explanation') {
+      expect(card.scenario?.active).toBe(true);
+      expect(card.scenario?.soDelta).toBeGreaterThan(0);
+      expect(card.actions?.every((action) => action.target?.forecastDraft?.priceDeltaPct === -5)).toBe(true);
+    }
+  });
+
+  it('uses the page-provided forecast snapshot and adapter instead of the demo fallback', async () => {
+    const context = buildAgentContext('forecast', state, []);
+    const snapshot = createForecastSnapshot(simpleFullDataset, { priceDeltaPct: 0, promoDeltaPct: 0, supplyDeltaPct: 0 }, context.fingerprint);
+    const response = await runAgent('解释当前简单版预测的关键假设、证据和风险', context, undefined, 'forecast_explain', undefined, snapshot, simpleFullDataset);
+    const card = response.cards[0];
+    expect(card?.kind).toBe('forecast_explanation');
+    if (card?.kind === 'forecast_explanation') {
+      expect(card.scope.modelVersion).toBe('simple-full-v1');
+      expect(card.current.week).toBe('W104');
+      expect(card.scope.currency).toBe('RUB');
+      expect(card.sampleCount).toBe(snapshot.fit.sampleCount);
+      expect(card.actions?.every((action) => action.target?.forecastSnapshot?.snapshotId === snapshot.snapshotId)).toBe(true);
+    }
+  });
+
+  it('attaches provenance to the context and deterministic response', async () => {
+    const context = buildAgentContext('dashboard', state, []);
+    expect(context.provenance?.source).toBe('pricelens-context');
+    expect(context.dataVersion).toBe('local-data-v1');
+    const response = await runAgent('最近有价周哪个平台最便宜？', context);
+    expect(response.provenance?.contextFingerprint).toBe(context.fingerprint);
+    expect(isContextStale(context, `${context.fingerprint}-new`)).toBe(true);
   });
 });

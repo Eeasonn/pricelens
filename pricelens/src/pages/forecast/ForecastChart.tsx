@@ -1,6 +1,6 @@
 // ============================================================
 // 逐周需求与成交图：无约束需求（蓝）/ SO（华为红，最粗）/ 可供量（弱灰）。
-// 实际周（W1–当前周）实线，预测周虚线；实际 / 预测分界线 + 预测区浅底；
+// 历史段（模拟）W1–当前周实线，预测周虚线；历史 / 预测分界线 + 预测区浅底；
 // 缺货只表现为 SO 被可供量截断（红环 + 图下文字），不改写无约束需求。
 // 图表只承担形态，长文本下沉到图下摘要与事件行。
 // ============================================================
@@ -55,12 +55,22 @@ export default function ForecastChart({ weeks, currentWeekIndex }: { weeks: Comp
       .map((point, offset) => `${offset === 0 ? 'M' : 'L'}${x(point.index).toFixed(1)} ${y(point.value).toFixed(1)}`)
       .join(' ');
   };
+  const intervalWeeks = weeks
+    .map((week, index) => ({ week, index }))
+    .filter(({ week, index }) => index > currentWeekIndex && week.forecastP10 != null && week.forecastP90 != null);
+  const intervalPath = intervalWeeks.length
+    ? [
+      ...intervalWeeks.map(({ week, index }, offset) => `${offset === 0 ? 'M' : 'L'}${x(index).toFixed(1)} ${y(week.forecastP90 as number).toFixed(1)}`),
+      ...intervalWeeks.slice().reverse().map(({ week, index }) => `L${x(index).toFixed(1)} ${y(week.forecastP10 as number).toFixed(1)}`),
+      'Z',
+    ].join(' ')
+    : '';
   const boundaryX = (x(currentWeekIndex) + x(Math.min(currentWeekIndex + 1, weeks.length - 1))) / 2;
   const gridFractions = [0.25, 0.5, 0.75, 1];
   const labelWeeks = weeks.filter((_, index) => index % 4 === 0 || index === weeks.length - 1);
   const current = weeks[currentWeekIndex];
   const stockoutWeeks = weeks.filter((week) => week.stockout);
-  const aria = `逐周需求与成交图，共 ${weeks.length} 周。${current.week}（当前周）无约束需求 ${fmtUnits(current.unconstrainedDemand)} 台，SO ${fmtUnits(current.so)} 台，可供量 ${fmtUnits(current.available)} 台。实际周用实线、预测周用虚线；${stockoutWeeks.length ? `缺货截断周：${stockoutWeeks.map((week) => week.week).join('、')}。` : '当前无缺货截断周。'}`;
+  const aria = `逐周需求与成交图，共 ${weeks.length} 周。${current.week}（当前周）无约束需求 ${fmtUnits(current.unconstrainedDemand)} 台，SO ${fmtUnits(current.so)} 台，可供量 ${fmtUnits(current.available)} 台。历史段（模拟）用实线、预测周用虚线；${stockoutWeeks.length ? `缺货截断周：${stockoutWeeks.map((week) => week.week).join('、')}。` : '当前无缺货截断周。'}`;
 
   return (
     <div style={{ display: 'grid', gap: 10 }}>
@@ -71,24 +81,26 @@ export default function ForecastChart({ weeks, currentWeekIndex }: { weeks: Comp
             {series.label}
           </span>
         ))}
-        <span style={{ display: 'inline-flex', alignItems: 'center' }}><LegendLine stroke={color.body} width={1.5} />实线 = 实际周</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}><LegendLine stroke={color.body} width={1.5} />实线 = 历史段（模拟）</span>
         <span style={{ display: 'inline-flex', alignItems: 'center' }}><LegendLine stroke={color.body} dashed width={1.5} />虚线 = 预测周</span>
         <span style={{ display: 'inline-flex', alignItems: 'center' }}>
           <span aria-hidden style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', border: `2px solid ${color.error}`, marginRight: 6 }} />
           缺货截断（SO = 可供量）
         </span>
+        {intervalWeeks.length > 0 && <span style={{ display: 'inline-flex', alignItems: 'center' }}><span aria-hidden style={{ width: 22, height: 8, marginRight: 6, background: `${color.link}22`, border: `1px solid ${color.link}66` }} />校准 P10–P90</span>}
       </div>
       <div style={{ overflowX: 'auto' }}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={aria}
+          aria-describedby="forecast-chart-summary"
           style={{ display: 'block', width: '100%', minWidth: 720, height: 'auto' }}
         >
           {/* 预测区浅底 + 实际 / 预测分界 */}
           <rect x={boundaryX} y={top} width={Math.max(0, width - right - boundaryX)} height={plotHeight} fill={color.canvasSoft2} opacity={0.5} />
           <line x1={boundaryX} x2={boundaryX} y1={top - 6} y2={top + plotHeight} stroke={color.hairlineStrong} strokeDasharray="4 3" />
-          <text x={boundaryX - 6} y={top - 9} textAnchor="end" fontSize={11} fill={color.body}>实际</text>
+          <text x={boundaryX - 6} y={top - 9} textAnchor="end" fontSize={11} fill={color.body}>历史段（模拟）</text>
           <text x={boundaryX + 6} y={top - 9} fontSize={11} fill={color.body}>预测</text>
 
           {/* 网格与刻度 */}
@@ -102,6 +114,8 @@ export default function ForecastChart({ weeks, currentWeekIndex }: { weeks: Comp
               <text key={fraction} x={left - 8} y={y(maxValue * fraction) + 3}>{Math.round(maxValue * fraction)}</text>
             ))}
           </g>
+
+          {intervalPath && <path d={intervalPath} fill={`${color.link}18`} stroke="none" aria-label="预测 P10 到 P90 区间" />}
 
           {/* 三条主线：实际段实线、预测段虚线 */}
           {SERIES.map((series) => (
@@ -131,12 +145,12 @@ export default function ForecastChart({ weeks, currentWeekIndex }: { weeks: Comp
           <text x={left - 8} y={height - 14} fontSize={10} fill={color.mute} textAnchor="end">台</text>
         </svg>
       </div>
-      <div style={{ padding: '8px 11px', borderRadius: radius.control, background: color.canvasSoft, fontSize: 12, lineHeight: 1.6, color: color.body }}>
+      <div id="forecast-chart-summary" style={{ padding: '8px 11px', borderRadius: radius.control, background: color.canvasSoft, fontSize: 12, lineHeight: 1.6, color: color.body }}>
         {current.week} 无约束需求 {fmtUnits(current.unconstrainedDemand)} 台、SO {fmtUnits(current.so)} 台、可供量 {fmtUnits(current.available)} 台；
         {stockoutWeeks.length
           ? `${stockoutWeeks.map((week) => week.week).join('、')} 因供应波动使 SO 按可供量截断（无约束需求保留原值，缺货不等于需求下降）。`
           : '当前窗口内无缺货截断周。'}
-        预测周为模型点估计（P50）；区间暂以历史残差带估计、未做分位数校准，本图不绘制区间。
+        {intervalWeeks.length > 0 ? '预测周同时展示通过留出验证校准的 P10–P90 区间；区间仍受可供量上限截断。' : '预测周为模型点估计；当前没有通过质量门槛的校准分位数区间，本图不绘制预测带。'}
       </div>
     </div>
   );

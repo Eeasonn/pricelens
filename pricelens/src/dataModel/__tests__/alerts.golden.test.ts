@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { dimProduct, dimRegion } from '../../data';
 import {
   alertSeriesMeta,
+  buildAlertResult,
   buildAlerts,
   groupAlertsBySeries,
   groupAlertsByWeek,
@@ -18,6 +19,7 @@ import {
   type AlertItem,
 } from '../alerts';
 import { platformPriceSpread } from '../aggregate';
+import { REAL_ALERT_PROVENANCE } from '../provenance';
 
 const SCOPE = { countryCode: 'RU', industry: 'phone' } as const;
 
@@ -72,10 +74,48 @@ describe('alertSeriesMeta / seriesKeyOfSku', () => {
 });
 
 describe('buildAlerts 规则边界', () => {
+  it('每条预警携带统一事实源与 as-of，不因币种或类型改变', () => {
+    const alerts = buildAlerts(cfg([ownKey, compKey], 0.02));
+    expect(alerts.length).toBeGreaterThan(0);
+    expect(alerts.every((a) => a.provenance === REAL_ALERT_PROVENANCE)).toBe(true);
+    expect(alerts.every((a) => a.provenance.asOf === '2026-W42')).toBe(true);
+  });
+
+  it('adapter wrapper 区分 ready 与 out-of-scope empty', () => {
+    const ready = buildAlertResult(cfg([ownKey], 0.05));
+    expect(ready.state).toBe('ready');
+    const empty = buildAlertResult({ ...cfg([ownKey], 0.05), scope: { countryCode: 'CN', industry: 'phone' } });
+    expect(empty.state).toBe('empty');
+    if (empty.state === 'empty') expect(empty.reason).toBe('out_of_scope');
+    expect(empty.provenance.freshness).toBe('missing');
+    const unconfigured = buildAlertResult({ ...cfg([], 0.05) });
+    expect(unconfigured.state).toBe('empty');
+    if (unconfigured.state === 'empty') expect(unconfigured.reason).toBe('not_configured');
+  });
+
   it('空订阅 / 阈值 0 → 恒空（阈值必须为正）', () => {
     expect(buildAlerts(cfg([], 0.05))).toEqual([]);
     expect(buildAlerts(cfg([ownKey, compKey], 0))).toEqual([]);
     expect(buildAlerts(cfg([ownKey, compKey], -0.1))).toEqual([]);
+  });
+
+  it('输入防御：重复订阅幂等，非法阈值不产生对应类型', () => {
+    const base = buildAlerts(cfg([ownKey], 0.02));
+    const duplicate = buildAlerts(cfg([ownKey, ownKey, '', ownKey], 0.02));
+    expect(duplicate).toEqual(base);
+
+    const invalid = buildAlerts({
+      ...cfg([ownKey], 0.02),
+      thresholds: {
+        'price-change': Number.POSITIVE_INFINITY,
+        promo: Number.NaN,
+        'platform-gap': 0.02,
+        'own-gap': 0.15,
+      },
+    });
+    expect(invalid.some((a) => a.type === 'price-change')).toBe(false);
+    expect(invalid.some((a) => a.type === 'promo')).toBe(false);
+    expect(invalid.some((a) => a.type === 'platform-gap')).toBe(true);
   });
 
   it('类型开关：只开一类只出该类（追补⑨）', () => {

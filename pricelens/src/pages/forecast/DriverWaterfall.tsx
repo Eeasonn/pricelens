@@ -1,7 +1,7 @@
 // ============================================================
 // 本周预测变化：基线 → 价格 → 促销 → 竞品 → 供给截断的贡献拆解。
 // 各台阶逐步取整后严格可加（见 forecastModel）；每一行带状态徽标
-// （模型学习 / 业务假设 / 方向性判断 / 确定性计算），不把相关写成因果。
+// （固定先验 / 待学习 / 业务假设 / 方向性判断 / 确定性计算），不把相关写成因果。
 // ============================================================
 import { color, fontSize, radius, space } from '../../theme/tokens';
 import type { DriverContribution, ForecastComputation } from './forecastModel';
@@ -48,7 +48,7 @@ export default function DriverWaterfall({ computation }: { computation: Forecast
         本拆解供业务核对，方向性条目不代表因果证明。
       </div>
       <div style={{ padding: '9px 11px', borderLeft: `2px solid ${color.warning}`, background: color.warningSoft, borderRadius: `0 ${radius.control} ${radius.control} 0`, fontSize: 12, lineHeight: 1.65, color: color.warningInk }}>
-        <strong>竞品上市 · 方向性判断：</strong>简单版只将其作为华为份额压力，扩盘比例待验证。默认上市后 6 周冲击逐周递减（当前周压力 {fmtSignedPct(current.competitorPressure * 100)}）。
+        <strong>竞品上市 · 方向性判断：</strong>简单版只将其作为华为份额压力，扩盘比例待验证。默认上市窗口共 6 周（含上市周），冲击逐周递减（当前周压力 {fmtSignedPct(current.competitorPressure * 100)}）。
       </div>
     </div>
   );

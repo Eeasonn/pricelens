@@ -87,12 +87,15 @@ export default function WeekDetailCard(props: {
   /** 异常守卫裁定入口（2026-11-01）：观察点打标时出现（已确认态不再出） */
   onExempt?: () => void;
   onIsolate?: () => void;
+  /** ARIA：卡片标题元素 id（codex 会话：可访问名关联） */
+  summaryId?: string;
 }) {
   if (!props.model.visible) return null;
   const m = props.model;
   return (
     <article
       className="lpl-volume-detail"
+      id={props.summaryId}
       aria-label="当前观察点详细数值"
       style={{
         display: 'grid',

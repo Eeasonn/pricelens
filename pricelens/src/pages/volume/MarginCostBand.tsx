@@ -5,12 +5,13 @@ import type { MarginCostPoint } from './marginCost';
 import { rangeBandFrame } from './periodSummary';
 import {
   contiguousSegmentRuns,
+  axisTicksOf,
+  costAxisDomainOf,
   costStepPolyline,
   lastValidMarginIndex,
-  marginAxisTicks,
   marginBarWidth,
   marginColumnMarks,
-  marginCostDomainOf,
+  marginAxisDomainOf,
   marginCrossX,
   marginFocusIndex,
   monthStepSegmentsOf,
@@ -69,13 +70,19 @@ export default function MarginCostBand(props: {
   selectionBand?: { startIndex: number; endIndex: number } | null;
 }) {
   const showEmpty = props.empty || props.geom == null || lastValidMarginIndex(props.points) == null;
-  const domain = useMemo(
-    () => marginCostDomainOf(props.points.filter((point): point is MarginCostPoint => point != null)),
-    [props.points],
+  const validPoints = useMemo(() => props.points.filter((point): point is MarginCostPoint => point != null), [props.points]);
+  const costDomain = useMemo(
+    () => costAxisDomainOf(validPoints),
+    [validPoints],
+  );
+  const marginDomain = useMemo(
+    () => marginAxisDomainOf(validPoints),
+    [validPoints],
   );
   const segments = useMemo(() => segmentsOf(props.points), [props.points]);
   const columns = useMemo(() => marginColumnMarks(props.points), [props.points]);
-  const ticks = useMemo(() => marginAxisTicks(domain), [domain]);
+  const costTicks = useMemo(() => axisTicksOf(costDomain), [costDomain]);
+  const marginTicks = useMemo(() => axisTicksOf(marginDomain), [marginDomain]);
   const focusIndex = props.focusIndex !== undefined
     ? props.focusIndex
     : marginFocusIndex(props.points.length, props.hoverIdx, lastValidMarginIndex(props.points));
@@ -156,17 +163,17 @@ export default function MarginCostBand(props: {
               const plotTop = PLOT_PAD_TOP;
               const plotHeight = PLOT_SVG_H - PLOT_PAD_TOP - PLOT_PAD_BOTTOM;
               const plotRight = props.geom.plotLeft + props.geom.plotWidth;
-              const yAt = (value: number): number => {
+              const yAt = (value: number, axis: 'cost' | 'margin'): number => {
+                const domain = axis === 'cost' ? costDomain : marginDomain;
                 const span = Math.max(1e-9, domain.max - domain.min);
                 return plotTop + (1 - (value - domain.min) / span) * plotHeight;
               };
-              const zeroY = yAt(0);
+              const zeroMarginY = yAt(0, 'margin');
               const slot = props.geom.plotWidth / Math.max(1, props.geom.n);
               const barWidth = marginBarWidth(slot);
               const runs = contiguousSegmentRuns(segments).map((run) => costStepPolyline(run, slot, props.geom!.plotLeft));
               const crossX = focusIndex == null ? null : marginCrossX(props.geom, focusIndex);
               const focusPoint = focusIndex == null ? null : props.points[focusIndex] ?? null;
-              const negative = domain.min < 0;
               const selBand = props.selectionBand
                 ? rangeBandFrame(props.geom.plotLeft, props.geom.plotWidth, props.geom.n, props.selectionBand.startIndex, props.selectionBand.endIndex)
                 : null;
@@ -175,23 +182,24 @@ export default function MarginCostBand(props: {
                   {selBand && (
                     <rect x={selBand.x} y={plotTop} width={selBand.width} height={plotHeight} fill={selectAccent} fillOpacity={0.05} />
                   )}
+                  <line x1={props.geom!.plotLeft} x2={props.geom!.plotLeft} y1={plotTop} y2={plotTop + plotHeight} stroke={color.hairline} strokeWidth={1} />
                   <line x1={plotRight} x2={plotRight} y1={plotTop} y2={plotTop + plotHeight} stroke={color.hairline} strokeWidth={1} />
-                  {ticks.map((tick) => {
-                    const y = yAt(tick);
+                  {costTicks.map((tick) => {
+                    const y = yAt(tick, 'cost');
                     const zeroTick = Math.abs(tick) < 1e-6;
                     return (
-                      <g key={tick}>
+                      <g key={`cost-tick-${tick}`}>
                         <line
                           x1={props.geom!.plotLeft}
                           x2={plotRight}
                           y1={y}
                           y2={y}
-                          stroke={zeroTick && negative ? color.ink : color.hairline}
-                          strokeWidth={zeroTick && negative ? 1.25 : 1}
+                          stroke={color.hairline}
+                          strokeWidth={1}
                         />
-                        <line x1={plotRight} x2={plotRight + 4} y1={y} y2={y} stroke={color.hairlineStrong} strokeWidth={1} />
+                        <line x1={props.geom!.plotLeft - 4} x2={props.geom!.plotLeft} y1={y} y2={y} stroke={color.hairlineStrong} strokeWidth={1} />
                         <text
-                          x={plotRight + 8}
+                          x={props.geom!.plotLeft - 8}
                           y={y}
                           fill={color.mute}
                           fontSize={10}
@@ -204,8 +212,38 @@ export default function MarginCostBand(props: {
                       </g>
                     );
                   })}
+                  {marginTicks.map((tick) => {
+                    const y = yAt(tick, 'margin');
+                    const zeroTick = Math.abs(tick) < 1e-6;
+                    return (
+                      <g key={`margin-tick-${tick}`}>
+                        <line x1={plotRight} x2={plotRight + 4} y1={y} y2={y} stroke={color.hairlineStrong} strokeWidth={1} />
+                        <text x={plotRight + 8} y={y} fill={color.mute} fontSize={10} fontFamily={font.family} dominantBaseline="middle" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {formatPrice(Math.round(tick), props.currency)}{zeroTick ? '' : ''}
+                        </text>
+                      </g>
+                    );
+                  })}
+                  <text x={props.geom!.plotLeft - 8} y={plotTop - 2} textAnchor="end" fill={color.mute} fontSize={9}>成本</text>
+                  <text x={plotRight + 8} y={plotTop - 2} fill={color.mute} fontSize={9}>销毛</text>
+                  {/* 独立时间轴：与主图共享桶顺序和观察列，但不借用主图的轴线。 */}
+                  <line x1={props.geom!.plotLeft} x2={plotRight} y1={plotTop + plotHeight} y2={plotTop + plotHeight} stroke={color.hairlineStrong} strokeWidth={1} />
+                  {(() => {
+                    const first = validPoints[0];
+                    const last = validPoints[validPoints.length - 1];
+                    const firstX = props.geom!.plotLeft + slot * 0.5;
+                    const lastX = props.geom!.plotLeft + slot * (props.geom!.n - 0.5);
+                    return (
+                      <>
+                        <line x1={firstX} x2={firstX} y1={plotTop + plotHeight} y2={plotTop + plotHeight + 4} stroke={color.hairlineStrong} />
+                        <line x1={lastX} x2={lastX} y1={plotTop + plotHeight} y2={plotTop + plotHeight + 4} stroke={color.hairlineStrong} />
+                        <text x={firstX} y={PLOT_SVG_H - 1} textAnchor="start" fill={color.mute} fontSize={9}>{first?.bucketId ?? '—'}</text>
+                        <text x={lastX} y={PLOT_SVG_H - 1} textAnchor="end" fill={color.mute} fontSize={9}>{last?.bucketId ?? '—'}</text>
+                      </>
+                    );
+                  })()}
                   {columns.map((column) => {
-                    const box = signedBarBox(column.unitMargin, yAt, zeroY);
+                    const box = signedBarBox(column.unitMargin, (value) => yAt(value, 'margin'), zeroMarginY);
                     if (box.height < 0.5) return null;
                     const cx = props.geom!.plotLeft + slot * (column.index + 0.5);
                     return (
@@ -223,15 +261,16 @@ export default function MarginCostBand(props: {
                   {runs.map((run, runIndex) => (
                     <polyline
                       key={`cost-${runIndex}`}
-                      points={run.map((vertex) => `${vertex.x},${yAt(vertex.cost)}`).join(' ')}
+                      points={run.map((vertex) => `${vertex.x},${yAt(vertex.cost, 'cost')}`).join(' ')}
                       fill="none"
                       stroke={props.seriesColor}
                       strokeWidth={2}
                     />
                   ))}
                   {focusPoint && crossX != null && (
-                    <circle cx={crossX} cy={yAt(focusPoint.unitCost)} r={3.5} fill={color.canvas} stroke={props.seriesColor} strokeWidth={1.5} />
+                    <circle cx={crossX} cy={yAt(focusPoint.unitCost, 'cost')} r={3.5} fill={color.canvas} stroke={props.seriesColor} strokeWidth={1.5} />
                   )}
+                  <text x={(props.geom!.plotLeft + plotRight) / 2} y={plotTop + plotHeight + 11} textAnchor="middle" fill={color.mute} fontSize={8}>时间轴与主图同步</text>
                 </>
               );
             })()}

@@ -24,7 +24,7 @@
 // ③ 零监控空态——添加监控入口 prominent 化（中号 + 白底），不再像禁用输入框。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
+import { Button, Checkbox, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import { BellOutlined, PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useAgent } from '../state/AgentContext';
@@ -41,6 +41,16 @@ import {
   type AlertSeriesMeta,
   type AlertType,
 } from '../dataModel/alerts';
+import {
+  ALERT_LIFECYCLE_LABEL,
+  ALERT_PRIORITY_LABEL,
+  alertAgentContextOf,
+  materializeAlertRecords,
+  summarizeAlertRecords,
+  transitionAlertRecord,
+  type AlertAction,
+  type AlertRecord,
+} from '../dataModel/alertLifecycle';
 import { productSelectionOfSeriesKey } from '../state/urlSync';
 import { getEffectiveBenchmark } from '../state/configStore';
 import { defaultPlatformAnchorOf } from '../dataModel/aggregate';
@@ -49,9 +59,10 @@ import usePageViewState from '../state/usePageViewState';
 import { ownBrand } from '../components/ProductCascader/tree';
 import PageHeader from '../components/PageHeader';
 import BrandDot from '../components/BrandMark';
-import { AlertBell, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
-import { color, fontSize, formatPrice, radius, shadow, space } from '../theme/tokens';
+import { AlertBell, AlertDetailDrawer, AlertLifecycleTag, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
+import { color, fontSize, formatPrice, radius, shadow, space, selectSoft } from '../theme/tokens';
 import { scopeLabels } from '../dataModel/scope';
+import { REAL_ALERT_PROVENANCE, provenanceSummary } from '../dataModel/provenance';
 
 /** 四类规则的文案与滑杆量程（追补⑨定稿沿用） */
 const TYPE_RULES: Record<
@@ -144,7 +155,7 @@ const MATRIX_COLS = 'minmax(0,1fr) repeat(4, 172px) 44px';
 /** 方向箭头（与看板 buildChangeMarks 同色：跌/折扣加深 = 琥珀 ↓、涨/收窄 = 蓝 ↑） */
 function dirArrowOf(a: AlertItem): ReactNode {
   const mk = (down: boolean, title: string): ReactNode => (
-    <span title={title} style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: down ? '#b45309' : '#0070f3', width: 10, textAlign: 'center' }}>
+    <span title={title} style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: down ? color.alert.promo.fg : color.link, width: 10, textAlign: 'center' }}>
       {down ? '↓' : '↑'}
     </span>
   );
@@ -272,6 +283,21 @@ function useOpenInDashboard() {
   };
 }
 
+const ALERT_RECORDS_STORAGE = 'LPL.alert.records.v1';
+
+function readAlertRecordOverrides(): Record<string, Partial<AlertRecord>> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(ALERT_RECORDS_STORAGE);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as Record<string, Partial<AlertRecord>>;
+  } catch {
+    return {};
+  }
+}
+
 export default function AlertsPage() {
   const { state, actions } = useFilters();
   const { openAgent } = useAgent();
@@ -301,6 +327,11 @@ export default function AlertsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // 历史事件 = 次级视图（第五十五轮，用户：主视觉只报最新，历史收进次级），默认折叠
   const [showHistory, setShowHistory] = usePageViewState<boolean>('alerts.showHistory', () => false);
+  // P0/P1 处理状态先落本地，结构与后端 AlertRecord 保持一致；服务端接入时只替换持久化 adapter。
+  const [recordOverrides, setRecordOverrides] = useState<Record<string, Partial<AlertRecord>>>(readAlertRecordOverrides);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
+  const [detailRecordId, setDetailRecordId] = useState<string | null>(null);
+  const [recordFilter, setRecordFilter] = useState<'all' | 'pending' | 'observing' | 'resolved' | 'stale'>('all');
   const toggleExp = (k: string): void =>
     setExpanded((prev) => {
       const n = new Set(prev);
@@ -312,11 +343,24 @@ export default function AlertsPage() {
     setTypeFilter(v);
     setExpanded(new Set());
   };
+  const clearAlertFilters = (): void => {
+    setTypeFilter('all');
+    setBrandFilter([]);
+    setModelFilter(null);
+    setStatusFilter('all');
+    setExpanded(new Set());
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem(ALERT_RECORDS_STORAGE, JSON.stringify(recordOverrides)); } catch { /* 本地存储不可用时继续使用内存态 */ }
+  }, [recordOverrides]);
 
   useEffect(() => {
     const focus = navBus.alertsFocus;
     if (!focus) return;
-    setModelFilter({ id: focus.modelId, name: focus.modelName ?? focus.modelId });
+    if (focus.modelId) setModelFilter({ id: focus.modelId, name: focus.modelName ?? focus.modelId });
+    if (focus.alertId) setDetailRecordId(focus.alertId);
     if (focus.seriesKey && focus.type && focus.weekId) {
       setTypeFilter(focus.type);
       setStatusFilter('all');
@@ -374,6 +418,74 @@ export default function AlertsPage() {
   const bySeries = useMemo(() => groupAlertsBySeries(alerts), [alerts]);
   // 最新态（第五十五轮，用户口径：主视觉只报最新、历史进次级）：计数与单元格都按「每系列×类型最新一条」
   const latestList = useMemo(() => latestAlerts(alerts), [alerts]);
+  const alertCfg = useMemo(() => ({
+    subs: state.alertSubs,
+    enabled: state.alertTypes,
+    thresholds: state.alertThresholds,
+    products: state.alertProducts,
+    currency: state.currency,
+    scope: { countryCode: state.countryCode, industry: state.industry },
+    platform: state.platform,
+  }), [state.alertSubs, state.alertTypes, state.alertThresholds, state.alertProducts, state.currency, state.countryCode, state.industry, state.platform]);
+  const records = useMemo(
+    () => materializeAlertRecords(latestList, alertCfg, recordOverrides),
+    [latestList, alertCfg, recordOverrides],
+  );
+  const recordsById = useMemo(() => new Map(records.map((record) => [record.alertId, record])), [records]);
+  const recordSummary = useMemo(() => summarizeAlertRecords(records), [records]);
+  const inboxRecords = useMemo(() => {
+    const selectedTypes = typeFilter === 'all' ? null : typeFilter;
+    return records
+      .filter((record) => (selectedTypes == null || record.type === selectedTypes)
+        && (brandFilter.length === 0 || brandFilter.includes(record.brand))
+        && (!modelFilter || record.seriesKey.startsWith(`${modelFilter.id}__`))
+        && (recordFilter === 'all'
+          || (recordFilter === 'pending' && (record.lifecycle === 'new' || record.lifecycle === 'acknowledged' || record.lifecycle === 'action_required'))
+          || (recordFilter === 'observing' && (record.lifecycle === 'investigating' || record.lifecycle === 'snoozed'))
+          || (recordFilter === 'resolved' && (record.lifecycle === 'resolved' || record.lifecycle === 'dismissed'))
+          || (recordFilter === 'stale' && (record.evidenceStatus === 'stale' || record.evidenceStatus === 'missing'))))
+      .slice(0, 100);
+  }, [records, typeFilter, brandFilter, modelFilter, recordFilter]);
+  const detailRecord = detailRecordId ? recordsById.get(detailRecordId) ?? null : null;
+  const updateRecord = (record: AlertRecord, action: AlertAction): void => {
+    const next = transitionAlertRecord(record, action);
+    if (!next) {
+      message.warning('当前状态已变化，请刷新后重试');
+      return;
+    }
+    setRecordOverrides((prev) => ({ ...prev, [record.alertId]: next }));
+    message.success(`${ALERT_LIFECYCLE_LABEL[next.lifecycle]} · ${record.modelName}`);
+  };
+  const updateSelected = (action: AlertAction): void => {
+    const selected = records.filter((record) => selectedRecordIds.has(record.alertId));
+    if (selected.length === 0) return;
+    let skipped = 0;
+    const patch: Record<string, Partial<AlertRecord>> = {};
+    for (const record of selected) {
+      const next = transitionAlertRecord(record, action);
+      if (next) patch[record.alertId] = next;
+      else skipped += 1;
+    }
+    if (Object.keys(patch).length > 0) setRecordOverrides((prev) => ({ ...prev, ...patch }));
+    setSelectedRecordIds(new Set());
+    message.success(`已处理 ${Object.keys(patch).length} 条${skipped ? `，跳过 ${skipped} 条状态冲突` : ''}`);
+  };
+  const toggleSelected = (id: string, checked: boolean): void => {
+    setSelectedRecordIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+  const selectedAll = inboxRecords.length > 0 && inboxRecords.every((record) => selectedRecordIds.has(record.alertId));
+  const toggleSelectAll = (checked: boolean): void => setSelectedRecordIds(checked ? new Set(inboxRecords.map((record) => record.alertId)) : new Set());
+  useEffect(() => {
+    const visible = new Set(inboxRecords.map((record) => record.alertId));
+    setSelectedRecordIds((prev) => {
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [inboxRecords]);
   const latestBySeries = useMemo(() => groupAlertsBySeries(latestList), [latestList]);
   const scopedLatest = useMemo(() => {
     const matchBrand = (brand: string): boolean => brandFilter.length === 0 || brandFilter.includes(brand);
@@ -463,6 +575,10 @@ export default function AlertsPage() {
     const active = activeCountFor(key) > 0;
     return statusFilter === 'alerts' ? active : statusFilter === 'normal' ? !active : true;
   };
+  const latestWeekFor = (key: string): string => {
+    const item = (latestBySeries.get(key) ?? []).find((x) => typeFilter === 'all' || x.type === typeFilter);
+    return item?.weekId ?? '';
+  };
   const visibleGroups = brandGroups
     .map((g) => ({
       ...g,
@@ -471,8 +587,9 @@ export default function AlertsPage() {
         .sort((a, b) => {
           if (rowSort === 'alerts-first') return activeCountFor(b.key) - activeCountFor(a.key) || a.meta.label.localeCompare(b.meta.label);
           if (rowSort === 'latest') {
-            const aw = latestBySeries.get(a.key)?.[0]?.weekId ?? '';
-            const bw = latestBySeries.get(b.key)?.[0]?.weekId ?? '';
+            // 类型筛选时按所选类型的最新周排序，避免「折扣」筛选却被较新的调价事件抢到前面。
+            const aw = latestWeekFor(a.key);
+            const bw = latestWeekFor(b.key);
             return bw.localeCompare(aw) || a.meta.label.localeCompare(b.meta.label);
           }
           return a.meta.label.localeCompare(b.meta.label);
@@ -502,8 +619,12 @@ export default function AlertsPage() {
   const shown = useMemo(() => filtered.slice(0, 150), [filtered]);
   const weekGroups = useMemo(() => groupAlertsByWeek(shown), [shown]);
   const latestFiltered = useMemo(
-    () => latestList.filter((a) => (typeFilter === 'all' || a.type === typeFilter) && matchBrand(a.brand) && matchModel(a.seriesKey)),
-    [latestList, typeFilter, brandFilter, modelFilter],
+    () => {
+      // 正常状态没有「最新事件」；避免 own-gap 条带在「只看正常」时仍显示。
+      if (statusFilter === 'normal') return [];
+      return latestList.filter((a) => (typeFilter === 'all' || a.type === typeFilter) && matchBrand(a.brand) && matchModel(a.seriesKey));
+    },
+    [latestList, typeFilter, brandFilter, modelFilter, statusFilter],
   );
   const gapItems = useMemo(() => latestFiltered.filter((a) => a.type === 'own-gap'), [latestFiltered]);
   const matrixEmptyText = modelFilter
@@ -516,6 +637,7 @@ export default function AlertsPage() {
   const alertStatusLabel = statusFilter === 'alerts' ? '只看异常' : statusFilter === 'normal' ? '只看正常' : '全部状态';
   const alertTypeLabel = typeFilter === 'all' ? '全部类型' : TYPE_STYLE[typeFilter].label;
   const agentAlertPrompt = `解释预警中心当前筛选下的最新预警：${alertTypeLabel}、${alertStatusLabel}${brandFilter.length ? `、品牌 ${brandFilter.join('、')}` : ''}${modelFilter ? `、产品 ${modelFilter.name}` : ''}。请列出触发事实、证据关联和下一步核查动作。`;
+  const hasAlertFilters = typeFilter !== 'all' || brandFilter.length > 0 || modelFilter != null || statusFilter !== 'all';
 
   // 添加监控候选：当前国家/产业可分析的系列（华为在前，按 label 字典序）——
   // 其他口径的产品在本页不产预警，不进候选
@@ -556,7 +678,7 @@ export default function AlertsPage() {
           <span style={{ fontSize: 12, fontWeight: 700, color: on ? color.mute : color.hairlineStrong, whiteSpace: 'nowrap' }}>
             {rule.name.replace('预警', '')}
             {rule.below && (
-              <span style={{ fontSize: 11, color: '#be123c', marginLeft: 3, fontWeight: 600 }}>低于触发</span>
+              <span style={{ fontSize: 11, color: color.alert.ownGap.fg, marginLeft: 3, fontWeight: 600 }}>低于触发</span>
             )}
           </span>
         </span>
@@ -596,7 +718,7 @@ export default function AlertsPage() {
               fontSize: 11,
               color: on ? color.link : color.mute,
               cursor: on ? 'pointer' : 'default',
-              borderBottom: `1px dashed ${on ? 'rgba(0,112,243,0.5)' : 'transparent'}`,
+              borderBottom: `1px dashed ${on ? `${color.link}80` : 'transparent'}`,
               whiteSpace: 'nowrap',
             }}
           >
@@ -682,10 +804,10 @@ export default function AlertsPage() {
           style={{
             fontSize: 11,
             fontWeight: thrOverridden ? 700 : 400,
-            color: thrOverridden ? '#0070f3' : color.mute,
+            color: thrOverridden ? color.link : color.mute,
             cursor: 'pointer',
             whiteSpace: 'nowrap',
-            borderBottom: thrOverridden ? '1px dashed #0070f3' : 'none',
+            borderBottom: thrOverridden ? `1px dashed ${color.link}` : 'none',
           }}
         >
           {r.below ? '<' : '≥'}
@@ -755,7 +877,7 @@ export default function AlertsPage() {
     return wrap(
       <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, maxWidth: '100%' }}>
         {!on || latest == null ? (
-          <span style={{ fontSize: 11, color: !on ? color.hairlineStrong : '#0a7d38' }}>{!on ? '—' : '正常'}</span>
+          <span style={{ fontSize: 11, color: !on ? color.hairlineStrong : color.alert.evidence.verified }}>{!on ? '—' : '正常'}</span>
         ) : (
           <span
             role="button"
@@ -861,7 +983,7 @@ export default function AlertsPage() {
       size={prominent ? 'middle' : 'small'}
       placeholder="＋ 添加监控（搜索品牌 / 型号 / 产品）"
       aria-label="添加监控产品"
-      style={{ width, ...(prominent ? { background: '#ffffff' } : {}) }}
+      style={{ width, ...(prominent ? { background: color.canvas } : {}) }}
       value={null}
       filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
       onChange={(key) => {
@@ -891,7 +1013,7 @@ export default function AlertsPage() {
         <PageHeader title="预警中心" />
 
         <main style={{ flex: 1, padding: space.lg }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.sm, color: color.mute, fontSize: 11 }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: space.sm, color: color.mute, fontSize: 11 }}>
             <span>{country} · {industry}</span>
             <span aria-hidden>·</span>
             <span>平台 {platformLabel}</span>
@@ -900,10 +1022,10 @@ export default function AlertsPage() {
             <span aria-hidden>·</span>
             <span title="当前页面数据覆盖的最新采集周">最新采集 {latestList[0] ? weekTag(latestList[0].weekId) : '—'}</span>
             <span aria-hidden>·</span>
-            <span style={{ color: color.body }}>演示数据</span>
+            <span title="预警计算使用与价格事实表同一批次；缺采周不插值" style={{ color: color.body }}>{provenanceSummary(REAL_ALERT_PROVENANCE)}</span>
           </div>
           {modelFilter && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.md, padding: '8px 12px', border: `1px solid ${color.link}33`, borderRadius: radius.control, background: '#f0f6ff', color: color.body, fontSize: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.md, padding: '8px 12px', border: `1px solid ${color.link}33`, borderRadius: radius.control, background: selectSoft, color: color.body, fontSize: 12 }}>
               <span>已定位产品：<strong style={{ color: color.ink }}>{modelFilter.name}</strong></span>
               <Button size="small" style={{ marginLeft: 'auto', height: 22, fontSize: 11 }} onClick={() => setModelFilter(null)}>查看全部产品</Button>
             </div>
@@ -963,6 +1085,68 @@ export default function AlertsPage() {
                 让 Agent 解释最新预警
               </Button>
             </div>
+          )}
+
+          {!emptyMode && (
+            <>
+              <section className="lpl-alert-ov" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.base, marginBottom: space.md }} aria-label="预警处理摘要">
+                {([
+                  ['pending', '待处理', recordSummary.pending, color.alert.lifecycle.new.fg],
+                  ['observing', '观察中', recordSummary.observing, color.alert.lifecycle.investigating.fg],
+                  ['resolved', '已解决', recordSummary.resolved, color.alert.lifecycle.resolved.fg],
+                  ['stale', '数据陈旧', recordSummary.stale, color.alert.evidence.pending],
+                ] as const).map(([key, label, count, fg]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setRecordFilter(key);
+                    }}
+                    aria-label={`筛选${label} ${count} 条`}
+                    style={{ display: 'block', textAlign: 'left', width: '100%', border: 0, cursor: 'pointer', outline: recordFilter === key ? `2px solid ${color.link}` : undefined, background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px' }}
+                  >
+                    <div className="tnum" style={{ fontSize: 22, lineHeight: '28px', fontWeight: 700, color: count > 0 ? fg : color.hairlineStrong }}>{count}</div>
+                    <div style={{ fontSize: 12, color: color.mute }}>{label}</div>
+                  </button>
+                ))}
+              </section>
+
+              <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg, marginBottom: space.md }} aria-label="预警处理收件箱">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+                  <h3 style={{ margin: 0, fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>处理收件箱</h3>
+                  <span style={{ fontSize: 11, color: color.mute }}>{inboxRecords.length} 条最新事件</span>
+                  <span style={{ flex: 1 }} />
+                  {selectedRecordIds.size > 0 && <>
+                    <span style={{ fontSize: 11, color: color.mute }}>已选 {selectedRecordIds.size}</span>
+                    <Button size="small" onClick={() => updateSelected({ kind: 'acknowledge' })}>批量确认</Button>
+                    <Button size="small" onClick={() => updateSelected({ kind: 'investigate' })}>批量核查</Button>
+                    <Button size="small" onClick={() => updateSelected({ kind: 'snooze', until: new Date(Date.now() + 24 * 3600 * 1000).toISOString() })}>批量静默</Button>
+                    <Button size="small" onClick={() => openAgent('dock', `请汇总所选 ${selectedRecordIds.size} 条预警，按优先级说明触发事实、证据缺口和下一步动作：${JSON.stringify(records.filter((record) => selectedRecordIds.has(record.alertId)).map(alertAgentContextOf))}`)}>让 Agent 汇总</Button>
+                  </>}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '30px 86px 80px minmax(180px, 1fr) minmax(150px, 1fr) 90px', alignItems: 'center', gap: 8, padding: '5px 6px', borderBottom: `1px solid ${color.hairline}`, color: color.mute, fontSize: 11 }}>
+                  <Checkbox checked={selectedAll} onChange={(event) => toggleSelectAll(event.target.checked)} aria-label="全选最新预警" />
+                  <span>状态</span><span>优先级</span><span>产品</span><span>触发读数</span><span>证据</span>
+                </div>
+                {inboxRecords.length === 0 ? <div style={{ padding: '22px 0', color: color.mute, fontSize: 12, textAlign: 'center' }}>当前筛选下没有最新事件</div> : inboxRecords.map((record) => (
+                  <div
+                    key={record.alertId}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDetailRecordId(record.alertId)}
+                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setDetailRecordId(record.alertId); } }}
+                    style={{ display: 'grid', gridTemplateColumns: '30px 86px 80px minmax(180px, 1fr) minmax(150px, 1fr) 90px', alignItems: 'center', gap: 8, padding: '8px 6px', borderBottom: `1px solid ${color.hairline}`, cursor: 'pointer' }}
+                  >
+                    <span onClick={(event) => event.stopPropagation()}><Checkbox checked={selectedRecordIds.has(record.alertId)} onChange={(event) => toggleSelected(record.alertId, event.target.checked)} aria-label={`选择 ${record.modelName} 预警`} /></span>
+                    <span><AlertLifecycleTag lifecycle={record.lifecycle} /></span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: color.alert.priority[record.priority] }}>{ALERT_PRIORITY_LABEL[record.priority]}</span>
+                    <span style={{ minWidth: 0 }}><div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600, color: color.ink }}>{record.brand} {record.modelName}</div><div style={{ fontSize: 11, color: color.mute }}>{record.romram} · {record.weekLabel}</div></span>
+                    <span style={{ minWidth: 0 }}><TypePill type={record.type} /> <span className="tnum" style={{ marginLeft: 5, fontSize: 11, color: color.body }}>{alertDigest(record, state.currency)}</span></span>
+                    <span style={{ fontSize: 11, color: record.evidenceStatus === 'verified' ? color.alert.evidence.verified : color.alert.evidence.pending }}>{record.evidence.length} 条 · {record.evidenceStatus === 'verified' ? '已核验' : '待核查'}</span>
+                  </div>
+                ))}
+              </section>
+            </>
           )}
 
           {/* ②③ 监控矩阵（工具行 + 列头规则 + 品牌分组行 + own-gap 成对条）。
@@ -1025,6 +1209,16 @@ export default function AlertsPage() {
                   { value: 'name', label: '产品名称' },
                 ]}
               />
+              {hasAlertFilters && (
+                <Button
+                  size="small"
+                  onClick={clearAlertFilters}
+                  aria-label="清除预警筛选"
+                  style={{ height: 24, fontSize: 11 }}
+                >
+                  清除筛选
+                </Button>
+              )}
               <span style={{ flex: 1 }} />
               <span aria-hidden style={{ width: 1, height: 22, background: color.hairline, flexShrink: 0 }} />
               {renderAddMonitor(320)}
@@ -1077,9 +1271,9 @@ export default function AlertsPage() {
                               alignItems: 'center',
                               gap: 8,
                               padding: '5px 10px',
-                              border: '1px dashed rgba(190, 18, 60, 0.4)',
+                              border: `1px dashed ${color.alert.ownGap.fg}66`,
                               borderRadius: radius.card,
-                              background: '#fff1f2',
+                              background: color.alert.ownGap.bg,
                             }}
                           >
                             <TypePill type="own-gap" />
@@ -1090,7 +1284,7 @@ export default function AlertsPage() {
                               {[a.romram === '—' ? '' : a.romram, formatPrice(a.pairLowPrice, state.currency)].filter(Boolean).join(' ')} ↔{' '}
                               {((): string => { const r = romOfLabel(a.pairHighLabel, a.modelName); return r === '—' ? '' : r; })()} {formatPrice(a.pairHighPrice, state.currency)}
                             </span>
-                            <span className="tnum" style={{ fontSize: 11, fontWeight: 700, color: '#be123c', whiteSpace: 'nowrap' }}>
+                            <span className="tnum" style={{ fontSize: 11, fontWeight: 700, color: color.alert.ownGap.fg, whiteSpace: 'nowrap' }}>
                               间距 {pctText(a.ownGapPct)} &lt; {+(state.alertThresholds['own-gap'] * 100).toFixed(1)}%
                             </span>
                             <span style={{ flex: 1 }} />
@@ -1126,16 +1320,11 @@ export default function AlertsPage() {
                 {filtered.length} 条 · 按周分组，最新在前
               </span>
               <span style={{ flex: 1 }} />
-              {(typeFilter !== 'all' || brandFilter.length > 0 || modelFilter != null || statusFilter !== 'all') && showHistory && (
+              {hasAlertFilters && showHistory && (
                 <Button
                   size="small"
                   style={{ height: 22, fontSize: 11 }}
-                  onClick={() => {
-                    setTypeFilter('all');
-                    setBrandFilter([]);
-                    setModelFilter(null);
-                    setStatusFilter('all');
-                  }}
+                  onClick={clearAlertFilters}
                 >
                   清除筛选
                 </Button>
@@ -1175,6 +1364,14 @@ export default function AlertsPage() {
             )}
           </section>
           )}
+          <AlertDetailDrawer
+            open={detailRecord != null}
+            record={detailRecord}
+            onClose={() => setDetailRecordId(null)}
+            onAction={(action) => { if (detailRecord) updateRecord(detailRecord, action); }}
+            onOpenDashboard={(record) => openInDash(record)}
+            onOpenAgent={(record) => openAgent('dock', `请解释这条预警并列出核查证据与下一步动作。结构化上下文：${JSON.stringify(alertAgentContextOf(record))}`)}
+          />
         </main>
 
       </div>

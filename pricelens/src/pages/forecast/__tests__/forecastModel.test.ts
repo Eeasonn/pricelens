@@ -20,7 +20,7 @@ describe('简单版量价预测模型 · 确定性与数据契约', () => {
     expect(computeForecast(forecastFixture, BASELINE_DRAFT)).toEqual(computeForecast(forecastFixture, BASELINE_DRAFT));
   });
 
-  it('生成 24 周主账：W1–W10 实际、W11–W24 预测、当前周 W10', () => {
+  it('生成 24 周主账：W1–W10 历史段、W11–W24 预测、当前周 W10', () => {
     expect(baseline.weeks).toHaveLength(24);
     expect(baseline.weeks.slice(0, 10).every((week) => week.status === 'actual')).toBe(true);
     expect(baseline.weeks.slice(10).every((week) => week.status === 'forecast')).toBe(true);
@@ -28,16 +28,35 @@ describe('简单版量价预测模型 · 确定性与数据契约', () => {
     expect(baseline.current.status).toBe('actual');
   });
 
-  it('周数据包含交接文档第 7 节契约字段，且不含验模真值字段', () => {
+  it('周数据包含历史 / 预测分离与激励费用字段，且不含验模真值字段', () => {
     const contractFields = [
       'week', 'status', 'phase', 'baseDemand', 'price', 'rrp', 'promoIntensity', 'competitorPressure',
-      'unconstrainedDemand', 'available', 'stockout', 'so', 'si', 'inventory', 'cost',
+      'source', 'dataStatus', 'effectivePrice', 'modelDemand', 'unconstrainedDemand', 'available', 'stockout',
+      'observedSO', 'soStatus', 'forecastSO', 'residual', 'so', 'si', 'inventory', 'cost', 'incentive',
       'companyNetRevenue', 'unitGrossMargin', 'weeklyGrossMargin', 'evidence',
     ];
     expect(Object.keys(baseline.weeks[0])).toEqual(expect.arrayContaining(contractFields));
     expect(JSON.stringify(baseline)).not.toContain('unconstrained_demand_truth');
     expect(JSON.stringify(baseline)).not.toContain('lost_sales_truth');
     expect(baseline.weeks.every((week) => week.evidence.includes('demo_seed') && week.evidence.includes('simple-demo-v1'))).toBe(true);
+    expect(baseline.weeks.slice(0, current + 1).every((week) => week.source === 'observed' && week.observedSO != null)).toBe(true);
+    expect(baseline.weeks.slice(current + 1).every((week) => week.source === 'forecast' && week.observedSO == null && week.soStatus === 'missing')).toBe(true);
+    expect(baseline.weeks.every((week) => week.dataStatus === 'simulated')).toBe(true);
+    expect(baseline.weeks[0].residual).toBe(0);
+    expect(baseline.weeks[7].residual).toBeUndefined();
+    expect(baseline.weeks[current + 1].residual).toBeUndefined();
+  });
+
+  it('历史周缺观测值时保留模型回填来源，不把 missing 标成 observed', () => {
+    const missingHistory = computeForecast({
+      ...forecastFixture,
+      weeks: forecastFixture.weeks.map((week, index) => index === 0
+        ? { ...week, observedSO: undefined, soStatus: 'missing' as const }
+        : week),
+    }, BASELINE_DRAFT);
+    expect(missingHistory.weeks[0].source).toBe('model');
+    expect(missingHistory.weeks[0].soStatus).toBe('missing');
+    expect(missingHistory.weeks[0].so).toBe(missingHistory.weeks[0].forecastSO);
   });
 });
 
@@ -95,10 +114,25 @@ describe('简单版量价预测模型 · 因子方向性', () => {
   it('价格上涨降低无约束需求，降价提升需求', () => {
     const up = forecastWeeksOf({ priceDeltaPct: 5, promoDeltaPct: 0, supplyDeltaPct: 0 });
     const down = forecastWeeksOf({ priceDeltaPct: -5, promoDeltaPct: 0, supplyDeltaPct: 0 });
-    baseline.weeks.slice(current + 1).forEach((baseWeek, index) => {
-      expect(up[index].unconstrainedDemand).toBeLessThan(baseWeek.unconstrainedDemand);
-      expect(down[index].unconstrainedDemand).toBeGreaterThan(baseWeek.unconstrainedDemand);
+    // 价格默认滞后一周生效：W11 仍使用当前周 W10 的历史价格，W12 起才出现情景差异。
+    expect(up[0].effectivePrice).toBe(baseline.weeks[current].price);
+    expect(down[0].effectivePrice).toBe(baseline.weeks[current].price);
+    expect(up[0].unconstrainedDemand).toBe(baseline.weeks[current + 1].unconstrainedDemand);
+    expect(down[0].unconstrainedDemand).toBe(baseline.weeks[current + 1].unconstrainedDemand);
+    baseline.weeks.slice(current + 2).forEach((baseWeek, index) => {
+      const offset = index + 1;
+      expect(up[offset].unconstrainedDemand).toBeLessThan(baseWeek.unconstrainedDemand);
+      expect(down[offset].unconstrainedDemand).toBeGreaterThan(baseWeek.unconstrainedDemand);
     });
+  });
+
+  it('调价周只记录标价变化，需求使用下一周才生效的 effectivePrice', () => {
+    expect(baseline.weeks[9].price).toBe(959);
+    expect(baseline.weeks[9].effectivePrice).toBe(979);
+    expect(baseline.weeks[10].effectivePrice).toBe(959);
+    expect(baseline.weeks[14].price).toBe(939);
+    expect(baseline.weeks[14].effectivePrice).toBe(959);
+    expect(baseline.weeks[15].effectivePrice).toBe(939);
   });
 
   it('促销只在活动窗口及活动后一周生效，不永久外推', () => {
@@ -122,22 +156,23 @@ describe('简单版量价预测模型 · 因子方向性', () => {
     expect(w8.unconstrainedDemand).toBeLessThan(Math.round(w8.baseDemand * priceFactorOf(w8.price)));
   });
 
-  it('竞品上市冲击逐周递减、窗口为 6 周，且压低我司需求', () => {
+  it('竞品上市冲击逐周递减、窗口共 6 周（含上市周），且压低我司需求', () => {
     const pressureOf = (week: number) => competitorPressureAt(forecastFixture, week - 1);
     expect(pressureOf(10)).toBeCloseTo(-0.12, 6);
+    expect(Math.abs(pressureOf(15))).toBeCloseTo(0.12 * 0.5 ** (5 / 6), 6);
     // 上市后逐周衰减（W12 叠加竞品促销脉冲，单独断言）。
     expect(Math.abs(pressureOf(11))).toBeLessThan(Math.abs(pressureOf(10)));
     expect(Math.abs(pressureOf(13))).toBeLessThan(Math.abs(pressureOf(11)));
-    expect(Math.abs(pressureOf(16))).toBeLessThan(Math.abs(pressureOf(15)));
+    expect(Math.abs(pressureOf(15))).toBeLessThan(Math.abs(pressureOf(14)));
     // W12 脉冲叠加：压力深于纯衰减的 W13。
     expect(pressureOf(12)).toBeLessThan(pressureOf(13));
     // 默认 6 周窗口结束后归零。
-    expect(pressureOf(17)).toBe(0);
+    expect(pressureOf(16)).toBe(0);
     expect(pressureOf(24)).toBe(0);
     // 事件名标注：窗口内带事件，窗口外不带。
     expect(baseline.weeks[9].competitorEvent).toBe('竞品新品上市');
     expect(baseline.weeks[11].competitorEvent).toBe('竞品促销');
-    expect(baseline.weeks[16].competitorEvent).toBeUndefined();
+    expect(baseline.weeks[15].competitorEvent).toBeUndefined();
     // 压力压低需求：W10 低于「无竞品压力」反事实。
     const w10 = baseline.weeks[9];
     expect(w10.unconstrainedDemand).toBeLessThan(Math.round(w10.baseDemand * priceFactorOf(w10.price)));
@@ -157,10 +192,25 @@ describe('简单版量价预测模型 · 因子方向性', () => {
     expect(flat.weeks[14].unitGrossMargin).toBeGreaterThan(baseline.weeks[14].unitGrossMargin);
     expect(flat.weeks.map((week) => week.so)).toEqual(baseline.weeks.map((week) => week.so));
   });
+
+  it('促销激励费用进入净收入之后的销毛链，但不修改需求', () => {
+    const w6 = baseline.weeks[5];
+    const w5 = baseline.weeks[4];
+    expect(w6.incentive).toBe(42);
+    expect(w6.unitGrossMargin).toBe(w6.companyNetRevenue - w6.cost - w6.incentive);
+    expect(w6.unitGrossMargin).toBeLessThan(w5.unitGrossMargin);
+    expect(w6.modelDemand).toBeGreaterThan(w5.modelDemand);
+    const noIncentive = computeForecast({
+      ...forecastFixture,
+      weeks: forecastFixture.weeks.map((week) => ({ ...week, incentive: 0 })),
+    }, BASELINE_DRAFT);
+    expect(noIncentive.weeks[5].modelDemand).toBe(w6.modelDemand);
+    expect(noIncentive.weeks[5].unitGrossMargin).toBeGreaterThan(w6.unitGrossMargin);
+  });
 });
 
 describe('简单版量价预测模型 · What-if 本地草稿', () => {
-  it('草稿只作用于预测窗口，实际周不可被改写', () => {
+  it('草稿只作用于预测窗口，历史段不可被改写', () => {
     const drafted = computeForecast(forecastFixture, { priceDeltaPct: -8, promoDeltaPct: 10, supplyDeltaPct: 15 });
     drafted.weeks.slice(0, current + 1).forEach((week, index) => {
       expect(week).toEqual(baseline.weeks[index]);
@@ -251,14 +301,14 @@ describe('简单版量价预测模型 · 极端草稿与钳制不变量（2026-1
   it('竞品压力钳制（1+pressure ≥ 0）只在压力 ≤ −1 的周清零，压力衰减后恢复（无跨周传染）', () => {
     const dataset: ForecastDataset = {
       ...forecastFixture,
-      competitorLaunches: [{ id: 'cmp-crush', label: '强竞品上市', week: 12, impact: -1.5, windowWeeks: 6, halfLifeWeeks: 6 }],
+      competitorLaunches: [{ id: 'cmp-crush', label: '强竞品上市', week: 12, impact: -1.5, windowWeeks: 6, halfLifeWeeks: 6, marketEffect: 'unknown' }],
     };
     const crushed = computeForecast(dataset, BASELINE_DRAFT);
     // impact 1.5、半衰期 6：age ≤ 2 时压力仍 ≤ −1（W12–W14 连续清零，属衰减窗口而非传染）
     expect(crushed.weeks[11].unconstrainedDemand).toBe(0);
     expect(crushed.weeks[13].unconstrainedDemand).toBe(0);
-    // age = 3 时压力 1.5·e^(−0.5) ≈ 0.91 < 1，需求恢复为正——下一周独立重算
-    expect(crushed.weeks[14].unconstrainedDemand).toBeGreaterThan(0);
+    // 真正半衰期 6 周：age = 4 时压力 1.5·0.5^(4/6) ≈ 0.945 < 1，需求恢复为正。
+    expect(crushed.weeks[15].unconstrainedDemand).toBeGreaterThan(0);
   });
 
   it('UI 可达滑杆极值组合下 SO ≤ 可供量、全字段有限；供给放大组合可把期末库存推负（恒等式保留）', () => {
@@ -282,5 +332,14 @@ describe('简单版量价预测模型 · 极端草稿与钳制不变量（2026-1
 
   it('基准与可达草稿下 DOS 恒有限且为正（除零保护 Math.max(1, 需求)）', () => {
     expect(baseline.weeks.every((week) => Number.isFinite(week.dos) && week.dos >= 0)).toBe(true);
+  });
+
+  it('DOS 使用最近四周模型需求均值，而不是当周 SO 或单周需求', () => {
+    const week = baseline.weeks[8]; // W9，包含 W6–W9 的模型需求
+    const rolling = baseline.weeks.slice(5, 9).reduce((sum, item) => sum + item.modelDemand, 0) / 4;
+    expect(week.rolling4wDemand).toBeCloseTo(rolling, 1);
+    expect(week.dos).toBe(Math.round((week.inventory / rolling) * 7));
+    // W9 是删失周，SO 低于模型需求；DOS 仍不能使用被截断的 SO。
+    expect(week.so).toBeLessThan(week.modelDemand);
   });
 });

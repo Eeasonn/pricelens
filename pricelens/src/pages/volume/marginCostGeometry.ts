@@ -6,6 +6,30 @@ export interface MarginCostDomain {
   zeroRatio: number;
 }
 
+/** 分离后的 Y 轴值域：成本和销毛量纲相同但变化范围不同，不能共用一条刻度。 */
+export interface MarginAxisDomain { min: number; max: number; zeroRatio: number }
+
+function axisDomain(values: readonly number[]): MarginAxisDomain {
+  if (values.length === 0) return { min: 0, max: 1, zeroRatio: 0 };
+  let min = Math.min(0, ...values);
+  let max = Math.max(1, ...values);
+  if (!(max > min)) max = min + 1;
+  return { min, max, zeroRatio: (0 - min) / (max - min) };
+}
+
+export function costAxisDomainOf(points: readonly Pick<MarginCostPoint, 'unitCost'>[]): MarginAxisDomain {
+  return axisDomain(points.map((point) => point.unitCost));
+}
+
+export function marginAxisDomainOf(points: readonly Pick<MarginCostPoint, 'unitMargin'>[]): MarginAxisDomain {
+  return axisDomain(points.map((point) => point.unitMargin));
+}
+
+export function axisTicksOf(domain: Pick<MarginAxisDomain, 'min' | 'max'>): number[] {
+  const mid = (domain.min + domain.max) / 2;
+  return [...new Set([domain.max, mid, domain.min].map((value) => Math.round(value * 100) / 100))].sort((a, b) => b - a);
+}
+
 export function marginCostDomainOf(
   points: readonly Pick<MarginCostPoint, 'unitCost' | 'unitMargin'>[],
 ): MarginCostDomain {

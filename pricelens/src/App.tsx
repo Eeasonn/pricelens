@@ -20,6 +20,7 @@ import { ChartContentProvider } from './state/chartContent';
 import { AgentProvider } from './state/AgentContext';
 import AgentPanel from './components/Copilot/AgentPanel';
 import { color, font, shadow, space } from './theme/tokens';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 export default function App() {
   return (
@@ -42,18 +43,20 @@ export default function App() {
         },
       }}
     >
-      <PageProvider>
-        <FiltersProvider>
-          <AgentProvider>
-            <OverviewViewProvider>
-              <ChartContentProvider>
-                <AppBody />
-                <AgentPanel />
-              </ChartContentProvider>
-            </OverviewViewProvider>
-          </AgentProvider>
-        </FiltersProvider>
-      </PageProvider>
+      <AppErrorBoundary>
+        <PageProvider>
+          <FiltersProvider>
+            <AgentProvider>
+              <OverviewViewProvider>
+                <ChartContentProvider>
+                  <AppBody />
+                  <AgentPanel />
+                </ChartContentProvider>
+              </OverviewViewProvider>
+            </AgentProvider>
+          </FiltersProvider>
+        </PageProvider>
+      </AppErrorBoundary>
     </ConfigProvider>
   );
 }
@@ -63,31 +66,62 @@ function AppBody() {
   const { state } = useFilters();
   // 标签页标题随当前国家（index.html 的静态标题只是首帧占位；多国接入后不再是单一 R国）
   const { region, country } = scopeLabels(state);
+  const pageLabel: Record<string, string> = {
+    overview: '国家总览',
+    dashboard: '价格走势',
+    volume: '量价走势',
+    pricing: '定价推演',
+    config: '配置',
+    alerts: '预警',
+    intelligence: '情报中心',
+    forecast: '量价预测',
+  };
   useEffect(() => {
-    document.title = `PriceLens · ${region} / ${country}`;
-  }, [region, country]);
+    document.title = `PriceLens · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
+  }, [page, region, country]);
   // 第一百八十四轮（Eason）：分析三页（价格走势/量价走势/定价推演）共享同一页面
   // 壳（页头+筛选条+滚动容器）——页内切换只换图表主体，不再整页重挂载（顶部
   // 筛选器不刷新）；非分析页仍按页 key 重挂载播淡入
   const analysis = page === 'dashboard' || page === 'volume' || page === 'pricing';
   return (
-    <div key={analysis ? 'analysis' : page} className="lpl-page-fade">
-      {page === 'overview' ? (
-        <Overview />
-      ) : analysis ? (
-        <AnalysisShell>
-          {page === 'volume' ? <VolumePrice /> : page === 'pricing' ? <PricingPage /> : <Dashboard />}
-        </AnalysisShell>
-      ) : page === 'config' ? (
-        <Config />
-      ) : page === 'intelligence' ? (
-        <IntelligenceCenter />
-      ) : page === 'forecast' ? (
-        <ForecastPage />
-      ) : (
-        <AlertsPage />
-      )}
-    </div>
+    <>
+      <a
+        className="lpl-skip-link"
+        href="#lpl-main-content"
+        onClick={(event) => {
+          // 页面内容使用内部滚动容器；默认锚点只会移动外层窗口，无法把
+          // 已滚动的看板带回顶部。显式重置容器后再把焦点交给主内容。
+          event.preventDefault();
+          const target = document.getElementById('lpl-main-content');
+          const scroller = target?.querySelector<HTMLElement>('[data-lpl-scroll]');
+          if (scroller) {
+            scroller.scrollTop = 0;
+            scroller.scrollLeft = 0;
+          }
+          target?.focus({ preventScroll: true });
+          window.history.replaceState(null, '', '#lpl-main-content');
+        }}
+      >
+        跳转到主要内容
+      </a>
+      <div key={analysis ? 'analysis' : page} id="lpl-main-content" tabIndex={-1} className="lpl-page-fade">
+        {page === 'overview' ? (
+          <Overview />
+        ) : analysis ? (
+          <AnalysisShell>
+            {page === 'volume' ? <VolumePrice /> : page === 'pricing' ? <PricingPage /> : <Dashboard />}
+          </AnalysisShell>
+        ) : page === 'config' ? (
+          <Config />
+        ) : page === 'intelligence' ? (
+          <IntelligenceCenter />
+        ) : page === 'forecast' ? (
+          <ForecastPage />
+        ) : (
+          <AlertsPage />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -107,11 +141,14 @@ function AnalysisShell({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div ref={rootRef} data-lpl-scroll style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }}>
+    <div ref={rootRef} id="lpl-analysis-scroll" className="lpl-analysis-shell" data-lpl-scroll style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }}>
       {/* 顶部居中圆形 ↑（第五十四轮追补）：滚过筛选器后浮现，点击平滑回滚筛选器 */}
       {showTop && (
         <button
           title="回到筛选器"
+          aria-label="返回筛选器顶部"
+          aria-controls="lpl-analysis-scroll"
+          className="lpl-scroll-top"
           onClick={() => {
             if (rootRef.current) rootRef.current.scrollTop = 0; // IAB 环境 scrollTo() 无效，直接赋值
           }}

@@ -1347,7 +1347,7 @@ export default function VolumePrice() {
                         </div>
                         {/* 双极差卡并排（视觉 demo：range-cards）：贴绘图区左右缘，图上方 */}
                         {(priceCard?.visible || volumeCard?.visible) && strip && cardRow && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, margin: `0 0 10px ${strip.plotLeft}px` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, margin: `0 0 10px ${strip.plotLeft}px`, position: 'sticky', top: 0, zIndex: 6, padding: '4px 0', background: color.canvas, boxShadow: `0 1px 0 ${color.hairline}` }}>
                             {priceCard?.visible
                               ? <SpreadRangeCard title="价格极差" accent={seriesColor} model={priceCard} style={{ width: cardRow.width }} />
                               : <span />}
@@ -1363,6 +1363,7 @@ export default function VolumePrice() {
                             tabIndex={0}
                             role="group"
                             aria-label={`${p.name}量价与成本销毛对照图。左右方向键切换观察${granNoun}，拖动鼠标选择区间。`}
+                            aria-describedby={detail.visible ? `volume-detail-${p.idx}` : undefined}
                             onKeyDown={(event) => {
                               if (viewLen <= 0 || activeIdx == null) return;
                               if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -1490,6 +1491,7 @@ export default function VolumePrice() {
                           brand={p.brand}
                           nameText={pill.nameText}
                           romText={pill.romText}
+                          summaryId={`volume-detail-${p.idx}`}
                           onExempt={
                             activePoint?.suspect && activePoint.suspect !== 'exempted' && activePoint.price != null
                               ? () => markPanelPoint(p, activePoint, 'exempt')

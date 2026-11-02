@@ -625,8 +625,15 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       setAlertProductRule: (key, rule) =>
         setState((s) => {
           const products = { ...s.alertProducts };
-          if (rule == null) delete products[key];
-          else products[key] = rule;
+          // 单元格弹层在恢复全局后可能传入 `{ types: {}, thresholds: {} }`。
+          // 这类空覆写既没有行为价值，又会污染持久化状态和「单独设置」计数，统一压缩掉。
+          const types = rule?.types ? { ...rule.types } : undefined;
+          const thresholds = rule?.thresholds ? { ...rule.thresholds } : undefined;
+          const normalized: AlertProductRule = {};
+          if (types && Object.keys(types).length > 0) normalized.types = types;
+          if (thresholds && Object.keys(thresholds).length > 0) normalized.thresholds = thresholds;
+          if (Object.keys(normalized).length === 0) delete products[key];
+          else products[key] = normalized;
           return { ...s, alertProducts: products };
         }),
     }),
