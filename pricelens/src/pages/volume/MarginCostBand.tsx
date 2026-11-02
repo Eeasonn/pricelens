@@ -10,8 +10,6 @@ import {
   costStepPolyline,
   lastValidMarginIndex,
   marginBarWidth,
-  marginColumnMarks,
-  marginAxisDomainOf,
   marginCrossX,
   marginFocusIndex,
   monthStepSegmentsOf,
@@ -19,7 +17,7 @@ import {
   type MonthStepSegment,
 } from './marginCostGeometry';
 
-const PLOT_SVG_H = 168;
+const PLOT_SVG_H = 224; // 2026-11-02 反馈：旧 168 与主图体量失衡（过于紧凑）
 const PLOT_PAD_TOP = 12;
 const PLOT_PAD_BOTTOM = 12;
 
@@ -69,8 +67,13 @@ export default function MarginCostBand(props: {
   /** 与主图同一选择区间的浅蓝背景带（只铺底色，不带边线）。 */
   selectionBand?: { startIndex: number; endIndex: number } | null;
   /** 水位线模式（2026-11-02 反馈③：周粒度下月度成本/销毛整月不变，逐周柱是
-   *  同值重复——改为两条半透明水位横线，不放柱子；月/季粒度保持柱+阶梯线）。 */
+   *  同值重复——改为半透明面积+销毛率线，不放柱子；月/季粒度保持柱+阶梯线）。 */
   waterline?: boolean;
+  /** 粒度（首末桶标签按它格式化：周 2026W31 / 月 2026-07） */
+  granularity: 'week' | 'month' | 'quarter';
+  /** 与 points 对齐的展示桶 id（首末标签用；点的 bucketId 是月 id，直接显示会与
+   *  主图/时间轴的桶文案不一致——2026-11-02 反馈 X 轴排版时一并修正） */
+  bucketLabels: readonly string[];
 }) {
   const showEmpty = props.empty || props.geom == null || lastValidMarginIndex(props.points) == null;
   const validPoints = useMemo(() => props.points.filter((point): point is MarginCostPoint => point != null), [props.points]);
@@ -78,14 +81,37 @@ export default function MarginCostBand(props: {
     () => costAxisDomainOf(validPoints),
     [validPoints],
   );
-  const marginDomain = useMemo(
-    () => marginAxisDomainOf(validPoints),
-    [validPoints],
-  );
+  // 销毛率域（2026-11-02 反馈：右轴从销毛金额改为销毛率 %；0 → 上取整 10% 档）
+  const marginDomain = useMemo(() => {
+    const rates = validPoints.map((p2) => p2.marginRate).filter((r): r is number => r != null && Number.isFinite(r));
+    const max = rates.length ? Math.max(...rates, 0.05) : 0.1;
+    return { min: 0, max: Math.min(1, Math.ceil((max * 100) / 10) * 10 / 100) };
+  }, [validPoints]);
   const segments = useMemo(() => segmentsOf(props.points), [props.points]);
-  const columns = useMemo(() => marginColumnMarks(props.points), [props.points]);
   const costTicks = useMemo(() => axisTicksOf(costDomain), [costDomain]);
   const marginTicks = useMemo(() => axisTicksOf(marginDomain), [marginDomain]);
+  // 月 → 销毛率查表（水位形态的销毛率线用；月内恒定取首点）
+  const rateByMonth = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p2 of validPoints) if (p2.marginRate != null && !m.has(p2.monthId)) m.set(p2.monthId, p2.marginRate);
+    return m;
+  }, [validPoints]);
+  // 首末有效点在 points 中的位置（桶标签取展示桶 id，而非点的月 id）
+  let firstValidIdx = -1;
+  let lastValidIdx = -1;
+  props.points.forEach((p2, i) => {
+    if (p2) {
+      if (firstValidIdx < 0) firstValidIdx = i;
+      lastValidIdx = i;
+    }
+  });
+  const fmtBucket = (id: string): string => {
+    if (props.granularity === 'week' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}W${id.slice(4)}`;
+    if (props.granularity === 'month' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}-${id.slice(4)}`;
+    return id;
+  };
+  const firstLabel = fmtBucket(props.bucketLabels[firstValidIdx] ?? props.points[firstValidIdx]?.bucketId ?? '—');
+  const lastLabel = fmtBucket(props.bucketLabels[lastValidIdx] ?? props.points[lastValidIdx]?.bucketId ?? '—');
   const focusIndex = props.focusIndex !== undefined
     ? props.focusIndex
     : marginFocusIndex(props.points.length, props.hoverIdx, lastValidMarginIndex(props.points));
@@ -145,10 +171,8 @@ export default function MarginCostBand(props: {
               成本
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              {props.waterline
-                ? <span aria-hidden style={{ width: 14, height: 1.5, background: props.seriesColor }} />
-                : <span aria-hidden style={{ width: 8, height: 8, borderRadius: 1, background: hexToRgba(props.seriesColor, 0.28) }} />}
-              销毛
+              <span aria-hidden style={{ width: 14, height: 1.5, background: props.seriesColor }} />
+              销毛率
             </span>
           </span>
         )}
@@ -221,18 +245,17 @@ export default function MarginCostBand(props: {
                   })}
                   {marginTicks.map((tick) => {
                     const y = yAt(tick, 'margin');
-                    const zeroTick = Math.abs(tick) < 1e-6;
                     return (
                       <g key={`margin-tick-${tick}`}>
                         <line x1={plotRight} x2={plotRight + 4} y1={y} y2={y} stroke={color.hairlineStrong} strokeWidth={1} />
                         <text x={plotRight + 8} y={y} fill={color.mute} fontSize={10} fontFamily={font.family} dominantBaseline="middle" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {formatPrice(Math.round(tick), props.currency)}{zeroTick ? '' : ''}
+                          {Math.round(tick * 100)}%
                         </text>
                       </g>
                     );
                   })}
                   <text x={props.geom!.plotLeft - 8} y={plotTop - 2} textAnchor="end" fill={color.mute} fontSize={9}>成本</text>
-                  <text x={plotRight + 8} y={plotTop - 2} fill={color.mute} fontSize={9}>销毛</text>
+                  <text x={plotRight + 8} y={plotTop - 2} fill={color.mute} fontSize={9}>销毛率</text>
                   {/* 独立时间轴：与主图共享桶顺序和观察列，但不借用主图的轴线。 */}
                   <line x1={props.geom!.plotLeft} x2={plotRight} y1={plotTop + plotHeight} y2={plotTop + plotHeight} stroke={color.hairlineStrong} strokeWidth={1} />
                   {(() => {
@@ -244,52 +267,53 @@ export default function MarginCostBand(props: {
                       <>
                         <line x1={firstX} x2={firstX} y1={plotTop + plotHeight} y2={plotTop + plotHeight + 4} stroke={color.hairlineStrong} />
                         <line x1={lastX} x2={lastX} y1={plotTop + plotHeight} y2={plotTop + plotHeight + 4} stroke={color.hairlineStrong} />
-                        <text x={firstX} y={PLOT_SVG_H - 1} textAnchor="start" fill={color.mute} fontSize={9}>{first?.bucketId ?? '—'}</text>
-                        <text x={lastX} y={PLOT_SVG_H - 1} textAnchor="end" fill={color.mute} fontSize={9}>{last?.bucketId ?? '—'}</text>
+                        <text x={firstX} y={PLOT_SVG_H - 3} textAnchor="start" fill={color.body} fontSize={13} fontFamily={font.family}>{firstLabel}</text>
+                        <text x={lastX} y={PLOT_SVG_H - 3} textAnchor="end" fill={color.body} fontSize={13} fontFamily={font.family}>{lastLabel}</text>
                       </>
                     );
                   })()}
                   {props.waterline ? (
-                    // 水位模式（周粒度）：成本 = 半透明带色面积（水位到轴基线的阶梯面积），
-                    // 销毛 = 细线（1.25px，比价格线 2px 细一档）。无柱；换月阶梯跳变、缺月断开。
+                    // 水位模式（周粒度）：成本 = 纯半透明面积（无上缘描线）；
+                    // 销毛率 = 细虚线（1.25px，比价格线 2px 细一档，右轴 % 刻度）。无柱。
                     (() => {
                       const baseline = plotTop + plotHeight;
                       const stepPath = segments.map((seg, i) => {
                         const x1 = props.geom!.plotLeft + seg.startIndex * slot;
                         const x2 = props.geom!.plotLeft + (seg.startIndex + seg.count) * slot;
                         const yCost = yAt(seg.unitCost, 'cost');
-                        const yMargin = yAt(seg.unitMargin, 'margin');
+                        const rate = rateByMonth.get(seg.monthId) ?? 0;
+                        const yRate = yAt(rate, 'margin');
                         const head = i === 0 ? `M${x1} ${yCost}` : `L${x1} ${yCost}`;
-                        return { head: `${head} L${x2} ${yCost}`, margin: `${head} L${x2} ${yMargin}` };
+                        return { head: `${head} L${x2} ${yCost}`, rate: `${head} L${x2} ${yRate}` };
                       });
-                      const costLine = stepPath.map((p) => p.head).join(' ');
-                      const marginLine = stepPath.map((p) => p.margin).join(' ');
+                      const marginLine = stepPath.map((p) => p.rate).join(' ');
                       const first = segments[0];
                       const last = segments[segments.length - 1];
-                      const areaPath = `${costLine} L${props.geom!.plotLeft + (last.startIndex + last.count) * slot} ${baseline} L${props.geom!.plotLeft + first.startIndex * slot} ${baseline} Z`;
+                      const areaTop = stepPath.map((p) => p.head).join(' ');
+                      const areaPath = `${areaTop} L${props.geom!.plotLeft + (last.startIndex + last.count) * slot} ${baseline} L${props.geom!.plotLeft + first.startIndex * slot} ${baseline} Z`;
                       return (
                         <g>
                           <path d={areaPath} fill={hexToRgba(props.seriesColor, 0.16)} />
-                          <path d={costLine} fill="none" stroke={props.seriesColor} strokeWidth={2} />
                           <path d={marginLine} fill="none" stroke={props.seriesColor} strokeWidth={1.25} strokeDasharray="4 3" />
                         </g>
                       );
                     })()
                   ) : (
                     <>
-                      {columns.map((column) => {
-                        const box = signedBarBox(column.unitMargin, (value) => yAt(value, 'margin'), zeroMarginY);
+                      {props.points.map((point, index) => {
+                        if (point == null || point.marginRate == null) return null;
+                        const box = signedBarBox(point.marginRate, (value) => yAt(value, 'margin'), zeroMarginY);
                         if (box.height < 0.5) return null;
-                        const cx = props.geom!.plotLeft + slot * (column.index + 0.5);
+                        const cx = props.geom!.plotLeft + slot * (index + 0.5);
                         return (
                           <rect
-                            key={`margin-${column.index}`}
+                            key={`margin-${index}`}
                             x={cx - barWidth / 2}
                             y={box.y}
                             width={barWidth}
                             height={box.height}
                             rx={1}
-                            fill={hexToRgba(props.seriesColor, column.index === focusIndex ? 0.55 : 0.28)}
+                            fill={hexToRgba(props.seriesColor, index === focusIndex ? 0.55 : 0.28)}
                           />
                         );
                       })}
@@ -307,7 +331,6 @@ export default function MarginCostBand(props: {
                   {focusPoint && crossX != null && (
                     <circle cx={crossX} cy={yAt(focusPoint.unitCost, 'cost')} r={3.5} fill={color.canvas} stroke={props.seriesColor} strokeWidth={1.5} />
                   )}
-                  <text x={(props.geom!.plotLeft + plotRight) / 2} y={plotTop + plotHeight + 11} textAnchor="middle" fill={color.mute} fontSize={8}>时间轴与主图同步</text>
                 </>
               );
             })()}

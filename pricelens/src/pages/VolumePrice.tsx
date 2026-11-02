@@ -1570,6 +1570,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                           {!costbar && (
                           <MarginCostBand
                             waterline={state.granularity === 'week'}
+                            granularity={state.granularity}
+                            bucketLabels={domainIds.slice(effWins[p.idx][0], effWins[p.idx][1] + 1)}
                             geom={geoms[p.idx] ?? null}
                             points={marginPointsMasked}
                             currency={state.currency}
