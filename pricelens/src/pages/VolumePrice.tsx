@@ -94,7 +94,7 @@ import { dimProduct } from '../data';
 import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
 import type { Granularity, Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
-import { volumeAdaptiveSeries } from './volume/volumeAdaptive';
+import { flatSelections } from '../state/mainSelection';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
 import VolumeBars from './volume/VolumeBars';
 import CostBarChart from './volume/CostBarChart';
@@ -447,27 +447,39 @@ export default function VolumePrice() {
     [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg, configVersion],
   );
 
-  // 时间自适应：只按当前画面上的产品重套上方极值。
-  // 默认主产品视图不含对比产品，不能沿用价格页按主品+对比产品算出的更宽范围。
-  // 组内对比才把该组正在显示的竞品算进跨度。
-  // 产品显隐（2026-11-01 设计 §5.3）：被隐藏面板不进自适应范围——高价长周期
-  // 竞品隐藏后查看范围随之收缩（刻度/范围只看可见面板）。
+  // 时间自适应（2026-11-02 Eason 纠偏）：自动范围 = 顶部所选全部产品（各卡主品 +
+  // 对比产品）的最早/最晚有效价格桶，与价格页同一口径——不再只看画面上的面板。
+  // 原先主产品视图只按主品算：切到量价页范围收窄、切回价格页又放宽，用户感知为
+  // 「自动时间不是所选产品的最早时间」。跨度取数照价格页合并图口径（flatSelections
+  // 去重 + 全集桶），只用来算范围、不参与渲染；视图模式/产品显隐只影响画面不影响范围。
   // 本 effect 声明在粒度换算之后：切粒度先换桶，自适应范围随后覆盖。
-  const adaptiveSeries = useMemo(
-    () => volumeAdaptiveSeries(
-      panelData
-        .filter((panel) => !hiddenSet.has(panel.spec.key))
-        .map((panel) => ({ isMain: panel.spec.isMain, series: panel.series })),
-      safeViewMode,
-    ),
-    [panelData, safeViewMode, hiddenSet],
-  );
-  const span = useMemo(() => seriesSpanRange(adaptiveSeries), [adaptiveSeries]);
+  const { mainSels: selMains, compareSels: selCompares } = useMemo(() => flatSelections(state.mains), [state.mains]);
+  const selectionSeries = useMemo<Series[]>(() => {
+    const groups = [...selMains, ...selCompares].map((g) => ({ ...g, isOwn: false }));
+    if (groups.length === 0) return [];
+    try {
+      return buildSeries({
+        groups,
+        granularity: state.granularity,
+        startBucket: dataStart,
+        endBucket: dataEnd,
+        currency: state.currency,
+        agg: state.agg,
+        scope: { countryCode: cc, industry: state.industry },
+      });
+    } catch {
+      return [];
+    }
+  }, [selMains, selCompares, state.granularity, dataStart, dataEnd, state.currency, state.agg, cc, state.industry, configVersion]);
+  const span = useMemo(() => seriesSpanRange(selectionSeries), [selectionSeries]);
   const adaptiveBounds = useMemo(
     () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0) : null),
     [state.adaptive, buckets, span],
   );
-  const adaptiveProductKey = adaptiveSeries.map((series) => series.key).join('|');
+  const adaptiveProductKey = JSON.stringify([
+    selMains.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
+    selCompares.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
+  ]);
   const adaptiveKey = adaptiveBounds
     ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}|${adaptiveProductKey}`
     : '';

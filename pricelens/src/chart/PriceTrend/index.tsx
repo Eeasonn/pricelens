@@ -408,8 +408,9 @@ export default function PriceTrend(props: {
       return;
     }
     if (adaptiveAppliedRef.current === adaptiveKey) return;
-    // 自适应开着时，范围以本页画面上的产品为准。价格页含对比产品，量价默认只有主产品，
-    // 两端点不一致就要重套。不能因为现范围仍盖住一部分数据，就沿用另一页算出的跨度。
+    // 自适应开着时，范围 = 顶部所选全部产品（主品 + 对比产品）的有效价格跨度；量价页
+    // 自 2026-11-02 起同一口径（flatSelections 合并图取数），两页往返范围不再抖动。
+    // 端点不一致就重套，不因现范围仍盖住一部分数据就沿用旧跨度。
     // 挂载时端点已经一致：保留会话里的查看窗口。范围若变化，先同步 rangeWatch 基线，
     // 避免紧随其后的 rangeWatch 清掉挂载焦点周刚设的查看窗口。
     adaptiveAppliedRef.current = adaptiveKey;
