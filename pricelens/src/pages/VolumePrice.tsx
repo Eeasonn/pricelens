@@ -1103,7 +1103,10 @@ export default function VolumePrice() {
                         ? rangeBandInView(row.volumes, row.windowStart, row.windowEnd, viewStart, volumePointValid)
                         : null;
                       const strip = geoms[p.idx];
-                      const seriesColor = p.vis[0]?.color ?? brandColorOf(p.brand);
+                      // 阅读视图 = 全部华为面板，品牌红 × N 重复刺眼（2026-11-02 反馈）：改中性墨色系
+//（价线 = ink，柱/带 = 半透明浅墨，符合「灰白+墨+单蓝强调」配色铁律）；
+// 组内对比保留品牌色以区分竞品
+const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.brand));
                       const cardRow = strip ? spreadCardRow(strip.plotLeft, strip.plotWidth) : null;
                       const marginPoints = marginCosts[p.idx] ?? [];
                       const marginUnavailable = marginCostAvailabilityOf(p.spec.isOwn, marginPoints) === 'empty';
@@ -1350,7 +1353,7 @@ export default function VolumePrice() {
                         {/* 双极差卡（2026-11-02 反馈④）：悬浮在图表顶部表面、不占布局高度——
                             absolute 贴绘图区顶缘，pointerEvents 关闭以免挡住下方拖选/悬停 */}
                         {(priceCard?.visible || volumeCard?.visible) && strip && cardRow && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, position: 'absolute', top: PANEL_GRID_TOP, left: strip.plotLeft, zIndex: 6, pointerEvents: 'none' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, position: 'absolute', top: PANEL_GRID_TOP, left: strip.plotLeft, zIndex: 30, pointerEvents: 'none' }}>
                             {priceCard?.visible
                               ? <SpreadRangeCard title="价格极差" accent={seriesColor} model={priceCard} style={{ width: cardRow.width }} />
                               : <span />}
@@ -1393,7 +1396,7 @@ export default function VolumePrice() {
                             selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
                           />
                           <Chart
-                            series={p.vis}
+                            series={reading ? p.vis.map((series) => ({ ...series, color: seriesColor })) : p.vis}
                             granularity={state.granularity}
                             currency={state.currency}
                             priceTypes={state.priceTypes}
@@ -1469,6 +1472,7 @@ export default function VolumePrice() {
                           )}
                           </div>
                           <MarginCostBand
+                            waterline={state.granularity === 'week'}
                             geom={geoms[p.idx] ?? null}
                             points={p.vis[0]?.points
                               ? marginPoints.map((mp, mi) => (p.vis[0]?.points[mi]?.suspect === 'quarantined' ? null : mp))

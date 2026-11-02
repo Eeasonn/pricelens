@@ -68,6 +68,9 @@ export default function MarginCostBand(props: {
   focusIndex?: number | null;
   /** 与主图同一选择区间的浅蓝背景带（只铺底色，不带边线）。 */
   selectionBand?: { startIndex: number; endIndex: number } | null;
+  /** 水位线模式（2026-11-02 反馈③：周粒度下月度成本/销毛整月不变，逐周柱是
+   *  同值重复——改为两条半透明水位横线，不放柱子；月/季粒度保持柱+阶梯线）。 */
+  waterline?: boolean;
 }) {
   const showEmpty = props.empty || props.geom == null || lastValidMarginIndex(props.points) == null;
   const validPoints = useMemo(() => props.points.filter((point): point is MarginCostPoint => point != null), [props.points]);
@@ -136,11 +139,13 @@ export default function MarginCostBand(props: {
         {!showEmpty && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, color: color.mute, fontSize: 10, flexShrink: 0 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span aria-hidden style={{ width: 14, height: 2, background: props.seriesColor }} />
+              <span aria-hidden style={{ width: 14, height: props.waterline ? 4 : 2, borderRadius: 2, background: props.waterline ? hexToRgba(props.seriesColor, 0.45) : props.seriesColor }} />
               成本
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span aria-hidden style={{ width: 8, height: 8, borderRadius: 1, background: hexToRgba(props.seriesColor, 0.28) }} />
+              {props.waterline
+                ? <span aria-hidden style={{ width: 14, height: 4, borderRadius: 2, background: hexToRgba(props.seriesColor, 0.2) }} />
+                : <span aria-hidden style={{ width: 8, height: 8, borderRadius: 1, background: hexToRgba(props.seriesColor, 0.28) }} />}
               销毛
             </span>
           </span>
@@ -154,7 +159,7 @@ export default function MarginCostBand(props: {
         <>
           <svg
             role="img"
-            aria-label="成本阶梯线与销毛独立柱"
+            aria-label={props.waterline ? "成本与销毛水位线" : "成本阶梯线与销毛独立柱"}
             width="100%"
             height={PLOT_SVG_H}
             style={{ display: 'block' }}
@@ -242,31 +247,60 @@ export default function MarginCostBand(props: {
                       </>
                     );
                   })()}
-                  {columns.map((column) => {
-                    const box = signedBarBox(column.unitMargin, (value) => yAt(value, 'margin'), zeroMarginY);
-                    if (box.height < 0.5) return null;
-                    const cx = props.geom!.plotLeft + slot * (column.index + 0.5);
-                    return (
-                      <rect
-                        key={`margin-${column.index}`}
-                        x={cx - barWidth / 2}
-                        y={box.y}
-                        width={barWidth}
-                        height={box.height}
-                        rx={1}
-                        fill={hexToRgba(props.seriesColor, column.index === focusIndex ? 0.55 : 0.28)}
-                      />
-                    );
-                  })}
-                  {runs.map((run, runIndex) => (
-                    <polyline
-                      key={`cost-${runIndex}`}
-                      points={run.map((vertex) => `${vertex.x},${yAt(vertex.cost, 'cost')}`).join(' ')}
-                      fill="none"
-                      stroke={props.seriesColor}
-                      strokeWidth={2}
-                    />
-                  ))}
+                  {props.waterline ? (
+                    // 水位线模式（周粒度）：成本/销毛按月段画半透明横线（水位），无柱。
+                    // 线段宽度覆盖该月全部周桶，换月跳变、缺月自然断开。
+                    segments.map((segment, segIndex) => {
+                      const x1 = props.geom!.plotLeft + segment.startIndex * slot;
+                      const x2 = props.geom!.plotLeft + (segment.startIndex + segment.count) * slot;
+                      return (
+                        <g key={`water-${segIndex}`}>
+                          <line
+                            x1={x1} x2={x2}
+                            y1={yAt(segment.unitCost, 'cost')} y2={yAt(segment.unitCost, 'cost')}
+                            stroke={hexToRgba(props.seriesColor, 0.45)}
+                            strokeWidth={4}
+                            strokeLinecap="round"
+                          />
+                          <line
+                            x1={x1} x2={x2}
+                            y1={yAt(segment.unitMargin, 'margin')} y2={yAt(segment.unitMargin, 'margin')}
+                            stroke={hexToRgba(props.seriesColor, 0.2)}
+                            strokeWidth={4}
+                            strokeLinecap="round"
+                          />
+                        </g>
+                      );
+                    })
+                  ) : (
+                    <>
+                      {columns.map((column) => {
+                        const box = signedBarBox(column.unitMargin, (value) => yAt(value, 'margin'), zeroMarginY);
+                        if (box.height < 0.5) return null;
+                        const cx = props.geom!.plotLeft + slot * (column.index + 0.5);
+                        return (
+                          <rect
+                            key={`margin-${column.index}`}
+                            x={cx - barWidth / 2}
+                            y={box.y}
+                            width={barWidth}
+                            height={box.height}
+                            rx={1}
+                            fill={hexToRgba(props.seriesColor, column.index === focusIndex ? 0.55 : 0.28)}
+                          />
+                        );
+                      })}
+                      {runs.map((run, runIndex) => (
+                        <polyline
+                          key={`cost-${runIndex}`}
+                          points={run.map((vertex) => `${vertex.x},${yAt(vertex.cost, 'cost')}`).join(' ')}
+                          fill="none"
+                          stroke={props.seriesColor}
+                          strokeWidth={2}
+                        />
+                      ))}
+                    </>
+                  )}
                   {focusPoint && crossX != null && (
                     <circle cx={crossX} cy={yAt(focusPoint.unitCost, 'cost')} r={3.5} fill={color.canvas} stroke={props.seriesColor} strokeWidth={1.5} />
                   )}
