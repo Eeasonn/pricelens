@@ -59,7 +59,7 @@ function CardActions({ actions }: { actions?: AgentCardAction[] }) {
         if (action.kind === 'followup') void send(action.prompt, action.target?.forecastDraft, { forecastSnapshot: action.target?.forecastSnapshot, forecastDataset: action.target?.forecastDataset });
         if (action.kind === 'open') {
           const targetPage = action.target?.page;
-          if (targetPage === 'alerts' || targetPage === 'forecast' || targetPage === 'dashboard' || targetPage === 'volume' || targetPage === 'overview' || targetPage === 'pricing' || targetPage === 'intelligence' || targetPage === 'config') go(targetPage);
+          if (targetPage === 'alerts' || targetPage === 'forecast' || targetPage === 'dashboard' || targetPage === 'volume' || targetPage === 'marketboard' || targetPage === 'overview' || targetPage === 'pricing' || targetPage === 'intelligence' || targetPage === 'config') go(targetPage);
           else if (/预警/.test(action.prompt)) go('alerts');
           else if (/预测/.test(action.prompt)) go('forecast');
           else go('dashboard');

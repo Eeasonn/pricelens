@@ -537,6 +537,7 @@ export function buildAgentContext(page: string, state: FiltersState, alerts: rea
   const pageLabel: Record<string, string> = {
     dashboard: '价格走势',
     volume: '量价走势',
+    marketboard: '大盘走势',
     pricing: '定价推演',
     intelligence: '情报中心',
     forecast: '量价预测',

@@ -6,7 +6,8 @@ import { writeUrlPatch } from './urlSync';
 // 页签同步 URL query（?p=，默认页省略；筛选参数由 FiltersProvider 写）。
 // 第112轮：新增 'volume'（量价看板，价格 × 估算销量三面板对比）。
 // 第一百六十五轮：新增 'pricing'（定价推演——上市定价 what-if 玻璃盒，全模拟数据）。
-export type Page = 'overview' | 'dashboard' | 'volume' | 'pricing' | 'intelligence' | 'forecast' | 'config' | 'alerts';
+// 2026-11-03：新增 'marketboard'（大盘走势——GFK 看板复刻三图，marketboard/ 目录组件）。
+export type Page = 'overview' | 'dashboard' | 'volume' | 'marketboard' | 'pricing' | 'intelligence' | 'forecast' | 'config' | 'alerts';
 
 interface PageCtx {
   page: Page;
@@ -18,7 +19,7 @@ const Ctx = createContext<PageCtx>({ page: 'dashboard', go: () => {} });
 function initialPage(): Page {
   try {
     const p = new URLSearchParams(window.location.search).get('p');
-    if (p === 'overview' || p === 'dashboard' || p === 'volume' || p === 'pricing' || p === 'intelligence' || p === 'forecast' || p === 'config' || p === 'alerts') return p;
+    if (p === 'overview' || p === 'dashboard' || p === 'volume' || p === 'marketboard' || p === 'pricing' || p === 'intelligence' || p === 'forecast' || p === 'config' || p === 'alerts') return p;
   } catch {
     /* 无 window 忽略 */
   }

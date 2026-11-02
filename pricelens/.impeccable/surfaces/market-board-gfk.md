@@ -1,7 +1,7 @@
 # 大盘图表 · GFK 看板复刻（market-board-gfk）
 
 > 视觉权威：`pricelens/DESIGN.md` + `pricelens/src/theme/tokens.ts`。父级契约：`PRODUCT.md` 数据边界与证据规则、`docs/PRICE-LENS-DESIGN-HANDOFF.md`。
-> 本面为**独立预览面**（`pricelens/marketboard-preview.html`，仅 dev 可达，不进构建入口），全部为新增文件，等待 Eason 审阅后决定合并落点。
+> 2026-11-03 起已接入主导航：分析壳页 id `marketboard`（标题「大盘走势」），入口在 `ChartContentBar`「量价走势」之后；页面组装见 `src/pages/MarketBoardPage.tsx`（口径行 = 模拟数据徽标 + 单位说明 + 产业 Segmented，产业选择会话级保留 `LPL3.view.marketboard.industry`；产业切换三卡按 key 重挂）。dev 预览面 `pricelens/marketboard-preview.html` 保留，仅作无壳审阅入口。
 
 ## 目标
 

@@ -1,10 +1,12 @@
-// 图表卡片上沿的导航行：价格走势 / 量价走势 / 量价预测 三个平级页签。
+// 图表卡片上沿的导航行：价格走势 / 量价走势 / 大盘走势 / 量价预测 四个平级页签。
 // 第一百八十九轮定版（Eason，收敛此前双层页签讨论）：价格走势默认承载多产品
 // 对比，常驻「多产品对比」子页签退役；多平台对比降为图表工具行右端的轻量文字
 // 入口（ChartToolbar.compareEntry），进入后原位变「← 返回多产品对比」——主导航
 // 任意时刻只有一处选中（墨色 + 600 字重 + 墨色下划线），不再有父子双高亮。
 // 点「价格走势」永远落回多产品对比；在多平台对比中主导航仍只有「价格走势」选中。
 // 量价预测沿用独立页面承载，保留在图表导航中作为快捷入口。
+// 2026-11-03：新增「大盘走势」（GFK 看板复刻三图，页 id marketboard），排在
+// 量价走势之后、量价预测之前。
 import { usePage } from '../state/PageContext';
 import { useChartContent } from '../state/chartContent';
 import { color, space } from '../theme/tokens';
@@ -62,6 +64,7 @@ export default function ChartContentBar() {
   const { setPriceSubview } = useChartContent();
   const priceOn = page === 'dashboard';
   const volumeOn = page === 'volume';
+  const marketOn = page === 'marketboard';
   const forecastOn = page === 'forecast';
 
   const openPrice = (): void => {
@@ -72,6 +75,10 @@ export default function ChartContentBar() {
   };
   const openVolume = (): void => {
     if (page !== 'volume') go('volume');
+  };
+
+  const openMarket = (): void => {
+    if (page !== 'marketboard') go('marketboard');
   };
 
   const openForecast = (): void => {
@@ -91,6 +98,7 @@ export default function ChartContentBar() {
     >
       <Tab active={priceOn} onClick={openPrice}>价格走势</Tab>
       <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
+      <Tab active={marketOn} onClick={openMarket}>大盘走势</Tab>
       {/* 预测页页头管理页签（PageHeader WIP）同枚页签也标 aria-current="page"，
           这里省略程序化标记只留视觉选中，同页唯一 current（2026-11-01 审计 P2） */}
       <Tab active={forecastOn} suppressCurrent onClick={openForecast}>量价预测</Tab>

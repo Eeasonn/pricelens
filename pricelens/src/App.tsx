@@ -9,6 +9,7 @@ import { scopeLabels } from './dataModel/scope';
 import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
 import VolumePrice from './pages/VolumePrice';
+import MarketBoardPage from './pages/MarketBoardPage';
 import PricingPage from './pages/pricing/PricingPage';
 import Config from './pages/Config';
 import AlertsPage from './pages/AlertsPage';
@@ -70,6 +71,7 @@ function AppBody() {
     overview: '国家总览',
     dashboard: '价格走势',
     volume: '量价走势',
+    marketboard: '大盘走势',
     pricing: '定价推演',
     config: '配置',
     alerts: '预警',
@@ -79,10 +81,11 @@ function AppBody() {
   useEffect(() => {
     document.title = `PriceLens · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
   }, [page, region, country]);
-  // 第一百八十四轮（Eason）：分析三页（价格走势/量价走势/定价推演）共享同一页面
+  // 第一百八十四轮（Eason）：分析页（价格走势/量价走势/定价推演）共享同一页面
   // 壳（页头+筛选条+滚动容器）——页内切换只换图表主体，不再整页重挂载（顶部
-  // 筛选器不刷新）；非分析页仍按页 key 重挂载播淡入
-  const analysis = page === 'dashboard' || page === 'volume' || page === 'pricing';
+  // 筛选器不刷新）；非分析页仍按页 key 重挂载播淡入。
+  // 2026-11-03：大盘走势（marketboard）加入分析壳，同享切页不重挂筛选器。
+  const analysis = page === 'dashboard' || page === 'volume' || page === 'marketboard' || page === 'pricing';
   return (
     <>
       <a
@@ -109,7 +112,7 @@ function AppBody() {
           <Overview />
         ) : analysis ? (
           <AnalysisShell>
-            {page === 'volume' ? <VolumePrice /> : page === 'pricing' ? <PricingPage /> : <Dashboard />}
+            {page === 'volume' ? <VolumePrice /> : page === 'marketboard' ? <MarketBoardPage /> : page === 'pricing' ? <PricingPage /> : <Dashboard />}
           </AnalysisShell>
         ) : page === 'config' ? (
           <Config />
