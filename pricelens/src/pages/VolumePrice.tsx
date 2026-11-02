@@ -54,6 +54,7 @@
 // 原纯文字面板头退役（信息已由药丸承载），面板头定高随药丸加高并与共享轴列对齐。
 // 屏蔽/悬停联动量价页没有，onToggle/onHover 传 no-op。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { Segmented } from 'antd';
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import { useConfigVersion } from '../state/configStore';
@@ -96,6 +97,7 @@ import { brandColorOf, color, font, fontSize, formatPrice, radius, selectAccent,
 import { volumeAdaptiveSeries } from './volume/volumeAdaptive';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
 import VolumeBars from './volume/VolumeBars';
+import CostBarChart from './volume/CostBarChart';
 import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
 import HiddenTray, { type HiddenTrayItem } from './volume/HiddenTray';
@@ -108,6 +110,7 @@ import PointerShield from './volume/PointerShield';
 import { detailDateOf, weekDetailModel } from './volume/weekDetail';
 import { spreadCardEmptyModel, spreadCardModel, spreadCardRow } from './volume/spreadCards';
 import { commitVolumeAxisLimit, fitVolumeLimitsByKey, normalizePanelWindow, vMaxOf, volumeRangeOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
+import { niceCeil } from '../dataModel/volume';
 import { formatVolumeAmount, pricePointValid, rangeBandInView, rangeSpreadOf, resolveSelectedWindow, shouldUseWanUnits, volumePointValid } from './volume/periodSummary';
 
 // 面板头定高（第一百九十一轮，Eason 五点）：面板头改 [拖柄][PillUnit] 后随药丸
@@ -127,6 +130,13 @@ const LOAD_ERROR_HINT: ReactNode = (
 
 const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
 const CHART_GRID_RIGHT = 78; // 右侧预留销量轴列（轴线 + 最高值输入框）
+
+/** 品牌色 → 半透明 rgba（成本柱图例/柱面用） */
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return `rgba(23, 23, 23, ${alpha})`;
+  return `rgba(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)}, ${alpha})`;
+}
 
 /** 粒度名词（周/月/季）：脚注与无障碍文案随粒度换字，不把「周」硬套在月/季视图 */
 const granNounOf = (granularity: Granularity): string => (granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季');
@@ -220,6 +230,11 @@ export default function VolumePrice() {
   //      产品清单/价格类型/币种变化清空（挂进下方 scaleResetKey 复位效果） ----
   const [hiddenPanels, setHiddenPanels] = usePageViewState<string[]>('volume.hiddenPanels', () => []);
   const hiddenSet = useMemo(() => new Set(hiddenPanels), [hiddenPanels]);
+  // 呈现方式（2026-11-02 新方案）：经典 = 折线+销量柱+成本销毛带；成本柱 = 柱高折后价
+  // + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱。会话态跨页保留
+  const [priceMode, setPriceMode] = usePageViewState<'classic' | 'costbar'>('volume.priceMode', () => 'classic');
+  const costbar = priceMode === 'costbar';
+
   // 视图模式切换（阅读 ↔ 组内对比 / 换组）即清空隐藏集：两视图面板集不同，
   // 「一次看一组」的心智下从空集开始
   const switchViewMode = (mode: VolumeViewMode): void => {
@@ -743,6 +758,8 @@ export default function VolumePrice() {
   }, [visUnion, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
   const tierValues = useMemo(() => collectTierValues(visUnion, state.priceTypes), [visUnion, state.priceTypes]);
 
+
+
   // ---- 销量：各面板生效窗口桶口径（非同步时各面板独立；不随平台/币种变化） ----
   const domainIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
   const volumes = useMemo(
@@ -772,6 +789,25 @@ export default function VolumePrice() {
     }),
     [panelData, domainIds, effWins, cc],
   );
+  // 成本柱模式 $ 刻度：从 0 起，上限覆盖可见面板的折后价与成本（柱形语义需要 0 基线）
+  const costBarMax = useMemo(() => {
+    let m = 0;
+    for (const panel of panelViews) {
+      if (hiddenSet.has(panel.spec.key)) continue;
+      for (const series of panel.vis) for (const pt of series.points) if (pt.price != null && pt.price > m) m = pt.price;
+      for (const point of marginCosts[panel.idx] ?? []) if (point && point.unitCost > m) m = point.unitCost;
+    }
+    return m;
+  }, [panelViews, hiddenSet, marginCosts]);
+  const yCfgCost = useMemo(() => computeYAxis({
+    series: visUnion,
+    priceTypes: state.priceTypes,
+    sliderScale: 1,
+    allowBreak: false,
+    perUsd: perUsdOf(state.currency),
+    yMin: 0,
+    yMax: costBarMax > 0 ? niceCeil(costBarMax * 1.06) : undefined,
+  }), [visUnion, state.priceTypes, state.currency, costBarMax]);
   // 各图销量轴上限恒自动（niceCeil 窗口内最大值）
   const panelVMax = volumes.map((vs) => vMaxOf(vs));
   const onVolumeAxisLimit = (key: string, kind: 'max', value: number | null, autoMax: number): void => {
@@ -912,6 +948,18 @@ export default function VolumePrice() {
                   onLabelMode={setLabelMode}
                   anomalySlot={<AnomalyQualityChip page="volume" />}
                 />
+                {/* 呈现方式切换（2026-11-02 新方案）：经典 = 折线+销量柱；成本柱 = 柱高
+                    折后价 + 成本灰线 + 销量右轴细线 + 销毛率下垂。会话态跨页保留 */}
+                <Segmented
+                  size="small"
+                  aria-label="图表呈现方式"
+                  value={priceMode}
+                  onChange={(v) => setPriceMode(v as 'classic' | 'costbar')}
+                  options={[
+                    { label: '经典', value: 'classic' },
+                    { label: '成本柱', value: 'costbar' },
+                  ]}
+                />
               </div>
             </div>
 
@@ -969,7 +1017,7 @@ export default function VolumePrice() {
                 }}
               >
                 <SplitAxisColumn
-                  yScale={yCfg}
+                  yScale={costbar ? yCfgCost : yCfg}
                   currency={state.currency}
                   industry={state.industry}
                   gridLeft={estGridLeft(state.currency, showYTicks, showTiers)}
@@ -1119,6 +1167,10 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                         : null;
                       const activePoint = activeIdx != null ? p.vis[0]?.points[activeIdx] ?? null : null;
                       const marginPoint = activeIdx != null ? marginPoints[activeIdx] ?? null : null;
+                      // 隔离周成本不进图（与水位/成本柱两形态一致：价格不可信 → 成本不显示）
+                      const marginPointsMasked = p.vis[0]?.points
+                        ? marginPoints.map((mp, mi) => (p.vis[0]?.points[mi]?.suspect === 'quarantined' ? null : mp))
+                        : marginPoints;
                       const crossX = strip && activeIdx != null ? marginCrossX(strip, activeIdx) : null;
                       // ---- 图下单周明细卡：缺采显示 —，环比只跟上一桶比，不借用相邻值。
                       //      上一桶取全量域（视图切片首桶的前一周在域内可能有值，
@@ -1303,22 +1355,45 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             胶囊（含清除）或「拖动图表选择区间」提示（无选区时） */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 30, padding: '0 4px', margin: '4px 0 8px' }}>
                           <div aria-label="图例" style={{ display: 'flex', alignItems: 'center', gap: 14, color: color.mute, fontSize: 11, lineHeight: '14px', flexWrap: 'wrap', minWidth: 0 }}>
-                            {state.priceTypes.discounted && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                <span aria-hidden style={{ width: 16, height: 2, background: seriesColor }} />
-                                折后价
-                              </span>
+                            {costbar ? (
+                              <>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                  <span aria-hidden style={{ width: 10, height: 12, borderRadius: 1, background: hexToRgba(seriesColor, 0.15), boxShadow: `inset 0 0 0 1.5px ${seriesColor}` }} />
+                                  折后价
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                  <span aria-hidden style={{ width: 14, height: 2, background: color.mute }} />
+                                  成本
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                  <span aria-hidden style={{ width: 14, height: 1.5, background: selectAccent }} />
+                                  销量
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                  <span aria-hidden style={{ width: 8, height: 10, borderRadius: 1, background: 'rgba(245, 166, 35, 0.32)' }} />
+                                  销毛率（下垂）
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                {state.priceTypes.discounted && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                    <span aria-hidden style={{ width: 16, height: 2, background: seriesColor }} />
+                                    折后价
+                                  </span>
+                                )}
+                                {state.priceTypes.rrp && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                    <span aria-hidden style={{ width: 16, height: 1, background: seriesColor, opacity: 0.85 }} />
+                                    RRP
+                                  </span>
+                                )}
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                  <span aria-hidden style={{ width: 8, height: 9, borderRadius: 1, background: seriesColor, opacity: 0.22 }} />
+                                  销量
+                                </span>
+                              </>
                             )}
-                            {state.priceTypes.rrp && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                <span aria-hidden style={{ width: 16, height: 1, background: seriesColor, opacity: 0.85 }} />
-                                RRP
-                              </span>
-                            )}
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                              <span aria-hidden style={{ width: 8, height: 9, borderRadius: 1, background: seriesColor, opacity: 0.22 }} />
-                              销量
-                            </span>
                           </div>
                           {ranged && brush && row ? (
                             <span
@@ -1383,20 +1458,39 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             }}
                             style={{ position: 'relative' }}
                           >
-                          <VolumeBars
-                            geom={geoms[p.idx] ?? null}
-                            plotTop={PANEL_GRID_TOP}
-                            plotHeight={yCfg.plotHeight}
-                            values={volumes[p.idx]}
-                            vMax={panelVMax[p.idx]}
-                            color={seriesColor}
-                            hoverIdx={activeIdx}
-                            axisLimits={volumeLimits[p.key] ?? { max: null }}
-                            onAxisLimit={(kind, value) => onVolumeAxisLimit(p.key, kind, value, panelVMax[p.idx] ?? 1)}
-                            selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
-                          />
-                          <Chart
-                            series={reading ? p.vis.map((series) => ({ ...series, color: seriesColor })) : p.vis}
+                          {costbar ? (
+                            <CostBarChart
+                              geom={geoms[p.idx] ?? null}
+                              plotTop={PANEL_GRID_TOP}
+                              plotHeight={yCfgCost.plotHeight}
+                              yScale={yCfgCost}
+                              points={p.vis[0]?.points ?? []}
+                              costPoints={marginPointsMasked}
+                              volumes={volumes[p.idx]}
+                              currency={state.currency}
+                              seriesColor={seriesColor}
+                              focusIdx={activeIdx}
+                              selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
+                              onGeom={onGeomOf(p.idx)}
+                              name={p.name}
+                              emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
+                            />
+                          ) : (
+                            <>
+                              <VolumeBars
+                                geom={geoms[p.idx] ?? null}
+                                plotTop={PANEL_GRID_TOP}
+                                plotHeight={yCfg.plotHeight}
+                                values={volumes[p.idx]}
+                                vMax={panelVMax[p.idx]}
+                                color={seriesColor}
+                                hoverIdx={activeIdx}
+                                axisLimits={volumeLimits[p.key] ?? { max: null }}
+                                onAxisLimit={(kind, value) => onVolumeAxisLimit(p.key, kind, value, panelVMax[p.idx] ?? 1)}
+                                selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
+                              />
+                              <Chart
+                                series={reading ? p.vis.map((series) => ({ ...series, color: seriesColor })) : p.vis}
                             granularity={state.granularity}
                             currency={state.currency}
                             priceTypes={state.priceTypes}
@@ -1420,6 +1514,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             onGeom={onGeomOf(p.idx)}
                             emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
                           />
+                            </>
+                          )}
                           {/* 指针承接层：悬停列 / 拖选区间 / 横向参考位统一从面板接管 */}
                           {strip && !p.failed && viewLen > 0 && (
                             <PointerShield
@@ -1427,7 +1523,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               plotTop={PANEL_GRID_TOP}
                               plotWidth={strip.plotWidth}
                               plotHeight={yCfg.plotHeight}
-                              extraBottom={GRID.bottom}
+                              extraBottom={costbar ? 60 : GRID.bottom}
                               n={viewLen}
                               onHover={onHoverOf(p.idx)}
                               onBrush={onBrushChangeOf(p.idx)}
@@ -1438,7 +1534,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               只留极值位置的点——价格 = 同心双环（外空心环 + 内实心点），
                               销量 = 白芯菱形；两种形状区分量纲，不再画水平引线与双向箭头尺
                               （辅助线全部退役，悬停浮窗照常给出数值） */}
-                          {strip && ranged && slot > 0 && (
+                          {strip && ranged && slot > 0 && !costbar && (
                             <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2, overflow: 'visible' }}>
                               {priceBand && !priceBand.flat && priceSpread?.spread != null && priceBand.dots.map((dot) => {
                                 const cx = xAt(dot.index);
@@ -1471,12 +1567,11 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             </svg>
                           )}
                           </div>
+                          {!costbar && (
                           <MarginCostBand
                             waterline={state.granularity === 'week'}
                             geom={geoms[p.idx] ?? null}
-                            points={p.vis[0]?.points
-                              ? marginPoints.map((mp, mi) => (p.vis[0]?.points[mi]?.suspect === 'quarantined' ? null : mp))
-                              : marginPoints}
+                            points={marginPointsMasked}
                             currency={state.currency}
                             seriesColor={seriesColor}
                             hoverIdx={hoverIdxs[p.idx] ?? null}
@@ -1486,6 +1581,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             focusIndex={activeIdx}
                             selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
                           />
+                          )}
                           {crossX != null && (
                             <div aria-hidden style={{ position: 'absolute', left: Math.round(crossX) - 0.5, top: PANEL_GRID_TOP, bottom: 0, width: 1, background: color.hairlineStrong, pointerEvents: 'none', zIndex: 4 }} />
                           )}
