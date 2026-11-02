@@ -148,7 +148,7 @@ function LimitInput(props: {
       title={`价格${label}：输入后按 Enter 或离开输入框生效；清空恢复自动。箭头每次调整 ${Y_LIMIT_STEP}`}
     >
       <input
-        className="tnum"
+        className="tnum lpl-raw-input"
         type="text"
         inputMode="decimal"
         value={draft}
@@ -184,7 +184,6 @@ function LimitInput(props: {
           lineHeight: '20px',
           textAlign: 'left',
           padding: '0 0 0 4px',
-          outline: 'none',
         }}
       />
       <span style={{ display: 'flex', flexDirection: 'column', flex: '0 0 12px', height: '100%' }}>

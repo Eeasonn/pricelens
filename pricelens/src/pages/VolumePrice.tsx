@@ -1177,6 +1177,9 @@ export default function VolumePrice() {
                         return PANEL_GRID_TOP + yCfg.plotHeight - ratio * yCfg.plotHeight;
                       };
                       const granNoun = granNounOf(state.granularity);
+                      // 面板根四边用长属性而非 border 简写：阅读态同元素仅设 borderLeft，
+                      // 简写↔长属性在同一次重渲染间切换会触发 React 控制台混用警告（2026-11-01 控制台卫生）
+                      const panelEdge = dropTarget === p.spec.key && draggingPanel !== p.spec.key ? color.link : color.hairline;
                       return (
                       <div
                         key={p.key}
@@ -1201,7 +1204,10 @@ export default function VolumePrice() {
                           minWidth: 0,
                           borderLeft: panelIndex > 0 ? `1px solid ${color.hairline}` : undefined,
                         } : {
-                          border: `1px solid ${dropTarget === p.spec.key && draggingPanel !== p.spec.key ? color.link : color.hairline}`,
+                          borderTop: `1px solid ${panelEdge}`,
+                          borderRight: `1px solid ${panelEdge}`,
+                          borderBottom: `1px solid ${panelEdge}`,
+                          borderLeft: `1px solid ${panelEdge}`,
                           boxShadow:
                             dropTarget === p.spec.key && draggingPanel !== p.spec.key
                               ? 'inset 0 0 0 2px rgba(0, 112, 243, 0.35)'
