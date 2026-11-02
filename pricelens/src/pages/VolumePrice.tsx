@@ -909,206 +909,10 @@ export default function VolumePrice() {
 
   const panelLead = reading ? 0 : SCROLL_PAD_TOP + PANEL_GRIP_H;
 
-  return (
-    <>
-      {/* 页面壳（页头/筛选条/滚动容器）第一百八十四轮上移 App.AnalysisShell 共享——
-          本组件只负责图表卡与大盘卡，价格走势↔量价走势切页不再整页重挂。 */}
-      <section
-        style={{
-          background: color.canvas,
-          boxShadow: reading ? undefined : shadow.l1,
-          borderRadius: reading ? 0 : radius.card,
-          padding: 0,
-          overflow: 'hidden',
-        }}
-      >
-        <ChartContentBar />
-        <div style={{ padding: `${space.sm}px ${space.lg}px ${space.md}px` }}>
-            {/* 常驻工具行：齿轮（每格高度/Y 刻度线/自动压缩/折线样式）+ 折后价/RRP 胶囊；
-                第131轮波2：时间筛选簇上移顶部筛选条，本行只剩齿轮簇 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 32, padding: '0 6px', marginBottom: 8 }}>
-              <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-                <ChartToolbar
-                  currency={state.currency}
-                  sliderScale={sliderScale}
-                  onSliderScale={setSliderScale}
-                  showYTicks={showYTicks}
-                  showTiers={showTiers}
-                  onShowTiers={setShowTiers}
-                  onShowYTicks={setShowYTicks}
-                  yCompress={yCompress}
-                  onYCompress={setYCompress}
-                  lineShape={lineShape}
-                  onLineShape={setLineShape}
-                  priceTypes={state.priceTypes}
-                  onPriceTypeToggle={setPriceType}
-                  tipMode={tipMode}
-                  onTipMode={setTipMode}
-                  labelMode={labelMode}
-                  onLabelMode={setLabelMode}
-                  anomalySlot={<AnomalyQualityChip page="volume" />}
-                />
-                {/* 呈现方式切换（2026-11-02 新方案）：经典 = 折线+销量柱；成本柱 = 柱高
-                    折后价 + 成本灰线 + 销量右轴细线 + 销毛率下垂。会话态跨页保留 */}
-                <Segmented
-                  size="small"
-                  aria-label="图表呈现方式"
-                  value={priceMode}
-                  onChange={(v) => setPriceMode(v as 'classic' | 'costbar')}
-                  options={[
-                    { label: '经典', value: 'classic' },
-                    { label: '成本柱', value: 'costbar' },
-                  ]}
-                />
-              </div>
-            </div>
-
-            {/* 组内对比是同一量价卡内的次级视图，一次只看一组。 */}
-            {safeViewMode.kind === 'group' && (
-              <nav aria-label="组内对比切换" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: space.sm }}>
-                <button
-                  type="button"
-                  onClick={() => switchViewMode({ kind: 'mains' })}
-                  style={{ border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 12, cursor: 'pointer' }}
-                >
-                  ← 返回主产品视图
-                </button>
-                {state.mains.filter((card) => card.main).map((card, index) => {
-                  const active = safeViewMode.cardId === card.id;
-                  return (
-                    <button
-                      key={card.id}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => switchViewMode({ kind: 'group', cardId: card.id })}
-                      style={{
-                        height: 24,
-                        padding: '0 8px',
-                        border: `1px solid ${active ? color.link : color.hairline}`,
-                        borderRadius: radius.control,
-                        background: active ? selectSoft : color.canvas,
-                        color: active ? selectSoftInk : color.body,
-                        fontSize: 12,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      第 {index + 1} 组
-                    </button>
-                  );
-                })}
-              </nav>
-            )}
-
-            {/* 面板区：[共享 Y 轴列][三面板网格]；柱层在价格线之下（zIndex 0 < 1）。
-                第一百二十六轮：轴列纵向撑满面板区，「同步」开关落列底、与各面板
-                时间轴同一水平线（原底部独立行删除）。
-                第一百八十二轮：窄视口在卡内横向拖动（内层 minWidth 880 保面板可读下限） */}
-            <div className="lpl-card-scroll" style={{ overflowX: 'auto', marginBottom: space.sm }}>
-            <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, minWidth: 880, width: '100%' }}>
-              {/* 共享 Y 轴列（可见面板 > 0 才渲染——全隐藏空态时 computeYAxis 走
-                  0-100 空数据兜底，无信息量的默认刻度与空态并排反而误导） */}
-              {visibleCount > 0 && (
-              <div
-                style={{
-                  flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers)}px`,
-                  paddingTop: panelLead + PANEL_HEAD_H,
-                  display: 'flex',
-                  flexDirection: 'column',
-                }}
-              >
-                <SplitAxisColumn
-                  yScale={costbar ? yCfgCost : yCfg}
-                  currency={state.currency}
-                  industry={state.industry}
-                  gridLeft={estGridLeft(state.currency, showYTicks, showTiers)}
-                  panelGridTop={PANEL_GRID_TOP}
-                  showYTicks={showYTicks}
-                  showTiers={showTiers}
-                  tierValues={tierValues}
-                />
-                <div style={{ flex: 1 }} />
-                {/* 与时间轴轨道带齐平：轨道高 52，其下是说明行 VIEW_WINDOW_CAPTION_H。
-                    槽位仍高 52、按钮 top -5 对准轨道带中心；下边距加上说明行高度，
-                    否则按钮会比轨道带低出一整行说明。 */}
-                {buckets.length > 0 && visUnion.length > 0 && (
-                  <div style={{ height: 52, marginBottom: 6 + VIEW_WINDOW_CAPTION_H, position: 'relative', flexShrink: 0 }}>
-                    {!reading && (
-                      <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
-                        {syncToggle}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              )}
-              <div style={{ flex: '1 1 0', minWidth: 0 }}>
-                {panelCount === 0 ? (
-                  <div
-                    style={{
-                      padding: '48px 0',
-                      textAlign: 'center',
-                      fontSize: fontSize.bodySm,
-                      color: color.mute,
-                      border: `1px dashed ${color.hairline}`,
-                      borderRadius: radius.card,
-                    }}
-                  >
-                    在上方筛选器选择产品后，这里按所选产品铺开量价走势
-                  </div>
-                ) : visibleCount === 0 ? (
-                  // 全隐藏空态（设计 §4.A.5）：允许隐藏到零，虚线框空态 + 居中「全部恢复」
-                  // 出口；此时暂存条不再重复渲染
-                  <div
-                    style={{
-                      padding: '48px 0',
-                      textAlign: 'center',
-                      fontSize: fontSize.bodySm,
-                      color: color.mute,
-                      border: `1px dashed ${color.hairline}`,
-                      borderRadius: radius.card,
-                    }}
-                  >
-                    已隐藏全部产品
-                    <div style={{ marginTop: 12 }}>
-                      <button
-                        type="button"
-                        ref={emptyRestoreRef}
-                        onClick={restoreAllPanels}
-                        style={{
-                          height: 28,
-                          padding: '0 16px',
-                          border: `1px solid ${color.hairline}`,
-                          borderRadius: radius.control,
-                          background: color.canvas,
-                          color: color.ink,
-                          font: 'inherit',
-                          fontSize: fontSize.caption,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        全部恢复
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  // 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
-                  // 均分一行；>3 个不折行，横向拖动查看（轨道宽 = N/3 × 100%，每格
-                  // 恒为视口 1/3 宽）。隐藏后按可见数重算
-                  <div className="lpl-card-scroll" style={{ overflowX: 'auto', overflowY: 'hidden', padding: `${reading ? 0 : SCROLL_PAD_TOP}px 0 0` }}>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))`,
-                        gap: reading ? 0 : space.md,
-                        width: `${(visibleCount / Math.min(visibleCount, 3)) * 100}%`,
-                      }}
-                    >
-                    {/* 第一百九十一轮（Eason 五点）：渲染序 = 拖拽换位序（orderedPanels，
-                        panelOrder 缺省回落数据序）；拖柄拖到目标面板松手换位。
-                        2026-11-01 显隐改版：渲染前按隐藏集过滤（渲染层过滤），grid 列数
-                        与轨道宽按可见数重算 */}
-                    {visiblePanels.map((p, panelIndex) => {
+  // 面板渲染体前置（2026-11-02 布局重排）：明细卡要在面板行之前的独立明细行渲染，
+  // 故面板体先 map 成节点数组，明细卡元素收集进 detailCards 供明细行使用。
+  const detailCards = new Map<string, ReactNode>();
+  const panelNodes = visiblePanels.map((p, panelIndex) => {
                       const pill = pillOf(p);
                       const row = summaryRows.find((item) => item.key === p.key);
                       const viewStart = effWins[p.idx]?.[0] ?? 0;
@@ -1312,45 +1116,6 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                           <HolderOutlined style={{ fontSize: 10 }} />
                         </span>
                         )}
-                        <div style={{ height: PANEL_HEAD_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, minWidth: 0 }}>
-                          <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: reading ? 'flex-start' : 'center' }}>
-                            {reading ? (
-                              // 阅读视图面板头药丸化（2026-11-01 设计 §4.A.1）：信息结构不变
-                              //（平台行 + 品牌行 + 名称行 + 配置 chip），点击 = 隐藏该产品面板
-                              <span
-                                ref={(el) => registerPanelPillHost(p.spec.key, el)}
-                                style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0, maxWidth: '100%' }}
-                              >
-                                <PillUnit pill={pill} dimmed={false} onToggle={hidePanel} onHover={() => {}} />
-                              </span>
-                            ) : (
-                              <PanelHeader
-                                brand={p.brand}
-                                name={p.name}
-                                isMain={p.spec.isMain}
-                                syncActive={storeSyncMap[p.spec.cardId] === true}
-                                onStoreSync={p.spec.isMain ? () => toggleStoreSync(p) : undefined}
-                              >
-                                <span
-                                  ref={(el) => registerPanelPillHost(p.spec.key, el)}
-                                  style={{ display: 'inline-flex', minWidth: 0 }}
-                                >
-                                  <PillUnit pill={pill} dimmed={false} onToggle={hidePanel} onHover={() => {}} />
-                                </span>
-                              </PanelHeader>
-                            )}
-                          </div>
-                          {safeViewMode.kind === 'mains' && p.spec.isMain && (state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0) > 0 && (
-                            <button
-                              type="button"
-                              aria-label={`查看 ${p.name} 所在组的 ${state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0} 款对比产品`}
-                              onClick={() => switchViewMode({ kind: 'group', cardId: p.spec.cardId })}
-                              style={{ flex: '0 0 auto', border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 11, lineHeight: '14px', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                            >
-                              本组对比（{state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0}）
-                            </button>
-                          )}
-                        </div>
                         {/* 图表元信息行（视觉 demo：chart-meta）：左 = 图例，右 = 所选区间
                             胶囊（含清除）或「拖动图表选择区间」提示（无选区时） */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 30, padding: '0 4px', margin: '4px 0 8px' }}>
@@ -1589,23 +1354,32 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                           )}
                         </div>
                         {/* 图下方单周明细卡（视觉 demo：detail-card 三栏网格） */}
-                        <WeekDetailCard
-                          model={detail}
-                          brand={p.brand}
-                          nameText={pill.nameText}
-                          romText={pill.romText}
-                          summaryId={`volume-detail-${p.idx}`}
-                          onExempt={
-                            activePoint?.suspect && activePoint.suspect !== 'exempted' && activePoint.price != null
-                              ? () => markPanelPoint(p, activePoint, 'exempt')
-                              : undefined
-                          }
-                          onIsolate={
-                            activePoint?.suspect === 'pending' && activePoint.price != null
-                              ? () => markPanelPoint(p, activePoint, 'isolate')
-                              : undefined
-                          }
-                        />
+                        {/* 明细卡收集进 detailCards（JSX children 内的语句容器：
+                            IIFE 执行 set、渲染 null——set 的返回值是 Map，
+                            直接渲染会触发 React 对可迭代对象的展开报错） */}
+                        {(() => {
+                          detailCards.set(
+                            p.spec.key,
+                            <WeekDetailCard
+                            model={detail}
+                            brand={p.brand}
+                            nameText={pill.nameText}
+                            romText={pill.romText}
+                            summaryId={`volume-detail-${p.idx}`}
+                            onExempt={
+                              activePoint?.suspect && activePoint.suspect !== 'exempted' && activePoint.price != null
+                                ? () => markPanelPoint(p, activePoint, 'exempt')
+                                : undefined
+                            }
+                            onIsolate={
+                              activePoint?.suspect === 'pending' && activePoint.price != null
+                                ? () => markPanelPoint(p, activePoint, 'isolate')
+                                : undefined
+                            }
+                            />
+                          );
+                          return null;
+                        })()}
                         {/* 脚注行：交互提示 + 口径说明 */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 12, color: color.mute, fontSize: 11, lineHeight: '16px' }}>
                           <span style={{ whiteSpace: 'nowrap' }}>拖动选择区间 · 移动鼠标查看单周明细</span>
@@ -1628,7 +1402,279 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                         </div>
                       </div>
                       );
-                    })}
+  });
+  return (
+    <>
+      {/* 页面壳（页头/筛选条/滚动容器）第一百八十四轮上移 App.AnalysisShell 共享——
+          本组件只负责图表卡与大盘卡，价格走势↔量价走势切页不再整页重挂。 */}
+      <section
+        style={{
+          background: color.canvas,
+          boxShadow: reading ? undefined : shadow.l1,
+          borderRadius: reading ? 0 : radius.card,
+          padding: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <ChartContentBar />
+        <div style={{ padding: `${space.sm}px ${space.lg}px ${space.md}px` }}>
+            {/* 已隐藏托盘（2026-11-02 反馈④）：置顶于齿轮行上方 */}
+            {trayItems.length > 0 && (
+              <div style={{ marginBottom: space.sm }}>
+                <HiddenTray items={trayItems} onRestore={restorePanel} onRestoreAll={restoreAllPanels} registerItem={registerTrayItem} />
+              </div>
+            )}
+            {/* 工具行三段同行（2026-11-02 反馈①②）：齿轮左 · 各面板产品药丸居中 · 经典/成本柱右 */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, minHeight: 64, padding: '0 6px', marginBottom: 8 }}>
+              <div style={{ flex: '0 0 auto' }}>
+                <ChartToolbar
+                  currency={state.currency}
+                  sliderScale={sliderScale}
+                  onSliderScale={setSliderScale}
+                  showYTicks={showYTicks}
+                  showTiers={showTiers}
+                  onShowTiers={setShowTiers}
+                  onShowYTicks={setShowYTicks}
+                  yCompress={yCompress}
+                  onYCompress={setYCompress}
+                  lineShape={lineShape}
+                  onLineShape={setLineShape}
+                  priceTypes={state.priceTypes}
+                  onPriceTypeToggle={setPriceType}
+                  tipMode={tipMode}
+                  onTipMode={setTipMode}
+                  labelMode={labelMode}
+                  onLabelMode={setLabelMode}
+                  anomalySlot={<AnomalyQualityChip page="volume" />}
+                />
+                {/* 呈现方式切换（2026-11-02 新方案）：经典 = 折线+销量柱；成本柱 = 柱高
+                    折后价 + 成本灰线 + 销量右轴细线 + 销毛率下垂。会话态跨页保留 */}
+              </div>
+              {/* 各面板产品药丸（2026-11-02 反馈①）：每分组一格、格内居中；组内主品面板
+                  左挂店铺同步、阅读视图主品面板右挂本组对比入口 */}
+              {panelCount > 0 && visibleCount > 0 && (
+                <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: reading ? 0 : space.md, paddingBottom: 2 }}>
+                  {visiblePanels.map((p) => {
+                    const pill = pillOf(p);
+                    const compareCount = (state.mains.find((card) => card.id === p.spec.cardId)?.compares.length ?? 0);
+                    return (
+                      <div
+                        key={p.spec.key}
+                        style={{ position: 'relative', flex: '1 1 0', minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: 6, padding: '0 4px' }}
+                      >
+                        {!reading && p.spec.isMain && (
+                          <button
+                            type="button"
+                            aria-pressed={storeSyncMap[p.spec.cardId] === true}
+                            aria-label={storeSyncMap[p.spec.cardId] === true ? `取消 ${p.name} 的店铺同步` : `同步 ${p.name} 的店铺`}
+                            title={storeSyncMap[p.spec.cardId] === true ? '已同步：本主产品卡内的对比产品跟随主产品店铺，点击取消' : '本主产品卡内的对比产品跟随主产品店铺'}
+                            onClick={() => toggleStoreSync(p)}
+                            style={{
+                              flex: '0 0 36px', alignSelf: 'flex-end',
+                              width: 36, height: 36,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+                              border: `1px solid ${storeSyncMap[p.spec.cardId] === true ? selectAccent : color.hairline}`,
+                              borderRadius: radius.control,
+                              background: storeSyncMap[p.spec.cardId] === true ? selectSoft : color.canvas,
+                              color: storeSyncMap[p.spec.cardId] === true ? selectSoftInk : color.body,
+                              font: 'inherit', fontSize: 10, fontWeight: 600, lineHeight: '13px', cursor: 'pointer', whiteSpace: 'normal',
+                            }}
+                          >
+                            <span>店铺<br />同步</span>
+                          </button>
+                        )}
+                        <span ref={(el) => registerPanelPillHost(p.spec.key, el)} style={{ display: 'inline-flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%', margin: '0 auto' }}>
+                          <PillUnit pill={pill} dimmed={false} onToggle={hidePanel} onHover={() => {}} />
+                        </span>
+                        {reading && compareCount > 0 && (
+                          <button
+                            type="button"
+                            aria-label={`查看 ${p.name} 所在组的 ${compareCount} 款对比产品`}
+                            onClick={() => switchViewMode({ kind: 'group', cardId: p.spec.cardId })}
+                            style={{ flex: '0 0 auto', alignSelf: 'flex-end', border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 11, lineHeight: '14px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            本组对比（{compareCount}）
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{ flex: '0 0 auto', paddingBottom: 2 }}>
+                <Segmented
+                  size="small"
+                  aria-label="图表呈现方式"
+                  value={priceMode}
+                  onChange={(v) => setPriceMode(v as 'classic' | 'costbar')}
+                  options={[
+                    { label: '经典', value: 'classic' },
+                    { label: '成本柱', value: 'costbar' },
+                  ]}
+                />
+              </div>
+            </div>
+            {/* 明细信息行（2026-11-02 反馈③）：紧跟工具行下一行，每面板一张明细卡；不再垫底 */}
+            {panelCount > 0 && visibleCount > 0 && detailCards.size > 0 && (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: reading ? 0 : space.md, marginBottom: space.sm }}>
+                <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers)}px`, flexShrink: 0 }} />
+                {[...detailCards.values()].map((card, i) => (
+                  <div
+                    key={visiblePanels[i]?.spec.key ?? i}
+                    style={{ containerType: 'inline-size', flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: reading ? '0 12px' : 0 }}
+                  >
+                    {card}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 组内对比是同一量价卡内的次级视图，一次只看一组。 */}
+            {safeViewMode.kind === 'group' && (
+              <nav aria-label="组内对比切换" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: space.sm }}>
+                <button
+                  type="button"
+                  onClick={() => switchViewMode({ kind: 'mains' })}
+                  style={{ border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 12, cursor: 'pointer' }}
+                >
+                  ← 返回主产品视图
+                </button>
+                {state.mains.filter((card) => card.main).map((card, index) => {
+                  const active = safeViewMode.cardId === card.id;
+                  return (
+                    <button
+                      key={card.id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => switchViewMode({ kind: 'group', cardId: card.id })}
+                      style={{
+                        height: 24,
+                        padding: '0 8px',
+                        border: `1px solid ${active ? color.link : color.hairline}`,
+                        borderRadius: radius.control,
+                        background: active ? selectSoft : color.canvas,
+                        color: active ? selectSoftInk : color.body,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      第 {index + 1} 组
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
+
+            {/* 面板区：[共享 Y 轴列][三面板网格]；柱层在价格线之下（zIndex 0 < 1）。
+                第一百二十六轮：轴列纵向撑满面板区，「同步」开关落列底、与各面板
+                时间轴同一水平线（原底部独立行删除）。
+                第一百八十二轮：窄视口在卡内横向拖动（内层 minWidth 880 保面板可读下限） */}
+            <div className="lpl-card-scroll" style={{ overflowX: 'auto', marginBottom: space.sm }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md, minWidth: 880, width: '100%' }}>
+              {/* 共享 Y 轴列（可见面板 > 0 才渲染——全隐藏空态时 computeYAxis 走
+                  0-100 空数据兜底，无信息量的默认刻度与空态并排反而误导） */}
+              {visibleCount > 0 && (
+              <div
+                style={{
+                  flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers)}px`,
+                  paddingTop: panelLead, // 面板头行撤销（药丸上收工具行），轴列随面板同步上移
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <SplitAxisColumn
+                  yScale={costbar ? yCfgCost : yCfg}
+                  currency={state.currency}
+                  industry={state.industry}
+                  gridLeft={estGridLeft(state.currency, showYTicks, showTiers)}
+                  panelGridTop={PANEL_GRID_TOP}
+                  showYTicks={showYTicks}
+                  showTiers={showTiers}
+                  tierValues={tierValues}
+                />
+                <div style={{ flex: 1 }} />
+                {/* 与时间轴轨道带齐平：轨道高 52，其下是说明行 VIEW_WINDOW_CAPTION_H。
+                    槽位仍高 52、按钮 top -5 对准轨道带中心；下边距加上说明行高度，
+                    否则按钮会比轨道带低出一整行说明。 */}
+                {buckets.length > 0 && visUnion.length > 0 && (
+                  <div style={{ height: 52, marginBottom: 6 + VIEW_WINDOW_CAPTION_H, position: 'relative', flexShrink: 0 }}>
+                    {!reading && (
+                      <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
+                        {syncToggle}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              )}
+              <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                {panelCount === 0 ? (
+                  <div
+                    style={{
+                      padding: '48px 0',
+                      textAlign: 'center',
+                      fontSize: fontSize.bodySm,
+                      color: color.mute,
+                      border: `1px dashed ${color.hairline}`,
+                      borderRadius: radius.card,
+                    }}
+                  >
+                    在上方筛选器选择产品后，这里按所选产品铺开量价走势
+                  </div>
+                ) : visibleCount === 0 ? (
+                  // 全隐藏空态（设计 §4.A.5）：允许隐藏到零，虚线框空态 + 居中「全部恢复」
+                  // 出口；此时暂存条不再重复渲染
+                  <div
+                    style={{
+                      padding: '48px 0',
+                      textAlign: 'center',
+                      fontSize: fontSize.bodySm,
+                      color: color.mute,
+                      border: `1px dashed ${color.hairline}`,
+                      borderRadius: radius.card,
+                    }}
+                  >
+                    已隐藏全部产品
+                    <div style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        ref={emptyRestoreRef}
+                        onClick={restoreAllPanels}
+                        style={{
+                          height: 28,
+                          padding: '0 16px',
+                          border: `1px solid ${color.hairline}`,
+                          borderRadius: radius.control,
+                          background: color.canvas,
+                          color: color.ink,
+                          font: 'inherit',
+                          fontSize: fontSize.caption,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        全部恢复
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
+                  // 均分一行；>3 个不折行，横向拖动查看（轨道宽 = N/3 × 100%，每格
+                  // 恒为视口 1/3 宽）。隐藏后按可见数重算
+                  <div className="lpl-card-scroll" style={{ overflowX: 'auto', overflowY: 'hidden', padding: `${reading ? 0 : SCROLL_PAD_TOP}px 0 0` }}>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))`,
+                        gap: reading ? 0 : space.md,
+                        width: `${(visibleCount / Math.min(visibleCount, 3)) * 100}%`,
+                      }}
+                    >
+                    {/* 第一百九十一轮（Eason 五点）：渲染序 = 拖拽换位序（orderedPanels，
+                        panelOrder 缺省回落数据序）；拖柄拖到目标面板松手换位。
+                        2026-11-01 显隐改版：渲染前按隐藏集过滤（渲染层过滤），grid 列数
+                        与轨道宽按可见数重算 */}
+            {panelNodes}
                     </div>
                   </div>
                 )}
@@ -1639,10 +1685,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
 
       {/* 已隐藏暂存条（设计 §4.A.3）：面板区下方、卡内底部，不入横滚区——
           被隐藏产品的恢复入口；无隐藏或全隐藏（空态承担）时不渲染 */}
-      {trayItems.length > 0 && (
-        <HiddenTray items={trayItems} onRestore={restorePanel} onRestoreAll={restoreAllPanels} registerItem={registerTrayItem} />
-      )}
       </section>
     </>
   );
 }
+// MARKER-CHECK-777
