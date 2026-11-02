@@ -1,9 +1,12 @@
 // ============================================================
 // 大盘图表② · 品牌份额趋势（GFK IMG_9368 复刻）
-// 双带布局（与图①的容量条带同手法）：上方条带为大盘销量线（蓝，万台）
-// 与大盘均价线（琥珀墨，美元），均逐点标值；下方为月度 100% 堆叠柱
-// （≥12% 标注）。两带共享月份轴，hover 十字联动。
+// 双带布局：上方条带为大盘销量线（蓝，万台）与大盘均价线（琥珀墨，美元，
+// 均逐点标值）；下方为月度 100% 堆叠柱（≥12% 标注）。两带共享月份轴。
+// 卡头 Segmented 支持全档位与单档位筛选：单档位模式下条带仅显示该档位
+// 容量（档位内无均价口径），柱为该档位内月度品牌份额。
 // ============================================================
+import { useState } from 'react';
+import { Segmented } from 'antd';
 import { color } from '../../theme/tokens';
 import { OTHERS, type MarketIndustryData } from './marketBoardData';
 import {
@@ -12,6 +15,8 @@ import {
   labelInkFor,
   monthLabel,
   round1,
+  tierTrendSeries,
+  tierTrendSummary,
   trendSeries,
   trendSummary,
 } from './marketBoardModel';
@@ -30,14 +35,23 @@ function bandAxis(values: number[], from: number, to: number): { min: number; ma
 }
 
 export default function BrandShareTrendCard({ data }: { data: MarketIndustryData }) {
-  const t = trendSeries(data);
+  const [tierId, setTierId] = useState<string>('all');
+  const tier = data.tiers.find((t) => t.id === tierId) ?? null;
+
+  const overall = trendSeries(data);
+  const tierTrend = tier ? tierTrendSeries(data, tier.id) : null;
+  const t = tier ? tierTrend! : overall;
+
   const legendItems = [...data.brands, OTHERS];
-  const legendRows = legendItems.length > 8 ? 2 : 1;
+  const legendNames = legendItems.map((b) => (b === OTHERS ? '<OTHERS>' : b));
+  const lineNames = tier ? ['档位容量（万台）'] : ['大盘销量（万台）', '大盘均价（美元）'];
+  const legendRows = legendNames.length + lineNames.length > 8 ? 2 : 1;
 
   const chart = useEChart(
     () => {
-      const volAxis = bandAxis(t.volumes, 0.1, 0.46); // 线带下半：销量
-      const aspAxis = bandAxis(t.asps, 0.54, 0.92); // 线带上半：均价
+      const volValues = tier ? t.volumes : overall.volumes;
+      const volBand = tier ? bandAxis(volValues, 0.15, 0.85) : bandAxis(volValues, 0.1, 0.46);
+      const aspBand = tier ? { min: 0, max: 1 } : bandAxis(overall.asps, 0.54, 0.92);
 
       const series: Record<string, unknown>[] = [];
 
@@ -62,33 +76,33 @@ export default function BrandShareTrendCard({ data }: { data: MarketIndustryData
         });
       });
 
-      series.push(
-        {
-          name: '大盘销量（万台）',
-          type: 'line',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
-          data: t.volumes,
-          symbol: 'circle',
-          symbolSize: 4.5,
-          lineStyle: { width: 2, color: color.link },
-          itemStyle: { color: color.link, borderColor: '#ffffff', borderWidth: 1 },
-          label: {
-            show: true,
-            position: 'bottom',
-            distance: 5,
-            fontSize: 10,
-            color: color.link,
-            formatter: (p: { value: number }) => round1(p.value).toFixed(1),
-          },
-          z: 5,
+      series.push({
+        name: tier ? '档位容量（万台）' : '大盘销量（万台）',
+        type: 'line',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        data: volValues,
+        symbol: 'circle',
+        symbolSize: 4.5,
+        lineStyle: { width: 2, color: color.link },
+        itemStyle: { color: color.link, borderColor: '#ffffff', borderWidth: 1 },
+        label: {
+          show: true,
+          position: 'bottom',
+          distance: 5,
+          fontSize: 10,
+          color: color.link,
+          formatter: (p: { value: number }) => round1(p.value).toFixed(1),
         },
-        {
+        z: 5,
+      });
+      if (!tier) {
+        series.push({
           name: '大盘均价（美元）',
           type: 'line',
           xAxisIndex: 0,
           yAxisIndex: 1,
-          data: t.asps,
+          data: overall.asps,
           symbol: 'diamond',
           symbolSize: 5,
           lineStyle: { width: 2, color: ASP_INK },
@@ -102,8 +116,8 @@ export default function BrandShareTrendCard({ data }: { data: MarketIndustryData
             formatter: (p: { value: number }) => `${Math.round(p.value)}`,
           },
           z: 5,
-        },
-      );
+        });
+      }
 
       return {
         grid: [
@@ -119,7 +133,7 @@ export default function BrandShareTrendCard({ data }: { data: MarketIndustryData
           icon: 'roundRect',
           itemGap: 12,
           textStyle: { fontSize: 11, color: color.body },
-          data: [...legendItems.map((b) => (b === OTHERS ? '<OTHERS>' : b)), '大盘销量（万台）', '大盘均价（美元）'],
+          data: [...legendNames, ...lineNames],
         },
         tooltip: {
           ...MB_TOOLTIP,
@@ -139,11 +153,13 @@ export default function BrandShareTrendCard({ data }: { data: MarketIndustryData
                   `<span style="font-weight:600;color:${color.ink}">${Math.round(v)}%</span></div>`;
               })
               .join('');
+            const scope = tier ? `${tier.label} 美元档容量` : '大盘容量';
+            const aspTail = tier ? '' : ` · 大盘均价 $${overall.asps[idx] ?? 0}`;
             return (
-              `<div style="font-weight:600;color:${color.ink};margin-bottom:4px">${monthLabel(m)}</div>` +
+              `<div style="font-weight:600;color:${color.ink};margin-bottom:4px">${monthLabel(m)}${tier ? ` · ${tier.label} 美元档` : ''}</div>` +
               shareRows +
               `<div style="margin-top:4px;padding-top:4px;border-top:1px solid ${color.hairline};color:${color.body}">` +
-              `大盘容量 ${fmtWan(t.volumes[idx] ?? 0)} · 大盘均价 $${t.asps[idx] ?? 0}</div>`
+              `${scope} ${fmtWan(volValues[idx] ?? 0)}${aspTail}</div>`
             );
           },
         },
@@ -166,8 +182,8 @@ export default function BrandShareTrendCard({ data }: { data: MarketIndustryData
           },
         ],
         yAxis: [
-          { type: 'value', gridIndex: 0, min: volAxis.min, max: volAxis.max, show: false },
-          { type: 'value', gridIndex: 0, min: aspAxis.min, max: aspAxis.max, show: false },
+          { type: 'value', gridIndex: 0, min: volBand.min, max: volBand.max, show: false },
+          { type: 'value', gridIndex: 0, min: aspBand.min, max: aspBand.max, show: false },
           {
             type: 'value',
             gridIndex: 1,
@@ -181,18 +197,36 @@ export default function BrandShareTrendCard({ data }: { data: MarketIndustryData
         series,
       };
     },
-    [data],
+    [data, tier],
     { width: '100%', height: 470 },
   );
 
+  const hint = tier
+    ? `${data.intro}；单档位视图仅含该档位容量与份额，档位内无均价口径`
+    : data.intro;
+
   return (
     <section style={MB_CARD}>
-      <MBCardHead title="品牌份额趋势" source="模拟数据" hint={data.intro} />
+      <MBCardHead
+        title="品牌份额趋势"
+        source="模拟数据"
+        hint={hint}
+        extra={
+          <Segmented
+            size="small"
+            options={[{ label: '全档位', value: 'all' }, ...data.tiers.map((tr) => ({ label: tr.label, value: tr.id }))]}
+            value={tierId}
+            onChange={(v) => setTierId(String(v))}
+          />
+        }
+      />
       <MBSummaryLine>
-        {'上方条带：蓝线为大盘容量（万台）、琥珀线为大盘均价（美元），均逐点标值；下方为月度品牌份额。'}
+        {tier
+          ? `${tier.label} 美元档月度品牌份额；蓝线为该档位容量（万台，逐点标值）。`
+          : '上方条带：蓝线为大盘容量（万台）、琥珀线为大盘均价（美元），均逐点标值；下方为月度品牌份额。'}
       </MBSummaryLine>
       <MBScroll minWidth={1160}>{chart}</MBScroll>
-      <MBSummaryLine>{trendSummary(data)}</MBSummaryLine>
+      <MBSummaryLine>{tier ? tierTrendSummary(data, tier.id) : trendSummary(data)}</MBSummaryLine>
     </section>
   );
 }

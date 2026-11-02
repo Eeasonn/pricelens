@@ -16,6 +16,10 @@ import {
   round1,
   tierShareAt,
   tierShareSummary,
+  tierShareTrendAt,
+  tierTrendSeries,
+  tierTrendSummary,
+  tierVolumeAt,
   tierYoyColumns,
   tierYoySummary,
   trendSeries,
@@ -144,6 +148,52 @@ describe('同比与摘要', () => {
         expect(t).not.toContain('我司');
       }
     }
+  });
+});
+
+describe('图 2 单档位模式', () => {
+  it('单档位任意月品牌份额合计 100%，锚点月与档位份额精确一致', () => {
+    for (const ind of MARKET_INDUSTRIES) {
+      for (const t of ind.tiers) {
+        for (const m of ind.trendMonths) {
+          const s = tierShareTrendAt(ind, t.id, m);
+          const sum = allBrands(ind).reduce((acc, b) => acc + (s[b] ?? 0), 0);
+          expect(sum, `${ind.id} ${t.id} ${m}`).toBeCloseTo(100, 4);
+        }
+        for (const m of ind.anchorMonths) {
+          const exact = tierShareAt(ind, t.id, m);
+          const trend = tierShareTrendAt(ind, t.id, m);
+          for (const b of allBrands(ind)) expect(trend[b], `${ind.id} ${t.id} ${m} ${b}`).toBeCloseTo(exact[b], 6);
+        }
+      }
+    }
+  });
+
+  it('单档位容量：锚点月精确等于档位容量，全域为正', () => {
+    for (const ind of MARKET_INDUSTRIES) {
+      for (const t of ind.tiers) {
+        for (const m of ind.anchorMonths) {
+          expect(tierVolumeAt(ind, t.id, m)).toBeCloseTo(ind.tierVolume[t.id][m], 6);
+        }
+        for (const m of ind.trendMonths) expect(tierVolumeAt(ind, t.id, m)).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('单档位序列与摘要', () => {
+    const ind = MARKET_INDUSTRIES[0];
+    const tier = ind.tiers[3]; // 75–150
+    const s = tierTrendSeries(ind, tier.id);
+    expect(s.months).toEqual(ind.trendMonths);
+    expect(s.volumes.length).toBe(ind.trendMonths.length);
+    for (const b of allBrands(ind)) expect(s.shares[b].length).toBe(ind.trendMonths.length);
+    // GOOGLE 在 75–150 档于 2026-06 进场：之前为 0、锚点月取到 44%
+    expect(s.shares.GOOGLE[ind.trendMonths.indexOf('202508')]).toBe(0);
+    expect(s.shares.GOOGLE[ind.trendMonths.indexOf('202606')]).toBe(44);
+    const text = tierTrendSummary(ind, tier.id);
+    expect(text).toContain('75–150');
+    expect(text).not.toContain('我司');
+    expect(tierTrendSummary(ind, 'nope')).toBe('');
   });
 });
 

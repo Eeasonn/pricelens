@@ -159,18 +159,20 @@ function overallShareAnchorList(ind: MarketIndustryData): { month: string; share
   return [...history, ...detail].sort((a, b) => monthNum(a.month) - monthNum(b.month));
 }
 
-/** 任意月的大盘品牌份额（%）：锚点精确、之间缓动插值，OTHERS 补齐 100% */
-export function overallShareAt(ind: MarketIndustryData, month: string): Record<string, number> {
-  const anchors = overallShareAnchorList(ind);
+/** 份额锚点折线：锚点月精确取锚点值、之间余弦缓动、域外钳到最近锚点（按 keys 逐键插值） */
+function piecewiseShares(
+  anchors: { month: string; shares: Record<string, number> }[],
+  month: string,
+  keys: string[],
+): Record<string, number> {
   const m = monthNum(month);
   let lo = anchors[0];
   let hi = anchors[anchors.length - 1];
-  let k: number;
+  let k = 0;
   if (m <= monthNum(lo.month)) {
-    k = 0;
+    hi = lo;
   } else if (m >= monthNum(hi.month)) {
     lo = hi;
-    k = 0;
   } else {
     for (let i = 1; i < anchors.length; i++) {
       if (m <= monthNum(anchors[i].month)) {
@@ -184,15 +186,18 @@ export function overallShareAt(ind: MarketIndustryData, month: string): Record<s
     k = ease(mb === ma ? 1 : (m - ma) / (mb - ma));
   }
   const out: Record<string, number> = {};
-  let sum = 0;
-  for (const b of ind.brands) {
-    const a = lo.shares[b] ?? 0;
-    const v = hi.shares[b] ?? 0;
-    const val = Math.max(0, a + (v - a) * k);
-    out[b] = val;
-    sum += val;
+  for (const key of keys) {
+    const a = lo.shares[key] ?? 0;
+    const v = hi.shares[key] ?? 0;
+    out[key] = Math.max(0, a + (v - a) * k);
   }
-  out[OTHERS] = 100 - sum;
+  return out;
+}
+
+/** 任意月的大盘品牌份额（%）：锚点精确、之间缓动插值，OTHERS 补齐 100% */
+export function overallShareAt(ind: MarketIndustryData, month: string): Record<string, number> {
+  const out = piecewiseShares(overallShareAnchorList(ind), month, ind.brands);
+  out[OTHERS] = 100 - ind.brands.reduce((s, b) => s + out[b], 0);
   return out;
 }
 
@@ -215,6 +220,100 @@ export function trendSeries(ind: MarketIndustryData): {
     asps.push(Math.round(aspAt(ind, m)));
   }
   return { months, volumes, asps, shares };
+}
+
+// ---------------- 图 2 · 单档位模式：档位内的月度份额与容量 ----------------
+
+/** 单档位的大盘容量锚点：锚点月取档位容量；早期月按该档位在首锚点月的容量占比折算总量 */
+function tierVolumeAnchorList(ind: MarketIndustryData, tierId: string): { month: string; value: number }[] {
+  const m0 = ind.anchorMonths[0];
+  const total0 = anchorTotalVolume(ind, m0);
+  const ratio = total0 > 0 ? (ind.tierVolume[tierId]?.[m0] ?? 0) / total0 : 0;
+  return [
+    ...ind.volumeHistory.map((h) => ({ month: h.month, value: h.value * ratio })),
+    ...ind.anchorMonths.map((m) => ({ month: m, value: ind.tierVolume[tierId]?.[m] ?? 0 })),
+  ].sort((a, b) => monthNum(a.month) - monthNum(b.month));
+}
+
+/** 单档位月度容量（万台）：锚点精确、之间缓动插值 */
+export function tierVolumeAt(ind: MarketIndustryData, tierId: string, month: string): number {
+  return piecewiseAt(tierVolumeAnchorList(ind, tierId), month);
+}
+
+/**
+ * 单档位的品牌份额锚点：锚点月取档位份额；早期月以「品牌整体份额相对首锚点月的漂移因子」
+ * 推导（因子钳在 0.25–4 倍内），再按合计归一到 100%（含 OTHERS）。
+ */
+function tierShareAnchorList(ind: MarketIndustryData, tierId: string): { month: string; shares: Record<string, number> }[] {
+  const keys = [...ind.brands, OTHERS];
+  const m0 = ind.anchorMonths[0];
+  const base = tierShareAt(ind, tierId, m0);
+  const overallBase = anchorOverallShares(ind, m0);
+  const history = ind.overallHistory.map((h) => {
+    const overallH: Record<string, number> = {
+      ...h.shares,
+      [OTHERS]: 100 - Object.values(h.shares).reduce((s, v) => s + v, 0),
+    };
+    const raw: Record<string, number> = {};
+    let sum = 0;
+    for (const k of keys) {
+      const denom = overallBase[k] ?? 0;
+      const factor = denom > 0.05 ? Math.min(4, Math.max(0.25, (overallH[k] ?? 0) / denom)) : 1;
+      raw[k] = Math.max(0, (base[k] ?? 0) * factor);
+      sum += raw[k];
+    }
+    const scale = sum > 0 ? 100 / sum : 0;
+    for (const k of keys) raw[k] = raw[k] * scale;
+    return { month: h.month, shares: raw };
+  });
+  const detail = ind.anchorMonths.map((m) => ({ month: m, shares: tierShareAt(ind, tierId, m) }));
+  return [...history, ...detail].sort((a, b) => monthNum(a.month) - monthNum(b.month));
+}
+
+/** 单档位任意月的品牌份额（%）：锚点精确、之间缓动插值，OTHERS 补齐 100% */
+export function tierShareTrendAt(ind: MarketIndustryData, tierId: string, month: string): Record<string, number> {
+  const out = piecewiseShares(tierShareAnchorList(ind, tierId), month, ind.brands);
+  out[OTHERS] = Math.max(0, 100 - ind.brands.reduce((s, b) => s + out[b], 0));
+  return out;
+}
+
+/** 图 2 单档位序列：月度品牌份额（含 OTHERS）+ 档位容量（万台）；档位内不提供均价 */
+export function tierTrendSeries(ind: MarketIndustryData, tierId: string): {
+  months: string[];
+  volumes: number[];
+  shares: Record<string, number[]>;
+} {
+  const months = ind.trendMonths;
+  const shares: Record<string, number[]> = {};
+  for (const b of [...ind.brands, OTHERS]) shares[b] = [];
+  const volumes: number[] = [];
+  for (const m of months) {
+    const s = tierShareTrendAt(ind, tierId, m);
+    for (const b of [...ind.brands, OTHERS]) shares[b].push(Math.max(0, s[b] ?? 0));
+    volumes.push(round1(tierVolumeAt(ind, tierId, m)));
+  }
+  return { months, volumes, shares };
+}
+
+/** 图 2 单档位要点：档位容量同比 + 领先品牌份额及其同比变化（pct） */
+export function tierTrendSummary(ind: MarketIndustryData, tierId: string): string {
+  const tier = ind.tiers.find((t) => t.id === tierId);
+  if (!tier) return '';
+  const [curMonth, prevMonth] = ind.yoyMonths;
+  const vol = tierVolumeAt(ind, tierId, curMonth);
+  const volPrev = tierVolumeAt(ind, tierId, prevMonth);
+  const sCur = tierShareAt(ind, tierId, curMonth);
+  const sPrev = tierShareAt(ind, tierId, prevMonth);
+  const lead = ind.brands.slice().sort((a, b) => sCur[b] - sCur[a])[0];
+  const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v)} pct`;
+  const parts = [
+    `${monthLabel(curMonth)} ${tier.label} 美元档容量 ${fmtWan(vol)}，同比 ${fmtYoy(yoyPct(vol, volPrev))}`,
+  ];
+  if (lead && sCur[lead] > 0) parts.push(`${lead} 份额 ${sCur[lead]}%，较去年同期 ${pct(sCur[lead] - sPrev[lead])}`);
+  if (lead !== 'HUAWEI' && ind.brands.includes('HUAWEI')) {
+    parts.push(`HUAWEI 份额 ${sCur.HUAWEI}%，较去年同期 ${pct(sCur.HUAWEI - sPrev.HUAWEI)}`);
+  }
+  return `${parts.join('；')}。`;
 }
 
 // ---------------- 图 3：品牌 × 档位同比矩阵 ----------------

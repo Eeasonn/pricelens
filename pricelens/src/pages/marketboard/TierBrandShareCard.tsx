@@ -1,12 +1,10 @@
 // ============================================================
 // 大盘图表① · 核心档位品牌份额趋势（GFK IMG_9476 复刻）
-// 两种形态：全档位（6 档 × 锚点月并列）与单档位筛选（卡头 Segmented）。
-// 顶部档位带 = 大盘容量（万台，与 GFK 同构）；主区 100% 堆叠柱，
-// 段内 ≥4% 标百分比（深底白字/浅底墨字自动反色）；全档位形态下档位分组
-// 以极浅底色交替区分。类目键用「档位·月份」组合串，避免跨组重名。
+// 6 档位 × 锚点月并列的 100% 堆叠柱（本图天然是全档位视图，无档位筛选）。
+// 顶部档位带 = 大盘容量（万台，与 GFK 同构）；段内 ≥4% 标百分比
+// （深底白字/浅底墨字按 WCAG 亮度自动反色）；档位分组以极浅底色交替区分。
+// 类目键用「档位·月份」组合串，避免跨组重名。
 // ============================================================
-import { useState, type ReactNode } from 'react';
-import { Segmented } from 'antd';
 import { color, font } from '../../theme/tokens';
 import { OTHERS, type MarketIndustryData } from './marketBoardData';
 import {
@@ -22,17 +20,12 @@ import { MB_CARD, MBCardHead, MBScroll, MBSummaryLine, MB_AXIS, MB_TOOLTIP, useE
 const LABEL_MIN_PCT = 4; // 段内标注阈值（GFK 同款：过小段不标）
 
 export default function TierBrandShareCard({ data }: { data: MarketIndustryData }) {
-  const [tierId, setTierId] = useState<string>('all');
-  const tier = data.tiers.find((t) => t.id === tierId) ?? null;
   const months = data.anchorMonths;
 
   // 类目元数据：{ key, tier, month }；key = 档位id·月份，保证唯一
-  const cats = (tier ? data.tiers.filter((t) => t.id === tier.id) : data.tiers).flatMap((t) =>
-    months.map((m) => ({ key: `${t.id}·${m}`, tier: t, month: m })),
-  );
+  const cats = data.tiers.flatMap((t) => months.map((m) => ({ key: `${t.id}·${m}`, tier: t, month: m })));
   const monthOfKey = (key: string) => key.slice(key.indexOf('·') + 1);
 
-  const chartHeight = tier ? 340 : 400;
   const legendItems = [...data.brands, OTHERS];
   const legendRows = legendItems.length > 8 ? 2 : 1;
 
@@ -71,7 +64,7 @@ export default function TierBrandShareCard({ data }: { data: MarketIndustryData 
           stack: 'share',
           xAxisIndex: 1,
           yAxisIndex: 1,
-          barWidth: tier ? '48%' : '62%',
+          barWidth: '62%',
           data: cats.map(({ tier: t, month }) => tierShareAt(data, t.id, month)[brand]),
           itemStyle: { color: fill },
           label: {
@@ -81,8 +74,8 @@ export default function TierBrandShareCard({ data }: { data: MarketIndustryData 
             color: labelInkFor(fill),
             formatter: (p: { value: number }) => (p.value >= LABEL_MIN_PCT ? `${Math.round(p.value)}%` : ''),
           },
-          // 全档位形态：奇数档位组衬极浅底色（GFK 分组框的轻量替身）
-          ...(!tier && bi === 0
+          // 奇数档位组衬极浅底色（GFK 分组框的轻量替身），挂在首个系列上即可
+          ...(bi === 0
             ? {
                 markArea: {
                   silent: true,
@@ -151,7 +144,6 @@ export default function TierBrandShareCard({ data }: { data: MarketIndustryData 
               color: color.ink,
               fontFamily: font.family,
               formatter: (_v: string, i: number) => {
-                if (tier) return '';
                 const len = months.length;
                 return i % len === Math.floor((len - 1) / 2) ? cats[i]?.tier.label ?? '' : '';
               },
@@ -181,26 +173,16 @@ export default function TierBrandShareCard({ data }: { data: MarketIndustryData 
         series,
       };
     },
-    [data, tier],
-    { width: '100%', height: chartHeight },
+    [data],
+    { width: '100%', height: 400 },
   );
-
-  const segOptions: { label: ReactNode; value: string }[] = [
-    { label: '全档位', value: 'all' },
-    ...data.tiers.map((t) => ({ label: t.label, value: t.id })),
-  ];
 
   return (
     <section style={MB_CARD}>
-      <MBCardHead
-        title="核心档位品牌份额趋势"
-        source="模拟数据"
-        hint={data.intro}
-        extra={<Segmented size="small" options={segOptions} value={tierId} onChange={(v) => setTierId(String(v))} />}
-      />
+      <MBCardHead title="核心档位品牌份额趋势" source="模拟数据" hint={data.intro} />
       <MBSummaryLine>{`单位：万台 · ${data.region} · 档位为美元价带；柱内百分比为品牌份额。`}</MBSummaryLine>
-      <MBScroll minWidth={tier ? 520 : 1160}>{chart}</MBScroll>
-      <MBSummaryLine>{tierShareSummary(data, tier ? tier.id : null)}</MBSummaryLine>
+      <MBScroll minWidth={1160}>{chart}</MBScroll>
+      <MBSummaryLine>{tierShareSummary(data, null)}</MBSummaryLine>
     </section>
   );
 }
