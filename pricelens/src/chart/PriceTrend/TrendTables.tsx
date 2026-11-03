@@ -15,8 +15,8 @@
 // 首屏可见数据列 +1。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Button } from 'antd';
-import { CopyOutlined, ExportOutlined, PictureOutlined } from '@ant-design/icons';
+import { Button, Tooltip } from 'antd';
+import { CopyOutlined, ExportOutlined, PictureOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { configTextOf } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
@@ -346,11 +346,20 @@ export default function TrendTables(props: {
             )}
           </span>
           {fourWeekChange !== undefined && (
-            <span
-              title="最近4周折后价均价相比此前4周均价"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, minWidth: 0, maxWidth: '100%' }}
-            >
+            // 2026-11-03 反馈：「近4周环比」旁加问号悬停口径说明——明确是「4 周均值 ÷
+            // 上一段 4 周均值」，杜绝「最新一天 ÷ 4 周均值」误读；原原生 title 并入
+            // 说明文案，本行只留问号一个提示源
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, minWidth: 0, maxWidth: '100%' }}>
               <span style={{ color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>近4周环比</span>
+              <Tooltip title="近 4 周折后价均值，对比上一段 4 周折后价均值的变化。按周取值，截至当前窗口末尾；月 / 季视图同样按周计算。">
+                <button
+                  type="button"
+                  aria-label="近4周环比口径说明"
+                  style={{ display: 'inline-flex', alignItems: 'center', padding: 0, border: 'none', background: 'none', cursor: 'help', color: color.mute, flexShrink: 0 }}
+                >
+                  <QuestionCircleOutlined style={{ fontSize: 12 }} />
+                </button>
+              </Tooltip>
               <span
                 className="tnum"
                 style={{

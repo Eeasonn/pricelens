@@ -49,7 +49,7 @@
 //   取筛选范围末端 12 个周桶（点距过密改善；宽屏/月季/手动窗口行为不变）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ConfigProvider, Segmented, Tooltip } from 'antd';
+import { ConfigProvider, message, Segmented, Tooltip } from 'antd';
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { useChartContent } from '../../state/chartContent';
@@ -118,7 +118,7 @@ import PointPanel from './PointPanel';
 import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
-import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from './platformSync';
+import { pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, syncComparesWithMain, type PlatformSyncCardSnap } from './platformSync';
 
 /** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之。
  *  空对组名分工：图表面板/图例保留「对比产品」（组名仍有内容），宽表组头用
@@ -134,6 +134,10 @@ const LOAD_ERROR_HINT = (
     <div style={{ marginTop: 4, fontSize: fontSize.caption }}>请刷新重试</div>
   </>
 );
+
+// 店铺同步不可用的轻提示（本轮，Eason）：主品还没价格数据时解析不出可跟随的
+// 店铺口径，点了同步不生效。沿全站轻提示通道（antd message），不弹解释框
+const SYNC_BLOCKED_HINT = '主品暂无价格数据，暂不能同步';
 
 export default function PriceTrend(props: {
   /** 第110轮（评审）立、第一百二十三轮按组：图下「价差与明细」取数口——按主分析卡
@@ -243,17 +247,25 @@ export default function PriceTrend(props: {
   const compareTab = priceSubview === 'platforms';
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
 
-  // 组内同步平台筛选（第一百八十四轮改语义，原全局单开关）：按卡（组）独立——
-  // 触发 = 快照本组平台并收敛到本组主产品；取消 = 按快照还原本组。ref 持镜像供
-  // pickChannel 免依赖读值；快照按卡存。togglePlatformSyncOf 依赖 visSeries
-  // （主品自动口径要解析实际取价平台），在 visSeries 声明之后定义（见下）。
-  const [platformSyncMap, setPlatformSyncMap] = useState<Record<string, boolean>>({});
+  // 店铺同步（本轮重定口径，Eason）：同步只让本组对比品的店铺跟随本组主品，
+  // 主品自身永不改写。开关态 + 触发快照按卡存进会话级持久（LPL3.view.price.
+  // platformSync）——platform 值本身随 LPL3.filters 落地，若开关与快照只在内存，
+  // 刷新后按钮回落「未同步」而数据仍钉着，再点同步会把钉着的状态当「原始」
+  // 快照，取消回不到真原始；会话化后刷新即按钮态与数据一致，取消仍还原真原始。
+  // ref 持「开」镜像供 pickChannel 免依赖读值；togglePlatformSyncOf 依赖
+  // visSeries（主品自动口径要解析实际取价平台），在 visSeries 之后定义（见下）。
+  interface PlatformSyncEntry {
+    on: boolean;
+    snap: PlatformSyncCardSnap[] | null;
+  }
+  const [platformSyncStore, setPlatformSyncStore] = usePageViewState<Record<string, PlatformSyncEntry>>(
+    'price.platformSync',
+    () => ({}),
+  );
   const platformSyncMapRef = useRef<Record<string, boolean>>({});
-  const platformSyncSnapRef = useRef<Record<string, PlatformSyncCardSnap[] | null>>({});
-  const setCardSync = (cardId: string, on: boolean): void => {
-    platformSyncMapRef.current = { ...platformSyncMapRef.current, [cardId]: on };
-    setPlatformSyncMap(platformSyncMapRef.current);
-  };
+  platformSyncMapRef.current = Object.fromEntries(
+    Object.entries(platformSyncStore).map(([id, entry]) => [id, entry.on]),
+  );
 
   // 时点摘要：入口在工具行 ⋯ 内，默认收起，不持久化
   const [pointPanelOpen, setPointPanelOpen] = useState(false);
@@ -584,29 +596,32 @@ export default function PriceTrend(props: {
 
   // 图例可见系列：声明下移至 cappedVisSeries 之后（见 splitActive 段）
 
-  // 组内同步平台筛选（原全局 togglePlatformSync，第一百八十四轮改按卡）：主品
-  // 自动口径 = 先经 pinnedSelectionFromBadge 取其最新有价周的实际取价平台（与
-  // 平台小药丸显示同名）钉成显式选择再同步本组——否则自动时各产品仍各自解到
-  // 不同平台，显示上「没同步」；主品已显式选择 = 原样同步；解析不出 = 回落自动
+  // 店铺同步开关（本轮重定口径，Eason）：开 = 本组对比品的店铺跟随主品——主品
+  // 自动口径先经 syncComparesWithMain 按其最新有价周的实际取价平台（与平台小
+  // 药丸显示同名）钉定再写给对比品，主品显式选择 = 原样写给对比品；主品自身
+  // 永不改写。解析不出（主品无价格数据）= 不同步、不开启同步态，轻提示一句。
+  // 关 = 按触发快照整组还原（含主品）。快照在写数据之前收，取消即回真原始。
   const togglePlatformSyncOf = useCallback(
     (cardId: string) => () => {
       const card = effMains.find((c) => c.id === cardId);
       if (!card) return;
-      if (platformSyncMapRef.current[cardId]) {
-        const restored = restorePlatformSync([card], platformSyncSnapRef.current[cardId] ?? [])[0] ?? card;
+      const entry = platformSyncStore[cardId];
+      if (entry?.on) {
+        const restored = restorePlatformSync([card], entry.snap ?? [])[0] ?? card;
         actions.setMains(effMains.map((c) => (c.id === cardId ? restored : c)));
-        platformSyncSnapRef.current[cardId] = null;
-        setCardSync(cardId, false);
+        setPlatformSyncStore((prev) => ({ ...prev, [cardId]: { on: false, snap: null } }));
         return;
       }
-      platformSyncSnapRef.current[cardId] = snapshotPlatformSync([card]);
       const badge = card.main ? visSeries.find((s) => s.key === seriesKeyOf(card.main!))?.channelBadge ?? null : null;
-      const src = pinnedSelectionFromBadge(badge, card.main?.platform ?? null);
-      const synced = applySyncedPlatforms([card], src)[0] ?? card;
+      const synced = syncComparesWithMain(card, badge);
+      if (!synced) {
+        message.info(SYNC_BLOCKED_HINT);
+        return;
+      }
       actions.setMains(effMains.map((c) => (c.id === cardId ? synced : c)));
-      setCardSync(cardId, true);
+      setPlatformSyncStore((prev) => ({ ...prev, [cardId]: { on: true, snap: snapshotPlatformSync([card]) } }));
     },
-    [effMains, visSeries, actions],
+    [effMains, visSeries, actions, platformSyncStore, setPlatformSyncStore],
   );
 
   const toggleLegend = (key: string): void => {
@@ -1393,7 +1408,7 @@ export default function PriceTrend(props: {
                   const card = state.mains.find((c) => c.id === g.id);
                   if (!card || card.compares.length === 0) return undefined;
                   return {
-                    active: platformSyncMap[g.id] ?? false,
+                    active: platformSyncStore[g.id]?.on ?? false,
                     onToggle: togglePlatformSyncOf(g.id),
                   };
                 }}
@@ -1609,7 +1624,7 @@ export default function PriceTrend(props: {
                           syncCtlOf={() => (
                             p.card.compares.length === 0
                               ? undefined
-                              : { active: platformSyncMap[p.key] ?? false, onToggle: togglePlatformSyncOf(p.key) }
+                              : { active: platformSyncStore[p.key]?.on ?? false, onToggle: togglePlatformSyncOf(p.key) }
                           )}
                         />
                       </div>

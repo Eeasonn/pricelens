@@ -1,10 +1,17 @@
-// 同步平台筛选开关语义（第一百七十三轮）：快照/收敛/还原纯函数单测
+// 店铺同步纯函数单测（本轮语义重定，Eason：同步只让对比品跟随主品，主品自身
+// 永不改写）：快照 / 钉定解析 / syncComparesWithMain / 取消还原
 import { describe, expect, it } from 'vitest';
-import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync } from '../platformSync';
+import {
+  pinnedSelectionFromBadge,
+  restorePlatformSync,
+  snapshotPlatformSync,
+  syncComparesWithMain,
+} from '../platformSync';
 import type { MainProduct, PlatformSelection, ProductSelection } from '../../../state/filtersTypes';
 
 const dns: PlatformSelection = { platforms: ['DNS'], shopIds: ['RU:DNS:STORE'] };
 const ozon: PlatformSelection = { platforms: ['OZON'], shopIds: ['RU:OZON:3P'], seller: 'GOODSTORE' };
+const mvideo: PlatformSelection = { platforms: ['Mvideo'], shopIds: [] };
 
 const sel = (modelId: string, platform?: PlatformSelection | null): ProductSelection => ({
   modelId,
@@ -39,29 +46,65 @@ describe('snapshotPlatformSync', () => {
   });
 });
 
-describe('applySyncedPlatforms', () => {
-  it('全部产品（各卡主品+对比）收敛到源平台', () => {
-    const out = applySyncedPlatforms(mains, dns);
-    expect(out.every((c) => c.main!.platform === dns && c.compares.every((s) => s.platform === dns))).toBe(true);
+describe('syncComparesWithMain（本轮重定口径：只写对比品，主品永不改写）', () => {
+  it('主品显式选择 = 原样写给全部对比品；主品对象与 platform 引用原样保留', () => {
+    const c = card('c1', sel('P80-Pro', dns), [sel('S26U', ozon), sel('M6', null)]);
+    const out = syncComparesWithMain(c);
+    expect(out).not.toBeNull();
+    expect(out!.main).toBe(c.main); // 主品引用不动（口径、SKU 全原样）
+    expect(out!.compares[0].platform).toBe(dns); // 同一引用透传
+    expect(out!.compares[1].platform).toBe(dns);
+    expect(out!.compares[0].modelId).toBe('S26U'); // 其余字段不动
+    expect(out!.compares[0].skuIds).toEqual(c.compares[0].skuIds);
   });
 
-  it('源为 null（主品自动口径）= 全员自动；其余字段不动', () => {
-    const out = applySyncedPlatforms(mains, null);
-    expect(out.every((c) => c.main!.platform === null && c.compares.every((s) => s.platform === null))).toBe(true);
-    expect(out[0].main!.skuIds).toEqual(mains[0].main!.skuIds);
-    expect(out[0].id).toBe('c1');
+  it('主品显式选择不受 badge 影响（badge 只在自动口径时用）', () => {
+    const c = card('c1', sel('P80-Pro', dns), [sel('S26U', ozon)]);
+    const out = syncComparesWithMain(c, { label: 'Mvideo', auto: true });
+    expect(out!.compares.every((s) => s.platform === dns)).toBe(true);
+  });
+
+  it('主品自动 = 按最新有价周 badge 钉平台（{platforms:[名], shopIds:[]}）写给全部对比品；主品保持自动', () => {
+    const c = card('c1', sel('P80-Pro', null), [sel('S26U', ozon), sel('M6', null)]);
+    const out = syncComparesWithMain(c, { label: 'Mvideo', auto: true });
+    expect(out).not.toBeNull();
+    expect(out!.main!.platform).toBeNull(); // 主品永不改写
+    expect(out!.compares[0].platform).toEqual(mvideo);
+    expect(out!.compares[1].platform).toEqual(mvideo);
+  });
+
+  it('解析不出（主品自动 + badge 占位「自动」/ 无 badge）= 返回 null，不写任何人', () => {
+    const c = card('c1', sel('P80-Pro', null), [sel('S26U', ozon)]);
+    expect(syncComparesWithMain(c, { label: '自动', auto: true })).toBeNull();
+    expect(syncComparesWithMain(c, null)).toBeNull();
+    expect(syncComparesWithMain(c)).toBeNull();
+    // 入参卡未被改动（纯函数）
+    expect(c.compares[0].platform).toBe(ozon);
+    expect(c.main!.platform).toBeNull();
+  });
+
+  it('未选主品（空对）= 返回 null', () => {
+    expect(syncComparesWithMain(card('c0', null, [sel('S26U', ozon)]), { label: 'DNS', auto: false })).toBeNull();
+  });
+
+  it('无对比区 = 卡原样返回（无写点；主品不动）', () => {
+    const c = card('c1', sel('P80-Pro', dns), []);
+    const out = syncComparesWithMain(c, { label: 'Mvideo', auto: true });
+    expect(out).not.toBeNull();
+    expect(out!.compares).toHaveLength(0);
+    expect(out!.main).toBe(c.main);
   });
 });
 
-describe('restorePlatformSync', () => {
-  it('触发→取消往返：平台逐项还原到快照', () => {
+describe('触发 → 取消往返（快照整组还原，含主品）', () => {
+  it('同步后取消：主品与对比品逐项还原到快照（真原始）', () => {
     const snap = snapshotPlatformSync(mains);
-    const synced = applySyncedPlatforms(mains, dns);
+    const synced = mains.map((c) => syncComparesWithMain(c, { label: 'Mvideo', auto: true }) ?? c);
     const back = restorePlatformSync(synced, snap);
-    expect(back[0].main!.platform).toBe(dns);
+    expect(back[0].main!.platform).toBe(dns); // 主品显式还原
+    expect(back[1].main!.platform).toBeNull(); // 主品自动还原（同步从未写过它）
     expect(back[0].compares[0].platform).toBe(ozon);
     expect(back[0].compares[1].platform).toBeNull();
-    expect(back[1].main!.platform).toBeNull();
     expect(back[1].compares[0].platform).toBe(dns);
   });
 
@@ -101,7 +144,7 @@ describe('pinnedSelectionFromBadge（第一百七十四轮：主品自动口径�
     expect(pinnedSelectionFromBadge({ label: 'Mvideo', auto: true }, null)).toEqual({ platforms: ['Mvideo'], shopIds: [] });
   });
 
-  it('主品自动但无数据（label 仍为占位「自动」/badge 缺）= 回落 null 全员自动', () => {
+  it('主品自动但无数据（label 仍为占位「自动」/badge 缺）= 返回 null（不可同步）', () => {
     expect(pinnedSelectionFromBadge({ label: '自动', auto: true }, null)).toBeNull();
     expect(pinnedSelectionFromBadge(null, null)).toBeNull();
     expect(pinnedSelectionFromBadge(undefined, null)).toBeNull();

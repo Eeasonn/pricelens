@@ -20,6 +20,9 @@ echarts.use([BarChart, LineChart, ScatterChart, GridComponent, TooltipComponent,
 
 export const MB_AXIS = { fontSize: fontSize.caption, color: color.mute, fontFamily: font.family };
 export const MB_TOOLTIP = {
+  // confine: 浮层钳在图表容器内（2026-11-03 反馈：MBScroll 横滚容器 overflow 裁掉
+  // hover 页签，贴容器左缘的 tooltip 被吞掉）；三卡 tooltip 均 ...展开本常量，一处生效
+  confine: true,
   backgroundColor: color.canvas,
   borderColor: color.hairline,
   textStyle: { color: color.body, fontSize: 12, fontFamily: font.family },

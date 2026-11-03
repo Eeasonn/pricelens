@@ -2,8 +2,8 @@
 // 量价页大促档期接线冒烟（2026-11-03 对齐价格页，方案 A 全量对齐）：
 // ① 工具行 = promoOnly 形态：有「大促档期」一颗、无「促销权益」；
 // ② 开关默认关 → 图上无档期带胶囊标志；点击原生 input 打开 → RU 默认口径下
-//    档期（BTS返校季，全渠道）与面板窗口相交 → 胶囊标志行出现（经典折线分支，
-//    Chart 内部白拿：带 / 胶囊 / 事件卡）；再点关闭 → 消失。
+//    档期（BTS返校季，全渠道）与面板窗口相交 → 胶囊标志行出现（销毛成本默认关 =
+//    经典纯量价呈现，Chart 内部白拿：带 / 胶囊 / 事件卡）；再点关闭 → 消失。
 // echarts 在 jsdom 无 canvas：mock 'echarts/core' 等模块；ResizeObserver 报一次
 // 固定宽度驱动 Chart/CostBarChart 完成几何测量（jsdom 无真实布局）。
 // ============================================================
@@ -75,7 +75,7 @@ describe('量价页 · 大促档期开关接线', () => {
     expect(promoTagButtons()).toHaveLength(0);
   });
 
-  it('开关开 → 档期胶囊标志行出现（经典分支）；关 → 消失', () => {
+  it('开关开 → 档期胶囊标志行出现（经典纯量价：销毛成本默认关）；关 → 消失', () => {
     window.history.replaceState(null, '', '/?p=volume');
     render(<App />);
     const input = promoCheckboxInput();
