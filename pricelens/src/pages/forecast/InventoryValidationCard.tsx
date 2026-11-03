@@ -1,10 +1,10 @@
 // ============================================================
-// 推演工作台 v2 · 层⑤库存验证（最后一步）：
+// 推演工作台 v2 · 层④库存验证（带预测的因子卡，最后一步）：
 // 左轴渠道 DOS（蓝实→虚）+ 全流程 DOS（灰虚）双线、右轴渠道库存柱 + SI ▼；
-// 历史段实 / 预测段虚（预测段 = 上游预测销量 + 人工 SI 计划推演）。
-// 输出 = 健康判定（演示规则：DOS 70–90 天合理带 + 库存降幅 ≥20–30% 异常 →
-// 打 9 折 / 8 折两档）+ 打折系数回写主图。SI 计划是本层唯一新输入。
-// 与走势页 InventoryDosCard 同构，预测段虚化 + 判定输出框为本页新增。
+// 历史段实 / 预测段虚（预测段 = 上游基线 SO + SI 月计划推演）。
+// SI 按月给入 = 唯一明确人工输入；健康判定（DOS 70–90 天 + 库存降幅 <20–30%，
+// 预警解释）→ 不健康 / 库存不足则刚性砍 min(基线 SO, 可售) 回写主图
+// （纲领：中间计算过程不呈现，主图只显最终 + 砍周琥珀描边微痕）。
 // ============================================================
 import { useState } from 'react';
 import { InputNumber } from 'antd';
@@ -14,7 +14,7 @@ import { fmtVolume } from '../volume/volumeAxis';
 import type { WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchParams, WorkbenchResult } from './workbenchModel';
 import { DOS_BAND, INV_CRASH_HEAVY_PCT, INV_CRASH_LIGHT_PCT } from './workbenchModel';
-import { CertaintyBadge, SectionHead, WorkbenchLegend, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import { CertaintyBadge, IoBar, SectionHead, WorkbenchLegend, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
 const W = 640;
 const H = 250;
@@ -30,14 +30,14 @@ export default function InventoryValidationCard({
   fixture,
   params,
   result,
-  onSiLive,
-  onSiCommit,
+  onSiMonthLive,
+  onSiMonthCommit,
 }: {
   fixture: WorkbenchFixture;
   params: WorkbenchParams;
   result: WorkbenchResult;
-  onSiLive: (weekNumber: number, units: number) => void;
-  onSiCommit: (weekNumber: number, units: number) => void;
+  onSiMonthLive: (monthKey: string, units: number) => void;
+  onSiMonthCommit: (monthKey: string, units: number) => void;
 }) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const show = (key: string): boolean => !hidden.has(key);
@@ -65,10 +65,7 @@ export default function InventoryValidationCard({
       .map((week, offset) => `${offset === 0 ? 'M' : 'L'}${x(from + offset).toFixed(1)} ${yDos(week[key]).toFixed(1)}`)
       .join(' ');
   const boundaryX = (x(7) + x(FORECAST_START)) / 2;
-  const adjusted = forecastWeeks.filter((week) => week.inventoryAdjusted);
-  const tiers = [...new Set(adjusted.map((week) => week.discount))]
-    .map((discount) => (discount === 0.8 ? '8 折' : '9 折'))
-    .join(' / ');
+  const cappedWeeks = forecastWeeks.filter((week) => week.capped);
 
   const legendItems: LegendItem[] = [
     { key: 'inv', label: '渠道库存（右轴）', shape: 'rect', color: color.ink },
@@ -81,15 +78,19 @@ export default function InventoryValidationCard({
     <section style={workbenchCardStyle}>
       <SectionHead
         title="库存验证"
-        hint="左轴 DOS（渠道蓝实→虚 / 全流程灰虚）、右轴渠道库存柱 + SI ▼；预测段 = 上游预测销量 + SI 计划推演，与走势页实测口径区分。判定基于预测的 DOS / 库存，打折系数回写主图。"
+        hint="左轴 DOS（渠道蓝实→虚 / 全流程灰虚）、右轴渠道库存柱 + SI ▼；预测段 = 上游基线 SO + SI 月计划推演。健康判定（预警解释）→ 不健康或库存不足则刚性砍 min(基线 SO, 可售) 回写主图——中间计算过程不呈现，主图只显最终。"
         extra={<CertaintyBadge level="high" />}
+      />
+      <IoBar
+        input="SI 月计划（唯一人工输入）· 上游基线 SO（大盘+量价考量）· 期初渠道库存"
+        output={`未来 DOS / 库存反算与健康判定；不健康周刚性砍回写主图（${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起` : '当前未触发'}）`}
       />
       <div style={{ overflowX: 'auto' }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
           width="100%"
           role="img"
-          aria-label={`库存验证：渠道库存柱（右轴）、渠道 DOS 与全流程 DOS 双线（左轴，合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天）；${adjusted.length ? `W${adjusted[0].weekNumber} 起触发打折修正（${tiers}，回写主图）` : '当前考量未触发库存修正'}。详细判定见下方输出框。`}
+          aria-label={`库存验证：渠道库存柱（右轴）、渠道 DOS 与全流程 DOS 双线（左轴，合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天）；${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起刚性修正（min(基线 SO, 可售)，回写主图）` : '当前考量未触发库存修正'}。详细判定见下方输出框。`}
           style={{ display: 'block', height: 'auto', minWidth: 460 }}
         >
           {/* 预测段浅底 + 今天分界 */}
@@ -182,63 +183,63 @@ export default function InventoryValidationCard({
       </div>
       <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
 
-      {/* 人工 SI 计划输入（本层唯一新输入；改后全链重算） */}
+      {/* 人工 SI 月计划输入（本层唯一新输入；月内均分到周，改后全链重算） */}
       <div style={{ marginTop: space.sm, display: 'grid', gap: space.xs }}>
         <div style={{ fontSize: 12, color: color.body }}>
-          <span style={{ fontWeight: 600, color: color.ink }}>人工 SI 计划</span>
-          <span style={{ marginLeft: 8, fontSize: 11, color: color.mute }}>千台 · 可改（本层唯一新输入，其余来自上游预测）；调整后全链重算</span>
+          <span style={{ fontWeight: 600, color: color.ink }}>人工 SI 计划（按月）</span>
+          <span style={{ marginLeft: 8, fontSize: 11, color: color.mute }}>千台/月 · 唯一明确人工输入，月内均分到周；调整后全链重算</span>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.sm }}>
-          {forecastWeeks.map((week) => (
-            <label key={week.weekNumber} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: color.mute }}>
-              <span className="mono">{week.week}</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.md }}>
+          {fixture.forecastMonths.map((month) => (
+            <label key={month.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
+              <span style={{ fontWeight: 600 }}>{month.label}</span>
               <InputNumber
-                aria-label={`W${week.weekNumber} SI 计划（千台）`}
+                aria-label={`${month.label} SI 计划（千台/月）`}
                 min={0}
-                max={500}
-                step={5}
+                max={2000}
+                step={10}
                 precision={0}
-                value={Math.round((params.siPlan[week.weekNumber] ?? 0) / 1000)}
+                value={Math.round((params.siPlanMonthly[month.key] ?? 0) / 1000)}
                 onChange={(value) => {
                   if (value == null) return;
-                  onSiLive(week.weekNumber, Math.max(0, Number(value)) * 1000);
+                  onSiMonthLive(month.key, Math.max(0, Number(value)) * 1000);
                 }}
                 onBlur={(event) => {
                   const raw = Number(event.target.value);
-                  if (Number.isFinite(raw)) onSiCommit(week.weekNumber, Math.max(0, raw) * 1000);
+                  if (Number.isFinite(raw)) onSiMonthCommit(month.key, Math.max(0, raw) * 1000);
                 }}
                 onPressEnter={(event) => (event.target as HTMLInputElement).blur()}
                 size="small"
-                style={{ width: 68 }}
+                style={{ width: 84 }}
               />
+              <span style={{ fontSize: 11, color: color.mute }}>千台</span>
             </label>
           ))}
         </div>
       </div>
 
-      {/* 输出框：健康判定 + 打折回写 */}
+      {/* 输出框：健康判定（预警解释）+ 刚性砍回写（结论级，中间过程不呈现） */}
       <div style={{ marginTop: space.md, padding: `${space.md - 2}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, display: 'grid', gap: 6, fontSize: 12, lineHeight: 1.7, color: color.body }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <span style={{ flex: 'none', fontWeight: 600, color: color.body }}>输入</span>
-          <span>人工 SI 计划 · 上游预测销量（不含库存限制）· 期初渠道库存</span>
-        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ flex: 'none', fontWeight: 600, color: color.body }}>输出</span>
           <span>
-            {adjusted.length
-              ? <><b style={{ color: color.warningInk }}>{`W${adjusted[0].weekNumber} 起按库存验证打折修正（${tiers}）`}</b>，回写主图最终柱，缺口进主图摘要</>
-              : '当前考量未触发库存修正（预测 DOS 落在合理带内），主图预测柱不受影响'}
+            {cappedWeeks.length
+              ? <><b style={{ color: color.warningInk }}>{`W${cappedWeeks[0].weekNumber} 起库存不足以支撑基线 SO`}</b>，刚性修正至可售量并回写主图（主图只显最终值，砍周琥珀描边标识）</>
+              : '当前考量未触发库存修正（库存可支撑基线 SO），主图预测柱不受影响'}
           </span>
         </div>
-        {adjusted.length > 0 && (
+        {cappedWeeks.length > 0 && (
           <div className="tnum" style={{ display: 'flex', gap: 8 }}>
             <span style={{ flex: 'none', fontWeight: 600, color: color.body }}>判定</span>
-            <span>{adjusted.map((week) => `W${week.weekNumber} ${week.discount === 0.8 ? '−20%' : '−10%'}`).join(' · ')}；{adjusted[0].health?.reasonText}</span>
+            <span>
+              {cappedWeeks.map((week) => `${week.week} 修正至 ${fmtVolume(week.final ?? 0)} 台`).join(' · ')}
+              ；{cappedWeeks[0].health?.reasonText}
+            </span>
           </div>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ flex: 'none', fontWeight: 600, color: color.body }}>规则</span>
-          <span>{`演示规则（待拍板）：DOS 合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天；库存较前 4 周均值降幅 ≥${INV_CRASH_LIGHT_PCT}% 判异常 → 打 9 折，≥${INV_CRASH_HEAVY_PCT}% 或双条件不达标 → 8 折`}</span>
+          <span>{`演示规则（待拍板）：DOS 合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天；库存较前 4 周均值降幅 ≥${INV_CRASH_LIGHT_PCT}% 预警，≥${INV_CRASH_HEAVY_PCT}% 重警；库存不足 → 刚性砍 min(基线 SO, 可售)，不按比例打折`}</span>
         </div>
       </div>
     </section>

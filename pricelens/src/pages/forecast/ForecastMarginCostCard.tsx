@@ -9,7 +9,7 @@ import { brandColor, color, radius, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
 import type { WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult } from './workbenchModel';
-import { CertaintyBadge, SectionHead, WorkbenchLegend, fmtMillionUsd, wanUsdOf, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import { CertaintyBadge, IoBar, SectionHead, WorkbenchLegend, fmtMillionUsd, wanUsdOf, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
 const W = 640;
 const H = 230;
@@ -70,8 +70,12 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
     <section style={workbenchCardStyle}>
       <SectionHead
         title="成本销毛"
-        hint="月版本成本阶梯 + 预测销毛柱（历史实 / 预测虚）。周销毛 = 周销 ×（价格 − 当月版本成本），演示口径不含渠道费率；成本只进销毛链，不修改需求。"
+        hint="链路末端独立推测（月版本成本阶梯 + 预测销毛柱，历史实 / 预测虚）：周销毛 = 主图最终 SO ×（价格 − 当月版本成本），演示口径不含渠道费率；不回写主图。"
         extra={<CertaintyBadge level="mid" />}
+      />
+      <IoBar
+        input="主图最终 SO（量价链推完）· 主图价格 · 成本月版本趋势"
+        output="预测期销毛（独立推测，不修正主图）"
       />
       <div style={{ overflowX: 'auto' }}>
         <svg

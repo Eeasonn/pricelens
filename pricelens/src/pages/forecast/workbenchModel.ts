@@ -1,55 +1,60 @@
 // ============================================================
 // 量价预测 · 推演工作台 v2 确定性模型（forecast-workbench-v2）
-// 顺序执行链（brief 两条铁律）：
-//   大盘参数（Q4 环比 + 关键事件）→ 基准走势 × 大盘考量倍数 = 不含库存限制的预测
-//   → 库存推演（期初 + SI − 预测销量）→ 健康判定（演示规则）→ 打折系数
-//   → 回写主图最终柱（手调优先）→ 摘要 / 纪要同步。
-// 库存验证不在预测链上游：判定基于「上游预测销量 + SI 计划」的推演值，
-// 打折只修正主图最终柱，不回流改库存推演（避免循环论证）。
+// 2026-11-03 晚纲领版：大盘 = 纯时间序列基线（周期性季节 × 全局性趋势，
+// AI 推第一版挂 AI 标，人工直接改预测格）+ 行业级事件四件套（起周 + 时长 +
+// 脉冲幅度 + 衰减方式[默认递减]，周粒度，可落历史段作解释性标记）；
+// 主图小事件（竞品上市 / 营销价促 / 自家挤兑）按参考品回放段幅度局部修正；
+// 库存验证 = 大盘+量价先出基线 SO → 反算 DOS/库存 → 健康判定（预警解释）→
+// 刚性砍 min(基线 SO, 可售) 回写主图（中间过程不呈现，主图只显最终）；
+// 成本销毛 = 链路末端独立推测，不回写主图。
 // 全部计算为纯函数：不读时间、不用随机数，同输入两次计算逐字段一致。
 // ============================================================
-import type { MarketEventSeed, WorkbenchFixture } from './workbenchFixture';
+import type { MarketEventSeed, ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
 
 /** TODO 待拍板（brief 开放问题 2）：DOS 合理带 70–90 天与降幅阈值 20%/30% 为演示规则，待业务确认与维护方。 */
 export const DOS_BAND = { min: 70, max: 90 } as const;
 /** TODO 待拍板：库存相对前 4 周均值降幅阈值（%）。 */
 export const INV_CRASH_LIGHT_PCT = 20;
 export const INV_CRASH_HEAVY_PCT = 30;
-/** 打折两档：降幅 ≥30%（或降幅 ≥20% 且 DOS 同时越界）= 8 折；单项不达标 = 9 折。 */
-export const DISCOUNT_LIGHT = 0.9;
-export const DISCOUNT_HEAVY = 0.8;
 
-export type QoqSource = 'ai' | 'human';
+export type OverrideSource = 'ai' | 'human';
 
 export interface WorkbenchParams {
-  /** 今年 Q4 环比降幅（%，负 = 下滑）。初始为 AI 判断值，人工改动后 qoqSource 转 human。 */
-  qoqDeclinePct: number;
-  qoqSource: QoqSource;
-  /** 关键事件（幅度 + 时间两参数，衰减曲率不做）。 */
+  /** 人工直接修改的当前季（2026Q4）指数；null = 用 AI 时间序列基线。 */
+  q4Override: number | null;
+  /** 人工直接修改的下一季（2027Q1）指数；null = 用 AI 基线。 */
+  q1Override: number | null;
+  /** 预测格来源：ai = AI 时间序列基线（第一版）；human = 人工已改。 */
+  overrideSource: OverrideSource;
+  /** 行业级大盘事件（人工录入假设，至多预填默认值；不挂 AI 标）。 */
   marketEvents: MarketEventSeed[];
+  /** 主图小事件（产品级三类，参考回放段预填幅度，可改）。 */
+  productEvents: ProductEventSeed[];
+  /** 人工 SI 月计划（台），键 = '2026-11' / '2026-12'；库存验证层唯一新输入。 */
+  siPlanMonthly: Record<string, number>;
+  /** 手调（键 = 周序号）：值 + 必填原因（原因标注在主图手调处）。 */
+  manual: Record<number, { value: number; reason: string }>;
   /** 理由栏：为什么这么推（截图贴 PPT 的关键假设载体）。 */
   rationale: string;
-  /** 人工 SI 计划（台），键 = 周序号 W45–W52。库存验证层唯一新输入。 */
-  siPlan: Record<number, number>;
-  /** 手调（键 = 周序号）：值 + 必填原因。 */
-  manual: Record<number, { value: number; reason: string }>;
 }
 
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 
-/** 基准考量：AI 判断的 Q4 环比 + 默认事件 + 初始 SI 计划，无手调。 */
+/** 基准考量：AI 时间序列基线 + 预填默认事件 + 初始 SI 月计划，无手调。 */
 export function baseWorkbenchParams(fixture: WorkbenchFixture): WorkbenchParams {
-  const siPlan: Record<number, number> = {};
-  fixture.weeks.forEach((week, index) => {
-    if (week.status === 'forecast') siPlan[week.weekNumber] = fixture.inventory.siPlan[index - 8];
+  const siPlanMonthly: Record<string, number> = {};
+  fixture.forecastMonths.forEach((month) => {
+    siPlanMonthly[month.key] = fixture.inventory.siPlanMonthly[month.key] ?? 0;
   });
   return {
-    qoqDeclinePct: fixture.market.baselineQoqDeclinePct,
-    qoqSource: 'ai',
+    q4Override: null,
+    q1Override: null,
+    overrideSource: 'ai',
     marketEvents: fixture.defaultMarketEvents.map((event) => ({ ...event })),
-    rationale: fixture.market.aiRationale,
-    siPlan,
+    productEvents: [],
+    siPlanMonthly,
     manual: {},
+    rationale: fixture.market.aiRationale,
   };
 }
 
@@ -57,86 +62,95 @@ export function baseWorkbenchParams(fixture: WorkbenchFixture): WorkbenchParams 
 export function isParamsActive(params: WorkbenchParams, fixture: WorkbenchFixture): boolean {
   const base = baseWorkbenchParams(fixture);
   return (
-    params.qoqDeclinePct !== base.qoqDeclinePct
+    params.q4Override !== base.q4Override
+    || params.q1Override !== base.q1Override
     || JSON.stringify(params.marketEvents) !== JSON.stringify(base.marketEvents)
-    || JSON.stringify(params.siPlan) !== JSON.stringify(base.siPlan)
+    || JSON.stringify(params.productEvents) !== JSON.stringify(base.productEvents)
+    || JSON.stringify(params.siPlanMonthly) !== JSON.stringify(base.siPlanMonthly)
     || Object.keys(params.manual).length > 0
   );
 }
 
 // ------------------------------------------------------------
-// 大盘层：季度推演（当前季 + 下一季）+ 周度考量倍数
+// 大盘层：纯时间序列基线（AI 第一版）+ 事件周乘子 + 人工改格
 // ------------------------------------------------------------
 
-/** 大盘推演季：'2026Q4'（当前季，主图预测周所在季）与 '2027Q1'（下一季，产品全景预测目标）。 */
-export const FORECAST_QUARTERS = ['2026Q4', '2027Q1'] as const;
-export type ForecastQuarter = (typeof FORECAST_QUARTERS)[number];
-
-export function isForecastQuarter(key: string): key is ForecastQuarter {
-  return (FORECAST_QUARTERS as readonly string[]).includes(key);
+/** 事件在某周的脉冲乘子（覆盖周内；递减 = 线性从峰值衰减，恒定 = 全程峰值）；覆盖外 = null。 */
+export function eventWeeklyFactor(event: MarketEventSeed, weekNumber: number): number | null {
+  const offset = weekNumber - event.startWeek;
+  if (offset < 0 || offset >= event.durationWeeks) return null;
+  if (event.decay === 'flat') return 1 + event.magnitudePct / 100;
+  const decayed = event.magnitudePct * (1 - offset / event.durationWeeks);
+  return 1 + decayed / 100;
 }
 
-/** 事件在某推演季是否生效（自生效季起持续 durationQuarters 个季，裁剪到推演段）。 */
-export function isEventActiveIn(event: MarketEventSeed, quarter: ForecastQuarter): boolean {
-  const start = FORECAST_QUARTERS.indexOf(event.startQuarter as ForecastQuarter);
-  if (start < 0) return false;
-  const index = FORECAST_QUARTERS.indexOf(quarter);
-  return index >= start && index < start + event.durationQuarters;
-}
-
-function eventFactorIn(events: readonly MarketEventSeed[], quarter: ForecastQuarter): number {
+/** 主图小事件乘子（锚定单周；局部修正）。 */
+export function productEventFactorAt(events: readonly ProductEventSeed[], weekNumber: number): number {
   return events
-    .filter((event) => isEventActiveIn(event, quarter))
+    .filter((event) => event.week === weekNumber)
     .reduce((factor, event) => factor * (1 + event.magnitudePct / 100), 1);
 }
 
-/**
- * 大盘季度推演（季度环比趋势 + 事件按季叠加，逐季连乘）：
- * 2026Q4 = 2026Q3 × (1 + 环比%) × 事件(Q4)；2027Q1 = 2026Q4 × (1 + 环比%) × 事件(Q1)。
- * 环比趋势为 AI 判断值（人工可改），逐季延续——「去年直接抄 + 叠加今年自然变化」的口径。
- */
-export function forecastQuarterIndexes(
+/** AI 时间序列基线：周期性季节因素（去年同季比）× 全局性趋势因素（今年/去年水平比）。 */
+export function marketSeriesBaseline(fixture: WorkbenchFixture): { aiQ4: number; aiQ1: number } {
+  const values = fixture.market.quarters.map((quarter) => quarter.value);
+  const lastYear = values.slice(0, 4);
+  const thisYear = values.slice(4);
+  const seasonQ4 = lastYear[3] / lastYear[2];
+  const seasonQ1 = lastYear[0] / lastYear[3];
+  const avg = (list: number[]): number => list.reduce((sum, v) => sum + v, 0) / list.length;
+  const trend = avg(thisYear) / avg(lastYear);
+  const aiQ4 = round1(thisYear[thisYear.length - 1] * seasonQ4 * trend);
+  const aiQ1 = round1(aiQ4 * seasonQ1 * trend);
+  return { aiQ4, aiQ1 };
+}
+
+/** 当前生效的两格推演值（人工改格优先，否则 AI 基线）。 */
+export function effectiveQuarterIndexes(
   fixture: WorkbenchFixture,
-  qoqDeclinePct: number,
-  events: readonly MarketEventSeed[],
-): { q4Index: number; q1NextIndex: number } {
-  const lastActual = fixture.market.quarters[fixture.market.quarters.length - 1]?.value ?? 0;
-  const qoq = 1 + qoqDeclinePct / 100;
-  const q4 = lastActual * qoq * eventFactorIn(events, '2026Q4');
-  const q1Next = q4 * qoq * eventFactorIn(events, '2027Q1');
-  return { q4Index: round1(q4), q1NextIndex: round1(q1Next) };
+  params: Pick<WorkbenchParams, 'q4Override' | 'q1Override'>,
+): { q4Index: number; q1Index: number } {
+  const { aiQ4, aiQ1 } = marketSeriesBaseline(fixture);
+  return { q4Index: params.q4Override ?? aiQ4, q1Index: params.q1Override ?? aiQ1 };
 }
 
 /**
- * 周度大盘考量倍数（相对基准考量）：环比趋势 + 事件增删改，只作用于预测周
- * （主图预测窗口 W45–W52 全部落在 2026Q4）。基准考量本身 = 1（basePath 已含基准走势）。
+ * 周度大盘考量倍数（只作用于预测周 W45+）：人工改格比率（当前 Q4 生效值 / AI 基线）
+ * × 行业级事件乘子直接叠加（事件 = 人工录入假设：删除即回落、改参数即换乘子）。
+ * 预测窗口 W45–W52 全部落在 2026Q4，改格比率按 Q4 口径作用。
  */
-export function marketFactorAt(params: WorkbenchParams, base: WorkbenchParams, weekNumber: number): number {
-  const qoqRatio = (1 + params.qoqDeclinePct / 100) / (1 + base.qoqDeclinePct / 100);
-  const eventIds = new Set([...params.marketEvents.map((event) => event.id), ...base.marketEvents.map((event) => event.id)]);
-  let eventRatio = 1;
-  for (const id of eventIds) {
-    const current = params.marketEvents.find((event) => event.id === id);
-    const baseEvent = base.marketEvents.find((event) => event.id === id);
-    if (current && isEventActiveIn(current, '2026Q4')) eventRatio *= 1 + current.magnitudePct / 100;
-    if (baseEvent && isEventActiveIn(baseEvent, '2026Q4')) eventRatio /= 1 + baseEvent.magnitudePct / 100;
+export function computeMarketFactor(
+  fixture: WorkbenchFixture,
+  params: Pick<WorkbenchParams, 'q4Override' | 'marketEvents'>,
+  weekNumber: number,
+): number {
+  const { aiQ4 } = marketSeriesBaseline(fixture);
+  const overrideRatio = (params.q4Override ?? aiQ4) / aiQ4;
+  let eventFactor = 1;
+  for (const event of params.marketEvents) {
+    const factor = eventWeeklyFactor(event, weekNumber);
+    if (factor != null) eventFactor *= factor;
   }
-  return qoqRatio * eventRatio;
+  return overrideRatio * eventFactor;
 }
 
 // ------------------------------------------------------------
-// 库存验证：推演 + 健康判定（演示规则）
+// 库存验证：推演 + 健康判定（预警解释）+ 刚性砍
 // ------------------------------------------------------------
 
 export interface InventoryRow {
   weekNumber: number;
   status: 'actual' | 'forecast';
-  /** 本周销量（历史实际 / 预测周用不含库存限制的预测）。 */
+  /** 基线 SO（历史实际 / 预测周 = 大盘+量价考量后的无约束需求）。 */
+  desiredSales: number;
+  /** 实际/修正后销量：预测周 = min(基线 SO, 可售)，即刚性砍结果。 */
   sales: number;
+  /** 本周被刚性砍（sales < desired）。 */
+  capped: boolean;
   si: number;
   /** 期末渠道库存（推演值）。 */
   channelInv: number;
-  /** 渠道 DOS（天）= 期末库存 ÷ 近 4 周平均周销 × 7。 */
+  /** 渠道 DOS（天）= 期末库存 ÷ 近 4 周平均销量 × 7。 */
   channelDos: number;
 }
 
@@ -148,14 +162,13 @@ export interface HealthRow {
   invChangePct: number;
   dosOk: boolean;
   crash: 'none' | 'light' | 'heavy';
-  discount: number;
+  capped: boolean;
   reasonText: string;
 }
 
 /**
- * 库存健康判定（演示规则，TODO 待拍板）：
- * 条件 A = DOS 落在 70–90 天合理带；条件 B = 库存相对前 4 周均值降幅 < 20%。
- * A、B 均满足 = 健康（不修正）；否则打折修正：降幅 ≥30%，或降幅 ≥20% 且 DOS 同时越界 = 8 折；其余 = 9 折。
+ * 健康判定（演示规则，TODO 待拍板）：DOS 落在 70–90 天带 + 库存较前 4 周均值
+ * 降幅 < 20% = 健康；越界 / 降幅超阈 = 预警（解释性），叠加刚性砍结果输出。
  */
 export function judgeInventoryHealth(rows: InventoryRow[]): HealthRow[] {
   return rows.map((row, index) => {
@@ -165,17 +178,15 @@ export function judgeInventoryHealth(rows: InventoryRow[]): HealthRow[] {
     const dropPct = -invChangePct;
     const dosOk = row.channelDos >= DOS_BAND.min && row.channelDos <= DOS_BAND.max;
     const crash: HealthRow['crash'] = dropPct >= INV_CRASH_HEAVY_PCT ? 'heavy' : dropPct >= INV_CRASH_LIGHT_PCT ? 'light' : 'none';
-    let discount = 1;
-    if (!(dosOk && crash === 'none')) {
-      discount = crash === 'heavy' || (crash === 'light' && !dosOk) ? DISCOUNT_HEAVY : DISCOUNT_LIGHT;
-    }
     const parts: string[] = [];
     if (dosOk) parts.push(`DOS ${row.channelDos.toFixed(1)} 天在合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天内`);
     else parts.push(`DOS ${row.channelDos.toFixed(1)} 天越出合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天`);
     parts.push(crash === 'none'
       ? `库存较前 4 周均值 ${invChangePct > 0 ? '+' : ''}${invChangePct}%`
       : `库存较前 4 周均值下降 ${dropPct.toFixed(1)}%（≥${crash === 'heavy' ? INV_CRASH_HEAVY_PCT : INV_CRASH_LIGHT_PCT}%）`);
-    const verdict = discount === 1 ? '健康，不修正' : `打 ${discount === DISCOUNT_HEAVY ? 8 : 9} 折`;
+    const verdict = row.capped
+      ? `库存不足以支撑基线 SO，刚性修正至 ${Math.round(row.sales).toLocaleString('en-US')} 台`
+      : '库存可支撑基线 SO';
     return {
       weekNumber: row.weekNumber,
       channelDos: row.channelDos,
@@ -183,7 +194,7 @@ export function judgeInventoryHealth(rows: InventoryRow[]): HealthRow[] {
       invChangePct,
       dosOk,
       crash,
-      discount,
+      capped: row.capped,
       reasonText: `${parts.join('；')} → ${verdict}`,
     };
   });
@@ -193,7 +204,7 @@ export function judgeInventoryHealth(rows: InventoryRow[]): HealthRow[] {
 // 主链：computeWorkbench
 // ------------------------------------------------------------
 
-export type ConsiderKind = 'market' | 'event' | 'promo' | 'inventory' | 'manual';
+export type ConsiderKind = 'market' | 'event' | 'productEvent' | 'promo' | 'inventory' | 'manual';
 
 export interface ConsiderItem {
   kind: ConsiderKind;
@@ -210,17 +221,13 @@ export interface WorkbenchWeekResult {
   status: 'actual' | 'forecast';
   /** 历史周销（台）。 */
   sales: number | null;
-  /** 不含库存限制的预测（台，仅预测周）。 */
+  /** 基线 SO（台，仅预测周）：大盘+量价考量后、库存验证前的需求。不上主图。 */
   unconstrained: number | null;
-  /** 健康判定打折系数（1 / 0.9 / 0.8，仅预测周）。 */
-  discount: number;
-  /** 打折修正后的预测柱（台，仅预测周；未含手调）。 */
-  corrected: number | null;
-  /** 主图最终柱：手调优先，否则打折修正值。 */
+  /** 本周被刚性砍（final < unconstrained 且无手调）。 */
+  capped: boolean;
+  /** 主图最终柱：手调优先，否则刚性砍结果（仅预测周）。 */
   final: number | null;
   manual: { value: number; reason: string } | null;
-  /** 该周是否被库存修正（打折 < 1 且未手调覆盖）。 */
-  inventoryAdjusted: boolean;
   price: number;
   prevGenSales: number;
   si: number;
@@ -231,7 +238,7 @@ export interface WorkbenchWeekResult {
   unitCost: number;
   /** 单台销毛 = 价格 − 当月成本（演示口径，与走势页成本卡一致不含渠道费率）。 */
   unitMargin: number;
-  /** 周销毛（USD，台 × 单台销毛）。 */
+  /** 周销毛（USD，主图最终柱 × 单台销毛）。 */
   weeklyMargin: number;
   health?: HealthRow;
   /** 本周考量构成（仅预测周，悬停浮窗用）。 */
@@ -242,28 +249,24 @@ export interface MarketQuarterPoint {
   key: string;
   value: number;
   status: 'actual' | 'forecast';
+  /** 推演格附 AI 时间序列基线（ghost 对照）；人工未改时 = value。 */
+  aiBaseline?: number;
 }
 
 export interface WorkbenchResult {
   weeks: WorkbenchWeekResult[];
-  /** 大盘季度单序列（2025Q1 连贯到当前实际 + 2026Q4/2027Q1 推演，产品全景视角）。 */
+  /** 大盘季度单序列（2025Q1 连贯到当前实际 + 2026Q4/2027Q1 推演，附 AI 基线）。 */
   marketQuarters: MarketQuarterPoint[];
-  /** 预测周健康判定（库存验证输出框用）。 */
+  /** 预测周健康判定（预警解释输出框用）。 */
   health: HealthRow[];
-  /** 首个库存修正周的周序号（未触发 = null）。 */
+  /** 首个刚性砍周的周序号（未触发 = null）。 */
   firstAdjustedWeek: number | null;
   summary: {
-    /** 预测期总销量（台，最终柱口径）。 */
     totalSales: number;
-    /** 相对历史 8 周的变动（%）。 */
     vsHistoryPct: number;
-    /** 大促峰周（周序号 / 台 / 标注）。 */
     peak: { weekNumber: number; value: number; note: string };
-    /** 库存修正缺口（台，≥ 0）：不含库存限制 − 最终柱。 */
     gap: number;
-    /** 预测期销毛（USD，最终柱 × 单台销毛）。 */
     forecastMargin: number;
-    /** 历史 8 周销毛（USD）。 */
     historyMargin: number;
   };
 }
@@ -277,28 +280,44 @@ export function unitCostOfWeek(fixture: WorkbenchFixture, weekNumber: number): n
   return cost;
 }
 
+/** 月 SI 计划 → 周序列（月内均分）。 */
+export function siWeeklyPlan(fixture: WorkbenchFixture, siPlanMonthly: Record<string, number>): Map<number, number> {
+  const plan = new Map<number, number>();
+  for (const month of fixture.forecastMonths) {
+    const total = Math.max(0, siPlanMonthly[month.key] ?? 0);
+    const per = Math.round(total / month.weekNumbers.length);
+    month.weekNumbers.forEach((weekNumber) => plan.set(weekNumber, per));
+  }
+  return plan;
+}
+
 export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchParams): WorkbenchResult {
-  const base = baseWorkbenchParams(fixture);
-  const { q4Index, q1NextIndex } = forecastQuarterIndexes(fixture, params.qoqDeclinePct, params.marketEvents);
+  const { aiQ4, aiQ1 } = marketSeriesBaseline(fixture);
+  const { q4Index, q1Index } = effectiveQuarterIndexes(fixture, params);
+  const siPlan = siWeeklyPlan(fixture, params.siPlanMonthly);
   const weeks: WorkbenchWeekResult[] = [];
   const inventoryRows: InventoryRow[] = [];
   let channelInv = fixture.inventory.initialChannelInv;
 
   fixture.weeks.forEach((week, index) => {
     const isForecast = week.status === 'forecast';
-    const si = isForecast ? Math.max(0, Math.round(params.siPlan[week.weekNumber] ?? 0)) : fixture.inventory.historySi[index];
+    const si = isForecast ? (siPlan.get(week.weekNumber) ?? 0) : fixture.inventory.historySi[index];
     let unconstrained: number | null = null;
     if (isForecast) {
-      const factor = marketFactorAt(params, base, week.weekNumber);
+      const factor = computeMarketFactor(fixture, params, week.weekNumber)
+        * productEventFactorAt(params.productEvents, week.weekNumber);
       unconstrained = Math.max(0, Math.round(fixture.basePath[index - 8] * factor));
     }
-    // 库存推演：历史周用实际销量，预测周用不含库存限制的预测（验证性分析，打折不回流）。
-    const salesForInventory = isForecast ? (unconstrained as number) : (week.sales as number);
-    channelInv = channelInv + si - salesForInventory;
+    // 库存验证定序：基线 SO（大盘+量价考量）→ 反算 DOS/库存 → 刚性砍 min(SO, 可售)。
+    const desired = isForecast ? (unconstrained as number) : (week.sales as number);
+    const available = channelInv + si;
+    const sales = isForecast ? Math.min(desired, Math.max(0, available)) : desired;
+    const capped = isForecast && sales < desired;
+    channelInv = Math.max(0, channelInv + si - sales);
     const window = inventoryRows.slice(-3).map((row) => row.sales);
-    const rollingAvg = window.length ? (window.reduce((total, v) => total + v, 0) + salesForInventory) / (window.length + 1) : salesForInventory;
+    const rollingAvg = window.length ? (window.reduce((total, v) => total + v, 0) + sales) / (window.length + 1) : sales;
     const channelDos = rollingAvg > 0 ? round1((channelInv / rollingAvg) * 7) : 0;
-    inventoryRows.push({ weekNumber: week.weekNumber, status: week.status, sales: salesForInventory, si, channelInv, channelDos });
+    inventoryRows.push({ weekNumber: week.weekNumber, status: week.status, desiredSales: desired, sales, capped, si, channelInv, channelDos });
 
     const unitCost = unitCostOfWeek(fixture, week.weekNumber);
     const unitMargin = week.price - unitCost;
@@ -309,11 +328,9 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
       status: week.status,
       sales: week.sales,
       unconstrained,
-      discount: 1,
-      corrected: null,
+      capped: false,
       final: isForecast ? null : week.sales,
       manual: null,
-      inventoryAdjusted: false,
       price: week.price,
       prevGenSales: week.prevGenSales,
       si,
@@ -327,44 +344,51 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
     });
   });
 
-  // 健康判定只针对预测周（判定基于预测的 DOS / 库存）。
   const forecastRows = inventoryRows.filter((row) => row.status === 'forecast');
   const health = judgeInventoryHealth(forecastRows);
   const healthByWeek = new Map(health.map((row) => [row.weekNumber, row]));
+  const cappedByWeek = new Map(forecastRows.map((row) => [row.weekNumber, row.capped]));
 
-  // 回写主图：打折修正 → 手调优先。
+  // 回写主图：刚性砍结果（min），手调优先。
   weeks.forEach((week) => {
     if (week.status !== 'forecast' || week.unconstrained == null) return;
     const row = healthByWeek.get(week.weekNumber);
-    const discount = row?.discount ?? 1;
-    const corrected = Math.max(0, Math.round(week.unconstrained * discount));
+    const isCapped = cappedByWeek.get(week.weekNumber) ?? false;
+    const cappedValue = inventoryRows.find((candidate) => candidate.weekNumber === week.weekNumber)?.sales ?? week.unconstrained;
     const manual = params.manual[week.weekNumber] ?? null;
-    week.discount = discount;
-    week.corrected = corrected;
+    week.capped = isCapped && manual == null;
     week.manual = manual;
-    week.inventoryAdjusted = discount < 1 && manual == null;
-    week.final = manual != null ? manual.value : corrected;
+    week.final = manual != null ? manual.value : cappedValue;
     week.weeklyMargin = week.final * week.unitMargin;
     week.health = row;
     const inPromo = week.weekNumber >= fixture.promoBand.startWeek && week.weekNumber <= fixture.promoBand.endWeek;
     const consider: ConsiderItem[] = [
       {
         kind: 'market',
-        label: '大盘 · 季度趋势',
-        pct: params.qoqDeclinePct,
-        note: `季度环比 ${params.qoqDeclinePct}% 逐季延续：2026Q4 指数 ${q4Index} · 2027Q1 指数 ${q1NextIndex}`,
+        label: '大盘 · 时间序列',
+        pct: null,
+        note: params.overrideSource === 'ai'
+          ? `AI 基线：2026Q4 ${aiQ4} · 2027Q1 ${aiQ1}（季节 × 趋势）`
+          : `人工修正：2026Q4 ${q4Index} · 2027Q1 ${q1Index}（AI 基线 ${aiQ4} / ${aiQ1}）`,
       },
       ...params.marketEvents.map((event) => {
-        const active = isEventActiveIn(event, '2026Q4');
+        const factor = eventWeeklyFactor(event, week.weekNumber);
+        const endWeek = event.startWeek + event.durationWeeks - 1;
         return {
           kind: 'event' as const,
           label: event.label,
-          pct: active ? event.magnitudePct : null,
-          note: active
-            ? `生效中（${event.startQuarter} 起，持续 ${event.durationQuarters} 季）`
-            : `${event.startQuarter} 起生效（持续 ${event.durationQuarters} 季），不影响本季周度预测`,
+          pct: factor != null && week.status === 'forecast' ? round1((factor - 1) * 100) : null,
+          note: factor != null && week.status === 'forecast'
+            ? `生效中（W${event.startWeek}–W${endWeek}，${event.decay === 'decreasing' ? '递减' : '恒定'}）`
+            : `W${event.startWeek}–W${endWeek}${week.weekNumber < event.startWeek ? '未生效' : '已结束'}`,
         };
       }),
+      ...params.productEvents.filter((event) => event.week === week.weekNumber).map((event) => ({
+        kind: 'productEvent' as const,
+        label: event.label,
+        pct: event.magnitudePct,
+        note: '主图小事件 · 参考品事实回放（人工录入）',
+      })),
       {
         kind: 'promo',
         label: fixture.promoBand.label,
@@ -373,13 +397,13 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
       },
       {
         kind: 'inventory',
-        label: '库存修正',
-        pct: discount < 1 ? -round1((1 - discount) * 100) : null,
-        note: discount < 1 ? row?.reasonText ?? '已触发打折修正' : '本周未触发',
+        label: '库存刚性修正',
+        pct: isCapped && week.unconstrained > 0 ? round1(((cappedValue / week.unconstrained) - 1) * 100) : null,
+        note: isCapped ? row?.reasonText ?? '可售不足，刚性修正' : '库存可支撑',
       },
     ];
     if (manual != null) {
-      const before = corrected;
+      const before = cappedValue;
       consider.push({
         kind: 'manual',
         label: '人工手调',
@@ -396,18 +420,18 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
   const totalSales = forecastWeeks.reduce((total, week) => total + (week.final ?? 0), 0);
   const gap = forecastWeeks.reduce((total, week) => total + Math.max(0, (week.unconstrained ?? 0) - (week.final ?? 0)), 0);
   const peakWeekResult = forecastWeeks.reduce((best, week) => ((week.final ?? 0) > (best?.final ?? 0) ? week : best), forecastWeeks[0]);
-  const adjusted = forecastWeeks.filter((week) => week.inventoryAdjusted);
+  const cappedForecast = forecastWeeks.filter((week) => week.capped);
   const marketQuarters: MarketQuarterPoint[] = [
     ...fixture.market.quarters.map((quarter) => ({ key: quarter.key, value: quarter.value, status: 'actual' as const })),
-    { key: '2026Q4', value: q4Index, status: 'forecast' as const },
-    { key: '2027Q1', value: q1NextIndex, status: 'forecast' as const },
+    { key: '2026Q4', value: q4Index, status: 'forecast' as const, aiBaseline: aiQ4 },
+    { key: '2027Q1', value: q1Index, status: 'forecast' as const, aiBaseline: aiQ1 },
   ];
 
   return {
     weeks,
     marketQuarters,
     health,
-    firstAdjustedWeek: adjusted.length ? adjusted[0].weekNumber : null,
+    firstAdjustedWeek: cappedForecast.length ? cappedForecast[0].weekNumber : null,
     summary: {
       totalSales,
       vsHistoryPct: historySalesTotal > 0 ? round1((totalSales / historySalesTotal - 1) * 100) : 0,
@@ -424,7 +448,7 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
 }
 
 // ------------------------------------------------------------
-// 手调（原因必填；留痕展示层已删，原因标注在主图手调处）
+// 手调（原因必填；原因标注在主图手调处）
 // ------------------------------------------------------------
 
 /** 手调设置（纯函数）：原因必填，空原因返回 null（调用方据此禁用保存）。 */

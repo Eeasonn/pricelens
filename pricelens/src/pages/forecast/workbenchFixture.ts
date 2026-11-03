@@ -29,16 +29,40 @@ export interface WorkbenchWeek {
   prevGenSales: number;
 }
 
-/** 大盘关键事件（仅行业级事件：生效季度 + 持续季数 + 幅度，衰减曲率不做）。 */
+/** 大盘关键事件（仅行业级；四件套：起周 + 时长 + 脉冲幅度 + 衰减方式，周粒度，可落历史段作解释性标记）。 */
 export interface MarketEventSeed {
   id: string;
   label: string;
-  /** 影响幅度（%，正 = 抬升总量，负 = 压低）。 */
+  /** 起始周（周粒度；允许落在历史段 = 解释性标记，不参与推演修正）。 */
+  startWeek: number;
+  /** 影响时长（周）。 */
+  durationWeeks: number;
+  /** 脉冲幅度峰值（%，正 = 抬升总量，负 = 压低）。 */
   magnitudePct: number;
-  /** 生效季度：'2026Q4'（当前季）或 '2027Q1'（下一季）。 */
-  startQuarter: string;
-  /** 持续季数（1–2，覆盖到推演段末为止）。 */
-  durationQuarters: number;
+  /** 衰减方式：递减（默认，线性衰减）/ 恒定。 */
+  decay: 'decreasing' | 'flat';
+}
+
+/** 主图小事件（产品级三类：竞品上市 / 营销价促 / 自家品挤兑；录入时弹参考品事实回放）。 */
+export interface ProductEventSeed {
+  id: string;
+  /** 事件类型（决定回放场景与锚点色）。 */
+  type: 'competitor-launch' | 'own-promo' | 'cannibalization';
+  label: string;
+  /** 锚定预测周。 */
+  week: number;
+  /** 影响幅度（%，参考回放段预填，可改）。 */
+  magnitudePct: number;
+  /** 回放场景 id（fixture.replayScenarios）。 */
+  replayId: string;
+}
+
+/** 参考卡事实锚（参照对象历史窗内的可观测事实：大促 / 发布 / 调价）。 */
+export interface ReferenceFactSeed {
+  label: string;
+  /** 历史窗内周序号（0 = W37 … 7 = W44）。 */
+  weekIndex: number;
+  type: 'promo' | 'launch' | 'price';
 }
 
 /** 大盘季度指数（单序列：2025Q1 起连贯到当前实际；2026Q4 / 2027Q1 由模型推演）。 */
@@ -84,8 +108,7 @@ export interface WorkbenchFixture {
   promoBand: { label: string; startWeek: number; endWeek: number; peakWeek: number; peakNote: string };
   market: {
     quarters: MarketQuarterSeed[];
-    /** AI 判断的初始 Q4 环比降幅（%，负 = 下滑）；人工改动后转「人工确认」。 */
-    baselineQoqDeclinePct: number;
+    /** AI 时间序列基线说明（周期性季节因素 × 全局性趋势因素，挂 AI 标）。 */
     aiRationale: string;
   };
   defaultMarketEvents: MarketEventSeed[];
@@ -98,15 +121,35 @@ export interface WorkbenchFixture {
     initialChannelInv: number;
     /** 历史 SI（台，0 = 无补货周，图上不画 ▼）。 */
     historySi: number[];
-    /** 人工 SI 计划初始值（台，W45–W52）。 */
-    siPlan: number[];
+    /** 人工 SI 月计划初始值（台）：11 月 = W45–W48，12 月 = W49–W52。 */
+    siPlanMonthly: Record<string, number>;
     /** 全流程 DOS 演示系数（含机关已产出未发货）。 */
     fullDosFactor: number;
   };
   references: {
     prevGenPool: ReferenceSeriesSeed[];
     competitorPool: ReferenceSeriesSeed[];
+    /** 参照对象历史窗内的事实锚（事实还原：大促 / 发布 / 调价，与主图事件同源色系）。 */
+    facts: ReferenceFactSeed[];
   };
+  /** 主图小事件录入的事实回放场景（四类解释场景，全部为历史事实段）。 */
+  replayScenarios: Array<{
+    id: string;
+    /** 匹配的主图事件类型。 */
+    match: ProductEventSeed['type'];
+    title: string;
+    /** 回放说明（参照对象 + 当时情境）。 */
+    desc: string;
+    /** 回放段周销（台，8 点历史段）。 */
+    points: number[];
+    refLabel: string;
+    /** 当时影响（对同类主品的冲击读数）。 */
+    impactPct: number;
+    impactWeeks: number;
+    impactText: string;
+  }>;
+  /** 预测窗按月拆分（SI 按月给入 = 唯一人工输入）。 */
+  forecastMonths: Array<{ key: string; label: string; weekNumbers: number[] }>;
   /** 主图锚点事件行（图下名录）。 */
   anchors: Array<{ week: number; label: string }>;
 }
@@ -173,13 +216,12 @@ export const workbenchFixture: WorkbenchFixture = {
       { key: '2026Q2', value: 106 },
       { key: '2026Q3', value: 104 },
     ],
-    baselineQoqDeclinePct: -4,
     aiRationale:
-      'AI 初始判断：季度环比延续今年弱势（−4%，自 2026Q4 起逐季延续）；折叠屏阵营扩容为行业级事件（2026Q4 起 +8%，持续两季）；内存供应涨价压制下一季（2027Q1 起 −6%）。竞品常规迭代不在大盘事件中，属量价参考与竞品考量。',
+      'AI 初始推演（第一版，可修改）：纯时间序列口径 = 周期性季节因素（去年 Q4/Q3、Q1/Q4 季节比）× 全局性趋势因素（今年/去年同比水平比）；下方关键事件为人工录入假设，可增删改。',
   },
   defaultMarketEvents: [
-    { id: 'ev-fold', label: '折叠屏阵营扩容', magnitudePct: 8, startQuarter: '2026Q4', durationQuarters: 2 },
-    { id: 'ev-mem', label: '内存供应涨价', magnitudePct: -6, startQuarter: '2027Q1', durationQuarters: 1 },
+    { id: 'ev-fold', label: '折叠屏阵营扩容', startWeek: 46, durationWeeks: 5, magnitudePct: 8, decay: 'decreasing' },
+    { id: 'ev-mem', label: '内存供应涨价', startWeek: 50, durationWeeks: 3, magnitudePct: -6, decay: 'decreasing' },
   ],
   costVersions: [
     { monthLabel: '9 月版本', fromWeek: 37, unitCost: 612 },
@@ -189,11 +231,16 @@ export const workbenchFixture: WorkbenchFixture = {
   ],
   basePath: BASE_PATH,
   inventory: {
-    initialChannelInv: 285000,
-    historySi: [33, 46, 58, 73, 66, 44, 49, 53].map((v) => v * 1000),
-    siPlan: [62, 74, 110, 90, 66, 0, 0, 0].map((v) => v * 1000),
+    initialChannelInv: 147000,
+    historySi: [16, 22, 28, 34, 30, 20, 24, 26].map((v) => v * 1000),
+    /** 人工 SI 月计划初始值（台）：11 月 = W45–W48，12 月 = W49–W52。 */
+    siPlanMonthly: { '2026-11': 220000, '2026-12': 32000 },
     fullDosFactor: 1.45,
   },
+  forecastMonths: [
+    { key: '2026-11', label: '11 月（W45–W48）', weekNumbers: [45, 46, 47, 48] },
+    { key: '2026-12', label: '12 月（W49–W52）', weekNumbers: [49, 50, 51, 52] },
+  ],
   references: {
     prevGenPool: [
       { id: 'ref-mate80', label: 'Mate 80（上一代）', points: PREV_GEN },
@@ -203,7 +250,58 @@ export const workbenchFixture: WorkbenchFixture = {
       { id: 'ref-ip17', label: 'iPhone 17 上市同期', points: [12, 18, 25, 31, 29, 27, 26, 28, 26, 25, 27, 30, 28, 26, 24, 22].map((v) => v * 1000) },
       { id: 'ref-s25', label: 'Galaxy S25 促销期', points: [20, 21, 22, 28, 26, 25, 24, 26, 25, 24, 26, 29, 27, 25, 23, 21].map((v) => v * 1000) },
     ],
+    facts: [
+      { label: 'Mate 80 官方降价（上一代）', weekIndex: 5, type: 'price' },
+      { label: 'Galaxy S25 促销期', weekIndex: 3, type: 'promo' },
+      { label: 'Galaxy 新配色上市', weekIndex: 1, type: 'launch' },
+    ],
   },
+  replayScenarios: [
+    {
+      id: 'rp-comp-promo',
+      match: 'competitor-launch',
+      title: '友商促销 / 新品上市期',
+      desc: 'Galaxy S25 上市 + 首销促销期（去年 W40–W44），同档位友商放量、我司同期被分流。',
+      points: [26, 28, 31, 34, 30, 27, 26, 25].map((v) => v * 1000),
+      refLabel: 'Galaxy S25 · 上市促销段',
+      impactPct: -6,
+      impactWeeks: 4,
+      impactText: '当时对同期我司旗舰的冲击约 −6%，持续 4 周，2 周后回到原趋势',
+    },
+    {
+      id: 'rp-own-marketing',
+      match: 'own-promo',
+      title: '自家营销 / 官方价促',
+      desc: 'Mate 80 官方降价促销（去年 W40–W44），降价次周起销量明显抬升。',
+      points: [30, 29, 33, 39, 43, 45, 42, 40].map((v) => v * 1000),
+      refLabel: 'Mate 80 · 官方价促段',
+      impactPct: 15,
+      impactWeeks: 3,
+      impactText: '当时降价后 3 周销量 +15%~+23%，随促销退坡回落',
+    },
+    {
+      id: 'rp-cannib',
+      match: 'cannibalization',
+      title: '自家品挤兑',
+      desc: 'Pura 90 Pro 上市挤兑同期 Mate 80（价格带重叠 $750–850）。',
+      points: [34, 33, 30, 27, 26, 27, 28, 29].map((v) => v * 1000),
+      refLabel: 'Mate 80 · 被挤兑段',
+      impactPct: -9,
+      impactWeeks: 3,
+      impactText: '当时被挤兑 −9%，持续 3 周；家族合计份额仍 +1.8pt',
+    },
+    {
+      id: 'rp-promo-sale',
+      match: 'own-promo',
+      title: '大促降价（档期脉冲）',
+      desc: '去年黑五档期（W46–W49）降价脉冲，主峰周抬升显著。',
+      points: [38, 42, 52, 58, 47, 41, 38, 36].map((v) => v * 1000),
+      refLabel: 'Mate 80 · 去年黑五段',
+      impactPct: 30,
+      impactWeeks: 4,
+      impactText: '档期脉冲峰值 +35%，档期后 2 周回落',
+    },
+  ],
   anchors: [
     { week: 42, label: '调价 −$50（899→849）' },
     { week: 46, label: '黑五档期 11.14–12.02 · 主峰 W47（11-27）' },

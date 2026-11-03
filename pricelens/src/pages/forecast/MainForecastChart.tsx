@@ -1,16 +1,18 @@
 // ============================================================
-// 推演工作台 v2 · 层①主图（视觉重心，只露最终结果）：
+// 推演工作台 v2 · 层①主图（视觉重心，只露最终结果——纲领：库存刚性砍的
+// 中间过程不呈现，仅保留砍周琥珀描边微痕标识）：
 // 历史实柱实线（W37–W44 演示实际）+ 预测虚柱虚线（W45–W52）+ 上一代同周龄
-// 参考线（灰虚）+ 把握区间帽（柱顶 I 形，窄 = 把握大）+ 库存修正段（琥珀描边，
-// 与「不含库存限制」细虚线分叉、差值淡琥珀着色）+ 价格线右轴（实→虚）+
-// 大促档期背景带 + 今天分界线。悬停 / 聚焦预测周出「本周考量」构成浮窗；
-// 点击或 Enter 打开微调（原因必填，弹窗在页面层）。图例可点击切换系列显隐。
-// 数据表（details）提供文字替代，预测周带「微调」键盘入口。
+// 参考线（灰虚）+ 把握区间帽（柱顶 I 形，窄 = 把握大）+ 库存修正周（琥珀描边）
+// + 价格线右轴（实→虚）+ 大促档期背景带 + 今天分界线 + 主图小事件锚点
+// （竞品上市蓝 / 营销价促琥珀 / 自家挤兑墨，与参考卡事实同源色系）。
+// 手调原因内联标注在主图手调处（小字截断 + hover 全文）。
+// 悬停 / 聚焦预测周出「本周考量」构成浮窗；点击或 Enter 打开微调（原因必填）。
+// 图例可点击切换系列显隐。数据表（details）提供文字替代。
 // ============================================================
 import { useState, type CSSProperties } from 'react';
 import { brandColor, color, font, radius, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
-import type { WorkbenchFixture } from './workbenchFixture';
+import type { ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult, WorkbenchWeekResult } from './workbenchModel';
 import { WorkbenchLegend, fmtWan, wanOf, type LegendItem } from './WorkbenchBits';
 
@@ -27,15 +29,27 @@ const PRICE_MAX = 950;
 /** 预测周首个下标（W45 = index 8）。 */
 const FORECAST_START = 8;
 
+/** 主图小事件锚点色（与参考卡事实锚同源色系）。 */
+export const PRODUCT_EVENT_COLOR: Record<ProductEventSeed['type'], string> = {
+  'competitor-launch': color.link,
+  'own-promo': color.warning,
+  cannibalization: color.ink,
+};
+export const PRODUCT_EVENT_LABEL: Record<ProductEventSeed['type'], string> = {
+  'competitor-launch': '竞品上市',
+  'own-promo': '营销价促',
+  cannibalization: '自家挤兑',
+};
+
 const LEGEND_ITEMS: LegendItem[] = [
   { label: '周销 实际', shape: 'rect', color: color.link },
   { label: '周销 预测', shape: 'rectDash', color: color.link },
-  { label: '预测 · 按可售修正', shape: 'rectAmber', color: color.warning },
-  { key: 'unconstrained', label: '不含库存限制', shape: 'dash', color: color.link },
+  { label: '预测 · 库存刚性修正', shape: 'rectAmber', color: color.warning },
   { key: 'price', label: '价格（右轴）', shape: 'line', color: brandColor.HUAWEI },
   { key: 'prevGen', label: '参考 · 上一代同周龄', shape: 'dash', color: color.hairlineStrong },
   { key: 'band', label: '柱顶帽 = 把握区间（窄 = 把握大）', shape: 'dash', color: color.warning },
-  { label: '手调标记', shape: 'marker', color: color.warning },
+  { label: '手调标记（内联原因）', shape: 'marker', color: color.warning },
+  { label: '小事件锚点（竞品=蓝 / 价促=琥珀 / 挤兑=墨）', shape: 'marker', color: color.link },
 ];
 
 const thStyle: CSSProperties = {
@@ -49,12 +63,16 @@ const tdStyle: CSSProperties = {
 
 export default function MainForecastChart({
   fixture,
+  params,
   result,
   onTuneWeek,
+  onRemoveProductEvent,
 }: {
   fixture: WorkbenchFixture;
+  params: { productEvents: ProductEventSeed[] };
   result: WorkbenchResult;
   onTuneWeek: (weekNumber: number) => void;
+  onRemoveProductEvent: (id: string) => void;
 }) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -69,7 +87,7 @@ export default function MainForecastChart({
   const weeks = result.weeks;
   const slot = PLOT_W / weeks.length;
   const x = (index: number): number => LEFT + (index + 0.5) * slot;
-  const maxVolume = Math.max(...weeks.flatMap((week) => [week.sales ?? 0, week.final ?? 0, week.unconstrained ?? 0, week.prevGenSales]));
+  const maxVolume = Math.max(...weeks.flatMap((week) => [week.sales ?? 0, week.final ?? 0, week.prevGenSales]));
   const yMax = Math.max(1, niceCeil(maxVolume * 1.12));
   const y = (value: number): number => TOP + PLOT_H * (1 - value / yMax);
   const yPrice = (value: number): number => TOP + PLOT_H * (1 - (value - PRICE_MIN) / (PRICE_MAX - PRICE_MIN));
@@ -93,9 +111,8 @@ export default function MainForecastChart({
       .join(' ');
 
   const hoverWeek = hoverIndex != null ? weeks[hoverIndex] : null;
-  const isForecastHover = hoverWeek != null && hoverWeek.status === 'forecast';
-  const adjustedWeeks = weeks.filter((week) => week.inventoryAdjusted);
-  const ariaLabel = `${fixture.context.product} 量价预测主图：历史 ${fixture.context.historyRange} 实柱、预测 ${fixture.context.forecastRange} 虚柱；预测期总销量 ${fmtWan(result.summary.totalSales)}；大促峰 W${result.summary.peak.weekNumber} ${fmtWan(result.summary.peak.value)}；${adjustedWeeks.length ? `库存修正 W${adjustedWeeks[0].weekNumber} 起，缺口 ${fmtWan(result.summary.gap)}` : '未触发库存修正'}；详细数值见下方数据表。`;
+  const cappedWeeks = weeks.filter((week) => week.capped);
+  const ariaLabel = `${fixture.context.product} 量价预测主图：历史 ${fixture.context.historyRange} 实柱、预测 ${fixture.context.forecastRange} 虚柱；预测期总销量 ${fmtWan(result.summary.totalSales)}；大促峰 W${result.summary.peak.weekNumber} ${fmtWan(result.summary.peak.value)}；${cappedWeeks.length ? `库存刚性修正 W${cappedWeeks[0].weekNumber} 起` : '未触发库存修正'}；详细数值见下方数据表。`;
 
   return (
     <div style={{ display: 'grid', gap: space.sm }}>
@@ -140,29 +157,12 @@ export default function MainForecastChart({
               <path d={linePath(weeks.map((week) => week.prevGenSales), 0, weeks.length - 1)} fill="none" stroke={color.hairlineStrong} strokeWidth={1.5} strokeDasharray="5 4" />
             )}
 
-            {/* 库存修正差值（淡琥珀）：不含库存限制 − 最终柱 */}
-            {weeks.map((week, index) => {
-              if (week.status !== 'forecast' || week.final == null || week.unconstrained == null) return null;
-              if (week.unconstrained <= week.final) return null;
-              return (
-                <rect
-                  key={`gap-${week.week}`}
-                  x={x(index) - barW / 2}
-                  y={y(week.unconstrained)}
-                  width={barW}
-                  height={Math.max(0, y(week.final) - y(week.unconstrained))}
-                  fill={color.warning}
-                  opacity={0.14}
-                />
-              );
-            })}
-
-            {/* 周销柱：历史实柱（浅蓝）/ 预测虚柱（描边；库存修正段琥珀） */}
+            {/* 周销柱：历史实柱（浅蓝）/ 预测虚柱（描边；库存刚性修正周琥珀描边微痕） */}
             {weeks.map((week, index) => {
               const value = week.final;
               if (value == null) return null;
               const forecast = week.status === 'forecast';
-              const adjusted = week.inventoryAdjusted;
+              const adjusted = week.capped;
               return (
                 <rect
                   key={`bar-${week.week}`}
@@ -186,11 +186,6 @@ export default function MainForecastChart({
             <path d={linePath(weeks.map((week) => week.sales), 0, 7)} fill="none" stroke={color.ink} strokeWidth={1.4} />
             <path d={linePath(weeks.map((week) => week.final), FORECAST_START, weeks.length - 1)} fill="none" stroke={color.ink} strokeWidth={1.4} strokeDasharray="5 4" />
 
-            {/* 不含库存限制（细虚线，仅预测周） */}
-            {show('unconstrained') && (
-              <path d={linePath(weeks.map((week) => week.unconstrained), FORECAST_START, weeks.length - 1)} fill="none" stroke={color.link} strokeWidth={1.5} strokeDasharray="2 4" />
-            )}
-
             {/* 价格线右轴：实 → 虚（主品最粗线） */}
             {show('price') && (
               <>
@@ -199,14 +194,14 @@ export default function MainForecastChart({
               </>
             )}
 
-            {/* 把握区间帽：修正段 ±2%（琥珀·窄）/ 其余 ±8%（蓝·中） */}
+            {/* 把握区间帽：修正周 ±2%（琥珀·窄，把握度大）/ 其余 ±8%（蓝·中） */}
             {show('band') && weeks.map((week, index) => {
               if (week.status !== 'forecast' || week.final == null) return null;
-              const bandPct = week.inventoryAdjusted ? 0.02 : 0.08;
+              const bandPct = week.capped ? 0.02 : 0.08;
               const cx = x(index);
               const y1 = y(week.final * (1 - bandPct));
               const y2 = y(week.final * (1 + bandPct));
-              const stroke = week.inventoryAdjusted ? color.warning : color.link;
+              const stroke = week.capped ? color.warning : color.link;
               return (
                 <g key={`band-${week.week}`} stroke={stroke} strokeWidth={1.3}>
                   <line x1={cx} y1={y1} x2={cx} y2={y2} />
@@ -216,12 +211,40 @@ export default function MainForecastChart({
               );
             })}
 
-            {/* 手调标记（琥珀菱形） */}
+            {/* 手调标记（琥珀菱形）+ 原因内联小字（纲领：原因标注内联在主图手调处） */}
             {weeks.map((week, index) => {
               if (week.manual == null || week.final == null) return null;
               const cx = x(index);
               const cy = y(week.final) - 14;
-              return <path key={`manual-${week.week}`} d={`M${cx} ${cy - 5} l5 5 l-5 5 l-5 -5 Z`} fill={color.warning} stroke={color.canvas} strokeWidth={1.2} />;
+              const reason = week.manual.reason;
+              const short = reason.length > 12 ? `${reason.slice(0, 12)}…` : reason;
+              return (
+                <g key={`manual-${week.week}`}>
+                  <path d={`M${cx} ${cy - 5} l5 5 l-5 5 l-5 -5 Z`} fill={color.warning} stroke={color.canvas} strokeWidth={1.2}>
+                    <title>{`手调：${reason}`}</title>
+                  </path>
+                  <text x={cx} y={cy - 10} textAnchor="middle" fontSize={9} fill={color.warningInk}>
+                    {short}
+                    <title>{reason}</title>
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* 主图小事件锚点（产品级三类，与参考卡事实同源色系） */}
+            {params.productEvents.map((event, order) => {
+              const index = weeks.findIndex((week) => week.weekNumber === event.week);
+              if (index < 0) return null;
+              const cx = x(index);
+              const tone = PRODUCT_EVENT_COLOR[event.type];
+              return (
+                <g key={`pe-${event.id}`}>
+                  <line x1={cx} y1={TOP - 4} x2={cx} y2={TOP + PLOT_H} stroke={tone} strokeDasharray="3 4" opacity={0.55} />
+                  <circle cx={cx} cy={TOP + 6} r={8.5} fill={color.canvas} stroke={tone} strokeWidth={1.4} />
+                  <text x={cx} y={TOP + 9.5} textAnchor="middle" fontSize={10} fill={tone} fontWeight={600}>{`A${order + 1}`}</text>
+                  <title>{`${PRODUCT_EVENT_LABEL[event.type]} · ${event.label}（W${event.week}，${event.magnitudePct > 0 ? '+' : ''}${event.magnitudePct}%）`}</title>
+                </g>
+              );
             })}
 
             {/* 锚点：调价 / 档期（编号 + 图下名录） */}
@@ -286,7 +309,7 @@ export default function MainForecastChart({
 
       <WorkbenchLegend items={LEGEND_ITEMS} hidden={hidden} onToggle={toggle} />
 
-      {/* 图下事件行：锚点名录 + 库存修正状态 */}
+      {/* 图下事件行：锚点名录 + 小事件名录（可删）+ 库存修正状态 */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', fontSize: 12, color: color.body }}>
         {fixture.anchors.map((anchor, order) => (
           <span key={anchor.week} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -294,9 +317,23 @@ export default function MainForecastChart({
             {anchor.label}
           </span>
         ))}
+        {params.productEvents.map((event, order) => (
+          <span key={event.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <span aria-hidden style={{ width: 17, height: 17, borderRadius: '50%', border: `1px solid ${PRODUCT_EVENT_COLOR[event.type]}`, fontSize: 9.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: PRODUCT_EVENT_COLOR[event.type], fontWeight: 600 }}>{`A${order + 1}`}</span>
+            {`${PRODUCT_EVENT_LABEL[event.type]} · ${event.label}（W${event.week}，${event.magnitudePct > 0 ? '+' : ''}${event.magnitudePct}%）`}
+            <button
+              type="button"
+              aria-label={`删除小事件 ${event.label}`}
+              onClick={() => onRemoveProductEvent(event.id)}
+              style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 11, cursor: 'pointer', padding: 0 }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
         <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          <span aria-hidden style={{ width: 17, height: 17, borderRadius: '50%', border: `1px solid ${color.warning}`, background: color.warningSoft, fontSize: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: color.warningInk }}>{fixture.anchors.length + 1}</span>
-          {result.firstAdjustedWeek ? `库存修正生效 · W${result.firstAdjustedWeek} 起（打折回写主图）` : '当前考量未触发库存修正'}
+          <span aria-hidden style={{ width: 17, height: 17, borderRadius: '50%', border: `1px solid ${color.warning}`, background: color.warningSoft, fontSize: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: color.warningInk }}>砍</span>
+          {cappedWeeks.length ? `库存刚性修正 · W${cappedWeeks[0].weekNumber} 起（min(基线 SO, 可售) 回写主图）` : '当前考量未触发库存修正'}
         </span>
       </div>
 
@@ -313,10 +350,9 @@ export default function MainForecastChart({
                 <th style={{ ...thStyle, textAlign: 'left' }}>周</th>
                 <th style={{ ...thStyle, textAlign: 'left' }}>状态</th>
                 <th style={thStyle}>周销（台）</th>
-                <th style={thStyle}>不含库存限制（台）</th>
                 <th style={thStyle}>价格</th>
                 <th style={thStyle}>上一代同周龄（台）</th>
-                <th style={{ ...thStyle, textAlign: 'left' }}>把握</th>
+                <th style={{ ...thStyle, textAlign: 'left' }}>把握度</th>
                 <th style={thStyle}>操作</th>
               </tr>
             </thead>
@@ -325,14 +361,13 @@ export default function MainForecastChart({
                 <tr key={week.week}>
                   <td style={{ ...tdStyle, textAlign: 'left', color: color.ink }}><span className="mono">{week.week}</span></td>
                   <td style={{ ...tdStyle, textAlign: 'left' }}>
-                    {week.status === 'actual' ? '演示实际' : week.manual != null ? '手调' : week.inventoryAdjusted ? '库存修正' : '预测'}
+                    {week.status === 'actual' ? '演示实际' : week.manual != null ? '手调' : week.capped ? '库存刚性修正' : '预测'}
                   </td>
                   <td style={{ ...tdStyle, color: color.ink }}>{(week.final ?? 0).toLocaleString('en-US')}</td>
-                  <td style={tdStyle}>{week.unconstrained != null ? week.unconstrained.toLocaleString('en-US') : '—'}</td>
                   <td style={tdStyle}>{`$${week.price}`}</td>
                   <td style={tdStyle}>{week.prevGenSales.toLocaleString('en-US')}</td>
                   <td style={{ ...tdStyle, textAlign: 'left' }}>
-                    {week.status === 'actual' ? '—' : `${week.inventoryAdjusted ? '±2%（把握大）' : '±8%（把握中）'}`}
+                    {week.status === 'actual' ? '—' : `${week.capped ? '±2%（把握度大）' : '±8%（把握度中）'}`}
                   </td>
                   <td style={tdStyle}>
                     {week.status === 'forecast' ? (
@@ -376,10 +411,9 @@ function WeekTooltip({ week, prevWeek, leftPct, flip }: { week: WorkbenchWeekRes
       </div>
       <div style={{ display: 'grid', gap: 2 }}>
         <TipRow label="周销" value={fmtWan(week.final)} />
-        {forecast && <TipRow label="不含库存限制" value={fmtWan(week.unconstrained)} />}
         <TipRow label="价格" value={`$${week.price}`} />
         <TipRow label="上一代同周龄" value={fmtWan(week.prevGenSales)} />
-        {forecast && <TipRow label="把握" value={week.inventoryAdjusted ? '±2%（把握大）' : '±8%（把握中）'} />}
+        {forecast && <TipRow label="把握度" value={week.capped ? '±2%（把握度大）' : '±8%（把握度中）'} />}
         {!forecast && wow != null && <TipRow label="周环比" value={wow} />}
         {week.manual != null && <TipRow label="手调原因" value={week.manual.reason} />}
       </div>

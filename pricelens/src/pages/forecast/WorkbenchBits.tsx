@@ -49,12 +49,12 @@ export function CertaintyBadge({ level }: { level: 'high' | 'mid' }) {
   );
 }
 
-/** AI 判断标注：初始值 = AI 判断 · 可修改（琥珀）；人工改动后 = 人工确认（灰）。 */
+/** AI 推测标注（纲领：AI 推的第一版，可改）：初始 = AI 推测 · 可改（琥珀）；人工改动后 = 人工确认（灰）。 */
 export function AiJudgeBadge({ source }: { source: 'ai' | 'human' }) {
   const ai = source === 'ai';
   return (
     <span
-      title={ai ? '初始值由 AI 生成，可直接修改；修改后标注转为「人工确认」' : '该值已被人工修改并确认，AI 初始值不再生效'}
+      title={ai ? 'AI 推的第一版（纯时间序列：季节 × 趋势），可直接修改' : '该值已被人工修改，AI 第一版不再生效'}
       style={{
         display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
         fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
@@ -62,8 +62,30 @@ export function AiJudgeBadge({ source }: { source: 'ai' | 'human' }) {
         color: ai ? color.warningInk : color.body,
       }}
     >
-      {ai ? 'AI 判断 · 可修改' : '人工确认'}
+      {ai ? 'AI 推测 · 可改' : '人工确认'}
     </span>
+  );
+}
+
+/** 输入/输出标注条（纲领：每张卡「输入 → 输出影响主图什么」一眼可读）。 */
+export function IoBar({ input, output }: { input: string; output: string }) {
+  const row = (label: string, text: string, strong: boolean) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+      <span
+        style={{
+          flex: 'none', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4,
+          background: strong ? color.canvasSoft2 : color.canvas, border: `1px solid ${color.hairline}`, color: color.body,
+        }}
+      >{label}</span>
+      <span style={{ fontSize: 11, color: strong ? color.ink : color.body, minWidth: 0 }}>{text}</span>
+    </span>
+  );
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px', alignItems: 'center', marginTop: -2, marginBottom: space.sm }}>
+      {row('输入', input, false)}
+      <span aria-hidden style={{ color: color.hairlineStrong }}>→</span>
+      {row('输出', output, true)}
+    </div>
   );
 }
 

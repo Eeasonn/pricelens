@@ -48,40 +48,51 @@ describe('量价预测推演工作台 v2 · 页面组装', () => {
     }
   });
 
-  it('渲染五层卡片、演示标识、大盘单线连贯与事件三参数（W50 起库存修正）', () => {
+  it('渲染五层卡片（参考居首/成本垫底）、演示标识与纲领要素', () => {
     render(<App />);
     const text = document.body.textContent ?? '';
     for (const label of [
       '量价预测 · 推演工作台',
       '量价预测主图',
-      '大盘 · 总量总线',
       '量价参考',
-      '成本销毛',
+      '大盘 · 总量总线',
       '库存验证',
+      '成本销毛',
     ]) {
       expect(text).toContain(label);
     }
     // 推演纪要层已删除（Eason 2026-11-03 晚拍板）。
     expect(text).not.toContain('推演纪要');
+    // 卡序（按 h2 标题 DOM 顺序）：主图 → 量价参考 → 大盘 → 库存验证 → 成本销毛垫底。
+    const titles = Array.from(document.querySelectorAll('h2')).map((node) => (node.textContent ?? '').trim());
+    const cardOrder = ['量价预测主图', '量价参考', '大盘 · 总量总线', '库存验证', '成本销毛']
+      .map((label) => titles.findIndex((title) => title.includes(label)));
+    expect(cardOrder.every((index) => index >= 0)).toBe(true);
+    expect([...cardOrder].sort((a, b) => a - b)).toEqual(cardOrder);
     // 演示数据显式标识（PRODUCT.md 数据边界）。
     expect(text).toContain('模拟数据');
     expect(text).toContain('演示');
-    // 大盘卡：单线连贯（2025Q1 起）+ 只预测下一季 + 行业级事件三参数。
-    expect(text).toContain('季度环比趋势（自 2026Q4 起逐季延续）');
-    expect(text).toContain('影响大盘的关键事件（仅行业级）');
+    // 量价参考 = 事实还原型输入因子卡：纯历史、无预测段。
+    expect(text).toContain('纯历史 · 无预测段');
+    expect(text).toContain('输入');
+    expect(text).not.toContain('不进计算公式');
+    // 大盘卡：AI 时间序列基线 + 预测格直接编辑 + 事件四件套。
+    expect(text).toContain('下一季度预测（直接改格修正走势）');
+    expect(text).toContain('影响大盘的关键事件（仅行业级 · 人工录入）');
     expect(text).toContain('下季预测');
-    expect(text).toContain('生效季');
-    expect(text).toContain('持续');
-    // 基准演示链：W50 起打折修正，缺口进摘要。
-    expect(text).toContain('库存修正缺口（W50 起）');
-    expect(text).toContain('9 折');
-    // AI 判断标注（初始值）与理由栏预填。
-    expect(text).toContain('AI 判断 · 可修改');
+    expect(text).toContain('衰减');
+    // 库存验证：SI 按月给入 + 刚性砍话术。
+    expect(text).toContain('人工 SI 计划（按月）');
+    expect(text).toContain('刚性');
+    // 基准演示链：W50 起刚性砍，缺口进摘要。
+    expect(text).toContain('库存刚性修正（W50 起）');
+    // AI 第一版标注与理由栏预填。
+    expect(text).toContain('AI 推测 · 可改');
     expect(text).toContain('理由 · 为什么这么推');
     // 主图摘要四格。
     expect(text).toContain('预测期总销量');
     expect(text).toContain('大促峰 · W47');
-    expect(text).toContain('预测期销毛');
+    expect(text).toContain('预测期销毛（末端独立推测）');
   });
 
   it('预测周「微调」打开弹窗：原因未填禁用保存，填原因后应用', () => {
