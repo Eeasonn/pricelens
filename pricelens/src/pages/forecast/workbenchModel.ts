@@ -65,35 +65,61 @@ export function isParamsActive(params: WorkbenchParams, fixture: WorkbenchFixtur
 }
 
 // ------------------------------------------------------------
-// 大盘层：季度推演 + 周度考量倍数
+// 大盘层：季度推演（当前季 + 下一季）+ 周度考量倍数
 // ------------------------------------------------------------
 
-/** 今年 Q4 指数 = Q3 × (1 + 环比降幅/100)。季度粒度（同比不下钻到周）。 */
-export function forecastQuarterIndex(fixture: WorkbenchFixture, qoqDeclinePct: number): number {
-  const q3 = fixture.market.quarters.find((quarter) => quarter.label === 'Q3')?.thisYear;
-  if (q3 == null) return 0;
-  return round1(q3 * (1 + qoqDeclinePct / 100));
+/** 大盘推演季：'2026Q4'（当前季，主图预测周所在季）与 '2027Q1'（下一季，产品全景预测目标）。 */
+export const FORECAST_QUARTERS = ['2026Q4', '2027Q1'] as const;
+export type ForecastQuarter = (typeof FORECAST_QUARTERS)[number];
+
+export function isForecastQuarter(key: string): key is ForecastQuarter {
+  return (FORECAST_QUARTERS as readonly string[]).includes(key);
 }
 
-/** 事件在某周是否生效（从生效周起持续到预测窗口末，衰减曲率不做）。 */
-export function isEventActiveAt(event: MarketEventSeed, weekNumber: number): boolean {
-  return weekNumber >= event.startWeek;
+/** 事件在某推演季是否生效（自生效季起持续 durationQuarters 个季，裁剪到推演段）。 */
+export function isEventActiveIn(event: MarketEventSeed, quarter: ForecastQuarter): boolean {
+  const start = FORECAST_QUARTERS.indexOf(event.startQuarter as ForecastQuarter);
+  if (start < 0) return false;
+  const index = FORECAST_QUARTERS.indexOf(quarter);
+  return index >= start && index < start + event.durationQuarters;
+}
+
+function eventFactorIn(events: readonly MarketEventSeed[], quarter: ForecastQuarter): number {
+  return events
+    .filter((event) => isEventActiveIn(event, quarter))
+    .reduce((factor, event) => factor * (1 + event.magnitudePct / 100), 1);
 }
 
 /**
- * 周度大盘考量倍数（相对基准考量）：环比降幅变化 + 事件增删改，都只作用于预测周。
- * 基准考量本身 = 1（basePath 已含基准大盘走势与黑五形状）。
+ * 大盘季度推演（季度环比趋势 + 事件按季叠加，逐季连乘）：
+ * 2026Q4 = 2026Q3 × (1 + 环比%) × 事件(Q4)；2027Q1 = 2026Q4 × (1 + 环比%) × 事件(Q1)。
+ * 环比趋势为 AI 判断值（人工可改），逐季延续——「去年直接抄 + 叠加今年自然变化」的口径。
+ */
+export function forecastQuarterIndexes(
+  fixture: WorkbenchFixture,
+  qoqDeclinePct: number,
+  events: readonly MarketEventSeed[],
+): { q4Index: number; q1NextIndex: number } {
+  const lastActual = fixture.market.quarters[fixture.market.quarters.length - 1]?.value ?? 0;
+  const qoq = 1 + qoqDeclinePct / 100;
+  const q4 = lastActual * qoq * eventFactorIn(events, '2026Q4');
+  const q1Next = q4 * qoq * eventFactorIn(events, '2027Q1');
+  return { q4Index: round1(q4), q1NextIndex: round1(q1Next) };
+}
+
+/**
+ * 周度大盘考量倍数（相对基准考量）：环比趋势 + 事件增删改，只作用于预测周
+ * （主图预测窗口 W45–W52 全部落在 2026Q4）。基准考量本身 = 1（basePath 已含基准走势）。
  */
 export function marketFactorAt(params: WorkbenchParams, base: WorkbenchParams, weekNumber: number): number {
   const qoqRatio = (1 + params.qoqDeclinePct / 100) / (1 + base.qoqDeclinePct / 100);
-  // 事件倍数 = 当前考量的事件乘子 ÷ 基准考量的事件乘子（同一事件改幅度 = 换乘子，删除 = 除回）。
   const eventIds = new Set([...params.marketEvents.map((event) => event.id), ...base.marketEvents.map((event) => event.id)]);
   let eventRatio = 1;
   for (const id of eventIds) {
     const current = params.marketEvents.find((event) => event.id === id);
     const baseEvent = base.marketEvents.find((event) => event.id === id);
-    if (current && isEventActiveAt(current, weekNumber)) eventRatio *= 1 + current.magnitudePct / 100;
-    if (baseEvent && isEventActiveAt(baseEvent, weekNumber)) eventRatio /= 1 + baseEvent.magnitudePct / 100;
+    if (current && isEventActiveIn(current, '2026Q4')) eventRatio *= 1 + current.magnitudePct / 100;
+    if (baseEvent && isEventActiveIn(baseEvent, '2026Q4')) eventRatio /= 1 + baseEvent.magnitudePct / 100;
   }
   return qoqRatio * eventRatio;
 }
@@ -212,10 +238,16 @@ export interface WorkbenchWeekResult {
   consider: ConsiderItem[];
 }
 
+export interface MarketQuarterPoint {
+  key: string;
+  value: number;
+  status: 'actual' | 'forecast';
+}
+
 export interface WorkbenchResult {
   weeks: WorkbenchWeekResult[];
-  /** 大盘季度对照（今年 Q4 为推演值，随环比降幅联动）。 */
-  marketQuarters: Array<{ label: string; lastYear: number; thisYear: number; thisYearForecast: boolean }>;
+  /** 大盘季度单序列（2025Q1 连贯到当前实际 + 2026Q4/2027Q1 推演，产品全景视角）。 */
+  marketQuarters: MarketQuarterPoint[];
   /** 预测周健康判定（库存验证输出框用）。 */
   health: HealthRow[];
   /** 首个库存修正周的周序号（未触发 = null）。 */
@@ -247,6 +279,7 @@ export function unitCostOfWeek(fixture: WorkbenchFixture, weekNumber: number): n
 
 export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchParams): WorkbenchResult {
   const base = baseWorkbenchParams(fixture);
+  const { q4Index, q1NextIndex } = forecastQuarterIndexes(fixture, params.qoqDeclinePct, params.marketEvents);
   const weeks: WorkbenchWeekResult[] = [];
   const inventoryRows: InventoryRow[] = [];
   let channelInv = fixture.inventory.initialChannelInv;
@@ -317,16 +350,21 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
     const consider: ConsiderItem[] = [
       {
         kind: 'market',
-        label: '大盘 · Q4 环比',
+        label: '大盘 · 季度趋势',
         pct: params.qoqDeclinePct,
-        note: `今年 Q4 指数推演 ${forecastQuarterIndex(fixture, params.qoqDeclinePct)}（Q3 = ${fixture.market.quarters[2].thisYear}）`,
+        note: `季度环比 ${params.qoqDeclinePct}% 逐季延续：2026Q4 指数 ${q4Index} · 2027Q1 指数 ${q1NextIndex}`,
       },
-      ...params.marketEvents.map((event) => ({
-        kind: 'event' as const,
-        label: event.label,
-        pct: isEventActiveAt(event, week.weekNumber) ? event.magnitudePct : null,
-        note: isEventActiveAt(event, week.weekNumber) ? `生效中（W${event.startWeek} 起）` : `W${event.startWeek} 起生效`,
-      })),
+      ...params.marketEvents.map((event) => {
+        const active = isEventActiveIn(event, '2026Q4');
+        return {
+          kind: 'event' as const,
+          label: event.label,
+          pct: active ? event.magnitudePct : null,
+          note: active
+            ? `生效中（${event.startQuarter} 起，持续 ${event.durationQuarters} 季）`
+            : `${event.startQuarter} 起生效（持续 ${event.durationQuarters} 季），不影响本季周度预测`,
+        };
+      }),
       {
         kind: 'promo',
         label: fixture.promoBand.label,
@@ -359,11 +397,11 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
   const gap = forecastWeeks.reduce((total, week) => total + Math.max(0, (week.unconstrained ?? 0) - (week.final ?? 0)), 0);
   const peakWeekResult = forecastWeeks.reduce((best, week) => ((week.final ?? 0) > (best?.final ?? 0) ? week : best), forecastWeeks[0]);
   const adjusted = forecastWeeks.filter((week) => week.inventoryAdjusted);
-  const marketQuarters = fixture.market.quarters.map((quarter) =>
-    quarter.thisYear != null
-      ? { label: quarter.label, lastYear: quarter.lastYear, thisYear: quarter.thisYear, thisYearForecast: false }
-      : { label: quarter.label, lastYear: quarter.lastYear, thisYear: forecastQuarterIndex(fixture, params.qoqDeclinePct), thisYearForecast: true },
-  );
+  const marketQuarters: MarketQuarterPoint[] = [
+    ...fixture.market.quarters.map((quarter) => ({ key: quarter.key, value: quarter.value, status: 'actual' as const })),
+    { key: '2026Q4', value: q4Index, status: 'forecast' as const },
+    { key: '2027Q1', value: q1NextIndex, status: 'forecast' as const },
+  ];
 
   return {
     weeks,
@@ -386,52 +424,8 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
 }
 
 // ------------------------------------------------------------
-// 推演纪要：纯函数留痕（确定性演示时钟，不读系统时间）
+// 手调（原因必填；留痕展示层已删，原因标注在主图手调处）
 // ------------------------------------------------------------
-
-export type MemoType = '生成' | '考量' | '事件' | 'SI 计划' | '手调' | '纪要' | '情景' | '重置';
-
-export interface MemoEntry {
-  id: string;
-  /** 演示时钟（初始 14:02，每条 +2 分钟）。 */
-  time: string;
-  type: MemoType;
-  /** 操作人（演示名）。 */
-  operator: string;
-  content: string;
-  reason?: string;
-}
-
-export const MEMO_BASE_MINUTES = 14 * 60 + 2;
-export const MEMO_STEP_MINUTES = 2;
-export const MEMO_DEMO_OPERATOR = '王峰';
-
-/** 演示时钟：第 index 条（0 起）的时间文本。 */
-export function memoTimeAt(index: number): string {
-  const minutes = (MEMO_BASE_MINUTES + index * MEMO_STEP_MINUTES) % (24 * 60);
-  const hh = Math.floor(minutes / 60);
-  const mm = minutes % 60;
-  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-}
-
-/** 追加纪要（纯函数）：返回新数组，id / 时间 / 操作人自动分配，原数组不变。 */
-export function appendMemo(
-  entries: MemoEntry[],
-  input: { type: MemoType; content: string; reason?: string; operator?: string },
-): MemoEntry[] {
-  const index = entries.length;
-  return [
-    ...entries,
-    {
-      id: `memo-${index + 1}`,
-      time: memoTimeAt(index),
-      type: input.type,
-      operator: input.operator ?? MEMO_DEMO_OPERATOR,
-      content: input.content,
-      reason: input.reason?.trim() ? input.reason.trim() : undefined,
-    },
-  ];
-}
 
 /** 手调设置（纯函数）：原因必填，空原因返回 null（调用方据此禁用保存）。 */
 export function setManualAdjustment(
@@ -450,39 +444,4 @@ export function clearManualAdjustment(params: WorkbenchParams, weekNumber: numbe
   const manual = { ...params.manual };
   delete manual[weekNumber];
   return { ...params, manual };
-}
-
-/** 纪要独立 HTML 文档（生成纪要导出用）：含摘要、当前考量、调整记录与演示边界声明。 */
-export function buildMemoHtml(input: {
-  fixture: WorkbenchFixture;
-  params: WorkbenchParams;
-  result: WorkbenchResult;
-  memo: MemoEntry[];
-}): string {
-  const { fixture, params, result, memo } = input;
-  const escape = (text: string): string =>
-    text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] as string);
-  const fmtWan = (units: number): string => `${(units / 10000).toFixed(2)} 万台`;
-  const rows = memo
-    .map((entry) => `<tr><td>${entry.time}</td><td>${escape(entry.type)}</td><td>${escape(entry.operator)}</td><td>${escape(entry.content)}</td><td>${escape(entry.reason ?? '—')}</td></tr>`)
-    .join('');
-  const adjustedWeeks = result.weeks.filter((week) => week.inventoryAdjusted).map((week) => week.week);
-  const summary = [
-    `预测期总销量（${fixture.context.forecastRange}）：${fmtWan(result.summary.totalSales)}（${result.summary.vsHistoryPct > 0 ? '+' : ''}${result.summary.vsHistoryPct}% vs ${fixture.context.historyRange}）`,
-    `大促峰 W${result.summary.peak.weekNumber}：${fmtWan(result.summary.peak.value)}（${result.summary.peak.note}）`,
-    `库存修正缺口：${result.summary.gap > 0 ? `−${fmtWan(result.summary.gap)}（${adjustedWeeks.join('、') || '未触发'}）` : '未触发'}`,
-    `预测期销毛：$${(result.summary.forecastMargin / 1e6).toFixed(1)}M（按月版本成本）`,
-  ];
-  const events = params.marketEvents.length
-    ? params.marketEvents.map((event) => `${escape(event.label)} ${event.magnitudePct > 0 ? '+' : ''}${event.magnitudePct}%（W${event.startWeek} 起）`).join('；')
-    : '无';
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>PriceLens 量价预测推演纪要</title><style>body{font:14px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;max-width:1080px;margin:40px auto;padding:0 24px;color:#171717}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #ebebeb;text-align:left;vertical-align:top}th{color:#737373}h1{font-size:22px}h2{font-size:17px;margin-top:28px}.note{color:#805b00;background:#ffefcf;padding:12px 16px;border-radius:8px}</style></head><body>`
-    + `<h1>量价预测推演纪要 · ${escape(fixture.context.product)}</h1>`
-    + `<p>${escape(fixture.context.country)} · ${escape(fixture.context.industry)} · ${escape(fixture.context.channel)} · 历史 ${fixture.context.historyRange} · 预测 ${fixture.context.forecastRange} · 生成于 ${fixture.meta.generatedAt}</p>`
-    + `<p class="note">全部数值为演示模型输出（${fixture.meta.modelVersion}），不作为业务事实、统计结论或经营承诺。</p>`
-    + `<h2>当前摘要</h2><ul>${summary.map((line) => `<li>${line}</li>`).join('')}</ul>`
-    + `<h2>当前考量</h2><p>大盘 Q4 环比 ${params.qoqDeclinePct}%（${params.qoqSource === 'ai' ? 'AI 判断' : '人工确认'}）；事件：${events}。</p><p>理由：${escape(params.rationale || '—')}</p>`
-    + `<h2>调整记录（${memo.length} 条）</h2><table><thead><tr><th>时间</th><th>类型</th><th>操作人</th><th>内容</th><th>原因</th></tr></thead><tbody>${rows}</tbody></table>`
-    + `<p>库存修正周：${adjustedWeeks.join('、') || '未触发'}；SI 计划（${fixture.context.forecastRange}）：${Object.values(params.siPlan).map((v) => Math.round(v / 1000)).join(' / ')} 千台。</p>`
-    + `</body></html>`;
 }

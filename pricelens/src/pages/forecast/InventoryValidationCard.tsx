@@ -182,11 +182,11 @@ export default function InventoryValidationCard({
       </div>
       <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
 
-      {/* 人工 SI 计划输入（本层唯一新输入；改后全链重算，失焦记纪要） */}
+      {/* 人工 SI 计划输入（本层唯一新输入；改后全链重算） */}
       <div style={{ marginTop: space.sm, display: 'grid', gap: space.xs }}>
         <div style={{ fontSize: 12, color: color.body }}>
           <span style={{ fontWeight: 600, color: color.ink }}>人工 SI 计划</span>
-          <span style={{ marginLeft: 8, fontSize: 11, color: color.mute }}>千台 · 可改（本层唯一新输入，其余来自上游预测）；调整后全链重算，失焦后记入纪要</span>
+          <span style={{ marginLeft: 8, fontSize: 11, color: color.mute }}>千台 · 可改（本层唯一新输入，其余来自上游预测）；调整后全链重算</span>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.sm }}>
           {forecastWeeks.map((week) => (

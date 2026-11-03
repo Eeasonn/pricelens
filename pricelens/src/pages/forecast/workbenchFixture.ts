@@ -29,23 +29,24 @@ export interface WorkbenchWeek {
   prevGenSales: number;
 }
 
-/** 大盘关键事件（幅度 + 时间两参数，衰减曲率不做 —— brief 拍板）。 */
+/** 大盘关键事件（仅行业级事件：生效季度 + 持续季数 + 幅度，衰减曲率不做）。 */
 export interface MarketEventSeed {
   id: string;
   label: string;
   /** 影响幅度（%，正 = 抬升总量，负 = 压低）。 */
   magnitudePct: number;
-  /** 生效周（W45–W52 内）。 */
-  startWeek: number;
+  /** 生效季度：'2026Q4'（当前季）或 '2027Q1'（下一季）。 */
+  startQuarter: string;
+  /** 持续季数（1–2，覆盖到推演段末为止）。 */
+  durationQuarters: number;
 }
 
-/** 大盘季度对照（去年线 vs 今年线，季度粒度）。 */
+/** 大盘季度指数（单序列：2025Q1 起连贯到当前实际；2026Q4 / 2027Q1 由模型推演）。 */
 export interface MarketQuarterSeed {
-  label: string;
-  /** 去年（2025）季度指数。 */
-  lastYear: number;
-  /** 今年（2026）季度指数；Q4 为推演值（null 由模型按环比降幅计算）。 */
-  thisYear: number | null;
+  /** 季度键，如 '2025Q1'。 */
+  key: string;
+  /** 季度指数（实际值）。 */
+  value: number;
 }
 
 /** 量价参照小图序列（演示参照对象，可下拉切换）。 */
@@ -164,18 +165,21 @@ export const workbenchFixture: WorkbenchFixture = {
   promoBand: { label: '黑五档期 11.14–12.02', startWeek: 46, endWeek: 49, peakWeek: 47, peakNote: '主峰 11-27（黑五）' },
   market: {
     quarters: [
-      { label: 'Q1', lastYear: 115, thisYear: 108 },
-      { label: 'Q2', lastYear: 113, thisYear: 106 },
-      { label: 'Q3', lastYear: 111, thisYear: 104 },
-      { label: 'Q4', lastYear: 116, thisYear: null },
+      { key: '2025Q1', value: 115 },
+      { key: '2025Q2', value: 113 },
+      { key: '2025Q3', value: 111 },
+      { key: '2025Q4', value: 116 },
+      { key: '2026Q1', value: 108 },
+      { key: '2026Q2', value: 106 },
+      { key: '2026Q3', value: 104 },
     ],
     baselineQoqDeclinePct: -4,
     aiRationale:
-      'AI 初始判断：今年 Q4 延续 Q3 弱势、环比 −4%（去年 Q4 旺季基数 116，同比约 −14%）；黑五档期热度按近两届取中，竞品新机分流已在事件中单列。',
+      'AI 初始判断：季度环比延续今年弱势（−4%，自 2026Q4 起逐季延续）；折叠屏阵营扩容为行业级事件（2026Q4 起 +8%，持续两季）；内存供应涨价压制下一季（2027Q1 起 −6%）。竞品常规迭代不在大盘事件中，属量价参考与竞品考量。',
   },
   defaultMarketEvents: [
-    { id: 'ev-fold', label: '折叠屏阵营扩容', magnitudePct: 8, startWeek: 47 },
-    { id: 'ev-mem', label: '内存供应涨价', magnitudePct: -6, startWeek: 50 },
+    { id: 'ev-fold', label: '折叠屏阵营扩容', magnitudePct: 8, startQuarter: '2026Q4', durationQuarters: 2 },
+    { id: 'ev-mem', label: '内存供应涨价', magnitudePct: -6, startQuarter: '2027Q1', durationQuarters: 1 },
   ],
   costVersions: [
     { monthLabel: '9 月版本', fromWeek: 37, unitCost: 612 },

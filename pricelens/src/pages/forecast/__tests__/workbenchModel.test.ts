@@ -1,24 +1,23 @@
 // ============================================================
 // 推演工作台 v2 纯函数金测（forecast-workbench-v2）：
-// 预测链联动（大盘环比 / 事件 / SI 计划 / 手调 → 主图最终柱与缺口）、
-// 库存推演自洽与健康判定打折（演示规则）、纪要追加、纪要 HTML 导出。
+// 预测链联动（大盘季度趋势 / 行业级事件三参数 / SI 计划 / 手调 → 主图最终柱
+// 与缺口）、大盘季度单序列推演（2026Q4 当前季 + 2027Q1 下一季）、
+// 库存推演自洽与健康判定打折（演示规则）。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { workbenchFixture } from '../workbenchFixture';
 import {
-  appendMemo,
   baseWorkbenchParams,
-  buildMemoHtml,
   clearManualAdjustment,
   computeWorkbench,
   DISCOUNT_HEAVY,
   DISCOUNT_LIGHT,
   DOS_BAND,
-  forecastQuarterIndex,
+  forecastQuarterIndexes,
+  isEventActiveIn,
   isParamsActive,
   judgeInventoryHealth,
   marketFactorAt,
-  memoTimeAt,
   setManualAdjustment,
   unitCostOfWeek,
   type InventoryRow,
@@ -51,35 +50,55 @@ describe('推演工作台 · 周结构与确定性', () => {
 });
 
 describe('推演工作台 · 预测链联动', () => {
-  it('Q4 环比降幅加深 → 预测周全线下调，历史段不动，摘要同步', () => {
+  it('季度环比加深 → 预测周全线下调，历史段不动，摘要同步', () => {
     const deeper = compute({ ...base, qoqDeclinePct: base.qoqDeclinePct - 4, qoqSource: 'human' });
     const before = forecastOf().map((week) => week.unconstrained as number);
     const after = forecastOf(deeper).map((week) => week.unconstrained as number);
     expect(after.every((value, index) => value < before[index])).toBe(true);
     expect(deeper.weeks.slice(0, 8)).toEqual(baseline.weeks.slice(0, 8));
     expect(deeper.summary.totalSales).toBeLessThan(baseline.summary.totalSales);
-    expect(forecastQuarterIndex(workbenchFixture, -8)).toBeLessThan(forecastQuarterIndex(workbenchFixture, -4));
+    expect(forecastQuarterIndexes(workbenchFixture, -8, base.marketEvents).q4Index)
+      .toBeLessThan(forecastQuarterIndexes(workbenchFixture, -4, base.marketEvents).q4Index);
   });
 
-  it('事件幅度上调只影响生效周及之后，生效周之前逐周不变', () => {
+  it('大盘季度单序列：8 个实际季 + 2026Q4/2027Q1 两格推演（逐季连乘含事件）', () => {
+    const quarters = baseline.marketQuarters;
+    expect(quarters).toHaveLength(9); // fixture 实际 7 季（2025Q1–2026Q3）+ 2 推演
+    expect(quarters.slice(0, 7).every((point) => point.status === 'actual')).toBe(true);
+    expect(quarters.slice(7).every((point) => point.status === 'forecast')).toBe(true);
+    expect(quarters[7]).toMatchObject({ key: '2026Q4' });
+    expect(quarters[8]).toMatchObject({ key: '2027Q1' });
+    // 逐季连乘可复算：Q4 = Q3 × (1+环比) × 事件(Q4)；Q1' = Q4 × (1+环比) × 事件(Q1)
+    const q3 = quarters[6].value;
+    const q4Manual = Math.round(q3 * (1 + base.qoqDeclinePct / 100) * (1 + 0.08) * 10) / 10; // ev-fold 2026Q4 起 +8%
+    expect(quarters[7].value).toBe(q4Manual);
+    // 事件按季生效：ev-mem（2027Q1 起）不影响 2026Q4，但影响下一季
+    const mem = base.marketEvents.find((event) => event.id === 'ev-mem');
+    expect(mem && isEventActiveIn(mem, '2026Q4')).toBe(false);
+    expect(mem && isEventActiveIn(mem, '2027Q1')).toBe(true);
+  });
+
+  it('事件三参数：幅度作用于生效季的预测周；改持续季数只改下一季读数', () => {
+    // ev-fold（2026Q4 起生效）幅度上调 → 主图预测周（全部在 2026Q4）上调
     const folded = base.marketEvents.map((event) => (event.id === 'ev-fold' ? { ...event, magnitudePct: 12 } : event));
     const adjusted = compute({ ...base, marketEvents: folded });
     const beforeByWeek = new Map(forecastOf().map((week) => [week.weekNumber, week.unconstrained as number]));
     const afterByWeek = new Map(forecastOf(adjusted).map((week) => [week.weekNumber, week.unconstrained as number]));
-    expect(afterByWeek.get(46)).toBe(beforeByWeek.get(46));
-    expect(afterByWeek.get(47)!).toBeGreaterThan(beforeByWeek.get(47)!);
-    expect(afterByWeek.get(52)!).toBeGreaterThan(beforeByWeek.get(52)!);
+    expect([...afterByWeek.values()].every((value, index) => value > [...beforeByWeek.values()][index])).toBe(true);
+    // ev-fold 持续缩到 1 季 → 2027Q1 不再受其抬升，下一季指数下降；主图（2026Q4）不变
+    const shorter = compute({ ...base, marketEvents: base.marketEvents.map((event) => (event.id === 'ev-fold' ? { ...event, durationQuarters: 1 } : event)) });
+    expect(shorter.marketQuarters[8].value).toBeLessThan(baseline.marketQuarters[8].value);
+    expect(shorter.marketQuarters[7].value).toBe(baseline.marketQuarters[7].value);
   });
 
-  it('删除事件 → 生效周起预测回升；新增事件 → 生效周起预测下压', () => {
+  it('删除 / 新增事件：只影响其生效季（主图窗口 = 2026Q4）', () => {
+    // 删除 ev-mem（仅生效于 2027Q1）→ 主图逐周不变、下一季指数上修
     const removed = compute({ ...base, marketEvents: base.marketEvents.filter((event) => event.id !== 'ev-mem') });
-    const removedByWeek = new Map(forecastOf(removed).map((week) => [week.weekNumber, week.unconstrained as number]));
-    expect(removedByWeek.get(49)).toBe(forecastOf().find((week) => week.weekNumber === 49)?.unconstrained);
-    expect(removedByWeek.get(50)!).toBeGreaterThan(forecastOf().find((week) => week.weekNumber === 50)?.unconstrained as number);
-
-    const added = compute({ ...base, marketEvents: [...base.marketEvents, { id: 'ev-new', label: '新增事件', magnitudePct: -10, startWeek: 45 }] });
-    expect(forecastOf(added).find((week) => week.weekNumber === 45)?.unconstrained)
-      .toBeLessThan(forecastOf().find((week) => week.weekNumber === 45)?.unconstrained as number);
+    expect(forecastOf(removed).map((week) => week.unconstrained)).toEqual(forecastOf().map((week) => week.unconstrained));
+    expect(removed.marketQuarters[8].value).toBeGreaterThan(baseline.marketQuarters[8].value);
+    // 新增行业级事件（2026Q4 生效）→ 主图预测下压
+    const added = compute({ ...base, marketEvents: [...base.marketEvents, { id: 'ev-new', label: '新增事件', magnitudePct: -10, startQuarter: '2026Q4', durationQuarters: 1 }] });
+    expect(forecastOf(added).every((week) => (week.unconstrained as number) < (forecastOf().find((item) => item.weekNumber === week.weekNumber)?.unconstrained as number))).toBe(true);
   });
 
   it('SI 计划加量 → 预测 DOS 回到合理带 → 不再打折，主图最终柱回到不含库存限制口径', () => {
@@ -177,34 +196,5 @@ describe('推演工作台 · 库存推演与健康判定（演示规则）', () 
     const expectedGap = adjustedWeeks.reduce((total, week) => total + ((week.unconstrained as number) - (week.final as number)), 0);
     expect(baseline.summary.gap).toBe(expectedGap);
     expect(baseline.firstAdjustedWeek).toBe(50);
-  });
-});
-
-describe('推演工作台 · 纪要', () => {
-  it('追加纪要：纯函数不改原数组，id / 演示时钟 / 操作人自动分配，原因保留', () => {
-    const first = appendMemo([], { type: '生成', content: '按默认考量生成基准预测', operator: '系统' });
-    expect(first).toHaveLength(1);
-    expect(first[0]).toMatchObject({ id: 'memo-1', time: memoTimeAt(0), type: '生成', operator: '系统' });
-    const second = appendMemo(first, { type: '考量', content: 'Q4 环比 −4% → −8%', reason: '预售前置分流，保守取值' });
-    expect(first).toHaveLength(1);
-    expect(second).toHaveLength(2);
-    expect(second[1]).toMatchObject({ id: 'memo-2', time: memoTimeAt(1), operator: '王峰', reason: '预售前置分流，保守取值' });
-    expect(memoTimeAt(0)).toBe('14:02');
-    expect(memoTimeAt(1)).toBe('14:04');
-    // 空白原因不落纪要字段。
-    expect(appendMemo(second, { type: '纪要', content: '生成纪要', reason: '  ' })[2].reason).toBeUndefined();
-  });
-
-  it('纪要 HTML 文档：含演示边界声明、当前考量与全部调整记录', () => {
-    const memo = appendMemo(
-      appendMemo([], { type: '生成', content: '按默认考量生成基准预测', operator: '系统' }),
-      { type: '手调', content: 'W47 预测销量微调为 6.0 万台', reason: '黑五主峰周，电商资源加投' },
-    );
-    const html = buildMemoHtml({ fixture: workbenchFixture, params: base, result: baseline, memo });
-    expect(html).toContain('不作为业务事实');
-    expect(html).toContain('大盘 Q4 环比 -4%（AI 判断）');
-    expect(html).toContain('黑五主峰周，电商资源加投');
-    expect(html).toContain('库存修正周：W50、W51、W52');
-    expect(html).toContain('调整记录（2 条）');
   });
 });

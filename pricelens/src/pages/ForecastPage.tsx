@@ -1,15 +1,18 @@
 // ============================================================
 // 量价预测 · 推演工作台 v2（forecast-workbench-v2）
 // 正典：pricelens/.impeccable/surfaces/forecast-workbench-v2.md（2026-11-03
-// 三轮产品讨论定稿）。两条铁律：展示与推演分离（推演层只要总量总线）；
-// 顺序执行解决循环论证（大盘/成本/参考 → 不含库存限制预测 → 库存验证判定
-// → 打折修正回写主图；主图只露最终结果）。
+// 三轮产品讨论定稿 + 同日晚 Eason 反馈：大盘卡单线连贯/只预测下一季/事件
+// 三参数[生效季+持续+幅度]/仅行业级事件；推演纪要层删除——手调原因必填保留，
+// 原因标注在主图手调处）。
+// 两条铁律：展示与推演分离（推演层只要总量总线）；顺序执行解决循环论证
+// （大盘/成本/参考 → 不含库存限制预测 → 库存验证判定 → 打折修正回写主图；
+// 主图只露最终结果）。
 // 页面自挂 PageHeader + data-lpl-scroll 滚动容器（不进 AnalysisShell）；
-// 六层自上而下：①主图+摘要 ②大盘·总量总线 ③量价参考 ④成本销毛 ⑤库存验证
-// ⑥推演纪要。数据全部演示（2026 真实周历 W37–W52），恒带 simulated 徽标 +
-// 「演示」琥珀 chip；措辞不出现 因子/约束/置信区间/无约束需求 等术语。
+// 五层自上而下：①主图+摘要 ②大盘·总量总线 ③量价参考 ④成本销毛 ⑤库存验证。
+// 数据全部演示（2026 真实周历 W37–W52），恒带 simulated 徽标 + 「演示」琥珀
+// chip；措辞不出现 因子/约束/置信区间/无约束需求 等术语。
 // ============================================================
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { RobotOutlined } from '@ant-design/icons';
 import { Button, Input, InputNumber, Modal } from 'antd';
 import PageHeader from '../components/PageHeader';
@@ -19,15 +22,12 @@ import { useFilters } from '../state/FiltersContext';
 import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, space } from '../theme/tokens';
 import { workbenchFixture } from './forecast/workbenchFixture';
-import type { MarketEventSeed } from './forecast/workbenchFixture';
 import {
-  appendMemo,
   baseWorkbenchParams,
   clearManualAdjustment,
   computeWorkbench,
   isParamsActive,
   setManualAdjustment,
-  type MemoEntry,
   type WorkbenchParams,
 } from './forecast/workbenchModel';
 import { DataStatusBadge } from './forecast/ForecastBits';
@@ -36,7 +36,6 @@ import {
   DemoChip,
   SectionHead,
   fmtMillionUsd,
-  fmtSignedPct,
   fmtWan,
   workbenchCardStyle,
 } from './forecast/WorkbenchBits';
@@ -45,12 +44,9 @@ import MarketBusPanel from './forecast/MarketBusPanel';
 import ReferencePanel from './forecast/ReferencePanel';
 import ForecastMarginCostCard from './forecast/ForecastMarginCostCard';
 import InventoryValidationCard from './forecast/InventoryValidationCard';
-import MemoLedger from './forecast/MemoLedger';
 
-/** TODO 待拍板（brief 开放问题 3/4 关联）：新增事件名称来自预设池占位。 */
+/** TODO 待拍板（brief 开放问题 3/4 关联）：新增事件名称来自预设池占位（仅行业级事件）。 */
 const ADD_EVENT_POOL = ['三折叠上市', '地缘冲突扰动', '汇率跳变', '平台补贴退坡'];
-const FORECAST_WEEK_MIN = 45;
-const FORECAST_WEEK_MAX = 52;
 const MAGNITUDE_MIN = -30;
 const MAGNITUDE_MAX = 30;
 
@@ -78,7 +74,7 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
           {manual && <Button danger type="text" onClick={onClear}>清除手调</Button>}
           <Button onClick={onCancel}>取消</Button>
           <Button type="primary" disabled={!reasonOk || !valueOk} onClick={() => valueOk && wan != null && onSave(Math.round(wan * 10000), reason)}>
-            应用并记录
+            应用
           </Button>
         </div>
       }
@@ -113,7 +109,7 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
           />
         </label>
         <div id="tune-reason-warn" role="alert" style={{ fontSize: 11, color: reasonOk ? color.mute : color.error, minHeight: 16 }}>
-          {reasonOk ? '原因将随纪要留痕与导出' : '必须填写调整原因，否则无法应用'}
+          {reasonOk ? '原因将标注在主图该周手调处' : '必须填写调整原因，否则无法应用'}
         </div>
       </div>
     </Modal>
@@ -127,21 +123,9 @@ export default function ForecastPage() {
   const fixture = workbenchFixture;
 
   const [params, setParams] = useState<WorkbenchParams>(() => baseWorkbenchParams(fixture));
-  const [memo, setMemo] = useState<MemoEntry[]>(() => appendMemo([], {
-    type: '生成',
-    content: '按默认考量生成基准预测（AI 判断 Q4 环比 −4% · 关键事件 2 项 · 初始 SI 计划）',
-    operator: '系统',
-  }));
   const [tuneWeek, setTuneWeek] = useState<number | null>(null);
   const result = useMemo(() => computeWorkbench(fixture, params), [fixture, params]);
   const active = isParamsActive(params, fixture);
-
-  // 纪要去重锚点：与「上一条纪要时的取值」比较，避免拖动 / 步进重复留痕。
-  const qoqMemoRef = useRef(params.qoqDeclinePct);
-  const siMemoRef = useRef<Record<number, number>>({ ...params.siPlan });
-
-  const append = (input: { type: MemoEntry['type']; content: string; reason?: string }) =>
-    setMemo((list) => appendMemo(list, input));
 
   const tuneWeekResult = tuneWeek != null ? result.weeks.find((week) => week.weekNumber === tuneWeek) ?? null : null;
 
@@ -207,13 +191,7 @@ export default function ForecastPage() {
                   <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: radius.pill, background: active ? color.warningSoft : color.canvasSoft2, color: active ? color.warningInk : color.mute, whiteSpace: 'nowrap' }}>
                     {active ? '本地考量已修改' : '基准考量'}
                   </span>
-                  <Button disabled={!active} onClick={() => {
-                    const base = baseWorkbenchParams(fixture);
-                    qoqMemoRef.current = base.qoqDeclinePct;
-                    siMemoRef.current = { ...base.siPlan };
-                    setParams(base);
-                    append({ type: '重置', content: '重置为基准考量（AI 判断环比 · 默认事件 · 初始 SI 计划 · 清空手调）' });
-                  }}>重置基准</Button>
+                  <Button disabled={!active} onClick={() => setParams(baseWorkbenchParams(fixture))}>重置基准</Button>
                 </>
               }
             />
@@ -254,47 +232,42 @@ export default function ForecastPage() {
             </div>
           </section>
 
-          {/* ② 大盘 · 总量总线（工作台形态） */}
+          {/* ② 大盘 · 总量总线（产品全景：单线连贯，只预测到下一季） */}
           <MarketBusPanel
             fixture={fixture}
             params={params}
             result={result}
             onQoqLive={(value) => setParams((prev) => ({ ...prev, qoqDeclinePct: value, qoqSource: 'human' }))}
-            onQoqCommit={(value) => {
-              if (value === qoqMemoRef.current) return;
-              const before = qoqMemoRef.current;
-              qoqMemoRef.current = value;
-              append({ type: '考量', content: `大盘 Q4 环比 ${fmtSignedPct(before)} → ${fmtSignedPct(value)}`, reason: '大盘考量面板调整（演示）' });
-            }}
+            onQoqCommit={() => {}}
             onEventStep={(id, field, delta) => {
-              const event = params.marketEvents.find((item) => item.id === id);
-              if (!event) return;
-              const next = params.marketEvents.map((item) => item.id !== id ? item : (
-                field === 'magnitudePct'
-                  ? { ...item, magnitudePct: Math.max(MAGNITUDE_MIN, Math.min(MAGNITUDE_MAX, item.magnitudePct + delta)) }
-                  : { ...item, startWeek: Math.max(FORECAST_WEEK_MIN, Math.min(FORECAST_WEEK_MAX, item.startWeek + delta)) }
-              ));
-              setParams((prev) => ({ ...prev, marketEvents: prev.marketEvents.map((item) => next.find((candidate) => candidate.id === item.id) ?? item) }));
-              append({
-                type: '事件',
-                content: field === 'magnitudePct'
-                  ? `事件「${event.label}」幅度 ${fmtSignedPct(event.magnitudePct)} → ${fmtSignedPct((next.find((item) => item.id === id) as MarketEventSeed).magnitudePct)}`
-                  : `事件「${event.label}」生效周 W${event.startWeek} → W${(next.find((item) => item.id === id) as MarketEventSeed).startWeek}`,
-                reason: '关键事件步进器调整（演示）',
-              });
+              setParams((prev) => ({
+                ...prev,
+                qoqSource: 'human',
+                marketEvents: prev.marketEvents.map((item) => {
+                  if (item.id !== id) return item;
+                  if (field === 'magnitudePct') {
+                    return { ...item, magnitudePct: Math.max(MAGNITUDE_MIN, Math.min(MAGNITUDE_MAX, item.magnitudePct + delta)) };
+                  }
+                  if (field === 'durationStep') {
+                    return { ...item, durationQuarters: Math.max(1, Math.min(2, item.durationQuarters + delta)) };
+                  }
+                  // 生效季在 2026Q4 ⇄ 2027Q1 间步进
+                  const shift = item.startQuarter === '2026Q4' ? 0 : 1;
+                  const nextShift = Math.max(0, Math.min(1, shift + delta));
+                  return { ...item, startQuarter: nextShift === 0 ? '2026Q4' : '2027Q1' };
+                }),
+              }));
             }}
             onEventRemove={(id) => {
-              const event = params.marketEvents.find((item) => item.id === id);
-              if (!event) return;
               setParams((prev) => ({ ...prev, marketEvents: prev.marketEvents.filter((item) => item.id !== id) }));
-              append({ type: '事件', content: `删除事件「${event.label}」（${fmtSignedPct(event.magnitudePct)} · W${event.startWeek} 起）`, reason: '关闭该假设，查看不含此事件的预测' });
             }}
             onEventAdd={() => {
               const count = params.marketEvents.filter((item) => item.id.startsWith('ev-custom')).length;
               const label = ADD_EVENT_POOL[count % ADD_EVENT_POOL.length];
-              const event: MarketEventSeed = { id: `ev-custom-${count + 1}`, label, magnitudePct: -6, startWeek: 46 };
-              setParams((prev) => ({ ...prev, marketEvents: [...prev.marketEvents, event] }));
-              append({ type: '事件', content: `添加事件「${label}」（−6% · W46 起，名称与幅度可再调）`, reason: '新增关键事件假设（演示占位）' });
+              setParams((prev) => ({
+                ...prev,
+                marketEvents: [...prev.marketEvents, { id: `ev-custom-${count + 1}`, label, magnitudePct: -6, startQuarter: '2026Q4', durationQuarters: 1 }],
+              }));
             }}
             onRationaleChange={(text) => setParams((prev) => ({ ...prev, rationale: text }))}
           />
@@ -311,30 +284,12 @@ export default function ForecastPage() {
             params={params}
             result={result}
             onSiLive={(weekNumber, units) => setParams((prev) => ({ ...prev, siPlan: { ...prev.siPlan, [weekNumber]: units } }))}
-            onSiCommit={(weekNumber, units) => {
-              if (units === siMemoRef.current[weekNumber]) return;
-              const before = siMemoRef.current[weekNumber] ?? 0;
-              siMemoRef.current = { ...siMemoRef.current, [weekNumber]: units };
-              append({
-                type: 'SI 计划',
-                content: `W${weekNumber} SI 计划 ${Math.round(before / 1000)} → ${Math.round(units / 1000)} 千台`,
-                reason: '库存验证层人工 SI 计划调整（演示）',
-              });
-            }}
-          />
-
-          {/* ⑥ 推演纪要 */}
-          <MemoLedger
-            fixture={fixture}
-            params={params}
-            result={result}
-            memo={memo}
-            onSaveScenario={() => append({ type: '情景', content: '另存情景（占位）：已按当前考量快照留痕，正式保存待拍板', reason: '会议需要保留当前考量版本（演示）' })}
+            onSiCommit={() => {}}
           />
         </main>
       </div>
 
-      {/* 单周微调弹窗：调整原因必填，不填禁用保存 */}
+      {/* 单周微调弹窗：调整原因必填，不填禁用保存（原因标注在主图手调处） */}
       {tuneWeekResult && (
         <TuneDialog
           key={tuneWeekResult.week}
@@ -347,12 +302,10 @@ export default function ForecastPage() {
             const next = setManualAdjustment(params, tuneWeekResult.weekNumber, value, reason);
             if (!next) return;
             setParams(next);
-            append({ type: '手调', content: `${tuneWeekResult.week} 预测销量微调为 ${fmtWan(value)}`, reason });
             setTuneWeek(null);
           }}
           onClear={() => {
             setParams((prev) => clearManualAdjustment(prev, tuneWeekResult.weekNumber));
-            append({ type: '手调', content: `清除 ${tuneWeekResult.week} 手调，恢复打折修正口径`, reason: tuneWeekResult.manual?.reason ?? '撤销人工覆盖' });
             setTuneWeek(null);
           }}
         />
