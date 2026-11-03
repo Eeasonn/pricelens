@@ -1,0 +1,1826 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PriceLens · 量价走势 × 量价预测 · 高保真设计稿</title>
+<style>
+:root{
+  --canvas:#fff;--soft:#fafafa;--soft2:#f5f5f5;--line:#ebebeb;--line2:#a1a1a1;
+  --ink:#171717;--body:#4d4d4d;--mute:#737373;
+  --blue:#0070f3;--blueInk:#0053c2;--blueSoft:#e8f1ff;
+  --red:#c7000b;--err:#ee0000;--amber:#b45309;--amberSoft:#fff7e6;--amberLine:#f5a623;
+  --selBg:#e8f1ff;--selInk:#0053c2;
+  --r-card:8px;--r-ctl:6px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--soft);color:var(--ink);
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input{font:inherit}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- demo 顶条 ---------- */
+.demo-bar{position:sticky;top:0;z-index:60;height:40px;display:flex;align-items:center;gap:16px;
+  padding:0 24px;background:#111;color:#ddd;font-size:12px}
+.demo-bar b{color:#fff;font-weight:650}
+.demo-tabs{margin-left:auto;display:flex;gap:4px;background:#222;border-radius:8px;padding:3px}
+.demo-tabs button{padding:4px 14px;border-radius:6px;color:#aaa;font-size:12px}
+.demo-tabs button.on{background:#fff;color:#111;font-weight:600}
+
+.view{display:none}
+.view.on{display:block}
+
+/* ---------- 应用壳 ---------- */
+.app{max-width:1440px;margin:0 auto;padding:20px 32px 64px}
+.app-head{display:flex;align-items:center;gap:28px;height:44px;margin-bottom:14px}
+.brand{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.brand span{color:var(--mute);font-weight:400;font-size:12px;margin-left:8px}
+.nav{display:flex;gap:22px}
+.nav a{color:var(--mute);text-decoration:none;font-size:14px;padding:4px 2px;border-bottom:2px solid transparent}
+.nav a.on{color:var(--ink);font-weight:650;border-bottom-color:var(--ink)}
+.head-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+.chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:999px;
+  font-size:12px;background:var(--soft2);color:var(--body);border:1px solid var(--line)}
+.chip.blue{background:var(--blueSoft);color:var(--selInk);border-color:#c7ddff}
+.chip.amber{background:var(--amberSoft);color:var(--amber);border-color:#ead2a8}
+.chip.dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip.ghost{background:#fff;color:var(--mute)}
+.chip.btn:hover{border-color:var(--blue);color:var(--selInk)}
+
+/* 筛选条 */
+.filters{background:var(--canvas);border:1px solid var(--line);border-radius:var(--r-card);
+  padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.fbox{background:var(--soft);border:1px solid var(--line);border-radius:var(--r-ctl);
+  padding:5px 12px;min-width:96px}
+.fbox label{display:block;font-size:10px;color:var(--mute);line-height:1.3}
+.fbox b{font-size:13px;font-weight:600}
+.fbox b i{font-style:normal;color:var(--mute);font-weight:400}
+.fsep{width:1px;height:26px;background:var(--line)}
+.filters .spacer{flex:1}
+.win-ctl{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--body)}
+.win-ctl input[type=range]{width:130px;accent-color:var(--blue)}
+
+.caliber{display:flex;gap:14px;align-items:center;padding:8px 4px;font-size:12px;color:var(--mute)}
+.caliber b{color:var(--body);font-weight:500}
+
+/* ---------- 卡片 ---------- */
+.stack{display:flex;flex-direction:column;gap:16px}
+.card{background:var(--canvas);border:1px solid var(--line);border-radius:var(--r-card)}
+.card-head{display:flex;align-items:center;gap:10px;padding:14px 18px 0}
+.card-no{font-size:11px;color:var(--mute);letter-spacing:.08em}
+.card-title{font-size:16px;font-weight:650;letter-spacing:-.01em}
+.card-sub{font-size:12px;color:var(--mute)}
+.card-head .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.card-body{display:flex;gap:0;padding:12px 18px 16px;align-items:stretch}
+.chart-wrap{flex:1;min-width:0;position:relative}
+.chart-wrap svg{width:100%;height:auto;display:block}
+.concl{width:318px;flex:none;margin-left:18px;background:var(--soft);border-radius:var(--r-ctl);
+  padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.concl h4{margin:0;font-size:12px;color:var(--mute);font-weight:600;letter-spacing:.06em}
+.concl li{list-style:none;font-size:13px;line-height:1.55;color:var(--body);padding-left:0;
+  display:flex;gap:8px;align-items:flex-start}
+.concl ul{margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.tagdata,.tagnews,.tagana{flex:none;margin-top:2.5px;width:5px;height:5px;border-radius:50%}
+.tagdata{background:var(--blue)}.tagnews{background:var(--ink)}.tagana{background:var(--amberLine)}
+.concl b{color:var(--ink);font-weight:600}
+.concl .more{margin-top:auto;font-size:12px;color:var(--selInk);cursor:pointer}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.half-body{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:12px 18px 16px}
+.half-body .chart-wrap{position:relative}
+
+/* 图下事件行 */
+.event-row{display:flex;gap:18px;padding:0 18px 12px;font-size:12px;color:var(--body);flex-wrap:wrap}
+.event-row .ev{display:flex;gap:6px;align-items:center;cursor:default}
+.anchor{width:17px;height:17px;border-radius:50%;background:#fff;border:1px solid var(--line2);
+  font-size:10px;display:inline-flex;align-items:center;justify-content:center;color:var(--body)}
+.anchor.amber{border-color:var(--amberLine);color:var(--amber);background:var(--amberSoft)}
+.anchor.dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* 图例 */
+.legend{display:flex;gap:14px;font-size:11px;color:var(--mute);flex-wrap:wrap;padding:6px 18px 0}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.ln{width:16px;height:0;border-top:2px solid var(--mute)}
+.ln.thin{border-top-width:1.5px}.ln.dash{border-top-style:dashed}
+.sw{width:10px;height:7px;background:#dceaff;border-radius:1px}
+.sw.dash{background:#fff;border:1px dashed var(--blue)}
+.sw.amber{background:#fff;border:1px dashed var(--amberLine)}
+
+/* ---------- 预测页 ---------- */
+.sum-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:0 18px 14px}
+.sum-cell{background:var(--soft);border-radius:var(--r-ctl);padding:10px 14px}
+.sum-cell label{display:block;font-size:11px;color:var(--mute)}
+.sum-cell b{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.sum-cell span{font-size:12px;margin-left:6px;color:var(--mute)}
+.sum-cell .delta-up{color:var(--blueInk)}
+.sum-cell .delta-warn{color:var(--amber)}
+
+.factor-body{display:flex;gap:16px;padding:12px 18px 16px;align-items:stretch}
+.factor-chart{width:56%;flex:none;position:relative}
+.factor-chart svg{width:100%;height:auto;display:block}
+.factor-panel{flex:1;min-width:0;border-left:1px solid var(--line);padding-left:16px;display:flex;flex-direction:column;gap:10px}
+.fp-title{font-size:12px;font-weight:650;color:var(--ink)}
+.fp-row{display:flex;align-items:center;gap:10px;font-size:13px}
+.fp-row .lbl{width:118px;color:var(--body);font-size:12.5px}
+.fp-row input[type=range]{flex:1;accent-color:var(--blue)}
+.fp-row .val{width:52px;text-align:right;font-weight:650;font-size:14px}
+.ev-list{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.ev-item{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--r-ctl);
+  padding:7px 10px;background:#fff}
+.ev-item .nm{font-size:12.5px;font-weight:600}
+.ev-item .meta{font-size:11px;color:var(--mute)}
+.ev-item .amt{margin-left:auto;font-size:13px;font-weight:650;color:var(--blueInk)}
+.ev-item .amt.neg{color:var(--err)}
+.ev-item.off{opacity:.5}
+.ev-item .ico{width:16px;height:16px;border-radius:4px;font-size:10px;display:inline-flex;align-items:center;justify-content:center;color:#fff;background:var(--mute)}
+.ico.promo{background:var(--amber)}.ico.comp{background:var(--blue)}.isco.big{background:var(--red)}
+.ico.big{background:var(--ink)}
+.switch{position:relative;width:32px;height:18px;border-radius:999px;background:#d9d9d9;transition:background .16s;flex:none}
+.switch.on{background:var(--blue)}
+.switch i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .16s}
+.switch.on i{left:16px}
+.add-ev{border:1px dashed var(--line2);border-radius:var(--r-ctl);padding:7px 10px;color:var(--selInk);
+  font-size:12.5px;text-align:center}
+.add-ev:hover{border-color:var(--blue);background:var(--blueSoft)}
+
+.output-box{background:var(--soft);border-radius:var(--r-ctl);padding:10px 12px;font-size:12.5px;color:var(--body);line-height:1.6}
+.output-box b{color:var(--ink)}
+.certain{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:2px 8px;border-radius:999px}
+.certain.hi{background:var(--ink);color:#fff}
+.certain.mid{background:#fff;border:1px solid var(--line2);color:var(--body)}
+.io-line{display:flex;gap:8px;font-size:11px;color:var(--mute);align-items:center}
+.io-line .k{flex:none;font-weight:600;color:var(--body)}
+
+/* 纪要 */
+.memo-body{padding:6px 18px 16px}
+.memo-list{display:flex;flex-direction:column}
+.memo-item{display:flex;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:13px;align-items:flex-start}
+.memo-item:last-child{border-bottom:none}
+.memo-time{width:44px;flex:none;color:var(--mute);font-size:12px;padding-top:1px}
+.memo-tag{flex:none;margin-top:2px}
+.memo-item .txt{color:var(--body)}
+.memo-item .txt b{color:var(--ink)}
+.memo-item .why{display:block;font-size:12px;color:var(--mute);margin-top:1px}
+
+/* ---------- 弹窗 / 浮层 ---------- */
+.modal{width:640px;background:#fff;border-radius:12px;box-shadow:0 24px 48px -12px rgba(0,0,0,.22);padding:20px 22px}
+.modal h3{margin:0 0 4px;font-size:16px;font-weight:650}
+.modal .sub{font-size:12px;color:var(--mute);margin-bottom:14px}
+.modal .close{float:right;color:var(--mute);font-size:18px;line-height:1;padding:2px 6px}
+.modal .close:hover{color:var(--ink)}
+.rec-card{border:1px solid #c7ddff;background:var(--blueSoft);border-radius:var(--r-ctl);padding:12px 14px;display:flex;gap:14px;align-items:center}
+.rec-card svg{flex:none}
+.rec-info{font-size:12.5px;color:var(--body);line-height:1.6}
+.rec-info b{display:block;font-size:13.5px;color:var(--ink)}
+.modal .alt{font-size:12px;color:var(--mute);margin:10px 0 12px}
+.modal .alt a{color:var(--selInk);cursor:pointer;text-decoration:none}
+.apply-row{display:flex;align-items:center;gap:14px;border-top:1px solid var(--line);padding-top:12px}
+.step{display:inline-flex;align-items:center;gap:8px;font-size:13px}
+.step button{width:24px;height:24px;border:1px solid var(--line2);border-radius:5px;font-size:14px;color:var(--body)}
+.step button:hover{border-color:var(--blue);color:var(--selInk)}
+.step b{min-width:44px;text-align:center;font-size:15px}
+.btn{height:32px;padding:0 16px;border-radius:var(--r-ctl);font-size:13px;font-weight:600}
+.btn.primary{background:var(--ink);color:#fff}
+.btn.primary:disabled{background:#d4d4d4;cursor:not-allowed}
+.btn.ghost{border:1px solid var(--line2);color:var(--body);background:#fff}
+.btn.mini{height:26px;padding:0 10px;font-size:12px}
+
+/* 微调浮层 */
+.tune-pop{position:fixed;z-index:90;width:280px;background:#fff;border-radius:10px;
+  box-shadow:0 12px 32px -6px rgba(0,0,0,.2),inset 0 0 0 1px rgba(0,0,0,.08);padding:14px;display:none}
+.tune-pop.on{display:block}
+.tune-pop h4{margin:0 0 8px;font-size:13.5px}
+.tune-pop .cur{font-size:12px;color:var(--mute);margin-bottom:8px}
+.tune-pop input[type=number]{width:100%;height:30px;border:1px solid var(--line2);border-radius:6px;padding:0 10px;margin-bottom:8px}
+.tune-pop textarea{width:100%;height:56px;border:1px solid var(--line2);border-radius:6px;padding:6px 10px;
+  font-size:12.5px;resize:none;margin-bottom:4px}
+.tune-pop textarea:invalid{border-color:var(--err)}
+.tune-pop .warn{font-size:11px;color:var(--err);height:15px;margin-bottom:6px}
+.tune-pop .btnrow{display:flex;gap:8px;justify-content:flex-end}
+
+/* 悬停浮窗 */
+.tip{position:fixed;z-index:70;pointer-events:none;background:#fff;border-radius:8px;
+  box-shadow:0 8px 24px -4px rgba(0,0,0,.18),inset 0 0 0 1px rgba(0,0,0,.08);
+  padding:10px 12px;font-size:12px;display:none;min-width:180px}
+.tip.on{display:block}
+.tip h5{margin:0 0 6px;font-size:12px;color:var(--mute);font-weight:600}
+.tip .r{display:flex;justify-content:space-between;gap:16px;line-height:1.7}
+.tip .r b{font-weight:650}
+.tip .factor-list{margin-top:7px;padding-top:7px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:3px}
+.tip .fl{display:flex;align-items:center;gap:6px}
+.tip .fl .nm{width:88px;color:var(--body)}
+.tip .fl .bar{flex:1;height:5px;border-radius:3px;background:var(--blueSoft);position:relative;overflow:hidden}
+.tip .fl .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--blue);border-radius:3px}
+.tip .fl .bar.neg i{left:auto;right:0;background:var(--err)}
+.tip .fl .pct{width:44px;text-align:right;font-weight:600}
+.tip .pct.up{color:var(--blueInk)}.tip .pct.dn{color:var(--err)}
+
+/* DNS 钻取小浮卡 */
+.drill{position:absolute;z-index:20;display:none;background:#fff;border-radius:8px;padding:10px 12px;width:210px;
+  box-shadow:0 8px 24px -4px rgba(0,0,0,.18),inset 0 0 0 1px rgba(0,0,0,.08);font-size:12px}
+.drill.on{display:block}
+.drill b{display:block;font-size:12.5px;margin-bottom:3px}
+.drill .warnline{color:var(--amber)}
+
+/* 领跌拆解 */
+.concl-split{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.contrib-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 4px;cursor:pointer;border-radius:4px}
+.contrib-row:hover{background:#f0f0f0}
+.contrib-row.on{background:var(--blueSoft)}
+.contrib-row .nm{width:46px;flex:none;color:var(--body)}
+.contrib-row .barzone{flex:1;height:9px;position:relative}
+.contrib-row .zero{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line2)}
+.contrib-row .bar{position:absolute;top:0;bottom:0;border-radius:2px}
+.contrib-row .bar.neg{background:var(--err);right:50%}
+.contrib-row .bar.pos{background:var(--blue);left:50%}
+.contrib-row .v{width:50px;flex:none;text-align:right;font-weight:600}
+.contrib-read{font-size:12px;color:var(--mute);line-height:1.6;margin-top:8px}
+.contrib-read b{color:var(--selInk)}
+
+/* Top 品行 */
+.top-head{display:grid;grid-template-columns:1fr 44px 60px 34px;gap:6px;font-size:10.5px;color:var(--mute);padding:0 4px 6px;border-bottom:1px solid var(--line)}
+.top-row{display:grid;grid-template-columns:1fr 44px 60px 34px;gap:6px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line);font-size:12.5px}
+.top-row:last-child{border-bottom:none}
+.top-row .nm b{display:block;font-weight:600}
+.top-row .nm span{display:block;font-size:10.5px;color:var(--mute)}
+.top-row .barz{height:8px;background:var(--soft2);border-radius:2px;position:relative;grid-column:1/-1;margin-top:5px}
+.top-row .barz i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;display:block}
+.top-row .trend{text-align:right;font-weight:600}
+.trend.up{color:var(--blueInk)}.trend.dn{color:var(--amber)}.trend.flat{color:var(--mute)}
+
+/* 把握低档 */
+.certain.lo{background:#fff;border:1px solid var(--amberLine);color:var(--amber)}
+
+/* ---------- 设计总览文档 ---------- */
+.doc{max-width:1080px;margin:0 auto;padding:36px 32px 80px}
+.doc .kicker{font-size:12px;color:var(--mute);letter-spacing:.1em;margin-bottom:8px}
+.doc h1{font-size:28px;letter-spacing:-.02em;margin:0 0 10px}
+.doc .lede{font-size:14px;color:var(--body);max-width:860px;margin-bottom:8px}
+.doc h2{font-size:19px;margin:40px 0 12px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+.doc h3{font-size:15px;margin:22px 0 8px}
+.doc p{color:var(--body);margin:8px 0;max-width:900px}
+.doc ul{color:var(--body);padding-left:20px;margin:8px 0}
+.doc li{margin:4px 0}
+.doc table{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0}
+.doc th{text-align:left;font-weight:650;color:var(--mute);font-size:11.5px;padding:7px 10px;border-bottom:1px solid var(--line)}
+.doc td{padding:8px 10px;border-bottom:1px solid var(--line);color:var(--body);vertical-align:top}
+.doc td b{color:var(--ink)}
+.doc .callout{background:var(--blueSoft);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--body);margin:12px 0}
+.doc .callout.amber{background:var(--amberSoft)}
+.doc .fig{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px;margin:14px 0}
+.doc .fig svg{width:100%;height:auto;display:block}
+.doc .figcap{font-size:11.5px;color:var(--mute);margin-top:8px}
+code.k{background:var(--soft2);border-radius:4px;padding:1px 6px;font-size:12px;font-family:ui-monospace,monospace}
+
+/* ---------- 可访问性、原生弹层与响应式 ---------- */
+::selection{background:var(--blueSoft);color:var(--ink)}
+:where(a:any-link,button,input,textarea,summary,[tabindex]):focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+button:disabled{cursor:not-allowed;opacity:.48}
+button[aria-pressed=true]{background:var(--blueSoft);color:var(--selInk)}
+.skip-link{position:fixed;left:16px;top:8px;z-index:120;padding:8px 12px;background:var(--ink);color:#fff;border-radius:6px;transform:translateY(-160%)}
+.skip-link:focus{transform:translateY(0)}
+dialog{color:var(--ink);font:inherit}
+dialog:modal,dialog::backdrop{overscroll-behavior:contain}
+dialog::backdrop{background:rgba(23,23,23,.42)}
+.modal{border:0;max-width:calc(100vw - 32px);max-height:calc(100vh - 48px);overflow:auto}
+.tune-pop{border:0;margin:0;max-width:calc(100vw - 24px)}
+.tune-pop[open]{display:block}
+.field-label{display:block;font-size:12px;color:var(--body);font-weight:600;margin:0 0 5px}
+.contrib-row{width:100%;background:transparent;text-align:left}
+.memo-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.data-alt{margin:0 18px 14px;border-top:1px solid var(--line);padding-top:10px;font-size:12px;color:var(--body)}
+.data-alt summary{cursor:pointer;color:var(--selInk);font-weight:600;width:max-content}
+.data-alt .table-scroll{overflow-x:auto;margin-top:10px}
+.data-alt table{width:100%;min-width:760px;border-collapse:collapse;font-size:12px}
+.data-alt th,.data-alt td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.data-alt th:first-child,.data-alt td:first-child{text-align:left}
+.data-alt th{color:var(--mute);font-weight:500;background:var(--soft)}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important}
+.demo-note{color:var(--amber);font-weight:600}
+
+@media (max-width:1100px){
+  .app{padding:16px 20px 48px}
+  .app-head{gap:18px;flex-wrap:wrap;height:auto;min-height:44px}
+  .nav{gap:16px;overflow-x:auto}
+  .card-head{flex-wrap:wrap;row-gap:5px}
+  .card-head .right{margin-left:0;width:100%}
+  .card-body{flex-direction:column}
+  .concl{width:100%;margin:12px 0 0}
+  .two{grid-template-columns:1fr}
+  .factor-body{flex-direction:column}
+  .factor-chart{width:100%}
+  .factor-panel{border-left:0;border-top:1px solid var(--line);padding:14px 0 0}
+  .sum-row{grid-template-columns:repeat(2,1fr)}
+  .card-body>.chart-wrap{overflow-x:auto}
+  .card-body>.chart-wrap>svg{min-width:660px}
+  #ch-main>svg{min-width:860px}
+}
+@media (max-width:680px){
+  .demo-bar{height:auto;min-height:40px;padding:8px 12px;flex-wrap:wrap;gap:8px}
+  .demo-tabs{margin-left:0;width:100%}
+  .demo-tabs button{flex:1}
+  .app{padding:12px 12px 40px}
+  .brand{width:100%}
+  .head-right{margin-left:0}
+  .filters{align-items:stretch}
+  .fbox{flex:1;min-width:128px}
+  .filters .spacer{display:none}
+  .win-ctl{width:100%;flex-wrap:wrap}
+  .win-ctl input[type=range]{flex:1;min-width:140px}
+  .caliber{align-items:flex-start;flex-direction:column;gap:4px}
+  .card-head,.card-body,.legend,.event-row{padding-left:12px;padding-right:12px}
+  .sum-row{grid-template-columns:1fr;padding-left:12px;padding-right:12px}
+  .doc{padding:24px 16px 56px}
+  .doc .table-scroll,.doc>table{display:block;overflow-x:auto}
+  .modal{padding:16px}
+  .rec-card{flex-direction:column;align-items:flex-start}
+  .apply-row{flex-wrap:wrap}
+  .tune-pop{left:12px!important;right:12px;top:72px!important;width:auto}
+}
+@media (pointer:coarse){button,.chip.btn,.switch{min-height:32px}.demo-tabs button{min-height:36px}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#view-spec">跳到当前设计内容</a>
+<div class="demo-bar">
+  <div><b>PriceLens 设计稿</b> · 量价走势 × 量价预测 · v1.1 · 2026-11-03 · <span class="demo-note">全部数值均为演示</span></div>
+  <div class="demo-tabs" role="tablist" aria-label="设计稿视图">
+    <button type="button" role="tab" data-view="spec" aria-selected="true" aria-controls="view-spec">设计总览</button>
+    <button type="button" role="tab" data-view="trend" aria-selected="false" aria-controls="view-trend">量价走势</button>
+    <button type="button" role="tab" data-view="forecast" aria-selected="false" aria-controls="view-forecast">量价预测</button>
+  </div>
+</div>
+
+<!-- ══════════════ 视图 1 · 设计总览 ══════════════ -->
+<section id="view-spec" class="view on" role="tabpanel" tabindex="-1">
+<div class="doc">
+  <h1>量价走势（结论看板）× 量价预测（推演看板）</h1>
+  <p class="lede">把「从分析到推演」的完整链路落成两个界面：<b>量价走势</b>只放已经发生的事实与结论，<b>量价预测</b>把结论作为输入向后延伸 1–2 个月。现有量价操作底座（一线日常看数）保持不动，本稿两页是叠加在其上的结论层与推演层。</p>
+
+  <h2>0 · 讨论要点 → 设计落点对照</h2>
+  <table>
+    <tr><th style="width:38%">讨论拍板 / 要点</th><th>设计落点</th></tr>
+    <tr><td>看板分左右：左边全是结论（事实），右边才是预测；预测永远只向未来</td><td>拆成两个页面：<b>量价走势 = 左边（结论）</b>、<b>量价预测 = 右边（推演）</b>；走势页时间选择器只能回看历史，预测页主图右半恒为未来 8 周</td></tr>
+    <tr><td>顺序：先大盘 → 价格（策略+影响）→ 量价 → 库存 → 成本销毛</td><td>走势页五张看板自上而下按此顺序；预测页因子区同序（大盘全宽一行，库存/成本销毛各半）</td></tr>
+    <tr><td>结论直接写在看板上（领导直接看结论，不进 Agent 侧边栏）</td><td>每卡右侧固定「结论」栏，每条带类型标：<span style="color:var(--blue)">●数据</span>（图上可证）、<span style="color:var(--ink)">●资讯</span>（确定性新闻）、<span style="color:var(--amberLine)">●分析</span>（推断）</td></tr>
+    <tr><td>视觉重心 = 量价主图；底部小图放各考量来源，且都要有历史+未来</td><td>预测页主图占首屏视觉重心（销量柱+价格线+参考线+把握区间），因子区在下方，各自小图历史实线/预测虚线</td></tr>
+    <tr><td>信任问题：下面小图怎么影响上面，必须能看见；允许看每个时点的考量比例</td><td>①因子区可调（拖板/开关/事件），主图与摘要实时联动；②悬停预测任意周，浮窗列出该周「本周考量」构成（大盘/档期/竞品/资源 各自影响幅度）</td></tr>
+    <tr><td>权重随时间变化，单时点可改；直接改结果必须绑定原因</td><td>点预测柱 → 微调浮层：新值 + <b>调整原因必填</b>（不填无法保存），应用后图上留手调标记、纪要留痕</td></tr>
+    <tr><td>因子与约束的区别体现在「把握」上，不向领导解释术语</td><td>不用「置信区间/因子/约束」字样：库存修正标<b>把握大 ±2%</b>（区间窄）、成本与大盘标<b>把握中 ±8%</b>（区间宽），主图预测柱画区间帽，宽窄即语义</td></tr>
+    <tr><td>预测先得「市场口径」结果，再用库存刚性压到「可售口径」</td><td>主图画两条：细虚线=不含库存限制，主柱=按可售库存；W50 起分叉段琥珀着色+锚点，缺口进摘要条</td></tr>
+    <tr><td>参考对象必须露出：不管参考谁，一定要画出来</td><td>走势页量价图画 Mate 80 上市同期；预测页主图把 Mate 80 已发生历史按同周龄贯穿 W37–W52；卡头固定露出主参考，竞品事件参考可在弹窗改选</td></tr>
+    <tr><td>事件（如竞品上市）输入后自动推荐历史对标，推荐不对可改选</td><td>「添加事件」→ 对标弹窗：推荐「iPhone 17 Pro 上市 × Mate 80 同期」迷你图与影响读数（−9% · 3 周），可改选 16 代 × Mate 70，并调整影响幅度/周期后套用到预测</td></tr>
+    <tr><td>两代同跑：新代销量未过阈值前，价格对标以旧代为准</td><td>预测页「竞品对标」卡：18 Pro 周销 2.1 万 = 17 代同期 62%（阈值 70%）→ 当前对标 iPhone 17，过阈值自动切换</td></tr>
+    <tr><td>大事件（如折叠屏阵营）单拎，与常规迭代区分</td><td>事件分三类徽标：<b>大促</b>（琥珀）/<b>竞品</b>（蓝）/<b>大事件</b>（墨）；大盘面板内置示例开关</td></tr>
+    <tr><td>库存卡：库存柱 + 渠道 DOS 线 + SI 供应时点；DOS 会虚高，必须与库存同看；不看 SO</td><td>走势页库存卡 = 库存柱 + 渠道 DOS 线 + 全流程 DOS 虚线 + SI ▼标记；结论栏给「Pura 90s 库存 −38% 但 DOS 51→69 天」的虚高警示；渠道缺货用 DNS 钻取点（悬停出，非常驻）</td></tr>
+    <tr><td>成本销毛 = 柱子加折线（成本趋势+销毛）；成本按月版本</td><td>走势页成本销毛卡与预测页成本因子卡均为：月版本成本阶梯线 + 周销毛琥珀柱</td></tr>
+    <tr><td>资源投入作为额外变量，用户自己填、自己判定</td><td>预测页「资源投入」卡：低/标准/加强三档 + 自填备注，仅作用于销量乘子</td></tr>
+    <tr><td>开完会调半天，图+考量+调整记录截图即会议结论</td><td>页面底部「推演纪要」时间线：每次操作自动留痕（谁/改了什么/为什么），配「生成本期预测纪要 / 另存情景」</td></tr>
+    <tr><td style="background:var(--blueSoft)"><b>（11-03 下午新增）</b>领导操盘实证：先看谁份额高、再看品牌下哪个品卖最好，Top 品自带价格心智 → 翻页对照</td><td style="background:var(--blueSoft)">走势页新增<b>「品牌与 Top 品」卡</b>：品牌份额走势（月）+ 各品牌 Top 品（传播名/周销/份额/4 周趋势）——大盘从「只有总趋势」补齐「品牌 → 品」两层</td></tr>
+    <tr><td style="background:var(--blueSoft)"><b>（新增）</b>想知道谁在领跌/领涨大盘：剔除品牌 X 后的大盘同比 vs 全大盘，剔除后明显好转 = X 领跌</td><td style="background:var(--blueSoft)">大盘卡「领跌拆解」：各品牌对大盘同比的贡献条（谁跌最多）+ <b>点击品牌即做剔除验证</b>，读数直接给结论（领跌 / 主要拖累 / 普跌 / 逆势上涨）——GFK 里很长的逻辑链一步到位</td></tr>
+    <tr><td style="background:var(--blueSoft)"><b>（新增）</b>大盘要看同比：Q4 只能 vs 去年 Q4，季度环比天然不公平（PCT、博总均确认）</td><td style="background:var(--blueSoft)">大盘主图小柱由周环比改为<b>同比（vs 2025 同周）</b>，口径条同步标注；「环比 = 近 4 周均 vs 前 4 周均」显性化（领导对该口径有认知偏差，最终口径待拍板）</td></tr>
+    <tr><td style="background:var(--blueSoft)"><b>（新增）</b>自家品档位重叠互相挤占（GT 7 Pro × Watch 6），领导明确关注；推演时要把两个自家品放一起看影响</td><td style="background:var(--blueSoft)">预测页新增<b>「自家挤占」卡</b>：两款自家品对照小图（手机 Mate 90 × Pura 90s / 穿戴 GT 7 Pro × Watch 6 双场景切换）+ 挤占读数 + 承接修正开关（W45–W48 +2% 联动主图）；<b>把握低 ±12%</b>（挤占最难量化，区间最宽）</td></tr>
+    <tr><td style="background:var(--blueSoft)"><b>（新增）</b>领导确实关注 DOS 和 inventory</td><td style="background:var(--blueSoft)">印证走势页库存卡设计：库存柱 + 渠道 DOS + 全流程 DOS + SI 保持</td></tr>
+    <tr><td style="background:var(--blueSoft)"><b>（新增）</b>ASP 大家都熟 GFK 口径，没必要自己设计</td><td style="background:var(--blueSoft)"><b>不做</b>：不自造 ASP 指标，价格卡沿用品牌均价（GFK 同口径）</td></tr>
+  </table>
+  <div class="callout amber">定位口径（应对「OVS 和 GFK 已经 more than enough」）：看板不是替业务做决定，而是<b>把 GFK 里要走很长链路的判断（剔除验证、量价对照、事件对标）变成一步</b>，解放业务精力去解决真正难解决的问题。</div>
+
+  <h2>1 · 因果模型（界面背后的口径）</h2>
+  <div class="fig"><svg id="fig-causal" viewBox="0 0 1000 320"></svg>
+    <div class="figcap">左：输入（考量来源，蓝=参考型考量、琥珀=硬性约束）；中：价格与销量两条链；右：加权汇成销毛。输入即走势页六张看板、预测页因子区的来源。</div></div>
+  <ul>
+    <li><b>参考型考量</b>（大盘与档期、竞品策略与事件、成本、资源投入、上一代参考）：影响方向和幅度可调，体现为较宽的把握区间（±8%）。</li>
+    <li><b>硬性约束</b>（供应计划 / 渠道可售库存）：先按考量得到市场口径预测，再按可售库存向下修正，修正段把握大（±2%）。界面上不出现这对术语，只用「把握大 / 把握中」与区间宽窄表达。</li>
+    <li>销量与单台毛利加权汇总为销毛；价格链（成本+竞品 9 项考量 → 价格 → 毛利）与销量链在销毛处汇合。</li>
+  </ul>
+
+  <h2>2 · 界面一：量价走势（结论看板）</h2>
+  <p><b>定位</b>：给决策者的「事实+结论」页——图给证据、右侧结论栏给判断；不再需要任何预测。与现有一线操作底座并存（底座不动，本页可从底座一键切换，筛选口径共享）。</p>
+  <table>
+    <tr><th style="width:110px">看板</th><th style="width:300px">图形态</th><th>结论栏示例（类型）</th></tr>
+    <tr><td><b>① 大盘</b></td><td>大盘销量指数线（基线 100）+ <b>同比小柱（vs 2025 同周）</b> + 事件锚点（编号锚点+图下名录）+ 结论栏内嵌<b>领跌拆解</b>（品牌贡献条 + 点击剔除验证）</td><td>大盘同比 −4.1% 连续走低（数据）；点「小米」剔除后 −2.2% vs 全大盘 −4.1% → 小米在领跌（交互结论）</td></tr>
+    <tr><td><b>② 品牌与 Top 品</b><br><span style="font-size:11px;color:var(--blueInk)">新增</span></td><td>左：品牌份额走势（月，品牌色）；右：各品牌 Top 品清单（传播名 · 周销 · 份额 · 4 周趋势）</td><td>三星 28% 居首 +4.2pt（数据）；小米 Note 17 未接棒、Top 品仍是 Note 15——两代同跑实证（数据）</td></tr>
+    <tr><td><b>③ 价格 · 策略与影响</b></td><td>左：品牌均价走势（品牌色，主品最粗）；右：份额变化横条（升蓝降红）</td><td>Galaxy S26 连续 12 周 $799 低位不动，Xiaomi/Honor 累计 +7~11%（数据）；Honor 涨价后周销 −18%（分析）</td></tr>
+    <tr><td><b>④ 量价</b></td><td>主品周销柱 + 价格线（双轴）+ 参考线（上一代上市同期）+ 降价/竞品锚点</td><td>W42 降价 $50 → 周销 +23%（数据）；爬坡斜率高于上一代同期 +18%（分析）</td></tr>
+    <tr><td><b>⑤ 库存</b></td><td>渠道库存柱 + 渠道 DOS 线 + 全流程 DOS 虚线 + SI ▼ 供应时点 + DNS 钻取点</td><td>DOS 健康带内（数据）；上一代收尾期库存降但 DOS 升 = 周销降更快所致，勿读作备货充足（分析）</td></tr>
+    <tr><td><b>⑥ 成本销毛</b></td><td>月版本成本阶梯线 + 周销毛琥珀柱（柱+折线）+ 价格线</td><td>10 月成本版本 −2.3%（数据）；降价对冲后周销毛 978→1,079 万美元（分析）</td></tr>
+  </table>
+  <ul>
+    <li>时间选择器默认最近 8 周，可拖动起点回看历史（窗口左移）；本页不出现任何预测元素。</li>
+    <li>结论栏每条带类型标（数据/资讯/分析）；「分析」类结论必须能在本卡图上找到证据点，否则不写。</li>
+  </ul>
+
+  <h2>3 · 界面二：量价预测（推演看板）</h2>
+  <p><b>定位</b>：视觉重心是主品的量价预测主图（历史实线实柱 + 未来虚线虚柱 + 参考线 + 把握区间）；下方因子区是「上面为什么会这样走」的来源与操作面。预测窗口固定向未来 8 周（1–2 个月，对齐精度要求）。</p>
+  <h3>主图规格</h3>
+  <ul>
+    <li>销量柱：历史浅蓝实心；预测白底蓝描边虚柱；<b>按可售库存修正段（W50 起）描边转琥珀</b>；柱顶画把握区间帽（窄=把握大）。</li>
+    <li>不含库存限制的细虚线与主柱的分叉段淡琥珀着色 = 约束缺口；缺口合计进摘要条。</li>
+    <li>价格线右轴（实→虚）；参考线「上一代上市同期」灰虚线按周龄对齐；今天分界线；黑五档期背景带；事件编号锚点+图下名录。</li>
+    <li>悬停：十字线 + 周读数；预测周追加「本周考量」构成（各来源影响幅度条）；点击预测柱 → 微调。</li>
+  </ul>
+  <h3>因子区（来源 + 操作）</h3>
+  <ul>
+    <li><b>大盘 · 需求与档期</b>（全宽）：大盘指数小图 + 增幅拖板（−20%~+30%，同比口径）+ <b>资源投入三档与备注（额外变量并入口袋）</b> + 事件列表（大促/竞品/大事件三类，开关+幅度）+「添加事件」（历史对标推荐弹窗）。</li>
+    <li><b>库存 · 供应修正</b>（左半）：库存柱（历史实/计划虚）+ DOS 线 + SI 计划 ▼ + 输出结论「W50 起按可售修正 −16%~−33%」+ 把握大 ±2%。</li>
+    <li><b>成本与销毛</b>（右半）：成本阶梯 + 预测销毛柱 + 输出「全窗口销毛」+ 把握中 ±8%。</li>
+    <li><b>竞品对标</b>（左半）：两代同跑判定（过阈值自动切换对标代次）+ 历史对标套用记录 + 弹窗入口。</li>
+    <li><b>自家挤占</b>（右半）<span style="color:var(--blueInk)">新增</span>：两款档位重叠的自家品对照（手机 / 穿戴双场景切换）+ 挤占读数 + 承接修正开关（联动主图 W45–W48 +2%）+ <b>把握低 ±12%</b>（最难量化，区间最宽）。</li>
+  </ul>
+  <h3>推演纪要</h3>
+  <ul>
+    <li>每次操作自动留痕：时间 / 类型（生成 · 考量调整 · 事件 · 手调）/ 操作人 / 内容 / 原因。</li>
+    <li>手调强制写原因：微调浮层中原因未填写时「应用并记录」禁用。</li>
+    <li>「生成本期预测纪要」输出会议结论（图 + 考量 + 调整记录一张图）。</li>
+  </ul>
+
+  <h2>4 · 口径与证据规则</h2>
+  <ul>
+    <li>DOS（天）= 渠道库存 ÷ 近 4 周平均周销 × 7（手机按 90 天档管理，下限 21 天）；全流程 DOS 另含机关已产出未发货部分。</li>
+    <li>成本按<b>月版本</b>阶梯，预测段沿用版本趋势；销毛（万美元）= 周销（万台）× [价格（USD）− 当期成本（USD）]；换算百万美元时再 ÷ 100。</li>
+    <li>两代同跑切换阈值 70%：新代周销达旧代同期 70% 前，价格对标以旧代为准。</li>
+    <li>结论三类型：数据（图上可证）/ 资讯（确定性公开信息）/ 分析（推断，须给证据点）。相关关系不写成确定因果。</li>
+    <li>预测期锚定「今天」向右 8 周；历史段永不改写，手调只落在预测段。Mate 80 的未来段参考线同样是已发生历史按同周龄映射，不是未来实际。</li>
+    <li><b>数据状态</b>：本稿所有数值均为演示，走势页标「演示 · 混合数据」，预测页标「演示 · 模拟预测」；把握区间是模型假设，不宣称校准后的统计置信区间。</li>
+  </ul>
+
+  <h2>5 · 视觉遵循（既有系统）</h2>
+  <ul>
+    <li>tokens：ink #171717 / mute #737373 / hairline #ebebeb / 单蓝 #0070f3 / 浅蓝选中 #e8f1ff·#0053c2 / 琥珀限量（大促·约束·手调）/ 语义红（下调）。品牌线色沿用 brandColor（主品红最粗）。</li>
+    <li>实际=实线实柱、预测=虚线虚柱（沿用滚动预测稿语言）；编号锚点+图下名录；图上只留数据与控件，结论下沉结论栏；全站无「我司」字样；卡片无左色线。</li>
+  </ul>
+
+  <h2>6 · 关键交互与状态契约</h2>
+  <table>
+    <tr><th style="width:150px">用户动作</th><th style="width:330px">即时反馈</th><th>留痕、确认与边界</th></tr>
+    <tr><td>走势页拖动历史窗口</td><td>大盘与量价图同步换窗，范围文字同步为 W 起–W 止 / 周数</td><td>只改变查看范围，不改模型历史；不出现未来数据</td></tr>
+    <tr><td>点击品牌剔除验证</td><td>选中行、剔除后同比和判断文案同步更新</td><td>判断是当前口径下的方向性读数；可换品牌继续对照，不写成业务因果证明</td></tr>
+    <tr><td>调整预测因子 / 事件</td><td>主图、库存修正、摘要、成本销毛与逐周数据表同源重算</td><td>修改仅进入本地草稿；change 后写纪要；「撤销上一调整」回到上一考量快照</td></tr>
+    <tr><td>添加竞品事件</td><td>原生弹窗展示推荐历史交叉关系；可改选参考、幅度和周期</td><td>取消不应用；应用后才联动主图，并同步实际影响周与参考来源</td></tr>
+    <tr><td>点击预测柱 / 键盘 Enter</td><td>打开该周微调弹窗，展示当前值、调整后值与原因</td><td>原因为空时保存禁用；手调标记、数据表状态、纪要和 tooltip 原因一致</td></tr>
+    <tr><td>另存情景</td><td>保存当前考量快照并新增保存记录</td><td>原型仅写本机 localStorage，不写业务系统；正式实现仍需确认、版本与撤销</td></tr>
+    <tr><td>生成预测纪要</td><td>下载独立 HTML，含当前摘要、考量、库存修正周与调整原因</td><td>导出内容显式标注演示边界，可直接归档或投屏复盘</td></tr>
+  </table>
+
+  <h2>7 · 响应式、可访问性与异常状态</h2>
+  <ul>
+    <li>桌面优先；≤1100px 结论栏下移、双卡改单栏；≤680px 筛选与摘要单列，图表只在自身容器横向滚动，不裁切关键数值。</li>
+    <li>三个主视图使用 tab 语义与左右方向键；所有按钮有可见 focus；开关暴露 checked 状态；滑杆保留原生键盘行为与 aria-valuetext。</li>
+    <li>竞品对标与单周微调使用原生 dialog，支持焦点约束、Esc 关闭与焦点返回；主图预测柱支持 Enter / Space。</li>
+    <li>主图提供逐周数据表；其他图表有相邻文字摘要。真实、演示、混合状态用文字 badge，不依赖颜色单独传达。</li>
+    <li>库存未触发时不显示固定 W50 标记，摘要显示「未触发」；预测极值自适应 Y 轴；缺数保持 —，不插值、不造点。</li>
+    <li>prefers-reduced-motion 下取消过渡动画但保留即时状态反馈；本原型无后端请求，加载 / 请求失败 / 权限失败不属于可演示状态。</li>
+  </ul>
+
+  <h2>8 · 待拍板</h2>
+  <ul>
+    <li>DOS 下限 21 天 / 两代切换阈值 70% 的具体数值与维护方；</li>
+    <li>资源投入三档（低 / 标准 / 加强 = −3% / 0% / +3%）的量化依据是否由业务年度确认；</li>
+    <li>「大事件」清单（折叠屏阵营、汇率跳变等）由谁维护、何时录入；</li>
+    <li>「分析」类结论是否需要人工确认后发布（当前设计为随数据自动刷新）；</li>
+    <li>走势页六卡与现有操作底座的入口关系（页签切换 or 独立导航位）；</li>
+    <li><b>（11-03 下午新增）品级下钻进推演的逻辑</b>：事实层下钻到品牌/品没问题，但预测层拆到「品」之后，「过去 12 月这样 → 未来也这样」的参考逻辑如何讲清——设计哲学未定，本次品牌/Top 品只落在走势页事实层；</li>
+    <li><b>（新增）SP 的摆放方式</b>：暂参考大盘卡位置，未定；</li>
+    <li><b>（新增）明细环比口径</b>：现为「近 4 周均 vs 前 4 周均」，领导默认「最新一周 vs 前 4 周均」——两种口径并存待拍板，UI 已显性标注。</li>
+  </ul>
+</div>
+</section>
+
+<!-- ══════════════ 视图 2 · 量价走势（结论看板） ══════════════ -->
+<section id="view-trend" class="view" role="tabpanel" tabindex="-1">
+<div class="app">
+  <h1 class="sr-only">量价走势 · 历史事实与结论</h1>
+  <header class="app-head">
+    <div class="brand">PriceLens<span>价格情报</span></div>
+    <nav class="nav" aria-label="产品模块">
+      <span>价格走势</span><a class="on" href="#trend" aria-current="page">量价走势</a><a href="#forecast" onclick="switchView('forecast')">量价预测</a><span>定价推演</span>
+    </nav>
+    <div class="head-right">
+      <span class="chip">USD</span>
+      <span class="chip ghost">周 · 全渠道</span>
+    </div>
+  </header>
+
+  <div class="filters">
+    <div class="fbox"><label>国家</label><b>俄罗斯</b></div>
+    <div class="fbox"><label>产业</label><b>手机</b></div>
+    <div class="fbox"><label>主品</label><b>Mate 90 <i>12+512</i></b></div>
+    <div class="fbox" style="min-width:150px"><label>对比</label><b><i>iPhone 18 Pro · Galaxy S26 · 小米 15 · 荣耀 400</i></b></div>
+    <div class="fsep"></div>
+    <div class="win-ctl">
+      <label for="trend-start">窗口起点</label>
+      <input type="range" id="trend-start" min="31" max="37" value="37" step="1" aria-valuetext="W37 至 W44，共 8 周">
+      <b class="num" id="trend-range">W37 – W44 · 8 周</b>
+    </div>
+    <div class="spacer"></div>
+    <span class="chip amber">演示 · 混合数据</span>
+    <span class="chip blue">分析结论视图</span>
+  </div>
+
+  <div class="caliber">
+    <span>口径：<b>周销（万台）· 全渠道 · USD</b></span>
+    <span>数据截至 <b>W44（11-02 周）</b></span>
+    <span>大盘 = <b>同比（vs 2025 同周/同季）</b>；明细环比 = <b>近 4 周均值 vs 前 4 周均值</b></span>
+    <span>结论类型：<span class="tagdata" style="display:inline-block;vertical-align:middle"></span> 数据 ·
+      <span class="tagnews" style="display:inline-block;vertical-align:middle"></span> 资讯 ·
+      <span class="tagana" style="display:inline-block;vertical-align:middle"></span> 分析</span>
+    <span class="demo-note">本页为设计演示，不作为业务事实或经营承诺</span>
+  </div>
+
+  <main class="stack">
+
+    <!-- ① 大盘（同比 + 领跌拆解） -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-no">01</span><span class="card-title">大盘</span>
+        <span class="card-sub">产业周销指数（基线 = 2026 均值 100）</span>
+        <div class="right"><span class="chip ghost">同比 · vs 2025 同周</span></div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap" id="ch-market"></div>
+        <div class="concl">
+          <h4>结论</h4>
+          <ul>
+            <li><span class="tagdata"></span><span>大盘同比 <b>−4.1%</b>（vs 2025 同周），指数连续 6 周走低——周期对周期，淡旺季不可比</span></li>
+            <li><span class="tagdata"></span><span>iPhone 18 Pro 上市周（W41）大盘单周 <b>+3.0%</b>，17 代上市同期为 +9%——仅作同期对照，不单独归因于上市事件</span></li>
+            <li><span class="tagana"></span><span>本轮下滑以中低端档位贡献为主，与 Mate 90 所在 $800+ 档关联度低，<b>对主品影响有限</b></span></li>
+          </ul>
+          <h4 class="concl-split">领跌拆解 · 各品牌对大盘同比的贡献</h4>
+          <div id="contrib"></div>
+          <div class="contrib-read" id="contrib-read">点击品牌行验证：剔除后大盘同比明显好转 = 该品牌在领跌；与全大盘一致 = 普跌</div>
+        </div>
+      </div>
+      <div class="event-row">
+        <span class="ev"><span class="anchor">1</span>iPhone 18 Pro 上市 · W41 · 竞品</span>
+        <span class="ev"><span class="anchor">2</span>开学季收尾 · W37 · 档期</span>
+      </div>
+    </div>
+
+    <!-- ② 品牌与 Top 品 -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-no">02</span><span class="card-title">品牌与 Top 品</span>
+        <span class="card-sub">份额走势（月）· 各品牌销量第一的品</span>
+        <div class="right"><span class="chip ghost">先看谁份额高 · 再看哪个品卖最好</span></div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap" style="display:flex;gap:16px">
+          <div style="flex:1.35;position:relative" id="ch-brand"></div>
+          <div style="flex:1;position:relative" id="ch-top"></div>
+        </div>
+        <div class="concl">
+          <h4>结论</h4>
+          <ul>
+            <li><span class="tagdata"></span><span>三星份额 <b>28%</b> 居首（+4.2pt）；华为 <b>+5.0pt</b> 居次，Mate 90 为 $800+ 档销量第一</span></li>
+            <li><span class="tagdata"></span><span>小米 Note 17 上市 6 周周销 0.6 万，未过 Note 15（2.4 万）——<b>Top 品仍是 Note 15，换代未接棒</b>（两代同跑）</span></li>
+            <li><span class="tagana"></span><span>未来 8 周主要竞争：三星（份额 + 低价坚守）与 iPhone 17 → 18 切换期</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ② 价格 -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-no">03</span><span class="card-title">价格 · 策略与影响</span>
+        <span class="card-sub">$800+ 档位 · 折后均价</span>
+        <div class="right"><span class="chip ghost">左：策略 · 右：影响</span></div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap" style="display:flex;gap:16px">
+          <div style="flex:1.5;position:relative" id="ch-price"></div>
+          <div style="flex:1;position:relative" id="ch-share"></div>
+        </div>
+        <div class="concl">
+          <h4>结论</h4>
+          <ul>
+            <li><span class="tagdata"></span><span>Galaxy S26 连续 <b>12 周 $799</b> 低位不动；小米 15 / 荣耀 400 同期累计涨价 <b>+7.7% / +11%</b></span></li>
+            <li><span class="tagdata"></span><span>Mate 90 W42 应对性调价 <b>$899 → $849</b>（−5.6%）</span></li>
+            <li><span class="tagana"></span><span>Galaxy 低价期份额 <b>+4.2pt</b>，荣耀涨价后周销 <b>−18%</b>——同期相关，仍需排除促销、缺货与新品结构影响</span></li>
+          </ul>
+          <span class="more">口径：品牌折后均价 · 与 GFK 品牌均价同口径</span>
+        </div>
+      </div>
+      <div class="event-row">
+        <span class="ev"><span class="anchor">3</span>Galaxy S26 维持 $799 · 12 周 · 竞品策略</span>
+      </div>
+    </div>
+
+    <!-- ③ 量价 -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-no">04</span><span class="card-title">量价</span>
+        <span class="card-sub">Mate 90 · 周销 × 价格</span>
+        <div class="right">
+          <span class="chip ghost">参考 · Mate 80 上市同期</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap" id="ch-volprice"></div>
+        <div class="concl">
+          <h4>结论</h4>
+          <ul>
+            <li><span class="tagdata"></span><span>W42 降价 $50 后两周周销 <b>+23%</b>（3.4 → 4.3 万台）</span></li>
+            <li><span class="tagana"></span><span>降价周恰逢 iPhone 18 Pro 上市次周，<b>对冲了竞品分流</b>——若无调价，预估周销 −8%</span></li>
+            <li><span class="tagdata"></span><span>上市 8 周累计 <b>26.7 万台</b>，同期斜率较 Mate 80 <b>+18%</b></span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="event-row">
+        <span class="ev"><span class="anchor">1</span>iPhone 18 Pro 上市 · W41</span>
+        <span class="ev"><span class="anchor">4</span>Mate 90 调价 −$50 · W42</span>
+      </div>
+    </div>
+
+    <div class="two">
+      <!-- ④ 库存 -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-no">05</span><span class="card-title">库存</span>
+          <span class="card-sub">渠道库存 × DOS × SI</span>
+          <div class="right"><span class="chip ghost">DOS = 库存 ÷ 近 4 周周销</span></div>
+        </div>
+        <div class="card-body" style="flex-direction:column">
+          <div class="chart-wrap" id="ch-stock" style="height:236px"></div>
+          <div class="concl" style="width:100%;margin:12px 0 0">
+            <h4>结论</h4>
+            <ul>
+              <li><span class="tagdata"></span><span>渠道 DOS <b>37 天</b>（健康带 21–60 天内）；W40 补货 4.5 万台后库存企稳 13.8 万</span></li>
+              <li><span class="tagana"></span><span>上一代收尾警示：Pura 90 库存 <b>−38%</b> 但 DOS 51→69 天——周销降幅大于库存降幅，<b>DOS 虚高，非备货充足</b></span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="event-row">
+          <span class="ev"><span class="anchor">5</span>SI 铺货 5.0 万 · W37</span>
+          <span class="ev"><span class="anchor">5</span>SI 补货 4.5 万 · W40</span>
+          <span class="ev"><span class="anchor amber">D</span>DNS 渠道现货偏紧 · W43 起</span>
+        </div>
+      </div>
+      <!-- ⑤ 成本销毛 -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-no">06</span><span class="card-title">成本销毛</span>
+          <span class="card-sub">月版本成本 × 周销毛</span>
+          <div class="right"><span class="chip ghost">成本 · 月版本</span></div>
+        </div>
+        <div class="card-body" style="flex-direction:column">
+          <div class="chart-wrap" id="ch-cost" style="height:236px"></div>
+          <div class="concl" style="width:100%;margin:12px 0 0">
+            <h4>结论</h4>
+            <ul>
+              <li><span class="tagdata"></span><span>10 月成本版本 <b>$612 → $598</b>（−2.3%，器件降价）</span></li>
+              <li><span class="tagana"></span><span>W42 降价后单台毛利 $301 → <b>$251</b>；周销 +23% 对冲，周销毛 <b>978 → 1,079 万美元</b></span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="event-row">
+          <span class="ev"><span class="anchor">6</span>成本版本 10 月 −$14 · −2.3%</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+  <div class="caliber" style="padding-top:14px">
+    <span>大盘/份额 = 产业口径（GFK 基准）；价格 = 折后均价（全渠道）；库存/DOS/SI = 渠道上报；成本 = 月版本</span>
+  </div>
+</div>
+</section>
+
+<!-- ══════════════ 视图 3 · 量价预测 ══════════════ -->
+<section id="view-forecast" class="view" role="tabpanel" tabindex="-1">
+<div class="app">
+  <h1 class="sr-only">量价预测 · 未来推演与人工修正</h1>
+  <header class="app-head">
+    <div class="brand">PriceLens<span>价格情报</span></div>
+    <nav class="nav" aria-label="产品模块">
+      <span>价格走势</span>
+      <a href="#trend" onclick="switchView('trend')">量价走势</a>
+      <a class="on" href="#forecast" aria-current="page">量价预测</a><span>定价推演</span>
+    </nav>
+    <div class="head-right"><span class="chip">USD</span></div>
+  </header>
+
+  <div class="filters">
+    <div class="fbox"><label>国家</label><b>俄罗斯</b></div>
+    <div class="fbox"><label>产业</label><b>手机</b></div>
+    <div class="fbox"><label>主品</label><b>Mate 90 <i>12+512</i></b></div>
+    <div class="fsep"></div>
+    <div class="fbox" style="border-color:#c7ddff;background:var(--blueSoft)"><label>预测窗口 · 向未来</label><b style="color:var(--selInk)">W45 – W52 · 8 周</b></div>
+    <div class="spacer"></div>
+    <span class="chip amber">演示 · 模拟预测</span>
+    <span class="chip ghost">基准生成于 11-03 14:02 · 数据截至 W44</span>
+  </div>
+
+  <div class="caliber">
+    <span>本地草稿 · <b>基准</b>（修改不写入真实数据）</span>
+    <span>参考 <b>Mate 80 上市同期</b>（主）· Pura 90s Pro（次）</span>
+    <span class="demo-note">预测区间是演示模型假设，不是统计置信区间或经营承诺</span>
+  </div>
+
+  <main class="stack">
+
+    <!-- 主图 -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-no">00</span><span class="card-title" role="heading" aria-level="2">量价预测 · Mate 90</span>
+        <span class="card-sub">历史 W37–W44 · 预测 W45–W52</span>
+        <div class="right">
+          <span class="chip ghost">主参考 · Mate 80 同周龄</span>
+          <button type="button" class="btn ghost mini" onclick="resetBase()">重置基准</button>
+          <button type="button" class="btn primary mini" onclick="recalcNote()">按当前考量重算</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="sw"></i>周销 实际</span>
+        <span><i class="sw dash"></i>周销 预测</span>
+        <span><i class="sw amber"></i>预测 · 按可售库存修正</span>
+        <span><i class="ln" style="border-color:var(--blue)"></i>不含库存限制</span>
+        <span><i class="ln" style="border-color:var(--red)"></i>价格</span>
+        <span><i class="ln dash" style="border-color:var(--line2)"></i>参考 · Mate 80 同周龄</span>
+        <span><i class="ln dash" style="border-color:var(--amberLine)"></i>手调</span>
+        <span>柱顶帽 = 把握区间（窄 = 把握大）</span>
+      </div>
+      <div class="card-body" style="padding-bottom:6px">
+        <div class="chart-wrap" id="ch-main"></div>
+      </div>
+      <div class="event-row" id="main-events">
+        <span class="ev"><span class="anchor">1</span>iPhone 18 Pro 上市 · W41 · 已兑现</span>
+        <span class="ev"><span class="anchor amber">2</span>黑五档期 11.14–12.2 · W46–W49</span>
+        <span class="ev" id="cap-event"><span class="anchor amber">3</span>库存修正按当前情景计算</span>
+      </div>
+      <div class="sum-row" id="main-sum"></div>
+      <details class="data-alt">
+        <summary>查看预测主图数据表</summary>
+        <div class="table-scroll"><table>
+          <caption>历史实际与未来预测周度明细；参考值为 Mate 80 同周龄对齐，全部数值为演示。</caption>
+          <thead><tr><th scope="col">周</th><th scope="col">状态</th><th scope="col">周销（万台）</th><th scope="col">不含库存限制</th><th scope="col">价格（USD）</th><th scope="col">Mate 80 同周龄</th><th scope="col">把握区间</th></tr></thead>
+          <tbody id="main-data"></tbody>
+        </table></div>
+      </details>
+    </div>
+
+    <!-- 因子 · 大盘 -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-no">01</span><span class="card-title">大盘 · 需求与档期</span>
+        <span class="card-sub">考量来源 · 可调</span>
+        <div class="right"><span class="certain mid">把握中 ±8%</span></div>
+      </div>
+      <div class="factor-body">
+        <div class="factor-chart" id="ch-fmarket"></div>
+        <div class="factor-panel">
+          <div class="fp-title">大盘增幅（预测期 vs 近 8 周）</div>
+          <div class="fp-row">
+            <span class="lbl">增幅</span>
+            <input type="range" id="fp-market" min="-20" max="30" value="8" step="1">
+            <b class="val num" id="fp-market-v">+8%</b>
+          </div>
+          <div class="fp-title" style="margin-top:6px">资源投入（额外变量 · 自行判定）</div>
+          <div class="fp-row" style="gap:8px;flex-wrap:wrap">
+            <span id="res-seg" style="display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden">
+              <button data-res="-0.03" style="padding:4px 13px;font-size:12.5px">低</button>
+              <button data-res="0" class="on" style="padding:4px 13px;font-size:12.5px;background:var(--blueSoft);color:var(--selInk);font-weight:600">标准</button>
+              <button data-res="0.03" style="padding:4px 13px;font-size:12.5px">加强</button>
+            </span>
+            <b class="val num" id="res-v" style="width:auto">+0%</b>
+          </div>
+          <input id="res-note" placeholder="备注：为什么调（如：黑五期电商资源加投）" style="height:30px;border:1px solid var(--line2);border-radius:6px;padding:0 10px;font-size:12.5px;width:100%">
+          <div class="fp-title" style="margin-top:4px">事件</div>
+          <div class="ev-list">
+            <div class="ev-item" id="ev-bf">
+              <span class="ico promo">促</span>
+              <div><div class="nm">黑五档期</div><div class="meta">11.14–12.2 · W46–W49 · 主峰 W48（11-27）</div></div>
+              <span class="amt">+35%</span>
+              <button class="switch on" data-ev="bf" aria-label="开关黑五档期"><i></i></button>
+            </div>
+            <div class="ev-item off" id="ev-fold">
+              <span class="ico big">大</span>
+              <div><div class="nm">折叠屏阵营扩容</div><div class="meta">大事件 · 档位热度 +18% · 未启用</div></div>
+              <span class="amt">+18%</span>
+              <button class="switch" data-ev="fold" aria-label="开关大事件"><i></i></button>
+            </div>
+            <button class="add-ev" onclick="openBench()">＋ 添加事件（自动推荐历史对标）</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="two">
+      <!-- 因子 · 库存 -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-no">02</span><span class="card-title">库存 · 供应修正</span>
+          <span class="card-sub">先按考量预测，再按可售库存向下修正</span>
+          <div class="right"><span class="certain hi">把握大 ±2%</span></div>
+        </div>
+        <div class="card-body" style="flex-direction:column">
+          <div class="chart-wrap" id="ch-fstock" style="height:210px"></div>
+          <div class="output-box" style="margin-top:12px">
+            <div class="io-line"><span class="k">输入</span>SI 供应计划（锁量递减）· 渠道库存 · DOS</div>
+            <div class="io-line" style="margin-top:4px"><span class="k">输出</span><span id="stock-output">按当前情景计算可售上限与修正周</span></div>
+          </div>
+        </div>
+      </div>
+      <!-- 因子 · 成本销毛 -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-no">03</span><span class="card-title">成本与销毛</span>
+          <span class="card-sub">月版本成本 → 销毛</span>
+          <div class="right"><span class="certain mid">把握中 ±8%</span></div>
+        </div>
+        <div class="card-body" style="flex-direction:column">
+          <div class="chart-wrap" id="ch-fcost" style="height:210px"></div>
+          <div class="output-box" style="margin-top:12px">
+            <div class="io-line"><span class="k">输入</span>成本版本趋势（器件降价延续）· 预测价格</div>
+            <div class="io-line" style="margin-top:4px"><span class="k">输出</span><span>11/12 月版本 <b>$591 / $585</b>；黑五价期单台毛利 $208；<b>全窗口销毛见主图摘要</b></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="two">
+      <!-- 竞品对标 -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-no">04</span><span class="card-title">竞品对标</span>
+          <span class="card-sub">两代同跑 · 自动切换</span>
+        </div>
+        <div class="card-body" style="flex-direction:column;gap:10px">
+          <div style="font-size:13px;line-height:1.7;color:var(--body)">
+            iPhone 18 Pro（W41 上市）周销 <b>2.1 万</b> = iPhone 17 同期的 <b>62%</b>（切换阈值 70%）→ 当前价格对标以 <b>iPhone 17</b> 为准，过阈值后自动切换。
+          </div>
+          <div class="output-box">
+            已套用历史对标：<span id="bench-source">17 Pro 上市对 Mate 80 冲击 <b>−9% × 3 周</b></span> → 本代取 <b id="bench-applied">−8% × 4 周</b><span id="bench-period">（W45–W48 惯性段）</span>
+          </div>
+          <div><button class="btn ghost mini" onclick="openBench()">查看历史对标 ↗</button></div>
+        </div>
+      </div>
+      <!-- 自家挤占 -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-no">05</span><span class="card-title">自家挤占</span>
+          <span class="card-sub">档位重叠的两款自家品 · 互相影响</span>
+          <div class="right"><span class="certain lo">把握低 ±12%</span></div>
+        </div>
+        <div class="card-body" style="flex-direction:column;gap:10px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="chip btn scene blue" data-scene="phone">手机 · Mate 90 × Pura 90s</button>
+            <button class="chip btn scene" data-scene="wear">穿戴 · GT 7 Pro × Watch 6</button>
+          </div>
+          <div class="chart-wrap" id="ch-cannib" style="height:190px"></div>
+          <div class="output-box" id="cannib-read"></div>
+          <div class="fp-row" style="gap:8px;align-items:center">
+            <span style="font-size:12.5px;color:var(--body)">承接修正：B 品让出的量部分转入主品预测（W45–W48 +2%）</span>
+            <button class="switch on" id="cannib-sw" aria-label="开关承接修正"><i></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 推演纪要 -->
+    <div class="card">
+      <div class="card-head">
+        <span class="card-no">06</span><span class="card-title">推演纪要</span>
+        <span class="card-sub">每次调整自动留痕 · 截图即会议结论</span>
+        <div class="right memo-actions">
+          <button type="button" class="btn ghost mini" id="undo-btn" onclick="undoLast()" disabled>撤销上一调整</button>
+          <button type="button" class="btn ghost mini" onclick="saveScenario()">另存情景</button>
+          <button type="button" class="btn primary mini" onclick="downloadMemo()">生成本期预测纪要</button>
+        </div>
+      </div>
+      <div class="memo-body"><div class="memo-list" id="memo-list" aria-live="polite" aria-relevant="additions"></div></div>
+    </div>
+
+  </main>
+</div>
+</section>
+
+<!-- 对标弹窗：原生 dialog 提供焦点约束、Esc 关闭与焦点返回 -->
+<dialog class="modal" id="bench-mask" aria-labelledby="bench-title" closedby="any">
+  <button type="button" class="close" onclick="closeBench()" aria-label="关闭历史对标弹窗">×</button>
+  <h3 id="bench-title">添加事件 · 历史对标</h3>
+  <div class="sub">事件：iPhone 18 Pro 上市（W41）· 类型：竞品 · 常规迭代 · 演示数据</div>
+  <div class="rec-card">
+    <svg id="bench-mini" width="200" height="112" viewBox="0 0 200 112" role="img" aria-label="iPhone 17 Pro 上市前后 Mate 80 周销对照演示图"></svg>
+    <div class="rec-info">
+      <b id="bench-choice">最相似：2025-09 iPhone 17 Pro 上市 × Mate 80 同期</b>
+      上市周起参考品周销 <b id="bench-impact" style="display:inline">−9%</b>，持续 <b id="bench-duration" style="display:inline">3 周</b>，随后恢复原趋势（左图灰带）。<br>
+      <span style="color:var(--mute);font-size:11.5px">相似依据：同档位旗舰 · 上市间隔约一年 · 档期环境相近；仅作参考，不证明因果</span>
+    </div>
+  </div>
+  <div class="alt">不是这个？<button type="button" class="chip btn" onclick="chooseBench()">改选：iPhone 16 Pro × Mate 70</button></div>
+  <div class="apply-row">
+    <span class="step"><button type="button" onclick="benchStep(-1)" aria-label="减弱影响幅度">−</button><b class="num" id="bench-amt">−8%</b><button type="button" onclick="benchStep(1)" aria-label="增强影响幅度">＋</button><span style="font-size:12px;color:var(--mute)">影响幅度</span></span>
+    <span class="step"><button type="button" onclick="benchWkStep(-1)" aria-label="缩短影响周期">−</button><b class="num" id="bench-wk">4 周</b><button type="button" onclick="benchWkStep(1)" aria-label="延长影响周期">＋</button><span style="font-size:12px;color:var(--mute)">影响周期</span></span>
+    <span style="margin-left:auto"></span>
+    <button type="button" class="btn ghost" onclick="closeBench()">取消</button>
+    <button type="button" class="btn primary" onclick="applyBench()">应用到预测</button>
+  </div>
+</dialog>
+
+<!-- 单周微调：结果修正必须绑定业务原因 -->
+<dialog class="tune-pop" id="tune-pop" aria-labelledby="tune-title" aria-describedby="tune-cur">
+  <h4 id="tune-title">微调 · W47</h4>
+  <div class="cur" id="tune-cur">当前预测 5.4 万台</div>
+  <label class="field-label" for="tune-val">调整后周销（万台）</label>
+  <input type="number" id="tune-val" step="0.1" min="0" autofocus>
+  <label class="field-label" for="tune-why">调整原因（必填）</label>
+  <textarea id="tune-why" placeholder="如：黑五主峰周，电商资源加投" aria-describedby="tune-warn" required></textarea>
+  <div class="warn" id="tune-warn" role="alert"></div>
+  <div class="btnrow">
+    <button type="button" class="btn ghost mini" onclick="closeTune()">取消</button>
+    <button type="button" class="btn primary mini" id="tune-save" onclick="saveTune()" disabled>应用并记录</button>
+  </div>
+</dialog>
+
+<div class="tip" id="tip"></div>
+
+<script>
+/* ================= 工具 ================= */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const NS='http://www.w3.org/2000/svg';
+const C={ink:'#171717',body:'#4d4d4d',mute:'#737373',line:'#ebebeb',line2:'#a1a1a1',
+  blue:'#0070f3',blueInk:'#0053c2',blueSoft:'#e8f1ff',barHist:'#dceaff',
+  red:'#c7000b',err:'#ee0000',amber:'#b45309',amberSoft:'#fff7e6',amberLine:'#f5a623'};
+function E(t,a,parent){
+  const n=document.createElementNS(NS,t);
+  for(const k in a)n.setAttribute(k,a[k]);
+  if(t==='svg'){
+    n.setAttribute('role','img');
+    const title=E('title',{},n);
+    title.textContent=parent?.id==='ch-main'?'Mate 90 历史量价与未来八周预测图；详细数据见下方数据表':parent?.id==='ch-fstock'?'渠道库存、DOS 与 SI 计划的历史和预测图':'量价分析演示图表；关键读数见相邻结论和文字说明';
+  }
+  if(parent)parent.appendChild(n);
+  return n;
+}
+function T(x,y,s,o={},parent){const n=E('text',{x,y,'font-size':o.fs||11,fill:o.fill||C.mute,
+  'text-anchor':o.an||'start','font-weight':o.fw||400,...(o.more||{})},parent);n.textContent=s;return n}
+const fmt=(v,d=1)=>v==null?'—':v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+/* ================= 数据（demo · 俄罗斯 · Mate 90） ================= */
+const WKS=Array.from({length:22},(_,i)=>31+i);           // W31..W52
+const WI=Object.fromEntries(WKS.map((w,i)=>[w,i]));
+const HIST_END=44, FC_START=45;
+const SALES=[null,null,null,null,null,null,1.8,2.6,3.3,3.8,3.6,3.4,3.9,4.3];   // W37..W44 万台
+const PRICE=[null,null,null,null,null,null,899,899,899,899,899,849,849,849];
+const REF80=[null,null,null,null,null,null,1.5,2.2,2.9,3.4,3.7,3.9,4.1,4.3];  // Mate 80 同期
+const REF80_FORECAST=[4.5,4.7,4.9,5.2,5.0,4.6,4.2,3.9];       // 已发生历史按当前 W45–52 周龄映射，不是未来实际
+const referenceAt=w=>w<=44?REF80[WI[w]]:REF80_FORECAST[w-FC_START];
+const MKT=[110,108,107,105,104,104,104,103,101,100,103,102,100,99];           // W31..W44 指数
+const FC_PURE=[4.7,5.0,5.4,6.4,5.1,4.3,3.9,3.6];            // W45..52 · 基准考量（大盘+8 黑五开）
+const FC_PURE_NOBF=[4.5,4.6,4.7,4.9,4.6,4.3,3.9,3.6];       // 黑五关闭
+const FC_CAP=[Infinity,Infinity,Infinity,Infinity,Infinity,3.6,2.8,2.4];      // 可售上限 W50..52
+const FC_PRICE=[849,799,799,799,799,849,849,849];           // 预测价格
+const COST_M={9:612,10:598,11:591,12:585};                  // 月版本成本
+const costOf=w=>{const m=w<=40?9:w<=44?10:w<=48?11:12;return COST_M[m]};
+const STOCK_INV=[5.0,7.8,10.9,13.8,16.2,15.4,14.5,13.8];    // W37..44 渠道库存
+const STOCK_DOS=[19,23,27,31,35,38,38,37];
+const STOCK_FINV=[13.6,13.9,14.2,16.8,11.2,6.8,4.1,2.6];    // W45..52（含 SI 计划消化）
+const STOCK_FDOS=[23,22,22,25,17,11,8,6];
+const SI_PLAN={45:4.5,46:4.0,47:5.5,48:6.5,49:1.5,50:1.0,51:1.0,52:0.8};
+const SI_HIST={37:5.0,40:4.5};
+const PX={ mate:[899,899,899,899,899,849,849,849], gal:[799,799,799,799,799,799,799,799],
+  mi:[649,649,655,662,668,675,684,699], ho:[549,552,558,566,575,586,596,609],
+  ip:[null,null,null,null,1099,1099,1099,1099] };           // W37..44
+const SHARE=[{n:'Mate 90',v:5.6,main:1},{n:'Galaxy S26',v:4.2},{n:'荣耀 400',v:-2.1},{n:'小米 15',v:-1.3}];
+const MKT_LY=[115,113,112,110,109,108,108,107,106,105,106,105,104,103];   // 2025 同周指数
+const CONTRIB=[   // 各品牌对大盘同比(−4.1%)的贡献 pt + 剔除该品牌后的大盘同比
+  {n:'小米',v:-1.9,ex:-2.2},{n:'荣耀',v:-1.3,ex:-2.9},{n:'其他',v:-0.8,ex:-3.4},
+  {n:'苹果',v:-0.3,ex:-3.9},{n:'华为',v:0.0,ex:-4.1},{n:'三星',v:0.2,ex:-4.5}];
+const BRANDSHARE={m:['03','04','05','06','07','08','09','10'],rows:[
+  ['三星','#0000cc',2.2,[25,25.5,26,26,26.5,27,27.5,28]],
+  ['华为','#c7000b',2.8,[16,16,16.5,17,17.5,18,19.5,21]],
+  ['小米','#ff6900',1.8,[19,18.5,18,17,16.5,15.5,15,15]],
+  ['荣耀','#0099cc',1.6,[14,13.8,13.5,13.2,13,12.6,12.3,12]],
+  ['苹果','#1d1d1f',1.6,[11,11,11,11,11,11,11,11]]]};
+const TOPLIST=[
+  {b:'华为',n:'Mate 90',v:4.3,sh:'21.7%',t:'up',tl:'↑↑',bar:'#c7000b'},
+  {b:'三星',n:'Galaxy S26',v:3.1,sh:'20.5%',t:'up',tl:'↑',bar:'#9db3cc'},
+  {b:'苹果',n:'iPhone 17',v:2.8,sh:'14.2%',t:'flat',tl:'→',bar:'#9db3cc'},
+  {b:'小米',n:'Redmi Note 15',v:2.4,sh:'11.8%',t:'dn',tl:'↓',bar:'#9db3cc'},
+  {b:'荣耀',n:'荣耀 400',v:2.2,sh:'10.9%',t:'dn',tl:'↓',bar:'#9db3cc'}];
+const CANNIB={
+  phone:{a:'Mate 90',b:'Pura 90s',evW:42,evTxt:'降 $849 进入重叠区',ticks:[2,4],overlap:'价格重叠 $750–850（Pura 90s 促后 $779）',
+    aw:[1.8,2.6,3.3,3.8,3.6,3.4,3.9,4.3],bw:[3.2,3.1,3.0,2.9,2.8,2.6,2.1,1.9],
+    pre:'周均 −16%（此前 −4%）',extra:'家族合计份额 +1.8pt——让量发生在自家内部，净效应为正'},
+  wear:{a:'GT 7 Pro',b:'Watch 6',evW:40,evTxt:'上市',ticks:[1,2,3],overlap:'同价位段 $299–399，柜台与广告资源直接竞争',
+    aw:[0.5,0.8,1.4,2.2,2.6,2.8,2.9,3.0],bw:[2.6,2.5,2.5,2.4,2.3,1.9,1.7,1.6],
+    pre:'周均 −13%（此前 −2%）',extra:'穿戴混战（GT 系 × Watch × Band），挤占最难量化'}};
+
+/* 预测状态 */
+const F={market:8,bf:true,fold:false,res:0,bench:-8,benchWk:4,cannibOn:true,manual:{}};
+const UNDO_STACK=[JSON.stringify(F)];
+const bandAt=(wk,capped=false)=>capped?0.02:(F.cannibOn&&wk-FC_START<4?0.12:0.08);
+const bandLabel=(wk,capped=false)=>capped?'±2%（把握大）':bandAt(wk)===0.12?'±12%（把握低）':'±8%（把握中）';
+
+function fcCalc(){
+  const m=(1+F.market/100)/1.08, res=1+F.res;
+  const uncon=FC_PURE.map((v,i)=>{
+    let base=F.bf?v:FC_PURE_NOBF[i];
+    let x=base*m*res;
+    if(F.fold)x*=1.18;
+    if(F.bench&&i<F.benchWk)x*=Math.pow(1+F.bench/100, 1);   // 竞品事件作用于前 N 周
+    if(F.cannibOn&&i<4)x*=1.02;                              // 自家挤占承接 W45–W48
+    return x;
+  });
+  const final=uncon.map((v,i)=>Math.min(v,FC_CAP[i]));
+  const capped=uncon.map((v,i)=>v>FC_CAP[i]+1e-9);
+  for(const w in F.manual)final[w-FC_START]=F.manual[w].v;
+  return {uncon,final,capped};
+}
+const marginOf=(w,s)=>s==null?null:(PRICE[WI[w]]??FC_PRICE[w-FC_START])-costOf(w);
+
+/* ================= 图表渲染 ================= */
+function frame(g,x0,y0,w,h,ymax,ticks,fmtY=l=>l,ymin=0){ // 网格+Y刻度（支持非零基线）
+  ticks.forEach(t=>{const y=y0+h-(t-ymin)/(ymax-ymin)*h;
+    E('line',{x1:x0,y1:y,x2:x0+w,y2:y,stroke:C.line,'stroke-width':1},g);
+    T(x0-8,y+3.5,fmtY(t),{an:'end',fs:10.5},g)});
+}
+function xLabels(g,x0,y0,w,ws,lab){ // X 刻度（周）
+  ws.forEach((wk,i)=>{if(lab(wk,i))T(x0+i/(ws.length-1)*w,y0+14,'W'+wk,{an:'middle',fs:10.5},g)});
+}
+
+/* ---- A1 大盘 ---- */
+function renderMarket(){
+  const host=$('#ch-market');host.innerHTML='';
+  const s0=+( $('#trend-start').value), ws=WKS.filter(w=>w>=s0&&w<=44);
+  const W=920,H=252,x0=44,y0=18,pw=W-x0-12,ph=H-y0-30;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);
+  const g=E('g',{},svg);
+  const ymax=115,ymin=95,yy=v=>y0+ph-(v-ymin)/(ymax-ymin)*ph,xx=i=>x0+i/(ws.length-1)*pw;
+  frame(g,x0,y0,pw,ph,ymax,[100,105,110,115],l=>l,95);
+  xLabels(g,x0,y0+ph,pw,ws,(w,i)=>i%2===0||i===ws.length-1);
+  // 同比小柱（vs 2025 同周）
+  const bw=Math.min(16,pw/ws.length*.32);
+  ws.forEach((wk,i)=>{const ly=MKT_LY[WI[wk]];if(ly==null)return;
+    const yoy=(MKT[WI[wk]]/ly-1)*100;
+    const h=Math.min(Math.abs(yoy)*7,24),x=xx(i)-bw/2,yb=y0+ph;
+    E('rect',{x,y:yoy>=0?yb-h:yb,width:bw,height:h,fill:yoy>=0?C.blue:C.err,opacity:.28,rx:1.5},g)});
+  // 指数线
+  let d='';ws.forEach((wk,i)=>{const x=xx(i),y=yy(MKT[WI[wk]]);d+=(i?'L':'M')+x+' '+y});
+  E('path',{d,fill:'none',stroke:C.ink,'stroke-width':2.2},g);
+  // 锚点 W41
+  if(WI[41]>=WI[s0]){const x=xx(WI[41]-WI[s0]);
+    E('line',{x1:x,y1:y0,x2:x,y2:y0+ph,stroke:C.line2,'stroke-dasharray':'3 4'},g);
+    E('circle',{cx:x,cy:yy(MKT[WI[41]]),r:3.2,fill:'#fff',stroke:C.blue,'stroke-width':1.6},g);
+    E('circle',{cx:x,cy:y0+8,r:8.5,fill:'#fff',stroke:C.line2},g);T(x,y0+11.5,'1',{an:'middle',fs:10,fill:C.body},g);}
+  T(x0+pw,y0+2,'指数（基线 100）',{an:'end',fs:10.5},g);
+  T(x0+pw-2,y0+ph-6,'同比 ▮ vs 2025 同周',{an:'end',fs:10,fill:C.mute},g);
+}
+
+/* ---- A2a 品牌价格 ---- */
+function renderPrice(){
+  const host=$('#ch-price');host.innerHTML='';
+  const W=520,H=268,x0=46,y0=16,pw=W-x0-10,ph=H-y0-58;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const ymin=500,ymax=1150,yy=v=>y0+ph-(v-ymin)/(ymax-ymin)*ph,xx=i=>x0+i/7*pw;
+  frame(g,x0,y0,pw,ph,ymax,[600,750,900,1050],l=>'$'+l,500);
+  T(x0,y0+ph+16,'W37',{an:'start',fs:10.5},g);T(x0+pw,y0+ph+16,'W44',{an:'end',fs:10.5},g);
+  const series=[
+    {n:'Mate 90',c:C.red,w:2.8,d:PX.mate},{n:'iPhone 18 Pro',c:'#1d1d1f',w:1.8,d:PX.ip},
+    {n:'Galaxy S26',c:'#0000cc',w:1.8,d:PX.gal},{n:'小米 15',c:'#ff6900',w:1.6,d:PX.mi},
+    {n:'荣耀 400',c:'#0099cc',w:1.6,d:PX.ho}];
+  series.forEach(s=>{let d='',started=false;
+    s.d.forEach((v,i)=>{if(v==null){return}d+=(d?'L':'M')+xx(i)+' '+yy(v)});
+    E('path',{d,fill:'none',stroke:s.c,'stroke-width':s.w},g)});
+  // 锚点 W41 18 Pro 上市
+  const x41=xx(4);E('line',{x1:x41,y1:y0,x2:x41,y2:y0+ph,stroke:C.line2,'stroke-dasharray':'3 4'},g);
+  E('circle',{cx:x41,cy:y0+8,r:8.5,fill:'#fff',stroke:C.line2},g);T(x41,y0+11.5,'1',{an:'middle',fs:10,fill:C.body},g);
+  // 图例（自动两行）
+  let lx=x0,ly=y0+ph+34;const lg=E('g',{},svg);
+  series.forEach(s=>{const wdt=18+String(s.n).length*7.5+16;
+    if(lx+wdt>x0+pw-4){lx=x0;ly+=15}
+    E('line',{x1:lx,y1:ly,x2:lx+14,y2:ly,stroke:s.c,'stroke-width':s.n==='Mate 90'?3:2},lg);
+    T(lx+18,ly+4,s.n,{fs:10.5,fill:C.body},lg);lx+=wdt;});
+}
+
+/* ---- A2b 份额变化 ---- */
+function renderShare(){
+  const host=$('#ch-share');host.innerHTML='';
+  const W=330,H=252,x0=64,y0=30,pw=W-x0-40;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  T(0,14,'周销份额变化 · W37 → W44（pt）',{fs:11.5,fill:C.body,fw:600},svg);
+  const max=6.5;
+  const zx=x0+pw/2;
+  SHARE.forEach((s,i)=>{const y=44+i*40;const w=Math.abs(s.v)/max*(pw/2-6);
+    E('text',{x:0,y:y+4,'font-size':11.5,fill:s.main?C.ink:C.body,'font-weight':s.main?650:400},g).textContent=s.n;
+    E('line',{x1:zx,y1:y-14,x2:zx,y2:y+12,stroke:C.line},g);
+    const left=s.v<0;
+    E('rect',{x:left?zx-w:zx,y:y-7,width:w,height:14,rx:2,fill:s.v>=0?C.blue:C.err,opacity:s.main?1:.75},g);
+    T(left?zx-w-6:zx+w+6,y+4,(s.v>=0?'+':'')+s.v.toFixed(1)+'pt',{an:left?'end':'start',fs:11.5,fill:s.v>=0?C.blueInk:C.err,fw:600},g);
+  });
+  T(zx,H-8,'0',{an:'middle',fs:10},g);
+}
+
+/* ---- A1b 领跌拆解（剔除验证） ---- */
+function renderContrib(){
+  const max=2.2;
+  $('#contrib').innerHTML=CONTRIB.map((c,i)=>{
+    const w=Math.abs(c.v)/max*50;
+    return `<button type="button" class="contrib-row" data-i="${i}" aria-pressed="false" aria-label="剔除 ${c.n} 验证大盘同比">
+      <span class="nm">${c.n}</span>
+      <span class="barzone"><i class="zero"></i><i class="bar ${c.v<0?'neg':'pos'}" style="width:${w}%"></i></span>
+      <span class="v num" style="color:${c.v<-0.05?'var(--err)':c.v>0.05?'var(--blueInk)':'var(--mute)'}">${c.v>0?'+':''}${c.v.toFixed(1)}pt</span></button>`}).join('');
+  $$('#contrib .contrib-row').forEach(r=>r.onclick=()=>{
+    $$('#contrib .contrib-row').forEach(x=>{x.classList.remove('on');x.setAttribute('aria-pressed','false')});r.classList.add('on');r.setAttribute('aria-pressed','true');
+    const c=CONTRIB[+r.dataset.i];
+    const verdict=c.ex>=-2.5?`剔除后大盘同比 <b>${c.ex.toFixed(1)}%</b>，明显好于全大盘（−4.1%）→ <b>${c.n} 在领跌大盘</b>`
+      :c.ex<=-4.4?`剔除后大盘同比 <b>${c.ex.toFixed(1)}%</b>，比全大盘更差 → <b>${c.n} 在逆势上涨</b>`
+      :Math.abs(c.ex+4.1)<=0.3?`剔除后大盘同比 <b>${c.ex.toFixed(1)}%</b>，与全大盘一致 → ${c.n} 贡献中性，<b>跌幅为普跌所致</b>`
+      :`剔除后大盘同比 <b>${c.ex.toFixed(1)}%</b>，有所好转 → <b>${c.n} 是主要拖累之一</b>`;
+    $('#contrib-read').innerHTML=verdict;});
+}
+
+/* ---- A2 品牌份额走势（月） ---- */
+function renderBrand(){
+  const host=$('#ch-brand');host.innerHTML='';
+  const W=520,H=252,x0=40,y0=14,pw=W-x0-40,ph=H-y0-42;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const ymax=30,yy=v=>y0+ph-v/ymax*ph,xx=i=>x0+i/(BRANDSHARE.m.length-1)*pw;
+  frame(g,x0,y0,pw,ph,ymax,[10,20,30],l=>l+'%');
+  [0,3,7].forEach(i=>T(xx(i),y0+ph+14,BRANDSHARE.m[i]+'月',{an:'middle',fs:10.5},g));
+  BRANDSHARE.rows.forEach(([n,c,w,d])=>{let p='';
+    d.forEach((v,i)=>p+=(p?'L':'M')+xx(i)+' '+yy(v));
+    E('path',{d:p,fill:'none',stroke:c,'stroke-width':w},g)});
+  // 末点值（前三）
+  [BRANDSHARE.rows[0],BRANDSHARE.rows[1],BRANDSHARE.rows[2]].forEach(([n,c,w,d])=>{
+    T(xx(d.length-1)+6,yy(d[d.length-1])+3.5,d[d.length-1]+'%',{fs:10.5,fill:c,fw:600},g)});
+  const lg=E('g',{},svg);let lx=x0;
+  BRANDSHARE.rows.forEach(([n,c])=>{
+    E('line',{x1:lx,y1:H-8,x2:lx+13,y2:H-8,stroke:c,'stroke-width':n==='华为'?3:2},lg);
+    T(lx+16,H-4.5,n,{fs:10.5,fill:C.body},lg);lx+=16+n.length*7+14;});
+}
+
+/* ---- A2b Top 品 ---- */
+function renderTop(){
+  const max=4.3;
+  $('#ch-top').innerHTML=
+   `<div class="top-head"><span>品牌 · Top 品（传播名）</span><span style="text-align:right">周销</span><span style="text-align:right">份额</span><span style="text-align:right">4 周</span></div>`+
+   TOPLIST.map(x=>`<div class="top-row">
+     <div class="nm"><b>${x.n}</b><span>${x.b}</span></div>
+     <div class="num" style="text-align:right;font-weight:650">${x.v.toFixed(1)}</div>
+     <div class="num" style="text-align:right;color:var(--mute)">${x.sh}</div>
+     <div class="trend ${x.t}">${x.tl}</div>
+     <div class="barz"><i style="width:${x.v/max*100}%;background:${x.bar}"></i></div>
+   </div>`).join('')+
+   `<div style="font-size:11px;color:var(--mute);padding:8px 4px 0">周销 = 万台 · W44；苹果含 18 Pro 爬坡 2.1 万（未过 17 代切换阈值）</div>`;
+}
+
+/* ---- B5 自家挤占 ---- */
+let cannibScene='phone';
+function renderCannib(scene){
+  if(scene)cannibScene=scene;
+  const d=CANNIB[cannibScene];
+  const host=$('#ch-cannib');host.innerHTML='';
+  const W=600,H=190,x0=38,y0=14,pw=W-x0-10,ph=H-y0-30;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const ymax=Math.max(...d.aw,...d.bw)*1.15,yy=v=>y0+ph-v/ymax*ph,xx=i=>x0+i/7*pw;
+  frame(g,x0,y0,pw,ph,ymax,d.ticks,l=>l);
+  T(x0,y0+ph+14,'W37',{an:'start',fs:10.5},g);T(x0+pw,y0+ph+14,'W44',{an:'end',fs:10.5},g);
+  const iEv=d.evW-37;
+  E('line',{x1:xx(iEv),y1:y0,x2:xx(iEv),y2:y0+ph,stroke:C.line2,'stroke-dasharray':'3 4'},g);
+  T(xx(iEv),y0+10,d.evTxt,{an:'middle',fs:10,fill:C.body,fw:600},g);
+  let da='',db='';
+  d.aw.forEach((v,i)=>da+=(da?'L':'M')+xx(i)+' '+yy(v));
+  d.bw.forEach((v,i)=>db+=(db?'L':'M')+xx(i)+' '+yy(v));
+  E('path',{d:db,fill:'none',stroke:C.body,'stroke-width':1.8,'stroke-dasharray':'1 0'},g);
+  E('path',{d:da,fill:'none',stroke:C.red,'stroke-width':2.4},g);
+  const lg=E('g',{},svg);let lx=x0;
+  [[d.a+'（挤入）',C.red],[d.b+'（被挤占）',C.body]].forEach(([n,c])=>{
+    E('line',{x1:lx,y1:H-7,x2:lx+14,y2:H-7,stroke:c,'stroke-width':2.4},lg);
+    T(lx+17,H-3,n,{fs:10.5,fill:C.body},lg);lx+=17+n.length*7+14;});
+  $('#cannib-read').innerHTML=
+    `<div class="io-line"><span class="k">重叠</span><span>${d.overlap}</span></div>
+     <div class="io-line" style="margin-top:4px"><span class="k">读数</span><span>${d.a} <b>${d.evTxt}</b> 后，${d.b} <b>${d.pre}</b>；${d.extra}</span></div>`;
+}
+
+/* ---- A3 量价 ---- */
+function renderVolPrice(){
+  const host=$('#ch-volprice');host.innerHTML='';
+  const s0=+$('#trend-start').value,ws=WKS.filter(w=>w>=s0&&w<=44);
+  const W=920,H=270,x0=44,x1=W-52,y0=16,pw=x1-x0-6,ph=H-y0-34;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const ymaxV=5,yyL=v=>y0+ph-v/ymaxV*ph,xx=i=>x0+i/(ws.length-1)*pw;
+  const yminP=750,ymaxP=950,yyR=v=>y0+ph-(v-yminP)/(ymaxP-yminP)*ph;
+  frame(g,x0,y0,pw,ph,ymaxV,[1,2,3,4,5],l=>l);
+  // 右轴刻度
+  [800,850,900].forEach(p=>{T(x1+8,yyR(p)+3.5,'$'+p,{fs:10.5},g)});
+  xLabels(g,x0,y0+ph,pw,ws,(w,i)=>i%2===0||i===ws.length-1);
+  // 参考线 Mate 80
+  let dr='';ws.forEach((wk,i)=>{const v=REF80[WI[wk]];if(v==null)return;dr+=(dr?'L':'M')+xx(i)+' '+yyL(v)});
+  E('path',{d:dr,fill:'none',stroke:C.line2,'stroke-width':1.5,'stroke-dasharray':'5 4'},g);
+  // 销量柱
+  const bw=Math.min(30,pw/ws.length*.5);
+  ws.forEach((wk,i)=>{const v=SALES[WI[wk]];if(v==null)return;
+    E('rect',{x:xx(i)-bw/2,y:yyL(v),width:bw,height:y0+ph-yyL(v),fill:C.barHist,rx:2},g)});
+  // 价格线
+  let dp='';ws.forEach((wk,i)=>{const v=PRICE[WI[wk]];if(v==null)return;dp+=(dp?'L':'M')+xx(i)+' '+yyR(v)});
+  E('path',{d:dp,fill:'none',stroke:C.red,'stroke-width':2.4},g);
+  // 锚点 1(W41) 4(W42)
+  [[41,'1'],[42,'4']].forEach(([w,a])=>{if(WI[w]<WI[s0])return;const x=xx(WI[w]-WI[s0]);
+    E('line',{x1:x,y1:y0,x2:x,y2:y0+ph,stroke:C.line2,'stroke-dasharray':'3 4'},g);
+    E('circle',{cx:x,cy:y0+8,r:8.5,fill:'#fff',stroke:C.line2},g);T(x,y0+11.5,a,{an:'middle',fs:10,fill:C.body},g)});
+  // 图例
+  const lg=E('g',{},svg);let lx=x0;
+  [['周销（万台）',null,C.barHist],['价格',null,C.red],['参考 · Mate 80 同期',null,C.line2]].forEach(([n,,c],i)=>{
+    if(i===0)E('rect',{x:lx,y:H-13,width:11,height:8,fill:c,rx:1.5},lg);
+    else E('line',{x1:lx,y1:H-9,x2:lx+14,y2:H-9,stroke:c,'stroke-width':i===1?2.4:1.5,...(i===2?{'stroke-dasharray':'5 4'}:{})},lg);
+    T(lx+17,H-5,n,{fs:10.5,fill:C.body},lg);lx+=17+n.length*7.2+18;});
+}
+
+/* ---- A4 库存 ---- */
+function renderStock(){
+  const host=$('#ch-stock');host.innerHTML='';
+  const W=600,H=236,x0=40,x1=W-42,y0=14,pw=x1-x0-4,ph=H-y0-30;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const ws=WKS.filter(w=>w>=37&&w<=44);
+  const ymaxI=18,yyL=v=>y0+ph-v/ymaxI*ph,xx=i=>x0+i/(ws.length-1)*pw;
+  const ymaxD=48,yyR=v=>y0+ph-v/ymaxD*ph;
+  frame(g,x0,y0,pw,ph,ymaxI,[6,12,18],l=>l);
+  [12,24,36,48].forEach(d=>T(x1+8,yyR(d)+3.5,d+'天',{fs:10},g));
+  // DOS 3 周线（21 天下限）
+  E('line',{x1:x0,y1:yyR(21),x2:x0+pw,y2:yyR(21),stroke:C.amberLine,'stroke-dasharray':'3 4',opacity:.75},g);
+  T(x0+4,yyR(21)-4,'3 周线（21 天）',{fs:9.5,fill:C.amber},g);
+  xLabels(g,x0,y0+ph,pw,ws,(_,i)=>i%2===0||i===ws.length-1);
+  // 库存柱
+  const bw=Math.min(26,pw/ws.length*.52);
+  ws.forEach((wk,i)=>{const v=STOCK_INV[i];
+    E('rect',{x:xx(i)-bw/2,y:yyL(v),width:bw,height:y0+ph-yyL(v),fill:'#c7d3e4',rx:2},g)});
+  // SI 标记
+  ws.forEach((wk,i)=>{if(!SI_HIST[wk])return;const x=xx(i);
+    E('path',{d:`M${x-5} ${yyL(STOCK_INV[i])-12} L${x+5} ${yyL(STOCK_INV[i])-12} L${x} ${yyL(STOCK_INV[i])-4} Z`,fill:C.ink},g);
+    T(x,yyL(STOCK_INV[i])-16,'SI '+SI_HIST[wk],{an:'middle',fs:9.5,fill:C.ink,fw:600},g)});
+  // DOS 线（渠道=蓝实 / 全流程=灰虚+4~8天）
+  let d1='',d2='';ws.forEach((wk,i)=>{const x=xx(i);
+    d1+=(d1?'L':'M')+x+' '+yyR(STOCK_DOS[i]);d2+=(d2?'L':'M')+x+' '+yyR(STOCK_DOS[i]+9)});
+  E('path',{d:d2,fill:'none',stroke:C.line2,'stroke-width':1.4,'stroke-dasharray':'4 4'},g);
+  E('path',{d:d1,fill:'none',stroke:C.blue,'stroke-width':2.2},g);
+  // DNS 钻取点（W44）
+  const dx=xx(ws.length-1);
+  const dot=E('g',{style:'cursor:pointer',tabindex:0,role:'button','aria-label':'查看 DNS 渠道缺货风险'},g);
+  E('circle',{cx:dx,cy:yyL(STOCK_INV[7])-30,r:9,fill:C.amberSoft,stroke:C.amberLine},dot);
+  T(dx,yyL(STOCK_INV[7])-26.5,'D',{an:'middle',fs:10,fill:C.amber,fw:700},dot);
+  dot.addEventListener('mouseenter',e=>showDrill(e,dx,yyL(STOCK_INV[7])-30));
+  dot.addEventListener('mouseleave',hideDrill);dot.addEventListener('blur',hideDrill);
+  dot.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showDrill(e,dx,yyL(STOCK_INV[7])-30)}});
+  // 图例
+  const lg=E('g',{},svg);let lx=x0;
+  [['渠道库存（万）','#c7d3e4',0],['渠道 DOS',C.blue,1],['全流程 DOS',C.line2,2]].forEach(([n,c,k])=>{
+    if(k===0)E('rect',{x:lx,y:H-12,width:10,height:7,fill:c},lg);
+    else E('line',{x1:lx,y1:H-8.5,x2:lx+14,y2:H-8.5,stroke:c,'stroke-width':2,...(k===2?{'stroke-dasharray':'4 4'}:{})},lg);
+    T(lx+16,H-4.5,n,{fs:10,fill:C.body},lg);lx+=16+n.length*7+14;});
+}
+function showDrill(e,x,y){
+  hideDrill();const host=$('#ch-stock'),d=document.createElement('div');d.className='drill on';d.setAttribute('role','status');
+  d.innerHTML='<b>DNS 渠道 · W43 起</b><span class="warnline">DOS 12 天 · 部分门店现货偏紧</span><br>全渠道口径健康，个别大渠道偏紧——需下钻核对，不影响大盘读数';
+  host.style.position='relative';host.appendChild(d);
+  const r=host.getBoundingClientRect();
+  d.style.left=Math.max(8,Math.min(x/600*r.width+12,r.width-220))+'px';d.style.top=Math.max(8,y/236*r.height-40)+'px';
+}
+function hideDrill(){$$('.drill').forEach(n=>n.remove())}
+
+/* ---- A5 成本销毛 ---- */
+function renderCost(){
+  const host=$('#ch-cost');host.innerHTML='';
+  const W=600,H=236,x0=44,x1=W-46,y0=14,pw=x1-x0-4,ph=H-y0-30;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const ws=WKS.filter(w=>w>=37&&w<=44);
+  const ymax=1200,yy=v=>y0+ph-v/ymax*ph,xx=i=>x0+i/(ws.length-1)*pw;
+  frame(g,x0,y0,pw,ph,ymax,[400,800,1200],l=>l);
+  const yminP=550,ymaxP=950,yyR=v=>y0+ph-(v-yminP)/(ymaxP-yminP)*ph;
+  [600,750,900].forEach(p=>T(x1+8,yyR(p)+3.5,'$'+p,{fs:10},g));
+  xLabels(g,x0,y0+ph,pw,ws,(_,i)=>i%2===0||i===ws.length-1);
+  // 销毛柱（周销 × 单台毛利, 万美元）
+  const bw=Math.min(26,pw/ws.length*.52);
+  ws.forEach((wk,i)=>{const s=SALES[WI[wk]],m=marginOf(wk,s);
+    const v=s*m;E('rect',{x:xx(i)-bw/2,y:yy(v),width:bw,height:y0+ph-yy(v),fill:'#f2d9a4',stroke:'#dcb56a','stroke-width':1,rx:2},g)});
+  // 成本线（右轴区间 550–950 内画 612/598 阶梯）
+  let dcs='';ws.forEach((wk,i)=>{const y=yyR(costOf(wk));dcs+=(dcs?'L':'M')+xx(i)+' '+y});
+  E('path',{d:dcs,fill:'none',stroke:C.body,'stroke-width':2},g);
+  // 价格线
+  let dp='';ws.forEach((wk,i)=>{dp+=(dp?'L':'M')+xx(i)+' '+yyR(PRICE[WI[wk]])});
+  E('path',{d:dp,fill:'none',stroke:C.red,'stroke-width':2.2},g);
+  // 版本锚点 W41
+  const x41=xx(4);E('circle',{cx:x41,cy:yyR(costOf(41)),r:3,fill:'#fff',stroke:C.body,'stroke-width':1.6},g);
+  E('circle',{cx:x41,cy:y0+8,r:8.5,fill:'#fff',stroke:C.line2},g);T(x41,y0+11.5,'6',{an:'middle',fs:10,fill:C.body},g);
+  const lg=E('g',{},svg);let lx=x0;
+  [['周销毛（万$）','#f2d9a4',0],['成本 · 月版本',C.body,1],['价格',C.red,2]].forEach(([n,c,k])=>{
+    if(k===0)E('rect',{x:lx,y:H-12,width:10,height:7,fill:c,stroke:'#dcb56a'},lg);
+    else E('line',{x1:lx,y1:H-8.5,x2:lx+14,y2:H-8.5,stroke:c,'stroke-width':2},lg);
+    T(lx+16,H-4.5,n,{fs:10,fill:C.body},lg);lx+=16+n.length*7+14;});
+}
+
+/* ================= 预测页 ================= */
+function renderMain(){
+  const host=$('#ch-main');host.innerHTML='';
+  const {uncon,final,capped}=fcCalc();
+  const ws=WKS.filter(w=>w>=37);   // W37..W52
+  const W=1310,H=380,x0=46,x1=W-54,y0=26,pw=x1-x0-8,ph=H-y0-40;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const ymaxV=Math.max(7.5,Math.ceil(Math.max(...uncon,...final)*1.2*2)/2),yyL=v=>y0+ph-v/ymaxV*ph,xx=i=>x0+i/(ws.length-1)*pw;
+  const yminP=560,ymaxP=960,yyR=v=>y0+ph-(v-yminP)/(ymaxP-yminP)*ph;
+  const iCut=WI[FC_START]-WI[37],xCut=xx(iCut);
+  E('rect',{x:xCut,y:y0-6,width:x0+pw-xCut,height:ph+6,fill:'#fafafa'},g);
+  T(x0+pw-4,y0+8,'预测 · 向未来',{an:'end',fs:10.5,fill:C.blueInk,fw:600},g);
+  frame(g,x0,y0,pw,ph,ymaxV,[2,4,6,8,10,12].filter(t=>t<=ymaxV),l=>l);
+  [650,750,850,950].forEach(p=>T(x1+10,yyR(p)+3.5,'$'+p,{fs:10.5},g));
+  xLabels(g,x0,y0+ph,pw,ws,(w,i)=>i%2===0||i===ws.length-1);
+  E('line',{x1:xCut,y1:y0-6,x2:xCut,y2:y0+ph,stroke:C.line2,'stroke-dasharray':'4 4'},g);
+  T(xCut-6,y0+ph+28,'今天 11-03',{an:'end',fs:10,fill:C.body,fw:600},g);
+  const bx1=xx(WI[46]-WI[37])-14,bx2=xx(WI[49]-WI[37])+14;
+  E('rect',{x:bx1,y:y0-6,width:bx2-bx1,height:ph+6,fill:C.amberSoft,opacity:F.bf?.55:.12},g);
+  T((bx1+bx2)/2,y0+8,F.bf?'黑五档期 11.14–12.2':'黑五档期 · 未启用',{an:'middle',fs:10.5,fill:C.amber,fw:600},g);
+  // 参考值来自已发生的 Mate 80 历史，按当前及未来各周的同周龄映射。
+  let dr='';ws.forEach((wk,i)=>{const ref=referenceAt(wk);if(ref==null)return;dr+=(dr?'L':'M')+xx(i)+' '+yyL(ref)});
+  E('path',{d:dr,fill:'none',stroke:C.line2,'stroke-width':1.5,'stroke-dasharray':'5 4'},g);
+  let du='';ws.forEach((wk,i)=>{if(wk<FC_START)return;const v=uncon[wk-FC_START];
+    du+=(du?'L':'M')+xx(i)+' '+yyL(v);});
+  E('path',{d:du,fill:'none',stroke:C.blue,'stroke-width':1.5,'stroke-dasharray':'2 4',opacity:.9},g);
+  const bw=Math.min(34,pw/ws.length*.55);
+  ws.forEach((wk,i)=>{
+    const isFc=wk>=FC_START;
+    const v=isFc?final[wk-FC_START]:SALES[WI[wk]];
+    if(v==null)return;
+    const cap=isFc&&capped[wk-FC_START];
+    E('rect',{x:xx(i)-bw/2,y:yyL(v),width:bw,height:Math.max(0,y0+ph-yyL(v)),rx:2,
+      fill:isFc?'#fff':C.barHist,stroke:isFc?(cap?C.amberLine:C.blue):'none',
+      'stroke-width':isFc?1.4:0,'stroke-dasharray':isFc?'4 3':'none'},g);
+    if(isFc){const band=bandAt(wk,cap),y1=yyL(v*(1+band)),y2=yyL(v*(1-band)),cx=xx(i);
+      E('line',{x1:cx,y1,x2:cx,y2,stroke:cap?C.amberLine:C.blue,'stroke-width':1.3},g);
+      E('line',{x1:cx-4,y1,x2:cx+4,y2:y1,stroke:cap?C.amberLine:C.blue,'stroke-width':1.3},g);
+      E('line',{x1:cx-4,y1:y2,x2:cx+4,y2,stroke:cap?C.amberLine:C.blue,'stroke-width':1.3},g);}
+    if(cap&&uncon[wk-FC_START]>v){const u=uncon[wk-FC_START];
+      E('path',{d:`M${xx(i)-bw/2} ${yyL(v)} L${xx(i)+bw/2} ${yyL(v)} L${xx(i)+bw/2} ${yyL(u)} L${xx(i)-bw/2} ${yyL(u)} Z`,
+        fill:C.amberLine,opacity:.14},g);}
+    if(isFc&&F.manual[wk]){const cx=xx(i);
+      E('path',{d:`M${cx} ${yyL(v)-16} l5 5 l-5 5 l-5 -5 Z`,fill:C.amberLine,stroke:'#fff','stroke-width':1.2},g);}
+    if(isFc){const hitR=E('rect',{x:xx(i)-bw/2-3,y:y0,width:bw+6,height:ph,fill:'transparent',style:'cursor:pointer',tabindex:0,role:'button','aria-label':`微调 W${wk} 预测销量，当前 ${fmt(v,1)} 万台`},g);
+      hitR.addEventListener('click',()=>openTune(wk));
+      hitR.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTune(wk)}});
+      hitR.addEventListener('mousemove',e=>mainTip(e,wk,i));
+      hitR.addEventListener('mouseleave',hideTip);}
+  });
+  const x41=xx(WI[41]-WI[37]);
+  E('line',{x1:x41,y1:y0-6,x2:x41,y2:y0+ph,stroke:C.line2,'stroke-dasharray':'3 4'},g);
+  E('circle',{cx:x41,cy:y0+8,r:8.5,fill:'#fff',stroke:C.line2},g);T(x41,y0+11.5,'1',{an:'middle',fs:10,fill:C.body},g);
+  let dh='';ws.forEach((wk,i)=>{if(wk>44)return;dh+=(dh?'L':'M')+xx(i)+' '+yyR(PRICE[WI[wk]])});
+  E('path',{d:dh,fill:'none',stroke:C.red,'stroke-width':2.4},g);
+  let df='';ws.forEach((wk,i)=>{if(wk<FC_START)return;df+=(df?'L':'M')+xx(i)+' '+yyR(FC_PRICE[wk-FC_START])});
+  E('path',{d:df,fill:'none',stroke:C.red,'stroke-width':2.2,'stroke-dasharray':'6 5'},g);
+  svg.addEventListener('mousemove',e=>{const r=svg.getBoundingClientRect();
+    const px=(e.clientX-r.left)/r.width*W;
+    if(px>=x0&&px<=x0+pw){const idx=Math.round((px-x0)/pw*(ws.length-1));
+      const wk=ws[idx];if(wk>=FC_START)mainTip(e,wk,idx);else histTip(e,wk,idx);}});
+  svg.addEventListener('mouseleave',hideTip);
+  renderSum(uncon,final,capped);
+  renderMainData(uncon,final,capped);
+}
+function renderSum(uncon,final,capped){
+  const tot=final.reduce((a,b)=>a+b,0),prev=SALES.reduce((a,b)=>a+(b||0),0);
+  const gap=final.reduce((a,b,i)=>a+Math.max(0,uncon[i]-b),0);
+  const delta=Math.round((tot/prev-1)*100),firstCap=capped.findIndex(Boolean);
+  let mg=0;final.forEach((v,i)=>{mg+=v*(FC_PRICE[i]-costOf(FC_START+i))});
+  const peak=final[48-FC_START];
+  $('#main-sum').innerHTML=`
+    <div class="sum-cell"><label>预测期销量（W45–W52）</label><b class="num">${fmt(tot,1)} 万台</b><span class="delta-up">${delta>=0?'+':''}${delta}% vs 上 8 周</span></div>
+    <div class="sum-cell"><label>${F.bf?'黑五主峰':'周销'} · W48（11-27）</label><b class="num">${fmt(peak,1)} 万台</b><span>${F.bf?'档期假设 +35%':'档期未启用'}</span></div>
+    <div class="sum-cell"><label>库存修正${firstCap>=0?'缺口 · W'+(FC_START+firstCap)+' 起':''}</label><b class="num delta-warn">${gap>0?'−'+fmt(gap,1)+' 万台':'未触发'}</b><span class="delta-warn">${gap>0?'按可售口径':'当前可售量覆盖预测需求'}</span></div>
+    <div class="sum-cell"><label>预测期销毛</label><b class="num">$${fmt(mg/100,1)}M</b><span>万台 × USD ÷ 100 · 成本按月版本</span></div>`;
+  $('#cap-event').innerHTML=`<span class="anchor amber">3</span>${firstCap>=0?'库存修正生效 · W'+(FC_START+firstCap)+' 起':'当前情景未触发库存修正'}`;
+  if(firstCap>=0){
+    const cuts=capped.map((on,i)=>on?`W${FC_START+i} −${Math.max(0,(1-final[i]/uncon[i])*100).toFixed(0)}%`:null).filter(Boolean);
+    $('#stock-output').innerHTML=`W49 起 DOS 跌破 3 周线（17 天），<b>${cuts.join(' / ')}</b>；先形成市场需求，再按可售量修正`;
+  }else $('#stock-output').textContent='当前情景未触发可售上限；继续监测 W49 后的 DOS 与库存变化';
+}
+function renderMainData(uncon,final,capped){
+  const rows=WKS.filter(w=>w>=37).map(wk=>{
+    const fc=wk>=FC_START,i=wk-FC_START,v=fc?final[i]:SALES[WI[wk]];
+    const status=!fc?'实际':F.manual[wk]?'手调':capped[i]?'可售修正':'预测';
+    return `<tr><th scope="row">W${wk}</th><td>${status}</td><td>${fmt(v,1)}</td><td>${fc?fmt(uncon[i],1):'—'}</td><td>$${fc?FC_PRICE[i]:PRICE[WI[wk]]}</td><td>${fmt(referenceAt(wk),1)}</td><td>${fc?bandLabel(wk,capped[i]):'—'}</td></tr>`;
+  });
+  $('#main-data').innerHTML=rows.join('');
+}
+
+/* 因子小图：大盘 */
+function renderFMarket(){
+  const host=$('#ch-fmarket');host.innerHTML='';
+  const mk=[...MKT.slice(WI[37],WI[44]+1)];          // W37..44 实际
+  const FCIDX=[100,102,108,128,118,103,100,99];      // W45..52 · 含黑五档期
+  const BFDIFF=[0,2,7,24,17,3,1,1];                  // 档期增量（关闭黑五时扣回）
+  const foldAdd=F.fold?[0,0,3,6,10,12,9,4]:[0,0,0,0,0,0,0,0],marketRatio=(1+F.market/100)/1.08;
+  const vals=[...mk,...FCIDX.map((v,i)=>(v-(F.bf?0:BFDIFF[i])+foldAdd[i])*marketRatio)];
+  const ws=[...WKS.filter(w=>w>=37)];
+  const W=620,H=200,x0=38,y0=14,pw=W-x0-10,ph=H-y0-28;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const ymax=Math.max(...vals)*1.06,ymin=92;
+  const yy=v=>y0+ph-(v-ymin)/(ymax-ymin)*ph,xx=i=>x0+i/(ws.length-1)*pw;
+  frame(g,x0,y0,pw,ph,ymax,[100,110,120].filter(t=>t<ymax),l=>l,92);
+  const xC=xx(WI[45]-WI[37]);
+  E('rect',{x:xC,y:y0-4,width:x0+pw-xC,height:ph+4,fill:'#fafafa'},g);
+  T(x0+pw,y0+6,'预测',{an:'end',fs:10,fill:C.blueInk,fw:600},g);
+  xLabels(g,x0,y0+ph,pw,ws,(w,i)=>i%2===0||i===ws.length-1);
+  // 预测带
+  const base=vals.map(v=>v),up=vals.map(v=>v*1.06),dn=vals.map(v=>v*0.94);
+  let bandD=`M${xx(8)} ${yy(up[8])} `;for(let i=9;i<vals.length;i++)bandD+=`L${xx(i)} ${yy(up[i])} `;
+  for(let i=vals.length-1;i>=8;i--)bandD+=`L${xx(i)} ${yy(dn[i])} `;
+  E('path',{d:bandD+'Z',fill:C.blueSoft,opacity:.8},g);
+  let d1='',d2='';
+  vals.forEach((v,i)=>{const x=xx(i),y=yy(v);if(i<=7)d1+=(d1?'L':'M')+x+' '+y;else d2+=(d2?'L':'M')+x+' '+y});
+  E('path',{d:d1,fill:'none',stroke:C.ink,'stroke-width':2},g);
+  E('path',{d:d2,fill:'none',stroke:C.blue,'stroke-width':2,'stroke-dasharray':'6 5'},g);
+  // 黑五峰标
+  const i48=WI[48]-WI[37];E('circle',{cx:xx(i48),cy:yy(vals[i48]),r:3,fill:'#fff',stroke:C.blue,'stroke-width':1.5},g);
+  T(xx(i48),yy(vals[i48])-8,'黑五 +35%',{an:'middle',fs:9.5,fill:C.blueInk,fw:600},g);
+  const lg=E('g',{},svg);let lx=x0;
+  [['大盘指数',C.ink,0],['预测',C.blue,1]].forEach(([n,c,k])=>{
+    E('line',{x1:lx,y1:H-6,x2:lx+14,y2:H-6,stroke:c,'stroke-width':2,...(k===1?{'stroke-dasharray':'6 5'}:{})},lg);
+    T(lx+17,H-2,n,{fs:10,fill:C.body},lg);lx+=17+n.length*7+14;});
+}
+
+/* 因子小图：库存 */
+function renderFStock(){
+  const host=$('#ch-fstock');host.innerHTML='';
+  const ws=WKS.filter(w=>w>=37);
+  const W=600,H=210,x0=38,x1=W-40,y0=12,pw=x1-x0-4,ph=H-y0-26;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const inv=[...STOCK_INV,...STOCK_FINV],dos=[...STOCK_DOS,...STOCK_FDOS];
+  const ymaxI=20,yyL=v=>y0+ph-v/ymaxI*ph,xx=i=>x0+i/(ws.length-1)*pw;
+  const ymaxD=48,yyR=v=>y0+ph-v/ymaxD*ph;
+  frame(g,x0,y0,pw,ph,ymaxI,[8,16],l=>l);
+  [12,24,36,48].forEach(d=>T(x1+8,yyR(d)+3,d+'天',{fs:10},g));
+  const xC=xx(WI[45]-WI[37]);
+  E('rect',{x:xC,y:y0-4,width:x0+pw-xC,height:ph+4,fill:'#fafafa'},g);
+  T(x0+pw,y0+6,'预测/计划',{an:'end',fs:10,fill:C.blueInk,fw:600},g);
+  xLabels(g,x0,y0+ph,pw,ws,(w,i)=>i%2===0||i===ws.length-1);
+  const bw=Math.min(24,pw/ws.length*.5);
+  ws.forEach((wk,i)=>{const isFc=wk>=45,v=inv[i];
+    E('rect',{x:xx(i)-bw/2,y:yyL(v),width:bw,height:y0+ph-yyL(v),rx:2,
+      fill:isFc?'#fff':'#c7d3e4',stroke:isFc?'#8aa3c4':'none','stroke-width':1.1,'stroke-dasharray':isFc?'4 3':'none'},g);
+    if(SI_PLAN[wk]){const x=xx(i);
+      E('path',{d:`M${x-4} ${yyL(v)-10} L${x+4} ${yyL(v)-10} L${x} ${yyL(v)-3} Z`,fill:C.blue},g);
+      T(x,yyL(v)-13,'SI '+SI_PLAN[wk],{an:'middle',fs:8.5,fill:C.blueInk,fw:600},g);}
+    if(SI_HIST[wk]){const x=xx(i);
+      E('path',{d:`M${x-4} ${yyL(v)-10} L${x+4} ${yyL(v)-10} L${x} ${yyL(v)-3} Z`,fill:C.ink},g);}});
+  // DOS 线 历史实/预测虚 + 21 天线
+  E('line',{x1:x0,y1:yyR(21),x2:x0+pw,y2:yyR(21),stroke:C.amberLine,'stroke-dasharray':'3 4',opacity:.8},g);
+  T(x0+2,yyR(21)-3,'3 周线（21 天）',{fs:9,fill:C.amber},g);
+  let d1='',d2='';dos.forEach((v,i)=>{const p=xx(i)+' '+yyR(v);if(i<=7)d1+=(d1?'L':'M')+p;else d2+=(d2?'L':'M')+p});
+  E('path',{d:d1,fill:'none',stroke:C.blue,'stroke-width':2},g);
+  E('path',{d:d2,fill:'none',stroke:C.blue,'stroke-width':2,'stroke-dasharray':'5 4'},g);
+  // 修正起点随当前情景变化；未触发时不保留误导性的固定标记。
+  const firstCap=fcCalc().capped.findIndex(Boolean);
+  if(firstCap>=0){const x=xx(firstCap+WI[45]-WI[37]);E('line',{x1:x,y1:y0,x2:x,y2:y0+ph,stroke:C.amberLine,'stroke-dasharray':'3 4',opacity:.6},g);
+    T(x+4,y0+10,`W${FC_START+firstCap} 起修正`,{fs:9.5,fill:C.amber,fw:600},g);}
+  const lg=E('g',{},svg);let lx=x0;
+  [['渠道库存（万）','#c7d3e4',0],['渠道 DOS',C.blue,1],['SI 计划 ▼',C.blue,2]].forEach(([n,c,k])=>{
+    if(k===0)E('rect',{x:lx,y:H-11,width:10,height:7,fill:c},lg);
+    else if(k===1)E('line',{x1:lx,y1:H-7.5,x2:lx+14,y2:H-7.5,stroke:c,'stroke-width':2},lg);
+    else T(lx,H-3.5,'▼ '+n,{fs:10,fill:C.blueInk},lg);
+    lx+=(k===2?20+n.length*7:16+n.length*7)+12;});
+}
+
+/* 因子小图：成本销毛 */
+function renderFCost(){
+  const host=$('#ch-fcost');host.innerHTML='';
+  const ws=WKS.filter(w=>w>=37);
+  const W=600,H=210,x0=44,x1=W-44,y0=12,pw=x1-x0-4,ph=H-y0-26;
+  const svg=E('svg',{viewBox:`0 0 ${W} ${H}`},host);const g=E('g',{},svg);
+  const {final}=fcCalc();
+  const ymax=1400,yy=v=>y0+ph-v/ymax*ph,xx=i=>x0+i/(ws.length-1)*pw;
+  const yminP=540,ymaxP=920,yyR=v=>y0+ph-(v-yminP)/(ymaxP-yminP)*ph;
+  frame(g,x0,y0,pw,ph,ymax,[700,1400],l=>l);
+  [600,750,900].forEach(p=>T(x1+8,yyR(p)+3,'$'+p,{fs:10},g));
+  const xC=xx(WI[45]-WI[37]);
+  E('rect',{x:xC,y:y0-4,width:x0+pw-xC,height:ph+4,fill:'#fafafa'},g);
+  T(x0+pw,y0+6,'预测',{an:'end',fs:10,fill:C.blueInk,fw:600},g);
+  xLabels(g,x0,y0+ph,pw,ws,(w,i)=>i%2===0||i===ws.length-1);
+  const bw=Math.min(24,pw/ws.length*.5);
+  ws.forEach((wk,i)=>{const isFc=wk>=45;
+    const s=isFc?final[wk-45]:SALES[WI[wk]];const m=marginOf(wk,s);if(m==null)return;
+    const v=s*m;
+    E('rect',{x:xx(i)-bw/2,y:yy(v),width:bw,height:y0+ph-yy(v),rx:2,
+      fill:isFc?'#fff':'#f2d9a4',stroke:'#dcb56a','stroke-width':1,'stroke-dasharray':isFc?'4 3':'none'},g)});
+  // 成本线（右轴）实/虚
+  let d1='',d2='';ws.forEach((wk,i)=>{const p=xx(i)+' '+yyR(costOf(wk));if(wk<=44)d1+=(d1?'L':'M')+p;else d2+=(d2?'L':'M')+p});
+  E('path',{d:d1,fill:'none',stroke:C.body,'stroke-width':2},g);
+  E('path',{d:d2,fill:'none',stroke:C.body,'stroke-width':2,'stroke-dasharray':'5 4'},g);
+  // 价格线
+  let p1='',p2='';ws.forEach((wk,i)=>{const v=wk<=44?PRICE[WI[wk]]:FC_PRICE[wk-45];
+    const p=xx(i)+' '+yyR(v);if(wk<=44)p1+=(p1?'L':'M')+p;else p2+=(p2?'L':'M')+p});
+  E('path',{d:p1,fill:'none',stroke:C.red,'stroke-width':2},g);
+  E('path',{d:p2,fill:'none',stroke:C.red,'stroke-width':2,'stroke-dasharray':'5 4'},g);
+  const lg=E('g',{},svg);let lx=x0;
+  [['周销毛（万$）','#f2d9a4',0],['成本 · 月版本',C.body,1],['价格',C.red,2]].forEach(([n,c,k])=>{
+    if(k===0)E('rect',{x:lx,y:H-11,width:10,height:7,fill:c,stroke:'#dcb56a'},lg);
+    else E('line',{x1:lx,y1:H-7.5,x2:lx+14,y2:H-7.5,stroke:c,'stroke-width':2},lg);
+    T(lx+16,H-3.5,n,{fs:10,fill:C.body},lg);lx+=16+n.length*7+12;});
+}
+
+/* ---- 主图浮窗 ---- */
+function mainTip(e,wk){
+  const {uncon,final,capped}=fcCalc(),i=wk-FC_START;
+  const v=F.manual[wk]?F.manual[wk].v:final[i],u=uncon[i],tip=$('#tip');
+  const bfValues={46:15,47:25,48:35,49:20},bfPct=bfValues[wk]||0;
+  const factors=[
+    {n:'大盘 · 需求',p:F.market>=0?`+${F.market}%`:`${F.market}%`,v:Math.abs(F.market)},
+    {n:'黑五档期',p:!F.bf?'未启用':bfPct?`+${bfPct}%`:'不在档期',v:F.bf?bfPct:0,off:!F.bf||!bfPct},
+    {n:'竞品惯性',p:i<F.benchWk?`${F.bench}%`:'影响期已结束',v:i<F.benchWk?Math.abs(F.bench):0,off:i>=F.benchWk},
+    {n:'资源投入',p:(F.res>=0?'+':'')+(F.res*100).toFixed(0)+'%',v:Math.abs(F.res*100),off:F.res===0},
+    {n:'自家承接',p:F.cannibOn&&i<4?'+2%':'未生效',v:F.cannibOn&&i<4?2:0,off:!F.cannibOn||i>=4},
+    {n:'库存修正',p:capped[i]?'本周已触发':'本周未触发',v:0,plain:1},
+  ];
+  if(F.fold)factors.splice(1,0,{n:'大事件',p:'+18%',v:18});
+  const maxF=Math.max(...factors.map(f=>f.v),1);
+  tip.innerHTML=`<h5>W${wk} · ${wkDate(wk)} · 预测</h5>
+    <div class="r"><span>周销（按可售）</span><b class="num">${fmt(v,1)} 万台</b></div>
+    <div class="r"><span>不含库存限制</span><b class="num">${fmt(u,1)} 万台</b></div>
+    <div class="r"><span>预测价格</span><b class="num">$${FC_PRICE[i]}</b></div>
+    <div class="r"><span>Mate 80 同周龄</span><b class="num">${fmt(referenceAt(wk),1)} 万台</b></div>
+    <div class="r"><span>把握区间</span><b class="num">${bandLabel(wk,capped[i])}</b></div>
+    ${F.manual[wk]?`<div class="r"><span>手调原因</span><b>${escapeHTML(F.manual[wk].reason)}</b></div>`:''}
+    <div class="factor-list"><h5 style="margin:0 0 4px">本周实际生效的考量</h5>
+    ${factors.map(f=>f.plain?`<div class="fl"><span class="nm">${f.n}</span><span style="font-size:11px;color:${f.p.includes('已触发')?C.amber:C.mute}">${f.p}</span></div>`
+      :`<div class="fl"><span class="nm">${f.n}</span><span class="bar ${f.p.startsWith('−')||f.p.startsWith('-')?'neg':''}"><i style="width:${f.v/maxF*100}%"></i></span><span class="pct ${f.off?'':(f.p.startsWith('−')||f.p.startsWith('-')?'dn':'up')}">${f.p}</span></div>`).join('')}
+    </div>
+    <div style="margin-top:7px;padding-top:6px;border-top:1px solid ${C.line};font-size:11px;color:${C.mute}">点击柱体或键盘 Enter 微调本周（需填原因）</div>`;
+  showTip(e);
+}
+function histTip(e,wk){
+  const tip=$('#tip');const i=WI[wk];
+  const wow=i>WI[37]&&SALES[i-1]?`<div class="r"><span>周环比</span><b class="num">${((SALES[i]/SALES[i-1]-1)*100).toFixed(1)}%</b></div>`:'';
+  tip.innerHTML=`<h5>W${wk} · ${wkDate(wk)} · 实际</h5>
+    <div class="r"><span>周销</span><b class="num">${SALES[i]!=null?fmt(SALES[i],1)+' 万台':'—'}</b></div>
+    <div class="r"><span>价格</span><b class="num">$${PRICE[i]??'—'}</b></div>${wow}
+    <div class="r"><span>参考 · Mate 80</span><b class="num">${REF80[i]!=null?fmt(REF80[i],1)+' 万台':'—'}</b></div>`;
+  showTip(e);
+}
+function wkDate(wk){const d=new Date(2026,10,2);d.setDate(2+(wk-44)*7);const m=d.getMonth()+1,dd=d.getDate();return `${m<10?'0'+m:m}-${dd<10?'0'+dd:dd}`}
+function showTip(e){const tip=$('#tip');tip.classList.add('on');
+  const x=Math.min(e.clientX+16,innerWidth-260),y=Math.min(e.clientY+14,innerHeight-tip.offsetHeight-12);
+  tip.style.left=x+'px';tip.style.top=y+'px'}
+function hideTip(){$('#tip').classList.remove('on')}
+
+/* ---- 因果模型图（总览） ---- */
+function renderCausal(){
+  const svg=$('#fig-causal');if(!svg||svg.childElementCount)return;
+  const g=E('g',{},svg);
+  const box=(x,y,w,h,fill,stroke,title,sub,dash)=>{
+    E('rect',{x,y,width:w,height:h,rx:8,fill:fill||'#fff',stroke:stroke||C.line,...(dash?{'stroke-dasharray':'5 4'}:{})},g);
+    T(x+w/2,y+20,title,{an:'middle',fs:13,fill:C.ink,fw:600},g);
+    if(sub)T(x+w/2,y+37,sub,{an:'middle',fs:10.5,fill:C.mute},g);};
+  const arrow=(x1,y1,x2,y2,c)=>{E('line',{x1,y1,x2,y2,stroke:c||C.line2,'stroke-width':1.3},g);
+    E('path',{d:`M${x2} ${y2} l-6 -4 v8 Z`,fill:c||C.line2},g)};
+  // 输入列
+  box(10,16,168,52,'#fff','#c7ddff','大盘 · 档期','需求淡旺季 / 大事件',0);
+  box(10,84,168,52,'#fff','#c7ddff','竞品策略与事件','9 项考量 → 对标代次',0);
+  box(10,152,168,52,'#fff','#c7ddff','成本（月版本）','器件 / 汇率',0);
+  box(10,220,168,52,'#fff','#ead2a8','供应 · 库存约束','SI 计划 / DOS / 可售',1);
+  box(10,288,168,30,'#fff','#c7ddff','资源投入（自填）','',0);
+  // 中间
+  box(300,60,170,56,'#fff',C.line,'我的价格','成本 + 竞品考量');
+  box(300,150,170,56,'#fff',C.line,'市场口径预测','大盘 + 竞品 + 资源 + 上一代参考');
+  box(300,236,170,56,'#fff','#ead2a8','可售口径修正','min(需求, 可售库存)',1);
+  box(590,105,170,52,'#fff',C.line,'单台毛利','价格 − 成本');
+  box(590,205,170,52,'#fff',C.line,'销量（可售口径）','',0);
+  box(830,150,160,64,C.ink,C.ink,'','',0);
+  T(910,171,'销毛',{an:'middle',fs:14,fill:'#fff',fw:700},g);
+  T(910,191,'销量 × 毛利加权',{an:'middle',fs:10.5,fill:'#e8e8e8'},g);
+  T(910,206,'界面二 · 主图摘要',{an:'middle',fs:9.5,fill:'#9a9a9a'},g);
+  // 箭头
+  arrow(178,42,300,84,C.blue);arrow(178,110,300,92,C.blue);       // 大盘/竞品→价格
+  arrow(178,110,300,176,C.blue);                                    // 竞品→市场预测
+  arrow(178,42,300,172,C.blue);                                     // 大盘→市场预测
+  arrow(178,178,300,88,C.blue);                                     // 成本→价格
+  arrow(178,246,300,262,'#f5a623');                                 // 供应→修正
+  arrow(300,262,590,178+52-26,'#f5a623');                            // 修正→销量
+  arrow(300,206,590,226,C.blue);                                    // 市场预测→销量
+  arrow(300,88,590,128,C.blue);                                     // 价格→毛利
+  arrow(178,303,300,180,C.blue);                                    // 资源→市场预测
+  arrow(760,131,830,168,C.line2);arrow(760,231,830,196,C.line2);    // →销毛
+  // 图例
+  E('line',{x1:640,y1:52,x2:664,y2:52,stroke:C.blue,'stroke-width':1.5},g);T(670,56,'参考型考量（把握中 ±8%）',{fs:10.5},g);
+  E('line',{x1:640,y1:72,x2:664,y2:72,stroke:'#f5a623','stroke-width':1.5,'stroke-dasharray':'5 4'},g);T(670,76,'硬性约束（把握大 ±2%）',{fs:10.5},g);
+}
+
+/* ================= 交互 ================= */
+const VIEW_TITLES={spec:'设计总览',trend:'量价走势',forecast:'量价预测'};
+function switchView(v,updateHash=true){
+  if(!VIEW_TITLES[v])v='spec';
+  $$('.demo-tabs button').forEach(b=>{
+    const on=b.dataset.view===v;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));b.tabIndex=on?0:-1;
+  });
+  $$('.view').forEach(s=>s.classList.toggle('on',s.id==='view-'+v));
+  $('.skip-link').href='#view-'+v;
+  document.title=`PriceLens · ${VIEW_TITLES[v]} · 高保真设计稿`;
+  if(updateHash)history.replaceState(null,'','#'+v);
+  if(v==='spec')renderCausal();
+}
+$$('.demo-tabs button').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
+window.addEventListener('hashchange',()=>switchView(location.hash.slice(1),false));
+
+let memoTime=33;
+const MEMO=[
+  {t:'14:02',tag:'生成',tagCls:'dark',who:'系统',txt:'按默认考量生成基准预测（大盘 +8% · 黑五档期开 · 库存修正开）'},
+  {t:'14:15',tag:'考量',tagCls:'blue',who:'王峰',txt:'大盘增幅 <b>+12% → +8%</b>',why:'黑五预售前置分流，档期热度保守取值'},
+  {t:'14:21',tag:'事件',tagCls:'amber',who:'王峰',txt:'套用历史对标：iPhone 18 Pro 上市影响 <b>−6% → −8% × 4 周</b>',why:'参考 17 Pro 上市对 Mate 80 的冲击（−9% × 3 周）'},
+];
+const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const plainText=s=>{const d=document.createElement('div');d.innerHTML=s;return d.textContent};
+function renderMemo(){
+  $('#memo-list').innerHTML=MEMO.map(m=>`<div class="memo-item">
+    <span class="memo-time num">${m.t}</span>
+    <span class="chip ${m.tagCls==='dark'?'dark':m.tagCls==='blue'?'blue':'amber'} tag memo-tag" style="height:20px;padding:0 8px;font-size:11px">${m.tag}</span>
+    <span class="txt"><b>${m.who}</b> · ${m.txt}${m.why?`<span class="why">原因：${escapeHTML(m.why)}</span>`:''}</span>
+  </div>`).join('');
+}
+function updateUndo(){$('#undo-btn').disabled=UNDO_STACK.length<=1}
+function pushMemo(tag,txt,why,tagCls,track=true){
+  memoTime+=2;const mm=memoTime,hh=14+Math.floor(mm/60),m2=mm%60;
+  MEMO.push({t:`${hh}:${String(m2).padStart(2,'0')}`,tag,tagCls:tagCls||'blue',who:'王峰',txt,why});
+  if(track){const snap=JSON.stringify(F);if(UNDO_STACK.at(-1)!==snap)UNDO_STACK.push(snap)}
+  renderMemo();updateUndo();
+}
+function setSwitch(sw,on){sw.classList.toggle('on',on);sw.setAttribute('aria-checked',String(on))}
+function renderForecastAll(){renderMain();renderFMarket();renderFStock();renderFCost()}
+function syncControls(){
+  $('#fp-market').value=F.market;$('#fp-market-v').textContent=(F.market>=0?'+':'')+F.market+'%';
+  $('#fp-market').setAttribute('aria-valuetext',`大盘增幅 ${F.market}%`);
+  setSwitch($('[data-ev=bf]'),F.bf);setSwitch($('[data-ev=fold]'),F.fold);setSwitch($('#cannib-sw'),F.cannibOn);
+  $('#ev-bf').classList.toggle('off',!F.bf);$('#ev-fold').classList.toggle('off',!F.fold);
+  $$('#res-seg button').forEach(x=>{const on=+x.dataset.res===F.res;x.style.background=on?'var(--blueSoft)':'';x.style.color=on?'var(--selInk)':'';x.style.fontWeight=on?'600':'';x.setAttribute('aria-pressed',String(on))});
+  $('#res-v').textContent=(F.res>=0?'+':'')+(F.res*100).toFixed(0)+'%';
+  benchAmt=F.bench;benchWk=F.benchWk;$('#bench-amt').textContent=benchAmt+'%';$('#bench-wk').textContent=benchWk+' 周';
+  $('#bench-applied').textContent=`${F.bench}% × ${F.benchWk} 周`;
+  $('#bench-period').textContent=`（W45–W${44+F.benchWk} 惯性段）`;
+  renderForecastAll();updateUndo();
+}
+function undoLast(){
+  if(UNDO_STACK.length<=1)return;
+  UNDO_STACK.pop();const prev=JSON.parse(UNDO_STACK.at(-1));
+  Object.keys(F).forEach(k=>delete F[k]);Object.assign(F,prev);
+  syncControls();pushMemo('撤销','恢复至上一次考量快照',null,'blue',false);
+}
+function saveScenario(){
+  try{localStorage.setItem('pricelens.demo.scenario',JSON.stringify({version:1,savedAt:new Date().toISOString(),forecast:F}))}catch{}
+  pushMemo('保存','另存情景 · 情景 B（当前考量快照，已保存在本机浏览器）',null,'blue',false);
+}
+function downloadMemo(){
+  const {uncon,final,capped}=fcCalc(),rows=MEMO.map(m=>`<tr><td>${m.t}</td><td>${m.tag}</td><td>${m.who}</td><td>${escapeHTML(plainText(m.txt))}</td><td>${escapeHTML(m.why||'—')}</td></tr>`).join('');
+  const summary=[...document.querySelectorAll('#main-sum .sum-cell')].map(n=>`<li>${escapeHTML(n.textContent)}</li>`).join('');
+  const html=`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>PriceLens 量价预测纪要</title><style>body{font:14px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;max-width:1080px;margin:40px auto;padding:0 24px;color:#171717}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #ebebeb;text-align:left;vertical-align:top}th{color:#737373}.note{color:#805b00;background:#ffefcf;padding:12px;border-radius:8px}</style></head><body><h1>量价预测纪要 · Mate 90</h1><p>俄罗斯 · 手机 · W45–W52 · 本地演示情景</p><p class="note">全部数值为演示模型输出，不作为业务事实、统计置信区间或经营承诺。</p><h2>当前摘要</h2><ul>${summary}</ul><h2>当前考量</h2><p>大盘 ${F.market}%；黑五 ${F.bf?'启用':'停用'}；资源 ${(F.res*100).toFixed(0)}%；竞品 ${F.bench}% × ${F.benchWk} 周；自家承接 ${F.cannibOn?'启用':'停用'}。</p><h2>调整记录</h2><table><thead><tr><th>时间</th><th>类型</th><th>操作人</th><th>内容</th><th>原因</th></tr></thead><tbody>${rows}</tbody></table><p>库存修正周：${capped.map((x,i)=>x?'W'+(FC_START+i):null).filter(Boolean).join('、')||'未触发'}。</p></body></html>`;
+  const url=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'})),a=document.createElement('a');
+  a.href=url;a.download='PriceLens-量价预测纪要-W45-W52.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  pushMemo('纪要','生成本期预测纪要（独立 HTML 下载）',null,'dark',false);
+}
+
+/* 大盘拖板：即时预览，change 后才写入纪要 */
+$('#fp-market').addEventListener('input',e=>{
+  F.market=+e.target.value;
+  $('#fp-market-v').textContent=(F.market>=0?'+':'')+F.market+'%';
+  e.target.setAttribute('aria-valuetext',`大盘增幅 ${F.market}%`);
+  renderForecastAll();});
+$('#fp-market').addEventListener('change',()=>{
+  pushMemo('考量',`大盘增幅调整为 <b>${(F.market>=0?'+':'')+F.market}%</b>`,`拖板调整（演示）`);});
+
+/* 事件开关 */
+$$('.switch[data-ev]').forEach(sw=>sw.onclick=()=>{
+  const k=sw.dataset.ev,on=k==='bf'?!F.bf:!F.fold;
+  if(k==='bf')F.bf=on;else F.fold=on;
+  setSwitch(sw,on);$('#ev-'+k).classList.toggle('off',!on);
+  pushMemo('事件',k==='bf'?`黑五档期 <b>${on?'启用':'停用'}</b>`:`折叠屏阵营扩容 <b>${on?'启用':'停用'}</b>`,on?'按当前情报假设启用':'关闭该假设，查看不含此事件的基线');
+  renderForecastAll();});
+
+/* 自家挤占：场景切换 + 承接开关 */
+$$('.scene').forEach(b=>b.onclick=()=>{
+  $$('.scene').forEach(x=>{x.classList.remove('blue');x.setAttribute('aria-pressed','false')});
+  b.classList.add('blue');b.setAttribute('aria-pressed','true');renderCannib(b.dataset.scene);});
+$('#cannib-sw').onclick=()=>{
+  F.cannibOn=!F.cannibOn;setSwitch($('#cannib-sw'),F.cannibOn);renderForecastAll();
+  pushMemo('考量',F.cannibOn?'自家挤占承接 <b>启用</b>（W45–W48 +2%）':'自家挤占承接 <b>停用</b>',
+    F.cannibOn?'Pura 90s 让出量部分转入主品':'挤占幅度难量化，先看不含承接的基线');};
+
+/* 资源档位 */
+$$('#res-seg button').forEach(b=>b.onclick=()=>{
+  $$('#res-seg button').forEach(x=>{const on=x===b;x.style.background=on?'var(--blueSoft)':'';x.style.color=on?'var(--selInk)':'';x.style.fontWeight=on?'600':'';x.setAttribute('aria-pressed',String(on))});
+  F.res=+b.dataset.res;
+  $('#res-v').textContent=(F.res>=0?'+':'')+(F.res*100).toFixed(0)+'%';
+  renderForecastAll();
+  pushMemo('考量',`资源投入调整为 <b>${b.textContent}（${(F.res>=0?'+':'')+(F.res*100).toFixed(0)}%）</b>`,$('#res-note').value||'档位切换');});
+
+/* 对标弹窗 */
+let benchAmt=-8,benchWk=4;
+function openBench(){
+  benchAmt=F.bench;benchWk=F.benchWk;$('#bench-amt').textContent=benchAmt+'%';$('#bench-wk').textContent=benchWk+' 周';
+  $('#bench-mask').showModal();renderBenchMini();
+}
+function closeBench(){$('#bench-mask').close()}
+function chooseBench(){
+  benchAmt=-6;benchWk=3;$('#bench-amt').textContent='−6%';$('#bench-wk').textContent='3 周';
+  $('#bench-choice').textContent='已改选：2024-09 iPhone 16 Pro 上市 × Mate 70 同期';
+  $('#bench-impact').textContent='−7%';$('#bench-duration').textContent='3 周';
+}
+if(!('closedBy' in HTMLDialogElement.prototype)){
+  const outside=(e,d)=>{const r=d.getBoundingClientRect();return e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom};
+  const dialog=$('#bench-mask');let pressedOutside=false;
+  dialog.addEventListener('pointerdown',e=>{pressedOutside=outside(e,dialog)});
+  dialog.addEventListener('pointerup',e=>{if(pressedOutside&&outside(e,dialog))dialog.close()});
+}
+function benchStep(d){benchAmt=Math.max(-30,Math.min(0,benchAmt+d));
+  $('#bench-amt').textContent=benchAmt+'%'}
+function benchWkStep(d){benchWk=Math.max(1,Math.min(8,benchWk+d));
+  $('#bench-wk').textContent=benchWk+' 周'}
+function applyBench(){F.bench=benchAmt;F.benchWk=benchWk;
+  $('#bench-applied').textContent=`${benchAmt}% × ${benchWk} 周`;
+  $('#bench-period').textContent=`（W45–W${44+benchWk} 惯性段）`;
+  if($('#bench-choice').textContent.startsWith('已改选'))$('#bench-source').innerHTML='16 Pro 上市对 Mate 70 冲击 <b>−7% × 3 周</b>';
+  closeBench();renderForecastAll();
+  pushMemo('事件',`竞品事件影响调整为 <b>${benchAmt}% × ${benchWk} 周</b>`,'历史对标弹窗应用');}
+function renderBenchMini(){
+  const svg=$('#bench-mini');svg.innerHTML='';
+  const g=E('g',{},svg);
+  const W=200,H=112,x0=8,y0=10,pw=W-16,ph=H-26;
+  const d=[1.5,2.2,2.9,3.4,3.7,3.9,4.1,4.3,4.4,4.5,4.6,4.7]; // Mate 80 W35..W46
+  const ev=6; // 17 Pro 上市在 idx6
+  const dd=d.map((v,i)=>i>=ev&&i<ev+3?v*0.91:v);
+  const ymax=5,yy=v=>y0+ph-v/ymax*ph,xx=i=>x0+i/(d.length-1)*pw;
+  E('line',{x1:x0,y1:y0+ph,x2:x0+pw,y2:y0+ph,stroke:C.line},g);
+  [2,4].forEach(t=>E('line',{x1:x0,y1:yy(t),x2:x0+pw,y2:yy(t),stroke:C.line},g));
+  // 无事件对照（灰虚）
+  let d0='';d.forEach((v,i)=>d0+=(d0?'L':'M')+xx(i)+' '+yy(v));
+  E('path',{d:d0,fill:'none',stroke:C.line2,'stroke-width':1.2,'stroke-dasharray':'3 3'},g);
+  let d1='';dd.forEach((v,i)=>d1+=(d1?'L':'M')+xx(i)+' '+yy(v));
+  E('path',{d:d1,fill:'none',stroke:C.red,'stroke-width':1.8},g);
+  // 冲击区
+  E('rect',{x:xx(ev),y:yy(d[ev]),width:xx(ev+2)-xx(ev),height:yy(0)-yy(d[ev]),fill:C.amberSoft},g);
+  E('line',{x1:xx(ev),y1:y0,x2:xx(ev),y2:y0+ph,stroke:C.line2,'stroke-dasharray':'2 3'},g);
+  T(xx(ev),y0+8,'17 Pro 上市',{an:'middle',fs:8.5,fill:C.body},g);
+  T(x0,y0+8,'Mate 80 周销',{fs:8.5},g);
+  T(xx(ev+1),yy(dd[ev])-4,'−9%',{an:'middle',fs:8.5,fill:C.amber,fw:700},g);
+}
+
+/* 微调浮层 */
+let tuneWk=null;
+function openTune(wk){
+  tuneWk=wk;const {final}=fcCalc();
+  const cur=F.manual[wk]?F.manual[wk].v:final[wk-FC_START];
+  $('#tune-title').textContent=`微调 · W${wk}（${wkDate(wk)}）`;
+  $('#tune-cur').textContent=`当前预测 ${fmt(cur,1)} 万台${F.manual[wk]?'（已手调过，再次覆盖）':''}`;
+  $('#tune-val').value=fmt(cur,1);$('#tune-why').value='';$('#tune-warn').textContent='';
+  $('#tune-save').disabled=true;
+  const pop=$('#tune-pop'),r=$('#ch-main').getBoundingClientRect();pop.showModal();
+  pop.style.left=Math.max(12,Math.min(r.left+r.width*0.62,innerWidth-300))+'px';
+  pop.style.top=Math.max(56,Math.min(r.top+70,innerHeight-pop.offsetHeight-16))+'px';
+}
+function closeTune(){$('#tune-pop').close()}
+$('#tune-why').addEventListener('input',e=>{
+  const ok=e.target.value.trim().length>0;
+  $('#tune-save').disabled=!ok;
+  $('#tune-why').setAttribute('aria-invalid',String(!ok));
+  $('#tune-warn').textContent=ok?'':'必须填写调整原因，否则无法应用';});
+function saveTune(){
+  const v=parseFloat($('#tune-val').value),why=$('#tune-why').value.trim();
+  if(!(v>0)){$('#tune-warn').textContent='请输入大于 0 的有效销量';return}
+  if(!why){$('#tune-warn').textContent='必须填写调整原因，否则无法应用';return}
+  F.manual[tuneWk]={v,reason:why};
+  pushMemo('手调',`W${tuneWk} 预测销量微调为 <b>${fmt(v,1)} 万台</b>`,why,'amber');
+  closeTune();renderForecastAll();}
+
+/* 重算/重置 */
+function recalcNote(){renderForecastAll();
+  pushMemo('生成','按当前考量重新计算预测（主图与摘要已刷新）',null,'dark',false)}
+function resetBase(){
+  Object.assign(F,{market:8,bf:true,fold:false,res:0,bench:-8,benchWk:4,cannibOn:true,manual:{}});
+  syncControls();
+  pushMemo('生成','重置为基准考量（大盘 +8% · 黑五开 · 资源标准 · 挤占承接开 · 清空手调）');}
+
+/* 走势页窗口拖动 */
+$('#trend-start').addEventListener('input',e=>{
+  const s=+e.target.value;
+  $('#trend-range').textContent=`W${s} – W44 · ${44-s+1} 周`;
+  e.target.setAttribute('aria-valuetext',`W${s} 至 W44，共 ${44-s+1} 周`);
+  renderMarket();renderVolPrice();});
+
+/* ================= 启动与可访问语义 ================= */
+$$('button').forEach(b=>{if(!b.hasAttribute('type'))b.type='button'});
+$$('.card-title').forEach(h=>{h.setAttribute('role','heading');h.setAttribute('aria-level','2')});
+$$('.switch').forEach(sw=>{sw.setAttribute('role','switch');sw.setAttribute('aria-checked',String(sw.classList.contains('on')))});
+$('#fp-market').setAttribute('aria-label','预测期大盘增幅');$('#res-note').setAttribute('aria-label','资源投入调整原因备注');
+$('#fig-causal').setAttribute('role','img');$('#fig-causal').setAttribute('aria-label','大盘、竞品、成本、资源和库存如何汇入量价与销毛预测的关系图');
+$$('.scene').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('blue'))));
+$('.demo-tabs').addEventListener('keydown',e=>{
+  if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+  const tabs=$$('.demo-tabs button'),cur=tabs.indexOf(document.activeElement);if(cur<0)return;
+  e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(cur+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+  tabs[next].focus();switchView(tabs[next].dataset.view);
+});
+renderCausal();renderMemo();
+renderMarket();renderContrib();renderBrand();renderTop();
+renderPrice();renderShare();renderVolPrice();renderStock();renderCost();renderCannib();
+syncControls();
+switchView(location.hash.slice(1)||'spec',false);
+</script>
+</body>
+</html>

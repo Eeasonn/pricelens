@@ -99,6 +99,9 @@ import { flatSelections } from '../state/mainSelection';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
 import VolumeBars from './volume/VolumeBars';
 import CostBarChart, { COST_RATE_H, costRateAxisMaxOf } from './volume/CostBarChart';
+import MarginCostCard from './volume/MarginCostCard';
+import InventoryDosCard from './volume/InventoryDosCard';
+import { inventoryDemoOf } from './volume/inventoryDemo';
 import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
 import HiddenTray, { type HiddenTrayItem } from './volume/HiddenTray';
@@ -1891,6 +1894,46 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                       </>
                     )}
                   </div>
+                </div>
+              );
+            })()}
+            {/* 补充图（2026-11-03 Eason：量价面板保持不动，面板区之外补两张独立图）——
+                ① 销毛成本：周销毛柱 + 月版本成本阶梯 + 均价线（模拟成本，随主品）
+                ② 库存 · DOS：渠道库存柱 + 渠道/全流程 DOS 线 + SI ▼（演示数据，随主品）。
+                跟随全窗口口径（与顶部摘要一致），不进面板横滚轨道 */}
+            {(() => {
+              const own = panelViews.find((p) => p.spec.isOwn && !hiddenSet.has(p.spec.key));
+              if (!own || domainIds.length === 0) return null;
+              const labels = buckets.map((b) => b.xLabel);
+              const ownVolumes = summaryVolumes[own.idx] ?? [];
+              return (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
+                    gap: space.md,
+                    marginTop: space.xs,
+                    marginBottom: space.sm,
+                  }}
+                >
+                  <MarginCostCard
+                    name={own.name}
+                    bucketLabels={labels}
+                    volumes={ownVolumes}
+                    marginPoints={marginCosts[own.idx] ?? []}
+                  />
+                  <InventoryDosCard
+                    name={own.name}
+                    bucketLabels={labels}
+                    points={inventoryDemoOf({
+                      modelId: own.spec.modelId,
+                      romram: own.spec.romram,
+                      countryCode: cc,
+                      granularity: state.granularity,
+                      bucketIds: domainIds,
+                      volumes: ownVolumes,
+                    })}
+                  />
                 </div>
               );
             })()}
