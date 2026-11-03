@@ -48,14 +48,16 @@
 // 第一百九十一轮（Eason 五点）：面板头升级为价格页分离面板同构 [拖柄][产品药丸]——
 // ①拖柄照价格页范式（拖到目标面板松手换位，dragover 描边 + 拖动降透明反馈）；
 // 换序只记本地会话态 panelOrder（不落盘），面板渲染序 = panelOrder 优先、缺省回落
-// 数据序。②产品药丸 = BrandLegendStrip 导出的 PillUnit（上行 16px 平台小药丸 =
-// 该产品取价渠道徽标，点击弹渠道选择浮层，onPick 回写 setSelectionPlatform 后
-// 量价取数随所选平台重算；下行两行产品药丸 = 品牌行 + 名称加粗 + 配置浅蓝底 chip）。
-// 原纯文字面板头退役（信息已由药丸承载），面板头定高随药丸加高并与共享轴列对齐。
-// 屏蔽/悬停联动量价页没有，onToggle/onHover 传 no-op。
+// 数据序。②产品药丸：第一百九十一轮 = BrandLegendStrip 导出的 PillUnit（上行 16px
+// 平台小药丸 + 下行两行产品药丸）；2026-11-03 明细卡单行化（Eason 拍板，高保真稿
+// design-proposals/volume-detail-card-compact.html 方案 A）后退役——身份区改紧凑
+// 单行胶囊（品牌点 + 名称 + 配置 chip，点击隐藏面板）+ DNS 店铺筛选 chip（渠道
+// 选择浮层同款，onPick 回写 setSelectionPlatform 后量价取数随所选平台重算），
+// 全部并入图下明细卡首行（2026-11-02 已并入，本次只压形态）。屏蔽/悬停联动
+// 量价页没有。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { Segmented } from 'antd';
-import { HolderOutlined } from '@ant-design/icons';
+import { Popover, Segmented } from 'antd';
+import { DownOutlined, HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import { useConfigVersion } from '../state/configStore';
 import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../components/AnomalyQualityChip';
@@ -63,10 +65,10 @@ import { addAnomalyMark } from '../dataModel/anomaly';
 import usePageViewState from '../state/usePageViewState';
 import type { PlatformSelection, ProductSelection } from '../state/filtersTypes';
 import ChartContentBar from '../components/ChartContentBar';
-import { brandLabelOf } from '../components/BrandMark';
+import BrandDot, { brandLabelOf } from '../components/BrandMark';
+import ChannelSelectPopover from '../components/ChannelSelectPopover';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
-import { PillUnit } from '../chart/PriceTrend/BrandLegendStrip';
 // 卡顶时间筛选簇在顶部筛选条。这里只取查看窗口说明行高度，用来对齐同步按钮。
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
 import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
@@ -1420,9 +1422,11 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             <div aria-hidden style={{ position: 'absolute', left: Math.round(crossX) - 0.5, top: PANEL_GRID_TOP, bottom: 0, width: 1, background: color.hairlineStrong, pointerEvents: 'none', zIndex: 4 }} />
                           )}
                         </div>
-                        {/* 图下方单周明细卡（视觉 demo：detail-card 三栏网格）。身份区 = 原面板头
-                            三件套（产品药丸 / 点击隐藏 / 平台小药丸店铺筛选）并入首行（2026-11-02
-                            Eason），日期行右挂本组对比（阅读视图）或店铺同步（组内对比主品） */}
+                        {/* 图下方单周明细卡（2026-11-03 Eason 拍板：单行摘要条，高保真稿
+                            design-proposals/volume-detail-card-compact.html 方案 A）。身份区 =
+                            紧凑单行胶囊（品牌点 + 产品名 + 配置 chip，点击仍 = 隐藏面板）+ DNS
+                            店铺筛选 chip（原两行 PillUnit 退役，平台弹层同款）；组内对比主品
+                            左侧挂单行「同步店铺」钮 */}
                         {/* 明细卡收集进 detailCards（JSX children 内的语句容器：
                             IIFE 执行 set、渲染 null——set 的返回值是 Map，
                             直接渲染会触发 React 对可迭代对象的展开报错） */}
@@ -1434,9 +1438,9 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             <WeekDetailCard
                             model={detail}
                             identity={
-                              <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 4, minWidth: 0, maxWidth: '100%' }}>
-                                {/* 店铺同步（组内对比主品）：与价格走势页药丸条的按钮逐像素同款
-                                    （36×36 两行字、边框/浅蓝按压态），放主品药丸左侧同一位置 */}
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
+                                {/* 店铺同步（组内对比主品）：单行摘要条内压成 24px 单行钮
+                                    （拍板④），同步态浅蓝底 + 蓝描边与原 36×36 版同源 */}
                                 {!reading && p.spec.isMain && (
                                   <button
                                     type="button"
@@ -1448,31 +1452,140 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                                       toggleStoreSync(p);
                                     }}
                                     style={{
-                                      flex: '0 0 36px',
-                                      width: 36,
-                                      height: 36,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      textAlign: 'center',
+                                      flex: '0 0 auto',
+                                      height: 24,
+                                      padding: '0 8px',
                                       border: `1px solid ${synced ? color.link : color.hairline}`,
                                       borderRadius: radius.control,
                                       background: synced ? selectSoft : color.canvas,
                                       color: synced ? selectSoftInk : color.body,
                                       font: 'inherit',
-                                      fontSize: 10,
+                                      fontSize: 11,
                                       fontWeight: 600,
-                                      lineHeight: '13px',
+                                      lineHeight: '22px',
                                       cursor: 'pointer',
-                                      whiteSpace: 'normal',
+                                      whiteSpace: 'nowrap',
                                     }}
                                   >
-                                    <span>店铺<br />同步</span>
+                                    {synced ? '已同步' : '同步店铺'}
                                   </button>
                                 )}
-                                <span ref={(el) => registerPanelPillHost(p.spec.key, el)} style={{ display: 'inline-flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%' }}>
-                                  <PillUnit pill={pill} dimmed={false} onToggle={hidePanel} onHover={() => {}} />
+                                {/* 单行身份胶囊：品牌点 + 产品名 + 配置 chip；点击 = 隐藏面板
+                                    （暂存条可恢复）。className 保留 lpl-lg-pill——隐藏/恢复的
+                                    焦点承接按它定位（panelPillHostRefs 消费处） */}
+                                <span ref={(el) => registerPanelPillHost(p.spec.key, el)} style={{ display: 'inline-flex', minWidth: 0, maxWidth: '100%' }}>
+                                  <button
+                                    type="button"
+                                    className="lpl-lg-pill"
+                                    title="点击隐藏该产品"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      hidePanel(p.spec.key);
+                                    }}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 5,
+                                      maxWidth: '100%',
+                                      padding: '3px 9px 3px 8px',
+                                      border: `1px solid ${color.hairline}`,
+                                      borderRadius: radius.pill,
+                                      background: color.canvas,
+                                      font: 'inherit',
+                                      minWidth: 0,
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    <BrandDot brand={p.brand} />
+                                    <span
+                                      title={pill.text}
+                                      style={{
+                                        fontSize: 12,
+                                        lineHeight: '16px',
+                                        fontWeight: 600,
+                                        color: color.ink,
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                      }}
+                                    >
+                                      {pill.nameText}
+                                    </span>
+                                    {pill.romText && (
+                                      <span
+                                        style={{
+                                          flexShrink: 0,
+                                          fontSize: 10,
+                                          lineHeight: '14px',
+                                          fontWeight: 600,
+                                          padding: '0 6px',
+                                          borderRadius: radius.pill,
+                                          color: selectSoftInk,
+                                          background: selectSoft,
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        {pill.romText}
+                                      </span>
+                                    )}
+                                  </button>
                                 </span>
+                                {/* DNS 店铺筛选 chip（拍板⑤，原平台小药丸行退役）：点开同款
+                                    ChannelSelectPopover，onPick 回写 setSelectionPlatform */}
+                                {pill.channel && pill.channelCtl && (
+                                  <Popover
+                                    trigger="click"
+                                    placement="bottomLeft"
+                                    arrow={false}
+                                    destroyOnHidden
+                                    classNames={{ root: 'lpl-cascade-popover' }}
+                                    styles={{ body: { padding: 0 } }}
+                                    content={
+                                      <ChannelSelectPopover
+                                        cc={pill.channelCtl.cc}
+                                        skuIds={pill.channelCtl.skuIds}
+                                        current={pill.channelCtl.current}
+                                        onPick={pill.channelCtl.onPick}
+                                        autoLabel={pill.channelCtl.autoLabel}
+                                      />
+                                    }
+                                  >
+                                    <button
+                                      type="button"
+                                      aria-pressed={!pill.channel.auto}
+                                      aria-label={`取价平台：${pill.channel.label}，点击筛选平台-店铺`}
+                                      title={
+                                        pill.channel.auto
+                                          ? `自动取价。当前主要来源平台：${pill.channel.label}。点击修改平台、店铺或卖家`
+                                          : `取价平台：${pill.channel.label}。点击修改平台、店铺或卖家`
+                                      }
+                                      onClick={(e) => e.stopPropagation()}
+                                      style={{
+                                        flex: '0 0 auto',
+                                        height: 22,
+                                        maxWidth: 150,
+                                        padding: '0 8px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 3,
+                                        border: `1px solid ${color.hairline}`,
+                                        borderRadius: radius.control,
+                                        background: color.canvas,
+                                        font: 'inherit',
+                                        fontSize: 11,
+                                        lineHeight: '16px',
+                                        fontWeight: 600,
+                                        color: color.body,
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
+                                      <DownOutlined aria-hidden style={{ fontSize: 8, color: color.mute, flexShrink: 0 }} />
+                                    </button>
+                                  </Popover>
+                                )}
                               </span>
                             }
                             identityActions={
