@@ -234,12 +234,7 @@ export default function PanelTimeTrack(props: {
         <span style={gripStyle('end')} />
       </div>
     </div>
-    {/* 说明行：与 XBrush 的 ViewWindowCaption 同款度量（marginTop 2 + 行高 16 =
-        VIEW_WINDOW_CAPTION_H，量价页同步按钮按这个高度让位），文案用「查看范围」——
-        「窗口」是工程语，不进 UI 文案 */}
-    <div style={{ fontSize: 11, lineHeight: '16px', color: color.mute, marginTop: 2 }}>
-      查看范围，仅缩放显示，不改变筛选范围
-    </div>
+    {/* 轨道下说明行已删（2026-11-02 Eason：图上不要解释性用语） */}
     </div>
   );
 }

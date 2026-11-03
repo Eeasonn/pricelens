@@ -21,6 +21,9 @@
 // 第一百九十轮（外部 UX 审计落地）：齿轮「Y 轴显示设置」与「⋯ 更多」两处弹层
 // 改受控 + useTopEscClose——此前非受控 trigger="click" 自身不响应 Esc（外层
 // 浮窗又已让位给它），Esc 成死区；现每次 Esc 只关最上层弹层、焦点归还触发按钮。
+// A1 收口（2026-11-02 Eason 拍板）：Y 轴上限/下限/自适应从轴列顶部竖排卡片
+// 移驻本行左簇（YLimitInputs 横排）——原卡片撑起 126px 图顶带却只占 63px 宽，
+// 其余整条空白；移驻后图顶带只剩档位小标与顶格刻度，收到 16px。
 // ============================================================
 import { Button, Checkbox, ConfigProvider, Popover, Segmented, Slider } from 'antd';
 import { MoreOutlined, ProfileOutlined, SettingOutlined } from '@ant-design/icons';
@@ -31,6 +34,7 @@ import { useTopEscClose } from '../../components/ProductPicker/pickerBits';
 import { color, radius } from '../../theme/tokens';
 import type { LineShapeChoice } from './chartModel';
 import ScaleSlider from './ScaleSlider';
+import YLimitInputs, { type YLimitState } from './YLimitInputs';
 
 export interface ChartToolbarProps {
   /** 布局槽位：all = 单行全套（齿轮+插槽 左、大促/⋯ 右，量价/多平台图表内用）；
@@ -51,6 +55,8 @@ export interface ChartToolbarProps {
   /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，两个轴各自显隐 */
   showTiers?: boolean;
   onShowTiers?: (v: boolean) => void;
+  /** 档位开关是否可用（2026-11-02）：量价成本柱模式档位无意义、强制不画，开关隐藏并改提示 */
+  showTiersToggle?: boolean;
   yCompress?: boolean;
   onYCompress?: (v: boolean) => void;
   lineShape?: LineShapeChoice;
@@ -60,6 +66,13 @@ export interface ChartToolbarProps {
   onPriceTypeToggle?: (key: 'discounted' | 'rrp', next: boolean) => void;
   /** 齿轮之后的插槽：全局「隐藏对比产品」（cluster/all 模式下与齿轮同簇） */
   priceTypesAfter?: ReactNode;
+  /** Y 轴范围控件（A1 收口，2026-11-02 Eason）：上限/下限/自适应横排进驻工具行，
+   *  替代原轴列顶部竖排卡片——图顶带 126px 只剩档位小标与顶格刻度，收到 16px。
+   *  onYLimit + yRangeScale 同时传入才渲染（量价页等无 Y 范围编辑的调用方不传 = 零影响） */
+  yLimit?: YLimitState;
+  onYLimit?: (kind: 'min' | 'max', v: number | null) => void;
+  /** 当前生效共享轴（合并图 yCfg 或分图 splitYCfg）：自动值与刻度缩写来源；空 = 不渲染 */
+  yRangeScale?: { min: number; max: number; interval: number } | null;
   /** 行尾次级入口插槽（第一百八十九轮定版）：多平台对比入口/返回钮——分隔线 +
       轻量文字钮，与大促/权益显示设置同排但不混入 ⋯ 菜单，保证可发现性 */
   compareEntry?: ReactNode;
@@ -83,6 +96,9 @@ export interface ChartToolbarProps {
   /** 异常价格守卫状态行（2026-11-01 晚反馈：收进 ⋯ 菜单）——调用方传入
    *  AnomalyQualityChip（menuRow 形态），渲染在 ⋯ 弹层底部（hairline 分隔） */
   anomalySlot?: ReactNode;
+  /** 呈现方式切换（2026-11-02 Eason：经典/成本柱收进 ⋯ 菜单首行，不再占工具行）——
+   *  传入即在 ⋯ 弹层最上方以「呈现 [控件]」一行渲染 */
+  presentationSlot?: ReactNode;
   /** ⋯ 更多菜单只保留价格变化提醒开关。
    *  时点摘要（PointPanel）自第112轮起由标题行「时点摘要」按钮手动展开 */
 }
@@ -200,7 +216,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     props.onTipMode != null ||
     props.onLabelMode != null ||
     props.onPointPanelToggle != null;
-  const showMore = hasDisplay || showMarks;
+  const showMore = hasDisplay || showMarks || props.presentationSlot != null;
   // 收进 ⋯ 的项离开默认值，或标注开关打开 = 按钮右上角蓝点
   const secondaryActive =
     (props.onPriceTypeToggle != null && props.priceTypes != null && (!props.priceTypes.discounted || props.priceTypes.rrp)) ||
@@ -241,14 +257,16 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           <Checkbox checked={props.showYTicks ?? true} onChange={(e) => props.onShowYTicks?.(e.target.checked)}>
             <span style={{ fontSize: 12 }}>Y 刻度线</span>
           </Checkbox>
-          {/* 价格档位只存在于 USD。本币没有这根轴，开关也不出现。 */}
-          {props.currency === 'usd' && (
+          {/* 价格档位只存在于 USD。本币没有这根轴，开关也不出现；成本柱模式强制不画档位，开关隐藏 */}
+          {props.currency === 'usd' && props.showTiersToggle !== false && (
             <Checkbox checked={props.showTiers ?? true} onChange={(e) => props.onShowTiers?.(e.target.checked)}>
               <span style={{ fontSize: 12 }}>价格档位</span>
             </Checkbox>
           )}
           <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-            {props.currency === 'usd' ? '数值刻度与价格档位可分别显示' : '关闭后 Y 轴刻度与上下限一起收起'}
+            {props.currency === 'usd'
+              ? props.showTiersToggle === false ? '成本柱模式只显示价格刻度，不显示价格档位' : '数值刻度与价格档位可分别显示'
+              : '关闭后 Y 轴刻度与上下限一起收起'}
           </div>
           <div style={{ marginTop: 6 }}>
             <Checkbox checked={props.yCompress ?? false} onChange={(e) => props.onYCompress?.(e.target.checked)}>
@@ -302,6 +320,13 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           {gearCtl}
           {/* 齿轮之后：隐藏对比产品（折后价/RRP 已收进 ⋯） */}
           {props.priceTypesAfter}
+          {/* Y 轴范围（A1 收口）：分隔线 + 横排控件，仅合并/分图主工具行传入时渲染 */}
+          {props.onYLimit && props.yRangeScale && (
+            <>
+              <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
+              <YLimitInputs scale={props.yRangeScale} limit={props.yLimit ?? { min: null, max: null }} onLimit={props.onYLimit} />
+            </>
+          )}
         </>
       )}
       {props.legend && (
@@ -354,10 +379,17 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           trigger="click"
           open={moreOpen}
           onOpenChange={setMoreOpen}
+          destroyOnHidden
           placement="bottomLeft"
           content={
             <ConfigProvider theme={filterBarTheme}>
               <div style={{ width: 280, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+                {props.presentationSlot && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: color.mute, fontSize: 12 }}>
+                    呈现{' '}
+                    {props.presentationSlot}
+                  </span>
+                )}
                 {props.onPriceTypeToggle && props.priceTypes != null && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <PriceTypePill

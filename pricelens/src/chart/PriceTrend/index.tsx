@@ -59,7 +59,7 @@ import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries, defaultPlatformAnchorOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
-import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../state/mainSelection';
+import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART, COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
 import type {
@@ -85,7 +85,7 @@ import {
   type PromoBand,
 } from './chartModel';
 import SplitAxisColumn from './SplitAxisColumn';
-import { Y_LIMIT_EDITOR_H, type YLimitState } from './YLimitHandles';
+import type { YLimitState } from './YLimitInputs';
 import { contentSignature } from '../../components/ProductPicker/combos';
 import {
   GRID,
@@ -408,8 +408,9 @@ export default function PriceTrend(props: {
       return;
     }
     if (adaptiveAppliedRef.current === adaptiveKey) return;
-    // 自适应开着时，范围以本页画面上的产品为准。价格页含对比产品，量价默认只有主产品，
-    // 两端点不一致就要重套。不能因为现范围仍盖住一部分数据，就沿用另一页算出的跨度。
+    // 自适应开着时，范围 = 顶部所选全部产品（主品 + 对比产品）的有效价格跨度；量价页
+    // 自 2026-11-02 起同一口径（flatSelections 合并图取数），两页往返范围不再抖动。
+    // 端点不一致就重套，不因现范围仍盖住一部分数据就沿用旧跨度。
     // 挂载时端点已经一致：保留会话里的查看窗口。范围若变化，先同步 rangeWatch 基线，
     // 避免紧随其后的 rangeWatch 清掉挂载焦点周刚设的查看窗口。
     adaptiveAppliedRef.current = adaptiveKey;
@@ -1081,10 +1082,13 @@ export default function PriceTrend(props: {
   }, [yCfg, adjusting]);
   // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
   // S/E 徽标上探 7.5px、名称避让钳 plotTop+2，14px 够用；极值胶囊已在 Chart 内钳回容器
-  // 刻度和档位都关掉时，上下限框一起收起，图顶不再留那一块。
+  // 刻度和档位都关掉时，一起收起，图顶不再留那一块。
   const yAxisVisible = showYTicks || (state.currency === 'usd' && showTiers);
-  // Y_LIMIT_EDITOR_H 已含控件高度、顶边留白，以及盒底到 Y 轴的空隙。
-  const panelGridTop = yAxisVisible ? Y_LIMIT_EDITOR_H : 8;
+  // A1 收口（2026-11-02 Eason 拍板）：Y 轴范围编辑器移驻常驻工具行后，图顶带只剩
+  // 档位小标 13px 与顶格刻度字上探 8px——原 Y_LIMIT_EDITOR_H（126px，其中卡片只占
+  // 左侧 63px 宽）退役，收到 16px，合并/分图的整条空白一并归零。
+  const Y_AXIS_TOP_BAND = 16;
+  const panelGridTop = yAxisVisible ? Y_AXIS_TOP_BAND : 8;
   // 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；本轮拍板回归面板内）：
   // 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（渠道行改药丸上方平台行）
   const PANEL_LEGEND_H = 54;
@@ -1317,6 +1321,9 @@ export default function PriceTrend(props: {
               lineShape={lineShape}
               onLineShape={setLineShape}
               priceTypesAfter={onlyMainCtl}
+              yLimit={yLimitLive} // A1 收口：显示画面实际生效值（范围过期时呈现自动）
+              onYLimit={commitYLimit}
+              yRangeScale={splitActive ? splitYCfg : yCfg}
             />
           </div>
           <ConfigProvider theme={filterBarTheme}>
@@ -1331,7 +1338,7 @@ export default function PriceTrend(props: {
                     ? { label: '合并', value: 'merge' }
                     : {
                         label: (
-                          <Tooltip title={`合并后共 ${mergeLines} 条，超过合并上限 ${MERGE_LINES_CAP} 条（每组最多 ${MAX_LINES_PER_CHART} 条）`}>
+                          <Tooltip title={`合并后共 ${mergeLines} 条，超过合并上限 ${MERGE_LINES_CAP} 条（每组最多 ${COMPARES_PER_CARD_CAP + 1} 条：主品 + 对比产品）`}>
                             <span>合并</span>
                           </Tooltip>
                         ),
@@ -1491,8 +1498,6 @@ export default function PriceTrend(props: {
                   showYTicks={showYTicks}
                   showTiers={showTiers}
                   tierValues={splitTierValues}
-                  yLimit={yLimit}
-                  onYLimit={commitYLimit}
                 />
               )}
               {/* 「时间轴同步」开关（与各面板时间轴同一水平线）：轴列体与面板绘图区同高，
@@ -1706,8 +1711,6 @@ export default function PriceTrend(props: {
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
             yScale={yCfg}
-            yLimit={yLimit}
-            onYLimit={commitYLimit}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
             yCompress={yCompress}

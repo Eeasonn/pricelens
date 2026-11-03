@@ -29,7 +29,8 @@
 //   上限 min(视口-48, 1100)，超限才横向滚动。
 // 主品空缺 = 空组（仅历史数据可能出现；空态不提供先加对比入口）。
 // 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；配额每卡
-// 1 主品 + ≤7 对比 = 8 条线在选择时收口，卡数 ≤ 8；即改即存。
+// 1 主品 + ≤3 对比（2026-11-02 Eason 硬性限制，COMPARES_PER_CARD_CAP）在选择时
+// 收口，配满后「添加对比产品」置灰并提示「每组最多 3 款对比产品」，卡数 ≤ 8；即改即存。
 // 添加主分析产品 = 最后一个组框向下延长的底边正中的显性大按钮。
 // 破坏性动作轻确认：删整组、清空全部。
 // 模板（第一百三十一轮增强、第一百三十三轮改纯插入）：顶栏与卡级「＋模板」
@@ -131,9 +132,10 @@ import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 import { color, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
   cardQuota,
+  COMPARE_CAP_HINT,
+  COMPARES_PER_CARD_CAP,
   isHuaweiModel,
   MAINS_CAP,
-  MAX_LINES_PER_CHART,
   newCardId,
   remapSelection,
   selKey,
@@ -414,7 +416,11 @@ function LevelSwitchPopover({
     // 与主品同型号同配置才拦（selKey 级，与编辑浮窗/自动匹配矩阵同口径）；
     // 同型号不同配置允许对比，不按整型号拦
     if (card.main && selKey(card.main) === nodeSelKey(r)) return;
-    if (card.compares.length >= cardQuota(card)) return;
+    // 每组对比硬上限（COMPARES_PER_CARD_CAP）：点行名称加第 4 款不再静默无效
+    if (card.compares.length >= cardQuota(card)) {
+      message.info(COMPARE_CAP_HINT);
+      return;
+    }
     actions.setCardCompares(card.id, [...card.compares, { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }]);
   };
 
@@ -432,15 +438,21 @@ function LevelSwitchPopover({
       const base = replaceCompareCtx ? card.compares.filter((c) => c !== ctx.sel) : card.compares;
       const seen = new Set(base.map(selKey));
       const added = [...base];
+      let capped = false;
       for (const sel of sels) {
         // 与主品同型号同配置才跳过（selKey 级）；同型号不同配置可进对比区
         if (card.main && selKey(card.main) === selKey(sel)) continue;
         const k = selKey(sel);
         if (seen.has(k)) continue;
-        if (added.length >= cardQuota(card)) break;
+        if (added.length >= cardQuota(card)) {
+          capped = true;
+          break;
+        }
         seen.add(k);
         added.push(sel);
       }
+      // 批量命中每组对比上限：与组数上限同口径提示，不静默截断
+      if (capped) message.info(`${COMPARE_CAP_HINT}，其余配置未加入`);
       actions.setCardCompares(card.id, added);
       if (replaceCompareCtx) setOpen(false);
       return;
@@ -555,15 +567,20 @@ function LevelSwitchPopover({
     const base = replaceCompareCtx ? card.compares.filter((c) => c !== ctx.sel) : card.compares;
     const seen = new Set(base.map(selKey));
     const added = [...base];
+    let capped = false;
     for (const sel of tierAllConfigs) {
       // 与主品同型号同配置才跳过（selKey 级）；同型号不同配置可进对比区
       if (card.main && selKey(card.main) === selKey(sel)) continue;
       const k = selKey(sel);
       if (seen.has(k)) continue;
-      if (added.length >= cardQuota(card)) break;
+      if (added.length >= cardQuota(card)) {
+        capped = true;
+        break;
+      }
       seen.add(k);
       added.push(sel);
     }
+    if (capped) message.info(`${COMPARE_CAP_HINT}，其余配置未加入`);
     actions.setCardCompares(card.id, added);
     if (replaceCompareCtx) setOpen(false);
   };
@@ -629,7 +646,7 @@ function LevelSwitchPopover({
                 sameAsMain && !inCompares
                   ? '主分析产品不对比自身配置'
                   : quotaFull && !inCompares
-                    ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）`
+                    ? COMPARE_CAP_HINT
                     : inCompares
                       ? '移除该对比'
                       : '加入对比区'
@@ -873,7 +890,7 @@ function LevelSwitchPopover({
                   <TierBatchPill text="全部各成一组" disabled={tierGroupDisabled} onClick={tierGroupAll} />
                 </Tooltip>
               ) : (
-                <Tooltip title={tierCompareDisabled ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）` : '该档位全部配置加入本组对比区'} zIndex={TIP_Z}>
+                <Tooltip title={tierCompareDisabled ? COMPARE_CAP_HINT : '该档位全部配置加入本组对比区'} zIndex={TIP_Z}>
                   <TierBatchPill text="全部加入对比" disabled={tierCompareDisabled} onClick={tierCompareAll} />
                 </Tooltip>
               )}
@@ -1090,7 +1107,7 @@ function AddCompareTrigger({ card }: { card: MainProduct }) {
   const quota = cardQuota(card);
   const full = card.compares.length >= quota;
   return (
-    <Tooltip title={full ? `每张图最多 ${MAX_LINES_PER_CHART} 条线（含主分析产品）` : '挑选对比产品（可连续添加）'} zIndex={TIP_Z}>
+    <Tooltip title={full ? COMPARE_CAP_HINT : '挑选对比产品（可连续添加）'} zIndex={TIP_Z}>
       <LevelSwitchPopover ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId}>
         <AddPill label="添加对比产品" disabled={full} />
       </LevelSwitchPopover>
@@ -1433,7 +1450,7 @@ function PickerPanel() {
     );
     if (!usable.length && !totalAdds) {
       if (overflowCards > 0) return `当前已选 ${MAINS_CAP} 组（上限），模板放不下`;
-      if (overflowCompares > 0) return `各对比区已配满（每张图最多 ${MAX_LINES_PER_CHART} 条线），没有可补充的对比`;
+      if (overflowCompares > 0) return `各组对比产品已满（${COMPARE_CAP_HINT}），没有可补充的对比`;
       if (fresh.length || merges.length) return '模板内产品在当前范围已无数据，没有可加入的内容';
       return '模板内产品对均已在当前选择中';
     }
@@ -1442,7 +1459,7 @@ function PickerPanel() {
     if (totalAdds) parts.push(`补充 ${totalAdds} 个对比`);
     let tip = `加入当前选择：${parts.join('、')}`;
     if (overflowCards) tip += `；受 ${MAINS_CAP} 组上限所限，${overflowCards} 组放不下`;
-    if (overflowCompares) tip += `；${overflowCompares} 个对比超出每图条线上限放不下`;
+    if (overflowCompares) tip += `；${overflowCompares} 个对比超出每组 ${COMPARES_PER_CARD_CAP} 款上限放不下`;
     return tip;
   };
 

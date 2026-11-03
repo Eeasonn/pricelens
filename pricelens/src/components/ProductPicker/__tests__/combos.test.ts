@@ -87,7 +87,7 @@ describe('planAppend（＋ 加入当前选择：逐模板卡增量）', () => {
 
   it('对比配额封顶：现有卡对比区已满时缺失对比计入 overflowCompares 不合并', () => {
     const comps = distinctComps(9);
-    const full = comps.slice(0, 7); // 有主品卡配额 = 7
+    const full = comps.slice(0, 3); // 有主品卡配额 = 3（2026-11-02 每组硬上限）
     const mains = [card(ownSel, full)];
     expect(mains[0].compares).toHaveLength(cardQuota(mains[0]));
     const combo: StoredCombo = { label: 'T', cards: [card(ownSel, [comps[7], comps[8]])] };
@@ -99,15 +99,15 @@ describe('planAppend（＋ 加入当前选择：逐模板卡增量）', () => {
 
   it('同一张现有卡被多个模板对命中 → 合并累计且配额合并计算', () => {
     const comps = distinctComps(8);
-    const mains = [card(ownSel, [comps[0]])]; // 配额 7，还能再放 6 条
+    const mains = [card(ownSel, [comps[0]])]; // 配额 3，还能再放 2 条
     const combo: StoredCombo = {
       label: 'T',
       cards: [card(ownSel, comps.slice(1, 6)), card(ownSel, comps.slice(6, 8))],
     };
     const plan = planAppend(mains, combo);
     expect(plan.merges).toHaveLength(1);
-    // 两个模板对命中同卡：先补 5 条、再补 2 条中放得下的 1 条（配额 7 = 1 已有 + 6 合并）
-    expect(plan.merges[0].compares.map(selKey)).toEqual(comps.slice(1, 7).map(selKey));
-    expect(plan.overflowCompares).toBe(1);
+    // 两个模板对命中同卡：先补 2 条（配额 3 = 1 已有 + 2 合并），其余 3 + 2 条放不下
+    expect(plan.merges[0].compares.map(selKey)).toEqual(comps.slice(1, 3).map(selKey));
+    expect(plan.overflowCompares).toBe(5);
   });
 });

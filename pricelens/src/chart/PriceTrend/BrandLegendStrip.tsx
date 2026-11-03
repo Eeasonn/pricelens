@@ -6,8 +6,8 @@
 // 带品牌名）——第一行 = 品牌色点 + 品牌名，第二行 = 产品名 + 型号 + 最新页外链；
 // 多组时块首「第 N 组」小字，单组不显示；空对无主品药丸也不画 vs。药丸点击 =
 // 屏蔽/恢复折线（虚线置灰态可恢复），悬停 = 该系列高亮、其余降透明。块间灰色
-// 短竖线分隔；对比药丸超过 3 个走块内 ‹› 滚动（主品药丸恒可见、不参与滚动）；
-// 整排放不下时两侧 ‹› 滚动。
+// 短竖线分隔；空间不足时先压缩对比区，实际放不下才出块内 ‹›（主品药丸恒可见、
+// 不参与滚动）；整排两侧 ‹› 已退役（见文末 2026-11-02 轮记）。
 // 第一百五十轮：药丸第二行加「多平台比价」悬停小入口（店铺图标，悬停药丸浮现
 // ）——每个产品直接发起自己的多平台比价；工具行「多平台比价」胶囊按钮随之退役。
 // 第一百六十四轮（Eason）：入口改「进入多平台对比页签」并带上该产品（页签主动
@@ -45,6 +45,11 @@
 // 圆胶囊外形确实怪（Eason 拍板问询后采纳圆角矩形）；②Pill/PlatformRow/PillUnit
 // 导出供量价走势面板头复用（两页产品药丸显示统一）；③channelCtl 增加
 // autoLabel（产品级自动当前解析到的平台名）——渠道浮层「自动」胶囊旁显示语境。
+// 2026-11-02（Eason，药丸带放不下时的处理）：①整排两侧「更多组」‹› 退役——外层
+// 只保留隐藏滚动条的横向滚动作兜底，不出箭头；②主品药丸（含左侧「店铺同步」）
+// 固定占位，永不压缩、不滚出；③空间不足只压缩对比区，对比区最窄 = 一颗药丸预算
+// + 两侧 ‹›；块内 ‹› 改按实测溢出出现（ResizeObserver + 滚动监听），不再按个数；
+// ④每组对比产品硬上限 3 款（mainSelection.COMPARES_PER_CARD_CAP）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
@@ -52,16 +57,25 @@ import ChannelSelectPopover from '../../components/ChannelSelectPopover';
 import { DownOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
+import { COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import { curveNameOf } from './chartModel';
 import type { LegendGroup } from './tableModel';
 import { color, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import { scrollBehaviorOf } from '../../theme/motion';
 
-/** 块内对比药丸可见预算（超出走块内 ‹› 滚动；主品药丸不占此预算、恒可见） */
-const COMPARES_VISIBLE = 3;
+/** 块内对比区最宽 = 3 颗药丸预算（与每组对比硬上限同值；主品药丸不占此预算、
+ *  恒可见）。空间不足时对比区压缩，实测溢出才出块内 ‹›。 */
+const COMPARES_VISIBLE = COMPARES_PER_CARD_CAP;
 /** 单个药丸的展示宽度预算（块内滚动容器 maxWidth = 3×预算 + 间距）
  *  第一百七十轮：178 → 220；第一百七十二轮：220 → 240（Eason：再宽一点） */
 const PILL_W_BUDGET = 240;
+/** 块内 ‹› 箭头边长、对比区内间距、组块内间距（对比区/组块最窄宽度的组成项） */
+const ARROW_SIZE = 14;
+const COMPARES_GAP = 4;
+const BLOCK_GAP = 4;
+/** 对比区最窄 = 一颗药丸预算 + 两侧 ‹› 与间距（2026-11-02，Eason：对比位置的最小
+ *  状态是显示一款对比产品） */
+const COMPARES_MIN_W = PILL_W_BUDGET + 2 * (ARROW_SIZE + COMPARES_GAP);
 /** 主品药丸描边：与选择浮窗颜色 chip 同一「浅蓝描边 = 强调」语言（第一百二十二轮） */
 const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
 
@@ -344,9 +358,25 @@ export function PlatformRow({
   );
 }
 
-/** 组块：主品药丸 + vs + 对比药丸（块内 ‹› 滚动，仅当对比数 > COMPARES_VISIBLE
- *  时出现；主品药丸在滚动区外恒可见）。第一百七十四轮：块首按钮列退役——
- *  「隐藏对比品」全局化（index 层，原「仅查看主产品」）；「店铺同步」在主品左侧；
+/** 组块实测量（2026-11-02）：对比轨道首末位 / 是否真溢出 / 内容宽，以及主品侧与
+ *  vs 的固定宽——块内 ‹› 只在实际放不下时出现；组块最窄 = 主品侧 + 对比区最窄。 */
+interface LaneMetrics {
+  atStart: boolean;
+  atEnd: boolean;
+  overflow: boolean;
+  contentW: number;
+  mainW: number;
+  vsW: number;
+}
+const LANE_INIT: LaneMetrics = { atStart: true, atEnd: true, overflow: false, contentW: 0, mainW: 0, vsW: 0 };
+const sameLane = (a: LaneMetrics, b: LaneMetrics): boolean =>
+  a.atStart === b.atStart && a.atEnd === b.atEnd && a.overflow === b.overflow
+  && a.contentW === b.contentW && a.mainW === b.mainW && a.vsW === b.vsW;
+
+/** 组块：主品药丸 + vs + 对比区。2026-11-02（Eason）：主品侧（店铺同步 + 主品药丸）
+ *  固定占位不压缩；空间不足时只压缩对比区（最窄 = 一颗药丸预算 + 两侧 ‹›），
+ *  块内 ‹› 按实测溢出出现。第一百七十四轮：块首按钮列退役——「隐藏对比品」
+ *  全局化（index 层，原「仅查看主产品」）；「店铺同步」在主品左侧；
  *  「第 N 组」块首小字随药丸带独立成行退役（第一百八十三轮） */
 function GroupBlock({
   group,
@@ -371,23 +401,6 @@ function GroupBlock({
    *  上层按组注入。 */
   syncCtl?: { active: boolean; onToggle: () => void };
 }) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [atStart, setAtStart] = useState(true);
-  const [atEnd, setAtEnd] = useState(true);
-  const sync = useCallback(() => {
-    const el = trackRef.current;
-    if (!el) return;
-    setAtStart(el.scrollLeft <= 1);
-    setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
-  }, []);
-  useEffect(() => {
-    sync();
-  }, [sync, group.series.length]);
-  const scrollByPill = (dir: 1 | -1): void => {
-    // 滚动行为走 scrollBehaviorOf()（减少动态效果时瞬时跳转，第一百八十五轮）
-    trackRef.current?.scrollBy({ left: dir * (PILL_W_BUDGET + 6), behavior: scrollBehaviorOf() });
-  };
-
   const pills: PillSpec[] = group.series.map((s) => {
     const rom = romTextOf(s.key);
     const text = curveNameOf(s);
@@ -420,13 +433,61 @@ function GroupBlock({
   });
   const mainPill = pills.find((p) => p.main) ?? null; // 主品无数据/空对 = null（不画药丸也不画 vs）
   const compares = pills.filter((p) => !p.main);
-  const scrollable = compares.length > COMPARES_VISIBLE;
   const dimOf = (p: PillSpec): boolean => hoverSet != null && !hoverSet.has(p.key);
+  const hasMain = mainPill != null;
+  const hasCompares = compares.length > 0;
+
+  // ---- 实测（2026-11-02，Eason）：块内 ‹› 只在对比区真放不下时出现 ----
+  // trackRef = 对比轨道（可横向滚动）；mainRef / vsRef = 主品侧与 vs 的固定宽，
+  // 用来给整块设显式最窄宽度（CSS 的 min-content 会把对比药丸全宽算进去，块就
+  // 压不动；不设又会在多组时互相压叠）。只写变化了的 state，量测不自激。
+  const mainRef = useRef<HTMLDivElement>(null);
+  const vsRef = useRef<HTMLSpanElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [lane, setLane] = useState<LaneMetrics>(LANE_INIT);
+  const sync = useCallback(() => {
+    const el = trackRef.current;
+    const widthOf = (node: HTMLElement | null): number => (node ? Math.ceil(node.getBoundingClientRect().width) : 0);
+    const next: LaneMetrics = {
+      atStart: el == null || el.scrollLeft <= 1,
+      atEnd: el == null || el.scrollLeft + el.clientWidth >= el.scrollWidth - 1,
+      overflow: el != null && el.scrollWidth > el.clientWidth + 1,
+      contentW: el?.scrollWidth ?? 0,
+      mainW: widthOf(mainRef.current),
+      vsW: widthOf(vsRef.current),
+    };
+    setLane((prev) => (sameLane(prev, next) ? prev : next));
+  }, []);
+  // 内容变化（增删产品 / 渠道名变化 → series 重建）：绘制前量一次，箭头不闪
+  useLayoutEffect(() => {
+    sync();
+  }, [sync, group.series]);
+  // 尺寸变化（视口缩放 / 对比区被压缩 / 箭头出现让位）：ResizeObserver 跟进
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => sync());
+    if (trackRef.current) ro.observe(trackRef.current);
+    if (mainRef.current) ro.observe(mainRef.current);
+    return () => ro.disconnect();
+  }, [sync, hasMain, hasCompares]);
+  const scrollByPill = (dir: 1 | -1): void => {
+    // 滚动行为走 scrollBehaviorOf()（减少动态效果时瞬时跳转，第一百八十五轮）
+    trackRef.current?.scrollBy({ left: dir * (PILL_W_BUDGET + 6), behavior: scrollBehaviorOf() });
+  };
+  // 对比区最窄 = 一颗药丸预算 + 两侧 ‹›（Eason：最小状态显示一款对比产品）；
+  // 内容本身更窄（如只有一款短名对比，永不溢出）时以内容为准，不留空白
+  const comparesMin = lane.overflow ? COMPARES_MIN_W : Math.min(COMPARES_MIN_W, lane.contentW);
+  // 整块最窄 = 主品侧 + vs + 对比区最窄 + 块内间距（多组时外层据此兜底横滚）
+  const parts = [hasMain ? lane.mainW : null, hasMain && hasCompares ? lane.vsW : null, hasCompares ? comparesMin : null]
+    .filter((w): w is number => w != null);
+  const blockMin = parts.reduce((sum, w) => sum + w, 0) + BLOCK_GAP * Math.max(0, parts.length - 1);
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}>
-      {/* 主品左侧固定放店铺同步按钮；平台筛选浮层只负责选平台/店铺。 */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: BLOCK_GAP, flex: '0 1 auto', minWidth: blockMin }}>
+      {/* 主品左侧固定放店铺同步按钮；平台筛选浮层只负责选平台/店铺。
+          主品侧 flex: 0 0 auto（2026-11-02，Eason）：永不压缩、不滚出视野。 */}
       {mainPill && (
-        <div style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+        <div ref={mainRef} style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 4, flex: '0 0 auto' }}>
           {syncCtl && (
             <button
               type="button"
@@ -464,12 +525,15 @@ function GroupBlock({
         </div>
       )}
       {mainPill && compares.length > 0 && (
-        <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>vs</span>
+        <span ref={vsRef} style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flex: '0 0 auto' }}>vs</span>
       )}
-      {compares.length > 0 && (
-        <>
-          {scrollable && (
-            <ArrowButton dir="left" label="更多对比产品（左）" onClick={() => scrollByPill(-1)} dim={atStart} />
+      {hasCompares && (
+        // 对比区 = [‹][对比轨道][›]，是块内唯一可压缩项（2026-11-02，Eason）：空间
+        // 不足先压这里，最窄 = 一颗药丸预算 + 两侧 ‹›；轨道最宽仍 = COMPARES_VISIBLE
+        // 颗药丸。‹› 只在轨道实测溢出时出现，首末位置灰。
+        <div style={{ display: 'flex', alignItems: 'center', gap: COMPARES_GAP, flex: '1 1 auto', minWidth: comparesMin }}>
+          {lane.overflow && (
+            <ArrowButton dir="left" label="更多对比产品（左）" onClick={() => scrollByPill(-1)} dim={lane.atStart} />
           )}
           <div
             ref={trackRef}
@@ -478,6 +542,8 @@ function GroupBlock({
             style={{
               display: 'flex',
               gap: 6,
+              flex: '0 1 auto',
+              minWidth: 0,
               maxWidth: COMPARES_VISIBLE * (PILL_W_BUDGET + 6),
               overflowX: 'auto',
               scrollbarWidth: 'none',
@@ -489,10 +555,10 @@ function GroupBlock({
               <PillUnit key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} />
             ))}
           </div>
-          {scrollable && (
-            <ArrowButton dir="right" label="更多对比产品（右）" onClick={() => scrollByPill(1)} dim={atEnd} />
+          {lane.overflow && (
+            <ArrowButton dir="right" label="更多对比产品（右）" onClick={() => scrollByPill(1)} dim={lane.atEnd} />
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -503,8 +569,8 @@ const ARROW_STYLE = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  width: 14,
-  height: 14,
+  width: ARROW_SIZE,
+  height: ARROW_SIZE,
   borderRadius: 9999,
   border: `1px solid ${color.hairline}`,
   background: color.canvas,
@@ -513,15 +579,15 @@ const ARROW_STYLE = {
 } as const;
 
 /** role="button" 箭头的原生按钮化统一包装（第一百八十二轮）：type=button +
- *  aria-label；「更多组/更多对比」两侧的小箭头命中区经 .lpl-hit 外扩 */
-function ArrowButton({ dir, label, onClick, size = 14, dim }: { dir: 'left' | 'right'; label: string; onClick: () => void; size?: number; dim?: boolean }) {
+ *  aria-label；「更多对比产品」两侧的小箭头命中区经 .lpl-hit 外扩 */
+function ArrowButton({ dir, label, onClick, dim }: { dir: 'left' | 'right'; label: string; onClick: () => void; dim?: boolean }) {
   return (
     <button
       type="button"
       aria-label={label}
       onClick={onClick}
       className="lpl-hit"
-      style={{ ...ARROW_STYLE, width: size, height: size, opacity: dim ? 0.25 : 1, cursor: dim ? 'default' : 'pointer' }}
+      style={{ ...ARROW_STYLE, opacity: dim ? 0.25 : 1, cursor: dim ? 'default' : 'pointer' }}
     >
       {dir === 'left' ? <LeftOutlined style={{ fontSize: 8 }} /> : <RightOutlined style={{ fontSize: 8 }} />}
     </button>
@@ -569,49 +635,23 @@ export default function BrandLegendStrip({
       onHover(null);
     }
   }, [hoverKey, groups, onHover]);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [outer, setOuter] = useState({ start: true, end: true, overflow: false });
-  const syncOuter = useCallback(() => {
-    const el = trackRef.current;
-    if (!el) return;
-    setOuter({
-      start: el.scrollLeft <= 1,
-      end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 1,
-      overflow: el.scrollWidth > el.clientWidth + 1,
-    });
-  }, []);
-  useLayoutEffect(() => {
-    syncOuter();
-  }, [syncOuter, groups]);
-  useEffect(() => {
-    const el = trackRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => syncOuter());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [syncOuter]);
   const hover = (key: string | null): void => {
     setHoverKey(key);
     onHover(key);
   };
-  const scrollOuter = (dir: 1 | -1): void => {
-    // 滚动行为走 scrollBehaviorOf()（减少动态效果时瞬时跳转，第一百八十五轮）
-    trackRef.current?.scrollBy({ left: dir * 260, behavior: scrollBehaviorOf() });
-  };
+  // 外层（2026-11-02，Eason：整个外围不要有左右箭头）：空间不足时先由各组压缩
+  // 对比区（GroupBlock），主品恒可见；多组合计仍放不下时，只保留隐藏滚动条的
+  // 横向滚动作兜底（触控板 / Shift+滚轮可达），不出箭头。
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, minWidth: 0, width: '100%', padding: '0 8px', boxSizing: 'border-box' }}>
-      {outer.overflow && (
-        <ArrowButton dir="left" label="更多组（左）" onClick={() => scrollOuter(-1)} size={16} dim={outer.start} />
-      )}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0, width: '100%', padding: '0 8px', boxSizing: 'border-box' }}>
       <div
-        ref={trackRef}
-        onScroll={syncOuter}
         className="lpl-legend-scroll"
         style={{ display: 'flex', alignItems: 'stretch', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', minWidth: 0, padding: '2px 0' }}
       >
         {(() => {
           // 块间灰色短竖线分隔（最后一块之后不加）；凡含主品的组各拿各的 syncCtl，
-          // 同步只作用于本组，开关显示在本组主品左侧。
+          // 同步只作用于本组，开关显示在本组主品左侧。组块自身即可压缩的 flex 项
+          // （最窄宽度由块内实测给出），不再包一层不可压缩的外壳。
           const items: ReactNode[] = [];
           blocks.forEach((g, i) => {
             if (i > 0) {
@@ -622,25 +662,21 @@ export default function BrandLegendStrip({
             const hasMain = g.series.some((s) => s.key === g.mainKey);
             const sync = hasMain ? syncCtlOf?.(g) : undefined;
             items.push(
-              <div key={g.id} style={{ display: 'flex', flexShrink: 0, minWidth: 0 }}>
-                <GroupBlock
-                  group={g}
-                  hiddenKeys={hiddenKeys}
-                  hoverSet={hoverSet}
-                  onToggle={onToggleHidden}
-                  onHover={hover}
-                  channelCtl={channelCtl}
-                  syncCtl={sync}
-                />
-              </div>,
+              <GroupBlock
+                key={g.id}
+                group={g}
+                hiddenKeys={hiddenKeys}
+                hoverSet={hoverSet}
+                onToggle={onToggleHidden}
+                onHover={hover}
+                channelCtl={channelCtl}
+                syncCtl={sync}
+              />,
             );
           });
           return items;
         })()}
       </div>
-      {outer.overflow && (
-        <ArrowButton dir="right" label="更多组（右）" onClick={() => scrollOuter(1)} size={16} dim={outer.end} />
-      )}
     </div>
   );
 }

@@ -212,7 +212,6 @@ export default function VolumeBars(props: {
       </svg>
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
         <div style={{ position: 'absolute', left: axisX, top: props.plotTop, width: 1, height: props.plotHeight, background: color.hairline }} />
-        <div style={{ position: 'absolute', left: axisX + 8, top: props.plotTop, color: color.mute, fontSize: 10, lineHeight: '12px', whiteSpace: 'nowrap' }}>销量（台）</div>
         {ticks.map((tick) => (
           <div key={tick.label + tick.y} style={{ position: 'absolute', left: axisX - 4, top: tick.y - 6, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 4, height: 1, background: color.hairlineStrong }} />

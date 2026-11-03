@@ -8,7 +8,6 @@ import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject,
 import type { Granularity } from '../../dataModel/types';
 import { axisTickPlan, hideOverlappingTicks, MIN_WINDOW, panWindow } from './helpers';
 import { color, font, radius, selectAccent, trackColors } from '../../theme/tokens';
-import { ViewWindowCaption } from './XBrush';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 type DragKind = 'start' | 'end' | 'pan';
@@ -275,7 +274,6 @@ export default function SplitTimeTrack(props: {
         <span style={gripStyle('end')} />
       </div>
     </div>
-    <ViewWindowCaption />
     </div>
   );
 }

@@ -1,8 +1,8 @@
 // ============================================================
 // 主分析卡纯函数（第一百二十轮，第三次迭代）：
 // 卡 = 唯一主品（产品+型号+颜色）+ 对比区。配额在选择时收口（每卡 1 主品
-// + ≤7 对比 = 8 条线；空对 ≤8），卡数上限 8。含自动匹配填充、v10/v11
-// 持久化迁移、勾选组工具。UI 与 FiltersContext 共用；不持有状态。
+// + ≤3 对比；空对同样 ≤3 对比，见 COMPARES_PER_CARD_CAP），卡数上限 8。含自动
+// 匹配填充、v10/v11 持久化迁移、勾选组工具。UI 与 FiltersContext 共用；不持有状态。
 // ============================================================
 import { dimProduct } from '../data';
 import type { DimProduct } from '../dataModel/types';
@@ -13,6 +13,15 @@ import { defaultColorSkuIds, modelIdOf, type RomramNode } from '../components/Pr
 /** 一张图（合并图 = 唯一主品卡；分离模式 = 某张面板卡）同时展示的折线数上限。
  *  上限前移到选择时（modal 配额），呈现层不再截断。 */
 export const MAX_LINES_PER_CHART = 8;
+
+/** 每组（卡）对比产品硬上限（2026-11-02，Eason：每组最多选 3 款对比产品）。
+ *  cardQuota 取它与折线上限的较小值，选择浮窗 / 模板合并 / 自动匹配 / 读档
+ *  收口（clampMains）全部经 cardQuota 同口径截断；价格走势药丸带的块内可见
+ *  预算（COMPARES_VISIBLE）与之同值。 */
+export const COMPARES_PER_CARD_CAP = 3;
+
+/** 对比产品达上限的统一提示（选择浮窗 / 模板编辑的禁用气泡与拦截提示同句） */
+export const COMPARE_CAP_HINT = `每组最多 ${COMPARES_PER_CARD_CAP} 款对比产品`;
 
 /** 主分析卡数上限（= 分离面板数上限；批量动作按剩余名额截断） */
 export const MAINS_CAP = 8;
@@ -40,9 +49,9 @@ export function selKey(sel: ProductSelection): string {
   return `${sel.modelId}|${norm(sel.romram)}`;
 }
 
-/** 卡内对比区配额 = 8 - 主品占线（空对 8；下限 0） */
+/** 卡内对比区配额 = min(每组对比硬上限 3, 8 - 主品占线)（有主品 / 空对均为 3；下限 0） */
 export function cardQuota(card: Pick<MainProduct, 'main'>): number {
-  return Math.max(0, MAX_LINES_PER_CHART - (card.main ? 1 : 0));
+  return Math.max(0, Math.min(COMPARES_PER_CARD_CAP, MAX_LINES_PER_CHART - (card.main ? 1 : 0)));
 }
 
 /** 型号是否华为产品（数据事实；自动匹配矩阵只覆盖华为侧） */
