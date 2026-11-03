@@ -189,6 +189,50 @@ describe('库存验证卡 · 规则文案收敛', () => {
   });
 });
 
+describe('库存验证卡 · 链路指示条（A3）', () => {
+  const stepLabelsOf = (container: HTMLElement): string[] =>
+    Array.from(container.querySelectorAll('[data-flow-step]')).map((el) => el.getAttribute('data-flow-step') ?? '');
+
+  it('五节点定序完整：主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图', () => {
+    const { container } = renderCard();
+    expect(stepLabelsOf(container)).toEqual(['主图基线 SO', '反算 DOS/库存', '健康判定', '上限修正', '回写主图']);
+    const bar = container.querySelector('[data-flow-bar]') as HTMLElement;
+    expect(bar).not.toBeNull();
+    expect(bar.getAttribute('aria-label')).toContain('主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图');
+  });
+
+  it('基准（W50–W52 截断）：「上限修正」琥珀点亮注 W50 起，「回写主图」激活', () => {
+    const { container } = renderCard();
+    const cap = container.querySelector('[data-flow-step="上限修正"]') as HTMLElement;
+    expect(cap.getAttribute('data-state')).toBe('amber');
+    expect(cap.textContent).toContain('W50 起');
+    // min 公式收节点 title
+    expect(cap.getAttribute('title')).toContain('min(基线 SO, 可售)');
+    const write = container.querySelector('[data-flow-step="回写主图"]') as HTMLElement;
+    expect(write.getAttribute('data-state')).toBe('active');
+    expect(write.textContent).not.toContain('未触发');
+  });
+
+  it('SI=0 单月（11 月）：点亮注 W46 起', () => {
+    const params: WorkbenchParams = { ...base, siPlanMonthly: { '2026-11': 0, '2026-12': base.siPlanMonthly['2026-12'] } };
+    const { container } = renderCard(params);
+    const cap = container.querySelector('[data-flow-step="上限修正"]') as HTMLElement;
+    expect(cap.getAttribute('data-state')).toBe('amber');
+    expect(cap.textContent).toContain('W46 起');
+  });
+
+  it('SI 充足（无修正）：「上限修正」不点亮，「回写主图 · 未触发」灰化', () => {
+    const params: WorkbenchParams = { ...base, siPlanMonthly: { ...base.siPlanMonthly, '2026-12': 400000 } };
+    const { container } = renderCard(params);
+    const cap = container.querySelector('[data-flow-step="上限修正"]') as HTMLElement;
+    expect(cap.getAttribute('data-state')).toBe('base');
+    expect(cap.textContent).not.toContain('起');
+    const write = container.querySelector('[data-flow-step="回写主图"]') as HTMLElement;
+    expect(write.getAttribute('data-state')).toBe('muted');
+    expect(write.textContent).toContain('未触发');
+  });
+});
+
 describe('库存验证卡 · 图例显隐与 SI 键盘输入保留', () => {
   it('图例点击切换显隐（aria-pressed），隐藏渠道 DOS 后双线移除', () => {
     const { container } = renderCard();

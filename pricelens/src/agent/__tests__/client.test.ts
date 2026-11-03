@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createSseAgentClient, parseSseFrames } from '../client';
-import type { AgentResponse } from '../contracts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createSseAgentClient, defaultAgentClient, localAgentClient, parseSseFrames, withLocalFallback, type AgentClient } from '../client';
+import { isAgentEvent, type AgentEvent, type AgentResponse } from '../contracts';
 
 describe('SSE Agent client', () => {
   it('reconstructs a completed structured response from event frames', async () => {
@@ -58,5 +58,83 @@ describe('SSE Agent client', () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('data: {"response":{"summary":"bad"}}\n\n', { status: 200 }));
     const client = createSseAgentClient({ baseUrl: '/api/agent', fetcher });
     await expect(client.run({ text: '查询价格', context: {} as never, clientRequestId: 'req-invalid' })).rejects.toThrow('未返回完整结果');
+  });
+});
+
+describe('withLocalFallback', () => {
+  const baseline: AgentResponse = { intent: 'filter', summary: '只看 Pura 90', steps: [], cards: [], citations: [], suggestions: [], contextFingerprint: 'ctx-fb' };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to the local client with a distinguishable marker when the remote rejects', async () => {
+    const events: AgentEvent[] = [];
+    const local: AgentClient = { run: vi.fn(async () => baseline) };
+    const remote: AgentClient = { run: () => Promise.reject(new Error('Fetch failed: ECONNREFUSED')) };
+    const result = await withLocalFallback(remote, local).run({ text: '只看 Pura 90', context: {} as never, clientRequestId: 'req-fb', runId: 'run-fb' }, undefined, (event) => events.push(event));
+    expect(result.summary).toBe('只看 Pura 90');
+    expect(result.provider).toEqual({ name: '本地确定性回退', model: 'local' });
+    expect(local.run).toHaveBeenCalledTimes(1);
+    expect(events).toHaveLength(1);
+    expect(isAgentEvent(events[0])).toBe(true);
+    expect(events[0]?.type).toBe('step.started');
+    expect(events[0]?.runId).toBe('run-fb');
+    expect(events[0]?.message).toContain('本地确定性引擎');
+  });
+
+  it('passes a healthy remote response through without falling back', async () => {
+    const remoteResponse: AgentResponse = { intent: 'query', summary: '远端叙述', steps: [], cards: [], citations: [], suggestions: [], contextFingerprint: 'ctx-remote', provider: { name: 'remote', model: 'x' } };
+    const remote: AgentClient = { run: vi.fn(async () => remoteResponse) };
+    const local: AgentClient = { run: vi.fn(async () => ({ ...remoteResponse, summary: '本地结果' })) };
+    const events: AgentEvent[] = [];
+    const result = await withLocalFallback(remote, local).run({ text: '查询价格', context: {} as never, clientRequestId: 'req-ok' }, undefined, (event) => events.push(event));
+    expect(result.summary).toBe('远端叙述');
+    expect(result.provider?.name).toBe('remote');
+    expect(local.run).not.toHaveBeenCalled();
+    expect(events).toHaveLength(0);
+  });
+
+  it('rethrows user cancellation instead of substituting a local result', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const local: AgentClient = { run: vi.fn(async () => baseline) };
+    const remote: AgentClient = { run: () => Promise.reject(Object.assign(new Error('Agent 查询已取消'), { name: 'AbortError' })) };
+    await expect(withLocalFallback(remote, local).run({ text: '查询价格', context: {} as never, clientRequestId: 'req-abort' }, controller.signal)).rejects.toThrow('已取消');
+    expect(local.run).not.toHaveBeenCalled();
+  });
+
+  it('falls back over the real fetch path when the remote endpoint is unreachable', async () => {
+    const client = withLocalFallback(createSseAgentClient({ baseUrl: 'http://127.0.0.1:9', timeoutMs: 2000 }), localAgentClient);
+    const result = await client.run({ text: '只看 Pura 90', context: {} as never, clientRequestId: 'req-unreachable', baseline });
+    expect(result.summary).toBe('只看 Pura 90');
+    expect(result.provider?.name).toBe('本地确定性回退');
+  });
+});
+
+describe('defaultAgentClient', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the pure local client when no remote base URL is configured', () => {
+    vi.stubGlobal('localStorage', { getItem: () => null });
+    expect(defaultAgentClient({})).toBe(localAgentClient);
+  });
+
+  it('wraps the SSE client with the local fallback when the env base URL is set', async () => {
+    vi.stubGlobal('localStorage', { getItem: () => null });
+    const client = defaultAgentClient({ VITE_AGENT_API_BASE_URL: '/api/agent' });
+    expect(client).not.toBe(localAgentClient);
+    const baseline: AgentResponse = { intent: 'query', summary: '本地结果', steps: [], cards: [], citations: [], suggestions: [], contextFingerprint: 'ctx-env' };
+    const result = await client.run({ text: '查询价格', context: {} as never, clientRequestId: 'req-env', baseline });
+    expect(result.summary).toBe('本地结果');
+    expect(result.provider?.name).toBe('本地确定性回退');
+  });
+
+  it('still yields a run-capable client when reading import.meta.env without an explicit map', () => {
+    vi.stubGlobal('localStorage', { getItem: () => null });
+    expect(typeof defaultAgentClient().run).toBe('function');
   });
 });

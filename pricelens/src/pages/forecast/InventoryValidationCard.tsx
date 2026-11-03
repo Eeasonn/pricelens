@@ -1,13 +1,21 @@
 // ============================================================
 // 推演工作台 v2 · 层④库存验证（带预测的因子卡，最后一步）：
+// 卡头下加「链路指示条」（纯展示，贴 IoBar 视觉语言）把定序表达成
+// 五节点：主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图；
+// 触发修正周时「上限修正」琥珀点亮注「W{n} 起」、「回写主图」点亮；
+// 未触发则末节点灰化注「未触发」。
 // 左轴渠道 DOS（蓝实→虚）+ 全流程 DOS（灰虚）双线、右轴渠道库存柱（万台）+ SI ▼；
 // 历史段实 / 预测段虚（预测段 = 上游基线 SO + SI 月计划推演）。
 // SI 按月给入 = 唯一明确人工输入；健康判定（DOS 70–90 天 + 库存降幅 20%/30%，
 // 预警解释，阈值未核定）→ 可售不足的预测周按可售量修正（min(基线 SO, 可售)，
 // 公式收 title）回写主图，修正周琥珀描边微痕；微痕读 supplyCapped（截断事实，
 // 手调不覆盖），capped 只表当前显示。输出只讲结果。
+// 图形几何（A3 尺寸对齐）：viewBox 1000×210（原 640×250）——宽幅比与大盘卡
+// 半栏图（520×224）一致，满宽渲染高 ≈ 大盘卡图（1440 下 282 vs 284px），
+// 字号 / 线宽渲染比例同步回到 1.34（原 2.1 过大）。
 // ============================================================
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { InputNumber } from 'antd';
 import { color, radius, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
@@ -16,8 +24,8 @@ import type { WorkbenchParams, WorkbenchResult, WorkbenchWeekResult } from './wo
 import { DOS_BAND, INV_CRASH_HEAVY_PCT, INV_CRASH_LIGHT_PCT } from './workbenchModel';
 import { CertaintyBadge, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtWan, wanOf, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
-const W = 640;
-const H = 250;
+const W = 1000;
+const H = 210;
 const LEFT = 40;
 const RIGHT = 52;
 const TOP = 14;
@@ -28,6 +36,67 @@ const FORECAST_START = 8;
 
 /** 库存上限修正公式（收 title，不进正文）。 */
 const MIN_FORMULA_TITLE = '库存上限修正：min(基线 SO, 可售)；可售 = 期初库存 + SI 补货';
+
+// ------------------------------------------------------------
+// 链路指示条（纯展示，卡内实现；与成本卡同一形态）：贴 IoBar 的
+// 小 chip + → 分隔语言，节点状态「文字 + 底色」双通道；琥珀只用于
+// 库存修正语义（PRODUCT.md：amber = 档期 / 库存修正 / 预警）。
+// ------------------------------------------------------------
+type FlowStepState = 'base' | 'active' | 'amber' | 'muted';
+
+interface FlowStep {
+  label: string;
+  /** 节点前分隔符（默认 →；「+」表并列输入）。 */
+  join?: string;
+  /** 节点补充注记（如 W50 起 / 未触发 / 不回写主图）。 */
+  note?: string;
+  /** 口径 / 公式收 title，不进正文。 */
+  title?: string;
+  state?: FlowStepState;
+}
+
+const FLOW_STEP_STYLE: Record<FlowStepState, CSSProperties> = {
+  base: { background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body },
+  active: { background: color.ink, border: `1px solid ${color.ink}`, color: color.onPrimary },
+  amber: { background: color.warningSoft, border: `1px solid ${color.warning}`, color: color.warningInk },
+  muted: { background: color.canvasSoft2, border: `1px solid ${color.hairline}`, color: color.mute },
+};
+
+function FlowBar({ ariaLabel, steps }: { ariaLabel: string; steps: FlowStep[] }) {
+  return (
+    <div
+      data-flow-bar=""
+      aria-label={ariaLabel}
+      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', marginBottom: space.sm }}
+    >
+      {steps.map((step, index) => {
+        const state = step.state ?? 'base';
+        return (
+          <Fragment key={step.label}>
+            {index > 0 && (
+              <span aria-hidden style={{ color: color.hairlineStrong, fontSize: 11 }}>{step.join ?? '→'}</span>
+            )}
+            <span
+              data-flow-step={step.label}
+              data-state={state}
+              title={step.title}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
+                borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
+                fontWeight: state === 'base' ? 400 : 600,
+                ...FLOW_STEP_STYLE[state],
+              }}
+            >
+              <span aria-hidden style={{ fontSize: 10, fontWeight: 600, opacity: 0.64 }}>{index + 1}</span>
+              {step.label}
+              {step.note && <span style={{ fontWeight: 600 }}>{step.note}</span>}
+            </span>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 /**
  * 修正周判定（读该周自己的 health 行结构化字段，不共用首周原因；输出只讲结果）：
@@ -109,6 +178,21 @@ export default function InventoryValidationCard({
   const boundaryX = (x(7) + x(FORECAST_START)) / 2;
   // 微痕读 supplyCapped（截断事实，手调不覆盖）；capped 只表当前是否按库存值显示。
   const cappedWeeks = forecastWeeks.filter((week) => week.supplyCapped);
+  const capTriggered = cappedWeeks.length > 0;
+
+  // 链路指示条：把「SO 先预测出 → 反算 → 判定 → 修正 → 回写」定序画在卡上
+  //（定序与 surface brief 层④一致）；激活态 = 触发修正时「上限修正」琥珀注 W{n} 起。
+  const flowSteps: FlowStep[] = [
+    { label: '主图基线 SO', title: '基线 SO 先在主图预测出（大盘 + 量价参考 + 事件推完），本卡在其上做库存推演' },
+    { label: '反算 DOS/库存', title: '用基线 SO 反算渠道 DOS 与库存（近 4 周均销）' },
+    { label: '健康判定', title: `DOS ${DOS_BAND.min}–${DOS_BAND.max} 天 + 库存降幅 ${INV_CRASH_LIGHT_PCT}%／${INV_CRASH_HEAVY_PCT}%（预警解释，阈值未核定）` },
+    capTriggered
+      ? { label: '上限修正', note: `W${cappedWeeks[0].weekNumber} 起`, title: MIN_FORMULA_TITLE, state: 'amber' as const }
+      : { label: '上限修正', title: MIN_FORMULA_TITLE },
+    capTriggered
+      ? { label: '回写主图', title: '修正后 SO 回写主图预测柱（修正周琥珀描边标识）', state: 'active' as const }
+      : { label: '回写主图', note: '未触发', title: '库存可支撑基线 SO，主图预测柱不受影响', state: 'muted' as const },
+  ];
 
   const legendItems: LegendItem[] = [
     { key: 'inv', label: '渠道库存（右轴）', shape: 'rect', color: color.ink },
@@ -133,13 +217,17 @@ export default function InventoryValidationCard({
         input="SI 月计划（唯一人工输入）· 上游基线 SO（大盘+量价考量）· 期初渠道库存"
         output={`未来 DOS / 库存反算与健康判定；可售不足周按可售量修正回写主图（${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起` : '当前未触发'}）`}
       />
+      <FlowBar
+        ariaLabel="库存链路：主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图"
+        steps={flowSteps}
+      />
       <div style={{ overflowX: 'auto' }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
           width="100%"
           role="img"
           aria-label={`库存验证：渠道库存柱（右轴，万台）、渠道 DOS 与全流程 DOS 双线（左轴，合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天）；${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起库存上限修正（按可售量修正回写主图，修正周琥珀描边）` : '当前库存可支撑基线 SO，未触发修正'}。详细判定见下方输出框。`}
-          style={{ display: 'block', height: 'auto', minWidth: 460 }}
+          style={{ display: 'block', height: 'auto', minWidth: 700 }}
         >
           {/* 预测段浅底 + 今天分界 */}
           <rect x={boundaryX} y={TOP - 4} width={W - RIGHT - boundaryX} height={PLOT_H + 4} fill={color.canvasSoft2} opacity={0.5} />

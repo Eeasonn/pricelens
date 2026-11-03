@@ -19,6 +19,7 @@ import { INDUSTRY_LABELS } from '../../dataModel/scope';
 import { usePage } from '../../state/PageContext';
 import { navBus } from '../../state/navBus';
 import type { AgentCardAction, AgentEvidence, AgentResponse, AgentResultCard, AgentRun, AlertResultCard, ChartResultCard, FilterResultCard, ForecastExplanationResultCard, TableResultCard } from '../../agent';
+import { describeAgentEngine, resolveAgentEngine } from '../../agent';
 import { color, formatPrice, motion, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 
 const panelWidth = 440;
@@ -266,6 +267,8 @@ export default function AgentPanel() {
     if (distanceToBottom < 96) node.scrollTop = node.scrollHeight;
   }, [messages, running]);
   if (!open) return null;
+  // 引擎来源标注：每次打开面板重读 localStorage 自配，与 defaultAgentClient 同一解析口径。
+  const engine = describeAgentEngine(resolveAgentEngine());
   const full = mode === 'full';
   const drawer = mode === 'drawer';
   const statusLabel: Record<string, string> = { idle: '只读分析 · 结果可追溯', queued: '已排队 · 即将开始', running: '正在运行…', waiting_input: '等待补充信息…', parsing: '正在理解请求…', planning: '正在规划执行步骤…', tool_running: '正在读取价格数据…', waiting_for_approval: '等待确认后继续…', partial_result: '已生成部分结果…', completed: '运行完成 · 结果可追溯', stale_context: '筛选已变化 · 结果需重新确认', failed: '运行失败 · 可重试', cancelled: '已取消本次运行', clarification_required: '需要补充一个口径' };
@@ -293,7 +296,7 @@ export default function AgentPanel() {
       <RunTimeline run={activeRun} />
     </div>
     {!messages.length && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 10px', background: color.canvasSoft }}>{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => void send(suggestion)} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '5px 8px', cursor: 'pointer' }}>{suggestion}</button>)}</div>}
-    <div style={{ flexShrink: 0, padding: '10px 12px 12px', borderTop: `1px solid ${color.hairline}`, background: color.canvas }}><div style={{ display: 'flex', alignItems: 'end', gap: 7 }}><Input.TextArea ref={inputRef} aria-label="向 PriceLens Agent 提问" autoSize={{ minRows: 1, maxRows: 5 }} value={draft} placeholder="问价格、平台或预警…" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} /> <Tooltip title={voiceAvailable ? '语音输入' : '浏览器不支持语音输入'}><button type="button" aria-label="语音输入" disabled={!voiceAvailable || voiceListening || running} onClick={() => void startVoice()} style={{ ...iconButtonStyle, width: 32, height: 32, color: voiceListening ? color.link : color.body, opacity: voiceAvailable ? 1 : 0.45 }}>{voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}</button></Tooltip>{running ? <Button aria-label="停止运行" icon={<StopOutlined />} onClick={stop} /> : <Button type="primary" aria-label="发送" icon={<SendOutlined />} onClick={() => void send()} disabled={!draft.trim()} />}</div><div style={{ marginTop: 5, fontSize: 10, color: color.mute }}>Enter 发送 · Shift+Enter 换行 · ⌘/Ctrl+K 打开</div></div>
+    <div style={{ flexShrink: 0, padding: '10px 12px 12px', borderTop: `1px solid ${color.hairline}`, background: color.canvas }}><div style={{ display: 'flex', alignItems: 'end', gap: 7 }}><Input.TextArea ref={inputRef} aria-label="向 PriceLens Agent 提问" autoSize={{ minRows: 1, maxRows: 5 }} value={draft} placeholder="问价格、平台或预警…" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} /> <Tooltip title={voiceAvailable ? '语音输入' : '浏览器不支持语音输入'}><button type="button" aria-label="语音输入" disabled={!voiceAvailable || voiceListening || running} onClick={() => void startVoice()} style={{ ...iconButtonStyle, width: 32, height: 32, color: voiceListening ? color.link : color.body, opacity: voiceAvailable ? 1 : 0.45 }}>{voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}</button></Tooltip>{running ? <Button aria-label="停止运行" icon={<StopOutlined />} onClick={stop} /> : <Button type="primary" aria-label="发送" icon={<SendOutlined />} onClick={() => void send()} disabled={!draft.trim()} />}</div><div style={{ marginTop: 5, fontSize: 10, color: color.mute }}>Enter 发送 · Shift+Enter 换行 · ⌘/Ctrl+K 打开</div><div role="note" aria-label="Agent 引擎来源" title={engine.hint} style={{ marginTop: 2, fontSize: 10, color: color.mute }}>{engine.label}</div></div>
   </aside>;
 }
 

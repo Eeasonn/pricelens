@@ -2,8 +2,10 @@
 // 推演工作台 v2 · 层①主图（视觉重心，只露最终结果——库存修正过程不呈现，
 // 仅保留修正周琥珀描边微痕）：
 // 历史实柱实线 + 预测虚柱虚线 + 上一代同周龄参考线 + 价格线右轴 +
-// 大促档期背景带（按周号定位）+ 今天分界 + 把握度帽（修正周 ±2% 窄 /
-// 其余 ±8%）+ 库存修正周琥珀描边微痕 + 手调墨色菱形（原因内联小字 +
+// 大促档期背景带（按周号定位）+ 今天分界 + 把握度帽 + 预测把握区间带
+// （销量线蓝 / 价格线品牌红半透明带；修正周 ±2% 窄 / 其余 ±8%，与把握帽
+// 同参数；带首点 = 最后一个有值历史点，预测线与历史线无缝衔接）+
+// 库存修正周琥珀描边微痕 + 手调墨色菱形（原因内联小字 +
 // 图下名录）+ 产品级小事件锚点。
 // 时间边界（预测起点 / 历史终点 / 今天分界）一律从周状态派生（WP5 Step 3，
 // 禁写死下标）；价格轴由数据派生（Step 5）；缺数不造 0、实线不跨缺失段
@@ -19,7 +21,7 @@ import { niceCeil } from '../../dataModel/volume';
 import type { ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult, WorkbenchWeekResult } from './workbenchModel';
 import { WorkbenchLegend, fmtWan, wanOf, type LegendItem } from './WorkbenchBits';
-import { buildAxisTicks, buildLineSegments, firstForecastIndex, segmentPathD } from './workbenchChartSegments';
+import { buildAxisTicks, buildLineSegments, firstForecastIndex, segmentPathD, type WorkbenchLineSegment } from './workbenchChartSegments';
 
 const W = 1180;
 /** heightScale = 1 时的画布高度（H = TOP + BASE_PLOT_H + BOTTOM）；heightScale 只缩放绘图区。 */
@@ -69,7 +71,9 @@ const LEGEND_SERIES: LegendItem[] = [
   { key: 'prevGen', label: '参考 · 上一代同周龄', shape: 'dash', color: color.hairlineStrong },
   { key: 'band', label: '柱顶帽 = 把握区间（窄 = 把握大）', shape: 'dash', color: color.warning },
 ];
-/** 说明项图例（无 key = 纯说明，不可点击）。 */
+/** 说明项图例（无 key = 纯说明，不可点击）。预测把握区间说明项因需要半透明
+ *  带 glyph（LegendShape 无此形态，WorkbenchBits 为共享件不扩形态），渲染在
+ *  说明项行内、WorkbenchLegend 之后（同字号同色，见 JSX）。 */
 const LEGEND_NOTES: LegendItem[] = [
   { label: '库存上限修正周（琥珀描边 · 预测样式）', shape: 'rectAmber', color: color.warning },
 ];
@@ -147,8 +151,15 @@ export default function MainForecastChart({
   const yMax = Math.max(1, niceCeil(volumePeak * 1.12));
   const y = (value: number): number => TOP + plotH * (1 - value / yMax);
   const prices = weeks.map((week) => week.price);
-  const priceLo = Math.min(...prices);
-  const priceHi = Math.max(...prices);
+  // 价格轴数据域纳入预测把握带极值（带 = price × (1 ± 8% / 修正周 ±2%)）：
+  // 带不溢出绘图区，轴仍由数据派生（Step 5），不写死轴范围。
+  const priceBandExtents = weeks.flatMap((week) => {
+    if (week.status !== 'forecast') return [];
+    const pct = week.capped ? 0.02 : 0.08;
+    return [week.price * (1 + pct), week.price * (1 - pct)];
+  });
+  const priceLo = Math.min(...prices, ...priceBandExtents);
+  const priceHi = Math.max(...prices, ...priceBandExtents);
   const pricePad = (priceHi - priceLo) * 0.12 || Math.max(1, priceHi * 0.12);
   const priceMin = priceLo - pricePad;
   const priceMax = priceHi + pricePad;
@@ -166,14 +177,91 @@ export default function MainForecastChart({
   const salesSegments = buildLineSegments(weeks.map((week) => (week.status === 'actual' ? week.sales : null)));
   const finalSegments = buildLineSegments(weeks.map((week) => (week.status === 'forecast' ? week.final : null)));
   const prevGenSegments = buildLineSegments(weeks.map((week) => week.prevGenSales));
-  const pricePathD = (from: number, to: number): string | null => {
+  const pricePathD = (from: number, to: number, anchorM: string | null = null): string | null => {
     if (from > to || from < 0 || to >= weeks.length) return null;
-    return weeks.slice(from, to + 1)
-      .map((_, offset) => `${offset === 0 ? 'M' : 'L'}${x(from + offset).toFixed(1)} ${yPrice(prices[from + offset]).toFixed(1)}`)
-      .join(' ');
+    const points = weeks.slice(from, to + 1)
+      .map((_, offset) => `${offset === 0 && !anchorM ? 'M' : 'L'}${x(from + offset).toFixed(1)} ${yPrice(prices[from + offset]).toFixed(1)}`);
+    if (anchorM) points.unshift(anchorM);
+    return points.join(' ');
   };
   const historyPriceD = hasHistory ? pricePathD(0, historyEnd) : null;
-  const forecastPriceD = hasForecast ? pricePathD(forecastStart, weeks.length - 1) : null;
+
+  // 接缝（A4 修复）：预测线 / 把握带以最后一个有值历史点为起点 M，与历史线
+  // 无缝衔接；该历史点缺数时预测线自首个有值预测点起，并在图下名录标注。
+  const lastValuedHistoryIndex = (read: (index: number) => number | null): number | null => {
+    for (let index = historyEnd; index >= 0; index -= 1) {
+      const value = read(index);
+      if (value != null && Number.isFinite(value)) return index;
+    }
+    return null;
+  };
+  const salesAnchorIndex = hasForecast ? lastValuedHistoryIndex((index) => weeks[index].sales) : null;
+  const priceAnchorIndex = hasForecast ? lastValuedHistoryIndex((index) => weeks[index].price) : null;
+  const salesSeamM = salesAnchorIndex != null
+    ? `M${x(salesAnchorIndex).toFixed(1)} ${y(weeks[salesAnchorIndex].sales as number).toFixed(1)}`
+    : null;
+  const priceSeamM = priceAnchorIndex != null
+    ? `M${x(priceAnchorIndex).toFixed(1)} ${yPrice(prices[priceAnchorIndex]).toFixed(1)}`
+    : null;
+  const forecastPriceD = hasForecast ? pricePathD(forecastStart, weeks.length - 1, priceSeamM) : null;
+
+  // 预测段折线：首段以接缝点为起点（seamM 存在时首点用 L 衔接，不再新起 M 子路径）。
+  const forecastSegmentD = (
+    segment: WorkbenchLineSegment,
+    order: number,
+    seamM: string | null,
+    pointAt: (index: number) => { x: number; y: number },
+  ): string => {
+    const first = pointAt(segment.from);
+    const head = order === 0 && seamM
+      ? `${seamM} L${first.x.toFixed(1)} ${first.y.toFixed(1)}`
+      : `M${first.x.toFixed(1)} ${first.y.toFixed(1)}`;
+    const rest = segment.bridging
+      ? [pointAt(segment.to)]
+      : Array.from({ length: segment.to - segment.from }, (_, offset) => pointAt(segment.from + 1 + offset));
+    return `${head}${rest.map((point) => ` L${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join('')}`;
+  };
+
+  // 预测把握区间带（与柱顶把握帽同参数：修正周 ±2% / 其余 ±8%）：上下边多边形，
+  // 半透明填充；首点 = 最后一个有值历史点（带在历史点收拢为一线，无缝衔接）；
+  // 跨缺预测周与折线同样直连两端真实点（缺数不造点）。
+  const bandPathD = (
+    anchorIndex: number | null,
+    indices: number[],
+    valueAt: (index: number) => number,
+    yOf: (value: number) => number,
+  ): string | null => {
+    if (!indices.length) return null;
+    if (anchorIndex == null && indices.length < 2) return null;
+    const bandPctOf = (week: WorkbenchWeekResult): number => (week.capped ? 0.02 : 0.08);
+    const anchor = anchorIndex != null
+      ? { x: x(anchorIndex), up: yOf(valueAt(anchorIndex)), down: yOf(valueAt(anchorIndex)) }
+      : null;
+    const points = indices.map((index) => ({
+      x: x(index),
+      up: yOf(valueAt(index) * (1 + bandPctOf(weeks[index]))),
+      down: yOf(valueAt(index) * (1 - bandPctOf(weeks[index]))),
+    }));
+    const upper = [...(anchor ? [anchor] : []), ...points]
+      .map((point) => `${point.x.toFixed(1)} ${point.up.toFixed(1)}`)
+      .join(' L');
+    const lower = [...points.slice().reverse(), ...(anchor ? [anchor] : [])]
+      .map((point) => `${point.x.toFixed(1)} ${point.down.toFixed(1)}`)
+      .join(' L');
+    return `M${upper} L${lower} Z`;
+  };
+  const salesBandIndices = weeks
+    .map((week, index) => (week.status === 'forecast' && week.final != null ? index : -1))
+    .filter((index) => index >= 0);
+  const salesBandValueAt = (index: number): number =>
+    (weeks[index].status === 'actual' ? weeks[index].sales : weeks[index].final) as number;
+  const salesBandD = hasForecast ? bandPathD(salesAnchorIndex, salesBandIndices, salesBandValueAt, y) : null;
+  const priceBandIndices = weeks
+    .map((week, index) => (week.status === 'forecast' ? index : -1))
+    .filter((index) => index >= 0);
+  const priceBandD = hasForecast ? bandPathD(priceAnchorIndex, priceBandIndices, (index) => prices[index], yPrice) : null;
+  const salesSeamMissing = hasHistory && hasForecast && salesAnchorIndex == null && salesBandIndices.length > 0;
+  const seamStartWeek = salesBandIndices.length ? weeks[salesBandIndices[0]].week : '';
 
   // 库存修正双状态（WP5 Step 8）：capped = 当前显示态（柱描边/窄帽）；supplyCapped = 截断事实（名录/aria，不随手调消失）。
   const cappedFactWeeks = weeks.filter((week) => week.supplyCapped);
@@ -190,7 +278,7 @@ export default function MainForecastChart({
     );
   }
 
-  const ariaLabel = `${fixture.context.product} 量价预测主图：历史 ${fixture.context.historyRange} 演示实际实柱、预测 ${fixture.context.forecastRange} 虚柱；预测期总销量 ${fmtWan(result.summary.totalSales)}；大促峰 W${result.summary.peak.weekNumber} ${fmtWan(result.summary.peak.value)}；${cappedFactWeeks.length ? `库存上限修正 W${cappedFactWeeks[0].weekNumber} 起` : '未触发库存上限修正'}；详细数值见下方数据表。`;
+  const ariaLabel = `${fixture.context.product} 量价预测主图：历史 ${fixture.context.historyRange} 演示实际实柱、预测 ${fixture.context.forecastRange} 虚柱；预测期总销量 ${fmtWan(result.summary.totalSales)}；大促峰 W${result.summary.peak.weekNumber} ${fmtWan(result.summary.peak.value)}；预测线附把握区间带（常规 ±8% / 修正周 ±2%）；${cappedFactWeeks.length ? `库存上限修正 W${cappedFactWeeks[0].weekNumber} 起` : '未触发库存上限修正'}；详细数值见下方数据表。`;
 
   return (
     <div style={{ display: 'grid', gap: space.sm }}>
@@ -243,6 +331,14 @@ export default function MainForecastChart({
               </>
             )}
 
+            {/* 预测把握区间带：销量=蓝 / 价格=品牌红 半透明多边形；柱与带并存（柱=值，带=线的区间），与把握帽同参数 */}
+            {show('band') && salesBandD && (
+              <path d={salesBandD} fill={color.link} fillOpacity={0.14} stroke="none" />
+            )}
+            {show('band') && priceBandD && (
+              <path d={priceBandD} fill={brandColor.HUAWEI} fillOpacity={0.1} stroke="none" />
+            )}
+
             {/* 上一代同周龄参考线（灰虚，按周龄对齐；W45 起为已发生历史映射） */}
             {show('prevGen') && prevGenSegments.map((segment) => (
               <path
@@ -281,7 +377,7 @@ export default function MainForecastChart({
               );
             })}
 
-            {/* 周销线：连续段实线 / 预测段虚线；跨缺失段灰虚（缺数不造点） */}
+            {/* 周销线：连续段实线 / 预测段虚线（首段以末历史点衔接）；跨缺失段灰虚（缺数不造点） */}
             {show('actual') && salesSegments.map((segment) => (
               <path
                 key={`sales-${segment.from}-${segment.to}`}
@@ -292,10 +388,10 @@ export default function MainForecastChart({
                 strokeDasharray={segment.bridging ? '5 4' : undefined}
               />
             ))}
-            {show('forecast') && finalSegments.map((segment) => (
+            {show('forecast') && finalSegments.map((segment, order) => (
               <path
                 key={`final-${segment.from}-${segment.to}`}
-                d={segmentPathD(segment, finalPointAt)}
+                d={forecastSegmentD(segment, order, salesSeamM, finalPointAt)}
                 fill="none"
                 stroke={segment.bridging ? color.hairlineStrong : color.ink}
                 strokeWidth={1.4}
@@ -438,6 +534,10 @@ export default function MainForecastChart({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: color.mute, flex: 'none' }}>说明项</span>
           <WorkbenchLegend items={LEGEND_NOTES} hidden={hidden} style={{ marginTop: 0 }} />
+          <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 11, color: color.body }}>
+            <span aria-hidden style={{ display: 'inline-block', width: 14, height: 8, borderRadius: 2, marginRight: 6, verticalAlign: 'middle', background: color.link, opacity: 0.25 }} />
+            预测把握区间（±8% / 修正周 ±2%）
+          </span>
         </div>
       </div>
 
@@ -469,6 +569,12 @@ export default function MainForecastChart({
             {`手调 · ${week.week}：${week.manual?.reason ?? ''}`}
           </span>
         ))}
+        {salesSeamMissing && (
+          <span title="周销预测线 / 把握带以最后一个有值历史点衔接；该点缺数时自首个有值预测周起画" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <span aria-hidden style={{ color: color.mute, fontSize: 10 }}>↔</span>
+            {`历史末周缺数 · 周销预测线自 ${seamStartWeek} 起`}
+          </span>
+        )}
         <span title="min(基线 SO, 可售) 回写主图" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           <span aria-hidden style={{ width: 17, height: 17, borderRadius: '50%', border: `1px solid ${color.warning}`, background: color.warningSoft, fontSize: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: color.warningInk }}>修</span>
           {cappedFactWeeks.length ? `库存上限修正 · W${cappedFactWeeks[0].weekNumber} 起` : '当前考量未触发库存上限修正'}

@@ -3,12 +3,18 @@
 // （形态参考走势页 MarginCostCard：周销毛琥珀柱 + 单台成本月版本阶梯线 +
 // 均价线；预测段按本页实/虚语言自建虚柱虚线）。销毛 = 周销 ×（价格 − 当月
 // 版本成本），演示口径不含渠道费率；成本只进销毛链，不修改需求。
+// 卡头下加「依赖链路条」（纯展示，与库存卡同一形态）：主图价格预测
+// + 成本月版本 → 单台销毛 → × 主图 SO → 预测期销毛（不回写主图），
+// 把「单台销毛只跟价的预测有关、价与成本又有关系」的依赖画在卡上。
 // WP5 Step 9：周销毛轴与 tooltip 统一 $M（fmtMillionUsd），禁「万$」标原始
 // USD；周销毛图例真实显隐（可点击）。Step 10：无数据显示「暂无成本销毛
 // 数据」；负单台销毛不静默丢柱，零基线向下表达。预测起点从周状态派生，
 // 禁写死下标（与主图共用 firstForecastIndex）。
+// 图形几何（A3 尺寸对齐）：viewBox 1000×210（原 640×230）——渲染高与
+// 大盘卡图拉齐（1440 下 ≈282 vs 284px），字号 / 线宽渲染比例回 1.34（原 2.1）。
 // ============================================================
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { brandColor, color, radius, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
 import type { WorkbenchFixture } from './workbenchFixture';
@@ -16,8 +22,8 @@ import type { WorkbenchResult } from './workbenchModel';
 import { CertaintyBadge, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtMillionUsd, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 import { buildAxisTicks, firstForecastIndex } from './workbenchChartSegments';
 
-const W = 640;
-const H = 230;
+const W = 1000;
+const H = 210;
 const LEFT = 52;
 const RIGHT = 50;
 const TOP = 16;
@@ -26,6 +32,80 @@ const PLOT_W = W - LEFT - RIGHT;
 const PLOT_H = H - TOP - BOTTOM;
 
 const fmtUnits = (value: number | null): string => (value != null ? value.toLocaleString('en-US') : '—');
+
+// ------------------------------------------------------------
+// 依赖链路条（纯展示，卡内实现；与库存卡同一形态）：贴 IoBar 的
+// 小 chip + → 分隔语言，节点状态「文字 + 底色」双通道；末节点点亮
+// 表「预测期销毛」是本卡输出且不回写主图。
+// ------------------------------------------------------------
+type FlowStepState = 'base' | 'active' | 'amber' | 'muted';
+
+interface FlowStep {
+  label: string;
+  /** 节点前分隔符（默认 →；「+」表并列输入）。 */
+  join?: string;
+  /** 节点补充注记（如 不回写主图）。 */
+  note?: string;
+  /** 口径 / 公式收 title，不进正文。 */
+  title?: string;
+  state?: FlowStepState;
+}
+
+const FLOW_STEP_STYLE: Record<FlowStepState, CSSProperties> = {
+  base: { background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body },
+  active: { background: color.ink, border: `1px solid ${color.ink}`, color: color.onPrimary },
+  amber: { background: color.warningSoft, border: `1px solid ${color.warning}`, color: color.warningInk },
+  muted: { background: color.canvasSoft2, border: `1px solid ${color.hairline}`, color: color.mute },
+};
+
+function FlowBar({ ariaLabel, steps }: { ariaLabel: string; steps: FlowStep[] }) {
+  return (
+    <div
+      data-flow-bar=""
+      aria-label={ariaLabel}
+      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', marginBottom: space.sm }}
+    >
+      {steps.map((step, index) => {
+        const state = step.state ?? 'base';
+        return (
+          <Fragment key={step.label}>
+            {index > 0 && (
+              <span aria-hidden style={{ color: color.hairlineStrong, fontSize: 11 }}>{step.join ?? '→'}</span>
+            )}
+            <span
+              data-flow-step={step.label}
+              data-state={state}
+              title={step.title}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
+                borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
+                fontWeight: state === 'base' ? 400 : 600,
+                ...FLOW_STEP_STYLE[state],
+              }}
+            >
+              <span aria-hidden style={{ fontSize: 10, fontWeight: 600, opacity: 0.64 }}>{index + 1}</span>
+              {step.label}
+              {step.note && <span style={{ fontWeight: 600 }}>{step.note}</span>}
+            </span>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 成本销毛依赖链路：单台销毛 = 主图价格 − 成本月版本，× 主图 SO 汇总为期销毛。 */
+const COST_FLOW_ARIA = '成本销毛依赖链路：主图价格预测 + 成本月版本 → 单台销毛 → × 主图 SO → 预测期销毛（不回写主图）';
+
+function costFlowSteps(): FlowStep[] {
+  return [
+    { label: '主图价格预测', title: '单台销毛只跟价的预测有关：价格线（历史实 / 预测虚）来自主图' },
+    { label: '成本月版本', join: '+', title: '成本按月版本阶梯（实→虚），与价共同决定单台销毛' },
+    { label: '单台销毛', title: '单台销毛 = 主图价格 − 成本月版本' },
+    { label: '× 主图 SO', title: '乘主图最终 SO（量价链推完）得周销毛' },
+    { label: '预测期销毛', note: '不回写主图', title: '链路末端独立推测：汇总为预测期销毛，不修正主图', state: 'active' },
+  ];
+}
 
 export default function ForecastMarginCostCard({ fixture, result }: { fixture: WorkbenchFixture; result: WorkbenchResult }) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
@@ -58,6 +138,7 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
         input="主图最终 SO（量价链推完）· 主图价格 · 成本月版本趋势"
         output="预测期销毛（独立推测，不修正主图）"
       />
+      <FlowBar ariaLabel={COST_FLOW_ARIA} steps={costFlowSteps()} />
     </>
   );
 
@@ -134,7 +215,7 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
           width="100%"
           role="img"
           aria-label={`成本销毛：周销毛柱与月版本成本阶梯（${fixture.costVersions.map((version) => `${version.monthLabel} $${version.unitCost}`).join(' → ')}）；预测期（${fixture.context.forecastRange}）销毛 ${fmtMillionUsd(result.summary.forecastMargin)}，历史 ${fixture.context.historyRange} 销毛 ${fmtMillionUsd(result.summary.historyMargin)}。`}
-          style={{ display: 'block', height: 'auto', minWidth: 420 }}
+          style={{ display: 'block', height: 'auto', minWidth: 650 }}
         >
           {/* 周销毛轴（$M）：0 基线强分隔，其余刻度弱网格；负值向下 */}
           {tickValues.map((value) => {

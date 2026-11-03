@@ -11,7 +11,7 @@
 // 措辞不出现 因子/约束/置信区间/无约束需求/我司；话术统一
 // 「库存上限修正 / 按可售量修正 / 修正周」。数据全部演示（2026 真实周历）。
 // ============================================================
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CopyOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { Button, Checkbox, Input, InputNumber, Modal } from 'antd';
 import ChartContentBar from '../components/ChartContentBar';
@@ -43,7 +43,7 @@ import {
   workbenchCardStyle,
 } from './forecast/WorkbenchBits';
 import MainForecastChart, { DEFAULT_MAIN_FORECAST_VIEW, type MainForecastView } from './forecast/MainForecastChart';
-import ReferencePanel from './forecast/ReferencePanel';
+import ReferencePanel, { type ReferenceInputSignal } from './forecast/ReferencePanel';
 import MarketBusPanel from './forecast/MarketBusPanel';
 import InventoryValidationCard from './forecast/InventoryValidationCard';
 import ForecastMarginCostCard from './forecast/ForecastMarginCostCard';
@@ -133,6 +133,35 @@ export default function ForecastPage() {
   const tuneWeekResult = tuneWeek != null ? result.weeks.find((week) => week.weekNumber === tuneWeek) ?? null : null;
   const forecastWeekOptions = result.weeks.filter((week) => week.status === 'forecast')
     .map((week) => ({ week: week.week, weekNumber: week.weekNumber }));
+
+  // 智能弹框触发信号（A1 参考卡重构）：主图输入（手调应用 / 产品事件录入）
+  // 变化时向参考卡发 transient 信号（seq 递增），参考卡弹「我参考了这些产品，
+  // 它们在类似时间的表现」提示条（实现在 ReferencePanel 卡内，非 Modal）。
+  const [referenceSignal, setReferenceSignal] = useState<ReferenceInputSignal | null>(null);
+  const inputSigRef = useRef('');
+  useEffect(() => {
+    const manualSig = JSON.stringify(params.manual);
+    const eventSig = JSON.stringify(params.productEvents);
+    const current = JSON.stringify([manualSig, eventSig]);
+    const prev = inputSigRef.current;
+    inputSigRef.current = current;
+    if (prev === '' || prev === current) return;
+    const [prevManual, prevEvent] = JSON.parse(prev) as [string, string];
+    if (prevManual === manualSig && prevEvent === eventSig) return;
+    let weekLabel: string | undefined;
+    if (prevEvent !== eventSig) {
+      const last = params.productEvents[params.productEvents.length - 1];
+      weekLabel = last ? `W${last.week}` : undefined;
+    } else {
+      const manualWeeks = Object.keys(params.manual).map(Number).filter((week) => Number.isFinite(week));
+      weekLabel = manualWeeks.length ? `W${Math.max(...manualWeeks)}` : undefined;
+    }
+    setReferenceSignal((prevSignal) => ({
+      seq: (prevSignal?.seq ?? 0) + 1,
+      kind: prevEvent !== eventSig ? 'event' : 'manual',
+      weekLabel,
+    }));
+  }, [params.manual, params.productEvents]);
 
   // 主图受控视图（WP5 view/controls 接口，WP6 8.3 Step 10）：会话级跨页保留，
   // 由共享工具行 ChartToolbar 写入；预测页只启用 scale / yTicks。
@@ -323,12 +352,14 @@ export default function ForecastPage() {
         </div>
       </section>
 
-      {/* ② 量价参考（历史参照，纯历史无预测段，参考品居首；上一代选择受控进主链） */}
+      {/* ② 量价参考（历史参照，纯历史无预测段，参考品居首；上一代选择受控进主链；
+          智能弹框 = 主图输入变化时在参考卡内弹参照表现提示条） */}
       <ReferencePanel
         fixture={fixture}
         result={result}
         prevGenReferenceId={params.prevGenReferenceId}
         onPrevGenReferenceChange={(id) => setParams((prev) => ({ ...prev, prevGenReferenceId: id }))}
+        inputSignal={referenceSignal}
       />
 
       {/* ③ 大盘 · 总量总线（时间序列基线 + 行业级事件，只预测下一季） */}

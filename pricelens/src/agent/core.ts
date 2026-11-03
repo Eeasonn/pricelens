@@ -189,6 +189,14 @@ function formatPatchValue(value: unknown): string {
   if (value === undefined) return '—';
   if (typeof value === 'boolean') return value ? '开' : '关';
   if (typeof value === 'object' && value !== null && 'rrp' in value) return (value as { rrp: boolean }).rrp ? '折后价 + RRP' : '仅折后价';
+  // 产品选择数组：结构化格式（型号 · 规格，逗号连接），不落 [object Object]。
+  if (Array.isArray(value) && value.every((item) => typeof item === 'object' && item !== null && 'main' in item)) {
+    const labels = (value as Array<{ main: { modelId: string; romram: string } }>).map((item) => {
+      const name = dimProduct.find((row) => row.model_id === item.main.modelId)?.model_name ?? item.main.modelId;
+      return `${name} · ${item.main.romram}`;
+    });
+    return labels.length ? labels.join('、') : '未选择';
+  }
   return String(value);
 }
 
@@ -414,6 +422,11 @@ function forecastExplanationCards(
       `价格因子使用参考价 ${forecastDataset.params.referencePrice} 与当前弹性 ${effectiveElasticity.toFixed(2)}；fit 是否注入预测由快照安全门决定。`,
       `当前 fit 状态为${snapshot.fit.status === 'completed' ? '已完成' : '证据不足，回退先验'}；总体有效样本 ${snapshot.fit.sampleCount} 周，排除删失 ${snapshot.fit.excluded.censored}、混杂 ${snapshot.fit.excluded.confounded}、缺失 ${snapshot.fit.excluded.missing}。`,
       snapshot.competitorEvents.some((event) => event.marketEffect === 'unknown') ? '竞品上市的市场扩盘 / 分流状态仍待验证，当前只作为份额压力情景。' : '竞品事件已带有显式市场效应状态，仍需结合证据核对。',
+      // 推演工作台界面能力口径（A4 同步）：措辞按正典（把握度 / 库存上限修正 / 上一代参照比值校正 / 复制关键假设）。
+      '参照品联动：在推演工作台切换上一代参照后，基线按同周龄比值校正（选中参照 / 默认参照）；友商参照仅作对照，不进入主链。',
+      '库存上限修正：SO = min(基线 SO, 可售)，修正结果回写主图；修正周以琥珀描边标注，截断事实独立保留，手调不覆盖。',
+      '预测把握度：周销线与价格线的预测段附把握区间带，常规 ±8%、库存上限修正周 ±2%，与柱顶把握帽同参数；柱与带并存（柱 = 值，带 = 线的区间）。',
+      '复制关键假设：推演工作台可一键复制结构化关键假设文本（范围与模拟状态 → 模型版本 → 季度基线 → 行业事件 → 上一代参照 → 产品事件 → SI → 手调原因 → 库存规则 → 结果摘要），供会议与评审直接引用。',
     ],
     boundaries: [
       `${forecastDataset.meta.status === 'simulated' ? '当前数据为模拟演示，不能当作真实销量、库存或利润事实。' : '当前数据状态已标记。'}`,
@@ -432,7 +445,7 @@ function forecastExplanationCards(
   return {
     cards: [card],
     citations: [{ id: id('citation'), kind: 'calculation', label: '量价预测确定性模型', detail: `${forecastDataset.meta.modelVersion} · ${forecastDataset.meta.source} · ${forecastDataset.context.weekRange}` }],
-    steps: [step('catalog.resolve', '读取预测口径', `${forecastDataset.context.product} · ${forecastDataset.context.country}`), step('series.query', '读取模型输入', `${forecastDataset.weeks.length} 周 · ${forecastDataset.meta.status}`), step('series.compare', '展开假设与风险', `${factors.length} 个因子 · 当前周 ${current.week}`)],
+    steps: [step('catalog.resolve', '读取预测口径', `${forecastDataset.context.product} · ${forecastDataset.context.country}`), step('series.query', '读取模型输入', `${forecastDataset.weeks.length} 周 · ${forecastDataset.meta.status}`), step('series.compare', '展开假设与风险', `${factors.length} 项考量 · 当前周 ${current.week}`)],
     summary: `当前简单版预测基于${forecastDataset.context.product}的${forecastDataset.meta.modelVersion}${forecastDataset.meta.status === 'simulated' ? '模拟' : '观测'}输入：${current.week} 无约束需求 ${current.unconstrainedDemand.toLocaleString()} 台，SO ${current.so.toLocaleString()} 台，主要风险为${computation.kpi.risk.label}。`,
   };
 }

@@ -1,19 +1,37 @@
 // ============================================================
-// 推演工作台 v2 · 量价参考卡（WP3）组件测试：
-// 上一代选择器受控（写入 params.prevGenReferenceId，由页面持有状态）、
-// 友商选择器仅卡内对照（不触发主链回调）、缺数不造 0（实线断开 +
-// 灰虚桥接 + 「—」）、空参照池空态、生产话术（无禁词）、
-// 同周龄比值显示来自模型（卡内不另算比值）。
+// 推演工作台 v2 · 量价参考卡（A1 参考卡重构）组件测试：
+// 参考池整池开放（lifecyclePool 全池下拉，分组：进主链 / 对照）、
+// 上一代槽选择映射 chainRefId 写 params.prevGenReferenceId（受控，
+// 由页面持有状态）、对照产品不写主链（卡内标注「对照 · 不影响主图基线」）、
+// 友商槽仅卡内查看、缺数不造 0（柱不画 + 「—」注记）、空参照池空态、
+// 生产话术（无禁词）、同周龄比值显示来自模型（卡内不另算比值）、
+// 智能弹框（主图输入信号 → transient 提示条 → 条目定位事件周 → 可关闭）。
+// jsdom 无 ResizeObserver：stub 之；clientWidth 覆写为 600 让图进入就绪态。
 // ============================================================
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import ReferencePanel from '../ReferencePanel';
+import ReferencePanel, { type ReferenceInputSignal } from '../ReferencePanel';
 import { workbenchFixture, type WorkbenchFixture } from '../workbenchFixture';
 import { baseWorkbenchParams, computeWorkbench, type WorkbenchResult } from '../workbenchModel';
-import { brandColor, color } from '../../../theme/tokens';
 
-afterEach(cleanup);
+beforeAll(() => {
+  Element.prototype.setPointerCapture ??= () => undefined;
+  Element.prototype.releasePointerCapture ??= () => undefined;
+  Element.prototype.hasPointerCapture ??= () => false;
+});
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  });
+  Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { configurable: true, value: 600 });
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const fixture = workbenchFixture;
 
@@ -21,6 +39,7 @@ interface RenderOptions {
   fixture?: WorkbenchFixture;
   prevGenReferenceId?: string;
   onPrevGenReferenceChange?: (id: string) => void;
+  inputSignal?: ReferenceInputSignal | null;
 }
 
 function renderPanel(options: RenderOptions = {}) {
@@ -35,9 +54,10 @@ function renderPanel(options: RenderOptions = {}) {
       result={result}
       prevGenReferenceId={prevGenReferenceId}
       onPrevGenReferenceChange={onPrevGenReferenceChange}
+      inputSignal={options.inputSignal ?? null}
     />,
   );
-  return { ...utils, onPrevGenReferenceChange };
+  return { ...utils, onPrevGenReferenceChange, result };
 }
 
 /** 打开 antd Select 并点选可见选项（点击只认虚拟列表里的 .ant-select-item-option，ARIA 镜像 listbox 不可点）。 */
@@ -56,31 +76,47 @@ async function pickOption(triggerLabel: string, optionText: string): Promise<voi
   fireEvent.click(option);
 }
 
-/** 第一块图（上一代卡）内的主品实线路径集合（role="img" 的 svg；antd Select 箭头图标无 role）。 */
-function mainPaths(): SVGPathElement[] {
-  return Array.from(
-    document.querySelectorAll('svg[role="img"]')[0]?.querySelectorAll(`path[stroke="${brandColor.HUAWEI}"]`) ?? [],
-  );
-}
-
-describe('量价参考卡 · 上一代选择器受控（WP3 Step 1–2）', () => {
-  it('选择 Pura 90 必须调用 onPrevGenReferenceChange；受控显示值在父组件更新前保持不变', async () => {
-    const { onPrevGenReferenceChange } = renderPanel({ prevGenReferenceId: 'ref-mate80' });
+describe('量价参考卡 · 参考池下拉与主链映射（A1）', () => {
+  it('选择池内上一代（Pura 90）映射 chainRefId 写 onPrevGenReferenceChange；卡内视图即时切换到所选产品', async () => {
+    const { onPrevGenReferenceChange, rerender } = renderPanel({ prevGenReferenceId: 'ref-mate80' });
     await pickOption('选择上一代参照对象', 'Pura 90 Pro（上上代）');
     expect(onPrevGenReferenceChange).toHaveBeenCalledTimes(1);
     expect(onPrevGenReferenceChange).toHaveBeenCalledWith('ref-pura90');
-    // 受控语义：props 未变时显示仍是当前受控值（不得卡内自改状态）
+    // 槽位为卡内视图态：显示即时切到所选产品；父组件应用回调后（prevGenReferenceId = ref-pura90）保持一致
     const shown = document.querySelectorAll('.ant-select-selection-item');
-    expect(shown[0]?.textContent).toBe('Mate 80（上一代）');
+    expect(shown[0]?.textContent).toBe('Pura 90 Pro（上上代）');
+    rerender(
+      <ReferencePanel
+        fixture={fixture}
+        result={computeWorkbench(fixture, { ...baseWorkbenchParams(fixture), prevGenReferenceId: 'ref-pura90' })}
+        prevGenReferenceId="ref-pura90"
+        onPrevGenReferenceChange={() => {}}
+        inputSignal={null}
+      />,
+    );
+    const shownAfter = document.querySelectorAll('.ant-select-selection-item');
+    expect(shownAfter[0]?.textContent).toBe('Pura 90 Pro（上上代）');
+    expect(screen.getAllByText('进主链 · 基线校正')).toHaveLength(1);
   });
 
-  it('友商选择器仅卡内查看状态：切换不触发 onPrevGenReferenceChange；文案明示仅对照、不改主图基线', async () => {
+  it('池下拉整池开放：上一代槽也能看到友商产品；选友商 = 纯对照（不写主链，双卡出对照标注）', async () => {
     const { onPrevGenReferenceChange } = renderPanel({ prevGenReferenceId: 'ref-mate80' });
-    await pickOption('选择友商参照对象', 'Galaxy S25 促销期');
+    // 默认上一代槽在主链：徽标「进主链 · 基线校正」恰好一处
+    expect(screen.getAllByText('进主链 · 基线校正')).toHaveLength(1);
+    await pickOption('选择上一代参照对象', 'Galaxy S25（友商同期）');
+    expect(onPrevGenReferenceChange).not.toHaveBeenCalled();
+    // 两卡均为对照：标注各一处
+    expect(screen.getAllByText('对照 · 不影响主图基线')).toHaveLength(2);
+    expect(screen.queryByText('进主链 · 基线校正')).toBeNull();
+  });
+
+  it('友商选择器仅卡内查看状态：切换不触发 onPrevGenReferenceChange；文案明示对照语义', async () => {
+    const { onPrevGenReferenceChange } = renderPanel({ prevGenReferenceId: 'ref-mate80' });
+    await pickOption('选择友商参照对象', 'iPhone 17（友商同期）');
     expect(onPrevGenReferenceChange).not.toHaveBeenCalled();
     const text = document.body.textContent ?? '';
-    expect(text).toContain('Galaxy S25 促销期');
-    expect(text).toContain('仅对照');
+    expect(text).toContain('iPhone 17（友商同期）');
+    expect(text).toContain('对照 · 不影响主图基线');
     expect(text).toContain('不修改主图基线');
   });
 
@@ -92,62 +128,36 @@ describe('量价参考卡 · 上一代选择器受控（WP3 Step 1–2）', () =
   });
 });
 
-describe('量价参考卡 · 缺数几何（WP3 Step 2–3）', () => {
-  /** W42（index 5）主品销量缺失。 */
-  const missingFixture: WorkbenchFixture = {
-    ...fixture,
-    weeks: fixture.weeks.map((week, index) => (index === 5 ? { ...week, sales: null } : week)),
-  };
-
-  it('主品缺数周不得画成零值点：实线在缺失处断开为两段；缺数显示「—」', () => {
-    renderPanel({ fixture: missingFixture });
-    const paths = mainPaths();
-    expect(paths.length).toBeGreaterThan(0);
-    const totalStarts = paths.reduce((count, path) => count + ((path.getAttribute('d') ?? '').match(/M/g) ?? []).length, 0);
-    expect(totalStarts).toBe(2);
-    expect(document.body.textContent).toContain('显示「—」');
-  });
-
-  it('跨缺失段用灰虚线桥接（只连缺失两侧有值点，与参照虚线区分）', () => {
-    renderPanel({ fixture: missingFixture });
-    const firstSvg = document.querySelectorAll('svg[role="img"]')[0];
-    const dashed = Array.from(firstSvg?.querySelectorAll(`path[stroke="${color.hairlineStrong}"]`) ?? []);
-    const bridge = dashed.find((path) => path.getAttribute('stroke-dasharray') === '2 3');
-    expect(bridge).toBeTruthy();
-    expect(((bridge?.getAttribute('d') ?? '').match(/M/g) ?? []).length).toBe(1);
-  });
-
-  it('无缺数时主品为单一实线段（回归）', () => {
+describe('量价参考卡 · 缺数纪律（缺数不造 0）', () => {
+  it('X200 缺采周（W13、W14）：柱不画（50 根）且显示「—」注记', async () => {
     renderPanel({ prevGenReferenceId: 'ref-mate80' });
-    const paths = mainPaths();
-    expect(paths.length).toBe(1);
-    expect(((paths[0]?.getAttribute('d') ?? '').match(/M/g) ?? []).length).toBe(1);
+    await pickOption('选择友商参照对象', 'X200（友商同期）');
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('缺数周 W13、W14 显示「—」，不计 0');
+    const overlay = Array.from(document.querySelectorAll('svg[role="img"]'))
+      .find((node) => (node.getAttribute('aria-label') ?? '').includes('X200'));
+    expect(overlay).toBeTruthy();
+    // 量柱在独立的 VolumeBars svg 层（VIVO 品牌色半透明），缺采周不画
+    const bars = Array.from(document.querySelectorAll('rect')).filter((rect) =>
+      (rect.getAttribute('fill') ?? '').startsWith('rgba(38, 147, 202'));
+    expect(bars.length).toBe(50);
   });
 });
 
-describe('量价参考卡 · 空参照池（WP3 Step 2）', () => {
-  it('上一代参照池为空显示「暂无可参照历史」，不崩溃、不回调', () => {
+describe('量价参考卡 · 空参照池（A1）', () => {
+  it('参考池为空显示「暂无可参照历史」（单空态），不崩溃、不回调', () => {
     const emptyFixture: WorkbenchFixture = {
       ...fixture,
-      references: { ...fixture.references, prevGenPool: [] },
+      references: { ...fixture.references, lifecyclePool: [] },
     };
     const { onPrevGenReferenceChange } = renderPanel({ fixture: emptyFixture, prevGenReferenceId: '' });
-    expect(screen.getByText('暂无可参照历史')).toBeTruthy();
+    expect(screen.getAllByText('暂无可参照历史')).toHaveLength(1);
     expect(onPrevGenReferenceChange).not.toHaveBeenCalled();
-  });
-
-  it('友商参照池为空同样显示空态', () => {
-    const emptyFixture: WorkbenchFixture = {
-      ...fixture,
-      references: { ...fixture.references, competitorPool: [] },
-    };
-    renderPanel({ fixture: emptyFixture });
-    expect(screen.getByText('暂无可参照历史')).toBeTruthy();
   });
 });
 
-describe('量价参考卡 · 生产话术与模型比值（WP3 Step 4 / 禁词 / 只消费模型）', () => {
-  it('卡头为「历史参照」+「仅历史」轻量标识；无禁词（因子 / 首当其冲 / 一定是 /（演示）/ 我司）', () => {
+describe('量价参考卡 · 生产话术与模型比值（禁词 / 只消费模型）', () => {
+  it('卡头 hint 为「历史参照」+「仅历史」轻量标识；无禁词（因子 / 首当其冲 / 一定是 /（演示）/ 我司）', () => {
     renderPanel();
     const text = document.body.textContent ?? '';
     expect(text).toContain('历史参照');
@@ -166,5 +176,42 @@ describe('量价参考卡 · 生产话术与模型比值（WP3 Step 4 / 禁词 /
   it('参照缺数（友商 id 被误传为主链参照）时展示模型回退说明「参照缺数，未修正」', () => {
     renderPanel({ prevGenReferenceId: 'ref-ip17' });
     expect(document.body.textContent).toContain('参照缺数，未修正');
+  });
+});
+
+describe('量价参考卡 · 智能弹框（主图输入 → 参照表现提示条）', () => {
+  const signal: ReferenceInputSignal = { seq: 1, kind: 'event', weekLabel: 'W47' };
+
+  it('inputSignal 触发 transient 提示条：列出参照产品类似时间的事件读数', () => {
+    renderPanel({ inputSignal: signal });
+    expect(screen.getByText('我参考了这些产品')).toBeTruthy();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('主图录入产品事件（W47）后');
+    expect(text).toContain('Mate 80 618 档期脉冲 +42%×4 周');
+    expect(text).toContain('Galaxy S25 首销促销期 −6%×4 周');
+  });
+
+  it('点击条目定位到对应事件周（图内窗口缩至 16 周并含事件）；可手动关闭', async () => {
+    renderPanel({ inputSignal: signal });
+    fireEvent.click(screen.getByRole('button', { name: 'Mate 80 618 档期脉冲 +42%×4 周' }));
+    expect(screen.getByText('查看 16/52 周')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('关闭参照提示'));
+    expect(screen.queryByText('我参考了这些产品')).toBeNull();
+  });
+
+  it('无信号不出现提示条；手动微调信号组稿口径不同（「手动微调」）', () => {
+    const { rerender } = renderPanel();
+    expect(screen.queryByText('我参考了这些产品')).toBeNull();
+    rerender(
+      <ReferencePanel
+        fixture={fixture}
+        result={computeWorkbench(fixture, { ...baseWorkbenchParams(fixture), prevGenReferenceId: 'ref-mate80' })}
+        prevGenReferenceId="ref-mate80"
+        onPrevGenReferenceChange={() => {}}
+        inputSignal={{ seq: 1, kind: 'manual', weekLabel: 'W49' }}
+      />,
+    );
+    expect(screen.getByText('我参考了这些产品')).toBeTruthy();
+    expect(document.body.textContent ?? '').toContain('主图手动微调（W49）后');
   });
 });

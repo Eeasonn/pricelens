@@ -1,5 +1,6 @@
 import { isAgentEvent, isAgentResponse, type AgentContextSnapshot, type AgentEvent, type AgentIntent, type AgentResponse, type ForecastContextInput, type ForecastDraftInput } from './contracts';
 import { runAgent } from './core';
+import { resolveAgentEngine } from './remoteConfig';
 
 export interface AgentRunRequest {
   text: string;
@@ -110,10 +111,47 @@ export function createSseAgentClient(options: { baseUrl: string; fetcher?: typeo
   };
 }
 
-/** 按构建时配置选择真实服务端或离线确定性适配器。 */
-export function defaultAgentClient(): AgentClient {
-  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-  const baseUrl = env?.VITE_AGENT_API_BASE_URL;
+/** 回退结果的 provider 标记：与 SSE 服务端 fallback 信封保持同一口径，调用方可据此区分引擎来源。 */
+export const LOCAL_FALLBACK_PROVIDER = { name: '本地确定性回退', model: 'local' } as const;
+
+/**
+ * 远端 Agent 只负责叙述与编排，数值卡片仍由本地确定性引擎生成；远端不可达
+ * （网络失败 / 非 2xx / 超时 / 契约不符）时回退本地 client，保证纯静态托管
+ * （GitHub Pages）下 Agent 功能等价可用。回退结果覆盖 provider 为可区分标记，
+ * 并经 events 通道补一条符合 isAgentEvent 校验的本地说明事件。用户主动取消
+ * （AbortError 且外部 signal 已中止）不是服务故障，直接上抛，不拿本地结果冒充。
+ */
+export function withLocalFallback(remote: AgentClient, local: AgentClient): AgentClient {
+  return {
+    async run(request, signal, onEvent) {
+      try {
+        return await remote.run(request, signal, onEvent);
+      } catch (error) {
+        if ((error as Error)?.name === 'AbortError' && signal?.aborted) throw error;
+        const runId = request.runId ?? request.clientRequestId;
+        onEvent?.({
+          id: `${runId}-local-fallback-${Date.now().toString(36)}`,
+          runId,
+          sequence: 1,
+          type: 'step.started',
+          timestamp: new Date().toISOString(),
+          message: '远端 Agent 服务不可达，已使用本地确定性引擎',
+          provenance: { source: 'local-deterministic', provider: LOCAL_FALLBACK_PROVIDER.name, model: LOCAL_FALLBACK_PROVIDER.model },
+        });
+        const response = await local.run(request, signal, onEvent);
+        return { ...response, provider: { ...LOCAL_FALLBACK_PROVIDER } };
+      }
+    },
+  };
+}
+
+/** 按配置选择远端（带回退）或离线确定性适配器；localStorage 自配地址优先于构建时 env。 */
+export function defaultAgentClient(env: Record<string, string | undefined> = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env): AgentClient {
+  const engine = resolveAgentEngine(env);
+  if (!engine.baseUrl) return localAgentClient;
   const protocol = (globalThis as typeof globalThis & { location?: { protocol?: string } }).location?.protocol;
-  return baseUrl && protocol !== 'file:' ? createSseAgentClient({ baseUrl }) : localAgentClient;
+  // 构建期 env 在生产里是同源相对路径（/api/agent），file: 打开的离线单文件包没有同源代理；
+  // localStorage 是显式自配的绝对地址，file: 下也放行，失败由回退兜底。
+  if (engine.source === 'env' && protocol === 'file:') return localAgentClient;
+  return withLocalFallback(createSseAgentClient({ baseUrl: engine.baseUrl }), localAgentClient);
 }

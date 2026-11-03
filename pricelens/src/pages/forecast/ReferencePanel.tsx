@@ -1,202 +1,129 @@
 // ============================================================
-// 推演工作台 v2 · 层②量价参考（历史参照卡，WP3 生产化版）：
-// 上一代同期 = 受控选择器（写入 params.prevGenReferenceId 进主链；
-// 同周龄比值校正由模型计算，卡内不另算比值）+ 友商同期 = 仅对照
-// 与回放（卡内查看状态，不改主图基线）；参照对象量价走势 + 历史
-// 窗内可观测事实锚（大促 / 发布 / 调价，与主图小事件同源色系）。
-// 仅历史、无预测段。缺数纪律：缺数不造 0——实线只连相邻有值点，
-// 跨缺失段灰虚线桥接，缺数周显示「—」。
+// 推演工作台 v2 · 层②量价参考（A1 参考卡重构）：
+// 标题「上一代上市同期 / 友商同期量价」不绑定具体产品名；参考池
+// （references.lifecyclePool）整池开放进两卡下拉，支持自由选择任何产品的
+// 全生命周期量价做参考——选上一代（chainRefId 映射 prevGenPool）仍写
+// params.prevGenReferenceId 进主链（同周龄比值校正，卡内只消费模型读数）；
+// 选友商 / 其他产品 = 纯对照，卡内标注「对照 · 不影响主图基线」。
+// 图 = ReferenceVolumeChart（量柱 + 价格线 + 档期带 + 事件锚 + 拖选区间
+// 读数 + 时间窗滑条，样式对齐量价走势页）；主品线不再出现在本卡（主品
+// 只在上方主图）。保留 SimChip「模拟历史」与 IoBar；保留模型比值行。
+// 智能弹框：主图输入（手调应用 / 产品事件录入）时经 inputSignal 触发卡头
+// 顶部 transient 条（非 Modal，8 秒自动收起，可手动关），列出当前参照
+// 产品在类似时间的表现；点击条目定位到对应事件周。
 // ============================================================
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Select } from 'antd';
-import { brandColor, color, radius, space } from '../../theme/tokens';
-import { niceCeil } from '../../dataModel/volume';
-import type { ReferenceFactSeed, ReferenceSeriesSeed, WorkbenchFixture } from './workbenchFixture';
+import { color, radius, space } from '../../theme/tokens';
+import type { LifecycleProductSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult } from './workbenchModel';
-import { IoBar, SectionHead, SimChip, WorkbenchLegend, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import { IoBar, SectionHead, SimChip, fmtSignedPct, workbenchCardStyle } from './WorkbenchBits';
+import ReferenceVolumeChart from './ReferenceVolumeChart';
 
-const CHART_W = 560;
-const CHART_H = 204;
-const HISTORY_LEN = 8;
-
-/** 事实锚色（与主图小事件同源：promo 琥珀 / launch 蓝 / price 墨）。 */
-const FACT_COLOR: Record<ReferenceFactSeed['type'], string> = {
-  promo: color.warning,
-  launch: color.link,
-  price: color.ink,
-};
-
-/** 缺数几何：连续有值段（实线只连接相邻有值点，缺数不造点）。 */
-function solidSegmentsOf(values: Array<number | null>): number[][] {
-  const segments: number[][] = [];
-  let current: number[] = [];
-  values.forEach((value, index) => {
-    if (value == null) {
-      if (current.length > 1) segments.push(current);
-      current = [];
-    } else {
-      current.push(index);
-    }
-  });
-  if (current.length > 1) segments.push(current);
-  return segments;
+/** 主图输入信号（页面接线）：手调 / 产品事件变化时 seq 递增，驱动智能弹框。 */
+export interface ReferenceInputSignal {
+  seq: number;
+  kind: 'manual' | 'event';
+  /** 变化涉及的周标签（如 W47），可缺省。 */
+  weekLabel?: string;
 }
 
-/** 缺数几何：跨缺失桥接段（连接缺失两侧最近的有值点，灰虚线表达）。 */
-function bridgeSegmentsOf(values: Array<number | null>): Array<[number, number]> {
-  const bridges: Array<[number, number]> = [];
-  let lastValid: number | null = null;
-  values.forEach((value, index) => {
-    if (value != null) {
-      if (lastValid != null && index - lastValid > 1) bridges.push([lastValid, index]);
-      lastValid = index;
-    }
-  });
-  return bridges;
+/** 参考池下拉选项（支持分组：进主链 / 对照）。 */
+type PoolOption = { value: string; label: string } | { label: string; options: Array<{ value: string; label: string }> };
+
+interface HintEntry {
+  chart: 'own' | 'comp';
+  productId: string;
+  text: string;
+  week: number;
 }
 
-function ReferenceChart({
-  fixture,
-  series,
-  selectValue,
-  onSelect,
-  selectLabel,
+interface HintState {
+  kind: 'manual' | 'event';
+  weekLabel?: string;
+  entries: HintEntry[];
+}
+
+const shortLabelOf = (product: LifecycleProductSeed): string => product.label.replace(/（[^）]*）/g, '').trim();
+
+/** 智能弹框组稿：取参照产品带影响读数的事件（档期事件优先），最多一条。 */
+function hintEntriesOf(product: LifecycleProductSeed | null, chart: 'own' | 'comp'): HintEntry[] {
+  if (!product) return [];
+  const events = product.events.filter((ev) => ev.impactPct != null && ev.impactWeeks != null);
+  const ranked = [...events].sort((a, b) => Number(b.type === 'promo') - Number(a.type === 'promo'));
+  return ranked.slice(0, 1).map((ev) => ({
+    chart,
+    productId: product.id,
+    week: ev.week,
+    text: `${shortLabelOf(product)} ${ev.label} ${fmtSignedPct(ev.impactPct as number)}×${ev.impactWeeks} 周`,
+  }));
+}
+
+/** 参考卡子卡：标题 + 池下拉 + 链路徽标 + 全生命周期量价图 + 模型比值行。 */
+function ReferenceChartCard({
   title,
   subtitle,
-  facts,
+  selectLabel,
+  product,
+  options,
+  value,
+  onSelect,
+  chainBadge,
   footNote,
+  focusWeek,
+  focusKey,
 }: {
-  fixture: WorkbenchFixture;
-  series: ReferenceSeriesSeed[];
-  selectValue: string;
-  onSelect: (id: string) => void;
-  selectLabel: string;
   title: string;
   subtitle: string;
-  facts: ReferenceFactSeed[];
-  /** 来自推演模型的说明行（如同周龄比值校正读数）；缺省不渲染。 */
+  selectLabel: string;
+  product: LifecycleProductSeed | null;
+  options: PoolOption[];
+  value: string;
+  onSelect: (id: string) => void;
+  /** 链路徽标：chain = 进主链；contrast = 对照（不影响主图基线）。 */
+  chainBadge: 'chain' | 'contrast';
+  /** 来自推演模型的说明行（同周龄比值校正读数）；缺省不渲染。 */
   footNote?: string;
+  focusWeek?: number | null;
+  focusKey?: number;
 }) {
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-
-  // 空参照池：显示空态，不渲染图表（缺数不造 0 的前置守卫）。
-  if (!series.length) {
-    return (
-      <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: `${space.md}px ${space.base}px ${space.sm}px`, minWidth: 0 }}>
-        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: color.ink }}>{title}</h3>
-        <div role="status" style={{ padding: `${space.lg}px 0`, textAlign: 'center', fontSize: 12, color: color.mute }}>暂无可参照历史</div>
-      </div>
-    );
-  }
-
-  const active = series.find((item) => item.id === selectValue) ?? series[0];
-  const left = 44;
-  const right = 14;
-  const top = 18;
-  const bottom = 26;
-  const plotW = CHART_W - left - right;
-  const plotH = CHART_H - top - bottom;
-  // 纯历史窗（W37–W44）：主品 8 点（可缺数）+ 参照 8 点，无预测段（纲领拍板）。
-  const mainValues: Array<number | null> = fixture.weeks.slice(0, HISTORY_LEN).map((week) => week.sales);
-  const refValues = active.points.slice(0, HISTORY_LEN);
-  const peak = Math.max(0, ...mainValues.filter((value): value is number => value != null), ...refValues);
-  const maxValue = Math.max(1, niceCeil(peak * 1.15));
-  const x = (index: number): number => left + (index + 0.5) * (plotW / HISTORY_LEN);
-  const y = (value: number): number => top + plotH * (1 - value / maxValue);
-  const line = (values: number[]): string =>
-    values.map((value, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)} ${y(value).toFixed(1)}`).join(' ');
-  const pathOf = (indexes: number[], values: Array<number | null>): string =>
-    indexes.map((index, position) => `${position === 0 ? 'M' : 'L'}${x(index).toFixed(1)} ${y(values[index] as number).toFixed(1)}`).join(' ');
-  const solidSegments = solidSegmentsOf(mainValues);
-  const bridges = bridgeSegmentsOf(mainValues);
-  const historyMain = mainValues.reduce<number>((total, value) => total + (value ?? 0), 0);
-  const historyRef = refValues.reduce((total, value) => total + value, 0);
-  const historyDelta = historyRef > 0 ? (((historyMain / historyRef) - 1) * 100).toFixed(1) : '—';
-  const missingWeeks = fixture.weeks.slice(0, HISTORY_LEN).filter((week) => week.sales == null).map((week) => week.week);
-  const missingNote = missingWeeks.length ? `缺数周 ${missingWeeks.join('、')} 显示「—」，不计 0` : '';
-  const historyText = `历史段（${fixture.context.historyRange}）累计：主品 ${(historyMain / 10000).toFixed(1)} 万台 vs ${active.label} ${(historyRef / 10000).toFixed(1)} 万台（${Number(historyDelta) > 0 ? '+' : ''}${historyDelta}%）${missingNote ? ` · ${missingNote}` : ''}`;
-
-  const legendItems: LegendItem[] = [
-    { key: 'main', label: '主品周销（历史）', shape: 'line', color: brandColor.HUAWEI },
-    { key: 'ref', label: active.label, shape: 'dash', color: color.hairlineStrong },
-    { key: 'facts', label: '事实锚（促销琥珀 / 发布蓝 / 调价墨）', shape: 'marker', color: color.warning },
-  ];
-  const toggle = (key: string) => setHidden((prev) => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    return next;
-  });
-
+  const badge = chainBadge === 'chain';
   return (
     <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: `${space.md}px ${space.base}px ${space.sm}px`, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm, flexWrap: 'wrap' }}>
         <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: color.ink }}>{title}</h3>
+        <span
+          title={badge
+            ? '该参照为上一代产品：选择写入主链，经同周龄比值校正主图基线'
+            : '对照查看：不写入主链、不影响主图基线，仅用于核对量价节奏'}
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: '2px 8px',
+            borderRadius: radius.pill,
+            whiteSpace: 'nowrap',
+            background: badge ? color.canvasSoft2 : color.canvasSoft,
+            color: badge ? color.body : color.mute,
+            border: `1px solid ${color.hairline}`,
+          }}
+        >
+          {badge ? '进主链 · 基线校正' : '对照 · 不影响主图基线'}
+        </span>
         <Select
           size="small"
           aria-label={selectLabel}
-          value={active.id}
+          value={value}
           onChange={onSelect}
-          options={series.map((item) => ({ value: item.id, label: item.label }))}
-          style={{ minWidth: 168, marginLeft: 'auto' }}
+          options={options}
+          style={{ minWidth: 172, marginLeft: 'auto' }}
         />
       </div>
-      <div style={{ fontSize: 11, color: color.mute, marginBottom: space.sm, minWidth: 0 }} title={subtitle}>{subtitle}</div>
-      <div style={{ overflowX: 'auto' }}>
-        <svg
-          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-          width="100%"
-          role="img"
-          aria-label={`${title}：主品与${active.label}的历史周销对照（仅 ${fixture.context.historyRange}，无预测段）；${historyText}；事实锚 ${facts.map((fact) => fact.label).join('、')}。`}
-          style={{ display: 'block', height: 'auto', minWidth: 320 }}
-        >
-          {[0.5, 1].map((fraction) => (
-            <g key={fraction}>
-              <line x1={left} y1={y(maxValue * fraction)} x2={CHART_W - right} y2={y(maxValue * fraction)} stroke={fraction === 1 ? color.hairlineStrong : color.hairline} />
-              <text x={left - 6} y={y(maxValue * fraction) + 3} fontSize={10} fill={color.mute} textAnchor="end">{Math.round(maxValue * fraction / 10000)}</text>
-            </g>
-          ))}
-          <text x={left - 6} y={top - 6} fontSize={10} fill={color.mute} textAnchor="end">万台</text>
-          {!hidden.has('ref') && (
-            <path d={line(refValues)} fill="none" stroke={color.hairlineStrong} strokeWidth={1.6} strokeDasharray="5 4" />
-          )}
-          {/* 主品实线：只连接相邻有值点；缺数不画零值点。 */}
-          {!hidden.has('main') && solidSegments.map((segment, segmentIndex) => (
-            <path key={`main-solid-${segmentIndex}`} d={pathOf(segment, mainValues)} fill="none" stroke={brandColor.HUAWEI} strokeWidth={2.4} />
-          ))}
-          {/* 跨缺失段：灰虚线桥接（连接缺失两侧有值点，不冒充实测）。 */}
-          {!hidden.has('main') && bridges.map(([from, to], bridgeIndex) => (
-            <path
-              key={`main-bridge-${bridgeIndex}`}
-              d={`M${x(from).toFixed(1)} ${y(mainValues[from] as number).toFixed(1)} L${x(to).toFixed(1)} ${y(mainValues[to] as number).toFixed(1)}`}
-              fill="none"
-              stroke={color.hairlineStrong}
-              strokeWidth={1.4}
-              strokeDasharray="2 3"
-              opacity={0.85}
-            />
-          ))}
-          {/* 事实锚（参照对象历史窗内的可观测事实，与主图小事件同源色系） */}
-          {!hidden.has('facts') && facts.map((fact) => {
-            const cx = x(fact.weekIndex);
-            const tone = FACT_COLOR[fact.type];
-            return (
-              <g key={fact.label}>
-                <line x1={cx} y1={top} x2={cx} y2={top + plotH} stroke={tone} strokeDasharray="3 4" opacity={0.5} />
-                <rect x={cx - 5} y={top + 2} width={10} height={10} rx={2} fill={color.canvas} stroke={tone} strokeWidth={1.3} />
-                <title>{`${fact.label}（${fixture.weeks[fact.weekIndex]?.week ?? ''} 周）`}</title>
-              </g>
-            );
-          })}
-          <g fontSize={10} fill={color.mute} textAnchor="middle">
-            {fixture.weeks.slice(0, HISTORY_LEN).map((week, index) => (index % 2 === 0 || index === HISTORY_LEN - 1
-              ? <text key={week.week} x={x(index)} y={CHART_H - 8}>{week.week}</text>
-              : null))}
-          </g>
-        </svg>
-      </div>
-      <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
-      <div className="tnum" style={{ marginTop: space.xs, fontSize: 11, color: color.body, minWidth: 0 }}>{historyText}</div>
+      <div style={{ fontSize: 11, color: color.mute, marginBottom: space.sm, minWidth: 0 }}>{subtitle}</div>
+      {product ? (
+        <ReferenceVolumeChart product={product} focusWeek={focusWeek} focusKey={focusKey} />
+      ) : (
+        <div role="status" style={{ padding: `${space.lg}px 0`, textAlign: 'center', fontSize: 12, color: color.mute }}>暂无可参照历史</div>
+      )}
       {footNote && (
         <div className="tnum" style={{ marginTop: space.xs, fontSize: 11, color: color.mute, minWidth: 0 }}>{footNote}</div>
       )}
@@ -211,6 +138,8 @@ export interface ReferencePanelProps {
   prevGenReferenceId: string;
   /** 选择回调：写入 params.prevGenReferenceId，经模型同周龄比值校正主图基线。 */
   onPrevGenReferenceChange: (id: string) => void;
+  /** 主图输入信号（手调应用 / 产品事件录入）：seq 递增触发智能弹框。 */
+  inputSignal?: ReferenceInputSignal | null;
 }
 
 export default function ReferencePanel({
@@ -219,24 +148,95 @@ export default function ReferencePanel({
   // 受控值；页面（WP6 集成）接线前回退基准参照，保证渲染安全。
   prevGenReferenceId = fixture.references.prevGenPool[0]?.id ?? '',
   onPrevGenReferenceChange,
+  inputSignal,
 }: ReferencePanelProps) {
-  // 友商参照 = 卡内查看状态（仅对照与回放），不写入主链。
-  const [competitorId, setCompetitorId] = useState(fixture.references.competitorPool[0]?.id ?? '');
+  const pool = useMemo(() => fixture.references.lifecyclePool ?? [], [fixture]);
+  // 上一代槽初始 = 主链参照对应的池内产品（无映射回退首个可进主链产品）。
+  const initialOwn = pool.find((p) => p.chainRefId === prevGenReferenceId)?.id
+    ?? pool.find((p) => p.chainRefId != null)?.id
+    ?? pool[0]?.id
+    ?? '';
+  const [ownId, setOwnId] = useState(initialOwn);
+  const ownIdRef = useRef(initialOwn);
+  // 页面侧受控 prevGenReferenceId 变化（如重置基准）→ 槽位视图跟随主链
+  //（当前槽位视图已是对照产品时不跟随，保留用户的对照视角）。
+  useEffect(() => {
+    const viewed = pool.find((p) => p.id === ownIdRef.current);
+    if (viewed?.chainRefId && viewed.chainRefId !== prevGenReferenceId) {
+      const chainProduct = pool.find((p) => p.chainRefId === prevGenReferenceId);
+      if (chainProduct) {
+        ownIdRef.current = chainProduct.id;
+        setOwnId(chainProduct.id);
+      }
+    }
+  }, [prevGenReferenceId, pool]);
+  // 友商槽 = 卡内查看状态（仅对照与回放），不写入主链。
+  const [compId, setCompId] = useState(() => pool.find((p) => p.chainRefId == null)?.id ?? pool[0]?.id ?? '');
+
+  const ownProduct = pool.find((p) => p.id === ownId) ?? null;
+  const compProduct = pool.find((p) => p.id === compId) ?? null;
+  const ownInChain = ownProduct?.chainRefId != null && ownProduct.chainRefId === prevGenReferenceId;
+
+  const selectOwn = (id: string): void => {
+    ownIdRef.current = id;
+    setOwnId(id);
+    const product = pool.find((p) => p.id === id);
+    // 选上一代（有主链映射）→ 写 prevGenReferenceId 进主链；其他产品 = 纯对照，不改主图基线。
+    if (product?.chainRefId) onPrevGenReferenceChange?.(product.chainRefId);
+  };
+
+  // 池下拉（与前页拉齐：整池开放，分组 = 进主链 / 对照）。
+  const poolOptions = useMemo(() => [
+    { label: '上一代 · 进主链', options: pool.filter((p) => p.chainRefId != null).map((p) => ({ value: p.id, label: p.label })) },
+    { label: '友商 / 其他 · 对照', options: pool.filter((p) => p.chainRefId == null).map((p) => ({ value: p.id, label: p.label })) },
+  ].filter((group) => group.options.length > 0), [pool]);
+
+  // ---- 智能弹框（transient 顶部条，非 Modal）：inputSignal.seq 递增触发，
+  //      8 秒自动收起；条目点击定位到对应事件周（图内窗口平移 + 悬停）。 ----
+  const [hint, setHint] = useState<HintState | null>(null);
+  const [focus, setFocus] = useState<{ ownWeek: number | null; ownKey: number; compWeek: number | null; compKey: number }>({
+    ownWeek: null, ownKey: 0, compWeek: null, compKey: 0,
+  });
+  const seenSeqRef = useRef(0);
+  useEffect(() => {
+    if (!inputSignal || inputSignal.seq <= seenSeqRef.current) return;
+    seenSeqRef.current = inputSignal.seq;
+    setHint({
+      kind: inputSignal.kind,
+      weekLabel: inputSignal.weekLabel,
+      entries: [...hintEntriesOf(ownProduct, 'own'), ...hintEntriesOf(compProduct, 'comp')],
+    });
+  }, [inputSignal, ownProduct, compProduct]);
+  useEffect(() => {
+    if (!hint) return;
+    const timer = window.setTimeout(() => setHint(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [hint]);
+  const focusEntry = (entry: HintEntry): void => {
+    setFocus((prev) => (entry.chart === 'own'
+      ? { ...prev, ownWeek: entry.week, ownKey: prev.ownKey + 1 }
+      : { ...prev, compWeek: entry.week, compKey: prev.compKey + 1 }));
+  };
+
+  // 模型比值行（主图基线校正）：只消费推演模型考量，卡内不另算比值。
   const firstForecastWeek = result.weeks.find((week) => week.status === 'forecast');
   const referenceConsider = firstForecastWeek?.consider.find((item) => item.kind === 'reference');
   const prevGenFootnote = firstForecastWeek && referenceConsider
     ? `主图基线校正 · 首预测周 ${firstForecastWeek.week}：${referenceConsider.note}`
     : undefined;
+
+  const emptyPool = pool.length === 0;
+
   return (
     <section style={workbenchCardStyle}>
       <SectionHead
-        title="量价参考"
-        hint="历史参照：上一代同期与友商同窗的量价走势 + 可观测事实锚（大促 / 发布 / 调价）；纯历史 · 无预测段。上一代参照经同周龄比值进入主图基线校正。"
+        title="上一代上市同期 / 友商同期量价"
+        hint="历史参照：上一代上市同期与友商同期量价。每张图为参照产品上市起的全生命周期量价（量柱 + 价格线 + 档期带 + 事件锚），图上拖选区间读价量变化，底部时间窗可平移缩放；参考池整池开放，选上一代经同周龄比值进入主图基线校正，其他产品仅对照。"
         extra={(
           <>
             <span
-              title="历史窗演示样本 · 纯历史数据，无预测段"
-              style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: color.canvasSoft2, color: color.body }}
+              title="参照序列为历史演示样本 · 纯历史数据，无预测段"
+              style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: radius.pill, background: color.canvasSoft2, color: color.body }}
             >
               仅历史
             </span>
@@ -245,32 +245,115 @@ export default function ReferencePanel({
         )}
       />
       <IoBar
-        input="参照对象历史量价与事实锚（上一代同期 / 友商促销期）"
-        output="上一代参照经同周龄比值校正主图基线；友商仅对照；主图小事件录入时回放此处事实"
+        input="参照产品全生命周期量价、档期与事件锚（参考池整池可选：上一代 / 友商同期）"
+        output="上一代参照经同周龄比值校正主图基线；对照产品仅查看；主图输入（手调 / 产品事件）时弹出参照表现提示"
       />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: space.md }}>
-        <ReferenceChart
-          fixture={fixture}
-          series={fixture.references.prevGenPool}
-          selectValue={prevGenReferenceId}
-          onSelect={(id) => onPrevGenReferenceChange?.(id)}
-          selectLabel="选择上一代参照对象"
-          title="上一代上市同期"
-          subtitle={`按周龄对齐（同周龄同窗）：主品上市周 vs ${fixture.references.prevGenPool.find((item) => item.id === prevGenReferenceId)?.label ?? fixture.references.prevGenPool[0]?.label ?? ''} 上市同期；选择经同周龄比值校正主图基线`}
-          facts={fixture.references.facts.filter((fact) => fact.type !== 'promo')}
-          footNote={prevGenFootnote}
-        />
-        <ReferenceChart
-          fixture={fixture}
-          series={fixture.references.competitorPool}
-          selectValue={competitorId}
-          onSelect={setCompetitorId}
-          selectLabel="选择友商参照对象"
-          title="友商同期量价"
-          subtitle="同窗对照 · 仅对照：友商上市 / 促销期的量价事实，用于核对档期应对节奏——不修改主图基线，不对竞品动作做因果归因"
-          facts={fixture.references.facts}
-        />
-      </div>
+      {/* 智能弹框（卡头顶部条，非 Modal）：主图输入后列出参照产品在类似时间的表现 */}
+      {hint && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '4px 10px',
+            padding: '8px 12px',
+            borderRadius: radius.control,
+            background: color.canvasSoft2,
+            border: `1px solid ${color.hairline}`,
+            marginBottom: space.md,
+            minWidth: 0,
+          }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>我参考了这些产品</span>
+          <span style={{ fontSize: 11.5, color: color.mute, minWidth: 0 }}>
+            主图{hint.kind === 'event' ? '录入产品事件' : '手动微调'}{hint.weekLabel ? `（${hint.weekLabel}）` : ''}后，它们在类似时间的表现：
+          </span>
+          {hint.entries.map((entry) => (
+            <button
+              key={`${entry.chart}-${entry.productId}`}
+              type="button"
+              className="tnum"
+              title="点击定位到对应事件周"
+              onClick={() => focusEntry(entry)}
+              style={{
+                fontSize: 11.5,
+                lineHeight: '16px',
+                padding: '3px 9px',
+                borderRadius: radius.pill,
+                border: `1px solid ${color.hairlineStrong}`,
+                background: color.canvas,
+                color: color.body,
+                cursor: 'pointer',
+                font: 'inherit',
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {entry.text}
+            </button>
+          ))}
+          {hint.entries.length === 0 && (
+            <span style={{ fontSize: 11.5, color: color.mute }}>当前参照产品无可回放的事件锚</span>
+          )}
+          <button
+            type="button"
+            aria-label="关闭参照提示"
+            onClick={() => setHint(null)}
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-grid',
+              placeItems: 'center',
+              width: 20,
+              height: 20,
+              padding: 0,
+              border: 'none',
+              borderRadius: radius.pill,
+              background: 'transparent',
+              color: color.mute,
+              fontSize: 13,
+              lineHeight: 1,
+              cursor: 'pointer',
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {emptyPool ? (
+        <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: `${space.md}px ${space.base}px ${space.sm}px`, minWidth: 0 }}>
+          <div role="status" style={{ padding: `${space.lg}px 0`, textAlign: 'center', fontSize: 12, color: color.mute }}>暂无可参照历史</div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: space.md }}>
+          <ReferenceChartCard
+            title="上一代上市同期"
+            subtitle="参照产品上市起全生命周期量价（同周龄对齐可调窗）；选择上一代经同周龄比值校正主图基线，选择友商 / 其他产品仅对照"
+            selectLabel="选择上一代参照对象"
+            product={ownProduct}
+            options={poolOptions}
+            value={ownId}
+            onSelect={selectOwn}
+            chainBadge={ownInChain ? 'chain' : 'contrast'}
+            footNote={prevGenFootnote}
+            focusWeek={focus.ownWeek}
+            focusKey={focus.ownKey}
+          />
+          <ReferenceChartCard
+            title="友商同期量价"
+            subtitle="同构对照：友商上市起全生命周期量价与档期应对节奏——不修改主图基线，不对竞品动作做因果归因"
+            selectLabel="选择友商参照对象"
+            product={compProduct}
+            options={poolOptions}
+            value={compId}
+            onSelect={setCompId}
+            chainBadge="contrast"
+            focusWeek={focus.compWeek}
+            focusKey={focus.compKey}
+          />
+        </div>
+      )}
     </section>
   );
 }

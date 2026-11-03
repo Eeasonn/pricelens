@@ -10,6 +10,9 @@
 //   - 关键事件 = 大盘图事件（折叠屏阵营 / 内存供应等行业级），幅度 + 时间两参数；
 //   - 大促档期（黑五）形状已含在基准走势内，画为主图背景带；
 //   - SI 计划为人工输入（库存验证层唯一新输入），其余库存推演来自上游预测。
+//   - 参考池：lifecyclePool = 全生命周期量价（52 周 × ≥4 产品，含档期带与
+//     事件锚，A1 参考卡重构新增）；prevGenPool / competitorPool 保留（主链
+//     比值校正与事件回放仍消费）。
 // ============================================================
 
 /** 演示周：W37–W52，历史（模拟实际）+ 预测。 */
@@ -83,6 +86,46 @@ export interface ReferenceSeriesSeed {
   points: number[];
 }
 
+/** 生命周期事件锚（四类：竞品上市 / 品上市 / 促销 / 挤兑；智能弹框组稿用）。 */
+export interface LifecycleEventSeed {
+  /** 生命周期周序（0 = 上市首周）。 */
+  week: number;
+  type: 'competitor-launch' | 'own-launch' | 'promo' | 'cannibalization';
+  label: string;
+  /** 参考影响读数（演示预标，%）：对同类主品的对应情境影响。 */
+  impactPct?: number;
+  /** 影响持续周数。 */
+  impactWeeks?: number;
+}
+
+/** 生命周期大促档期带（琥珀背景带 + 档期价）。 */
+export interface LifecyclePromoBandSeed {
+  label: string;
+  startWeek: number;
+  endWeek: number;
+  /** 档期内价格直降（USD）。 */
+  priceDrop?: number;
+}
+
+/** 全生命周期参考产品（量柱 + 价格线 + 档期带 + 事件锚的数据源）。 */
+export interface LifecycleProductSeed {
+  id: string;
+  label: string;
+  brand: string;
+  /** 上市周标签（如 2025-W02），仅作上下文展示。 */
+  launchWeekLabel: string;
+  /** 全生命周期周销（台，周序 0 起；null = 缺采周，显示「—」不造 0）。 */
+  points: Array<number | null>;
+  /** 全生命周期价格（USD，与 points 同周序对齐）。 */
+  pricePoints: number[];
+  /** 大促档期带（生命周期周序）。 */
+  promoBands: LifecyclePromoBandSeed[];
+  /** 事件锚（四类各 ≥1 覆盖于池内）。 */
+  events: LifecycleEventSeed[];
+  /** 进主链的 prevGenPool 映射 id（选择写入 prevGenReferenceId）；缺省 = 纯对照。 */
+  chainRefId?: string;
+}
+
 export interface WorkbenchFixture {
   meta: {
     status: 'simulated';
@@ -133,6 +176,8 @@ export interface WorkbenchFixture {
     competitorPool: ReferenceSeriesSeed[];
     /** 参照对象历史窗内的事实锚（事实还原：大促 / 发布 / 调价，与主图事件同源色系）。 */
     facts: ReferenceFactSeed[];
+    /** 全生命周期参考池（≥4 产品 × 52 周量价 + 档期带 + 事件锚；参考卡自由选择）。 */
+    lifecyclePool: LifecycleProductSeed[];
   };
   /** 主图小事件录入的事实回放场景（四类解释场景，全部为历史事实段）。 */
   replayScenarios: Array<{
@@ -167,6 +212,224 @@ function mondayParts(weekNumber: number): { date: string; dateLabel: string } {
   const iso = new Date(Date.UTC(2026, 0, 5 + (weekNumber - 1) * 7)).toISOString().slice(0, 10);
   return { date: iso, dateLabel: iso.slice(5) };
 }
+
+// ============================================================
+// 全生命周期参考池（A1 参考卡重构新增）：≥4 个可参考产品 × 52 周量价 +
+// 大促档期带 + 事件锚（竞品上市 / 品上市 / 促销 / 挤兑四类于池内各 ≥1）。
+// 形状 = 首销爬坡（0–7 周）→ 平台波动（8–31）→ 生命末期衰减（32–51）
+// + 档期脉冲 + 事件凹坑；随机成分来自固定种子 LCG（mulberry32），
+// 同种子恒同序列——数据完全确定性。周序相对上市周（0 = 上市首周）。
+// ============================================================
+
+const LIFECYCLE_WEEKS = 52;
+
+/** 固定种子 LCG（mulberry32）：确定性伪随机，同种子恒同序列。 */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** 全生命周期周销：爬坡 → 平台波动 → 衰减 + 档期脉冲 + 事件凹坑 + 缺采周。 */
+function lifecycleVolumes(seed: number, cfg: {
+  /** 爬坡顶（首销峰，台）。 */
+  peak: number;
+  /** 平台期基准（台）。 */
+  base: number;
+  /** 生命末期衰减底线系数（×base）。 */
+  floor: number;
+  /** 档期脉冲幅度（档期末周 ×1.1、其余周 ×0.9）。 */
+  promoPulse: number;
+  promoBands: LifecyclePromoBandSeed[];
+  /** 事件凹坑（pct 为负 = 压低）。 */
+  dips: Array<{ week: number; weeks: number; pct: number }>;
+  /** 缺采周（null，不造 0）。 */
+  missingWeeks?: number[];
+}): Array<number | null> {
+  const rand = mulberry32(seed);
+  const out: Array<number | null> = [];
+  for (let w = 0; w < LIFECYCLE_WEEKS; w++) {
+    let v: number;
+    if (w < 8) v = (0.55 + (w / 7) * 0.45) * cfg.peak;
+    else if (w < 32) v = cfg.base * (0.92 + rand() * 0.16);
+    else v = (1 - (1 - cfg.floor) * ((w - 32) / (LIFECYCLE_WEEKS - 33))) * cfg.base * (0.9 + rand() * 0.2);
+    for (const band of cfg.promoBands) {
+      if (w >= band.startWeek && w <= band.endWeek) v *= 1 + cfg.promoPulse * (w === band.endWeek ? 1.1 : 0.9);
+    }
+    for (const dip of cfg.dips) {
+      if (w >= dip.week && w < dip.week + dip.weeks) v *= 1 + dip.pct;
+    }
+    out.push(Math.max(1000, Math.round(v / 100) * 100));
+  }
+  for (const week of cfg.missingWeeks ?? []) if (week >= 0 && week < LIFECYCLE_WEEKS) out[week] = null;
+  return out;
+}
+
+/** 全生命周期价格：阶梯调价表（week 起生效）+ 档期直降。 */
+function lifecyclePrices(launch: number, cuts: Array<{ week: number; price: number }>, promoBands: LifecyclePromoBandSeed[]): number[] {
+  const out: number[] = [];
+  for (let w = 0; w < LIFECYCLE_WEEKS; w++) {
+    let price = launch;
+    for (const cut of cuts) if (w >= cut.week) price = cut.price;
+    for (const band of promoBands) if (w >= band.startWeek && w <= band.endWeek) price -= band.priceDrop ?? 0;
+    out.push(price);
+  }
+  return out;
+}
+
+const lifecyclePool: LifecycleProductSeed[] = [
+  {
+    id: 'lc-mate80',
+    label: 'Mate 80（上一代）',
+    brand: 'HUAWEI',
+    launchWeekLabel: '2025-W02',
+    chainRefId: 'ref-mate80',
+    points: lifecycleVolumes(101, {
+      peak: 44000,
+      base: 36000,
+      floor: 0.55,
+      promoPulse: 0.42,
+      promoBands: [
+        { label: '618 档期', startWeek: 22, endWeek: 25, priceDrop: 50 },
+        { label: '黑五档期', startWeek: 46, endWeek: 49, priceDrop: 100 },
+      ],
+      dips: [
+        { week: 18, weeks: 4, pct: -0.06 },
+        { week: 34, weeks: 3, pct: -0.09 },
+      ],
+    }),
+    pricePoints: lifecyclePrices(899, [{ week: 16, price: 849 }], [
+      { label: '618 档期', startWeek: 22, endWeek: 25, priceDrop: 50 },
+      { label: '黑五档期', startWeek: 46, endWeek: 49, priceDrop: 100 },
+    ]),
+    promoBands: [
+      { label: '618 档期', startWeek: 22, endWeek: 25, priceDrop: 50 },
+      { label: '黑五档期', startWeek: 46, endWeek: 49, priceDrop: 100 },
+    ],
+    events: [
+      { week: 0, type: 'own-launch', label: '上市首销', impactPct: 30, impactWeeks: 4 },
+      { week: 18, type: 'competitor-launch', label: 'Galaxy S26 上市', impactPct: -6, impactWeeks: 4 },
+      { week: 22, type: 'promo', label: '618 档期脉冲', impactPct: 42, impactWeeks: 4 },
+      { week: 34, type: 'cannibalization', label: 'Pura 90 上市挤兑', impactPct: -9, impactWeeks: 3 },
+      { week: 46, type: 'promo', label: '黑五档期脉冲', impactPct: 46, impactWeeks: 4 },
+    ],
+  },
+  {
+    id: 'lc-pura90',
+    label: 'Pura 90 Pro（上上代）',
+    brand: 'HUAWEI',
+    launchWeekLabel: '2024-W40',
+    chainRefId: 'ref-pura90',
+    points: lifecycleVolumes(202, {
+      peak: 39000,
+      base: 32000,
+      floor: 0.5,
+      promoPulse: 0.38,
+      promoBands: [
+        { label: '618 档期', startWeek: 20, endWeek: 23, priceDrop: 50 },
+        { label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 80 },
+      ],
+      dips: [{ week: 38, weeks: 3, pct: -0.07 }],
+    }),
+    pricePoints: lifecyclePrices(849, [{ week: 18, price: 799 }], [
+      { label: '618 档期', startWeek: 20, endWeek: 23, priceDrop: 50 },
+      { label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 80 },
+    ]),
+    promoBands: [
+      { label: '618 档期', startWeek: 20, endWeek: 23, priceDrop: 50 },
+      { label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 80 },
+    ],
+    events: [
+      { week: 0, type: 'own-launch', label: '上市首销', impactPct: 26, impactWeeks: 4 },
+      { week: 20, type: 'promo', label: '618 档期脉冲', impactPct: 38, impactWeeks: 4 },
+      { week: 38, type: 'cannibalization', label: 'Mate 80 上市挤兑', impactPct: -7, impactWeeks: 3 },
+      { week: 44, type: 'promo', label: '双11 档期脉冲', impactPct: 38, impactWeeks: 4 },
+    ],
+  },
+  {
+    id: 'lc-s25',
+    label: 'Galaxy S25（友商同期）',
+    brand: 'SAMSUNG',
+    launchWeekLabel: '2025-W06',
+    points: lifecycleVolumes(303, {
+      peak: 36000,
+      base: 30000,
+      floor: 0.6,
+      promoPulse: 0.5,
+      promoBands: [
+        { label: '首销促销', startWeek: 1, endWeek: 4, priceDrop: 60 },
+        { label: '黑五档期', startWeek: 46, endWeek: 49, priceDrop: 110 },
+      ],
+      dips: [{ week: 30, weeks: 3, pct: -0.05 }],
+    }),
+    pricePoints: lifecyclePrices(999, [{ week: 20, price: 949 }], [
+      { label: '首销促销', startWeek: 1, endWeek: 4, priceDrop: 60 },
+      { label: '黑五档期', startWeek: 46, endWeek: 49, priceDrop: 110 },
+    ]),
+    promoBands: [
+      { label: '首销促销', startWeek: 1, endWeek: 4, priceDrop: 60 },
+      { label: '黑五档期', startWeek: 46, endWeek: 49, priceDrop: 110 },
+    ],
+    events: [
+      { week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -6, impactWeeks: 4 },
+      { week: 1, type: 'promo', label: '首销促销期', impactPct: -6, impactWeeks: 4 },
+      { week: 30, type: 'competitor-launch', label: 'Galaxy S25 Edge 上市', impactPct: -5, impactWeeks: 3 },
+      { week: 46, type: 'promo', label: '黑五档期促销', impactPct: -7, impactWeeks: 3 },
+    ],
+  },
+  {
+    id: 'lc-ip17',
+    label: 'iPhone 17（友商同期）',
+    brand: 'APPLE',
+    launchWeekLabel: '2025-W37',
+    points: lifecycleVolumes(404, {
+      peak: 33000,
+      base: 26000,
+      floor: 0.62,
+      promoPulse: 0.25,
+      promoBands: [{ label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 60 }],
+      dips: [{ week: 8, weeks: 3, pct: -0.04 }],
+      missingWeeks: [30],
+    }),
+    pricePoints: lifecyclePrices(999, [{ week: 26, price: 969 }], [
+      { label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 60 },
+    ]),
+    promoBands: [{ label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 60 }],
+    events: [
+      { week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -8, impactWeeks: 5 },
+      { week: 26, type: 'competitor-launch', label: 'iPhone 17e 上市', impactPct: -4, impactWeeks: 3 },
+      { week: 44, type: 'promo', label: '双11 档期促销', impactPct: -5, impactWeeks: 3 },
+    ],
+  },
+  {
+    id: 'lc-x200',
+    label: 'X200（友商同期）',
+    brand: 'VIVO',
+    launchWeekLabel: '2025-W42',
+    points: lifecycleVolumes(505, {
+      peak: 24000,
+      base: 19000,
+      floor: 0.6,
+      promoPulse: 0.45,
+      promoBands: [{ label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 70 }],
+      dips: [{ week: 20, weeks: 3, pct: -0.05 }],
+      missingWeeks: [12, 13],
+    }),
+    pricePoints: lifecyclePrices(799, [{ week: 24, price: 749 }], [
+      { label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 70 },
+    ]),
+    promoBands: [{ label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 70 }],
+    events: [
+      { week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -4, impactWeeks: 3 },
+      { week: 44, type: 'promo', label: '双11 档期促销', impactPct: -6, impactWeeks: 3 },
+    ],
+  },
+];
 
 const weeks: WorkbenchWeek[] = Array.from({ length: 16 }, (_, index) => {
   const weekNumber = 37 + index;
@@ -257,6 +520,7 @@ export const workbenchFixture: WorkbenchFixture = {
       { label: 'Galaxy S25 促销期', weekIndex: 3, type: 'promo' },
       { label: 'Galaxy 新配色上市', weekIndex: 1, type: 'launch' },
     ],
+    lifecyclePool,
   },
   replayScenarios: [
     {

@@ -4,6 +4,8 @@
 // （历史解释 / 本季生效 / 不在预测窗口）、2027Q1 同比 = −13.3%（vs 2026Q1，
 // 卡头与图内单口径）、卡头输入/输出条、图例真实显隐（AI 基线只影响对照点）、
 // tokens 与无数据空态。
+// A2（2026-11-04）：理由栏整体删除——UI 层不得再出现理由 TextArea /「理由 ·
+// 为什么这么推」，卡体定高 + 右栏 overflowY auto 兜底（底边可预测策略）。
 // 只验证 React 组装与交互开关，不验证图表像素（SVG 由 typecheck 保证结构）。
 // ============================================================
 // @vitest-environment jsdom
@@ -167,16 +169,43 @@ describe('大盘卡 · 事件步进可用性', () => {
   });
 });
 
+describe('大盘卡 · 理由栏删除与卡体定高（A2）', () => {
+  it('理由栏整体删除：无「理由 · 为什么这么推」、无理由 TextArea、无 workbench-rationale 挂点', () => {
+    setup();
+    const text = document.body.textContent ?? '';
+    expect(text).not.toContain('理由 · 为什么这么推');
+    expect(text).not.toContain('推演理由（为什么这么推）');
+    expect(text).not.toContain('理由是推演结论的关键假设说明');
+    expect(document.querySelector('#workbench-rationale')).toBeNull();
+    expect(document.querySelector('textarea')).toBeNull();
+    // 模型契约保留 rationale 字段，但 UI 不再消费：params 仍带值也不渲染。
+    expect(text).not.toContain('AI 初始推演（可修改）');
+  });
+
+  it('卡体定高 + 右栏卡内纵向滚动兜底（底边可预测策略）', () => {
+    setup();
+    // 左右双栏内容区定高 420px（MARKET_BODY_HEIGHT），超出由右栏 overflowY auto 兜底。
+    const marketSection = Array.from(document.querySelectorAll('section'))
+      .find((section) => section.querySelector('h2')?.textContent?.includes('大盘'));
+    expect(marketSection).toBeTruthy();
+    const bodyGrid = marketSection?.querySelector(':scope > div.lpl-card-scroll') as HTMLElement | null;
+    expect(bodyGrid).toBeTruthy();
+    expect(bodyGrid?.style.height).toBe('420px');
+    const rightCol = bodyGrid?.children[1] as HTMLElement | undefined;
+    expect(rightCol?.className).toContain('lpl-card-scroll');
+    expect(rightCol?.style.overflowY).toBe('auto');
+    // 左图 SVG 填满剩余高度（viewBox 等比缩放），不再按内容撑高。
+    const svg = document.querySelector('svg[role="img"]') as SVGSVGElement | null;
+    expect(svg?.getAttribute('height')).toBe('100%');
+  });
+});
+
 describe('大盘卡 · 生产话术与空态', () => {
   it('移除教学词（四件套 / 开天辟地 / ghost / 第一版 / 圆桌会议截图腔）', () => {
     setup();
-    // 理由栏预填值来自 fixture.market.aiRationale（数据层文案归 WP6 集成阶段清理，
-    // 组件不可改 fixture、也不得截断受控值），教学词扫描只针对组件 UI 层话术。
-    // rc-textarea 含隐藏 sizer textarea（DOM 顺序不稳定），克隆 body 移除全部 textarea
-    // 后再扫描，保证只验证组件 UI 层话术。
-    const clone = document.body.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll('textarea').forEach((ta) => ta.remove());
-    const text = clone.textContent ?? '';
+    // A2 删理由栏后卡内不再有受控 textarea（fixture.market.aiRationale 只留在数据层，
+    // UI 不渲染），教学词扫描直接对组件 UI 层话术进行。
+    const text = document.body.textContent ?? '';
     for (const banned of ['四件套', '开天辟地', 'ghost', '第一版', '圆桌会议', '截图贴 PPT']) {
       expect(text).not.toContain(banned);
     }

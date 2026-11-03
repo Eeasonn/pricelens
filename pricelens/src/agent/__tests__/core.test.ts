@@ -166,6 +166,42 @@ describe('PriceLens Agent deterministic core', () => {
     }
   });
 
+  it('covers workbench interface wording in the forecast explanation (A4 sync)', async () => {
+    const context = buildAgentContext('forecast', state, []);
+    const response = await runAgent('解释当前简单版预测的关键假设、证据和风险', context, undefined, 'forecast_explain');
+    const card = response.cards[0];
+    expect(card?.kind).toBe('forecast_explanation');
+    if (card?.kind === 'forecast_explanation') {
+      const capabilityLines = card.assumptions.slice(-4).join('\n');
+      // 四条新口径：参照品联动比值校正 / 库存上限修正回写 / 预测把握度区间 / 复制关键假设。
+      expect(capabilityLines).toContain('上一代参照');
+      expect(capabilityLines).toContain('比值校正');
+      expect(capabilityLines).toContain('库存上限修正');
+      expect(capabilityLines).toContain('min(基线 SO, 可售)');
+      expect(capabilityLines).toContain('±8%');
+      expect(capabilityLines).toContain('±2%');
+      expect(capabilityLines).toContain('把握区间带');
+      expect(capabilityLines).toContain('复制关键假设');
+      // 新增口径遵循正典禁词（因子 / 约束 / 置信区间 / 无约束需求 / 我司）。
+      for (const banned of ['因子', '约束', '置信区间', '无约束需求', '我司']) {
+        expect(capabilityLines).not.toContain(banned);
+      }
+    }
+  });
+
+  it('formats mains filter patches as structured product labels, never [object Object]', () => {
+    const prompt = '我要看 mate x7 价格走势';
+    const patch = buildFilterPatch(prompt, state);
+    expect(patch.mains?.length ?? 0).toBeGreaterThan(0);
+    const card = buildFilterCard(prompt, state);
+    expect(card?.kind).toBe('filter');
+    const productChange = card?.changes.find((change) => change.label === '产品');
+    expect(productChange).toBeDefined();
+    expect(productChange?.after).not.toContain('[object Object]');
+    expect(productChange?.after).toContain('Mate X7');
+    expect(productChange?.after).toContain('·');
+  });
+
   it('attaches provenance to the context and deterministic response', async () => {
     const context = buildAgentContext('dashboard', state, []);
     expect(context.provenance?.source).toBe('pricelens-context');

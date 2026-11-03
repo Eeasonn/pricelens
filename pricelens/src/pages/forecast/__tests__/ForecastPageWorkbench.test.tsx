@@ -72,7 +72,7 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     for (const label of [
       '量价预测 · 推演工作台',
       '量价预测主图',
-      '量价参考',
+      '上一代上市同期 / 友商同期量价',
       '大盘 · 总量总线',
       '库存验证',
       '成本销毛',
@@ -80,7 +80,7 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
       expect(text).toContain(label);
     }
     const titles = Array.from(document.querySelectorAll('h2')).map((node) => (node.textContent ?? '').trim());
-    const cardOrder = ['量价预测主图', '量价参考', '大盘 · 总量总线', '库存验证', '成本销毛']
+    const cardOrder = ['量价预测主图', '上一代上市同期 / 友商同期量价', '大盘 · 总量总线', '库存验证', '成本销毛']
       .map((label) => titles.findIndex((title) => title.includes(label)));
     expect(cardOrder.every((index) => index >= 0)).toBe(true);
     expect([...cardOrder].sort((a, b) => a - b)).toEqual(cardOrder);

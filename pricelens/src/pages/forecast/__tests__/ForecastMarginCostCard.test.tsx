@@ -64,6 +64,30 @@ describe('成本销毛 · $M 轴（禁万$）', () => {
   });
 });
 
+describe('成本销毛 · 依赖链路条（A3）', () => {
+  it('链路完整：主图价格预测 + 成本月版本 → 单台销毛 → × 主图 SO → 预测期销毛（末节点激活注「不回写主图」）', () => {
+    renderCard(baseResult);
+    const steps = Array.from(document.querySelectorAll('[data-flow-step]'));
+    expect(steps.map((el) => el.getAttribute('data-flow-step'))).toEqual([
+      '主图价格预测', '成本月版本', '单台销毛', '× 主图 SO', '预测期销毛',
+    ]);
+    const bar = document.querySelector('[data-flow-bar]') as HTMLElement;
+    expect(bar.getAttribute('aria-label')).toContain('主图价格预测 + 成本月版本 → 单台销毛 → × 主图 SO → 预测期销毛');
+    const last = steps[steps.length - 1] as HTMLElement;
+    expect(last.getAttribute('data-state')).toBe('active');
+    expect(last.textContent).toContain('不回写主图');
+    // 公式收 title：单台销毛节点 = 主图价格 − 成本月版本
+    const unitStep = steps[2] as HTMLElement;
+    expect(unitStep.getAttribute('title')).toContain('主图价格 − 成本月版本');
+  });
+
+  it('空态也渲染依赖链路条（关系先于数据可见）', () => {
+    renderCard({ ...baseResult, weeks: [] });
+    expect(document.querySelectorAll('[data-flow-step]').length).toBe(5);
+    expect(document.querySelector('[data-flow-step="预测期销毛"]')?.getAttribute('data-state')).toBe('active');
+  });
+});
+
 describe('成本销毛 · 负单台销毛（零基线向下）与空态', () => {
   it('负周销毛不丢柱：柱从零基线向下（top = 零基线），零基线网格线存在', () => {
     const withNegative = {

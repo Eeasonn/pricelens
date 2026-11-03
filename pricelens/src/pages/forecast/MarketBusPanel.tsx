@@ -5,12 +5,16 @@
 // 人工改格后图中保留 AI 基线灰色对照点，当前生效值用实心点；
 // 右栏 = AI 基线读数（挂 AI 标）+ 下一季度预测格直接编辑（人工修改路径之一，
 // 还原后自动回 AI 标）+ 行业级事件录入（起周[可落历史段作解释] + 时长 +
-// 峰值幅度 + 衰减方式[默认递减]，人工录入，AI 不猜）+ 理由栏。
+// 峰值幅度 + 衰减方式[默认递减]，人工录入，AI 不猜）。
+// A2（2026-11-04）：理由栏（label + TextArea + 助手句）整体删除（产品拍板「没啥用」；
+// params.rationale 保留在模型契约，UI 不再消费）；卡体定高（MARKET_BODY_HEIGHT）
+// + 右栏卡内纵向滚动（lpl-card-scroll 细滚动条），保证本卡底边可预测、可与
+// 相邻卡统一高度策略。
 // 竞品常规迭代不在此配置。事件锚点季度用 quarterKeyOfWeek 从周完整日期推导，
 // 生效状态用 marketEventDisposition 三态（历史解释 / 本季生效 / 不在预测窗口）。
 // ============================================================
 import { useState } from 'react';
-import { Button, Input, InputNumber } from 'antd';
+import { Button, InputNumber } from 'antd';
 import { color, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import type { MarketEventSeed, WorkbenchFixture } from './workbenchFixture';
 import type { MarketQuarterPoint, WorkbenchParams, WorkbenchResult } from './workbenchModel';
@@ -27,6 +31,14 @@ const DURATION_MAX = 8;
 
 const CHART_W = 520;
 const CHART_H = 224;
+
+/**
+ * 卡体定高策略（A2 底部拉齐）：左右双栏内容区固定 420px（真机量得默认内容
+ * 右栏 ≈342px@1440 / ≈414px@1280，删理由栏后取 420 覆盖两档宽度免滚动），
+ * 超出（如继续添加事件）由右栏卡内纵向滚动兜底，本卡底边因此可预测，
+ * 供库存 / 成本卡集成时统一高度。左图 SVG 在剩余高度内自适应（viewBox 等比缩放）。
+ */
+const MARKET_BODY_HEIGHT = 420;
 
 // 图例系列 key（显隐状态按 key 记录；AI 基线只控制对照点，不影响生效值渲染）。
 const SERIES_ACTUAL = 'actual';
@@ -109,7 +121,6 @@ export default function MarketBusPanel({
   onEventDecay,
   onEventRemove,
   onEventAdd,
-  onRationaleChange,
 }: {
   fixture: WorkbenchFixture;
   params: WorkbenchParams;
@@ -121,6 +132,7 @@ export default function MarketBusPanel({
   onEventDecay: (id: string, decay: 'decreasing' | 'flat') => void;
   onEventRemove: (id: string) => void;
   onEventAdd: () => void;
+  /** 兼容保留（A2 删理由栏后 UI 不再消费）：页面壳仍传该回调，契约不动，勿删。 */
   onRationaleChange: (text: string) => void;
 }) {
   const [hiddenSeries, setHiddenSeries] = useState<ReadonlySet<string>>(new Set());
@@ -221,16 +233,29 @@ export default function MarketBusPanel({
     <section style={workbenchCardStyle}>
       {sectionHead}
       {ioBar}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: space.lg, alignItems: 'start' }}>
-        {/* 左图：单条连贯季度线 + AI 基线对照点 + 事件锚点 */}
-        <div>
-          <div style={{ overflowX: 'auto' }}>
+      {/* 卡体定高（MARKET_BODY_HEIGHT）：单行网格默认 stretch，两栏同高、底边拉齐；
+          极窄视口双栏叠排时整块卡内滚动兜底（lpl-card-scroll 细滚动条）。 */}
+      <div
+        className="lpl-card-scroll"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
+          gap: space.lg,
+          height: MARKET_BODY_HEIGHT,
+          overflow: 'auto',
+        }}
+      >
+        {/* 左图：单条连贯季度线 + AI 基线对照点 + 事件锚点（SVG 占满剩余高度，viewBox 等比缩放） */}
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <svg
               viewBox={`0 0 ${CHART_W} ${CHART_H}`}
               width="100%"
+              height="100%"
+              preserveAspectRatio="xMidYMid meet"
               role="img"
               aria-label={`大盘季度指数单线：实际 ${quarters.filter((point) => point.status === 'actual').map((point) => `${point.key} ${point.value}`).join(' / ')}；推演 2026Q4 ${q4Index}、2027Q1 ${q1Index}；AI 基线 ${aiQ4} / ${aiQ1}。`}
-              style={{ display: 'block', height: 'auto', minWidth: 300 }}
+              style={{ display: 'block' }}
             >
               <g stroke={color.hairline}>
                 {yTicks.map((tick) => (
@@ -310,8 +335,9 @@ export default function MarketBusPanel({
           </div>
         </div>
 
-        {/* 右栏：AI 基线 + 预测格直接编辑 + 行业级事件 + 理由栏 */}
-        <div style={{ display: 'grid', gap: space.md, minWidth: 0 }}>
+        {/* 右栏：AI 基线 + 预测格直接编辑 + 行业级事件。内容超高由卡内纵向滚动兜底
+            （lpl-card-scroll 细滚动条对齐系统样式），底边不撑破卡体定高。 */}
+        <div className="lpl-card-scroll" style={{ display: 'grid', gap: space.md, minWidth: 0, minHeight: 0, overflowY: 'auto', alignContent: 'start', paddingRight: 2 }}>
           <div style={{ display: 'grid', gap: space.sm }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>下一季度预测（直接改格修正走势）</span>
@@ -360,7 +386,7 @@ export default function MarketBusPanel({
           <div style={{ display: 'grid', gap: space.sm }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>影响大盘的关键事件（仅行业级 · 人工录入）</div>
             <div style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-              每个事件含起始周（周粒度，可落历史段作解释）、影响时长、峰值幅度与衰减方式（默认递减）；只收行业级事件，竞品常规迭代由量价参考与主图事件承载。
+              事件 = 起始周（可落历史段作解释）+ 时长 + 峰值幅度 + 衰减（默认递减）；只收行业级，竞品常规迭代由量价参考与主图事件承载。
             </div>
             {params.marketEvents.map((event: MarketEventSeed) => {
               const disposition = marketEventDisposition(fixture, event);
@@ -435,18 +461,6 @@ export default function MarketBusPanel({
             >
               ＋ 添加行业级事件（起周 + 时长 + 幅度 + 衰减）
             </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: space.xs }}>
-            <label htmlFor="workbench-rationale" style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>理由 · 为什么这么推</label>
-            <Input.TextArea
-              id="workbench-rationale"
-              aria-label="推演理由（为什么这么推）"
-              value={params.rationale}
-              onChange={(event) => onRationaleChange(event.target.value)}
-              autoSize={{ minRows: 3, maxRows: 6 }}
-            />
-            <div style={{ fontSize: 11, color: color.mute }}>理由是推演结论的关键假设说明。</div>
           </div>
         </div>
       </div>
