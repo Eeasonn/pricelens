@@ -7,6 +7,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { workbenchFixture } from '../workbenchFixture';
+import { marketEventDisposition } from '../workbenchTime';
 import {
   baseWorkbenchParams,
   clearManualAdjustment,
@@ -18,10 +19,12 @@ import {
   isParamsActive,
   judgeInventoryHealth,
   marketSeriesBaseline,
+  normalizeWorkbenchParams,
   productEventFactorAt,
   setManualAdjustment,
   siWeeklyPlan,
   unitCostOfWeek,
+  withQuarterOverride,
   type InventoryRow,
   type WorkbenchParams,
 } from '../workbenchModel';
@@ -241,5 +244,247 @@ describe('推演工作台 · 摘要与销毛（链路末端独立推测）', () 
     const restored = compute(clearManualAdjustment(tuned as WorkbenchParams, 47));
     expect(forecastOf(restored).find((week) => week.weekNumber === 47)?.final)
       .toBe(forecastOf().find((week) => week.weekNumber === 47)?.final);
+  });
+});
+
+describe('推演工作台 · 事件处置联动与 flat 衰减全链', () => {
+  it('历史事件跨界只解释：W44 起 2 周不影响 W45（computeMarketFactor 跳过 historical）', () => {
+    const crossing = { id: 'ev-cross', label: '跨段事件', startWeek: 44, durationWeeks: 2, magnitudePct: 10, decay: 'decreasing' as const };
+    expect(marketEventDisposition(fixture, crossing)).toBe('historical');
+    expect(computeMarketFactor(fixture, { ...base, marketEvents: [crossing] }, 44 + 1)).toBe(1);
+    const result = compute({ ...base, marketEvents: [crossing] });
+    expect(forecastOf(result).map((week) => week.unconstrained)).toEqual(fixture.basePath);
+    // 考量构成标注历史解释语义，不给预测周挂幅度
+    const w45 = forecastOf(result).find((week) => week.weekNumber === 45);
+    const evItem = w45?.consider.find((item) => item.kind === 'event');
+    expect(evItem?.pct).toBeNull();
+    expect(evItem?.note).toContain('历史');
+  });
+
+  it('decay=flat 全链：覆盖周全程峰值（末周不归零），覆盖外回落基线', () => {
+    const flatParams = { ...base, marketEvents: [{ id: 'ev-flat', label: '恒定事件', startWeek: 46, durationWeeks: 4, magnitudePct: 8, decay: 'flat' as const }] };
+    const byWeek = new Map(forecastOf(compute(flatParams)).map((week) => [week.weekNumber, week.unconstrained as number]));
+    expect(byWeek.get(45)).toBe(fixture.basePath[0]);
+    expect(byWeek.get(46)).toBe(Math.round(fixture.basePath[1] * 1.08));
+    expect(byWeek.get(47)).toBe(Math.round(fixture.basePath[2] * 1.08));
+    expect(byWeek.get(48)).toBe(Math.round(fixture.basePath[3] * 1.08));
+    expect(byWeek.get(49)).toBe(Math.round(fixture.basePath[4] * 1.08));
+    expect(byWeek.get(50)).toBe(fixture.basePath[5]);
+  });
+});
+
+describe('推演工作台 · 上一代参照进主链（同周龄比值校正）', () => {
+  it('默认参照 = prevGenPool[0]（Mate 80）：比值恒 1，考量给出参照名与 ×1.00', () => {
+    expect(base.prevGenReferenceId).toBe(fixture.references.prevGenPool[0].id);
+    expect(base.prevGenReferenceId).toBe('ref-mate80');
+    const w45 = forecastOf().find((week) => week.weekNumber === 45);
+    const refItem = w45?.consider.find((item) => item.kind === 'reference');
+    expect(refItem?.label).toBe('Mate 80（上一代）');
+    expect(refItem?.pct).toBeNull();
+    expect(refItem?.note).toContain('×1.00');
+  });
+
+  it('选择 ref-pura90：W45 无事件口径 = 47000 × (40000 / 45000) = 41778，考量给出比值', () => {
+    const pura = compute({ ...base, prevGenReferenceId: 'ref-pura90', marketEvents: [] });
+    const w45 = pura.weeks.find((week) => week.weekNumber === 45);
+    expect(w45?.unconstrained).toBe(41778);
+    const refItem = w45?.consider.find((item) => item.kind === 'reference');
+    expect(refItem?.label).toBe('Pura 90 Pro（上上代）');
+    expect(refItem?.pct).toBe(-11.1);
+    // 默认事件口径下 W45 同值（W45 无默认事件覆盖）
+    expect(compute({ ...base, prevGenReferenceId: 'ref-pura90' }).weeks.find((week) => week.weekNumber === 45)?.unconstrained).toBe(41778);
+  });
+
+  it('友商参照不进入主链：ref-ip17 不在 prevGenPool → 比值回退 1', () => {
+    const competitor = compute({ ...base, prevGenReferenceId: 'ref-ip17', marketEvents: [] });
+    const w45 = competitor.weeks.find((week) => week.weekNumber === 45);
+    expect(w45?.unconstrained).toBe(fixture.basePath[0]);
+    expect(w45?.consider.find((item) => item.kind === 'reference')?.note).toBe('参照缺数，未修正');
+  });
+
+  it('参照不存在 / 分母为 0 / 序列缺点 → 比值回退 1 且考量写「参照缺数，未修正」', () => {
+    const ghost = compute({ ...base, prevGenReferenceId: 'ref-ghost', marketEvents: [] });
+    const w45 = ghost.weeks.find((week) => week.weekNumber === 45);
+    expect(w45?.unconstrained).toBe(fixture.basePath[0]);
+    expect(w45?.consider.find((item) => item.kind === 'reference')?.note).toBe('参照缺数，未修正');
+    // 分母为 0：默认参照在 W45 同周龄点位为 0
+    const zeroFixture = {
+      ...fixture,
+      references: {
+        ...fixture.references,
+        prevGenPool: [
+          { id: 'ref-zero', label: '零值参照', points: fixture.references.prevGenPool[0].points.map((point, pointIndex) => (pointIndex === 8 ? 0 : point)) },
+          fixture.references.prevGenPool[1],
+        ],
+      },
+    };
+    const zeroResult = computeWorkbench(zeroFixture, { ...baseWorkbenchParams(zeroFixture), marketEvents: [] });
+    const zw45 = zeroResult.weeks.find((week) => week.weekNumber === 45);
+    expect(zw45?.unconstrained).toBe(fixture.basePath[0]);
+    expect(zw45?.consider.find((item) => item.kind === 'reference')?.note).toBe('参照缺数，未修正');
+  });
+});
+
+describe('推演工作台 · 库存健康窗口与供给缺口（全序列口径）', () => {
+  it('健康判定先跑完整库存序列再筛预测周：W45 invChangePct = -15.2（W41–44 均值 103750 → W45 88000）', () => {
+    const w45 = forecastOf().find((week) => week.weekNumber === 45);
+    expect(w45?.channelInv).toBe(88000);
+    expect(w45?.health?.invChangePct).toBe(-15.2);
+    expect(w45?.health?.crash).toBe('none');
+    // result.health 仍只含预测周
+    expect(baseline.health.map((row) => row.weekNumber)).toEqual([45, 46, 47, 48, 49, 50, 51, 52]);
+  });
+
+  it('supplyCapped 保留截断事实；capped 只表示当前显示状态；firstAdjustedWeek 读 supplyCapped', () => {
+    const w50 = forecastOf().find((week) => week.weekNumber === 50);
+    expect(w50?.capped).toBe(true);
+    expect(w50?.supplyCapped).toBe(true);
+    const tuned = setManualAdjustment(base, 50, 50000, '会议结论上调') as WorkbenchParams;
+    const tunedResult = compute(tuned);
+    const tw50 = forecastOf(tunedResult).find((week) => week.weekNumber === 50);
+    expect(tw50?.final).toBe(50000);
+    expect(tw50?.manual?.reason).toBe('会议结论上调');
+    expect(tw50?.capped).toBe(false);
+    expect(tw50?.supplyCapped).toBe(true);
+    expect(tunedResult.firstAdjustedWeek).toBe(50);
+    // 未截断周不受影响
+    expect(forecastOf(tunedResult).find((week) => week.weekNumber === 47)?.supplyCapped).toBe(false);
+    expect(forecastOf(tunedResult).find((week) => week.weekNumber === 47)?.capped).toBe(false);
+  });
+
+  it('summary.gap 只算供给截断：SI 充足无截断时手调 W47 → gap = 0（手调不污染缺口）', () => {
+    const healthySi = { ...base.siPlanMonthly, '2026-12': 400000 };
+    const tuned = setManualAdjustment({ ...base, siPlanMonthly: healthySi }, 47, 60000, '黑五主峰周，电商资源加投') as WorkbenchParams;
+    const result = compute(tuned);
+    expect(result.firstAdjustedWeek).toBeNull();
+    expect(result.summary.gap).toBe(0);
+    // 下压手调同样不进缺口
+    const downTuned = setManualAdjustment({ ...base, siPlanMonthly: healthySi }, 47, 30000, '渠道反馈下修') as WorkbenchParams;
+    expect(compute(downTuned).summary.gap).toBe(0);
+  });
+
+  it('手调落在截断周：缺口仍按供给截断计（与无手调基准一致），不随手调漂移', () => {
+    const tuned = setManualAdjustment(base, 50, 50000, '会议结论上调') as WorkbenchParams;
+    expect(compute(tuned).summary.gap).toBe(baseline.summary.gap);
+    expect(baseline.summary.gap).toBeGreaterThan(0);
+  });
+});
+
+describe('推演工作台 · SI 确定性分配与极端输入', () => {
+  it('整数余数分配：10001 台 / 4 周 = [2501,2500,2500,2500]，总量守恒；可整除 fixture 不变', () => {
+    const plan = siWeeklyPlan(fixture, { ...base.siPlanMonthly, '2026-11': 10001 });
+    expect([45, 46, 47, 48].map((week) => plan.get(week))).toEqual([2501, 2500, 2500, 2500]);
+    expect([45, 46, 47, 48].reduce((total, week) => total + (plan.get(week) ?? 0), 0)).toBe(10001);
+    const basePlan = siWeeklyPlan(fixture, base.siPlanMonthly);
+    expect([45, 46, 47, 48].map((week) => basePlan.get(week))).toEqual([55000, 55000, 55000, 55000]);
+    expect([49, 50, 51, 52].map((week) => basePlan.get(week))).toEqual([8000, 8000, 8000, 8000]);
+  });
+
+  it('SI 负值 / NaN 钳 0；全 0 → 库存耗尽、supplyCapped、sales 归零、缺口为供给差', () => {
+    expect(siWeeklyPlan(fixture, { '2026-11': -5000, '2026-12': 0 }).get(45)).toBe(0);
+    expect(siWeeklyPlan(fixture, { '2026-11': Number.NaN }).get(45)).toBe(0);
+    const zero = compute({ ...base, siPlanMonthly: { '2026-11': 0, '2026-12': 0 } });
+    const w46 = forecastOf(zero).find((week) => week.weekNumber === 46);
+    expect(w46?.supplyCapped).toBe(true);
+    expect(w46?.channelInv).toBe(0);
+    const w52 = forecastOf(zero).find((week) => week.weekNumber === 52);
+    expect(w52?.final).toBe(0);
+    expect(w52?.supplyCapped).toBe(true);
+    expect(zero.firstAdjustedWeek).toBe(46);
+    expect(zero.summary.gap).toBeGreaterThan(0);
+  });
+});
+
+describe('推演工作台 · 季度覆盖与会话恢复（withQuarterOverride / normalizeWorkbenchParams）', () => {
+  it('withQuarterOverride：改任一格 → human；两者都还原 → 回 ai', () => {
+    const q4 = withQuarterOverride(base, 'q4', 120);
+    expect(q4.q4Override).toBe(120);
+    expect(q4.q1Override).toBeNull();
+    expect(q4.overrideSource).toBe('human');
+    const both = withQuarterOverride(q4, 'q1', 95);
+    expect(both.q1Override).toBe(95);
+    expect(both.overrideSource).toBe('human');
+    const q4Restored = withQuarterOverride(both, 'q4', null);
+    expect(q4Restored.q4Override).toBeNull();
+    expect(q4Restored.q1Override).toBe(95);
+    expect(q4Restored.overrideSource).toBe('human');
+    const allRestored = withQuarterOverride(q4Restored, 'q1', null);
+    expect(allRestored.q4Override).toBeNull();
+    expect(allRestored.q1Override).toBeNull();
+    expect(allRestored.overrideSource).toBe('ai');
+    expect(allRestored).toEqual(base);
+    // 非有限值按 null 处理
+    expect(withQuarterOverride(base, 'q4', Number.NaN).overrideSource).toBe('ai');
+  });
+
+  it('normalizeWorkbenchParams：基准与合法草稿（含新字段）往返保真', () => {
+    expect(normalizeWorkbenchParams(fixture, base)).toEqual(base);
+    const tuned: WorkbenchParams = {
+      ...base,
+      q4Override: 118.5,
+      overrideSource: 'human',
+      prevGenReferenceId: 'ref-pura90',
+      marketEvents: [{ id: 'ev-x', label: '恒定', startWeek: 47, durationWeeks: 2, magnitudePct: 4, decay: 'flat' }],
+      productEvents: [{ id: 'pe-x', type: 'own-promo', label: '营销', week: 47, magnitudePct: 12, replayId: 'rp-own-marketing' }],
+      siPlanMonthly: { '2026-11': 210000, '2026-12': 40000 },
+      manual: { 47: { value: 60000, reason: '原因' } },
+    };
+    expect(normalizeWorkbenchParams(fixture, tuned)).toEqual(tuned);
+    expect(normalizeWorkbenchParams(fixture, JSON.parse(JSON.stringify(tuned)))).toEqual(tuned);
+  });
+
+  it('normalizeWorkbenchParams：非对象 / 坏 JSON 输入回退基准，永不崩溃', () => {
+    expect(normalizeWorkbenchParams(fixture, null)).toEqual(base);
+    expect(normalizeWorkbenchParams(fixture, undefined)).toEqual(base);
+    expect(normalizeWorkbenchParams(fixture, 42)).toEqual(base);
+    expect(normalizeWorkbenchParams(fixture, 'bad json')).toEqual(base);
+    expect(normalizeWorkbenchParams(fixture, [])).toEqual(base);
+    expect(normalizeWorkbenchParams(fixture, {})).toEqual(base);
+  });
+
+  it('normalizeWorkbenchParams：错型字段逐项修正、失效参照回退、overrideSource 重算', () => {
+    const dirty = {
+      q4Override: '120',
+      q1Override: Number.NaN,
+      overrideSource: 'human',
+      marketEvents: [
+        'bad-entry',
+        { id: 'ev-half', label: '半改事件', startWeek: 46.8, durationWeeks: -1, magnitudePct: 8, decay: 'decreasing' },
+        { id: 'ev-ok', label: '恒定事件', startWeek: 47, durationWeeks: 2, magnitudePct: 3, decay: 'weird' },
+      ],
+      productEvents: [
+        { id: 'pe-ok', type: 'competitor-launch', label: '竞品', week: 46, magnitudePct: -5, replayId: 'rp-comp-promo' },
+        { id: 'pe-type', type: 'other', label: '错型', week: 47, magnitudePct: 5, replayId: 'rp-own-marketing' },
+        { id: 'pe-stale', type: 'own-promo', label: '失效回放', week: 48, magnitudePct: 5, replayId: 'rp-ghost' },
+      ],
+      siPlanMonthly: { '2026-11': -3, '2026-12': 'x', '2027-01': 999 },
+      manual: {
+        46: { value: 60000, reason: '   ' },
+        47: { value: 'x', reason: 'r' },
+        48: { value: -5, reason: 'r' },
+        44: { value: 1000, reason: '历史周无效' },
+        50: { value: 52000.4, reason: ' ok ' },
+      },
+      rationale: 42,
+      prevGenReferenceId: 'ref-ghost',
+    };
+    const normalized = normalizeWorkbenchParams(fixture, dirty);
+    expect(normalized.q4Override).toBeNull();
+    expect(normalized.q1Override).toBeNull();
+    expect(normalized.overrideSource).toBe('ai');
+    expect(normalized.marketEvents).toEqual([
+      { id: 'ev-half', label: '半改事件', startWeek: 47, durationWeeks: 1, magnitudePct: 8, decay: 'decreasing' },
+      { id: 'ev-ok', label: '恒定事件', startWeek: 47, durationWeeks: 2, magnitudePct: 3, decay: 'decreasing' },
+    ]);
+    expect(normalized.productEvents).toEqual([
+      { id: 'pe-ok', type: 'competitor-launch', label: '竞品', week: 46, magnitudePct: -5, replayId: 'rp-comp-promo' },
+    ]);
+    // 负值钳 0（合法类型越界）；错型（'x'）回退基准月值；未知月份键剔除
+    expect(normalized.siPlanMonthly).toEqual({ '2026-11': 0, '2026-12': 32000 });
+    expect(normalized.manual).toEqual({ 50: { value: 52000, reason: 'ok' } });
+    expect(normalized.rationale).toBe(fixture.market.aiRationale);
+    expect(normalized.prevGenReferenceId).toBe('ref-mate80');
+    // 修正后的参数可直接进主链
+    expect(() => compute(normalized)).not.toThrow();
   });
 });

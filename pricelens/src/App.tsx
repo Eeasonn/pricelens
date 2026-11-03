@@ -85,7 +85,10 @@ function AppBody() {
   // 壳（页头+筛选条+滚动容器）——页内切换只换图表主体，不再整页重挂载（顶部
   // 筛选器不刷新）；非分析页仍按页 key 重挂载播淡入。
   // 2026-11-03：大盘走势（marketboard）加入分析壳，同享切页不重挂筛选器。
-  const analysis = page === 'dashboard' || page === 'volume' || page === 'marketboard' || page === 'pricing';
+  // 2026-11-04（WP6 集成）：量价预测（forecast）入壳——showFilters=false
+  //（fixture 固定样本，不渲染会被误解为联动数据的 FilterBar），页头/滚动
+  // 容器/回滚按钮全部共享，页头页签退役（同页单 current，见 PageHeader）。
+  const analysis = page === 'dashboard' || page === 'volume' || page === 'marketboard' || page === 'pricing' || page === 'forecast';
   return (
     <>
       <a
@@ -111,15 +114,21 @@ function AppBody() {
         {page === 'overview' ? (
           <Overview />
         ) : analysis ? (
-          <AnalysisShell>
-            {page === 'volume' ? <VolumePrice /> : page === 'marketboard' ? <MarketBoardPage /> : page === 'pricing' ? <PricingPage /> : <Dashboard />}
-          </AnalysisShell>
+          page === 'forecast' ? (
+            // 推演工作台：固定演示样本，无 FilterBar（showFilters=false），
+            // 避免被误解为会联动数据的筛选器（计划 8.1 Step 1）
+            <AnalysisShell showFilters={false}>
+              <ForecastPage />
+            </AnalysisShell>
+          ) : (
+            <AnalysisShell>
+              {page === 'volume' ? <VolumePrice /> : page === 'marketboard' ? <MarketBoardPage /> : page === 'pricing' ? <PricingPage /> : <Dashboard />}
+            </AnalysisShell>
+          )
         ) : page === 'config' ? (
           <Config />
         ) : page === 'intelligence' ? (
           <IntelligenceCenter />
-        ) : page === 'forecast' ? (
-          <ForecastPage />
         ) : (
           <AlertsPage />
         )}
@@ -131,8 +140,10 @@ function AppBody() {
 /** 分析页共享壳（第一百八十四轮）：页头、顶部筛选条、滚动容器与回滚按钮只挂载
  *  一次，价格走势/量价走势（定价推演就绪后同）在壳内换主体——切页签不再触发
  *  筛选器刷新（原各页自带壳，切换即整页重挂）。滚动容器原属价格看板页（第五十
- *  四轮的顶部居中 ↑ 回滚按钮随迁，量价页同样生效）。 */
-function AnalysisShell({ children }: { children: ReactNode }) {
+ *  四轮的顶部居中 ↑ 回滚按钮随迁，量价页同样生效）。
+ *  showFilters（默认 true 不改旧行为）：量价预测传 false——fixture 固定样本
+ *  不随全局筛选联动，不渲染会被误解为联动数据的 FilterBar（计划 8.1 Step 1）。 */
+function AnalysisShell({ children, showFilters = true }: { children: ReactNode; showFilters?: boolean }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [showTop, setShowTop] = useState(false);
   const onScroll = (): void => setShowTop((rootRef.current?.scrollTop ?? 0) > 140);
@@ -180,8 +191,9 @@ function AnalysisShell({ children }: { children: ReactNode }) {
       <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader />
-        {/* 分析对象与当前对比口径；showTime = 时间筛选簇（第一百三十一轮波2上移） */}
-        <FilterBar showTime showPlatform={false} />
+        {/* 分析对象与当前对比口径；showTime = 时间筛选簇（第一百三十一轮波2上移）。
+            forecast（showFilters=false）不渲染筛选条，页面自带固定样本范围行 */}
+        {showFilters && <FilterBar showTime showPlatform={false} />}
         <main style={{ flex: 1, padding: `${space.md}px ${space.lg}px ${space.lg}px`, minWidth: 0 }}>{children}</main>
       </div>
     </div>

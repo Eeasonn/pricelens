@@ -18,6 +18,8 @@ export interface WorkbenchWeek {
   week: string;
   /** ISO 风格周序号（与 2026 真实周历对齐，W44 = 11-02 周）。 */
   weekNumber: number;
+  /** 周一完整日期（YYYY-MM-DD）；季度与时间边界从该日期推导（workbenchTime）。 */
+  date: string;
   /** 周一日期展示（MM-DD）。 */
   dateLabel: string;
   status: 'actual' | 'forecast';
@@ -160,21 +162,21 @@ const FORECAST_PRICES = [849, 799, 799, 799, 799, 849, 849, 849];
 const PREV_GEN = [15, 22, 29, 34, 37, 39, 41, 43, 45, 47, 49, 52, 50, 46, 42, 39].map((v) => v * 1000);
 const BASE_PATH = [47, 52, 66, 55, 50, 47, 45, 43].map((v) => v * 1000);
 
-/** 周一日期：W1 = 2026-01-05，逐周 +7 天。 */
-function mondayLabel(weekNumber: number): string {
-  const date = new Date(Date.UTC(2026, 0, 5 + (weekNumber - 1) * 7));
-  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(date.getUTCDate()).padStart(2, '0');
-  return `${mm}-${dd}`;
+/** 周一日期：W1 = 2026-01-05，逐周 +7 天；同时产出完整 date（YYYY-MM-DD）与 MM-DD 展示标签。 */
+function mondayParts(weekNumber: number): { date: string; dateLabel: string } {
+  const iso = new Date(Date.UTC(2026, 0, 5 + (weekNumber - 1) * 7)).toISOString().slice(0, 10);
+  return { date: iso, dateLabel: iso.slice(5) };
 }
 
 const weeks: WorkbenchWeek[] = Array.from({ length: 16 }, (_, index) => {
   const weekNumber = 37 + index;
   const isHistory = index < 8;
+  const { date, dateLabel } = mondayParts(weekNumber);
   return {
     week: `W${weekNumber}`,
     weekNumber,
-    dateLabel: mondayLabel(weekNumber),
+    date,
+    dateLabel,
     status: isHistory ? ('actual' as const) : ('forecast' as const),
     sales: isHistory ? HISTORY_SALES[index] : null,
     price: isHistory ? HISTORY_PRICES[index] : FORECAST_PRICES[index - 8],
@@ -217,7 +219,7 @@ export const workbenchFixture: WorkbenchFixture = {
       { key: '2026Q3', value: 104 },
     ],
     aiRationale:
-      'AI 初始推演（第一版，可修改）：纯时间序列口径 = 周期性季节因素（去年 Q4/Q3、Q1/Q4 季节比）× 全局性趋势因素（今年/去年同比水平比）；下方关键事件为人工录入假设，可增删改。',
+      'AI 初始推演（可修改）：纯时间序列口径 = 周期性季节因素（去年 Q4/Q3、Q1/Q4 季节比）× 全局性趋势因素（今年/去年同比水平比）；本地确定性规则基线，未调用模型服务；下方关键事件为人工录入假设，可增删改。',
   },
   defaultMarketEvents: [
     { id: 'ev-fold', label: '折叠屏阵营扩容', startWeek: 46, durationWeeks: 5, magnitudePct: 8, decay: 'decreasing' },
@@ -261,45 +263,45 @@ export const workbenchFixture: WorkbenchFixture = {
       id: 'rp-comp-promo',
       match: 'competitor-launch',
       title: '友商促销 / 新品上市期',
-      desc: 'Galaxy S25 上市 + 首销促销期（去年 W40–W44），同档位友商放量、我司同期被分流。',
+      desc: 'Galaxy S25 上市 + 首销促销期（去年 W40–W44）：同期观察到同档位友商放量，本品周销被分流。',
       points: [26, 28, 31, 34, 30, 27, 26, 25].map((v) => v * 1000),
       refLabel: 'Galaxy S25 · 上市促销段',
       impactPct: -6,
       impactWeeks: 4,
-      impactText: '当时对同期我司旗舰的冲击约 −6%，持续 4 周，2 周后回到原趋势',
+      impactText: '同期观察到本品周销约 −6%，持续 4 周，2 周后回到原趋势，作为人工推演参照',
     },
     {
       id: 'rp-own-marketing',
       match: 'own-promo',
       title: '自家营销 / 官方价促',
-      desc: 'Mate 80 官方降价促销（去年 W40–W44），降价次周起销量明显抬升。',
+      desc: 'Mate 80 官方降价促销（去年 W40–W44）：同期观察到降价次周起销量明显抬升。',
       points: [30, 29, 33, 39, 43, 45, 42, 40].map((v) => v * 1000),
       refLabel: 'Mate 80 · 官方价促段',
       impactPct: 15,
       impactWeeks: 3,
-      impactText: '当时降价后 3 周销量 +15%~+23%，随促销退坡回落',
+      impactText: '同期观察到降价后 3 周销量 +15%~+23%，随促销退坡回落，作为人工推演参照',
     },
     {
       id: 'rp-cannib',
       match: 'cannibalization',
       title: '自家品挤兑',
-      desc: 'Pura 90 Pro 上市挤兑同期 Mate 80（价格带重叠 $750–850）。',
+      desc: '同期观察到 Pura 90 Pro 上市后 Mate 80 周销回落（价格带重叠 $750–850）。',
       points: [34, 33, 30, 27, 26, 27, 28, 29].map((v) => v * 1000),
       refLabel: 'Mate 80 · 被挤兑段',
       impactPct: -9,
       impactWeeks: 3,
-      impactText: '当时被挤兑 −9%，持续 3 周；家族合计份额仍 +1.8pt',
+      impactText: '同期观察到 Mate 80 周销 −9%，持续 3 周，作为人工推演参照',
     },
     {
       id: 'rp-promo-sale',
       match: 'own-promo',
       title: '大促降价（档期脉冲）',
-      desc: '去年黑五档期（W46–W49）降价脉冲，主峰周抬升显著。',
+      desc: '去年黑五档期（W46–W49）降价脉冲：同期观察到主峰周销量显著抬升。',
       points: [38, 42, 52, 58, 47, 41, 38, 36].map((v) => v * 1000),
       refLabel: 'Mate 80 · 去年黑五段',
       impactPct: 30,
       impactWeeks: 4,
-      impactText: '档期脉冲峰值 +35%，档期后 2 周回落',
+      impactText: '同期观察到档期脉冲峰值 +35%，档期后 2 周回落，作为人工推演参照',
     },
   ],
   anchors: [

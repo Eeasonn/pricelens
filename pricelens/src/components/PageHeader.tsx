@@ -23,10 +23,11 @@ import DataHelpModal from './DataHelpModal';
 import AgentLauncher from './Copilot/AgentLauncher';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
-/** 页头只留管理页签。图表内容的切换在筛选栏下方。 */
+/** 页头只留管理页签。图表内容的切换在筛选栏下方（ChartContentBar）。
+ *  量价预测页签已退役（WP6 集成 8.1 Step 3）：预测页入分析壳后，其入口
+ *  与当前标识统一在 ChartContentBar——同一页面只允许一处 aria-current。 */
 const TABS: { page: Page; label: string }[] = [
   { page: 'intelligence', label: '情报中心' },
-  { page: 'forecast', label: '量价预测' },
   { page: 'config', label: '配置' },
   { page: 'alerts', label: '预警' },
 ];
@@ -34,7 +35,7 @@ const TABS: { page: Page; label: string }[] = [
 export default function PageHeader({ extra }: { title?: string; extra?: ReactNode }) {
   const { go, page } = usePage();
   const [helpOpen, setHelpOpen] = useState(false);
-  const managementPage = page === 'config' || page === 'alerts' || page === 'intelligence' || page === 'forecast';
+  const managementPage = page === 'config' || page === 'alerts' || page === 'intelligence';
   return (
     <header
       className="lpl-page-header"

@@ -1,20 +1,20 @@
 // ============================================================
 // 推演工作台 v2 · 层④库存验证（带预测的因子卡，最后一步）：
-// 左轴渠道 DOS（蓝实→虚）+ 全流程 DOS（灰虚）双线、右轴渠道库存柱 + SI ▼；
+// 左轴渠道 DOS（蓝实→虚）+ 全流程 DOS（灰虚）双线、右轴渠道库存柱（万台）+ SI ▼；
 // 历史段实 / 预测段虚（预测段 = 上游基线 SO + SI 月计划推演）。
-// SI 按月给入 = 唯一明确人工输入；健康判定（DOS 70–90 天 + 库存降幅 <20–30%，
-// 预警解释）→ 不健康 / 库存不足则刚性砍 min(基线 SO, 可售) 回写主图
-// （纲领：中间计算过程不呈现，主图只显最终 + 砍周琥珀描边微痕）。
+// SI 按月给入 = 唯一明确人工输入；健康判定（DOS 70–90 天 + 库存降幅 20%/30%，
+// 预警解释，阈值未核定）→ 可售不足的预测周按可售量修正（min(基线 SO, 可售)，
+// 公式收 title）回写主图，修正周琥珀描边微痕；微痕读 supplyCapped（截断事实，
+// 手调不覆盖），capped 只表当前显示。输出只讲结果。
 // ============================================================
 import { useState } from 'react';
 import { InputNumber } from 'antd';
 import { color, radius, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
-import { fmtVolume } from '../volume/volumeAxis';
 import type { WorkbenchFixture } from './workbenchFixture';
-import type { WorkbenchParams, WorkbenchResult } from './workbenchModel';
+import type { WorkbenchParams, WorkbenchResult, WorkbenchWeekResult } from './workbenchModel';
 import { DOS_BAND, INV_CRASH_HEAVY_PCT, INV_CRASH_LIGHT_PCT } from './workbenchModel';
-import { CertaintyBadge, IoBar, SectionHead, WorkbenchLegend, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import { CertaintyBadge, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtWan, wanOf, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
 const W = 640;
 const H = 250;
@@ -25,6 +25,46 @@ const BOTTOM = 26;
 const PLOT_W = W - LEFT - RIGHT;
 const PLOT_H = H - TOP - BOTTOM;
 const FORECAST_START = 8;
+
+/** 库存上限修正公式（收 title，不进正文）。 */
+const MIN_FORMULA_TITLE = '库存上限修正：min(基线 SO, 可售)；可售 = 期初库存 + SI 补货';
+
+/**
+ * 修正周判定（读该周自己的 health 行结构化字段，不共用首周原因；输出只讲结果）：
+ * 本周 DOS / 库存降幅 → 可售不足时按可售量修正读数（人工手调周保留手调事实）。
+ */
+function verdictLine(week: WorkbenchWeekResult): string {
+  const health = week.health;
+  const parts: string[] = [];
+  if (health) {
+    parts.push(health.dosOk
+      ? `DOS ${health.channelDos.toFixed(1)} 天在合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天内`
+      : `DOS ${health.channelDos.toFixed(1)} 天越出合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天`);
+    parts.push(health.crash === 'none'
+      ? `库存较前 4 周均值 ${health.invChangePct > 0 ? '+' : ''}${health.invChangePct}%`
+      : `库存较前 4 周均值下降 ${Math.abs(health.invChangePct).toFixed(1)}%（≥${health.crash === 'heavy' ? INV_CRASH_HEAVY_PCT : INV_CRASH_LIGHT_PCT}%）`);
+  }
+  const result = week.manual != null
+    ? `可售不足，主图当前按人工手调 ${fmtWan(week.manual.value)} 显示`
+    : `可售不足，按可售量修正至 ${fmtWan(week.final ?? 0)}`;
+  return `${week.week} ${parts.join('；')} → ${result}`;
+}
+
+/** 轻量状态 chip（文字承载语义）：库存可支撑 / 阈值未核定。 */
+function StateChip({ label, title }: { label: string; title: string }) {
+  return (
+    <span
+      title={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
+        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+        background: color.canvasSoft2, color: color.mute,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
 
 export default function InventoryValidationCard({
   fixture,
@@ -37,7 +77,9 @@ export default function InventoryValidationCard({
   params: WorkbenchParams;
   result: WorkbenchResult;
   onSiMonthLive: (monthKey: string, units: number) => void;
-  onSiMonthCommit: (monthKey: string, units: number) => void;
+  /** 可选落库口（WP6 8.2 Step 4）：本轮 SI 只进本地草稿、不写真实数据，
+   *  页面不再传假提交回调（onSiMonthCommit={() => {}} 已移除）。 */
+  onSiMonthCommit?: (monthKey: string, units: number) => void;
 }) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const show = (key: string): boolean => !hidden.has(key);
@@ -65,7 +107,8 @@ export default function InventoryValidationCard({
       .map((week, offset) => `${offset === 0 ? 'M' : 'L'}${x(from + offset).toFixed(1)} ${yDos(week[key]).toFixed(1)}`)
       .join(' ');
   const boundaryX = (x(7) + x(FORECAST_START)) / 2;
-  const cappedWeeks = forecastWeeks.filter((week) => week.capped);
+  // 微痕读 supplyCapped（截断事实，手调不覆盖）；capped 只表当前是否按库存值显示。
+  const cappedWeeks = forecastWeeks.filter((week) => week.supplyCapped);
 
   const legendItems: LegendItem[] = [
     { key: 'inv', label: '渠道库存（右轴）', shape: 'rect', color: color.ink },
@@ -78,26 +121,31 @@ export default function InventoryValidationCard({
     <section style={workbenchCardStyle}>
       <SectionHead
         title="库存验证"
-        hint="左轴 DOS（渠道蓝实→虚 / 全流程灰虚）、右轴渠道库存柱 + SI ▼；预测段 = 上游基线 SO + SI 月计划推演。健康判定（预警解释）→ 不健康或库存不足则刚性砍 min(基线 SO, 可售) 回写主图——中间计算过程不呈现，主图只显最终。"
-        extra={<CertaintyBadge level="high" />}
+        hint="左轴 DOS（渠道蓝实→虚 / 全流程灰虚）、右轴渠道库存柱（万台）+ SI ▼；预测段 = 上游基线 SO + SI 月计划推演。健康判定（预警解释）→ 可售不足的预测周按可售量修正并回写主图，修正周琥珀描边标识。"
+        extra={<>
+          <SimChip title="库存推演为演示样本：SI 计划仅存本地草稿，不写真实数据" />
+          {cappedWeeks.length > 0
+            ? <CertaintyBadge level="high" />
+            : <StateChip label="库存可支撑" title="当前库存推演可支撑基线 SO：未触发库存上限修正" />}
+        </>}
       />
       <IoBar
         input="SI 月计划（唯一人工输入）· 上游基线 SO（大盘+量价考量）· 期初渠道库存"
-        output={`未来 DOS / 库存反算与健康判定；不健康周刚性砍回写主图（${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起` : '当前未触发'}）`}
+        output={`未来 DOS / 库存反算与健康判定；可售不足周按可售量修正回写主图（${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起` : '当前未触发'}）`}
       />
       <div style={{ overflowX: 'auto' }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
           width="100%"
           role="img"
-          aria-label={`库存验证：渠道库存柱（右轴）、渠道 DOS 与全流程 DOS 双线（左轴，合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天）；${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起刚性修正（min(基线 SO, 可售)，回写主图）` : '当前考量未触发库存修正'}。详细判定见下方输出框。`}
+          aria-label={`库存验证：渠道库存柱（右轴，万台）、渠道 DOS 与全流程 DOS 双线（左轴，合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天）；${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起库存上限修正（按可售量修正回写主图，修正周琥珀描边）` : '当前库存可支撑基线 SO，未触发修正'}。详细判定见下方输出框。`}
           style={{ display: 'block', height: 'auto', minWidth: 460 }}
         >
           {/* 预测段浅底 + 今天分界 */}
           <rect x={boundaryX} y={TOP - 4} width={W - RIGHT - boundaryX} height={PLOT_H + 4} fill={color.canvasSoft2} opacity={0.5} />
           <line x1={boundaryX} y1={TOP - 4} x2={boundaryX} y2={TOP + PLOT_H} stroke={color.hairlineStrong} strokeDasharray="4 4" />
           <text x={boundaryX + 4} y={TOP + 8} fontSize={10} fill={color.body}>预测 / 计划</text>
-          {/* 网格 + 左轴（天）+ 右轴（库存台） */}
+          {/* 网格 + 左轴（天）+ 右轴（万台） */}
           {[0, 0.5, 1].map((fraction) => {
             const gy = TOP + PLOT_H * (1 - fraction);
             return (
@@ -109,8 +157,9 @@ export default function InventoryValidationCard({
           })}
           <text x={LEFT - 6} y={TOP - 3} fontSize={10} fill={color.mute} textAnchor="end">天</text>
           {[0, 0.5, 1].map((fraction) => (
-            <text key={fraction} x={W - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{fmtVolume(invMax * fraction)}</text>
+            <text key={fraction} x={W - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{wanOf(invMax * fraction)}</text>
           ))}
+          <text x={W - RIGHT + 6} y={TOP - 3} fontSize={10} fill={color.mute}>万台</text>
           {/* DOS 合理带 70–90 天（mute 虚线 + 浅带） */}
           <rect x={LEFT} y={yDos(DOS_BAND.max)} width={PLOT_W} height={Math.max(0, yDos(DOS_BAND.min) - yDos(DOS_BAND.max))} fill={color.canvasSoft2} opacity={0.6} />
           {[DOS_BAND.min, DOS_BAND.max].map((days) => (
@@ -141,7 +190,7 @@ export default function InventoryValidationCard({
                 strokeWidth={1}
                 strokeDasharray={forecast ? '4 3' : undefined}
               >
-                <title>{`${week.week} 渠道库存 ${Math.round(week.channelInv).toLocaleString('en-US')} 台 · 渠道 DOS ${week.channelDos} 天 · 全流程 DOS ${week.fullDos} 天${week.si > 0 ? ` · SI ${Math.round(week.si).toLocaleString('en-US')} 台` : ''}`}</title>
+                <title>{`${week.week} 渠道库存 ${fmtWan(week.channelInv)} · 渠道 DOS ${week.channelDos} 天 · 全流程 DOS ${week.fullDos} 天${week.si > 0 ? ` · SI ${fmtWan(week.si)}` : ''}`}</title>
               </rect>
             );
           })}
@@ -153,7 +202,7 @@ export default function InventoryValidationCard({
             const py = yInv(week.channelInv) - 8;
             return (
               <path key={`si-${week.week}`} d={`M${px - 4} ${py - 6} L${px + 4} ${py - 6} L${px} ${py} Z`} fill={forecast ? color.link : color.ink}>
-                <title>{`${forecast ? 'SI 计划' : 'SI 补货'} ${Math.round(week.si).toLocaleString('en-US')} 台`}</title>
+                <title>{`${forecast ? 'SI 计划' : 'SI 补货'} ${fmtWan(week.si)}`}</title>
               </path>
             );
           })}
@@ -167,7 +216,7 @@ export default function InventoryValidationCard({
               <path d={dosLine('channelDos', FORECAST_START, weeks.length - 1)} fill="none" stroke={color.link} strokeWidth={2.2} strokeDasharray="5 4" />
             </>
           )}
-          {/* 修正起点（随当前考量变化；未触发不画固定标记） */}
+          {/* 修正起点（微痕读 supplyCapped，随截断事实变化；未触发不画固定标记） */}
           {result.firstAdjustedWeek != null && (() => {
             const index = weeks.findIndex((week) => week.weekNumber === result.firstAdjustedWeek);
             if (index < 0) return null;
@@ -206,7 +255,7 @@ export default function InventoryValidationCard({
                 }}
                 onBlur={(event) => {
                   const raw = Number(event.target.value);
-                  if (Number.isFinite(raw)) onSiMonthCommit(month.key, Math.max(0, raw) * 1000);
+                  if (Number.isFinite(raw)) onSiMonthCommit?.(month.key, Math.max(0, raw) * 1000);
                 }}
                 onPressEnter={(event) => (event.target as HTMLInputElement).blur()}
                 size="small"
@@ -218,28 +267,30 @@ export default function InventoryValidationCard({
         </div>
       </div>
 
-      {/* 输出框：健康判定（预警解释）+ 刚性砍回写（结论级，中间过程不呈现） */}
+      {/* 输出框：健康判定（预警解释）+ 库存上限修正（结论级，只讲结果） */}
       <div style={{ marginTop: space.md, padding: `${space.md - 2}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, display: 'grid', gap: 6, fontSize: 12, lineHeight: 1.7, color: color.body }}>
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ flex: 'none', fontWeight: 600, color: color.body }}>输出</span>
           <span>
             {cappedWeeks.length
-              ? <><b style={{ color: color.warningInk }}>{`W${cappedWeeks[0].weekNumber} 起库存不足以支撑基线 SO`}</b>，刚性修正至可售量并回写主图（主图只显最终值，砍周琥珀描边标识）</>
+              ? <><b style={{ color: color.warningInk }}>{`W${cappedWeeks[0].weekNumber} 起可售不足`}</b>，按可售量修正并回写主图（修正周琥珀描边标识）</>
               : '当前考量未触发库存修正（库存可支撑基线 SO），主图预测柱不受影响'}
           </span>
         </div>
         {cappedWeeks.length > 0 && (
-          <div className="tnum" style={{ display: 'flex', gap: 8 }}>
-            <span style={{ flex: 'none', fontWeight: 600, color: color.body }}>判定</span>
-            <span>
-              {cappedWeeks.map((week) => `${week.week} 修正至 ${fmtVolume(week.final ?? 0)} 台`).join(' · ')}
-              ；{cappedWeeks[0].health?.reasonText}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <span style={{ flex: 'none', fontWeight: 600, color: color.body }} title={MIN_FORMULA_TITLE}>判定</span>
+            <span style={{ display: 'grid', gap: 2 }}>
+              {cappedWeeks.map((week) => (
+                <span key={week.week} className="tnum">{verdictLine(week)}</span>
+              ))}
             </span>
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ flex: 'none', fontWeight: 600, color: color.body }}>规则</span>
-          <span>{`演示规则（待拍板）：DOS 合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天；库存较前 4 周均值降幅 ≥${INV_CRASH_LIGHT_PCT}% 预警，≥${INV_CRASH_HEAVY_PCT}% 重警；库存不足 → 刚性砍 min(基线 SO, 可售)，不按比例打折`}</span>
+          <span title={MIN_FORMULA_TITLE}>{`DOS ${DOS_BAND.min}–${DOS_BAND.max} 天 · 降幅预警 ${INV_CRASH_LIGHT_PCT}%／${INV_CRASH_HEAVY_PCT}%`}</span>
+          <StateChip label="阈值未核定" title="DOS 合理带与库存降幅预警阈值尚未获业务核定" />
         </div>
       </div>
     </section>

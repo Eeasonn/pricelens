@@ -36,11 +36,18 @@ import type { LineShapeChoice } from './chartModel';
 import ScaleSlider from './ScaleSlider';
 import YLimitInputs, { type YLimitState } from './YLimitInputs';
 
+/** 齿轮弹层功能开关键：scale = 每格高度滑杆；yTicks = Y 刻度线；tiers = 价格档位；
+ *  yCompress = Y 轴自动压缩；lineShape = 折线样式。 */
+export type ChartToolbarFeature = 'scale' | 'yTicks' | 'tiers' | 'yCompress' | 'lineShape';
+
 export interface ChartToolbarProps {
   /** 布局槽位：all = 单行全套（齿轮+插槽 左、大促/⋯ 右，量价/多平台图表内用）；
    *  actions = 只显示右侧功能；cluster = 只显示左簇（齿轮+隐藏对比产品）；
    *  pills = 药丸行（合并模式专用，仅居中图例）。 */
   mode?: 'all' | 'actions' | 'pills' | 'cluster';
+  /** 齿轮弹层功能可见性（2026-11-04 WP6：预测页等复用方按需收窄）；
+   *  默认全 true = 不改既有行为。false 的功能整块不渲染（含相关说明与 dirty 判断）。 */
+  featureVisibility?: Partial<Record<ChartToolbarFeature, boolean>>;
   /** 顶部居中的系列页签（由看板层注入，避免页签占用图表底部时间区域）。
    *  第一百七十八轮起 = 看板合并模式把产品药丸带注入工具行中区（行内居中、
    *  底部与折后价/RRP 对齐），不再是绝对定位浮层 */
@@ -79,8 +86,10 @@ export interface ChartToolbarProps {
   /** 悬停页签比率（收进 ⋯；默认周环比） */
   tipMode?: 'discount' | 'wow';
   onTipMode?: (v: 'discount' | 'wow') => void;
-  /** 图上价格标签密度（收进 ⋯；默认精简） */
+  /** 图上价格标签密度（收进 ⋯；默认精简）。labelModeLabel = 该行前缀文案
+   *  （默认「价格显示」；预测页复用时传「周标签密度」等更贴切的口径） */
   labelMode?: 'detail' | 'compact';
+  labelModeLabel?: string;
   onLabelMode?: (v: 'detail' | 'compact') => void;
   /** 时点摘要（收进 ⋯；默认隐藏）。不传 onPointPanelToggle = 菜单里不出现 */
   pointPanelOpen?: boolean;
@@ -209,6 +218,13 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   const mode = props.mode ?? 'all';
   const showLeft = mode === 'all' || mode === 'cluster';
   const showRight = mode === 'all' || mode === 'actions';
+  // 齿轮功能可见性（featureVisibility）：默认全 true = 既有行为不变
+  const featureOn = (feature: ChartToolbarFeature): boolean => props.featureVisibility?.[feature] !== false;
+  const showScaleCtl = featureOn('scale');
+  const showYTicksCtl = featureOn('yTicks');
+  const showTiersCtl = featureOn('tiers') && props.currency === 'usd' && props.showTiersToggle !== false;
+  const showCompressCtl = featureOn('yCompress');
+  const showShapeCtl = featureOn('lineShape');
   const showPromo = props.onPromoBandsOn != null && props.onOffersOn != null;
   const showMarks = props.onChangeThreshold != null;
   const hasDisplay =
@@ -217,6 +233,15 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     props.onLabelMode != null ||
     props.onPointPanelToggle != null;
   const showMore = hasDisplay || showMarks || props.presentationSlot != null;
+  // ⋯ 按钮title 随实际收进的项生成（预测页等复用方只收部分项时不再罗列无关词）
+  const moreItems = [
+    props.presentationSlot != null ? '呈现' : null,
+    props.onPriceTypeToggle != null ? '折后价' : null,
+    props.onTipMode != null ? '页签显示' : null,
+    props.onLabelMode != null ? (props.labelModeLabel ?? '价格显示') : null,
+    props.onPointPanelToggle != null ? '时点摘要' : null,
+    showMarks ? '价格变化提醒' : null,
+  ].filter((item): item is string => item != null);
   // 收进 ⋯ 的项离开默认值，或标注开关打开 = 按钮右上角蓝点
   const secondaryActive =
     (props.onPriceTypeToggle != null && props.priceTypes != null && (!props.priceTypes.discounted || props.priceTypes.rrp)) ||
@@ -225,11 +250,11 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     props.pointPanelOpen === true ||
     props.changeThreshold != null;
   const gearDirty =
-    (props.sliderScale != null && Math.abs(props.sliderScale - 1) > 0.001) ||
-    props.showYTicks === false ||
-    (props.currency === 'usd' && props.showTiers === false) ||
-    props.yCompress === true ||
-    (props.lineShape != null && props.lineShape !== 'auto');
+    (showScaleCtl && props.sliderScale != null && Math.abs(props.sliderScale - 1) > 0.001) ||
+    (showYTicksCtl && props.showYTicks === false) ||
+    (showTiersCtl && props.currency === 'usd' && props.showTiers === false) ||
+    (showCompressCtl && props.yCompress === true) ||
+    (showShapeCtl && props.lineShape != null && props.lineShape !== 'auto');
   // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
   // ——与每格高度滑杆「松手生效」同一语言，避免拖动全程逐帧触发提醒重算
   const [dragThreshold, setDragThreshold] = useState<number | null>(null);
@@ -250,49 +275,69 @@ export default function ChartToolbar(props: ChartToolbarProps) {
       placement="bottomLeft"
       content={
         <div style={{ width: 236 }}>
-          <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度</div>
-          <ScaleSlider scale={props.sliderScale ?? 1} onCommit={props.onSliderScale ?? (() => {})} />
-          <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>松手生效 · 双击复位</div>
-          <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-          <Checkbox checked={props.showYTicks ?? true} onChange={(e) => props.onShowYTicks?.(e.target.checked)}>
-            <span style={{ fontSize: 12 }}>Y 刻度线</span>
-          </Checkbox>
+          {/* featureVisibility（2026-11-04 WP6）：false 的功能整块不渲染；
+              分隔线按相邻可见块动态出删，避免留下孤立 hairline */}
+          {showScaleCtl && (
+            <>
+              <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>每格高度</div>
+              <ScaleSlider scale={props.sliderScale ?? 1} onCommit={props.onSliderScale ?? (() => {})} />
+              <div style={{ fontSize: 11, color: color.mute, marginTop: 8 }}>松手生效 · 双击复位</div>
+            </>
+          )}
+          {(showScaleCtl && (showYTicksCtl || showTiersCtl || showCompressCtl || showShapeCtl)) && (
+            <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
+          )}
+          {showYTicksCtl && (
+            <Checkbox checked={props.showYTicks ?? true} onChange={(e) => props.onShowYTicks?.(e.target.checked)}>
+              <span style={{ fontSize: 12 }}>Y 刻度线</span>
+            </Checkbox>
+          )}
           {/* 价格档位只存在于 USD。本币没有这根轴，开关也不出现；成本柱模式强制不画档位，开关隐藏 */}
-          {props.currency === 'usd' && props.showTiersToggle !== false && (
+          {showTiersCtl && (
             <Checkbox checked={props.showTiers ?? true} onChange={(e) => props.onShowTiers?.(e.target.checked)}>
               <span style={{ fontSize: 12 }}>价格档位</span>
             </Checkbox>
           )}
-          <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
-            {props.currency === 'usd'
-              ? props.showTiersToggle === false ? '成本柱模式只显示价格刻度，不显示价格档位' : '数值刻度与价格档位可分别显示'
-              : '关闭后 Y 轴刻度与上下限一起收起'}
-          </div>
-          <div style={{ marginTop: 6 }}>
-            <Checkbox checked={props.yCompress ?? false} onChange={(e) => props.onYCompress?.(e.target.checked)}>
-              <span style={{ fontSize: 12 }}>Y 轴自动压缩</span>
-            </Checkbox>
-            <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
-              差距悬殊的价格段之间自动压缩空白；默认关 = 完整连续展示
+          {(showYTicksCtl || showTiersCtl) && (
+            <div style={{ fontSize: 11, color: color.mute, marginTop: 3, lineHeight: '16px' }}>
+              {props.currency === 'usd'
+                ? props.showTiersToggle === false ? '成本柱模式只显示价格刻度，不显示价格档位' : '数值刻度与价格档位可分别显示'
+                : '关闭后 Y 轴刻度与上下限一起收起'}
             </div>
-          </div>
-          <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 12, color: color.mute }}>折线样式</span>
-            <Segmented
-              size="small"
-              value={props.lineShape ?? 'auto'}
-              onChange={(v) => props.onLineShape?.(v as LineShapeChoice)}
-              options={[
-                { label: '自适应', value: 'auto' },
-                { label: '阶梯', value: 'step' },
-                { label: '平滑', value: 'smooth' },
-              ]}
-            />
-          </div>
-          <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
-            自适应 = 周度阶梯、月/季平滑（默认）；阶梯 = 方形折角；平滑 = 圆滑曲线
-          </div>
+          )}
+          {showCompressCtl && (
+            <div style={{ marginTop: 6 }}>
+              <Checkbox checked={props.yCompress ?? false} onChange={(e) => props.onYCompress?.(e.target.checked)}>
+                <span style={{ fontSize: 12 }}>Y 轴自动压缩</span>
+              </Checkbox>
+              <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
+                差距悬殊的价格段之间自动压缩空白；默认关 = 完整连续展示
+              </div>
+            </div>
+          )}
+          {showShapeCtl && (
+            <>
+              {((showScaleCtl || showYTicksCtl || showTiersCtl || showCompressCtl)) && (
+                <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: 12, color: color.mute }}>折线样式</span>
+                <Segmented
+                  size="small"
+                  value={props.lineShape ?? 'auto'}
+                  onChange={(v) => props.onLineShape?.(v as LineShapeChoice)}
+                  options={[
+                    { label: '自适应', value: 'auto' },
+                    { label: '阶梯', value: 'step' },
+                    { label: '平滑', value: 'smooth' },
+                  ]}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
+                自适应 = 周度阶梯、月/季平滑（默认）；阶梯 = 方形折角；平滑 = 圆滑曲线
+              </div>
+            </>
+          )}
         </div>
       }
     >
@@ -423,7 +468,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                 )}
                 {props.onLabelMode && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: color.mute, fontSize: 12 }}>
-                    价格显示{' '}
+                    {`${props.labelModeLabel ?? '价格显示'} `}
                     <Segmented
                       size="small"
                       value={props.labelMode ?? 'compact'}
@@ -494,7 +539,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           }
         >
           <RoundIconButton
-            title="折后价 / 页签显示 / 价格显示 / 时点摘要"
+            title={moreItems.length ? moreItems.join(' / ') : '更多显示选项'}
             aria-label="更多显示选项"
             active={secondaryActive}
           >

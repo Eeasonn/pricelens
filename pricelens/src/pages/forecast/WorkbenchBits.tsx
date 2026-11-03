@@ -49,20 +49,46 @@ export function CertaintyBadge({ level }: { level: 'high' | 'mid' }) {
   );
 }
 
-/** AI 推测标注（纲领：AI 推的第一版，可改）：初始 = AI 推测 · 可改（琥珀）；人工改动后 = 人工确认（灰）。 */
+/** AI 推测标注（信任语言保留：AI 推测 · 可改 → 人工确认）。琥珀语义统一
+ *  （WP6 8.3 Step 8）：AI 与人工状态走中性灰 / 墨色，琥珀只留给档期、库存
+ *  修正与预警；文字标签继续承载语义，不靠颜色单独表达。 */
 export function AiJudgeBadge({ source }: { source: 'ai' | 'human' }) {
   const ai = source === 'ai';
   return (
     <span
-      title={ai ? 'AI 推的第一版（纯时间序列：季节 × 趋势），可直接修改' : '该值已被人工修改，AI 第一版不再生效'}
+      title={ai
+        ? 'AI 推测 · 本地确定性规则基线（季节 × 趋势），未调用模型服务，可直接修改'
+        : '该值已被人工修改，AI 基线不再生效'}
       style={{
         display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
         fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-        background: ai ? color.warningSoft : color.canvasSoft2,
-        color: ai ? color.warningInk : color.body,
+        background: ai ? color.canvasSoft2 : color.ink,
+        color: ai ? color.body : color.onPrimary,
+        border: ai ? `1px solid ${color.hairline}` : 'none',
       }}
     >
       {ai ? 'AI 推测 · 可改' : '人工确认'}
+    </span>
+  );
+}
+
+/** 轻量模拟标识（卡级，页首另有 DataStatusBadge 一处）：模拟 / 模拟历史。
+ *  中性灰表达——琥珀只留给档期 / 库存修正 / 预警（PRODUCT.md：模拟数据必须
+ *  显式标识，页首 badge + 各卡轻量标识两级分级）。 */
+export function SimChip({ variant = 'sim', title }: { variant?: 'sim' | 'simHistory'; title?: string }) {
+  const history = variant === 'simHistory';
+  return (
+    <span
+      title={title ?? (history
+        ? '本卡历史序列为模拟样本回放，不代表真实市场'
+        : '本卡数值为演示假设，不代表真实市场')}
+      style={{
+        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
+        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+        background: color.canvasSoft2, color: color.body, border: `1px solid ${color.hairline}`,
+      }}
+    >
+      {history ? '模拟历史' : '模拟'}
     </span>
   );
 }
@@ -89,20 +115,8 @@ export function IoBar({ input, output }: { input: string; output: string }) {
   );
 }
 
-/** 「演示」琥珀 chip（PRODUCT.md：演示/模拟数据必须显式标识）。 */
-export function DemoChip({ title }: { title?: string }) {
-  return (
-    <span
-      title={title ?? '演示数据：数值为演示假设，不代表真实市场'}
-      style={{
-        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-        fontSize: 11, fontWeight: 600, background: color.warningSoft, color: color.warningInk, whiteSpace: 'nowrap',
-      }}
-    >
-      演示
-    </span>
-  );
-}
+/** 「演示」琥珀 chip 已退役（WP6 8.3 Step 2）：页首 = DataStatusBadge 一处，
+ *  卡级 = 轻量 SimChip（模拟 / 模拟历史，中性灰），不再重复页级琥珀「演示」标。 */
 
 // ------------------------------------------------------------
 // 图例（SuppLegend 规格）
@@ -139,7 +153,9 @@ function LegendGlyph({ item }: { item: LegendItem }) {
   );
 }
 
-/** 图外底部居中行图例：带 key 的项点击切换系列显隐（aria-pressed + 隐藏态 opacity .45）。 */
+/** 图外底部居中行图例：带 key 的项点击切换系列显隐（aria-pressed + 隐藏态
+ *  opacity .45）。无可点击项（全部为纯说明项 / 未接 onToggle）时，可访问
+ *  名称不写「点击切换」（WP6 8.3 Step 9：语义与行为一致）。 */
 export function WorkbenchLegend({
   items,
   hidden,
@@ -151,8 +167,9 @@ export function WorkbenchLegend({
   onToggle?: (key: string) => void;
   style?: CSSProperties;
 }) {
+  const toggleable = onToggle != null && items.some((item) => item.key != null);
   return (
-    <div role="group" aria-label="图例（点击切换系列显隐）" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px 14px', fontSize: 11, color: color.body, marginTop: space.sm, ...style }}>
+    <div role="group" aria-label={toggleable ? '图例（点击切换系列显隐）' : '图例'} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px 14px', fontSize: 11, color: color.body, marginTop: space.sm, ...style }}>
       {items.map((item) => {
         const key = item.key;
         if (!key) {

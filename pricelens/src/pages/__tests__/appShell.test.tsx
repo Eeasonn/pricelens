@@ -1,9 +1,13 @@
 // ============================================================
-// 分析壳页头唯一性回归（2026-11-03 全量审查 P1）：dashboard / volume /
-// marketboard / pricing 四页共享 App.AnalysisShell——页头（PageHeader）由
-// 壳渲染一次。pricing 曾自带 <PageHeader /> 与壳内页头叠加成双页头（经
-// ?p=pricing 或 Agent 跳入即可复现），本测试锁定每页 header.lpl-page-header
-// 恰好 1 个，防止后续新分析页再犯同款。
+// 分析壳页头唯一性回归（2026-11-03 全量审查 P1；2026-11-04 WP6 扩量）：
+// dashboard / volume / marketboard / pricing / forecast 五页共享
+// App.AnalysisShell——页头（PageHeader）由壳渲染一次。pricing 曾自带
+// <PageHeader /> 与壳内页头叠加成双页头（经 ?p=pricing 或 Agent 跳入即可
+// 复现），本测试锁定每页 header.lpl-page-header 恰好 1 个。
+// WP6（8.1）：forecast 入壳后另锁三件事——①不渲染 FilterBar（fixture
+// 固定样本，showFilters=false）；②全页「量价预测」aria-current="page" 恰好
+// 一处（页头管理页签组的预测特例已退役）；③其余分析页的筛选条与页签
+// current 不回归（切页导航行为由 marketBoardTab.test.tsx 覆盖）。
 // echarts 在 jsdom 无 canvas：mock 'echarts/core' 等模块（Chart 需要
 // setOption/resize/clear/dispose），只验证 React 组装不验证图表渲染。
 // ============================================================
@@ -51,7 +55,7 @@ describe('AnalysisShell 页头唯一性', () => {
     }
   });
 
-  it.each(['dashboard', 'volume', 'marketboard', 'pricing'] as const)(
+  it.each(['dashboard', 'volume', 'marketboard', 'pricing', 'forecast'] as const)(
     '%s 页在分析壳内只渲染一个页头',
     (page) => {
       window.history.replaceState(null, '', `/?p=${page}`);
@@ -59,4 +63,43 @@ describe('AnalysisShell 页头唯一性', () => {
       expect(document.querySelectorAll('header.lpl-page-header')).toHaveLength(1);
     },
   );
+});
+
+describe('量价预测入壳（WP6 8.1）', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+    sessionStorage.clear();
+    try {
+      localStorage.clear();
+    } catch {
+      /* 受限环境 localStorage 不可用 */
+    }
+  });
+
+  it('forecast 页不渲染 FilterBar（showFilters=false，固定样本不伪装筛选联动）', () => {
+    window.history.replaceState(null, '', '/?p=forecast');
+    render(<App />);
+    expect(document.querySelectorAll('.lpl-fb')).toHaveLength(0);
+  });
+
+  it('forecast 页全页「量价预测」aria-current="page" 恰好一处（ChartContentBar 常态标记）', () => {
+    window.history.replaceState(null, '', '/?p=forecast');
+    render(<App />);
+    const forecastCurrents = Array.from(document.querySelectorAll('[aria-current="page"]'))
+      .filter((el) => (el.textContent ?? '').includes('量价预测'));
+    expect(forecastCurrents).toHaveLength(1);
+    // 页头管理页签组不再有「量价预测」入口（单 current 的另一半）
+    const headerButtons = Array.from(document.querySelectorAll('header.lpl-page-header button'));
+    expect(headerButtons.some((button) => (button.textContent ?? '').trim() === '量价预测')).toBe(false);
+  });
+
+  it('其余分析页不回归：dashboard 有 FilterBar，「价格走势」current 唯一且无预测 current', () => {
+    window.history.replaceState(null, '', '/?p=dashboard');
+    render(<App />);
+    expect(document.querySelectorAll('.lpl-fb')).toHaveLength(1);
+    const currents = Array.from(document.querySelectorAll('[aria-current="page"]'))
+      .map((el) => (el.textContent ?? '').trim());
+    expect(currents.filter((label) => label === '价格走势')).toHaveLength(1);
+    expect(currents.some((label) => label.includes('量价预测'))).toBe(false);
+  });
 });

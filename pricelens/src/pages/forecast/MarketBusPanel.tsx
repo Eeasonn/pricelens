@@ -1,22 +1,23 @@
 // ============================================================
-// 推演工作台 v2 · 层②大盘 · 总量总线（2026-11-03 晚纲领版）：
-// 左图 = 单条季度线 2025Q1 连贯到当前（2026Q3 实际），向后只预测下一季：
-// 推演两格附 AI 时间序列基线（ghost 空心灰点，AI 推的第一版）与当前生效值
-// （人工改格后实心蓝点；未改时两者重合）；
-// 右栏 = 大盘考量面板：AI 基线读数（季节 × 趋势，挂 AI 标）+ 下一季度预测格
-// 直接编辑（人工修改两条路之一）+ 影响大盘的关键事件四件套（起周[可落历史段
-// 作解释性标记] + 时长 + 峰值幅度 + 衰减方式[默认递减]，人工录入，AI 不猜）
-// + 理由栏。竞品常规迭代不在此配置。
+// 推演工作台 v2 · 层②大盘 · 总量总线（2026-11-03 生产化版）：
+// 左图 = 单条季度线 2025Q1 连贯到当前（2026Q3 实际），向后只预测下一季
+// （2026Q4 当前季估读 → 2027Q1 预测）；AI 基线 = 本地确定性规则（季节 × 趋势），
+// 人工改格后图中保留 AI 基线灰色对照点，当前生效值用实心点；
+// 右栏 = AI 基线读数（挂 AI 标）+ 下一季度预测格直接编辑（人工修改路径之一，
+// 还原后自动回 AI 标）+ 行业级事件录入（起周[可落历史段作解释] + 时长 +
+// 峰值幅度 + 衰减方式[默认递减]，人工录入，AI 不猜）+ 理由栏。
+// 竞品常规迭代不在此配置。事件锚点季度用 quarterKeyOfWeek 从周完整日期推导，
+// 生效状态用 marketEventDisposition 三态（历史解释 / 本季生效 / 不在预测窗口）。
 // ============================================================
+import { useState } from 'react';
 import { Button, Input, InputNumber } from 'antd';
-import { color, radius, space } from '../../theme/tokens';
+import { color, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import type { MarketEventSeed, WorkbenchFixture } from './workbenchFixture';
-import type { WorkbenchParams, WorkbenchResult } from './workbenchModel';
-import { effectiveQuarterIndexes, eventWeeklyFactor, marketSeriesBaseline } from './workbenchModel';
-import { AiJudgeBadge, SectionHead, WorkbenchLegend, fmtSignedPct, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import type { MarketQuarterPoint, WorkbenchParams, WorkbenchResult } from './workbenchModel';
+import { effectiveQuarterIndexes, marketSeriesBaseline } from './workbenchModel';
+import { marketEventDisposition, quarterKeyOfWeek, type MarketEventDisposition } from './workbenchTime';
+import { AiJudgeBadge, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtSignedPct, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
-/** TODO 待拍板（brief 开放问题 3/4 关联）：新增事件名称来自预设池占位（仅行业级事件），清单维护方待定。 */
-const ADD_EVENT_POOL = ['三折叠上市', '地缘冲突扰动', '汇率跳变', '平台补贴退坡'];
 const MAGNITUDE_MIN = -30;
 const MAGNITUDE_MAX = 30;
 const WEEK_MIN = 38; // 事件起周可落历史段（W38 起，解释性标记）
@@ -27,6 +28,41 @@ const DURATION_MAX = 8;
 const CHART_W = 520;
 const CHART_H = 224;
 
+// 图例系列 key（显隐状态按 key 记录；AI 基线只控制对照点，不影响生效值渲染）。
+const SERIES_ACTUAL = 'actual';
+const SERIES_FORECAST = 'forecast';
+const SERIES_AI_BASELINE = 'ai-baseline';
+
+/** 事件三态文案（WP1 marketEventDisposition 唯一来源，禁止组件内另算）。 */
+const DISPOSITION_TEXT: Record<MarketEventDisposition, string> = {
+  historical: '历史解释',
+  active: '本季生效',
+  inactive: '不在预测窗口',
+};
+
+/** 去年同季键：'2027Q1' → '2026Q1'；非季度键返回 null。 */
+function priorYearKey(key: string): string | null {
+  const match = /^(\d{4})Q([1-4])$/.exec(key);
+  return match ? `${Number(match[1]) - 1}Q${match[2]}` : null;
+}
+
+/**
+ * 季度同比（%，1 位小数）：与去年同季比较（如 2027Q1 vs 2026Q1）。
+ * 卡头副标与图内同比读数共用本 helper，保证单一口径；缺去年同季或基数 ≤ 0 返回 null。
+ */
+function quarterYoYPct(quarters: readonly MarketQuarterPoint[], key: string): number | null {
+  const point = quarters.find((candidate) => candidate.key === key);
+  const baseKey = priorYearKey(key);
+  const base = baseKey ? quarters.find((candidate) => candidate.key === baseKey) : undefined;
+  if (!point || !base || base.value <= 0) return null;
+  return Math.round((point.value / base.value - 1) * 1000) / 10;
+}
+
+/** 带符号同比文案（+12.7% / −13.3% / —），与 fmtSignedPct 同一符号约定。 */
+function fmtYoY(pct: number | null): string {
+  return pct == null ? '—' : `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct).toFixed(1)}%`;
+}
+
 function Stepper({ label, value, onStep, dec, inc, decLabel, incLabel }: {
   label: string;
   value: string;
@@ -36,16 +72,17 @@ function Stepper({ label, value, onStep, dec, inc, decLabel, incLabel }: {
   decLabel: string;
   incLabel: string;
 }) {
-  const btn = (arrow: string, delta: number, disabled: boolean, aria: string) => (
+  // dec / inc = 「该方向可步进」（界内 true）；到边界按钮禁用（disabled = 取反）。
+  const btn = (arrow: string, delta: number, enabled: boolean, aria: string) => (
     <button
       type="button"
-      disabled={disabled}
+      disabled={!enabled}
       aria-label={aria}
       onClick={() => onStep(delta)}
       style={{
         width: 22, height: 22, borderRadius: 5, border: `1px solid ${color.hairlineStrong}`,
-        background: color.canvas, color: color.body, fontSize: 13, lineHeight: 1, cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.48 : 1, padding: 0,
+        background: color.canvas, color: color.body, fontSize: 13, lineHeight: 1, cursor: enabled ? 'pointer' : 'not-allowed',
+        opacity: enabled ? 1 : 0.48, padding: 0,
       }}
     >
       {arrow}
@@ -77,25 +114,69 @@ export default function MarketBusPanel({
   fixture: WorkbenchFixture;
   params: WorkbenchParams;
   result: WorkbenchResult;
-  /** 人工直接改预测格（修正下一季度预测）：field = 'q4' | 'q1'。 */
+  /** 人工直接改预测格（修正下一季度预测）：field = 'q4' | 'q1'；还原传 null（来源回 AI）。 */
   onOverride: (field: 'q4' | 'q1', value: number | null) => void;
-  /** 事件四件套步进：field = magnitudePct ±1pt / startWeek ±1 / durationWeeks ±1。 */
+  /** 事件参数步进：field = magnitudePct ±1pt / startWeek ±1 / durationWeeks ±1。 */
   onEventStep: (id: string, field: 'magnitudePct' | 'startWeek' | 'durationWeeks', delta: number) => void;
   onEventDecay: (id: string, decay: 'decreasing' | 'flat') => void;
   onEventRemove: (id: string) => void;
   onEventAdd: () => void;
   onRationaleChange: (text: string) => void;
 }) {
+  const [hiddenSeries, setHiddenSeries] = useState<ReadonlySet<string>>(new Set());
+  const toggleSeries = (key: string) => {
+    setHiddenSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const seriesOn = (key: string) => !hiddenSeries.has(key);
+
   const quarters = result.marketQuarters;
   const { aiQ4, aiQ1 } = marketSeriesBaseline(fixture);
   const { q4Index, q1Index } = effectiveQuarterIndexes(fixture, params);
   const actualCount = quarters.filter((point) => point.status === 'actual').length;
   const humanQ4 = params.q4Override != null;
   const humanQ1 = params.q1Override != null;
-  const q1LastYear = quarters.find((point) => point.key === '2025Q1')?.value ?? 0;
-  const yoyNext = q1LastYear > 0 ? ((q1Index / q1LastYear - 1) * 100).toFixed(1) : '—';
+  // 下季 = 序列末格；同比与去年同季比较（单一口径 helper，卡头与图内共用）。
+  const nextQuarterKey = quarters[quarters.length - 1]?.key ?? '';
+  const nextPriorKey = priorYearKey(nextQuarterKey);
+  const yoyNext = quarterYoYPct(quarters, nextQuarterKey);
 
-  // 左图几何：单条季度线（9 格 = 7 实际 + 2 推演）。
+  const legendItems: LegendItem[] = [
+    { key: SERIES_ACTUAL, label: '实际（2025Q1 起）', shape: 'line', color: color.ink },
+    { key: SERIES_FORECAST, label: '当前推演', shape: 'dash', color: color.link },
+    { key: SERIES_AI_BASELINE, label: 'AI 基线', shape: 'dash', color: color.hairlineStrong },
+  ];
+
+  const ioBar = <IoBar input="季度指数 · 行业事件" output="主图周销基准" />;
+  const sectionHead = (
+    <SectionHead
+      title="大盘 · 总量总线"
+      hint={nextQuarterKey
+        ? `单条季度线 2025Q1 连贯到当前实际；向后只预测下一季（${nextQuarterKey}，同比 ${nextPriorKey ?? '去年同季'} ${fmtYoY(yoyNext)}）。`
+        : '单条季度线 2025Q1 连贯到当前实际；向后只预测下一季。'}
+      extra={<>
+        <SimChip title="季度序列为演示样本：实际段为模拟数据，推演段为模型假设" />
+        <AiJudgeBadge source={params.overrideSource} />
+      </>}
+    />
+  );
+
+  // 空态：无季度数据不渲染 NaN / Infinity SVG。
+  if (quarters.length === 0) {
+    return (
+      <section style={workbenchCardStyle}>
+        {sectionHead}
+        {ioBar}
+        <div style={{ padding: `${space.lg}px 0`, fontSize: 12.5, color: color.mute }}>当前范围无大盘数据</div>
+      </section>
+    );
+  }
+
+  // 左图几何：单条季度线（7 实际 + 2 推演）。
   const left = 40;
   const right = 14;
   const top = 22;
@@ -125,35 +206,30 @@ export default function MarketBusPanel({
     .join(' ');
   const todayX = (xq(actualCount - 1) + xq(actualCount)) / 2;
   const nextIdx = quarters.length - 1;
+  const showAiGhost = (humanQ4 || humanQ1) && seriesOn(SERIES_AI_BASELINE);
 
-  // 事件标记：startWeek 所属格（历史段事件画在实际段对应位置，解释性锚）。
-  const weekToIndex = (weekNumber: number): number => {
-    const start = 37;
-    return Math.max(0, Math.min(quarters.length - 1, Math.floor(((weekNumber - start) / (52 - start + 1)) * quarters.length)));
+  // 事件锚点：起周所属季度（quarterKeyOfWeek 从周完整日期推导，禁止按数组比例猜季度）；
+  // 季度键解析不到时（超出 fixture 周窗）锚到末格并标「不在预测窗口」。
+  const eventAnchorIndex = (event: MarketEventSeed): number => {
+    const quarterKey = quarterKeyOfWeek(fixture, event.startWeek);
+    if (!quarterKey) return quarters.length - 1;
+    const found = quarters.findIndex((point) => point.key === quarterKey);
+    return found >= 0 ? found : quarters.length - 1;
   };
-
-  const legendItems: LegendItem[] = [
-    { label: '大盘指数 · 实际（2025Q1 起）', shape: 'line', color: color.ink },
-    { label: '推演（当前生效值）', shape: 'dash', color: color.link },
-    { label: 'AI 时间序列基线（ghost）', shape: 'dash', color: color.hairlineStrong },
-  ];
 
   return (
     <section style={workbenchCardStyle}>
-      <SectionHead
-        title="大盘 · 总量总线"
-        hint={`单条季度线从 2025Q1 连贯到当前；向后只预测下一季（2027Q1，同比 2025Q1 约 ${yoyNext}%）。推演第一版 = 纯时间序列（周期性季节因素 × 全局性趋势，AI 推），人工可直接改预测格或录入行业级事件修正。`}
-        extra={<AiJudgeBadge source={params.overrideSource} />}
-      />
+      {sectionHead}
+      {ioBar}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: space.lg, alignItems: 'start' }}>
-        {/* 左图：单条连贯季度线 + AI ghost + 事件标记 */}
+        {/* 左图：单条连贯季度线 + AI 基线对照点 + 事件锚点 */}
         <div>
           <div style={{ overflowX: 'auto' }}>
             <svg
               viewBox={`0 0 ${CHART_W} ${CHART_H}`}
               width="100%"
               role="img"
-              aria-label={`大盘季度指数单线：实际 ${quarters.filter((point) => point.status === 'actual').map((point) => `${point.key} ${point.value}`).join(' / ')}；推演 2026Q4 ${q4Index}、2027Q1 ${q1Index}；AI 时间序列基线 ${aiQ4} / ${aiQ1}。`}
+              aria-label={`大盘季度指数单线：实际 ${quarters.filter((point) => point.status === 'actual').map((point) => `${point.key} ${point.value}`).join(' / ')}；推演 2026Q4 ${q4Index}、2027Q1 ${q1Index}；AI 基线 ${aiQ4} / ${aiQ1}。`}
               style={{ display: 'block', height: 'auto', minWidth: 300 }}
             >
               <g stroke={color.hairline}>
@@ -169,49 +245,58 @@ export default function MarketBusPanel({
               <text x={left - 6} y={top - 8} fontSize={10} fill={color.mute} textAnchor="end">指数</text>
               <line x1={todayX} y1={top - 6} x2={todayX} y2={top + plotH} stroke={color.hairlineStrong} strokeDasharray="4 4" />
               <text x={todayX - 5} y={CHART_H - 14} textAnchor="end" fontSize={10} fill={color.body}>{`今天 ${fixture.context.todayLabel}`}</text>
-              {/* 实际段（墨实线）→ 推演段（蓝虚线）+ AI 基线 ghost（灰虚点） */}
-              <path d={actualPath} fill="none" stroke={color.ink} strokeWidth={2.2} />
-              <path d={forecastPath} fill="none" stroke={color.link} strokeWidth={2.2} strokeDasharray="6 5" />
-              {(humanQ4 || humanQ1) && (
-                <path d={aiGhostPath} fill="none" stroke={color.hairlineStrong} strokeWidth={1.4} strokeDasharray="2 4" opacity={0.85} />
-              )}
-              <circle cx={xq(actualCount)} cy={yq(q4Index)} r={3.4} fill={humanQ4 ? color.link : color.canvas} stroke={color.link} strokeWidth={1.6} />
-              <circle cx={xq(nextIdx)} cy={yq(q1Index)} r={4.6} fill={humanQ1 ? color.link : color.canvas} stroke={color.link} strokeWidth={2} />
-              <circle cx={xq(nextIdx)} cy={yq(q1Index)} r={2} fill={color.link} />
-              {(humanQ4 || humanQ1) && (
-                <>
+              {/* 实际段（墨实线）→ 推演段（蓝虚线）+ AI 基线对照（灰虚点，仅人工改格后出现） */}
+              {seriesOn(SERIES_ACTUAL) && <path data-series="actual" d={actualPath} fill="none" stroke={color.ink} strokeWidth={2.2} />}
+              {seriesOn(SERIES_FORECAST) && <path data-series="forecast" d={forecastPath} fill="none" stroke={color.link} strokeWidth={2.2} strokeDasharray="6 5" />}
+              {showAiGhost && (
+                <g data-series="ai-ghost">
+                  <path d={aiGhostPath} fill="none" stroke={color.hairlineStrong} strokeWidth={1.4} strokeDasharray="2 4" opacity={0.85} />
                   <circle cx={xq(actualCount)} cy={yq(aiQ4)} r={3} fill="none" stroke={color.hairlineStrong} strokeWidth={1.2} />
                   <circle cx={xq(nextIdx)} cy={yq(aiQ1)} r={3} fill="none" stroke={color.hairlineStrong} strokeWidth={1.2} />
-                </>
+                </g>
               )}
-              {/* 同比读数（vs 去年同季） */}
-              {quarters.map((point, index) => {
-                const base = quarters[index - 4];
-                if (!base || base.value <= 0) return null;
-                const yoy = ((point.value / base.value - 1) * 100).toFixed(1);
+              {seriesOn(SERIES_FORECAST) && (
+                <g data-series="forecast-value">
+                  <circle cx={xq(actualCount)} cy={yq(q4Index)} r={3.4} fill={humanQ4 ? color.link : color.canvas} stroke={color.link} strokeWidth={1.6} />
+                  <circle cx={xq(nextIdx)} cy={yq(q1Index)} r={4.6} fill={humanQ1 ? color.link : color.canvas} stroke={color.link} strokeWidth={2} />
+                  <circle cx={xq(nextIdx)} cy={yq(q1Index)} r={2} fill={color.link} />
+                </g>
+              )}
+              {/* 同比读数（vs 去年同季；与卡头共用 quarterYoYPct 单口径） */}
+              {quarters.map((point) => {
+                const yoy = quarterYoYPct(quarters, point.key);
+                if (yoy == null) return null;
+                const index = quarters.indexOf(point);
                 return (
                   <text key={point.key} x={xq(index)} y={yq(point.value) - 7} textAnchor="middle" fontSize={9.5} fill={point.status === 'forecast' ? color.link : color.mute}>
-                    {`${Number(yoy) > 0 ? '+' : ''}${yoy}%`}
+                    {fmtYoY(yoy)}
                   </text>
                 );
               })}
-              {/* 行业级事件标记（起周所属格；历史段 = 解释性锚） */}
+              {/* 行业级事件锚点（起周所属季度格；historical = 历史解释锚） */}
               {params.marketEvents.map((event) => {
-                const index = weekToIndex(event.startWeek);
+                const disposition = marketEventDisposition(fixture, event);
+                const index = eventAnchorIndex(event);
                 const cx = xq(index);
-                const inHistory = event.startWeek < 45;
+                const anchorQuarter = quarterKeyOfWeek(fixture, event.startWeek) ?? '';
+                const endWeek = event.startWeek + event.durationWeeks - 1;
                 return (
-                  <g key={`mk-${event.id}`}>
-                    <line x1={cx} y1={top - 6} x2={cx} y2={top + plotH} stroke={color.hairlineStrong} strokeDasharray="2 4" opacity={inHistory ? 0.5 : 0.8} />
-                    <circle cx={cx} cy={top - 2} r={4} fill={inHistory ? color.hairlineStrong : color.warning} />
-                    <title>{`${event.label}（W${event.startWeek} 起 ${event.durationWeeks} 周 · ${event.decay === 'decreasing' ? '递减' : '恒定'}${inHistory ? ' · 历史段解释标记' : ''}）`}</title>
+                  <g
+                    key={`mk-${event.id}`}
+                    data-event-id={event.id}
+                    data-quarter={anchorQuarter}
+                    data-disposition={disposition}
+                  >
+                    <line x1={cx} y1={top - 6} x2={cx} y2={top + plotH} stroke={color.hairlineStrong} strokeDasharray="2 4" opacity={disposition === 'historical' ? 0.5 : 0.8} />
+                    <circle cx={cx} cy={top - 2} r={4} fill={disposition === 'historical' ? color.hairlineStrong : color.warning} />
+                    <title>{`${event.label}（W${event.startWeek}–W${endWeek} · ${event.decay === 'decreasing' ? '递减' : '恒定'} · ${DISPOSITION_TEXT[disposition]}）`}</title>
                   </g>
                 );
               })}
               {/* X 轴季度标签 */}
               <g fontSize={10} fill={color.mute} textAnchor="middle">
-                {quarters.map((point) => (
-                  <text key={point.key} x={xq(quarters.indexOf(point))} y={CHART_H - 24}>
+                {quarters.map((point, index) => (
+                  <text key={point.key} x={xq(index)} y={CHART_H - 24}>
                     {point.key.endsWith('Q1') ? point.key : point.key.slice(5)}
                   </text>
                 ))}
@@ -219,21 +304,24 @@ export default function MarketBusPanel({
               <text x={xq(nextIdx)} y={CHART_H - 10} textAnchor="middle" fontSize={9.5} fill={color.link} fontWeight={600}>下季预测</text>
             </svg>
           </div>
-          <WorkbenchLegend items={legendItems} hidden={new Set()} style={{ marginTop: 0 }} />
+          <WorkbenchLegend items={legendItems} hidden={hiddenSeries} onToggle={toggleSeries} style={{ marginTop: 0 }} />
           <div style={{ marginTop: space.xs, fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-            大盘只看总量总线，不下钻品牌 / 品（展示层与推演层分离，避免循环论证）；预测只延伸到下一季。事件允许落在历史段（解释性标记，不参与推演修正）。
+            大盘只看总量，不下钻品牌 / 品；预测只延伸到下一季。历史段事件仅作解释，不参与推演修正。
           </div>
         </div>
 
-        {/* 右栏：AI 基线 + 预测格直接编辑 + 事件四件套 + 理由栏 */}
+        {/* 右栏：AI 基线 + 预测格直接编辑 + 行业级事件 + 理由栏 */}
         <div style={{ display: 'grid', gap: space.md, minWidth: 0 }}>
           <div style={{ display: 'grid', gap: space.sm }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>下一季度预测（直接改格修正走势）</span>
               <AiJudgeBadge source={params.overrideSource} />
             </div>
-            <div style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-              AI 基线 = 纯时间序列（周期性季节因素 × 全局性趋势）：2026Q4 {aiQ4} · 2027Q1 {aiQ1}。改任意一格即转「人工确认」，图中灰 ghost 保留 AI 第一版对照。
+            <div
+              style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}
+              title={`AI 基线为本地确定性规则推演（季节 × 趋势：去年同季比 × 今年/去年水平比），未调用模型服务；人工改格后图中保留 AI 基线灰色对照点，还原改格即回到 AI 基线。`}
+            >
+              {`AI 基线：2026Q4 ${aiQ4} · 2027Q1 ${aiQ1}。改任意一格即转「人工确认」。`}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.md }}>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
@@ -272,17 +360,17 @@ export default function MarketBusPanel({
           <div style={{ display: 'grid', gap: space.sm }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>影响大盘的关键事件（仅行业级 · 人工录入）</div>
             <div style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-              四件套 = 起始周（周粒度，可落历史段作解释性标记）+ 影响时长 + 脉冲幅度 + 衰减方式（默认递减）。只收行业级开天辟地事件；竞品常规迭代由量价参考与主图小事件承载。
+              每个事件含起始周（周粒度，可落历史段作解释）、影响时长、峰值幅度与衰减方式（默认递减）；只收行业级事件，竞品常规迭代由量价参考与主图事件承载。
             </div>
             {params.marketEvents.map((event: MarketEventSeed) => {
-              const activeNow = eventWeeklyFactor(event, 45) != null;
+              const disposition = marketEventDisposition(fixture, event);
               const endWeek = event.startWeek + event.durationWeeks - 1;
               return (
                 <div key={event.id} style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap', border: `1px solid ${color.hairline}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px` }}>
                   <div style={{ flex: '1 1 140px', minWidth: 120 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{event.label}</div>
                     <div style={{ fontSize: 11, color: color.mute }}>
-                      {`W${event.startWeek}–W${endWeek}${activeNow ? ' · 作用于本季预测' : event.startWeek < 45 ? ' · 历史段解释标记' : ' · 不在本季窗口'}`}
+                      {`W${event.startWeek}–W${endWeek} · ${DISPOSITION_TEXT[disposition]}`}
                     </div>
                   </div>
                   <Stepper
@@ -323,7 +411,7 @@ export default function MarketBusPanel({
                           onClick={() => onEventDecay(event.id, key)}
                           style={{
                             border: 'none', padding: '3px 8px', fontSize: 11, cursor: 'pointer',
-                            background: event.decay === key ? selectSoftBg : color.canvas,
+                            background: event.decay === key ? selectSoft : color.canvas,
                             color: event.decay === key ? selectSoftInk : color.body,
                             fontWeight: event.decay === key ? 600 : 400,
                           }}
@@ -358,13 +446,10 @@ export default function MarketBusPanel({
               onChange={(event) => onRationaleChange(event.target.value)}
               autoSize={{ minRows: 3, maxRows: 6 }}
             />
-            <div style={{ fontSize: 11, color: color.mute }}>理由是圆桌会议后截图贴 PPT 的关键假设载体。</div>
+            <div style={{ fontSize: 11, color: color.mute }}>理由是推演结论的关键假设说明。</div>
           </div>
         </div>
       </div>
     </section>
   );
 }
-
-const selectSoftBg = '#e8f1ff';
-const selectSoftInk = '#0053c2';
