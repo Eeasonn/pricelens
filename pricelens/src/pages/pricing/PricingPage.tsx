@@ -9,7 +9,6 @@
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, Drawer, Segmented, Select, Slider, Tooltip } from 'antd';
-import PageHeader from '../../components/PageHeader';
 import usePageViewState from '../../state/usePageViewState';
 import { color, fontSize, radius, shadow, space } from '../../theme/tokens';
 import {
@@ -391,8 +390,10 @@ export default function PricingPage() {
   });
 
   return (
+    // 页面壳（页头/筛选条/滚动容器）由 App.AnalysisShell 共享（第一百八十四轮起
+    // pricing 进分析壳）；本页曾自带 <PageHeader />，与壳的页头叠加成双页头
+    // （2026-11-03 全量审查 P1），随其他分析页同口径移除
     <div style={{ minWidth: 1280, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-      <PageHeader />
       <main style={{ flex: 1, padding: space.lg, display: 'flex', flexDirection: 'column', gap: space.base, minWidth: 0 }}>
         {/* 页头：标题 + 模拟徽章 ｜ 产品 / 场景 / 竞品 / 重置 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.base, flexWrap: 'wrap' }}>

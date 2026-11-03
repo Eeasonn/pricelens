@@ -535,6 +535,7 @@ export async function runAgent(
 
 export function buildAgentContext(page: string, state: FiltersState, alerts: readonly AgentAlertRecord[]): AgentContextSnapshot {
   const pageLabel: Record<string, string> = {
+    overview: '国家总览',
     dashboard: '价格走势',
     volume: '量价走势',
     marketboard: '大盘走势',
