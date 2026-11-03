@@ -10,13 +10,16 @@
 //   不再逐格带「· 模拟」）；被隔离周不造销毛，合并显示「价格不可信」提示。
 // 缺采显示 —，不借用相邻周；环比只对上一可信点，跨隔离周时胶囊旁挂小注。
 // 无观察点（范围内无数据）时头部照常渲染（隐藏/店铺入口不能随卡消失），指标区显提示。
+// 2026-11-03 主品视图改版追加（纯增量导出，卡片行为不变）：行内值/标签字体、
+// 环比胶囊、异常守卫徽标与裁定按钮行（SuspectActions）导出给悬停浮窗
+// （PanelHoverTip）与主品面板裁定行复用——两处视觉与口径与本卡同源。
 import type { CSSProperties, ReactNode } from 'react';
 import { Popconfirm } from 'antd';
 import { color, font, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import type { WeekDetailModel } from './weekDetail';
 
 /** 行内值：14px/20 600（层级 = 身份胶囊名 12 > 指标值 14 > 日期 12 > 标签/桶号 11） */
-const VALUE_FONT: CSSProperties = {
+export const VALUE_FONT: CSSProperties = {
   fontFamily: font.family,
   fontVariantNumeric: 'tabular-nums',
   fontSize: 14,
@@ -26,7 +29,7 @@ const VALUE_FONT: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-const LABEL_FONT: CSSProperties = {
+export const LABEL_FONT: CSSProperties = {
   fontSize: 11,
   lineHeight: '20px',
   color: color.mute,
@@ -70,7 +73,7 @@ const SIM_TAG_STYLE: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-function WowBadge(props: { text: string; dir: 'up' | 'down' | 'flat' }) {
+export function WowBadge(props: { text: string; dir: 'up' | 'down' | 'flat' }) {
   const down = props.dir === 'down';
   return (
     <span
@@ -97,7 +100,7 @@ function WowBadge(props: { text: string; dir: 'up' | 'down' | 'flat' }) {
 const MISSING = '—';
 
 /** 异常守卫小徽标（2026-11-01）：隔离/待核对/已确认——琥珀/蓝，文字承载状态 */
-function SuspectTag(props: { kind: 'quarantined' | 'pending' | 'exempted' }) {
+export function SuspectTag(props: { kind: 'quarantined' | 'pending' | 'exempted' }) {
   const text = props.kind === 'quarantined' ? '已隔离' : props.kind === 'pending' ? '待核对' : '已确认';
   const blue = props.kind === 'exempted';
   return (
@@ -130,6 +133,61 @@ const CARD_STYLE: CSSProperties = {
   background: color.canvas,
   minWidth: 0,
 };
+
+/** 异常守卫裁定入口行（2026-11-01）：隔离/待核对观察点的「确认真实价格 /
+ *  标记异常」（预览-确认-记录-撤销，Popconfirm 二次确认）。明细卡内独立整行；
+ *  2026-11-03 主品视图改版抽出导出——明细卡退役后主品面板的裁定行复用同一份
+ *  （判定与文案不双写）。exempted 态或无回调时不渲染。 */
+export function SuspectActions(props: {
+  suspect?: 'quarantined' | 'pending' | 'exempted';
+  onExempt?: () => void;
+  onIsolate?: () => void;
+}) {
+  if (!props.suspect || props.suspect === 'exempted') return null;
+  if (!props.onExempt && !props.onIsolate) return null;
+  return (
+    <div style={{ borderTop: `1px solid ${color.hairline}`, marginTop: 5, paddingTop: 5, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {props.onExempt && (
+        <Popconfirm
+          title="确认该价格为真实价格？"
+          description="确认后该点参与计算并保留「已确认」标注，可在配置页撤销"
+          okText="确认"
+          cancelText="取消"
+          okButtonProps={{ size: 'small' }}
+          cancelButtonProps={{ size: 'small' }}
+          onConfirm={props.onExempt}
+        >
+          <button
+            type="button"
+            title="确认该价格为真实价格：参与计算并留痕（配置页可撤销）"
+            style={{ height: 20, padding: '0 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            确认真实价格
+          </button>
+        </Popconfirm>
+      )}
+      {props.onIsolate && props.suspect === 'pending' && (
+        <Popconfirm
+          title="标记该价格为异常？"
+          description="标记后该点退出计算（原值保留），可在配置页撤销"
+          okText="标记"
+          cancelText="取消"
+          okButtonProps={{ size: 'small', danger: true }}
+          cancelButtonProps={{ size: 'small' }}
+          onConfirm={props.onIsolate}
+        >
+          <button
+            type="button"
+            title="标记该价格为异常：退出计算（原值保留），配置页可撤销"
+            style={{ height: 20, padding: '0 8px', border: '1px solid rgba(235, 87, 87, 0.4)', borderRadius: radius.control, background: color.canvas, color: '#b45309', font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            标记异常
+          </button>
+        </Popconfirm>
+      )}
+    </div>
+  );
+}
 
 /** 日期：12px（2026-11-03 单行化后与身份名同级，桶号 11px mute 随行） */
 const DATE_STYLE: CSSProperties = {
@@ -293,47 +351,8 @@ export default function WeekDetailCard(props: {
       {header}
       {marginBlock}
       {/* 被隔离/待核对点：人工裁定入口（预览-确认-记录-撤销），独立整行不被挤压 */}
-      {m.priceSuspect && m.priceSuspect !== 'exempted' && (props.onExempt || props.onIsolate) && (
-        <div style={{ borderTop: `1px solid ${color.hairline}`, marginTop: 5, paddingTop: 5, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {props.onExempt && (
-            <Popconfirm
-              title="确认该价格为真实价格？"
-              description="确认后该点参与计算并保留「已确认」标注，可在配置页撤销"
-              okText="确认"
-              cancelText="取消"
-              okButtonProps={{ size: 'small' }}
-              cancelButtonProps={{ size: 'small' }}
-              onConfirm={props.onExempt}
-            >
-              <button
-                type="button"
-                title="确认该价格为真实价格：参与计算并留痕（配置页可撤销）"
-                style={{ height: 20, padding: '0 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
-              >
-                确认真实价格
-              </button>
-            </Popconfirm>
-          )}
-          {props.onIsolate && m.priceSuspect === 'pending' && (
-            <Popconfirm
-              title="标记该价格为异常？"
-              description="标记后该点退出计算（原值保留），可在配置页撤销"
-              okText="标记"
-              cancelText="取消"
-              okButtonProps={{ size: 'small', danger: true }}
-              cancelButtonProps={{ size: 'small' }}
-              onConfirm={props.onIsolate}
-            >
-              <button
-                type="button"
-                title="标记该价格为异常：退出计算（原值保留），配置页可撤销"
-                style={{ height: 20, padding: '0 8px', border: '1px solid rgba(235, 87, 87, 0.4)', borderRadius: radius.control, background: color.canvas, color: '#b45309', font: 'inherit', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
-              >
-                标记异常
-              </button>
-            </Popconfirm>
-          )}
-        </div>
+      {m.priceSuspect && (props.onExempt || props.onIsolate) && (
+        <SuspectActions suspect={m.priceSuspect} onExempt={props.onExempt} onIsolate={props.onIsolate} />
       )}
     </article>
   );
