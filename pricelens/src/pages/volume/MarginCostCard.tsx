@@ -7,6 +7,7 @@
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MarginCostPoint } from './marginCost';
+import SuppLegend, { type SuppLegendItem } from './SuppLegend';
 import { niceCeil } from '../../dataModel/volume';
 import { color, fontSize, radius, space } from '../../theme/tokens';
 
@@ -28,12 +29,27 @@ export function weeklyMarginOf(
   });
 }
 
+/** 图例项（键与系列一一对应；点击显隐，与价格走势/大盘走势图例同交互） */
+export const MARGIN_LEGEND_ITEMS: readonly SuppLegendItem[] = [
+  { key: 'margin', label: '周销毛（万$）', shape: 'bar', color: 'rgba(180,83,9,0.55)', fill: 'rgba(245,166,35,0.42)' },
+  { key: 'cost', label: '成本 · 月版本', shape: 'line', color: color.hairlineStrong },
+  { key: 'avg', label: '均价', shape: 'line', color: color.ink },
+];
+
 export default function MarginCostCard(props: {
   name: string;
   bucketLabels: readonly string[];
   volumes: readonly (number | null)[];
   marginPoints: readonly (MarginCostPoint | null)[];
 }) {
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (key: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -130,7 +146,7 @@ export default function MarginCostCard(props: {
           模拟成本 · 月版本
         </span>
       </div>
-      <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: H }}>
+      <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
         {!ready ? (
           <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: color.mute, fontSize: 13 }}>
             {n === 0 ? '暂无数据' : '当前产品在所选范围内无销毛成本数据'}
@@ -167,8 +183,8 @@ export default function MarginCostCard(props: {
                 </text>
               ) : null,
             )}
-            {/* 周销毛柱 */}
-            {weekly.map((v, i) => {
+            {/* 周销毛柱（图例可隐） */}
+            {hidden.has('margin') ? null : weekly.map((v, i) => {
               if (v == null) return null;
               const mp = props.marginPoints[i];
               return (
@@ -189,20 +205,13 @@ export default function MarginCostCard(props: {
                 </rect>
               );
             })}
-            {/* 单台成本（月版本阶梯）与均价线 */}
-            <path d={unitLine('unitCost')} fill="none" stroke={color.hairlineStrong} strokeWidth={2} />
-            <path d={unitLine('unitRevenue')} fill="none" stroke={color.ink} strokeWidth={1.4} strokeOpacity={0.75} />
-            {/* 图例 */}
-            <g>
-              <rect x={PAD_L + 2} y={6} width={10} height={7} rx={1.5} fill="rgba(245,166,35,0.42)" stroke="rgba(180,83,9,0.55)" />
-              <text x={PAD_L + 16} y={13} fontSize={10.5} fill={color.body}>周销毛（万$）</text>
-              <line x1={PAD_L + 112} y1={10} x2={PAD_L + 126} y2={10} stroke={color.hairlineStrong} strokeWidth={2} />
-              <text x={PAD_L + 130} y={13} fontSize={10.5} fill={color.body}>成本 · 月版本</text>
-              <line x1={PAD_L + 222} y1={10} x2={PAD_L + 236} y2={10} stroke={color.ink} strokeWidth={1.4} strokeOpacity={0.75} />
-              <text x={PAD_L + 240} y={13} fontSize={10.5} fill={color.body}>均价</text>
-            </g>
+            {/* 单台成本（月版本阶梯）与均价线（各自图例可隐） */}
+            {hidden.has('cost') ? null : <path d={unitLine('unitCost')} fill="none" stroke={color.hairlineStrong} strokeWidth={2} />}
+            {hidden.has('avg') ? null : <path d={unitLine('unitRevenue')} fill="none" stroke={color.ink} strokeWidth={1.4} strokeOpacity={0.75} />}
           </svg>
         )}
+        {/* 可点击图例（图外底部居中，与大盘走势同款交互——图例不与数据线重叠） */}
+        <SuppLegend items={MARGIN_LEGEND_ITEMS} hidden={hidden} onToggle={toggle} />
       </div>
     </div>
   );

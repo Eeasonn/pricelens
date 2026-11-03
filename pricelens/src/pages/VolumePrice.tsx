@@ -99,7 +99,6 @@ import { flatSelections } from '../state/mainSelection';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
 import VolumeBars from './volume/VolumeBars';
 import CostBarChart, { COST_RATE_H, costRateAxisMaxOf } from './volume/CostBarChart';
-import MarginCostCard from './volume/MarginCostCard';
 import InventoryDosCard from './volume/InventoryDosCard';
 import { inventoryDemoOf } from './volume/inventoryDemo';
 import PanelHeader from './volume/PanelHeader';
@@ -1639,6 +1638,37 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                       </div>
                       );
   });
+  // 销毛成本开关（2026-11-03 Eason 反馈：上移工具行、与齿轮/⋯ 同簇——
+  // 原位置在明细卡行左侧的轴列缩进里，独自占一行左侧留白且与齿轮不对齐）
+  const marginCtl = (
+    <button
+      type="button"
+      aria-pressed={marginOn}
+      aria-label={marginOn ? '隐藏销毛成本' : '显示销毛成本'}
+      aria-disabled={marginLocked || undefined}
+      title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：成本柱呈现（⋯ 菜单可切回经典 + 成本销毛带）；点击隐藏回到经典量价图' : '显示销毛成本：切到成本柱呈现'}
+      onClick={toggleMargin}
+      style={{
+        height: 24,
+        padding: '0 8px',
+        border: `1px solid ${marginOn ? color.link : color.hairline}`,
+        borderRadius: radius.control,
+        background: marginOn ? selectSoft : color.canvas,
+        color: marginLocked ? color.mute : marginOn ? selectSoftInk : color.body,
+        font: 'inherit',
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: '22px',
+        cursor: marginLocked ? 'not-allowed' : 'pointer',
+        whiteSpace: 'nowrap',
+        opacity: marginLocked ? 0.55 : 1,
+        flexShrink: 0,
+      }}
+    >
+      销毛成本
+    </button>
+  );
+
   return (
     <>
       {/* 页面壳（页头/筛选条/滚动容器）第一百八十四轮上移 App.AnalysisShell 共享——
@@ -1684,6 +1714,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   labelMode={labelMode}
                   onLabelMode={setLabelMode}
                   anomalySlot={<AnomalyQualityChip page="volume" />}
+                  priceTypesAfter={marginCtl}
                   presentationSlot={marginOn ? (
                     <Segmented
                       size="small"
@@ -1794,36 +1825,11 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                       <>
                         {/* 明细信息行（2026-11-02 反馈③）：紧跟工具行，每面板一张明细卡正对其面板。
                             左侧轴列宽留白里放「销毛成本」开关（Eason：齿轮与 ⋯ 的下方） */}
+                        {/* 明细信息行（2026-11-03 Eason 反馈：销毛成本开关上移工具行后，
+                            本行不再保留轴列缩进留白——卡片直接顶满可用宽度 */}
                         {detailCards.size > 0 && (
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: space.md, marginBottom: space.sm }}>
-                            <div style={{ flex: `0 0 ${axisW}px`, boxSizing: 'border-box', display: 'flex', justifyContent: 'flex-start', paddingLeft: 6, paddingTop: 6 }}>
-                              <button
-                                type="button"
-                                aria-pressed={marginOn}
-                                aria-label={marginOn ? '隐藏销毛成本' : '显示销毛成本'}
-                                aria-disabled={marginLocked || undefined}
-                                title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：成本柱呈现（⋯ 菜单可切回经典 + 成本销毛带）；点击隐藏回到经典量价图' : '显示销毛成本：切到成本柱呈现'}
-                                onClick={toggleMargin}
-                                style={{
-                                  height: 24,
-                                  padding: '0 8px',
-                                  border: `1px solid ${marginOn ? color.link : color.hairline}`,
-                                  borderRadius: radius.control,
-                                  background: marginOn ? selectSoft : color.canvas,
-                                  color: marginLocked ? color.mute : marginOn ? selectSoftInk : color.body,
-                                  font: 'inherit',
-                                  fontSize: 11,
-                                  fontWeight: 600,
-                                  lineHeight: '22px',
-                                  cursor: marginLocked ? 'not-allowed' : 'pointer',
-                                  whiteSpace: 'nowrap',
-                                  opacity: marginLocked ? 0.55 : 1,
-                                }}
-                              >
-                                销毛成本
-                              </button>
-                            </div>
-                            <div style={{ flex: '1 1 0', minWidth: 0, display: 'grid', gridTemplateColumns: gridCols, gap: gridGap }}>
+                          <div style={{ marginBottom: space.sm }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: gridGap }}>
                               {[...detailCards.values()].map((card, i) => (
                                 <div
                                   key={visiblePanels[i]?.spec.key ?? i}
@@ -1897,9 +1903,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                 </div>
               );
             })()}
-            {/* 补充图（2026-11-03 Eason：量价面板保持不动，面板区之外补两张独立图）——
-                ① 销毛成本：周销毛柱 + 月版本成本阶梯 + 均价线（模拟成本，随主品）
-                ② 库存 · DOS：渠道库存柱 + 渠道/全流程 DOS 线 + SI ▼（演示数据，随主品）。
+            {/* 补充图（2026-11-03 Eason 复盘：销毛成本已由成本柱模式在主面板承担，
+                独立销毛图撤下——组件保留给量价预测页；库存 · DOS 独立图全宽呈现，
                 跟随全窗口口径（与顶部摘要一致），不进面板横滚轨道 */}
             {(() => {
               const own = panelViews.find((p) => p.spec.isOwn && !hiddenSet.has(p.spec.key));
@@ -1907,21 +1912,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
               const labels = buckets.map((b) => b.xLabel);
               const ownVolumes = summaryVolumes[own.idx] ?? [];
               return (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
-                    gap: space.md,
-                    marginTop: space.xs,
-                    marginBottom: space.sm,
-                  }}
-                >
-                  <MarginCostCard
-                    name={own.name}
-                    bucketLabels={labels}
-                    volumes={ownVolumes}
-                    marginPoints={marginCosts[own.idx] ?? []}
-                  />
+                <div style={{ marginTop: space.xs, marginBottom: space.sm }}>
                   <InventoryDosCard
                     name={own.name}
                     bucketLabels={labels}

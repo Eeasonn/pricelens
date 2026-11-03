@@ -8,11 +8,12 @@
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InventoryDemoPoint } from './inventoryDemo';
+import SuppLegend, { type SuppLegendItem } from './SuppLegend';
 import { niceCeil } from '../../dataModel/volume';
 import { fmtVolume } from './volumeAxis';
 import { color, fontSize, radius, space } from '../../theme/tokens';
 
-const H = 208;
+const H = 236;
 const PAD_L = 40;
 const PAD_R = 52;
 const PAD_T = 14;
@@ -21,11 +22,28 @@ const PAD_B = 24;
 /** DOS 参考线（天）——手机档讨论口径 70–90 天合理带；超出当前 DOS 上限的不画 */
 export const DOS_REF_DAYS: readonly number[] = [70, 90];
 
+/** 图例项（键与系列一一对应；点击显隐，与价格走势/大盘走势图例同交互） */
+export const INVENTORY_LEGEND_ITEMS: readonly SuppLegendItem[] = [
+  { key: 'inv', label: '渠道库存（台）', shape: 'bar', color: color.hairline, fill: 'rgba(23,23,23,0.14)' },
+  { key: 'channelDos', label: '渠道 DOS', shape: 'line', color: color.link },
+  { key: 'fullDos', label: '全流程 DOS', shape: 'dash', color: color.hairlineStrong },
+  { key: 'si', label: 'SI', shape: 'tri', color: color.ink },
+];
+
 export default function InventoryDosCard(props: {
   name: string;
   bucketLabels: readonly string[];
   points: readonly InventoryDemoPoint[];
 }) {
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const toggle = (key: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -106,13 +124,26 @@ export default function InventoryDosCard(props: {
           演示数据
         </span>
       </div>
-      <div ref={wrapRef} style={{ position: 'relative', width: '100%', height: H }}>
+      <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
         {!ready ? (
           <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: color.mute, fontSize: 13 }}>
             {n === 0 ? '暂无数据' : '当前产品在所选范围内无库存数据'}
           </div>
         ) : (
-          <svg width="100%" height={H} role="img" aria-label={`${props.name}库存与 DOS：渠道库存柱、渠道 DOS 与全流程 DOS 线`}>
+          <svg
+            width="100%"
+            height={H}
+            role="img"
+            aria-label={`${props.name}库存与 DOS：渠道库存柱、渠道 DOS 与全流程 DOS 线`}
+            onMouseMove={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              if (r.width <= 0 || width <= 0) return;
+              const sx = ((e.clientX - r.left) / r.width) * width;
+              const i = Math.round((sx - PAD_L) / slot - 0.5);
+              setHoverIdx(i >= 0 && i < n ? i : null);
+            }}
+            onMouseLeave={() => setHoverIdx(null)}
+          >
             {/* 网格 + 左轴（天） */}
             {[0, 0.5, 1].map((t) => {
               const v = dosMax * t;
@@ -135,15 +166,27 @@ export default function InventoryDosCard(props: {
                 </text>
               );
             })}
-            {/* DOS 70–90 天参考线 */}
-            {DOS_REF_DAYS.filter((d) => d <= dosMax).map((d) => (
-              <g key={d}>
-                <line x1={PAD_L} y1={yDos(d)} x2={PAD_L + plotW} y2={yDos(d)} stroke={color.mute} strokeWidth={1} strokeDasharray="3 4" opacity={0.7} />
-                <text x={PAD_L + plotW - 2} y={yDos(d) - 3} textAnchor="end" fontSize={9.5} fill={color.mute}>
-                  {d} 天
-                </text>
+            {/* DOS 70–90 天健康带（讨论口径：浅灰带 + 边界线，比双虚线更直观） */}
+            {DOS_REF_DAYS[1] <= dosMax && (
+              <g>
+                <rect
+                  x={PAD_L}
+                  y={yDos(DOS_REF_DAYS[1])}
+                  width={plotW}
+                  height={Math.max(0, yDos(DOS_REF_DAYS[0]) - yDos(DOS_REF_DAYS[1]))}
+                  fill={color.canvasSoft2}
+                  opacity={0.8}
+                />
+                {DOS_REF_DAYS.map((d) => (
+                  <g key={d}>
+                    <line x1={PAD_L} y1={yDos(d)} x2={PAD_L + plotW} y2={yDos(d)} stroke={color.mute} strokeWidth={1} strokeDasharray="3 4" opacity={0.7} />
+                    <text x={PAD_L + plotW - 2} y={yDos(d) - 3} textAnchor="end" fontSize={9.5} fill={color.mute}>
+                      {d} 天
+                    </text>
+                  </g>
+                ))}
               </g>
-            ))}
+            )}
             {/* X 标签 */}
             {props.bucketLabels.map((label, i) =>
               i % labelEvery === 0 || i === n - 1 ? (
@@ -152,8 +195,8 @@ export default function InventoryDosCard(props: {
                 </text>
               ) : null,
             )}
-            {/* 渠道库存柱（中性墨） */}
-            {props.points.map((p, i) => {
+            {/* 渠道库存柱（中性墨，图例可隐） */}
+            {hidden.has('inv') ? null : props.points.map((p, i) => {
               if (p.channelInv == null) return null;
               const y = yInv(p.channelInv);
               return (
@@ -173,8 +216,8 @@ export default function InventoryDosCard(props: {
                 </rect>
               );
             })}
-            {/* SI 补货 ▼ */}
-            {props.points.map((p, i) => {
+            {/* SI 补货 ▼（图例可隐） */}
+            {hidden.has('si') ? null : props.points.map((p, i) => {
               if (p.siUnits == null || p.channelInv == null) return null;
               const x = xOf(i);
               const y = yInv(p.channelInv) - 8;
@@ -184,22 +227,67 @@ export default function InventoryDosCard(props: {
                 </path>
               );
             })}
-            {/* DOS 双线 */}
-            <path d={lineOf('fullDos')} fill="none" stroke={color.hairlineStrong} strokeWidth={1.5} strokeDasharray="5 4" />
-            <path d={lineOf('channelDos')} fill="none" stroke={color.link} strokeWidth={2.2} />
-            {/* 图例 */}
-            <g>
-              <rect x={PAD_L + 2} y={6} width={10} height={7} rx={1.5} fill="rgba(23,23,23,0.14)" stroke={color.hairline} />
-              <text x={PAD_L + 16} y={13} fontSize={10.5} fill={color.body}>渠道库存（台）</text>
-              <line x1={PAD_L + 106} y1={10} x2={PAD_L + 120} y2={10} stroke={color.link} strokeWidth={2.2} />
-              <text x={PAD_L + 124} y={13} fontSize={10.5} fill={color.body}>渠道 DOS</text>
-              <line x1={PAD_L + 178} y1={10} x2={PAD_L + 192} y2={10} stroke={color.hairlineStrong} strokeWidth={1.5} strokeDasharray="5 4" />
-              <text x={PAD_L + 196} y={13} fontSize={10.5} fill={color.body}>全流程 DOS</text>
-              <path d={`M${PAD_L + 266} 3 L${PAD_L + 271} 3 L${PAD_L + 268.5} 8 Z`} fill={color.ink} />
-              <text x={PAD_L + 275} y={13} fontSize={10.5} fill={color.body}>SI</text>
-            </g>
+            {/* DOS 双线（各自图例可隐） */}
+            {hidden.has('fullDos') ? null : <path d={lineOf('fullDos')} fill="none" stroke={color.hairlineStrong} strokeWidth={1.5} strokeDasharray="5 4" />}
+            {hidden.has('channelDos') ? null : <path d={lineOf('channelDos')} fill="none" stroke={color.link} strokeWidth={2.2} />}
+            {/* 悬停十字线 */}
+            {hoverIdx != null && props.points[hoverIdx]?.channelInv != null && (
+              <line
+                x1={xOf(hoverIdx)}
+                y1={PAD_T}
+                x2={xOf(hoverIdx)}
+                y2={PAD_T + plotH}
+                stroke={color.hairlineStrong}
+                strokeWidth={1}
+                strokeDasharray="2 3"
+                aria-hidden
+              />
+            )}
           </svg>
         )}
+        {/* 悬停浮窗：当周读数（周 / 库存 / 双 DOS / SI） */}
+        {ready && hoverIdx != null && (() => {
+          const p = props.points[hoverIdx];
+          if (!p || p.channelInv == null) return null;
+          const pct = (xOf(hoverIdx) / width) * 100;
+          const flip = pct > 62; // 靠右缘时浮窗翻到左侧，防溢出
+          const rows: Array<[string, string]> = [
+            ['渠道库存', `${Math.round(p.channelInv).toLocaleString('en-US')} 台`],
+            ['渠道 DOS', p.channelDos != null ? `${Math.round(p.channelDos)} 天` : '—'],
+            ['全流程 DOS', p.fullDos != null ? `${Math.round(p.fullDos)} 天` : '—'],
+            ['SI', p.siUnits != null ? `${Math.round(p.siUnits).toLocaleString('en-US')} 台` : '—'],
+          ];
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                top: 4,
+                left: `${flip ? pct - 1 : pct + 1}%`,
+                transform: flip ? 'translateX(-100%)' : undefined,
+                background: color.canvas,
+                borderRadius: radius.control,
+                boxShadow: '0 8px 24px -4px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.08)',
+                padding: '8px 10px',
+                fontSize: 11,
+                lineHeight: '18px',
+                color: color.body,
+                pointerEvents: 'none',
+                zIndex: 2,
+                minWidth: 132,
+              }}
+            >
+              <div style={{ fontWeight: 600, color: color.ink, marginBottom: 2 }}>{props.bucketLabels[hoverIdx] ?? ''}</div>
+              {rows.map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span>{k}</span>
+                  <span style={{ fontWeight: 600, color: color.ink }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+        {/* 可点击图例（图外底部居中，与大盘走势同款交互——图例不与数据线重叠） */}
+        <SuppLegend items={INVENTORY_LEGEND_ITEMS} hidden={hidden} onToggle={toggle} />
       </div>
     </div>
   );
