@@ -86,11 +86,14 @@ export interface ChartToolbarProps {
   pointPanelOpen?: boolean;
   onPointPanelToggle?: () => void;
   /** 中区圆框组：三个回调全传才渲染（下钻弹窗等不传 = 不渲染）。
-   *  最高/最低价标注删除（本轮，Eason） */
+   *  最高/最低价标注删除（本轮，Eason）。
+   *  promoOnly（2026-11-03）：量价页无 offer 权益层——只传 onPromoBandsOn +
+   *  promoOnly 即渲染「大促档期」单颗（成组样式不变）；价格页传两回调出两颗 */
   promoBandsOn?: boolean;
   onPromoBandsOn?: (v: boolean) => void;
   offersOn?: boolean;
   onOffersOn?: (v: boolean) => void;
+  promoOnly?: boolean;
   changeThreshold?: number | null;
   onChangeThreshold?: (v: number | null) => void;
   /** 异常价格守卫状态行（2026-11-01 晚反馈：收进 ⋯ 菜单）——调用方传入
@@ -209,7 +212,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   const mode = props.mode ?? 'all';
   const showLeft = mode === 'all' || mode === 'cluster';
   const showRight = mode === 'all' || mode === 'actions';
-  const showPromo = props.onPromoBandsOn != null && props.onOffersOn != null;
+  const showPromo = props.onPromoBandsOn != null && (props.onOffersOn != null || props.promoOnly === true);
   const showMarks = props.onChangeThreshold != null;
   const hasDisplay =
     props.onPriceTypeToggle != null ||
@@ -366,9 +369,11 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
             <span style={{ fontSize: 12 }}>大促档期</span>
           </Checkbox>
-          <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
-            <span style={{ fontSize: 12 }}>促销权益</span>
-          </Checkbox>
+          {props.onOffersOn != null && (
+            <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
+              <span style={{ fontSize: 12 }}>促销权益</span>
+            </Checkbox>
+          )}
         </div>
       )}
       {showRight && showMore && (

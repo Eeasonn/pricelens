@@ -47,7 +47,7 @@
 // ============================================================
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover, Popconfirm } from 'antd';
-import { TagOutlined, CloseOutlined } from '@ant-design/icons';
+import { CloseOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -112,6 +112,8 @@ import { addAnomalyMark, readAnomalyRule } from '../../dataModel/anomaly';
 import { formatPrice } from '../../theme/tokens';
 import OfferPopover from './OfferPopover';
 import ChartToolbar from './ChartToolbar';
+import PromoBandTags from './PromoBandTags';
+import { bandColorOf } from './promoShared';
 import BrandDot from '../../components/BrandMark';
 
 export interface ChartProps {
@@ -289,33 +291,7 @@ const fmt_hoverDate = (gran: Granularity, x: string): string => {
   return x;
 };
 
-/** 大促档期事件卡（第三十六轮；第四十七轮精简：只留名称/起止/深度） */
-function PromoEventCard({ band }: { band: PromoBand }) {
-  return (
-    <div style={{ width: 208 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: color.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <i
-          style={{
-            display: 'inline-block',
-            width: 8,
-            height: 8,
-            borderRadius: radius.pill,
-            background: `rgba(235, 87, 87, ${band.depth === '深' ? 0.75 : band.depth === '中' ? 0.5 : 0.3})`,
-            boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)',
-          }}
-        />
-        {band.name}
-      </div>
-      <div className="tnum" style={{ marginTop: 6, fontSize: 12, color: color.body }}>
-        起止 {band.dateText.replace('–', ' ~ ')}
-      </div>
-      <div style={{ marginTop: 4, fontSize: 12, color: color.body }}>
-        促销深度
-        <span style={{ fontWeight: 600, color: '#b45309', marginLeft: 6 }}>{band.depth}</span>
-      </div>
-    </div>
-  );
-}
+/** 大促档期事件卡与图下标志行已抽共享组件 PromoBandTags（量价成本柱模式同用，2026-11-03） */
 /** 高度过渡动画（第十一轮）：高度变化超过 2 格（步长换档/换产品/伸缩大幅调整）时，
  *  以缓动缩放过渡而不是瞬跳；≤2 格的小步（整格吸附、断裂条）即时生效保持跟手 */
 const H_ANIM_THRESHOLD_PX = 2 * TICK_PX;
@@ -995,12 +971,7 @@ export default function Chart(props: ChartProps) {
             const left = geom.plotLeft + (b.startIdx + b.startFrac) * bw;
             const right = geom.plotLeft + (b.endIdx + b.endFrac) * bw;
             const w = Math.max(2, right - left);
-            const fill =
-              b.depth === '深'
-                ? 'rgba(235, 87, 87, 0.055)'
-                : b.depth === '中'
-                  ? 'rgba(235, 87, 87, 0.035)'
-                  : 'rgba(235, 87, 87, 0.018)';
+            const fill = bandColorOf(b.depth);
             return (
               <div key={`pb-${b.key}`}>
                 <div
@@ -1455,73 +1426,19 @@ export default function Chart(props: ChartProps) {
                 </div>
               );
             })}
-          {/* 大促档期标志（第四十二轮窄条）：默认纯图标（名称悬停可见）；空间够
-              （与相邻标志互不重叠、不越绘图区左右缘）时显示「图标 + 档期名」胶囊，
-              放不下自动回落纯图标（第一百四十七轮，Eason） */}
-          {promoBandsOn &&
-            geom &&
-            (() => {
-              const items = promoBands
-                .map((b) => ({
-                  b,
-                  mid: geom.plotLeft + (((b.startIdx + b.startFrac + b.endIdx + b.endFrac) / 2 / geom.n) * geom.plotWidth),
-                }))
-                .sort((x, y) => x.mid - y.mid);
-              const ICON_W = 16;
-              const labelW = (name: string): number => ICON_W + 4 + measureText(name) * (10 / 13) + 12;
-              let lastRight = -Infinity;
-              return items.map(({ b, mid }, i) => {
-                const lo = i === 0 ? geom.plotLeft - 16 : lastRight + 8;
-                const hi = i + 1 < items.length ? items[i + 1].mid - 10 : geom.plotLeft + geom.plotWidth + 16;
-                const w = labelW(b.name);
-                const withLabel = mid - w / 2 >= lo && mid + w / 2 <= hi;
-                lastRight = mid + (withLabel ? w / 2 : ICON_W / 2);
-                return (
-                  <div
-                    key={`pm-${b.key}`}
-                    style={{
-                      position: 'absolute',
-                      left: mid,
-                      // 专用行（第四十七轮）：轴标签 margin 22 下推，图标带 +4~18 独占；
-                      // 第110轮：小图自带时间轴标签（占 +7~19）→ 档期标志下移让位（+24~38，
-                      // 仍在 GRID.bottom=40 留白内）
-                      top: geom.plotTop + geom.plotHeight + (props.showXLabels ? 24 : 4),
-                      transform: 'translateX(-50%)',
-                      zIndex: 9,
-                    }}
-                  >
-                    <Popover trigger="click" placement="top" content={<PromoEventCard band={b} />}>
-                      <button
-                        type="button"
-                        aria-label={`${b.name} ${b.dateText}，点击看档期详情`}
-                        title={`${b.name} ${b.dateText} · 点击看档期详情`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="lpl-hit"
-                        style={{
-                          position: 'relative',
-                          pointerEvents: 'auto',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          height: 16,
-                          padding: withLabel ? '0 7px 0 5px' : '0 2px',
-                          borderRadius: radius.pill,
-                          border: withLabel ? '1px solid rgba(180, 83, 9, 0.3)' : undefined,
-                          background: withLabel ? color.canvas : undefined,
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        <TagOutlined style={{ fontSize: withLabel ? 10 : 12, color: '#b45309' }} />
-                        {withLabel && (
-                          <span style={{ fontSize: 10, lineHeight: '12px', color: '#b45309', fontWeight: 500 }}>{b.name}</span>
-                        )}
-                      </button>
-                    </Popover>
-                  </div>
-                );
-              });
-            })()}
+          {/* 大促档期标志（第四十二轮窄条；2026-11-03 抽共享 PromoBandTags——量价
+              成本柱模式同用）：默认纯图标（名称悬停可见）；空间够（与相邻标志互不
+              重叠、不越绘图区左右缘）时显示「图标 + 档期名」胶囊，放不下自动回落
+              纯图标（第一百四十七轮，Eason）。点击弹档期事件卡 */}
+          {promoBandsOn && geom && (
+            <PromoBandTags
+              bands={promoBands}
+              plotLeft={geom.plotLeft}
+              plotWidth={geom.plotWidth}
+              n={geom.n}
+              top={geom.plotTop + geom.plotHeight + (props.showXLabels ? 24 : 4)}
+            />
+          )}
           {/* 预警事件周小标签（第一百九十轮）：贴焦点带顶缘居中；带内放不下时不出
               （与大促标志「放不下回落纯图标」同一克制的兜底策略），蓝带自身仍在 */}
           {geom && focusBand != null && focusBand.startIdx >= 0 && focusBand.endIdx < geom.n && (() => {

@@ -14,6 +14,8 @@ import type { ReactNode } from 'react';
 import type { StripGeom } from '../../chart/PriceTrend/helpers';
 import { yPxOf } from '../../chart/PriceTrend/helpers';
 import type { YScale } from '../../chart/PriceTrend/helpers';
+import type { PromoBand } from '../../chart/PriceTrend/chartModel';
+import { bandColorOf } from '../../chart/PriceTrend/promoShared';
 import type { SeriesPoint } from '../../dataModel/types';
 import type { MarginCostPoint } from './marginCost';
 import { fmtVolume } from './volumeAxis';
@@ -59,6 +61,9 @@ export default function CostBarChart(props: {
   seriesColor: string;
   focusIdx: number | null;
   selectionBand?: { startIndex: number; endIndex: number } | null;
+  /** 大促档期带（2026-11-03 量价对齐价格页）：页面按面板窗口算好传入；空 = 不画。
+   *  画在 SVG 最先 = 选区带与柱之下，深度色与价格页 Chart 同源（promoShared.bandColorOf） */
+  promoBands?: PromoBand[];
   onGeom?: (geom: StripGeom | null) => void;
   name: string;
   emptyHint?: ReactNode;
@@ -196,6 +201,19 @@ export default function CostBarChart(props: {
         ];
         return (
           <svg role="img" aria-label={`${props.name} 成本柱量价图：柱高为折后价，灰线为成本，蓝线为销量，下垂柱为销毛率`} width="100%" height={totalH} style={{ display: 'block' }}>
+            {/* 大促档期带（2026-11-03）：SVG 最先 = 选区带/柱之下；几何换算照 selectionBand
+                （(idx+frac)×slot），深度色与价格页 Chart 同源；不拦截指针（交互走 PointerShield） */}
+            {(props.promoBands ?? []).map((b) => (
+              <rect
+                key={`pb-${b.key}`}
+                x={GRID_L + (b.startIdx + b.startFrac) * slot}
+                y={props.plotTop}
+                width={Math.max(2, (b.endIdx - b.startIdx + b.endFrac - b.startFrac) * slot)}
+                height={props.plotHeight}
+                fill={bandColorOf(b.depth)}
+                style={{ pointerEvents: 'none' }}
+              />
+            ))}
             <line x1={GRID_L} x2={GRID_L + geom.plotWidth} y1={baseline} y2={baseline} stroke={color.hairlineStrong} strokeWidth={1} />
             {cols}
             {volPts.length > 0 && (

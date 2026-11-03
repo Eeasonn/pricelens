@@ -2,6 +2,8 @@
 // §5.1 框一：国家 —— 地区部 → 国家 级联（dimRegion）。
 // 仅 欧亚 → R国 可选、默认选中；其余 27 国置灰（🔒，可见不可点）。
 // 切换国家 = 重载该国家维度数据（demo 仅 R国实现）。
+// 2026-11-03：大盘走势页置灰（样例国家固定，国家筛选不作用于该页）；本框由
+// PageHeader 挂载、不经 FilterBar，自行读当前页判定（scopeFiltersDisabled）。
 // ============================================================
 import { useMemo } from 'react';
 import { Cascader } from 'antd';
@@ -10,6 +12,7 @@ import { LockOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { dimRegion } from '../../data';
 import type { DimRegion } from '../../dataModel/types';
+import { useScopeFiltersDisabled } from './scopeFiltersDisabled';
 
 interface RegionOption {
   value: string;
@@ -52,6 +55,7 @@ const optionRender: CascaderProps<RegionOption>['optionRender'] = (option) => {
 
 export default function CountryBox() {
   const { state, actions } = useFilters();
+  const disabled = useScopeFiltersDisabled();
   const options = useMemo(() => buildOptions(dimRegion), []);
   const current = dimRegion.find((r) => r.country_code === state.countryCode);
   // 数据未就绪（dimRegion 为空）时降级：值无法在维表中定位，展示 spec 默认路径文案
@@ -66,6 +70,7 @@ export default function CountryBox() {
       placeholder={current ? '选择国家' : '欧亚 / R国'}
       optionRender={options.length ? optionRender : undefined}
       allowClear={false}
+      disabled={disabled}
       style={{ width: '100%' }}
       onChange={(keys) => {
         const path = keys as string[];

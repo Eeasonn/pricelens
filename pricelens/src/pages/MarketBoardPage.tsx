@@ -3,24 +3,46 @@
 // 组件与数据不另起炉灶）从独立预览面迁入正式分析壳。
 // 页面壳（页头/筛选条/滚动容器/回滚按钮）由 App.AnalysisShell 共享——与价格
 // 走势/量价走势互切不整页重挂（筛选器不刷新）；本页只负责图表页签行 + 口径行
-// （模拟数据徽标 + 单位说明 + 产业 Segmented）与三卡纵排。
-// 产业选择走 usePageViewState（会话级跨页保留，与量价页视图态同口径）；
+// （模拟数据徽标 + 口径说明 + 产业 Segmented）与三卡纵排。
+// 产业选择走 marketBoardIndustry（会话级保留，与标签页标题共用一份）；
 // 产业切换时三卡按 key 重挂（卡内档位筛选回默认全档位，与预览面同款行为）。
+// 2026-11-03 顶部产业对齐（方案 A）：进入本页及每次切换顶部产业时，手机/平板/
+// 穿戴对齐到对应样例（单向，不回写顶部筛选）；音频等无样例的产业保持当前选择，
+// 口径行注明样例覆盖范围。页内产业切换在下次切换顶部产业前一直有效。国家/币种/
+// 时间三项筛选不作用于本页样例，由筛选条在本页置灰（FilterBar/scopeFiltersDisabled）。
 // 数据恒为 simulated（marketBoardData.ts 模拟，切换真实数据源仅替换该文件）。
 // ============================================================
+import { useEffect } from 'react';
 import { Segmented } from 'antd';
 import ChartContentBar from '../components/ChartContentBar';
-import usePageViewState from '../state/usePageViewState';
+import { useFilters } from '../state/FiltersContext';
+import { INDUSTRY_LABELS } from '../dataModel/scope';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
 import { MARKET_INDUSTRIES } from './marketboard/marketBoardData';
+import { marketDatasetOf, setMarketIndustryId, useMarketIndustry } from './marketboard/marketBoardIndustry';
 import TierBrandShareCard from './marketboard/TierBrandShareCard';
 import BrandShareTrendCard from './marketboard/BrandShareTrendCard';
 import BrandTierYoYCard from './marketboard/BrandTierYoYCard';
 import { MBSourceTag } from './marketboard/marketBoardUI';
 
 export default function MarketBoardPage() {
-  const [industryId, setIndustryId] = usePageViewState<string>('marketboard.industry', () => MARKET_INDUSTRIES[0].id);
-  const ind = MARKET_INDUSTRIES.find((i) => i.id === industryId) ?? MARKET_INDUSTRIES[0];
+  const { industry } = useFilters().state;
+  const ind = useMarketIndustry();
+
+  // 顶部产业 → 大盘样例（单向）：进入本页即对齐一次，其后每次切换顶部产业再对齐；
+  // 无样例的产业（音频等）不动当前选择
+  useEffect(() => {
+    const target = marketDatasetOf(industry);
+    if (target) setMarketIndustryId(target.id);
+  }, [industry]);
+
+  // 口径行：样例国家 · 当前产业 · 单位；顶部产业无样例时注明样例覆盖范围
+  const scopeLine = [ind.region, ind.label, '销量单位万台', '均价为美元', '口径参考 GFK 看板'];
+  if (!marketDatasetOf(industry)) {
+    scopeLine.push(
+      `样例覆盖：${MARKET_INDUSTRIES.map((i) => i.label).join('、')}，暂无${INDUSTRY_LABELS[industry] ?? industry}`,
+    );
+  }
 
   return (
     <>
@@ -46,15 +68,13 @@ export default function MarketBoardPage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', minWidth: 0 }}>
-            <MBSourceTag label="模拟数据" hint={`${ind.intro}；切换真实数据源仅需替换 marketBoardData.ts`} />
-            <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-              {`${ind.region} · 销量单位万台 · 均价为美元 · 口径参考 GFK 看板`}
-            </span>
+            <MBSourceTag label="模拟数据" hint={ind.intro} />
+            <span style={{ fontSize: fontSize.caption, color: color.mute }}>{scopeLine.join(' · ')}</span>
           </div>
           <Segmented
             options={MARKET_INDUSTRIES.map((i) => ({ label: i.label, value: i.id }))}
             value={ind.id}
-            onChange={(v) => setIndustryId(String(v))}
+            onChange={(v) => setMarketIndustryId(String(v))}
           />
         </div>
       </section>

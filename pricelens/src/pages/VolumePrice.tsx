@@ -66,13 +66,16 @@ import ChartContentBar from '../components/ChartContentBar';
 import { brandLabelOf } from '../components/BrandMark';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
+import PromoBandTags from '../chart/PriceTrend/PromoBandTags';
+import { scopedPromosOf } from '../chart/PriceTrend/promoShared';
 import { PillUnit } from '../chart/PriceTrend/BrandLegendStrip';
 // 卡顶时间筛选簇在顶部筛选条。这里只取查看窗口说明行高度，用来对齐同步按钮。
 import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
-import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
+import { buildPromoBands, collectTierValues, type LineShapeChoice, type PromoBand } from '../chart/PriceTrend/chartModel';
 import {
   GRID,
   adaptiveRangeOf,
+  bucketSpans,
   computeYAxis,
   convertWindowIds,
   dataBucketRange,
@@ -89,7 +92,7 @@ import {
 } from '../chart/PriceTrend/helpers';
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
-import { dimProduct } from '../data';
+import { dimProduct, dimPromo } from '../data';
 import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
 import type { Granularity, Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
@@ -239,6 +242,9 @@ export default function VolumePrice() {
   // + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱。只在销毛成本开启时有意义；切换收进 ⋯ 菜单
   const [priceMode, setPriceMode] = usePageViewState<'classic' | 'costbar'>('volume.priceMode', () => 'costbar');
   const costbar = marginOn && priceMode === 'costbar';
+  // 大促档期（2026-11-03 量价对齐价格页，方案 A 全量对齐）：默认关，两呈现模式
+  // （经典折线 / 成本柱）共用同一开关；带 / 胶囊标志 / 事件卡与价格页同源同视觉
+  const [promoBandsOn, setPromoBandsOn] = useState(false);
   const toggleMargin = (): void => {
     if (marginLocked) return;
     const next = !showMargin;
@@ -461,6 +467,21 @@ export default function VolumePrice() {
     [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg, configVersion],
   );
 
+  // ---- 大促档期圈定（2026-11-03 量价对齐价格页）：与价格页 scopedPromos 同式——
+  //      国家命中 + 平台并集圈定（promoShared.scopedPromosOf）。平台并集取各面板
+  //      series 的 channelBadge.platforms（= 该产品取价渠道平台并集，buildSeries
+  //      显式勾选解析 / 自动 = 全平台每周最低价两态都与价格页所选产品线同口径），
+  //      空集（取数失败等）回落默认店铺归属平台（scopedPromosOf 内置兜底）----
+  const scopedPromos = useMemo(() => {
+    const platforms = new Set<string>();
+    for (const panel of panelData) {
+      for (const s of panel.series) {
+        for (const pl of s.channelBadge?.platforms ?? []) platforms.add(pl);
+      }
+    }
+    return scopedPromosOf({ promos: dimPromo, countryCode: cc, platforms });
+  }, [panelData, cc]);
+
   // 时间自适应（2026-11-02 Eason 纠偏）：自动范围 = 顶部所选全部产品（各卡主品 +
   // 对比产品）的最早/最晚有效价格桶，与价格页同一口径——不再只看画面上的面板。
   // 原先主产品视图只按主品算：切到量价页范围收窄、切回价格页又放宽，用户感知为
@@ -559,6 +580,19 @@ export default function VolumePrice() {
     () => panelSpecs.map((_, i) => normalizePanelWindow(timeSynced ? null : panelWins[i] ?? null, win.s, win.e, filterBounds[0], filterBounds[1])),
     [panelSpecs, timeSynced, panelWins, win.s, win.e, filterBounds],
   );
+  // 各面板的大促带随面板生效窗口自算（照价格页 index.tsx panelPromoBands 范式，
+  // 2026-11-03）：startIdx/endIdx 是相对窗口的局部下标，独立窗口下直接喂共享窗口
+  // 的带会整体错位/画出绘图区（同步模式两窗口一致，结果同价）。开关关 = 全空不算
+  const panelPromoBands = useMemo<PromoBand[][]>(() => {
+    if (!promoBandsOn) return panelData.map(() => []);
+    return panelData.map((_, i) => {
+      const [ps, pe] = effWins[i] ?? [win.s, win.e];
+      return buildPromoBands({
+        promos: scopedPromos,
+        spans: bucketSpans(state.granularity, buckets.slice(ps, pe + 1)),
+      });
+    });
+  }, [promoBandsOn, panelData, effWins, win.s, win.e, scopedPromos, state.granularity, buckets]);
   const toggleSynced = (): void => {
     if (synced) setPanelWins(panelSpecs.map(() => [win.s, win.e] as [number, number]));
     else setPanelWins(panelSpecs.map(() => null));
@@ -1303,6 +1337,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               seriesColor={seriesColor}
                               focusIdx={activeIdx}
                               selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
+                              promoBands={panelPromoBands[p.idx] ?? []}
                               onGeom={onGeomOf(p.idx)}
                               name={p.name}
                               emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
@@ -1343,10 +1378,26 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             showXLabels
                             crosshairY={crossY}
                             externalCrosshair
+                            promoBandsOn={promoBandsOn}
+                            onPromoBandsOn={setPromoBandsOn}
+                            promoBands={panelPromoBands[p.idx] ?? []}
                             onGeom={onGeomOf(p.idx)}
                             emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
                           />
                             </>
+                          )}
+                          {/* 成本柱模式的档期胶囊标志行（2026-11-03）：经典模式由 Chart
+                              内部渲染（共享 PromoBandTags），成本柱图自身只画带——标志行
+                              在面板层补挂，同视觉位（绘图区底缘下 24px）、点击弹同一事件卡；
+                              zIndex 9 高于指针承接层（z3），胶囊仍可点 */}
+                          {costbar && promoBandsOn && strip && !p.failed && (panelPromoBands[p.idx]?.length ?? 0) > 0 && (
+                            <PromoBandTags
+                              bands={panelPromoBands[p.idx] ?? []}
+                              plotLeft={strip.plotLeft}
+                              plotWidth={strip.plotWidth}
+                              n={strip.n}
+                              top={PANEL_GRID_TOP + yCfgCost.plotHeight + 24}
+                            />
                           )}
                           {/* 指针承接层：悬停列 / 拖选区间 / 横向参考位统一从面板接管 */}
                           {strip && !p.failed && viewLen > 0 && (
@@ -1567,6 +1618,9 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   onTipMode={setTipMode}
                   labelMode={labelMode}
                   onLabelMode={setLabelMode}
+                  promoOnly
+                  promoBandsOn={promoBandsOn}
+                  onPromoBandsOn={setPromoBandsOn}
                   anomalySlot={<AnomalyQualityChip page="volume" />}
                   presentationSlot={marginOn ? (
                     <Segmented

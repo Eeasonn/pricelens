@@ -58,7 +58,8 @@ import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
-import { buildSeries, defaultPlatformAnchorOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
+import { buildSeries, tierOf, tierOrderOf } from '../../dataModel/aggregate';
+import { scopedPromosOf } from './promoShared';
 import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART, COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
@@ -972,18 +973,11 @@ export default function PriceTrend(props: {
   // 或未选时的默认店铺归属平台（未配置回国家默认平台）显示
   const scopedPromos = useMemo(() => {
     // 第一百六十轮：平台口径下沉到每条产品线后，档期带 = 各线取价渠道平台的并集
-    // （任一产品的渠道命中即显示）；无线可归时回默认店铺归属平台
+    // （任一产品的渠道命中即显示）；无线可归时回默认店铺归属平台。
+    // 圈定逻辑抽 promoShared.scopedPromosOf（量价页同式复用，行为零变化）
     const fromSeries = new Set<string>();
     for (const s of allSeries) for (const pl of s.channelBadge?.platforms ?? []) fromSeries.add(pl);
-    if (fromSeries.size === 0) {
-      const dp = defaultPlatformAnchorOf(state.countryCode);
-      if (dp) fromSeries.add(dp);
-    }
-    const selectedLower = new Set([...fromSeries].map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, '')));
-    return dimPromo.filter(
-      (p) => p.country_code === state.countryCode
-        && (p.platforms == null || p.platforms.some((pl) => selectedLower.has(pl.toLowerCase().replace(/[^a-z0-9]/g, '')))),
-    );
+    return scopedPromosOf({ promos: dimPromo, countryCode: state.countryCode, platforms: fromSeries });
   }, [state.countryCode, allSeries]);
   const promoBands = useMemo(
     () => (promoBandsOn ? buildPromoBands({ promos: scopedPromos, spans: winSpans }) : []),

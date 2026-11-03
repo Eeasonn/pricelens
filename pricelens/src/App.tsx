@@ -10,6 +10,7 @@ import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
 import VolumePrice from './pages/VolumePrice';
 import MarketBoardPage from './pages/MarketBoardPage';
+import { useMarketIndustry } from './pages/marketboard/marketBoardIndustry';
 import PricingPage from './pages/pricing/PricingPage';
 import Config from './pages/Config';
 import AlertsPage from './pages/AlertsPage';
@@ -67,6 +68,8 @@ function AppBody() {
   const { state } = useFilters();
   // 标签页标题随当前国家（index.html 的静态标题只是首帧占位；多国接入后不再是单一 R国）
   const { region, country } = scopeLabels(state);
+  // 大盘走势按页面自身口径（样例国家 · 当前产业）命名，不借用全局国家（2026-11-03）
+  const market = useMarketIndustry();
   const pageLabel: Record<string, string> = {
     overview: '国家总览',
     dashboard: '价格走势',
@@ -79,8 +82,11 @@ function AppBody() {
     forecast: '量价预测',
   };
   useEffect(() => {
-    document.title = `PriceLens · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
-  }, [page, region, country]);
+    document.title =
+      page === 'marketboard'
+        ? `PriceLens · ${pageLabel.marketboard} · ${market.region} · ${market.label}`
+        : `PriceLens · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
+  }, [page, region, country, market.region, market.label]);
   // 第一百八十四轮（Eason）：分析页（价格走势/量价走势/定价推演）共享同一页面
   // 壳（页头+筛选条+滚动容器）——页内切换只换图表主体，不再整页重挂载（顶部
   // 筛选器不刷新）；非分析页仍按页 key 重挂载播淡入。

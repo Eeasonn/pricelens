@@ -1254,3 +1254,60 @@ describe('buildChangeMarks（价格变化点，第三十五轮起；第四十二
   });
 });
 
+
+// ---------------- 大促带求交一致性（2026-11-03 量价页接线 golden） ----------------
+// 量价页每面板按生效窗口切片后调 buildPromoBands（价格页 panelPromoBands 同范式）。
+// 本 golden 锁定：同 promos 同桶集合下，「切片窗口直接求交」与「整窗求交后按切片
+// 裁剪平移」两条路径结果逐字段一致（含边缘 frac 与端点裁剪语义）——两页两分支
+// （整窗 / 分离面板 / 量价面板）求交口径不漂移。
+describe('buildPromoBands 切片一致性（整窗 vs 面板切片）', () => {
+  const SPANS = [
+    { start: '2025-11-10', end: '2025-11-16' },
+    { start: '2025-11-17', end: '2025-11-23' },
+    { start: '2025-11-24', end: '2025-11-30' },
+    { start: '2025-12-01', end: '2025-12-07' },
+  ];
+  const P = (promo_id: string, start_date: string, end_date: string) => ({
+    promo_id,
+    promo_name: '黑五 Чёрная пятница',
+    start_date,
+    end_date,
+    depth_hint: '深' as const,
+  });
+  const PROMOS = [
+    P('head', '2025-11-12', '2025-11-26'), // 跨切片左缘（左裁剪 → startFrac 0）
+    P('mid', '2025-11-20', '2025-11-25'), // 完整落在切片内（frac 原样保留）
+    P('tail', '2025-11-25', '2025-12-03'), // 跨切片右缘（右裁剪 → endFrac 1）
+  ];
+  const SLICE_S = 1;
+  const SLICE_E = 2;
+
+  it('切片窗口直接求交 = 整窗求交后裁剪平移（逐字段一致）', () => {
+    const whole = buildPromoBands({ promos: PROMOS, spans: SPANS });
+    const sliced = buildPromoBands({ promos: PROMOS, spans: SPANS.slice(SLICE_S, SLICE_E + 1) });
+    const shifted = whole
+      .filter((b) => b.endIdx >= SLICE_S && b.startIdx <= SLICE_E)
+      .map((b) => {
+        const sIdx = b.startIdx < SLICE_S ? 0 : b.startIdx - SLICE_S;
+        const eIdx = b.endIdx > SLICE_E ? SLICE_E - SLICE_S : b.endIdx - SLICE_S;
+        return {
+          ...b,
+          startIdx: sIdx,
+          endIdx: eIdx,
+          startFrac: b.startIdx < SLICE_S ? 0 : b.startFrac,
+          endFrac: b.endIdx > SLICE_E ? 1 : b.endFrac,
+          weeks: eIdx - sIdx + 1,
+        };
+      });
+    expect(sliced).toEqual(shifted);
+  });
+
+  it('切片窗口外的档期被剔除；桶 span 与整窗逐桶相同（同一桶同一覆盖区间）', () => {
+    const outsideOnly = buildPromoBands({
+      promos: [P('out', '2025-12-03', '2025-12-05')],
+      spans: SPANS.slice(SLICE_S, SLICE_E + 1),
+    });
+    expect(outsideOnly).toEqual([]);
+    expect(SPANS.slice(SLICE_S, SLICE_E + 1)).toEqual([SPANS[1], SPANS[2]]);
+  });
+});

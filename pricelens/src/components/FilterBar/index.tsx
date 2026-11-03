@@ -13,6 +13,9 @@
 // 第一百九十轮（外部 UX 审计落地）：多平台对比子视图下主图已按店铺画多条线，
 // 单组摘要 chip 第二行不再写「无对比」，改示「平台对比」（悬停全量摘要保持
 // 产品对语义不动——细节仍真实）；产品对比子视图行为与现状完全一致。
+// 2026-11-03（大盘走势 × 顶部筛选，方案 A）：大盘走势页置灰币种与时间簇（国家
+// 框在页头，同一判定）——三项不作用于大盘样例；产业保持可用（驱动大盘产业）。
+// 停用条件随当前页派生（scopeFiltersDisabled），本条切页不重挂，切回即恢复。
 // ============================================================
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConfigProvider, Tooltip } from 'antd';
@@ -23,6 +26,7 @@ import PlatformBox from './PlatformBox';
 import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
 import TimeBox from './TimeBox';
+import { useScopeFiltersDisabled } from './scopeFiltersDisabled';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
@@ -296,6 +300,8 @@ export default function FilterBar({
    *  不再渲染全局「平台 / 店铺」（false）；总览页矩阵筛选保留 */
   showPlatform?: boolean;
 } = {}) {
+  // 大盘走势页：币种与时间簇置灰（只读当前页，切回其他页即恢复）
+  const scopeDisabled = useScopeFiltersDisabled();
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
@@ -319,12 +325,12 @@ export default function FilterBar({
             <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={labelStyle}>币种</span>
-              <CurrencyBox />
+              <CurrencyBox disabled={scopeDisabled} />
             </div>
             {showTime && (
               <>
                 <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-                <TimeBox />
+                <TimeBox disabled={scopeDisabled} />
               </>
             )}
           </div>
