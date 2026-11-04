@@ -1,39 +1,35 @@
 // ============================================================
-// 推演工作台 v2 · 量价参考卡 · 全生命周期量价图（A1 参考卡重构）：
-// 样式与量价走势页（&p=volume）同语言——量柱直接复用 volume/VolumeBars
+// 推演工作台 v2 · 量价参考卡 · 全生命周期量价图（A5 参考卡二轮重构）：
+// 与量价走势页（&p=volume）面板完全同语言——量柱直接复用 volume/VolumeBars
 // （values/geom/vMax/hoverIdx/axisLimits + 选区带），价格线同系列色实线
-// （左轴 $ 刻度）+ 大促档期琥珀带（主图同款 warningSoft）+ 事件锚
-// （上市蓝 / 促销琥珀 / 挤兑墨，与主图小事件同源色系）+ 图上拖选区间
-// 读数（价 / 量变化，语言对齐 SpreadRangeCard）+ 底部简版时间窗滑条
-// （两端拖柄 + 整段平移 + 键盘微调，全周期 ↔ 窗口缩放平移）。
+// + 大促档期琥珀带（主图同款 warningSoft）+ 事件锚（预标 + 补录：上市蓝 /
+// 促销琥珀 / 挤兑墨，与主图小事件同源色系）+ 图上拖选区间读数（价 / 量变化，
+// 语言对齐 SpreadRangeCard）。Y 轴双轴刻度常显（左量右价），0 为量轴基线。
 // 缺数纪律：缺采周不造 0——柱不画、实线断开、跨缺灰虚桥接、读数「—」。
 // 布局照 volume/CostBarChart 范式：ResizeObserver 量宽 → 全部按像素定位，
-// 指针承接层直接复用 volume/PointerShield（悬停列 / 拖选区间）。
+// 指针承接层直接复用 volume/PointerShield（悬停列 / 拖选区间 / 补录点选）。
+// A5 变化：①查看窗口受控（面板区底部共享时间轨统一驱动，本图不再自带滑条）；
+// ②补录锚（ReferenceEventComposer 提交的会话草稿）与预标锚同语言上图；
+// ③补录点选模式：pickMode 下点击图上某周回调 onPickWeek（选区带被抑制）。
 // ============================================================
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import PointerShield from '../volume/PointerShield';
 import VolumeBars from '../volume/VolumeBars';
 import { vMaxOf } from '../volume/volumeAxis';
-import { brandColorOf, color, font, trackColors } from '../../theme/tokens';
-import type { LifecycleEventSeed, LifecycleProductSeed } from './workbenchFixture';
+import { brandColorOf, color, font } from '../../theme/tokens';
+import type { LifecycleProductSeed } from './workbenchFixture';
 import { WorkbenchLegend, type LegendItem } from './WorkbenchBits';
+import { REFERENCE_EVENT_TONES, referenceEventTypeLabel, type ReferenceComposedEvent } from './ReferenceEventComposer';
 
 const GRID_L = 44;
 const GRID_R = 74;
 const PLOT_TOP = 16;
 const PLOT_H = 150;
 const LABEL_H = 18;
-const TRACK_H = 44;
-const MIN_WINDOW = 8;
 const FOCUS_SPAN = 16;
 
-/** 事件锚色（与主图小事件 / 参考卡事实锚同源：上市蓝 / 促销琥珀 / 挤兑墨）。 */
-const EVENT_TONE: Record<LifecycleEventSeed['type'], string> = {
-  'competitor-launch': color.link,
-  'own-launch': color.link,
-  promo: color.warning,
-  cannibalization: color.ink,
-};
+const signedPctText = (pct: number): string =>
+  `${pct > 0.05 ? '+' : pct < -0.05 ? '−' : '±'}${Math.abs(pct).toFixed(1)}%`;
 
 /** 连续有值段（实线只连接相邻有值点，缺数不造点）。 */
 function solidSegmentsOf(values: Array<number | null>): number[][] {
@@ -64,26 +60,27 @@ function bridgeSegmentsOf(values: Array<number | null>): Array<[number, number]>
   return bridges;
 }
 
-const signedPctText = (pct: number): string =>
-  `${pct > 0.05 ? '+' : pct < -0.05 ? '−' : '±'}${Math.abs(pct).toFixed(1)}%`;
-
 export default function ReferenceVolumeChart(props: {
   product: LifecycleProductSeed;
-  /** 聚焦定位（生命周期周序 0 基）；配合 focusKey 触发窗口平移 + 悬停该周（智能弹框联动）。 */
+  /** 查看窗口（生命周期周序，受控）：由面板区共享时间轨统一驱动，全部面板联动。 */
+  win: [number, number];
+  /** 聚焦定位（生命周期周序 0 基）；配合 focusKey 触发悬停该周（智能弹框联动）。 */
   focusWeek?: number | null;
   focusKey?: number;
+  /** 历史补录锚（会话草稿）：与预标锚同语言上图。 */
+  composedEvents?: ReferenceComposedEvent[];
+  /** 补录点选模式：点击图上某周完成补录（选区带被抑制）。 */
+  pickMode?: boolean;
+  /** 点选回调（生命周期周序 0 基；松手列 = 所选周）。 */
+  onPickWeek?: (week: number) => void;
 }) {
-  const { product } = props;
+  const { product, win } = props;
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ kind: 'start' | 'end' | 'pan'; grabS: number; grabE: number; grabIdx: number } | null>(null);
   const [width, setWidth] = useState(0);
-  const [win, setWin] = useState<[number, number]>([0, Math.max(0, product.points.length - 1)]);
   const [hover, setHover] = useState<number | null>(null);
   const [brush, setBrush] = useState<[number, number] | null>(null);
   const [brushLive, setBrushLive] = useState<[number, number] | null>(null);
   const [axisLimits, setAxisLimits] = useState<{ max: number | null }>({ max: null });
-  const [trackDragging, setTrackDragging] = useState(false);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -97,34 +94,33 @@ export default function ReferenceVolumeChart(props: {
   }, []);
 
   const total = product.points.length;
-  // 切换参照产品：窗口复位全周期，选区 / 悬停 / 轴限位随失义清除
+  // 切换参照产品：选区 / 悬停 / 轴限位随失义清除（窗口归共享时间轨管，不动）
   const productId = product.id;
   useEffect(() => {
-    setWin([0, Math.max(0, total - 1)]);
     setBrush(null);
     setBrushLive(null);
     setHover(null);
     setAxisLimits({ max: null });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
-  // 聚焦定位（智能弹框「定位到对应事件周」）：窗口移到事件附近并悬停该周
+  // 聚焦定位（智能弹框「定位到对应事件周」）：窗口已由父层移到事件附近，这里悬停该周
   const focusKey = props.focusKey ?? 0;
+  const winS = win[0];
   useEffect(() => {
     if (focusKey === 0 || props.focusWeek == null) return;
-    const w = Math.min(total - 1, Math.max(0, props.focusWeek));
-    const span = Math.min(FOCUS_SPAN, total);
-    let s = Math.max(0, w - 6);
-    let e = Math.min(total - 1, s + span - 1);
-    s = Math.max(0, e - span + 1);
-    setWin([s, e]);
     setBrush(null);
     setBrushLive(null);
-    setHover(w - s);
+    setHover(Math.min(total - 1, Math.max(0, props.focusWeek - winS)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
 
-  const s = win[0];
-  const e = Math.min(total - 1, Math.max(win[0], win[1]));
+  const s = Math.min(Math.max(0, winS), Math.max(0, total - 1));
+  const e = Math.min(total - 1, Math.max(s, win[1]));
+  // 共享窗口平移 / 缩放 → 窗口内选区下标失义，自动清除（与量价页同口径）
+  const winSig = `${win[0]}:${win[1]}`;
+  useEffect(() => {
+    setBrush(null);
+    setBrushLive(null);
+  }, [winSig]);
   const values = useMemo(() => product.points.slice(s, e + 1), [product, s, e]);
   const prices = useMemo(() => product.pricePoints.slice(s, e + 1), [product, s, e]);
   const n = values.length;
@@ -136,7 +132,7 @@ export default function ReferenceVolumeChart(props: {
   const colW = n > 0 ? plotWidth / n : 0;
   const xAt = (i: number): number => GRID_L + colW * (i + 0.5);
 
-  // 价格刻度（左轴）：窗口内价格 min/max 加 18% 余量，上 / 中 / 下三刻度
+  // 价格刻度（右轴 $）：窗口内价格 min/max 加 18% 余量，上 / 中 / 下三刻度常显
   const priceBounds = useMemo(() => {
     let lo = Number.POSITIVE_INFINITY;
     let hi = Number.NEGATIVE_INFINITY;
@@ -165,11 +161,31 @@ export default function ReferenceVolumeChart(props: {
     })
     .filter((band): band is NonNullable<typeof band> => band != null), [product, s, e]);
 
-  const eventsIn = useMemo(() => product.events
-    .filter((ev) => ev.week >= s && ev.week <= e)
-    .map((ev) => ({ ...ev, index: ev.week - s })), [product, s, e]);
+  // 事件锚 = 预标（fixture）+ 补录（会话草稿），同语言上图
+  const composed = props.composedEvents ?? [];
+  const eventsIn = useMemo(() => {
+    const preset = product.events
+      .filter((ev) => ev.week >= s && ev.week <= e)
+      .map((ev) => ({
+        key: `preset-${ev.type}-${ev.week}`,
+        week: ev.week,
+        index: ev.week - s,
+        tone: REFERENCE_EVENT_TONES[ev.type],
+        title: `${ev.label}（W${ev.week + 1}${ev.impactPct != null && ev.impactWeeks != null ? ` · 参考 ${signedPctText(ev.impactPct)}×${ev.impactWeeks} 周` : ''}）`,
+      }));
+    const custom = composed
+      .filter((ev) => ev.week >= s && ev.week <= e)
+      .map((ev) => ({
+        key: `composed-${ev.id}`,
+        week: ev.week,
+        index: ev.week - s,
+        tone: REFERENCE_EVENT_TONES[ev.type],
+        title: `补录 · ${referenceEventTypeLabel(ev.type)}（W${ev.week + 1}）：${ev.note}`,
+      }));
+    return [...preset, ...custom];
+  }, [product, s, e, composed]);
 
-  const activeBrush = brushLive ?? brush;
+  const activeBrush = props.pickMode ? null : (brushLive ?? brush);
   const brushLo = activeBrush ? Math.min(activeBrush[0], activeBrush[1]) : 0;
   const brushHi = activeBrush ? Math.max(activeBrush[0], activeBrush[1]) : 0;
 
@@ -205,74 +221,11 @@ export default function ReferenceVolumeChart(props: {
     .filter(Boolean);
   const legendItems: LegendItem[] = [
     { label: '周销（量柱）', shape: 'rect', color: seriesColor },
-    { label: '价格（线 · 左轴 $）', shape: 'line', color: seriesColor },
+    { label: '价格（线 · 右轴 $）', shape: 'line', color: seriesColor },
     { label: '档期带（琥珀）', shape: 'rectAmber', color: color.warning },
-    { label: '事件锚（上市蓝 / 促销琥珀 / 挤兑墨）', shape: 'marker', color: color.link },
+    { label: '事件锚（预标 / 补录）', shape: 'marker', color: color.link },
   ];
   const labelStep = Math.max(1, Math.ceil(n / 6));
-
-  // ---- 时间窗滑条（简版 PanelTimeTrack）：两端拖柄 + 整段平移 + 键盘微调 ----
-  const clampWindow = (next: [number, number]): [number, number] => {
-    let cs = Math.min(total - 1, Math.max(0, Math.round(next[0])));
-    let ce = Math.min(total - 1, Math.max(0, Math.round(next[1])));
-    if (cs > ce) [cs, ce] = [ce, cs];
-    if (ce - cs < MIN_WINDOW - 1) {
-      ce = Math.min(total - 1, cs + MIN_WINDOW - 1);
-      cs = Math.max(0, ce - (MIN_WINDOW - 1));
-    }
-    return [cs, ce];
-  };
-  const applyWindow = (next: [number, number]): void => {
-    setWin(clampWindow(next));
-    // 窗口平移 / 缩放后选区下标失义，自动清除（与量价页同口径）
-    setBrush(null);
-    setBrushLive(null);
-  };
-  const idxFromClientX = (clientX: number): number => {
-    const el = trackRef.current;
-    if (!el || plotWidth <= 0) return 0;
-    const rect = el.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left - GRID_L) / plotWidth));
-    return Math.round(ratio * (total - 1));
-  };
-  const onHandleDown = (kind: 'start' | 'end' | 'pan') => (event: ReactPointerEvent<HTMLElement>): void => {
-    event.preventDefault();
-    if (typeof event.currentTarget.setPointerCapture === 'function') {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
-    dragRef.current = { kind, grabS: win[0], grabE: win[1], grabIdx: idxFromClientX(event.clientX) };
-    setTrackDragging(true);
-  };
-  const onTrackMove = (event: ReactPointerEvent<HTMLElement>): void => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const idx = idxFromClientX(event.clientX);
-    if (drag.kind === 'start') applyWindow([idx, drag.grabE]);
-    else if (drag.kind === 'end') applyWindow([drag.grabS, idx]);
-    else {
-      const len = drag.grabE - drag.grabS;
-      const cs = Math.min(Math.max(0, idx - (drag.grabIdx - drag.grabS)), total - 1 - len);
-      applyWindow([cs, cs + len]);
-    }
-  };
-  const endTrackDrag = (event: ReactPointerEvent<HTMLElement>): void => {
-    if (!dragRef.current) return;
-    dragRef.current = null;
-    setTrackDragging(false);
-    const el = event.currentTarget;
-    if (typeof el.hasPointerCapture === 'function' && el.hasPointerCapture(event.pointerId)) {
-      el.releasePointerCapture(event.pointerId);
-    }
-  };
-  const nudgeWindow = (kind: 'start' | 'end', delta: number): void => {
-    setWin((prev) => {
-      if (kind === 'start') return clampWindow([prev[0] + delta, prev[1]]);
-      return clampWindow([prev[0], prev[1] + delta]);
-    });
-    setBrush(null);
-    setBrushLive(null);
-  };
-  const pctAt = (index: number): number => (index / Math.max(1, total - 1)) * 100;
 
   if (total === 0) {
     return <div role="status" style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: color.mute }}>暂无可参照历史</div>;
@@ -347,10 +300,10 @@ export default function ReferenceVolumeChart(props: {
             selectionBand={activeBrush ? { startIndex: brushLo, endIndex: brushHi } : null}
           />
         )}
-        {/* 价格线 + 事件锚层 */}
+        {/* 价格线 + 事件锚层（预标 + 补录同语言：虚线 + 方形锚，type 色） */}
         <svg
           role="img"
-          aria-label={`${product.label} 全生命周期量价图（上市 ${product.launchWeekLabel} 起 ${total} 周）：量柱为周销、实线为价格；琥珀带为大促档期；锚点为事件（上市蓝 / 促销琥珀 / 挤兑墨）。图上拖选区间读价量变化。`}
+          aria-label={`${product.label} 全生命周期量价图（上市 ${product.launchWeekLabel} 起 ${total} 周）：量柱为周销（左轴）、实线为价格（右轴 $）；琥珀带为大促档期；锚点为事件（预标与补录同语言）。图上拖选区间读价量变化${props.pickMode ? '；当前为补录点选模式，点击某周完成补录' : ''}。`}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}
         >
           {solidSegs.map((segment, segmentIndex) => (
@@ -367,18 +320,14 @@ export default function ReferenceVolumeChart(props: {
               opacity={0.85}
             />
           ))}
-          {eventsIn.map((ev) => {
-            const cx = xAt(ev.index);
-            const tone = EVENT_TONE[ev.type];
-            return (
-              <g key={`${ev.type}-${ev.week}`}>
-                <line x1={cx} y1={PLOT_TOP} x2={cx} y2={plotBottom} stroke={tone} strokeDasharray="3 4" opacity={0.5} />
-                <rect x={cx - 5} y={PLOT_TOP + 2} width={10} height={10} rx={2} fill={color.canvas} stroke={tone} strokeWidth={1.3}>
-                  <title>{`${ev.label}（W${ev.week + 1}${ev.impactPct != null && ev.impactWeeks != null ? ` · 参考 ${signedPctText(ev.impactPct)}×${ev.impactWeeks} 周` : ''}）`}</title>
-                </rect>
-              </g>
-            );
-          })}
+          {eventsIn.map((ev) => (
+            <g key={ev.key}>
+              <line x1={xAt(ev.index)} y1={PLOT_TOP} x2={xAt(ev.index)} y2={plotBottom} stroke={ev.tone} strokeDasharray="3 4" opacity={0.5} />
+              <rect x={xAt(ev.index) - 5} y={PLOT_TOP + 2} width={10} height={10} rx={2} fill={color.canvas} stroke={ev.tone} strokeWidth={1.3}>
+                <title>{ev.title}</title>
+              </rect>
+            </g>
+          ))}
           {hover != null && prices[hover] != null && (
             <circle cx={xAt(hover)} cy={y$(prices[hover] as number)} r={3.5} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
           )}
@@ -424,7 +373,7 @@ export default function ReferenceVolumeChart(props: {
             <div style={{ marginTop: 1, whiteSpace: 'nowrap' }}>量 {reading.volumeText}</div>
           </div>
         )}
-        {/* 指针承接层（volume/PointerShield 直接复用）：悬停列 / 拖选区间 */}
+        {/* 指针承接层（volume/PointerShield 直接复用）：悬停列 / 拖选区间 / 补录点选 */}
         {geom && (
           <PointerShield
             plotLeft={GRID_L}
@@ -435,6 +384,11 @@ export default function ReferenceVolumeChart(props: {
             n={n}
             onHover={setHover}
             onBrush={(range, committing) => {
+              // 补录点选模式：松手列 = 所选周，选区带抑制（不进入读数态）
+              if (props.pickMode) {
+                if (committing && range) props.onPickWeek?.(s + range[1]);
+                return;
+              }
               if (committing) {
                 setBrush(range);
                 setBrushLive(null);
@@ -445,63 +399,6 @@ export default function ReferenceVolumeChart(props: {
             onCrossY={() => {}}
           />
         )}
-      </div>
-      {/* 时间窗滑条：全周期 ↔ 窗口缩放平移（两端拖柄 + 整段平移 + ←/→ 键盘微调） */}
-      <div ref={trackRef} style={{ position: 'relative', height: TRACK_H, marginTop: 4, minWidth: 0 }}
-        onPointerMove={onTrackMove}
-        onPointerUp={endTrackDrag}
-        onPointerCancel={endTrackDrag}
-      >
-        <div aria-hidden style={{ position: 'absolute', left: GRID_L, width: Math.max(0, plotWidth), top: 13, height: 6, borderRadius: 3, background: trackColors.rail }} />
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: GRID_L + (pctAt(win[0]) / 100) * Math.max(0, plotWidth),
-            width: Math.max(0, ((pctAt(win[1]) - pctAt(win[0])) / 100) * Math.max(0, plotWidth)),
-            top: 13,
-            height: 6,
-            borderRadius: 3,
-            background: trackDragging ? trackColors.fillStrong : trackColors.fill,
-          }}
-        />
-        {(['start', 'end'] as const).map((kind) => (
-          <button
-            key={kind}
-            type="button"
-            aria-label={`时间窗${kind === 'start' ? '起点' : '终点'}拖柄（当前 W${(kind === 'start' ? win[0] : win[1]) + 1}，←/→ 微调）`}
-            title="拖动调整查看窗口；←/→ 键微调（Shift ×4）"
-            onPointerDown={onHandleDown(kind)}
-            onPointerMove={onTrackMove}
-            onPointerUp={endTrackDrag}
-            onPointerCancel={endTrackDrag}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                event.preventDefault();
-                const delta = (event.key === 'ArrowRight' ? 1 : -1) * (event.shiftKey ? 4 : 1);
-                nudgeWindow(kind, delta);
-              }
-            }}
-            style={{
-              position: 'absolute',
-              left: GRID_L + ((pctAt(kind === 'start' ? win[0] : win[1]) / 100) * Math.max(0, plotWidth)) - 5,
-              top: 7,
-              width: 10,
-              height: 18,
-              padding: 0,
-              border: 'none',
-              borderRadius: 3,
-              background: trackColors.handle,
-              cursor: 'ew-resize',
-              touchAction: 'none',
-            }}
-          />
-        ))}
-        <span className="tnum" style={{ position: 'absolute', left: GRID_L, top: 26, fontSize: 10, color: color.mute, fontVariantNumeric: 'tabular-nums' }}>W{win[0] + 1}</span>
-        <span className="tnum" style={{ position: 'absolute', left: GRID_L + Math.max(0, plotWidth), top: 26, transform: 'translateX(-100%)', fontSize: 10, color: color.mute, fontVariantNumeric: 'tabular-nums' }}>W{win[1] + 1}</span>
-        <span className="tnum" style={{ position: 'absolute', left: GRID_L + Math.max(0, plotWidth) / 2, top: 26, transform: 'translateX(-50%)', fontSize: 10, color: color.mute, fontVariantNumeric: 'tabular-nums', maxWidth: Math.max(0, plotWidth - 56), overflow: 'hidden', whiteSpace: 'nowrap' }}>
-          查看 {win[1] - win[0] + 1}/{total} 周
-        </span>
       </div>
       {missingWeeks.length > 0 && (
         <div style={{ marginTop: 2, fontSize: 10.5, color: color.mute }}>缺数周 {missingWeeks.join('、')} 显示「—」，不计 0</div>

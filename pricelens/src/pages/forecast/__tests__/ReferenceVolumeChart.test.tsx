@@ -1,8 +1,9 @@
 // ============================================================
-// 推演工作台 v2 · 全生命周期量价图组件测试（A1 参考卡重构，jsdom）：
-// 量柱 / 价格线 / 档期琥珀带 / 事件锚渲染、图上拖选区间读数（价 / 量变化
-// 胶囊 + 清除）、时间窗滑条（键盘微调 + 聚焦定位）、缺数纪律（柱不画 /
-// 实线断开 + 灰虚桥接 / 读数「—」）、空数据空态。
+// 推演工作台 v2 · 全生命周期量价图组件测试（A5 参考卡二轮重构，jsdom）：
+// 量柱 / 价格线 / 档期琥珀带 / 事件锚（预标 + 补录）渲染、图上拖选区间
+// 读数（价 / 量变化胶囊 + 清除）、受控窗口（共享时间轨驱动；窗口变化清
+// 选区失义）、补录点选模式（点击周回调 onPickWeek、选区带抑制）、聚焦
+// 定位悬停、缺数纪律（柱不画 / 实线断开 + 灰虚桥接 / 读数「—」）、空态。
 // jsdom 无 ResizeObserver：stub 之；clientWidth 覆写为 600 让图进入就绪态。
 // jsdom 无 Pointer Capture API：补齐 PointerShield 依赖的最小面。
 // jsdom 无布局（getBoundingClientRect 恒 0）：拖选 clientX 直读，
@@ -34,10 +35,14 @@ afterEach(() => {
 
 const POOL = workbenchFixture.references.lifecyclePool;
 const MATE80 = POOL[0];
+const FULL: [number, number] = [0, MATE80.points.length - 1];
 const HUAWEI_FILL = 'rgba(199, 0, 11';
 const PLOT_WIDTH = 600 - 44 - 74;
 const COL_W = PLOT_WIDTH / 52;
 const clientXAt = (index: number): number => Math.round(COL_W * (index + 0.5));
+/** 窗口内列 → clientX（窗口长度 n 决定列宽）。 */
+const clientXInWindow = (index: number, windowLength: number): number =>
+  Math.round((PLOT_WIDTH / windowLength) * (index + 0.5));
 
 /** jsdom 内 PointerShield 的位置为 0 起算：clientX = 列宽 ×（列 + 0.5）。 */
 function shieldOf(container: HTMLElement): HTMLElement {
@@ -48,8 +53,8 @@ function shieldOf(container: HTMLElement): HTMLElement {
 }
 
 describe('ReferenceVolumeChart · 渲染（量柱 / 价格线 / 档期带 / 事件锚）', () => {
-  it('52 周全周期出量柱（品牌色半透明）与价格线；档期琥珀带两段；事件锚带 title', () => {
-    const { container } = render(<ReferenceVolumeChart product={MATE80} />);
+  it('52 周全窗口出量柱（品牌色半透明）与价格线；档期琥珀带两段；事件锚带 title', () => {
+    const { container } = render(<ReferenceVolumeChart product={MATE80} win={FULL} />);
     const bars = Array.from(container.querySelectorAll('rect')).filter((rect) =>
       (rect.getAttribute('fill') ?? '').startsWith(HUAWEI_FILL));
     expect(bars.length).toBe(52);
@@ -65,23 +70,28 @@ describe('ReferenceVolumeChart · 渲染（量柱 / 价格线 / 档期带 / 事�
     expect(anchorTitles.some((text) => text.includes('上市首销'))).toBe(true);
     expect(anchorTitles.some((text) => text.includes('618 档期脉冲'))).toBe(true);
     expect(anchorTitles.some((text) => text.includes('Pura 90 上市挤兑'))).toBe(true);
-    // 图无障碍名：全生命周期口径 + 上市标签
-    expect(overlay?.getAttribute('aria-label') ?? '').toContain('全生命周期量价图');
-    expect((overlay?.getAttribute('aria-label') ?? '')).toContain(MATE80.launchWeekLabel);
+    // 图无障碍名：全生命周期口径 + 上市标签 + 双轴语言
+    const label = overlay?.getAttribute('aria-label') ?? '';
+    expect(label).toContain('全生命周期量价图');
+    expect(label).toContain(MATE80.launchWeekLabel);
+    expect(label).toContain('右轴');
   });
 
-  it('X 周标签覆盖首末周（W1 / W52）；时间窗滑条显示全周期读数', () => {
-    render(<ReferenceVolumeChart product={MATE80} />);
-    // W1 同时出现在 X 轴标签与时间窗起点标签
-    expect(screen.getAllByText('W1').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('W52').length).toBeGreaterThan(0);
-    expect(screen.getByText('查看 52/52 周')).toBeTruthy();
+  it('受控窗口 [16, 31]：X 周标签只在窗口内（W17 / W32），价格双轴刻度常显', () => {
+    render(<ReferenceVolumeChart product={MATE80} win={[16, 31]} />);
+    expect(screen.queryByText('W1')).toBeNull();
+    expect(screen.getAllByText('W17').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('W32').length).toBeGreaterThan(0);
+    // 窗口 [16,31]：618 档期带（W23–W26）在窗内，黑五带不在
+    expect(screen.queryByText(/黑五档期/)).toBeNull();
+    const bands = document.querySelectorAll('rect[fill="#ffefcf"]');
+    expect(bands.length).toBe(1);
   });
 });
 
-describe('ReferenceVolumeChart · 拖选区间读数', () => {
-  it('拖选 W11–W18：胶囊报价（$899 → $849 = −6.0%）与量变化，可 × 清除', () => {
-    const { container } = render(<ReferenceVolumeChart product={MATE80} />);
+describe('ReferenceVolumeChart · 拖选区间读数（选区带各面板独立）', () => {
+  it('拖选 W11–W18：胶囊报价（$899 → $849 = −5.6%）与量变化，可 × 清除', () => {
+    const { container } = render(<ReferenceVolumeChart product={MATE80} win={FULL} />);
     const shield = shieldOf(container);
     fireEvent.pointerDown(shield, { pointerId: 7, clientX: clientXAt(10), clientY: 60 });
     fireEvent.pointerMove(shield, { pointerId: 7, clientX: clientXAt(17), clientY: 60 });
@@ -94,6 +104,17 @@ describe('ReferenceVolumeChart · 拖选区间读数', () => {
     expect(screen.queryByText(/^区间 W11/)).toBeNull();
   });
 
+  it('共享窗口变化（受控 win 改变）→ 选区下标失义自动清除', () => {
+    const { container, rerender } = render(<ReferenceVolumeChart product={MATE80} win={FULL} />);
+    const shield = shieldOf(container);
+    fireEvent.pointerDown(shield, { pointerId: 7, clientX: clientXAt(10), clientY: 60 });
+    fireEvent.pointerUp(shield, { pointerId: 7, clientX: clientXAt(12), clientY: 60 });
+    expect(screen.getByText(/^区间 W11/)).toBeTruthy();
+    rerender(<ReferenceVolumeChart product={MATE80} win={[24, 39]} />);
+    expect(screen.queryByText(/^区间 W11/)).toBeNull();
+    expect(screen.queryByText(/^区间 W/)).toBeNull();
+  });
+
   it('缺采端点回退区间内有值点；全缺显示「—」（缺数不造 0）', () => {
     const sparse: LifecycleProductSeed = {
       ...MATE80,
@@ -101,7 +122,7 @@ describe('ReferenceVolumeChart · 拖选区间读数', () => {
       points: MATE80.points.map((v, i) => (i >= 10 && i <= 17 ? null : v)),
       pricePoints: MATE80.pricePoints.map((v, i) => (i >= 10 && i <= 17 ? null : v)) as number[],
     };
-    const { container } = render(<ReferenceVolumeChart product={sparse} />);
+    const { container } = render(<ReferenceVolumeChart product={sparse} win={FULL} />);
     const shield = shieldOf(container);
     fireEvent.pointerDown(shield, { pointerId: 7, clientX: clientXAt(11), clientY: 60 });
     fireEvent.pointerUp(shield, { pointerId: 7, clientX: clientXAt(14), clientY: 60 });
@@ -110,34 +131,94 @@ describe('ReferenceVolumeChart · 拖选区间读数', () => {
   });
 });
 
-describe('ReferenceVolumeChart · 时间窗滑条', () => {
-  it('起点拖柄 → 键盘右移 8 周：窗口缩至 44 周并清除选区失义', () => {
-    render(<ReferenceVolumeChart product={MATE80} />);
-    const handle = screen.getByLabelText(/时间窗起点拖柄/);
-    for (let i = 0; i < 8; i++) fireEvent.keyDown(handle, { key: 'ArrowRight' });
-    expect(screen.getByText('查看 44/52 周')).toBeTruthy();
-    expect(screen.queryByText('W1')).toBeNull();
-    expect(screen.getAllByText('W9').length).toBeGreaterThan(0);
+describe('ReferenceVolumeChart · 补录锚（预标 / 补录同语言）', () => {
+  it('composedEvents 上图：虚线 + 方形锚，title 带「补录 ·」前缀与说明；图例标注预标 / 补录', () => {
+    const { container } = render(
+      <ReferenceVolumeChart
+        product={MATE80}
+        win={FULL}
+        composedEvents={[{ id: 'ce-1', type: 'competitor-launch', week: 10, note: '对手官旗补贴' }]}
+      />,
+    );
+    const anchorTitles = Array.from(container.querySelectorAll('svg title'))
+      .map((title) => title.textContent ?? '');
+    expect(anchorTitles.some((text) => text === '补录 · 竞品上市（W11）：对手官旗补贴')).toBe(true);
+    // 补录锚与预标锚同语言：同为方形锚（10×10 rect stroke 描边）
+    const anchors = Array.from(container.querySelectorAll('svg rect'))
+      .filter((rect) => rect.getAttribute('width') === '10' && rect.getAttribute('height') === '10');
+    expect(anchors.length).toBe(MATE80.events.length + 1);
+    expect(document.body.textContent ?? '').toContain('事件锚（预标 / 补录）');
   });
 
-  it('终点拖柄键盘左移钳制最小窗口（8 周）', () => {
-    render(<ReferenceVolumeChart product={MATE80} />);
-    const handle = screen.getByLabelText(/时间窗终点拖柄/);
-    for (let i = 0; i < 60; i++) fireEvent.keyDown(handle, { key: 'ArrowLeft' });
-    expect(screen.getByText('查看 8/52 周')).toBeTruthy();
-  });
-
-  it('focusWeek + focusKey：窗口定位到事件附近 16 周并悬停该周', () => {
-    const { rerender } = render(<ReferenceVolumeChart product={MATE80} />);
-    rerender(<ReferenceVolumeChart product={MATE80} focusWeek={22} focusKey={1} />);
-    expect(screen.getByText('查看 16/52 周')).toBeTruthy();
-    expect(screen.getAllByText('W17').length).toBeGreaterThan(0);
-    // 窗口 [16,31]：618 档期带（W23–W26）在窗内，黑五带不在
-    expect(screen.queryByText(/黑五档期/)).toBeNull();
+  it('补录锚只在其周位于共享窗口内时出现', () => {
+    render(
+      <ReferenceVolumeChart
+        product={MATE80}
+        win={[0, 9]}
+        composedEvents={[{ id: 'ce-2', type: 'promo', week: 22, note: '店庆补贴' }]}
+      />,
+    );
+    expect(screen.queryByText(/补录 · 促销投放/)).toBeNull();
   });
 });
 
-describe('ReferenceVolumeChart · 缺数纪律与空态', () => {
+describe('ReferenceVolumeChart · 补录点选模式（pickMode）', () => {
+  it('pickMode 下点击某周：onPickWeek 回调带生命周期周序（松手列），选区带 / 读数被抑制', () => {
+    const onPickWeek = vi.fn();
+    const { container } = render(
+      <ReferenceVolumeChart product={MATE80} win={[8, 23]} pickMode onPickWeek={onPickWeek} />,
+    );
+    const shield = shieldOf(container);
+    fireEvent.pointerDown(shield, { pointerId: 7, clientX: clientXInWindow(2, 16), clientY: 60 });
+    fireEvent.pointerUp(shield, { pointerId: 7, clientX: clientXInWindow(2, 16), clientY: 60 });
+    // 窗口 [8,23]：列 2 = 生命周期周序 8+2 = 10（W11）
+    expect(onPickWeek).toHaveBeenCalledWith(10);
+    expect(screen.queryByText(/^区间 W/)).toBeNull();
+    // 图 aria 名提示点选模式
+    const overlay = container.querySelector('svg[role="img"]') as SVGSVGElement;
+    expect(overlay.getAttribute('aria-label') ?? '').toContain('补录点选模式');
+  });
+
+  it('pickMode 下拖动跨越多列：松手列（终点）为所选周', () => {
+    const onPickWeek = vi.fn();
+    const { container } = render(
+      <ReferenceVolumeChart product={MATE80} win={[8, 23]} pickMode onPickWeek={onPickWeek} />,
+    );
+    const shield = shieldOf(container);
+    fireEvent.pointerDown(shield, { pointerId: 7, clientX: clientXInWindow(1, 16), clientY: 60 });
+    fireEvent.pointerMove(shield, { pointerId: 7, clientX: clientXInWindow(5, 16), clientY: 60 });
+    fireEvent.pointerUp(shield, { pointerId: 7, clientX: clientXInWindow(5, 16), clientY: 60 });
+    expect(onPickWeek).toHaveBeenCalledWith(13);
+  });
+
+  it('非 pickMode：点击不触发 onPickWeek（正常选区语义）', () => {
+    const onPickWeek = vi.fn();
+    const { container } = render(<ReferenceVolumeChart product={MATE80} win={FULL} onPickWeek={onPickWeek} />);
+    const shield = shieldOf(container);
+    fireEvent.pointerDown(shield, { pointerId: 7, clientX: clientXAt(3), clientY: 60 });
+    fireEvent.pointerUp(shield, { pointerId: 7, clientX: clientXAt(3), clientY: 60 });
+    expect(onPickWeek).not.toHaveBeenCalled();
+    expect(screen.getByText('区间 W4–W4 · 1 周')).toBeTruthy();
+  });
+});
+
+describe('ReferenceVolumeChart · 聚焦定位与缺数纪律', () => {
+  it('focusWeek + focusKey：共享窗口已由父层定位，图内悬停该周（选区清除）', () => {
+    const { container, rerender } = render(<ReferenceVolumeChart product={MATE80} win={FULL} />);
+    const shield = shieldOf(container);
+    fireEvent.pointerDown(shield, { pointerId: 7, clientX: clientXAt(2), clientY: 60 });
+    fireEvent.pointerUp(shield, { pointerId: 7, clientX: clientXAt(4), clientY: 60 });
+    expect(screen.getByText(/^区间 W3/)).toBeTruthy();
+    // 父层共享窗口移到事件附近（[16,31] 含 W23）并触发 focusKey
+    rerender(<ReferenceVolumeChart product={MATE80} win={[16, 31]} focusWeek={22} focusKey={1} />);
+    expect(screen.queryByText(/^区间 W3/)).toBeNull();
+    // 悬停参考线落在 W23（窗口 [16,31] 内列 6）：参考线画在底层 svg（aria-hidden）
+    const hoverLine = Array.from(container.querySelectorAll('svg line'))
+      .find((line) => line.getAttribute('stroke') === '#a1a1a1');
+    expect(hoverLine).toBeTruthy();
+    expect(Number(hoverLine?.getAttribute('x1'))).toBeCloseTo(44 + (PLOT_WIDTH / 16) * 6.5, 0);
+  });
+
   it('缺采周：柱不画（50 根）、价格实线断开为两段 + 灰虚桥接、显示「—」注记', () => {
     const sparse: LifecycleProductSeed = {
       ...MATE80,
@@ -145,7 +226,7 @@ describe('ReferenceVolumeChart · 缺数纪律与空态', () => {
       points: MATE80.points.map((v, i) => (i === 5 || i === 6 ? null : v)),
       pricePoints: MATE80.pricePoints.map((v, i) => (i === 5 || i === 6 ? null : v)) as number[],
     };
-    const { container } = render(<ReferenceVolumeChart product={sparse} />);
+    const { container } = render(<ReferenceVolumeChart product={sparse} win={FULL} />);
     const bars = Array.from(container.querySelectorAll('rect')).filter((rect) =>
       (rect.getAttribute('fill') ?? '').startsWith(HUAWEI_FILL));
     expect(bars.length).toBe(50);
@@ -161,7 +242,7 @@ describe('ReferenceVolumeChart · 缺数纪律与空态', () => {
 
   it('空数据：空态「暂无可参照历史」，不崩溃', () => {
     const empty: LifecycleProductSeed = { ...MATE80, id: 'lc-empty', points: [], pricePoints: [] };
-    render(<ReferenceVolumeChart product={empty} />);
+    render(<ReferenceVolumeChart product={empty} win={[0, 7]} />);
     expect(screen.getByText('暂无可参照历史')).toBeTruthy();
   });
 });

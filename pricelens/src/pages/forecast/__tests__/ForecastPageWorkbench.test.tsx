@@ -107,23 +107,18 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     expect(screen.queryByText('演示')).toBeNull();
   });
 
-  it('上一代参照受控接线（TS2741 修复）：切 Pura 90 → 基线校正读数更新，草稿按模型版本落 sessionStorage', async () => {
+  it('上一代参照受控接线（A5 多面板）：追加上一代 Pura 90 面板 → 写主链、基线校正读数更新，草稿按模型版本落 sessionStorage', async () => {
     render(<App />);
     expect(document.body.textContent).toContain('主图基线校正 · 首预测周 W45');
-    const pickOption = async (optionText: string): Promise<void> => {
-      const trigger = screen.getAllByLabelText('选择上一代参照对象')[0];
-      fireEvent.mouseDown(trigger.querySelector('.ant-select-selector') ?? trigger);
-      const dropdown = await waitFor(() => {
-        const el = document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
-        if (!el) throw new Error('dropdown 未展开');
-        return el;
-      });
-      const option = [...dropdown.querySelectorAll('.ant-select-item-option')]
-        .find((item) => item.textContent === optionText);
-      if (!option) throw new Error(`option 未找到：${optionText}`);
-      fireEvent.click(option);
-    };
-    await pickOption('Pura 90 Pro（上上代）');
+    // 「＋ 添加参考」下拉（A5：面板增删替代原槽位下拉）追加 Pura 90（链内产品 → 写 prevGenReferenceId）
+    fireEvent.click(screen.getByRole('button', { name: '添加参考面板' }));
+    const item = await waitFor(() => {
+      const el = [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) [role="menuitem"]')]
+        .find((node) => node.textContent === 'Pura 90 Pro（上上代）');
+      if (!el) throw new Error('menu item 未找到：Pura 90 Pro（上上代）');
+      return el;
+    });
+    fireEvent.click(item);
     // 主链重算：W45 = 47000 × (40000 / 45000) → 同周龄比值 ×0.89
     expect(document.body.textContent).toContain('×0.89');
     // 草稿按模型版本落 sessionStorage（键 = forecast.workbench.<modelVersion>）
