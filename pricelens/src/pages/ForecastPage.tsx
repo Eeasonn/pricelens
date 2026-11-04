@@ -134,9 +134,11 @@ export default function ForecastPage() {
   const forecastWeekOptions = result.weeks.filter((week) => week.status === 'forecast')
     .map((week) => ({ week: week.week, weekNumber: week.weekNumber }));
 
-  // 智能弹框触发信号（A1 参考卡重构）：主图输入（手调应用 / 产品事件录入）
-  // 变化时向参考卡发 transient 信号（seq 递增），参考卡弹「我参考了这些产品，
-  // 它们在类似时间的表现」提示条（实现在 ReferencePanel 卡内，非 Modal）。
+  // 参考回放触发信号（§4.5）：主图输入（手调应用 / 产品事件变化）时向参考卡发
+  // transient 信号（seq 递增）；产品事件按明确映射带 eventType：
+  // competitor-launch → competitor-launch / own-promo → promo / cannibalization →
+  // cannibalization。新增事件传新增项类型；删除事件不把剩余数组末项误当被删
+  // 事件 → eventType 回退 undefined（参考卡展示当前有效事件，不声称「类似时间」）。
   const [referenceSignal, setReferenceSignal] = useState<ReferenceInputSignal | null>(null);
   const inputSigRef = useRef('');
   useEffect(() => {
@@ -149,9 +151,19 @@ export default function ForecastPage() {
     const [prevManual, prevEvent] = JSON.parse(prev) as [string, string];
     if (prevManual === manualSig && prevEvent === eventSig) return;
     let weekLabel: string | undefined;
+    let eventType: ReferenceInputSignal['eventType'] | undefined;
     if (prevEvent !== eventSig) {
-      const last = params.productEvents[params.productEvents.length - 1];
-      weekLabel = last ? `W${last.week}` : undefined;
+      const prevEvents = JSON.parse(prevEvent) as ProductEventSeed[];
+      const prevIds = new Set(prevEvents.map((event) => event.id));
+      const added = params.productEvents.find((event) => !prevIds.has(event.id));
+      if (added) {
+        weekLabel = `W${added.week}`;
+        eventType = added.type === 'own-promo' ? 'promo' : added.type;
+      } else {
+        const removed = prevEvents.find((event) => !params.productEvents.some((next) => next.id === event.id));
+        weekLabel = removed ? `W${removed.week}` : undefined;
+        eventType = undefined;
+      }
     } else {
       const manualWeeks = Object.keys(params.manual).map(Number).filter((week) => Number.isFinite(week));
       weekLabel = manualWeeks.length ? `W${Math.max(...manualWeeks)}` : undefined;
@@ -160,6 +172,7 @@ export default function ForecastPage() {
       seq: (prevSignal?.seq ?? 0) + 1,
       kind: prevEvent !== eventSig ? 'event' : 'manual',
       weekLabel,
+      eventType,
     }));
   }, [params.manual, params.productEvents]);
 

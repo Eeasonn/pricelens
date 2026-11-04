@@ -1,0 +1,37 @@
+# PriceLens GLM 网关：为 GitHub Pages 静态站提供安全的预设模型接入。
+# 数据边界：GLM API key 只存 Worker secret（wrangler secret put GLM_API_KEY），
+# 绝不写进本文件、任何源码、前端 bundle 或 git。
+
+name = "pricelens-glm-gateway"
+main = "src/index.ts"
+# 较新的稳定兼容日期；若本地 wrangler 版本较旧报 compatibility 错误，
+# 下调到本地 wrangler 支持的日期即可（只影响运行时行为开关，不影响本网关逻辑）。
+compatibility_date = "2025-05-05"
+
+# 非敏感配置走 vars。部署后也可以在 dashboard → Workers → 本服务 →
+# Settings → Variables and Secrets 里修改（dashboard 优先级更高）。
+# 把 ALLOWED_ORIGINS 换成你的 GitHub Pages 域名；本地开发加 localhost。
+[vars]
+# 生产值（2026-11-04 主线部署时写入）。白名单条目自动归一到 scheme+host+port，
+# 所以写 Pages 子路径 https://eeasonn.github.io/pricelens 也可以。
+ALLOWED_ORIGINS = "https://eeasonn.github.io/pricelens,http://localhost:5173,http://localhost:5177"
+# 未配置 ALLOWED_ORIGINS = 拒绝所有跨域请求（fail-closed），仅 health 例外。
+# 以下可选项按需开启（不配置时使用 src/config.ts 中的默认值）：
+GLM_MODEL = "glm-5.3-flash"      # 模型覆写，必须在 src/config.ts 白名单内
+# GLM_THINKING = "disabled"        # 或 "enabled"；注意思考 token 也计入 max_tokens
+# RATE_LIMIT_MAX = "20"            # 每 isolate、每 IP 滑动窗内最大请求数
+# RATE_LIMIT_WINDOW_SECONDS = "60" # 滑动窗宽度（秒）
+# QUOTA_DAILY_MAX = "200"          # 每日 GLM 调用配额；0 = 不限量
+
+# ── 可选 KV 绑定：日配额持久化计数 ─────────────────────────────────────
+# 未绑定时的降级路径（默认）：日配额退化为 isolate 内存计数——isolate 回收即
+# 清零、多实例各自计数，只能拦住单实例内的明显滥用；此时 GET /api/agent/health
+# 的 rateLimitPrecision 会如实标注 "memory-per-isolate"。
+# 绑定方法：
+#   1. npx wrangler kv namespace create QUOTA_KV
+#   2. 把命令输出的 id 填到下面，并取消下面两行注释后重新 deploy
+# 注意：KV 是最终一致（读取侧默认缓存约 60s），日配额是近似值；
+# 真正的硬上限请同时配置 BigModel 控制台的消费上限（见 README）。
+[[kv_namespaces]]
+binding = "QUOTA_KV"
+id = "83ffd4de0ab0475f901d5e8d131ed6d2"

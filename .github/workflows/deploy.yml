@@ -43,6 +43,11 @@ jobs:
         run: npm run test -- --run
       - name: Build (vite build + sync-single)
         working-directory: pricelens
+        env:
+          # 平台预设 GLM 网关地址（仓库 Settings → Secrets and variables → Actions →
+          # Variables 里的 AGENT_GATEWAY_URL）。未配置该变量时此处展开为空串 =
+          # 构建不注入预设网关，前端维持纯本地引擎，向后兼容。
+          VITE_AGENT_API_BASE_URL: ${{ vars.AGENT_GATEWAY_URL }}
         run: npm run build
       - name: Verify data and build artifacts
         working-directory: pricelens

@@ -140,6 +140,8 @@ export default function VolumeBars(props: {
   onAxisLimit: (kind: 'max', value: number | null) => void;
   /** 当前选择区间的背景带（视觉 demo：浅蓝底 + 双侧竖线），铺绘图区全高、只盖选区桶。 */
   selectionBand?: { startIndex: number; endIndex: number } | null;
+  /** 销量轴侧：默认 'right'（量价页既有几何不变）；参考卡传 'left' 落实左量右价。 */
+  axisSide?: 'right' | 'left';
 }) {
   const { geom, values, vMax } = props;
   if (!geom || geom.n <= 0 || !(props.plotHeight > 0) || !(vMax > 0)) return null;
@@ -168,7 +170,8 @@ export default function VolumeBars(props: {
     };
   });
 
-  const axisX = geom.plotLeft + geom.plotWidth + 10;
+  const axisSide = props.axisSide ?? 'right';
+  const axisX = axisSide === 'left' ? geom.plotLeft - 10 : geom.plotLeft + geom.plotWidth + 10;
   const band = props.selectionBand;
   const bandFrame = band ? rangeBandFrame(geom.plotLeft, geom.plotWidth, geom.n, band.startIndex, band.endIndex) : null;
   const commit = (value: number | null): void => {
@@ -212,20 +215,36 @@ export default function VolumeBars(props: {
       </svg>
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
         <div style={{ position: 'absolute', left: axisX, top: props.plotTop, width: 1, height: props.plotHeight, background: color.hairline }} />
-        {ticks.map((tick) => (
+        {ticks.map((tick) => axisSide === 'left' ? (
+          <div key={tick.label + tick.y} style={{ position: 'absolute', left: 0, width: Math.max(0, axisX - 4), top: tick.y - 6, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+            <span className="tnum" style={{ fontSize: 10, lineHeight: '12px', color: color.mute, fontVariantNumeric: 'tabular-nums' }}>{tick.label}</span>
+            <span style={{ width: 4, height: 1, background: color.hairlineStrong }} />
+          </div>
+        ) : (
           <div key={tick.label + tick.y} style={{ position: 'absolute', left: axisX - 4, top: tick.y - 6, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 4, height: 1, background: color.hairlineStrong }} />
             <span className="tnum" style={{ fontSize: 10, lineHeight: '12px', color: color.mute, fontVariantNumeric: 'tabular-nums' }}>{tick.label}</span>
           </div>
         ))}
-        <div style={{ position: 'absolute', left: axisX - 4, top: props.plotTop + 12, display: 'flex', alignItems: 'flex-start', gap: 4, pointerEvents: 'auto' }}>
-          <span style={{ width: 4, height: 1, marginTop: 8, background: color.hairlineStrong }} />
-          <div>
-            <VolumeAxisLimit limit={props.axisLimits.max} autoValue={axisMax} onCommit={commit} />
-            <div style={{ color: color.mute, fontSize: 9, lineHeight: '12px' }}>{props.axisLimits.max == null ? '自动' : '手动'}</div>
-            {clip.clipped && <div style={{ color: color.error, fontSize: 9, lineHeight: '12px', whiteSpace: 'nowrap' }}>超出当前上限</div>}
+        {axisSide === 'left' ? (
+          <div style={{ position: 'absolute', left: 0, width: Math.max(0, axisX - 4), top: props.plotTop + 12, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 4, pointerEvents: 'auto', textAlign: 'right' }}>
+            <div>
+              <VolumeAxisLimit limit={props.axisLimits.max} autoValue={axisMax} onCommit={commit} />
+              <div style={{ color: color.mute, fontSize: 9, lineHeight: '12px' }}>{props.axisLimits.max == null ? '自动' : '手动'}</div>
+              {clip.clipped && <div style={{ color: color.error, fontSize: 9, lineHeight: '12px', whiteSpace: 'nowrap' }}>超出当前上限</div>}
+            </div>
+            <span style={{ width: 4, height: 1, marginTop: 8, background: color.hairlineStrong }} />
           </div>
-        </div>
+        ) : (
+          <div style={{ position: 'absolute', left: axisX - 4, top: props.plotTop + 12, display: 'flex', alignItems: 'flex-start', gap: 4, pointerEvents: 'auto' }}>
+            <span style={{ width: 4, height: 1, marginTop: 8, background: color.hairlineStrong }} />
+            <div>
+              <VolumeAxisLimit limit={props.axisLimits.max} autoValue={axisMax} onCommit={commit} />
+              <div style={{ color: color.mute, fontSize: 9, lineHeight: '12px' }}>{props.axisLimits.max == null ? '自动' : '手动'}</div>
+              {clip.clipped && <div style={{ color: color.error, fontSize: 9, lineHeight: '12px', whiteSpace: 'nowrap' }}>超出当前上限</div>}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

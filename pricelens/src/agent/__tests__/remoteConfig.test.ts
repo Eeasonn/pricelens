@@ -42,10 +42,30 @@ describe('resolveAgentEngine', () => {
 });
 
 describe('describeAgentEngine', () => {
-  it('labels the offline local engine and the remote-with-fallback engine', () => {
+  it('labels the offline local engine', () => {
     expect(describeAgentEngine({ source: 'none' }).label).toBe('本地确定性引擎 · 离线可用');
-    const remote = describeAgentEngine({ baseUrl: 'http://127.0.0.1:8787', source: 'local-storage' });
-    expect(remote.label).toBe('远端 Agent 叙述 · 本地引擎兜底');
-    expect(remote.hint).toContain(AGENT_REMOTE_BASE_URL_KEY);
+    expect(describeAgentEngine({ source: 'none' }).engine).toBe('local');
+  });
+
+  it('distinguishes the platform-preset gateway (env) from self-configured (local-storage)', () => {
+    const preset = describeAgentEngine({ baseUrl: 'https://gateway.example.com', source: 'env' });
+    expect(preset.engine).toBe('remote-with-fallback');
+    expect(preset.label).toBe('平台预设网关 · GLM 叙述 · 本地兜底');
+    expect(preset.hint).toContain('平台预设 GLM 网关');
+    expect(preset.hint).toContain('https://gateway.example.com');
+    expect(preset.hint).toContain('不含密钥');
+
+    const selfConfigured = describeAgentEngine({ baseUrl: 'http://127.0.0.1:8787', source: 'local-storage' });
+    expect(selfConfigured.engine).toBe('remote-with-fallback');
+    expect(selfConfigured.label).toBe('远端 Agent 叙述 · 本地引擎兜底');
+    expect(selfConfigured.hint).toContain('自配远端服务');
+    expect(selfConfigured.hint).toContain(AGENT_REMOTE_BASE_URL_KEY);
+  });
+
+  it('keeps the two remote labels distinct', () => {
+    const preset = describeAgentEngine({ baseUrl: 'https://gateway.example.com', source: 'env' });
+    const selfConfigured = describeAgentEngine({ baseUrl: 'https://gateway.example.com', source: 'local-storage' });
+    expect(preset.label).not.toBe(selfConfigured.label);
+    expect(preset.hint).not.toBe(selfConfigured.hint);
   });
 });

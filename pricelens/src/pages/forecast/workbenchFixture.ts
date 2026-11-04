@@ -88,6 +88,9 @@ export interface ReferenceSeriesSeed {
 
 /** 生命周期事件锚（四类：竞品上市 / 品上市 / 促销 / 挤兑；智能弹框组稿用）。 */
 export interface LifecycleEventSeed {
+  /** 稳定 id（产品内唯一）：本地覆写层（referenceWorkspace overrides）以此为锚，
+   *  不使用可编辑的周、类型或标题作 key。 */
+  id: string;
   /** 生命周期周序（0 = 上市首周）。 */
   week: number;
   type: 'competitor-launch' | 'own-launch' | 'promo' | 'cannibalization';
@@ -116,8 +119,8 @@ export interface LifecycleProductSeed {
   launchWeekLabel: string;
   /** 全生命周期周销（台，周序 0 起；null = 缺采周，显示「—」不造 0）。 */
   points: Array<number | null>;
-  /** 全生命周期价格（USD，与 points 同周序对齐）。 */
-  pricePoints: number[];
+  /** 全生命周期价格（USD，与 points 同周序对齐；null = 缺采周，不造 0）。 */
+  pricePoints: Array<number | null>;
   /** 大促档期带（生命周期周序）。 */
   promoBands: LifecyclePromoBandSeed[];
   /** 事件锚（四类各 ≥1 覆盖于池内）。 */
@@ -271,7 +274,7 @@ function lifecycleVolumes(seed: number, cfg: {
 }
 
 /** 全生命周期价格：阶梯调价表（week 起生效）+ 档期直降。 */
-function lifecyclePrices(launch: number, cuts: Array<{ week: number; price: number }>, promoBands: LifecyclePromoBandSeed[]): number[] {
+function lifecyclePrices(launch: number, cuts: Array<{ week: number; price: number }>, promoBands: LifecyclePromoBandSeed[]): Array<number | null> {
   const out: number[] = [];
   for (let w = 0; w < LIFECYCLE_WEEKS; w++) {
     let price = launch;
@@ -312,11 +315,11 @@ const lifecyclePool: LifecycleProductSeed[] = [
       { label: '黑五档期', startWeek: 46, endWeek: 49, priceDrop: 100 },
     ],
     events: [
-      { week: 0, type: 'own-launch', label: '上市首销', impactPct: 30, impactWeeks: 4 },
-      { week: 18, type: 'competitor-launch', label: 'Galaxy S26 上市', impactPct: -6, impactWeeks: 4 },
-      { week: 22, type: 'promo', label: '618 档期脉冲', impactPct: 42, impactWeeks: 4 },
-      { week: 34, type: 'cannibalization', label: 'Pura 90 上市挤兑', impactPct: -9, impactWeeks: 3 },
-      { week: 46, type: 'promo', label: '黑五档期脉冲', impactPct: 46, impactWeeks: 4 },
+      { id: 'ev-m80-launch', week: 0, type: 'own-launch', label: '上市首销', impactPct: 30, impactWeeks: 4 },
+      { id: 'ev-m80-s26', week: 18, type: 'competitor-launch', label: 'Galaxy S26 上市', impactPct: -6, impactWeeks: 4 },
+      { id: 'ev-m80-618', week: 22, type: 'promo', label: '618 档期脉冲', impactPct: 42, impactWeeks: 4 },
+      { id: 'ev-m80-pura90', week: 34, type: 'cannibalization', label: 'Pura 90 上市挤兑', impactPct: -9, impactWeeks: 3 },
+      { id: 'ev-m80-bf', week: 46, type: 'promo', label: '黑五档期脉冲', impactPct: 46, impactWeeks: 4 },
     ],
   },
   {
@@ -345,10 +348,10 @@ const lifecyclePool: LifecycleProductSeed[] = [
       { label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 80 },
     ],
     events: [
-      { week: 0, type: 'own-launch', label: '上市首销', impactPct: 26, impactWeeks: 4 },
-      { week: 20, type: 'promo', label: '618 档期脉冲', impactPct: 38, impactWeeks: 4 },
-      { week: 38, type: 'cannibalization', label: 'Mate 80 上市挤兑', impactPct: -7, impactWeeks: 3 },
-      { week: 44, type: 'promo', label: '双11 档期脉冲', impactPct: 38, impactWeeks: 4 },
+      { id: 'ev-p90-launch', week: 0, type: 'own-launch', label: '上市首销', impactPct: 26, impactWeeks: 4 },
+      { id: 'ev-p90-618', week: 20, type: 'promo', label: '618 档期脉冲', impactPct: 38, impactWeeks: 4 },
+      { id: 'ev-p90-m80', week: 38, type: 'cannibalization', label: 'Mate 80 上市挤兑', impactPct: -7, impactWeeks: 3 },
+      { id: 'ev-p90-d11', week: 44, type: 'promo', label: '双11 档期脉冲', impactPct: 38, impactWeeks: 4 },
     ],
   },
   {
@@ -376,10 +379,10 @@ const lifecyclePool: LifecycleProductSeed[] = [
       { label: '黑五档期', startWeek: 46, endWeek: 49, priceDrop: 110 },
     ],
     events: [
-      { week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -6, impactWeeks: 4 },
-      { week: 1, type: 'promo', label: '首销促销期', impactPct: -6, impactWeeks: 4 },
-      { week: 30, type: 'competitor-launch', label: 'Galaxy S25 Edge 上市', impactPct: -5, impactWeeks: 3 },
-      { week: 46, type: 'promo', label: '黑五档期促销', impactPct: -7, impactWeeks: 3 },
+      { id: 'ev-s25-launch', week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -6, impactWeeks: 4 },
+      { id: 'ev-s25-promo', week: 1, type: 'promo', label: '首销促销期', impactPct: -6, impactWeeks: 4 },
+      { id: 'ev-s25-edge', week: 30, type: 'competitor-launch', label: 'Galaxy S25 Edge 上市', impactPct: -5, impactWeeks: 3 },
+      { id: 'ev-s25-bf', week: 46, type: 'promo', label: '黑五档期促销', impactPct: -7, impactWeeks: 3 },
     ],
   },
   {
@@ -401,9 +404,9 @@ const lifecyclePool: LifecycleProductSeed[] = [
     ]),
     promoBands: [{ label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 60 }],
     events: [
-      { week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -8, impactWeeks: 5 },
-      { week: 26, type: 'competitor-launch', label: 'iPhone 17e 上市', impactPct: -4, impactWeeks: 3 },
-      { week: 44, type: 'promo', label: '双11 档期促销', impactPct: -5, impactWeeks: 3 },
+      { id: 'ev-ip17-launch', week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -8, impactWeeks: 5 },
+      { id: 'ev-ip17-17e', week: 26, type: 'competitor-launch', label: 'iPhone 17e 上市', impactPct: -4, impactWeeks: 3 },
+      { id: 'ev-ip17-d11', week: 44, type: 'promo', label: '双11 档期促销', impactPct: -5, impactWeeks: 3 },
     ],
   },
   {
@@ -425,8 +428,8 @@ const lifecyclePool: LifecycleProductSeed[] = [
     ]),
     promoBands: [{ label: '双11 档期', startWeek: 44, endWeek: 47, priceDrop: 70 }],
     events: [
-      { week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -4, impactWeeks: 3 },
-      { week: 44, type: 'promo', label: '双11 档期促销', impactPct: -6, impactWeeks: 3 },
+      { id: 'ev-x200-launch', week: 0, type: 'competitor-launch', label: '上市首销', impactPct: -4, impactWeeks: 3 },
+      { id: 'ev-x200-d11', week: 44, type: 'promo', label: '双11 档期促销', impactPct: -6, impactWeeks: 3 },
     ],
   },
 ];

@@ -19,6 +19,13 @@ export const LPL = {
   cfgAnomalyMarks: 'LPL3.config.anomalyMarks',
   /** 最近使用的主分析组合（第一百一十七轮，选择产品浮窗快捷 chips；上限 5 组） */
   uiMainCombos: 'LPL3.ui.mainCombos',
+  /** 量价参考卡事件类型库（浏览器级长期配置：内置类型颜色覆写 + 自定义类型）。
+   *  完整键 = `${referenceEventTypes}`（单键存整库，schemaVersion 内嵌）。 */
+  referenceEventTypes: 'LPL3.config.referenceEventTypes',
+  /** 量价参考卡工作区（已保存补录 / 预标覆写 / 软删除 / 撤销历史 / 编辑器草稿）。
+   *  完整键 = `${referenceWorkspace}.${scopeHash}`，scopeHash 由模型版本 +
+   *  国家 + 产业 + 渠道 + 产品稳定序列化生成，避免未来接入真实筛选后串草稿。 */
+  referenceWorkspace: 'LPL3.forecast.referenceWorkspace',
 } as const;
 
 /** 配置变更广播：配置页保存后主页立即生效（§13） */

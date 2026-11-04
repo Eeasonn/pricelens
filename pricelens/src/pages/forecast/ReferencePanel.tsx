@@ -1,87 +1,91 @@
 // ============================================================
-// 推演工作台 v2 · 层②量价参考（A5 参考卡二轮重构：多面板 + 历史事件补录）：
-// 与量价走势页（&p=volume）面板体系完全同构——参考面板数动态（默认 2：
-// 上一代 Mate 80 + 当前友商对照），「＋ 添加参考」下拉（池内未添加产品，
-// 分组「上一代 · 进主链 / 友商 · 对照」）追加面板，面板头 × 删除（至少保留
-// 1 个；删除上一代面板 = 主链参照回退默认 prevGenPool[0]，徽标随实际指向
-// 切换）；≤2 面板均分一行，>2 不折行横向滚动（单一横滚容器，量价页同款
-// 轨道宽度策略，minWidth 880 保可读下限）。
-// 每面板 = 量柱（复用 volume/VolumeBars）+ 价格线（右轴 $）+ 大促档期琥珀带
-// + 事件锚（预标 + 补录）+ PointerShield（悬停列 + 拖选区间读数；拖选各面板
-// 独立，同量价页非同步语义）。Y 轴双轴刻度常显。
-// 时间轴 = 面板区底部共享时间轨（对齐 volume/PanelTimeTrack 视觉：trackColors
-// 轨道 + 选中窗 + 两端拖柄缩放 + 整段平移 + 键盘微调），控制全部面板窗口
-// （52 周全池内滑动，最小 8 周）——替换 A1 的每图独立滑条；窗口联动天然成立。
-// 唯一差异 = 历史事件补录（「作业草稿」语义）：面板头「＋ 补录事件」弹
-// ReferenceEventComposer 弹层（类型 / 周两式选择含图上点选 / 说明必填 /
-// 仅本次会话标识）；提交后锚点上图（与预标锚同语言）+ 图下名录（分组
-// 「预标 / 补录」，补录可删）。补录存卡内会话 state（key 含面板产品 id），
-// 刷新即清；不写主链、不参与模型推演。
-// prevGenReferenceId 受控语义保留：上一代面板存在时主链指向它（添加上一代
-// 产品面板即写主链；页面侧重置基准 → 首个链内面板跟随主链参照）。
-// 智能弹框（A1 保留）：主图输入（手调应用 / 产品事件录入）时经 inputSignal
-// 触发卡头顶部 transient 条（非 Modal，8 秒自动收起，可手动关），按面板列出
-// 参照产品在类似时间的表现；点击条目定位到对应事件周（共享窗口平移 + 悬停）。
+// 推演工作台 v2 · 层②「量价参考产品」卡（作业化重设计）：
+// 统一有效事件视图 + 独立本地工作区 + 每面板独立时间窗。
+// - 卡头只留「仅历史」「模拟历史」两个状态标；无长 hint、无 IoBar、无
+//   常驻教程（§3.5 文案清单）。
+// - 面板体系：默认 2 面板（上一代 + 友商对照）、「＋ 添加参考」下拉
+//   （上一代 · 主链 / 友商 · 对照）、面板头 × 删除（至少 1 个；删除上一代
+//   面板 = 主链回退默认参照）；≤2 均分、>2 单一横滚容器（minWidth 880）。
+// - 每面板窗口存会话视图态 forecast.referenceView.<scopeHash>
+//   （usePageViewState：panelIds / windows / syncAge（默认关）/ 锁定表）；
+//   悬停与拖动瞬态不持久化。窗口只决定查看范围，不裁剪模型输入、
+//   不重算同周龄比值；主链仍由页面受控 prevGenReferenceId 写入。
+// - 卡级「同周龄同步」开启后，任一未锁定面板驱动其余未锁定面板按同周龄
+//   （数值周龄）钳制；锁定面板的轨道与窗口预设禁用，同步 / 回放定位 /
+//   名录定位均不改写它。
+// - 事件作业：fixture 预标（稳定 id + 覆写层）+ 本地补录（软删除）→ 统一
+//   EffectiveReferenceEvent 供图 / 名录 / 编辑器 / 回放 / 读数消费；工作区
+//   localStorage 持久化（刷新 / 重开页签可恢复，删除面板不清草稿），编辑器
+//   草稿自动保存（刷新后「未完成」点击恢复，不自动抢开弹层），撤销 =
+//   20 步 before/after patch 重放；写失败显式「未持久化」+ 重试。
+// - 参考回放（§4.5）：信号带可选 eventType（映射自主图产品事件），候选按
+//   「与面板窗口中心距离 → 起周 → id」稳定排序每面板 1 条；不 8 秒自动
+//   消失（手动关 / 下一信号替换）；补录条目带「草稿」标；无匹配显
+//   「无可回放事件」。
+// - 红线：补录 / 覆写 / 窗口 / 颜色绝不进入 WorkbenchParams / computeWorkbench；
+//   prevGenReferenceId 受控语义原样；fixture 原始对象不被修改。
 // ============================================================
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Dropdown, Popover } from 'antd';
-import { panWindow } from '../../chart/PriceTrend/helpers';
-import { brandColorOf, color, font, radius, selectAccent, space, trackColors } from '../../theme/tokens';
+import { brandColorOf, color, radius, space } from '../../theme/tokens';
+import usePageViewState from '../../state/usePageViewState';
 import type { LifecycleProductSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult } from './workbenchModel';
-import { IoBar, SectionHead, SimChip, fmtSignedPct, workbenchCardStyle } from './WorkbenchBits';
+import { SectionHead, SimChip, workbenchCardStyle } from './WorkbenchBits';
 import ReferenceVolumeChart from './ReferenceVolumeChart';
-import ReferenceEventComposer, {
-  REFERENCE_EVENT_TONES,
-  type ReferenceComposedDraft,
-  type ReferenceComposedEvent,
-  type ReferenceComposerValue,
-} from './ReferenceEventComposer';
+import ReferenceTimeTrack, { type ReferenceWindowPreset } from './ReferenceTimeTrack';
+import ReferenceEventList from './ReferenceEventList';
+import ReferenceEventComposer from './ReferenceEventComposer';
+import {
+  clampReferenceWindow,
+  eventFocusWindow,
+  eventRangeLabel,
+  fullWindowOf,
+  mergeEffectiveEvents,
+  type EffectiveReferenceEvent,
+  type ReferenceEditorDraft,
+  type ReferenceEventDraftValue,
+  type ReferenceEventEditableFields,
+} from './referenceEventModel';
+import {
+  referenceEventColorOf,
+  referenceEventLabelOf,
+  useReferenceEventTypes,
+} from './referenceEventTypeStore';
+import {
+  discardReferenceEditorDraft,
+  referenceScopeHash,
+  referenceUndoLabel,
+  useReferenceWorkspace,
+} from './useReferenceWorkspace';
 
-/** 主图输入信号（页面接线）：手调 / 产品事件变化时 seq 递增，驱动智能弹框。 */
+/** 主图输入信号（页面接线）：手调 / 产品事件变化时 seq 递增，驱动参考回放条。 */
 export interface ReferenceInputSignal {
   seq: number;
   kind: 'manual' | 'event';
   /** 变化涉及的周标签（如 W47），可缺省。 */
   weekLabel?: string;
+  /**
+   * 产品事件类型（映射后）：competitor-launch / promo / cannibalization。
+   * 新增事件时传新增项类型；删除事件与手动微调为 undefined（展示当前有效
+   * 事件，不声称「类似时间」精准匹配）。
+   */
+  eventType?: 'competitor-launch' | 'promo' | 'cannibalization';
 }
 
-/** 共享时间轨最小窗口（周），与量价页面板时间轴同钳法。 */
-const TRACK_MIN_WINDOW = 8;
-/** 聚焦定位窗口跨度（周），与 A1 口径一致。 */
-const FOCUS_SPAN = 16;
-/** 横滚轨道可读下限（量价页同款策略）。 */
-const TRACK_MIN_WIDTH = 880;
+/** 会话视图态（切页 / 刷新恢复；瞬态不进这里）。 */
+interface ReferenceViewState {
+  panelIds: string[];
+  windows: Record<string, [number, number]>;
+  syncAge: boolean;
+  lockedByProduct: Record<string, boolean>;
+}
 
-const clampInt = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, Math.round(v)));
+const TRACK_MIN_WIDTH = 880;
 
 const shortLabelOf = (product: LifecycleProductSeed): string => product.label.replace(/（[^）]*）/g, '').trim();
 
-interface HintEntry {
-  panelId: string;
-  productId: string;
-  text: string;
-  week: number;
-}
-
-interface HintState {
-  kind: 'manual' | 'event';
-  weekLabel?: string;
-  entries: HintEntry[];
-}
-
-/** 智能弹框组稿：取参照产品带影响读数的事件（档期事件优先），每面板最多一条。 */
-function hintEntriesOf(product: LifecycleProductSeed | null, panelId: string): HintEntry[] {
-  if (!product) return [];
-  const events = product.events.filter((ev) => ev.impactPct != null && ev.impactWeeks != null);
-  const ranked = [...events].sort((a, b) => Number(b.type === 'promo') - Number(a.type === 'promo'));
-  return ranked.slice(0, 1).map((ev) => ({
-    panelId,
-    productId: product.id,
-    week: ev.week,
-    text: `${shortLabelOf(product)} ${ev.label} ${fmtSignedPct(ev.impactPct as number)}×${ev.impactWeeks} 周`,
-  }));
-}
+const clampInt = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, Math.round(v)));
 
 const smallChipStyle = {
   display: 'inline-flex',
@@ -94,7 +98,7 @@ const smallChipStyle = {
   whiteSpace: 'nowrap' as const,
 };
 
-/** 面板头小按钮（＋ 补录事件 / × 删除共用语言）。 */
+/** 面板头小按钮（＋事件 / × 删除共用语言）。 */
 function headButtonStyle(danger: boolean): CSSProperties {
   return {
     display: 'inline-flex',
@@ -115,191 +119,85 @@ function headButtonStyle(danger: boolean): CSSProperties {
 }
 
 // ------------------------------------------------------------
-// 共享时间轨（对齐 volume/PanelTimeTrack 视觉）：轨道 + 选中窗 + 两端拖柄
-// （拖柄缩放 / 键盘微调）+ 整段平移；一个轨道控制全部参考面板窗口。
-// 生命周期周为相对周龄刻度（W1 = 上市首周），不走日历 axisTickPlan。
+// 参考回放条目（§4.5）：与面板窗口中心距离 → 起周 → id 稳定排序，每面板 1 条。
 // ------------------------------------------------------------
-function SharedTimeTrack(props: {
-  total: number;
-  win: [number, number];
-  onChange: (s: number, e: number) => void;
-}) {
-  const { total, win, onChange } = props;
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ kind: 'start' | 'end' | 'pan'; startX: number; startS: number; startE: number } | null>(null);
-  const [panning, setPanning] = useState(false);
-  const [activeDrag, setActiveDrag] = useState<'start' | 'end' | 'pan' | null>(null);
-  const n = total;
-  if (n <= 0) return null;
+interface ReplayEntry {
+  productId: string;
+  eventId: string;
+  startWeek: number;
+  endWeek: number;
+  text: string;
+  composed: boolean;
+}
 
-  const pct = (i: number): number => (i / Math.max(1, n)) * 100;
-  const s = clampInt(win[0], 0, n - 1);
-  const e = clampInt(win[1], s, n - 1);
-
-  const onDragDown = (kind: 'start' | 'end' | 'pan') => (ev: ReactPointerEvent<HTMLElement>): void => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    dragRef.current = { kind, startX: ev.clientX, startS: s, startE: e };
-    setActiveDrag(kind);
-    if (kind === 'pan') setPanning(true);
-    if (typeof ev.currentTarget.setPointerCapture === 'function') ev.currentTarget.setPointerCapture(ev.pointerId);
+function replayEntryFor(
+  product: LifecycleProductSeed,
+  events: EffectiveReferenceEvent[],
+  win: [number, number],
+  eventType: ReferenceInputSignal['eventType'],
+): ReplayEntry | null {
+  const candidates = eventType ? events.filter((ev) => ev.typeId === eventType) : events;
+  if (candidates.length === 0) return null;
+  const center = (win[0] + win[1]) / 2;
+  const ranked = [...candidates].sort((a, b) =>
+    Math.abs((a.startWeek + a.endWeek) / 2 - center) - Math.abs((b.startWeek + b.endWeek) / 2 - center)
+    || a.startWeek - b.startWeek
+    || a.id.localeCompare(b.id));
+  const ev = ranked[0];
+  return {
+    productId: product.id,
+    eventId: ev.id,
+    startWeek: ev.startWeek,
+    endWeek: ev.endWeek,
+    text: `${shortLabelOf(product)} · ${eventRangeLabel(ev)} · ${ev.label}`,
+    composed: ev.source === 'composed',
   };
-  const onDragMove = (ev: ReactPointerEvent<HTMLElement>): void => {
-    const d = dragRef.current;
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!d || !rect || rect.width <= 0) return;
-    if (d.kind === 'pan') {
-      const delta = Math.round(((ev.clientX - d.startX) / rect.width) * n);
-      const w = panWindow(d.startS, d.startE, 0, n - 1, delta);
-      if (w.s !== s || w.e !== e) onChange(w.s, w.e);
-      return;
-    }
-    const i = clampInt(((ev.clientX - rect.left) / rect.width) * n, 0, n - 1);
-    // 与键盘微调同钳法：起点 ≤ 终点 −(MIN−1)、终点 ≥ 起点+MIN−1
-    if (d.kind === 'start') onChange(clampInt(i, 0, Math.max(0, d.startE - (TRACK_MIN_WINDOW - 1))), d.startE);
-    else onChange(d.startS, clampInt(i, Math.min(n - 1, d.startS + TRACK_MIN_WINDOW - 1), n - 1));
-  };
-  const onDragUp = (ev: ReactPointerEvent<HTMLElement>): void => {
-    if (!dragRef.current) return;
-    dragRef.current = null;
-    setPanning(false);
-    setActiveDrag(null);
-    const el = ev.currentTarget;
-    if (typeof el.hasPointerCapture === 'function' && el.hasPointerCapture(ev.pointerId)) {
-      el.releasePointerCapture(ev.pointerId);
-    }
-  };
-  const nudge = (kind: 'start' | 'end', delta: number): void => {
-    if (kind === 'start') onChange(clampInt(s + delta, 0, Math.max(0, e - (TRACK_MIN_WINDOW - 1))), e);
-    else onChange(s, clampInt(e + delta, Math.min(n - 1, s + TRACK_MIN_WINDOW - 1), n - 1));
-  };
-
-  // 中间刻度（密度 n/4，PanelTimeTrack 同档）：与窗口端点相邻 ±1 的让位（端点标签恒标）
-  const step = Math.max(1, Math.ceil(n / 4));
-  const midIdx = Array.from({ length: n }, (_, i) => i)
-    .filter((i) => i % step === 0 && Math.abs(i - s) > 1 && Math.abs(i - e) > 1);
-
-  const gripStyle = (kind: 'start' | 'end'): CSSProperties => ({
-    width: activeDrag === kind ? 5 : 3,
-    height: 20,
-    borderRadius: radius.pill,
-    background: activeDrag === kind ? selectAccent : trackColors.handle,
-  });
-  const handleStyle = (kind: 'start' | 'end'): CSSProperties => ({
-    position: 'absolute',
-    left: `${pct(kind === 'start' ? s : e + 1)}%`,
-    top: 0,
-    width: 18,
-    height: 20,
-    border: 0,
-    background: 'transparent',
-    transform: 'translateX(-50%)',
-    cursor: 'ew-resize',
-    touchAction: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-    zIndex: 3,
-  });
-
-  return (
-    <div ref={trackRef} style={{ position: 'relative', height: 52, marginTop: space.sm, minWidth: 0 }}>
-      <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 20, borderRadius: 5, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
-      <div
-        title="拖动调整全部面板的查看窗口，不改变参照数据范围"
-        aria-label="平移参考时间窗"
-        style={{
-          position: 'absolute',
-          left: `${pct(s)}%`,
-          width: `${pct(e + 1) - pct(s)}%`,
-          top: 0,
-          height: 20,
-          borderRadius: 5,
-          background: panning ? trackColors.fillStrong : trackColors.fill,
-          boxShadow: `inset 0 0 0 1px ${trackColors.handleSoft}`,
-          cursor: panning ? 'grabbing' : 'grab',
-          touchAction: 'none',
-          zIndex: 1,
-        }}
-        onPointerDown={onDragDown('pan')}
-        onPointerMove={onDragMove}
-        onPointerUp={onDragUp}
-        onPointerCancel={onDragUp}
-      />
-      {[s, e].map((m) => (
-        <span key={`edge-tick-${m}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(m) + 0.5 / n}%`, top: 4, width: 1, height: 12, transform: 'translateX(-50%)', background: color.hairlineStrong, pointerEvents: 'none' }} />
-      ))}
-      {midIdx.map((i) => (
-        <span key={`mid-tick-${i}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(i) + 0.5 / n}%`, top: 7, width: 1, height: 6, transform: 'translateX(-50%)', background: trackColors.tick, pointerEvents: 'none' }} />
-      ))}
-      {/* 两端拖柄标签（恒标，白底兜底遮盖；中间刻度只画线 + 少量灰标签） */}
-      <span aria-hidden="true" className="tnum" style={{ position: 'absolute', left: `${pct(s)}%`, top: 26, transform: 'translateX(-12%)', fontSize: 12, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', color: color.body, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none', background: color.canvas, padding: '0 3px' }}>
-        {`W${s + 1}`}
-      </span>
-      <span aria-hidden="true" className="tnum" style={{ position: 'absolute', left: `${pct(e + 1)}%`, top: 26, transform: 'translateX(-88%)', fontSize: 12, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', color: color.body, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none', background: color.canvas, padding: '0 3px' }}>
-        {`W${e + 1}`}
-      </span>
-      {midIdx.map((i) => (
-        <span
-          key={`mid-label-${i}`}
-          aria-hidden="true"
-          className="tnum"
-          style={{ position: 'absolute', left: `${pct(i) + 0.5 / n}%`, top: 26, transform: 'translateX(-50%)', fontSize: 12, lineHeight: '14px', fontFamily: font.family, fontVariantNumeric: 'tabular-nums', color: color.mute, whiteSpace: 'nowrap', pointerEvents: 'none' }}
-        >
-          {`W${i + 1}`}
-        </span>
-      ))}
-      {(['start', 'end'] as const).map((kind) => (
-        <div
-          key={kind}
-          style={handleStyle(kind)}
-          role="slider"
-          tabIndex={0}
-          aria-label={`参考时间窗${kind === 'start' ? '起点' : '终点'}拖柄`}
-          aria-valuemin={kind === 'start' ? 0 : Math.min(n - 1, s + TRACK_MIN_WINDOW - 1)}
-          aria-valuemax={kind === 'start' ? Math.max(0, e - TRACK_MIN_WINDOW + 1) : n - 1}
-          aria-valuenow={kind === 'start' ? s : e}
-          onKeyDown={(event) => {
-            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-            event.preventDefault();
-            const delta = (event.key === 'ArrowRight' ? 1 : -1) * (event.shiftKey ? 4 : 1);
-            nudge(kind, delta);
-          }}
-          onPointerDown={onDragDown(kind)}
-          onPointerMove={onDragMove}
-          onPointerUp={onDragUp}
-          onPointerCancel={onDragUp}
-        >
-          <span style={gripStyle(kind)} />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 // ------------------------------------------------------------
-// 参考面板卡：面板头（身份区 + 链路徽标 + 补录 / 删除）+ 共享窗口量价图
-// + 事件名录（预标 / 补录）。
+// 参考面板卡：面板头（身份 + 主链语义 + 草稿标 + 动作）→ 拖选操作条 →
+// 量价图（左量右价 + 图顶事件轨）→ 本面板时间轨 → 事件名录 → 主链读数。
 // ------------------------------------------------------------
 function ReferenceChartCard({
   product,
   isInChain,
   panelCount,
   onRemove,
-  composer,
-  picking,
-  composerValue,
-  onComposerChange,
-  onOpenComposer,
-  onPick,
-  onPickWeek,
-  onSubmitComposer,
-  onCancelComposer,
-  onCancelPick,
-  composedEvents,
-  onRemoveComposed,
   win,
+  onWindowChange,
+  windowLocked,
+  onToggleLock,
+  events,
+  selectedEvent,
+  labelOf,
+  colorOf,
+  draftCount,
+  hasUnfinishedDraft,
+  editorOpen,
+  picking,
+  draft,
+  saveState,
+  onRetryPersist,
+  onOpenCreate,
+  onOpenUnfinished,
+  onComposerChange,
+  onPickRange,
+  onSelectRange,
+  onSubmitDraft,
+  onCollapseComposer,
+  onDiscardDraft,
+  composerRestore,
+  onRestorePreset,
+  onSelectEvent,
+  onEditEvent,
+  onDeleteComposed,
+  onHoverEvent,
+  hoverEventId,
+  onOverflowEvents,
+  onlyIds,
+  onClearOnly,
+  rosterFocus,
+  onPreset,
   focusWeek,
   focusKey,
   footNote,
@@ -309,29 +207,55 @@ function ReferenceChartCard({
   isInChain: boolean;
   panelCount: number;
   onRemove: () => void;
-  /** 补录弹层受控：composer = 本面板是否有打开的弹层草稿。 */
-  composer: boolean;
-  picking: boolean;
-  composerValue: ReferenceComposerValue | null;
-  onComposerChange: (patch: Partial<ReferenceComposerValue>) => void;
-  onOpenComposer: () => void;
-  onPick: () => void;
-  onPickWeek: (week: number) => void;
-  onSubmitComposer: (draft: ReferenceComposedDraft) => void;
-  onCancelComposer: () => void;
-  onCancelPick: () => void;
-  composedEvents: ReferenceComposedEvent[];
-  onRemoveComposed: (id: string) => void;
   win: [number, number];
+  onWindowChange: (s: number, e: number) => void;
+  windowLocked: boolean;
+  onToggleLock: () => void;
+  /** 统一有效事件（预标 + 覆写 + 补录，已合并排序）。 */
+  events: EffectiveReferenceEvent[];
+  selectedEvent: EffectiveReferenceEvent | null;
+  labelOf: (typeId: string) => string;
+  colorOf: (typeId: string) => string;
+  /** 本地事件 / 覆写数（草稿 N 条件显示）。 */
+  draftCount: number;
+  /** 有未提交编辑器草稿且弹层未开 → 「未完成」入口。 */
+  hasUnfinishedDraft: boolean;
+  editorOpen: boolean;
+  /** 拖选事件时段模式（弹层收起、面板顶操作条）。 */
+  picking: boolean;
+  /** 当前编辑器草稿（弹层内容；null = 不渲染）。 */
+  draft: ReferenceEditorDraft | null;
+  saveState: 'saved' | 'unpersisted';
+  onRetryPersist: () => void;
+  onOpenCreate: () => void;
+  onOpenUnfinished: () => void;
+  onComposerChange: (patch: Partial<ReferenceEventDraftValue>) => void;
+  onPickRange: () => void;
+  onSelectRange: (startWeek: number, endWeek: number) => void;
+  onSubmitDraft: () => void;
+  onCollapseComposer: () => void;
+  onDiscardDraft: () => void;
+  /** 编辑预标且存在覆写时提供「恢复预标」。 */
+  composerRestore: (() => void) | null;
+  onRestorePreset: (sourceEventId: string) => void;
+  onSelectEvent: (id: string | null) => void;
+  onEditEvent: (id: string) => void;
+  onDeleteComposed: (id: string) => void;
+  onHoverEvent: (id: string | null) => void;
+  hoverEventId: string | null;
+  onOverflowEvents: (ids: string[]) => void;
+  onlyIds: string[] | null;
+  onClearOnly: () => void;
+  rosterFocus: { id: string; key: number } | null;
+  onPreset: (preset: Exclude<ReferenceWindowPreset, 'custom'>) => void;
   focusWeek: number | null;
   focusKey: number;
   footNote?: string;
 }) {
   const tone = brandColorOf(product.brand);
-  const pickMode = picking;
   return (
     <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: `${space.md}px ${space.base}px ${space.sm}px`, minWidth: 0 }}>
-      {/* 面板头（量价页明细卡身份区语言）：品牌色点 + 产品名胶囊 + 徽标 + 补录 / 删除 */}
+      {/* 面板头：品牌色点 + 产品名胶囊 + 主链 / 对照徽标 + 草稿标 + ＋事件 / × */}
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm, flexWrap: 'wrap' }}>
         <span aria-hidden style={{ width: 8, height: 8, borderRadius: radius.pill, background: tone, flex: 'none' }} />
         <span
@@ -364,46 +288,68 @@ function ReferenceChartCard({
             border: `1px solid ${isInChain ? '#0070f3' : color.hairline}`,
           }}
         >
-          {isInChain ? '进主链 · 基线校正' : '对照 · 不影响主图基线'}
+          {isInChain ? '主链 · 同周龄校正' : '仅对照'}
         </span>
-        <span title="历史补录为会话内草稿：刷新即清，不写入主链" style={{ ...smallChipStyle, background: color.canvasSoft2, color: color.body, border: `1px solid ${color.hairline}` }}>
-          补录 · 会话内
-        </span>
+        {draftCount > 0 && (
+          <span
+            title={`本产品有 ${draftCount} 条本地事件 / 覆写：保存在本浏览器，刷新、重开页签后仍可恢复`}
+            style={{ ...smallChipStyle, background: '#e8f1ff', color: '#0053c2', border: '1px solid #0070f3' }}
+          >
+            {`草稿 ${draftCount}`}
+          </span>
+        )}
+        {hasUnfinishedDraft && !editorOpen && (
+          <button
+            type="button"
+            aria-label={`恢复未完成草稿：${product.label}`}
+            title="有未提交的编辑器草稿；点击恢复编辑（不会自动弹层抢焦点）"
+            onClick={onOpenUnfinished}
+            style={{ ...headButtonStyle(false), borderColor: '#0070f3', color: '#0053c2' }}
+          >
+            未完成
+          </button>
+        )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Popover
-            open={composer && !picking}
-            onOpenChange={(open) => { if (open) onOpenComposer(); else onCancelComposer(); }}
+            open={editorOpen && !picking}
+            onOpenChange={(open) => { if (open) onOpenCreate(); else onCollapseComposer(); }}
             trigger="click"
             placement="bottomRight"
-            content={composer && composerValue ? (
+            content={editorOpen && !picking && draft ? (
               <ReferenceEventComposer
                 product={product}
-                value={composerValue}
+                mode={draft.mode}
+                value={draft.value}
                 onChange={onComposerChange}
-                onPick={onPick}
-                onSubmit={onSubmitComposer}
-                onCancel={onCancelComposer}
+                onPickRange={onPickRange}
+                onSubmit={onSubmitDraft}
+                onCollapse={onCollapseComposer}
+                onDiscard={onDiscardDraft}
+                onRestorePreset={composerRestore ?? undefined}
+                saveState={saveState}
+                onRetryPersist={onRetryPersist}
               />
             ) : null}
           >
-            <button type="button" aria-label={`为 ${product.label} 补录历史事件`} title="补录历史事件（会话内草稿）" onClick={onOpenComposer} style={headButtonStyle(false)}>
-              ＋ 补录事件
+            <button type="button" aria-label={`为 ${product.label} 新增事件`} title="新增事件（本地草稿，自动保存）" onClick={onOpenCreate} style={headButtonStyle(false)}>
+              ＋事件
             </button>
           </Popover>
           <button
             type="button"
             aria-label={`删除参考面板：${product.label}`}
-            title={panelCount <= 1 ? '至少保留一个参考面板' : '删除该参考面板'}
+            title={panelCount <= 1 ? '至少保留一个参考面板' : '删除该参考面板（本地事件与覆写保留，重新添加后恢复显示）'}
             onClick={onRemove}
             disabled={panelCount <= 1}
-            style={{ ...headButtonStyle(true), cursor: panelCount <= 1 ? 'not-allowed' : 'pointer', opacity: panelCount <= 1 ? 0.45 : 1 }}
+            aria-disabled={panelCount <= 1}
+            style={{ ...headButtonStyle(true), cursor: panelCount <= 1 ? 'not-allowed' : 'pointer', opacity: panelCount <= 1 ? 0.45 : 1, width: 24, justifyContent: 'center', padding: 0 }}
           >
-            × 删除
+            ×
           </button>
         </span>
       </div>
-      {/* 补录点选模式提示条：弹层收起，点图上某周完成补录 */}
-      {pickMode && (
+      {/* 拖选事件时段操作条：弹层收起，按下—拖动—松手回填起止周，Esc 取消 */}
+      {picking && (
         <div
           role="status"
           aria-live="polite"
@@ -419,14 +365,14 @@ function ReferenceChartCard({
             minWidth: 0,
           }}
         >
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: '#0053c2' }}>点击图上某周完成补录</span>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: '#0053c2' }}>拖选事件时段 · Esc 取消</span>
           <button
             type="button"
-            aria-label="取消补录点选"
-            onClick={onCancelPick}
+            aria-label="取消拖选"
+            onClick={onCollapseComposer}
             style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: '#0053c2', font: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}
           >
-            取消补录
+            取消
           </button>
         </div>
       )}
@@ -434,56 +380,53 @@ function ReferenceChartCard({
         <ReferenceVolumeChart
           product={product}
           win={win}
+          events={events}
+          labelOf={labelOf}
+          colorOf={colorOf}
+          selectedEventId={selectedEvent?.id ?? null}
+          onSelectEvent={onSelectEvent}
+          onEditEvent={onEditEvent}
+          onRestorePreset={onRestorePreset}
+          hoverEventId={hoverEventId}
+          onHoverEvent={onHoverEvent}
+          onOverflowEvents={onOverflowEvents}
+          rangePickMode={picking}
+          onSelectRange={onSelectRange}
           focusWeek={focusWeek}
           focusKey={focusKey}
-          composedEvents={composedEvents}
-          pickMode={pickMode}
-          onPickWeek={onPickWeek}
         />
       ) : (
         <div role="status" style={{ padding: `${space.lg}px 0`, textAlign: 'center', fontSize: 12, color: color.mute }}>暂无可参照历史</div>
       )}
-      {/* 事件名录（预标 / 补录分组；补录可删） */}
-      {(product.events.length > 0 || composedEvents.length > 0) && (
-        <div style={{ marginTop: space.sm, borderTop: `1px solid ${color.hairline}`, paddingTop: space.sm, display: 'grid', gap: 4 }}>
-          {product.events.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '3px 10px', minWidth: 0 }}>
-              <span style={{ ...smallChipStyle, background: color.canvasSoft2, color: color.mute, border: `1px solid ${color.hairline}`, flex: 'none' }}>预标</span>
-              {product.events.map((ev) => (
-                <span key={`preset-${ev.type}-${ev.week}`} className="tnum" style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, fontSize: 11, color: color.body, minWidth: 0 }}>
-                  <span aria-hidden style={{ width: 7, height: 7, borderRadius: 2, background: REFERENCE_EVENT_TONES[ev.type], flex: 'none', alignSelf: 'center' }} />
-                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>W{ev.week + 1}</span>
-                  <span>{ev.label}</span>
-                  {ev.impactPct != null && ev.impactWeeks != null && (
-                    <span style={{ color: color.mute }}>{fmtSignedPct(ev.impactPct)}×{ev.impactWeeks} 周</span>
-                  )}
-                </span>
-              ))}
-            </div>
-          )}
-          {composedEvents.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '3px 10px', minWidth: 0 }}>
-              <span style={{ ...smallChipStyle, background: color.canvasSoft2, color: color.body, border: `1px solid ${color.hairline}`, flex: 'none' }}>补录（会话内草稿）</span>
-              {composedEvents.map((ev) => (
-                <span key={`composed-${ev.id}`} className="tnum" style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, fontSize: 11, color: color.body, minWidth: 0 }}>
-                  <span aria-hidden style={{ width: 7, height: 7, borderRadius: 2, background: REFERENCE_EVENT_TONES[ev.type], flex: 'none', alignSelf: 'center' }} />
-                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>W{ev.week + 1}</span>
-                  <span>{ev.note}</span>
-                  <button
-                    type="button"
-                    aria-label={`删除补录事件：${ev.note}`}
-                    title="删除该补录事件（会话内草稿）"
-                    onClick={() => onRemoveComposed(ev.id)}
-                    style={{ border: 'none', background: 'transparent', color: color.mute, font: 'inherit', fontSize: 12, lineHeight: 1, cursor: 'pointer', padding: '0 2px' }}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* 本面板时间轨（窗口预设 + 拖柄 + 锁定）；刻度 = 生命周期周龄 W1…W末周 */}
+      <ReferenceTimeTrack
+        productLabel={product.label}
+        total={product.points.length}
+        win={win}
+        onChange={onWindowChange}
+        locked={windowLocked}
+        onToggleLock={onToggleLock}
+        eventRange={selectedEvent ? [selectedEvent.startWeek, selectedEvent.endWeek] : null}
+        onPreset={onPreset}
+      />
+      {/* 统一事件名录（预标 / 预标 · 已改 / 草稿 行标；双向联动 + 收纳） */}
+      <ReferenceEventList
+        productLabel={product.label}
+        events={events}
+        win={win}
+        selectedEventId={selectedEvent?.id ?? null}
+        hoverEventId={hoverEventId}
+        onHoverEvent={onHoverEvent}
+        onSelectEvent={onSelectEvent}
+        onEditEvent={onEditEvent}
+        onRestorePreset={onRestorePreset}
+        onDeleteComposed={onDeleteComposed}
+        labelOf={labelOf}
+        colorOf={colorOf}
+        onlyIds={onlyIds}
+        onClearOnly={onClearOnly}
+        focusReq={rosterFocus}
+      />
       {footNote && (
         <div className="tnum" style={{ marginTop: space.xs, fontSize: 11, color: color.mute, minWidth: 0 }}>{footNote}</div>
       )}
@@ -498,144 +441,305 @@ export interface ReferencePanelProps {
   prevGenReferenceId: string;
   /** 选择回调：写入 params.prevGenReferenceId，经模型同周龄比值校正主图基线。 */
   onPrevGenReferenceChange: (id: string) => void;
-  /** 主图输入信号（手调应用 / 产品事件录入）：seq 递增触发智能弹框。 */
+  /** 主图输入信号（手调应用 / 产品事件录入）：seq 递增触发参考回放条。 */
   inputSignal?: ReferenceInputSignal | null;
 }
 
 export default function ReferencePanel({
   fixture,
   result,
-  // 受控值；页面（WP6 集成）接线前回退基准参照，保证渲染安全。
+  // 受控值；页面（接线）回退基准参照，保证渲染安全。
   prevGenReferenceId = fixture.references.prevGenPool[0]?.id ?? '',
   onPrevGenReferenceChange,
   inputSignal,
 }: ReferencePanelProps) {
   const pool = useMemo(() => fixture.references.lifecyclePool ?? [], [fixture]);
   const defaultChainRef = fixture.references.prevGenPool[0]?.id ?? '';
+  const poolKey = pool.map((p) => p.id).join(',');
 
-  // ---- 面板构成（卡内会话态）：默认 2 面板 = 首个链内产品（随受控主链参照）
-  //      + 首个对照产品；增删走「＋ 添加参考」下拉与面板头 × 删除。 ----
-  const [panelIds, setPanelIds] = useState<string[]>(() => {
-    const chain = pool.find((p) => p.chainRefId === prevGenReferenceId)?.id
-      ?? pool.find((p) => p.chainRefId != null)?.id;
-    const contrast = pool.find((p) => p.chainRefId == null)?.id;
-    return [chain, contrast].filter((x): x is string => !!x);
-  });
+  // ---- 工作区（localStorage：补录 / 覆写 / 编辑器草稿 / 撤销历史） ----
+  const scopeHash = useMemo(
+    () => referenceScopeHash([fixture.meta.modelVersion, fixture.context.country, fixture.context.industry, fixture.context.channel, fixture.context.product]),
+    [fixture],
+  );
+  const ws = useReferenceWorkspace(scopeHash);
+  const typeLib = useReferenceEventTypes();
+  const labelOf = useCallback((typeId: string) => referenceEventLabelOf(typeLib, typeId), [typeLib]);
+  const colorOf = useCallback((typeId: string) => referenceEventColorOf(typeLib, typeId), [typeLib]);
+
+  // ---- 面板构成 / 窗口 / 同步 / 锁定（会话视图态，刷新与切页恢复） ----
+  const [view, setView] = usePageViewState<ReferenceViewState>(
+    `forecast.referenceView.${scopeHash}`,
+    () => {
+      const chain = pool.find((p) => p.chainRefId === prevGenReferenceId)?.id
+        ?? pool.find((p) => p.chainRefId != null)?.id;
+      const contrast = pool.find((p) => p.chainRefId == null)?.id;
+      return {
+        panelIds: [chain, contrast].filter((x): x is string => !!x),
+        windows: {},
+        syncAge: false,
+        lockedByProduct: {},
+      };
+    },
+  );
+  const panelIds = view.panelIds;
+  const syncAge = view.syncAge;
+
   const panelProducts = useMemo(
     () => panelIds
       .map((id) => pool.find((p) => p.id === id))
       .filter((p): p is LifecycleProductSeed => p != null),
-    [pool, panelIds],
+    [pool, panelIds, poolKey],
   );
-  // 面板数变化（增删）→ 各面板态数组随动（补录草稿按产品 id 挂，不受影响）
+  // 面板数变化（增删）→ 无效面板 id 清理（产品池失义时视图自愈）
   useEffect(() => {
     const valid = panelIds.filter((id) => pool.some((p) => p.id === id));
-    if (valid.length !== panelIds.length) setPanelIds(valid);
-  }, [panelIds, pool]);
+    if (valid.length !== panelIds.length) setView((prev) => ({ ...prev, panelIds: valid }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelIds, poolKey]);
 
-  // ---- 页面侧受控 prevGenReferenceId 变化（如重置基准）→ 面板视图跟随主链：
-  //      已有面板映射该参照则不动；否则把首个链内面板的产品换成主链产品。 ----
+  // ---- 页面侧受控 prevGenReferenceId 变化（如重置基准）→ 面板视图跟随主链 ----
   const prevGenSeenRef = useRef(prevGenReferenceId);
   useEffect(() => {
     if (prevGenSeenRef.current === prevGenReferenceId) return;
     prevGenSeenRef.current = prevGenReferenceId;
-    const showsTarget = panelIds.some((id) => pool.find((p) => p.id === id)?.chainRefId === prevGenReferenceId);
-    if (showsTarget) return;
-    const target = pool.find((p) => p.chainRefId === prevGenReferenceId);
-    if (!target) return;
-    const idx = panelIds.findIndex((id) => pool.find((p) => p.id === id)?.chainRefId != null);
-    if (idx === -1) return;
-    setPanelIds((prev) => prev.map((pid, i) => (i === idx ? target.id : pid)));
-  }, [prevGenReferenceId, pool, panelIds]);
+    setView((prev) => {
+      const showsTarget = prev.panelIds.some((id) => pool.find((p) => p.id === id)?.chainRefId === prevGenReferenceId);
+      if (showsTarget) return prev;
+      const target = pool.find((p) => p.chainRefId === prevGenReferenceId);
+      if (!target) return prev;
+      const idx = prev.panelIds.findIndex((id) => pool.find((p) => p.id === id)?.chainRefId != null);
+      if (idx === -1) return prev;
+      return { ...prev, panelIds: prev.panelIds.map((pid, i) => (i === idx ? target.id : pid)) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prevGenReferenceId, poolKey]);
 
-  const addPanel = (id: string): void => {
+  const windowOf = useCallback((product: LifecycleProductSeed): [number, number] =>
+    clampReferenceWindow(product, view.windows[product.id] ?? fullWindowOf(product)),
+  [view.windows]);
+
+  const lockedOf = useCallback((product: LifecycleProductSeed): boolean =>
+    view.lockedByProduct[product.id] ?? false,
+  [view.lockedByProduct]);
+
+  /** 设置本面板窗口；同步开启时以本面板为来源，其余未锁定面板按同周龄钳制。 */
+  const setPanelWindow = useCallback((productId: string, s: number, e: number): void => {
+    const product = pool.find((p) => p.id === productId);
+    if (!product) return;
+    const clamped = clampReferenceWindow(product, [s, e]);
+    setView((prev) => {
+      const nextWindows: Record<string, [number, number]> = { ...prev.windows, [productId]: clamped };
+      if (prev.syncAge) {
+        for (const other of pool) {
+          if (other.id === productId) continue;
+          if (!prev.panelIds.includes(other.id)) continue;
+          if (prev.lockedByProduct[other.id] ?? false) continue;
+          nextWindows[other.id] = clampReferenceWindow(other, clamped);
+        }
+      }
+      return { ...prev, windows: nextWindows };
+    });
+  }, [pool, setView]);
+
+  const toggleLock = useCallback((productId: string): void => {
+    setView((prev) => ({
+      ...prev,
+      lockedByProduct: { ...prev.lockedByProduct, [productId]: !(prev.lockedByProduct[productId] ?? false) },
+    }));
+  }, [setView]);
+
+  const addPanel = useCallback((id: string): void => {
     if (panelIds.includes(id)) return;
     const product = pool.find((p) => p.id === id);
     if (!product) return;
-    setPanelIds((prev) => [...prev, id]);
+    setView((prev) => (prev.panelIds.includes(id) ? prev : {
+      ...prev,
+      panelIds: [...prev.panelIds, id],
+      windows: { ...prev.windows, [id]: fullWindowOf(product) },
+    }));
     // 上一代（有主链映射）面板加入 → 写 prevGenReferenceId 进主链；对照面板不改基线
     if (product.chainRefId) onPrevGenReferenceChange?.(product.chainRefId);
-  };
-  const removePanel = (id: string): void => {
-    if (panelIds.length <= 1) return;
-    const removed = pool.find((p) => p.id === id);
-    const next = panelIds.filter((x) => x !== id);
-    setPanelIds(next);
-    if (composer?.productId === id) setComposer(null);
-    if (pickingId === id) setPickingId(null);
-    // 删除的是当前主链面板 → 主链回退：下一个链内面板优先，否则回默认参照
-    const wasChain = removed?.chainRefId != null && removed.chainRefId === prevGenReferenceId;
-    if (wasChain) {
-      const nextChain = next
-        .map((pid) => pool.find((p) => p.id === pid))
-        .find((p) => p?.chainRefId != null);
-      onPrevGenReferenceChange?.(nextChain?.chainRefId ?? defaultChainRef);
-    }
-  };
+  }, [panelIds, pool, setView, onPrevGenReferenceChange]);
 
-  // ---- 共享时间窗（52 周全池内滑动，最小 8 周）：控制全部面板 ----
-  const trackTotal = useMemo(
-    () => pool.reduce((max, p) => Math.max(max, p.points.length), 0),
-    [pool],
-  );
-  const [sharedWin, setSharedWin] = useState<[number, number]>([0, Math.max(0, trackTotal - 1)]);
-  const clampWin = (next: [number, number]): [number, number] => {
-    let cs = clampInt(next[0], 0, trackTotal - 1);
-    let ce = clampInt(next[1], 0, trackTotal - 1);
-    if (cs > ce) [cs, ce] = [ce, cs];
-    if (ce - cs < TRACK_MIN_WINDOW - 1) {
-      ce = Math.min(trackTotal - 1, cs + TRACK_MIN_WINDOW - 1);
-      cs = Math.max(0, ce - (TRACK_MIN_WINDOW - 1));
+  // ---- 统一有效事件（图 / 名录 / 编辑器 / 回放 / 读数唯一数据源） ----
+  const eventsByProduct = useMemo(() => {
+    const map = new Map<string, EffectiveReferenceEvent[]>();
+    for (const p of pool) {
+      map.set(p.id, mergeEffectiveEvents(p, ws.workspace.composed, ws.workspace.overrides));
     }
-    return [cs, ce];
-  };
-  const applySharedWin = (s: number, e: number): void => setSharedWin(clampWin([s, e]));
-  // 窗口变化 / 池失义 → 窗口钳回可调全域（面板内选区失义由图内自清）
-  useEffect(() => {
-    setSharedWin((prev) => clampWin(prev));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackTotal]);
+    return map;
+  }, [pool, ws.workspace.composed, ws.workspace.overrides]);
 
-  // ---- 历史事件补录（「作业草稿」会话 state，key 含面板产品 id；刷新即清） ----
-  const [composedByProduct, setComposedByProduct] = useState<Record<string, ReferenceComposedEvent[]>>({});
-  const composedSeqRef = useRef(0);
-  // 补录弹层（受控）：value 由卡持有——「在图上点选」回归后已填内容不丢
-  const [composer, setComposer] = useState<{ productId: string; value: ReferenceComposerValue } | null>(null);
+  // ---- 选中 / 悬停 / 名录定位 / 图上聚合筛选 ----
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const selectedEventIdRef = useRef<string | null>(null);
+  selectedEventIdRef.current = selectedEventId;
+
+  const selectedEventOf = useCallback((product: LifecycleProductSeed): EffectiveReferenceEvent | null =>
+    eventsByProduct.get(product.id)?.find((ev) => ev.id === selectedEventIdRef.current) ?? null,
+  [eventsByProduct]);
+  const [hoverEventId, setHoverEventId] = useState<string | null>(null);
+  const [onlyIds, setOnlyIds] = useState<string[] | null>(null);
+  const [rosterFocus, setRosterFocus] = useState<{ id: string; key: number } | null>(null);
+  const rosterFocusKey = useRef(0);
+
+  const selectEvent = useCallback((product: LifecycleProductSeed, id: string | null): void => {
+    setSelectedEventId(id);
+    if (id == null) {
+      setRosterFocus(null);
+      return;
+    }
+    rosterFocusKey.current += 1;
+    setRosterFocus({ id, key: rosterFocusKey.current });
+    const ev = eventsByProduct.get(product.id)?.find((e) => e.id === id);
+    if (ev && !lockedOf(product)) {
+      const win = windowOf(product);
+      if (ev.startWeek < win[0] || ev.endWeek > win[1]) {
+        // 事件不在窗内：按事件范围扩展（16 周聚焦，事件完整可见）；锁定面板不改窗
+        setPanelWindow(product.id, ...eventFocusWindow(product, ev));
+      }
+    }
+  }, [eventsByProduct, lockedOf, windowOf, setPanelWindow]);
+
+  // ---- 编辑器（弹层受控；草稿自动保存在工作区 editorDrafts） ----
+  const [editorOpenId, setEditorOpenId] = useState<string | null>(null);
   const [pickingId, setPickingId] = useState<string | null>(null);
-  const openComposer = (productId: string): void => {
-    setPickingId(null);
-    setComposer((prev) => (prev?.productId === productId
-      ? prev
-      : { productId, value: { type: 'competitor-launch', week: null, note: '' } }));
-  };
-  const changeComposer = (productId: string, patch: Partial<ReferenceComposerValue>): void => {
-    setComposer((prev) => (prev?.productId === productId ? { ...prev, value: { ...prev.value, ...patch } } : prev));
-  };
-  const cancelComposer = (): void => {
-    setComposer(null);
-    setPickingId(null);
-  };
-  // 面板级取消：只清自己面板的弹层草稿 / 点选态——A 面板弹层离场动画中的
-  // 外点关闭回调不得清掉刚打开的 B 面板草稿（先开 B 后收 A 的竞态）
-  const cancelComposerFor = (productId: string): void => {
-    setComposer((prev) => (prev?.productId === productId ? null : prev));
-    setPickingId((prev) => (prev === productId ? null : prev));
-  };
-  const submitComposer = (productId: string, draft: ReferenceComposedDraft): void => {
-    composedSeqRef.current += 1;
-    const event: ReferenceComposedEvent = { id: `ce-${productId}-${composedSeqRef.current}`, ...draft };
-    setComposedByProduct((prev) => ({ ...prev, [productId]: [...(prev[productId] ?? []), event] }));
-    setComposer(null);
-    setPickingId(null);
-  };
-  const removeComposed = (productId: string, eventId: string): void => {
-    setComposedByProduct((prev) => ({
-      ...prev,
-      [productId]: (prev[productId] ?? []).filter((ev) => ev.id !== eventId),
-    }));
-  };
+  const drafts = ws.workspace.editorDrafts;
 
-  // ---- 「＋ 添加参考」下拉：池内未添加产品，分组 上一代 · 进主链 / 友商 · 对照 ----
+  const draftFor = useCallback((productId: string): ReferenceEditorDraft | null => {
+    let latest: ReferenceEditorDraft | null = null;
+    for (const draft of Object.values(drafts)) {
+      if (draft.productId !== productId) continue;
+      if (latest == null || draft.updatedAt > latest.updatedAt) latest = draft;
+    }
+    return latest;
+  }, [drafts]);
+
+  const openComposerCreate = useCallback((product: LifecycleProductSeed): void => {
+    setPickingId(null);
+    const id = `${product.id}::new`;
+    if (!drafts[id]) {
+      ws.setEditorDraft({
+        id,
+        mode: 'create',
+        productId: product.id,
+        eventId: null,
+        value: { typeId: 'competitor-launch', startWeek: null, endWeek: null, label: '', note: '', impact: null },
+        baseRevision: null,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    setEditorOpenId(product.id);
+  }, [drafts, ws]);
+
+  const openEditorEvent = useCallback((product: LifecycleProductSeed, eventId: string): void => {
+    setPickingId(null);
+    const id = `${product.id}::${eventId}`;
+    const existing = drafts[id];
+    if (existing) {
+      setEditorOpenId(product.id);
+      return;
+    }
+    const ev = eventsByProduct.get(product.id)?.find((e) => e.id === eventId);
+    if (!ev) return;
+    ws.setEditorDraft({
+      id,
+      mode: 'edit',
+      productId: product.id,
+      eventId,
+      value: { typeId: ev.typeId, startWeek: ev.startWeek, endWeek: ev.endWeek, label: ev.label, note: ev.note, impact: ev.impact },
+      baseRevision: ev.revision,
+      updatedAt: new Date().toISOString(),
+    });
+    setEditorOpenId(product.id);
+  }, [drafts, eventsByProduct, ws]);
+
+  const changeDraft = useCallback((productId: string, patch: Partial<ReferenceEventDraftValue>): void => {
+    const draft = draftFor(productId);
+    if (!draft) return;
+    ws.setEditorDraft({ ...draft, value: { ...draft.value, ...patch }, updatedAt: new Date().toISOString() });
+  }, [draftFor, ws]);
+
+  // 面板级收起：只清自己面板的弹层 / 拖选态——A 面板弹层离场动画中的外点
+  // 关闭回调不得清掉刚打开的 B 面板草稿（先开 B 后收 A 的竞态）
+  const closeComposerFor = useCallback((productId: string): void => {
+    setEditorOpenId((prev) => (prev === productId ? null : prev));
+    setPickingId((prev) => (prev === productId ? null : prev));
+  }, []);
+
+  const submitDraftFor = useCallback((product: LifecycleProductSeed): void => {
+    const draft = draftFor(product.id);
+    if (!draft || draft.value.startWeek == null || draft.value.endWeek == null) return;
+    const fields: ReferenceEventEditableFields = {
+      typeId: draft.value.typeId,
+      startWeek: draft.value.startWeek,
+      endWeek: draft.value.endWeek,
+      label: draft.value.label.trim(),
+      note: draft.value.note.trim(),
+      impact: draft.value.impact,
+    };
+    if (draft.eventId == null) {
+      const record = ws.createComposed(product.id, fields);
+      setSelectedEventId(record.id);
+    } else if (product.events.some((ev) => ev.id === draft.eventId)) {
+      // 预标覆写：键 = productId + sourceEventId；不物理删除预标
+      ws.savePresetOverride(product, draft.eventId, fields);
+      setSelectedEventId(draft.eventId);
+    } else {
+      ws.editComposed(draft.eventId, fields);
+      setSelectedEventId(draft.eventId);
+    }
+    ws.clearEditorDraft(draft.id);
+    setEditorOpenId(null);
+    setPickingId(null);
+  }, [draftFor, ws]);
+
+  const discardDraftFor = useCallback((product: LifecycleProductSeed): void => {
+    const draft = draftFor(product.id);
+    if (!draft) return;
+    if (typeof window !== 'undefined' && !window.confirm('丢弃未提交草稿？（可撤销）')) return;
+    discardReferenceEditorDraft(scopeHash, draft.id);
+    closeComposerFor(product.id);
+  }, [draftFor, scopeHash, closeComposerFor]);
+
+  const deleteComposedFor = useCallback((product: LifecycleProductSeed, eventId: string): void => {
+    const current = eventsByProduct.get(product.id) ?? [];
+    const removed = current.find((ev) => ev.id === eventId) ?? null;
+    ws.deleteComposed(eventId);
+    // 删除后选择下一最近事件（按起周距离），无事件则清空
+    if (selectedEventIdRef.current === eventId) {
+      const rest = current.filter((ev) => ev.id !== eventId);
+      const next = rest.length > 0
+        ? [...rest].sort((a, b) =>
+          Math.abs(a.startWeek - (removed?.startWeek ?? 0)) - Math.abs(b.startWeek - (removed?.startWeek ?? 0))
+          || a.startWeek - b.startWeek
+          || a.id.localeCompare(b.id))[0]
+        : null;
+      setSelectedEventId(next?.id ?? null);
+    }
+  }, [eventsByProduct, ws]);
+
+  // ---- Esc 分级：先退拖选，再关事件详情，再收起编辑器（草稿保留） ----
+  useEffect(() => {
+    const handler = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      if (pickingId != null) {
+        setPickingId(null);
+        return;
+      }
+      if (selectedEventIdRef.current != null) {
+        setSelectedEventId(null);
+        setRosterFocus(null);
+        return;
+      }
+      if (editorOpenId != null) setEditorOpenId(null);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [pickingId, editorOpenId]);
+
+  // ---- 「＋ 添加参考」下拉：池内未添加产品，分组 上一代 · 主链 / 友商 · 对照 ----
   const addMenuItems = useMemo(() => {
     const remaining = pool.filter((p) => !panelIds.includes(p.id));
     const groupOf = (label: string, items: LifecycleProductSeed[]) =>
@@ -643,66 +747,91 @@ export default function ReferencePanel({
         ? { key: `group-${label}`, type: 'group' as const, label, children: items.map((p) => ({ key: p.id, label: p.label })) }
         : null;
     const groups = [
-      groupOf('上一代 · 进主链', remaining.filter((p) => p.chainRefId != null)),
-      groupOf('友商 / 其他 · 对照', remaining.filter((p) => p.chainRefId == null)),
+      groupOf('上一代 · 主链', remaining.filter((p) => p.chainRefId != null)),
+      groupOf('友商 · 对照', remaining.filter((p) => p.chainRefId == null)),
     ].filter((group) => group != null);
     if (groups.length === 0) {
-      return [{ key: 'add-empty', label: pool.length === 0 ? '参考池为空' : '参考池产品已全部添加', disabled: true }];
+      return [{ key: 'add-empty', label: pool.length === 0 ? '参考池为空' : '已全部添加', disabled: true }];
     }
     return groups;
   }, [pool, panelIds]);
 
-  // ---- 智能弹框（transient 顶部条，非 Modal）：inputSignal.seq 递增触发，
-  //      8 秒自动收起；条目点击定位到对应事件周（共享窗口平移 + 悬停）。 ----
-  const [hint, setHint] = useState<HintState | null>(null);
-  const [focus, setFocus] = useState<{ panelId: string; week: number; key: number } | null>(null);
+  // ---- 参考回放（transient 顶部条）：信号驱动；不 8 秒自动消失 ----
+  const [hint, setHint] = useState<{ kind: 'manual' | 'event'; entries: ReplayEntry[] } | null>(null);
   const seenSeqRef = useRef(0);
+  const seq = inputSignal?.seq ?? 0;
   useEffect(() => {
     if (!inputSignal || inputSignal.seq <= seenSeqRef.current) return;
     seenSeqRef.current = inputSignal.seq;
-    setHint({
-      kind: inputSignal.kind,
-      weekLabel: inputSignal.weekLabel,
-      entries: panelProducts.flatMap((product) => hintEntriesOf(product, product.id)),
-    });
-  }, [inputSignal, panelProducts]);
-  useEffect(() => {
-    if (!hint) return;
-    const timer = window.setTimeout(() => setHint(null), 8000);
-    return () => window.clearTimeout(timer);
-  }, [hint]);
-  const focusEntry = (entry: HintEntry): void => {
-    const total = trackTotal;
-    if (total <= 0) return;
-    const w = clampInt(entry.week, 0, total - 1);
-    const span = Math.min(FOCUS_SPAN, total);
-    let s = Math.max(0, w - 6);
-    let e = Math.min(total - 1, s + span - 1);
-    s = Math.max(0, e - span + 1);
-    setSharedWin(clampWin([s, e]));
-    setFocus((prev) => ({ panelId: entry.panelId, week: w, key: (prev?.key ?? 0) + 1 }));
-  };
+    const entries = panelProducts
+      .map((product) => replayEntryFor(
+        product,
+        eventsByProduct.get(product.id) ?? [],
+        windowOf(product),
+        inputSignal.eventType,
+      ))
+      .filter((entry): entry is ReplayEntry => entry != null);
+    setHint({ kind: inputSignal.kind, entries });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seq, poolKey]);
+
+  const [focus, setFocus] = useState<{ panelId: string; week: number; key: number } | null>(null);
+  const focusKeyRef = useRef(0);
+
+  const locateReplayEntry = useCallback((entry: ReplayEntry): void => {
+    const product = pool.find((p) => p.id === entry.productId);
+    if (!product) return;
+    setSelectedEventId(entry.eventId);
+    rosterFocusKey.current += 1;
+    setRosterFocus({ id: entry.eventId, key: rosterFocusKey.current });
+    // 目标面板锁定 → 只展开详情不改窗；未锁定 → 聚焦事件（同步开启时其余未锁定面板同动）
+    if (!lockedOf(product)) {
+      setPanelWindow(product.id, ...eventFocusWindow(product, { startWeek: entry.startWeek, endWeek: entry.endWeek }));
+    }
+    focusKeyRef.current += 1;
+    setFocus({ panelId: product.id, week: clampInt(entry.startWeek, 0, Math.max(0, product.points.length - 1)), key: focusKeyRef.current });
+  }, [pool, lockedOf, setPanelWindow]);
 
   // 模型比值行（主图基线校正）：只消费推演模型考量，卡内不另算比值。
   const firstForecastWeek = result.weeks.find((week) => week.status === 'forecast');
   const referenceConsider = firstForecastWeek?.consider.find((item) => item.kind === 'reference');
   const prevGenFootnote = firstForecastWeek && referenceConsider
-    ? `主图基线校正 · 首预测周 ${firstForecastWeek.week}：${referenceConsider.note}`
+    ? `首预测周 ${firstForecastWeek.week} · ${referenceConsider.note}`
     : undefined;
 
   const emptyPool = pool.length === 0;
   const panelCount = panelProducts.length;
-  // 并排上限 2（量价页同款轨道宽度策略）：≤2 均分一行；>2 不折行横滚——
-  // 轨道总宽 = (N/2) × 可视宽 + (N/2 − 1) × 列距，使每格恒为可视宽 1/2（减列距）
+  // 并排上限 2（量价页同款轨道宽度策略）：≤2 均分一行；>2 不折行横滚
   const trackWidth = panelCount > 2
     ? `calc(${panelCount / 2} * 100% + ${(panelCount / 2 - 1) * space.md}px)`
     : '100%';
 
+  const undoLabel = referenceUndoLabel(ws.lastAction);
+
+  const applyPreset = useCallback((product: LifecycleProductSeed, preset: Exclude<ReferenceWindowPreset, 'custom'>): void => {
+    const n = product.points.length;
+    if (n <= 0) return;
+    if (preset === 'full') setPanelWindow(product.id, 0, n - 1);
+    else if (preset === 'last16') setPanelWindow(product.id, Math.max(0, n - 16), n - 1);
+    else {
+      const ev = selectedEventOf(product);
+      if (ev) setPanelWindow(product.id, ...eventFocusWindow(product, ev));
+    }
+  }, [setPanelWindow, selectedEventOf]);
+
+  const composerRestoreFor = (product: LifecycleProductSeed, draft: ReferenceEditorDraft | null): (() => void) | null => {
+    if (!draft || draft.mode !== 'edit' || draft.eventId == null) return null;
+    const isPreset = product.events.some((ev) => ev.id === draft.eventId);
+    if (!isPreset) return null;
+    const ev = eventsByProduct.get(product.id)?.find((e) => e.id === draft.eventId);
+    if (!ev?.overridden) return null;
+    return () => ws.restorePreset(product, draft.eventId as string);
+  };
+
   return (
     <section style={workbenchCardStyle}>
       <SectionHead
-        title="上一代上市同期 / 友商同期量价"
-        hint="历史参照：参考面板可增删（＋ 添加参考 / 面板头删除，至少保留一个），每张图为参照产品上市起的全生命周期量价（量柱 + 价格线 + 档期带 + 事件锚），底部共享时间轨控制全部面板窗口，图上拖选区间读价量变化；上一代面板经同周龄比值进入主图基线校正，对照面板仅查看。唯一差异 = 历史事件补录：为已发生的量价变化补记原因（会话内草稿，刷新即清）。"
+        title="量价参考产品"
         extra={(
           <>
             <span
@@ -715,11 +844,7 @@ export default function ReferencePanel({
           </>
         )}
       />
-      <IoBar
-        input="参照产品全生命周期量价、档期与事件锚（参考面板可增删：上一代 / 友商同期）"
-        output="上一代面板经同周龄比值校正主图基线；对照面板仅查看；历史事件补录只作解释性标注（会话内）；主图输入（手调 / 产品事件）时弹出参照表现提示"
-      />
-      {/* 智能弹框（卡头顶部条，非 Modal）：主图输入后按面板列出参照产品在类似时间的表现 */}
+      {/* 参考回放（非 Modal，顶部条）：下一信号替换或手动关闭，不自动消失 */}
       {hint && (
         <div
           role="status"
@@ -737,18 +862,18 @@ export default function ReferencePanel({
             minWidth: 0,
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>我参考了这些产品</span>
-          <span style={{ fontSize: 11.5, color: color.mute, minWidth: 0 }}>
-            主图{hint.kind === 'event' ? '录入产品事件' : '手动微调'}{hint.weekLabel ? `（${hint.weekLabel}）` : ''}后，它们在类似时间的表现：
-          </span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>参考回放</span>
           {hint.entries.map((entry) => (
             <button
-              key={`${entry.panelId}-${entry.productId}`}
+              key={`${entry.productId}-${entry.eventId}`}
               type="button"
               className="tnum"
-              title="点击定位到对应事件周"
-              onClick={() => focusEntry(entry)}
+              title="点击定位到该事件（锁定面板只展开详情，不改窗口）"
+              onClick={() => locateReplayEntry(entry)}
               style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
                 fontSize: 11.5,
                 lineHeight: '16px',
                 padding: '3px 9px',
@@ -763,14 +888,19 @@ export default function ReferencePanel({
               }}
             >
               {entry.text}
+              {entry.composed && (
+                <span aria-hidden style={{ ...smallChipStyle, height: 16, padding: '0 5px', fontSize: 9.5, background: '#e8f1ff', color: '#0053c2', border: '1px solid #0070f3' }}>
+                  草稿
+                </span>
+              )}
             </button>
           ))}
           {hint.entries.length === 0 && (
-            <span style={{ fontSize: 11.5, color: color.mute }}>当前参照产品无可回放的事件锚</span>
+            <span style={{ fontSize: 11.5, color: color.mute }}>无可回放事件</span>
           )}
           <button
             type="button"
-            aria-label="关闭参照提示"
+            aria-label="关闭参考回放"
             onClick={() => setHint(null)}
             style={{
               marginLeft: 'auto',
@@ -798,11 +928,33 @@ export default function ReferencePanel({
         </div>
       ) : (
         <>
-          {/* 面板区工具行：补录叙述 + 添加参考下拉 */}
+          {/* 卡级工具行：同周龄同步（默认关）+ ＋ 添加参考 */}
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 12px', marginBottom: space.sm, minWidth: 0 }}>
-            <span style={{ fontSize: 11, color: color.mute, minWidth: 0 }}>
-              历史事件补录：为已发生的量价变化补记原因（会话内草稿，刷新即清）
-            </span>
+            <label
+              title="开启后，调整任一未锁定面板窗口时，其余未锁定面板按相同周龄同步（各面板按自身长度与最小窗口钳制）；锁定面板不动；同步的是周龄，不是日历日期，也不是纵轴"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body, cursor: 'pointer' }}
+            >
+              <input
+                type="checkbox"
+                checked={syncAge}
+                onChange={(event) => setView((prev) => ({ ...prev, syncAge: event.target.checked }))}
+                style={{ margin: 0, accentColor: color.ink }}
+              />
+              同周龄同步
+            </label>
+            {ws.saveState === 'unpersisted' && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: color.warningInk }}>
+                未持久化 · 未能保存到浏览器，仅当前页面有效
+                <button
+                  type="button"
+                  aria-label="重试保存工作区"
+                  onClick={ws.retryPersist}
+                  style={{ border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 10.5, padding: '1px 8px', cursor: 'pointer' }}
+                >
+                  重试
+                </button>
+              </span>
+            )}
             <span style={{ marginLeft: 'auto', flex: 'none' }}>
               <Dropdown
                 trigger={['click']}
@@ -832,7 +984,7 @@ export default function ReferencePanel({
               </Dropdown>
             </span>
           </div>
-          {/* 单一横滚容器：面板网格 + 共享时间轨同轨（>2 面板不折行，一起横滚） */}
+          {/* 单一横滚容器：面板网格（>2 面板不折行，每格恒为可视宽 1/2） */}
           <div className="lpl-card-scroll" style={{ overflowX: 'auto', marginBottom: space.sm }}>
             <div style={{ minWidth: TRACK_MIN_WIDTH, width: trackWidth }}>
               {panelCount === 0 ? (
@@ -840,47 +992,111 @@ export default function ReferencePanel({
                   暂无可参照历史
                 </div>
               ) : (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${panelCount}, minmax(0, 1fr))`, gap: space.md, alignItems: 'start' }}>
-                    {panelProducts.map((product) => {
-                      const composed = composedByProduct[product.id] ?? [];
-                      const isChainPanel = product.chainRefId != null && product.chainRefId === prevGenReferenceId;
-                      return (
-                        <ReferenceChartCard
-                          key={product.id}
-                          product={product}
-                          isInChain={isChainPanel}
-                          panelCount={panelCount}
-                          onRemove={() => removePanel(product.id)}
-                          composer={composer?.productId === product.id}
-                          picking={pickingId === product.id}
-                          composerValue={composer?.productId === product.id ? composer.value : null}
-                          onComposerChange={(patch) => changeComposer(product.id, patch)}
-                          onOpenComposer={() => openComposer(product.id)}
-                          onPick={() => setPickingId(product.id)}
-                          onPickWeek={(week) => {
-                            changeComposer(product.id, { week });
-                            setPickingId(null);
-                          }}
-                          onSubmitComposer={(value) => submitComposer(product.id, value)}
-                          onCancelComposer={() => cancelComposerFor(product.id)}
-                          onCancelPick={() => cancelComposerFor(product.id)}
-                          composedEvents={composed}
-                          onRemoveComposed={(eventId) => removeComposed(product.id, eventId)}
-                          win={sharedWin}
-                          focusWeek={focus?.panelId === product.id ? focus.week : null}
-                          focusKey={focus?.panelId === product.id ? focus.key : 0}
-                          footNote={isChainPanel ? prevGenFootnote : undefined}
-                        />
-                      );
-                    })}
-                  </div>
-                  {/* 面板区底部共享时间轨：控制全部面板窗口（52 周全池内滑动，最小 8 周） */}
-                  <SharedTimeTrack total={trackTotal} win={sharedWin} onChange={applySharedWin} />
-                </>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${panelCount}, minmax(0, 1fr))`, gap: space.md, alignItems: 'start' }}>
+                  {panelProducts.map((product) => {
+                    const events = eventsByProduct.get(product.id) ?? [];
+                    const draft = draftFor(product.id);
+                    const isChainPanel = product.chainRefId != null && product.chainRefId === prevGenReferenceId;
+                    // 草稿 N = 本地补录（未删除）+ 预标覆写
+                    const localCount = Object.values(ws.workspace.composed)
+                      .filter((record) => record.productId === product.id && record.deletedAt == null).length
+                      + Object.values(ws.workspace.overrides)
+                        .filter((record) => record.productId === product.id).length;
+                    return (
+                      <ReferenceChartCard
+                        key={product.id}
+                        product={product}
+                        isInChain={isChainPanel}
+                        panelCount={panelCount}
+                        onRemove={() => {
+                          if (panelCount <= 1) return;
+                          const removed = pool.find((p) => p.id === product.id);
+                          const next = panelIds.filter((x) => x !== product.id);
+                          setView((prev) => ({ ...prev, panelIds: next }));
+                          closeComposerFor(product.id);
+                          // 删除面板不清事件：工作区补录 / 覆写原样保留（重加恢复显示）
+                          if (selectedEventId && events.some((ev) => ev.id === selectedEventId)) {
+                            setSelectedEventId(null);
+                            setRosterFocus(null);
+                          }
+                          if (onlyIds != null && events.some((ev) => onlyIds.includes(ev.id))) {
+                            setOnlyIds(null);
+                          }
+                          // 删除的是当前主链面板 → 主链回退：下一个链内面板优先，否则回默认参照
+                          const wasChain = removed?.chainRefId != null && removed.chainRefId === prevGenReferenceId;
+                          if (wasChain) {
+                            const nextChain = next
+                              .map((pid) => pool.find((p) => p.id === pid))
+                              .find((p) => p?.chainRefId != null);
+                            onPrevGenReferenceChange?.(nextChain?.chainRefId ?? defaultChainRef);
+                          }
+                        }}
+                        win={windowOf(product)}
+                        onWindowChange={(s, e) => setPanelWindow(product.id, s, e)}
+                        windowLocked={lockedOf(product)}
+                        onToggleLock={() => toggleLock(product.id)}
+                        events={events}
+                        selectedEvent={events.find((ev) => ev.id === selectedEventId) ?? null}
+                        labelOf={labelOf}
+                        colorOf={colorOf}
+                        draftCount={localCount}
+                        hasUnfinishedDraft={draft != null}
+                        editorOpen={editorOpenId === product.id}
+                        picking={pickingId === product.id}
+                        draft={draft}
+                        saveState={ws.saveState === 'unpersisted' ? 'unpersisted' : 'saved'}
+                        onRetryPersist={ws.retryPersist}
+                        onOpenCreate={() => openComposerCreate(product)}
+                        onOpenUnfinished={() => { setPickingId(null); setEditorOpenId(product.id); }}
+                        onComposerChange={(patch) => changeDraft(product.id, patch)}
+                        onPickRange={() => setPickingId(product.id)}
+                        onSelectRange={(startWeek, endWeek) => {
+                          changeDraft(product.id, { startWeek, endWeek: startWeek > endWeek ? startWeek : endWeek });
+                          setPickingId(null);
+                        }}
+                        onSubmitDraft={() => submitDraftFor(product)}
+                        onCollapseComposer={() => closeComposerFor(product.id)}
+                        onDiscardDraft={() => discardDraftFor(product)}
+                        composerRestore={composerRestoreFor(product, draft)}
+                        onRestorePreset={(sourceEventId) => ws.restorePreset(product, sourceEventId)}
+                        onSelectEvent={(id) => selectEvent(product, id)}
+                        onEditEvent={(id) => openEditorEvent(product, id)}
+                        onDeleteComposed={(id) => deleteComposedFor(product, id)}
+                        onHoverEvent={setHoverEventId}
+                        hoverEventId={hoverEventId}
+                        onOverflowEvents={(ids) => setOnlyIds(ids)}
+                        onlyIds={onlyIds}
+                        onClearOnly={() => setOnlyIds(null)}
+                        rosterFocus={rosterFocus}
+                        onPreset={(preset) => applyPreset(product, preset)}
+                        focusWeek={focus?.panelId === product.id ? focus.week : null}
+                        focusKey={focus?.panelId === product.id ? focus.key : 0}
+                        footNote={isChainPanel ? prevGenFootnote : undefined}
+                      />
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
+          {/* 撤销操作条（轻量）：最近一步可撤销（20 步 before/after patch 重放） */}
+          {ws.canUndo && undoLabel && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: space.sm, padding: '4px 10px', borderRadius: radius.control, border: `1px solid ${color.hairline}`, background: color.canvasSoft2 }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 600, color: color.body }}>{undoLabel}</span>
+              <button
+                type="button"
+                aria-label={`撤销：${undoLabel}`}
+                onClick={ws.undo}
+                style={{ border: 'none', background: 'transparent', color: color.link, font: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+              >
+                撤销
+              </button>
+            </div>
+          )}
           {/* 模型比值行（主图基线校正）：上一代面板存在时面板内同文显示，此处兜底 */}
           {prevGenFootnote && !panelProducts.some((p) => p.chainRefId != null && p.chainRefId === prevGenReferenceId) && (
             <div className="tnum" style={{ fontSize: 11, color: color.mute, minWidth: 0 }}>{prevGenFootnote}</div>

@@ -45,12 +45,22 @@ export interface AgentEngineLabel {
   hint: string;
 }
 
-/** Agent 面板小字标注：说明当前引擎来源与远端地址如何自配。 */
+/**
+ * Agent 面板小字标注：区分「平台预设网关」（构建时 env 注入，key 只存服务端）
+ * 与「自配」（localStorage 显式指定地址）两种远端引擎来源。
+ */
 export function describeAgentEngine(config: AgentEngineConfig): AgentEngineLabel {
   if (!config.baseUrl) return { engine: 'local', label: '本地确定性引擎 · 离线可用', hint: '未配置远端 Agent 服务；所有数值与结论均由本地确定性引擎计算。' };
+  if (config.source === 'env') {
+    return {
+      engine: 'remote-with-fallback',
+      label: '平台预设网关 · GLM 叙述 · 本地兜底',
+      hint: `已接入平台预设 GLM 网关（${config.baseUrl}）；API key 只存网关服务端，浏览器与构建产物不含密钥。GLM 不可达时自动回退本地确定性引擎。`,
+    };
+  }
   return {
     engine: 'remote-with-fallback',
     label: '远端 Agent 叙述 · 本地引擎兜底',
-    hint: `远端服务 ${config.baseUrl}；不可达时自动回退本地确定性引擎。将 localStorage 键 ${AGENT_REMOTE_BASE_URL_KEY} 设为服务地址即可自行接入。`,
+    hint: `自配远端服务 ${config.baseUrl}；不可达时自动回退本地确定性引擎。将 localStorage 键 ${AGENT_REMOTE_BASE_URL_KEY} 设为服务地址即可自行接入。`,
   };
 }

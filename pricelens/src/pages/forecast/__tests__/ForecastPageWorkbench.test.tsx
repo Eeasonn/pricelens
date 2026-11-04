@@ -72,7 +72,7 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     for (const label of [
       '量价预测 · 推演工作台',
       '量价预测主图',
-      '上一代上市同期 / 友商同期量价',
+      '量价参考产品',
       '大盘 · 总量总线',
       '库存验证',
       '成本销毛',
@@ -80,7 +80,7 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
       expect(text).toContain(label);
     }
     const titles = Array.from(document.querySelectorAll('h2')).map((node) => (node.textContent ?? '').trim());
-    const cardOrder = ['量价预测主图', '上一代上市同期 / 友商同期量价', '大盘 · 总量总线', '库存验证', '成本销毛']
+    const cardOrder = ['量价预测主图', '量价参考产品', '大盘 · 总量总线', '库存验证', '成本销毛']
       .map((label) => titles.findIndex((title) => title.includes(label)));
     expect(cardOrder.every((index) => index >= 0)).toBe(true);
     expect([...cardOrder].sort((a, b) => a - b)).toEqual(cardOrder);
@@ -109,7 +109,8 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
 
   it('上一代参照受控接线（A5 多面板）：追加上一代 Pura 90 面板 → 写主链、基线校正读数更新，草稿按模型版本落 sessionStorage', async () => {
     render(<App />);
-    expect(document.body.textContent).toContain('主图基线校正 · 首预测周 W45');
+    // 参考卡读数新格式（§3.5）：首预测周 · 同周龄比值（不再有「主图基线校正 ·」前缀）
+    expect(document.body.textContent).toContain('首预测周 W45 · 同周龄比值');
     // 「＋ 添加参考」下拉（A5：面板增删替代原槽位下拉）追加 Pura 90（链内产品 → 写 prevGenReferenceId）
     fireEvent.click(screen.getByRole('button', { name: '添加参考面板' }));
     const item = await waitFor(() => {

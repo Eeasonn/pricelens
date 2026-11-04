@@ -154,6 +154,8 @@ Blue is reserved for links, selected controls, focus, and favorable comparison s
 
 Brand chart colors are a separate vocabulary. Huawei stays `brand-huawei` and receives the strongest line weight. Apple, Samsung, Honor, Vivo, and Xiaomi keep stable colors across views. A new brand may use the code's stable extension palette only after confirming that it is a chart identity, not a UI semantic color.
 
+The forecast reference card adds one scoped chart palette: `referenceEventPalette` in `tokens.ts` (eight colors). The first four reuse the existing semantic colors (`color.link`, `color.warning`, `color.ink`, `color.mute`) so default event types stay in the same color families as the main chart's product-event anchors; the remaining four (`#0f766e`, `#be123c`, `#a16207`, `#0891b2`) come from the established extended chart palette. This palette is the default and restore-default source for reference-card event **types** only. Custom type colors are a local display configuration of the reference card: they never rewrite the main chart's `PRODUCT_EVENT_COLOR`, never enter model inputs, and never act as UI state colors. Event colors are always accompanied by a text type label; color never carries the type or status alone.
+
 Use no gradient, glow, or AI-specific accent color in the formal product shell. Historical roadshow pages and exploratory proposals are separate surfaces and do not define these tokens.
 
 ## Typography

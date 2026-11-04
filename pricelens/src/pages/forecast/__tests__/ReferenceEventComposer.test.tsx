@@ -1,168 +1,296 @@
 // ============================================================
-// 推演工作台 v2 · 历史事件补录弹层组件测试（A5 参考卡二轮重构，jsdom）：
-// 事件类型五选（色点与锚点同源）、周下拉 +「在图上点选」入口、说明必填
-// 校验（首次提交尝试后才报错）、提交载荷（week 非空 + note 去空白）、
-// 「仅本次会话 · 历史补录」标识、取消回调。值受控：父层持有 type/week/note。
+// 推演工作台 v2 · 事件编辑器组件测试（作业化重设计，jsdom）：
+// 类型下拉（类型库 + 色点）、类型颜色入口（色板 8 色 / hex / 恢复默认，写
+// referenceEventTypeStore）、起止周两下拉（起周变化止周自动跟随；时长派生）、
+// 「图上拖选」入口、标题 / 说明必填与上限校验（首次提交尝试后才报错）、
+// 「参考读数（选填）」默认收起（幅度 / 影响时长 / 衰减；仅历史标注不进模型）、
+// 状态行（已自动保存到本浏览器 / 未持久化 + 重试）、按钮组（保存事件 / 收起 /
+// 丢弃草稿 / 恢复预标）、新增 / 编辑标题切换。
+// 值受控（父层持有草稿并自动保存）；类型库经 useSyncExternalStore 自持。
 // ============================================================
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import ReferenceEventComposer, {
-  REFERENCE_EVENT_TONES,
-  referenceEventTypeLabel,
-  type ReferenceComposerValue,
-} from '../ReferenceEventComposer';
+import ReferenceEventComposer from '../ReferenceEventComposer';
+import type { ReferenceEventDraftValue } from '../referenceEventModel';
+import {
+  BUILTIN_REFERENCE_EVENT_TYPES,
+  getReferenceEventTypesSnapshot,
+  referenceEventColorOf,
+  resetReferenceEventTypeStoreForTests,
+  setReferenceEventTypeColor,
+} from '../referenceEventTypeStore';
 import { workbenchFixture } from '../workbenchFixture';
-import { color } from '../../../theme/tokens';
+import { referenceEventPalette } from '../../../theme/tokens';
 
+beforeEach(() => {
+  // 防御性 shim（历史坑：本环境 jsdom 无 localStorage）
+  if (typeof globalThis.localStorage === 'undefined') {
+    const mem = new Map<string, string>();
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (k: string) => mem.get(k) ?? null,
+        setItem: (k: string, v: string) => void mem.set(k, v),
+        removeItem: (k: string) => void mem.delete(k),
+        clear: () => mem.clear(),
+      },
+    });
+  }
+  localStorage.clear();
+  resetReferenceEventTypeStoreForTests();
+});
 afterEach(cleanup);
 
 const MATE80 = workbenchFixture.references.lifecyclePool[0];
 
-describe('ReferenceEventComposer · 事件类型（色系与既有锚点同源）', () => {
-  it('五个类型选项齐备，选中态切换经 onChange；「其他」为中性灰（非新增语义色）', () => {
-    const onChange = vi.fn();
-    render(
-      <ReferenceEventComposer
-        product={MATE80}
-        value={{ type: 'competitor-launch', week: null, note: '' }}
-        onChange={onChange}
-        onPick={vi.fn()}
-        onSubmit={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
-    const group = screen.getByRole('radiogroup', { name: '补录事件类型' });
-    const options = [...group.querySelectorAll('[role="radio"]')];
-    expect(options.map((o) => o.textContent)).toEqual(['竞品上市', '我司上市', '促销投放', '挤兑', '其他']);
-    expect(options[0]?.getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(screen.getByRole('radio', { name: '促销投放' }));
-    expect(onChange).toHaveBeenCalledWith({ type: 'promo' });
-    // 色源：上市蓝 / 促销琥珀 / 挤兑墨，全部来自既有锚点色（link / warning / ink）
-    expect(REFERENCE_EVENT_TONES['competitor-launch']).toBe(color.link);
-    expect(REFERENCE_EVENT_TONES.promo).toBe(color.warning);
-    expect(REFERENCE_EVENT_TONES.cannibalization).toBe(color.ink);
-    expect(referenceEventTypeLabel('other')).toBe('其他');
+const emptyDraft: ReferenceEventDraftValue = {
+  typeId: 'competitor-launch',
+  startWeek: null,
+  endWeek: null,
+  label: '',
+  note: '',
+  impact: null,
+};
+
+/** 受控宿主（与父层真实接线一致：草稿值随 onChange 更新并自动保存）。 */
+function Host(props: {
+  initial?: Partial<ReferenceEventDraftValue>;
+  mode?: 'create' | 'edit';
+  saveState?: 'saved' | 'unpersisted';
+  onRestorePreset?: () => void;
+  onPickRange?: () => void;
+  onSubmit?: (value: ReferenceEventDraftValue) => void;
+  onCollapse?: () => void;
+  onDiscard?: () => void;
+}) {
+  const [value, setValue] = useState<ReferenceEventDraftValue>({ ...emptyDraft, ...props.initial });
+  return (
+    <ReferenceEventComposer
+      product={MATE80}
+      mode={props.mode ?? 'create'}
+      value={value}
+      onChange={(patch) => setValue((prev) => ({ ...prev, ...patch }))}
+      onPickRange={props.onPickRange ?? vi.fn()}
+      onSubmit={() => props.onSubmit?.(value)}
+      onCollapse={props.onCollapse ?? vi.fn()}
+      onDiscard={props.onDiscard ?? vi.fn()}
+      onRestorePreset={props.onRestorePreset}
+      saveState={props.saveState ?? 'saved'}
+      onRetryPersist={vi.fn()}
+    />
+  );
+}
+
+async function openSelect(ariaLabel: string): Promise<HTMLElement> {
+  // jsdom 无动画事件：此前关闭的下拉壳仍缺 -hidden 类，先补上再开新的（取最新展开的下拉）
+  document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
+    .forEach((el) => el.classList.add('ant-select-dropdown-hidden'));
+  const trigger = screen.getAllByLabelText(ariaLabel)[0];
+  fireEvent.mouseDown(trigger.querySelector('.ant-select-selector') ?? trigger);
+  return await waitFor(() => {
+    const el = [...document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')].pop();
+    if (!el) throw new Error(`${ariaLabel} 下拉未展开`);
+    return el as HTMLElement;
+  });
+}
+
+async function pickOption(ariaLabel: string, text: string): Promise<void> {
+  const dropdown = await openSelect(ariaLabel);
+  const option = [...dropdown.querySelectorAll('.ant-select-item-option')]
+    .find((item) => (item.textContent ?? '').includes(text));
+  if (!option) throw new Error(`选项未找到：${text}`);
+  fireEvent.click(option);
+}
+
+describe('ReferenceEventComposer · 类型与类型颜色入口（类型库）', () => {
+  it('类型下拉含五个内置类型；切换经 onChange 带 typeId', async () => {
+    const onSubmit = vi.fn();
+    render(<Host onSubmit={onSubmit} />);
+    await pickOption('事件类型', '促销投放');
+    expect(screen.getAllByLabelText('事件类型')[0].textContent).toContain('促销投放');
+    // 提交后父层收到 typeId 变更后的草稿值（typeId 走类型库 id）
+    fireEvent.change(screen.getByLabelText('事件标题（必填）'), { target: { value: '618 档期脉冲' } });
+    fireEvent.change(screen.getByLabelText('事件说明（必填）'), { target: { value: '档期补贴' } });
+    await pickOption('事件起周', 'W23');
+    await pickOption('事件止周', 'W26');
+    fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ typeId: 'promo', startWeek: 22, endWeek: 25 }));
+  });
+
+  it('色块入口：色板 8 色点击写类型库（同类型事件全部同步变色）；hex 与恢复默认可用', async () => {
+    render(<Host initial={{ typeId: 'promo' }} />);
+    fireEvent.click(screen.getByRole('button', { name: '编辑类型「促销投放」颜色' }));
+    // 默认色 = 色板第 2 项（促销琥珀）
+    expect(referenceEventColorOf(getReferenceEventTypesSnapshot(), 'promo')).toBe(referenceEventPalette[1]);
+    // 点击色板第 1 项 → 类型库 promo 颜色更新（事件只存 typeId，调色后引用同步）
+    const swatch = screen.getByRole('button', { name: `色板 ${referenceEventPalette[0]}` });
+    fireEvent.click(swatch);
+    expect(referenceEventColorOf(getReferenceEventTypesSnapshot(), 'promo')).toBe(referenceEventPalette[0]);
+    // 恢复默认：回色板默认位
+    fireEvent.click(screen.getByRole('button', { name: '恢复默认' }));
+    expect(referenceEventColorOf(getReferenceEventTypesSnapshot(), 'promo')).toBe(referenceEventPalette[1]);
+    // hex 输入合法值提交（Enter / 失焦）→ 写库
+    const hex = screen.getByLabelText('hex 颜色值');
+    fireEvent.change(hex, { target: { value: '#123456' } });
+    fireEvent.blur(hex);
+    expect(referenceEventColorOf(getReferenceEventTypesSnapshot(), 'promo')).toBe('#123456');
+    // 非法 hex 回退当前色，不写库
+    fireEvent.change(hex, { target: { value: 'zzz' } });
+    fireEvent.blur(hex);
+    expect((hex as HTMLInputElement).value).toBe('#123456');
+    // 内置类型默认色与主图语义同源（前四 = link / warning / ink / mute + 扩展）
+    expect(referenceEventPalette).toHaveLength(8);
+    expect(BUILTIN_REFERENCE_EVENT_TYPES.map((t) => t.id)).toEqual(['competitor-launch', 'own-launch', 'promo', 'cannibalization', 'other']);
+    expect(getReferenceEventTypesSnapshot().types).toHaveLength(5);
+    // 直接改库验证「颜色按类型生效」的单一来源
+    setReferenceEventTypeColor('promo', '#0f766e');
+    expect(referenceEventColorOf(getReferenceEventTypesSnapshot(), 'promo')).toBe('#0f766e');
+  });
+
+  it('对比度提示非阻断（浅色给提醒，文字标签仍在）', () => {
+    render(<Host initial={{ typeId: 'other' }} />);
+    fireEvent.click(screen.getByRole('button', { name: '编辑类型「其他」颜色' }));
+    // 与量柱品牌色（HUAWEI #c7000b）几乎相同 → 非阻断提醒；文字标签仍在
+    const hex = screen.getByLabelText('hex 颜色值');
+    fireEvent.change(hex, { target: { value: '#c7000b' } });
+    fireEvent.blur(hex);
+    expect(screen.getByText('与量柱 / 价格线颜色过近，事件可能被误读为数据系列（非阻断提醒；类型文字始终显示）')).toBeTruthy();
+    void referenceEventPalette;
   });
 });
 
-describe('ReferenceEventComposer · 周选择两式（下拉 + 在图上点选）', () => {
-  it('周下拉覆盖全生命周期 52 周；选择经 onChange 带生命周期周序（0 基）', async () => {
-    const onChange = vi.fn();
-    render(
-      <ReferenceEventComposer
-        product={MATE80}
-        value={{ type: 'competitor-launch', week: null, note: '' }}
-        onChange={onChange}
-        onPick={vi.fn()}
-        onSubmit={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
-    const trigger = screen.getAllByLabelText('选择补录事件周')[0];
-    fireEvent.mouseDown(trigger.querySelector('.ant-select-selector') ?? trigger);
-    const dropdown = await waitFor(() => {
-      const el = document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
-      if (!el) throw new Error('dropdown 未展开');
-      return el;
-    });
-    const options = [...dropdown.querySelectorAll('.ant-select-item-option')];
-    expect(options.length).toBe(52);
-    expect(options[0]?.textContent).toBe('W1');
-    expect(options[21]?.textContent).toBe('W22');
-    fireEvent.click(options[21] as HTMLElement);
-    expect(onChange).toHaveBeenCalledWith({ week: 21 });
+describe('ReferenceEventComposer · 起止周与图上拖选', () => {
+  it('起止周下拉覆盖全生命周期；起周大于止周时止周自动跟随；时长派生', async () => {
+    render(<Host />);
+    await pickOption('事件起周', 'W23');
+    expect(screen.getByText('已选 W23 · 请选择止周')).toBeTruthy();
+    await pickOption('事件止周', 'W26');
+    expect(screen.getByText('已选 W23–W26 · 4 周')).toBeTruthy();
+    // 起周改到 W30 > 止周 W26 → 止周自动跟到 W30
+    await pickOption('事件起周', 'W30');
+    expect(screen.getByText('已选 W30–W30 · 1 周')).toBeTruthy();
   });
 
-  it('「在图上点选」触发 onPick（父层收起弹层、面板顶提示条，点完周带值回归）', () => {
-    const onPick = vi.fn();
-    render(
-      <ReferenceEventComposer
-        product={MATE80}
-        value={{ type: 'promo', week: null, note: '' }}
-        onChange={vi.fn()}
-        onPick={onPick}
-        onSubmit={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: '在图上点选' }));
-    expect(onPick).toHaveBeenCalledTimes(1);
+  it('「图上拖选」触发 onPickRange（父层收起弹层、面板顶操作条）', () => {
+    const onPickRange = vi.fn();
+    render(<Host onPickRange={onPickRange} />);
+    fireEvent.click(screen.getByRole('button', { name: '图上拖选' }));
+    expect(onPickRange).toHaveBeenCalledTimes(1);
   });
 
-  it('点选回归带值：week 受控回填后显示「已选 W..」，已填类型 / 说明不丢，提交携带该周', () => {
+  it('未选择起止周提交 → 「请选择起止周」，不提交', () => {
     const onSubmit = vi.fn();
-    // 模拟父层：先填写类型与说明 → 图上点选返回 week = 21 → 弹层带值回归
-    function PickHost() {
-      const [value, setValue] = useState<ReferenceComposerValue>({ type: 'promo', week: null, note: '黑五前哨促销' });
-      return (
-        <div>
-          <button type="button" aria-label="模拟点选回归" onClick={() => setValue((prev) => ({ ...prev, week: 21 }))}>
-            pick-return
-          </button>
-          <ReferenceEventComposer
-            product={MATE80}
-            value={value}
-            onChange={(patch) => setValue((prev) => ({ ...prev, ...patch }))}
-            onPick={vi.fn()}
-            onSubmit={onSubmit}
-            onCancel={vi.fn()}
-          />
-        </div>
-      );
-    }
-    render(<PickHost />);
-    fireEvent.click(screen.getByRole('button', { name: '模拟点选回归' }));
-    expect(screen.getByText('已选 W22（上市起第 22 周）')).toBeTruthy();
-    expect((screen.getByLabelText('补录事件说明（必填）') as HTMLInputElement).value).toBe('黑五前哨促销');
-    expect(screen.getByRole('radio', { name: '促销投放' }).getAttribute('aria-checked')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: '补录到图上' }));
-    expect(onSubmit).toHaveBeenCalledWith({ type: 'promo', week: 21, note: '黑五前哨促销' });
-  });
-});
-
-describe('ReferenceEventComposer · 说明必填与提交', () => {
-  it('说明为空：首次提交尝试显示必填错误且不提交；填后提交载荷 = { type, week, note }（去空白）', () => {
-    const onSubmit = vi.fn();
-    // 受控宿主：value 随输入更新（与父层真实接线一致）
-    function NoteHost() {
-      const [value, setValue] = useState<ReferenceComposerValue>({ type: 'cannibalization', week: 21, note: '  ' });
-      return (
-        <ReferenceEventComposer
-          product={MATE80}
-          value={value}
-          onChange={(patch) => setValue((prev) => ({ ...prev, ...patch }))}
-          onPick={vi.fn()}
-          onSubmit={onSubmit}
-          onCancel={vi.fn()}
-        />
-      );
-    }
-    render(<NoteHost />);
-    fireEvent.click(screen.getByRole('button', { name: '补录到图上' }));
+    render(<Host initial={{ label: '标题', note: '说明' }} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(document.body.textContent ?? '').toContain('必须填写说明');
-    const input = screen.getByLabelText('补录事件说明（必填）') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '  Pura 90 上市挤兑  ' } });
-    fireEvent.click(screen.getByRole('button', { name: '补录到图上' }));
-    expect(onSubmit).toHaveBeenCalledWith({ type: 'cannibalization', week: 21, note: 'Pura 90 上市挤兑' });
+    expect(screen.getByText('请选择起止周')).toBeTruthy();
+  });
+});
+
+describe('ReferenceEventComposer · 标题 / 说明校验与提交', () => {
+  it('标题与说明必填：首次提交尝试后报错；填后提交（值去空白由父层处理，组件带原始值）', () => {
+    const onSubmit = vi.fn();
+    render(<Host initial={{ startWeek: 22, endWeek: 22 }} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText('请填写标题')).toBeTruthy();
+    expect(screen.getByText('请填写说明')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('事件标题（必填）'), { target: { value: '618 档期脉冲' } });
+    fireEvent.change(screen.getByLabelText('事件说明（必填）'), { target: { value: '平台补贴与档期降价叠加' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it('「仅本次会话 · 历史补录」标识在场（作业草稿语义）；取消触发 onCancel', () => {
-    const onCancel = vi.fn();
+  it('上限校验：标题 > 40 字、说明 > 200 字提示且不提交', () => {
+    const onSubmit = vi.fn();
+    render(<Host initial={{ startWeek: 1, endWeek: 2, label: 'a'.repeat(41), note: 'b'.repeat(201) }} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText('标题不超过 40 字')).toBeTruthy();
+    expect(screen.getByText('说明不超过 200 字')).toBeTruthy();
+  });
+});
+
+describe('ReferenceEventComposer · 参考读数（选填）与状态行', () => {
+  it('默认收起；展开后幅度 / 影响时长 / 衰减可填（onChange impact patch）', async () => {
+    const onSubmit = vi.fn();
+    render(<Host initial={{ startWeek: 22, endWeek: 25, label: '618', note: '档期' }} onSubmit={onSubmit} />);
+    expect(screen.queryByLabelText('参考幅度（%）')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /参考读数（选填）/ }));
+    fireEvent.change(screen.getByLabelText('参考幅度（%）'), { target: { value: '42' } });
+    fireEvent.change(screen.getByLabelText('参考影响时长（周）'), { target: { value: '4' } });
+    await pickOption('参考衰减', '递减');
+    expect(screen.getByText('仅历史参考标注，不参与任何模型计算')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      impact: { magnitudePct: 42, durationWeeks: 4, decay: 'decreasing' },
+    }));
+  });
+
+  it('状态行：saved = 已自动保存到本浏览器；unpersisted = 未持久化 + 重试按钮', () => {
+    const onRetryPersist = vi.fn();
+    const { rerender } = render(
+      <Host saveState="saved" />,
+    );
+    expect(screen.getByText('已自动保存到本浏览器')).toBeTruthy();
+    // Host 固定 saveState=saved；直接渲染 unpersisted 变体
     render(
       <ReferenceEventComposer
         product={MATE80}
-        value={{ type: 'other', week: 5, note: '渠道库存补货扰动' }}
+        mode="create"
+        value={emptyDraft}
         onChange={vi.fn()}
-        onPick={vi.fn()}
+        onPickRange={vi.fn()}
         onSubmit={vi.fn()}
-        onCancel={onCancel}
+        onCollapse={vi.fn()}
+        onDiscard={vi.fn()}
+        saveState="unpersisted"
+        onRetryPersist={onRetryPersist}
       />,
     );
-    expect(screen.getByText('仅本次会话 · 历史补录')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '取消' }));
-    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('未持久化')).toBeTruthy();
+    expect(screen.getByText('未能保存到浏览器，仅当前页面有效')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(onRetryPersist).toHaveBeenCalledTimes(1);
+    void rerender;
+  });
+});
+
+describe('ReferenceEventComposer · 模式与按钮组', () => {
+  it('新增 / 编辑标题切换；收起 / 丢弃草稿回调；恢复预标仅在提供时出现', () => {
+    const onCollapse = vi.fn();
+    const onDiscard = vi.fn();
+    const { rerender } = render(
+      <Host mode="create" onCollapse={onCollapse} onDiscard={onDiscard} />,
+    );
+    expect(screen.getByText('新增事件')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '收起' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '丢弃草稿' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '恢复预标' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '收起' }));
+    expect(onCollapse).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '丢弃草稿' }));
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+    rerender(
+      <ReferenceEventComposer
+        product={MATE80}
+        mode="edit"
+        value={{ ...emptyDraft, startWeek: 22, endWeek: 22, label: '618 档期脉冲', note: '档期' }}
+        onChange={vi.fn()}
+        onPickRange={vi.fn()}
+        onSubmit={vi.fn()}
+        onCollapse={vi.fn()}
+        onDiscard={vi.fn()}
+        onRestorePreset={vi.fn()}
+        saveState="saved"
+      />,
+    );
+    expect(screen.getByText('编辑事件')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '恢复预标' })).toBeTruthy();
+    // 本地草稿标识（持久化语义，不再写「刷新即清 / 仅本次会话」）
+    expect(screen.getByText('本地草稿')).toBeTruthy();
+    expect(document.body.textContent ?? '').not.toContain('仅本次会话');
   });
 });
