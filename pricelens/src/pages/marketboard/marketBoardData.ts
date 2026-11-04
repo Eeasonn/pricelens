@@ -320,6 +320,35 @@ const TABLETS: MarketIndustryData = {
   },
 };
 
+// ---------------- 图 2 · 自定义价带的 50 美元格子（2026-11-04 第二波） ----------------
+// 模拟插值口径（数据诚实）：锚点数据按固定档位组织，自定义价带不新造锚点，
+// 而是「覆盖的档位格子聚合」——本函数把产业既有档位定义参数化细分为 ≤50 美元
+// 一格的价带格子（既有档位边界全部保留，故「自选 25–50」这类带恰等于原档位；
+// 粗于 50 的档位，如穿戴 75–150、手机 100–200，按档内均匀分摊细分，格宽取
+// 整数：75→3×25、200→4×50）。格子容量 = 档位锚点容量均分，由 marketBoardModel
+// 聚合，锚点月总量守恒、确定性、无随机数。开口档（<起步 / >上限）不参与
+// 自定义带；带内无均价口径（档位格无价格锚点），图 2 自定义态诚实留空均价线。
+
+/** 50 美元粒度价带格子：参数化于产业既有档位定义（不改动图 1 的 6 档位组与图 3） */
+export function tierCellsOf(ind: MarketIndustryData): MarketTier[] {
+  const cells: MarketTier[] = [];
+  for (const t of ind.tiers) {
+    if (t.min == null || t.max == null) continue; // 开口档不参与自定义带
+    const width = t.max - t.min;
+    if (width <= 0) continue;
+    // 细分格数：每格 ≤50 美元且格宽取整（确定性均匀分摊，锚点月容量守恒）
+    let k = Math.max(1, Math.ceil(width / 50));
+    while (width % k !== 0 && k < width) k += 1;
+    const step = width / k;
+    for (let i = 0; i < k; i++) {
+      const lo = t.min + i * step;
+      const hi = lo + step;
+      cells.push({ id: `c${lo}_${hi}`, label: `${lo}–${hi}`, min: lo, max: hi });
+    }
+  }
+  return cells;
+}
+
 /** 闭区间逐月枚举（YYYYMM，含首尾） */
 function months(start: string, end: string): string[] {
   const out: string[] = [];

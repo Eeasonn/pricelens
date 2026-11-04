@@ -9,6 +9,7 @@ import { color, fontSize, space } from '../../theme/tokens';
 import { MARKET_INDUSTRIES } from './marketBoardData';
 import TierBrandShareCard from './TierBrandShareCard';
 import BrandShareTrendCard from './BrandShareTrendCard';
+import BrandShareLinesCard from './BrandShareLinesCard';
 import BrandTierYoYCard from './BrandTierYoYCard';
 import { MBSourceTag } from './marketBoardUI';
 
@@ -37,6 +38,7 @@ export default function MarketBoardPreview() {
         {/* key 随产业重挂：各卡内部视图状态（档位筛选）回到默认全档位 */}
         <TierBrandShareCard key={`t1-${ind.id}`} data={ind} />
         <BrandShareTrendCard key={`t2-${ind.id}`} data={ind} />
+        <BrandShareLinesCard key={`tl-${ind.id}`} data={ind} />
         <BrandTierYoYCard key={`t3-${ind.id}`} data={ind} />
 
         <footer style={{ fontSize: fontSize.caption, color: color.mute, lineHeight: 1.8 }}>

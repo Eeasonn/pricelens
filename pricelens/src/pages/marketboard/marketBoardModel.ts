@@ -2,7 +2,7 @@
 // 大盘图表 · 纯模型层：锚点插值、份额/容量换算、同比、摘要文案。
 // 全部为确定性计算（无随机数），锚点月数值恒等于手写数据，单测锁定。
 // ============================================================
-import { OTHERS, type MarketIndustryData, type MonthShares } from './marketBoardData';
+import { OTHERS, tierCellsOf, type MarketIndustryData, type MarketTier, type MonthShares } from './marketBoardData';
 import { brandColorOf, color } from '../../theme/tokens';
 
 /** 品牌别名：GFK 面板上 MI 即小米，沿用 XIAOMI 的登记品牌色 */
@@ -325,6 +325,194 @@ export function tierTrendSummary(ind: MarketIndustryData, tierId: string): strin
     parts.push(`HUAWEI 份额 ${sCur.HUAWEI}%，较去年同期 ${pct(sCur.HUAWEI - sPrev.HUAWEI)}`);
   }
   return `${parts.join('；')}。`;
+}
+
+// ---------------- 图 2 · 自定义价带模式（2026-11-04 第二波，50 美元格子聚合） ----------------
+// 口径：自定义带 = 覆盖的 50 美元格子聚合（格子由 marketBoardData.tierCellsOf
+// 参数化生成）；粗于 50 的档位按「档内均匀分摊」折算（数据层已注明模拟插值口径）。
+// 锚点月容量/份额按覆盖比例聚合，早期月沿用既有确定性插值（早期总量按首锚点月
+// 占比折算、早期份额按品牌整体份额漂移因子推导），无随机数；带内无均价口径。
+
+export interface PriceBand {
+  lo: number;
+  hi: number;
+}
+
+/** 自定义带可用价域 = 产业最小/最大有限档位边界（穿戴 25–300 / 手机 100–1000 / 平板 200–1500） */
+export function bandDomainOf(ind: MarketIndustryData): PriceBand {
+  const cells = tierCellsOf(ind);
+  return { lo: cells[0].min ?? 0, hi: cells[cells.length - 1].max ?? 0 };
+}
+
+/** 自定义带可取的边界值清单（50 美元粒度 + 价域上限，供输入钳制/吸附） */
+export function bandBoundariesOf(ind: MarketIndustryData): number[] {
+  const cells = tierCellsOf(ind);
+  return cells.map((c) => c.min ?? 0).concat(cells[cells.length - 1].max ?? 0);
+}
+
+/** 默认自定义带 = 首个 50 格（即最小起步档位的第一格：穿戴 $25–50 / 手机 $100–150 / 平板 $200–250） */
+export function defaultBand(ind: MarketIndustryData): PriceBand {
+  const cells = tierCellsOf(ind);
+  return { lo: cells[0].min ?? 0, hi: cells[0].max ?? 0 };
+}
+
+/** 非法输入钳制：吸附到 50 格边界、钳在产业价域内、逆序换序；退化（min===max）返回 null */
+export function clampBand(ind: MarketIndustryData, lo: number, hi: number): PriceBand | null {
+  const bounds = bandBoundariesOf(ind);
+  const snap = (v: number) => bounds.reduce((acc, b) => (Math.abs(b - v) < Math.abs(acc - v) ? b : acc), bounds[0]);
+  let a = Number.isFinite(lo) ? snap(lo) : bounds[0];
+  let b = Number.isFinite(hi) ? snap(hi) : bounds[bounds.length - 1];
+  if (a > b) [a, b] = [b, a];
+  return a < b ? { lo: a, hi: b } : null;
+}
+
+/** 档位落在自定义带内的覆盖比例（按价带宽度线性折算；档内均匀分摊 = 模拟插值口径） */
+function tierBandFraction(tier: MarketTier, lo: number, hi: number): number {
+  const tMin = tier.min ?? lo;
+  const tMax = tier.max ?? hi;
+  const width = tMax - tMin;
+  if (width <= 0) return 0;
+  const overlap = Math.min(tMax, hi) - Math.max(tMin, lo);
+  return Math.min(1, Math.max(0, overlap / width));
+}
+
+/** 自定义带锚点月容量（万台）= 覆盖档位按覆盖比例分摊之和 */
+export function bandAnchorVolume(ind: MarketIndustryData, lo: number, hi: number, month: string): number {
+  return ind.tiers.reduce((sum, t) => sum + (ind.tierVolume[t.id]?.[month] ?? 0) * tierBandFraction(t, lo, hi), 0);
+}
+
+/** 自定义带锚点月品牌份额（%，含 OTHERS 差值）= 覆盖档位容量加权 */
+export function bandAnchorShares(ind: MarketIndustryData, lo: number, hi: number, month: string): Record<string, number> {
+  const acc: Record<string, number> = {};
+  let total = 0;
+  for (const t of ind.tiers) {
+    const vol = (ind.tierVolume[t.id]?.[month] ?? 0) * tierBandFraction(t, lo, hi);
+    if (vol <= 0) continue;
+    total += vol;
+    const shares = tierShareAt(ind, t.id, month);
+    for (const b of ind.brands) acc[b] = (acc[b] ?? 0) + (vol * (shares[b] ?? 0)) / 100;
+  }
+  const out: Record<string, number> = {};
+  let sum = 0;
+  for (const b of ind.brands) {
+    const pct = total > 0 ? ((acc[b] ?? 0) / total) * 100 : 0;
+    out[b] = Math.round(pct * 100) / 100;
+    sum += out[b];
+  }
+  out[OTHERS] = Math.round((100 - sum) * 100) / 100;
+  return out;
+}
+
+/** 自定义带容量锚点：锚点月取带容量；早期月按带在首锚点月的总量占比折算（与单档位同口径） */
+function bandVolumeAnchorList(ind: MarketIndustryData, band: PriceBand): { month: string; value: number }[] {
+  const m0 = ind.anchorMonths[0];
+  const total0 = anchorTotalVolume(ind, m0);
+  const ratio = total0 > 0 ? bandAnchorVolume(ind, band.lo, band.hi, m0) / total0 : 0;
+  return [
+    ...ind.volumeHistory.map((h) => ({ month: h.month, value: h.value * ratio })),
+    ...ind.anchorMonths.map((m) => ({ month: m, value: bandAnchorVolume(ind, band.lo, band.hi, m) })),
+  ].sort((a, b) => monthNum(a.month) - monthNum(b.month));
+}
+
+/** 自定义带任意月容量（万台）：锚点精确、之间缓动插值 */
+export function bandVolumeAt(ind: MarketIndustryData, band: PriceBand, month: string): number {
+  return piecewiseAt(bandVolumeAnchorList(ind, band), month);
+}
+
+/**
+ * 自定义带份额锚点：锚点月取带份额；早期月以「品牌整体份额相对首锚点月的漂移因子」
+ * 推导（因子钳在 0.25–4 倍内）后归一（与单档位同口径）。
+ */
+function bandShareAnchorList(ind: MarketIndustryData, band: PriceBand): { month: string; shares: Record<string, number> }[] {
+  const keys = [...ind.brands, OTHERS];
+  const m0 = ind.anchorMonths[0];
+  const base = bandAnchorShares(ind, band.lo, band.hi, m0);
+  const overallBase = anchorOverallShares(ind, m0);
+  const history = ind.overallHistory.map((h) => {
+    const overallH: Record<string, number> = {
+      ...h.shares,
+      [OTHERS]: 100 - Object.values(h.shares).reduce((s, v) => s + v, 0),
+    };
+    const raw: Record<string, number> = {};
+    let sum = 0;
+    for (const k of keys) {
+      const denom = overallBase[k] ?? 0;
+      const factor = denom > 0.05 ? Math.min(4, Math.max(0.25, (overallH[k] ?? 0) / denom)) : 1;
+      raw[k] = Math.max(0, (base[k] ?? 0) * factor);
+      sum += raw[k];
+    }
+    const scale = sum > 0 ? 100 / sum : 0;
+    for (const k of keys) raw[k] = raw[k] * scale;
+    return { month: h.month, shares: raw };
+  });
+  const detail = ind.anchorMonths.map((m) => ({ month: m, shares: bandAnchorShares(ind, band.lo, band.hi, m) }));
+  return [...history, ...detail].sort((a, b) => monthNum(a.month) - monthNum(b.month));
+}
+
+/** 自定义带任意月品牌份额（%）：锚点精确、之间缓动插值，OTHERS 补齐 100% */
+export function bandShareTrendAt(ind: MarketIndustryData, band: PriceBand, month: string): Record<string, number> {
+  const out = piecewiseShares(bandShareAnchorList(ind, band), month, ind.brands);
+  out[OTHERS] = Math.max(0, 100 - ind.brands.reduce((s, b) => s + out[b], 0));
+  return out;
+}
+
+/** 图 2 自定义带序列（输入先经 clampBand 钳制）：月度品牌份额（含 OTHERS）+ 带容量（万台）；带内不提供均价 */
+export function customBandSeries(
+  ind: MarketIndustryData,
+  lo: number,
+  hi: number,
+): { band: PriceBand; months: string[]; volumes: number[]; shares: Record<string, number[]> } {
+  const band = clampBand(ind, lo, hi) ?? defaultBand(ind);
+  const months = ind.trendMonths;
+  const shares: Record<string, number[]> = {};
+  for (const b of [...ind.brands, OTHERS]) shares[b] = [];
+  const volumes: number[] = [];
+  for (const m of months) {
+    const s = bandShareTrendAt(ind, band, m);
+    for (const b of [...ind.brands, OTHERS]) shares[b].push(Math.max(0, s[b] ?? 0));
+    volumes.push(round1(bandVolumeAt(ind, band, m)));
+  }
+  return { band, months, volumes, shares };
+}
+
+/** 图 2 自定义带要点：带容量同比 + 领先品牌份额及其同比变化（锚点月精确值） */
+export function customBandSummary(ind: MarketIndustryData, lo: number, hi: number): string {
+  const band = clampBand(ind, lo, hi);
+  if (!band) return '';
+  const [curMonth, prevMonth] = ind.yoyMonths;
+  const vol = bandAnchorVolume(ind, band.lo, band.hi, curMonth);
+  const volPrev = bandAnchorVolume(ind, band.lo, band.hi, prevMonth);
+  const sCur = bandAnchorShares(ind, band.lo, band.hi, curMonth);
+  const sPrev = bandAnchorShares(ind, band.lo, band.hi, prevMonth);
+  const lead = ind.brands.slice().sort((a, b) => sCur[b] - sCur[a])[0];
+  const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v)} pct`;
+  const parts = [
+    `${monthLabel(curMonth)} $${band.lo}–${band.hi} 价带容量 ${fmtWan(vol)}，同比 ${fmtYoy(yoyPct(vol, volPrev))}`,
+  ];
+  if (lead && sCur[lead] > 0) parts.push(`${lead} 份额 ${sCur[lead]}%，较去年同期 ${pct(sCur[lead] - sPrev[lead])}`);
+  if (lead !== 'HUAWEI' && ind.brands.includes('HUAWEI')) {
+    parts.push(`HUAWEI 份额 ${sCur.HUAWEI}%，较去年同期 ${pct(sCur.HUAWEI - sPrev.HUAWEI)}`);
+  }
+  return `${parts.join('；')}。`;
+}
+
+// ---------------- 品牌份额走势多线卡（2026-11-04 第二波新增卡） ----------------
+
+/** 多线卡要点：最新锚点月大盘份额前三 + 较去年同期变化最大的两个品牌（锚点精确值） */
+export function brandLinesSummary(ind: MarketIndustryData): string {
+  const [curMonth, prevMonth] = ind.yoyMonths;
+  const cur = anchorOverallShares(ind, curMonth);
+  const prev = anchorOverallShares(ind, prevMonth);
+  const top3 = ind.brands.slice().sort((a, b) => cur[b] - cur[a]).slice(0, 3);
+  const movers = ind.brands
+    .map((b) => ({ brand: b, delta: cur[b] - (prev[b] ?? 0) }))
+    .sort((a, z) => Math.abs(z.delta) - Math.abs(a.delta))
+    .slice(0, 2);
+  const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v)} pct`;
+  return (
+    `${monthLabel(curMonth)} 大盘份额前三：${top3.map((b) => `${b} ${cur[b]}%`).join('、')}；` +
+    `较 ${monthLabel(prevMonth)} 变化最大：${movers.map((m) => `${m.brand} ${pct(m.delta)}`).join('、')}。`
+  );
 }
 
 // ---------------- 图 3：品牌 × 档位同比矩阵 ----------------

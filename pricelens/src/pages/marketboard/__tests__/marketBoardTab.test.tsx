@@ -1,9 +1,12 @@
 // ============================================================
-// 「大盘走势」页签接入冒烟（2026-11-03）：
+// 「大盘走势」页签接入冒烟（2026-11-03；2026-11-04 第二波追加④多线卡
+// 与②自定义价带断言）：
 // ① ChartContentBar 四页签顺序（价格→量价→大盘→预测）与切换导航；
 // ② ?p=marketboard 链接恢复（urlSync 读侧 + PageProvider 初始页）；
-// ③ MarketBoardPage 组装：口径行（模拟数据徽标 + 产业 Segmented）+ 三张
-//    大盘卡 + 图表页签行；产业切换后口径/数据说明随产业更新。
+// ③ MarketBoardPage 组装：口径行（模拟数据徽标 + 产业 Segmented）+ 四张
+//    大盘卡（④品牌份额走势多线卡插在②之后）+ 图表页签行；产业切换后
+//    口径/数据说明随产业更新；②自定义价带默认全档位、状态文字与非法
+//    输入钳制、一键回全档位。
 // echarts 在 jsdom 无 canvas：mock 'echarts/core' 等模块，只验证 React 组装
 // 与导航行为，不验证图表渲染（图内逻辑由 marketBoardModel.test.ts 覆盖）；
 // mock 透传 setOption 的 option（__testOptionLog），tooltip 防裁切 confine 有断言。
@@ -159,24 +162,54 @@ describe('MarketBoardPage 组装', () => {
     sessionStorage.clear();
   });
 
-  it('口径行（模拟数据徽标 + 产业切换）与三张大盘卡纵排呈现，图表页签行嵌在首卡', () => {
+  it('口径行（模拟数据徽标 + 产业切换）与四张大盘卡纵排呈现，图表页签行嵌在首卡', () => {
     mountShell(<MarketBoardPage />);
-    // 模拟数据徽标：口径行 1 枚 + 三卡卡头各 1 枚（文字承载状态，不靠颜色）
-    expect(screen.getAllByText('模拟数据')).toHaveLength(4);
+    // 模拟数据徽标：口径行 1 枚 + 四卡卡头各 1 枚（文字承载状态，不靠颜色）
+    expect(screen.getAllByText('模拟数据')).toHaveLength(5);
     expect(screen.getByText('核心档位品牌份额趋势')).toBeTruthy();
     expect(screen.getByText('品牌份额趋势')).toBeTruthy();
+    expect(screen.getByText('品牌份额走势')).toBeTruthy();
     expect(screen.getByText('各品牌核心档位结构同比变化')).toBeTruthy();
     // 页嵌在分析壳内：图表页签行同卡呈现，当前页大盘走势选中
     expect(screen.getByRole('button', { name: '大盘走势' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('④品牌份额走势多线卡插在②品牌份额趋势之后、③同比卡之前（2026-11-04 第二波卡位）', () => {
+    mountShell(<MarketBoardPage />);
+    const trend = screen.getByText('品牌份额趋势');
+    const lines = screen.getByText('品牌份额走势');
+    const yoy = screen.getByText('各品牌核心档位结构同比变化');
+    expect(lines.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(lines.compareDocumentPosition(yoy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 多线卡口径行注明全档位（本卡不加档位筛选）
+    expect(screen.getAllByText(/全档位大盘口径：每品牌一条月度份额线/).length).toBeGreaterThan(0);
   });
 
   it('大盘卡 echarts tooltip 全部开 confine（2026-11-03 反馈：MBScroll 横滚容器裁掉贴边 hover 页签）', () => {
     testOptionLog().length = 0;
     mountShell(<MarketBoardPage />);
     const opts = tooltipOptions();
-    // 同比卡按品牌列出多图：带 tooltip 的 option 覆盖全部卡（≥3 份）
-    expect(opts.length).toBeGreaterThanOrEqual(3);
+    // 同比卡按品牌列出多图：带 tooltip 的 option 覆盖四张图卡（≥4 份，含②多线卡④）
+    expect(opts.length).toBeGreaterThanOrEqual(4);
     for (const o of opts) expect(o.tooltip.confine).toBe(true);
+  });
+
+  it('②自定义价带：默认全档位；选自定义出 50 美元粒度状态文字；非法输入钳制；一键回全档位', () => {
+    mountShell(<MarketBoardPage />);
+    // 默认全档位（=大盘总量），无自定义状态文字
+    expect(screen.queryByText(/自定义 \$/)).toBeNull();
+    // 选「自定义」→ 默认给最小 50 带（穿戴 25–50）
+    fireEvent.click(screen.getByText('自定义'));
+    expect(screen.getByText('自定义 $25–50')).toBeTruthy();
+    // 非法输入钳制：越界 400 吸附到价域上限 300，min>max 自动换序为 50–300
+    const lo = screen.getByRole('spinbutton', { name: '自定义价带最低价' });
+    fireEvent.change(lo, { target: { value: '400' } });
+    fireEvent.blur(lo);
+    expect(screen.getByText('自定义 $50–300')).toBeTruthy();
+    // 点「全档位」一键恢复大盘总量，自定义控件与状态文字消失
+    fireEvent.click(screen.getByText('全档位'));
+    expect(screen.queryByText(/自定义 \$/)).toBeNull();
+    expect(screen.queryByRole('spinbutton', { name: '自定义价带最低价' })).toBeNull();
   });
 
   it('产业切换：默认智能穿戴（GFK 口径），切智能手机后口径行/数据说明随产业更新', () => {
