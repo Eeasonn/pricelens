@@ -1,28 +1,54 @@
 // ============================================================
-// WP5 · 成本销毛卡组件测试（jsdom）：
-// $M 轴与 tooltip 同源（禁「万$」标原始 USD）、周销毛图例真实显隐、
-// 负单台销毛零基线向下表达不丢柱、空态文案、缺数周销「—」。
-// 2026-11-04 评审定位修正：销毛 = 经营结果而非输入——卡标题 / 口径行 /
-// IoBar / 输出框按「输入（量价）→ 结果（销毛）」标注（模型计算不动）。
+// WP5 / 任务 9 · 成本销毛卡组件测试（jsdom）：
+// 继承 WP5 Step 9/10：$M 轴与 tooltip 同源（禁「万$」标原始 USD）、周销毛
+// 图例真实显隐、负单台销毛零基线向下表达不丢柱、空态文案。
+// 任务 9 迁移（v3 统一销毛视图）：预测起点从周状态派生、负销毛与缺数周
+// 断言改走 MarginView 语义（weeklyMargin=null 不画 0 柱 + 覆盖率如实显示、
+// 负值经 marginView 注入——主链 weeklyMargin 过渡字段不再是卡的数字来源）。
+// 任务 9 新增（IA 文档 4.2 / B.5.8）：hairline 分「成本参考区 / 经营结果区」、
+// 成本编辑写 costOverrides（原因选填、可还原）、主数字读 MarginView、
+// 结果回读「含主图价格手调 Wn / 含成本假设 N 项」、唯一人工动作
+// 「带到主图调价」打开 PriceAdjustDialog、方向性提示「成本上升 · 请核对价格」。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import type { ComponentProps } from 'react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { workbenchFixture } from '../workbenchFixture';
 import { baseWorkbenchParams, computeWorkbench, type WorkbenchResult } from '../workbenchModel';
+import { computeMarginView, emptyMarginScenario, type MarginView } from '../marginScenarioModel';
+import { resetMarginScenarioStoresForTests } from '../useMarginScenario';
 import ForecastMarginCostCard from '../ForecastMarginCostCard';
 
 const fixture = workbenchFixture;
 const baseResult = computeWorkbench(fixture, baseWorkbenchParams(fixture));
+const baseView = (): MarginView => computeMarginView(fixture, baseResult, emptyMarginScenario());
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // 成本/价格工作区是 sessionStorage 持久化的模块级 store：逐用例隔离。
+  resetMarginScenarioStoresForTests();
+});
 
-const renderCard = (result: WorkbenchResult) => render(<ForecastMarginCostCard fixture={fixture} result={result} />);
+const renderCard = (
+  result: WorkbenchResult,
+  marginView?: MarginView,
+  extra: Partial<ComponentProps<typeof ForecastMarginCostCard>> = {},
+) => render(
+  <ForecastMarginCostCard
+    fixture={fixture}
+    result={result}
+    {...(marginView != null ? { marginView } : {})}
+    {...extra}
+  />,
+);
 
 const marginBars = (): Element[] =>
   Array.from(document.querySelectorAll('svg rect')).filter((rect) =>
     Array.from(rect.querySelectorAll('title')).some((title) => (title.textContent ?? '').includes('周销毛')),
   );
+
+const barTitleOf = (rect: Element): string => rect.querySelector('title')?.textContent ?? '';
 
 describe('成本销毛 · $M 轴（禁万$）', () => {
   it('轴刻度与 tooltip 均为 $M 格式，全文不出现「万$」', () => {
@@ -50,19 +76,70 @@ describe('成本销毛 · $M 轴（禁万$）', () => {
     fireEvent.click(marginButton!);
     expect(marginBars().length).toBeGreaterThan(0);
   });
+});
 
-  it('预测起点从周状态派生：预测段销毛柱为虚柱（forecast 起点不再写死 8）', () => {
-    // 截断 10 周历史 + 6 周预测的合成窗口：预测虚柱只出现在 status=forecast 的周。
-    const weeks = baseResult.weeks.slice(0, 8).concat(baseResult.weeks.slice(10));
-    const shifted = weeks.map((week, index) => ({
+describe('成本销毛 · MarginView 迁移（任务 9：预测起点 / 负柱 / 缺数周）', () => {
+  it('预测起点从周状态派生：预测段销毛柱为虚柱（v3 合成窗口 8 实际 + 4 预测，不写死下标）', () => {
+    // v3 合成窗口：8 个实际周 + 首个预测周起的 4 个预测周。
+    const weeks = [...baseResult.weeks.slice(0, 8), ...baseResult.weeks.slice(52, 56)].map((week, index) => ({
       ...week,
-      status: index < 10 ? ('actual' as const) : ('forecast' as const),
-      final: index < 10 ? week.final : week.final,
+      status: (index < 8 ? 'actual' : 'forecast') as 'actual' | 'forecast',
     }));
-    renderCard({ ...baseResult, weeks: shifted });
+    renderCard({ ...baseResult, weeks });
     const forecastBars = marginBars().filter((rect) => rect.getAttribute('stroke-dasharray'));
     expect(forecastBars).toHaveLength(4); // 合成窗口只有 4 个预测周。
     expect(forecastBars.every((rect) => (rect.getAttribute('stroke') ?? '').length > 0)).toBe(true);
+  });
+
+  it('负周销毛不丢柱：柱从零基线向下（MarginWeek 负值），零基线网格线存在', () => {
+    const view = baseView();
+    const negWeekId = view.weeks[9]!.weekId;
+    const posWeekId = view.weeks[8]!.weekId;
+    renderCard(baseResult, {
+      ...view,
+      weeks: view.weeks.map((week) => (week.weekId === negWeekId ? { ...week, weeklyMargin: -800000 } : week)),
+    });
+    const negBar = marginBars().find((rect) => barTitleOf(rect).includes(negWeekId));
+    const posBar = marginBars().find((rect) => barTitleOf(rect).includes(posWeekId));
+    expect(negBar).not.toBeUndefined();
+    expect(posBar).not.toBeUndefined();
+    // 负柱顶端（零基线）在正柱顶端之下（向下表达）。
+    expect(Number(negBar!.getAttribute('y'))).toBeGreaterThan(Number(posBar!.getAttribute('y')));
+    // 零基线网格线（强分隔）穿过负柱顶端。
+    const negTop = Number(negBar!.getAttribute('y'));
+    const baseline = Array.from(document.querySelectorAll('svg line')).find(
+      (line) => Math.abs(Number(line.getAttribute('y1')) - negTop) < 0.6,
+    );
+    expect(baseline).not.toBeUndefined();
+    expect(baseline!.getAttribute('stroke')).toBe('#a1a1a1');
+  });
+
+  it('负周销毛 tooltip 为 $M 带符号（$-0.8M），不是万$', () => {
+    const view = baseView();
+    renderCard(baseResult, {
+      ...view,
+      weeks: view.weeks.map((week, index) => (index === 9 ? { ...week, weeklyMargin: -800000 } : week)),
+    });
+    const titles = Array.from(document.querySelectorAll('svg rect title')).map((title) => title.textContent ?? '');
+    expect(titles.some((title) => title.includes('$-0.8M'))).toBe(true);
+    expect(document.body.textContent).not.toContain('万$');
+  });
+
+  it('销量缺失周：不画 0 柱（weeklyMargin=null），覆盖率如实显示「有效周/总数」不掩盖', () => {
+    const targetWeek = baseResult.weeks.find((week) => week.status === 'forecast')!;
+    const withNull = {
+      ...baseResult,
+      weeks: baseResult.weeks.map((week) => (week.weekId === targetWeek.weekId ? { ...week, final: null } : week)),
+    };
+    renderCard(withNull);
+    // 缺数周无柱（不造 0），tooltip 不出现该周。
+    expect(marginBars().some((rect) => barTitleOf(rect).includes(targetWeek.weekId))).toBe(false);
+    // 覆盖率如实显示：与 MarginView 口径一致（缺失周计入总数、不计有效周）。
+    const view = computeMarginView(fixture, withNull, emptyMarginScenario());
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(`预测覆盖 ${view.forecastCoverage.validWeeks}/${view.forecastCoverage.totalWeeks} 周`);
+    expect(text).toContain(`历史覆盖 ${view.historyCoverage.validWeeks}/${view.historyCoverage.totalWeeks} 周`);
+    expect(text).toContain('缺数周不计 0');
   });
 });
 
@@ -140,43 +217,6 @@ describe('成本销毛 · 经营结果定位（2026-11-04 评审：输入（量�
 });
 
 describe('成本销毛 · 负单台销毛（零基线向下）与空态', () => {
-  it('负周销毛不丢柱：柱从零基线向下（top = 零基线），零基线网格线存在', () => {
-    const withNegative = {
-      ...baseResult,
-      weeks: baseResult.weeks.map((week, index) => (index === 9 ? { ...week, weeklyMargin: -800000 } : week)),
-    };
-    renderCard(withNegative);
-    const negBar = marginBars().find((rect) =>
-      Array.from(rect.querySelectorAll('title')).some((title) => (title.textContent ?? '').includes('W46')),
-    );
-    expect(negBar).not.toBeUndefined();
-    const negTop = Number(negBar!.getAttribute('y'));
-    const posBar = marginBars().find((rect) =>
-      Array.from(rect.querySelectorAll('title')).some((title) => (title.textContent ?? '').includes('W45')),
-    );
-    expect(posBar).not.toBeUndefined();
-    const posTop = Number(posBar!.getAttribute('y'));
-    // 负柱顶端在正柱顶端之下（向下表达）。
-    expect(negTop).toBeGreaterThan(posTop);
-    // 零基线网格线（强分隔）穿过负柱顶端。
-    const baseline = Array.from(document.querySelectorAll('svg line')).find(
-      (line) => Math.abs(Number(line.getAttribute('y1')) - negTop) < 0.6,
-    );
-    expect(baseline).not.toBeUndefined();
-    expect(baseline!.getAttribute('stroke')).toBe('#a1a1a1');
-  });
-
-  it('负周销毛 tooltip 为 $M 带符号（$-0.8M），不是万$', () => {
-    const withNegative = {
-      ...baseResult,
-      weeks: baseResult.weeks.map((week, index) => (index === 9 ? { ...week, weeklyMargin: -800000 } : week)),
-    };
-    renderCard(withNegative);
-    const titles = Array.from(document.querySelectorAll('svg rect title')).map((title) => title.textContent ?? '');
-    expect(titles.some((title) => title.includes('$-0.8M'))).toBe(true);
-    expect(document.body.textContent).not.toContain('万$');
-  });
-
   it('无周数据：显「暂无成本销毛数据」，不渲染 SVG、无 NaN', () => {
     renderCard({ ...baseResult, weeks: [] });
     expect(document.querySelector('svg')).toBeNull();
@@ -184,15 +224,95 @@ describe('成本销毛 · 负单台销毛（零基线向下）与空态', () => 
     expect(text).toContain('暂无成本销毛数据');
     expect(text).not.toContain('NaN');
   });
+});
 
-  it('预测周 final 缺失：tooltip 周销显「—」不当 0', () => {
-    const withNull = {
-      ...baseResult,
-      weeks: baseResult.weeks.map((week, index) => (index === 8 ? { ...week, final: null } : week)),
-    };
-    renderCard(withNull);
+describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5.8）', () => {
+  it('卡内分「成本参考区 / 经营结果区」两区，hairline 分区不新增嵌套卡', () => {
+    renderCard(baseResult);
+    expect(document.querySelector('[data-zone="cost-reference"]')).toBeTruthy();
+    expect(document.querySelector('[data-zone="business-result"]')).toBeTruthy();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('成本参考区');
+    expect(text).toContain('经营结果区');
+  });
+
+  it('成本参考区逐月版本行：月份 / 生效成本 / 较上版变化 / 模拟来源状态', () => {
+    renderCard(baseResult);
+    const text = document.body.textContent ?? '';
+    for (const version of fixture.costVersions) {
+      expect(text).toContain(version.monthKey);
+    }
+    expect(text).toContain('较上版');
+    expect(text).toContain('模拟样本');
+  });
+
+  it('成本编辑写 costOverrides：主数字读 MarginView 即时变化、行标「已改」、可还原、回读计数', () => {
+    renderCard(baseResult);
+    const firstMonth = fixture.costVersions[0]!.monthKey;
+    // 基线主数字 = 无假设时的 MarginView.forecastMargin。
+    const baselineMargin = baseView().forecastMargin;
+    fireEvent.click(screen.getByRole('button', { name: `编辑成本版本 ${firstMonth}` }));
+    fireEvent.change(screen.getByLabelText(`成本假设 ${firstMonth}（USD/台）`), { target: { value: '900' } });
+    fireEvent.click(screen.getByRole('button', { name: `保存成本假设 ${firstMonth}` }));
+    // 主数字随假设变化（成本上升 → 预测期销毛下降），与 computeMarginView 同源。
+    const afterView = computeMarginView(fixture, baseResult, {
+      costOverrides: { [firstMonth]: { unitCost: 900, reason: '' } },
+      priceOverrides: {},
+    });
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(`$${(afterView.forecastMargin / 1e6).toFixed(1)}M`);
+    expect(text).not.toContain(`$${(baselineMargin / 1e6).toFixed(1)}M`);
+    // 行标已改 + 可还原 + 回读计数。
+    expect(screen.getByText('已改')).toBeTruthy();
+    expect(screen.getByRole('button', { name: `还原成本基准 ${firstMonth}` })).toBeTruthy();
+    expect(screen.getByText('含成本假设 1 项')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: `还原成本基准 ${firstMonth}` }));
+    expect((document.body.textContent ?? '').includes(`$${(baselineMargin / 1e6).toFixed(1)}M`)).toBe(true);
+    expect(screen.getByText('含成本假设 0 项')).toBeTruthy();
+  });
+
+  it('成本证据浮框位：证据面板显示版本阶梯、单台销毛与周销毛算例（UI 不另编数字）', () => {
+    renderCard(baseResult);
+    fireEvent.click(screen.getByRole('button', { name: `成本证据 ${fixture.costVersions[0]!.monthKey}` }));
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('版本阶梯');
+    expect(text).toContain('单台销毛 = 价格');
+    expect(text).toContain('周销毛');
+    expect(text).toContain('模拟样本');
+  });
+
+  it('方向性提示：成本假设高于上版时「成本上升 · 请核对价格」（无定价依据不预填数值建议）', () => {
+    renderCard(baseResult);
+    const month = fixture.costVersions[1]!.monthKey;
+    const prevCost = fixture.costVersions[0]!.unitCost;
+    fireEvent.click(screen.getByRole('button', { name: `编辑成本版本 ${month}` }));
+    fireEvent.change(screen.getByLabelText(`成本假设 ${month}（USD/台）`), { target: { value: String(prevCost + 50) } });
+    fireEvent.click(screen.getByRole('button', { name: `保存成本假设 ${month}` }));
+    expect(screen.getByText('成本上升 · 请核对价格')).toBeTruthy();
+  });
+
+  it('唯一人工动作「带到主图调价」：打开价格弹窗 → 应用价格调整 → 回读「含主图价格手调 W1」', () => {
+    renderCard(baseResult);
+    expect(screen.queryByText('价格→销量关系未纳入 · 暂不联动销量')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '带到主图调价' }));
+    expect(screen.getByText('价格→销量关系未纳入 · 暂不联动销量')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '应用价格调整' }));
+    // 弹窗关闭，回读区出现价格手调计数（W1）。
+    expect(screen.queryByText('价格→销量关系未纳入 · 暂不联动销量')).toBeNull();
+    expect(screen.getByText('含主图价格手调 W1')).toBeTruthy();
+  });
+
+  it('主数字来自 MarginView 而非主链过渡字段：手调价不改销量时预测期销毛随之更新', () => {
+    const week = baseResult.weeks.find((item) => item.status === 'forecast')!;
+    const marginView = computeMarginView(fixture, baseResult, {
+      costOverrides: {},
+      priceOverrides: { [week.weekId]: { price: week.price + 100, reason: '', batchId: 'price-t' } },
+    });
+    renderCard(baseResult, marginView);
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(`$${(marginView.forecastMargin / 1e6).toFixed(1)}M`);
+    // tooltip 价格列读 MarginView.effectivePrice（显示价 = 手调价）。
     const titles = Array.from(document.querySelectorAll('svg rect title')).map((title) => title.textContent ?? '');
-    expect(titles.some((title) => title.includes('W45') && title.includes('周销 —'))).toBe(true);
-    expect(titles.some((title) => title.includes('W45') && title.includes('周销 0'))).toBe(false);
+    expect(titles.some((title) => title.includes(week.weekId) && title.includes(`价格 $${week.price + 100}`))).toBe(true);
   });
 });

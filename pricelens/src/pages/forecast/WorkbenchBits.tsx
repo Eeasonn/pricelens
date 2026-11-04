@@ -1,10 +1,15 @@
 // ============================================================
-// 量价预测 · 推演工作台 v2 共享展示件：卡头、chip、图例（SuppLegend 规格）、
-// 数字格式。颜色全部来自 src/theme/tokens.ts；状态一律「文字 + 色」双通道。
+// 量价预测 · 推演工作台共享展示件：卡头、chip、链路条（FlowBar）、
+// 图例（SuppLegend 规格）、数字格式。颜色全部来自 src/theme/tokens.ts；
+// 状态一律「文字 + 底色」双通道。
 // 图例规格（与主线 volume/SuppLegend 对齐）：图外底部居中行、roundRect 色块
 // 14×8 或线/虚线/▼ 形态、11px color.body、点击切换系列显隐、隐藏态
 // opacity .45 + aria-pressed。
+// 2026-11-05 任务 6（IA 评审 2.3 B/C）：链路条 FlowBar 上收共享并去节点编号——
+// 页级管线已用①–④编号（PipelineNav），卡内链路不再编第二套 1–5 号
+// （库存卡 3a–3e / 成本卡 4a–4d 的编号方案一并作废，直接无编号）。
 // ============================================================
+import { Fragment } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { color, radius, space } from '../../theme/tokens';
 
@@ -98,6 +103,67 @@ export function IoBar({ input, output }: { input: string; output: string }) {
 
 /** 「演示」琥珀 chip 已退役（WP6 8.3 Step 2）：页首 = DataStatusBadge 一处，
  *  卡级 = 轻量 SimChip（模拟 / 模拟历史，中性灰），不再重复页级琥珀「演示」标。 */
+
+// ------------------------------------------------------------
+// 链路指示条（FlowBar · 卡内共享）：贴 IoBar 的「输入 → 输出」小 chip + →
+// 分隔语言，节点状态「文字 + 底色」双通道；琥珀只用于库存修正语义
+//（PRODUCT.md：amber = 档期 / 库存修正 / 预警）。节点无编号：页级管线
+// ①–④（PipelineNav）是唯一编号体系，卡内链路不重号（IA 评审 2.3 B/C）。
+// ------------------------------------------------------------
+export type FlowStepState = 'base' | 'active' | 'amber' | 'muted';
+
+export interface FlowStep {
+  label: string;
+  /** 节点前分隔符（默认 →；「+」表并列输入）。 */
+  join?: string;
+  /** 节点补充注记（如 2026W46 起 / 未触发 / 不回写主图）。 */
+  note?: string;
+  /** 口径 / 公式收 title，不进正文。 */
+  title?: string;
+  state?: FlowStepState;
+}
+
+export const FLOW_STEP_STYLE: Record<FlowStepState, CSSProperties> = {
+  base: { background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body },
+  active: { background: color.ink, border: `1px solid ${color.ink}`, color: color.onPrimary },
+  amber: { background: color.warningSoft, border: `1px solid ${color.warning}`, color: color.warningInk },
+  muted: { background: color.canvasSoft2, border: `1px solid ${color.hairline}`, color: color.mute },
+};
+
+export function FlowBar({ ariaLabel, steps }: { ariaLabel: string; steps: FlowStep[] }) {
+  return (
+    <div
+      data-flow-bar=""
+      aria-label={ariaLabel}
+      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', marginBottom: space.sm }}
+    >
+      {steps.map((step, index) => {
+        const state = step.state ?? 'base';
+        return (
+          <Fragment key={step.label}>
+            {index > 0 && (
+              <span aria-hidden style={{ color: color.hairlineStrong, fontSize: 11 }}>{step.join ?? '→'}</span>
+            )}
+            <span
+              data-flow-step={step.label}
+              data-state={state}
+              title={step.title}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
+                borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
+                fontWeight: state === 'base' ? 400 : 600,
+                ...FLOW_STEP_STYLE[state],
+              }}
+            >
+              {step.label}
+              {step.note && <span style={{ fontWeight: 600 }}>{step.note}</span>}
+            </span>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 // ------------------------------------------------------------
 // 图例（SuppLegend 规格）

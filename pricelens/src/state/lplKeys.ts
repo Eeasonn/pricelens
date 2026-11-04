@@ -26,6 +26,11 @@ export const LPL = {
    *  完整键 = `${referenceWorkspace}.${scopeHash}`，scopeHash 由模型版本 +
    *  国家 + 产业 + 渠道 + 产品稳定序列化生成，避免未来接入真实筛选后串草稿。 */
   referenceWorkspace: 'LPL3.forecast.referenceWorkspace',
+  /** 情报候选审核工作区（任务 8：候选状态机 / 编辑草稿 / 已应用事件链接 /
+   *  批次号 / 20 步撤销；来源映射不进 WorkbenchParams）。
+   *  完整键 = `${intelligenceReview}.${scopeHash}`，scopeHash 口径同
+   *  referenceWorkspace（模型版本 + 国家 + 产业 + 渠道 + 产品）。 */
+  intelligenceReview: 'LPL3.forecast.intelligenceReview',
 } as const;
 
 /** 配置变更广播：配置页保存后主页立即生效（§13） */

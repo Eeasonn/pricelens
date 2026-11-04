@@ -1,24 +1,25 @@
 // ============================================================
-// 大盘卡（MarketBusPanel）组件测试（jsdom · 2026-11-04 证据信任 v2 版）：
-// 任务一 = 历史 21 个月实线 + 未来 4 季度逐月预测虚线（2026-10–2027-09），
-//   四季度 AI 基线读数（101.3 / 93.6 / 85.7 / 78.4）与月线生效值（含事件乘子）；
-//   X 轴月标签 = 全站月视图日历格式 YYYY-MM（无 25-01 缩写式）；「今天」文字
-//   标签已删（分界虚线保留）；
+// 大盘卡（MarketBusPanel）组件测试（jsdom · v3 · 任务 7 迁移 + B.5.6 增补）：
+// 任务一 = 历史 24 个月实线 + 统一 12 个预测月虚线（2026-11–2027-10，严格 12 个月），
+//   预测季基线读数（109.9 / 105.0 / 102.1 / 99.2 / 105.8，与主链
+//   result.marketQuarters 同源同值）与月线生效值（含月事件乘子）；
+//   X 轴月标签 = 全站月视图日历格式 YYYY-MM（无缩写式）；「今天」文字标签已删；
 // 任务二（v2-1）= hover/Tab+Enter 预测月 → 证据浮框四层（头部 基线/生效、
-//   趋势行 近 6 个月环比 −0.5%/月 + sparkline、月形行 去年同季三柱 + 算例、
+//   趋势行 近 6 个月环比 −0.7%/月 + sparkline、月形行 去年同季三柱 + 算例、
 //   底部「调整此月」）；「调整此月」就地切换既有调整表单（一层化两态，
 //   原因选填不拦截），已调整月轻量标记（实心蓝点 data-adjusted），
 //   还原 AI = onMonthOverride(key, null, '')；
-// 任务二（v2-2）= 双锚点：hover 月同时趋势源段衬带（data-anchor="trend-band"，
-//   窗口 = 模型 marketTrendWindow 同源）+ 去年同位圆环（data-anchor=
-//   "last-year-ring"）+ 其余线段降不透明（data-dim）+ hover 月加重点；
-//   移开即恢复（mouseOut 后全部消失，零常驻元素）；
+// 任务二（v2-2）= 双锚点：趋势源段衬带（2026-05..2026-10，窗口 = 模型
+//   marketTrendWindow 同源）+ 去年同位圆环 + 其余线段降不透明 + 移开即恢复；
 // 任务二（v2-3）= 卡头「AI 推测 · 可改」徽章 hover/点击 → 三步链浮层
-//   （样本 → 两个规律 → 外推，含算例，数字与模型同源），零新增常驻元素；
-// 任务三 = 月中事件均摊口径可见（含事件月浮框复算提示「含事件 +0.8%
-//   （均摊 3/31 天）」）+ 三字段录入（名称选填）+ 删除回调；
-// 任务四 = 事件区右 1/3 两块（AI 候选事件 Top5 占位 + 人工事件列表）；
-//   事件在图上 = 轴下次要标记（不占主视觉）；卡体定高 330（2026-11-04 视觉一致性，旧 420 已下）。
+//   （样本 24 个月 → 两个规律 → 外推，数字与模型同源），零新增常驻元素；
+// 任务三（B.5.6）= 月中事件均摊口径可见 + 三字段录入（名称选填）+
+//   行内「编辑」（同一三字段编辑器 → onMonthEventUpdate）+ 删除回调；
+// 任务七（B.5.6）= 月调整应用后反馈「本月比值 ×… · 已联动 N 个预测周」+
+//   「查看主图」「检查库存」；
+// 任务四 = 事件区右 1/3 两块（情报候选空态「候选生成能力待接入」+ 禁用按钮，
+//   不画假候选；人工事件列表）；事件在图上 = 轴下次要标记；
+//   卡体定高 330（2026-11-04 视觉一致性）。
 // 环比数字由所画 6 个月真实计算（marketBusMonthly.test 同源断言），UI 不另编。
 // 只验证 React 组装与交互开关，不验证图表像素（SVG 由 typecheck 保证结构）。
 // ============================================================
@@ -33,30 +34,47 @@ class ResizeObserverStub {
 }
 (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
 
-import { workbenchFixture } from '../workbenchFixture';
+import { workbenchFixture, type MarketMonthEventSeed } from '../workbenchFixture';
 import { baseWorkbenchParams, computeWorkbench, type WorkbenchParams, type WorkbenchResult } from '../workbenchModel';
 import MarketBusPanel from '../MarketBusPanel';
 
 afterEach(cleanup);
 
-function setup(overrides: Partial<WorkbenchParams> = {}): {
+const fixture = workbenchFixture;
+
+/** 默认月度事件（2027-01-29 起 +8% × 1 个月）：月中均摊口径用例。 */
+const FOLD_MONTH_EVENT: MarketMonthEventSeed = { id: 'me-fold', label: '新春促销脉冲', startMonth: '2027-01', startDay: 29, durationMonths: 1, magnitudePct: 8 };
+/** 周口径行业事件（v3 WeekRange 口径）：图上轴下次要标记用例。 */
+const FOLD_WEEK_EVENT = { id: 'ev-fold', label: '折叠屏阵营扩容', startWeekId: '2026W46', endWeekId: '2026W50', magnitudePct: 6, decay: 'decreasing' as const };
+
+interface SetupOptions {
+  overrides?: Partial<WorkbenchParams>;
+  onViewMainChart?: () => void;
+  onCheckInventory?: () => void;
+  onMonthEventUpdate?: (id: string, event: Omit<MarketMonthEventSeed, 'id'>) => void;
+}
+
+function setup(options: SetupOptions = {}): {
   onMonthOverride: ReturnType<typeof vi.fn>;
   onMonthEventAdd: ReturnType<typeof vi.fn>;
   onMonthEventRemove: ReturnType<typeof vi.fn>;
 } {
-  const params: WorkbenchParams = { ...baseWorkbenchParams(workbenchFixture), ...overrides };
-  const result: WorkbenchResult = computeWorkbench(workbenchFixture, params);
+  const params: WorkbenchParams = { ...baseWorkbenchParams(fixture), ...options.overrides };
+  const result: WorkbenchResult = computeWorkbench(fixture, params);
   const onMonthOverride = vi.fn();
   const onMonthEventAdd = vi.fn();
   const onMonthEventRemove = vi.fn();
   render(
     <MarketBusPanel
-      fixture={workbenchFixture}
+      fixture={fixture}
       params={params}
       result={result}
       onMonthOverride={onMonthOverride}
       onMonthEventAdd={onMonthEventAdd}
       onMonthEventRemove={onMonthEventRemove}
+      onMonthEventUpdate={options.onMonthEventUpdate}
+      onViewMainChart={options.onViewMainChart}
+      onCheckInventory={options.onCheckInventory}
       onRationaleChange={vi.fn()}
     />,
   );
@@ -77,8 +95,8 @@ const openAdjustForm = (monthKey = '2027-03'): void => {
   fireEvent.click(adjust as Element);
 };
 
-describe('大盘卡 · 任务一：4 季度月线（月粒度主序列 + 轴清洁）', () => {
-  it('历史 21 个月实线 + 未来 4 季度逐月预测 12 个月（2026-10 起，2027-09 止），交互列只挂预测月', () => {
+describe('大盘卡 · 任务一：月度主序列（v3 统一 12 个预测月）', () => {
+  it('历史 24 个月实线 + 统一 12 个预测月虚线（2026-11 起，2027-10 止），交互列只挂预测月', () => {
     setup();
     const svg = document.querySelector('svg[role="img"]');
     expect(svg).not.toBeNull();
@@ -86,19 +104,18 @@ describe('大盘卡 · 任务一：4 季度月线（月粒度主序列 + 轴清�
     expect(svg?.querySelector('[data-series="forecast"]')).not.toBeNull();
     const hitMonths = Array.from(document.querySelectorAll('rect[data-month]')).map((rect) => rect.getAttribute('data-month'));
     expect(hitMonths).toHaveLength(12);
-    expect(hitMonths[0]).toBe('2026-10');
-    expect(hitMonths[hitMonths.length - 1]).toBe('2027-09');
+    expect(hitMonths[0]).toBe('2026-11');
+    expect(hitMonths[hitMonths.length - 1]).toBe('2027-10');
     // 历史月不可调整（无交互列）
     expect(hitMonths).not.toContain('2026-08');
-    expect(hitMonths).not.toContain('2025-01');
+    expect(hitMonths).not.toContain('2024-11');
   });
 
-  it('X 轴月标签 = 全站月视图日历格式 YYYY-MM（如 2025-01 / 2027-01，弃用 25-01 缩写式）', () => {
+  it('X 轴月标签 = 全站月视图日历格式 YYYY-MM（季度首月刻度，含 2027-10；非季度首月不出刻度）', () => {
     setup();
     const svg = document.querySelector('svg[role="img"]');
     const labels = Array.from(svg?.querySelectorAll('text') ?? []).map((text) => text.textContent ?? '');
-    // 季度首月刻度出全格式日历标签（与价格走势/量价月视图悬停、明细同一口径）
-    for (const key of ['2025-01', '2025-04', '2025-07', '2025-10', '2026-01', '2026-04', '2026-07', '2026-10', '2027-01', '2027-04', '2027-07']) {
+    for (const key of ['2025-01', '2025-04', '2025-07', '2025-10', '2026-01', '2026-04', '2026-07', '2026-10', '2027-01', '2027-04', '2027-07', '2027-10']) {
       expect(labels).toContain(key);
     }
     // 非季度首月不出刻度标签
@@ -115,21 +132,22 @@ describe('大盘卡 · 任务一：4 季度月线（月粒度主序列 + 轴清�
     expect(divider, '历史/预测分界虚线保留').not.toBeNull();
   });
 
-  it('四季度 AI 基线读数：2026Q4 101.3 · 2027Q1 93.6 · 2027Q2 85.7 · 2027Q3 78.4（与主链 aiQ4/aiQ1 同源同值）', () => {
+  it('预测季基线读数：2026Q4 109.9 · 2027Q1 105.0 · 2027Q2 102.1 · 2027Q3 99.2 · 2027Q4 105.8（与主链 marketQuarters 同源同值）', () => {
     setup();
     const text = document.body.textContent ?? '';
-    expect(text).toContain('AI 四季度基线');
-    expect(text).toContain('2026Q4 101.3');
-    expect(text).toContain('2027Q1 93.6');
-    expect(text).toContain('2027Q2 85.7');
-    expect(text).toContain('2027Q3 78.4');
+    expect(text).toContain('AI 预测季基线');
+    expect(text).toContain('2026Q4 109.9');
+    expect(text).toContain('2027Q1 105.0');
+    expect(text).toContain('2027Q2 102.1');
+    expect(text).toContain('2027Q3 99.2');
+    expect(text).toContain('2027Q4 105.8');
   });
 
-  it('月线生效值即时反映事件乘子：2027-01 含默认月度事件（29 日起 +8% × 3/31）→ 当前 94.0 ≠ 基线 93.3', () => {
-    setup();
+  it('月线生效值即时反映事件乘子：2027-01 含月事件（29 日起 +8% × 3/31）→ 当前 105.8 ≠ 基线 105.0', () => {
+    setup({ overrides: { marketMonthEvents: [FOLD_MONTH_EVENT] } });
     const hit = monthHit('2027-01');
-    expect(hit.getAttribute('aria-label')).toContain('当前 94.0');
-    expect(hit.getAttribute('aria-label')).toContain('AI 基线 93.3');
+    expect(hit.getAttribute('aria-label')).toContain('当前 105.8');
+    expect(hit.getAttribute('aria-label')).toContain('AI 基线 105.0');
   });
 
   it('卡头输入/输出条：输入「月度指数 · 行业事件（月中按日均摊）」→ 输出「主图周销基准」；模拟标识保留', () => {
@@ -151,24 +169,24 @@ describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整�
     expect(popover).not.toBeNull();
     expect((popover as HTMLElement).getAttribute('role')).toBe('dialog');
     expect((popover as HTMLElement).textContent ?? '').toContain('2027-02 · 预测月');
-    expect((popover as HTMLElement).textContent ?? '').toContain('AI 基线 93.9 · 生效 93.9');
+    expect((popover as HTMLElement).textContent ?? '').toContain('AI 基线 104.4 · 生效 104.4');
   });
 
-  it('趋势层：读数「近 6 个月环比 −0.5%/月」（模型 marketTrendWindow 同源）+ sparkline（实线 6 点 + 基线虚线延伸）', () => {
+  it('趋势层：读数「近 6 个月环比 −0.7%/月」（模型 marketTrendWindow 同源）+ sparkline（实线 6 点 + 基线虚线延伸）', () => {
     setup();
     fireEvent.mouseOver(monthHit('2027-02'));
     const readout = document.querySelector('[data-lpl-evidence-trend-readout]');
-    expect(readout?.textContent).toBe('趋势 · 近 6 个月环比 −0.5%/月');
+    expect(readout?.textContent).toBe('趋势 · 近 6 个月环比 −0.7%/月');
     const spark = document.querySelector('svg[data-lpl-evidence-sparkline]');
     expect(spark).not.toBeNull();
     // 近 6 个月实线（1 条）+ 基线虚线延伸（1 条）
     expect(spark?.querySelectorAll('polyline')).toHaveLength(2);
-    expect((spark as SVGSVGElement).textContent ?? '').toContain('2026-04');
-    expect((spark as SVGSVGElement).textContent ?? '').toContain('2026-09');
+    expect((spark as SVGSVGElement).textContent ?? '').toContain('2026-05');
+    expect((spark as SVGSVGElement).textContent ?? '').toContain('2026-10');
     expect((spark as SVGSVGElement).textContent ?? '').toContain('2027-02');
   });
 
-  it('月形层：去年同季三根小柱（2027-02 高亮去年 2 月）+ 构成算例「93.6 × 100.37% ≈ 93.9」（算例与模型同源）', () => {
+  it('月形层：去年同季三根小柱（2027-02 高亮去年 2 月）+ 构成算例「105.0 × 99.44% ≈ 104.4」（算例与模型同源）', () => {
     setup();
     fireEvent.mouseOver(monthHit('2027-02'));
     const shape = document.querySelector('[data-lpl-evidence-shape]');
@@ -177,21 +195,21 @@ describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整�
     expect(bars).toHaveLength(3);
     const highlighted = shape?.querySelector('[data-lpl-shape-bar="2026-02"][data-lpl-shape-highlighted]');
     expect(highlighted, '本月（2 月位）去年同柱高亮').not.toBeNull();
-    expect(shape?.textContent ?? '').toContain('1 月 99.63%');
-    expect(shape?.textContent ?? '').toContain('2 月 100.37%');
-    expect(shape?.textContent ?? '').toContain('3 月 100.00%');
-    expect((shape?.textContent ?? '')).toContain('93.6 × 100.37% ≈ 93.9');
+    expect(shape?.textContent ?? '').toContain('1 月 100.00%');
+    expect(shape?.textContent ?? '').toContain('2 月 99.44%');
+    expect(shape?.textContent ?? '').toContain('3 月 100.56%');
+    expect((shape?.textContent ?? '')).toContain('105.0 × 99.44% ≈ 104.4');
   });
 
   it('无事件/无手调月无复算提示行；含事件月（2027-01）顶部复算提示「含事件 +0.8%（均摊 3/31 天）」且算例含乘子', () => {
-    setup();
+    setup({ overrides: { marketMonthEvents: [FOLD_MONTH_EVENT] } });
     fireEvent.mouseOver(monthHit('2027-02'));
     expect(document.querySelector('[data-lpl-evidence-recalc]')).toBeNull();
     fireEvent.mouseOver(monthHit('2027-01'));
     const notice = document.querySelector('[data-lpl-evidence-recalc]');
     expect(notice?.textContent).toContain('含事件 +0.8%（均摊 3/31 天）');
     const shape = document.querySelector('[data-lpl-evidence-shape]');
-    expect(shape?.textContent ?? '').toContain('93.6 × 99.63% × 100.8% ≈ 94.0');
+    expect(shape?.textContent ?? '').toContain('105.0 × 100.00% × 100.8% ≈ 105.8');
   });
 
   it('键盘可达：Tab 聚焦 + Enter 触发同一证据浮框（月列 role=button）', () => {
@@ -222,11 +240,11 @@ describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整�
     const { onMonthOverride } = setup();
     openAdjustForm('2027-03');
     const popover = document.querySelector('[data-lpl-month-popover]');
-    expect((popover as HTMLElement).textContent ?? '').toContain('AI 基线 93.6');
+    expect((popover as HTMLElement).textContent ?? '').toContain('AI 基线 105.6');
     const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
     expect(apply?.disabled).toBe(false);
     fireEvent.click(apply as HTMLButtonElement);
-    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 93.6, '');
+    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 105.6, '');
     expect(document.querySelector('[data-lpl-month-popover]')).toBeNull();
   });
 
@@ -243,7 +261,7 @@ describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整�
     expect(document.querySelector('[data-lpl-month-popover]')).toBeNull();
   });
 
-  it('增减幅式：+10% → 回调值 = round1(生效 × 1.1) = 103', () => {
+  it('增减幅式：+10% → 回调值 = round1(生效 × 1.1) = 116.2', () => {
     const { onMonthOverride } = setup();
     openAdjustForm('2027-03');
     const pctMode = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '增减幅%');
@@ -252,12 +270,12 @@ describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整�
     fireEvent.change(pctInput, { target: { value: '10' } });
     const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
     fireEvent.click(apply as HTMLButtonElement);
-    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 103, '');
+    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 116.2, '');
   });
 
   it('已调整月 = 轻量标记（实心蓝点 data-adjusted）；含手调证据复算提示；调整态「还原 AI」→ onMonthOverride(key, null, \'\')', () => {
     const { onMonthOverride } = setup({
-      marketMonthOverrides: { '2027-03': { value: 88, reason: '竞品延期' } },
+      overrides: { marketMonthOverrides: { '2027-03': { value: 88, reason: '竞品延期' } } },
     });
     const dot = document.querySelector('circle[data-adjusted="2027-03"]');
     expect(dot).not.toBeNull();
@@ -274,6 +292,47 @@ describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整�
   });
 });
 
+describe('大盘卡 · 任务七（B.5.6）：月调整应用后反馈行', () => {
+  it('应用后显示「本月比值 ×0.85 · 已联动 5 个预测周」+「查看主图」「检查库存」（回调接线）', () => {
+    const onViewMainChart = vi.fn();
+    const onCheckInventory = vi.fn();
+    const { onMonthOverride } = setup({ onViewMainChart, onCheckInventory });
+    openAdjustForm('2027-03');
+    const valueInput = screen.getByLabelText('调整后指数') as HTMLInputElement;
+    fireEvent.change(valueInput, { target: { value: '90' } });
+    const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
+    fireEvent.click(apply as HTMLButtonElement);
+    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 90, '');
+    const feedback = document.querySelector('[data-lpl-month-feedback="2027-03"]');
+    expect(feedback).not.toBeNull();
+    expect(feedback?.textContent ?? '').toContain('本月比值 ×0.85 · 已联动 5 个预测周');
+    // 跨卡动作（任务 6 接线：回主图 / 检查库存）
+    fireEvent.click(screen.getByRole('button', { name: '查看主图' }));
+    expect(onViewMainChart).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '检查库存' }));
+    expect(onCheckInventory).toHaveBeenCalledTimes(1);
+    // 反馈可关闭
+    fireEvent.click(screen.getByRole('button', { name: '关闭 2027-03 调整反馈' }));
+    expect(document.querySelector('[data-lpl-month-feedback="2027-03"]')).toBeNull();
+  });
+
+  it('还原该月后反馈行随之消失（不显示还原后残留比值）', () => {
+    setup({ overrides: { marketMonthOverrides: { '2027-03': { value: 88, reason: '' } } } });
+    fireEvent.mouseOver(monthHit('2027-03'));
+    fireEvent.click(document.querySelector('[data-lpl-evidence-adjust]') as Element);
+    // 调整态应用（写入同值）→ 反馈出现
+    const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
+    fireEvent.click(apply as HTMLButtonElement);
+    expect(document.querySelector('[data-lpl-month-feedback="2027-03"]')).not.toBeNull();
+    // 再进调整态 → 还原 AI → 反馈消失
+    fireEvent.mouseOver(monthHit('2027-03'));
+    fireEvent.click(document.querySelector('[data-lpl-evidence-adjust]') as Element);
+    const restore = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '还原AI');
+    fireEvent.click(restore as HTMLButtonElement);
+    expect(document.querySelector('[data-lpl-month-feedback="2027-03"]')).toBeNull();
+  });
+});
+
 describe('大盘卡 · v2-2：图上双锚点（hover 临时，移开即恢复）', () => {
   it('默认态零锚点零降透明（不新增常驻元素）', () => {
     setup();
@@ -284,13 +343,13 @@ describe('大盘卡 · v2-2：图上双锚点（hover 临时，移开即恢复�
     expect(actual?.getAttribute('opacity')).toBe('1');
   });
 
-  it('hover 预测月 → 趋势源段衬带（近 6 个月实际段，窗口与模型同源）+ 去年同位圆环 + hover 月加重点 + 来源连线', () => {
+  it('hover 预测月 → 趋势源段衬带（2026-05..2026-10，窗口与模型同源）+ 去年同位圆环 + hover 月加重点 + 来源连线', () => {
     setup();
     fireEvent.mouseOver(monthHit('2027-02'));
     const svg = document.querySelector('svg[role="img"]');
     const band = svg?.querySelector('[data-anchor="trend-band"]');
     expect(band).not.toBeNull();
-    expect(band?.getAttribute('data-anchor-window')).toBe('2026-04..2026-09');
+    expect(band?.getAttribute('data-anchor-window')).toBe('2026-05..2026-10');
     expect(svg?.querySelector('[data-anchor="trend-source"]')).not.toBeNull();
     expect(svg?.querySelector('[data-anchor="trend-seg"]')).not.toBeNull();
     const ring = svg?.querySelector('[data-anchor="last-year-ring"]');
@@ -334,16 +393,16 @@ describe('大盘卡 · v2-3：徽章三步链浮层（零新增常驻元素）',
     const steps = popover?.querySelectorAll('[data-lpl-chain-step]');
     expect(steps).toHaveLength(3);
     const text = popover?.textContent ?? '';
-    // 步 1 样本：21 个月历史段
+    // 步 1 样本：24 个月历史段（2024-11–2026-10）
     expect(steps?.[0].textContent ?? '').toContain('样本');
-    expect(steps?.[0].textContent ?? '').toContain('2025-01 – 2026-09 · 21 个月大盘指数');
-    // 步 2 两个规律：季节（2027Q1 去年同季月形）+ 趋势（近 6 个月环比均值 −0.5%/月，模型同源）
+    expect(steps?.[0].textContent ?? '').toContain('2024-11 – 2026-10 · 24 个月大盘指数');
+    // 步 2 两个规律：季节（2027Q1 去年同季月形）+ 趋势（近 6 个月环比均值 −0.7%/月，模型同源）
     expect(steps?.[1].textContent ?? '').toContain('两个规律');
-    expect(steps?.[1].textContent ?? '').toContain('99.63% / 100.37% / 100.00%');
-    expect(steps?.[1].textContent ?? '').toContain('近 6 个月（2026-04–2026-09）环比均值 −0.5%/月');
-    // 步 3 外推：算例（2027Q1 基线 93.6 → 93.3 · 93.9 · 93.6，与 computeMarketMonths 同源）
+    expect(steps?.[1].textContent ?? '').toContain('100.00% / 99.44% / 100.56%');
+    expect(steps?.[1].textContent ?? '').toContain('近 6 个月（2026-05–2026-10）环比均值 −0.7%/月');
+    // 步 3 外推：算例（2027Q1 基线 105.0 → 105.0 · 104.4 · 105.6，与 computeMarketMonths 同源）
     expect(steps?.[2].textContent ?? '').toContain('外推');
-    expect(steps?.[2].textContent ?? '').toContain('例：2027Q1 基线 93.6 × 去年同季月形 → 93.3 · 93.9 · 93.6');
+    expect(steps?.[2].textContent ?? '').toContain('例：2027Q1 基线 105.0 × 去年同季月形 → 105.0 · 104.4 · 105.6');
     // 口径注释显式声明（模型与 UI 同一窗口）
     expect(text).toContain('趋势读数 = 近 6 个月实际段环比，模型与浮框同一函数');
     // 移开即收起（零常驻元素）
@@ -362,18 +421,18 @@ describe('大盘卡 · v2-3：徽章三步链浮层（零新增常驻元素）',
   });
 });
 
-describe('大盘卡 · 任务三：月中事件均摊与三字段录入', () => {
-  it('默认月度事件（2027-01-29 起）显式声明均摊口径：列表与图上标记均含「首月覆盖 3/31 天」', () => {
-    setup();
+describe('大盘卡 · 任务三：月中事件均摊与三字段录入 / 行内编辑（B.5.6）', () => {
+  it('月度事件（2027-01-29 起）显式声明均摊口径：列表与图上标记均含「首月覆盖 3/31 天」', () => {
+    setup({ overrides: { marketMonthEvents: [FOLD_MONTH_EVENT] } });
     const text = document.body.textContent ?? '';
     expect(text).toContain('2027-01-29 起 · 1 个月 · +8% · 首月覆盖 3/31 天');
-    const mark = document.querySelector('[data-month-event-id="ev-fold-m"]');
+    const mark = document.querySelector('[data-month-event-id="me-fold"]');
     expect(mark?.getAttribute('data-start-month')).toBe('2027-01');
     expect((mark as Element).querySelector('title')?.textContent ?? '').toContain('首月覆盖 3/31 天');
   });
 
-  it('添加表单三字段 + 名称选填：空名称即可添加（默认 2026-10 / 1 日 / 1 个月 / +5%）', () => {
-    const { onMonthEventAdd } = setup({ marketMonthEvents: [] });
+  it('添加表单三字段 + 名称选填：空名称即可添加（默认 2026-11 / 1 日 / 1 个月 / +5%）', () => {
+    const { onMonthEventAdd } = setup();
     const opener = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').includes('添加事件'));
     fireEvent.click(opener as HTMLButtonElement);
     // 三字段入口齐全：起始月 / 起始日 / 时长（月）/ 幅度；名称标注选填
@@ -388,7 +447,7 @@ describe('大盘卡 · 任务三：月中事件均摊与三字段录入', () => 
     fireEvent.click(submit as HTMLButtonElement);
     expect(onMonthEventAdd).toHaveBeenCalledWith({
       label: '',
-      startMonth: '2026-10',
+      startMonth: '2026-11',
       startDay: 1,
       durationMonths: 1,
       magnitudePct: 5,
@@ -397,13 +456,37 @@ describe('大盘卡 · 任务三：月中事件均摊与三字段录入', () => 
 
   it('事件名称选填不被拦截：卡片列表空名称显示「未命名事件」；删除回调带 id', () => {
     const { onMonthEventRemove } = setup({
-      marketMonthEvents: [{ id: 'me-x', label: '', startMonth: '2026-12', startDay: 15, durationMonths: 2, magnitudePct: -6 }],
+      overrides: { marketMonthEvents: [{ id: 'me-x', label: '', startMonth: '2026-12', startDay: 15, durationMonths: 2, magnitudePct: -6 }] },
     });
     const text = document.body.textContent ?? '';
     expect(text).toContain('未命名事件');
     expect(text).toContain('2026-12-15 起 · 2 个月 · −6%');
     fireEvent.click(screen.getByRole('button', { name: '删除事件 未命名事件' }));
     expect(onMonthEventRemove).toHaveBeenCalledWith('me-x');
+  });
+
+  it('行内「编辑」（B.5.6）：同一三字段编辑器预填当前值，改幅度后「保存修改」→ onMonthEventUpdate(id, next)', () => {
+    const onMonthEventUpdate = vi.fn();
+    setup({
+      overrides: { marketMonthEvents: [{ id: 'me-x', label: '内存涨价', startMonth: '2026-12', startDay: 15, durationMonths: 2, magnitudePct: -6 }] },
+      onMonthEventUpdate,
+    });
+    fireEvent.click(screen.getByRole('button', { name: '编辑事件 内存涨价' }));
+    // 预填：名称与幅度同当前值
+    expect((screen.getByLabelText('事件名称（选填）') as HTMLInputElement).value).toBe('内存涨价');
+    expect((screen.getByLabelText('事件影响幅度（%）') as HTMLInputElement).value).toContain('-6');
+    // 改幅度 → 保存修改 → 回调带 id 与三字段
+    fireEvent.change(screen.getByLabelText('事件影响幅度（%）'), { target: { value: '-9' } });
+    const submit = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '保存修改');
+    expect(submit).toBeTruthy();
+    fireEvent.click(submit as HTMLButtonElement);
+    expect(onMonthEventUpdate).toHaveBeenCalledWith('me-x', {
+      label: '内存涨价',
+      startMonth: '2026-12',
+      startDay: 15,
+      durationMonths: 2,
+      magnitudePct: -9,
+    });
   });
 });
 
@@ -427,42 +510,37 @@ describe('大盘卡 · 任务四：事件区右 1/3 两块', () => {
     expect(svg?.getAttribute('preserveAspectRatio')).toBeNull();
   });
 
-  it('上块 AI 候选事件 Top5 占位：空态注明「候选生成能力待接入，抓取逻辑另议」；先列后删骨架全禁用（不接数据）', () => {
+  it('上块情报候选空态（B.5.6 / 3.3-A）：「候选生成能力待接入」+ 禁用按钮；不画占位候选行', () => {
     setup();
     const text = document.body.textContent ?? '';
-    expect(text).toContain('AI 候选事件 Top5');
-    expect(text).toContain('候选生成能力待接入，抓取逻辑另议');
-    // 5 行禁用态示意：勾选框与删除按钮全部 disabled
-    const popoverArea = Array.from(document.querySelectorAll('div')).find((node) => (node.getAttribute('aria-label') ?? '').includes('AI 候选事件占位列表'));
-    expect(popoverArea).toBeTruthy();
-    const checkboxes = Array.from(popoverArea?.querySelectorAll('input[type="checkbox"]') ?? []);
-    expect(checkboxes).toHaveLength(5);
-    expect(checkboxes.every((checkbox) => (checkbox as HTMLInputElement).disabled)).toBe(true);
-    const deleteButtons = Array.from(popoverArea?.querySelectorAll('button') ?? []);
-    expect(deleteButtons).toHaveLength(5);
-    expect(deleteButtons.every((button) => button.disabled)).toBe(true);
-    // 弹出入口同样禁用（能力待接入）
-    const trigger = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').trim() === '弹出候选');
+    expect(text).toContain('情报候选 · 待审核');
+    expect(text).toContain('候选生成能力待接入');
+    // 不再画五条假候选：空态区无勾选框、无「候选事件位」占位行
+    expect(document.body.textContent ?? '').not.toContain('候选事件位');
+    expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    // 候选入口按钮禁用（能力待接入）
+    const trigger = Array.from(document.querySelectorAll('button')).find((button) =>
+      (button.getAttribute('title') ?? '').includes('候选生成能力待接入'));
     expect(trigger?.disabled).toBe(true);
   });
 
-  it('周口径默认事件（主链生效中）以轴下次要标记呈现（不占主视觉），带 hover 详情', () => {
-    setup();
+  it('周口径行业事件（人工录入假设）以轴下次要标记呈现（不占主视觉），带 hover 详情', () => {
+    setup({ overrides: { marketEvents: [FOLD_WEEK_EVENT] } });
     const mark = document.querySelector('[data-week-event-id="ev-fold"]');
     expect(mark).not.toBeNull();
     expect((mark as Element).querySelector('title')?.textContent ?? '').toContain('折叠屏阵营扩容');
-    expect((mark as Element).querySelector('title')?.textContent ?? '').toContain('W46–W50');
+    expect((mark as Element).querySelector('title')?.textContent ?? '').toContain('2026W46–2026W50');
   });
 });
 
 describe('大盘卡 · 图例显隐与空态', () => {
-  it('图例三项可切换；默认月度事件存在时 AI 基线 ghost 显示，隐藏图例只影响 ghost 不影响生效线', () => {
-    setup();
+  it('图例三项可切换；有月事件时 AI 基线 ghost 显示，隐藏图例只影响 ghost 不影响生效线', () => {
+    setup({ overrides: { marketMonthEvents: [FOLD_MONTH_EVENT] } });
     const svg = document.querySelector('svg[role="img"]');
     expect(svg?.querySelector('[data-series="ai-ghost"]')).not.toBeNull();
     const legendButton = (labelPart: string): HTMLButtonElement | undefined =>
       Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').includes(labelPart));
-    for (const label of ['实际（月度）', '预测 · 未来 4 季逐月', 'AI 基线']) {
+    for (const label of ['实际（月度）', '预测 · 统一 12 个月逐月', 'AI 基线']) {
       expect(legendButton(label)?.getAttribute('aria-pressed')).toBe('true');
     }
     const aiLegend = legendButton('AI 基线');
@@ -474,16 +552,16 @@ describe('大盘卡 · 图例显隐与空态', () => {
   });
 
   it('无事件且无按月调整时不渲染 AI ghost（回 AI 口径对照不出现）', () => {
-    setup({ marketMonthEvents: [] });
+    setup();
     expect(document.querySelector('svg[role="img"]')?.querySelector('[data-series="ai-ghost"]')).toBeNull();
   });
 
   it('无月度数据时不渲染 NaN SVG，显示「当前范围无大盘数据」', () => {
-    const params = baseWorkbenchParams(workbenchFixture);
-    const result: WorkbenchResult = { ...computeWorkbench(workbenchFixture, params), marketMonths: [] };
+    const params = baseWorkbenchParams(fixture);
+    const result: WorkbenchResult = { ...computeWorkbench(fixture, params), marketMonths: [] };
     render(
       <MarketBusPanel
-        fixture={workbenchFixture}
+        fixture={fixture}
         params={params}
         result={result}
         onMonthOverride={vi.fn()}

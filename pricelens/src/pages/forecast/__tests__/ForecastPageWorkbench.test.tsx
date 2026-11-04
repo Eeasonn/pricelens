@@ -1,13 +1,14 @@
 // ============================================================
-// 量价预测 · 推演工作台 v2 页面集成冒烟（WP6 8.1–8.4，jsdom）：
+// 量价预测 · 推演工作台 v3 页面集成冒烟（任务 10 收敛 · jsdom）：
 // 入共享分析壳（单页头、无 FilterBar、全页唯一「量价预测」current）、
-// 五卡齐全有序、范围行压缩 + 模拟标识分级（页首 DataStatusBadge + 各卡
-// 轻量 SimChip）、上一代参照受控进主链（草稿按模型版本落 sessionStorage）、
-// 微调→复制关键假设→切页往返草稿保留、禁词/旧话术总扫。
-// 2026-11-04 清洁第二轮：④⑤ 库存验证 + 成本销毛改左右两列
-//（data-lpl-forecast-grid：minmax(0,1fr) / minmax(0,0.8fr)，窄屏退化走
-// index.css 既有 ≤760px 单列断点），新增布局结构断言。
-// 只验证 React 组装与交互开关，不验证图表像素（SVG 由 typecheck 保证结构）。
+// PipelineNav 挂载（四节点 + 点击只定位：跨卡滚动/聚焦 + 「来自…」返回条，
+// 返回恢复）、五卡齐全有序（主图→参考→大盘→③库存修正→成本销毛垫底）、
+// 范围行压缩 + 模拟标识分级（页首 DataStatusBadge + 各卡轻量 SimChip）、
+// SI 未全部确认页首提示（B.5.7）、上一代参照受控进①学习器（切换 = 重新
+// 学习，草稿按 workbench-demo-v3 落 sessionStorage）、微调（WeekId 键控）→
+// 复制关键假设（v3 管线顺序 + SI 状态）→ 切页往返草稿保留、禁词/旧话术总扫。
+// 周身份一律用跨年周 ID（YYYYWww）。只验证 React 组装与交互开关，不验证
+// 图表像素（SVG 由 typecheck 保证结构）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,14 +38,16 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
+// jsdom 无 scrollIntoView：跨卡导航（PipelineNav / 证据定位）在页级真实调用。
+(Element.prototype as { scrollIntoView?: unknown }).scrollIntoView ??= () => undefined;
 
 import App from '../../../App';
 
 afterEach(cleanup);
 
-const DRAFT_KEY = 'LPL3.view.forecast.workbench.workbench-demo-v2';
+const DRAFT_KEY = 'LPL3.view.forecast.workbench.workbench-demo-v3';
 
-describe('量价预测推演工作台 v2 · WP6 集成', () => {
+describe('量价预测推演工作台 v3 · WP6 集成', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/?p=forecast');
     sessionStorage.clear();
@@ -69,7 +72,36 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     expect(headerButtons.some((button) => (button.textContent ?? '').trim() === '量价预测')).toBe(false);
   });
 
-  it('五卡齐全有序（主图→参考→大盘→库存→成本垫底）；范围行压缩要素齐全；纪要层不回归', () => {
+  it('PipelineNav 挂载：全局管线四节点齐全（①自动学习基线→②大盘修正→③库存修正→④成本及销毛），点击只定位不写参数', () => {
+    render(<App />);
+    const nav = document.querySelector('[data-pipeline-nav]');
+    expect(nav).not.toBeNull();
+    expect(nav!.getAttribute('aria-label')).toContain('①自动学习基线');
+    expect(nav!.getAttribute('aria-label')).toContain('④成本及销毛');
+    for (const stage of ['1', '2', '3', '4']) {
+      expect(document.querySelector(`[data-pipeline-stage="${stage}"]`)).not.toBeNull();
+    }
+    // 节点状态读数（B.5.1）：③SI 待确认 N / 12（基准 = 全部待确认）· ④暂不联动销量
+    const stage3 = document.querySelector('[data-pipeline-stage="3"]')!;
+    expect(stage3.textContent).toContain('SI 待确认 12 / 12');
+    const stage4 = document.querySelector('[data-pipeline-stage="4"]')!;
+    expect(stage4.textContent).toContain('暂不联动销量');
+    // 点击 = 页级跨卡定位 + 返回条；不弹编辑器、不写草稿（params 键保持无值）
+    fireEvent.click(stage3);
+    const bar = document.querySelector('[data-cross-card-bar]');
+    expect(bar).not.toBeNull();
+    expect(bar!.textContent).toContain('来自 结果总览');
+    // ③目标卡获得 DOM 焦点（tabIndex=-1 聚焦；不弹编辑器、不写草稿）
+    const inventoryWrapper = Array.from(document.querySelectorAll('[data-lpl-forecast-grid] > div'))
+      .find((node) => (node.textContent ?? '').includes('③ 库存修正'));
+    expect(inventoryWrapper).not.toBeUndefined();
+    expect(document.activeElement === inventoryWrapper).toBe(true);
+    // 返回 = 恢复滚动与焦点，返回条消失
+    fireEvent.click(screen.getByRole('button', { name: '返回结果总览' }));
+    expect(document.querySelector('[data-cross-card-bar]')).toBeNull();
+  });
+
+  it('五卡齐全有序（主图→参考→大盘→③库存修正→成本销毛垫底）；SI 未全部确认页首提示；纪要层不回归', () => {
     render(<App />);
     const text = document.body.textContent ?? '';
     for (const label of [
@@ -77,13 +109,13 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
       '量价预测主图',
       '量价参考产品',
       '大盘 · 总量总线',
-      '库存验证',
+      '③ 库存修正',
       '成本销毛',
     ]) {
       expect(text).toContain(label);
     }
     const titles = Array.from(document.querySelectorAll('h2')).map((node) => (node.textContent ?? '').trim());
-    const cardOrder = ['量价预测主图', '量价参考产品', '大盘 · 总量总线', '库存验证', '成本销毛']
+    const cardOrder = ['量价预测主图', '量价参考产品', '大盘 · 总量总线', '③ 库存修正', '成本销毛']
       .map((label) => titles.findIndex((title) => title.includes(label)));
     expect(cardOrder.every((index) => index >= 0)).toBe(true);
     expect([...cardOrder].sort((a, b) => a - b)).toEqual(cardOrder);
@@ -92,6 +124,8 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     expect(text).toContain('HUAWEI Mate 90 · 12+512GB');
     expect(text).toContain('币种 USD（固定）');
     expect(text).toContain('复制关键假设');
+    // SI 未全部确认页首提示（B.5.7）：基准 = 12 个月全部待确认
+    expect(text).toContain('SI 未全部确认（待确认 12 / 12）');
     // 教学腔与结构说明段已删除
     expect(text).not.toContain('顶部 = 关注产品量价主图');
     expect(text).not.toContain('把握区间是演示假设，不是统计结论');
@@ -100,7 +134,7 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     expect(text).not.toContain('（演示实际）');
   });
 
-  it('④⑤ 库存验证 + 成本销毛左右两列：data-lpl-forecast-grid 双列模板（左 1fr / 右 0.8fr），卡序仍库存在前', () => {
+  it('④⑤ 库存修正 + 成本销毛左右两列：data-lpl-forecast-grid 双列模板（左 1fr / 右 0.8fr），卡序仍库存在前', () => {
     render(<App />);
     const grid = document.querySelector('[data-lpl-forecast-grid]') as HTMLElement | null;
     expect(grid).not.toBeNull();
@@ -109,11 +143,12 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     expect(grid!.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 0.8fr)');
     expect(grid!.style.gap).toBe('12px');
     expect(grid!.style.alignItems).toBe('stretch');
-    // 两卡为网格直接子级，DOM 顺序仍 ④ 库存 → ⑤ 成本（左右排布不改变卡序）。
-    const cards = Array.from(grid!.children).filter((node) => node.tagName === 'SECTION');
+    // 两卡为网格直接子级（跨卡聚焦包装层 div 内各一张卡），DOM 顺序仍 ④ 库存 → ⑤ 成本。
+    const cards = Array.from(grid!.children).map((wrapper) => wrapper.querySelector('section'))
+      .filter((node): node is HTMLElement => node != null);
     expect(cards).toHaveLength(2);
     const cardTitles = cards.map((card) => card.querySelector('h2')?.textContent ?? '');
-    expect(cardTitles[0]).toContain('库存验证');
+    expect(cardTitles[0]).toContain('③ 库存修正');
     expect(cardTitles[1]).toContain('成本销毛');
     // 右列窄卡自适应：销毛图 SVG 地板宽 560（1440 最小工作宽下列内不出现横向滚动）。
     const marginSvg = cards[1].querySelector('svg[role="img"]') as SVGSVGElement | null;
@@ -133,8 +168,9 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
 
   it('上一代参照受控接线（A5 多面板）：追加上一代 Pura 90 面板 → 写主链、基线校正读数更新，草稿按模型版本落 sessionStorage', async () => {
     render(<App />);
-    // 参考卡读数新格式（§3.5）：首预测周 · 同周龄比值（不再有「主图基线校正 ·」前缀）
-    expect(document.body.textContent).toContain('首预测周 W45 · 同周龄比值');
+    // 参考卡读数（§3.5 · B.5.5 v3）：首预测周（跨年周 ID 2026W45）· 同周龄证据
+    expect(document.body.textContent).toContain('首预测周 2026W45 · 同周龄证据');
+    const readoutBefore = (document.body.textContent ?? '').match(/首预测周 2026W45 · 同周龄证据 · [\s\S]{0,40}/)?.[0] ?? '';
     // 「＋ 添加参考」下拉（A5：面板增删替代原槽位下拉）追加 Pura 90（链内产品 → 写 prevGenReferenceId）
     fireEvent.click(screen.getByRole('button', { name: '添加参考面板' }));
     const item = await waitFor(() => {
@@ -144,18 +180,21 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
       return el;
     });
     fireEvent.click(item);
-    // 主链重算：W45 = 47000 × (40000 / 45000) → 同周龄比值 ×0.89
-    expect(document.body.textContent).toContain('×0.89');
-    // 草稿按模型版本落 sessionStorage（键 = forecast.workbench.<modelVersion>）
+    // v3 主链：切换参照 = ①重新学习（无额外参考乘子）→ 同周龄证据读数更新
+    const readoutAfter = (document.body.textContent ?? '').match(/首预测周 2026W45 · 同周龄证据 · [\s\S]{0,40}/)?.[0] ?? '';
+    expect(readoutAfter).not.toBe('');
+    expect(readoutAfter).not.toBe(readoutBefore);
+    // 草稿按模型版本落 sessionStorage（键 = forecast.workbench.workbench-demo-v3）
     const draft = sessionStorage.getItem(DRAFT_KEY);
     expect(draft).not.toBeNull();
     expect(draft ?? '').toContain('ref-pura90');
   });
 
-  it('微调（原因选填，不填即可应用）→ 复制关键假设（含原因与模拟状态）→ 切价格走势再返回草稿保留', async () => {
+  it('微调（原因选填，不填即可应用）→ 复制关键假设（含原因、模拟状态与 SI 待确认）→ 切价格走势再返回草稿保留', async () => {
     render(<App />);
     const tuneButtons = Array.from(document.querySelectorAll('button')).filter((button) => button.textContent === '微调');
-    expect(tuneButtons.length).toBe(8);
+    // v3 主图数据表 = 全部预测周（52 个 WeekId）各一个微调入口
+    expect(tuneButtons.length).toBe(52);
     fireEvent.click(tuneButtons[2]);
     // 2026-11-04 评审：调整原因改选填——去掉必填拦截，不填即可应用；
     // placeholder 引导（如「选填：帮助追溯调整依据」），空值照常提交。
@@ -170,10 +209,10 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     if (reasonInput) fireEvent.change(reasonInput, { target: { value: '黑五主峰周，电商资源加投' } });
     fireEvent.click(applyButton()!);
     // 手调原因内联标注主图手调处（图下名录），无纪要层
-    expect(document.body.textContent).toContain('手调 · W47：黑五主峰周，电商资源加投');
+    expect(document.body.textContent).toContain('手调 · 2026W47：黑五主峰周，电商资源加投');
     expect(document.body.textContent).not.toContain('推演纪要');
 
-    // 复制关键假设：剪贴板文本与当前 params/result 同源
+    // 复制关键假设：剪贴板文本与当前 params/result/context 同源（v3 管线顺序）
     const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const copyButton = () => Array.from(document.querySelectorAll('button'))
@@ -183,8 +222,14 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     const exported = writeText.mock.calls[0][0];
     expect(exported).toContain('黑五主峰周，电商资源加投');
-    expect(exported).toContain('workbench-demo-v2');
+    expect(exported).toContain('workbench-demo-v3');
     expect(exported.split('\n\n')[0]).toContain('模拟');
+    // v3 导出（任务 10）：SI 未全部确认时复制假设显式警示 + 管线段落顺序
+    expect(exported).toContain('SI 未全部确认');
+    expect(exported).toContain('SI 待确认 12 / 12');
+    expect(exported).toContain('【① 基线预测】');
+    expect(exported).toContain('【④ 成本及销毛】');
+    expect(exported).toContain('价格→销量关系未纳入');
     // 成功反馈「已复制」（icon aria-label 参与可访问名，用正则匹配）
     expect(Array.from(document.querySelectorAll('button')).some((button) => (button.textContent ?? '').trim() === '已复制')).toBe(true);
 
@@ -194,7 +239,7 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     expect(document.querySelectorAll('.lpl-fb')).toHaveLength(1); // 分析页 FilterBar 不回归
     fireEvent.click(screen.getByRole('button', { name: '量价预测' }));
     expect(window.location.search).toContain('p=forecast');
-    expect(document.body.textContent).toContain('手调 · W47：黑五主峰周，电商资源加投');
+    expect(document.body.textContent).toContain('手调 · 2026W47：黑五主峰周，电商资源加投');
   });
 
   it('禁词与旧话术总扫：因子/约束/置信区间/无约束需求/我司/刚性砍 可见文本为零', () => {

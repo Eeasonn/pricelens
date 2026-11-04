@@ -434,6 +434,13 @@ function ReferenceChartCard({
   );
 }
 
+/** ①跨卡定位请求（B.5.5 · 任务 7）：主图学习证据「定位」跳来；seq 递增触发。 */
+export interface ReferenceLocateRequest {
+  seq: number;
+  /** 主图证据周（同周龄段定位）；null = 只定位面板不改段。 */
+  weekId: string | null;
+}
+
 export interface ReferencePanelProps {
   fixture: WorkbenchFixture;
   result: WorkbenchResult;
@@ -443,6 +450,8 @@ export interface ReferencePanelProps {
   onPrevGenReferenceChange: (id: string) => void;
   /** 主图输入信号（手调应用 / 产品事件录入）：seq 递增触发参考回放条。 */
   inputSignal?: ReferenceInputSignal | null;
+  /** ①跨卡定位入口（主图学习证据 → 定位当前主链面板同周龄段；锁定面板只展开详情不改窗）。 */
+  locateRequest?: ReferenceLocateRequest | null;
 }
 
 export default function ReferencePanel({
@@ -452,6 +461,7 @@ export default function ReferencePanel({
   prevGenReferenceId = fixture.references.prevGenPool[0]?.id ?? '',
   onPrevGenReferenceChange,
   inputSignal,
+  locateRequest,
 }: ReferencePanelProps) {
   const pool = useMemo(() => fixture.references.lifecyclePool ?? [], [fixture]);
   const defaultChainRef = fixture.references.prevGenPool[0]?.id ?? '';
@@ -792,11 +802,34 @@ export default function ReferencePanel({
     setFocus({ panelId: product.id, week: clampInt(entry.startWeek, 0, Math.max(0, product.points.length - 1)), key: focusKeyRef.current });
   }, [pool, lockedOf, setPanelWindow]);
 
-  // 模型比值行（主图基线校正）：只消费推演模型考量，卡内不另算比值。
+  // ---- ①跨卡定位（B.5.5 · 任务 7）：主图学习证据跳来 → 定位当前主链面板同周龄段。
+  // 锁定面板只展开详情（聚焦高亮），不改窗口；未锁定 → 16 周聚焦该周龄段。
+  const locateSeq = locateRequest?.seq ?? 0;
+  useEffect(() => {
+    if (locateSeq <= 0 || !locateRequest) return;
+    const product = pool.find((p) => p.chainRefId === prevGenReferenceId);
+    if (!product) return;
+    const age = locateRequest.weekId != null
+      ? fixture.weeks.find((week) => week.id === locateRequest.weekId)?.lifecycleIndex ?? null
+      : null;
+    if (age == null) return;
+    setView((prev) => (prev.panelIds.includes(product.id)
+      ? prev
+      : { ...prev, panelIds: [...prev.panelIds, product.id], windows: { ...prev.windows, [product.id]: fullWindowOf(product) } }));
+    if (!lockedOf(product)) {
+      setPanelWindow(product.id, ...eventFocusWindow(product, { startWeek: age, endWeek: age }));
+    }
+    focusKeyRef.current += 1;
+    setFocus({ panelId: product.id, week: clampInt(age, 0, Math.max(0, product.points.length - 1)), key: focusKeyRef.current });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locateSeq, poolKey]);
+
+  // 模型比值行（①学习参照读数）：只消费推演模型考量，卡内不另算比值。
+  // B.5.5：首预测周比值行升级为「首预测周 YYYYWww · 同周龄证据」。
   const firstForecastWeek = result.weeks.find((week) => week.status === 'forecast');
   const referenceConsider = firstForecastWeek?.consider.find((item) => item.kind === 'reference');
   const prevGenFootnote = firstForecastWeek && referenceConsider
-    ? `首预测周 ${firstForecastWeek.week} · ${referenceConsider.note}`
+    ? `首预测周 ${firstForecastWeek.weekId} · 同周龄证据 · ${referenceConsider.note}`
     : undefined;
 
   const emptyPool = pool.length === 0;
@@ -834,6 +867,13 @@ export default function ReferencePanel({
         title="量价参考产品"
         extra={(
           <>
+            {/* ①阶段标（B.5.1 卡头语言：参考 = ① 基线预测 · 历史参照） */}
+            <span
+              title="本卡为①自动学习基线提供历史参照：上一代同周龄对齐进入①学习器，切换参照 = 重新学习"
+              style={{ ...smallChipStyle, background: '#e8f1ff', color: '#0053c2', border: '1px solid #0070f3' }}
+            >
+              ① 基线预测 · 历史参照
+            </span>
             <span
               title="参照序列为历史演示样本 · 纯历史数据，无预测段"
               style={{ ...smallChipStyle, background: color.canvasSoft2, color: color.body }}

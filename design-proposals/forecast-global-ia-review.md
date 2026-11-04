@@ -1,9 +1,9 @@
-# ForecastPage 全局信息架构审视
+# ForecastPage 全局信息架构与开发落地完整方案
 
 > 日期：2026-11-04  
-> 范围：量价预测推演工作台（ForecastPage）；仅设计审视与目标设计，保持 `computeWorkbench` 的①→④阶段顺序。  
+> 范围：量价预测推演工作台（ForecastPage）；包含现状审视、前端设计、功能设计与开发交接计划；保持 `computeWorkbench` 的①→④阶段顺序。  
 > 标尺：Eason 的四类内容心智模型与①基线 → ②大盘 → ③库存 → ④成本及销毛计算顺序。  
-> 状态：已完成；七部分及拍板后的统一方案附录齐全。
+> 状态：已完成；原七部分、统一方案附录 A、前端与功能开发交接附录 B 齐全。
 
 ## 审视口径与红线
 
@@ -752,6 +752,7 @@ IntelligenceItem → EventRecommendation → 临时 params 预览
 |---|---|
 | `pricelens/src/pages/forecast/PipelineNav.tsx` | ①–④节点、状态摘要、键盘定位、`aria-current="step"` |
 | `pricelens/src/pages/forecast/EvidenceFrame.tsx` | 统一浮框外壳：头部/状态/内容/动作；不拥有业务公式 |
+| `pricelens/src/pages/forecast/MainForecastDataTable.tsx` | 全期只读阶段明细、sticky header、局部横滚、缺数与修正状态；吸收 WeeklyLedger 表格职责 |
 | `pricelens/src/pages/forecast/IntelligenceReviewPanel.tsx` | Top5、逐条审核、批量整理与预览入口；只编排已有纯函数和回调 |
 | `pricelens/src/pages/forecast/PriceAdjustDialog.tsx` | ④带参跳主图后的价格编辑、过渡提示、预览与确认 |
 
@@ -903,15 +904,36 @@ type WorkbenchWeekResult = {
   price: number;                    // fixture 原价；显示价由 MarginView 提供
   prevGenSales: number | null;
   si: number;
-  channelInv: number;
-  channelDos: number;
-  fullDos: number;
+  channelInv: number | null;   // 无法推演时为 null，不伪造 0
+  channelDos: number | null;
+  fullDos: number | null;
   unitCost: number;
   consider: ConsiderItem[];
+};
+
+type LearningRun = LearningEvidence & {
+  referenceId: string;
+  productFactorByWeek: Record<WeekId, number>;
+};
+
+type WorkbenchResult = {
+  weeks: WorkbenchWeekResult[];
+  marketMonths: MarketMonthPoint[];
+  marketQuarters: MarketQuarterPoint[];
+  health: HealthRow[];                 // HealthRow.weekId: WeekId
+  firstAdjustedWeek: WeekId | null;
+  learning: LearningRun;
+  summary: {
+    totalSales: number;
+    peak: { weekId: WeekId; value: number; note: string };
+    gap: number;
+  };
 };
 ```
 
 - v3 不再以 `q4Override / q1Override` 作为周修正源；月生效值直接决定该月所有周的大盘比值。季度只用于生成与解释大盘基线。
+- 销毛不再以 `WorkbenchResult.summary` 为权威来源；主图摘要、④卡和导出统一读 `MarginView.forecastMargin / historyMargin`，避免出现基准销毛与情营销毛两套数字。
+- 不把不同长度的历史 8 周与预测 12 个月直接计算同比；如需对照，另设等长历史窗口并显式标注。
 - `overrideSource` 不再手存：没有月调整为 AI 基线，有任一有效月调整为人工确认；情报审核状态另行表达。
 - `manual` 改由 `WeekId` 键控。模型版本升为 `workbench-demo-v3` 后旧 v2 会话自然隔离，不尝试把裸数字周号跨版本拼到新年。
 - 结果必须保留①②③阶段字段；无法提供的阶段填 `null` 并给原因，禁止 UI 用最终值反推中间值。
@@ -950,6 +972,7 @@ type EventRecommendation = {
   intelligenceId: string;
   target: IntelligenceTarget;
   eventType: ProductEventSeed['type'] | null;
+  label: string;            // 事件名称选填，空串合法
   range: WeekRange | null;
   startMonth: MonthKey | null;
   startDay: number | null;
@@ -970,6 +993,10 @@ type CandidateReview = {
   batchId: string | null;
   reviewedAt: string | null;
 };
+
+type IntelligenceReviewState = {
+  byCandidate: Record<string, CandidateReview | undefined>;
+};
 ```
 
 ```ts
@@ -985,7 +1012,7 @@ type MarginWeek = {
   effectivePrice: number;
   unitCost: number;
   unitMargin: number;
-  weeklyMargin: number;
+  weeklyMargin: number | null;
   priceOverridden: boolean;
   costOverridden: boolean;
 };
@@ -994,6 +1021,8 @@ type MarginView = {
   weeks: MarginWeek[];
   forecastMargin: number;
   historyMargin: number;
+  forecastCoverage: { validWeeks: number; totalWeeks: number };
+  historyCoverage: { validWeeks: number; totalWeeks: number };
   appliedPriceCount: number;
   appliedCostCount: number;
   priceDemandLinked: false; // 关系拍板前恒为 false
@@ -1008,4 +1037,1417 @@ function computeMarginView(
 
 情报对象和审核对象分离；接受建议不会修改 `IntelligenceItem` 原文。`priceDemandLinked` 是显式过渡标记，未来价格关系拍板后必须另改类型与主链契约，不能偷偷翻成 `true`。
 
+#### B.4.4 ①自动学习：确定性、可复算、可回退
+
+新增类型与入口：
+
+```ts
+type LearningEvidence = {
+  status: 'completed' | 'partial' | 'fallback';
+  algorithm: 'ridge-log-volume-v1';
+  sampleStart: ISODate | null;
+  sampleEnd: ISODate | null;
+  validSampleCount: number;
+  trainCount: number;
+  holdoutCount: number;
+  featureNames: ['trend', 'referenceLogVolume', 'promo'];
+  coefficients: number[] | null; // [intercept, trend, referenceLogVolume, promo]
+  holdoutMae: number | null;     // 台
+  holdoutMape: number | null;    // %，不是概率
+  fallbackReasons: string[];
+  fallbackWeekIds: WeekId[];
+};
+
+type LearnedBaseline = {
+  baseByWeek: Map<WeekId, number | null>;
+  evidence: LearningEvidence;
+};
+
+function learnWorkbenchBaseline(
+  fixture: WorkbenchFixture,
+  calendar: ForecastCalendar,
+  prevGenReferenceId: string,
+): LearnedBaseline;
+```
+
+fixture 周的 `lifecycleIndex` 把本品周映射到参考产品同周龄；参考选择先经 `prevGenReferenceId → lifecyclePool.chainRefId` 找到完整生命周期序列。促销输入改为多个已知窗口：
+
+```ts
+type PromoWindow = WeekRange & { id: string; label: string };
+// fixture.promoWindows: PromoWindow[]
+```
+
+**训练行**
+
+- 只使用 `status='actual'`、`sales > 0`、参考同周龄销量 > 0 的周；缺采与 0 不作为 0 销量训练。
+- 按日期升序。令 `t = lifecycleIndex / 52`，`r = log(referenceSales)`，`p` 在已知促销窗口内为 1、否则为 0，`y = log(sales)`。
+- 模型为 `y = β0 + β1·t + β2·r + β3·p`。**不包含价格、成本、大盘事件或未来情报**；大盘在②另行修正，未来产品范围事件在学习基线之后叠加。
+- 有效样本至少 32 周；最后 8 个有效周作留出验证，其余至少 24 周作训练。少于 32、留出不足 8、矩阵不可解或系数非有限时走回退。
+- 用正规方程与确定性的部分主元高斯消元求岭回归；`λ = 0.000001`，只加在非截距对角项。不得新增数学库，不得 import simple-v1 的 `fitForecastFactors`。
+- 先用训练集计算留出预测，再对所有有效样本拟合最终系数。留出 MAE 以台计，MAPE = `mean(|actual − predicted| / actual) × 100%`；仅作证据，不使用未核定的误差阈值自动否决模型。
+
+**预测与回退**
+
+```text
+学习周基线 = round(exp(β0 + β1·t + β2·r + β3·p))，最小为 0
+
+样本/矩阵不可用：
+  回退周基线 = 本品最近 8 个有效实际周销量中位数
+
+仅未来参考点缺失：
+  若参考未来值与参考最近 8 周均值均可用：
+    回退周基线 = round(本品最近 8 周中位数 × 参考未来值 ÷ 参考最近 8 周均值)
+  否则：本品最近 8 周中位数
+```
+
+- 全部预测周学习成功为 `completed`；部分周因参考缺口回退为 `partial`；无法拟合为 `fallback`。
+- 回退促销不额外叠加，避免把已知促销重复计入；产品范围事件仍照常叠加。
+- 学习证据记录每个回退周；主图考量和浮框可区分「学习基线 / 参考缺口回退 / 样本不足回退」。
+- 若未来参考序列无法覆盖预测周龄，模拟 fixture 必须扩展参考生命周期，不得把末值无限平铺而不标识。
+- 若连一个有效实际周都不存在，回退中位数也无法计算：对应预测周 `learnedBase / baselineSales / marketAdjusted / inventoryAdjusted / final` 均为 `null`，主图显示「无法学习：缺少有效历史」，不得回退成 0 销量。库存可继续累加 SI，但 DOS 与销毛在销量不可算时显示「—」，不输出 NaN/Infinity。
+
+#### B.4.5 ②大盘：12 个月生效值直接修正对应周
+
+```ts
+function computeMarketMonths(
+  fixture: WorkbenchFixture,
+  calendar: ForecastCalendar,
+  params: Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+): MarketMonthPoint[];
+
+function marketFactorAt(
+  calendar: ForecastCalendar,
+  months: MarketMonthPoint[],
+  weekId: WeekId,
+): { factor: number; note: string };
+```
+
+1. 季度外推器可生成覆盖 horizon 所需的全部日历季度；`computeMarketMonths` 先按原月季同源规则生成，再筛选到统一 12 个预测月。不得只生成前两季后让 Q2 以后回退 1。
+2. **部分实际季不重摊残差**：2026Q4 的 2026-10 已是实际月，11/12 月保留原季度基线 × 去年月形得到的各自基线；季度读数改按「10 月实际 + 11/12 月基线」的月均计算。不得为了追逐旧 Q4 目标把 10 月实际与目标的差额强摊给未来月。完整未来季仍保持三月合计 = 季度基线 × 3，末月吸收舍入残差。
+3. 月生效值继续是 `override ?? round1(baseline × eventFactor)`；人工月调整覆盖事件后值是现有行为，界面须显式说明。
+4. 周修正比值 = `所属月生效值 ÷ 所属月 AI 基线`。基线非有限或 ≤0 时回退 1，并在 `note` 写「大盘基线不可用，未修正」。
+5. `marketAdjusted = round(baselineSales × factor)`；同一月所有预测周使用同一比值，不把指数当成销量均摊。
+6. 月调整只写 `marketMonthOverrides`，不再同步 q4/q1；卡头人工状态由是否存在有效月调整派生。
+
+#### B.4.6 范围事件、库存与手调的确定性规则
+
+```ts
+function rangeEventFactorAt(
+  calendar: ForecastCalendar,
+  events: Array<WeekRange & { magnitudePct: number; decay: 'decreasing' | 'flat' }>,
+  weekId: WeekId,
+): number;
+
+function productEventFactorAt(
+  calendar: ForecastCalendar,
+  events: ProductEventSeed[],
+  weekId: WeekId,
+): number; // 只调用 rangeEventFactorAt，不维护第二份公式
+
+function siWeeklyPlan(
+  calendar: ForecastCalendar,
+  siPlanMonthly: Record<MonthKey, number>,
+): Map<WeekId, number>;
+```
+
+- 对每个覆盖预测周，`offset = week.index − startWeek.index`，`duration = end.index − start.index + 1`。
+- `flat` 乘子 = `1 + magnitudePct / 100`；`decreasing` = `1 + magnitudePct × (1 − offset / duration) / 100`。范围外不乘；多事件按数组顺序连乘，数组顺序必须在归一化时稳定。
+- `baselineSales = round(learnedBase × productEventFactor)`；然后才进入②。历史周不被未来范围事件改写。
+- SI 只对每月 `forecastWeekIds` 做整数分配：先 `floor(total / N)`，余数按预测周序每周 +1；月总量守恒。空白、错型不得在这里静默变 0；后台安全兜底与前台的未提交状态分开。
+- ③逐周：`available = previousInventory + SI`，`inventoryAdjusted = min(marketAdjusted, max(0, available))`，`channelInv = max(0, available − inventoryAdjusted)`，DOS 继续使用近 4 周均销。
+- `supplyCapped = inventoryAdjusted < marketAdjusted`；`final = manual?.value ?? inventoryAdjusted`。手调不进入后续库存递推，也不改变缺口。
+- 周销手调、月调整、事件编辑都必须返回新 params 对象；React 不直接 mutate 当前草稿。
+
+#### B.4.7 ④成本与价格过渡态
+
+```text
+effectivePrice = priceOverrides[weekId]?.price ?? resultWeek.price
+unitCost = costOverrides[monthKey]?.unitCost ?? resultWeek.unitCost
+unitMargin = effectivePrice − unitCost
+weeklyMargin = finalSales == null ? null : finalSales × unitMargin
+forecastMargin = Σ 预测周非空 weeklyMargin
+historyMargin = Σ 历史周非空 weeklyMargin
+```
+
+- 价格/成本 override 只允许作用于预测周和统一 horizon 月份；历史周与历史月份始终使用事实值。归一化时剔除范围外记录，不允许通过修改历史美化对照。
+- 周销毛在销量缺失时为 `null`；汇总只累计有效周并显示 `forecastCoverage / historyCoverage`，不得把缺失周当 0 或掩盖覆盖率。
+- 月价格调整若被用户主动选择，展开为该月全部预测周的 `priceOverrides`，共享同一 `batchId`；确认前展示每个受影响周，不静默覆盖已有价格手调。
+- 已有价格手调与新批次冲突时逐项列「保留 / 覆盖」；默认保留，只有用户明确选择才覆盖。
+- `priceDemandLinked=false` 时，`computeMarginView` 不得调用学习器或修改 `WorkbenchResult`；销量、库存和 DOS 必须引用相等。
+- 未来价格关系拍板后另开契约：价格情景进入①并顺序重跑②③④，不在本过渡期预留隐式弹性参数。
+
+#### B.4.8 情报转化、预览与批次原子性
+
+```ts
+type ValidationIssue = { field: string; message: string; blocking: boolean };
+
+function validateRecommendation(
+  item: IntelligenceItem,
+  recommendation: EventRecommendation,
+  calendar: ForecastCalendar,
+): ValidationIssue[];
+
+function buildEventPreview(
+  recommendation: EventRecommendation,
+  params: WorkbenchParams,
+): WorkbenchParams; // 仅 market-month / product-range
+
+function findDuplicateImpacts(
+  recommendation: EventRecommendation,
+  params: WorkbenchParams,
+  calendar: ForecastCalendar,
+): Array<{ eventId: string; overlapWeekIds: WeekId[] }>;
+```
+
+- `market-month` 必须有合法起始月/日、1–12 月时长、−30…30% 幅度；`product-range` 必须有合法起止周、三类之一、幅度、形状和有效 replayId；`cost-reference` 必须有月份与有限非负成本。
+- 范围外、范围不符、缺参、起止倒置均 blocking；名称永远不是 blocking。
+- 预览先在内存构造完整临时 params，再调用 `computeWorkbench`；只有点击「确认应用事件」才调用页面 setter。成本候选只构造临时 `MarginScenario`。
+- 重复检测按目标 + 类型 + 范围交集；同一 `intelligenceId` 已有落点必须提醒，即使用户改了幅度。
+- 同目标批次先逐项 validate，再构造一个临时 params；确认时一次 setter 写入全部事件并生成同一 `batchId`。任何单项失败则整批不写入。
+- 审核工作区保存 before/after 参数补丁与事件链接；撤销只重放该事件/批次，不回滚后续无关编辑。跨目标候选必须分组预览与确认。
+
 ---
+
+### B.5 前端设计与交互实现契约
+
+#### B.5.1 页面结构与卡头语言
+
+```text
+┌ 页首白卡 ─────────────────────────────────────────────────────────────┐
+│ 量价预测 · 推演工作台       [模拟数据] [让 Agent 解释] [复制关键假设] │
+│ 固定样本… · 预测 2026-11—2027-10 · 12 个月 · 主图周 / 大盘月         │
+└───────────────────────────────────────────────────────────────────────┘
+┌ PipelineNav ─────────────────────────────────────────────────────────┐
+│ ①自动学习基线 → ②大盘修正 → ③库存修正 → ④成本及销毛                 │
+└───────────────────────────────────────────────────────────────────────┘
+[结果总览：主图 + 四格摘要]
+[① 基线预测 · 历史参照：ReferencePanel]
+[② 大盘修正：左 2/3 月图 / 右 1/3 情报候选 + 人工事件]
+[③ 库存修正] + [④ 成本及销毛]  左右两列，≤760px 单列
+```
+
+| 卡 | 卡头标 | 关键状态文案 |
+|---|---|---|
+| 主图 | `结果总览` | `自动学习 / 学习回退`、`含人工调整`、`③ SI 待确认 N` |
+| 参考 | `① 基线预测 · 历史参照` | `主链 · 同周龄校正 / 仅对照` |
+| 大盘 | `② 大盘修正` | `自动学习基线 · 可改 / 人工确认`；候选另有 `待审核 N` |
+| 库存 | `③ 库存修正` | `SI 待确认 N / 12`、`未触发 / YYYYWww 起` |
+| 成本销毛 | `④ 成本及销毛` | `含成本假设 N / 价格手调 N`；关系未定前 `暂不联动销量` |
+
+`AiJudgeBadge` 可在现有组件内扩展 `source='learned'` 文案为「自动学习 · 可改」，但不得新增颜色；若保留原 `'ai'|'human'` 类型，则新增字段必须有统一映射，不能由不同卡各自拼文案。
+
+#### B.5.2 PipelineNav 与跨卡焦点
+
+```ts
+type ForecastStage = 1 | 2 | 3 | 4;
+type CrossCardFocus = {
+  source: 'main' | 'reference' | 'market' | 'inventory' | 'margin';
+  target: 'reference' | 'market' | 'inventory' | 'margin' | 'main';
+  weekId: WeekId | null;
+  monthKey: MonthKey | null;
+  eventId: string | null;
+  returnScrollY: number;
+};
+```
+
+- `PipelineNav` 四个按钮分别显示：①学习状态与参考名；②人工调整数/待审核数；③SI 待确认数与首修正周；④预测期销毛与价格联动状态。
+- 点击只调用 `scrollIntoView`、设置临时焦点与目标卡 `tabIndex={-1}` 聚焦；不调用 `setParams`，不自动提交任何编辑。
+- 目标卡顶显示「来自结果总览 · YYYYWww　返回」；返回只恢复滚动和焦点。`returnScrollY` 是内存瞬态，不持久化。
+- 从②月到①/③/④：以月内首个预测周为默认焦点，同时列该月周数；从周到②：使用 `week.monthKey`。跨月周按日历既定周一归属，不另造规则。
+- 目标在「全期 / 三月 / 近 8 周」当前视图之外时，只调整视图窗口使其可见；不改变模型范围。
+- 输入导致重算时不自动滚动、不抢焦；仅更新 PipelineNav 状态和当前卡内文字反馈。
+
+#### B.5.3 统一证据浮框
+
+```ts
+type EvidenceFrameProps = {
+  title: string;
+  status?: React.ReactNode;
+  notices?: string[];
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+  onClose: () => void;
+  width?: number;
+  flip?: boolean;
+};
+```
+
+- 外壳固定使用 `color.canvas`、`color.hairline`、`radius.card`、`shadow.l5`；正文 12px，元数据 11px，数字使用 `tnum`。
+- 内容顺序：对象/时间 → 条件 notices → 来源小图/事实 → 算例/学习规则 → 动作。业务组件负责内容，EvidenceFrame 不计算。
+- hover/focus 出证据，click/Enter 固定；编辑态保持打开；Esc 在编辑态先回证据，再按一次关闭；关闭按钮有可访问名称。
+- 大盘保留近 6 月趋势和去年同季三柱；主图展示学习样本/回测和①②③阶段值；参考展示同周龄比值；成本展示版本与销毛算例。不得为了组件复用而强塞同一小图。
+
+#### B.5.4 结果主图与数据表
+
+- 保持现有实际实柱、预测虚柱、价格实/虚线、上一代灰虚参考、促销轴下日期标注；不恢复把握帽、销量黑线、档位线或档期色带（现有系列见 `MainForecastChart.tsx:273-369`）。
+- 横轴覆盖完整历史和统一预测窗，以月份分组，周详情保留 `YYYYWww`。默认全期；「三月 / 近 8 周」只改视图。
+- 预测周命中区：hover/focus 显示证据；click/Enter 固定；证据动作「微调本周」打开周销弹窗，原因选填。
+- 考量按①学习、①产品范围事件、②大盘、③库存、手调排序；每项可跳对应卡。阶段值直接使用 `learnedBase / baselineSales / marketAdjusted / inventoryAdjusted / final`。
+- 产品范围事件在图顶使用 A 编号 + 起止端点 + 范围线；重叠最多两条 lane，其余 `+N` 打开名录筛选。键盘从事件名录可达所有范围。
+- 周销手调沿用墨色菱形；价格手调使用墨色「价」小标，两者可同时存在。库存截断仍用琥珀描边，`supplyCapped` 不随手调消失。
+- 价格系列读取 `MarginView.weeks.effectivePrice`；销量、库存标记读取 `WorkbenchResult`；二者键均为 `weekId`。
+- 主图数据表吸收 `WeeklyLedger` 职责，列为：周、状态、学习基线、①后、②后、SI、③后、手调、最终 SO、期末库存、渠道 DOS、显示价格、成本、单台销毛、周销毛、事件/操作。缺数为「—」，局部横滚 + sticky header。
+
+#### B.5.5 ①参考卡
+
+- 保留当前纯历史、每面板独立时间轨、同步/锁、预标覆写、补录、20 步撤销；不得把参考事件或颜色写进主链。
+- 卡头增加①阶段标，不恢复旧长 IoBar；当前首预测周比值行升级为「首预测周 YYYYWww · 同周龄证据」。
+- 从主图学习证据跳来时，定位当前 `prevGenReferenceId` 对应面板及同周龄段；锁定面板只展开详情，不改窗口。
+- 自动学习证据中的参考名与这里的选择一致；切换上一代会重新学习①，而非只替换一个静态比值。
+
+#### B.5.6 ②大盘与人工事件
+
+- 保持左图右事件区；预测月严格为 12 个月，历史实际至少到 2026-10。月图、证据浮框、季度基线读数与主图周结果同源。
+- 预测月操作沿用「调整后指数 / 增减幅」两式、原因选填、还原基线；应用后显示「本月比值 ×… · 已联动 N 个预测周」，提供「查看主图」与「检查库存」。
+- 人工月事件三字段保持不变：起始月/日、时长、幅度；名称选填。已有事件行新增「编辑」，编辑器使用同一三字段，删除/编辑可撤销。
+- 右上候选未接入时只显示一个空态：「候选生成能力待接入」+ 禁用按钮；不画五条假候选。
+- 若未来注入候选，`IntelligenceReviewPanel` 在同区展示 Top5；内容超过卡高继续局部滚动，不把事件列表铺到图内。
+
+#### B.5.7 ③库存与 SI 逐月确认
+
+```text
+2026-11—2027-01                         [待确认 3 / 3]
+2026-11 [220] 千台  基准·待确认  [确认本月]  拆周…
+2026-12 [ 32] 千台  已修改·待确认 [确认本月]  拆周…
+2027-01 [ 80] 千台  已确认        修改后重新待确认
+```
+
+- 12 格分四个连续三月组；所有月份都能通过局部滚动看到，组头和待确认状态不隐藏。
+- 输入过程使用本地 raw 草稿；合法值 blur/Enter 后写 `siPlanMonthly` 并更新**参考预览**，但该月仍为待确认。只有点击「确认本月」才写确认工作区。
+- 空白显示「请输入 0 或恢复基准」；0 显示「本月不补货」；非法值使用 `aria-invalid` + 就地错误，不调用模型 setter。
+- Esc 恢复最后合法草稿；单月恢复基准使该月重新待确认；修改已确认月后自动回到待确认。
+- 未确认时主图仍可出现参考结果，但页首/③/复制假设都显示「SI 未全部确认」，不得显示“人工已确认完成”。
+- 合法值变化后，库存柱、DOS、修正周、主图和 MarginView 同步；反馈写实际前后变化，例如「2027-02 SI +10 千台 → 2027W08 修正已解除」。
+- 输出框修正周提供「回主图查看该周」；手调周继续显示截断事实与手调终值。
+
+#### B.5.8 ④成本销毛与价格弹窗
+
+- 卡内仅用 hairline 分「成本参考」和「经营结果」，不新增嵌套卡。成本版本行显示月份、成本、来源状态、相对上版变化和「编辑 / 证据」。
+- 成本编辑只写 `costOverrides[monthKey]`，原因选填，可还原；结果区与主图摘要即时使用新 `MarginView`。
+- 「带到主图调价」打开 PriceAdjustDialog：目标周或月、调整后价格/增减额/增减幅、参考说明选填、受影响周清单、已有价格手调冲突。
+- 过渡态预览仅显示价格、单台销毛、周销毛、期销毛前后值；固定提示「价格→销量关系未纳入 · 暂不联动销量」。主按钮「应用价格调整」。
+- 月调整展开为共享 `batchId` 的周价格记录；冲突默认保留已有手调。应用后提供「返回④查看销毛」，可撤销或清除。
+- 未来价格关系拍板后，再扩展弹窗为①–④全链预览；本期不得出现“预计销量随之变化”的文案。
+
+#### B.5.9 情报候选审核界面
+
+候选行固定包含：标题/摘要、来源与时间、数据状态、建议目标、范围/时长、幅度或成本建议、依据状态。动作如下：
+
+- 「接受 / 改参」都打开审核弹层；「拒绝」记录状态；「移除出列表」只整理候选。拒绝原因选填，移除/拒绝可撤销。
+- 审核弹层依次是只读情报事实、可编辑转化建议、影响预览、确认动作。缺参时聚焦首个缺参字段，但名称选填不阻塞。
+- 主图建议显示起止周、实际日期、派生周数、逐周幅度形状；②建议显示月中均摊；④建议显示成本版本，不自动改价。
+- 预览显示总销量、首修正周、预测期销毛等前后差；只读临时计算，确认前不更新页面。
+- 批量选择条提供「批量移除 / 批量拒绝 / 批量预览」。跨目标只允许整理；同目标批次必须逐项合法且无未处理冲突。
+- 已应用行保留为「已应用 · 查看落点」；源更新标「来源已更新」，不得静默改已应用参数。
+
+#### B.5.10 状态存储、重置与故障恢复
+
+| 状态 | 位置 / 键 | 生命周期 |
+|---|---|---|
+| `WorkbenchParams` | `usePageViewState`：`forecast.workbench.workbench-demo-v3` | 页签会话；归一化后使用 |
+| 主图/参考视图窗口 | 现有 `forecast.mainView`、`forecast.referenceView.<scopeHash>` | 页签会话；只影响呈现 |
+| SI 确认 | `forecast.siConfirmation.workbench-demo-v3` | 页签会话；数值仍以 params 为准 |
+| 成本/价格情景与撤销 | `forecast.marginScenario.workbench-demo-v3` | 页签会话；含 scenario + 20 步 before/after |
+| 情报审核工作区 | `LPL3.forecast.intelligenceReview.<scopeHash>` | 浏览器本地；来源映射/审核/批次/撤销 |
+| 参考事件工作区 | 现有 `LPL3.forecast.referenceWorkspace.<scopeHash>` | 浏览器本地；保持不动 |
+| 跨卡焦点、hover、拖选中、非法 raw 输入 | React 内存 | 离场即清；不持久化 |
+
+- `scopeHash` 继续使用模型版本 + 国家 + 产业 + 渠道 + 产品的稳定序列化；v2/v3 不串工作区。
+- 「重置基准」只清 v3 主链 params 与 SI 确认，确认文案明确“成本价格、参考事件与情报审核工作区不清”。④提供独立「还原成本与价格基准」。
+- 重置后主链事件被移除，候选工作区把对应链接标为「事件已随重置移除」；不自动重新应用。
+- localStorage/sessionStorage 失败不能静默丢数据：内存态继续，相关卡显示「未持久化 · 重试」。参考卡现有模式可复用（`useReferenceWorkspace.ts:95-107`）。
+- 所有 schema 读取先 validate/migrate；无法迁移的原始值保留备份，不因一条坏候选或坏手调导致整页崩溃。
+
+#### B.5.11 可访问性、响应式与反馈
+
+- 桌面沿用 1440px 工作宽；≤760px 库存/成本单列；PipelineNav、数据表和图各自局部横滚，不裁关键数值。
+- 所有动作可 Tab 到达；SVG 命中区有 button 角色与名称；范围事件另有名录等价；重要图有数据表。
+- Esc 顺序：取消拖选 → 退出编辑到证据 → 关闭浮框/弹窗；弹窗焦点循环与关闭后焦点返回由 Ant Design/调用方共同保证。
+- 状态不只靠颜色：学习/回退、确认、拒绝、修正、价格联动均有文字。
+- 提交反馈使用卡内 `role=status` / `aria-live=polite`；不以强制抢焦 toast 替代审核或导航。
+- 动效只用 `motion.fast/base`；`prefers-reduced-motion` 下保留即时状态，不做依赖动画的交接。
+
+### B.6 分任务开发计划（TDD + 独立验收）
+
+#### B.6.1 执行顺序与协作边界
+
+| 任务 | 交付物 | 依赖 | 可并行关系 |
+|---|---|---|---|
+| 1 | 统一日历与跨年周 ID | 无 | 独占，最先完成 |
+| 2 | v3 模拟数据与 fixture | 1 | 完成后可释放 3/4 |
+| 3 | 自动学习器与证据 | 2 | 与任务 4 可并行 |
+| 4 | 12 月大盘与范围事件纯函数 | 2 | 与任务 3 可并行；不改主链 |
+| 5 | `computeWorkbench` v3 主链切换 | 3、4 | 独占主链与旧测试迁移 |
+| 6 | PipelineNav、SI 确认与跨卡导航 | 5 | 与任务 8/9 可并行 |
+| 7 | 主图证据、范围锚与统一数据表 | 5、6 | 可用 B.4 的 MarginView 测试契约；实际页面接线在任务 10 收敛 |
+| 8 | 情报审核面板与工作区 | 5 | 与任务 6/7/9 可并行；成本情报的销毛预览只依赖 B.4 接口 |
+| 9 | 成本证据、MarginView 与人工价格回路 | 5 | 与任务 8 可并行；共享 ForecastPage 的接线留到任务 10 |
+| 10 | 导出、孤儿清理、文档与全页集成 | 5–9 | 收敛任务，统一接线和跨模块回归 |
+| 11 | 全量检查与真机场景验收 | 10 | 最终门禁，见 B.7 |
+
+协作规则：任务 3/4 只新增纯函数和测试，不修改 `computeWorkbench`；任务 5 独占主链切换。任务 6/7/8/9 共享 B.4 类型，但不能各自另创 `WeekId`、`MarginView` 或候选字段。任务 8 的成本候选用 `computeMarginView` 接口做预览，不在任务 8 重写销毛公式；任务 9 提供唯一实现。每个任务结束后只运行检查，不要求 Git 提交。
+
+#### B.6.2 共享测试工厂（实际契约）
+
+Create `pricelens/src/pages/forecast/__tests__/workbenchV3TestFactory.ts` in task 5 with only calendar/result helpers. Tasks 6–10 add their own component imports and helpers only after the corresponding component exists; do not paste future imports prematurely. The code below is the **final target after task 10**, not a task-5 copy/paste block. This file is test-only and never imported by production code. It defines every helper referenced by the following tasks:
+
+```tsx
+import type { ComponentProps } from 'react';
+import { vi } from 'vitest';
+import PipelineNav from '../PipelineNav';
+import InventoryValidationCard from '../InventoryValidationCard';
+import MainForecastChart from '../MainForecastChart';
+import EventReplayModal from '../EventReplayModal';
+import IntelligenceReviewPanel from '../IntelligenceReviewPanel';
+import PriceAdjustDialog from '../PriceAdjustDialog';
+import { workbenchFixture } from '../workbenchFixture';
+import { buildForecastCalendar } from '../workbenchCalendar';
+import {
+  baseWorkbenchParams,
+  computeWorkbench,
+  type WorkbenchParams,
+  type WorkbenchResult,
+} from '../workbenchModel';
+import { computeMarginView, type MarginScenario } from '../marginScenarioModel';
+import type {
+  EventRecommendation,
+  IntelligenceItem,
+} from '../intelligenceModel';
+
+const makeCalendar = () => buildForecastCalendar(workbenchFixture.calendar);
+const makeResult = (params: WorkbenchParams) => computeWorkbench(workbenchFixture, params);
+const emptyScenario = (): MarginScenario => ({ costOverrides: {}, priceOverrides: {} });
+const makeMargin = (result: WorkbenchResult, scenario = emptyScenario()) =>
+  computeMarginView(workbenchFixture, result, scenario);
+
+export function makeInventoryHarnessProps(
+  onSiMonthLive: (monthKey: string, units: number) => void,
+): ComponentProps<typeof InventoryValidationCard> {
+  const params = baseWorkbenchParams(workbenchFixture);
+  return {
+    fixture: workbenchFixture,
+    calendar: makeCalendar(),
+    params,
+    result: makeResult(params),
+    confirmationState: { byMonth: {} },
+    onSiMonthLive,
+    onConfirmMonth: vi.fn(),
+    onResetMonth: vi.fn(),
+    onNavigate: vi.fn(),
+  };
+}
+
+export function makePipelineProps(
+  params: WorkbenchParams,
+  onNavigate: (stage: 1 | 2 | 3 | 4) => void,
+): ComponentProps<typeof PipelineNav> {
+  const result = makeResult(params);
+  return {
+    calendar: makeCalendar(),
+    result,
+    params,
+    confirmationState: { byMonth: {} },
+    marginView: makeMargin(result),
+    onNavigate,
+  };
+}
+
+export function makeMainChartProps(
+  fixture: typeof workbenchFixture,
+  params: WorkbenchParams,
+  result: WorkbenchResult,
+): ComponentProps<typeof MainForecastChart> {
+  return {
+    fixture,
+    calendar: buildForecastCalendar(fixture.calendar),
+    params,
+    result,
+    marginView: computeMarginView(fixture, result, emptyScenario()),
+    onTuneWeek: vi.fn(),
+    onNavigate: vi.fn(),
+    onEditProductEvent: vi.fn(),
+    onRemoveProductEvent: vi.fn(),
+  };
+}
+
+export function makeRangeChartProps(): ComponentProps<typeof MainForecastChart> {
+  const calendar = makeCalendar();
+  const params: WorkbenchParams = {
+    ...baseWorkbenchParams(workbenchFixture),
+    productEvents: [{
+      id: 'pe-range-test',
+      type: 'competitor-launch',
+      label: '',
+      startWeekId: '2026W45',
+      endWeekId: '2026W48',
+      magnitudePct: -6,
+      decay: 'flat',
+      replayId: 'rp-comp-promo',
+    }],
+  };
+  const result = makeResult(params);
+  return {
+    fixture: workbenchFixture,
+    calendar,
+    params,
+    result,
+    marginView: makeMargin(result),
+    onTuneWeek: vi.fn(),
+    onNavigate: vi.fn(),
+    onEditProductEvent: vi.fn(),
+    onRemoveProductEvent: vi.fn(),
+  };
+}
+
+export function makeRangeEditorProps(
+  onSubmit: (event: Omit<import('../workbenchFixture').ProductEventSeed, 'id'>) => void,
+): ComponentProps<typeof EventReplayModal> {
+  const calendar = makeCalendar();
+  return {
+    fixture: workbenchFixture,
+    calendar,
+    forecastWeeks: calendar.forecastWeeks,
+    onSubmit,
+    onCancel: vi.fn(),
+  };
+}
+
+export function makeProductIntelligence(): IntelligenceItem {
+  return {
+    intelligenceId: 'intelligence-sim-promo',
+    title: '官方价促',
+    summary: '模拟官方价促情报',
+    excerpt: '模拟摘录，仅用于审核界面测试',
+    sourceName: '模拟情报源',
+    sourceUrl: null,
+    publishedAt: '2026-11-01T00:00:00Z',
+    capturedAt: '2026-11-02T00:00:00Z',
+    dataStatus: 'simulated',
+    scope: {
+      country: workbenchFixture.context.country,
+      industry: workbenchFixture.context.industry,
+      channel: workbenchFixture.context.channel,
+      product: workbenchFixture.context.product,
+    },
+  };
+}
+
+export function makeProductRecommendation(
+  startWeekId: string,
+  endWeekId: string,
+): EventRecommendation {
+  return {
+    candidateId: 'candidate-sim-promo',
+    intelligenceId: 'intelligence-sim-promo',
+    target: 'product-range',
+    eventType: 'own-promo',
+    label: '',
+    range: { startWeekId, endWeekId },
+    startMonth: null,
+    startDay: null,
+    durationMonths: null,
+    magnitudePct: 8,
+    decay: 'flat',
+    unitCost: null,
+    evidenceState: 'supported',
+    missingFields: [],
+    rationale: '模拟历史回放参考',
+    replayId: 'rp-own-marketing',
+  };
+}
+
+function makeCostRecommendation(): EventRecommendation {
+  return {
+    candidateId: 'candidate-sim-cost',
+    intelligenceId: 'intelligence-sim-cost',
+    target: 'cost-reference',
+    eventType: null,
+    label: '',
+    range: null,
+    startMonth: '2026-12',
+    startDay: null,
+    durationMonths: null,
+    magnitudePct: null,
+    decay: null,
+    unitCost: 600,
+    evidenceState: 'supported',
+    missingFields: [],
+    rationale: '模拟成本版本参考',
+    replayId: null,
+  };
+}
+
+export function makeReviewPanelProps(
+  onApplyParams: ComponentProps<typeof IntelligenceReviewPanel>['onApplyParams'],
+): ComponentProps<typeof IntelligenceReviewPanel> {
+  const calendar = makeCalendar();
+  const params = baseWorkbenchParams(workbenchFixture);
+  return {
+    availability: 'ready',
+    items: [makeProductIntelligence()],
+    recommendations: [makeProductRecommendation(calendar.forecastWeeks[0].id, calendar.forecastWeeks[3].id)],
+    calendar,
+    params,
+    result: makeResult(params),
+    marginScenario: emptyScenario(),
+    reviewState: { byCandidate: {} },
+    onReviewChange: vi.fn(),
+    onApplyParams,
+    onApplyMargin: vi.fn(),
+  };
+}
+
+export function makeMixedBatchProps(): ComponentProps<typeof IntelligenceReviewPanel> {
+  const base = makeReviewPanelProps(vi.fn());
+  const costItem: IntelligenceItem = {
+    ...makeProductIntelligence(),
+    intelligenceId: 'intelligence-sim-cost',
+    title: '内存成本变化',
+  };
+  return {
+    ...base,
+    items: [base.items[0], costItem],
+    recommendations: [base.recommendations[0], makeCostRecommendation()],
+  };
+}
+
+export function makePriceDialogProps(
+  onApply: ComponentProps<typeof PriceAdjustDialog>['onApply'],
+): ComponentProps<typeof PriceAdjustDialog> {
+  const params = baseWorkbenchParams(workbenchFixture);
+  const result = makeResult(params);
+  return {
+    fixture: workbenchFixture,
+    calendar: makeCalendar(),
+    result,
+    scenario: emptyScenario(),
+    initialWeekId: makeCalendar().forecastWeeks[0].id,
+    sourceCostMonth: '2026-11',
+    onCancel: vi.fn(),
+    onApply,
+  };
+}
+
+export function makeExportContext(
+  calendar: ReturnType<typeof buildForecastCalendar>,
+  result: WorkbenchResult,
+) {
+  return {
+    calendar,
+    learning: result.learning,
+    siConfirmation: { byMonth: {} },
+    marginView: makeMargin(result),
+    intelligenceReview: { byCandidate: {} },
+  };
+}
+```
+
+The component prop names in this factory are part of the target contract. If a component needs an additional required prop, update B.5, this factory, and the component test in the same task; do not silence TypeScript with `any`.
+
+#### 任务 1：统一日历与跨年周 ID
+
+**Files:**
+- Create: `pricelens/src/pages/forecast/workbenchCalendar.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/workbenchCalendar.test.ts`
+
+**Interfaces:**
+- Consumes: 固定 `historyStart / historyThrough / horizonStart / horizonEnd`。
+- Produces: B.4.1 的 `ForecastCalendar`、`buildForecastCalendar`、`durationOfWeekRange`；后续所有任务只能使用这里的 `WeekId`。
+
+- [ ] **Step 1：写失败测试，覆盖 12 个月、首预测周和跨年唯一性**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { buildForecastCalendar, durationOfWeekRange } from '../workbenchCalendar';
+
+const calendar = buildForecastCalendar({
+  historyStart: '2025-11-03',
+  historyThrough: '2026W44',
+  horizonStart: '2026-11',
+  horizonEnd: '2027-10',
+});
+
+describe('forecastCalendar', () => {
+  it('uses one twelve-month horizon and unique ISO week ids', () => {
+    expect(calendar.forecastMonths.map((month) => month.key)).toEqual([
+      '2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04',
+      '2027-05', '2027-06', '2027-07', '2027-08', '2027-09', '2027-10',
+    ]);
+    expect(calendar.forecastWeeks[0]?.id).toBe('2026W45');
+    expect(calendar.weekById.get('2027W01')?.date).toBe('2027-01-04');
+    expect(new Set(calendar.weeks.map((week) => week.id)).size).toBe(calendar.weeks.length);
+  });
+
+  it('computes a cross-year range by absolute indexes', () => {
+    const weeks2026 = calendar.forecastWeeks.filter((week) => week.date.startsWith('2026'));
+    const last2026 = weeks2026[weeks2026.length - 1]!;
+    const first2027 = calendar.forecastWeeks.find((week) => week.date.startsWith('2027'))!;
+    expect(durationOfWeekRange(calendar, {
+      startWeekId: last2026.id,
+      endWeekId: first2027.id,
+    })).toBe(2);
+    expect(durationOfWeekRange(calendar, {
+      startWeekId: first2027.id,
+      endWeekId: last2026.id,
+    })).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2：运行并确认因模块不存在而失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchCalendar.test.ts`
+Expected: FAIL，无法解析 `../workbenchCalendar`。
+
+- [ ] **Step 3：实现最小日历模块**
+
+Use UTC date arithmetic, Monday-start weeks, ISO Thursday week-year rule, and Monday-based month assignment. Build `weekById` / `monthByKey` from the same arrays returned to callers. `forecastWeekIds` contains only `status='forecast'`; do not allocate SI into actual weeks. Do not read the system clock.
+
+- [ ] **Step 4：运行测试与类型检查**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchCalendar.test.ts && npm --prefix pricelens run typecheck`
+Expected: PASS；无 TypeScript 错误。
+
+#### 任务 2：v3 统一模拟数据与 fixture
+
+**Files:**
+- Create: `pricelens/src/pages/forecast/workbenchSimulation.ts`
+- Modify: `pricelens/src/pages/forecast/workbenchFixture.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/workbenchSimulation.test.ts`
+
+**Interfaces:**
+- Consumes: 任务 1 的日历；现有 `WorkbenchFixture` 业务字段。
+- Produces: `createWorkbenchSimulation(calendar): WorkbenchFixture` 与并行开发用 `workbenchFixtureV3`（`meta.modelVersion='workbench-demo-v3'`）；52+ 本品实际周、覆盖全部预测周龄的参考序列、12 个月 SI/成本/价格计划、多个促销窗口。任务 5 前保留原 `workbenchFixture` 出口，避免旧页面在纯函数开发期间被破坏。
+
+- [ ] **Step 1：写失败测试，锁定覆盖与确定性**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { buildForecastCalendar } from '../workbenchCalendar';
+import { createWorkbenchSimulation } from '../workbenchSimulation';
+
+const calendar = buildForecastCalendar({
+  historyStart: '2025-11-03', historyThrough: '2026W44',
+  horizonStart: '2026-11', horizonEnd: '2027-10',
+});
+
+describe('workbench simulation v3', () => {
+  it('covers every calendar week and repeats exactly', () => {
+    const first = createWorkbenchSimulation(calendar);
+    const second = createWorkbenchSimulation(calendar);
+    expect(first).toEqual(second);
+    expect(first.meta.modelVersion).toBe('workbench-demo-v3');
+    expect(first.weeks.filter((week) => week.status === 'actual').length).toBeGreaterThanOrEqual(52);
+    expect(first.weeks.map((week) => week.id)).toEqual(calendar.weeks.map((week) => week.id));
+    expect(first.forecastMonths.map((month) => month.key)).toEqual(calendar.forecastMonths.map((month) => month.key));
+    for (const month of calendar.forecastMonths) {
+      expect(Number.isFinite(first.inventory.siPlanMonthly[month.key])).toBe(true);
+      expect(first.costVersions.some((version) => version.monthKey === month.key)).toBe(true);
+    }
+  });
+});
+```
+
+- [ ] **Step 2：运行并确认失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchSimulation.test.ts`
+Expected: FAIL，无法解析 `../workbenchSimulation`。
+
+- [ ] **Step 3：实现固定种子模拟生成并接入 fixture**
+
+Reuse the existing fixed-seed LCG approach in `workbenchFixture.ts`, but move generation to `workbenchSimulation.ts`. Keep missing weeks as `null`; do not convert missing sales/prices to zero. Add `monthKey` to cost versions, `lifecycleIndex` to product weeks, `promoWindows`, and enough aligned reference points for every training and forecast week. Export the result as `workbenchFixtureV3`; keep the existing `workbenchFixture` and current page untouched until task 5. Keep all values visibly simulated.
+
+- [ ] **Step 4：运行新模拟测试与现有模型回归**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchSimulation.test.ts src/pages/forecast/__tests__/workbenchModel.test.ts && npm --prefix pricelens run typecheck`
+Expected: 新旧测试均 PASS；v3 与当前页面并存只用于开发隔离，任务 5 完成后不得保留两套预测主链。
+
+#### 任务 3：自动学习基线与证据
+
+**Files:**
+- Create: `pricelens/src/pages/forecast/workbenchLearning.ts`
+- Modify: `pricelens/src/pages/forecast/workbenchFixture.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/workbenchLearning.test.ts`
+
+**Interfaces:**
+- Consumes: v3 fixture、任务 1 日历、`prevGenReferenceId`。
+- Produces: B.4.4 的 `learnWorkbenchBaseline`、`LearningEvidence`、`baseByWeek`；不包含价格特征，不输出概率或区间。
+
+- [ ] **Step 1：写失败测试，覆盖学习、留出、确定性与回退**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { workbenchFixtureV3 } from '../workbenchFixture';
+import { buildForecastCalendar } from '../workbenchCalendar';
+import { learnWorkbenchBaseline } from '../workbenchLearning';
+
+const calendar = buildForecastCalendar(workbenchFixtureV3.calendar);
+
+describe('learnWorkbenchBaseline', () => {
+  it('learns a deterministic baseline with eight holdout weeks', () => {
+    const first = learnWorkbenchBaseline(workbenchFixtureV3, calendar, 'ref-mate80');
+    const second = learnWorkbenchBaseline(workbenchFixtureV3, calendar, 'ref-mate80');
+    expect(first).toEqual(second);
+    expect(first.evidence.status).toBe('completed');
+    expect(first.evidence.holdoutCount).toBe(8);
+    expect(first.evidence.featureNames).toEqual(['trend', 'referenceLogVolume', 'promo']);
+    expect(first.evidence.holdoutMape).not.toBeNull();
+    for (const week of calendar.forecastWeeks) {
+      expect(Number.isFinite(first.baseByWeek.get(week.id))).toBe(true);
+      expect(first.baseByWeek.get(week.id)!).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('falls back visibly when no valid actual samples exist', () => {
+    const emptyFixture = {
+      ...workbenchFixtureV3,
+      weeks: workbenchFixtureV3.weeks.map((week) => week.status === 'actual' ? { ...week, sales: null } : week),
+    };
+    const learned = learnWorkbenchBaseline(emptyFixture, calendar, 'ref-mate80');
+    expect(learned.evidence.status).toBe('fallback');
+    expect(learned.evidence.fallbackReasons.join('；')).toContain('有效样本');
+    expect(learned.evidence.coefficients).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2：运行并确认失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchLearning.test.ts`
+Expected: FAIL，无法解析 `../workbenchLearning`。
+
+- [ ] **Step 3：实现 B.4.4 的岭回归、留出验证和回退**
+
+Implement the four-term log-volume model exactly as specified, using the raw features defined in B.4.4, partial-pivot Gaussian elimination, ridge only on non-intercept terms, and `exp` inversion for unit-level MAE/MAPE. Use the median of the last eight valid actual weeks for fallback. Return all evidence from the same function; UI must not recompute coefficients or errors.
+
+- [ ] **Step 4：运行学习测试与类型检查**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchLearning.test.ts && npm --prefix pricelens run typecheck`
+Expected: PASS；学习结果不含价格字段、概率字段或区间字段。
+
+#### 任务 4：12 月大盘与自由范围事件纯函数
+
+**Files:**
+- Modify: `pricelens/src/pages/forecast/workbenchModel.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/marketBusMonthly.test.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/workbenchRangeEvents.test.ts`
+
+**Interfaces:**
+- Consumes: v3 fixture、日历、B.4.2 的事件类型。
+- Produces: `computeMarketMonths(fixture, calendar, params)`、`marketFactorAt(calendar, months, weekId)`、`rangeEventFactorAt(...)`、`productEventFactorAt(...)`。本任务不改 `computeWorkbench`。
+
+- [ ] **Step 1：写大盘失败测试，覆盖 12 月、2027 年调整与部分实际季**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { workbenchFixtureV3 } from '../workbenchFixture';
+import { buildForecastCalendar } from '../workbenchCalendar';
+import { computeMarketMonths, marketFactorAt } from '../workbenchModel';
+
+const calendar = buildForecastCalendar(workbenchFixtureV3.calendar);
+
+describe('v3 market months', () => {
+  it('covers the shared horizon and applies a mid-2027 override', () => {
+    const baseline = computeMarketMonths(workbenchFixtureV3, calendar, {
+      marketMonthEvents: [], marketMonthOverrides: {},
+    });
+    const adjusted = computeMarketMonths(workbenchFixtureV3, calendar, {
+      marketMonthEvents: [], marketMonthOverrides: { '2027-06': { value: 120, reason: '' } },
+    });
+    expect(baseline.filter((point) => point.status === 'forecast').map((point) => point.key))
+      .toEqual(calendar.forecastMonths.map((month) => month.key));
+    const june = adjusted.find((point) => point.key === '2027-06')!;
+    const juneWeek = calendar.forecastWeeks.find((week) => week.monthKey === '2027-06')!;
+    expect(marketFactorAt(calendar, adjusted, juneWeek.id).factor).toBeCloseTo(120 / june.baseline, 10);
+  });
+
+  it('does not redistribute October actuals into November or December', () => {
+    const input = { marketMonthEvents: [], marketMonthOverrides: {} };
+    const result = computeMarketMonths(workbenchFixtureV3, calendar, input);
+    const changedFixture = {
+      ...workbenchFixtureV3,
+      market: {
+        ...workbenchFixtureV3.market,
+        months: workbenchFixtureV3.market.months.map((month) => month.key === '2026-10'
+          ? { ...month, value: month.value + 10 }
+          : month),
+      },
+    };
+    const changed = computeMarketMonths(changedFixture, calendar, input);
+    expect(result.find((point) => point.key === '2026-10')?.status).toBe('actual');
+    expect(changed.find((point) => point.key === '2026-11')?.baseline)
+      .toBe(result.find((point) => point.key === '2026-11')?.baseline);
+    expect(changed.find((point) => point.key === '2026-12')?.baseline)
+      .toBe(result.find((point) => point.key === '2026-12')?.baseline);
+  });
+});
+```
+
+- [ ] **Step 2：写范围事件失败测试，覆盖跨年、形状与范围外**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { buildForecastCalendar } from '../workbenchCalendar';
+import { rangeEventFactorAt } from '../workbenchModel';
+import { workbenchFixtureV3 } from '../workbenchFixture';
+
+const calendar = buildForecastCalendar(workbenchFixtureV3.calendar);
+const weeks = calendar.forecastWeeks;
+const range = { startWeekId: weeks[10].id, endWeekId: weeks[13].id };
+
+describe('rangeEventFactorAt', () => {
+  it('supports arbitrary ranges and both shapes', () => {
+    expect(rangeEventFactorAt(calendar, [{ ...range, magnitudePct: 8, decay: 'flat' }], weeks[12].id)).toBeCloseTo(1.08);
+    expect(rangeEventFactorAt(calendar, [{ ...range, magnitudePct: 8, decay: 'decreasing' }], weeks[10].id)).toBeCloseTo(1.08);
+    expect(rangeEventFactorAt(calendar, [{ ...range, magnitudePct: 8, decay: 'decreasing' }], weeks[13].id)).toBeCloseTo(1.02);
+    expect(rangeEventFactorAt(calendar, [{ ...range, magnitudePct: 8, decay: 'flat' }], weeks[14].id)).toBe(1);
+  });
+});
+```
+
+- [ ] **Step 3：运行两个测试并确认失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/marketBusMonthly.test.ts src/pages/forecast/__tests__/workbenchRangeEvents.test.ts`
+Expected: FAIL，新 v3 接口或范围函数尚不存在。
+
+- [ ] **Step 4：实现 B.4.5/B.4.6 纯函数**
+
+Generate quarters until the calendar horizon, preserve full-future-quarter capacity conservation, leave partial-actual Q4 future months at their original month baselines, and compute all week factors from month effective/baseline ratios. Implement one shared range-event formula used by both market week events and product events. Do not modify `computeWorkbench` in this task.
+
+- [ ] **Step 5：运行测试与类型检查**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/marketBusMonthly.test.ts src/pages/forecast/__tests__/workbenchRangeEvents.test.ts && npm --prefix pricelens run typecheck`
+Expected: PASS。
+
+#### 任务 5：`computeWorkbench` v3 主链切换
+
+**Files:**
+- Modify: `pricelens/src/pages/forecast/workbenchModel.ts`
+- Modify: `pricelens/src/pages/forecast/workbenchFixture.ts`
+- Modify: `pricelens/src/pages/forecast/useWorkbenchParams.ts`
+- Modify: `pricelens/src/pages/forecast/workbenchTime.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/workbenchModel.test.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/ForecastPageWorkbench.test.tsx`
+- Create test helper: `pricelens/src/pages/forecast/__tests__/workbenchV3TestFactory.ts`（本任务只放日历/结果基础 helper，不引用未来 UI 组件）
+
+**Interfaces:**
+- Consumes: `learnWorkbenchBaseline`、任务 4 的月/范围纯函数、v3 fixture。
+- Produces: 外部签名保持 `computeWorkbench(fixture, params)`；结果含 `learnedBase / baselineSales / marketAdjusted / inventoryAdjusted / final / learning`；`baseWorkbenchParams` 与 `normalizeWorkbenchParams` 使用 v3 类型。
+
+- [ ] **Step 1：把旧固定 16 周金测改为日历驱动，并写阶段顺序失败测试**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { workbenchFixture } from '../workbenchFixture';
+import { baseWorkbenchParams, computeWorkbench, marketFactorAt } from '../workbenchModel';
+import { buildForecastCalendar } from '../workbenchCalendar';
+
+const calendar = buildForecastCalendar(workbenchFixture.calendar);
+
+describe('computeWorkbench v3 stage order', () => {
+  it('computes learning -> product events -> market -> inventory -> manual', () => {
+    const params = baseWorkbenchParams(workbenchFixture);
+    const result = computeWorkbench(workbenchFixture, params);
+    expect(result.weeks).toHaveLength(calendar.weeks.length);
+    for (const week of result.weeks.filter((item) => item.status === 'forecast')) {
+      const factor = marketFactorAt(calendar, result.marketMonths, week.weekId).factor;
+      expect(week.marketAdjusted).toBe(Math.round(week.baselineSales! * factor));
+      expect(week.inventoryAdjusted).toBeLessThanOrEqual(week.marketAdjusted!);
+      expect(week.final).toBe(week.manual?.value ?? week.inventoryAdjusted);
+    }
+  });
+
+  it('relearns on reference change without an additional reference multiplier', () => {
+    const base = baseWorkbenchParams(workbenchFixture);
+    const changed = computeWorkbench(workbenchFixture, { ...base, prevGenReferenceId: 'ref-pura90' });
+    const first = changed.weeks.find((week) => week.status === 'forecast')!;
+    expect(first.learnedBase).not.toBeNull();
+    expect(first.baselineSales).toBe(Math.round(first.learnedBase! * changed.learning.productFactorByWeek[first.weekId]));
+    expect(changed.learning.referenceId).toBe('ref-pura90');
+  });
+});
+```
+
+- [ ] **Step 2：运行并确认当前实现失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchModel.test.ts`
+Expected: FAIL，旧结果没有 v3 阶段字段/学习证据。
+
+- [ ] **Step 3：切换主链，但保持外部入口与阶段顺序**
+
+Set the production fixture export to v3 and remove `basePath` as the forecast source. Call the selected-reference learner once per `computeWorkbench`, apply product ranges to `learnedBase`, then market ratios, inventory recursion, and manual final overrides. Do not apply the old `referenceRatioAt` multiplier after learning. Add `learning.referenceId` and `learning.productFactorByWeek` to the result so the test and evidence UI consume the same factors. Preserve `supplyCapped`, gap, and DOS semantics. Update old numeric-week tests to derive weeks from the calendar rather than hard-coded W37–W52.
+
+- [ ] **Step 4：隔离 v2 会话并完成归一化**
+
+Use `forecast.workbench.workbench-demo-v3`; do not read v2 numeric-key manual/product-event drafts into the new calendar. Sanitize every range by `weekId`, reject unknown/reversed ranges, preserve empty reasons/names, and normalize `siPlanMonthly` to exactly the 12 calendar month keys. `marketEventDisposition` must use absolute calendar indexes rather than bare week numbers.
+
+- [ ] **Step 5：运行主链、页面和纯函数回归**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchModel.test.ts src/pages/forecast/__tests__/ForecastPageWorkbench.test.tsx src/pages/forecast/__tests__/workbenchLearning.test.ts src/pages/forecast/__tests__/workbenchRangeEvents.test.ts && npm --prefix pricelens run typecheck`
+Expected: PASS。页面可以暂时保留旧视觉，但数值与草稿必须全部来自 v3。
+
+#### 任务 6：PipelineNav、SI 逐月确认与跨卡导航
+
+**Files:**
+- Create: `pricelens/src/pages/forecast/PipelineNav.tsx`
+- Create: `pricelens/src/pages/forecast/useSiConfirmations.ts`
+- Modify: `pricelens/src/pages/forecast/ForecastPage.tsx`
+- Modify: `pricelens/src/pages/forecast/InventoryValidationCard.tsx`
+- Modify: `pricelens/src/pages/forecast/WorkbenchBits.tsx`
+- Test: `pricelens/src/pages/forecast/__tests__/PipelineNav.test.tsx`
+- Test: `pricelens/src/pages/forecast/__tests__/InventoryValidationCard.test.tsx`
+
+**Interfaces:**
+- Consumes: v3 result、calendar、params、B.4.3 `SiConfirmationState`。
+- Produces: `PipelineNav({ calendar, result, params, confirmationState, marginView, onNavigate })`；`useSiConfirmations(modelVersion, siPlanMonthly)` 返回 `{ byMonth, statusOf, confirmMonth, resetMonth, resetAll, saveState, retryPersist }`。
+
+- [ ] **Step 1：写 SI 失败测试，覆盖 12 月、空白、0、修改后重确认**
+
+```tsx
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import InventoryValidationCard from '../InventoryValidationCard';
+import { workbenchFixture } from '../workbenchFixture';
+import { baseWorkbenchParams } from '../workbenchModel';
+import { makeInventoryHarnessProps, makePipelineProps } from './workbenchV3TestFactory';
+
+describe('SI monthly confirmation', () => {
+  it('requires each month, separates blank from zero, and reopens edited months', () => {
+    const onSiMonthLive = vi.fn();
+    render(<InventoryValidationCard {...makeInventoryHarnessProps(onSiMonthLive)} />);
+    expect(screen.getAllByRole('button', { name: /确认本月/ })).toHaveLength(12);
+    expect(screen.queryByRole('button', { name: '全部确认' })).toBeNull();
+    const november = screen.getByLabelText('2026-11 SI 计划（千台/月）');
+    fireEvent.change(november, { target: { value: '' } });
+    fireEvent.blur(november);
+    expect(onSiMonthLive).not.toHaveBeenCalled();
+    fireEvent.change(november, { target: { value: '0' } });
+    fireEvent.blur(november);
+    expect(onSiMonthLive).toHaveBeenCalledWith('2026-11', 0);
+    expect(screen.getByText('本月不补货')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '确认 2026-11 SI' }));
+    expect(screen.getByText('2026-11 · 已确认')).toBeTruthy();
+  });
+});
+```
+
+`makeInventoryHarnessProps / makePipelineProps` 来自 B.6.2 的共享测试工厂；不要在测试文件另造同名字段或不存在的导入模块，也不要用 `any` 绕过组件契约。
+
+- [ ] **Step 2：写 PipelineNav 失败测试，确认导航不改参数**
+
+```tsx
+it('navigates to a stage without changing params', () => {
+  const onNavigate = vi.fn();
+  const params = baseWorkbenchParams(workbenchFixture);
+  render(<PipelineNav {...makePipelineProps(params, onNavigate)} />);
+  fireEvent.click(screen.getByRole('button', { name: /③ 库存修正/ }));
+  expect(onNavigate).toHaveBeenCalledWith(3);
+  expect(params).toEqual(baseWorkbenchParams(workbenchFixture));
+});
+```
+
+- [ ] **Step 3：运行并确认失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/InventoryValidationCard.test.tsx src/pages/forecast/__tests__/PipelineNav.test.tsx`
+Expected: FAIL，组件/逐月确认能力尚不存在。
+
+- [ ] **Step 4：实现组件、确认工作区和导航**
+
+Render four pipeline stages with current status and keyboard-focusable targets. Keep SI raw drafts local; only finite values in the existing 0…2000 千台 range commit on blur/Enter. A valid commit updates the preview but remains unconfirmed until its own confirmation action. Persist confirmation state under `forecast.siConfirmation.workbench-demo-v3`; surface storage failure with retry instead of silently swallowing it. Add cross-card source/return strips and explicit-focus navigation; no automatic scrolling on recompute.
+
+- [ ] **Step 5：运行组件与页面集成测试**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/InventoryValidationCard.test.tsx src/pages/forecast/__tests__/PipelineNav.test.tsx src/pages/forecast/__tests__/ForecastPageWorkbench.test.tsx && npm --prefix pricelens run typecheck`
+Expected: PASS。
+
+#### 任务 7：主图证据、范围锚、参考定位与统一数据表
+
+**Files:**
+- Create: `pricelens/src/pages/forecast/EvidenceFrame.tsx`
+- Create: `pricelens/src/pages/forecast/MainForecastDataTable.tsx`
+- Modify: `pricelens/src/pages/forecast/MainForecastChart.tsx`
+- Modify: `pricelens/src/pages/forecast/EventReplayModal.tsx`
+- Modify: `pricelens/src/pages/forecast/ReferencePanel.tsx`
+- Modify: `pricelens/src/pages/forecast/MarketBusPanel.tsx`
+- Test: `pricelens/src/pages/forecast/__tests__/MainForecastChart.test.tsx`
+- Test: `pricelens/src/pages/forecast/__tests__/EventReplayModal.test.tsx`
+- Test: `pricelens/src/pages/forecast/__tests__/ReferencePanel.test.tsx`
+- Test: `pricelens/src/pages/forecast/__tests__/MarketBusPanel.test.tsx`
+
+**Interfaces:**
+- Consumes: v3 阶段结果、`LearningEvidence`、`MarginView`、跨卡焦点。
+- Produces: `EvidenceFrame` B.5.3 契约；范围事件编辑提交 `Omit<ProductEventSeed,'id'>`；主图数据表只读 `WorkbenchResult + MarginView`。
+
+- [ ] **Step 1：写主图失败测试，锁定阶段证据、范围名录与键盘入口**
+
+```tsx
+// @vitest-environment jsdom
+import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import MainForecastChart from '../MainForecastChart';
+import { workbenchFixture } from '../workbenchFixture';
+import { baseWorkbenchParams, computeWorkbench } from '../workbenchModel';
+import { makeMainChartProps, makeRangeChartProps, makeRangeEditorProps } from './workbenchV3TestFactory';
+
+describe('MainForecastChart v3', () => {
+  it('shows stage evidence and keyboard access to every forecast week', () => {
+    const params = baseWorkbenchParams(workbenchFixture);
+    render(<MainForecastChart {...makeMainChartProps(workbenchFixture, params, computeWorkbench(workbenchFixture, params))} />);
+    const target = screen.getByRole('button', { name: /查看 2027W01 预测证据/ });
+    fireEvent.keyDown(target, { key: 'Enter' });
+    expect(screen.getByRole('dialog', { name: /2027W01/ })).toBeTruthy();
+    expect(screen.getByText('① 自动学习基线')).toBeTruthy();
+    expect(screen.getByText('② 大盘修正后')).toBeTruthy();
+    expect(screen.getByText('③ 库存修正后')).toBeTruthy();
+  });
+
+  it('lists one range event once with derived duration', () => {
+    render(<MainForecastChart {...makeRangeChartProps()} />);
+    expect(screen.getByRole('button', { name: /编辑事件 2026W45–2026W48/ })).toBeTruthy();
+    expect(screen.getByText('4 周 · 恒定')).toBeTruthy();
+  });
+});
+```
+
+`makeMainChartProps / makeRangeChartProps / makeRangeEditorProps` 均来自 B.6.2 共享测试工厂，覆盖 fixture、calendar、params、result、MarginView 和回调；不使用 `any` 或不存在的导入模块。
+
+- [ ] **Step 2：写范围编辑器失败测试**
+
+```tsx
+it('submits a free closed range with optional name and explicit shape', () => {
+  const onSubmit = vi.fn();
+  render(<EventReplayModal {...makeRangeEditorProps(onSubmit)} />);
+  fireEvent.mouseDown(screen.getByLabelText('事件起周'));
+  fireEvent.click(screen.getByText('2026W45'));
+  fireEvent.mouseDown(screen.getByLabelText('事件止周'));
+  fireEvent.click(screen.getByText('2026W48'));
+  fireEvent.click(screen.getByRole('radio', { name: '恒定' }));
+  fireEvent.click(screen.getByRole('button', { name: '预览事件' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认应用事件' }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+    startWeekId: '2026W45', endWeekId: '2026W48', decay: 'flat',
+  }));
+});
+```
+
+- [ ] **Step 3：运行并确认失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/MainForecastChart.test.tsx src/pages/forecast/__tests__/EventReplayModal.test.tsx`
+Expected: FAIL，证据/范围编辑契约尚未实现。
+
+- [ ] **Step 4：实现前端证据和范围交互**
+
+Use existing SVG geometry and `WorkbenchLegend`; do not add ECharts to this workbench. Render range anchors without full-height color bands, pin evidence on click/Enter, and return from edit mode to evidence on the first Escape. Keep reference-panel locking behavior unchanged. Replace the narrow main data table with `MainForecastDataTable` using the columns in B.5.4 and v3 week IDs. Preserve missing values as `—` and negative margins below zero.
+
+- [ ] **Step 5：运行所有相关组件测试**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/MainForecastChart.test.tsx src/pages/forecast/__tests__/EventReplayModal.test.tsx src/pages/forecast/__tests__/ReferencePanel.test.tsx src/pages/forecast/__tests__/MarketBusPanel.test.tsx && npm --prefix pricelens run typecheck`
+Expected: PASS；无概率/置信区间话术回归。
+
+#### 任务 8：AI 情报转化与人工审核
+
+**Files:**
+- Create: `pricelens/src/pages/forecast/intelligenceModel.ts`
+- Create: `pricelens/src/pages/forecast/useIntelligenceReview.ts`
+- Create: `pricelens/src/pages/forecast/IntelligenceReviewPanel.tsx`
+- Modify: `pricelens/src/pages/forecast/MarketBusPanel.tsx`
+- Modify: `pricelens/src/pages/forecast/ForecastPage.tsx`
+- Modify: `pricelens/src/state/lplKeys.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/intelligenceModel.test.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/IntelligenceReviewPanel.test.tsx`
+
+**Interfaces:**
+- Consumes: B.4.3/B.4.8 类型、v3 params/result、当前 `MarginScenario`。
+- Produces: `validateRecommendation`、`buildEventPreview`、`findDuplicateImpacts`；面板回调 `onApplyParams(nextParams, reviewMeta)` 与 `onApplyMargin(nextScenario, reviewMeta)`。`reviewMeta` 固定含 `candidateIds / batchId / appliedEventIds`。
+
+- [ ] **Step 1：写纯函数失败测试，覆盖目标校验、重复和预览隔离**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { workbenchFixture } from '../workbenchFixture';
+import { baseWorkbenchParams } from '../workbenchModel';
+import { buildForecastCalendar } from '../workbenchCalendar';
+import { buildEventPreview, findDuplicateImpacts, validateRecommendation } from '../intelligenceModel';
+import {
+  makeProductIntelligence,
+  makeProductRecommendation,
+  makeReviewPanelProps,
+  makeMixedBatchProps,
+} from './workbenchV3TestFactory';
+
+const calendar = buildForecastCalendar(workbenchFixture.calendar);
+
+describe('intelligence conversion', () => {
+  it('validates a product range and builds a detached preview', () => {
+    const item = makeProductIntelligence();
+    const recommendation = makeProductRecommendation(calendar.forecastWeeks[0].id, calendar.forecastWeeks[3].id);
+    const params = baseWorkbenchParams(workbenchFixture);
+    expect(validateRecommendation(item, recommendation, calendar).filter((issue) => issue.blocking)).toEqual([]);
+    const preview = buildEventPreview(recommendation, params);
+    expect(preview.productEvents).toHaveLength(1);
+    expect(params.productEvents).toHaveLength(0);
+    expect(findDuplicateImpacts(recommendation, preview, calendar)[0]?.overlapWeekIds).toHaveLength(4);
+  });
+
+  it('blocks an out-of-horizon range without requiring a name', () => {
+    const item = makeProductIntelligence();
+    const recommendation = { ...makeProductRecommendation('2028W01', '2028W02'), label: '' };
+    const issues = validateRecommendation(item, recommendation, calendar);
+    expect(issues.some((issue) => issue.field === 'range' && issue.blocking)).toBe(true);
+    expect(issues.some((issue) => issue.field === 'label')).toBe(false);
+  });
+});
+```
+
+候选与面板参数统一使用 B.6.2 的 `__tests__/workbenchV3TestFactory.ts`：模拟来源、当前国家/产业/渠道/产品、`own-promo`、合法 replayId、8% 幅度、恒定形状；所有测试共用这一份明确数据，不在页面 fixture 中伪装真实情报。
+
+- [ ] **Step 2：写面板失败测试，确认前不得写主链**
+
+```tsx
+it('requires preview confirmation and applies once', () => {
+  const onApplyParams = vi.fn();
+  render(<IntelligenceReviewPanel {...makeReviewPanelProps(onApplyParams)} />);
+  fireEvent.click(screen.getByRole('button', { name: /接受.*官方价促/ }));
+  expect(onApplyParams).not.toHaveBeenCalled();
+  expect(screen.getByText('影响预览')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '确认应用事件' }));
+  expect(onApplyParams).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('已应用 · 查看落点')).toBeTruthy();
+});
+
+it('rejects a mixed-target batch apply while allowing batch removal', () => {
+  render(<IntelligenceReviewPanel {...makeMixedBatchProps()} />);
+  fireEvent.click(screen.getByLabelText('选择当前 Top5'));
+  expect(screen.getByRole('button', { name: '批量预览' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '批量移除' }));
+  expect(screen.getByText('已移除 2 条 · 撤销')).toBeTruthy();
+});
+```
+
+- [ ] **Step 3：运行并确认失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/intelligenceModel.test.ts src/pages/forecast/__tests__/IntelligenceReviewPanel.test.tsx`
+Expected: FAIL，审核模块尚不存在。
+
+- [ ] **Step 4：实现审核工作区与面板**
+
+Keep candidate generation unavailable by default. Tests and future adapters inject `IntelligenceItem + EventRecommendation`; no fake Top5 rows. Build temporary params for previews, commit only on confirmation, persist review metadata under `LPL3.forecast.intelligenceReview.<scopeHash>`, and keep 20 before/after undo actions. A batch is atomic and same-target only. Source updates never rewrite applied events.
+
+- [ ] **Step 5：运行审核与页面回归**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/intelligenceModel.test.ts src/pages/forecast/__tests__/IntelligenceReviewPanel.test.tsx src/pages/forecast/__tests__/MarketBusPanel.test.tsx src/pages/forecast/__tests__/ForecastPageWorkbench.test.tsx && npm --prefix pricelens run typecheck`
+Expected: PASS。
+
+#### 任务 9：成本证据、销毛统一视图与人工调价回路
+
+**Files:**
+- Create: `pricelens/src/pages/forecast/marginScenarioModel.ts`
+- Create: `pricelens/src/pages/forecast/useMarginScenario.ts`
+- Create: `pricelens/src/pages/forecast/PriceAdjustDialog.tsx`
+- Modify: `pricelens/src/pages/forecast/ForecastMarginCostCard.tsx`
+- Modify: `pricelens/src/pages/forecast/ForecastPage.tsx`
+- Modify: `pricelens/src/pages/forecast/MainForecastChart.tsx`
+- Test: `pricelens/src/pages/forecast/__tests__/marginScenarioModel.test.ts`
+- Test: `pricelens/src/pages/forecast/__tests__/ForecastMarginCostCard.test.tsx`
+- Test: `pricelens/src/pages/forecast/__tests__/PriceAdjustDialog.test.tsx`
+
+**Interfaces:**
+- Consumes: v3 `WorkbenchResult`、B.4.3 `MarginScenario`。
+- Produces: `computeMarginView(fixture, result, scenario)`、`useMarginScenario(modelVersion)`、价格/成本编辑与撤销回调。`MarginView.priceDemandLinked` 恒为 `false`。
+
+- [ ] **Step 1：写销毛纯函数失败测试，证明主链不被修改**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { workbenchFixture } from '../workbenchFixture';
+import { baseWorkbenchParams, computeWorkbench } from '../workbenchModel';
+import { computeMarginView } from '../marginScenarioModel';
+
+describe('MarginView', () => {
+  it('applies price and cost only to displayed price and margin', () => {
+    const params = baseWorkbenchParams(workbenchFixture);
+    const result = computeWorkbench(workbenchFixture, params);
+    const snapshot = structuredClone(result);
+    const week = result.weeks.find((item) => item.status === 'forecast')!;
+    const view = computeMarginView(workbenchFixture, result, {
+      costOverrides: { [week.monthKey]: { unitCost: 600, reason: '' } },
+      priceOverrides: { [week.weekId]: { price: 1000, reason: '', batchId: 'price-test-1' } },
+    });
+    const changed = view.weeks.find((item) => item.weekId === week.weekId)!;
+    expect(changed.effectivePrice).toBe(1000);
+    expect(changed.unitMargin).toBe(400);
+    expect(changed.weeklyMargin).toBe((week.final ?? 0) * 400);
+    expect(view.priceDemandLinked).toBe(false);
+    expect(result).toEqual(snapshot);
+  });
+});
+```
+
+- [ ] **Step 2：写价格弹窗失败测试，锁定过渡提示与确认**
+
+```tsx
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import PriceAdjustDialog from '../PriceAdjustDialog';
+import { makePriceDialogProps } from './workbenchV3TestFactory';
+
+describe('PriceAdjustDialog', () => {
+  it('previews margin without claiming a demand effect', () => {
+    const onApply = vi.fn();
+    render(<PriceAdjustDialog {...makePriceDialogProps(onApply)} />);
+    expect(screen.getByText('价格→销量关系未纳入 · 暂不联动销量')).toBeTruthy();
+    expect(onApply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '预览销毛变化' }));
+    expect(screen.getByText('预测期销毛变化')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '应用价格调整' }));
+    expect(onApply).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+- [ ] **Step 3：运行并确认失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/marginScenarioModel.test.ts src/pages/forecast/__tests__/PriceAdjustDialog.test.tsx`
+Expected: FAIL，销毛情景模块/弹窗尚不存在。
+
+- [ ] **Step 4：实现统一销毛视图与工作区**
+
+Compute effective price and cost by week ID/month key, leave `WorkbenchResult` referentially and numerically unchanged, and make the main summary and margin card consume the same `MarginView`. Add cost evidence/editing and the④→price dialog→④ loop. Month price batches show all target weeks and preserve existing overrides by default. Persist 20 undo actions in the session and surface storage failures with retry.
+
+- [ ] **Step 5：运行销毛、主图和页面回归**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/marginScenarioModel.test.ts src/pages/forecast/__tests__/ForecastMarginCostCard.test.tsx src/pages/forecast/__tests__/PriceAdjustDialog.test.tsx src/pages/forecast/__tests__/MainForecastChart.test.tsx src/pages/forecast/__tests__/ForecastPageWorkbench.test.tsx && npm --prefix pricelens run typecheck`
+Expected: PASS；成本不改价/量，价格不改变 SO/库存/DOS。
+
+#### 任务 10：导出、孤儿清理与全页集成
+
+**Files:**
+- Modify: `pricelens/src/pages/forecast/workbenchExport.ts`
+- Modify: `pricelens/src/pages/forecast/ForecastPage.tsx`
+- Modify: `pricelens/.impeccable/surfaces/forecast-workbench-v2.md`
+- Modify: `pricelens/src/pages/forecast/__tests__/workbenchExport.test.ts`
+- Modify: `pricelens/src/pages/forecast/__tests__/ForecastPageWorkbench.test.tsx`
+- Delete after reference check: `CalculationPath.tsx`、`DriverWaterfall.tsx`、`WhatIfDraft.tsx`、`EventTimeline.tsx`、`FactorEvidence.tsx`、`ForecastKpiStrip.tsx`、`WeeklyLedger.tsx` 及其专属测试。
+
+**Interfaces:**
+- Consumes: 最终 v3 result、SI 确认、情报审核、MarginView。
+- Produces: `buildWorkbenchAssumptionText(fixture, params, result, context)`，其中 `context` 固定含 `calendar / learning / siConfirmation / marginView / intelligenceReview`。
+
+- [ ] **Step 1：写导出失败测试，锁定完整顺序与敏感边界**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { workbenchFixture } from '../workbenchFixture';
+import { baseWorkbenchParams, computeWorkbench } from '../workbenchModel';
+import { buildWorkbenchAssumptionText } from '../workbenchExport';
+import { buildForecastCalendar } from '../workbenchCalendar';
+import { makeExportContext } from './workbenchV3TestFactory';
+
+describe('workbench v3 export', () => {
+  it('exports the shared horizon and all human review states in pipeline order', () => {
+    const params = baseWorkbenchParams(workbenchFixture);
+    const result = computeWorkbench(workbenchFixture, params);
+    const calendar = buildForecastCalendar(workbenchFixture.calendar);
+    const text = buildWorkbenchAssumptionText(
+      workbenchFixture,
+      params,
+      result,
+      makeExportContext(calendar, result),
+    );
+    expect(text).toContain('2026-11—2027-10');
+    expect(text).toContain('自动学习');
+    expect(text).toContain('SI 待确认 12 / 12');
+    expect(text).toContain('价格→销量关系未纳入');
+    expect(text.indexOf('【① 基线预测】')).toBeLessThan(text.indexOf('【② 大盘修正】'));
+    expect(text.indexOf('【② 大盘修正】')).toBeLessThan(text.indexOf('【③ 库存修正】'));
+    expect(text.indexOf('【③ 库存修正】')).toBeLessThan(text.indexOf('【④ 成本及销毛】'));
+    for (const banned of ['置信区间', '无约束需求', '刚性砍', '我司']) {
+      expect(text).not.toContain(banned);
+    }
+  });
+});
+```
+
+`makeExportContext` 使用 B.6.2 共享测试工厂，提供真实日历/结果、空 SI 确认、默认 `MarginView`、空审核工作区；不使用散落的 mock 数字。
+
+- [ ] **Step 2：运行并确认失败**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchExport.test.ts src/pages/forecast/__tests__/ForecastPageWorkbench.test.tsx`
+Expected: FAIL，旧导出没有统一上下文与 v3 顺序。
+
+- [ ] **Step 3：实现导出并收敛页面**
+
+Export scope/status first, then①learning sample/reference/events,②market months/events/overrides,③all twelve SI values and confirmation states/inventory rules,④cost/price scenarios and margin results. Include a visible warning when SI is incomplete or learning falls back. Keep the page in the shared shell, the existing card order, one page-level data-status badge, and no minutes/scenario layer.
+
+- [ ] **Step 4：删除孤儿并保护 simple-v1 Agent 链**
+
+Use `Grep` for each component name across `pricelens/src` before deletion. Remove only unreferenced page components and their exclusive tests. Do not delete `forecastModel / forecastDatasetRegistry / forecastSnapshot / forecastLearning`; Agent still consumes them. Update the surface brief so no old 8-week, fixed-basePath, single-week-event, or mandatory-reason decision remains.
+
+- [ ] **Step 5：运行导出与页面集成回归**
+
+Run: `npm --prefix pricelens run test -- src/pages/forecast/__tests__/workbenchExport.test.ts src/pages/forecast/__tests__/ForecastPageWorkbench.test.tsx && npm --prefix pricelens run typecheck`
+Expected: PASS。
+
+### B.7 任务 11：测试矩阵、真机验收与交付门禁
+
+任务 11 不新增功能。执行者逐项勾选以下验收场景，保留命令输出和真机结果；任何一项失败都不得以“主体已完成”交付。
+
+#### B.7.1 自动化测试矩阵
+
+| 层 | 必测场景 | 通过条件 |
+|---|---|---|
+| 日历 | 12 个月、ISO 跨年、跨月周、非法/倒置范围 | 周 ID 唯一，范围按绝对序位，月周映射同源 |
+| 模拟数据 | 固定种子、52+ 历史、参考覆盖、12 月 SI/成本 | 两次生成逐字段相等，缺数不造 0 |
+| 自动学习 | 正常学习、切换参考、缺样本、奇异矩阵、参考未来缺口 | 结果确定，证据完整，回退可见，不含价格关系 |
+| 大盘 | 完整未来季守恒、部分实际季不重摊、月事件均摊、2027 人工调整 | 月图与周修正同源，无 Q2 以后失效 |
+| 范围事件 | 单周、跨月、跨年、恒定/递减、重叠、范围外 | 一个事件一个范围，逐周乘子正确，无自动拆条 |
+| 库存 | 12 月确认、空白/0/非法、整数余数、全 0、SI 充足 | 确认状态独立，库存恒等式成立，截断事实保留 |
+| 手调 | 库存后手调、清除、高于可售、跨年 | final 正确，库存不重跑，缺口不漂移 |
+| 情报 | 缺参、范围不符、逐条审核、批次、重复、来源更新、撤销 | 确认前不写，批次原子，来源映射不污染 params |
+| 成本/价格 | 成本编辑、周/月价格、已有手调冲突、撤销 | 只改显示价和销毛，主链不变，摘要与④一致 |
+| 前端 | 键盘、Esc、焦点返回、局部横滚、减少动态、空/错/加载 | 无 hover-only 功能，无关键数值裁切 |
+| 导出 | 范围、顺序、学习/确认/审核/价格状态、禁词 | 与页面同源，不含退役话术 |
+
+#### B.7.2 真机端到端验收脚本
+
+在本地开发版 `http://localhost:5174` 以实际浏览器执行，不用 import/编译成功代替交互验收：
+
+1. **统一范围**：打开 ForecastPage，页首、主图、大盘、SI、成本、数据表和复制文本均为 2026-11—2027-10；大盘有 12 个预测月，主图可定位 2027 年任一预测周。
+2. **自动学习证据**：hover 并固定一个预测周，查看学习样本、参考产品、实际特征、系数、留出 MAE/MAPE；切换上一代后①结果和证据同时变化，没有额外参考比值重复乘入。
+3. **学习回退**：用测试数据入口或组件 harness 模拟不足 32 周/未来参考缺口；界面显示回退原因与影响周，不出现 NaN、Infinity 或假「学习完成」。
+4. **②修正**：调整 2027-06 指数，原因留空并应用；该月所有预测周按同一比值变化，点击「检查库存」定位③，随后返回②保留草稿。
+5. **自由范围事件**：录入 2026W50—2027W02 的竞品上市，选择递减、名称留空；先预览再确认。图顶只有一个范围锚，名录显示实际起止日期和派生周数，范围外周不变。
+6. **SI 逐月确认**：12 个月初始均待确认；清空一月不变 0，输入 0 显示不补货，非法值不提交。逐月确认并修改其中一个已确认月，该月重新待确认；刷新会话后状态恢复。
+7. **③库存与手调**：通过 SI 制造并解除库存不足；回主图定位修正周。对截断周做高于可售的周销手调，final 显示手调，截断事实与缺口仍在；清除后回到库存修正值。
+8. **情报审核**：在测试注入模拟候选后，逐条接受/改参/拒绝，确认前主链不变；重复事件有提醒，已应用可定位与撤销。取消注入后只显示待接入空态。
+9. **④成本与价格**：编辑一个未来月成本，再带参考到主图调整价格；预览和应用都显示「暂不联动销量」。SO/库存/DOS 不变，主图价格与④/摘要销毛同源，撤销可恢复。
+10. **可访问与恢复**：全程仅用键盘完成证据、编辑、确认、导航和返回；窄屏局部横滚不裁关键数值；模拟存储失败后显示未持久化并可重试。
+
+#### B.7.3 标准命令与交付物
+
+实现完成后从仓库根目录依次执行：
+
+```bash
+npm --prefix pricelens run design:check
+npm --prefix pricelens run design:lint
+npm --prefix pricelens run typecheck
+npm --prefix pricelens run check
+```
+
+`check` 必须包含项目现有 verify、全部 Vitest 与 build（脚本定义见 `pricelens/package.json:18-18`）。build 由项目脚本生成根目录 `PriceLens.html`，不得手工编辑。若设计 detector 可用，再运行 `npm --prefix pricelens run design:detect`；advisory 按交接规则说明，不扩大排除范围。
+
+最终交付应包含：
+
+- v3 主链与统一模拟数据；
+- 完整前端交互、会话/本地工作区和撤销；
+- 所有新增/更新测试及原七部分/附录对应文档更新；
+- 生成的离线单文件；
+- 真机验收结果、任何未通过项和仍然开放的价格→销量关系边界。
+
+**明确不在本次交付：** 真实情报抓取、价格→销量数学关系、账号级多人协作、真实数据 Adapter、自动改价或自动执行经营动作。
+
+---
+
+**文档完成说明**：原七部分、统一方案附录 A、前端与功能开发交接附录 B 均已写入。本次仅修改本设计文档；未修改源码、测试或配置，未执行 Git、build、类型检查或设计检查。现状事实与目标设计分开表述；价格→销量数学关系仍明确保留为开放项。
