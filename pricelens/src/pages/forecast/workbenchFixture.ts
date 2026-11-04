@@ -22,6 +22,9 @@
 //     事件锚，A1 参考卡重构新增）；prevGenPool / competitorPool 保留（主链
 //     比值校正与事件回放仍消费）。
 // ============================================================
+import { buildForecastCalendar } from './workbenchCalendar';
+import type { ForecastCalendarInput, WeekRange } from './workbenchCalendar';
+import { createWorkbenchSimulation } from './workbenchSimulation';
 
 /** 演示周：W37–W52，历史（模拟实际）+ 预测。 */
 export interface WorkbenchWeek {
@@ -667,3 +670,95 @@ export const workbenchFixture: WorkbenchFixture = {
     { week: 46, label: '黑五档期 11.14–12.02 · 主峰 W47（11-27）' },
   ],
 };
+
+// ============================================================
+// v3 统一模拟 fixture（forecast-global-ia-review 附录 A.2 / B.6 任务 2）：
+// 在任务 1 的统一日历（2026-11—2027-10 · 12 个月，真实 ISO 跨年周 ID）上，
+// 由 workbenchSimulation.createWorkbenchSimulation 固定种子确定性生成。
+//
+// ⚠️ 并存约束（写死在注释里）：workbenchFixtureV3 与上方既有 workbenchFixture
+// （v2）并存仅为纯函数开发期的隔离环境；当前页面继续消费 v2 导出，本节不改动
+// 任何 v2 导出；任务 5 独占完成 computeWorkbench v3 主链切换后，必须移除 v2
+// 预测主链与对应 fixture 出口，之后不得保留两套预测主链。
+// 相对 v2 的字段变化（B.4.1 / B.4.4 拍板）：
+//   - 新增 calendar：统一日历输入（buildForecastCalendar 的入参形态）；
+//   - weeks 改带跨年周 id（YYYYWww 唯一主键）与 lifecycleIndex（本品周龄，
+//     映射 lifecyclePool 同周龄点）；缺采周 sales=null 不造 0；
+//   - costVersions 改 monthKey 键控（不再 fromWeek 裸周号，跨年不串值）；
+//   - 新增 promoWindows（B.4.4 PromoWindow，多个已知促销窗口，学习促销
+//     特征与档期价共用），取代 v2 单一 promoBand 概念；
+//   - 不再携带 basePath：①基线必须自动学习（B.1），预置基线不得改名后
+//     冒充学习结果；大盘默认事件随 B.4.2 的 WeekRange 事件契约在任务 4/5 落地。
+// ============================================================
+
+/** v3 统一周序列项：周 id 为唯一主键，weekNumber 仅作跨年不唯一的周号读数。 */
+export interface WorkbenchWeekV3 {
+  /** 跨年周 ID（YYYYWww；来自 workbenchCalendar，2026W53 与 2027W01 不串值）。 */
+  id: string;
+  /** ISO 周号读数（跨年不唯一，仅展示；不作键）。 */
+  weekNumber: number;
+  /** 周一完整日期（YYYY-MM-DD）。 */
+  date: string;
+  /** 周一日期展示（MM-DD）。 */
+  dateLabel: string;
+  status: 'actual' | 'forecast';
+  /** 历史周销（台）；缺采周与预测周为 null（保留真实缺采状态，不转 0）。 */
+  sales: number | null;
+  /** 价格（USD）：历史实际 + 预测价格计划（promoWindows 内为档期价）。 */
+  price: number;
+  /** 本品周龄（0 = 首个历史周）；映射 references.lifecyclePool 同周龄点（B.4.4）。 */
+  lifecycleIndex: number;
+}
+
+/** v3 月版本成本：monthKey 键控（YYYY-MM 跨年月键），不再用裸周号 fromWeek。 */
+export interface WorkbenchCostVersionV3 {
+  /** 版本所属月（YYYY-MM）。 */
+  monthKey: string;
+  /** 版本展示名（如「2026-11 版本」）。 */
+  label: string;
+  /** 版本生效成本（USD/台）。 */
+  unitCost: number;
+}
+
+/** 已知促销窗口（B.4.4）：起止周闭区间；①学习促销特征 p 与档期价共用。 */
+export interface PromoWindow extends WeekRange {
+  id: string;
+  label: string;
+}
+
+/** v3 统一模拟 fixture 契约（workbench-demo-v3）。 */
+export interface WorkbenchFixtureV3 {
+  meta: WorkbenchFixture['meta'];
+  context: WorkbenchFixture['context'];
+  /** 统一日历输入：buildForecastCalendar(workbenchFixtureV3.calendar) 可复建同一日历。 */
+  calendar: ForecastCalendarInput;
+  /** 统一周序列：顺序与 calendar.weeks 一致（52 实际 + 52 预测）。 */
+  weeks: WorkbenchWeekV3[];
+  /** 多个已知促销窗口（含历史窗口供①训练行、预测窗口供价格计划）。 */
+  promoWindows: PromoWindow[];
+  market: WorkbenchFixture['market'];
+  inventory: WorkbenchFixture['inventory'];
+  /** 月版本成本（12 个预测月逐月覆盖）。 */
+  costVersions: WorkbenchCostVersionV3[];
+  /** 预测月（12 个月；weekIds / forecastWeekIds 与统一日历同源）。 */
+  forecastMonths: Array<{ key: string; label: string; weekIds: string[]; forecastWeekIds: string[] }>;
+  references: WorkbenchFixture['references'];
+  /** 主图小事件录入的事实回放场景（历史事实段，与 v2 同源演示）。 */
+  replayScenarios: WorkbenchFixture['replayScenarios'];
+}
+
+/** v3 统一日历输入：唯一预测范围 2026-11—2027-10 · 12 个月（附录 A.2 拍板）。 */
+const WORKBENCH_V3_CALENDAR_INPUT: ForecastCalendarInput = {
+  historyStart: '2025-11-03',
+  historyThrough: '2026W44',
+  horizonStart: '2026-11',
+  horizonEnd: '2027-10',
+};
+
+/**
+ * 并行开发用 v3 fixture：固定 fixture + 固定种子 + 固定日历推导
+ * （确定性，不读系统当前时间，不在渲染中随机）。
+ */
+export const workbenchFixtureV3: WorkbenchFixtureV3 = createWorkbenchSimulation(
+  buildForecastCalendar(WORKBENCH_V3_CALENDAR_INPUT),
+);
