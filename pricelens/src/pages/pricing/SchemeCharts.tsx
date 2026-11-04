@@ -22,6 +22,8 @@ echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendCompone
 
 const AXIS = { fontSize: fontSize.caption, color: color.mute, fontFamily: font.family };
 const TOOLTIP = {
+  // confine: 浮层钳在图表容器内，贴边 hover 不出界被裁（2026-11-03 大盘同款防遮挡）
+  confine: true,
   backgroundColor: color.canvas, borderColor: color.hairline,
   textStyle: { color: color.body, fontSize: 12, fontFamily: font.family },
 };

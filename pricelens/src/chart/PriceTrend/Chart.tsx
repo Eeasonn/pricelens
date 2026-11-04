@@ -114,6 +114,14 @@ import OfferPopover from './OfferPopover';
 import ChartToolbar from './ChartToolbar';
 import BrandDot from '../../components/BrandMark';
 
+/** 悬停摘要浮层横向定位（纯函数，2026-11-03 防边缘遮挡）：跟随十字线右移 16px；
+ *  右缘放不下时翻到十字线左侧；翻转后仍越绘图区左缘（最左列 + 宽浮层时 left
+ *  可为负、被容器裁掉）则钳回 plotLeft+8——宁盖住悬停列也不出界消失 */
+export function tipOverlayLeft(plotLeft: number, plotWidth: number, x0: number, w: number): number {
+  const flip = x0 + 16 + w > plotLeft + plotWidth;
+  return Math.max(plotLeft + 8, flip ? x0 - 16 - w : x0 + 16);
+}
+
 export interface ChartProps {
   series: Series[];
   granularity: Granularity;
@@ -1849,13 +1857,12 @@ export default function Chart(props: ChartProps) {
                 </div>
               );
             }
-            // ---- 浮层模式：跟随十字竖线，右缘自动左翻 ----
+            // ---- 浮层模式：跟随十字竖线，右缘自动左翻；左翻越界再钳回绘图区左缘 ----
             const x0 = xPxOf(geom, tipIdx);
             const nameEst = Math.max(...rows.map((r) => curveNameOf(r.s).length)) * 6.2 + 14;
             const hasSnap = rows.some((r) => r.s.points[tipIdx]?.price != null);
             const W = Math.ceil(20 + 6 * 6 + 2 + rateW + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasSnap ? 16 : 0);
-            const flip = x0 + 16 + W > geom.plotLeft + geom.plotWidth;
-            const left = flip ? x0 - 16 - W : x0 + 16;
+            const left = tipOverlayLeft(geom.plotLeft, geom.plotWidth, x0, W);
             const top = Math.min(
               Math.max(geom.plotTop + 8, 40),
               geom.plotTop + geom.plotHeight - 36 - (rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0)),

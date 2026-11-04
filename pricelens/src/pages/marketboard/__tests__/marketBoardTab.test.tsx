@@ -5,17 +5,30 @@
 // ③ MarketBoardPage 组装：口径行（模拟数据徽标 + 产业 Segmented）+ 三张
 //    大盘卡 + 图表页签行；产业切换后口径/数据说明随产业更新。
 // echarts 在 jsdom 无 canvas：mock 'echarts/core' 等模块，只验证 React 组装
-// 与导航行为，不验证图表渲染（图内逻辑由 marketBoardModel.test.ts 覆盖）。
+// 与导航行为，不验证图表渲染（图内逻辑由 marketBoardModel.test.ts 覆盖）；
+// mock 透传 setOption 的 option（__testOptionLog），tooltip 防裁切 confine 有断言。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
-vi.mock('echarts/core', () => ({
-  use: vi.fn(),
-  init: vi.fn(() => ({ setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn() })),
-}));
+vi.mock('echarts/core', () => {
+  // 记录每次 setOption 的 option（2026-11-03）：断言大盘卡 tooltip.confine === true
+  const optionLog: unknown[] = [];
+  return {
+    use: vi.fn(),
+    init: vi.fn(() => ({
+      setOption: vi.fn((option: unknown) => {
+        optionLog.push(option);
+      }),
+      resize: vi.fn(),
+      clear: vi.fn(),
+      dispose: vi.fn(),
+    })),
+    __testOptionLog: optionLog,
+  };
+});
 vi.mock('echarts/charts', () => ({ BarChart: {}, LineChart: {}, ScatterChart: {} }));
 vi.mock('echarts/components', () => ({
   GridComponent: {},
@@ -38,6 +51,18 @@ import { ChartContentProvider } from '../../../state/chartContent';
 import { readUrlOverrides } from '../../../state/urlSync';
 import ChartContentBar from '../../../components/ChartContentBar';
 import MarketBoardPage from '../../MarketBoardPage';
+import * as echartsCore from 'echarts/core';
+
+/** mock echarts/core 记录的全部 option（模块工厂闭包数组，经别名暴露） */
+const testOptionLog = (): unknown[] =>
+  (echartsCore as unknown as { __testOptionLog: unknown[] }).__testOptionLog;
+
+/** option 里带 tooltip 的条目（大盘卡 tooltip 配置） */
+const tooltipOptions = (): { tooltip: { confine?: boolean } }[] =>
+  testOptionLog().filter(
+    (o): o is { tooltip: { confine?: boolean } } =>
+      o != null && typeof o === 'object' && typeof (o as { tooltip?: unknown }).tooltip === 'object',
+  );
 
 /** 当前页探针：把 PageProvider 的 page 暴露成可断言文本 */
 function Probe() {
@@ -143,6 +168,15 @@ describe('MarketBoardPage 组装', () => {
     expect(screen.getByText('各品牌核心档位结构同比变化')).toBeTruthy();
     // 页嵌在分析壳内：图表页签行同卡呈现，当前页大盘走势选中
     expect(screen.getByRole('button', { name: '大盘走势' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('大盘卡 echarts tooltip 全部开 confine（2026-11-03 反馈：MBScroll 横滚容器裁掉贴边 hover 页签）', () => {
+    testOptionLog().length = 0;
+    mountShell(<MarketBoardPage />);
+    const opts = tooltipOptions();
+    // 同比卡按品牌列出多图：带 tooltip 的 option 覆盖全部卡（≥3 份）
+    expect(opts.length).toBeGreaterThanOrEqual(3);
+    for (const o of opts) expect(o.tooltip.confine).toBe(true);
   });
 
   it('产业切换：默认智能穿戴（GFK 口径），切智能手机后口径行/数据说明随产业更新', () => {

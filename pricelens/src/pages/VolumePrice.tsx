@@ -70,7 +70,7 @@
 // 全部并入图下明细卡首行（2026-11-02 已并入，本次只压形态）。屏蔽/悬停联动
 // 量价页没有。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { Popover, Segmented } from 'antd';
+import { message, Popover } from 'antd';
 import { DownOutlined, HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import { useConfigVersion } from '../state/configStore';
@@ -106,7 +106,7 @@ import {
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
-import { applySyncedPlatforms, pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
+import { restorePlatformSync, snapshotPlatformSync, syncComparesWithMain, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
 import type { Granularity, Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 import { flatSelections } from '../state/mainSelection';
@@ -118,7 +118,6 @@ import { inventoryDemoOf } from './volume/inventoryDemo';
 import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack from './volume/PanelTimeTrack';
 import HiddenTray, { type HiddenTrayItem } from './volume/HiddenTray';
-import MarginCostBand from './volume/MarginCostBand';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
 import { marginCrossX } from './volume/marginCostGeometry';
 import SpreadRangeCard from './volume/SpreadRangeCard';
@@ -250,21 +249,20 @@ export default function VolumePrice() {
   //      产品清单/价格类型/币种变化清空（挂进下方 scaleResetKey 复位效果） ----
   const [hiddenPanels, setHiddenPanels] = usePageViewState<string[]>('volume.hiddenPanels', () => []);
   const hiddenSet = useMemo(() => new Set(hiddenPanels), [hiddenPanels]);
-  // 销毛成本开关（2026-11-02 Eason）：关 = 经典呈现且不画成本销毛带（回到最初的量价图）；
-  // 开 = 默认切成本柱呈现（⋯ 菜单仍可切回经典，此时经典带着成本销毛带）。
+  // 销毛成本开关（2026-11-02 Eason；2026-11-03 收口：经典带成本销毛带形态与
+  // 「经典 | 成本柱」呈现切换一并退役，开启即成本柱呈现）：
+  // 关 = 经典纯量价（折线 + 销量柱，无成本无销毛带，回到最初的量价图）；
+  // 开 = 成本柱呈现（柱高折后价 + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱）。
   // 组内对比下不允许显示销毛成本（对比时放在下方不合理）：强制关、开关禁用。会话态跨页保留
   const [showMargin, setShowMargin] = usePageViewState<boolean>('volume.showMargin', () => false);
   const marginLocked = safeViewMode.kind === 'group';
   const marginOn = showMargin && !marginLocked;
-  // 呈现方式（2026-11-02 新方案）：经典 = 折线+销量柱（+成本销毛带）；成本柱 = 柱高折后价
-  // + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱。只在销毛成本开启时有意义；切换收进 ⋯ 菜单
-  const [priceMode, setPriceMode] = usePageViewState<'classic' | 'costbar'>('volume.priceMode', () => 'costbar');
-  const costbar = marginOn && priceMode === 'costbar';
+  // 呈现方式（2026-11-03 五条反馈收口）：销毛成本开关 = 呈现总开关，「经典」形态退役——
+  // 开 = 成本柱呈现（柱高折后价 + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱），关 = 纯量价
+  const costbar = marginOn;
   const toggleMargin = (): void => {
     if (marginLocked) return;
-    const next = !showMargin;
-    setShowMargin(next);
-    setPriceMode(next ? 'costbar' : 'classic');
+    setShowMargin(!showMargin);
   };
 
   // 视图模式切换（阅读 ↔ 组内对比 / 换组）即清空隐藏集：两视图面板集不同，
@@ -331,10 +329,12 @@ export default function VolumePrice() {
     return out;
   }, [state.mains, cc, safeViewMode]);
   const panelCount = panelSpecs.length;
-  // 量价页把同步入口放在每个主产品面板左侧；状态按卡保存，避免把一个主产品
-  // 的店铺口径误传给另一张主产品卡。快照用于再次点击时恢复同步前的选择。
-  const [storeSyncMap, setStoreSyncMap] = useState<Record<string, boolean>>({});
-  const storeSyncSnapshotsRef = useRef<Record<string, PlatformSyncCardSnap | null>>({});
+  // 量价页把同步入口放在每个主产品面板左侧；开态按面板 key（型号__配置，跨刷新/
+  // 卡片重建都稳定）保存，避免把一个主产品的店铺口径误传给另一张卡。开态与还原
+  // 快照同存会话态 'volume.storeSync'（2026-11-03）：刷新/切页回来按钮态与店铺
+  // 数据不再错位，取消同步还原的也是触发同步那一刻的真实快照（二次同步不失真）。
+  // 形状 { [panelKey]: { on, snapshot } }
+  const [storeSyncMap, setStoreSyncMap] = usePageViewState<Record<string, { on: boolean; snapshot: PlatformSyncCardSnap | null }>>('volume.storeSync', () => ({}));
 
   // ---- 视图状态（同价格看板口径；全部面板共用）。同步态/面板独立窗口/价格
   //      显示 = 会话态跨页保留（P1-5，usePageViewState）；其余为瞬态。
@@ -345,9 +345,9 @@ export default function VolumePrice() {
   const [showYTicks, setShowYTicks] = usePageViewState<boolean>('volume.showYTicks', () => true);
   // 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立
   const [showTiers, setShowTiers] = usePageViewState<boolean>('volume.showTiers', () => true);
-  // 成本柱模式（2026-11-02 Eason）：档位在柱形语义下没有作用，强制不画且不留档位列空白；
-  // 用户的档位开关设置只对经典模式生效
-  const effShowTiers = costbar ? false : showTiers;
+  // 成本柱呈现（销毛成本开启）下档位没有作用（2026-11-02 Eason），强制不画且不留
+  // 档位列空白；用户的档位开关设置只对经典量价生效
+  const effShowTiers = marginOn ? false : showTiers;
   const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('volume.lineShape', () => 'auto');
   // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 全面板共享悬停纵向位置（横向虚线）
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
@@ -362,10 +362,10 @@ export default function VolumePrice() {
   const [volumeLimits, setVolumeLimits] = useState<Record<string, VolumeAxisLimits>>({});
   // ---- 第119轮（走查会）：同步/非同步查看时间。同步 = 全部面板共用窗口（原行为）；
   //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
-  //      两项均会话态跨页保留（P1-5）----
+  //      两项均会话态跨页保留（P1-5）。2026-11-03：开关两视图通用——主产品视图
+  //      同款出现在共享轴列底部，默认开，语义与组内对比完全一致 ----
   const [synced, setSynced] = usePageViewState<boolean>('volume.synced', () => true);
-  // 主产品视图没有「时间轴同步」开关，各图固定共用一段查看时间。
-  const timeSynced = reading || synced;
+  const timeSynced = synced;
   const [panelWins, setPanelWinsRaw] = usePageViewState<([number, number] | null)[]>('volume.panelWins', () => panelSpecs.map(() => null));
   // 面板独立窗口伴生粒度（跨粒度错位修复）：panelWins 存的是裸桶下标，只在本粒度
   // 内可解释。挂载期间切粒度有下方 granRef 效果整组重置；但跨页往返（卸载期间在
@@ -573,9 +573,9 @@ export default function VolumePrice() {
 
   // ---- 第119轮（走查会）：各面板生效窗口。同步 = 全部面板共用共享窗口（原行为）；
   //      非同步 = 各面板独立窗口（未单独调整过的回落共享窗口，越界钳回可调全域）。
-  //      timeSynced（主产品阅读视图或开同步）恒用共享窗口——此前组内对比关过同步
-  //      留下的独立窗口残留会把阅读视图的图冻结在旧窗口（时间轴显示共享窗、拖动
-  //      图不动），按「同步 = 共用窗口」口径直接忽略（2026-11-01 审查 P1）。----
+  //      timeSynced（开同步）恒用共享窗口；2026-11-03 起两视图同一语义——主产品
+  //      视图要独立窗口需显式关掉轴列底部的「时间轴同步」开关，开关可见即无
+  //      「残留独立窗口把图冻结在旧段」的死角（2026-11-01 审查 P1 的口径保留）。----
   const effWins = useMemo<[number, number][]>(
     () => panelSpecs.map((_, i) => normalizePanelWindow(timeSynced ? null : panelWins[i] ?? null, win.s, win.e, filterBounds[0], filterBounds[1])),
     [panelSpecs, timeSynced, panelWins, win.s, win.e, filterBounds],
@@ -728,25 +728,30 @@ export default function VolumePrice() {
       });
   }, [orderedPanels, hiddenSet, panelCount, visibleCount]);
 
+  // 店铺同步开关（组内对比主品）：开 = 本组对比产品的取价店铺跟随主产品当前口径
+  // （主品自选 = 原样同步；主品自动 = 钉定其最新有价周的实际平台），主品自身永不
+  // 改写（syncComparesWithMain 契约，2026-11-03）；取消 = 按快照还原触发前的选择。
+  // 开态与快照同存会话态（见上方 storeSyncMap）。不可同步（主品无数据、口径解析
+  // 不出）不开态、不写筛选。
   const toggleStoreSync = (p: (typeof panelViews)[number]): void => {
     if (!p.spec.isMain) return;
     const card = state.mains.find((item) => item.id === p.spec.cardId);
     if (!card?.main) return;
-    const cardId = card.id;
-    if (storeSyncMap[cardId]) {
-      const snap = storeSyncSnapshotsRef.current[cardId];
-      if (snap) actions.setMains(restorePlatformSync(state.mains, [snap]));
-      storeSyncSnapshotsRef.current[cardId] = null;
-      setStoreSyncMap((prev) => ({ ...prev, [cardId]: false }));
+    const syncKey = p.spec.key; // 面板 key：会话态键，跨刷新/卡片重建稳定
+    const cur = storeSyncMap[syncKey];
+    if (cur?.on) {
+      // 快照条目按 selKey 匹配还原；cardId 重定向到当前卡（卡片重建换了 id 也照常还原）
+      if (cur.snapshot) actions.setMains(restorePlatformSync(state.mains, [{ ...cur.snapshot, cardId: card.id }]));
+      setStoreSyncMap((prev) => ({ ...prev, [syncKey]: { on: false, snapshot: null } }));
       return;
     }
     const snap = snapshotPlatformSync([card])[0] ?? null;
-    const source = pinnedSelectionFromBadge(p.series[0]?.channelBadge ?? null, card.main.platform ?? null);
-    const syncedCard = applySyncedPlatforms([card], source)[0];
+    const syncedCard = syncComparesWithMain(card, p.series[0]?.channelBadge ?? null);
     if (!syncedCard) return;
-    actions.setMains(state.mains.map((item) => (item.id === cardId ? syncedCard : item)));
-    storeSyncSnapshotsRef.current[cardId] = snap;
-    setStoreSyncMap((prev) => ({ ...prev, [cardId]: true }));
+    actions.setMains(state.mains.map((item) => (item.id === card.id ? syncedCard : item)));
+    setStoreSyncMap((prev) => ({ ...prev, [syncKey]: { on: true, snapshot: snap } }));
+    // 同步改了什么要可见（Eason 修复要求）：激活即报跟随范围与还原路径
+    message.success(`店铺同步：${syncedCard.compares.length} 款对比品已跟随主品取价口径（主品不变；取消同步即还原）`);
   };
 
   // 异常守卫人工裁定（2026-11-01）：单周明细卡「确认真实价格 / 标记异常」→
@@ -964,15 +969,16 @@ export default function VolumePrice() {
   };
 
   /** 「时间轴同步」开关（第119轮走查会；第126轮移到共享轴列下方、与时间轴行齐平；
-   *  第148轮改名「时间轴同步」两行竖排、与整条时间轴块垂直居中）：
-   *  同步 = 各图查看同一段时间，拖任一图的时间轴三图一起动；非同步 = 各图时间
+   *  第148轮改名「时间轴同步」两行竖排、与整条时间轴块垂直居中；2026-11-03 起
+   *  主产品视图同款可见，语义两视图通用）：
+   *  同步 = 各图查看同一段时间，拖任一图的时间轴全部联动；非同步 = 各图时间
    *  范围独立调整（用于对齐不同上市节奏产品的可比区间） */
   const syncToggle = (
     <button
       type="button"
       aria-label="时间轴同步"
       aria-pressed={synced}
-      title={synced ? '同步：三张图共用一段查看时间' : '独立：各图分别调整'}
+      title={synced ? '同步：各图共用一段查看时间' : '独立：各图分别调整'}
       onClick={toggleSynced}
       style={{
         height: 30, padding: '0 9px', borderRadius: radius.control,
@@ -1389,7 +1395,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               plotTop={PANEL_GRID_TOP}
                               plotWidth={strip.plotWidth}
                               plotHeight={yCfg.plotHeight}
-                              extraBottom={costbar ? 60 : GRID.bottom}
+                              extraBottom={marginOn ? 60 : GRID.bottom}
                               n={viewLen}
                               onHover={onHoverOf(p.idx)}
                               onBrush={onBrushChangeOf(p.idx)}
@@ -1439,23 +1445,6 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             />
                           )}
                           </div>
-                          {!costbar && marginOn && (
-                          <MarginCostBand
-                            waterline={state.granularity === 'week'}
-                            granularity={state.granularity}
-                            bucketLabels={domainIds.slice(effWins[p.idx][0], effWins[p.idx][1] + 1)}
-                            geom={geoms[p.idx] ?? null}
-                            points={marginPointsMasked}
-                            currency={state.currency}
-                            seriesColor={seriesColor}
-                            hoverIdx={hoverIdxs[p.idx] ?? null}
-                            onHover={onHoverOf(p.idx)}
-                            empty={marginUnavailable}
-                            externalCrosshair
-                            focusIndex={activeIdx}
-                            selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
-                          />
-                          )}
                           {crossX != null && (
                             <div aria-hidden style={{ position: 'absolute', left: Math.round(crossX) - 0.5, top: PANEL_GRID_TOP, bottom: 0, width: 1, background: color.hairlineStrong, pointerEvents: 'none', zIndex: 4 }} />
                           )}
@@ -1469,7 +1458,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             直接渲染会触发 React 对可迭代对象的展开报错） */}
                         {(() => {
                           if (reading) return null;
-                          const synced = storeSyncMap[p.spec.cardId] === true;
+                          const synced = storeSyncMap[p.spec.key]?.on === true;
                           detailCards.set(
                             p.spec.key,
                             <WeekDetailCard
@@ -1709,7 +1698,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
       aria-pressed={marginOn}
       aria-label={marginOn ? '隐藏销毛成本' : '显示销毛成本'}
       aria-disabled={marginLocked || undefined}
-      title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：成本柱呈现（⋯ 菜单可切回经典 + 成本销毛带）；点击隐藏回到经典量价图' : '显示销毛成本：切到成本柱呈现'}
+      title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：成本柱呈现；点击回到纯量价图' : '显示销毛成本：切到成本柱呈现'}
       onClick={toggleMargin}
       style={{
         height: 24,
@@ -1758,7 +1747,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
             {/* 工具行（2026-11-02 反馈②；2026-11-03 主品视图改版）：主品视图 = 齿轮簇（左）
                 + 产品显隐药丸带与 DNS 店铺 chip（中区 legend 槽）+ 「进入本组对比」轻量
                 文字钮（行尾 compareEntry 槽，价格走势「多平台对比」同款同位——一体性）；
-                组视图 = 齿轮簇（左）与组内切换（中段），明细卡身份区照旧承载药丸/店铺 chip */}
+                组视图 = 齿轮簇（左）与组内切换（中段），明细卡身份区照旧承载药丸/店铺 chip。
+                （2026-11-03 五条反馈：经典|成本柱呈现切换已退役，销毛成本开关 = 呈现总开关） */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 6px', marginBottom: 2 }}>
               <div style={reading ? { flex: '1 1 auto', minWidth: 0 } : { flex: '0 0 auto' }}>
                 <ChartToolbar
@@ -1766,8 +1756,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   sliderScale={sliderScale}
                   onSliderScale={setSliderScale}
                   showYTicks={showYTicks}
-                  showTiers={costbar ? true : showTiers}
-                  showTiersToggle={!costbar}
+                  showTiers={marginOn ? true : showTiers}
+                  showTiersToggle={!marginOn}
                   onShowTiers={setShowTiers}
                   onShowYTicks={setShowYTicks}
                   yCompress={yCompress}
@@ -1787,18 +1777,6 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   ) : undefined}
                   compareEntry={reading && compareEntries.length > 0 ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>{compareEntries}</span>
-                  ) : undefined}
-                  presentationSlot={marginOn ? (
-                    <Segmented
-                      size="small"
-                      aria-label="图表呈现方式"
-                      value={priceMode}
-                      onChange={(v) => setPriceMode(v as 'classic' | 'costbar')}
-                      options={[
-                        { label: '经典', value: 'classic' },
-                        { label: '成本柱', value: 'costbar' },
-                      ]}
-                    />
                   ) : undefined}
                 />
               </div>
@@ -1899,9 +1877,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                     ) : (
                       <>
                         {/* 明细信息行（2026-11-02 反馈③）：紧跟工具行，每面板一张明细卡正对其面板。
-                            左侧轴列宽留白里放「销毛成本」开关（Eason：齿轮与 ⋯ 的下方） */}
-                        {/* 明细信息行（2026-11-03 Eason 反馈：销毛成本开关上移工具行后，
-                            本行不再保留轴列缩进留白——卡片直接顶满可用宽度 */}
+                            （2026-11-03 Eason 反馈：销毛成本开关上移工具行后，
+                            本行不再保留轴列缩进留白——卡片直接顶满可用宽度） */}
                         {detailCards.size > 0 && (
                           <div style={{ marginBottom: space.sm }}>
                             <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: gridGap }}>
@@ -1932,7 +1909,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             }}
                           >
                             <SplitAxisColumn
-                              yScale={costbar ? yCfgCost : yCfg}
+                              yScale={marginOn ? yCfgCost : yCfg}
                               currency={state.currency}
                               industry={state.industry}
                               gridLeft={estGridLeft(state.currency, showYTicks, effShowTiers)}
@@ -1940,18 +1917,17 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               showYTicks={showYTicks}
                               showTiers={effShowTiers}
                               tierValues={tierValues}
-                              belowTicks={costbar ? costRateTicks : undefined}
+                              belowTicks={marginOn ? costRateTicks : undefined}
                             />
                             <div style={{ flex: 1 }} />
                             {/* 与时间轴轨道带齐平：轨道高 52、按钮 top -5 对准轨道带中心
-                                （轨道下说明行已删，2026-11-02 Eason：图上不要解释性用语） */}
+                                （轨道下说明行已删，2026-11-02 Eason：图上不要解释性用语；
+                                2026-11-03 起两视图都渲染开关，主产品视图同款可关） */}
                             {buckets.length > 0 && visUnion.length > 0 && (
                               <div style={{ height: 52, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
-                                {!reading && (
-                                  <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
-                                    {syncToggle}
-                                  </div>
-                                )}
+                                <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
+                                  {syncToggle}
+                                </div>
                               </div>
                             )}
                           </div>
