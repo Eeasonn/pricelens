@@ -143,6 +143,12 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
   });
 
   const weeks = result.weeks;
+  // X 周标签 = 全站日历周格式（2026W45）：桶号 YYYYWW 由周数据完整日期年份 + weekNumber 拼装（与主图同口径，年份不写死）。
+  const weekBucketIds = weeks.map((week) => {
+    const source = fixture.weeks.find((candidate) => candidate.weekNumber === week.weekNumber);
+    const year = source ? source.date.slice(0, 4) : '';
+    return `${year}W${String(week.weekNumber).padStart(2, '0')}`;
+  });
   const legendItems: LegendItem[] = [
     { key: 'margin', label: '周销毛（$M）', shape: 'rect', color: color.warning },
     { key: 'cost', label: '成本 · 月版本（实→虚）', shape: 'line', color: color.hairlineStrong },
@@ -235,12 +241,15 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
     <section style={workbenchCardStyle}>
       {head}
       <div style={{ overflowX: 'auto' }}>
+        {/* SVG 地板宽 560（原 650）：本卡在页面 ④⑤ 左右两列的右列
+            （minmax(0,1fr) / minmax(0,0.8fr)，ForecastPage），1440 最小工作宽下
+             右列卡内 ≈565px——下探地板避免列内横向滚动（2026-11-04 清洁第二轮） */}
         <svg
           viewBox={`0 0 ${W} ${H}`}
           width="100%"
           role="img"
           aria-label={`成本销毛（经营结果 · 由上述量价与成本推导）：周销毛柱与月版本成本阶梯（${fixture.costVersions.map((version) => `${version.monthLabel} $${version.unitCost}`).join(' → ')}）；预测期（${fixture.context.forecastRange}）销毛 ${fmtMillionUsd(result.summary.forecastMargin)}，历史 ${fixture.context.historyRange} 销毛 ${fmtMillionUsd(result.summary.historyMargin)}；不回写主图。`}
-          style={{ display: 'block', height: 'auto', minWidth: 650 }}
+          style={{ display: 'block', height: 'auto', minWidth: 560 }}
         >
           {/* 周销毛轴（$M）：0 基线强分隔，其余刻度弱网格；负值向下 */}
           {tickValues.map((value) => {
@@ -258,7 +267,7 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
           })}
           {weeks.map((week, index) => {
             if (index % 4 === 0 || index === weeks.length - 1) {
-              return <text key={week.week} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{week.week}</text>;
+              return <text key={week.week} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{weekBucketIds[index]}</text>;
             }
             return null;
           })}

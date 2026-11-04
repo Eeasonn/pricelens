@@ -391,17 +391,22 @@ export default function ForecastPage() {
         onRationaleChange={(text) => setParams((prev) => ({ ...prev, rationale: text }))}
       />
 
-      {/* ④ 库存验证（SI 月计划唯一人工输入 → 反算 → min 修正回写主图；
-          本地草稿即时更新，不设假提交口、不宣称写真实数据） */}
-      <InventoryValidationCard
-        fixture={fixture}
-        params={params}
-        result={result}
-        onSiMonthLive={(monthKey, units) => setParams((prev) => ({ ...prev, siPlanMonthly: { ...prev.siPlanMonthly, [monthKey]: units } }))}
-      />
-
-      {/* ⑤ 成本销毛（链路末端独立推测，不回写主图） */}
-      <ForecastMarginCostCard fixture={fixture} result={result} />
+      {/* ④⑤ 库存验证 + 成本销毛：左右两列（2026-11-04 清洁第二轮，卡序 ④→⑤ 不变）。
+          左列 1fr（库存卡内容多：SI 格子行 + 链路条 + 图 + 输出框），右列 0.8fr
+          （成本销毛为窄卡，以视觉平衡为准）；窄屏退化 = 复用仓库既有
+          [data-lpl-forecast-grid] @media 断点（index.css，≤760px 单列堆叠）。 */}
+      <div
+        data-lpl-forecast-grid
+        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 0.8fr)', gap: space.md, alignItems: 'start' }}
+      >
+        <InventoryValidationCard
+          fixture={fixture}
+          params={params}
+          result={result}
+          onSiMonthLive={(monthKey, units) => setParams((prev) => ({ ...prev, siPlanMonthly: { ...prev.siPlanMonthly, [monthKey]: units } }))}
+        />
+        <ForecastMarginCostCard fixture={fixture} result={result} />
+      </div>
 
       {/* 单周微调弹窗：调整原因选填（不填即可应用；填了则内联标注主图手调处） */}
       {tuneWeekResult && (

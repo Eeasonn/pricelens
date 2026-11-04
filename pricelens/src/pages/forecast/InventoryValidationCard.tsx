@@ -9,6 +9,11 @@
 //（仅作考量因素，数值收进库存柱悬停提示）、删 SI ▼ 小三角、删 DOS 50
 // 参考格线（左轴只标 0 与上限）。SI 不上图：改卡头格子按月输入（唯一
 // 人工输入；SI 够高 → 库存柱自然高，从 DOS 反推可见）。
+// 2026-11-04 清洁第二轮：删 DOS 70–90 天健康带（底衬 rect + 两条边界虚线 +
+// 「70 天 / 90 天」边界标注 + aria 里的合理带描述）——图上只剩库存柱 +
+// 渠道 DOS 线 + 轴刻度；左轴定标随之改回纯数据派生（不再为健康带保底
+// DOS_BAND.max + 1）。健康判定规则本身不动（DOS 合理带阈值仍是判定口径，
+// 收在输出框规则行 / 判定行与链路条 title，不上图）。
 // 历史段实 / 预测段虚（预测段 = 上游基线 SO + SI 月计划推演）。
 // SI 按月给入 = 唯一明确人工输入；健康判定（DOS 70–90 天 + 库存降幅 20%/30%，
 // 预警解释，阈值未核定）→ 可售不足的预测周按可售量修正（min(基线 SO, 可售)，
@@ -166,15 +171,19 @@ export default function InventoryValidationCard({
   });
 
   const weeks = result.weeks;
+  // X 周标签 = 全站日历周格式（2026W45）：桶号 YYYYWW 由周数据完整日期年份 + weekNumber 拼装（与主图同口径，年份不写死）。
+  const weekBucketIds = weeks.map((week) => {
+    const source = fixture.weeks.find((candidate) => candidate.weekNumber === week.weekNumber);
+    const year = source ? source.date.slice(0, 4) : '';
+    return `${year}W${String(week.weekNumber).padStart(2, '0')}`;
+  });
   const forecastWeeks = weeks.filter((week) => week.status === 'forecast');
   const slot = PLOT_W / weeks.length;
   const barW = Math.min(24, slot * 0.46);
   const x = (index: number): number => LEFT + (index + 0.5) * slot;
-  // 轴域只按渠道 DOS（全流程 DOS 已下架，不再参与左轴定标）
-  const dosMax = Math.max(
-    niceCeil(Math.max(...weeks.map((week) => week.channelDos))),
-    DOS_BAND.max + 1,
-  );
+  // 轴域只按渠道 DOS 数据派生（全流程 DOS 已下架、健康带已删——不再为
+  // 70–90 天带保底 DOS_BAND.max + 1，2026-11-04 清洁第二轮）
+  const dosMax = Math.max(1, niceCeil(Math.max(...weeks.map((week) => week.channelDos))));
   const invMax = Math.max(1, niceCeil(Math.max(...weeks.map((week) => week.channelInv))));
   const yDos = (value: number): number => TOP + PLOT_H * (1 - value / dosMax);
   const yInv = (value: number): number => TOP + PLOT_H * (1 - value / invMax);
@@ -182,7 +191,6 @@ export default function InventoryValidationCard({
     weeks.slice(from, to + 1)
       .map((week, offset) => `${offset === 0 ? 'M' : 'L'}${x(from + offset).toFixed(1)} ${yDos(week.channelDos).toFixed(1)}`)
       .join(' ');
-  const boundaryX = (x(7) + x(FORECAST_START)) / 2;
   // 微痕读 supplyCapped（截断事实，手调不覆盖）；capped 只表当前是否按库存值显示。
   const cappedWeeks = forecastWeeks.filter((week) => week.supplyCapped);
   const capTriggered = cappedWeeks.length > 0;
@@ -269,13 +277,10 @@ export default function InventoryValidationCard({
           viewBox={`0 0 ${W} ${H}`}
           width="100%"
           role="img"
-          aria-label={`库存验证：渠道库存柱（右轴，万台）+ 渠道 DOS 线（左轴，合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天）；全流程 DOS 不上图，悬停库存柱读数值；${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起库存上限修正（按可售量修正回写主图，修正周琥珀描边）` : '当前库存可支撑基线 SO，未触发修正'}。详细判定见下方输出框。`}
+          aria-label={`库存验证：渠道库存柱（右轴，万台）+ 渠道 DOS 线（左轴）；全流程 DOS 不上图，悬停库存柱读数值；${cappedWeeks.length ? `W${cappedWeeks[0].weekNumber} 起库存上限修正（按可售量修正回写主图，修正周琥珀描边）` : '当前库存可支撑基线 SO，未触发修正'}。详细判定见下方输出框。`}
           style={{ display: 'block', height: 'auto', minWidth: 700 }}
         >
-          {/* 预测段浅底 + 今天分界 */}
-          <rect x={boundaryX} y={TOP - 4} width={W - RIGHT - boundaryX} height={PLOT_H + 4} fill={color.canvasSoft2} opacity={0.5} />
-          <line x1={boundaryX} y1={TOP - 4} x2={boundaryX} y2={TOP + PLOT_H} stroke={color.hairlineStrong} strokeDasharray="4 4" />
-          <text x={boundaryX + 4} y={TOP + 8} fontSize={10} fill={color.body}>预测 / 计划</text>
+          {/* 预测段浅底/分界线/「预测 / 计划」说明已下线（2026-11-04 晚清洁：预测周靠虚柱本身区分，图上只留数据） */}
           {/* 网格 + 左轴（天）+ 右轴（万台）；2026-11-04 评审删 DOS 50 参考格线：左轴只标 0 与上限 */}
           {[0, 1].map((fraction) => {
             const gy = TOP + PLOT_H * (1 - fraction);
@@ -291,17 +296,12 @@ export default function InventoryValidationCard({
             <text key={fraction} x={W - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{wanOf(invMax * fraction)}</text>
           ))}
           <text x={W - RIGHT + 6} y={TOP - 3} fontSize={10} fill={color.mute}>万台</text>
-          {/* DOS 合理带 70–90 天（mute 虚线 + 浅带） */}
-          <rect x={LEFT} y={yDos(DOS_BAND.max)} width={PLOT_W} height={Math.max(0, yDos(DOS_BAND.min) - yDos(DOS_BAND.max))} fill={color.canvasSoft2} opacity={0.6} />
-          {[DOS_BAND.min, DOS_BAND.max].map((days) => (
-            <g key={days}>
-              <line x1={LEFT} y1={yDos(days)} x2={W - RIGHT} y2={yDos(days)} stroke={color.mute} strokeWidth={1} strokeDasharray="3 4" opacity={0.7} />
-              <text x={W - RIGHT - 2} y={yDos(days) - 3} textAnchor="end" fontSize={9.5} fill={color.mute}>{`${days} 天`}</text>
-            </g>
-          ))}
-          {/* X 周标签 */}
+          {/* DOS 70–90 天健康带（底衬 + 边界虚线 + 边界标注）已下线
+              （2026-11-04 清洁第二轮）：图上只剩库存柱 + 渠道 DOS 线 + 轴刻度；
+              合理带阈值仍在判定口径（输出框规则行 / 判定行、链路条 title） */}
+          {/* X 周标签（全站日历周格式 2026W45） */}
           {weeks.map((week, index) => (index % 4 === 0 || index === weeks.length - 1
-            ? <text key={week.week} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{week.week}</text>
+            ? <text key={week.week} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{weekBucketIds[index]}</text>
             : null))}
           {/* 渠道库存柱：历史实（中性墨）/ 预测虚柱；悬停 title = 选中点读数
               （含全流程 DOS 与 SI 数值——评审：全流程不上线，仅考量因素） */}

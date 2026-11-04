@@ -10,6 +10,10 @@
 //    首月按日均摊 = 幅度 × 覆盖天数 ÷ 当月天数，覆盖外 null，起始日超月按末日）；
 // ④ 按月调整（withMarketMonthOverride：覆盖生效值、原因选填、有人工调整的
 //    季度经季内三月均值同步 q4/q1Override，无调整季度回 null = AI）。
+// ⑤ 证据信任 v2 口径（2026-11-04 晚拍板：趋势窗口 = 6 个月）：
+//    marketTrendWindow（近 6 个月实际段 + 逐月环比 + 环比均值）与
+//    marketMonthShape（去年同季月形权重）——大盘卡证据浮框/图上趋势源段/
+//    徽章三步链的唯一数字来源，UI 不另算（环比数字与模型同源断言）。
 // 全部断言不依赖运行时间与随机数。
 // ============================================================
 // @vitest-environment node
@@ -21,9 +25,12 @@ import {
   computeMarketMonths,
   computeWorkbench,
   daysInMonthOf,
+  MARKET_TREND_WINDOW_MONTHS,
   marketMonthEventFactor,
+  marketMonthShape,
   marketQuarterForecast,
   marketSeriesBaseline,
+  marketTrendWindow,
   monthCoverageRatio,
   monthKeyOfDate,
   monthsBetween,
@@ -245,5 +252,55 @@ describe('withMarketMonthOverride · 按月调整与季度同步', () => {
     ];
     expect(nextMarketMonthEventId(existing)).toBe('me-custom-3');
     expect(nextMarketMonthEventId([existing[0]])).toBe('me-custom-2');
+  });
+});
+
+describe('证据信任 v2 口径 · marketTrendWindow / marketMonthShape（2026-11-04 拍板：窗口 = 6 个月）', () => {
+  it('MARKET_TREND_WINDOW_MONTHS = 6（模型与 UI 统一口径常量，禁止两套口径）', () => {
+    expect(MARKET_TREND_WINDOW_MONTHS).toBe(6);
+  });
+
+  it('窗口 = 收盘于最后实际月的连续 6 个实际月；逐月环比 round1、首月 null（不造数）', () => {
+    const { months, avgMomPct } = marketTrendWindow(fixture);
+    expect(months.map((point) => point.key)).toEqual(['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']);
+    expect(months.map((point) => point.value)).toEqual([106, 105.4, 106.6, 104.6, 104, 103.4]);
+    // 环比由所画 6 个月真实计算：105.4/106−1 ≈ −0.566% → −0.6；106.6/105.4−1 ≈ +1.139% → +1.1；
+    // 104.6/106.6−1 ≈ −1.876% → −1.9；104/104.6−1 ≈ −0.574% → −0.6；103.4/104−1 ≈ −0.577% → −0.6
+    expect(months.map((point) => point.momPct)).toEqual([null, -0.6, 1.1, -1.9, -0.6, -0.6]);
+    // 均值由未取整环比的算术平均（−0.4908…）→ round1 = −0.5（浮框「近 6 个月环比 −0.5%/月」同源）
+    expect(avgMomPct).toBe(-0.5);
+  });
+
+  it('窗口与月度主序列历史段同源（computeMarketMonths 历史尾段 = 窗口，UI 高亮段即模型窗口）', () => {
+    const all = computeMarketMonths(fixture, { marketMonthEvents: [], marketMonthOverrides: {} });
+    const actualTail = all.filter((point) => point.status === 'actual').slice(-MARKET_TREND_WINDOW_MONTHS);
+    const { months } = marketTrendWindow(fixture);
+    expect(months.map((point) => point.key)).toEqual(actualTail.map((point) => point.key));
+    expect(months.map((point) => point.value)).toEqual(actualTail.map((point) => point.value));
+  });
+
+  it('确定性：同输入两次计算逐字段一致（禁随机）', () => {
+    expect(marketTrendWindow(fixture)).toEqual(marketTrendWindow(fixture));
+  });
+
+  it('marketMonthShape：去年同季月形与月形分布（lastYearMonthWeights）同源，权重 = 月值 ÷ 季内均值', () => {
+    const shape = marketMonthShape(fixture, '2027Q1');
+    expect(shape.map((point) => point.key)).toEqual(['2026-01', '2026-02', '2026-03']);
+    expect(shape.map((point) => point.value)).toEqual([107.6, 108.4, 108]);
+    expect(shape.map((point) => point.weight)).toEqual([107.6 / 108, 108.4 / 108, 1]);
+    // 浮框算例同源：2027-02 基线 = round1(2027Q1 基线 93.6 × 2026-02 权重) = 93.9
+    const monthsList = computeMarketMonths(fixture, { marketMonthEvents: [], marketMonthOverrides: {} });
+    const february = monthsList.find((point) => point.key === '2027-02');
+    expect(february?.baseline).toBe(Math.round(93.6 * (108.4 / 108) * 10) / 10);
+    expect(february?.baseline).toBe(93.9);
+  });
+
+  it('marketMonthShape：非法季度键返回空数组；去年同季缺月回退均等 1/3 权重、value null（不造数）', () => {
+    expect(marketMonthShape(fixture, 'bad')).toEqual([]);
+    // 2028Q1 去年同季 = 2027Q1（不在 21 个历史月内）→ 均等回退
+    const shape = marketMonthShape(fixture, '2028Q1');
+    expect(shape.map((point) => point.key)).toEqual(['2027-01', '2027-02', '2027-03']);
+    expect(shape.map((point) => point.value)).toEqual([null, null, null]);
+    expect(shape.map((point) => point.weight)).toEqual([1 / 3, 1 / 3, 1 / 3]);
   });
 });

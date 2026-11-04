@@ -4,6 +4,9 @@
 // 五卡齐全有序、范围行压缩 + 模拟标识分级（页首 DataStatusBadge + 各卡
 // 轻量 SimChip）、上一代参照受控进主链（草稿按模型版本落 sessionStorage）、
 // 微调→复制关键假设→切页往返草稿保留、禁词/旧话术总扫。
+// 2026-11-04 清洁第二轮：④⑤ 库存验证 + 成本销毛改左右两列
+//（data-lpl-forecast-grid：minmax(0,1fr) / minmax(0,0.8fr)，窄屏退化走
+// index.css 既有 ≤760px 单列断点），新增布局结构断言。
 // 只验证 React 组装与交互开关，不验证图表像素（SVG 由 typecheck 保证结构）。
 // ============================================================
 // @vitest-environment jsdom
@@ -95,6 +98,27 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     expect(text).not.toContain('推演纪要');
     // 可见「演示实际」话术退役（数据表 caption 保留模拟语境，不在可见 hint 中）
     expect(text).not.toContain('（演示实际）');
+  });
+
+  it('④⑤ 库存验证 + 成本销毛左右两列：data-lpl-forecast-grid 双列模板（左 1fr / 右 0.8fr），卡序仍库存在前', () => {
+    render(<App />);
+    const grid = document.querySelector('[data-lpl-forecast-grid]') as HTMLElement | null;
+    expect(grid).not.toBeNull();
+    // 两列 grid：左列（库存卡，内容多）1fr，右列（成本销毛窄卡）0.8fr；间距 = space.md；
+    // 窄屏退化（≤760px 单列）由 index.css 既有 [data-lpl-forecast-grid] 断点承担（jsdom 不测媒体查询）。
+    expect(grid!.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 0.8fr)');
+    expect(grid!.style.gap).toBe('12px');
+    expect(grid!.style.alignItems).toBe('start');
+    // 两卡为网格直接子级，DOM 顺序仍 ④ 库存 → ⑤ 成本（左右排布不改变卡序）。
+    const cards = Array.from(grid!.children).filter((node) => node.tagName === 'SECTION');
+    expect(cards).toHaveLength(2);
+    const cardTitles = cards.map((card) => card.querySelector('h2')?.textContent ?? '');
+    expect(cardTitles[0]).toContain('库存验证');
+    expect(cardTitles[1]).toContain('成本销毛');
+    // 右列窄卡自适应：销毛图 SVG 地板宽 560（1440 最小工作宽下列内不出现横向滚动）。
+    const marginSvg = cards[1].querySelector('svg[role="img"]') as SVGSVGElement | null;
+    expect(marginSvg).not.toBeNull();
+    expect(marginSvg!.style.minWidth).toBe('560px');
   });
 
   it('模拟标识分级：页首 DataStatusBadge 一处 + 四卡「模拟」+ 参考卡「模拟历史」；页级「演示」chip 退役', () => {

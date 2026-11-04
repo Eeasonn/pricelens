@@ -2,13 +2,18 @@
 // 推演工作台 v2 · 层①主图（视觉重心，只露最终结果——库存修正过程不呈现，
 // 仅保留修正周琥珀描边微痕）：
 // 历史实柱 + 预测虚柱（销量只留柱）+ 上一代同周龄参考线 + 价格线右轴
-// （历史实线 / 预测虚线）+ 今天分界 + 库存修正周琥珀描边微痕 +
+// （历史实线 / 预测虚线）+ 今天分界虚线 + 库存修正周琥珀描边微痕 +
 // 手调墨色菱形（原因内联小字 + 图下名录）+ 产品级小事件锚点 +
 // 促销档期轴下日期标注（轴上最小标记，不上色带）。
 // 2026-11-04 三方评审「大减法」下线：历史销量黑线（只是把销量点描了一遍，
 // 信息重复）、把握帽与把握区间带、调价/档期锚点竖线（档位线）、大促琥珀
 // 色带。把握帽计算源自 workbenchModel.ts（该文件另一 Agent 施工中不改），
 // 本组件仅在渲染层停用，计算函数保留待主线清理。
+// 2026-11-04 清洁第二轮：预测区灰底衬（canvasSoft2 分区色块）与「实际 /
+// 预测 · 向未来」说明文字下线——分区靠虚柱 / 价格虚线本身区分；今天分界
+// 只留虚线 + 轴上「今天」日期。X 轴刻度改全站日历周格式（2026W37）：
+// 取刻度与文案同源价格走势页 axisTickPlan / shortBucketLabel
+//（chart/PriceTrend/helpers，桶号 YYYYWW 由周数据的完整日期年份拼装）。
 // 时间边界（预测起点 / 历史终点 / 今天分界）一律从周状态派生（WP5 Step 3，
 // 禁写死下标）；价格轴由数据派生（Step 5）；缺数不造 0、实线不跨缺失段
 // （跨缺灰虚，Step 1/6）；图例分「数据系列 / 说明项」两组（Step 7）；
@@ -25,6 +30,7 @@ import type { ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult, WorkbenchWeekResult } from './workbenchModel';
 import { WorkbenchLegend, fmtWan, wanOf, type LegendItem } from './WorkbenchBits';
 import { buildAxisTicks, buildLineSegments, firstForecastIndex, segmentPathD } from './workbenchChartSegments';
+import { axisTickPlan } from '../../chart/PriceTrend/helpers';
 
 const W = 1180;
 /** heightScale = 1 时的画布高度（H = TOP + BASE_PLOT_H + BOTTOM）；heightScale 只缩放绘图区。 */
@@ -159,6 +165,19 @@ export default function MainForecastChart({
   const priceTicks = buildAxisTicks(priceMin, priceMax, 3);
   const barW = Math.min(34, slot * 0.55);
 
+  // 横轴刻度与文案同源价格走势页（第一百五十二轮口径）：axisTickPlan 取刻度
+  //（首末恒显示 + 抽稀让位），文案走周自带年份短格式（2026W37，shortBucketLabel）。
+  // 桶号 YYYYWW 由周数据的完整日期年份 + weekNumber 拼装（年份不写死）；compact /
+  // detail 两档密度映射为抽稀步长（compact = 全站图轴同款 ceil(n/9)，detail = 每周）。
+  const weekBucketIds = weeks.map((week) => {
+    const source = fixture.weeks.find((candidate) => candidate.weekNumber === week.weekNumber);
+    const year = source ? source.date.slice(0, 4) : '';
+    return `${year}${String(week.weekNumber).padStart(2, '0')}`;
+  });
+  const labelStep = labelMode === 'detail' ? 1 : Math.max(1, Math.ceil(weekBucketIds.length / 9));
+  const axisPlan = axisTickPlan('week', weekBucketIds, labelStep, weekBucketIds.length > 1 ? [0, weekBucketIds.length - 1] : [0]);
+  const axisShown = new Set(axisPlan.indexes);
+
   // 折线段（WP5 Step 1）：连续段实线、跨缺段灰虚，缺数不造点。
   const prevGenPointAt = (index: number): { x: number; y: number } => ({ x: x(index), y: y(weeks[index].prevGenSales) });
   const prevGenSegments = buildLineSegments(weeks.map((week) => week.prevGenSales));
@@ -206,13 +225,12 @@ export default function MainForecastChart({
             aria-label={ariaLabel}
             style={{ display: 'block', height: 'auto' }}
           >
-            {/* 今天分界（实际/预测分区底衬）；大促档期琥珀色带已下线（2026-11-04 评审） */}
+            {/* 今天分界：只留虚线 + 轴上「今天」日期；预测区灰底衬与「实际 /
+                预测 · 向未来」分区说明文字已下线（2026-11-04 清洁第二轮：
+                分区靠虚柱 / 价格虚线本身区分）；大促档期琥珀色带已下线（2026-11-04 评审） */}
             {boundaryX != null && (
               <>
-                <rect x={boundaryX} y={TOP - 6} width={W - RIGHT - boundaryX} height={plotH + 6} fill={color.canvasSoft2} opacity={0.45} />
                 <line x1={boundaryX} x2={boundaryX} y1={TOP - 6} y2={TOP + plotH} stroke={color.hairlineStrong} strokeDasharray="4 4" />
-                <text x={boundaryX - 6} y={TOP - 10} textAnchor="end" fontSize={10.5} fill={color.body}>实际</text>
-                <text x={boundaryX + 6} y={TOP - 10} fontSize={10.5} fill={color.body}>预测 · 向未来</text>
                 <text x={boundaryX - 6} y={H - 8} textAnchor="end" fontSize={10} fontWeight={600} fill={color.body}>{`今天 ${fixture.context.todayLabel}`}</text>
               </>
             )}
@@ -333,10 +351,11 @@ export default function MainForecastChart({
             {/* 调价 / 档期锚点竖线已下线（2026-11-04 评审「删档位线」）：
                 调价读价格线折点，档期读轴下促销日期标注 */}
 
-            {/* 横轴周标签（等宽技术标识；labelMode = compact 每 2 个 / detail 每个） */}
+            {/* 横轴周标签：全站日历周格式（2026W37，短格式自带年份）；取刻度
+                同源 axisTickPlan（首末恒显示 + 抽稀让位），labelMode 只切换抽稀步长 */}
             <g fontSize={10} fill={color.mute} textAnchor="middle" fontFamily={font.mono}>
-              {weeks.map((week, index) => (labelMode === 'detail' || index % 2 === 0 || index === weeks.length - 1
-                ? <text key={week.week} x={x(index)} y={H - 24}>{week.week}</text>
+              {weeks.map((week, index) => (axisShown.has(index)
+                ? <text key={week.week} x={x(index)} y={H - 24}>{axisPlan.dateText(index)}</text>
                 : null))}
             </g>
 

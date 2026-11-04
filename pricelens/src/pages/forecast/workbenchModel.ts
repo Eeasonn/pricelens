@@ -19,6 +19,13 @@
 //   - 人工月度事件三字段（起始月/日 + 时长（月）+ 幅度%，名称选填），
 //     月中起始按日均摊：首月影响 × 覆盖天数 ÷ 当月天数（显式口径，非静默
 //     造数），衰减固定递减；周口径行业事件（marketEvents）与主链结构不变。
+//   - 证据信任 v2（2026-11-04 晚拍板）：趋势证据窗口 = 近 6 个月实际段
+//     （MARKET_TREND_WINDOW_MONTHS），环比均值读数由 marketTrendWindow 导出，
+//     大盘卡证据浮框 / 图上趋势源段 / 徽章三步链共用同一函数，UI 不另算
+//     第二套数字；去年同季月形（marketMonthShape）与 lastYearMonthWeights
+//     同源导出。口径注释：季度基线外推链（marketQuarterForecast：同季比 ×
+//     年度趋势比）是主链口径、结构不动，6 个月窗口只服务「证据语言」读数
+//     （趋势怎么来的），两套读数同出本文件、互不改写。
 // 全部计算为纯函数：不读时间、不用随机数，同输入两次计算逐字段一致。
 // ============================================================
 import type { MarketEventSeed, MarketMonthEventSeed, ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
@@ -368,6 +375,73 @@ export function computeMarketMonths(
     const override = entry != null && Number.isFinite(entry.value) ? entry.value : null;
     const value = override ?? round1(point.baseline * (factor ?? 1));
     return { ...point, eventFactor: factor, value, override, reason: entry?.reason ?? '' };
+  });
+}
+
+// ------------------------------------------------------------
+// 证据信任 v2（2026-11-04 晚拍板）：趋势窗口 6 个月 + 去年同季月形读数。
+// 模型侧唯一口径：大盘卡证据浮框（趋势行 sparkline / 月形行小柱 / 算例）、
+// 图上「趋势源段」双锚点、卡头徽章三步链全部消费这两个导出，UI 不另算。
+// 口径注释：季度基线外推链（marketQuarterForecast，同季比 × 年度趋势比）
+// 是主链口径、结构不动；6 个月窗口是「证据语言」读数（回答趋势从哪来），
+// 两者同出本文件、互不改写，不允许 UI 与模型两套口径。
+// ------------------------------------------------------------
+
+/** 趋势证据窗口（2026-11-04 拍板定为 6 个月；与模型外推读数严格一致）。 */
+export const MARKET_TREND_WINDOW_MONTHS = 6;
+
+/** 趋势窗口月点：key = 月键；momPct = 相邻月环比（%，首月无上一月 = null）。 */
+export interface MarketTrendWindowPoint {
+  key: string;
+  value: number;
+  momPct: number | null;
+}
+
+/**
+ * 近 6 个月实际段趋势窗口（纯函数）：窗口 = 收盘于最后一个实际月的连续
+ * 6 个实际月（fixture.market.months 尾段，与 computeMarketMonths 历史段同源）；
+ * 逐月环比 = 本月/上月 − 1（%），窗口环比均值 = 未取整环比的算术平均后
+ * round1（展示值逐月 round1，均值由原始值计算更精确）。实际月不足窗口时
+ * 取全部实际月；无相邻月对时均值为 null（不造数）。
+ */
+export function marketTrendWindow(fixture: WorkbenchFixture): {
+  months: MarketTrendWindowPoint[];
+  avgMomPct: number | null;
+} {
+  const actual = fixture.market.months.slice(-MARKET_TREND_WINDOW_MONTHS);
+  const months: MarketTrendWindowPoint[] = actual.map((point, index) => {
+    const prev = index > 0 ? actual[index - 1].value : null;
+    const momPct = prev != null && prev > 0 ? (point.value / prev - 1) * 100 : null;
+    return { key: point.key, value: point.value, momPct: momPct == null ? null : round1(momPct) };
+  });
+  const rawRates = actual.slice(1).map((point, index) => (point.value / actual[index].value - 1) * 100);
+  const avgMomPct = rawRates.length
+    ? round1(rawRates.reduce((sum, rate) => sum + rate, 0) / rawRates.length)
+    : null;
+  return { months, avgMomPct };
+}
+
+/** 去年同季月形点：value = 去年该月实际值（缺月 null）；weight = 占季内均值权重。 */
+export interface MarketMonthShapePoint {
+  key: string;
+  value: number | null;
+  weight: number;
+}
+
+/**
+ * 去年同季月形（纯函数）：与月形分布 lastYearMonthWeights 同源（缺月回退
+ * 均等 1/3），供证据浮框「月形行」三根小柱与徽章三步链算例消费。
+ * quarterKey 非法返回空数组。
+ */
+export function marketMonthShape(fixture: WorkbenchFixture, quarterKey: string): MarketMonthShapePoint[] {
+  const match = /^(\d{4})Q([1-4])$/.exec(quarterKey);
+  if (!match) return [];
+  const lastYearQuarter = `${Number(match[1]) - 1}Q${match[2]}`;
+  const keys = monthsOfQuarterKey(lastYearQuarter);
+  const weights = lastYearMonthWeights(fixture, quarterKey);
+  return keys.map((key, index) => {
+    const value = fixture.market.months.find((month) => month.key === key)?.value;
+    return { key, value: typeof value === 'number' && Number.isFinite(value) ? value : null, weight: weights[index] };
   });
 }
 

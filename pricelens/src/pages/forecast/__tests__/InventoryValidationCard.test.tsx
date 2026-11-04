@@ -8,6 +8,10 @@
 //（数值收进库存柱悬停 title）、删 SI ▼ 三角、删 DOS 50 参考格线；SI 移至
 // 卡头页签格子输入（aria 与 live/commit 口不变）。修正段「把握大 ±2%」徽标
 // 随评审 1b（置信区间提示不必要）退役 → 中性「修正段 · 波动参考 ±2%」chip。
+// 2026-11-04 清洁第二轮：删 DOS 70–90 天健康带（底衬 rect + 两条边界虚线 +
+// 「70 天 / 90 天」标注 + aria 合理带描述）；左轴定标改回纯数据派生
+//（不再为健康带保底 DOS_BAND.max + 1）；规则层（输出框规则行 / 判定行、
+// 链路条 title）不动——合理带阈值仍是判定口径，只是不上图。
 // ============================================================
 // @vitest-environment jsdom
 import { useState } from 'react';
@@ -16,7 +20,6 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import InventoryValidationCard from '../InventoryValidationCard';
 import { workbenchFixture } from '../workbenchFixture';
 import {
-  DOS_BAND,
   baseWorkbenchParams,
   computeWorkbench,
   setManualAdjustment,
@@ -220,20 +223,29 @@ describe('库存验证卡 · 图面精简（2026-11-04 评审：只留库存柱 
     expect(container.textContent).not.toContain('SI ▼');
   });
 
-  it('删 DOS 50 参考格线：左轴只标 0 与上限；健康带 70–90 天保留', () => {
+  it('删 DOS 50 参考格线与健康带：左轴只标 0 与数据派生上限，图上无 70–90 天带（清洁第二轮）', () => {
     const { container, result } = renderCard();
-    const leftLabels = Array.from(container.querySelectorAll('svg text[text-anchor="end"]'))
+    const chart = container.querySelector('svg[role="img"]') as SVGSVGElement;
+    const leftLabels = Array.from(chart.querySelectorAll('text[text-anchor="end"]'))
       .map((node) => node.textContent ?? '')
       .filter((label) => /^\d+$/.test(label));
-    const dosMax = Math.max(
-      niceCeil(Math.max(...result.weeks.map((week) => week.channelDos))),
-      DOS_BAND.max + 1,
-    );
+    // 左轴定标 = 纯渠道 DOS 数据派生（不再为健康带保底 DOS_BAND.max + 1）。
+    const dosMax = Math.max(1, niceCeil(Math.max(...result.weeks.map((week) => week.channelDos))));
     expect(leftLabels).toEqual(['0', String(Math.round(dosMax))]);
     expect(leftLabels).not.toContain('50');
-    const text = container.textContent ?? '';
-    expect(text).toContain('70 天');
-    expect(text).toContain('90 天');
+    // 健康带（底衬 rect + 两条边界虚线 + 「70 天 / 90 天」标注）全部下线：
+    // 图上只剩库存柱 + 渠道 DOS 线 + 轴刻度。
+    const svgTexts = Array.from(chart.querySelectorAll('text')).map((node) => node.textContent ?? '');
+    expect(svgTexts.some((label) => label === '70 天' || label === '90 天')).toBe(false);
+    const bandBackings = Array.from(chart.querySelectorAll('rect')).filter((rect) => rect.getAttribute('opacity') === '0.6');
+    expect(bandBackings).toHaveLength(0);
+    const bandLines = Array.from(chart.querySelectorAll('line')).filter(
+      (line) => line.getAttribute('stroke') === color.mute && line.getAttribute('stroke-dasharray') === '3 4',
+    );
+    expect(bandLines).toHaveLength(0);
+    // 图面 aria 不再声称合理带；判定口径仍在（输出框规则行保留 DOS 合理带阈值）。
+    expect(chart.getAttribute('aria-label')).not.toContain('合理带');
+    expect(container.textContent ?? '').toContain('DOS 70–90 天');
   });
 
   it('SI 移至页签格子输入：输入行在卡头区（SVG 之前），月格子与 aria 语义保留', () => {

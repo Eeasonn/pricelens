@@ -6,6 +6,10 @@
 // 2026-11-04 评审大减法：黑线 / 把握帽 / 把握区间带 / 调价档期锚点竖线 /
 // 档期琥珀色带全部下线（销量只留柱、促销只留轴下日期标注），本文件同步
 // 删除相关断言并新增「下线」回归断言；调整原因改选填（空原因手调可渲染）。
+// 2026-11-04 清洁第二轮：预测区灰底衬（canvasSoft2）与「实际 / 预测 · 向未来」
+// 分区说明文字下线（分区靠虚柱 / 价格虚线，今天分界只留虚线 + 轴上日期）；
+// X 轴刻度改全站日历周格式（2026W37，axisTickPlan 取刻度 + shortBucketLabel
+// 文案，首末恒显示 + 抽稀让位），周标签计数与格式断言同步。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
@@ -46,7 +50,7 @@ const renderChart = (opts: RenderOpts = {}) =>
 const svgTexts = (): string[] =>
   Array.from(document.querySelectorAll('svg text')).map((node) => node.textContent ?? '');
 
-const xLabels = (): string[] => svgTexts().filter((text) => /^W\d+$/.test(text));
+const xLabels = (): string[] => svgTexts().filter((text) => /^\d{4}W\d{2}$/.test(text));
 
 const priceLinePaths = (): Element[] =>
   Array.from(document.querySelectorAll('svg path')).filter((path) => path.getAttribute('stroke') === brandColor.HUAWEI);
@@ -79,8 +83,9 @@ describe('主图 · 受控视图（MainForecastView 默认 = 当前视觉）', (
     const amberBand = Array.from(document.querySelectorAll('svg rect')).find((rect) => rect.getAttribute('fill') === color.warningSoft);
     expect(amberBand).toBeUndefined();
     expect(document.body.textContent).toContain('万台');
-    // compact = 每 2 个 + 末尾 → 9 个周标签。
-    expect(xLabels()).toHaveLength(9);
+    // compact = 全站图轴同款抽稀（axisTickPlan：步长 ceil(16/9)=2 + 首末恒显示 +
+    // 边界让位）→ 8 个周标签（W44 让位给末刻度 W52）。
+    expect(xLabels()).toHaveLength(8);
   });
 
   it('promoBandOn=false：促销日期标注消失，其余结构保留', () => {
@@ -99,9 +104,10 @@ describe('主图 · 受控视图（MainForecastView 默认 = 当前视觉）', (
     expect(document.body.textContent).toContain('周销 7.0 万台');
   });
 
-  it('labelMode=detail：每周标签（16 个）；heightScale=0.5：viewBox 高度 = TOP + 150 + BOTTOM', () => {
+  it('labelMode=detail：每周标签（首末让位后 14 个）；heightScale=0.5：viewBox 高度 = TOP + 150 + BOTTOM', () => {
     const detail = renderChart({ view: { labelMode: 'detail' } });
-    expect(xLabels()).toHaveLength(16);
+    // detail = 步长 1：16 周里仅与首末边界刻度距离 ≤1 的 W38 / W51 让位。
+    expect(xLabels()).toHaveLength(14);
     detail.unmount();
     const compressed = renderChart({ view: { heightScale: 0.5 } });
     expect(compressed.container.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 230');
@@ -335,5 +341,39 @@ describe('主图 · 2026-11-04 评审大减法下线回归', () => {
     expect(markText).toBeDefined();
     const amberBand = Array.from(document.querySelectorAll('svg rect')).find((rect) => rect.getAttribute('fill') === color.warningSoft);
     expect(amberBand).toBeUndefined();
+  });
+});
+
+describe('主图 · 2026-11-04 清洁第二轮（去装饰 + 日历周轴）', () => {
+  it('预测区灰底衬下线：SVG 无 canvasSoft2 色块，「实际 / 预测 · 向未来」说明文字不渲染', () => {
+    renderChart();
+    // 分区底衬（canvasSoft2 rect）删除：分区靠虚柱 / 价格虚线本身区分。
+    const softBands = Array.from(document.querySelectorAll('svg rect')).filter((rect) => rect.getAttribute('fill') === color.canvasSoft2);
+    expect(softBands).toHaveLength(0);
+    // 「实际」「预测 · 向未来」两个分区说明文字删除（图例与数据表里的实际/预测属数据读数，不在 SVG text 层）。
+    expect(svgTexts().some((text) => text === '实际')).toBe(false);
+    expect(svgTexts().some((text) => text.includes('向未来'))).toBe(false);
+  });
+
+  it('今天分界保留：hairlineStrong 虚线 + 轴上「今天 11-03」日期仍在', () => {
+    renderChart();
+    const boundaryLine = Array.from(document.querySelectorAll('svg line')).find(
+      (line) => line.getAttribute('stroke') === color.hairlineStrong && line.getAttribute('stroke-dasharray') === '4 4',
+    );
+    expect(boundaryLine).not.toBeUndefined();
+    expect(svgTexts().some((text) => text.includes('今天 11-03'))).toBe(true);
+  });
+
+  it('X 轴刻度为全站日历周格式（2026W37…2026W52）：首末恒显示、边界让位同 axisTickPlan', () => {
+    renderChart();
+    const labels = xLabels();
+    // 全部标签 = YYYYWnn 短格式（自带年份），无裸「W37」。
+    for (const label of labels) {
+      expect(label).toMatch(/^\d{4}W\d{2}$/);
+    }
+    expect(labels[0]).toBe('2026W37');
+    expect(labels[labels.length - 1]).toBe('2026W52');
+    // compact 抽稀（步长 2 + 首末恒显示 + 边界 ≤1 让位）的确切刻度集。
+    expect(labels).toEqual(['2026W37', '2026W39', '2026W41', '2026W43', '2026W45', '2026W47', '2026W49', '2026W52']);
   });
 });
