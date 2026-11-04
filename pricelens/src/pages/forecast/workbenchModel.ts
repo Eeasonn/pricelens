@@ -26,9 +26,22 @@
 //     同源导出。口径注释：季度基线外推链（marketQuarterForecast：同季比 ×
 //     年度趋势比）是主链口径、结构不动，6 个月窗口只服务「证据语言」读数
 //     （趋势怎么来的），两套读数同出本文件、互不改写。
+// 2026-11-05 v3 任务 4（IA 文档 B.4.5 / B.4.6；computeWorkbench 主链不动，
+//   任务 5 独占切换）：
+//   - computeMarketMonths 新增 (v3 fixture, calendar, params) 三参重载：季度基线
+//     链外推到覆盖 horizon 的全部季度（按窗口位置映射同季比，与 v2 前两季同源
+//     同值），再筛选统一 12 个预测月；部分实际季（2026Q4 的 2026-10 已实际）
+//     不重摊残差，完整未来季三月合计 = 季度基线 × 3（末月吸收舍入残差）；
+//   - marketFactorAt：周修正比值 = 所属月生效值 ÷ 所属月 AI 基线（基线不可用
+//     回退 1 并注明）；
+//   - rangeEventFactorAt / productEventFactorAt(calendar, …, weekId)：任意周范围
+//     事件乘子（绝对 index，跨年不串值；flat / decreasing 两形状），产品事件只调
+//     同一公式，不维护第二份；
+//   - v2 两参重载与 computeWorkbench 主链保持原行为（v2/v3 并存至任务 5 移除）。
 // 全部计算为纯函数：不读时间、不用随机数，同输入两次计算逐字段一致。
 // ============================================================
-import type { MarketEventSeed, MarketMonthEventSeed, ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
+import type { ForecastCalendar, WeekId, WeekRange } from './workbenchCalendar';
+import type { MarketEventSeed, MarketMonthEventSeed, ProductEventSeed, WorkbenchFixture, WorkbenchFixtureV3 } from './workbenchFixture';
 import { marketEventDisposition } from './workbenchTime';
 
 /** TODO 待拍板（brief 开放问题 2）：DOS 合理带 70–90 天与降幅阈值 20%/30% 为演示规则，待业务确认与维护方。 */
@@ -116,11 +129,71 @@ export function eventWeeklyFactor(event: MarketEventSeed, weekNumber: number): n
   return 1 + decayed / 100;
 }
 
-/** 主图小事件乘子（锚定单周；局部修正）。 */
-export function productEventFactorAt(events: readonly ProductEventSeed[], weekNumber: number): number {
-  return events
-    .filter((event) => event.week === weekNumber)
-    .reduce((factor, event) => factor * (1 + event.magnitudePct / 100), 1);
+// ------------------------------------------------------------
+// v3 自由范围事件（B.4.2 / B.4.6 · 任务 4）：任意起止周 + 幅度 + 形状；
+// offset / duration 一律按日历绝对 index（跨年 2026W53 → 2027W01 不串值）。
+// ------------------------------------------------------------
+
+/** v3 范围事件公共形状：大盘周口径事件与产品范围事件共用（B.4.6 单一公式）。 */
+export type RangeEventSeed = WeekRange & {
+  /** 脉冲幅度峰值（%，正 = 抬升，负 = 压低）。 */
+  magnitudePct: number;
+  /** 形状：递减（线性从峰值衰减）/ 恒定（全程峰值）。 */
+  decay: 'decreasing' | 'flat';
+};
+
+/**
+ * 范围事件在某周的乘子（B.4.6 确定性规则，唯一公式来源）：
+ * - offset = week.index − startWeek.index；duration = end.index − start.index + 1；
+ * - flat = 1 + magnitudePct / 100（全程峰值）；
+ * - decreasing = 1 + magnitudePct × (1 − offset / duration) / 100（首周峰值、末周趋 1）；
+ * - 范围外不乘（该事件乘子 = 1）；多事件按数组顺序连乘（数组顺序在归一化时稳定）；
+ * - 起止周不在该日历、或起晚于止（倒置）的事件不乘（无效范围不静默造数）。
+ */
+export function rangeEventFactorAt(
+  calendar: ForecastCalendar,
+  events: ReadonlyArray<RangeEventSeed>,
+  weekId: WeekId,
+): number {
+  const week = calendar.weekById.get(weekId);
+  if (!week) return 1;
+  let factor = 1;
+  for (const event of events) {
+    const start = calendar.weekById.get(event.startWeekId);
+    const end = calendar.weekById.get(event.endWeekId);
+    if (!start || !end || start.index > end.index) continue;
+    const offset = week.index - start.index;
+    const duration = end.index - start.index + 1;
+    if (offset < 0 || offset >= duration) continue;
+    factor *= event.decay === 'flat'
+      ? 1 + event.magnitudePct / 100
+      : 1 + (event.magnitudePct * (1 - offset / duration)) / 100;
+  }
+  return factor;
+}
+
+/**
+ * 主图小事件乘子（双口径重载；任务 5 切 v3 主链后移除 v2 槽位）：
+ * - v3（calendar, events, weekId）：产品范围事件——只调 rangeEventFactorAt，
+ *   不维护第二份公式；事件可携带 id / type / label / replayId 等额外字段（按
+ *   RangeEventSeed 结构子集接受）。
+ * - v2（events, weekNumber）：锚定单周小事件（computeWorkbench v2 主链既有
+ *   行为，保持不变：同周事件连乘 1 + magnitudePct / 100）。
+ */
+export function productEventFactorAt(calendar: ForecastCalendar, events: ReadonlyArray<RangeEventSeed>, weekId: WeekId): number;
+export function productEventFactorAt(events: readonly ProductEventSeed[], weekNumber: number): number;
+export function productEventFactorAt(
+  calendarOrEvents: ForecastCalendar | readonly ProductEventSeed[],
+  eventsOrWeekNumber: ReadonlyArray<RangeEventSeed> | number,
+  weekId?: WeekId,
+): number {
+  if (typeof eventsOrWeekNumber === 'number') {
+    const events = calendarOrEvents as readonly ProductEventSeed[];
+    return events
+      .filter((event) => event.week === eventsOrWeekNumber)
+      .reduce((factor, event) => factor * (1 + event.magnitudePct / 100), 1);
+  }
+  return rangeEventFactorAt(calendarOrEvents as ForecastCalendar, eventsOrWeekNumber, weekId as WeekId);
 }
 
 /** AI 时间序列基线：周期性季节因素（去年同季比）× 全局性趋势因素（今年/去年水平比）。 */
@@ -303,7 +376,7 @@ export interface MarketMonthPoint {
 }
 
 /** 去年同季三月权重（月形分布源）：缺月回退均等 1/3（显式回退，不造数）。 */
-function lastYearMonthWeights(fixture: WorkbenchFixture, quarterKey: string): number[] {
+function lastYearMonthWeights(fixture: Pick<WorkbenchFixture, 'market'>, quarterKey: string): number[] {
   const match = /^(\d{4})Q([1-4])$/.exec(quarterKey);
   const fallback = [1 / 3, 1 / 3, 1 / 3];
   if (!match) return fallback;
@@ -315,15 +388,47 @@ function lastYearMonthWeights(fixture: WorkbenchFixture, quarterKey: string): nu
   return values.map((value) => (value as number) / avg);
 }
 
+/** 历史月点（v2/v3 共用单一来源）：fixture.market.months 原样（模拟样本，不动）。 */
+function actualMarketMonthPoints(fixture: Pick<WorkbenchFixture, 'market'>): MarketMonthPoint[] {
+  return fixture.market.months.map((month) => ({
+    key: month.key,
+    status: 'actual' as const,
+    quarter: quarterKeyOfMonth(month.key) ?? '',
+    baseline: month.value,
+    eventFactor: null,
+    value: month.value,
+    override: null,
+    reason: '',
+  }));
+}
+
+/** 生效值链（v2/v3 单一规则）：月度事件月中按日均摊合成乘子；人工月调整覆盖事件后值。 */
+function withMarketMonthChain(
+  points: MarketMonthPoint[],
+  params: Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+): MarketMonthPoint[] {
+  return points.map((point) => {
+    if (point.status !== 'forecast') return point;
+    let factor: number | null = null;
+    for (const event of params.marketMonthEvents) {
+      const monthly = marketMonthEventFactor(event, point.key);
+      if (monthly != null) factor = (factor ?? 1) * monthly;
+    }
+    const entry = params.marketMonthOverrides[point.key];
+    const override = entry != null && Number.isFinite(entry.value) ? entry.value : null;
+    const value = override ?? round1(point.baseline * (factor ?? 1));
+    return { ...point, eventFactor: factor, value, override, reason: entry?.reason ?? '' };
+  });
+}
+
 /**
- * 大盘月度主序列（历史月 + 未来 4 季度逐月预测）：
+ * 大盘月度主序列 v2 实现（历史月 + 未来 4 季度逐月预测；既有行为保持不变）：
  * - 历史月直接取 fixture.market.months（模拟样本，不动）；
  * - 预测月 = 季度基线 × 去年同季月形权重；round1 后季内末月吸收舍入残差，
  *   保证季内三月合计精确 = 季度基线 × 3（容量守恒）；
- * - 生效值链：事件乘子（月中均摊）作用于基线，人工按月调整覆盖生效值；
- *   事件只作用于预测月（历史段为已发生事实，不修正）。
+ * - 生效值链与 v3 共用 withMarketMonthChain（单一规则来源）。
  */
-export function computeMarketMonths(
+function computeMarketMonthsV2(
   fixture: WorkbenchFixture,
   params: Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
 ): MarketMonthPoint[] {
@@ -354,28 +459,171 @@ export function computeMarketMonths(
       });
     });
   }
-  const actualPoints: MarketMonthPoint[] = fixture.market.months.map((month) => ({
-    key: month.key,
-    status: 'actual' as const,
-    quarter: quarterKeyOfMonth(month.key) ?? '',
-    baseline: month.value,
-    eventFactor: null,
-    value: month.value,
-    override: null,
-    reason: '',
-  }));
-  return [...actualPoints, ...forecastPoints].map((point) => {
-    if (point.status !== 'forecast') return point;
-    let factor: number | null = null;
-    for (const event of params.marketMonthEvents) {
-      const monthly = marketMonthEventFactor(event, point.key);
-      if (monthly != null) factor = (factor ?? 1) * monthly;
+  return withMarketMonthChain([...actualMarketMonthPoints(fixture), ...forecastPoints], params);
+}
+
+/**
+ * v3 季度基线链（与 marketSeriesBaseline / marketQuarterForecast 同源同规则，
+ * 唯一差别：外推到「季首月越出 horizon 终月」为止，覆盖 horizon 全部季度）：
+ * - 窗口 = quarters 前 4 / 后 4 季（thisYear 紧接 lastYear）；趋势 = thisYear 均值 ÷ lastYear 均值；
+ * - 入位比按窗口位置映射（v2 固定 Q1 起窗时与原公式逐值一致；v3 fixture 起窗
+ *   2024Q4，位置 0…3 = Q4,Q1,Q2,Q3，逐季同样得到日历一致的「进入该季 ÷ 上一季」比）：
+ *   进入位置 p（1–3）= lastYear[p] ÷ lastYear[p−1]；进入位置 0 = lastYear[0] ÷ lastYear[3]；
+ * - 链首格 = round1(最后实际季值 × 入位比 × 趋势)，之后沿链 round1(上一格 × 入位比 × 趋势)；
+ * - 季度不足两窗（< 8）或键不合法返回空链（不造数）；guard 24 季防异常输入死循环。
+ */
+function marketQuarterChainV3(
+  fixture: Pick<WorkbenchFixtureV3, 'market'>,
+  horizonEnd: string,
+): Array<{ key: string; value: number }> {
+  const quarters = fixture.market.quarters;
+  const values = quarters.map((quarter) => quarter.value);
+  if (quarters.length === 0 || values.length < 8) return [];
+  const windowStart = /^(\d{4})Q([1-4])$/.exec(quarters[0].key);
+  const last = /^(\d{4})Q([1-4])$/.exec(quarters[quarters.length - 1].key);
+  if (!windowStart || !last) return [];
+  const lastYear = values.slice(0, 4);
+  const thisYear = values.slice(4);
+  const avg = (list: number[]): number => list.reduce((sum, v) => sum + v, 0) / list.length;
+  const trend = avg(thisYear) / avg(lastYear);
+  const intoRatio = (position: number): number => (position === 0 ? lastYear[0] / lastYear[3] : lastYear[position] / lastYear[position - 1]);
+  const windowStartQuarter = Number(windowStart[2]);
+  // 链首格（最后实际季的下一季）在窗口中的位置 =（入位季号 − 起窗季号 + 4）mod 4。
+  let position = ((Number(last[2]) % 4) + 1 - windowStartQuarter + 4) % 4;
+  let key = quarters[quarters.length - 1].key;
+  let value = round1(values[values.length - 1] * intoRatio(position) * trend);
+  const chain: Array<{ key: string; value: number }> = [];
+  for (let guard = 0; guard < 24; guard += 1) {
+    key = nextQuarterKey(key);
+    if ((monthsOfQuarterKey(key)[0] ?? '') > horizonEnd) break;
+    chain.push({ key, value });
+    position = (position + 1) % 4;
+    value = round1(value * intoRatio(position) * trend);
+  }
+  return chain;
+}
+
+/**
+ * 大盘月度主序列 v3 实现（B.4.5 · 任务 4）：
+ * - 季度链外推覆盖 horizon 全部季度（marketQuarterChainV3），先按原月季同源
+ *   规则生成全部月份，再筛选到统一 12 个预测月（calendar.forecastMonths）；
+ *   不得只生成前两季后让 Q2 以后回退 1；
+ * - 完整未来季：前两月 round1、末月吸收舍入残差（季内合计 = 季度基线 × 3）；
+ * - 部分实际季（如 2026Q4 的 2026-10 已是实际月）：预测月各自 = round1(季度基线
+ *   × 去年月形)，不把实际与旧季目标的差额重摊给未来月（季度读数改按
+ *   「实际 + 基线」月均由展示层另算，不在本函数输出）；
+ * - 实际月 = fixture.market.months 原样；生效值链与 v2 共用 withMarketMonthChain。
+ */
+function computeMarketMonthsV3(
+  fixture: WorkbenchFixtureV3,
+  calendar: ForecastCalendar,
+  params: Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+): MarketMonthPoint[] {
+  const chain = marketQuarterChainV3(fixture, calendar.horizonEnd);
+  const actualMonthKeys = new Set(fixture.market.months.map((month) => month.key));
+  const horizonMonthKeys = new Set(calendar.forecastMonths.map((month) => month.key));
+  const forecastPoints: MarketMonthPoint[] = [];
+  for (const quarter of chain) {
+    const monthKeys = monthsOfQuarterKey(quarter.key);
+    const weights = lastYearMonthWeights(fixture, quarter.key);
+    const futureIndexes = monthKeys
+      .map((key, index) => (actualMonthKeys.has(key) ? -1 : index))
+      .filter((index) => index >= 0);
+    if (!futureIndexes.length) continue; // 整季已实际（契约外情形，防御：不产出预测月）
+    if (futureIndexes.length === monthKeys.length) {
+      // 完整未来季：前两月 round1，末月吸收残差（季内合计 = 季度基线 × 3，容量守恒）。
+      const raw = monthKeys.map((key, index) => ({ key, raw: quarter.value * weights[index] }));
+      const values = raw.map((month, index) => {
+        if (index < raw.length - 1) return round1(month.raw);
+        const total = round1(quarter.value * 3);
+        const consumed = raw.slice(0, index).reduce((sum, item) => sum + Math.round(item.raw * 10) / 10, 0);
+        return round1(total - consumed);
+      });
+      monthKeys.forEach((key, index) => {
+        forecastPoints.push({
+          key,
+          status: 'forecast',
+          quarter: quarter.key,
+          baseline: values[index],
+          eventFactor: null,
+          value: values[index],
+          override: null,
+          reason: '',
+        });
+      });
+    } else {
+      // 部分实际季：各预测月独立取「季度基线 × 去年月形」（不重摊残差）。
+      futureIndexes.forEach((index) => {
+        const baseline = round1(quarter.value * weights[index]);
+        forecastPoints.push({
+          key: monthKeys[index],
+          status: 'forecast',
+          quarter: quarter.key,
+          baseline,
+          eventFactor: null,
+          value: baseline,
+          override: null,
+          reason: '',
+        });
+      });
     }
-    const entry = params.marketMonthOverrides[point.key];
-    const override = entry != null && Number.isFinite(entry.value) ? entry.value : null;
-    const value = override ?? round1(point.baseline * (factor ?? 1));
-    return { ...point, eventFactor: factor, value, override, reason: entry?.reason ?? '' };
-  });
+  }
+  const horizonPoints = forecastPoints.filter((point) => horizonMonthKeys.has(point.key));
+  return withMarketMonthChain([...actualMarketMonthPoints(fixture), ...horizonPoints], params);
+}
+
+/**
+ * 大盘月度主序列（重载并存至任务 5 移除 v2 槽位）：
+ * - v3（fixture, calendar, params）（B.4.5 · 任务 4）：季度基线链外推覆盖 horizon
+ *   全部季度 → 统一 12 个预测月；部分实际季不重摊残差；完整未来季容量守恒；
+ * - v2（fixture, params）：历史月 + 未来 4 季逐月（computeWorkbench v2 主链与
+ *   MarketBusPanel 既有消费，行为不变）。
+ * 实际月与生效值链两口径同源（actualMarketMonthPoints / withMarketMonthChain）。
+ */
+export function computeMarketMonths(
+  fixture: WorkbenchFixtureV3,
+  calendar: ForecastCalendar,
+  params: Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+): MarketMonthPoint[];
+export function computeMarketMonths(
+  fixture: WorkbenchFixture,
+  params: Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+): MarketMonthPoint[];
+export function computeMarketMonths(
+  fixture: WorkbenchFixture | WorkbenchFixtureV3,
+  calendarOrParams: ForecastCalendar | Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+  maybeParams?: Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+): MarketMonthPoint[] {
+  if (maybeParams != null) {
+    return computeMarketMonthsV3(fixture as WorkbenchFixtureV3, calendarOrParams as ForecastCalendar, maybeParams);
+  }
+  return computeMarketMonthsV2(
+    fixture as WorkbenchFixture,
+    calendarOrParams as Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+  );
+}
+
+/**
+ * 大盘周修正比值（B.4.5）：factor = 该周所属月的生效值 ÷ 所属月 AI 基线；
+ * 同一月所有预测周共用同一比值（不把指数当销量均摊）。
+ * 周不在日历 / 无所属月点 / 基线非有限或 ≤ 0 时回退 1，note 写「大盘基线不可用，未修正」。
+ */
+export function marketFactorAt(
+  calendar: ForecastCalendar,
+  months: MarketMonthPoint[],
+  weekId: WeekId,
+): { factor: number; note: string } {
+  const week = calendar.weekById.get(weekId);
+  const point = week != null ? months.find((month) => month.key === week.monthKey) : undefined;
+  const baseline = point?.baseline;
+  if (point == null || typeof baseline !== 'number' || !Number.isFinite(baseline) || baseline <= 0) {
+    return { factor: 1, note: '大盘基线不可用，未修正' };
+  }
+  const factor = point.value / baseline;
+  return {
+    factor,
+    note: `所属月 ${point.key}：大盘生效值 ${point.value} ÷ AI 基线 ${baseline} = ×${factor.toFixed(2)}`,
+  };
 }
 
 // ------------------------------------------------------------

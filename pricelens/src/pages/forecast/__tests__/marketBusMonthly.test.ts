@@ -14,11 +14,18 @@
 //    marketTrendWindow（近 6 个月实际段 + 逐月环比 + 环比均值）与
 //    marketMonthShape（去年同季月形权重）——大盘卡证据浮框/图上趋势源段/
 //    徽章三步链的唯一数字来源，UI 不另算（环比数字与模型同源断言）。
+// ⑥ v3 12 个预测月大盘（B.4.5 · IA 文档任务 4，2026-11-05 追加）：
+//    computeMarketMonths(fixture, calendar, params) 新签名 + marketFactorAt——
+//    统一 12 个预测月（2026-11…2027-10 = calendar.forecastMonths）、季度外推
+//    覆盖 horizon 全部季度（2027Q4 的 2027-10 不回退 1）、部分实际季
+//    （2026Q4 的 2026-10 已实际）不重摊残差；v2 断言段保持不动（重载并存）。
 // 全部断言不依赖运行时间与随机数。
 // ============================================================
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
+import { buildForecastCalendar } from '../workbenchCalendar';
 import { workbenchFixture } from '../workbenchFixture';
+import { workbenchFixtureV3 } from '../workbenchFixture';
 import {
   baseWorkbenchParams,
   computeMarketFactor,
@@ -26,6 +33,7 @@ import {
   computeWorkbench,
   daysInMonthOf,
   MARKET_TREND_WINDOW_MONTHS,
+  marketFactorAt,
   marketMonthEventFactor,
   marketMonthShape,
   marketQuarterForecast,
@@ -302,5 +310,89 @@ describe('证据信任 v2 口径 · marketTrendWindow / marketMonthShape（2026-
     expect(shape.map((point) => point.key)).toEqual(['2027-01', '2027-02', '2027-03']);
     expect(shape.map((point) => point.value)).toEqual([null, null, null]);
     expect(shape.map((point) => point.weight)).toEqual([1 / 3, 1 / 3, 1 / 3]);
+  });
+});
+
+// ============================================================
+// ⑥ v3 12 个预测月大盘（B.4.5 · IA 文档任务 4 Step 1，2026-11-05 追加）。
+// ============================================================
+
+const calendar = buildForecastCalendar(workbenchFixtureV3.calendar);
+
+describe('v3 market months', () => {
+  it('covers the shared horizon and applies a mid-2027 override', () => {
+    const baseline = computeMarketMonths(workbenchFixtureV3, calendar, {
+      marketMonthEvents: [], marketMonthOverrides: {},
+    });
+    const adjusted = computeMarketMonths(workbenchFixtureV3, calendar, {
+      marketMonthEvents: [], marketMonthOverrides: { '2027-06': { value: 120, reason: '' } },
+    });
+    expect(baseline.filter((point) => point.status === 'forecast').map((point) => point.key))
+      .toEqual(calendar.forecastMonths.map((month) => month.key));
+    const june = adjusted.find((point) => point.key === '2027-06')!;
+    const juneWeek = calendar.forecastWeeks.find((week) => week.monthKey === '2027-06')!;
+    expect(marketFactorAt(calendar, adjusted, juneWeek.id).factor).toBeCloseTo(120 / june.baseline, 10);
+  });
+
+  it('does not redistribute October actuals into November or December', () => {
+    const input = { marketMonthEvents: [], marketMonthOverrides: {} };
+    const result = computeMarketMonths(workbenchFixtureV3, calendar, input);
+    const changedFixture = {
+      ...workbenchFixtureV3,
+      market: {
+        ...workbenchFixtureV3.market,
+        months: workbenchFixtureV3.market.months.map((month) => month.key === '2026-10'
+          ? { ...month, value: month.value + 10 }
+          : month),
+      },
+    };
+    const changed = computeMarketMonths(changedFixture, calendar, input);
+    expect(result.find((point) => point.key === '2026-10')?.status).toBe('actual');
+    expect(changed.find((point) => point.key === '2026-11')?.baseline)
+      .toBe(result.find((point) => point.key === '2026-11')?.baseline);
+    expect(changed.find((point) => point.key === '2026-12')?.baseline)
+      .toBe(result.find((point) => point.key === '2026-12')?.baseline);
+  });
+
+  it('keeps every horizon month on the quarter chain (2027-10 not fallen back to 1)', () => {
+    // 季度外推覆盖 horizon 全部季度：2027-10 属 2027Q4，链上生成后筛选，
+    // 不得只生成前两季后让 Q2 以后回退 1。
+    const months = computeMarketMonths(workbenchFixtureV3, calendar, { marketMonthEvents: [], marketMonthOverrides: {} });
+    const forecast = months.filter((point) => point.status === 'forecast');
+    expect(forecast).toHaveLength(12);
+    expect(forecast.every((point) => point.baseline > 0)).toBe(true);
+    expect(months.find((point) => point.key === '2027-10')?.quarter).toBe('2027Q4');
+  });
+
+  it('conserves full future quarters at chain value × 3 and keeps partial-Q4 months independent', () => {
+    // 与实现同源重算季度链（原月季同源规则，按窗口位置映射入位比）：
+    // quarters[0] = 2024Q4 → 窗口位置 0…3 = Q4,Q1,Q2,Q3；入位比 [p]/[p−1]，位置 0 = [0]/[3]。
+    const values = workbenchFixtureV3.market.quarters.map((quarter) => quarter.value);
+    const lastYear = values.slice(0, 4);
+    const thisYear = values.slice(4);
+    const avg = (list: number[]): number => list.reduce((total, v) => total + v, 0) / list.length;
+    const trend = avg(thisYear) / avg(lastYear);
+    const into = (position: number): number => (position === 0 ? lastYear[0] / lastYear[3] : lastYear[position] / lastYear[position - 1]);
+    const q4 = Math.round(thisYear[3] * into(0) * trend * 10) / 10; // 2026Q4（入位 0）
+    const q1 = Math.round(q4 * into(1) * trend * 10) / 10; // 2027Q1
+    const q2 = Math.round(q1 * into(2) * trend * 10) / 10; // 2027Q2
+    const q3 = Math.round(q2 * into(3) * trend * 10) / 10; // 2027Q3
+    const months = computeMarketMonths(workbenchFixtureV3, calendar, { marketMonthEvents: [], marketMonthOverrides: {} });
+    const sumOf = (quarter: string): number =>
+      months.filter((point) => point.quarter === quarter && point.status === 'forecast')
+        .reduce((total, point) => total + point.baseline, 0);
+    // 完整未来季：三月合计精确 = 季度链值 × 3（末月吸收舍入残差）
+    expect(sumOf('2027Q1')).toBeCloseTo(q1 * 3, 6);
+    expect(sumOf('2027Q2')).toBeCloseTo(q2 * 3, 6);
+    expect(sumOf('2027Q3')).toBeCloseTo(q3 * 3, 6);
+    // 部分实际季（2026Q4 的 2026-10 已实际）：11/12 月各自 = round1(季度基线 × 去年月形)，
+    // 不把实际与旧季度目标的差额重摊给未来月。
+    const shape = ['2025-10', '2025-11', '2025-12']
+      .map((key) => workbenchFixtureV3.market.months.find((month) => month.key === key)!.value);
+    const shapeAvg = (shape[0] + shape[1] + shape[2]) / 3;
+    const november = months.find((point) => point.key === '2026-11');
+    const december = months.find((point) => point.key === '2026-12');
+    expect(november?.baseline).toBe(Math.round(q4 * (shape[1] / shapeAvg) * 10) / 10);
+    expect(december?.baseline).toBe(Math.round(q4 * (shape[2] / shapeAvg) * 10) / 10);
   });
 });
