@@ -3,7 +3,9 @@
 // 大盘纯时间序列基线（季节 × 趋势，AI 第一版）+ 人工改格、
 // 行业级事件四件套周乘子（递减默认，可落历史段）、主图小事件局部修正、
 // 库存验证定序（基线 SO → 反算 DOS/库存 → 刚性砍 min(SO, 可售)）、
-// SI 月计划均分、手调原因必填。
+// SI 月计划均分、手调原因选填（2026-11-04 评审拍板）。
+// 2026-11-04 补：大盘月度段断言（4 季外推确定性 + 月形分布容量守恒 +
+// 月中事件均摊 + 按月调整季度同步）——完整金测见 __tests__/marketBusMonthly.test.ts。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { workbenchFixture } from '../workbenchFixture';
@@ -12,18 +14,22 @@ import {
   baseWorkbenchParams,
   clearManualAdjustment,
   computeMarketFactor,
+  computeMarketMonths,
   computeWorkbench,
   DOS_BAND,
   effectiveQuarterIndexes,
   eventWeeklyFactor,
   isParamsActive,
   judgeInventoryHealth,
+  marketMonthEventFactor,
+  marketQuarterForecast,
   marketSeriesBaseline,
   normalizeWorkbenchParams,
   productEventFactorAt,
   setManualAdjustment,
   siWeeklyPlan,
   unitCostOfWeek,
+  withMarketMonthOverride,
   withQuarterOverride,
   type InventoryRow,
   type WorkbenchParams,
@@ -230,8 +236,11 @@ describe('推演工作台 · 摘要与销毛（链路末端独立推测）', () 
     expect(baseline.summary.peak.weekNumber).toBe(47);
   });
 
-  it('手调：原因必填（空原因拒绝），值覆盖该周最终柱，其他周不受影响，清除后恢复', () => {
-    expect(setManualAdjustment(base, 47, 60000, '   ')).toBeNull();
+  it('手调：原因选填（2026-11-04 评审拍板，空原因照常应用；负值仍拒绝），值覆盖该周最终柱，其他周不受影响，清除后恢复', () => {
+    // 空原因不再拦截：照常应用，reason 存空串（后台字段结构保留）
+    const untuned = setManualAdjustment(base, 47, 60000, '   ');
+    expect(untuned).not.toBeNull();
+    expect(untuned?.manual[47]).toEqual({ value: 60000, reason: '' });
     expect(setManualAdjustment(base, 47, -1, '原因')).toBeNull();
     const tuned = setManualAdjustment(base, 47, 60000, '黑五主峰周，电商资源加投');
     expect(tuned).not.toBeNull();
@@ -481,10 +490,72 @@ describe('推演工作台 · 季度覆盖与会话恢复（withQuarterOverride /
     ]);
     // 负值钳 0（合法类型越界）；错型（'x'）回退基准月值；未知月份键剔除
     expect(normalized.siPlanMonthly).toEqual({ '2026-11': 0, '2026-12': 32000 });
-    expect(normalized.manual).toEqual({ 50: { value: 52000, reason: 'ok' } });
+    // 原因选填（2026-11-04 评审拍板）：空白原因去空白后保留为 ''，不再剔除手调
+    expect(normalized.manual).toEqual({
+      46: { value: 60000, reason: '' },
+      50: { value: 52000, reason: 'ok' },
+    });
     expect(normalized.rationale).toBe(fixture.market.aiRationale);
     expect(normalized.prevGenReferenceId).toBe('ref-mate80');
     // 修正后的参数可直接进主链
     expect(() => compute(normalized)).not.toThrow();
+  });
+});
+
+// ------------------------------------------------------------
+// 2026-11-04 补：大盘月度段（4 季外推 + 月形分布 + 月中均摊 + 按月调整）
+// 完整纯函数金测（含边界与钳制）见 __tests__/marketBusMonthly.test.ts；
+// 此处补主链视角的关键断言：确定性、容量守恒、主链 marketMonths 同源。
+// ------------------------------------------------------------
+describe('推演工作台 · 大盘月度段（2026-11-04 拍板）', () => {
+  it('4 季外推确定性：前两季与 aiQ4/aiQ1 同值，两次外推逐字段一致（禁随机）', () => {
+    const first = marketQuarterForecast(fixture);
+    expect(first.map((quarter) => quarter.key)).toEqual(['2026Q4', '2027Q1', '2027Q2', '2027Q3']);
+    expect(first[0].value).toBe(marketSeriesBaseline(fixture).aiQ4);
+    expect(first[1].value).toBe(marketSeriesBaseline(fixture).aiQ1);
+    expect(marketQuarterForecast(fixture)).toEqual(first);
+  });
+
+  it('月度主序列容量守恒：每个预测季的三月合计恒等季度基线 × 3；computeWorkbench 同源输出', () => {
+    const months = computeMarketMonths(fixture, base);
+    for (const quarter of marketQuarterForecast(fixture)) {
+      const quarterBaselines = months
+        .filter((point) => point.quarter === quarter.key && point.status === 'forecast')
+        .map((point) => point.baseline);
+      expect(quarterBaselines).toHaveLength(3);
+      expect(quarterBaselines.reduce((total, value) => total + value, 0)).toBeCloseTo(quarter.value * 3, 6);
+    }
+    const result = compute(base);
+    expect(result.marketMonths).toEqual(months);
+    expect(result.marketMonths).toHaveLength(fixture.market.months.length + 12);
+  });
+
+  it('月中事件均摊：首月按覆盖天数折减（29 日起 → 3/31），主链修正段按周所属月附加叠加', () => {
+    // 默认演示事件（2027-01-29 起 1 个月 +8%）：首月乘子 = 1 + 8% × 3/31
+    const event = base.marketMonthEvents[0];
+    expect(event.startMonth).toBe('2027-01');
+    expect(event.startDay).toBe(29);
+    const factor = marketMonthEventFactor(event, '2027-01') as number;
+    expect(factor).toBeCloseTo(1 + 0.08 * (3 / 31), 12);
+    expect(marketMonthEventFactor(event, '2027-02')).toBeNull();
+    // 主链：事件不在预测窗（W45–W52 = 2026-11/12）→ 周乘子口径不变
+    expect(computeMarketFactor(fixture, { ...base, marketEvents: [] }, 49)).toBe(1);
+    // 覆盖 2026-11 的事件 → 11 月周（W45–W48）生效、12 月周（W49+）不受影响
+    const nov = { ...base, marketEvents: [], marketMonthEvents: [{ id: 'me-n', label: '', startMonth: '2026-11', startDay: 1, durationMonths: 1, magnitudePct: 5 }] };
+    expect(computeMarketFactor(fixture, nov, 45)).toBeCloseTo(1.05, 10);
+    expect(computeMarketFactor(fixture, nov, 49)).toBe(1);
+  });
+
+  it('按月调整季度同步：调整 2026-11 → q4Override = round1(季内三月均值)、转 human；还原后回 AI', () => {
+    const adjusted = withMarketMonthOverride(base, fixture, '2026-11', 120, '');
+    expect(adjusted.q4Override).toBe(107.5);
+    expect(adjusted.overrideSource).toBe('human');
+    // 季度均值口径与月度基线一致（101.8 + 120 + 100.8) / 3 → 不出现第二套数字
+    const months = computeMarketMonths(fixture, adjusted);
+    const november = months.find((point) => point.key === '2026-11');
+    expect(november?.value).toBe(120);
+    const restored = withMarketMonthOverride(adjusted, fixture, '2026-11', null, '');
+    expect(restored.q4Override).toBeNull();
+    expect(restored.overrideSource).toBe('ai');
   });
 });

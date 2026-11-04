@@ -173,14 +173,14 @@ describe('PriceLens Agent deterministic core', () => {
     expect(card?.kind).toBe('forecast_explanation');
     if (card?.kind === 'forecast_explanation') {
       const capabilityLines = card.assumptions.slice(-4).join('\n');
-      // 四条新口径：参照品联动比值校正 / 库存上限修正回写 / 预测把握度区间 / 复制关键假设。
+      // 四条新口径：参照品联动比值校正 / 库存上限修正回写 / 大盘月粒度调整 / 复制关键假设（把握区间带已于 2026-11-04 评审下线）。
       expect(capabilityLines).toContain('上一代参照');
       expect(capabilityLines).toContain('比值校正');
       expect(capabilityLines).toContain('库存上限修正');
       expect(capabilityLines).toContain('min(基线 SO, 可售)');
-      expect(capabilityLines).toContain('±8%');
-      expect(capabilityLines).toContain('±2%');
-      expect(capabilityLines).toContain('把握区间带');
+      expect(capabilityLines).toContain('大盘月粒度');
+      expect(capabilityLines).toContain('未来 4 个季度');
+      expect(capabilityLines).toContain('点击预测月');
       expect(capabilityLines).toContain('复制关键假设');
       // 新增口径遵循正典禁词（因子 / 约束 / 置信区间 / 无约束需求 / 我司）。
       for (const banned of ['因子', '约束', '置信区间', '无约束需求', '我司']) {

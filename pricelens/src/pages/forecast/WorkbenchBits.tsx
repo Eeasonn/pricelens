@@ -30,25 +30,6 @@ export function SectionHead({ title, hint, extra }: { title: string; hint?: stri
   );
 }
 
-/** 把握度徽标：把握大 = 墨底白字；把握中 = 白底描边（文字承载语义，不靠颜色单独表达）。 */
-export function CertaintyBadge({ level }: { level: 'high' | 'mid' }) {
-  const high = level === 'high';
-  return (
-    <span
-      title={high ? '库存修正段：把握大 ±2%（区间帽最窄）' : '参考型考量：把握中 ±8%（区间帽中等）'}
-      style={{
-        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-        background: high ? color.ink : color.canvas,
-        color: high ? color.onPrimary : color.body,
-        border: high ? 'none' : `1px solid ${color.hairlineStrong}`,
-      }}
-    >
-      {high ? '把握大 ±2%' : '把握中 ±8%'}
-    </span>
-  );
-}
-
 /** AI 推测标注（信任语言保留：AI 推测 · 可改 → 人工确认）。琥珀语义统一
  *  （WP6 8.3 Step 8）：AI 与人工状态走中性灰 / 墨色，琥珀只留给档期、库存
  *  修正与预警；文字标签继续承载语义，不靠颜色单独表达。 */

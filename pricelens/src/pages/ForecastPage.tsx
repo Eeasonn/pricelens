@@ -27,10 +27,11 @@ import {
   clearManualAdjustment,
   computeWorkbench,
   isParamsActive,
+  nextMarketMonthEventId,
   setManualAdjustment,
-  withQuarterOverride,
+  withMarketMonthOverride,
 } from './forecast/workbenchModel';
-import useWorkbenchParams, { nextMarketEventSeed, nextProductEventId } from './forecast/useWorkbenchParams';
+import useWorkbenchParams, { nextProductEventId } from './forecast/useWorkbenchParams';
 import { buildWorkbenchAssumptionText } from './forecast/workbenchExport';
 import { DataStatusBadge } from './forecast/ForecastBits';
 import {
@@ -49,7 +50,8 @@ import InventoryValidationCard from './forecast/InventoryValidationCard';
 import ForecastMarginCostCard from './forecast/ForecastMarginCostCard';
 import EventReplayModal from './forecast/EventReplayModal';
 
-/** 单周微调弹窗：调整原因必填（不填禁用保存），已有手调可一键清除；原因内联标注主图手调处。 */
+/** 单周微调弹窗：调整原因选填（2026-11-04 评审拍板：不填即可应用，不以必填拦截；
+ *  placeholder 引导追溯依据；后台字段结构保留）。已有手调可一键清除；填了原因则内联标注主图手调处。 */
 function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSave, onClear }: {
   weekLabel: string;
   dateLabel: string;
@@ -61,7 +63,6 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
 }) {
   const [wan, setWan] = useState<number | null>(Math.round((currentValue / 1000)) / 10);
   const [reason, setReason] = useState('');
-  const reasonOk = reason.trim().length > 0;
   const valueOk = wan != null && Number.isFinite(wan) && wan >= 0;
   return (
     <Modal
@@ -72,7 +73,7 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
         <div style={{ display: 'flex', gap: space.sm, justifyContent: 'flex-end', alignItems: 'center' }}>
           {manual && <Button danger type="text" onClick={onClear}>清除手调</Button>}
           <Button onClick={onCancel}>取消</Button>
-          <Button type="primary" disabled={!reasonOk || !valueOk} onClick={() => valueOk && wan != null && onSave(Math.round(wan * 10000), reason)}>
+          <Button type="primary" disabled={!valueOk} onClick={() => valueOk && wan != null && onSave(Math.round(wan * 10000), reason)}>
             应用
           </Button>
         </div>
@@ -96,19 +97,18 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
           />
         </label>
         <label style={{ display: 'grid', gap: 4, fontSize: 12, fontWeight: 600, color: color.body }}>
-          调整原因（必填）
+          调整原因（选填）
           <Input.TextArea
-            aria-label="调整原因（必填）"
-            aria-invalid={!reasonOk}
-            aria-describedby="tune-reason-warn"
-            placeholder="如：黑五主峰周，电商资源加投"
+            aria-label="调整原因（选填）"
+            aria-describedby="tune-reason-hint"
+            placeholder="选填：帮助追溯调整依据"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             autoSize={{ minRows: 2, maxRows: 4 }}
           />
         </label>
-        <div id="tune-reason-warn" role="alert" style={{ fontSize: 11, color: reasonOk ? color.mute : color.error, minHeight: 16 }}>
-          {reasonOk ? '原因将内联标注在主图该周手调处' : '必须填写调整原因，否则无法应用'}
+        <div id="tune-reason-hint" style={{ fontSize: 11, color: color.mute, minHeight: 16 }}>
+          {`选填：帮助追溯调整依据；填写后原因将内联标注在主图该周手调处，不填也可应用`}
         </div>
       </div>
     </Modal>
@@ -198,7 +198,7 @@ export default function ForecastPage() {
           checked={mainView.promoBandOn}
           onChange={(event) => patchMainView({ promoBandOn: event.target.checked })}
         >
-          <span style={{ fontSize: 12 }}>档期背景带</span>
+          <span style={{ fontSize: 12 }}>促销日期标注</span>
         </Checkbox>
       )}
     />
@@ -295,7 +295,7 @@ export default function ForecastPage() {
       <section style={workbenchCardStyle}>
         <SectionHead
           title={`量价预测主图 · ${fixture.context.product}`}
-          hint={`历史 ${fixture.context.historyRange} 实柱实线（实际）· 预测 ${fixture.context.forecastRange} 虚柱虚线；悬停预测周看「本周考量」构成，点击柱体微调（需填原因，原因内联标注在主图手调处）。`}
+          hint={`历史 ${fixture.context.historyRange} 实柱（实际）· 预测 ${fixture.context.forecastRange} 虚柱；促销档期为轴下日期标注；悬停预测周看「本周考量」构成，点击柱体微调（原因选填，填了则内联标注在主图手调处）。`}
           extra={
             <>
               <SimChip title="主图数值为演示假设：历史段为模拟实际，预测段为模型推演" />
@@ -375,26 +375,19 @@ export default function ForecastPage() {
         inputSignal={referenceSignal}
       />
 
-      {/* ③ 大盘 · 总量总线（时间序列基线 + 行业级事件，只预测下一季） */}
+      {/* ③ 大盘 · 总量总线（月粒度主序列：历史月 + 未来 4 季度逐月预测；
+          点击预测月就地调整（原因选填，季内均值同步主链改格）；
+          右 1/3 事件区 = AI 候选 Top5 占位 + 人工月度事件三字段录入） */}
       <MarketBusPanel
         fixture={fixture}
         params={params}
         result={result}
-        onOverride={(field, value) => setParams((prev) => withQuarterOverride(prev, field, value))}
-        onEventStep={(id, fieldKey, delta) => {
-          setParams((prev) => ({
-            ...prev,
-            marketEvents: prev.marketEvents.map((item) => {
-              if (item.id !== id) return item;
-              if (fieldKey === 'magnitudePct') return { ...item, magnitudePct: Math.max(-30, Math.min(30, item.magnitudePct + delta)) };
-              if (fieldKey === 'startWeek') return { ...item, startWeek: Math.max(38, Math.min(52, item.startWeek + delta)) };
-              return { ...item, durationWeeks: Math.max(1, Math.min(8, item.durationWeeks + delta)) };
-            }),
-          }));
-        }}
-        onEventDecay={(id, decay) => setParams((prev) => ({ ...prev, marketEvents: prev.marketEvents.map((item) => (item.id === id ? { ...item, decay } : item)) }))}
-        onEventRemove={(id) => setParams((prev) => ({ ...prev, marketEvents: prev.marketEvents.filter((item) => item.id !== id) }))}
-        onEventAdd={() => setParams((prev) => ({ ...prev, marketEvents: [...prev.marketEvents, nextMarketEventSeed(prev.marketEvents)] }))}
+        onMonthOverride={(monthKey, value, reason) => setParams((prev) => withMarketMonthOverride(prev, fixture, monthKey, value, reason))}
+        onMonthEventAdd={(event) => setParams((prev) => ({
+          ...prev,
+          marketMonthEvents: [...prev.marketMonthEvents, { ...event, id: nextMarketMonthEventId(prev.marketMonthEvents) }],
+        }))}
+        onMonthEventRemove={(id) => setParams((prev) => ({ ...prev, marketMonthEvents: prev.marketMonthEvents.filter((item) => item.id !== id) }))}
         onRationaleChange={(text) => setParams((prev) => ({ ...prev, rationale: text }))}
       />
 
@@ -410,7 +403,7 @@ export default function ForecastPage() {
       {/* ⑤ 成本销毛（链路末端独立推测，不回写主图） */}
       <ForecastMarginCostCard fixture={fixture} result={result} />
 
-      {/* 单周微调弹窗：调整原因必填，不填禁用保存（原因内联标注主图手调处） */}
+      {/* 单周微调弹窗：调整原因选填（不填即可应用；填了则内联标注主图手调处） */}
       {tuneWeekResult && (
         <TuneDialog
           key={tuneWeekResult.week}

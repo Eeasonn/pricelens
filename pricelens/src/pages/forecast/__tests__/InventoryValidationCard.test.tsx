@@ -4,6 +4,10 @@
 // 手调覆盖截断周（截断事实仍在）、无修正状态、规则文案收敛（阈值未核定 chip +
 // min 公式收 title）、判定列表按修正周各自 health 行、输出与右轴万台单位统一、
 // 图例显隐与 SI 键盘输入保留。
+// 2026-11-04 评审图面精简：图上只留「库存柱 + 渠道 DOS」——删全流程 DOS 线
+//（数值收进库存柱悬停 title）、删 SI ▼ 三角、删 DOS 50 参考格线；SI 移至
+// 卡头页签格子输入（aria 与 live/commit 口不变）。修正段「把握大 ±2%」徽标
+// 随评审 1b（置信区间提示不必要）退役 → 中性「修正段 · 波动参考 ±2%」chip。
 // ============================================================
 // @vitest-environment jsdom
 import { useState } from 'react';
@@ -12,6 +16,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import InventoryValidationCard from '../InventoryValidationCard';
 import { workbenchFixture } from '../workbenchFixture';
 import {
+  DOS_BAND,
   baseWorkbenchParams,
   computeWorkbench,
   setManualAdjustment,
@@ -19,6 +24,7 @@ import {
   type WorkbenchResult,
 } from '../workbenchModel';
 import { fmtWan } from '../WorkbenchBits';
+import { niceCeil } from '../../../dataModel/volume';
 import { color } from '../../../theme/tokens';
 
 const fixture = workbenchFixture;
@@ -89,9 +95,14 @@ describe('库存验证卡 · 基准截断（输出只讲结果 + 万台单位）
     expect(w50Row).not.toContain('W52');
   });
 
-  it('把握度语义化：修正段挂「把握大 ±2%」徽标', () => {
+  it('修正段波动参考中性化：chip「修正段 · 波动参考 ±2%」，无「把握」话术（评审 1b：置信区间提示不必要）', () => {
     const { container } = renderCard();
-    expect(container.textContent).toContain('把握大 ±2%');
+    const text = container.textContent ?? '';
+    expect(text).toContain('修正段 · 波动参考 ±2%');
+    expect(text).not.toContain('把握');
+    // 口径收 title：非统计置信区间
+    const chip = Array.from(container.querySelectorAll('span[title]')).find((el) => (el.textContent ?? '') === '修正段 · 波动参考 ±2%');
+    expect(chip?.getAttribute('title')).toContain('非统计置信区间');
   });
 
   it('单位统一：右轴与输出为万台，图形 tooltip 不再出现 K 台 / 千分位「台」', () => {
@@ -150,8 +161,8 @@ describe('库存验证卡 · 手调覆盖截断周（supplyCapped 仍在）', ()
     const svg = container.querySelector('svg[role="img"]') as SVGSVGElement;
     expect(svg.getAttribute('aria-label')).toContain('W50 起');
     expect((container.textContent ?? '')).toContain('W50 起修正');
-    // 修正段徽标仍在
-    expect((container.textContent ?? '')).toContain('把握大 ±2%');
+    // 修正段中性波动参考 chip 仍在（评审 1b：不用「把握」话术）
+    expect((container.textContent ?? '')).toContain('修正段 · 波动参考 ±2%');
     // W50 判定行写人工手调，W51/W52 仍写按可售量修正
     const manualRows = verdictRowsOf(container).filter((row) => row.startsWith('W50'));
     expect(manualRows.length).toBe(1);
@@ -168,7 +179,8 @@ describe('库存验证卡 · 无修正状态', () => {
     const text = container.textContent ?? '';
     expect(text).toContain('库存可支撑');
     expect(text).toContain('当前未触发');
-    expect(text).not.toContain('把握大');
+    expect(text).not.toContain('把握');
+    expect(text).not.toContain('波动参考 ±2%');
     expect(verdictRowsOf(container).length).toBe(0);
     const svg = container.querySelector('svg[role="img"]') as SVGSVGElement;
     expect(svg.getAttribute('aria-label')).toContain('库存可支撑');
@@ -186,6 +198,65 @@ describe('库存验证卡 · 规则文案收敛', () => {
     expect(text).not.toContain('min(');
     const titled = container.querySelectorAll('[title*="min(基线 SO"]');
     expect(titled.length).toBeGreaterThan(0);
+  });
+});
+
+describe('库存验证卡 · 图面精简（2026-11-04 评审：只留库存柱 + 渠道 DOS）', () => {
+  it('删全流程 DOS 线与 SI ▼ 三角：图上 path 只剩渠道 DOS 双段（蓝实 / 蓝虚）', () => {
+    const { container } = renderCard();
+    const chart = container.querySelector('svg[role="img"]') as SVGSVGElement;
+    const paths = Array.from(chart.querySelectorAll('path'));
+    expect(paths.length).toBe(2);
+    for (const path of paths) {
+      expect(path.getAttribute('stroke')).toBe(color.link);
+    }
+  });
+
+  it('SI 不上图：图例只剩「渠道库存（右轴）+ 渠道 DOS」两项，无「SI ▼」', () => {
+    const { container } = renderCard();
+    const legendLabels = Array.from(container.querySelectorAll('button[aria-pressed]'))
+      .map((button) => button.textContent ?? '');
+    expect(legendLabels).toEqual(['渠道库存（右轴）', '渠道 DOS']);
+    expect(container.textContent).not.toContain('SI ▼');
+  });
+
+  it('删 DOS 50 参考格线：左轴只标 0 与上限；健康带 70–90 天保留', () => {
+    const { container, result } = renderCard();
+    const leftLabels = Array.from(container.querySelectorAll('svg text[text-anchor="end"]'))
+      .map((node) => node.textContent ?? '')
+      .filter((label) => /^\d+$/.test(label));
+    const dosMax = Math.max(
+      niceCeil(Math.max(...result.weeks.map((week) => week.channelDos))),
+      DOS_BAND.max + 1,
+    );
+    expect(leftLabels).toEqual(['0', String(Math.round(dosMax))]);
+    expect(leftLabels).not.toContain('50');
+    const text = container.textContent ?? '';
+    expect(text).toContain('70 天');
+    expect(text).toContain('90 天');
+  });
+
+  it('SI 移至页签格子输入：输入行在卡头区（SVG 之前），月格子与 aria 语义保留', () => {
+    const { container } = renderCard();
+    const row = container.querySelector('[data-si-cell-row]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    const svg = container.querySelector('svg');
+    expect(svg).not.toBeNull();
+    // 卡头区 = SI 格子行在 SVG 之前（旧「人工 SI 计划（按月）」图下块已删）
+    expect(row!.compareDocumentPosition(svg!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row!.querySelector('input[aria-label="11 月（W45–W48） SI 计划（千台/月）"]')).not.toBeNull();
+    expect(row!.textContent).toContain('千台/月');
+    expect(container.textContent).not.toContain('人工 SI 计划（按月）');
+  });
+
+  it('选中点弹全流程 DOS 数值提示：库存柱悬停 title 含全流程 DOS 与 SI（线不上图）', () => {
+    const { container } = renderCard();
+    const titles = Array.from(container.querySelectorAll('svg title')).map((node) => node.textContent ?? '');
+    expect(titles.some((title) => title.includes('全流程 DOS'))).toBe(true);
+    expect(titles.some((title) => title.includes('SI ') && title.includes('万台'))).toBe(true);
+    // aria 同步声明「全流程 DOS 不上图，悬停读数值」
+    const svg = container.querySelector('svg[role="img"]') as SVGSVGElement;
+    expect(svg.getAttribute('aria-label')).toContain('全流程 DOS 不上图');
   });
 });
 

@@ -3,6 +3,13 @@
 // （形态参考走势页 MarginCostCard：周销毛琥珀柱 + 单台成本月版本阶梯线 +
 // 均价线；预测段按本页实/虚语言自建虚柱虚线）。销毛 = 周销 ×（价格 − 当月
 // 版本成本），演示口径不含渠道费率；成本只进销毛链，不修改需求。
+// 2026-11-04 三方评审定位修正：销毛 = 经营结果而非输入——量价是输入活动区，
+// 本卡是经营结果区（上面一系列活动反映为下面的结果）；成本 ↔ 价格无直接
+// 数学映射，成本只是「是否调价」的参考因素，不进模型输入；对销毛不满意
+// → 回到量价区调价。卡标题 / 口径行 / 输出框按「输入（量价）→ 结果（销毛）」
+// 标注；模型计算不动（链路末端独立推测、不回写主图，维持现状）。
+// 把握度徽标随评审 1b（置信区间提示不必要）退役：改中性「推演参考 · 波动 ±8%」
+// chip，不用「把握」话术。
 // 卡头下加「依赖链路条」（纯展示，与库存卡同一形态）：主图价格预测
 // + 成本月版本 → 单台销毛 → × 主图 SO → 预测期销毛（不回写主图），
 // 把「单台销毛只跟价的预测有关、价与成本又有关系」的依赖画在卡上。
@@ -19,7 +26,7 @@ import { brandColor, color, radius, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
 import type { WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult } from './workbenchModel';
-import { CertaintyBadge, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtMillionUsd, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import { IoBar, SectionHead, SimChip, WorkbenchLegend, fmtMillionUsd, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 import { buildAxisTicks, firstForecastIndex } from './workbenchChartSegments';
 
 const W = 1000;
@@ -94,17 +101,35 @@ function FlowBar({ ariaLabel, steps }: { ariaLabel: string; steps: FlowStep[] })
   );
 }
 
-/** 成本销毛依赖链路：单台销毛 = 主图价格 − 成本月版本，× 主图 SO 汇总为期销毛。 */
-const COST_FLOW_ARIA = '成本销毛依赖链路：主图价格预测 + 成本月版本 → 单台销毛 → × 主图 SO → 预测期销毛（不回写主图）';
+/** 成本销毛依赖链路：单台销毛 = 主图价格 − 成本月版本，× 主图 SO 汇总为期销毛。
+ *  2026-11-04 评审：量价 = 输入，销毛 = 经营结果（结果区不回写、不进模型输入）。 */
+const COST_FLOW_ARIA = '成本销毛依赖链路：主图价格预测 + 成本月版本 → 单台销毛 → × 主图 SO → 预测期销毛（不回写主图）；量价 = 输入，销毛 = 经营结果';
 
 function costFlowSteps(): FlowStep[] {
   return [
     { label: '主图价格预测', title: '单台销毛只跟价的预测有关：价格线（历史实 / 预测虚）来自主图' },
-    { label: '成本月版本', join: '+', title: '成本按月版本阶梯（实→虚），与价共同决定单台销毛' },
+    { label: '成本月版本', join: '+', title: '成本按月版本阶梯（实→虚）；成本 ↔ 价格无直接数学映射，成本只是是否调价的参考' },
     { label: '单台销毛', title: '单台销毛 = 主图价格 − 成本月版本' },
     { label: '× 主图 SO', title: '乘主图最终 SO（量价链推完）得周销毛' },
-    { label: '预测期销毛', note: '不回写主图', title: '链路末端独立推测：汇总为预测期销毛，不修正主图', state: 'active' },
+    { label: '预测期销毛', note: '不回写主图', title: '经营结果（链路末端独立推测）：汇总为预测期销毛，不修正主图；对结果不满意回到量价输入调整', state: 'active' },
   ];
+}
+
+/** 轻量中性 chip（与库存卡 StateChip 同形态）：波动参考口径，不用「把握」话术
+ *  （2026-11-04 评审 1b 同精神：置信区间提示不必要，中性表述保留 ± 区间事实）。 */
+function RefChip({ label, title }: { label: string; title: string }) {
+  return (
+    <span
+      title={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
+        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+        background: color.canvasSoft2, color: color.mute,
+      }}
+    >
+      {label}
+    </span>
+  );
 }
 
 export default function ForecastMarginCostCard({ fixture, result }: { fixture: WorkbenchFixture; result: WorkbenchResult }) {
@@ -127,16 +152,16 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
   const head = (
     <>
       <SectionHead
-        title="成本销毛"
-        hint="链路末端独立推测（月版本成本阶梯 + 预测销毛柱，历史实 / 预测虚）：周销毛 = 主图最终 SO ×（价格 − 当月版本成本），演示口径不含渠道费率；不回写主图。"
+        title="成本销毛 · 经营结果"
+        hint="经营结果 · 由上述量价与成本推导（月版本成本阶梯 + 预测销毛柱，历史实 / 预测虚）：周销毛 = 主图最终 SO ×（价格 − 当月版本成本），演示口径不含渠道费率；不回写主图——对销毛不满意，回到量价输入区调整。"
         extra={<>
           <SimChip title="成本与销毛为演示样本推演：月版本成本 × 主图价格，不含渠道费率" />
-          <CertaintyBadge level="mid" />
+          <RefChip label="推演参考 · 波动 ±8%" title="销毛为链路末端推演结果，±8% 为演示波动参考口径，非统计置信区间" />
         </>}
       />
       <IoBar
-        input="主图最终 SO（量价链推完）· 主图价格 · 成本月版本趋势"
-        output="预测期销毛（独立推测，不修正主图）"
+        input="输入（量价）：主图最终 SO（量价链推完）· 主图价格 · 成本月版本趋势（仅调价参考）"
+        output="经营结果：预测期销毛（独立推测，不修正主图）"
       />
       <FlowBar ariaLabel={COST_FLOW_ARIA} steps={costFlowSteps()} />
     </>
@@ -214,7 +239,7 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
           viewBox={`0 0 ${W} ${H}`}
           width="100%"
           role="img"
-          aria-label={`成本销毛：周销毛柱与月版本成本阶梯（${fixture.costVersions.map((version) => `${version.monthLabel} $${version.unitCost}`).join(' → ')}）；预测期（${fixture.context.forecastRange}）销毛 ${fmtMillionUsd(result.summary.forecastMargin)}，历史 ${fixture.context.historyRange} 销毛 ${fmtMillionUsd(result.summary.historyMargin)}。`}
+          aria-label={`成本销毛（经营结果 · 由上述量价与成本推导）：周销毛柱与月版本成本阶梯（${fixture.costVersions.map((version) => `${version.monthLabel} $${version.unitCost}`).join(' → ')}）；预测期（${fixture.context.forecastRange}）销毛 ${fmtMillionUsd(result.summary.forecastMargin)}，历史 ${fixture.context.historyRange} 销毛 ${fmtMillionUsd(result.summary.historyMargin)}；不回写主图。`}
           style={{ display: 'block', height: 'auto', minWidth: 650 }}
         >
           {/* 周销毛轴（$M）：0 基线强分隔，其余刻度弱网格；负值向下 */}
@@ -286,6 +311,11 @@ export default function ForecastMarginCostCard({ fixture, result }: { fixture: W
       </div>
       <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
       <div className="tnum" style={{ marginTop: space.xs, fontSize: 12, lineHeight: 1.6, color: color.body, padding: `${space.sm}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
+        {/* 2026-11-04 评审：销毛 = 经营结果而非输入；成本只是「是否调价」参考，不进模型输入 */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ color: color.mute }}>经营结果</span>
+          <span>由上述量价与成本推导（链路末端独立推测）；成本只是是否调价的参考，不进模型输入；对销毛不满意 → 回头调价</span>
+        </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ color: color.mute }}>成本版本</span>
           <span>{fixture.costVersions.map((version) => `${version.monthLabel} $${version.unitCost}`).join(' → ')}</span>

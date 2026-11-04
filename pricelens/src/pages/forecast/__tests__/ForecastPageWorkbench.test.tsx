@@ -128,19 +128,22 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     expect(draft ?? '').toContain('ref-pura90');
   });
 
-  it('微调（原因必填）→ 复制关键假设（含原因与模拟状态）→ 切价格走势再返回草稿保留', async () => {
+  it('微调（原因选填，不填即可应用）→ 复制关键假设（含原因与模拟状态）→ 切价格走势再返回草稿保留', async () => {
     render(<App />);
     const tuneButtons = Array.from(document.querySelectorAll('button')).filter((button) => button.textContent === '微调');
     expect(tuneButtons.length).toBe(8);
     fireEvent.click(tuneButtons[2]);
-    expect(document.body.textContent).toContain('调整原因（必填）');
+    // 2026-11-04 评审：调整原因改选填——去掉必填拦截，不填即可应用；
+    // placeholder 引导（如「选填：帮助追溯调整依据」），空值照常提交。
+    expect(document.body.textContent).not.toContain('（必填）');
+    const reasonInput = (document.querySelector('.ant-modal textarea')
+      ?? document.querySelector('textarea[aria-label*="调整原因"]')) as HTMLTextAreaElement | null;
+    expect(reasonInput).not.toBeNull();
+    expect(reasonInput!.placeholder).toContain('选填');
     const applyButton = () => Array.from(document.querySelectorAll('button'))
       .find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
-    expect(applyButton()?.disabled).toBe(true);
-    const reasonInput = document.querySelector('textarea[aria-label="调整原因（必填）"]') as HTMLTextAreaElement | null;
-    expect(reasonInput).not.toBeNull();
-    if (reasonInput) fireEvent.change(reasonInput, { target: { value: '黑五主峰周，电商资源加投' } });
     expect(applyButton()?.disabled).toBe(false);
+    if (reasonInput) fireEvent.change(reasonInput, { target: { value: '黑五主峰周，电商资源加投' } });
     fireEvent.click(applyButton()!);
     // 手调原因内联标注主图手调处（图下名录），无纪要层
     expect(document.body.textContent).toContain('手调 · W47：黑五主峰周，电商资源加投');

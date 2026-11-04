@@ -6,8 +6,16 @@
 // 全部数值为演示（simulated）：销量单位台、价格/成本 USD；只存输入事实，
 // 派生值（不含库存限制预测、库存推演、DOS、健康判定、销毛）由 workbenchModel 计算。
 // 口径注意（与 brief 一致）：
-//   - 大盘 = 总量总线，季度粒度（同比不下钻到周）；
-//   - 关键事件 = 大盘图事件（折叠屏阵营 / 内存供应等行业级），幅度 + 时间两参数；
+//   - 大盘 = 总量总线；2026-11-04 拍板后主序列为**月粒度**（历史月 + 未来 4
+//     个季度逐月预测），market.quarters 保留（季度基线 = 月分布的聚合口径，
+//     与主链 q4/q1 单格口径一致）；market.months = 历史月度模拟样本
+//     （季内三月均值恒等于季度值，构造守恒），预测月由 workbenchModel 按
+//     季度基线 × 去年同季月形分布生成（确定性外推，禁随机）——模拟外推口径
+//     注释见 market.monthlyNote；
+//   - 关键事件：行业级周口径四件套（marketEvents，主链既有输入）保留；
+//     2026-11-04 拍板新增人工月度事件三字段（起始月/日 + 时长（月）+ 幅度%，
+//     名称选填），月中起始按日均摊（首月影响 × 覆盖天数 ÷ 当月天数），
+//     默认演示事件锚定 2027-01-29（主链预测窗 W45–W52 之外，不改基准数字）；
 //   - 大促档期（黑五）形状已含在基准走势内，画为主图背景带；
 //   - SI 计划为人工输入（库存验证层唯一新输入），其余库存推演来自上游预测。
 //   - 参考池：lifecyclePool = 全生命周期量价（52 周 × ≥4 产品，含档期带与
@@ -48,6 +56,26 @@ export interface MarketEventSeed {
   decay: 'decreasing' | 'flat';
 }
 
+/**
+ * 大盘人工月度事件（2026-11-04 评审拍板的极简三字段）：
+ * 起始时间（月/日）+ 持续时长（月）+ 影响幅度%；事件名称选填（可为 ''）。
+ * 月中起始按日均摊口径生效（见 workbenchModel.marketMonthEventFactor），
+ * 衰减固定递减（三字段不再暴露衰减选择）。
+ */
+export interface MarketMonthEventSeed {
+  id: string;
+  /** 事件名称（选填；空 = UI 显示「未命名事件」）。 */
+  label: string;
+  /** 起始月（YYYY-MM，如 '2027-01'）。 */
+  startMonth: string;
+  /** 起始日（1–31；超出当月天数按当月末日处理）。 */
+  startDay: number;
+  /** 持续时长（月，≥1）。 */
+  durationMonths: number;
+  /** 影响幅度（%，正 = 抬升大盘，负 = 压低）。 */
+  magnitudePct: number;
+}
+
 /** 主图小事件（产品级三类：竞品上市 / 营销价促 / 自家品挤兑；录入时弹参考品事实回放）。 */
 export interface ProductEventSeed {
   id: string;
@@ -75,6 +103,14 @@ export interface MarketQuarterSeed {
   /** 季度键，如 '2025Q1'。 */
   key: string;
   /** 季度指数（实际值）。 */
+  value: number;
+}
+
+/** 大盘月度指数（主序列：历史月为模拟样本；预测月由模型按季度基线月分布生成）。 */
+export interface MarketMonthSeed {
+  /** 月键，如 '2025-01'。 */
+  key: string;
+  /** 月度指数（模拟实际）。 */
   value: number;
 }
 
@@ -156,10 +192,21 @@ export interface WorkbenchFixture {
   promoBand: { label: string; startWeek: number; endWeek: number; peakWeek: number; peakNote: string };
   market: {
     quarters: MarketQuarterSeed[];
+    /**
+     * 历史月度主序列（2025-01–2026-09，模拟样本）：季内三月均值恒等于季度值
+     * （偏差三元组逐季轮换、合计为 0，构造守恒）。预测月不在 fixture 存储，
+     * 由 workbenchModel.marketQuarterForecast + computeMarketMonths 确定性生成
+     * （未来 4 个季度 = 2026-10–2027-09）。
+     */
+    months: MarketMonthSeed[];
+    /** 月度序列模拟外推口径注释（显式声明，非静默造数）。 */
+    monthlyNote: string;
     /** AI 时间序列基线说明（周期性季节因素 × 全局性趋势因素，挂 AI 标）。 */
     aiRationale: string;
   };
   defaultMarketEvents: MarketEventSeed[];
+  /** 人工月度事件预填（三字段极简口径；默认演示事件在主链预测窗之外，不改基准数字）。 */
+  defaultMarketMonthEvents: MarketMonthEventSeed[];
   /** 月版本成本（USD/台），按周所属月份取版本。 */
   costVersions: Array<{ monthLabel: string; fromWeek: number; unitCost: number }>;
   /** 基准走势（台，W45–W52）：大盘延续 + 黑五形状 + 上一代同期形态（演示口径），未含参数调整。 */
@@ -450,6 +497,48 @@ const weeks: WorkbenchWeek[] = Array.from({ length: 16 }, (_, index) => {
   };
 });
 
+// ============================================================
+// 大盘历史月度序列（2025-01–2026-09，21 个月 = 7 个完整季度）：
+// 季内三月 = 季度值 + 偏差三元组（逐季轮换、合计恒为 0），三月均值精确等于
+// 季度值（构造守恒）——月度主序列与季度聚合口径不出现两套数字。
+// 偏差形态为固定模拟样本（确定性，无随机）。
+// ============================================================
+
+/** 季内月度偏差三元组（合计 = 0；按季度序号轮换）。 */
+const QUARTER_MONTH_DEVIATIONS: ReadonlyArray<readonly [number, number, number]> = [
+  [0.6, 0, -0.6],
+  [-0.4, 0.4, 0],
+  [0, -0.6, 0.6],
+];
+
+/** 季度值 → 三个月度值（round1；月均值守恒）。 */
+function monthsOfQuarter(seed: MarketQuarterSeed, quarterIndex: number): MarketMonthSeed[] {
+  const [q1, q2, q3] = QUARTER_MONTH_DEVIATIONS[quarterIndex % QUARTER_MONTH_DEVIATIONS.length];
+  const year = Number(seed.key.slice(0, 4));
+  const quarter = Number(seed.key.slice(5, 6));
+  const baseMonth = (quarter - 1) * 3 + 1;
+  const mm = (month: number): string => `${year}-${String(month).padStart(2, '0')}`;
+  const round1 = (value: number): number => Math.round(value * 10) / 10;
+  return [
+    { key: mm(baseMonth), value: round1(seed.value + q1) },
+    { key: mm(baseMonth + 1), value: round1(seed.value + q2) },
+    { key: mm(baseMonth + 2), value: round1(seed.value + q3) },
+  ];
+}
+
+/** 大盘季度实际值（2025Q1–2026Q3；2026Q4 起由模型推演）。 */
+const MARKET_QUARTERS: MarketQuarterSeed[] = [
+  { key: '2025Q1', value: 115 },
+  { key: '2025Q2', value: 113 },
+  { key: '2025Q3', value: 111 },
+  { key: '2025Q4', value: 116 },
+  { key: '2026Q1', value: 108 },
+  { key: '2026Q2', value: 106 },
+  { key: '2026Q3', value: 104 },
+];
+
+const marketMonths: MarketMonthSeed[] = MARKET_QUARTERS.map((quarter, index) => monthsOfQuarter(quarter, index)).flat();
+
 export const workbenchFixture: WorkbenchFixture = {
   meta: {
     status: 'simulated',
@@ -475,21 +564,23 @@ export const workbenchFixture: WorkbenchFixture = {
   weeks,
   promoBand: { label: '黑五档期 11.14–12.02', startWeek: 46, endWeek: 49, peakWeek: 47, peakNote: '主峰 11-27（黑五）' },
   market: {
-    quarters: [
-      { key: '2025Q1', value: 115 },
-      { key: '2025Q2', value: 113 },
-      { key: '2025Q3', value: 111 },
-      { key: '2025Q4', value: 116 },
-      { key: '2026Q1', value: 108 },
-      { key: '2026Q2', value: 106 },
-      { key: '2026Q3', value: 104 },
-    ],
+    quarters: MARKET_QUARTERS,
+    months: marketMonths,
+    monthlyNote:
+      '月度序列口径（模拟外推，显式声明）：历史月为模拟样本，季内三月均值恒等于季度值（构造守恒）；'
+      + '预测月 = 未来 4 个季度基线（季节 × 趋势确定性外推，禁随机）按去年同期季内月形分布，'
+      + '季内三月合计恒等于季度基线 × 3（容量守恒）；月中事件按日均摊：首月影响 ×（覆盖天数 ÷ 当月天数）。',
     aiRationale:
       'AI 初始推演（可修改）：纯时间序列口径 = 周期性季节因素（去年 Q4/Q3、Q1/Q4 季节比）× 全局性趋势因素（今年/去年同比水平比）；本地确定性规则基线，未调用模型服务；下方关键事件为人工录入假设，可增删改。',
   },
   defaultMarketEvents: [
     { id: 'ev-fold', label: '折叠屏阵营扩容', startWeek: 46, durationWeeks: 5, magnitudePct: 8, decay: 'decreasing' },
     { id: 'ev-mem', label: '内存供应涨价', startWeek: 50, durationWeeks: 3, magnitudePct: -6, decay: 'decreasing' },
+  ],
+  // 月度三字段事件预填演示：起始日 29（月中）示范日均摊（首月覆盖 3/31 天）；
+  // 起始月 2027-01 在主链预测窗（W45–W52 = 2026-11/12）之外，不改基准推演数字。
+  defaultMarketMonthEvents: [
+    { id: 'ev-fold-m', label: '折叠屏阵营扩容', startMonth: '2027-01', startDay: 29, durationMonths: 1, magnitudePct: 8 },
   ],
   costVersions: [
     { monthLabel: '9 月版本', fromWeek: 37, unitCost: 612 },

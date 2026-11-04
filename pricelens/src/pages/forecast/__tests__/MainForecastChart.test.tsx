@@ -2,8 +2,10 @@
 // WP5 · 主图组件测试（jsdom）：只验证 React 组装与行为开关，不验证像素。
 // 覆盖：受控视图（heightScale / showYTicks / labelMode / promoBandOn）、
 // controls 插槽、缺数「—」不造 0、手调墨色与库存琥珀双状态共存、
-// 图例「数据系列 / 说明项」分组与真实显隐、预测把握区间带（A4：
-// 两组带 + ±8%/±2% 宽度参数 + 预测线/带与末历史点无缝衔接 + 缺数回退）。
+// 图例「数据系列 / 说明项」分组与真实显隐、价格线历史实线 / 预测虚线接缝。
+// 2026-11-04 评审大减法：黑线 / 把握帽 / 把握区间带 / 调价档期锚点竖线 /
+// 档期琥珀色带全部下线（销量只留柱、促销只留轴下日期标注），本文件同步
+// 删除相关断言并新增「下线」回归断言；调整原因改选填（空原因手调可渲染）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
@@ -49,14 +51,19 @@ const xLabels = (): string[] => svgTexts().filter((text) => /^W\d+$/.test(text))
 const priceLinePaths = (): Element[] =>
   Array.from(document.querySelectorAll('svg path')).filter((path) => path.getAttribute('stroke') === brandColor.HUAWEI);
 
-const inkSolidPaths = (): Element[] =>
-  Array.from(document.querySelectorAll('svg path')).filter(
-    (path) => path.getAttribute('stroke') === color.ink && !path.getAttribute('stroke-dasharray'),
-  );
-
 const barWithTitle = (label: string): Element | null =>
   Array.from(document.querySelectorAll('svg rect')).find((rect) =>
     Array.from(rect.querySelectorAll('title')).some((title) => (title.textContent ?? '').includes(label)),
+  ) ?? null;
+
+const forecastPriceLine = (): Element | null =>
+  Array.from(document.querySelectorAll('svg path')).find(
+    (path) => path.getAttribute('stroke') === brandColor.HUAWEI && path.getAttribute('stroke-dasharray') === '6 5',
+  ) ?? null;
+
+const historyPriceLine = (): Element | null =>
+  Array.from(document.querySelectorAll('svg path')).find(
+    (path) => path.getAttribute('stroke') === brandColor.HUAWEI && !path.getAttribute('stroke-dasharray'),
   ) ?? null;
 
 describe('主图 · 受控视图（MainForecastView 默认 = 当前视觉）', () => {
@@ -64,16 +71,19 @@ describe('主图 · 受控视图（MainForecastView 默认 = 当前视觉）', (
     expect(DEFAULT_MAIN_FORECAST_VIEW).toEqual({ heightScale: 1, showYTicks: true, labelMode: 'compact', promoBandOn: true });
   });
 
-  it('不传 view：viewBox 高度 = 默认（380），促销带、刻度与紧凑周标签齐全', () => {
+  it('不传 view：viewBox 高度 = 默认（380），促销日期标注、刻度与紧凑周标签齐全，档期色带不渲染', () => {
     renderChart();
     expect(document.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 380');
-    expect(svgTexts().some((text) => text.includes('黑五档期'))).toBe(true);
+    // 促销只留轴下日期标注（不上色带）：标注文字在，琥珀色带 rect 不在。
+    expect(svgTexts().some((text) => text === '黑五档期 11.14–12.02')).toBe(true);
+    const amberBand = Array.from(document.querySelectorAll('svg rect')).find((rect) => rect.getAttribute('fill') === color.warningSoft);
+    expect(amberBand).toBeUndefined();
     expect(document.body.textContent).toContain('万台');
     // compact = 每 2 个 + 末尾 → 9 个周标签。
     expect(xLabels()).toHaveLength(9);
   });
 
-  it('promoBandOn=false：档期带与带标签消失，其余结构保留', () => {
+  it('promoBandOn=false：促销日期标注消失，其余结构保留', () => {
     renderChart({ view: { promoBandOn: false } });
     expect(svgTexts().some((text) => text.includes('黑五档期'))).toBe(false);
     expect(document.querySelector('svg')).not.toBeNull();
@@ -179,19 +189,40 @@ describe('主图 · 手调（墨色）与库存上限修正（琥珀）双状态
     expect(text).toContain('库存上限修正 · W50 起');
     expect(text).not.toContain('未触发库存上限修正');
   });
+
+  it('原因选填：空原因手调只留菱形与名录周号，可正常应用渲染（2026-11-04 评审）', () => {
+    const tuned = { ...baseParams, manual: { 50: { value: 60000, reason: '' } } };
+    const result = computeWorkbench(fixture, tuned);
+    renderChart({ params: tuned, result });
+    // 菱形还在，title 不带原因冒号。
+    const inkDiamond = Array.from(document.querySelectorAll('svg path')).find(
+      (path) => path.getAttribute('fill') === color.ink && (path.getAttribute('d') ?? '').includes('l5 5'),
+    );
+    expect(inkDiamond).not.toBeUndefined();
+    expect(inkDiamond!.querySelector('title')?.textContent).toBe('手调');
+    // 柱 title 不产生「手调：」空尾巴。
+    const tunedBar = barWithTitle('W50');
+    expect(tunedBar!.querySelector('title')?.textContent).toContain('手调');
+    expect(tunedBar!.querySelector('title')?.textContent).not.toContain('手调：');
+    // 图下名录只列周号，不出现空冒号；修正事实照常报告。
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('手调 · W50');
+    expect(text).not.toContain('手调 · W50：');
+    expect(text).toContain('库存上限修正 · W50 起');
+  });
 });
 
 describe('主图 · 图例分组与真实显隐', () => {
-  it('数据系列 5 项均为可点击按钮（aria-pressed），说明项为纯文字', () => {
+  it('数据系列 4 项均为可点击按钮（aria-pressed），说明项为纯文字；把握区间图例已下线', () => {
     renderChart();
     const pressedButtons = Array.from(document.querySelectorAll('button[aria-pressed]'));
-    expect(pressedButtons).toHaveLength(5);
+    expect(pressedButtons).toHaveLength(4);
     const labels = pressedButtons.map((button) => button.textContent ?? '');
     expect(labels.join('|')).toContain('周销 实际');
     expect(labels.join('|')).toContain('周销 预测');
     expect(labels.join('|')).toContain('价格');
     expect(labels.join('|')).toContain('上一代');
-    expect(labels.join('|')).toContain('把握区间');
+    expect(labels.join('|')).not.toContain('把握区间');
     // 说明项：库存描边是预测样式，不是按钮。
     const note = Array.from(document.querySelectorAll('span')).find((span) => (span.textContent ?? '').includes('预测样式'));
     expect(note).toBeDefined();
@@ -212,41 +243,29 @@ describe('主图 · 图例分组与真实显隐', () => {
     expect(priceLinePaths().length).toBeGreaterThan(0);
   });
 
-  it('点击「周销 实际」隐藏历史实线；预测虚线不受影响', () => {
+  it('点击「周销 实际」隐藏历史实柱；预测虚柱不受影响', () => {
     renderChart();
-    expect(inkSolidPaths().length).toBeGreaterThan(0);
+    expect(barWithTitle('W44')).not.toBeNull();
     const actualButton = Array.from(document.querySelectorAll('button[aria-pressed]')).find((button) =>
       (button.textContent ?? '').includes('周销 实际'),
     );
     fireEvent.click(actualButton!);
-    expect(inkSolidPaths()).toHaveLength(0);
-    const dashedInk = Array.from(document.querySelectorAll('svg path')).filter(
-      (path) => path.getAttribute('stroke') === color.ink && path.getAttribute('stroke-dasharray'),
-    );
-    expect(dashedInk.length).toBeGreaterThan(0);
+    expect(barWithTitle('W44')).toBeNull();
+    expect(barWithTitle('W45')).not.toBeNull();
   });
 });
 
-describe('主图 · 预测把握区间带与历史接缝（A4）', () => {
+describe('主图 · 2026-11-04 评审大减法下线回归', () => {
   // 复刻组件几何派生（默认视图 heightScale = 1；与 MainForecastChart 同公式，非像素断言）。
   const SLOT = (1180 - 64 - 64) / 16;
   const xOf = (index: number): number => 64 + (index + 0.5) * SLOT;
   const round1 = (value: number): number => Number(value.toFixed(1));
-  const scalesOf = (weeks: WorkbenchWeekResult[]): { y: (value: number) => number; yPrice: (value: number) => number } => {
-    const volumeValues = weeks.flatMap((week) => [week.sales, week.final]).filter((value): value is number => value != null);
-    const volumePeak = Math.max(0, ...volumeValues, ...weeks.map((week) => week.prevGenSales));
-    const yMax = Math.max(1, niceCeil(volumePeak * 1.12));
+  const scalesOf = (weeks: WorkbenchWeekResult[]): { yPrice: (value: number) => number } => {
     const prices = weeks.map((week) => week.price);
-    const bandExtents = weeks.flatMap((week) => {
-      if (week.status !== 'forecast') return [];
-      const pct = week.capped ? 0.02 : 0.08;
-      return [week.price * (1 + pct), week.price * (1 - pct)];
-    });
-    const priceLo = Math.min(...prices, ...bandExtents);
-    const priceHi = Math.max(...prices, ...bandExtents);
+    const priceLo = Math.min(...prices);
+    const priceHi = Math.max(...prices);
     const pad = (priceHi - priceLo) * 0.12 || Math.max(1, priceHi * 0.12);
     return {
-      y: (value: number): number => 34 + 300 * (1 - value / yMax),
       yPrice: (value: number): number => 34 + 300 * (1 - (value - (priceLo - pad)) / (priceHi + pad - (priceLo - pad))),
     };
   };
@@ -255,122 +274,66 @@ describe('主图 · 预测把握区间带与历史接缝（A4）', () => {
       const [px, py] = pair.slice(1).trim().split(/\s+/).map(Number);
       return [px, py];
     });
-  const bandPath = (fill: string, opacity: string): Element | null =>
-    Array.from(document.querySelectorAll('svg path')).find(
-      (path) => path.getAttribute('fill') === fill && path.getAttribute('fill-opacity') === opacity,
-    ) ?? null;
-  const salesBand = (): Element | null => bandPath(color.link, '0.14');
-  const priceBand = (): Element | null => bandPath(brandColor.HUAWEI, '0.1');
-  const forecastInkLine = (): Element | null =>
-    Array.from(document.querySelectorAll('svg path')).find(
-      (path) => path.getAttribute('stroke') === color.ink && path.getAttribute('stroke-dasharray') === '5 4',
-    ) ?? null;
-  const forecastPriceLine = (): Element | null =>
-    Array.from(document.querySelectorAll('svg path')).find(
-      (path) => path.getAttribute('stroke') === brandColor.HUAWEI && path.getAttribute('stroke-dasharray') === '6 5',
-    ) ?? null;
 
-  it('两组把握带存在：销量带蓝（fill-opacity 0.14）、价格带品牌红（0.10）；带与帽、虚柱并存', () => {
+  it('黑线下线：无墨色销量连线（历史实线 / 预测虚线均不渲染），销量只留柱', () => {
     renderChart();
-    expect(salesBand()).not.toBeNull();
-    expect(priceBand()).not.toBeNull();
-    // 把握帽仍在（帽线组 stroke 挂在 <g> 上）：修正周琥珀帽。
-    const capGroup = Array.from(document.querySelectorAll('svg g')).find((group) => group.getAttribute('stroke') === color.warning);
-    expect(capGroup).not.toBeUndefined();
-    // 预测虚柱仍在（柱=值，带=线的区间）。
+    const inkPaths = Array.from(document.querySelectorAll('svg path')).filter((path) => path.getAttribute('stroke') === color.ink);
+    expect(inkPaths).toHaveLength(0);
+    // 柱还在：历史实柱（浅蓝）+ 预测虚柱（描边）。
+    const historyBar = barWithTitle('W44');
+    expect(historyBar!.getAttribute('fill')).toBe(color.link);
     const forecastBar = barWithTitle('W45');
-    expect(forecastBar).not.toBeNull();
-    // 图例说明项 + aria 同步。
-    expect(document.body.textContent).toContain('预测把握区间（±8% / 修正周 ±2%）');
-    expect(document.querySelector('svg')?.getAttribute('aria-label')).toContain('把握区间带（常规 ±8% / 修正周 ±2%）');
+    expect(forecastBar!.getAttribute('stroke')).toBe(color.link);
+    expect(forecastBar!.getAttribute('stroke-dasharray')).toBe('4 3');
   });
 
-  it('接缝连续：销量带 / 周销预测线 / 价格预测线首点 = 最后有值历史点（W44 中心 x）', () => {
+  it('把握帽 / 把握区间带下线：无帽线组、无半透明带，「把握」话术全下（计算函数保留待主线清理）', () => {
     renderChart();
-    const { y, yPrice } = scalesOf(baseResult.weeks);
-    const anchorX = round1(xOf(7));
-    const anchorSalesY = round1(y(43000));
-    // W44 = HISTORY_SALES 末点 43000 / HISTORY_PRICES 末点 849。
-    const salesBandCoords = pathCoords(salesBand()!.getAttribute('d') ?? '');
-    expect(salesBandCoords[0]).toEqual([anchorX, anchorSalesY]);
-    const forecastLineCoords = pathCoords(forecastInkLine()!.getAttribute('d') ?? '');
-    expect(forecastLineCoords[0]).toEqual([anchorX, anchorSalesY]);
-    const forecastPriceCoords = pathCoords(forecastPriceLine()!.getAttribute('d') ?? '');
-    expect(forecastPriceCoords[0]).toEqual([anchorX, round1(yPrice(849))]);
+    const bandPaths = Array.from(document.querySelectorAll('svg path')).filter(
+      (path) =>
+        (path.getAttribute('fill') === color.link && path.getAttribute('fill-opacity') === '0.14') ||
+        (path.getAttribute('fill') === brandColor.HUAWEI && path.getAttribute('fill-opacity') === '0.1'),
+    );
+    expect(bandPaths).toHaveLength(0);
+    const capGroups = Array.from(document.querySelectorAll('svg g')).filter((group) => group.getAttribute('stroke') === color.warning);
+    expect(capGroups).toHaveLength(0);
+    const text = document.body.textContent ?? '';
+    expect(text).not.toContain('把握');
+    expect(document.querySelector('svg')?.getAttribute('aria-label')).not.toContain('把握');
   });
 
-  it('带宽参数与柱顶把握帽同参：未修正周 ±8%（W45）、修正周 ±2%（W50）', () => {
+  it('档位线下线：无调价/档期锚点竖线与编号圆点（事件锚点色竖线不在此列）', () => {
     renderChart();
-    const { y } = scalesOf(baseResult.weeks);
-    const coords = pathCoords(salesBand()!.getAttribute('d') ?? '');
-    // 顶边顺序 = [W44 锚点, W45..W52]，W45 = coords[1]（±8%）；W50 = coords[6]（capped ±2%）。
-    const w45 = baseResult.weeks[8];
-    const w50 = baseResult.weeks[13];
-    expect(w45.capped).toBe(false);
-    expect(w50.capped).toBe(true);
-    expect(coords[1]).toEqual([round1(xOf(8)), round1(y(w45.final! * 1.08))]);
-    expect(coords[6]).toEqual([round1(xOf(13)), round1(y(w50.final! * 1.02))]);
-    // 底边逆序：W45 底 = coords[16]（±8% 下缘）；W50 底 = coords[11]（±2% 下缘）。
-    expect(coords[16]).toEqual([round1(xOf(8)), round1(y(w45.final! * 0.92))]);
-    expect(coords[11]).toEqual([round1(xOf(13)), round1(y(w50.final! * 0.98))]);
+    const anchorLines = Array.from(document.querySelectorAll('svg line')).filter(
+      (line) => line.getAttribute('stroke') === color.hairlineStrong && line.getAttribute('stroke-dasharray') === '3 4',
+    );
+    expect(anchorLines).toHaveLength(0);
+    const anchorCircles = Array.from(document.querySelectorAll('svg circle')).filter(
+      (circle) => circle.getAttribute('stroke') === color.hairlineStrong,
+    );
+    expect(anchorCircles).toHaveLength(0);
   });
 
-  it('价格带纳入价格轴数据域：带上缘不越出绘图区（y ≥ TOP）', () => {
+  it('预测段虚线区分：价格历史段实线、预测段虚线（6 5）', () => {
+    renderChart();
+    expect(historyPriceLine()).not.toBeNull();
+    expect(forecastPriceLine()).not.toBeNull();
+  });
+
+  it('价格线接缝连续：预测线首点 = 最后历史点（W44 中心 x，$849 数据派生 y）', () => {
     renderChart();
     const { yPrice } = scalesOf(baseResult.weeks);
-    const coords = pathCoords(priceBand()!.getAttribute('d') ?? '');
-    const minUpperY = Math.min(...coords.slice(0, 9).map(([, py]) => py));
-    expect(minUpperY).toBeGreaterThanOrEqual(34);
-    const maxLowerY = Math.max(...coords.slice(9).map(([, py]) => py));
-    expect(maxLowerY).toBeLessThanOrEqual(334);
+    const coords = pathCoords(forecastPriceLine()!.getAttribute('d') ?? '');
+    expect(coords[0]).toEqual([round1(xOf(7)), round1(yPrice(849))]);
   });
 
-  it('历史末周缺数：锚定回退到最后一个有值历史点（W43），线仍连续、无缺数标注', () => {
-    const withNullHistoryEnd = {
-      ...baseResult,
-      weeks: baseResult.weeks.map((week, index) => (index === 7 ? { ...week, sales: null, final: null } : week)),
-    };
-    renderChart({ result: withNullHistoryEnd });
-    const { y } = scalesOf(withNullHistoryEnd.weeks);
-    // W44 缺数 → 锚定最后一个有值历史点 W43（HISTORY_SALES[6] = 39000）。
-    const salesBandCoords = pathCoords(salesBand()!.getAttribute('d') ?? '');
-    expect(salesBandCoords[0]).toEqual([round1(xOf(6)), round1(y(39000))]);
-    const forecastLineCoords = pathCoords(forecastInkLine()!.getAttribute('d') ?? '');
-    expect(forecastLineCoords[0]).toEqual([round1(xOf(6)), round1(y(39000))]);
-    expect(document.body.textContent).not.toContain('历史末周缺数');
-  });
-
-  it('全历史缺数：带与预测线自首个有值预测点起，图下名录标注衔接说明', () => {
-    const noHistory = {
-      ...baseResult,
-      weeks: baseResult.weeks.map((week) => (week.status === 'actual' ? { ...week, sales: null, final: null } : week)),
-    };
-    const withNote = renderChart({ result: noHistory });
-    const { y } = scalesOf(noHistory.weeks);
-    const w45 = noHistory.weeks[8];
-    const firstForecastX = round1(xOf(8));
-    const salesBandCoords = pathCoords(salesBand()!.getAttribute('d') ?? '');
-    expect(salesBandCoords[0]).toEqual([firstForecastX, round1(y(w45.final! * 1.08))]);
-    const forecastLineCoords = pathCoords(forecastInkLine()!.getAttribute('d') ?? '');
-    expect(forecastLineCoords[0]).toEqual([firstForecastX, round1(y(w45.final!))]);
-    expect(document.body.textContent).toContain('历史末周缺数 · 周销预测线自 W45 起');
-    // 有历史锚时该标注不出现（先卸载上一棵树，避免 DOM 文本累积）。
-    withNote.unmount();
+  it('促销日期标注在 aria 与轴下：W46 起最小标记，档期琥珀色带不再渲染', () => {
     renderChart();
-    expect(document.body.textContent).not.toContain('历史末周缺数');
-  });
-
-  it('把握带随「柱顶帽 = 把握区间」开关显隐；说明项文字不受开关影响', () => {
-    renderChart();
-    expect(salesBand()).not.toBeNull();
-    const bandButton = Array.from(document.querySelectorAll('button[aria-pressed]')).find((button) =>
-      (button.textContent ?? '').includes('把握区间'),
-    );
-    fireEvent.click(bandButton!);
-    expect(salesBand()).toBeNull();
-    expect(priceBand()).toBeNull();
-    expect(document.body.textContent).toContain('预测把握区间（±8% / 修正周 ±2%）');
-    fireEvent.click(bandButton!);
-    expect(salesBand()).not.toBeNull();
+    expect(document.querySelector('svg')?.getAttribute('aria-label')).toContain('促销档期 W46 起');
+    // 轴下标注 = 起点小刻度 + 日期文字（无 warningSoft 底带 rect）。
+    const markText = svgTexts().find((text) => text === '黑五档期 11.14–12.02');
+    expect(markText).toBeDefined();
+    const amberBand = Array.from(document.querySelectorAll('svg rect')).find((rect) => rect.getAttribute('fill') === color.warningSoft);
+    expect(amberBand).toBeUndefined();
   });
 });

@@ -1,112 +1,226 @@
 // ============================================================
-// 推演工作台 v2 · 层②大盘 · 总量总线（2026-11-03 生产化版）：
-// 左图 = 单条季度线 2025Q1 连贯到当前（2026Q3 实际），向后只预测下一季
-// （2026Q4 当前季估读 → 2027Q1 预测）；AI 基线 = 本地确定性规则（季节 × 趋势），
-// 人工改格后图中保留 AI 基线灰色对照点，当前生效值用实心点；
-// 右栏 = AI 基线读数（挂 AI 标）+ 下一季度预测格直接编辑（人工修改路径之一，
-// 还原后自动回 AI 标）+ 行业级事件录入（起周[可落历史段作解释] + 时长 +
-// 峰值幅度 + 衰减方式[默认递减]，人工录入，AI 不猜）。
-// A2（2026-11-04）：理由栏（label + TextArea + 助手句）整体删除（产品拍板「没啥用」；
-// params.rationale 保留在模型契约，UI 不再消费）；卡体定高（MARKET_BODY_HEIGHT）
-// + 右栏卡内纵向滚动（lpl-card-scroll 细滚动条），保证本卡底边可预测、可与
-// 相邻卡统一高度策略。
-// 竞品常规迭代不在此配置。事件锚点季度用 quarterKeyOfWeek 从周完整日期推导，
-// 生效状态用 marketEventDisposition 三态（历史解释 / 本季生效 / 不在预测窗口）。
+// 推演工作台 v2 · 层②大盘 · 总量总线（2026-11-04 月粒度重构版）：
+// 主序列 = 月粒度（大盘数据粒度 = 月，调整颗粒度 = 月）：历史月度实线
+// （2025-01–2026-09 模拟样本）+ 未来 4 个季度逐月预测虚线（2026-10–2027-09，
+// AI 季节 × 趋势季度基线的月形分布，确定性外推禁随机，口径见
+// fixture.market.monthlyNote）；卡内布局 = 图表区左 2/3 主视觉 + 事件区右 1/3。
+// 按月调整 = 点击预测月就地浮层（调整后指数 / 增减幅两式，原因选填不拦截），
+// 应用后预测线即时重算；已调整月 = 生效点实心蓝点标记；还原复用页面既有
+// 会话草稿机制（onMonthOverride(key, null)），有人工调整的季度经季内三月
+// 均值同步 q4/q1Override 进主链（workbenchModel.withMarketMonthOverride）。
+// 事件区（右 1/3）两块：上块 = AI 候选事件 Top5 占位（空态注明「候选生成
+// 能力待接入，抓取逻辑另议」，先列后删交互骨架为禁用态静态示意，不接数据）；
+// 下块 = 人工月度事件列表 + 极简三字段录入（起始月/日 + 时长（月）+ 幅度%，
+// 名称选填）。事件在图上的呈现 = 次要标记（轴下小标记 + hover 详情，
+// 不占主视觉）：月中起始按日均摊（首月影响 × 覆盖天数 ÷ 当月天数，显式口径）。
+// 卡体延续 A2 定高策略（MARKET_BODY_HEIGHT）+ 右栏卡内纵向滚动。
+// 全部视觉取 theme/tokens 既有 token 与 WorkbenchBits 既有控件语言，无新视觉。
 // ============================================================
 import { useState } from 'react';
-import { Button, InputNumber } from 'antd';
-import { color, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
-import type { MarketEventSeed, WorkbenchFixture } from './workbenchFixture';
-import type { MarketQuarterPoint, WorkbenchParams, WorkbenchResult } from './workbenchModel';
-import { effectiveQuarterIndexes, marketSeriesBaseline } from './workbenchModel';
-import { marketEventDisposition, quarterKeyOfWeek, type MarketEventDisposition } from './workbenchTime';
+import { Button, Checkbox, Input, InputNumber, Select } from 'antd';
+import { color, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
+import type { MarketMonthEventSeed, WorkbenchFixture } from './workbenchFixture';
+import type { MarketMonthPoint, WorkbenchParams, WorkbenchResult } from './workbenchModel';
+import {
+  daysInMonthOf,
+  marketQuarterForecast,
+  monthCoverageRatio,
+  monthKeyOfDate,
+  MONTH_OVERRIDE_MAX,
+  MONTH_OVERRIDE_MIN,
+} from './workbenchModel';
 import { AiJudgeBadge, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtSignedPct, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
-const MAGNITUDE_MIN = -30;
-const MAGNITUDE_MAX = 30;
-const WEEK_MIN = 38; // 事件起周可落历史段（W38 起，解释性标记）
-const WEEK_MAX = 52;
-const DURATION_MIN = 1;
-const DURATION_MAX = 8;
-
-const CHART_W = 520;
-const CHART_H = 224;
+const CHART_W = 560;
+const CHART_H = 240;
 
 /**
- * 卡体定高策略（A2 底部拉齐）：左右双栏内容区固定 420px（真机量得默认内容
- * 右栏 ≈342px@1440 / ≈414px@1280，删理由栏后取 420 覆盖两档宽度免滚动），
- * 超出（如继续添加事件）由右栏卡内纵向滚动兜底，本卡底边因此可预测，
- * 供库存 / 成本卡集成时统一高度。左图 SVG 在剩余高度内自适应（viewBox 等比缩放）。
+ * 卡体定高策略（A2 底部拉齐延续）：图表区左 2/3 + 事件区右 1/3，内容区固定
+ * 420px；右栏（事件区）内容超高由卡内纵向滚动兜底（lpl-card-scroll 细滚动条），
+ * 本卡底边可预测，与相邻卡统一高度策略。左图 SVG 在剩余高度内自适应
+ * （viewBox 等比缩放）。
  */
 const MARKET_BODY_HEIGHT = 420;
 
-// 图例系列 key（显隐状态按 key 记录；AI 基线只控制对照点，不影响生效值渲染）。
+// 图例系列 key（显隐状态按 key 记录；AI 基线只控制对照虚线，不影响生效值渲染）。
 const SERIES_ACTUAL = 'actual';
 const SERIES_FORECAST = 'forecast';
 const SERIES_AI_BASELINE = 'ai-baseline';
 
-/** 事件三态文案（WP1 marketEventDisposition 唯一来源，禁止组件内另算）。 */
-const DISPOSITION_TEXT: Record<MarketEventDisposition, string> = {
-  historical: '历史解释',
-  active: '本季生效',
-  inactive: '不在预测窗口',
-};
+const POPOVER_W = 248;
 
-/** 去年同季键：'2027Q1' → '2026Q1'；非季度键返回 null。 */
-function priorYearKey(key: string): string | null {
-  const match = /^(\d{4})Q([1-4])$/.exec(key);
-  return match ? `${Number(match[1]) - 1}Q${match[2]}` : null;
+/** 指数文案（1 位小数，与模型 round1 口径一致）。 */
+const fmtIndex = (value: number): string => value.toFixed(1);
+
+/** 事件起始日展示（MM-DD）。 */
+const fmtDay = (day: number): string => String(day).padStart(2, '0');
+
+/** 月键 → 轴标签（季度首月 'YYYY-MM' → 'YY-MM'；其余月不刻标签）。 */
+const isQuarterStartMonth = (key: string): boolean => /-(01|04|07|10)$/.test(key);
+
+/** 月度事件首月覆盖读数（covered/days；口径见 workbenchModel.monthCoverageRatio）。 */
+function monthCoverageText(event: MarketMonthEventSeed): string {
+  const dim = daysInMonthOf(event.startMonth);
+  if (dim == null) return '';
+  const covered = Math.round(monthCoverageRatio(dim, event.startDay) * dim);
+  return `首月覆盖 ${covered}/${dim} 天`;
 }
 
 /**
- * 季度同比（%，1 位小数）：与去年同季比较（如 2027Q1 vs 2026Q1）。
- * 卡头副标与图内同比读数共用本 helper，保证单一口径；缺去年同季或基数 ≤ 0 返回 null。
+ * 按月调整就地浮层（点击预测月弹出；与主图悬停浮窗同一浮层视觉语言：
+ * 白底 + hairline + 卡片圆角 + L5 阴影）。两式输入 = 调整后指数 / 增减幅%；
+ * 调整原因选填（评审拍板：不得以「不填无法应用」强迫，空值照常应用）。
  */
-function quarterYoYPct(quarters: readonly MarketQuarterPoint[], key: string): number | null {
-  const point = quarters.find((candidate) => candidate.key === key);
-  const baseKey = priorYearKey(key);
-  const base = baseKey ? quarters.find((candidate) => candidate.key === baseKey) : undefined;
-  if (!point || !base || base.value <= 0) return null;
-  return Math.round((point.value / base.value - 1) * 1000) / 10;
-}
-
-/** 带符号同比文案（+12.7% / −13.3% / —），与 fmtSignedPct 同一符号约定。 */
-function fmtYoY(pct: number | null): string {
-  return pct == null ? '—' : `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct).toFixed(1)}%`;
-}
-
-function Stepper({ label, value, onStep, dec, inc, decLabel, incLabel }: {
-  label: string;
-  value: string;
-  onStep: (delta: number) => void;
-  dec: boolean;
-  inc: boolean;
-  decLabel: string;
-  incLabel: string;
+function MonthAdjustPopover({ point, flip, onApply, onRestore, onClose }: {
+  point: MarketMonthPoint;
+  /** 锚点位于图右半区时左翻（与主图悬停浮窗同款翻转语言），避免被图区右缘裁切。 */
+  flip: boolean;
+  onApply: (value: number, reason: string) => void;
+  onRestore: () => void;
+  onClose: () => void;
 }) {
-  // dec / inc = 「该方向可步进」（界内 true）；到边界按钮禁用（disabled = 取反）。
-  const btn = (arrow: string, delta: number, enabled: boolean, aria: string) => (
+  const [mode, setMode] = useState<'abs' | 'pct'>('abs');
+  const [absValue, setAbsValue] = useState<number | null>(point.value);
+  const [pctValue, setPctValue] = useState<number | null>(0);
+  const [reason, setReason] = useState(point.reason);
+  const absOk = absValue != null && Number.isFinite(absValue) && absValue >= MONTH_OVERRIDE_MIN && absValue <= MONTH_OVERRIDE_MAX;
+  const pctOk = pctValue != null && Number.isFinite(pctValue) && pctValue >= -50 && pctValue <= 100;
+  const applyValue = mode === 'abs'
+    ? (absOk ? Math.round(absValue * 10) / 10 : null)
+    : (pctOk ? Math.round(point.value * (1 + pctValue / 100) * 10) / 10 : null);
+  const modeBtn = (key: 'abs' | 'pct', label: string) => (
     <button
+      key={key}
       type="button"
-      disabled={!enabled}
-      aria-label={aria}
-      onClick={() => onStep(delta)}
+      aria-pressed={mode === key}
+      onClick={() => setMode(key)}
       style={{
-        width: 22, height: 22, borderRadius: 5, border: `1px solid ${color.hairlineStrong}`,
-        background: color.canvas, color: color.body, fontSize: 13, lineHeight: 1, cursor: enabled ? 'pointer' : 'not-allowed',
-        opacity: enabled ? 1 : 0.48, padding: 0,
+        border: 'none', padding: '3px 8px', fontSize: 11, cursor: 'pointer',
+        background: mode === key ? selectSoft : color.canvas,
+        color: mode === key ? selectSoftInk : color.body,
+        fontWeight: mode === key ? 600 : 400,
       }}
     >
-      {arrow}
+      {label}
     </button>
   );
   return (
-    <div style={{ display: 'grid', justifyItems: 'center', gap: 2 }}>
-      <span style={{ fontSize: 10, color: color.mute }}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {btn('−', -1, dec, decLabel)}
-        <b className="tnum" style={{ minWidth: 44, textAlign: 'center', fontSize: 13, fontWeight: 600, color: color.ink }}>{value}</b>
-        {btn('＋', 1, inc, incLabel)}
+    <div
+      data-lpl-month-popover
+      role="dialog"
+      aria-label={`调整 ${point.key}`}
+      style={{
+        position: 'absolute', top: 6, width: POPOVER_W, zIndex: 6,
+        transform: flip ? 'translateX(calc(-100% - 10px))' : 'translateX(10px)',
+        background: color.canvas, border: `1px solid ${color.hairline}`, borderRadius: radius.card,
+        boxShadow: shadow.l5, padding: `${space.md - 2}px ${space.md}px`, fontSize: 12, lineHeight: 1.6, color: color.body,
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 600, color: color.mute, marginBottom: 4 }}>
+        {`调整 · ${point.key}（预测月）`}
+      </div>
+      <div style={{ display: 'grid', gap: 2, marginBottom: 6 }} className="tnum">
+        <span>{`AI 基线 ${fmtIndex(point.baseline)} · 生效 ${fmtIndex(point.value)}`}</span>
+        {point.eventFactor != null && <span>{`含事件乘子 ×${point.eventFactor.toFixed(3)}`}</span>}
+        {point.override != null && <span style={{ color: color.link }}>{`已调整（原填 ${fmtIndex(point.override)}${point.reason ? ` · ${point.reason}` : ''}）`}</span>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+        <span style={{ display: 'inline-flex', border: `1px solid ${color.hairlineStrong}`, borderRadius: 6, overflow: 'hidden' }}>
+          {modeBtn('abs', '调整后指数')}
+          {modeBtn('pct', '增减幅%')}
+        </span>
+        {mode === 'abs' ? (
+          <InputNumber
+            aria-label="调整后指数"
+            min={MONTH_OVERRIDE_MIN}
+            max={MONTH_OVERRIDE_MAX}
+            step={0.1}
+            precision={1}
+            value={absValue}
+            onChange={(value) => setAbsValue(value == null ? null : Number(value))}
+            style={{ width: 92 }}
+          />
+        ) : (
+          <InputNumber
+            aria-label="增减幅（%）"
+            min={-50}
+            max={100}
+            step={1}
+            precision={1}
+            value={pctValue}
+            formatter={(value) => (value == null ? '' : `${value}%`)}
+            parser={(text) => Number((text ?? '').replace('%', ''))}
+            onChange={(value) => setPctValue(value == null ? null : Number(value))}
+            style={{ width: 92 }}
+          />
+        )}
+      </div>
+      <label style={{ display: 'grid', gap: 3, fontSize: 12, fontWeight: 600, color: color.body, marginBottom: 6 }}>
+        {`调整原因（选填）`}
+        <Input
+          aria-label="调整原因（选填）"
+          placeholder="选填：帮助追溯调整依据"
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+        />
+      </label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+        {point.override != null && (
+          <Button size="small" type="text" onClick={onRestore}>还原 AI</Button>
+        )}
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: space.sm }}>
+          <Button size="small" onClick={onClose}>取消</Button>
+          <Button
+            size="small"
+            type="primary"
+            disabled={applyValue == null}
+            onClick={() => { if (applyValue != null) onApply(applyValue, reason); }}
+          >
+            应用
+          </Button>
+        </span>
+      </div>
+      <div style={{ marginTop: 6, fontSize: 11, color: color.mute }}>
+        只调整该月；应用后预测线即时重算，本会话内可还原（还原空月季度回 AI 口径）。
+      </div>
+    </div>
+  );
+}
+
+/** AI 候选事件 Top5 占位（2026-11-04 评审：只留界面占位，不接任何数据）。 */
+function AiCandidatePlaceholder() {
+  const chipStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
+    fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+    background: color.canvasSoft2, color: color.body, border: `1px solid ${color.hairline}`,
+  };
+  return (
+    <div style={{ display: 'grid', gap: space.sm, paddingBottom: space.md, borderBottom: `1px solid ${color.hairline}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>AI 候选事件 Top5</span>
+        <span style={chipStyle}>待接入</span>
+        <Button size="small" disabled title="候选生成能力待接入，抓取逻辑另议">弹出候选</Button>
+      </div>
+      {/* 先列后删交互骨架（静态禁用态示意）：勾选 + 删除，全部禁用，不接数据 */}
+      <div role="group" aria-label="AI 候选事件占位列表（禁用态示意）" style={{ display: 'grid', gap: 4 }}>
+        {[1, 2, 3, 4, 5].map((index) => (
+          <div
+            key={index}
+            aria-hidden="true"
+            style={{
+              display: 'flex', alignItems: 'center', gap: space.sm,
+              border: `1px solid ${color.hairline}`, borderRadius: radius.control,
+              padding: `3px ${space.sm}px`, background: color.canvasSoft, opacity: 0.62,
+            }}
+          >
+            <Checkbox disabled />
+            <span style={{ flex: 1, fontSize: 11.5, color: color.mute }}>{`候选事件位 ${index} · 待接入`}</span>
+            <Button size="small" disabled>删除</Button>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}>
+        候选生成能力待接入，抓取逻辑另议；接入后先列后删（勾选候选 → 删除入人工事件）。
       </div>
     </div>
   );
@@ -116,26 +230,29 @@ export default function MarketBusPanel({
   fixture,
   params,
   result,
-  onOverride,
-  onEventStep,
-  onEventDecay,
-  onEventRemove,
-  onEventAdd,
+  onMonthOverride,
+  onMonthEventAdd,
+  onMonthEventRemove,
 }: {
   fixture: WorkbenchFixture;
   params: WorkbenchParams;
   result: WorkbenchResult;
-  /** 人工直接改预测格（修正下一季度预测）：field = 'q4' | 'q1'；还原传 null（来源回 AI）。 */
-  onOverride: (field: 'q4' | 'q1', value: number | null) => void;
-  /** 事件参数步进：field = magnitudePct ±1pt / startWeek ±1 / durationWeeks ±1。 */
-  onEventStep: (id: string, field: 'magnitudePct' | 'startWeek' | 'durationWeeks', delta: number) => void;
-  onEventDecay: (id: string, decay: 'decreasing' | 'flat') => void;
-  onEventRemove: (id: string) => void;
-  onEventAdd: () => void;
+  /** 按月调整（点击预测月浮层应用）：value = null 还原该月；reason 选填可空。 */
+  onMonthOverride: (monthKey: string, value: number | null, reason: string) => void;
+  /** 新增人工月度事件（极简三字段产物；id 由页面侧循环查重生成）。 */
+  onMonthEventAdd: (event: Omit<MarketMonthEventSeed, 'id'>) => void;
+  onMonthEventRemove: (id: string) => void;
   /** 兼容保留（A2 删理由栏后 UI 不再消费）：页面壳仍传该回调，契约不动，勿删。 */
   onRationaleChange: (text: string) => void;
 }) {
   const [hiddenSeries, setHiddenSeries] = useState<ReadonlySet<string>>(new Set());
+  const [popoverMonth, setPopoverMonth] = useState<string | null>(null);
+  const [eventFormOpen, setEventFormOpen] = useState(false);
+  const [formMonth, setFormMonth] = useState<string>('');
+  const [formDay, setFormDay] = useState<number | null>(1);
+  const [formDuration, setFormDuration] = useState<number | null>(1);
+  const [formMagnitude, setFormMagnitude] = useState<number | null>(5);
+  const [formLabel, setFormLabel] = useState('');
   const toggleSeries = (key: string) => {
     setHiddenSeries((prev) => {
       const next = new Set(prev);
@@ -146,39 +263,33 @@ export default function MarketBusPanel({
   };
   const seriesOn = (key: string) => !hiddenSeries.has(key);
 
-  const quarters = result.marketQuarters;
-  const { aiQ4, aiQ1 } = marketSeriesBaseline(fixture);
-  const { q4Index, q1Index } = effectiveQuarterIndexes(fixture, params);
-  const actualCount = quarters.filter((point) => point.status === 'actual').length;
-  const humanQ4 = params.q4Override != null;
-  const humanQ1 = params.q1Override != null;
-  // 下季 = 序列末格；同比与去年同季比较（单一口径 helper，卡头与图内共用）。
-  const nextQuarterKey = quarters[quarters.length - 1]?.key ?? '';
-  const nextPriorKey = priorYearKey(nextQuarterKey);
-  const yoyNext = quarterYoYPct(quarters, nextQuarterKey);
+  const months = result.marketMonths;
+  const actualCount = months.filter((point) => point.status === 'actual').length;
+  const forecastMonthKeys = months.filter((point) => point.status === 'forecast').map((point) => point.key);
+  const quarterForecast = marketQuarterForecast(fixture);
+  const hasMonthAdjust = forecastMonthKeys.some((key) => params.marketMonthOverrides[key] != null);
+  const showAiGhost = (hasMonthAdjust || params.marketMonthEvents.length > 0) && seriesOn(SERIES_AI_BASELINE);
 
   const legendItems: LegendItem[] = [
-    { key: SERIES_ACTUAL, label: '实际（2025Q1 起）', shape: 'line', color: color.ink },
-    { key: SERIES_FORECAST, label: '当前推演', shape: 'dash', color: color.link },
+    { key: SERIES_ACTUAL, label: '实际（月度）', shape: 'line', color: color.ink },
+    { key: SERIES_FORECAST, label: '预测 · 未来 4 季逐月', shape: 'dash', color: color.link },
     { key: SERIES_AI_BASELINE, label: 'AI 基线', shape: 'dash', color: color.hairlineStrong },
   ];
 
-  const ioBar = <IoBar input="季度指数 · 行业事件" output="主图周销基准" />;
+  const ioBar = <IoBar input="月度指数 · 行业事件（月中按日均摊）" output="主图周销基准" />;
   const sectionHead = (
     <SectionHead
       title="大盘 · 总量总线"
-      hint={nextQuarterKey
-        ? `单条季度线 2025Q1 连贯到当前实际；向后只预测下一季（${nextQuarterKey}，同比 ${nextPriorKey ?? '去年同季'} ${fmtYoY(yoyNext)}）。`
-        : '单条季度线 2025Q1 连贯到当前实际；向后只预测下一季。'}
+      hint={`历史月度线 2025-01 连贯至当前实际；向后按月预测未来 4 个季度（${forecastMonthKeys[0] ?? ''} … ${forecastMonthKeys[forecastMonthKeys.length - 1] ?? ''}，AI 基线逐月分布）。点击预测月就地调整；调整只落当月，可撤销。`}
       extra={<>
-        <SimChip title="季度序列为演示样本：实际段为模拟数据，推演段为模型假设" />
+        <SimChip title="月度序列为演示样本：历史月为模拟数据，预测月为模型假设（确定性外推）" />
         <AiJudgeBadge source={params.overrideSource} />
       </>}
     />
   );
 
-  // 空态：无季度数据不渲染 NaN / Infinity SVG。
-  if (quarters.length === 0) {
+  // 空态：无月度数据不渲染 NaN / Infinity SVG。
+  if (months.length === 0) {
     return (
       <section style={workbenchCardStyle}>
         {sectionHead}
@@ -188,279 +299,359 @@ export default function MarketBusPanel({
     );
   }
 
-  // 左图几何：单条季度线（7 实际 + 2 推演）。
+  // 左图几何：33 个月（21 实际 + 12 预测 = 未来 4 季度逐月）。
   const left = 40;
   const right = 14;
-  const top = 22;
-  const bottom = 42;
+  const top = 18;
+  const bottom = 48;
   const plotW = CHART_W - left - right;
   const plotH = CHART_H - top - bottom;
-  const values = quarters.map((point) => point.value).concat(quarters.map((point) => point.aiBaseline ?? point.value));
+  const values = months.map((point) => point.value).concat(months.map((point) => point.baseline));
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
   const pad = Math.max(2, (rawMax - rawMin) * 0.15);
   const yMin = Math.floor(rawMin - pad);
   const yMax = Math.ceil(rawMax + pad);
-  const xq = (index: number): number => left + (index + 0.5) * (plotW / quarters.length);
-  const yq = (value: number): number => top + plotH * (1 - (value - yMin) / (yMax - yMin));
+  const colW = plotW / months.length;
+  const xm = (index: number): number => left + (index + 0.5) * colW;
+  const ym = (value: number): number => top + plotH * (1 - (value - yMin) / (yMax - yMin));
   const yTicks = Array.from({ length: 4 }, (_, index) => Math.round(yMin + ((yMax - yMin) * index) / 3));
-  const actualPath = quarters.slice(0, actualCount)
-    .map((point, index) => `${index === 0 ? 'M' : 'L'}${xq(index).toFixed(1)} ${yq(point.value).toFixed(1)}`)
+  const actualPath = months.slice(0, actualCount)
+    .map((point, index) => `${index === 0 ? 'M' : 'L'}${xm(index).toFixed(1)} ${ym(point.value).toFixed(1)}`)
     .join(' ');
-  const forecastPath = quarters.slice(actualCount - 1)
-    .map((point, offset) => `${offset === 0 ? 'M' : 'L'}${xq(actualCount - 1 + offset).toFixed(1)} ${yq(point.value).toFixed(1)}`)
+  const forecastPath = months.slice(actualCount - 1)
+    .map((point, offset) => `${offset === 0 ? 'M' : 'L'}${xm(actualCount - 1 + offset).toFixed(1)} ${ym(point.value).toFixed(1)}`)
     .join(' ');
-  const aiGhostPath = [
-    { index: actualCount - 1, value: quarters[actualCount - 1]?.value ?? 0 },
-    { index: actualCount, value: aiQ4 },
-    { index: actualCount + 1, value: aiQ1 },
-  ].map((point, offset) => `${offset === 0 ? 'M' : 'L'}${xq(point.index).toFixed(1)} ${yq(point.value).toFixed(1)}`)
+  const ghostPath = [
+    { index: actualCount - 1, value: months[actualCount - 1]?.value ?? 0 },
+    ...months.slice(actualCount).map((point, offset) => ({ index: actualCount + offset, value: point.baseline })),
+  ].map((point, offset) => `${offset === 0 ? 'M' : 'L'}${xm(point.index).toFixed(1)} ${ym(point.value).toFixed(1)}`)
     .join(' ');
-  const todayX = (xq(actualCount - 1) + xq(actualCount)) / 2;
-  const nextIdx = quarters.length - 1;
-  const showAiGhost = (humanQ4 || humanQ1) && seriesOn(SERIES_AI_BASELINE);
+  const todayX = (xm(actualCount - 1) + xm(actualCount)) / 2;
+  const popoverPoint = popoverMonth != null ? months.find((point) => point.key === popoverMonth) ?? null : null;
+  const popoverAnchorPct = popoverPoint ? (xm(months.indexOf(popoverPoint)) / CHART_W) * 100 : 0;
+  const popoverFlip = popoverAnchorPct > 55;
 
-  // 事件锚点：起周所属季度（quarterKeyOfWeek 从周完整日期推导，禁止按数组比例猜季度）；
-  // 季度键解析不到时（超出 fixture 周窗）锚到末格并标「不在预测窗口」。
-  const eventAnchorIndex = (event: MarketEventSeed): number => {
-    const quarterKey = quarterKeyOfWeek(fixture, event.startWeek);
-    if (!quarterKey) return quarters.length - 1;
-    const found = quarters.findIndex((point) => point.key === quarterKey);
-    return found >= 0 ? found : quarters.length - 1;
+  /** 月度事件在图上的起始月序（起始月不在当前窗口时返回 null，不画标记）。 */
+  const monthEventIndex = (event: MarketMonthEventSeed): number | null => {
+    const index = months.findIndex((point) => point.key === event.startMonth);
+    return index >= 0 ? index : null;
   };
+  /** 周口径行业事件锚月序（起周所属月，缺周回 null 不画）。 */
+  const weekEventIndex = (event: { startWeek: number }): number | null => {
+    const week = fixture.weeks.find((candidate) => candidate.weekNumber === event.startWeek);
+    const monthKey = week ? monthKeyOfDate(week.date) : null;
+    if (!monthKey) return null;
+    const index = months.findIndex((point) => point.key === monthKey);
+    return index >= 0 ? index : null;
+  };
+
+  const eventFormValid = formMonth !== '' && formDay != null && Number.isFinite(formDay) && formDay >= 1 && formDay <= 31
+    && formDuration != null && formDuration >= 1 && formDuration <= 12
+    && formMagnitude != null && Number.isFinite(formMagnitude) && formMagnitude >= -30 && formMagnitude <= 30;
 
   return (
     <section style={workbenchCardStyle}>
       {sectionHead}
       {ioBar}
-      {/* 卡体定高（MARKET_BODY_HEIGHT）：单行网格默认 stretch，两栏同高、底边拉齐；
-          极窄视口双栏叠排时整块卡内滚动兜底（lpl-card-scroll 细滚动条）。 */}
+      {/* 卡体定高（MARKET_BODY_HEIGHT）：图表区左 2/3 主视觉 + 事件区右 1/3；
+          极窄视口由卡内滚动兜底（lpl-card-scroll 细滚动条）。 */}
       <div
         className="lpl-card-scroll"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
+          gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
           gap: space.lg,
           height: MARKET_BODY_HEIGHT,
           overflow: 'auto',
         }}
       >
-        {/* 左图：单条连贯季度线 + AI 基线对照点 + 事件锚点（SVG 占满剩余高度，viewBox 等比缩放） */}
+        {/* 左 2/3：图表区（四季度 AI 基线读数 + 月度单线 SVG + 图例 + 口径脚注） */}
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div
+            className="tnum"
+            style={{ fontSize: 11, color: color.mute, marginBottom: space.xs }}
+            title="季度基线 = 季内三月均值（容量守恒：季内三月合计恒等季度基线 × 3）；按月调整后，有人工调整的季度均值同步主链改格。"
+          >
+            {`AI 四季度基线：${quarterForecast.map((quarter) => `${quarter.key} ${fmtIndex(quarter.value)}`).join(' · ')}（逐月分布见图）`}
+          </div>
+          <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <svg
               viewBox={`0 0 ${CHART_W} ${CHART_H}`}
               width="100%"
               height="100%"
               preserveAspectRatio="xMidYMid meet"
               role="img"
-              aria-label={`大盘季度指数单线：实际 ${quarters.filter((point) => point.status === 'actual').map((point) => `${point.key} ${point.value}`).join(' / ')}；推演 2026Q4 ${q4Index}、2027Q1 ${q1Index}；AI 基线 ${aiQ4} / ${aiQ1}。`}
+              aria-label={`大盘月度指数：历史 ${months[0]?.key ?? ''}–${months[actualCount - 1]?.key ?? ''}（模拟实际）；预测 ${forecastMonthKeys[0] ?? ''}–${forecastMonthKeys[forecastMonthKeys.length - 1] ?? ''}（未来 4 季度逐月，AI 基线）；点击预测月可调整。`}
               style={{ display: 'block' }}
             >
               <g stroke={color.hairline}>
                 {yTicks.map((tick) => (
-                  <line key={tick} x1={left} y1={yq(tick)} x2={CHART_W - right} y2={yq(tick)} />
+                  <line key={tick} x1={left} y1={ym(tick)} x2={CHART_W - right} y2={ym(tick)} />
                 ))}
               </g>
               <g fontSize={10} fill={color.mute} textAnchor="end">
                 {yTicks.map((tick) => (
-                  <text key={tick} x={left - 6} y={yq(tick) + 3}>{tick}</text>
+                  <text key={tick} x={left - 6} y={ym(tick) + 3}>{tick}</text>
                 ))}
               </g>
-              <text x={left - 6} y={top - 8} fontSize={10} fill={color.mute} textAnchor="end">指数</text>
-              <line x1={todayX} y1={top - 6} x2={todayX} y2={top + plotH} stroke={color.hairlineStrong} strokeDasharray="4 4" />
-              <text x={todayX - 5} y={CHART_H - 14} textAnchor="end" fontSize={10} fill={color.body}>{`今天 ${fixture.context.todayLabel}`}</text>
-              {/* 实际段（墨实线）→ 推演段（蓝虚线）+ AI 基线对照（灰虚点，仅人工改格后出现） */}
+              <text x={left - 6} y={top - 6} fontSize={10} fill={color.mute} textAnchor="end">指数</text>
+              {/* 今天分界（历史段 | 预测段） */}
+              <line x1={todayX} y1={top - 4} x2={todayX} y2={top + plotH} stroke={color.hairlineStrong} strokeDasharray="4 4" />
+              <text x={todayX + 4} y={top + 6} fontSize={9.5} fill={color.body}>{`今天 ${fixture.context.todayLabel}`}</text>
+              {/* 历史月实线（墨）→ 预测月虚线（蓝，随事件与按月调整即时重算）+ AI 基线对照灰虚线 */}
               {seriesOn(SERIES_ACTUAL) && <path data-series="actual" d={actualPath} fill="none" stroke={color.ink} strokeWidth={2.2} />}
               {seriesOn(SERIES_FORECAST) && <path data-series="forecast" d={forecastPath} fill="none" stroke={color.link} strokeWidth={2.2} strokeDasharray="6 5" />}
               {showAiGhost && (
                 <g data-series="ai-ghost">
-                  <path d={aiGhostPath} fill="none" stroke={color.hairlineStrong} strokeWidth={1.4} strokeDasharray="2 4" opacity={0.85} />
-                  <circle cx={xq(actualCount)} cy={yq(aiQ4)} r={3} fill="none" stroke={color.hairlineStrong} strokeWidth={1.2} />
-                  <circle cx={xq(nextIdx)} cy={yq(aiQ1)} r={3} fill="none" stroke={color.hairlineStrong} strokeWidth={1.2} />
+                  <path d={ghostPath} fill="none" stroke={color.hairlineStrong} strokeWidth={1.4} strokeDasharray="2 4" opacity={0.85} />
                 </g>
               )}
-              {seriesOn(SERIES_FORECAST) && (
-                <g data-series="forecast-value">
-                  <circle cx={xq(actualCount)} cy={yq(q4Index)} r={3.4} fill={humanQ4 ? color.link : color.canvas} stroke={color.link} strokeWidth={1.6} />
-                  <circle cx={xq(nextIdx)} cy={yq(q1Index)} r={4.6} fill={humanQ1 ? color.link : color.canvas} stroke={color.link} strokeWidth={2} />
-                  <circle cx={xq(nextIdx)} cy={yq(q1Index)} r={2} fill={color.link} />
-                </g>
-              )}
-              {/* 同比读数（vs 去年同季；与卡头共用 quarterYoYPct 单口径） */}
-              {quarters.map((point) => {
-                const yoy = quarterYoYPct(quarters, point.key);
-                if (yoy == null) return null;
-                const index = quarters.indexOf(point);
+              {/* 已调整月 = 轻量标记：生效点实心蓝点（评审拍板：小点 / 月标签加重取其一） */}
+              {seriesOn(SERIES_FORECAST) && months.slice(actualCount).map((point, offset) => (
+                point.override != null ? (
+                  <circle
+                    key={`adj-${point.key}`}
+                    data-adjusted={point.key}
+                    cx={xm(actualCount + offset)}
+                    cy={ym(point.value)}
+                    r={3.2}
+                    fill={color.link}
+                    stroke={color.canvas}
+                    strokeWidth={1.4}
+                  />
+                ) : null
+              ))}
+              {/* X 轴月份刻度（季度首月出标签，保持可扫描密度） */}
+              <g fontSize={9.5} fill={color.mute} textAnchor="middle">
+                {months.map((point, index) => (
+                  isQuarterStartMonth(point.key)
+                    ? <text key={point.key} x={xm(index)} y={CHART_H - 30}>{point.key.slice(2)}</text>
+                    : null
+                ))}
+              </g>
+              {/* 事件次要标记（轴下小标记 + hover 详情，不占主视觉）：
+                  月度三字段事件 = 琥珀实心菱；周口径行业事件（预填默认，仍在主链生效）= 灰空心圆 */}
+              {params.marketMonthEvents.map((event) => {
+                const index = monthEventIndex(event);
+                if (index == null) return null;
+                const cx = xm(index);
+                const markY = CHART_H - 13;
                 return (
-                  <text key={point.key} x={xq(index)} y={yq(point.value) - 7} textAnchor="middle" fontSize={9.5} fill={point.status === 'forecast' ? color.link : color.mute}>
-                    {fmtYoY(yoy)}
-                  </text>
-                );
-              })}
-              {/* 行业级事件锚点（起周所属季度格；historical = 历史解释锚） */}
-              {params.marketEvents.map((event) => {
-                const disposition = marketEventDisposition(fixture, event);
-                const index = eventAnchorIndex(event);
-                const cx = xq(index);
-                const anchorQuarter = quarterKeyOfWeek(fixture, event.startWeek) ?? '';
-                const endWeek = event.startWeek + event.durationWeeks - 1;
-                return (
-                  <g
-                    key={`mk-${event.id}`}
-                    data-event-id={event.id}
-                    data-quarter={anchorQuarter}
-                    data-disposition={disposition}
-                  >
-                    <line x1={cx} y1={top - 6} x2={cx} y2={top + plotH} stroke={color.hairlineStrong} strokeDasharray="2 4" opacity={disposition === 'historical' ? 0.5 : 0.8} />
-                    <circle cx={cx} cy={top - 2} r={4} fill={disposition === 'historical' ? color.hairlineStrong : color.warning} />
-                    <title>{`${event.label}（W${event.startWeek}–W${endWeek} · ${event.decay === 'decreasing' ? '递减' : '恒定'} · ${DISPOSITION_TEXT[disposition]}）`}</title>
+                  <g key={`me-${event.id}`} data-month-event-id={event.id} data-start-month={event.startMonth}>
+                    <rect
+                      x={cx - 3.4}
+                      y={markY - 3.4}
+                      width={6.8}
+                      height={6.8}
+                      transform={`rotate(45 ${cx} ${markY})`}
+                      fill={color.warning}
+                    />
+                    <title>
+                      {`${event.label || '未命名事件'}（${event.startMonth}-${fmtDay(event.startDay)} 起 · ${event.durationMonths} 个月 · ${fmtSignedPct(event.magnitudePct)}${event.startDay > 1 ? ` · ${monthCoverageText(event)}` : ''}）`}
+                    </title>
                   </g>
                 );
               })}
-              {/* X 轴季度标签 */}
-              <g fontSize={10} fill={color.mute} textAnchor="middle">
-                {quarters.map((point, index) => (
-                  <text key={point.key} x={xq(index)} y={CHART_H - 24}>
-                    {point.key.endsWith('Q1') ? point.key : point.key.slice(5)}
-                  </text>
-                ))}
-              </g>
-              <text x={xq(nextIdx)} y={CHART_H - 10} textAnchor="middle" fontSize={9.5} fill={color.link} fontWeight={600}>下季预测</text>
+              {params.marketEvents.map((event) => {
+                const index = weekEventIndex(event);
+                if (index == null) return null;
+                const cx = xm(index);
+                const markY = CHART_H - 13;
+                const endWeek = event.startWeek + event.durationWeeks - 1;
+                return (
+                  <g key={`we-${event.id}`} data-week-event-id={event.id}>
+                    <circle cx={cx} cy={markY} r={3.4} fill={color.canvas} stroke={color.hairlineStrong} strokeWidth={1.4} />
+                    <title>{`${event.label}（W${event.startWeek}–W${endWeek} · ${fmtSignedPct(event.magnitudePct)} · 周口径行业事件，主链生效中）`}</title>
+                  </g>
+                );
+              })}
+              {/* 预测月点击列（就地浮层入口）：键盘可达（Tab + Enter），hover 出月度详情 */}
+              {months.slice(actualCount).map((point, offset) => {
+                const index = actualCount + offset;
+                const x = left + index * colW;
+                return (
+                  <g key={`hit-${point.key}`}>
+                    <rect
+                      data-month={point.key}
+                      x={x}
+                      y={top}
+                      width={colW}
+                      height={plotH}
+                      fill="transparent"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`调整 ${point.key} 预测（当前 ${fmtIndex(point.value)}，AI 基线 ${fmtIndex(point.baseline)}）`}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => setPopoverMonth(point.key)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setPopoverMonth(point.key);
+                        }
+                      }}
+                    >
+                      <title>{`${point.key} · 预测 ${fmtIndex(point.value)}（AI 基线 ${fmtIndex(point.baseline)}${point.eventFactor != null ? ` · 含事件 ×${point.eventFactor.toFixed(3)}` : ''}${point.override != null ? ' · 已调整' : ''}）`}</title>
+                    </rect>
+                  </g>
+                );
+              })}
             </svg>
+            {/* 就地浮层（HTML 覆盖层，与主图悬停浮窗同视觉语言；跟随被点击月份列定位，右半区左翻） */}
+            {popoverPoint && (
+              <div style={{ position: 'absolute', left: `${popoverAnchorPct}%`, top: 0, width: 0, height: 0 }}>
+                <MonthAdjustPopover
+                  key={popoverPoint.key}
+                  point={popoverPoint}
+                  flip={popoverFlip}
+                  onApply={(value, reason) => {
+                    onMonthOverride(popoverPoint.key, value, reason);
+                    setPopoverMonth(null);
+                  }}
+                  onRestore={() => {
+                    onMonthOverride(popoverPoint.key, null, '');
+                    setPopoverMonth(null);
+                  }}
+                  onClose={() => setPopoverMonth(null)}
+                />
+              </div>
+            )}
           </div>
           <WorkbenchLegend items={legendItems} hidden={hiddenSeries} onToggle={toggleSeries} style={{ marginTop: 0 }} />
           <div style={{ marginTop: space.xs, fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-            大盘只看总量，不下钻品牌 / 品；预测只延伸到下一季。历史段事件仅作解释，不参与推演修正。
+            大盘只看总量，不下钻品牌 / 品；预测覆盖未来 4 个季度（月粒度）。调整原因选填；月中事件按日均摊口径见事件区说明。
           </div>
         </div>
 
-        {/* 右栏：AI 基线 + 预测格直接编辑 + 行业级事件。内容超高由卡内纵向滚动兜底
-            （lpl-card-scroll 细滚动条对齐系统样式），底边不撑破卡体定高。 */}
+        {/* 右 1/3：事件区两块（上 = AI 候选事件 Top5 占位；下 = 人工月度事件三字段录入）。
+            内容超高由卡内纵向滚动兜底（lpl-card-scroll 细滚动条对齐系统样式）。 */}
         <div className="lpl-card-scroll" style={{ display: 'grid', gap: space.md, minWidth: 0, minHeight: 0, overflowY: 'auto', alignContent: 'start', paddingRight: 2 }}>
-          <div style={{ display: 'grid', gap: space.sm }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>下一季度预测（直接改格修正走势）</span>
-              <AiJudgeBadge source={params.overrideSource} />
-            </div>
-            <div
-              style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}
-              title={`AI 基线为本地确定性规则推演（季节 × 趋势：去年同季比 × 今年/去年水平比），未调用模型服务；人工改格后图中保留 AI 基线灰色对照点，还原改格即回到 AI 基线。`}
-            >
-              {`AI 基线：2026Q4 ${aiQ4} · 2027Q1 ${aiQ1}。改任意一格即转「人工确认」。`}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.md }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
-                2026Q4（当前季估读）
-                <InputNumber
-                  aria-label="2026Q4 大盘指数（人工修正）"
-                  min={40}
-                  max={200}
-                  step={1}
-                  precision={1}
-                  value={q4Index}
-                  status={humanQ4 ? 'warning' : undefined}
-                  onChange={(value) => { if (value != null) onOverride('q4', Math.max(40, Math.min(200, Number(value)))); }}
-                  style={{ width: 92 }}
-                />
-                {humanQ4 && <Button size="small" type="text" onClick={() => onOverride('q4', null)}>还原 AI</Button>}
-              </label>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
-                2027Q1（下季预测）
-                <InputNumber
-                  aria-label="2027Q1 大盘指数（人工修正）"
-                  min={40}
-                  max={200}
-                  step={1}
-                  precision={1}
-                  value={q1Index}
-                  status={humanQ1 ? 'warning' : undefined}
-                  onChange={(value) => { if (value != null) onOverride('q1', Math.max(40, Math.min(200, Number(value)))); }}
-                  style={{ width: 92 }}
-                />
-                {humanQ1 && <Button size="small" type="text" onClick={() => onOverride('q1', null)}>还原 AI</Button>}
-              </label>
-            </div>
-          </div>
+          <AiCandidatePlaceholder />
 
           <div style={{ display: 'grid', gap: space.sm }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>影响大盘的关键事件（仅行业级 · 人工录入）</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>人工事件（月度 · 三字段）</div>
             <div style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-              事件 = 起始周（可落历史段作解释）+ 时长 + 峰值幅度 + 衰减（默认递减）；只收行业级，竞品常规迭代由量价参考与主图事件承载。
+              事件 = 起始（月 / 日）+ 时长（月）+ 幅度（%）；名称选填。月中起始按日均摊：首月影响 ×（覆盖天数 ÷ 当月天数），后续月线性递减。
             </div>
-            {params.marketEvents.map((event: MarketEventSeed) => {
-              const disposition = marketEventDisposition(fixture, event);
-              const endWeek = event.startWeek + event.durationWeeks - 1;
-              return (
-                <div key={event.id} style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap', border: `1px solid ${color.hairline}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px` }}>
-                  <div style={{ flex: '1 1 140px', minWidth: 120 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>{event.label}</div>
-                    <div style={{ fontSize: 11, color: color.mute }}>
-                      {`W${event.startWeek}–W${endWeek} · ${DISPOSITION_TEXT[disposition]}`}
-                    </div>
-                  </div>
-                  <Stepper
-                    label="起周"
-                    value={`W${event.startWeek}`}
-                    onStep={(delta) => onEventStep(event.id, 'startWeek', delta)}
-                    dec={event.startWeek > WEEK_MIN}
-                    inc={event.startWeek < WEEK_MAX}
-                    decLabel={`提前 ${event.label} 起始周`}
-                    incLabel={`推后 ${event.label} 起始周`}
-                  />
-                  <Stepper
-                    label="时长"
-                    value={`${event.durationWeeks} 周`}
-                    onStep={(delta) => onEventStep(event.id, 'durationWeeks', delta)}
-                    dec={event.durationWeeks > DURATION_MIN}
-                    inc={event.durationWeeks < DURATION_MAX}
-                    decLabel={`缩短 ${event.label} 影响时长`}
-                    incLabel={`延长 ${event.label} 影响时长`}
-                  />
-                  <Stepper
-                    label="峰值幅度"
-                    value={fmtSignedPct(event.magnitudePct)}
-                    onStep={(delta) => onEventStep(event.id, 'magnitudePct', delta)}
-                    dec={event.magnitudePct > MAGNITUDE_MIN}
-                    inc={event.magnitudePct < MAGNITUDE_MAX}
-                    decLabel={`减弱 ${event.label} 峰值幅度`}
-                    incLabel={`增强 ${event.label} 峰值幅度`}
-                  />
-                  <div style={{ display: 'grid', justifyItems: 'center', gap: 2 }}>
-                    <span style={{ fontSize: 10, color: color.mute }}>衰减</span>
-                    <span style={{ display: 'inline-flex', border: `1px solid ${color.hairlineStrong}`, borderRadius: 6, overflow: 'hidden' }}>
-                      {([['decreasing', '递减'], ['flat', '恒定']] as const).map(([key, label]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          aria-pressed={event.decay === key}
-                          onClick={() => onEventDecay(event.id, key)}
-                          style={{
-                            border: 'none', padding: '3px 8px', fontSize: 11, cursor: 'pointer',
-                            background: event.decay === key ? selectSoft : color.canvas,
-                            color: event.decay === key ? selectSoftInk : color.body,
-                            fontWeight: event.decay === key ? 600 : 400,
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                  <Button size="small" aria-label={`删除事件 ${event.label}`} onClick={() => onEventRemove(event.id)}>删除</Button>
+            {params.marketMonthEvents.map((event) => (
+              <div key={event.id} style={{ display: 'grid', gap: 3, border: `1px solid ${color.hairline}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {event.label || '未命名事件'}
+                  </span>
+                  <Button size="small" aria-label={`删除事件 ${event.label || '未命名事件'}`} onClick={() => onMonthEventRemove(event.id)}>删除</Button>
                 </div>
-              );
-            })}
-            <button
-              type="button"
-              onClick={onEventAdd}
-              style={{
-                border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px`,
-                background: color.canvas, color: color.link, fontSize: 12.5, cursor: 'pointer', textAlign: 'center',
-              }}
-            >
-              ＋ 添加行业级事件（起周 + 时长 + 幅度 + 衰减）
-            </button>
+                <div className="tnum" style={{ fontSize: 11, color: color.mute }}>
+                  {`${event.startMonth}-${fmtDay(event.startDay)} 起 · ${event.durationMonths} 个月 · ${fmtSignedPct(event.magnitudePct)}${event.startDay > 1 ? ` · ${monthCoverageText(event)}` : ''}`}
+                </div>
+              </div>
+            ))}
+            {eventFormOpen ? (
+              <div style={{ display: 'grid', gap: space.sm, border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
+                    起始月
+                    <Select
+                      aria-label="事件起始月"
+                      size="small"
+                      value={formMonth || forecastMonthKeys[0]}
+                      onChange={(value: string) => setFormMonth(value)}
+                      options={forecastMonthKeys.map((key) => ({ value: key, label: key }))}
+                      style={{ width: 104 }}
+                    />
+                  </label>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
+                    起始日
+                    <InputNumber
+                      aria-label="事件起始日（1–31）"
+                      size="small"
+                      min={1}
+                      max={31}
+                      step={1}
+                      precision={0}
+                      value={formDay}
+                      onChange={(value) => setFormDay(value == null ? null : Number(value))}
+                      style={{ width: 64 }}
+                    />
+                  </label>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
+                    时长（月）
+                    <InputNumber
+                      aria-label="事件时长（月）"
+                      size="small"
+                      min={1}
+                      max={12}
+                      step={1}
+                      precision={0}
+                      value={formDuration}
+                      onChange={(value) => setFormDuration(value == null ? null : Number(value))}
+                      style={{ width: 64 }}
+                    />
+                  </label>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
+                    幅度
+                    <InputNumber
+                      aria-label="事件影响幅度（%）"
+                      size="small"
+                      min={-30}
+                      max={30}
+                      step={1}
+                      precision={0}
+                      value={formMagnitude}
+                      formatter={(value) => (value == null ? '' : `${value}%`)}
+                      parser={(text) => Number((text ?? '').replace('%', ''))}
+                      onChange={(value) => setFormMagnitude(value == null ? null : Number(value))}
+                      style={{ width: 76 }}
+                    />
+                  </label>
+                </div>
+                <label style={{ display: 'grid', gap: 3, fontSize: 12, fontWeight: 600, color: color.body }}>
+                  {`事件名称（选填）`}
+                  <Input
+                    aria-label="事件名称（选填）"
+                    placeholder="选填：如 内存涨价"
+                    value={formLabel}
+                    onChange={(input) => setFormLabel(input.target.value)}
+                  />
+                </label>
+                <div style={{ display: 'flex', gap: space.sm, justifyContent: 'flex-end' }}>
+                  <Button size="small" onClick={() => setEventFormOpen(false)}>收起</Button>
+                  <Button
+                    size="small"
+                    type="primary"
+                    disabled={!eventFormValid}
+                    onClick={() => {
+                      if (!eventFormValid || formDay == null || formDuration == null || formMagnitude == null) return;
+                      onMonthEventAdd({
+                        label: formLabel.trim(),
+                        startMonth: formMonth,
+                        startDay: Math.max(1, Math.min(31, Math.round(formDay))),
+                        durationMonths: Math.max(1, Math.min(12, Math.round(formDuration))),
+                        magnitudePct: Math.max(-30, Math.min(30, Math.round(formMagnitude))),
+                      });
+                      setEventFormOpen(false);
+                      setFormLabel('');
+                    }}
+                  >
+                    添加事件
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setFormMonth((prev) => prev || forecastMonthKeys[0] || '');
+                  setEventFormOpen(true);
+                }}
+                style={{
+                  border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px`,
+                  background: color.canvas, color: color.link, fontSize: 12.5, cursor: 'pointer', textAlign: 'center',
+                }}
+              >
+                ＋ 添加事件（起始 月/日 + 时长 + 幅度；名称选填）
+              </button>
+            )}
           </div>
         </div>
       </div>

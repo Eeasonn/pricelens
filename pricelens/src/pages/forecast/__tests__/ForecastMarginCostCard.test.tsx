@@ -2,6 +2,8 @@
 // WP5 · 成本销毛卡组件测试（jsdom）：
 // $M 轴与 tooltip 同源（禁「万$」标原始 USD）、周销毛图例真实显隐、
 // 负单台销毛零基线向下表达不丢柱、空态文案、缺数周销「—」。
+// 2026-11-04 评审定位修正：销毛 = 经营结果而非输入——卡标题 / 口径行 /
+// IoBar / 输出框按「输入（量价）→ 结果（销毛）」标注（模型计算不动）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
@@ -85,6 +87,55 @@ describe('成本销毛 · 依赖链路条（A3）', () => {
     renderCard({ ...baseResult, weeks: [] });
     expect(document.querySelectorAll('[data-flow-step]').length).toBe(5);
     expect(document.querySelector('[data-flow-step="预测期销毛"]')?.getAttribute('data-state')).toBe('active');
+  });
+});
+
+describe('成本销毛 · 经营结果定位（2026-11-04 评审：输入（量价）→ 结果（销毛））', () => {
+  it('卡标题标注「经营结果」，口径行注明由上述量价与成本推导', () => {
+    renderCard(baseResult);
+    const h2 = document.querySelector('h2');
+    expect(h2?.textContent).toContain('成本销毛 · 经营结果');
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('经营结果 · 由上述量价与成本推导');
+    expect(text).toContain('对销毛不满意');
+  });
+
+  it('IoBar 重排为 输入（量价）→ 经营结果：预测期销毛（不修正主图）', () => {
+    renderCard(baseResult);
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('输入（量价）');
+    expect(text).toContain('经营结果：预测期销毛');
+    expect(text).toContain('仅调价参考');
+  });
+
+  it('成本定位口径：成本只是是否调价的参考、不进模型输入；输出框首行 = 经营结果推导口径', () => {
+    renderCard(baseResult);
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('成本只是是否调价的参考');
+    expect(text).toContain('不进模型输入');
+    expect(text).toContain('由上述量价与成本推导');
+    // aria 同步声明经营结果定位
+    const svg = document.querySelector('svg[role="img"]') as SVGSVGElement;
+    expect(svg.getAttribute('aria-label')).toContain('经营结果 · 由上述量价与成本推导');
+  });
+
+  it('空态同样保留经营结果定位文案', () => {
+    renderCard({ ...baseResult, weeks: [] });
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('暂无成本销毛数据');
+    expect(text).toContain('经营结果 · 由上述量价与成本推导');
+    expect(text).toContain('输入（量价）');
+  });
+
+  it('把握话术退役：中性 chip「推演参考 · 波动 ±8%」，无「把握」字样（评审 1b：置信区间提示不必要）', () => {
+    renderCard(baseResult);
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('推演参考 · 波动 ±8%');
+    expect(text).not.toContain('把握');
+    // 口径收 title：非统计置信区间
+    const chip = Array.from(document.querySelectorAll('span[title]'))
+      .find((el) => (el.textContent ?? '') === '推演参考 · 波动 ±8%');
+    expect(chip?.getAttribute('title')).toContain('非统计置信区间');
   });
 });
 

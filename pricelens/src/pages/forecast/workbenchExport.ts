@@ -70,6 +70,23 @@ export function buildWorkbenchAssumptionText(
     lines.push('【行业事件】无');
   }
 
+  // 4b. 大盘月度事件与按月人工调整（月粒度修正段；月中起始按日均摊口径）
+  const monthEventRows = params.marketMonthEvents.map((event) => {
+    const label = event.label.trim() !== '' ? event.label : '未命名事件';
+    return `- ${label}：起 ${event.startMonth}-${event.startDay} 日 · 时长 ${event.durationMonths} 个月 · 幅度 ${signedPct(event.magnitudePct)}`;
+  });
+  lines.push(params.marketMonthEvents.length
+    ? `【大盘月度事件】（人工录入假设，共 ${params.marketMonthEvents.length} 条；月中起始按日均摊，衰减固定递减）\n${monthEventRows.join('\n')}`
+    : '【大盘月度事件】无');
+  const monthOverrideKeys = Object.keys(params.marketMonthOverrides).sort();
+  lines.push(monthOverrideKeys.length
+    ? `【大盘按月人工调整】（点击预测月就地调整，共 ${monthOverrideKeys.length} 个月；调整季度经季内三月均值同步主链）\n${monthOverrideKeys.map((key) => {
+        const entry = params.marketMonthOverrides[key];
+        const reason = entry.reason.trim() !== '' ? ` · 原因：${entry.reason}` : '';
+        return `- ${key} → ${entry.value.toLocaleString('en-US')}${reason}`;
+      }).join('\n')}`
+    : '【大盘按月人工调整】无');
+
   // 5. 上一代参照（同周龄比值校正进入主链；读数取自模型 consider，不另算）
   const firstForecast = result.weeks.find((week) => week.status === 'forecast');
   const reference = firstForecast?.consider.find((item) => item.kind === 'reference');
@@ -90,12 +107,13 @@ export function buildWorkbenchAssumptionText(
   const siRows = fixture.forecastMonths.map((month) => `- ${month.label}：${(params.siPlanMonthly[month.key] ?? 0).toLocaleString('en-US')} 台`);
   lines.push(`【SI 月计划】（人工输入，月内均分到周）\n${siRows.join('\n')}`);
 
-  // 8. 手调及原因（原因必填）
+  // 8. 手调及原因（原因选填，空不打印）
   const manualWeekNumbers = Object.keys(params.manual).map(Number).sort((a, b) => a - b);
   if (manualWeekNumbers.length) {
     const rows = manualWeekNumbers.map((weekNumber) => {
       const entry = params.manual[weekNumber];
-      return `- W${weekNumber} → ${entry.value.toLocaleString('en-US')} 台 · 原因：${entry.reason}`;
+      const reason = entry.reason.trim() !== '' ? ` · 原因：${entry.reason}` : '';
+      return `- W${weekNumber} → ${entry.value.toLocaleString('en-US')} 台${reason}`;
     });
     lines.push(`【手调】（人工微调，共 ${manualWeekNumbers.length} 处）\n${rows.join('\n')}`);
   } else {

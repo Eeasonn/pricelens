@@ -9,9 +9,19 @@
 // 库存序列再筛预测周，预警解释）→ 刚性 min(基线 SO, 可售) 回写主图；
 // supplyCapped 保留截断事实（手调不覆盖），供给缺口只算供给截断；
 // 成本销毛 = 链路末端独立推测，不回写主图。
+// 2026-11-04 拍板扩展（呈现层 + 大盘段，主链管线结构不动）：
+//   - 大盘主序列改月粒度：季度基线链外推到未来 4 季（同季比 × 趋势，确定性，
+//     前两季与既有 aiQ4/aiQ1 同源同值），预测月 = 季度基线按去年同期季内月形
+//     分布（季内三月合计恒 = 季度基线 × 3，容量守恒）；
+//   - 按月调整 = 点击预测月就地调整（marketMonthOverrides，原因选填），
+//     有调整的季度经「季内三月（调整 ?? AI 基线）均值」同步 q4/q1Override
+//     进主链（事件乘子不触发季度同步，回 AI 口径不变）；
+//   - 人工月度事件三字段（起始月/日 + 时长（月）+ 幅度%，名称选填），
+//     月中起始按日均摊：首月影响 × 覆盖天数 ÷ 当月天数（显式口径，非静默
+//     造数），衰减固定递减；周口径行业事件（marketEvents）与主链结构不变。
 // 全部计算为纯函数：不读时间、不用随机数，同输入两次计算逐字段一致。
 // ============================================================
-import type { MarketEventSeed, ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
+import type { MarketEventSeed, MarketMonthEventSeed, ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
 import { marketEventDisposition } from './workbenchTime';
 
 /** TODO 待拍板（brief 开放问题 2）：DOS 合理带 70–90 天与降幅阈值 20%/30% 为演示规则，待业务确认与维护方。 */
@@ -31,11 +41,15 @@ export interface WorkbenchParams {
   overrideSource: OverrideSource;
   /** 行业级大盘事件（人工录入假设，至多预填默认值；不挂 AI 标）。 */
   marketEvents: MarketEventSeed[];
+  /** 人工月度事件（极简三字段：起始月/日 + 时长（月）+ 幅度%；名称选填）。 */
+  marketMonthEvents: MarketMonthEventSeed[];
+  /** 大盘按月调整（键 = 预测月 '2027-03'；value = 调整后指数，reason 选填可空）。 */
+  marketMonthOverrides: Record<string, { value: number; reason: string }>;
   /** 主图小事件（产品级三类，参考回放段预填幅度，可改）。 */
   productEvents: ProductEventSeed[];
   /** 人工 SI 月计划（台），键 = '2026-11' / '2026-12'；库存验证层唯一新输入。 */
   siPlanMonthly: Record<string, number>;
-  /** 手调（键 = 周序号）：值 + 必填原因（原因标注在主图手调处）。 */
+  /** 手调（键 = 周序号）：值 + 选填原因（填了则标注在主图手调处；2026-11-04 评审拍板改选填）。 */
   manual: Record<number, { value: number; reason: string }>;
   /** 理由栏：为什么这么推（截图贴 PPT 的关键假设载体）。 */
   rationale: string;
@@ -56,6 +70,8 @@ export function baseWorkbenchParams(fixture: WorkbenchFixture): WorkbenchParams 
     q1Override: null,
     overrideSource: 'ai',
     marketEvents: fixture.defaultMarketEvents.map((event) => ({ ...event })),
+    marketMonthEvents: fixture.defaultMarketMonthEvents.map((event) => ({ ...event })),
+    marketMonthOverrides: {},
     productEvents: [],
     siPlanMonthly,
     manual: {},
@@ -71,6 +87,8 @@ export function isParamsActive(params: WorkbenchParams, fixture: WorkbenchFixtur
     params.q4Override !== base.q4Override
     || params.q1Override !== base.q1Override
     || JSON.stringify(params.marketEvents) !== JSON.stringify(base.marketEvents)
+    || JSON.stringify(params.marketMonthEvents) !== JSON.stringify(base.marketMonthEvents)
+    || JSON.stringify(params.marketMonthOverrides) !== JSON.stringify(base.marketMonthOverrides)
     || JSON.stringify(params.productEvents) !== JSON.stringify(base.productEvents)
     || JSON.stringify(params.siPlanMonthly) !== JSON.stringify(base.siPlanMonthly)
     || Object.keys(params.manual).length > 0
@@ -136,15 +154,277 @@ export function withQuarterOverride(
   return { ...next, overrideSource };
 }
 
+// ------------------------------------------------------------
+// 大盘月度段（2026-11-04 拍板）：季度基线外推 4 季 → 逐月分布（容量守恒）
+// + 按月调整（点击预测月）+ 月度事件月中均摊。全部纯函数、确定性、禁随机。
+// ------------------------------------------------------------
+
+/** 大盘按月调整的取值边界（与季度改格 40–200 同带）。 */
+export const MONTH_OVERRIDE_MIN = 40;
+export const MONTH_OVERRIDE_MAX = 200;
+
+/** 日期（YYYY-MM-DD）→ 月键（YYYY-MM）；格式不合法返回 null。 */
+export function monthKeyOfDate(date: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const month = Number(date.slice(5, 7));
+  if (month < 1 || month > 12) return null;
+  return date.slice(0, 7);
+}
+
+/** 季度键 '2027Q1' → 含三月键 ['2027-01','2027-02','2027-03']；非季度键返回空数组。 */
+export function monthsOfQuarterKey(quarterKey: string): string[] {
+  const match = /^(\d{4})Q([1-4])$/.exec(quarterKey);
+  if (!match) return [];
+  const year = Number(match[1]);
+  const baseMonth = (Number(match[2]) - 1) * 3 + 1;
+  return [baseMonth, baseMonth + 1, baseMonth + 2].map((month) => `${year}-${String(month).padStart(2, '0')}`);
+}
+
+/** 月键 → 所属季度键（'2027-03' → '2027Q1'）；月键不合法返回 null。 */
+export function quarterKeyOfMonth(monthKey: string): string | null {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(monthKey);
+  if (!match) return null;
+  const quarter = Math.floor((Number(match[2]) - 1) / 3) + 1;
+  return `${match[1]}Q${quarter}`;
+}
+
+/** 当月天数（公历口径，含闰年规则）；月键不合法返回 null。纯日历计算，不读系统时间。 */
+export function daysInMonthOf(monthKey: string): number | null {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(monthKey);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  return month === 2 && leap ? 29 : lengths[month - 1];
+}
+
+/**
+ * 月中事件当月覆盖占比（显式均摊口径）：月度大盘值均匀分摊到当月每一天
+ * （每日 = 月值 ÷ 当月天数），事件自起始日（含当日）生效，当月覆盖占比 =
+ * （当月天数 − 起始日 + 1）÷ 当月天数。起始日超出当月天数按当月末日处理
+ * （不静默丢弃）。startDay 非有限数按全月（占比 1）处理。
+ */
+export function monthCoverageRatio(daysInMonth: number, startDay: number): number {
+  if (!Number.isFinite(startDay)) return 1;
+  const day = Math.min(Math.max(1, Math.round(startDay)), daysInMonth);
+  return (daysInMonth - day + 1) / daysInMonth;
+}
+
+/** 月份差：startMonth → monthKey 的整月偏移（'2026-11' → '2027-01' = 2）；键不合法返回 null。 */
+export function monthsBetween(startMonth: string, monthKey: string): number | null {
+  const parse = (key: string): number | null => {
+    const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(key);
+    return match ? Number(match[1]) * 12 + (Number(match[2]) - 1) : null;
+  };
+  const start = parse(startMonth);
+  const target = parse(monthKey);
+  if (start == null || target == null) return null;
+  return target - start;
+}
+
+/**
+ * 月度事件在某月的乘子（月中按日均摊口径）：
+ * - 覆盖首月（offset 0）：影响 = 幅度 × 当月覆盖占比（monthCoverageRatio）；
+ * - 后续整月（offset ≥ 1）：影响 = 幅度 ×（1 − offset ÷ 时长月数）——衰减固定
+ *   递减（三字段极简口径不再暴露衰减选择；与周口径事件递减默认同语言）；
+ * - 覆盖外返回 null（不修正该月）。
+ */
+export function marketMonthEventFactor(event: MarketMonthEventSeed, monthKey: string): number | null {
+  const offset = monthsBetween(event.startMonth, monthKey);
+  if (offset == null || offset < 0 || offset >= event.durationMonths) return null;
+  const dim = daysInMonthOf(monthKey);
+  if (dim == null) return null;
+  const coverage = offset === 0 ? monthCoverageRatio(dim, event.startDay) : 1;
+  const impact = event.magnitudePct * (1 - offset / event.durationMonths);
+  return 1 + (impact * coverage) / 100;
+}
+
+function nextQuarterKey(key: string): string {
+  const match = /^(\d{4})Q([1-4])$/.exec(key);
+  if (!match) return key;
+  const year = Number(match[1]);
+  const quarter = Number(match[2]);
+  return quarter === 4 ? `${year + 1}Q1` : `${year}Q${quarter + 1}`;
+}
+
+/**
+ * 未来 4 个季度的 AI 基线（确定性外推，禁随机）：前两季 = 既有
+ * marketSeriesBaseline 的 aiQ4/aiQ1（与主链单格口径同源同值，不出现第二套
+ * 数字）；后两季沿同一链继续（同季比 × 趋势；链上取上一格四舍五入值，
+ * 与 aiQ1 链式口径一致）。
+ */
+export function marketQuarterForecast(fixture: WorkbenchFixture): Array<{ key: string; value: number }> {
+  const { aiQ4, aiQ1 } = marketSeriesBaseline(fixture);
+  const values = fixture.market.quarters.map((quarter) => quarter.value);
+  const lastYear = values.slice(0, 4);
+  const avg = (list: number[]): number => list.reduce((sum, v) => sum + v, 0) / list.length;
+  const trend = avg(values.slice(4)) / avg(lastYear);
+  let key = fixture.market.quarters[fixture.market.quarters.length - 1]?.key ?? '';
+  const keys: string[] = [];
+  for (let index = 0; index < 4; index += 1) {
+    key = nextQuarterKey(key);
+    keys.push(key);
+  }
+  const q2 = round1(aiQ1 * (lastYear[1] / lastYear[0]) * trend);
+  const q3 = round1(q2 * (lastYear[2] / lastYear[1]) * trend);
+  return [
+    { key: keys[0], value: aiQ4 },
+    { key: keys[1], value: aiQ1 },
+    { key: keys[2], value: q2 },
+    { key: keys[3], value: q3 },
+  ];
+}
+
+/** 大盘月度点（月粒度主序列）：baseline = AI 口径（actual = fixture 值；forecast = 季度基线月分布）。 */
+export interface MarketMonthPoint {
+  /** 月键，如 '2026-11'。 */
+  key: string;
+  status: 'actual' | 'forecast';
+  /** 所属季度键，如 '2026Q4'。 */
+  quarter: string;
+  /** AI 口径基线（人工未调整、无事件时的值）。 */
+  baseline: number;
+  /** 覆盖该月的月度事件合成乘子；无事件覆盖 = null。 */
+  eventFactor: number | null;
+  /** 生效值 = override ?? round1(baseline × (eventFactor ?? 1))。 */
+  value: number;
+  /** 人工按月调整值（未调整 = null）。 */
+  override: number | null;
+  /** 调整原因（选填，可为空串）。 */
+  reason: string;
+}
+
+/** 去年同季三月权重（月形分布源）：缺月回退均等 1/3（显式回退，不造数）。 */
+function lastYearMonthWeights(fixture: WorkbenchFixture, quarterKey: string): number[] {
+  const match = /^(\d{4})Q([1-4])$/.exec(quarterKey);
+  const fallback = [1 / 3, 1 / 3, 1 / 3];
+  if (!match) return fallback;
+  const lastYearMonths = monthsOfQuarterKey(`${Number(match[1]) - 1}Q${match[2]}`);
+  const values = lastYearMonths.map((monthKey) => fixture.market.months.find((month) => month.key === monthKey)?.value);
+  if (values.some((value) => typeof value !== 'number' || !Number.isFinite(value) || (value as number) <= 0)) return fallback;
+  const avg = (values.reduce<number>((sum, v) => sum + (v as number), 0)) / 3;
+  if (!(avg > 0)) return fallback;
+  return values.map((value) => (value as number) / avg);
+}
+
+/**
+ * 大盘月度主序列（历史月 + 未来 4 季度逐月预测）：
+ * - 历史月直接取 fixture.market.months（模拟样本，不动）；
+ * - 预测月 = 季度基线 × 去年同季月形权重；round1 后季内末月吸收舍入残差，
+ *   保证季内三月合计精确 = 季度基线 × 3（容量守恒）；
+ * - 生效值链：事件乘子（月中均摊）作用于基线，人工按月调整覆盖生效值；
+ *   事件只作用于预测月（历史段为已发生事实，不修正）。
+ */
+export function computeMarketMonths(
+  fixture: WorkbenchFixture,
+  params: Pick<WorkbenchParams, 'marketMonthEvents' | 'marketMonthOverrides'>,
+): MarketMonthPoint[] {
+  const forecastQuarters = marketQuarterForecast(fixture);
+  const forecastPoints: MarketMonthPoint[] = [];
+  for (const quarter of forecastQuarters) {
+    const monthKeys = monthsOfQuarterKey(quarter.key);
+    const weights = lastYearMonthWeights(fixture, quarter.key);
+    // month_i = 季度基线 ×（去年同季该月 ÷ 去年同季月均）≈ 季度基线；季内合计 = 基线 × 3。
+    const raw = monthKeys.map((key, index) => ({ key, raw: quarter.value * weights[index] }));
+    // 容量守恒：前两月 round1，末月吸收残差（季内合计精确 = 季度基线 × 3）。
+    const values = raw.map((month, index) => {
+      if (index < raw.length - 1) return round1(month.raw);
+      const total = round1(quarter.value * 3);
+      const consumed = raw.slice(0, index).reduce((sum, item) => sum + Math.round(item.raw * 10) / 10, 0);
+      return round1(total - consumed);
+    });
+    monthKeys.forEach((key, index) => {
+      forecastPoints.push({
+        key,
+        status: 'forecast',
+        quarter: quarter.key,
+        baseline: values[index],
+        eventFactor: null,
+        value: values[index],
+        override: null,
+        reason: '',
+      });
+    });
+  }
+  const actualPoints: MarketMonthPoint[] = fixture.market.months.map((month) => ({
+    key: month.key,
+    status: 'actual' as const,
+    quarter: quarterKeyOfMonth(month.key) ?? '',
+    baseline: month.value,
+    eventFactor: null,
+    value: month.value,
+    override: null,
+    reason: '',
+  }));
+  return [...actualPoints, ...forecastPoints].map((point) => {
+    if (point.status !== 'forecast') return point;
+    let factor: number | null = null;
+    for (const event of params.marketMonthEvents) {
+      const monthly = marketMonthEventFactor(event, point.key);
+      if (monthly != null) factor = (factor ?? 1) * monthly;
+    }
+    const entry = params.marketMonthOverrides[point.key];
+    const override = entry != null && Number.isFinite(entry.value) ? entry.value : null;
+    const value = override ?? round1(point.baseline * (factor ?? 1));
+    return { ...point, eventFactor: factor, value, override, reason: entry?.reason ?? '' };
+  });
+}
+
+/**
+ * 按月调整（纯函数）：设置 / 还原某预测月的人工调整（value null = 还原；
+ * 原因选填，空串合法），并同步季度改格进主链——
+ * 有人工调整的季度：q4/q1Override = 季内三月（调整 ?? AI 月基线）均值（人工确认）；
+ * 无人工调整的季度：对应 override 回 null（回 AI）。事件乘子不参与季度同步
+ * （事件走周口径主链修正段），季度同步永不改变 AI 口径本身。
+ */
+export function withMarketMonthOverride(
+  params: WorkbenchParams,
+  fixture: WorkbenchFixture,
+  monthKey: string,
+  value: number | null,
+  reason: string,
+): WorkbenchParams {
+  const overrides = { ...params.marketMonthOverrides };
+  if (value == null || !Number.isFinite(value)) delete overrides[monthKey];
+  else {
+    overrides[monthKey] = {
+      value: Math.max(MONTH_OVERRIDE_MIN, Math.min(MONTH_OVERRIDE_MAX, round1(value))),
+      reason: reason.trim(),
+    };
+  }
+  const months = computeMarketMonths(fixture, { marketMonthEvents: params.marketMonthEvents, marketMonthOverrides: overrides });
+  const syncQuarters = marketQuarterForecast(fixture).slice(0, 2).map((quarter) => quarter.key);
+  const quarterOverride = (quarterKey: string): number | null => {
+    const quarterMonths = months.filter((point) => point.quarter === quarterKey && point.status === 'forecast');
+    if (!quarterMonths.length || !quarterMonths.some((point) => overrides[point.key] != null)) return null;
+    const avg = quarterMonths.reduce((sum, point) => sum + (overrides[point.key]?.value ?? point.baseline), 0) / quarterMonths.length;
+    return round1(avg);
+  };
+  const q4Override = syncQuarters[0] ? quarterOverride(syncQuarters[0]) : null;
+  const q1Override = syncQuarters[1] ? quarterOverride(syncQuarters[1]) : null;
+  const overrideSource: OverrideSource = q4Override != null || q1Override != null ? 'human' : 'ai';
+  return { ...params, marketMonthOverrides: overrides, q4Override, q1Override, overrideSource };
+}
+
+/** 新增月度事件：ID 循环查重（`me-custom-N` 取第一个未使用值，删除任一事件不影响后续新增）。 */
+export function nextMarketMonthEventId(existing: ReadonlyArray<MarketMonthEventSeed>): string {
+  const used = new Set(existing.map((event) => event.id));
+  let serial = 1;
+  while (used.has(`me-custom-${serial}`)) serial += 1;
+  return `me-custom-${serial}`;
+}
+
 /**
  * 周度大盘考量倍数（只作用于预测周 W45+）：人工改格比率（当前 Q4 生效值 / AI 基线）
- * × 行业级事件乘子直接叠加（事件 = 人工录入假设：删除即回落、改参数即换乘子）。
+ * × 行业级事件乘子 × 月度事件乘子（按周所属月份取当月乘子，月中按日均摊）
+ * 直接叠加（事件 = 人工录入假设：删除即回落、改参数即换乘子）。
  * 预测窗口 W45–W52 全部落在 2026Q4，改格比率按 Q4 口径作用；
  * historical 事件（起周早于首个预测周）只作解释，一律跳过，不修正预测周。
  */
 export function computeMarketFactor(
   fixture: WorkbenchFixture,
-  params: Pick<WorkbenchParams, 'q4Override' | 'marketEvents'>,
+  params: Pick<WorkbenchParams, 'q4Override' | 'marketEvents' | 'marketMonthEvents'>,
   weekNumber: number,
 ): number {
   const { aiQ4 } = marketSeriesBaseline(fixture);
@@ -154,6 +434,16 @@ export function computeMarketFactor(
     if (marketEventDisposition(fixture, event) === 'historical') continue;
     const factor = eventWeeklyFactor(event, weekNumber);
     if (factor != null) eventFactor *= factor;
+  }
+  // 月度事件（三字段 · 月中按日均摊）：按周完整日期所属月份取当月乘子；
+  // 周日期缺失 / 月份不合法时跳过（不造数）。附加叠加，周口径事件结构不变。
+  const weekDate = fixture.weeks.find((week) => week.weekNumber === weekNumber)?.date;
+  const monthKey = weekDate ? monthKeyOfDate(weekDate) : null;
+  if (monthKey != null) {
+    for (const event of params.marketMonthEvents) {
+      const factor = marketMonthEventFactor(event, monthKey);
+      if (factor != null) eventFactor *= factor;
+    }
   }
   return overrideRatio * eventFactor;
 }
@@ -283,6 +573,8 @@ export interface WorkbenchResult {
   weeks: WorkbenchWeekResult[];
   /** 大盘季度单序列（2025Q1 连贯到当前实际 + 2026Q4/2027Q1 推演，附 AI 基线）。 */
   marketQuarters: MarketQuarterPoint[];
+  /** 大盘月度主序列（历史月 + 未来 4 季度逐月预测；大盘卡月线唯一数据源）。 */
+  marketMonths: MarketMonthPoint[];
   /** 预测周健康判定（预警解释输出框用；先对完整库存序列判定，再筛预测周）。 */
   health: HealthRow[];
   /** 首个库存截断周（supplyCapped）的周序号（未触发 = null；不因手调消失）。 */
@@ -490,6 +782,25 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
         pct: event.magnitudePct,
         note: '主图小事件 · 参考品事实回放（人工录入）',
       })),
+      ...(() => {
+        // 月度事件（三字段）：按周所属月份取当月乘子（月中按日均摊口径）；
+        // 未覆盖该周月份的事件不产出考量项（与周口径事件的覆盖外语义一致）。
+        const weekDate = fixture.weeks.find((candidate) => candidate.weekNumber === week.weekNumber)?.date;
+        const monthKey = weekDate ? monthKeyOfDate(weekDate) : null;
+        if (monthKey == null) return [];
+        return params.marketMonthEvents
+          .map((event) => ({ event, factor: marketMonthEventFactor(event, monthKey) }))
+          .filter((entry): entry is { event: MarketMonthEventSeed; factor: number } => entry.factor != null)
+          .map((entry) => {
+            const pct = round1((entry.factor - 1) * 100);
+            return {
+              kind: 'event' as const,
+              label: entry.event.label || '未命名事件',
+              pct: pct === 0 ? null : pct,
+              note: `月度事件 ${entry.event.startMonth}-${entry.event.startDay} 起 · ${entry.event.durationMonths} 个月（月中按日均摊）`,
+            };
+          });
+      })(),
       {
         kind: 'promo',
         label: fixture.promoBand.label,
@@ -532,6 +843,7 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
   return {
     weeks,
     marketQuarters,
+    marketMonths: computeMarketMonths(fixture, params),
     health,
     firstAdjustedWeek: cappedForecast.length ? cappedForecast[0].weekNumber : null,
     summary: {
@@ -550,17 +862,16 @@ export function computeWorkbench(fixture: WorkbenchFixture, params: WorkbenchPar
 }
 
 // ------------------------------------------------------------
-// 手调（原因必填；原因标注在主图手调处）
+// 手调（2026-11-04 评审拍板：原因选填，不填即可应用；原因填了则标注在主图手调处）
 // ------------------------------------------------------------
 
-/** 手调设置（纯函数）：原因必填，空原因返回 null（调用方据此禁用保存）。 */
+/** 手调设置（纯函数）：原因选填（空原因照常应用，后台字段结构保留）。 */
 export function setManualAdjustment(
   params: WorkbenchParams,
   weekNumber: number,
   value: number,
   reason: string,
 ): WorkbenchParams | null {
-  if (!reason.trim()) return null;
   if (!Number.isFinite(value) || value < 0) return null;
   return { ...params, manual: { ...params.manual, [weekNumber]: { value: Math.round(value), reason: reason.trim() } } };
 }
@@ -621,6 +932,46 @@ function sanitizeProductEvent(value: unknown, fixture: WorkbenchFixture): Produc
   return { id, type, label: typeof value.label === 'string' ? value.label : '', week, magnitudePct, replayId };
 }
 
+/** 月度事件校验：起始月须为合法 'YYYY-MM'；日 1–31、时长 1–24、幅度 −30..30 钳制；坏条目剔除。 */
+function sanitizeMarketMonthEvent(value: unknown): MarketMonthEventSeed | null {
+  if (!isRecord(value)) return null;
+  const id = typeof value.id === 'string' ? value.id.trim() : '';
+  const startMonth = typeof value.startMonth === 'string' && /^(\d{4})-(0[1-9]|1[0-2])$/.test(value.startMonth)
+    ? value.startMonth
+    : '';
+  const startDay = finiteOrNull(value.startDay);
+  const durationMonths = finiteOrNull(value.durationMonths);
+  const magnitudePct = finiteOrNull(value.magnitudePct);
+  if (!id || !startMonth || startDay == null || durationMonths == null || magnitudePct == null) return null;
+  return {
+    id,
+    label: typeof value.label === 'string' ? value.label : '',
+    startMonth,
+    startDay: Math.max(1, Math.min(31, Math.round(startDay))),
+    durationMonths: Math.max(1, Math.min(24, Math.round(durationMonths))),
+    magnitudePct: Math.max(-30, Math.min(30, magnitudePct)),
+  };
+}
+
+/** 大盘按月调整校验：只保留预测月键、有限值（钳 40–200）；原因选填（去空白，空串合法）。 */
+function sanitizeMonthOverrides(
+  value: unknown,
+  validMonthKeys: ReadonlySet<string>,
+): Record<string, { value: number; reason: string }> {
+  const source = isRecord(value) ? value : {};
+  const overrides: Record<string, { value: number; reason: string }> = {};
+  for (const [key, entry] of Object.entries(source)) {
+    if (!validMonthKeys.has(key) || !isRecord(entry)) continue;
+    const amount = finiteOrNull(entry.value);
+    if (amount == null) continue;
+    overrides[key] = {
+      value: Math.max(MONTH_OVERRIDE_MIN, Math.min(MONTH_OVERRIDE_MAX, amount)),
+      reason: typeof entry.reason === 'string' ? entry.reason.trim() : '',
+    };
+  }
+  return overrides;
+}
+
 /** SI 月计划校验：非对象整字段回退基准；单月非数字（错型）回退基准月值；数字负值钳 0。 */
 function sanitizeSiPlan(fixture: WorkbenchFixture, value: unknown, base: Record<string, number>): Record<string, number> {
   const source = isRecord(value) ? value : {};
@@ -640,8 +991,9 @@ function sanitizeManual(fixture: WorkbenchFixture, value: unknown): Record<numbe
     const weekNumber = Number(key);
     if (!Number.isInteger(weekNumber) || !forecastWeeks.has(weekNumber) || !isRecord(entry)) continue;
     const amount = finiteOrNull(entry.value);
+    // 原因选填（2026-11-04 评审拍板）：空原因照常保留手调（后台字段结构不变）。
     const reason = typeof entry.reason === 'string' ? entry.reason.trim() : '';
-    if (amount == null || amount < 0 || !reason) continue;
+    if (amount == null || amount < 0) continue;
     manual[weekNumber] = { value: Math.round(amount), reason };
   }
   return manual;
@@ -651,9 +1003,11 @@ function sanitizeManual(fixture: WorkbenchFixture, value: unknown): Record<numbe
  * 会话草稿恢复校验：输入未知数据（坏 JSON / 错型字段 / 失效参照）时逐项回退基准，
  * 返回值永远可直接进 computeWorkbench。
  * - q4/q1 非有限数字 → null；overrideSource 按两格重算（任一非 null = human，都 null = ai）。
- * - marketEvents / productEvents：非数组回退基准数组；数组内坏条目剔除（失效回放场景 id 亦剔除）。
+ * - marketEvents / marketMonthEvents / productEvents：非数组回退基准数组；数组内坏条目剔除
+ *   （月度事件起始月须为合法 YYYY-MM；失效回放场景 id 亦剔除）。
+ * - marketMonthOverrides：只保留预测月键、有限值（钳 40–200）；原因选填（空串合法）。
  * - siPlanMonthly：非对象整字段回退基准；单月错型回退基准月值；数字负值钳 0。
- * - manual：只保留预测周、有限非负值、非空原因（值取整、原因去空白）。
+ * - manual：只保留预测周、有限非负值（值取整；原因选填，去空白，空串合法）。
  * - prevGenReferenceId：不在 prevGenPool → 回基准参照。
  */
 export function normalizeWorkbenchParams(fixture: WorkbenchFixture, value: unknown): WorkbenchParams {
@@ -665,6 +1019,11 @@ export function normalizeWorkbenchParams(fixture: WorkbenchFixture, value: unkno
   const referenceId = typeof value.prevGenReferenceId === 'string' && validReferenceIds.has(value.prevGenReferenceId)
     ? value.prevGenReferenceId
     : base.prevGenReferenceId;
+  const forecastMonthKeys = new Set(
+    computeMarketMonths(fixture, { marketMonthEvents: [], marketMonthOverrides: {} })
+      .filter((point) => point.status === 'forecast')
+      .map((point) => point.key),
+  );
   return {
     q4Override,
     q1Override,
@@ -672,6 +1031,10 @@ export function normalizeWorkbenchParams(fixture: WorkbenchFixture, value: unkno
     marketEvents: Array.isArray(value.marketEvents)
       ? value.marketEvents.map((event) => sanitizeMarketEvent(event)).filter((event): event is MarketEventSeed => event != null)
       : base.marketEvents,
+    marketMonthEvents: Array.isArray(value.marketMonthEvents)
+      ? value.marketMonthEvents.map((event) => sanitizeMarketMonthEvent(event)).filter((event): event is MarketMonthEventSeed => event != null)
+      : base.marketMonthEvents,
+    marketMonthOverrides: sanitizeMonthOverrides(value.marketMonthOverrides, forecastMonthKeys),
     productEvents: Array.isArray(value.productEvents)
       ? value.productEvents.map((event) => sanitizeProductEvent(event, fixture)).filter((event): event is ProductEventSeed => event != null)
       : base.productEvents,
