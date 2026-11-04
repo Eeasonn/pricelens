@@ -70,7 +70,7 @@
 // 全部并入图下明细卡首行（2026-11-02 已并入，本次只压形态）。屏蔽/悬停联动
 // 量价页没有。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { message, Popover } from 'antd';
+import { message, Popover, Segmented } from 'antd';
 import { DownOutlined, HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import { useConfigVersion } from '../state/configStore';
@@ -113,6 +113,7 @@ import { flatSelections } from '../state/mainSelection';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
 import VolumeBars from './volume/VolumeBars';
 import CostBarChart, { COST_RATE_H, costRateAxisMaxOf } from './volume/CostBarChart';
+import MergedCompareChart, { type MergedCompareProduct } from './volume/MergedCompareChart';
 import InventoryDosCard from './volume/InventoryDosCard';
 import { inventoryDemoOf } from './volume/inventoryDemo';
 import PanelHeader from './volume/PanelHeader';
@@ -264,6 +265,17 @@ export default function VolumePrice() {
     if (marginLocked) return;
     setShowMargin(!showMargin);
   };
+  // 销毛呈现二式（2026-11-04 Eason）：下垂柱（默认，下半区）| 顶部销毛线（平滑虚线 +
+  // 最高/最低/最新三点标值，不与价格/销量共用 Y 轴）。收进 ⋯ 菜单「呈现」行，会话态。
+  const [marginLineOn, setMarginLineOn] = usePageViewState<boolean>('volume.marginLine', () => false);
+  // 面板呈现二式（2026-11-04 Eason，纯量价 + 组内对比限定）：分离面板（默认 = 现状）|
+  // 合并单图（组内产品合并同一张图：销量面积叠层 + 折后价平滑线，内建量/价双轴）。
+  // 会话态跨页保留；仅组内对比视图出切换槽（主品视图合并不适用）；销毛开（主品视图）
+  // 的「呈现」行仍是既有销毛呈现二式，互不占用。
+  const [mergedCompare, setMergedCompare] = usePageViewState<boolean>('volume.mergedCompare', () => false);
+  const mergedOn = !marginOn && safeViewMode.kind === 'group' && mergedCompare;
+  // 合并单图观察列（瞬态，不持久化）：联动图内列高亮/读值浮层与图下各产品明细卡
+  const [mergedHover, setMergedHover] = useState<number | null>(null);
 
   // 视图模式切换（阅读 ↔ 组内对比 / 换组）即清空隐藏集：两视图面板集不同，
   // 「一次看一组」的心智下从空集开始
@@ -835,6 +847,34 @@ export default function VolumePrice() {
       panelData.map((p) => volumeByBuckets(p.spec.modelId, p.spec.romram, cc, state.granularity, domainIds)),
     [panelData, domainIds, cc, state.granularity],
   );
+  // ---- 合并单图数据（2026-11-04 Eason）：纯量价 + 组内对比 + 合并呈现时生效——
+  //      销量/价格取组内各产品既有 panel 数据源、共享查看窗口切片（与分离面板
+  //      同源同窗口），只改呈现不改数值；销量轴上限 = 合并窗口全产品并集 nice 上限，
+  //      万档判定与明细卡同一份 shouldUseWanUnits 口径 ----
+  const mergedVolumes = useMemo(
+    () =>
+      (mergedOn
+        ? panelData.map((p) => volumeByBuckets(p.spec.modelId, p.spec.romram, cc, state.granularity, domainIds.slice(win.s, win.e + 1)))
+        : []),
+    [mergedOn, panelData, cc, state.granularity, domainIds, win.s, win.e],
+  );
+  const mergedProducts = useMemo<MergedCompareProduct[]>(
+    () =>
+      (mergedOn
+        ? visiblePanels.map((p) => ({
+          key: p.spec.key,
+          name: p.name,
+          brand: p.brand,
+          color: p.series[0]?.color ?? brandColorOf(p.brand),
+          points: (p.series[0]?.points ?? []).slice(win.s, win.e + 1),
+          volumes: mergedVolumes[p.idx] ?? [],
+        }))
+        : []),
+    [mergedOn, visiblePanels, mergedVolumes, win.s, win.e],
+  );
+  const mergedVMax = useMemo(() => vMaxOf(mergedProducts.flatMap((pr) => [...pr.volumes])), [mergedProducts]);
+  const mergedWan = useMemo(() => shouldUseWanUnits(mergedProducts.flatMap((pr) => [...pr.volumes])), [mergedProducts]);
+  const mergedFormatVolume = useCallback((v: number) => formatVolumeAmount(v, mergedWan), [mergedWan]);
   const marginCosts = useMemo(
     () => panelData.map((panel, i) => {
       const ids = domainIds.slice(effWins[i][0], effWins[i][1] + 1);
@@ -1004,7 +1044,9 @@ export default function VolumePrice() {
   const panelNodes = visiblePanels.map((p, panelIndex) => {
                       const pill = pillOf(p);
                       const row = summaryRows.find((item) => item.key === p.key);
-                      const viewStart = effWins[p.idx]?.[0] ?? 0;
+                      // 合并单图（2026-11-04 Eason）：明细卡观察列跟随合并图共享窗口
+                      //（分离面板 = 各面板生效窗口，现状不变）
+                      const viewStart = mergedOn ? win.s : (effWins[p.idx]?.[0] ?? 0);
                       const brush = brushLive[p.idx] ?? brushes[p.idx] ?? null;
                       const ranged = brush != null && !!row && !row.failed;
                       const windowLo = row ? Math.min(row.windowStart, row.windowEnd) : 0;
@@ -1053,12 +1095,17 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                       const marginUnavailable = marginCostAvailabilityOf(p.spec.isOwn, marginPoints) === 'empty';
                       // ---- 观察列（demo：activeIndex）：悬停列 ?? 所选区间末周 ?? 窗口末桶。
                       //      十字线、明细卡、销量柱/销毛柱高亮、成本点全部跟同一列。
-                      const viewLen = strip?.n ?? p.vis[0]?.points.length ?? 0;
+                      //      合并单图：观察列 = 合并图悬停列 ?? 窗口末桶（共享窗口切片）。
+                      const mPts = mergedOn ? (p.series[0]?.points ?? []).slice(win.s, win.e + 1) : null;
+                      const viewLen = mergedOn ? (mPts?.length ?? 0) : (strip?.n ?? p.vis[0]?.points.length ?? 0);
                       const brushEnd = brush ? Math.max(brush[0], brush[1]) : null;
+                      const hoverSeed = mergedOn ? mergedHover : (hoverIdxs[p.idx] ?? brushEnd);
                       const activeIdx = viewLen > 0
-                        ? Math.min(viewLen - 1, Math.max(0, hoverIdxs[p.idx] ?? brushEnd ?? viewLen - 1))
+                        ? Math.min(viewLen - 1, Math.max(0, hoverSeed ?? viewLen - 1))
                         : null;
-                      const activePoint = activeIdx != null ? p.vis[0]?.points[activeIdx] ?? null : null;
+                      const activePoint = activeIdx != null
+                        ? (mergedOn ? (mPts?.[activeIdx] ?? null) : (p.vis[0]?.points[activeIdx] ?? null))
+                        : null;
                       const marginPoint = activeIdx != null ? marginPoints[activeIdx] ?? null : null;
                       // 隔离周成本不进图（与水位/成本柱两形态一致：价格不可信 → 成本不显示）
                       const marginPointsMasked = p.vis[0]?.points
@@ -1096,7 +1143,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                         price: activePoint?.price ?? null,
                         rrp: activePoint?.rrp ?? null,
                         prevPrice: prevTrustedPrice,
-                        volume: activeIdx != null ? volumes[p.idx]?.[activeIdx] ?? null : null,
+                        volume: activeIdx != null ? (mergedOn ? (mergedVolumes[p.idx]?.[activeIdx] ?? null) : (volumes[p.idx]?.[activeIdx] ?? null)) : null,
                         marginPoint,
                         marginUnavailable,
                         formatMoney: (value) => formatPrice(Math.round(value), state.currency),
@@ -1233,8 +1280,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                                   销量
                                 </span>
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                  <span aria-hidden style={{ width: 8, height: 10, borderRadius: 1, background: 'rgba(245, 166, 35, 0.32)' }} />
-                                  销毛率（下垂）
+                                  <span aria-hidden style={marginLineOn ? { width: 14, height: 0, borderTop: '2px dashed #f5a623' } : { width: 8, height: 10, borderRadius: 1, background: 'rgba(245, 166, 35, 0.32)' }} />
+                                  {marginLineOn ? '销毛率（顶部线 · 标注最高/最低/最新）' : '销毛率（下垂）'}
                                 </span>
                               </>
                             ) : (
@@ -1339,6 +1386,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               volumes={volumes[p.idx]}
                               volumeAxisMax={volumeAxisMax}
                               rateAxisMax={costRateAxisMax}
+                              marginLineOn={marginLineOn}
                               currency={state.currency}
                               seriesColor={seriesColor}
                               focusIdx={activeIdx}
@@ -1671,24 +1719,27 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
         };
       })
     : [];
-  // 「进入本组对比」入口：每张有对比区的主品卡一枚（价格页「多平台对比」同款
-  // 轻量文字钮，compareEntry 槽落工具行行尾）；语义 = switchViewMode 到该卡组视图
+  // 「本组对比」入口随格（2026-11-04 Eason 看图反馈）：每张有对比区的主品卡一枚，
+  // 挂主品控制带对应胶囊组之后（面板 key 对位，不再堆工具行最右端——多卡时逐格
+  // 就位、不再互相堆叠）；语义 = switchViewMode 到该卡组视图。价格走势「多平台
+  // 对比」同款轻量文字钮不变。
   const compareEntries = reading
-    ? state.mains
-        .filter((card): card is typeof card & { main: NonNullable<typeof card.main> } => card.main != null && card.compares.length > 0)
-        .map((card) => {
-          const panel = panelViews.find((pn) => pn.spec.cardId === card.id);
-          const main = card.main;
-          return (
-            <GroupCompareEntry
-              key={card.id}
-              name={panel?.name ?? main.modelId}
-              count={card.compares.length}
-              onEnter={() => switchViewMode({ kind: 'group', cardId: card.id })}
-            />
-          );
-        })
-    : [];
+    ? (() => {
+      const map = new Map<string, ReactNode>();
+      for (const p of orderedPanels) {
+        const card = state.mains.find((item) => item.id === p.spec.cardId);
+        if (!card?.main || card.compares.length === 0) continue;
+        map.set(p.spec.key, (
+          <GroupCompareEntry
+            name={p.name}
+            count={card.compares.length}
+            onEnter={() => switchViewMode({ kind: 'group', cardId: card.id })}
+          />
+        ));
+      }
+      return map;
+    })()
+    : new Map<string, ReactNode>();
 
   // 销毛成本开关（2026-11-03 Eason 反馈：上移工具行、与齿轮/⋯ 同簇——
   // 原位置在明细卡行左侧的轴列缩进里，独自占一行左侧留白且与齿轮不对齐）
@@ -1772,50 +1823,91 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   onLabelMode={setLabelMode}
                   anomalySlot={<AnomalyQualityChip page="volume" />}
                   priceTypesAfter={marginCtl}
-                  legend={reading && panelCount > 0 ? (
-                    <MainControlBand items={mainBandItems} onToggle={togglePanelVisible} registerHost={registerPanelPillHost} />
-                  ) : undefined}
-                  compareEntry={reading && compareEntries.length > 0 ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>{compareEntries}</span>
+                  /* 主品控制带（胶囊 + 本组对比入口）2026-11-04 下移到面板上方的
+                     胶囊带行（按面板位置对齐），不再占工具行 legend/compareEntry 槽 */
+                  presentationSlot={marginOn ? (
+                    <Segmented
+                      size="small"
+                      aria-label="销毛呈现方式"
+                      value={marginLineOn ? 'line' : 'bars'}
+                      onChange={(v) => setMarginLineOn(v === 'line')}
+                      options={[
+                        { label: '下垂柱', value: 'bars' },
+                        { label: '顶部销毛线', value: 'line' },
+                      ]}
+                    />
+                  ) : safeViewMode.kind === 'group' ? (
+                    // 纯量价 + 组内对比：面板呈现二式（2026-11-04 Eason）——分离面板（默认）
+                    // | 合并单图；主品视图不出本槽（合并仅组内对比适用）
+                    <Segmented
+                      size="small"
+                      aria-label="面板呈现方式"
+                      value={mergedCompare ? 'merged' : 'split'}
+                      onChange={(v) => setMergedCompare(v === 'merged')}
+                      options={[
+                        { label: '分离面板', value: 'split' },
+                        { label: '合并单图', value: 'merged' },
+                      ]}
+                    />
                   ) : undefined}
                 />
               </div>
               {/* 中段：组内对比切换（仅组视图渲染）——同一量价卡内的次级视图，一次只看一组。
-                  主品视图本段不渲染：中区让位给产品显隐药丸带（ChartToolbar legend 槽），
-                  组视图「返回主产品视图」语义不变 */}
+                  2026-11-04（Eason 看图反馈）：组别切换改页签形式——价格走势明细表
+                  「产品组」页签同款（文字 + 当前组墨色下划线，lpl-chart-tab），页签名
+                  = 该组主品展示名（不再「第 N 组」编号按钮）；「返回主产品视图」保留
+                  页签行左端。主品视图本段不渲染：中区让位给主品控制带（胶囊带行） */}
               {safeViewMode.kind === 'group' && (
                 <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
-                  <nav aria-label="组内对比切换" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <nav aria-label="组内对比切换" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'center', gap: 18 }}>
                     <button
                       type="button"
                       onClick={() => switchViewMode({ kind: 'mains' })}
-                      style={{ border: 'none', background: 'none', padding: 0, color: color.link, fontSize: 12, cursor: 'pointer' }}
+                      className="lpl-chart-tab"
+                      style={{
+                        height: 32, marginBottom: -1, padding: '0 2px',
+                        border: 'none', borderBottom: '2px solid transparent',
+                        background: 'transparent', font: 'inherit', fontSize: 13,
+                        color: color.body, cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
                     >
                       ← 返回主产品视图
                     </button>
-                    {state.mains.filter((card) => card.main).map((card, index) => {
-                      const active = safeViewMode.cardId === card.id;
-                      return (
-                        <button
-                          key={card.id}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => switchViewMode({ kind: 'group', cardId: card.id })}
-                          style={{
-                            height: 24,
-                            padding: '0 8px',
-                            border: `1px solid ${active ? color.link : color.hairline}`,
-                            borderRadius: radius.control,
-                            background: active ? selectSoft : color.canvas,
-                            color: active ? selectSoftInk : color.body,
-                            fontSize: 12,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          第 {index + 1} 组
-                        </button>
-                      );
-                    })}
+                    <div role="tablist" aria-label="产品组" style={{ display: 'flex', alignItems: 'flex-end', gap: 18, borderBottom: `1px solid ${color.hairline}` }}>
+                      {state.mains.filter((card): card is typeof card & { main: NonNullable<typeof card.main> } => card.main != null).map((card, index) => {
+                        const active = safeViewMode.cardId === card.id;
+                        // 页签名 = 该组主品展示名（型号 + 配置；与面板头/胶囊同源口径）
+                        const tabName = resolveSlot(card.main, cc)?.name ?? card.main.modelId;
+                        return (
+                          <button
+                            key={card.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            title={`第 ${index + 1} 组：${tabName}`}
+                            onClick={() => switchViewMode({ kind: 'group', cardId: card.id })}
+                            className="lpl-chart-tab"
+                            style={{
+                              height: 32,
+                              marginBottom: -1,
+                              padding: '0 2px',
+                              border: 'none',
+                              borderBottom: `2px solid ${active ? color.ink : 'transparent'}`,
+                              background: 'transparent',
+                              font: 'inherit',
+                              fontSize: 13,
+                              fontWeight: active ? 600 : 400,
+                              color: active ? color.ink : color.body,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              transition: 'color 160ms ease, border-color 160ms ease, background-color 160ms ease',
+                            }}
+                          >
+                            {tabName}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </nav>
                 </div>
               )}
@@ -1842,9 +1934,42 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                 border: `1px dashed ${color.hairline}`,
                 borderRadius: radius.card,
               };
+              // 明细卡行（组视图主参照）：分离/合并两呈现共用——合并态观察列跟随合并图。
+              // offset = 共享轴列宽偏移（2026-11-04 Eason 看图反馈：数据卡要与各面板
+              // 对齐——行起点 = 轴列宽 + 列距，与面板网格同一起点；合并单图无轴列 = 0）
+              const detailRow = (offset: number) => detailCards.size > 0 ? (
+                <div style={{ marginBottom: space.sm, marginLeft: offset }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: gridGap }}>
+                    {[...detailCards.values()].map((card, i) => (
+                      <div
+                        key={visiblePanels[i]?.spec.key ?? i}
+                        style={{ containerType: 'inline-size', minWidth: 0, padding: reading ? '0 12px' : 0 }}
+                      >
+                        {card}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
               return (
                 <div className="lpl-card-scroll" style={{ overflowX: 'auto', marginBottom: space.sm }}>
                   <div style={{ minWidth: 880, width: trackWidth }}>
+                    {/* 主品控制带行（2026-11-04 Eason 看图反馈）：胶囊组 + 「本组对比」入口
+                        按面板位置对齐——与面板网格同列模板/列距、同轴列偏移（marginLeft
+                        lead），每个胶囊组居中于其面板上方；隐藏面板保留原列位（虚线胶囊
+                        同位恢复）。随面板横滚区一起滚动，列位恒对齐 */}
+                    {reading && panelCount > 0 && (
+                      <div style={{ marginBottom: space.sm, marginLeft: lead }}>
+                        <MainControlBand
+                          items={mainBandItems}
+                          entries={compareEntries}
+                          gridColumns={Math.max(1, panelCount)}
+                          gridGap={gridGap}
+                          onToggle={togglePanelVisible}
+                          registerHost={registerPanelPillHost}
+                        />
+                      </div>
+                    )}
                     {panelCount === 0 ? (
                       <div style={emptyBoxStyle}>在上方筛选器选择产品后，这里按所选产品铺开量价走势</div>
                     ) : visibleCount === 0 ? (
@@ -1874,25 +1999,32 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                           </button>
                         </div>
                       </div>
+                    ) : mergedOn ? (
+                      // 合并单图（2026-11-04 Eason）：组内产品合并全宽单图——内建量/价双轴
+                      // 与完整 X 轴（axisTickPlan 日历周口径），不再走 SplitAxisColumn +
+                      // 面板网格；面板级时间轨与「同步」开关在合并态隐藏（合并图自带完整
+                      // X 轴，查看窗口沿用共享窗口）；明细卡行照旧保留（无轴列，不偏移）
+                      <>
+                        {detailRow(0)}
+                        <MergedCompareChart
+                          products={mergedProducts}
+                          bucketIds={domainIds.slice(win.s, win.e + 1)}
+                          granularity={state.granularity}
+                          currency={state.currency}
+                          volumeAxisMax={mergedVMax}
+                          formatVolume={mergedFormatVolume}
+                          plotHeight={yCfg.plotHeight}
+                          focusIdx={mergedHover}
+                          onHover={setMergedHover}
+                        />
+                      </>
                     ) : (
                       <>
-                        {/* 明细信息行（2026-11-02 反馈③）：紧跟工具行，每面板一张明细卡正对其面板。
-                            （2026-11-03 Eason 反馈：销毛成本开关上移工具行后，
-                            本行不再保留轴列缩进留白——卡片直接顶满可用宽度） */}
-                        {detailCards.size > 0 && (
-                          <div style={{ marginBottom: space.sm }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: gridGap }}>
-                              {[...detailCards.values()].map((card, i) => (
-                                <div
-                                  key={visiblePanels[i]?.spec.key ?? i}
-                                  style={{ containerType: 'inline-size', minWidth: 0, padding: reading ? '0 12px' : 0 }}
-                                >
-                                  {card}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        {/* 明细信息行：紧跟工具行，每面板一张明细卡正对其面板。
+                            （2026-11-03 Eason 反馈曾去轴列缩进；2026-11-04 看图反馈
+                            恢复对齐——行起点计入共享轴列宽 + 列距，卡片列与面板列
+                            逐列对齐） */}
+                        {detailRow(lead)}
                         <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md }}>
                           <div
                             style={{
@@ -1917,7 +2049,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               showYTicks={showYTicks}
                               showTiers={effShowTiers}
                               tierValues={tierValues}
-                              belowTicks={marginOn ? costRateTicks : undefined}
+                              belowTicks={marginOn && !marginLineOn ? costRateTicks : undefined}
                             />
                             <div style={{ flex: 1 }} />
                             {/* 与时间轴轨道带齐平：轨道高 52、按钮 top -5 对准轨道带中心

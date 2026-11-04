@@ -23,6 +23,7 @@ import PlatformBox from './PlatformBox';
 import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
 import TimeBox from './TimeBox';
+import GranularityBox from './GranularityBox';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
@@ -286,7 +287,10 @@ function ProductPickerEntry() {
  *  then platform and currency. 第一百一十五轮：平台与币种收进顶部筛选条（各看板
  *  标题行不再重复），整行不换行——选择产品列弹性收缩，平台/币种定宽保底。
  *  第一百三十一轮波2：showTime = 时间筛选簇（仅价格看板与量价看板传入），
- *  币种右侧短分隔线后渲染；卡片根为 RangePicker 弹层挂载容器（向下展开）。 */
+ *  币种右侧短分隔线后渲染；卡片根为 RangePicker 弹层挂载容器（向下展开）。
+ *  2026-11-04（Eason 看图反馈）：周/月/季粒度切换从时间筛选簇弹层里移出，
+ *  常驻筛选条币种右侧（GranularityBox Segmented 同款语言）；时间簇收窄让位
+ *  （时间筛选器原日期范围区过宽），整行仍单行不换行。 */
 export default function FilterBar({
   showTime = false,
   showPlatform = true,
@@ -323,6 +327,12 @@ export default function FilterBar({
             </div>
             {showTime && (
               <>
+                <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+                {/* 粒度常驻（2026-11-04 Eason）：币种右侧直接可切，时间簇收窄让位 */}
+                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={labelStyle}>粒度</span>
+                  <GranularityBox />
+                </div>
                 <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
                 <TimeBox />
               </>

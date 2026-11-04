@@ -1,11 +1,14 @@
 // ============================================================
 // 顶部筛选条 · 时间筛选簇（第一百三十一轮波2）：包装 XBrush 导出的
-// TimeRangeCluster（「自动」开关 + 周/月/季范围选择器），不自建交互逻辑。
+// TimeRangeCluster（「自动」开关 + 时间范围选择器），不自建交互逻辑。
 // 桶枚举与筛选范围下标推导与两看板同口径（dataBucketRange/enumerateBuckets
 // + state.rangeStart/rangeEnd → [lo, hi]）；时间状态全局同源（useFilters，
 // URL/持久化同步照旧），价格看板与量价看板共用本入口（FilterBar showTime
 // 时渲染在币种右侧）。手动选段 = 退出自动模式；「自动」= 跟随所选产品
 // 最早/最晚有价时间。查看窗口复位由各看板监听范围变化自理。
+// 2026-11-04（Eason 看图反馈）：周/月/季粒度切换移出本簇（常驻筛选条
+// 币种右侧 GranularityBox），本簇收窄让位（flex 基准 280→220、上限 460→340，
+// 选择器 240→200）。
 // ============================================================
 import { useMemo } from 'react';
 import { TimeRangeCluster } from '../../chart/PriceTrend/XBrush';
@@ -42,9 +45,9 @@ export default function TimeBox() {
     actions.set({ adaptive: false, rangeStart: buckets[first].id, rangeEnd: buckets[last].id });
   };
 
-  // 桌面定宽一行；窄屏拉满当前行，避免范围选择器被裁切
+  // 桌面定宽一行；窄屏拉满当前行，避免范围选择器被裁切（2026-11-04 收窄让位粒度控件）
   return (
-    <div style={{ flex: '1 1 280px', width: 'auto', maxWidth: 460, minWidth: 0 }}>
+    <div style={{ flex: '1 1 220px', width: 'auto', maxWidth: 340, minWidth: 0 }}>
       <TimeRangeCluster
         buckets={buckets}
         lo={lo}
@@ -54,7 +57,6 @@ export default function TimeBox() {
         agg={state.agg}
         onAggChange={(agg) => actions.set({ agg })}
         onRangeChange={onRangeChange}
-        onGranularityChange={actions.setGranularity}
         onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
         placement="bottomRight"
       />

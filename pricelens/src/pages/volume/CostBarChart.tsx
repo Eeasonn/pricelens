@@ -41,6 +41,25 @@ export function costRateAxisMaxOf(rates: readonly (number | null | undefined)[])
   return Math.ceil(m * 10 - 1e-9) / 10;
 }
 
+/** Catmull-Rom → 三次贝塞尔平滑（相邻有效点间插值；跨缺数断段由调用方按连续段传入） */
+function smoothPath(pts: Array<[number, number]>): string {
+  if (pts.length === 0) return '';
+  if (pts.length === 1) return `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
 export default function CostBarChart(props: {
   /** 页面级传入（初次测量前为 null，测量后经 onGeom 回流） */
   geom: StripGeom | null;
@@ -55,6 +74,9 @@ export default function CostBarChart(props: {
   volumeAxisMax: number;
   /** 销毛率共享轴上限（costRateAxisMaxOf；0 = 无销毛数据，不画下垂区刻度） */
   rateAxisMax: number;
+  /** 销毛呈现 = 顶部平滑虚线（2026-11-04 Eason：取消下半部分下垂柱，改上方销毛线 +
+   *  最高/最低/最新三点标值；销毛率无法与价格/销量共用 Y 轴，读值由三点标注承载） */
+  marginLineOn?: boolean;
   currency: 'local' | 'usd';
   seriesColor: string;
   focusIdx: number | null;
@@ -94,7 +116,9 @@ export default function CostBarChart(props: {
 
   const empty = props.points.length === 0 || geom == null;
   const baseline = props.plotTop + props.plotHeight;
-  const totalH = props.plotTop + props.plotHeight + COST_MARGIN_ZONE_H;
+  const marginLineOn = props.marginLineOn === true;
+  // 线模式下取消下半下垂区（2026-11-04 Eason），画布高度随之回收
+  const totalH = marginLineOn ? props.plotTop + props.plotHeight : props.plotTop + props.plotHeight + COST_MARGIN_ZONE_H;
 
   const hasAny = props.points.some((pt) => pt.price != null) || props.volumes.some((v) => v != null);
 
@@ -172,7 +196,7 @@ export default function CostBarChart(props: {
           if (vol != null) {
             volPts.push(`${cx},${volY(vol)}`);
           }
-          if (rate != null && rate > 0 && rateMax > 0) {
+          if (!marginLineOn && rate != null && rate > 0 && rateMax > 0) {
             // 0% 贴 X 轴基线向下生长（与价格轴共用 0 基线），满深度 = 共享上限
             const h = Math.max(2, Math.min(1, rate / rateMax) * COST_RATE_H);
             cols.push(
@@ -187,6 +211,42 @@ export default function CostBarChart(props: {
             );
           }
         }
+        // 销毛线模式：绘图区上方画平滑虚线（销毛率无法与价格/销量共用 Y 轴——
+        // 独立归一化到上方 lane，读值由最高/最低/最新三点标注承载，不画 % 轴）
+        const marginLane: { path: string; marks: Array<{ x: number; y: number; text: string; kind: 'max' | 'min' | 'last' }> } | null = (() => {
+          if (!marginLineOn) return null;
+          const valid: Array<{ i: number; rate: number; cx: number }> = [];
+          for (let i = 0; i < n; i++) {
+            const rate = props.costPoints[i]?.marginRate ?? null;
+            if (rate != null && props.points[i]?.price != null) valid.push({ i, rate, cx: GRID_L + slot * (i + 0.5) });
+          }
+          if (valid.length === 0) return null;
+          const dataMax = Math.max(...valid.map((v) => v.rate));
+          const dataMin = Math.min(...valid.map((v) => v.rate));
+          const domainMax = Math.max(rateMax, dataMax, 0.01);
+          const domainMin = Math.min(0, dataMin);
+          const laneTop = props.plotTop + 10;
+          const laneBottom = props.plotTop + props.plotHeight * 0.62;
+          const yRate = (rate: number): number =>
+            laneBottom - ((rate - domainMin) / (domainMax - domainMin)) * (laneBottom - laneTop);
+          const pts = valid.map((v) => [v.cx, yRate(v.rate)] as [number, number]);
+          // 归约对象本身（非索引）：页面上有缺率周时 valid[k].i ≠ k，索引累加器会越界
+          const maxEntry = valid.reduce((best, v) => (v.rate > best.rate ? v : best), valid[0]);
+          const minEntry = valid.reduce((best, v) => (v.rate < best.rate ? v : best), valid[0]);
+          const lastEntry = valid[valid.length - 1];
+          const markEntries = [...new Map([
+            [maxEntry.i, maxEntry],
+            [minEntry.i, minEntry],
+            [lastEntry.i, lastEntry],
+          ]).values()];
+          const marks = markEntries.map((entry) => {
+            const kind: 'max' | 'min' | 'last' = entry === lastEntry ? 'last' : entry === maxEntry ? 'max' : 'min';
+            // 标注分位避让：最高 = 点上方，最低/最新 = 点下方（相邻点不挤同一行）
+            const above = kind === 'max';
+            return { x: entry.cx, y: above ? yRate(entry.rate) - 8 : yRate(entry.rate) + 15, text: `${Math.round(entry.rate * 100)}%`, kind };
+          });
+          return { path: smoothPath(pts), marks };
+        })();
         // 右侧销量轴（与经典 VolumeBars 同语言）：细竖线 + 标题 + 上/中/0 三刻度
         const axisX = GRID_L + geom.plotWidth + 10;
         const volTicks = [
@@ -195,9 +255,22 @@ export default function CostBarChart(props: {
           { v: 0, y: baseline },
         ];
         return (
-          <svg role="img" aria-label={`${props.name} 成本柱量价图：柱高为折后价，灰线为成本，蓝线为销量，下垂柱为销毛率`} width="100%" height={totalH} style={{ display: 'block' }}>
+          <svg role="img" aria-label={`${props.name} 成本柱量价图：柱高为折后价，灰线为成本，蓝线为销量${marginLineOn ? '；上方平滑虚线为销毛率（标注最高/最低/最新，读值见标注）' : '，下垂柱为销毛率'}`} width="100%" height={totalH} style={{ display: 'block' }}>
             <line x1={GRID_L} x2={GRID_L + geom.plotWidth} y1={baseline} y2={baseline} stroke={color.hairlineStrong} strokeWidth={1} />
             {cols}
+            {marginLane && (
+              <g aria-hidden={false}>
+                <path d={marginLane.path} fill="none" stroke="#f5a623" strokeWidth={2} strokeDasharray="6 4" strokeLinecap="round" />
+                {marginLane.marks.map((mk) => (
+                  <g key={`${mk.kind}-${mk.x}`}>
+                    <circle cx={mk.x} cy={mk.y} r={3} fill="#f5a623" stroke={color.canvas} strokeWidth={1} />
+                    <text x={mk.x} y={mk.y - 8} textAnchor="middle" fill="#b45309" fontSize={10} fontWeight={600} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {mk.text}
+                    </text>
+                  </g>
+                ))}
+              </g>
+            )}
             {volPts.length > 0 && (
               <>
                 <polyline points={volPts.join(' ')} fill="none" stroke={selectAccent} strokeWidth={1.5} />

@@ -8,16 +8,21 @@
 // ②DNS 店铺 chip：明细卡身份区的同款原件迁入（ChannelSelectPopover 同源浮层），
 //   onPick 仍回写 setSelectionPlatform → 面板取数随所选平台重算，数据流零改动。
 // ③「进入本组对比」入口（GroupCompareEntry）：价格走势「多平台对比」同款轻量
-//   文字钮（lpl-text-entry，悬停变墨），由宿主放工具行行尾 compareEntry 位
-//   （分隔线 + 右端，与价格页完全同构）；语义 = switchViewMode 到该主品的组视图。
+//   文字钮（lpl-text-entry，悬停变墨）。
+// 2026-11-04（Eason 看图反馈）：③入口改随胶囊组——entries 按 key 挂到对应
+//   胶囊组之后（不再堆工具行最右端，多卡时逐格就位）；新增 gridColumns 网格
+//   模式——列数 = 面板数、列距 = 面板网格同款 space.md，宿主把整条带放进与
+//   面板网格同宽同偏移的行里，每个胶囊组即居中于其面板上方。两 prop 均可选，
+//   不传 = 既有单行 flex 行为（组件级测试契约不变）。
 // 本组件只改布局位置，不改任何取数/筛选数据流。
 // ============================================================
 import { Popover } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
+import type { ReactNode } from 'react';
 import BrandDot from '../../components/BrandMark';
 import ChannelSelectPopover from '../../components/ChannelSelectPopover';
 import type { PlatformSelection } from '../../state/filtersTypes';
-import { color, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { color, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 
 export interface MainControlBandItem {
   /** 面板 key（PanelSpec.key = modelId__配置去空格） */
@@ -48,19 +53,36 @@ export default function MainControlBand(props: {
   onToggle: (key: string) => void;
   /** 药丸宿主节点上报（焦点承接契约：restoreAll 后焦点落回 button.lpl-lg-pill） */
   registerHost?: (key: string, el: HTMLSpanElement | null) => void;
+  /** 「本组对比」入口随格（2026-11-04 Eason）：面板 key → 入口节点，渲染在该
+   *  胶囊组之后；不传 = 不出入口 */
+  entries?: ReadonlyMap<string, ReactNode>;
+  /** 面板对齐网格模式（2026-11-04 Eason）：列数 = 面板数，列距 = 面板网格同款
+   *  space.md——每格胶囊组居中于其面板上方；不传 = 既有单行 flex 居中排布 */
+  gridColumns?: number;
+  /** 网格列距（与面板网格 gap 同值：量价阅读视图面板间隙为 0，须同值对齐） */
+  gridGap?: number;
 }) {
   if (props.items.length === 0) return null;
+  const grid = props.gridColumns != null && props.gridColumns > 0;
   return (
     <div
       role="group"
       aria-label="产品显示与隐藏"
-      style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}
+      style={grid
+        ? {
+          display: 'grid',
+          gridTemplateColumns: `repeat(${props.gridColumns}, minmax(0, 1fr))`,
+          columnGap: props.gridGap ?? space.md,
+          alignItems: 'center',
+          minWidth: 0,
+        }
+        : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}
     >
       {props.items.map((item) => (
         <span
           key={item.key}
           ref={(el) => props.registerHost?.(item.key, el)}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 0 }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0, justifySelf: grid ? 'center' : undefined, maxWidth: '100%' }}
         >
           {/* 单行身份胶囊（同明细卡原款）：品牌点 + 产品名 + 配置 chip；点击切换显隐 */}
           <button
@@ -173,6 +195,8 @@ export default function MainControlBand(props: {
               </button>
             </Popover>
           )}
+          {/* 「本组对比」入口随格（2026-11-04 Eason）：紧跟该胶囊组之后 */}
+          {props.entries?.get(item.key)}
         </span>
       ))}
     </div>

@@ -34,8 +34,6 @@ export interface TimeRangeClusterProps {
   granularity: Granularity;
   /** 修改上方极值筛选器，退出自动模式。 */
   onRangeChange: (startId: string, endId: string) => void;
-  /** 在时间设置面板中切换图表粒度。 */
-  onGranularityChange: (granularity: Granularity) => void;
   onToggleAdaptive: () => void;
   /** 月/季聚合。周粒度不展示；不传则面板里不出现聚合方式。 */
   agg?: AggMode;
@@ -46,36 +44,26 @@ export interface TimeRangeClusterProps {
   popupContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
-/** 时间筛选簇 = 「自动」跟随开关 + 时间范围选择器（粒度切换在选择器面板内）。
+/** 时间筛选簇 = 「自动」跟随开关 + 时间范围选择器。
  *  独立导出：底部刷选条与量价卡顶工具行共用同一交互。
  *  第一百三十一轮波2修：①弹层显隐不依赖 CSS 过渡（transitionName 置空，即时
  *  开关）；②外点/Escape 关闭改由本组件直接 setState（rc-picker 把关闭延迟一帧
  *  raf，在 rAF 挂起的嵌入 webview 里永不执行 → 弹层关不掉，见下方 effect 注）；
- *  ③再点输入框 = 关闭切换（rc-picker 原生对输入框点击恒保持打开）。 */
+ *  ③再点输入框 = 关闭切换（rc-picker 原生对输入框点击恒保持打开）。
+ *  2026-11-04（Eason 看图反馈）：周/月/季粒度切换移出时间筛选簇——常驻顶部
+ *  筛选条币种右侧（FilterBar GranularityBox），时间簇收窄让位；弹层内不再
+ *  重复出粒度 Segmented（原「切粒度关弹层再重开」的锚点重算机制随之退役）。 */
 export function TimeRangeCluster(props: TimeRangeClusterProps) {
-  const { buckets, lo, hi, adaptive, granularity, onRangeChange, onGranularityChange, onToggleAdaptive, agg, onAggChange, placement = 'topLeft', popupContainerRef } = props;
+  const { buckets, lo, hi, adaptive, granularity, onRangeChange, onToggleAdaptive, agg, onAggChange, placement = 'topLeft', popupContainerRef } = props;
   const narrow = useNarrowViewport();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [rangeOpen, setRangeOpen] = useState(false);
-  const reopenPickerRef = useRef(false);
   // 输入框再点切换用：pointerdown 先于 focus/click 落表（focus 会把选择器打开，
   // 点击批内再取渲染值恒为"已开"），故在按下时刻捕获打开态，点击时据此判定切换。
   const rangeOpenRef = useRef(false);
   rangeOpenRef.current = rangeOpen;
   const pressOpenRef = useRef(false);
   const n = buckets.length;
-  useEffect(() => {
-    if (!reopenPickerRef.current) return undefined;
-    reopenPickerRef.current = false;
-    let secondFrame = 0;
-    const firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => setRangeOpen(true));
-    });
-    return () => {
-      window.cancelAnimationFrame(firstFrame);
-      if (secondFrame) window.cancelAnimationFrame(secondFrame);
-    };
-  }, [granularity]);
   // 关闭兜底（第一百三十一轮波2修）：rc-picker 的外点/Escape 关闭被刻意延迟一帧
   // （useDelayState 的 raf(doUpdate)，防快速开→关抖动），在 rAF 被挂起的环境
   // （后台/遮挡的嵌入 webview）里该帧永不执行，经其内部的关闭路径全部失效、
@@ -147,25 +135,13 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
     );
     setRangeOpen(false);
   };
-  const handleGranularityChange = (next: Granularity): void => {
-    if (next === granularity) return;
-    // 粒度切换会改变图表高度；先关闭再重开，让 AntD 重新计算弹层锚点。
-    reopenPickerRef.current = rangeOpen;
-    setRangeOpen(false);
-    onGranularityChange(next);
-  };
   const renderPickerPanel = (panel: ReactNode): ReactNode => (
     <div style={{ display: 'flex', flexDirection: 'column', maxWidth: narrow ? 'calc(100vw - 16px)' : undefined }}>
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px 6px', borderBottom: `1px solid ${color.hairline}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ color: color.body, fontSize: fontSize.caption, fontWeight: 600 }}>筛选范围</span>
-          <Segmented
-            size={narrow ? 'middle' : 'small'}
-            aria-label="时间粒度"
-            value={granularity}
-            options={[{ label: '周', value: 'week' }, { label: '月', value: 'month' }, { label: '季', value: 'quarter' }]}
-            onChange={(value) => handleGranularityChange(value as Granularity)}
-          />
+          <span style={{ color: color.body, fontSize: fontSize.caption, fontWeight: 600 }}>
+            筛选范围（{granularityLabel[granularity]}）
+          </span>
         </div>
         {granularity !== 'week' && onAggChange && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -254,7 +230,7 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
             placement={placement}
             transitionName="" // 弹层即时开关：不依赖 CSS transitionend（嵌入 webview 不回报，见上注）
             getPopupContainer={() => popupContainerRef?.current ?? rootRef.current ?? document.body}
-            style={{ minWidth: 0, flex: '1 1 180px', width: narrow ? '100%' : 240, height: narrow ? 44 : 30 }}
+            style={{ minWidth: 0, flex: '1 1 160px', width: narrow ? '100%' : 200, height: narrow ? 44 : 30 }}
           />
         </ConfigProvider>
       </span>
