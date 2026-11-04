@@ -53,16 +53,18 @@ import {
 } from './workbenchModel';
 import { AiJudgeBadge, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtSignedPct, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
-const CHART_W = 560;
-const CHART_H = 240;
+// 2026-11-04 视觉一致性：viewBox 宽度对齐左栏实际渲染宽度（≈760，缩放比 ≈1，
+// 文字回归真实 px——旧 560 宽被放大 1.36 倍导致轴字体偏大）；图高与全站 ≈252px 对齐。
+const CHART_W = 760;
+const CHART_H = 252;
 
 /**
- * 卡体定高策略（A2 底部拉齐延续）：图表区左 2/3 + 事件区右 1/3，内容区固定
- * 420px；右栏（事件区）内容超高由卡内纵向滚动兜底（lpl-card-scroll 细滚动条），
- * 本卡底边可预测，与相邻卡统一高度策略。左图 SVG 在剩余高度内自适应
- * （viewBox 等比缩放）。
+ * 卡体定高策略（2026-11-04 视觉一致性修订）：图表区左 2/3 + 事件区右 1/3，内容区
+ * 固定 330px；右栏（事件区）内容超高由卡内纵向滚动兜底（lpl-card-scroll 细滚动条）。
+ * 左图 SVG 宽度 100%（viewBox 760 与左栏实际宽 ≈1:1，无 letterbox 留白），高度随
+ * 宽度等比 ≈252px——与全站图高一致。
  */
-const MARKET_BODY_HEIGHT = 420;
+const MARKET_BODY_HEIGHT = 330;
 
 // 图例系列 key（显隐状态按 key 记录；AI 基线只控制对照虚线，不影响生效值渲染）。
 const SERIES_ACTUAL = 'actual';
@@ -734,8 +736,6 @@ export default function MarketBusPanel({
             <svg
               viewBox={`0 0 ${CHART_W} ${CHART_H}`}
               width="100%"
-              height="100%"
-              preserveAspectRatio="xMidYMid meet"
               role="img"
               aria-label={`大盘月度指数：历史 ${months[0]?.key ?? ''}–${months[actualCount - 1]?.key ?? ''}（模拟实际）；预测 ${forecastMonthKeys[0] ?? ''}–${forecastMonthKeys[forecastMonthKeys.length - 1] ?? ''}（未来 4 季度逐月，AI 基线）；hover 或 Enter 预测月查看证据浮框并可调整。`}
               style={{ display: 'block' }}

@@ -36,7 +36,8 @@ const LANE_H = 9;
 const LANE_GAP = 3;
 export const EVENT_TRACK_LANES = 2;
 const PLOT_TOP = TRACK_TOP + EVENT_TRACK_LANES * LANE_H + LANE_GAP + 2; // ≈ 30
-const PLOT_H = 150;
+// 2026-11-04 视觉一致性：图高过低（评审），绘图区 150→200。
+const PLOT_H = 200;
 const LABEL_H = 18;
 
 const signedPctText = (pct: number): string =>

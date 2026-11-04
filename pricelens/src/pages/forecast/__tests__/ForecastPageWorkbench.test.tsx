@@ -108,7 +108,7 @@ describe('量价预测推演工作台 v2 · WP6 集成', () => {
     // 窄屏退化（≤760px 单列）由 index.css 既有 [data-lpl-forecast-grid] 断点承担（jsdom 不测媒体查询）。
     expect(grid!.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 0.8fr)');
     expect(grid!.style.gap).toBe('12px');
-    expect(grid!.style.alignItems).toBe('start');
+    expect(grid!.style.alignItems).toBe('stretch');
     // 两卡为网格直接子级，DOM 顺序仍 ④ 库存 → ⑤ 成本（左右排布不改变卡序）。
     const cards = Array.from(grid!.children).filter((node) => node.tagName === 'SECTION');
     expect(cards).toHaveLength(2);

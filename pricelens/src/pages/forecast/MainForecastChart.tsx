@@ -33,8 +33,9 @@ import { buildAxisTicks, buildLineSegments, firstForecastIndex, segmentPathD } f
 import { axisTickPlan } from '../../chart/PriceTrend/helpers';
 
 const W = 1180;
-/** heightScale = 1 时的画布高度（H = TOP + BASE_PLOT_H + BOTTOM）；heightScale 只缩放绘图区。 */
-const BASE_PLOT_H = 300;
+/** heightScale = 1 时的画布高度（H = TOP + BASE_PLOT_H + BOTTOM）；heightScale 只缩放绘图区。
+ *  2026-11-04 视觉一致性：与价格走势页图高（≈252px）对齐。 */
+const BASE_PLOT_H = 172;
 const LEFT = 64;
 const RIGHT = 64;
 const TOP = 34;

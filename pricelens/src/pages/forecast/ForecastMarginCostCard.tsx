@@ -29,8 +29,10 @@ import type { WorkbenchResult } from './workbenchModel';
 import { IoBar, SectionHead, SimChip, WorkbenchLegend, fmtMillionUsd, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 import { buildAxisTicks, firstForecastIndex } from './workbenchChartSegments';
 
-const W = 1000;
-const H = 210;
+// 2026-11-04 视觉一致性：viewBox 宽度对齐右列实际渲染宽度（≈560-720，缩放比 ≈1，
+// 文字回归真实 px——旧 1000 宽被压缩导致轴字体过小）；图高与全站 ≈252px 对齐。
+const W = 720;
+const H = 252;
 const LEFT = 52;
 const RIGHT = 50;
 const TOP = 16;

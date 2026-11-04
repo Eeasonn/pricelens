@@ -397,7 +397,7 @@ export default function ForecastPage() {
           [data-lpl-forecast-grid] @media 断点（index.css，≤760px 单列堆叠）。 */}
       <div
         data-lpl-forecast-grid
-        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 0.8fr)', gap: space.md, alignItems: 'start' }}
+        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 0.8fr)', gap: space.md, alignItems: 'stretch' }}
       >
         <InventoryValidationCard
           fixture={fixture}

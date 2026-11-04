@@ -18,7 +18,7 @@
 // 任务三 = 月中事件均摊口径可见（含事件月浮框复算提示「含事件 +0.8%
 //   （均摊 3/31 天）」）+ 三字段录入（名称选填）+ 删除回调；
 // 任务四 = 事件区右 1/3 两块（AI 候选事件 Top5 占位 + 人工事件列表）；
-//   事件在图上 = 轴下次要标记（不占主视觉）；卡体定高 420 延续 A2 策略。
+//   事件在图上 = 轴下次要标记（不占主视觉）；卡体定高 330（2026-11-04 视觉一致性，旧 420 已下）。
 // 环比数字由所画 6 个月真实计算（marketBusMonthly.test 同源断言），UI 不另编。
 // 只验证 React 组装与交互开关，不验证图表像素（SVG 由 typecheck 保证结构）。
 // ============================================================
@@ -408,21 +408,23 @@ describe('大盘卡 · 任务三：月中事件均摊与三字段录入', () => 
 });
 
 describe('大盘卡 · 任务四：事件区右 1/3 两块', () => {
-  it('卡内布局 = 图表左 2/3 + 事件区右 1/3；卡体定高 420 延续 A2；右栏卡内纵向滚动兜底', () => {
+  it('卡内布局 = 图表左 2/3 + 事件区右 1/3；卡体定高 330（2026-11-04 视觉一致性）；右栏卡内纵向滚动兜底', () => {
     setup();
     const marketSection = Array.from(document.querySelectorAll('section'))
       .find((section) => section.querySelector('h2')?.textContent?.includes('大盘'));
     expect(marketSection).toBeTruthy();
     const bodyGrid = marketSection?.querySelector(':scope > div.lpl-card-scroll') as HTMLElement | null;
     expect(bodyGrid).toBeTruthy();
-    expect(bodyGrid?.style.height).toBe('420px');
+    expect(bodyGrid?.style.height).toBe('330px');
     expect(bodyGrid?.style.gridTemplateColumns).toBe('minmax(0, 2fr) minmax(0, 1fr)');
     const rightCol = bodyGrid?.children[1] as HTMLElement | undefined;
     expect(rightCol?.className).toContain('lpl-card-scroll');
     expect(rightCol?.style.overflowY).toBe('auto');
-    // 左图 SVG 填满剩余高度（viewBox 等比缩放）
+    // 左图 SVG 宽度 100%（viewBox 760 与左栏实际宽 ≈1:1，无 letterbox）；高度随宽度等比（不再定高 100%）
     const svg = document.querySelector('svg[role="img"]') as SVGSVGElement | null;
-    expect(svg?.getAttribute('height')).toBe('100%');
+    expect(svg?.getAttribute('width')).toBe('100%');
+    expect(svg?.getAttribute('height')).toBeNull();
+    expect(svg?.getAttribute('preserveAspectRatio')).toBeNull();
   });
 
   it('上块 AI 候选事件 Top5 占位：空态注明「候选生成能力待接入，抓取逻辑另议」；先列后删骨架全禁用（不接数据）', () => {

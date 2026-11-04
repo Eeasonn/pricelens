@@ -35,8 +35,10 @@ import type { WorkbenchParams, WorkbenchResult, WorkbenchWeekResult } from './wo
 import { DOS_BAND, INV_CRASH_HEAVY_PCT, INV_CRASH_LIGHT_PCT } from './workbenchModel';
 import { IoBar, SectionHead, SimChip, WorkbenchLegend, fmtWan, wanOf, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
-const W = 1000;
-const H = 210;
+// 2026-11-04 视觉一致性：viewBox 宽度对齐左列实际渲染宽度（≈720，缩放比 ≈1，
+// 文字回归真实 px——旧 1000 宽被压到 0.6 倍导致轴字体过小）；图高与全站 ≈252px 对齐。
+const W = 720;
+const H = 252;
 const LEFT = 40;
 const RIGHT = 52;
 const TOP = 14;

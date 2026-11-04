@@ -75,9 +75,9 @@ describe('主图 · 受控视图（MainForecastView 默认 = 当前视觉）', (
     expect(DEFAULT_MAIN_FORECAST_VIEW).toEqual({ heightScale: 1, showYTicks: true, labelMode: 'compact', promoBandOn: true });
   });
 
-  it('不传 view：viewBox 高度 = 默认（380），促销日期标注、刻度与紧凑周标签齐全，档期色带不渲染', () => {
+  it('不传 view：viewBox 高度 = 默认（252，与全站图高一致），促销日期标注、刻度与紧凑周标签齐全，档期色带不渲染', () => {
     renderChart();
-    expect(document.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 380');
+    expect(document.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 252');
     // 促销只留轴下日期标注（不上色带）：标注文字在，琥珀色带 rect 不在。
     expect(svgTexts().some((text) => text === '黑五档期 11.14–12.02')).toBe(true);
     const amberBand = Array.from(document.querySelectorAll('svg rect')).find((rect) => rect.getAttribute('fill') === color.warningSoft);
@@ -110,12 +110,12 @@ describe('主图 · 受控视图（MainForecastView 默认 = 当前视觉）', (
     expect(xLabels()).toHaveLength(14);
     detail.unmount();
     const compressed = renderChart({ view: { heightScale: 0.5 } });
-    expect(compressed.container.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 230');
+    expect(compressed.container.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 166');
   });
 
   it('heightScale 只缩放绘图区：宽度不变、周标签仍在（底部结构不丢）', () => {
     renderChart({ view: { heightScale: 2 } });
-    expect(document.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 680');
+    expect(document.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 424');
     expect(xLabels().length).toBeGreaterThan(0);
   });
 
@@ -272,7 +272,7 @@ describe('主图 · 2026-11-04 评审大减法下线回归', () => {
     const priceHi = Math.max(...prices);
     const pad = (priceHi - priceLo) * 0.12 || Math.max(1, priceHi * 0.12);
     return {
-      yPrice: (value: number): number => 34 + 300 * (1 - (value - (priceLo - pad)) / (priceHi + pad - (priceLo - pad))),
+      yPrice: (value: number): number => 34 + 172 * (1 - (value - (priceLo - pad)) / (priceHi + pad - (priceLo - pad))),
     };
   };
   const pathCoords = (d: string): Array<[number, number]> =>
