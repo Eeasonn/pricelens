@@ -684,10 +684,21 @@ describe('量价参考产品 · 参考回放（§4.5）', () => {
 // ============================================================
 describe('量价参考产品 · 异常态 / 缺数 / 可访问性', () => {
   it('存储不可用：显式「未持久化」+ 重试；恢复后状态消除（§4.1 / §4.6）', async () => {
-    renderPanel({ prevGenReferenceId: 'ref-mate80' });
-    const failing = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
-      throw new Error('quota');
+    // 整只替换 localStorage 访问器（而非实例级 spyOn）：jsdom 的 localStorage
+    // 在部分 Node/jsdom 组合下（CI Node 22 实证）实例 spy 会被绕过，访问器替换版本免疫。
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => { throw new Error('quota'); },
+        removeItem: () => undefined,
+        clear: () => undefined,
+        key: () => null,
+        length: 0,
+      },
     });
+    renderPanel({ prevGenReferenceId: 'ref-mate80' });
     const popover = await openCreateComposer('Mate 80（上一代）');
     await pickSelectOption(popover, '事件起周', 'W40');
     await pickSelectOption(popover, '事件止周', 'W40');
@@ -695,7 +706,7 @@ describe('量价参考产品 · 异常态 / 缺数 / 可访问性', () => {
     // 自动保存失败 → 工具行 + 编辑器状态行显式「未持久化」
     await waitFor(() => expect(screen.getAllByText('未持久化').length).toBeGreaterThanOrEqual(1));
     expect(document.body.textContent ?? '').toContain('未能保存到浏览器，仅当前页面有效');
-    failing.mockRestore();
+    if (original) Object.defineProperty(window, 'localStorage', original);
     fireEvent.click(screen.getByRole('button', { name: '重试保存工作区' }));
     await waitFor(() => expect(screen.queryByText('未持久化')).toBeNull());
     // 内存操作不中断：仍可保存

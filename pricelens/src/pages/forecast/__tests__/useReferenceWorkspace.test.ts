@@ -177,13 +177,23 @@ describe('useReferenceWorkspace · 撤销（before/after patch）与软删除', 
 describe('useReferenceWorkspace · 写入失败显式「未持久化」+ 重试', () => {
   it('setItem 抛错 → saveState unpersisted（内存态保留）；恢复存储后 retryPersist → ready', () => {
     const { result } = renderHook(() => useReferenceWorkspace(SCOPE));
-    const failing = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
-      throw new Error('quota exceeded');
-    });
+    // 整只替换 localStorage 访问器（而非实例级 spyOn）：jsdom 的 localStorage
+    // 在部分 Node/jsdom 组合下（CI Node 22 实证）访问器返回的实例不稳定，
+    // 实例 spy 会被绕过导致「未持久化」路径测不到；访问器替换版本免疫。
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    const failingStorage = {
+      getItem: () => null,
+      setItem: () => { throw new Error('quota exceeded'); },
+      removeItem: () => undefined,
+      clear: () => undefined,
+      key: () => null,
+      length: 0,
+    };
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: failingStorage });
     act(() => { result.current.createComposed('lc-test', fieldsOf('店庆补贴')); });
     expect(result.current.saveState).toBe('unpersisted');
     expect(Object.values(result.current.workspace.composed)).toHaveLength(1); // 内存态不中断
-    failing.mockRestore();
+    if (original) Object.defineProperty(window, 'localStorage', original);
     act(() => { result.current.retryPersist(); });
     expect(result.current.saveState).toBe('ready');
     const stored = JSON.parse(localStorage.getItem(KEY) as string);
