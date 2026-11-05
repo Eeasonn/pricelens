@@ -30,3 +30,10 @@ dist/
 **/.impeccable/live/pending-manual-edits.json
 **/.impeccable/live/deferred-svelte-component-accepts.json
 **/.impeccable/live/*.png
+
+# 本地工作区（2026-11-05 垃圾文件整理）：设计稿/演示素材历来不入库，只静音 git status
+design-proposals/
+demo/
+.zcode/
+logs/
+*.tsbuildinfo
