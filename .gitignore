@@ -37,3 +37,18 @@ demo/
 .zcode/
 logs/
 *.tsbuildinfo
+
+# 工作文档与路演素材不入库（2026-11-05 Eason 拍板：仓库只留代码与工程必需文件；
+# 已跟踪的历史文档不受影响，仅不再新增入库）
+/docs/*.md
+/docs/*.html
+/docs/*.pdf
+/docs/priceLens_figures/
+/docs/lifecycle-os-mvp/
+/docs/superpowers/
+/pricelens/docs/
+/pricelens/scripts/roadshow-narration.mjs
+/pricelens/public/
+/PriceLens-UX需求文档.md
+/docs/*.xlsx
+/docs/plans/
