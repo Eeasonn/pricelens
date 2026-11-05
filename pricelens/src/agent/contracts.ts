@@ -44,6 +44,10 @@ export type AgentEventType =
   | 'run.status'
   | 'step.started'
   | 'step.updated'
+  /** Incremental assistant text; never treated as a deterministic fact. */
+  | 'text.delta'
+  /** Incremental structured card upsert; the baseline remains authoritative. */
+  | 'card.patch'
   | 'approval.required'
   | 'clarification.required'
   | 'warning'
@@ -118,6 +122,12 @@ export interface AgentActionTarget {
   weekId?: string;
   modelId?: string;
   seriesKey?: string;
+  /** Alert deep-link fields; the target remains scoped to the producing run. */
+  alertId?: string;
+  alertType?: string;
+  alertSeriesKey?: string;
+  /** A reversible filter patch used by an alert/card action. */
+  filterPatch?: FilterPatch;
   forecastDraft?: ForecastDraftInput;
   forecastSnapshot?: ForecastSnapshot;
   forecastDataset?: ForecastDataset;
@@ -148,6 +158,7 @@ export interface AgentAlertRecord {
   gapHighPlatform: string | null;
   gapLowPrice: number | null;
   gapHighPrice: number | null;
+  ownGapPct?: number | null;
   isOwn: boolean;
   lifecycle?: AlertLifecycle;
   priority?: AlertPriority;
@@ -158,6 +169,9 @@ export interface AgentAlertRecord {
   contextFingerprint?: string;
   evidenceIds?: string[];
   evidenceStatus?: AlertEvidenceStatus;
+  /** Expanded deterministic evidence carried into the Agent result card. */
+  evidence?: AgentEvidence[];
+  actions?: AgentCardAction[];
 }
 
 export interface AgentContextSnapshot {
@@ -189,6 +203,22 @@ export interface AgentStep {
   status: 'success' | 'warning' | 'failed';
   detail: string;
   durationMs: number;
+}
+
+export type ToolCallStatus = 'queued' | 'running' | 'success' | 'failed' | 'waiting_for_approval';
+
+export interface ToolCallCard {
+  kind: 'tool_call';
+  id: string;
+  tool: AgentToolName | string;
+  status: ToolCallStatus;
+  inputSummary: string;
+  outputSummary?: string;
+  durationMs?: number;
+  error?: string;
+  actions?: AgentCardAction[];
+  filterCard?: FilterResultCard;
+  expanded?: boolean;
 }
 
 export interface FilterResultCard {
@@ -224,11 +254,69 @@ export interface ChartResultCard {
   evidence?: AgentEvidence[];
 }
 
+export type PriceAdvantageDirection = 'advantage' | 'lagging' | 'parity';
+
+export interface PriceAdvantageRow {
+  id: string;
+  countryCode: string;
+  channel: string;
+  weekId: string;
+  weekLabel: string;
+  ownModelId: string;
+  ownModelName: string;
+  ownRomram: string;
+  ownSkuId: string;
+  competitorModelId: string;
+  competitorModelName: string;
+  competitorBrand: string;
+  competitorRomram: string;
+  competitorSkuId: string;
+  ownPrice: number;
+  competitorPrice: number;
+  gap: number;
+  gapPct: number | null;
+  direction: PriceAdvantageDirection;
+  currency: 'usd' | 'local';
+  target: {
+    modelId: string;
+    romram: string;
+    skuIds: string[];
+    weekId: string;
+    platform: string | null;
+  };
+}
+
+export interface PriceAdvantageSkuOption {
+  skuId: string;
+  modelId: string;
+  modelName: string;
+  romram: string;
+  label: string;
+}
+
+export interface PriceAdvantageResultCard {
+  kind: 'price_advantage';
+  id: string;
+  title: string;
+  countryCode: string;
+  currency: 'usd' | 'local';
+  rows: PriceAdvantageRow[];
+  skuOptions: PriceAdvantageSkuOption[];
+  selectedSkuId?: string;
+  filter: 'all' | 'advantage' | 'lagging';
+  note: string;
+  actions?: AgentCardAction[];
+  evidence?: AgentEvidence[];
+  target?: AgentActionTarget;
+}
+
 export interface AlertResultCard {
   kind: 'alert';
   id: string;
   title: string;
   alert: AgentAlertRecord;
+  /** Multiple latest alerts are rendered as independently actionable rows. */
+  alerts?: AgentAlertRecord[];
   facts: string[];
   checks: string[];
   evidence?: AgentEvidence[];
@@ -292,7 +380,7 @@ export interface ForecastExplanationResultCard {
   evidence?: AgentEvidence[];
 }
 
-export type AgentResultCard = FilterResultCard | TableResultCard | ChartResultCard | AlertResultCard | ForecastExplanationResultCard;
+export type AgentResultCard = FilterResultCard | TableResultCard | ChartResultCard | AlertResultCard | ForecastExplanationResultCard | ToolCallCard | PriceAdvantageResultCard;
 
 export interface AgentResponse {
   intent: AgentIntent;
@@ -300,11 +388,25 @@ export interface AgentResponse {
   steps: AgentStep[];
   cards: AgentResultCard[];
   citations: AgentCitation[];
-  suggestions: string[];
+  suggestions: Array<string | AgentSuggestion>;
   contextFingerprint: string;
   provider?: { name: string; model: string };
+  fallbackReason?: string;
   provenance?: AgentProvenance;
   coverage?: CoverageSummary;
+  /** Set by the client when untrusted remote facts were ignored. */
+  factGuard?: {
+    calibrated: boolean;
+    message: string;
+    rejectedFields?: string[];
+  };
+}
+
+export interface AgentSuggestion {
+  label: string;
+  intent: AgentIntent;
+  target?: 'comparison' | 'evidence' | 'filter_preview' | 'query';
+  prompt: string;
 }
 
 export interface AgentEvent {
@@ -318,6 +420,12 @@ export interface AgentEvent {
   tool?: AgentToolName;
   stepId?: string;
   cardId?: string;
+  /** Payload for text.delta events. */
+  delta?: string;
+  /** Structured card payload for card.ready/card.patch events. */
+  card?: AgentResultCard;
+  /** Partial card fields for card.patch events. */
+  cardPatch?: Partial<AgentResultCard>;
   evidence?: AgentEvidence[];
   approval?: ApprovalRequest;
   provenance?: AgentProvenance;
@@ -340,6 +448,9 @@ export interface AgentRun {
 export function isAgentEvent(value: unknown): value is AgentEvent {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const event = value as Record<string, unknown>;
+  if (event.delta !== undefined && typeof event.delta !== 'string') return false;
+  if (event.card !== undefined && !isAgentResultCard(event.card)) return false;
+  if (event.cardPatch !== undefined && !isRecord(event.cardPatch)) return false;
   return typeof event.id === 'string'
     && typeof event.runId === 'string'
     && typeof event.sequence === 'number'
@@ -364,10 +475,82 @@ export function isAgentResponse(value: unknown): value is AgentResponse {
   if (typeof response.summary !== 'string' || typeof response.contextFingerprint !== 'string') return false;
   if (!Array.isArray(response.steps) || !Array.isArray(response.cards) || !Array.isArray(response.citations) || !Array.isArray(response.suggestions)) return false;
   if (response.provider !== undefined && (!response.provider || typeof response.provider !== 'object' || typeof (response.provider as Record<string, unknown>).name !== 'string' || typeof (response.provider as Record<string, unknown>).model !== 'string')) return false;
-  if (response.suggestions.some((suggestion) => typeof suggestion !== 'string')) return false;
-  if (response.steps.some((item) => !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).tool !== 'string')) return false;
-  if (response.cards.some((item) => !item || typeof item !== 'object' || !['filter', 'table', 'chart', 'alert', 'forecast_explanation'].includes(String((item as Record<string, unknown>).kind)))) return false;
+  if (response.suggestions.some((suggestion) => typeof suggestion !== 'string' && !isAgentSuggestion(suggestion))) return false;
+  if (response.steps.some((item) => !isAgentStep(item))) return false;
+  if (response.cards.some((item) => !isAgentResultCard(item))) return false;
+  if (response.citations.some((item) => !isAgentCitation(item))) return false;
+  if (response.coverage !== undefined && !isCoverageSummary(response.coverage)) return false;
+  if (response.factGuard !== undefined && !isFactGuard(response.factGuard)) return false;
   return true;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isAgentStep(value: unknown): value is AgentStep {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.tool === 'string'
+    && typeof value.label === 'string'
+    && ['success', 'warning', 'failed'].includes(String(value.status))
+    && typeof value.detail === 'string'
+    && typeof value.durationMs === 'number';
+}
+
+function isAgentCitation(value: unknown): value is AgentCitation {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && ['fact', 'calculation', 'alert', 'rule', 'page'].includes(String(value.kind))
+    && typeof value.label === 'string'
+    && typeof value.detail === 'string';
+}
+
+function isAgentSuggestion(value: unknown): value is AgentSuggestion {
+  if (!isRecord(value)) return false;
+  return typeof value.label === 'string'
+    && typeof value.prompt === 'string'
+    && ['filter', 'query', 'forecast_explain', 'alert', 'clarify'].includes(String(value.intent))
+    && (value.target === undefined || ['comparison', 'evidence', 'filter_preview', 'query'].includes(String(value.target)));
+}
+
+function isAgentResultCard(value: unknown): value is AgentResultCard {
+  if (!isRecord(value) || typeof value.id !== 'string') return false;
+  const kind = String(value.kind);
+  if (kind === 'tool_call') return typeof value.tool === 'string' && ['queued', 'running', 'success', 'failed', 'waiting_for_approval'].includes(String(value.status)) && typeof value.inputSummary === 'string';
+  if (kind === 'price_advantage') {
+    return typeof value.title === 'string'
+      && typeof value.countryCode === 'string'
+      && (value.currency === 'usd' || value.currency === 'local')
+      && Array.isArray(value.rows)
+      && Array.isArray(value.skuOptions)
+      && ['all', 'advantage', 'lagging'].includes(String(value.filter))
+      && typeof value.note === 'string';
+  }
+  if (!['filter', 'table', 'chart', 'alert', 'forecast_explanation'].includes(kind)) return false;
+  // Keep the remote boundary strict enough to reject malformed or fact-shaped
+  // payloads while leaving the domain-specific card validators in their own
+  // modules. The baseline still owns every card value in the merge below.
+  if (kind === 'filter') return isRecord(value.patch) && Array.isArray(value.changes);
+  if (kind === 'table') return Array.isArray(value.columns) && Array.isArray(value.rows);
+  if (kind === 'chart') return Array.isArray(value.series) && typeof value.note === 'string';
+  if (kind === 'alert') return isRecord(value.alert) && Array.isArray(value.facts) && Array.isArray(value.checks);
+  return typeof value.contextFingerprint === 'string' && isRecord(value.scope) && isRecord(value.current) && Array.isArray(value.factors) && Array.isArray(value.assumptions) && Array.isArray(value.boundaries);
+}
+
+function isCoverageSummary(value: unknown): value is CoverageSummary {
+  if (!isRecord(value)) return false;
+  return Number.isInteger(value.covered) && Number.isInteger(value.total)
+    && (value.missing === undefined || Number.isInteger(value.missing))
+    && (value.stale === undefined || Number.isInteger(value.stale))
+    && (value.note === undefined || typeof value.note === 'string');
+}
+
+function isFactGuard(value: unknown): value is NonNullable<AgentResponse['factGuard']> {
+  if (!isRecord(value)) return false;
+  return typeof value.calibrated === 'boolean'
+    && typeof value.message === 'string'
+    && (value.rejectedFields === undefined || (Array.isArray(value.rejectedFields) && value.rejectedFields.every((item) => typeof item === 'string')));
 }
 
 export interface FilterValidationResult {

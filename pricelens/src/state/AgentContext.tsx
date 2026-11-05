@@ -15,6 +15,7 @@ import {
   type AgentRun,
   type AgentRunStatus,
   type AgentResponse,
+  type AgentEvent,
   type AgentResultCard,
   type ForecastContextInput,
   type ForecastDraftInput,
@@ -37,6 +38,12 @@ export interface AgentMessage {
   /** 原始请求，用于错误结果一键重试。 */
   prompt?: string;
   alert?: AgentAlertRecord;
+  /** Incremental assistant output is kept separate from the final response. */
+  partialText?: string;
+  partialCards?: AgentResultCard[];
+  provider?: AgentResponse['provider'];
+  fallbackReason?: string;
+  applyError?: string;
 }
 
 interface AgentContextValue {
@@ -59,7 +66,7 @@ interface AgentContextValue {
   openAgent: (mode?: 'dock' | 'drawer' | 'full', prompt?: string | ({ text: string; intent?: AgentIntent; forecastDraft?: ForecastDraftInput } & ForecastContextInput)) => void;
   closeAgent: () => void;
   setMode: (mode: 'dock' | 'drawer' | 'full') => void;
-  send: (text?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput) => Promise<void>;
+  send: (text?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, intent?: AgentIntent) => Promise<void>;
   stop: () => void;
   newConversation: () => void;
   applyFilter: (card: FilterResultCard) => { ok: boolean; error?: string };
@@ -72,6 +79,7 @@ interface AgentContextValue {
 const Ctx = createContext<AgentContextValue | null>(null);
 
 const messageId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+type AgentEventLike = AgentEvent & { delta?: string; card?: Partial<AgentResultCard> };
 
 function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState, page: string) {
   const cfg = {
@@ -105,6 +113,7 @@ function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState,
       gapHighPlatform: record.gapHighPlatform,
       gapLowPrice: record.gapLowPrice,
       gapHighPrice: record.gapHighPrice,
+      ownGapPct: record.ownGapPct,
       isOwn: record.isOwn,
       lifecycle: structured.lifecycle,
       priority: structured.priority,
@@ -115,6 +124,14 @@ function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState,
       contextFingerprint: structured.contextFingerprint,
       evidenceIds: structured.evidenceIds,
       evidenceStatus: record.evidenceStatus,
+      evidence: record.evidence.map((item) => ({
+        id: item.id,
+        label: item.label,
+        detail: item.detail,
+        source: item.kind === 'source' ? '平台价格事实' : item.kind === 'product' ? '商品价格事实' : '预警规则快照',
+        href: item.href,
+        timestamp: item.capturedAt,
+      })),
     };
   });
 }
@@ -146,6 +163,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const pendingIntent = useRef<AgentIntent | undefined>(undefined);
   const pendingForecastDraft = useRef<ForecastDraftInput | undefined>(undefined);
   const pendingForecastContext = useRef<ForecastContextInput | undefined>(undefined);
+  const activeMessageId = useRef<string | null>(null);
   const seenProactiveAlerts = useRef<Set<string>>(new Set());
   const agentClient = useMemo(() => defaultAgentClient(), []);
   const voice = useMemo<VoiceInputAdapter>(() => defaultVoiceAdapter(), []);
@@ -189,13 +207,13 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   // 允许运行中折叠面板，查询继续在后台执行；launcher 会保留运行指示。
   const closeAgent = useCallback(() => { setOpen(false); }, []);
 
-  const send = useCallback(async (value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput) => {
+  const send = useCallback(async (value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent) => {
     const text = (value ?? draft).trim();
     if (!text || running) return;
     setDraft('');
     const requestContextFingerprint = context.fingerprint;
     appendMessage({ id: messageId('user'), role: 'user', text, prompt: text, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() });
-    const explicitIntent = pendingIntent.current;
+    const explicitIntent = requestedIntent ?? pendingIntent.current;
     const explicitForecastDraft = forecastDraft ?? pendingForecastDraft.current;
     const explicitForecastContext = forecastContext ?? pendingForecastContext.current;
     pendingIntent.current = undefined;
@@ -205,6 +223,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const runId = ++runSequence.current;
     const agentRunId = messageId('run');
     const startedAt = new Date().toISOString();
+    const assistantMessageId = messageId('assistant');
+    activeMessageId.current = assistantMessageId;
+    appendMessage({ id: assistantMessageId, role: 'assistant', text: '', partialText: '', partialCards: [], kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, prompt: text, createdAt: startedAt });
     controller.current = run; cancelRequested.current = false; setRunning(true); setOpen(true); setRunStatus('parsing');
     setActiveRun({ id: agentRunId, requestId: messageId('request'), status: 'parsing', startedAt, updatedAt: startedAt, context, events: [{ id: messageId('event'), runId: agentRunId, sequence: 1, type: 'run.started', status: 'parsing', timestamp: startedAt, message: '已接收请求', provenance: context.provenance }] });
     try {
@@ -217,10 +238,44 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         if (runSequence.current !== runId) return;
         setActiveRun((prev) => prev ? { ...prev, status: event.status ?? prev.status, updatedAt: event.timestamp, events: [...prev.events, event] } : prev);
         if (event.status && event.status !== 'completed') setRunStatus(event.status);
+        const candidate = event as AgentEventLike;
+        if (candidate.type === 'text.delta' && typeof candidate.delta === 'string') {
+          setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, partialText: `${message.partialText ?? ''}${candidate.delta}`, text: `${message.partialText ?? ''}${candidate.delta}` } : message));
+        }
+        if (candidate.type === 'card.patch' && candidate.card && typeof candidate.card === 'object') {
+          setMessages((prev) => prev.map((message) => {
+            if (message.id !== assistantMessageId) return message;
+            const cards = [...(message.partialCards ?? [])];
+            const patch = candidate.card as AgentResultCard;
+            const index = cards.findIndex((card) => card.id === patch.id);
+            if (index >= 0) cards[index] = { ...cards[index], ...patch } as AgentResultCard;
+            else cards.push(patch);
+            return { ...message, partialCards: cards };
+          }));
+        }
+        const toolName = candidate.tool ?? (candidate.message?.includes('远端 Agent 服务不可达') ? 'remote.agent' : undefined);
+        if (toolName && (candidate.type === 'step.started' || candidate.type === 'step.updated' || candidate.type === 'run.failed')) {
+          setMessages((prev) => prev.map((message) => {
+            if (message.id !== assistantMessageId) return message;
+            const cards = [...(message.partialCards ?? [])];
+            const id = `tool-${candidate.stepId ?? toolName}`;
+            const status: import('../agent').ToolCallStatus = candidate.message?.includes('远端 Agent 服务不可达') || candidate.type === 'run.failed' || candidate.status === 'failed' ? 'failed' : candidate.status === 'completed' ? 'success' : candidate.type === 'step.updated' ? 'running' : 'queued';
+            const inputSummary = candidate.message?.includes('远端 Agent 服务不可达') ? (message.prompt ?? '价格优势') : (candidate.message ?? message.prompt ?? '当前筛选范围');
+            const toolCard = { kind: 'tool_call' as const, id, tool: toolName, status, inputSummary, outputSummary: candidate.status === 'completed' ? '已返回结构化结果' : undefined, error: status === 'failed' ? candidate.message : undefined };
+            const index = cards.findIndex((card) => card.id === id);
+            if (index >= 0) cards[index] = { ...cards[index], ...toolCard } as AgentResultCard;
+            else cards.push(toolCard);
+            return { ...message, partialCards: cards };
+          }));
+        }
+        if (candidate.provenance?.provider || candidate.message?.includes('回退')) {
+          setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, provider: candidate.provenance?.provider ? { name: candidate.provenance.provider, model: candidate.provenance.model ?? 'unknown' } : message.provider, fallbackReason: candidate.message?.includes('回退') ? candidate.message : message.fallbackReason } : message));
+        }
       });
       if (runSequence.current !== runId) return;
       const stale = contextRef.current ? contextRef.current.fingerprint !== requestContextFingerprint : false;
-      const nextStatus: AgentRunStatus = stale ? 'stale_context' : response.intent === 'clarify' ? 'clarification_required' : 'completed';
+      const responseFingerprintMismatch = response.contextFingerprint !== requestContextFingerprint;
+      const nextStatus: AgentRunStatus = stale || responseFingerprintMismatch ? 'stale_context' : response.intent === 'clarify' ? 'clarification_required' : 'completed';
       setRunStatus(nextStatus);
       setActiveRun((prev) => {
         if (!prev) return prev;
@@ -229,7 +284,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         return { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), response, events };
       });
       const messageKind: AgentMessage['kind'] = response.intent === 'clarify' ? 'clarification' : /量价预测|预测|情景/.test(text) ? 'scenario' : 'conversation';
-      appendMessage({ id: messageId('assistant'), role: 'assistant', text: response.summary, response, prompt: text, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() });
+      setMessages((prev) => prev.map((message) => {
+        if (message.id !== assistantMessageId) return message;
+        const completedTools = response.steps.map((step) => ({ kind: 'tool_call' as const, id: `tool-${step.id}`, tool: step.tool, status: step.status === 'failed' ? 'failed' as const : 'success' as const, inputSummary: step.label, outputSummary: step.detail, durationMs: step.durationMs, error: step.status === 'failed' ? step.detail : undefined }));
+        const existing = new Set((message.partialCards ?? []).map((card) => card.id));
+        return { ...message, text: response.summary, response, partialText: undefined, partialCards: [...(message.partialCards ?? []), ...completedTools.filter((card) => !existing.has(card.id))], provider: response.provider, fallbackReason: response.fallbackReason ?? message.fallbackReason, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint };
+      }));
     } catch (error) {
       if (runSequence.current !== runId) return;
       const aborted = error instanceof Error && error.name === 'AbortError';
@@ -237,9 +297,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       const nextStatus: AgentRunStatus = aborted || cancelRequested.current ? 'cancelled' : 'failed';
       setRunStatus(nextStatus);
       setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: aborted || cancelRequested.current ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: context.provenance }] } : prev);
-      appendMessage({ id: messageId('assistant'), role: 'assistant', text: aborted || cancelRequested.current ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, prompt: text, kind: aborted || cancelRequested.current ? 'system' : 'error', unread: true, createdAt: new Date().toISOString() });
+      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: aborted || cancelRequested.current ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, partialText: undefined, prompt: text, kind: aborted || cancelRequested.current ? 'system' : 'error', unread: true } : message));
     } finally {
-      if (runSequence.current === runId) { controller.current = null; setRunning(false); }
+      if (runSequence.current === runId) { controller.current = null; activeMessageId.current = null; setRunning(false); }
     }
   }, [agentClient, appendMessage, context, draft, running]);
 
@@ -251,6 +311,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     // 立刻允许下一次提问；被取消的旧响应由 runSequence 丢弃。
     setRunning(false);
     setRunStatus('cancelled');
+    activeMessageId.current = null;
     setActiveRun((prev) => prev ? {
       ...prev,
       status: 'cancelled',

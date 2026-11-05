@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRightOutlined, AudioOutlined, LoadingOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
-import { gsap } from 'gsap';
 import { dimProduct } from '../data';
 import { buildFilterPatch } from '../agent/core';
+import type { AgentSuggestion } from '../agent';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { usePage } from '../state/PageContext';
@@ -22,6 +22,9 @@ interface ProductHit {
   romram: string;
   skuId: string;
   isOwn: boolean;
+  /** All country-valid configurations for this model, kept together so a
+   * search result never silently chooses the first SKU. */
+  configOptions: Array<{ romram: string; skuId: string; color: string }>;
 }
 
 const normalize = (value: string): string => value.trim().toLocaleLowerCase();
@@ -29,17 +32,23 @@ const compactSearch = (value: string): string => normalize(value).replace(/[\s_\
 
 const COUNTRY_QUERY_WORDS = ['r国', '俄罗斯', '俄国', '中国', '巴西', '法国', '德国', '英国', '美国', '日本'];
 
-function productHits(query: string, countryCode: string, industry: string): ProductHit[] {
+export function productHits(query: string, countryCode: string, industry: string): ProductHit[] {
   const q = compactSearch(query);
   const queryTokens = normalize(query).split(/[^a-z0-9\u4e00-\u9fff]+/i).map(compactSearch).filter((token) => token.length > 1 && !COUNTRY_QUERY_WORDS.includes(token));
-  const seen = new Set<string>();
+  const grouped = new Map<string, ProductHit>();
   const hits: ProductHit[] = [];
   for (const product of dimProduct) {
-    if (product.industry !== industry || !product.countries.includes(countryCode) || seen.has(product.model_id)) continue;
+    if (product.industry !== industry || !product.countries.includes(countryCode)) continue;
     const haystack = compactSearch(`${product.brand} ${brandLabelOf(product.brand)} ${product.model_name} ${product.series} ${product.romram}`);
     if (q && !haystack.includes(q) && !queryTokens.every((token) => haystack.includes(token))) continue;
-    seen.add(product.model_id);
-    hits.push({
+    const existing = grouped.get(product.model_id);
+    if (existing) {
+      if (!existing.configOptions.some((option) => option.romram === product.romram && option.skuId === product.sku_id)) {
+        existing.configOptions.push({ romram: product.romram, skuId: product.sku_id, color: product.color });
+      }
+      continue;
+    }
+    grouped.set(product.model_id, {
       modelId: product.model_id,
       brand: product.brand,
       modelName: product.model_name,
@@ -47,18 +56,31 @@ function productHits(query: string, countryCode: string, industry: string): Prod
       romram: product.romram,
       skuId: product.sku_id,
       isOwn: product.is_own,
+      configOptions: [{ romram: product.romram, skuId: product.sku_id, color: product.color }],
     });
   }
+  hits.push(...grouped.values());
+  hits.forEach((hit) => {
+    hit.configOptions.sort((a, b) => a.romram.localeCompare(b.romram) || a.skuId.localeCompare(b.skuId));
+    // The first option is deterministic and visible in the result row; the
+    // user can choose another config before applying it to the dashboard.
+    const defaultOption = hit.configOptions[0];
+    if (defaultOption) {
+      hit.romram = defaultOption.romram;
+      hit.skuId = defaultOption.skuId;
+    }
+  });
   return hits
     .sort((a, b) => Number(b.isOwn) - Number(a.isOwn) || Number(compactSearch(b.modelName) === q) - Number(compactSearch(a.modelName) === q) || a.modelName.localeCompare(b.modelName));
 }
 
-function selectionOf(hit: ProductHit): ProductSelection {
-  return { modelId: hit.modelId, romram: hit.romram, skuIds: [hit.skuId] };
+export function selectionOf(hit: ProductHit, skuId = hit.skuId): ProductSelection {
+  const config = hit.configOptions.find((option) => option.skuId === skuId) ?? hit.configOptions[0];
+  return { modelId: hit.modelId, romram: config?.romram ?? hit.romram, skuIds: [config?.skuId ?? skuId] };
 }
 
-function cardOf(hit: ProductHit): MainProduct {
-  const card: MainProduct = { id: newCardId(), main: selectionOf(hit), compares: [] };
+export function cardOf(hit: ProductHit, skuId = hit.skuId): MainProduct {
+  const card: MainProduct = { id: newCardId(), main: selectionOf(hit, skuId), compares: [] };
   return hit.isOwn ? withAutoOn(card) : card;
 }
 
@@ -69,15 +91,12 @@ export default function PriceTrendSearch() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const exitMatchMediaRef = useRef<{ revert: () => void } | null>(null);
   const [open, setOpen] = useState(false);
   const [renderedOpen, setRenderedOpen] = useState(false);
   const [mode, setMode] = useState<SearchMode>('products');
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const submittedPromptRef = useRef('');
-
-  useEffect(() => () => exitMatchMediaRef.current?.revert(), []);
 
   const hits = useMemo(() => productHits(query, state.countryCode, state.industry).slice(0, 6), [query, state.countryCode, state.industry]);
   const ownChips = useMemo(() => productHits('', state.countryCode, state.industry).filter((hit) => hit.isOwn).slice(0, 4), [state.countryCode, state.industry]);
@@ -119,83 +138,22 @@ export default function PriceTrendSearch() {
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
-  // The panel entrance runs once per open. Query updates only crossfade the
-  // results region, which prevents the whole popover from flickering on every
-  // keystroke. GSAP matchMedia removes travel and staged motion for reduced
-  // motion users.
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!isDashboard || !open || !renderedOpen || !panel) return undefined;
-    const mm = gsap.matchMedia();
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
-      const reduceMotion = Boolean(context.conditions?.reduceMotion);
-      gsap.fromTo(
-        panel,
-        { autoAlpha: 0, y: reduceMotion ? 0 : -6 },
-        { autoAlpha: 1, y: 0, duration: reduceMotion ? 0 : 0.2, ease: 'power2.out' },
-      );
-    });
-    return () => mm.revert();
-  }, [isDashboard, open, renderedOpen]);
-
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!isDashboard || !open || !renderedOpen || !panel) return undefined;
-    const resultRegion = panel.querySelector<HTMLElement>('[data-search-results]');
-    if (!resultRegion) return undefined;
-    const mm = gsap.matchMedia();
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
-      const reduceMotion = Boolean(context.conditions?.reduceMotion);
-      gsap.killTweensOf(resultRegion);
-      gsap.fromTo(resultRegion, { autoAlpha: reduceMotion ? 1 : 0.35 }, { autoAlpha: 1, duration: reduceMotion ? 0 : 0.12, ease: 'power1.out' });
-    });
-    return () => mm.revert();
-  }, [isDashboard, mode, open, renderedOpen, trimmed, hits.length]);
-
   if (!isDashboard) return null;
 
   const closeSearch = () => {
     setOpen(false);
-    const panel = panelRef.current;
-    if (!panel) { setRenderedOpen(false); return; }
-    const mm = gsap.matchMedia();
-    exitMatchMediaRef.current?.revert();
-    exitMatchMediaRef.current = mm;
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
-      const reduceMotion = Boolean(context.conditions?.reduceMotion);
-      gsap.to(panel, {
-        autoAlpha: 0,
-        y: reduceMotion ? 0 : -4,
-        duration: reduceMotion ? 0 : 0.14,
-        ease: 'power2.in',
-        onComplete: () => {
-          setRenderedOpen(false);
-          if (exitMatchMediaRef.current === mm) {
-            exitMatchMediaRef.current = null;
-            mm.revert();
-          }
-        },
-      });
-    });
+    setRenderedOpen(false);
     inputRef.current?.blur();
   };
 
   const openSearch = () => {
-    exitMatchMediaRef.current?.revert();
-    exitMatchMediaRef.current = null;
-    if (panelRef.current) gsap.killTweensOf(panelRef.current);
     setRenderedOpen(true);
     setOpen(true);
   };
 
   const handoffToFilters = () => {
-    const filterBar = document.querySelector<HTMLElement>('[data-lpl-filter-bar]');
-    if (!filterBar) return;
-    const mm = gsap.matchMedia();
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
-      const reduceMotion = Boolean(context.conditions?.reduceMotion);
-      gsap.fromTo(filterBar, { boxShadow: `0 0 0 2px ${selectAccent}` }, { boxShadow: shadow.l1, duration: reduceMotion ? 0 : motion.slow / 1000, ease: motion.enter, onComplete: () => mm.revert() });
-    });
+    // Stable line keeps the handoff static; the filters state itself is the
+    // visible confirmation and remains accessible without motion.
   };
 
   const close = (preserveQuery = false) => {
@@ -208,9 +166,9 @@ export default function PriceTrendSearch() {
     setActiveIndex(0);
   };
 
-  const useSuggestion = (suggestion: string) => {
+  const useSuggestion = (suggestion: AgentSuggestion) => {
     setMode('ai');
-    setQuery(suggestion);
+    setQuery(suggestion.prompt);
     setActiveIndex(0);
     openSearch();
     window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -232,13 +190,14 @@ export default function PriceTrendSearch() {
     window.setTimeout(() => void send(trimmed), 0);
   };
 
-  const selectProduct = (hit: ProductHit) => {
+  const selectProduct = (hit: ProductHit, skuId = hit.skuId) => {
     const patch = buildFilterPatch(trimmed, state);
+    const selectedCard = cardOf(hit, skuId);
     if (patch.countryCode) {
-      actions.set({ ...patch, mains: [cardOf(hit)] });
+      actions.set({ ...patch, mains: [selectedCard] });
       handoffToFilters();
     } else {
-      actions.setMains([cardOf(hit)]);
+      actions.setMains([selectedCard]);
     }
     close();
   };
@@ -267,7 +226,6 @@ export default function PriceTrendSearch() {
           borderRadius: radius.control,
           background: color.canvas,
           boxShadow: open ? `0 0 0 1px ${selectAccent}` : undefined,
-          transition: `border-color ${motion.fast}ms ease, box-shadow ${motion.fast}ms ease`,
         }}
       >
         <span aria-hidden title={running ? '正在读取价格数据' : runStatus === 'failed' ? 'Agent 分析失败' : undefined} style={{ display: 'inline-flex', color: running ? color.link : runStatus === 'failed' ? color.error : open ? selectSoftInk : color.link, fontSize: 15 }}><RobotOutlined /></span>
@@ -330,22 +288,25 @@ export default function PriceTrendSearch() {
 
           {mode === 'products' ? (
             <div data-search-results role="listbox" aria-label="产品命中结果" aria-activedescendant={hits[activeIndex] ? `price-search-option-${hits[activeIndex].modelId}` : undefined} tabIndex={-1} style={{ maxHeight: 300, overflowY: 'auto', padding: 4 }}>
-              {!trimmed && <div style={{ padding: '4px 5px 8px' }}><div style={emptyStyle}><SearchOutlined style={{ color: color.link }} /><span>输入型号、品牌或系列，快速切换看板主产品</span></div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{ownChips.map((hit) => <button key={hit.modelId} type="button" onClick={() => selectProduct(hit)} style={suggestionStyle}>{brandLabelOf(hit.brand)} · {hit.modelName}</button>)}{PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" onClick={() => useSuggestion(suggestion)} style={suggestionStyle}>{suggestion}</button>)}</div></div>}
+              {!trimmed && <div style={{ padding: '4px 5px 8px' }}><div style={emptyStyle}><SearchOutlined style={{ color: color.link }} /><span>输入型号、品牌或系列，快速切换看板主产品</span></div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{ownChips.map((hit) => <button key={hit.modelId} type="button" onClick={() => selectProduct(hit)} style={suggestionStyle}>{brandLabelOf(hit.brand)} · {hit.modelName}</button>)}{PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => <button key={suggestion.label} type="button" onClick={() => useSuggestion(suggestion)} style={suggestionStyle}>{suggestion.label}</button>)}</div></div>}
               {trimmed && hits.length === 0 && (
                 <div style={emptyStyle}><span>暂无本地产品命中</span><button type="button" onClick={() => setMode('ai')} style={inlineLinkStyle}>让 AI 分析「{trimmed}」</button></div>
               )}
-              {hits.map((hit) => (
-                <button id={`price-search-option-${hit.modelId}`} key={hit.modelId} type="button" role="option" data-search-item aria-selected={activeIndex === indexOfHit(hits, hit.modelId)} onMouseEnter={() => setActiveIndex(indexOfHit(hits, hit.modelId))} onClick={() => selectProduct(hit)} style={{ ...resultButtonStyle, background: activeIndex === indexOfHit(hits, hit.modelId) ? color.canvasSoft2 : color.canvas }}>
+              {hits.map((hit) => {
+                const hitIndex = indexOfHit(hits, hit.modelId);
+                const active = activeIndex === hitIndex;
+                return <div id={`price-search-option-${hit.modelId}`} key={hit.modelId} role="option" data-search-item aria-selected={active} onMouseEnter={() => setActiveIndex(hitIndex)} style={{ ...resultButtonStyle, display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr) auto', rowGap: hit.configOptions.length > 1 ? 5 : 0, background: active ? color.canvasSoft2 : color.canvas }}>
                   <span style={{ width: 24, height: 24, display: 'grid', placeItems: 'center', borderRadius: radius.control, background: color.canvasSoft2, color: brandColorOf(hit.brand), fontSize: 11, fontWeight: 700 }}>{hit.isOwn ? '我' : brandLabelOf(hit.brand).slice(0, 1)}</span>
-                  <span style={{ minWidth: 0, flex: 1, textAlign: 'left' }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.ink, fontSize: 12, fontWeight: 600 }}>{hit.modelName}</span><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.mute, fontSize: 11 }}>{brandLabelOf(hit.brand)} · {hit.romram}</span></span>
-                  <ArrowRightOutlined style={{ color: color.mute, fontSize: 11 }} />
-                </button>
-              ))}
+                  <button type="button" onClick={() => selectProduct(hit)} style={{ minWidth: 0, display: 'block', padding: 0, border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer' }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.ink, fontSize: 12, fontWeight: 600 }}>{hit.modelName}</span><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.mute, fontSize: 11 }}>{brandLabelOf(hit.brand)} · 默认 {hit.romram} · {hit.skuId}</span></button>
+                  <ArrowRightOutlined onClick={() => selectProduct(hit)} style={{ color: color.mute, fontSize: 11, cursor: 'pointer' }} />
+                  {hit.configOptions.length > 1 && <div style={{ gridColumn: '2 / -1', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}><span style={{ color: color.mute, fontSize: 10 }}>同系规格</span>{hit.configOptions.map((option) => <button key={option.skuId} type="button" onClick={() => selectProduct(hit, option.skuId)} aria-label={`切换 ${hit.modelName} ${option.romram} ${option.skuId}`} style={{ ...suggestionStyle, padding: '3px 6px', color: option.skuId === hit.skuId ? selectSoftInk : color.body, background: option.skuId === hit.skuId ? selectSoft : color.canvas }}>{option.romram}{option.color && option.color !== '—' ? ` · ${option.color}` : ''}</button>)}</div>}
+                </div>;
+              })}
             </div>
           ) : (
             <div data-search-results style={{ padding: 12 }}>
               <div data-search-item style={{ display: 'flex', alignItems: 'flex-start', gap: 8, color: color.body, fontSize: 12, lineHeight: 1.5 }}><RobotOutlined style={{ color: aiFailureMessage ? color.error : color.link, marginTop: 2 }} /><span>{trimmed ? 'AI 会基于当前国家、产业、产品和时间范围读取价格证据。' : '输入一个价格问题，AI 会基于当前看板范围分析。'}</span></div>
-              {!trimmed && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 10 }}>{PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" onClick={() => useSuggestion(suggestion)} style={suggestionStyle}>{suggestion}</button>)}</div>}
+              {!trimmed && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 10 }}>{PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => <button key={suggestion.label} type="button" onClick={() => useSuggestion(suggestion)} style={suggestionStyle}>{suggestion.label}</button>)}</div>}
               <button data-search-item type="button" aria-label={aiFailureMessage ? '重试 AI 分析' : running ? '正在读取价格数据' : '开始 AI 分析'} disabled={!trimmed || running} onClick={searchWithAgent} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 10, padding: '8px 9px', border: `1px solid ${trimmed ? selectAccent : color.hairline}`, borderRadius: radius.control, background: trimmed ? selectSoft : color.canvasSoft2, color: trimmed ? selectSoftInk : color.mute, cursor: trimmed && !running ? 'pointer' : 'not-allowed', fontSize: 12, textAlign: 'left' }}><span>{running ? '正在读取价格数据…' : aiFailureMessage ? '重试' : trimmed ? `分析「${trimmed}」` : '例如：最近有价周哪个平台最便宜？'}</span>{running ? <LoadingOutlined spin /> : <ArrowRightOutlined />}</button>
               <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 8, color: aiFailureMessage ? color.error : running ? color.link : color.mute, fontSize: 10 }}><span>{aiStatusMessage}</span>{sameAsSubmitted && runStatus === 'completed' && <button type="button" onClick={() => openAgent('dock', submittedPromptRef.current)} style={statusLinkStyle}>打开 Agent</button>}</div>
               {aiFailureMessage && <div data-search-item role="alert" aria-live="assertive" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, padding: '6px 8px', borderRadius: radius.control, background: color.canvasSoft2, color: color.body, fontSize: 11, lineHeight: 1.4 }}><span style={{ flex: 1 }}>{aiFailureMessage}</span><button type="button" aria-label="重试 AI 分析" onClick={searchWithAgent} style={retryLinkStyle}>重试</button></div>}

@@ -1,19 +1,26 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
 import { dimProduct, dimRegion, dimTime } from '../data';
-import { flatSelections } from '../state/mainSelection';
+import { buildCards, clampMains, flatSelections, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
-import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, FilterPatch, FilterResultCard, ForecastContextInput } from './contracts';
+import type { AgentActionTarget, AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, FilterPatch, FilterResultCard, ForecastContextInput, AgentSuggestion } from './contracts';
 import { contextFingerprint } from './contracts';
 import { BASELINE_DRAFT, type ForecastDataset, type ScenarioDraft } from '../pages/forecast/forecastModel';
 import type { ForecastDraftInput } from './contracts';
 import { simpleDemoDataset as forecastFixture } from '../pages/forecast/forecastDatasetRegistry';
 import { createForecastSnapshot, type ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 import { provenanceSummary } from '../dataModel/provenance';
+import { buildPriceAdvantageResult } from './priceAdvantage';
 
 const id = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const norm = (s: string): string => s.replace(/\s+/g, '').toLowerCase();
 const compact = (s: string): string => s.toLocaleLowerCase().replace(/[\s_\-]+/g, '').replace(/[’']/g, '');
+const suggestion = (label: string, prompt: string, intent: AgentIntent, target?: AgentSuggestion['target']): AgentSuggestion => ({ label, prompt, intent, target });
+const CORE_SUGGESTIONS: AgentSuggestion[] = [
+  suggestion('价格优势', '比较我司与核心竞品的价格优势', 'query', 'comparison'),
+  suggestion('价格预警', '查看价格预警', 'alert', 'evidence'),
+  suggestion('基础我司快搜', '查看当前我司产品价格概览', 'query', 'query'),
+];
 
 const COUNTRY_ALIASES: Record<string, string> = {
   巴西: 'BR', 中国: 'CN', 俄罗斯: 'RU', 俄国: 'RU', 美国: 'US', 英国: 'GB',
@@ -137,7 +144,7 @@ export function classifyIntent(text: string): AgentIntent {
   if (/预警|异常|阈值|触发原因|为什么.*变/.test(text)) return 'alert';
   if (/(?:量价预测|简单版预测|预测)/.test(text) && /解释|假设|证据|风险|不确定|为什么/.test(text)) return 'forecast_explain';
   if (/只看|切换|显示|带上|去掉|最近\s*\d+\s*(周|月)|usd|美元|本币|rrp|划线价/i.test(text)) return 'filter';
-  if (/最低|最便宜|价差|趋势|价格|平台|多少|均值|变化|情报|预测|销量|需求|供给|库存|汇率|大盘/.test(text)) return 'query';
+  if (/价格优势|优势|领先|落后|最低|最便宜|价差|趋势|价格|平台|多少|均值|变化|情报|预测|销量|需求|供给|库存|汇率|大盘/.test(text)) return 'query';
   if (knownEntityInText(text) && /看|查|查询|了解|情况|表现|分析|走势/.test(text)) return 'query';
   return 'clarify';
 }
@@ -149,13 +156,15 @@ export function classifyIntent(text: string): AgentIntent {
  */
 export function clarificationReasonForQuery(text: string, state: FiltersState, entities = resolveAgentEntities(text, state)): string | null {
   const hasSelectedProduct = state.mains.some((card) => Boolean(card.main));
+  const targeted = /价格优势|优势|领先|落后|比较|对比|打开依据|依据|解释当前|主竞品|最新预警|市场情报|事件|汇率|量价|销量|预测|不确定性|价格下调|价格上调|趋势/.test(text);
   const isForecast = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text);
   if (isForecast) return null;
-  if (!entities.explicitProduct && !hasSelectedProduct) return '产品';
+  if (!entities.explicitProduct && !hasSelectedProduct && !targeted) return '产品';
 
   const hasExplicitRange = /最近\s*\d+\s*(周|星期|月)|\d{4}\s*(年|年初|年末)?\s*(?:第?\d+\s*(周|月)|Q[1-4])|\d{4}(?:\d{2}|Q[1-4])/.test(text);
   const usesBusinessLatestBucket = /(?:最近|最新)有价周/.test(text);
   if (/最近|近期|近段时间|这段时间/.test(text) && !hasExplicitRange && !usesBusinessLatestBucket) return '时间范围';
+  if (targeted) return null;
 
   return null;
 }
@@ -181,7 +190,10 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
   const entities = resolveAgentEntities(text, state);
   if (entities.explicitCountry) patch.countryCode = entities.countryCode;
   if (entities.explicitProduct && entities.selections.length) {
-    patch.mains = entities.selections.map((selection, index): MainProduct => ({ id: `agent-filter-${index}`, main: selection, compares: [] }));
+    // Keep natural-language filtering on the same card builder as header
+    // search. This preserves the default own-product competitor matrix and
+    // enforces the shared 8-card / 3-compare caps.
+    patch.mains = clampMains(buildCards(entities.selections, { auto: true }));
   }
   return patch;
 }
@@ -192,9 +204,10 @@ function formatPatchValue(value: unknown): string {
   if (typeof value === 'object' && value !== null && 'rrp' in value) return (value as { rrp: boolean }).rrp ? '折后价 + RRP' : '仅折后价';
   // 产品选择数组：结构化格式（型号 · 规格，逗号连接），不落 [object Object]。
   if (Array.isArray(value) && value.every((item) => typeof item === 'object' && item !== null && 'main' in item)) {
-    const labels = (value as Array<{ main: { modelId: string; romram: string } }>).map((item) => {
+    const labels = (value as Array<{ main: { modelId: string; romram: string; skuIds?: string[] } }>).map((item) => {
       const name = dimProduct.find((row) => row.model_id === item.main.modelId)?.model_name ?? item.main.modelId;
-      return `${name} · ${item.main.romram}`;
+      const sku = item.main.skuIds?.[0];
+      return `${name} · ${item.main.romram}${sku ? ` · ${sku}` : ''}`;
     });
     return labels.length ? labels.join('、') : '未选择';
   }
@@ -266,6 +279,23 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
   return { ...state, countryCode: entities.countryCode, mains };
 }
 
+function stateForPriceAdvantage(state: FiltersState, entities: AgentEntityResolution): FiltersState {
+  let next = stateForEntityQuery(state, entities);
+  // A competitor-only page selection must not make the core price-advantage
+  // entry point silently compare Apple/Samsung against each other. Materialize
+  // an own product when the current scope has no Huawei main card.
+  const ownCard = next.mains.find((card) => card.main && ownSelectionForAgent(card.main));
+  if (ownCard) return { ...next, mains: clampMains(next.mains.map((card) => card.id === ownCard.id ? withAutoOn(card) : card)) };
+  const own = dimProduct.find((row) => row.is_own && row.industry === state.industry && row.countries.includes(entities.countryCode || state.countryCode));
+  if (!own) return next;
+  const skuId = lowestPriceColorSku(own.model_id, own.romram, entities.countryCode || state.countryCode) ?? own.sku_id;
+  return { ...next, countryCode: entities.countryCode || state.countryCode, mains: clampMains(buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [skuId] }], { auto: true })) };
+}
+
+function ownSelectionForAgent(selection: ProductSelection): boolean {
+  return selection.skuIds.some((skuId) => dimProduct.find((row) => row.sku_id === skuId)?.is_own === true);
+}
+
 function noDataResult(entities: AgentEntityResolution, state: FiltersState): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
   const labels = entities.unavailableProducts.length ? entities.unavailableProducts : entities.productLabels;
   const productText = labels.length ? labels.join('、') : '当前页面选择的产品';
@@ -283,7 +313,14 @@ function noDataResult(entities: AgentEntityResolution, state: FiltersState): { c
 }
 
 function queryCards(state: FiltersState, text: string, entities: AgentEntityResolution = resolveAgentEntities(text, state)): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
-  const queryState = stateForEntityQuery(state, entities);
+  let queryState = stateForEntityQuery(state, entities);
+  // Preset comparison/evidence chips are actionable even when the shell has
+  // not materialized a product selection yet: use the first country-valid
+  // own product as a deterministic target instead of falling into clarify.
+  if (!queryState.mains.some((card) => card.main) && /比较|对比|依据|解释当前|主竞品|最新预警|市场情报|事件|汇率|量价|销量|预测|不确定性|价格下调|价格上调|趋势/.test(text)) {
+    const own = dimProduct.find((row) => row.is_own && row.industry === state.industry && row.countries.includes(state.countryCode));
+    if (own) queryState = { ...queryState, mains: buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] }], { auto: true }) };
+  }
   const query = seriesQueryOf(queryState);
   if (!query) {
     if (entities.explicitCountry || entities.explicitProduct) return noDataResult(entities, queryState);
@@ -462,12 +499,84 @@ function scopeCardActions(cards: AgentResultCard[], target: { page: string; cont
   });
 }
 
-function alertCard(text: string, alerts: readonly AgentAlertRecord[]): { card: AgentResultCard | null; summary: string; steps: AgentStep[]; citations: AgentResponse['citations'] } {
-  const alert = alerts[0];
-  if (!alert) return { card: null, summary: '当前页面没有可解释的预警事件。', steps: [step('alerts.query', '查询预警', '当前口径没有预警', 'warning')], citations: [] };
+function alertSelectionOf(alert: AgentAlertRecord, state: FiltersState): ProductSelection | null {
+  const seriesKey = alert.seriesKey ?? '';
+  const separator = seriesKey.indexOf('__');
+  if (separator < 0) return null;
+  const modelId = seriesKey.slice(0, separator);
+  const romram = seriesKey.slice(separator + 2);
+  const product = dimProduct.find((row) => row.model_id === modelId && norm(row.romram) === norm(romram) && row.industry === state.industry && row.countries.includes(state.countryCode));
+  if (!product) return null;
+  const skuId = lowestPriceColorSku(modelId, product.romram, state.countryCode, state.currency) ?? product.sku_id;
+  return { modelId, romram: product.romram, skuIds: skuId ? [skuId] : [] };
+}
+
+function alertFilterPatch(alert: AgentAlertRecord, state: FiltersState): FilterPatch {
+  const selection = alertSelectionOf(alert, state);
+  const patch: FilterPatch = {
+    countryCode: state.countryCode,
+    platform: state.platform,
+    granularity: 'week',
+    adaptive: false,
+    rangeStart: alert.weekId,
+    rangeEnd: alert.weekId,
+  };
+  if (selection) patch.mains = clampMains(buildCards([selection], { auto: true }));
+  return patch;
+}
+
+function alertTarget(alert: AgentAlertRecord, state: FiltersState, page: 'alerts' | 'dashboard'): AgentActionTarget {
+  const seriesKey = alert.seriesKey ?? '';
+  const modelId = seriesKey.split('__')[0];
+  return {
+    page,
+    contextFingerprint: alert.contextFingerprint ?? contextFingerprint(state, page),
+    weekId: alert.weekId,
+    modelId,
+    seriesKey,
+    alertId: alert.alertId,
+    alertType: alert.type,
+    alertSeriesKey: seriesKey,
+    filterPatch: alertFilterPatch(alert, state),
+  };
+}
+
+function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: FiltersState, targetFingerprint?: string): { card: AgentResultCard | null; summary: string; steps: AgentStep[]; citations: AgentResponse['citations'] } {
+  const records = alerts.slice(0, 8);
+  const alert = records[0];
+  if (!alert) {
+    const card: AgentResultCard = {
+      kind: 'table',
+      id: id('alert-empty'),
+      title: '价格预警 · 当前口径没有触发事件',
+      columns: ['状态', '口径', '下一步'],
+      rows: [['暂无预警', `${state.countryCode} · ${state.industry} · 当前预警订阅`, '可在预警中心添加监控产品']],
+      note: '结果来自现有预警规则与当前订阅范围；没有触发事实时不编造事件。',
+      evidence: [{ id: id('evidence'), label: '预警规则快照', detail: '当前订阅范围没有返回触发事件', source: '本地预警确定性引擎' }],
+      actions: [{ id: id('action'), label: '打开预警中心', kind: 'open', prompt: '打开预警中心添加监控产品', target: { page: 'alerts', contextFingerprint: targetFingerprint ?? contextFingerprint(state, 'alerts') } }],
+    };
+    return { card, summary: '当前订阅范围没有可解释的预警事件；结果已按本地规则核对。', steps: [step('alerts.query', '查询预警', '当前口径没有预警', 'warning')], citations: [] };
+  }
   const direction = alert.wowPct != null ? `${alert.wowPct < 0 ? '下降' : '上涨'} ${Math.abs(alert.wowPct * 100).toFixed(1)}%` : '已触发规则';
-  const card: AgentResultCard = { kind: 'alert', id: id('alert'), title: `${alert.modelName} 的最新预警`, alert, facts: [`${alert.weekLabel}（${alert.weekId}）触发${alert.type}规则`, `折后价${direction}`, alert.gapPct != null ? `平台价差为 ${(alert.gapPct * 100).toFixed(1)}%` : '当前事件没有平台价差字段'], checks: ['核对促销记录与商品页面快照', '对比其他平台是否同步变化', '确认是否为单平台的短期变化'], evidence: [{ id: id('evidence'), label: '预警事件', detail: `${alert.brand} ${alert.modelName} · ${alert.weekId}`, source: '预警中心事件流' }, { id: id('evidence'), label: '规则输入', detail: alert.gapPct != null ? `平台价差 ${(alert.gapPct * 100).toFixed(1)}%` : `周度变化 ${alert.wowPct == null ? '—' : `${(alert.wowPct * 100).toFixed(1)}%`}`, source: '规则快照' }], actions: [{ id: id('action'), label: '继续核查预警', kind: 'followup', prompt: '基于最新预警证据，列出下一步核查顺序和需要补充的数据' }, { id: id('action'), label: '回预警中心', kind: 'open', prompt: '把这条预警定位回预警中心详情' }] };
-  return { card, summary: '我把触发事实、前后变化和建议核查项分开列出；当前结果不推断唯一因果。', steps: [step('alerts.query', '读取预警事件', alert.weekLabel), step('alerts.explain', '解释触发原因', '已读取当前规则与输入值')], citations: [{ id: id('citation'), kind: 'alert', label: '预警事件', detail: alert.key }] };
+  const actionsFor = (item: AgentAlertRecord) => [
+    { id: id('action'), label: '应用预警筛选', kind: 'apply' as const, target: alertTarget(item, state, 'dashboard') },
+    { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这条预警定位回对应产品、渠道和国家的看板', target: alertTarget(item, state, 'dashboard') },
+    { id: id('action'), label: '预警中心详情', kind: 'open' as const, prompt: '打开这条预警的证据与处理状态', target: alertTarget(item, state, 'alerts') },
+  ];
+  const card: AgentResultCard = {
+    kind: 'alert',
+    id: id('alert'),
+    title: `价格预警 · ${records.length} 条最新事件`,
+    alert: { ...alert, evidence: alert.evidence ?? [], actions: actionsFor(alert) },
+    alerts: records,
+    facts: [`${alert.weekLabel}（${alert.weekId}）触发${alert.type}规则`, `折后价${direction}`, alert.gapPct != null ? `平台价差为 ${(alert.gapPct * 100).toFixed(1)}%` : '当前事件没有平台价差字段'],
+    checks: ['核对促销记录与商品页面快照', '对比其他平台是否同步变化', '确认是否为单平台的短期变化'],
+    evidence: alert.evidence?.length ? alert.evidence : [{ id: id('evidence'), label: '预警事件', detail: `${alert.brand} ${alert.modelName} · ${alert.weekId}`, source: '预警中心事件流' }],
+  };
+  // Keep each row independently actionable; the first record remains on the
+  // legacy `alert` field for consumers that only understand one alert.
+  (card as Extract<AgentResultCard, { kind: 'alert' }>).alerts = records.map((item) => ({ ...item, evidence: item.evidence ?? [], actions: actionsFor(item) }));
+  return { card, summary: `已读取当前口径下 ${records.length} 条真实预警；每条都可展开证据、应用筛选或回看板定位。当前结果不推断唯一因果。`, steps: [step('catalog.resolve', '解析意图', '价格预警 · 当前国家、渠道与时间口径'), step('alerts.query', '读取预警', `${records.length} 条最新事件`), step('alerts.explain', '核对规则与证据', '已读取当前规则、触发值和来源'), step('alerts.explain', '生成结论', '保留事实、证据和下一步动作')], citations: [{ id: id('citation'), kind: 'alert', label: '预警事件', detail: records.map((item) => item.key).join('；') }] };
 }
 
 export async function runAgent(
@@ -504,15 +613,28 @@ export async function runAgent(
     summary = card ? '我先生成筛选预览，当前看板尚未改变。确认后才会应用。' : '我没有识别到明确的筛选变化，可以补充国家、时间、币种或 RRP 条件。';
     steps = [step('catalog.resolve', '解析筛选条件', card ? `${card.changes.length} 项待变更` : '需要补充口径', card ? 'success' : 'warning'), ...(card ? [step('view.preview', '生成筛选预览', '等待用户确认')] : [])];
   } else if (intent === 'alert') {
-    const result = alertCard(text, context.alerts);
+    const result = alertCard(text, context.alerts, context.state, context.fingerprint);
     if (result.card) cards.push(result.card);
     summary = result.summary; steps = result.steps; citations = result.citations;
   } else if (intent === 'forecast_explain') {
     const result = forecastExplanationCards({ page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot);
     cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
   } else if (intent === 'query') {
-    const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(context.state, text, entities);
-    cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
+    if (/价格优势|优势|领先|落后/.test(text)) {
+      const result = buildPriceAdvantageResult(stateForPriceAdvantage(context.state, entities), context.fingerprint);
+      if (result) {
+        cards.push(result.card);
+        summary = result.summary;
+        steps = result.steps;
+        citations = result.citations;
+      } else {
+        summary = '当前范围没有可用于价格优势比较的产品事实。';
+        steps = [step('catalog.resolve', '解析意图', '价格优势', 'success'), step('series.query', '读取价格', '没有可用产品事实', 'warning'), step('series.compare', '计算优势', '缺少我司与竞品的共同价格点', 'warning'), step('view.preview', '生成结论', '无法计算', 'warning')];
+      }
+    } else {
+      const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(context.state, text, entities);
+      cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
+    }
   } else {
     summary = clarificationReason === '产品'
       ? '我可以继续查，但需要先确认产品。请选择一个主品或竞品，或直接告诉我型号；这样“最便宜/趋势/平台价差”才有明确对象。'
@@ -527,15 +649,7 @@ export async function runAgent(
     steps,
     cards: scopeCardActions(cards, { page: context.page, contextFingerprint: context.fingerprint }),
     citations,
-    suggestions: intent === 'forecast_explain'
-      ? ['如果价格下调 5% 会怎样？', '查看预测的不确定性', '回到量价预测页查看计算路径']
-      : intent === 'filter'
-      ? ['只看最近 8 周', '解释当前产品预警']
-      : clarificationReason === '产品'
-        ? ['选择一个主品或竞品', '告诉我具体型号', '指定国家和时间范围']
-        : clarificationReason === '时间范围'
-          ? ['最近 8 周哪个平台最便宜？', '最新有价周哪个平台最便宜？', '指定最近 3 个月']
-          : ['最近有价周哪个平台最便宜？', '解释当前产品的最新预警', '只看最近 8 周并显示 RRP'],
+    suggestions: CORE_SUGGESTIONS,
     contextFingerprint: context.fingerprint,
     provenance: context.provenance ?? {
       source: 'local-deterministic',

@@ -66,6 +66,8 @@ const agentEventTypeSchema: JsonSchema = {
     'run.status',
     'step.started',
     'step.updated',
+    'text.delta',
+    'card.patch',
     'approval.required',
     'clarification.required',
     'warning',
@@ -119,7 +121,25 @@ const responseSchema: JsonSchema = {
     steps: { type: 'array', items: { type: 'object' } },
     cards: { type: 'array', items: { type: 'object' } },
     citations: { type: 'array', items: { type: 'object' } },
-    suggestions: { type: 'array', items: { type: 'string' } },
+    suggestions: {
+      type: 'array',
+      items: {
+        anyOf: [
+          { type: 'string' },
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: ['label', 'prompt', 'intent'],
+            properties: {
+              label: { type: 'string' },
+              prompt: { type: 'string' },
+              intent: { type: 'string', enum: ['filter', 'query', 'forecast_explain', 'alert', 'clarify'] },
+              target: { type: 'string', enum: ['comparison', 'evidence', 'filter_preview', 'query'] },
+            },
+          },
+        ],
+      },
+    },
     contextFingerprint: { type: 'string', minLength: 1 },
     provider: {
       type: 'object',
@@ -127,6 +147,7 @@ const responseSchema: JsonSchema = {
       required: ['name', 'model'],
       properties: { name: { type: 'string' }, model: { type: 'string' } },
     },
+    fallbackReason: { type: 'string' },
     provenance: { $ref: '#/$defs/provenance' },
     coverage: {
       type: 'object',
@@ -138,6 +159,16 @@ const responseSchema: JsonSchema = {
         missing: { type: 'integer', minimum: 0 },
         stale: { type: 'integer', minimum: 0 },
         note: { type: 'string' },
+      },
+    },
+    factGuard: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['calibrated', 'message'],
+      properties: {
+        calibrated: { type: 'boolean' },
+        message: { type: 'string' },
+        rejectedFields: { type: 'array', items: { type: 'string' } },
       },
     },
   },
@@ -176,6 +207,9 @@ const eventSchema: JsonSchema = {
     tool: toolSchema,
     stepId: { type: 'string' },
     cardId: { type: 'string' },
+    delta: { type: 'string' },
+    card: { type: 'object' },
+    cardPatch: { type: 'object' },
     evidence: { type: 'array', items: { $ref: '#/$defs/evidence' } },
     approval: { $ref: '#/$defs/approval' },
     provenance: { $ref: '#/$defs/provenance' },
@@ -258,6 +292,9 @@ function validateEvent(value: unknown, path: string, errors: string[]): value is
   if (value.status !== undefined && !isAgentStatus(value.status)) errors.push(`${path}.status 不是已知运行状态`);
   if (value.tool !== undefined && !isTool(value.tool)) errors.push(`${path}.tool 不是白名单工具`);
   if (value.evidence !== undefined && (!Array.isArray(value.evidence) || value.evidence.some((item) => !isRecord(item) || typeof item.label !== 'string' || typeof item.detail !== 'string'))) errors.push(`${path}.evidence 格式无效`);
+  if (value.delta !== undefined && typeof value.delta !== 'string') errors.push(`${path}.delta 必须是文本`);
+  if (value.card !== undefined && !isRecord(value.card)) errors.push(`${path}.card 必须是对象`);
+  if (value.cardPatch !== undefined && !isRecord(value.cardPatch)) errors.push(`${path}.cardPatch 必须是对象`);
   if (value.provenance !== undefined) validateProvenance(value.provenance, `${path}.provenance`, errors);
   return errors.length === 0;
 }

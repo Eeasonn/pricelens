@@ -48,7 +48,7 @@ describe('PriceLens Agent deterministic core', () => {
     const response = await runAgent('最近有价周哪个平台最便宜？', buildAgentContext('dashboard', state, []));
     expect(response.intent).toBe('clarify');
     expect(response.summary).toContain('确认产品');
-    expect(response.suggestions).toContain('选择一个主品或竞品');
+    expect(response.suggestions.map((item) => typeof item === 'string' ? item : item.label)).toEqual(['价格优势', '价格预警', '基础我司快搜']);
   });
 
   it('asks for an explicit range when the product context exists but time is vague', async () => {
