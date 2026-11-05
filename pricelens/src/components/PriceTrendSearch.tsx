@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRightOutlined, LoadingOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, AudioOutlined, LoadingOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
 import { gsap } from 'gsap';
 import { dimProduct } from '../data';
+import { buildFilterPatch } from '../agent/core';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { usePage } from '../state/PageContext';
@@ -24,15 +25,19 @@ interface ProductHit {
 }
 
 const normalize = (value: string): string => value.trim().toLocaleLowerCase();
+const compactSearch = (value: string): string => normalize(value).replace(/[\s_\-]+/g, '');
+
+const COUNTRY_QUERY_WORDS = ['r国', '俄罗斯', '俄国', '中国', '巴西', '法国', '德国', '英国', '美国', '日本'];
 
 function productHits(query: string, countryCode: string, industry: string): ProductHit[] {
-  const q = normalize(query);
+  const q = compactSearch(query);
+  const queryTokens = normalize(query).split(/[^a-z0-9\u4e00-\u9fff]+/i).map(compactSearch).filter((token) => token.length > 1 && !COUNTRY_QUERY_WORDS.includes(token));
   const seen = new Set<string>();
   const hits: ProductHit[] = [];
   for (const product of dimProduct) {
     if (product.industry !== industry || !product.countries.includes(countryCode) || seen.has(product.model_id)) continue;
-    const haystack = normalize(`${product.brand} ${brandLabelOf(product.brand)} ${product.model_name} ${product.series} ${product.romram}`);
-    if (q && !haystack.includes(q)) continue;
+    const haystack = compactSearch(`${product.brand} ${brandLabelOf(product.brand)} ${product.model_name} ${product.series} ${product.romram}`);
+    if (q && !haystack.includes(q) && !queryTokens.every((token) => haystack.includes(token))) continue;
     seen.add(product.model_id);
     hits.push({
       modelId: product.model_id,
@@ -43,9 +48,9 @@ function productHits(query: string, countryCode: string, industry: string): Prod
       skuId: product.sku_id,
       isOwn: product.is_own,
     });
-    if (hits.length === 6) break;
   }
-  return hits;
+  return hits
+    .sort((a, b) => Number(b.isOwn) - Number(a.isOwn) || Number(compactSearch(b.modelName) === q) - Number(compactSearch(a.modelName) === q) || a.modelName.localeCompare(b.modelName));
 }
 
 function selectionOf(hit: ProductHit): ProductSelection {
@@ -60,17 +65,22 @@ function cardOf(hit: ProductHit): MainProduct {
 export default function PriceTrendSearch() {
   const { page } = usePage();
   const { state, actions } = useFilters();
-  const { open: agentOpen, openAgent, send, running, runStatus, activeRun } = useAgent();
+  const { open: agentOpen, openAgent, send, running, runStatus, activeRun, voiceAvailable, voiceListening, startVoice } = useAgent();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const exitMatchMediaRef = useRef<{ revert: () => void } | null>(null);
   const [open, setOpen] = useState(false);
+  const [renderedOpen, setRenderedOpen] = useState(false);
   const [mode, setMode] = useState<SearchMode>('products');
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const submittedPromptRef = useRef('');
 
-  const hits = useMemo(() => productHits(query, state.countryCode, state.industry), [query, state.countryCode, state.industry]);
+  useEffect(() => () => exitMatchMediaRef.current?.revert(), []);
+
+  const hits = useMemo(() => productHits(query, state.countryCode, state.industry).slice(0, 6), [query, state.countryCode, state.industry]);
+  const ownChips = useMemo(() => productHits('', state.countryCode, state.industry).filter((hit) => hit.isOwn).slice(0, 4), [state.countryCode, state.industry]);
   const trimmed = query.trim();
   const isDashboard = page === 'dashboard';
   const shortcutLabel = platformShortcutLabel();
@@ -85,12 +95,12 @@ export default function PriceTrendSearch() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         if (agentOpen) return;
         event.preventDefault();
-        setOpen(true);
+        openSearch();
         window.setTimeout(() => inputRef.current?.focus(), 0);
       }
       if (event.key === 'Escape' && open) {
         setOpen(false);
-        inputRef.current?.blur();
+        closeSearch();
       }
     };
     // Capture this shortcut before the Agent provider's global handler so the
@@ -103,69 +113,133 @@ export default function PriceTrendSearch() {
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (event: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) closeSearch();
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
-  // The search surface owns a very small GSAP scene that reveals the panel and
-  // results. AI state is communicated through copy and the status color.
-  // matchMedia removes all motion for users who prefer reduced motion and
-  // mm.revert() cleans up when the panel or mode changes.
+  // The panel entrance runs once per open. Query updates only crossfade the
+  // results region, which prevents the whole popover from flickering on every
+  // keystroke. GSAP matchMedia removes travel and staged motion for reduced
+  // motion users.
   useEffect(() => {
     const panel = panelRef.current;
-    if (!isDashboard || !open || !panel) return undefined;
+    if (!isDashboard || !open || !renderedOpen || !panel) return undefined;
     const mm = gsap.matchMedia();
     mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
       const reduceMotion = Boolean(context.conditions?.reduceMotion);
-      const items = panel.querySelectorAll<HTMLElement>('[data-search-item]');
       gsap.fromTo(
         panel,
         { autoAlpha: 0, y: reduceMotion ? 0 : -6 },
         { autoAlpha: 1, y: 0, duration: reduceMotion ? 0 : 0.2, ease: 'power2.out' },
       );
-      if (items.length) {
-        gsap.fromTo(
-          items,
-          { autoAlpha: 0, y: reduceMotion ? 0 : 4 },
-          { autoAlpha: 1, y: 0, duration: reduceMotion ? 0 : 0.16, stagger: reduceMotion ? 0 : 0.025, ease: 'power1.out' },
-        );
-      }
     });
     return () => mm.revert();
-  }, [isDashboard, mode, open, runStatus, trimmed, hits.length]);
+  }, [isDashboard, open, renderedOpen]);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!isDashboard || !open || !renderedOpen || !panel) return undefined;
+    const resultRegion = panel.querySelector<HTMLElement>('[data-search-results]');
+    if (!resultRegion) return undefined;
+    const mm = gsap.matchMedia();
+    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
+      const reduceMotion = Boolean(context.conditions?.reduceMotion);
+      gsap.killTweensOf(resultRegion);
+      gsap.fromTo(resultRegion, { autoAlpha: reduceMotion ? 1 : 0.35 }, { autoAlpha: 1, duration: reduceMotion ? 0 : 0.12, ease: 'power1.out' });
+    });
+    return () => mm.revert();
+  }, [isDashboard, mode, open, renderedOpen, trimmed, hits.length]);
 
   if (!isDashboard) return null;
 
+  const closeSearch = () => {
+    setOpen(false);
+    const panel = panelRef.current;
+    if (!panel) { setRenderedOpen(false); return; }
+    const mm = gsap.matchMedia();
+    exitMatchMediaRef.current?.revert();
+    exitMatchMediaRef.current = mm;
+    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
+      const reduceMotion = Boolean(context.conditions?.reduceMotion);
+      gsap.to(panel, {
+        autoAlpha: 0,
+        y: reduceMotion ? 0 : -4,
+        duration: reduceMotion ? 0 : 0.14,
+        ease: 'power2.in',
+        onComplete: () => {
+          setRenderedOpen(false);
+          if (exitMatchMediaRef.current === mm) {
+            exitMatchMediaRef.current = null;
+            mm.revert();
+          }
+        },
+      });
+    });
+    inputRef.current?.blur();
+  };
+
+  const openSearch = () => {
+    exitMatchMediaRef.current?.revert();
+    exitMatchMediaRef.current = null;
+    if (panelRef.current) gsap.killTweensOf(panelRef.current);
+    setRenderedOpen(true);
+    setOpen(true);
+  };
+
+  const handoffToFilters = () => {
+    const filterBar = document.querySelector<HTMLElement>('[data-lpl-filter-bar]');
+    if (!filterBar) return;
+    const mm = gsap.matchMedia();
+    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
+      const reduceMotion = Boolean(context.conditions?.reduceMotion);
+      gsap.fromTo(filterBar, { boxShadow: `0 0 0 2px ${selectAccent}` }, { boxShadow: shadow.l1, duration: reduceMotion ? 0 : motion.slow / 1000, ease: motion.enter, onComplete: () => mm.revert() });
+    });
+  };
+
   const close = (preserveQuery = false) => {
+    closeSearch();
     setOpen(false);
     if (!preserveQuery) {
       setQuery('');
       setMode('products');
     }
     setActiveIndex(0);
-    inputRef.current?.blur();
   };
 
   const useSuggestion = (suggestion: string) => {
     setMode('ai');
     setQuery(suggestion);
     setActiveIndex(0);
-    setOpen(true);
+    openSearch();
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const searchWithAgent = () => {
     if (!trimmed) return;
     submittedPromptRef.current = trimmed;
+    const patch = buildFilterPatch(trimmed, state);
+    if (Object.keys(patch).length) {
+      actions.set(patch);
+      handoffToFilters();
+    }
     close(true);
     openAgent('dock', trimmed);
-    void send(trimmed);
+    // Let the filter context commit the NL country/product handoff before the
+    // Agent snapshots its context. The response still comes from the local
+    // deterministic engine or configured remote-with-fallback client.
+    window.setTimeout(() => void send(trimmed), 0);
   };
 
   const selectProduct = (hit: ProductHit) => {
-    actions.setMains([cardOf(hit)]);
+    const patch = buildFilterPatch(trimmed, state);
+    if (patch.countryCode) {
+      actions.set({ ...patch, mains: [cardOf(hit)] });
+      handoffToFilters();
+    } else {
+      actions.setMains([cardOf(hit)]);
+    }
     close();
   };
 
@@ -204,8 +278,8 @@ export default function PriceTrendSearch() {
           aria-expanded={open}
           aria-activedescendant={mode === 'products' && hits[activeIndex] ? `price-search-option-${hits[activeIndex].modelId}` : undefined}
           value={query}
-          onFocus={() => setOpen(true)}
-          onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+          onFocus={openSearch}
+          onChange={(event) => { setQuery(event.target.value); openSearch(); }}
           onKeyDown={(event) => {
             if (event.key === 'Escape' && open) {
               event.preventDefault();
@@ -222,14 +296,25 @@ export default function PriceTrendSearch() {
             } else if (event.key === 'Enter' && mode === 'products' && hits[0]) {
               event.preventDefault();
               selectProduct(hits[activeIndex] ?? hits[0]);
+            } else if (event.key === 'Enter' && mode === 'products' && trimmed) {
+              event.preventDefault();
+              const patch = buildFilterPatch(trimmed, state);
+              if (Object.keys(patch).length) {
+                actions.set(patch);
+                handoffToFilters();
+                close();
+              } else {
+                setMode('ai');
+              }
             }
           }}
           placeholder="搜索产品或价格问题"
           style={{ minWidth: 0, flex: 1, border: 0, outline: 0, background: 'transparent', color: color.ink, fontFamily: font.family, fontSize: 12 }}
         />
+        <button type="button" aria-label={voiceAvailable ? '搜索语音输入' : '浏览器不支持语音输入'} disabled={!voiceAvailable || voiceListening || running} onClick={() => void startVoice((transcript) => { setQuery((prev) => `${prev}${prev ? ' ' : ''}${transcript}`); openSearch(); })} style={{ display: 'inline-grid', placeItems: 'center', width: 24, height: 24, border: 0, background: 'transparent', color: voiceListening ? color.link : color.body, cursor: voiceAvailable && !running ? 'pointer' : 'not-allowed', opacity: voiceAvailable ? 1 : 0.45 }} title={voiceAvailable ? '语音输入' : '浏览器不支持语音输入'}>{voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}</button>
         <kbd aria-label={`快捷键 ${shortcutLabel}`} style={{ flexShrink: 0, padding: '1px 4px', border: `1px solid ${color.hairline}`, borderRadius: 4, color: color.mute, fontFamily: font.mono, fontSize: 10, lineHeight: '14px' }}>{shortcutLabel}</kbd>
       </div>
-      {open && (
+      {renderedOpen && (
         <div
           ref={panelRef}
           id="pricelens-price-search-results"
@@ -244,8 +329,8 @@ export default function PriceTrendSearch() {
           </div>
 
           {mode === 'products' ? (
-            <div role="listbox" aria-label="产品命中结果" aria-activedescendant={hits[activeIndex] ? `price-search-option-${hits[activeIndex].modelId}` : undefined} tabIndex={-1} style={{ maxHeight: 300, overflowY: 'auto', padding: 4 }}>
-              {!trimmed && <div style={{ padding: '4px 5px 8px' }}><div style={emptyStyle}><SearchOutlined style={{ color: color.link }} /><span>输入型号、品牌或系列，快速切换看板主产品</span></div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" onClick={() => useSuggestion(suggestion)} style={suggestionStyle}>{suggestion}</button>)}</div></div>}
+            <div data-search-results role="listbox" aria-label="产品命中结果" aria-activedescendant={hits[activeIndex] ? `price-search-option-${hits[activeIndex].modelId}` : undefined} tabIndex={-1} style={{ maxHeight: 300, overflowY: 'auto', padding: 4 }}>
+              {!trimmed && <div style={{ padding: '4px 5px 8px' }}><div style={emptyStyle}><SearchOutlined style={{ color: color.link }} /><span>输入型号、品牌或系列，快速切换看板主产品</span></div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{ownChips.map((hit) => <button key={hit.modelId} type="button" onClick={() => selectProduct(hit)} style={suggestionStyle}>{brandLabelOf(hit.brand)} · {hit.modelName}</button>)}{PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" onClick={() => useSuggestion(suggestion)} style={suggestionStyle}>{suggestion}</button>)}</div></div>}
               {trimmed && hits.length === 0 && (
                 <div style={emptyStyle}><span>暂无本地产品命中</span><button type="button" onClick={() => setMode('ai')} style={inlineLinkStyle}>让 AI 分析「{trimmed}」</button></div>
               )}
@@ -258,7 +343,7 @@ export default function PriceTrendSearch() {
               ))}
             </div>
           ) : (
-            <div style={{ padding: 12 }}>
+            <div data-search-results style={{ padding: 12 }}>
               <div data-search-item style={{ display: 'flex', alignItems: 'flex-start', gap: 8, color: color.body, fontSize: 12, lineHeight: 1.5 }}><RobotOutlined style={{ color: aiFailureMessage ? color.error : color.link, marginTop: 2 }} /><span>{trimmed ? 'AI 会基于当前国家、产业、产品和时间范围读取价格证据。' : '输入一个价格问题，AI 会基于当前看板范围分析。'}</span></div>
               {!trimmed && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 10 }}>{PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" onClick={() => useSuggestion(suggestion)} style={suggestionStyle}>{suggestion}</button>)}</div>}
               <button data-search-item type="button" aria-label={aiFailureMessage ? '重试 AI 分析' : running ? '正在读取价格数据' : '开始 AI 分析'} disabled={!trimmed || running} onClick={searchWithAgent} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 10, padding: '8px 9px', border: `1px solid ${trimmed ? selectAccent : color.hairline}`, borderRadius: radius.control, background: trimmed ? selectSoft : color.canvasSoft2, color: trimmed ? selectSoftInk : color.mute, cursor: trimmed && !running ? 'pointer' : 'not-allowed', fontSize: 12, textAlign: 'left' }}><span>{running ? '正在读取价格数据…' : aiFailureMessage ? '重试' : trimmed ? `分析「${trimmed}」` : '例如：最近有价周哪个平台最便宜？'}</span>{running ? <LoadingOutlined spin /> : <ArrowRightOutlined />}</button>

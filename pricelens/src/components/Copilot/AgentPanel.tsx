@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { gsap } from 'gsap';
 import {
   AudioOutlined,
   CheckOutlined,
@@ -213,7 +214,9 @@ export default function AgentPanel() {
   const wasOpenRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const modeTransitionTimerRef = useRef<number | null>(null);
+  const animatedMessageIdsRef = useRef<Set<string>>(new Set());
   const [modeTransitionMs, setModeTransitionMs] = useState<number>(motion.base);
+  const [rendered, setRendered] = useState(open);
   const [compactViewport, setCompactViewport] = useState(
     () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 1023.98px)').matches,
   );
@@ -258,6 +261,42 @@ export default function AgentPanel() {
   }, [closeAgent, open]);
   useEffect(() => { if (open && !running) markRead(); }, [markRead, open, running, messages.length]);
   useEffect(() => { if (open) window.setTimeout(() => inputRef.current?.focus(), 0); }, [open]);
+  useEffect(() => {
+    if (open && !rendered) {
+      setRendered(true);
+      return undefined;
+    }
+    if (!rendered && !open) return undefined;
+    const node = panelRef.current;
+    if (!node) return undefined;
+    const mm = gsap.matchMedia();
+    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
+      const reduceMotion = Boolean(context.conditions?.reduceMotion);
+      if (open) {
+        gsap.killTweensOf(node);
+        gsap.fromTo(node, { autoAlpha: reduceMotion ? 1 : 0, x: reduceMotion ? 0 : 28 }, { autoAlpha: 1, x: 0, duration: reduceMotion ? 0 : 0.2, ease: motion.enter });
+      } else {
+        gsap.killTweensOf(node);
+        gsap.to(node, { autoAlpha: 0, x: reduceMotion ? 0 : 28, duration: reduceMotion ? 0 : 0.14, ease: motion.exit, onComplete: () => setRendered(false) });
+      }
+    });
+    return () => mm.revert();
+  }, [open, rendered]);
+  useEffect(() => {
+    if (!open || !rendered) return undefined;
+    const nodes = [...document.querySelectorAll<HTMLElement>('[data-agent-message]')]
+      .filter((node) => !animatedMessageIdsRef.current.has(node.dataset.agentMessage ?? ''));
+    if (!nodes.length) return undefined;
+    nodes.forEach((node) => animatedMessageIdsRef.current.add(node.dataset.agentMessage ?? ''));
+    const mm = gsap.matchMedia();
+    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
+      const reduceMotion = Boolean(context.conditions?.reduceMotion);
+      gsap.fromTo(nodes, { autoAlpha: reduceMotion ? 1 : 0, y: reduceMotion ? 0 : 8 }, { autoAlpha: 1, y: 0, duration: reduceMotion ? 0 : 0.16, stagger: reduceMotion ? 0 : 0.03, ease: motion.enter });
+      const cards = nodes.flatMap((node) => [...node.querySelectorAll<HTMLElement>('[data-agent-result-card]')]);
+      if (cards.length) gsap.fromTo(cards, { autoAlpha: reduceMotion ? 1 : 0, y: reduceMotion ? 0 : 6 }, { autoAlpha: 1, y: 0, duration: reduceMotion ? 0 : 0.16, stagger: reduceMotion ? 0 : 0.04, ease: motion.enter });
+    });
+    return () => mm.revert();
+  }, [messages.length, open, rendered]);
   useEffect(() => () => {
     if (modeTransitionTimerRef.current !== null) window.clearTimeout(modeTransitionTimerRef.current);
   }, []);
@@ -267,7 +306,7 @@ export default function AgentPanel() {
     const distanceToBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
     if (distanceToBottom < 96) node.scrollTop = node.scrollHeight;
   }, [messages, running]);
-  if (!open) return null;
+  if (!open && !rendered) return null;
   // 引擎来源标注：每次打开面板重读 localStorage 自配，与 defaultAgentClient 同一解析口径。
   const engine = describeAgentEngine(resolveAgentEngine());
   const full = mode === 'full';
@@ -282,7 +321,7 @@ export default function AgentPanel() {
     setMode(next);
   };
   const suggestions = messages.length ? AGENT_FOLLOWUP_SUGGESTIONS : agentSuggestionsForPage(context.page);
-  return <aside id="pricelens-agent-panel" ref={panelRef} className="lpl-agent-panel" data-agent-mode={mode} role="dialog" aria-modal={compactModal ? 'true' : undefined} aria-labelledby="pricelens-agent-title" tabIndex={-1} style={{ position: 'fixed', zIndex: 100, top: full || compactViewport ? 0 : 64, right: 0, bottom: 0, width: full ? '100%' : drawer ? 'min(640px, 100%)' : `min(${panelWidth}px, 100%)`, maxWidth: '100%', display: 'flex', flexDirection: 'column', background: color.canvas, boxShadow: full ? 'none' : shadow.l2, borderLeft: `1px solid ${color.hairline}`, borderTop: `2px solid ${color.link}`, opacity: 1, willChange: full || drawer ? 'width, top' : undefined, transition: `width ${modeTransitionMs}ms ${motion.enter}, top ${modeTransitionMs}ms ${motion.enter}, opacity ${modeTransitionMs}ms ${motion.enter}` }}>
+  return <aside id="pricelens-agent-panel" ref={panelRef} className="lpl-agent-panel" data-agent-mode={mode} role="dialog" aria-hidden={!open} aria-modal={compactModal ? 'true' : undefined} aria-labelledby="pricelens-agent-title" tabIndex={-1} style={{ position: 'fixed', zIndex: 100, top: full || compactViewport ? 0 : 64, right: 0, bottom: 0, width: full ? '100%' : drawer ? 'min(640px, 100%)' : `min(${panelWidth}px, 100%)`, maxWidth: '100%', display: 'flex', flexDirection: 'column', background: color.canvas, boxShadow: full ? 'none' : shadow.l2, borderLeft: `1px solid ${color.hairline}`, borderTop: `2px solid ${color.link}`, opacity: 1, pointerEvents: open ? 'auto' : 'none', willChange: 'transform, opacity, width, top', transition: `width ${modeTransitionMs}ms ${motion.enter}, top ${modeTransitionMs}ms ${motion.enter}` }}>
     <header style={{ height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', borderBottom: `1px solid ${color.hairline}`, boxShadow: shadow.l1 }}>
       <div><div id="pricelens-agent-title" style={{ fontWeight: 600, fontSize: 14 }}>PriceLens Agent</div><div role="status" aria-live="polite" aria-atomic="true" style={{ fontSize: 10.5, color: running ? color.link : runStatus === 'stale_context' ? color.warningInk : color.mute }}>{AGENT_STATUS_LABELS[runStatus] ?? AGENT_STATUS_LABELS.idle}</div></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Tooltip title="新对话"><button type="button" aria-label="新对话" onClick={newConversation} style={iconButtonStyle}><PlusOutlined /></button></Tooltip><Tooltip title={modeLabel}><button type="button" aria-label={modeLabel} onClick={() => changeMode(nextMode)} style={iconButtonStyle}>{full ? <FullscreenExitOutlined /> : drawer ? <ExpandOutlined /> : <CompressOutlined />}</button></Tooltip><Tooltip title={running ? '关闭面板（后台继续运行）' : '关闭'}><button type="button" aria-label={running ? '关闭 Agent，后台继续运行' : '关闭 Agent'} onClick={closeAgent} style={iconButtonStyle}><CloseOutlined /></button></Tooltip></div>
@@ -290,8 +329,8 @@ export default function AgentPanel() {
     <ContextChips />
     <div ref={scrollRef} role="log" aria-live="off" aria-relevant="additions text" aria-busy={running} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px 20px', background: color.canvasSoft }}>
       {!messages.length && <div style={{ padding: '18px 4px 10px' }}><div style={{ fontSize: 20, fontWeight: 600, color: color.ink }}>问 PriceLens</div><p style={{ margin: '6px 0 16px', color: color.body, fontSize: 13 }}>在当前页面里查询价格、比较平台，或者解释预警。Agent 会先展示口径和证据，再给出结果。</p></div>}
-      {messages.map((message) => <div key={message.id} style={{ marginBottom: 16, paddingLeft: message.role === 'assistant' ? 10 : 0, borderLeft: message.role === 'assistant' ? `2px solid ${color.link}` : 'none' }}><div style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}>{message.role === 'assistant' && <span style={{ alignSelf: 'flex-start', margin: '3px 6px 0 0', padding: '2px 6px', borderRadius: radius.pill, background: message.kind === 'proactive' ? color.warningSoft : color.canvas, color: message.kind === 'proactive' ? color.warningInk : color.link, fontSize: 10, whiteSpace: 'nowrap' }}>PriceLens · {messageKindLabel[message.kind ?? 'conversation']}</span>}<div style={{ maxWidth: '92%', padding: message.role === 'user' ? '8px 11px' : '0', background: message.role === 'user' ? color.ink : 'transparent', color: message.role === 'user' ? color.onPrimary : color.ink, borderRadius: message.role === 'user' ? '12px 12px 3px 12px' : 0, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{message.text}</div></div>{message.kind === 'proactive' && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{message.alert && <span className="tnum" style={{ fontSize: 11, color: color.mute }}>优先级 {message.alert.priority ?? '—'} · {message.alert.weekId} · {formatPrice(message.alert.price, context.state.currency)}</span>}<button type="button" onClick={() => { if (message.alert) navBus.alertsFocus = { alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint, modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName, seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId }; go('alerts'); }} style={textButtonStyle}>查看预警</button><button type="button" onClick={() => { if (message.alert) navBus.dashboardFocusWeekId = message.alert.weekId; go('dashboard'); }} style={textButtonStyle}>回看板</button><button type="button" onClick={() => { const prompt = '解释最新预警并列出触发事实、证据关联和下一步核查动作'; setDraft(prompt); void send(prompt); }} style={textButtonStyle}>让 Agent 解释</button></div>}{message.kind === 'error' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试</button>}{message.contextFingerprint && message.contextFingerprint !== context.fingerprint && <div role="status" style={{ marginTop: 4, fontSize: 10.5, color: color.warningInk }}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}{message.response && <><StepTimeline response={message.response} />{message.response.cards.map((card) => <ResultCard key={card.id} card={card} />)}<Citations response={message.response} /><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>{message.response.suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setDraft(suggestion); void send(suggestion); }} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' }}>{suggestion}</button>)}</div></>}</div>)}
-      {running && <div role="status" aria-live="polite" aria-atomic="true" style={{ color: color.mute, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}><LoadingOutlined spin /> {AGENT_STATUS_LABELS[runStatus] ?? '生成结果中…'}</div>}
+      {messages.map((message) => <div data-agent-message={message.id} key={message.id} style={{ marginBottom: 16, paddingLeft: message.role === 'assistant' ? 10 : 0, borderLeft: message.role === 'assistant' ? `2px solid ${color.link}` : 'none' }}><div style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}>{message.role === 'assistant' && <span style={{ alignSelf: 'flex-start', margin: '3px 6px 0 0', padding: '2px 6px', borderRadius: radius.pill, background: message.kind === 'proactive' ? color.warningSoft : color.canvas, color: message.kind === 'proactive' ? color.warningInk : color.link, fontSize: 10, whiteSpace: 'nowrap' }}>PriceLens · {messageKindLabel[message.kind ?? 'conversation']}</span>}<div style={{ maxWidth: '92%', padding: message.role === 'user' ? '8px 11px' : '0', background: message.role === 'user' ? color.ink : 'transparent', color: message.role === 'user' ? color.onPrimary : color.ink, borderRadius: message.role === 'user' ? '12px 12px 3px 12px' : 0, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{message.text}</div></div>{message.kind === 'proactive' && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{message.alert && <span className="tnum" style={{ fontSize: 11, color: color.mute }}>优先级 {message.alert.priority ?? '—'} · {message.alert.weekId} · {formatPrice(message.alert.price, context.state.currency)}</span>}<button type="button" onClick={() => { if (message.alert) navBus.alertsFocus = { alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint, modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName, seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId }; go('alerts'); }} style={textButtonStyle}>查看预警</button><button type="button" onClick={() => { if (message.alert) navBus.dashboardFocusWeekId = message.alert.weekId; go('dashboard'); }} style={textButtonStyle}>回看板</button><button type="button" onClick={() => { const prompt = '解释最新预警并列出触发事实、证据关联和下一步核查动作'; setDraft(prompt); void send(prompt); }} style={textButtonStyle}>让 Agent 解释</button></div>}{message.kind === 'error' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试</button>}{message.contextFingerprint && message.contextFingerprint !== context.fingerprint && <div role="status" style={{ marginTop: 4, fontSize: 10.5, color: color.warningInk }}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}{message.response && <><StepTimeline response={message.response} />{message.response.cards.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}<Citations response={message.response} /><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>{message.response.suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setDraft(suggestion); void send(suggestion); }} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' }}>{suggestion}</button>)}</div></>}</div>)}
+      {running && <div role="status" aria-live="polite" aria-atomic="true" style={{ color: color.mute, fontSize: 12 }}><div className="lpl-agent-skeleton" aria-hidden="true"><span /><span /><span /></div><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><LoadingOutlined spin /> {AGENT_STATUS_LABELS[runStatus] ?? '生成结果中…'}</span></div>}
       <RunTimeline run={activeRun} />
     </div>
     {!messages.length && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 10px', background: color.canvasSoft }}>{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => void send(suggestion)} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '5px 8px', cursor: 'pointer' }}>{suggestion}</button>)}</div>}

@@ -66,7 +66,7 @@ interface AgentContextValue {
   undoFilter: () => void;
   redoFilter: () => void;
   markRead: () => void;
-  startVoice: () => Promise<void>;
+  startVoice: (onTranscript?: (transcript: string) => void) => Promise<void>;
 }
 
 const Ctx = createContext<AgentContextValue | null>(null);
@@ -300,10 +300,14 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     setMessages((prev) => prev.some((message) => message.unread) ? prev.map((message) => ({ ...message, unread: false })) : prev);
   }, []);
 
-  const startVoice = useCallback(async () => {
+  const startVoice = useCallback(async (onTranscript?: (transcript: string) => void) => {
     if (!voice.available || voiceListening || running) return;
     setVoiceListening(true);
-    try { const result = await voice.listen(); setDraft((prev) => `${prev}${prev ? ' ' : ''}${result.transcript}`); }
+    try {
+      const result = await voice.listen();
+      if (onTranscript) onTranscript(result.transcript);
+      else setDraft((prev) => `${prev}${prev ? ' ' : ''}${result.transcript}`);
+    }
     catch (error) {
       if (!(error instanceof Error && error.name === 'AbortError')) {
         const detail = error instanceof Error && error.message ? error.message : '浏览器未返回语音结果。';

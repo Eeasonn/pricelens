@@ -17,6 +17,7 @@ const compact = (s: string): string => s.toLocaleLowerCase().replace(/[\s_\-]+/g
 
 const COUNTRY_ALIASES: Record<string, string> = {
   巴西: 'BR', 中国: 'CN', 俄罗斯: 'RU', 俄国: 'RU', 美国: 'US', 英国: 'GB',
+  'R国': 'RU', 'R 国': 'RU',
   法国: 'FR', 德国: 'DE', 西班牙: 'ES', 意大利: 'IT', 土耳其: 'TR', 墨西哥: 'MX',
   沙特: 'SA', 沙特阿拉伯: 'SA', 阿联酋: 'AE', 阿拉伯联合酋长国: 'AE',
   印度尼西亚: 'ID', 印尼: 'ID', 马来西亚: 'MY', 新加坡: 'SG', 泰国: 'TH',

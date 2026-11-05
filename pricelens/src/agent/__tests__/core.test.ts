@@ -24,6 +24,17 @@ describe('PriceLens Agent deterministic core', () => {
     expect(resolved.selections.every((selection) => selection.modelId === 'own-huawei-mate-x7')).toBe(true);
   });
 
+  it('resolves the dashboard quick-search shorthand R 国 + compact model', () => {
+    const resolved = resolveAgentEntities('R 国 pura90spro', state);
+    const patch = buildFilterPatch('R 国 pura90spro', state);
+    expect(resolved.countryCode).toBe('RU');
+    expect(resolved.explicitCountry).toBe(true);
+    expect(resolved.explicitProduct).toBe(true);
+    expect(resolved.productLabels[0]).toContain('Pura 90s Pro');
+    expect(patch.countryCode).toBe('RU');
+    expect(patch.mains?.[0]?.main?.modelId).toContain('pura-90s-pro');
+  });
+
   it('returns an explicit no-data result for a known product in an unsupported country', async () => {
     const response = await runAgent('我要看 巴西的 Pura 90s 情况', buildAgentContext('dashboard', state, []));
     expect(response.intent).toBe('query');

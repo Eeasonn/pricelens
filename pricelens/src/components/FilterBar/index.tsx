@@ -319,7 +319,7 @@ export default function FilterBar({
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
         {/* 时间范围弹层锚定在其筛选簇自身（第一百四十二轮对齐修复），卡片根不再是定位容器 */}
-        <section className="lpl-fb" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
+        <section className="lpl-fb" data-lpl-filter-bar style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
           {/* 第一百八十二轮：行允许换行（rowGap 8）——≥1280 视口仍单行不变；
               窄视口筛选簇折行而非把整页撑出横向裁切 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, rowGap: 8, minHeight: 30, flexWrap: 'wrap' }}>
