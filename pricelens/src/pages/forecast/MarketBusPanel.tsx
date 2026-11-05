@@ -1,49 +1,45 @@
 // ============================================================
-// 推演工作台 v2 · 层②大盘 · 总量总线（2026-11-04 月粒度重构 + 证据信任 v2）：
-// 主序列 = 月粒度（大盘数据粒度 = 月，调整颗粒度 = 月）：历史月度实线
-// （2025-01–2026-09 模拟样本）+ 未来 4 个季度逐月预测虚线（2026-10–2027-09，
-// AI 季节 × 趋势季度基线的月形分布，确定性外推禁随机，口径见
-// fixture.market.monthlyNote）；卡内布局 = 图表区左 2/3 主视觉 + 事件区右 1/3。
-// 证据信任 v2（2026-11-04 晚拍板，设计稿 design-proposals/forecast-baseline-trust.html
-// v2-1 / v2-2 / v2-3 三节）：
-// - v2-1 hover 证据浮框：hover/Tab+Enter 预测月 → 四层浮框 = 头部（月名 +
-//   AI 基线/生效）→ 趋势行（近 6 个月实际实线 + 基线虚线延伸 sparkline，
-//   环比数字由 workbenchModel.marketTrendWindow 导出，UI 不另编）→ 月形行
-//   （去年同季三根小柱 + 占季内均值占比，本月高亮，构成算例）→ 底部
-//   「调整此月」就地切换为既有调整表单（一层化：证据与调整同一浮层两态）；
-//   含事件/手调月顶部加复算提示（如「含事件 +0.8%（均摊 3/31 天）」）。
-// - v2-2 图上双锚点：hover 月同时图上临时高亮——趋势源段（近 6 个月实际段）
-//   浅底衬带（canvasSoft2 系，非新线）+ 去年同位点圆环 + 其余线段降不透明；
-//   移开即恢复，零新增常驻元素。
-// - v2-3 徽章三步链：卡头既有「AI 推测 · 可改」徽章 hover/点击 → 三步链浮层
-//   （样本 → 两个规律 → 外推，含算例，数字同出模型导出），整卡常驻元素零增加。
-// - 口径一致：浮框/高亮窗口与数字全部来自 workbenchModel 实际计算路径
-//   （marketTrendWindow 6 个月窗口 / marketMonthShape 去年同季月形 /
-//   computeMarketMonths 月形分布），季度基线外推链（主链口径）结构不动。
-// 按月调整沿用会话草稿机制（onMonthOverride(key, null) 还原），有人工调整的
-// 季度经季内三月均值同步 q4/q1Override 进主链（workbenchModel.withMarketMonthOverride）。
-// 事件区（右 1/3）两块：上块 = AI 候选事件 Top5 占位（空态注明「候选生成
-// 能力待接入，抓取逻辑另议」，先列后删交互骨架为禁用态静态示意，不接数据）；
-// 下块 = 人工月度事件列表 + 极简三字段录入（起始月/日 + 时长（月）+ 幅度%，
-// 名称选填）。事件在图上的呈现 = 次要标记（轴下小标记 + hover 详情，
-// 不占主视觉）：月中起始按日均摊（首月影响 × 覆盖天数 ÷ 当月天数，显式口径）。
-// X 轴月标签 = 全站月视图日历格式 YYYY-MM（与价格走势/量价月视图悬停与明细
-// 同一口径，fmtMonthCalendar 复用该格式，不新造）；「今天」文字标签已删
-// （说明性内容），历史/预测分界虚线保留（定位参考非说明）。
-// 卡体延续 A2 定高策略（MARKET_BODY_HEIGHT）+ 右栏卡内纵向滚动。
+// 推演工作台 v2 · 层②大盘修正（2026-11-05 拍板：高保真 market-card-hifi
+// 为实施规格，逐条对齐）：
+// 主序列 = 月粒度（历史月度实线 + 统一 12 个预测月虚线，AI 季节 × 趋势季度
+// 基线的月形分布，确定性外推禁随机）；卡头 = 「② 大盘修正」+ 模拟 chip +
+// 「AI 推测 · 可改」徽章（hover 三步链 v2-3）+ 图内高亮开关 + 「事件与情报」
+// 右侧滑出菜单按钮。
+// 信息删减（全部删除不留残根）：头部说明长句、「输入与读数」整块（IoBar +
+// AI 季基线读数行）、底部说明长句、事件与情报相关说明行；保留图例行
+// （实际 / 预测 / AI 基线 / 事件，每项显隐开关）与月调整应用后反馈行
+// （role=status）。月度证据浮框（v2-1）与图上双锚点（v2-2）不动。
+// 事件形态（2026-11-05 拍板）：
+// - 右侧滑出菜单（默认收起，图表占满全宽）：transform translateX 过渡 +
+//   半透明遮罩，Esc / ✕ / 遮罩点击关闭；内容 = 情报候选区
+//   （IntelligenceReviewPanel availability="pending" 空态，真实候选另议）+
+//   人工事件列表（名称、起止周段、幅度、衰减 + 编辑/删除）+「＋ 添加事件」。
+// - 添加事件浮窗（绝对定位悬浮在图上，不改变图表区高度）：名称选填、
+//   起止周 = 双月周历选择器（两月并排、行 = 整周[周一起]、行首 ISO 周号、
+//   选中实蓝白字、区间内浅蓝、跨月连续、‹ › 月导航；起点行→终点行选择，
+//   自动收起回填）、幅度 %、衰减 chips（递减/恒定）、说明选填；保存经
+//   workbenchModel.monthSeedOfWeekRange 映射进既有 MarketMonthEventSeed
+//   （startMonth/startDay = 起始周周一所属月与日期、durationMonths = 跨月数
+//   向上取整；模型契约不变，仅新增可选 decay 形状）。
+// - 图上标注统一（与量价参考同款箭头-线小标）：人工月事件（琥珀）与周口径
+//   行业事件（灰）渲染在图顶部 = 左右小箭头 + 中间线，hover → 对应周区间
+//   临时高亮；图内高亮开关（默认关）= 所有事件区间常驻底衬；「事件」图例
+//   项控制小标层。月事件周范围经 workbenchModel.weekRangeOfMonthEvent 由
+//   startMonth/startDay+duration 反推。
+// - 衰减形状（2026-11-05 拍板）：MarketMonthEventSeed 可选 decay
+//   （缺省递减 = 现行为）；flat = 事件覆盖的完整月恒定乘子（首月仍按日均摊
+//   占比），公式见 workbenchModel.marketMonthEventFactor。
+// 按月调整沿用会话草稿机制（onMonthOverride(key, null) 还原）。X 轴月标签 =
+// 全站月视图日历格式 YYYY-MM；历史/预测分界虚线保留（定位参考非说明）。
+// 卡体延续 A2 定高策略（MARKET_BODY_HEIGHT）+ 卡内纵向滚动。
 // 全部视觉取 theme/tokens 既有 token 与 WorkbenchBits 既有控件语言，无新视觉。
-// 2026-11-05 视觉精简二轮（Eason 看图反馈）：
-// - 线宽统一到价格走势页基准 2：实际月线 / 预测外推线 2.2→2；hover 趋势源段
-//   强调线 2.8→2；证据浮框 sparkline 基线延伸 1.8→1.4（辅线 ≤1.4）；
-//   AI 基线 ghost 1.4 已达标不动。
-// - IoBar 行与 AI 季基线读数行收进共享 CollapsibleSection「输入与读数」；
-//   右 1/3 事件区（情报候选 + 人工事件）默认收起为「事件与情报」一条头
-//   （收起时图表占满全宽 = grid 切单列；展开恢复 2/3 + 1/3）；卡头
-//   「大盘 · 总量总线」与「AI 推测 · 可改」徽章保留。
 // ============================================================
 import { useState } from 'react';
-import { Button, Input, InputNumber, Select } from 'antd';
-import { color, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
+import { Button, Input, InputNumber } from 'antd';
+import { color, motion, radius, selectSoft, selectSoftInk, shadow, space, trackColors } from '../../theme/tokens';
+import { prefersReducedMotion } from '../../theme/motion';
+import type { CalendarWeek } from './workbenchCalendar';
+import { buildForecastCalendar, durationOfWeekRange } from './workbenchCalendar';
 import type { MarketMonthEventSeed, WorkbenchFixture } from './workbenchFixture';
 import type { MarketMonthPoint, MarketTrendWindowPoint, WorkbenchParams, WorkbenchResult } from './workbenchModel';
 import {
@@ -54,31 +50,41 @@ import {
   marketTrendWindow,
   monthCoverageRatio,
   monthKeyOfDate,
+  monthSeedOfWeekRange,
   monthsBetween,
   MONTH_OVERRIDE_MAX,
   MONTH_OVERRIDE_MIN,
+  weekRangeOfMonthEvent,
 } from './workbenchModel';
 import { overrideSourceOf } from './workbenchModel';
 import IntelligenceReviewPanel from './IntelligenceReviewPanel';
-import { AiJudgeBadge, CollapsibleSection, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtSignedPct, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import { AiJudgeBadge, SectionHead, SimChip, WorkbenchLegend, fmtSignedPct, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
 // 2026-11-04 视觉一致性：viewBox 宽度对齐左栏实际渲染宽度（≈760，缩放比 ≈1，
-// 文字回归真实 px——旧 560 宽被放大 1.36 倍导致轴字体偏大）；图高与全站 ≈252px 对齐。
+// 文字回归真实 px）；图高与全站 ≈252px 对齐。
 const CHART_W = 760;
 const CHART_H = 252;
 
 /**
- * 卡体定高策略（2026-11-04 视觉一致性修订）：图表区左 2/3 + 事件区右 1/3，内容区
- * 固定 330px；右栏（事件区）内容超高由卡内纵向滚动兜底（lpl-card-scroll 细滚动条）。
- * 左图 SVG 宽度 100%（viewBox 760 与左栏实际宽 ≈1:1，无 letterbox 留白），高度随
- * 宽度等比 ≈252px——与全站图高一致。
+ * 卡体定高策略（2026-11-04 视觉一致性修订；2026-11-05 起卡体恒为单列——
+ * 事件与情报收进右侧滑出菜单，图表恒占满全宽）：内容区固定 330px，超高由
+ * 卡内纵向滚动兜底（lpl-card-scroll 细滚动条）。
  */
 const MARKET_BODY_HEIGHT = 330;
 
-// 图例系列 key（显隐状态按 key 记录；AI 基线只控制对照虚线，不影响生效值渲染）。
+/** 右侧滑出菜单宽度（高保真 340px）。 */
+const DRAWER_W = 340;
+/** 添加事件浮层宽度（高保真 300px；与证据浮层同上限口径）。 */
+const EVENT_FORM_W = 300;
+/** 双月周历选择器宽度（两月并排，高保真 ≈460px）。 */
+const WEEK_PICKER_W = 440;
+
+// 图例系列 key（显隐状态按 key 记录；AI 基线只控制对照虚线，「事件」控制
+// 图顶部箭头-线小标层 + 区间底衬）。
 const SERIES_ACTUAL = 'actual';
 const SERIES_FORECAST = 'forecast';
 const SERIES_AI_BASELINE = 'ai-baseline';
+const SERIES_EVENT = 'event';
 
 /** 证据浮层（v2-1 四层）宽度上限（设计稿：总宽 ≤300px）。 */
 const EVIDENCE_W = 300;
@@ -105,6 +111,10 @@ const fmtMonthCalendar = (key: string): string =>
 
 /** 月键 → 轴标签刻度月（季度首月出标签，保持可扫描密度；其余月不刻）。 */
 const isQuarterStartMonth = (key: string): boolean => /-(01|04|07|10)$/.test(key);
+
+/** 衰减形状标签（列表行 / 小标详情共用；缺省递减）。 */
+const decayLabelOf = (event: Pick<MarketMonthEventSeed, 'decay'>): string =>
+  event.decay === 'flat' ? '恒定' : '递减';
 
 /** 月度事件首月覆盖读数（covered/days；口径见 workbenchModel.monthCoverageRatio）。 */
 function monthCoverageText(event: MarketMonthEventSeed): string {
@@ -441,9 +451,139 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
   );
 }
 
-// AI 候选事件 Top5 占位已由真实候选容器 IntelligenceReviewPanel 接管（任务 8）：
-// 能力未接入 = 空态「候选生成能力待接入」+ 禁用按钮，不再画五条假候选（3.3.A）。
-// 页级 items/recommendations/回调接线归任务 10（届时经 props 传入真实候选容器）。
+/**
+ * 双月周历选择器行（添加事件浮窗 · 高保真形态）：两月并排、行 = 整周
+ * （周一起）、行首 = ISO 周号、默认浅蓝底、区间内更浅蓝、选中 = 实蓝白字；
+ * 选择 = 点起点行 → 点终点行（同周再点 = 重选起点）。跨月区间连续高亮。
+ */
+function WeekRangePicker({
+  months,
+  page,
+  onPage,
+  startWeekId,
+  endWeekId,
+  onPick,
+}: {
+  /** 可选月序列（统一日历预测月，每月 = 其内整周行）。 */
+  months: Array<{ key: string; label: string; weeks: CalendarWeek[] }>;
+  /** 当前页（显示 months[page] 与 months[page+1]）。 */
+  page: number;
+  onPage: (next: number) => void;
+  /** 已选起点周（ISO WeekId）；null = 未选。 */
+  startWeekId: string | null;
+  /** 已选终点周；null = 待选（区间未完成）。 */
+  endWeekId: string | null;
+  onPick: (weekId: string) => void;
+}) {
+  const a = months[page];
+  const b = months[page + 1] ?? a;
+  if (a == null) return null;
+  const rangeDone = startWeekId != null && endWeekId != null;
+  // 起止周绝对序位（区间内衬判定用；跨月页仍连续高亮）。
+  const indexOfWeek = (id: string): number | null => {
+    for (const month of months) {
+      const hit = month.weeks.find((week) => week.id === id);
+      if (hit != null) return hit.index;
+    }
+    return null;
+  };
+  const lo = startWeekId != null ? indexOfWeek(startWeekId) : null;
+  const hi = endWeekId != null ? indexOfWeek(endWeekId) : null;
+  const loHi = lo != null && hi != null ? { lo: Math.min(lo, hi), hi: Math.max(lo, hi) } : null;
+  const renderMonth = (month: { key: string; label: string; weeks: CalendarWeek[] }) => (
+    <div data-lpl-week-month={month.key} style={{ minWidth: 0 }}>
+      <div className="tnum" style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: color.ink, marginBottom: 4 }}>{month.label}</div>
+      {month.weeks.map((week) => {
+        const selected = week.id === startWeekId || week.id === endWeekId;
+        const inRange = !selected && loHi != null && week.index > loHi.lo && week.index < loHi.hi;
+        // 周行 7 个日格：从周一起逐日；不属于本月页的日期降灰（跨月连续）。
+        const monday = Date.UTC(Number(week.date.slice(0, 4)), Number(week.date.slice(5, 7)) - 1, Number(week.date.slice(8, 10)));
+        const cells = Array.from({ length: 7 }, (_, offset) => {
+          const iso = new Date(monday + offset * 86_400_000).toISOString().slice(0, 10);
+          return { day: Number(iso.slice(8, 10)), inMonth: iso.slice(0, 7) === month.key };
+        });
+        return (
+          <div
+            key={week.id}
+            data-lpl-week-row={week.id}
+            data-week-number={week.weekNumber}
+            role="button"
+            tabIndex={0}
+            aria-pressed={selected}
+            aria-label={`${week.id}（第 ${week.weekNumber} 周）`}
+            onClick={() => onPick(week.id)}
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onPick(week.id); } }}
+              style={{
+                display: 'grid', gridTemplateColumns: '26px repeat(7, 1fr)', gap: 2, alignItems: 'center',
+                padding: '1px 2px', borderRadius: 5, marginBottom: 2, cursor: 'pointer',
+                background: selected ? color.link : inRange ? trackColors.fill : selectSoft,
+                color: selected ? color.onPrimary : color.ink,
+              }}
+          >
+            <span className="tnum" style={{ fontSize: 10, textAlign: 'center', color: selected ? color.onPrimary : color.mute }}>{week.weekNumber}</span>
+            {cells.map((cell, index) => (
+              <span
+                key={index}
+                className="tnum"
+                style={{
+                  fontSize: 11, textAlign: 'center',
+                  color: selected ? color.onPrimary : cell.inMonth ? color.ink : color.hairlineStrong,
+                }}
+              >
+                {cell.day}
+              </span>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+  return (
+    <div
+      data-lpl-week-picker
+      data-range-done={rangeDone ? 'true' : undefined}
+      style={{
+        position: 'absolute', right: 0, top: '100%', marginTop: 6, width: WEEK_PICKER_W, zIndex: 20,
+        background: color.canvas, border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.card,
+        boxShadow: shadow.l5, padding: '10px 12px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <button
+          type="button"
+          data-lpl-week-nav="prev"
+          aria-label="上一月"
+          disabled={page <= 0}
+          onClick={() => onPage(Math.max(0, page - 1))}
+          style={{ border: 'none', background: color.canvasSoft2, borderRadius: 5, width: 22, height: 22, color: color.body, fontSize: 12, cursor: 'pointer' }}
+        >
+          ‹
+        </button>
+        <span className="tnum" style={{ flex: 1, textAlign: 'center', fontSize: 13, fontWeight: 700, color: color.ink }}>
+          {`${a.label} / ${b.label}`}
+        </span>
+        <button
+          type="button"
+          data-lpl-week-nav="next"
+          aria-label="下一月"
+          disabled={page >= months.length - 2}
+          onClick={() => onPage(Math.min(months.length - 2, page + 1))}
+          style={{ border: 'none', background: color.canvasSoft2, borderRadius: 5, width: 22, height: 22, color: color.body, fontSize: 12, cursor: 'pointer' }}
+        >
+          ›
+        </button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {renderMonth(a)}
+        {b.key !== a.key && renderMonth(b)}
+      </div>
+    </div>
+  );
+}
+
+// AI 候选事件占位已由真实候选容器 IntelligenceReviewPanel 接管（任务 8）：
+// 能力未接入 = 空态「候选生成能力待接入」+ 禁用按钮，不再画假候选（3.3.A）。
+// 页级 items/recommendations/回调接线归页级任务（届时经 props 传入真实候选容器）。
 
 export default function MarketBusPanel({
   fixture,
@@ -461,14 +601,14 @@ export default function MarketBusPanel({
   result: WorkbenchResult;
   /** 按月调整（点击预测月浮层应用）：value = null 还原该月；reason 选填可空。 */
   onMonthOverride: (monthKey: string, value: number | null, reason: string) => void;
-  /** 新增人工月度事件（极简三字段产物；id 由页面侧循环查重生成）。 */
+  /** 新增人工月度事件（周历选择器映射产物；id 由页面侧循环查重生成）。 */
   onMonthEventAdd: (event: Omit<MarketMonthEventSeed, 'id'>) => void;
   onMonthEventRemove: (id: string) => void;
-  /** 编辑人工月度事件（同一三字段编辑器；缺省回退 = 删除 + 新增，页面撤销层可撤）。 */
+  /** 编辑人工月度事件（同一浮窗编辑器；缺省回退 = 删除 + 新增，页面撤销层可撤）。 */
   onMonthEventUpdate?: (id: string, event: Omit<MarketMonthEventSeed, 'id'>) => void;
-  /** 月调整应用后反馈行的「查看主图」（跨卡定位，任务 6 接线）。 */
+  /** 月调整应用后反馈行的「查看主图」（跨卡定位，页级接线）。 */
   onViewMainChart?: () => void;
-  /** 月调整应用后反馈行的「检查库存」（跨卡定位，任务 6 接线）。 */
+  /** 月调整应用后反馈行的「检查库存」（跨卡定位，页级接线）。 */
   onCheckInventory?: () => void;
   /** 兼容保留（A2 删理由栏后 UI 不再消费）：页面壳仍传该回调，契约不动，勿删。 */
   onRationaleChange: (text: string) => void;
@@ -478,19 +618,100 @@ export default function MarketBusPanel({
   const [popover, setPopover] = useState<{ key: string; mode: 'evidence' | 'adjust' } | null>(null);
   /** v2-3 徽章三步链浮层（hover/点击临时，零新增常驻元素）。 */
   const [chainOpen, setChainOpen] = useState(false);
+  /** 事件与情报右侧滑出菜单（默认收起；组件内存态，不持久化）。 */
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  /** 图内高亮开关（默认关；开 = 所有事件区间常驻底衬）。 */
+  const [highlightAll, setHighlightAll] = useState(false);
+  /** hover 事件小标 → 对应周区间临时高亮（移开即恢复）。 */
+  const [hoverEventId, setHoverEventId] = useState<string | null>(null);
+  /** 添加/编辑事件浮窗（绝对定位悬浮在图上，不改变图表区高度）。 */
   const [eventFormOpen, setEventFormOpen] = useState(false);
-  const [formMonth, setFormMonth] = useState<string>('');
-  const [formDay, setFormDay] = useState<number | null>(1);
-  const [formDuration, setFormDuration] = useState<number | null>(1);
-  const [formMagnitude, setFormMagnitude] = useState<number | null>(5);
-  const [formLabel, setFormLabel] = useState('');
-  /** 编辑中的人工月事件 id（null = 表单为新增态；B.5.6：行内「编辑」用同一三字段编辑器）。 */
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [formLabel, setFormLabel] = useState('');
+  const [formNote, setFormNote] = useState('');
+  const [formStartWeekId, setFormStartWeekId] = useState<string | null>(null);
+  const [formEndWeekId, setFormEndWeekId] = useState<string | null>(null);
+  const [formMagnitude, setFormMagnitude] = useState<number | null>(5);
+  const [formDecay, setFormDecay] = useState<'decreasing' | 'flat'>('decreasing');
+  const [weekPickerOpen, setWeekPickerOpen] = useState(false);
+  const [pickerPage, setPickerPage] = useState(0);
   /** 月调整应用反馈（B.5.6）：应用后显示「本月比值 ×… · 已联动 N 个预测周」（比值 = 应用值 ÷ 该月 AI 基线）。 */
   const [feedback, setFeedback] = useState<{ monthKey: string; value: number } | null>(null);
-  /** 2026-11-05 视觉精简二轮：右 1/3 事件区默认收起（组件内存态，不持久化）；
-   *  收起 = 卡体 grid 切单列（图表占满全宽），展开恢复 2/3 + 1/3。 */
-  const [eventsOpen, setEventsOpen] = useState(false);
+
+  // 统一日历（周历选择器 / 事件小标区间反推的唯一时间来源）。
+  const calendar = buildForecastCalendar(fixture.calendar);
+  /** 周历选择器月页：统一日历预测月（每月 = 其内整周行，按周一归属月）。 */
+  const pickerMonths = calendar.forecastMonths.map((month) => ({
+    key: month.key,
+    label: `${month.key.slice(0, 4)}年 ${Number(month.key.slice(5))}月`,
+    weeks: calendar.weeks.filter((week) => week.monthKey === month.key),
+  }));
+  const firstPickerWeekId = pickerMonths[0]?.weeks[0]?.id ?? null;
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setEventFormOpen(false);
+    setWeekPickerOpen(false);
+    setEditingEventId(null);
+  };
+
+  const openEventForm = (event?: MarketMonthEventSeed) => {
+    if (event != null) {
+      setEditingEventId(event.id);
+      setFormLabel(event.label);
+      setFormNote('');
+      setFormMagnitude(event.magnitudePct);
+      setFormDecay(event.decay === 'flat' ? 'flat' : 'decreasing');
+      const range = weekRangeOfMonthEvent(calendar, event);
+      setFormStartWeekId(range?.startWeekId ?? firstPickerWeekId);
+      setFormEndWeekId(range?.endWeekId ?? firstPickerWeekId);
+      const pageIndex = pickerMonths.findIndex((month) => month.key === event.startMonth);
+      setPickerPage(Math.min(Math.max(0, pageIndex), Math.max(0, pickerMonths.length - 2)));
+    } else {
+      setEditingEventId(null);
+      setFormLabel('');
+      setFormNote('');
+      setFormMagnitude(5);
+      setFormDecay('decreasing');
+      setFormStartWeekId(firstPickerWeekId);
+      setFormEndWeekId(firstPickerWeekId);
+      setPickerPage(0);
+    }
+    setWeekPickerOpen(false);
+    setEventFormOpen(true);
+  };
+
+  /** 周历行点击：首点 = 起点；次点 = 终点（自动收起回填）；同周再点 = 重选起点。 */
+  const pickWeek = (weekId: string) => {
+    if (formStartWeekId != null && formEndWeekId == null && weekId !== formStartWeekId) {
+      const a = calendar.weekById.get(formStartWeekId);
+      const b = calendar.weekById.get(weekId);
+      if (a == null || b == null) return;
+      const [start, end] = a.index <= b.index ? [a.id, b.id] : [b.id, a.id];
+      setFormStartWeekId(start);
+      setFormEndWeekId(end);
+      // 高保真：完成选择后短暂展示区间再自动收起回填。
+      window.setTimeout(() => setWeekPickerOpen(false), 350);
+    } else {
+      setFormStartWeekId(weekId);
+      setFormEndWeekId(null);
+    }
+  };
+
+  /** 起止周范围读数（按钮标签与校验；周数 = 统一日历绝对 index 口径）。 */
+  const formWeeks = formStartWeekId != null && formEndWeekId != null
+    ? { start: calendar.weekById.get(formStartWeekId), end: calendar.weekById.get(formEndWeekId) }
+    : null;
+  const formWeekCount = formWeeks && formWeeks.start != null && formWeeks.end != null
+    ? durationOfWeekRange(calendar, { startWeekId: formWeeks.start.id, endWeekId: formWeeks.end.id })
+    : null;
+  /** 周范围 → 月度事件三字段映射（保存路径；workbenchModel 纯函数）。 */
+  const formMapped = formStartWeekId != null && formEndWeekId != null
+    ? monthSeedOfWeekRange(calendar, { startWeekId: formStartWeekId, endWeekId: formEndWeekId })
+    : null;
+  const formMagnitudeOk = formMagnitude != null && Number.isFinite(formMagnitude) && formMagnitude >= -30 && formMagnitude <= 30;
+  const eventFormValid = formMapped != null && formWeeks?.start != null && formWeeks?.end != null && formWeekCount != null && formMagnitudeOk;
+
   const toggleSeries = (key: string) => {
     setHiddenSeries((prev) => {
       const next = new Set(prev);
@@ -519,15 +740,14 @@ export default function MarketBusPanel({
 
   const legendItems: LegendItem[] = [
     { key: SERIES_ACTUAL, label: '实际（月度）', shape: 'line', color: color.ink },
-    { key: SERIES_FORECAST, label: '预测 · 统一 12 个月逐月', shape: 'dash', color: color.link },
+    { key: SERIES_FORECAST, label: '预测 · 未来 4 季逐月', shape: 'dash', color: color.link },
     { key: SERIES_AI_BASELINE, label: 'AI 基线', shape: 'dash', color: color.hairlineStrong },
+    { key: SERIES_EVENT, label: '事件', shape: 'line', color: color.warning },
   ];
 
-  const ioBar = <IoBar input="月度指数 · 行业事件（月中按日均摊）" output="主图周销基准" />;
   const sectionHead = (
     <SectionHead
-      title="大盘 · 总量总线"
-      hint={`历史月度线 ${fmtMonthCalendar(months[0]?.key ?? '')} 连贯至当前实际；向后按月预测统一 12 个月（${forecastMonthKeys[0] ?? ''} … ${forecastMonthKeys[forecastMonthKeys.length - 1] ?? ''}，AI 基线逐月分布）。hover 预测月看证据浮框（趋势 / 月形 / 算例），浮框内就地调整；调整只落当月，可撤销。`}
+      title="② 大盘修正"
       extra={<>
         <SimChip title="月度序列为演示样本：历史月为模拟数据，预测月为模型假设（确定性外推）" />
         <span
@@ -617,6 +837,55 @@ export default function MarketBusPanel({
             </div>
           )}
         </span>
+        {/* 图内高亮开关（默认关；开 = 所有事件区间常驻底衬） */}
+        <span
+          data-lpl-highlight-switch
+          role="switch"
+          aria-checked={highlightAll}
+          tabIndex={0}
+          aria-label={`图内高亮：${highlightAll ? '开' : '关'}`}
+          onClick={() => setHighlightAll((value) => !value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setHighlightAll((value) => !value);
+            }
+          }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: color.body, cursor: 'pointer', userSelect: 'none' }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 30, height: 17, borderRadius: radius.pill, position: 'relative',
+              background: highlightAll ? color.link : color.hairlineStrong, transition: `background ${motion.fast}ms`,
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute', top: 2, left: highlightAll ? 15 : 2, width: 13, height: 13,
+                borderRadius: radius.pill, background: color.canvas, transition: `left ${motion.fast}ms`,
+              }}
+            />
+          </span>
+          {`图内高亮：${highlightAll ? '开' : '关'}`}
+        </span>
+        {/* 「事件与情报」右侧滑出菜单开关（默认收起） */}
+        <button
+          type="button"
+          data-lpl-drawer-button
+          aria-expanded={drawerOpen}
+          aria-controls="lpl-market-drawer"
+          onClick={() => (drawerOpen ? closeDrawer() : setDrawerOpen(true))}
+          onKeyDown={(event) => { if (event.key === 'Escape') closeDrawer(); }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', height: 26, padding: '0 10px', borderRadius: radius.control,
+            border: `1px solid ${color.hairlineStrong}`, background: color.canvas, color: color.ink,
+            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          事件与情报
+        </button>
       </>}
     />
   );
@@ -626,16 +895,16 @@ export default function MarketBusPanel({
     return (
       <section style={workbenchCardStyle}>
         {sectionHead}
-        <CollapsibleSection label="输入与读数">{ioBar}</CollapsibleSection>
         <div style={{ padding: `${space.lg}px 0`, fontSize: 12.5, color: color.mute }}>当前范围无大盘数据</div>
       </section>
     );
   }
 
-  // 左图几何：36 个月（24 实际 + 12 预测 = 统一 12 个月预测窗）。
+  // 图几何：36 个月（24 实际 + 12 预测 = 统一 12 个月预测窗）；top 加高为
+  // 图顶部事件小标轨道（箭头-线 + 名称）留位（2026-11-05 图上标注统一）。
   const left = 40;
   const right = 14;
-  const top = 18;
+  const top = 32;
   const bottom = 48;
   const plotW = CHART_W - left - right;
   const plotH = CHART_H - top - bottom;
@@ -662,6 +931,65 @@ export default function MarketBusPanel({
     .join(' ');
   const todayX = (xm(actualCount - 1) + xm(actualCount)) / 2;
 
+  /** 首月（months[0]）的绝对月序；日期 → x 用它归一到 0..months.length-1。 */
+  const baseMonthAbs = (() => {
+    const key = months[0]?.key ?? '';
+    return Number(key.slice(0, 4)) * 12 + (Number(key.slice(5, 7)) - 1);
+  })();
+  /** ISO 日期 → 时间轴 x（月列内按日均分；窗外的月序钳制到首/末月）。 */
+  const xOfDate = (iso: string): number => {
+    const monthKey = monthKeyOfDate(iso);
+    const dim = monthKey != null ? daysInMonthOf(monthKey) : null;
+    if (monthKey == null || dim == null) return left;
+    const abs = Number(monthKey.slice(0, 4)) * 12 + (Number(monthKey.slice(5, 7)) - 1);
+    const index = Math.min(Math.max(abs - baseMonthAbs, 0), months.length - 1);
+    const day = Math.min(Math.max(Number(iso.slice(8, 10)), 1), dim);
+    return left + (index + (day - 1) / dim) * colW;
+  };
+
+  // 图上事件小标统一层（2026-11-05）：人工月事件（琥珀，经日历反推周范围）
+  // + 周口径行业事件（灰，自带 WeekRange）；同一箭头-线形态，hover → 区间
+  // 临时高亮，「事件」图例项控制整层。
+  const eventMarks = (() => {
+    const marks: Array<{
+      id: string; kind: 'month' | 'week'; label: string; color: string; detail: string;
+      x1: number; x2: number;
+    }> = [];
+    for (const event of params.marketMonthEvents) {
+      const range = weekRangeOfMonthEvent(calendar, event);
+      if (range == null) continue;
+      const start = calendar.weekById.get(range.startWeekId);
+      const end = calendar.weekById.get(range.endWeekId);
+      if (start == null || end == null) continue;
+      marks.push({
+        id: event.id,
+        kind: 'month',
+        label: event.label || '未命名事件',
+        color: color.warning,
+        detail: `${event.label || '未命名事件'}（${event.startMonth}-${fmtDay(event.startDay)} 起 · ${event.durationMonths} 个月 · ${fmtSignedPct(event.magnitudePct)} · ${decayLabelOf(event)}${event.startDay > 1 ? ` · ${monthCoverageText(event)}` : ''}）`,
+        x1: xOfDate(start.date),
+        x2: xOfDate(end.endDate),
+      });
+    }
+    for (const event of params.marketEvents) {
+      const start = calendar.weekById.get(event.startWeekId);
+      const end = calendar.weekById.get(event.endWeekId);
+      if (start == null || end == null || start.index > end.index) continue;
+      marks.push({
+        id: event.id,
+        kind: 'week',
+        label: event.label || '未命名事件',
+        color: color.mute,
+        detail: `${event.label || '未命名事件'}（${event.startWeekId}–${event.endWeekId} · ${fmtSignedPct(event.magnitudePct)} · ${event.decay === 'flat' ? '恒定' : '递减'} · 周口径行业事件（人工录入假设））`,
+        x1: xOfDate(start.date),
+        x2: xOfDate(end.endDate),
+      });
+    }
+    return marks;
+  })();
+  const eventsVisible = seriesOn(SERIES_EVENT);
+  const hoverMark = hoverEventId != null && eventsVisible ? eventMarks.find((mark) => mark.id === hoverEventId) ?? null : null;
+
   // v2-1 / v2-2：hover（或键盘 Enter）预测月 → 证据浮框 + 图上双锚点临时高亮。
   const popoverPoint = popover != null ? months.find((point) => point.key === popover.key) ?? null : null;
   const anchorActive = popoverPoint != null;
@@ -677,53 +1005,34 @@ export default function MarketBusPanel({
     return index >= 0 ? { index, key: lastYearKey, value: months[index].value } : null;
   })();
 
-  /** 月度事件在图上的起始月序（起始月不在当前窗口时返回 null，不画标记）。 */
-  const monthEventIndex = (event: MarketMonthEventSeed): number | null => {
-    const index = months.findIndex((point) => point.key === event.startMonth);
-    return index >= 0 ? index : null;
-  };
-  /** 周口径行业事件锚月序（v3：起周 WeekId 所属月；缺周回 null 不画）。 */
-  const weekEventIndex = (event: { startWeekId: string }): number | null => {
-    const week = fixture.weeks.find((candidate) => candidate.id === event.startWeekId);
-    const monthKey = week ? monthKeyOfDate(week.date) : null;
-    if (!monthKey) return null;
-    const index = months.findIndex((point) => point.key === monthKey);
-    return index >= 0 ? index : null;
-  };
+  /** 滑出菜单动效（高保真 translateX 过渡；prefers-reduced-motion 即时态）。 */
+  const reducedMotion = prefersReducedMotion();
+  const drawerTransition = reducedMotion
+    ? 'none'
+    : `transform ${motion.base}ms ${drawerOpen ? motion.enter : motion.exit}`;
 
-  const eventFormValid = formMonth !== '' && formDay != null && Number.isFinite(formDay) && formDay >= 1 && formDay <= 31
-    && formDuration != null && formDuration >= 1 && formDuration <= 12
-    && formMagnitude != null && Number.isFinite(formMagnitude) && formMagnitude >= -30 && formMagnitude <= 30;
+  /** 滑出菜单内人工事件行的「起止周段」（月事件经日历反推；窗外回退起始月-日）。 */
+  const eventRangeText = (event: MarketMonthEventSeed): string => {
+    const range = weekRangeOfMonthEvent(calendar, event);
+    return range != null ? `${range.startWeekId}–${range.endWeekId}` : `${event.startMonth}-${fmtDay(event.startDay)} 起`;
+  };
 
   return (
-    <section style={workbenchCardStyle}>
+    <section style={{ ...workbenchCardStyle, position: 'relative', overflow: 'hidden' }}>
       {sectionHead}
-      {/* 「输入与读数」收起区（2026-11-05 视觉精简二轮，默认收起）：IoBar 行 +
-          AI 预测季基线读数行；卡头与图表保留可见。 */}
-      <CollapsibleSection label="输入与读数">
-        {ioBar}
-        <div
-          className="tnum"
-          style={{ fontSize: 11, color: color.mute, marginBottom: space.xs }}
-          title="季度基线 = 季内三月均值（容量守恒：季内三月合计恒等季度基线 × 3）；按月调整只改当月生效值并联动该月全部预测周。"
-        >
-          {`AI 预测季基线：${quarterForecast.map((quarter) => `${quarter.key} ${fmtIndex(quarter.value)}`).join(' · ')}（逐月分布见图）`}
-        </div>
-      </CollapsibleSection>
-      {/* 卡体定高（MARKET_BODY_HEIGHT）：事件区展开 = 图表区左 2/3 + 事件区右 1/3；
-          事件区收起（2026-11-05 视觉精简二轮默认态）= grid 切单列，图表占满全宽；
-          极窄视口由卡内滚动兜底（lpl-card-scroll 细滚动条对齐系统样式）。 */}
+      {/* 卡体定高（MARKET_BODY_HEIGHT）恒单列：事件与情报收进右侧滑出菜单，
+          图表占满全宽（无左右空白）；极窄视口由卡内滚动兜底。 */}
       <div
         className="lpl-card-scroll"
+        data-testid="market-body-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: eventsOpen ? 'minmax(0, 2fr) minmax(0, 1fr)' : 'minmax(0, 1fr)',
-          gap: space.lg,
+          gridTemplateColumns: 'minmax(0, 1fr)',
           height: MARKET_BODY_HEIGHT,
           overflow: 'auto',
         }}
       >
-        {/* 左 2/3（收起时全宽）：图表区（月度单线 SVG + 图例 + 口径脚注） */}
+        {/* 图表区（月度单线 SVG + 图例；无口径脚注——信息删减拍板） */}
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* 月调整应用反馈（B.5.6）：应用后显示「本月比值 ×… · 已联动 N 个预测周」+ 查看主图 / 检查库存 */}
           {(() => {
@@ -776,7 +1085,7 @@ export default function MarketBusPanel({
               viewBox={`0 0 ${CHART_W} ${CHART_H}`}
               width="100%"
               role="img"
-              aria-label={`大盘月度指数：历史 ${months[0]?.key ?? ''}–${months[actualCount - 1]?.key ?? ''}（模拟实际）；预测 ${forecastMonthKeys[0] ?? ''}–${forecastMonthKeys[forecastMonthKeys.length - 1] ?? ''}（统一 12 个月逐月，AI 基线）；hover 或 Enter 预测月查看证据浮框并可调整。`}
+              aria-label={`大盘月度指数：历史 ${months[0]?.key ?? ''}–${months[actualCount - 1]?.key ?? ''}（模拟实际）；预测 ${forecastMonthKeys[0] ?? ''}–${forecastMonthKeys[forecastMonthKeys.length - 1] ?? ''}（未来 4 季逐月，AI 基线）；顶部事件箭头小标 hover 高亮区间；hover 或 Enter 预测月查看证据浮框并可调整。`}
               style={{ display: 'block' }}
             >
               <g stroke={color.hairline}>
@@ -790,6 +1099,24 @@ export default function MarketBusPanel({
                 ))}
               </g>
               <text x={left - 6} y={top - 6} fontSize={10} fill={color.mute} textAnchor="end">指数</text>
+              {/* 图内高亮（开关常开态）：所有事件区间底衬（事件色 × 0.10） */}
+              {eventsVisible && highlightAll && (
+                <g data-lpl-event-bands>
+                  {eventMarks.map((mark) => (
+                    <rect
+                      key={`band-${mark.id}`}
+                      data-lpl-event-band={mark.id}
+                      x={mark.x1}
+                      y={top - 8}
+                      width={Math.max(2, mark.x2 - mark.x1)}
+                      height={plotH + 8}
+                      rx={3}
+                      fill={mark.color}
+                      opacity={0.1}
+                    />
+                  ))}
+                </g>
+              )}
               {/* v2-2 双锚点 · 趋势源段浅底衬带（hover 临时，canvasSoft2 系，非新线非箭头） */}
               {anchorActive && trendWindowValid && (
                 <g data-anchor="trend-source">
@@ -815,12 +1142,25 @@ export default function MarketBusPanel({
                   </text>
                 </g>
               )}
-              {/* 历史/预测分界虚线（定位参考非说明；「今天」文字标签按 2026-11-04 拍板删除） */}
+              {/* hover 事件小标 → 对应周区间临时高亮（移开即恢复） */}
+              {hoverMark && (
+                <rect
+                  data-lpl-event-band-hover={hoverMark.id}
+                  x={hoverMark.x1}
+                  y={top - 8}
+                  width={Math.max(2, hoverMark.x2 - hoverMark.x1)}
+                  height={plotH + 8}
+                  rx={3}
+                  fill={hoverMark.color}
+                  opacity={0.14}
+                />
+              )}
+              {/* 历史/预测分界虚线（定位参考非说明；「今天」文字标签已删） */}
               <line x1={todayX} y1={top - 4} x2={todayX} y2={top + plotH} stroke={color.hairlineStrong} strokeDasharray="4 4">
                 <title>历史 | 预测分界</title>
               </line>
               {/* 历史月实线（墨）→ 预测月虚线（蓝，随事件与按月调整即时重算）+ AI 基线对照灰虚线；
-                  线宽 = 全站主类线基准 2（实/虚同宽，虚线 dasharray 区分，2026-11-05）；
+                  线宽 = 全站主类线基准 2（实/虚同宽，虚线 dasharray 区分）；
                   双锚点激活时其余线段降不透明（data-dim），移开即恢复 */}
               {seriesOn(SERIES_ACTUAL) && (
                 <path
@@ -850,8 +1190,7 @@ export default function MarketBusPanel({
                   <path d={ghostPath} fill="none" stroke={color.hairlineStrong} strokeWidth={1.4} strokeDasharray="2 4" />
                 </g>
               )}
-              {/* v2-2 双锚点 · 趋势源段加重（同一段实际线的强调描边，hover 临时；
-                  线宽随全站线宽统一降至主类线档 2，2026-11-05） */}
+              {/* v2-2 双锚点 · 趋势源段加重（同一段实际线的强调描边，hover 临时） */}
               {anchorActive && trendWindowValid && seriesOn(SERIES_ACTUAL) && (
                 <path
                   data-anchor="trend-seg"
@@ -932,41 +1271,35 @@ export default function MarketBusPanel({
                     : null
                 ))}
               </g>
-              {/* 事件次要标记（轴下小标记 + hover 详情，不占主视觉）：
-                  月度三字段事件 = 琥珀实心菱；周口径行业事件（预填默认，仍在主链生效）= 灰空心圆 */}
-              {params.marketMonthEvents.map((event) => {
-                const index = monthEventIndex(event);
-                if (index == null) return null;
-                const cx = xm(index);
-                const markY = CHART_H - 13;
-                return (
-                  <g key={`me-${event.id}`} data-month-event-id={event.id} data-start-month={event.startMonth}>
-                    <rect
-                      x={cx - 3.4}
-                      y={markY - 3.4}
-                      width={6.8}
-                      height={6.8}
-                      transform={`rotate(45 ${cx} ${markY})`}
-                      fill={color.warning}
-                    />
-                    <title>
-                      {`${event.label || '未命名事件'}（${event.startMonth}-${fmtDay(event.startDay)} 起 · ${event.durationMonths} 个月 · ${fmtSignedPct(event.magnitudePct)}${event.startDay > 1 ? ` · ${monthCoverageText(event)}` : ''}）`}
-                    </title>
-                  </g>
-                );
-              })}
-              {params.marketEvents.map((event) => {
-                const index = weekEventIndex(event);
-                if (index == null) return null;
-                const cx = xm(index);
-                const markY = CHART_H - 13;
-                return (
-                  <g key={`we-${event.id}`} data-week-event-id={event.id}>
-                    <circle cx={cx} cy={markY} r={3.4} fill={color.canvas} stroke={color.hairlineStrong} strokeWidth={1.4} />
-                    <title>{`${event.label || '未命名事件'}（${event.startWeekId}–${event.endWeekId} · ${fmtSignedPct(event.magnitudePct)} · 周口径行业事件（人工录入假设））`}</title>
-                  </g>
-                );
-              })}
+              {/* 图上事件小标统一层（箭头-线 + 名称；「事件」图例项控制整层）：
+                  人工月事件 = 琥珀；周口径行业事件 = 灰。hover → 区间临时高亮。 */}
+              {eventsVisible && (
+                <g data-lpl-event-track>
+                  {eventMarks.map((mark) => {
+                    const x1 = mark.x1 + 2;
+                    const x2 = mark.x2 - 2;
+                    const y0 = 14;
+                    return (
+                      <g
+                        key={`tick-${mark.id}`}
+                        data-lpl-event-tick={mark.id}
+                        data-month-event-id={mark.kind === 'month' ? mark.id : undefined}
+                        data-week-event-id={mark.kind === 'week' ? mark.id : undefined}
+                        style={{ cursor: 'default' }}
+                        onMouseEnter={() => setHoverEventId(mark.id)}
+                        onMouseLeave={() => setHoverEventId((prev) => (prev === mark.id ? null : prev))}
+                      >
+                        <rect x={x1} y={4} width={Math.max(6, x2 - x1)} height={22} fill="rgba(0,0,0,0)" pointerEvents="all" />
+                        <path d={`M${(x1 + 5).toFixed(1)} ${y0 - 5} L${x1.toFixed(1)} ${y0} L${(x1 + 5).toFixed(1)} ${y0 + 5}`} fill="none" stroke={mark.color} strokeWidth={1.6} />
+                        <line x1={(x1 + 5).toFixed(1)} y1={y0} x2={(x2 - 5).toFixed(1)} y2={y0} stroke={mark.color} strokeWidth={1.6} />
+                        <path d={`M${(x2 - 5).toFixed(1)} ${y0 - 5} L${x2.toFixed(1)} ${y0} L${(x2 - 5).toFixed(1)} ${y0 + 5}`} fill="none" stroke={mark.color} strokeWidth={1.6} />
+                        <text x={((x1 + x2) / 2).toFixed(1)} y={y0 - 4} textAnchor="middle" fontSize={10} fill={mark.color} fontWeight={600}>{mark.label}</text>
+                        <title>{mark.detail}</title>
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
               {/* 预测月交互列（v2-1 证据浮框入口）：键盘可达（Tab + Enter 触发证据浮框），
                   hover 同效；浮框内「调整此月」就地切换调整表单 */}
               {months.slice(actualCount).map((point, offset) => {
@@ -1035,99 +1368,95 @@ export default function MarketBusPanel({
                 )}
               </div>
             )}
-          </div>
-          <WorkbenchLegend items={legendItems} hidden={hiddenSeries} onToggle={toggleSeries} style={{ marginTop: 0 }} />
-          <div style={{ marginTop: space.xs, fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-            大盘只看总量，不下钻品牌 / 品；预测覆盖统一 12 个月（月粒度，{forecastMonthKeys[0] ?? ''}–{forecastMonthKeys[forecastMonthKeys.length - 1] ?? ''}）。hover 预测月看证据（近 6 个月趋势 / 去年同季月形 / 算例），浮框内可调整；调整原因选填；月中事件按日均摊口径见事件区说明。
-          </div>
-        </div>
-
-        {/* 右 1/3：事件区两块（上 = 情报候选审核容器 IntelligenceReviewPanel（任务 8；
-            能力未接入 = 空态 + 禁用按钮）；下 = 人工月度事件三字段录入）。
-            2026-11-05 视觉精简二轮：随「事件与情报」收起区开合（默认收起不渲染，
-            收起时图表占满全宽）。内容超高由卡内纵向滚动兜底。 */}
-        {eventsOpen && (
-        <div className="lpl-card-scroll" style={{ display: 'grid', gap: space.md, minWidth: 0, minHeight: 0, overflowY: 'auto', alignContent: 'start', paddingRight: 2 }}>
-          <IntelligenceReviewPanel availability="pending" />
-
-          <div style={{ display: 'grid', gap: space.sm }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: color.ink }}>人工事件（月度 · 三字段）</div>
-            <div style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}>
-              事件 = 起始（月 / 日）+ 时长（月）+ 幅度（%）；名称选填。月中起始按日均摊：首月影响 ×（覆盖天数 ÷ 当月天数），后续月线性递减。
-            </div>
-            {params.marketMonthEvents.map((event) => (
-              <div key={event.id} style={{ display: 'grid', gap: 3, border: `1px solid ${color.hairline}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px` }}>
+            {/* 添加/编辑事件浮窗（绝对定位悬浮在图上，不改变图表区高度；
+                字段风格与量价参考编辑器同款：label 上标 + 小输入 + chips 行） */}
+            {eventFormOpen && drawerOpen && (
+              <div
+                data-lpl-event-popover
+                data-lpl-event-popover-mode={editingEventId != null ? 'edit' : 'add'}
+                role="dialog"
+                aria-label={editingEventId != null ? '编辑事件' : '添加事件'}
+                onKeyDown={(event) => { if (event.key === 'Escape') { setEventFormOpen(false); setWeekPickerOpen(false); } }}
+                style={{
+                  position: 'absolute', top: 6, right: DRAWER_W + 12, width: EVENT_FORM_W, zIndex: 10,
+                  background: color.canvas, border: `1px solid ${color.link}`, borderRadius: radius.card,
+                  boxShadow: shadow.l5, padding: `${space.md - 2}px ${space.md}px`, fontSize: 12, lineHeight: 1.6, color: color.body,
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {event.label || '未命名事件'}
-                  </span>
-                  {/* B.5.6：行内「编辑」= 同一三字段编辑器（删除 / 编辑可撤销由页面撤销层承接） */}
-                  <Button size="small" aria-label={`编辑事件 ${event.label || '未命名事件'}`} onClick={() => {
-                    setEditingEventId(event.id);
-                    setFormMonth(event.startMonth);
-                    setFormDay(event.startDay);
-                    setFormDuration(event.durationMonths);
-                    setFormMagnitude(event.magnitudePct);
-                    setFormLabel(event.label);
-                    setEventFormOpen(true);
-                  }}>编辑</Button>
-                  <Button size="small" aria-label={`删除事件 ${event.label || '未命名事件'}`} onClick={() => {
-                    if (editingEventId === event.id) {
-                      setEditingEventId(null);
-                      setEventFormOpen(false);
-                    }
-                    onMonthEventRemove(event.id);
-                  }}>删除</Button>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink }}>{editingEventId != null ? '编辑事件' : '添加事件'}</span>
+                  <button
+                    type="button"
+                    aria-label="关闭添加事件浮窗"
+                    onClick={() => { setEventFormOpen(false); setWeekPickerOpen(false); }}
+                    style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: color.mute, fontSize: 13, lineHeight: 1.2, cursor: 'pointer', padding: '0 2px' }}
+                  >
+                    ✕
+                  </button>
                 </div>
-                <div className="tnum" style={{ fontSize: 11, color: color.mute }}>
-                  {`${event.startMonth}-${fmtDay(event.startDay)} 起 · ${event.durationMonths} 个月 · ${fmtSignedPct(event.magnitudePct)}${event.startDay > 1 ? ` · ${monthCoverageText(event)}` : ''}`}
-                </div>
-              </div>
-            ))}
-            {eventFormOpen ? (
-              <div style={{ display: 'grid', gap: space.sm, border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
-                    起始月
-                    <Select
-                      aria-label="事件起始月"
+                <div style={{ display: 'grid', gap: space.sm - 2, marginTop: space.sm - 2 }}>
+                  <label style={{ display: 'grid', gap: 3 }}>
+                    <span style={{ fontSize: 11, color: color.mute }}>事件名称（选填）</span>
+                    <Input
+                      aria-label="事件名称（选填）"
+                      placeholder="如：苹果折叠屏上线"
+                      value={formLabel}
+                      onChange={(input) => setFormLabel(input.target.value)}
                       size="small"
-                      value={formMonth || forecastMonthKeys[0]}
-                      onChange={(value: string) => setFormMonth(value)}
-                      options={forecastMonthKeys.map((key) => ({ value: key, label: key }))}
-                      style={{ width: 104 }}
                     />
                   </label>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
-                    起始日
-                    <InputNumber
-                      aria-label="事件起始日（1–31）"
+                  <label style={{ display: 'grid', gap: 3 }}>
+                    <span style={{ fontSize: 11, color: color.mute }}>事件说明（选填）</span>
+                    <Input
+                      aria-label="事件说明（选填）"
+                      placeholder="发生了什么（选填）"
+                      value={formNote}
+                      onChange={(input) => setFormNote(input.target.value)}
                       size="small"
-                      min={1}
-                      max={31}
-                      step={1}
-                      precision={0}
-                      value={formDay}
-                      onChange={(value) => setFormDay(value == null ? null : Number(value))}
-                      style={{ width: 64 }}
                     />
                   </label>
+                  <div style={{ display: 'grid', gap: 3, position: 'relative' }}>
+                    <span style={{ fontSize: 11, color: color.mute }}>起止周（整周 · 含年月）</span>
+                    <button
+                      type="button"
+                      data-lpl-week-range-button
+                      aria-expanded={weekPickerOpen}
+                      aria-haspopup="dialog"
+                      onClick={() => {
+                        if (!weekPickerOpen && formStartWeekId != null) {
+                          // 打开时跳到起点周所在月页（两月并排的左月）。
+                          const week = calendar.weekById.get(formStartWeekId);
+                          const pageIndex = week != null ? pickerMonths.findIndex((month) => month.key === week.monthKey) : -1;
+                          if (pageIndex >= 0) setPickerPage(Math.min(Math.max(0, pageIndex), Math.max(0, pickerMonths.length - 2)));
+                        }
+                        setWeekPickerOpen((open) => !open);
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 8px',
+                        border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control,
+                        background: color.canvas, color: color.ink, fontSize: 12, cursor: 'pointer',
+                      }}
+                    >
+                      <span className="tnum" style={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {formWeeks?.start != null && formWeeks?.end != null && formWeekCount != null
+                          ? `${formWeeks.start.id} → ${formWeeks.end.id} · ${formWeekCount} 周`
+                          : '请选择起止周'}
+                      </span>
+                      <span aria-hidden style={{ color: color.mute }}>▾</span>
+                    </button>
+                    {weekPickerOpen && (
+                      <WeekRangePicker
+                        months={pickerMonths}
+                        page={pickerPage}
+                        onPage={setPickerPage}
+                        startWeekId={formStartWeekId}
+                        endWeekId={formEndWeekId}
+                        onPick={pickWeek}
+                      />
+                    )}
+                  </div>
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
-                    时长（月）
-                    <InputNumber
-                      aria-label="事件时长（月）"
-                      size="small"
-                      min={1}
-                      max={12}
-                      step={1}
-                      precision={0}
-                      value={formDuration}
-                      onChange={(value) => setFormDuration(value == null ? null : Number(value))}
-                      style={{ width: 64 }}
-                    />
-                  </label>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
-                    幅度
+                    <span style={{ fontSize: 11, color: color.mute }}>幅度</span>
                     <InputNumber
                       aria-label="事件影响幅度（%）"
                       size="small"
@@ -1139,33 +1468,54 @@ export default function MarketBusPanel({
                       formatter={(value) => (value == null ? '' : `${value}%`)}
                       parser={(text) => Number((text ?? '').replace('%', ''))}
                       onChange={(value) => setFormMagnitude(value == null ? null : Number(value))}
-                      style={{ width: 76 }}
+                      style={{ width: 84 }}
                     />
                   </label>
+                  <div style={{ display: 'grid', gap: 3 }}>
+                    <span style={{ fontSize: 11, color: color.mute }}>衰减</span>
+                    <div style={{ display: 'flex', gap: 5 }}>
+                      {([
+                        { key: 'decreasing', label: '递减' },
+                        { key: 'flat', label: '恒定' },
+                      ] as const).map((chip) => (
+                        <button
+                          key={chip.key}
+                          type="button"
+                          data-lpl-decay-chip={chip.key}
+                          aria-pressed={formDecay === chip.key}
+                          onClick={() => setFormDecay(chip.key)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px',
+                            borderRadius: radius.pill, cursor: 'pointer', fontSize: 11,
+                            border: `1px solid ${formDecay === chip.key ? color.ink : color.hairlineStrong}`,
+                            background: color.canvas,
+                            color: formDecay === chip.key ? color.ink : color.body,
+                            fontWeight: formDecay === chip.key ? 600 : 400,
+                          }}
+                        >
+                          <span aria-hidden style={{ width: 6, height: 6, borderRadius: 2, background: chip.key === 'flat' ? color.mute : color.warning }} />
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <label style={{ display: 'grid', gap: 3, fontSize: 12, fontWeight: 600, color: color.body }}>
-                  {`事件名称（选填）`}
-                  <Input
-                    aria-label="事件名称（选填）"
-                    placeholder="选填：如 内存涨价"
-                    value={formLabel}
-                    onChange={(input) => setFormLabel(input.target.value)}
-                  />
-                </label>
-                <div style={{ display: 'flex', gap: space.sm, justifyContent: 'flex-end' }}>
-                  <Button size="small" onClick={() => { setEventFormOpen(false); setEditingEventId(null); }}>收起</Button>
+                <div style={{ display: 'flex', gap: space.sm, marginTop: space.md, justifyContent: 'flex-end' }}>
+                  <Button size="small" onClick={() => { setEventFormOpen(false); setWeekPickerOpen(false); setEditingEventId(null); }}>取消</Button>
                   <Button
                     size="small"
                     type="primary"
                     disabled={!eventFormValid}
                     onClick={() => {
-                      if (!eventFormValid || formDay == null || formDuration == null || formMagnitude == null) return;
+                      if (!eventFormValid || formMapped == null || formMagnitude == null) return;
+                      const label = [formLabel.trim(), formNote.trim()].filter(Boolean).join('；');
                       const next = {
-                        label: formLabel.trim(),
-                        startMonth: formMonth,
-                        startDay: Math.max(1, Math.min(31, Math.round(formDay))),
-                        durationMonths: Math.max(1, Math.min(12, Math.round(formDuration))),
+                        label,
+                        startMonth: formMapped.startMonth,
+                        startDay: formMapped.startDay,
+                        durationMonths: formMapped.durationMonths,
                         magnitudePct: Math.max(-30, Math.min(30, Math.round(formMagnitude))),
+                        decay: formDecay,
                       };
                       if (editingEventId != null) {
                         if (onMonthEventUpdate != null) onMonthEventUpdate(editingEventId, next);
@@ -1179,38 +1529,127 @@ export default function MarketBusPanel({
                         onMonthEventAdd(next);
                       }
                       setEventFormOpen(false);
+                      setWeekPickerOpen(false);
                       setFormLabel('');
+                      setFormNote('');
                     }}
                   >
-                    {editingEventId != null ? '保存修改' : '添加事件'}
+                    {editingEventId != null ? '保存修改' : '保存事件'}
                   </Button>
                 </div>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setFormMonth((prev) => prev || forecastMonthKeys[0] || '');
-                  setEditingEventId(null);
-                  setEventFormOpen(true);
-                }}
-                style={{
-                  border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px`,
-                  background: color.canvas, color: color.link, fontSize: 12.5, cursor: 'pointer', textAlign: 'center',
-                }}
-              >
-                ＋ 添加事件（起始 月/日 + 时长 + 幅度；名称选填）
-              </button>
             )}
           </div>
+          <WorkbenchLegend items={legendItems} hidden={hiddenSeries} onToggle={toggleSeries} style={{ marginTop: 0 }} />
         </div>
-        )}
       </div>
-      {/* 「事件与情报」收起头（2026-11-05 视觉精简二轮，默认收起）：情报候选 +
-          人工事件列表的开关；收起 = 上方 grid 单列（图表占满全宽），展开恢复
-          2/3 + 1/3（右栏内容见上，随本开关渲染）。受控 CollapsibleSection。 */}
-      <div style={{ marginTop: space.sm }}>
-        <CollapsibleSection label="事件与情报" open={eventsOpen} onToggle={setEventsOpen} />
+
+      {/* 半透明遮罩（滑出菜单打开时；点击遮罩关闭） */}
+      {drawerOpen && (
+        <div
+          data-lpl-drawer-scrim
+          onClick={closeDrawer}
+          style={{ position: 'absolute', inset: 0, zIndex: 8, background: color.ink, opacity: 0.28, cursor: 'pointer' }}
+        />
+      )}
+
+      {/* 右侧滑出菜单（高保真形态）：transform translateX 过渡；内容 = 情报候选
+          （IntelligenceReviewPanel availability="pending" 空态，真实候选另议）+
+          人工事件列表（名称、起止周段、幅度、衰减 + 编辑/删除）+「＋ 添加事件」。
+          Esc / ✕ / 遮罩点击关闭。 */}
+      <div
+        id="lpl-market-drawer"
+        data-lpl-drawer
+        data-open={drawerOpen ? 'true' : 'false'}
+        role="dialog"
+        aria-label="事件与情报"
+        aria-hidden={!drawerOpen}
+        onKeyDown={(event) => { if (event.key === 'Escape') closeDrawer(); }}
+        style={{
+          position: 'absolute', top: 0, right: 0, bottom: 0, width: DRAWER_W, zIndex: 9,
+          display: 'flex', flexDirection: 'column', gap: 0,
+          background: color.canvas, borderLeft: `1px solid ${color.hairlineStrong}`, boxShadow: shadow.l5,
+          transform: drawerOpen ? 'translateX(0)' : `translateX(105%)`,
+          transition: drawerTransition,
+          padding: `${space.md - 2}px ${space.md}px`,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm - 2 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: color.ink }}>事件与情报</span>
+          <button
+            type="button"
+            data-lpl-drawer-close
+            aria-label="关闭事件与情报"
+            onClick={closeDrawer}
+            style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: color.mute, fontSize: 13, lineHeight: 1.2, cursor: 'pointer', padding: '0 2px' }}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="lpl-card-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'grid', gap: space.md, alignContent: 'start', paddingRight: 2 }}>
+          <IntelligenceReviewPanel availability="pending" />
+          <div style={{ display: 'grid', gap: space.sm - 2 }}>
+            <div style={{ fontSize: 11, color: color.mute, letterSpacing: '0.06em' }}>{`人工事件 · ${params.marketMonthEvents.length}`}</div>
+            {params.marketMonthEvents.map((event) => (
+              <div
+                key={event.id}
+                data-lpl-month-event-row={event.id}
+                style={{ display: 'grid', gap: 3, border: `1px solid ${color.hairline}`, borderRadius: radius.control, padding: `${space.sm - 2}px 10px` }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: space.sm - 2, minWidth: 0 }}>
+                  <span aria-hidden style={{ flex: 'none', width: 8, height: 8, borderRadius: 2, background: color.warning }} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={event.label || '未命名事件'}>
+                    {event.label || '未命名事件'}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`编辑事件 ${event.label || '未命名事件'}`}
+                    onClick={() => openEventForm(event)}
+                    style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 12, cursor: 'pointer', padding: 0 }}
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`删除事件 ${event.label || '未命名事件'}`}
+                    onClick={() => {
+                      if (editingEventId === event.id) {
+                        setEditingEventId(null);
+                        setEventFormOpen(false);
+                        setWeekPickerOpen(false);
+                      }
+                      onMonthEventRemove(event.id);
+                    }}
+                    style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 12, cursor: 'pointer', padding: 0 }}
+                  >
+                    删除
+                  </button>
+                </div>
+                <div className="tnum" style={{ fontSize: 11, color: color.mute, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
+                  <span>{eventRangeText(event)}</span>
+                  <span>{`${fmtSignedPct(event.magnitudePct)} · ${decayLabelOf(event)}`}</span>
+                </div>
+              </div>
+            ))}
+            {params.marketMonthEvents.length === 0 && (
+              <div style={{ border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px`, fontSize: 12, color: color.mute }}>
+                暂无人工事件
+              </div>
+            )}
+            <button
+              type="button"
+              data-lpl-add-event-button
+              onClick={() => openEventForm()}
+              style={{
+                width: '100%', marginTop: space.xs, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                height: 30, borderRadius: radius.control, border: `1px dashed ${color.hairlineStrong}`,
+                background: color.canvas, color: color.link, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              ＋ 添加事件
+            </button>
+          </div>
+        </div>
       </div>
     </section>
   );

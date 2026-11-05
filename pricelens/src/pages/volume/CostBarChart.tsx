@@ -8,11 +8,19 @@
 //   belowTicks），0 与价格轴共用基线
 // - 价格/成本/销毛率标签在列宽足够时显示；缺采周空柱；隔离周价格帽变灰虚线
 // - Y 轴从 0 起（由页面级 yCfgCost 传入，与共享轴列同刻度；档位带在本模式不画）
+// 2026-11-05（Eason 看图反馈三针）：
+// - X 轴日历标签补齐（整改3 审计：本图原为销毛成本模式下唯一没有图内日期层的
+//   图——与主图/合并单图同一套 axisTickPlan / shortBucketLabel 口径：周 = 2026W33，
+//   月 = MM + 年份第二行，季 = Qn + 年份第二行；顶部销毛线模式画基线下，下垂柱
+//   模式画销毛区下方，避让柱下 % 标签）
+// - 图例显隐门控（整改2）：hidePrice/hideCost/hideVolume/hideMargin 对应元素
+//   整组不渲染（页面图例点击切换，轴不重算）
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { Granularity } from '../../dataModel/types';
 import type { StripGeom } from '../../chart/PriceTrend/helpers';
-import { yPxOf } from '../../chart/PriceTrend/helpers';
+import { axisTickPlan, yPxOf } from '../../chart/PriceTrend/helpers';
 import type { YScale } from '../../chart/PriceTrend/helpers';
 import type { SeriesPoint } from '../../dataModel/types';
 import type { MarginCostPoint } from './marginCost';
@@ -23,6 +31,8 @@ import { color, font, formatPrice, selectAccent } from '../../theme/tokens';
 export const COST_RATE_H = 38;
 /** 销毛率下垂区总高（满深度 + 柱下 % 标签） */
 export const COST_MARGIN_ZONE_H = COST_RATE_H + 18;
+/** X 轴日历标签带（主行 + 年份第二行；与合并单图 AXIS_ZONE_H 同高同几何语言） */
+export const COST_AXIS_ZONE_H = 38;
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -77,6 +87,13 @@ export default function CostBarChart(props: {
   /** 销毛呈现 = 顶部平滑虚线（2026-11-04 Eason：取消下半部分下垂柱，改上方销毛线 +
    *  最高/最低/最新三点标值；销毛率无法与价格/销量共用 Y 轴，读值由三点标注承载） */
   marginLineOn?: boolean;
+  /** 粒度（2026-11-05 整改3）：X 轴日历标签按 axisTickPlan 口径取周/月/季格式 */
+  granularity: Granularity;
+  /** 图例显隐门控（2026-11-05 整改2）：对应系列整组不渲染；轴与几何不重算 */
+  hidePrice?: boolean;
+  hideCost?: boolean;
+  hideVolume?: boolean;
+  hideMargin?: boolean;
   currency: 'local' | 'usd';
   seriesColor: string;
   focusIdx: number | null;
@@ -117,8 +134,11 @@ export default function CostBarChart(props: {
   const empty = props.points.length === 0 || geom == null;
   const baseline = props.plotTop + props.plotHeight;
   const marginLineOn = props.marginLineOn === true;
-  // 线模式下取消下半下垂区（2026-11-04 Eason），画布高度随之回收
-  const totalH = marginLineOn ? props.plotTop + props.plotHeight : props.plotTop + props.plotHeight + COST_MARGIN_ZONE_H;
+  // 线模式取消下半下垂区（2026-11-04 Eason）；下垂柱模式保留销毛区。
+  // 两种模式都补 X 轴日历标签带（2026-11-05 整改3，与主图/合并图同 38px 带）
+  const totalH = marginLineOn
+    ? props.plotTop + props.plotHeight + COST_AXIS_ZONE_H
+    : props.plotTop + props.plotHeight + COST_MARGIN_ZONE_H + COST_AXIS_ZONE_H;
 
   const hasAny = props.points.some((pt) => pt.price != null) || props.volumes.some((v) => v != null);
 
@@ -162,7 +182,7 @@ export default function CostBarChart(props: {
           if (focus === i) {
             cols.push(<rect key={`focus-${i}`} x={GRID_L + slot * i} y={props.plotTop} width={slot} height={props.plotHeight} fill={color.canvasSoft2} opacity={0.5} />);
           }
-          if (price != null) {
+          if (price != null && !props.hidePrice) {
             const yCap = y$(price);
             const capColor = quarantined ? color.hairlineStrong : pending ? '#b45309' : props.seriesColor;
             cols.push(
@@ -176,27 +196,29 @@ export default function CostBarChart(props: {
                 )}
               </g>,
             );
-            if (cost != null) {
-              const yCost = y$(cost);
-              cols.push(
-                <g key={`cost-${i}`}>
-                  <line x1={cx - barW / 2 - 3} x2={cx + barW / 2 + 3} y1={yCost} y2={yCost} stroke={color.mute} strokeWidth={2} />
-                  {(showLabels || focus === i) && (
-                    <text x={cx} y={yCost + 11} textAnchor="middle" fill={color.mute} fontSize={9.5} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {formatPrice(Math.round(cost), props.currency)}
-                    </text>
-                  )}
-                </g>,
-              );
-            }
             if (focus === i) {
               cols.push(<circle key={`dot-${i}`} cx={cx} cy={yCap} r={4} fill={color.canvas} stroke={props.seriesColor} strokeWidth={1.5} />);
             }
           }
-          if (vol != null) {
+          // 成本线独立于价格柱门控（图例各自显隐；成本为月版本数据，隔离/缺采周已由
+          // 页面 marginPointsMasked 置 null——缺采价周的成本位仍可读）
+          if (cost != null && !props.hideCost) {
+            const yCost = y$(cost);
+            cols.push(
+              <g key={`cost-${i}`}>
+                <line x1={cx - barW / 2 - 3} x2={cx + barW / 2 + 3} y1={yCost} y2={yCost} stroke={color.mute} strokeWidth={2} />
+                {(showLabels || focus === i) && (
+                  <text x={cx} y={yCost + 11} textAnchor="middle" fill={color.mute} fontSize={9.5} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {formatPrice(Math.round(cost), props.currency)}
+                  </text>
+                )}
+              </g>,
+            );
+          }
+          if (vol != null && !props.hideVolume) {
             volPts.push(`${cx},${volY(vol)}`);
           }
-          if (!marginLineOn && rate != null && rate > 0 && rateMax > 0) {
+          if (!marginLineOn && !props.hideMargin && rate != null && rate > 0 && rateMax > 0) {
             // 0% 贴 X 轴基线向下生长（与价格轴共用 0 基线），满深度 = 共享上限
             const h = Math.max(2, Math.min(1, rate / rateMax) * COST_RATE_H);
             cols.push(
@@ -214,7 +236,7 @@ export default function CostBarChart(props: {
         // 销毛线模式：绘图区上方画平滑虚线（销毛率无法与价格/销量共用 Y 轴——
         // 独立归一化到上方 lane，读值由最高/最低/最新三点标注承载，不画 % 轴）
         const marginLane: { path: string; marks: Array<{ x: number; y: number; text: string; kind: 'max' | 'min' | 'last' }> } | null = (() => {
-          if (!marginLineOn) return null;
+          if (!marginLineOn || props.hideMargin) return null;
           const valid: Array<{ i: number; rate: number; cx: number }> = [];
           for (let i = 0; i < n; i++) {
             const rate = props.costPoints[i]?.marginRate ?? null;
@@ -291,6 +313,32 @@ export default function CostBarChart(props: {
                 </g>
               ))}
             </g>
+            {/* X 轴日历标签（2026-11-05 整改3 审计补齐）：与主图/合并单图同一套
+                axisTickPlan（step 抽稀 + 两端恒显示 + 年份第二行；周 = 2026W33，
+                月 = MM、季 = Qn）。下垂柱模式画在销毛区下方（避让柱下 % 标签），
+                线模式画在基线下——两模式同一份刻度计划 */}
+            {(() => {
+              const ids = props.points.map((pt) => pt.bucketId);
+              const xPlan = axisTickPlan(props.granularity, ids, Math.max(1, Math.ceil(ids.length / 9)), ids.length > 1 ? [0, ids.length - 1] : [0]);
+              const labelMainY = baseline + (marginLineOn ? 15 : COST_MARGIN_ZONE_H + 14);
+              return xPlan.indexes.map((xi) => {
+                const edge = xPlan.isEdge(xi);
+                const year = xPlan.yearText(xi);
+                const tx = GRID_L + slot * (xi + 0.5);
+                return (
+                  <g key={`xt-${xi}`}>
+                    <text x={tx} y={labelMainY} textAnchor="middle" fill={edge ? color.body : color.mute} fontWeight={edge ? 600 : 400} fontSize={10} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {xPlan.dateText(xi)}
+                    </text>
+                    {year && (
+                      <text x={tx} y={labelMainY + 12} textAnchor="middle" fill={color.mute} fontSize={9.5} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {year}
+                      </text>
+                    )}
+                  </g>
+                );
+              });
+            })()}
           </svg>
         );
       })()}

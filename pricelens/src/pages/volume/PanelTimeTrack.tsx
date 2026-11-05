@@ -13,6 +13,14 @@ import { color, font, radius, selectAccent, trackColors } from '../../theme/toke
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 type DragKind = 'start' | 'end' | 'pan';
 
+/** 时间轨块总高（轨道带 20 + 拖柄标签带）；页面「时间轴同步」开关容器用同一
+ *  常量对位（2026-11-05 整改3：同几何常量 = 结构化对中保证的一半） */
+export const TRACK_BLOCK_H = 52;
+/** 轨道带（rail）高度：拖柄与选段所在的横带（块内 top 0 起）。同步开关的中心
+ *  必须落在该带中心——页面侧开关承载盒用同值（top 0 / height TRACK_RAIL_H）+
+ *  flex 居中，按钮中心 = 带中心不再依赖按钮自身高度（原 top -5 魔法数退役） */
+export const TRACK_RAIL_H = 20;
+
 /** 元素实宽（ResizeObserver；第一百二十三轮像素让位——轨道宽度决定刻度标签像素区间） */
 function useObservedWidth(): [MutableRefObject<HTMLDivElement | null>, number] {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -169,14 +177,14 @@ export default function PanelTimeTrack(props: {
         trackRef.current = el;
         widthRef.current = el;
       }}
-      style={{ position: 'relative', height: 52, minWidth: 0 }}
+      style={{ position: 'relative', height: TRACK_BLOCK_H, minWidth: 0 }}
     >
-      <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 20, borderRadius: 5, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: TRACK_RAIL_H, borderRadius: 5, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
       <div
         title="拖动调整查看范围，不改变筛选范围"
         aria-label="平移本图时间段"
         style={{
-          position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: 20,
+          position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: TRACK_RAIL_H,
           borderRadius: 5, background: panning ? trackColors.fillStrong : trackColors.fill,
           boxShadow: `inset 0 0 0 1px ${trackColors.handleSoft}`, cursor: panning ? 'grabbing' : 'grab', touchAction: 'none', zIndex: 1,
         }}

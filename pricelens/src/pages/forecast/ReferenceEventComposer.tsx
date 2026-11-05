@@ -3,8 +3,13 @@
 // ①类型行：类型下拉（类型库，色点辅助）+ 当前色块入口——色板 8 色
 //   （referenceEventPalette）+ 原生取色器 + hex 输入 + 恢复默认；颜色按
 //   类型生效（写 referenceEventTypeStore，不反写主图）；对比度提示非阻断。
-// ②起止周：闭区间两下拉（起周变化后止周自动跟随；止周不得早于起周），
-//   时长由区间派生（end − start + 1）；「图上拖选」与下拉等价。
+// ②起止周：双月周历选择器（2026-11-05 视觉精简二轮，替换两下拉）——
+//   两月并排、行 = 整周（周一起）、行首 = 生命周期周号（W1 = 上市首周）、
+//   周底浅蓝、区间内浅蓝加深、选中周实蓝白字、跨月连续、月导航 ‹ ›；
+//   第一次点击 = 起始周，第二次点击 = 止周并自动收起；起 > 止自动对调。
+//   周历锚点 = fixture 的 launchWeekLabel（真实 ISO 周规则，同
+//   workbenchCalendar 算法，不新造假日历）；选择结果回写既有 start/end。
+//   「图上拖选」与周历等价。时长由区间派生（end − start + 1）。
 // ③标题（必填 ≤40）+ 说明（必填 ≤200，记录发生了什么、为什么）。
 // ④「参考读数（选填）」默认收起：幅度 % / 影响时长（周）/ 衰减——仅历史
 //   参考标注，绝不进模型。
@@ -13,9 +18,9 @@
 //   编辑预标时另提供「恢复预标」。
 // 类型库经 useSyncExternalStore 自持（antd Popover portal 不随父 props 更新）。
 // ============================================================
-import { useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { Button, Select } from 'antd';
-import { brandColorOf, color, font, radius, space, referenceEventPalette } from '../../theme/tokens';
+import { brandColorOf, color, font, radius, shadow, space, referenceEventPalette, selectSoft, trackColors } from '../../theme/tokens';
 import type { LifecycleProductSeed } from './workbenchFixture';
 import {
   LABEL_MAX,
@@ -35,6 +40,86 @@ import {
 } from './referenceEventTypeStore';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
+
+const DAY_MS = 86_400_000;
+
+/**
+ * ISO 周一毫秒（与 workbenchCalendar 同一规则：W1 = 含当年首个周四的周，
+ * 周一起算）。仅作周历锚点换算，不新造假日历。
+ */
+function mondayMsOfIsoWeek(year: number, week: number): number {
+  const jan4 = Date.UTC(year, 0, 4);
+  const day = new Date(jan4).getUTCDay(); // 0 = 周日
+  const mondayWeek1 = jan4 - ((day === 0 ? 7 : day) - 1) * DAY_MS;
+  return mondayWeek1 + (week - 1) * 7 * DAY_MS;
+}
+
+/** 周一毫秒 → 跨年周 ID（YYYYWww；ISO 周四定周年，跨年不串值）。 */
+function weekIdOfMondayMs(mondayMs: number): string {
+  const thursday = mondayMs + 3 * DAY_MS;
+  const thursdayDate = new Date(thursday);
+  const week = Math.round((thursday - mondayMsOfIsoWeek(thursdayDate.getUTCFullYear(), 1)) / (7 * DAY_MS)) + 1;
+  return `${thursdayDate.getUTCFullYear()}W${String(week).padStart(2, '0')}`;
+}
+
+/** 双月周历的单周行（index = 生命周期周序 0 基）。 */
+interface LifecycleCalWeek {
+  index: number;
+  /** 跨年周 ID（YYYYWww）。 */
+  weekId: string;
+  /** 周一（YYYY-MM-DD）。 */
+  monday: string;
+  mondayMs: number;
+  monthKey: string;
+  /** 周一至周日的「日」号（1–31）。 */
+  dayNumbers: number[];
+}
+
+/**
+ * 产品的生命周期周历：锚点 = fixture 的 launchWeekLabel（如 2025-W02），
+ * 逐周 +7 天直到 points.length；数据源为真实 ISO 周规则 + fixture 标签。
+ */
+function lifecycleCalendarWeeks(product: LifecycleProductSeed): LifecycleCalWeek[] {
+  const total = product.points.length;
+  const match = /^(\d{4})-W(\d{2})$/.exec(product.launchWeekLabel);
+  if (total <= 0 || !match) return [];
+  const startMs = mondayMsOfIsoWeek(Number(match[1]), Number(match[2]));
+  const weeks: LifecycleCalWeek[] = [];
+  for (let index = 0; index < total; index += 1) {
+    const mondayMs = startMs + index * 7 * DAY_MS;
+    const monday = new Date(mondayMs).toISOString().slice(0, 10);
+    weeks.push({
+      index,
+      weekId: weekIdOfMondayMs(mondayMs),
+      monday,
+      mondayMs,
+      monthKey: monday.slice(0, 7),
+      dayNumbers: Array.from({ length: 7 }, (_, k) => new Date(mondayMs + k * DAY_MS).getUTCDate()),
+    });
+  }
+  return weeks;
+}
+
+/** 月页（双月周历的左 / 右页）：同一 monthKey 的整周行，按周序排列。 */
+interface LifecycleCalMonth {
+  key: string;
+  label: string;
+  weeks: LifecycleCalWeek[];
+}
+
+function calendarMonthsOf(weeks: LifecycleCalWeek[]): LifecycleCalMonth[] {
+  const byKey = new Map<string, LifecycleCalWeek[]>();
+  for (const week of weeks) {
+    const list = byKey.get(week.monthKey);
+    if (list) list.push(week);
+    else byKey.set(week.monthKey, [week]);
+  }
+  return [...byKey.entries()].map(([key, monthWeeks]) => ({
+    key,
+    label: `${Number(key.slice(0, 4))}年 ${Number(key.slice(5, 7))}月`,
+    weeks: monthWeeks,
+  }));
+}
 
 export default function ReferenceEventComposer(props: {
   /** 补录对象产品（周下拉取其全生命周期长度；色提示对比量价系列色）。 */
@@ -78,14 +163,36 @@ export default function ReferenceEventComposer(props: {
       : '尚未选择起止周';
   const contrastHint = contrastHintOf(resolved.type.color, seriesColor);
 
-  const setStart = (week: number): void => {
-    // 起周变化后若大于止周，止周自动跟到起周（闭区间，止周不得早于起周）
-    const end = value.endWeek != null && value.endWeek < week ? week : value.endWeek;
-    onChange({ startWeek: week, endWeek: end });
+  // ---- 双月周历（2026-11-05 视觉精简二轮）：两月并排，行 = 整周（周一起）----
+  const calWeeks = useMemo(() => lifecycleCalendarWeeks(product), [product]);
+  const calMonths = useMemo(() => calendarMonthsOf(calWeeks), [calWeeks]);
+  const [calOpen, setCalOpen] = useState(false);
+  const [calPage, setCalPage] = useState(0);
+  /** 第一次点击锁定的起始周（非空 = 等待第二次点击选止周）。 */
+  const [anchorWeek, setAnchorWeek] = useState<number | null>(null);
+
+  const openCalendar = (): void => {
+    if (calOpen) {
+      setCalOpen(false);
+      return;
+    }
+    const key = value.startWeek != null ? calWeeks[value.startWeek]?.monthKey : undefined;
+    const idx = key ? calMonths.findIndex((month) => month.key === key) : -1;
+    setCalPage(Math.max(0, Math.min(idx < 0 ? 0 : idx, Math.max(0, calMonths.length - 2))));
+    setAnchorWeek(null);
+    setCalOpen(true);
   };
-  const setEnd = (week: number): void => {
-    const start = value.startWeek ?? 0;
-    onChange({ endWeek: Math.max(start, week), startWeek: start });
+
+  /** 周历选周：第一次点击 = 起始周；第二次点击 = 止周并收起；起 > 止自动对调。 */
+  const pickCalendarWeek = (week: number): void => {
+    if (anchorWeek == null) {
+      onChange({ startWeek: week, endWeek: week });
+      setAnchorWeek(week);
+      return;
+    }
+    onChange({ startWeek: Math.min(anchorWeek, week), endWeek: Math.max(anchorWeek, week) });
+    setAnchorWeek(null);
+    setCalOpen(false);
   };
 
   const toggleImpact = (next: boolean): void => {
@@ -126,7 +233,27 @@ export default function ReferenceEventComposer(props: {
     fontSize: 12,
   });
 
-  const weekOptions = product.points.map((_, week) => ({ value: week, label: `W${week + 1}` }));
+  const weekCellStyle = (out: boolean, selected: boolean): CSSProperties => ({
+    fontSize: 11,
+    fontVariantNumeric: 'tabular-nums',
+    color: selected ? color.onPrimary : out ? color.hairlineStrong : color.ink,
+  });
+  const calNavButtonStyle = (disabled: boolean): CSSProperties => ({
+    width: 22,
+    height: 22,
+    display: 'inline-grid',
+    placeItems: 'center',
+    padding: 0,
+    border: 'none',
+    borderRadius: radius.control,
+    background: color.canvasSoft2,
+    color: color.body,
+    font: 'inherit',
+    fontSize: 12,
+    lineHeight: 1,
+    cursor: disabled ? 'default' : 'pointer',
+    opacity: disabled ? 0.4 : 1,
+  });
 
   return (
     <div style={{ width: 296, padding: `${space.xs}px 2px 0`, maxWidth: '100%' }}>
@@ -279,43 +406,138 @@ export default function ReferenceEventComposer(props: {
         )}
       </div>
 
-      {/* ② 起止周（闭区间；时长派生）+ 图上拖选入口 */}
-      <div style={{ marginBottom: space.sm }}>
+      {/* ② 起止周（双月周历选择器；闭区间；时长派生）+ 图上拖选入口 */}
+      <div style={{ marginBottom: space.sm, position: 'relative' }}>
         <div style={labelStyle(show(validation.weekMissing))}>
-          {show(validation.weekMissing) ? '请选择起止周' : '起周 / 止周'}
+          {show(validation.weekMissing) ? '请选择起止周' : '起止周'}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Select
-            size="small"
-            aria-label="事件起周"
-            aria-invalid={show(validation.weekMissing)}
-            value={value.startWeek ?? undefined}
-            placeholder="起周"
-            virtual={false}
-            onChange={setStart}
-            options={weekOptions}
-            style={{ flex: '1 1 auto', minWidth: 0 }}
-          />
-          <Select
-            size="small"
-            aria-label="事件止周"
-            aria-invalid={show(validation.weekMissing)}
-            value={value.endWeek ?? undefined}
-            placeholder="止周"
-            virtual={false}
-            onChange={setEnd}
-            options={weekOptions.filter((option) => value.startWeek == null || option.value >= value.startWeek)}
-            style={{ flex: '1 1 auto', minWidth: 0 }}
-          />
-          <span className="tnum" style={{ flex: 'none', fontSize: 11, color: color.mute, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-            {duration != null ? `${duration} 周` : '—'}
-          </span>
-        </div>
+        <button
+          type="button"
+          aria-label="选择起止周"
+          aria-expanded={calOpen}
+          aria-invalid={show(validation.weekMissing)}
+          onClick={openCalendar}
+          title="展开双月周历：第一次点击选起始周，第二次点击选止周并收起；起晚于止自动对调"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 6,
+            height: 28,
+            padding: '0 8px',
+            border: `1px solid ${show(validation.weekMissing) ? color.error : color.hairlineStrong}`,
+            borderRadius: radius.control,
+            background: color.canvas,
+            color: color.ink,
+            font: 'inherit',
+            fontSize: 12,
+            fontVariantNumeric: 'tabular-nums',
+            cursor: 'pointer',
+          }}
+        >
+          <span className="tnum">{rangeText}</span>
+          <span aria-hidden style={{ color: color.mute, flex: 'none' }}>▾</span>
+        </button>
+        {calOpen && (
+          <div
+            role="group"
+            aria-label="起止周双月历"
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 'calc(100% + 4px)',
+              zIndex: 60,
+              width: 440,
+              maxWidth: 'calc(100vw - 48px)',
+              background: color.canvas,
+              border: `1px solid ${color.hairlineStrong}`,
+              borderRadius: radius.modal,
+              boxShadow: shadow.l5,
+              padding: '10px 12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <button
+                type="button"
+                aria-label="上一月"
+                disabled={calPage <= 0}
+                onClick={() => setCalPage((prev) => Math.max(0, prev - 1))}
+                style={calNavButtonStyle(calPage <= 0)}
+              >
+                ‹
+              </button>
+              <span style={{ flex: 1, textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
+                {calMonths[calPage]?.label}
+                {calMonths[calPage + 1] ? ` / ${calMonths[calPage + 1].label}` : ''}
+              </span>
+              <button
+                type="button"
+                aria-label="下一月"
+                disabled={calPage >= calMonths.length - 2}
+                onClick={() => setCalPage((prev) => Math.min(calMonths.length - 2, prev + 1))}
+                style={calNavButtonStyle(calPage >= calMonths.length - 2)}
+              >
+                ›
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {[calMonths[calPage], calMonths[calPage + 1]].filter((month): month is LifecycleCalMonth => month != null).map((month) => (
+                <div key={month.key} style={{ minWidth: 0 }}>
+                  <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 4 }}>{month.label}</div>
+                  {month.weeks.map((week) => {
+                    const selected = week.index === value.startWeek || week.index === value.endWeek;
+                    const inRange = value.startWeek != null && value.endWeek != null
+                      && week.index > Math.min(value.startWeek, value.endWeek)
+                      && week.index < Math.max(value.startWeek, value.endWeek);
+                    return (
+                      <button
+                        key={week.index}
+                        type="button"
+                        aria-label={`W${week.index + 1}（${week.weekId}）`}
+                        aria-pressed={selected}
+                        title={`${week.weekId} · 自 ${week.monday} 起的一周`}
+                        onClick={() => pickCalendarWeek(week.index)}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '26px repeat(7, 1fr)',
+                          gap: 2,
+                          alignItems: 'center',
+                          width: '100%',
+                          padding: '1px 2px',
+                          marginBottom: 2,
+                          borderRadius: 5,
+                          border: 'none',
+                          cursor: 'pointer',
+                          font: 'inherit',
+                          textAlign: 'center',
+                          background: selected ? color.link : inRange ? trackColors.fill : selectSoft,
+                        }}
+                      >
+                        <span className="tnum" style={{ fontSize: 10, color: selected ? color.onPrimary : color.mute }}>{week.index + 1}</span>
+                        {week.dayNumbers.map((dayNumber, k) => {
+                          const dayMs = week.mondayMs + k * DAY_MS;
+                          const dayKey = new Date(dayMs).toISOString().slice(0, 7);
+                          return (
+                            <span key={k} className="tnum" style={weekCellStyle(dayKey !== month.key, selected)}>{dayNumber}</span>
+                          );
+                        })}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 11, color: color.mute }}>第一次点击选起始周，第二次点击选止周并收起；起晚于止自动对调。</div>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
           <Button size="small" type="default" onClick={onPickRange} title="收起本弹层，在面板图上按下—拖动—松手选择事件时段（Esc 取消）">
             图上拖选
           </Button>
-          <span className="tnum" style={{ fontSize: 11, color: color.mute, fontVariantNumeric: 'tabular-nums' }}>{rangeText}</span>
+          <span className="tnum" style={{ fontSize: 11, color: color.mute, fontVariantNumeric: 'tabular-nums' }}>
+            {duration != null ? `${duration} 周` : '—'}
+          </span>
         </div>
       </div>
 
@@ -453,7 +675,7 @@ export default function ReferenceEventComposer(props: {
         <button
           type="button"
           onClick={onCollapse}
-          title="收起编辑器，保留未提交草稿；名录区出现「未完成」入口可恢复"
+          title="收起编辑器，保留未提交草稿；再次点「＋事件」或名录「编辑」可恢复"
           style={{
             padding: '4px 10px',
             borderRadius: radius.control,

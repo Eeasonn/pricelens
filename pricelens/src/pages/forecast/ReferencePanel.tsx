@@ -24,19 +24,27 @@
 //   「无可回放事件」。
 // - 红线：补录 / 覆写 / 窗口 / 颜色绝不进入 WorkbenchParams / computeWorkbench；
 //   prevGenReferenceId 受控语义原样；fixture 原始对象不被修改。
-// 2026-11-05 视觉精简二轮：首预测周读数行（B.5.5 同周龄证据）默认收起为
-// 共享 CollapsibleSection「首预测周读数」（卡头「① 基线预测 · 历史参照」保留）。
+// 2026-11-05 视觉精简二轮（六条反馈）：
+// - 首预测周读数行（B.5.5 同周龄证据）默认收起为共享 CollapsibleSection
+//   「首预测周读数」（卡头「① 基线预测 · 历史参照」保留）。
+// - 关闭行为：保存成功 → 编辑浮层自动收起 + 名录自动展开并 0.6s 高亮淡出；
+//   点弹层外空白 / Esc → 收起（草稿不丢）；「未完成」chip 删除（草稿经
+//   ＋事件 / 名录「编辑」恢复）。
+// - 预标 / 补录统一：删除一切来源标注（浮框头 tag、名录行标、锚点形态
+//   差异）；能力差异隐形保留——预标 × = 恢复基准，补录 × = 软删除。
+// - 名录默认收起为一根「事件 N ▸」细条（组件态记忆展开），不再分来源组；
+//   「主链 · 同周龄校正」「窗内」chip 删除；「仅历史」「模拟历史」合并为
+//   单个「模拟历史」；参考回放条目不带「草稿」标。
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Dropdown, Popover } from 'antd';
-import { brandColorOf, color, radius, space } from '../../theme/tokens';
+import { brandColorOf, color, motion, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import usePageViewState from '../../state/usePageViewState';
 import type { LifecycleProductSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult } from './workbenchModel';
 import { CollapsibleSection, SectionHead, SimChip, workbenchCardStyle } from './WorkbenchBits';
 import ReferenceVolumeChart from './ReferenceVolumeChart';
 import ReferenceTimeTrack, { type ReferenceWindowPreset } from './ReferenceTimeTrack';
-import ReferenceEventList from './ReferenceEventList';
 import ReferenceEventComposer from './ReferenceEventComposer';
 import {
   clampReferenceWindow,
@@ -44,6 +52,7 @@ import {
   eventRangeLabel,
   fullWindowOf,
   mergeEffectiveEvents,
+  REFERENCE_DECAY_LABEL,
   type EffectiveReferenceEvent,
   type ReferenceEditorDraft,
   type ReferenceEventDraftValue,
@@ -122,6 +131,7 @@ function headButtonStyle(danger: boolean): CSSProperties {
 
 // ------------------------------------------------------------
 // 参考回放条目（§4.5）：与面板窗口中心距离 → 起周 → id 稳定排序，每面板 1 条。
+// 2026-11-05 视觉精简二轮：无来源标注（不再区分补录 / 预标条目形态）。
 // ------------------------------------------------------------
 interface ReplayEntry {
   productId: string;
@@ -129,7 +139,6 @@ interface ReplayEntry {
   startWeek: number;
   endWeek: number;
   text: string;
-  composed: boolean;
 }
 
 function replayEntryFor(
@@ -152,13 +161,222 @@ function replayEntryFor(
     startWeek: ev.startWeek,
     endWeek: ev.endWeek,
     text: `${shortLabelOf(product)} · ${eventRangeLabel(ev)} · ${ev.label}`,
-    composed: ev.source === 'composed',
   };
 }
 
 // ------------------------------------------------------------
-// 参考面板卡：面板头（身份 + 主链语义 + 草稿标 + 动作）→ 拖选操作条 →
-// 量价图（左量右价 + 图顶事件轨）→ 本面板时间轨 → 事件名录 → 主链读数。
+// 统一事件名录（2026-11-05 视觉精简二轮，替代 ReferenceEventList 常驻列表）：
+// - 默认收起为一根纯文字细条「事件 N ▸」（共享 CollapsibleSection；会话内
+//   组件态记忆展开，刷新回默认收起）；展开 = 全量统一列表（按起周排序，
+//   不再分「预标 / 补录」组，无任何来源标注）。
+// - 行：类型色点 + 起止周 + 标题（点击 = 选中详情）+ 幅度 · 衰减 +
+//   [编辑] [×]；能力差异隐形保留：补录 × = 软删除，预标 × = 恢复基准
+//   （回 fixture 值，可撤销），编辑入口两者一致。
+// - 保存成功 → 自动展开 + 新行 0.6s 高亮淡出（saveFlash）。
+// - 双向联动：hover 行 → 图上区间临时高亮；图上 +N 聚合筛选（onlyIds）
+//   自动展开并可清；focusReq（图锚 / 定位）展开态下滚动定位 + 短暂强调。
+// ------------------------------------------------------------
+function ReferenceRoster(props: {
+  events: EffectiveReferenceEvent[];
+  selectedEventId: string | null;
+  hoverEventId: string | null;
+  onHoverEvent: (id: string | null) => void;
+  onSelectEvent: (id: string | null) => void;
+  onEditEvent: (id: string) => void;
+  onRestorePreset: (sourceEventId: string) => void;
+  onDeleteComposed: (id: string) => void;
+  labelOf: (typeId: string) => string;
+  colorOf: (typeId: string) => string;
+  /** 图上 +N 聚合点击后的只看集合（null = 无此筛选）。 */
+  onlyIds: string[] | null;
+  onClearOnly: () => void;
+  /** 图锚 / 定位请求：展开态下滚动到该行并短暂强调（key 递增触发）。 */
+  focusReq: { id: string; key: number } | null;
+  /** 保存成功闪强（父层 { eventId, key }；key 递增触发展开 + 0.6s 高亮）。 */
+  saveFlash: { eventId: string; key: number } | null;
+}) {
+  const {
+    events, selectedEventId, hoverEventId, onHoverEvent, onSelectEvent,
+    onEditEvent, onRestorePreset, onDeleteComposed, labelOf, colorOf,
+    onlyIds, onClearOnly, focusReq, saveFlash,
+  } = props;
+  const [open, setOpen] = useState(false);
+  const rowRefs = useRef(new Map<string, HTMLElement>());
+  const [emphasizedId, setEmphasizedId] = useState<string | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
+
+  // 保存成功 → 自动展开名录并短暂强调新行（0.6s 高亮淡出）
+  useEffect(() => {
+    if (!saveFlash) return;
+    setOpen(true);
+    setFlashId(saveFlash.eventId);
+    rowRefs.current.get(saveFlash.eventId)?.scrollIntoView({ block: 'nearest' });
+    const timer = window.setTimeout(() => setFlashId((prev) => (prev === saveFlash.eventId ? null : prev)), 600);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveFlash?.key]);
+
+  // 图锚 / 定位：展开态下滚动到行并短暂强调（收起时不打扰）
+  useEffect(() => {
+    if (!focusReq || !open) return;
+    setEmphasizedId(focusReq.id);
+    rowRefs.current.get(focusReq.id)?.scrollIntoView({ block: 'nearest' });
+    const timer = window.setTimeout(() => setEmphasizedId((prev) => (prev === focusReq.id ? null : prev)), 1600);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusReq?.key, focusReq?.id, open]);
+
+  // 图上 +N 聚合筛选：自动展开名录（筛选结果需要可见）
+  useEffect(() => {
+    if (onlyIds != null) setOpen(true);
+  }, [onlyIds]);
+
+  const filtered = useMemo(
+    () => (onlyIds ? events.filter((ev) => onlyIds.includes(ev.id)) : events),
+    [events, onlyIds],
+  );
+
+  if (events.length === 0 && onlyIds == null) return null;
+
+  return (
+    <div style={{ marginTop: space.sm, minWidth: 0 }}>
+      <CollapsibleSection
+        label={`事件 ${events.length}`}
+        open={open}
+        onToggle={setOpen}
+      >
+        {onlyIds != null && (
+          <div style={{ display: 'flex', marginBottom: 6 }}>
+            <button
+              type="button"
+              onClick={onClearOnly}
+              title="清除图上事件聚合筛选，恢复完整名录"
+              style={{
+                height: 20,
+                padding: '0 8px',
+                borderRadius: radius.pill,
+                fontSize: 11,
+                fontWeight: 600,
+                font: 'inherit',
+                cursor: 'pointer',
+                border: `1px solid ${selectAccent}`,
+                background: selectSoft,
+                color: selectSoftInk,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {`图上聚合 ${onlyIds.length} 条 ×`}
+            </button>
+          </div>
+        )}
+        <div style={{ display: 'grid', gap: 4, maxHeight: filtered.length > 8 ? 176 : undefined, overflowY: filtered.length > 8 ? 'auto' : undefined }}>
+          {filtered.map((ev) => {
+            const selected = selectedEventId === ev.id;
+            const rangeLabel = eventRangeLabel(ev);
+            const rowLabel = `${rangeLabel} ${ev.label}`;
+            const impact = ev.impact;
+            return (
+              <div
+                key={ev.id}
+                ref={(el) => { if (el) rowRefs.current.set(ev.id, el); else rowRefs.current.delete(ev.id); }}
+                onMouseEnter={() => onHoverEvent(ev.id)}
+                onMouseLeave={() => onHoverEvent(null)}
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: '3px 8px',
+                  padding: '3px 6px',
+                  borderRadius: radius.control,
+                  background: flashId === ev.id
+                    ? selectSoft
+                    : (emphasizedId === ev.id || selected)
+                      ? color.canvasSoft2
+                      : 'transparent',
+                  outline: selected ? `1px solid ${color.hairlineStrong}` : 'none',
+                  transition: `background ${motion.fast}ms`,
+                  minWidth: 0,
+                }}
+              >
+                <button
+                  type="button"
+                  className="tnum"
+                  aria-pressed={selected}
+                  aria-label={`查看事件读数 ${rowLabel}`}
+                  title="点击查看事件详情；再次点击关闭"
+                  onClick={() => onSelectEvent(selected ? null : ev.id)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', padding: 0, font: 'inherit', fontSize: 11.5, color: color.body, cursor: 'pointer', minWidth: 0, textAlign: 'left' }}
+                >
+                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: 2, background: colorOf(ev.typeId), flex: 'none' }} />
+                  <span style={{ fontVariantNumeric: 'tabular-nums', color: color.ink, fontWeight: 600, whiteSpace: 'nowrap' }}>{rangeLabel}</span>
+                  <span style={{ color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.label}</span>
+                </button>
+                {impact && (impact.magnitudePct != null || impact.decay !== 'unspecified') && (
+                  <span className="tnum" style={{ fontSize: 11, color: color.mute, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    {`${impact.magnitudePct != null ? `${impact.magnitudePct > 0 ? '+' : impact.magnitudePct < 0 ? '−' : '±'}${Math.abs(impact.magnitudePct)}%` : '—'} · ${REFERENCE_DECAY_LABEL[impact.decay]}`}
+                  </span>
+                )}
+                <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, flex: 'none' }}>
+                  <button
+                    type="button"
+                    aria-label={`编辑事件 ${rowLabel}`}
+                    title={`编辑事件（类型 ${labelOf(ev.typeId)}）`}
+                    onClick={() => onEditEvent(ev.id)}
+                    style={rosterActionButtonStyle(false)}
+                  >
+                    编辑
+                  </button>
+                  {/* 无来源标注：同形 ×；能力差异隐形保留——补录 = 软删除，预标 = 恢复基准 */}
+                  <button
+                    type="button"
+                    aria-label={ev.source === 'composed' ? `删除事件 ${rowLabel}` : `恢复事件基准 ${rowLabel}`}
+                    title={ev.source === 'composed'
+                      ? '删除该事件（可撤销）'
+                      : ev.overridden
+                        ? '恢复到基准值（可撤销）'
+                        : '已为基准值'}
+                    onClick={() => {
+                      if (ev.source === 'composed') onDeleteComposed(ev.id);
+                      else if (ev.overridden && ev.sourceEventId) onRestorePreset(ev.sourceEventId);
+                    }}
+                    style={rosterActionButtonStyle(true)}
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div role="status" style={{ fontSize: 11.5, color: color.mute, padding: '4px 0' }}>无匹配事件</div>
+          )}
+        </div>
+      </CollapsibleSection>
+    </div>
+  );
+}
+
+function rosterActionButtonStyle(danger: boolean): CSSProperties {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    height: 20,
+    padding: '0 7px',
+    borderRadius: radius.control,
+    border: `1px solid ${danger ? color.hairlineStrong : color.hairline}`,
+    background: color.canvas,
+    color: danger ? color.error : color.body,
+    font: 'inherit',
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
+}
+
+// ------------------------------------------------------------
+// 参考面板卡：面板头（身份 + 对照标 + 草稿标 + 动作）→ 拖选操作条 →
+// 量价图（左量右价 + 图顶小标轨）→ 本面板时间轨 → 事件名录（默认收起）→ 主链读数。
 // ------------------------------------------------------------
 function ReferenceChartCard({
   product,
@@ -174,14 +392,12 @@ function ReferenceChartCard({
   labelOf,
   colorOf,
   draftCount,
-  hasUnfinishedDraft,
   editorOpen,
   picking,
   draft,
   saveState,
   onRetryPersist,
   onOpenCreate,
-  onOpenUnfinished,
   onComposerChange,
   onPickRange,
   onSelectRange,
@@ -199,13 +415,14 @@ function ReferenceChartCard({
   onlyIds,
   onClearOnly,
   rosterFocus,
+  saveFlash,
   onPreset,
   focusWeek,
   focusKey,
   footNote,
 }: {
   product: LifecycleProductSeed;
-  /** 该面板产品当前是否主链参照（进主链徽标）。 */
+  /** 该面板产品当前是否主链参照（决定首预测周读数与主链回退语义）。 */
   isInChain: boolean;
   panelCount: number;
   onRemove: () => void;
@@ -213,15 +430,13 @@ function ReferenceChartCard({
   onWindowChange: (s: number, e: number) => void;
   windowLocked: boolean;
   onToggleLock: () => void;
-  /** 统一有效事件（预标 + 覆写 + 补录，已合并排序）。 */
+  /** 统一有效事件（已合并排序；无来源标注，预标与补录同形）。 */
   events: EffectiveReferenceEvent[];
   selectedEvent: EffectiveReferenceEvent | null;
   labelOf: (typeId: string) => string;
   colorOf: (typeId: string) => string;
   /** 本地事件 / 覆写数（草稿 N 条件显示）。 */
   draftCount: number;
-  /** 有未提交编辑器草稿且弹层未开 → 「未完成」入口。 */
-  hasUnfinishedDraft: boolean;
   editorOpen: boolean;
   /** 拖选事件时段模式（弹层收起、面板顶操作条）。 */
   picking: boolean;
@@ -230,14 +445,13 @@ function ReferenceChartCard({
   saveState: 'saved' | 'unpersisted';
   onRetryPersist: () => void;
   onOpenCreate: () => void;
-  onOpenUnfinished: () => void;
   onComposerChange: (patch: Partial<ReferenceEventDraftValue>) => void;
   onPickRange: () => void;
   onSelectRange: (startWeek: number, endWeek: number) => void;
   onSubmitDraft: () => void;
   onCollapseComposer: () => void;
   onDiscardDraft: () => void;
-  /** 编辑预标且存在覆写时提供「恢复预标」。 */
+  /** 编辑且存在本地覆写时提供「恢复基准」。 */
   composerRestore: (() => void) | null;
   onRestorePreset: (sourceEventId: string) => void;
   onSelectEvent: (id: string | null) => void;
@@ -249,6 +463,8 @@ function ReferenceChartCard({
   onlyIds: string[] | null;
   onClearOnly: () => void;
   rosterFocus: { id: string; key: number } | null;
+  /** 保存成功闪强（0.6s 名录高亮淡出 + 自动展开）。 */
+  saveFlash: { eventId: string; key: number } | null;
   onPreset: (preset: Exclude<ReferenceWindowPreset, 'custom'>) => void;
   focusWeek: number | null;
   focusKey: number;
@@ -257,7 +473,7 @@ function ReferenceChartCard({
   const tone = brandColorOf(product.brand);
   return (
     <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: `${space.md}px ${space.base}px ${space.sm}px`, minWidth: 0 }}>
-      {/* 面板头：品牌色点 + 产品名胶囊 + 主链 / 对照徽标 + 草稿标 + ＋事件 / × */}
+      {/* 面板头：品牌色点 + 产品名胶囊 + 对照标 + 草稿标 + ＋事件 / × */}
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm, flexWrap: 'wrap' }}>
         <span aria-hidden style={{ width: 8, height: 8, borderRadius: radius.pill, background: tone, flex: 'none' }} />
         <span
@@ -279,37 +495,26 @@ function ReferenceChartCard({
         >
           {product.label}
         </span>
-        <span
-          title={isInChain
-            ? '该参照为上一代产品：选择写入主链，经同周龄比值校正主图基线'
-            : '对照查看：不写入主链、不影响主图基线，仅用于核对量价节奏'}
-          style={{
-            ...smallChipStyle,
-            background: isInChain ? '#e8f1ff' : color.canvasSoft2,
-            color: isInChain ? '#0053c2' : color.mute,
-            border: `1px solid ${isInChain ? '#0070f3' : color.hairline}`,
-          }}
-        >
-          {isInChain ? '主链 · 同周龄校正' : '仅对照'}
-        </span>
+        {!isInChain && (
+          <span
+            title="对照查看：不写入主链、不影响主图基线，仅用于核对量价节奏"
+            style={{
+              ...smallChipStyle,
+              background: color.canvasSoft2,
+              color: color.mute,
+              border: `1px solid ${color.hairline}`,
+            }}
+          >
+            仅对照
+          </span>
+        )}
         {draftCount > 0 && (
           <span
             title={`本产品有 ${draftCount} 条本地事件 / 覆写：保存在本浏览器，刷新、重开页签后仍可恢复`}
-            style={{ ...smallChipStyle, background: '#e8f1ff', color: '#0053c2', border: '1px solid #0070f3' }}
+            style={{ ...smallChipStyle, background: selectSoft, color: selectSoftInk, border: `1px solid ${selectAccent}` }}
           >
             {`草稿 ${draftCount}`}
           </span>
-        )}
-        {hasUnfinishedDraft && !editorOpen && (
-          <button
-            type="button"
-            aria-label={`恢复未完成草稿：${product.label}`}
-            title="有未提交的编辑器草稿；点击恢复编辑（不会自动弹层抢焦点）"
-            onClick={onOpenUnfinished}
-            style={{ ...headButtonStyle(false), borderColor: '#0070f3', color: '#0053c2' }}
-          >
-            未完成
-          </button>
         )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Popover
@@ -333,7 +538,15 @@ function ReferenceChartCard({
               />
             ) : null}
           >
-            <button type="button" aria-label={`为 ${product.label} 新增事件`} title="新增事件（本地草稿，自动保存）" onClick={onOpenCreate} style={headButtonStyle(false)}>
+            {/* data-ref-composer-trigger：点本钮不触发「空白收起」（开关交给 antd trigger） */}
+            <button
+              type="button"
+              data-ref-composer-trigger={product.id}
+              aria-label={`为 ${product.label} 新增事件`}
+              title="新增 / 恢复事件编辑（本地草稿，自动保存；点弹层外空白或 Esc 收起，草稿不丢）"
+              onClick={onOpenCreate}
+              style={headButtonStyle(false)}
+            >
               ＋事件
             </button>
           </Popover>
@@ -388,7 +601,6 @@ function ReferenceChartCard({
           selectedEventId={selectedEvent?.id ?? null}
           onSelectEvent={onSelectEvent}
           onEditEvent={onEditEvent}
-          onRestorePreset={onRestorePreset}
           hoverEventId={hoverEventId}
           onHoverEvent={onHoverEvent}
           onOverflowEvents={onOverflowEvents}
@@ -411,11 +623,9 @@ function ReferenceChartCard({
         eventRange={selectedEvent ? [selectedEvent.startWeek, selectedEvent.endWeek] : null}
         onPreset={onPreset}
       />
-      {/* 统一事件名录（预标 / 预标 · 已改 / 草稿 行标；双向联动 + 收纳） */}
-      <ReferenceEventList
-        productLabel={product.label}
+      {/* 统一事件名录（默认收起「事件 N ▸」；无来源标注；保存成功 0.6s 闪强） */}
+      <ReferenceRoster
         events={events}
-        win={win}
         selectedEventId={selectedEvent?.id ?? null}
         hoverEventId={hoverEventId}
         onHoverEvent={onHoverEvent}
@@ -428,6 +638,7 @@ function ReferenceChartCard({
         onlyIds={onlyIds}
         onClearOnly={onClearOnly}
         focusReq={rosterFocus}
+        saveFlash={saveFlash}
       />
       {/* 首预测周读数（B.5.5 同周龄证据）：2026-11-05 视觉精简二轮默认收起
           （共享 CollapsibleSection，组件内存态），卡头「① 基线预测 · 历史参照」保留 */}
@@ -593,6 +804,9 @@ export default function ReferencePanel({
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const selectedEventIdRef = useRef<string | null>(null);
   selectedEventIdRef.current = selectedEventId;
+  /** 保存成功闪强（名录自动展开 + 新行 0.6s 高亮淡出；key 递增触发）。 */
+  const [saveFlash, setSaveFlash] = useState<{ productId: string; eventId: string; key: number } | null>(null);
+  const saveFlashKeyRef = useRef(0);
 
   const selectedEventOf = useCallback((product: LifecycleProductSeed): EffectiveReferenceEvent | null =>
     eventsByProduct.get(product.id)?.find((ev) => ev.id === selectedEventIdRef.current) ?? null,
@@ -697,18 +911,21 @@ export default function ReferencePanel({
       note: draft.value.note.trim(),
       impact: draft.value.impact,
     };
+    let savedEventId: string;
     if (draft.eventId == null) {
-      const record = ws.createComposed(product.id, fields);
-      setSelectedEventId(record.id);
+      savedEventId = ws.createComposed(product.id, fields).id;
     } else if (product.events.some((ev) => ev.id === draft.eventId)) {
-      // 预标覆写：键 = productId + sourceEventId；不物理删除预标
+      // 预标覆写：键 = productId + sourceEventId；不物理删除预标（× = 恢复基准）
       ws.savePresetOverride(product, draft.eventId, fields);
-      setSelectedEventId(draft.eventId);
+      savedEventId = draft.eventId;
     } else {
       ws.editComposed(draft.eventId, fields);
-      setSelectedEventId(draft.eventId);
+      savedEventId = draft.eventId;
     }
     ws.clearEditorDraft(draft.id);
+    // 保存成功：编辑浮层自动收起 + 名录自动展开并短暂强调该行（0.6s 高亮淡出）
+    saveFlashKeyRef.current += 1;
+    setSaveFlash({ productId: product.id, eventId: savedEventId, key: saveFlashKeyRef.current });
     setEditorOpenId(null);
     setPickingId(null);
   }, [draftFor, ws]);
@@ -756,6 +973,23 @@ export default function ReferencePanel({
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [pickingId, editorOpenId]);
+
+  // ---- 点弹层外空白收起编辑器（草稿不丢；与 antd Popover outside-click 双保险）----
+  // 排除：编辑器弹层内部（含其下拉 portal）、「＋事件」触发钮（开关语义交给
+  // antd trigger，避免 mousedown 收起 + click 重开的竞态）。
+  useEffect(() => {
+    if (editorOpenId == null) return;
+    const onDocMouseDown = (event: MouseEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (!target || typeof target.closest !== 'function') return;
+      if (target.closest('.ant-popover')) return;
+      if (target.closest('.ant-select-dropdown')) return;
+      if (target.closest('[data-ref-composer-trigger]')) return;
+      closeComposerFor(editorOpenId);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [editorOpenId, closeComposerFor]);
 
   // ---- 「＋ 添加参考」下拉：池内未添加产品，分组 上一代 · 主链 / 友商 · 对照 ----
   const addMenuItems = useMemo(() => {
@@ -878,17 +1112,12 @@ export default function ReferencePanel({
             {/* ①阶段标（B.5.1 卡头语言：参考 = ① 基线预测 · 历史参照） */}
             <span
               title="本卡为①自动学习基线提供历史参照：上一代同周龄对齐进入①学习器，切换参照 = 重新学习"
-              style={{ ...smallChipStyle, background: '#e8f1ff', color: '#0053c2', border: '1px solid #0070f3' }}
+              style={{ ...smallChipStyle, background: selectSoft, color: selectSoftInk, border: `1px solid ${selectAccent}` }}
             >
               ① 基线预测 · 历史参照
             </span>
-            <span
-              title="参照序列为历史演示样本 · 纯历史数据，无预测段"
-              style={{ ...smallChipStyle, background: color.canvasSoft2, color: color.body }}
-            >
-              仅历史
-            </span>
-            <SimChip variant="simHistory" title="参照序列为模拟样本回放，不代表真实市场" />
+            {/* 2026-11-05 视觉精简二轮：「仅历史」「模拟历史」合并为单个「模拟历史」 */}
+            <SimChip variant="simHistory" title="参照序列为纯历史的模拟样本回放，无预测段，不代表真实市场" />
           </>
         )}
       />
@@ -936,11 +1165,6 @@ export default function ReferencePanel({
               }}
             >
               {entry.text}
-              {entry.composed && (
-                <span aria-hidden style={{ ...smallChipStyle, height: 16, padding: '0 5px', fontSize: 9.5, background: '#e8f1ff', color: '#0053c2', border: '1px solid #0070f3' }}>
-                  草稿
-                </span>
-              )}
             </button>
           ))}
           {hint.entries.length === 0 && (
@@ -1088,14 +1312,12 @@ export default function ReferencePanel({
                         labelOf={labelOf}
                         colorOf={colorOf}
                         draftCount={localCount}
-                        hasUnfinishedDraft={draft != null}
                         editorOpen={editorOpenId === product.id}
                         picking={pickingId === product.id}
                         draft={draft}
                         saveState={ws.saveState === 'unpersisted' ? 'unpersisted' : 'saved'}
                         onRetryPersist={ws.retryPersist}
                         onOpenCreate={() => openComposerCreate(product)}
-                        onOpenUnfinished={() => { setPickingId(null); setEditorOpenId(product.id); }}
                         onComposerChange={(patch) => changeDraft(product.id, patch)}
                         onPickRange={() => setPickingId(product.id)}
                         onSelectRange={(startWeek, endWeek) => {
@@ -1116,6 +1338,9 @@ export default function ReferencePanel({
                         onlyIds={onlyIds}
                         onClearOnly={() => setOnlyIds(null)}
                         rosterFocus={rosterFocus}
+                        saveFlash={saveFlash?.productId === product.id
+                          ? { eventId: saveFlash.eventId, key: saveFlash.key }
+                          : null}
                         onPreset={(preset) => applyPreset(product, preset)}
                         focusWeek={focus?.panelId === product.id ? focus.week : null}
                         focusKey={focus?.panelId === product.id ? focus.key : 0}

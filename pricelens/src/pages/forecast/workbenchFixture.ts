@@ -63,7 +63,9 @@ export interface MarketEventSeed extends WeekRange {
 /**
  * 大盘人工月度事件（三字段极简口径）：起始时间（月/日）+ 持续时长（月）+
  * 影响幅度%；事件名称选填（可为 ''）。月中起始按日均摊口径生效
- * （见 workbenchModel.marketMonthEventFactor），衰减固定递减。
+ * （见 workbenchModel.marketMonthEventFactor）。衰减形状可选（2026-11-05
+ * 拍板）：缺省/递减 = 逐月线性递减（现行为）；'flat' = 事件覆盖的完整月
+ * 恒定乘子（首月仍按日均摊占比）。
  */
 export interface MarketMonthEventSeed {
   id: string;
@@ -77,6 +79,8 @@ export interface MarketMonthEventSeed {
   durationMonths: number;
   /** 影响幅度（%，正 = 抬升大盘，负 = 压低）。 */
   magnitudePct: number;
+  /** 衰减形状（可选；缺省递减 = 现行为）：'flat' = 覆盖完整月恒定乘子。 */
+  decay?: 'decreasing' | 'flat';
 }
 
 /**

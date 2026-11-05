@@ -24,7 +24,7 @@
 // referenceRatioAt 主链乘子（替代为仅展示的同周龄比值）。
 // 全部计算为纯函数：不读时间、不用随机数，同输入两次计算逐字段一致。
 // ============================================================
-import type { ForecastCalendar, ISODate, MonthKey, WeekId, WeekRange } from './workbenchCalendar';
+import type { CalendarWeek, ForecastCalendar, ISODate, MonthKey, WeekId, WeekRange } from './workbenchCalendar';
 import { buildForecastCalendar } from './workbenchCalendar';
 import type { LearningEvidence } from './workbenchLearning';
 import { learnWorkbenchBaseline } from './workbenchLearning';
@@ -173,8 +173,9 @@ export function monthsBetween(startMonth: string, monthKey: string): number | nu
 /**
  * 月度事件在某月的乘子（月中按日均摊口径）：
  * - 覆盖首月（offset 0）：影响 = 幅度 × 当月覆盖占比（monthCoverageRatio）；
- * - 后续整月（offset ≥ 1）：影响 = 幅度 ×（1 − offset ÷ 时长月数）——衰减固定
- *   递减（三字段极简口径不再暴露衰减选择）；
+ * - 后续整月（offset ≥ 1）：影响 = 幅度 ×（1 − offset ÷ 时长月数）——衰减形状
+ *   取 event.decay（2026-11-05 拍板：缺省/递减 = 线性递减现行为；'flat' =
+ *   恒定——覆盖的完整月恒定乘子 = 幅度全量，首月仍按日均摊占比）；
  * - 覆盖外返回 null（不修正该月）。
  */
 export function marketMonthEventFactor(event: MarketMonthEventSeed, monthKey: string): number | null {
@@ -183,8 +184,90 @@ export function marketMonthEventFactor(event: MarketMonthEventSeed, monthKey: st
   const dim = daysInMonthOf(monthKey);
   if (dim == null) return null;
   const coverage = offset === 0 ? monthCoverageRatio(dim, event.startDay) : 1;
-  const impact = event.magnitudePct * (1 - offset / event.durationMonths);
+  const impact = event.decay === 'flat'
+    ? event.magnitudePct
+    : event.magnitudePct * (1 - offset / event.durationMonths);
   return 1 + (impact * coverage) / 100;
+}
+
+// ------------------------------------------------------------
+// 周历 ↔ 月度事件映射（2026-11-05 大盘修正卡精简拍板）：添加事件浮窗 =
+// 双月周历选择器（起止周整周选择），选择结果映射进既有 MarketMonthEventSeed
+// 三字段（模型契约不变）；图上箭头-线小标反向经日历反推派生周范围。
+// 全部纯函数（字符串 / 整数日历算术，不读时间、不用随机数）。
+// ------------------------------------------------------------
+
+/** 周范围 → 月度事件三字段映射产物（MarketMonthEventSeed 除 id/label/幅度/decay 外的时间字段）。 */
+export interface MarketMonthSeedFromWeekRange {
+  /** 起始月 = 起始周周一所属月（YYYY-MM，与 CalendarWeek.monthKey 同口径）。 */
+  startMonth: string;
+  /** 起始日 = 起始周周一日期（1–31）。 */
+  startDay: number;
+  /** 持续时长（月）= 起周周一 → 止周周日的跨月数（覆盖的连续月数，不足整月按 1 计）。 */
+  durationMonths: number;
+}
+
+/**
+ * 起止周闭区间 → 月度事件三字段映射（添加事件浮窗「双月周历选择器」的保存路径）：
+ * - startMonth / startDay：取起始周（周一）所属月与周一日期——与统一日历
+ *   「周按周一日期归属月」同口径，周口径选择无损落进月粒度模型；
+ * - durationMonths：起周周一所在月 → 止周周日所在月的整月跨度 + 1（即事件
+ *   覆盖的连续月数；起止不足整月按整月计 = 「跨月数向上取整」），钳 1–24
+ *   （与 sanitizeMarketMonthEvent 同带）；
+ * - 起止周不在该日历、或起晚于止（倒置）返回 null（无效范围不静默造数）。
+ */
+export function monthSeedOfWeekRange(
+  calendar: ForecastCalendar,
+  range: WeekRange,
+): MarketMonthSeedFromWeekRange | null {
+  const start = calendar.weekById.get(range.startWeekId);
+  const end = calendar.weekById.get(range.endWeekId);
+  if (!start || !end || start.index > end.index) return null;
+  const endMonthKey = monthKeyOfDate(end.endDate);
+  if (endMonthKey == null) return null;
+  const span = monthsBetween(start.monthKey, endMonthKey);
+  if (span == null) return null;
+  return {
+    startMonth: start.monthKey,
+    startDay: Math.max(1, Math.min(31, Number(start.date.slice(8, 10)))),
+    durationMonths: Math.max(1, Math.min(24, span + 1)),
+  };
+}
+
+/**
+ * 月度事件 → 派生周范围（图上箭头-线小标与滑出菜单行「起止周段」的显示反推）：
+ * - 起点 = startMonth + min(startDay, 当月天数) 所在周（含起始日的整周，
+ *   「周一 ≤ 该日」的最后一个日历周）；
+ * - 终点 = startMonth + durationMonths − 1 的当月末日所在周（覆盖完整月的
+ *   最后一天，向后取含它的整周；周为覆盖单位， band 可外扩至该周日）；
+ * - 事件整体落在日历窗外（止日早于首周周一 / 起日晚于末周周日）返回 null
+ *   不画；部分越界时按日历首/末周钳制（只画窗内可见段，不造窗外数据）。
+ */
+export function weekRangeOfMonthEvent(
+  calendar: ForecastCalendar,
+  event: Pick<MarketMonthEventSeed, 'startMonth' | 'startDay' | 'durationMonths'>,
+): WeekRange | null {
+  const weeks = calendar.weeks;
+  if (weeks.length === 0) return null;
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(event.startMonth);
+  const dimStart = match ? daysInMonthOf(event.startMonth) : null;
+  if (!match || dimStart == null) return null;
+  const day = Math.max(1, Math.min(dimStart, Math.round(event.startDay)));
+  const startDate = `${event.startMonth}-${String(day).padStart(2, '0')}`;
+  const duration = Math.max(1, Math.round(event.durationMonths));
+  const endMonthIndex = Number(match[1]) * 12 + (Number(match[2]) - 1) + (duration - 1);
+  const endMonthKey = `${Math.floor(endMonthIndex / 12)}-${String((endMonthIndex % 12) + 1).padStart(2, '0')}`;
+  const dimEnd = daysInMonthOf(endMonthKey);
+  if (dimEnd == null) return null;
+  const endDate = `${endMonthKey}-${String(dimEnd).padStart(2, '0')}`;
+  // 整体在窗外不画；窗内可见段按首/末周钳制（显示层裁剪，不改模型字段）。
+  if (endDate < weeks[0].date || startDate > weeks[weeks.length - 1].endDate) return null;
+  const weekOnOrBefore = (iso: string): CalendarWeek =>
+    [...weeks].reverse().find((week) => week.date <= iso) ?? weeks[0];
+  const start = weekOnOrBefore(startDate);
+  const end = weekOnOrBefore(endDate);
+  if (start.index > end.index) return null;
+  return { startWeekId: start.id, endWeekId: end.id };
 }
 
 function nextQuarterKey(key: string): string {
@@ -1123,7 +1206,7 @@ function sanitizeProductEvent(value: unknown, calendar: ForecastCalendar, fixtur
   };
 }
 
-/** 月度事件校验：起始月须为合法 'YYYY-MM'；日 1–31、时长 1–24、幅度 −30..30 钳制；坏条目剔除。 */
+/** 月度事件校验：起始月须为合法 'YYYY-MM'；日 1–31、时长 1–24、幅度 −30..30 钳制；decay 非 'flat' 回退递减；坏条目剔除。 */
 function sanitizeMarketMonthEvent(value: unknown): MarketMonthEventSeed | null {
   if (!isRecord(value)) return null;
   const id = typeof value.id === 'string' ? value.id.trim() : '';
@@ -1141,6 +1224,7 @@ function sanitizeMarketMonthEvent(value: unknown): MarketMonthEventSeed | null {
     startDay: Math.max(1, Math.min(31, Math.round(startDay))),
     durationMonths: Math.max(1, Math.min(24, Math.round(durationMonths))),
     magnitudePct: Math.max(-30, Math.min(30, magnitudePct)),
+    decay: value.decay === 'flat' ? 'flat' : 'decreasing',
   };
 }
 

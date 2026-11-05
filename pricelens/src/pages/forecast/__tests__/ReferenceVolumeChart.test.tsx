@@ -1,15 +1,16 @@
 // ============================================================
-// 推演工作台 v3 · 全生命周期量价图组件测试（作业化重设计，jsdom · 任务 10 迁移）：
+// 推演工作台 v3 · 全生命周期量价图组件测试（视觉精简二轮迁移，jsdom）：
 // 左量右价真实几何（销量轴在左 VolumeBars axisSide='left'，价格刻度画右）、
-// 量柱 / 价格线 / 档期琥珀带 / 图顶事件轨（单周虚线方形锚 + 时段 □────□）、
-// +N 聚合（第三条重叠起聚合，点击回调只含这些事件的筛选）、统一选中
-// （锚点点击 → onSelectEvent；事件详情 = 事件时段读数：实际输入周 / 覆盖 /
-// 公式 / 预标参考分栏，预标 impact 不参与计算）、图上拖选事件时段模式
+// 量柱 / 价格线 / 顶部统一小标轨（事件与档期同形态：区间 = 左右箭头 + 中间
+// 线、单周 = 小方标；档期 = 琥珀；无常驻琥珀档期带）、图内高亮开关三态
+// （默认关 = 无高亮 / 开 = 各自颜色 0.12 底色 / hover = 0.16 临时高亮且不受
+// 开关影响）、+N 聚合（第三条重叠起聚合，点击回调只含这些事件的筛选）、
+// 统一选中（小标点击 → onSelectEvent；证据浮框五项精简：名称 + 起止周 /
+// 幅度 / 衰减 / 说明（有才显示）/ 编辑；无来源标注）、图上拖选事件时段模式
 // （回填起止周、无量价读数）、手动区间读数（端点取实际有效周并标注）、
-// 名录 hover 加粗弱竖线、受控窗口（窗口变化清选区）、缺数纪律、空态。
-// v3 迁移说明：fixture 生命周期池为 108 周量价（B.4.4 全周龄覆盖，缺采仅
-// 演示在 lc-x200）；本文件「全窗口」= 前 52 周查看窗 [0, 51]（时间轨可任选，
-// 拖选几何按 52 列计算保持原断言语义——52 实柱、缺采 50 柱）。
+// 受控窗口（窗口变化清选区）、缺数纪律、空态。
+// v3 迁移说明：fixture 生命周期池为 108 周量价；本文件「全窗口」= 前 52 周
+// 查看窗 [0, 51]（拖选几何按 52 列计算——52 实柱、缺采 50 柱）。
 // jsdom：stub ResizeObserver / Pointer Capture；clientWidth = 600；
 // 布局常量 GRID_L=84、GRID_R=52 → 列宽 = (600−84−52)/52。
 // ============================================================
@@ -40,8 +41,7 @@ afterEach(() => {
 
 const POOL = workbenchFixture.references.lifecyclePool;
 const MATE80 = POOL[0];
-// v3：生命周期池 = 108 周；本文件查看窗固定为前 52 周（与列宽常量一致），
-// 52 周内 lc-mate80 无缺采 → 52 根量柱；缺采纪律用例在其上补 null（50 根）。
+// v3：生命周期池 = 108 周；本文件查看窗固定为前 52 周（与列宽常量一致）。
 const FULL: [number, number] = [0, 51];
 const HUAWEI_FILL = 'rgba(199, 0, 11';
 const PLOT_WIDTH = 600 - 84 - 52;
@@ -61,7 +61,7 @@ function shieldOf(container: HTMLElement): HTMLElement {
   const el = Array.from(container.querySelectorAll('div'))
     .find((node) => (node as HTMLElement).style.cursor === 'crosshair');
   if (!el) throw new Error('PointerShield 未找到');
-  return el as HTMLElement;
+  return el;
 }
 
 function overlayOf(container: HTMLElement): SVGSVGElement {
@@ -70,8 +70,14 @@ function overlayOf(container: HTMLElement): SVGSVGElement {
   return el;
 }
 
+/** 底层高亮 rect（opacity 0.12 = 开关常驻 / 0.16 = 悬停临时）。 */
+function highlightRects(container: HTMLElement, opacity: string): SVGRectElement[] {
+  return Array.from(container.querySelectorAll('rect'))
+    .filter((rect) => rect.getAttribute('opacity') === opacity && rect.getAttribute('height') === '200');
+}
+
 describe('ReferenceVolumeChart · 左量右价几何与基础渲染', () => {
-  it('52 周全窗口出量柱与价格线；档期琥珀带两段；图例收敛「销量 / 价格 / 档期 / 事件」', () => {
+  it('52 周全窗口出量柱与价格线；图内无常驻琥珀档期带；图例「销量 / 价格 / 档期 / 事件 + 图内高亮」', () => {
     const { container } = render(
       <ReferenceVolumeChart product={MATE80} win={FULL} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={identity} />,
     );
@@ -82,16 +88,18 @@ describe('ReferenceVolumeChart · 左量右价几何与基础渲染', () => {
     const pricePaths = Array.from(overlay.querySelectorAll('path'))
       .filter((path) => path.getAttribute('stroke') === '#c7000b' && !path.getAttribute('stroke-dasharray'));
     expect(pricePaths.length).toBe(1);
-    const bands = container.querySelectorAll('rect[fill="#ffefcf"]');
-    expect(bands.length).toBe(2);
-    // 图例四项裸标签（不带解释括号）
+    // 删除图内常驻琥珀档期带（warningSoft #ffefcf 不再出现）
+    expect(container.querySelectorAll('rect[fill="#ffefcf"]').length).toBe(0);
+    // 图例四项裸标签 + 图内高亮开关
     const text = document.body.textContent ?? '';
     expect(text).toContain('销量');
     expect(text).toContain('价格');
     expect(text).toContain('档期');
     expect(text).toContain('事件');
+    expect(text).toContain('图内高亮：关');
     expect(text).not.toContain('周销（量柱）');
     expect(text).not.toContain('事件锚（预标 / 补录）');
+    expect(screen.getByRole('switch', { name: '图内高亮：关' }).getAttribute('aria-checked')).toBe('false');
   });
 
   it('左量右价：销量轴线在绘图区左侧（plotLeft − 10），价格刻度文本在绘图区右侧', () => {
@@ -118,38 +126,44 @@ describe('ReferenceVolumeChart · 左量右价几何与基础渲染', () => {
     expect(label).toContain(MATE80.launchWeekLabel);
   });
 
-  it('受控窗口 [16, 31]：X 周标签只在窗口内（W17 / W32），618 档期带在窗内', () => {
-    render(
+  it('受控窗口 [16, 31]：X 周标签只在窗口内（W17 / W32）；618 档期 = 琥珀顶部小标（区间箭头-线），窗外档期不渲染', () => {
+    const { container } = render(
       <ReferenceVolumeChart product={MATE80} win={[16, 31]} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={identity} />,
     );
     expect(screen.queryByText('W1')).toBeNull();
     expect(screen.getAllByText('W17').length).toBeGreaterThan(0);
     expect(screen.getAllByText('W32').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/黑五档期/)).toBeNull();
-    const bands = document.querySelectorAll('rect[fill="#ffefcf"]');
-    expect(bands.length).toBe(1);
+    // 窗内档期小标（618 档期 W23–W26）；窗外（黑五档期 W47–W50）不渲染
+    expect(screen.getByRole('img', { name: '档期 618 档期 W23–W26' })).toBeTruthy();
+    expect(screen.queryByRole('img', { name: /黑五档期/ })).toBeNull();
+    // 区间小标形态 = 左右小箭头（fill none 折线）+ 中间连线，无背景 rect
+    const overlay = overlayOf(container);
+    const arrowHeads = Array.from(overlay.querySelectorAll('path'))
+      .filter((path) => path.getAttribute('fill') === 'none' && path.getAttribute('stroke') === '#f5a623');
+    expect(arrowHeads.length).toBe(2);
+    const connectors = Array.from(overlay.querySelectorAll('line'))
+      .filter((line) => !line.getAttribute('stroke-dasharray') && line.getAttribute('stroke') === '#f5a623' && line.getAttribute('y1') === line.getAttribute('y2'));
+    expect(connectors.length).toBe(1);
   });
 });
 
-describe('ReferenceVolumeChart · 图顶事件轨（单周锚 / 时段轨 / +N 聚合）', () => {
-  it('单周事件 = 虚线 + 方形锚（可 Tab、role button、可访问名称含周段与标题）；点击回传统一选中', () => {
+describe('ReferenceVolumeChart · 顶部小标轨（单周方标 / 区间箭头-线 / +N 聚合）', () => {
+  it('单周事件 = 小方标（可 Tab、role button、可访问名称含周段与标题）；不再画全高虚线；点击回传统一选中', () => {
     const onSelectEvent = vi.fn();
     const { container } = render(
       <ReferenceVolumeChart product={MATE80} win={FULL} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={identity} onSelectEvent={onSelectEvent} />,
     );
     const anchor = screen.getByRole('button', { name: '事件 W23 618 档期脉冲' });
     expect(anchor.getAttribute('tabindex')).toBe('0');
-    // 单周锚 = 虚线（全高）+ 6×7 方形锚
-    const dashed = Array.from(container.querySelectorAll('svg line'))
-      .filter((line) => line.getAttribute('stroke-dasharray') === '3 4');
-    expect(dashed.length).toBeGreaterThanOrEqual(5); // 5 个预标单周事件
+    // 单周 = 小方标：无全高虚线（旧形态删除）
+    expect(Array.from(container.querySelectorAll('line')).filter((line) => line.getAttribute('stroke-dasharray') === '3 4').length).toBe(0);
     fireEvent.click(anchor);
     expect(onSelectEvent).toHaveBeenCalledWith('ev-m80-618');
     fireEvent.keyDown(anchor, { key: 'Enter' });
     expect(onSelectEvent).toHaveBeenLastCalledWith('ev-m80-618');
   });
 
-  it('时段事件（覆写为 W23–W26）在事件轨画 □────□（连接线 + 两端方形锚），点击回传选中', () => {
+  it('时段事件（覆写为 W23–W26）= 左右箭头 + 中间线小标（整段可点），点击回传选中', () => {
     const onSelectEvent = vi.fn();
     const events = presetEvents(MATE80, {
       'lc-test-618': undefined,
@@ -159,18 +173,18 @@ describe('ReferenceVolumeChart · 图顶事件轨（单周锚 / 时段轨 / +N �
         createdAt: 't', updatedAt: 't',
       },
     });
-    const { container } = render(
-      <ReferenceVolumeChart product={MATE80} win={FULL} events={events} labelOf={labelOf} colorOf={identity} onSelectEvent={onSelectEvent} />,
+    render(
+      <ReferenceVolumeChart
+        product={MATE80} win={FULL} events={events} labelOf={labelOf} colorOf={identity}
+        selectedEventId="ev-m80-618" onSelectEvent={onSelectEvent}
+      />,
     );
     const anchor = screen.getByRole('button', { name: '事件 W23–W26 618 档期脉冲' });
+    // 选中时段：端点周标签显示在轨上方
+    expect(screen.getByText('W23–W26')).toBeTruthy();
     fireEvent.click(anchor);
-    expect(onSelectEvent).toHaveBeenCalledWith('ev-m80-618');
-    // 时段轨连接线（lane 0/1 顶部的横向线）+ 两端锚
-    const overlay = overlayOf(container);
-    const trackLines = Array.from(overlay.querySelectorAll('line'))
-      .filter((line) => !line.getAttribute('stroke-dasharray') && line.getAttribute('y1') === line.getAttribute('y2'));
-    expect(trackLines.length).toBeGreaterThanOrEqual(1);
-    void container;
+    // 已选中态下点击 = 关闭详情（toggle 语义不变）
+    expect(onSelectEvent).toHaveBeenCalledWith(null);
   });
 
   it('第三条重叠事件聚合 +N：点击 onOverflowEvents 回传只含这些事件的集合', () => {
@@ -203,54 +217,148 @@ describe('ReferenceVolumeChart · 图顶事件轨（单周锚 / 时段轨 / +N �
     expect(triple.get('c')?.overflow.map((o) => o.id)).toEqual(['c']);
   });
 
-  it('名录 hover（hoverEventId）→ 弱竖线出现；离开恢复由父层控制', () => {
+  it('名录 hover（hoverEventId）→ 对应区间临时高亮（0.16）；移开恢复由父层控制', () => {
+    const colorOf = (typeId: string): string => (typeId === 'promo' ? '#f5a623' : '#0070f3');
     const { rerender } = render(
-      <ReferenceVolumeChart product={MATE80} win={[16, 31]} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={identity} hoverEventId="ev-m80-618" />,
+      <ReferenceVolumeChart product={MATE80} win={[16, 31]} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={colorOf} hoverEventId="ev-m80-618" />,
     );
-    const weakLine = () => Array.from(document.body.querySelectorAll('line'))
-      .filter((line) => line.getAttribute('stroke-dasharray') === '2 3' && line.getAttribute('stroke-opacity') === '0.4');
-    expect(weakLine().length).toBeGreaterThanOrEqual(1);
+    const hoverRects = () => highlightRects(document.body as HTMLElement, '0.16');
+    expect(hoverRects().length).toBe(1);
+    expect(hoverRects()[0].getAttribute('fill')).toBe('#f5a623');
     rerender(
-      <ReferenceVolumeChart product={MATE80} win={[16, 31]} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={identity} hoverEventId={null} />,
+      <ReferenceVolumeChart product={MATE80} win={[16, 31]} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={colorOf} hoverEventId={null} />,
     );
-    expect(weakLine().length).toBe(0);
+    expect(hoverRects().length).toBe(0);
   });
 });
 
-describe('ReferenceVolumeChart · 事件详情与事件时段读数', () => {
-  it('选中事件 → 详情卡：实际输入周 / 覆盖 / 计算口径 / 预标参考分栏（impact 不参与计算）', () => {
+describe('ReferenceVolumeChart · 图内高亮开关三态', () => {
+  const colorOf = (typeId: string): string => (typeId === 'promo' ? '#f5a623' : '#0070f3');
+
+  it('默认关：图内无任何事件高亮（只有顶部小标）', () => {
+    const { container } = render(
+      <ReferenceVolumeChart product={MATE80} win={FULL} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={colorOf} />,
+    );
+    expect(screen.getByRole('switch', { name: '图内高亮：关' }).getAttribute('aria-checked')).toBe('false');
+    expect(highlightRects(container, '0.12').length).toBe(0);
+    expect(highlightRects(container, '0.16').length).toBe(0);
+  });
+
+  it('开：所有小标对应区间渲染各自颜色 0.12 底色（事件 + 档期带语义回归）；再点关恢复', () => {
+    const { container } = render(
+      <ReferenceVolumeChart product={MATE80} win={FULL} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={colorOf} />,
+    );
+    // 窗内 5 个预标单周事件 + 2 个档期带 = 7 条高亮
+    fireEvent.click(screen.getByRole('switch', { name: '图内高亮：关' }));
+    expect(screen.getByRole('switch', { name: '图内高亮：开' }).getAttribute('aria-checked')).toBe('true');
+    const rects = highlightRects(container, '0.12');
+    expect(rects.length).toBe(7);
+    expect(rects.filter((rect) => rect.getAttribute('fill') === '#f5a623').length).toBe(4); // 618 / 黑五事件 + 两条档期带
+    expect((document.body.textContent ?? '')).toContain('图内高亮：开');
+    fireEvent.click(screen.getByRole('switch', { name: '图内高亮：开' }));
+    expect(screen.getByRole('switch', { name: '图内高亮：关' }).getAttribute('aria-checked')).toBe('false');
+    expect(highlightRects(container, '0.12').length).toBe(0);
+    expect((document.body.textContent ?? '')).toContain('图内高亮：关');
+  });
+
+  it('hover 任意小标 → 对应区间临时高亮（0.16），不受开关影响；移开恢复', () => {
+    const { container } = render(
+      <ReferenceVolumeChart product={MATE80} win={FULL} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={colorOf} />,
+    );
+    // 开关关闭状态下 hover 618 事件小标 → 临时高亮（pointerOver/Out 驱动
+    // React 的 enter/leave 合成）
+    const anchor = screen.getByRole('button', { name: '事件 W23 618 档期脉冲' });
+    fireEvent.pointerOver(anchor);
+    expect(highlightRects(container, '0.16').length).toBe(1);
+    expect(highlightRects(container, '0.16')[0].getAttribute('fill')).toBe('#f5a623');
+    fireEvent.pointerOut(anchor);
+    expect(highlightRects(container, '0.16').length).toBe(0);
+    // 开关开启后 hover 仍在常驻层之上（临时高亮独立存在）
+    fireEvent.click(screen.getByRole('switch', { name: '图内高亮：关' }));
+    fireEvent.pointerOver(anchor);
+    expect(highlightRects(container, '0.12').length).toBe(7);
+    expect(highlightRects(container, '0.16').length).toBe(1);
+    fireEvent.pointerOut(anchor);
+    expect(highlightRects(container, '0.16').length).toBe(0);
+    expect(highlightRects(container, '0.12').length).toBe(7);
+  });
+});
+
+describe('ReferenceVolumeChart · 证据浮框（五项精简）', () => {
+  it('选中事件 → 五项浮框：名称 + 起止周 / 幅度 / 衰减 / 说明（有才显示）/ 编辑；无读数行、无来源标注', () => {
     const events = presetEvents(MATE80, {
       [`${MATE80.id}::ev-m80-618`]: {
         id: `${MATE80.id}::ev-m80-618`, scopeKey: 's', productId: MATE80.id, sourceEventId: 'ev-m80-618',
-        baseFingerprint: 'x', patch: { startWeek: 22, endWeek: 25, note: '平台补贴与档期降价叠加' }, revision: 1,
+        baseFingerprint: 'x', patch: { startWeek: 22, endWeek: 25, note: '平台补贴与档期降价叠加', impact: { magnitudePct: 42, durationWeeks: 4, decay: 'decreasing' } }, revision: 1,
         createdAt: 't', updatedAt: 't',
       },
     });
     render(
       <ReferenceVolumeChart
         product={MATE80} win={[16, 31]} events={events} labelOf={labelOf} colorOf={identity}
-        selectedEventId="ev-m80-618" onSelectEvent={vi.fn()} onEditEvent={vi.fn()} onRestorePreset={vi.fn()}
+        selectedEventId="ev-m80-618" onSelectEvent={vi.fn()} onEditEvent={vi.fn()}
       />,
     );
-    const detail = screen.getByRole('group', { name: '事件时段读数 W23–W26 618 档期脉冲' });
+    const detail = screen.getByRole('group', { name: '事件详情 W23–W26 618 档期脉冲' });
     const text = detail.textContent ?? '';
-    expect(text).toContain('事件时段 4 周');
-    expect(text).toContain('销量有效 4/4');
-    expect(text).toContain('期内均周销');
-    expect(text).toContain('较前 4 周');
-    expect(text).toContain('前段 W19–W22 · 均值比均值；端点取实际有效周');
-    expect(text).toContain('价格 $799（W23）→ $799（W26）');
-    // 预标参考分栏：impact 只作标注，并明示不参与计算
-    expect(text).toContain('预标参考 +42% · 4 周 · 未标衰减（仅预标，不参与上述计算）');
-    expect(text).toContain('说明 平台补贴与档期降价叠加');
-    expect(text).toContain('预标 · 已改');
-    // 动作：编辑 / 恢复预标 / 关闭（可访问名称含周段与标题）
+    // 五项：名称 + 起止周（浮框头）/ 幅度 / 衰减 / 说明 / 编辑
+    expect(text).toContain('W23–W26 · 618 档期脉冲');
+    expect(text).toContain('幅度');
+    expect(text).toContain('+42%');
+    expect(text).toContain('衰减');
+    expect(text).toContain('递减');
+    expect(text).toContain('平台补贴与档期降价叠加');
     expect(screen.getByRole('button', { name: '编辑事件 W23–W26 618 档期脉冲' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '恢复预标 W23–W26 618 档期脉冲' })).toBeTruthy();
+    // 删除的读数行与来源标注不再出现
+    expect(text).not.toContain('事件时段');
+    expect(text).not.toContain('销量有效');
+    expect(text).not.toContain('期内均周销');
+    expect(text).not.toContain('较前');
+    expect(text).not.toContain('前段');
+    expect(text).not.toContain('价格 $');
+    expect(text).not.toContain('计算');
+    expect(text).not.toContain('预标参考');
+    expect(text).not.toContain('预标 · 已改');
+    expect(text).not.toContain('预标');
+    expect(text).not.toContain('草稿');
+    expect(text).not.toContain('源已更新');
+    // 关闭按钮
     fireEvent.click(screen.getByRole('button', { name: '关闭事件详情' }));
   });
 
-  it('全缺时段 → 「无法计算」，不补 0；无有效价格只显示 —', () => {
+  it('fixture 预标事件：幅度 +42%、衰减 未标（decay 缺省）；说明缺省不显示', () => {
+    render(
+      <ReferenceVolumeChart
+        product={MATE80} win={[16, 31]} events={presetEvents(MATE80)} labelOf={labelOf} colorOf={identity}
+        selectedEventId="ev-m80-618" onSelectEvent={vi.fn()} onEditEvent={vi.fn()}
+      />,
+    );
+    const detail = screen.getByRole('group', { name: '事件详情 W23 618 档期脉冲' });
+    const text = detail.textContent ?? '';
+    expect(text).toContain('W23 · 618 档期脉冲');
+    expect(text).toContain('+42%');
+    expect(text).toContain('未标');
+    expect(text).not.toContain('平台补贴');
+    expect(screen.getByRole('button', { name: '编辑事件 W23 618 档期脉冲' })).toBeTruthy();
+  });
+
+  it('无参考读数的补录事件：幅度 —、衰减 未标', () => {
+    const composed: EffectiveReferenceEvent[] = [
+      { id: 'ce-noimpact', productId: MATE80.id, source: 'composed', typeId: 'other', startWeek: 22, endWeek: 22, label: '本地记录', note: '', impact: null, overridden: false, revision: 1, createdAt: 't', updatedAt: 't' },
+    ];
+    render(
+      <ReferenceVolumeChart
+        product={MATE80} win={[16, 31]} events={composed} labelOf={labelOf} colorOf={identity}
+        selectedEventId="ce-noimpact" onSelectEvent={vi.fn()} onEditEvent={vi.fn()}
+      />,
+    );
+    const detail = screen.getByRole('group', { name: '事件详情 W23 本地记录' });
+    const text = detail.textContent ?? '';
+    expect(text).toContain('—');
+    expect(text).toContain('未标');
+  });
+
+  it('全缺时段：五项浮框照常渲染（幅度 — / 衰减 未标），不再有「无法计算」读数行', () => {
     const sparse: LifecycleProductSeed = {
       ...MATE80,
       id: 'lc-sparse-r',
@@ -265,9 +373,10 @@ describe('ReferenceVolumeChart · 事件详情与事件时段读数', () => {
         selectedEventId="ev-m80-618"
       />,
     );
-    const text = (screen.getByRole('group', { name: '事件时段读数 W23 618 档期脉冲' }).textContent ?? '');
-    expect(text).toContain('无法计算');
-    expect(text).toContain('销量有效 0/1');
+    const detail = screen.getByRole('group', { name: '事件详情 W23 618 档期脉冲' });
+    expect((detail.textContent ?? '')).toContain('幅度');
+    expect((detail.textContent ?? '')).not.toContain('无法计算');
+    expect((detail.textContent ?? '')).not.toContain('销量有效');
   });
 });
 
@@ -320,6 +429,8 @@ describe('ReferenceVolumeChart · 拖选（区间读数 / 事件时段回填）'
     expect(onSelectRange).toHaveBeenLastCalledWith(11, 11);
     // 图 aria 名提示拖选模式
     expect((overlayOf(container).getAttribute('aria-label') ?? '')).toContain('拖选事件时段模式');
+    // 拖选模式下小标不抢指针（role button 移除）
+    expect(screen.queryByRole('button', { name: '事件 W23 618 档期脉冲' })).toBeNull();
   });
 });
 

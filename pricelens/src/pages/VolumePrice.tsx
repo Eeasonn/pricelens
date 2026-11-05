@@ -69,6 +69,21 @@
 // 选择浮层同款，onPick 回写 setSelectionPlatform 后量价取数随所选平台重算），
 // 全部并入图下明细卡首行（2026-11-02 已并入，本次只压形态）。屏蔽/悬停联动
 // 量价页没有。
+// ============================================================
+// 2026-11-05 三针整改（Eason 看图反馈）：
+// ①胶囊带逐格严格居中对齐 + 隐藏收纳区改位——胶囊带只放**可见面板**胶囊
+//   （gridColumns = 可见面板数，与面板网格同一条模板字符串/同 gap/同轴列偏移，
+//   对位参数 single-source），隐藏产品移入工具行「销毛成本」右侧的 HiddenVault
+//   专用收纳区（迷你芯片、>3 枚收缩为 +N，点击恢复回原列位；「全部恢复」并入），
+//   主品视图不再渲染面板区下方 HiddenTray（组内对比视图行为不变）；
+// ②主图图例（经典 折后价/RRP/销量、销毛成本 折后价/成本/销量/销毛率）全部
+//   可点击切换对应元素显隐，隐藏态降透明（全站图例语言 opacity .45），会话态
+//   跨页保留（volume.legendOff）；库存卡/销毛卡图例已在各卡内支持（确认覆盖）；
+// ③X 轴格式审计收口：成本柱呈现补 X 轴日历标签行（axisTickPlan 口径，周 =
+//   2026W33，月 MM/季 Qn + 年份第二行），库存 · DOS 卡改传 shortBucketLabel
+//   标签（原先周粒度是周三 MM-DD）；「时间轴同步」开关承载盒改为轨道带同几何
+//   （TRACK_RAIL_H）+ flex 居中——按钮中心恒等于轨道带中心，不再依赖按钮高度。
+// ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { message, Popover, Segmented } from 'antd';
 import { DownOutlined, HolderOutlined } from '@ant-design/icons';
@@ -97,6 +112,7 @@ import {
   normalizeWindow,
   perUsdOf,
   seriesSpanRange,
+  shortBucketLabel,
   splitAxisWidth,
   yPxOf,
   type Bucket,
@@ -117,8 +133,8 @@ import MergedCompareChart, { type MergedCompareProduct } from './volume/MergedCo
 import InventoryDosCard from './volume/InventoryDosCard';
 import { inventoryDemoOf } from './volume/inventoryDemo';
 import PanelHeader from './volume/PanelHeader';
-import PanelTimeTrack from './volume/PanelTimeTrack';
-import HiddenTray, { type HiddenTrayItem } from './volume/HiddenTray';
+import PanelTimeTrack, { TRACK_BLOCK_H, TRACK_RAIL_H } from './volume/PanelTimeTrack';
+import HiddenTray, { HiddenVault, type HiddenTrayItem } from './volume/HiddenTray';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
 import { marginCrossX } from './volume/marginCostGeometry';
 import SpreadRangeCard from './volume/SpreadRangeCard';
@@ -160,6 +176,32 @@ function hexToRgba(hex: string, alpha: number): string {
 
 /** 粒度名词（周/月/季）：脚注与无障碍文案随粒度换字，不把「周」硬套在月/季视图 */
 const granNounOf = (granularity: Granularity): string => (granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季');
+
+/** 面板网格列模板（2026-11-05 整改1① 对位 single-source）：胶囊带行与面板网格
+ *  必须由本函数取同一条字符串——同容器宽（trackWidth 内）、同模板、同 gap、
+ *  同轴列偏移（lead），胶囊组逐格居中于其面板上方 */
+const panelGridCols = (count: number): string => `repeat(${Math.max(1, count)}, minmax(0, 1fr))`;
+
+/** 主图图例可点击项（2026-11-05 整改2）：aria-pressed + 隐藏态降透明（全站图例
+ *  显隐语言 opacity .45，SuppLegend/WorkbenchLegend 同款），glyph 形态随各系列 */
+function LegendToggleItem(props: { label: string; off: boolean; onToggle: () => void; glyph: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={!props.off}
+      title={props.off ? `显示${props.label}` : `隐藏${props.label}`}
+      onClick={props.onToggle}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+        border: 'none', background: 'none', padding: 0, font: 'inherit', fontSize: 11, lineHeight: '14px',
+        color: 'inherit', cursor: 'pointer', opacity: props.off ? 0.45 : 1,
+      }}
+    >
+      {props.glyph}
+      {props.label}
+    </button>
+  );
+}
 
 interface SlotInfo {
   isOwn: boolean;
@@ -283,15 +325,21 @@ export default function VolumePrice() {
     setViewMode(mode);
     setHiddenPanels((prev) => (prev.length === 0 ? prev : []));
   };
-  // 焦点承接（设计 §5.5）：隐藏后药丸随面板卸载，焦点移到暂存条对应迷你药丸；
-  // 迷你药丸恢复后焦点回该面板头药丸；「全部恢复」后落到第一个恢复面板的药丸
-  const pendingFocusRef = useRef<{ where: 'tray' | 'panel'; key: string } | null>(null);
+  // 焦点承接（设计 §5.5）：隐藏后药丸随面板卸载，焦点移到暂存条对应迷你药丸
+  // （组视图 HiddenTray）或收纳区对应芯片（主品视图 HiddenVault，2026-11-05 整改1）；
+  // 迷你药丸/芯片恢复后焦点回该面板头药丸；「全部恢复」后落到第一个恢复面板的药丸
+  const pendingFocusRef = useRef<{ where: 'tray' | 'panel' | 'vault'; key: string } | null>(null);
   const trayItemRefs = useRef(new Map<string, HTMLButtonElement>());
+  const vaultItemRefs = useRef(new Map<string, HTMLButtonElement>());
   const emptyRestoreRef = useRef<HTMLButtonElement | null>(null);
   const panelPillHostRefs = useRef(new Map<string, HTMLSpanElement>());
   const registerTrayItem = (key: string, el: HTMLButtonElement | null): void => {
     if (el) trayItemRefs.current.set(key, el);
     else trayItemRefs.current.delete(key);
+  };
+  const registerVaultItem = (key: string, el: HTMLButtonElement | null): void => {
+    if (el) vaultItemRefs.current.set(key, el);
+    else vaultItemRefs.current.delete(key);
   };
   const registerPanelPillHost = (key: string, el: HTMLSpanElement | null): void => {
     if (el) panelPillHostRefs.current.set(key, el);
@@ -301,6 +349,16 @@ export default function VolumePrice() {
     const pending = pendingFocusRef.current;
     if (!pending) return;
     pendingFocusRef.current = null;
+    if (pending.where === 'vault') {
+      const chip = vaultItemRefs.current.get(pending.key);
+      if (chip) {
+        chip.focus();
+        return;
+      }
+      // 主品视图收纳区恒渲染（有隐藏必有芯片），缺兜底到空态「全部恢复」
+      emptyRestoreRef.current?.focus();
+      return;
+    }
     if (pending.where === 'tray') {
       const mini = trayItemRefs.current.get(pending.key);
       if (mini) {
@@ -365,6 +423,26 @@ export default function VolumePrice() {
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
   // 悬停页签比率：默认周环比（与价格看板同一默认）；会话态跨页保留（192 轮）
   const [tipMode, setTipMode] = usePageViewState<'discount' | 'wow'>('volume.tipMode', () => 'wow');
+  // ---- 主图图例显隐（2026-11-05 整改2）：图例项点击切换对应图表元素显隐，
+  //      隐藏态图例降透明（全站语言 opacity .45），会话态跨页保留。键空间：
+  //      经典 = 'discounted' | 'rrp' | 'volume'；销毛成本 = 'cbPrice' | 'cbCost'
+  //      | 'cbVolume' | 'cbMargin'。图例只切显隐，不重算轴（yCfg/costBarMax
+  //      仍按全量可见面板序列）----
+  const [legendOff, setLegendOff] = usePageViewState<Record<string, boolean>>('volume.legendOff', () => ({}));
+  const legendOffOf = useCallback((key: string): boolean => legendOff[key] === true, [legendOff]);
+  const toggleLegend = useCallback((key: string): void => {
+    setLegendOff((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, [setLegendOff]);
+  // 经典模式传给 Chart 的价格口径 = 全局筛选 ∩ 图例显隐（图例隐藏只影响本页图内
+  // 渲染，不回写全局 priceTypes——顶部筛选条的价格开关语义保持独立）
+  const classicPriceTypes = useMemo(
+    () => ({
+      ...state.priceTypes,
+      discounted: state.priceTypes.discounted && !legendOffOf('discounted'),
+      rrp: state.priceTypes.rrp && !legendOffOf('rrp'),
+    }),
+    [state.priceTypes, legendOffOf],
+  );
   const [crossY, setCrossY] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   // 查看窗口 = 会话态跨页保留（与价格看板对齐；范围改动等失义路径照旧复位）
@@ -679,12 +757,15 @@ export default function VolumePrice() {
     setHiddenPanels((prev) => (prev.length === 0 ? prev : []));
     if (first) pendingFocusRef.current = { where: 'panel', key: first };
   };
-  // 主品视图药丸显隐（2026-11-03 改版）：药丸常驻工具行控制区（显/隐同位切换，
-  // 按钮不卸载），不走暂存条焦点承接（pendingFocus）——键盘焦点原地保留在药丸上；
-  // 全隐藏仍走面板区空态「全部恢复」（restoreAllPanels 的焦点落到控制区药丸）。
-  // 组视图明细卡药丸继续走 hidePanel/restorePanel（暂存条承接，交互不变）。
-  const togglePanelVisible = (key: string): void => {
-    setHiddenPanels((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  // 主品视图药丸显隐（2026-11-05 整改1② 改版）：胶囊带只放**可见面板**胶囊，
+  // 点击 = 隐藏（收进「销毛成本」右侧 HiddenVault 收纳区，焦点承接 'vault'）；
+  // 收纳区芯片点击 = 恢复（restorePanel，焦点回胶囊带原列位）；全隐藏仍走面板区
+  // 空态「全部恢复」（restoreAllPanels 的焦点落到控制区药丸），收纳区行尾也有
+  // 「全部恢复」轻量钮。组视图明细卡药丸继续走 hidePanel/restorePanel（暂存条
+  // 承接，交互不变）。
+  const hideFromBand = (key: string): void => {
+    setHiddenPanels((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    pendingFocusRef.current = { where: 'vault', key };
   };
   // 拖拽落点 = 把被拖面板插到目标面板当前位置（同价格页 movePanelTo）
   const movePanelTo = (dragKey: string, targetKey: string): void => {
@@ -727,9 +808,10 @@ export default function VolumePrice() {
     };
   };
 
-  // 暂存条清单：跟随当前展示序（拖拽换位序优先）；产品已从筛选器移除的隐藏项
-  // 不再出现（面板 key 不在清单里即随暂存条消失）。全隐藏时空态承担恢复，
-  // 暂存条不重复渲染（设计 §4.A.5）。
+  // 暂存条清单（组内对比视图专用，2026-11-05 整改1② 起主品视图恢复入口 =
+  // 收纳区 HiddenVault）：跟随当前展示序（拖拽换位序优先）；产品已从筛选器移除
+  // 的隐藏项不再出现（面板 key 不在清单里即随暂存条消失）。全隐藏时空态承担
+  // 恢复，暂存条不重复渲染（设计 §4.A.5）。
   const trayItems = useMemo<HiddenTrayItem[]>(() => {
     if (panelCount > 0 && visibleCount === 0) return [];
     return orderedPanels
@@ -1264,44 +1346,60 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                             胶囊（含清除）；无选区时右侧留空（拖动提示语已删，2026-11-02 Eason）。定高
                             PANEL_META_ROW_H——共享轴列按同一常量上偏移，刻度才与绘图区对齐 */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: PANEL_META_ROW_H, overflow: 'hidden', padding: '0 4px', margin: '4px 0 8px' }}>
-                          <div aria-label="图例" style={{ display: 'flex', alignItems: 'center', gap: 14, color: color.mute, fontSize: 11, lineHeight: '14px', flexWrap: 'nowrap', minWidth: 0, overflow: 'hidden' }}>
+                          {/* 图例（2026-11-05 整改2）：全部项可点击切换对应图表元素显隐
+                              （隐藏态降透明 = 全站图例语言）；状态存会话态 volume.legendOff */}
+                          <div role="group" aria-label="图例（点击切换元素显隐）" style={{ display: 'flex', alignItems: 'center', gap: 14, color: color.mute, fontSize: 11, lineHeight: '14px', flexWrap: 'nowrap', minWidth: 0, overflow: 'hidden' }}>
                             {costbar ? (
                               <>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                  <span aria-hidden style={{ width: 10, height: 12, borderRadius: 1, background: hexToRgba(seriesColor, 0.15), boxShadow: `inset 0 0 0 1.5px ${seriesColor}` }} />
-                                  折后价
-                                </span>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                  <span aria-hidden style={{ width: 14, height: 2, background: color.mute }} />
-                                  成本
-                                </span>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                  <span aria-hidden style={{ width: 14, height: 1.5, background: selectAccent }} />
-                                  销量
-                                </span>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                  <span aria-hidden style={marginLineOn ? { width: 14, height: 0, borderTop: '2px dashed #f5a623' } : { width: 8, height: 10, borderRadius: 1, background: 'rgba(245, 166, 35, 0.32)' }} />
-                                  {marginLineOn ? '销毛率（顶部线 · 标注最高/最低/最新）' : '销毛率（下垂）'}
-                                </span>
+                                <LegendToggleItem
+                                  label="折后价"
+                                  off={legendOffOf('cbPrice')}
+                                  onToggle={() => toggleLegend('cbPrice')}
+                                  glyph={<span aria-hidden style={{ width: 10, height: 12, borderRadius: 1, background: hexToRgba(seriesColor, 0.15), boxShadow: `inset 0 0 0 1.5px ${seriesColor}` }} />}
+                                />
+                                <LegendToggleItem
+                                  label="成本"
+                                  off={legendOffOf('cbCost')}
+                                  onToggle={() => toggleLegend('cbCost')}
+                                  glyph={<span aria-hidden style={{ width: 14, height: 2, background: color.mute }} />}
+                                />
+                                <LegendToggleItem
+                                  label="销量"
+                                  off={legendOffOf('cbVolume')}
+                                  onToggle={() => toggleLegend('cbVolume')}
+                                  glyph={<span aria-hidden style={{ width: 14, height: 1.5, background: selectAccent }} />}
+                                />
+                                <LegendToggleItem
+                                  label={marginLineOn ? '销毛率（顶部线 · 标注最高/最低/最新）' : '销毛率（下垂）'}
+                                  off={legendOffOf('cbMargin')}
+                                  onToggle={() => toggleLegend('cbMargin')}
+                                  glyph={<span aria-hidden style={marginLineOn ? { width: 14, height: 0, borderTop: '2px dashed #f5a623' } : { width: 8, height: 10, borderRadius: 1, background: 'rgba(245, 166, 35, 0.32)' }} />}
+                                />
                               </>
                             ) : (
                               <>
                                 {state.priceTypes.discounted && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                    <span aria-hidden style={{ width: 16, height: 2, background: seriesColor }} />
-                                    折后价
-                                  </span>
+                                  <LegendToggleItem
+                                    label="折后价"
+                                    off={legendOffOf('discounted')}
+                                    onToggle={() => toggleLegend('discounted')}
+                                    glyph={<span aria-hidden style={{ width: 16, height: 2, background: seriesColor }} />}
+                                  />
                                 )}
                                 {state.priceTypes.rrp && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                    <span aria-hidden style={{ width: 16, height: 1, background: seriesColor, opacity: 0.85 }} />
-                                    RRP
-                                  </span>
+                                  <LegendToggleItem
+                                    label="RRP"
+                                    off={legendOffOf('rrp')}
+                                    onToggle={() => toggleLegend('rrp')}
+                                    glyph={<span aria-hidden style={{ width: 16, height: 1, background: seriesColor, opacity: 0.85 }} />}
+                                  />
                                 )}
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                  <span aria-hidden style={{ width: 8, height: 9, borderRadius: 1, background: seriesColor, opacity: 0.22 }} />
-                                  销量
-                                </span>
+                                <LegendToggleItem
+                                  label="销量"
+                                  off={legendOffOf('volume')}
+                                  onToggle={() => toggleLegend('volume')}
+                                  glyph={<span aria-hidden style={{ width: 8, height: 9, borderRadius: 1, background: seriesColor, opacity: 0.22 }} />}
+                                />
                               </>
                             )}
                           </div>
@@ -1387,6 +1485,11 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               volumeAxisMax={volumeAxisMax}
                               rateAxisMax={costRateAxisMax}
                               marginLineOn={marginLineOn}
+                              granularity={state.granularity}
+                              hidePrice={legendOffOf('cbPrice')}
+                              hideCost={legendOffOf('cbCost')}
+                              hideVolume={legendOffOf('cbVolume')}
+                              hideMargin={legendOffOf('cbMargin')}
                               currency={state.currency}
                               seriesColor={seriesColor}
                               focusIdx={activeIdx}
@@ -1401,7 +1504,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                                 geom={geoms[p.idx] ?? null}
                                 plotTop={PANEL_GRID_TOP}
                                 plotHeight={yCfg.plotHeight}
-                                values={volumes[p.idx]}
+                                values={legendOffOf('volume') ? [] : volumes[p.idx]}
                                 vMax={panelVMax[p.idx]}
                                 color={seriesColor}
                                 hoverIdx={activeIdx}
@@ -1413,7 +1516,9 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                                 series={reading ? p.vis.map((series) => ({ ...series, color: seriesColor })) : p.vis}
                             granularity={state.granularity}
                             currency={state.currency}
-                            priceTypes={state.priceTypes}
+                            // 图例显隐只影响本图渲染（整改2）：经典价格线按 图例∩全局 口径，
+                            // 不回写顶部筛选条的 priceTypes
+                            priceTypes={classicPriceTypes}
                             gridLeft={CHART_GRID_LEFT}
                             gridRight={CHART_GRID_RIGHT}
                             gridTop={PANEL_GRID_TOP}
@@ -1701,11 +1806,13 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                       </div>
                       );
   });
-  // ---- 主品视图顶部控制区数据（2026-11-03 改版）----
-  // 产品显隐药丸带：全部面板（含已隐藏）——药丸常驻、显隐同位切换；nameText/
-  // romText/渠道徽标与明细卡身份区同源（pillOf），DNS chip 的 onPick 数据流原样
+  // ---- 主品视图顶部控制区数据（2026-11-03 改版；2026-11-05 整改1 收口）----
+  // 产品显隐药丸带：只放**可见面板**（展示序）——隐藏产品移入 HiddenVault 收纳区，
+  // 不再占带内格，胶囊带列数 = 可见面板数与面板网格完全一致（逐格居中对齐）；
+  // nameText/romText/渠道徽标与明细卡身份区同源（pillOf），DNS chip 的 onPick
+  // 数据流原样
   const mainBandItems = reading
-    ? orderedPanels.map((p) => {
+    ? visiblePanels.map((p) => {
         const pill = pillOf(p);
         return {
           key: p.spec.key,
@@ -1713,10 +1820,19 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
           name: p.name,
           nameText: pill.nameText,
           romText: pill.romText,
-          hidden: hiddenSet.has(p.spec.key),
+          hidden: false,
           channel: pill.channel ?? null,
           channelCtl: pill.channelCtl ?? null,
         };
+      })
+    : [];
+  // 收纳区清单（主品视图）：被隐藏产品按展示序排（恢复后胶囊回面板网格原列位）
+  const vaultItems = reading
+    ? orderedPanels
+      .filter((p) => hiddenSet.has(p.spec.key))
+      .map((p) => {
+        const pill = pillOf(p);
+        return { key: p.spec.key, brand: p.brand, nameText: pill.nameText, romText: pill.romText };
       })
     : [];
   // 「本组对比」入口随格（2026-11-04 Eason 看图反馈）：每张有对比区的主品卡一枚，
@@ -1822,7 +1938,20 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   labelMode={labelMode}
                   onLabelMode={setLabelMode}
                   anomalySlot={<AnomalyQualityChip page="volume" />}
-                  priceTypesAfter={marginCtl}
+                  priceTypesAfter={
+                    /* 「销毛成本」右侧专用收纳区（2026-11-05 整改1②）：主品视图隐藏
+                       产品以迷你芯片直显（>3 枚收缩为 +N），点击恢复面板显示（胶囊回
+                       原列位）；「全部恢复」并入收纳区。组视图不出（暂存条行为不变） */
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      {marginCtl}
+                      {reading && vaultItems.length > 0 && (
+                        <>
+                          <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
+                          <HiddenVault items={vaultItems} onRestore={restorePanel} onRestoreAll={restoreAllPanels} registerItem={registerVaultItem} />
+                        </>
+                      )}
+                    </div>
+                  }
                   /* 主品控制带（胶囊 + 本组对比入口）2026-11-04 下移到面板上方的
                      胶囊带行（按面板位置对齐），不再占工具行 legend/compareEntry 槽 */
                   presentationSlot={marginOn ? (
@@ -1924,7 +2053,9 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
               const lead = axisW > 0 ? axisW + space.md : 0;
               const trackRatio = visibleCount > 0 ? visibleCount / Math.min(visibleCount, 3) : 1;
               const trackWidth = `calc(${lead}px + ${trackRatio} * (100% - ${lead}px))`;
-              const gridCols = `repeat(${Math.max(1, visibleCount)}, minmax(0, 1fr))`;
+              // 列模板 single-source（2026-11-05 整改1①）：明细卡行 / 胶囊带 / 面板网格
+              // 三处必须同一条字符串、同一个 gap——胶囊带逐格居中对齐的结构化保证
+              const gridCols = panelGridCols(visibleCount);
               const gridGap = reading ? 0 : space.md;
               const emptyBoxStyle = {
                 padding: '48px 0',
@@ -1954,18 +2085,20 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
               return (
                 <div className="lpl-card-scroll" style={{ overflowX: 'auto', marginBottom: space.sm }}>
                   <div style={{ minWidth: 880, width: trackWidth }}>
-                    {/* 主品控制带行（2026-11-04 Eason 看图反馈）：胶囊组 + 「本组对比」入口
-                        按面板位置对齐——与面板网格同列模板/列距、同轴列偏移（marginLeft
-                        lead），每个胶囊组居中于其面板上方；隐藏面板保留原列位（虚线胶囊
-                        同位恢复）。随面板横滚区一起滚动，列位恒对齐 */}
+                    {/* 主品控制带行（2026-11-04 Eason 看图反馈；2026-11-05 整改1① 收口）：
+                        胶囊组 + 「本组对比」入口按面板位置对齐——只放**可见面板**胶囊，
+                        gridColumns = 可见面板数（panelGridCols 与面板网格同一条模板
+                        字符串）、同 gap、同轴列偏移（marginLeft lead），每个胶囊组
+                        居中于其面板正上方；隐藏产品在收纳区，恢复后回原列位。随面板
+                        横滚区一起滚动，列位恒对齐 */}
                     {reading && panelCount > 0 && (
                       <div style={{ marginBottom: space.sm, marginLeft: lead }}>
                         <MainControlBand
                           items={mainBandItems}
                           entries={compareEntries}
-                          gridColumns={Math.max(1, panelCount)}
+                          gridColumns={Math.max(1, visibleCount)}
                           gridGap={gridGap}
-                          onToggle={togglePanelVisible}
+                          onToggle={hideFromBand}
                           registerHost={registerPanelPillHost}
                         />
                       </div>
@@ -2052,12 +2185,15 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                               belowTicks={marginOn && !marginLineOn ? costRateTicks : undefined}
                             />
                             <div style={{ flex: 1 }} />
-                            {/* 与时间轴轨道带齐平：轨道高 52、按钮 top -5 对准轨道带中心
-                                （轨道下说明行已删，2026-11-02 Eason：图上不要解释性用语；
-                                2026-11-03 起两视图都渲染开关，主产品视图同款可关） */}
+                            {/* 与时间轴轨道带对中（2026-11-05 整改3）：开关承载盒复刻轨道带
+                                几何（同 TRACK_BLOCK_H 块 + marginBottom 6，承载盒 = top 0 /
+                                高 TRACK_RAIL_H 与 PanelTimeTrack 的 rail 同值），盒内 flex
+                                居中——按钮中心恒等于轨道带中心，不再依赖按钮自身高度
+                                （原 top -5 魔法数随高度漂移，已退役）；两侧行几何由常量
+                                保证（轨道下说明行已删，2026-11-02 Eason） */}
                             {buckets.length > 0 && visUnion.length > 0 && (
-                              <div style={{ height: 52, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
-                                <div style={{ position: 'absolute', left: 0, right: 0, top: -5, display: 'flex', justifyContent: 'center' }}>
+                              <div style={{ height: TRACK_BLOCK_H, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
+                                <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: TRACK_RAIL_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                   {syncToggle}
                                 </div>
                               </div>
@@ -2092,7 +2228,10 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
             {(() => {
               const own = panelViews.find((p) => p.spec.isOwn && !hiddenSet.has(p.spec.key));
               if (!own || domainIds.length === 0) return null;
-              const labels = buckets.map((b) => b.xLabel);
+              // X 轴标签（2026-11-05 整改3 审计修正）：改传 shortBucketLabel 日历格式
+              //（周 = 2026W33、月 = MM、季 = Qn，与主图/价格走势页同源）——原传
+              // bucket.xLabel（周 = 周三 MM-DD）与量价图轴格式不一致
+              const labels = buckets.map((b) => shortBucketLabel(state.granularity, b.id));
               const ownVolumes = summaryVolumes[own.idx] ?? [];
               return (
                 <div style={{ marginTop: space.xs, marginBottom: space.sm }}>
@@ -2113,8 +2252,9 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
             })()}
       </div>
 
-      {/* 已隐藏暂存条（设计 §4.A.3）：面板区下方、卡内底部，不入横滚区——
-          被隐藏产品的恢复入口；无隐藏或全隐藏（空态承担）时不渲染 */}
+      {/* 已隐藏暂存条（设计 §4.A.3 → 2026-11-05 整改1② 收口）：主品视图的恢复
+          入口已改为工具行「销毛成本」右侧的 HiddenVault 收纳区，面板区下方不再
+          出暂存条；组内对比视图仍在面板区上方沿用 HiddenTray（行为不变） */}
       </section>
     </>
   );
