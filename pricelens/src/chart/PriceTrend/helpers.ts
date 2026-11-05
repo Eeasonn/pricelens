@@ -55,8 +55,17 @@ export const MIN_WINDOW = 4;
 // ---------------- Y 轴左侧布局（第七轮+八轮修订） ----------------
 
 /** 绘图区左缘呼吸带（第一百一十五轮：系列名称药丸上移顶部品牌图例带后，
- *  原 188px 名称预留带回收为纯呼吸位，折线区向左放宽） */
+ *  原 188px 名称预留带回收为纯呼吸位，折线区向左放宽）。名称带（NAME_BAND_W）
+ *  恢复后本值仍作为下钻弹窗等自管场景/未显式传 nameZoneWidth 的调用方的缺省呼吸位 */
 export const NAME_ZONE_W = 14;
+/** 名称预留带恢复（第196轮整改3，Eason；蓝本 = 第115轮回收前的 987da34^）：
+ *  图左侧产品名称带基准宽 188px；实际按当前产品名自适应（nameZoneWidthOf，
+ *  以名称完整不换行为准），钳制上下界见 chartModel。 */
+export const NAME_BAND_W = 188;
+/** 名称带自适应下限：单列窄名时避免整条带空旷 */
+export const NAME_BAND_MIN_W = 112;
+/** 名称带自适应上限：超长名按带宽裁剪（zone 药丸 nowrap，估宽已含余量） */
+export const NAME_BAND_MAX_W = 320;
 /** 档位带（仅 USD）宽 + 与刻度列的间距（旧口径；渲染已改用下方固定轴宽常量） */
 export const TIER_BAND_W = 64;
 export const TIER_BAND_GAP = 8;
@@ -90,7 +99,23 @@ export interface AxisChrome {
 /** 仅刻度时的列宽。12px 的「151.6K」再加上上下限里的百位箭头。 */
 const TICK_COL_W = 64;
 
-export function axisChrome(currency: CurrencyMode, showYTicks = true, showTiers = true): AxisChrome {
+/** 仅刻度场景的刻度文字区宽（第196轮整改2，内容自适应）：调用方传入当前刻度
+ *  文案集时按最长文案估宽（与 axisTickGutter 同公式：≈7.2px/字符 + 两侧呼吸），
+ *  钳 [34, TICK_COL_W]；未传（量价/多平台/下钻等旧调用方）= 固定 TICK_COL_W 不变 */
+export function tickZoneWidthFor(texts?: readonly string[]): number {
+  if (!texts || texts.length === 0) return TICK_COL_W;
+  const chars = texts.reduce((m, t) => Math.max(m, t.length), 0);
+  return Math.min(TICK_COL_W, Math.max(34, Math.round(chars * 7.2) + 12));
+}
+
+export function axisChrome(
+  currency: CurrencyMode,
+  showYTicks = true,
+  showTiers = true,
+  /** 仅刻度场景的刻度文案集（第196轮整改2）：传入 → 轴列宽随内容自适应；
+   *  两者同开/仅档位场景恒为现状堆叠，不受影响 */
+  tickTexts?: readonly string[],
+): AxisChrome {
   const tiers = currency === 'usd' && showTiers;
   const ticks = showYTicks;
   if (tiers && ticks) {
@@ -116,22 +141,28 @@ export function axisChrome(currency: CurrencyMode, showYTicks = true, showTiers 
     };
   }
   if (ticks) {
+    const tw = tickZoneWidthFor(tickTexts);
     return {
       visible: true,
-      width: TICK_COL_W + TICK_DASH_W,
-      editorWidth: TICK_COL_W,
+      width: tw + TICK_DASH_W,
+      editorWidth: tw,
       tickLeft: 0,
-      tickWidth: TICK_COL_W,
-      dashLeft: TICK_COL_W,
+      tickWidth: tw,
+      dashLeft: tw,
       tierWidth: 0,
     };
   }
   return { visible: false, width: 0, editorWidth: 0, tickLeft: 0, tickWidth: 0, dashLeft: 0, tierWidth: 0 };
 }
 
-/** 轴区总宽（不含名称预留带）。显隐缺省全开，与旧的固定宽一致。 */
-export const axisFixedWidth = (currency: CurrencyMode, showYTicks = true, showTiers = true): number =>
-  axisChrome(currency, showYTicks, showTiers).width;
+/** 轴区总宽（不含名称预留带）。显隐缺省全开，与旧的固定宽一致。
+ *  仅刻度场景可传刻度文案集 → 宽随内容自适应（第196轮整改2）。 */
+export const axisFixedWidth = (
+  currency: CurrencyMode,
+  showYTicks = true,
+  showTiers = true,
+  tickTexts?: readonly string[],
+): number => axisChrome(currency, showYTicks, showTiers, tickTexts).width;
 
 /** 档位标签显示缩写（第九十一轮）：「1000」全写压成 K 缩写（1000+ → 1K+、
  *  800~1000 → 800~/1K），与刻度的 K 缩写同语言；阶梯数据本身不动。 */
@@ -227,9 +258,31 @@ export function axisTickGutter(ticks: number[], interval = 0): number {
   return Math.max(34, Math.round(chars * 7.2) + 12);
 }
 
-/** Y 轴总左缘 = 当前显隐下的轴列 + 名称预留带。刻度或档位关掉后左缘收回，绘图区变宽。 */
-export function estGridLeft(currency: CurrencyMode = 'local', showYTicks = true, showTiers = true): number {
-  return axisFixedWidth(currency, showYTicks, showTiers) + NAME_ZONE_W;
+/** 当前 Y 模型下的全部刻度文案（第196轮整改2，纯函数）：与 buildTickRows 同一
+ *  segTicks × fmtAxisTick 口径、不依赖几何（文案与像素位置无关）——轴列自适应宽
+ *  （tickZoneWidthFor）与调用方（index → Chart/SplitAxisColumn）共用同一份输入，
+ *  保证逐像素一致。抽稀（thinTickRows）只删行不增宽，取全集为安全上界 */
+export function axisTickTextsOf(scale: YScale): string[] {
+  const out: string[] = [];
+  for (const seg of scale.segs) {
+    for (const v of segTicks(seg, scale.interval)) {
+      out.push(fmtAxisTick(v, scale.interval));
+    }
+  }
+  return out;
+}
+
+/** Y 轴总左缘 = 当前显隐下的轴列 + 名称预留带。刻度或档位关掉后左缘收回，绘图区变宽。
+ *  第196轮整改2/3：仅刻度场景轴列宽随刻度文案自适应（tickTexts）；名称带宽由调用方
+ *  按当前产品名自适应传入（nameZoneW，缺省 = 呼吸位 NAME_ZONE_W，下钻等自管场景不变）。 */
+export function estGridLeft(
+  currency: CurrencyMode = 'local',
+  showYTicks = true,
+  showTiers = true,
+  tickTexts?: readonly string[],
+  nameZoneW: number = NAME_ZONE_W,
+): number {
+  return axisFixedWidth(currency, showYTicks, showTiers, tickTexts) + nameZoneW;
 }
 
 // ---------------- Y 轴（第七轮：纯自适应 + 空白压缩分段刻度） ----------------
@@ -744,8 +797,15 @@ export function bucketAnchorDate(g: Granularity, bucketId: string): string | nul
 
 /** 分离共享轴列宽（第五十四轮追补⑤）：只含实际轴元素——USD = 档位区块（含刻度区）+
  *  短横线，非 USD = 刻度文字区 + 短横线；与主图 estGridLeft 同口径（第九十轮签名收敛）。 */
-export function splitAxisWidth(currency: CurrencyMode, showYTicks = true, showTiers = true): number {
-  return axisFixedWidth(currency, showYTicks, showTiers);
+export function splitAxisWidth(
+  currency: CurrencyMode,
+  showYTicks = true,
+  showTiers = true,
+  /** 第196轮整改2：仅刻度场景传入刻度文案集 → 宽随内容自适应（与 SplitAxisColumn
+   *  tickTexts 同源同值，调用方不传 = 固定宽，量价页行为不变） */
+  tickTexts?: readonly string[],
+): number {
+  return axisFixedWidth(currency, showYTicks, showTiers, tickTexts);
 }
 
 /** 周 id → 当前粒度桶 id（追补⑧：总览下钻焦点周跨粒度换算——总览迷你图是周度序列，
@@ -1075,6 +1135,9 @@ export interface AvoidItem {
   anchorY?: number;
   /** 第八十二轮：名称药丸的隐藏态（折线已屏蔽 → 虚线置灰药丸） */
   hidden?: boolean;
+  /** 第196轮整改3（zone 模式恢复）：名称已按带内等距分布放置——渲染层按单行
+   *  nowrap 药丸绘制（带宽按名称自适应预留，不换行） */
+  zone?: boolean;
 }
 
 export interface AvoidResult {
@@ -1098,6 +1161,8 @@ export interface AvoidResult {
     anchorY: number;
     /** 第八十二轮：药丸隐藏态（折线已屏蔽） */
     hidden?: boolean;
+    /** 第196轮整改3：名称带内等距分布项（渲染单行 nowrap） */
+    zone?: boolean;
   }[];
 }
 
@@ -1152,6 +1217,8 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number): AvoidRes
         anchorX: it.anchorX ?? it.left,
         anchorY: it.anchorY ?? top,
         hidden: it.hidden,
+        // 第196轮整改3：仅带内项带 zone 标记（锚定模式字段缺省，不进金测序列化）
+        ...(it.zone ? { zone: true as const } : {}),
       });
     }
   }

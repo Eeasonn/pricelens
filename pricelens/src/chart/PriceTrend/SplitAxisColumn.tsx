@@ -34,6 +34,10 @@ export default function SplitAxisColumn(props: {
   showYTicks?: boolean;
   /** 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，关 = 不画档位区块 */
   showTiers?: boolean;
+  /** 第196轮整改2（轴列宽度内容自适应）：当前刻度文案集（axisTickTextsOf(yScale)，
+   *  由 index 层与 splitAxisWidth 同源传入）——仅刻度场景轴列宽随内容收回；
+   *  不传 = 固定宽（量价页等旧调用方行为不变）。档位/刻度同开场景不受影响 */
+  tickTexts?: readonly string[];
   tierValues: number[];
   /** 绘图区下方的附加刻度（2026-11-02 成本柱模式销毛率轴）：y = 相对绘图区底缘（X 轴
    *  基线）的向下像素偏移，与价格刻度同款文字/短横线；0 不重复出（与价格轴共用基线上的 0） */
@@ -43,7 +47,9 @@ export default function SplitAxisColumn(props: {
   const showYTicks = props.showYTicks ?? true;
   const showTiers = props.showTiers !== false;
   void props.gridLeft; // 旧契约字段，宽度由显隐决定
-  const chrome = axisChrome(currency, showYTicks, showTiers);
+  // 第196轮整改2：仅刻度场景宽随 tickTexts 内容自适应（index 与 splitAxisWidth 同源
+  // 同值 → 面板绘图区与轴刻度逐像素对齐；不传 = 固定宽，旧调用方零变化）
+  const chrome = axisChrome(currency, showYTicks, showTiers, props.tickTexts);
   const axisW = chrome.width;
   const geom: Geom = {
     gridLeft: axisW,

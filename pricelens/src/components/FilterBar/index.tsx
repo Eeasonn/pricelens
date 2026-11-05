@@ -13,19 +13,26 @@
 // 第一百九十轮（外部 UX 审计落地）：多平台对比子视图下主图已按店铺画多条线，
 // 单组摘要 chip 第二行不再写「无对比」，改示「平台对比」（悬停全量摘要保持
 // 产品对语义不动——细节仍真实）；产品对比子视图行为与现状完全一致。
+// 2026-11-05（Eason 指令）：全局平台筛选器回归并改版——紧随「选择产品」入口
+// 渲染一枚平台 Select（PlatformSelectBox：选项 = 该国 dim_channel 平台集合，
+// 默认 = 现默认平台，写入 state.platform），筛选结果作用于看板下方所有产品；
+// 每产品单独选店铺的入口（量价页 DNS chip / 店铺同步）同日退役。原「平台 /
+// 店铺」三级级联（PlatformBox）从筛选条撤下（总览页矩阵仍在用该组件，文件
+// 保留）；showPlatform prop 退役为 no-op，仅为 App.AnalysisShell 既有传参保留。
 // ============================================================
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConfigProvider, Tooltip } from 'antd';
 import type { ThemeConfig } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
-import PlatformBox from './PlatformBox';
+import PlatformSelectBox from './PlatformSelectBox';
 import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
 import TimeBox from './TimeBox';
 import GranularityBox from './GranularityBox';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
+import { usePage } from '../../state/PageContext';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { useChartContent } from '../../state/chartContent';
 import { brandOfModel, configTextOf, modelNameOf } from '../ProductCascader/tree';
@@ -284,22 +291,29 @@ function ProductPickerEntry() {
 }
 
 /** One global row: country and industry scope, then the unified product picker,
- *  then platform and currency. 第一百一十五轮：平台与币种收进顶部筛选条（各看板
- *  标题行不再重复），整行不换行——选择产品列弹性收缩，平台/币种定宽保底。
+ *  then the global platform filter and currency. 第一百一十五轮：平台与币种收进
+ *  顶部筛选条（各看板标题行不再重复），整行不换行——选择产品列弹性收缩，
+ *  平台/币种定宽保底。
  *  第一百三十一轮波2：showTime = 时间筛选簇（仅价格看板与量价看板传入），
  *  币种右侧短分隔线后渲染；卡片根为 RangePicker 弹层挂载容器（向下展开）。
  *  2026-11-04（Eason 看图反馈）：周/月/季粒度切换从时间筛选簇弹层里移出，
  *  常驻筛选条币种右侧（GranularityBox Segmented 同款语言）；时间簇收窄让位
- *  （时间筛选器原日期范围区过宽），整行仍单行不换行。 */
+ *  （时间筛选器原日期范围区过宽），整行仍单行不换行。
+ *  2026-11-05（Eason 指令）：全局平台 Select 常驻量价走势页（产品入口后第一位），
+ *  写 state.platform 作用于看板下方所有产品；价格走势页不渲染——该页各线自带
+ *  平台口径（自动=每周全网最低价 / 图例渠道 chip / 多平台对比视图），全局 Select
+ *  在该页不消费（主线收口补丁：按当前页门控）。showPlatform 退役为 no-op
+ *  （App 传参兼容）。 */
 export default function FilterBar({
   showTime = false,
-  showPlatform = true,
 }: {
   showTime?: boolean;
-  /** 第一百六十轮：平台口径下沉到每条产品线（图例渠道 chip）后，价格看板与量价页
-   *  不再渲染全局「平台 / 店铺」（false）；总览页矩阵筛选保留 */
+  /** @deprecated 2026-11-05（Eason 指令）：全局平台筛选器改按当前页门控
+   *  （仅量价走势页渲染），本 prop 不再控制任何渲染；仅为 App.AnalysisShell
+   *  既有 `showPlatform={false}` 传参保留类型兼容 */
   showPlatform?: boolean;
 } = {}) {
+  const { page } = usePage();
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
@@ -314,10 +328,14 @@ export default function FilterBar({
             <div style={{ flex: '1 1 260px', minWidth: 200, display: 'flex', alignItems: 'center' }}>
               <ProductPickerEntry />
             </div>
-            {showPlatform && (
+            {/* 全局平台筛选器（2026-11-05 Eason）：产品入口后第一位；选平台即作用
+                于看板下方所有产品（每产品不可再单独选平台店铺）。定宽与原「平台 /
+                店铺」槽同宽，选择产品列弹性收缩，1280 视口仍单行。仅量价走势页
+                渲染（价格页各线自带平台口径，全局 Select 不消费 = 死控件） */}
+            {page === 'volume' && (
               <>
                 <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-                <div style={{ flexShrink: 0, width: 188 }}><Field label="平台 / 店铺"><PlatformBox /></Field></div>
+                <div style={{ flexShrink: 0, width: 188 }}><Field label="平台"><PlatformSelectBox /></Field></div>
               </>
             )}
             <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />

@@ -64,6 +64,9 @@ export interface ChartToolbarProps {
   onShowTiers?: (v: boolean) => void;
   /** 档位开关是否可用（2026-11-02）：量价成本柱模式档位无意义、强制不画，开关隐藏并改提示 */
   showTiersToggle?: boolean;
+  /** 价格档位的「本页默认值」（第196轮整改2，Eason）：价格走势页默认翻转为关后传
+   *  false——齿轮「已修改」蓝点按与默认值的偏离判断；缺省 true = 量价页等旧调用方不变 */
+  tiersDefault?: boolean;
   yCompress?: boolean;
   onYCompress?: (v: boolean) => void;
   lineShape?: LineShapeChoice;
@@ -105,6 +108,17 @@ export interface ChartToolbarProps {
   /** 异常价格守卫状态行（2026-11-01 晚反馈：收进 ⋯ 菜单）——调用方传入
    *  AnomalyQualityChip（menuRow 形态），渲染在 ⋯ 弹层底部（hairline 分隔） */
   anomalySlot?: ReactNode;
+  // ---- 第196轮整改5（量层，Eason）：「量」开关 = 大促档期组框左侧（同组框首位），
+  //      默认关、视觉同组框 Checkbox 语言；开启后同组追加 柱|面积 Segmented。
+  //      仅价格走势页（index 层 actions 行）传入，其余调用方零变化 ----
+  /** 量层开关（缺省不传 = 不渲染量控件） */
+  volumeOn?: boolean;
+  /** 量层开关提交 */
+  onVolumeOn?: (v: boolean) => void;
+  /** 量层形态（柱|面积；开启后才出现） */
+  volumeMode?: 'bar' | 'area';
+  /** 量层形态提交 */
+  onVolumeMode?: (v: 'bar' | 'area') => void;
   /** 呈现方式切换（2026-11-02 Eason：经典/成本柱收进 ⋯ 菜单首行，不再占工具行）——
    *  传入即在 ⋯ 弹层最上方以「呈现 [控件]」一行渲染 */
   presentationSlot?: ReactNode;
@@ -252,7 +266,9 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   const gearDirty =
     (showScaleCtl && props.sliderScale != null && Math.abs(props.sliderScale - 1) > 0.001) ||
     (showYTicksCtl && props.showYTicks === false) ||
-    (showTiersCtl && props.currency === 'usd' && props.showTiers === false) ||
+    // 第196轮整改2：档位「已修改」= 偏离本页默认值（价格页默认关 → 开 = 蓝点；
+    // 缺省 true = 量价页等旧调用方语义不变）
+    (showTiersCtl && props.currency === 'usd' && (props.showTiers ?? true) !== (props.tiersDefault ?? true)) ||
     (showCompressCtl && props.yCompress === true) ||
     (showShapeCtl && props.lineShape != null && props.lineShape !== 'auto');
   // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
@@ -391,8 +407,10 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           {props.legend}
         </div>
       )}
-      {/* 功能键同一排：大促档期、促销权益，然后 ⋯。折后价/页签/价格显示/时点摘要在 ⋯ 内，
-          控件外形与原先露在外面时一致。 */}
+      {/* 功能键同一排：量（第196轮整改5）+ 大促档期 + 促销权益，然后 ⋯。折后价/页签/
+          价格显示/时点摘要在 ⋯ 内，控件外形与原先露在外面时一致。量开关在大促档期
+          左侧（Eason 指定位置），同组框语言：默认关、开启浅蓝勾选；开启后同组追加
+          柱|面积 Segmented（量层形态）。 */}
       {showRight && showPromo && (
         <div
           style={{
@@ -408,6 +426,24 @@ export default function ChartToolbar(props: ChartToolbarProps) {
             marginLeft: 'auto',
           }}
         >
+          {props.onVolumeOn != null && (
+            <>
+              <Checkbox checked={props.volumeOn ?? false} onChange={(e) => props.onVolumeOn!(e.target.checked)}>
+                <span style={{ fontSize: 12 }}>量</span>
+              </Checkbox>
+              {props.volumeOn && props.onVolumeMode != null && (
+                <Segmented
+                  size="small"
+                  value={props.volumeMode ?? 'bar'}
+                  onChange={(v) => props.onVolumeMode!(v as 'bar' | 'area')}
+                  options={[
+                    { label: '柱', value: 'bar' },
+                    { label: '面积', value: 'area' },
+                  ]}
+                />
+              )}
+            </>
+          )}
           <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
             <span style={{ fontSize: 12 }}>大促档期</span>
           </Checkbox>

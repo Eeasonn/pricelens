@@ -1,15 +1,13 @@
 // ============================================================
 // 量价页 · 主品视图顶部控制区（2026-11-03 Eason 改版）：明细卡行退役后，上方
-// 工具行中区承载①产品显示/隐藏切换 + ②店铺切换——
+// 工具行中区承载产品显示/隐藏切换——
 // ①产品药丸：常驻同位切换（显示态实线描边、隐藏态虚线降透明），点击切换显隐；
 //   语义与原明细卡身份胶囊（点击隐藏 → 暂存条恢复）一致，只是恢复不再跳暂存条、
 //   原地再点即回；全隐藏仍走面板区空态「全部恢复」。className 保留 lpl-lg-pill
 //   ——隐藏/恢复的焦点承接（panelPillHostRefs → button.lpl-lg-pill）按它定位。
-// ②DNS 店铺 chip：明细卡身份区的同款原件迁入（ChannelSelectPopover 同源浮层），
-//   onPick 仍回写 setSelectionPlatform → 面板取数随所选平台重算，数据流零改动。
-// ③「进入本组对比」入口（GroupCompareEntry）：价格走势「多平台对比」同款轻量
+// ②「进入本组对比」入口（GroupCompareEntry）：价格走势「多平台对比」同款轻量
 //   文字钮（lpl-text-entry，悬停变墨）。
-// 2026-11-04（Eason 看图反馈）：③入口改随胶囊组——entries 按 key 挂到对应
+// 2026-11-04（Eason 看图反馈）：②入口改随胶囊组——entries 按 key 挂到对应
 //   胶囊组之后（不再堆工具行最右端，多卡时逐格就位）；新增 gridColumns 网格
 //   模式——列数 = 面板数、列距 = 面板网格同款 space.md，宿主把整条带放进与
 //   面板网格同宽同偏移的行里，每个胶囊组即居中于其面板上方。两 prop 均可选，
@@ -20,14 +18,14 @@
 //   （宿主 single-source：panelGridCols(visibleCount)），列距/左偏移（共享轴列宽
 //   + 列距）同源同值——带与面板网格同容器宽、同模板、同 gap、同偏移，逐格居中。
 //   item.hidden 虚线形态保留为组件级契约（量价页不再传入 hidden=true）。
+// 2026-11-05（Eason 指令 · 平台口径收口）：DNS 店铺 chip 退役——「不允许每个
+//   产品单独选择平台店铺」，取价平台统一走顶部筛选条的全局平台筛选器
+//   （FilterBar.PlatformSelectBox 写 state.platform）；channel/channelCtl 字段
+//   与 ChannelSelectPopover 浮层随之从本组件删除（价格走势页共用件保留）。
 // 本组件只改布局位置，不改任何取数/筛选数据流。
 // ============================================================
-import { Popover } from 'antd';
-import { DownOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import BrandDot from '../../components/BrandMark';
-import ChannelSelectPopover from '../../components/ChannelSelectPopover';
-import type { PlatformSelection } from '../../state/filtersTypes';
 import { color, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 
 export interface MainControlBandItem {
@@ -42,15 +40,6 @@ export interface MainControlBandItem {
   romText: string;
   /** 当前是否被隐藏（隐藏 = 虚线降透明，点击恢复） */
   hidden: boolean;
-  /** DNS 店铺徽标（buildSeries 回显；null = 不出 chip） */
-  channel: { label: string; auto: boolean } | null;
-  channelCtl: {
-    cc: string;
-    skuIds: string[];
-    current: PlatformSelection | null;
-    onPick: (sel: PlatformSelection | null) => void;
-    autoLabel?: string;
-  } | null;
 }
 
 export default function MainControlBand(props: {
@@ -146,61 +135,6 @@ export default function MainControlBand(props: {
               </span>
             )}
           </button>
-          {/* DNS 店铺筛选 chip（明细卡拍板⑤原款迁入）：点开同款 ChannelSelectPopover */}
-          {item.channel && item.channelCtl && (
-            <Popover
-              trigger="click"
-              placement="bottomLeft"
-              arrow={false}
-              destroyOnHidden
-              classNames={{ root: 'lpl-cascade-popover' }}
-              styles={{ body: { padding: 0 } }}
-              content={
-                <ChannelSelectPopover
-                  cc={item.channelCtl.cc}
-                  skuIds={item.channelCtl.skuIds}
-                  current={item.channelCtl.current}
-                  onPick={item.channelCtl.onPick}
-                  autoLabel={item.channelCtl.autoLabel}
-                />
-              }
-            >
-              <button
-                type="button"
-                aria-pressed={!item.channel.auto}
-                aria-label={`取价平台：${item.channel.label}，点击筛选平台-店铺`}
-                title={
-                  item.channel.auto
-                    ? `自动取价。当前主要来源平台：${item.channel.label}。点击修改平台、店铺或卖家`
-                    : `取价平台：${item.channel.label}。点击修改平台、店铺或卖家`
-                }
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  flex: '0 0 auto',
-                  height: 22,
-                  maxWidth: 150,
-                  padding: '0 8px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  border: `1px solid ${color.hairline}`,
-                  borderRadius: radius.control,
-                  background: color.canvas,
-                  font: 'inherit',
-                  fontSize: 11,
-                  lineHeight: '16px',
-                  fontWeight: 600,
-                  color: color.body,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                }}
-              >
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.channel.label}</span>
-                <DownOutlined aria-hidden style={{ fontSize: 8, color: color.mute, flexShrink: 0 }} />
-              </button>
-            </Popover>
-          )}
           {/* 「本组对比」入口随格（2026-11-04 Eason）：紧跟该胶囊组之后 */}
           {props.entries?.get(item.key)}
         </span>

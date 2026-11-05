@@ -84,18 +84,30 @@
 //   标签（原先周粒度是周三 MM-DD）；「时间轴同步」开关承载盒改为轨道带同几何
 //   （TRACK_RAIL_H）+ flex 居中——按钮中心恒等于轨道带中心，不再依赖按钮高度。
 // ============================================================
+// 2026-11-05 平台口径收口（Eason 指令：「删除店铺同步的功能，删除每个产品卡片
+// 选店铺的功能。改为在顶部产品后面加一个平台筛选器，它筛选的结果会作用于底下
+// 所有的产品。我们不允许每个产品单独选择平台店铺。」）：
+// ①每卡 DNS 店铺 chip 退役（MainControlBand 胶囊带 + 组视图明细卡身份区），
+//   ChannelSelectPopover 随之从本页撤下（价格走势页共用件保留）；
+// ②「店铺同步」按钮退役（组视图明细卡 + 会话态 volume.storeSync / 快照还原
+//   链路整体删除；platformSync.ts 纯函数由价格走势页继续使用）；
+// ③面板取价口径改读全局平台筛选器——顶部筛选条「产品」后的平台 Select
+//   （FilterBar.PlatformSelectBox）写 state.platform，本页 panelSpecs 全部
+//   面板按它取数（选平台 = 该平台全部渠道、平台内每周最低价店铺；默认 =
+//   默认店铺/默认平台自动口径）。每产品选择项上的 platform 覆写字段不再被
+//   本页消费（价格走势页图例渠道 chip 语义不变）。
+// ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { message, Popover, Segmented } from 'antd';
-import { DownOutlined, HolderOutlined } from '@ant-design/icons';
+import { Segmented } from 'antd';
+import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
 import { useConfigVersion } from '../state/configStore';
 import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../components/AnomalyQualityChip';
 import { addAnomalyMark } from '../dataModel/anomaly';
 import usePageViewState from '../state/usePageViewState';
-import type { PlatformSelection, ProductSelection } from '../state/filtersTypes';
+import type { PlatformSelection } from '../state/filtersTypes';
 import ChartContentBar from '../components/ChartContentBar';
-import BrandDot, { brandLabelOf } from '../components/BrandMark';
-import ChannelSelectPopover from '../components/ChannelSelectPopover';
+import BrandDot from '../components/BrandMark';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
 // 卡顶时间筛选簇在顶部筛选条。这里只取查看窗口说明行高度，用来对齐同步按钮。
@@ -122,7 +134,6 @@ import {
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
-import { restorePlatformSync, snapshotPlatformSync, syncComparesWithMain, type PlatformSyncCardSnap } from '../chart/PriceTrend/platformSync';
 import type { Granularity, Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 import { flatSelections } from '../state/mainSelection';
@@ -132,7 +143,6 @@ import CostBarChart, { COST_RATE_H, costRateAxisMaxOf } from './volume/CostBarCh
 import MergedCompareChart, { type MergedCompareProduct } from './volume/MergedCompareChart';
 import InventoryDosCard from './volume/InventoryDosCard';
 import { inventoryDemoOf } from './volume/inventoryDemo';
-import PanelHeader from './volume/PanelHeader';
 import PanelTimeTrack, { TRACK_BLOCK_H, TRACK_RAIL_H } from './volume/PanelTimeTrack';
 import HiddenTray, { HiddenVault, type HiddenTrayItem } from './volume/HiddenTray';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
@@ -228,49 +238,29 @@ function resolveSlot(slot: VolumeSlot, cc: string): SlotInfo | null {
   };
 }
 
-/** 面板 key（modelId__配置去空格）→ 选择项键（modelId|配置去空格）——与筛选状态
- *  selKey 同口径，setSelectionPlatform 按它定位选择项（同价格页 pickChannel 的
- *  非同步分支） */
-function selKeyOfPanel(panelKey: string): string {
-  const i = panelKey.indexOf('__');
-  return i <= 0 ? panelKey : `${panelKey.slice(0, i)}|${panelKey.slice(i + 2)}`;
-}
-
-/** 面板头产品药丸规格（第一百九十一轮，Eason 五点）：与 BrandLegendStrip 的
- *  PillSpec 同构的本地结构（该类型未导出，跨页传 props 走 TS 结构化兼容） */
+/** 面板身份文案（胶囊/暂存条/收纳区共用）：name = 「型号 + 配置」展示名，
+ *  nameText 去配置后缀、romText = 配置原文（'—' 出空）。
+ *  2026-11-05：DNS 店铺 chip 退役后，药丸规格只剩身份文案。 */
 interface PanelPillSpec {
-  key: string;
-  brand: string;
-  brandLabel: string;
   text: string;
   nameText: string;
   romText: string;
-  hidden: boolean;
-  main: boolean;
-  wrapChannelLabel?: boolean;
-  channel?: { label: string; auto: boolean } | null;
-  channelCtl?: {
-    cc: string;
-    skuIds: string[];
-    current: PlatformSelection | null;
-    onPick: (sel: PlatformSelection | null) => void;
-    autoLabel?: string;
-  };
 }
 
 /** 量价面板取数清单（第一百六十七轮）：顶部筛选器所选产品 = 各卡「主品 + 对比区」
- *  依次铺开去重；每产品一面板，国家变化时 SKU 口径随 resolveSlot 重算 */
+ *  依次铺开去重；每产品一面板，国家变化时 SKU 口径随 resolveSlot 重算。
+ *  2026-11-05（Eason）：platform = 全局平台筛选器口径（state.platform，所有面板
+ *  同一口径），每产品选择项上的 platform 覆写不再被本页消费 */
 interface PanelSpec {
   key: string;
   cardId: string;
   modelId: string;
   romram: string;
   isOwn: boolean;
-  isMain: boolean;
   brand: string;
   name: string;
   skuIds: string[];
-  platform: PlatformSelection | null; // 该产品取价口径（null = 自动，第一百九十一轮随渠道徽标接入）
+  platform: PlatformSelection | null;
 }
 
 export default function VolumePrice() {
@@ -374,7 +364,9 @@ export default function VolumePrice() {
     if (pill instanceof HTMLElement) pill.focus();
   });
 
-  // ---- 面板清单：默认只铺各卡主品；组内对比才展开该卡的主品与竞品 ----
+  // ---- 面板清单：默认只铺各卡主品；组内对比才展开该卡的主品与竞品。
+  //      取价口径 = 全局平台筛选器（state.platform，2026-11-05 Eason：所有面板
+  //      同一口径，每产品不再单独绑平台店铺）；换平台即全部面板重取数 ----
   const panelSpecs = useMemo<PanelSpec[]>(() => {
     const out: PanelSpec[] = [];
     const seen = new Set<string>();
@@ -391,20 +383,13 @@ export default function VolumePrice() {
         cardId: ref.cardId,
         modelId: sel.modelId,
         romram: sel.romram,
-        isMain: ref.isMain,
         ...info,
-        platform: sel.platform ?? null,
+        platform: state.platform ?? null,
       });
     }
     return out;
-  }, [state.mains, cc, safeViewMode]);
+  }, [state.mains, cc, safeViewMode, state.platform]);
   const panelCount = panelSpecs.length;
-  // 量价页把同步入口放在每个主产品面板左侧；开态按面板 key（型号__配置，跨刷新/
-  // 卡片重建都稳定）保存，避免把一个主产品的店铺口径误传给另一张卡。开态与还原
-  // 快照同存会话态 'volume.storeSync'（2026-11-03）：刷新/切页回来按钮态与店铺
-  // 数据不再错位，取消同步还原的也是触发同步那一刻的真实快照（二次同步不失真）。
-  // 形状 { [panelKey]: { on, snapshot } }
-  const [storeSyncMap, setStoreSyncMap] = usePageViewState<Record<string, { on: boolean; snapshot: PlatformSyncCardSnap | null }>>('volume.storeSync', () => ({}));
 
   // ---- 视图状态（同价格看板口径；全部面板共用）。同步态/面板独立窗口/价格
   //      显示 = 会话态跨页保留（P1-5，usePageViewState）；其余为瞬态。
@@ -542,8 +527,9 @@ export default function VolumePrice() {
         if (spec.skuIds.length > 0) {
           try {
             series = buildSeries({
-              // 第一百九十一轮（Eason 五点）：组级取价口径随选择项接入——选了平台/
-              // 渠道后量价曲线真的跟随重算（buildSeries 按组解析渠道；null = 自动）
+              // 取价口径 = 全局平台筛选器（2026-11-05 Eason）：buildSeries 按口径
+              // 解析渠道——选平台 = 该平台全部渠道（平台内每周最低价店铺），
+              // null = 默认店铺/默认平台自动口径；所有面板同口径
               groups: [{ modelId: spec.modelId, romram: spec.romram, skuIds: spec.skuIds, isOwn: spec.isOwn, platform: spec.platform }],
               granularity: state.granularity,
               startBucket: dataStart,
@@ -778,33 +764,15 @@ export default function VolumePrice() {
     setPanelOrder(keys);
   };
 
-  // 面板头产品药丸（第一百九十一轮，Eason 五点）：key = 面板 key；名称/配置拆自
-  // 面板规格（name =「型号 + 配置」，nameText 去配置后缀、'—' 出空）；渠道徽标与
-  // 浮层语境直接用 buildSeries 回显的 channelBadge（选平台=平台名、自动=最新有价周
-  // 实际平台名）。量价页无屏蔽/悬停联动，onToggle/onHover 传 no-op；onPick 回写
-  // setSelectionPlatform（selKey 定位）→ panelSpecs 重算 → 量价曲线随所选平台重取
+  // 面板身份文案（2026-11-05 起）：名称/配置拆自面板规格（name =「型号 + 配置」，
+  // nameText 去配置后缀、'—' 出空），供组视图明细卡胶囊、暂存条与收纳区共用。
+  // 原 DNS 店铺 chip 的渠道徽标/浮层语境随每卡选店退役一并删除。
   const pillOf = (p: (typeof panelViews)[number]): PanelPillSpec => {
     const rom = p.spec.romram !== '—' ? p.spec.romram : '';
-    const badge = p.series[0]?.channelBadge ?? null;
     return {
-      key: p.spec.key,
-      brand: p.brand,
-      brandLabel: brandLabelOf(p.brand),
       text: p.name,
       nameText: rom && p.name.endsWith(rom) ? p.name.slice(0, p.name.length - rom.length).trim() : p.name,
       romText: rom,
-      hidden: false,
-      main: false,
-      // 平台小药丸单行省略（与价格页药丸条同款；原面板头窄格才换行，2026-11-02 并入明细卡后撤）
-      wrapChannelLabel: false,
-      channel: badge ? { label: badge.label, auto: badge.auto } : null,
-      channelCtl: {
-        cc,
-        skuIds: p.spec.skuIds,
-        current: p.spec.platform,
-        onPick: (sel) => actions.setSelectionPlatform(selKeyOfPanel(p.spec.key), sel),
-        autoLabel: badge?.auto ? badge.label : undefined,
-      },
     };
   };
 
@@ -821,32 +789,6 @@ export default function VolumePrice() {
         return { key: p.spec.key, brand: p.brand, nameText: pill.nameText, romText: pill.romText };
       });
   }, [orderedPanels, hiddenSet, panelCount, visibleCount]);
-
-  // 店铺同步开关（组内对比主品）：开 = 本组对比产品的取价店铺跟随主产品当前口径
-  // （主品自选 = 原样同步；主品自动 = 钉定其最新有价周的实际平台），主品自身永不
-  // 改写（syncComparesWithMain 契约，2026-11-03）；取消 = 按快照还原触发前的选择。
-  // 开态与快照同存会话态（见上方 storeSyncMap）。不可同步（主品无数据、口径解析
-  // 不出）不开态、不写筛选。
-  const toggleStoreSync = (p: (typeof panelViews)[number]): void => {
-    if (!p.spec.isMain) return;
-    const card = state.mains.find((item) => item.id === p.spec.cardId);
-    if (!card?.main) return;
-    const syncKey = p.spec.key; // 面板 key：会话态键，跨刷新/卡片重建稳定
-    const cur = storeSyncMap[syncKey];
-    if (cur?.on) {
-      // 快照条目按 selKey 匹配还原；cardId 重定向到当前卡（卡片重建换了 id 也照常还原）
-      if (cur.snapshot) actions.setMains(restorePlatformSync(state.mains, [{ ...cur.snapshot, cardId: card.id }]));
-      setStoreSyncMap((prev) => ({ ...prev, [syncKey]: { on: false, snapshot: null } }));
-      return;
-    }
-    const snap = snapshotPlatformSync([card])[0] ?? null;
-    const syncedCard = syncComparesWithMain(card, p.series[0]?.channelBadge ?? null);
-    if (!syncedCard) return;
-    actions.setMains(state.mains.map((item) => (item.id === card.id ? syncedCard : item)));
-    setStoreSyncMap((prev) => ({ ...prev, [syncKey]: { on: true, snapshot: snap } }));
-    // 同步改了什么要可见（Eason 修复要求）：激活即报跟随范围与还原路径
-    message.success(`店铺同步：${syncedCard.compares.length} 款对比品已跟随主品取价口径（主品不变；取消同步即还原）`);
-  };
 
   // 异常守卫人工裁定（2026-11-01）：单周明细卡「确认真实价格 / 标记异常」→
   // addAnomalyMark 留痕 + CONFIG_CHANGED_EVENT 广播（configVersion 使面板重取数）
@@ -1603,52 +1545,22 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                           )}
                         </div>
                         {/* 图下明细卡 = 组视图承载（2026-11-03 主品视图改版）：主品视图退役
-                            明细卡行，时点读数改走悬停浮窗；组视图明细卡仍是组内主参照，原样
-                            保留——身份区 = 同步店铺钮 + 紧凑胶囊（点击隐藏，暂存条恢复）+
-                            DNS 店铺 chip。「本组对比」入口上移主品视图控制区，卡片不再挂 */}
+                            明细卡行，时点读数改走悬停浮窗；组视图明细卡仍是组内主参照，
+                            身份区 = 紧凑胶囊（点击隐藏，暂存条恢复）——原「同步店铺」钮与
+                            DNS 店铺 chip 已随 2026-11-05 平台口径收口退役（取价口径统一
+                            走顶部筛选条的全局平台筛选器）。「本组对比」入口在主品视图
+                            控制区，卡片不再挂 */}
                         {/* 明细卡收集进 detailCards（JSX children 内的语句容器：
                             IIFE 执行 set、渲染 null——set 的返回值是 Map，
                             直接渲染会触发 React 对可迭代对象的展开报错） */}
                         {(() => {
                           if (reading) return null;
-                          const synced = storeSyncMap[p.spec.key]?.on === true;
                           detailCards.set(
                             p.spec.key,
                             <WeekDetailCard
                             model={detail}
                             identity={
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
-                                {/* 店铺同步（组内对比主品）：单行摘要条内压成 24px 单行钮
-                                    （拍板④），同步态浅蓝底 + 蓝描边与原 36×36 版同源 */}
-                                {!reading && p.spec.isMain && (
-                                  <button
-                                    type="button"
-                                    aria-pressed={synced}
-                                    aria-label={synced ? `取消 ${p.name} 的店铺同步` : `同步 ${p.name} 的店铺`}
-                                    title={synced ? '已同步：本组对比产品跟随主产品店铺，点击取消' : '将本组对比产品的店铺同步为主产品店铺'}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleStoreSync(p);
-                                    }}
-                                    style={{
-                                      flex: '0 0 auto',
-                                      height: 24,
-                                      padding: '0 8px',
-                                      border: `1px solid ${synced ? color.link : color.hairline}`,
-                                      borderRadius: radius.control,
-                                      background: synced ? selectSoft : color.canvas,
-                                      color: synced ? selectSoftInk : color.body,
-                                      font: 'inherit',
-                                      fontSize: 11,
-                                      fontWeight: 600,
-                                      lineHeight: '22px',
-                                      cursor: 'pointer',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {synced ? '已同步' : '同步店铺'}
-                                  </button>
-                                )}
                                 {/* 单行身份胶囊：品牌点 + 产品名 + 配置 chip；点击 = 隐藏面板
                                     （暂存条可恢复）。className 保留 lpl-lg-pill——隐藏/恢复的
                                     焦点承接按它定位（panelPillHostRefs 消费处） */}
@@ -1709,62 +1621,6 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                                     )}
                                   </button>
                                 </span>
-                                {/* DNS 店铺筛选 chip（拍板⑤，原平台小药丸行退役）：点开同款
-                                    ChannelSelectPopover，onPick 回写 setSelectionPlatform */}
-                                {pill.channel && pill.channelCtl && (
-                                  <Popover
-                                    trigger="click"
-                                    placement="bottomLeft"
-                                    arrow={false}
-                                    destroyOnHidden
-                                    classNames={{ root: 'lpl-cascade-popover' }}
-                                    styles={{ body: { padding: 0 } }}
-                                    content={
-                                      <ChannelSelectPopover
-                                        cc={pill.channelCtl.cc}
-                                        skuIds={pill.channelCtl.skuIds}
-                                        current={pill.channelCtl.current}
-                                        onPick={pill.channelCtl.onPick}
-                                        autoLabel={pill.channelCtl.autoLabel}
-                                      />
-                                    }
-                                  >
-                                    <button
-                                      type="button"
-                                      aria-pressed={!pill.channel.auto}
-                                      aria-label={`取价平台：${pill.channel.label}，点击筛选平台-店铺`}
-                                      title={
-                                        pill.channel.auto
-                                          ? `自动取价。当前主要来源平台：${pill.channel.label}。点击修改平台、店铺或卖家`
-                                          : `取价平台：${pill.channel.label}。点击修改平台、店铺或卖家`
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                      style={{
-                                        flex: '0 0 auto',
-                                        height: 22,
-                                        maxWidth: 150,
-                                        padding: '0 8px',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 3,
-                                        border: `1px solid ${color.hairline}`,
-                                        borderRadius: radius.control,
-                                        background: color.canvas,
-                                        font: 'inherit',
-                                        fontSize: 11,
-                                        lineHeight: '16px',
-                                        fontWeight: 600,
-                                        color: color.body,
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{pill.channel.label}</span>
-                                      <DownOutlined aria-hidden style={{ fontSize: 8, color: color.mute, flexShrink: 0 }} />
-                                    </button>
-                                  </Popover>
-                                )}
                               </span>
                             }
                             summaryId={`volume-detail-${p.idx}`}
@@ -1809,8 +1665,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
   // ---- 主品视图顶部控制区数据（2026-11-03 改版；2026-11-05 整改1 收口）----
   // 产品显隐药丸带：只放**可见面板**（展示序）——隐藏产品移入 HiddenVault 收纳区，
   // 不再占带内格，胶囊带列数 = 可见面板数与面板网格完全一致（逐格居中对齐）；
-  // nameText/romText/渠道徽标与明细卡身份区同源（pillOf），DNS chip 的 onPick
-  // 数据流原样
+  // nameText/romText 与明细卡身份区同源（pillOf）。原 DNS 店铺 chip 字段随
+  // 2026-11-05 每卡选店退役一并删除。
   const mainBandItems = reading
     ? visiblePanels.map((p) => {
         const pill = pillOf(p);
@@ -1821,8 +1677,6 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
           nameText: pill.nameText,
           romText: pill.romText,
           hidden: false,
-          channel: pill.channel ?? null,
-          channelCtl: pill.channelCtl ?? null,
         };
       })
     : [];

@@ -16,6 +16,7 @@
 import { useState, type ReactNode } from 'react';
 import { ConfigProvider, Tooltip } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
+import { hiddenInStable } from '../appChannel';
 import { usePage, type Page } from '../state/PageContext';
 import { filterBarTheme } from './FilterBar';
 import CountryBox from './FilterBar/CountryBox';
@@ -25,12 +26,15 @@ import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shado
 
 /** 页头只留管理页签。图表内容的切换在筛选栏下方（ChartContentBar）。
  *  量价预测页签已退役（WP6 集成 8.1 Step 3）：预测页入分析壳后，其入口
- *  与当前标识统一在 ChartContentBar——同一页面只允许一处 aria-current。 */
+ *  与当前标识统一在 ChartContentBar——同一页面只允许一处 aria-current。
+ *  稳定版通道（Eason 2026-11-05）：「情报中心」不在稳定版上架——入口不
+ *  渲染（DOM 中不存在，非 display:none），迭代版（本地 dev）不受影响。 */
 const TABS: { page: Page; label: string }[] = [
   { page: 'intelligence', label: '情报中心' },
   { page: 'config', label: '配置' },
   { page: 'alerts', label: '预警' },
 ];
+const VISIBLE_TABS = TABS.filter((t) => !hiddenInStable(t.page));
 
 export default function PageHeader({ extra }: { title?: string; extra?: ReactNode }) {
   const { go, page } = usePage();
@@ -126,7 +130,7 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
       <div className="lpl-page-header-actions" style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
         <AgentLauncher />
         <nav className="lpl-page-nav" aria-label="页面" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          {TABS.map((t) => (
+          {VISIBLE_TABS.map((t) => (
             <span key={t.page} style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
               <button
                 type="button"

@@ -44,6 +44,19 @@
 //   （与图上变化标记同一口径，全站唯一）；Y 轴刻度字号 8px → 10px（Y_TICK_FONT）；
 //   高度动画在系统「减少动态效果」开启时跳过直接落终值；emptyHint 放宽为 ReactNode
 //   供调用方区分「暂无数据」与「数据加载异常」
+// - 第196轮（Eason 五条整改，2026-11-05）：
+//   ① 悬停明细在「周环比/折扣率」后新增「价差」列（tipDiffBaseKey 传入主品 key 才
+//      出现）：口径/格式与 TrendTables 宽表价差区完全同源（同一 diffPct），主品行留空、
+//      对比行带符号百分比、缺值「—」；tip 浮层与 tipBox 预留框两模式同一 body 同源。
+//   ② 「价格档位」内部缺省态翻转为关（showTiers 受控仍以调用方为准）；仅刻度场景
+//      轴列宽随 axisTickTexts 自适应（tickZoneWidthFor）。
+//   ③ 名称预留带（zone 模式）恢复：nameZoneWidth 传入 → 全部名称药丸进图左侧
+//      [plotLeft−axisW−width, plotLeft−axisW] 带，按折线起点纵向等距分布（不换行）。
+//   ④ 销毛迷你卡：margins 传入（我司主品逐桶销毛点）→ 悬停浮层上方 8px 处再浮一张
+//      迷你卡（销毛率大数字 + 单台毛利/成本小字；缺数据显「—」）。
+//   ⑤ 量层：volumeOn 开启 → 价格绘图区下方叠量带（volumeHeight 定高），柱/面积两
+//      模式视觉常量与量价页 VolumeBars 同源；右轴刻度随量层缩放（gridRight 24→56），
+//      价格区与量带之间无分界线（x 轴线隐藏、时间标签下移到量带之下）。
 // ============================================================
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover, Popconfirm } from 'antd';
@@ -57,9 +70,13 @@ import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, font, fontSize, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
+import { color, font, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 import { measureText } from '../../components/ProductCascader';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
+// 第196轮整改5（量层）：量上限 niceCeil 与量价页同一口径（dataModel 共享模型，只读）
+import { niceCeil } from '../../dataModel/volume';
+// 第196轮整改4（销毛小卡）：只 import 量价侧销毛模型类型（数据由 index 层计算传入）
+import type { MarginCostPoint } from '../../pages/volume/marginCost';
 import { useFilters } from '../../state/FiltersContext';
 // 第一百八十五轮（外部 UX 审计）：JS 动画统一吃系统「减少动态效果」设置
 import { prefersReducedMotion } from '../../theme/motion';
@@ -71,6 +88,7 @@ import {
   TICK_DASH_W,
   axisChrome,
   computeYAxis,
+  diffPct,
   perUsdOf,
   xPxOf,
   yPxOf,
@@ -109,7 +127,6 @@ import {
   type SuspectBadge,
 } from './chartModel';
 import { addAnomalyMark, readAnomalyRule } from '../../dataModel/anomaly';
-import { formatPrice } from '../../theme/tokens';
 import OfferPopover from './OfferPopover';
 import ChartToolbar from './ChartToolbar';
 import BrandDot from '../../components/BrandMark';
@@ -274,6 +291,29 @@ export interface ChartProps {
   anomalyActions?: boolean;
   /** 异常价格守卫状态行（2026-11-01 晚反馈：收进 ⋯ 菜单）——透传给图顶工具行 */
   anomalySlot?: ReactNode;
+  // ---- 第196轮（Eason 五条整改）----
+  /** ①价差列基准（主分析产品系列 key）：传入且图上存在 ≥2 行时，悬停明细在
+   *  「周环比/折扣率」后追加「价差」列——主品行留空（基准），对比行显示相对主品的
+   *  价差百分比（与 TrendTables 宽表价差区同一 diffPct 同源）；缺省不传 = 不出该列 */
+  tipDiffBaseKey?: string | null;
+  /** ②仅刻度场景的轴列自适应宽输入（当前 Y 模型刻度文案集，axisTickTextsOf）：
+   *  传入 → tick 列宽随内容收回；缺省 = 固定宽（量价/多平台/下钻等调用方不变） */
+  axisTickTexts?: readonly string[];
+  /** ③名称预留带宽（zone 模式恢复）：传入 = 全部名称药丸进图左侧名称带、按折线
+   *  起点纵向等距分布；缺省 = 名称锚在折线起点旁（量价/多平台 hideNamePills 亦不变） */
+  nameZoneWidth?: number;
+  /** ④销毛迷你卡数据（我司主品逐桶销毛点，与 points 同下标对齐；index 层经
+   *  marginCostOf 计算）：非空数组时悬停浮层上方再浮一张迷你卡；该桶无数据显「—」 */
+  margins?: readonly (MarginCostPoint | null)[];
+  /** ⑤量层开关（工具行「量」）：开启 = 价格绘图区下方叠量带（volumeHeight 定高），
+   *  数据源 = volumes（与 points 同下标）。量价页等未传 = 不渲染 */
+  volumeOn?: boolean;
+  /** ⑤量层形态：柱（默认，视觉与量价页 VolumeBars 同常量）| 面积（纯半透明面积无描边） */
+  volumeMode?: 'bar' | 'area';
+  /** ⑤量层柱/面积颜色（品牌色，index 层取我司主品系列色） */
+  volumeColor?: string;
+  /** ⑤量带高度 px（index 层按「压缩后总高 30%」算好传入）；缺省 = 图高 30% 兜底 */
+  volumeHeight?: number;
   // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
   // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
@@ -286,9 +326,23 @@ const HOVER_DOT_PX = 7;
 /** 预警事件焦点带小标签（第一百九十轮，外部 UX 审计）：预警页跳转带来的触发周，
  *  图上焦点带顶缘的归属标注（业务语义，不带工程词） */
 const FOCUS_BAND_LABEL = '预警触发周';
+/** 第196轮整改5：量层开启时的右侧量轴预留宽（右轴线 +10、刻度标签随量层缩放；
+ *  与量价页 gridRight=56 的销量轴列同宽） */
+const VOL_AXIS_RIGHT_W = 56;
+/** 第196轮整改4：销毛迷你卡高度（≈价格悬停卡一半：标题行 13 + 大数字行 20 + 内边距） */
+const MARGIN_MINI_H = 48;
 
 /** 浮层/参照线数值格式（第三十五轮）：千分位整数 */
 const fmt_mm = (v: number): string => v.toLocaleString('en-US');
+
+/** 品牌色 hex → rgba（第196轮整改5 量层；与量价页 VolumeBars 同名实现同语义） */
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 /** 悬停浮层时间标题：周=MM-DD / 月=YYYY-MM / 季=YYYYQn */
 const fmt_hoverDate = (gran: Granularity, x: string): string => {
   if (!x) return '';
@@ -431,19 +485,23 @@ function ZoneNamePill(props: {
         <BrandDot brand={props.brand} />
         <span
           style={
-            nm.maxW != null
-              ? {
-                  display: '-webkit-box',
-                  WebkitBoxOrient: 'vertical' as const,
-                  WebkitLineClamp: 2,
-                  overflow: 'hidden',
-                  wordBreak: 'break-word',
-                  whiteSpace: 'normal',
-                  fontSize: 11,
-                  lineHeight: '16px',
-                  color: color.body,
-                }
-              : { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
+            nm.zone
+              ? // 第196轮整改3：名称带内单行 nowrap——带宽按名称实测自适应预留
+                // （nameZoneWidthOf），正常不换行不省略；overflow 可见兜底极端长名
+                { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
+              : nm.maxW != null
+                ? {
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical' as const,
+                    WebkitLineClamp: 2,
+                    overflow: 'hidden',
+                    wordBreak: 'break-word',
+                    whiteSpace: 'normal',
+                    fontSize: 11,
+                    lineHeight: '16px',
+                    color: color.body,
+                  }
+                : { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
           }
         >
           {nm.text}
@@ -517,9 +575,16 @@ export default function Chart(props: ChartProps) {
   const [innerShowYTicks, setInnerShowYTicks] = useState(true);
   const showYTicks = props.showYTicks ?? innerShowYTicks;
   const commitShowYTicks = props.onShowYTicks ?? setInnerShowYTicks;
-  const [innerShowTiers, setInnerShowTiers] = useState(true);
+  // 价格档位带（第一百九十三轮立；第196轮整改2，Eason：默认值翻转为关——
+  // Y 轴默认只显示刻度，档位带经齿轮显示设置打开。受控调用方（index 层等）
+  // 传 showTiers 仍以其为准）
+  const [innerShowTiers, setInnerShowTiers] = useState(false);
   const showTiers = props.showTiers ?? innerShowTiers;
   const commitShowTiers = props.onShowTiers ?? setInnerShowTiers;
+  // 左缘布局（第196轮整改2）：[档位色块 | 刻度文字][短横线][名称带][绘图区]。
+  // 仅刻度场景轴列宽随 axisTickTexts 自适应（tickZoneWidthFor）；档位/刻度各自
+  // 开关，关掉的部分不占宽，绘图区跟着左移，任何场景左侧不留空。
+  const chrome = axisChrome(currency, showYTicks, showTiers, props.axisTickTexts);
   // Y 轴自动压缩（第二十轮）：齿轮弹层内开关。第三十五轮起默认关 = Y 轴完全连续
   const [innerYCompress, setInnerYCompress] = useState(false);
   const yCompress = props.yCompress ?? innerYCompress;
@@ -620,7 +685,16 @@ export default function Chart(props: ChartProps) {
   // 用 animH（动画中）而非目标高度，大变化时整体缓动伸缩。
   // 第一百一十四轮：tipBox 模式在底边距下再垫一条居中明细预留框（canvas 不进入）
   const tipBoxOn = props.tipBox === true;
-  const chartH = gridTop + Math.round(animH) + GRID.bottom;
+  // ---- 第196轮整改5（量层）：量带在价格绘图区下方（plotBottom 起向下 volBandH），
+  //      index 层压缩价格区后把「压缩前总高 × 30%」作为 volumeHeight 传入；缺省兜底
+  //      = 当前图高 30%。量带开启时 canvas 高度同步加高（时间标签画到量带之下），
+  //      右缘让出量轴列（VOL_AXIS_RIGHT_W），价格区与量带之间无分界线 ----
+  const volOn = props.volumeOn === true;
+  const volBandH = volOn
+    ? Math.max(40, Math.round(props.volumeHeight ?? (gridTop + scale.plotHeight + GRID.bottom) * 0.3))
+    : 0;
+  const gridRight = props.gridRight ?? (volOn ? VOL_AXIS_RIGHT_W : GRID.right);
+  const chartH = gridTop + Math.round(animH) + GRID.bottom + volBandH;
   const totalH = chartH + (tipBoxOn ? TIP_BOX_H : 0);
 
   // ---- 容器宽度（ResizeObserver） ----
@@ -664,14 +738,17 @@ export default function Chart(props: ChartProps) {
         scale: displayScale,
         currency,
         gridLeft: props.gridLeft,
-        gridRight: props.gridRight,
+        gridRight,
       }),
-    [width, chartH, gridTop, series, displayScale, currency, props.gridLeft, props.gridRight],
+    [width, chartH, gridTop, series, displayScale, currency, props.gridLeft, gridRight],
   );
 
   // ---- 第一百一十五轮（评审）：量价明细框条位置 = 「时间 X 轴标签底」与「容器
   //      下边界」之间垂直居中（此前贴底偏下）；geom 未就绪时空态兜底贴 chartH ----
-  const tipBandTop = geom ? geom.plotTop + geom.plotHeight + (props.showXLabels ? 22 : 6) : chartH;
+  // 第一百一十五轮（评审）：量价明细框条位置 = 「时间 X 轴标签底」与「容器
+  //      下边界」之间垂直居中（此前贴底偏下）；geom 未就绪时空态兜底贴 chartH。
+  //      第196轮整改5：量带开启时整体下移到量带之下（时间标签同步下移，不重叠）
+  const tipBandTop = geom ? geom.plotTop + geom.plotHeight + volBandH + (props.showXLabels ? 22 : 6) : chartH;
   const tipBandH = Math.max(60, totalH - tipBandTop);
 
   // ---- 绘图区横向几何原语上报（第十五轮为图下热力带对齐引入；第五十六轮热力带
@@ -755,6 +832,11 @@ export default function Chart(props: ChartProps) {
   // 有值且带 url 的点（退市后停在清库末点，语义仍是「该产品现页」）
   const nameAll = props.nameSeries ?? series;
   const labelMode = props.labelMode ?? 'detail';
+  // 第196轮整改3：名称带（zone 模式）——调用方传 nameZoneWidth 且未整体禁画名称时，
+  // 名称药丸全部进带（带右缘 = 绘图区左缘 − 轴列宽；分离面板 axisChrome=false 轴宽 0）。
+  // 依赖收原始值（zoneAxisW），避免每渲染新建对象击穿 labelPlan memo
+  const nameZoneWProp = props.nameZoneWidth;
+  const zoneAxisW = props.axisChrome !== false ? chrome.width : 0;
 
   const labelPlan = useMemo(
     () =>
@@ -770,8 +852,10 @@ export default function Chart(props: ChartProps) {
         hideNames: props.hideNamePills === true, // 第一百一十三轮：量价面板禁画名称药丸
         labelMode, // 第一百一十四轮：精简 = 仅最高/最低/最新三价
         markExtremes: props.markExtremes,
+        // 第196轮整改3：名称带等距分布（传入才启用）
+        nameZone: nameZoneWProp != null ? { width: nameZoneWProp, axisW: zoneAxisW } : undefined,
       }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes],
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes, nameZoneWProp, zoneAxisW],
   );
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
@@ -791,9 +875,10 @@ export default function Chart(props: ChartProps) {
         lineShape,
         xLabels: props.showXLabels === true, // 第110轮：分离面板自带时间轴标签
         labelMode,
-        gridRight: props.gridRight,
+        gridRight,
+        bottomExtra: volBandH, // 第196轮整改5：量带高度 → x 轴线隐藏、时间标签下移
       }),
-    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, litKeys, lineShape, props.showXLabels, labelMode, props.gridRight],
+    [geom, series, priceTypes, granularity, labelPlan, gridTop, endpointMarks, focusKey, litKeys, lineShape, props.showXLabels, labelMode, gridRight, volBandH],
   );
 
   // ---- setOption / resize ----
@@ -961,7 +1046,7 @@ export default function Chart(props: ChartProps) {
   // ---- DOM 刻度/断轴/档位带数据（纯构建见 chartModel） ----
   // 左缘布局：[档位色块 | 刻度文字叠在色块右段][短横线][名称预留带][绘图区]。
   // 刻度线、价格档位各自开关，关掉的部分不占宽，绘图区跟着左移。
-  const chrome = axisChrome(currency, showYTicks, showTiers);
+  // （chrome 已上提到组件顶部——名称带 nameZone 与轴列宽同一来源，第196轮整改2/3）
   const tickRows = useMemo(() => thinTickRows(buildTickRows(geom)), [geom]);
 
   // 有值档位过滤（第八轮）：完全不存在该价格档位的数据时不显示该档（用户反馈 400~600 空档）
@@ -983,6 +1068,15 @@ export default function Chart(props: ChartProps) {
     brushCommitted && tipIdxRaw != null && (tipIdxRaw < brushCommitted[0] || tipIdxRaw > brushCommitted[1])
       ? null
       : tipIdxRaw;
+  // 第196轮整改5：量层上限 = 窗口内最大周量的 niceCeil（与量价页 volumeAxis 同口径）；
+  // 全缺 = 0（量带保留但不画柱、不出刻度，布局不跳）
+  const vMax = useMemo(() => {
+    let m = 0;
+    for (const v of props.volumes ?? []) {
+      if (v != null && Number.isFinite(v) && v > m) m = v;
+    }
+    return m > 0 ? niceCeil(m) : 0;
+  }, [props.volumes]);
 
   return (
     <div
@@ -1048,6 +1142,95 @@ export default function Chart(props: ChartProps) {
       </div>
       {/* ECharts 挂载层（第一百一十四轮：高度不含 tipBox 预留框——canvas 网格仍止于底边距） */}
       <div ref={chartDivRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: chartH, zIndex: 1 }} />
+      {/* 第196轮整改5（量层，Eason 领导要求）：价格绘图区下方的销量带——量 Y=0 贴带底、
+          最高柱顶 = 价格绘图区底缘，中间无分界线（x 轴线已随 buildOption bottomExtra 隐藏，
+          时间标签画到量带之下）。柱模式视觉常量与量价页 VolumeBars 完全一致（柱宽
+          0.62×列宽、rx=1、品牌色 α0.18、悬停列 α0.38）；面积模式 = 纯半透明面积无描边线。
+          右轴 = 1px hairline + 三档刻度（vMax / vMax/2 / 0，随量层缩放），仅量层开启出现。
+          volumes 未传或全缺 = 量带保留（布局稳定）但不画柱、不出刻度 */}
+      {volOn && geom && (() => {
+        const plotBottom = geom.plotTop + geom.plotHeight;
+        const volBase = plotBottom + volBandH;
+        const volColor = props.volumeColor ?? color.mute;
+        const colW = geom.plotWidth / geom.n;
+        const barW = Math.max(1, 0.62 * colW); // 与 VolumeBars 同：柱宽 = 0.62 列宽
+        const litIdx = hoverIdx ?? props.crosshairIdx ?? null;
+        const hOf = (v: number): number => (vMax > 0 ? Math.max(1, Math.min(volBandH, (v / vMax) * volBandH)) : 0);
+        const volVals = props.volumes ?? [];
+        const axisX = geom.plotLeft + geom.plotWidth + 10; // 与 VolumeBars 右轴同偏移
+        const ticks = vMax > 0
+          ? ([
+              [vMax, plotBottom],
+              [vMax / 2, plotBottom + volBandH / 2],
+              [0, volBase],
+            ] as [number, number][]).map(([v, y]) => ({ label: Math.round(v).toLocaleString('en-US'), y }))
+          : [];
+        const bars = volVals.map((v, i) => {
+          if (v == null || !Number.isFinite(v) || v <= 0 || vMax <= 0) return null;
+          const h = hOf(v);
+          return { i, x: geom.plotLeft + colW * (i + 0.5) - barW / 2, y: volBase - h, w: barW, h, lit: litIdx === i };
+        });
+        // 面积模式：纯半透明面积（无边界描边线）；缺采桶断开成段（与柱模式同语义）
+        const areaPath = (() => {
+          if (vMax <= 0) return '';
+          let d = '';
+          let run: string[] = [];
+          const flush = (): void => {
+            if (run.length >= 2) {
+              d += `M ${run[0]} ${volBase} L ${run.join(' L ')} L ${run[run.length - 1].split(' ')[0]} ${volBase} Z `;
+            }
+            run = [];
+          };
+          volVals.forEach((v, i) => {
+            if (v == null || !Number.isFinite(v) || v <= 0) {
+              flush();
+              return;
+            }
+            run.push(`${(geom.plotLeft + colW * (i + 0.5)).toFixed(1)} ${(volBase - hOf(v)).toFixed(1)}`);
+          });
+          flush();
+          return d;
+        })();
+        return (
+          <>
+            <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
+              {props.volumeMode === 'area' ? (
+                <path d={areaPath} fill={hexToRgba(volColor, 0.18)} stroke="none" />
+              ) : (
+                bars.map((bar) =>
+                  bar == null ? null : (
+                    <rect
+                      key={bar.i}
+                      x={bar.x}
+                      y={bar.y}
+                      width={bar.w}
+                      height={bar.h}
+                      rx={1}
+                      fill={hexToRgba(volColor, bar.lit ? 0.38 : 0.18)}
+                    />
+                  ),
+                )
+              )}
+            </svg>
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
+              {/* 右轴线（仅量层）：贴绘图区右缘外侧，随量层缩放的三档刻度 */}
+              {vMax > 0 && (
+                <>
+                  <div style={{ position: 'absolute', left: axisX, top: plotBottom, width: 1, height: volBandH, background: color.hairline }} />
+                  {ticks.map((t, ti) => (
+                    <div key={`vt-${ti}`} style={{ position: 'absolute', left: axisX - 4, top: t.y - 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ width: 4, height: 1, background: color.hairlineStrong }} />
+                      <span className="tnum" style={{ fontSize: 10, lineHeight: '12px', color: color.mute, fontVariantNumeric: 'tabular-nums' }}>
+                        {t.label}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </>
+        );
+      })()}
       {empty && (
         <div
           style={{
@@ -1492,8 +1675,8 @@ export default function Chart(props: ChartProps) {
                       left: mid,
                       // 专用行（第四十七轮）：轴标签 margin 22 下推，图标带 +4~18 独占；
                       // 第110轮：小图自带时间轴标签（占 +7~19）→ 档期标志下移让位（+24~38，
-                      // 仍在 GRID.bottom=40 留白内）
-                      top: geom.plotTop + geom.plotHeight + (props.showXLabels ? 24 : 4),
+                      // 仍在 GRID.bottom=40 留白内）。第196轮整改5：量带开启时整体下移到量带之下
+                      top: geom.plotTop + geom.plotHeight + volBandH + (props.showXLabels ? 24 : 4),
                       transform: 'translateX(-50%)',
                       zIndex: 9,
                     }}
@@ -1610,8 +1793,11 @@ export default function Chart(props: ChartProps) {
               );
             }
             if (rows.length === 0) return null;
-            // 第一百一十三轮：量价看板传入的该列销量（与 points 同下标）；null = 不出销量行
-            const volVal = props.volumes?.[tipIdx] ?? null;
+            // 第一百一十三轮：量价看板传入的该列销量（与 points 同下标）；null = 不出销量行。
+            // 第196轮整改5：销量行只在 tipBox 模式（量价看板预留框）出现——价格走势页的
+            // volumes 现兼作量层数据源，量层开启时悬停卡仍保持五列（量层已有右轴刻度，
+            // Eason 口径：卡片不膨胀），销量数字由右轴承载
+            const volVal = tipBoxOn ? (props.volumes?.[tipIdx] ?? null) : null;
             // 第四十八轮：有 offer 的系列在价格行下附权益行；第五十轮改结构化三字段
             // （折扣/分期/赠品 各占一行，只出有值的字段），随「offer 权益」开关整体显隐
             const offerRows = rows.map((r) =>
@@ -1646,6 +1832,26 @@ export default function Chart(props: ChartProps) {
               return wow == null ? '' : fmtSignedPct(wow);
             });
             const rateW = rateColWidth(rateLabel, rateValues);
+            // 第196轮整改1（价差列，Eason）：基准 = tipDiffBaseKey 指定的主分析产品
+            // （index 层合并图传第一组主品、分离面板传各卡主品）；口径/格式/舍入与
+            // TrendTables 宽表价差区完全同源——同一 helpers.diffPct(对比.price, 主品.price)，
+            // 主品行留空、任一侧缺价或主品价 ≤ 0 显「—」（hairlineStrong 同明细表空格）。
+            // 仅当图上还有对比行时出列（全部为主品 = 与宽表 hasDiff=false 同语义，不出）
+            const diffBase =
+              props.tipDiffBaseKey != null ? series.find((s) => s.key === props.tipDiffBaseKey) ?? null : null;
+            const showDiffCol = diffBase != null && rows.some((r) => r.s.key !== diffBase.key);
+            const diffCellOf = (s: (typeof series)[number]): { text: string; color: string } | null => {
+              if (!diffBase || s.key === diffBase.key) return null; // 主品行留空（基准）
+              const pa = s.points[tipIdx]?.price ?? null;
+              const pb = diffBase.points[tipIdx]?.price ?? null;
+              if (pa == null || pb == null) return { text: '—', color: color.hairlineStrong };
+              const d = diffPct(pa, pb);
+              if (!d) return { text: '—', color: color.hairlineStrong };
+              // 着色与明细表同口径：行更贵红 / 更便宜蓝 / 平 ±0.0% 中性
+              return { text: d.text, color: d.text.startsWith('±') ? color.body : d.tone === 'rich' ? color.error : color.link };
+            };
+            const diffTexts = rows.map(({ s }) => diffCellOf(s)?.text ?? '');
+            const diffW = rateColWidth('价差', diffTexts);
             const body = (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
@@ -1665,6 +1871,20 @@ export default function Chart(props: ChartProps) {
                   <span style={{ width: rateW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     {rateLabel}
                   </span>
+                  {/* 价差列（第196轮整改1）：列间竖线/表头样式沿悬停卡既有语言
+                      （188 轮收口：表头与数据行逐元素 x 对齐、竖线满行高） */}
+                  {showDiffCol && (
+                    <>
+                      <span aria-hidden style={{ width: 1, height: 13, background: color.hairlineStrong, flexShrink: 0 }} />
+                      <span
+                        className="tnum"
+                        title="相对主分析产品的价差 =（对比折后价 − 主品折后价）/ 主品折后价"
+                        style={{ width: diffW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}
+                      >
+                        价差
+                      </span>
+                    </>
+                  )}
                   {/* 尾部快照占位已随快照入口一并删除（188 轮）：两侧 flex 分配必须
                       对称，否则数据行名称列比表头宽、整列右移错位 */}
                 </div>
@@ -1744,6 +1964,32 @@ export default function Chart(props: ChartProps) {
                               ))
                             : (disc != null && <MiniDiscountBadge discount={disc} dim={dim} />)}
                         </span>
+                        {/* 价差列数据格（第196轮整改1）：与表头同宽居中、竖线满行高；
+                            主品基准行留空 */}
+                        {showDiffCol && (() => {
+                          const cell = diffCellOf(s);
+                          return (
+                            <>
+                              <span aria-hidden style={{ width: 1, height: 20, background: color.hairlineStrong, flexShrink: 0 }} />
+                              <span
+                                className="tnum"
+                                style={{
+                                  width: diffW,
+                                  textAlign: 'center',
+                                  flexShrink: 0,
+                                  display: 'inline-block',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  color: cell?.color,
+                                  opacity: dim ? 0.3 : undefined,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {cell?.text ?? ''}
+                              </span>
+                            </>
+                          );
+                        })()}
                         {/* 快照入口已删除（本轮，Eason）：悬停小卡只读；取证走明细表快照列 */}
                       </div>
                     {items.map((it) => (
@@ -1861,30 +2107,91 @@ export default function Chart(props: ChartProps) {
             const x0 = xPxOf(geom, tipIdx);
             const nameEst = Math.max(...rows.map((r) => curveNameOf(r.s).length)) * 6.2 + 14;
             const hasSnap = rows.some((r) => r.s.points[tipIdx]?.price != null);
-            const W = Math.ceil(20 + 6 * 6 + 2 + rateW + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasSnap ? 16 : 0);
+            const W = Math.ceil(20 + 6 * 6 + 2 + rateW + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasSnap ? 16 : 0) + (showDiffCol ? diffW + 7 : 0);
             const left = tipOverlayLeft(geom.plotLeft, geom.plotWidth, x0, W);
-            const top = Math.min(
-              Math.max(geom.plotTop + 8, 40),
-              geom.plotTop + geom.plotHeight - 36 - (rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0)),
-            );
-            return (
+            const tipContentH = rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0);
+            const topRaw = Math.min(Math.max(geom.plotTop + 8, 40), geom.plotTop + geom.plotHeight - 36 - tipContentH);
+            // 第196轮整改4：销毛迷你卡在浮层上方 8px——浮层整体下移腾出卡位
+            // （仍钳在绘图区内；绘图区过矮放不下时回落贴顶，接受与浮层轻叠）
+            const top = props.margins != null ? Math.min(topRaw + MARGIN_MINI_H + 8, geom.plotTop + geom.plotHeight - 36 - tipContentH) : topRaw;
+            // 第196轮整改4（销毛迷你卡）：悬停浮层上方 8px、左右缘对齐同一 left——
+            // 同一圆角/描边/投影语言，高度≈价格卡一半；内容 = 我司主品该时点销毛
+            // （销毛率大数字 + 单台毛利/成本小字两格；该桶无数据显「—」）。tipBox
+            // 模式（量价看板预留框）不出迷你卡；margins 未传（量价/下钻等）不渲染
+            const mpt = props.margins?.[tipIdx] ?? null;
+            const marginMini = props.margins != null && (
               <div
                 style={{
                   position: 'absolute',
                   left,
-                  top,
-                  width: W,
+                  top: Math.max(2, top - 8 - MARGIN_MINI_H),
+                  width: 208,
+                  height: MARGIN_MINI_H,
+                  boxSizing: 'border-box',
                   background: color.canvas,
                   border: `1px solid ${color.hairline}`,
                   borderRadius: radius.card,
                   boxShadow: shadow.l2,
-                  padding: '6px 10px 7px',
+                  padding: '5px 10px 6px',
                   pointerEvents: 'none',
                   zIndex: 20,
                 }}
               >
-                {body}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, lineHeight: '13px', color: color.mute }}>
+                  销毛率
+                  {/* 数据状态显性（PRODUCT.md：simulated 必须文字标注）——销毛为
+                      量价侧月版本模拟模型，非真实成本口径 */}
+                  <span
+                    style={{
+                      padding: '0 4px',
+                      fontSize: 9,
+                      lineHeight: '12px',
+                      fontWeight: 700,
+                      borderRadius: radius.pill,
+                      color: '#b45309',
+                      background: color.warningSoft,
+                    }}
+                  >
+                    模拟
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 1 }}>
+                  <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink }}>
+                    {mpt ? `${(mpt.marginRate * 100).toFixed(1)}%` : '—'}
+                  </span>
+                  <span className="tnum" style={{ fontSize: 10, lineHeight: '13px', color: color.body, whiteSpace: 'nowrap' }}>
+                    {mpt ? (
+                      <>
+                        毛利 {formatPrice(Math.round(mpt.unitMargin), currency)} · 成本 {formatPrice(Math.round(mpt.unitCost), currency)}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </span>
+                </div>
               </div>
+            );
+            return (
+              <>
+                {marginMini}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left,
+                    top,
+                    width: W,
+                    background: color.canvas,
+                    border: `1px solid ${color.hairline}`,
+                    borderRadius: radius.card,
+                    boxShadow: shadow.l2,
+                    padding: '6px 10px 7px',
+                    pointerEvents: 'none',
+                    zIndex: 20,
+                  }}
+                >
+                  {body}
+                </div>
+              </>
             );
           })()}
           {/* tipBox 模式无悬停时的居中提示（第一百一十四轮，评审：预留框常驻，

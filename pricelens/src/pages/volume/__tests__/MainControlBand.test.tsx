@@ -1,39 +1,29 @@
 // ============================================================
-// MainControlBand / GroupCompareEntry 组件级测试（2026-11-03 主品视图改版）：
-// 顶部控制区三件套——①产品显隐药丸（常驻同位切换：显示实线 / 隐藏虚线降透明，
-// aria-pressed 表达状态，点击回调带面板 key）；②DNS 店铺 chip（明细卡原款：
-// 触发钮 + aria，浮层同源 ChannelSelectPopover——本测试只验触发钮语义，
-// 浮层行为归共用组件既有契约）；③「进入本组对比」轻量文字钮（价格走势
-// 「多平台对比」同款，aria-label 沿用原明细卡入口文案，点击切组视图回调）。
+// MainControlBand / GroupCompareEntry 组件级测试（2026-11-03 主品视图改版；
+// 2026-11-05 平台口径收口改写）：顶部控制区两件套——①产品显隐药丸（常驻同位
+// 切换：显示实线 / 隐藏虚线降透明，aria-pressed 表达状态，点击回调带面板 key）；
+// ②「进入本组对比」轻量文字钮（价格走势「多平台对比」同款，aria-label 沿用
+// 原明细卡入口文案，点击切组视图回调）。
+// 原第二件「DNS 店铺 chip」随 2026-11-05 Eason 指令退役（每产品不再单独选平台
+// 店铺，取价平台统一走顶部筛选条的全局平台筛选器），channel/channelCtl 字段
+// 从 MainControlBandItem 删除，对应断言一并移除。
 // 焦点承接：registerHost 上报药丸宿主（restoreAll 后焦点落回 button.lpl-lg-pill）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import MainControlBand, { GroupCompareEntry, type MainControlBandItem } from '../MainControlBand';
-import type { PlatformSelection } from '../../../state/filtersTypes';
 
 afterEach(cleanup);
-
-const SEL: PlatformSelection = { platforms: ['DNS'], shopIds: ['RU:DNS:offline'] };
 
 const ITEMS: MainControlBandItem[] = [
   {
     key: 'm-80__12+256gb', brand: 'HUAWEI', name: 'Pura 80 Pro 12+256 GB',
     nameText: 'Pura 80 Pro', romText: '12+256 GB', hidden: false,
-    channel: { label: '京东自营', auto: false },
-    channelCtl: { cc: 'RU', skuIds: ['s1'], current: SEL, onPick: vi.fn() },
   },
   {
     key: 'mate-60__12+512gb', brand: 'HUAWEI', name: 'Mate 60 12+512 GB',
     nameText: 'Mate 60', romText: '12+512 GB', hidden: true,
-    channel: { label: '自动', auto: true },
-    channelCtl: { cc: 'RU', skuIds: ['s2'], current: null, onPick: vi.fn(), autoLabel: '京东自营' },
-  },
-  {
-    key: 'nova-12__256gb', brand: 'HUAWEI', name: 'nova 12 256 GB',
-    nameText: 'nova 12', romText: '256 GB', hidden: false,
-    channel: null, channelCtl: null,
   },
 ];
 
@@ -65,18 +55,15 @@ describe('MainControlBand · 主品控制区药丸带', () => {
     expect(onToggle).toHaveBeenCalledWith('mate-60__12+512gb');
   });
 
-  it('DNS 店铺 chip 原款迁入：显式平台 aria-pressed、自动平台带 autoLabel 语义', () => {
-    render(<MainControlBand items={ITEMS} onToggle={vi.fn()} />);
-    const chip = screen.getByRole('button', { name: '取价平台：京东自营，点击筛选平台-店铺' });
-    expect(chip.getAttribute('aria-pressed')).toBe('true');
-    const autoChip = screen.getByRole('button', { name: '取价平台：自动，点击筛选平台-店铺' });
-    expect(autoChip.getAttribute('aria-pressed')).toBe('false');
+  it('2026-11-05 平台口径收口：每卡不再有取价平台 chip（全局平台筛选器唯一入口）', () => {
+    const { container } = render(<MainControlBand items={ITEMS} onToggle={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /取价平台：/ })).toBeNull();
+    expect(container.querySelectorAll('button')).toHaveLength(ITEMS.length);
   });
 
-  it('无渠道徽标的产品不出 chip；registerHost 上报每个药丸宿主（焦点承接通道）', () => {
+  it('registerHost 上报每个药丸宿主（焦点承接通道）', () => {
     const registerHost = vi.fn();
     render(<MainControlBand items={ITEMS} onToggle={vi.fn()} registerHost={registerHost} />);
-    expect(screen.queryByRole('button', { name: /取价平台：256 GB/ })).toBeNull();
     const keys = registerHost.mock.calls.map((call) => call[0]);
     expect(keys).toEqual(ITEMS.map((item) => item.key));
     expect(registerHost.mock.calls[0][1]).toBeInstanceOf(HTMLSpanElement);

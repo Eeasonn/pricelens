@@ -7,6 +7,10 @@
 // 量价预测沿用独立页面承载，保留在图表导航中作为快捷入口。
 // 2026-11-03：新增「大盘走势」（GFK 看板复刻三图，页 id marketboard），排在
 // 量价走势之后、量价预测之前。
+// 2026-11-05（稳定版 / 迭代版双通道，Eason）：「大盘走势」「量价预测」不在
+// 稳定版（生产构建）上架——页签不渲染（DOM 中不存在，非视觉隐藏）；其余页签
+// 语义、顺序与 aria-current 规则不变。迭代版（本地 dev）照常显示。
+import { hiddenInStable } from '../appChannel';
 import { usePage } from '../state/PageContext';
 import { useChartContent } from '../state/chartContent';
 import { color, space } from '../theme/tokens';
@@ -95,10 +99,12 @@ export default function ChartContentBar() {
     >
       <Tab active={priceOn} onClick={openPrice}>价格走势</Tab>
       <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
-      <Tab active={marketOn} onClick={openMarket}>大盘走势</Tab>
+      {/* 稳定版不上架：两页签不渲染（入口不存在），页 id 直达已在 PageContext
+          统一落回 dashboard；迭代版保持原顺序与 aria-current 规则 */}
+      {!hiddenInStable('marketboard') && <Tab active={marketOn} onClick={openMarket}>大盘走势</Tab>}
       {/* 2026-11-04（WP6）：预测页头页签退役，本处恢复 aria-current="page"，
           全页唯一预测 current（与 PageHeader 页签组不再并存） */}
-      <Tab active={forecastOn} onClick={openForecast}>量价预测</Tab>
+      {!hiddenInStable('forecast') && <Tab active={forecastOn} onClick={openForecast}>量价预测</Tab>}
     </nav>
   );
 }

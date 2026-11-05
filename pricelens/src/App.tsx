@@ -78,6 +78,9 @@ function AppBody() {
     intelligence: '情报中心',
     forecast: '量价预测',
   };
+  // 稳定版 / 迭代版双通道（Eason 2026-11-05）：大盘走势 / 量价预测 / 情报中心
+  // 仅迭代版（本地 dev）可达；稳定版的页 id 直达已在 PageContext（唯一页写入口）
+  // 统一落回 dashboard，故此处渲染分支与标题映射原样保留即可（迭代版继续使用）。
   useEffect(() => {
     document.title = `PriceLens · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
   }, [page, region, country]);

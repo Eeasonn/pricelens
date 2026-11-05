@@ -103,3 +103,40 @@ describe('量价预测入壳（WP6 8.1）', () => {
     expect(currents.some((label) => label.includes('量价预测'))).toBe(false);
   });
 });
+
+// ============================================================
+// 迭代版通道不回归（Eason 2026-11-05 双通道指令）：vitest 运行于 dev 形态
+// （import.meta.env.DEV === true）= 迭代版——「大盘走势」「量价预测」
+// 「情报中心」三入口照常显示、三页照常可达。稳定版行为由
+// stableChannel.test.tsx（vi.mock stable）覆盖。
+// ============================================================
+describe('迭代版通道（本地 dev）三入口照常', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+    sessionStorage.clear();
+    try {
+      localStorage.clear();
+    } catch {
+      /* 受限环境 localStorage 不可用 */
+    }
+  });
+
+  it('页头有「情报中心」，图表页签有「大盘走势」「量价预测」', () => {
+    window.history.replaceState(null, '', '/?p=dashboard');
+    render(<App />);
+    const buttons = Array.from(document.querySelectorAll('button')).map((b) => (b.textContent ?? '').trim());
+    expect(buttons).toContain('情报中心');
+    expect(buttons).toContain('大盘走势');
+    expect(buttons).toContain('量价预测');
+  });
+
+  it('?p=intelligence 直达仍可达情报中心；?p=forecast 落在量价预测页', () => {
+    window.history.replaceState(null, '', '/?p=intelligence');
+    render(<App />);
+    expect(document.title).toContain('情报中心');
+    cleanup();
+    window.history.replaceState(null, '', '/?p=forecast');
+    render(<App />);
+    expect(document.title).toContain('量价预测');
+  });
+});

@@ -15,6 +15,7 @@
 import { dimChannel, dimProduct } from '../data';
 import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
 import type { Page } from './PageContext';
+import { hiddenInStable } from '../appChannel';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { cardsFromSelections, clampMains } from './mainSelection';
 import { getCurrentCountry } from './currentScope';
@@ -22,6 +23,12 @@ import { getCurrentCountry } from './currentScope';
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
 const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'marketboard', 'pricing', 'intelligence', 'forecast', 'config', 'alerts'];
+
+// 稳定版通道收敛（Eason 2026-11-05）：大盘走势 / 量价预测 / 情报中心不在稳定版
+// 上架，?p= 页参数白名单随之收敛——稳定版分享链接直达三页时静默忽略（回退
+// 默认页）；页路由的统一落回在 PageContext（resolveChannelPage），此处保证
+// readUrlOverrides 的 page 解析与之一致。迭代版白名单不变。
+const URL_PAGES: Page[] = PAGES.filter((p) => !hiddenInStable(p));
 
 /** 逗号列表参数 → 去空白、去空项 */
 const listParam = (q: URLSearchParams, name: string): string[] =>
@@ -94,7 +101,7 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
   try {
     const q = new URLSearchParams(window.location.search);
     const p = q.get('p');
-    if (p && (PAGES as string[]).includes(p)) out.page = p as Page;
+    if (p && (URL_PAGES as string[]).includes(p)) out.page = p as Page;
     const g = q.get('g');
     if (g === 'week' || g === 'month' || g === 'quarter') out.filters.granularity = g;
     const cur = q.get('cur');

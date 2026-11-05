@@ -80,7 +80,9 @@ import {
   buildPriceSummary,
   buildPromoBands,
   collectTierValues,
+  curveNameOf,
   dedupeSpecText,
+  nameZoneWidthOf,
   type LineShapeChoice,
   type PromoBand,
 } from './chartModel';
@@ -88,8 +90,11 @@ import SplitAxisColumn from './SplitAxisColumn';
 import type { YLimitState } from './YLimitInputs';
 import { contentSignature } from '../../components/ProductPicker/combos';
 import {
+  BREAK_PX,
   GRID,
+  TICK_PX,
   adaptiveRangeOf,
+  axisTickTextsOf,
   bucketLatestWeekLabel,
   bucketSpans,
   computeYAxis,
@@ -105,10 +110,13 @@ import {
   bucketIdOfWeek,
   bucketAnchorDate,
   tailWindowIds,
-  NAME_ZONE_W,
   type Bucket,
   type YScale,
 } from './helpers';
+// 第196轮整改4/5（Eason）：只 import 量价侧模型——销毛（marginCostOf）与销量估算
+// （volumeByBuckets），按当前价格页产品/国家/粒度取数；量价侧文件零改动
+import { marginCostOf, type MarginCostPoint } from '../../pages/volume/marginCost';
+import { volumeByBuckets } from '../../dataModel/volume';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { useConfigVersion } from '../../state/configStore';
 import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
@@ -281,8 +289,9 @@ export default function PriceTrend(props: {
   // 统一写，主图与全部分离面板同值（此前是各 Chart 实例内部状态，互相不同步）。
   // 第一百九十二轮：改会话态——与 Y 轴设置同批，切看板不再被清
   const [showYTicks, setShowYTicks] = usePageViewState<boolean>('dashboard.showYTicks', () => true); // Y 刻度线（第九十一轮恢复；默认开）
-  // 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立，两个轴各自显隐
-  const [showTiers, setShowTiers] = usePageViewState<boolean>('dashboard.showTiers', () => true);
+  // 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立；第196轮整改2默认值
+  // 翻转为关——Y 轴默认只显示刻度标签，档位带经齿轮「显示设置」打开（开关保留）
+  const [showTiers, setShowTiers] = usePageViewState<boolean>('dashboard.showTiers', () => false);
   // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑），缺省
   const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('dashboard.lineShape', () => 'auto');
   // 价格显示（第一百一十四轮，评审）：精简 = 每系列仅最高/最低/最新三价直标（默认）；
@@ -290,6 +299,10 @@ export default function PriceTrend(props: {
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('dashboard.labelMode', () => 'compact');
   // 悬停小页签比率：默认周环比；「页签显示」在工具行 ⋯ 内；会话态跨页保留（192 轮）
   const [tipMode, setTipMode] = usePageViewState<'discount' | 'wow'>('dashboard.tipMode', () => 'wow');
+  // 量层（第196轮整改5，Eason 领导要求）：默认关；开启 = 价格绘图区下方叠销量带
+  // （柱|面积两模式，柱视觉与量价页 VolumeBars 同源）。会话态跨页保留（与 Y 轴设置同约定）
+  const [volumeOn, setVolumeOn] = usePageViewState<boolean>('dashboard.volumeOn', () => false);
+  const [volumeMode, setVolumeMode] = usePageViewState<'bar' | 'area'>('dashboard.volumeMode', () => 'bar');
   // 第一百一十四轮：分离模式横向虚线（跨面板共享悬停纵向位置；与 splitHoverIdx 同机制）
   const [splitCrossY, setSplitCrossY] = useState<number | null>(null);
   // 第一百一十五轮：顶部图例带悬停的产品——合并图单键；分离模式记录面板 + 系列
@@ -1038,6 +1051,81 @@ export default function PriceTrend(props: {
     return m;
   }, [focusIdx, panelViews, effWins, win.s, win.e]);
 
+  // ---- 第196轮整改4/5（Eason）：我司主品的销量与销毛——只 import 量价侧模型
+  //      （dataModel/volume 与 pages/volume/marginCost，量价侧文件零改动）。销量 =
+  //      量层柱/面积数据源；销毛 = 悬停小卡上方的迷你卡（月版本模拟模型，非真实成本；
+  //      桶无有效价月 = null → 卡内显「—」，不造假口径）。对比产品不出销毛卡 ----
+  const ownMainCard = useMemo(() => effMains.find((c) => c.main) ?? null, [effMains]);
+  const ownMainSel = ownMainCard?.main ?? null;
+  const ownMainKey = ownMainSel ? seriesKeyOf(ownMainSel) : null;
+  const winBucketIds = useMemo(() => bucketIds.slice(win.s, win.e + 1), [bucketIds, win.s, win.e]);
+  // 合并图：主品周/月/季销量序列（与 points 同下标）+ 系列色（量层柱色 = 主品品牌色）
+  const mergedVolumes = useMemo(
+    () =>
+      ownMainSel && winBucketIds.length > 0
+        ? volumeByBuckets(ownMainSel.modelId, ownMainSel.romram, state.countryCode, state.granularity, winBucketIds)
+        : null,
+    [ownMainSel, winBucketIds, state.countryCode, state.granularity],
+  );
+  const mergedMainSeries = useMemo(
+    () => (ownMainKey ? chartSeries.find((s) => s.key === ownMainKey) ?? null : null),
+    [chartSeries, ownMainKey],
+  );
+  const mergedVolumeColor = mergedMainSeries?.color ?? color.mute;
+  // 合并图：主品逐桶销毛（输入 = 显示币种折后价窗口序列；模拟月版本模型）
+  const mergedMargins = useMemo(
+    () =>
+      mergedMainSeries && ownMainSel && winBucketIds.length > 0
+        ? marginCostOf({
+            modelId: ownMainSel.modelId,
+            romram: ownMainSel.romram,
+            countryCode: state.countryCode,
+            points: mergedMainSeries.points,
+            bucketIds: winBucketIds,
+          })
+        : null,
+    [mergedMainSeries, ownMainSel, state.countryCode, winBucketIds],
+  );
+  // 分离面板：逐面板各自主品的销量/销毛/量色/价差基准（独立窗口按面板生效窗口切片）
+  const panelExtra = useMemo(() => {
+    const m: Record<
+      string,
+      {
+        volumes: (number | null)[] | null;
+        margins: (MarginCostPoint | null)[] | null;
+        volumeColor: string;
+        diffBaseKey: string | null;
+      }
+    > = {};
+    if (!splitActive) return m;
+    for (const p of panelViews) {
+      const [ps, pe] = effWins[p.key] ?? [win.s, win.e];
+      const ids = bucketIds.slice(ps, pe + 1);
+      const sel = p.card.main;
+      const key = sel ? seriesKeyOf(sel) : null;
+      const mainSeries = key ? p.all.find((s) => s.key === key) ?? null : null;
+      m[p.key] = {
+        volumes:
+          sel && ids.length > 0
+            ? volumeByBuckets(sel.modelId, sel.romram, state.countryCode, state.granularity, ids)
+            : null,
+        margins:
+          mainSeries && sel && ids.length > 0
+            ? marginCostOf({
+                modelId: sel.modelId,
+                romram: sel.romram,
+                countryCode: state.countryCode,
+                points: mainSeries.points,
+                bucketIds: ids,
+              })
+            : null,
+        volumeColor: (key ? p.all.find((s) => s.key === key)?.color : null) ?? color.mute,
+        diffBaseKey: key,
+      };
+    }
+    return m;
+  }, [splitActive, panelViews, effWins, win.s, win.e, bucketIds, state.countryCode, state.granularity]);
+
   // Y 轴 = 自适应分段刻度；刷选拖动中冻结（沿用上次 scale，只做横向重采样），
   // 松手统一重算一次 —— 调节过程不再实时改变纵轴（第九轮反馈）。
   // scaleRef 同时是步长滞回的 prev（第十一轮）：存的是"上一次未冻结"的模型，
@@ -1052,6 +1140,7 @@ export default function PriceTrend(props: {
     state.priceTypes.discounted, state.priceTypes.rrp,
     state.currency, state.granularity, state.rangeStart, state.rangeEnd,
     yCompress,
+    volumeOn, // 第196轮整改5：量层开合 = 价格区高度变化 → 步长冻结解冻重适配
   ]);
   const yBaseRef = useRef<{ key: string; intervalUsd: number } | null>(null);
   const yCfg = useMemo(() => {
@@ -1072,10 +1161,60 @@ export default function PriceTrend(props: {
       freeze: frozen, // 非触发时机冻结步长（第一百六十八轮；169 轮格数随范围自然伸缩）
     });
   }, [chartSeries, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimitLive, yAdaptKey]);
-  // 自适应基线在渲染提交后写入（渲染期写 ref 会被并发渲染污染）
+  // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
+  // S/E 徽标上探 7.5px、名称避让钳 plotTop+2，14px 够用；极值胶囊已在 Chart 内钳回容器
+  // 刻度和档位都关掉时，一起收起，图顶不再留那一块。
+  // （第196轮整改5：上提到量带规划之前——量带高度以「图顶带 + 绘图区 + 底边距」为基数）
+  const yAxisVisible = showYTicks || (state.currency === 'usd' && showTiers);
+  // A1 收口（2026-11-02 Eason 拍板）：Y 轴范围编辑器移驻常驻工具行后，图顶带只剩
+  // 档位小标 13px 与顶格刻度字上探 8px——原 Y_LIMIT_EDITOR_H（126px，其中卡片只占
+  // 左侧 63px 宽）退役，收到 16px，合并/分图的整条空白一并归零。
+  const Y_AXIS_TOP_BAND = 16;
+  const panelGridTop = yAxisVisible ? Y_AXIS_TOP_BAND : 8;
+  // 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；本轮拍板回归面板内）：
+  // 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（渠道行改药丸上方平台行）
+  const PANEL_LEGEND_H = 54;
+  // ---- 第196轮整改5（量层）：量带高度规划——量带 = 压缩前总高 × 30%（Eason 口径
+  //      28~32%，以视觉舒适为准），价格绘图区以有效 sliderScale 等比压缩：
+  //      plot' = plot0 − volH ⇔ sEff = (plot' − 断裂条) / (cells×TICK_PX / s0)。格值与
+  //      步长完全不变，只改每格像素高（线的纵向比例保持） ----
+  const VOL_BAND_RATIO = 0.3;
+  const volPlan = useMemo<{ scale: YScale; volH: number } | null>(() => {
+    if (!volumeOn) return null;
+    const breaks = yCfg.breaks.length * BREAK_PX;
+    const unit = yCfg.plotHeight - breaks; // cells × TICK_PX × sliderScale
+    const totalH0 = panelGridTop + yCfg.plotHeight + GRID.bottom;
+    const volH = Math.max(40, Math.round(totalH0 * VOL_BAND_RATIO));
+    if (unit <= 0) return { scale: yCfg, volH };
+    const targetPlot = Math.max(breaks + TICK_PX, yCfg.plotHeight - volH);
+    const sEff = Math.min(3, Math.max(0.5, ((targetPlot - breaks) / unit) * sliderScale));
+    const frozen =
+      yBaseRef.current && yBaseRef.current.key === yAdaptKey
+        ? { intervalUsd: yBaseRef.current.intervalUsd }
+        : undefined;
+    return {
+      volH,
+      scale: computeYAxis({
+        series: chartSeries,
+        priceTypes: state.priceTypes,
+        sliderScale: sEff,
+        allowBreak: yCompress,
+        perUsd: perUsdOf(state.currency),
+        prev: scaleRef.current,
+        yMin: yLimitLive.min,
+        yMax: yLimitLive.max,
+        freeze: frozen,
+      }),
+    };
+  }, [volumeOn, yCfg, panelGridTop, sliderScale, chartSeries, state.priceTypes, yCompress, state.currency, yLimitLive, yAdaptKey]);
+  // 量层开启 = 用压缩后的模型喂主图（关闭 = 原模型，行为不变）
+  const yFinal = volumeOn && volPlan ? volPlan.scale : yCfg;
+  const mergedVolH = volumeOn && volPlan ? volPlan.volH : 0;
+  // 自适应基线在渲染提交后写入（渲染期写 ref 会被并发渲染污染）；写「实际生效」的
+  // yFinal——量层开合属于 yAdaptKey 触发时机，冻结步长在两种形态下保持一致
   useEffect(() => {
-    yBaseRef.current = { key: yAdaptKey, intervalUsd: yCfg.intervalUsd };
-  }, [yAdaptKey, yCfg]);
+    yBaseRef.current = { key: yAdaptKey, intervalUsd: yFinal.intervalUsd };
+  }, [yAdaptKey, yFinal]);
   // 限位提交（第一百六十六轮）：拖柄实时回传。钳制 = 与对侧至少保留一个刻度格
   // （防拖越对侧把轴挤翻）、下限不为负；null = 该侧恢复自动。落库前按方向吸附整格
   // （上限向上取整格、下限向下取整格，与 computeYAxis.snapWith 外缘吸附同口径）——
@@ -1095,22 +1234,23 @@ export default function PriceTrend(props: {
   };
   // 滞回基线在渲染提交后写入（渲染期写 ref 会被丢弃的并发渲染污染）
   useEffect(() => {
-    if (!(adjusting && scaleRef.current)) scaleRef.current = yCfg;
-  }, [yCfg, adjusting]);
-  // 分离面板图顶（第五十四轮追补）：面板 chrome=false 无工具行，只留窄空气带——
-  // S/E 徽标上探 7.5px、名称避让钳 plotTop+2，14px 够用；极值胶囊已在 Chart 内钳回容器
-  // 刻度和档位都关掉时，一起收起，图顶不再留那一块。
-  const yAxisVisible = showYTicks || (state.currency === 'usd' && showTiers);
-  // A1 收口（2026-11-02 Eason 拍板）：Y 轴范围编辑器移驻常驻工具行后，图顶带只剩
-  // 档位小标 13px 与顶格刻度字上探 8px——原 Y_LIMIT_EDITOR_H（126px，其中卡片只占
-  // 左侧 63px 宽）退役，收到 16px，合并/分图的整条空白一并归零。
-  const Y_AXIS_TOP_BAND = 16;
-  const panelGridTop = yAxisVisible ? Y_AXIS_TOP_BAND : 8;
-  // 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；本轮拍板回归面板内）：
-  // 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（渠道行改药丸上方平台行）
-  const PANEL_LEGEND_H = 54;
-  // 第八十三轮：关「显示 Y 刻度线」时刻度列塌缩，右侧内容左移对齐
-  const gridLeft = estGridLeft(state.currency, showYTicks, showTiers);
+    if (!(adjusting && scaleRef.current)) scaleRef.current = yFinal;
+  }, [yFinal, adjusting]);
+  // 第八十三轮：关「显示 Y 刻度线」时刻度列塌缩，右侧内容左移对齐。
+  // 第196轮整改2：仅刻度场景轴列宽随刻度文案自适应；整改3：名称带恢复（宽度按当前
+  // 产品名自适应预留，见 nameZoneW）——总左缘 = 轴列 + 名称带，任何场景不留空。
+  const yAxisTickTexts = useMemo(() => axisTickTextsOf(yFinal), [yFinal]);
+  // 第196轮整改3（名称带恢复，蓝本 987da34^）：带宽 = 当前图上可见产品名自适应
+  // （nameZoneWidthOf，钳 [112, 320]、以名称完整不换行为准，旧基准 188）；合并图与
+  // 全部分离面板统一取全局最长名（面板保持等宽）
+  const nameZoneW = useMemo(
+    () =>
+      nameZoneWidthOf(
+        (splitActive ? panelViews.flatMap((p) => p.vis) : chartSeries).map((s) => curveNameOf(s)),
+      ),
+    [splitActive, panelViews, chartSeries],
+  );
+  const gridLeft = estGridLeft(state.currency, showYTicks, showTiers, yAxisTickTexts, nameZoneW);
 
   // 分离显示共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
   // 第五十四轮追补②：补上步长滞回 prev——此前缺 prev，季粒度把促销低谷平均掉后
@@ -1141,20 +1281,55 @@ export default function PriceTrend(props: {
       freeze: frozen, // 非触发时机冻结步长（格数随范围自然伸缩，第一百六十九轮）
     });
   }, [splitActive, panelViews, state.priceTypes, sliderScale, adjusting, yCompress, state.currency, yLimitLive, yAdaptKey]);
+  // 第196轮整改5：分离共享轴的量带规划（与合并图 volPlan 同一算法同一比例）——
+  // 全部面板共用同一压缩模型（共享轴逐像素一致）与同一条量带高度
+  const splitVolPlan = useMemo<{ scale: YScale; volH: number } | null>(() => {
+    if (!splitActive || !volumeOn || !splitYCfg) return null;
+    const breaks = splitYCfg.breaks.length * BREAK_PX;
+    const unit = splitYCfg.plotHeight - breaks;
+    const totalH0 = panelGridTop + splitYCfg.plotHeight + GRID.bottom;
+    const volH = Math.max(40, Math.round(totalH0 * VOL_BAND_RATIO));
+    if (unit <= 0) return { scale: splitYCfg, volH };
+    const targetPlot = Math.max(breaks + TICK_PX, splitYCfg.plotHeight - volH);
+    const sEff = Math.min(3, Math.max(0.5, ((targetPlot - breaks) / unit) * sliderScale));
+    const frozen =
+      splitYBaseRef.current && splitYBaseRef.current.key === yAdaptKey
+        ? { intervalUsd: splitYBaseRef.current.intervalUsd }
+        : undefined;
+    return {
+      volH,
+      scale: computeYAxis({
+        series: panelViews.flatMap((p) => p.vis),
+        priceTypes: state.priceTypes,
+        sliderScale: sEff,
+        allowBreak: yCompress,
+        perUsd: perUsdOf(state.currency),
+        prev: splitScaleRef.current,
+        yMin: yLimitLive.min,
+        yMax: yLimitLive.max,
+        freeze: frozen,
+      }),
+    };
+  }, [splitActive, volumeOn, splitYCfg, panelGridTop, sliderScale, panelViews, state.priceTypes, yCompress, state.currency, yLimitLive, yAdaptKey]);
+  // 量层开启 = 面板与共享轴列都吃压缩后的模型（关闭 = 原模型，行为不变）
+  const splitYFinal = splitVolPlan && volumeOn ? splitVolPlan.scale : splitYCfg;
+  const splitVolH = splitVolPlan && volumeOn ? splitVolPlan.volH : 0;
   useEffect(() => {
-    if (splitYCfg) splitYBaseRef.current = { key: yAdaptKey, intervalUsd: splitYCfg.intervalUsd };
-  }, [yAdaptKey, splitYCfg]);
+    if (splitYFinal) splitYBaseRef.current = { key: yAdaptKey, intervalUsd: splitYFinal.intervalUsd };
+  }, [yAdaptKey, splitYFinal]);
   // 滞回基线提交后写入；分离模式退出时清档（与主图 scaleRef 各自独立，两模式互不串档）
   useEffect(() => {
     if (!splitActive || panelViews.length === 0) {
       splitScaleRef.current = null;
       return;
     }
-    if (!(adjusting && splitScaleRef.current)) splitScaleRef.current = splitYCfg;
-  }, [splitActive, panelViews.length, splitYCfg, adjusting]);
+    if (!(adjusting && splitScaleRef.current)) splitScaleRef.current = splitYFinal;
+  }, [splitActive, panelViews.length, splitYFinal, adjusting]);
+  // 第196轮整改2：共享轴列宽随当前刻度文案自适应（与 SplitAxisColumn tickTexts 同源）
+  const splitTickTexts = useMemo(() => (splitYFinal ? axisTickTextsOf(splitYFinal) : []), [splitYFinal]);
   const splitGridLeft = useMemo(
-    () => (splitYCfg ? estGridLeft(state.currency, showYTicks, showTiers) : gridLeft),
-    [splitYCfg, state.currency, showYTicks, showTiers, gridLeft],
+    () => (splitYFinal ? splitAxisWidth(state.currency, showYTicks, showTiers, splitTickTexts) : gridLeft),
+    [splitYFinal, state.currency, showYTicks, showTiers, splitTickTexts, gridLeft],
   );
   // 共享轴列的档位带数据（第五十四轮追补⑤）：与面板同一份并集判定「档内有无数据」
   const splitTierValues = useMemo(
@@ -1333,6 +1508,7 @@ export default function PriceTrend(props: {
               showTiers={showTiers}
               onShowTiers={setShowTiers}
               onShowYTicks={setShowYTicks}
+              tiersDefault={false} // 第196轮整改2：本页档位默认关，蓝点按偏离默认判断
               yCompress={yCompress}
               onYCompress={setYCompress}
               lineShape={lineShape}
@@ -1340,7 +1516,7 @@ export default function PriceTrend(props: {
               priceTypesAfter={onlyMainCtl}
               yLimit={yLimitLive} // A1 收口：显示画面实际生效值（范围过期时呈现自动）
               onYLimit={commitYLimit}
-              yRangeScale={splitActive ? splitYCfg : yCfg}
+              yRangeScale={splitActive ? splitYFinal : yFinal}
             />
           </div>
           <ConfigProvider theme={filterBarTheme}>
@@ -1377,6 +1553,7 @@ export default function PriceTrend(props: {
               showTiers={showTiers}
               onShowTiers={setShowTiers}
               onShowYTicks={setShowYTicks}
+              tiersDefault={false} // 第196轮整改2：本页档位默认关，蓝点按偏离默认判断
               yCompress={yCompress}
               onYCompress={setYCompress}
               lineShape={lineShape}
@@ -1389,6 +1566,10 @@ export default function PriceTrend(props: {
               onLabelMode={setLabelMode}
               pointPanelOpen={pointPanelOpen}
               onPointPanelToggle={() => setPointPanelOpen((v) => !v)}
+              volumeOn={volumeOn} // 第196轮整改5（量层）：大促档期左侧开关 + 柱|面积
+              onVolumeOn={setVolumeOn}
+              volumeMode={volumeMode}
+              onVolumeMode={setVolumeMode}
               promoBandsOn={promoBandsOn}
               onPromoBandsOn={setPromoBandsOn}
               offersOn={offersOn}
@@ -1504,16 +1685,17 @@ export default function PriceTrend(props: {
               marginBottom: space.sm,
             }}
           >
-            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_LEGEND_H, display: 'flex', flexDirection: 'column' }}>
-              {splitYCfg && (
+            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers, splitTickTexts)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_LEGEND_H, display: 'flex', flexDirection: 'column' }}>
+              {splitYFinal && (
                 <SplitAxisColumn
-                  yScale={splitYCfg}
+                  yScale={splitYFinal}
                   currency={state.currency}
                   industry={state.industry}
                   gridLeft={splitGridLeft}
                   panelGridTop={panelGridTop}
                   showYTicks={showYTicks}
                   showTiers={showTiers}
+                  tickTexts={splitTickTexts} // 第196轮整改2：轴列宽随刻度内容自适应
                   tierValues={splitTierValues}
                 />
               )}
@@ -1642,7 +1824,7 @@ export default function PriceTrend(props: {
                         currency={state.currency}
                         priceTypes={state.priceTypes}
                         tipMode={tipMode}
-                        gridLeft={NAME_ZONE_W // 第一百一十五轮：名称药丸上移图顶后左缘只留呼吸带（原 188px 名称带回收）
+                        gridLeft={nameZoneW // 第196轮整改3：面板内恢复名称预留带（宽随产品名自适应，与合并图同宽）
                         }
                         gridTop={panelGridTop}
                         chrome={false} // 面板不渲染设置行（第五十四轮追补）：统管权在上方常驻行
@@ -1653,8 +1835,15 @@ export default function PriceTrend(props: {
                         enableOffer={state.granularity === 'week' && offersOn}
                         onDrill={makePanelDrill(p)}
                         windowKey={`${pw[0]}:${pw[1]}:${p.key}`}
-                        yScale={splitYCfg ?? undefined}
-                        hideNamePills // 第一百一十五轮：产品名在面板顶部图例带，图内不再画药丸
+                        yScale={splitYFinal ?? undefined}
+                        nameZoneWidth={nameZoneW} // 第196轮整改3：名称带（zone 等距分布）恢复
+                        tipDiffBaseKey={panelExtra[p.key]?.diffBaseKey ?? null} // 第196轮整改1：价差列基准 = 本卡主品
+                        margins={panelExtra[p.key]?.margins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）
+                        volumeOn={volumeOn} // 第196轮整改5：量层（面板各自主品销量）
+                        volumeMode={volumeMode}
+                        volumeColor={panelExtra[p.key]?.volumeColor}
+                        volumes={panelExtra[p.key]?.volumes ?? undefined}
+                        volumeHeight={splitVolH}
                         legendHoverKey={panelLegendHover?.panel === p.key ? panelLegendHover.key : null}
                         lineShape={lineShape}
                         labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
@@ -1675,7 +1864,7 @@ export default function PriceTrend(props: {
                       {/* 本图时间轴：每张分离面板底部各自一条（同步 = 拖任一条全面板
                           联动；独立 = 只调本图）。左右缘对齐绘图区 = 卡片内边距 + 图内
                           名称带 / 右留白；拖动中冻结共享 Y 轴（onAdjusting） */}
-                      <div style={{ margin: `0 ${8 + GRID.right}px 6px ${8 + NAME_ZONE_W}px` }}>
+                      <div style={{ margin: `0 ${8 + GRID.right}px 6px ${8 + nameZoneW}px` }}>
                         <SplitTimeTrack
                           ids={bucketIds}
                           lo={filterBounds[0]}
@@ -1718,7 +1907,15 @@ export default function PriceTrend(props: {
             gridTop={panelGridTop}
             showXLabels // 第一百五十二轮：图内恢复独立时间轴（业务意见）——周刻度 YYYYWxx、
             // 密度按 axisTickPlan 抽稀；底部轨道收敛为拖柄/跨年标注的查看窗口毛刷
-            hideNamePills // 第一百一十五轮：产品名在图顶图例带，图内不再画药丸
+            nameZoneWidth={nameZoneW} // 第196轮整改3：名称带恢复（与图顶品牌图例带并存）
+            axisTickTexts={yAxisTickTexts} // 第196轮整改2：仅刻度场景轴列宽随内容自适应
+            tipDiffBaseKey={ownMainKey} // 第196轮整改1：价差列基准 = 第一组主品
+            margins={mergedMargins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）
+            volumeOn={volumeOn} // 第196轮整改5：量层（柱|面积 + 右轴）
+            volumeMode={volumeMode}
+            volumeColor={mergedVolumeColor}
+            volumes={mergedVolumes ?? undefined}
+            volumeHeight={mergedVolH}
             legendHoverKey={legendHoverKey}
             showYTicks={showYTicks}
             showTiers={showTiers}
@@ -1727,7 +1924,7 @@ export default function PriceTrend(props: {
             enableOffer={state.granularity === 'week' && offersOn}
             onDrill={onDrill}
             windowKey={`${win.s}:${win.e}`}
-            yScale={yCfg}
+            yScale={yFinal}
             sliderScale={sliderScale}
             onSliderScale={setSliderScale}
             yCompress={yCompress}
