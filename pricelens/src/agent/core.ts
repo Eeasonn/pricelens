@@ -17,6 +17,7 @@ const compact = (s: string): string => s.toLocaleLowerCase().replace(/[\s_\-]+/g
 
 const COUNTRY_ALIASES: Record<string, string> = {
   巴西: 'BR', 中国: 'CN', 俄罗斯: 'RU', 俄国: 'RU', 美国: 'US', 英国: 'GB',
+  R国: 'RU',
   法国: 'FR', 德国: 'DE', 西班牙: 'ES', 意大利: 'IT', 土耳其: 'TR', 墨西哥: 'MX',
   沙特: 'SA', 沙特阿拉伯: 'SA', 阿联酋: 'AE', 阿拉伯联合酋长国: 'AE',
   印度尼西亚: 'ID', 印尼: 'ID', 马来西亚: 'MY', 新加坡: 'SG', 泰国: 'TH',
@@ -53,7 +54,7 @@ function modelPrefixes(modelName: string): string[] {
 
 function knownEntityInText(text: string): boolean {
   const haystack = compact(text);
-  if (Object.keys(COUNTRY_ALIASES).some((alias) => text.includes(alias))) return true;
+  if (Object.keys(COUNTRY_ALIASES).some((alias) => haystack.includes(compact(alias)))) return true;
   if (/(?:^|[^a-z])(BR|CN|RU|US|GB|FR|DE|ES|IT|TR|MX|SA|AE|ID|MY|SG|TH|VN|ZA|PH|PL|RO)(?:$|[^a-z])/i.test(text)) return true;
   const byModel = new Map<string, string>();
   for (const row of dimProduct) byModel.set(row.model_id, row.model_name);
@@ -61,8 +62,9 @@ function knownEntityInText(text: string): boolean {
 }
 
 function countryOfText(text: string, fallback: string): { code: string; explicit: boolean } {
-  for (const [alias, code] of Object.entries(COUNTRY_ALIASES)) if (text.includes(alias)) return { code, explicit: true };
-  const byName = dimRegion.find((region) => text.includes(region.country_name));
+  const haystack = compact(text);
+  for (const [alias, code] of Object.entries(COUNTRY_ALIASES)) if (haystack.includes(compact(alias))) return { code, explicit: true };
+  const byName = dimRegion.find((region) => haystack.includes(compact(region.country_name)));
   if (byName) return { code: byName.country_code, explicit: true };
   const code = text.match(/(?:^|[^a-z])(BR|CN|RU|US|GB|FR|DE|ES|IT|TR|MX|SA|AE|ID|MY|SG|TH|VN|ZA|PH|PL|RO)(?:$|[^a-z])/i)?.[1];
   return code ? { code: code.toUpperCase(), explicit: true } : { code: fallback, explicit: false };

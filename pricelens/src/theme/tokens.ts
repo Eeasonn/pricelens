@@ -102,6 +102,9 @@ export const motion = {
   base: 240, // 模式切换、面板宽度形变、chip 滑入
   slow: 320, // 跨页接力收起
   agentFull: 720, // Agent 全屏与 dock 的同壳体连续收窄，给用户确认和空间重排时间
+  searchEntrance: 200, // 页头快速搜索面板只在打开时入场
+  searchResult: 120, // 快速搜索结果换算/换模式时的交叉淡化
+  searchExit: 140, // 快速搜索面板退场，避免关闭时瞬间消失
   enter: 'cubic-bezier(0.25, 0.8, 0.3, 1)', // 入场（快出缓停）
   exit: 'cubic-bezier(0.4, 0, 0.2, 1)', // 退场（匀出急停）
 } as const;
