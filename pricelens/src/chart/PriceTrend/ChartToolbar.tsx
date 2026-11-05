@@ -45,6 +45,11 @@ export interface ChartToolbarProps {
    *  actions = 只显示右侧功能；cluster = 只显示左簇（齿轮+隐藏对比产品）；
    *  pills = 药丸行（合并模式专用，仅居中图例）。 */
   mode?: 'all' | 'actions' | 'pills' | 'cluster';
+  /** 左簇收进齿轮（2026-11-05 Eason：「这些功能就收到左边的设置图标里」）：true =
+   *  「隐藏对比产品」插槽与 Y 轴范围（自适应/上限/下限）不再占工具行，改渲染在
+   *  齿轮弹层顶部（分区 对比产品 / Y 轴范围）。仅价格走势主页传（量价页
+   *  priceTypesAfter 槽 = 销毛成本开关，保持原位不受影响）。 */
+  compactLeft?: boolean;
   /** 齿轮弹层功能可见性（2026-11-04 WP6：预测页等复用方按需收窄）；
    *  默认全 true = 不改既有行为。false 的功能整块不渲染（含相关说明与 dirty 判断）。 */
   featureVisibility?: Partial<Record<ChartToolbarFeature, boolean>>;
@@ -264,6 +269,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     props.pointPanelOpen === true ||
     props.changeThreshold != null;
   const gearDirty =
+    (props.compactLeft === true && props.yLimit != null && (props.yLimit.min != null || props.yLimit.max != null)) ||
     (showScaleCtl && props.sliderScale != null && Math.abs(props.sliderScale - 1) > 0.001) ||
     (showYTicksCtl && props.showYTicks === false) ||
     // 第196轮整改2：档位「已修改」= 偏离本页默认值（价格页默认关 → 开 = 蓝点；
@@ -290,7 +296,26 @@ export default function ChartToolbar(props: ChartToolbarProps) {
       onOpenChange={setGearOpen}
       placement="bottomLeft"
       content={
-        <div style={{ width: 236 }}>
+        <div style={{ width: props.compactLeft && props.onYLimit != null ? 288 : 236 }}>
+          {/* compactLeft（2026-11-05 Eason）：左簇两件收进弹层顶部，分区承载 */}
+          {props.compactLeft && (props.priceTypesAfter != null || (props.onYLimit != null && props.yRangeScale != null)) && (
+            <>
+              {props.priceTypesAfter != null && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>对比产品</div>
+                  {props.priceTypesAfter}
+                </div>
+              )}
+              {props.onYLimit != null && props.yRangeScale != null && (
+                <>
+                  {props.priceTypesAfter != null && <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />}
+                  <div style={{ fontSize: 12, color: color.mute, marginBottom: 8 }}>Y 轴范围</div>
+                  <YLimitInputs scale={props.yRangeScale} limit={props.yLimit ?? { min: null, max: null }} onLimit={props.onYLimit} />
+                </>
+              )}
+              <div style={{ borderTop: `1px solid ${color.hairline}`, margin: '10px 0' }} />
+            </>
+          )}
           {/* featureVisibility（2026-11-04 WP6）：false 的功能整块不渲染；
               分隔线按相邻可见块动态出删，避免留下孤立 hairline */}
           {showScaleCtl && (
@@ -357,7 +382,11 @@ export default function ChartToolbar(props: ChartToolbarProps) {
         </div>
       }
     >
-      <RoundIconButton title={gearDirty ? 'Y 轴显示设置（已修改）' : 'Y 轴显示设置'} aria-label="Y 轴显示设置" active={gearDirty}>
+      <RoundIconButton
+        title={gearDirty ? `${props.compactLeft ? '图表显示设置' : 'Y 轴显示设置'}（已修改）` : props.compactLeft ? '图表显示设置' : 'Y 轴显示设置'}
+        aria-label={props.compactLeft ? '图表显示设置' : 'Y 轴显示设置'}
+        active={gearDirty}
+      >
         <SettingOutlined style={{ fontSize: 12 }} />
       </RoundIconButton>
     </Popover>
@@ -379,10 +408,11 @@ export default function ChartToolbar(props: ChartToolbarProps) {
       {showLeft && (
         <>
           {gearCtl}
-          {/* 齿轮之后：隐藏对比产品（折后价/RRP 已收进 ⋯） */}
-          {props.priceTypesAfter}
+          {/* 齿轮之后：隐藏对比产品（折后价/RRP 已收进 ⋯）。compactLeft 时两件
+              改收齿轮弹层（2026-11-05 Eason），工具行只剩设置图标 */}
+          {!props.compactLeft && props.priceTypesAfter}
           {/* Y 轴范围（A1 收口）：分隔线 + 横排控件，仅合并/分图主工具行传入时渲染 */}
-          {props.onYLimit && props.yRangeScale && (
+          {!props.compactLeft && props.onYLimit && props.yRangeScale && (
             <>
               <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
               <YLimitInputs scale={props.yRangeScale} limit={props.yLimit ?? { min: null, max: null }} onLimit={props.onYLimit} />

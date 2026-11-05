@@ -124,6 +124,15 @@ describe('第196轮整改5：量层（价格绘图区下方 + 右轴）', () => 
     expect(path!.getAttribute('stroke')).toBe('none');
     // 半透明填充（缺省色 = color.mute，α0.18 与柱模式同透明度语言）
     expect(path!.getAttribute('fill')).toMatch(/^rgba\(.+, 0\.18\)$/);
+    // 路径语法良构（2026-11-05 Eason「面积无呈现」回归）：每个命令后坐标必须成对
+    // ——旧实现拼出「M x y volBase L …」奇数序列，M 吞掉后续 x 当配对值整条画出界
+    const d = path!.getAttribute('d') ?? '';
+    expect(d).not.toBe('');
+    for (const seg of d.split(/(?=[MLZ])/).filter((s) => s.trim() && !s.trim().startsWith('Z'))) {
+      const nums = seg.trim().slice(1).trim().split(/[\s,]+/).map(Number);
+      expect(nums.length % 2).toBe(0);
+      expect(nums.every((n) => Number.isFinite(n))).toBe(true);
+    }
   });
 
   it('量层开启时 canvas 网格让出量带（grid.bottom 增大）→ 时间标签下移，量带无分界线', async () => {

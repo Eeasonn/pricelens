@@ -1179,7 +1179,10 @@ export default function Chart(props: ChartProps) {
           let run: string[] = [];
           const flush = (): void => {
             if (run.length >= 2) {
-              d += `M ${run[0]} ${volBase} L ${run.join(' L ')} L ${run[run.length - 1].split(' ')[0]} ${volBase} Z `;
+              // 起点必须拆出首点 x 再落基线：`M ${run[0]} ${volBase}` 会拼出
+              // 「M x y volBase」奇数坐标序列，M 吞掉后续 L 的首 x 当配对值，
+              // 整条路径坐标错乱画出界（2026-11-05 Eason：面积模式无呈现根因）
+              d += `M ${run[0].split(' ')[0]} ${volBase} L ${run.join(' L ')} L ${run[run.length - 1].split(' ')[0]} ${volBase} Z `;
             }
             run = [];
           };

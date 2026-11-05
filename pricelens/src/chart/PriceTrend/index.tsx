@@ -1540,6 +1540,7 @@ export default function PriceTrend(props: {
               lineShape={lineShape}
               onLineShape={setLineShape}
               priceTypesAfter={onlyMainCtl}
+              compactLeft // 2026-11-05 Eason：左簇（隐藏对比产品/Y 轴范围）收进设置齿轮
               yLimit={yLimitLive} // A1 收口：显示画面实际生效值（范围过期时呈现自动）
               onYLimit={commitYLimit}
               yRangeScale={splitActive ? splitYFinal : yFinal}
