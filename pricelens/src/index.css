@@ -88,6 +88,17 @@ button[aria-disabled='true'] {
   cursor: not-allowed;
 }
 
+.lpl-price-search-shell:hover:not(:focus-within) {
+  border-color: #a1a1a1 !important;
+}
+.lpl-price-search-shell:has(input:focus-visible) {
+  border-color: #0070f3 !important;
+  box-shadow: 0 0 0 1px #0070f3, 0 0 0 3px #e8f1ff !important;
+}
+.lpl-price-search-shell input:focus-visible {
+  outline: none;
+}
+
 /* 键盘用户进入页面后可直接越过统一页头与筛选区。默认移出视觉流，
    聚焦时固定在左上角，避免被 sticky/fixed 元素遮住。 */
 .lpl-skip-link {
@@ -600,6 +611,10 @@ button.lpl-map-card:hover {
 .lpl-agent-panel[data-agent-mode='dock'] { width: min(440px, 100vw); }
 .lpl-agent-panel[data-agent-mode='drawer'] { width: min(640px, 100vw); }
 .lpl-agent-panel[data-agent-mode='full'] { width: 100vw; }
+
+/* Agent launcher keeps the hover state quiet so the blue selection accent remains
+   reserved for focus/open state. The hover fill is a soft canvas tint only. */
+.lpl-agent-launcher:hover { background: #f5f5f5 !important; }
 
 /* Agent 结果卡在小屏保持可读：标题徽标可换行，解释卡的双列指标改成单列，
    filter 预览的 before/after 也不再把内容压成不可读的四列。 */
