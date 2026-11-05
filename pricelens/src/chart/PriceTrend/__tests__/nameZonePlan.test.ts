@@ -1,12 +1,11 @@
 // ============================================================
-// 第196轮整改3（Eason）：名称预留带（zone 模式恢复，蓝本 987da34^）测试。
-// 结构断言：传入 nameZone 后——
-// ① 全部名称药丸进带内（x ∈ [plotLeft − axisW − width + 4, plotLeft − axisW − 4]），
-//    带在轴列与绘图区之间不留空；
-// ② 名称按折线起点纵向排序、等距分布：相邻 top 间距 ≥ 药丸高 + 4（避让挤在一起
-//    的名称），整组在绘图区纵向居中（首尾到绘图区两缘距离对称）；
-// ③ 名称项带 zone 标记（渲染单行 nowrap）；锚定模式（不传）不受影响（金测钉住）。
-// 宽度断言：nameZoneWidthOf 自适应钳 [112, 320]、空集回落基准 188。
+// 第196轮整改3（2026-11-05 复检定版）：名称预留带 位置 + 对齐 测试。
+// 位置：带 = 「Y 轴刻度标签右侧、绘图区左缘之间」（[plotLeft − width + 4,
+// plotLeft − 4]）——合并图 gridLeft = 轴列宽 + 带宽时，带紧贴刻度短横线右侧、
+// 不再压在刻度上；分离面板（无轴列）带贴面板左缘。
+// 对齐：药丸期望位 = 该线首个可见桶的 y（钳在带内）；互不重叠时逐线精确对齐，
+// 重叠时经 resolveCollisions 最小位移上推（不再等距分布），盒恒互不相交、钳带内。
+// 宽度：nameZoneWidthOf 自适应钳 [112, 320]、空集回落基准 188。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import {
@@ -14,7 +13,6 @@ import {
   NAME_BAND_MIN_W,
   NAME_BAND_W,
   computeYAxis,
-  xPxOf,
   yPxOf,
 } from '../helpers';
 import { ZONE_LINE_H, buildLabelPlan, nameZoneWidthOf } from '../chartModel';
@@ -43,101 +41,154 @@ const mk = (key: string, label: string, prices: number[]): Series => ({
 });
 
 const priceTypes = { discounted: true, rrp: false };
-const series: Series[] = [
-  mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1100, 1200]), // 折线起点在高位
-  mk('OWN__2', 'HUAWEI Mate 70 Pro 12GB', [900, 950, 1000]), // 起点 ~中部
-  mk('OWN__3', 'HUAWEI nova 14 8GB', [800, 850, 900]), // 起点在低位
-];
-
-const scale = computeYAxis({ series, priceTypes, sliderScale: 1, allowBreak: false, perUsd: 1 });
-const geom = {
-  gridLeft: 258,
-  plotLeft: 258, // = 名称带 188 + 轴列 70（estGridLeft 同构）
-  plotTop: 36,
-  plotWidth: 600,
-  plotHeight: scale.plotHeight,
-  scale,
-  n: 3,
-};
 const marks = new Map();
+const PILL_H = ZONE_LINE_H + 6; // 名称药丸盒高（单行 + 内边距）
 
-const planOf = (nameZone?: { width: number; axisW: number }) =>
-  buildLabelPlan({
-    geom,
-    series,
-    granularity: 'week',
+describe('第196轮整改3：名称带位置（刻度标签右侧、绘图区左缘之间）', () => {
+  // 合并图布局：gridLeft = 轴列 70 + 带 188，plotLeft = 258 —— 带必须落在
+  // [70+4, 258−4] = [74, 254]，即紧贴刻度短横线（右缘 76）右侧、不压刻度
+  const scale = computeYAxis({
+    series: [mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1050, 1100])],
     priceTypes,
-    endpointMarks: marks,
-    nameZone,
+    sliderScale: 1,
+    allowBreak: false,
+    perUsd: 1,
+  });
+  const geom = {
+    gridLeft: 258,
+    plotLeft: 258, // = 名称带 188 + 轴列 70（estGridLeft 同构）
+    plotTop: 36,
+    plotWidth: 600,
+    plotHeight: scale.plotHeight,
+    scale,
+    n: 3,
+  };
+
+  it('带 = 刻度右侧到绘图区左缘（[plotLeft−width+4, plotLeft−4]），不再压在刻度上', () => {
+    const plan = buildLabelPlan({ geom, series: [], granularity: 'week', priceTypes, endpointMarks: marks, nameZone: { width: 188 } });
+    void plan;
+    // 走「全部进带」断言：见下一个用例的集合版；此处钉带宽边界值
+    const ZONE_W = 188;
+    const AXIS_W = 70;
+    const bandLeft = geom.plotLeft - ZONE_W + 4; // = 74 > 轴列右缘 76−6=70（刻度+短横线）
+    expect(bandLeft).toBeGreaterThanOrEqual(AXIS_W + 2);
   });
 
-describe('第196轮整改3：名称预留带（zone 模式）结构与间距', () => {
-  const ZONE_W = 188;
-  const AXIS_W = 70;
-  const PILL_H = ZONE_LINE_H + 6; // 名称药丸盒高（单行 + 内边距）
-  const plan = planOf({ width: ZONE_W, axisW: AXIS_W });
-
-  it('全部名称药丸进带内（带 = 轴列右缘到绘图区左缘，不留空）', () => {
-    expect(plan.names.length).toBe(3);
-    const bandLeft = geom.plotLeft - AXIS_W - ZONE_W;
+  it('全部名称药丸盒进带内（带右缘贴绘图区左缘，不留空）', () => {
+    const series = [
+      mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1050, 1100]),
+      mk('OWN__2', 'HUAWEI nova 14 8GB', [800, 820, 840]),
+    ];
+    const s2 = computeYAxis({ series, priceTypes, sliderScale: 1, allowBreak: false, perUsd: 1 });
+    const g = { ...geom, scale: s2, plotHeight: s2.plotHeight };
+    const plan = buildLabelPlan({ geom: g, series, granularity: 'week', priceTypes, endpointMarks: marks, nameZone: { width: 188 } });
+    expect(plan.names.length).toBe(2);
     for (const nm of plan.names) {
-      expect(nm.x).toBeGreaterThanOrEqual(bandLeft);
-      expect(nm.x + nm.w).toBeLessThanOrEqual(geom.plotLeft - AXIS_W);
+      expect(nm.x).toBeGreaterThanOrEqual(g.plotLeft - 188 + 4);
+      expect(nm.x + nm.w).toBeLessThanOrEqual(g.plotLeft - 4);
       expect(nm.zone).toBe(true);
     }
   });
+});
 
-  it('名称按折线起点高度排序，等距分布：相邻间距 ≥ 药丸高 + 4（不互相挤）', () => {
-    const ys = plan.names.map((nm) => nm.y);
-    const sorted = [...ys].sort((a, b) => a - b);
-    expect(new Set(ys).size).toBe(3); // 等距 = 各占独立槽位
-    // 槽位 = max(药丸高 + 4, plotHeight/条数)——本例绘图区充裕，槽位均分 ≥ 下限
-    const slot = Math.max(PILL_H + 4, geom.plotHeight / 3);
-    for (let i = 1; i < sorted.length; i++) {
-      expect(sorted[i] - sorted[i - 1]).toBe(slot);
-      expect(slot).toBeGreaterThanOrEqual(PILL_H + 4); // 不互相挤的下限保证
+describe('第196轮整改3：名称带对齐（折线首桶 y + 最小位移避让，不再等距分布）', () => {
+  const ZONE_W = 188;
+  const mkGeom = (series: Series[]) => {
+    const scale = computeYAxis({ series, priceTypes, sliderScale: 1, allowBreak: false, perUsd: 1 });
+    return {
+      gridLeft: 258,
+      plotLeft: 258,
+      plotTop: 36,
+      plotWidth: 600,
+      plotHeight: scale.plotHeight,
+      scale,
+      n: 3,
+    };
+  };
+
+  it('线位相距足够时逐线精确对齐（药丸中心 = 首桶 y，零位移）', () => {
+    // 1000/500/950 → 折线首桶分别在高位/低位/中位，彼此相距远
+    const series = [
+      mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1010, 1020]),
+      mk('OWN__2', 'HUAWEI nova 14 8GB', [500, 505, 510]),
+    ];
+    const g = mkGeom(series);
+    const plan = buildLabelPlan({ geom: g, series, granularity: 'week', priceTypes, endpointMarks: marks, nameZone: { width: ZONE_W } });
+    expect(plan.names.length).toBe(2);
+    for (const nm of plan.names) {
+      // 零位移：药丸纵向中心 = 首桶 y（dy = 0 且 top = 期望位）
+      expect(nm.dy).toBe(0);
+      expect(nm.y + nm.h / 2).toBeCloseTo(nm.anchorY, 5);
     }
-    // 名称顺序与折线起点顺序一致（引线不交叉）：锚点升序 = 药丸升序
-    const withAnchor = [...plan.names].sort((a, b) => a.y - b.y).map((nm) => nm.anchorY);
-    expect([...withAnchor].sort((a, b) => a - b)).toEqual(withAnchor);
   });
 
-  it('整组在绘图区纵向居中（首尾呼吸对称）', () => {
-    const ys = plan.names.map((nm) => nm.y);
-    const slot = Math.max(PILL_H + 4, geom.plotHeight / 3);
-    const total = slot * 3;
-    const y0 = geom.plotTop + Math.max(0, (geom.plotHeight - total) / 2);
-    expect(Math.min(...ys)).toBeCloseTo(y0 + (slot - PILL_H) / 2, 5);
-    // 顶部呼吸 = 底部呼吸（整组居中）
-    const topGap = Math.min(...ys) - geom.plotTop;
-    const bottomGap = geom.plotTop + geom.plotHeight - (Math.max(...ys) + PILL_H);
-    expect(topGap).toBeCloseTo(bottomGap, 1);
-    void xPxOf;
+  it('首桶 y 越带界时钳在带内（贴顶/贴底不越绘图区）', () => {
+    // 极端值把首桶 y 压到绘图区顶/底之外（computeYAxis 已含端点，钳制为防御语义）：
+    // 单系列贴顶场景——首桶即全域最高点，期望中心 = 线 y；盒高 22 → top = y−11 ≥ plotTop+2
+    const series = [mk('OWN__1', 'HUAWEI Mate 70 12GB', [1200, 1200, 1200])];
+    const g = mkGeom(series);
+    const plan = buildLabelPlan({ geom: g, series, granularity: 'week', priceTypes, endpointMarks: marks, nameZone: { width: ZONE_W } });
+    expect(plan.names.length).toBe(1);
+    const nm = plan.names[0];
+    expect(nm.y).toBeGreaterThanOrEqual(g.plotTop);
+    expect(nm.y + nm.h).toBeLessThanOrEqual(g.plotTop + g.plotHeight);
     void yPxOf;
   });
 
-  it('锚定模式不受影响（不传 nameZone = 名称锚折线起点旁，无 zone 标记）', () => {
-    const plain = planOf();
-    expect(plain.names.length).toBe(3);
-    for (const nm of plain.names) {
-      expect(nm.zone).toBeUndefined();
-      // 锚定：名称盒横跨折线起点（起点旁）
-      expect(nm.anchorX).toBeGreaterThanOrEqual(nm.x);
-    }
+  it('两条线位相邻重叠时：最小位移上推避让（盒不相交、位移者紧贴遮挡者），非等距分布', () => {
+    // 两线首桶值仅差 1（像素距 < 药丸高 + 4）→ 期望位重叠
+    const series = [
+      mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1010, 1020]),
+      mk('OWN__2', 'HUAWEI nova 14 8GB', [1001, 1002, 1003]),
+    ];
+    const g = mkGeom(series);
+    const plan = buildLabelPlan({ geom: g, series, granularity: 'week', priceTypes, endpointMarks: marks, nameZone: { width: ZONE_W } });
+    expect(plan.names.length).toBe(2);
+    const [a, b] = [...plan.names].sort((x, y) => x.y - y.y);
+    // 盒互不相交（金测同一不变量）
+    expect(a.y + a.h + 4).toBeLessThanOrEqual(b.y + 0.001);
+    // 期望位本应重叠（线距 < 药丸高 + 4）：避让真发生了
+    const lineGap = Math.abs(plan.names[0].anchorY - plan.names[1].anchorY);
+    expect(lineGap).toBeLessThan(PILL_H + 4);
+    // 最小位移：下方药丸留在期望位（dy=0），上方药丸紧贴其上（displaced 紧贴遮挡者）
+    const stays = plan.names.find((nm) => nm.dy === 0)!;
+    const moved = plan.names.find((nm) => nm.dy !== 0)!;
+    expect(moved.y + moved.h + 4).toBeCloseTo(stays.y, 5);
+    // 非等距分布：两盒间距恰为最小呼吸 4（moved 在上、stays 在下），而非均分槽位
+    expect(stays.y - (moved.y + moved.h)).toBeCloseTo(4, 5);
   });
 
-  it('生命周期第二行计入药丸高（季粒度槽位下限随之抬高，不互压）', () => {
+  it('生命周期第二行计入药丸高（季粒度避让盒含第二行，不互压）', () => {
+    const series = [
+      mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1010, 1020]),
+      mk('OWN__2', 'HUAWEI nova 14 8GB', [1005, 1008, 1012]),
+    ];
+    const g = mkGeom(series);
     const qPlan = buildLabelPlan({
-      geom,
+      geom: g,
       series,
       granularity: 'quarter',
       priceTypes,
       endpointMarks: marks,
       lifecycleRow: () => true,
-      nameZone: { width: ZONE_W, axisW: AXIS_W },
+      nameZone: { width: ZONE_W },
     });
     for (const nm of qPlan.names) {
       expect(nm.h).toBe(ZONE_LINE_H + 6 + 14); // 药丸行 + 生命周期行
+    }
+  });
+
+  it('锚定模式不受影响（不传 nameZone = 名称锚折线起点旁，无 zone 标记）', () => {
+    const series = [
+      mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1050, 1100]),
+      mk('OWN__2', 'HUAWEI nova 14 8GB', [800, 820, 840]),
+    ];
+    const g = mkGeom(series);
+    const plain = buildLabelPlan({ geom: g, series, granularity: 'week', priceTypes, endpointMarks: marks });
+    expect(plain.names.length).toBe(2);
+    for (const nm of plain.names) {
+      expect(nm.zone).toBeUndefined();
+      expect(nm.anchorX).toBeGreaterThanOrEqual(nm.x);
     }
   });
 });

@@ -31,7 +31,7 @@ import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache } from '../components/ProductCascader/tree';
 import { clampMains, autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
-import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf } from './urlSync';
+import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
 /** 追补⑨：四类预警全局缺省（阈值小数；own-gap = 低于 15% 视为档位太近） */
@@ -388,8 +388,11 @@ function loadBaseState(): FiltersState {
     // ≤v9 一律落默认（readPersistedState 只放行 v10/11/12）
     const { v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
     restored = { ...defaultFilters, ...rest } as FiltersState;
-    // 平台单选归一：旧持久化的多选形态（platforms 多值 / shopIds 渠道下钻）取第一个平台
+    // 平台单选归一：旧持久化的多选形态（platforms 多值 / shopIds 渠道下钻）取第一个平台；
+    // 稳定版再降店铺级 → 平台级（2026-11-05 复检整改3，Eason：默认视图不再钉具体店铺，
+    // 平台级自动 = 平台内每周最低价店铺；迭代版原样）
     restored.platform = normalizePlatformSelection(restored.platform);
+    restored.platform = platformLevelForChannel(restored.platform);
     // 迁移里的矩阵查询（groupsFromBenchmark）按数据层缺省国家取分国对标，须先切到载荷国家，
     // 否则迁移产出的对比区会被别的国家矩阵固化写回
     syncScopeRegistries(restored.countryCode);
@@ -477,8 +480,13 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     );
     // 平台/店铺单选写入：店铺级选择 = plat={平台}&shop={渠道id}（平台由渠道反查）；
     // 仅平台级（旧兼容）只写 plat=；未选 = 双 null 删键（连同旧链接残留的 shop=）。
-    // 与 readUrlOverrides 的归一化读取对称（读侧同存时 shop= 优先，数据层不动）
-    const { plat, shop, seller } = platformUrlParamsOf(state.platform);
+    // 与 readUrlOverrides 的归一化读取对称（读侧同存时 shop= 优先，数据层不动）。
+    // 稳定版（2026-11-05 复检整改3，Eason）：不再钉具体店铺——state.platform 先经
+    // platformLevelForChannel 降级（平台级），shop=/seller= 恒写 null 删键，把旧
+    // 链接/旧会话残留从地址栏剥离；plat= 继续承载全局平台（价格/量价两页同键，
+    // 与读侧「stable 忽略 shop=」成对，互不打架）。迭代版 = platformLevelForChannel
+    // 原样透传，写入行为逐字节不变
+    const { plat, shop, seller } = platformUrlParamsOf(platformLevelForChannel(state.platform));
     // 第一百三十八轮：时间范围/价格显示/汇总口径入链（rs/re/pt/agg）——分享链接
     // 带全取数上下文；自适应态不写范围（接收方随数据自动算），读入 rs/re 即退出自适应
     const ptCode = state.priceTypes.discounted && state.priceTypes.rrp

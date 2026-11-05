@@ -386,6 +386,7 @@ function GroupBlock({
   onHover,
   channelCtl,
   syncCtl,
+  hideChannelBadges,
 }: {
   group: LegendGroup;
   hiddenKeys: Set<string>;
@@ -400,6 +401,11 @@ function GroupBlock({
   /** 店铺同步：渲染在主品左侧；只作用于本组（本组主品+对比品跟随本组主产品），
    *  上层按组注入。 */
   syncCtl?: { active: boolean; onToggle: () => void };
+  /** 稳定版平台化（2026-11-05 复检整改3，Eason）：true = 药丸上方每线渠道
+   *  小药丸整体不渲染——稳定版取数口径 = 顶部全局平台筛选器，每线不再挂
+   *  平台/店铺概念（渠道选择 chip 由上层不传 channelCtl 收敛）。缺省 false =
+   *  迭代版/量价面板头行为不变 */
+  hideChannelBadges?: boolean;
 }) {
   const pills: PillSpec[] = group.series.map((s) => {
     const rom = romTextOf(s.key);
@@ -418,7 +424,7 @@ function GroupBlock({
       romText: rom,
       hidden: hiddenKeys.has(s.key),
       main: group.mainKey === s.key,
-      channel: s.channelBadge ?? null,
+      channel: hideChannelBadges ? null : (s.channelBadge ?? null),
       channelCtl: channelCtl
       ? {
           cc: channelCtl.cc,
@@ -601,6 +607,7 @@ export default function BrandLegendStrip({
   onHover,
   channelCtl,
   syncCtlOf,
+  hideChannelBadges,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -610,15 +617,21 @@ export default function BrandLegendStrip({
   onToggleHidden: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
   /** 平台筛选（第一百六十二轮）：传入 = 每颗药丸上方出平台小药丸（第一百七十六轮
-   *  追补起居右），点击弹三级渠道浮层；onPick 按系列 key 回写该产品的取价口径 */
+   *  追补起居右），点击弹三级渠道浮层；onPick 按系列 key 回写该产品的取价口径。
+   *  稳定版（2026-11-05 复检整改3）：价格页不传 = 渠道选择 chip 整体不渲染 */
   channelCtl?: {
     cc: string;
     onPick: (seriesKey: string, sel: { platforms: string[]; shopIds: string[]; seller?: string | null } | null) => void;
   };
   /** 店铺同步（按组）：传入 = 返回该组的开关态与回调（在有主品的组的主品左侧
    *  出现）；同步只作用于本组
-   *  （本组主品+对比品跟随本组主产品），各组互相独立（index 层实现） */
+   *  （本组主品+对比品跟随本组主产品），各组互相独立（index 层实现）。
+   *  稳定版价格页返回 undefined = 店铺同步按钮不渲染 */
   syncCtlOf?: (group: LegendGroup) => { active: boolean; onToggle: () => void } | undefined;
+  /** 稳定版平台化（2026-11-05 复检整改3，Eason）：true = 每线渠道小药丸整体
+   *  不渲染（取数口径 = 顶部全局平台筛选器，药丸上不再挂平台/店铺概念）。
+   *  缺省 false = 迭代版/量价面板头不变 */
+  hideChannelBadges?: boolean;
 }) {
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
   const [hoverKey, setHoverKey] = useState<string | null>(null);
@@ -671,6 +684,7 @@ export default function BrandLegendStrip({
                 onHover={hover}
                 channelCtl={channelCtl}
                 syncCtl={sync}
+                hideChannelBadges={hideChannelBadges}
               />,
             );
           });

@@ -251,12 +251,13 @@ export function buildLabelPlan(p: {
   labelMode?: 'detail' | 'compact';
   /** compact 时是否标最高/最低。缺省标出。量价常驻只留最新价。 */
   markExtremes?: boolean;
-  /** 第196轮整改3（zone 模式恢复，蓝本 = 987da34^ buildLabelPlan forceNameZone）：
-   *  传入 = 全部名称药丸固定进图左侧名称预留带（width = 带宽，axisW = 本图轴列宽，
-   *  带 = [plotLeft − axisW − width, plotLeft − axisW]），按折线起点纵向排序后
-   *  等距分布（槽位 ≥ 药丸高 + 4、整组绘图区纵向居中）——不进 resolveCollisions
-   *  推挤；名称项带 zone 标记（渲染单行 nowrap）。缺省 = 锚定模式（起点旁）不变 */
-  nameZone?: { width: number; axisW: number };
+  /** 第196轮整改3（zone 模式恢复，蓝本 = 987da34^ buildLabelPlan forceNameZone）；
+   *  2026-11-05 复检定版：传入 = 全部名称药丸固定进「Y 轴刻度标签右侧、绘图区
+   *  左缘」的名称预留带（width = 带宽，带右缘贴绘图区左缘），药丸期望位 = 该线
+   *  首个可见桶的 y（钳在带内），重叠时经 resolveCollisions 最小位移上下避让
+   *  （不再等距分布）；名称项带 zone 标记（渲染单行 nowrap）。缺省 = 锚定模式
+   *  （起点旁）不变 */
+  nameZone?: { width: number };
 }): LabelPlan {
   if (!p.geom) return EMPTY_LABEL_PLAN;
   const { geom, series, granularity, priceTypes, endpointMarks } = p;
@@ -356,12 +357,14 @@ export function buildLabelPlan(p: {
   // 系列名称小药丸（第八十二轮再版）：品牌点+型号名，统一灰字；点击 = 切换折线
   // 显隐（取代上方页签）。第九十轮：来源链接行删除（跳转入口收编）。
   // 第一百一十五轮：名称带（forceNameZone 等距分布）随「名称上移顶部品牌图例带」
-  // 整体退役；第196轮整改3（Eason）恢复 zone 模式——按当前代码结构重写旧等价物：
-  // 名称项进 nameZone 带、等距分布（见函数尾部），锚定模式保持原样。
+  // 整体退役；第196轮整改3（Eason）恢复 zone 模式；2026-11-05 复检双改：
+  // ① 位置 = Y 轴刻度标签右侧、绘图区左缘之间（带右缘贴绘图区，视觉顺序
+  //    刻度 → 名称带 → 绘图区，「产品名称显示应该是在 Y 轴的右侧预留空间」）；
+  // ② 对齐 = 药丸尽量与价格线位置对齐——期望位取该线首个可见桶的 y（钳在带内），
+  //    重叠时经 resolveCollisions 最小位移上下避让（不再等距分布）。
   const zone = p.nameZone;
-  const zoneItems: AvoidItem[] = [];
   const zoneBoxW = zone ? Math.max(24, zone.width - 8) : 0;
-  const zoneLeft = zone ? Math.max(2, geom.plotLeft - zone.axisW - zone.width + 4) : 0;
+  const zoneLeft = zone ? Math.max(2, geom.plotLeft - zone.width + 4) : 0;
   const pushNameItem = (s: Series, hidden: boolean): void => {
     if (p.hideNames === true) return; // 第一百一十三轮：整体禁画名称药丸
     const pts = s.points;
@@ -378,15 +381,20 @@ export function buildLabelPlan(p: {
     const nw = nameW(nameText);
     const fullH = ZONE_LINE_H + 6 + (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
     if (zone) {
-      // 名称带内：盒固定带宽（药丸单行 nowrap，带宽按名称自适应预留，见 nameZoneWidthOf）
-      zoneItems.push({
+      // 名称带内：盒固定带宽（药丸单行 nowrap，带宽按名称自适应预留，见 nameZoneWidthOf）；
+      // 期望位 = 首桶 y 居中，钳在带内（带 = 绘图区同高）——重叠避让交给 resolveCollisions
+      const desired = Math.min(
+        Math.max(py - fullH / 2, geom.plotTop + 2),
+        geom.plotTop + geom.plotHeight - fullH - 2,
+      );
+      items.push({
         kind: 'name',
         seriesKey: s.key,
         pointIdx: fi,
         pinned: true,
         left: zoneLeft,
         right: zoneLeft + zoneBoxW,
-        top: py - fullH / 2,
+        top: desired,
         h: fullH,
         text: nameText,
         color: s.color,
@@ -420,33 +428,11 @@ export function buildLabelPlan(p: {
   for (const s of p.nameOnlySeries ?? []) {
     if (!series.some((v) => v.key === s.key)) pushNameItem(s, true);
   }
+  // 带内名称与价格标签同走一遍避让（pinned = 期望位冲突时最小位移上推；带内同 x，
+  // 线位相邻的名称互相推离，极端贴顶时钳 plotTop+2 再向下堆叠——resolveCollisions
+  // 既有守卫）。锚定模式语义不变。
   const res = resolveCollisions(items, geom.plotTop);
-  let names = res.names;
-  // 名称带等距分布（第196轮整改3恢复；算法与 987da34^ 旧实现同语义）：按折线起点
-  // 高度排序（名称顺序与折线位置一致，悬停引线不交叉），槽位均分绘图区高度、整组
-  // 纵向居中；槽位下限 = 药丸高 + 4 呼吸（超多系列时对称外溢），上下间距保底不挤
-  if (zone && zoneItems.length > 0) {
-    const sorted = [...zoneItems].sort((a, b) => (a.anchorY ?? 0) - (b.anchorY ?? 0));
-    const minSlot = Math.max(...sorted.map((e) => e.h)) + 4;
-    const slot = Math.max(minSlot, geom.plotHeight / sorted.length);
-    const total = slot * sorted.length;
-    const y0 = geom.plotTop + Math.max(0, (geom.plotHeight - total) / 2);
-    names = sorted.map((e, i) => ({
-      x: e.left,
-      y: y0 + slot * i + (slot - e.h) / 2,
-      w: e.right - e.left,
-      h: e.h,
-      dy: 0,
-      text: e.text,
-      color: e.color,
-      seriesKey: e.seriesKey,
-      maxW: e.maxW,
-      anchorX: e.anchorX ?? e.left,
-      anchorY: e.anchorY ?? e.top,
-      hidden: e.hidden,
-      zone: true,
-    }));
-  }
+  const names = res.names;
   // 精简标签直出表覆盖合并（compact 模式下 res.dy 恒空——价格项未进避让）
   return compact
     ? { dy: { ...res.dy, ...compactDy }, names, pos: compactPos }

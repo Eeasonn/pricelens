@@ -119,6 +119,11 @@ import { marginCostOf, type MarginCostPoint } from '../../pages/volume/marginCos
 import { volumeByBuckets } from '../../dataModel/volume';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { useConfigVersion } from '../../state/configStore';
+// 第196轮复检整改3（2026-11-05，Eason：稳定版价格页全局平台化）：STABLE 通道判定 +
+// 店铺级→平台级归一（与量价页同源的全局 state.platform 口径）。iterate 全部门控失效，
+// 行为逐字节不变
+import { STABLE } from '../../appChannel';
+import { platformLevelForChannel } from '../../state/urlSync';
 import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
 import PlatformCompareView from './PlatformCompareView';
 import PointPanel from './PointPanel';
@@ -166,6 +171,11 @@ export default function PriceTrend(props: {
   // 面板取数 = state.mains 原样。
   const effMains = state.mains;
   const mainsEmpty = effMains.length === 0;
+  // 第196轮复检整改3（2026-11-05，Eason）：稳定版价格页取数口径 = 顶部全局平台
+  // 筛选器（state.platform，与量价页 2026-11-05 同源同键）；店铺级选择先降级为
+  // 平台级（平台内每周最低价店铺自动口径）——每产品选择项上的 platform 覆写在
+  // stable 失效。iterate = null 哨兵，取数仍走每线 platform
+  const stablePlatform = useMemo(() => (STABLE ? platformLevelForChannel(state.platform) : null), [state.platform]);
   // 合并图（单卡）取数组：全部主品配置 + 全部对比区并集（按卡序去重）
   const { mainSels, compareSels } = useMemo(() => flatSelections(effMains), [effMains]);
 
@@ -192,7 +202,12 @@ export default function PriceTrend(props: {
       .join(','),
     [effMains],
   );
-  const limitScopeSig = useMemo(() => `${contentSignature(effMains)}#${platformSig}#${state.currency}`, [effMains, platformSig, state.currency]);
+  // 第196轮复检整改3：stable 的实际取数口径 = 全局平台（每线覆写失效）——
+  // 全局平台变化必须进入限位作用域签名（换平台即回自动）；iterate 签名串不变
+  const limitScopeSig = useMemo(
+    () => `${contentSignature(effMains)}#${platformSig}#${STABLE ? JSON.stringify(stablePlatform) : ''}#${state.currency}`,
+    [effMains, platformSig, stablePlatform, state.currency],
+  );
   // 币种或产品集一变，旧限位还停在上一币种的数字上。若等 effect 再清，
   // 这一帧会用错的端点算出过细的步长，并被冻结进后续自适应（USD→本币时刻度炸开）。
   const limitScopeSeenRef = useRef<string | null>(null);
@@ -362,8 +377,10 @@ export default function PriceTrend(props: {
   const query: SeriesQuery = useMemo(
     () => ({
       // isOwn 由数据层按型号事实判定（华为产品恒真）；主分析/对比是角色，
-      // 图上不因角色改样式（第一百一十七轮）
-      groups: [...mainSels, ...compareSels].map((g) => ({ ...g, isOwn: false })),
+      // 图上不因角色改样式（第一百一十七轮）。
+      // 第196轮复检整改3：stable 每组 platform = 全局平台（state.platform 降级归一），
+      // 每线 sel.platform 覆写失效；iterate 保持每线覆写（与量价页全局化同款口径）
+      groups: [...mainSels, ...compareSels].map((g) => ({ ...g, isOwn: false, platform: STABLE ? stablePlatform : (g.platform ?? null) })),
       granularity: state.granularity,
       startBucket: dataStart,
       endBucket: dataEnd,
@@ -371,7 +388,7 @@ export default function PriceTrend(props: {
       agg: state.agg,
       scope: { countryCode: state.countryCode, industry: state.industry },
     }),
-    [mainSels, compareSels, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry],
+    [mainSels, compareSels, stablePlatform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry],
   );
 
   // 取数异常 ≠ 空态（第一百八十五轮，外部 UX 审计）：异常不再静默回落空数组
@@ -714,7 +731,13 @@ export default function PriceTrend(props: {
       let failed = false;
       try {
         series = buildSeries({
-          groups: [...(card.main ? [card.main] : []), ...card.compares].map((g) => ({ ...g, isOwn: false })),
+          // 第196轮复检整改3：stable 每组 platform = 全局平台（与合并图同口径，
+          // 每线覆写失效）；iterate 保持每线 platform
+          groups: [...(card.main ? [card.main] : []), ...card.compares].map((g) => ({
+            ...g,
+            isOwn: false,
+            platform: STABLE ? stablePlatform : (g.platform ?? null),
+          })),
           granularity: state.granularity,
           startBucket: dataStart,
           endBucket: dataEnd,
@@ -727,7 +750,7 @@ export default function PriceTrend(props: {
       }
       return { key: card.id, card, series, failed };
     });
-  }, [splitActive, effMains, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry, configVersion]);
+  }, [splitActive, effMains, stablePlatform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry, configVersion]);
 
   // 各面板生效窗口：同步 = 全面板共用共享窗口；独立 = 面板自己的窗口
   //（未单独调整过回落共享窗口，越界钳回可调全域并保住最小窗口跨度）
@@ -1141,6 +1164,9 @@ export default function PriceTrend(props: {
     state.currency, state.granularity, state.rangeStart, state.rangeEnd,
     yCompress,
     volumeOn, // 第196轮整改5：量层开合 = 价格区高度变化 → 步长冻结解冻重适配
+    // 第196轮复检整改3：stable 全局平台变化 = 价格线口径真实变化 → 解冻重适配；
+    // iterate 取数走每线 platform（不入键，行为不变）
+    ...(STABLE ? [stablePlatform] : []),
   ]);
   const yBaseRef = useRef<{ key: string; intervalUsd: number } | null>(null);
   const yCfg = useMemo(() => {
@@ -1576,7 +1602,9 @@ export default function PriceTrend(props: {
               onOffersOn={setOffersOn}
               changeThreshold={changeThreshold}
               onChangeThreshold={setChangeThreshold}
-              compareEntry={platformCtl}
+              // 第196轮复检整改3：稳定版隐藏「多平台对比」入口（每产品多店铺取数
+              // 概念随全局平台化退役；PlatformCompareView 代码保留，iterate 照旧）
+              compareEntry={STABLE ? undefined : platformCtl}
             />
           </div>
         </div>
@@ -1592,8 +1620,12 @@ export default function PriceTrend(props: {
                 hiddenKeys={hiddenKeys}
                 onToggleHidden={toggleLegend}
                 onHover={setLegendHoverKey}
-                channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
+                // 第196轮复检整改3：稳定版不渲染每线渠道选择 chip / 店铺同步按钮 /
+                // 渠道小药丸（取数口径 = 顶部全局平台筛选器）；iterate 照旧
+                channelCtl={STABLE ? undefined : { cc: state.countryCode, onPick: pickChannel }}
+                hideChannelBadges={STABLE}
                 syncCtlOf={(g) => {
+                  if (STABLE) return undefined;
                   const card = state.mains.find((c) => c.id === g.id);
                   if (!card || card.compares.length === 0) return undefined;
                   return {
@@ -1810,9 +1842,11 @@ export default function PriceTrend(props: {
                           hiddenKeys={hiddenKeys}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
-                          channelCtl={{ cc: state.countryCode, onPick: pickChannel }}
+                          // 第196轮复检整改3：稳定版不渲染每线渠道 chip / 店铺同步 / 渠道小药丸
+                          channelCtl={STABLE ? undefined : { cc: state.countryCode, onPick: pickChannel }}
+                          hideChannelBadges={STABLE}
                           syncCtlOf={() => (
-                            p.card.compares.length === 0
+                            STABLE || p.card.compares.length === 0
                               ? undefined
                               : { active: platformSyncStore[p.key]?.on ?? false, onToggle: togglePlatformSyncOf(p.key) }
                           )}
@@ -1836,7 +1870,7 @@ export default function PriceTrend(props: {
                         onDrill={makePanelDrill(p)}
                         windowKey={`${pw[0]}:${pw[1]}:${p.key}`}
                         yScale={splitYFinal ?? undefined}
-                        nameZoneWidth={nameZoneW} // 第196轮整改3：名称带（zone 等距分布）恢复
+                        nameZoneWidth={nameZoneW} // 第196轮整改3（复检定版）：名称带恢复（刻度右→绘图区左、线位对齐）
                         tipDiffBaseKey={panelExtra[p.key]?.diffBaseKey ?? null} // 第196轮整改1：价差列基准 = 本卡主品
                         margins={panelExtra[p.key]?.margins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）
                         volumeOn={volumeOn} // 第196轮整改5：量层（面板各自主品销量）

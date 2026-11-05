@@ -33,6 +33,7 @@ import GranularityBox from './GranularityBox';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
 import { usePage } from '../../state/PageContext';
+import { STABLE } from '../../appChannel';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { useChartContent } from '../../state/chartContent';
 import { brandOfModel, configTextOf, modelNameOf } from '../ProductCascader/tree';
@@ -330,9 +331,11 @@ export default function FilterBar({
             </div>
             {/* 全局平台筛选器（2026-11-05 Eason）：产品入口后第一位；选平台即作用
                 于看板下方所有产品（每产品不可再单独选平台店铺）。定宽与原「平台 /
-                店铺」槽同宽，选择产品列弹性收缩，1280 视口仍单行。仅量价走势页
-                渲染（价格页各线自带平台口径，全局 Select 不消费 = 死控件） */}
-            {page === 'volume' && (
+                店铺」槽同宽，选择产品列弹性收缩，1280 视口仍单行。
+                渲染条件：量价走势页恒渲染；稳定版价格走势页也渲染（价格页全局
+                平台化由 PriceTrend 侧 STABLE 门控实现，Eason 2026-11-05 复检
+                拍板「先只针对稳定版」）；迭代版价格页保留每线平台模型不渲染 */}
+            {(page === 'volume' || STABLE) && (
               <>
                 <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
                 <div style={{ flexShrink: 0, width: 188 }}><Field label="平台"><PlatformSelectBox /></Field></div>

@@ -1,5 +1,18 @@
 # 价格走势页 · 第196轮五条整改（Eason 2026-11-05 指令）
 
+> **2026-11-05 复检补充（Eason 三条，稳定版为先）**：
+> ①销毛迷你卡只留「销毛率 + 模拟徽标 + 大数字」，单行卡高 30px（毛利/成本小字段删除）。
+> ②名称带位置改「Y 轴刻度标签右侧、绘图区左缘之间」（带右缘贴绘图区，不再压刻度）；
+>   对齐改「与价格线位置对齐」——期望位 = 该线首个可见桶 y（钳带内），重叠时
+>   resolveCollisions 最小位移上下避让（等距分布退役）；带宽自适应保留。
+> ③稳定版价格页全局平台化（全部 STABLE 门控，iterate 不动）：取数 platform =
+>   全局 state.platform（店铺级经 platformLevelForChannel 降平台级，每线覆写失效）；
+>   渠道 chip / 店铺同步 / 每线渠道小药丸 / 「多平台对比」入口在 stable 不渲染；
+>   URL shop=/seller= stable 忽略并剥离（写侧恒 null 删键），plat= 继续驱动全局；
+>   旧持久化店铺级平台启动降级。平台化回归测试：stableGlobalPlatform（mock 钉 stable）
+>   + iterateGlobalPlatformRegression（无 mock 锁现状）。
+
+
 范围：`pricelens/src/chart/PriceTrend/**` 与 `pages/Dashboard.tsx`。量价侧（pages/volume、VolumePrice）只 import 不改。
 
 ## 1. 悬停小卡「价差」列

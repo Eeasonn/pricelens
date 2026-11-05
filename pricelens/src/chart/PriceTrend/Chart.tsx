@@ -50,8 +50,9 @@
 //      对比行带符号百分比、缺值「—」；tip 浮层与 tipBox 预留框两模式同一 body 同源。
 //   ② 「价格档位」内部缺省态翻转为关（showTiers 受控仍以调用方为准）；仅刻度场景
 //      轴列宽随 axisTickTexts 自适应（tickZoneWidthFor）。
-//   ③ 名称预留带（zone 模式）恢复：nameZoneWidth 传入 → 全部名称药丸进图左侧
-//      [plotLeft−axisW−width, plotLeft−axisW] 带，按折线起点纵向等距分布（不换行）。
+//   ③ 名称预留带（zone 模式）恢复：nameZoneWidth 传入 → 全部名称药丸进「Y 轴
+//      刻度标签右侧、绘图区左缘」带（带右缘贴绘图区），药丸与价格线位置对齐
+//      （首桶 y 钳带内，重叠最小位移避让，单行不换行）。
 //   ④ 销毛迷你卡：margins 传入（我司主品逐桶销毛点）→ 悬停浮层上方 8px 处再浮一张
 //      迷你卡（销毛率大数字 + 单台毛利/成本小字；缺数据显「—」）。
 //   ⑤ 量层：volumeOn 开启 → 价格绘图区下方叠量带（volumeHeight 定高），柱/面积两
@@ -329,8 +330,9 @@ const FOCUS_BAND_LABEL = '预警触发周';
 /** 第196轮整改5：量层开启时的右侧量轴预留宽（右轴线 +10、刻度标签随量层缩放；
  *  与量价页 gridRight=56 的销量轴列同宽） */
 const VOL_AXIS_RIGHT_W = 56;
-/** 第196轮整改4：销毛迷你卡高度（≈价格悬停卡一半：标题行 13 + 大数字行 20 + 内边距） */
-const MARGIN_MINI_H = 48;
+/** 第196轮整改4（2026-11-05 复检收敛）：销毛迷你卡高度——只留「销毛率 + 模拟
+ *  徽标 + 大数字」单行（毛利/成本小字段随复检删除），高相应收窄 */
+const MARGIN_MINI_H = 30;
 
 /** 浮层/参照线数值格式（第三十五轮）：千分位整数 */
 const fmt_mm = (v: number): string => v.toLocaleString('en-US');
@@ -832,11 +834,11 @@ export default function Chart(props: ChartProps) {
   // 有值且带 url 的点（退市后停在清库末点，语义仍是「该产品现页」）
   const nameAll = props.nameSeries ?? series;
   const labelMode = props.labelMode ?? 'detail';
-  // 第196轮整改3：名称带（zone 模式）——调用方传 nameZoneWidth 且未整体禁画名称时，
-  // 名称药丸全部进带（带右缘 = 绘图区左缘 − 轴列宽；分离面板 axisChrome=false 轴宽 0）。
-  // 依赖收原始值（zoneAxisW），避免每渲染新建对象击穿 labelPlan memo
+  // 第196轮整改3（2026-11-05 复检定版）：名称带在「Y 轴刻度标签右侧、绘图区左缘」
+  // 之间（带右缘贴绘图区），药丸与价格线位置对齐、重叠最小位移避让——见
+  // buildLabelPlan nameZone。依赖收原始值（nameZoneWProp），避免每渲染新建对象
+  // 击穿 labelPlan memo
   const nameZoneWProp = props.nameZoneWidth;
-  const zoneAxisW = props.axisChrome !== false ? chrome.width : 0;
 
   const labelPlan = useMemo(
     () =>
@@ -852,10 +854,10 @@ export default function Chart(props: ChartProps) {
         hideNames: props.hideNamePills === true, // 第一百一十三轮：量价面板禁画名称药丸
         labelMode, // 第一百一十四轮：精简 = 仅最高/最低/最新三价
         markExtremes: props.markExtremes,
-        // 第196轮整改3：名称带等距分布（传入才启用）
-        nameZone: nameZoneWProp != null ? { width: nameZoneWProp, axisW: zoneAxisW } : undefined,
+        // 第196轮整改3：名称带（传入才启用）
+        nameZone: nameZoneWProp != null ? { width: nameZoneWProp } : undefined,
       }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes, nameZoneWProp, zoneAxisW],
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes, nameZoneWProp],
   );
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
@@ -2114,10 +2116,11 @@ export default function Chart(props: ChartProps) {
             // 第196轮整改4：销毛迷你卡在浮层上方 8px——浮层整体下移腾出卡位
             // （仍钳在绘图区内；绘图区过矮放不下时回落贴顶，接受与浮层轻叠）
             const top = props.margins != null ? Math.min(topRaw + MARGIN_MINI_H + 8, geom.plotTop + geom.plotHeight - 36 - tipContentH) : topRaw;
-            // 第196轮整改4（销毛迷你卡）：悬停浮层上方 8px、左右缘对齐同一 left——
-            // 同一圆角/描边/投影语言，高度≈价格卡一半；内容 = 我司主品该时点销毛
-            // （销毛率大数字 + 单台毛利/成本小字两格；该桶无数据显「—」）。tipBox
-            // 模式（量价看板预留框）不出迷你卡；margins 未传（量价/下钻等）不渲染
+            // 第196轮整改4（2026-11-05 复检收敛，Eason：只留销毛率）：悬停浮层上方
+            // 8px、左右缘对齐同一 left——同一圆角/描边/投影语言；卡内单行 =
+            // 「销毛率 + 模拟徽标 + 大数字销毛率」（单台毛利/成本小字段随复检删除，
+            // 卡高相应收窄；该桶无数据显「—」）。tipBox 模式（量价看板预留框）不出
+            // 迷你卡；margins 未传（量价/下钻等）不渲染
             const mpt = props.margins?.[tipIdx] ?? null;
             const marginMini = props.margins != null && (
               <div
@@ -2125,50 +2128,41 @@ export default function Chart(props: ChartProps) {
                   position: 'absolute',
                   left,
                   top: Math.max(2, top - 8 - MARGIN_MINI_H),
-                  width: 208,
+                  width: 148,
                   height: MARGIN_MINI_H,
                   boxSizing: 'border-box',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
                   background: color.canvas,
                   border: `1px solid ${color.hairline}`,
                   borderRadius: radius.card,
                   boxShadow: shadow.l2,
-                  padding: '5px 10px 6px',
+                  padding: '0 10px',
                   pointerEvents: 'none',
                   zIndex: 20,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, lineHeight: '13px', color: color.mute }}>
-                  销毛率
-                  {/* 数据状态显性（PRODUCT.md：simulated 必须文字标注）——销毛为
-                      量价侧月版本模拟模型，非真实成本口径 */}
-                  <span
-                    style={{
-                      padding: '0 4px',
-                      fontSize: 9,
-                      lineHeight: '12px',
-                      fontWeight: 700,
-                      borderRadius: radius.pill,
-                      color: '#b45309',
-                      background: color.warningSoft,
-                    }}
-                  >
-                    模拟
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 1 }}>
-                  <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink }}>
-                    {mpt ? `${(mpt.marginRate * 100).toFixed(1)}%` : '—'}
-                  </span>
-                  <span className="tnum" style={{ fontSize: 10, lineHeight: '13px', color: color.body, whiteSpace: 'nowrap' }}>
-                    {mpt ? (
-                      <>
-                        毛利 {formatPrice(Math.round(mpt.unitMargin), currency)} · 成本 {formatPrice(Math.round(mpt.unitCost), currency)}
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </span>
-                </div>
+                <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute, flexShrink: 0 }}>销毛率</span>
+                {/* 数据状态显性（PRODUCT.md：simulated 必须文字标注）——销毛为
+                    量价侧月版本模拟模型，非真实成本口径 */}
+                <span
+                  style={{
+                    padding: '0 4px',
+                    fontSize: 9,
+                    lineHeight: '12px',
+                    fontWeight: 700,
+                    borderRadius: radius.pill,
+                    color: '#b45309',
+                    background: color.warningSoft,
+                    flexShrink: 0,
+                  }}
+                >
+                  模拟
+                </span>
+                <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink, marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                  {mpt ? `${(mpt.marginRate * 100).toFixed(1)}%` : '—'}
+                </span>
               </div>
             );
             return (

@@ -100,8 +100,8 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-describe('第196轮整改4：销毛迷你卡（悬停小卡上方）', () => {
-  it('有数据桶：出「销毛率 · 模拟」卡 = 大数字销毛率 + 单台毛利/成本小字', async () => {
+describe('第196轮整改4：销毛迷你卡（悬停小卡上方；2026-11-05 复检只留销毛率）', () => {
+  it('有数据桶：出「销毛率 + 模拟徽标 + 大数字销毛率」卡（不含毛利/成本段）', async () => {
     const margins: (MarginCostPoint | null)[] = [null, mp({}), null, null, null];
     const { container } = render(<Chart {...baseProps} margins={margins} /> as ReactElement);
     await waitForGeom(container);
@@ -113,19 +113,18 @@ describe('第196轮整改4：销毛迷你卡（悬停小卡上方）', () => {
     expect(screen.getByText('模拟')).toBeTruthy();
     // 销毛率大数字（marginRate × 100 保留 1 位小数）
     expect(screen.getByText('37.4%')).toBeTruthy();
-    // 单台毛利/成本小字（USD formatPrice 口径）
-    expect(screen.getByText('毛利 $370 · 成本 $620')).toBeTruthy();
+    // 复检收敛：单台毛利/成本小字段不再出现
+    expect(screen.queryByText('毛利 $370 · 成本 $620')).toBeNull();
   });
 
-  it('该桶无销毛数据（月模型无有效价月 → null）→ 两格显「—」，卡仍在', async () => {
+  it('该桶无销毛数据（月模型无有效价月 → null）→ 销毛率显「—」，卡仍在', async () => {
     const margins: (MarginCostPoint | null)[] = [null, null, null, null, null];
     const { container } = render(<Chart {...baseProps} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     hoverColumn(container, 0);
     expect(screen.getByText('销毛率')).toBeTruthy();
-    // 大数字与小字两格都是「—」
-    const dashes = screen.getAllByText('—');
-    expect(dashes.length).toBeGreaterThanOrEqual(2);
+    // 大数字格「—」（仅此一处：毛利/成本段已随复检删除）
+    expect(screen.getByText('—')).toBeTruthy();
   });
 
   it('margins 未传（量价/下钻等调用方）→ 不渲染迷你卡', async () => {

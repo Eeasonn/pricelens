@@ -15,7 +15,7 @@
 import { dimChannel, dimProduct } from '../data';
 import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
 import type { Page } from './PageContext';
-import { hiddenInStable } from '../appChannel';
+import { hiddenInStable, STABLE } from '../appChannel';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { cardsFromSelections, clampMains } from './mainSelection';
 import { getCurrentCountry } from './currentScope';
@@ -76,6 +76,19 @@ export function platformUrlParamsOf(
   return { plat: platform?.platforms[0] ?? null, shop: null, seller: null };
 }
 
+/**
+ * 稳定版平台归一（2026-11-05 复检整改3，Eason「删除每产品选店铺」收口）：
+ * 店铺级（shopIds 单渠道）选择降级为平台级——稳定版不再钉具体店铺，平台级自动
+ * = 平台内每周最低价店铺（effectiveChannelIds 平台级并集语义）。入口包括：
+ * 旧持久化（v12 载荷存过店铺级全局平台）、总览级联写入的 state.platform。
+ * 迭代版原样返回（行为不变）。null / 平台级 = 原样。
+ */
+export function platformLevelForChannel(platform: PlatformSelection | null): PlatformSelection | null {
+  if (!STABLE || !platform || platform.shopIds.length === 0) return platform;
+  const p = platformOfShopId(platform.shopIds[0]);
+  return p ? { platforms: [p], shopIds: [] } : null;
+}
+
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null。
  *  第一百一十七轮：主分析可任意品牌（旧 ownOnly 白名单随之退役）。
  *  countryCode = 取代表色 SKU 的国家口径（链接自带 c= 时须显式传入：解析发生在
@@ -113,12 +126,14 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     // 第一百二十三轮：按档位主体模式退役，旧链接的 m=tier / t= 参数静默忽略
     // 平台/店铺单选：plat = 平台、shop = 渠道 id（店铺级）；同存时 shop= 优先
     // （normalizePlatformSelection 先吃 shopIds）；旧多值链接取第一个归一。
-    // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认口径）
+    // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认口径）。
+    // 稳定版（2026-11-05 复检整改3，Eason）：不再钉具体店铺——shop=/seller=
+    // 静默忽略（仅 plat= 平台级继续驱动 state.platform）；残留键由写侧统一剥离
     const platforms = listParam(q, 'plat');
-    const shopIds = listParam(q, 'shop');
+    const shopIds = STABLE ? [] : listParam(q, 'shop');
     if (platforms.length || shopIds.length) {
       // 卖家细化仅店铺级链接可带（shop= 单渠道）；无 shop 时静默忽略
-      const seller = shopIds.length === 1 ? q.get('seller') || null : null;
+      const seller = !STABLE && shopIds.length === 1 ? q.get('seller') || null : null;
       out.filters.platform = normalizePlatformSelection({ platforms, shopIds, seller });
     }
     // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入
