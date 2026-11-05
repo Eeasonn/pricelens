@@ -35,14 +35,15 @@ afterEach(() => {
 const segItem = (name: string) => screen.getAllByText(name).find((el) => el.closest('.ant-segmented-item')) ?? screen.getByText(name);
 
 describe('DataQualityBlock · 档位交互', () => {
-  it('默认开启 50%（§8 拍板 1）', () => {
+  it('默认关闭（2026-11-05 Eason 拍板：守卫默认不开），阈值保留 50%', () => {
     render(<DataQualityBlock />);
-    expect(readAnomalyRule()).toEqual({ enabled: true, thresholdPct: 50 });
-    expect(screen.getByText('当前口径 ≥50%')).toBeDefined();
+    expect(readAnomalyRule()).toEqual({ enabled: false, thresholdPct: 50 });
+    expect(screen.getByText('已关闭')).toBeDefined();
   });
 
   it('QA Bug#2 回归：点「自定义」即进入自定义模式（输入框出现且选中态保持）', () => {
     render(<DataQualityBlock />);
+    fireEvent.click(screen.getByRole('switch')); // 默认关（2026-11-05），阈值区先开启
     expect(screen.queryByLabelText('自定义阈值百分比')).toBeNull();
     fireEvent.click(segItem('自定义'));
     expect(screen.getByLabelText('自定义阈值百分比')).toBeDefined();
@@ -52,6 +53,7 @@ describe('DataQualityBlock · 档位交互', () => {
 
   it('自定义提交合法值落盘并停在自定义档；选回预设档输入框消失', () => {
     render(<DataQualityBlock />);
+    fireEvent.click(screen.getByRole('switch'));
     fireEvent.click(segItem('自定义'));
     const input = screen.getByLabelText('自定义阈值百分比') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '20' } });
@@ -65,6 +67,7 @@ describe('DataQualityBlock · 档位交互', () => {
 
   it('非法值（5 / abc / 95）被拒：提示 10–90 且规则不落盘', () => {
     render(<DataQualityBlock />);
+    fireEvent.click(screen.getByRole('switch'));
     fireEvent.click(segItem('30%'));
     fireEvent.click(segItem('自定义'));
     const input = screen.getByLabelText('自定义阈值百分比') as HTMLInputElement;
@@ -85,14 +88,14 @@ describe('DataQualityBlock · 档位交互', () => {
     expect(screen.queryByText('2026W09')).toBeNull(); // 修复前月 id 会被错显成周号
   });
 
-  it('开关即改即存并广播 CONFIG_CHANGED_EVENT', () => {
+  it('开关即改即存并广播 CONFIG_CHANGED_EVENT（默认关 → 点开 = 已启用）', () => {
     const fired = vi.fn();
     window.addEventListener('lpl3-config-changed', fired);
     render(<DataQualityBlock />);
     fireEvent.click(screen.getByRole('switch'));
     expect(fired).toHaveBeenCalled();
-    expect(readAnomalyRule().enabled).toBe(false);
-    expect(screen.getByText('已关闭')).toBeDefined();
+    expect(readAnomalyRule().enabled).toBe(true);
+    expect(screen.getByText('当前口径 ≥50%')).toBeDefined();
     window.removeEventListener('lpl3-config-changed', fired);
   });
 });

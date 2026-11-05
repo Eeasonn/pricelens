@@ -58,6 +58,10 @@
 //   ⑤ 量层：volumeOn 开启 → 价格绘图区下方叠量带（volumeHeight 定高），柱/面积两
 //      模式视觉常量与量价页 VolumeBars 同源；右轴刻度随量层缩放（gridRight 24→56），
 //      价格区与量带之间无分界线（x 轴线隐藏、时间标签下移到量带之下）。
+//      2026-11-05 复检五件套：面积渐变再淡 50%；量带左缘归属小药丸（volumeOwner）；
+//      悬停量带出单行量值小卡 + 细竖参考线，并经 hoverNameKey 同通道高亮主品线；
+//      最高/最低/最新常驻纯数字标注（buildVolumeMarks，带内独立避让）；
+//      销毛 / 销量 / 价格主卡同组定侧（tipGroupPlacement）。
 // ============================================================
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover, Popconfirm } from 'antd';
@@ -118,6 +122,8 @@ import {
   buildOption,
   buildTierBoxes,
   buildTickRows,
+  buildVolumeMarks,
+  volumeBarHeightOf,
   collectTierValues,
   primaryPriceOf,
   resolveLineShape,
@@ -140,6 +146,26 @@ export function tipOverlayLeft(plotLeft: number, plotWidth: number, x0: number, 
   const flip = x0 + 16 + w > plotLeft + plotWidth;
   return Math.max(plotLeft + 8, flip ? x0 - 16 - w : x0 + 16);
 }
+
+/** 悬停卡组定位（2026-11-05 Eason 看真机）：销毛卡 / 销量卡 / 价格主卡是一组，由主卡定侧，
+ *  翻转判定与 tipOverlayLeft 同源。edgeX = 主卡贴触发线的那条边：卡在右 = 主卡左缘，
+ *  卡在左 = 主卡右缘（含左翻越界钳回的情况，边界仍跟主卡实际位置走）。小卡贴这条边对齐。 */
+export interface TipGroupPlacement {
+  mainLeft: number;
+  side: 'right' | 'left';
+  edgeX: number;
+}
+export function tipGroupPlacement(plotLeft: number, plotWidth: number, x0: number, mainW: number): TipGroupPlacement {
+  const mainLeft = tipOverlayLeft(plotLeft, plotWidth, x0, mainW);
+  const side = x0 + 16 + mainW > plotLeft + plotWidth ? 'left' : 'right';
+  return { mainLeft, side, edgeX: side === 'left' ? mainLeft + mainW : mainLeft };
+}
+
+/** 小卡贴组边对齐的定位样式：左侧组用 translateX(-100%)，右缘对齐不依赖估算卡宽 */
+const tipGroupAnchor = (g: TipGroupPlacement): CSSProperties => ({
+  left: g.edgeX,
+  transform: g.side === 'left' ? 'translateX(-100%)' : undefined,
+});
 
 export interface ChartProps {
   series: Series[];
@@ -316,6 +342,10 @@ export interface ChartProps {
   volumeColor?: string;
   /** ⑤量带高度 px（index 层按「压缩后总高 30%」算好传入）；缺省 = 图高 30% 兜底 */
   volumeHeight?: number;
+  /** ⑤量带归属（2026-11-05 复检五件套）：这条量是谁的——量带左缘小药丸、量值小卡
+   *  产品名、悬停联动高亮都以它为准。用对象不用 key：主品线被图例隐藏时不在 series
+   *  里，药丸仍要能说明归属。未传 / 无量数据 = 药丸、悬停层、联动都不出 */
+  volumeOwner?: { key: string; brand: string; text: string } | null;
   // 第五十三轮：图例页签订阅铃铛撤除——订阅入口上移到时点页签（PriceSummary）尾
   // （用户：铃铛应在「上面大的页签」即来源链接之后，不该在图表小页签上）
 }
@@ -334,6 +364,23 @@ const VOL_AXIS_RIGHT_W = 56;
 /** 第196轮整改4（2026-11-05 复检收敛）：销毛迷你卡高度——只留「销毛率 + 模拟
  *  徽标 + 大数字」单行（毛利/成本小字段随复检删除），高相应收窄 */
 const MARGIN_MINI_H = 30;
+/** 量值小卡的翻侧估算宽：只在主卡不存在（该列无价）时用来定侧，渲染宽随内容 */
+const VOL_CARD_EST_W = 130;
+/** 价格主卡外框比 W 多出的宽：content-box 下 width 只管内容区，左右内边距 10+10 与描边
+ *  1+1 在外。翻侧与贴线边必须按外框算——此前按 W 算，左翻时主卡右缘越过触发线 6px，
+ *  三卡贴线边对不齐 22px（2026-11-05 真机量出） */
+const TIP_MAIN_CHROME_W = 22;
+/** 名称药丸规格单一来源（名称带 / 量带归属同款，2026-11-05 Eason：两处完全一致）：
+ *  外框高 = 行高 16 + 上下内边距 3 + 描边 1 = 24 */
+const NAME_PILL_BOX: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '3px 8px',
+  background: color.canvas,
+  borderRadius: radius.pill,
+};
+const NAME_PILL_TEXT: CSSProperties = { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' };
 
 /** 浮层/参照线数值格式（第三十五轮）：千分位整数 */
 const fmt_mm = (v: number): string => v.toLocaleString('en-US');
@@ -474,14 +521,9 @@ function ZoneNamePill(props: {
         onFocus={() => props.onHover(nm.seriesKey)}
         onBlur={() => props.onHover(null)}
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 4,
+          ...NAME_PILL_BOX,
           maxWidth: nm.maxW ?? 200,
-          padding: '3px 8px',
-          background: color.canvas,
           border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : color.hairline}`,
-          borderRadius: radius.pill,
           cursor: 'pointer',
         }}
       >
@@ -491,7 +533,7 @@ function ZoneNamePill(props: {
             nm.zone
               ? // 第196轮整改3：名称带内单行 nowrap——带宽按名称实测自适应预留
                 // （nameZoneWidthOf），正常不换行不省略；overflow 可见兜底极端长名
-                { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
+                NAME_PILL_TEXT
               : nm.maxW != null
                 ? {
                     display: '-webkit-box',
@@ -542,6 +584,9 @@ export default function Chart(props: ChartProps) {
   const focusActive = focusKey != null;
   // 悬停的名称药丸（第八十二轮）：仅该系列的起点指引线可见（默认全部隐藏）
   const [hoverNameKey, setHoverNameKey] = useState<string | null>(null);
+  // 量带悬停态（2026-11-05 复检五件套③⑤）：null = 未悬停；idx = 捕获层 x→桶下标；
+  // idx=null = 悬停/聚焦在量带药丸上（只联动高亮，不出量值小卡）
+  const [volHover, setVolHover] = useState<{ idx: number | null } | null>(null);
   // ---- 第118轮：图内拖选时间段（量价看板）----
   // 拖动数据在 ref 内逐帧变化（anchor/当前列/起点横距/是否已越过拖动阈值），
   // dragging + brushTick 仅驱动重渲；松手提交或清除（见 window 监听 effect）
@@ -558,6 +603,8 @@ export default function Chart(props: ChartProps) {
     prevWindowKeyRef.current = props.windowKey;
     setHoverIdx(null);
     setFocusKey(null);
+    setVolHover(null); // 量带悬停下标同样按旧列号记，换窗口即失义
+    setHoverNameKey(null);
     brushDragRef.current = null;
     setBrushDragging(false);
   }, [props.windowKey]);
@@ -566,14 +613,13 @@ export default function Chart(props: ChartProps) {
   // 第一百一十六轮 联动高亮集合：悬停名称药丸/图例药丸时 = 仅该系列自身
   //（不再联动其对标竞品/我司）；折线悬停聚焦时 = 单系列。非空时集合外的一切
   //（线/药丸/徽标）降透明。
-  const litKeys: string[] | null =
-    legendHoverKey != null
-      ? [legendHoverKey]
-      : hoverNameKey != null
-        ? [hoverNameKey]
-        : focusKey != null
-          ? [focusKey]
-          : null;
+  // 2026-11-05 复检五件套⑤：记忆化——量带悬停逐桶重渲时高亮键不变，若每次新建数组
+  // 会击穿 buildOption 的 memo，换一桶就整图 setOption 重绘一次
+  const litKeys: string[] | null = useMemo(() => {
+    if (legendHoverKey != null) return [legendHoverKey];
+    if (hoverNameKey != null) return [hoverNameKey];
+    return focusKey != null ? [focusKey] : null;
+  }, [legendHoverKey, hoverNameKey, focusKey]);
   // Y 刻度线（第九十一轮）：受控开关，缺省开 = 刻度值+短横线；关 = 仅价格档位
   const [innerShowYTicks, setInnerShowYTicks] = useState(true);
   const showYTicks = props.showYTicks ?? innerShowYTicks;
@@ -935,12 +981,19 @@ export default function Chart(props: ChartProps) {
     props.onCrosshairMove?.(hit.idx); // 第110轮：上报时间列 → 其他分离面板画同列参考线
     // 第一百一十四轮：纵向位置钳入绘图区上报 → 全部面板同高度横向虚线（逐像素跟随）
     if (geom) {
-      const y = Math.min(
-        geom.plotTop + geom.plotHeight,
-        Math.max(geom.plotTop, Math.round(hit.my)),
-      );
-      setHoverY(y);
-      props.onCrosshairYMove?.(y);
+      if (volBandH > 0 && hit.my > geom.plotTop + geom.plotHeight) {
+        // 指针在量带内：钳到绘图区底缘会在价格区与量带交界画出一条横虚线，
+        // 破坏「中间无分界线」（2026-11-05 复检五件套）；时间列联动不受影响
+        setHoverY(null);
+        props.onCrosshairYMove?.(null);
+      } else {
+        const y = Math.min(
+          geom.plotTop + geom.plotHeight,
+          Math.max(geom.plotTop, Math.round(hit.my)),
+        );
+        setHoverY(y);
+        props.onCrosshairYMove?.(y);
+      }
     }
     // 聚焦检测（第三十二轮）：悬停列上最近的有值系列（±HIT_PX）→ 高亮该系列；
     // 空白处悬停 = 取消聚焦（全部系列恢复常态）
@@ -1081,6 +1134,85 @@ export default function Chart(props: ChartProps) {
     }
     return m > 0 ? niceCeil(m) : 0;
   }, [props.volumes]);
+  // 2026-11-05 复检五件套④：最高/最低/最新常驻小标（纯计算见 chartModel.buildVolumeMarks）
+  const volMarks = useMemo(
+    () =>
+      volOn && geom && vMax > 0
+        ? buildVolumeMarks({
+            values: props.volumes ?? [],
+            vMax,
+            plotLeft: geom.plotLeft,
+            plotWidth: geom.plotWidth,
+            n: geom.n,
+            bandTop: geom.plotTop + geom.plotHeight,
+            bandH: volBandH,
+          })
+        : [],
+    [volOn, geom, vMax, props.volumes, volBandH],
+  );
+  // 2026-11-05 复检五件套②③⑤：量带悬停 = 量值小卡 + 参考线 + 主品线高亮共用一个悬停态；
+  // 高亮走名称药丸同一条线（setHoverNameKey → litKeys），不另开通道
+  const volOwnerKey = props.volumeOwner?.key ?? null;
+  const volBandLive = volOn && geom != null && vMax > 0 && volOwnerKey != null;
+  const enterVolBand = (idx: number | null): void => {
+    setVolHover((cur) => (cur != null && cur.idx === idx ? cur : { idx })); // 同桶不重渲
+    setHoverNameKey(volOwnerKey);
+  };
+  const leaveVolBand = (): void => {
+    setVolHover(null);
+    setHoverNameKey(null);
+  };
+  // 悬停中量带被撤（关「量」/换产品无量数据）：捕获层直接卸载、mouseleave 不触发，
+  // 不自愈的话对比品线会一直停在降淡态
+  useEffect(() => {
+    if (volHover == null || volBandLive) return;
+    setVolHover(null);
+    setHoverNameKey(null);
+  }, [volHover, volBandLive]);
+  const volHoverIdx = volBandLive && geom && volHover?.idx != null && volHover.idx < geom.n ? volHover.idx : null;
+  // 该列价格主卡是否在场（与下方悬停明细 rows 判定同源）：在场 = 销量卡随主卡定侧，否则自己定侧
+  const mainTipShown =
+    !tipBoxOn && geom != null && tipIdx != null && tipIdx < geom.n
+    && series.some((s) => primaryPriceOf(s.points[tipIdx], priceTypes) != null);
+  // 量值小卡（2026-11-05 Eason 看真机）：单行「销量 N 台」，容器与销毛卡同款；垂直贴量带顶，水平随卡组
+  const renderVolCard = (group: TipGroupPlacement): ReactNode => {
+    if (volHoverIdx == null || !geom) return null;
+    const v = props.volumes?.[volHoverIdx] ?? null;
+    return (
+      <div
+        data-testid="volume-hover-card"
+        style={{
+          position: 'absolute',
+          ...tipGroupAnchor(group),
+          top: geom.plotTop + geom.plotHeight + 4,
+          height: MARGIN_MINI_H,
+          boxSizing: 'border-box',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          background: color.canvas,
+          border: `1px solid ${color.hairline}`,
+          borderRadius: radius.card,
+          boxShadow: shadow.l2,
+          padding: '0 10px',
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+          zIndex: 20,
+        }}
+      >
+        <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute }}>销量</span>{' '}
+        <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink }}>
+          {v != null ? fmt_mm(Math.round(v)) : '—'}
+        </span>
+        {v != null && (
+          <>
+            {' '}
+            <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute }}>台</span>
+          </>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -1159,7 +1291,7 @@ export default function Chart(props: ChartProps) {
         const colW = geom.plotWidth / geom.n;
         const barW = Math.max(1, 0.62 * colW); // 与 VolumeBars 同：柱宽 = 0.62 列宽
         const litIdx = hoverIdx ?? props.crosshairIdx ?? null;
-        const hOf = (v: number): number => (vMax > 0 ? Math.max(1, Math.min(volBandH, (v / vMax) * volBandH)) : 0);
+        const hOf = (v: number): number => volumeBarHeightOf(v, vMax, volBandH); // 与三点标注同一映射
         const volVals = props.volumes ?? [];
         const axisX = geom.plotLeft + geom.plotWidth + 10; // 与 VolumeBars 右轴同偏移
         const ticks = vMax > 0
@@ -1206,11 +1338,13 @@ export default function Chart(props: ChartProps) {
             <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
               {props.volumeMode === 'area' ? (
                 <>
-                  {/* 纵向渐变（从下往上渐隐）：底部 0.34 → 顶部 0.04；useId 防多面板实例 id 冲突 */}
+                  {/* 纵向渐变（从下往上渐隐）：底部 0.17 → 顶部 0.02（2026-11-05 复检
+                      第 1 条，Eason：再淡 50%——0.34/0.04 减半；仅面积模式，柱模式不动）；
+                      useId 防多面板实例 id 冲突 */}
                   <defs>
                     <linearGradient id={volumeGradId} x1="0" y1="1" x2="0" y2="0">
-                      <stop offset="0%" stopColor={hexToRgba(volColor, 0.34)} />
-                      <stop offset="100%" stopColor={hexToRgba(volColor, 0.04)} />
+                      <stop offset="0%" stopColor={hexToRgba(volColor, 0.17)} />
+                      <stop offset="100%" stopColor={hexToRgba(volColor, 0.02)} />
                     </linearGradient>
                   </defs>
                   <path d={areaPath} fill={`url(#${volumeGradId})`} stroke="none" />
@@ -1246,7 +1380,91 @@ export default function Chart(props: ChartProps) {
                   ))}
                 </>
               )}
+              {/* 最高/最低/最新常驻标注（2026-11-05 Eason 看真机：去框，纯数字，与价格线
+                  精简价标同语言——品牌色 + 细白描边保压柱可读）；柱|面积两模式同标，
+                  随「量」开关出现/消失，无量数据不标 */}
+              {volMarks.map((m) => (
+                <span
+                  key={`vm-${m.idx}`}
+                  data-testid={`volume-mark-${m.kind}`}
+                  style={{
+                    position: 'absolute',
+                    left: m.x,
+                    top: m.y,
+                    width: m.w,
+                    fontSize: 10,
+                    lineHeight: `${m.h}px`,
+                    fontVariantNumeric: 'tabular-nums',
+                    textAlign: 'center',
+                    color: volColor,
+                    textShadow: `-1px 0 ${color.canvas}, 1px 0 ${color.canvas}, 0 -1px ${color.canvas}, 0 1px ${color.canvas}`,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {m.text}
+                </span>
+              ))}
             </div>
+            {/* 量带交互层（2026-11-05 复检五件套②③⑤）：归属药丸 + 透明捕获层 + 参考线 +
+                量值小卡。捕获层只占量带（价格区悬停逻辑不动，事件照常冒泡给外层算时间列），
+                层级低于异常胶囊（8/9）与浮层（20） */}
+            {volBandLive && props.volumeOwner && (
+              <>
+                {props.nameZoneWidth != null && (
+                  <span
+                    role="note"
+                    tabIndex={0}
+                    aria-label={`销量归属：${props.volumeOwner.text}`}
+                    title={`销量归属：${props.volumeOwner.text}（估算口径，非真实销量）`}
+                    onMouseEnter={() => enterVolBand(null)}
+                    onMouseLeave={leaveVolBand}
+                    onFocus={() => enterVolBand(null)}
+                    onBlur={leaveVolBand}
+                    style={{
+                      ...NAME_PILL_BOX,
+                      position: 'absolute',
+                      left: Math.max(2, geom.plotLeft - props.nameZoneWidth + 4), // 与名称带药丸同列
+                      top: plotBottom + volBandH / 2, // 量带内垂直居中，不依赖药丸高
+                      transform: 'translateY(-50%)',
+                      border: `1px solid ${color.hairline}`,
+                      zIndex: 6,
+                    }}
+                  >
+                    <BrandDot brand={props.volumeOwner.brand} />
+                    <span style={NAME_PILL_TEXT}>{props.volumeOwner.text}</span>
+                  </span>
+                )}
+                <div
+                  aria-hidden
+                  data-testid="volume-hover-layer"
+                  onMouseMove={(e) => {
+                    const hit = locate(e);
+                    if (hit) enterVolBand(hit.idx);
+                  }}
+                  onMouseLeave={leaveVolBand}
+                  style={{ position: 'absolute', left: geom.plotLeft, top: plotBottom, width: geom.plotWidth, height: volBandH, zIndex: 6 }}
+                />
+                {volHoverIdx != null && (
+                  <div
+                    aria-hidden
+                    data-testid="volume-hover-rule"
+                    style={{
+                      position: 'absolute',
+                      left: Math.round(xPxOf(geom, volHoverIdx)) - 0.5,
+                      top: plotBottom,
+                      width: 1,
+                      height: volBandH,
+                      background: color.hairlineStrong,
+                      pointerEvents: 'none',
+                      zIndex: 5,
+                    }}
+                  />
+                )}
+                {/* 主卡在场时销量卡由主卡分支渲染（同组定侧）；该列无价时自己定侧 */}
+                {volHoverIdx != null && !mainTipShown
+                  && renderVolCard(tipGroupPlacement(geom.plotLeft, geom.plotWidth, xPxOf(geom, volHoverIdx), VOL_CARD_EST_W))}
+              </>
+            )}
           </>
         );
       })()}
@@ -2127,7 +2345,9 @@ export default function Chart(props: ChartProps) {
             const nameEst = Math.max(...rows.map((r) => curveNameOf(r.s).length)) * 6.2 + 14;
             const hasSnap = rows.some((r) => r.s.points[tipIdx]?.price != null);
             const W = Math.ceil(20 + 6 * 6 + 2 + rateW + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasSnap ? 16 : 0) + (showDiffCol ? diffW + 7 : 0);
-            const left = tipOverlayLeft(geom.plotLeft, geom.plotWidth, x0, W);
+            // 2026-11-05 Eason 看真机：销毛 / 销量 / 主卡一组，主卡定侧，小卡贴主卡的贴线边对齐
+            const group = tipGroupPlacement(geom.plotLeft, geom.plotWidth, x0, W + TIP_MAIN_CHROME_W);
+            const left = group.mainLeft;
             const tipContentH = rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0);
             const topRaw = Math.min(Math.max(geom.plotTop + 8, 40), geom.plotTop + geom.plotHeight - 36 - tipContentH);
             // 第196轮整改4：销毛迷你卡在浮层上方 8px——浮层整体下移腾出卡位
@@ -2143,7 +2363,7 @@ export default function Chart(props: ChartProps) {
               <div
                 style={{
                   position: 'absolute',
-                  left,
+                  ...tipGroupAnchor(group),
                   top: Math.max(2, top - 8 - MARGIN_MINI_H),
                   width: 148,
                   height: MARGIN_MINI_H,
@@ -2185,6 +2405,7 @@ export default function Chart(props: ChartProps) {
             return (
               <>
                 {marginMini}
+                {volHoverIdx != null && renderVolCard(group)}
                 <div
                   style={{
                     position: 'absolute',
@@ -2640,7 +2861,9 @@ export default function Chart(props: ChartProps) {
                   }}
                 >
                   {labelPlan.names
-                    .filter((nm) => !nm.hidden && nm.seriesKey === hoverNameKey)
+                    // 引线只属于悬停名称药丸；量带悬停借同一高亮通道时不画（否则从名称带拉出一条
+                    // 横穿绘图区的长线，真机可见）
+                    .filter((nm) => !nm.hidden && nm.seriesKey === hoverNameKey && volHover == null)
                     .map((nm) => (
                       <line
                         key={`ld-${nm.seriesKey}`}

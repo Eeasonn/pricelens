@@ -1094,11 +1094,21 @@ export default function PriceTrend(props: {
     () => (ownMainKey ? chartSeries.find((s) => s.key === ownMainKey) ?? null : null),
     [chartSeries, ownMainKey],
   );
-  const mergedVolumeColor = mergedMainSeries?.color ?? color.mute;
+  // 量带归属按全量系列找（主品线被图例隐藏时不在 chartSeries，药丸仍要说明这是谁的量）
+  const mergedOwnerSeries = useMemo(
+    () => (ownMainKey ? visSeries.find((s) => s.key === ownMainKey) ?? null : null),
+    [visSeries, ownMainKey],
+  );
+  const mergedVolumeColor = mergedOwnerSeries?.color ?? color.mute;
+  const mergedVolumeOwner = useMemo(
+    () => (mergedOwnerSeries ? { key: mergedOwnerSeries.key, brand: mergedOwnerSeries.brand, text: curveNameOf(mergedOwnerSeries) } : null),
+    [mergedOwnerSeries],
+  );
   // 合并图：主品逐桶销毛（输入 = 显示币种折后价窗口序列；模拟月版本模型）
   const mergedMargins = useMemo(
     () =>
-      mergedMainSeries && ownMainSel && winBucketIds.length > 0
+      // isOwn 门控：主分析可任意品牌（第一百一十七轮），竞品当主品时不出销毛卡（口径 = 我司产品）
+      mergedMainSeries?.isOwn && ownMainSel && winBucketIds.length > 0
         ? marginCostOf({
             modelId: ownMainSel.modelId,
             romram: ownMainSel.romram,
@@ -1117,6 +1127,7 @@ export default function PriceTrend(props: {
         volumes: (number | null)[] | null;
         margins: (MarginCostPoint | null)[] | null;
         volumeColor: string;
+        volumeOwner: { key: string; brand: string; text: string } | null;
         diffBaseKey: string | null;
       }
     > = {};
@@ -1133,7 +1144,7 @@ export default function PriceTrend(props: {
             ? volumeByBuckets(sel.modelId, sel.romram, state.countryCode, state.granularity, ids)
             : null,
         margins:
-          mainSeries && sel && ids.length > 0
+          mainSeries?.isOwn && sel && ids.length > 0
             ? marginCostOf({
                 modelId: sel.modelId,
                 romram: sel.romram,
@@ -1143,6 +1154,7 @@ export default function PriceTrend(props: {
               })
             : null,
         volumeColor: (key ? p.all.find((s) => s.key === key)?.color : null) ?? color.mute,
+        volumeOwner: mainSeries ? { key: mainSeries.key, brand: mainSeries.brand, text: curveNameOf(mainSeries) } : null,
         diffBaseKey: key,
       };
     }
@@ -1879,6 +1891,7 @@ export default function PriceTrend(props: {
                         volumeColor={panelExtra[p.key]?.volumeColor}
                         volumes={panelExtra[p.key]?.volumes ?? undefined}
                         volumeHeight={splitVolH}
+                        volumeOwner={panelExtra[p.key]?.volumeOwner ?? null} // 复检五件套：面板各自主品
                         legendHoverKey={panelLegendHover?.panel === p.key ? panelLegendHover.key : null}
                         lineShape={lineShape}
                         labelMode={labelMode} // 第一百一十四轮：价格显示 详细/精简
@@ -1951,6 +1964,7 @@ export default function PriceTrend(props: {
             volumeColor={mergedVolumeColor}
             volumes={mergedVolumes ?? undefined}
             volumeHeight={mergedVolH}
+            volumeOwner={mergedVolumeOwner} // 复检五件套：量带归属药丸/小卡/联动高亮
             legendHoverKey={legendHoverKey}
             showYTicks={showYTicks}
             showTiers={showTiers}

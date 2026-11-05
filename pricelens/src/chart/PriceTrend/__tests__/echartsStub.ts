@@ -6,8 +6,15 @@
 // 用法：vi.mock('echarts/core', async () => await import('./echartsStub'))
 // 并 vi.mock('echarts/charts' | 'echarts/components' | 'echarts/renderers', () => ({}))
 // ============================================================
+let lastOption: unknown = null;
+
+/** 最近一次 setOption 的入参：断言「线真的降淡」要看喂给 ECharts 的 option，而不是组件 state */
+export const lastSetOption = (): unknown => lastOption;
+
 const instance = {
-  setOption: (): void => {},
+  setOption: (option: unknown): void => {
+    lastOption = option;
+  },
   resize: (): void => {},
   clear: (): void => {},
   dispose: (): void => {},

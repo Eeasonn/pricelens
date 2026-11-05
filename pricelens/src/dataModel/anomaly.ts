@@ -23,8 +23,9 @@ export interface AnomalyRule {
   thresholdPct: number;
 }
 
-/** 默认开启 50%（§8 拍板 1）：瞬态+豁免规则已把促销/官方调价放行，50% 几乎只命中采集事故 */
-export const DEFAULT_ANOMALY_RULE: AnomalyRule = { enabled: true, thresholdPct: 50 };
+/** 默认关闭（2026-11-05 Eason：守卫默认不开；配置页显式打开的用户不受影响）。
+ *  阈值保留 50%：瞬态+豁免规则已把促销/官方调价放行，50% 几乎只命中采集事故。 */
+export const DEFAULT_ANOMALY_RULE: AnomalyRule = { enabled: false, thresholdPct: 50 };
 export const ANOMALY_CUSTOM_MIN = 10;
 export const ANOMALY_CUSTOM_MAX = 90;
 

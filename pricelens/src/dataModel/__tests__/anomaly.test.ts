@@ -202,7 +202,7 @@ describe('异常守卫 · 规则与人工裁定存取', () => {
 });
 
 describe('异常守卫 · buildSeries 端到端锚点（真实数据）', () => {
-  it('DE 穿戴 Galaxy Watch 8 Classic 46mm 2026W39 为瞬态隔离点（默认 50%）', () => {
+  it('默认关闭（2026-11-05 Eason 拍板）：同场景不产隔离点，脱敏线不受守卫影响', () => {
     const row = dimProduct.find((p) => p.model_id === 'cmp-samsung-galaxy-watch-8-classic' && p.romram === '46mm');
     expect(row).toBeDefined();
     const [startBucket, endBucket] = dataBucketRange('week');
@@ -216,9 +216,32 @@ describe('异常守卫 · buildSeries 端到端锚点（真实数据）', () => 
       scope: { countryCode: 'DE', industry: 'wearable' },
     });
     expect(series).toHaveLength(1);
-    const isolated = series[0].points.filter((pt) => pt.suspect === 'quarantined');
-    expect(isolated.map((pt) => pt.bucketId)).toEqual(['202639']);
-    expect(isolated[0].suspectReason).toBe('transient');
-    expect(isolated[0].suspectWow).toBeGreaterThan(0.5);
+    expect(readAnomalyRule().enabled).toBe(false);
+    expect(series[0].points.filter((pt) => pt.suspect === 'quarantined')).toEqual([]);
+  });
+
+  it('显式开启后：DE 穿戴 Galaxy Watch 8 Classic 46mm 2026W39 为瞬态隔离点（50%）', () => {
+    saveAnomalyRule({ enabled: true, thresholdPct: 50 });
+    try {
+      const row = dimProduct.find((p) => p.model_id === 'cmp-samsung-galaxy-watch-8-classic' && p.romram === '46mm');
+      expect(row).toBeDefined();
+      const [startBucket, endBucket] = dataBucketRange('week');
+      const series = buildSeries({
+        groups: [{ modelId: 'cmp-samsung-galaxy-watch-8-classic', romram: '46mm', skuIds: [row!.sku_id], isOwn: false }],
+        granularity: 'week',
+        startBucket,
+        endBucket,
+        currency: 'usd',
+        agg: 'avg',
+        scope: { countryCode: 'DE', industry: 'wearable' },
+      });
+      expect(series).toHaveLength(1);
+      const isolated = series[0].points.filter((pt) => pt.suspect === 'quarantined');
+      expect(isolated.map((pt) => pt.bucketId)).toEqual(['202639']);
+      expect(isolated[0].suspectReason).toBe('transient');
+      expect(isolated[0].suspectWow).toBeGreaterThan(0.5);
+    } finally {
+      saveAnomalyRule({ enabled: false, thresholdPct: 50 });
+    }
   });
 });

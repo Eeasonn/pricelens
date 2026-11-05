@@ -7,6 +7,9 @@
 import { dimProduct } from '../data';
 import type { DimProduct } from '../dataModel/types';
 import type { MainProduct, ProductSelection } from './filtersTypes';
+// 类型再导出（2026-11-05）：PriceTrendSearch 等调用方从本模块取 MainProduct，
+// filtersTypes 仍是唯一定义源，此处仅透传
+export type { MainProduct, ProductSelection };
 import { groupsFromBenchmark } from './configStore';
 import { defaultColorSkuIds, modelIdOf, type RomramNode } from '../components/ProductCascader/tree';
 

@@ -81,7 +81,8 @@ const ZONE_PILL_CHROME_W = 32;
 export function nameZoneWidthOf(names: readonly string[]): number {
   if (names.length === 0) return NAME_BAND_W;
   const maxPill = names.reduce((max, t) => Math.max(max, measureText(t) * (11 / 13) + ZONE_PILL_CHROME_W), 0);
-  return Math.min(NAME_BAND_MAX_W, Math.max(NAME_BAND_MIN_W, Math.ceil(maxPill) + 4));
+  // 带内左右各留 4（buildLabelPlan：盒宽 = 带宽 − 8），少留会把药丸压窄 3px、量带药丸被截断
+  return Math.min(NAME_BAND_MAX_W, Math.max(NAME_BAND_MIN_W, Math.ceil(maxPill) + 8));
 }
 
 /** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB。
@@ -750,6 +751,99 @@ export function buildEndpointBadges(p: {
     });
   }
   return out;
+}
+
+// ---------------- 量带（2026-11-05 复检五件套） ----------------
+
+/** 销量 → 量带内柱高/面积高 px：非零至少 1px 可见，超上限贴顶；vMax 无效 = 0 */
+export function volumeBarHeightOf(v: number, vMax: number, bandH: number): number {
+  return vMax > 0 ? Math.max(1, Math.min(bandH, (v / vMax) * bandH)) : 0;
+}
+
+/** 量带三点标注行高（10px 纯数字，无框） */
+export const VOL_MARK_H = 14;
+export type VolumeMarkKind = 'max' | 'min' | 'latest';
+export interface VolumeMark {
+  idx: number;
+  kind: VolumeMarkKind;
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** 量带最高/最低/最新常驻标注：最高点标上方、最低点标下方、最新点看来向（较前一有值桶
+ *  回落标下、否则标上，与价格精简标签 posOf 同规则）；同一桶身兼多职只出一枚（最高 >
+ *  最低 > 最新）。null = 无数据不参与；0 是真实值（退市后估算为 0）参与最低/最新。
+ *  横向钳入绘图区（最新点常在最右桶，不钳会压到右轴刻度）；带内独立走 resolveCollisions，
+ *  与价格标签互不影响。 */
+export function buildVolumeMarks(p: {
+  values: readonly (number | null)[];
+  vMax: number;
+  plotLeft: number;
+  plotWidth: number;
+  n: number;
+  bandTop: number;
+  bandH: number;
+}): VolumeMark[] {
+  if (!(p.vMax > 0) || p.n <= 0) return [];
+  const idxs: number[] = [];
+  p.values.forEach((v, i) => {
+    if (v != null && Number.isFinite(v) && i < p.n) idxs.push(i);
+  });
+  if (idxs.length === 0) return [];
+  const val = (i: number): number => p.values[i] as number;
+  let maxI = idxs[0];
+  let minI = idxs[0];
+  for (const i of idxs) {
+    if (val(i) > val(maxI)) maxI = i;
+    if (val(i) < val(minI)) minI = i;
+  }
+  const lastI = idxs[idxs.length - 1];
+  const prevOfLast = idxs.length >= 2 ? val(idxs[idxs.length - 2]) : null;
+  const kindOf = (i: number): VolumeMarkKind => (i === maxI ? 'max' : i === minI ? 'min' : 'latest');
+  const below = (i: number): boolean => {
+    const kind = kindOf(i);
+    if (kind === 'max') return false;
+    if (kind === 'min') return true;
+    return prevOfLast != null && val(i) < prevOfLast;
+  };
+  const colW = p.plotWidth / p.n;
+  const bandBottom = p.bandTop + p.bandH;
+  const items: AvoidItem[] = [...new Set([maxI, minI, lastI])].map((i) => {
+    const text = Math.round(val(i)).toLocaleString('en-US');
+    const w = Math.round(text.length * 6.2) + 2; // 10px 等宽数字（无框，只留描边余量）
+    const left = Math.max(p.plotLeft, Math.min(p.plotLeft + colW * (i + 0.5) - w / 2, p.plotLeft + p.plotWidth - w));
+    const pointY = bandBottom - volumeBarHeightOf(val(i), p.vMax, p.bandH);
+    const wanted = below(i) ? pointY + 2 : pointY - VOL_MARK_H - 2;
+    return {
+      kind: 'name',
+      seriesKey: String(i),
+      pointIdx: i,
+      pinned: true,
+      left,
+      right: left + w,
+      top: Math.max(p.bandTop + 2, Math.min(wanted, bandBottom - VOL_MARK_H - 1)),
+      h: VOL_MARK_H,
+      text,
+      color: '',
+    };
+  });
+  return resolveCollisions(items, p.bandTop).names
+    .map((nm) => {
+      const idx = Number(nm.seriesKey);
+      return {
+        idx,
+        kind: kindOf(idx),
+        text: nm.text,
+        x: nm.x,
+        y: Math.min(nm.y, bandBottom - VOL_MARK_H - 1),
+        w: nm.w,
+        h: VOL_MARK_H,
+      };
+    })
+    .sort((a, b) => a.idx - b.idx);
 }
 
 /** DOM 刻度线行：各段的 interval 整数倍刻度 + 绝对 y 像素 + 步长感知缩写文案
