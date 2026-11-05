@@ -1,9 +1,9 @@
-import type { FiltersState } from '../state/filtersTypes';
+import type { FiltersState, ProductSelection } from '../state/filtersTypes';
 import type { AlertEvidenceStatus, AlertLifecycle, AlertPriority } from '../dataModel/alertLifecycle';
 import type { ForecastDataset } from '../pages/forecast/forecastModel';
 import type { ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 
-export type AgentIntent = 'filter' | 'query' | 'forecast_explain' | 'alert' | 'clarify';
+export type AgentIntent = 'filter' | 'query' | 'forecast_explain' | 'alert' | 'price_advantage' | 'price_alert' | 'clarify';
 /** Local What-if inputs that must travel with a forecast explanation request. */
 export interface ForecastDraftInput {
   priceDeltaPct: number;
@@ -44,9 +44,12 @@ export type AgentEventType =
   | 'run.status'
   | 'step.started'
   | 'step.updated'
+  | 'step.completed'
   | 'approval.required'
   | 'clarification.required'
   | 'warning'
+  | 'text.delta'
+  | 'card.patch'
   | 'card.ready'
   | 'evidence.ready'
   | 'run.completed'
@@ -112,12 +115,28 @@ export interface AgentCardAction {
   target?: AgentActionTarget;
 }
 
+export type AgentSuggestionIntent = 'filter' | 'query' | 'compare' | 'evidence' | 'price_advantage' | 'price_alert' | 'clarify';
+
+/** Fixed chips carry the action contract; free text still uses classifier fallback. */
+export interface AgentSuggestionAction {
+  label: string;
+  intent: AgentSuggestionIntent;
+  target?: 'comparison' | 'evidence' | 'filter_preview' | 'dashboard' | 'forecast';
+  prompt?: string;
+}
+
 export interface AgentActionTarget {
   page?: string;
   contextFingerprint: string;
   weekId?: string;
   modelId?: string;
+  alertId?: string;
+  alertType?: AgentAlertRecord['type'];
   seriesKey?: string;
+  countryCode?: string;
+  platform?: FiltersState['platform'];
+  selection?: ProductSelection;
+  compareSelection?: ProductSelection;
   forecastDraft?: ForecastDraftInput;
   forecastSnapshot?: ForecastSnapshot;
   forecastDataset?: ForecastDataset;
@@ -157,7 +176,9 @@ export interface AgentAlertRecord {
   dataVersion?: string;
   contextFingerprint?: string;
   evidenceIds?: string[];
+  evidence?: AgentEvidence[];
   evidenceStatus?: AlertEvidenceStatus;
+  countryCode?: string;
 }
 
 export interface AgentContextSnapshot {
@@ -186,9 +207,25 @@ export interface AgentStep {
   id: string;
   tool: AgentToolName;
   label: string;
-  status: 'success' | 'warning' | 'failed';
+  status: 'queued' | 'running' | 'success' | 'warning' | 'failed' | 'waiting_for_approval';
   detail: string;
   durationMs: number;
+}
+
+export type AgentToolCallStatus = 'queued' | 'running' | 'success' | 'failed' | 'waiting_for_approval';
+
+export interface AgentToolCall {
+  id: string;
+  tool: AgentToolName;
+  label: string;
+  status: AgentToolCallStatus;
+  inputSummary?: string;
+  outputSummary?: string;
+  durationMs?: number;
+  error?: string;
+  requestId?: string;
+  cardId?: string;
+  expandable?: boolean;
 }
 
 export interface FilterResultCard {
@@ -201,6 +238,7 @@ export interface FilterResultCard {
   warning?: string;
   actions?: AgentCardAction[];
   evidence?: AgentEvidence[];
+  contextFingerprint?: string;
 }
 
 export interface TableResultCard {
@@ -233,6 +271,48 @@ export interface AlertResultCard {
   checks: string[];
   evidence?: AgentEvidence[];
   actions?: AgentCardAction[];
+}
+
+export interface PriceAdvantageRow {
+  id: string;
+  countryCode: string;
+  weekId: string;
+  weekLabel: string;
+  channelLabel: string;
+  platform: string | null;
+  currency: 'usd' | 'local';
+  own: { modelId: string; modelName: string; romram: string; skuId: string; price: number };
+  competitor: { modelId: string; modelName: string; romram: string; skuId: string; price: number };
+  ownSelection: ProductSelection;
+  compareSelection: ProductSelection;
+  priceDiff: number;
+  priceDiffPct: number;
+  relation: 'advantage' | 'behind' | 'tie';
+  contextFingerprint: string;
+}
+
+export interface PriceAdvantageResultCard {
+  kind: 'price_advantage';
+  id: string;
+  title: string;
+  rows: PriceAdvantageRow[];
+  skuOptions: Array<{ skuId: string; label: string }>;
+  note: string;
+  currency: 'usd' | 'local';
+  contextFingerprint: string;
+  evidence?: AgentEvidence[];
+  actions?: AgentCardAction[];
+}
+
+export interface AlertListResultCard {
+  kind: 'alert_list';
+  id: string;
+  title: string;
+  alerts: AgentAlertRecord[];
+  contextFingerprint: string;
+  note: string;
+  actions?: AgentCardAction[];
+  evidence?: AgentEvidence[];
 }
 
 export interface ForecastExplanationFactor {
@@ -292,7 +372,7 @@ export interface ForecastExplanationResultCard {
   evidence?: AgentEvidence[];
 }
 
-export type AgentResultCard = FilterResultCard | TableResultCard | ChartResultCard | AlertResultCard | ForecastExplanationResultCard;
+export type AgentResultCard = FilterResultCard | TableResultCard | ChartResultCard | AlertResultCard | AlertListResultCard | PriceAdvantageResultCard | ForecastExplanationResultCard;
 
 export interface AgentResponse {
   intent: AgentIntent;
@@ -301,10 +381,15 @@ export interface AgentResponse {
   cards: AgentResultCard[];
   citations: AgentCitation[];
   suggestions: string[];
+  suggestionActions?: AgentSuggestionAction[];
   contextFingerprint: string;
-  provider?: { name: string; model: string };
+  provider?: { name: string; model: string; reason?: string };
   provenance?: AgentProvenance;
   coverage?: CoverageSummary;
+  factGuard?: {
+    status: 'verified' | 'calibrated' | 'stale_context';
+    message?: string;
+  };
 }
 
 export interface AgentEvent {
@@ -315,12 +400,17 @@ export interface AgentEvent {
   status?: AgentRunStatus;
   timestamp: string;
   message?: string;
+  delta?: string;
+  text?: string;
   tool?: AgentToolName;
   stepId?: string;
   cardId?: string;
   evidence?: AgentEvidence[];
   approval?: ApprovalRequest;
   provenance?: AgentProvenance;
+  card?: AgentResultCard;
+  patch?: Partial<AgentResultCard>;
+  toolCall?: AgentToolCall;
 }
 
 export interface AgentRun {
@@ -334,6 +424,7 @@ export interface AgentRun {
   events: AgentEvent[];
   approval?: ApprovalRequest;
   response?: AgentResponse;
+  toolCalls?: AgentToolCall[];
   error?: { code?: string; message: string };
 }
 
@@ -348,6 +439,20 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
     && typeof event.timestamp === 'string';
 }
 
+function isAgentCardDeep(value: unknown): value is AgentResultCard {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const card = value as Record<string, unknown>;
+  if (typeof card.id !== 'string' || !['filter', 'table', 'chart', 'alert', 'alert_list', 'price_advantage', 'forecast_explanation'].includes(String(card.kind))) return false;
+  if (typeof card.title !== 'string') return false;
+  if (card.kind === 'filter') return Boolean(card.patch && typeof card.patch === 'object' && Array.isArray(card.changes));
+  if (card.kind === 'table') return Array.isArray(card.columns) && Array.isArray(card.rows);
+  if (card.kind === 'chart') return Array.isArray(card.series) && typeof card.note === 'string';
+  if (card.kind === 'alert') return Boolean(card.alert && Array.isArray(card.facts) && Array.isArray(card.checks));
+  if (card.kind === 'alert_list') return Array.isArray(card.alerts) && typeof card.note === 'string';
+  if (card.kind === 'price_advantage') return Array.isArray(card.rows) && Array.isArray(card.skuOptions) && typeof card.note === 'string' && typeof card.contextFingerprint === 'string';
+  return Boolean(typeof card.contextFingerprint === 'string' && card.scope && card.current && Array.isArray(card.factors));
+}
+
 export function isContextStale(snapshot: AgentContextSnapshot, currentFingerprint: string): boolean {
   return snapshot.fingerprint !== currentFingerprint;
 }
@@ -360,13 +465,14 @@ export function isContextStale(snapshot: AgentContextSnapshot, currentFingerprin
 export function isAgentResponse(value: unknown): value is AgentResponse {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const response = value as Record<string, unknown>;
-  if (!['filter', 'query', 'forecast_explain', 'alert', 'clarify'].includes(String(response.intent))) return false;
+  if (!['filter', 'query', 'forecast_explain', 'alert', 'price_advantage', 'price_alert', 'clarify'].includes(String(response.intent))) return false;
   if (typeof response.summary !== 'string' || typeof response.contextFingerprint !== 'string') return false;
   if (!Array.isArray(response.steps) || !Array.isArray(response.cards) || !Array.isArray(response.citations) || !Array.isArray(response.suggestions)) return false;
   if (response.provider !== undefined && (!response.provider || typeof response.provider !== 'object' || typeof (response.provider as Record<string, unknown>).name !== 'string' || typeof (response.provider as Record<string, unknown>).model !== 'string')) return false;
   if (response.suggestions.some((suggestion) => typeof suggestion !== 'string')) return false;
-  if (response.steps.some((item) => !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).tool !== 'string')) return false;
-  if (response.cards.some((item) => !item || typeof item !== 'object' || !['filter', 'table', 'chart', 'alert', 'forecast_explanation'].includes(String((item as Record<string, unknown>).kind)))) return false;
+  if (response.suggestionActions !== undefined && (!Array.isArray(response.suggestionActions) || response.suggestionActions.some((item) => !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).label !== 'string' || typeof (item as Record<string, unknown>).intent !== 'string'))) return false;
+  if (response.steps.some((item) => !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).tool !== 'string' || typeof (item as Record<string, unknown>).label !== 'string')) return false;
+  if (response.cards.some((item) => !isAgentCardDeep(item))) return false;
   return true;
 }
 

@@ -357,6 +357,12 @@ export default function AlertsPage() {
   }, [recordOverrides]);
 
   useEffect(() => {
+    const onAgentAlertUpdate = () => setRecordOverrides(readAlertRecordOverrides());
+    window.addEventListener('pricelens:alert-records-updated', onAgentAlertUpdate);
+    return () => window.removeEventListener('pricelens:alert-records-updated', onAgentAlertUpdate);
+  }, []);
+
+  useEffect(() => {
     const focus = navBus.alertsFocus;
     if (!focus) return;
     if (focus.modelId) setModelFilter({ id: focus.modelId, name: focus.modelName ?? focus.modelId });

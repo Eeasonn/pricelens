@@ -1,12 +1,14 @@
-import type { AgentRunStatus } from '../../agent';
+import type { AgentRunStatus, AgentSuggestionAction } from '../../agent';
 
-export const PRICE_TREND_AI_SUGGESTIONS = [
-  '最近有价周哪个平台最便宜？',
-  '比较当前产品与主竞品',
-  '解释当前价格变化',
-] as const;
+export const PRICE_TREND_AI_SUGGESTIONS = ['价格优势', '价格预警', '查我司产品价格'] as const;
 
-export const AGENT_FOLLOWUP_SUGGESTIONS = ['只看最近 8 周', '与主竞品比较', '打开依据'] as const;
+export const AGENT_FOLLOWUP_SUGGESTIONS = PRICE_TREND_AI_SUGGESTIONS;
+
+export const AGENT_FOLLOWUP_ACTIONS: readonly AgentSuggestionAction[] = [
+  { label: '价格优势', intent: 'price_advantage', target: 'comparison', prompt: '价格优势' },
+  { label: '价格预警', intent: 'price_alert', target: 'evidence', prompt: '价格预警' },
+  { label: '查我司产品价格', intent: 'query', target: 'dashboard', prompt: '查我司产品价格' },
+];
 
 export const AGENT_STATUS_LABELS: Record<AgentRunStatus, string> = {
   idle: '只读分析 · 结果可追溯',
@@ -30,14 +32,14 @@ export function platformShortcutLabel(): '⌘K' | 'Ctrl K' {
   return /Mac|iPhone|iPad|iPod/i.test(`${navigator.platform ?? ''} ${navigator.userAgent ?? ''}`) ? '⌘K' : 'Ctrl K';
 }
 
-const PAGE_SUGGESTIONS: Record<string, readonly string[]> = {
-  dashboard: PRICE_TREND_AI_SUGGESTIONS,
-  alerts: ['解释最新预警并列出核查证据', '只看最近 8 周的预警', '把最新预警定位到看板'],
-  intelligence: ['总结当前市场情报', '哪些事件最可能影响价格？', '解释汇率对当前价格的影响'],
-  forecast: ['解释量价预测的关键假设', '如果价格下调 5% 会怎样？', '查看预测的不确定性'],
-  volume: ['比较当前产品的销量趋势', '只看最近 8 周', '解释量价变化'],
+const PAGE_ACTIONS: Record<string, readonly AgentSuggestionAction[]> = {
+  dashboard: AGENT_FOLLOWUP_ACTIONS,
+  alerts: AGENT_FOLLOWUP_ACTIONS,
+  intelligence: AGENT_FOLLOWUP_ACTIONS,
+  forecast: AGENT_FOLLOWUP_ACTIONS,
+  volume: AGENT_FOLLOWUP_ACTIONS,
 };
 
-export function agentSuggestionsForPage(page: string): readonly string[] {
-  return PAGE_SUGGESTIONS[page] ?? ['最近有价周哪个平台最便宜？', '解释当前产品的最新预警', '只看最近 8 周并显示 RRP'];
+export function agentSuggestionsForPage(page: string): readonly AgentSuggestionAction[] {
+  return PAGE_ACTIONS[page] ?? AGENT_FOLLOWUP_ACTIONS;
 }

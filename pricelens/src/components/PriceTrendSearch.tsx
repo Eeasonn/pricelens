@@ -22,6 +22,7 @@ interface ProductHit {
   romram: string;
   skuId: string;
   isOwn: boolean;
+  variants: Array<{ romram: string; skuId: string }>;
 }
 
 const normalize = (value: string): string => value.trim().toLocaleLowerCase();
@@ -64,36 +65,35 @@ export function parsePriceTrendSearch(value: string, fallbackCountry: string): P
   return { countryCode: region.country_code, productQuery: productQuery.replace(/\s+/g, ' ').trim() };
 }
 
-function productHits(query: string, countryCode: string, industry: string): ProductHit[] {
+export function productHits(query: string, countryCode: string, industry: string): ProductHit[] {
   const q = compact(query);
-  const seen = new Set<string>();
-  const hits: ProductHit[] = [];
+  const grouped = new Map<string, ProductHit>();
   for (const product of dimProduct) {
-    if (product.industry !== industry || !product.countries.includes(countryCode) || seen.has(product.model_id)) continue;
+    if (product.industry !== industry || !product.countries.includes(countryCode)) continue;
     const haystack = compact(`${product.brand} ${brandLabelOf(product.brand)} ${product.model_name} ${product.series} ${product.romram}`);
     if (q && !haystack.includes(q)) continue;
-    seen.add(product.model_id);
-    hits.push({
-      modelId: product.model_id,
-      brand: product.brand,
-      modelName: product.model_name,
-      series: product.series,
-      romram: product.romram,
-      skuId: product.sku_id,
-      isOwn: product.is_own,
-    });
+    const existing = grouped.get(product.model_id);
+    if (existing) {
+      if (!existing.variants.some((variant) => variant.romram === product.romram && variant.skuId === product.sku_id)) existing.variants.push({ romram: product.romram, skuId: product.sku_id });
+      continue;
+    }
+    grouped.set(product.model_id, { modelId: product.model_id, brand: product.brand, modelName: product.model_name, series: product.series, romram: product.romram, skuId: product.sku_id, isOwn: product.is_own, variants: [{ romram: product.romram, skuId: product.sku_id }] });
   }
   // Huawei is the decision subject. Keep own products at the top without
   // changing the stable order within either group.
-  return hits.sort((a, b) => Number(b.isOwn) - Number(a.isOwn)).slice(0, 6);
+  return [...grouped.values()].sort((a, b) => Number(b.isOwn) - Number(a.isOwn)).slice(0, 6);
 }
 
 function selectionOf(hit: ProductHit): ProductSelection {
   return { modelId: hit.modelId, romram: hit.romram, skuIds: [hit.skuId] };
 }
 
-function cardOf(hit: ProductHit): MainProduct {
-  const card: MainProduct = { id: newCardId(), main: selectionOf(hit), compares: [] };
+function selectionOfVariant(hit: ProductHit, variant: { romram: string; skuId: string }): ProductSelection {
+  return { modelId: hit.modelId, romram: variant.romram, skuIds: [variant.skuId] };
+}
+
+function cardOf(hit: ProductHit, variant?: { romram: string; skuId: string }): MainProduct {
+  const card: MainProduct = { id: newCardId(), main: variant ? selectionOfVariant(hit, variant) : selectionOf(hit), compares: [] };
   return hit.isOwn ? withAutoOn(card) : card;
 }
 
@@ -275,9 +275,9 @@ export default function PriceTrendSearch() {
     void send(trimmed);
   };
 
-  const selectProduct = (hit: ProductHit) => {
+  const selectProduct = (hit: ProductHit, variant?: { romram: string; skuId: string }) => {
     if (parsed.countryCode !== state.countryCode) actions.set({ countryCode: parsed.countryCode });
-    actions.setMains([cardOf(hit)]);
+    actions.setMains([cardOf(hit, variant)]);
     animateFilterHandoff();
     close();
   };
@@ -374,13 +374,17 @@ export default function PriceTrendSearch() {
               {hasProductQuery && hits.length === 0 && (
                 <div style={emptyStyle}><span>暂无本地产品命中</span><button type="button" onClick={() => setMode('ai')} style={inlineLinkStyle}>让 AI 分析「{trimmed}」</button></div>
               )}
-              {hasProductQuery && hits.map((hit) => (
-                <button id={`price-search-option-${hit.modelId}`} key={hit.modelId} type="button" role="option" data-search-item aria-selected={activeIndex === indexOfHit(hits, hit.modelId)} onMouseEnter={() => setActiveIndex(indexOfHit(hits, hit.modelId))} onClick={() => selectProduct(hit)} style={{ ...resultButtonStyle, background: activeIndex === indexOfHit(hits, hit.modelId) ? color.canvasSoft2 : color.canvas }}>
-                  <span style={{ width: 24, height: 24, display: 'grid', placeItems: 'center', borderRadius: radius.control, background: color.canvasSoft2, color: brandColorOf(hit.brand), fontSize: 11, fontWeight: 700 }}>{hit.isOwn ? '我' : brandLabelOf(hit.brand).slice(0, 1)}</span>
-                  <span style={{ minWidth: 0, flex: 1, textAlign: 'left' }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.ink, fontSize: 12, fontWeight: 600 }}>{hit.modelName}</span><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.mute, fontSize: 11 }}>{brandLabelOf(hit.brand)} · {hit.romram}</span></span>
-                  <ArrowRightOutlined style={{ color: color.mute, fontSize: 11 }} />
-                </button>
-              ))}
+              {hasProductQuery && hits.map((hit) => {
+                const active = activeIndex === indexOfHit(hits, hit.modelId);
+                return <div id={`price-search-option-${hit.modelId}`} key={hit.modelId} role="option" data-search-item aria-selected={active} onMouseEnter={() => setActiveIndex(indexOfHit(hits, hit.modelId))} style={{ padding: 4, borderRadius: radius.control, background: active ? color.canvasSoft2 : color.canvas }}>
+                  <button type="button" onClick={() => selectProduct(hit)} style={{ ...resultButtonStyle, padding: '4px 3px', background: 'transparent' }}>
+                    <span style={{ width: 24, height: 24, display: 'grid', placeItems: 'center', borderRadius: radius.control, background: color.canvasSoft2, color: brandColorOf(hit.brand), fontSize: 11, fontWeight: 700 }}>{hit.isOwn ? '我' : brandLabelOf(hit.brand).slice(0, 1)}</span>
+                    <span style={{ minWidth: 0, flex: 1, textAlign: 'left' }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.ink, fontSize: 12, fontWeight: 600 }}>{hit.modelName}</span><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.mute, fontSize: 11 }}>{brandLabelOf(hit.brand)} · 默认 {hit.romram}</span></span>
+                    <ArrowRightOutlined style={{ color: color.mute, fontSize: 11 }} />
+                  </button>
+                  {hit.variants.length > 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '2px 3px 3px 35px' }}><span style={{ color: color.mute, fontSize: 10 }}>规格</span>{hit.variants.map((variant) => <button key={`${variant.romram}-${variant.skuId}`} type="button" aria-label={`选择 ${hit.modelName} ${variant.romram} ${variant.skuId}`} onClick={(event) => { event.stopPropagation(); selectProduct(hit, variant); }} style={suggestionStyle}>{variant.romram} · {variant.skuId}</button>)}</div>}
+                </div>;
+              })}
             </div>
           ) : (
             <div style={{ padding: 12 }}>

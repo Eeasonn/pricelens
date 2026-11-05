@@ -1,15 +1,17 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
 import { dimProduct, dimRegion, dimTime } from '../data';
-import { flatSelections } from '../state/mainSelection';
+import { buildCards, clampMains, flatSelections } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
-import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, FilterPatch, FilterResultCard, ForecastContextInput } from './contracts';
+import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, AgentSuggestionAction, AlertListResultCard, FilterPatch, FilterResultCard, ForecastContextInput } from './contracts';
 import { contextFingerprint } from './contracts';
 import { BASELINE_DRAFT, type ForecastDataset, type ScenarioDraft } from '../pages/forecast/forecastModel';
 import type { ForecastDraftInput } from './contracts';
 import { simpleDemoDataset as forecastFixture } from '../pages/forecast/forecastDatasetRegistry';
 import { createForecastSnapshot, type ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 import { provenanceSummary } from '../dataModel/provenance';
+import { buildPriceAdvantageResult } from './priceAdvantage';
+export { buildPriceAdvantageResult } from './priceAdvantage';
 
 const id = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const norm = (s: string): string => s.replace(/\s+/g, '').toLowerCase();
@@ -135,10 +137,12 @@ function step(tool: AgentStep['tool'], label: string, detail: string, status: Ag
 }
 
 export function classifyIntent(text: string): AgentIntent {
+  if (/价格优势|价格对比|我司.*竞品.*价|竞品.*我司.*价/.test(text)) return 'price_advantage';
+  if (/价格预警|预警列表|预警.*证据|预警.*看板/.test(text)) return 'price_alert';
   if (/预警|异常|阈值|触发原因|为什么.*变/.test(text)) return 'alert';
   if (/(?:量价预测|简单版预测|预测)/.test(text) && /解释|假设|证据|风险|不确定|为什么/.test(text)) return 'forecast_explain';
   if (/只看|切换|显示|带上|去掉|最近\s*\d+\s*(周|月)|usd|美元|本币|rrp|划线价/i.test(text)) return 'filter';
-  if (/最低|最便宜|价差|趋势|价格|平台|多少|均值|变化|情报|预测|销量|需求|供给|库存|汇率|大盘/.test(text)) return 'query';
+  if (/比较|对比|依据|最低|最便宜|价差|趋势|价格|平台|多少|均值|变化|情报|预测|销量|需求|供给|库存|汇率|大盘/.test(text)) return 'query';
   if (knownEntityInText(text) && /看|查|查询|了解|情况|表现|分析|走势/.test(text)) return 'query';
   return 'clarify';
 }
@@ -182,7 +186,7 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
   const entities = resolveAgentEntities(text, state);
   if (entities.explicitCountry) patch.countryCode = entities.countryCode;
   if (entities.explicitProduct && entities.selections.length) {
-    patch.mains = entities.selections.map((selection, index): MainProduct => ({ id: `agent-filter-${index}`, main: selection, compares: [] }));
+    patch.mains = clampMains(buildCards(entities.selections, { auto: true }));
   }
   return patch;
 }
@@ -257,12 +261,20 @@ function latestWeekForRange(state: FiltersState): string {
   return inRange[inRange.length - 1]?.week_id ?? state.rangeEnd;
 }
 
-function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolution): FiltersState {
+function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolution, allowDefaultOwn = false): FiltersState {
   let targetSelections = entities.selections;
   if (!entities.explicitProduct && entities.explicitCountry) {
     targetSelections = selections(state).filter((selection) => dimProduct.some((row) => row.model_id === selection.modelId && norm(row.romram) === norm(selection.romram) && row.countries.includes(entities.countryCode)));
   }
-  if (!entities.explicitCountry && !entities.explicitProduct) return state;
+  if (!entities.explicitCountry && !entities.explicitProduct && !allowDefaultOwn) return state;
+  if (!entities.explicitCountry && !entities.explicitProduct && allowDefaultOwn) {
+    if (state.mains.some((card) => card.main)) return state;
+    const defaultModelId = dimRegion.find((region) => region.country_code === state.countryCode)?.default_own_models[state.industry];
+    const defaultRows = dimProduct.filter((row) => row.industry === state.industry && row.is_own && row.countries.includes(state.countryCode) && (!defaultModelId || row.model_id === defaultModelId));
+    const fallback = defaultRows[0] ?? dimProduct.find((row) => row.industry === state.industry && row.is_own && row.countries.includes(state.countryCode));
+    if (!fallback) return state;
+    targetSelections = [{ modelId: fallback.model_id, romram: fallback.romram, skuIds: [lowestPriceColorSku(fallback.model_id, fallback.romram, state.countryCode, state.currency) ?? fallback.sku_id] }];
+  }
   const mains: MainProduct[] = targetSelections.map((selection, index) => ({ id: `agent-query-${index}`, main: selection, compares: [] }));
   return { ...state, countryCode: entities.countryCode, mains };
 }
@@ -284,7 +296,7 @@ function noDataResult(entities: AgentEntityResolution, state: FiltersState): { c
 }
 
 function queryCards(state: FiltersState, text: string, entities: AgentEntityResolution = resolveAgentEntities(text, state)): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
-  const queryState = stateForEntityQuery(state, entities);
+  const queryState = stateForEntityQuery(state, entities, /我司|自家|华为.*价格|快搜/.test(text));
   const query = seriesQueryOf(queryState);
   if (!query) {
     if (entities.explicitCountry || entities.explicitProduct) return noDataResult(entities, queryState);
@@ -455,10 +467,11 @@ function forecastExplanationCards(
 /** 给所有确定性结果卡补上生成时的作用域，避免卡片按钮在筛选变化后误操作。 */
 function scopeCardActions(cards: AgentResultCard[], target: { page: string; contextFingerprint: string }): AgentResultCard[] {
   return cards.map((card) => {
-    if (!card.actions?.length) return card;
+    if (!card.actions?.length) return card.kind === 'filter' ? { ...card, contextFingerprint: target.contextFingerprint } : card;
     return {
       ...card,
       actions: card.actions.map((action) => action.target ? action : { ...action, target }),
+      ...(card.kind === 'filter' ? { contextFingerprint: target.contextFingerprint } : {}),
     } as AgentResultCard;
   });
 }
@@ -469,6 +482,37 @@ function alertCard(text: string, alerts: readonly AgentAlertRecord[]): { card: A
   const direction = alert.wowPct != null ? `${alert.wowPct < 0 ? '下降' : '上涨'} ${Math.abs(alert.wowPct * 100).toFixed(1)}%` : '已触发规则';
   const card: AgentResultCard = { kind: 'alert', id: id('alert'), title: `${alert.modelName} 的最新预警`, alert, facts: [`${alert.weekLabel}（${alert.weekId}）触发${alert.type}规则`, `折后价${direction}`, alert.gapPct != null ? `平台价差为 ${(alert.gapPct * 100).toFixed(1)}%` : '当前事件没有平台价差字段'], checks: ['核对促销记录与商品页面快照', '对比其他平台是否同步变化', '确认是否为单平台的短期变化'], evidence: [{ id: id('evidence'), label: '预警事件', detail: `${alert.brand} ${alert.modelName} · ${alert.weekId}`, source: '预警中心事件流' }, { id: id('evidence'), label: '规则输入', detail: alert.gapPct != null ? `平台价差 ${(alert.gapPct * 100).toFixed(1)}%` : `周度变化 ${alert.wowPct == null ? '—' : `${(alert.wowPct * 100).toFixed(1)}%`}`, source: '规则快照' }], actions: [{ id: id('action'), label: '继续核查预警', kind: 'followup', prompt: '基于最新预警证据，列出下一步核查顺序和需要补充的数据' }, { id: id('action'), label: '回预警中心', kind: 'open', prompt: '把这条预警定位回预警中心详情' }] };
   return { card, summary: '我把触发事实、前后变化和建议核查项分开列出；当前结果不推断唯一因果。', steps: [step('alerts.query', '读取预警事件', alert.weekLabel), step('alerts.explain', '解释触发原因', '已读取当前规则与输入值')], citations: [{ id: id('citation'), kind: 'alert', label: '预警事件', detail: alert.key }] };
+}
+
+function priceAlertList(text: string, context: AgentContextSnapshot): { card: AlertListResultCard; summary: string; steps: AgentStep[]; citations: AgentResponse['citations'] } {
+  const alerts = context.alerts.slice(0, 40);
+  const card: AlertListResultCard = {
+    kind: 'alert_list',
+    id: `price-alert-${context.fingerprint}`,
+    title: `价格预警 · ${alerts.length} 条当前事件`,
+    alerts: [...alerts],
+    contextFingerprint: context.fingerprint,
+    note: alerts.length
+      ? '预警来自现有四类规则：调价、折扣、平台价差、档位间距。展开每条可查看触发事实、规则版本与来源。'
+      : '当前国家、产业、订阅和平台口径下没有触发事件；没有用其他范围的数据填充。',
+    evidence: [{ id: 'alert-engine', label: '预警规则', detail: `${context.ruleVersion ?? 'price-rules-v1'} · ${context.dataVersion ?? 'local-data-v1'}`, source: '预警确定性引擎' }],
+  };
+  return {
+    card,
+    summary: alerts.length ? `已读取 ${alerts.length} 条真实预警，并保留每条的规则、周次和证据入口。` : card.note,
+    steps: [step('alerts.query', '读取价格预警', `${alerts.length} 条当前事件`), step('alerts.explain', '校验触发证据', alerts.length ? '规则与数据版本已带出' : '当前口径无触发事件'), step('view.preview', '生成结论', '预警卡可展开、定位和处理')],
+    citations: [{ id: 'alert-rule', kind: 'rule', label: '预警规则', detail: '复用调价、折扣、平台价差、档位间距四类现有规则' }],
+  };
+}
+
+function suggestionActionsFor(intent: AgentIntent, clarificationReason: string | null): AgentSuggestionAction[] {
+  const core: AgentSuggestionAction[] = [
+    { label: '价格优势', intent: 'price_advantage', target: 'comparison', prompt: '价格优势' },
+    { label: '价格预警', intent: 'price_alert', target: 'evidence', prompt: '价格预警' },
+    { label: '查我司产品价格', intent: 'query', target: 'dashboard', prompt: '查我司产品价格' },
+  ];
+  void intent; void clarificationReason;
+  return core;
 }
 
 export async function runAgent(
@@ -504,6 +548,12 @@ export async function runAgent(
     if (card) cards.push(card);
     summary = card ? '我先生成筛选预览，当前看板尚未改变。确认后才会应用。' : '我没有识别到明确的筛选变化，可以补充国家、时间、币种或 RRP 条件。';
     steps = [step('catalog.resolve', '解析筛选条件', card ? `${card.changes.length} 项待变更` : '需要补充口径', card ? 'success' : 'warning'), ...(card ? [step('view.preview', '生成筛选预览', '等待用户确认')] : [])];
+  } else if (intent === 'price_advantage') {
+    const result = buildPriceAdvantageResult(context.state, context.fingerprint);
+    cards.push(result.card); summary = result.summary; steps = result.steps; citations = result.citations;
+  } else if (intent === 'price_alert') {
+    const result = priceAlertList(text, context);
+    cards.push(result.card); summary = result.summary; steps = result.steps; citations = result.citations;
   } else if (intent === 'alert') {
     const result = alertCard(text, context.alerts);
     if (result.card) cards.push(result.card);
@@ -528,15 +578,15 @@ export async function runAgent(
     steps,
     cards: scopeCardActions(cards, { page: context.page, contextFingerprint: context.fingerprint }),
     citations,
-    suggestions: intent === 'forecast_explain'
-      ? ['如果价格下调 5% 会怎样？', '查看预测的不确定性', '回到量价预测页查看计算路径']
-      : intent === 'filter'
-      ? ['只看最近 8 周', '解释当前产品预警']
-      : clarificationReason === '产品'
-        ? ['选择一个主品或竞品', '告诉我具体型号', '指定国家和时间范围']
-        : clarificationReason === '时间范围'
-          ? ['最近 8 周哪个平台最便宜？', '最新有价周哪个平台最便宜？', '指定最近 3 个月']
-          : ['最近有价周哪个平台最便宜？', '解释当前产品的最新预警', '只看最近 8 周并显示 RRP'],
+    // Keep the legacy string field useful for API clients and older tests; the
+    // visible UI renders the explicit suggestionActions below, which are
+    // intentionally limited to the three supported entry points.
+    suggestions: clarificationReason === '产品'
+      ? ['选择一个主品或竞品', '告诉我具体型号', '指定国家和时间范围']
+      : clarificationReason === '时间范围'
+        ? ['最近 8 周哪个平台最便宜？', '最新有价周哪个平台最便宜？', '指定最近 3 个月']
+        : ['价格优势', '价格预警', '查我司产品价格'],
+    suggestionActions: suggestionActionsFor(intent, clarificationReason),
     contextFingerprint: context.fingerprint,
     provenance: context.provenance ?? {
       source: 'local-deterministic',
@@ -545,6 +595,7 @@ export async function runAgent(
       contextFingerprint: context.fingerprint,
       generatedAt: new Date().toISOString(),
     },
+    provider: { name: '本地确定性', model: 'local' },
   };
 }
 

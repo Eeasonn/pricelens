@@ -75,7 +75,8 @@ describe('withLocalFallback', () => {
     const remote: AgentClient = { run: () => Promise.reject(new Error('Fetch failed: ECONNREFUSED')) };
     const result = await withLocalFallback(remote, local).run({ text: '只看 Pura 90', context: {} as never, clientRequestId: 'req-fb', runId: 'run-fb' }, undefined, (event) => events.push(event));
     expect(result.summary).toBe('只看 Pura 90');
-    expect(result.provider).toEqual({ name: '本地确定性回退', model: 'local' });
+    expect(result.provider).toMatchObject({ name: '本地确定性回退', model: 'local' });
+    expect(result.provider?.reason).toContain('ECONNREFUSED');
     expect(local.run).toHaveBeenCalledTimes(1);
     expect(events).toHaveLength(1);
     expect(isAgentEvent(events[0])).toBe(true);
