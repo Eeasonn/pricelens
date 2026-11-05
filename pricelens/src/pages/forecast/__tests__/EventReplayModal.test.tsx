@@ -227,15 +227,18 @@ describe('产品事件弹窗 · 窄屏安全', () => {
 // 文案与禁词（WP3 Step 7–8 → v3 范围口径）
 // ============================================================
 describe('产品事件弹窗 · 文案与禁词', () => {
-  it('教学说明（可改 / 画范围锚 / 名录删除）迁 title 不占可见文本；类型 hint 用「本品」不用「我司」', () => {
+  it('教学说明（可改 / 起始周小方块点 / 名录删除）迁 title 不占可见文本；类型 hint 用「本品」不用「我司」', () => {
     renderModal();
     const text = document.body.textContent ?? '';
     expect(text).toContain('分流本品同期销量');
     expect(text).not.toContain('分流我司同期销量');
     expect(text).not.toContain('可在图下名录删除');
     expect(text).not.toContain('按回放段预填，可改');
-    const titled = document.querySelector<HTMLElement>('[title*="画锚点"]');
+    // 2026-11-05 全局 #2：主图事件统一「起始周小方块点」口径（范围线 / 端点话术下线）。
+    const titled = document.querySelector<HTMLElement>('[title*="小方块点"]');
     expect(titled?.getAttribute('title') ?? '').toContain('图下名录');
+    expect(titled?.getAttribute('title') ?? '').not.toContain('范围线');
+    expect(titled?.getAttribute('title') ?? '').not.toContain('起止端点');
     expect(document.querySelector<HTMLElement>('[title*="按回放段预填"]')).toBeTruthy();
     // 范围口径可见：形状默认递减 + 起始峰值说明。
     expect(text).toContain('递减');

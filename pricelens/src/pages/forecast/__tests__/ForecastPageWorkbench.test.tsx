@@ -3,7 +3,7 @@
 // 入共享分析壳（单页头、无 FilterBar、全页唯一「量价预测」current）、
 // PipelineNav 挂载（四节点 + 点击只定位：跨卡滚动/聚焦 + 「来自…」返回条，
 // 返回恢复）、五卡齐全有序（主图→参考→大盘→③库存修正→成本销毛垫底）、
-// 范围行压缩 + 模拟标识分级（页首 DataStatusBadge + 各卡轻量 SimChip）、
+// 范围行压缩 + 模拟标识分级（页首 DataStatusBadge 一处 + 卡级 ？号 HintInfo）、
 // SI 未全部确认页首提示（B.5.7）、上一代参照受控进①学习器（切换 = 重新
 // 学习，草稿按 workbench-demo-v3 落 sessionStorage）、微调（WeekId 键控）→
 // 复制关键假设（v3 管线顺序 + SI 状态）→ 切页往返草稿保留、禁词/旧话术总扫。
@@ -134,13 +134,13 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     expect(text).not.toContain('（演示实际）');
   });
 
-  it('④⑤ 库存修正 + 成本销毛左右两列：data-lpl-forecast-grid 双列模板（左 1fr / 右 0.8fr），卡序仍库存在前', () => {
+  it('④⑤ 库存修正 + 成本销毛单列全宽堆叠（2026-11-05 高保真拍板：库存卡占满全宽，不再左右分栏），卡序仍库存在前', () => {
     render(<App />);
     const grid = document.querySelector('[data-lpl-forecast-grid]') as HTMLElement | null;
     expect(grid).not.toBeNull();
-    // 两列 grid：左列（库存卡，内容多）1fr，右列（成本销毛窄卡）0.8fr；间距 = space.md；
-    // 窄屏退化（≤760px 单列）由 index.css 既有 [data-lpl-forecast-grid] 断点承担（jsdom 不测媒体查询）。
-    expect(grid!.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 0.8fr)');
+    // 单列全宽：③库存修正 → 成本销毛 上下堆叠（间距 = space.md）；
+    // 窄屏退化断点由 index.css 既有 [data-lpl-forecast-grid] 断点承担（jsdom 不测媒体查询）。
+    expect(grid!.style.gridTemplateColumns).toBe('minmax(0, 1fr)');
     expect(grid!.style.gap).toBe('12px');
     expect(grid!.style.alignItems).toBe('stretch');
     // 两卡为网格直接子级（跨卡聚焦包装层 div 内各一张卡），DOM 顺序仍 ④ 库存 → ⑤ 成本。
@@ -150,18 +150,20 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     const cardTitles = cards.map((card) => card.querySelector('h2')?.textContent ?? '');
     expect(cardTitles[0]).toContain('③ 库存修正');
     expect(cardTitles[1]).toContain('成本销毛');
-    // 右列窄卡自适应：销毛图 SVG 地板宽 560（1440 最小工作宽下列内不出现横向滚动）。
+    // 两卡同宽几何：销毛图 SVG 地板宽 700（与库存卡 720×252 同源，单列全宽无横向滚动）。
     const marginSvg = cards[1].querySelector('svg[role="img"]') as SVGSVGElement | null;
     expect(marginSvg).not.toBeNull();
-    expect(marginSvg!.style.minWidth).toBe('560px');
+    expect(marginSvg!.style.minWidth).toBe('700px');
   });
 
-  it('模拟标识分级：页首 DataStatusBadge 一处 + 四卡「模拟」+ 参考卡「模拟历史」；页级「演示」chip 退役', () => {
+  it('模拟标识分级（2026-11-05 第 7 条）：页首 DataStatusBadge 一处，卡级「模拟/模拟历史」chip 退役为 ？号 HintInfo', () => {
     render(<App />);
     expect(document.body.textContent).toContain('模拟数据');
-    // 卡级轻量标识：主图 / 大盘 / 库存 / 成本 = 模拟；量价参考 = 模拟历史
-    expect(screen.getAllByText('模拟').filter((el) => (el.textContent ?? '') === '模拟')).toHaveLength(4);
-    expect(screen.getAllByText('模拟历史')).toHaveLength(1);
+    // 卡级 chip 全部退役：不再有「模拟」/「模拟历史」独立 chip（说明收 ？号 title）
+    expect(screen.queryAllByText('模拟').filter((el) => (el.textContent ?? '') === '模拟')).toHaveLength(0);
+    expect(screen.queryByText('模拟历史')).toBeNull();
+    // ？号说明图标在五张卡卡头承载说明（aria-label 以「说明」结尾：主图默认 + 四卡「××卡说明」；页内另有既有 ？号说明不计数上限）
+    expect(document.querySelectorAll('[aria-label$="说明"]').length).toBeGreaterThanOrEqual(5);
     // 页级 DemoChip（独立「演示」chip）已移除
     expect(screen.queryByText('演示')).toBeNull();
   });

@@ -9,6 +9,13 @@
 // 成本编辑写 costOverrides（原因选填、可还原）、主数字读 MarginView、
 // 结果回读「含主图价格手调 Wn / 含成本假设 N 项」、唯一人工动作
 // 「带到主图调价」打开 PriceAdjustDialog、方向性提示「成本上升 · 请核对价格」。
+// 2026-11-05 拍板实施（Eason：库存+销毛按推荐改；margin-card-hifi 推荐稿）：
+// - 默认视图 = 周销毛柱（琥珀）+ 成本月版本线（实→虚）+ 价格线；「成本参考
+//   与调价回路」「输出与规则」两区 CollapsibleSection 默认收起（不加时间轨）；
+// - 卡头说明 chip（模拟 / 推演参考 · 波动 ±8% / 价格→销量关系未纳入）退役为
+//   单个 HintInfo（title 合并并保留模拟语境）；图例全部可点显隐（aria-pressed +
+//   隐藏态 opacity .45）；图宽与库存卡同宽（viewBox 720×252 · minWidth 700）；
+//   链路条改用共享 FlowBar（去编号）；svg 轴文本对齐价格走势页取值。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
@@ -51,16 +58,16 @@ const marginBars = (): Element[] =>
 const barTitleOf = (rect: Element): string => rect.querySelector('title')?.textContent ?? '';
 
 /**
- * 2026-11-05 视觉精简二轮：IoBar / 链路条 / 成本参考区（含「带到主图调价」）
- * 收进「成本参考与链路」收起区，回读行 + 输出框收进「结果读数」收起区
+ * 2026-11-05 拍板实施：IoBar / 链路条 / 成本参考区（含「带到主图调价」）
+ * 收进「成本参考与调价回路」收起区，回读行 + 输出框收进「输出与规则」收起区
  * （默认收起，展开后可见）——受影响断言先展开再查询（逐个迁移不删除）。
  */
 const expandSection = (label: string): void => {
   const toggle = document.querySelector(`[data-collapsible-section="${label}"] > button`);
   if (toggle != null && toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
 };
-const expandCostOps = (): void => expandSection('成本参考与链路');
-const expandReadout = (): void => expandSection('结果读数');
+const expandCostOps = (): void => expandSection('成本参考与调价回路');
+const expandReadout = (): void => expandSection('输出与规则');
 
 describe('成本销毛 · $M 轴（禁万$）', () => {
   it('轴刻度与 tooltip 均为 $M 格式，全文不出现「万$」', () => {
@@ -87,6 +94,36 @@ describe('成本销毛 · $M 轴（禁万$）', () => {
     expect(marginBars()).toHaveLength(0);
     fireEvent.click(marginButton!);
     expect(marginBars().length).toBeGreaterThan(0);
+  });
+
+  it('图例全部可点显隐（全局 #1）：成本 / 价格项带 key + aria-pressed，隐藏态 opacity .45，点击后对应线移除', () => {
+    renderCard(baseResult);
+    const legendButtons = Array.from(document.querySelectorAll('button[aria-pressed]')) as HTMLButtonElement[];
+    expect(legendButtons.map((button) => (button.textContent ?? '').trim())).toEqual([
+      '周销毛（$M）', '成本 · 月版本（实→虚）', '价格',
+    ]);
+    const mainChart = () => document.querySelector('svg[role="img"]') as SVGSVGElement;
+    const pathsOf = (stroke: string): Element[] =>
+      Array.from(mainChart().querySelectorAll('path')).filter((path) => path.getAttribute('stroke') === stroke);
+    expect(pathsOf('#a1a1a1').length).toBeGreaterThan(0);
+    expect(pathsOf('#c7000b').length).toBeGreaterThan(0);
+    // 隐藏成本阶梯
+    const costButton = legendButtons[1]!;
+    fireEvent.click(costButton);
+    expect(costButton.getAttribute('aria-pressed')).toBe('false');
+    expect(costButton.style.opacity).toBe('0.45');
+    expect(pathsOf('#a1a1a1')).toHaveLength(0);
+    // 隐藏价格线
+    const priceButton = legendButtons[2]!;
+    fireEvent.click(priceButton);
+    expect(priceButton.getAttribute('aria-pressed')).toBe('false');
+    expect(priceButton.style.opacity).toBe('0.45');
+    expect(pathsOf('#c7000b')).toHaveLength(0);
+    // 恢复显示
+    fireEvent.click(costButton);
+    expect(pathsOf('#a1a1a1').length).toBeGreaterThan(0);
+    fireEvent.click(priceButton);
+    expect(pathsOf('#c7000b').length).toBeGreaterThan(0);
   });
 });
 
@@ -223,15 +260,21 @@ describe('成本销毛 · 经营结果定位（2026-11-04 评审：输入（量�
     expect(text).toContain('输入（量价）');
   });
 
-  it('把握话术退役：中性 chip「推演参考 · 波动 ±8%」，无「把握」字样（评审 1b：置信区间提示不必要）', () => {
+  it('说明 chip 退役为 ？号（全局 #7）：无「模拟 / 推演参考 · 波动 ±8%」chip，HintInfo 合并说明并保留模拟语境、±8% 口径与价格→销量边界', () => {
     renderCard(baseResult);
     const text = document.body.textContent ?? '';
-    expect(text).toContain('推演参考 · 波动 ±8%');
+    expect(text).not.toContain('推演参考 · 波动 ±8%');
     expect(text).not.toContain('把握');
-    // 口径收 title：非统计置信区间
-    const chip = Array.from(document.querySelectorAll('span[title]'))
-      .find((el) => (el.textContent ?? '') === '推演参考 · 波动 ±8%');
-    expect(chip?.getAttribute('title')).toContain('非统计置信区间');
+    // 模拟语境合并保留：模拟口径 + 波动参考 + 非统计置信区间 + 价格→销量关系未纳入
+    const hint = Array.from(document.querySelectorAll('span[title]'))
+      .find((el) => (el.getAttribute('title') ?? '').includes('模拟数据 · 推演参考'));
+    expect(hint).not.toBeUndefined();
+    const title = hint!.getAttribute('title') ?? '';
+    expect(title).toContain('模拟');
+    expect(title).toContain('±8%');
+    expect(title).toContain('非统计置信区间');
+    expect(title).toContain('不含渠道费率');
+    expect(title).toContain('价格→销量关系未纳入');
   });
 });
 
@@ -246,15 +289,18 @@ describe('成本销毛 · 负单台销毛（零基线向下）与空态', () => 
 });
 
 describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5.8；成本参考区与回读/输出框在收起区内，展开后可见）', () => {
-  it('卡内分「成本参考区 / 经营结果区」两区，hairline 分区不新增嵌套卡', () => {
+  it('卡内分「成本参考区 / 经营结果区」两区：成本参考区在「成本参考与调价回路」收起区内（hairline 分区），经营结果区为默认可见的图 + 图例（data-zone 包装，区头说明收 HintInfo）', () => {
     renderCard(baseResult);
     expandCostOps();
-    expandReadout();
     expect(document.querySelector('[data-zone="cost-reference"]')).toBeTruthy();
-    expect(document.querySelector('[data-zone="business-result"]')).toBeTruthy();
-    const text = document.body.textContent ?? '';
-    expect(text).toContain('成本参考区');
-    expect(text).toContain('经营结果区');
+    expect((document.body.textContent ?? '')).toContain('成本参考区');
+    const resultZone = document.querySelector('[data-zone="business-result"]') as HTMLElement | null;
+    expect(resultZone).toBeTruthy();
+    expect(resultZone!.getAttribute('aria-label')).toBe('经营结果区');
+    expect(resultZone!.querySelector('svg[role="img"]')).not.toBeNull();
+    expect(resultZone!.querySelectorAll('button[aria-pressed]').length).toBe(3);
+    // 默认视图不再有可见区头行（说明收 HintInfo）
+    expect((document.body.textContent ?? '')).toContain('经营结果 · 由上述量价与成本推导');
   });
 
   it('成本参考区逐月版本行：月份 / 生效成本 / 较上版变化 / 模拟来源状态', () => {
@@ -343,5 +389,72 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
     // tooltip 价格列读 MarginView.effectivePrice（显示价 = 手调价）。
     const titles = Array.from(document.querySelectorAll('svg rect title')).map((title) => title.textContent ?? '');
     expect(titles.some((title) => title.includes(week.weekId) && title.includes(`价格 $${week.price + 100}`))).toBe(true);
+  });
+});
+
+// ============================================================
+// 2026-11-05 拍板实施：默认视图 / 收起区 / 图宽对齐 / 风格对齐价格走势页
+// ============================================================
+describe('成本销毛 · 默认视图与收起区（margin-card-hifi 推荐稿）', () => {
+  it('默认视图 = 卡头 + 周销毛柱图 + 图例：「成本参考与调价回路」「输出与规则」默认 aria-expanded=false 且内容不渲染', () => {
+    renderCard(baseResult);
+    for (const label of ['成本参考与调价回路', '输出与规则']) {
+      const section = document.querySelector(`[data-collapsible-section="${label}"]`);
+      expect(section).not.toBeNull();
+      const toggle = section!.querySelector('[data-collapsible-toggle]');
+      expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+    }
+    // 收起内容不渲染：成本参考区 / 链路条 / 回读行 / 输出框都不可见
+    expect(document.querySelector('[data-zone="cost-reference"]')).toBeNull();
+    expect(document.querySelector('[data-flow-bar]')).toBeNull();
+    expect(document.querySelector('[data-evidence-panel]')).toBeNull();
+    expect((document.body.textContent ?? '')).not.toContain('成本参考区');
+    expect((document.body.textContent ?? '')).not.toContain('含成本假设');
+    // 默认视图仍可见：卡头 + 销毛柱图 + 图例
+    expect(document.querySelector('svg[role="img"]')).not.toBeNull();
+    expect(marginBars().length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('button[aria-pressed]').length).toBe(3);
+  });
+
+  it('不加时间轨（全局退役）：无时间轨预设与拖柄文案', () => {
+    renderCard(baseResult);
+    const text = document.body.textContent ?? '';
+    for (const banned of ['全期', '近 8 周', '时间轨']) {
+      expect(text).not.toContain(banned);
+    }
+    expect(document.querySelector('[data-timetrack]')).toBeNull();
+  });
+
+  it('图宽与库存卡同宽对齐：viewBox 720×252（与库存卡同尺寸）· minWidth 700 · 全期周域（首末周都在图上）', () => {
+    renderCard(baseResult);
+    const svg = document.querySelector('svg[role="img"]') as SVGSVGElement;
+    expect(svg.getAttribute('viewBox')).toBe('0 0 720 252');
+    expect(svg.style.minWidth).toBe('700px');
+    // 全期域：周刻度覆盖整段（首周与末周标签都在）
+    const tickTexts = Array.from(svg.querySelectorAll('text')).map((node) => node.textContent ?? '');
+    expect(tickTexts).toContain(baseResult.weeks[0]!.weekId);
+    expect(tickTexts).toContain(baseResult.weeks[baseResult.weeks.length - 1]!.weekId);
+  });
+
+  it('链路条改用共享 FlowBar（去编号）：节点文本不以数字开头，与库存卡同款', () => {
+    renderCard(baseResult);
+    expandCostOps();
+    const steps = Array.from(document.querySelectorAll('[data-flow-step]')) as HTMLElement[];
+    for (const step of steps) {
+      expect((step.textContent ?? '').trim()).not.toMatch(/^\d/);
+    }
+  });
+
+  it('svg 轴文本取值对齐价格走势页（全局 #8）：fontFamily=Inter 栈 · 字号 10–11 · color.mute · tabular-nums', () => {
+    renderCard(baseResult);
+    const texts = Array.from(document.querySelectorAll<SVGTextElement>('svg[role="img"] text[fill="#737373"]'));
+    expect(texts.length).toBeGreaterThan(0);
+    for (const node of texts) {
+      expect(node.getAttribute('font-family')).toContain('Inter');
+      const size = Number(node.getAttribute('font-size'));
+      expect(size).toBeGreaterThanOrEqual(10);
+      expect(size).toBeLessThanOrEqual(11);
+      expect(node.style.fontVariantNumeric).toBe('tabular-nums');
+    }
   });
 });

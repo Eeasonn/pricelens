@@ -1,15 +1,18 @@
 // ============================================================
 // 主图 v3 组件测试（jsdom · forecast-global-ia-review 任务 7 Step 1–2）：
 // 阶段证据浮框（B.5.3 四层 + ①②③阶段值 + 学习证据 + 键盘固定）、
-// 范围事件锚（图顶 A 编号 + 起止端点 + 范围线，名录派生周数与形状 +
-// 键盘编辑入口）、视图窗（全期默认 / 三月 / 近 8 周只改视图 + 时间轨手调）、
-// 月分组横轴（月份刻度 YYYY-MM；周详情 YYYYWww 保留在 evidence / 表）、
-// MainForecastDataTable（B.5.4 列 + 缺数「—」+ sticky header + 局部横滚）、
-// 评审大减法下线回归（无黑线 / 把握帽 / 档位线 / 色带）、
-// 手调墨色菱形与库存琥珀双状态共存。
-// 2026-11-05 视觉精简二轮：上一代参考线删除回归（图例 3 项）；图下时间轨
-// （PanelTimeTrack 同款：预设联动 + 拖柄键盘微调）；名录 / 数据表 / extras
-// 收进「数据与操作」收起区——受影响断言迁移为「展开后可见」（逐个迁移）。
+// 范围事件锚（2026-11-05 Eason 全局 #2：起始周小方块点 + hover 区间底衬 +
+// 精简证据浮框；范围线 / 起止端点删除回归；名录派生周数与形状 + 键盘编辑
+// 入口）、促销档期起始周方块点（轴下文字标注删除回归）、视图窗（全期默认 /
+// 三月 / 近 8 周只改视图 + 时间轨手调）、月分组横轴（月份刻度 YYYY-MM；
+// 周详情 YYYYWww 保留在 evidence / 表）、MainForecastDataTable（B.5.4 列 +
+// 缺数「—」+ sticky header + 局部横滚）、评审大减法下线回归（无黑线 /
+// 把握帽 / 档位线 / 色带）、手调墨色菱形与库存琥珀双状态共存。
+// 2026-11-05 视觉精简二轮：上一代参考线删除回归；图下时间轨（PanelTimeTrack
+// 同款：预设联动 + 拖柄键盘微调）；名录 / 数据表 / extras 收进「数据与操作」
+// 收起区——受影响断言迁移为「展开后可见」（逐个迁移）。
+// 2026-11-05 Eason 全局反馈：#1 图例 5 项全部可点（含库存修正描边与「事件」
+// 整层显隐）；#8 SVG 文本 font.family / 字号 10 / mute / tabular-nums。
 // 工厂 makeMainChartProps / makeRangeChartProps 定义在本文件本地
 // （B.6.2 共享工厂只含日历 / 结果 helper，UI 工厂由任务 7–10 自行扩展）。
 // ============================================================
@@ -17,7 +20,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
-import { brandColor, color } from '../../../theme/tokens';
+import { brandColor, color, font } from '../../../theme/tokens';
 import { niceCeil } from '../../../dataModel/volume';
 import { axisTickPlan } from '../../../chart/PriceTrend/helpers';
 import { workbenchFixture, type ProductEventSeed, type WorkbenchFixture } from '../workbenchFixture';
@@ -173,18 +176,38 @@ describe('MainForecastChart v3（任务 7 给定测试）', () => {
     expect(screen.queryByRole('dialog', { name: /2027W01/ })).toBeNull();
   });
 
-  it('范围锚 = 图顶 A 编号 + 起止端点 + 范围线（不铺全高色带）；重叠超两条出 +N 名录筛选', () => {
+  it('范围事件锚 = 起始周小方块点 + A 编号小标（2026-11-05 全局 #2：范围线 / 起止端点删除回归）；hover 出区间底衬与精简证据浮框，点击固定', () => {
     render(<MainForecastChart {...makeRangeChartProps()} />);
     const svg = document.querySelector('svg[role="img"]') as SVGSVGElement;
-    // 范围线（水平，起点到终点）+ 端点圆；无全高竖线（y2 远小于绘图区底）。
-    const rangeLine = svg.querySelector('line[data-range-event-id="pe-range-1"]');
-    expect(rangeLine).not.toBeNull();
-    const y1 = Number(rangeLine!.getAttribute('y1'));
-    const y2 = Number(rangeLine!.getAttribute('y2'));
-    expect(y1).toBe(y2);
-    expect(y2).toBeLessThan(60); // 图顶范围线，不铺全高
-    expect(svg.querySelector('g[data-range-anchor="pe-range-1"]')).not.toBeNull();
-    // 三条事件时前两条上 lane，其余 +N 打开名录筛选（键盘可达）。
+    // 方块点结构：7px 方块（事件色）+ A1 小标。
+    const dot = svg.querySelector('g[data-event-dot="pe-range-1"]');
+    expect(dot).not.toBeNull();
+    const dotRect = dot!.querySelector('rect');
+    expect(Number(dotRect!.getAttribute('width'))).toBe(7);
+    expect(dotRect!.getAttribute('fill')).toBe(PRODUCT_EVENT_COLOR['competitor-launch']);
+    expect(dot!.textContent).toContain('A1');
+    // 常驻范围线 / 起止端点 / 编号圆删除回归（旧 data-range-* 结构不回归）。
+    expect(svg.querySelector('line[data-range-event-id]')).toBeNull();
+    expect(svg.querySelector('g[data-range-anchor]')).toBeNull();
+    expect(svg.querySelector('circle[r="8.5"]')).toBeNull();
+    // 无常驻区间底衬（hover / focus 才有）。
+    expect(svg.querySelector('[data-event-shade]')).toBeNull();
+    // hover 方块点 → 图内临时起止区间底衬（0.14）+ 精简证据浮框（role=status）。
+    fireEvent.mouseEnter(dot!);
+    const shade = svg.querySelector('rect[data-event-shade="pe-range-1"]');
+    expect(shade).not.toBeNull();
+    expect(shade!.getAttribute('fill-opacity')).toBe('0.14');
+    const evidence = screen.getByRole('status', { name: /事件 A1 证据/ });
+    expect(evidence.textContent ?? '').toContain('2026W45 – 2026W48');
+    fireEvent.mouseLeave(dot!);
+    expect(svg.querySelector('[data-event-shade]')).toBeNull();
+    expect(screen.queryByRole('status', { name: /事件 A1 证据/ })).toBeNull();
+    // 点击固定 → role=dialog；Esc 关闭固定。
+    fireEvent.click(dot!);
+    const dialog = screen.getByRole('dialog', { name: /事件 A1 证据/ });
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: /事件 A1 证据/ })).toBeNull();
+    // 三条重叠事件：前两条上 lane（各有方块点），其余 +N 打开名录筛选（键盘可达）。
     const events: ProductEventSeed[] = [
       RANGE_EVENT,
       { ...RANGE_EVENT, id: 'pe-range-2', type: 'own-promo', startWeekId: '2026W46', endWeekId: '2026W49', replayId: 'rp-own-marketing' },
@@ -193,6 +216,7 @@ describe('MainForecastChart v3（任务 7 给定测试）', () => {
     const params: WorkbenchParams = { ...baseWorkbenchParams(fixture), productEvents: events };
     cleanup();
     render(<MainForecastChart {...makeMainChartProps(fixture, params, computeWorkbench(fixture, params))} />);
+    expect(document.querySelector('g[data-event-dot="pe-range-3"]')).toBeNull();
     const overflow = screen.getByRole('button', { name: '其余 1 个重叠范围事件 · 名录筛选' });
     fireEvent.click(overflow);
     // 名录在「数据与操作」收起区内（2026-11-05）：展开后筛选态可见。
@@ -209,10 +233,12 @@ describe('主图 · 受控视图与视图窗（全期 / 三月 / 近 8 周）', 
     expect(DEFAULT_MAIN_FORECAST_VIEW).toEqual({ heightScale: 1, showYTicks: true, labelMode: 'compact', promoBandOn: true, window: 'full' });
   });
 
-  it('不传 view：viewBox 高度 = 默认（252，与全站图高一致），全期 104 周全渲染，促销日期标注在、档期色带不渲染', () => {
+  it('不传 view：viewBox 高度 = 默认（252，与全站图高一致），全期 104 周全渲染，促销档期 = 起始周方块点（轴下文字标注删除回归）、档期色带不渲染', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
     expect(document.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 1180 252');
-    expect(svgTexts().some((text) => text === '黑五档期 2026')).toBe(true);
+    // 2026-11-05 全局 #2：轴下常驻档期文字标注删除，改起始周小方块点。
+    expect(svgTexts().some((text) => text === '黑五档期 2026')).toBe(false);
+    expect(document.querySelector('g[data-event-dot="promo-window"]')).not.toBeNull();
     const amberBand = Array.from(document.querySelectorAll('svg rect')).find((rect) => rect.getAttribute('fill') === color.warningSoft);
     expect(amberBand).toBeUndefined();
     expect(document.body.textContent).toContain('万台');
@@ -242,8 +268,9 @@ describe('主图 · 受控视图与视图窗（全期 / 三月 / 近 8 周）', 
     expect(monthLabels()[monthLabels().length - 1]).toBe('2027-10');
   });
 
-  it('promoBandOn=false：促销日期标注消失，其余结构保留', () => {
+  it('promoBandOn=false：促销档期起始周方块点消失，其余结构保留', () => {
     render(<MainForecastChart {...makeMainChartProps(fixture, baseParams, baseResult, { view: { promoBandOn: false } })} />);
+    expect(document.querySelector('g[data-event-dot="promo-window"]')).toBeNull();
     expect(svgTexts().some((text) => text.includes('黑五档期'))).toBe(false);
     expect(document.querySelector('svg')).not.toBeNull();
   });
@@ -423,55 +450,82 @@ describe('主图 · 手调（墨色）与库存上限修正（琥珀）双状态
 });
 
 // ============================================================
-// 图例分组与真实显隐
+// 图例全部可点（2026-11-05 Eason 全局 #1：5 项，说明项行下线）与真实显隐
 // ============================================================
-describe('主图 · 图例分组与真实显隐（2026-11-05：上一代参考线删除，数据系列 3 项）', () => {
-  it('数据系列 3 项均为可点击按钮（aria-pressed），说明项为纯文字；上一代与把握区间图例均已下线', () => {
+describe('主图 · 图例全部可点（2026-11-05 Eason 全局 #1：5 项，说明项行下线）', () => {
+  const LEGEND_LABELS = ['周销 实际', '周销 预测', '价格（右轴）', '库存上限修正（琥珀描边）', '事件'] as const;
+  const legendButton = (label: string): HTMLButtonElement | undefined =>
+    Array.from(document.querySelectorAll('button[aria-pressed]'))
+      .find((button) => (button.textContent ?? '').trim() === label) as HTMLButtonElement | undefined;
+
+  it('图例 5 项全部为可点击按钮（aria-pressed + 隐藏态 opacity .45）；纯说明项与上一代 / 把握区间图例均已下线', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
-    // aria-pressed 按钮 = 数据系列 3 项 + 视图窗预设 3 项（时间轨，2026-11-05 新增）。
-    const pressedButtons = Array.from(document.querySelectorAll('button[aria-pressed]'));
-    const legendButtons = pressedButtons.filter((button) => (button.textContent ?? '').match(/周销|价格/));
-    expect(legendButtons).toHaveLength(3);
-    const labels = pressedButtons.map((button) => button.textContent ?? '');
-    expect(labels.join('|')).toContain('周销 实际');
-    expect(labels.join('|')).toContain('周销 预测');
-    expect(labels.join('|')).toContain('价格');
-    // 上一代参考线与图例项已删（对照由①参考卡承担）；把握区间不回归。
+    for (const label of LEGEND_LABELS) {
+      const button = legendButton(label);
+      expect(button).toBeDefined();
+      expect(button!.getAttribute('aria-pressed')).toBe('true');
+      expect(button!.style.opacity).toBe('1');
+    }
+    const labels = Array.from(document.querySelectorAll('button[aria-pressed]')).map((button) => button.textContent ?? '');
+    // 上一代参考线与图例项保持删除（对照由①参考卡承担）；把握区间不回归。
     expect(labels.join('|')).not.toContain('上一代');
     expect(labels.join('|')).not.toContain('把握区间');
+    // 纯说明项（无 key、不可点）下线：无「预测样式」说明 span 残留。
+    const note = Array.from(document.querySelectorAll('span')).find((span) => (span.textContent ?? '').includes('预测样式'));
+    expect(note).toBeUndefined();
     // 图内无 hairlineStrong 灰虚参考线残留。
     const prevGenPaths = Array.from(document.querySelectorAll('svg path')).filter(
       (path) => path.getAttribute('stroke') === color.hairlineStrong && path.getAttribute('stroke-dasharray') === '5 4',
     );
     expect(prevGenPaths).toHaveLength(0);
-    const note = Array.from(document.querySelectorAll('span')).find((span) => (span.textContent ?? '').includes('预测样式'));
-    expect(note).toBeDefined();
-    expect(note!.closest('button')).toBeNull();
   });
 
-  it('点击「价格」隐藏价格线并置 aria-pressed=false；再点恢复', () => {
+  it('点击「价格」隐藏价格线并置 aria-pressed=false（隐藏态 opacity .45）；再点恢复', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
     expect(priceLinePaths().length).toBeGreaterThan(0);
-    const priceButton = Array.from(document.querySelectorAll('button[aria-pressed]')).find((button) =>
-      (button.textContent ?? '').includes('价格'),
-    );
-    expect(priceButton).toBeDefined();
-    fireEvent.click(priceButton!);
-    expect(priceButton!.getAttribute('aria-pressed')).toBe('false');
+    const priceButton = legendButton('价格（右轴）')!;
+    fireEvent.click(priceButton);
+    expect(priceButton.getAttribute('aria-pressed')).toBe('false');
+    expect(priceButton.style.opacity).toBe('0.45');
     expect(priceLinePaths()).toHaveLength(0);
-    fireEvent.click(priceButton!);
+    fireEvent.click(priceButton);
     expect(priceLinePaths().length).toBeGreaterThan(0);
   });
 
   it('点击「周销 实际」隐藏历史实柱；预测虚柱不受影响', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
     expect(barWithTitle('2026W44')).not.toBeNull();
-    const actualButton = Array.from(document.querySelectorAll('button[aria-pressed]')).find((button) =>
-      (button.textContent ?? '').includes('周销 实际'),
-    );
-    fireEvent.click(actualButton!);
+    fireEvent.click(legendButton('周销 实际')!);
     expect(barWithTitle('2026W44')).toBeNull();
     expect(barWithTitle('2026W45')).not.toBeNull();
+  });
+
+  it('点击「库存上限修正（琥珀描边）」隐藏修正周琥珀描边（回退预测蓝描边）；再点恢复', () => {
+    render(<MainForecastChart {...makeMainChartProps()} />);
+    expect(barWithTitle('2026W46')!.getAttribute('stroke')).toBe(color.warning);
+    const cappedButton = legendButton('库存上限修正（琥珀描边）')!;
+    fireEvent.click(cappedButton);
+    expect(cappedButton.getAttribute('aria-pressed')).toBe('false');
+    expect(barWithTitle('2026W46')!.getAttribute('stroke')).toBe(color.link);
+    fireEvent.click(cappedButton);
+    expect(barWithTitle('2026W46')!.getAttribute('stroke')).toBe(color.warning);
+  });
+
+  it('点击「事件」整层隐藏：范围事件与促销档期方块点消失（hover 底衬随层隐藏）；再点恢复', () => {
+    const params: WorkbenchParams = { ...baseWorkbenchParams(fixture), productEvents: [RANGE_EVENT] };
+    render(<MainForecastChart {...makeMainChartProps(fixture, params, computeWorkbench(fixture, params))} />);
+    expect(document.querySelector('g[data-event-dot="pe-range-1"]')).not.toBeNull();
+    expect(document.querySelector('g[data-event-dot="promo-window"]')).not.toBeNull();
+    const eventsButton = legendButton('事件')!;
+    fireEvent.click(eventsButton);
+    expect(eventsButton.getAttribute('aria-pressed')).toBe('false');
+    expect(eventsButton.style.opacity).toBe('0.45');
+    expect(document.querySelector('[data-event-layer]')).toBeNull();
+    expect(document.querySelector('[data-event-dot]')).toBeNull();
+    expect(document.querySelector('[data-event-shade]')).toBeNull();
+    fireEvent.click(eventsButton);
+    expect(document.querySelector('g[data-event-dot="pe-range-1"]')).not.toBeNull();
+    expect(document.querySelector('g[data-event-dot="promo-window"]')).not.toBeNull();
   });
 });
 
@@ -548,11 +602,20 @@ describe('主图 · 评审大减法下线回归（黑线 / 把握帽 / 档位线
     expect(coords[0]).toEqual([round1(xOf(51)), round1(yPrice(849))]);
   });
 
-  it('促销日期标注在 aria 与轴下：2026W46 起最小标记，档期琥珀色带不再渲染', () => {
+  it('促销档期 = 起始周小方块点：aria 报告起点；hover 出档期区间底衬（琥珀 0.14）与名称浮框；档期色带不回归', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
     expect(document.querySelector('svg')?.getAttribute('aria-label')).toContain('促销档期 2026W46 起');
-    const markText = svgTexts().find((text) => text === '黑五档期 2026');
-    expect(markText).toBeDefined();
+    const promoDot = document.querySelector('g[data-event-dot="promo-window"]');
+    expect(promoDot).not.toBeNull();
+    expect(promoDot!.querySelector('rect')?.getAttribute('fill')).toBe(color.warning);
+    // hover 方块点 → 档期区间底衬 + 名称证据浮框（轴下常驻文字标注已删）。
+    fireEvent.mouseEnter(promoDot!);
+    const shade = document.querySelector('rect[data-event-shade="promo-window"]');
+    expect(shade).not.toBeNull();
+    expect(shade!.getAttribute('fill')).toBe(color.warning);
+    expect(shade!.getAttribute('fill-opacity')).toBe('0.14');
+    expect(screen.getByRole('status', { name: /促销档期 黑五档期 2026/ })).toBeTruthy();
+    fireEvent.mouseLeave(promoDot!);
     const amberBand = Array.from(document.querySelectorAll('svg rect')).find((rect) => rect.getAttribute('fill') === color.warningSoft);
     expect(amberBand).toBeUndefined();
   });
@@ -575,6 +638,41 @@ describe('主图 · 评审大减法下线回归（黑线 / 把握帽 / 档位线
     const volumePeak = Math.max(0, ...baseResult.weeks.flatMap((week) => [week.sales, week.final]).filter((value): value is number => value != null), ...baseResult.weeks.map((week) => week.prevGenSales ?? 0));
     expect(niceCeil).toBeDefined();
     expect(volumePeak).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================
+// 2026-11-05 Eason 全局 #8：SVG 文本风格对齐量价页基准
+// ============================================================
+describe('主图 · SVG 文本风格（font.family / 字号 10 / mute / tabular-nums）', () => {
+  it('主图所有 SVG text 均 font.family + 字号 10（含 g 组继承）；说明性文本（月分组 / 今天 / 轴刻度）fill = mute 且 tabular-nums', () => {
+    render(<MainForecastChart {...makeMainChartProps()} />);
+    const texts = Array.from(document.querySelectorAll('svg text')) as SVGTextElement[];
+    expect(texts.length).toBeGreaterThan(0);
+    // font-family / font-size / tabular-nums 可在 text 本身或其 g 组上（SVG 表现属性沿 g 继承）。
+    const attrOf = (text: SVGTextElement, name: string): string | null =>
+      text.getAttribute(name) ?? text.closest('g')?.getAttribute(name) ?? null;
+    const numericOf = (text: SVGTextElement): string => {
+      let node: Element | null = text;
+      while (node != null) {
+        const value = (node as HTMLElement).style?.fontVariantNumeric;
+        if (value) return value;
+        node = node.parentElement;
+      }
+      return '';
+    };
+    for (const text of texts) {
+      expect(attrOf(text, 'font-family')).toBe(font.family);
+      expect(attrOf(text, 'font-size')).toBe('10');
+    }
+    const month = texts.find((text) => /^\d{4}-\d{2}$/.test(text.textContent ?? ''));
+    expect(month).toBeDefined();
+    expect(attrOf(month!, 'fill')).toBe(color.mute);
+    expect(numericOf(month!)).toBe('tabular-nums');
+    const today = texts.find((text) => (text.textContent ?? '').startsWith('今天'));
+    expect(today).toBeDefined();
+    expect(today!.getAttribute('fill')).toBe(color.mute);
+    expect(numericOf(today!)).toBe('tabular-nums');
   });
 });
 
@@ -602,7 +700,10 @@ describe('主图 · 图下时间轨（2026-11-05 视觉精简二轮）', () => {
   const presetButton = (label: string): HTMLButtonElement =>
     screen.getByRole('button', { name: `视图窗预设 · ${label}` }) as HTMLButtonElement;
   const visibleBars = (): Element[] =>
-    Array.from(document.querySelectorAll('svg rect')).filter((rect) => (rect.getAttribute('fill') ?? '') !== 'transparent');
+    Array.from(document.querySelectorAll('svg rect')).filter((rect) =>
+      (rect.getAttribute('fill') ?? '') !== 'transparent'
+      // 事件层（2026-11-05 全局 #2：促销档期起始方块点为非透明 rect）不计入数据柱。
+      && rect.closest('[data-event-layer]') == null);
   const barsOfRange = (from: number, to: number): number =>
     baseResult.weeks.slice(from, to + 1).filter((week) => week.final != null).length;
 

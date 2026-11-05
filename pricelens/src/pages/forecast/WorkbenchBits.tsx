@@ -35,47 +35,26 @@ export function SectionHead({ title, hint, extra }: { title: string; hint?: stri
   );
 }
 
-/** AI 推测标注（信任语言保留：AI 推测 · 可改 → 人工确认）。琥珀语义统一
- *  （WP6 8.3 Step 8）：AI 与人工状态走中性灰 / 墨色，琥珀只留给档期、库存
- *  修正与预警；文字标签继续承载语义，不靠颜色单独表达。 */
-export function AiJudgeBadge({ source }: { source: 'ai' | 'human' }) {
-  const ai = source === 'ai';
-  return (
-    <span
-      title={ai
-        ? 'AI 推测 · 本地确定性规则基线（季节 × 趋势），未调用模型服务，可直接修改'
-        : '该值已被人工修改，AI 基线不再生效'}
-      style={{
-        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-        background: ai ? color.canvasSoft2 : color.ink,
-        color: ai ? color.body : color.onPrimary,
-        border: ai ? `1px solid ${color.hairline}` : 'none',
-      }}
-    >
-      {ai ? 'AI 推测 · 可改' : '人工确认'}
-    </span>
-  );
-}
+/** AI 推测标注 / 轻量模拟标识已退役（2026-11-05 Eason 第 7 条）：卡头说明性
+ *  chip（「模拟」「AI 推测 · 可改」「模拟历史」）统一收进 ？号 HintInfo 承载，
+ *  说明文案不占卡头空间；页首 DataStatusBadge 一处保留页级分级。 */
 
-/** 轻量模拟标识（卡级，页首另有 DataStatusBadge 一处）：模拟 / 模拟历史。
- *  中性灰表达——琥珀只留给档期 / 库存修正 / 预警（PRODUCT.md：模拟数据必须
- *  显式标识，页首 badge + 各卡轻量标识两级分级）。 */
-export function SimChip({ variant = 'sim', title }: { variant?: 'sim' | 'simHistory'; title?: string }) {
-  const history = variant === 'simHistory';
+/** ？号说明图标（2026-11-05 Eason 第 7 条）：卡头说明性 chip（「模拟」「AI 推测 ·
+ *  可改」等）退役为单个 ？图标，说明文案收 title（hover / focus 可读），不占
+ *  卡头空间。视觉 = 14px 圆形 hairline 描边 + mute 色「?」，不新增视觉语言。 */
+export function HintInfo({ text, label = '说明' }: { text: string; label?: string }) {
   return (
     <span
-      title={title ?? (history
-        ? '本卡历史序列为模拟样本回放，不代表真实市场'
-        : '本卡数值为演示假设，不代表真实市场')}
+      title={text}
+      aria-label={label}
+      tabIndex={0}
       style={{
-        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-        background: color.canvasSoft2, color: color.body, border: `1px solid ${color.hairline}`,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 14, height: 14, borderRadius: radius.pill, flex: 'none',
+        border: `1px solid ${color.hairline}`, color: color.mute,
+        fontSize: 10, fontWeight: 600, lineHeight: 1, cursor: 'help', userSelect: 'none',
       }}
-    >
-      {history ? '模拟历史' : '模拟'}
-    </span>
+    >?</span>
   );
 }
 
@@ -101,8 +80,8 @@ export function IoBar({ input, output }: { input: string; output: string }) {
   );
 }
 
-/** 「演示」琥珀 chip 已退役（WP6 8.3 Step 2）：页首 = DataStatusBadge 一处，
- *  卡级 = 轻量 SimChip（模拟 / 模拟历史，中性灰），不再重复页级琥珀「演示」标。 */
+/** 「演示」琥珀 chip 已退役（WP6 8.3 Step 2）：页首 = DataStatusBadge 一处；
+ *  2026-11-05 起卡级说明也统一收 HintInfo ？号（SimChip 一并退役）。 */
 
 // ------------------------------------------------------------
 // 共享收起区（2026-11-05 视觉精简二轮）：卡内次级信息默认收起为一条

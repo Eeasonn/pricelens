@@ -191,10 +191,17 @@ describe('clampReferenceWindow / fullWindowOf / 事件定位窗', () => {
     expect(eventFocusWindow(product, { startWeek: 10, endWeek: 40 })).toEqual([10, 40]);
   });
 
-  it('rangeOfEvent / durationOfEvent / eventRangeLabel', () => {
+  it('rangeOfEvent / durationOfEvent / eventRangeLabel（2026-11-05 二轮：传产品锚 = 日历周口径）', () => {
+    const anchor = productOf(new Array(52).fill(1), new Array(52).fill(1));
     expect(rangeOfEvent({ startWeek: 22, endWeek: 25 })).toEqual([22, 25]);
     expect(durationOfEvent({ startWeek: 22, endWeek: 25 })).toBe(4);
     expect(durationOfEvent({ startWeek: 9, endWeek: 9 })).toBe(1);
+    // 传产品锚（launchWeekLabel 2025-W02）→ 日历周 ID（2025W24 形态，与图轴同口径）
+    expect(eventRangeLabel({ startWeek: 22, endWeek: 25 }, anchor)).toBe('2025W24–2025W27');
+    expect(eventRangeLabel({ startWeek: 9, endWeek: 9 }, anchor)).toBe('2025W11');
+    // 跨年进位：生命周期 52 周（2025-W02 起）末周 = 2026W01
+    expect(eventRangeLabel({ startWeek: 51, endWeek: 51 }, anchor)).toBe('2026W01');
+    // 缺省锚 → 回退相对周序（防御路径；生产调用方均传锚）
     expect(eventRangeLabel({ startWeek: 22, endWeek: 25 })).toBe('W23–W26');
     expect(eventRangeLabel({ startWeek: 9, endWeek: 9 })).toBe('W10');
   });

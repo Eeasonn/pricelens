@@ -10,6 +10,47 @@
 import type { LifecycleEventSeed, LifecycleProductSeed } from './workbenchFixture';
 
 // ------------------------------------------------------------
+// 生命周期日历周（2026-11-05 二轮整改：图轴 / 事件周段标签统一同一换算）。
+// 换算收编在领域模型层（ReferenceEventComposer 反向 import 会成环），锚点 =
+// fixture launchWeekLabel 的真实 ISO 周规则（与 workbenchCalendar 同算法，
+// 不新造假日历）；编辑器周历与量价参考图共用，不造第二套。
+// ------------------------------------------------------------
+
+const DAY_MS = 86_400_000;
+
+/**
+ * ISO 周一毫秒（与 workbenchCalendar 同一规则：W1 = 含当年首个周四的周，
+ * 周一起算）。仅作周历锚点换算。
+ */
+export function mondayMsOfIsoWeek(year: number, week: number): number {
+  const jan4 = Date.UTC(year, 0, 4);
+  const day = new Date(jan4).getUTCDay(); // 0 = 周日
+  const mondayWeek1 = jan4 - ((day === 0 ? 7 : day) - 1) * DAY_MS;
+  return mondayWeek1 + (week - 1) * 7 * DAY_MS;
+}
+
+/** 周一毫秒 → 跨年周 ID（YYYYWww；ISO 周四定周年，跨年不串值）。 */
+export function weekIdOfMondayMs(mondayMs: number): string {
+  const thursday = mondayMs + 3 * DAY_MS;
+  const thursdayDate = new Date(thursday);
+  const week = Math.round((thursday - mondayMsOfIsoWeek(thursdayDate.getUTCFullYear(), 1)) / (7 * DAY_MS)) + 1;
+  return `${thursdayDate.getUTCFullYear()}W${String(week).padStart(2, '0')}`;
+}
+
+/**
+ * 生命周期全周日历周 ID（YYYYWww；锚点 = launchWeekLabel，真实 ISO 跨年进位）。
+ * 量价参考图 X 轴 / 事件周段标签 / 编辑器周历共用同一换算；
+ * launchWeekLabel 非法 / 空产品返回 []（调用方安全降级）。
+ */
+export function lifecycleWeekIdsOf(product: LifecycleProductSeed): string[] {
+  const total = product.points.length;
+  const match = /^(\d{4})-W(\d{2})$/.exec(product.launchWeekLabel);
+  if (total <= 0 || !match) return [];
+  const startMs = mondayMsOfIsoWeek(Number(match[1]), Number(match[2]));
+  return Array.from({ length: total }, (_, index) => weekIdOfMondayMs(startMs + index * 7 * DAY_MS));
+}
+
+// ------------------------------------------------------------
 // 类型（规格 §5.1–5.3 草案落地）
 // ------------------------------------------------------------
 
@@ -302,10 +343,27 @@ export const rangeOfEvent = (event: { startWeek: number; endWeek: number }): [nu
 export const durationOfEvent = (event: { startWeek: number; endWeek: number }): number =>
   Math.max(1, event.endWeek - event.startWeek + 1);
 
-export const eventRangeLabel = (event: { startWeek: number; endWeek: number }): string =>
-  event.startWeek === event.endWeek
+/**
+ * 事件短周段标签（2026-11-05 二轮整改：全卡统一日历周口径，与图轴同形）：
+ * - 传产品锚（launchWeekLabel）→ 日历周 ID：单周 = 2025W24；区间 =
+ *   2025W24–2025W27（ISO 跨年进位由周历保证）；
+ * - 缺省 / 锚非法（标签不符或周序越界）→ 回退生命周期相对周序（W24 形态，
+ *   防御路径；生产调用方均传锚）。
+ */
+export const eventRangeLabel = (
+  event: { startWeek: number; endWeek: number },
+  anchor?: LifecycleProductSeed,
+): string => {
+  const relative = event.startWeek === event.endWeek
     ? `W${event.startWeek + 1}`
     : `W${event.startWeek + 1}–W${event.endWeek + 1}`;
+  if (!anchor) return relative;
+  const weekIds = lifecycleWeekIdsOf(anchor);
+  const startId = weekIds[event.startWeek];
+  const endId = weekIds[event.endWeek];
+  if (!startId || !endId) return relative;
+  return startId === endId ? startId : `${startId}–${endId}`;
+};
 
 /**
  * 事件定位窗：FOCUS_SPAN 聚焦、事件居中并保证完整起止范围可见。

@@ -17,16 +17,27 @@
 // WorkbenchParams。图形几何沿用 WP5（$M 轴 / 预测起点派生 / 负销毛向下 /
 // 空态显式）。
 // 2026-11-05 视觉精简二轮（Eason 看图反馈）：
-// - 默认视图 = 卡头 + 销毛柱图：IoBar / 链路条 / 成本参考区（含「带到主图
-//   调价」）收进共享 CollapsibleSection「成本参考与链路」；结果回读行与输出
-//   框收进「结果读数」；销毛柱图 + 图例保留可见。
-// - 线宽统一：价格线 1.8 → 2（实/虚同宽，虚线 dasharray 区分）；成本阶梯
-//   2 保持（全站主类线基准）。
+// - 默认视图 = 卡头 + 销毛柱图；线宽统一：价格线 1.8 → 2（实/虚同宽，虚线
+//   dasharray 区分）；成本阶梯 2 保持（全站主类线基准）。
+// 2026-11-05 拍板实施（Eason：库存+销毛成本都先按推荐改；依据
+// margin-card-hifi.html 推荐稿）：
+// - 默认视图 = 周销毛柱（琥珀）+ 成本月版本线（实→虚）+ 价格线；「成本参考
+//   与调价回路」「输出与规则」两区全部 CollapsibleSection 默认收起（组件内存
+//   态）；不加时间轨（全局退役）。
+// - 图宽与库存卡同宽对齐（viewBox 720×252 · minWidth 700 · 全期 52 周同域），
+//   两卡高度一致（同 H 与同卡内节奏；页级两列改同宽由主线收口）。
+// - 卡头说明性 chip（「模拟」「推演参考 · 波动 ±8%」「价格→销量关系未纳入 ·
+//   暂不联动销量」）退役为单个 HintInfo（title 合并并保留模拟语境）；活状态
+//   读数保留（含主图价格手调 / 含成本假设回读 chip 在「输出与规则」内）。
+// - 链路条改用 WorkbenchBits 共享 FlowBar（去编号，与库存卡同款；本地带编号
+//   副本退役）。
+// - svg 文本取值对齐价格走势页同源组件（font.family / 10px / color.mute /
+//   tabular-nums）；图例全部可点显隐（WorkbenchLegend 规格）。
 // ============================================================
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Button, Input, InputNumber } from 'antd';
-import { brandColor, color, radius, space } from '../../theme/tokens';
+import { brandColor, color, font, radius, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
 import { buildForecastCalendar } from './workbenchCalendar';
 import type { ForecastCalendar, MonthKey, WeekId } from './workbenchCalendar';
@@ -37,7 +48,18 @@ import type { MarginPriceOverride, MarginScenario, MarginView } from './marginSc
 import useMarginScenario from './useMarginScenario';
 import type { PriceAdjustReviewMeta } from './PriceAdjustDialog';
 import PriceAdjustDialog from './PriceAdjustDialog';
-import { CollapsibleSection, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtMillionUsd, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import {
+  CollapsibleSection,
+  FlowBar,
+  HintInfo,
+  IoBar,
+  SectionHead,
+  WorkbenchLegend,
+  fmtMillionUsd,
+  workbenchCardStyle,
+  type FlowStep,
+  type LegendItem,
+} from './WorkbenchBits';
 import { buildAxisTicks, firstForecastIndex } from './workbenchChartSegments';
 
 // 2026-11-04 视觉一致性：viewBox 宽度对齐右列实际渲染宽度（≈560-720，缩放比 ≈1，
@@ -56,65 +78,9 @@ const fmtUsd = (value: number): string => `$${Math.round(value * 10) / 10}`;
 const fmtSignedUsd = (value: number): string => (value > 0 ? `+${fmtUsd(value)}` : value === 0 ? `±${fmtUsd(0)}` : `−${fmtUsd(-value)}`);
 
 // ------------------------------------------------------------
-// 依赖链路条（纯展示，卡内实现；与库存卡同一形态）：贴 IoBar 的
-// 小 chip + → 分隔语言，节点状态「文字 + 底色」双通道；末节点点亮
-// 表「预测期销毛」是本卡输出且不回写主图。
+// 依赖链路条上收 WorkbenchBits 共享 FlowBar（去编号，与库存卡同款；
+// 2026-11-05 拍板实施：本地带编号副本退役）。
 // ------------------------------------------------------------
-type FlowStepState = 'base' | 'active' | 'amber' | 'muted';
-
-interface FlowStep {
-  label: string;
-  /** 节点前分隔符（默认 →；「+」表并列输入）。 */
-  join?: string;
-  /** 节点补充注记（如 不回写主图）。 */
-  note?: string;
-  /** 口径 / 公式收 title，不进正文。 */
-  title?: string;
-  state?: FlowStepState;
-}
-
-const FLOW_STEP_STYLE: Record<FlowStepState, CSSProperties> = {
-  base: { background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body },
-  active: { background: color.ink, border: `1px solid ${color.ink}`, color: color.onPrimary },
-  amber: { background: color.warningSoft, border: `1px solid ${color.warning}`, color: color.warningInk },
-  muted: { background: color.canvasSoft2, border: `1px solid ${color.hairline}`, color: color.mute },
-};
-
-function FlowBar({ ariaLabel, steps }: { ariaLabel: string; steps: FlowStep[] }) {
-  return (
-    <div
-      data-flow-bar=""
-      aria-label={ariaLabel}
-      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', marginBottom: space.sm }}
-    >
-      {steps.map((step, index) => {
-        const state = step.state ?? 'base';
-        return (
-          <Fragment key={step.label}>
-            {index > 0 && (
-              <span aria-hidden style={{ color: color.hairlineStrong, fontSize: 11 }}>{step.join ?? '→'}</span>
-            )}
-            <span
-              data-flow-step={step.label}
-              data-state={state}
-              title={step.title}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
-                fontWeight: state === 'base' ? 400 : 600,
-                ...FLOW_STEP_STYLE[state],
-              }}
-            >
-              <span aria-hidden style={{ fontSize: 10, fontWeight: 600, opacity: 0.64 }}>{index + 1}</span>
-              {step.label}
-              {step.note && <span style={{ fontWeight: 600 }}>{step.note}</span>}
-            </span>
-          </Fragment>
-        );
-      })}
-    </div>
-  );
-}
 
 /** 成本销毛依赖链路：单台销毛 = 主图价格 − 成本月版本，× 主图 SO 汇总为期销毛。
  *  2026-11-04 评审：量价 = 输入，销毛 = 经营结果（结果区不回写、不进模型输入）。
@@ -131,21 +97,11 @@ function costFlowSteps(): FlowStep[] {
   ];
 }
 
-/** 轻量中性 chip（与库存卡 StateChip 同形态）：波动参考口径，不用「把握」话术。 */
-function RefChip({ label, title }: { label: string; title: string }) {
-  return (
-    <span
-      title={title}
-      style={{
-        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-        background: color.canvasSoft2, color: color.mute,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
+/** svg 文本取值（全局 #8 对齐价格走势页同源组件）：font.family + tabular-nums。 */
+const axisTextProps = {
+  fontFamily: font.family,
+  style: { fontVariantNumeric: 'tabular-nums' } as CSSProperties,
+};
 
 /** 小按钮（行内操作：编辑 / 证据 / 还原；11px 中性；aria-label 含月份保证唯一可达名称）。 */
 function RowButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -278,12 +234,14 @@ export default function ForecastMarginCostCard({
       title="成本销毛 · 经营结果"
       hint="经营结果 · 由上述量价与成本推导（月版本成本阶梯 + 预测销毛柱，历史实 / 预测虚）：周销毛 = 主图最终 SO ×（价格 − 当月版本成本），演示口径不含渠道费率；不回写主图——对销毛不满意，回到量价输入区调整。"
       extra={<>
-        <SimChip title="成本与销毛为演示样本推演：月版本成本 × 主图价格，不含渠道费率" />
-        <RefChip label="推演参考 · 波动 ±8%" title="销毛为链路末端推演结果，±8% 为演示波动参考口径，非统计置信区间" />
+        <HintInfo
+          label="成本销毛卡说明"
+          text="模拟数据 · 推演参考，波动 ±8%：成本与销毛为演示样本推演（月版本成本 × 主图价格，不含渠道费率），±8% 为演示波动参考口径，非统计置信区间；价格→销量关系未纳入 · 调价暂不联动销量；成本只是是否调价的参考，不进模型输入；唯一人工调价入口在「成本参考与调价回路」。"
+        />
       </>}
     />
   );
-  // 2026-11-05 视觉精简二轮：IoBar + 依赖链路条下沉「成本参考与链路」收起区
+  // 2026-11-05 拍板实施：IoBar + 依赖链路条下沉「成本参考与调价回路」收起区
   // （默认收起；「带到主图调价」随成本参考区在展开区内）。
   const flowBlock = (
     <>
@@ -301,7 +259,7 @@ export default function ForecastMarginCostCard({
     return (
       <section style={workbenchCardStyle}>
         {head}
-        <CollapsibleSection label="成本参考与链路">{flowBlock}</CollapsibleSection>
+        <CollapsibleSection label="成本参考与调价回路">{flowBlock}</CollapsibleSection>
         <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.control, padding: space.lg, fontSize: 12, color: color.mute, textAlign: 'center' }}>
           暂无成本销毛数据
         </div>
@@ -395,10 +353,10 @@ export default function ForecastMarginCostCard({
     <section style={workbenchCardStyle}>
       {head}
 
-      {/* 「成本参考与链路」收起区（2026-11-05 视觉精简二轮，默认收起）：IoBar +
+      {/* 「成本参考与调价回路」收起区（2026-11-05 拍板实施，默认收起）：IoBar +
           依赖链路条 + 成本参考区（月版本 / 较上版 / 来源状态 / 编辑 / 证据 /
-          工作区操作条 /「带到主图调价」）；卡头与销毛柱图保留可见。 */}
-      <CollapsibleSection label="成本参考与链路">
+          工作区操作条 /「带到主图调价」）；默认视图只剩卡头 + 销毛柱图 + 图例。 */}
+      <CollapsibleSection label="成本参考与调价回路">
         {flowBlock}
 
         {/* ── 成本参考区（hairline 分区 · 只读区 1）：月版本 / 较上版 / 来源状态 / 编辑 / 证据 ── */}
@@ -576,24 +534,22 @@ export default function ForecastMarginCostCard({
       </div>
       </CollapsibleSection>
 
-      {/* ── 经营结果区（hairline 分区 · 只读区 2）：销毛柱 / 价格线 / 公式 / 主数字 ── */}
+      {/* ── 经营结果区（hairline 分区 · 只读区 2，2026-11-05 拍板实施：默认视图
+          = 卡头 + 销毛柱图 + 图例，区头说明收 HintInfo；data-zone 包装保留） ── */}
       <div
         data-zone="business-result"
+        aria-label="经营结果区"
         style={{ borderTop: `1px solid ${color.hairline}`, marginTop: space.sm, paddingTop: space.sm, minWidth: 0 }}
       >
-        <div style={zoneHeadStyle}>
-          <b style={zoneTitleStyle}>经营结果区</b>
-          <span style={zoneHintStyle}>销毛按当前量价与成本计算（演示口径不含渠道费率）· 唯一人工调价入口在成本参考区</span>
-        </div>
         <div style={{ overflowX: 'auto' }}>
-          {/* SVG 地板宽 560：本卡在页面 ④⑤ 左右两列的右列，1440 最小工作宽下
-              右列卡内 ≈565px——下探地板避免列内横向滚动（2026-11-04 清洁第二轮） */}
+          {/* 图宽与库存卡同宽对齐（2026-11-05 拍板实施）：viewBox 720×252 ·
+              minWidth 700 · 全期 52 周同域（页级两列改同宽由主线收口） */}
           <svg
             viewBox={`0 0 ${W} ${H}`}
             width="100%"
             role="img"
             aria-label={`成本销毛（经营结果 · 由上述量价与成本推导）：周销毛柱与月版本成本阶梯（${versions.map((version) => `${version.label} $${version.unitCost}`).join(' → ')}）；预测期（${fixture.context.forecastRange}）销毛 ${fmtMillionUsd(view.forecastMargin)}，历史 ${fixture.context.historyRange} 销毛 ${fmtMillionUsd(view.historyMargin)}；不回写主图。`}
-            style={{ display: 'block', height: 'auto', minWidth: 560 }}
+            style={{ display: 'block', height: 'auto', minWidth: 700 }}
           >
             {/* 周销毛轴（$M）：0 基线强分隔，其余刻度弱网格；负值向下 */}
             {tickValues.map((value) => {
@@ -601,17 +557,17 @@ export default function ForecastMarginCostCard({
               return (
                 <g key={value}>
                   <line x1={LEFT} y1={gy} x2={W - RIGHT} y2={gy} stroke={value === 0 ? color.hairlineStrong : color.hairline} />
-                  <text x={LEFT - 6} y={gy + 3.5} fontSize={10} fill={color.mute} textAnchor="end">{fmtMillionUsd(value)}</text>
+                  <text {...axisTextProps} x={LEFT - 6} y={gy + 3.5} fontSize={10} fill={color.mute} textAnchor="end">{fmtMillionUsd(value)}</text>
                 </g>
               );
             })}
             {[0, 0.5, 1].map((fraction) => {
               const value = uMin + (uMax - uMin) * fraction;
-              return <text key={fraction} x={W - RIGHT + 6} y={yUnit(value) + 3.5} fontSize={10} fill={color.mute}>{`$${Math.round(value / 10) * 10}`}</text>;
+              return <text {...axisTextProps} key={fraction} x={W - RIGHT + 6} y={yUnit(value) + 3.5} fontSize={10} fill={color.mute}>{`$${Math.round(value / 10) * 10}`}</text>;
             })}
             {weeks.map((week, index) => {
               if (index % 4 === 0 || index === weeks.length - 1) {
-                return <text key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{week.weekId}</text>;
+                return <text {...axisTextProps} key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{week.weekId}</text>;
               }
               return null;
             })}
@@ -668,10 +624,10 @@ export default function ForecastMarginCostCard({
         <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
       </div>
 
-      {/* 「结果读数」收起区（2026-11-05 视觉精简二轮，默认收起）：结果回读行
-          （含主图价格手调 / 含成本假设，回跳 chips）+ 输出框（经营结果口径 /
-          成本版本 / 预测期销毛 / 覆盖率） */}
-      <CollapsibleSection label="结果读数">
+      {/* 「输出与规则」收起区（2026-11-05 拍板实施，默认收起；与库存卡同名对齐）：
+          结果回读行（含主图价格手调 / 含成本假设，回跳 chips）+ 输出框
+          （经营结果口径 / 成本版本 / 预测期销毛 / 覆盖率） */}
+      <CollapsibleSection label="输出与规则">
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <ReadbackChip
             label={view.appliedPriceCount > 0 ? `含主图价格手调 W${view.appliedPriceCount}` : '无主图价格手调'}

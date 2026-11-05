@@ -19,7 +19,8 @@
 // - 主图证据定位（T7）：onFocusCard → 参考卡 locateRequest / 大盘 / 库存跨卡
 //   定位；onEditProductEvent → EventReplayModal initialRange（同范围编辑替换）；
 //   MarketBusPanel onViewMainChart / onCheckInventory / onMonthEventUpdate 接线。
-// 模拟标识分级：页首 DataStatusBadge 一处 + 各卡轻量 SimChip；范围行写
+// 模拟标识分级（2026-11-05 Eason 第 7 条）：页首 DataStatusBadge 一处 +
+// 各卡说明收 HintInfo ？号图标（卡头「模拟/AI 推测·可改」chip 退役）；范围行写
 // 「固定样本 · 不随全局筛选联动」；SI 未全部确认时页首显式提示（B.5.7）。
 // 「复制关键假设」= 纪要层的替代物（workbenchExport v3 管线顺序 + 上下文）。
 // 措辞不出现 因子/约束/置信区间/无约束需求/我司；话术统一「库存上限修正 /
@@ -45,7 +46,6 @@ import {
   computeWorkbench,
   isParamsActive,
   nextMarketMonthEventId,
-  overrideSourceOf,
   setManualAdjustment,
   withMarketMonthOverride,
 } from './forecast/workbenchModel';
@@ -59,10 +59,9 @@ import { useIntelligenceReview } from './forecast/useIntelligenceReview';
 import { referenceScopeHash } from './forecast/useReferenceWorkspace';
 import { DataStatusBadge } from './forecast/ForecastBits';
 import {
-  AiJudgeBadge,
+  HintInfo,
   IoBar,
   SectionHead,
-  SimChip,
   fmtMillionUsd,
   fmtWan,
   workbenchCardStyle,
@@ -507,11 +506,10 @@ export default function ForecastPage() {
         <section style={workbenchCardStyle}>
           <SectionHead
             title={`量价预测主图 · ${fixture.context.product}`}
-            hint={`历史 ${fixture.context.historyRange} 实柱（实际）· 预测 ${fixture.context.forecastRange} 虚柱；促销档期为轴下日期标注；悬停预测周看「本周考量」构成，点击柱体微调（原因选填，填了则内联标注在主图手调处）。`}
+            hint={`历史 ${fixture.context.historyRange} 实柱（实际）· 预测 ${fixture.context.forecastRange} 虚柱；促销档期与范围事件为起始周小方块点，悬停看对应区间；悬停预测周看「本周考量」构成，点击柱体微调（原因选填，填了则内联标注在主图手调处）。`}
             extra={
               <>
-                <SimChip title="主图数值为演示假设：历史段为模拟实际，预测段为模型推演" />
-                <AiJudgeBadge source={overrideSourceOf(params)} />
+                <HintInfo text="模拟数据：历史段为模拟实际，预测段为模型推演（本地确定性规则基线，未调用模型服务）；数值可直接修改，改动即人工确认。" />
                 <span style={{
                   fontSize: 11,
                   fontWeight: 600,
@@ -645,7 +643,7 @@ export default function ForecastPage() {
           [data-lpl-forecast-grid] @media 断点（index.css，≤760px 单列堆叠）。 */}
       <div
         data-lpl-forecast-grid
-        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 0.8fr)', gap: space.md, alignItems: 'stretch' }}
+        style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: space.md, alignItems: 'stretch' }}
       >
         <div ref={cardRefs.inventory} tabIndex={-1} style={{ display: 'grid', minWidth: 0, gap: space.sm }}>
           {crossFocus?.target === 'inventory' && (

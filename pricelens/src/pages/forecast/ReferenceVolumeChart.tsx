@@ -1,18 +1,32 @@
 // ============================================================
-// 推演工作台 v2 · 量价参考卡 · 全生命周期量价图（视觉精简二轮）：
+// 推演工作台 v2 · 量价参考卡 · 全生命周期量价图（2026-11-05 四条整改）：
 // 与量价走势页同语言——量柱复用 volume/VolumeBars（axisSide='left'，真实
-// 改几何落实左量右价）+ 价格线同系列色实线（刻度画在右侧 $）。
-// 2026-11-05 六条反馈：
-// - 顶部小标统一：事件与大促档期同形态（区间 = 左右箭头 + 中间线，单周 =
-//   小方标），档期用琥珀色；删除图内常驻琥珀档期带。
-// - 「图内高亮」开关（图例行，默认关）：关 = 图内无任何事件高亮（只有顶部
-//   小标）；开 = 所有小标对应区间渲染各自颜色 0.12 透明度底色；悬停任意
-//   小标（或名录行 hover）→ 对应区间临时高亮（0.16，不受开关影响）。
-// - 证据浮框精简为五项：事件名称 + 起止周、幅度、衰减方式、说明（有才
-//   显示）、[编辑]；删除读数行与来源标注（纯函数 computeEventRangeReading
-//   保留导出，仅删浮框调用）。
-// 缺数纪律：缺采周不造 0——柱不画、实线断开、跨缺灰虚桥接。图例收敛为
-// 「销量 / 价格 / 档期 / 事件 + 图内高亮」；图无障碍名按实际「左量右价」。
+// 改几何落实左量右价）+ 价格线同系列色实线 2px（刻度画在右侧 $）。
+// 2026-11-05 看图反馈 #1–#4 + 风格对齐（第 8 条在本卡的落实）：
+// - X 轴改日历周（#1，杜绝 W108）：与价格走势页同一套 axisTickPlan /
+//   shortBucketLabel 口径——周 = 2026W33（无连字符），首尾恒显示 + step 抽稀
+//   + 边界让位；周序锚点 = fixture launchWeekLabel 的真实 ISO 周历（复用
+//   ReferenceEventComposer 的周历换算 lifecycleWeekIdsOf，不造第二套日历），
+//   跨年进位按 ISO 规则（2025W52 → 2026W01 不串值）。
+// - 事件合一为小方块点（#2，核心）：图上只有一个「事件」概念，大促档期也是
+//   事件——顶部小标轨全部为小方块点（8px，事件类目色填充），默认显示在对齐
+//   事件开始时间的位置；同起点两点纵向微错开，第三点起聚合 +N（点击回填名录
+//   筛选；档期点不聚合）。旧区间呈现（左右箭头 + 中间连线、档期 dashed 方标、
+//   2-lane 分轨）全部删除。hover 方块点 = 图内临时 0.16 高亮该事件整个起止
+//   区间（不受开关影响）；点击选中 = 既有精简证据浮框（名称/起止/幅度/衰减/
+//   说明/编辑）。
+// - 图例全部可点（#3）：销量 / 价格 / 事件 三项点击切换显隐（WorkbenchLegend
+//   同规格：aria-pressed + 隐藏态 opacity .45）；事件隐藏时顶部小标轨整层 +
+//   图内事件高亮一起隐藏。
+// - 图内高亮开关挪位（#4）：删除右下角独立开关位，开关作为图例行内紧跟
+//   「事件」项之后的小控件（视觉与语义不变：开 = 所有事件区间常驻 0.12 底衬，
+//   默认关）。
+// - 风格对齐价格走势页（#5）：本卡全部 SVG <text> 带 fontFamily（tokens
+//   font）、字号 10、fill mute（首尾刻度 = body + 600，同 CostBarChart）、
+//   数字 tabular-nums；主线 2px。
+// - 周段标签统一日历周（二轮收尾）：区间读数胶囊 / 拖选实时提示 / 缺数注记 /
+//   事件周段（eventRangeLabel 传产品锚）全部 = 2025W24 形态，与 X 轴同口径。
+// 缺数纪律：缺采周不造 0——柱不画、实线断开、跨缺灰虚桥接。
 // 布局照 volume/CostBarChart 范式：ResizeObserver 量宽 → 全部按像素定位，
 // 指针承接层复用 volume/PointerShield（悬停列 / 拖选区间）。
 // ============================================================
@@ -20,11 +34,13 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import PointerShield from '../volume/PointerShield';
 import VolumeBars from '../volume/VolumeBars';
 import { vMaxOf } from '../volume/volumeAxis';
+import { axisTickPlan } from '../../chart/PriceTrend/helpers';
 import { brandColorOf, color, font, motion, space } from '../../theme/tokens';
 import type { LifecycleProductSeed } from './workbenchFixture';
 import { WorkbenchLegend, type LegendItem } from './WorkbenchBits';
 import {
   eventRangeLabel,
+  lifecycleWeekIdsOf,
   REFERENCE_DECAY_LABEL,
   type EffectiveReferenceEvent,
 } from './referenceEventModel';
@@ -32,11 +48,12 @@ import {
 // 左量右价：左侧留销量轴区（刻度 + 上限编辑），右侧留价格刻度区（$）
 const GRID_L = 84;
 const GRID_R = 52;
-const TRACK_TOP = 4;
-const LANE_H = 9;
-const LANE_GAP = 3;
-export const EVENT_TRACK_LANES = 2;
-const PLOT_TOP = TRACK_TOP + EVENT_TRACK_LANES * LANE_H + LANE_GAP + 2; // ≈ 30
+// 顶部事件点轨：单行小方块点（8px）+ 同起点微错开余量；2-lane 分轨已删
+const TRACK_TOP = 5;
+const DOT = 8;
+const DOT_STACK_DY = 5;
+const TRACK_H = DOT + DOT_STACK_DY;
+const PLOT_TOP = TRACK_TOP + TRACK_H + 3; // 21
 // 2026-11-04 视觉一致性：图高过低（评审），绘图区 150→200。
 const PLOT_H = 200;
 const LABEL_H = 18;
@@ -84,7 +101,9 @@ function bridgeSegmentsOf(values: Array<number | null>): Array<[number, number]>
 }
 
 // ------------------------------------------------------------
-// 顶部小标轨：事件 + 大促档期统一形态（区间 = 箭头-线，单周 = 小方标）。
+// 顶部事件点轨：事件 + 大促档期合一（档期也是事件，琥珀类目色区分来源）。
+// 每个事件 = 一个小方块点（对齐起始周）；无 lane 算法——同起点两点纵向微
+// 错开，第三点起（仅事件）聚合 +N。
 // ------------------------------------------------------------
 export interface ReferenceTrackTick {
   id: string;
@@ -95,51 +114,15 @@ export interface ReferenceTrackTick {
   color: string;
 }
 
-export interface TrackLaneAssignment {
-  lane: 0 | 1;
-  overflow: boolean;
+/** 事件点摆放：stack = 0 主行 / 1 微错开行（同起点第二点）。 */
+interface EventDotPlacement {
+  tick: ReferenceTrackTick;
+  startIndex: number;
+  stack: 0 | 1;
 }
 
-/** 顶部小标 lane 分配：按起周贪心放 lane 0/1（重叠不共 lane）；第三条起 overflow。 */
-export function assignTrackLanes(
-  spans: ReadonlyArray<{ id: string; startWeek: number; endWeek: number }>,
-): Map<string, TrackLaneAssignment> {
-  const map = new Map<string, TrackLaneAssignment>();
-  const sorted = [...spans].sort((a, b) => a.startWeek - b.startWeek || a.endWeek - b.endWeek || a.id.localeCompare(b.id));
-  const laneEnd: [number, number] = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
-  for (const span of sorted) {
-    if (laneEnd[0] < span.startWeek) {
-      laneEnd[0] = span.endWeek;
-      map.set(span.id, { lane: 0, overflow: false });
-    } else if (laneEnd[1] < span.startWeek) {
-      laneEnd[1] = span.endWeek;
-      map.set(span.id, { lane: 1, overflow: false });
-    } else {
-      map.set(span.id, { lane: 1, overflow: true });
-    }
-  }
-  return map;
-}
-
-interface LaneAssignment {
-  lane: 0 | 1;
-  overflow: EffectiveReferenceEvent[];
-}
-
-/** 事件 lane 分配（assignTrackLanes 的事件形状包装，保持既有导出契约）。 */
-export function assignEventLanes(events: EffectiveReferenceEvent[]): Map<string, LaneAssignment> {
-  const assignments = assignTrackLanes(events);
-  const overflowIds = new Set(
-    [...assignments.entries()].filter(([, a]) => a.overflow).map(([id]) => id),
-  );
-  const overflow = events.filter((ev) => overflowIds.has(ev.id));
-  const map = new Map<string, LaneAssignment>();
-  for (const ev of events) {
-    const assignment = assignments.get(ev.id);
-    if (assignment) map.set(ev.id, { lane: assignment.lane, overflow });
-  }
-  return map;
-}
+/** 事件点行中心的 y（stack 0 / 1）。 */
+const dotCyOf = (stack: 0 | 1): number => TRACK_TOP + DOT / 2 + stack * DOT_STACK_DY;
 
 export default function ReferenceVolumeChart(props: {
   product: LifecycleProductSeed;
@@ -156,10 +139,10 @@ export default function ReferenceVolumeChart(props: {
   selectedEventId?: string | null;
   onSelectEvent?: (id: string | null) => void;
   onEditEvent?: (id: string) => void;
-  /** 名录行 hover → 小标加粗 + 区间临时高亮；小标 hover 反向上报。 */
+  /** 名录行 hover → 事件点加粗 + 区间临时高亮；事件点 hover 反向上报。 */
   hoverEventId?: string | null;
   onHoverEvent?: (id: string | null) => void;
-  /** 事件轨 +N 聚合点击：只看这些事件（父层回填名录筛选）。 */
+  /** 同起点第三事件起聚合 +N 点击：只看这些事件（父层回填名录筛选）。 */
   onOverflowEvents?: (ids: string[]) => void;
   /** 拖选事件时段模式：松手回填事件起止周（不进入区间读数态）。 */
   rangePickMode?: boolean;
@@ -172,9 +155,11 @@ export default function ReferenceVolumeChart(props: {
   const [brush, setBrush] = useState<[number, number] | null>(null);
   const [brushLive, setBrushLive] = useState<[number, number] | null>(null);
   const [axisLimits, setAxisLimits] = useState<{ max: number | null }>({ max: null });
-  /** 图内高亮开关（图例行，默认关）：关 = 图内无任何事件高亮。 */
+  /** 图内高亮开关（图例行「事件」项旁，默认关）：关 = 图内无任何事件高亮。 */
   const [highlightAll, setHighlightAll] = useState(false);
-  /** 小标直接悬停（本地即时态；名录 hover 走 hoverEventId）。 */
+  /** 图例显隐（#3）：销量 / 价格 / 事件 三层可点切换（默认全显）。 */
+  const [hiddenSeries, setHiddenSeries] = useState<ReadonlySet<string>>(new Set());
+  /** 事件点直接悬停（本地即时态；名录 hover 走 hoverEventId）。 */
   const [tickHoverId, setTickHoverId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -229,7 +214,17 @@ export default function ReferenceVolumeChart(props: {
   const xAt = (i: number): number => GRID_L + colW * (i + 0.5);
   const xLeft = (i: number): number => GRID_L + colW * i;
   const xRight = (i: number): number => GRID_L + colW * (i + 1);
-  const laneY = (lane: 0 | 1): number => TRACK_TOP + lane * (LANE_H + LANE_GAP);
+
+  // ---- X 轴日历周（#1）：锚点 = launchWeekLabel 的 ISO 周历，跨年进位不串值；
+  // 刻度计划与价格走势页同源（axisTickPlan：首尾恒显示 + step 抽稀 + 边界让位） ----
+  const weekIds = useMemo(() => lifecycleWeekIdsOf(product), [product]);
+  const windowWeekIds = useMemo(() => weekIds.slice(s, s + n), [weekIds, s, n]);
+  const xPlan = useMemo(
+    () => axisTickPlan('week', windowWeekIds, Math.max(1, Math.ceil(n / 9)), n > 1 ? [0, n - 1] : [0]),
+    [windowWeekIds, n],
+  );
+  /** 生命周期绝对周序 → 日历周 ID（2025W24 形态；锚缺失回退相对 W 序，防御）。 */
+  const weekLabelAt = (abs: number): string => weekIds[abs] ?? `W${abs + 1}`;
 
   // 价格刻度（右轴 $）：窗口内价格 min/max 加 18% 余量，上 / 中 / 下三刻度常显
   const priceBounds = useMemo(() => {
@@ -251,7 +246,7 @@ export default function ReferenceVolumeChart(props: {
   const pathOf = (indexes: number[]): string =>
     indexes.map((index, position) => `${position === 0 ? 'M' : 'L'}${xAt(index).toFixed(1)} ${y$(prices[index] as number).toFixed(1)}`).join(' ');
 
-  // ---- 顶部小标（事件 + 大促档期统一形态，档期 = 琥珀；无来源标注） ----
+  // ---- 顶部事件点（事件 + 大促档期合一；无来源标注） ----
   const events = props.events ?? [];
   const eventsIn = useMemo(() => events
     .filter((ev) => ev.endWeek >= s && ev.startWeek <= e)
@@ -277,31 +272,69 @@ export default function ReferenceVolumeChart(props: {
       color: props.colorOf(ev.typeId),
     })),
   ], [product, eventsIn, props.colorOf]);
-  const tickLaneMap = useMemo(() => assignTrackLanes(ticksIn), [ticksIn]);
-  // 第三条起聚合 +N（只聚合事件；档期小标不聚合，保证档期可见）
-  const overflowEvents = useMemo(() => eventsIn.filter((ev) => tickLaneMap.get(ev.id)?.overflow), [eventsIn, tickLaneMap]);
+
+  // 同起点分组：第 1、2 个事件点微错开常显；第 3 个起（仅事件）聚合 +N（档期点不聚合）
+  const { dotPlacements, overflowEvents } = useMemo(() => {
+    const groups = new Map<number, ReferenceTrackTick[]>();
+    for (const tick of ticksIn) {
+      const key = Math.max(tick.startWeek, s);
+      const list = groups.get(key);
+      if (list) list.push(tick);
+      else groups.set(key, [tick]);
+    }
+    const placements: EventDotPlacement[] = [];
+    const overflow: EffectiveReferenceEvent[] = [];
+    for (const [start, list] of groups) {
+      let count = 0;
+      for (const tick of list) {
+        if (tick.kind === 'event' && count >= 2) {
+          const ev = eventsIn.find((candidate) => candidate.id === tick.id);
+          if (ev) overflow.push(ev);
+          continue;
+        }
+        placements.push({ tick, startIndex: start - s, stack: count >= 1 ? 1 : 0 });
+        count += 1;
+      }
+    }
+    overflow.sort((a, b) => a.startWeek - b.startWeek || a.endWeek - b.endWeek || a.id.localeCompare(b.id));
+    return { dotPlacements: placements, overflowEvents: overflow };
+  }, [ticksIn, eventsIn, s]);
 
   const selectedEvent = useMemo(
     () => (props.selectedEventId ? events.find((ev) => ev.id === props.selectedEventId) ?? null : null),
     [events, props.selectedEventId],
   );
 
+  // ---- 图例显隐（#3） ----
+  const volumeVisible = !hiddenSeries.has('volume');
+  const priceVisible = !hiddenSeries.has('price');
+  const eventsVisible = !hiddenSeries.has('events');
+  const toggleSeries = (key: string): void => {
+    setHiddenSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   // 选区带：拖选实时 / 已提交（手动区间读数；事件高亮不再占用该层）
   const activeBrush = brushLive ?? brush;
   const brushLo = activeBrush ? Math.min(activeBrush[0], activeBrush[1]) : 0;
   const brushHi = activeBrush ? Math.max(activeBrush[0], activeBrush[1]) : 0;
 
-  // ---- 图内高亮层：开关（0.12）+ 悬停临时（0.16，不受开关影响） ----
-  const highlightRects = useMemo(() => ticksIn
+  // ---- 图内高亮层：开关（0.12）+ 悬停临时（0.16，不受开关影响）；事件图例
+  // 隐藏时整层（常驻 + 临时 + 小标轨）一起隐藏 ----
+  const highlightRects = useMemo(() => (eventsVisible ? ticksIn
     .map((tick) => {
       const lo = Math.max(tick.startWeek, s);
       const hi = Math.min(tick.endWeek, e);
       return lo > hi ? null : { tick, startIndex: lo - s, endIndex: hi - s };
     })
-    .filter((rect): rect is { tick: ReferenceTrackTick; startIndex: number; endIndex: number } => rect != null),
-  [ticksIn, s, e]);
+    .filter((rect): rect is { tick: ReferenceTrackTick; startIndex: number; endIndex: number } => rect != null) : []),
+  [ticksIn, s, e, eventsVisible]);
   const hoverTickId = tickHoverId ?? (props.hoverEventId != null && ticksIn.some((t) => t.id === props.hoverEventId) ? props.hoverEventId : null);
-  const hoverRect = hoverTickId != null ? highlightRects.find((rect) => rect.tick.id === hoverTickId) ?? null : null;
+  const hoverRect = eventsVisible && hoverTickId != null ? highlightRects.find((rect) => rect.tick.id === hoverTickId) ?? null : null;
 
   // ---- 区间读数（手动拖选）：价 / 量端点取首个 / 末个有效点，标实际参与周 ----
   const reading = useMemo(() => {
@@ -323,7 +356,8 @@ export default function ReferenceVolumeChart(props: {
     const pairText = (a: { week: number; value: number } | null, b: { week: number; value: number } | null, fmt: (v: number) => string): string => {
       if (a == null || b == null) return '—';
       const pct = ((b.value / Math.max(1e-6, a.value)) - 1) * 100;
-      return `${fmt(a.value)}（W${a.week + 1}）→ ${fmt(b.value)}（W${b.week + 1}） ${signedPctText(pct)}`;
+      // 端点周统一日历周口径（2025W24，与 X 轴 / 事件周段标签同形）
+      return `${fmt(a.value)}（${weekLabelAt(s + a.week)}）→ ${fmt(b.value)}（${weekLabelAt(s + b.week)}） ${signedPctText(pct)}`;
     };
     return {
       weeks: brushHi - brushLo + 1,
@@ -332,28 +366,26 @@ export default function ReferenceVolumeChart(props: {
       priceText: pairText(firstValid(prices), lastValid(prices), priceShortText),
       volumeText: pairText(firstValid(values), lastValid(values), volumeShortText),
     };
-  }, [activeBrush, brushLo, brushHi, prices, values, s, props.rangePickMode]);
+  }, [activeBrush, brushLo, brushHi, prices, values, s, weekIds, props.rangePickMode]);
 
-  // 拖选事件时段模式：拖动中只显示 W起–W止 · N 周（不显示量价读数）
+  // 拖选事件时段模式：拖动中只显示 起周日历周–止周日历周 · N 周（不显示量价读数）
   const rangePickText = props.rangePickMode && activeBrush
-    ? `W${s + brushLo + 1}–W${s + brushHi + 1} · ${brushHi - brushLo + 1} 周`
+    ? `${weekLabelAt(s + brushLo)}–${weekLabelAt(s + brushHi)} · ${brushHi - brushLo + 1} 周`
     : null;
 
   const seriesColor = brandColorOf(product.brand);
   const missingWeeks = useMemo(() => values
-    .map((v, i) => (v == null || prices[i] == null ? `W${s + i + 1}` : ''))
-    .filter(Boolean), [values, prices, s]);
+    .map((v, i) => (v == null || prices[i] == null ? weekLabelAt(s + i) : ''))
+    .filter(Boolean), [values, prices, s, weekIds]);
   const legendItems: LegendItem[] = [
-    { label: '销量', shape: 'rect', color: seriesColor },
-    { label: '价格', shape: 'line', color: seriesColor },
-    { label: '档期', shape: 'rectAmber', color: color.warning },
-    { label: '事件', shape: 'marker', color: color.link },
+    { key: 'volume', label: '销量', shape: 'rect', color: seriesColor },
+    { key: 'price', label: '价格', shape: 'line', color: seriesColor },
+    { key: 'events', label: '事件', shape: 'marker', color: color.link },
   ];
-  const labelStep = Math.max(1, Math.ceil(n / 6));
 
-  // 小标轨交互（rangePickMode 下交给拖选，小标不抢指针）
+  // 事件点交互（rangePickMode 下交给拖选，事件点不抢指针）
   const tickInteractive = !props.rangePickMode;
-  const eventTickProps = (tick: ReferenceTrackTick): {
+  const eventDotProps = (tick: ReferenceTrackTick): {
     onPointerEnter: () => void;
     onPointerLeave: () => void;
     onClick: () => void;
@@ -374,7 +406,7 @@ export default function ReferenceVolumeChart(props: {
       props.onSelectEvent?.(props.selectedEventId === tick.id ? null : tick.id);
     },
   });
-  const bandTickHoverProps = (tick: ReferenceTrackTick): {
+  const bandDotHoverProps = (tick: ReferenceTrackTick): {
     onPointerEnter: () => void;
     onPointerLeave: () => void;
   } => ({
@@ -386,14 +418,17 @@ export default function ReferenceVolumeChart(props: {
     return <div role="status" style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: color.mute }}>暂无可参照历史</div>;
   }
 
-  const ariaLabel = `${product.label} 全生命周期量价图（上市 ${product.launchWeekLabel} 起 ${total} 周）：左轴为销量柱（台/周）、右轴为价格线（$）；图顶小标轨为事件与大促档期（档期 = 琥珀色小标，区间为箭头-线、单周为方标），文字替代见下方事件名录。图上拖选区间读价量变化${props.rangePickMode ? '；当前为拖选事件时段模式，按下—拖动—松手回填起止周，Esc 取消' : ''}。`;
+  const firstWeekId = weekIds[0] ?? product.launchWeekLabel;
+  const windowFirstId = windowWeekIds[0] ?? firstWeekId;
+  const windowLastId = windowWeekIds[windowWeekIds.length - 1] ?? '';
+  const ariaLabel = `${product.label} 全生命周期量价图（上市 ${firstWeekId} 起 ${total} 周；横轴为日历周标签，如 ${windowFirstId}–${windowLastId}，首尾恒显示）：左轴为销量柱（台/周）、右轴为价格线（$）；图顶小标轨为事件点（含大促档期，小方块点标在事件起始周，档期 = 琥珀色），文字替代见下方事件名录。图上拖选区间读价量变化${props.rangePickMode ? '；当前为拖选事件时段模式，按下—拖动—松手回填起止周，Esc 取消' : ''}。`;
 
   return (
     <div style={{ minWidth: 0 }}>
       <div ref={wrapRef} style={{ position: 'relative', height: plotBottom + LABEL_H + 4 }}>
-        {/* 底层：图内高亮（开关 0.12 / 悬停 0.16）+ 价格轴刻度（右）+ 悬停参考线 + X 周标签 */}
+        {/* 底层：图内高亮（开关 0.12 / 悬停 0.16）+ 价格轴刻度（右）+ 悬停参考线 + X 日历周标签 */}
         <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}>
-          {highlightAll && highlightRects.map((rect) => (
+          {eventsVisible && highlightAll && highlightRects.map((rect) => (
             <rect
               key={`hl-${rect.tick.id}`}
               x={xLeft(rect.startIndex)}
@@ -405,7 +440,7 @@ export default function ReferenceVolumeChart(props: {
               rx={3}
             />
           ))}
-          {hoverRect && (
+          {eventsVisible && hoverRect && (
             <rect
               key="hl-hover"
               x={xLeft(hoverRect.startIndex)}
@@ -434,16 +469,30 @@ export default function ReferenceVolumeChart(props: {
           {hover != null && (
             <line x1={xAt(hover)} x2={xAt(hover)} y1={PLOT_TOP} y2={plotBottom} stroke={color.hairlineStrong} strokeOpacity={0.6} />
           )}
-          <g fontSize={10} fill={color.mute} textAnchor="middle">
-            {Array.from({ length: n }, (_, i) => i)
-              .filter((i) => i % labelStep === 0 || i === n - 1)
-              .map((i) => (
-                <text key={`x-${i}`} x={xAt(i)} y={plotBottom + 12}>W{s + i + 1}</text>
-              ))}
-          </g>
+          {/* X 轴日历周标签（#1）：axisTickPlan 同价格走势页——首尾恒显示（加粗）、
+              step 抽稀 + 边界让位；文案 = YYYYWww（shortBucketLabel 周口径） */}
+          {xPlan.indexes.map((i) => {
+            const edge = xPlan.isEdge(i);
+            return (
+              <text
+                key={`x-${i}`}
+                x={xAt(i)}
+                y={plotBottom + 12}
+                textAnchor="middle"
+                fontSize={10}
+                fill={edge ? color.body : color.mute}
+                fontWeight={edge ? 600 : 400}
+                fontFamily={font.family}
+                style={{ fontVariantNumeric: 'tabular-nums' }}
+              >
+                {xPlan.dateText(i)}
+              </text>
+            );
+          })}
         </svg>
-        {/* 量柱层（volume/VolumeBars：axisSide='left' 左量右价；手动选区带 / 上限编辑） */}
-        {geom && (
+        {/* 量柱层（volume/VolumeBars：axisSide='left' 左量右价；手动选区带 / 上限编辑）。
+            图例「销量」隐藏时整层不渲染（价格轴与几何不重算，量价页同门控口径） */}
+        {geom && volumeVisible && (
           <VolumeBars
             geom={geom}
             plotTop={PLOT_TOP}
@@ -458,16 +507,16 @@ export default function ReferenceVolumeChart(props: {
             selectionBand={activeBrush ? { startIndex: brushLo, endIndex: brushHi } : undefined}
           />
         )}
-        {/* 价格线（实线 + 灰虚桥接） + 顶部小标轨（事件与档期统一形态） */}
+        {/* 价格线（实线 2px + 灰虚桥接） + 顶部事件点轨（#2 合一：档期也是事件点） */}
         <svg
           role="img"
           aria-label={ariaLabel}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1, overflow: 'visible' }}
         >
-          {solidSegs.map((segment, segmentIndex) => (
+          {priceVisible && solidSegs.map((segment, segmentIndex) => (
             <path key={`solid-${segmentIndex}`} d={pathOf(segment)} fill="none" stroke={seriesColor} strokeWidth={2} />
           ))}
-          {bridges.map(([from, to], bridgeIndex) => (
+          {priceVisible && bridges.map(([from, to], bridgeIndex) => (
             <path
               key={`bridge-${bridgeIndex}`}
               d={`M${xAt(from).toFixed(1)} ${y$(prices[from] as number).toFixed(1)} L${xAt(to).toFixed(1)} ${y$(prices[to] as number).toFixed(1)}`}
@@ -478,116 +527,67 @@ export default function ReferenceVolumeChart(props: {
               opacity={0.85}
             />
           ))}
-          {ticksIn.map((tick) => {
-            const assignment = tickLaneMap.get(tick.id);
-            if (!assignment) return null;
-            // 事件第三条起聚合 +N（由聚合 chip 承接）；档期小标不聚合（强制 lane 1 画）
-            if (tick.kind === 'event' && assignment.overflow) return null;
-            const lane = assignment.overflow ? 1 : assignment.lane;
-            const yC = laneY(lane) + LANE_H / 2;
-            const lo = Math.max(tick.startWeek, s);
-            const hi = Math.min(tick.endWeek, e);
-            const single = tick.startWeek === tick.endWeek;
+          {eventsVisible && dotPlacements.map(({ tick, startIndex, stack }) => {
+            const cx = xAt(startIndex);
+            const cy = dotCyOf(stack);
             const isEvent = tick.kind === 'event';
             const hovered = tickHoverId === tick.id || (isEvent && props.hoverEventId === tick.id);
             const selected = isEvent && props.selectedEventId === tick.id;
-            const strokeWidth = selected || hovered ? 2 : 1.5;
-            const rangeLabel = eventRangeLabel(tick);
+            const rangeLabel = eventRangeLabel(tick, product);
             const anchorAria = isEvent ? `事件 ${rangeLabel} ${tick.label}` : `档期 ${tick.label} ${rangeLabel}`;
-            if (single) {
-              const cx0 = xAt(lo - s);
-              const square = (
-                <rect
-                  x={cx0 - 3}
-                  y={yC - 3.5}
-                  width={6}
-                  height={7}
-                  rx={1.5}
-                  fill={color.canvas}
-                  stroke={tick.color}
-                  strokeWidth={selected || hovered ? 2 : 1.5}
-                />
-              );
-              if (!isEvent || !tickInteractive) {
-                return (
-                  <g key={tick.id} style={{ pointerEvents: tickInteractive ? 'auto' : 'none' }} {...(tickInteractive ? bandTickHoverProps(tick) : {})}>
-                    {isEvent ? square : (
-                      <g role="img" aria-label={anchorAria}>
-                        <title>{`${anchorAria}（大促档期）`}</title>
-                        {square}
-                      </g>
-                    )}
-                  </g>
-                );
-              }
-              return (
-                <g key={tick.id} style={{ pointerEvents: 'auto', cursor: 'pointer' }} {...eventTickProps(tick)}>
-                  <rect
-                    x={cx0 - 5}
-                    y={yC - 5}
-                    width={10}
-                    height={10}
-                    fill="transparent"
-                    style={{ pointerEvents: 'all', cursor: 'pointer' }}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={anchorAria}
-                  />
-                  {square}
-                </g>
-              );
-            }
-            // 区间小标：左右小箭头 + 中间连线（无背景色；高亮归图内高亮层）
-            const x1 = xLeft(lo - s) + 1;
-            const x2 = xRight(hi - s) - 1;
-            const mark = (
-              <g>
-                <path d={`M${(x1 + 4).toFixed(1)} ${(yC - 4).toFixed(1)} L${x1.toFixed(1)} ${yC.toFixed(1)} L${(x1 + 4).toFixed(1)} ${(yC + 4).toFixed(1)}`} fill="none" stroke={tick.color} strokeWidth={strokeWidth} />
-                <line x1={x1 + 4} y1={yC} x2={x2 - 4} y2={yC} stroke={tick.color} strokeWidth={strokeWidth} opacity={0.8} />
-                <path d={`M${(x2 - 4).toFixed(1)} ${(yC - 4).toFixed(1)} L${x2.toFixed(1)} ${yC.toFixed(1)} L${(x2 - 4).toFixed(1)} ${(yC + 4).toFixed(1)}`} fill="none" stroke={tick.color} strokeWidth={strokeWidth} />
-              </g>
+            // 小方块点：事件类目色填充；悬停 / 选中加墨色描边（文字始终承载语义）
+            const dot = (
+              <rect
+                x={cx - DOT / 2}
+                y={cy - DOT / 2}
+                width={DOT}
+                height={DOT}
+                rx={1.5}
+                fill={tick.color}
+                stroke={selected || hovered ? color.ink : 'none'}
+                strokeWidth={selected || hovered ? 1.5 : 0}
+              />
             );
             if (!isEvent || !tickInteractive) {
               return (
-                <g key={tick.id} style={{ pointerEvents: tickInteractive ? 'auto' : 'none' }} {...(tickInteractive ? bandTickHoverProps(tick) : {})}>
-                  {isEvent ? mark : (
-                    <g role="img" aria-label={anchorAria}>
+                <g
+                  key={tick.id}
+                  role={isEvent ? undefined : 'img'}
+                  aria-label={isEvent ? undefined : anchorAria}
+                  style={{ pointerEvents: tickInteractive ? 'auto' : 'none' }}
+                  {...(tickInteractive ? bandDotHoverProps(tick) : {})}
+                >
+                  {isEvent ? dot : (
+                    <g>
                       <title>{`${anchorAria}（大促档期）`}</title>
-                      {mark}
+                      {dot}
                     </g>
                   )}
                 </g>
               );
             }
             return (
-              <g key={tick.id}>
-                {/* 选中时段：端点周标签（非选中不显示长标题） */}
-                {selected && (
-                  <text x={(x1 + x2) / 2} y={yC - 6} textAnchor="middle" fontSize={9.5} fontWeight={600} fill={tick.color} style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {rangeLabel}
-                  </text>
-                )}
-                <g style={{ pointerEvents: 'auto', cursor: 'pointer' }} {...eventTickProps(tick)}>
-                  <rect
-                    x={x1}
-                    y={laneY(lane) - 1}
-                    width={Math.max(6, x2 - x1)}
-                    height={LANE_H + 2}
-                    fill="transparent"
-                    style={{ pointerEvents: 'all', cursor: 'pointer' }}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={anchorAria}
-                  />
-                  {mark}
-                </g>
+              <g key={tick.id} style={{ pointerEvents: 'auto', cursor: 'pointer' }} {...eventDotProps(tick)}>
+                <rect
+                  x={cx - 6}
+                  y={cy - 6}
+                  width={12}
+                  height={12}
+                  fill="transparent"
+                  style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={anchorAria}
+                />
+                {dot}
               </g>
             );
           })}
-          {/* +N 聚合（第三条起的重叠事件）：点击打开只含这些事件的名录筛选 */}
-          {overflowEvents.length > 0 && (() => {
+          {/* +N 聚合（同起点第三事件起）：点击打开只含这些事件的名录筛选 */}
+          {eventsVisible && overflowEvents.length > 0 && (() => {
             const first = overflowEvents[0];
             const x = Math.min(Math.max(0, first.startWeek - s), n - 1);
+            const cy = dotCyOf(1);
             return (
               <g
                 style={{ pointerEvents: 'auto', cursor: 'pointer' }}
@@ -601,12 +601,23 @@ export default function ReferenceVolumeChart(props: {
                 role="button"
                 aria-label={`查看其余 ${overflowEvents.length} 个重叠事件`}
               >
-                <rect x={xAt(x) - 11} y={laneY(1) - 1} width={22} height={11} rx={5.5} fill={color.canvas} stroke={color.hairlineStrong} />
-                <text x={xAt(x)} y={laneY(1) + 8} textAnchor="middle" fontSize={9} fontWeight={600} fill={color.body}>{`+${overflowEvents.length}`}</text>
+                <rect x={xAt(x) - 11} y={cy - 5.5} width={22} height={11} rx={5.5} fill={color.canvas} stroke={color.hairlineStrong} />
+                <text
+                  x={xAt(x)}
+                  y={cy + 3.5}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fontWeight={600}
+                  fill={color.mute}
+                  fontFamily={font.family}
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {`+${overflowEvents.length}`}
+                </text>
               </g>
             );
           })()}
-          {hover != null && prices[hover] != null && (
+          {priceVisible && hover != null && prices[hover] != null && (
             <circle cx={xAt(hover)} cy={y$(prices[hover] as number)} r={3.5} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
           )}
         </svg>
@@ -639,7 +650,7 @@ export default function ReferenceVolumeChart(props: {
         {reading && geom && !props.rangePickMode && (
           <div
             role="group"
-            aria-label={`区间读数 W${reading.absStart + 1}–W${reading.absEnd + 1}：价 ${reading.priceText}，量 ${reading.volumeText}`}
+            aria-label={`区间读数 ${weekLabelAt(reading.absStart)}–${weekLabelAt(reading.absEnd)}：价 ${reading.priceText}，量 ${reading.volumeText}`}
             className="tnum"
             style={{
               position: 'absolute',
@@ -661,7 +672,7 @@ export default function ReferenceVolumeChart(props: {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: color.mute }}>
-              区间 W{reading.absStart + 1}–W{reading.absEnd + 1} · {reading.weeks} 周
+              区间 {weekLabelAt(reading.absStart)}–{weekLabelAt(reading.absEnd)} · {reading.weeks} 周
               <button
                 type="button"
                 aria-label="清除所选区间"
@@ -680,7 +691,7 @@ export default function ReferenceVolumeChart(props: {
         {selectedEvent && geom && !props.rangePickMode && (
           <div
             role="group"
-            aria-label={`事件详情 ${eventRangeLabel(selectedEvent)} ${selectedEvent.label}`}
+            aria-label={`事件详情 ${eventRangeLabel(selectedEvent, product)} ${selectedEvent.label}`}
             className="tnum"
             style={{
               position: 'absolute',
@@ -705,7 +716,7 @@ export default function ReferenceVolumeChart(props: {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
               <span style={{ fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-                {`${eventRangeLabel(selectedEvent)} · ${selectedEvent.label}`}
+                {`${eventRangeLabel(selectedEvent, product)} · ${selectedEvent.label}`}
               </span>
               <button
                 type="button"
@@ -732,7 +743,7 @@ export default function ReferenceVolumeChart(props: {
               <div style={{ marginTop: 5 }}>
                 <button
                   type="button"
-                  aria-label={`编辑事件 ${eventRangeLabel(selectedEvent)} ${selectedEvent.label}`}
+                  aria-label={`编辑事件 ${eventRangeLabel(selectedEvent, product)} ${selectedEvent.label}`}
                   onClick={() => props.onEditEvent?.(selectedEvent.id)}
                   style={{ height: 20, padding: '0 8px', borderRadius: 6, border: `1px solid ${color.hairline}`, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: `background ${motion.fast}ms` }}
                 >
@@ -778,16 +789,22 @@ export default function ReferenceVolumeChart(props: {
       {missingWeeks.length > 0 && (
         <div style={{ marginTop: 2, fontSize: 10.5, color: color.mute }}>缺数 {missingWeeks.join('、')} · 不计 0</div>
       )}
-      {/* 图例行：销量 / 价格 / 档期 / 事件 + 图内高亮开关（默认关） */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, minWidth: 0 }}>
-        <WorkbenchLegend items={legendItems} hidden={new Set()} style={{ marginTop: 4, flex: '1 1 auto' }} />
+      {/* 图例行（#3/#4）：销量 / 价格 / 事件 全部可点切换显隐（aria-pressed + 隐藏态
+          opacity .45）；「图内高亮」开关内联紧跟「事件」项之后（默认关） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: space.xs, minWidth: 0 }}>
+        <WorkbenchLegend
+          items={legendItems}
+          hidden={hiddenSeries}
+          onToggle={toggleSeries}
+          style={{ marginTop: 4, flex: '0 0 auto', justifyContent: 'flex-start' }}
+        />
         <button
           type="button"
           role="switch"
           aria-checked={highlightAll}
           title={highlightAll
-            ? '图内高亮已开：所有事件与大促档期区间渲染各自颜色的 0.12 透明度底色；悬停小标仍临时加深'
-            : '图内高亮已关：图内只保留顶部小标；悬停任意小标仍临时高亮对应区间'}
+            ? '图内高亮已开：所有事件（含大促档期）区间渲染各自颜色的 0.12 透明度底色；悬停事件点仍临时加深'
+            : '图内高亮已关：图内只保留顶部事件点；悬停任意事件点仍临时高亮对应区间'}
           onClick={() => setHighlightAll((prev) => !prev)}
           style={{
             display: 'inline-flex',

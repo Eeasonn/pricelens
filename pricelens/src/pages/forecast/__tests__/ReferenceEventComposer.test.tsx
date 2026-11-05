@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import ReferenceEventComposer from '../ReferenceEventComposer';
-import type { ReferenceEventDraftValue } from '../referenceEventModel';
+import { lifecycleWeekIdsOf, type ReferenceEventDraftValue } from '../referenceEventModel';
 import {
   BUILTIN_REFERENCE_EVENT_TYPES,
   getReferenceEventTypesSnapshot,
@@ -47,8 +47,9 @@ afterEach(cleanup);
 
 const MATE80 = workbenchFixture.references.lifecyclePool[0];
 // Mate 80 上市周 = fixture launchWeekLabel 2025-W02 → 生命周期 W1 = 2025W02；
-// 月历首页 = 2025年 1月 / 2月（W1–W8）。
+// 月历首页 = 2025年 1月 / 2月（W1–W8）。已选区间读法 = 日历周 ID（与图轴同口径）。
 const MATE80_W1_WEEK_ID = '2025W02';
+const MATE_WEEKS = lifecycleWeekIdsOf(MATE80);
 
 const emptyDraft: ReferenceEventDraftValue = {
   typeId: 'competitor-launch',
@@ -209,11 +210,11 @@ describe('ReferenceEventComposer · 双月周历选择器（起止周）', () =>
     render(<Host onSubmit={onSubmit} />);
     openCalendar();
     pickWeek(1);
-    // 第一次点击后区间收拢为该周，周历保持展开等待止周
-    expect(screen.getByText('已选 W1–W1 · 1 周')).toBeTruthy();
+    // 第一次点击后区间收拢为该周（日历周口径），周历保持展开等待止周
+    expect(screen.getByText(`已选 ${MATE_WEEKS[0]} · 1 周`)).toBeTruthy();
     expect(screen.queryByRole('group', { name: '起止周双月历' })).not.toBeNull();
     pickWeek(4);
-    expect(screen.getByText('已选 W1–W4 · 4 周')).toBeTruthy();
+    expect(screen.getByText(`已选 ${MATE_WEEKS[0]}–${MATE_WEEKS[3]} · 4 周`)).toBeTruthy();
     // 止周选完自动收起；区间内浅蓝 + 选中周实蓝由样式承载（此处验证 aria-pressed）
     expect(screen.queryByRole('group', { name: '起止周双月历' })).toBeNull();
     fireEvent.change(screen.getByLabelText('事件标题（必填）'), { target: { value: '标题' } });
@@ -227,7 +228,7 @@ describe('ReferenceEventComposer · 双月周历选择器（起止周）', () =>
     openCalendar();
     pickWeek(4);
     pickWeek(2);
-    expect(screen.getByText('已选 W2–W4 · 3 周')).toBeTruthy();
+    expect(screen.getByText(`已选 ${MATE_WEEKS[1]}–${MATE_WEEKS[3]} · 3 周`)).toBeTruthy();
   });
 
   it('月导航 ‹ ›：翻月后跨月连续选周；‹ 在首页禁用', () => {
@@ -239,7 +240,7 @@ describe('ReferenceEventComposer · 双月周历选择器（起止周）', () =>
     // 跨月连续：2 月的 W5 起始、3 月的 W7 止周（不同月页各一行）
     pickWeek(5);
     pickWeek(7);
-    expect(screen.getByText('已选 W5–W7 · 3 周')).toBeTruthy();
+    expect(screen.getByText(`已选 ${MATE_WEEKS[4]}–${MATE_WEEKS[6]} · 3 周`)).toBeTruthy();
   });
 
   it('「图上拖选」触发 onPickRange（父层收起弹层、面板顶操作条）', () => {

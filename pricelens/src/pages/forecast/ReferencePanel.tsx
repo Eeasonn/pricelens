@@ -35,6 +35,11 @@
 // - 名录默认收起为一根「事件 N ▸」细条（组件态记忆展开），不再分来源组；
 //   「主链 · 同周龄校正」「窗内」chip 删除；「仅历史」「模拟历史」合并为
 //   单个「模拟历史」；参考回放条目不带「草稿」标。
+// 2026-11-05 二轮收尾：
+// - 卡头「模拟历史」chip 退役为 ？说明图标（HintInfo，全局 #7 同规则），
+//   title 合并模拟语境；「仅对照」为产品身份语义 chip，保留。
+// - 周段标签统一日历周：名录行 / 证据浮框 / 参考回放条目经 eventRangeLabel
+//   传产品锚（2025W24 形态，与图 X 轴同口径；换算收编在 referenceEventModel）。
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Dropdown, Popover } from 'antd';
@@ -42,7 +47,7 @@ import { brandColorOf, color, motion, radius, selectAccent, selectSoft, selectSo
 import usePageViewState from '../../state/usePageViewState';
 import type { LifecycleProductSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult } from './workbenchModel';
-import { CollapsibleSection, SectionHead, SimChip, workbenchCardStyle } from './WorkbenchBits';
+import { CollapsibleSection, HintInfo, SectionHead, workbenchCardStyle } from './WorkbenchBits';
 import ReferenceVolumeChart from './ReferenceVolumeChart';
 import ReferenceTimeTrack, { type ReferenceWindowPreset } from './ReferenceTimeTrack';
 import ReferenceEventComposer from './ReferenceEventComposer';
@@ -160,7 +165,7 @@ function replayEntryFor(
     eventId: ev.id,
     startWeek: ev.startWeek,
     endWeek: ev.endWeek,
-    text: `${shortLabelOf(product)} · ${eventRangeLabel(ev)} · ${ev.label}`,
+    text: `${shortLabelOf(product)} · ${eventRangeLabel(ev, product)} · ${ev.label}`,
   };
 }
 
@@ -177,6 +182,8 @@ function replayEntryFor(
 //   自动展开并可清；focusReq（图锚 / 定位）展开态下滚动定位 + 短暂强调。
 // ------------------------------------------------------------
 function ReferenceRoster(props: {
+  /** 参照产品（事件周段标签的日历周锚点 = launchWeekLabel）。 */
+  product: LifecycleProductSeed;
   events: EffectiveReferenceEvent[];
   selectedEventId: string | null;
   hoverEventId: string | null;
@@ -196,7 +203,7 @@ function ReferenceRoster(props: {
   saveFlash: { eventId: string; key: number } | null;
 }) {
   const {
-    events, selectedEventId, hoverEventId, onHoverEvent, onSelectEvent,
+    product, events, selectedEventId, hoverEventId, onHoverEvent, onSelectEvent,
     onEditEvent, onRestorePreset, onDeleteComposed, labelOf, colorOf,
     onlyIds, onClearOnly, focusReq, saveFlash,
   } = props;
@@ -272,7 +279,8 @@ function ReferenceRoster(props: {
         <div style={{ display: 'grid', gap: 4, maxHeight: filtered.length > 8 ? 176 : undefined, overflowY: filtered.length > 8 ? 'auto' : undefined }}>
           {filtered.map((ev) => {
             const selected = selectedEventId === ev.id;
-            const rangeLabel = eventRangeLabel(ev);
+            // 行短周段标签 = 日历周 ID（2025W24，与图轴同口径；锚 = launchWeekLabel）
+            const rangeLabel = eventRangeLabel(ev, product);
             const rowLabel = `${rangeLabel} ${ev.label}`;
             const impact = ev.impact;
             return (
@@ -625,6 +633,7 @@ function ReferenceChartCard({
       />
       {/* 统一事件名录（默认收起「事件 N ▸」；无来源标注；保存成功 0.6s 闪强） */}
       <ReferenceRoster
+        product={product}
         events={events}
         selectedEventId={selectedEvent?.id ?? null}
         hoverEventId={hoverEventId}
@@ -1116,8 +1125,12 @@ export default function ReferencePanel({
             >
               ① 基线预测 · 历史参照
             </span>
-            {/* 2026-11-05 视觉精简二轮：「仅历史」「模拟历史」合并为单个「模拟历史」 */}
-            <SimChip variant="simHistory" title="参照序列为纯历史的模拟样本回放，无预测段，不代表真实市场" />
+            {/* 2026-11-05 二轮收尾（全局 #7）：模拟历史 chip 退役为 ？说明图标
+                （HintInfo），title 合并模拟语境；「仅对照」为产品身份语义 chip 保留 */}
+            <HintInfo
+              label="量价参考卡说明"
+              text="模拟历史 · 演示样本回放：参照产品历史序列为纯历史的模拟样本（仅历史、无预测段），量价与事件不代表真实市场；仅作历史参照，不写入主链、不进模型推演。"
+            />
           </>
         )}
       />

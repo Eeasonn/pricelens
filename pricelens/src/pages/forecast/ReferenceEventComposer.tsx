@@ -27,7 +27,9 @@ import {
   NOTE_MAX,
   REFERENCE_DECAY_LABEL,
   contrastHintOf,
+  mondayMsOfIsoWeek,
   validateReferenceDraftValue,
+  weekIdOfMondayMs,
   type ReferenceDecay,
   type ReferenceEventDraftValue,
 } from './referenceEventModel';
@@ -43,24 +45,9 @@ const HEX_RE = /^#[0-9a-f]{6}$/i;
 
 const DAY_MS = 86_400_000;
 
-/**
- * ISO 周一毫秒（与 workbenchCalendar 同一规则：W1 = 含当年首个周四的周，
- * 周一起算）。仅作周历锚点换算，不新造假日历。
- */
-function mondayMsOfIsoWeek(year: number, week: number): number {
-  const jan4 = Date.UTC(year, 0, 4);
-  const day = new Date(jan4).getUTCDay(); // 0 = 周日
-  const mondayWeek1 = jan4 - ((day === 0 ? 7 : day) - 1) * DAY_MS;
-  return mondayWeek1 + (week - 1) * 7 * DAY_MS;
-}
-
-/** 周一毫秒 → 跨年周 ID（YYYYWww；ISO 周四定周年，跨年不串值）。 */
-function weekIdOfMondayMs(mondayMs: number): string {
-  const thursday = mondayMs + 3 * DAY_MS;
-  const thursdayDate = new Date(thursday);
-  const week = Math.round((thursday - mondayMsOfIsoWeek(thursdayDate.getUTCFullYear(), 1)) / (7 * DAY_MS)) + 1;
-  return `${thursdayDate.getUTCFullYear()}W${String(week).padStart(2, '0')}`;
-}
+// 周历锚点换算（mondayMsOfIsoWeek / weekIdOfMondayMs）2026-11-05 二轮整改起
+// 收编至 referenceEventModel 领域模型层，本文件经 import 复用（与量价参考图
+// X 轴 / 事件周段标签同一套，不造第二套日历）。
 
 /** 双月周历的单周行（index = 生命周期周序 0 基）。 */
 interface LifecycleCalWeek {
@@ -156,16 +143,19 @@ export default function ReferenceEventComposer(props: {
   const validation = validateReferenceDraftValue(value);
   const show = (bad: boolean): boolean => attempted && bad;
   const duration = value.startWeek != null && value.endWeek != null ? value.endWeek - value.startWeek + 1 : null;
-  const rangeText = value.startWeek != null && value.endWeek != null
-    ? `已选 W${value.startWeek + 1}–W${value.endWeek + 1} · ${duration} 周`
-    : value.startWeek != null
-      ? `已选 W${value.startWeek + 1} · 请选择止周`
-      : '尚未选择起止周';
-  const contrastHint = contrastHintOf(resolved.type.color, seriesColor);
-
   // ---- 双月周历（2026-11-05 视觉精简二轮）：两月并排，行 = 整周（周一起）----
   const calWeeks = useMemo(() => lifecycleCalendarWeeks(product), [product]);
   const calMonths = useMemo(() => calendarMonthsOf(calWeeks), [calWeeks]);
+  // 已选区间读法统一日历周口径（2025W24，与图轴 / 事件周段标签同形；周历缺行回退相对 W 序）
+  const weekIdAt = (index: number): string => calWeeks[index]?.weekId ?? `W${index + 1}`;
+  const rangeText = value.startWeek != null && value.endWeek != null
+    ? (value.startWeek === value.endWeek
+      ? `已选 ${weekIdAt(value.startWeek)} · ${duration} 周`
+      : `已选 ${weekIdAt(value.startWeek)}–${weekIdAt(value.endWeek)} · ${duration} 周`)
+    : value.startWeek != null
+      ? `已选 ${weekIdAt(value.startWeek)} · 请选择止周`
+      : '尚未选择起止周';
+  const contrastHint = contrastHintOf(resolved.type.color, seriesColor);
   const [calOpen, setCalOpen] = useState(false);
   const [calPage, setCalPage] = useState(0);
   /** 第一次点击锁定的起始周（非空 = 等待第二次点击选止周）。 */

@@ -9,8 +9,11 @@
 // [样本窗/有效周数/特征/系数/留出 MAE/MAPE——全部来自 result.learning] →
 // 构成按 ①学习→①范围事件→②大盘→③库存→手调 排序、每项可定位对应卡 →
 // 动作「微调本周」）；Esc 关闭固定（编辑态粘滞由页面周销弹窗承接）。
-// 产品范围事件图顶锚 = A 编号 + 起止端点 + 范围线（不铺全高色带）；
-// 重叠 ≤2 lane，其余 +N 打开图下名录筛选；名录行提供编辑 / 删除（键盘可达）。
+// 产品范围事件 / 促销档期事件锚（2026-11-05 Eason 全局 #2）：起始周小方块点
+// （7px 事件色 + A 编号小标）——「起止端点 + 范围线」与「轴下档期文字标注」
+// 下线；hover / focus 显示起止区间底衬（0.14）+ 精简证据浮框（EvidenceFrame
+// role=status），click / Enter 固定（role=dialog）；重叠 ≤2 lane，其余 +N 打开
+// 图下名录筛选；名录行提供编辑 / 删除（键盘可达）。
 // 价格手调墨色「价」小标与周销墨色菱形并存；库存截断琥珀描边读 supplyCapped。
 // 价格系列显示过渡态 effectivePrice（marginView prop 可选；缺省 = fixture 原价
 // ——MarginView 正式接线在任务 9 / T10）。数据表替换为 MainForecastDataTable
@@ -27,6 +30,10 @@
 // - 线宽统一到价格走势页基准：主类线 width 2（实/虚同宽，虚线 dasharray 区分）。
 // - 图下名录 + 数据表 + 页面传入的 extras（IoBar / 摘要）收进共享
 //   CollapsibleSection「数据与操作」（默认收起；默认视图 = 卡头 + 图表本身）。
+// 2026-11-05 Eason 全局反馈落实（主图）：#1 图例全部可点（「库存上限修正」
+//   描边与「事件」整层收进可点图例，「说明项」行下线）；#8 SVG 文本对齐量价
+//   页基准（font.family + tabular-nums + 字号 10 + mute；月分组刻度弃用 mono）。
+//   #3 卡头「模拟」chip → HintInfo 在页面卡头（ForecastPage），主线统一处理。
 // ============================================================
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { brandColor, color, font, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
@@ -59,7 +66,7 @@ export interface MainForecastView {
   showYTicks: boolean;
   /** 周标签密度：compact = 月刻度抽稀步长 ×1.5；detail = 每月。 */
   labelMode: 'compact' | 'detail';
-  /** 促销呈现开关：档期琥珀色带已下线（2026-11-04 评审），现仅控制轴下促销日期标注显隐；字段名保留兼容共享工具行。 */
+  /** 促销呈现开关：档期琥珀色带已下线（2026-11-04 评审），现仅控制促销档期起始周小方块点显隐；字段名保留兼容共享工具行。 */
   promoBandOn: boolean;
   /** 视图窗（B.5.4）：full = 全期（默认）；m3 = 预测末三月；w8 = 近 8 周；custom = 时间轨手调窗（windowRange）。只改可见范围，不裁剪模型。 */
   window?: 'full' | 'm3' | 'w8' | 'custom';
@@ -96,16 +103,20 @@ const DECAY_TEXT: Record<ProductEventSeed['decay'], string> = {
 /** 跨卡定位目标（B.5.2 CrossCardFocus 子集：主图证据构成项 → 对应卡）。 */
 export type MainChartFocusCard = 'reference' | 'market' | 'inventory';
 
-/** 数据系列图例（均可点击切换显隐；库存描边是预测样式，归说明项）。
- *  2026-11-05：「参考 · 上一代同周龄」参考线与其图例项删除（对照由①参考卡承担）。 */
-const LEGEND_SERIES: LegendItem[] = [
+/** 促销档期方块点的固定事件 id（与范围事件 id 共用 hover/pin 状态机）。 */
+const PROMO_MARK_ID = 'promo-window';
+
+/** 主图图例（2026-11-05 Eason 全局 #1）：全部可点（WorkbenchLegend 规格：
+ *  aria-pressed + 隐藏态 opacity .45），图外底部居中一行，「数据系列 / 说明项」
+ *  分组行下线。「参考 · 上一代同周龄」参考线项保持删除（对照由①参考卡承担）；
+ *  「库存上限修正」= 预测柱琥珀描边样式显隐；「事件」= 范围事件 / 促销档期
+ *  方块点 + 事件区间底衬整层显隐。 */
+const LEGEND_ITEMS: LegendItem[] = [
   { key: 'actual', label: '周销 实际', shape: 'rect', color: color.link },
   { key: 'forecast', label: '周销 预测', shape: 'rectDash', color: color.link },
   { key: 'price', label: '价格（右轴）', shape: 'line', color: brandColor.HUAWEI },
-];
-/** 说明项图例（无 key = 纯说明，不可点击）。 */
-const LEGEND_NOTES: LegendItem[] = [
-  { label: '库存上限修正周（琥珀描边 · 预测样式）', shape: 'rectAmber', color: color.warning },
+  { key: 'capped', label: '库存上限修正（琥珀描边）', shape: 'rectAmber', color: color.warning },
+  { key: 'events', label: '事件', shape: 'rect', color: color.ink },
 ];
 
 /** 构成项阶段排序（B.5.4：①学习 → ①范围事件 → ②大盘 → ③库存 → 手调）。 */
@@ -169,6 +180,9 @@ export default function MainForecastChart({
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  /** 事件锚（范围事件 / 促销档期方块点）hover / 固定态（2026-11-05 全局 #2）。 */
+  const [hoverEventId, setHoverEventId] = useState<string | null>(null);
+  const [pinnedEventId, setPinnedEventId] = useState<string | null>(null);
   const [overflowIds, setOverflowIds] = useState<string[] | null>(null);
   const show = (key: string): boolean => !hidden.has(key);
   const toggle = (key: string) => setHidden((prev) => {
@@ -212,12 +226,16 @@ export default function MainForecastChart({
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return;
-      // Esc 分级：先回证据（关固定回预览），再关闭（预览随 hover 消失）。
+      // Esc 分级：先回事件证据（关固定回预览），再回周证据（预览随 hover 消失）。
+      if (pinnedEventId != null) {
+        setPinnedEventId(null);
+        return;
+      }
       setPinnedIndex((prev) => (prev != null ? null : prev));
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, []);
+  }, [pinnedEventId]);
 
   const weeks = chartWeeks;
   // 时间边界派生（WP5 Step 3）：预测起点 / 历史终点 / 今天分界共用同一来源，禁写死下标。
@@ -229,11 +247,15 @@ export default function MainForecastChart({
   const x = (index: number): number => LEFT + (index + 0.5) * slot;
   const boundaryX = hasHistory && hasForecast ? (x(historyEnd) + x(forecastStart)) / 2 : null;
 
-  // 促销档期 = 轴下日期标注（琥珀色带下线，只留轴上最小日期标记）。
+  // 促销档期 = 起始周小方块点（轴下文字标注与琥珀色带均已下线，2026-11-05 全局 #2）。
   const forecastPromoWindow = fixture.promoWindows.find((window) =>
     weeks.some((week) => week.weekId === window.startWeekId && week.status === 'forecast')) ?? null;
   const promoStartIndex = forecastPromoWindow
     ? weeks.findIndex((week) => week.weekId === forecastPromoWindow.startWeekId)
+    : -1;
+  // 档期区间在可见窗内的终点（止周被视图裁掉时 = 可见末周；底衬只画可见范围）。
+  const promoEndIndex = forecastPromoWindow
+    ? weeks.findIndex((week) => week.weekId === forecastPromoWindow.endWeekId)
     : -1;
   const promoMarkOn = viewState.promoBandOn && promoStartIndex >= 0;
 
@@ -295,7 +317,9 @@ export default function MainForecastChart({
   const cappedFactWeeks = allWeeks.filter((week) => week.supplyCapped);
   const manualWeeks = allWeeks.filter((week) => week.manual != null);
 
-  // 范围事件图顶锚（B.5.4）：A 编号 + 起止端点 + 范围线；重叠 ≤2 lane，其余 +N 名录筛选。
+  // 范围事件方块点（2026-11-05 全局 #2：起止端点 + 范围线下线，只留起始周点 +
+  // hover 区间底衬）；lane 仍按起止区间分配，避免相邻事件方块点 / A 标重叠；
+  // 重叠 ≤2 lane，其余 +N 名录筛选。
   const calendar = useMemo(() => buildForecastCalendar(fixture.calendar), [fixture.calendar]);
   const chartIndexOfWeekId = useMemo(() => new Map(weeks.map((week, index) => [week.weekId, index])), [weeks]);
   const rangeAnchors = useMemo(() => {
@@ -332,7 +356,7 @@ export default function MainForecastChart({
     );
   }
 
-  const ariaLabel = `${fixture.context.product} 量价预测主图：历史 ${fixture.context.historyRange} 演示实际实柱、预测 ${fixture.context.forecastRange} 虚柱；预测期总销量 ${fmtWan(result.summary.totalSales)}；大促峰 ${result.summary.peak.weekId} ${fmtWan(result.summary.peak.value)}；促销档期 ${forecastPromoWindow ? `${forecastPromoWindow.startWeekId} 起` : '无'}（轴下日期标注）；${cappedFactWeeks.length ? `库存上限修正 ${cappedFactWeeks[0]!.weekId} 起` : '未触发库存上限修正'}；横轴按月分组，周详情见证据浮框与数据表。`;
+  const ariaLabel = `${fixture.context.product} 量价预测主图：历史 ${fixture.context.historyRange} 演示实际实柱、预测 ${fixture.context.forecastRange} 虚柱；预测期总销量 ${fmtWan(result.summary.totalSales)}；大促峰 ${result.summary.peak.weekId} ${fmtWan(result.summary.peak.value)}；促销档期 ${forecastPromoWindow ? `${forecastPromoWindow.startWeekId} 起（起始周小方块点，悬停显示档期区间）` : '无'}；范围事件 ${params.productEvents.length} 个（起始周小方块点，悬停显示起止区间）；${cappedFactWeeks.length ? `库存上限修正 ${cappedFactWeeks[0]!.weekId} 起` : '未触发库存上限修正'}；横轴按月分组，周详情见证据浮框与数据表。`;
 
   const activeIndex = pinnedIndex ?? hoverIndex;
   const activeWeek = activeIndex != null ? weeks[activeIndex] ?? null : null;
@@ -352,6 +376,18 @@ export default function MainForecastChart({
     { key: 'w8', label: '近 8 周' },
   ];
 
+  // 事件锚焦点（2026-11-05 Eason 全局 #2）：固定 > hover；事件浮框优先于周证据浮框。
+  const eventFocusId = pinnedEventId ?? hoverEventId;
+  const focusAnchor = eventFocusId != null
+    ? rangeAnchors.placed.find((anchor) => anchor.event.id === eventFocusId) ?? null
+    : null;
+  const promoFocusActive = eventFocusId === PROMO_MARK_ID && promoMarkOn;
+  /** 方块点点击 / Enter：固定（或取消固定）事件证据；周固定证据让位。 */
+  const toggleEventPin = (id: string): void => {
+    setPinnedIndex(null);
+    setPinnedEventId((prev) => (prev === id ? null : id));
+  };
+
   return (
     <div style={{ display: 'grid', gap: space.sm }}>
       {controls}
@@ -364,11 +400,11 @@ export default function MainForecastChart({
             aria-label={ariaLabel}
             style={{ display: 'block', height: 'auto' }}
           >
-            {/* 今天分界：只留虚线 + 轴上「今天」日期 */}
+            {/* 今天分界：只留虚线 + 轴上「今天」日期（全局 #8：font.family + tabular-nums + mute） */}
             {boundaryX != null && (
               <>
                 <line x1={boundaryX} x2={boundaryX} y1={TOP - 6} y2={TOP + plotH} stroke={color.hairlineStrong} strokeDasharray="4 4" />
-                <text x={boundaryX - 6} y={H - 8} textAnchor="end" fontSize={10} fontWeight={600} fill={color.body}>{`今天 ${fixture.context.todayLabel}`}</text>
+                <text x={boundaryX - 6} y={H - 8} textAnchor="end" fontSize={10} fontWeight={600} fill={color.mute} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`今天 ${fixture.context.todayLabel}`}</text>
               </>
             )}
 
@@ -380,13 +416,13 @@ export default function MainForecastChart({
                     <line key={`grid-${tick}`} x1={LEFT} y1={y(tick)} x2={W - RIGHT} y2={y(tick)} />
                   ))}
                 </g>
-                <g fontSize={10} fill={color.mute} textAnchor="end">
+                <g fontSize={10} fill={color.mute} textAnchor="end" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {volumeTicks.map((tick) => (
                     <text key={`vt-${tick}`} x={LEFT - 8} y={y(tick) + 3}>{wanOf(tick)}</text>
                   ))}
                 </g>
-                <text x={LEFT - 8} y={TOP - 10} fontSize={10} fill={color.mute} textAnchor="end">万台</text>
-                <g fontSize={10} fill={color.mute} textAnchor="start">
+                <text x={LEFT - 8} y={TOP - 10} fontSize={10} fill={color.mute} textAnchor="end" fontFamily={font.family}>万台</text>
+                <g fontSize={10} fill={color.mute} textAnchor="start" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {priceTicks.map((tick) => (
                     <text key={`pt-${tick}`} x={W - RIGHT + 8} y={yPrice(tick) + 3}>{`$${tick}`}</text>
                   ))}
@@ -402,7 +438,7 @@ export default function MainForecastChart({
               if (value == null) return null;
               const forecast = week.status === 'forecast';
               if (forecast ? !show('forecast') : !show('actual')) return null;
-              const adjusted = week.capped;
+              const adjusted = week.capped && show('capped');
               const reason = week.manual?.reason ?? '';
               return (
                 <rect
@@ -444,7 +480,7 @@ export default function MainForecastChart({
                   <rect x={cx - 8} y={cy - 9} width={16} height={13} rx={2.5} fill={color.ink} stroke={color.canvas} strokeWidth={1.2}>
                     <title>{`价格手调 · 显示价 $${overridePrice}`}</title>
                   </rect>
-                  <text x={cx} y={cy + 1} textAnchor="middle" fontSize={9.5} fontWeight={700} fill={color.onPrimary}>价</text>
+                  <text x={cx} y={cy + 1} textAnchor="middle" fontSize={10} fontWeight={700} fill={color.onPrimary} fontFamily={font.family}>价</text>
                 </g>
               );
             })}
@@ -462,7 +498,7 @@ export default function MainForecastChart({
                     <title>{`手调${reason ? `：${reason}` : ''}`}</title>
                   </path>
                   {reason && (
-                    <text x={cx} y={cy - 10} textAnchor="middle" fontSize={9} fill={color.body}>
+                    <text x={cx} y={cy - 10} textAnchor="middle" fontSize={10} fill={color.mute} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {short}
                       <title>{reason}</title>
                     </text>
@@ -471,59 +507,20 @@ export default function MainForecastChart({
               );
             })}
 
-            {/* 产品范围事件图顶锚（B.5.4）：A 编号 + 起止端点 + 范围线；≤2 lane；不铺全高色带 */}
-            {rangeAnchors.placed.map(({ event, order, lane, startIdx, endIdx }) => {
-              const tone = PRODUCT_EVENT_COLOR[event.type];
-              const laneY = laneYOf(lane);
-              const x1 = x(startIdx);
-              const x2 = x(endIdx);
-              return (
-                <g key={`range-${event.id}`} data-range-anchor={event.id}>
-                  <line data-range-event-id={event.id} x1={x1} y1={laneY} x2={x2} y2={laneY} stroke={tone} strokeWidth={2} />
-                  <rect x={x1 - 3} y={laneY - 3} width={6} height={6} fill={color.canvas} stroke={tone} strokeWidth={1.4} />
-                  <rect x={x2 - 3} y={laneY - 3} width={6} height={6} fill={color.canvas} stroke={tone} strokeWidth={1.4} />
-                  <circle cx={x1} cy={laneY} r={8.5} fill={color.canvas} stroke={tone} strokeWidth={1.4} />
-                  <text x={x1} y={laneY + 3.5} textAnchor="middle" fontSize={10} fill={tone} fontWeight={600}>{`A${order + 1}`}</text>
-                  <title>{`${PRODUCT_EVENT_LABEL[event.type]} · ${event.label || '未命名事件'}（${event.startWeekId}–${event.endWeekId}，${fmtSignedPct(event.magnitudePct)} · ${DECAY_TEXT[event.decay]}）`}</title>
-                </g>
-              );
-            })}
-            {/* 重叠超出两条 lane：+N 打开名录筛选（键盘可达） */}
-            {rangeAnchors.overflow.length > 0 && (
-              <g
-                role="button"
-                tabIndex={0}
-                aria-label={`其余 ${rangeAnchors.overflow.length} 个重叠范围事件 · 名录筛选`}
-                onClick={() => setOverflowIds(rangeAnchors.overflow.map((event) => event.id))}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    setOverflowIds(rangeAnchors.overflow.map((event) => event.id));
-                  }
-                }}
-                style={{ cursor: 'pointer' }}
-              >
-                <rect x={W - RIGHT - 74} y={TOP - 2} width={44} height={16} rx={8} fill={color.canvas} stroke={color.hairlineStrong} strokeWidth={1} />
-                <text x={W - RIGHT - 52} y={TOP + 10} textAnchor="middle" fontSize={10} fontWeight={600} fill={color.body}>{`+${rangeAnchors.overflow.length}`}</text>
-                <title>其余重叠范围事件：打开图下名录筛选</title>
-              </g>
-            )}
+            {/* 产品范围事件 / 促销档期方块点统一收进「事件层」（命中区之后渲染，
+                保证 hover / focus 可达；见下方 data-event-layer） */}
 
-            {/* 横轴月分组刻度：全站月日历格式 YYYY-MM；取刻度同源 axisTickPlan */}
-            <g fontSize={10} fill={color.mute} textAnchor="middle" fontFamily={font.mono}>
+            {/* 横轴月分组刻度：全站月日历格式 YYYY-MM；取刻度同源 axisTickPlan。
+                2026-11-05 全局 #8：font.family + tabular-nums（DESIGN.md：Geist Mono
+                只用于周 ID / 版本等技术标记，YYYY-MM 日历刻度随量价页用正文字体）。 */}
+            <g fontSize={10} fill={color.mute} textAnchor="middle" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
               {monthPlan.indexes.map((monthIndex) => {
                 const weekIndex = monthFirstWeekIndex.get(monthKeys[monthIndex]!) ?? 0;
                 return <text key={monthKeys[monthIndex]!} x={x(weekIndex)} y={H - 24}>{monthKeys[monthIndex]}</text>;
               })}
             </g>
 
-            {/* 促销档期日期标注：轴下最小标记（起点小刻度 + 日期文字），不上色带 */}
-            {promoMarkOn && (
-              <g key="promo-mark">
-                <line x1={x(promoStartIndex)} x2={x(promoStartIndex)} y1={H - 21} y2={H - 14} stroke={color.hairlineStrong} strokeWidth={1} />
-                <text x={x(promoStartIndex)} y={H - 5} textAnchor="middle" fontSize={10} fontWeight={600} fill={color.body}>{forecastPromoWindow?.label ?? '促销档期'}</text>
-              </g>
-            )}
+            {/* 促销档期轴下日期标注已删（2026-11-05 全局 #2）：改为事件层内起始周小方块点 */}
 
             {/* 命中区：hover/focus 出证据预览；预测周可聚焦（button），click/Enter 固定证据；
                 微调经证据动作「微调本周」（周销弹窗原因选填，页面承接） */}
@@ -545,22 +542,169 @@ export default function MainForecastChart({
                   onMouseLeave={() => setHoverIndex((prev) => (prev === index ? null : prev))}
                   onFocus={() => setHoverIndex(index)}
                   onBlur={() => setHoverIndex((prev) => (prev === index && pinnedIndex !== index ? null : prev))}
-                  onClick={() => forecast && setPinnedIndex((prev) => (prev === index ? null : index))}
+                  onClick={() => {
+                    if (!forecast) return;
+                    // 固定周证据让位事件固定态（同一时刻只有一个证据浮框）。
+                    setPinnedEventId(null);
+                    setPinnedIndex((prev) => (prev === index ? null : index));
+                  }}
                   onKeyDown={(event) => {
                     if (!forecast) return;
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
+                      setPinnedEventId(null);
                       setPinnedIndex((prev) => (prev === index ? null : index));
                     }
                   }}
                 />
               );
             })}
+
+            {/* 事件层（2026-11-05 Eason 全局 #2，渲染在命中区之上保证 hover/focus 可达）：
+                范围事件 / 促销档期统一「起始周小方块点」（7px 事件色 + A 编号小标）；
+                hover / focus 显示起止区间底衬（0.14）+ 精简证据浮框，click/Enter 固定；
+                图例「事件」隐藏时整层（方块点 + 底衬 + +N）隐藏。 */}
+            {show('events') && (
+              <g data-event-layer="">
+                {/* 事件区间底衬（hover / focus 临时；pointerEvents none 不挡周命中区） */}
+                {focusAnchor != null && (
+                  <rect
+                    data-event-shade={focusAnchor.event.id}
+                    x={x(focusAnchor.startIdx) - slot / 2}
+                    y={TOP}
+                    width={(focusAnchor.endIdx - focusAnchor.startIdx + 1) * slot}
+                    height={plotH}
+                    fill={PRODUCT_EVENT_COLOR[focusAnchor.event.type]}
+                    fillOpacity={0.14}
+                    pointerEvents="none"
+                  />
+                )}
+                {promoFocusActive && forecastPromoWindow != null && (
+                  <rect
+                    data-event-shade={PROMO_MARK_ID}
+                    x={x(promoStartIndex) - slot / 2}
+                    y={TOP}
+                    width={(Math.max(promoEndIndex, weeks.length - 1) - promoStartIndex + 1) * slot}
+                    height={plotH}
+                    fill={color.warning}
+                    fillOpacity={0.14}
+                    pointerEvents="none"
+                  />
+                )}
+                {/* 范围事件方块点：起始周 7px 事件色方块 + A 编号小标（范围线 / 起止端点已删） */}
+                {rangeAnchors.placed.map(({ event, order, lane, startIdx }) => {
+                  const tone = PRODUCT_EVENT_COLOR[event.type];
+                  const laneY = laneYOf(lane);
+                  const dotCx = x(startIdx);
+                  return (
+                    <g
+                      key={`event-dot-${event.id}`}
+                      data-event-dot={event.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={eventFocusId === event.id}
+                      aria-label={`事件 A${order + 1} · ${PRODUCT_EVENT_LABEL[event.type]}（${event.startWeekId}–${event.endWeekId}），悬停显示起止区间`}
+                      style={{ cursor: 'pointer' }}
+                      onMouseEnter={() => setHoverEventId(event.id)}
+                      onMouseLeave={() => setHoverEventId((prev) => (prev === event.id ? null : prev))}
+                      onFocus={() => setHoverEventId(event.id)}
+                      onBlur={() => setHoverEventId((prev) => (prev === event.id && pinnedEventId !== event.id ? null : prev))}
+                      onClick={() => toggleEventPin(event.id)}
+                      onKeyDown={(keyEvent) => {
+                        if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+                          keyEvent.preventDefault();
+                          toggleEventPin(event.id);
+                        }
+                      }}
+                    >
+                      <rect x={dotCx - 3.5} y={laneY - 3.5} width={7} height={7} fill={tone} stroke={color.canvas} strokeWidth={1}>
+                        <title>{`${PRODUCT_EVENT_LABEL[event.type]} · ${event.label || '未命名事件'}（${event.startWeekId}–${event.endWeekId}，${fmtSignedPct(event.magnitudePct)} · ${DECAY_TEXT[event.decay]}）· 悬停看区间，点击固定`}</title>
+                      </rect>
+                      <text x={dotCx + 8} y={laneY + 3.5} textAnchor="start" fontSize={10} fontWeight={600} fill={tone} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`A${order + 1}`}</text>
+                    </g>
+                  );
+                })}
+                {/* 重叠超出两条 lane：+N 打开名录筛选（键盘可达） */}
+                {rangeAnchors.overflow.length > 0 && (
+                  <g
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`其余 ${rangeAnchors.overflow.length} 个重叠范围事件 · 名录筛选`}
+                    onClick={() => setOverflowIds(rangeAnchors.overflow.map((event) => event.id))}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setOverflowIds(rangeAnchors.overflow.map((event) => event.id));
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <rect x={W - RIGHT - 74} y={TOP - 2} width={44} height={16} rx={8} fill={color.canvas} stroke={color.hairlineStrong} strokeWidth={1} />
+                    <text x={W - RIGHT - 52} y={TOP + 10} textAnchor="middle" fontSize={10} fontWeight={600} fill={color.body} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`+${rangeAnchors.overflow.length}`}</text>
+                    <title>其余重叠范围事件：打开图下名录筛选</title>
+                  </g>
+                )}
+                {/* 促销档期方块点：起点 7px 琥珀方块（轴下常驻文字标注已删），hover 出档期区间底衬与名称 */}
+                {promoMarkOn && forecastPromoWindow != null && (
+                  <g
+                    key="promo-dot"
+                    data-event-dot={PROMO_MARK_ID}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={eventFocusId === PROMO_MARK_ID}
+                    aria-label={`促销档期 ${forecastPromoWindow.label || ''}（${forecastPromoWindow.startWeekId}–${forecastPromoWindow.endWeekId}），悬停显示档期区间`}
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={() => setHoverEventId(PROMO_MARK_ID)}
+                    onMouseLeave={() => setHoverEventId((prev) => (prev === PROMO_MARK_ID ? null : prev))}
+                    onFocus={() => setHoverEventId(PROMO_MARK_ID)}
+                    onBlur={() => setHoverEventId((prev) => (prev === PROMO_MARK_ID && pinnedEventId !== PROMO_MARK_ID ? null : prev))}
+                    onClick={() => toggleEventPin(PROMO_MARK_ID)}
+                    onKeyDown={(keyEvent) => {
+                      if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+                        keyEvent.preventDefault();
+                        toggleEventPin(PROMO_MARK_ID);
+                      }
+                    }}
+                  >
+                    <rect x={x(promoStartIndex) - 3.5} y={TOP + plotH - 3.5} width={7} height={7} fill={color.warning} stroke={color.canvas} strokeWidth={1}>
+                      <title>{`${forecastPromoWindow.label || '促销档期'}（${forecastPromoWindow.startWeekId}–${forecastPromoWindow.endWeekId}）· 悬停看档期区间`}</title>
+                    </rect>
+                  </g>
+                )}
+              </g>
+            )}
           </svg>
 
-          {/* 证据浮框：hover/focus = 预览（role=status，不拦截指针）；click/Enter = 固定（role=dialog）。
-              固定态粘滞（页面周销弹窗打开时保持），Esc 先回证据再关闭。 */}
-          {activeWeek != null && activeIndex != null && (
+          {/* 证据浮框（2026-11-05 全局 #2）：事件锚浮框（固定 > hover 预览）优先于
+              周证据；周证据 hover/focus = 预览（role=status，不拦截指针）、
+              click/Enter = 固定（role=dialog）。固定态粘滞（页面周销弹窗打开时
+              保持），Esc 先回证据再关闭。 */}
+          {focusAnchor != null && (
+            <EventEvidence
+              event={focusAnchor.event}
+              order={focusAnchor.order}
+              duration={durationOfWeekRange(calendar, focusAnchor.event)}
+              flip={focusAnchor.startIdx > weeks.length / 2}
+              pinned={pinnedEventId === focusAnchor.event.id}
+              onClose={() => {
+                if (pinnedEventId === focusAnchor.event.id) setPinnedEventId(null);
+                else setHoverEventId(null);
+              }}
+            />
+          )}
+          {focusAnchor == null && promoFocusActive && forecastPromoWindow != null && (
+            <PromoEvidence
+              promo={forecastPromoWindow}
+              duration={durationOfWeekRange(calendar, forecastPromoWindow)}
+              flip={promoStartIndex > weeks.length / 2}
+              pinned={pinnedEventId === PROMO_MARK_ID}
+              onClose={() => {
+                if (pinnedEventId === PROMO_MARK_ID) setPinnedEventId(null);
+                else setHoverEventId(null);
+              }}
+            />
+          )}
+          {focusAnchor == null && !promoFocusActive && activeWeek != null && activeIndex != null && (
             pinnedIndex != null ? (
               <WeekEvidence
                 week={activeWeek}
@@ -638,16 +782,10 @@ export default function MainForecastChart({
         </div>
       </div>
 
-      {/* 图例：数据系列（可点击切换显隐）/ 说明项（纯说明）两组分开 */}
-      <div style={{ display: 'grid', justifyContent: 'center', gap: 2 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: color.mute, flex: 'none' }}>数据系列</span>
-          <WorkbenchLegend items={LEGEND_SERIES} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: color.mute, flex: 'none' }}>说明项</span>
-          <WorkbenchLegend items={LEGEND_NOTES} hidden={hidden} style={{ marginTop: 0 }} />
-        </div>
+      {/* 图例（2026-11-05 Eason 全局 #1）：全部可点（aria-pressed + 隐藏态 opacity .45），
+          图外底部居中一行；「事件」隐藏 = 方块点 + 事件底衬整层隐藏。 */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <WorkbenchLegend items={LEGEND_ITEMS} hidden={hidden} onToggle={toggle} />
       </div>
 
       {/* 「数据与操作」收起区（2026-11-05 视觉精简二轮，默认收起 = 组件内存态）：
@@ -747,6 +885,90 @@ function coveringPromoId(calendar: ReturnType<typeof buildForecastCalendar>, fix
 /** 构成项定位映射（B.5.2：每项可跳对应卡；无对应卡 = null 不出按钮）。 */
 function locateCardOf(kind: string): MainChartFocusCard | null {
   return CONSIDER_CARD[kind] ?? null;
+}
+
+/**
+ * 范围事件精简证据浮框（2026-11-05 Eason 全局 #2）：方块点 hover/focus = 预览
+ * （role=status，不拦截指针）、click/Enter = 固定（role=dialog）。读数全部来自
+ * 事件种子与日历派生（durationOfWeekRange），UI 不复算、不反推。
+ */
+function EventEvidence({
+  event,
+  order,
+  duration,
+  flip,
+  pinned,
+  onClose,
+}: {
+  event: ProductEventSeed;
+  order: number;
+  /** 派生周数（日历绝对 index；起止无效 = null）。 */
+  duration: number | null;
+  flip: boolean;
+  pinned?: boolean;
+  onClose: () => void;
+}) {
+  const valueRow = (label: string, value: string): ReactNode => (
+    <div key={label} style={stageRowStyle}>
+      <span>{label}</span>
+      <b style={{ fontWeight: 600, color: color.ink }}>{value}</b>
+    </div>
+  );
+  return (
+    <EvidenceFrame
+      title={`事件 A${order + 1} · ${PRODUCT_EVENT_LABEL[event.type]}`}
+      status={`${event.startWeekId} – ${event.endWeekId}`}
+      role={pinned ? 'dialog' : 'status'}
+      ariaLabel={`事件 A${order + 1} 证据`}
+      flip={flip}
+      onClose={onClose}
+      shellProps={pinned ? undefined : { style: { pointerEvents: 'none' } }}
+    >
+      {valueRow('名称', event.label || '未命名事件')}
+      {valueRow('幅度（起始峰值）', fmtSignedPct(event.magnitudePct))}
+      {valueRow('形状', DECAY_TEXT[event.decay])}
+      {valueRow('派生周数', duration != null ? `${duration} 周` : '—')}
+    </EvidenceFrame>
+  );
+}
+
+/**
+ * 促销档期精简证据浮框（2026-11-05 Eason 全局 #2）：档期方块点 hover/focus 显示
+ * 档期区间底衬与名称；读数来自 fixture.promoWindows 与日历派生。
+ */
+function PromoEvidence({
+  promo,
+  duration,
+  flip,
+  pinned,
+  onClose,
+}: {
+  promo: WorkbenchFixture['promoWindows'][number];
+  duration: number | null;
+  flip: boolean;
+  pinned?: boolean;
+  onClose: () => void;
+}) {
+  const valueRow = (label: string, value: string): ReactNode => (
+    <div key={label} style={stageRowStyle}>
+      <span>{label}</span>
+      <b style={{ fontWeight: 600, color: color.ink }}>{value}</b>
+    </div>
+  );
+  return (
+    <EvidenceFrame
+      title={promo.label || '促销档期'}
+      status="促销档期"
+      role={pinned ? 'dialog' : 'status'}
+      ariaLabel={`促销档期 ${promo.label || ''}`}
+      flip={flip}
+      onClose={onClose}
+      shellProps={pinned ? undefined : { style: { pointerEvents: 'none' } }}
+    >
+      {valueRow('起止', `${promo.startWeekId} – ${promo.endWeekId}`)}
+      {valueRow('派生周数', duration != null ? `${duration} 周` : '—')}
+    </EvidenceFrame>
+  );
 }
 
 const stageRowStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'baseline' };

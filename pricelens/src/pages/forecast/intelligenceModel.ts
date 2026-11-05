@@ -377,3 +377,179 @@ export function findDuplicateImpacts(
 
 /** fixture 类型再出口（面板预览签名用；避免面板直接依赖 fixture 内部路径）。 */
 export type WorkbenchFixtureLike = WorkbenchFixture;
+
+// ------------------------------------------------------------
+// 模拟情报候选（2026-11-05 大盘卡整改：情报列改右侧 1/3 常驻展示）：
+// 确定性演示数据，字段结构对齐 B.4.3 契约（IntelligenceItem /
+// EventRecommendation）；dataStatus 恒 'simulated' 显式标识（PRODUCT.md：
+// 模拟数据必须显式表达，不给真实来源链接）。供 MarketBusPanel 以
+// availability="ready" 注入 IntelligenceReviewPanel——先列后删 / 逐条审核
+// （接受 / 改参 / 拒绝）/ 批量规则（跨目标只可整理）交互照旧。真实候选
+// 接入层另议：接入后由接入层投递替换本出口；月 / 周 id 均落在唯一日历
+// 预测范围（2026-11—2027-10）内，validateRecommendation 全部可过。
+// 纯静态数据：不读时间、不用随机数、不改入参。
+// ------------------------------------------------------------
+export interface SimulatedIntelligenceFeed {
+  items: IntelligenceItem[];
+  recommendations: EventRecommendation[];
+}
+
+/** 适用范围（对齐唯一 fixture 上下文：俄罗斯 / 手机 / 全渠道；市场级无产品）。 */
+const SIM_SCOPE = { country: '俄罗斯', industry: '手机', channel: '全渠道', product: null } as const;
+
+export const simulatedIntelligenceCandidates: SimulatedIntelligenceFeed = {
+  items: [
+    {
+      intelligenceId: 'intel-sim-001',
+      title: '友商旗舰 X5 预计 2027-01 发布',
+      summary: '竞品动态：友商旗舰 X5 定档 2027-01 海外发布，首销期叠加渠道铺货资源，同价位段需求可能被分流。',
+      excerpt: '「X5 已进入量产爬坡，计划 2027 年 1 月海外首销，首发档期配套渠道激励与陈列资源。」',
+      sourceName: '渠道周报（模拟样本）',
+      sourceUrl: null,
+      publishedAt: '2026-10-26T09:00:00.000Z',
+      capturedAt: '2026-10-28T09:00:00.000Z',
+      dataStatus: 'simulated',
+      scope: SIM_SCOPE,
+    },
+    {
+      intelligenceId: 'intel-sim-002',
+      title: '黑五网一大促 2026W47-W49',
+      summary: '档期情报：2026 黑五网一档期落在 2026W47–W49，平台流量与促销资源集中，历史同期观察到明显销量脉冲。',
+      excerpt: '「黑五大促 11 月下旬开跑，网一收尾；主推会场报名与平台补贴窗口已开放。」',
+      sourceName: '平台档期日历（模拟样本）',
+      sourceUrl: null,
+      publishedAt: '2026-10-27T09:00:00.000Z',
+      capturedAt: '2026-10-29T09:00:00.000Z',
+      dataStatus: 'simulated',
+      scope: SIM_SCOPE,
+    },
+    {
+      intelligenceId: 'intel-sim-003',
+      title: '运营商 Q1 补贴政策落地',
+      summary: '渠道情报：运营商 Q1 换机补贴政策预计 2027-01 起落地，合约机补贴覆盖主价位段，或抬升季度需求。',
+      excerpt: '「Q1 终端补贴预算已批复，1 月起按合约档位执行，补贴期约一个季度。」',
+      sourceName: '运营商政策简报（模拟样本）',
+      sourceUrl: null,
+      publishedAt: '2026-10-28T09:00:00.000Z',
+      capturedAt: '2026-10-30T09:00:00.000Z',
+      dataStatus: 'simulated',
+      scope: SIM_SCOPE,
+    },
+    {
+      intelligenceId: 'intel-sim-004',
+      title: '关税调整推高渠道成本',
+      summary: '成本情报：进口关税调整预期推高渠道到岸成本，2027-02 起单台成本或上移，只作成本参考，不自动改价。',
+      excerpt: '「关税调整方案进入执行阶段，渠道反馈 2 月起到岸成本上行约 4%。」',
+      sourceName: '关务通报（模拟样本）',
+      sourceUrl: null,
+      publishedAt: '2026-10-29T09:00:00.000Z',
+      capturedAt: '2026-10-31T09:00:00.000Z',
+      dataStatus: 'simulated',
+      scope: SIM_SCOPE,
+    },
+    {
+      intelligenceId: 'intel-sim-005',
+      title: '线上渠道补贴战延续',
+      summary: '竞争情报：线上平台补贴战预计延续到 2027 年初，幅度未定，需人工补参后才能转化为事件。',
+      excerpt: '「多家平台暗示年初延续价格补贴，具体力度与档期待官宣。」',
+      sourceName: '电商行业速讯（模拟样本）',
+      sourceUrl: null,
+      publishedAt: '2026-10-30T09:00:00.000Z',
+      capturedAt: '2026-10-31T09:00:00.000Z',
+      dataStatus: 'simulated',
+      scope: SIM_SCOPE,
+    },
+  ],
+  recommendations: [
+    {
+      candidateId: 'cand-sim-001',
+      intelligenceId: 'intel-sim-001',
+      target: 'market-month',
+      eventType: null,
+      label: '友商 X5 首销分流',
+      range: null,
+      startMonth: '2027-01',
+      startDay: 8,
+      durationMonths: 2,
+      magnitudePct: -5,
+      decay: null,
+      unitCost: null,
+      evidenceState: 'supported',
+      missingFields: [],
+      rationale: '首销期 2 个月同价位需求分流；参照历史友商上市段观察读数约 −6%，取保守值',
+      replayId: null,
+    },
+    {
+      candidateId: 'cand-sim-002',
+      intelligenceId: 'intel-sim-002',
+      target: 'product-range',
+      eventType: 'own-promo',
+      label: '黑五网一大促',
+      range: { startWeekId: '2026W47', endWeekId: '2026W49' },
+      startMonth: null,
+      startDay: null,
+      durationMonths: null,
+      magnitudePct: 18,
+      decay: 'decreasing',
+      unitCost: null,
+      evidenceState: 'supported',
+      missingFields: [],
+      rationale: '档期脉冲参照去年黑五回放（rp-promo-sale，峰值 +35% 退坡），主图范围事件取 +18% 起步',
+      replayId: 'rp-promo-sale',
+    },
+    {
+      candidateId: 'cand-sim-003',
+      intelligenceId: 'intel-sim-003',
+      target: 'market-month',
+      eventType: null,
+      label: '运营商 Q1 补贴',
+      range: null,
+      startMonth: '2027-01',
+      startDay: 1,
+      durationMonths: 3,
+      magnitudePct: 6,
+      decay: null,
+      unitCost: null,
+      evidenceState: 'supported',
+      missingFields: [],
+      rationale: '补贴期约一个季度，按档期抬升假设 +6%（可改）',
+      replayId: null,
+    },
+    {
+      candidateId: 'cand-sim-004',
+      intelligenceId: 'intel-sim-004',
+      target: 'cost-reference',
+      eventType: null,
+      label: '关税成本上移',
+      range: null,
+      startMonth: '2027-02',
+      startDay: null,
+      durationMonths: null,
+      magnitudePct: null,
+      decay: null,
+      unitCost: 615,
+      evidenceState: 'supported',
+      missingFields: [],
+      rationale: '渠道反馈到岸成本上行约 4%（2027-02 版本成本 592 → 615）；只入④成本参考，不自动改价',
+      replayId: null,
+    },
+    {
+      candidateId: 'cand-sim-005',
+      intelligenceId: 'intel-sim-005',
+      target: 'market-month',
+      eventType: null,
+      label: '线上补贴战',
+      range: null,
+      startMonth: '2027-02',
+      startDay: 1,
+      durationMonths: 2,
+      magnitudePct: null,
+      decay: null,
+      unitCost: null,
+      evidenceState: 'insufficient',
+      missingFields: ['magnitudePct'],
+      rationale: '补贴力度未官宣：幅度待人工补参，补参后方可应用',
+      replayId: null,
+    },
+  ],
+};

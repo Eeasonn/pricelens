@@ -1,18 +1,20 @@
 // ============================================================
-// 大盘卡（MarketBusPanel）组件测试（jsdom · v3 · 2026-11-05 精简三轮迁移）：
-// 2026-11-05 拍板（高保真 market-card-hifi 为实施规格）：
-// - 卡头 = 「② 大盘修正」+ 模拟 chip + AI 推测·可改徽章（hover 三步链 v2-3）
-//   + 图内高亮开关（默认关）+ 「事件与情报」右侧滑出菜单按钮；
-// - 信息删减：头部说明长句、「输入与读数」整块（IoBar + AI 季基线读数行）、
-//   底部说明长句全部删除（不留残根）；
-// - 事件与情报 = 右侧滑出菜单（默认收起、图表恒占满全宽；translateX 过渡 +
-//   遮罩，Esc / ✕ / 遮罩关闭；情报候选空态 + 人工事件列表 + ＋添加事件）；
-// - 添加事件浮窗 = 绝对定位悬浮图上（不改变图表区高度）：名称选填 / 说明选填 /
-//   起止周 = 双月周历选择器（起点行→终点行，自动收起回填）/ 幅度 / 衰减 chips；
-//   保存经 workbenchModel.monthSeedOfWeekRange 映射进 MarketMonthEventSeed；
-// - 图上标注统一 = 箭头-线小标（月事件琥珀 / 周口径事件灰），hover → 区间
-//   临时高亮，图内高亮开关 = 常驻底衬，「事件」图例项控制整层；
-// - 衰减形状：MarketMonthEventSeed 可选 decay（缺省递减；flat = 恒定）。
+// 大盘卡（MarketBusPanel）组件测试（jsdom · v3 · 2026-11-05 看图反馈整改）：
+// 2026-11-05 Eason 反馈 #5-#7 + 全局 #1/#2/#8：
+// - 卡头 = 「② 大盘修正」+ 单个 HintInfo（模拟 chip 与 AI 推测·可改徽章
+//   退役合并，title = 模拟语境 + AI 基线信任语言）+ 卡头「＋事件」按钮
+//   （形态对齐量价参考卡卡头）；抽屉 / 三步链浮层断言删除；
+// - 卡体两栏 = 左图表区 + 右 1/3 情报常驻列（340px；≤760px 由 index.css
+//   既有 [data-lpl-intelligence-grid] 断点堆叠，jsdom 不测媒体查询）：情报候选
+//   availability="ready"（模拟候选 5 条，先列后删 / 批量规则）+ 人工事件
+//   名录（CollapsibleSection 收起头 + 11px 行）；列内滚动兜底；
+// - y 轴横向 gridline 全删只留刻度文字（无网格净图）；
+// - 图上事件小标 = 小方块点（8px 事件色，对齐起始位置；箭头-线已删），
+//   hover → 区间临时高亮 + <title> 精简 tooltip；
+// - 图内高亮开关在图例行「事件」项旁（默认关）；图例四项全部可点显隐；
+// - 添加事件浮窗 = 绝对定位悬浮图上（不改变图表区高度）：名称选填 /
+//   说明选填 / 起止周 = 双月周历选择器 / 幅度 / 衰减 chips；保存经
+//   workbenchModel.monthSeedOfWeekRange 映射进 MarketMonthEventSeed。
 // 月度证据浮框（v2-1）、图上双锚点（v2-2）、月调整反馈（B.5.6）契约不变。
 // 只验证 React 组装与交互开关，不验证图表像素（SVG 由 typecheck 保证结构）。
 // ============================================================
@@ -82,12 +84,12 @@ const monthHit = (monthKey: string): Element => {
   return hit as Element;
 };
 
-/** 滑出菜单开合 helper：点卡头「事件与情报」按钮。 */
-const toggleDrawer = (): void => {
-  fireEvent.click(screen.getByRole('button', { name: '事件与情报' }));
+/** 情报列人工事件名录展开 helper：点 CollapsibleSection 收起头。 */
+const expandManualEvents = (count = 1): void => {
+  fireEvent.click(screen.getByRole('button', { name: `人工事件 · ${count}` }));
 };
 
-/** 滑出菜单内「＋ 添加事件」按钮。 */
+/** 卡头「＋事件」按钮（情报列整改后入口在卡头控件簇）。 */
 const clickAddEvent = (): void => {
   fireEvent.click(document.querySelector('[data-lpl-add-event-button]') as HTMLButtonElement);
 };
@@ -168,17 +170,34 @@ describe('大盘卡 · 模型纯函数：恒定形状与周历↔月度事件映
   });
 });
 
-describe('大盘卡 · 卡头（2026-11-05 精简）：② 大盘修正 + 图内高亮开关 + 事件与情报按钮', () => {
-  it('卡头 = 「② 大盘修正」+ 模拟 chip + AI 推测·可改徽章 + 图内高亮开关（默认关）+ 事件与情报按钮', () => {
+describe('大盘卡 · 卡头（2026-11-05 整改）：② 大盘修正 + HintInfo + ＋事件按钮', () => {
+  it('卡头 = 「② 大盘修正」+ 单个 HintInfo（模拟 + AI 基线合并 title）+ 「＋事件」按钮（量价参考卡头同款形态）', () => {
     setup();
     const marketSection = Array.from(document.querySelectorAll('section'))
       .find((section) => section.querySelector('h2')?.textContent === '② 大盘修正');
     expect(marketSection).toBeTruthy();
-    expect(screen.getAllByText('模拟').length).toBeGreaterThan(0);
-    expect(document.body.textContent ?? '').toContain('AI 推测 · 可改');
-    const hlSwitch = screen.getByRole('switch', { name: '图内高亮：关' });
-    expect(hlSwitch.getAttribute('aria-checked')).toBe('false');
-    expect(screen.getByRole('button', { name: '事件与情报' }).getAttribute('aria-expanded')).toBe('false');
+    // chip 退役（反馈 #7）：卡头不再有「模拟」chip（情报列候选行只在合并元信息行携带数据状态文字）
+    expect(screen.queryByText('模拟')).toBeNull();
+    expect(document.body.textContent ?? '').not.toContain('AI 推测 · 可改');
+    // 合并为单个 HintInfo：? 号说明图标 + 合并 title（模拟语境 + AI 基线信任语言）
+    const hints = document.querySelectorAll('section [aria-label="大盘修正卡说明"]');
+    expect(hints).toHaveLength(1);
+    const hintTitle = hints[0].getAttribute('title') ?? '';
+    expect(hintTitle).toContain('模拟数据');
+    expect(hintTitle).toContain('确定性外推');
+    expect(hintTitle).toContain('AI 基线 · 可直接修改，改动即人工确认');
+    // 卡头「＋事件」按钮（data-lpl-add-event-button；headButtonStyle 形态）
+    const add = document.querySelector('[data-lpl-add-event-button]') as HTMLButtonElement | null;
+    expect(add).not.toBeNull();
+    expect(add?.getAttribute('aria-label')).toBe('添加事件');
+    expect(add?.textContent).toContain('＋事件');
+    expect(add?.style.height).toBe('24px');
+    expect(add?.style.fontSize).toBe('11.5px');
+    // 抽屉机制整体退役：无抽屉按钮 / 抽屉容器 / 遮罩 / 三步链浮层触发器
+    expect(screen.queryByRole('button', { name: '事件与情报' })).toBeNull();
+    expect(document.querySelector('[data-lpl-drawer]')).toBeNull();
+    expect(document.querySelector('[data-lpl-drawer-scrim]')).toBeNull();
+    expect(document.querySelector('[data-lpl-ai-chain-root]')).toBeNull();
   });
 
   it('信息删减（不留残根）：头部说明长句 / IoBar / AI 预测季基线读数行 / 底部说明长句全部不存在', () => {
@@ -405,137 +424,91 @@ describe('大盘卡 · v2-2：图上双锚点（hover 临时，移开即恢复�
   });
 });
 
-describe('大盘卡 · v2-3：徽章三步链浮层（零新增常驻元素）', () => {
-  it('默认态无三步链浮层；hover 徽章 → 三步链出现（样本 → 两个规律 → 外推，数字与模型同源）', () => {
-    setup();
-    const trigger = document.querySelector('[data-lpl-ai-chain-root]');
-    expect(trigger).not.toBeNull();
-    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
-    expect(document.querySelector('[data-lpl-ai-chain-popover]')).toBeNull();
-    fireEvent.mouseOver(trigger as Element);
-    const popover = document.querySelector('[data-lpl-ai-chain-popover]');
-    expect(popover).not.toBeNull();
-    expect(trigger?.getAttribute('aria-expanded')).toBe('true');
-    expect((popover as HTMLElement).getAttribute('role')).toBe('dialog');
-    const steps = popover?.querySelectorAll('[data-lpl-chain-step]');
-    expect(steps).toHaveLength(3);
-    const text = popover?.textContent ?? '';
-    // 步 1 样本：24 个月历史段（2024-11–2026-10）
-    expect(steps?.[0].textContent ?? '').toContain('样本');
-    expect(steps?.[0].textContent ?? '').toContain('2024-11 – 2026-10 · 24 个月大盘指数');
-    // 步 2 两个规律：季节（2027Q1 去年同季月形）+ 趋势（近 6 个月环比均值 −0.7%/月，模型同源）
-    expect(steps?.[1].textContent ?? '').toContain('两个规律');
-    expect(steps?.[1].textContent ?? '').toContain('100.00% / 99.44% / 100.56%');
-    expect(steps?.[1].textContent ?? '').toContain('近 6 个月（2026-05–2026-10）环比均值 −0.7%/月');
-    // 步 3 外推：算例（2027Q1 基线 105.0 → 105.0 · 104.4 · 105.6，与 computeMarketMonths 同源）
-    expect(steps?.[2].textContent ?? '').toContain('外推');
-    expect(steps?.[2].textContent ?? '').toContain('例：2027Q1 基线 105.0 × 去年同季月形 → 105.0 · 104.4 · 105.6');
-    // 口径注释显式声明（模型与 UI 同一窗口）
-    expect(text).toContain('趋势读数 = 近 6 个月实际段环比，模型与浮框同一函数');
-    // 移开即收起（零常驻元素）
-    fireEvent.mouseOut(trigger as Element);
-    expect(document.querySelector('[data-lpl-ai-chain-popover]')).toBeNull();
-  });
-
-  it('键盘可达：Enter 切换三步链浮层（aria-expanded 同步）', () => {
-    setup();
-    const trigger = document.querySelector('[data-lpl-ai-chain-root]') as Element;
-    fireEvent.keyDown(trigger, { key: 'Enter' });
-    expect(document.querySelector('[data-lpl-ai-chain-popover]')).not.toBeNull();
-    expect(trigger.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.keyDown(trigger, { key: 'Enter' });
-    expect(document.querySelector('[data-lpl-ai-chain-popover]')).toBeNull();
-  });
-});
-
-describe('大盘卡 · 右侧滑出菜单（2026-11-05：事件与情报，默认收起，图表恒占满全宽）', () => {
-  it('卡体恒单列定高 330：默认收起 = 图表占满全宽；滑出菜单为浮层叠加（不改变卡体 grid）', () => {
+describe('大盘卡 · 卡体两栏（2026-11-05 整改 #5+#6）：左图表区 + 右 1/3 情报常驻列', () => {
+  it('卡体定高 330 两栏：左图表 1fr + 右情报列 340px；无抽屉/遮罩残根；SVG 宽 100% 无 letterbox', () => {
     setup();
     const bodyGrid = document.querySelector('[data-testid="market-body-grid"]') as HTMLElement | null;
     expect(bodyGrid).toBeTruthy();
     expect(bodyGrid?.style.height).toBe('330px');
-    expect(bodyGrid?.style.gridTemplateColumns).toBe('minmax(0, 1fr)');
-    // 打开滑出菜单：grid 仍单列（菜单是 absolute 浮层，不挤压图表）
-    toggleDrawer();
-    expect(bodyGrid?.style.gridTemplateColumns).toBe('minmax(0, 1fr)');
-    // 左图 SVG 宽度 100%（viewBox 760 与实际宽 ≈1:1，无 letterbox）
+    expect(bodyGrid?.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 340px)');
+    // 窄屏退化挂点：复用 index.css 既有 [data-lpl-intelligence-grid] ≤760px 单列断点
+    expect(bodyGrid?.hasAttribute('data-lpl-intelligence-grid')).toBe(true);
+    // 左图 SVG 宽度 100%（viewBox 宽 = 实测渲染宽口径，无 letterbox）
     const svg = document.querySelector('svg[role="img"]') as SVGSVGElement | null;
     expect(svg?.getAttribute('width')).toBe('100%');
     expect(svg?.getAttribute('height')).toBeNull();
+    expect(svg?.getAttribute('viewBox')).toMatch(/^0 0 \d+ 252$/);
   });
 
-  it('滑出菜单开合：默认收起（translateX(105%)）；按钮 / ✕ / 遮罩 / Esc 均可关闭；aria-expanded 同步', () => {
+  it('右情报列常驻：IntelligenceReviewPanel availability="ready" + 模拟候选 5 条（先列后审/批量规则），dataStatus 显式模拟', () => {
     setup();
-    const drawer = document.querySelector('[data-lpl-drawer]') as HTMLElement;
-    expect(drawer.getAttribute('data-open')).toBe('false');
-    expect(drawer.getAttribute('aria-hidden')).toBe('true');
-    expect(drawer.style.transform).toBe('translateX(105%)');
-    // 动效参数：transform 过渡（motion.base = 240ms）
-    expect(drawer.style.transition).toContain('240ms');
-    expect(drawer.style.transition).toContain('transform');
-    const button = screen.getByRole('button', { name: '事件与情报' });
-    expect(button.getAttribute('aria-expanded')).toBe('false');
-    // 打开
-    fireEvent.click(button);
-    expect(drawer.getAttribute('data-open')).toBe('true');
-    expect(drawer.getAttribute('aria-hidden')).toBe('false');
-    expect(drawer.style.transform).toBe('translateX(0)');
-    expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect(document.querySelector('[data-lpl-drawer-scrim]')).not.toBeNull();
-    // ✕ 关闭
-    fireEvent.click(screen.getByRole('button', { name: '关闭事件与情报' }));
-    expect(drawer.getAttribute('data-open')).toBe('false');
-    // 再开 → Esc 关闭
-    fireEvent.click(button);
-    fireEvent.keyDown(drawer, { key: 'Escape' });
-    expect(drawer.getAttribute('data-open')).toBe('false');
-    // 再开 → 遮罩点击关闭（同时收起浮窗）
-    fireEvent.click(button);
-    clickAddEvent();
-    expect(document.querySelector('[data-lpl-event-popover]')).not.toBeNull();
-    fireEvent.click(document.querySelector('[data-lpl-drawer-scrim]') as Element);
-    expect(drawer.getAttribute('data-open')).toBe('false');
-    expect(document.querySelector('[data-lpl-event-popover]')).toBeNull();
-  });
-
-  it('滑出菜单内容两块：情报候选空态（先列后审，禁用按钮）+ 人工事件区（列表 + ＋添加事件）', () => {
-    setup({ overrides: { marketMonthEvents: [FOLD_MONTH_EVENT] } });
+    const intel = document.querySelector('[data-lpl-market-intel]') as HTMLElement | null;
+    expect(intel).not.toBeNull();
+    expect(document.querySelector('[data-lpl-intelligence-panel]')?.getAttribute('data-lpl-intelligence-availability')).toBe('ready');
     const text = document.body.textContent ?? '';
-    // 上块：情报候选空态（availability="pending"，真实候选另议）
-    expect(text).toContain('情报候选 · 待审核 0');
-    expect(text).toContain('候选生成能力待接入');
-    expect(document.body.textContent ?? '').not.toContain('候选事件位');
-    expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
-    const trigger = Array.from(document.querySelectorAll('button')).find((button) =>
-      (button.getAttribute('title') ?? '').includes('候选生成能力待接入'));
-    expect(trigger?.disabled).toBe(true);
-    // 下块：人工事件列表行（名称 / 起止周段 / 幅度 / 衰减）＋ 添加事件
-    const row = document.querySelector('[data-lpl-month-event-row="me-fold"]');
-    expect(row).not.toBeNull();
-    expect(row?.textContent ?? '').toContain('新春促销脉冲');
-    expect(row?.textContent ?? '').toContain('2027W04–2027W04');
-    expect(row?.textContent ?? '').toContain('+8% · 递减');
-    expect(document.querySelector('[data-lpl-add-event-button]')).not.toBeNull();
+    // 标题 = Top5 语义待审核数（5 条模拟候选）
+    expect(text).toContain('情报候选 · 待审核 5');
+    // 模拟候选内容（任务示例 4 条 + 需人工补参 1 条）
+    for (const title of [
+      '友商旗舰 X5 预计 2027-01 发布',
+      '黑五网一大促 2026W47-W49',
+      '运营商 Q1 补贴政策落地',
+      '关税调整推高渠道成本',
+      '线上渠道补贴战延续',
+    ]) {
+      expect(text).toContain(title);
+    }
+    // 依据状态与目标 chip 双通道（先列后审；跨目标批量规则可见）
+    expect(text).toContain('依据齐全');
+    expect(text).toContain('需人工补参');
+    expect(text).toContain('②大盘 · 月事件');
+    expect(text).toContain('主图 · 范围事件');
+    expect(text).toContain('④成本 · 成本参考');
+    // 模拟状态显式（PRODUCT.md：模拟数据必须文字标识，不靠颜色）
+    expect(text).toContain('模拟样本');
+    // 批量规则交互在位：全选 + 批量移除 / 批量拒绝 / 批量预览
+    expect(screen.getByLabelText('选择当前 Top5')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '批量移除' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '批量拒绝' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '批量预览' })).toBeTruthy();
+    // 5 行候选复选框 + 全选 1 = 6
+    expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(6);
   });
 
-  it('空名称事件显示「未命名事件」；行内「删除」回调带 id', () => {
+  it('情报列人工事件名录 = CollapsibleSection 收起头（默认收起）+ 11px 列表行；展开后行内编辑/删除在位', () => {
     const { onMonthEventRemove } = setup({
       overrides: { marketMonthEvents: [{ id: 'me-x', label: '', startMonth: '2026-12', startDay: 15, durationMonths: 2, magnitudePct: -6 }] },
     });
+    // 默认收起：行不渲染（CollapsibleSection 收起即卸载内容）
+    expect(document.querySelector('[data-lpl-month-event-row="me-x"]')).toBeNull();
+    // 展开名录
+    expandManualEvents(1);
     const row = document.querySelector('[data-lpl-month-event-row="me-x"]');
+    expect(row).not.toBeNull();
     expect(row?.textContent ?? '').toContain('未命名事件');
     expect(row?.textContent ?? '').toContain('−6%');
-    // 行内操作在滑出菜单内（默认收起时 aria-hidden，先打开再交互）
-    toggleDrawer();
+    expect(row?.textContent ?? '').toContain('递减');
+    // 行内「删除」回调带 id
     fireEvent.click(screen.getByRole('button', { name: '删除事件 未命名事件' }));
     expect(onMonthEventRemove).toHaveBeenCalledWith('me-x');
+    // 行内「编辑」打开同一浮窗编辑器
+    fireEvent.click(screen.getByRole('button', { name: '编辑事件 未命名事件' }));
+    expect(document.querySelector('[data-lpl-event-popover][data-lpl-event-popover-mode="edit"]')).not.toBeNull();
+  });
+
+  it('无人工事件时名录展开显示空态引导（入口指向卡头「＋事件」）', () => {
+    setup();
+    expandManualEvents(0);
+    const section = document.querySelector('[data-collapsible-section="人工事件 · 0"]');
+    expect(section).not.toBeNull();
+    expect(section?.textContent ?? '').toContain('暂无人工事件');
+    expect(section?.textContent ?? '').toContain('＋事件');
   });
 });
 
 describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器，悬浮图上不改变图表区高度）', () => {
-  it('浮窗悬浮在图上（absolute 定位）：打开后卡体高度仍 330px、grid 布局不变', () => {
+  it('浮窗悬浮在图上（absolute 定位）：打开后卡体高度仍 330px、两栏 grid 布局不变', () => {
     setup();
-    toggleDrawer();
     const bodyGrid = document.querySelector('[data-testid="market-body-grid"]') as HTMLElement;
     expect(bodyGrid.style.height).toBe('330px');
     clickAddEvent();
@@ -545,12 +518,11 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
     expect(pop?.style.position).toBe('absolute');
     // 浮层打开不改变图表区高度（定高策略不受浮层影响）
     expect(bodyGrid.style.height).toBe('330px');
-    expect(bodyGrid.style.gridTemplateColumns).toBe('minmax(0, 1fr)');
+    expect(bodyGrid.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 340px)');
   });
 
   it('字段齐全（名称选填 / 说明选填 / 起止周 / 幅度 / 衰减 chips）+ 默认值保存 → 映射进 MarketMonthEventSeed', () => {
     const { onMonthEventAdd } = setup();
-    toggleDrawer();
     clickAddEvent();
     expect(screen.getByLabelText('事件名称（选填）')).toBeTruthy();
     expect(screen.getByLabelText('事件说明（选填）')).toBeTruthy();
@@ -585,7 +557,6 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
     vi.useFakeTimers();
     try {
       const { onMonthEventAdd } = setup();
-      toggleDrawer();
       clickAddEvent();
       // 打开周历：默认页 = 2026年 11月 / 2026年 12月（两月并排）
       fireEvent.click(document.querySelector('[data-lpl-week-range-button]') as HTMLButtonElement);
@@ -628,7 +599,6 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
 
   it('衰减 chips 切换（递减/恒定）：恒定保存 → decay: flat；取消 / ✕ / Esc 均可关闭浮窗', () => {
     const { onMonthEventAdd } = setup();
-    toggleDrawer();
     clickAddEvent();
     fireEvent.click(document.querySelector('[data-lpl-decay-chip="flat"]') as HTMLButtonElement);
     expect(document.querySelector('[data-lpl-decay-chip="flat"]')?.getAttribute('aria-pressed')).toBe('true');
@@ -656,7 +626,7 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
       overrides: { marketMonthEvents: [{ id: 'me-x', label: '内存涨价', startMonth: '2026-12', startDay: 15, durationMonths: 2, magnitudePct: -6 }] },
       onMonthEventUpdate,
     });
-    toggleDrawer();
+    expandManualEvents(1);
     fireEvent.click(screen.getByRole('button', { name: '编辑事件 内存涨价' }));
     const pop = document.querySelector('[data-lpl-event-popover]');
     expect(pop?.getAttribute('data-lpl-event-popover-mode')).toBe('edit');
@@ -678,27 +648,53 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
   });
 });
 
-describe('大盘卡 · 图上标注统一（2026-11-05：箭头-线小标 + hover 区间高亮 + 图内高亮开关）', () => {
-  it('人工月事件 = 图顶部琥珀箭头-线小标（经日历反推周范围），hover 详情含均摊口径与衰减形状', () => {
+describe('大盘卡 · 图上标注统一（2026-11-05 全局 #2：小方块点 + hover 区间高亮 + 图内高亮开关在图例行）', () => {
+  it('人工月事件 = 图顶部琥珀小方块点（8px，对齐事件起始位置；箭头-线与图上名称已删），hover 详情含均摊口径与衰减形状', () => {
     setup({ overrides: { marketMonthEvents: [FOLD_MONTH_EVENT] } });
     const tick = document.querySelector('[data-lpl-event-tick="me-fold"]') as SVGGElement | null;
     expect(tick).not.toBeNull();
     expect(tick?.getAttribute('data-month-event-id')).toBe('me-fold');
-    // 箭头-线形态：两条箭头 path + 中间线
-    expect(tick?.querySelectorAll('path')).toHaveLength(2);
-    expect(tick?.querySelector('line')).not.toBeNull();
-    expect(tick?.querySelector('text')?.textContent).toBe('新春促销脉冲');
+    // 方块点形态：8×8 rect（rx 2，事件色）；无箭头 path / 区间连线 / 图上名称文字
+    const dot = tick?.querySelector('rect[data-lpl-event-dot]') as SVGRectElement | null;
+    expect(dot).not.toBeNull();
+    expect(dot?.getAttribute('width')).toBe('8');
+    expect(dot?.getAttribute('height')).toBe('8');
+    expect(dot?.getAttribute('rx')).toBe('2');
+    expect(dot?.getAttribute('fill')).toBe('#f5a623');
+    expect(tick?.querySelectorAll('path')).toHaveLength(0);
+    expect(tick?.querySelector('line')).toBeNull();
+    expect(tick?.querySelector('text')).toBeNull();
+    // 既有精简 tooltip（<title>）不变
     expect(tick?.querySelector('title')?.textContent ?? '').toContain('2027-01-29 起 · 1 个月 · +8% · 递减');
     expect(tick?.querySelector('title')?.textContent ?? '').toContain('首月覆盖 3/31 天');
   });
 
-  it('周口径行业事件 = 灰箭头-线小标（不占主视觉），带 hover 详情', () => {
+  it('周口径行业事件 = 灰小方块点（不占主视觉），带 hover 详情', () => {
     setup({ overrides: { marketEvents: [FOLD_WEEK_EVENT] } });
     const tick = document.querySelector('[data-lpl-event-tick="ev-fold"]') as SVGGElement | null;
     expect(tick).not.toBeNull();
     expect(tick?.getAttribute('data-week-event-id')).toBe('ev-fold');
+    expect(tick?.querySelector('rect[data-lpl-event-dot]')?.getAttribute('fill')).toBe('#737373');
     expect(tick?.querySelector('title')?.textContent ?? '').toContain('折叠屏阵营扩容');
     expect(tick?.querySelector('title')?.textContent ?? '').toContain('2026W46–2026W50');
+  });
+
+  it('y 轴横向 gridline 全删（反馈 #5）：无 hairline 横线组，只留刻度文字（含 font.family + tabular-nums）', () => {
+    setup();
+    const svg = document.querySelector('svg[role="img"]') as SVGSVGElement | null;
+    expect(svg).not.toBeNull();
+    // 无横向网格线（hairline stroke 的 line 一条都不留）
+    expect(svg?.querySelectorAll('line')).toHaveLength(1); // 仅历史/预测分界虚线
+    expect(svg?.querySelector('line')?.getAttribute('stroke-dasharray')).toBe('4 4');
+    // 刻度文字保留 + 风格对齐 volume 页（#8）：fontSize 10 / fill=mute / font.family / tabular-nums
+    const tickGroup = svg?.querySelector('g[font-family]') as SVGGElement | null;
+    expect(tickGroup?.getAttribute('font-size')).toBe('10');
+    expect(tickGroup?.getAttribute('fill')).toBe('#737373');
+    expect(tickGroup?.getAttribute('font-family')).toContain('Inter');
+    expect(tickGroup?.getAttribute('style')).toContain('tabular-nums');
+    expect(tickGroup?.querySelectorAll('text').length).toBeGreaterThan(0);
+    const axisGroup = svg?.querySelector('g[text-anchor="middle"]') as SVGGElement | null;
+    expect(axisGroup?.getAttribute('font-size')).toBe('10');
   });
 
   it('hover 小标 → 对应周区间临时高亮（移开即恢复）', () => {
@@ -711,16 +707,20 @@ describe('大盘卡 · 图上标注统一（2026-11-05：箭头-线小标 + hove
     expect(document.querySelector('[data-lpl-event-band-hover="me-fold"]')).toBeNull();
   });
 
-  it('图内高亮开关（默认关）：开 = 所有事件区间常驻底衬；关 = 移除', () => {
+  it('图内高亮开关挪到图例行「事件」项旁（默认关）：开 = 所有事件区间常驻底衬；关 = 移除；卡头无开关', () => {
     setup({ overrides: { marketMonthEvents: [FOLD_MONTH_EVENT], marketEvents: [FOLD_WEEK_EVENT] } });
     expect(document.querySelector('[data-lpl-event-band="me-fold"]')).toBeNull();
+    // 开关在图例行内（与 WorkbenchLegend 同一行容器；量价参考卡同处理）
     const hlSwitch = screen.getByRole('switch', { name: '图内高亮：关' });
+    const legendRow = hlSwitch.parentElement as HTMLElement;
+    expect(legendRow.textContent ?? '').toContain('事件');
+    expect(legendRow.querySelectorAll('[role="button"], button').length).toBeGreaterThanOrEqual(4);
     fireEvent.click(hlSwitch);
     expect(screen.getByRole('switch', { name: '图内高亮：开' }).getAttribute('aria-checked')).toBe('true');
     expect(document.querySelector('[data-lpl-event-band="me-fold"]')).not.toBeNull();
     expect(document.querySelector('[data-lpl-event-band="ev-fold"]')).not.toBeNull();
-    // 键盘可达：Enter 再切回关
-    fireEvent.keyDown(screen.getByRole('switch', { name: '图内高亮：开' }), { key: 'Enter' });
+    // 再点切回关（原生 button 键盘可达，Enter/Space 触发 click）
+    fireEvent.click(screen.getByRole('switch', { name: '图内高亮：开' }));
     expect(screen.getByRole('switch', { name: '图内高亮：关' }).getAttribute('aria-checked')).toBe('false');
     expect(document.querySelector('[data-lpl-event-band="me-fold"]')).toBeNull();
   });

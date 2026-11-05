@@ -18,7 +18,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import ReferencePanel, { type ReferenceInputSignal, type ReferenceLocateRequest } from '../ReferencePanel';
-import { workbenchFixture, type WorkbenchFixture } from '../workbenchFixture';
+import { lifecycleWeekIdsOf } from '../referenceEventModel';
+import { workbenchFixture, type LifecycleProductSeed, type WorkbenchFixture } from '../workbenchFixture';
 import { baseWorkbenchParams, computeWorkbench, type WorkbenchResult } from '../workbenchModel';
 import { resetReferenceEventTypeStoreForTests } from '../referenceEventTypeStore';
 import { resetReferenceWorkspacesForTests } from '../useReferenceWorkspace';
@@ -255,17 +256,33 @@ const PLOT_WIDTH = 600 - 84 - 52;
 const COL_W = PLOT_WIDTH / 108;
 const clientXAt = (index: number): number => Math.round(COL_W * (index + 0.5));
 
+/**
+ * 生命周期周序 → 日历周 ID（与图 X 轴同一换算，锚点 = launchWeekLabel，ISO 跨年进位）。
+ * 2026-11-05 整改 #1 后图轴 = 日历周标签（axisTickPlan：首尾恒显示 + n/9 抽稀 +
+ * 边界让位），窗口断言改按目标窗口内恒被显示的刻度下标取值。
+ */
+const POOL = fixture.references.lifecyclePool;
+const calendarWeeksOf = (label: string): string[] =>
+  lifecycleWeekIdsOf(POOL.find((p) => p.label === label) as LifecycleProductSeed);
+const MATE_WEEKS = calendarWeeksOf('Mate 80（上一代）');
+const GALAXY_WEEKS = calendarWeeksOf('Galaxy S25（友商同期）');
+
 // ============================================================
 describe('量价参考产品 · 卡头与文案收敛（含①阶段标）', () => {
-  it('标题 = 量价参考产品；① 基线预测 · 历史参照阶段标 + 单个模拟历史 chip；仅历史 / 主链校正 / 未完成 chip 删除', () => {
+  it('标题 = 量价参考产品；① 基线预测 · 历史参照阶段标 + 模拟历史 ？说明（HintInfo 退役）；仅历史 / 主链校正 / 未完成 chip 删除', () => {
     const { container } = renderPanel({ prevGenReferenceId: 'ref-mate80' });
     expect(screen.getByRole('heading', { name: '量价参考产品' })).toBeTruthy();
     // ①阶段标（B.5.1 卡头语言；不恢复旧长 IoBar）
     expect(screen.getByText('① 基线预测 · 历史参照')).toBeTruthy();
     expect(container.textContent ?? '').not.toContain('输入');
     expect(container.textContent ?? '').not.toContain('主图周销基准');
-    // 「仅历史」「模拟历史」合并为单个「模拟历史」
-    expect(screen.getAllByText('模拟历史')).toHaveLength(1);
+    // 2026-11-05 二轮（全局 #7）：「模拟历史」chip 退役为 ？说明图标（HintInfo），
+    // title 合并模拟语境；「仅对照」身份 chip 保留，文字态「模拟历史」不再出现
+    const hint = screen.getByLabelText('量价参考卡说明');
+    expect(hint.getAttribute('title')).toContain('模拟');
+    expect(hint.getAttribute('title')).toContain('不代表真实市场');
+    expect(hint.getAttribute('title')).toContain('不写入主链');
+    expect(screen.queryByText('模拟历史')).toBeNull();
     expect(screen.queryByText('仅历史')).toBeNull();
     // 「主链 · 同周龄校正」chip 删除（对照语义保留「仅对照」）
     expect(screen.queryByText('主链 · 同周龄校正')).toBeNull();
@@ -359,15 +376,16 @@ describe('量价参考产品 · 卡头与文案收敛（含①阶段标）', () 
 describe('量价参考产品 · 每面板独立窗口 / 同步 / 锁定', () => {
   it('面板窗口互不影响：Mate 80 起点 +8 周后 Galaxy 仍显示全周期（验收 1）', () => {
     renderPanel({ prevGenReferenceId: 'ref-mate80' });
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(true);
-    expect(chartHasWeek('Galaxy S25（友商同期）', 'W1')).toBe(true);
+    // 图轴 = 日历周标签（整改 #1）：首刻度 = 上市锚点周（下标 0 恒显示）
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(true);
+    expect(chartHasWeek('Galaxy S25（友商同期）', GALAXY_WEEKS[0])).toBe(true);
     const handle = screen.getByLabelText('Mate 80（上一代） 时间窗起点拖柄');
     for (let i = 0; i < 8; i++) fireEvent.keyDown(handle, { key: 'ArrowRight' });
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(false);
-    expect(chartHasWeek('Mate 80（上一代）', 'W9')).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(false);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[8])).toBe(true);
     // Galaxy 不动
-    expect(chartHasWeek('Galaxy S25（友商同期）', 'W1')).toBe(true);
-    expect(chartHasWeek('Galaxy S25（友商同期）', 'W9')).toBe(false);
+    expect(chartHasWeek('Galaxy S25（友商同期）', GALAXY_WEEKS[0])).toBe(true);
+    expect(chartHasWeek('Galaxy S25（友商同期）', GALAXY_WEEKS[8])).toBe(false);
     // 主链回调不受窗口影响（验收 2：窗口只决定查看范围）
     expect(screen.getByLabelText('Mate 80（上一代） 平移参考时间窗')).toBeTruthy();
   });
@@ -378,8 +396,8 @@ describe('量价参考产品 · 每面板独立窗口 / 同步 / 锁定', () => 
     for (let i = 0; i < 8; i++) fireEvent.keyDown(handle, { key: 'ArrowRight' });
     first.unmount();
     renderPanel({ prevGenReferenceId: 'ref-mate80' });
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(false);
-    expect(chartHasWeek('Mate 80（上一代）', 'W9')).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(false);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[8])).toBe(true);
   });
 
   it('同周龄同步默认关；开启后调整任一未锁定面板，其余未锁定面板按同周龄钳制', () => {
@@ -391,9 +409,9 @@ describe('量价参考产品 · 每面板独立窗口 / 同步 / 锁定', () => 
     const handle = screen.getByLabelText('Galaxy S25（友商同期） 时间窗起点拖柄');
     for (let i = 0; i < 4; i++) fireEvent.keyDown(handle, { key: 'ArrowRight' });
     // 两面板同窗 [4, 51]
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(false);
-    expect(chartHasWeek('Mate 80（上一代）', 'W5')).toBe(true);
-    expect(chartHasWeek('Galaxy S25（友商同期）', 'W5')).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(false);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[4])).toBe(true);
+    expect(chartHasWeek('Galaxy S25（友商同期）', GALAXY_WEEKS[4])).toBe(true);
   });
 
   it('锁定面板：轨道禁用（滑柄不可达）、同步与定位不改写它（验收 1 / §3.2）', () => {
@@ -409,8 +427,8 @@ describe('量价参考产品 · 每面板独立窗口 / 同步 / 锁定', () => 
     // 同步调整 Mate 80 → Galaxy 保持全周期
     const handle = screen.getByLabelText('Mate 80（上一代） 时间窗起点拖柄');
     for (let i = 0; i < 4; i++) fireEvent.keyDown(handle, { key: 'ArrowRight' });
-    expect(chartHasWeek('Mate 80（上一代）', 'W5')).toBe(true);
-    expect(chartHasWeek('Galaxy S25（友商同期）', 'W1')).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[4])).toBe(true);
+    expect(chartHasWeek('Galaxy S25（友商同期）', GALAXY_WEEKS[0])).toBe(true);
     // 解锁后手动调整可达
     fireEvent.click(screen.getByRole('button', { name: 'Galaxy S25（友商同期） 解锁时间窗' }));
     expect(screen.getByLabelText('Galaxy S25（友商同期） 时间窗起点拖柄').getAttribute('tabindex')).toBe('0');
@@ -419,9 +437,9 @@ describe('量价参考产品 · 每面板独立窗口 / 同步 / 锁定', () => 
   it('窗口预设：全周期 / 最近 16 周（v3 参考池 108 周 → 窗 [92,107]）；窗口不产生主链回调（验收 2）', async () => {
     const { onPrevGenReferenceChange } = renderPanel({ prevGenReferenceId: 'ref-mate80' });
     await pickSelectOption(document.body, 'Mate 80（上一代） 窗口预设', '最近 16 周');
-    expect(chartHasWeek('Mate 80（上一代）', 'W93')).toBe(true);
-    expect(chartHasWeek('Mate 80（上一代）', 'W108')).toBe(true);
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(false);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[92])).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[107])).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(false);
     fireEvent.keyDown(screen.getByLabelText('Mate 80（上一代） 时间窗终点拖柄'), { key: 'ArrowLeft' });
     expect(onPrevGenReferenceChange).not.toHaveBeenCalled();
   });
@@ -460,11 +478,11 @@ describe('量价参考产品 · 名录默认收起与无来源标注', () => {
     expect(text).not.toContain('窗内');
     expect(text).not.toContain('源已更新');
     // 行内容：起止周 + 标题（可访问名称）；幅度 · 衰减列（预标 impact 只作参考列）
-    expect(within(roster).getByRole('button', { name: '查看事件读数 W23 618 档期脉冲' })).toBeTruthy();
-    expect(within(roster).getByRole('button', { name: '编辑事件 W23 618 档期脉冲' })).toBeTruthy();
+    expect(within(roster).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]} 618 档期脉冲` })).toBeTruthy();
+    expect(within(roster).getByRole('button', { name: `编辑事件 ${MATE_WEEKS[22]} 618 档期脉冲` })).toBeTruthy();
     expect((roster.textContent ?? '')).toContain('+42% · 未标');
     // × 能力差异隐形保留：预标行 × = 恢复基准（aria 名称不带来源字样）
-    expect(within(roster).getByRole('button', { name: '恢复事件基准 W23 618 档期脉冲' })).toBeTruthy();
+    expect(within(roster).getByRole('button', { name: `恢复事件基准 ${MATE_WEEKS[22]} 618 档期脉冲` })).toBeTruthy();
   });
 
   it('编辑预标 → 覆写保存（弹层自动收起 + 名录闪强）→ × 恢复基准；fixture 原对象不被修改（验收 3）', async () => {
@@ -472,7 +490,7 @@ describe('量价参考产品 · 名录默认收起与无来源标注', () => {
     renderPanel({ prevGenReferenceId: 'ref-mate80' });
     const mateCard = cardOf('Mate 80（上一代）');
     expandRoster(mateCard);
-    fireEvent.click(within(mateCard).getByRole('button', { name: '编辑事件 W23 618 档期脉冲' }));
+    fireEvent.click(within(mateCard).getByRole('button', { name: `编辑事件 ${MATE_WEEKS[22]} 618 档期脉冲` }));
     const popover = await visiblePopover();
     expect(popover.textContent).toContain('编辑事件');
     // 双月周历：编辑打开时定位到起周所在月页（W23 → 2025年 6月），改止周 W26
@@ -484,8 +502,8 @@ describe('量价参考产品 · 名录默认收起与无来源标注', () => {
     fireEvent.change(noteInputIn(popover), { target: { value: '预售前移 + 平台补贴叠加' } });
     fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
     // 名录自动展开 + 新行短暂强调（0.6s 高亮淡出；先断言闪强，再等弹层收起）
-    await waitFor(() => expect(within(mateCard).getByRole('button', { name: '查看事件读数 W23–W26 618 档期脉冲（含预售）' })).toBeTruthy());
-    const row = (within(mateCard).getByRole('button', { name: '恢复事件基准 W23–W26 618 档期脉冲（含预售）' }).closest('div')) as HTMLElement;
+    await waitFor(() => expect(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]}–${MATE_WEEKS[25]} 618 档期脉冲（含预售）` })).toBeTruthy());
+    const row = (within(mateCard).getByRole('button', { name: `恢复事件基准 ${MATE_WEEKS[22]}–${MATE_WEEKS[25]} 618 档期脉冲（含预售）` }).closest('div')) as HTMLElement;
     expect(row.style.background).toBe('rgb(232, 241, 255)');
     await waitFor(() => expect(row.style.background).not.toBe('rgb(232, 241, 255)'), { timeout: 2000 });
     // 关闭行为：保存成功 → 弹层自动收起
@@ -497,8 +515,8 @@ describe('量价参考产品 · 名录默认收起与无来源标注', () => {
     expect(screen.getByText('已保存事件')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '关闭事件详情' })).toBeNull();
     // × 恢复基准 → 回 fixture 原值（可撤销）
-    fireEvent.click(within(mateCard).getByRole('button', { name: '恢复事件基准 W23–W26 618 档期脉冲（含预售）' }));
-    await waitFor(() => expect(within(mateCard).getByRole('button', { name: '查看事件读数 W23 618 档期脉冲' })).toBeTruthy());
+    fireEvent.click(within(mateCard).getByRole('button', { name: `恢复事件基准 ${MATE_WEEKS[22]}–${MATE_WEEKS[25]} 618 档期脉冲（含预售）` }));
+    await waitFor(() => expect(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]} 618 档期脉冲` })).toBeTruthy());
     expect(screen.getByText('已恢复预标')).toBeTruthy();
     // fixture 原始对象未被修改
     expect(JSON.stringify(fixture.references.lifecyclePool.map((p) => p.events))).toBe(snapshot);
@@ -511,16 +529,16 @@ describe('量价参考产品 · 证据浮框（五项精简）与删除 / 撤销
     renderPanel({ prevGenReferenceId: 'ref-mate80' });
     const mateCard = cardOf('Mate 80（上一代）');
     expandRoster(mateCard);
-    fireEvent.click(within(mateCard).getByRole('button', { name: '查看事件读数 W23 618 档期脉冲' }));
-    const detail = screen.getByRole('group', { name: '事件详情 W23 618 档期脉冲' });
+    fireEvent.click(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]} 618 档期脉冲` }));
+    const detail = screen.getByRole('group', { name: `事件详情 ${MATE_WEEKS[22]} 618 档期脉冲` });
     const text = detail.textContent ?? '';
-    expect(text).toContain('W23 · 618 档期脉冲');
+    expect(text).toContain(`${MATE_WEEKS[22]} · 618 档期脉冲`);
     expect(text).toContain('幅度');
     expect(text).toContain('+42%');
     expect(text).toContain('衰减');
     expect(text).toContain('未标');
     // 编辑按钮在浮框内（名录行另有同名入口，浮框内以详情组作用域查询）
-    expect(within(detail).getByRole('button', { name: '编辑事件 W23 618 档期脉冲' })).toBeTruthy();
+    expect(within(detail).getByRole('button', { name: `编辑事件 ${MATE_WEEKS[22]} 618 档期脉冲` })).toBeTruthy();
     // 删除的读数行与来源标注
     expect(text).not.toContain('事件时段');
     expect(text).not.toContain('销量有效');
@@ -531,13 +549,13 @@ describe('量价参考产品 · 证据浮框（五项精简）与删除 / 撤销
     expect(text).not.toContain('预标');
     expect(text).not.toContain('草稿');
     // 生命周期起点事件（W1 上市首销，impact +30%）：同款五项浮框
-    fireEvent.click(within(mateCard).getByRole('button', { name: '查看事件读数 W1 上市首销' }));
-    const first = screen.getByRole('group', { name: '事件详情 W1 上市首销' });
+    fireEvent.click(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[0]} 上市首销` }));
+    const first = screen.getByRole('group', { name: `事件详情 ${MATE_WEEKS[0]} 上市首销` });
     expect((first.textContent ?? '')).toContain('+30%');
     expect((first.textContent ?? '')).not.toContain('无法计算');
     // 再次点击关闭详情（名录行 toggle）
-    fireEvent.click(within(mateCard).getByRole('button', { name: '查看事件读数 W1 上市首销' }));
-    expect(screen.queryByRole('group', { name: '事件详情 W1 上市首销' })).toBeNull();
+    fireEvent.click(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[0]} 上市首销` }));
+    expect(screen.queryByRole('group', { name: `事件详情 ${MATE_WEEKS[0]} 上市首销` })).toBeNull();
   });
 
   it('删除补录 = 软删除 + 撤销条「已删除事件」；名录已随保存自动展开', async () => {
@@ -549,12 +567,12 @@ describe('量价参考产品 · 证据浮框（五项精简）与删除 / 撤销
     // 保存成功：弹层收起、名录自动展开并出现新行
     await expectComposerClosed();
     const roster = rosterOf(mateCard);
-    await waitFor(() => expect(within(roster).getByRole('button', { name: '删除事件 W40 店庆补贴' })).toBeTruthy());
-    fireEvent.click(within(roster).getByRole('button', { name: '删除事件 W40 店庆补贴' }));
-    await waitFor(() => expect(within(roster).queryByRole('button', { name: '删除事件 W40 店庆补贴' })).toBeNull());
+    await waitFor(() => expect(within(roster).getByRole('button', { name: `删除事件 ${MATE_WEEKS[39]} 店庆补贴` })).toBeTruthy());
+    fireEvent.click(within(roster).getByRole('button', { name: `删除事件 ${MATE_WEEKS[39]} 店庆补贴` }));
+    await waitFor(() => expect(within(roster).queryByRole('button', { name: `删除事件 ${MATE_WEEKS[39]} 店庆补贴` })).toBeNull());
     expect(screen.getByText('已删除事件')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '撤销：已删除事件' }));
-    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: '删除事件 W40 店庆补贴' })).toBeTruthy());
+    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: `删除事件 ${MATE_WEEKS[39]} 店庆补贴` })).toBeTruthy());
   });
 
   it('连续编辑后撤销最后一步只撤该步（验收 6：撤销 A 不清掉 B）', async () => {
@@ -562,7 +580,7 @@ describe('量价参考产品 · 证据浮框（五项精简）与删除 / 撤销
     const mateCard = cardOf('Mate 80（上一代）');
     // 编辑预标 A（618 → 加止周 W26）
     expandRoster(mateCard);
-    fireEvent.click(within(mateCard).getByRole('button', { name: '编辑事件 W23 618 档期脉冲' }));
+    fireEvent.click(within(mateCard).getByRole('button', { name: `编辑事件 ${MATE_WEEKS[22]} 618 档期脉冲` }));
     let popover = await visiblePopover();
     openCal(popover);
     pickCalWeek(popover, 23);
@@ -571,16 +589,16 @@ describe('量价参考产品 · 证据浮框（五项精简）与删除 / 撤销
     fireEvent.change(noteInputIn(popover), { target: { value: '改期说明' } });
     fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
     await expectComposerClosed();
-    await waitFor(() => expect(within(mateCard).getByRole('button', { name: '查看事件读数 W23–W26 618（改）' })).toBeTruthy());
+    await waitFor(() => expect(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]}–${MATE_WEEKS[25]} 618（改）` })).toBeTruthy());
     // 新增补录 B（W40–W41）
     await createEventViaCalendar('Mate 80（上一代）', {
       startWeek: 40, endWeek: 41, month: '2025年 10月', title: '店庆补贴', note: '渠道庆补贴',
     });
-    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: '删除事件 W40–W41 店庆补贴' })).toBeTruthy());
+    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: `删除事件 ${MATE_WEEKS[39]}–${MATE_WEEKS[40]} 店庆补贴` })).toBeTruthy());
     // 撤销（撤最后一步 = 新增 B）：B 消失，A 的覆写仍在
     fireEvent.click(screen.getByRole('button', { name: '撤销：已保存事件' }));
-    await waitFor(() => expect(within(rosterOf(mateCard)).queryByRole('button', { name: '删除事件 W40–W41 店庆补贴' })).toBeNull());
-    expect(within(mateCard).getByRole('button', { name: '查看事件读数 W23–W26 618（改）' })).toBeTruthy();
+    await waitFor(() => expect(within(rosterOf(mateCard)).queryByRole('button', { name: `删除事件 ${MATE_WEEKS[39]}–${MATE_WEEKS[40]} 店庆补贴` })).toBeNull());
+    expect(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]}–${MATE_WEEKS[25]} 618（改）` })).toBeTruthy();
   });
 });
 
@@ -630,9 +648,9 @@ describe('量价参考产品 · 新增事件（双月周历）+ 图上拖选（�
     });
     await expectComposerClosed();
     const mateCard = cardOf('Mate 80（上一代）');
-    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: '删除事件 W40–W41 店庆补贴' })).toBeTruthy());
+    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: `删除事件 ${MATE_WEEKS[39]}–${MATE_WEEKS[40]} 店庆补贴` })).toBeTruthy());
     // 文字只留在名录 / 详情：图内锚点无长 title，事件轨小标以可访问名称承载
-    expect(screen.getByRole('button', { name: '事件 W40–W41 店庆补贴' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: `事件 ${MATE_WEEKS[39]}–${MATE_WEEKS[40]} 店庆补贴` })).toBeTruthy();
     expect(screen.getAllByText('草稿 1').length).toBeGreaterThanOrEqual(1);
   });
 
@@ -647,12 +665,12 @@ describe('量价参考产品 · 新增事件（双月周历）+ 图上拖选（�
     const shield = shieldOf(container, 0);
     fireEvent.pointerDown(shield, { pointerId: 7, clientX: clientXAt(14), clientY: 60 });
     fireEvent.pointerMove(shield, { pointerId: 7, clientX: clientXAt(11), clientY: 60 });
-    expect(screen.getByText('已选 W12–W15 · 4 周')).toBeTruthy();
+    expect(screen.getByText(`已选 ${MATE_WEEKS[11]}–${MATE_WEEKS[14]} · 4 周`)).toBeTruthy();
     fireEvent.pointerUp(shield, { pointerId: 7, clientX: clientXAt(11), clientY: 60 });
     // 弹层回归带值（已填内容不丢）
     const back = await waitFor(() => {
       const pops = [...document.querySelectorAll('.ant-popover:not(.ant-popover-hidden)')]
-        .filter((el) => (el.textContent ?? '').includes('已选 W12–W15 · 4 周'));
+        .filter((el) => (el.textContent ?? '').includes(`已选 ${MATE_WEEKS[11]}–${MATE_WEEKS[14]} · 4 周`));
       return pops.pop();
     });
     expect(back).toBeTruthy();
@@ -668,8 +686,8 @@ describe('量价参考产品 · 新增事件（双月周历）+ 图上拖选（�
     fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
     await expectComposerClosed();
     const mateCard = cardOf('Mate 80（上一代）');
-    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: '删除事件 W12–W15 店庆补贴' })).toBeTruthy());
-    expect(screen.getByRole('button', { name: '事件 W12–W15 店庆补贴' })).toBeTruthy();
+    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: `删除事件 ${MATE_WEEKS[11]}–${MATE_WEEKS[14]} 店庆补贴` })).toBeTruthy());
+    expect(screen.getByRole('button', { name: `事件 ${MATE_WEEKS[11]}–${MATE_WEEKS[14]} 店庆补贴` })).toBeTruthy();
   });
 
   it('名录「读数」/ 图锚点击共享同一选中态；选中事件不在窗内时窗口自动扩展', async () => {
@@ -678,16 +696,17 @@ describe('量价参考产品 · 新增事件（双月周历）+ 图上拖选（�
     // 收缩 Mate 80 窗口到 [0, 7]（v3 池 108 周：终点 107 → 7 需 ≥100 步，取 120）
     const handle = screen.getByLabelText('Mate 80（上一代） 时间窗终点拖柄');
     for (let i = 0; i < 120; i++) fireEvent.keyDown(handle, { key: 'ArrowLeft' });
-    expect(chartHasWeek('Mate 80（上一代）', 'W8')).toBe(true);
-    // 展开名录点击窗外事件（W23）→ 窗口扩展到事件附近（16 周聚焦 [W15,W30]）
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[7])).toBe(true);
+    // 展开名录点击窗外事件（W23）→ 窗口扩展到事件附近（16 周聚焦 [14,29]；
+    // 日历周轴抽稀下恒显示刻度 = 下标 14/16/…/26/29）
     expandRoster(mateCard);
-    fireEvent.click(within(mateCard).getByRole('button', { name: '查看事件读数 W23 618 档期脉冲' }));
-    await waitFor(() => expect(chartHasWeek('Mate 80（上一代）', 'W15')).toBe(true));
-    expect(chartHasWeek('Mate 80（上一代）', 'W24')).toBe(true);
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(false);
-    expect(screen.getByRole('group', { name: '事件详情 W23 618 档期脉冲' })).toBeTruthy();
+    fireEvent.click(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]} 618 档期脉冲` }));
+    await waitFor(() => expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[14])).toBe(true));
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[22])).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(false);
+    expect(screen.getByRole('group', { name: `事件详情 ${MATE_WEEKS[22]} 618 档期脉冲` })).toBeTruthy();
     // 图锚点击 = 同一选中态（此处已打开详情，点击同锚再次切换关闭由组件处理；这里验证锚点可点）
-    const anchor = screen.getByRole('button', { name: '事件 W23 618 档期脉冲' });
+    const anchor = screen.getByRole('button', { name: `事件 ${MATE_WEEKS[22]} 618 档期脉冲` });
     fireEvent.click(anchor);
   });
 
@@ -698,7 +717,7 @@ describe('量价参考产品 · 新增事件（双月周历）+ 图上拖选（�
     });
     await expectComposerClosed();
     const galaxyCard = cardOf('Galaxy S25（友商同期）');
-    await waitFor(() => expect(within(rosterOf(galaxyCard)).getByRole('button', { name: '删除事件 W10–W12 对比机促销提前' })).toBeTruthy());
+    await waitFor(() => expect(within(rosterOf(galaxyCard)).getByRole('button', { name: `删除事件 ${GALAXY_WEEKS[9]}–${GALAXY_WEEKS[11]} 对比机促销提前` })).toBeTruthy());
     expect(screen.getAllByText('草稿 1').length).toBeGreaterThanOrEqual(1);
   });
 });
@@ -738,7 +757,7 @@ describe('量价参考产品 · 工作区持久化（验收 5）', () => {
       startWeek: 10, endWeek: 10, month: '2025年 4月', title: '对比机促销', note: '友商促销记录',
     });
     const galaxyCard = cardOf('Galaxy S25（友商同期）');
-    await waitFor(() => expect(within(rosterOf(galaxyCard)).getByRole('button', { name: '删除事件 W10 对比机促销' })).toBeTruthy());
+    await waitFor(() => expect(within(rosterOf(galaxyCard)).getByRole('button', { name: `删除事件 ${GALAXY_WEEKS[9]} 对比机促销` })).toBeTruthy());
     // 删除 Galaxy 面板 → 事件草稿保留在工作区（Mate 80 不受影响）
     fireEvent.click(screen.getByLabelText('删除参考面板：Galaxy S25（友商同期）'));
     expect(screen.queryByLabelText('删除参考面板：Galaxy S25（友商同期）')).toBeNull();
@@ -747,7 +766,7 @@ describe('量价参考产品 · 工作区持久化（验收 5）', () => {
     const restoredCard = cardOf('Galaxy S25（友商同期）');
     await waitFor(() => expect(within(restoredCard).getByRole('button', { name: '事件 6' })).toBeTruthy());
     expandRoster(restoredCard);
-    await waitFor(() => expect(within(rosterOf(restoredCard)).getByRole('button', { name: '删除事件 W10 对比机促销' })).toBeTruthy());
+    await waitFor(() => expect(within(rosterOf(restoredCard)).getByRole('button', { name: `删除事件 ${GALAXY_WEEKS[9]} 对比机促销` })).toBeTruthy());
   });
 
   it('丢弃草稿需确认并支持撤销；「重置基准」不清工作区（开放问题 ②）', async () => {
@@ -777,11 +796,11 @@ describe('量价参考产品 · 类型颜色（验收 7）', () => {
     const first = renderPanel({ prevGenReferenceId: 'ref-mate80' });
     const mateCard = cardOf('Mate 80（上一代）');
     expandRoster(mateCard);
-    const row618 = within(mateCard).getByRole('button', { name: '查看事件读数 W23 618 档期脉冲' });
+    const row618 = within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]} 618 档期脉冲` });
     const swatchBefore = (row618.firstElementChild as HTMLElement).style.background;
     expect(swatchBefore).toBeTruthy();
     // 经编辑器色块入口改促销类型色 → 色板第 1 项
-    fireEvent.click(within(mateCard).getByRole('button', { name: '编辑事件 W23 618 档期脉冲' }));
+    fireEvent.click(within(mateCard).getByRole('button', { name: `编辑事件 ${MATE_WEEKS[22]} 618 档期脉冲` }));
     const popover = await visiblePopover();
     fireEvent.click(screen.getByRole('button', { name: /编辑类型「促销投放」颜色/ }));
     fireEvent.click(await waitFor(() => {
@@ -789,10 +808,10 @@ describe('量价参考产品 · 类型颜色（验收 7）', () => {
       if (!el) throw new Error('色板未展开');
       return el;
     }));
-    const swatchAfter = (within(mateCard).getByRole('button', { name: '查看事件读数 W23 618 档期脉冲' }).firstElementChild as HTMLElement).style.background;
+    const swatchAfter = (within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]} 618 档期脉冲` }).firstElementChild as HTMLElement).style.background;
     expect(swatchAfter).not.toBe(swatchBefore);
     // 同类型（黑五档期脉冲，同为促销投放）同步变色（名录展开态全量可见）
-    const swatchBf = (within(mateCard).getByRole('button', { name: '查看事件读数 W47 黑五档期脉冲' }).firstElementChild as HTMLElement).style.background;
+    const swatchBf = (within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[46]} 黑五档期脉冲` }).firstElementChild as HTMLElement).style.background;
     expect(swatchBf).toBe(swatchAfter);
     // 刷新保持
     first.unmount();
@@ -801,7 +820,7 @@ describe('量价参考产品 · 类型颜色（验收 7）', () => {
     renderPanel({ prevGenReferenceId: 'ref-mate80' });
     const cardAfter = cardOf('Mate 80（上一代）');
     expandRoster(cardAfter);
-    expect((within(cardAfter).getByRole('button', { name: '查看事件读数 W23 618 档期脉冲' }).firstElementChild as HTMLElement).style.background).toBe(swatchAfter);
+    expect((within(cardAfter).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]} 618 档期脉冲` }).firstElementChild as HTMLElement).style.background).toBe(swatchAfter);
   });
 });
 
@@ -810,9 +829,9 @@ describe('量价参考产品 · 参考回放（§4.5）', () => {
   it('信号驱动回放条：标题「参考回放」；eventType 过滤；条目 = 产品 · 周段 · 标题（v3 全窗中心 53.5 → 最近促销 = W47 黑五）', () => {
     renderPanel({ prevGenReferenceId: 'ref-mate80', inputSignal: { seq: 1, kind: 'event', weekLabel: 'W47', eventType: 'promo' } });
     expect(screen.getByText('参考回放')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Mate 80 · W47 · 黑五档期脉冲/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: new RegExp(`Mate 80 · ${MATE_WEEKS[46]} · 黑五档期脉冲`) })).toBeTruthy();
     // 回放条目无来源标注（草稿标删除）
-    const entry = screen.getByRole('button', { name: /Mate 80 · W47 · 黑五档期脉冲/ });
+    const entry = screen.getByRole('button', { name: new RegExp(`Mate 80 · ${MATE_WEEKS[46]} · 黑五档期脉冲`) });
     expect(entry.textContent).not.toContain('草稿');
   });
 
@@ -848,12 +867,13 @@ describe('量价参考产品 · 参考回放（§4.5）', () => {
         inputSignal={{ seq: 1, kind: 'event', weekLabel: 'W47', eventType: 'promo' }}
       />,
     );
-    const entry = await waitFor(() => screen.getByRole('button', { name: /Galaxy S25 · W48 · 对比机促销/ }));
+    const entry = await waitFor(() => screen.getByRole('button', { name: new RegExp(`Galaxy S25 · ${GALAXY_WEEKS[47]} · 对比机促销`) }));
     expect(entry.textContent).not.toContain('草稿');
-    // 点击条目定位：Galaxy 窗口移到事件附近（16 周聚焦 [W40,W55]，事件窗内）
+    // 点击条目定位：Galaxy 窗口移到事件附近（W48 = 下标 47 → 16 周聚焦 [39,54]，
+    // 事件窗内；首刻度 = 下标 39 恒显示）
     fireEvent.click(entry);
-    await waitFor(() => expect(chartHasWeek('Galaxy S25（友商同期）', 'W40')).toBe(true));
-    expect(chartHasWeek('Galaxy S25（友商同期）', 'W1')).toBe(false);
+    await waitFor(() => expect(chartHasWeek('Galaxy S25（友商同期）', GALAXY_WEEKS[39])).toBe(true));
+    expect(chartHasWeek('Galaxy S25（友商同期）', GALAXY_WEEKS[0])).toBe(false);
   });
 
   it('删除事件信号不把剩余末项误当被删事件：eventType 缺省展示当前有效事件（不写「类似时间」）', () => {
@@ -915,13 +935,14 @@ describe('量价参考产品 · 异常态 / 缺数 / 可访问性', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
     await expectComposerClosed();
     const mateCard = cardOf('Mate 80（上一代）');
-    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: '删除事件 W40 店庆补贴' })).toBeTruthy());
+    await waitFor(() => expect(within(rosterOf(mateCard)).getByRole('button', { name: `删除事件 ${MATE_WEEKS[39]} 店庆补贴` })).toBeTruthy());
   });
 
-  it('缺数纪律（X200）：柱不画、注记「缺数 W13、W14 · 不计 0」（v3 全周期 108 周 − 缺 2 = 106 柱）', async () => {
+  it('缺数纪律（X200）：柱不画、注记「缺数 2026W02、2026W03 · 不计 0」（日历周口径；v3 全周期 108 周 − 缺 2 = 106 柱）', async () => {
     const { container } = renderPanel({ prevGenReferenceId: 'ref-mate80' });
     await addRef('X200（友商同期）');
-    expect(document.body.textContent ?? '').toContain('缺数 W13、W14 · 不计 0');
+    const X200_WEEKS = calendarWeeksOf('X200（友商同期）');
+    expect(document.body.textContent ?? '').toContain(`缺数 ${X200_WEEKS[12]}、${X200_WEEKS[13]} · 不计 0`);
     const bars = Array.from(container.querySelectorAll('rect')).filter((rect) =>
       (rect.getAttribute('fill') ?? '').startsWith('rgba(38, 147, 202'));
     expect(bars.length).toBe(106);
@@ -944,11 +965,11 @@ describe('量价参考产品 · 异常态 / 缺数 / 可访问性', () => {
     renderPanel({ prevGenReferenceId: 'ref-mate80' });
     const mateCard = cardOf('Mate 80（上一代）');
     expandRoster(mateCard);
-    expect(within(mateCard).getByRole('button', { name: '编辑事件 W23 618 档期脉冲' }).getAttribute('tabindex')).toBeNull();
+    expect(within(mateCard).getByRole('button', { name: `编辑事件 ${MATE_WEEKS[22]} 618 档期脉冲` }).getAttribute('tabindex')).toBeNull();
     expect(screen.getByLabelText('Mate 80（上一代） 时间窗起点拖柄').getAttribute('tabindex')).toBe('0');
     expect(screen.getByRole('button', { name: 'Mate 80（上一代） 锁定时间窗' })).toBeTruthy();
     // 图小标键盘可达
-    expect(screen.getByRole('button', { name: '事件 W23 618 档期脉冲' }).getAttribute('tabindex')).toBe('0');
+    expect(screen.getByRole('button', { name: `事件 ${MATE_WEEKS[22]} 618 档期脉冲` }).getAttribute('tabindex')).toBe('0');
   });
 
   it('同周龄比值来自模型考量（Pura 90 首预测周 2026W45 = ×0.98）；行口径 = 供①学习参照，不另乘主链（读数行在收起区内，展开后可见）', () => {
@@ -972,8 +993,9 @@ describe('量价参考产品 · 异常态 / 缺数 / 可访问性', () => {
 describe('量价参考产品 · ①跨卡定位（主图学习证据 → 同周龄段）', () => {
   it('locateRequest(seq 递增 + weekId 2027W10)：主链面板窗口聚焦同周龄段（16 周围绕周龄 70）', async () => {
     const utils = renderPanel({ prevGenReferenceId: 'ref-mate80' });
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(true);
-    // 2027W10 → lifecycleIndex 70 → eventFocusWindow = [62,77]（窗内刻度 63+3k → W72 可见）
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(true);
+    // 2027W10 → lifecycleIndex 70 → eventFocusWindow = [62,77]
+    //（日历周轴抽稀下恒显示刻度 = 下标 62/64/…/74/77）
     utils.rerender(
       <ReferencePanel
         fixture={fixture}
@@ -983,9 +1005,10 @@ describe('量价参考产品 · ①跨卡定位（主图学习证据 → 同周�
         locateRequest={{ seq: 1, weekId: '2027W10' }}
       />,
     );
-    await waitFor(() => expect(chartHasWeek('Mate 80（上一代）', 'W72')).toBe(true));
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(false);
-    expect(chartHasWeek('Galaxy S25（友商同期）', 'W1')).toBe(true);
+    await waitFor(() => expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[62])).toBe(true));
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[70])).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(false);
+    expect(chartHasWeek('Galaxy S25（友商同期）', GALAXY_WEEKS[0])).toBe(true);
   });
 
   it('锁定面板只展开详情不改窗：定位请求到达时窗口保持全周期，聚焦高亮生效（不改锁语义）', async () => {
@@ -1001,17 +1024,17 @@ describe('量价参考产品 · ①跨卡定位（主图学习证据 → 同周�
         locateRequest={{ seq: 1, weekId: '2027W10' }}
       />,
     );
-    // 窗口不动（全周期 W1 仍在）；面板其余语义不变。
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(true);
+    // 窗口不动（全周期起点刻度仍在）；面板其余语义不变。
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(true);
     expect(screen.getByRole('button', { name: 'Mate 80（上一代） 解锁时间窗' }).getAttribute('aria-pressed')).toBe('true');
     const mateCard = cardOf('Mate 80（上一代）');
     expandRoster(mateCard);
-    expect(within(mateCard).getByRole('button', { name: '编辑事件 W23 618 档期脉冲' })).toBeTruthy();
+    expect(within(mateCard).getByRole('button', { name: `编辑事件 ${MATE_WEEKS[22]} 618 档期脉冲` })).toBeTruthy();
   });
 
   it('weekId 未知时定位安全跳过（不改窗、不崩溃、不写主链回调）', () => {
     const { onPrevGenReferenceChange } = renderPanel({ prevGenReferenceId: 'ref-mate80', locateRequest: { seq: 1, weekId: '2099W01' } });
-    expect(chartHasWeek('Mate 80（上一代）', 'W1')).toBe(true);
+    expect(chartHasWeek('Mate 80（上一代）', MATE_WEEKS[0])).toBe(true);
     expect(onPrevGenReferenceChange).not.toHaveBeenCalled();
   });
 });

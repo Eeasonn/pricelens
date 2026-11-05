@@ -24,25 +24,44 @@
 // - 输出框修正周提供「回主图查看该周」（onNavigate 跨卡焦点回调；任务 10 接线）。
 // 2026-11-05 视觉精简二轮（Eason 看图反馈）：
 // - DOS 线宽统一到全站主类线基准 2（实/虚同宽，虚线 dasharray 区分）。
-// - 默认视图 = 卡头（chip「SI 待确认 N/12」保留在头）+ 图（柱 + DOS 线）：
-//   SI 格子行、联动反馈、IoBar、FlowBar、输出框收进共享 CollapsibleSection
-//   「SI 月计划与输出」（默认收起，组件内存态不持久化），置于图与图例之下。
+// - 默认视图 = 卡头（活状态 chip 保留在头）+ 图（柱 + DOS 线）+ 图例。
+// 2026-11-05 拍板实施（Eason：库存+销毛成本都先按推荐改；依据
+// inventory-card-hifi.html + si-input-variants.html V2「输入+库存即时联动」）：
+// - SI 区展开态 = V2 双栏：左列 12 个月输入行（月份 + 输入 + 状态 chip +
+//   拆周读数 + 恢复基准/确认本月），右列「期末渠道库存」迷你柱图随任意月 SI
+//   合法提交即时重算（复用 v3 主链 computeWorkbench 同源递推，改 SI → 库存柱
+//   立刻反映）；V4 三月组网格退役（data-si-group 不再产出）。
+// - 纪律全保留：逐月确认（无「全部确认」）、0=本月不补货、空白≠0、非法输入
+//   不静默钳制（红色错误态）、拆周守恒读数、恢复基准。
+// - 收起态保持：「▸ SI 月计划与链路」一条默认收起（CollapsibleSection），按
+//   高保真置于图与图例之下；卡头活状态读数保留（SI 待确认 N/12、未触发 /
+//   首修正周起）；说明性 chip（「模拟」「修正段 · 波动参考 ±2%」等）退役为
+//   单个 HintInfo（title 合并说明并保留模拟语境）。
+// - 图例全部可点显隐（WorkbenchLegend 规格）；svg 文本取值对齐价格走势页
+//   同源组件（font.family / 10px / color.mute / tabular-nums）。
+// - 不实现时间轨（全局已退役）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { color, radius, space } from '../../theme/tokens';
+import { color, font, radius, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
 import type { ForecastCalendar, WeekId } from './workbenchCalendar';
 import type { WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchParams, WorkbenchResult, WorkbenchWeekResult } from './workbenchModel';
-import { DOS_BAND, INV_CRASH_HEAVY_PCT, INV_CRASH_LIGHT_PCT, siWeeklyPlan } from './workbenchModel';
+import {
+  DOS_BAND,
+  INV_CRASH_HEAVY_PCT,
+  INV_CRASH_LIGHT_PCT,
+  computeWorkbench,
+  siWeeklyPlan,
+} from './workbenchModel';
 import { firstForecastIndex } from './workbenchChartSegments';
 import {
   CollapsibleSection,
   FlowBar,
+  HintInfo,
   IoBar,
   SectionHead,
-  SimChip,
   WorkbenchLegend,
   fmtWan,
   wanOf,
@@ -62,6 +81,22 @@ const TOP = 14;
 const BOTTOM = 26;
 const PLOT_W = W - LEFT - RIGHT;
 const PLOT_H = H - TOP - BOTTOM;
+
+// V2 右列迷你柱图（si-input-variants V2 语义）：期末渠道库存，月粒度 12 柱。
+const MINI_W = 300;
+const MINI_H = 122;
+const MINI_L = 10;
+const MINI_R = 8;
+const MINI_T = 16;
+const MINI_B = 20;
+const MINI_PLOT_W = MINI_W - MINI_L - MINI_R;
+const MINI_PLOT_H = MINI_H - MINI_T - MINI_B;
+
+/** svg 文本取值（全局 #8 对齐价格走势页同源组件）：font.family + tabular-nums。 */
+const axisTextProps = {
+  fontFamily: font.family,
+  style: { fontVariantNumeric: 'tabular-nums' } as CSSProperties,
+};
 
 /** 库存上限修正公式（收 title，不进正文）。 */
 const MIN_FORMULA_TITLE = '库存上限修正：min(基线 SO, 可售)；可售 = 期初库存 + SI 补货';
@@ -181,7 +216,7 @@ export default function InventoryValidationCard({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [issues, setIssues] = useState<Record<string, SiDraftIssue | undefined>>({});
 
-  const monthKeys = fixture.forecastMonths.map((month) => month.key);
+  const monthKeys = useMemo(() => fixture.forecastMonths.map((month) => month.key), [fixture]);
   const committedOf = (monthKey: string): number => siLocal[monthKey] ?? params.siPlanMonthly[monthKey] ?? 0;
   const baselineOf = (monthKey: string): number => fixture.inventory.siPlanMonthly[monthKey] ?? 0;
 
@@ -243,6 +278,31 @@ export default function InventoryValidationCard({
       .filter((week) => week.status === 'forecast' && week.monthKey === monthKey)
       .map((week) => ({ weekId: week.weekId, units: week.si }));
   };
+
+  // ------------------------------------------------------------
+  // V2 右列联动（已拍板 si-input-variants.html V2）：期末渠道库存迷你柱图随
+  // 任意月 SI 合法提交即时重算——复用 v3 主链 computeWorkbench 同源递推（把
+  // 乐观 siLocal 写回 siPlanMonthly），改 SI → 库存柱立刻反映；页面回写
+  // params 后与 props.result 汇合同帧一致。
+  // ------------------------------------------------------------
+  const siPreview = useMemo(
+    () => computeWorkbench(fixture, { ...params, siPlanMonthly: siLocal }),
+    [fixture, params, siLocal],
+  );
+  const monthEndInv = useMemo(() => {
+    const entries = monthKeys.map((monthKey) => ({ monthKey, value: null as number | null }));
+    const byKey = new Map(entries.map((entry) => [entry.monthKey, entry]));
+    for (const week of siPreview.weeks) {
+      if (week.status !== 'forecast' || week.channelInv == null) continue;
+      const entry = byKey.get(week.monthKey);
+      if (entry != null) entry.value = week.channelInv; // 周序遍历，月末周最后写入
+    }
+    return entries;
+  }, [siPreview, monthKeys]);
+  const miniInvMax = Math.max(
+    1,
+    niceCeil(Math.max(1, ...monthEndInv.map((entry) => entry.value ?? 0))),
+  );
 
   // ------------------------------------------------------------
   // SI 联动反馈（B.5.7）：合法提交后同帧更新③库存柱 / DOS / 修正周 / 主图
@@ -318,14 +378,6 @@ export default function InventoryValidationCard({
     { key: 'chdos', label: '渠道 DOS', shape: 'line', color: color.link },
   ];
 
-  // 四个连续三月组（2026-11—01 / 02—04 / 05—07 / 08—10）。
-  const monthGroups: string[][] = [
-    monthKeys.slice(0, 3),
-    monthKeys.slice(3, 6),
-    monthKeys.slice(6, 9),
-    monthKeys.slice(9, 12),
-  ];
-
   const inputStyle = (invalid: boolean): CSSProperties => ({
     width: 72, padding: '2px 6px', fontSize: 12, fontVariantNumeric: 'tabular-nums',
     border: `1px solid ${invalid ? color.error : color.hairline}`, borderRadius: radius.control,
@@ -338,7 +390,10 @@ export default function InventoryValidationCard({
         title="③ 库存修正"
         hint="SI 月计划逐月确认（唯一人工输入）：合法值 blur/Enter 提交并全链重算，「确认本月」写入确认工作区；未确认时主图结果为参考预览。图上只留渠道库存柱（右轴，万台）+ 渠道 DOS 线（左轴）；可售不足的预测周按可售量修正并回写主图，修正周琥珀描边标识。"
         extra={<>
-          <SimChip title="库存推演为演示样本：SI 计划仅存会话草稿，不写真实数据" />
+          <HintInfo
+            label="库存修正卡说明"
+            text="模拟数据 · 推演参考，波动 ±2%：库存推演为演示样本，SI 计划仅存会话草稿，不写真实数据；修正段按可售量修正，±2% 为演示波动参考口径，非统计置信区间；SI 月计划逐月确认（唯一人工输入），未确认时主图结果为参考预览。"
+          />
           <StateChip
             label={`SI 待确认 ${pendingCount} / 12${pendingCount > 0 ? ' · 未全部确认' : ' · 已全部确认'}`}
             title={pendingCount > 0
@@ -348,9 +403,6 @@ export default function InventoryValidationCard({
           {capTriggered
             ? <StateChip label={`${result.firstAdjustedWeek} 起`} title={`库存上限修正自 ${result.firstAdjustedWeek} 起（修正周琥珀描边）`} />
             : <StateChip label="未触发" title="当前库存可支撑基线 SO：未触发库存上限修正" />}
-          {cappedWeeks.length > 0
-            ? <StateChip label="修正段 · 波动参考 ±2%" title="库存修正段按可售量修正，±2% 为演示波动参考口径，非统计置信区间" />
-            : <StateChip label="库存可支撑" title="当前库存推演可支撑基线 SO：未触发库存上限修正" />}
           {siSaveState === 'unpersisted' && (
             <button
               type="button"
@@ -368,197 +420,7 @@ export default function InventoryValidationCard({
         </>}
       />
 
-      {/* 「SI 月计划与链路」收起区（2026-11-05 视觉精简二轮，默认收起 = 组件内存态）：
-          SI 格子行（唯一人工输入）+ 联动反馈 + IoBar + FlowBar；卡头状态 chip 与
-          图（柱 + DOS 线）保留可见。 */}
-      <CollapsibleSection label="SI 月计划与链路">
-        {/* SI 月计划：12 格四个连续三月组，逐月输入 + 确认（B.5.7）。 */}
-        <div
-          data-si-cell-row=""
-        role="group"
-        aria-label="SI 月计划（按月格子输入）"
-        style={{ overflowX: 'auto', marginBottom: space.sm }}
-      >
-        <div style={{ minWidth: 'max-content' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, marginBottom: space.xs }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>SI 月计划</span>
-            <span style={{ fontSize: 11, color: color.mute }}>
-              千台/月 · 月内均分到周（整数守恒，余数月初起 +1）· 逐月确认，无「全部确认」
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: space.md, alignItems: 'stretch' }}>
-            {monthGroups.map((group) => {
-              const groupLabel = `${group[0]}—${group[group.length - 1]}`;
-              const groupPending = group.filter((key) => statusOf(key) !== 'confirmed').length;
-              return (
-                <div
-                  key={groupLabel}
-                  data-si-group={groupLabel}
-                  style={{
-                    border: `1px solid ${color.hairline}`, borderRadius: radius.control,
-                    padding: `${space.xs}px ${space.sm}px`, minWidth: 320, background: color.canvas,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, padding: '2px 0 6px' }}>
-                    <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>{groupLabel}</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: groupPending > 0 ? color.warningInk : color.mute }}>
-                      {`待确认 ${groupPending} / ${group.length}`}
-                    </span>
-                  </div>
-                  {group.map((monthKey, monthIndex) => {
-                    const status = statusOf(monthKey);
-                    const value = committedOf(monthKey);
-                    const atBaseline = value === baselineOf(monthKey);
-                    const draft = drafts[monthKey];
-                    const issue = issues[monthKey];
-                    const invalid = issue === 'invalid';
-                    const statusText = status === 'confirmed'
-                      ? `${monthKey} · 已确认`
-                      : status === 'modified' || !atBaseline
-                        ? '已修改·待确认'
-                        : '基准·待确认';
-                    return (
-                      <div
-                        key={monthKey}
-                        data-si-month={monthKey}
-                        style={{
-                          borderTop: monthIndex === 0 ? 'none' : `1px solid ${color.hairline}`,
-                          padding: '6px 0',
-                          display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 10px', alignItems: 'center',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, minWidth: 52 }}>{monthKey}</span>
-                          <input
-                            aria-label={`${monthKey} SI 计划（千台/月）`}
-                            aria-invalid={invalid}
-                            inputMode="numeric"
-                            value={draft ?? String(Math.round(value / 1000))}
-                            onChange={(event) => {
-                              const raw = event.target.value;
-                              setDrafts((prev) => ({ ...prev, [monthKey]: raw }));
-                              setIssues((prev) => (prev[monthKey] == null ? prev : { ...prev, [monthKey]: undefined }));
-                            }}
-                            onBlur={() => handleBlur(monthKey)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                (event.target as HTMLInputElement).blur();
-                              } else if (event.key === 'Escape') {
-                                // Esc 恢复最后合法值：丢弃草稿与错误态，回显已提交值。
-                                setDrafts((prev) => {
-                                  if (!(monthKey in prev)) return prev;
-                                  const next = { ...prev };
-                                  delete next[monthKey];
-                                  return next;
-                                });
-                                setIssues((prev) => (prev[monthKey] == null ? prev : { ...prev, [monthKey]: undefined }));
-                              }
-                            }}
-                            style={inputStyle(invalid)}
-                          />
-                          <span style={{ fontSize: 11, color: color.mute }}>千台</span>
-                          <span
-                            data-si-status={monthKey}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
-                              borderRadius: radius.pill, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-                              background: status === 'confirmed' ? color.ink : status === 'modified' ? color.warningSoft : color.canvasSoft2,
-                              color: status === 'confirmed' ? color.onPrimary : status === 'modified' ? color.warningInk : color.body,
-                              border: status === 'confirmed' ? 'none' : `1px solid ${color.hairline}`,
-                            }}
-                          >
-                            {statusText}
-                          </span>
-                          {value === 0 && <span style={{ fontSize: 11, fontWeight: 600, color: color.body }}>本月不补货</span>}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          {status !== 'confirmed' && (
-                            <button
-                              type="button"
-                              data-si-confirm={monthKey}
-                              aria-label={atBaseline ? undefined : `确认 ${monthKey} SI`}
-                              title={`确认 ${monthKey} SI = ${fmtThousandUnits(value)} 千台：写入确认工作区（数值仍以 params 为准）`}
-                              onClick={() => confirmMonth(monthKey)}
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
-                                borderRadius: radius.control, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-                                cursor: 'pointer', font: 'inherit',
-                                background: color.ink, border: `1px solid ${color.ink}`, color: color.onPrimary,
-                              }}
-                            >
-                              确认本月
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            data-si-restore={monthKey}
-                            aria-label={`恢复 ${monthKey} 基准 SI`}
-                            title={`恢复 ${monthKey} 基准值 ${fmtThousandUnits(baselineOf(monthKey))} 千台，该月重新待确认`}
-                            onClick={() => restoreBaseline(monthKey)}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
-                              borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
-                              cursor: 'pointer', font: 'inherit',
-                              background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body,
-                            }}
-                          >
-                            恢复基准
-                          </button>
-                          <span
-                            data-si-split={monthKey}
-                            className="tnum"
-                            title="拆周 = siWeeklyPlan（月总量→周整数守恒，余数月初起 +1）"
-                            style={{ fontSize: 11, color: color.mute }}
-                          >
-                            {splitOfWeek(monthKey).map(({ weekId, units }) => `${weekId} ${fmtThousandUnits(units)}`).join(' · ')}
-                            {' 千台'}
-                          </span>
-                        </div>
-                        {issue != null && (
-                          <span
-                            role={invalid ? 'alert' : undefined}
-                            style={{
-                              gridColumn: '1 / -1', fontSize: 11,
-                              color: invalid ? color.error : color.mute, fontWeight: invalid ? 600 : 400,
-                            }}
-                          >
-                            {issue === 'invalid' ? SI_INVALID_TEXT : SI_BLANK_TEXT}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* SI 联动反馈（aria-live=polite；写实际前后变化，不生成泛化赞美）。 */}
-      <div
-        role="status"
-        aria-live="polite"
-        data-si-feedback=""
-        style={{
-          minHeight: 20, fontSize: 12, lineHeight: 1.6, color: color.body,
-          padding: `0 ${space.sm}px`, marginBottom: space.sm,
-        }}
-      >
-        {feedback}
-      </div>
-
-      <IoBar
-        input="SI 月计划（唯一人工输入，逐月确认）· 上游基线 SO（大盘+量价考量）· 期初渠道库存"
-        output={`未来 DOS / 库存反算与健康判定；可售不足周按可售量修正回写主图（${cappedWeeks.length ? `${cappedWeeks[0]!.weekId} 起` : '当前未触发'}）`}
-      />
-        <FlowBar
-          ariaLabel="库存链路：主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图"
-          steps={flowSteps}
-        />
-      </CollapsibleSection>
-
-      {/* 图（渠道库存柱 + 渠道 DOS 线）：默认视图保留（2026-11-05 视觉精简二轮） */}
+      {/* 图（渠道库存柱 + 渠道 DOS 线）：默认视图 = 卡头 + 图 + 图例（2026-11-05 拍板实施） */}
       <div style={{ overflowX: 'auto' }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -572,17 +434,17 @@ export default function InventoryValidationCard({
             return (
               <g key={fraction}>
                 <line x1={LEFT} y1={gy} x2={W - RIGHT} y2={gy} stroke={fraction === 0 ? color.hairlineStrong : color.hairline} />
-                <text x={LEFT - 6} y={gy + 3.5} fontSize={10} fill={color.mute} textAnchor="end">{Math.round(dosMax * fraction)}</text>
+                <text {...axisTextProps} x={LEFT - 6} y={gy + 3.5} fontSize={10} fill={color.mute} textAnchor="end">{Math.round(dosMax * fraction)}</text>
               </g>
             );
           })}
-          <text x={LEFT - 6} y={TOP - 3} fontSize={10} fill={color.mute} textAnchor="end">天</text>
+          <text {...axisTextProps} x={LEFT - 6} y={TOP - 3} fontSize={10} fill={color.mute} textAnchor="end">天</text>
           {[0, 0.5, 1].map((fraction) => (
-            <text key={fraction} x={W - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{wanOf(invMax * fraction)}</text>
+            <text {...axisTextProps} key={fraction} x={W - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{wanOf(invMax * fraction)}</text>
           ))}
-          <text x={W - RIGHT + 6} y={TOP - 3} fontSize={10} fill={color.mute}>万台</text>
+          <text {...axisTextProps} x={W - RIGHT + 6} y={TOP - 3} fontSize={10} fill={color.mute}>万台</text>
           {weeks.map((week, index) => (index % 4 === 0 || index === weeks.length - 1
-            ? <text key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{weekBucketIds[index]}</text>
+            ? <text {...axisTextProps} key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{weekBucketIds[index]}</text>
             : null))}
           {show('inv') && weeks.map((week, index) => {
             const forecast = index >= forecastStart;
@@ -619,13 +481,236 @@ export default function InventoryValidationCard({
             return (
               <g>
                 <line x1={px} y1={TOP} x2={px} y2={TOP + PLOT_H} stroke={color.warning} strokeDasharray="3 4" opacity={0.7} />
-                <text x={px + 4} y={TOP + 20} fontSize={9.5} fontWeight={600} fill={color.warningInk}>{`${result.firstAdjustedWeek} 起修正`}</text>
+                <text {...axisTextProps} x={px + 4} y={TOP + 20} fontSize={10} fontWeight={600} fill={color.warningInk}>{`${result.firstAdjustedWeek} 起修正`}</text>
               </g>
             );
           })()}
         </svg>
       </div>
       <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
+
+      {/* 「SI 月计划与链路」收起区（默认收起，组件内存态；按高保真置于图与图例之下）。
+          展开态 = si-input-variants.html V2「输入 + 库存即时联动」双栏（已拍板）：
+          左列 12 个月输入行（逐月确认纪律全保留），右列期末渠道库存迷你柱图随任意月
+          SI 合法提交即时重算（v3 主链 computeWorkbench 同源递推）。不实现时间轨。 */}
+      <CollapsibleSection label="SI 月计划与链路">
+        <div
+          data-si-cell-row=""
+          role="group"
+          aria-label="SI 月计划（按月格子输入）"
+          style={{
+            display: 'grid', gridTemplateColumns: 'minmax(250px, 1fr) minmax(230px, 300px)',
+            gap: space.md, alignItems: 'start', marginBottom: space.sm,
+          }}
+        >
+          {/* 左列：12 个月输入行（月份 + 输入 + 状态 chip + 拆周读数 + 恢复基准/确认本月）。 */}
+          <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, marginBottom: 2, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>SI 月计划</span>
+              <span style={{ fontSize: 11, color: color.mute }}>
+                千台/月 · 月内均分到周（整数守恒，余数月初起 +1）· 逐月确认，无「全部确认」
+              </span>
+            </div>
+            {monthKeys.map((monthKey) => {
+              const status = statusOf(monthKey);
+              const value = committedOf(monthKey);
+              const atBaseline = value === baselineOf(monthKey);
+              const draft = drafts[monthKey];
+              const issue = issues[monthKey];
+              const invalid = issue === 'invalid';
+              const statusText = status === 'confirmed'
+                ? `${monthKey} · 已确认`
+                : status === 'modified' || !atBaseline
+                  ? '已修改·待确认'
+                  : '基准·待确认';
+              return (
+                <div
+                  key={monthKey}
+                  data-si-month={monthKey}
+                  style={{
+                    border: `1px solid ${invalid ? color.error : color.hairline}`, borderRadius: radius.control,
+                    background: color.canvas, padding: '6px 10px', display: 'grid', gap: 4,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, minWidth: 52 }}>{monthKey}</span>
+                    <input
+                      aria-label={`${monthKey} SI 计划（千台/月）`}
+                      aria-invalid={invalid}
+                      inputMode="numeric"
+                      value={draft ?? String(Math.round(value / 1000))}
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        setDrafts((prev) => ({ ...prev, [monthKey]: raw }));
+                        setIssues((prev) => (prev[monthKey] == null ? prev : { ...prev, [monthKey]: undefined }));
+                      }}
+                      onBlur={() => handleBlur(monthKey)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          (event.target as HTMLInputElement).blur();
+                        } else if (event.key === 'Escape') {
+                          // Esc 恢复最后合法值：丢弃草稿与错误态，回显已提交值。
+                          setDrafts((prev) => {
+                            if (!(monthKey in prev)) return prev;
+                            const next = { ...prev };
+                            delete next[monthKey];
+                            return next;
+                          });
+                          setIssues((prev) => (prev[monthKey] == null ? prev : { ...prev, [monthKey]: undefined }));
+                        }
+                      }}
+                      style={inputStyle(invalid)}
+                    />
+                    <span style={{ fontSize: 11, color: color.mute }}>千台</span>
+                    <span
+                      data-si-status={monthKey}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
+                        borderRadius: radius.pill, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                        background: status === 'confirmed' ? color.ink : status === 'modified' ? color.warningSoft : color.canvasSoft2,
+                        color: status === 'confirmed' ? color.onPrimary : status === 'modified' ? color.warningInk : color.body,
+                        border: status === 'confirmed' ? 'none' : `1px solid ${color.hairline}`,
+                      }}
+                    >
+                      {statusText}
+                    </span>
+                    <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {status !== 'confirmed' && (
+                        <button
+                          type="button"
+                          data-si-confirm={monthKey}
+                          aria-label={atBaseline ? undefined : `确认 ${monthKey} SI`}
+                          title={`确认 ${monthKey} SI = ${fmtThousandUnits(value)} 千台：写入确认工作区（数值仍以 params 为准）`}
+                          onClick={() => confirmMonth(monthKey)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
+                            borderRadius: radius.control, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                            cursor: 'pointer', font: 'inherit',
+                            background: color.ink, border: `1px solid ${color.ink}`, color: color.onPrimary,
+                          }}
+                        >
+                          确认本月
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        data-si-restore={monthKey}
+                        aria-label={`恢复 ${monthKey} 基准 SI`}
+                        title={`恢复 ${monthKey} 基准值 ${fmtThousandUnits(baselineOf(monthKey))} 千台，该月重新待确认`}
+                        onClick={() => restoreBaseline(monthKey)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
+                          borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
+                          cursor: 'pointer', font: 'inherit',
+                          background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body,
+                        }}
+                      >
+                        恢复基准
+                      </button>
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    {value === 0 && <span style={{ fontSize: 11, fontWeight: 600, color: color.body }}>本月不补货</span>}
+                    <span
+                      data-si-split={monthKey}
+                      className="tnum"
+                      title="拆周 = siWeeklyPlan（月总量→周整数守恒，余数月初起 +1）"
+                      style={{ fontSize: 11, color: color.mute }}
+                    >
+                      {splitOfWeek(monthKey).map(({ weekId, units }) => `${weekId} ${fmtThousandUnits(units)}`).join(' · ')}
+                      {' 千台'}
+                    </span>
+                  </div>
+                  {issue != null && (
+                    <span
+                      role={invalid ? 'alert' : undefined}
+                      style={{ fontSize: 11, color: invalid ? color.error : color.mute, fontWeight: invalid ? 600 : 400 }}
+                    >
+                      {issue === 'invalid' ? SI_INVALID_TEXT : SI_BLANK_TEXT}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 右列：期末渠道库存迷你柱图（随任意月 SI 修改即时重算 · v3 主链同源递推）。 */}
+          <div data-si-mini-chart="" style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: color.mute, marginBottom: 4 }}>期末渠道库存（随 SI 即时重算 · 万台）</div>
+            <svg
+              viewBox={`0 0 ${MINI_W} ${MINI_H}`}
+              width="100%"
+              role="img"
+              aria-label={`期末渠道库存迷你柱图：12 个预测月的月末读数（右轴万台），随任意月 SI 合法提交即时重算（v3 主链 computeWorkbench 同源递推）；悬停柱读月份与库存值。`}
+              style={{ display: 'block', height: 'auto' }}
+            >
+              <line x1={MINI_L} y1={MINI_T} x2={MINI_W - MINI_R} y2={MINI_T} stroke={color.hairline} />
+              <text {...axisTextProps} x={MINI_L} y={MINI_T - 4} fontSize={10} fill={color.mute}>{`${wanOf(miniInvMax)} 万台`}</text>
+              <line x1={MINI_L} y1={MINI_T + MINI_PLOT_H} x2={MINI_W - MINI_R} y2={MINI_T + MINI_PLOT_H} stroke={color.hairlineStrong} />
+              {monthEndInv.map(({ monthKey, value }, index) => {
+                const slotW = MINI_PLOT_W / monthEndInv.length;
+                const barMiniW = Math.min(16, slotW * 0.52);
+                const v = value ?? 0;
+                const topY = MINI_T + MINI_PLOT_H * (1 - v / miniInvMax);
+                return (
+                  <g key={monthKey}>
+                    <rect
+                      data-si-mini-bar={monthKey}
+                      x={MINI_L + (index + 0.5) * slotW - barMiniW / 2}
+                      y={topY}
+                      width={barMiniW}
+                      height={Math.max(1, MINI_T + MINI_PLOT_H - topY)}
+                      rx={1.5}
+                      fill={color.ink}
+                      fillOpacity={0.16}
+                      stroke={color.hairline}
+                    >
+                      <title>{`${monthKey} 期末渠道库存 ${fmtWan(v)}（随 SI 即时重算）`}</title>
+                    </rect>
+                    {(index % 2 === 0 || index === monthEndInv.length - 1) && (
+                      <text
+                        {...axisTextProps}
+                        x={MINI_L + (index + 0.5) * slotW}
+                        y={MINI_H - 6}
+                        textAnchor="middle"
+                        fontSize={10}
+                        fill={color.mute}
+                      >
+                        {monthKey.slice(2)}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+            <div style={{ fontSize: 11, color: color.mute, marginTop: 6 }}>
+              改任意月 SI → 柱即时反映期末库存变化（v3 主链同源递推）；确认状态仍在行内。
+            </div>
+          </div>
+        </div>
+
+        {/* SI 联动反馈（aria-live=polite；写实际前后变化，不生成泛化赞美）。 */}
+        <div
+          role="status"
+          aria-live="polite"
+          data-si-feedback=""
+          style={{
+            minHeight: 20, fontSize: 12, lineHeight: 1.6, color: color.body,
+            padding: `0 ${space.sm}px`, marginBottom: space.sm,
+          }}
+        >
+          {feedback}
+        </div>
+
+        <IoBar
+          input="SI 月计划（唯一人工输入，逐月确认）· 上游基线 SO（大盘+量价考量）· 期初渠道库存"
+          output={`未来 DOS / 库存反算与健康判定；可售不足周按可售量修正回写主图（${cappedWeeks.length ? `${cappedWeeks[0]!.weekId} 起` : '当前未触发'}）`}
+        />
+        <FlowBar
+          ariaLabel="库存链路：主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图"
+          steps={flowSteps}
+        />
+      </CollapsibleSection>
 
       {/* 「输出与规则」收起区（2026-11-05 视觉精简二轮，默认收起）：输出框
           （健康判定 + 库存上限修正结论 + 回主图导航 + 规则行） */}

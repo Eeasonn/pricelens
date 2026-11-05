@@ -14,6 +14,14 @@
 //    链路条（去编号）、图例显隐、全流程 DOS 收进悬停；
 // 6. useSiConfirmations 持久化（forecast.siConfirmation.workbench-demo-v3、
 //    失败显式「未持久化」+ 重试）。
+// 2026-11-05 拍板实施（Eason：库存+销毛按推荐改；si-input-variants V2）：
+// 7. SI 展开态 = V2 双栏「输入 + 库存即时联动」：左列 12 个月输入行、右列
+//    期末渠道库存迷你柱图随任意月 SI 合法提交即时重算（computeWorkbench
+//    同源递推）；三月组网格退役；收起区默认收起、置于图与图例之下；
+// 8. 卡头说明 chip 退役为 HintInfo（title 保留模拟语境与 ±2% 口径），活状态
+//    chip（SI 待确认 N/12、未触发 / 首修正周起）保留；图例全部可点显隐
+//    （aria-pressed + 隐藏态 opacity .45）；svg 轴文本对齐价格走势页
+//    （font.family / 10px / mute / tabular-nums）。
 // makeInventoryHarnessProps 为 B.6.2 工厂的任务 6 本地版（任务 10 统一收敛）。
 // ============================================================
 // @vitest-environment jsdom
@@ -169,6 +177,51 @@ describe('SI monthly confirmation（SI 格子行在「SI 月计划与链路」�
 });
 
 // ============================================================
+// SI V2 双栏结构（2026-11-05 拍板实施：si-input-variants.html V2
+// 「输入 + 库存即时联动」；三月组网格退役）
+// ============================================================
+describe('SI V2 双栏结构（展开「SI 月计划与链路」后断言）', () => {
+  it('双栏 = 左列 12 个月输入行 + 右列期末渠道库存迷你柱图（12 柱），无三月组网格', () => {
+    const { container } = renderCard();
+    expandSiWorkspace(container);
+    const row = container.querySelector('[data-si-cell-row]') as HTMLElement;
+    expect(row).not.toBeNull();
+    // 双栏 grid：两列模板
+    expect(row.style.gridTemplateColumns).toContain('minmax');
+    const months = row.querySelectorAll('[data-si-month]');
+    expect(months).toHaveLength(12);
+    expect(row.querySelectorAll('input')).toHaveLength(12);
+    expect(container.querySelectorAll('[data-si-group]').length).toBe(0);
+    const mini = row.querySelector('[data-si-mini-chart]') as HTMLElement | null;
+    expect(mini).not.toBeNull();
+    expect(mini!.querySelectorAll('[data-si-mini-bar]')).toHaveLength(12);
+    expect((mini!.textContent ?? '')).toContain('期末渠道库存');
+    expect((mini!.textContent ?? '')).toContain('即时重算');
+  });
+
+  it('V2 联动重算：改 2027-10 SI → 右列迷你柱图当月期末库存即时变化（v3 主链同源递推）', () => {
+    const { container } = renderCard();
+    expandSiWorkspace(container);
+    const miniBarTitleOf = (monthKey: string): string =>
+      (container.querySelector(`[data-si-mini-bar="${monthKey}"] > title`)?.textContent ?? '');
+    const monthEndOf = (siPlanMonthly: Record<string, number>): number => {
+      const weeks = computeWorkbench(fixture, { ...base, siPlanMonthly }).weeks
+        .filter((week) => week.status === 'forecast' && week.monthKey === '2027-10');
+      return weeks[weeks.length - 1]!.channelInv ?? 0;
+    };
+    const before = monthEndOf(base.siPlanMonthly);
+    expect(before).toBeGreaterThan(0);
+    expect(miniBarTitleOf('2027-10')).toBe(`2027-10 期末渠道库存 ${fmtWan(before)}（随 SI 即时重算）`);
+    const october = siInputOf(container, '2027-10');
+    fireEvent.change(october, { target: { value: '0' } });
+    fireEvent.blur(october);
+    const after = monthEndOf({ ...base.siPlanMonthly, '2027-10': 0 });
+    expect(after).not.toBe(before);
+    expect(miniBarTitleOf('2027-10')).toBe(`2027-10 期末渠道库存 ${fmtWan(after)}（随 SI 即时重算）`);
+  });
+});
+
+// ============================================================
 // SI 逐月确认状态机（B.5.7 / B.4.3）
 // ============================================================
 describe('SI 逐月确认状态机（展开「SI 月计划与链路」后断言）', () => {
@@ -243,25 +296,9 @@ describe('SI 逐月确认状态机（展开「SI 月计划与链路」后断言�
 });
 
 // ============================================================
-// 12 格分组与拆周（B.5.7：四个连续三月组、组头+待确认状态不隐藏）
+// 拆周守恒读数（B.5.7；V2 左列行内读数）
 // ============================================================
-describe('SI 格子分组与拆周（展开「SI 月计划与链路」后断言）', () => {
-  it('12 格分四个连续三月组，组头写月份区间与「待确认 n / 3」且不隐藏', () => {
-    const { container } = renderCard();
-    expandSiWorkspace(container);
-    const groups = Array.from(container.querySelectorAll('[data-si-group]'));
-    expect(groups.map((group) => group.getAttribute('data-si-group'))).toEqual([
-      '2026-11—2027-01',
-      '2027-02—2027-04',
-      '2027-05—2027-07',
-      '2027-08—2027-10',
-    ]);
-    for (const group of groups) {
-      expect((group.textContent ?? '')).toContain('待确认 3 / 3');
-      expect(group.querySelectorAll('input').length).toBe(3);
-    }
-  });
-
+describe('SI 拆周读数（展开「SI 月计划与链路」后断言）', () => {
   it('拆周 = 月总量→周整数守恒（siWeeklyPlan 同源）：2026-11=221 千台 → 五周各 44.2', () => {
     const { container } = renderCard();
     expandSiWorkspace(container);
@@ -307,18 +344,18 @@ describe('SI 格子分组与拆周（展开「SI 月计划与链路」后断言�
     expect((view.container.textContent ?? '')).toContain('未触发');
   });
 
-  it('默认视图 = 卡头 chip + 图（SVG）：SI 格子行收进「SI 月计划与链路」收起区（展开后月格子 aria 用 v3 月键），无旧「人工 SI 计划（按月）」', () => {
+  it('默认视图 = 卡头 + 图（SVG）+ 图例：SI 双栏收进「SI 月计划与链路」收起区（按高保真置于图与图例之下，展开后月格子 aria 用 v3 月键），无旧「人工 SI 计划（按月）」', () => {
     const { container } = renderCard();
     // 默认收起：SI 格子行不渲染；图默认可见。
     expect(container.querySelector('svg')).not.toBeNull();
     expect(container.querySelector('[data-si-cell-row]')).toBeNull();
-    // 展开：SI 格子行在收起区内（位于图之后），月格子 aria 用 v3 月键。
+    // 展开：SI 双栏在收起区内（位于图与图例之后），月格子 aria 用 v3 月键。
     expandSiWorkspace(container);
-    const svgAfter = container.querySelector('svg');
+    const svg = container.querySelector('svg');
     const row = container.querySelector('[data-si-cell-row]') as HTMLElement | null;
     expect(row).not.toBeNull();
-    expect(svgAfter).not.toBeNull();
-    expect(row!.compareDocumentPosition(svgAfter!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(svg).not.toBeNull();
+    expect(svg!.compareDocumentPosition(row!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(row!.querySelector('input[aria-label="2026-11 SI 计划（千台/月）"]')).not.toBeNull();
     expect(row!.textContent).toContain('千台/月');
     expect(container.textContent).not.toContain('人工 SI 计划（按月）');
@@ -404,13 +441,21 @@ describe('库存修正卡 · 基准截断（输出只讲结果 + 万台单位；
     expect(w46Row).not.toContain('2026W48');
   });
 
-  it('修正段波动参考中性化：chip「修正段 · 波动参考 ±2%」，无「把握」话术', () => {
+  it('说明 chip 退役为 ？号（全局 #7）：无「模拟 / 修正段 · 波动参考 ±2%」chip，HintInfo 合并说明且保留模拟语境与 ±2% 口径', () => {
     const { container } = renderCard();
     const text = container.textContent ?? '';
-    expect(text).toContain('修正段 · 波动参考 ±2%');
+    expect(text).toContain('SI 待确认 12 / 12'); // 活状态读数保留
+    expect(text).toContain('2026W46 起'); // 活状态读数保留
     expect(text).not.toContain('把握');
-    const chip = Array.from(container.querySelectorAll('span[title]')).find((el) => (el.textContent ?? '') === '修正段 · 波动参考 ±2%');
-    expect(chip?.getAttribute('title')).toContain('非统计置信区间');
+    expect(text).not.toContain('修正段 · 波动参考 ±2%');
+    const hint = Array.from(container.querySelectorAll('span[title]'))
+      .find((el) => (el.getAttribute('title') ?? '').includes('模拟数据 · 推演参考'));
+    expect(hint).not.toBeUndefined();
+    const title = hint!.getAttribute('title') ?? '';
+    expect(title).toContain('模拟');
+    expect(title).toContain('±2%');
+    expect(title).toContain('非统计置信区间');
+    expect(title).toContain('不写真实数据');
   });
 
   it('单位统一：右轴与输出为万台，图形 tooltip 不再出现 K 台 / 千分位「台」', () => {
@@ -443,7 +488,6 @@ describe('库存修正卡 · 手调覆盖截断周（supplyCapped 仍在）与�
     // v3 基准截断自 2026W46 起（早于手调周 W50）：微痕仍标注修正段起点
     expect(svg.getAttribute('aria-label')).toContain('2026W46 起');
     expect((container.textContent ?? '')).toContain('2026W46 起修正');
-    expect((container.textContent ?? '')).toContain('修正段 · 波动参考 ±2%');
     const manualRows = verdictRowsOf(container).filter((row) => row.startsWith('2026W50'));
     expect(manualRows.length).toBe(1);
     expect(manualRows[0]).toContain('人工手调');
@@ -592,8 +636,23 @@ describe('库存修正卡 · 链路指示条（去编号 · 与页级管线①�
   });
 });
 
-describe('库存修正卡 · 图例显隐保留', () => {
-  it('图例点击切换显隐（aria-pressed），隐藏渠道 DOS 后双线移除', () => {
+describe('库存修正卡 · 图例全部可点显隐（全局 #1 · WorkbenchLegend 规格）', () => {
+  it('两图例项带 key 全部可点（aria-pressed），隐藏态 opacity .45；隐藏库存柱后柱消失', () => {
+    const { container } = renderCard();
+    const legendButtons = Array.from(container.querySelectorAll('button[aria-pressed]')) as HTMLButtonElement[];
+    expect(legendButtons.map((button) => button.textContent)).toEqual(['渠道库存（右轴）', '渠道 DOS']);
+    for (const button of legendButtons) expect(button.getAttribute('aria-pressed')).toBe('true');
+    const mainChart = () => container.querySelector('svg[role="img"]') as SVGSVGElement;
+    expect(mainChart().querySelectorAll('rect').length).toBeGreaterThan(0);
+    fireEvent.click(legendButtons[0]!);
+    expect(legendButtons[0]!.getAttribute('aria-pressed')).toBe('false');
+    expect(legendButtons[0]!.style.opacity).toBe('0.45');
+    expect(mainChart().querySelectorAll('rect').length).toBe(0);
+    fireEvent.click(legendButtons[0]!);
+    expect(mainChart().querySelectorAll('rect').length).toBeGreaterThan(0);
+  });
+
+  it('隐藏渠道 DOS 后双线移除（原回归保留）', () => {
     const { container } = renderCard();
     const dosButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '渠道 DOS');
     expect(dosButton).toBeDefined();
@@ -601,7 +660,44 @@ describe('库存修正卡 · 图例显隐保留', () => {
     expect(container.querySelectorAll('path[stroke="#0070f3"]').length).toBeGreaterThan(0);
     fireEvent.click(dosButton!);
     expect(dosButton!.getAttribute('aria-pressed')).toBe('false');
+    expect(dosButton!.style.opacity).toBe('0.45');
     expect(container.querySelectorAll('path[stroke="#0070f3"]').length).toBe(0);
+  });
+});
+
+// ============================================================
+// 收起区默认收起（2026-11-05 拍板实施）+ 风格对齐价格走势页（全局 #8）
+// ============================================================
+describe('库存修正卡 · 收起区默认收起', () => {
+  it('「SI 月计划与链路」「输出与规则」默认 aria-expanded=false，SI 双栏与输出框不渲染；默认视图保留卡头活状态与图', () => {
+    const { container } = renderCard();
+    for (const label of ['SI 月计划与链路', '输出与规则']) {
+      const section = container.querySelector(`[data-collapsible-section="${label}"]`);
+      expect(section).not.toBeNull();
+      const toggle = section!.querySelector('[data-collapsible-toggle]');
+      expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+    }
+    expect(container.querySelector('[data-si-cell-row]')).toBeNull();
+    expect(container.querySelector('[data-si-mini-chart]')).toBeNull();
+    expect(container.querySelector('[data-flow-bar]')).toBeNull();
+    expect((container.textContent ?? '')).not.toContain('DOS 70–90 天 · 降幅预警');
+    expect((container.textContent ?? '')).toContain('SI 待确认 12 / 12');
+    expect(container.querySelector('svg[role="img"]')).not.toBeNull();
+  });
+});
+
+describe('库存修正卡 · 风格对齐价格走势页（全局 #8）', () => {
+  it('svg 轴文本取值：fontFamily=Inter 栈 · 字号 10–11 · color.mute · tabular-nums', () => {
+    const { container } = renderCard();
+    const texts = Array.from(container.querySelectorAll<SVGTextElement>('svg[role="img"] text[fill="#737373"]'));
+    expect(texts.length).toBeGreaterThan(0);
+    for (const node of texts) {
+      expect(node.getAttribute('font-family')).toContain('Inter');
+      const size = Number(node.getAttribute('font-size'));
+      expect(size).toBeGreaterThanOrEqual(10);
+      expect(size).toBeLessThanOrEqual(11);
+      expect(node.style.fontVariantNumeric).toBe('tabular-nums');
+    }
   });
 });
 
