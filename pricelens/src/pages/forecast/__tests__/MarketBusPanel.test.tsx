@@ -87,6 +87,12 @@ const monthHit = (monthKey: string): Element => {
   return hit as Element;
 };
 
+/** 收起区展开 helper（2026-11-05 视觉精简二轮：IoBar/读数与事件区默认收起）。 */
+const expandSection = (label: string): void => {
+  const toggle = screen.queryByRole('button', { name: label });
+  if (toggle != null && toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+};
+
 /** v2-1 一层化两态入口：hover 预测月 → 证据浮框；点击「调整此月」→ 调整表单。 */
 const openAdjustForm = (monthKey = '2027-03'): void => {
   fireEvent.mouseOver(monthHit(monthKey));
@@ -132,8 +138,9 @@ describe('大盘卡 · 任务一：月度主序列（v3 统一 12 个预测月�
     expect(divider, '历史/预测分界虚线保留').not.toBeNull();
   });
 
-  it('预测季基线读数：2026Q4 109.9 · 2027Q1 105.0 · 2027Q2 102.1 · 2027Q3 99.2 · 2027Q4 105.8（与主链 marketQuarters 同源同值）', () => {
+  it('预测季基线读数：2026Q4 109.9 · 2027Q1 105.0 · 2027Q2 102.1 · 2027Q3 99.2 · 2027Q4 105.8（与主链 marketQuarters 同源同值；读数行在「输入与读数」收起区，展开后可见）', () => {
     setup();
+    expandSection('输入与读数');
     const text = document.body.textContent ?? '';
     expect(text).toContain('AI 预测季基线');
     expect(text).toContain('2026Q4 109.9');
@@ -150,8 +157,11 @@ describe('大盘卡 · 任务一：月度主序列（v3 统一 12 个预测月�
     expect(hit.getAttribute('aria-label')).toContain('AI 基线 105.0');
   });
 
-  it('卡头输入/输出条：输入「月度指数 · 行业事件（月中按日均摊）」→ 输出「主图周销基准」；模拟标识保留', () => {
+  it('卡头输入/输出条：输入「月度指数 · 行业事件（月中按日均摊）」→ 输出「主图周销基准」；模拟标识保留（IoBar 在「输入与读数」收起区，展开后可见）', () => {
     setup();
+    // 默认收起：IoBar 文本不可见；展开「输入与读数」后断言。
+    expect(document.body.textContent ?? '').not.toContain('月度指数 · 行业事件');
+    expandSection('输入与读数');
     const text = document.body.textContent ?? '';
     expect(text).toContain('输入');
     expect(text).toContain('月度指数 · 行业事件（月中按日均摊）');
@@ -421,9 +431,10 @@ describe('大盘卡 · v2-3：徽章三步链浮层（零新增常驻元素）',
   });
 });
 
-describe('大盘卡 · 任务三：月中事件均摊与三字段录入 / 行内编辑（B.5.6）', () => {
+describe('大盘卡 · 任务三：月中事件均摊与三字段录入 / 行内编辑（B.5.6；事件区在「事件与情报」收起区内，展开后可见）', () => {
   it('月度事件（2027-01-29 起）显式声明均摊口径：列表与图上标记均含「首月覆盖 3/31 天」', () => {
     setup({ overrides: { marketMonthEvents: [FOLD_MONTH_EVENT] } });
+    expandSection('事件与情报');
     const text = document.body.textContent ?? '';
     expect(text).toContain('2027-01-29 起 · 1 个月 · +8% · 首月覆盖 3/31 天');
     const mark = document.querySelector('[data-month-event-id="me-fold"]');
@@ -433,6 +444,7 @@ describe('大盘卡 · 任务三：月中事件均摊与三字段录入 / 行内
 
   it('添加表单三字段 + 名称选填：空名称即可添加（默认 2026-11 / 1 日 / 1 个月 / +5%）', () => {
     const { onMonthEventAdd } = setup();
+    expandSection('事件与情报');
     const opener = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').includes('添加事件'));
     fireEvent.click(opener as HTMLButtonElement);
     // 三字段入口齐全：起始月 / 起始日 / 时长（月）/ 幅度；名称标注选填
@@ -458,6 +470,7 @@ describe('大盘卡 · 任务三：月中事件均摊与三字段录入 / 行内
     const { onMonthEventRemove } = setup({
       overrides: { marketMonthEvents: [{ id: 'me-x', label: '', startMonth: '2026-12', startDay: 15, durationMonths: 2, magnitudePct: -6 }] },
     });
+    expandSection('事件与情报');
     const text = document.body.textContent ?? '';
     expect(text).toContain('未命名事件');
     expect(text).toContain('2026-12-15 起 · 2 个月 · −6%');
@@ -471,6 +484,7 @@ describe('大盘卡 · 任务三：月中事件均摊与三字段录入 / 行内
       overrides: { marketMonthEvents: [{ id: 'me-x', label: '内存涨价', startMonth: '2026-12', startDay: 15, durationMonths: 2, magnitudePct: -6 }] },
       onMonthEventUpdate,
     });
+    expandSection('事件与情报');
     fireEvent.click(screen.getByRole('button', { name: '编辑事件 内存涨价' }));
     // 预填：名称与幅度同当前值
     expect((screen.getByLabelText('事件名称（选填）') as HTMLInputElement).value).toBe('内存涨价');
@@ -490,8 +504,8 @@ describe('大盘卡 · 任务三：月中事件均摊与三字段录入 / 行内
   });
 });
 
-describe('大盘卡 · 任务四：事件区右 1/3 两块', () => {
-  it('卡内布局 = 图表左 2/3 + 事件区右 1/3；卡体定高 330（2026-11-04 视觉一致性）；右栏卡内纵向滚动兜底', () => {
+describe('大盘卡 · 任务四：事件区右 1/3 两块（2026-11-05：事件区默认收起为「事件与情报」头，展开恢复 2/3 + 1/3）', () => {
+  it('卡内布局：默认收起 = grid 切单列（图表占满全宽）；展开「事件与情报」= 图表左 2/3 + 事件区右 1/3；卡体定高 330；右栏卡内纵向滚动兜底', () => {
     setup();
     const marketSection = Array.from(document.querySelectorAll('section'))
       .find((section) => section.querySelector('h2')?.textContent?.includes('大盘'));
@@ -499,6 +513,13 @@ describe('大盘卡 · 任务四：事件区右 1/3 两块', () => {
     const bodyGrid = marketSection?.querySelector(':scope > div.lpl-card-scroll') as HTMLElement | null;
     expect(bodyGrid).toBeTruthy();
     expect(bodyGrid?.style.height).toBe('330px');
+    // 默认（事件与情报收起）：单列，事件区内容不渲染。
+    expect(bodyGrid?.style.gridTemplateColumns).toBe('minmax(0, 1fr)');
+    expect(document.body.textContent ?? '').not.toContain('情报候选 · 待审核');
+    const eventsToggle = screen.getByRole('button', { name: '事件与情报' });
+    expect(eventsToggle.getAttribute('aria-expanded')).toBe('false');
+    // 展开：恢复 2/3 + 1/3，右栏卡内纵向滚动。
+    fireEvent.click(eventsToggle);
     expect(bodyGrid?.style.gridTemplateColumns).toBe('minmax(0, 2fr) minmax(0, 1fr)');
     const rightCol = bodyGrid?.children[1] as HTMLElement | undefined;
     expect(rightCol?.className).toContain('lpl-card-scroll');
@@ -510,8 +531,9 @@ describe('大盘卡 · 任务四：事件区右 1/3 两块', () => {
     expect(svg?.getAttribute('preserveAspectRatio')).toBeNull();
   });
 
-  it('上块情报候选空态（B.5.6 / 3.3-A）：「候选生成能力待接入」+ 禁用按钮；不画占位候选行', () => {
+  it('上块情报候选空态（B.5.6 / 3.3-A）：「候选生成能力待接入」+ 禁用按钮；不画占位候选行（展开后可见）', () => {
     setup();
+    expandSection('事件与情报');
     const text = document.body.textContent ?? '';
     expect(text).toContain('情报候选 · 待审核');
     expect(text).toContain('候选生成能力待接入');

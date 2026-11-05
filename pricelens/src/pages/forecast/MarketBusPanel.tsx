@@ -32,6 +32,14 @@
 // （说明性内容），历史/预测分界虚线保留（定位参考非说明）。
 // 卡体延续 A2 定高策略（MARKET_BODY_HEIGHT）+ 右栏卡内纵向滚动。
 // 全部视觉取 theme/tokens 既有 token 与 WorkbenchBits 既有控件语言，无新视觉。
+// 2026-11-05 视觉精简二轮（Eason 看图反馈）：
+// - 线宽统一到价格走势页基准 2：实际月线 / 预测外推线 2.2→2；hover 趋势源段
+//   强调线 2.8→2；证据浮框 sparkline 基线延伸 1.8→1.4（辅线 ≤1.4）；
+//   AI 基线 ghost 1.4 已达标不动。
+// - IoBar 行与 AI 季基线读数行收进共享 CollapsibleSection「输入与读数」；
+//   右 1/3 事件区（情报候选 + 人工事件）默认收起为「事件与情报」一条头
+//   （收起时图表占满全宽 = grid 切单列；展开恢复 2/3 + 1/3）；卡头
+//   「大盘 · 总量总线」与「AI 推测 · 可改」徽章保留。
 // ============================================================
 import { useState } from 'react';
 import { Button, Input, InputNumber, Select } from 'antd';
@@ -52,7 +60,7 @@ import {
 } from './workbenchModel';
 import { overrideSourceOf } from './workbenchModel';
 import IntelligenceReviewPanel from './IntelligenceReviewPanel';
-import { AiJudgeBadge, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtSignedPct, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import { AiJudgeBadge, CollapsibleSection, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtSignedPct, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 
 // 2026-11-04 视觉一致性：viewBox 宽度对齐左栏实际渲染宽度（≈760，缩放比 ≈1，
 // 文字回归真实 px——旧 560 宽被放大 1.36 倍导致轴字体偏大）；图高与全站 ≈252px 对齐。
@@ -241,7 +249,8 @@ function MonthEvidencePopover({
             style={{ display: 'block', marginTop: 2 }}
           >
             <polyline points={actualPoints.join(' ')} fill="none" stroke={color.ink} strokeWidth={2} />
-            <polyline points={extPoints.join(' ')} fill="none" stroke={color.link} strokeWidth={1.8} strokeDasharray="4 3" />
+            {/* 基线延伸 = 辅线档（≤1.4，2026-11-05 线宽统一） */}
+            <polyline points={extPoints.join(' ')} fill="none" stroke={color.link} strokeWidth={1.4} strokeDasharray="4 3" />
             <circle cx={sparkX(trendWindow.months.length - 1)} cy={sparkY(trendWindow.months[trendWindow.months.length - 1].value)} r={2.5} fill={color.ink} />
             <circle cx={sparkX(sparkValues.length - 1)} cy={sparkY(point.baseline)} r={3} fill={color.link} />
             <text x={4} y={44} fontSize={9} fill={color.mute}>{fmtMonthCalendar(trendWindow.months[0].key)}</text>
@@ -479,6 +488,9 @@ export default function MarketBusPanel({
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   /** 月调整应用反馈（B.5.6）：应用后显示「本月比值 ×… · 已联动 N 个预测周」（比值 = 应用值 ÷ 该月 AI 基线）。 */
   const [feedback, setFeedback] = useState<{ monthKey: string; value: number } | null>(null);
+  /** 2026-11-05 视觉精简二轮：右 1/3 事件区默认收起（组件内存态，不持久化）；
+   *  收起 = 卡体 grid 切单列（图表占满全宽），展开恢复 2/3 + 1/3。 */
+  const [eventsOpen, setEventsOpen] = useState(false);
   const toggleSeries = (key: string) => {
     setHiddenSeries((prev) => {
       const next = new Set(prev);
@@ -614,7 +626,7 @@ export default function MarketBusPanel({
     return (
       <section style={workbenchCardStyle}>
         {sectionHead}
-        {ioBar}
+        <CollapsibleSection label="输入与读数">{ioBar}</CollapsibleSection>
         <div style={{ padding: `${space.lg}px 0`, fontSize: 12.5, color: color.mute }}>当前范围无大盘数据</div>
       </section>
     );
@@ -686,28 +698,33 @@ export default function MarketBusPanel({
   return (
     <section style={workbenchCardStyle}>
       {sectionHead}
-      {ioBar}
-      {/* 卡体定高（MARKET_BODY_HEIGHT）：图表区左 2/3 主视觉 + 事件区右 1/3；
+      {/* 「输入与读数」收起区（2026-11-05 视觉精简二轮，默认收起）：IoBar 行 +
+          AI 预测季基线读数行；卡头与图表保留可见。 */}
+      <CollapsibleSection label="输入与读数">
+        {ioBar}
+        <div
+          className="tnum"
+          style={{ fontSize: 11, color: color.mute, marginBottom: space.xs }}
+          title="季度基线 = 季内三月均值（容量守恒：季内三月合计恒等季度基线 × 3）；按月调整只改当月生效值并联动该月全部预测周。"
+        >
+          {`AI 预测季基线：${quarterForecast.map((quarter) => `${quarter.key} ${fmtIndex(quarter.value)}`).join(' · ')}（逐月分布见图）`}
+        </div>
+      </CollapsibleSection>
+      {/* 卡体定高（MARKET_BODY_HEIGHT）：事件区展开 = 图表区左 2/3 + 事件区右 1/3；
+          事件区收起（2026-11-05 视觉精简二轮默认态）= grid 切单列，图表占满全宽；
           极窄视口由卡内滚动兜底（lpl-card-scroll 细滚动条对齐系统样式）。 */}
       <div
         className="lpl-card-scroll"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
+          gridTemplateColumns: eventsOpen ? 'minmax(0, 2fr) minmax(0, 1fr)' : 'minmax(0, 1fr)',
           gap: space.lg,
           height: MARKET_BODY_HEIGHT,
           overflow: 'auto',
         }}
       >
-        {/* 左 2/3：图表区（预测季基线读数 + 月度单线 SVG + 图例 + 口径脚注） */}
+        {/* 左 2/3（收起时全宽）：图表区（月度单线 SVG + 图例 + 口径脚注） */}
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div
-            className="tnum"
-            style={{ fontSize: 11, color: color.mute, marginBottom: space.xs }}
-            title="季度基线 = 季内三月均值（容量守恒：季内三月合计恒等季度基线 × 3）；按月调整只改当月生效值并联动该月全部预测周。"
-          >
-            {`AI 预测季基线：${quarterForecast.map((quarter) => `${quarter.key} ${fmtIndex(quarter.value)}`).join(' · ')}（逐月分布见图）`}
-          </div>
           {/* 月调整应用反馈（B.5.6）：应用后显示「本月比值 ×… · 已联动 N 个预测周」+ 查看主图 / 检查库存 */}
           {(() => {
             const feedbackPoint = feedback != null
@@ -803,6 +820,7 @@ export default function MarketBusPanel({
                 <title>历史 | 预测分界</title>
               </line>
               {/* 历史月实线（墨）→ 预测月虚线（蓝，随事件与按月调整即时重算）+ AI 基线对照灰虚线；
+                  线宽 = 全站主类线基准 2（实/虚同宽，虚线 dasharray 区分，2026-11-05）；
                   双锚点激活时其余线段降不透明（data-dim），移开即恢复 */}
               {seriesOn(SERIES_ACTUAL) && (
                 <path
@@ -811,7 +829,7 @@ export default function MarketBusPanel({
                   d={actualPath}
                   fill="none"
                   stroke={color.ink}
-                  strokeWidth={2.2}
+                  strokeWidth={2}
                   opacity={anchorActive ? 0.25 : 1}
                 />
               )}
@@ -822,7 +840,7 @@ export default function MarketBusPanel({
                   d={forecastPath}
                   fill="none"
                   stroke={color.link}
-                  strokeWidth={2.2}
+                  strokeWidth={2}
                   strokeDasharray="6 5"
                   opacity={anchorActive ? 0.25 : 1}
                 />
@@ -832,14 +850,15 @@ export default function MarketBusPanel({
                   <path d={ghostPath} fill="none" stroke={color.hairlineStrong} strokeWidth={1.4} strokeDasharray="2 4" />
                 </g>
               )}
-              {/* v2-2 双锚点 · 趋势源段加重（同一段实际线的强调描边，hover 临时） */}
+              {/* v2-2 双锚点 · 趋势源段加重（同一段实际线的强调描边，hover 临时；
+                  线宽随全站线宽统一降至主类线档 2，2026-11-05） */}
               {anchorActive && trendWindowValid && seriesOn(SERIES_ACTUAL) && (
                 <path
                   data-anchor="trend-seg"
                   d={trendWindow.months.map((month, index) => `${index === 0 ? 'M' : 'L'}${xm(trendFirstIndex + index).toFixed(1)} ${ym(month.value).toFixed(1)}`).join(' ')}
                   fill="none"
                   stroke={color.ink}
-                  strokeWidth={2.8}
+                  strokeWidth={2}
                 />
               )}
               {/* 已调整月 = 轻量标记：生效点实心蓝点（评审拍板：小点 / 月标签加重取其一） */}
@@ -1025,7 +1044,9 @@ export default function MarketBusPanel({
 
         {/* 右 1/3：事件区两块（上 = 情报候选审核容器 IntelligenceReviewPanel（任务 8；
             能力未接入 = 空态 + 禁用按钮）；下 = 人工月度事件三字段录入）。
-            内容超高由卡内纵向滚动兜底（lpl-card-scroll 细滚动条对齐系统样式）。 */}
+            2026-11-05 视觉精简二轮：随「事件与情报」收起区开合（默认收起不渲染，
+            收起时图表占满全宽）。内容超高由卡内纵向滚动兜底。 */}
+        {eventsOpen && (
         <div className="lpl-card-scroll" style={{ display: 'grid', gap: space.md, minWidth: 0, minHeight: 0, overflowY: 'auto', alignContent: 'start', paddingRight: 2 }}>
           <IntelligenceReviewPanel availability="pending" />
 
@@ -1183,6 +1204,13 @@ export default function MarketBusPanel({
             )}
           </div>
         </div>
+        )}
+      </div>
+      {/* 「事件与情报」收起头（2026-11-05 视觉精简二轮，默认收起）：情报候选 +
+          人工事件列表的开关；收起 = 上方 grid 单列（图表占满全宽），展开恢复
+          2/3 + 1/3（右栏内容见上，随本开关渲染）。受控 CollapsibleSection。 */}
+      <div style={{ marginTop: space.sm }}>
+        <CollapsibleSection label="事件与情报" open={eventsOpen} onToggle={setEventsOpen} />
       </div>
     </section>
   );

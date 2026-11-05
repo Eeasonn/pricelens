@@ -16,6 +16,12 @@
 // 红线不变：成本只进④销毛，不修改需求主链；本卡不写 WorkbenchResult /
 // WorkbenchParams。图形几何沿用 WP5（$M 轴 / 预测起点派生 / 负销毛向下 /
 // 空态显式）。
+// 2026-11-05 视觉精简二轮（Eason 看图反馈）：
+// - 默认视图 = 卡头 + 销毛柱图：IoBar / 链路条 / 成本参考区（含「带到主图
+//   调价」）收进共享 CollapsibleSection「成本参考与链路」；结果回读行与输出
+//   框收进「结果读数」；销毛柱图 + 图例保留可见。
+// - 线宽统一：价格线 1.8 → 2（实/虚同宽，虚线 dasharray 区分）；成本阶梯
+//   2 保持（全站主类线基准）。
 // ============================================================
 import { Fragment, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -31,7 +37,7 @@ import type { MarginPriceOverride, MarginScenario, MarginView } from './marginSc
 import useMarginScenario from './useMarginScenario';
 import type { PriceAdjustReviewMeta } from './PriceAdjustDialog';
 import PriceAdjustDialog from './PriceAdjustDialog';
-import { IoBar, SectionHead, SimChip, WorkbenchLegend, fmtMillionUsd, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
+import { CollapsibleSection, IoBar, SectionHead, SimChip, WorkbenchLegend, fmtMillionUsd, workbenchCardStyle, type LegendItem } from './WorkbenchBits';
 import { buildAxisTicks, firstForecastIndex } from './workbenchChartSegments';
 
 // 2026-11-04 视觉一致性：viewBox 宽度对齐右列实际渲染宽度（≈560-720，缩放比 ≈1，
@@ -268,15 +274,19 @@ export default function ForecastMarginCostCard({
   const priceOverrideWeekIds = Object.keys(activeScenario.priceOverrides);
 
   const head = (
+    <SectionHead
+      title="成本销毛 · 经营结果"
+      hint="经营结果 · 由上述量价与成本推导（月版本成本阶梯 + 预测销毛柱，历史实 / 预测虚）：周销毛 = 主图最终 SO ×（价格 − 当月版本成本），演示口径不含渠道费率；不回写主图——对销毛不满意，回到量价输入区调整。"
+      extra={<>
+        <SimChip title="成本与销毛为演示样本推演：月版本成本 × 主图价格，不含渠道费率" />
+        <RefChip label="推演参考 · 波动 ±8%" title="销毛为链路末端推演结果，±8% 为演示波动参考口径，非统计置信区间" />
+      </>}
+    />
+  );
+  // 2026-11-05 视觉精简二轮：IoBar + 依赖链路条下沉「成本参考与链路」收起区
+  // （默认收起；「带到主图调价」随成本参考区在展开区内）。
+  const flowBlock = (
     <>
-      <SectionHead
-        title="成本销毛 · 经营结果"
-        hint="经营结果 · 由上述量价与成本推导（月版本成本阶梯 + 预测销毛柱，历史实 / 预测虚）：周销毛 = 主图最终 SO ×（价格 − 当月版本成本），演示口径不含渠道费率；不回写主图——对销毛不满意，回到量价输入区调整。"
-        extra={<>
-          <SimChip title="成本与销毛为演示样本推演：月版本成本 × 主图价格，不含渠道费率" />
-          <RefChip label="推演参考 · 波动 ±8%" title="销毛为链路末端推演结果，±8% 为演示波动参考口径，非统计置信区间" />
-        </>}
-      />
       <IoBar
         input="输入（量价）：主图最终 SO（量价链推完）· 主图价格 · 成本月版本趋势（仅调价参考）"
         output="经营结果：预测期销毛（独立推测，不修正主图）"
@@ -291,6 +301,7 @@ export default function ForecastMarginCostCard({
     return (
       <section style={workbenchCardStyle}>
         {head}
+        <CollapsibleSection label="成本参考与链路">{flowBlock}</CollapsibleSection>
         <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.control, padding: space.lg, fontSize: 12, color: color.mute, textAlign: 'center' }}>
           暂无成本销毛数据
         </div>
@@ -384,11 +395,17 @@ export default function ForecastMarginCostCard({
     <section style={workbenchCardStyle}>
       {head}
 
-      {/* ── 成本参考区（hairline 分区 · 只读区 1）：月版本 / 较上版 / 来源状态 / 编辑 / 证据 ── */}
-      <div
-        data-zone="cost-reference"
-        style={{ borderTop: `1px solid ${color.hairline}`, marginTop: space.xs, paddingTop: space.sm, minWidth: 0 }}
-      >
+      {/* 「成本参考与链路」收起区（2026-11-05 视觉精简二轮，默认收起）：IoBar +
+          依赖链路条 + 成本参考区（月版本 / 较上版 / 来源状态 / 编辑 / 证据 /
+          工作区操作条 /「带到主图调价」）；卡头与销毛柱图保留可见。 */}
+      <CollapsibleSection label="成本参考与链路">
+        {flowBlock}
+
+        {/* ── 成本参考区（hairline 分区 · 只读区 1）：月版本 / 较上版 / 来源状态 / 编辑 / 证据 ── */}
+        <div
+          data-zone="cost-reference"
+          style={{ borderTop: `1px solid ${color.hairline}`, marginTop: space.xs, paddingTop: space.sm, minWidth: 0 }}
+        >
         <div style={zoneHeadStyle}>
           <b style={zoneTitleStyle}>成本参考区</b>
           <span style={zoneHintStyle}>月版本成本 · 模拟样本 · 成本只是是否调价的参考，不进模型输入（只进本区销毛结果）</span>
@@ -557,6 +574,7 @@ export default function ForecastMarginCostCard({
           </div>
         )}
       </div>
+      </CollapsibleSection>
 
       {/* ── 经营结果区（hairline 分区 · 只读区 2）：销毛柱 / 价格线 / 公式 / 主数字 ── */}
       <div
@@ -566,26 +584,6 @@ export default function ForecastMarginCostCard({
         <div style={zoneHeadStyle}>
           <b style={zoneTitleStyle}>经营结果区</b>
           <span style={zoneHintStyle}>销毛按当前量价与成本计算（演示口径不含渠道费率）· 唯一人工调价入口在成本参考区</span>
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <ReadbackChip
-              label={view.appliedPriceCount > 0 ? `含主图价格手调 W${view.appliedPriceCount}` : '无主图价格手调'}
-              title={view.appliedPriceCount > 0
-                ? `价格手调周：${priceOverrideWeekIds.join('、')}（来自④成本参考 · 暂不联动销量）`
-                : '主图价格无人工手调'}
-              onJump={onJumpToPriceOverride != null && priceOverrideWeekIds.length > 0
-                ? () => onJumpToPriceOverride(priceOverrideWeekIds[0]!)
-                : undefined}
-            />
-            <ReadbackChip
-              label={`含成本假设 ${view.appliedCostCount} 项`}
-              title={view.appliedCostCount > 0
-                ? `成本假设月：${Object.keys(activeScenario.costOverrides).join('、')}`
-                : '成本按月版本基准，无人工假设'}
-              onJump={onJumpToCostMonth != null && Object.keys(activeScenario.costOverrides).length > 0
-                ? () => onJumpToCostMonth(Object.keys(activeScenario.costOverrides)[0]!)
-                : undefined}
-            />
-          </span>
         </div>
         <div style={{ overflowX: 'auto' }}>
           {/* SVG 地板宽 560：本卡在页面 ④⑤ 左右两列的右列，1440 最小工作宽下
@@ -660,14 +658,41 @@ export default function ForecastMarginCostCard({
             {/* 价格线（实→虚，显示价含手调） */}
             {show('price') && (
               <>
-                {priceHistoryD && <path d={priceHistoryD} fill="none" stroke={brandColor.HUAWEI} strokeWidth={1.8} />}
-                {priceForecastD && <path d={priceForecastD} fill="none" stroke={brandColor.HUAWEI} strokeWidth={1.8} strokeDasharray="5 4" />}
+                {/* 价格线宽 = 全站主类线基准 2（实/虚同宽，虚线 dasharray 区分，2026-11-05） */}
+                {priceHistoryD && <path d={priceHistoryD} fill="none" stroke={brandColor.HUAWEI} strokeWidth={2} />}
+                {priceForecastD && <path d={priceForecastD} fill="none" stroke={brandColor.HUAWEI} strokeWidth={2} strokeDasharray="5 4" />}
               </>
             )}
           </svg>
         </div>
         <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
-        <div className="tnum" style={{ marginTop: space.xs, fontSize: 12, lineHeight: 1.6, color: color.body, padding: `${space.sm}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
+      </div>
+
+      {/* 「结果读数」收起区（2026-11-05 视觉精简二轮，默认收起）：结果回读行
+          （含主图价格手调 / 含成本假设，回跳 chips）+ 输出框（经营结果口径 /
+          成本版本 / 预测期销毛 / 覆盖率） */}
+      <CollapsibleSection label="结果读数">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <ReadbackChip
+            label={view.appliedPriceCount > 0 ? `含主图价格手调 W${view.appliedPriceCount}` : '无主图价格手调'}
+            title={view.appliedPriceCount > 0
+              ? `价格手调周：${priceOverrideWeekIds.join('、')}（来自④成本参考 · 暂不联动销量）`
+              : '主图价格无人工手调'}
+            onJump={onJumpToPriceOverride != null && priceOverrideWeekIds.length > 0
+              ? () => onJumpToPriceOverride(priceOverrideWeekIds[0]!)
+              : undefined}
+          />
+          <ReadbackChip
+            label={`含成本假设 ${view.appliedCostCount} 项`}
+            title={view.appliedCostCount > 0
+              ? `成本假设月：${Object.keys(activeScenario.costOverrides).join('、')}`
+              : '成本按月版本基准，无人工假设'}
+            onJump={onJumpToCostMonth != null && Object.keys(activeScenario.costOverrides).length > 0
+              ? () => onJumpToCostMonth(Object.keys(activeScenario.costOverrides)[0]!)
+              : undefined}
+          />
+        </div>
+        <div className="tnum" style={{ fontSize: 12, lineHeight: 1.6, color: color.body, padding: `${space.sm}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
           {/* 2026-11-04 评审：销毛 = 经营结果而非输入；成本只是是否调价的参考，不进模型输入 */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ color: color.mute }}>经营结果</span>
@@ -687,7 +712,7 @@ export default function ForecastMarginCostCard({
             <span>{`预测覆盖 ${view.forecastCoverage.validWeeks}/${view.forecastCoverage.totalWeeks} 周 · 历史覆盖 ${view.historyCoverage.validWeeks}/${view.historyCoverage.totalWeeks} 周（缺数周不计 0，不掩盖）`}</span>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       {/* 唯一人工动作：带到主图调价（跳转与草稿预填，不是自动映射） */}
       {adjustOpen && dialogMonth != null && (

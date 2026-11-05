@@ -2,18 +2,21 @@
 // 主图 v3 组件测试（jsdom · forecast-global-ia-review 任务 7 Step 1–2）：
 // 阶段证据浮框（B.5.3 四层 + ①②③阶段值 + 学习证据 + 键盘固定）、
 // 范围事件锚（图顶 A 编号 + 起止端点 + 范围线，名录派生周数与形状 +
-// 键盘编辑入口）、视图窗（全期默认 / 三月 / 近 8 周只改视图）、
+// 键盘编辑入口）、视图窗（全期默认 / 三月 / 近 8 周只改视图 + 时间轨手调）、
 // 月分组横轴（月份刻度 YYYY-MM；周详情 YYYYWww 保留在 evidence / 表）、
 // MainForecastDataTable（B.5.4 列 + 缺数「—」+ sticky header + 局部横滚）、
 // 评审大减法下线回归（无黑线 / 把握帽 / 档位线 / 色带）、
 // 手调墨色菱形与库存琥珀双状态共存。
+// 2026-11-05 视觉精简二轮：上一代参考线删除回归（图例 3 项）；图下时间轨
+// （PanelTimeTrack 同款：预设联动 + 拖柄键盘微调）；名录 / 数据表 / extras
+// 收进「数据与操作」收起区——受影响断言迁移为「展开后可见」（逐个迁移）。
 // 工厂 makeMainChartProps / makeRangeChartProps 定义在本文件本地
 // （B.6.2 共享工厂只含日历 / 结果 helper，UI 工厂由任务 7–10 自行扩展）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { brandColor, color } from '../../../theme/tokens';
 import { niceCeil } from '../../../dataModel/volume';
 import { axisTickPlan } from '../../../chart/PriceTrend/helpers';
@@ -21,6 +24,14 @@ import { workbenchFixture, type ProductEventSeed, type WorkbenchFixture } from '
 import { baseWorkbenchParams, computeWorkbench, type WorkbenchParams, type WorkbenchResult, type WorkbenchWeekResult } from '../workbenchModel';
 import { buildForecastCalendar } from '../workbenchCalendar';
 import MainForecastChart, { DEFAULT_MAIN_FORECAST_VIEW, PRODUCT_EVENT_COLOR, type MainForecastView } from '../MainForecastChart';
+
+// 主图时间轨（PanelTimeTrack）依赖 ResizeObserver 量宽：jsdom 无此构造器，本地 stub。
+class ResizeObserverStub {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
 
 const fixture = workbenchFixture;
 const baseParams = baseWorkbenchParams(fixture);
@@ -95,6 +106,11 @@ const historyPriceLine = (): Element | null =>
     (path) => path.getAttribute('stroke') === brandColor.HUAWEI && !path.getAttribute('stroke-dasharray'),
   ) ?? null;
 
+/** 「数据与操作」收起区（2026-11-05 视觉精简二轮默认收起）：展开后名录 / 数据表 / extras 才可见。 */
+const expandDataOps = (): void => {
+  fireEvent.click(screen.getByRole('button', { name: '数据与操作' }));
+};
+
 /** 组件内横轴月分组刻度的同源复算（断言期望刻度集）。 */
 function expectedMonthLabels(weeks: WorkbenchWeekResult[]): string[] {
   const keys: string[] = [];
@@ -123,6 +139,8 @@ describe('MainForecastChart v3（任务 7 给定测试）', () => {
 
   it('lists one range event once with derived duration', () => {
     render(<MainForecastChart {...makeRangeChartProps()} />);
+    // 图下名录收进「数据与操作」收起区（2026-11-05）：展开后可见。
+    expandDataOps();
     expect(screen.getByRole('button', { name: /编辑事件 2026W45–2026W48/ })).toBeTruthy();
     expect(screen.getByText('4 周 · 恒定')).toBeTruthy();
   });
@@ -177,6 +195,8 @@ describe('MainForecastChart v3（任务 7 给定测试）', () => {
     render(<MainForecastChart {...makeMainChartProps(fixture, params, computeWorkbench(fixture, params))} />);
     const overflow = screen.getByRole('button', { name: '其余 1 个重叠范围事件 · 名录筛选' });
     fireEvent.click(overflow);
+    // 名录在「数据与操作」收起区内（2026-11-05）：展开后筛选态可见。
+    expandDataOps();
     expect(document.body.textContent ?? '').toContain('名录筛选');
   });
 });
@@ -207,7 +227,8 @@ describe('主图 · 受控视图与视图窗（全期 / 三月 / 近 8 周）', 
     const bars = Array.from(document.querySelectorAll('svg rect')).filter((rect) => (rect.getAttribute('fill') ?? '') !== 'transparent');
     // 近 8 周 = 2027W36–2027W43，全部有 final → 8 根柱。
     expect(bars.length).toBe(8);
-    // 数据表吸收 WeeklyLedger 职责：仍列全期 104 行。
+    // 数据表吸收 WeeklyLedger 职责：仍列全期 104 行（展开「数据与操作」后可见）。
+    expandDataOps();
     const rows = Array.from(document.querySelectorAll('tbody tr'));
     expect(rows.length).toBe(104);
   });
@@ -284,9 +305,10 @@ describe('主图 · 横轴月分组刻度（周详情保留 YYYYWww）', () => {
 // ============================================================
 // 数据表（MainForecastDataTable · B.5.4 列）
 // ============================================================
-describe('主图数据表 · B.5.4 列与缺数纪律', () => {
+describe('主图数据表 · B.5.4 列与缺数纪律（数据表在「数据与操作」收起区内，展开后可见）', () => {
   it('列齐全：周/状态/学习基线/①后/②后/SI/③后/手调/最终 SO/期末库存/渠道 DOS/显示价格/成本/单台销毛/周销毛/事件操作；sticky header + 局部横滚', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
+    expandDataOps();
     const header = Array.from(document.querySelectorAll('thead th')).map((th) => th.textContent ?? '');
     for (const label of ['周', '状态', '学习基线', '①后', '②后', 'SI', '③后', '手调', '最终 SO', '期末库存', '渠道 DOS', '显示价格', '成本', '单台销毛', '周销毛', '事件/操作']) {
       expect(header).toContain(label);
@@ -305,6 +327,7 @@ describe('主图数据表 · B.5.4 列与缺数纪律', () => {
       weeks: baseResult.weeks.map((week, index) => (index === victimIndex ? { ...week, final: null } : week)),
     };
     render(<MainForecastChart {...makeMainChartProps(fixture, baseParams, withNull)} />);
+    expandDataOps();
     const row = Array.from(document.querySelectorAll('tbody tr')).find((tr) => (tr.textContent ?? '').includes(victim.weekId));
     expect(row).toBeDefined();
     expect(row!.textContent).toContain('—');
@@ -318,6 +341,7 @@ describe('主图数据表 · B.5.4 列与缺数纪律', () => {
       weeks: { '2027W01': { effectivePrice: 799, unitMargin: -12, weeklyMargin: -495000 } },
     };
     render(<MainForecastChart {...makeMainChartProps(fixture, baseParams, baseResult)} marginView={marginView} />);
+    expandDataOps();
     const row = Array.from(document.querySelectorAll('tbody tr')).find((tr) => (tr.textContent ?? '').includes('2027W01'));
     expect(row!.textContent).toContain('$799');
     expect(row!.textContent).toContain('-12');
@@ -344,6 +368,8 @@ describe('主图 · 手调（墨色）与库存上限修正（琥珀）双状态
     const cappedBar = barWithTitle('2026W46');
     expect(cappedBar).not.toBeNull();
     expect(cappedBar!.getAttribute('stroke')).toBe(color.warning);
+    // 名录在「数据与操作」收起区内：展开后可见（2026-11-05）。
+    expandDataOps();
     expect(document.body.textContent).toContain('库存上限修正 · 2026W46 起');
     expect(document.querySelector('svg')?.getAttribute('aria-label')).toContain('库存上限修正 2026W46 起');
   });
@@ -366,7 +392,8 @@ describe('主图 · 手调（墨色）与库存上限修正（琥珀）双状态
       (path) => path.getAttribute('fill') === color.warning && (path.getAttribute('d') ?? '').includes('l5 5'),
     );
     expect(amberDiamond).toBeUndefined();
-    // 图下名录：手调原因 + 修正事实（不因手调消失）。
+    // 图下名录（「数据与操作」收起区内，2026-11-05）：手调原因 + 修正事实（不因手调消失）。
+    expandDataOps();
     const text = document.body.textContent ?? '';
     expect(text).toContain('手调 · 2026W46');
     expect(text).toContain('黑五加投，按会议口径上调');
@@ -386,6 +413,8 @@ describe('主图 · 手调（墨色）与库存上限修正（琥珀）双状态
     const tunedBar = barWithTitle('2026W46');
     expect(tunedBar!.querySelector('title')?.textContent).toContain('手调');
     expect(tunedBar!.querySelector('title')?.textContent).not.toContain('手调：');
+    // 名录在「数据与操作」收起区内：展开后断言（2026-11-05）。
+    expandDataOps();
     const text = document.body.textContent ?? '';
     expect(text).toContain('手调 · 2026W46');
     expect(text).not.toContain('手调 · 2026W46：');
@@ -396,17 +425,25 @@ describe('主图 · 手调（墨色）与库存上限修正（琥珀）双状态
 // ============================================================
 // 图例分组与真实显隐
 // ============================================================
-describe('主图 · 图例分组与真实显隐', () => {
-  it('数据系列 4 项均为可点击按钮（aria-pressed），说明项为纯文字；把握区间图例已下线', () => {
+describe('主图 · 图例分组与真实显隐（2026-11-05：上一代参考线删除，数据系列 3 项）', () => {
+  it('数据系列 3 项均为可点击按钮（aria-pressed），说明项为纯文字；上一代与把握区间图例均已下线', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
+    // aria-pressed 按钮 = 数据系列 3 项 + 视图窗预设 3 项（时间轨，2026-11-05 新增）。
     const pressedButtons = Array.from(document.querySelectorAll('button[aria-pressed]'));
-    expect(pressedButtons).toHaveLength(4);
+    const legendButtons = pressedButtons.filter((button) => (button.textContent ?? '').match(/周销|价格/));
+    expect(legendButtons).toHaveLength(3);
     const labels = pressedButtons.map((button) => button.textContent ?? '');
     expect(labels.join('|')).toContain('周销 实际');
     expect(labels.join('|')).toContain('周销 预测');
     expect(labels.join('|')).toContain('价格');
-    expect(labels.join('|')).toContain('上一代');
+    // 上一代参考线与图例项已删（对照由①参考卡承担）；把握区间不回归。
+    expect(labels.join('|')).not.toContain('上一代');
     expect(labels.join('|')).not.toContain('把握区间');
+    // 图内无 hairlineStrong 灰虚参考线残留。
+    const prevGenPaths = Array.from(document.querySelectorAll('svg path')).filter(
+      (path) => path.getAttribute('stroke') === color.hairlineStrong && path.getAttribute('stroke-dasharray') === '5 4',
+    );
+    expect(prevGenPaths).toHaveLength(0);
     const note = Array.from(document.querySelectorAll('span')).find((span) => (span.textContent ?? '').includes('预测样式'));
     expect(note).toBeDefined();
     expect(note!.closest('button')).toBeNull();
@@ -538,5 +575,85 @@ describe('主图 · 评审大减法下线回归（黑线 / 把握帽 / 档位线
     const volumePeak = Math.max(0, ...baseResult.weeks.flatMap((week) => [week.sales, week.final]).filter((value): value is number => value != null), ...baseResult.weeks.map((week) => week.prevGenSales ?? 0));
     expect(niceCeil).toBeDefined();
     expect(volumePeak).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================
+// 2026-11-05 视觉精简二轮：图下时间轨（PanelTimeTrack 同款）与视图窗联动
+// ============================================================
+describe('主图 · 图下时间轨（2026-11-05 视觉精简二轮）', () => {
+  /** 有状态视图 harness：onViewChange 真实回写 view（与页面 patchMainView 同链路）。 */
+  function renderWithViewHarness(initialView: Partial<MainForecastView> = {}) {
+    function Harness() {
+      const [viewState, setViewState] = useState<Partial<MainForecastView>>(initialView);
+      return (
+        <MainForecastChart
+          {...makeMainChartProps(fixture, baseParams, baseResult)}
+          view={viewState}
+          onViewChange={(patch) => setViewState((prev) => ({ ...prev, ...patch }))}
+        />
+      );
+    }
+    return render(<Harness />);
+  }
+
+  const startSlider = (): Element => screen.getByRole('slider', { name: '本图时间起点' });
+  const endSlider = (): Element => screen.getByRole('slider', { name: '本图时间终点' });
+  const presetButton = (label: string): HTMLButtonElement =>
+    screen.getByRole('button', { name: `视图窗预设 · ${label}` }) as HTMLButtonElement;
+  const visibleBars = (): Element[] =>
+    Array.from(document.querySelectorAll('svg rect')).filter((rect) => (rect.getAttribute('fill') ?? '') !== 'transparent');
+  const barsOfRange = (from: number, to: number): number =>
+    baseResult.weeks.slice(from, to + 1).filter((week) => week.final != null).length;
+
+  it('默认 = 全期窗：轨道域全期 104 周，选中窗 [0,103]，「全期」预设按下；extras 随「数据与操作」默认收起', () => {
+    renderWithViewHarness();
+    expect(startSlider().getAttribute('aria-valuemin')).toBe('0');
+    // 起点拖柄上限 = 终点 − MIN_WINDOW + 1（103 − 4 + 1，最小窗钳制）。
+    expect(startSlider().getAttribute('aria-valuemax')).toBe('100');
+    expect(startSlider().getAttribute('aria-valuenow')).toBe('0');
+    expect(endSlider().getAttribute('aria-valuenow')).toBe('103');
+    expect(presetButton('全期').getAttribute('aria-pressed')).toBe('true');
+    // 轨道位于图表下方（svg 之后出现）。
+    const svgEl = document.querySelector('svg');
+    const trackStart = startSlider();
+    expect(svgEl!.compareDocumentPosition(trackStart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 收起区默认收起：extras（IoBar 输入文本）不可见。
+    expect(document.body.textContent ?? '').not.toContain('大盘时间序列（经事件修正）');
+  });
+
+  it('预设「近 8 周」点击 → 可见窗同步为近 8 周（有值柱 8 根），轨道选中窗 aria-valuenow 同步 [96,103]', () => {
+    renderWithViewHarness();
+    fireEvent.click(presetButton('近 8 周'));
+    expect(visibleBars()).toHaveLength(8);
+    expect(barsOfRange(96, 103)).toBe(8);
+    expect(startSlider().getAttribute('aria-valuenow')).toBe('96');
+    expect(endSlider().getAttribute('aria-valuenow')).toBe('103');
+    expect(presetButton('近 8 周').getAttribute('aria-pressed')).toBe('true');
+    expect(presetButton('全期').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('预设「三月」点击 → 只画预测末三月周（与受控 window=m3 同口径）', () => {
+    renderWithViewHarness();
+    fireEvent.click(presetButton('三月'));
+    const m3Weeks = baseResult.weeks.filter((week) => ['2027-08', '2027-09', '2027-10'].includes(week.monthKey));
+    expect(visibleBars()).toHaveLength(m3Weeks.filter((week) => week.final != null).length);
+    expect(monthLabels()[0]).toBe('2027-08');
+  });
+
+  it('轨道拖柄键盘微调（→ 起点右移 1 周）→ 可见窗 = custom（预设全部弹起），柱窗随动', () => {
+    renderWithViewHarness();
+    expect(visibleBars()).toHaveLength(barsOfRange(0, 103));
+    fireEvent.keyDown(startSlider(), { key: 'ArrowRight' });
+    expect(startSlider().getAttribute('aria-valuenow')).toBe('1');
+    expect(visibleBars()).toHaveLength(barsOfRange(1, 103));
+    // custom 窗 = 无预设按下。
+    expect(presetButton('全期').getAttribute('aria-pressed')).toBe('false');
+    expect(presetButton('三月').getAttribute('aria-pressed')).toBe('false');
+    expect(presetButton('近 8 周').getAttribute('aria-pressed')).toBe('false');
+    // 最小窗钳制（MIN_WINDOW = 4）：终点左移到起点 +3 以内被钳。
+    const endEl = endSlider();
+    for (let i = 0; i < 120; i++) fireEvent.keyDown(endEl, { key: 'ArrowLeft' });
+    expect(Number(endEl.getAttribute('aria-valuenow'))).toBeGreaterThanOrEqual(Number(startSlider().getAttribute('aria-valuenow')) + 3);
   });
 });

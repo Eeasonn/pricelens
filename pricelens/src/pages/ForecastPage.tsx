@@ -24,6 +24,9 @@
 // 「复制关键假设」= 纪要层的替代物（workbenchExport v3 管线顺序 + 上下文）。
 // 措辞不出现 因子/约束/置信区间/无约束需求/我司；话术统一「库存上限修正 /
 // 按可售量修正 / 修正周」。数据全部演示（统一日历 2026-11—2027-10）。
+// 2026-11-05 视觉精简二轮（Eason 看图反馈）：主图卡的 IoBar 行与摘要四格
+// 下沉为 MainForecastChart extras（「数据与操作」共享收起区，默认收起）——
+// 默认视图 = 卡头 + PipelineNav + 图表本身（图 + 图例 + 时间轨）。
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
@@ -528,10 +531,9 @@ export default function ForecastPage() {
               </>
             }
           />
-          <IoBar
-            input="大盘时间序列（经事件修正）· 量价参考（上一代同期形态）· 主图小事件考量"
-            output="主品周销预测（最终口径含库存上限修正，修正周琥珀描边）"
-          />
+          {/* 2026-11-05 视觉精简二轮：IoBar 与摘要四格下沉为主图「数据与操作」收起区
+              的 extras（MainForecastChart 内共享 CollapsibleSection，默认收起）——
+              默认视图 = 卡头 + 图表本身（图 + 图例 + 时间轨）。 */}
           <MainForecastChart
             fixture={fixture}
             params={params}
@@ -539,6 +541,7 @@ export default function ForecastPage() {
             view={mainView}
             controls={mainControls}
             marginView={mainMarginView}
+            onViewChange={patchMainView}
             onTuneWeek={(weekId) => setTuneWeek(weekId)}
             onFocusCard={handleFocusCard}
             onEditProductEvent={(event) => setEventEditor({
@@ -546,42 +549,50 @@ export default function ForecastPage() {
               replaceId: event.id,
             })}
             onRemoveProductEvent={(id) => setParams((prev) => ({ ...prev, productEvents: prev.productEvents.filter((event) => event.id !== id) }))}
+            extras={(
+              <>
+                <IoBar
+                  input="大盘时间序列（经事件修正）· 量价参考（上一代同期形态）· 主图小事件考量"
+                  output="主品周销预测（最终口径含库存上限修正，修正周琥珀描边）"
+                />
+                {/* 摘要行：预测期总销量 / 大促峰 / 库存上限修正缺口 / 预测期销毛（MarginView，与④同源） */}
+                <div role="group" aria-label="预测摘要" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: space.md, marginTop: space.md }}>
+                  {([
+                    {
+                      label: `预测期总销量（${fixture.context.forecastRange}）`,
+                      value: fmtWan(result.summary.totalSales),
+                      foot: `${result.summary.vsHistoryPct > 0 ? '+' : ''}${result.summary.vsHistoryPct}% vs ${fixture.context.historyRange}`,
+                    },
+                    {
+                      label: `大促峰 · ${result.summary.peak.weekId}`,
+                      value: fmtWan(result.summary.peak.value),
+                      foot: result.summary.peak.note,
+                    },
+                    {
+                      label: result.firstAdjustedWeek != null ? `库存上限修正（${result.firstAdjustedWeek} 起）` : '库存上限修正',
+                      value: result.summary.gap > 0 ? `−${fmtWan(result.summary.gap)}` : '未触发',
+                      foot: result.summary.gap > 0
+                        ? 'min(基线 SO, 可售) 回写主图，修正周琥珀描边'
+                        : '当前可售口径覆盖预测需求',
+                      tone: result.summary.gap > 0 ? color.warningInk : undefined,
+                    },
+                    {
+                      label: '预测期销毛（末端独立推测）',
+                      value: fmtMillionUsd(marginView.forecastMargin),
+                      foot: `历史 ${fixture.context.historyRange} ${fmtMillionUsd(marginView.historyMargin)} · 按月版本成本 · 与④成本销毛同源`,
+                      tone: marginView.appliedPriceCount + marginView.appliedCostCount > 0 ? color.warningInk : undefined,
+                    },
+                  ] as Array<{ label: string; value: string; foot: string; tone?: string }>).map((cell) => (
+                    <div key={cell.label} style={{ background: color.canvasSoft, borderRadius: radius.control, padding: `${space.md - 2}px ${space.md}px` }}>
+                      <div style={{ fontSize: 11, color: color.mute }}>{cell.label}</div>
+                      <strong className="tnum" style={{ display: 'block', marginTop: 4, fontSize: 18, fontWeight: 700, color: cell.tone ?? color.ink }}>{cell.value}</strong>
+                      <div style={{ marginTop: 3, fontSize: 11, color: color.mute }}>{cell.foot}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           />
-          {/* 摘要行：预测期总销量 / 大促峰 / 库存上限修正缺口 / 预测期销毛（MarginView，与④同源） */}
-          <div role="group" aria-label="预测摘要" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: space.md, marginTop: space.md }}>
-            {([
-              {
-                label: `预测期总销量（${fixture.context.forecastRange}）`,
-                value: fmtWan(result.summary.totalSales),
-                foot: `${result.summary.vsHistoryPct > 0 ? '+' : ''}${result.summary.vsHistoryPct}% vs ${fixture.context.historyRange}`,
-              },
-              {
-                label: `大促峰 · ${result.summary.peak.weekId}`,
-                value: fmtWan(result.summary.peak.value),
-                foot: result.summary.peak.note,
-              },
-              {
-                label: result.firstAdjustedWeek != null ? `库存上限修正（${result.firstAdjustedWeek} 起）` : '库存上限修正',
-                value: result.summary.gap > 0 ? `−${fmtWan(result.summary.gap)}` : '未触发',
-                foot: result.summary.gap > 0
-                  ? 'min(基线 SO, 可售) 回写主图，修正周琥珀描边'
-                  : '当前可售口径覆盖预测需求',
-                tone: result.summary.gap > 0 ? color.warningInk : undefined,
-              },
-              {
-                label: '预测期销毛（末端独立推测）',
-                value: fmtMillionUsd(marginView.forecastMargin),
-                foot: `历史 ${fixture.context.historyRange} ${fmtMillionUsd(marginView.historyMargin)} · 按月版本成本 · 与④成本销毛同源`,
-                tone: marginView.appliedPriceCount + marginView.appliedCostCount > 0 ? color.warningInk : undefined,
-              },
-            ] as Array<{ label: string; value: string; foot: string; tone?: string }>).map((cell) => (
-              <div key={cell.label} style={{ background: color.canvasSoft, borderRadius: radius.control, padding: `${space.md - 2}px ${space.md}px` }}>
-                <div style={{ fontSize: 11, color: color.mute }}>{cell.label}</div>
-                <strong className="tnum" style={{ display: 'block', marginTop: 4, fontSize: 18, fontWeight: 700, color: cell.tone ?? color.ink }}>{cell.value}</strong>
-                <div style={{ marginTop: 3, fontSize: 11, color: color.mute }}>{cell.foot}</div>
-              </div>
-            ))}
-          </div>
         </section>
       </div>
 

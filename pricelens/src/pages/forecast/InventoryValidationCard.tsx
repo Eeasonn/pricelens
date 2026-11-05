@@ -22,6 +22,11 @@
 //   带与 50 格线不上图；SI 不上图。
 // - 链路条 FlowBar 上收 WorkbenchBits 共享并去编号（页级管线①–④唯一编号）。
 // - 输出框修正周提供「回主图查看该周」（onNavigate 跨卡焦点回调；任务 10 接线）。
+// 2026-11-05 视觉精简二轮（Eason 看图反馈）：
+// - DOS 线宽统一到全站主类线基准 2（实/虚同宽，虚线 dasharray 区分）。
+// - 默认视图 = 卡头（chip「SI 待确认 N/12」保留在头）+ 图（柱 + DOS 线）：
+//   SI 格子行、联动反馈、IoBar、FlowBar、输出框收进共享 CollapsibleSection
+//   「SI 月计划与输出」（默认收起，组件内存态不持久化），置于图与图例之下。
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -33,6 +38,7 @@ import type { WorkbenchParams, WorkbenchResult, WorkbenchWeekResult } from './wo
 import { DOS_BAND, INV_CRASH_HEAVY_PCT, INV_CRASH_LIGHT_PCT, siWeeklyPlan } from './workbenchModel';
 import { firstForecastIndex } from './workbenchChartSegments';
 import {
+  CollapsibleSection,
   FlowBar,
   IoBar,
   SectionHead,
@@ -362,9 +368,13 @@ export default function InventoryValidationCard({
         </>}
       />
 
-      {/* SI 月计划：12 格四个连续三月组，逐月输入 + 确认（B.5.7）。 */}
-      <div
-        data-si-cell-row=""
+      {/* 「SI 月计划与链路」收起区（2026-11-05 视觉精简二轮，默认收起 = 组件内存态）：
+          SI 格子行（唯一人工输入）+ 联动反馈 + IoBar + FlowBar；卡头状态 chip 与
+          图（柱 + DOS 线）保留可见。 */}
+      <CollapsibleSection label="SI 月计划与链路">
+        {/* SI 月计划：12 格四个连续三月组，逐月输入 + 确认（B.5.7）。 */}
+        <div
+          data-si-cell-row=""
         role="group"
         aria-label="SI 月计划（按月格子输入）"
         style={{ overflowX: 'auto', marginBottom: space.sm }}
@@ -542,10 +552,13 @@ export default function InventoryValidationCard({
         input="SI 月计划（唯一人工输入，逐月确认）· 上游基线 SO（大盘+量价考量）· 期初渠道库存"
         output={`未来 DOS / 库存反算与健康判定；可售不足周按可售量修正回写主图（${cappedWeeks.length ? `${cappedWeeks[0]!.weekId} 起` : '当前未触发'}）`}
       />
-      <FlowBar
-        ariaLabel="库存链路：主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图"
-        steps={flowSteps}
-      />
+        <FlowBar
+          ariaLabel="库存链路：主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图"
+          steps={flowSteps}
+        />
+      </CollapsibleSection>
+
+      {/* 图（渠道库存柱 + 渠道 DOS 线）：默认视图保留（2026-11-05 视觉精简二轮） */}
       <div style={{ overflowX: 'auto' }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -594,8 +607,9 @@ export default function InventoryValidationCard({
           })}
           {show('chdos') && (
             <>
-              <path d={dosLine(0, Math.max(0, forecastStart - 1))} fill="none" stroke={color.link} strokeWidth={2.2} />
-              <path d={dosLine(forecastStart, weeks.length - 1)} fill="none" stroke={color.link} strokeWidth={2.2} strokeDasharray="5 4" />
+              {/* DOS 线宽 = 全站主类线基准 2（实/虚同宽，虚线 dasharray 区分，2026-11-05） */}
+              <path d={dosLine(0, Math.max(0, forecastStart - 1))} fill="none" stroke={color.link} strokeWidth={2} />
+              <path d={dosLine(forecastStart, weeks.length - 1)} fill="none" stroke={color.link} strokeWidth={2} strokeDasharray="5 4" />
             </>
           )}
           {result.firstAdjustedWeek != null && (() => {
@@ -613,8 +627,11 @@ export default function InventoryValidationCard({
       </div>
       <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
 
-      {/* 输出框：健康判定（预警解释）+ 库存上限修正（结论级，只讲结果）+ 回主图导航 */}
-      <div style={{ marginTop: space.md, padding: `${space.md - 2}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, display: 'grid', gap: 6, fontSize: 12, lineHeight: 1.7, color: color.body }}>
+      {/* 「输出与规则」收起区（2026-11-05 视觉精简二轮，默认收起）：输出框
+          （健康判定 + 库存上限修正结论 + 回主图导航 + 规则行） */}
+      <CollapsibleSection label="输出与规则">
+        {/* 输出框：健康判定（预警解释）+ 库存上限修正（结论级，只讲结果）+ 回主图导航 */}
+        <div style={{ padding: `${space.md - 2}px ${space.md}px`, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, display: 'grid', gap: 6, fontSize: 12, lineHeight: 1.7, color: color.body }}>
         <div style={{ display: 'flex', gap: 8 }}>
           <span style={{ flex: 'none', fontWeight: 600, color: color.body }}>输出</span>
           <span>
@@ -657,7 +674,8 @@ export default function InventoryValidationCard({
           <span title={MIN_FORMULA_TITLE}>{`DOS ${DOS_BAND.min}–${DOS_BAND.max} 天 · 降幅预警 ${INV_CRASH_LIGHT_PCT}%／${INV_CRASH_HEAVY_PCT}%`}</span>
           <StateChip label="阈值未核定" title="DOS 合理带与库存降幅预警阈值尚未获业务核定" />
         </div>
-      </div>
+        </div>
+      </CollapsibleSection>
     </section>
   );
 }

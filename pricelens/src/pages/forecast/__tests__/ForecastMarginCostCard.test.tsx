@@ -50,6 +50,18 @@ const marginBars = (): Element[] =>
 
 const barTitleOf = (rect: Element): string => rect.querySelector('title')?.textContent ?? '';
 
+/**
+ * 2026-11-05 视觉精简二轮：IoBar / 链路条 / 成本参考区（含「带到主图调价」）
+ * 收进「成本参考与链路」收起区，回读行 + 输出框收进「结果读数」收起区
+ * （默认收起，展开后可见）——受影响断言先展开再查询（逐个迁移不删除）。
+ */
+const expandSection = (label: string): void => {
+  const toggle = document.querySelector(`[data-collapsible-section="${label}"] > button`);
+  if (toggle != null && toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+};
+const expandCostOps = (): void => expandSection('成本参考与链路');
+const expandReadout = (): void => expandSection('结果读数');
+
 describe('成本销毛 · $M 轴（禁万$）', () => {
   it('轴刻度与 tooltip 均为 $M 格式，全文不出现「万$」', () => {
     renderCard(baseResult);
@@ -132,6 +144,7 @@ describe('成本销毛 · MarginView 迁移（任务 9：预测起点 / 负柱 /
       weeks: baseResult.weeks.map((week) => (week.weekId === targetWeek.weekId ? { ...week, final: null } : week)),
     };
     renderCard(withNull);
+    expandReadout();
     // 缺数周无柱（不造 0），tooltip 不出现该周。
     expect(marginBars().some((rect) => barTitleOf(rect).includes(targetWeek.weekId))).toBe(false);
     // 覆盖率如实显示：与 MarginView 口径一致（缺失周计入总数、不计有效周）。
@@ -143,9 +156,10 @@ describe('成本销毛 · MarginView 迁移（任务 9：预测起点 / 负柱 /
   });
 });
 
-describe('成本销毛 · 依赖链路条（A3）', () => {
+describe('成本销毛 · 依赖链路条（A3；在「成本参考与链路」收起区内，展开后可见）', () => {
   it('链路完整：主图价格预测 + 成本月版本 → 单台销毛 → × 主图 SO → 预测期销毛（末节点激活注「不回写主图」）', () => {
     renderCard(baseResult);
+    expandCostOps();
     const steps = Array.from(document.querySelectorAll('[data-flow-step]'));
     expect(steps.map((el) => el.getAttribute('data-flow-step'))).toEqual([
       '主图价格预测', '成本月版本', '单台销毛', '× 主图 SO', '预测期销毛',
@@ -160,8 +174,9 @@ describe('成本销毛 · 依赖链路条（A3）', () => {
     expect(unitStep.getAttribute('title')).toContain('主图价格 − 成本月版本');
   });
 
-  it('空态也渲染依赖链路条（关系先于数据可见）', () => {
+  it('空态也渲染依赖链路条（关系先于数据可见；在收起区内，展开后可见）', () => {
     renderCard({ ...baseResult, weeks: [] });
+    expandCostOps();
     expect(document.querySelectorAll('[data-flow-step]').length).toBe(5);
     expect(document.querySelector('[data-flow-step="预测期销毛"]')?.getAttribute('data-state')).toBe('active');
   });
@@ -177,16 +192,19 @@ describe('成本销毛 · 经营结果定位（2026-11-04 评审：输入（量�
     expect(text).toContain('对销毛不满意');
   });
 
-  it('IoBar 重排为 输入（量价）→ 经营结果：预测期销毛（不修正主图）', () => {
+  it('IoBar 重排为 输入（量价）→ 经营结果：预测期销毛（不修正主图；IoBar 在「成本参考与链路」收起区，展开后可见）', () => {
     renderCard(baseResult);
+    expandCostOps();
     const text = document.body.textContent ?? '';
     expect(text).toContain('输入（量价）');
     expect(text).toContain('经营结果：预测期销毛');
     expect(text).toContain('仅调价参考');
   });
 
-  it('成本定位口径：成本只是是否调价的参考、不进模型输入；输出框首行 = 经营结果推导口径', () => {
+  it('成本定位口径：成本只是是否调价的参考、不进模型输入；输出框首行 = 经营结果推导口径（展开收起区后可见）', () => {
     renderCard(baseResult);
+    expandCostOps();
+    expandReadout();
     const text = document.body.textContent ?? '';
     expect(text).toContain('成本只是是否调价的参考');
     expect(text).toContain('不进模型输入');
@@ -196,8 +214,9 @@ describe('成本销毛 · 经营结果定位（2026-11-04 评审：输入（量�
     expect(svg.getAttribute('aria-label')).toContain('经营结果 · 由上述量价与成本推导');
   });
 
-  it('空态同样保留经营结果定位文案', () => {
+  it('空态同样保留经营结果定位文案（IoBar 在收起区内，展开后可见）', () => {
     renderCard({ ...baseResult, weeks: [] });
+    expandCostOps();
     const text = document.body.textContent ?? '';
     expect(text).toContain('暂无成本销毛数据');
     expect(text).toContain('经营结果 · 由上述量价与成本推导');
@@ -226,9 +245,11 @@ describe('成本销毛 · 负单台销毛（零基线向下）与空态', () => 
   });
 });
 
-describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5.8）', () => {
+describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5.8；成本参考区与回读/输出框在收起区内，展开后可见）', () => {
   it('卡内分「成本参考区 / 经营结果区」两区，hairline 分区不新增嵌套卡', () => {
     renderCard(baseResult);
+    expandCostOps();
+    expandReadout();
     expect(document.querySelector('[data-zone="cost-reference"]')).toBeTruthy();
     expect(document.querySelector('[data-zone="business-result"]')).toBeTruthy();
     const text = document.body.textContent ?? '';
@@ -238,6 +259,7 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
 
   it('成本参考区逐月版本行：月份 / 生效成本 / 较上版变化 / 模拟来源状态', () => {
     renderCard(baseResult);
+    expandCostOps();
     const text = document.body.textContent ?? '';
     for (const version of fixture.costVersions) {
       expect(text).toContain(version.monthKey);
@@ -248,6 +270,8 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
 
   it('成本编辑写 costOverrides：主数字读 MarginView 即时变化、行标「已改」、可还原、回读计数', () => {
     renderCard(baseResult);
+    expandCostOps();
+    expandReadout();
     const firstMonth = fixture.costVersions[0]!.monthKey;
     // 基线主数字 = 无假设时的 MarginView.forecastMargin。
     const baselineMargin = baseView().forecastMargin;
@@ -273,6 +297,7 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
 
   it('成本证据浮框位：证据面板显示版本阶梯、单台销毛与周销毛算例（UI 不另编数字）', () => {
     renderCard(baseResult);
+    expandCostOps();
     fireEvent.click(screen.getByRole('button', { name: `成本证据 ${fixture.costVersions[0]!.monthKey}` }));
     const text = document.body.textContent ?? '';
     expect(text).toContain('版本阶梯');
@@ -283,6 +308,7 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
 
   it('方向性提示：成本假设高于上版时「成本上升 · 请核对价格」（无定价依据不预填数值建议）', () => {
     renderCard(baseResult);
+    expandCostOps();
     const month = fixture.costVersions[1]!.monthKey;
     const prevCost = fixture.costVersions[0]!.unitCost;
     fireEvent.click(screen.getByRole('button', { name: `编辑成本版本 ${month}` }));
@@ -291,8 +317,10 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
     expect(screen.getByText('成本上升 · 请核对价格')).toBeTruthy();
   });
 
-  it('唯一人工动作「带到主图调价」：打开价格弹窗 → 应用价格调整 → 回读「含主图价格手调 W1」', () => {
+  it('唯一人工动作「带到主图调价」（在「成本参考与链路」展开区内）：打开价格弹窗 → 应用价格调整 → 回读「含主图价格手调 W1」', () => {
     renderCard(baseResult);
+    expandCostOps();
+    expandReadout();
     expect(screen.queryByText('价格→销量关系未纳入 · 暂不联动销量')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '带到主图调价' }));
     expect(screen.getByText('价格→销量关系未纳入 · 暂不联动销量')).toBeTruthy();
@@ -309,6 +337,7 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
       priceOverrides: { [week.weekId]: { price: week.price + 100, reason: '', batchId: 'price-t' } },
     });
     renderCard(baseResult, marginView);
+    expandReadout();
     const text = document.body.textContent ?? '';
     expect(text).toContain(`$${(marginView.forecastMargin / 1e6).toFixed(1)}M`);
     // tooltip 价格列读 MarginView.effectivePrice（显示价 = 手调价）。

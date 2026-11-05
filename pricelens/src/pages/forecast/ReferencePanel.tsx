@@ -24,6 +24,8 @@
 //   「无可回放事件」。
 // - 红线：补录 / 覆写 / 窗口 / 颜色绝不进入 WorkbenchParams / computeWorkbench；
 //   prevGenReferenceId 受控语义原样；fixture 原始对象不被修改。
+// 2026-11-05 视觉精简二轮：首预测周读数行（B.5.5 同周龄证据）默认收起为
+// 共享 CollapsibleSection「首预测周读数」（卡头「① 基线预测 · 历史参照」保留）。
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Dropdown, Popover } from 'antd';
@@ -31,7 +33,7 @@ import { brandColorOf, color, radius, space } from '../../theme/tokens';
 import usePageViewState from '../../state/usePageViewState';
 import type { LifecycleProductSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult } from './workbenchModel';
-import { SectionHead, SimChip, workbenchCardStyle } from './WorkbenchBits';
+import { CollapsibleSection, SectionHead, SimChip, workbenchCardStyle } from './WorkbenchBits';
 import ReferenceVolumeChart from './ReferenceVolumeChart';
 import ReferenceTimeTrack, { type ReferenceWindowPreset } from './ReferenceTimeTrack';
 import ReferenceEventList from './ReferenceEventList';
@@ -427,8 +429,14 @@ function ReferenceChartCard({
         onClearOnly={onClearOnly}
         focusReq={rosterFocus}
       />
+      {/* 首预测周读数（B.5.5 同周龄证据）：2026-11-05 视觉精简二轮默认收起
+          （共享 CollapsibleSection，组件内存态），卡头「① 基线预测 · 历史参照」保留 */}
       {footNote && (
-        <div className="tnum" style={{ marginTop: space.xs, fontSize: 11, color: color.mute, minWidth: 0 }}>{footNote}</div>
+        <div style={{ marginTop: space.sm, minWidth: 0 }}>
+          <CollapsibleSection label="首预测周读数">
+            <div className="tnum" style={{ fontSize: 11, color: color.mute, minWidth: 0 }}>{footNote}</div>
+          </CollapsibleSection>
+        </div>
       )}
     </div>
   );
@@ -1137,9 +1145,12 @@ export default function ReferencePanel({
               </button>
             </div>
           )}
-          {/* 模型比值行（主图基线校正）：上一代面板存在时面板内同文显示，此处兜底 */}
+          {/* 模型比值行（主图基线校正）：上一代面板存在时面板内同文显示，此处兜底。
+              2026-11-05 视觉精简二轮：随「首预测周读数」收起区默认收起 */}
           {prevGenFootnote && !panelProducts.some((p) => p.chainRefId != null && p.chainRefId === prevGenReferenceId) && (
-            <div className="tnum" style={{ fontSize: 11, color: color.mute, minWidth: 0 }}>{prevGenFootnote}</div>
+            <CollapsibleSection label="首预测周读数">
+              <div className="tnum" style={{ fontSize: 11, color: color.mute, minWidth: 0 }}>{prevGenFootnote}</div>
+            </CollapsibleSection>
           )}
         </>
       )}

@@ -17,16 +17,27 @@
 // （B.5.4 列，只读 WorkbenchResult + MarginView，吸收 WeeklyLedger 职责）。
 // 大减法下线（2026-11-04 评审）保持：无历史销量黑线、无把握帽/区间带、
 // 无调价档期锚点竖线、无档期琥珀色带、无预测区灰底衬；计算函数保留待清理。
+// 2026-11-05 视觉精简二轮（Eason 看图反馈）：
+// - 上一代同周龄灰虚参考线与图例项「参考：上一代同周龄」删除（上一代对照
+//   仍由①参考卡承担；prevGenSales 数据读取与①学习器不动）。
+// - 图下新增主图时间轨（volume/PanelTimeTrack 同款样式：trackColors 轨道 +
+//   选中窗 + 两端拖柄 + 键盘微调；轨道域 = 全期，选中窗 = 可见窗），与
+//   「全期 / 三月 / 近 8 周」视图预设联动：预设点击同步轨道窗，拖动 = 改窗
+//   （window = 'custom' + windowRange，只改可见范围不裁剪模型）。
+// - 线宽统一到价格走势页基准：主类线 width 2（实/虚同宽，虚线 dasharray 区分）。
+// - 图下名录 + 数据表 + 页面传入的 extras（IoBar / 摘要）收进共享
+//   CollapsibleSection「数据与操作」（默认收起；默认视图 = 卡头 + 图表本身）。
 // ============================================================
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { brandColor, color, font, radius, space } from '../../theme/tokens';
+import { brandColor, color, font, radius, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import { niceCeil } from '../../dataModel/volume';
 import type { ProductEventSeed, WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult, WorkbenchWeekResult } from './workbenchModel';
-import { WorkbenchLegend, fmtSignedPct, fmtWan, wanOf, type LegendItem } from './WorkbenchBits';
-import { buildAxisTicks, buildLineSegments, firstForecastIndex, segmentPathD } from './workbenchChartSegments';
+import { CollapsibleSection, WorkbenchLegend, fmtSignedPct, fmtWan, wanOf, type LegendItem } from './WorkbenchBits';
+import { buildAxisTicks, firstForecastIndex } from './workbenchChartSegments';
 import { axisTickPlan } from '../../chart/PriceTrend/helpers';
 import { buildForecastCalendar, durationOfWeekRange } from './workbenchCalendar';
+import PanelTimeTrack from '../volume/PanelTimeTrack';
 import EvidenceFrame from './EvidenceFrame';
 import MainForecastDataTable, { type MainForecastMarginView } from './MainForecastDataTable';
 
@@ -50,8 +61,10 @@ export interface MainForecastView {
   labelMode: 'compact' | 'detail';
   /** 促销呈现开关：档期琥珀色带已下线（2026-11-04 评审），现仅控制轴下促销日期标注显隐；字段名保留兼容共享工具行。 */
   promoBandOn: boolean;
-  /** 视图窗（B.5.4）：full = 全期（默认）；m3 = 预测末三月；w8 = 近 8 周。只改可见范围，不裁剪模型。 */
-  window?: 'full' | 'm3' | 'w8';
+  /** 视图窗（B.5.4）：full = 全期（默认）；m3 = 预测末三月；w8 = 近 8 周；custom = 时间轨手调窗（windowRange）。只改可见范围，不裁剪模型。 */
+  window?: 'full' | 'm3' | 'w8' | 'custom';
+  /** custom 窗的全期周序区间 [start, end]（闭区间；时间轨拖柄写入，越界钳制）。 */
+  windowRange?: [number, number];
 }
 
 export const DEFAULT_MAIN_FORECAST_VIEW: MainForecastView = {
@@ -83,12 +96,12 @@ const DECAY_TEXT: Record<ProductEventSeed['decay'], string> = {
 /** 跨卡定位目标（B.5.2 CrossCardFocus 子集：主图证据构成项 → 对应卡）。 */
 export type MainChartFocusCard = 'reference' | 'market' | 'inventory';
 
-/** 数据系列图例（均可点击切换显隐；库存描边是预测样式，归说明项）。 */
+/** 数据系列图例（均可点击切换显隐；库存描边是预测样式，归说明项）。
+ *  2026-11-05：「参考 · 上一代同周龄」参考线与其图例项删除（对照由①参考卡承担）。 */
 const LEGEND_SERIES: LegendItem[] = [
   { key: 'actual', label: '周销 实际', shape: 'rect', color: color.link },
   { key: 'forecast', label: '周销 预测', shape: 'rectDash', color: color.link },
   { key: 'price', label: '价格（右轴）', shape: 'line', color: brandColor.HUAWEI },
-  { key: 'prevGen', label: '参考 · 上一代同周龄', shape: 'dash', color: color.hairlineStrong },
 ];
 /** 说明项图例（无 key = 纯说明，不可点击）。 */
 const LEGEND_NOTES: LegendItem[] = [
@@ -129,6 +142,8 @@ export default function MainForecastChart({
   marginView,
   view,
   controls,
+  extras,
+  onViewChange,
 }: {
   fixture: WorkbenchFixture;
   params: { productEvents: ProductEventSeed[] };
@@ -145,6 +160,11 @@ export default function MainForecastChart({
   view?: Partial<MainForecastView>;
   /** 渲染在主图上方的插槽（共享工具行），不含卡头操作。 */
   controls?: ReactNode;
+  /** 2026-11-05 视觉精简：页面侧次级信息插槽（IoBar / 摘要四格），渲染在
+   *  「数据与操作」收起区内（名录 / 数据表之前）；默认随区收起。 */
+  extras?: ReactNode;
+  /** 视图写入回调（时间轨 / 窗口预设用）：页面侧 patchMainView。 */
+  onViewChange?: (patch: Partial<MainForecastView>) => void;
 }) {
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -166,7 +186,8 @@ export default function MainForecastChart({
   const labelMode = viewState.labelMode;
 
   const allWeeks = result.weeks;
-  // 视图窗（B.5.4）：full = 全期；m3 = 预测末三月；w8 = 近 8 周。只裁可见范围，数据表 / 名录仍列全期。
+  // 视图窗（B.5.4）：full = 全期；m3 = 预测末三月；w8 = 近 8 周；custom = 时间轨手调窗。
+  // 只裁可见范围，数据表 / 名录仍列全期。
   const chartWeeks = useMemo(() => {
     if (viewState.window === 'w8') return allWeeks.slice(Math.max(0, allWeeks.length - 8));
     if (viewState.window === 'm3') {
@@ -178,8 +199,15 @@ export default function MainForecastChart({
       const start = allWeeks.findIndex((week) => keys.has(week.monthKey));
       return start >= 0 ? allWeeks.slice(start) : allWeeks;
     }
+    if (viewState.window === 'custom' && viewState.windowRange) {
+      // 时间轨手调窗：全期周序闭区间，越界钳制；非法回退全期。
+      const max = allWeeks.length - 1;
+      const s = Math.min(Math.max(0, Math.round(viewState.windowRange[0])), max);
+      const e = Math.min(Math.max(s, Math.round(viewState.windowRange[1])), max);
+      return allWeeks.slice(s, e + 1);
+    }
     return allWeeks;
-  }, [allWeeks, viewState.window]);
+  }, [allWeeks, viewState.window, viewState.windowRange]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
@@ -248,8 +276,8 @@ export default function MainForecastChart({
   });
 
   // 折线段（WP5 Step 1）：连续段实线、跨缺段灰虚，缺数不造点。
-  const prevGenPointAt = (index: number): { x: number; y: number } => ({ x: x(index), y: y(weeks[index]!.prevGenSales ?? 0) });
-  const prevGenSegments = buildLineSegments(weeks.map((week) => week.prevGenSales));
+  // 2026-11-05：上一代同周龄灰虚参考线渲染删除（对照由①参考卡承担；
+  // prevGenSales 数据读取不动——纵轴域仍覆盖上一代值，学习器不受影响）。
   const pricePathD = (from: number, to: number, anchorM: string | null = null): string | null => {
     if (from > to || from < 0 || to >= weeks.length) return null;
     const points = weeks.slice(from, to + 1)
@@ -309,6 +337,21 @@ export default function MainForecastChart({
   const activeIndex = pinnedIndex ?? hoverIndex;
   const activeWeek = activeIndex != null ? weeks[activeIndex] ?? null : null;
 
+  // 时间轨（2026-11-05 视觉精简二轮）：轨道域 = 全期，选中窗 = 当前可见窗。
+  // chartWeeks 恒为 allWeeks 的连续切片，可见窗周序 = 首周下标 → 首周下标 + 窗长 − 1。
+  const visibleStart = weeks.length
+    ? Math.max(0, allWeeks.findIndex((week) => week.weekId === weeks[0]!.weekId))
+    : 0;
+  const visibleEnd = weeks.length
+    ? Math.min(allWeeks.length - 1, visibleStart + weeks.length - 1)
+    : Math.max(0, allWeeks.length - 1);
+  const windowPreset: 'full' | 'm3' | 'w8' | 'custom' = viewState.window ?? 'full';
+  const windowPresetDefs: Array<{ key: 'full' | 'm3' | 'w8'; label: string }> = [
+    { key: 'full', label: '全期' },
+    { key: 'm3', label: '三月' },
+    { key: 'w8', label: '近 8 周' },
+  ];
+
   return (
     <div style={{ display: 'grid', gap: space.sm }}>
       {controls}
@@ -351,17 +394,7 @@ export default function MainForecastChart({
               </>
             )}
 
-            {/* 上一代同周龄参考线（灰虚，按周龄对齐） */}
-            {show('prevGen') && prevGenSegments.map((segment) => (
-              <path
-                key={`pg-${segment.from}-${segment.to}`}
-                d={segmentPathD(segment, prevGenPointAt)}
-                fill="none"
-                stroke={color.hairlineStrong}
-                strokeWidth={1.5}
-                strokeDasharray="5 4"
-              />
-            ))}
+            {/* 上一代同周龄参考线已删（2026-11-05 视觉精简二轮）：上一代对照由①参考卡承担 */}
 
             {/* 周销柱：历史实柱（浅蓝）/ 预测虚柱（描边；库存修正周琥珀描边微痕）；缺数周不造柱 */}
             {weeks.map((week, index) => {
@@ -390,12 +423,13 @@ export default function MainForecastChart({
               );
             })}
 
-            {/* 价格线右轴：实（历史）→ 虚（预测）；显示价读 MarginView 过渡字段（缺省原价） */}
+            {/* 价格线右轴：实（历史）→ 虚（预测）；线宽 = 全站主类线基准 2（实/虚同宽，虚线 dasharray 区分）；
+                显示价读 MarginView 过渡字段（缺省原价） */}
             {show('price') && historyPriceD && (
-              <path d={historyPriceD} fill="none" stroke={brandColor.HUAWEI} strokeWidth={2.4} />
+              <path d={historyPriceD} fill="none" stroke={brandColor.HUAWEI} strokeWidth={2} />
             )}
             {show('price') && forecastPriceD && (
-              <path d={forecastPriceD} fill="none" stroke={brandColor.HUAWEI} strokeWidth={2.2} strokeDasharray="6 5" />
+              <path d={forecastPriceD} fill="none" stroke={brandColor.HUAWEI} strokeWidth={2} strokeDasharray="6 5" />
             )}
 
             {/* 价格手调墨色「价」小标（与周销墨色菱形并存）：MarginView 提供且异于
@@ -559,6 +593,51 @@ export default function MainForecastChart({
         </div>
       </div>
 
+      {/* 主图时间轨（2026-11-05 视觉精简二轮）：volume/PanelTimeTrack 同款样式
+          （trackColors 轨道 + 选中窗 + 两端拖柄 + 键盘微调，量价页/参考卡同语言）。
+          轨道域 = 全期周序，选中窗 = 当前可见窗；与「全期 / 三月 / 近 8 周」视图
+          预设联动——预设点击同步轨道窗，轨道拖动 = 改窗（custom + windowRange），
+          只改可见范围不裁剪模型。 */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 0 }}>
+        <div
+          role="group"
+          aria-label="主图视图窗预设"
+          style={{ display: 'inline-flex', flex: 'none', marginTop: 2, border: `1px solid ${color.hairline}`, borderRadius: radius.control, overflow: 'hidden' }}
+        >
+          {windowPresetDefs.map((presetDef) => {
+            const active = windowPreset === presetDef.key;
+            return (
+              <button
+                key={presetDef.key}
+                type="button"
+                aria-pressed={active}
+                aria-label={`视图窗预设 · ${presetDef.label}`}
+                onClick={() => onViewChange?.({ window: presetDef.key })}
+                style={{
+                  border: 'none', padding: '3px 9px', font: 'inherit', fontSize: 11, cursor: 'pointer',
+                  background: active ? selectSoft : color.canvas,
+                  color: active ? selectSoftInk : color.body,
+                  fontWeight: active ? 600 : 400, whiteSpace: 'nowrap',
+                }}
+              >
+                {presetDef.label}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+          <PanelTimeTrack
+            ids={allWeeks.map((week) => week.weekId)}
+            lo={0}
+            hi={Math.max(0, allWeeks.length - 1)}
+            s={visibleStart}
+            e={visibleEnd}
+            granularity="week"
+            onChange={(start, end) => onViewChange?.({ window: 'custom', windowRange: [start, end] })}
+          />
+        </div>
+      </div>
+
       {/* 图例：数据系列（可点击切换显隐）/ 说明项（纯说明）两组分开 */}
       <div style={{ display: 'grid', justifyContent: 'center', gap: 2 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -571,9 +650,14 @@ export default function MainForecastChart({
         </div>
       </div>
 
-      {/* 图下名录：范围事件（A 编号 + 起止 + 派生周数/形状 + 编辑/删除，键盘可达；
-          +N 筛选态含清除）+ 手调（周销菱形 / 价格「价」标）+ 库存修正事实 */}
-      <div style={{ display: 'grid', gap: 6, fontSize: 12, color: color.body }}>
+      {/* 「数据与操作」收起区（2026-11-05 视觉精简二轮，默认收起 = 组件内存态）：
+          extras（页面传入的 IoBar / 摘要四格）+ 图下名录 + 数据表。默认视图 =
+          卡头 + PipelineNav + 图表本身（图 + 图例 + 时间轨 + 证据浮框）。 */}
+      <CollapsibleSection label="数据与操作">
+        {extras}
+        {/* 图下名录：范围事件（A 编号 + 起止 + 派生周数/形状 + 编辑/删除，键盘可达；
+            +N 筛选态含清除）+ 手调（周销菱形 / 价格「价」标）+ 库存修正事实 */}
+        <div style={{ display: 'grid', gap: 6, fontSize: 12, color: color.body }}>
         {overflowIds != null && (
           <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: color.warningInk }}>名录筛选 · 其余重叠范围事件（{overflowIds.length} 条）</span>
@@ -633,14 +717,16 @@ export default function MainForecastChart({
         </div>
       </div>
 
-      {/* 数据表（B.5.4）：MainForecastDataTable 吸收 WeeklyLedger 职责——全期只读
-          WorkbenchResult + MarginView，sticky header + 局部横滚，缺数「—」。 */}
-      <MainForecastDataTable
-        result={result}
-        productEvents={params.productEvents}
-        marginView={marginView}
-        onTuneWeek={onTuneWeek}
-      />
+        {/* 数据表（B.5.4）：MainForecastDataTable 吸收 WeeklyLedger 职责——全期只读
+            WorkbenchResult + MarginView，sticky header + 局部横滚，缺数「—」。
+            2026-11-05：并入「数据与操作」收起区（与收起语义合一，无第二套开关）。 */}
+        <MainForecastDataTable
+          result={result}
+          productEvents={params.productEvents}
+          marginView={marginView}
+          onTuneWeek={onTuneWeek}
+        />
+      </CollapsibleSection>
     </div>
   );
 }

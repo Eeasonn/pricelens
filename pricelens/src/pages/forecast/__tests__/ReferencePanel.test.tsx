@@ -100,6 +100,17 @@ async function addRef(productLabel: string): Promise<void> {
   fireEvent.click(item);
 }
 
+/**
+ * 2026-11-05 视觉精简二轮：首预测周读数行收进「首预测周读数」收起区
+ * （默认收起，展开后可见）——受影响断言先展开再查询（逐个迁移不删除）。
+ * 主链面板重挂后收起区回到默认收起，需再展开（多副本时全量展开）。
+ */
+function expandFootnotes(): void {
+  for (const toggle of screen.getAllByRole('button', { name: '首预测周读数' })) {
+    if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+  }
+}
+
 /** 编辑器弹层作用域（可见 popover 取最后一个 = 最新打开的 portal，隔离历史隐藏壳）。 */
 async function visiblePopover(): Promise<HTMLElement> {
   return await waitFor(() => {
@@ -195,9 +206,12 @@ describe('量价参考产品 · 卡头与文案收敛（含①阶段标）', () 
     expect(text).not.toContain('补录 · 会话内');
     expect(text).not.toContain('上一代上市同期');
     // 首预测周行升级（B.5.5）：「首预测周 YYYYWww · 同周龄证据」+ 跨年周 ID。
-    expect(text).toContain('首预测周 2026W45 · 同周龄证据');
-    expect(text).toContain('同周龄比值');
-    expect(text).toContain('供①学习参照，不另乘主链');
+    // 2026-11-05：读数行在「首预测周读数」收起区，展开后可见。
+    expandFootnotes();
+    const textWithFootnote = container.textContent ?? '';
+    expect(textWithFootnote).toContain('首预测周 2026W45 · 同周龄证据');
+    expect(textWithFootnote).toContain('同周龄比值');
+    expect(textWithFootnote).toContain('供①学习参照，不另乘主链');
   });
 
   it('默认 2 面板：Mate 80 主链徽标（新文案）+ Galaxy S25 仅对照', () => {
@@ -763,14 +777,16 @@ describe('量价参考产品 · 异常态 / 缺数 / 可访问性', () => {
     expect(screen.getByRole('button', { name: '事件 W23 618 档期脉冲' }).getAttribute('tabindex')).toBe('0');
   });
 
-  it('同周龄比值来自模型考量（Pura 90 首预测周 2026W45 = ×0.98）；行口径 = 供①学习参照，不另乘主链', () => {
+  it('同周龄比值来自模型考量（Pura 90 首预测周 2026W45 = ×0.98）；行口径 = 供①学习参照，不另乘主链（读数行在收起区内，展开后可见）', () => {
     renderPanel({ prevGenReferenceId: 'ref-pura90' });
+    expandFootnotes();
     const text = document.body.textContent ?? '';
     expect(text).toContain('首预测周 2026W45 · 同周龄证据');
     expect(text).toContain('×0.98');
     expect(text).toContain('供①学习参照，不另乘主链');
-    // 默认参照（Mate 80 = 自身 / 自身）比值 ×1.00，同一行口径。
+    // 默认参照（Mate 80 = 自身 / 自身）比值 ×1.00，同一行口径（重挂后需再展开）。
     renderPanel({ prevGenReferenceId: 'ref-mate80' });
+    expandFootnotes();
     expect(document.body.textContent ?? '').toContain('首预测周 2026W45 · 同周龄证据');
   });
 });

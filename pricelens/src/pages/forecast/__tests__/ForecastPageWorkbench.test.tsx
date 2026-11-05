@@ -168,7 +168,14 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
 
   it('上一代参照受控接线（A5 多面板）：追加上一代 Pura 90 面板 → 写主链、基线校正读数更新，草稿按模型版本落 sessionStorage', async () => {
     render(<App />);
-    // 参考卡读数（§3.5 · B.5.5 v3）：首预测周（跨年周 ID 2026W45）· 同周龄证据
+    // 参考卡读数（§3.5 · B.5.5 v3）：首预测周（跨年周 ID 2026W45）· 同周龄证据。
+    // 2026-11-05 视觉精简二轮：读数行收进「首预测周读数」收起区——展开后可见；
+    // 主链切换后读数随新链面板重挂（收起区回到默认收起），需再展开。
+    const expandFootnote = () => {
+      const toggle = screen.queryByRole('button', { name: '首预测周读数' });
+      if (toggle != null) fireEvent.click(toggle);
+    };
+    expandFootnote();
     expect(document.body.textContent).toContain('首预测周 2026W45 · 同周龄证据');
     const readoutBefore = (document.body.textContent ?? '').match(/首预测周 2026W45 · 同周龄证据 · [\s\S]{0,40}/)?.[0] ?? '';
     // 「＋ 添加参考」下拉（A5：面板增删替代原槽位下拉）追加 Pura 90（链内产品 → 写 prevGenReferenceId）
@@ -181,6 +188,7 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     });
     fireEvent.click(item);
     // v3 主链：切换参照 = ①重新学习（无额外参考乘子）→ 同周龄证据读数更新
+    expandFootnote();
     const readoutAfter = (document.body.textContent ?? '').match(/首预测周 2026W45 · 同周龄证据 · [\s\S]{0,40}/)?.[0] ?? '';
     expect(readoutAfter).not.toBe('');
     expect(readoutAfter).not.toBe(readoutBefore);
@@ -192,6 +200,9 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
 
   it('微调（原因选填，不填即可应用）→ 复制关键假设（含原因、模拟状态与 SI 待确认）→ 切价格走势再返回草稿保留', async () => {
     render(<App />);
+    // 2026-11-05 视觉精简二轮：微调入口在主图「数据与操作」收起区（数据表）——展开后可见。
+    const expandDataOps = () => fireEvent.click(screen.getByRole('button', { name: '数据与操作' }));
+    expandDataOps();
     const tuneButtons = Array.from(document.querySelectorAll('button')).filter((button) => button.textContent === '微调');
     // v3 主图数据表 = 全部预测周（52 个 WeekId）各一个微调入口
     expect(tuneButtons.length).toBe(52);
@@ -239,6 +250,8 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     expect(document.querySelectorAll('.lpl-fb')).toHaveLength(1); // 分析页 FilterBar 不回归
     fireEvent.click(screen.getByRole('button', { name: '量价预测' }));
     expect(window.location.search).toContain('p=forecast');
+    // 返回后收起区回到默认收起（组件内存态不持久化）：再展开断言名录草稿仍在。
+    expandDataOps();
     expect(document.body.textContent).toContain('手调 · 2026W47：黑五主峰周，电商资源加投');
   });
 

@@ -126,6 +126,18 @@ const splitLineOf = (container: HTMLElement, monthKey: string): string =>
 const feedbackTextOf = (container: HTMLElement): string =>
   (container.querySelector('[data-si-feedback]')?.textContent ?? '');
 
+/**
+ * 2026-11-05 视觉精简二轮：SI 格子行 / 联动反馈 / IoBar / FlowBar 收进
+ * 「SI 月计划与链路」收起区，输出框收进「输出与规则」收起区（默认收起，
+ * 展开后可见）——受影响断言先展开再查询（逐个迁移不删除）。
+ */
+const expandSection = (container: HTMLElement, label: string): void => {
+  const toggle = container.querySelector(`[data-collapsible-section="${label}"] > button`);
+  if (toggle != null && toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+};
+const expandSiWorkspace = (container: HTMLElement): void => expandSection(container, 'SI 月计划与链路');
+const expandOutput = (container: HTMLElement): void => expandSection(container, '输出与规则');
+
 beforeEach(() => {
   sessionStorage.clear();
 });
@@ -135,10 +147,11 @@ afterEach(cleanup);
 // ============================================================
 // 任务 6 Step 1 文档给定用例（照抄；工厂 props 本地定义）
 // ============================================================
-describe('SI monthly confirmation', () => {
+describe('SI monthly confirmation（SI 格子行在「SI 月计划与链路」收起区内，展开后可见）', () => {
   it('requires each month, separates blank from zero, and reopens edited months', () => {
     const onSiMonthLive = vi.fn();
-    render(<InventoryValidationCard {...makeInventoryHarnessProps(onSiMonthLive)} />);
+    const { container } = render(<InventoryValidationCard {...makeInventoryHarnessProps(onSiMonthLive)} />);
+    expandSiWorkspace(container);
     expect(screen.getAllByRole('button', { name: /确认本月/ })).toHaveLength(12);
     expect(screen.queryByRole('button', { name: '全部确认' })).toBeNull();
     const november = screen.getByLabelText('2026-11 SI 计划（千台/月）');
@@ -158,9 +171,10 @@ describe('SI monthly confirmation', () => {
 // ============================================================
 // SI 逐月确认状态机（B.5.7 / B.4.3）
 // ============================================================
-describe('SI 逐月确认状态机', () => {
+describe('SI 逐月确认状态机（展开「SI 月计划与链路」后断言）', () => {
   it('初始全部「基准·待确认」；修改已确认月后自动回到待确认（已修改·待确认）', () => {
     const { container, onSiMonthLive, onConfirmMonth } = renderCard();
+    expandSiWorkspace(container);
     expect((statusChipOf(container, '2026-11').textContent ?? '')).toBe('基准·待确认');
     // 修改并提交 2026-12（180 千台 ≠ 基准 161）→ 按钮名指明确认对象 → 确认
     const december = siInputOf(container, '2026-12');
@@ -179,6 +193,7 @@ describe('SI 逐月确认状态机', () => {
 
   it('非法值：不调 setter、aria-invalid 就地错误；改回合法值后错误清除', () => {
     const { container, onSiMonthLive } = renderCard();
+    expandSiWorkspace(container);
     const november = siInputOf(container, '2026-11');
     fireEvent.change(november, { target: { value: '2500' } });
     fireEvent.blur(november);
@@ -198,6 +213,7 @@ describe('SI 逐月确认状态机', () => {
 
   it('Esc 恢复最后合法值：草稿丢弃、不提交、错误态清除', () => {
     const { container, onSiMonthLive } = renderCard();
+    expandSiWorkspace(container);
     const november = siInputOf(container, '2026-11');
     november.focus();
     fireEvent.change(november, { target: { value: '999' } });
@@ -213,6 +229,7 @@ describe('SI 逐月确认状态机', () => {
 
   it('单月「恢复基准」：回写基准值并重新待确认（基准·待确认）', () => {
     const { container, onSiMonthLive, onResetMonth } = renderCard();
+    expandSiWorkspace(container);
     const january = siInputOf(container, '2027-01');
     fireEvent.change(january, { target: { value: '300' } });
     fireEvent.blur(january);
@@ -228,9 +245,10 @@ describe('SI 逐月确认状态机', () => {
 // ============================================================
 // 12 格分组与拆周（B.5.7：四个连续三月组、组头+待确认状态不隐藏）
 // ============================================================
-describe('SI 格子分组与拆周', () => {
+describe('SI 格子分组与拆周（展开「SI 月计划与链路」后断言）', () => {
   it('12 格分四个连续三月组，组头写月份区间与「待确认 n / 3」且不隐藏', () => {
     const { container } = renderCard();
+    expandSiWorkspace(container);
     const groups = Array.from(container.querySelectorAll('[data-si-group]'));
     expect(groups.map((group) => group.getAttribute('data-si-group'))).toEqual([
       '2026-11—2027-01',
@@ -246,6 +264,7 @@ describe('SI 格子分组与拆周', () => {
 
   it('拆周 = 月总量→周整数守恒（siWeeklyPlan 同源）：2026-11=221 千台 → 五周各 44.2', () => {
     const { container } = renderCard();
+    expandSiWorkspace(container);
     expect(splitLineOf(container, '2026-11')).toBe(
       '2026W45 44.2 · 2026W46 44.2 · 2026W47 44.2 · 2026W48 44.2 · 2026W49 44.2 千台',
     );
@@ -256,6 +275,7 @@ describe('SI 格子分组与拆周', () => {
 
   it('合法提交后拆周随 SI 更新（乐观呈现，不等页面回写）', () => {
     const { container } = renderCard();
+    expandSiWorkspace(container);
     const december = siInputOf(container, '2026-12');
     fireEvent.change(december, { target: { value: '101' } });
     fireEvent.blur(december);
@@ -287,13 +307,18 @@ describe('SI 格子分组与拆周', () => {
     expect((view.container.textContent ?? '')).toContain('未触发');
   });
 
-  it('SI 格子行在卡头区（SVG 之前），月格子 aria 用 v3 月键，无旧「人工 SI 计划（按月）」', () => {
+  it('默认视图 = 卡头 chip + 图（SVG）：SI 格子行收进「SI 月计划与链路」收起区（展开后月格子 aria 用 v3 月键），无旧「人工 SI 计划（按月）」', () => {
     const { container } = renderCard();
+    // 默认收起：SI 格子行不渲染；图默认可见。
+    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('[data-si-cell-row]')).toBeNull();
+    // 展开：SI 格子行在收起区内（位于图之后），月格子 aria 用 v3 月键。
+    expandSiWorkspace(container);
+    const svgAfter = container.querySelector('svg');
     const row = container.querySelector('[data-si-cell-row]') as HTMLElement | null;
-    const svg = container.querySelector('svg');
     expect(row).not.toBeNull();
-    expect(svg).not.toBeNull();
-    expect(row!.compareDocumentPosition(svg!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(svgAfter).not.toBeNull();
+    expect(row!.compareDocumentPosition(svgAfter!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(row!.querySelector('input[aria-label="2026-11 SI 计划（千台/月）"]')).not.toBeNull();
     expect(row!.textContent).toContain('千台/月');
     expect(container.textContent).not.toContain('人工 SI 计划（按月）');
@@ -303,9 +328,10 @@ describe('SI 格子分组与拆周', () => {
 // ============================================================
 // SI 联动反馈（aria-live=polite，写实际前后变化）
 // ============================================================
-describe('SI 联动反馈', () => {
+describe('SI 联动反馈（反馈行在「SI 月计划与链路」收起区内，展开后可见）', () => {
   it('SI 提高解除修正：「2026-11 SI +179 千台 → 2026W46 修正已解除」（aria-live=polite）', () => {
     const { container } = renderCard();
+    expandSiWorkspace(container);
     const region = container.querySelector('[data-si-feedback]') as HTMLElement;
     expect(region.getAttribute('aria-live')).toBe('polite');
     const november = siInputOf(container, '2026-11');
@@ -316,6 +342,7 @@ describe('SI 联动反馈', () => {
 
   it('SI 降为小值新增修正：「2026-11 SI −370 千台 → 2026W45 起新增修正」', () => {
     const { container } = renderCard(fatParams());
+    expandSiWorkspace(container);
     expect((container.textContent ?? '')).toContain('未触发');
     const november = siInputOf(container, '2026-11');
     fireEvent.change(november, { target: { value: '30' } });
@@ -326,6 +353,7 @@ describe('SI 联动反馈', () => {
   it('手调周截断事实仍在：「… → 2026W46 起修正仍在；截断事实仍在，主图该周显示手调值」', () => {
     const tuned = setManualAdjustment(base, '2026W46', 45000, '会议口径上调') as WorkbenchParams;
     const { container } = renderCard(tuned);
+    expandSiWorkspace(container);
     const november = siInputOf(container, '2026-11');
     fireEvent.change(november, { target: { value: '230' } });
     fireEvent.blur(november);
@@ -338,9 +366,11 @@ describe('SI 联动反馈', () => {
 // ============================================================
 // 迁移自 v2 的回归（v3 周身份 = 跨年 WeekId）
 // ============================================================
-describe('库存修正卡 · 基准截断（输出只讲结果 + 万台单位）', () => {
+describe('库存修正卡 · 基准截断（输出只讲结果 + 万台单位；IoBar/输出框在收起区内，展开后可见）', () => {
   it('基准截断：输出只讲结果，无「刚性砍 / 中间过程 / 主图只显最终」话术', () => {
     const { container } = renderCard();
+    expandSiWorkspace(container);
+    expandOutput(container);
     const result = computeWorkbench(fixture, base);
     const cappedWeeks = result.weeks.filter((week) => week.status === 'forecast' && week.supplyCapped);
     expect(cappedWeeks.map((week) => week.weekId)).toEqual([
@@ -358,6 +388,7 @@ describe('库存修正卡 · 基准截断（输出只讲结果 + 万台单位）
 
   it('判定列表：每个修正周一条、各带自己的跨年周 ID 与修正读数（不共用第一周原因）', () => {
     const { container } = renderCard();
+    expandOutput(container);
     const result = computeWorkbench(fixture, base);
     const rows = verdictRowsOf(container);
     const cappedWeeks = result.weeks.filter((week) => week.status === 'forecast' && week.supplyCapped);
@@ -403,6 +434,7 @@ describe('库存修正卡 · 手调覆盖截断周（supplyCapped 仍在）与�
   it('手调 2026W50：截断事实保留（微痕与判定仍标修正段起点），该周判定写人工手调', () => {
     const tuned = setManualAdjustment(base, '2026W50', 50000, '会议结论上调') as WorkbenchParams;
     const { container, onNavigate } = renderCard(tuned);
+    expandOutput(container);
     const result = computeWorkbench(fixture, tuned);
     const w50 = result.weeks.find((week) => week.weekId === '2026W50');
     expect(w50?.supplyCapped).toBe(true);
@@ -429,6 +461,8 @@ describe('库存修正卡 · 手调覆盖截断周（supplyCapped 仍在）与�
 describe('库存修正卡 · 无修正状态', () => {
   it('SI 充足：显示「库存可支撑 / 未触发」，不挂 ±2% 徽标，无判定行', () => {
     const { container } = renderCard(fatParams());
+    expandSiWorkspace(container);
+    expandOutput(container);
     expect(computeWorkbench(fixture, fatParams()).firstAdjustedWeek).toBeNull();
     const text = container.textContent ?? '';
     expect(text).toContain('库存可支撑');
@@ -441,9 +475,10 @@ describe('库存修正卡 · 无修正状态', () => {
   });
 });
 
-describe('库存修正卡 · 规则文案收敛', () => {
+describe('库存修正卡 · 规则文案收敛（输出框在「输出与规则」收起区，展开后可见）', () => {
   it('规则一行展示 + 「阈值未核定」chip；无「待拍板」；min 公式只在 title', () => {
     const { container } = renderCard();
+    expandOutput(container);
     const text = container.textContent ?? '';
     expect(text).toContain('DOS 70–90 天 · 降幅预警 20%／30%');
     expect(text).toContain('阈值未核定');
@@ -475,6 +510,7 @@ describe('库存修正卡 · 图面精简（只留库存柱 + 渠道 DOS）', ()
 
   it('删 DOS 50 参考格线与健康带：左轴只标 0 与数据派生上限', () => {
     const { container } = renderCard();
+    expandOutput(container);
     const chart = container.querySelector('svg[role="img"]') as SVGSVGElement;
     const leftLabels = Array.from(chart.querySelectorAll('text[text-anchor="end"]'))
       .map((node) => node.textContent ?? '')
@@ -505,12 +541,13 @@ describe('库存修正卡 · 图面精简（只留库存柱 + 渠道 DOS）', ()
   });
 });
 
-describe('库存修正卡 · 链路指示条（去编号 · 与页级管线①–④不重号）', () => {
+describe('库存修正卡 · 链路指示条（去编号 · 与页级管线①–④不重号；FlowBar 在「SI 月计划与链路」收起区，展开后可见）', () => {
   const stepLabelsOf = (container: HTMLElement): string[] =>
     Array.from(container.querySelectorAll('[data-flow-step]')).map((el) => el.getAttribute('data-flow-step') ?? '');
 
   it('五节点定序完整且无编号：主图基线 SO → 反算 DOS/库存 → 健康判定 → 上限修正 → 回写主图', () => {
     const { container } = renderCard();
+    expandSiWorkspace(container);
     const steps = Array.from(container.querySelectorAll('[data-flow-step]')) as HTMLElement[];
     expect(stepLabelsOf(container)).toEqual(['主图基线 SO', '反算 DOS/库存', '健康判定', '上限修正', '回写主图']);
     for (const step of steps) {
@@ -522,6 +559,7 @@ describe('库存修正卡 · 链路指示条（去编号 · 与页级管线①�
 
   it('基准（2026W46 起截断）：「上限修正」琥珀点亮注 2026W46 起，「回写主图」激活', () => {
     const { container } = renderCard();
+    expandSiWorkspace(container);
     const cap = container.querySelector('[data-flow-step="上限修正"]') as HTMLElement;
     expect(cap.getAttribute('data-state')).toBe('amber');
     expect(cap.textContent).toContain('2026W46 起');
@@ -533,6 +571,7 @@ describe('库存修正卡 · 链路指示条（去编号 · 与页级管线①�
 
   it('2026-11 SI=0：点亮注 2026W45 起', () => {
     const { container } = renderCard();
+    expandSiWorkspace(container);
     const november = siInputOf(container, '2026-11');
     fireEvent.change(november, { target: { value: '0' } });
     fireEvent.blur(november);
@@ -543,6 +582,7 @@ describe('库存修正卡 · 链路指示条（去编号 · 与页级管线①�
 
   it('SI 充足（无修正）：「上限修正」不点亮，「回写主图 · 未触发」灰化', () => {
     const { container } = renderCard(fatParams());
+    expandSiWorkspace(container);
     const cap = container.querySelector('[data-flow-step="上限修正"]') as HTMLElement;
     expect(cap.getAttribute('data-state')).toBe('base');
     expect(cap.textContent).not.toContain('起');

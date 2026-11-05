@@ -9,9 +9,9 @@
 // 页级管线已用①–④编号（PipelineNav），卡内链路不再编第二套 1–5 号
 // （库存卡 3a–3e / 成本卡 4a–4d 的编号方案一并作废，直接无编号）。
 // ============================================================
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { color, radius, space } from '../../theme/tokens';
+import { color, motion, radius, space } from '../../theme/tokens';
 
 /** 页面白卡通用样式（与 ForecastBits.forecastCardStyle 同语言）。 */
 export const workbenchCardStyle: CSSProperties = {
@@ -103,6 +103,69 @@ export function IoBar({ input, output }: { input: string; output: string }) {
 
 /** 「演示」琥珀 chip 已退役（WP6 8.3 Step 2）：页首 = DataStatusBadge 一处，
  *  卡级 = 轻量 SimChip（模拟 / 模拟历史，中性灰），不再重复页级琥珀「演示」标。 */
+
+// ------------------------------------------------------------
+// 共享收起区（2026-11-05 视觉精简二轮）：卡内次级信息默认收起为一条
+// 「▸ 标签」细条（canvasSoft2 底 + hairline 描边 + 11px 标签 + chevron），
+// 展开显示内容；不用 antd Collapse，不新增视觉语言（颜色 / 圆角 / 字号 /
+// 动效全部取既有 token）。默认非受控 useState（默认收起，组件内存态——
+// 不持久化，每次进页回到最净状态）；可选受控（open + onToggle）供布局随
+// 开合切换的场景（如大盘卡 grid 切单列）。收起时不渲染内容（children 卸载）。
+// ------------------------------------------------------------
+export function CollapsibleSection({
+  label,
+  open,
+  onToggle,
+  defaultOpen = false,
+  children,
+}: {
+  /** 收起头标签（11px；同时是头按钮的可访问名称）。 */
+  label: string;
+  /** 受控开合（可选；缺省走内部 useState）。 */
+  open?: boolean;
+  /** 开合回调（受控必配；非受控也会回调，便于父级感知）。 */
+  onToggle?: (next: boolean) => void;
+  /** 非受控初始态（默认收起）。 */
+  defaultOpen?: boolean;
+  /** 展开内容；收起时不渲染。缺省 = 仅渲染头（纯开关用法）。 */
+  children?: ReactNode;
+}) {
+  const [uncontrolled, setUncontrolled] = useState(defaultOpen);
+  const expanded = open ?? uncontrolled;
+  const toggle = () => {
+    if (open == null) setUncontrolled((prev) => !prev);
+    onToggle?.(!expanded);
+  };
+  return (
+    <div data-collapsible-section={label} data-open={expanded ? 'true' : undefined} style={{ minWidth: 0 }}>
+      <button
+        type="button"
+        data-collapsible-toggle=""
+        aria-expanded={expanded}
+        onClick={toggle}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+          padding: '3px 10px', border: `1px solid ${color.hairline}`, borderRadius: radius.control,
+          background: color.canvasSoft2, cursor: 'pointer', font: 'inherit', textAlign: 'left',
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            flex: 'none', fontSize: 10, lineHeight: 1, color: color.mute,
+            transform: expanded ? 'rotate(90deg)' : 'none', transition: `transform ${motion.fast}ms`,
+          }}
+        >
+          ▸
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: color.body, whiteSpace: 'nowrap' }}>{label}</span>
+      </button>
+      {expanded && children != null && (
+        <div data-collapsible-body="" style={{ marginTop: space.sm, minWidth: 0 }}>{children}</div>
+      )}
+    </div>
+  );
+}
 
 // ------------------------------------------------------------
 // 链路指示条（FlowBar · 卡内共享）：贴 IoBar 的「输入 → 输出」小 chip + →
