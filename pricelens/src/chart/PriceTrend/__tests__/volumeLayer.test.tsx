@@ -114,7 +114,7 @@ describe('第196轮整改5：量层（价格绘图区下方 + 右轴）', () => 
     expect(screen.queryByText(vMax.toLocaleString('en-US'))).toBeNull();
   });
 
-  it('面积模式：纯半透明面积（无描边线），不出柱 rect', async () => {
+  it('面积模式：平滑曲线 + 纵向渐变填充（无描边线），不出柱 rect', async () => {
     const { container } = render(<Chart {...baseProps} volumeOn volumeMode="area" volumes={VOLUMES} volumeHeight={120} /> as ReactElement);
     await waitForGeom(container);
     expect(container.querySelectorAll('svg rect').length).toBe(0);
@@ -122,17 +122,31 @@ describe('第196轮整改5：量层（价格绘图区下方 + 右轴）', () => 
     expect(path).toBeTruthy();
     // 无边界描边线：stroke = none
     expect(path!.getAttribute('stroke')).toBe('none');
-    // 半透明填充（缺省色 = color.mute，α0.18 与柱模式同透明度语言）
-    expect(path!.getAttribute('fill')).toMatch(/^rgba\(.+, 0\.18\)$/);
-    // 路径语法良构（2026-11-05 Eason「面积无呈现」回归）：每个命令后坐标必须成对
+    // 渐变填充（2026-11-05 Eason：从下往上渐变色）= url(#id)，且 defs 里有两档 stop
+    const fill = path!.getAttribute('fill') ?? '';
+    expect(fill).toMatch(/^url\(#.+\)$/);
+    const gradId = fill.slice(5, -1);
+    const grad = container.querySelector(`linearGradient[id="${gradId}"]`);
+    expect(grad).toBeTruthy();
+    const stops = grad!.querySelectorAll('stop');
+    expect(stops.length).toBe(2);
+    // 路径语法良构（含平滑 C 段）：按命令收敛坐标数（M/L=2、C=6、Z=0）
     // ——旧实现拼出「M x y volBase L …」奇数序列，M 吞掉后续 x 当配对值整条画出界
     const d = path!.getAttribute('d') ?? '';
     expect(d).not.toBe('');
-    for (const seg of d.split(/(?=[MLZ])/).filter((s) => s.trim() && !s.trim().startsWith('Z'))) {
-      const nums = seg.trim().slice(1).trim().split(/[\s,]+/).map(Number);
-      expect(nums.length % 2).toBe(0);
+    expect(d).toContain('C'); // 平滑（2026-11-05 Eason）
+    const arity: Record<string, number> = { M: 2, L: 2, C: 6, Z: 0 };
+    const segs = d.match(/[MLCZ][^MLCZ]*/g) ?? [];
+    expect(segs.length).toBeGreaterThan(0);
+    for (const seg of segs) {
+      const cmd = seg[0];
+      const nums = seg.slice(1).trim().split(/[\s,]+/).filter(Boolean).map(Number);
+      expect(nums.length).toBe(arity[cmd]);
       expect(nums.every((n) => Number.isFinite(n))).toBe(true);
     }
+    // 起点落基线、闭合回基线（面积底边完整）
+    expect(d.trim().startsWith('M')).toBe(true);
+    expect(d.trim().endsWith('Z')).toBe(true);
   });
 
   it('量层开启时 canvas 网格让出量带（grid.bottom 增大）→ 时间标签下移，量带无分界线', async () => {

@@ -1233,3 +1233,44 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number): AvoidRes
   }
   return { dy, names };
 }
+
+// ------------------------------------------------------------
+// 量层面积模式（2026-11-05 Eason：面积应平滑 + 纵向渐变）：平滑段生成纯函数。
+// 单调三次 Hermite（Fritsch–Carlson 切线）：曲线过全部点、不产生邻域外过冲
+// （Catmull-Rom 会在陡变处下探基线以下，量带会出现破底假象）。
+// 返回「C …C …」段串（调用方先 M/L 到首点再拼接），坐标恒成对。
+// ------------------------------------------------------------
+export function smoothAreaSegments(points: ReadonlyArray<{ x: number; y: number }>): string {
+  const n = points.length;
+  if (n < 2) return '';
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const dxs: number[] = [];
+  const ms: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = xs[i + 1] - xs[i];
+    dxs.push(dx);
+    ms.push((ys[i + 1] - ys[i]) / (dx || 1e-6));
+  }
+  const tangents: number[] = new Array<number>(n);
+  tangents[0] = ms[0];
+  tangents[n - 1] = ms[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    if (ms[i - 1] * ms[i] <= 0) {
+      tangents[i] = 0; // 局部极值点切线置平，杜绝过冲
+    } else {
+      const wx = dxs[i - 1] + dxs[i];
+      tangents[i] = (3 * wx) / ((wx + dxs[i]) / ms[i - 1] + (wx + dxs[i - 1]) / ms[i]);
+    }
+  }
+  let d = '';
+  for (let i = 0; i < n - 1; i++) {
+    const x0 = xs[i];
+    const x1 = xs[i + 1];
+    const h = x1 - x0;
+    const c1y = ys[i] + (tangents[i] * h) / 3;
+    const c2y = ys[i + 1] - (tangents[i + 1] * h) / 3;
+    d += `C ${(x0 + h / 3).toFixed(1)} ${c1y.toFixed(1)} ${(x1 - h / 3).toFixed(1)} ${c2y.toFixed(1)} ${x1.toFixed(1)} ${ys[i + 1].toFixed(1)} `;
+  }
+  return d.trimEnd();
+}

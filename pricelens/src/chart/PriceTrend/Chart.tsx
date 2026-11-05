@@ -59,7 +59,7 @@
 //      模式视觉常量与量价页 VolumeBars 同源；右轴刻度随量层缩放（gridRight 24→56），
 //      价格区与量带之间无分界线（x 轴线隐藏、时间标签下移到量带之下）。
 // ============================================================
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover, Popconfirm } from 'antd';
 import { TagOutlined, CloseOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
@@ -91,6 +91,7 @@ import {
   computeYAxis,
   diffPct,
   perUsdOf,
+  smoothAreaSegments,
   xPxOf,
   yPxOf,
   type Geom,
@@ -692,6 +693,7 @@ export default function Chart(props: ChartProps) {
   //      = 当前图高 30%。量带开启时 canvas 高度同步加高（时间标签画到量带之下），
   //      右缘让出量轴列（VOL_AXIS_RIGHT_W），价格区与量带之间无分界线 ----
   const volOn = props.volumeOn === true;
+  const volumeGradId = useId(); // 量层面积渐变 id（多面板实例防冲突）
   const volBandH = volOn
     ? Math.max(40, Math.round(props.volumeHeight ?? (gridTop + scale.plotHeight + GRID.bottom) * 0.3))
     : 0;
@@ -1172,17 +1174,20 @@ export default function Chart(props: ChartProps) {
           const h = hOf(v);
           return { i, x: geom.plotLeft + colW * (i + 0.5) - barW / 2, y: volBase - h, w: barW, h, lit: litIdx === i };
         });
-        // 面积模式：纯半透明面积（无边界描边线）；缺采桶断开成段（与柱模式同语义）
+        // 面积模式（2026-11-05 Eason：平滑曲线 + 纵向渐变填充）：单调三次平滑过全部
+        // 桶心点，缺采桶断开成段（与柱模式同语义）；填充 = 底部实、向上渐隐的线性渐变
         const areaPath = (() => {
           if (vMax <= 0) return '';
           let d = '';
-          let run: string[] = [];
+          let run: Array<{ x: number; y: number }> = [];
           const flush = (): void => {
             if (run.length >= 2) {
               // 起点必须拆出首点 x 再落基线：`M ${run[0]} ${volBase}` 会拼出
               // 「M x y volBase」奇数坐标序列，M 吞掉后续 L 的首 x 当配对值，
-              // 整条路径坐标错乱画出界（2026-11-05 Eason：面积模式无呈现根因）
-              d += `M ${run[0].split(' ')[0]} ${volBase} L ${run.join(' L ')} L ${run[run.length - 1].split(' ')[0]} ${volBase} Z `;
+              // 整条路径坐标错乱画出界（同日更早的「面积无呈现」根因，勿回退）
+              const x0 = run[0].x.toFixed(1);
+              const xn = run[run.length - 1].x.toFixed(1);
+              d += `M ${x0} ${volBase} L ${x0} ${run[0].y.toFixed(1)} ${smoothAreaSegments(run)} L ${xn} ${volBase} Z `;
             }
             run = [];
           };
@@ -1191,7 +1196,7 @@ export default function Chart(props: ChartProps) {
               flush();
               return;
             }
-            run.push(`${(geom.plotLeft + colW * (i + 0.5)).toFixed(1)} ${(volBase - hOf(v)).toFixed(1)}`);
+            run.push({ x: geom.plotLeft + colW * (i + 0.5), y: volBase - hOf(v) });
           });
           flush();
           return d;
@@ -1200,7 +1205,16 @@ export default function Chart(props: ChartProps) {
           <>
             <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
               {props.volumeMode === 'area' ? (
-                <path d={areaPath} fill={hexToRgba(volColor, 0.18)} stroke="none" />
+                <>
+                  {/* 纵向渐变（从下往上渐隐）：底部 0.34 → 顶部 0.04；useId 防多面板实例 id 冲突 */}
+                  <defs>
+                    <linearGradient id={volumeGradId} x1="0" y1="1" x2="0" y2="0">
+                      <stop offset="0%" stopColor={hexToRgba(volColor, 0.34)} />
+                      <stop offset="100%" stopColor={hexToRgba(volColor, 0.04)} />
+                    </linearGradient>
+                  </defs>
+                  <path d={areaPath} fill={`url(#${volumeGradId})`} stroke="none" />
+                </>
               ) : (
                 bars.map((bar) =>
                   bar == null ? null : (
