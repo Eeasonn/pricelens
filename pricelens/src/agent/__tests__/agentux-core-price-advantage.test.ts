@@ -4,6 +4,8 @@ import { dimProduct } from '../../data';
 import { buildCards } from '../../state/mainSelection';
 import { buildAgentContext, runAgent } from '../core';
 import { calculatePriceAdvantage } from '../priceAdvantage';
+import { benchmarkSkuIdsFor } from '../../state/configStore';
+import { getCurrentCountry, setCurrentCountry } from '../../state/currentScope';
 
 describe('agentux-core price advantage', () => {
   it('uses local deterministic price facts and exposes advantage/lagging rows', async () => {
@@ -30,5 +32,31 @@ describe('agentux-core price advantage', () => {
     const second = calculatePriceAdvantage(state, 'ctx');
     expect(first).toEqual(second);
     expect(first?.rows.length).toBeGreaterThan(0);
+  });
+
+  it('uses the requested country benchmark when the current scope registry still points to another country', async () => {
+    const own = dimProduct.find((row) => row.is_own && row.model_id === 'own-huawei-watch-ultimate-2' && row.countries.includes('AE') && row.countries.includes('RU'));
+    expect(own).toBeDefined();
+    if (!own) return;
+    const previousCountry = getCurrentCountry();
+    setCurrentCountry('AE');
+    try {
+      const state = {
+        ...defaultFilters,
+        countryCode: 'AE',
+        mains: buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] }], { auto: true, countryCode: 'AE' }),
+      };
+      const response = await runAgent('RU 价格优势', buildAgentContext('dashboard', state, []));
+      const card = response.cards.find((item) => item.kind === 'price_advantage');
+      expect(card?.kind).toBe('price_advantage');
+      if (card?.kind !== 'price_advantage') return;
+      const ruSkuIds = benchmarkSkuIdsFor(own.model_id, own.romram, 'RU').sort();
+      const aeSkuIds = benchmarkSkuIdsFor(own.model_id, own.romram, 'AE').sort();
+      const resultSkuIds = [...new Set(card.rows.map((row) => row.competitorSkuId))].sort();
+      expect(ruSkuIds).not.toEqual(aeSkuIds);
+      expect(resultSkuIds).toEqual(ruSkuIds);
+    } finally {
+      setCurrentCountry(previousCountry);
+    }
   });
 });

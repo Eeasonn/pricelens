@@ -213,7 +213,7 @@ function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
       adaptive: false,
       rangeStart: row.weekId,
       rangeEnd: row.weekId,
-      mains: buildCards([{ modelId: row.ownModelId, romram: row.ownRomram, skuIds: [row.ownSkuId] }], { auto: true }),
+      mains: buildCards([{ modelId: row.ownModelId, romram: row.ownRomram, skuIds: [row.ownSkuId] }], { auto: true, countryCode: row.countryCode }),
     };
     const result = applyFilter({ kind: 'filter', id: `price-advantage-locate-${row.id}`, title: '价格优势定位', patch, changes: [] });
     if (!result.ok) return;

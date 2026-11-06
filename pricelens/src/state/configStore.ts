@@ -111,7 +111,7 @@ export function benchmarkSkuIdsFor(modelId: string, romram: string, countryCode:
  * 配置给到哪个 SKU 就勾哪个 SKU（品牌色/颜色级）；SKU 不在主数据中时丢弃（防御）。
  * 输出顺序按 sort 升序（主竞品在前），多我司产品按其顺序拼接。
  */
-export function groupsFromBenchmark(own: ProductSelection[]): ProductSelection[] {
+export function groupsFromBenchmark(own: ProductSelection[], countryCode: string = getCurrentCountry()): ProductSelection[] {
   if (!own.length || !dimProduct.length) return [];
   const bySku = new Map(dimProduct.map((p) => [p.sku_id, p]));
   const out = new Map<string, ProductSelection>();
@@ -125,7 +125,7 @@ export function groupsFromBenchmark(own: ProductSelection[]): ProductSelection[]
     out.set(key, group);
   };
   for (const sel of own) {
-    for (const skuId of benchmarkSkuIdsFor(sel.modelId, sel.romram)) push(skuId);
+    for (const skuId of benchmarkSkuIdsFor(sel.modelId, sel.romram, countryCode)) push(skuId);
   }
   return [...out.values()];
 }

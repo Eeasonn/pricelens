@@ -193,7 +193,7 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
     // Keep natural-language filtering on the same card builder as header
     // search. This preserves the default own-product competitor matrix and
     // enforces the shared 8-card / 3-compare caps.
-    patch.mains = clampMains(buildCards(entities.selections, { auto: true }));
+    patch.mains = clampMains(buildCards(entities.selections, { auto: true, countryCode: entities.countryCode }));
   }
   return patch;
 }
@@ -285,11 +285,12 @@ function stateForPriceAdvantage(state: FiltersState, entities: AgentEntityResolu
   // entry point silently compare Apple/Samsung against each other. Materialize
   // an own product when the current scope has no Huawei main card.
   const ownCard = next.mains.find((card) => card.main && ownSelectionForAgent(card.main));
-  if (ownCard) return { ...next, mains: clampMains(next.mains.map((card) => card.id === ownCard.id ? withAutoOn(card) : card)) };
+  if (ownCard) return { ...next, mains: clampMains(next.mains.map((card) => card.id === ownCard.id ? withAutoOn(card, next.countryCode) : card)) };
   const own = dimProduct.find((row) => row.is_own && row.industry === state.industry && row.countries.includes(entities.countryCode || state.countryCode));
   if (!own) return next;
   const skuId = lowestPriceColorSku(own.model_id, own.romram, entities.countryCode || state.countryCode) ?? own.sku_id;
-  return { ...next, countryCode: entities.countryCode || state.countryCode, mains: clampMains(buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [skuId] }], { auto: true })) };
+  const countryCode = entities.countryCode || state.countryCode;
+  return { ...next, countryCode, mains: clampMains(buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [skuId] }], { auto: true, countryCode })) };
 }
 
 function ownSelectionForAgent(selection: ProductSelection): boolean {
@@ -319,7 +320,7 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
   // own product as a deterministic target instead of falling into clarify.
   if (!queryState.mains.some((card) => card.main) && /比较|对比|依据|解释当前|主竞品|最新预警|市场情报|事件|汇率|量价|销量|预测|不确定性|价格下调|价格上调|趋势/.test(text)) {
     const own = dimProduct.find((row) => row.is_own && row.industry === state.industry && row.countries.includes(state.countryCode));
-    if (own) queryState = { ...queryState, mains: buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] }], { auto: true }) };
+    if (own) queryState = { ...queryState, mains: buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] }], { auto: true, countryCode: queryState.countryCode }) };
   }
   const query = seriesQueryOf(queryState);
   if (!query) {
@@ -521,7 +522,7 @@ function alertFilterPatch(alert: AgentAlertRecord, state: FiltersState): FilterP
     rangeStart: alert.weekId,
     rangeEnd: alert.weekId,
   };
-  if (selection) patch.mains = clampMains(buildCards([selection], { auto: true }));
+  if (selection) patch.mains = clampMains(buildCards([selection], { auto: true, countryCode: state.countryCode }));
   return patch;
 }
 
