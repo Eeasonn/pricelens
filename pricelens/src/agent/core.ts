@@ -186,7 +186,7 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
   const entities = resolveAgentEntities(text, state);
   if (entities.explicitCountry) patch.countryCode = entities.countryCode;
   if (entities.explicitProduct && entities.selections.length) {
-    patch.mains = clampMains(buildCards(entities.selections, { auto: true }));
+    patch.mains = clampMains(buildCards(entities.selections, { auto: true, countryCode: entities.countryCode }));
   }
   return patch;
 }

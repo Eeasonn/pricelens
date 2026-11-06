@@ -29,7 +29,7 @@ function defaultOwnCards(state: FiltersState): MainProduct[] {
   const rows = dimProduct.filter((row) => row.industry === state.industry && row.is_own && row.countries.includes(state.countryCode) && (!defaultModel || row.model_id === defaultModel));
   const fallback = rows.length ? rows : dimProduct.filter((row) => row.industry === state.industry && row.is_own && row.countries.includes(state.countryCode));
   const selections = [...new Map(fallback.map((row) => [compact(row.romram), { modelId: row.model_id, romram: row.romram, skuIds: [row.sku_id] }])).values()].slice(0, 2);
-  return buildCards(selections, { auto: true });
+  return buildCards(selections, { auto: true, countryCode: state.countryCode });
 }
 
 function effectiveOwnCards(state: FiltersState): MainProduct[] {
@@ -38,7 +38,7 @@ function effectiveOwnCards(state: FiltersState): MainProduct[] {
   return own.map((card) => {
     if (!card.main) return card;
     if (card.compares.length || card.auto) return card;
-    return withAutoOn(card);
+    return withAutoOn(card, state.countryCode);
   });
 }
 
@@ -92,7 +92,7 @@ export function buildPriceAdvantageResult(state: FiltersState, contextFingerprin
   let rowIndex = 0;
   for (const card of cards) {
     if (!card.main || !isOwn(card.main)) continue;
-    const competitors = card.compares.length ? card.compares : autoComparesFor(card);
+    const competitors = card.compares.length ? card.compares : autoComparesFor(card, state.countryCode);
     const ownKey = `${card.main.modelId}__${compact(card.main.romram)}`;
     const ownSeries = seriesByKey.get(ownKey);
     if (!ownSeries) continue;

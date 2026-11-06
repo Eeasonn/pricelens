@@ -190,7 +190,7 @@ function AdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
   const rows = card.rows.filter((row) => (relation === 'all' || row.relation === relation) && (skuId === 'all' || row.own.skuId === skuId));
   const currency = card.currency === 'usd' ? 'usd' : 'local';
   const jump = (row: PriceAdvantageRow) => {
-    const autoCards = buildCards([row.ownSelection], { auto: true });
+    const autoCards = buildCards([row.ownSelection], { auto: true, countryCode: row.countryCode });
     const first = autoCards[0];
     const keepsTarget = first?.compares.some((item) => item.modelId === row.compareSelection.modelId && item.romram.replace(/\s+/g, '') === row.compareSelection.romram.replace(/\s+/g, ''));
     const mains = keepsTarget ? autoCards : clampMains(autoCards.map((item) => ({ ...item, compares: [...item.compares, row.compareSelection].slice(0, 3) })));
@@ -238,7 +238,8 @@ function AlertListCard({ card }: { card: AlertListResultCard }) {
   const dashboard = (alert: AlertListResultCard['alerts'][number]) => {
     const selection = seriesSelectionOf(alert.seriesKey ?? '');
     if (selection) {
-      const result = applyFilter({ kind: 'filter', id: `alert-focus-${alert.alertId ?? alert.key}`, title: '定位预警', contextFingerprint: context.fingerprint, patch: { countryCode: alert.countryCode ?? context.state.countryCode, platform: context.state.platform, granularity: 'week', adaptive: false, rangeStart: alert.weekId, rangeEnd: alert.weekId, mains: buildCards([selection], { auto: true }) }, changes: [] });
+      const countryCode = alert.countryCode ?? context.state.countryCode;
+      const result = applyFilter({ kind: 'filter', id: `alert-focus-${alert.alertId ?? alert.key}`, title: '定位预警', contextFingerprint: context.fingerprint, patch: { countryCode, platform: context.state.platform, granularity: 'week', adaptive: false, rangeStart: alert.weekId, rangeEnd: alert.weekId, mains: buildCards([selection], { auto: true, countryCode }) }, changes: [] });
       if (!result.ok) { setActionError(result.error); return; }
     }
     navBus.dashboardFocusWeekId = alert.weekId;

@@ -58,7 +58,7 @@ const realSku = (i: number): string =>
 describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
   it('只把目标配置回退维表默认，其他国家/型号/配置的行原样保留', () => {
     // 无快照 = 维表默认的生效视图（每配置截到 BENCHMARK_CAP_PER_CONFIG 款；维表按旧上限
-    // 4 生成，2026-11-02 上限降到 3 后第 4 款在生效口径里被截掉，不再与维表逐行相等）
+    // 生成，超过当前 BENCHMARK_CAP_PER_CONFIG 的行在生效口径里被截掉，不再与维表逐行相等）
     const baseline = getEffectiveBenchmark();
     // 模拟用户改过目标组：竞品换成另两款真实竞品、来源标人工；其余组 = 整份维表
     const modified = targetRows.map((r, i) => ({ ...r, competitor_sku_id: realSku(i), source: 'manual' as const }));

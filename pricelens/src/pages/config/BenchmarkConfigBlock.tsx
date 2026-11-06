@@ -16,7 +16,7 @@ import { dimProduct } from '../../data';
 import { buildOverviewMatrix, TIER_LABELS, type OverviewModel } from '../../dataModel/aggregate';
 import { INDUSTRY_LABELS, industriesOfCountry } from '../../dataModel/scope';
 import type { DimBenchmark, Industry } from '../../dataModel/types';
-import { getEffectiveBenchmark } from '../../state/configStore';
+import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark } from '../../state/configStore';
 import { useFilters } from '../../state/FiltersContext';
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
 import { color, fontSize, radius, space } from '../../theme/tokens';
@@ -74,7 +74,7 @@ export default function BenchmarkConfigBlock() {
       <div>② 矩阵未覆盖的国家和型号：优先沿用矩阵其他国家为同款产品配过的竞品；仍有空缺时，在同档位（价差 ±35% 以内）就近补齐，每个品牌先取一款。</div>
       <div>③ 矩阵指名的竞品在该国没有在售数据时，以近似款替代。</div>
       <div>④ 本页可人工增删与调序，人工配置优先于以上规则。</div>
-      <div style={{ marginTop: 4, fontWeight: 600, color: color.ink }}>每款产品每个配置最多 4 个竞品；超出时按 人工 → 矩阵列序 → 就近补齐 的顺序保留前 4 个，同型号多配置只占富余名额。</div>
+      <div style={{ marginTop: 4, fontWeight: 600, color: color.ink }}>每款产品每个配置最多 {BENCHMARK_CAP_PER_CONFIG} 个竞品；超出时按 人工 → 矩阵列序 → 就近补齐 的顺序保留前 {BENCHMARK_CAP_PER_CONFIG} 个，同型号多配置只占富余名额。</div>
     </div>
   );
 
@@ -88,7 +88,7 @@ export default function BenchmarkConfigBlock() {
           options={industries.map((i) => ({ label: INDUSTRY_LABELS[i], value: i }))}
         />
         <span className="tnum" style={{ fontSize: fontSize.caption, color: color.mute }}>
-          {ownModels.length} 个型号 · {totalPairs} 条对标 · 每配置最多 4 款
+          {ownModels.length} 个型号 · {totalPairs} 条对标 · 每配置最多 {BENCHMARK_CAP_PER_CONFIG} 款
         </span>
         <Popover trigger="click" placement="bottomLeft" content={matchLogic} arrow={false}>
           <Button size="small" icon={<InfoCircleOutlined />} style={{ height: 24 }}>

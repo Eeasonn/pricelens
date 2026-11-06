@@ -11,6 +11,7 @@ import type { MainProduct, ProductSelection } from './filtersTypes';
 // filtersTypes 仍是唯一定义源，此处仅透传
 export type { MainProduct, ProductSelection };
 import { groupsFromBenchmark } from './configStore';
+import { getCurrentCountry } from './currentScope';
 import { defaultColorSkuIds, modelIdOf, type RomramNode } from '../components/ProductCascader/tree';
 
 /** 一张图（合并图 = 唯一主品卡；分离模式 = 某张面板卡）同时展示的折线数上限。
@@ -78,18 +79,18 @@ export function mainsValidFor(mains: MainProduct[], countryCode: string, industr
 
 /** 主品卡的自动匹配对比区：对标矩阵（主竞品在前）→
  *  剔除与主品同型号同配置 → 按卡配额截断。 */
-export function autoComparesFor(card: MainProduct): ProductSelection[] {
+export function autoComparesFor(card: MainProduct, countryCode: string = getCurrentCountry()): ProductSelection[] {
   if (!card.main) return [];
   const ownKey = selKey(card.main);
-  return groupsFromBenchmark([card.main])
+  return groupsFromBenchmark([card.main], countryCode)
     .filter((c) => selKey(c) !== ownKey)
     .slice(0, cardQuota(card));
 }
 
 /** 「自动匹配竞品」开（第一百二十八轮：开关语义）：对比区立即按矩阵重算，
  *  此后换主品 / 矩阵更新自动跟随。仅华为主品卡可开（矩阵只覆盖华为侧）。 */
-export function withAutoOn(card: MainProduct): MainProduct {
-  return card.main && isHuaweiModel(card.main.modelId) ? { ...card, compares: autoComparesFor(card), auto: true } : card;
+export function withAutoOn(card: MainProduct, countryCode: string = getCurrentCountry()): MainProduct {
+  return card.main && isHuaweiModel(card.main.modelId) ? { ...card, compares: autoComparesFor(card, countryCode), auto: true } : card;
 }
 
 /** 「自动匹配竞品」关：退出矩阵驱动，当前对比区保留转手动。 */
@@ -136,7 +137,7 @@ export function withMain(card: MainProduct, sel: ProductSelection): MainProduct 
  *  （对比区 = 矩阵产出，仅华为主品生效）。 */
 export function buildCards(
   sels: ProductSelection[],
-  opts: { firstCompares?: ProductSelection[]; auto?: boolean } = {},
+  opts: { firstCompares?: ProductSelection[]; auto?: boolean; countryCode?: string } = {},
 ): MainProduct[] {
   const out: MainProduct[] = [];
   const seen = new Set<string>();
@@ -148,7 +149,7 @@ export function buildCards(
     const card: MainProduct = { id: newCardId(), main: sel, compares: [] };
     if (opts.auto && isHuaweiModel(sel.modelId)) {
       card.auto = true;
-      card.compares = autoComparesFor(card);
+      card.compares = autoComparesFor(card, opts.countryCode);
     } else if (out.length === 0 && opts.firstCompares?.length) {
       card.compares = opts.firstCompares.filter((c) => selKey(c) !== key).slice(0, cardQuota(card));
     }
