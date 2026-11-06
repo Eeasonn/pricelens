@@ -35,6 +35,11 @@
 // 卡体延续定高策略（MARKET_BODY_HEIGHT=330）+ 卡内纵向滚动；图例四项
 // （实际 / 预测 / AI 基线 / 事件）全部可点显隐（WorkbenchLegend 规格）。
 // 全部视觉取 theme/tokens 既有 token 与 WorkbenchBits 既有控件语言，无新视觉。
+// 2026-11-07 Batch 2（batch2-iterate-forecast）：按月调整原因改必填（保存才
+// 回写，取消不写入）；月度事件「事件说明」改必填（说明 = 内联原因，随事件
+// label 进审计轨迹）；月度证据浮框新增数据状态行（模拟 · 数据版本 · 采集时间
+// 待确认 · 缺失字段），情报候选注入为空的待接入空态语义不变（模拟候选显式
+// 「模拟」，更新能力 title 仍「候选生成能力待接入」）。
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import { Button, Input, InputNumber } from 'antd';
@@ -317,6 +322,14 @@ function MonthEvidencePopover({
           </span>
         </div>
       </div>
+      {/* 数据状态行（Batch 2 统一取证）：状态 + 数据版本 + 采集时间（缺失写待确认）+ 缺失字段 */}
+      <div
+        data-lpl-evidence-status
+        className="tnum"
+        style={{ borderTop: `1px solid ${color.hairline}`, marginTop: 8, paddingTop: 8, fontSize: 11, color: color.mute }}
+      >
+        {`数据状态：模拟（演示样本，非实时）· 数据版本 ${fixture.meta.modelVersion} · 采集时间：待确认 · 缺失：真实大盘来源 URL / 采集时间（待接入）`}
+      </div>
       {/* 层④ 底部：就地调整入口（点击切换为调整表单，同一浮层两态） */}
       <div style={{ borderTop: `1px solid ${color.hairline}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space.sm }}>
         <span style={{ fontSize: 10.5, color: color.mute }}>调整后直接修正该月对应预测周</span>
@@ -324,7 +337,7 @@ function MonthEvidencePopover({
           type="button"
           data-lpl-evidence-adjust
           onClick={onAdjust}
-          title="就地调整该月生效值（原因选填，还原基线随时可退）"
+          title="就地调整该月生效值（原因必填，保存才回写；还原基线随时可退）"
           style={{
             // P0-2（2026-11-06）：浮框动作退出墨色实心主按钮（墨色只留给唯一主按钮），
             // 改 hairlineStrong 描边静默样式（与主图证据浮框「微调本周」同语言）。
@@ -342,8 +355,8 @@ function MonthEvidencePopover({
 /**
  * 按月调整就地浮层（证据浮框「调整此月」就地切换的两态之二；与主图悬停
  * 浮窗同一浮层视觉语言：白底 + hairline + 卡片圆角 + L5 阴影）。两式输入 =
- * 调整后指数 / 增减幅%；调整原因选填（评审拍板：不得以「不填无法应用」
- * 强迫，空值照常应用）。取消 = 回到证据态（同一浮层两态，不再分开）。
+ * 调整后指数 / 增减幅%；调整原因必填（Batch 2 · 2026-11-07 起 brief §3.2：
+ * 保存才回写主图与审计轨迹，取消不写入）。取消 = 回到证据态（同一浮层两态）。
  */
 function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
   point: MarketMonthPoint;
@@ -357,6 +370,7 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
   const [absValue, setAbsValue] = useState<number | null>(point.value);
   const [pctValue, setPctValue] = useState<number | null>(0);
   const [reason, setReason] = useState(point.reason);
+  const reasonOk = reason.trim() !== '';
   const absOk = absValue != null && Number.isFinite(absValue) && absValue >= MONTH_OVERRIDE_MIN && absValue <= MONTH_OVERRIDE_MAX;
   const pctOk = pctValue != null && Number.isFinite(pctValue) && pctValue >= -50 && pctValue <= 100;
   const applyValue = mode === 'abs'
@@ -426,10 +440,10 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
         )}
       </div>
       <label style={{ display: 'grid', gap: 3, fontSize: 12, fontWeight: 600, color: color.body, marginBottom: 6 }}>
-        {`调整原因（选填）`}
+        {`调整原因（必填）`}
         <Input
-          aria-label="调整原因（选填）"
-          placeholder="选填：帮助追溯调整依据"
+          aria-label="调整原因（必填）"
+          placeholder="必填：如大促流量前置，帮助追溯并写入审计轨迹"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
         />
@@ -443,15 +457,17 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
           <Button
             size="small"
             type="primary"
-            disabled={applyValue == null}
-            onClick={() => { if (applyValue != null) onApply(applyValue, reason); }}
+            disabled={applyValue == null || !reasonOk}
+            onClick={() => { if (applyValue != null && reasonOk) onApply(applyValue, reason.trim()); }}
           >
             应用
           </Button>
         </span>
       </div>
-      <div style={{ marginTop: 6, fontSize: 11, color: color.mute }}>
-        只调整该月；应用后预测线即时重算，本会话内可还原（还原该月即回 AI 基线口径）。
+      <div style={{ marginTop: 6, fontSize: 11, color: reasonOk ? color.mute : color.warningInk }}>
+        {reasonOk
+          ? '只调整该月；应用后预测线即时重算并写入审计轨迹，本会话内可还原（还原该月即回 AI 基线口径）。'
+          : '请填写调整原因后应用（不填不可应用；取消不写入任何参数）。'}
       </div>
     </div>
   );
@@ -728,7 +744,9 @@ export default function MarketBusPanel({
     ? monthSeedOfWeekRange(calendar, { startWeekId: formStartWeekId, endWeekId: formEndWeekId })
     : null;
   const formMagnitudeOk = formMagnitude != null && Number.isFinite(formMagnitude) && formMagnitude >= -30 && formMagnitude <= 30;
-  const eventFormValid = formMapped != null && formWeeks?.start != null && formWeeks?.end != null && formWeekCount != null && formMagnitudeOk;
+  // Batch 2：事件说明必填（月度事件 = 人工修正，须内联原因并进审计轨迹）。
+  const formNoteOk = formNote.trim() !== '';
+  const eventFormValid = formMapped != null && formWeeks?.start != null && formWeeks?.end != null && formWeekCount != null && formMagnitudeOk && formNoteOk;
 
   const toggleSeries = (key: string) => {
     setHiddenSeries((prev) => {
@@ -1304,10 +1322,10 @@ export default function MarketBusPanel({
                     />
                   </label>
                   <label style={{ display: 'grid', gap: 3 }}>
-                    <span style={{ fontSize: 11, color: color.mute }}>事件说明（选填）</span>
+                    <span style={{ fontSize: 11, color: color.mute }}>事件说明（必填 · 写入审计轨迹的原因）</span>
                     <Input
-                      aria-label="事件说明（选填）"
-                      placeholder="发生了什么（选填）"
+                      aria-label="事件说明（必填）"
+                      placeholder="必填：发生了什么（如竞品新品首销，作为修正原因随事件记录）"
                       value={formNote}
                       onChange={(input) => setFormNote(input.target.value)}
                       size="small"

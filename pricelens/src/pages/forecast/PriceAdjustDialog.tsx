@@ -18,7 +18,7 @@ import { color, radius, space } from '../../theme/tokens';
 import type { ForecastCalendar, MonthKey, WeekId } from './workbenchCalendar';
 import type { WorkbenchFixture } from './workbenchFixture';
 import type { WorkbenchResult } from './workbenchModel';
-import { computeMarginView, nextPriceBatchId } from './marginScenarioModel';
+import { computeMarginView, forecastMarginRateOf, nextPriceBatchId } from './marginScenarioModel';
 import type { MarginPriceOverride, MarginScenario } from './marginScenarioModel';
 import { fmtMillionUsd } from './WorkbenchBits';
 
@@ -40,6 +40,12 @@ export interface PriceAdjustReviewMeta {
 const roundPrice = (value: number): number => Math.max(0, Math.round(value * 10) / 10);
 
 const fmtUsd = (value: number): string => `$${Math.round(value * 10) / 10}`;
+
+/** 预测期销毛率展示（销毛率 = 单台销毛额 ÷ 单台收入；无有效收入周 = — 不造数）。 */
+const fmtRate = (view: ReturnType<typeof computeMarginView>): string => {
+  const rate = forecastMarginRateOf(view);
+  return rate != null ? `${(rate * 100).toFixed(1)}%` : '—';
+};
 
 /** 固定过渡提示（B.4.7）：价格→销量关系未拍板前恒显，不得出现销量变化文案。 */
 function DemandLinkNotice() {
@@ -97,8 +103,9 @@ export default function PriceAdjustDialog({
   const [priceValue, setPriceValue] = useState<number | null>(null);
   const [deltaAmount, setDeltaAmount] = useState<number | null>(null);
   const [deltaPct, setDeltaPct] = useState<number | null>(null);
-  // 参考说明选填：自动带入来源成本月，可清空。
+  // 参考说明必填（Batch 2：价格手调须有原因并进审计轨迹）：自动带入来源成本月，可改不可清空。
   const [reason, setReason] = useState(sourceCostMonth ? `参考④ ${sourceCostMonth} 月成本版本` : '');
+  const reasonOk = reason.trim() !== '';
   // 冲突逐项处理：默认保留既有手调（只有明确选择才覆盖）。
   const [conflictChoices, setConflictChoices] = useState<Record<WeekId, 'keep' | 'overwrite'>>({});
   const [previewed, setPreviewed] = useState(false);
@@ -177,10 +184,11 @@ export default function PriceAdjustDialog({
       width={640}
       style={{ maxWidth: 'calc(100vw - 24px)' }}
       footer={
-        <div style={{ display: 'flex', gap: space.sm, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: space.sm, justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' }}>
+          {!reasonOk && <span style={{ fontSize: 11, color: color.warningInk, marginRight: 'auto' }}>请填写参考说明（必填）后应用</span>}
           <Button onClick={onCancel}>取消</Button>
           <Button onClick={() => setPreviewed(true)}>预览销毛变化</Button>
-          <Button type="primary" onClick={handleApply}>应用价格调整</Button>
+          <Button type="primary" disabled={!reasonOk} title={reasonOk ? undefined : '价格手调必须填写参考说明（原因）'} onClick={handleApply}>应用价格调整</Button>
         </div>
       }
     >
@@ -270,13 +278,13 @@ export default function PriceAdjustDialog({
           )}
         </div>
 
-        {/* 参考说明选填（自动带入可清空） */}
+        {/* 参考说明（必填 · Batch 2：价格手调须有原因并进审计轨迹；自动带入可改不可清空） */}
         <Input
-          aria-label="参考说明（选填）"
+          aria-label="参考说明（必填）"
           value={reason}
-          placeholder="选填：为什么调价（可清空）"
+          placeholder="必填：为什么调价（如参考④成本版本上升）"
           onChange={(event) => setReason(event.target.value)}
-          allowClear
+          status={reasonOk ? undefined : 'error'}
         />
 
         {/* 受影响周清单：确认前展示每个受影响周（月展开 = 全部预测周） */}
@@ -366,6 +374,12 @@ export default function PriceAdjustDialog({
               </span>
               <span className="tnum" style={{ fontSize: 12, color: color.mute }}>
                 {`Δ ${(preview.afterView.forecastMargin - preview.beforeView.forecastMargin >= 0 ? '+' : '')}${fmtMillionUsd(preview.afterView.forecastMargin - preview.beforeView.forecastMargin)}`}
+              </span>
+            </div>
+            <div className="tnum" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }} title="销毛率 = 单台销毛额 ÷ 单台收入（预测周有效口径；无有效收入周显示 —）">
+              <b style={{ fontSize: 12, color: color.ink }}>预测期销毛率</b>
+              <span style={{ fontSize: 12, color: color.body }}>
+                {`${fmtRate(preview.beforeView)} → ${fmtRate(preview.afterView)}`}
               </span>
             </div>
           </div>

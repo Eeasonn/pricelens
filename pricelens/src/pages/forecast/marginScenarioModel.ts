@@ -194,6 +194,24 @@ export function computeMarginView(fixture: WorkbenchFixture, result: WorkbenchRe
 const PRICE_BATCH_PATTERN = /^price-batch-(\d+)$/;
 
 /**
+ * 预测期销毛率（Batch 2 · 2026-11-07，纯函数；口径 = 销毛率定义的唯一来源）：
+ * 销毛率 = Σ 预测周周销毛 ÷ Σ 预测周（最终 SO × 显示价）——只在 weeklyMargin
+ * 非空的周累计（缺数周不进分子分母，不掩盖覆盖率）；分母 ≤ 0（无有效周或
+ * 收入为零）返回 null，UI 显示「—」不造数。
+ */
+export function forecastMarginRateOf(view: MarginView): number | null {
+  let marginSum = 0;
+  let revenueSum = 0;
+  for (const week of view.weeks) {
+    if (week.status !== 'forecast' || week.weeklyMargin == null || week.finalSales == null) continue;
+    marginSum += week.weeklyMargin;
+    revenueSum += week.finalSales * week.effectivePrice;
+  }
+  if (!(revenueSum > 0)) return null;
+  return marginSum / revenueSum;
+}
+
+/**
  * 新价格批次 id（确定性）：扫描既有记录中 price-batch-N 形态的最大序号 +1；
  * 无既有序号（或全部为其他形态）时从 price-batch-1 起。同输入恒同输出。
  */

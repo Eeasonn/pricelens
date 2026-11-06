@@ -276,15 +276,20 @@ describe('大盘卡 · 任务一：月度主序列（v3 统一 12 个预测月�
 });
 
 describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整两态', () => {
-  it('调整表单（证据态切换进入）：应用默认值回调 onMonthOverride(key, value, \'\')，原因选填不拦截', () => {
+  it('调整表单（证据态切换进入）：缺原因先阻断；填原因后应用回调（保存才回写，Batch 2 必填）', () => {
     const { onMonthOverride } = setup();
     openAdjustForm('2027-03');
     const popover = document.querySelector('[data-lpl-month-popover]');
     expect((popover as HTMLElement).textContent ?? '').toContain('AI 基线 105.6');
-    const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
-    expect(apply?.disabled).toBe(false);
-    fireEvent.click(apply as HTMLButtonElement);
-    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 105.6, '');
+    const apply = () => Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
+    // 原因未填：应用禁用，不回调（取消不写入）
+    expect(apply()?.disabled).toBe(true);
+    expect(onMonthOverride).not.toHaveBeenCalled();
+    const reasonInput = screen.getByLabelText('调整原因（必填）') as HTMLInputElement;
+    fireEvent.change(reasonInput, { target: { value: '大促流量前置' } });
+    expect(apply()?.disabled).toBe(false);
+    fireEvent.click(apply() as HTMLButtonElement);
+    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 105.6, '大促流量前置');
     expect(document.querySelector('[data-lpl-month-popover]')).toBeNull();
   });
 
@@ -293,7 +298,7 @@ describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整�
     openAdjustForm('2027-03');
     const valueInput = screen.getByLabelText('调整后指数') as HTMLInputElement;
     fireEvent.change(valueInput, { target: { value: '95' } });
-    const reasonInput = screen.getByLabelText('调整原因（选填）') as HTMLInputElement;
+    const reasonInput = screen.getByLabelText('调整原因（必填）') as HTMLInputElement;
     fireEvent.change(reasonInput, { target: { value: '投屏会领导当场上调' } });
     const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
     fireEvent.click(apply as HTMLButtonElement);
@@ -301,16 +306,18 @@ describe('大盘卡 · v2-1：hover 证据浮框（四层）与一层化调整�
     expect(document.querySelector('[data-lpl-month-popover]')).toBeNull();
   });
 
-  it('增减幅式：+10% → 回调值 = round1(生效 × 1.1) = 116.2', () => {
+  it('增减幅式：+10% → 回调值 = round1(生效 × 1.1) = 116.2（原因必填）', () => {
     const { onMonthOverride } = setup();
     openAdjustForm('2027-03');
     const pctMode = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '增减幅%');
     fireEvent.click(pctMode as HTMLButtonElement);
     const pctInput = screen.getByLabelText('增减幅（%）') as HTMLInputElement;
     fireEvent.change(pctInput, { target: { value: '10' } });
+    const reasonInput = screen.getByLabelText('调整原因（必填）') as HTMLInputElement;
+    fireEvent.change(reasonInput, { target: { value: '竞品提价跟随' } });
     const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
     fireEvent.click(apply as HTMLButtonElement);
-    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 116.2, '');
+    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 116.2, '竞品提价跟随');
   });
 
   it('含事件月复算提示 + 算例含乘子；已调整月轻量标记 + 还原 AI → onMonthOverride(key, null, \'\')', () => {
@@ -346,9 +353,11 @@ describe('大盘卡 · 任务七（B.5.6）：月调整应用后反馈行', () =
     openAdjustForm('2027-03');
     const valueInput = screen.getByLabelText('调整后指数') as HTMLInputElement;
     fireEvent.change(valueInput, { target: { value: '90' } });
+    const reasonInput = screen.getByLabelText('调整原因（必填）') as HTMLInputElement;
+    fireEvent.change(reasonInput, { target: { value: '季度末冲量' } });
     const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
     fireEvent.click(apply as HTMLButtonElement);
-    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 90, '');
+    expect(onMonthOverride).toHaveBeenCalledWith('2027-03', 90, '季度末冲量');
     const feedback = document.querySelector('[data-lpl-month-feedback="2027-03"]');
     expect(feedback).not.toBeNull();
     expect(feedback?.textContent ?? '').toContain('本月比值 ×0.85 · 已联动 5 个预测周');
@@ -363,11 +372,12 @@ describe('大盘卡 · 任务七（B.5.6）：月调整应用后反馈行', () =
   });
 
   it('还原该月后反馈行随之消失（不显示还原后残留比值）', () => {
-    setup({ overrides: { marketMonthOverrides: { '2027-03': { value: 88, reason: '' } } } });
+    setup({ overrides: { marketMonthOverrides: { '2027-03': { value: 88, reason: '竞品延期' } } } });
     fireEvent.mouseOver(monthHit('2027-03'));
     fireEvent.click(document.querySelector('[data-lpl-evidence-adjust]') as Element);
-    // 调整态应用（写入同值）→ 反馈出现
+    // 调整态应用（原因沿用已填值）→ 反馈出现
     const apply = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
+    expect(apply?.disabled).toBe(false);
     fireEvent.click(apply as HTMLButtonElement);
     expect(document.querySelector('[data-lpl-month-feedback="2027-03"]')).not.toBeNull();
     // 再进调整态 → 还原 AI → 反馈消失
@@ -521,11 +531,11 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
     expect(bodyGrid.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 340px)');
   });
 
-  it('字段齐全（名称选填 / 说明选填 / 起止周 / 幅度 / 衰减 chips）+ 默认值保存 → 映射进 MarketMonthEventSeed', () => {
+  it('字段齐全（名称选填 / 说明必填 / 起止周 / 幅度 / 衰减 chips）+ 缺说明阻断 → 填说明保存 → 映射进 MarketMonthEventSeed', () => {
     const { onMonthEventAdd } = setup();
     clickAddEvent();
     expect(screen.getByLabelText('事件名称（选填）')).toBeTruthy();
-    expect(screen.getByLabelText('事件说明（选填）')).toBeTruthy();
+    expect(screen.getByLabelText('事件说明（必填）')).toBeTruthy();
     expect(screen.getByLabelText('事件影响幅度（%）')).toBeTruthy();
     expect(screen.getByLabelText('事件名称（选填）')).toBeTruthy();
     // 起止周按钮默认 = 统一日历首个预测周（单周）
@@ -534,10 +544,13 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
     // 衰减 chips：递减默认选中
     expect(document.querySelector('[data-lpl-decay-chip="decreasing"]')?.getAttribute('aria-pressed')).toBe('true');
     expect(document.querySelector('[data-lpl-decay-chip="flat"]')?.getAttribute('aria-pressed')).toBe('false');
+    // Batch 2：说明必填——不填先阻断（取消不写入）
+    const save = screen.getByRole('button', { name: '保存事件' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(onMonthEventAdd).not.toHaveBeenCalled();
     // 名称 + 说明 + 默认周保存 → 映射（2026W45 周一 = 2026-11-02；单周 = 1 个月）
     fireEvent.change(screen.getByLabelText('事件名称（选填）'), { target: { value: '新品首销' } });
-    fireEvent.change(screen.getByLabelText('事件说明（选填）'), { target: { value: '门店堆头放量' } });
-    const save = screen.getByRole('button', { name: '保存事件' }) as HTMLButtonElement;
+    fireEvent.change(screen.getByLabelText('事件说明（必填）'), { target: { value: '门店堆头放量' } });
     expect(save.disabled).toBe(false);
     fireEvent.click(save);
     expect(onMonthEventAdd).toHaveBeenCalledTimes(1);
@@ -582,10 +595,11 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
       // 自动收起回填（高保真 350ms 展示区间后收）
       act(() => { vi.advanceTimersByTime(360); });
       expect(document.querySelector('[data-lpl-week-picker]')).toBeNull();
-      // 保存 → 跨月数向上取整 = 2 个月，起始 = 起周周一 2026-12-07
+      // 说明必填（Batch 2）：填说明后保存 → 跨月数向上取整 = 2 个月，起始 = 起周周一 2026-12-07
+      fireEvent.change(screen.getByLabelText('事件说明（必填）'), { target: { value: '年末促销档期' } });
       fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
       expect(onMonthEventAdd).toHaveBeenCalledWith({
-        label: '',
+        label: '年末促销档期',
         startMonth: '2026-12',
         startDay: 7,
         durationMonths: 2,
@@ -603,8 +617,9 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
     fireEvent.click(document.querySelector('[data-lpl-decay-chip="flat"]') as HTMLButtonElement);
     expect(document.querySelector('[data-lpl-decay-chip="flat"]')?.getAttribute('aria-pressed')).toBe('true');
     expect(document.querySelector('[data-lpl-decay-chip="decreasing"]')?.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.change(screen.getByLabelText('事件说明（必填）'), { target: { value: '补贴持续到季末' } });
     fireEvent.click(screen.getByRole('button', { name: '保存事件' }));
-    expect(onMonthEventAdd).toHaveBeenCalledWith(expect.objectContaining({ decay: 'flat' }));
+    expect(onMonthEventAdd).toHaveBeenCalledWith(expect.objectContaining({ decay: 'flat', label: '补贴持续到季末' }));
     // 取消关闭（antd 双字按钮文案带空格，按去空白匹配）
     clickAddEvent();
     const cancel = Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').replace(/\s/g, '') === '取消');
@@ -634,11 +649,12 @@ describe('大盘卡 · 添加事件浮窗（2026-11-05：双月周历选择器�
     expect((screen.getByLabelText('事件名称（选填）') as HTMLInputElement).value).toBe('内存涨价');
     expect((screen.getByLabelText('事件影响幅度（%）') as HTMLInputElement).value).toContain('-6');
     expect(document.querySelector('[data-lpl-week-range-button]')?.textContent ?? '').toContain('2026W51 → 2027W04');
-    // 改幅度 → 保存修改 → 回调带 id 与映射字段（整周口径：起始 = 起周周一 2026-12-14）
+    // 改幅度 → 填修改说明（Batch 2 必填）→ 保存修改 → 回调带 id 与映射字段（整周口径：起始 = 起周周一 2026-12-14）
     fireEvent.change(screen.getByLabelText('事件影响幅度（%）'), { target: { value: '-9' } });
+    fireEvent.change(screen.getByLabelText('事件说明（必填）'), { target: { value: '供应链成本再涨' } });
     fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
     expect(onMonthEventUpdate).toHaveBeenCalledWith('me-x', {
-      label: '内存涨价',
+      label: '内存涨价；供应链成本再涨',
       startMonth: '2026-12',
       startDay: 14,
       durationMonths: 2,

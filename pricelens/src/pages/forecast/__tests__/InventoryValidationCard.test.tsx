@@ -36,6 +36,7 @@ import {
   baseWorkbenchParams,
   computeWorkbench,
   setManualAdjustment,
+  withSiPlanEntry,
   type WorkbenchParams,
 } from '../workbenchModel';
 import { buildForecastCalendar } from '../workbenchCalendar';
@@ -59,7 +60,7 @@ const fatParams = (): WorkbenchParams => ({
 // 任务 10 收敛进共享工厂。
 // ------------------------------------------------------------
 const makeInventoryHarnessProps = (
-  onSiMonthLive: (monthKey: string, units: number) => void,
+  onSiMonthLive: (monthKey: string, units: number, reason: string) => void,
 ): ComponentProps<typeof InventoryValidationCard> => ({
   fixture,
   calendar,
@@ -73,9 +74,10 @@ const makeInventoryHarnessProps = (
 });
 
 /**
- * 有状态渲染（与页面同链路）：onSiMonthLive 真实写回 params.siPlanMonthly，
+ * 有状态渲染（与页面同链路）：onSiMonthLive 经 withSiPlanEntry 真实写回
+ * params.siPlanMonthly + params.siReasons（数值与原因同笔，Batch 2），
  * 确认工作区走 useSiConfirmations（持久化 = forecast.siConfirmation.workbench-demo-v3），
- * 恢复基准 = 回写基准值 + 清确认记录（重新待确认）。
+ * 恢复基准 = 回写基准值 + 清原因与确认记录（重新待确认）。
  */
 const renderCard = (initial: WorkbenchParams = base) => {
   const onSiMonthLive = vi.fn();
@@ -92,9 +94,9 @@ const renderCard = (initial: WorkbenchParams = base) => {
         params={params}
         result={computeWorkbench(fixture, params)}
         confirmationState={{ byMonth: si.byMonth }}
-        onSiMonthLive={(monthKey, units) => {
-          onSiMonthLive(monthKey, units);
-          setParams((prev) => ({ ...prev, siPlanMonthly: { ...prev.siPlanMonthly, [monthKey]: units } }));
+        onSiMonthLive={(monthKey, units, reason) => {
+          onSiMonthLive(monthKey, units, reason);
+          setParams((prev) => withSiPlanEntry(prev, monthKey, units, reason) ?? prev);
         }}
         onConfirmMonth={(monthKey, value) => {
           onConfirmMonth(monthKey, value);
@@ -102,10 +104,12 @@ const renderCard = (initial: WorkbenchParams = base) => {
         }}
         onResetMonth={(monthKey) => {
           onResetMonth(monthKey);
-          setParams((prev) => ({
-            ...prev,
-            siPlanMonthly: { ...prev.siPlanMonthly, [monthKey]: fixture.inventory.siPlanMonthly[monthKey] ?? 0 },
-          }));
+          setParams((prev) => withSiPlanEntry(
+            prev,
+            monthKey,
+            fixture.inventory.siPlanMonthly[monthKey] ?? 0,
+            '',
+          ) ?? prev);
           si.resetMonth(monthKey);
         }}
         onNavigate={onNavigate}
@@ -124,6 +128,20 @@ const verdictRowsOf = (container: HTMLElement): string[] =>
 
 const siInputOf = (container: HTMLElement, monthKey: string): HTMLInputElement =>
   container.querySelector(`input[aria-label="${monthKey} SI 计划（千台/月）"]`) as HTMLInputElement;
+
+const siReasonInputOf = (container: HTMLElement, monthKey: string): HTMLInputElement =>
+  container.querySelector(`input[aria-label="${monthKey} SI 修正原因（必填）"]`) as HTMLInputElement;
+
+/** Batch 2：修改 SI = 数值 + 必填原因同笔保存（改数值 → 内联原因输入出现 →
+ *  填原因 → 失焦保存；缺原因先阻断不提交）。 */
+const commitSi = (container: HTMLElement, monthKey: string, value: string, reason: string): void => {
+  const input = siInputOf(container, monthKey);
+  fireEvent.change(input, { target: { value } });
+  const reasonInput = siReasonInputOf(container, monthKey);
+  expect(reasonInput).not.toBeNull();
+  fireEvent.change(reasonInput, { target: { value: reason } });
+  fireEvent.blur(input);
+};
 
 const statusChipOf = (container: HTMLElement, monthKey: string): HTMLElement =>
   container.querySelector(`[data-si-status="${monthKey}"]`) as HTMLElement;
@@ -167,10 +185,16 @@ describe('SI monthly confirmation（SI 格子行在「SI 月计划与链路」�
     fireEvent.blur(november);
     expect(onSiMonthLive).not.toHaveBeenCalled();
     expect(screen.getByText('请输入 0 或恢复基准')).toBeTruthy();
+    // Batch 2：0 = 修改（≠基准 221）→ 原因必填先阻断（保存才回写，取消不写入）
     fireEvent.change(november, { target: { value: '0' } });
     fireEvent.blur(november);
-    expect(onSiMonthLive).toHaveBeenCalledWith('2026-11', 0);
+    expect(onSiMonthLive).not.toHaveBeenCalled();
+    expect(screen.getByText(/请填写修正原因/)).toBeTruthy();
+    commitSi(container, '2026-11', '0', '本月渠道不再补货');
+    expect(onSiMonthLive).toHaveBeenCalledWith('2026-11', 0, '本月渠道不再补货');
     expect(screen.getByText('本月不补货')).toBeTruthy();
+    // 原因随数值同笔展示（行内「原因：…」）
+    expect(container.querySelector('[data-si-reason="2026-11"]')?.textContent).toBe('原因：本月渠道不再补货');
     fireEvent.click(screen.getByRole('button', { name: '确认 2026-11 SI' }));
     expect(screen.getByText('2026-11 · 已确认')).toBeTruthy();
   });
@@ -213,8 +237,7 @@ describe('SI V2 双栏结构（展开「SI 月计划与链路」后断言）', (
     expect(before).toBeGreaterThan(0);
     expect(miniBarTitleOf('2027-10')).toBe(`2027-10 期末渠道库存 ${fmtWan(before)}（随 SI 即时重算）`);
     const october = siInputOf(container, '2027-10');
-    fireEvent.change(october, { target: { value: '0' } });
-    fireEvent.blur(october);
+    commitSi(container, '2027-10', '0', '季末停止补货');
     const after = monthEndOf({ ...base.siPlanMonthly, '2027-10': 0 });
     expect(after).not.toBe(before);
     expect(miniBarTitleOf('2027-10')).toBe(`2027-10 期末渠道库存 ${fmtWan(after)}（随 SI 即时重算）`);
@@ -230,21 +253,18 @@ describe('SI 逐月确认状态机（展开「SI 月计划与链路」后断言�
     expandSiWorkspace(container);
     expect((statusChipOf(container, '2026-11').textContent ?? '')).toBe('基准·待确认');
     // 修改并提交 2026-12（180 千台 ≠ 基准 161）→ 按钮名指明确认对象 → 确认
-    const december = siInputOf(container, '2026-12');
-    fireEvent.change(december, { target: { value: '180' } });
-    fireEvent.blur(december);
-    expect(onSiMonthLive).toHaveBeenCalledWith('2026-12', 180000);
+    commitSi(container, '2026-12', '180', '春节备货提前');
+    expect(onSiMonthLive).toHaveBeenCalledWith('2026-12', 180000, '春节备货提前');
     fireEvent.click(screen.getByRole('button', { name: '确认 2026-12 SI' }));
     expect(statusChipOf(container, '2026-12').textContent).toBe('2026-12 · 已确认');
     expect(onConfirmMonth).toHaveBeenCalledWith('2026-12', 180000);
-    // 修改已确认月 → 自动重新待确认
-    fireEvent.change(december, { target: { value: '200' } });
-    fireEvent.blur(december);
-    expect(onSiMonthLive).toHaveBeenCalledWith('2026-12', 200000);
+    // 修改已确认月 → 自动重新待确认（再次修改同样要求原因）
+    commitSi(container, '2026-12', '200', '追加备货');
+    expect(onSiMonthLive).toHaveBeenCalledWith('2026-12', 200000, '追加备货');
     expect(statusChipOf(container, '2026-12').textContent).toBe('已修改·待确认');
   });
 
-  it('非法值：不调 setter、aria-invalid 就地错误；改回合法值后错误清除', () => {
+  it('非法值：不调 setter、aria-invalid 就地错误；改回合法值后需原因才提交（错误清除）', () => {
     const { container, onSiMonthLive } = renderCard();
     expandSiWorkspace(container);
     const november = siInputOf(container, '2026-11');
@@ -257,11 +277,17 @@ describe('SI 逐月确认状态机（展开「SI 月计划与链路」后断言�
     fireEvent.blur(november);
     expect(onSiMonthLive).not.toHaveBeenCalled();
     expect(november.getAttribute('aria-invalid')).toBe('true');
+    // 合法值但未填原因：阻断不提交（数值错误先清除）
     fireEvent.change(november, { target: { value: '30' } });
     fireEvent.blur(november);
-    expect(onSiMonthLive).toHaveBeenCalledWith('2026-11', 30000);
+    expect(onSiMonthLive).not.toHaveBeenCalled();
     expect(november.getAttribute('aria-invalid')).toBe('false');
     expect(screen.queryByText('SI 需为 0–2000 的整数（千台）')).toBeNull();
+    // 填原因后保存（Batch 2：数值与原因同笔提交）
+    const reasonInput = siReasonInputOf(container, '2026-11');
+    fireEvent.change(reasonInput, { target: { value: '渠道去库存' } });
+    fireEvent.blur(november);
+    expect(onSiMonthLive).toHaveBeenCalledWith('2026-11', 30000, '渠道去库存');
   });
 
   it('Esc 恢复最后合法值：草稿丢弃、不提交、错误态清除', () => {
@@ -274,24 +300,30 @@ describe('SI 逐月确认状态机（展开「SI 月计划与链路」后断言�
     expect(november.value).toBe('221');
     expect(onSiMonthLive).not.toHaveBeenCalled();
     expect(november.getAttribute('aria-invalid')).toBe('false');
-    // Enter = blur 提交（真机键入即聚焦；jsdom 需真实 focus）
+    // Enter = blur 提交（真机键入即聚焦；jsdom 需真实 focus）；缺原因先阻断
     fireEvent.change(november, { target: { value: '230' } });
     fireEvent.keyDown(november, { key: 'Enter' });
-    expect(onSiMonthLive).toHaveBeenCalledWith('2026-11', 230000);
+    expect(onSiMonthLive).not.toHaveBeenCalled();
+    // 原因输入内 Enter = 数值与原因同笔保存
+    const reasonInput = siReasonInputOf(container, '2026-11');
+    fireEvent.change(reasonInput, { target: { value: '口径更新' } });
+    fireEvent.keyDown(reasonInput, { key: 'Enter' });
+    expect(onSiMonthLive).toHaveBeenCalledWith('2026-11', 230000, '口径更新');
   });
 
-  it('单月「恢复基准」：回写基准值并重新待确认（基准·待确认）', () => {
+  it('单月「恢复基准」：回写基准值、清原因并重新待确认（基准·待确认）', () => {
     const { container, onSiMonthLive, onResetMonth } = renderCard();
     expandSiWorkspace(container);
-    const january = siInputOf(container, '2027-01');
-    fireEvent.change(january, { target: { value: '300' } });
-    fireEvent.blur(january);
+    commitSi(container, '2027-01', '300', '旺季加单');
     expect(statusChipOf(container, '2027-01').textContent).toBe('已修改·待确认');
+    expect(container.querySelector('[data-si-reason="2027-01"]')?.textContent).toBe('原因：旺季加单');
     fireEvent.click(screen.getByRole('button', { name: '恢复 2027-01 基准 SI' }));
-    expect(onSiMonthLive).toHaveBeenCalledWith('2027-01', 165000);
+    expect(onSiMonthLive).toHaveBeenCalledWith('2027-01', 165000, '');
     expect(onResetMonth).toHaveBeenCalledWith('2027-01');
-    expect((january.value)).toBe('165');
+    expect((siInputOf(container, '2027-01').value)).toBe('165');
     expect(statusChipOf(container, '2027-01').textContent).toBe('基准·待确认');
+    // 恢复基准 = 回基准，原因随之清除（不残留孤儿原因）
+    expect(container.querySelector('[data-si-reason="2027-01"]')).toBeNull();
   });
 });
 
@@ -313,9 +345,7 @@ describe('SI 拆周读数（展开「SI 月计划与链路」后断言）', () =
   it('合法提交后拆周随 SI 更新（乐观呈现，不等页面回写）', () => {
     const { container } = renderCard();
     expandSiWorkspace(container);
-    const december = siInputOf(container, '2026-12');
-    fireEvent.change(december, { target: { value: '101' } });
-    fireEvent.blur(december);
+    commitSi(container, '2026-12', '101', '月末冲量补货');
     expect(splitLineOf(container, '2026-12')).toBe(
       '2026W50 25.25 · 2026W51 25.25 · 2026W52 25.25 · 2026W53 25.25 千台',
     );
@@ -371,9 +401,7 @@ describe('SI 联动反馈（反馈行在「SI 月计划与链路」收起区内�
     expandSiWorkspace(container);
     const region = container.querySelector('[data-si-feedback]') as HTMLElement;
     expect(region.getAttribute('aria-live')).toBe('polite');
-    const november = siInputOf(container, '2026-11');
-    fireEvent.change(november, { target: { value: '400' } });
-    fireEvent.blur(november);
+    commitSi(container, '2026-11', '400', '加大补货解除缺口');
     expect(feedbackTextOf(container)).toBe('2026-11 SI +179 千台 → 2026W46 修正已解除');
   });
 
@@ -381,9 +409,7 @@ describe('SI 联动反馈（反馈行在「SI 月计划与链路」收起区内�
     const { container } = renderCard(fatParams());
     expandSiWorkspace(container);
     expect((container.textContent ?? '')).toContain('未触发');
-    const november = siInputOf(container, '2026-11');
-    fireEvent.change(november, { target: { value: '30' } });
-    fireEvent.blur(november);
+    commitSi(container, '2026-11', '30', '补货节奏收紧');
     expect(feedbackTextOf(container)).toBe('2026-11 SI −370 千台 → 2026W45 起新增修正');
   });
 
@@ -391,9 +417,7 @@ describe('SI 联动反馈（反馈行在「SI 月计划与链路」收起区内�
     const tuned = setManualAdjustment(base, '2026W46', 45000, '会议口径上调') as WorkbenchParams;
     const { container } = renderCard(tuned);
     expandSiWorkspace(container);
-    const november = siInputOf(container, '2026-11');
-    fireEvent.change(november, { target: { value: '230' } });
-    fireEvent.blur(november);
+    commitSi(container, '2026-11', '230', '微调补货节奏');
     expect(feedbackTextOf(container)).toBe(
       '2026-11 SI +9 千台 → 2026W46 起修正仍在；截断事实仍在，主图该周显示手调值',
     );
@@ -616,9 +640,7 @@ describe('库存修正卡 · 链路指示条（去编号 · 与页级管线①�
   it('2026-11 SI=0：点亮注 2026W45 起', () => {
     const { container } = renderCard();
     expandSiWorkspace(container);
-    const november = siInputOf(container, '2026-11');
-    fireEvent.change(november, { target: { value: '0' } });
-    fireEvent.blur(november);
+    commitSi(container, '2026-11', '0', '当月停止补货');
     const cap = container.querySelector('[data-flow-step="上限修正"]') as HTMLElement;
     expect(cap.getAttribute('data-state')).toBe('amber');
     expect(cap.textContent).toContain('2026W45 起');

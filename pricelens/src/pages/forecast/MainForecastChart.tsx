@@ -746,6 +746,7 @@ export default function MainForecastChart({
                 productEventCount={params.productEvents.length}
                 promoLabel={fixture.promoWindows.find((window) => window.id === coveringPromoId(calendar, fixture, activeWeek.weekId))?.label ?? null}
                 displayPrice={displayPriceOf(activeWeek)}
+                modelVersion={fixture.meta.modelVersion}
                 leftPct={(x(activeIndex) / chartW) * 100}
                 flip={activeIndex > weeks.length / 2}
                 pinned
@@ -760,6 +761,7 @@ export default function MainForecastChart({
                 productEventCount={params.productEvents.length}
                 promoLabel={fixture.promoWindows.find((window) => window.id === coveringPromoId(calendar, fixture, activeWeek.weekId))?.label ?? null}
                 displayPrice={displayPriceOf(activeWeek)}
+                modelVersion={fixture.meta.modelVersion}
                 leftPct={(x(activeIndex) / chartW) * 100}
                 flip={activeIndex > weeks.length / 2}
                 onFocusCard={onFocusCard}
@@ -1010,7 +1012,8 @@ const stageRowStyle: CSSProperties = { display: 'flex', justifyContent: 'space-b
 /**
  * 周证据浮框（B.5.3 四层 + 3.2 结果主图分卡规范）：
  * 头部（周 · 日期 · 状态 + 阶段显示口径）→ 条件 notices → 阶段值 + 学习证据 +
- * 构成（排序 + 定位）→ 动作「微调本周」。预览态 role=status（hover 临时，
+ * 构成（排序 + 定位）→ 数据状态行（Batch 2：模拟 · 数据版本 · 采集时间待确认）
+ * → 动作「微调本周」（原因必填）。预览态 role=status（hover 临时，
  * pointerEvents none）；固定态 role=dialog（click/Enter 固定，Esc 关闭）。
  * 全部数字来自 result（含 result.learning），UI 不复算、不反推。
  */
@@ -1020,6 +1023,7 @@ function WeekEvidence({
   productEventCount,
   promoLabel,
   displayPrice,
+  modelVersion,
   leftPct,
   flip,
   pinned,
@@ -1033,6 +1037,8 @@ function WeekEvidence({
   promoLabel: string | null;
   /** 显示价（MarginView 过渡接线后的口径；缺省 = 原价）。 */
   displayPrice: number;
+  /** 数据版本（fixture.meta.modelVersion；数据状态行展示）。 */
+  modelVersion: string;
   leftPct: number;
   flip: boolean;
   pinned?: boolean;
@@ -1080,12 +1086,12 @@ function WeekEvidence({
       shellProps={pinned ? undefined : { style: { pointerEvents: 'none' } }}
       actions={(
         <>
-          <span style={{ fontSize: 10.5, color: color.mute }}>{forecast ? '微调进入逐周手调，原因选填' : '实际周不微调'}</span>
+          <span style={{ fontSize: 10.5, color: color.mute }}>{forecast ? '微调进入逐周手调，原因必填（取消不写入）' : '实际周不微调'}</span>
           {tunable && (
             <button
               type="button"
               onClick={() => onTuneWeek?.(week.weekId)}
-              title="打开周销微调弹窗（调整只落在本周）"
+              title="打开周销微调弹窗（调整只落在本周；原因必填）"
               style={{
                 border: `1px solid ${color.hairlineStrong}`, padding: '3px 12px', borderRadius: radius.control, background: color.canvas,
                 color: color.ink, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
@@ -1157,6 +1163,10 @@ function WeekEvidence({
           })}
         </div>
       )}
+      {/* 数据状态行（Batch 2 统一取证）：状态 + 数据版本 + 采集时间（缺失写待确认）+ 缺数口径 */}
+      <div data-week-evidence-status className="tnum" style={{ fontSize: 11, color: color.mute }}>
+        {`数据状态：${forecast ? '模拟（预测段为本地确定性推演，未调用模型服务）' : '模拟（历史段为模拟实际）'} · 数据版本 ${modelVersion} · 采集时间：待确认 · 缺数周不插值`}
+      </div>
     </EvidenceFrame>
   );
 }

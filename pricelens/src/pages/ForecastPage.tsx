@@ -25,6 +25,20 @@
 // 「复制关键假设」= 纪要层的替代物（workbenchExport v3 管线顺序 + 上下文）。
 // 措辞不出现 因子/约束/置信区间/无约束需求/我司；话术统一「库存上限修正 /
 // 按可售量修正 / 修正周」。数据全部演示（统一日历 2026-11—2027-10）。
+// ============================================================
+// Batch 2（2026-11-07 · batch2-iterate-forecast）：四步推演工作台收敛——
+// - 手动修正原因一律必填（brief §3.2）：周销微调 / 大盘按月调整 / 月度事件
+//   说明 / SI 月计划修改 / 成本假设 / 价格手调，保存才回写，取消不写入；
+//   原因随 override/event 进主图标注与审计轨迹；
+// - 主链重算守卫：computeWorkbench 抛错时保留上次成功结果（失败不当 0），
+//   审计卡顶部 alert + 重试按钮（computeTick 触发重算）；
+// - 新增「步间对比与因果记录」审计卡（ForecastAuditTrail + forecastSteps）：
+//   四步 结论默认露出，展开见 输入/假设/修正(原因)/证据(数据状态+版本+
+//   采集时间待确认)/公式/待补契约；数字与主图四卡同源，不算第二套数；
+// - 上下文指纹（referenceScopeHash）入审计卡，全局筛选漂移显示提醒，
+//   不把旧结果静默套到新国家/产品；
+// - SI 月计划回写改经 withSiPlanEntry（数值与原因同笔，回基准清原因）。
+// ============================================================
 // 2026-11-05 视觉精简二轮（Eason 看图反馈）：主图卡的 IoBar 行与摘要四格
 // 下沉为 MainForecastChart extras（「数据与操作」共享收起区，默认收起）——
 // 默认视图 = 卡头 + PipelineNav + 图表本身（图 + 图例 + 时间轨）。
@@ -53,6 +67,8 @@ import {
   nextMarketMonthEventId,
   setManualAdjustment,
   withMarketMonthOverride,
+  withSiPlanEntry,
+  type WorkbenchResult,
 } from './forecast/workbenchModel';
 import useWorkbenchParams, { nextProductEventId } from './forecast/useWorkbenchParams';
 import { buildWorkbenchAssumptionText } from './forecast/workbenchExport';
@@ -62,6 +78,8 @@ import useMarginScenario from './forecast/useMarginScenario';
 import { computeMarginView } from './forecast/marginScenarioModel';
 import { useIntelligenceReview } from './forecast/useIntelligenceReview';
 import { referenceScopeHash } from './forecast/useReferenceWorkspace';
+import buildForecastSteps from './forecast/forecastSteps';
+import ForecastAuditTrail from './forecast/ForecastAuditTrail';
 import { DataStatusBadge } from './forecast/ForecastBits';
 import {
   HintInfo,
@@ -123,8 +141,9 @@ function CrossCardReturnBar({ sourceLabel, weekId, onReturn }: {
   );
 }
 
-/** 单周微调弹窗：调整原因选填（2026-11-04 评审拍板：不填即可应用，不以必填拦截；
- *  placeholder 引导追溯依据；后台字段结构保留）。已有手调可一键清除；填了原因则内联标注主图手调处。 */
+/** 单周微调弹窗（Batch 2 · 2026-11-07 起原因必填——brief §3.2「数量或价格修正
+ *  旁必须填写原因」；不填不可应用，取消不写入。已有手调可一键清除；原因必填
+ *  后内联标注主图手调处并进审计轨迹。 */
 function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSave, onClear }: {
   weekLabel: string;
   dateLabel: string;
@@ -137,6 +156,7 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
   const [wan, setWan] = useState<number | null>(Math.round((currentValue / 1000)) / 10);
   const [reason, setReason] = useState('');
   const valueOk = wan != null && Number.isFinite(wan) && wan >= 0;
+  const reasonOk = reason.trim() !== '';
   return (
     <Modal
       title={`微调 · ${weekLabel}（${dateLabel}）`}
@@ -146,7 +166,7 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
         <div style={{ display: 'flex', gap: space.sm, justifyContent: 'flex-end', alignItems: 'center' }}>
           {manual && <Button danger type="text" onClick={onClear}>清除手调</Button>}
           <Button onClick={onCancel}>取消</Button>
-          <Button type="primary" disabled={!valueOk} onClick={() => valueOk && wan != null && onSave(Math.round(wan * 10000), reason)}>
+          <Button type="primary" disabled={!valueOk || !reasonOk} onClick={() => valueOk && reasonOk && wan != null && onSave(Math.round(wan * 10000), reason.trim())}>
             应用
           </Button>
         </div>
@@ -170,18 +190,20 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
           />
         </label>
         <label style={{ display: 'grid', gap: 4, fontSize: 12, fontWeight: 600, color: color.body }}>
-          调整原因（选填）
+          调整原因（必填）
           <Input.TextArea
-            aria-label="调整原因（选填）"
+            aria-label="调整原因（必填）"
             aria-describedby="tune-reason-hint"
-            placeholder="选填：帮助追溯调整依据"
+            placeholder="必填：本次微调的依据（如黑五主峰周资源加投）"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             autoSize={{ minRows: 2, maxRows: 4 }}
           />
         </label>
-        <div id="tune-reason-hint" style={{ fontSize: 11, color: color.mute, minHeight: 16 }}>
-          {`选填：帮助追溯调整依据；填写后原因将内联标注在主图该周手调处，不填也可应用`}
+        <div id="tune-reason-hint" style={{ fontSize: 11, color: reasonOk ? color.mute : color.warningInk, minHeight: 16 }}>
+          {reasonOk
+            ? '原因将内联标注在主图该周手调处，并写入步间审计轨迹；取消不写入。'
+            : '请填写调整原因后应用（不填不可应用；取消不写入任何参数）。'}
         </div>
       </div>
     </Modal>
@@ -208,7 +230,25 @@ export default function ForecastPage() {
   const { params, setParams, resetParams } = useWorkbenchParams(fixture);
   const [tuneWeek, setTuneWeek] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
-  const result = useMemo(() => computeWorkbench(fixture, params), [fixture, params]);
+  // 主链重算守卫（Batch 2）：computeWorkbench 抛错时保留上次成功结果（失败
+  // 不当 0、不清空已有结果）；computeTick = 审计卡「重试」触发重算的唯一入口。
+  const [computeTick, setComputeTick] = useState(0);
+  const lastResultRef = useRef<WorkbenchResult | null>(null);
+  const compute = useMemo(() => {
+    void computeTick; // 重试按钮经 setComputeTick 触发本 memo 重跑
+    try {
+      const next = computeWorkbench(fixture, params);
+      lastResultRef.current = next;
+      return { result: next, error: null as string | null };
+    } catch (error) {
+      return {
+        result: lastResultRef.current,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }, [fixture, params, computeTick]);
+  const result = compute.result;
+  const computeError = compute.error;
   const active = isParamsActive(params, fixture);
   const hasWeeks = fixture.weeks.length > 0;
 
@@ -227,7 +267,7 @@ export default function ForecastPage() {
   // 数据表 / 页面摘要 / PipelineNav / ④卡统一消费（hook 与④卡共享同一会话 store）。
   const margin = useMarginScenario(fixture.meta.modelVersion);
   const marginView = useMemo(
-    () => computeMarginView(fixture, result, margin.scenario),
+    () => (result != null ? computeMarginView(fixture, result, margin.scenario) : null),
     [fixture, result, margin.scenario],
   );
 
@@ -239,9 +279,10 @@ export default function ForecastPage() {
   );
   const intelligence = useIntelligenceReview(intelligenceScopeKey);
 
-  const tuneWeekResult = tuneWeek != null ? result.weeks.find((week) => week.weekId === tuneWeek) ?? null : null;
+  const tuneWeekResult = tuneWeek != null ? result?.weeks.find((week) => week.weekId === tuneWeek) ?? null : null;
   // v3 预测周选项：id/label = 跨年周 ID（YYYYWww，跨年标签用 weekId 本身）。
-  const forecastWeekOptions = result.weeks.filter((week) => week.status === 'forecast')
+  const forecastWeekOptions = (result?.weeks ?? [])
+    .filter((week) => week.status === 'forecast')
     .map((week) => ({ id: week.weekId, label: week.weekId }));
 
   // 跨卡导航（B.5.2）：滚动 + 目标卡聚焦 + 「来自…」返回条；内存瞬态，不写 params。
@@ -362,7 +403,7 @@ export default function ForecastPage() {
 
   // 主图 MarginView 过渡切片（T9 价格接线，最小）：显示价 / 单台与周销毛，键 = WeekId。
   const mainMarginView = useMemo<MainForecastMarginView>(() => ({
-    weeks: Object.fromEntries(marginView.weeks.map((week) => [week.weekId, {
+    weeks: Object.fromEntries((marginView?.weeks ?? []).map((week) => [week.weekId, {
       effectivePrice: week.effectivePrice,
       unitMargin: week.unitMargin,
       weeklyMargin: week.weeklyMargin,
@@ -387,6 +428,10 @@ export default function ForecastPage() {
   /** 复制关键假设（8.4 / 任务 10）：纯文本进剪贴板（v3 上下文同源）；
    *  成功「已复制」/ 失败「复制失败」，不新增纪要层。 */
   const copyAssumptions = async (): Promise<void> => {
+    if (result == null || marginView == null) {
+      setCopyState('fail');
+      return;
+    }
     const text = buildWorkbenchAssumptionText(fixture, params, result, {
       calendar,
       learning: result.learning,
@@ -430,6 +475,25 @@ export default function ForecastPage() {
       </div>
     );
   }
+
+  // 重算失败且无上次成功结果（Batch 2 守卫）：不渲染 NaN 图表，可读错误 + 重试。
+  if (result == null || marginView == null) {
+    return (
+      <div data-lpl-forecast>
+        <section style={{ ...workbenchCardStyle, boxShadow: shadow.l1 }}>
+          <ChartContentBar />
+          <div role="alert" style={{ padding: `${space.lg}px 0`, textAlign: 'center' }}>
+            <div style={{ fontSize: 13, color: color.error, fontWeight: 600 }}>{`重算失败：${computeError ?? '未知错误'}`}</div>
+            <div style={{ marginTop: 6, fontSize: 11, color: color.mute }}>本地确定性引擎未产出结果；不显示 0 或伪摘要。</div>
+            <Button size="small" style={{ marginTop: space.md }} onClick={() => setComputeTick((tick) => tick + 1)}>重试</Button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  // 四步推演元数据（Batch 2）：审计卡唯一数据源（与主图 / 四卡同源派生）。
+  const auditSteps = buildForecastSteps(fixture, params, result, marginView, margin.scenario, { byMonth: si.byMonth });
 
   const referenceLabel = fixture.references.prevGenPool.find((series) => series.id === result.learning.referenceId)?.label;
   const siTotalMonths = calendar.forecastMonths.length;
@@ -611,6 +675,21 @@ export default function ForecastPage() {
         </section>
       </div>
 
+      {/* 步间对比与因果记录（Batch 2 · 2026-11-07）：四步结论默认露出，展开见
+          输入/假设/修正(原因)/证据(数据状态+版本+采集时间)/公式/待补契约；
+          数字与主图四卡同源（forecastSteps 派生）；「定位」只滚动聚焦对应卡；
+          顶部承载重算失败保留旧值 + 重试、上下文指纹与全局筛选漂移提醒。 */}
+      <ForecastAuditTrail
+        steps={auditSteps}
+        contextFingerprint={intelligenceScopeKey}
+        contextStaleNote={labels.country !== fixture.context.country
+          ? `全局筛选当前为 ${labels.country} · ${labels.industry}，与固定样本（${fixture.context.country} · ${fixture.context.industry}）不一致`
+          : null}
+        computeError={computeError}
+        onRetryCompute={() => setComputeTick((tick) => tick + 1)}
+        onLocate={(stage) => navigateCard(stageCardOf(stage), null, '步间审计')}
+      />
+
       {/* ② 量价参考（①基线预测 · 历史参照，纯历史无预测段，参考品居首；上一代选择受控进主链；
           智能弹框 = 主图输入变化时在参考卡内弹参照表现提示条；locateRequest = 主图学习证据定位） */}
       <div ref={cardRefs.reference} tabIndex={-1} style={{ display: 'grid', minWidth: 0, gap: space.sm }}>
@@ -628,8 +707,9 @@ export default function ForecastPage() {
       </div>
 
       {/* ③ 大盘 · 总量总线（②大盘修正：月粒度主序列 = 历史月 + 统一 12 个预测月；
-          点击预测月就地调整（原因选填）；右 1/3 事件区 = 情报候选审核容器（当前
-          availability="pending" 空态）+ 人工月度事件三字段录入） */}
+          点击预测月就地调整（原因必填，取消不写入）；右 1/3 事件区 = 情报候选
+          审核容器（真实注入为空，模拟候选显式「模拟」+ 更新能力待接入）+
+          人工月度事件录入（说明必填）） */}
       <div ref={cardRefs.market} tabIndex={-1} style={{ display: 'grid', minWidth: 0, gap: space.sm }}>
         {crossFocus?.target === 'market' && (
           <CrossCardReturnBar sourceLabel={crossFocus.sourceLabel} weekId={crossFocus.weekId} onReturn={returnToSource} />
@@ -672,7 +752,11 @@ export default function ForecastPage() {
             params={params}
             result={result}
             confirmationState={{ byMonth: si.byMonth }}
-            onSiMonthLive={(monthKey, units) => setParams((prev) => ({ ...prev, siPlanMonthly: { ...prev.siPlanMonthly, [monthKey]: units } }))}
+            onSiMonthLive={(monthKey, units, reason) => setParams((prev) => {
+              // SI 数值与修正原因同笔回写（Batch 2：保存才写入，取消不进 params）。
+              const next = withSiPlanEntry(prev, monthKey, units, reason);
+              return next ?? prev;
+            })}
             onConfirmMonth={si.confirmMonth}
             onResetMonth={si.resetMonth}
             onNavigate={(weekId) => navigateCard('main', weekId, '③ 库存修正')}

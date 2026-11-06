@@ -54,6 +54,10 @@ export interface WorkbenchParams {
   productEvents: ProductEventSeed[];
   /** 人工 SI 月计划（台），键 = 统一 12 个预测月键；库存验证层唯一新输入。 */
   siPlanMonthly: Record<MonthKey, number>;
+  /** SI 月计划修正原因（Batch 2 · 2026-11-07 起必填）：键 = 预测月键；与
+   *  siPlanMonthly 平行存储——原因不参与计算，只进审计轨迹与导出；数值回
+   *  基准时清除该月原因。 */
+  siReasons: Record<MonthKey, string>;
   /** 手调（键 = 预测周 WeekId）：值 + 选填原因（空串合法）。 */
   manual: Record<WeekId, { value: number; reason: string }>;
   /** 理由栏：为什么这么推（截图贴 PPT 的关键假设载体）。 */
@@ -81,6 +85,7 @@ export function baseWorkbenchParams(fixture: WorkbenchFixture): WorkbenchParams 
     marketMonthOverrides: {},
     productEvents: [],
     siPlanMonthly,
+    siReasons: {},
     manual: {},
     rationale: fixture.market.aiRationale,
     prevGenReferenceId: fixture.references.prevGenPool[0]?.id ?? '',
@@ -1132,6 +1137,28 @@ export function clearManualAdjustment(params: WorkbenchParams, weekId: WeekId): 
 }
 
 // ------------------------------------------------------------
+// SI 月计划写入（Batch 2 · 2026-11-07）：数值与修正原因同笔写入——
+// 保存才回写（取消不写入由 UI 草稿态承接）；回基准（reason 空串）清原因。
+// ------------------------------------------------------------
+
+/** SI 单月写入（纯函数）：units 非有限或负返回 null 不写入；原因去空白，
+ *  空串 = 清除该月原因（回基准路径）。 */
+export function withSiPlanEntry(
+  params: WorkbenchParams,
+  monthKey: MonthKey,
+  units: number,
+  reason: string,
+): WorkbenchParams | null {
+  if (!Number.isFinite(units) || units < 0) return null;
+  const siPlanMonthly = { ...params.siPlanMonthly, [monthKey]: Math.round(units) };
+  const siReasons = { ...params.siReasons };
+  const trimmed = reason.trim();
+  if (trimmed !== '') siReasons[monthKey] = trimmed;
+  else delete siReasons[monthKey];
+  return { ...params, siPlanMonthly, siReasons };
+}
+
+// ------------------------------------------------------------
 // 会话草稿恢复校验（坏 JSON / 错型 / 失效参照 / 非法范围回退基准，永不崩溃）
 // ------------------------------------------------------------
 
@@ -1262,6 +1289,23 @@ function sanitizeSiPlan(
   return plan;
 }
 
+/** SI 修正原因归一：只保留预测月键的字符串（去空白；空串 = 无原因，历史草稿兼容）。 */
+function sanitizeSiReasons(
+  calendar: ForecastCalendar,
+  value: unknown,
+  plan: Record<string, number>,
+  baseSiPlan: Record<string, number>,
+): Record<string, string> {
+  const source = isRecord(value) ? value : {};
+  const reasons: Record<string, string> = {};
+  for (const month of calendar.forecastMonths) {
+    const reason = typeof source[month.key] === 'string' ? (source[month.key] as string).trim() : '';
+    // 数值已回基准的月不留孤儿原因（原因只随修正存在）。
+    if (reason !== '' && plan[month.key] !== (baseSiPlan[month.key] ?? 0)) reasons[month.key] = reason;
+  }
+  return reasons;
+}
+
 /** 手调校验：只保留预测周 WeekId 键、有限非负值（值取整；原因选填，去空白，空串合法）。 */
 function sanitizeManual(
   forecastWeekIds: ReadonlySet<string>,
@@ -1302,6 +1346,7 @@ export function normalizeWorkbenchParams(fixture: WorkbenchFixture, value: unkno
   const referenceId = typeof value.prevGenReferenceId === 'string' && validReferenceIds.has(value.prevGenReferenceId)
     ? value.prevGenReferenceId
     : base.prevGenReferenceId;
+  const siPlanMonthly = sanitizeSiPlan(calendar, value.siPlanMonthly, base.siPlanMonthly);
   return {
     marketEvents: Array.isArray(value.marketEvents)
       ? value.marketEvents.map((event) => sanitizeMarketEvent(event, calendar)).filter((event): event is MarketEventSeed => event != null)
@@ -1313,7 +1358,8 @@ export function normalizeWorkbenchParams(fixture: WorkbenchFixture, value: unkno
     productEvents: Array.isArray(value.productEvents)
       ? value.productEvents.map((event) => sanitizeProductEvent(event, calendar, fixture)).filter((event): event is ProductEventSeed => event != null)
       : base.productEvents,
-    siPlanMonthly: sanitizeSiPlan(calendar, value.siPlanMonthly, base.siPlanMonthly),
+    siPlanMonthly,
+    siReasons: sanitizeSiReasons(calendar, value.siReasons, siPlanMonthly, base.siPlanMonthly),
     manual: sanitizeManual(forecastWeekIds, value.manual),
     rationale: typeof value.rationale === 'string' ? value.rationale : base.rationale,
     prevGenReferenceId: referenceId,

@@ -314,7 +314,7 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
     expect(text).toContain('模拟样本');
   });
 
-  it('成本编辑写 costOverrides：主数字读 MarginView 即时变化、行标「已改」、可还原、回读计数', () => {
+  it('成本编辑写 costOverrides：原因必填（缺原因阻断）、主数字读 MarginView 即时变化、行标「已改」、可还原、回读计数', () => {
     renderCard(baseResult);
     expandCostOps();
     expandReadout();
@@ -323,10 +323,15 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
     const baselineMargin = baseView().forecastMargin;
     fireEvent.click(screen.getByRole('button', { name: `编辑成本版本 ${firstMonth}` }));
     fireEvent.change(screen.getByLabelText(`成本假设 ${firstMonth}（USD/台）`), { target: { value: '900' } });
-    fireEvent.click(screen.getByRole('button', { name: `保存成本假设 ${firstMonth}` }));
+    // Batch 2：原因必填——缺原因保存禁用，不写入（取消不写入）
+    const saveButton = screen.getByRole('button', { name: `保存成本假设 ${firstMonth}` }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(`成本假设原因 ${firstMonth}（必填）`), { target: { value: '核价更新' } });
+    expect(saveButton.disabled).toBe(false);
+    fireEvent.click(saveButton);
     // 主数字随假设变化（成本上升 → 预测期销毛下降），与 computeMarginView 同源。
     const afterView = computeMarginView(fixture, baseResult, {
-      costOverrides: { [firstMonth]: { unitCost: 900, reason: '' } },
+      costOverrides: { [firstMonth]: { unitCost: 900, reason: '核价更新' } },
       priceOverrides: {},
     });
     const text = document.body.textContent ?? '';
@@ -359,6 +364,7 @@ describe('任务 9 · 成本参考区 / 经营结果区（hairline 双区 · B.5
     const prevCost = fixture.costVersions[0]!.unitCost;
     fireEvent.click(screen.getByRole('button', { name: `编辑成本版本 ${month}` }));
     fireEvent.change(screen.getByLabelText(`成本假设 ${month}（USD/台）`), { target: { value: String(prevCost + 50) } });
+    fireEvent.change(screen.getByLabelText(`成本假设原因 ${month}（必填）`), { target: { value: '物料成本上调' } });
     fireEvent.click(screen.getByRole('button', { name: `保存成本假设 ${month}` }));
     expect(screen.getByText('成本上升 · 请核对价格')).toBeTruthy();
   });

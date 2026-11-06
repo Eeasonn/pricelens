@@ -45,6 +45,11 @@
 //   无 RO / jsdom 回退），刻度字号回归真实 px（同 MarketBusPanel / 主图）。
 // - P0-2 SI「已确认」状态胶囊退出墨色（墨色只留给唯一主按钮），改已登记的
 //   alert.lifecycle.resolved 绿色系（文字 + 底色双通道，与预警系统同源）。
+// 2026-11-07 Batch 2（batch2-iterate-forecast §3.2）：SI 修改必须内联填写
+// 修正原因——数值与原因同笔保存（withSiPlanEntry：onSiMonthLive 携带原因，
+// 页面写 params.siPlanMonthly + params.siReasons）；缺原因置 'reason' 阻断
+// 态不提交；保存（失焦/Enter/保存按钮）才回写，取消/Esc 不写入；恢复基准
+// 清原因；已提交原因在行内「原因：…」展示并进步间审计轨迹。
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -111,6 +116,8 @@ const MIN_FORMULA_TITLE = '库存上限修正：min(基线 SO, 可售)；可售 
 const SI_MAX_KUNITS = 2000;
 const SI_INVALID_TEXT = 'SI 需为 0–2000 的整数（千台）';
 const SI_BLANK_TEXT = '请输入 0 或恢复基准';
+/** Batch 2（2026-11-07）：SI 修改必须内联填写修正原因（保存才回写，取消不写入）。 */
+const SI_REASON_REQUIRED_TEXT = '请填写修正原因（必填）：填原因后按 Enter 或失焦保存；Esc 取消不写入';
 
 /** 台 → 千台展示（去掉多余的 0；拆周守恒读数）。 */
 const fmtThousandUnits = (units: number): string => String(Math.round((units / 1000) * 1000) / 1000);
@@ -153,8 +160,8 @@ function verdictLine(week: WorkbenchWeekResult): string {
   return `${week.weekId} ${parts.join('；')} → ${result}`;
 }
 
-/** 单月 SI 草稿的本地态种类：无 / 空白（不提交）/ 非法（不提交）。 */
-type SiDraftIssue = 'blank' | 'invalid';
+/** 单月 SI 草稿的本地态种类：无 / 空白（不提交）/ 非法（不提交）/ 缺原因（不提交）。 */
+type SiDraftIssue = 'blank' | 'invalid' | 'reason';
 
 export default function InventoryValidationCard({
   fixture,
@@ -176,8 +183,9 @@ export default function InventoryValidationCard({
   result: WorkbenchResult;
   /** SI 确认工作区（useSiConfirmations，页面持有）；缺省 = 全部待确认。 */
   confirmationState?: SiConfirmationState;
-  /** 合法值 blur/Enter 提交（写 params.siPlanMonthly，同帧重算主链）。 */
-  onSiMonthLive?: (monthKey: string, units: number) => void;
+  /** 合法值 + 原因提交（Batch 2：修改值必须带原因；原因与数值同笔写 params 并
+   *  全链重算，保存才回写、取消不写入）。 */
+  onSiMonthLive?: (monthKey: string, units: number, reason: string) => void;
   /** 「确认本月」写确认工作区（useSiConfirmations.confirmMonth）。 */
   onConfirmMonth?: (monthKey: string, confirmedValue: number) => void;
   /** 「恢复基准」清该月确认记录（重新待确认）；基准值回写走 onSiMonthLive。 */
@@ -216,9 +224,12 @@ export default function InventoryValidationCard({
   // ------------------------------------------------------------
   // SI 提交值的本地镜像（乐观呈现）：提交即更新本卡读数与状态，不等页面
   // 回写 params；页面回写一致则无感，页面外部变更（如重置基准）按差异采纳。
+  // Batch 2：修正原因（siReasons）与数值同笔——镜像 / 草稿 / 提交三态同构。
   // ------------------------------------------------------------
   const [siLocal, setSiLocal] = useState<Record<string, number>>(() => ({ ...params.siPlanMonthly }));
+  const [siReasonsLocal, setSiReasonsLocal] = useState<Record<string, string>>(() => ({ ...params.siReasons }));
   const reportedRef = useRef(siLocal);
+  const reportedReasonsRef = useRef(siReasonsLocal);
   useEffect(() => {
     const reported = reportedRef.current;
     const externalChanged = Object.keys(params.siPlanMonthly)
@@ -228,35 +239,70 @@ export default function InventoryValidationCard({
       reportedRef.current = next;
       setSiLocal(next);
     }
-  }, [params.siPlanMonthly]);
+    const reportedReasons = reportedReasonsRef.current;
+    const reasonsChanged = Object.keys(params.siReasons)
+      .some((key) => reportedReasons[key] !== params.siReasons[key])
+      || Object.keys(reportedReasons).some((key) => params.siReasons[key] == null);
+    if (reasonsChanged) {
+      const nextReasons = { ...params.siReasons };
+      reportedReasonsRef.current = nextReasons;
+      setSiReasonsLocal(nextReasons);
+    }
+  }, [params.siPlanMonthly, params.siReasons]);
 
   // 确认记录的本地镜像（乐观呈现）：props（页面工作区）优先，本地确认即时可见。
   const [localConfirmed, setLocalConfirmed] = useState<Record<string, SiConfirmation>>({});
   const byMonth: SiConfirmationState['byMonth'] = { ...localConfirmed, ...confirmationState.byMonth };
 
-  // 本地 raw 草稿与提交阻断态（输入中不提交；B.5.7）。
+  // 本地 raw 草稿与提交阻断态（输入中不提交；B.5.7 + Batch 2 原因必填）。
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [reasonDrafts, setReasonDrafts] = useState<Record<string, string>>({});
   const [issues, setIssues] = useState<Record<string, SiDraftIssue | undefined>>({});
 
   const monthKeys = useMemo(() => fixture.forecastMonths.map((month) => month.key), [fixture]);
   const committedOf = (monthKey: string): number => siLocal[monthKey] ?? params.siPlanMonthly[monthKey] ?? 0;
+  const committedReasonOf = (monthKey: string): string => siReasonsLocal[monthKey] ?? '';
   const baselineOf = (monthKey: string): number => fixture.inventory.siPlanMonthly[monthKey] ?? 0;
 
-  const commitMonth = (monthKey: string, units: number) => {
+  const clearDraftOf = (monthKey: string) => {
+    setDrafts((prev) => {
+      if (!(monthKey in prev)) return prev;
+      const next = { ...prev };
+      delete next[monthKey];
+      return next;
+    });
+    setIssues((prev) => (prev[monthKey] == null ? prev : { ...prev, [monthKey]: undefined }));
+  };
+
+  const commitMonth = (monthKey: string, units: number, reason: string) => {
     const next = { ...siLocal, [monthKey]: units };
     reportedRef.current = next;
     setSiLocal(next);
+    const trimmed = reason.trim();
+    const nextReasons = { ...siReasonsLocal };
+    if (trimmed !== '') nextReasons[monthKey] = trimmed;
+    else delete nextReasons[monthKey];
+    reportedReasonsRef.current = nextReasons;
+    setSiReasonsLocal(nextReasons);
     setDrafts((prev) => {
       if (!(monthKey in prev)) return prev;
       const nextDrafts = { ...prev };
       delete nextDrafts[monthKey];
       return nextDrafts;
     });
+    setReasonDrafts((prev) => {
+      if (!(monthKey in prev)) return prev;
+      const nextReasonDrafts = { ...prev };
+      delete nextReasonDrafts[monthKey];
+      return nextReasonDrafts;
+    });
     setIssues((prev) => (prev[monthKey] == null ? prev : { ...prev, [monthKey]: undefined }));
-    onSiMonthLive?.(monthKey, units);
+    onSiMonthLive?.(monthKey, units, reason);
   };
 
-  const handleBlur = (monthKey: string) => {
+  /** 保存路径（数值失焦 / 原因 Enter 共用）：数值合法 + 与已提交值不同时必须
+   *  已填原因；缺原因置 'reason' 阻断态（保存才回写，取消不写入）。 */
+  const tryCommit = (monthKey: string) => {
     const raw = drafts[monthKey];
     if (raw == null) return; // 未编辑过，不处理
     const text = raw.trim();
@@ -270,8 +316,21 @@ export default function InventoryValidationCard({
       setIssues((prev) => ({ ...prev, [monthKey]: 'invalid' }));
       return;
     }
-    commitMonth(monthKey, num * 1000);
+    const units = num * 1000;
+    if (units === committedOf(monthKey)) {
+      // 数值与已提交值一致（含改回原值）：只清草稿，不要求原因。
+      clearDraftOf(monthKey);
+      return;
+    }
+    const reason = (reasonDrafts[monthKey] ?? '').trim();
+    if (reason === '') {
+      setIssues((prev) => ({ ...prev, [monthKey]: 'reason' }));
+      return;
+    }
+    commitMonth(monthKey, units, reason);
   };
+
+  const handleBlur = tryCommit;
 
   const confirmMonth = (monthKey: string) => {
     const value = committedOf(monthKey);
@@ -283,8 +342,8 @@ export default function InventoryValidationCard({
   };
 
   const restoreBaseline = (monthKey: string) => {
-    // 单月恢复基准：回写基准值 + 清确认记录（该月重新待确认；B.5.7）。
-    commitMonth(monthKey, baselineOf(monthKey));
+    // 单月恢复基准：回写基准值 + 清确认记录与修正原因（该月重新待确认；B.5.7）。
+    commitMonth(monthKey, baselineOf(monthKey), '');
     onResetMonth?.(monthKey);
   };
 
@@ -412,7 +471,7 @@ export default function InventoryValidationCard({
     <section style={workbenchCardStyle}>
       <SectionHead
         title="③ 库存修正"
-        hint="SI 月计划逐月确认（唯一人工输入）：合法值 blur/Enter 提交并全链重算，「确认本月」写入确认工作区；未确认时主图结果为参考预览。图上只留渠道库存柱（右轴，万台）+ 渠道 DOS 线（左轴）；可售不足的预测周按可售量修正并回写主图，修正周琥珀描边标识。"
+        hint="SI 月计划逐月确认（唯一人工输入）：修改数值必须内联填写修正原因，保存（失焦/Enter/保存按钮）才回写主链，「确认本月」写入确认工作区，取消/Esc 不写入；未确认时主图结果为参考预览。图上只留渠道库存柱（右轴，万台）+ 渠道 DOS 线（左轴）；可售不足的预测周按可售量修正并回写主图，修正周琥珀描边标识。"
         extra={<>
           <HintInfo
             label="库存修正卡说明"
@@ -546,6 +605,9 @@ export default function InventoryValidationCard({
               const draft = drafts[monthKey];
               const issue = issues[monthKey];
               const invalid = issue === 'invalid';
+              const draftNum = draft != null && draft.trim() !== '' ? Number(draft.trim()) : null;
+              const draftNumOk = draftNum != null && Number.isFinite(draftNum) && Number.isInteger(draftNum) && draftNum >= 0 && draftNum <= SI_MAX_KUNITS;
+              const showReasonEditor = issue === 'reason' || (draftNumOk && Math.round(draftNum * 1000) !== value);
               const statusText = status === 'confirmed'
                 ? `${monthKey} · 已确认`
                 : status === 'modified' || !atBaseline
@@ -577,14 +639,14 @@ export default function InventoryValidationCard({
                         if (event.key === 'Enter') {
                           (event.target as HTMLInputElement).blur();
                         } else if (event.key === 'Escape') {
-                          // Esc 恢复最后合法值：丢弃草稿与错误态，回显已提交值。
-                          setDrafts((prev) => {
+                          // Esc 取消：丢弃数值与原因草稿（取消不写入），回显已提交值。
+                          clearDraftOf(monthKey);
+                          setReasonDrafts((prev) => {
                             if (!(monthKey in prev)) return prev;
                             const next = { ...prev };
                             delete next[monthKey];
                             return next;
                           });
-                          setIssues((prev) => (prev[monthKey] == null ? prev : { ...prev, [monthKey]: undefined }));
                         }
                       }}
                       style={inputStyle(invalid)}
@@ -650,13 +712,95 @@ export default function InventoryValidationCard({
                       {splitOfWeek(monthKey).map(({ weekId, units }) => `${weekId} ${fmtThousandUnits(units)}`).join(' · ')}
                       {' 千台'}
                     </span>
+                    {committedReasonOf(monthKey) !== '' && (
+                      <span
+                        data-si-reason={monthKey}
+                        title="SI 修正原因（Batch 2 起必填，随数值同笔写入审计轨迹）"
+                        style={{ fontSize: 11, color: color.warningInk, minWidth: 0 }}
+                      >
+                        {`原因：${committedReasonOf(monthKey)}`}
+                      </span>
+                    )}
                   </div>
+                  {/* 内联原因输入（Batch 2：修改值必填原因，保存才回写；Esc 取消不写入）。
+                      出现时机 = 数值草稿合法且与已提交值不同（含 'reason' 阻断态）。 */}
+                  {showReasonEditor && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: color.body, minWidth: 0 }}>
+                        {`修正原因（必填）`}
+                        <input
+                          aria-label={`${monthKey} SI 修正原因（必填）`}
+                          value={reasonDrafts[monthKey] ?? ''}
+                          placeholder="如：渠道压货节奏提前"
+                          onChange={(event) => setReasonDrafts((prev) => ({ ...prev, [monthKey]: event.target.value }))}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              tryCommit(monthKey);
+                            } else if (event.key === 'Escape') {
+                              clearDraftOf(monthKey);
+                              setReasonDrafts((prev) => {
+                                if (!(monthKey in prev)) return prev;
+                                const next = { ...prev };
+                                delete next[monthKey];
+                                return next;
+                              });
+                            }
+                          }}
+                          style={{
+                            ...inputStyle(false), flex: '1 1 160px', width: 'auto',
+                            borderColor: issue === 'reason' ? color.error : color.hairline,
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        data-si-save={monthKey}
+                        aria-label={`保存 ${monthKey} SI 修改`}
+                        title="保存数值与原因（同笔写入参数与主链）；原因必填"
+                        disabled={(reasonDrafts[monthKey] ?? '').trim() === ''}
+                        onClick={() => tryCommit(monthKey)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
+                          borderRadius: radius.control, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                          cursor: 'pointer', font: 'inherit',
+                          background: color.canvas, border: `1px solid ${color.hairline}`,
+                          color: (reasonDrafts[monthKey] ?? '').trim() === '' ? color.hairlineStrong : color.body,
+                        }}
+                      >
+                        保存
+                      </button>
+                      <button
+                        type="button"
+                        data-si-cancel={monthKey}
+                        aria-label={`取消 ${monthKey} SI 修改`}
+                        title="取消：不写入任何参数，回显已提交值"
+                        onClick={() => {
+                          clearDraftOf(monthKey);
+                          setReasonDrafts((prev) => {
+                            if (!(monthKey in prev)) return prev;
+                            const next = { ...prev };
+                            delete next[monthKey];
+                            return next;
+                          });
+                        }}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
+                          borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
+                          cursor: 'pointer', font: 'inherit',
+                          background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body,
+                        }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  )}
                   {issue != null && (
                     <span
-                      role={invalid ? 'alert' : undefined}
-                      style={{ fontSize: 11, color: invalid ? color.error : color.mute, fontWeight: invalid ? 600 : 400 }}
+                      role={invalid || issue === 'reason' ? 'alert' : undefined}
+                      style={{ fontSize: 11, color: invalid || issue === 'reason' ? color.error : color.mute, fontWeight: invalid || issue === 'reason' ? 600 : 400 }}
                     >
-                      {issue === 'invalid' ? SI_INVALID_TEXT : SI_BLANK_TEXT}
+                      {issue === 'invalid' ? SI_INVALID_TEXT : issue === 'reason' ? SI_REASON_REQUIRED_TEXT : SI_BLANK_TEXT}
                     </span>
                   )}
                 </div>

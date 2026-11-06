@@ -190,6 +190,9 @@ export default function ForecastMarginCostCard({
   const [editingMonth, setEditingMonth] = useState<MonthKey | null>(null);
   const [editValue, setEditValue] = useState<number | null>(null);
   const [editReason, setEditReason] = useState('');
+  /** Batch 2：成本假设原因必填（保存才回写，取消不写入）。 */
+  const editReasonOk = editReason.trim() !== '';
+  const editValueOk = editValue != null && Number.isFinite(editValue) && editValue >= 0;
   const show = (key: string): boolean => !hidden.has(key);
   const toggle = (key: string) => setHidden((prev) => {
     const next = new Set(prev);
@@ -430,14 +433,21 @@ export default function ForecastMarginCostCard({
                         style={{ width: 92 }}
                       />
                       <Input
-                        aria-label={`成本假设原因 ${monthKey}（选填）`}
+                        aria-label={`成本假设原因 ${monthKey}（必填）`}
                         size="small"
                         value={editReason}
-                        placeholder="原因（选填）"
+                        placeholder="原因（必填）"
                         onChange={(event) => setEditReason(event.target.value)}
                         style={{ width: 140 }}
                       />
-                      <Button size="small" type="primary" aria-label={`保存成本假设 ${monthKey}`} onClick={() => saveEditor(monthKey)}>保存</Button>
+                      <Button
+                        size="small"
+                        type="primary"
+                        aria-label={`保存成本假设 ${monthKey}`}
+                        disabled={!editValueOk || !editReasonOk}
+                        title={editReasonOk ? '保存数值与原因（同笔写入④工作区与审计轨迹）' : '请填写成本假设原因后保存（取消不写入）'}
+                        onClick={() => { if (editValueOk && editReasonOk) saveEditor(monthKey); }}
+                      >保存</Button>
                       <Button size="small" aria-label={`取消编辑 ${monthKey}`} onClick={() => { setEditingMonth(null); setEditValue(null); setEditReason(''); }}>取消</Button>
                     </>
                   ) : (
