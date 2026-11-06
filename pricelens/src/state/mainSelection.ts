@@ -101,18 +101,41 @@ export function firstLegalSelectionOfModel(modelId: string, countryCode: string)
   return null;
 }
 
-/** 勾选组跨口径映射（R3 M1a，显式口径切换专用）：精确合法配置原样保留；
- *  配置/SKU 在目标国不存在但型号仍在 → 同型号该国首个合法配置（颜色尽量
- *  沿用同色名，缺失回落最低价色）；型号整体缺席 = null（调用方回落默认）。 */
+/** 勾选组跨口径映射（R3 M1a + R4 S1，显式口径切换/查询共用）：
+ *  - 空 skuIds = 整配置口径（buildSeries 展开该配置全部颜色行），配置在该国
+ *    有行即原样保留；
+ *  - 非空 skuIds 逐个校验（型号 × 产业 × 国家 × 配置 × SKU 行）：合法子集
+ *    非空 → 只保留合法成员（任一合法不能让非法 SKU 混进来）；全部非法但配置
+ *    在该国真实存在 → 配置内换合法 SKU（同色优先，缺失回落最低价色/首行）；
+ *  - 配置整体不在目标国但型号仍在 → 同型号该国首个合法配置（颜色尽量沿用
+ *    同色名，缺失回落最低价色）；型号整体缺席 = null（调用方回落默认）。 */
 export function remapSelectionForCountry(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): ProductSelection | null {
-  if (selectionValidFor(sel, countryCode, industry)) return sel;
+  const configRows = dimProduct.filter(
+    (p) => p.model_id === sel.modelId
+      && p.industry === industry
+      && p.countries.includes(countryCode)
+      && norm(p.romram) === norm(sel.romram),
+  );
+  if (configRows.length) {
+    if (sel.skuIds.length === 0) return sel;
+    const legal = sel.skuIds.filter((skuId) => configRows.some((p) => p.sku_id === skuId));
+    if (legal.length) return legal.length === sel.skuIds.length ? sel : { ...sel, skuIds: legal };
+    // 配置在该国真实存在、只是所选 SKU 全部不存在（旧 id 漂移/坏数据）：
+    // 配置名不漂移，配置内换合法 SKU（同色优先 → 最低价色 → 首行兜底）
+    const sameColor = configRows.find(
+      (p) => p.color && p.color !== '—' && sel.skuIds.some((old) => {
+        const oldRow = dimProduct.find((row) => row.sku_id === old);
+        return oldRow?.color && oldRow.color !== '—' && oldRow.color.toLowerCase() === p.color!.toLowerCase();
+      }),
+    );
+    const skuId = sameColor?.sku_id ?? lowestPriceColorSku(sel.modelId, sel.romram, countryCode) ?? configRows[0].sku_id;
+    return { ...sel, skuIds: [skuId] };
+  }
   const modelInCountry = dimProduct.some(
     (p) => p.model_id === sel.modelId && p.industry === industry && p.countries.includes(countryCode),
   );
   if (!modelInCountry) return null;
-  // 精确配置优先：原配置在目标国有价则只换 SKU，配置名不漂移
-  const keepRomram = lowestPriceColorSku(sel.modelId, sel.romram, countryCode) != null ? sel.romram : null;
-  const romram = keepRomram ?? firstLegalSelectionOfModel(sel.modelId, countryCode)?.romram;
+  const romram = firstLegalSelectionOfModel(sel.modelId, countryCode)?.romram;
   if (romram == null) return null;
   const oldColors = new Set(
     dimProduct.filter((p) => sel.skuIds.includes(p.sku_id) && p.color && p.color !== '—')
@@ -126,20 +149,39 @@ export function remapSelectionForCountry(sel: ProductSelection, countryCode: str
   return skuId ? { modelId: sel.modelId, romram, skuIds: [skuId] } : null;
 }
 
-/** 显式携带的主分析卡整组合法化（R3 M1a）：主品逐卡按 remapSelectionForCountry
- *  映射（同型号保留/换合法配置），型号整体缺席的卡剔除；手动对比区只保留目标国
- *  仍合法的条目（自动匹配卡对比区由调用方按目标国矩阵重算）；空对卡原样保留。
+/** 显式携带的主分析卡整组合法化（R3 M1a + R4 S1）：主品逐卡按 remapSelectionForCountry
+ *  映射（同型号保留/换合法配置/逐 SKU 过滤），型号整体缺席的卡剔除；手动对比区同样
+ *  逐条合法化（合法 SKU 子集保留，配置漂移同型号映射，型号缺席剔除）；多张源卡
+ *  映射后落到同一 selKey（RU 12+512 与 16+512 → ID 均 16+512）按 selKey 去重，
+ *  对比区封 COMPARES_PER_CARD_CAP；空对卡原样保留（对比区只留合法条目）。
  *  返回 null = 没有任何卡能落在目标国（型号全缺席），调用方回落默认/快照。 */
 export function remapMainsForScope(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): MainProduct[] | null {
   const out: MainProduct[] = [];
+  const seen = new Set<string>();
+  const sanitizeCompares = (compares: ProductSelection[], mainKey?: string): ProductSelection[] => {
+    const legal: ProductSelection[] = [];
+    const seenCompare = new Set<string>();
+    for (const sel of compares) {
+      const mapped = remapSelectionForCountry(sel, countryCode, industry);
+      if (!mapped) continue;
+      const key = selKey(mapped);
+      if (seenCompare.has(key) || key === mainKey) continue;
+      seenCompare.add(key);
+      legal.push(mapped);
+    }
+    return legal;
+  };
   for (const card of mains) {
     if (!card.main) {
-      out.push({ ...card, compares: card.compares.filter((sel) => selectionValidFor(sel, countryCode, industry)) });
+      out.push({ ...card, compares: sanitizeCompares(card.compares) });
       continue;
     }
     const main = remapSelectionForCountry(card.main, countryCode, industry);
     if (!main) continue;
-    out.push({ ...card, main, compares: card.compares.filter((sel) => selectionValidFor(sel, countryCode, industry)) });
+    const key = selKey(main);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...card, main, compares: sanitizeCompares(card.compares, key) });
   }
   return out.length ? clampMains(out) : null;
 }

@@ -1,6 +1,6 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
 import { dimProduct, dimRegion, dimTime } from '../data';
-import { buildCards, clampMains, flatSelections, withAutoOn } from '../state/mainSelection';
+import { buildCards, clampMains, flatSelections, remapSelectionForCountry, selKey, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
 import type { AgentActionTarget, AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, FilterPatch, FilterResultCard, ForecastContextInput, AgentSuggestion } from './contracts';
@@ -277,28 +277,67 @@ function latestWeekForRange(state: FiltersState): string {
   return inRange[inRange.length - 1]?.week_id ?? state.rangeEnd;
 }
 
-function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolution): FiltersState {
-  let targetSelections = entities.selections;
-  if (!entities.explicitProduct && entities.explicitCountry) {
-    targetSelections = selections(state).filter((selection) => dimProduct.some((row) => row.model_id === selection.modelId && norm(row.romram) === norm(selection.romram) && row.countries.includes(entities.countryCode)));
-  }
-  if (!entities.explicitCountry && !entities.explicitProduct) return state;
-  const mains: MainProduct[] = targetSelections.map((selection, index) => ({ id: `agent-query-${index}`, main: selection, compares: [] }));
-  return { ...state, countryCode: entities.countryCode, mains };
+function modelLabelOf(modelId: string): string {
+  return dimProduct.find((row) => row.model_id === modelId)?.model_name ?? modelId;
 }
 
-function stateForPriceAdvantage(state: FiltersState, entities: AgentEntityResolution): FiltersState {
-  let next = stateForEntityQuery(state, entities);
+/** 实体查询的目标口径 + 口径映射说明（R4-M2）。
+ *  跨国不带产品名时不再用「romram 精确存在」硬过滤（那会把 RU Mate X6 12+512
+ *  在 ID 整条丢掉、错误回落 Mate 80 Pro），改用与看板共用的 mainSelection
+ *  同型号合法映射：精确合法配置保留 → 同型号该国首个合法配置 → 型号缺席剔除；
+ *  映射/剔除/回落都产生 note，供结果卡边界说明。 */
+interface EntityQueryPlan {
+  state: FiltersState;
+  notes: string[];
+}
+
+function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolution): EntityQueryPlan {
+  const notes: string[] = [];
+  if (!entities.explicitCountry && !entities.explicitProduct) return { state, notes };
+  let targetSelections = entities.selections;
+  if (!entities.explicitProduct && entities.explicitCountry) {
+    const remapped: ProductSelection[] = [];
+    const seen = new Set<string>();
+    for (const selection of selections(state)) {
+      // 合法化按勾选组自身的产业维表校验（看板可跨产业保留旧卡，如穿戴卡留在
+      // 手机产业页）；型号维表不存在时才回落看板产业
+      const industryOfSel = dimProduct.find((row) => row.model_id === selection.modelId)?.industry ?? state.industry;
+      const legal = remapSelectionForCountry(selection, entities.countryCode, industryOfSel);
+      if (!legal) {
+        notes.push(`${modelLabelOf(selection.modelId)} 在${entities.countryName}没有在售型号，未沿用原选择。`);
+        continue;
+      }
+      if (norm(legal.romram) !== norm(selection.romram)) {
+        notes.push(`${modelLabelOf(selection.modelId)} ${selection.romram} 在${entities.countryName}不在售，已映射同型号 ${legal.romram}。`);
+      }
+      const key = selKey(legal);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      remapped.push(legal);
+    }
+    targetSelections = remapped;
+  }
+  const mains: MainProduct[] = targetSelections.map((selection, index) => ({ id: `agent-query-${index}`, main: selection, compares: [] }));
+  return { state: { ...state, countryCode: entities.countryCode, mains }, notes };
+}
+
+function stateForPriceAdvantage(state: FiltersState, entities: AgentEntityResolution): EntityQueryPlan {
+  const plan = stateForEntityQuery(state, entities);
+  const next = plan.state;
+  const notes = [...plan.notes];
   // A competitor-only page selection must not make the core price-advantage
   // entry point silently compare Apple/Samsung against each other. Materialize
-  // an own product when the current scope has no Huawei main card.
+  // an own product when the current scope has no Huawei main card. R4-M2：
+  // 只有同型号映射后确实没有我司主卡时才回落该国首个我司产品，且必须把
+  // 回落原因写进卡边界（Mate X6 缺席 DE → nova 14 Pro），不能静默替换。
   const ownCard = next.mains.find((card) => card.main && ownSelectionForAgent(card.main));
-  if (ownCard) return { ...next, mains: clampMains(next.mains.map((card) => card.id === ownCard.id ? withAutoOn(card, next.countryCode) : card)) };
-  const own = dimProduct.find((row) => row.is_own && row.industry === state.industry && row.countries.includes(entities.countryCode || state.countryCode));
-  if (!own) return next;
-  const skuId = lowestPriceColorSku(own.model_id, own.romram, entities.countryCode || state.countryCode) ?? own.sku_id;
+  if (ownCard) return { state: { ...next, mains: clampMains(next.mains.map((card) => card.id === ownCard.id ? withAutoOn(card, next.countryCode) : card)) }, notes };
   const countryCode = entities.countryCode || state.countryCode;
-  return { ...next, countryCode, mains: clampMains(buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [skuId] }], { auto: true, countryCode })) };
+  const own = dimProduct.find((row) => row.is_own && row.industry === state.industry && row.countries.includes(countryCode));
+  if (!own) return { state: next, notes };
+  const skuId = lowestPriceColorSku(own.model_id, own.romram, countryCode) ?? own.sku_id;
+  notes.push(`当前口径没有可沿用的我司主品，已回落${entities.countryName}有数据的我司产品 ${own.model_name}（${own.romram}）计算价格优势。`);
+  return { state: { ...next, countryCode, mains: clampMains(buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [skuId] }], { auto: true, countryCode })) }, notes };
 }
 
 function ownSelectionForAgent(selection: ProductSelection): boolean {
@@ -325,14 +364,52 @@ function noDataResult(entities: AgentEntityResolution, state: FiltersState): { c
   };
 }
 
-function queryCards(state: FiltersState, text: string, entities: AgentEntityResolution = resolveAgentEntities(text, state)): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
-  let queryState = stateForEntityQuery(state, entities);
+/** R4-M1：结果卡 open 动作必须携带「实际计算口径」的完整 filterPatch——
+ *  国家、产品卡、平台、粒度、范围、币种等一并带上，点击后精确落回计算该卡
+ *  的看板口径（AE 页问 RU 趋势 → 回看切 RU + 实际产品/范围），而不是停在
+ *  当前页口径。与 priceAdvantage 的 scopePatch 同一条口径快照规则。 */
+function scopePatchOf(state: FiltersState): FilterPatch {
+  return {
+    countryCode: state.countryCode,
+    industry: state.industry,
+    mains: clampMains(state.mains.map((card) => ({
+      ...card,
+      main: card.main ? { ...card.main } : null,
+      compares: card.compares.map((compare) => ({ ...compare })),
+    }))),
+    platform: state.platform,
+    granularity: state.granularity,
+    adaptive: false,
+    rangeStart: state.rangeStart,
+    rangeEnd: state.rangeEnd,
+    currency: state.currency,
+    priceTypes: state.priceTypes,
+    agg: state.agg,
+  };
+}
+
+function queryCards(
+  state: FiltersState,
+  text: string,
+  entities: AgentEntityResolution = resolveAgentEntities(text, state),
+  contextFingerprint = '',
+): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
+  const plan = stateForEntityQuery(state, entities);
+  let queryState = plan.state;
+  const notes = [...plan.notes];
   // Preset comparison/evidence chips are actionable even when the shell has
   // not materialized a product selection yet: use the first country-valid
   // own product as a deterministic target instead of falling into clarify.
+  // R4-M2：这是真正的型号缺席回落——必须把回落原因写进卡边界。
   if (!queryState.mains.some((card) => card.main) && /比较|对比|依据|解释当前|主竞品|最新预警|市场情报|事件|汇率|量价|销量|预测|不确定性|价格下调|价格上调|趋势/.test(text)) {
     const own = dimProduct.find((row) => row.is_own && row.industry === state.industry && row.countries.includes(state.countryCode));
-    if (own) queryState = { ...queryState, mains: buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] }], { auto: true, countryCode: queryState.countryCode }) };
+    if (own) {
+      const reason = notes.length
+        ? '当前页面产品在目标国家没有在售型号'
+        : '当前页面还没有选中的产品';
+      notes.push(`${reason}，已回落${entities.countryName}有数据的我司产品 ${own.model_name} 计算本结果。`);
+      queryState = { ...queryState, mains: buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] }], { auto: true, countryCode: queryState.countryCode }) };
+    }
   }
   const query = seriesQueryOf(queryState);
   if (!query) {
@@ -346,13 +423,16 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
     const scopeLabel = entities.explicitCountry || entities.explicitProduct
       ? `${entities.countryName}${entities.productLabels.length ? ` · ${entities.productLabels.join('、')}` : ''}`
       : '当前页面';
+    // R4-M1：open 动作带完整计算口径（卡上每个 open 都共享这份 filterPatch）
+    const openTarget: AgentActionTarget = { page: 'dashboard', contextFingerprint, filterPatch: scopePatchOf(queryState) };
+    const scopeNote = notes.length ? `${notes.join(' ')}` : undefined;
     const chart = {
       kind: 'chart' as const,
       id: id('chart'),
       title: /最低|最便宜|平台/.test(text) ? `${scopeLabel}价格走势` : `${scopeLabel}价格走势摘要`,
       series: series.slice(0, 6).map((s) => ({ label: s.label, color: s.color, values: s.points.slice(-8).map((p) => ({ bucket: p.xLabel, value: p.price })) })),
-      note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。`,
-      actions: [{ id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: '解释这组价格趋势的关键变化和需要核查的异常点' }, { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这组价格趋势定位回当前看板' }],
+      note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。${scopeNote ? `判断边界：${scopeNote}` : ''}`,
+      actions: [{ id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: '解释这组价格趋势的关键变化和需要核查的异常点' }, { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这组价格趋势定位回当前看板', target: openTarget }],
       evidence: [{ id: id('evidence'), label: '价格序列', detail: `${series.length} 条系列 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }],
     };
     const rows = series.slice(0, 8).map((s) => {
@@ -369,9 +449,9 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
       const latestWeek = latestWeekForRange(queryState);
       const spread = first ? platformPriceSpread(first.skuIds[0], latestWeek, queryState.countryCode, queryState.currency) : [];
       const lowest = spread[0]?.price ?? null;
-      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, item.price.toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0].platform}。` : '当前产品在最新有价周没有可比较的平台数据。', actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板` }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, item.price.toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0].platform}。` : '当前产品在最新有价周没有可比较的平台数据。', ...(notes.length ? { boundaries: notes } : {}), actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板`, target: openTarget }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台`, source: '统一价格聚合引擎' }] };
     } else {
-      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: '少于两个有效点时不计算环比；结果可回到看板继续下钻。', actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻' }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: '少于两个有效点时不计算环比；结果可回到看板继续下钻。', ...(notes.length ? { boundaries: notes } : {}), actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', target: openTarget }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
     }
     return { cards: [chart, table], citations: [{ id: id('citation'), kind: 'calculation', label: '统一价格聚合引擎', detail: `${series.length} 条系列 · ${queryState.countryCode} · ${queryState.rangeStart}–${queryState.rangeEnd}` }], steps: [step('catalog.resolve', '解析产品与口径', `${query.groups.length} 个产品组`), step('series.query', '查询价格序列', `${series.length} 条系列`), step('series.compare', '计算变化', '已完成确定性计算')], summary: rows.length ? `已按${scopeLabel}整理 ${rows.length} 个产品的价格结果。` : '当前范围没有足够的价格数据。' };
   } catch {
@@ -659,9 +739,13 @@ export async function runAgent(
     // 输出卡必须反映新范围（重算），而不是只改筛选预览后仍读旧 state。
     const queryBase: FiltersState = { ...context.state, ...buildFilterPatch(text, context.state) };
     if (/价格优势|优势|领先|落后/.test(text)) {
-      const result = buildPriceAdvantageResult(stateForPriceAdvantage(queryBase, entities), context.fingerprint);
+      // R4-M2：跨国查询先走 mainSelection 同型号合法映射再定查询主品
+      //（RU Mate X6 12+512 → ID 16+512，而不是丢掉后回落 Mate 80 Pro）；
+      // 型号确实缺席才回落该国默认我司产品，回落/映射原因写进卡边界。
+      const plan = stateForPriceAdvantage(queryBase, entities);
+      const result = buildPriceAdvantageResult(plan.state, context.fingerprint);
       if (result) {
-        cards.push(result.card);
+        cards.push(plan.notes.length ? { ...result.card, boundaries: [...plan.notes, ...(result.card.boundaries ?? [])] } : result.card);
         summary = result.summary;
         steps = result.steps;
         citations = result.citations;
@@ -670,7 +754,7 @@ export async function runAgent(
         steps = [step('catalog.resolve', '解析意图', '价格优势', 'success'), step('series.query', '读取价格', '没有可用产品事实', 'warning'), step('series.compare', '计算优势', '缺少我司与竞品的共同价格点', 'warning'), step('view.preview', '生成结论', '无法计算', 'warning')];
       }
     } else {
-      const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(queryBase, text, entities);
+      const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(queryBase, text, entities, context.fingerprint);
       cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
     }
   } else {

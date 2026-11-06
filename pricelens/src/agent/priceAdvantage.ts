@@ -141,6 +141,7 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
     .map((card) => ({ ...card, main: { ...card.main }, compares: card.compares.map((compare) => ({ ...compare })) })));
   const scopePatch: FilterPatch = {
     countryCode: state.countryCode,
+    industry: state.industry,
     // R3（三轮返修 m2）：粒度与范围桶必须同形——有对比行时按实际参与对比的周
     //（rows 已按周倒序）给真实周桶 + 周粒度；空结果回退原状态口径时保持原粒度
     // 与原桶（季粒度 2025Q1–2025Q2 的空卡回看不得变成 week + 2025Q1 的错配）。
@@ -149,6 +150,11 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
       : { granularity: state.granularity, rangeStart: state.rangeStart, rangeEnd: state.rangeEnd }),
     adaptive: false,
     platform: state.platform,
+    // R4-M1 同口径补全：币种/价格类型/汇总参与计算，回看必须一并带回，
+    // 否则「用 USD 重算的优势卡」回看落回本币口径，结果与卡脱节。
+    currency: state.currency,
+    priceTypes: state.priceTypes,
+    agg: state.agg,
     ...(scopeMains.length ? { mains: scopeMains } : {}),
   };
   const actions: AgentCardAction[] = [
