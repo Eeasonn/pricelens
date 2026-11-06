@@ -189,6 +189,9 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
   if (recent) {
     const count = Math.max(2, Math.min(52, Number(recent[1]) || 8));
     Object.assign(patch, recentRange(state, count));
+    // R6（二轮返修）：「最近 N 周」给的是周桶范围，粒度必须同步对齐 week——
+    // 否则月/季粒度下周桶 id 会塞进月/季查询，真实机型最新价/环比全为空。
+    if (recent[2] !== '月') patch.granularity = 'week';
   }
   const entities = resolveAgentEntities(text, state);
   if (entities.explicitCountry) patch.countryCode = entities.countryCode;
@@ -205,6 +208,8 @@ function formatPatchValue(value: unknown): string {
   if (value === undefined) return '—';
   if (typeof value === 'boolean') return value ? '开' : '关';
   if (typeof value === 'object' && value !== null && 'rrp' in value) return (value as { rrp: boolean }).rrp ? '折后价 + RRP' : '仅折后价';
+  // 粒度值中文映射（R6：最近 N 周会把粒度并入 patch，预览不能裸显 week/month）
+  if (value === 'week' || value === 'month' || value === 'quarter') return ({ week: '周', month: '月', quarter: '季' })[value];
   // 产品选择数组：结构化格式（型号 · 规格，逗号连接），不落 [object Object]。
   if (Array.isArray(value) && value.every((item) => typeof item === 'object' && item !== null && 'main' in item)) {
     const labels = (value as Array<{ main: { modelId: string; romram: string; skuIds?: string[] } }>).map((item) => {
@@ -218,7 +223,7 @@ function formatPatchValue(value: unknown): string {
 }
 
 function filterLabelOf(key: keyof FilterPatch): string {
-  return key === 'priceTypes' ? '价格类型' : key === 'rangeStart' ? '时间起点' : key === 'rangeEnd' ? '时间终点' : key === 'adaptive' ? '自动时间范围' : key === 'currency' ? '币种' : key === 'countryCode' ? '国家' : key === 'mains' ? '产品' : key;
+  return key === 'priceTypes' ? '价格类型' : key === 'rangeStart' ? '时间起点' : key === 'rangeEnd' ? '时间终点' : key === 'adaptive' ? '自动时间范围' : key === 'currency' ? '币种' : key === 'countryCode' ? '国家' : key === 'mains' ? '产品' : key === 'granularity' ? '时间粒度' : key;
 }
 
 export function buildFilterCard(text: string, state: FiltersState): FilterResultCard | null {

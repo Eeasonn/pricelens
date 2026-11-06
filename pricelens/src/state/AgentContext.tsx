@@ -38,6 +38,11 @@ export interface AgentMessage {
   /** 原始请求，用于错误结果一键重试。 */
   prompt?: string;
   alert?: AgentAlertRecord;
+  /**
+   * R8（二轮返修）：响应携带的 contextFingerprint 与请求不一致时置 true——
+   * 该消息结果保留可读，但所有副作用动作被隔离禁用（AgentPanel 渲染层消费）。
+   */
+  staleMismatch?: boolean;
   /** Incremental assistant output is kept separate from the final response. */
   partialText?: string;
   partialCards?: AgentResultCard[];
@@ -98,12 +103,13 @@ const mergeCompletedToolCards = (cards: AgentResultCard[], completed: AgentResul
   return next;
 };
 
-const finalizeLiveToolCards = (cards: AgentResultCard[], outcome: 'success' | 'cancelled'): AgentResultCard[] =>
+const finalizeLiveToolCards = (cards: AgentResultCard[], outcome: 'success' | 'cancelled' | 'failed'): AgentResultCard[] =>
   cards.map((card) => {
     if (card.kind !== 'tool_call' || (card.status !== 'running' && card.status !== 'queued')) return card;
-    return outcome === 'success'
-      ? { ...card, status: 'success' as const, outputSummary: card.outputSummary ?? '已随本次运行完成' }
-      : { ...card, status: 'cancelled' as const, outputSummary: card.outputSummary ?? '已随本次运行终止' };
+    if (outcome === 'success') return { ...card, status: 'success' as const, outputSummary: card.outputSummary ?? '已随本次运行完成' };
+    // R3（二轮返修）：普通异常失败收敛为「失败」，只有用户取消才收敛为「已取消」。
+    if (outcome === 'failed') return { ...card, status: 'failed' as const, outputSummary: card.outputSummary ?? '已随本次运行失败', error: card.error ?? '本次运行未完成' };
+    return { ...card, status: 'cancelled' as const, outputSummary: card.outputSummary ?? '已随本次运行终止' };
   });
 
 function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState, page: string) {
@@ -304,8 +310,11 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       setRunStatus(nextStatus);
       setActiveRun((prev) => {
         if (!prev) return prev;
-        const completionEvent = stale || response.intent === 'clarify' ? null : { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.completed' as const, status: nextStatus, timestamp: new Date().toISOString(), message: '运行完成', provenance: response.provenance ?? context.provenance };
-        const events = completionEvent && prev.events.some((event) => event.type === 'run.completed') ? prev.events : completionEvent ? [...prev.events, completionEvent] : [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status' as const, status: nextStatus, timestamp: new Date().toISOString(), message: stale ? '筛选上下文已变化，结果可查看但需要重新确认口径' : '需要补充查询口径', provenance: response.provenance ?? context.provenance }];
+        // R8（二轮返修）：响应指纹与请求不一致 = 不可采信的完成——不派发正常
+        // run.completed，只落 run.status 说明结果动作已锁定；stale 与 clarify
+        // 维持原有不派发完成事件的语义。
+        const completionEvent = stale || responseFingerprintMismatch || response.intent === 'clarify' ? null : { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.completed' as const, status: nextStatus, timestamp: new Date().toISOString(), message: '运行完成', provenance: response.provenance ?? context.provenance };
+        const events = completionEvent && prev.events.some((event) => event.type === 'run.completed') ? prev.events : completionEvent ? [...prev.events, completionEvent] : [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status' as const, status: nextStatus, timestamp: new Date().toISOString(), message: stale ? '筛选上下文已变化，结果可查看但需要重新确认口径' : responseFingerprintMismatch ? '响应口径与请求上下文不一致，结果动作已锁定' : '需要补充查询口径', provenance: response.provenance ?? context.provenance }];
         return { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), response, events };
       });
       const messageKind: AgentMessage['kind'] = response.intent === 'clarify' ? 'clarification' : /量价预测|预测|情景/.test(text) ? 'scenario' : 'conversation';
@@ -315,16 +324,19 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         // R3：响应路径到达即终态——先按稳定 id/工具名合并完成态，再收敛残留
         // running/queued 工具卡，消息里不允许再出现「运行中」的工具活动卡。
         const partialCards = finalizeLiveToolCards(mergeCompletedToolCards(message.partialCards ?? [], completedTools), 'success');
-        return { ...message, text: response.summary, response, partialText: undefined, partialCards, provider: response.provider, fallbackReason: response.fallbackReason ?? message.fallbackReason, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint };
+        return { ...message, text: response.summary, response, partialText: undefined, partialCards, provider: response.provider, fallbackReason: response.fallbackReason ?? message.fallbackReason, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, staleMismatch: responseFingerprintMismatch || undefined };
       }));
     } catch (error) {
       if (runSequence.current !== runId) return;
       const aborted = error instanceof Error && error.name === 'AbortError';
       const messageText = error instanceof Error && error.message ? error.message : 'Agent 服务暂时不可用。';
-      const nextStatus: AgentRunStatus = aborted || cancelRequested.current ? 'cancelled' : 'failed';
+      // R3（二轮返修）：只有用户取消（AbortError / stop 置位）才是 cancelled；
+      // 普通异常失败收敛为 failed，残留 running 工具卡标「失败」而非「已取消」。
+      const userCancelled = aborted || cancelRequested.current;
+      const nextStatus: AgentRunStatus = userCancelled ? 'cancelled' : 'failed';
       setRunStatus(nextStatus);
-      setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: aborted || cancelRequested.current ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: context.provenance }] } : prev);
-      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: aborted || cancelRequested.current ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], 'cancelled'), prompt: text, kind: aborted || cancelRequested.current ? 'system' : 'error', unread: true } : message));
+      setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: userCancelled ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: context.provenance }] } : prev);
+      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: userCancelled ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], userCancelled ? 'cancelled' : 'failed'), prompt: text, kind: userCancelled ? 'system' : 'error', unread: true } : message));
     } finally {
       if (runSequence.current === runId) { controller.current = null; activeMessageId.current = null; setRunning(false); }
     }

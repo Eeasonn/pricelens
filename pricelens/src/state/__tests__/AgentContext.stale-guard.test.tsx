@@ -129,3 +129,36 @@ describe('t428u 返修 R8 · AgentContext 迟到响应防串写', () => {
     expect(within(panel).queryByText('结果已在 Agent 面板生成')).toBeNull();
   });
 });
+
+describe('t428u 返修 R8（二轮）· 错指纹响应隔离副作用动作', () => {
+  it('页面未变但响应指纹错配：不派发完成事件，apply/open 与行级定位 disabled，「查看证据」仍可点', async () => {
+    const panel = openPanel();
+    await sendFromPanel(panel, '价格优势');
+    await waitFor(() => expect(bridge.pending.length).toBe(1));
+    // 页面上下文不变，仅响应自身指纹错配（远端串写/迟到串指纹）
+    (bridge.pending[0] as PendingRun).release({ contextFingerprint: 'ctx-forged-scope' });
+    await waitFor(() => expect(within(panel).getByText(/响应口径与当前上下文不一致 · 结果可查看，动作已锁定/)).toBeTruthy(), { timeout: 4000 });
+    // 未派发正常 run.completed 完成事件：只落 run.status 说明动作已锁定
+    expect(within(panel).queryByText('运行完成')).toBeNull();
+    expect(within(panel).getByText('响应口径与请求上下文不一致，结果动作已锁定')).toBeTruthy();
+    // 结果卡确定性结果保留（可读）
+    expect(within(panel).getByText('价格优势对比')).toBeTruthy();
+    // open 类动作全部禁用（回看价格走势 / 打开价格预警；锁定态可达名带「结果口径未确认」后缀）
+    expect((within(panel).getByRole('button', { name: /回看价格走势/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(panel).getByRole('button', { name: /打开价格预警/ }) as HTMLButtonElement).disabled).toBe(true);
+    // 行级定位（改筛选 + 跳页）同样锁定
+    const rowLocate = panel.querySelector('[data-price-advantage-row] button') as HTMLButtonElement | null;
+    expect(rowLocate).toBeTruthy();
+    expect(rowLocate!.disabled).toBe(true);
+    // 仅原地只读 evidence 豁免：可点击且真实展开证据区
+    const evidence = within(panel).getByRole('button', { name: '查看证据' }) as HTMLButtonElement;
+    expect(evidence.disabled).toBe(false);
+    fireEvent.click(evidence);
+    const summary = await waitFor(() => {
+      const node = Array.from(panel.querySelectorAll('summary')).find((item) => (item.textContent ?? '').includes('证据与来源'));
+      expect(node).toBeDefined();
+      return node!;
+    });
+    expect((summary.closest('details') as HTMLDetailsElement).open).toBe(true);
+  });
+});

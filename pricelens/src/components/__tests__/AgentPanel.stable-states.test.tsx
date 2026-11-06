@@ -249,6 +249,39 @@ describe('t428u 返修 R5 · 跨国回看导航带请求国家', () => {
   });
 });
 
+describe('t428u 返修 R5（二轮）· 跨国回看保留结果卡的主品口径', () => {
+  beforeEach(() => resetTo('/?p=dashboard&c=AE&main=own-huawei-nova-14-pro__12%2B512GB'));
+
+  it('AE + nova 14 Pro 问「RU 价格优势」→ 回看后 RU 上下文主品仍是 nova 14 Pro，而非 RU 默认主品', async () => {
+    const novaChip = 'own-huawei-nova-14-pro · 12+512 GB · own-huawei-nova-14-pro__12-512gb__black';
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    const panel = screen.getByRole('dialog');
+    // 起始口径：AE 页、主品 nova 14 Pro（URL 指定，真实 FiltersProvider 载入）
+    await waitFor(() => {
+      expect(within(panel).getAllByText('AE · 手机').length).toBeGreaterThan(0);
+      expect(within(panel).getAllByText(novaChip).length).toBeGreaterThan(0);
+    }, { timeout: 4000 });
+    const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+    fireEvent.change(input, { target: { value: 'RU 价格优势' } });
+    fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(within(panel).getByText('价格优势对比')).toBeTruthy(), { timeout: 4000 });
+    fireEvent.click(within(panel).getByRole('button', { name: '回看价格走势' }));
+    // 最终 Filters 状态（chips 直读 context.state）：国家 RU 且主品仍是该卡计算的
+    // nova 14 Pro SKU；不能被 switchScope 重置成 RU 第一默认主品 Pura 90s Pro Max。
+    await waitFor(() => {
+      expect(within(panel).getAllByText('RU · 手机').length).toBeGreaterThan(0);
+      expect(within(panel).getAllByText(novaChip).length).toBeGreaterThan(0);
+    }, { timeout: 4000 });
+    expect(within(panel).queryByText(/own-huawei-pura-90s-pro-max · /)).toBeNull();
+    // URL 与状态同口径（分享链接同样是 nova 14 Pro）
+    const decodedSearch = decodeURIComponent(window.location.search);
+    expect(decodedSearch).toContain('c=RU');
+    expect(decodedSearch).toContain('main=own-huawei-nova-14-pro__12+512GB');
+    expect(decodedSearch).not.toContain('pura-90s');
+  });
+});
+
 describe('t428u 返修 R7 · 预警展开行动作在判断边界之后', () => {
   beforeEach(() => resetTo('/?p=dashboard'));
 

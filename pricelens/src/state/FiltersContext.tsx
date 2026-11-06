@@ -350,6 +350,15 @@ function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
   } catch {
     /* 存储不可用时跳过快照，走默认重算 */
   }
+  // R5（二轮返修）：调用方随口径切换显式传入一整套 mains（Agent 结果卡跨国
+  // 回看/定位携带计算口径），且它们在目标国+产业整体有效时，这套口径优先——
+  // 直接保留，不落入「目标国会话快照恢复 / 默认主品重算」，否则回看会被静默
+  // 重置成目标国第一默认主品，与结果卡脱节。auto 卡对比区仍按目标国矩阵重算
+  // （applyScopeDefaults 末尾 withAutoOn，先同步数据层缺省国家），手动对比区
+  // 原样随行。
+  if (next.mains.length > 0 && mainsValidFor(next.mains, next.countryCode, next.industry)) {
+    return applyScopeDefaults(next, false);
+  }
   const applied = applyScopeDefaults(next, true);
   try {
     const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode, applied.industry));

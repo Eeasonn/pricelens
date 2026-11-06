@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   AudioOutlined,
   CheckOutlined,
@@ -25,6 +25,13 @@ import { AGENT_FOLLOWUP_SUGGESTIONS, AGENT_STATUS_LABELS, agentProviderLabel, ag
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 
 const panelWidth = 440;
+/**
+ * R8（二轮返修）：错指纹响应的消息级动作锁。响应 contextFingerprint 与请求
+ * 不一致的消息（AgentMessage.staleMismatch）渲染结果卡时，所有有副作用/导航/
+ * 改筛选动作（apply/open/followup/copy 及行级定位）一律禁用，仅原地只读
+ * evidence 豁免；建议词条不锁（发起的是全新运行，正是修复动作）。
+ */
+const CardActionsLockedContext = createContext(false);
 const suggestionStyle: CSSProperties = { padding: '4px 7px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.body, cursor: 'pointer', fontSize: 11, textAlign: 'left' };
 const suggestionLabel = (item: string | { label: string }): string => typeof item === 'string' ? item : item.label;
 const suggestionPrompt = (item: string | { prompt: string }): string => typeof item === 'string' ? item : item.prompt;
@@ -92,6 +99,7 @@ function CardSection({ label, children }: { label: string; children: ReactNode }
 function CardActions({ actions, onEvidence }: { actions?: AgentCardAction[]; onEvidence?: () => void }) {
   const { setDraft, send, context, applyFilter, undoFilter } = useAgent();
   const { go } = usePage();
+  const actionsLocked = useContext(CardActionsLockedContext);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   if (!actions?.length) return null;
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>{actions.map((action) => {
@@ -103,8 +111,10 @@ function CardActions({ actions, onEvidence }: { actions?: AgentCardAction[]; onE
     const applied = appliedIds.has(action.id);
     // Keep the applied action live so the user can undo it even though the
     // filter change necessarily updates the context fingerprint.
-    const disabled = Boolean(action.disabled || (stale && !applied));
-    return <button type="button" key={action.id} disabled={disabled} title={stale && !applied ? '当前筛选已变化，请重新运行 Agent' : undefined} aria-label={stale && !applied ? `${action.label}（当前口径已变化）` : action.label} onClick={() => {
+    // R8：错指纹消息的动作锁只豁免 evidence——applied 撤销路径不可能出现在
+    // 锁定消息上（锁定动作从未被应用）。
+    const disabled = Boolean(action.disabled) || (stale && !applied) || (actionsLocked && !readonlyEvidence);
+    return <button type="button" key={action.id} disabled={disabled} title={stale && !applied ? '当前筛选已变化，请重新运行 Agent' : actionsLocked && !readonlyEvidence ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-label={stale && !applied ? `${action.label}（当前口径已变化）` : actionsLocked && !readonlyEvidence ? `${action.label}（结果口径未确认）` : action.label} onClick={() => {
       if (disabled) return;
       if (action.kind === 'evidence') { onEvidence?.(); return; }
       if (action.kind === 'apply' && action.target?.filterPatch) {
@@ -177,6 +187,7 @@ function RunTimeline({ run }: { run: AgentRun | null }) {
 
 function FilterCard({ card }: { card: FilterResultCard }) {
   const { appliedFilterIds, applyFilter, canUndo, undoFilter, canRedo, redoFilter, setDraft } = useAgent();
+  const actionsLocked = useContext(CardActionsLockedContext);
   const [applyError, setApplyError] = useState<string | null>(null);
   const applied = appliedFilterIds.has(card.id);
   return <div className="lpl-agent-result-card" style={cardStyle}>
@@ -186,7 +197,7 @@ function FilterCard({ card }: { card: FilterResultCard }) {
     </div>
     {card.warning && <div style={warningStyle}>{card.warning}</div>}
     <div style={actionRowStyle}>
-      {applied ? <><span style={{ color: color.link, fontSize: 12 }}><CheckOutlined /> 已应用</span>{canUndo && <button type="button" onClick={undoFilter} style={textButtonStyle}><UndoOutlined /> 撤销</button>}{canRedo && <button type="button" onClick={redoFilter} style={textButtonStyle}><RedoOutlined /> 重做</button>}</> : <><Button size="small" type="primary" onClick={() => { const result = applyFilter(card); setApplyError(result.ok ? null : result.error ?? '当前筛选无法应用，请重新生成预览。'); }}>应用到看板</Button><Button size="small" onClick={() => setDraft(card.prompt ?? '')}>继续修改</Button></>}
+      {applied ? <><span style={{ color: color.link, fontSize: 12 }}><CheckOutlined /> 已应用</span>{canUndo && <button type="button" onClick={undoFilter} style={textButtonStyle}><UndoOutlined /> 撤销</button>}{canRedo && <button type="button" onClick={redoFilter} style={textButtonStyle}><RedoOutlined /> 重做</button>}</> : <><Button size="small" type="primary" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { const result = applyFilter(card); setApplyError(result.ok ? null : result.error ?? '当前筛选无法应用，请重新生成预览。'); }}>应用到看板</Button><Button size="small" onClick={() => setDraft(card.prompt ?? '')}>继续修改</Button></>}
     </div>
     {applyError && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>应用失败：{applyError}</div>}
     <EvidenceList evidence={card.evidence} />
@@ -226,12 +237,15 @@ function ChartCard({ card }: { card: ChartResultCard }) {
 function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
   const { applyFilter, undoFilter, context } = useAgent();
   const { go } = usePage();
+  const actionsLocked = useContext(CardActionsLockedContext);
   const [filter, setFilter] = useState<PriceAdvantageResultCard['filter']>(card.filter);
   const [filterHistory, setFilterHistory] = useState<PriceAdvantageResultCard['filter'][]>([]);
   const [selectedSkuId, setSelectedSkuId] = useState(card.selectedSkuId ?? card.skuOptions[0]?.skuId);
   const [locatedRowId, setLocatedRowId] = useState<string | null>(null);
   const [evidenceReveal, setEvidenceReveal] = useState(0);
   const stale = Boolean(card.target?.contextFingerprint && card.target.contextFingerprint !== context.fingerprint);
+  // R8：错指纹消息的行级定位同样属于副作用动作（改筛选 + 跳页），一并锁定。
+  const locateBlocked = stale || actionsLocked;
   const rows = card.rows.filter((row) => (filter === 'all' || row.direction === filter) && (!selectedSkuId || row.ownSkuId === selectedSkuId));
   const pushFilter = (next: PriceAdvantageResultCard['filter']) => {
     if (next === filter) return;
@@ -245,7 +259,7 @@ function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
     setFilterHistory((prev) => prev.slice(0, -1));
   };
   const locate = (row: PriceAdvantageResultCard['rows'][number]) => {
-    if (stale) return;
+    if (locateBlocked) return;
     const patch = {
       countryCode: row.countryCode,
       platform: row.target.platform ? { platforms: [row.target.platform], shopIds: [], seller: null } : null,
@@ -269,9 +283,9 @@ function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
       {filterHistory.length > 0 && <button type="button" onClick={undoView} style={textButtonStyle}>撤销筛选</button>}
     </div>
     {card.skuOptions.length > 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8, alignItems: 'center' }}><span style={{ color: color.mute, fontSize: 11 }}>SKU</span>{card.skuOptions.map((option) => <button key={option.skuId} type="button" aria-pressed={selectedSkuId === option.skuId} onClick={() => setSelectedSkuId(option.skuId)} style={{ ...suggestionStyle, color: selectedSkuId === option.skuId ? selectSoftInk : color.body, background: selectedSkuId === option.skuId ? selectSoft : color.canvas }}>{option.label}</button>)}</div>}
-    {stale && <div role="status" style={warningStyle}>当前筛选已变化，定位动作需重新运行价格优势。</div>}
+    {locateBlocked && <div role="status" style={warningStyle}>{stale ? '当前筛选已变化，定位动作需重新运行价格优势。' : '响应口径与当前上下文不一致，定位动作已锁定，请重新运行确认。'}</div>}
     <CardSection label="事实">
-      <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}><thead><tr>{['周', '渠道', '我司', '竞品', '价差', '方向', '定位'].map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-price-advantage-row={row.id} role="button" tabIndex={stale ? -1 : 0} aria-label={`定位 ${row.ownModelName} 与 ${row.competitorBrand} ${row.competitorModelName} ${row.weekId}`} onClick={() => locate(row)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); locate(row); } }} style={{ cursor: stale ? 'not-allowed' : 'pointer' }}>{[row.weekLabel, row.channel, formatPrice(row.ownPrice, card.currency), formatPrice(row.competitorPrice, card.currency), `${row.gap >= 0 ? '+' : ''}${formatPrice(row.gap, card.currency)}`, row.direction === 'advantage' ? '占优' : row.direction === 'lagging' ? '落后' : '持平'].map((cell, index) => <td key={`${row.id}-${index}`} style={{ ...tableCellStyle, color: index === 5 ? (row.direction === 'advantage' ? color.link : row.direction === 'lagging' ? color.error : color.body) : tableCellStyle.color }}>{cell}</td>)}<td style={tableCellStyle}><button type="button" disabled={stale} onClick={(event) => { event.stopPropagation(); locate(row); }} style={textButtonStyle}>看板</button></td></tr>)}</tbody></table></div>
+      <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}><thead><tr>{['周', '渠道', '我司', '竞品', '价差', '方向', '定位'].map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-price-advantage-row={row.id} role="button" tabIndex={locateBlocked ? -1 : 0} aria-label={`定位 ${row.ownModelName} 与 ${row.competitorBrand} ${row.competitorModelName} ${row.weekId}`} onClick={() => locate(row)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); locate(row); } }} style={{ cursor: locateBlocked ? 'not-allowed' : 'pointer' }}>{[row.weekLabel, row.channel, formatPrice(row.ownPrice, card.currency), formatPrice(row.competitorPrice, card.currency), `${row.gap >= 0 ? '+' : ''}${formatPrice(row.gap, card.currency)}`, row.direction === 'advantage' ? '占优' : row.direction === 'lagging' ? '落后' : '持平'].map((cell, index) => <td key={`${row.id}-${index}`} style={{ ...tableCellStyle, color: index === 5 ? (row.direction === 'advantage' ? color.link : row.direction === 'lagging' ? color.error : color.body) : tableCellStyle.color }}>{cell}</td>)}<td style={tableCellStyle}><button type="button" disabled={locateBlocked} onClick={(event) => { event.stopPropagation(); locate(row); }} style={textButtonStyle}>看板</button></td></tr>)}</tbody></table></div>
       {!rows.length && <div style={noteStyle}>当前 SKU 与筛选下没有同时具备我司和竞品价格事实。</div>}
     </CardSection>
     <CardSection label="计算与规则">{card.note}</CardSection>
@@ -284,6 +298,7 @@ function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
 
 function ToolCallCardView({ card }: { card: ToolCallCard }) {
   const { send, applyFilter, undoFilter } = useAgent();
+  const actionsLocked = useContext(CardActionsLockedContext);
   const [applyError, setApplyError] = useState<string | null>(null);
   const label = ({ queued: '排队中', running: '运行中', success: '已完成', failed: '失败', waiting_for_approval: '等待确认', cancelled: '已取消' } as Record<string, string>)[card.status];
   return <div className="lpl-agent-result-card" style={cardStyle} data-tool-status={card.status}>
@@ -292,7 +307,7 @@ function ToolCallCardView({ card }: { card: ToolCallCard }) {
     {card.outputSummary && <div style={{ marginTop: 4, fontSize: 11, color: color.body }}>输出：{card.outputSummary}</div>}
     {card.error && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>工具失败：{card.error}</div>}
     {card.status === 'failed' && <button type="button" style={{ ...textButtonStyle, marginTop: 8 }} onClick={() => void send(card.tool === 'remote.agent' ? card.inputSummary : `重试工具 ${card.tool}`)}>重试此步骤</button>}
-    {card.filterCard && <div style={actionRowStyle}><button type="button" style={textButtonStyle} onClick={() => { const result = applyFilter(card.filterCard!); setApplyError(result.ok ? null : result.error ?? '请重新生成预览'); }}>应用筛选</button><button type="button" style={textButtonStyle} onClick={undoFilter}>撤销恢复</button></div>}
+    {card.filterCard && <div style={actionRowStyle}><button type="button" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} style={{ ...textButtonStyle, opacity: actionsLocked ? 0.5 : 1 }} onClick={() => { const result = applyFilter(card.filterCard!); setApplyError(result.ok ? null : result.error ?? '请重新生成预览'); }}>应用筛选</button><button type="button" style={textButtonStyle} onClick={undoFilter}>撤销恢复</button></div>}
     {applyError && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>应用失败：{applyError}</div>}
     <details style={{ marginTop: 8, fontSize: 10.5, color: color.mute }}><summary tabIndex={0} style={{ cursor: 'pointer' }}>展开明细</summary><div style={{ marginTop: 5 }}>请求工具：{card.tool} · 状态：{card.status}{card.durationMs != null ? ` · 耗时 ${card.durationMs}ms` : ''}</div></details>
     <CardActions actions={card.actions} />
@@ -494,7 +509,7 @@ export default function AgentPanel() {
     <ContextChips />
     <div ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions text" aria-busy={running} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px 20px', background: color.canvasSoft }}>
       {!messages.length && <div style={{ padding: '18px 4px 10px' }}><div style={{ fontSize: 20, fontWeight: 600, color: color.ink }}>问 PriceLens</div><p style={{ margin: '6px 0 16px', color: color.body, fontSize: 13 }}>在当前页面里查询价格、比较平台，或者解释预警。Agent 会先展示口径和证据，再给出结果。</p></div>}
-      {messages.map((message) => <div data-agent-message={message.id} key={message.id} style={{ marginBottom: 16, paddingLeft: message.role === 'assistant' ? 10 : 0, borderLeft: message.role === 'assistant' ? `2px solid ${color.link}` : 'none' }}><div style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}>{message.role === 'assistant' && <span style={{ alignSelf: 'flex-start', margin: '3px 6px 0 0', padding: '2px 6px', borderRadius: radius.pill, background: message.kind === 'proactive' ? color.warningSoft : color.canvas, color: message.kind === 'proactive' ? color.warningInk : color.link, fontSize: 10, whiteSpace: 'nowrap' }}>PriceLens · {messageKindLabel[message.kind ?? 'conversation']}</span>}<div style={{ maxWidth: '92%', padding: message.role === 'user' ? '8px 11px' : '0', background: message.role === 'user' ? color.ink : 'transparent', color: message.role === 'user' ? color.onPrimary : color.ink, borderRadius: message.role === 'user' ? '12px 12px 3px 12px' : 0, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{message.text}</div></div>{message.role === 'assistant' && (message.provider || message.response) && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}><ProviderBadge provider={message.provider ?? message.response?.provider} fallbackReason={message.fallbackReason} factGuard={message.response?.factGuard} simulated={message.response?.provenance?.source?.includes('simulated') || message.response?.cards.some((card) => card.kind === 'forecast_explanation' && card.dataStatus === 'simulated')} />{message.response && <span style={{ fontSize: 10, color: color.mute }}>事实来源：本地确定性引擎 · 远端叙述：{message.response.provider?.name ?? '本地确定性'}</span>}</div>}{message.kind === 'proactive' && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{message.alert && <span className="tnum" style={{ fontSize: 11, color: color.mute }}>优先级 {message.alert.priority ?? '—'} · {message.alert.weekId} · {formatPrice(message.alert.price, context.state.currency)}</span>}<button type="button" onClick={() => { if (message.alert) navBus.alertsFocus = { alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint, modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName, seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId }; go('alerts'); }} style={textButtonStyle}>查看预警</button><button type="button" onClick={() => { if (message.alert) navBus.dashboardFocusWeekId = message.alert.weekId; go('dashboard'); }} style={textButtonStyle}>回看板</button><button type="button" onClick={() => { const prompt = '解释最新预警并列出触发事实、证据关联和下一步核查动作'; setDraft(prompt); void send(prompt); }} style={textButtonStyle}>让 Agent 解释</button></div>}{message.kind === 'error' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试</button>}{message.kind === 'system' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试本次查询</button>}{message.contextFingerprint && message.contextFingerprint !== context.fingerprint && <div role="status" style={{ marginTop: 4, fontSize: 10.5, color: color.warningInk }}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}{message.partialText && !message.response && <div aria-live="polite" style={{ marginTop: 7, whiteSpace: 'pre-wrap' }}>{message.partialText}</div>}{message.partialCards?.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}{message.response && <><StepTimeline response={message.response} />{message.response.cards.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}<Citations response={message.response} /><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>{message.response.suggestions.map((suggestion) => { const label = suggestionLabel(suggestion); const prompt = suggestionPrompt(suggestion); return <button type="button" key={label} onClick={() => { setDraft(prompt); void send(prompt, undefined, undefined, suggestionIntent(suggestion)); }} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' }}>{label}</button>; })}</div></>}</div>)}
+      {messages.map((message) => <div data-agent-message={message.id} key={message.id} style={{ marginBottom: 16, paddingLeft: message.role === 'assistant' ? 10 : 0, borderLeft: message.role === 'assistant' ? `2px solid ${color.link}` : 'none' }}><div style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}>{message.role === 'assistant' && <span style={{ alignSelf: 'flex-start', margin: '3px 6px 0 0', padding: '2px 6px', borderRadius: radius.pill, background: message.kind === 'proactive' ? color.warningSoft : color.canvas, color: message.kind === 'proactive' ? color.warningInk : color.link, fontSize: 10, whiteSpace: 'nowrap' }}>PriceLens · {messageKindLabel[message.kind ?? 'conversation']}</span>}<div style={{ maxWidth: '92%', padding: message.role === 'user' ? '8px 11px' : '0', background: message.role === 'user' ? color.ink : 'transparent', color: message.role === 'user' ? color.onPrimary : color.ink, borderRadius: message.role === 'user' ? '12px 12px 3px 12px' : 0, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{message.text}</div></div>{message.role === 'assistant' && (message.provider || message.response) && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}><ProviderBadge provider={message.provider ?? message.response?.provider} fallbackReason={message.fallbackReason} factGuard={message.response?.factGuard} simulated={message.response?.provenance?.source?.includes('simulated') || message.response?.cards.some((card) => card.kind === 'forecast_explanation' && card.dataStatus === 'simulated')} />{message.response && <span style={{ fontSize: 10, color: color.mute }}>事实来源：本地确定性引擎 · 远端叙述：{message.response.provider?.name ?? '本地确定性'}</span>}</div>}{message.kind === 'proactive' && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{message.alert && <span className="tnum" style={{ fontSize: 11, color: color.mute }}>优先级 {message.alert.priority ?? '—'} · {message.alert.weekId} · {formatPrice(message.alert.price, context.state.currency)}</span>}<button type="button" onClick={() => { if (message.alert) navBus.alertsFocus = { alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint, modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName, seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId }; go('alerts'); }} style={textButtonStyle}>查看预警</button><button type="button" onClick={() => { if (message.alert) navBus.dashboardFocusWeekId = message.alert.weekId; go('dashboard'); }} style={textButtonStyle}>回看板</button><button type="button" onClick={() => { const prompt = '解释最新预警并列出触发事实、证据关联和下一步核查动作'; setDraft(prompt); void send(prompt); }} style={textButtonStyle}>让 Agent 解释</button></div>}{message.kind === 'error' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试</button>}{message.kind === 'system' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试本次查询</button>}{message.contextFingerprint && message.contextFingerprint !== context.fingerprint && <div role="status" style={{ marginTop: 4, fontSize: 10.5, color: color.warningInk }}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}{message.staleMismatch && <div role="status" style={{ marginTop: 4, fontSize: 10.5, color: color.warningInk }}>响应口径与当前上下文不一致 · 结果可查看，动作已锁定，请重新运行确认</div>}{message.partialText && !message.response && <div aria-live="polite" style={{ marginTop: 7, whiteSpace: 'pre-wrap' }}>{message.partialText}</div>}<CardActionsLockedContext.Provider value={message.staleMismatch === true}>{message.partialCards?.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}{message.response && <><StepTimeline response={message.response} />{message.response.cards.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}<Citations response={message.response} /><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>{message.response.suggestions.map((suggestion) => { const label = suggestionLabel(suggestion); const prompt = suggestionPrompt(suggestion); return <button type="button" key={label} onClick={() => { setDraft(prompt); void send(prompt, undefined, undefined, suggestionIntent(suggestion)); }} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' }}>{label}</button>; })}</div></>}</CardActionsLockedContext.Provider></div>)}
       {running && <div role="status" aria-live="polite" aria-atomic="true" style={{ color: color.mute, fontSize: 12 }}><div className="lpl-agent-skeleton" aria-hidden="true"><span /><span /><span /></div><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><LoadingOutlined spin /> {AGENT_STATUS_LABELS[runStatus] ?? '生成结果中…'}</span><button type="button" onClick={stop} style={{ ...textButtonStyle, marginLeft: 8 }}>取消本次调用</button></div>}
       <RunTimeline run={activeRun} />
     </div>
