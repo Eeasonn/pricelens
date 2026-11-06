@@ -28,6 +28,11 @@
 // 2026-11-05 视觉精简二轮（Eason 看图反馈）：主图卡的 IoBar 行与摘要四格
 // 下沉为 MainForecastChart extras（「数据与操作」共享收起区，默认收起）——
 // 默认视图 = 卡头 + PipelineNav + 图表本身（图 + 图例 + 时间轨）。
+// 2026-11-06 P0-3（价格走势设计语言对齐，来源回执 forecast-gap-20261106）：
+// 首卡收敛成「页签行 + 单条工具行」——去掉与页签重复的大标题「量价预测 ·
+// 推演工作台」；7 段范围口径压缩为摘要 + 问号 title；PipelineNav 紧凑形态
+// 并入工具行（不再独立厚条，状态读数在节点 title）；页级/卡级按钮 24px
+// 小号；主图卡长 hint 收进 HintInfo。
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CopyOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
@@ -37,7 +42,7 @@ import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { scopeLabels } from '../dataModel/scope';
-import { color, fontSize, radius, shadow, space } from '../theme/tokens';
+import { color, radius, shadow, space } from '../theme/tokens';
 import usePageViewState from '../state/usePageViewState';
 import { workbenchFixture } from './forecast/workbenchFixture';
 import type { ProductEventSeed } from './forecast/workbenchFixture';
@@ -429,53 +434,71 @@ export default function ForecastPage() {
   const referenceLabel = fixture.references.prevGenPool.find((series) => series.id === result.learning.referenceId)?.label;
   const siTotalMonths = calendar.forecastMonths.length;
 
+  /** 完整范围口径（P0-3 2026-11-06：7 段范围文字收敛进工具行摘要 + 问号 title；
+   *  原「量价预测 · 推演工作台」大标题与页签重复，删除）。 */
+  const rangeSummaryTitle = [
+    '固定样本 · 不随全局筛选联动',
+    `${fixture.context.country} · ${fixture.context.industry} · ${fixture.context.channel} · ${fixture.context.product}`,
+    `币种 ${fixture.meta.currency}（固定）`,
+    `${fixture.context.currentWeek} · 今天 ${fixture.context.todayLabel}`,
+    `历史 ${fixture.context.historyRange}（模拟实际）· 预测 ${fixture.context.forecastRange}（统一预测窗）`,
+    `主参考 ${fixture.context.prevGenProduct} 同周龄`,
+    `参照竞品 ${fixture.context.competitor}`,
+  ].join('；');
+
   return (
     <div data-lpl-forecast style={{ display: 'flex', flexDirection: 'column', gap: space.md, minWidth: 0 }}>
-      {/* 首卡：图表页签行 + 压缩范围行（与价格/量价/大盘首卡同构的白卡壳）。
-          全局筛选仅作上下文展示，计算不随其变化——口径写在一行范围行内 */}
-      <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `0 0 ${space.md}px`, overflow: 'hidden' }}>
+      {/* 首卡（P0-3 2026-11-06 收敛）：图表页签行 + 单条工具行（与价格走势首卡同
+          密度）。全局筛选仅作上下文展示，计算不随其变化——范围口径压缩为
+          「固定样本」+ 产品名 + 问号（完整 7 段进 title）；PipelineNav 紧凑形态
+          并入工具行（状态读数在节点 title）；页级按钮 24px 小号。 */}
+      <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: 0, overflow: 'hidden' }}>
         <ChartContentBar />
-        <div style={{ padding: `${space.sm}px ${space.lg}px 0` }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: space.md, flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: fontSize.displaySm, color: color.ink }}>量价预测 · 推演工作台</h1>
-              {/* 一行范围口径（8.3 Step 1 压缩：教学段与演示声明删除） */}
-              <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7, color: color.body, display: 'flex', flexWrap: 'wrap', gap: '2px 16px' }}>
-                <span style={{ fontWeight: 600, color: color.ink }}>固定样本 · 不随全局筛选联动</span>
-                <span>{fixture.context.country} · {fixture.context.industry} · {fixture.context.channel} · {fixture.context.product}</span>
-                <span>币种 {fixture.meta.currency}（固定）</span>
-                <span>{fixture.context.currentWeek} · 今天 {fixture.context.todayLabel}</span>
-                <span>历史 {fixture.context.historyRange}（模拟实际）· 预测 {fixture.context.forecastRange}</span>
-                <span>主参考 {fixture.context.prevGenProduct} 同周龄</span>
-                <span>参照竞品 {fixture.context.competitor}</span>
-                {/* SI 未全部确认页首提示（B.5.7）：主图可看参考结果，但确认事实显式可见 */}
-                {siPendingCount > 0 && (
-                  <span
-                    style={{ fontWeight: 600, color: color.warningInk }}
-                    title="SI 逐月确认未完成：主图当前为 SI 计划参考结果，不视作人工确认完成"
-                  >
-                    SI 未全部确认（待确认 {siPendingCount} / {siTotalMonths}）
-                  </span>
-                )}
-              </div>
-            </div>
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
-              {/* 页首模拟标识只保留 DataStatusBadge 一处（页级 DemoChip 已移除） */}
-              <DataStatusBadge status={fixture.meta.status} />
-              <span className="mono" style={{ fontSize: 11, color: color.body, padding: '2px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control }}>{fixture.meta.modelVersion}</span>
-              <Button icon={<RobotOutlined />} onClick={() => {
-                const prompt = '解释当前量价预测推演的关键考量、库存修正与风险';
-                openAgent('full', { text: prompt });
-                void send(prompt);
-              }}>让 Agent 解释</Button>
-              <Button
-                icon={<CopyOutlined />}
-                onClick={() => { void copyAssumptions(); }}
-                aria-live="polite"
+        <div style={{ padding: `${space.sm}px ${space.lg}px ${space.md}px` }}>
+          <div
+            data-forecast-tool-row=""
+            style={{ display: 'flex', alignItems: 'center', gap: '4px 10px', flexWrap: 'wrap', fontSize: 12, color: color.body }}
+          >
+            <span style={{ fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }} title={rangeSummaryTitle}>固定样本 · 不随全局筛选联动</span>
+            <span style={{ whiteSpace: 'nowrap' }} title={rangeSummaryTitle}>{fixture.context.product}</span>
+            <HintInfo label="范围与口径" text={rangeSummaryTitle} />
+            <DataStatusBadge status={fixture.meta.status} />
+            <span className="mono" style={{ fontSize: 11, color: color.body, padding: '2px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control }}>{fixture.meta.modelVersion}</span>
+            {/* SI 未全部确认页首提示（B.5.7）：主图可看参考结果，但确认事实显式可见 */}
+            {siPendingCount > 0 && (
+              <span
+                style={{ fontWeight: 600, color: color.warningInk, whiteSpace: 'nowrap' }}
+                title="SI 逐月确认未完成：主图当前为 SI 计划参考结果，不视作人工确认完成"
               >
-                {copyState === 'ok' ? '已复制' : copyState === 'fail' ? '复制失败' : '复制关键假设'}
-              </Button>
-            </div>
+                SI 未全部确认（待确认 {siPendingCount} / {siTotalMonths}）
+              </span>
+            )}
+            <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flex: 'none' }} />
+            {/* PipelineNav（紧凑形态）并入工具行：点击只定位（滚动 + 聚焦 + 返回条），
+                不写 params、不重算；状态读数收进节点 title。 */}
+            <PipelineNav
+              calendar={calendar}
+              result={result}
+              params={params}
+              confirmationState={{ byMonth: si.byMonth }}
+              marginView={marginView}
+              onNavigate={(stage) => navigateCard(stageCardOf(stage), null, '结果总览')}
+              referenceLabel={referenceLabel}
+            />
+            <span style={{ flex: '1 1 auto', minWidth: 0 }} />
+            <Button size="small" icon={<RobotOutlined />} onClick={() => {
+              const prompt = '解释当前量价预测推演的关键考量、库存修正与风险';
+              openAgent('full', { text: prompt });
+              void send(prompt);
+            }}>让 Agent 解释</Button>
+            <Button
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => { void copyAssumptions(); }}
+              aria-live="polite"
+            >
+              {copyState === 'ok' ? '已复制' : copyState === 'fail' ? '复制失败' : '复制关键假设'}
+            </Button>
           </div>
           {labels.country !== fixture.context.country && (
             <div style={{ marginTop: 4, fontSize: 11, color: color.mute }}>
@@ -485,18 +508,6 @@ export default function ForecastPage() {
         </div>
       </section>
 
-      {/* PipelineNav（T6 / B.5.1-B.5.2）：首卡范围行之下、结果主图之上的一条全局
-          管线（①自动学习基线 → ②大盘修正 → ③库存修正 → ④成本及销毛）；
-          点击只定位（滚动 + 聚焦 + 返回条），不写 params、不重算。 */}
-      <PipelineNav
-        calendar={calendar}
-        result={result}
-        params={params}
-        confirmationState={{ byMonth: si.byMonth }}
-        marginView={marginView}
-        onNavigate={(stage) => navigateCard(stageCardOf(stage), null, '结果总览')}
-        referenceLabel={referenceLabel}
-      />
 
       {/* ① 结果总览（主图视觉重心，只露最终结果）+ 摘要行（销毛读 MarginView，与④同源） */}
       <div ref={cardRefs.main} tabIndex={-1} style={{ display: 'grid', minWidth: 0, gap: space.sm }}>
@@ -504,25 +515,31 @@ export default function ForecastPage() {
           <CrossCardReturnBar sourceLabel={crossFocus.sourceLabel} weekId={crossFocus.weekId} onReturn={returnToSource} />
         )}
         <section style={workbenchCardStyle}>
+          {/* P0-3（2026-11-06）：卡头收敛——长 hint 退役进 HintInfo（title 承载完整
+              口径），「本地考量已修改」chip 退出墨色（改琥珀=需要关注），操作按钮
+              24px 小号与工具行同密度。 */}
           <SectionHead
             title={`量价预测主图 · ${fixture.context.product}`}
-            hint={`历史 ${fixture.context.historyRange} 实柱（实际）· 预测 ${fixture.context.forecastRange} 虚柱；促销档期与范围事件为起始周小方块点，悬停看对应区间；悬停预测周看「本周考量」构成，点击柱体微调（原因选填，填了则内联标注在主图手调处）。`}
             extra={
               <>
-                <HintInfo text="模拟数据：历史段为模拟实际，预测段为模型推演（本地确定性规则基线，未调用模型服务）；数值可直接修改，改动即人工确认。" />
+                <HintInfo
+                  label="主图卡说明"
+                  text={`历史 ${fixture.context.historyRange} 实柱（实际）· 预测 ${fixture.context.forecastRange} 虚柱；促销档期与范围事件为起始周小方块点，悬停看对应区间；悬停预测周看「本周考量」构成，点击柱体微调（原因选填，填了则内联标注在主图手调处）。模拟数据：历史段为模拟实际，预测段为模型推演（本地确定性规则基线，未调用模型服务）；数值可直接修改，改动即人工确认。`}
+                />
                 <span style={{
                   fontSize: 11,
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: radius.pill,
-                  background: active ? color.ink : color.canvasSoft2,
-                  color: active ? color.onPrimary : color.mute,
+                  background: active ? color.warningSoft : color.canvasSoft2,
+                  color: active ? color.warningInk : color.mute,
                   whiteSpace: 'nowrap',
                 }}>
                   {active ? '本地考量已修改' : '基准考量'}
                 </span>
-                <Button icon={<PlusOutlined />} onClick={() => setEventEditor({ range: null, replaceId: null })}>录入事件</Button>
+                <Button size="small" icon={<PlusOutlined />} onClick={() => setEventEditor({ range: null, replaceId: null })}>录入事件</Button>
                 <Button
+                  size="small"
                   disabled={!active && Object.keys(si.byMonth).length === 0}
                   onClick={confirmReset}
                 >重置基准</Button>

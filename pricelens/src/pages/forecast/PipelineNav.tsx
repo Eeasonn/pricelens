@@ -1,6 +1,8 @@
 // ============================================================
 // 量价预测 · 推演工作台 v3 · 页级管线导航 PipelineNav（任务 6 · B.5.1 / B.5.2）：
-// 一条全局管线的四个节点（只读状态 + 定位），放在首卡范围行之下、结果主图之上。
+// 一条全局管线的四个节点（只读状态 + 定位）。2026-11-06 P0-3：并入首卡工具行——
+// 紧凑形态（无独立厚条边框 / 无「推演顺序」占位标签），节点只显「① 名称」，
+// 实时状态读数收进节点 title（悬停可读，跨卡导航能力不变）。
 //   ①自动学习基线（学习状态 + 参考名）→ ②大盘修正（人工调整数）→
 //   ③库存修正（SI 待确认数 + 首修正周）→ ④成本及销毛（预测期销毛 + 暂不联动销量）
 // 红线（B.5.2 / IA 评审 2.3 A）：
@@ -14,7 +16,7 @@
 // 结构兼容直接可用；本组件不另造 MarginView 类型、不算销毛公式。
 // ============================================================
 import { Fragment, useState } from 'react';
-import { color, radius, space } from '../../theme/tokens';
+import { color, radius } from '../../theme/tokens';
 import type { ForecastCalendar } from './workbenchCalendar';
 import type { WorkbenchParams, WorkbenchResult } from './workbenchModel';
 import { siMonthStatusOf, type SiConfirmationState } from './useSiConfirmations';
@@ -109,11 +111,9 @@ export default function PipelineNav({
       aria-label="推演管线导航（①自动学习基线 → ②大盘修正 → ③库存修正 → ④成本及销毛）"
       style={{
         display: 'flex', alignItems: 'center', gap: '4px 8px', overflowX: 'auto', whiteSpace: 'nowrap',
-        marginBottom: space.md, padding: `${space.xs}px ${space.sm}px`,
-        border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas,
+        minWidth: 0,
       }}
     >
-      <span style={{ flex: 'none', fontSize: 11, fontWeight: 600, color: color.mute }}>推演顺序</span>
       {stages.map((stage, index) => (
         <Fragment key={stage.stage}>
           {index > 0 && <span aria-hidden style={{ color: color.hairlineStrong, fontSize: 11 }}>→</span>}
@@ -121,7 +121,7 @@ export default function PipelineNav({
             type="button"
             data-pipeline-stage={stage.stage}
             aria-current={current === stage.stage ? 'step' : undefined}
-            title={stage.title}
+            title={`${stage.title} · 当前：${stage.status}`}
             onClick={() => {
               // 只定位：不写 params、不重算、不自动提交任何编辑（B.5.2）。
               setCurrent(stage.stage);
@@ -134,7 +134,6 @@ export default function PipelineNav({
             }}
           >
             <span style={{ fontWeight: 600, color: color.ink }}>{`${stage.numeral} ${stage.label}`}</span>
-            <span style={{ color: color.mute }}>{stage.status}</span>
           </button>
         </Fragment>
       ))}

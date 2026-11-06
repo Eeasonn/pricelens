@@ -172,7 +172,7 @@ describe('ReferenceEventComposer · 类型与类型颜色入口（类型库）',
     fireEvent.change(hex, { target: { value: 'zzz' } });
     fireEvent.blur(hex);
     expect((hex as HTMLInputElement).value).toBe('#123456');
-    // 内置类型默认色与主图语义同源（前四 = link / warning / ink / mute + 扩展）
+    // 内置类型默认色与主图语义同源（前四 = link / warning / #be123c / mute + 扩展；2026-11-06 挤兑退出 ink）
     expect(referenceEventPalette).toHaveLength(8);
     expect(BUILTIN_REFERENCE_EVENT_TYPES.map((t) => t.id)).toEqual(['competitor-launch', 'own-launch', 'promo', 'cannibalization', 'other']);
     expect(getReferenceEventTypesSnapshot().types).toHaveLength(5);

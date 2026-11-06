@@ -23,7 +23,8 @@ export interface ReferenceEventTypeLibraryState {
   status: 'idle' | 'unpersisted';
 }
 
-/** 内置类型（默认色与主图小事件同源色系：上市蓝 / 促销琥珀 / 挤兑墨 / 其他灰）。 */
+/** 内置类型（默认色与主图小事件同源色系：上市蓝 / 促销琥珀 / 挤兑 #be123c / 其他灰；
+ *  2026-11-06 P0-2：挤兑退出 ink，与主图 PRODUCT_EVENT_COLOR.cannibalization 同步）。 */
 export const BUILTIN_REFERENCE_EVENT_TYPES: ReadonlyArray<ReferenceEventType> = [
   { id: 'competitor-launch', label: '竞品上市', color: referenceEventPalette[0], origin: 'builtin', order: 0, updatedAt: '' },
   { id: 'own-launch', label: '我司上市', color: referenceEventPalette[0], origin: 'builtin', order: 1, updatedAt: '' },

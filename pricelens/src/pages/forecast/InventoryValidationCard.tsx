@@ -40,6 +40,11 @@
 // - 图例全部可点显隐（WorkbenchLegend 规格）；svg 文本取值对齐价格走势页
 //   同源组件（font.family / 10px / color.mute / tabular-nums）。
 // - 不实现时间轨（全局已退役）。
+// 2026-11-06 P0（价格走势设计语言对齐，来源回执 forecast-gap-20261106）：
+// - P0-1 viewBox 宽 = ResizeObserver 实测容器宽（CHART_W_FALLBACK 720 仅作
+//   无 RO / jsdom 回退），刻度字号回归真实 px（同 MarketBusPanel / 主图）。
+// - P0-2 SI「已确认」状态胶囊退出墨色（墨色只留给唯一主按钮），改已登记的
+//   alert.lifecycle.resolved 绿色系（文字 + 底色双通道，与预警系统同源）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -72,14 +77,15 @@ import {
 import type { SiConfirmation, SiConfirmationState, SiSaveState } from './useSiConfirmations';
 import { siMonthStatusOf } from './useSiConfirmations';
 
-// 2026-11-04 视觉一致性：viewBox 宽度对齐左列实际渲染宽度（≈720）。
-const W = 720;
+/** P0-1（2026-11-06）：绘图宽 = ResizeObserver 实测容器宽；本常量仅作无 RO /
+ *  jsdom 环境的回退估值（2026-11-04 视觉一致性按左列实际渲染宽 ≈720 定）。
+ *  图表地板宽由包裹层 minWidth 保证，不再作为固定绘制宽拉伸。 */
+const CHART_W_FALLBACK = 720;
 const H = 252;
 const LEFT = 40;
 const RIGHT = 52;
 const TOP = 14;
 const BOTTOM = 26;
-const PLOT_W = W - LEFT - RIGHT;
 const PLOT_H = H - TOP - BOTTOM;
 
 // V2 右列迷你柱图（si-input-variants V2 语义）：期末渠道库存，月粒度 12 柱。
@@ -190,6 +196,22 @@ export default function InventoryValidationCard({
     else next.add(key);
     return next;
   });
+  /** P0-1（2026-11-06）：图区实测渲染宽——viewBox 宽 = 真实渲染宽（缩放比 1，
+   *  刻度字号回归真实 px）；无 RO / jsdom 环境回退 CHART_W_FALLBACK。 */
+  const chartWrapRef = useRef<HTMLDivElement | null>(null);
+  const [chartW, setChartW] = useState(CHART_W_FALLBACK);
+  useEffect(() => {
+    const el = chartWrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = Math.round(entry.contentRect.width);
+        setChartW((prev) => (width >= 320 && width !== prev ? width : prev));
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // ------------------------------------------------------------
   // SI 提交值的本地镜像（乐观呈现）：提交即更新本卡读数与状态，不等页面
@@ -341,7 +363,9 @@ export default function InventoryValidationCard({
   const weekBucketIds = weeks.map((week) => week.weekId);
   const forecastStart = firstForecastIndex(weeks);
   const forecastWeeks = weeks.filter((week) => week.status === 'forecast');
-  const slot = PLOT_W / weeks.length;
+  /** P0-1：绘图宽随实测渲染宽（chartW）派生，不再用固定 720。 */
+  const plotW = chartW - LEFT - RIGHT;
+  const slot = plotW / weeks.length;
   const barW = Math.min(24, slot * 0.46);
   const x = (index: number): number => LEFT + (index + 0.5) * slot;
   const dosMax = Math.max(1, niceCeil(Math.max(...weeks.map((week) => week.channelDos ?? 0))));
@@ -420,29 +444,32 @@ export default function InventoryValidationCard({
         </>}
       />
 
-      {/* 图（渠道库存柱 + 渠道 DOS 线）：默认视图 = 卡头 + 图 + 图例（2026-11-05 拍板实施） */}
+      {/* 图（渠道库存柱 + 渠道 DOS 线）：默认视图 = 卡头 + 图 + 图例（2026-11-05 拍板实施）。
+          P0-1（2026-11-06）：viewBox 宽 = 包裹层实测渲染宽（chartW），地板宽 700 由
+          包裹层 minWidth 保证（窄容器横向滚动，不缩放字号）。 */}
       <div style={{ overflowX: 'auto' }}>
+        <div ref={chartWrapRef} style={{ minWidth: 700 }}>
         <svg
-          viewBox={`0 0 ${W} ${H}`}
+          viewBox={`0 0 ${chartW} ${H}`}
           width="100%"
           role="img"
           aria-label={`库存验证：渠道库存柱（右轴，万台）+ 渠道 DOS 线（左轴）；全流程 DOS 不上图，悬停库存柱读数值；${cappedWeeks.length ? `${cappedWeeks[0]!.weekId} 起库存上限修正（按可售量修正回写主图，修正周琥珀描边）` : '当前库存可支撑基线 SO，未触发修正'}。详细判定见下方输出框。`}
-          style={{ display: 'block', height: 'auto', minWidth: 700 }}
+          style={{ display: 'block', height: 'auto' }}
         >
           {[0, 1].map((fraction) => {
             const gy = TOP + PLOT_H * (1 - fraction);
             return (
               <g key={fraction}>
-                <line x1={LEFT} y1={gy} x2={W - RIGHT} y2={gy} stroke={fraction === 0 ? color.hairlineStrong : color.hairline} />
+                <line x1={LEFT} y1={gy} x2={chartW - RIGHT} y2={gy} stroke={fraction === 0 ? color.hairlineStrong : color.hairline} />
                 <text {...axisTextProps} x={LEFT - 6} y={gy + 3.5} fontSize={10} fill={color.mute} textAnchor="end">{Math.round(dosMax * fraction)}</text>
               </g>
             );
           })}
           <text {...axisTextProps} x={LEFT - 6} y={TOP - 3} fontSize={10} fill={color.mute} textAnchor="end">天</text>
           {[0, 0.5, 1].map((fraction) => (
-            <text {...axisTextProps} key={fraction} x={W - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{wanOf(invMax * fraction)}</text>
+            <text {...axisTextProps} key={fraction} x={chartW - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{wanOf(invMax * fraction)}</text>
           ))}
-          <text {...axisTextProps} x={W - RIGHT + 6} y={TOP - 3} fontSize={10} fill={color.mute}>万台</text>
+          <text {...axisTextProps} x={chartW - RIGHT + 6} y={TOP - 3} fontSize={10} fill={color.mute}>万台</text>
           {weeks.map((week, index) => (index % 4 === 0 || index === weeks.length - 1
             ? <text {...axisTextProps} key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{weekBucketIds[index]}</text>
             : null))}
@@ -486,6 +513,7 @@ export default function InventoryValidationCard({
             );
           })()}
         </svg>
+        </div>
       </div>
       <WorkbenchLegend items={legendItems} hidden={hidden} onToggle={toggle} style={{ marginTop: 0 }} />
 
@@ -567,9 +595,11 @@ export default function InventoryValidationCard({
                       style={{
                         display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
                         borderRadius: radius.pill, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-                        background: status === 'confirmed' ? color.ink : status === 'modified' ? color.warningSoft : color.canvasSoft2,
-                        color: status === 'confirmed' ? color.onPrimary : status === 'modified' ? color.warningInk : color.body,
-                        border: status === 'confirmed' ? 'none' : `1px solid ${color.hairline}`,
+                        // P0-2（2026-11-06）：已确认退出墨色（墨色只留给唯一主按钮），
+                        // 改已登记的 alert.lifecycle.resolved 绿色系（文字 + 底色双通道）。
+                        background: status === 'confirmed' ? color.alert.lifecycle.resolved.bg : status === 'modified' ? color.warningSoft : color.canvasSoft2,
+                        color: status === 'confirmed' ? color.alert.lifecycle.resolved.fg : status === 'modified' ? color.warningInk : color.body,
+                        border: `1px solid ${status === 'confirmed' ? color.alert.lifecycle.resolved.bg : color.hairline}`,
                       }}
                     >
                       {statusText}

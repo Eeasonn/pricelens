@@ -12,15 +12,20 @@
 // 同款：预设联动 + 拖柄键盘微调）；名录 / 数据表 / extras 收进「数据与操作」
 // 收起区——受影响断言迁移为「展开后可见」（逐个迁移）。
 // 2026-11-05 Eason 全局反馈：#1 图例 5 项全部可点（含库存修正描边与「事件」
-// 整层显隐）；#8 SVG 文本 font.family / 字号 10 / mute / tabular-nums。
+//   整层显隐）；#8 SVG 文本 font.family / 字号 10 / mute / tabular-nums。
+// 2026-11-06 P0（来源回执 forecast-gap-20261106）：
+// - P0-1 viewBox 宽 = ResizeObserver 实测容器宽（jsdom 默认 no-op stub → 回退
+//   1180 兜底；专用用例装可上报 stub 验证实测路径与 resize 随动）；
+// - P0-2 周销实际/预测柱 = 品牌色 brandColor.HUAWEI（≠ color.link/#0070f3 回归）；
+//   cannibalization 事件色 = #be123c（退出 ink，与 referenceEventPalette 同源）。
 // 工厂 makeMainChartProps / makeRangeChartProps 定义在本文件本地
 // （B.6.2 共享工厂只含日历 / 结果 helper，UI 工厂由任务 7–10 自行扩展）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
-import { brandColor, color, font } from '../../../theme/tokens';
+import { brandColor, color, font, referenceEventPalette } from '../../../theme/tokens';
 import { niceCeil } from '../../../dataModel/volume';
 import { axisTickPlan } from '../../../chart/PriceTrend/helpers';
 import { workbenchFixture, type ProductEventSeed, type WorkbenchFixture } from '../workbenchFixture';
@@ -34,13 +39,38 @@ class ResizeObserverStub {
   unobserve(): void {}
   disconnect(): void {}
 }
-(globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
+const NoopResizeObserver = ResizeObserverStub;
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver = NoopResizeObserver;
+
+/** P0-1（2026-11-06）可上报宽度的 RO stub：observe 即按静态 width 上报一次，
+ *  实例留存供测试触发放报（模拟容器 resize）。 */
+class ReportingResizeObserverStub {
+  static width = 1000;
+  static instances: ReportingResizeObserverStub[] = [];
+  constructor(private readonly callback: ResizeObserverCallback) {
+    ReportingResizeObserverStub.instances.push(this);
+  }
+  report(width: number): void {
+    this.callback([{ contentRect: { width } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+  }
+  observe(): void {
+    this.report(ReportingResizeObserverStub.width);
+  }
+  unobserve(): void {}
+  disconnect(): void {
+    ReportingResizeObserverStub.instances = ReportingResizeObserverStub.instances.filter((inst) => inst !== this);
+  }
+}
 
 const fixture = workbenchFixture;
 const baseParams = baseWorkbenchParams(fixture);
 const baseResult = computeWorkbench(fixture, baseParams);
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // P0-1 用例会换装 / 删除 RO 构造器：恢复默认 no-op stub，其他用例走回退宽。
+  (globalThis as { ResizeObserver?: unknown }).ResizeObserver = NoopResizeObserver;
+});
 
 // ------------------------------------------------------------
 // 本地测试工厂（任务 7 · B.6.2 接口参考）
@@ -401,7 +431,7 @@ describe('主图 · 手调（墨色）与库存上限修正（琥珀）双状态
     expect(document.querySelector('svg')?.getAttribute('aria-label')).toContain('库存上限修正 2026W46 起');
   });
 
-  it('手调落在截断周：柱恢复预测描边（蓝）、菱形转墨色；修正事实仍在名录（supplyCapped）', () => {
+  it('手调落在截断周：柱恢复预测描边（品牌色）、菱形转墨色；修正事实仍在名录（supplyCapped）', () => {
     const tuned = { ...baseParams, manual: { '2026W46': { value: 60000, reason: '黑五加投，按会议口径上调' } } };
     const result = computeWorkbench(fixture, tuned);
     const w46 = result.weeks.find((week) => week.weekId === '2026W46');
@@ -409,7 +439,7 @@ describe('主图 · 手调（墨色）与库存上限修正（琥珀）双状态
     expect(w46?.capped).toBe(false);
     render(<MainForecastChart {...makeMainChartProps(fixture, tuned, result)} />);
     const tunedBar = barWithTitle('2026W46');
-    expect(tunedBar!.getAttribute('stroke')).toBe(color.link);
+    expect(tunedBar!.getAttribute('stroke')).toBe(brandColor.HUAWEI);
     // 手调菱形 = 墨色（非琥珀）。
     const inkDiamond = Array.from(document.querySelectorAll('svg path')).find(
       (path) => path.getAttribute('fill') === color.ink && (path.getAttribute('d') ?? '').includes('l5 5'),
@@ -500,13 +530,13 @@ describe('主图 · 图例全部可点（2026-11-05 Eason 全局 #1：5 项，�
     expect(barWithTitle('2026W45')).not.toBeNull();
   });
 
-  it('点击「库存上限修正（琥珀描边）」隐藏修正周琥珀描边（回退预测蓝描边）；再点恢复', () => {
+  it('点击「库存上限修正（琥珀描边）」隐藏修正周琥珀描边（回退预测品牌色描边）；再点恢复', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
     expect(barWithTitle('2026W46')!.getAttribute('stroke')).toBe(color.warning);
     const cappedButton = legendButton('库存上限修正（琥珀描边）')!;
     fireEvent.click(cappedButton);
     expect(cappedButton.getAttribute('aria-pressed')).toBe('false');
-    expect(barWithTitle('2026W46')!.getAttribute('stroke')).toBe(color.link);
+    expect(barWithTitle('2026W46')!.getAttribute('stroke')).toBe(brandColor.HUAWEI);
     fireEvent.click(cappedButton);
     expect(barWithTitle('2026W46')!.getAttribute('stroke')).toBe(color.warning);
   });
@@ -551,14 +581,15 @@ describe('主图 · 评审大减法下线回归（黑线 / 把握帽 / 档位线
       return [px, py];
     });
 
-  it('黑线下线：无墨色销量连线，销量只留柱（历史实柱浅蓝 / 预测虚柱描边）', () => {
+  it('黑线下线：无墨色销量连线，销量只留柱（P0-2：历史实柱品牌浅红 / 预测虚柱品牌色描边）', () => {
     render(<MainForecastChart {...makeMainChartProps()} />);
     const inkPaths = Array.from(document.querySelectorAll('svg path')).filter((path) => path.getAttribute('stroke') === color.ink);
     expect(inkPaths).toHaveLength(0);
     const historyBar = barWithTitle('2026W44');
-    expect(historyBar!.getAttribute('fill')).toBe(color.link);
+    expect(historyBar!.getAttribute('fill')).toBe(brandColor.HUAWEI);
+    expect(historyBar!.getAttribute('fill-opacity')).toBe('0.16');
     const forecastBar = barWithTitle('2026W45');
-    expect(forecastBar!.getAttribute('stroke')).toBe(color.link);
+    expect(forecastBar!.getAttribute('stroke')).toBe(brandColor.HUAWEI);
     expect(forecastBar!.getAttribute('stroke-dasharray')).toBe('4 3');
   });
 
@@ -756,5 +787,61 @@ describe('主图 · 图下时间轨（2026-11-05 视觉精简二轮）', () => {
     const endEl = endSlider();
     for (let i = 0; i < 120; i++) fireEvent.keyDown(endEl, { key: 'ArrowLeft' });
     expect(Number(endEl.getAttribute('aria-valuenow'))).toBeGreaterThanOrEqual(Number(startSlider().getAttribute('aria-valuenow')) + 3);
+  });
+});
+
+// ============================================================
+// 2026-11-06 P0：实测宽绘制（ResizeObserver）与数据色纪律
+// ============================================================
+describe('主图 · P0-1 实测宽绘制 + P0-2 数据色（2026-11-06）', () => {
+  const mainSvg = (): SVGSVGElement => document.querySelector('svg[role="img"]') as SVGSVGElement;
+
+  it('P0-1 ResizeObserver 实测宽：viewBox 宽 = 实测容器宽（1000，非固定 1180）；resize 再报 640 随动', () => {
+    (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ReportingResizeObserverStub;
+    ReportingResizeObserverStub.width = 1000;
+    render(<MainForecastChart {...makeMainChartProps()} />);
+    expect(mainSvg().getAttribute('viewBox')).toBe('0 0 1000 252');
+    // 模拟容器 resize（640 ≥ 320 门槛）：viewBox 随动，绘图坐标按实测宽重排。
+    act(() => {
+      for (const inst of [...ReportingResizeObserverStub.instances]) inst.report(640);
+    });
+    expect(mainSvg().getAttribute('viewBox')).toBe('0 0 640 252');
+    // 缩放比恒 1：月刻度字号仍是设计值 10（本字或沿 g 组继承），不因 SVG 等比缩放变小。
+    const month = Array.from(mainSvg().querySelectorAll('text')).find((text) => /^\d{4}-\d{2}$/.test(text.textContent ?? ''));
+    const fontSizeOf = (text: Element): string | null =>
+      text.getAttribute('font-size') ?? text.closest('g')?.getAttribute('font-size') ?? null;
+    expect(month).toBeDefined();
+    expect(fontSizeOf(month!)).toBe('10');
+  });
+
+  it('P0-1 RO 不上报（no-op stub，等同无 RO 的 jsdom 环境）：viewBox 宽回退兜底常量 1180，不作为固定绘制宽', () => {
+    // 组件 effect 对 typeof ResizeObserver === 'undefined' 同样直接跳过（源码守卫）；
+    // no-op stub 下 observe 永不上报 → 宽保持 CHART_W_FALLBACK。
+    render(<MainForecastChart {...makeMainChartProps()} />);
+    expect(mainSvg().getAttribute('viewBox')).toBe('0 0 1180 252');
+  });
+
+  it('P0-2 周销柱（实际/预测）= 品牌色 HUAWEI：图内不再出现 link 蓝（#0070f3）柱 fill/stroke；图例色块同源', () => {
+    render(<MainForecastChart {...makeMainChartProps()} />);
+    const linkRects = Array.from(document.querySelectorAll('svg rect')).filter((rect) =>
+      rect.getAttribute('fill') === color.link || rect.getAttribute('stroke') === color.link);
+    expect(linkRects).toHaveLength(0);
+    // 实际柱 = HUAWEI 浅实柱（fill-opacity 0.16）；预测柱 = HUAWEI 虚描边。
+    expect(barWithTitle('2026W44')!.getAttribute('fill')).toBe(brandColor.HUAWEI);
+    expect(barWithTitle('2026W45')!.getAttribute('stroke')).toBe(brandColor.HUAWEI);
+    // 图例「周销 实际 / 周销 预测」色块 = 品牌色（jsdom style 序列化为 rgb()，按分量断言）。
+    for (const label of ['周销 实际', '周销 预测']) {
+      const glyph = Array.from(document.querySelectorAll('button[aria-pressed]'))
+        .find((button) => (button.textContent ?? '').trim() === label)
+        ?.querySelector('span[aria-hidden]') as HTMLElement | null;
+      expect(glyph).toBeDefined();
+      expect(`${glyph!.style.background};${glyph!.style.border}`).toContain('rgb(199, 0, 11)');
+    }
+  });
+
+  it('P0-2 cannibalization 事件色退出 ink：= #be123c（与 referenceEventPalette 挤兑默认同源）', () => {
+    expect(PRODUCT_EVENT_COLOR.cannibalization).not.toBe(color.ink);
+    expect(PRODUCT_EVENT_COLOR.cannibalization).toBe('#be123c');
+    expect(PRODUCT_EVENT_COLOR.cannibalization).toBe(referenceEventPalette[2]);
   });
 });

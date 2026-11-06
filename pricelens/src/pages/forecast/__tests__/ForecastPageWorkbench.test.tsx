@@ -81,11 +81,11 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     for (const stage of ['1', '2', '3', '4']) {
       expect(document.querySelector(`[data-pipeline-stage="${stage}"]`)).not.toBeNull();
     }
-    // 节点状态读数（B.5.1）：③SI 待确认 N / 12（基准 = 全部待确认）· ④暂不联动销量
+    // 节点状态读数（B.5.1；P0-3 紧凑形态收进节点 title）：③SI 待确认 N / 12（基准 = 全部待确认）· ④暂不联动销量
     const stage3 = document.querySelector('[data-pipeline-stage="3"]')!;
-    expect(stage3.textContent).toContain('SI 待确认 12 / 12');
+    expect(stage3.getAttribute('title')).toContain('SI 待确认 12 / 12');
     const stage4 = document.querySelector('[data-pipeline-stage="4"]')!;
-    expect(stage4.textContent).toContain('暂不联动销量');
+    expect(stage4.getAttribute('title')).toContain('暂不联动销量');
     // 点击 = 页级跨卡定位 + 返回条；不弹编辑器、不写草稿（params 键保持无值）
     fireEvent.click(stage3);
     const bar = document.querySelector('[data-cross-card-bar]');
@@ -104,8 +104,8 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
   it('五卡齐全有序（主图→参考→大盘→③库存修正→成本销毛垫底）；SI 未全部确认页首提示；纪要层不回归', () => {
     render(<App />);
     const text = document.body.textContent ?? '';
+    // P0-3（2026-11-06）：首卡大标题「量价预测 · 推演工作台」与页签重复，已删除。
     for (const label of [
-      '量价预测 · 推演工作台',
       '量价预测主图',
       '量价参考产品',
       '② 大盘修正',
@@ -119,10 +119,15 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
       .map((label) => titles.findIndex((title) => title.includes(label)));
     expect(cardOrder.every((index) => index >= 0)).toBe(true);
     expect([...cardOrder].sort((a, b) => a - b)).toEqual(cardOrder);
-    // 范围行（8.3 Step 1 压缩）：固定样本口径 + 不随全局筛选联动保留
+    // 工具行范围摘要（P0-3 压缩）：固定样本口径 + 产品名可见，完整 7 段口径进 ？号 title。
     expect(text).toContain('固定样本 · 不随全局筛选联动');
     expect(text).toContain('HUAWEI Mate 90 · 12+512GB');
-    expect(text).toContain('币种 USD（固定）');
+    const scopeHint = document.querySelector('[aria-label="范围与口径"]');
+    expect(scopeHint).not.toBeNull();
+    const scopeTitle = scopeHint!.getAttribute('title') ?? '';
+    for (const segment of ['币种 USD（固定）', '历史 2025W45–2026W44（模拟实际）', '主参考', '参照竞品']) {
+      expect(scopeTitle).toContain(segment);
+    }
     expect(text).toContain('复制关键假设');
     // SI 未全部确认页首提示（B.5.7）：基准 = 12 个月全部待确认
     expect(text).toContain('SI 未全部确认（待确认 12 / 12）');
@@ -132,6 +137,30 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     expect(text).not.toContain('推演纪要');
     // 可见「演示实际」话术退役（数据表 caption 保留模拟语境，不在可见 hint 中）
     expect(text).not.toContain('（演示实际）');
+  });
+
+  it('P0-3 首卡收敛成单条工具行：无 h1「量价预测 · 推演工作台」；PipelineNav 紧凑并入首卡（无独立厚条 / 无「推演顺序」标签）；页级按钮 24px 小号', () => {
+    render(<App />);
+    // 不再渲染与页签重复的大标题（h1 与全文均无该字样）。
+    expect(document.querySelectorAll('h1').length).toBe(0);
+    expect(document.body.textContent ?? '').not.toContain('量价预测 · 推演工作台');
+    // 首卡 = 页签行 + 单条工具行（data-forecast-tool-row）。
+    const toolRow = document.querySelector('[data-forecast-tool-row]');
+    expect(toolRow).not.toBeNull();
+    // PipelineNav 并入首卡工具行：nav 是工具行后代，不再是独立厚条。
+    const nav = document.querySelector('[data-pipeline-nav]') as HTMLElement;
+    expect(nav).not.toBeNull();
+    expect(toolRow!.contains(nav)).toBe(true);
+    expect(nav.style.border).toBe('');
+    expect(document.body.textContent ?? '').not.toContain('推演顺序');
+    for (const stage of ['1', '2', '3', '4']) {
+      expect(document.querySelector(`[data-pipeline-stage="${stage}"]`)).not.toBeNull();
+    }
+    // 页级按钮小号（antd size=small → height 24px），不再是 32px 大按钮。
+    const agentBtn = Array.from(document.querySelectorAll('button'))
+      .find((button) => (button.textContent ?? '').includes('让 Agent 解释')) as HTMLElement;
+    expect(agentBtn).toBeDefined();
+    expect(agentBtn.className).toContain('ant-btn-sm');
   });
 
   it('④⑤ 库存修正 + 成本销毛单列全宽堆叠（2026-11-05 高保真拍板：库存卡占满全宽，不再左右分栏），卡序仍库存在前', () => {

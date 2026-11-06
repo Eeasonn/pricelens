@@ -324,9 +324,12 @@ function MonthEvidencePopover({
           type="button"
           data-lpl-evidence-adjust
           onClick={onAdjust}
+          title="就地调整该月生效值（原因选填，还原基线随时可退）"
           style={{
-            border: 'none', padding: '3px 12px', borderRadius: radius.control, background: color.ink,
-            color: color.onPrimary, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            // P0-2（2026-11-06）：浮框动作退出墨色实心主按钮（墨色只留给唯一主按钮），
+            // 改 hairlineStrong 描边静默样式（与主图证据浮框「微调本周」同语言）。
+            border: `1px solid ${color.hairlineStrong}`, padding: '3px 12px', borderRadius: radius.control, background: color.canvas,
+            color: color.ink, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
           调整此月

@@ -753,3 +753,64 @@ describe('useSiConfirmations', () => {
     expect(result.current.byMonth['2026-12']?.confirmedValue).toBe(161000);
   });
 });
+
+// ============================================================
+// 2026-11-06 P0（来源回执 forecast-gap-20261106）：
+// P0-1 viewBox 宽 = ResizeObserver 实测容器宽（720 仅兜底）；
+// P0-2 SI「已确认」胶囊退出墨色 = 已登记 alert.lifecycle.resolved 绿色系。
+// ============================================================
+class ReportingResizeObserverStub {
+  static instances: ReportingResizeObserverStub[] = [];
+  constructor(private readonly callback: ResizeObserverCallback) {
+    ReportingResizeObserverStub.instances.push(this);
+  }
+  report(width: number): void {
+    this.callback([{ contentRect: { width } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+  }
+  observe(): void {
+    this.report(1000);
+  }
+  unobserve(): void {}
+  disconnect(): void {
+    ReportingResizeObserverStub.instances = ReportingResizeObserverStub.instances.filter((inst) => inst !== this);
+  }
+}
+
+describe('库存修正卡 · P0-1 实测宽 + P0-2 确认胶囊（2026-11-06）', () => {
+  it('P0-1 RO 实测宽：viewBox 宽 = 实测容器宽（1000，非固定 720）；再报 860 随动，字号不因缩放变小', () => {
+    (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ReportingResizeObserverStub;
+    try {
+      const { container } = renderCard();
+      const svg = container.querySelector('svg[role="img"]') as SVGSVGElement;
+      expect(svg.getAttribute('viewBox')).toBe('0 0 1000 252');
+      act(() => {
+        for (const inst of [...ReportingResizeObserverStub.instances]) inst.report(860);
+      });
+      expect(svg.getAttribute('viewBox')).toBe('0 0 860 252');
+      // 缩放比恒 1：轴刻度字号仍是设计值 10。
+      const tick = Array.from(svg.querySelectorAll('text')).find((text) => (text.textContent ?? '') === '天');
+      expect(tick?.getAttribute('font-size')).toBe('10');
+    } finally {
+      delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+    }
+  });
+
+  it('P0-1 无 RO（jsdom 默认）：viewBox 宽回退兜底常量 720；包裹层 minWidth 700 地板保留（窄容器滚动不缩字）', () => {
+    const { container } = renderCard();
+    const svg = container.querySelector('svg[role="img"]') as SVGSVGElement;
+    expect(svg.getAttribute('viewBox')).toBe('0 0 720 252');
+    const wrap = svg.parentElement as HTMLElement;
+    expect(wrap.style.minWidth).toBe('700px');
+  });
+
+  it('P0-2 SI「已确认」胶囊退出墨色：已登记 alert.lifecycle.resolved 绿色系（文字 + 底色双通道）', () => {
+    const { container } = renderCard();
+    expandSiWorkspace(container);
+    fireEvent.click(container.querySelector('[data-si-confirm="2026-11"]') as HTMLButtonElement);
+    const chip = statusChipOf(container, '2026-11');
+    expect(chip.textContent).toContain('已确认');
+    // #f0fdf4 / #15803d（jsdom style 序列化为 rgb()，按分量断言）。
+    expect(chip.style.background).toContain('240, 253, 244');
+    expect(chip.style.color).toContain('21, 128, 61');
+  });
+});
