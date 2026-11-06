@@ -502,7 +502,10 @@ export function buildSeries(q: SeriesQuery): Series[] {
       channels = new Set(effectiveChannelIds(cc, explicit));
       const chs = dimChannel.filter((c) => channels.has(c.channel_id));
       const platforms = [...new Set(chs.map((c) => c.platform))];
-      badge = { label: platforms.join('/') || '已选渠道', auto: false, platforms };
+      // R6（六审透明说明）：店铺级口径用渠道显示名（如 "OZON 3P"）点名实际
+      // 参与计算的渠道——只挂平台名会把严格店铺级价误读成平台内最低价口径。
+      const label = explicit.shopIds.length ? chs.map((c) => c.display_name).join('/') : platforms.join('/');
+      badge = { label: label || '已选渠道', auto: false, platforms };
     } else {
       channels = new Set(dimChannel.filter((c) => c.country_code === cc).map((c) => c.channel_id));
       badge = {
