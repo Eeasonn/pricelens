@@ -9,7 +9,8 @@
 // 不进 URL、不进 LPL3.filters（默认店铺先例）；唯一写入口 = 本块 + 图上逐点裁定。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Empty, Segmented, Switch, Tag } from 'antd';
+import { Button, Empty, Segmented, Switch, Tag, Tooltip } from 'antd';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import {
   ANOMALY_CUSTOM_MAX,
   ANOMALY_CUSTOM_MIN,
@@ -40,7 +41,7 @@ const fmtTime = (ts: number): string => {
 const fmtPct = (v: number | null): string =>
   v == null ? '—' : `${v > 0.005 ? '+' : v < -0.005 ? '−' : '±'}${Math.round(Math.abs(v) * 100)}%`;
 
-export default function DataQualityBlock() {
+export default function DataQualityBlock({ canEdit = true }: { canEdit?: boolean }) {
   const [rule, setRule] = useState<AnomalyRule>(() => readAnomalyRule());
   const [tick, setTick] = useState(0);
   const [customDraft, setCustomDraft] = useState<string>('');
@@ -88,10 +89,12 @@ export default function DataQualityBlock() {
           size="small"
           checked={rule.enabled}
           aria-label="异常价格守卫开关"
+          disabled={!canEdit}
           onChange={(on) => commit({ ...rule, enabled: on })}
         />
         <Segmented
           size="small"
+          disabled={!canEdit}
           value={segValue}
           onChange={(v) => {
             const val = v as string;
@@ -123,6 +126,7 @@ export default function DataQualityBlock() {
               type="text"
               inputMode="numeric"
               aria-label="自定义阈值百分比"
+              disabled={!canEdit}
               value={customDraft}
               onChange={(e) => setCustomDraft(e.target.value)}
               onFocus={() => {
@@ -155,13 +159,22 @@ export default function DataQualityBlock() {
           {rule.enabled ? `当前口径 ≥${rule.thresholdPct}%` : '已关闭'}
         </Tag>
       </div>
-      <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px' }}>
-        相邻两个观测点的折后价变化幅度超过阈值时，该点标记为异常价格：图上保留原值（空心点 + 疑似幅度）但不参与极差、环比、均价与预警计算。
-        真实大促（促销档期内下跌）与官方调价（RRP 同步变化）自动放行；持续两周以上的新价位只标注「待核对」不隔离；最新一周只标注不隔离。
-        也可在图上逐点「确认真实价格 / 标记异常」，下方清单留痕可撤销。改动即时生效于全部页面。
-      </div>
-      <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.xs, lineHeight: '18px' }}>
-        另有条目级守卫自动剔除零价、负价与明显低于参考价的异常采集行，此类行不进入任何页面。
+      <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px', display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+        <span>
+          相邻观测点折后价变化超过阈值即标记异常：图上保留原值，但不参与极差、环比、均价与预警计算；改动即时生效于全部页面。
+        </span>
+        <Tooltip
+          title={
+            <div style={{ maxWidth: 340 }}>
+              <div>· 真实大促（促销档期内下跌）与官方调价（RRP 同步变化）自动放行；</div>
+              <div>· 持续两周以上的新价位只标注「待核对」不隔离；最新一周只标注不隔离；</div>
+              <div>· 也可在图上逐点「确认真实价格 / 标记异常」，下方清单留痕可撤销；</div>
+              <div>· 另有条目级守卫自动剔除零价、负价与明显低于参考价的异常采集行，此类行不进入任何页面。</div>
+            </div>
+          }
+        >
+          <InfoCircleOutlined aria-label="异常判定完整规则" style={{ fontSize: 11, color: color.mute, cursor: 'help' }} />
+        </Tooltip>
       </div>
 
       <div style={{ marginTop: space.md }}>
@@ -201,6 +214,8 @@ export default function DataQualityBlock() {
                 <span className="tnum" title={new Date(m.ts).toISOString()} style={{ color: color.mute }}>{fmtTime(m.ts)}</span>
                 <Button
                   size="small"
+                  disabled={!canEdit}
+                  title={canEdit ? undefined : '查阅者不可修改配置，请联系 GTM'}
                   onClick={() => {
                     undoAnomalyMark(m.countryCode, m.seriesKey, m.bucketId, m.ts);
                     setTick((t) => t + 1);

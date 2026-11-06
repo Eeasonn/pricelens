@@ -32,7 +32,7 @@ const SOURCE_TAG: Record<DimBenchmark['source'], { text: string; fg: string; bg:
   manual: { text: '人工', fg: '#15803d', bg: '#ecfdf3', hint: '本页人工配置' },
 };
 
-export default function BenchmarkConfigBlock() {
+export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boolean }) {
   const { state } = useFilters();
   const cc = state.countryCode;
   const industries = useMemo(() => industriesOfCountry(cc), [cc]);
@@ -158,10 +158,13 @@ export default function BenchmarkConfigBlock() {
                         })
                       )}
                     </span>
-                    {/* 图标按钮无可见文字：读屏念「编辑」需带型号 + 配置上下文（第一百九十轮） */}
+                    {/* 图标按钮无可见文字：读屏念「编辑」需带型号 + 配置上下文（第一百九十轮）。
+                        2026-11-06 RBAC：查阅者禁编辑（BenchConfigModal 内部另有纵深门控） */}
                     <Button
                       size="small"
                       icon={<EditOutlined />}
+                      disabled={!canEdit}
+                      title={canEdit ? undefined : '查阅者不可修改配置，请联系 GTM'}
                       aria-label={`编辑 ${m.modelName} ${r.romram} 的竞品对标`}
                       onClick={() => setEditing({ model: m, rom: r.romram })}
                     >

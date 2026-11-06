@@ -16,9 +16,10 @@
 // （键盘可达 + aria-pressed）；↑↓/移除/添加/搜索补上下文可访问名称。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Input, Modal, Popconfirm, Segmented, message } from 'antd';
+import { Button, Input, Modal, Popconfirm, Segmented, Tooltip, message } from 'antd';
 import { DownOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
+import { useRole } from '../../access/role';
 import { COMPETITOR_BRANDS } from '../../components/ProductCascader/tree';
 import { TIER_LABELS } from '../../dataModel/aggregate';
 import { getCurrentCountry } from '../../state/currentScope';
@@ -56,6 +57,9 @@ export default function BenchConfigModal(props: BenchConfigModalProps) {
 }
 
 function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: BenchConfigModalProps) {
+  // 2026-11-06 RBAC：弹窗被配置页与总览「＋添加竞品」共用——内部统一门控，
+  // 查阅者只读（增删/排序/保存/恢复默认全禁用），入口按钮不重复判断角色
+  const canEdit = useRole() === 'gtm';
   // 传入 bands 的价格按全局币种构造（BenchmarkConfigBlock 同 state.currency 取数），
   // 展示须同币种——硬编码 usd 会在本币态显示 '$' 前缀 + 本币数值（第一百二十五轮）
   const currency = useFilters().state.currency;
@@ -217,6 +221,7 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
           <Button
             size="small"
             style={{ height: 22, fontSize: 11 }}
+            disabled={!canEdit}
             aria-label={`添加 ${c.row.modelName} ${c.row.romram} 为对标竞品`}
             onClick={() => addComp(c.row.skuId)}
           >
@@ -250,15 +255,23 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
             description="仅恢复当前配置的对标，其他配置不受影响"
             okText="恢复"
             cancelText="取消"
+            disabled={!canEdit}
             onConfirm={restoreAuto}
           >
-            <Button size="small">恢复默认</Button>
+            <Button size="small" disabled={!canEdit}>
+              恢复默认
+            </Button>
           </Popconfirm>
+          {!canEdit && (
+            <Tooltip title="查阅者不可修改配置，请联系 GTM">
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>查阅者只读</span>
+            </Tooltip>
+          )}
           <span style={{ flex: 1 }} />
           <Button size="small" onClick={onClose}>
             取消
           </Button>
-          <Button type="primary" size="small" onClick={save}>
+          <Button type="primary" size="small" disabled={!canEdit} onClick={save}>
             保存配置
           </Button>
         </div>
@@ -342,7 +355,7 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
                     <Button
                       type="text"
                       size="small"
-                      disabled={i === 0}
+                      disabled={i === 0 || !canEdit}
                       icon={<UpOutlined style={{ fontSize: 10 }} />}
                       style={{ height: 22, width: 22, padding: 0 }}
                       title="上移（移到首位 = 设为主竞品）"
@@ -352,7 +365,7 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
                     <Button
                       type="text"
                       size="small"
-                      disabled={i === sortedRows.length - 1}
+                      disabled={i === sortedRows.length - 1 || !canEdit}
                       icon={<DownOutlined style={{ fontSize: 10 }} />}
                       style={{ height: 22, width: 22, padding: 0 }}
                       title="下移"
@@ -362,6 +375,7 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
                     <Button
                       size="small"
                       style={{ height: 22, fontSize: 11 }}
+                      disabled={!canEdit}
                       aria-label={`移除 ${cm?.modelName ?? r.competitor_sku_id} 的对标`}
                       onClick={() => removeComp(r.competitor_sku_id)}
                     >

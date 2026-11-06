@@ -7,6 +7,7 @@
 // （按型号清单清上一代覆盖），避免「恢复默认」误伤其他国家/型号的人工配置。
 // ============================================================
 import { useEffect, useState } from 'react';
+import { canEditConfig } from '../access/role';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimBenchmark, dimProduct } from '../data';
 import type { DimBenchmark } from '../dataModel/types';
@@ -130,8 +131,10 @@ export function groupsFromBenchmark(own: ProductSelection[], countryCode: string
   return [...out.values()];
 }
 
-/** 保存竞品矩阵；传 null = 清除手动配置（回到 dimBenchmark 的 auto 默认） */
+/** 保存竞品矩阵；传 null = 清除手动配置（回到 dimBenchmark 的 auto 默认）。
+ *  2026-11-06 RBAC：查阅者角色写为 no-op（UI 已门控，此处为纵深防御） */
 export function saveBenchmark(rows: DimBenchmark[] | null): void {
+  if (!canEditConfig()) return;
   if (rows == null) {
     try {
       localStorage.removeItem(LPL.cfgBenchmark);
@@ -153,6 +156,7 @@ export function saveBenchmark(rows: DimBenchmark[] | null): void {
  * 直接返回，不凭空建快照。配置键与读取侧同样按去空格归一比较。
  */
 export function clearBenchmarkEntry(countryCode: string, modelId: string, romram: string): void {
+  if (!canEditConfig()) return;
   const manual = readJson<DimBenchmark[]>(LPL.cfgBenchmark);
   if (!Array.isArray(manual)) return;
   const key = romram.replace(/\s+/g, '');
@@ -192,8 +196,10 @@ export function getPrevGenOverrides(): PrevGenOverrides {
   return out;
 }
 
-/** 保存上一代覆盖表；传 null/空表 = 清除手动维护（全部回退 dim_product 的 auto 关系） */
+/** 保存上一代覆盖表；传 null/空表 = 清除手动维护（全部回退 dim_product 的 auto 关系）。
+ *  2026-11-06 RBAC：查阅者角色写为 no-op（UI 已门控，此处为纵深防御） */
 export function savePrevGenOverrides(map: PrevGenOverrides | null): void {
+  if (!canEditConfig()) return;
   if (map == null || Object.keys(map).length === 0) {
     try {
       localStorage.removeItem(LPL.cfgPrevGen);
@@ -212,6 +218,7 @@ export function savePrevGenOverrides(map: PrevGenOverrides | null): void {
  * 该结构下最细的粒度。返回实际清除的条数，供调用方在提示里写明范围。
  */
 export function clearPrevGenOverridesForModels(modelIds: readonly string[]): number {
+  if (!canEditConfig()) return 0;
   const raw = readJson<PrevGenOverrides>(LPL.cfgPrevGen);
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return 0;
   const targets = new Set(modelIds);
