@@ -81,6 +81,31 @@ const Ctx = createContext<AgentContextValue | null>(null);
 const messageId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 type AgentEventLike = AgentEvent & { delta?: string; card?: Partial<AgentResultCard> };
 
+/**
+ * R3：终态收敛工具活动卡。流事件创建的工具卡（id = tool-<toolName>）与
+ * 完成态步骤卡（id = tool-<stepId>）id 天然对不上——先用稳定 step id / 工具名
+ * 合并，再把仍处 queued/running 的残留卡标记完成/取消，任何终态都不再显示「运行中」。
+ */
+const mergeCompletedToolCards = (cards: AgentResultCard[], completed: AgentResultCard[]): AgentResultCard[] => {
+  const next = [...cards];
+  for (const toolCard of completed) {
+    if (toolCard.kind !== 'tool_call') continue;
+    const index = next.findIndex((card) => card.id === toolCard.id
+      || (card.kind === 'tool_call' && card.tool === toolCard.tool && card.status !== 'success' && card.status !== 'failed'));
+    if (index >= 0) next[index] = toolCard;
+    else next.push(toolCard);
+  }
+  return next;
+};
+
+const finalizeLiveToolCards = (cards: AgentResultCard[], outcome: 'success' | 'cancelled'): AgentResultCard[] =>
+  cards.map((card) => {
+    if (card.kind !== 'tool_call' || (card.status !== 'running' && card.status !== 'queued')) return card;
+    return outcome === 'success'
+      ? { ...card, status: 'success' as const, outputSummary: card.outputSummary ?? '已随本次运行完成' }
+      : { ...card, status: 'cancelled' as const, outputSummary: card.outputSummary ?? '已随本次运行终止' };
+  });
+
 function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState, page: string) {
   const cfg = {
     subs: state.alertSubs,
@@ -286,9 +311,11 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       const messageKind: AgentMessage['kind'] = response.intent === 'clarify' ? 'clarification' : /量价预测|预测|情景/.test(text) ? 'scenario' : 'conversation';
       setMessages((prev) => prev.map((message) => {
         if (message.id !== assistantMessageId) return message;
-        const completedTools = response.steps.map((step) => ({ kind: 'tool_call' as const, id: `tool-${step.id}`, tool: step.tool, status: step.status === 'failed' ? 'failed' as const : 'success' as const, inputSummary: step.label, outputSummary: step.detail, durationMs: step.durationMs, error: step.status === 'failed' ? step.detail : undefined }));
-        const existing = new Set((message.partialCards ?? []).map((card) => card.id));
-        return { ...message, text: response.summary, response, partialText: undefined, partialCards: [...(message.partialCards ?? []), ...completedTools.filter((card) => !existing.has(card.id))], provider: response.provider, fallbackReason: response.fallbackReason ?? message.fallbackReason, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint };
+        const completedTools: AgentResultCard[] = response.steps.map((step) => ({ kind: 'tool_call' as const, id: `tool-${step.id}`, tool: step.tool, status: step.status === 'failed' ? 'failed' as const : 'success' as const, inputSummary: step.label, outputSummary: step.detail, durationMs: step.durationMs, error: step.status === 'failed' ? step.detail : undefined }));
+        // R3：响应路径到达即终态——先按稳定 id/工具名合并完成态，再收敛残留
+        // running/queued 工具卡，消息里不允许再出现「运行中」的工具活动卡。
+        const partialCards = finalizeLiveToolCards(mergeCompletedToolCards(message.partialCards ?? [], completedTools), 'success');
+        return { ...message, text: response.summary, response, partialText: undefined, partialCards, provider: response.provider, fallbackReason: response.fallbackReason ?? message.fallbackReason, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint };
       }));
     } catch (error) {
       if (runSequence.current !== runId) return;
@@ -297,7 +324,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       const nextStatus: AgentRunStatus = aborted || cancelRequested.current ? 'cancelled' : 'failed';
       setRunStatus(nextStatus);
       setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: aborted || cancelRequested.current ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: context.provenance }] } : prev);
-      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: aborted || cancelRequested.current ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, partialText: undefined, prompt: text, kind: aborted || cancelRequested.current ? 'system' : 'error', unread: true } : message));
+      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: aborted || cancelRequested.current ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], 'cancelled'), prompt: text, kind: aborted || cancelRequested.current ? 'system' : 'error', unread: true } : message));
     } finally {
       if (runSequence.current === runId) { controller.current = null; activeMessageId.current = null; setRunning(false); }
     }
@@ -313,7 +340,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const cancelledMessageId = activeMessageId.current;
     if (cancelledMessageId) {
       setMessages((prev) => prev.map((message) => message.id === cancelledMessageId && !message.response
-        ? { ...message, text: '已取消这次查询。', partialText: undefined, kind: 'system', unread: true }
+        ? { ...message, text: '已取消这次查询。', partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], 'cancelled'), kind: 'system', unread: true }
         : message));
     }
     // 立刻允许下一次提问；被取消的旧响应由 runSequence 丢弃。

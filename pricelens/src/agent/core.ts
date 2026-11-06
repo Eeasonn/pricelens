@@ -143,6 +143,9 @@ function step(tool: AgentStep['tool'], label: string, detail: string, status: Ag
 export function classifyIntent(text: string): AgentIntent {
   if (/预警|异常|阈值|触发原因|为什么.*变/.test(text)) return 'alert';
   if (/(?:量价预测|简单版预测|预测)/.test(text) && /解释|假设|证据|风险|不确定|为什么/.test(text)) return 'forecast_explain';
+  // 价格优势类指令即使带范围/币种词（如「用最近 12 周重新计算价格优势」）也必须
+  // 重算优势，不能先落进筛选分支只改筛选不重跑（R4）。
+  if (/价格优势/.test(text)) return 'query';
   if (/只看|切换|显示|带上|去掉|最近\s*\d+\s*(周|月)|usd|美元|本币|rrp|划线价/i.test(text)) return 'filter';
   if (/价格优势|优势|领先|落后|最低|最便宜|价差|趋势|价格|平台|多少|均值|变化|情报|预测|销量|需求|供给|库存|汇率|大盘/.test(text)) return 'query';
   if (knownEntityInText(text) && /看|查|查询|了解|情况|表现|分析|走势/.test(text)) return 'query';
@@ -499,7 +502,9 @@ function scopeCardActions(cards: AgentResultCard[], target: { page: string; cont
     if (!card.actions?.length) return card;
     return {
       ...card,
-      actions: card.actions.map((action) => action.target ? action : { ...action, target }),
+      // kind: 'evidence' 只在卡内原地展开自身证据区（只读），不依赖当前上下文，
+      // 不能被挂上 target 后又被 stale gate 禁用（R1）。
+      actions: card.actions.map((action) => action.target || action.kind === 'evidence' ? action : { ...action, target }),
     } as AgentResultCard;
   });
 }
@@ -550,6 +555,12 @@ function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: Fil
   const records = alerts.slice(0, 8);
   const alert = records[0];
   if (!alert) {
+    // 空态/未监控卡同样遵循 B1 固定结构：事实(表) → 计算/规则 → 判断边界 → 动作（R2）。
+    const enabledRules = (['price-change', 'promo', 'platform-gap', 'own-gap'] as const)
+      .filter((type) => state.alertTypes[type])
+      .map((type) => ({ 'price-change': '调价', promo: '折扣', 'platform-gap': '平台价差', 'own-gap': '档位间距' })[type])
+      .join(' / ');
+    const rules = `已按本地预警规则快照核对启用中的规则（${enabledRules || '无启用规则'}）与当前阈值（调价 ±${(state.alertThresholds['price-change'] * 100).toFixed(1)}% · 折扣 ${(state.alertThresholds.promo * 100).toFixed(1)}% · 平台价差 ${(state.alertThresholds['platform-gap'] * 100).toFixed(1)}% · 档位间距 低于${(state.alertThresholds['own-gap'] * 100).toFixed(0)}%）；核对 ${state.alertSubs.length} 个订阅系列在 ${state.countryCode} / ${state.industry} 口径下的触发结果；规则版本 price-rules-v1 · 数据 local-data-v1。`;
     const card: AgentResultCard = {
       kind: 'table',
       id: id('alert-empty'),
@@ -557,6 +568,11 @@ function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: Fil
       columns: ['状态', '口径', '下一步'],
       rows: [['暂无预警', `${state.countryCode} · ${state.industry} · 当前预警订阅`, '可在预警中心添加监控产品']],
       note: '结果来自现有预警规则与当前订阅范围；没有触发事实时不编造事件。',
+      rules,
+      boundaries: [
+        `覆盖范围限于当前预警订阅（${state.alertSubs.length} 个系列）与 ${state.countryCode} / ${state.industry} 渠道口径；未订阅或未监控的产品不会出现在结果里。`,
+        '没有触发事实只代表当前规则与阈值未命中，不等于价格没有变化；缺采周不参与规则计算，也不推断原因。',
+      ],
       evidence: [{ id: id('evidence'), label: '预警规则快照', detail: '当前订阅范围没有返回触发事件', source: '本地预警确定性引擎' }],
       actions: [{ id: id('action'), label: '打开预警中心', kind: 'open', prompt: '打开预警中心添加监控产品', target: { page: 'alerts', contextFingerprint: targetFingerprint ?? contextFingerprint(state, 'alerts') } }],
     };
@@ -634,8 +650,11 @@ export async function runAgent(
     const result = forecastExplanationCards({ page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot);
     cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
   } else if (intent === 'query') {
+    // R4/R6：建议动作带来的范围/币种/国家变更先并入查询口径再执行——
+    // 输出卡必须反映新范围（重算），而不是只改筛选预览后仍读旧 state。
+    const queryBase: FiltersState = { ...context.state, ...buildFilterPatch(text, context.state) };
     if (/价格优势|优势|领先|落后/.test(text)) {
-      const result = buildPriceAdvantageResult(stateForPriceAdvantage(context.state, entities), context.fingerprint);
+      const result = buildPriceAdvantageResult(stateForPriceAdvantage(queryBase, entities), context.fingerprint);
       if (result) {
         cards.push(result.card);
         summary = result.summary;
@@ -646,7 +665,7 @@ export async function runAgent(
         steps = [step('catalog.resolve', '解析意图', '价格优势', 'success'), step('series.query', '读取价格', '没有可用产品事实', 'warning'), step('series.compare', '计算优势', '缺少我司与竞品的共同价格点', 'warning'), step('view.preview', '生成结论', '无法计算', 'warning')];
       }
     } else {
-      const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(context.state, text, entities);
+      const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(queryBase, text, entities);
       cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
     }
   } else {

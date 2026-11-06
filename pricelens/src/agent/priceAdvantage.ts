@@ -3,7 +3,7 @@ import { dimChannel, dimProduct, dimTime } from '../data';
 import { flatSelections } from '../state/mainSelection';
 import type { FiltersState, ProductSelection } from '../state/filtersTypes';
 import type { Series, SeriesQuery } from '../dataModel/types';
-import type { AgentActionTarget, AgentCardAction, AgentStep, PriceAdvantageDirection, PriceAdvantageResultCard, PriceAdvantageRow, PriceAdvantageSkuOption } from './contracts';
+import type { AgentActionTarget, AgentCardAction, AgentStep, FilterPatch, PriceAdvantageDirection, PriceAdvantageResultCard, PriceAdvantageRow, PriceAdvantageSkuOption } from './contracts';
 
 export interface PriceAdvantageResult {
   card: PriceAdvantageResultCard;
@@ -130,10 +130,21 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
   const advantageCount = rows.filter((row) => row.direction === 'advantage').length;
   const laggingCount = rows.filter((row) => row.direction === 'lagging').length;
   const target: AgentActionTarget = { page: 'dashboard', contextFingerprint };
+  // R5：跨国自然语言查询（如在 AE 页问 RU 价格优势）的跳页动作必须携带该卡
+  // 计算时的请求国家/范围，回看时切到请求国家再打开对应页，而不是跳回旧国家。
+  // 范围优先取实际参与对比的周（rows 已按周倒序），空结果回退计算口径。
+  const scopePatch: FilterPatch = {
+    countryCode: state.countryCode,
+    granularity: 'week',
+    adaptive: false,
+    ...(rows.length
+      ? { rangeStart: rows[rows.length - 1].weekId, rangeEnd: rows[0].weekId }
+      : { rangeStart: state.rangeStart, rangeEnd: state.rangeEnd }),
+  };
   const actions: AgentCardAction[] = [
     // 三个药丸动作都绑定真实能力：open=保留上下文跳页，evidence=卡内展开证据。
-    { id: 'price-advantage-open', label: '回看价格走势', kind: 'open', prompt: '把价格优势对比定位回价格走势看板', target },
-    { id: 'price-advantage-alerts', label: '打开价格预警', kind: 'open', prompt: '打开价格预警中心', target: { page: 'alerts', contextFingerprint } },
+    { id: 'price-advantage-open', label: '回看价格走势', kind: 'open', prompt: '把价格优势对比定位回价格走势看板', target: { ...target, filterPatch: scopePatch } },
+    { id: 'price-advantage-alerts', label: '打开价格预警', kind: 'open', prompt: '打开价格预警中心', target: { page: 'alerts', contextFingerprint, filterPatch: scopePatch } },
     { id: 'price-advantage-evidence', label: '查看证据', kind: 'evidence' },
   ];
   if (!rows.length) {

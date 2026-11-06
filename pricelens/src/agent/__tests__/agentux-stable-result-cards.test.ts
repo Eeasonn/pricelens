@@ -6,9 +6,9 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
-import { dimProduct } from '../../data';
+import { dimProduct, dimTime } from '../../data';
 import { buildCards } from '../../state/mainSelection';
-import { buildAgentContext, clarificationReasonForQuery, runAgent } from '../core';
+import { buildAgentContext, clarificationReasonForQuery, classifyIntent, runAgent } from '../core';
 import { calculatePriceAdvantage } from '../priceAdvantage';
 import { isAgentResponse, type AgentAlertRecord } from '../contracts';
 
@@ -170,5 +170,128 @@ describe('t428u 稳定线 · 合约向后兼容', () => {
     expect(isAgentResponse(response)).toBe(true);
     const alert = await runAgent('价格预警', buildAgentContext('alerts', EMPTY_MAINS, []), undefined, 'alert');
     expect(isAgentResponse(alert)).toBe(true);
+  });
+});
+
+// ============================================================
+// t428u Batch1 返修 R1–R8：stale gate 豁免、空卡固定结构、
+// 范围建议重算、跨国回看 filterPatch、时间建议先并口径。
+// ============================================================
+describe('t428u 返修 R1 · evidence 动作不受 stale gate 影响', () => {
+  it('scopeCardActions 不给 evidence 动作挂 target，导航类动作仍带 target 受保护', async () => {
+    const response = await runAgent('价格优势', buildAgentContext('dashboard', EMPTY_MAINS, []));
+    const card = response.cards.find((item) => item.kind === 'price_advantage');
+    if (card?.kind !== 'price_advantage') throw new Error('missing price_advantage card');
+    const evidence = card.actions!.find((action) => action.kind === 'evidence')!;
+    expect(evidence.label).toBe('查看证据');
+    expect(evidence.target).toBeUndefined();
+    const open = card.actions!.find((action) => action.label === '回看价格走势')!;
+    expect(open.kind).toBe('open');
+    expect(open.target?.contextFingerprint).toBe(response.contextFingerprint);
+  });
+
+  it('真实预警卡的「查看证据」动作同样不携带 target', async () => {
+    const own = dimProduct.find((row) => row.is_own && row.industry === 'phone' && row.countries.includes('RU'));
+    expect(own).toBeDefined();
+    if (!own) return;
+    const record: AgentAlertRecord = {
+      key: 'alert-r1', alertId: 'alert-r1', seriesKey: `${own.model_id}__${own.romram.replace(/\s+/g, '')}`,
+      type: 'price-change', brand: own.brand, modelName: own.model_name, romram: own.romram,
+      weekLabel: '示例周', weekId: '202628', price: 79990, wowPct: -0.031, promoDeltaPp: null,
+      gapPct: null, gapLowPlatform: null, gapHighPlatform: null, gapLowPrice: null, gapHighPrice: null,
+      isOwn: true, ruleVersion: 'alerts-v1', dataVersion: 'real-alert-v1', evidenceStatus: 'verified',
+      evidence: [{ id: 'ev-r1', label: '触发事实', detail: '202628 · 本地规则', source: '预警引擎' }],
+    };
+    const response = await runAgent('价格预警', buildAgentContext('alerts', EMPTY_MAINS, [record]), undefined, 'alert');
+    const card = response.cards.find((item) => item.kind === 'alert');
+    if (card?.kind !== 'alert') throw new Error('missing alert card');
+    const evidence = card.actions!.find((action) => action.kind === 'evidence')!;
+    expect(evidence.target).toBeUndefined();
+    const open = card.actions!.find((action) => action.label === '打开价格预警')!;
+    expect(open.target?.contextFingerprint).toBe(response.contextFingerprint);
+  });
+});
+
+describe('t428u 返修 R2 · 空预警/未监控卡补齐固定结构', () => {
+  it('空预警卡显式给出 计算/规则（查了哪些规则/口径）与判断边界（订阅/缺数）', async () => {
+    const response = await runAgent('价格预警', buildAgentContext('alerts', EMPTY_MAINS, []), undefined, 'alert');
+    const card = response.cards[0];
+    expect(card.kind).toBe('table');
+    if (card.kind !== 'table') return;
+    expect(card.rules).toBeDefined();
+    expect(card.rules).toContain('调价');
+    expect(card.rules).toContain('平台价差');
+    expect(card.rules).toContain('0 个订阅系列');
+    expect(card.boundaries?.length).toBeGreaterThanOrEqual(2);
+    expect(card.boundaries?.some((item) => item.includes('未订阅'))).toBe(true);
+    expect(card.boundaries?.some((item) => item.includes('缺采周'))).toBe(true);
+    // 动作仍真实可执行（open 指向预警中心）
+    expect(card.actions?.[0]?.kind).toBe('open');
+    expect(card.actions?.[0]?.target?.page).toBe('alerts');
+  });
+});
+
+describe('t428u 返修 R4 · 「调整范围 · 最近 12 周」必须重算价格优势', () => {
+  it('调整范围提示词命中 query 意图并以最近 12 周重跑 price_advantage（不是只改筛选）', async () => {
+    // 数据期之前的范围 → 无共同价格事实 → 空优势卡带「调整范围 · 最近 12 周」动作
+    const state = { ...EMPTY_MAINS, adaptive: false, rangeStart: '202601', rangeEnd: '202604' };
+    const context = buildAgentContext('dashboard', state, []);
+    const first = await runAgent('价格优势', context);
+    const emptyCard = first.cards.find((item) => item.kind === 'price_advantage');
+    if (emptyCard?.kind !== 'price_advantage') throw new Error('missing price_advantage card');
+    expect(emptyCard.rows).toHaveLength(0);
+    const adjust = emptyCard.actions!.find((action) => action.label.includes('调整范围'))!;
+    expect(adjust.prompt).toContain('最近 12 周');
+    expect(classifyIntent(adjust.prompt!)).toBe('query');
+    const second = await runAgent(adjust.prompt!, context);
+    expect(second.intent).toBe('query');
+    expect(second.cards.some((item) => item.kind === 'filter')).toBe(false);
+    const card = second.cards.find((item) => item.kind === 'price_advantage');
+    if (card?.kind !== 'price_advantage') throw new Error('missing recomputed price_advantage card');
+    const buckets = dimTime.map((time) => time.week_id);
+    const expectedRange = `${buckets[buckets.length - 12]}–${buckets[buckets.length - 1]}`;
+    expect(card.evidence?.[0]?.detail).toContain(expectedRange);
+    expect(card.rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe('t428u 返修 R5 · 跨国回看导航带请求国家 filterPatch', () => {
+  it('AE 页问「RU 价格优势」→ 回看动作携带 RU 国家与实际对比周范围', async () => {
+    const aeState = { ...defaultFilters, countryCode: 'AE', mains: [] };
+    const response = await runAgent('RU 价格优势', buildAgentContext('dashboard', aeState, []));
+    const card = response.cards.find((item) => item.kind === 'price_advantage');
+    if (card?.kind !== 'price_advantage') throw new Error('missing price_advantage card');
+    expect(card.countryCode).toBe('RU');
+    const back = card.actions!.find((action) => action.label === '回看价格走势')!;
+    expect(back.kind).toBe('open');
+    expect(back.target?.page).toBe('dashboard');
+    expect(back.target?.filterPatch?.countryCode).toBe('RU');
+    expect(back.target?.filterPatch?.granularity).toBe('week');
+    if (card.rows.length) {
+      expect(back.target?.filterPatch?.rangeEnd).toBe(card.rows[0].weekId);
+      expect(back.target?.filterPatch?.rangeStart).toBe(card.rows[card.rows.length - 1].weekId);
+    }
+  });
+});
+
+describe('t428u 返修 R6 · 「最近 8 周」建议先并入新范围再查询', () => {
+  it('forced query 的「查看最近 8 周的价格趋势」输出卡反映最近 8 周口径', async () => {
+    const own = dimProduct.find((row) => row.is_own && row.industry === 'phone' && row.countries.includes(defaultFilters.countryCode));
+    expect(own).toBeDefined();
+    if (!own) return;
+    const state = {
+      ...defaultFilters,
+      mains: buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] }], { auto: true, countryCode: defaultFilters.countryCode }),
+      adaptive: false,
+      rangeStart: dimTime[0].week_id,
+      rangeEnd: dimTime[dimTime.length - 1].week_id,
+    };
+    // 面板点击「补齐时间 · 最近 8 周」建议 = 以显式 query 意图发送该提示词
+    const response = await runAgent('查看最近 8 周的价格趋势', buildAgentContext('dashboard', state, []), undefined, 'query');
+    const chart = response.cards.find((item) => item.kind === 'chart');
+    if (chart?.kind !== 'chart') throw new Error('missing chart card');
+    const buckets = dimTime.map((time) => time.week_id);
+    const expectedRange = `${buckets[buckets.length - 8]}–${buckets[buckets.length - 1]}`;
+    expect(chart.note).toContain(expectedRange);
   });
 });

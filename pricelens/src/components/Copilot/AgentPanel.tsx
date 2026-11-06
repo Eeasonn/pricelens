@@ -22,7 +22,7 @@ import { buildCards } from '../../state/mainSelection';
 import type { AgentCardAction, AgentEvidence, AgentResponse, AgentResultCard, AgentRun, AlertResultCard, ChartResultCard, FilterResultCard, ForecastExplanationResultCard, PriceAdvantageResultCard, TableResultCard, ToolCallCard } from '../../agent';
 import { describeAgentEngine, resolveAgentEngine } from '../../agent';
 import { AGENT_FOLLOWUP_SUGGESTIONS, AGENT_STATUS_LABELS, agentProviderLabel, agentSuggestionsForPage, platformShortcutLabel } from './agentCopy';
-import { color, formatPrice, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
+import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 
 const panelWidth = 440;
 const suggestionStyle: CSSProperties = { padding: '4px 7px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.body, cursor: 'pointer', fontSize: 11, textAlign: 'left' };
@@ -80,10 +80,11 @@ function EvidenceList({ evidence, revealSignal = 0 }: { evidence?: AgentEvidence
 /**
  * B1 固定结构分节：结论在气泡文本，卡内按 事实 → 计算/规则 → 判断边界 →
  * 动作 的顺序呈现；分节只做标签化，不引入新容器样式。
+ * 间距/字号引用运行时 token（R8：不落非标 9px / 10.5px 硬编码）。
  */
 function CardSection({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="lpl-agent-card-section" data-agent-card-section={label} style={{ marginTop: 9 }}>
-    <div style={{ fontSize: 10.5, fontWeight: 600, color: color.mute, marginBottom: 4 }}>{label}</div>
+  return <div className="lpl-agent-card-section" data-agent-card-section={label} style={{ marginTop: space.sm }}>
+    <div style={{ fontSize: fontSize.caption, fontWeight: 600, color: color.mute, marginBottom: space.xs }}>{label}</div>
     {children}
   </div>;
 }
@@ -94,7 +95,11 @@ function CardActions({ actions, onEvidence }: { actions?: AgentCardAction[]; onE
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   if (!actions?.length) return null;
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>{actions.map((action) => {
-    const stale = Boolean(action.target?.contextFingerprint && action.target.contextFingerprint !== context.fingerprint);
+    // R1：evidence 只在卡内原地只读展开/收起该结果卡自身的证据区，不读当前
+    // 上下文、不跳页，绝不能因 contextFingerprint 过期被禁用或改名「需刷新」；
+    // 导航 / 筛选 / 追问类动作仍受 stale gate 保护。
+    const readonlyEvidence = action.kind === 'evidence';
+    const stale = !readonlyEvidence && Boolean(action.target?.contextFingerprint && action.target.contextFingerprint !== context.fingerprint);
     const applied = appliedIds.has(action.id);
     // Keep the applied action live so the user can undo it even though the
     // filter change necessarily updates the context fingerprint.
@@ -190,10 +195,16 @@ function FilterCard({ card }: { card: FilterResultCard }) {
 }
 
 function TableCard({ card }: { card: TableResultCard }) {
+  const table = <div style={{ overflowX: 'auto', marginTop: 8 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}><thead><tr>{card.columns.map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{card.rows.map((row, index) => <tr key={`${row[0]}-${index}`}>{row.map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`} style={tableCellStyle}>{cell}</td>)}</tr>)}</tbody></table></div>;
+  // R2：带显式 计算/规则 或 判断边界 的表卡（空预警/未监控卡）同样按 B1 固定
+  // 结构呈现：事实(表) → 计算/规则 → 判断边界 → 动作；普通表卡保持原渲染。
+  const structured = Boolean(card.rules || card.boundaries?.length);
   return <div className="lpl-agent-result-card" style={cardStyle}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.title}</span><span style={mutedBadge}>确定性结果</span></div>
-    <div style={{ overflowX: 'auto', marginTop: 8 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}><thead><tr>{card.columns.map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{card.rows.map((row, index) => <tr key={`${row[0]}-${index}`}>{row.map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`} style={tableCellStyle}>{cell}</td>)}</tr>)}</tbody></table></div>
+    {structured ? <CardSection label="事实">{table}</CardSection> : table}
     {card.note && <div style={noteStyle}>{card.note}</div>}
+    {card.rules && <CardSection label="计算与规则">{card.rules}</CardSection>}
+    {card.boundaries?.length ? <CardSection label="判断边界">{card.boundaries.map((item) => <div key={item} style={{ ...noteStyle, marginTop: 2 }}>· {item}</div>)}</CardSection> : null}
     <EvidenceList evidence={card.evidence} />
     <CardActions actions={card.actions} />
   </div>;
@@ -274,7 +285,7 @@ function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
 function ToolCallCardView({ card }: { card: ToolCallCard }) {
   const { send, applyFilter, undoFilter } = useAgent();
   const [applyError, setApplyError] = useState<string | null>(null);
-  const label = ({ queued: '排队中', running: '运行中', success: '已完成', failed: '失败', waiting_for_approval: '等待确认' } as Record<string, string>)[card.status];
+  const label = ({ queued: '排队中', running: '运行中', success: '已完成', failed: '失败', waiting_for_approval: '等待确认', cancelled: '已取消' } as Record<string, string>)[card.status];
   return <div className="lpl-agent-result-card" style={cardStyle} data-tool-status={card.status}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.tool}</span><span style={mutedBadge}>{label}</span></div>
     <div style={{ marginTop: 7, fontSize: 11, color: color.body }}>输入：{card.inputSummary}</div>
@@ -291,7 +302,14 @@ function ToolCallCardView({ card }: { card: ToolCallCard }) {
 function AlertCard({ card }: { card: AlertResultCard }) {
   const { context } = useAgent();
   const [evidenceReveal, setEvidenceReveal] = useState(0);
+  // R7：行级展开用受控 details；动作统一收束在判断边界（与证据区块）之后，
+  // 不再出现在记录行内部，保证 结论 → 事实 → 计算/规则 → 判断边界 → 动作。
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const records = card.alerts?.length ? card.alerts : [card.alert];
+  const keyOf = (item: AlertResultCard['alert']): string => item.alertId ?? item.key;
+  const toggleExpanded = (key: string): void => {
+    setExpandedKeys((prev) => prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]);
+  };
   const alertSummary = (item: AlertResultCard['alert']): string => {
     if (item.gapPct != null) return `平台价差 ${(item.gapPct * 100).toFixed(1)}%`;
     if (item.ownGapPct != null) return `档位间距 ${(item.ownGapPct * 100).toFixed(1)}%`;
@@ -308,8 +326,8 @@ function AlertCard({ card }: { card: AlertResultCard }) {
       <div style={{ fontSize: 11, color: color.body }}>触发规则由本地预警引擎按当前阈值与折后价口径计算 · 规则版本 {card.alert.ruleVersion ?? '待确认'} · 数据 {card.alert.dataVersion ?? '待确认'}</div>
     </CardSection>
     <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
-      {records.map((item) => <details key={item.alertId ?? item.key} data-agent-alert-id={item.alertId ?? item.key} style={{ borderTop: `1px solid ${color.hairline}`, paddingTop: 7 }}>
-        <summary tabIndex={0} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: color.ink }}>
+      {records.map((item) => <details key={keyOf(item)} data-agent-alert-id={keyOf(item)} open={expandedKeys.includes(keyOf(item))} style={{ borderTop: `1px solid ${color.hairline}`, paddingTop: 7 }}>
+        <summary tabIndex={0} role="button" aria-expanded={expandedKeys.includes(keyOf(item))} onClick={(event) => { event.preventDefault(); toggleExpanded(keyOf(item)); }} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: color.ink }}>
           <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.brand} {item.modelName}</strong>
           <span style={{ color: color.body }}>{item.romram}</span>
           <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{item.weekId} · {alertSummary(item)}</span>
@@ -318,7 +336,6 @@ function AlertCard({ card }: { card: AlertResultCard }) {
           <div>触发规则：{item.type} · 当前价 {formatPrice(item.price, context.state.currency)} · 数据 {item.dataVersion ?? '待确认'}</div>
           <div>状态：{item.lifecycle ?? 'new'} · 证据：{item.evidenceStatus === 'verified' ? '已核验' : item.evidenceStatus === 'missing' ? '缺失' : '部分覆盖'}</div>
           <EvidenceList evidence={item.evidence} />
-          <CardActions actions={item.actions ?? card.actions} />
         </div>
       </details>)}
     </div>
@@ -326,6 +343,11 @@ function AlertCard({ card }: { card: AlertResultCard }) {
     {card.boundaries?.length ? <CardSection label="判断边界">{card.boundaries.map((item) => <div key={item} style={{ ...noteStyle, marginTop: 2 }}>· {item}</div>)}</CardSection> : null}
     <EvidenceList evidence={card.evidence} revealSignal={evidenceReveal} />
     <CardActions actions={card.actions} onEvidence={() => setEvidenceReveal((n) => n + 1)} />
+    {/* R7：展开行的动作统一在判断边界与证据区块之后渲染（结论→事实→计算/规则→判断边界→动作）。 */}
+    {expandedKeys.map((key) => {
+      const item = records.find((record) => keyOf(record) === key);
+      return item ? <CardActions key={`row-actions-${key}`} actions={item.actions ?? card.actions} /> : null;
+    })}
   </div>;
 }
 

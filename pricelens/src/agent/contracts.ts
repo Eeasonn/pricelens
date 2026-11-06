@@ -210,7 +210,11 @@ export interface AgentStep {
   durationMs: number;
 }
 
-export type ToolCallStatus = 'queued' | 'running' | 'success' | 'failed' | 'waiting_for_approval';
+/**
+ * 'cancelled' 只由编排层在运行终态写入（R3）：远端/本地流事件创建的
+ * queued/running 工具卡随运行终止收敛，不再显示「运行中」。
+ */
+export type ToolCallStatus = 'queued' | 'running' | 'success' | 'failed' | 'waiting_for_approval' | 'cancelled';
 
 export interface ToolCallCard {
   kind: 'tool_call';
@@ -245,6 +249,10 @@ export interface TableResultCard {
   columns: string[];
   rows: string[][];
   note?: string;
+  /** B1 固定结构（R2）：显式「计算/规则」说明（空态卡须补齐查了哪些规则/口径）；缺省不渲染该节。 */
+  rules?: string;
+  /** B1 固定结构（R2）：判断边界（订阅范围与缺数边界）；缺省不渲染该节。 */
+  boundaries?: string[];
   actions?: AgentCardAction[];
   evidence?: AgentEvidence[];
 }
@@ -526,7 +534,7 @@ function isAgentSuggestion(value: unknown): value is AgentSuggestion {
 function isAgentResultCard(value: unknown): value is AgentResultCard {
   if (!isRecord(value) || typeof value.id !== 'string') return false;
   const kind = String(value.kind);
-  if (kind === 'tool_call') return typeof value.tool === 'string' && ['queued', 'running', 'success', 'failed', 'waiting_for_approval'].includes(String(value.status)) && typeof value.inputSummary === 'string';
+  if (kind === 'tool_call') return typeof value.tool === 'string' && ['queued', 'running', 'success', 'failed', 'waiting_for_approval', 'cancelled'].includes(String(value.status)) && typeof value.inputSummary === 'string';
   if (kind === 'price_advantage') {
     return typeof value.title === 'string'
       && typeof value.countryCode === 'string'
