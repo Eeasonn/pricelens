@@ -496,7 +496,7 @@ export default function ReferenceEventComposer(props: {
                           width: '100%',
                           padding: '1px 2px',
                           marginBottom: 2,
-                          borderRadius: 5,
+                          borderRadius: radius.control,
                           border: 'none',
                           cursor: 'pointer',
                           font: 'inherit',

@@ -338,8 +338,12 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
 /** 口径切换（国家/产业变化）+ 按国快照：切走前把当前整套产品卡存该国会话快照；
  *  目的国存在本会话快照且仍有效（产品在新口径有数据）时恢复快照而非重算默认卡——
  *  高频的国家来回切换不再静默清空用户搭好的选择。快照会话级（关页即清），
- *  不跨会话复活旧选择。 */
-function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
+ *  不跨会话复活旧选择。
+ *  R5（主品口径跨国保持，2026-11-07 二审）：patch 显式携带 mains（Agent 跨国
+ *  结果卡「回看价格走势」等跳转动作）且整组在目标口径有效时以 patch.mains 为准
+ *  ——不恢复按国快照、不被 applyScopeDefaults(force=true) 重算成默认主品；
+ *  无显式 mains 的普通国家切换行为保持原样（快照恢复 / 默认重算）。 */
+function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false): FiltersState {
   // 快照键含产业维度：纯产业切换同样要保住「回切后还原」，键只按国会把
   // 当前产业的卡覆盖进该国快照，回切时校验不过即永久丢卡
   const snapKeyOf = (cc: string, industry: string) => `${LPL.filters}.mainsOf.${cc}.${industry}`;
@@ -350,6 +354,11 @@ function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
   } catch {
     /* 存储不可用时跳过快照，走默认重算 */
   }
+  // 有效性按规范后的目标口径判定（applyScopeDefaults 内部同样先 normalize，
+  // 此处先取一次保证判定与落地口径一致）
+  const scope = normalizeDataScope({ countryCode: next.countryCode, industry: next.industry });
+  const keepMains = explicitMains && mainsValidFor(next.mains, scope.countryCode, scope.industry);
+  if (keepMains) return applyScopeDefaults({ ...next, ...scope }, false);
   const applied = applyScopeDefaults(next, true);
   try {
     const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode, applied.industry));
@@ -541,14 +550,15 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<FiltersActions>(
     () => ({
       /** 通用补丁（平台/币种/时间范围/价格类型/agg 等直接字段）；
-       *  国家/产业变化 = 口径切换：同步数据层缺省国家，平台回默认电渠，主分析按矩阵重算 */
+       *  国家/产业变化 = 口径切换：同步数据层缺省国家，平台回默认电渠，主分析按矩阵重算。
+       *  patch 显式带 mains 时按 switchScope 的 R5 通道保留（新口径有效即不重算默认） */
       set: (patch) =>
         setState((s) => {
           const next = { ...s, ...patch };
           const scopeChanged =
             (patch.countryCode != null && patch.countryCode !== s.countryCode) ||
             (patch.industry != null && patch.industry !== s.industry);
-          return scopeChanged ? switchScope(s, next) : next;
+          return scopeChanged ? switchScope(s, next, patch.mains !== undefined) : next;
         }),
 
       /** 回到默认视图（含数据默认主分析卡 + 其配置对比区）。直接从默认态重建，

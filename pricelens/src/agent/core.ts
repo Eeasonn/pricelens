@@ -10,8 +10,8 @@ import type { ForecastDraftInput } from './contracts';
 import { simpleDemoDataset as forecastFixture } from '../pages/forecast/forecastDatasetRegistry';
 import { createForecastSnapshot, type ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 import { provenanceSummary } from '../dataModel/provenance';
-import { buildPriceAdvantageResult } from './priceAdvantage';
-export { buildPriceAdvantageResult } from './priceAdvantage';
+import { buildPriceAdvantageResult, stateForPriceAdvantageCountry } from './priceAdvantage';
+export { buildPriceAdvantageResult, stateForPriceAdvantageCountry } from './priceAdvantage';
 
 const id = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const norm = (s: string): string => s.replace(/\s+/g, '').toLowerCase();
@@ -165,11 +165,27 @@ export function clarificationReasonForQuery(text: string, state: FiltersState, e
   return null;
 }
 
-function recentRange(state: FiltersState, count: number): Pick<FilterPatch, 'adaptive' | 'rangeStart' | 'rangeEnd'> {
+/** 「最近 N 周/月」范围补丁：以 dimTime 最后 N 桶为准（与看板当前范围无关），
+ *  显式带回周粒度与关闭自适应，供筛选预览、空卡调整范围动作和带范围查询共用。 */
+export function recentRangePatch(state: FiltersState, count: number): Pick<FilterPatch, 'adaptive' | 'granularity' | 'rangeStart' | 'rangeEnd'> {
   const buckets = dimTime.map((t) => t.week_id);
   const end = buckets[buckets.length - 1] ?? state.rangeEnd;
   const start = buckets[Math.max(0, buckets.length - count)] ?? state.rangeStart;
-  return { adaptive: false, rangeStart: start, rangeEnd: end };
+  return { adaptive: false, granularity: 'week', rangeStart: start, rangeEnd: end };
+}
+
+function recentRangeCountOf(text: string): number | null {
+  const recent = text.match(/最近\s*(\d+)\s*(周|星期|月)/);
+  if (!recent) return null;
+  return Math.max(2, Math.min(52, Number(recent[1]) || 8));
+}
+
+/** R6：带「最近 N 周」的查询/价格优势动作执行时，必须用合并新 recentRange 后的
+ *  state 计算（recentRangePatch 显式带 granularity:'week' + adaptive:false），
+ *  不能沿用看板旧范围/旧粒度读数——月/季粒度下合并周 id 会产生口径错配。 */
+function stateWithRecentRange(state: FiltersState, text: string): FiltersState {
+  const count = recentRangeCountOf(text);
+  return count ? { ...state, ...recentRangePatch(state, count) } : state;
 }
 
 export function buildFilterPatch(text: string, state: FiltersState): FilterPatch {
@@ -178,10 +194,9 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
   if (/本币|当地币|local/i.test(text)) patch.currency = 'local';
   if (/带上\s*(rrp|划线价)|显示\s*(rrp|划线价)/i.test(text)) patch.priceTypes = { ...state.priceTypes, rrp: true };
   if (/去掉\s*(rrp|划线价)|只看折后/i.test(text)) patch.priceTypes = { discounted: true, rrp: false };
-  const recent = text.match(/最近\s*(\d+)\s*(周|星期|月)/);
+  const recent = recentRangeCountOf(text);
   if (recent) {
-    const count = Math.max(2, Math.min(52, Number(recent[1]) || 8));
-    Object.assign(patch, recentRange(state, count));
+    Object.assign(patch, recentRangePatch(state, recent));
   }
   const entities = resolveAgentEntities(text, state);
   if (entities.explicitCountry) patch.countryCode = entities.countryCode;
@@ -549,7 +564,14 @@ export async function runAgent(
     summary = card ? '我先生成筛选预览，当前看板尚未改变。确认后才会应用。' : '我没有识别到明确的筛选变化，可以补充国家、时间、币种或 RRP 条件。';
     steps = [step('catalog.resolve', '解析筛选条件', card ? `${card.changes.length} 项待变更` : '需要补充口径', card ? 'success' : 'warning'), ...(card ? [step('view.preview', '生成筛选预览', '等待用户确认')] : [])];
   } else if (intent === 'price_advantage') {
-    const result = buildPriceAdvantageResult(context.state, context.fingerprint);
+    // R5：跨国自然语言查询（AE 页问「RU 价格优势」）按请求国计算，
+    // 结果行携带请求国，跳转动作据此带回该国 filterPatch。
+    // R6：「最近 N 周」属于周口径范围，先经 stateWithRecentRange 合并（显式
+    // granularity:'week' + adaptive:false）——月/季粒度看板上不能只并周 id
+    // 留旧粒度，否则产出 month · 202635–202642 这类口径错配、价格全空。
+    const rangedState = stateWithRecentRange(context.state, text);
+    const advState = entities.explicitCountry ? stateForPriceAdvantageCountry(rangedState, entities.countryCode) : rangedState;
+    const result = buildPriceAdvantageResult(advState, context.fingerprint);
     cards.push(result.card); summary = result.summary; steps = result.steps; citations = result.citations;
   } else if (intent === 'price_alert') {
     const result = priceAlertList(text, context);
@@ -562,7 +584,7 @@ export async function runAgent(
     const result = forecastExplanationCards({ page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot);
     cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
   } else if (intent === 'query') {
-    const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(context.state, text, entities);
+    const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(stateWithRecentRange(context.state, text), text, entities);
     cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
   } else {
     summary = clarificationReason === '产品'

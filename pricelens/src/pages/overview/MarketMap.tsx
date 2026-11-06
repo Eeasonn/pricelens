@@ -491,7 +491,7 @@ function DetailFloat({
             <CloseOutlined style={{ fontSize: 11 }} />
           </span>
         </div>
-        <div style={{ border: `1px solid ${color.hairline}`, borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, overflow: 'hidden' }}>
           {/* 细表：最左公共标签列（整表一份）+ 每行指标一条贯穿行线 + 产品列竖线加重区隔 */}
           <div style={{ display: 'grid', gridTemplateColumns: matrixCols, background: color.canvasSoft, borderBottom: `1px solid ${color.hairline}` }}>
             <div style={{ borderRight: `1px solid ${color.hairlineStrong}` }} />

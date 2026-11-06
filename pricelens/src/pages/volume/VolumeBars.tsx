@@ -5,7 +5,7 @@
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import type { StripGeom } from '../../chart/PriceTrend/helpers';
-import { color, font, selectAccent } from '../../theme/tokens';
+import { color, font, radius, selectAccent } from '../../theme/tokens';
 import { commitVolumeAxisLimit, volumeAxisClipOf, volumeRangeOf, type VolumeAxisLimits } from './volumeAxis';
 import { rangeBandFrame } from './periodSummary';
 
@@ -113,7 +113,7 @@ function VolumeAxisLimit(props: {
         boxSizing: 'border-box',
         padding: '0 4px',
         border: `1px solid ${color.hairlineStrong}`,
-        borderRadius: 4,
+        borderRadius: radius.control,
         background: color.canvas,
         color: color.body,
         fontFamily: font.family,

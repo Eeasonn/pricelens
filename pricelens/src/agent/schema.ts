@@ -53,6 +53,7 @@ const agentStatusSchema: JsonSchema = {
     'waiting_for_approval',
     'partial_result',
     'completed',
+    'empty',
     'failed',
     'cancelled',
     'stale_context',

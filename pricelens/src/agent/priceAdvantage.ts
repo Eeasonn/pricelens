@@ -71,6 +71,19 @@ function step(tool: AgentStep['tool'], label: string, detail: string, status: Ag
   return { id: id('step', Math.round(Math.random() * 1_000_000)), tool, label, detail, status, durationMs: 18 };
 }
 
+/**
+ * R5：跨国自然语言查询（如在 AE 页问「RU 价格优势」）时按请求国计算。
+ * 我司主品只保留目标国在架型号，并按目标国重建自动竞品矩阵（与换国同步
+ * 同口径）；目标国一个都不在架时清空 mains，让确定性引擎落到该国默认主品，
+ * 不拿 AE 的产品和矩阵冒充 RU 结果。
+ */
+export function stateForPriceAdvantageCountry(state: FiltersState, countryCode: string): FiltersState {
+  if (countryCode === state.countryCode) return state;
+  const ownMains = state.mains.flatMap((card) => (card.main && isOwn(card.main) ? [card.main] : []));
+  const available = ownMains.filter((selection) => dimProduct.some((row) => row.model_id === selection.modelId && compact(row.romram) === compact(selection.romram) && row.countries.includes(countryCode)));
+  return { ...state, countryCode, mains: available.length ? buildCards(available, { auto: true, countryCode }) : [] };
+}
+
 export interface PriceAdvantageResult {
   card: PriceAdvantageResultCard;
   summary: string;

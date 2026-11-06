@@ -658,6 +658,14 @@ button.lpl-map-card:hover {
    reserved for focus/open state. The hover fill is a soft canvas tint only. */
 .lpl-agent-launcher:hover { background: #f5f5f5 !important; }
 
+/* Agent 药丸快捷动作（DESIGN.md：胶囊圆角仅用于标签/快捷动作）：hover 只把边框
+   收紧到强调蓝，不加投影/位移；键盘焦点环由全站 button:focus-visible 统一提供。 */
+.lpl-agent-quick-pill:hover { border-color: #0070f3; }
+
+/* 价格优势结果表整行可点击定位：hover 给轻量页面底色提示可点（纯颜色变化，
+   无位移动画，reduced-motion 无需特殊处理）。 */
+.lpl-agent-result-card tbody tr[data-advantage-row]:hover > td { background: #fafafa; }
+
 /* Agent 结果卡在小屏保持可读：标题徽标可换行，解释卡的双列指标改成单列，
    filter 预览的 before/after 也不再把内容压成不可读的四列。 */
 @media (max-width: 639.98px) {

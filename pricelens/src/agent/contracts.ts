@@ -35,6 +35,8 @@ export type AgentRunStatus =
   | 'waiting_for_approval'
   | 'partial_result'
   | 'completed'
+  /** Run finished without error but produced zero result cards; UI offers scope adjustments. */
+  | 'empty'
   | 'failed'
   | 'cancelled'
   | 'stale_context';
@@ -210,6 +212,19 @@ export interface AgentStep {
   status: 'queued' | 'running' | 'success' | 'warning' | 'failed' | 'waiting_for_approval';
   detail: string;
   durationMs: number;
+}
+
+const TERMINAL_STEP_STATUSES: ReadonlySet<AgentStep['status']> = new Set(['success', 'warning', 'failed']);
+
+/**
+ * R3（终态收敛）：run 进入 success/empty/error/cancelled 等终态后，远端流式
+ * 响应里可能残留 running/queued/waiting_for_approval 的工具步骤。历史消息里的
+ * 工具卡必须全部呈现终态：成功类终态把未完成步骤收敛为 success，失败/取消
+ * 类终态收敛为 failed，已终态的步骤原样保留。
+ */
+export function finalizeStepsForTerminalRun(steps: AgentStep[], runStatus: AgentRunStatus): AgentStep[] {
+  const outcome: AgentStep['status'] = runStatus === 'failed' || runStatus === 'cancelled' ? 'failed' : 'success';
+  return steps.map((step) => (TERMINAL_STEP_STATUSES.has(step.status) ? step : { ...step, status: outcome }));
 }
 
 export type AgentToolCallStatus = 'queued' | 'running' | 'success' | 'failed' | 'waiting_for_approval';
