@@ -11,8 +11,10 @@
 //  - 显式 mains（Agent filterPatch / undo 快照）：精确合法配置保留，同型号映射
 //    目标国首个合法配置（ID 16+512GB），型号整体缺席回落默认；对比区按目标国
 //    重建且 ≤3；目标国快照同步更新。
-//  - 普通 UI 换国（补丁不带 mains）：存离建国快照 → 目标国快照优先（含 SKU
-//    校验）→ 无快照按目标国默认重算，绝不落非法 SKU / 空看板。
+//  - 普通 UI 换国（补丁不带 mains）：存离建国快照 → 目标国快照 100% 优先（含
+//    SKU 校验；恢复时清理无效手动 compares）→ 无快照先旧 mains 同型号重映射
+//    （R4-m1：RU Mate X6 12+512 → ID 16+512，结果写回目标国快照）→ 型号整体
+//    缺席才按目标国默认重算，绝不落非法 SKU / 空看板。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -156,14 +158,68 @@ describe('t428u R3 M1b · 普通 UI 换国（补丁不带 mains）', () => {
     expect(state().mains[0].main?.modelId).not.toBe('own-huawei-nova-14-pro');
   });
 
-  it('RU Mate X6 → ID 普通换国：绝不保留非法 12+512GB，落 ID 合法默认卡', () => {
+  it('RU Mate X6 → ID 普通换国（R4-m1 新契约）：无快照先同型号重映射 16+512GB，不再默认 Mate 80 Pro', () => {
     const { state, actions } = renderFilters();
     act(() => actions().setMains([mateX6RuCard()]));
     act(() => actions().set({ countryCode: 'ID' }));
     expect(state().countryCode).toBe('ID');
-    expect(state().mains[0].main).not.toEqual(MATE_X6_RU);
-    expect(state().mains[0].main?.modelId).toBe('own-huawei-mate-80-pro');
+    // R4-m1：无 ID 快照时先 remapMainsForScope 保原型号——Mate X6 12+512 → ID 16+512
+    expect(state().mains[0].main).toEqual(MATE_X6_ID);
+    expect(state().mains[0].main?.modelId).not.toBe('own-huawei-mate-80-pro');
     expect(selectionValidFor(state().mains[0].main!, 'ID', 'phone')).toBe(true);
+    // 重映射结果写入 ID 快照：切走再回 ID 仍按这套口径还原
+    expect(readSnapshot('ID')?.mains[0].main).toEqual(MATE_X6_ID);
+    act(() => actions().set({ countryCode: 'RU' }));
+    act(() => actions().set({ countryCode: 'ID' }));
+    expect(state().mains[0].main).toEqual(MATE_X6_ID);
+  });
+
+  it('RU Mate X6 → DE 普通换国：型号整体缺席才默认重算（nova 14 Pro），RU 快照仍保留 12+512', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().setMains([mateX6RuCard()]));
+    act(() => actions().set({ countryCode: 'DE' }));
+    expect(state().countryCode).toBe('DE');
+    expect(state().mains[0].main?.modelId).toBe('own-huawei-nova-14-pro');
+    expect(readSnapshot('RU')?.mains[0].main).toEqual(MATE_X6_RU);
+  });
+
+  it('显式 mains:[] 换国不当「未传」（安全回退）：不残留源国产品，落目标国快照或默认', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().setMains([mateX6RuCard()]));
+    // 显式空 mains 切 ID：不触发显式重映射通道（无卡可映射），也不把 RU 卡带进 ID
+    act(() => actions().set({ countryCode: 'ID', mains: [] }));
+    expect(state().countryCode).toBe('ID');
+    for (const card of state().mains) {
+      expect(card.main?.modelId).not.toBe('own-huawei-mate-x6');
+      if (card.main) expect(selectionValidFor(card.main, 'ID', 'phone')).toBe(true);
+    }
+  });
+
+  it('patch 显式 { countryCode, mains: undefined } 不崩且不视为显式口径（undefined 不覆盖已有选择）', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().setMains([mateX6RuCard()]));
+    // 模拟外部 API / 旧调用方把 undefined 显式塞进 patch：spread 不能把 undefined
+    // 写进 state.mains（后续 .length/.map 会崩），也不得冒充显式口径
+    act(() => actions().set({ countryCode: 'ID', mains: undefined }));
+    expect(state().countryCode).toBe('ID');
+    expect(Array.isArray(state().mains)).toBe(true);
+    // undefined 被忽略 → 普通换国路径（R4-m1 remap）：Mate X6 12+512 → ID 16+512
+    expect(state().mains[0].main).toEqual(MATE_X6_ID);
+  });
+
+  it('快照恢复 100% 优先于同型号重映射：污染的无效手动 compares 在恢复时被清理', () => {
+    const { state, actions } = renderFilters();
+    // 先制造一个合法 RU 快照，再手工污染 compares：型号/配置在 RU 有、SKU 行不存在
+    act(() => actions().setMains([{ ...mateX6RuCard(), compares: [{ modelId: 'own-huawei-mate-x6', romram: '12+512 GB', skuIds: ['own-huawei-mate-x6__12-512gb__nonexistent'] }] }]));
+    act(() => actions().set({ countryCode: 'DE' }));
+    sessionStorage.setItem(snapKey('RU'), JSON.stringify({
+      mains: [{ id: 'card-snap', main: MATE_X6_RU, compares: [{ modelId: 'own-huawei-mate-x6', romram: '12+512 GB', skuIds: ['own-huawei-mate-x6__12-512gb__nonexistent'] }], auto: false }],
+    }));
+    act(() => actions().set({ countryCode: 'RU' }));
+    expect(state().countryCode).toBe('RU');
+    // 快照优先恢复主品（而非 remap/默认），且无效手动对比区被清空
+    expect(state().mains[0].main).toEqual(MATE_X6_RU);
+    expect(state().mains[0].compares).toHaveLength(0);
   });
 
   it('快照含目标国非法 SKU 时不还原（严格校验），回落目标国默认卡', () => {

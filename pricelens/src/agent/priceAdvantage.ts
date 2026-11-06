@@ -1,6 +1,6 @@
 import { buildSeries } from '../dataModel/aggregate';
 import { dimProduct, dimRegion, dimTime } from '../data';
-import { autoComparesFor, buildCards, clampMains, withAutoOn } from '../state/mainSelection';
+import { autoComparesFor, buildCards, clampMains, remapSelectionForCountry, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { AgentCitation, AgentResponse, AgentStep, FilterPatch, PriceAdvantageResultCard, PriceAdvantageRow } from './contracts';
 
@@ -73,15 +73,34 @@ function step(tool: AgentStep['tool'], label: string, detail: string, status: Ag
 
 /**
  * R5：跨国自然语言查询（如在 AE 页问「RU 价格优势」）时按请求国计算。
- * 我司主品只保留目标国在架型号，并按目标国重建自动竞品矩阵（与换国同步
- * 同口径）；目标国一个都不在架时清空 mains，让确定性引擎落到该国默认主品，
- * 不拿 AE 的产品和矩阵冒充 RU 结果。
+ * R4（M2，同步稳定线四审）：我司主品跨国先按统一 remapSelectionForCountry 保
+ * 原型号重映射到目标国合法配置（RU Mate X6 12+512 → ID Mate X6 16+512），不能
+ * 精确 romram 过滤后丢型号、让引擎落到目标国默认主品（Mate 80 Pro）；目标国
+ * 整体缺型号（型号全部缺席）才清空 mains 安全回落该国默认主品，且结果必须
+ * 明确说明（priceAdvantageCountryFallbackNote）。
  */
 export function stateForPriceAdvantageCountry(state: FiltersState, countryCode: string): FiltersState {
   if (countryCode === state.countryCode) return state;
-  const ownMains = state.mains.flatMap((card) => (card.main && isOwn(card.main) ? [card.main] : []));
-  const available = ownMains.filter((selection) => dimProduct.some((row) => row.model_id === selection.modelId && compact(row.romram) === compact(selection.romram) && row.countries.includes(countryCode)));
-  return { ...state, countryCode, mains: available.length ? buildCards(available, { auto: true, countryCode }) : [] };
+  const ownMains = (state.mains ?? []).flatMap((card) => (card.main && isOwn(card.main) ? [card.main] : []));
+  if (!ownMains.length) return { ...state, countryCode, mains: [] };
+  const remapped = ownMains
+    .map((selection) => remapSelectionForCountry(selection, countryCode, state.industry))
+    .filter((selection): selection is ProductSelection => selection != null);
+  return { ...state, countryCode, mains: remapped.length ? buildCards(remapped, { auto: true, countryCode }) : [] };
+}
+
+/** R4（M2）：跨国请求的我司主品全部不在目标国在架（型号整体缺席）时的显式
+ *  说明——回落目标国默认主品属于安全默认，必须在结果里说清楚，不冒充用户
+ *  原产品。仅在确有我司主品且重映射全空时给出；同国 / 正常重映射返回 null。 */
+export function priceAdvantageCountryFallbackNote(state: FiltersState, countryCode: string): string | null {
+  if (countryCode === state.countryCode) return null;
+  const ownMains = (state.mains ?? []).flatMap((card) => (card.main && isOwn(card.main) ? [card.main] : []));
+  if (!ownMains.length) return null;
+  const anyRemapped = ownMains.some((selection) => remapSelectionForCountry(selection, countryCode, state.industry) != null);
+  if (anyRemapped) return null;
+  const labels = [...new Set(ownMains.map((selection) => modelLabel(selection).modelName))];
+  const targetName = dimRegion.find((region) => region.country_code === countryCode)?.country_name ?? countryCode;
+  return `请求的我司主品（${labels.join('、')}）在${targetName}均无在架型号，已回落到${targetName}默认主品口径。`;
 }
 
 export interface PriceAdvantageResult {

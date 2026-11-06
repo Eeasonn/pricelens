@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button, ConfigProvider } from 'antd';
+import { App as AntdApp, Button, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { ArrowUpOutlined } from '@ant-design/icons';
 import { usePage, PageProvider } from './state/PageContext';
@@ -44,20 +44,26 @@ export default function App() {
         },
       }}
     >
-      <AppErrorBoundary>
-        <PageProvider>
-          <FiltersProvider>
-            <AgentProvider>
-              <OverviewViewProvider>
-                <ChartContentProvider>
-                  <AppBody />
-                  <AgentPanel />
-                </ChartContentProvider>
-              </OverviewViewProvider>
-            </AgentProvider>
-          </FiltersProvider>
-        </PageProvider>
-      </AppErrorBoundary>
+      {/* R4（双 0 收口）：antd 上下文消息壳——AlertsPage 等页面改用 App.useApp()
+          的 context hook 消息 API，静态 message.success 会打
+          「Static function can not consume context」console.error，Chrome 全场景
+          双 0 不允许；component={false} 不引入额外 DOM 包裹。 */}
+      <AntdApp component={false}>
+        <AppErrorBoundary>
+          <PageProvider>
+            <FiltersProvider>
+              <AgentProvider>
+                <OverviewViewProvider>
+                  <ChartContentProvider>
+                    <AppBody />
+                    <AgentPanel />
+                  </ChartContentProvider>
+                </OverviewViewProvider>
+              </AgentProvider>
+            </FiltersProvider>
+          </PageProvider>
+        </AppErrorBoundary>
+      </AntdApp>
     </ConfigProvider>
   );
 }

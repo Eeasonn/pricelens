@@ -85,8 +85,9 @@ function CardSection({ label, children }: { label: string; children: ReactNode }
 }
 
 function CardActions({ actions, locked }: { actions?: AgentCardAction[]; locked?: boolean }) {
-  const { setDraft, send, context } = useAgent();
+  const { setDraft, send, context, applyFilter } = useAgent();
   const { go } = usePage();
+  const [actionError, setActionError] = useState<string | undefined>();
   if (!actions?.length) return null;
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: space.sm }}>{actions.map((action) => {
     // R1：stale 门控只保护会改看板口径的动作（open 导航 / apply 应用筛选）；
@@ -104,6 +105,13 @@ function CardActions({ actions, locked }: { actions?: AgentCardAction[]; locked?
         setDraft(action.prompt);
         if (action.kind === 'followup') void send(action.prompt, action.target?.forecastDraft, { forecastSnapshot: action.target?.forecastSnapshot, forecastDataset: action.target?.forecastDataset });
         if (action.kind === 'open') {
+          // R4（M1，同步稳定线四审）：回看类 open 动作携带 filterPatch（生成卡时的
+          // 完整查询口径）——先经 applyFilter 可撤销通道落地（国家/主品/平台/粒度/
+          // 时间范围），失败不导航；AE 页问「RU nova 趋势」回看必须落 RU + nova。
+          if (action.filterPatch) {
+            const result = applyFilter({ kind: 'filter', id: `open-scope-${action.id}`, title: '回看定位口径', contextFingerprint: context.fingerprint, patch: action.filterPatch, changes: [] });
+            if (!result.ok) { setActionError(result.error); return; }
+          }
           const targetPage = action.target?.page;
           if (targetPage === 'alerts' || targetPage === 'forecast' || targetPage === 'dashboard' || targetPage === 'volume' || targetPage === 'marketboard' || targetPage === 'overview' || targetPage === 'pricing' || targetPage === 'intelligence' || targetPage === 'config') go(targetPage);
           else if (/预警/.test(action.prompt)) go('alerts');
@@ -112,7 +120,8 @@ function CardActions({ actions, locked }: { actions?: AgentCardAction[]; locked?
         }
       }
     }} style={{ ...textButtonStyle, fontSize: fontSize.caption, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: `${space.xs}px ${space.sm}px`, background: color.canvas, opacity: disabled ? 0.5 : 1 }}>{stale ? `${action.label} · 需刷新` : action.label}</button>;
-  })}</div>;
+  })}
+  {actionError && <div role="alert" style={warningStyle}>{actionError}</div>}</div>;
 }
 
 function StepTimeline({ response }: { response: AgentResponse }) {

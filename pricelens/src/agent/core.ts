@@ -1,6 +1,6 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
 import { dimProduct, dimRegion, dimTime } from '../data';
-import { buildCards, clampMains, flatSelections } from '../state/mainSelection';
+import { buildCards, clampMains, flatSelections, remapSelectionForCountry, selKey } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
 import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, AgentSuggestionAction, AlertListResultCard, FilterPatch, FilterResultCard, ForecastContextInput } from './contracts';
@@ -10,8 +10,8 @@ import type { ForecastDraftInput } from './contracts';
 import { simpleDemoDataset as forecastFixture } from '../pages/forecast/forecastDatasetRegistry';
 import { createForecastSnapshot, type ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 import { provenanceSummary } from '../dataModel/provenance';
-import { buildPriceAdvantageResult, stateForPriceAdvantageCountry } from './priceAdvantage';
-export { buildPriceAdvantageResult, stateForPriceAdvantageCountry } from './priceAdvantage';
+import { buildPriceAdvantageResult, priceAdvantageCountryFallbackNote, stateForPriceAdvantageCountry } from './priceAdvantage';
+export { buildPriceAdvantageResult, priceAdvantageCountryFallbackNote, stateForPriceAdvantageCountry } from './priceAdvantage';
 
 const id = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const norm = (s: string): string => s.replace(/\s+/g, '').toLowerCase();
@@ -160,7 +160,8 @@ export function classifyIntent(text: string): AgentIntent {
  * 这个检查只作用于查询意图，不改变筛选预览、预警解释和演示预测的确定性流程。
  */
 export function clarificationReasonForQuery(text: string, state: FiltersState, entities = resolveAgentEntities(text, state)): string | null {
-  const hasSelectedProduct = state.mains.some((card) => Boolean(card.main));
+  // 坏载荷/调用方可能给出 mains:undefined——安全防御，不在此处崩
+  const hasSelectedProduct = (state.mains ?? []).some((card) => Boolean(card.main));
   const isForecast = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text);
   if (isForecast) return null;
   if (!entities.explicitProduct && !hasSelectedProduct) return '产品';
@@ -253,7 +254,7 @@ export function buildFilterCard(text: string, state: FiltersState): FilterResult
 }
 
 function selections(state: FiltersState): ProductSelection[] {
-  const { mainSels, compareSels } = flatSelections(state.mains);
+  const { mainSels, compareSels } = flatSelections(Array.isArray(state.mains) ? state.mains : []);
   return [...mainSels, ...compareSels];
 }
 
@@ -286,11 +287,24 @@ function latestWeekForRange(state: FiltersState): string {
 function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolution, allowDefaultOwn = false): FiltersState {
   let targetSelections = entities.selections;
   if (!entities.explicitProduct && entities.explicitCountry) {
-    targetSelections = selections(state).filter((selection) => dimProduct.some((row) => row.model_id === selection.modelId && norm(row.romram) === norm(selection.romram) && row.countries.includes(entities.countryCode)));
+    // R4（M2，同步稳定线四审）：跨国未点名产品必须保原型号重映射
+    // （remapSelectionForCountry：RU Mate X6 12+512 → ID 16+512），不能精确
+    // romram 过滤后丢型号、让看板落到默认主品（Mate 80 Pro）；映射合并按
+    // selKey 去重，型号整体缺席目标国时自然消失（后续走无数据结果，不冒充）。
+    const seen = new Set<string>();
+    targetSelections = [];
+    for (const selection of selections(state)) {
+      const remapped = remapSelectionForCountry(selection, entities.countryCode, state.industry);
+      if (!remapped) continue;
+      const key = selKey(remapped);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targetSelections.push(remapped);
+    }
   }
   if (!entities.explicitCountry && !entities.explicitProduct && !allowDefaultOwn) return state;
   if (!entities.explicitCountry && !entities.explicitProduct && allowDefaultOwn) {
-    if (state.mains.some((card) => card.main)) return state;
+    if ((state.mains ?? []).some((card) => card.main)) return state;
     const defaultModelId = dimRegion.find((region) => region.country_code === state.countryCode)?.default_own_models[state.industry];
     const defaultRows = dimProduct.filter((row) => row.industry === state.industry && row.is_own && row.countries.includes(state.countryCode) && (!defaultModelId || row.model_id === defaultModelId));
     const fallback = defaultRows[0] ?? dimProduct.find((row) => row.industry === state.industry && row.is_own && row.countries.includes(state.countryCode));
@@ -331,13 +345,25 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
     const scopeLabel = entities.explicitCountry || entities.explicitProduct
       ? `${entities.countryName}${entities.productLabels.length ? ` · ${entities.productLabels.join('、')}` : ''}`
       : '当前页面';
+    // R4（M1，同步稳定线四审）：回看类 open 动作携带生成该卡时的完整查询口径
+    // （国家、主品、平台、粒度、时间范围）——AE 页问「RU nova 14 Pro 价格趋势」，
+    // 回看必须落在 RU + nova，而不是让目标页回落 AE 旧口径。
+    const openPatch: FilterPatch = {
+      countryCode: queryState.countryCode,
+      mains: queryState.mains,
+      platform: queryState.platform,
+      granularity: queryState.granularity,
+      adaptive: queryState.adaptive,
+      rangeStart: queryState.rangeStart,
+      rangeEnd: queryState.rangeEnd,
+    };
     const chart = {
       kind: 'chart' as const,
       id: id('chart'),
       title: /最低|最便宜|平台/.test(text) ? `${scopeLabel}价格走势` : `${scopeLabel}价格走势摘要`,
       series: series.slice(0, 6).map((s) => ({ label: s.label, color: s.color, values: s.points.slice(-8).map((p) => ({ bucket: p.xLabel, value: p.price })) })),
       note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。`,
-      actions: [{ id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: '解释这组价格趋势的关键变化和需要核查的异常点' }, { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这组价格趋势定位回当前看板' }],
+      actions: [{ id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: '解释这组价格趋势的关键变化和需要核查的异常点' }, { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这组价格趋势定位回当前看板', filterPatch: openPatch }],
       evidence: [{ id: id('evidence'), label: '价格序列', detail: `${series.length} 条系列 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }],
     };
     const rows = series.slice(0, 8).map((s) => {
@@ -354,9 +380,9 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
       const latestWeek = latestWeekForRange(queryState);
       const spread = first ? platformPriceSpread(first.skuIds[0], latestWeek, queryState.countryCode, queryState.currency) : [];
       const lowest = spread[0]?.price ?? null;
-      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, item.price.toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0].platform}。` : '当前产品在最新有价周没有可比较的平台数据。', actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板` }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, item.price.toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0].platform}。` : '当前产品在最新有价周没有可比较的平台数据。', actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板`, filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台`, source: '统一价格聚合引擎' }] };
     } else {
-      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: '少于两个有效点时不计算环比；结果可回到看板继续下钻。', actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻' }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: '少于两个有效点时不计算环比；结果可回到看板继续下钻。', actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
     }
     return { cards: [chart, table], citations: [{ id: id('citation'), kind: 'calculation', label: '统一价格聚合引擎', detail: `${series.length} 条系列 · ${queryState.countryCode} · ${queryState.rangeStart}–${queryState.rangeEnd}` }], steps: [step('catalog.resolve', '解析产品与口径', `${query.groups.length} 个产品组`), step('series.query', '查询价格序列', `${series.length} 条系列`), step('series.compare', '计算变化', '已完成确定性计算')], summary: rows.length ? `已按${scopeLabel}整理 ${rows.length} 个产品的价格结果。` : '当前范围没有足够的价格数据。' };
   } catch {
@@ -589,7 +615,17 @@ export async function runAgent(
     const rangedState = stateWithRecentRange(context.state, text);
     const advState = entities.explicitCountry ? stateForPriceAdvantageCountry(rangedState, entities.countryCode) : rangedState;
     const result = buildPriceAdvantageResult(advState, context.fingerprint);
-    cards.push(result.card); summary = result.summary; steps = result.steps; citations = result.citations;
+    // R4（M2）：跨国请求的我司主品整体缺席目标国 → 安全回落默认主品，但必须在
+    // 结果卡与摘要里明确说明，不冒充用户原产品的比较。
+    const fallbackNote = entities.explicitCountry ? priceAdvantageCountryFallbackNote(rangedState, entities.countryCode) : null;
+    if (fallbackNote) {
+      cards.push({ ...result.card, note: `${result.card.note}${fallbackNote}` });
+      summary = `${result.summary}${fallbackNote}`;
+      steps = result.steps;
+      citations = result.citations;
+    } else {
+      cards.push(result.card); summary = result.summary; steps = result.steps; citations = result.citations;
+    }
   } else if (intent === 'price_alert') {
     const result = priceAlertList(text, context);
     cards.push(result.card); summary = result.summary; steps = result.steps; citations = result.citations;

@@ -115,6 +115,13 @@ export interface AgentCardAction {
    * instead of silently applying them to a different scope.
    */
   target?: AgentActionTarget;
+  /**
+   * R4（M1，同步稳定线四审）：open 类「回看板定位 / 定位到看板 / 回看板下钻」
+   * 必须携带生成该卡时的完整查询口径（countryCode、mains、platform、
+   * granularity、rangeStart/End）——跨页跨国查询（AE 页问 RU nova 趋势）回看
+   * 时先落地这套 patch 再导航，不能只发 prompt 文本让目标页回落旧口径。
+   */
+  filterPatch?: FilterPatch;
 }
 
 export type AgentSuggestionIntent = 'filter' | 'query' | 'compare' | 'evidence' | 'price_advantage' | 'price_alert' | 'clarify';
