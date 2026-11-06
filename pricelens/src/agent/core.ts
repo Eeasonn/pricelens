@@ -1,5 +1,8 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
+import { lawfulPlatformScope } from '../dataModel/platformScope';
 import { dimProduct, dimRegion, dimTime } from '../data';
+import { STABLE } from '../appChannel';
+import { platformLevelForChannel } from '../state/urlSync';
 import { buildCards, clampMains, flatSelections, remapSelectionForCountry, selKey, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
@@ -252,12 +255,19 @@ function selections(state: FiltersState): ProductSelection[] {
 }
 
 function seriesQueryOf(state: FiltersState): SeriesQuery | null {
+  // R5-M1：stable 看板取数每组 platform = 全局平台（PriceTrend 第196轮整改3
+  // 口径，店铺级经 platformLevelForChannel 降平台级）；Agent 趋势/平台查询必须
+  // 同口径，否则卡上数值与回看落地后的看板渠道集不同（如全局选 OZON 时卡按
+  // 全渠道自动算、落地却是 OZON）。iterate 保持每线覆写（现状不变）。
+  const stablePlatform = STABLE ? platformLevelForChannel(state.platform) : null;
   const groups = selections(state).map((selection) => ({
     modelId: selection.modelId,
     romram: selection.romram,
     skuIds: selection.skuIds,
     isOwn: selection.skuIds.some((sku) => dimProduct.find((p) => p.sku_id === sku)?.is_own),
-    platform: selection.platform ? { platforms: selection.platform.platforms, shopIds: selection.platform.shopIds, seller: selection.platform.seller } : null,
+    platform: STABLE
+      ? stablePlatform
+      : selection.platform ? { platforms: selection.platform.platforms, shopIds: selection.platform.shopIds, seller: selection.platform.seller } : null,
   }));
   if (!groups.length) return null;
   return { scope: { countryCode: state.countryCode, industry: state.industry }, groups, granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg };
@@ -293,7 +303,16 @@ interface EntityQueryPlan {
 
 function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolution): EntityQueryPlan {
   const notes: string[] = [];
-  if (!entities.explicitCountry && !entities.explicitProduct) return { state, notes };
+  // R5-M1：平台/店铺口径在进入任何实际取数前先归一到目标国合法范围（唯一
+  // 共享政策 lawfulPlatformScope，与 FiltersContext 落地校验同源）。跨国查询
+  // 沿用的旧国平台（AE 的 NOON 进 RU）剔除合法子集保留、全部非法回落未选
+  // 平台口径，并产出透明说明；同国合法选择幂等无说明。
+  const withLawfulPlatform = (queryState: FiltersState): FiltersState => {
+    const scope = lawfulPlatformScope(queryState.countryCode, queryState.platform);
+    if (scope.note) notes.push(scope.note);
+    return scope.platform === queryState.platform ? queryState : { ...queryState, platform: scope.platform };
+  };
+  if (!entities.explicitCountry && !entities.explicitProduct) return { state: withLawfulPlatform(state), notes };
   let targetSelections = entities.selections;
   if (!entities.explicitProduct && entities.explicitCountry) {
     const remapped: ProductSelection[] = [];
@@ -318,7 +337,7 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
     targetSelections = remapped;
   }
   const mains: MainProduct[] = targetSelections.map((selection, index) => ({ id: `agent-query-${index}`, main: selection, compares: [] }));
-  return { state: { ...state, countryCode: entities.countryCode, mains }, notes };
+  return { state: withLawfulPlatform({ ...state, countryCode: entities.countryCode, mains }), notes };
 }
 
 function stateForPriceAdvantage(state: FiltersState, entities: AgentEntityResolution): EntityQueryPlan {
@@ -610,7 +629,9 @@ function alertFilterPatch(alert: AgentAlertRecord, state: FiltersState): FilterP
   const selection = alertSelectionOf(alert, state);
   const patch: FilterPatch = {
     countryCode: state.countryCode,
-    platform: state.platform,
+    // R5-M1：预警跳转补丁同用 lawfulPlatformScope 归一（幂等；活态 state 本就
+    // 合法，防御陈旧/手工构造的非法口径），保证落地不被二次清改。
+    platform: lawfulPlatformScope(state.countryCode, state.platform).platform,
     granularity: 'week',
     adaptive: false,
     rangeStart: alert.weekId,
@@ -745,7 +766,14 @@ export async function runAgent(
       const plan = stateForPriceAdvantage(queryBase, entities);
       const result = buildPriceAdvantageResult(plan.state, context.fingerprint);
       if (result) {
-        cards.push(plan.notes.length ? { ...result.card, boundaries: [...plan.notes, ...(result.card.boundaries ?? [])] } : result.card);
+        // R5-M1：查询口径说明（含平台剔除说明）与卡内判断边界合并去重——同一条
+        // 说明（stateForEntityQuery 与 calculatePriceAdvantage 共用同一 helper）
+        // 不重复出现
+        const mergedBoundaries = [...plan.notes, ...(result.card.boundaries ?? [])];
+        const boundaries = mergedBoundaries.filter((line, index) => mergedBoundaries.indexOf(line) === index);
+        cards.push(boundaries.length !== (result.card.boundaries?.length ?? 0)
+          ? { ...result.card, boundaries }
+          : result.card);
         summary = result.summary;
         steps = result.steps;
         citations = result.citations;

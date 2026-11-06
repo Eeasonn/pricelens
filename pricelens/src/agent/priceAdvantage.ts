@@ -1,4 +1,5 @@
 import { buildSeries } from '../dataModel/aggregate';
+import { lawfulPlatformScope } from '../dataModel/platformScope';
 import { dimChannel, dimProduct, dimTime } from '../data';
 import { clampMains, flatSelections } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
@@ -70,11 +71,18 @@ function directionOf(gap: number): PriceAdvantageDirection {
  * author or replace these rows.
  */
 export function calculatePriceAdvantage(state: FiltersState, contextFingerprint = ''): PriceAdvantageResultCard | null {
+  // R5-M1：取数前先把平台/店铺口径归一到目标国合法范围（共享 lawfulPlatformScope，
+  // 与 FiltersContext.applyScopeDefaults 同一政策）。跨国查询沿用的旧国平台
+  //（如 AE 的 NOON 带进 RU）不再以空渠道集参与计算产出 0 行假空卡；归一结果
+  // 同步写进 scopePatch.platform——回看落地与计算同口径，跳转后再问同一问题
+  // 行数一致。剔除发生时在卡判断边界透明说明。
+  const platformScope = lawfulPlatformScope(state.countryCode, state.platform);
+  const scoped: FiltersState = platformScope.platform === state.platform ? state : { ...state, platform: platformScope.platform };
   const options: PriceAdvantageSkuOption[] = [];
   const seenOptions = new Set<string>();
   const rows: PriceAdvantageRow[] = [];
-  for (const platform of platformCandidates(state)) {
-    const query = stateGroups(state, platform);
+  for (const platform of platformCandidates(scoped)) {
+    const query = stateGroups(scoped, platform);
     if (!query) continue;
     const series = buildSeries(query);
     for (const main of state.mains) {
@@ -149,7 +157,10 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
       ? { granularity: 'week' as const, rangeStart: rows[rows.length - 1].weekId, rangeEnd: rows[0].weekId }
       : { granularity: state.granularity, rangeStart: state.rangeStart, rangeEnd: state.rangeEnd }),
     adaptive: false,
-    platform: state.platform,
+    // R5-M1：补丁平台 = 归一后的实际计算口径（不是原始 state.platform）——
+    // FiltersContext 落地用同一 lawfulPlatformScope 校验，合法即原样保留，
+    // 计算口径与回看口径不可能再分叉。
+    platform: platformScope.platform,
     // R4-M1 同口径补全：币种/价格类型/汇总参与计算，回看必须一并带回，
     // 否则「用 USD 重算的优势卡」回看落回本币口径，结果与卡脱节。
     currency: state.currency,
@@ -179,6 +190,8 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
     filter: 'all',
     note: rows.length ? `按 ${state.countryCode} × 渠道 × 周对齐折后价；我司更低记为占优，数字来自本地确定性价格引擎。占优 ${advantageCount} 条，落后 ${laggingCount} 条。` : '当前国家、渠道和时间范围没有同时具备我司与竞品价格事实的周。',
     boundaries: [
+      // R5-M1：平台/店铺口径剔除必须透明（如「NOON 在R国没有渠道」），放在判断边界首位
+      ...(platformScope.note ? [platformScope.note] : []),
       '仅统计同一周内我司与竞品都有有效折后价的对比；缺价周不插值、不外推。',
       '占优/落后只描述相对价位，不构成因果结论；促销与渠道快照需按证据逐条核对。',
     ],
