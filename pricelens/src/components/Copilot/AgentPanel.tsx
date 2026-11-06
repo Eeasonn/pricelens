@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   AudioOutlined,
   CheckOutlined,
@@ -56,12 +56,39 @@ function ContextChips() {
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '9px 16px', borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}>{chips.map((chip, index) => <span key={chip} style={{ fontSize: 11, color: index === 0 ? selectSoftInk : color.body, border: `1px solid ${index === 0 ? selectSoftInk : color.hairline}`, borderRadius: radius.pill, padding: '3px 8px', background: index === 0 ? selectSoft : color.canvas }}>{chip}</span>)}{contextStale && <span role="status" style={{ fontSize: 11, color: color.warningInk, border: `1px solid ${color.warning}`, borderRadius: radius.pill, padding: '3px 8px', background: color.warningSoft }}>上下文已更新 · 旧结果需重新确认</span>}</div>;
 }
 
-function EvidenceList({ evidence }: { evidence?: AgentEvidence[] }) {
-  if (!evidence?.length) return null;
-  return <details style={{ marginTop: 9, fontSize: 11, color: color.mute }}><summary style={{ cursor: 'pointer', color: color.body }}>证据与来源 · {evidence.length}</summary><div style={{ display: 'grid', gap: 5, marginTop: 6 }}>{evidence.map((item, index) => <div key={`${item.id ?? item.label}-${index}`} style={{ padding: '6px 8px', borderLeft: `2px solid ${color.hairlineStrong}`, background: color.canvas }}>{item.href ? <a href={item.href} target="_blank" rel="noreferrer" style={{ color: color.link }}>{item.label}</a> : <strong style={{ color: color.ink }}>{item.label}</strong>}<div>{item.detail}</div>{item.source && <div style={{ marginTop: 2, fontSize: 10, color: color.mute }}>来源：{item.source}{item.timestamp ? ` · ${item.timestamp}` : ''}</div>}</div>)}</div></details>;
+/**
+ * 证据区（B3 契约）：永远真实——来源状态、范围、采集/快照时间未知时明确
+ * 「待确认」；无证据写「暂无快照 · 待接入」，不渲染虚构链接或数字。
+ * revealSignal 由「查看证据」动作递增：原地展开并把焦点移到可聚焦标题。
+ */
+function EvidenceList({ evidence, revealSignal = 0 }: { evidence?: AgentEvidence[]; revealSignal?: number }) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  useEffect(() => {
+    if (!revealSignal) return;
+    const node = detailsRef.current;
+    if (!node) return;
+    node.open = true;
+    const summary = node.querySelector('summary');
+    if (summary instanceof HTMLElement) summary.focus();
+  }, [revealSignal]);
+  const items = evidence ?? [];
+  return <details ref={detailsRef} style={{ marginTop: 9, fontSize: 11, color: color.mute }}><summary tabIndex={0} style={{ cursor: 'pointer', color: color.body }}>证据与来源 · {items.length}</summary>{items.length
+    ? <div style={{ display: 'grid', gap: 5, marginTop: 6 }}>{items.map((item, index) => <div key={`${item.id ?? item.label}-${index}`} style={{ padding: '6px 8px', borderLeft: `2px solid ${color.hairlineStrong}`, background: color.canvas }}>{item.href ? <a href={item.href} target="_blank" rel="noreferrer" style={{ color: color.link }}>{item.label}</a> : <strong style={{ color: color.ink }}>{item.label}</strong>}<div>{item.detail}</div><div style={{ marginTop: 2, fontSize: 10, color: color.mute }}>来源：{item.source || '待确认'} · 快照：{item.timestamp || '待确认'}</div></div>)}</div>
+    : <div style={{ marginTop: 6, padding: '6px 8px', borderLeft: `2px solid ${color.hairlineStrong}`, background: color.canvas }}>暂无快照 · 待接入（无证据时不展示链接或数字）</div>}</details>;
 }
 
-function CardActions({ actions }: { actions?: AgentCardAction[] }) {
+/**
+ * B1 固定结构分节：结论在气泡文本，卡内按 事实 → 计算/规则 → 判断边界 →
+ * 动作 的顺序呈现；分节只做标签化，不引入新容器样式。
+ */
+function CardSection({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="lpl-agent-card-section" data-agent-card-section={label} style={{ marginTop: 9 }}>
+    <div style={{ fontSize: 10.5, fontWeight: 600, color: color.mute, marginBottom: 4 }}>{label}</div>
+    {children}
+  </div>;
+}
+
+function CardActions({ actions, onEvidence }: { actions?: AgentCardAction[]; onEvidence?: () => void }) {
   const { setDraft, send, context, applyFilter, undoFilter } = useAgent();
   const { go } = usePage();
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
@@ -74,6 +101,7 @@ function CardActions({ actions }: { actions?: AgentCardAction[] }) {
     const disabled = Boolean(action.disabled || (stale && !applied));
     return <button type="button" key={action.id} disabled={disabled} title={stale && !applied ? '当前筛选已变化，请重新运行 Agent' : undefined} aria-label={stale && !applied ? `${action.label}（当前口径已变化）` : action.label} onClick={() => {
       if (disabled) return;
+      if (action.kind === 'evidence') { onEvidence?.(); return; }
       if (action.kind === 'apply' && action.target?.filterPatch) {
         if (applied) {
           undoFilter();
@@ -120,7 +148,7 @@ function CardActions({ actions }: { actions?: AgentCardAction[] }) {
 function StepTimeline({ response }: { response: AgentResponse }) {
   if (!response) return null;
   return <details style={{ margin: '7px 0 10px', color: color.mute, fontSize: 11 }}>
-    <summary style={{ cursor: 'pointer', color: color.body }}>执行步骤 · {response.steps.filter((s) => s.status === 'success').length}/{response.steps.length} 完成</summary>
+    <summary tabIndex={0} style={{ cursor: 'pointer', color: color.body }}>执行步骤 · {response.steps.filter((s) => s.status === 'success').length}/{response.steps.length} 完成</summary>
     <div style={{ display: 'grid', gap: 5, marginTop: 7, paddingLeft: 4 }}>
       {response.steps.map((s) => <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ color: s.status === 'failed' ? color.error : s.status === 'warning' ? color.warning : color.link }}>{s.status === 'success' ? '✓' : s.status === 'warning' ? '!' : '×'}</span><span>{s.label}</span><span style={{ color: color.mute }}>· {s.detail}</span></div>)}
     </div>
@@ -131,7 +159,7 @@ function StepTimeline({ response }: { response: AgentResponse }) {
 function RunTimeline({ run }: { run: AgentRun | null }) {
   if (!run?.events.length) return null;
   return <details open={run.status !== 'completed'} style={{ margin: '7px 0 10px', color: color.mute, fontSize: 11 }}>
-    <summary style={{ cursor: 'pointer', color: color.body }}>运行活动 · {run.events.length} 条</summary>
+    <summary tabIndex={0} style={{ cursor: 'pointer', color: color.body }}>工具与运行活动 · {run.events.length} 条</summary>
     <div style={{ display: 'grid', gap: 5, marginTop: 7, paddingLeft: 4 }}>
       {run.events.slice(-8).map((event) => <div key={event.id} style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
         <span style={{ color: event.status === 'failed' ? color.error : event.status === 'completed' ? color.link : color.mute }}>•</span>
@@ -191,6 +219,7 @@ function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
   const [filterHistory, setFilterHistory] = useState<PriceAdvantageResultCard['filter'][]>([]);
   const [selectedSkuId, setSelectedSkuId] = useState(card.selectedSkuId ?? card.skuOptions[0]?.skuId);
   const [locatedRowId, setLocatedRowId] = useState<string | null>(null);
+  const [evidenceReveal, setEvidenceReveal] = useState(0);
   const stale = Boolean(card.target?.contextFingerprint && card.target.contextFingerprint !== context.fingerprint);
   const rows = card.rows.filter((row) => (filter === 'all' || row.direction === filter) && (!selectedSkuId || row.ownSkuId === selectedSkuId));
   const pushFilter = (next: PriceAdvantageResultCard['filter']) => {
@@ -230,12 +259,15 @@ function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
     </div>
     {card.skuOptions.length > 1 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8, alignItems: 'center' }}><span style={{ color: color.mute, fontSize: 11 }}>SKU</span>{card.skuOptions.map((option) => <button key={option.skuId} type="button" aria-pressed={selectedSkuId === option.skuId} onClick={() => setSelectedSkuId(option.skuId)} style={{ ...suggestionStyle, color: selectedSkuId === option.skuId ? selectSoftInk : color.body, background: selectedSkuId === option.skuId ? selectSoft : color.canvas }}>{option.label}</button>)}</div>}
     {stale && <div role="status" style={warningStyle}>当前筛选已变化，定位动作需重新运行价格优势。</div>}
-    <div style={{ overflowX: 'auto', marginTop: 9 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}><thead><tr>{['周', '渠道', '我司', '竞品', '价差', '方向', '定位'].map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-price-advantage-row={row.id} role="button" tabIndex={stale ? -1 : 0} aria-label={`定位 ${row.ownModelName} 与 ${row.competitorBrand} ${row.competitorModelName} ${row.weekId}`} onClick={() => locate(row)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); locate(row); } }} style={{ cursor: stale ? 'not-allowed' : 'pointer' }}>{[row.weekLabel, row.channel, formatPrice(row.ownPrice, card.currency), formatPrice(row.competitorPrice, card.currency), `${row.gap >= 0 ? '+' : ''}${formatPrice(row.gap, card.currency)}`, row.direction === 'advantage' ? '占优' : row.direction === 'lagging' ? '落后' : '持平'].map((cell, index) => <td key={`${row.id}-${index}`} style={{ ...tableCellStyle, color: index === 5 ? (row.direction === 'advantage' ? color.link : row.direction === 'lagging' ? color.error : color.body) : tableCellStyle.color }}>{cell}</td>)}<td style={tableCellStyle}><button type="button" disabled={stale} onClick={(event) => { event.stopPropagation(); locate(row); }} style={textButtonStyle}>看板</button></td></tr>)}</tbody></table></div>
-    {!rows.length && <div style={noteStyle}>当前 SKU 与筛选下没有同时具备我司和竞品价格事实。</div>}
-    <div style={noteStyle}>{card.note}</div>
+    <CardSection label="事实">
+      <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}><thead><tr>{['周', '渠道', '我司', '竞品', '价差', '方向', '定位'].map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-price-advantage-row={row.id} role="button" tabIndex={stale ? -1 : 0} aria-label={`定位 ${row.ownModelName} 与 ${row.competitorBrand} ${row.competitorModelName} ${row.weekId}`} onClick={() => locate(row)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); locate(row); } }} style={{ cursor: stale ? 'not-allowed' : 'pointer' }}>{[row.weekLabel, row.channel, formatPrice(row.ownPrice, card.currency), formatPrice(row.competitorPrice, card.currency), `${row.gap >= 0 ? '+' : ''}${formatPrice(row.gap, card.currency)}`, row.direction === 'advantage' ? '占优' : row.direction === 'lagging' ? '落后' : '持平'].map((cell, index) => <td key={`${row.id}-${index}`} style={{ ...tableCellStyle, color: index === 5 ? (row.direction === 'advantage' ? color.link : row.direction === 'lagging' ? color.error : color.body) : tableCellStyle.color }}>{cell}</td>)}<td style={tableCellStyle}><button type="button" disabled={stale} onClick={(event) => { event.stopPropagation(); locate(row); }} style={textButtonStyle}>看板</button></td></tr>)}</tbody></table></div>
+      {!rows.length && <div style={noteStyle}>当前 SKU 与筛选下没有同时具备我司和竞品价格事实。</div>}
+    </CardSection>
+    <CardSection label="计算与规则">{card.note}</CardSection>
+    {card.boundaries?.length ? <CardSection label="判断边界">{card.boundaries.map((item) => <div key={item} style={{ ...noteStyle, marginTop: 2 }}>· {item}</div>)}</CardSection> : null}
     {locatedRowId && <div style={{ ...noteStyle, color: color.link }}>已定位到看板 · <button type="button" onClick={undoFilter} style={textButtonStyle}>撤销定位</button></div>}
-    <EvidenceList evidence={card.evidence} />
-    <CardActions actions={card.actions} />
+    <EvidenceList evidence={card.evidence} revealSignal={evidenceReveal} />
+    <CardActions actions={card.actions} onEvidence={() => setEvidenceReveal((n) => n + 1)} />
   </div>;
 }
 
@@ -251,13 +283,14 @@ function ToolCallCardView({ card }: { card: ToolCallCard }) {
     {card.status === 'failed' && <button type="button" style={{ ...textButtonStyle, marginTop: 8 }} onClick={() => void send(card.tool === 'remote.agent' ? card.inputSummary : `重试工具 ${card.tool}`)}>重试此步骤</button>}
     {card.filterCard && <div style={actionRowStyle}><button type="button" style={textButtonStyle} onClick={() => { const result = applyFilter(card.filterCard!); setApplyError(result.ok ? null : result.error ?? '请重新生成预览'); }}>应用筛选</button><button type="button" style={textButtonStyle} onClick={undoFilter}>撤销恢复</button></div>}
     {applyError && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>应用失败：{applyError}</div>}
-    <details style={{ marginTop: 8, fontSize: 10.5, color: color.mute }}><summary style={{ cursor: 'pointer' }}>展开明细</summary><div style={{ marginTop: 5 }}>请求工具：{card.tool} · 状态：{card.status}{card.durationMs != null ? ` · 耗时 ${card.durationMs}ms` : ''}</div></details>
+    <details style={{ marginTop: 8, fontSize: 10.5, color: color.mute }}><summary tabIndex={0} style={{ cursor: 'pointer' }}>展开明细</summary><div style={{ marginTop: 5 }}>请求工具：{card.tool} · 状态：{card.status}{card.durationMs != null ? ` · 耗时 ${card.durationMs}ms` : ''}</div></details>
     <CardActions actions={card.actions} />
   </div>;
 }
 
 function AlertCard({ card }: { card: AlertResultCard }) {
   const { context } = useAgent();
+  const [evidenceReveal, setEvidenceReveal] = useState(0);
   const records = card.alerts?.length ? card.alerts : [card.alert];
   const alertSummary = (item: AlertResultCard['alert']): string => {
     if (item.gapPct != null) return `平台价差 ${(item.gapPct * 100).toFixed(1)}%`;
@@ -268,16 +301,21 @@ function AlertCard({ card }: { card: AlertResultCard }) {
   };
   return <div className="lpl-agent-result-card" style={{ ...cardStyle, borderColor: color.warning }}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.title}</span><span style={{ ...mutedBadge, color: color.warningInk, background: color.warningSoft }}>真实预警 · 可操作</span></div>
-    <div style={{ display: 'grid', gap: 5, marginTop: 8, fontSize: 12 }}>{card.facts.map((fact) => <div key={fact}>• {fact}</div>)}</div>
+    <CardSection label="事实">
+      <div style={{ display: 'grid', gap: 5, fontSize: 12 }}>{card.facts.map((fact) => <div key={fact}>• {fact}</div>)}</div>
+    </CardSection>
+    <CardSection label="计算与规则">
+      <div style={{ fontSize: 11, color: color.body }}>触发规则由本地预警引擎按当前阈值与折后价口径计算 · 规则版本 {card.alert.ruleVersion ?? '待确认'} · 数据 {card.alert.dataVersion ?? '待确认'}</div>
+    </CardSection>
     <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
       {records.map((item) => <details key={item.alertId ?? item.key} data-agent-alert-id={item.alertId ?? item.key} style={{ borderTop: `1px solid ${color.hairline}`, paddingTop: 7 }}>
-        <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: color.ink }}>
+        <summary tabIndex={0} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: color.ink }}>
           <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.brand} {item.modelName}</strong>
           <span style={{ color: color.body }}>{item.romram}</span>
           <span className="tnum" style={{ marginLeft: 'auto', color: color.mute }}>{item.weekId} · {alertSummary(item)}</span>
         </summary>
         <div style={{ display: 'grid', gap: 5, marginTop: 7, fontSize: 11, color: color.body }}>
-          <div>触发规则：{item.type} · 当前价 {formatPrice(item.price, context.state.currency)} · 数据 {item.dataVersion ?? 'local-data-v1'}</div>
+          <div>触发规则：{item.type} · 当前价 {formatPrice(item.price, context.state.currency)} · 数据 {item.dataVersion ?? '待确认'}</div>
           <div>状态：{item.lifecycle ?? 'new'} · 证据：{item.evidenceStatus === 'verified' ? '已核验' : item.evidenceStatus === 'missing' ? '缺失' : '部分覆盖'}</div>
           <EvidenceList evidence={item.evidence} />
           <CardActions actions={item.actions ?? card.actions} />
@@ -285,8 +323,9 @@ function AlertCard({ card }: { card: AlertResultCard }) {
       </details>)}
     </div>
     <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${color.hairline}`, fontSize: 11, color: color.body }}><strong style={{ color: color.ink }}>建议核查</strong>{card.checks.map((check) => <div key={check} style={{ marginTop: 4 }}>· {check}</div>)}</div>
-    <EvidenceList evidence={card.evidence} />
-    <CardActions actions={card.actions} />
+    {card.boundaries?.length ? <CardSection label="判断边界">{card.boundaries.map((item) => <div key={item} style={{ ...noteStyle, marginTop: 2 }}>· {item}</div>)}</CardSection> : null}
+    <EvidenceList evidence={card.evidence} revealSignal={evidenceReveal} />
+    <CardActions actions={card.actions} onEvidence={() => setEvidenceReveal((n) => n + 1)} />
   </div>;
 }
 
@@ -350,7 +389,7 @@ const cardTitleStyle: CSSProperties = { display: 'flex', justifyContent: 'space-
 const mutedBadge: CSSProperties = { fontSize: 10, fontWeight: 400, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '2px 6px', whiteSpace: 'nowrap' };
 const actionRowStyle: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 };
 const textButtonStyle: CSSProperties = { color: color.link, cursor: 'pointer', fontSize: 12 };
-const warningStyle: CSSProperties = { marginTop: 8, padding: '6px 8px', background: color.warningSoft, color: color.warningInk, fontSize: 11, borderRadius: 4 };
+const warningStyle: CSSProperties = { marginTop: 8, padding: '6px 8px', background: color.warningSoft, color: color.warningInk, fontSize: 11, borderRadius: radius.control };
 const noteStyle: CSSProperties = { marginTop: 8, color: color.mute, fontSize: 10.5, lineHeight: 1.45 };
 const tableHeadStyle: CSSProperties = { textAlign: 'left', color: color.mute, fontWeight: 500, padding: '4px 5px', borderBottom: `1px solid ${color.hairline}` };
 const tableCellStyle: CSSProperties = { padding: '5px', borderBottom: `1px solid ${color.hairline}`, whiteSpace: 'nowrap', color: color.body };
@@ -433,8 +472,8 @@ export default function AgentPanel() {
     <ContextChips />
     <div ref={scrollRef} role="log" aria-live="polite" aria-relevant="additions text" aria-busy={running} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px 20px', background: color.canvasSoft }}>
       {!messages.length && <div style={{ padding: '18px 4px 10px' }}><div style={{ fontSize: 20, fontWeight: 600, color: color.ink }}>问 PriceLens</div><p style={{ margin: '6px 0 16px', color: color.body, fontSize: 13 }}>在当前页面里查询价格、比较平台，或者解释预警。Agent 会先展示口径和证据，再给出结果。</p></div>}
-      {messages.map((message) => <div data-agent-message={message.id} key={message.id} style={{ marginBottom: 16, paddingLeft: message.role === 'assistant' ? 10 : 0, borderLeft: message.role === 'assistant' ? `2px solid ${color.link}` : 'none' }}><div style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}>{message.role === 'assistant' && <span style={{ alignSelf: 'flex-start', margin: '3px 6px 0 0', padding: '2px 6px', borderRadius: radius.pill, background: message.kind === 'proactive' ? color.warningSoft : color.canvas, color: message.kind === 'proactive' ? color.warningInk : color.link, fontSize: 10, whiteSpace: 'nowrap' }}>PriceLens · {messageKindLabel[message.kind ?? 'conversation']}</span>}<div style={{ maxWidth: '92%', padding: message.role === 'user' ? '8px 11px' : '0', background: message.role === 'user' ? color.ink : 'transparent', color: message.role === 'user' ? color.onPrimary : color.ink, borderRadius: message.role === 'user' ? '12px 12px 3px 12px' : 0, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{message.text}</div></div>{message.role === 'assistant' && (message.provider || message.response) && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}><ProviderBadge provider={message.provider ?? message.response?.provider} fallbackReason={message.fallbackReason} factGuard={message.response?.factGuard} simulated={message.response?.provenance?.source?.includes('simulated') || message.response?.cards.some((card) => card.kind === 'forecast_explanation' && card.dataStatus === 'simulated')} />{message.response && <span style={{ fontSize: 10, color: color.mute }}>事实来源：本地确定性引擎 · 远端叙述：{message.response.provider?.name ?? '本地确定性'}</span>}</div>}{message.kind === 'proactive' && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{message.alert && <span className="tnum" style={{ fontSize: 11, color: color.mute }}>优先级 {message.alert.priority ?? '—'} · {message.alert.weekId} · {formatPrice(message.alert.price, context.state.currency)}</span>}<button type="button" onClick={() => { if (message.alert) navBus.alertsFocus = { alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint, modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName, seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId }; go('alerts'); }} style={textButtonStyle}>查看预警</button><button type="button" onClick={() => { if (message.alert) navBus.dashboardFocusWeekId = message.alert.weekId; go('dashboard'); }} style={textButtonStyle}>回看板</button><button type="button" onClick={() => { const prompt = '解释最新预警并列出触发事实、证据关联和下一步核查动作'; setDraft(prompt); void send(prompt); }} style={textButtonStyle}>让 Agent 解释</button></div>}{message.kind === 'error' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试</button>}{message.contextFingerprint && message.contextFingerprint !== context.fingerprint && <div role="status" style={{ marginTop: 4, fontSize: 10.5, color: color.warningInk }}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}{message.partialText && !message.response && <div aria-live="polite" style={{ marginTop: 7, whiteSpace: 'pre-wrap' }}>{message.partialText}</div>}{message.partialCards?.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}{message.response && <><StepTimeline response={message.response} />{message.response.cards.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}<Citations response={message.response} /><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>{message.response.suggestions.map((suggestion) => { const label = suggestionLabel(suggestion); const prompt = suggestionPrompt(suggestion); return <button type="button" key={label} onClick={() => { setDraft(prompt); void send(prompt, undefined, undefined, suggestionIntent(suggestion)); }} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' }}>{label}</button>; })}</div></>}</div>)}
-      {running && <div role="status" aria-live="polite" aria-atomic="true" style={{ color: color.mute, fontSize: 12 }}><div className="lpl-agent-skeleton" aria-hidden="true"><span /><span /><span /></div><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><LoadingOutlined spin /> {AGENT_STATUS_LABELS[runStatus] ?? '生成结果中…'}</span></div>}
+      {messages.map((message) => <div data-agent-message={message.id} key={message.id} style={{ marginBottom: 16, paddingLeft: message.role === 'assistant' ? 10 : 0, borderLeft: message.role === 'assistant' ? `2px solid ${color.link}` : 'none' }}><div style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}>{message.role === 'assistant' && <span style={{ alignSelf: 'flex-start', margin: '3px 6px 0 0', padding: '2px 6px', borderRadius: radius.pill, background: message.kind === 'proactive' ? color.warningSoft : color.canvas, color: message.kind === 'proactive' ? color.warningInk : color.link, fontSize: 10, whiteSpace: 'nowrap' }}>PriceLens · {messageKindLabel[message.kind ?? 'conversation']}</span>}<div style={{ maxWidth: '92%', padding: message.role === 'user' ? '8px 11px' : '0', background: message.role === 'user' ? color.ink : 'transparent', color: message.role === 'user' ? color.onPrimary : color.ink, borderRadius: message.role === 'user' ? '12px 12px 3px 12px' : 0, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{message.text}</div></div>{message.role === 'assistant' && (message.provider || message.response) && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}><ProviderBadge provider={message.provider ?? message.response?.provider} fallbackReason={message.fallbackReason} factGuard={message.response?.factGuard} simulated={message.response?.provenance?.source?.includes('simulated') || message.response?.cards.some((card) => card.kind === 'forecast_explanation' && card.dataStatus === 'simulated')} />{message.response && <span style={{ fontSize: 10, color: color.mute }}>事实来源：本地确定性引擎 · 远端叙述：{message.response.provider?.name ?? '本地确定性'}</span>}</div>}{message.kind === 'proactive' && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{message.alert && <span className="tnum" style={{ fontSize: 11, color: color.mute }}>优先级 {message.alert.priority ?? '—'} · {message.alert.weekId} · {formatPrice(message.alert.price, context.state.currency)}</span>}<button type="button" onClick={() => { if (message.alert) navBus.alertsFocus = { alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint, modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName, seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId }; go('alerts'); }} style={textButtonStyle}>查看预警</button><button type="button" onClick={() => { if (message.alert) navBus.dashboardFocusWeekId = message.alert.weekId; go('dashboard'); }} style={textButtonStyle}>回看板</button><button type="button" onClick={() => { const prompt = '解释最新预警并列出触发事实、证据关联和下一步核查动作'; setDraft(prompt); void send(prompt); }} style={textButtonStyle}>让 Agent 解释</button></div>}{message.kind === 'error' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试</button>}{message.kind === 'system' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试本次查询</button>}{message.contextFingerprint && message.contextFingerprint !== context.fingerprint && <div role="status" style={{ marginTop: 4, fontSize: 10.5, color: color.warningInk }}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}{message.partialText && !message.response && <div aria-live="polite" style={{ marginTop: 7, whiteSpace: 'pre-wrap' }}>{message.partialText}</div>}{message.partialCards?.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}{message.response && <><StepTimeline response={message.response} />{message.response.cards.map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}<Citations response={message.response} /><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>{message.response.suggestions.map((suggestion) => { const label = suggestionLabel(suggestion); const prompt = suggestionPrompt(suggestion); return <button type="button" key={label} onClick={() => { setDraft(prompt); void send(prompt, undefined, undefined, suggestionIntent(suggestion)); }} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' }}>{label}</button>; })}</div></>}</div>)}
+      {running && <div role="status" aria-live="polite" aria-atomic="true" style={{ color: color.mute, fontSize: 12 }}><div className="lpl-agent-skeleton" aria-hidden="true"><span /><span /><span /></div><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><LoadingOutlined spin /> {AGENT_STATUS_LABELS[runStatus] ?? '生成结果中…'}</span><button type="button" onClick={stop} style={{ ...textButtonStyle, marginLeft: 8 }}>取消本次调用</button></div>}
       <RunTimeline run={activeRun} />
     </div>
     {!messages.length && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 10px', background: color.canvasSoft }}>{suggestions.map((suggestion) => { const label = suggestionLabel(suggestion); const prompt = suggestionPrompt(suggestion); return <button type="button" key={label} onClick={() => void send(prompt, undefined, undefined, suggestionIntent(suggestion))} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '5px 8px', cursor: 'pointer' }}>{label}</button>; })}</div>}
@@ -442,4 +481,4 @@ export default function AgentPanel() {
   </aside>;
 }
 
-const iconButtonStyle: CSSProperties = { width: 28, height: 28, display: 'inline-grid', placeItems: 'center', border: `1px solid ${color.hairline}`, borderRadius: 5, background: color.canvas, color: color.body, cursor: 'pointer' };
+const iconButtonStyle: CSSProperties = { width: 28, height: 28, display: 'inline-grid', placeItems: 'center', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas, color: color.body, cursor: 'pointer' };

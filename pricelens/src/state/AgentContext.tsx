@@ -308,6 +308,14 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     runSequence.current += 1;
     controller.current?.abort();
     controller.current = null;
+    // 取消后在途占位消息落成显式「已取消」状态（保留 prompt 供一键重试）；
+    // runSequence 已自增，catch 分支不会再覆盖这条消息。
+    const cancelledMessageId = activeMessageId.current;
+    if (cancelledMessageId) {
+      setMessages((prev) => prev.map((message) => message.id === cancelledMessageId && !message.response
+        ? { ...message, text: '已取消这次查询。', partialText: undefined, kind: 'system', unread: true }
+        : message));
+    }
     // 立刻允许下一次提问；被取消的旧响应由 runSequence 丢弃。
     setRunning(false);
     setRunStatus('cancelled');

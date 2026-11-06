@@ -3,7 +3,7 @@ import { dimChannel, dimProduct, dimTime } from '../data';
 import { flatSelections } from '../state/mainSelection';
 import type { FiltersState, ProductSelection } from '../state/filtersTypes';
 import type { Series, SeriesQuery } from '../dataModel/types';
-import type { AgentActionTarget, AgentStep, PriceAdvantageDirection, PriceAdvantageResultCard, PriceAdvantageRow, PriceAdvantageSkuOption } from './contracts';
+import type { AgentActionTarget, AgentCardAction, AgentStep, PriceAdvantageDirection, PriceAdvantageResultCard, PriceAdvantageRow, PriceAdvantageSkuOption } from './contracts';
 
 export interface PriceAdvantageResult {
   card: PriceAdvantageResultCard;
@@ -130,6 +130,16 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
   const advantageCount = rows.filter((row) => row.direction === 'advantage').length;
   const laggingCount = rows.filter((row) => row.direction === 'lagging').length;
   const target: AgentActionTarget = { page: 'dashboard', contextFingerprint };
+  const actions: AgentCardAction[] = [
+    // 三个药丸动作都绑定真实能力：open=保留上下文跳页，evidence=卡内展开证据。
+    { id: 'price-advantage-open', label: '回看价格走势', kind: 'open', prompt: '把价格优势对比定位回价格走势看板', target },
+    { id: 'price-advantage-alerts', label: '打开价格预警', kind: 'open', prompt: '打开价格预警中心', target: { page: 'alerts', contextFingerprint } },
+    { id: 'price-advantage-evidence', label: '查看证据', kind: 'evidence' },
+  ];
+  if (!rows.length) {
+    // 空结果不给死按钮：给出可执行的调整范围追问（重跑仍是只读查询）。
+    actions.push({ id: 'price-advantage-adjust-range', label: '调整范围 · 最近 12 周', kind: 'followup', prompt: '用最近 12 周重新计算价格优势' });
+  }
   return {
     kind: 'price_advantage',
     id: `price-advantage-${contextFingerprint || state.countryCode}`,
@@ -141,7 +151,11 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
     selectedSkuId: options[0]?.skuId,
     filter: 'all',
     note: rows.length ? `按 ${state.countryCode} × 渠道 × 周对齐折后价；我司更低记为占优，数字来自本地确定性价格引擎。占优 ${advantageCount} 条，落后 ${laggingCount} 条。` : '当前国家、渠道和时间范围没有同时具备我司与竞品价格事实的周。',
-    actions: [{ id: 'price-advantage-open', label: '回看板定位', kind: 'open', prompt: '把价格优势对比定位回看板', target }],
+    boundaries: [
+      '仅统计同一周内我司与竞品都有有效折后价的对比；缺价周不插值、不外推。',
+      '占优/落后只描述相对价位，不构成因果结论；促销与渠道快照需按证据逐条核对。',
+    ],
+    actions,
     evidence: [{ id: 'price-advantage-facts', label: '价格事实', detail: `${rows.length} 条国家 × 渠道 × 周对比 · ${state.rangeStart}–${state.rangeEnd}`, source: '统一价格聚合引擎' }],
     target,
   };

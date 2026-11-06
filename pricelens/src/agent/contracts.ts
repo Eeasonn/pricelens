@@ -105,7 +105,12 @@ export interface ApprovalRequest {
 export interface AgentCardAction {
   id: string;
   label: string;
-  kind: 'apply' | 'open' | 'followup' | 'copy';
+  /**
+   * 'evidence' 只在卡内原地展开证据区（只读、不跳转、不受上下文过期禁用）；
+   * 其余 kind 保持原有语义：apply=open+filterPatch、open=真实导航、
+   * followup=带回当前上下文的追问、copy=复制提示词。
+   */
+  kind: 'apply' | 'open' | 'followup' | 'copy' | 'evidence';
   prompt?: string;
   disabled?: boolean;
   /**
@@ -305,6 +310,8 @@ export interface PriceAdvantageResultCard {
   selectedSkuId?: string;
   filter: 'all' | 'advantage' | 'lagging';
   note: string;
+  /** 判断边界（B1 固定结构）：对比覆盖口径与不推断因果的声明；缺省时 UI 不渲染该节。 */
+  boundaries?: string[];
   actions?: AgentCardAction[];
   evidence?: AgentEvidence[];
   target?: AgentActionTarget;
@@ -319,6 +326,8 @@ export interface AlertResultCard {
   alerts?: AgentAlertRecord[];
   facts: string[];
   checks: string[];
+  /** 判断边界（B1 固定结构）：规则触发不等于因果、订阅覆盖范围等口径声明。 */
+  boundaries?: string[];
   evidence?: AgentEvidence[];
   actions?: AgentCardAction[];
 }

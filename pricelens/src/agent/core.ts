@@ -304,6 +304,10 @@ function noDataResult(entities: AgentEntityResolution, state: FiltersState): { c
   const table: AgentResultCard = {
     kind: 'table', id: id('table'), title: '目标查询结果', columns: ['产品', '国家', '结果'], rows,
     note: '已按请求的国家和产品查询；当前数据集没有可用的价格事实，因此没有沿用原看板产品代替。',
+    actions: [
+      // 空结果也给真实可执行动作：回到当前页面所选产品重新查（只读）。
+      { id: id('action'), label: '调整范围 · 当前页面产品', kind: 'followup', prompt: '查看当前页面所选产品的价格趋势' },
+    ],
   };
   return {
     cards: [table],
@@ -572,7 +576,15 @@ function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: Fil
     alerts: records,
     facts: [`${alert.weekLabel}（${alert.weekId}）触发${alert.type}规则`, `折后价${direction}`, alert.gapPct != null ? `平台价差为 ${(alert.gapPct * 100).toFixed(1)}%` : '当前事件没有平台价差字段'],
     checks: ['核对促销记录与商品页面快照', '对比其他平台是否同步变化', '确认是否为单平台的短期变化'],
+    boundaries: [
+      '预警是规则触发的确定性结果，不推断唯一因果；价格变化原因需按证据核查。',
+      `覆盖范围限于当前预警订阅与 ${state.countryCode} / 当前渠道口径。`,
+    ],
     evidence: alert.evidence?.length ? alert.evidence : [{ id: id('evidence'), label: '预警事件', detail: `${alert.brand} ${alert.modelName} · ${alert.weekId}`, source: '预警中心事件流' }],
+    actions: [
+      { id: id('action'), label: '查看证据', kind: 'evidence' },
+      { id: id('action'), label: '打开价格预警', kind: 'open', prompt: '打开价格预警中心', target: alertTarget(alert, state, 'alerts') },
+    ],
   };
   // Keep each row independently actionable; the first record remains on the
   // legacy `alert` field for consumers that only understand one alert.
@@ -608,6 +620,7 @@ export async function runAgent(
   let summary = '';
   let steps: AgentStep[] = [];
   let citations: AgentResponse['citations'] = [];
+  let suggestions: AgentResponse['suggestions'] = CORE_SUGGESTIONS;
   if (intent === 'filter') {
     const card = buildFilterCard(text, context.state);
     if (card) cards.push(card);
@@ -643,6 +656,13 @@ export async function runAgent(
         ? '我可以继续查，但需要先确认时间范围。请指定最近几周/几个月，或直接说最新有价周。'
         : '你可以让我查询价格走势、比较平台价差、解释预警，或先生成筛选预览。';
     steps = [step('catalog.resolve', '识别问题', clarificationReason ? `需要补充${clarificationReason}` : '需要选择一个分析方向', 'warning')];
+    // 上下文不足要给出能直接补齐口径的动作（context-insufficient 可操作），
+    // 追问提示词都通过 clarificationReasonForQuery 预检，避免再落入 clarify。
+    suggestions = clarificationReason === '产品'
+      ? [suggestion('补齐产品 · 当前我司产品', '查看当前我司产品价格趋势', 'query', 'query'), ...CORE_SUGGESTIONS]
+      : clarificationReason === '时间范围'
+        ? [suggestion('补齐时间 · 最近 8 周', '查看最近 8 周的价格趋势', 'query', 'query'), ...CORE_SUGGESTIONS]
+        : CORE_SUGGESTIONS;
   }
   return {
     intent,
@@ -650,7 +670,7 @@ export async function runAgent(
     steps,
     cards: scopeCardActions(cards, { page: context.page, contextFingerprint: context.fingerprint }),
     citations,
-    suggestions: CORE_SUGGESTIONS,
+    suggestions,
     contextFingerprint: context.fingerprint,
     provenance: context.provenance ?? {
       source: 'local-deterministic',
