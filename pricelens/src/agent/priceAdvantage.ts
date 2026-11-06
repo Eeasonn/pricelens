@@ -132,7 +132,6 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
   const target: AgentActionTarget = { page: 'dashboard', contextFingerprint };
   // R5：跨国自然语言查询（如在 AE 页问 RU 价格优势）的跳页动作必须携带该卡
   // 计算时的请求国家/范围，回看时切到请求国家再打开对应页，而不是跳回旧国家。
-  // 范围优先取实际参与对比的周（rows 已按周倒序），空结果回退计算口径。
   // 二轮返修：只带国家/范围不够——回看 patch 还必须携带计算该卡的完整主品/SKU
   // 口径（我司主卡的 SKU、对比区与 auto 标记；auto 卡对比区由 Filters 侧按目标
   // 国矩阵重算）与参与计算的平台口径，否则跨国 switchScope 会把主品重置成
@@ -142,13 +141,15 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
     .map((card) => ({ ...card, main: { ...card.main }, compares: card.compares.map((compare) => ({ ...compare })) })));
   const scopePatch: FilterPatch = {
     countryCode: state.countryCode,
-    granularity: 'week',
+    // R3（三轮返修 m2）：粒度与范围桶必须同形——有对比行时按实际参与对比的周
+    //（rows 已按周倒序）给真实周桶 + 周粒度；空结果回退原状态口径时保持原粒度
+    // 与原桶（季粒度 2025Q1–2025Q2 的空卡回看不得变成 week + 2025Q1 的错配）。
+    ...(rows.length
+      ? { granularity: 'week' as const, rangeStart: rows[rows.length - 1].weekId, rangeEnd: rows[0].weekId }
+      : { granularity: state.granularity, rangeStart: state.rangeStart, rangeEnd: state.rangeEnd }),
     adaptive: false,
     platform: state.platform,
     ...(scopeMains.length ? { mains: scopeMains } : {}),
-    ...(rows.length
-      ? { rangeStart: rows[rows.length - 1].weekId, rangeEnd: rows[0].weekId }
-      : { rangeStart: state.rangeStart, rangeEnd: state.rangeEnd }),
   };
   const actions: AgentCardAction[] = [
     // 三个药丸动作都绑定真实能力：open=保留上下文跳页，evidence=卡内展开证据。

@@ -30,8 +30,10 @@ const panelWidth = 440;
  * 不一致的消息（AgentMessage.staleMismatch）渲染结果卡时，所有有副作用/导航/
  * 改筛选动作（apply/open/followup/copy 及行级定位）一律禁用，仅原地只读
  * evidence 豁免；建议词条不锁（发起的是全新运行，正是修复动作）。
+ * R3（三轮返修 m3）：applied 撤销/重做、工具卡撤销恢复、定位撤销同样消费本
+ * Context——导出给回归测试直接验证锁定态（组件本身仍是内部实现）。
  */
-const CardActionsLockedContext = createContext(false);
+export const CardActionsLockedContext = createContext(false);
 const suggestionStyle: CSSProperties = { padding: '4px 7px', border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, color: color.body, cursor: 'pointer', fontSize: 11, textAlign: 'left' };
 const suggestionLabel = (item: string | { label: string }): string => typeof item === 'string' ? item : item.label;
 const suggestionPrompt = (item: string | { prompt: string }): string => typeof item === 'string' ? item : item.prompt;
@@ -185,7 +187,7 @@ function RunTimeline({ run }: { run: AgentRun | null }) {
   </details>;
 }
 
-function FilterCard({ card }: { card: FilterResultCard }) {
+export function FilterCard({ card }: { card: FilterResultCard }) {
   const { appliedFilterIds, applyFilter, canUndo, undoFilter, canRedo, redoFilter, setDraft } = useAgent();
   const actionsLocked = useContext(CardActionsLockedContext);
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -197,7 +199,10 @@ function FilterCard({ card }: { card: FilterResultCard }) {
     </div>
     {card.warning && <div style={warningStyle}>{card.warning}</div>}
     <div style={actionRowStyle}>
-      {applied ? <><span style={{ color: color.link, fontSize: 12 }}><CheckOutlined /> 已应用</span>{canUndo && <button type="button" onClick={undoFilter} style={textButtonStyle}><UndoOutlined /> 撤销</button>}{canRedo && <button type="button" onClick={redoFilter} style={textButtonStyle}><RedoOutlined /> 重做</button>}</> : <><Button size="small" type="primary" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { const result = applyFilter(card); setApplyError(result.ok ? null : result.error ?? '当前筛选无法应用，请重新生成预览。'); }}>应用到看板</Button><Button size="small" onClick={() => setDraft(card.prompt ?? '')}>继续修改</Button></>}
+      {/* R3（三轮返修 m3）：applied 态的撤销/重写同样是副作用动作（改回全局筛选），
+          锁定消息上一并禁用 + 回调守卫——appliedFilterIds 全局共享，同 id 卡可能
+          在早前未锁消息上应用过、随后出现在锁定消息里，不能只信「锁定即未应用」。 */}
+      {applied ? <><span style={{ color: color.link, fontSize: 12 }}><CheckOutlined /> 已应用</span>{canUndo && <button type="button" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={actionsLocked} onClick={() => { if (actionsLocked) return; undoFilter(); }} style={{ ...textButtonStyle, opacity: actionsLocked ? 0.5 : 1, cursor: actionsLocked ? 'not-allowed' : 'pointer' }}><UndoOutlined /> 撤销</button>}{canRedo && <button type="button" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={actionsLocked} onClick={() => { if (actionsLocked) return; redoFilter(); }} style={{ ...textButtonStyle, opacity: actionsLocked ? 0.5 : 1, cursor: actionsLocked ? 'not-allowed' : 'pointer' }}><RedoOutlined /> 重做</button>}</> : <><Button size="small" type="primary" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { const result = applyFilter(card); setApplyError(result.ok ? null : result.error ?? '当前筛选无法应用，请重新生成预览。'); }}>应用到看板</Button><Button size="small" onClick={() => setDraft(card.prompt ?? '')}>继续修改</Button></>}
     </div>
     {applyError && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>应用失败：{applyError}</div>}
     <EvidenceList evidence={card.evidence} />
@@ -234,7 +239,7 @@ function ChartCard({ card }: { card: ChartResultCard }) {
   </div>;
 }
 
-function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
+export function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
   const { applyFilter, undoFilter, context } = useAgent();
   const { go } = usePage();
   const actionsLocked = useContext(CardActionsLockedContext);
@@ -290,13 +295,14 @@ function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard }) {
     </CardSection>
     <CardSection label="计算与规则">{card.note}</CardSection>
     {card.boundaries?.length ? <CardSection label="判断边界">{card.boundaries.map((item) => <div key={item} style={{ ...noteStyle, marginTop: 2 }}>· {item}</div>)}</CardSection> : null}
-    {locatedRowId && <div style={{ ...noteStyle, color: color.link }}>已定位到看板 · <button type="button" onClick={undoFilter} style={textButtonStyle}>撤销定位</button></div>}
+    {/* R3（三轮返修 m3）：撤销定位 = 改回全局筛选的副作用动作，锁定消息上禁用 + 回调守卫 */}
+    {locatedRowId && <div style={{ ...noteStyle, color: color.link }}>已定位到看板 · <button type="button" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={actionsLocked} onClick={() => { if (actionsLocked) return; undoFilter(); }} style={{ ...textButtonStyle, opacity: actionsLocked ? 0.5 : 1, cursor: actionsLocked ? 'not-allowed' : 'pointer' }}>撤销定位</button></div>}
     <EvidenceList evidence={card.evidence} revealSignal={evidenceReveal} />
     <CardActions actions={card.actions} onEvidence={() => setEvidenceReveal((n) => n + 1)} />
   </div>;
 }
 
-function ToolCallCardView({ card }: { card: ToolCallCard }) {
+export function ToolCallCardView({ card }: { card: ToolCallCard }) {
   const { send, applyFilter, undoFilter } = useAgent();
   const actionsLocked = useContext(CardActionsLockedContext);
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -307,7 +313,9 @@ function ToolCallCardView({ card }: { card: ToolCallCard }) {
     {card.outputSummary && <div style={{ marginTop: 4, fontSize: 11, color: color.body }}>输出：{card.outputSummary}</div>}
     {card.error && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>工具失败：{card.error}</div>}
     {card.status === 'failed' && <button type="button" style={{ ...textButtonStyle, marginTop: 8 }} onClick={() => void send(card.tool === 'remote.agent' ? card.inputSummary : `重试工具 ${card.tool}`)}>重试此步骤</button>}
-    {card.filterCard && <div style={actionRowStyle}><button type="button" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} style={{ ...textButtonStyle, opacity: actionsLocked ? 0.5 : 1 }} onClick={() => { const result = applyFilter(card.filterCard!); setApplyError(result.ok ? null : result.error ?? '请重新生成预览'); }}>应用筛选</button><button type="button" style={textButtonStyle} onClick={undoFilter}>撤销恢复</button></div>}
+    {/* R3（三轮返修 m3）：撤销恢复 = undoFilter 的全局副作用，锁定消息上与应用筛选
+        同等禁用 + 回调守卫，不再裸挂 onClick */}
+    {card.filterCard && <div style={actionRowStyle}><button type="button" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={actionsLocked} style={{ ...textButtonStyle, opacity: actionsLocked ? 0.5 : 1, cursor: actionsLocked ? 'not-allowed' : 'pointer' }} onClick={() => { if (actionsLocked) return; const result = applyFilter(card.filterCard!); setApplyError(result.ok ? null : result.error ?? '请重新生成预览'); }}>应用筛选</button><button type="button" disabled={actionsLocked} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={actionsLocked} onClick={() => { if (actionsLocked) return; undoFilter(); }} style={{ ...textButtonStyle, opacity: actionsLocked ? 0.5 : 1, cursor: actionsLocked ? 'not-allowed' : 'pointer' }}>撤销恢复</button></div>}
     {applyError && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>应用失败：{applyError}</div>}
     <details style={{ marginTop: 8, fontSize: 10.5, color: color.mute }}><summary tabIndex={0} style={{ cursor: 'pointer' }}>展开明细</summary><div style={{ marginTop: 5 }}>请求工具：{card.tool} · 状态：{card.status}{card.durationMs != null ? ` · 耗时 ${card.durationMs}ms` : ''}</div></details>
     <CardActions actions={card.actions} />

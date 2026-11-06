@@ -30,7 +30,7 @@ import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache } from '../components/ProductCascader/tree';
-import { clampMains, autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
+import { clampMains, autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, remapMainsForScope, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -338,8 +338,12 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
 /** 口径切换（国家/产业变化）+ 按国快照：切走前把当前整套产品卡存该国会话快照；
  *  目的国存在本会话快照且仍有效（产品在新口径有数据）时恢复快照而非重算默认卡——
  *  高频的国家来回切换不再静默清空用户搭好的选择。快照会话级（关页即清），
- *  不跨会话复活旧选择。 */
-function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
+ *  不跨会话复活旧选择。
+ *  R3（三轮返修 M1b）：explicitMains = 调用方补丁自身显式携带非空 mains
+ *  （Agent 结果卡跨国回看/定位的 filterPatch、undo/redo 整态快照）；普通 UI
+ *  换国补丁不带 mains，next.mains 只是旧状态继承，不得按显式口径对待——
+ *  否则 RU→DE→RU 会把 DE 的默认主品当成 RU 的显式选择，丢掉 RU 快照。 */
+function switchScope(prev: FiltersState, next: FiltersState, explicitMains: boolean): FiltersState {
   // 快照键含产业维度：纯产业切换同样要保住「回切后还原」，键只按国会把
   // 当前产业的卡覆盖进该国快照，回切时校验不过即永久丢卡
   const snapKeyOf = (cc: string, industry: string) => `${LPL.filters}.mainsOf.${cc}.${industry}`;
@@ -350,14 +354,24 @@ function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
   } catch {
     /* 存储不可用时跳过快照，走默认重算 */
   }
-  // R5（二轮返修）：调用方随口径切换显式传入一整套 mains（Agent 结果卡跨国
-  // 回看/定位携带计算口径），且它们在目标国+产业整体有效时，这套口径优先——
-  // 直接保留，不落入「目标国会话快照恢复 / 默认主品重算」，否则回看会被静默
-  // 重置成目标国第一默认主品，与结果卡脱节。auto 卡对比区仍按目标国矩阵重算
-  // （applyScopeDefaults 末尾 withAutoOn，先同步数据层缺省国家），手动对比区
-  // 原样随行。
-  if (next.mains.length > 0 && mainsValidFor(next.mains, next.countryCode, next.industry)) {
-    return applyScopeDefaults(next, false);
+  // R5（二轮返修）+ R3 M1a：调用方随口径切换显式传入一整套 mains（Agent 结果
+  // 卡跨国回看/定位携带计算口径）时，这套口径优先——先整组合法化：精确合法
+  // 配置原样保留，同型号配置/SKU 在目标国不存在时映射到该国首个合法配置
+  // （RU Mate X6 12+512 → ID 16+512），型号整体缺席的卡剔除；全部缺席回落
+  // 默认/快照。合法化后的口径同时更新目标国快照（其后普通切走/切回按这套
+  // 口径还原）。auto 卡对比区仍按目标国矩阵重算（applyScopeDefaults 末尾
+  // withAutoOn，先同步数据层缺省国家），手动对比区只保留目标国仍合法条目。
+  if (explicitMains && next.mains.length > 0) {
+    const remapped = remapMainsForScope(next.mains, next.countryCode, next.industry);
+    if (remapped) {
+      try {
+        sessionStorage.setItem(snapKeyOf(next.countryCode, next.industry), JSON.stringify({ mains: remapped }));
+      } catch {
+        /* 存储不可用时跳过快照更新 */
+      }
+      return applyScopeDefaults({ ...next, mains: remapped }, false);
+    }
+    // 型号整体缺席 → 默认安全回落（下方快照恢复 / 默认重算路径）
   }
   const applied = applyScopeDefaults(next, true);
   try {
@@ -366,8 +380,8 @@ function switchScope(prev: FiltersState, next: FiltersState): FiltersState {
       const snap = JSON.parse(raw) as { mains: unknown };
       const mains = isMainProductArray(snap.mains) ? snap.mains : null;
       // 空数组也是合法快照：还原空态而非回落重算默认卡；非空快照仍须整组在新
-      // 口径有效。mainsValidFor 对空数组返回 false 的既有语义不动（读档重算
-      // 判定还依赖它），此处单独放行空快照
+      // 口径有效（R3 M1a 起含配置/SKU 校验）。mainsValidFor 对空数组返回 false
+      // 的既有语义不动（读档重算判定还依赖它），此处单独放行空快照
       if (mains && (!mains.length || mainsValidFor(mains, applied.countryCode, applied.industry))) {
         return { ...applied, mains: mains.map((c) => (c.auto && c.main ? withAutoOn(c) : c)) };
       }
@@ -557,7 +571,12 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           const scopeChanged =
             (patch.countryCode != null && patch.countryCode !== s.countryCode) ||
             (patch.industry != null && patch.industry !== s.industry);
-          return scopeChanged ? switchScope(s, next) : next;
+          if (!scopeChanged) return next;
+          // R3 M1b：补丁自身显式携带非空 mains（Agent filterPatch / undo 快照）
+          // 才按显式口径走 switchScope；普通 UI 换国不带 mains，继承的
+          // next.mains 不得冒充显式选择
+          const explicitMains = Array.isArray(patch.mains) && patch.mains.length > 0;
+          return switchScope(s, next, explicitMains);
         }),
 
       /** 回到默认视图（含数据默认主分析卡 + 其配置对比区）。直接从默认态重建，

@@ -12,6 +12,7 @@ import type { MainProduct, ProductSelection } from './filtersTypes';
 export type { MainProduct, ProductSelection };
 import { groupsFromBenchmark } from './configStore';
 import { defaultColorSkuIds, modelIdOf, type RomramNode } from '../components/ProductCascader/tree';
+import { lowestPriceColorSku } from '../dataModel/aggregate';
 
 /** 一张图（合并图 = 唯一主品卡；分离模式 = 某张面板卡）同时展示的折线数上限。
  *  上限前移到选择时（modal 配额），呈现层不再截断。 */
@@ -62,10 +63,19 @@ export function isHuaweiModel(modelId: string): boolean {
   return dimProduct.some((p) => modelIdOf(p) === modelId && p.is_own);
 }
 
-/** 勾选组在该国该产业仍有效（切口径后判定重算默认） */
+/** 勾选组在该国该产业仍有效（切口径后判定重算默认）。
+ *  R3（三轮返修 M1a）：型号在该国之外，配置（romram）与 SKU 也必须在目标国
+ *  真实存在——只校验型号会把 RU 的 Mate X6 12+512GB 原样带进只有 16+512GB
+ *  的 ID，留下合法型号下的非法 SKU / 空看板。skuIds 为空 = 整配置口径
+ *  （buildSeries 会展开该配置全部颜色行），配置在该国有行即有效；非空则
+ *  任一颜色 SKU 在目标国存在才算有效。 */
 export function selectionValidFor(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): boolean {
   return dimProduct.some(
-    (p) => p.model_id === sel.modelId && p.industry === industry && p.countries.includes(countryCode),
+    (p) => p.model_id === sel.modelId
+      && p.industry === industry
+      && p.countries.includes(countryCode)
+      && norm(p.romram) === norm(sel.romram)
+      && (sel.skuIds.length === 0 || sel.skuIds.includes(p.sku_id)),
   );
 }
 
@@ -74,6 +84,64 @@ export function mainsValidFor(mains: MainProduct[], countryCode: string, industr
   const sels = mains.map((m) => m.main).filter((s): s is ProductSelection => s != null);
   if (!sels.length) return false;
   return sels.every((sel) => selectionValidFor(sel, countryCode, industry));
+}
+
+/** 型号在目标国的首个合法配置：配置名升序遍历，取该国「最新有价周最低折后价
+ *  颜色」的 SKU（与 computeDataDefaults 默认卡同口径）。型号在该国无任何
+ *  有价配置 = null。R3（M1a）：URL 链接携带的配置在目标国不存在（RU 12+512
+ *  链接进 ID）时按此落到同型号该国首个合法配置（ID 16+512GB）。 */
+export function firstLegalSelectionOfModel(modelId: string, countryCode: string): ProductSelection | null {
+  const rows = dimProduct.filter((p) => modelIdOf(p) === modelId && p.countries.includes(countryCode));
+  if (!rows.length) return null;
+  const romrams = [...new Set(rows.map((p) => p.romram))].sort();
+  for (const romram of romrams) {
+    const skuId = lowestPriceColorSku(modelId, romram, countryCode);
+    if (skuId) return { modelId, romram, skuIds: [skuId] };
+  }
+  return null;
+}
+
+/** 勾选组跨口径映射（R3 M1a，显式口径切换专用）：精确合法配置原样保留；
+ *  配置/SKU 在目标国不存在但型号仍在 → 同型号该国首个合法配置（颜色尽量
+ *  沿用同色名，缺失回落最低价色）；型号整体缺席 = null（调用方回落默认）。 */
+export function remapSelectionForCountry(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): ProductSelection | null {
+  if (selectionValidFor(sel, countryCode, industry)) return sel;
+  const modelInCountry = dimProduct.some(
+    (p) => p.model_id === sel.modelId && p.industry === industry && p.countries.includes(countryCode),
+  );
+  if (!modelInCountry) return null;
+  // 精确配置优先：原配置在目标国有价则只换 SKU，配置名不漂移
+  const keepRomram = lowestPriceColorSku(sel.modelId, sel.romram, countryCode) != null ? sel.romram : null;
+  const romram = keepRomram ?? firstLegalSelectionOfModel(sel.modelId, countryCode)?.romram;
+  if (romram == null) return null;
+  const oldColors = new Set(
+    dimProduct.filter((p) => sel.skuIds.includes(p.sku_id) && p.color && p.color !== '—')
+      .map((p) => p.color.toLowerCase()),
+  );
+  const sameColor = dimProduct.find(
+    (p) => modelIdOf(p) === sel.modelId && norm(p.romram) === norm(romram)
+      && p.countries.includes(countryCode) && p.color && p.color !== '—' && oldColors.has(p.color.toLowerCase()),
+  );
+  const skuId = sameColor?.sku_id ?? lowestPriceColorSku(sel.modelId, romram, countryCode);
+  return skuId ? { modelId: sel.modelId, romram, skuIds: [skuId] } : null;
+}
+
+/** 显式携带的主分析卡整组合法化（R3 M1a）：主品逐卡按 remapSelectionForCountry
+ *  映射（同型号保留/换合法配置），型号整体缺席的卡剔除；手动对比区只保留目标国
+ *  仍合法的条目（自动匹配卡对比区由调用方按目标国矩阵重算）；空对卡原样保留。
+ *  返回 null = 没有任何卡能落在目标国（型号全缺席），调用方回落默认/快照。 */
+export function remapMainsForScope(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): MainProduct[] | null {
+  const out: MainProduct[] = [];
+  for (const card of mains) {
+    if (!card.main) {
+      out.push({ ...card, compares: card.compares.filter((sel) => selectionValidFor(sel, countryCode, industry)) });
+      continue;
+    }
+    const main = remapSelectionForCountry(card.main, countryCode, industry);
+    if (!main) continue;
+    out.push({ ...card, main, compares: card.compares.filter((sel) => selectionValidFor(sel, countryCode, industry)) });
+  }
+  return out.length ? clampMains(out) : null;
 }
 
 /** 主品卡的自动匹配对比区：对标矩阵（主竞品在前）→
