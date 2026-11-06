@@ -26,6 +26,7 @@ import { useAgent } from '../../state/AgentContext';
 import { buildCards } from '../../state/mainSelection';
 import { dimProduct } from '../../data';
 import { INDUSTRY_LABELS } from '../../dataModel/scope';
+import { platformSelectionForCountry } from '../../dataModel/aggregate';
 import { usePage } from '../../state/PageContext';
 import { navBus } from '../../state/navBus';
 import type { AgentCardAction, AgentEvidence, AgentIntent, AgentResponse, AgentResultCard, AgentRun, AgentStep, AlertListResultCard, AlertResultCard, ChartResultCard, FilterResultCard, ForecastExplanationResultCard, PriceAdvantageResultCard, PriceAdvantageRow, TableResultCard, AgentSuggestionAction } from '../../agent';
@@ -284,7 +285,9 @@ function AdvantageCard({ card, locked }: { card: PriceAdvantageResultCard; locke
       id: `advantage-focus-${row.id}`,
       title: '定位价格优势',
       contextFingerprint: context.fingerprint,
-      patch: { countryCode: row.countryCode, platform: row.platform ? { platforms: [row.platform], shopIds: [], seller: null } : context.state.platform, granularity: 'week', adaptive: false, rangeStart: row.weekId, rangeEnd: row.weekId, mains: buildCards([row.ownSelection], { auto: true, countryCode: row.countryCode }) },
+      // R5（M1）：行无渠道信息回退全局平台口径时，按行所在国过共享规则归一化
+      // （源国不可落地平台落地即回落目标国默认电渠），与计算口径一致。
+      patch: { countryCode: row.countryCode, platform: row.platform ? { platforms: [row.platform], shopIds: [], seller: null } : platformSelectionForCountry(context.state.platform, row.countryCode), granularity: 'week', adaptive: false, rangeStart: row.weekId, rangeEnd: row.weekId, mains: buildCards([row.ownSelection], { auto: true, countryCode: row.countryCode }) },
       changes: [],
     });
     if (!result.ok) { setActionError(result.error); return; }

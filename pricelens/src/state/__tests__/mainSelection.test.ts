@@ -438,14 +438,21 @@ describe('remapMainsForScope（R4-m1：映射合并按 selKey 去重 / 对比区
     expect(selKey(out![0].main!)).toBe(selKey(idSel));
   });
 
-  it('映射后对比区只保留目标国仍合法的条目；空对卡原样保留', () => {
+  it('映射后对比区逐条合法化、去重并排除与主品同组（R4-S1：compare 不重复占线）；空对卡原样保留', () => {
+    // compare#1 = 与主品同组的 RU 12+512（映射后与主品同 selKey）、compare#2 = ID 16+512
+    // （主品映射后也是 16+512 → 同组剔除）、compare#3 = 主品缺席国仍合法的第三方型号
+    const legalThird = dimProduct.find((p) => p.model_id !== mateX6 && p.industry === 'phone' && p.countries.includes('ID'))!;
+    const thirdSel: ProductSelection = { modelId: legalThird.model_id, romram: legalThird.romram, skuIds: [legalThird.sku_id] };
     const mains: MainProduct[] = [
-      { id: 'card-a', main: ruSel, compares: [ruSel, idSel] },
+      { id: 'card-a', main: ruSel, compares: [ruSel, idSel, thirdSel] },
       { id: 'card-empty', main: null, compares: [idSel] },
     ];
     const out = remapMainsForScope(mains, 'ID', 'phone')!;
     expect(out.length).toBe(2);
-    expect(out[0].compares.map((c) => c.skuIds[0])).toEqual([id16.sku_id]);
+    // 与重映射后主品同组的 compare（含显式传入的 16+512）一律剔除，不留重复占线
+    expect(out[0].compares.map((c) => selKey(c))).toEqual([selKey(thirdSel)]);
+    expect(out[0].main).not.toBeNull();
+    expect(selKey(out[0].main!)).toBe(selKey(idSel));
     expect(out[1].main).toBeNull();
     expect(out[1].compares.length).toBe(1);
     expect(selectionValidFor(out[1].compares[0], 'ID', 'phone')).toBe(true);

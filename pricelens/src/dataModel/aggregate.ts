@@ -217,6 +217,22 @@ export function platformSelectionValidFor(countryCode: string, platform: Platfor
   );
 }
 
+/** R5-M1（目标国可落地平台归一化 · 计算与落地共用的共享规则）：平台勾选按目标国
+ *  渠道表逐项过滤——整平台勾选须在该国在架，店铺（渠道）勾选须属于该国；有任一
+ *  可落地部分则保留该子集（同国 RU+OZON 等有效平台与 shopIds 原样保留，不整体
+ *  清空），全部不可落地 = null（回落目标国默认电渠，绝不解析成空渠道集导致取价
+ *  全空）。完全可落地时返回原引用（调用方可用 === 判定「未发生归一化」）。
+ *  seller 仅在其所属渠道保留时随行。 */
+export function platformSelectionForCountry(platform: PlatformQuery | null | undefined, countryCode: string): PlatformQuery | null {
+  if (!platform) return null;
+  const platforms = platform.platforms.filter((p) => dimChannel.some((c) => c.country_code === countryCode && c.platform === p));
+  const shopIds = platform.shopIds.filter((id) => channelById.get(id)?.country_code === countryCode);
+  if (!platforms.length && !shopIds.length) return null;
+  if (platforms.length === platform.platforms.length && shopIds.length === platform.shopIds.length) return platform;
+  const seller = platform.seller != null && shopIds.length === 1 && shopIds[0] === platform.shopIds[0] ? platform.seller : null;
+  return { platforms, shopIds, seller };
+}
+
 /** 取价店铺文案：渠道显示名（如 "DNS 独立站"）+ 具体店铺（有意义时） */
 function shopLabelOf(row: FactPriceWeekly): string {
   const ch = channelById.get(row.channel_id);

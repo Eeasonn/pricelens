@@ -138,15 +138,32 @@ export function remapSelectionForCountry(sel: ProductSelection, countryCode: str
 
 /** 显式携带的主分析卡整组合法化（R2 M1a）：主品逐卡按 remapSelectionForCountry
  *  映射（同型号保留/换合法配置），型号整体缺席的卡剔除；映射后按 selKey 去重
- *  （R4-m1：两张卡重映射到同型号同配置时合并为一卡，不留重复占线）；手动对比区
- *  只保留目标国仍合法的条目（自动匹配卡对比区由调用方按目标国矩阵重算）；空对卡
- *  原样保留。返回 null = 没有任何卡能落在目标国（型号全缺席），调用方回落默认/快照。 */
+ *  （R4-m1：两张卡重映射到同型号同配置时合并为一卡，不留重复占线）；空对卡
+ *  原样保留。返回 null = 没有任何卡能落在目标国（型号全缺席），调用方回落默认/快照。
+ *  R4-S1（同步稳定线 5f5898d）：手动对比区同样逐条合法化（逐 SKU 过滤 / 配置
+ *  漂移同型号映射 / 型号缺席剔除），按 selKey 去重并排除与所在卡主品同组的条目
+ *  （重映射后 compare 与 main 落到同型号同配置时不再重复占线），对比区封
+ *  COMPARES_PER_CARD_CAP（clampMains 收口）；自动匹配卡对比区由调用方按目标国
+ *  矩阵重算。 */
 export function remapMainsForScope(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): MainProduct[] | null {
   const out: MainProduct[] = [];
   const seen = new Set<string>();
+  const sanitizeCompares = (compares: ProductSelection[], mainKey?: string): ProductSelection[] => {
+    const legal: ProductSelection[] = [];
+    const seenCompare = new Set<string>();
+    for (const sel of compares) {
+      const mapped = remapSelectionForCountry(sel, countryCode, industry);
+      if (!mapped) continue;
+      const key = selKey(mapped);
+      if (seenCompare.has(key) || key === mainKey) continue;
+      seenCompare.add(key);
+      legal.push(mapped);
+    }
+    return legal;
+  };
   for (const card of mains) {
     if (!card.main) {
-      out.push({ ...card, compares: card.compares.filter((sel) => selectionValidFor(sel, countryCode, industry)) });
+      out.push({ ...card, compares: sanitizeCompares(card.compares) });
       continue;
     }
     const main = remapSelectionForCountry(card.main, countryCode, industry);
@@ -154,7 +171,7 @@ export function remapMainsForScope(mains: MainProduct[], countryCode: string, in
     const key = selKey(main);
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ ...card, main, compares: card.compares.filter((sel) => selectionValidFor(sel, countryCode, industry)) });
+    out.push({ ...card, main, compares: sanitizeCompares(card.compares, key) });
   }
   return out.length ? clampMains(out) : null;
 }

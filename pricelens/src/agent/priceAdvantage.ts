@@ -1,4 +1,4 @@
-import { buildSeries } from '../dataModel/aggregate';
+import { buildSeries, platformSelectionForCountry } from '../dataModel/aggregate';
 import { dimProduct, dimRegion, dimTime } from '../data';
 import { autoComparesFor, buildCards, clampMains, remapSelectionForCountry, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
@@ -78,15 +78,20 @@ function step(tool: AgentStep['tool'], label: string, detail: string, status: Ag
  * 精确 romram 过滤后丢型号、让引擎落到目标国默认主品（Mate 80 Pro）；目标国
  * 整体缺型号（型号全部缺席）才清空 mains 安全回落该国默认主品，且结果必须
  * 明确说明（priceAdvantageCountryFallbackNote）。
+ * R5（M1，同步稳定线五审）：跨国时平台勾选同样经共享规则
+ * platformSelectionForCountry 归一化到目标国可落地范围——源国平台（AE · NOON）
+ * 在目标国（RU）不存在时，计算前就回落目标国默认电渠，而不是带着 NOON 过滤
+ * 出 0 行、点回看才被 FiltersContext 清空；同国有效平台与 shopIds 原样保留。
  */
 export function stateForPriceAdvantageCountry(state: FiltersState, countryCode: string): FiltersState {
   if (countryCode === state.countryCode) return state;
+  const platform = platformSelectionForCountry(state.platform, countryCode);
   const ownMains = (state.mains ?? []).flatMap((card) => (card.main && isOwn(card.main) ? [card.main] : []));
-  if (!ownMains.length) return { ...state, countryCode, mains: [] };
+  if (!ownMains.length) return { ...state, countryCode, platform, mains: [] };
   const remapped = ownMains
     .map((selection) => remapSelectionForCountry(selection, countryCode, state.industry))
     .filter((selection): selection is ProductSelection => selection != null);
-  return { ...state, countryCode, mains: remapped.length ? buildCards(remapped, { auto: true, countryCode }) : [] };
+  return { ...state, countryCode, platform, mains: remapped.length ? buildCards(remapped, { auto: true, countryCode }) : [] };
 }
 
 /** R4（M2）：跨国请求的我司主品全部不在目标国在架（型号整体缺席）时的显式
@@ -101,6 +106,24 @@ export function priceAdvantageCountryFallbackNote(state: FiltersState, countryCo
   const labels = [...new Set(ownMains.map((selection) => modelLabel(selection).modelName))];
   const targetName = dimRegion.find((region) => region.country_code === countryCode)?.country_name ?? countryCode;
   return `请求的我司主品（${labels.join('、')}）在${targetName}均无在架型号，已回落到${targetName}默认主品口径。`;
+}
+
+/** R5（M1，同步稳定线五审）：跨国平台归一化发生实际回退（不可落地部分被剔除或
+ *  整体回落默认电渠）时的透明说明——只陈述事实：哪些勾选在目标国没有在架渠道、
+ *  本次按什么口径计算，不冒称原平台在目标国有价格。完全可落地 / 未勾平台 =
+ *  null（无回退事实，不产生说明）。 */
+export function platformCountryFallbackNote(platform: FiltersState['platform'], countryCode: string): string | null {
+  if (!platform) return null;
+  const normalized = platformSelectionForCountry(platform, countryCode);
+  if (normalized === platform) return null;
+  const raw = [...platform.platforms, ...platform.shopIds];
+  if (!raw.length) return null;
+  const targetName = dimRegion.find((region) => region.country_code === countryCode)?.country_name ?? countryCode;
+  if (!normalized) {
+    return `平台口径 ${raw.join('、')} 在${targetName}没有在架渠道，本次已按${targetName}默认电渠口径计算；不代表其在${targetName}有价格。`;
+  }
+  const kept = [...normalized.platforms, ...normalized.shopIds];
+  return `平台口径已按${targetName}可落地范围归一：${raw.join('、')}中不在${targetName}在架渠道的部分已剔除，本次仅按${kept.join('、')}计算。`;
 }
 
 export interface PriceAdvantageResult {
@@ -124,14 +147,17 @@ function focusCardsOfRow(row: PriceAdvantageRow): MainProduct[] {
  *  平台口径与实际参与对比的周范围。粒度与范围桶必须同形：有对比行时按实际
  *  参与对比的周（rows 已按周倒序）给真实周桶 + 周粒度；空结果回退原状态口径时
  *  保持原粒度与原桶（季粒度 2025Q1–2025Q2 的空卡回看不得变成 week + 2025Q1
- *  的错配）。空结果不带 mains——跨国回看由目标国快照 / 默认卡安全落地。 */
+ *  的错配）。空结果不带 mains——跨国回看由目标国快照 / 默认卡安全落地。
+ *  R5（M1）：平台与计算同口径——按行所在国（空结果 = 原状态国）过共享规则
+ *  platformSelectionForCountry 归一化，源国不可落地平台（AE · NOON → RU）落地
+ *  即回落目标国默认电渠，不让 FiltersContext 事后清出与计算不一致的口径。 */
 export function advantageScopePatch(state: FiltersState, rows: PriceAdvantageRow[]): FilterPatch {
   const earliest = rows[rows.length - 1];
   const latest = rows[0];
   if (!rows.length || !earliest || !latest) {
     return {
       countryCode: state.countryCode,
-      platform: state.platform,
+      platform: platformSelectionForCountry(state.platform, state.countryCode),
       adaptive: false,
       granularity: state.granularity,
       rangeStart: state.rangeStart,
@@ -140,7 +166,7 @@ export function advantageScopePatch(state: FiltersState, rows: PriceAdvantageRow
   }
   return {
     countryCode: latest.countryCode,
-    platform: state.platform,
+    platform: platformSelectionForCountry(state.platform, latest.countryCode),
     adaptive: false,
     granularity: 'week',
     rangeStart: earliest.weekId,

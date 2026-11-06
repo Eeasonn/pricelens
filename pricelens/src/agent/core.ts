@@ -1,17 +1,17 @@
-import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
+import { buildSeries, lowestPriceColorSku, platformPriceSpread, platformSelectionForCountry } from '../dataModel/aggregate';
 import { dimProduct, dimRegion, dimTime } from '../data';
 import { buildCards, clampMains, flatSelections, remapSelectionForCountry, selKey } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
-import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, AgentSuggestionAction, AlertListResultCard, FilterPatch, FilterResultCard, ForecastContextInput } from './contracts';
+import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, AgentSuggestionAction, AlertListResultCard, FilterResultCard, FilterPatch, ForecastContextInput } from './contracts';
 import { contextFingerprint } from './contracts';
 import { BASELINE_DRAFT, type ForecastDataset, type ScenarioDraft } from '../pages/forecast/forecastModel';
 import type { ForecastDraftInput } from './contracts';
 import { simpleDemoDataset as forecastFixture } from '../pages/forecast/forecastDatasetRegistry';
 import { createForecastSnapshot, type ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 import { provenanceSummary } from '../dataModel/provenance';
-import { buildPriceAdvantageResult, priceAdvantageCountryFallbackNote, stateForPriceAdvantageCountry } from './priceAdvantage';
-export { buildPriceAdvantageResult, priceAdvantageCountryFallbackNote, stateForPriceAdvantageCountry } from './priceAdvantage';
+import { buildPriceAdvantageResult, platformCountryFallbackNote, priceAdvantageCountryFallbackNote, stateForPriceAdvantageCountry } from './priceAdvantage';
+export { buildPriceAdvantageResult, platformCountryFallbackNote, priceAdvantageCountryFallbackNote, stateForPriceAdvantageCountry } from './priceAdvantage';
 
 const id = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const norm = (s: string): string => s.replace(/\s+/g, '').toLowerCase();
@@ -312,7 +312,11 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
     targetSelections = [{ modelId: fallback.model_id, romram: fallback.romram, skuIds: [lowestPriceColorSku(fallback.model_id, fallback.romram, state.countryCode, state.currency) ?? fallback.sku_id] }];
   }
   const mains: MainProduct[] = targetSelections.map((selection, index) => ({ id: `agent-query-${index}`, main: selection, compares: [] }));
-  return { ...state, countryCode: entities.countryCode, mains };
+  // R5（M1，同步稳定线五审）：跨国查询的平台勾选同样经共享规则归一化到目标国
+  // 可落地范围——源国平台（AE · NOON）在目标国（RU）不存在时计算前就回落目标
+  // 国默认电渠，不再带着不可落地平台过滤出空结果；同国有效平台与 shopIds
+  // 原样保留（platformSelectionForCountry 完全可落地时返回原引用）。
+  return { ...state, countryCode: entities.countryCode, platform: platformSelectionForCountry(state.platform, entities.countryCode), mains };
 }
 
 function noDataResult(entities: AgentEntityResolution, state: FiltersState): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
@@ -357,12 +361,15 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
       rangeStart: queryState.rangeStart,
       rangeEnd: queryState.rangeEnd,
     };
+    // R5（M1，同步稳定线五审）：跨国平台归一化发生回退（stateForEntityQuery 已按
+    // 目标国归一）时，在卡片与摘要透明说明回退事实，不冒称源国平台在目标国有价。
+    const platformNote = platformCountryFallbackNote(state.platform, queryState.countryCode);
     const chart = {
       kind: 'chart' as const,
       id: id('chart'),
       title: /最低|最便宜|平台/.test(text) ? `${scopeLabel}价格走势` : `${scopeLabel}价格走势摘要`,
       series: series.slice(0, 6).map((s) => ({ label: s.label, color: s.color, values: s.points.slice(-8).map((p) => ({ bucket: p.xLabel, value: p.price })) })),
-      note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。`,
+      note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。${platformNote ?? ''}`,
       actions: [{ id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: '解释这组价格趋势的关键变化和需要核查的异常点' }, { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这组价格趋势定位回当前看板', filterPatch: openPatch }],
       evidence: [{ id: id('evidence'), label: '价格序列', detail: `${series.length} 条系列 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }],
     };
@@ -380,11 +387,11 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
       const latestWeek = latestWeekForRange(queryState);
       const spread = first ? platformPriceSpread(first.skuIds[0], latestWeek, queryState.countryCode, queryState.currency) : [];
       const lowest = spread[0]?.price ?? null;
-      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, item.price.toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0].platform}。` : '当前产品在最新有价周没有可比较的平台数据。', actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板`, filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, item.price.toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0].platform}。${platformNote ?? ''}` : `当前产品在最新有价周没有可比较的平台数据。${platformNote ?? ''}`, actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板`, filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台`, source: '统一价格聚合引擎' }] };
     } else {
-      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: '少于两个有效点时不计算环比；结果可回到看板继续下钻。', actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: `少于两个有效点时不计算环比；结果可回到看板继续下钻。${platformNote ?? ''}`, actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
     }
-    return { cards: [chart, table], citations: [{ id: id('citation'), kind: 'calculation', label: '统一价格聚合引擎', detail: `${series.length} 条系列 · ${queryState.countryCode} · ${queryState.rangeStart}–${queryState.rangeEnd}` }], steps: [step('catalog.resolve', '解析产品与口径', `${query.groups.length} 个产品组`), step('series.query', '查询价格序列', `${series.length} 条系列`), step('series.compare', '计算变化', '已完成确定性计算')], summary: rows.length ? `已按${scopeLabel}整理 ${rows.length} 个产品的价格结果。` : '当前范围没有足够的价格数据。' };
+    return { cards: [chart, table], citations: [{ id: id('citation'), kind: 'calculation', label: '统一价格聚合引擎', detail: `${series.length} 条系列 · ${queryState.countryCode} · ${queryState.rangeStart}–${queryState.rangeEnd}` }], steps: [step('catalog.resolve', '解析产品与口径', `${query.groups.length} 个产品组`), step('series.query', '查询价格序列', `${series.length} 条系列`), step('series.compare', '计算变化', '已完成确定性计算')], summary: rows.length ? `已按${scopeLabel}整理 ${rows.length} 个产品的价格结果。${platformNote ?? ''}` : `当前范围没有足够的价格数据。${platformNote ?? ''}` };
   } catch {
     return { cards: [], citations: [], steps: [step('series.query', '查询价格序列', '价格引擎返回异常', 'failed')], summary: '价格数据暂时无法读取，请刷新后重试。' };
   }
@@ -617,10 +624,15 @@ export async function runAgent(
     const result = buildPriceAdvantageResult(advState, context.fingerprint);
     // R4（M2）：跨国请求的我司主品整体缺席目标国 → 安全回落默认主品，但必须在
     // 结果卡与摘要里明确说明，不冒充用户原产品的比较。
-    const fallbackNote = entities.explicitCountry ? priceAdvantageCountryFallbackNote(rangedState, entities.countryCode) : null;
-    if (fallbackNote) {
-      cards.push({ ...result.card, note: `${result.card.note}${fallbackNote}` });
-      summary = `${result.summary}${fallbackNote}`;
+    // R5（M1）：跨国平台勾选不可落地（stateForPriceAdvantageCountry 已归一）同样
+    // 在结果卡与摘要透明说明回退事实，不冒称源国平台在目标国有价。
+    const fallbackNotes = [
+      entities.explicitCountry ? priceAdvantageCountryFallbackNote(rangedState, entities.countryCode) : null,
+      entities.explicitCountry ? platformCountryFallbackNote(rangedState.platform, entities.countryCode) : null,
+    ].filter((note): note is string => note != null).join('');
+    if (fallbackNotes) {
+      cards.push({ ...result.card, note: `${result.card.note}${fallbackNotes}` });
+      summary = `${result.summary}${fallbackNotes}`;
       steps = result.steps;
       citations = result.citations;
     } else {

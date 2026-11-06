@@ -183,16 +183,23 @@ describe('t428u R3 M1b · 普通 UI 换国（补丁不带 mains）', () => {
     expect(readSnapshot('RU')?.mains[0].main).toEqual(MATE_X6_RU);
   });
 
-  it('显式 mains:[] 换国不当「未传」（安全回退）：不残留源国产品，落目标国快照或默认', () => {
+  it('显式 mains:[] 换国不当「未传」（R4-S3 清空态）：不残留源国产品，也不复活目标国旧快照', () => {
     const { state, actions } = renderFilters();
     act(() => actions().setMains([mateX6RuCard()]));
-    // 显式空 mains 切 ID：不触发显式重映射通道（无卡可映射），也不把 RU 卡带进 ID
+    // 先普通切 ID 再回 RU：制造一个非空的 ID 快照（旧逻辑下显式清空会被它复活）
+    act(() => actions().set({ countryCode: 'ID' }));
+    act(() => actions().set({ countryCode: 'RU' }));
+    expect(readSnapshot('ID')?.mains.length).toBeGreaterThan(0);
+    // 显式空 mains 切 ID：清空态胜出——落空看板，不触发显式重映射通道（无卡可
+    // 映射）、不回填默认，也不查/不复活 ID 旧快照
     act(() => actions().set({ countryCode: 'ID', mains: [] }));
     expect(state().countryCode).toBe('ID');
-    for (const card of state().mains) {
-      expect(card.main?.modelId).not.toBe('own-huawei-mate-x6');
-      if (card.main) expect(selectionValidFor(card.main, 'ID', 'phone')).toBe(true);
-    }
+    expect(state().mains).toHaveLength(0);
+    // 目标国快照同步为空：此后普通切走再回 ID 仍保持空态
+    expect(readSnapshot('ID')?.mains).toHaveLength(0);
+    act(() => actions().set({ countryCode: 'RU' }));
+    act(() => actions().set({ countryCode: 'ID' }));
+    expect(state().mains).toHaveLength(0);
   });
 
   it('patch 显式 { countryCode, mains: undefined } 不崩且不视为显式口径（undefined 不覆盖已有选择）', () => {
@@ -281,5 +288,115 @@ describe('t428u R3 M1a · 显式 mains 跨国（Agent filterPatch 口径）', ()
     expect(state().countryCode).toBe('ID');
     expect(state().mains[0].main?.modelId).toBe('own-huawei-mate-80-pro');
     expect(selectionValidFor(state().mains[0].main!, 'ID', 'phone')).toBe(true);
+  });
+});
+
+describe('t428u R5-M1 · 目标国可落地平台归一化（计算与落地共享规则）', () => {
+  const NOON_AE: NonNullable<FiltersState['platform']> = { platforms: ['NOON'], shopIds: [], seller: null };
+  const OZON_RU_SHOP: NonNullable<FiltersState['platform']> = { platforms: [], shopIds: ['RU:ozon:1P'], seller: null };
+
+  it('普通 UI 换国：RU+OZON 店铺级勾选切 DE（无 OZON）→ 平台回落默认电渠 null', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().set({ platform: OZON_RU_SHOP }));
+    expect(state().platform).toEqual(OZON_RU_SHOP);
+    act(() => actions().set({ countryCode: 'DE' }));
+    expect(state().countryCode).toBe('DE');
+    expect(state().platform).toBeNull();
+  });
+
+  it('同国普通补丁：RU+OZON（含 shopIds）原样保留，不一律清空', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().set({ platform: OZON_RU_SHOP }));
+    act(() => actions().set({ granularity: 'month' }));
+    expect(state().countryCode).toBe('RU');
+    expect(state().platform).toEqual(OZON_RU_SHOP);
+  });
+
+  it('部分可落地（旧多选载荷 OZON+NOON 切 AE）：保留 NOON 有效子集，不整体清空', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().set({ platform: { platforms: ['OZON', 'NOON'], shopIds: [], seller: null } }));
+    act(() => actions().set({ countryCode: 'AE' }));
+    expect(state().countryCode).toBe('AE');
+    expect(state().platform).toEqual({ platforms: ['NOON'], shopIds: [], seller: null });
+  });
+
+  it('回看落地（显式 mains + 平台）：AE·NOON + nova 跨国落 RU → 平台归一为默认电渠，主品合法保留', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().set({ countryCode: 'AE', platform: NOON_AE, mains: [novaCard()] }));
+    expect(state().countryCode).toBe('AE');
+    // 与 advantageScopePatch/queryCards openPatch 同形：跨国 patch 的平台是计算前
+    // 归一化结果（NOON 不在 RU → null）
+    act(() => actions().set({
+      countryCode: 'RU',
+      platform: null,
+      granularity: 'week',
+      adaptive: false,
+      mains: [novaCard()],
+    }));
+    expect(state().countryCode).toBe('RU');
+    expect(state().platform).toBeNull();
+    expect(state().mains[0].main).toEqual(NOVA_14_PRO);
+    expect(selectionValidFor(state().mains[0].main!, 'RU', 'phone')).toBe(true);
+  });
+});
+
+describe('t428u R4-S3/S4 · undefined 字段防护与同口径显式 mains 合法化', () => {
+  it('patch 显式 { platform: undefined } 不覆盖：平台保持原值（undefined 不入 state）', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().set({ platform: { platforms: ['OZON'], shopIds: [], seller: null } }));
+    act(() => actions().set({ platform: undefined, granularity: undefined }));
+    expect(state().platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
+    expect(state().granularity).toBe('week');
+  });
+
+  it('同口径显式 mains 合法化（R4-S4）：ID 下显式写 RU 非法 12+512 → 映射 16+512', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().set({ countryCode: 'ID' }));
+    act(() => actions().set({ mains: [mateX6RuCard()] }));
+    expect(state().countryCode).toBe('ID');
+    expect(state().mains[0].main).toEqual(MATE_X6_ID);
+    expect(selectionValidFor(state().mains[0].main!, 'ID', 'phone')).toBe(true);
+  });
+
+  it('同口径显式 mains 型号全缺席 → 默认安全回落（ID 默认 Mate 80 Pro）', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().set({ countryCode: 'ID' }));
+    act(() => actions().set({
+      mains: [{ id: 'card-absent-same-scope', main: { modelId: 'own-huawei-pura-999', romram: '12+256 GB', skuIds: ['own-huawei-pura-999__12-256gb__black'] }, compares: [], auto: false }],
+    }));
+    expect(state().mains[0].main?.modelId).toBe('own-huawei-mate-80-pro');
+    expect(selectionValidFor(state().mains[0].main!, 'ID', 'phone')).toBe(true);
+  });
+
+  it('非数组 mains 坏值整体忽略（外部 JS 调用方防御），状态不破坏', () => {
+    const { state, actions } = renderFilters();
+    act(() => actions().setMains([mateX6RuCard()]));
+    act(() => actions().set({ mains: 'broken-not-array' as unknown as MainProduct[] }));
+    expect(Array.isArray(state().mains)).toBe(true);
+    expect(state().mains[0].main).toEqual(MATE_X6_RU);
+  });
+});
+
+describe('t428u R4-S2 · 快照恢复对比区封顶 COMPARES_PER_CARD_CAP', () => {
+  it('污染快照（单卡 4 条合法 RU compares）恢复后封顶 3，且全部仍合法', () => {
+    const fourCompares: ProductSelection[] = [
+      { modelId: 'cmp-apple-iphone-16', romram: '128 GB', skuIds: ['cmp-apple-iphone-16__128gb__black'] },
+      { modelId: 'cmp-apple-iphone-16-plus', romram: '128 GB', skuIds: ['cmp-apple-iphone-16-plus__128gb__black'] },
+      { modelId: 'cmp-apple-iphone-16-pro', romram: '128 GB', skuIds: ['cmp-apple-iphone-16-pro__128gb__black'] },
+      { modelId: 'cmp-apple-iphone-16-pro-max', romram: '12+256 GB', skuIds: ['cmp-apple-iphone-16-pro-max__12-256gb__white'] },
+    ];
+    const { state, actions } = renderFilters();
+    act(() => actions().set({ countryCode: 'DE' }));
+    sessionStorage.setItem(snapKey('RU'), JSON.stringify({
+      mains: [{ id: 'card-cap3', main: MATE_X6_RU, compares: fourCompares, auto: false }],
+    }));
+    act(() => actions().set({ countryCode: 'RU' }));
+    expect(state().countryCode).toBe('RU');
+    // 快照优先恢复主品；对比区 >3 被封到 3（clampMains 卡配额），条目全部合法
+    expect(state().mains[0].main).toEqual(MATE_X6_RU);
+    expect(state().mains[0].compares.length).toBe(3);
+    for (const compare of state().mains[0].compares) {
+      expect(selectionValidFor(compare, 'RU', 'phone')).toBe(true);
+    }
   });
 });
