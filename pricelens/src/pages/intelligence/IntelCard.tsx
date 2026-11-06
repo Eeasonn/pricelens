@@ -38,7 +38,7 @@ export function DataModeBadge({ mode, title }: { mode: IntelDataMode; title?: st
         borderRadius: radius.pill,
         color: tone.fg,
         background: tone.bg,
-        fontSize: 10.5,
+        fontSize: 12,
         lineHeight: 1.4,
         whiteSpace: 'nowrap',
         flexShrink: 0,
@@ -82,7 +82,7 @@ export function IntelImage({
     return (
       <div data-lpl-intel-img-fallback style={boxStyle} title="未配图或加载失败 · 中性占位">
         {brand ? <BrandDot brand={brand} size={7} /> : null}
-        <span style={{ fontSize: 10.5, color: color.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: width - 18 }}>
+        <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: width - 18 }}>
           {brand ? `${brandLabelOf(brand)} ${abbrev}` : abbrev}
         </span>
       </div>
@@ -106,7 +106,7 @@ function abbreviateModel(model: string): string {
   return tokens.length <= 2 ? model : `${tokens.slice(0, 2).join(' ')}…`;
 }
 
-const labelStyle = { fontSize: 11, color: color.mute, flexShrink: 0 } as const;
+const labelStyle = { fontSize: 12, color: color.mute, flexShrink: 0 } as const;
 
 /** 产品图区只用于新品 / 竞品模块（真实机型的图卡）；促销 / 事件 / 渠道卡走纯文字密度 */
 export function productImageModule(module: IntelItem['module']): boolean {
@@ -150,12 +150,12 @@ export default function IntelCard({ item, onOpen }: { item: IntelItem; onOpen: (
       onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = pending ? color.hairlineStrong : color.hairline; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 11, color: selectSoftInk, background: selectSoft, padding: '2px 7px', borderRadius: radius.pill, whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: selectSoftInk, background: selectSoft, padding: '2px 7px', borderRadius: radius.pill, whiteSpace: 'nowrap' }}>
           {INTEL_MODULE_LABEL[item.module]}
         </span>
         <DataModeBadge mode={item.dataMode} />
         {item.brand ? (
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>
             <BrandDot brand={item.brand} size={7} />
             {brandLabelOf(item.brand)}{item.model ? ` · ${item.model}` : ''}
           </span>
@@ -166,7 +166,7 @@ export default function IntelCard({ item, onOpen }: { item: IntelItem; onOpen: (
           <IntelImage image={item.image} brand={item.brand} model={item.model} />
           <div style={{ minWidth: 0 }}>
             <h3 style={{ margin: 0, fontSize: fontSize.bodySm, lineHeight: '19px', fontWeight: 600, color: color.ink }}>{item.title}</h3>
-            <div style={{ marginTop: 3, fontSize: 11, color: color.mute }}>
+            <div style={{ marginTop: 3, fontSize: 12, color: color.mute }}>
               {item.region} · {item.eventDate}
             </div>
           </div>
@@ -174,16 +174,16 @@ export default function IntelCard({ item, onOpen }: { item: IntelItem; onOpen: (
       ) : (
         <div>
           <h3 style={{ margin: 0, fontSize: fontSize.bodySm, lineHeight: '19px', fontWeight: 600, color: color.ink }}>{item.title}</h3>
-          <div style={{ marginTop: 3, fontSize: 11, color: color.mute }}>
+          <div style={{ marginTop: 3, fontSize: 12, color: color.mute }}>
             {item.region} · {item.eventDate}
           </div>
         </div>
       )}
-      <div style={{ display: 'flex', gap: 6, fontSize: 11.5, lineHeight: 1.5 }}>
+      <div style={{ display: 'flex', gap: 6, fontSize: 12, lineHeight: 1.5 }}>
         <span style={labelStyle}>关键变化</span>
         <span style={{ color: item.change ? color.body : color.mute }}>{item.change ?? '暂无'}</span>
       </div>
-      <div style={{ display: 'flex', gap: 6, fontSize: 11.5, lineHeight: 1.5 }}>
+      <div style={{ display: 'flex', gap: 6, fontSize: 12, lineHeight: 1.5 }}>
         <span style={labelStyle}>GTM 意义</span>
         <span style={{ color: color.body, minWidth: 0 }}>
           {item.gtmMeaning}
@@ -191,11 +191,11 @@ export default function IntelCard({ item, onOpen }: { item: IntelItem; onOpen: (
         </span>
       </div>
       <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6, borderTop: `1px solid ${color.hairline}` }}>
-        <span title={item.evidence.label} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.mute, fontSize: 10.5 }}>
+        <span title={item.evidence.label} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: color.mute, fontSize: 12 }}>
           来源：{item.evidence.label}
         </span>
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 3, color: color.link, fontSize: 11, whiteSpace: 'nowrap' }}>
-          展开溯源 <ArrowRightOutlined style={{ fontSize: 9 }} />
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 3, color: color.link, fontSize: 12, whiteSpace: 'nowrap' }}>
+          展开溯源 <ArrowRightOutlined style={{ fontSize: 12 }} />
         </span>
       </div>
     </article>

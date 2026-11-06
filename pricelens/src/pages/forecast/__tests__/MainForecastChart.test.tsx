@@ -694,7 +694,7 @@ describe('主图 · SVG 文本风格（font.family / 字号 10 / mute / tabular-
     };
     for (const text of texts) {
       expect(attrOf(text, 'font-family')).toBe(font.family);
-      expect(attrOf(text, 'font-size')).toBe('10');
+      expect(attrOf(text, 'font-size')).toBe('12');
     }
     const month = texts.find((text) => /^\d{4}-\d{2}$/.test(text.textContent ?? ''));
     expect(month).toBeDefined();
@@ -811,7 +811,7 @@ describe('主图 · P0-1 实测宽绘制 + P0-2 数据色（2026-11-06）', () =
     const fontSizeOf = (text: Element): string | null =>
       text.getAttribute('font-size') ?? text.closest('g')?.getAttribute('font-size') ?? null;
     expect(month).toBeDefined();
-    expect(fontSizeOf(month!)).toBe('10');
+    expect(fontSizeOf(month!)).toBe('12');
   });
 
   it('P0-1 RO 不上报（no-op stub，等同无 RO 的 jsdom 环境）：viewBox 宽回退兜底常量 1180，不作为固定绘制宽', () => {

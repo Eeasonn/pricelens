@@ -26,7 +26,7 @@ export default function AgentLauncher() {
     >
       <RobotOutlined />
       <span>问 PriceLens</span>
-      {unreadCount > 0 && <span aria-hidden="true" style={{ minWidth: 16, height: 16, padding: '0 4px', display: 'inline-grid', placeItems: 'center', borderRadius: 9999, background: color.ink, color: color.onPrimary, fontSize: 10, lineHeight: 1 }}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
+      {unreadCount > 0 && <span aria-hidden="true" style={{ minWidth: 16, height: 16, padding: '0 4px', display: 'inline-grid', placeItems: 'center', borderRadius: 9999, background: color.ink, color: color.onPrimary, fontSize: 12, lineHeight: 1 }}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
       {running && <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: color.link }} />}
     </button>
   );

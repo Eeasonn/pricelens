@@ -130,6 +130,19 @@ function buildForecastSteps(
     .pop();
   const cappedWeeks = forecastWeeks.filter((week) => week.supplyCapped);
 
+  // R2（C3）：周销手调（params.manual）= 链路末端人工修正——final = manual.value
+  // ?? 库存修正值，覆盖该周最终 SO 但不参与库存递推与任何自动步骤。纳入第③步
+  // adjustments 可见可定位，标签显式「末端人工修正」，不与自动步骤混淆。
+  const manualAdjustments: ForecastStepAdjustment[] = Object.keys(params.manual).sort().map((weekId) => {
+    const entry = params.manual[weekId]!;
+    return {
+      key: `manual-${weekId}`,
+      label: `${weekId} 周销手调 ${fmtWanLocal(entry.value)}（末端人工修正 · 覆盖该周最终 SO，不参与自动步骤计算）`,
+      value: entry.value,
+      reason: entry.reason || '未填（历史草稿）',
+    };
+  });
+
   // ④成本及销毛：价格手调按批次归并（月展开共享 batchId），成本假设逐月。
   const priceBatches = new Map<string, { weeks: string[]; price: number; reason: string }>();
   for (const [weekId, entry] of Object.entries(scenario.priceOverrides)) {
@@ -255,8 +268,8 @@ function buildForecastSteps(
       step: 3,
       title: '③ 库存 → 第二轮修正',
       conclusion: cappedWeeks.length > 0
-        ? `已修正：${result.firstAdjustedWeek} 起按可售量修正 · 供给缺口 −${fmtWanLocal(result.summary.gap)} · SI 待确认 ${siPending} / 12`
-        : `未触发修正（库存可支撑基线 SO）· SI 待确认 ${siPending} / 12`,
+        ? `已修正：${result.firstAdjustedWeek} 起按可售量修正 · 供给缺口 −${fmtWanLocal(result.summary.gap)} · SI 待确认 ${siPending} / 12${manualAdjustments.length ? ` · 周销手调 ${manualAdjustments.length} 周（末端人工修正）` : ''}`
+        : `未触发修正（库存可支撑基线 SO）· SI 待确认 ${siPending} / 12${manualAdjustments.length ? ` · 周销手调 ${manualAdjustments.length} 周（末端人工修正）` : ''}`,
       tone: cappedWeeks.length > 0 ? 'amber' : undefined,
       inputs: [
         '②输出：大盘修正后基线 SO（周粒度）',
@@ -267,9 +280,9 @@ function buildForecastSteps(
       assumptions: [
         `DOS 合理带 ${DOS_BAND.min}–${DOS_BAND.max} 天与降幅阈值 ${INV_CRASH_LIGHT_PCT}%／${INV_CRASH_HEAVY_PCT}% 为演示规则（待业务核定）`,
         'SI 月计划拆周整数守恒（余数月初起 +1）',
-        '手调不进入库存递推（截断事实保留，主图显示手调值）',
+        '手调不进入库存递推（截断事实保留，主图显示手调值）；手调 = 末端人工修正，覆盖该周最终 SO，不改自动步骤',
       ],
-      adjustments: siAdjustments,
+      adjustments: [...siAdjustments, ...manualAdjustments],
       evidence: [
         {
           ...evidenceBase,

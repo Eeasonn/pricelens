@@ -116,7 +116,7 @@ export default function PipelineNav({
     >
       {stages.map((stage, index) => (
         <Fragment key={stage.stage}>
-          {index > 0 && <span aria-hidden style={{ color: color.hairlineStrong, fontSize: 11 }}>→</span>}
+          {index > 0 && <span aria-hidden style={{ color: color.hairlineStrong, fontSize: 12 }}>→</span>}
           <button
             type="button"
             data-pipeline-stage={stage.stage}

@@ -93,7 +93,7 @@ describe('buildForecastSteps · 四步推演元数据', () => {
     expect(siEvidence?.status).toBe('real');
   });
 
-  it('SI 原因孤儿清理：数值回基准后 normalize 不保留原因；手调原因进入主链（不在 steps 内重复）', () => {
+  it('SI 原因孤儿清理：数值回基准后 normalize 不保留原因；周销手调原因进入③末端人工修正', () => {
     let params: WorkbenchParams = baseWorkbenchParams(fixture);
     params = withSiPlanEntry(params, '2026-12', 200000, '春节备货提前')!;
     // 回基准 → 原因清除
@@ -103,7 +103,8 @@ describe('buildForecastSteps · 四步推演元数据', () => {
     const marginView = computeMarginView(fixture, result, emptyMarginScenario());
     const steps = buildForecastSteps(fixture, params, result, marginView, emptyMarginScenario(), { byMonth: {} });
     expect(steps[2]!.adjustments.find((entry) => entry.key === 'si-2026-12')).toBeUndefined();
-    // 周销手调属于主链末端显示（不进四步 adjustments；审计轨迹以「手调」另行标注）
+    // R2（C3）：周销手调与原因（如「黑五资源加投」）纳入第③步 adjustments——
+    // 四步因果审计可见可定位，且显式标注「末端人工修正」，不与自动步骤混淆。
     const tuned = setManualAdjustment(params, '2026W47', 60000, '黑五资源加投')!;
     const tunedResult = computeWorkbench(fixture, tuned);
     const tunedSteps = buildForecastSteps(
@@ -114,7 +115,16 @@ describe('buildForecastSteps · 四步推演元数据', () => {
       emptyMarginScenario(),
       { byMonth: {} },
     );
-    expect(JSON.stringify(tunedSteps)).not.toContain('黑五资源加投');
+    const manualAdjustment = tunedSteps[2]!.adjustments.find((entry) => entry.key === 'manual-2026W47');
+    expect(manualAdjustment).toBeTruthy();
+    expect(manualAdjustment!.value).toBe(60000);
+    expect(manualAdjustment!.reason).toBe('黑五资源加投');
+    expect(manualAdjustment!.label).toContain('末端人工修正');
+    expect(manualAdjustment!.label).toContain('2026W47');
+    // 原因真的进了审计元数据（旧断言「不包含原因」按 C3 反转）
+    expect(JSON.stringify(tunedSteps)).toContain('黑五资源加投');
+    // 结论同步显出「周销手调 N 周（末端人工修正）」
+    expect(tunedSteps[2]!.conclusion).toContain('周销手调 1 周（末端人工修正）');
   });
 
   it('forecastMarginRateOf：无有效收入周返回 null（不造数）', () => {

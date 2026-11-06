@@ -436,7 +436,7 @@ export default function MainForecastChart({
             {boundaryX != null && (
               <>
                 <line x1={boundaryX} x2={boundaryX} y1={TOP - 6} y2={TOP + plotH} stroke={color.hairlineStrong} strokeDasharray="4 4" />
-                <text x={boundaryX - 6} y={H - 8} textAnchor="end" fontSize={10} fontWeight={600} fill={color.mute} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`今天 ${fixture.context.todayLabel}`}</text>
+                <text x={boundaryX - 6} y={H - 8} textAnchor="end" fontSize={12} fontWeight={600} fill={color.mute} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`今天 ${fixture.context.todayLabel}`}</text>
               </>
             )}
 
@@ -448,13 +448,13 @@ export default function MainForecastChart({
                     <line key={`grid-${tick}`} x1={LEFT} y1={y(tick)} x2={chartW - RIGHT} y2={y(tick)} />
                   ))}
                 </g>
-                <g fontSize={10} fill={color.mute} textAnchor="end" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <g fontSize={12} fill={color.mute} textAnchor="end" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {volumeTicks.map((tick) => (
                     <text key={`vt-${tick}`} x={LEFT - 8} y={y(tick) + 3}>{wanOf(tick)}</text>
                   ))}
                 </g>
-                <text x={LEFT - 8} y={TOP - 10} fontSize={10} fill={color.mute} textAnchor="end" fontFamily={font.family}>万台</text>
-                <g fontSize={10} fill={color.mute} textAnchor="start" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <text x={LEFT - 8} y={TOP - 10} fontSize={12} fill={color.mute} textAnchor="end" fontFamily={font.family}>万台</text>
+                <g fontSize={12} fill={color.mute} textAnchor="start" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {priceTicks.map((tick) => (
                     <text key={`pt-${tick}`} x={chartW - RIGHT + 8} y={yPrice(tick) + 3}>{`$${tick}`}</text>
                   ))}
@@ -514,7 +514,7 @@ export default function MainForecastChart({
                   <rect x={cx - 8} y={cy - 9} width={16} height={13} rx={2.5} fill={color.ink} stroke={color.canvas} strokeWidth={1.2}>
                     <title>{`价格手调 · 显示价 $${overridePrice}`}</title>
                   </rect>
-                  <text x={cx} y={cy + 1} textAnchor="middle" fontSize={10} fontWeight={700} fill={color.onPrimary} fontFamily={font.family}>价</text>
+                  <text x={cx} y={cy + 1} textAnchor="middle" fontSize={12} fontWeight={700} fill={color.onPrimary} fontFamily={font.family}>价</text>
                 </g>
               );
             })}
@@ -532,7 +532,7 @@ export default function MainForecastChart({
                     <title>{`手调${reason ? `：${reason}` : ''}`}</title>
                   </path>
                   {reason && (
-                    <text x={cx} y={cy - 10} textAnchor="middle" fontSize={10} fill={color.mute} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <text x={cx} y={cy - 10} textAnchor="middle" fontSize={12} fill={color.mute} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {short}
                       <title>{reason}</title>
                     </text>
@@ -547,7 +547,7 @@ export default function MainForecastChart({
             {/* 横轴月分组刻度：全站月日历格式 YYYY-MM；取刻度同源 axisTickPlan。
                 2026-11-05 全局 #8：font.family + tabular-nums（DESIGN.md：Geist Mono
                 只用于周 ID / 版本等技术标记，YYYY-MM 日历刻度随量价页用正文字体）。 */}
-            <g fontSize={10} fill={color.mute} textAnchor="middle" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <g fontSize={12} fill={color.mute} textAnchor="middle" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
               {monthPlan.indexes.map((monthIndex) => {
                 const weekIndex = monthFirstWeekIndex.get(monthKeys[monthIndex]!) ?? 0;
                 return <text key={monthKeys[monthIndex]!} x={x(weekIndex)} y={H - 24}>{monthKeys[monthIndex]}</text>;
@@ -557,7 +557,7 @@ export default function MainForecastChart({
             {/* 促销档期轴下日期标注已删（2026-11-05 全局 #2）：改为事件层内起始周小方块点 */}
 
             {/* 命中区：hover/focus 出证据预览；预测周可聚焦（button），click/Enter 固定证据；
-                微调经证据动作「微调本周」（周销弹窗原因选填，页面承接） */}
+                微调经证据动作「微调本周」（周销弹窗原因必填，页面承接） */}
             {weeks.map((week, index) => {
               const forecast = week.status === 'forecast';
               return (
@@ -654,7 +654,7 @@ export default function MainForecastChart({
                       <rect x={dotCx - 3.5} y={laneY - 3.5} width={7} height={7} fill={tone} stroke={color.canvas} strokeWidth={1}>
                         <title>{`${PRODUCT_EVENT_LABEL[event.type]} · ${event.label || '未命名事件'}（${event.startWeekId}–${event.endWeekId}，${fmtSignedPct(event.magnitudePct)} · ${DECAY_TEXT[event.decay]}）· 悬停看区间，点击固定`}</title>
                       </rect>
-                      <text x={dotCx + 8} y={laneY + 3.5} textAnchor="start" fontSize={10} fontWeight={600} fill={tone} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`A${order + 1}`}</text>
+                      <text x={dotCx + 8} y={laneY + 3.5} textAnchor="start" fontSize={12} fontWeight={600} fill={tone} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`A${order + 1}`}</text>
                     </g>
                   );
                 })}
@@ -674,7 +674,7 @@ export default function MainForecastChart({
                     style={{ cursor: 'pointer' }}
                   >
                     <rect x={chartW - RIGHT - 74} y={TOP - 2} width={44} height={16} rx={8} fill={color.canvas} stroke={color.hairlineStrong} strokeWidth={1} />
-                    <text x={chartW - RIGHT - 52} y={TOP + 10} textAnchor="middle" fontSize={10} fontWeight={600} fill={color.body} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`+${rangeAnchors.overflow.length}`}</text>
+                    <text x={chartW - RIGHT - 52} y={TOP + 10} textAnchor="middle" fontSize={12} fontWeight={600} fill={color.body} fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>{`+${rangeAnchors.overflow.length}`}</text>
                     <title>其余重叠范围事件：打开图下名录筛选</title>
                   </g>
                 )}
@@ -794,7 +794,7 @@ export default function MainForecastChart({
                 aria-label={`视图窗预设 · ${presetDef.label}`}
                 onClick={() => onViewChange?.({ window: presetDef.key })}
                 style={{
-                  border: 'none', padding: '3px 9px', font: 'inherit', fontSize: 11, cursor: 'pointer',
+                  border: 'none', padding: '3px 9px', font: 'inherit', fontSize: 12, cursor: 'pointer',
                   background: active ? selectSoft : color.canvas,
                   color: active ? selectSoftInk : color.body,
                   fontWeight: active ? 600 : 400, whiteSpace: 'nowrap',
@@ -834,12 +834,12 @@ export default function MainForecastChart({
         <div style={{ display: 'grid', gap: 6, fontSize: 12, color: color.body }}>
         {overflowIds != null && (
           <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: color.warningInk }}>名录筛选 · 其余重叠范围事件（{overflowIds.length} 条）</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: color.warningInk }}>名录筛选 · 其余重叠范围事件（{overflowIds.length} 条）</span>
             <button
               type="button"
               aria-label="清除名录筛选"
               onClick={() => setOverflowIds(null)}
-              style={{ border: 'none', background: 'transparent', color: color.link, fontSize: 11, cursor: 'pointer', padding: 0 }}
+              style={{ border: 'none', background: 'transparent', color: color.link, fontSize: 12, cursor: 'pointer', padding: 0 }}
             >
               清除筛选
             </button>
@@ -852,16 +852,16 @@ export default function MainForecastChart({
               const duration = durationOfWeekRange(calendar, event);
               return (
                 <span key={event.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span aria-hidden style={{ width: 17, height: 17, borderRadius: '50%', border: `1px solid ${PRODUCT_EVENT_COLOR[event.type]}`, fontSize: 9.5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: PRODUCT_EVENT_COLOR[event.type], fontWeight: 600 }}>{`A${order + 1}`}</span>
+                  <span aria-hidden style={{ width: 17, height: 17, borderRadius: '50%', border: `1px solid ${PRODUCT_EVENT_COLOR[event.type]}`, fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: PRODUCT_EVENT_COLOR[event.type], fontWeight: 600 }}>{`A${order + 1}`}</span>
                   {`${PRODUCT_EVENT_LABEL[event.type]} · ${event.label || '未命名事件'}（${event.startWeekId}–${event.endWeekId}，${fmtSignedPct(event.magnitudePct)}）`}
-                  <span className="tnum" style={{ color: color.mute, fontSize: 11 }}>
+                  <span className="tnum" style={{ color: color.mute, fontSize: 12 }}>
                     {duration != null ? `${duration} 周 · ${DECAY_TEXT[event.decay]}` : '起止无效'}
                   </span>
                   <button
                     type="button"
                     aria-label={`编辑事件 ${event.startWeekId}–${event.endWeekId}`}
                     onClick={() => onEditProductEvent?.(event)}
-                    style={{ border: 'none', background: 'transparent', color: color.link, fontSize: 11, cursor: 'pointer', padding: 0 }}
+                    style={{ border: 'none', background: 'transparent', color: color.link, fontSize: 12, cursor: 'pointer', padding: 0 }}
                   >
                     编辑
                   </button>
@@ -869,7 +869,7 @@ export default function MainForecastChart({
                     type="button"
                     aria-label={`删除小事件 ${event.label || '未命名事件'}`}
                     onClick={() => onRemoveProductEvent(event.id)}
-                    style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 11, cursor: 'pointer', padding: 0 }}
+                    style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 12, cursor: 'pointer', padding: 0 }}
                   >
                     ×
                   </button>
@@ -880,12 +880,12 @@ export default function MainForecastChart({
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px' }}>
           {manualWeeks.map((week) => (
             <span key={`manual-${week.weekId}`} title={week.manual?.reason || undefined} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-              <span aria-hidden style={{ color: color.ink, fontSize: 10 }}>◆</span>
+              <span aria-hidden style={{ color: color.ink, fontSize: 12 }}>◆</span>
               {`手调 · ${week.weekId}${week.manual?.reason ? `：${week.manual.reason}` : ''}`}
             </span>
           ))}
           <span title="min(基线 SO, 可售) 回写主图" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-            <span aria-hidden style={{ width: 17, height: 17, borderRadius: '50%', border: `1px solid ${color.warning}`, background: color.warningSoft, fontSize: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: color.warningInk }}>修</span>
+            <span aria-hidden style={{ width: 17, height: 17, borderRadius: '50%', border: `1px solid ${color.warning}`, background: color.warningSoft, fontSize: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: color.warningInk }}>修</span>
             {cappedFactWeeks.length ? `库存上限修正 · ${cappedFactWeeks[0]!.weekId} 起` : '当前考量未触发库存上限修正'}
           </span>
         </div>
@@ -1086,7 +1086,7 @@ function WeekEvidence({
       shellProps={pinned ? undefined : { style: { pointerEvents: 'none' } }}
       actions={(
         <>
-          <span style={{ fontSize: 10.5, color: color.mute }}>{forecast ? '微调进入逐周手调，原因必填（取消不写入）' : '实际周不微调'}</span>
+          <span style={{ fontSize: 12, color: color.mute }}>{forecast ? '微调进入逐周手调，原因必填（取消不写入）' : '实际周不微调'}</span>
           {tunable && (
             <button
               type="button"
@@ -1094,7 +1094,7 @@ function WeekEvidence({
               title="打开周销微调弹窗（调整只落在本周；原因必填）"
               style={{
                 border: `1px solid ${color.hairlineStrong}`, padding: '3px 12px', borderRadius: radius.control, background: color.canvas,
-                color: color.ink, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                color: color.ink, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
               }}
             >
               微调本周
@@ -1118,8 +1118,8 @@ function WeekEvidence({
       </div>
       {/* 学习证据（B.4.4：全部来自学习器输出；回测只展示可复核误差） */}
       {forecast && (
-        <div style={{ display: 'grid', gap: 2, fontSize: 11, color: color.mute }}>
-          <div style={{ fontSize: 10.5, color: color.mute, letterSpacing: '0.05em' }}>学习证据 · {learning.algorithm}</div>
+        <div style={{ display: 'grid', gap: 2, fontSize: 12, color: color.mute }}>
+          <div style={{ fontSize: 12, color: color.mute, letterSpacing: '0.05em' }}>学习证据 · {learning.algorithm}</div>
           {learning.sampleStart != null && learning.sampleEnd != null && (
             <div>{`样本窗 ${learning.sampleStart} – ${learning.sampleEnd}`}</div>
           )}
@@ -1136,12 +1136,12 @@ function WeekEvidence({
       {/* 本周考量构成（按 ①学习→①范围事件→②大盘→③库存→手调 排序；可定位对应卡） */}
       {forecast && consider.length > 0 && (
         <div style={{ display: 'grid', gap: 3 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: color.mute }}>本周考量构成</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: color.mute }}>本周考量构成</div>
           {consider.map((item) => {
             const card = locateCardOf(item.kind);
             return (
               <div key={`${item.kind}-${item.label}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 104, flex: 'none', fontSize: 11, color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.label}>{item.label}</span>
+                <span style={{ width: 104, flex: 'none', fontSize: 12, color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.label}>{item.label}</span>
                 <span className="tnum" style={{ width: 46, flex: 'none', textAlign: 'right', fontWeight: 600, color: (item.pct ?? 0) < 0 ? color.error : color.body }}>
                   {item.pct != null ? fmtSignedPct(item.pct) : '—'}
                 </span>
@@ -1151,12 +1151,12 @@ function WeekEvidence({
                     aria-label={`定位 ${item.label} 来源`}
                     title="定位到对应卡的证据来源"
                     onClick={() => onFocusCard?.(card, week.weekId)}
-                    style={{ border: 'none', background: 'transparent', color: color.link, fontSize: 11, cursor: 'pointer', padding: 0, flex: 'none' }}
+                    style={{ border: 'none', background: 'transparent', color: color.link, fontSize: 12, cursor: 'pointer', padding: 0, flex: 'none' }}
                   >
                     定位
                   </button>
                 ) : (
-                  <span style={{ flex: 1, fontSize: 10.5, color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.note}</span>
+                  <span style={{ flex: 1, fontSize: 12, color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.note}</span>
                 )}
               </div>
             );
@@ -1164,7 +1164,7 @@ function WeekEvidence({
         </div>
       )}
       {/* 数据状态行（Batch 2 统一取证）：状态 + 数据版本 + 采集时间（缺失写待确认）+ 缺数口径 */}
-      <div data-week-evidence-status className="tnum" style={{ fontSize: 11, color: color.mute }}>
+      <div data-week-evidence-status className="tnum" style={{ fontSize: 12, color: color.mute }}>
         {`数据状态：${forecast ? '模拟（预测段为本地确定性推演，未调用模型服务）' : '模拟（历史段为模拟实际）'} · 数据版本 ${modelVersion} · 采集时间：待确认 · 缺数周不插值`}
       </div>
     </EvidenceFrame>

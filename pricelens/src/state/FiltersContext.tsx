@@ -30,7 +30,7 @@ import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache } from '../components/ProductCascader/tree';
-import { clampMains, autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
+import { clampMains, autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, remapMainsForScope, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -342,7 +342,13 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
  *  R5（主品口径跨国保持，2026-11-07 二审）：patch 显式携带 mains（Agent 跨国
  *  结果卡「回看价格走势」等跳转动作）且整组在目标口径有效时以 patch.mains 为准
  *  ——不恢复按国快照、不被 applyScopeDefaults(force=true) 重算成默认主品；
- *  无显式 mains 的普通国家切换行为保持原样（快照恢复 / 默认重算）。 */
+ *  无显式 mains 的普通国家切换行为保持原样（快照恢复 / 默认重算）。
+ *  R2（本轮返修 M1b，同步稳定线 7edadc6）：explicitMains = 调用方补丁自身显式
+ *  携带非空 mains（Agent 结果卡跨国回看/定位的 filterPatch、undo/redo 整态快照）；
+ *  普通 UI 换国补丁不带 mains，next.mains 只是旧状态继承，不得按显式口径对待
+ *  ——否则 RU→DE→RU 会把 DE 的默认主品当成 RU 的显式选择，丢掉 RU 快照。显式
+ *  口径先经 remapMainsForScope 整组合法化（同型号换目标国首个合法配置）并更新
+ *  目标国快照，型号整体缺席才回落快照恢复 / 默认重算。 */
 function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false): FiltersState {
   // 快照键含产业维度：纯产业切换同样要保住「回切后还原」，键只按国会把
   // 当前产业的卡覆盖进该国快照，回切时校验不过即永久丢卡
@@ -357,8 +363,22 @@ function switchScope(prev: FiltersState, next: FiltersState, explicitMains = fal
   // 有效性按规范后的目标口径判定（applyScopeDefaults 内部同样先 normalize，
   // 此处先取一次保证判定与落地口径一致）
   const scope = normalizeDataScope({ countryCode: next.countryCode, industry: next.industry });
-  const keepMains = explicitMains && mainsValidFor(next.mains, scope.countryCode, scope.industry);
-  if (keepMains) return applyScopeDefaults({ ...next, ...scope }, false);
+  if (explicitMains && next.mains.length > 0) {
+    // R2 M1a：显式口径先整组合法化——精确合法配置原样保留，同型号配置/SKU 在
+    // 目标国不存在时映射到该国首个合法配置（RU Mate X6 12+512 → ID 16+512），
+    // 型号整体缺席的卡剔除；全部缺席回落默认/快照。合法化后的口径同时更新目标
+    // 国快照（其后普通切走/切回按这套口径还原）。
+    const remapped = remapMainsForScope(next.mains, scope.countryCode, scope.industry);
+    if (remapped) {
+      try {
+        sessionStorage.setItem(snapKeyOf(scope.countryCode, scope.industry), JSON.stringify({ mains: remapped }));
+      } catch {
+        /* 存储不可用时跳过快照更新 */
+      }
+      return applyScopeDefaults({ ...next, ...scope, mains: remapped }, false);
+    }
+    // 型号整体缺席 → 下方快照恢复 / 默认重算路径安全回落
+  }
   const applied = applyScopeDefaults(next, true);
   try {
     const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode, applied.industry));

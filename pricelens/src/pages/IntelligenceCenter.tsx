@@ -12,7 +12,7 @@
 //   - 图卡 5 要素 + 示例徽章；新品 / 竞品默认渲染 Wikimedia Commons
 //     CC/PD 真机照片（public/gtm-samples/），未配图 / 加载失败走中性灰底缩写；
 //   - 点卡片 / Tab+Enter 展开右侧详情抽屉（Esc 关闭，240ms +
-//     prefers-reduced-motion 降级），提供「进入量价预测」真实捷径。
+//     prefers-reduced-motion 降级），提供「查看量价预测示例（固定样本）」真实捷径。
 // 稳定渠道继续由 appChannel 隐藏本页（hiddenInStable），本文件不触碰通道语义。
 // ============================================================
 import { useMemo, useState } from 'react';
@@ -86,7 +86,7 @@ export default function IntelligenceCenter() {
           {/* 标题行 + 演示口径：示例徽章全局可见，不冒充实时 */}
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: space.md, flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: 11, color: color.mute, letterSpacing: '.04em' }}>INTELLIGENCE CENTER / {state.countryCode}</div>
+              <div style={{ fontSize: 12, color: color.mute, letterSpacing: '.04em' }}>INTELLIGENCE CENTER / {state.countryCode}</div>
               <h1 style={{ margin: '3px 0 0', fontSize: fontSize.displaySm, color: color.ink }}>GTM 情报工作台</h1>
               <div style={{ marginTop: 5, fontSize: 12, color: color.mute }}>
                 {labels.country} · {labels.industry} · {rangeLabel}——新品 / 竞品 / 渠道 / 价格促销 / 市场事件五模块；卡片按 5 要素组织，展开可溯源。
@@ -94,7 +94,9 @@ export default function IntelligenceCenter() {
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Tag color="blue" title={provenanceSummary(DEMO_INTELLIGENCE_PROVENANCE)}>示例数据</Tag>
-              <Button onClick={() => go('forecast')}>进入量价预测</Button>
+              {/* R2 C4：文案统一为固定样本口径——量价预测是俄罗斯 HUAWEI Mate 90
+                  固定样本推演，不随情报条目/全局筛选联动。 */}
+              <Button onClick={() => go('forecast')}>查看量价预测示例（固定样本）</Button>
               <Button icon={<RobotOutlined />} onClick={askAgentSummary}>让 Agent 总结</Button>
             </div>
           </div>
@@ -142,13 +144,13 @@ export default function IntelligenceCenter() {
                   }}
                 >
                   {module.label}
-                  <span className="tnum" style={{ fontSize: 11, color: visible && !pending ? selectSoftInk : color.mute }}>
+                  <span className="tnum" style={{ fontSize: 12, color: visible && !pending ? selectSoftInk : color.mute }}>
                     {pending ? '待接入' : count}
                   </span>
                 </button>
               );
             })}
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: color.mute, whiteSpace: 'nowrap' }}>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>
               联动全局筛选：{labels.country} / {labels.industry} / {rangeLabel}（只读，改筛选请回价格走势）
             </span>
           </section>
@@ -168,13 +170,13 @@ export default function IntelligenceCenter() {
               >
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: space.md, flexWrap: 'wrap' }}>
                   <h2 style={{ margin: 0, fontSize: 16, color: color.ink }}>{module.label}</h2>
-                  <span style={{ fontSize: 11, color: sampleCount && localCount ? color.body : color.mute }}>
+                  <span style={{ fontSize: 12, color: sampleCount && localCount ? color.body : color.mute }}>
                     {localCount > 0 && `本地 ${localCount}`}
                     {localCount > 0 && sampleCount > 0 && ' + '}
                     {sampleCount > 0 && `示例 ${sampleCount}`}
                     {module.id === 'channel' && '待接入'}
                   </span>
-                  <span style={{ fontSize: 11.5, color: color.mute }}>{module.hint}</span>
+                  <span style={{ fontSize: 12, color: color.mute }}>{module.hint}</span>
                 </div>
                 {moduleItems.length === 0 ? (
                   <div
@@ -195,9 +197,9 @@ export default function IntelligenceCenter() {
           })}
 
           {/* 口径与图片授权说明：本页所有判断均为示例，图片为 CC/PD 真机照 */}
-          <div style={{ marginTop: space.sm, fontSize: 11, color: color.mute, lineHeight: 1.7 }}>
+          <div style={{ marginTop: space.sm, fontSize: 12, color: color.mute, lineHeight: 1.7 }}>
             口径说明：{provenanceSummary(DEMO_INTELLIGENCE_PROVENANCE)}；新品 / 竞品卡图为 Wikimedia Commons CC0 / CC BY / CC BY-SA 真机照片（授权见
-            {' '}<span style={{ fontFamily: font.mono, fontSize: 10.5 }}>public/gtm-samples/ATTRIBUTION.md</span>），未配图条目与加载失败均显示中性灰底占位。真实情报源（新品官方图库、渠道采集、促销抓取）接入前，本页不展示任何实时数据。
+            {' '}<span style={{ fontFamily: font.mono, fontSize: 12 }}>public/gtm-samples/ATTRIBUTION.md</span>），未配图条目与加载失败均显示中性灰底占位。真实情报源（新品官方图库、渠道采集、促销抓取）接入前，本页不展示任何实时数据。
           </div>
         </main>
       </div>

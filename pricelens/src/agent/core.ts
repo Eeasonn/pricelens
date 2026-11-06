@@ -141,7 +141,14 @@ export function classifyIntent(text: string): AgentIntent {
   if (/价格预警|预警列表|预警.*证据|预警.*看板/.test(text)) return 'price_alert';
   if (/预警|异常|阈值|触发原因|为什么.*变/.test(text)) return 'alert';
   if (/(?:量价预测|简单版预测|预测)/.test(text) && /解释|假设|证据|风险|不确定|为什么/.test(text)) return 'forecast_explain';
-  if (/只看|切换|显示|带上|去掉|最近\s*\d+\s*(周|月)|usd|美元|本币|rrp|划线价/i.test(text)) return 'filter';
+  // R2（本轮返修 M4）：含「最近 N 周/月」的真实查询（“最近 8 周哪个平台最便宜？”
+  // “最近 8 周价格趋势”）不能被筛选意图抢占——只有纯切换/筛选口令（只看 / 切到 /
+  // 筛选 / 显示…开头且不带疑问）才走 filter；币种/RRP 口令维持原 filter 归类。
+  // 疑问与比较类措辞落到下方 query 关键词判定，保证拿到真实周范围结果而非预览。
+  const recentRangeInText = /最近\s*\d+\s*(?:周|星期|月)/.test(text);
+  const pureRangeSwitch = /^(?:只看|切到|切换|筛选|显示|带上|去掉|改为|换成)/.test(text.trim()) && !/[?？]/.test(text);
+  if (!recentRangeInText && /只看|切换|显示|带上|去掉|usd|美元|本币|rrp|划线价/i.test(text)) return 'filter';
+  if (recentRangeInText && (pureRangeSwitch || /只看|切换|带上|去掉|usd|美元|本币|rrp|划线价/i.test(text))) return 'filter';
   if (/比较|对比|依据|最低|最便宜|价差|趋势|价格|平台|多少|均值|变化|情报|预测|销量|需求|供给|库存|汇率|大盘/.test(text)) return 'query';
   if (knownEntityInText(text) && /看|查|查询|了解|情况|表现|分析|走势/.test(text)) return 'query';
   return 'clarify';
@@ -521,12 +528,22 @@ function priceAlertList(text: string, context: AgentContextSnapshot): { card: Al
 }
 
 function suggestionActionsFor(intent: AgentIntent, clarificationReason: string | null): AgentSuggestionAction[] {
+  // R2（本轮返修 M4）：时间范围澄清卡必须给可点击的「补齐时间」动作——点击即以
+  // 明确的「最近 N 周价格趋势」发起真实查询（周范围来自 dimTime 最后 N 桶，
+  // 如 202635–202642，并带最新价摘要），不能只生成筛选预览。
+  if (clarificationReason === '时间范围') {
+    return [
+      { label: '补齐时间 · 最近 8 周', intent: 'query', prompt: '最近 8 周价格趋势' },
+      { label: '补齐时间 · 最近 4 周', intent: 'query', prompt: '最近 4 周价格趋势' },
+      { label: '补齐时间 · 最近 12 周', intent: 'query', prompt: '最近 12 周价格趋势' },
+    ];
+  }
+  void intent;
   const core: AgentSuggestionAction[] = [
     { label: '价格优势', intent: 'price_advantage', target: 'comparison', prompt: '价格优势' },
     { label: '价格预警', intent: 'price_alert', target: 'evidence', prompt: '价格预警' },
     { label: '查我司产品价格', intent: 'query', target: 'dashboard', prompt: '查我司产品价格' },
   ];
-  void intent; void clarificationReason;
   return core;
 }
 

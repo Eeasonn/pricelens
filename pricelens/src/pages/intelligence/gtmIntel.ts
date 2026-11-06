@@ -112,10 +112,24 @@ function dimTimeIndex(rowId: string, granularity: Granularity): number {
   );
 }
 
-/** 筛选区间 → [起始周 id, 结束周 id]（含端点）；非法区间回退整段日历 */
+/** 结束桶 → 最后一个匹配周的下标（R2 本轮返修 M3）：月/季桶覆盖多周，findIndex
+ *  只落在首周会把 202610/2026Q4 的窗口收口在 202641，W42（如 Galaxy S25 Ultra
+ *  促销加深条目）被错误过滤；结束边界必须取该桶内最后一个周。 */
+function dimTimeLastIndex(rowId: string, granularity: Granularity): number {
+  for (let i = dimTime.length - 1; i >= 0; i -= 1) {
+    const row = dimTime[i];
+    if (granularity === 'week' ? row.week_id === rowId
+      : granularity === 'month' ? row.month_id === rowId
+        : row.quarter_id === rowId) return i;
+  }
+  return -1;
+}
+
+/** 筛选区间 → [起始周 id, 结束周 id]（含端点）；非法区间回退整段日历。
+ *  起始桶取首个匹配周，结束桶取最后匹配周（月/季结束桶不提前收口）。 */
 export function weekIdRange(granularity: Granularity, rangeStart: string, rangeEnd: string): [string, string] {
   const start = Math.max(0, dimTimeIndex(rangeStart, granularity));
-  const end = dimTimeIndex(rangeEnd, granularity);
+  const end = dimTimeLastIndex(rangeEnd, granularity);
   const last = dimTime.length - 1;
   const endIndex = end === -1 ? last : Math.min(end, last);
   return start > endIndex

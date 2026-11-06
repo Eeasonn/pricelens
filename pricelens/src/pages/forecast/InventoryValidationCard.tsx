@@ -129,7 +129,7 @@ function StateChip({ label, title }: { label: string; title: string }) {
       title={title}
       style={{
         display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+        fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
         background: color.canvasSoft2, color: color.mute,
       }}
     >
@@ -493,7 +493,7 @@ export default function InventoryValidationCard({
               title="SI 确认状态未能写入浏览器会话存储：内存态继续生效，点击重试持久化"
               style={{
                 display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-                fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', font: 'inherit',
+                fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', font: 'inherit',
                 background: color.warningSoft, border: `1px solid ${color.warning}`, color: color.warningInk,
               }}
             >
@@ -520,17 +520,17 @@ export default function InventoryValidationCard({
             return (
               <g key={fraction}>
                 <line x1={LEFT} y1={gy} x2={chartW - RIGHT} y2={gy} stroke={fraction === 0 ? color.hairlineStrong : color.hairline} />
-                <text {...axisTextProps} x={LEFT - 6} y={gy + 3.5} fontSize={10} fill={color.mute} textAnchor="end">{Math.round(dosMax * fraction)}</text>
+                <text {...axisTextProps} x={LEFT - 6} y={gy + 3.5} fontSize={12} fill={color.mute} textAnchor="end">{Math.round(dosMax * fraction)}</text>
               </g>
             );
           })}
-          <text {...axisTextProps} x={LEFT - 6} y={TOP - 3} fontSize={10} fill={color.mute} textAnchor="end">天</text>
+          <text {...axisTextProps} x={LEFT - 6} y={TOP - 3} fontSize={12} fill={color.mute} textAnchor="end">天</text>
           {[0, 0.5, 1].map((fraction) => (
-            <text {...axisTextProps} key={fraction} x={chartW - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{wanOf(invMax * fraction)}</text>
+            <text {...axisTextProps} key={fraction} x={chartW - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={12} fill={color.mute}>{wanOf(invMax * fraction)}</text>
           ))}
-          <text {...axisTextProps} x={chartW - RIGHT + 6} y={TOP - 3} fontSize={10} fill={color.mute}>万台</text>
+          <text {...axisTextProps} x={chartW - RIGHT + 6} y={TOP - 3} fontSize={12} fill={color.mute}>万台</text>
           {weeks.map((week, index) => (index % 4 === 0 || index === weeks.length - 1
-            ? <text {...axisTextProps} key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{weekBucketIds[index]}</text>
+            ? <text {...axisTextProps} key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={12} fill={color.mute}>{weekBucketIds[index]}</text>
             : null))}
           {show('inv') && weeks.map((week, index) => {
             const forecast = index >= forecastStart;
@@ -567,7 +567,7 @@ export default function InventoryValidationCard({
             return (
               <g>
                 <line x1={px} y1={TOP} x2={px} y2={TOP + PLOT_H} stroke={color.warning} strokeDasharray="3 4" opacity={0.7} />
-                <text {...axisTextProps} x={px + 4} y={TOP + 20} fontSize={10} fontWeight={600} fill={color.warningInk}>{`${result.firstAdjustedWeek} 起修正`}</text>
+                <text {...axisTextProps} x={px + 4} y={TOP + 20} fontSize={12} fontWeight={600} fill={color.warningInk}>{`${result.firstAdjustedWeek} 起修正`}</text>
               </g>
             );
           })()}
@@ -594,7 +594,7 @@ export default function InventoryValidationCard({
           <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, marginBottom: 2, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>SI 月计划</span>
-              <span style={{ fontSize: 11, color: color.mute }}>
+              <span style={{ fontSize: 12, color: color.mute }}>
                 千台/月 · 月内均分到周（整数守恒，余数月初起 +1）· 逐月确认，无「全部确认」
               </span>
             </div>
@@ -651,12 +651,12 @@ export default function InventoryValidationCard({
                       }}
                       style={inputStyle(invalid)}
                     />
-                    <span style={{ fontSize: 11, color: color.mute }}>千台</span>
+                    <span style={{ fontSize: 12, color: color.mute }}>千台</span>
                     <span
                       data-si-status={monthKey}
                       style={{
                         display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
-                        borderRadius: radius.pill, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                        borderRadius: radius.pill, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
                         // P0-2（2026-11-06）：已确认退出墨色（墨色只留给唯一主按钮），
                         // 改已登记的 alert.lifecycle.resolved 绿色系（文字 + 底色双通道）。
                         background: status === 'confirmed' ? color.alert.lifecycle.resolved.bg : status === 'modified' ? color.warningSoft : color.canvasSoft2,
@@ -676,7 +676,7 @@ export default function InventoryValidationCard({
                           onClick={() => confirmMonth(monthKey)}
                           style={{
                             display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
-                            borderRadius: radius.control, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                            borderRadius: radius.control, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
                             cursor: 'pointer', font: 'inherit',
                             background: color.ink, border: `1px solid ${color.ink}`, color: color.onPrimary,
                           }}
@@ -692,7 +692,7 @@ export default function InventoryValidationCard({
                         onClick={() => restoreBaseline(monthKey)}
                         style={{
                           display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
-                          borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
+                          borderRadius: radius.control, fontSize: 12, whiteSpace: 'nowrap',
                           cursor: 'pointer', font: 'inherit',
                           background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body,
                         }}
@@ -702,12 +702,12 @@ export default function InventoryValidationCard({
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    {value === 0 && <span style={{ fontSize: 11, fontWeight: 600, color: color.body }}>本月不补货</span>}
+                    {value === 0 && <span style={{ fontSize: 12, fontWeight: 600, color: color.body }}>本月不补货</span>}
                     <span
                       data-si-split={monthKey}
                       className="tnum"
                       title="拆周 = siWeeklyPlan（月总量→周整数守恒，余数月初起 +1）"
-                      style={{ fontSize: 11, color: color.mute }}
+                      style={{ fontSize: 12, color: color.mute }}
                     >
                       {splitOfWeek(monthKey).map(({ weekId, units }) => `${weekId} ${fmtThousandUnits(units)}`).join(' · ')}
                       {' 千台'}
@@ -716,7 +716,7 @@ export default function InventoryValidationCard({
                       <span
                         data-si-reason={monthKey}
                         title="SI 修正原因（Batch 2 起必填，随数值同笔写入审计轨迹）"
-                        style={{ fontSize: 11, color: color.warningInk, minWidth: 0 }}
+                        style={{ fontSize: 12, color: color.warningInk, minWidth: 0 }}
                       >
                         {`原因：${committedReasonOf(monthKey)}`}
                       </span>
@@ -726,7 +726,7 @@ export default function InventoryValidationCard({
                       出现时机 = 数值草稿合法且与已提交值不同（含 'reason' 阻断态）。 */}
                   {showReasonEditor && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: color.body, minWidth: 0 }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body, minWidth: 0 }}>
                         {`修正原因（必填）`}
                         <input
                           aria-label={`${monthKey} SI 修正原因（必填）`}
@@ -762,7 +762,7 @@ export default function InventoryValidationCard({
                         onClick={() => tryCommit(monthKey)}
                         style={{
                           display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
-                          borderRadius: radius.control, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                          borderRadius: radius.control, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
                           cursor: 'pointer', font: 'inherit',
                           background: color.canvas, border: `1px solid ${color.hairline}`,
                           color: (reasonDrafts[monthKey] ?? '').trim() === '' ? color.hairlineStrong : color.body,
@@ -786,7 +786,7 @@ export default function InventoryValidationCard({
                         }}
                         style={{
                           display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px',
-                          borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
+                          borderRadius: radius.control, fontSize: 12, whiteSpace: 'nowrap',
                           cursor: 'pointer', font: 'inherit',
                           background: color.canvas, border: `1px solid ${color.hairline}`, color: color.body,
                         }}
@@ -798,7 +798,7 @@ export default function InventoryValidationCard({
                   {issue != null && (
                     <span
                       role={invalid || issue === 'reason' ? 'alert' : undefined}
-                      style={{ fontSize: 11, color: invalid || issue === 'reason' ? color.error : color.mute, fontWeight: invalid || issue === 'reason' ? 600 : 400 }}
+                      style={{ fontSize: 12, color: invalid || issue === 'reason' ? color.error : color.mute, fontWeight: invalid || issue === 'reason' ? 600 : 400 }}
                     >
                       {issue === 'invalid' ? SI_INVALID_TEXT : issue === 'reason' ? SI_REASON_REQUIRED_TEXT : SI_BLANK_TEXT}
                     </span>
@@ -810,7 +810,7 @@ export default function InventoryValidationCard({
 
           {/* 右列：期末渠道库存迷你柱图（随任意月 SI 修改即时重算 · v3 主链同源递推）。 */}
           <div data-si-mini-chart="" style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: color.mute, marginBottom: 4 }}>期末渠道库存（随 SI 即时重算 · 万台）</div>
+            <div style={{ fontSize: 12, color: color.mute, marginBottom: 4 }}>期末渠道库存（随 SI 即时重算 · 万台）</div>
             <svg
               viewBox={`0 0 ${MINI_W} ${MINI_H}`}
               width="100%"
@@ -819,7 +819,7 @@ export default function InventoryValidationCard({
               style={{ display: 'block', height: 'auto' }}
             >
               <line x1={MINI_L} y1={MINI_T} x2={MINI_W - MINI_R} y2={MINI_T} stroke={color.hairline} />
-              <text {...axisTextProps} x={MINI_L} y={MINI_T - 4} fontSize={10} fill={color.mute}>{`${wanOf(miniInvMax)} 万台`}</text>
+              <text {...axisTextProps} x={MINI_L} y={MINI_T - 4} fontSize={12} fill={color.mute}>{`${wanOf(miniInvMax)} 万台`}</text>
               <line x1={MINI_L} y1={MINI_T + MINI_PLOT_H} x2={MINI_W - MINI_R} y2={MINI_T + MINI_PLOT_H} stroke={color.hairlineStrong} />
               {monthEndInv.map(({ monthKey, value }, index) => {
                 const slotW = MINI_PLOT_W / monthEndInv.length;
@@ -847,7 +847,7 @@ export default function InventoryValidationCard({
                         x={MINI_L + (index + 0.5) * slotW}
                         y={MINI_H - 6}
                         textAnchor="middle"
-                        fontSize={10}
+                        fontSize={12}
                         fill={color.mute}
                       >
                         {monthKey.slice(2)}
@@ -857,7 +857,7 @@ export default function InventoryValidationCard({
                 );
               })}
             </svg>
-            <div style={{ fontSize: 11, color: color.mute, marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: color.mute, marginTop: 6 }}>
               改任意月 SI → 柱即时反映期末库存变化（v3 主链同源递推）；确认状态仍在行内。
             </div>
           </div>
@@ -919,7 +919,7 @@ export default function InventoryValidationCard({
               title={`跨卡导航：回主图定位 ${result.firstAdjustedWeek}（只滚动与临时聚焦，不清除手调、不改库存）`}
               style={{
                 display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 10px',
-                borderRadius: radius.control, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                borderRadius: radius.control, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
                 cursor: 'pointer', font: 'inherit',
                 background: color.canvas, border: `1px solid ${color.hairlineStrong}`, color: color.ink,
               }}

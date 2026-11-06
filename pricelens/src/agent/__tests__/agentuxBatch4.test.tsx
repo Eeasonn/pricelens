@@ -106,14 +106,15 @@ describe('agentux Batch4 面板交互（empty 卡 / 药丸 / 降级文案）', (
     const card = within(cards[cards.length - 1] as HTMLElement);
     // 结论 → 事实 → 规则/计算边界：规则文案带标签展示
     expect(card.getByText(/规则 · 计算边界/)).toBeTruthy();
-    // 迭代渠道工作台捷径（jsdom 为 iterate 通道）
-    fireEvent.click(card.getByRole('button', { name: '跳 GTM 情报' }));
-    await waitFor(() => expect(window.location.search).toContain('p=intelligence'));
-    // 回看价格走势：定位到最新对齐周并回到 dashboard（默认页 → ?p= 清除）
+    // R2 M1 语义下按序验证：回看走势（同国不换口径，消息保持未锁）→ 跳 GTM
+    // （页面变化使消息进入 stale 锁）→ 打开价格预警（纯 prompt 快问，永不锁）。
     fireEvent.click(card.getByRole('button', { name: '回看价格走势' }));
     await waitFor(() => expect(window.location.search).not.toContain('p=intelligence'));
     expect(navBus.dashboardFocusWeekId).toMatch(/^2026\d{2}$/);
-    // 打开价格预警：触发真实 price_alert 运行并产出预警事件卡
+    // 迭代渠道工作台捷径（jsdom 为 iterate 通道）
+    fireEvent.click(card.getByRole('button', { name: '跳 GTM 情报' }));
+    await waitFor(() => expect(window.location.search).toContain('p=intelligence'));
+    // 打开价格预警：纯 prompt 快问触发真实 price_alert 运行并产出预警事件卡
     fireEvent.click(card.getByRole('button', { name: '打开价格预警' }));
     await waitFor(() => expect(screen.getByText(/价格预警 · \d+ 条当前事件/)).toBeTruthy());
     view.unmount();

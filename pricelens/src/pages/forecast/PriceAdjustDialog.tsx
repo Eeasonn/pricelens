@@ -56,7 +56,7 @@ function DemandLinkNotice() {
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '5px 10px', borderRadius: radius.control,
         background: color.canvasSoft2, border: `1px solid ${color.hairline}`,
-        fontSize: 11.5, color: color.body,
+        fontSize: 12, color: color.body,
       }}
     >
       <span aria-hidden style={{ width: 6, height: 6, borderRadius: 6, background: color.warningInk }} />
@@ -185,7 +185,7 @@ export default function PriceAdjustDialog({
       style={{ maxWidth: 'calc(100vw - 24px)' }}
       footer={
         <div style={{ display: 'flex', gap: space.sm, justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' }}>
-          {!reasonOk && <span style={{ fontSize: 11, color: color.warningInk, marginRight: 'auto' }}>请填写参考说明（必填）后应用</span>}
+          {!reasonOk && <span style={{ fontSize: 12, color: color.warningInk, marginRight: 'auto' }}>请填写参考说明（必填）后应用</span>}
           <Button onClick={onCancel}>取消</Button>
           <Button onClick={() => setPreviewed(true)}>预览销毛变化</Button>
           <Button type="primary" disabled={!reasonOk} title={reasonOk ? undefined : '价格手调必须填写参考说明（原因）'} onClick={handleApply}>应用价格调整</Button>
@@ -273,7 +273,7 @@ export default function PriceAdjustDialog({
                 onChange={(value) => { setDeltaPct(value == null || Number.isNaN(Number(value)) ? null : Number(value)); setDeltaAmount(null); }}
                 style={{ width: 100 }}
               />
-              <span style={{ fontSize: 11, color: color.mute }}>按各周当前主图价计算</span>
+              <span style={{ fontSize: 12, color: color.mute }}>按各周当前主图价计算</span>
             </>
           )}
         </div>
@@ -289,11 +289,11 @@ export default function PriceAdjustDialog({
 
         {/* 受影响周清单：确认前展示每个受影响周（月展开 = 全部预测周） */}
         <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.control, padding: space.sm, background: color.canvasSoft, minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: color.mute, marginBottom: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: color.mute, marginBottom: 6 }}>
             受影响周清单（{affectedWeekIds.length} 周 · 新批次 {batchId}）
           </div>
           {affectedWeekIds.length === 0 && (
-            <div style={{ fontSize: 11.5, color: color.mute }}>该范围无预测周</div>
+            <div style={{ fontSize: 12, color: color.mute }}>该范围无预测周</div>
           )}
           <div style={{ display: 'grid', gap: 4, fontSize: 12, color: color.body }}>
             {affectedWeekIds.map((id) => {
@@ -304,7 +304,7 @@ export default function PriceAdjustDialog({
                   <span className="tnum" style={{ fontWeight: 600, color: color.ink }}>{id}</span>
                   <span className="tnum">{`${fmtUsd(current)} → ${fmtUsd(next)}`}</span>
                   {scenario.priceOverrides[id] != null && (
-                    <span style={{ fontSize: 11, color: color.mute }}>已有手调</span>
+                    <span style={{ fontSize: 12, color: color.mute }}>已有手调</span>
                   )}
                 </div>
               );
@@ -315,7 +315,7 @@ export default function PriceAdjustDialog({
         {/* 已有价格手调冲突：逐项「保留 / 覆盖」，默认保留 */}
         {conflictWeekIds.length > 0 && (
           <div style={{ border: `1px solid ${color.warning}`, borderRadius: radius.control, padding: space.sm, background: color.warningSoft, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: color.warningInk, marginBottom: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: color.warningInk, marginBottom: 6 }}>
               与已有价格手调冲突（逐项确认 · 默认保留）
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
@@ -325,7 +325,7 @@ export default function PriceAdjustDialog({
                   <div key={id} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12, color: color.body }}>
                     <span className="tnum" style={{ fontWeight: 600, color: color.ink }}>{id}</span>
                     <span className="tnum">{`已有 ${fmtUsd(existing.price)}`}</span>
-                    <span style={{ fontSize: 11, color: color.mute }}>{`${existing.reason || '（无说明）'} · ${existing.batchId}`}</span>
+                    <span style={{ fontSize: 12, color: color.mute }}>{`${existing.reason || '（无说明）'} · ${existing.batchId}`}</span>
                     <Segmented
                       value={conflictChoices[id] ?? 'keep'}
                       onChange={(value) => setConflictChoices((prev) => ({ ...prev, [id]: value as 'keep' | 'overwrite' }))}
@@ -348,7 +348,7 @@ export default function PriceAdjustDialog({
             data-preview=""
             style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: space.md, background: color.canvas, boxShadow: 'none', display: 'grid', gap: 6, minWidth: 0 }}
           >
-            <div style={{ fontSize: 11, fontWeight: 600, color: color.mute }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: color.mute }}>
               预览销毛变化（只读临时计算 · 价格→销量关系未纳入）
             </div>
             <div style={{ display: 'grid', gap: 4, fontSize: 12, color: color.body }}>
@@ -384,7 +384,7 @@ export default function PriceAdjustDialog({
             </div>
           </div>
         )}
-        <div style={{ fontSize: 11, lineHeight: 1.6, color: color.mute }}>
+        <div style={{ fontSize: 12, lineHeight: 1.6, color: color.mute }}>
           应用后写入④销毛工作区（会话内可撤销 / 清除）；主图价格点以手调小标显示「价格手调 · 来自成本参考」。
           无定价依据时本弹窗只预填当前价，不自动给出涨价金额。
         </div>

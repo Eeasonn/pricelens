@@ -192,7 +192,7 @@ describe('大盘卡 · 卡头（2026-11-05 整改）：② 大盘修正 + HintIn
     expect(add?.getAttribute('aria-label')).toBe('添加事件');
     expect(add?.textContent).toContain('＋事件');
     expect(add?.style.height).toBe('24px');
-    expect(add?.style.fontSize).toBe('11.5px');
+    expect(add?.style.fontSize).toBe('12px'); // R2 C4：辅助字号统一 >=12
     // 抽屉机制整体退役：无抽屉按钮 / 抽屉容器 / 遮罩 / 三步链浮层触发器
     expect(screen.queryByRole('button', { name: '事件与情报' })).toBeNull();
     expect(document.querySelector('[data-lpl-drawer]')).toBeNull();
@@ -704,13 +704,13 @@ describe('大盘卡 · 图上标注统一（2026-11-05 全局 #2：小方块点 
     expect(svg?.querySelector('line')?.getAttribute('stroke-dasharray')).toBe('4 4');
     // 刻度文字保留 + 风格对齐 volume 页（#8）：fontSize 10 / fill=mute / font.family / tabular-nums
     const tickGroup = svg?.querySelector('g[font-family]') as SVGGElement | null;
-    expect(tickGroup?.getAttribute('font-size')).toBe('10');
+    expect(tickGroup?.getAttribute('font-size')).toBe('12'); // R2 C4：轴刻度 >=12
     expect(tickGroup?.getAttribute('fill')).toBe('#737373');
     expect(tickGroup?.getAttribute('font-family')).toContain('Inter');
     expect(tickGroup?.getAttribute('style')).toContain('tabular-nums');
     expect(tickGroup?.querySelectorAll('text').length).toBeGreaterThan(0);
     const axisGroup = svg?.querySelector('g[text-anchor="middle"]') as SVGGElement | null;
-    expect(axisGroup?.getAttribute('font-size')).toBe('10');
+    expect(axisGroup?.getAttribute('font-size')).toBe('12');
   });
 
   it('hover 小标 → 对应周区间临时高亮（移开即恢复）', () => {
@@ -785,5 +785,76 @@ describe('大盘卡 · 图上标注统一（2026-11-05 全局 #2：小方块点 
     );
     expect(document.querySelector('svg')).toBeNull();
     expect(document.body.textContent).toContain('当前范围无大盘数据');
+  });
+});
+
+describe('大盘卡 · R2（本轮返修 M6）：月证据 pinnedMonth 固定态', () => {
+  const popoverOf = () => document.querySelector('[data-lpl-month-popover][data-popover-mode="evidence"]') as HTMLElement | null;
+  const chartWrapOf = (monthKey: string): HTMLElement =>
+    document.querySelector(`rect[data-month="${monthKey}"]`)!.closest('svg')!.parentElement as HTMLElement;
+
+  it('hover 预览 → click 固定：pointerleave 不收起；再点同月解除', () => {
+    setup();
+    const hit = monthHit('2026-11');
+    // hover = 预览（未钉住）
+    fireEvent.mouseOver(hit);
+    expect(popoverOf()).not.toBeNull();
+    expect(popoverOf()!.getAttribute('data-evidence-pinned')).toBeNull();
+    // 未钉住时移出图区即收起（v2-2 既有行为）
+    fireEvent.mouseLeave(chartWrapOf('2026-11'));
+    expect(popoverOf()).toBeNull();
+    // click = 钉住（role=dialog 固定），pointerleave 不收起
+    fireEvent.click(hit);
+    expect(popoverOf()).not.toBeNull();
+    expect(popoverOf()!.getAttribute('data-evidence-pinned')).toBe('true');
+    expect(hit.getAttribute('data-month-pinned')).toBe('true');
+    fireEvent.mouseLeave(chartWrapOf('2026-11'));
+    expect(popoverOf(), '钉住后 pointerleave 仍保留').not.toBeNull();
+    // 再次点同月 = 解除
+    fireEvent.click(hit);
+    expect(popoverOf()).toBeNull();
+    expect(hit.getAttribute('data-month-pinned')).toBeNull();
+  });
+
+  it('Space 钉住后 Escape 关闭（焦点仍在 SVG 命中区）并安全归还焦点', () => {
+    setup();
+    const hit = monthHit('2026-11');
+    fireEvent.keyDown(hit, { key: ' ' });
+    expect(popoverOf()).not.toBeNull();
+    expect(popoverOf()!.getAttribute('data-evidence-pinned')).toBe('true');
+    // 焦点还停在月命中区（点击/键盘触发后不离开 SVG）：document 级 Escape 生效
+    (hit as SVGRectElement).focus?.();
+    fireEvent.keyDown(hit, { key: 'Escape' });
+    expect(popoverOf()).toBeNull();
+    expect(document.activeElement).toBe(hit);
+  });
+
+  it('外部点击解除钉住；关闭按钮同样解除', () => {
+    setup();
+    const hit = monthHit('2026-11');
+    fireEvent.click(hit);
+    expect(popoverOf()).not.toBeNull();
+    // 点图区以外（页面主体）= 外部点击解除
+    fireEvent.pointerDown(document.body);
+    expect(popoverOf()).toBeNull();
+    // 重新钉住后用关闭钮解除
+    fireEvent.click(hit);
+    expect(popoverOf()).not.toBeNull();
+    const close = popoverOf()!.querySelector('button[aria-label^="关闭 "]') as HTMLButtonElement;
+    expect(close).toBeTruthy();
+    fireEvent.click(close);
+    expect(popoverOf()).toBeNull();
+  });
+
+  it('钉住 2026-11 时 hover 其他预测月不切换浮层；点击其他月切换钉住目标', () => {
+    setup();
+    const first = monthHit('2026-11');
+    const second = monthHit('2026-12');
+    fireEvent.click(first);
+    expect(popoverOf()!.textContent).toContain('2026-11');
+    fireEvent.mouseOver(second);
+    expect(popoverOf()!.textContent, '钉住期间 hover 不切换').toContain('2026-11');
+    fireEvent.click(second);
+    expect(popoverOf()!.textContent).toContain('2026-12');
   });
 });

@@ -86,18 +86,48 @@ describe('agentux-core price advantage and price alert loops', () => {
     expect(alertToggle).toBeTruthy();
     fireEvent.click(alertToggle as HTMLElement);
     await waitFor(() => expect(card.getAllByText((content) => content.includes('触发事实')).length).toBeGreaterThan(1));
-    fireEvent.click(card.getAllByRole('button', { name: '看板' })[0]);
+    // R2 M5：折叠行头不再有前置「看板」按钮；行级定位动作 = 展开区判断边界之后的「应用预警筛选」
+    fireEvent.click(card.getAllByRole('button', { name: '应用预警筛选' })[0]);
     await waitFor(() => {
       const next = JSON.parse(view.container.querySelector('[data-filter-state]')?.textContent ?? '{}');
       expect(next.granularity).toBe('week');
       expect(next.rangeStart).toBe(next.rangeEnd);
       expect(next.mains.length).toBeGreaterThan(0);
     });
-    fireEvent.click(card.getByRole('button', { name: /撤销筛选/ }));
+    // R2 M1/B m3：定位改写全局口径 → 本消息自锁，撤销筛选禁用且程序化点击无效
+    const lockedUndo = card.getByRole('button', { name: /撤销筛选/ }) as HTMLButtonElement;
+    expect(lockedUndo.disabled).toBe(true);
+    fireEvent.click(lockedUndo);
+    await new Promise((resolve) => { setTimeout(resolve, 100); });
+    expect(view.container.querySelector('[data-filter-state]')?.textContent).not.toBe(JSON.stringify(before));
+    // 纯 prompt 追问（未锁）发起当前口径新查询：新消息上撤销可用并真实回滚到 before
+    // 锁定消息上状态流转同样禁用：程序化点击后不产生「撤销状态变更」
+    fireEvent.click(card.getAllByRole('button', { name: /标记已确认|开始核查|标记需行动/ })[0] as HTMLButtonElement);
+    await new Promise((resolve) => { setTimeout(resolve, 100); });
+    expect(card.queryByRole('button', { name: /撤销状态变更/ })).toBeNull();
+    const input = screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' });
+    fireEvent.change(input, { target: { value: '价格预警' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(view.container.querySelectorAll('[data-agent-message]').length).toBeGreaterThan(4), { timeout: 5000 });
+    const freshCards = view.container.querySelectorAll('[data-agent-result-card]');
+    const freshCardEl = freshCards[freshCards.length - 1] as HTMLElement;
+    const freshCard = within(freshCardEl);
+    // 新预警卡（未锁）上状态流转可用并可撤销（状态流转不改筛选指纹，消息保持未锁）
+    const freshToggle = freshCard.getAllByRole('button').find((button) => /HUAWEI/.test(button.textContent ?? ''));
+    expect(freshToggle).toBeTruthy();
+    fireEvent.click(freshToggle as HTMLElement);
+    await waitFor(() => expect(freshCard.getAllByRole('button', { name: /标记已确认|开始核查|标记需行动/ }).length).toBeGreaterThan(0));
+    fireEvent.click(freshCard.getAllByRole('button', { name: /标记已确认|开始核查|标记需行动/ })[0]!);
+    expect(await freshCard.findByRole('button', { name: /撤销状态变更/ })).toBeTruthy();
+    fireEvent.click(freshCard.getByRole('button', { name: /撤销状态变更/ }));
+    // 最后撤销筛选（同一未锁消息上仍可用）：真实回滚到 before 口径
+    const freshUndo = await waitFor(() => {
+      const button = freshCard.getAllByRole('button', { name: /撤销筛选/ }).find((b) => !(b as HTMLButtonElement).disabled) as HTMLButtonElement;
+      expect(button).toBeTruthy();
+      return button;
+    });
+    fireEvent.click(freshUndo);
     await waitFor(() => expect(view.container.querySelector('[data-filter-state]')?.textContent).toBe(JSON.stringify(before)));
-    fireEvent.click(card.getAllByRole('button', { name: /标记已确认|开始核查|标记需行动/ })[0]);
-    expect(await card.findByRole('button', { name: /撤销状态变更/ })).toBeTruthy();
-    fireEvent.click(card.getByRole('button', { name: /撤销状态变更/ }));
     view.unmount();
   });
 

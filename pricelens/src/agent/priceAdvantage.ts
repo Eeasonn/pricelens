@@ -1,8 +1,8 @@
 import { buildSeries } from '../dataModel/aggregate';
 import { dimProduct, dimRegion, dimTime } from '../data';
-import { autoComparesFor, buildCards, withAutoOn } from '../state/mainSelection';
+import { autoComparesFor, buildCards, clampMains, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
-import type { AgentCitation, AgentResponse, AgentStep, PriceAdvantageResultCard, PriceAdvantageRow } from './contracts';
+import type { AgentCitation, AgentResponse, AgentStep, FilterPatch, PriceAdvantageResultCard, PriceAdvantageRow } from './contracts';
 
 const compact = (value: string): string => value.replace(/\s+/g, '');
 const id = (prefix: string, index: number): string => `${prefix}-${index.toString(36)}`;
@@ -89,6 +89,45 @@ export interface PriceAdvantageResult {
   summary: string;
   steps: AgentStep[];
   citations: AgentCitation[];
+}
+
+/** 按行目标国重建主品卡：自动竞品矩阵跟随国家，并确保该行竞品在对比区内
+ *  （AgentPanel AdvantageCard.focusCards 的模型侧同款，供回看/跳 GTM 共用）。 */
+function focusCardsOfRow(row: PriceAdvantageRow): MainProduct[] {
+  const autoCards = buildCards([row.ownSelection], { auto: true, countryCode: row.countryCode });
+  const first = autoCards[0];
+  const keepsTarget = first?.compares.some((item) => item.modelId === row.compareSelection.modelId && item.romram.replace(/\s+/g, '') === row.compareSelection.romram.replace(/\s+/g, ''));
+  return keepsTarget ? autoCards : clampMains(autoCards.map((item) => ({ ...item, compares: [...item.compares, row.compareSelection].slice(0, 3) })));
+}
+
+/** R2（本轮返修 m2 + M2，同步稳定线 7edadc6）：结果卡「回看价格走势 / 跳 GTM
+ *  情报」共用的 scopePatch——目标 countryCode、完整主品/SKU 口径（显式 mains）、
+ *  平台口径与实际参与对比的周范围。粒度与范围桶必须同形：有对比行时按实际
+ *  参与对比的周（rows 已按周倒序）给真实周桶 + 周粒度；空结果回退原状态口径时
+ *  保持原粒度与原桶（季粒度 2025Q1–2025Q2 的空卡回看不得变成 week + 2025Q1
+ *  的错配）。空结果不带 mains——跨国回看由目标国快照 / 默认卡安全落地。 */
+export function advantageScopePatch(state: FiltersState, rows: PriceAdvantageRow[]): FilterPatch {
+  const earliest = rows[rows.length - 1];
+  const latest = rows[0];
+  if (!rows.length || !earliest || !latest) {
+    return {
+      countryCode: state.countryCode,
+      platform: state.platform,
+      adaptive: false,
+      granularity: state.granularity,
+      rangeStart: state.rangeStart,
+      rangeEnd: state.rangeEnd,
+    };
+  }
+  return {
+    countryCode: latest.countryCode,
+    platform: state.platform,
+    adaptive: false,
+    granularity: 'week',
+    rangeStart: earliest.weekId,
+    rangeEnd: latest.weekId,
+    mains: focusCardsOfRow(latest),
+  };
 }
 
 /**

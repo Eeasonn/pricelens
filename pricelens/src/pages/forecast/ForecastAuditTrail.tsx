@@ -36,7 +36,7 @@ function StatusChip({ label, bg, fg, title }: { label: string; bg: string; fg: s
       title={title}
       style={{
         display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-        fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', background: bg, color: fg,
+        fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: bg, color: fg,
         border: `1px solid ${bg === color.canvasSoft2 ? color.hairline : 'transparent'}`,
       }}
     >
@@ -50,10 +50,10 @@ function EvidenceRow({ evidence }: { evidence: ForecastStepResult['evidence'][nu
   return (
     <div data-audit-evidence={evidence.id} style={{ display: 'grid', gap: 2, padding: '4px 0', borderBottom: `1px solid ${color.hairline}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11.5, color: color.ink, fontWeight: 600, minWidth: 0 }}>{evidence.label}</span>
+        <span style={{ fontSize: 12, color: color.ink, fontWeight: 600, minWidth: 0 }}>{evidence.label}</span>
         <StatusChip label={EVIDENCE_STATUS_LABEL[evidence.status]} bg={color.canvasSoft2} fg={color.mute} />
       </div>
-      <div className="tnum" style={{ fontSize: 11, color: color.mute, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <div className="tnum" style={{ fontSize: 12, color: color.mute, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <span>来源：{evidence.source}</span>
         <span>数据版本：{evidence.dataVersion ?? '待确认'}</span>
         <span>采集时间：{evidence.capturedAt ?? '待确认'}</span>
@@ -72,7 +72,7 @@ function StepRow({
 }) {
   const [open, setOpen] = useState(false);
   const statusView = STEP_STATUS_VIEW[step.status];
-  const detailLabelStyle = { fontSize: 11, fontWeight: 600, color: color.mute, letterSpacing: '0.05em' } as const;
+  const detailLabelStyle = { fontSize: 12, fontWeight: 600, color: color.mute, letterSpacing: '0.05em' } as const;
   return (
     <div
       data-audit-step={step.step}
@@ -82,7 +82,7 @@ function StepRow({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' }}>
-        <span className="mono tnum" style={{ fontSize: 11, color: color.mute, flex: 'none' }}>{`STEP 0${step.step}`}</span>
+        <span className="mono tnum" style={{ fontSize: 12, color: color.mute, flex: 'none' }}>{`STEP 0${step.step}`}</span>
         <span style={{ fontSize: 13, fontWeight: 600, color: color.ink, flex: 'none' }}>{step.title}</span>
         <StatusChip label={statusView.label} bg={statusView.bg} fg={statusView.fg} title={step.statusText} />
         <span
@@ -99,7 +99,7 @@ function StepRow({
             onClick={() => setOpen((prev) => !prev)}
             style={{
               border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas,
-              color: color.body, fontSize: 11, padding: '2px 10px', cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
+              color: color.body, fontSize: 12, padding: '2px 10px', cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
             }}
           >
             {open ? '收起' : '展开'}
@@ -110,7 +110,7 @@ function StepRow({
             title={`滚动定位到本步对应卡（只定位与聚焦，不重算、不改参数）`}
             onClick={() => onLocate(step.step)}
             style={{
-              border: 'none', background: 'transparent', color: color.link, fontSize: 11, fontWeight: 600,
+              border: 'none', background: 'transparent', color: color.link, fontSize: 12, fontWeight: 600,
               cursor: 'pointer', padding: '2px 4px', font: 'inherit', whiteSpace: 'nowrap',
             }}
           >
@@ -126,20 +126,20 @@ function StepRow({
         >
           <div style={{ display: 'grid', gap: 4 }}>
             <div style={detailLabelStyle}>输入（前一步输出 = 本步输入）</div>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, lineHeight: 1.7, color: color.body }}>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color: color.body }}>
               {step.inputs.map((input) => <li key={input}>{input}</li>)}
             </ul>
           </div>
           <div style={{ display: 'grid', gap: 4 }}>
             <div style={detailLabelStyle}>假设</div>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, lineHeight: 1.7, color: color.body }}>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color: color.body }}>
               {step.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}
             </ul>
           </div>
           <div style={{ display: 'grid', gap: 4 }}>
             <div style={detailLabelStyle}>修正（含内联原因 · 取消不写入）</div>
             {step.adjustments.length === 0 ? (
-              <div style={{ fontSize: 11.5, color: color.mute }}>本步暂无人工修正</div>
+              <div style={{ fontSize: 12, color: color.mute }}>本步暂无人工修正</div>
             ) : (
               <div style={{ display: 'grid', gap: 3 }}>
                 {step.adjustments.map((adjustment) => (
@@ -147,7 +147,7 @@ function StepRow({
                     key={adjustment.key}
                     data-audit-adjustment={adjustment.key}
                     className="tnum"
-                    style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11.5, color: color.body }}
+                    style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12, color: color.body }}
                   >
                     <span style={{ color: color.ink, fontWeight: 600, minWidth: 0 }}>{adjustment.label}</span>
                     <span style={{ color: color.mute }}>{`原因：${adjustment.reason}`}</span>
@@ -164,12 +164,12 @@ function StepRow({
           </div>
           <div style={{ display: 'grid', gap: 4 }}>
             <div style={detailLabelStyle}>计算关系（可复核）</div>
-            <div className="tnum" style={{ fontSize: 11.5, lineHeight: 1.7, color: color.body }}>{step.formula}</div>
+            <div className="tnum" style={{ fontSize: 12, lineHeight: 1.7, color: color.body }}>{step.formula}</div>
           </div>
           <div style={{ display: 'grid', gap: 4 }}>
             <div style={detailLabelStyle}>数据状态与待补契约</div>
-            <div style={{ fontSize: 11.5, lineHeight: 1.7, color: color.body }}>{step.statusText}</div>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, lineHeight: 1.7, color: color.mute }}>
+            <div style={{ fontSize: 12, lineHeight: 1.7, color: color.body }}>{step.statusText}</div>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color: color.mute }}>
               {step.missingFields.map((field) => <li key={field}>{field}</li>)}
             </ul>
           </div>
@@ -215,7 +215,7 @@ export default function ForecastAuditTrail({
             className="mono"
             title={`当前推演上下文指纹（国家/产业/渠道/产品/模型版本）：${contextFingerprint}。换国家或产品后请以此指纹比对，不把旧结果静默套用到新范围。`}
             style={{
-              fontSize: 11, color: color.body, padding: '2px 8px',
+              fontSize: 12, color: color.body, padding: '2px 8px',
               border: `1px solid ${color.hairline}`, borderRadius: radius.control, whiteSpace: 'nowrap',
             }}
           >
@@ -240,7 +240,7 @@ export default function ForecastAuditTrail({
             onClick={onRetryCompute}
             style={{
               marginLeft: 'auto', border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control,
-              background: color.canvas, color: color.ink, fontSize: 11.5, fontWeight: 600,
+              background: color.canvas, color: color.ink, fontSize: 12, fontWeight: 600,
               padding: '3px 12px', cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
             }}
           >
@@ -255,7 +255,7 @@ export default function ForecastAuditTrail({
           style={{
             padding: `4px ${space.md}px`, marginBottom: space.sm,
             border: `1px solid ${color.hairline}`, borderRadius: radius.control,
-            background: color.canvasSoft2, fontSize: 11.5, color: color.body,
+            background: color.canvasSoft2, fontSize: 12, color: color.body,
           }}
         >
           {`${contextStaleNote}；本页为固定样本，换国后请回到全局筛选切换并以指纹比对上下文`}

@@ -5,7 +5,7 @@
 // （prefers-reduced-motion 时保留状态、去掉位移——与全局 CSS 降级双保险）。
 // 内容 = 完整可追溯字段（是什么 / 哪里 / 什么时候（事件+采集）/ 关键变化 /
 // GTM 意义及其依据 / 来源状态与原始链接 / 图片授权），并提供真实捷径
-// 「进入量价预测」（go('forecast)）与「让 Agent 评估」。
+// 「查看量价预测示例（固定样本）」（go('forecast')）与「让 Agent 评估」。
 // ============================================================
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowRightOutlined, CloseOutlined, RobotOutlined } from '@ant-design/icons';
@@ -88,7 +88,7 @@ export default function IntelDrawer({ item, onClose, onGoForecast, onAskAgent }:
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.md}px ${space.base}px`, borderBottom: `1px solid ${color.hairline}`, flexShrink: 0 }}>
-          <span style={{ fontSize: 11, color: color.mute }}>{INTEL_MODULE_LABEL[item.module]}情报</span>
+          <span style={{ fontSize: 12, color: color.mute }}>{INTEL_MODULE_LABEL[item.module]}情报</span>
           <DataModeBadge mode={item.dataMode} />
           <button
             type="button"
@@ -96,7 +96,7 @@ export default function IntelDrawer({ item, onClose, onGoForecast, onAskAgent }:
             aria-label="关闭详情（Esc）"
             style={{ marginLeft: 'auto', border: `1px solid ${color.hairline}`, background: color.canvas, borderRadius: radius.control, width: 26, height: 26, display: 'grid', placeItems: 'center', color: color.body, cursor: 'pointer' }}
           >
-            <CloseOutlined style={{ fontSize: 11 }} />
+            <CloseOutlined style={{ fontSize: 12 }} />
           </button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: space.base, display: 'flex', flexDirection: 'column', gap: space.md }}>
@@ -106,7 +106,7 @@ export default function IntelDrawer({ item, onClose, onGoForecast, onAskAgent }:
               <div style={{ minWidth: 0 }}>
                 <h2 style={{ margin: 0, fontSize: fontSize.bodyMd, lineHeight: '22px', fontWeight: 600, color: color.ink }}>{item.title}</h2>
                 {item.brand ? (
-                  <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: color.mute }}>
+                  <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: color.mute }}>
                     <BrandDot brand={item.brand} size={7} />
                     {brandLabelOf(item.brand)}{item.model ? ` · ${item.model}` : ''}
                   </div>
@@ -131,7 +131,7 @@ export default function IntelDrawer({ item, onClose, onGoForecast, onAskAgent }:
             <Field label="关键变化">{item.change ?? <span style={{ color: color.mute }}>暂无</span>}</Field>
             <Field label="GTM 意义">
               {item.gtmMeaning}
-              <span style={{ display: 'block', marginTop: 2, fontSize: 11, color: item.gtmBasis === 'sample' ? color.warningInk : color.alert.evidence.verified }}>
+              <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: item.gtmBasis === 'sample' ? color.warningInk : color.alert.evidence.verified }}>
                 {item.gtmBasis === 'sample' ? '示例判断——不构成实时结论' : `依据：${item.evidenceNote ?? '仓内数据'}`}
               </span>
             </Field>
@@ -167,7 +167,7 @@ export default function IntelDrawer({ item, onClose, onGoForecast, onAskAgent }:
             onClick={onGoForecast}
             style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, border: 'none', background: color.ink, color: color.onPrimary, borderRadius: radius.control, padding: '9px 12px', fontSize: fontSize.bodySm, fontWeight: 500, cursor: 'pointer' }}
           >
-            进入量价预测 <ArrowRightOutlined style={{ fontSize: 11 }} />
+            查看量价预测示例（固定样本） <ArrowRightOutlined style={{ fontSize: 12 }} />
           </button>
           <button
             type="button"

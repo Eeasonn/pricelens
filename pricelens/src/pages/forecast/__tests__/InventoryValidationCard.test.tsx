@@ -716,8 +716,8 @@ describe('库存修正卡 · 风格对齐价格走势页（全局 #8）', () => 
     for (const node of texts) {
       expect(node.getAttribute('font-family')).toContain('Inter');
       const size = Number(node.getAttribute('font-size'));
-      expect(size).toBeGreaterThanOrEqual(10);
-      expect(size).toBeLessThanOrEqual(11);
+      expect(size).toBeGreaterThanOrEqual(12); // R2 C4：辅助字号统一 >=12
+      expect(size).toBeLessThanOrEqual(12);
       expect(node.style.fontVariantNumeric).toBe('tabular-nums');
     }
   });
@@ -811,7 +811,7 @@ describe('库存修正卡 · P0-1 实测宽 + P0-2 确认胶囊（2026-11-06）'
       expect(svg.getAttribute('viewBox')).toBe('0 0 860 252');
       // 缩放比恒 1：轴刻度字号仍是设计值 10。
       const tick = Array.from(svg.querySelectorAll('text')).find((text) => (text.textContent ?? '') === '天');
-      expect(tick?.getAttribute('font-size')).toBe('10');
+      expect(tick?.getAttribute('font-size')).toBe('12'); // R2 C4：辅助字号统一 >=12
     } finally {
       delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
     }

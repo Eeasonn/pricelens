@@ -200,7 +200,7 @@ function TuneDialog({ weekLabel, dateLabel, currentValue, manual, onCancel, onSa
             autoSize={{ minRows: 2, maxRows: 4 }}
           />
         </label>
-        <div id="tune-reason-hint" style={{ fontSize: 11, color: reasonOk ? color.mute : color.warningInk, minHeight: 16 }}>
+        <div id="tune-reason-hint" style={{ fontSize: 12, color: reasonOk ? color.mute : color.warningInk, minHeight: 16 }}>
           {reasonOk
             ? '原因将内联标注在主图该周手调处，并写入步间审计轨迹；取消不写入。'
             : '请填写调整原因后应用（不填不可应用；取消不写入任何参数）。'}
@@ -229,6 +229,8 @@ export default function ForecastPage() {
   // 工作区不清）。v3 键 = forecast.workbench.workbench-demo-v3。
   const { params, setParams, resetParams } = useWorkbenchParams(fixture);
   const [tuneWeek, setTuneWeek] = useState<string | null>(null);
+  /** R2（C2）：重置基准确认弹窗的受控开关（替代静态 Modal.confirm）。 */
+  const [resetOpen, setResetOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
   // 主链重算守卫（Batch 2）：computeWorkbench 抛错时保留上次成功结果（失败
   // 不当 0、不清空已有结果）；computeTick = 审计卡「重试」触发重算的唯一入口。
@@ -411,19 +413,11 @@ export default function ForecastPage() {
   }), [marginView]);
 
   /** 重置基准（B.5.10）：只清 v3 主链 params 与 SI 确认；确认文案明确
-   *  「成本价格、参考事件与情报审核工作区不清」。④另有独立「还原成本与价格基准」。 */
-  const confirmReset = (): void => {
-    Modal.confirm({
-      title: '重置基准？',
-      content: '将清除：本页主链假设草稿（上一代参照 / 大盘调整与事件 / SI 月计划 / 产品范围事件 / 周销手调）与 SI 逐月确认记录。不清：④成本价格假设与价格手调、参考卡事件工作区、情报审核工作区。',
-      okText: '重置基准',
-      cancelText: '取消',
-      onOk: () => {
-        resetParams();
-        si.resetAll();
-      },
-    });
-  };
+   *  「成本价格、参考事件与情报审核工作区不清」。④另有独立「还原成本与价格基准」。
+   *  R2（C2）：从静态 Modal.confirm 改为受控 Modal——静态方法挂在应用根之外，
+   *  React 18 并发根下会触发 antd「Static function can not consume context」
+   *  console.error（Chrome 验证要求 console.error=0）。 */
+  const confirmReset = (): void => setResetOpen(true);
 
   /** 复制关键假设（8.4 / 任务 10）：纯文本进剪贴板（v3 上下文同源）；
    *  成功「已复制」/ 失败「复制失败」，不新增纪要层。 */
@@ -469,7 +463,7 @@ export default function ForecastPage() {
           <ChartContentBar />
           <div style={{ padding: `${space.lg}px 0`, textAlign: 'center' }}>
             <div role="status" style={{ fontSize: 13, color: color.mute }}>当前范围无可推演数据</div>
-            <div style={{ marginTop: 6, fontSize: 11, color: color.mute }}>检查 fixture 周数据后重试；加载异常时会提示具体错误，无数据时仅显示本状态。</div>
+            <div style={{ marginTop: 6, fontSize: 12, color: color.mute }}>检查 fixture 周数据后重试；加载异常时会提示具体错误，无数据时仅显示本状态。</div>
           </div>
         </section>
       </div>
@@ -484,7 +478,7 @@ export default function ForecastPage() {
           <ChartContentBar />
           <div role="alert" style={{ padding: `${space.lg}px 0`, textAlign: 'center' }}>
             <div style={{ fontSize: 13, color: color.error, fontWeight: 600 }}>{`重算失败：${computeError ?? '未知错误'}`}</div>
-            <div style={{ marginTop: 6, fontSize: 11, color: color.mute }}>本地确定性引擎未产出结果；不显示 0 或伪摘要。</div>
+            <div style={{ marginTop: 6, fontSize: 12, color: color.mute }}>本地确定性引擎未产出结果；不显示 0 或伪摘要。</div>
             <Button size="small" style={{ marginTop: space.md }} onClick={() => setComputeTick((tick) => tick + 1)}>重试</Button>
           </div>
         </section>
@@ -527,7 +521,7 @@ export default function ForecastPage() {
             <span style={{ whiteSpace: 'nowrap' }} title={rangeSummaryTitle}>{fixture.context.product}</span>
             <HintInfo label="范围与口径" text={rangeSummaryTitle} />
             <DataStatusBadge status={fixture.meta.status} />
-            <span className="mono" style={{ fontSize: 11, color: color.body, padding: '2px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control }}>{fixture.meta.modelVersion}</span>
+            <span className="mono" style={{ fontSize: 12, color: color.body, padding: '2px 8px', border: `1px solid ${color.hairline}`, borderRadius: radius.control }}>{fixture.meta.modelVersion}</span>
             {/* SI 未全部确认页首提示（B.5.7）：主图可看参考结果，但确认事实显式可见 */}
             {siPendingCount > 0 && (
               <span
@@ -564,8 +558,10 @@ export default function ForecastPage() {
               {copyState === 'ok' ? '已复制' : copyState === 'fail' ? '复制失败' : '复制关键假设'}
             </Button>
           </div>
-          {labels.country !== fixture.context.country && (
-            <div style={{ marginTop: 4, fontSize: 11, color: color.mute }}>
+          {/* R2（C1）：口径漂移判定用稳定国家 ID（RU vs fixture.context.countryCode），
+              不拿显示名（R国 vs 俄罗斯）比较——默认 RU 不再误报不一致。 */}
+          {state.countryCode !== fixture.context.countryCode && (
+            <div style={{ marginTop: 4, fontSize: 12, color: color.mute }}>
               {`全局筛选（${labels.country} · ${labels.industry}）仅作上下文展示，不改变本页计算口径`}
             </div>
           )}
@@ -588,10 +584,10 @@ export default function ForecastPage() {
               <>
                 <HintInfo
                   label="主图卡说明"
-                  text={`历史 ${fixture.context.historyRange} 实柱（实际）· 预测 ${fixture.context.forecastRange} 虚柱；促销档期与范围事件为起始周小方块点，悬停看对应区间；悬停预测周看「本周考量」构成，点击柱体微调（原因选填，填了则内联标注在主图手调处）。模拟数据：历史段为模拟实际，预测段为模型推演（本地确定性规则基线，未调用模型服务）；数值可直接修改，改动即人工确认。`}
+                  text={`历史 ${fixture.context.historyRange} 实柱（实际）· 预测 ${fixture.context.forecastRange} 虚柱；促销档期与范围事件为起始周小方块点，悬停看对应区间；悬停预测周看「本周考量」构成，点击柱体微调（原因必填，随周销手调写入主图标注与审计轨迹）。模拟数据：历史段为模拟实际，预测段为模型推演（本地确定性规则基线，未调用模型服务）；数值可直接修改，改动即人工确认。`}
                 />
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: radius.pill,
@@ -663,9 +659,9 @@ export default function ForecastPage() {
                     },
                   ] as Array<{ label: string; value: string; foot: string; tone?: string }>).map((cell) => (
                     <div key={cell.label} style={{ background: color.canvasSoft, borderRadius: radius.control, padding: `${space.md - 2}px ${space.md}px` }}>
-                      <div style={{ fontSize: 11, color: color.mute }}>{cell.label}</div>
+                      <div style={{ fontSize: 12, color: color.mute }}>{cell.label}</div>
                       <strong className="tnum" style={{ display: 'block', marginTop: 4, fontSize: 18, fontWeight: 700, color: cell.tone ?? color.ink }}>{cell.value}</strong>
-                      <div style={{ marginTop: 3, fontSize: 11, color: color.mute }}>{cell.foot}</div>
+                      <div style={{ marginTop: 3, fontSize: 12, color: color.mute }}>{cell.foot}</div>
                     </div>
                   ))}
                 </div>
@@ -682,8 +678,8 @@ export default function ForecastPage() {
       <ForecastAuditTrail
         steps={auditSteps}
         contextFingerprint={intelligenceScopeKey}
-        contextStaleNote={labels.country !== fixture.context.country
-          ? `全局筛选当前为 ${labels.country} · ${labels.industry}，与固定样本（${fixture.context.country} · ${fixture.context.industry}）不一致`
+        contextStaleNote={state.countryCode !== fixture.context.countryCode
+          ? `全局筛选当前为 ${state.countryCode} · ${labels.industry}，与固定样本（${fixture.context.countryCode} · ${fixture.context.industry}）不一致`
           : null}
         computeError={computeError}
         onRetryCompute={() => setComputeTick((tick) => tick + 1)}
@@ -780,7 +776,25 @@ export default function ForecastPage() {
         </div>
       </div>
 
-      {/* 单周微调弹窗：调整原因选填（不填即可应用；填了则内联标注主图手调处） */}
+      {/* 重置基准确认（R2 C2 受控 Modal，随应用根渲染，无静态方法 context 告警） */}
+      <Modal
+        title="重置基准？"
+        open={resetOpen}
+        okText="重置基准"
+        cancelText="取消"
+        onCancel={() => setResetOpen(false)}
+        onOk={() => {
+          resetParams();
+          si.resetAll();
+          setResetOpen(false);
+        }}
+      >
+        <div style={{ fontSize: 12, color: color.body, lineHeight: 1.7 }}>
+          将清除：本页主链假设草稿（上一代参照 / 大盘调整与事件 / SI 月计划 / 产品范围事件 / 周销手调）与 SI 逐月确认记录。不清：④成本价格假设与价格手调、参考卡事件工作区、情报审核工作区。
+        </div>
+      </Modal>
+
+      {/* 单周微调弹窗（Batch 2 起）：调整原因必填（不填不可应用；填了则内联标注主图手调处并进审计轨迹） */}
       {tuneWeekResult && (
         <TuneDialog
           key={tuneWeekResult.weekId}

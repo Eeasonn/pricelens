@@ -142,7 +142,7 @@ describe('R8 responseFingerprintMismatch：run.completed 隔离 + 消息动作�
     view.unmount();
   }, 15000);
 
-  it('指纹不一致：价格优势卡 QuickPill 与行级定位同样锁定，追问 chips 禁用', async () => {
+  it('指纹不一致：副作用 QuickPill 与行级定位锁定；纯 prompt 快问（打开预警/追问 chips）不锁（R2 M1）', async () => {
     overrideClient({
       run: async () => ({ ...mismatchedResponse, cards: [mismatchAdvantageCard] }),
     });
@@ -157,14 +157,17 @@ describe('R8 responseFingerprintMismatch：run.completed 隔离 + 消息动作�
     // 行级「定位」按钮（写看板口径 + 导航）disabled
     const locateButton = within(advCard).getAllByRole('button', { name: /定位 .*202642/ })[0] as HTMLButtonElement;
     expect(locateButton.disabled).toBe(true);
-    // QuickPill 副作用动作全部 disabled（回看走势 / 打开预警 / 跳 GTM 情报）
-    for (const label of ['回看价格走势', '打开价格预警', '跳 GTM 情报']) {
+    // R2 M1：副作用 QuickPill（回看走势 / 跳 GTM 情报 = 导航+改口径）disabled；
+    // 纯 prompt 快问（打开价格预警 = 发起当前上下文新查询）不锁
+    for (const label of ['回看价格走势', '跳 GTM 情报']) {
       const pill = within(advCard).queryByRole('button', { name: label }) as HTMLButtonElement | null;
       if (pill) expect(pill.disabled, label).toBe(true);
     }
-    // 消息级追问 chips（suggestions 派生的 query 动作）禁用
+    const alertPill = within(advCard).queryByRole('button', { name: '打开价格预警' }) as HTMLButtonElement | null;
+    if (alertPill) expect(alertPill.disabled, '打开价格预警（纯 prompt）').toBe(false);
+    // 消息级追问 chips（发起当前上下文新查询）同样不锁
     const suggestionChip = screen.getByRole('button', { name: '价格优势' }) as HTMLButtonElement;
-    expect(suggestionChip.disabled).toBe(true);
+    expect(suggestionChip.disabled).toBe(false);
     view.unmount();
   }, 15000);
 });

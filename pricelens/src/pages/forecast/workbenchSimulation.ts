@@ -477,6 +477,8 @@ export function createWorkbenchSimulation(calendar: ForecastCalendar): Workbench
     },
     context: {
       country: '俄罗斯',
+      // R2 C1：稳定国家 ID——口径漂移判定用 ID（RU）比较，显示名只作展示
+      countryCode: 'RU',
       industry: '手机',
       channel: '全渠道',
       product: 'HUAWEI Mate 90 · 12+512GB',

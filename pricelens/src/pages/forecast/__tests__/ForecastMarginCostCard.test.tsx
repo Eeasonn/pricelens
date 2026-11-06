@@ -451,15 +451,15 @@ describe('成本销毛 · 默认视图与收起区（margin-card-hifi 推荐稿�
     }
   });
 
-  it('svg 轴文本取值对齐价格走势页（全局 #8）：fontFamily=Inter 栈 · 字号 10–11 · color.mute · tabular-nums', () => {
+  it('svg 轴文本取值对齐价格走势页（全局 #8）：fontFamily=Inter 栈 · 字号 >=12（R2 C4）· color.mute · tabular-nums', () => {
     renderCard(baseResult);
     const texts = Array.from(document.querySelectorAll<SVGTextElement>('svg[role="img"] text[fill="#737373"]'));
     expect(texts.length).toBeGreaterThan(0);
     for (const node of texts) {
       expect(node.getAttribute('font-family')).toContain('Inter');
       const size = Number(node.getAttribute('font-size'));
-      expect(size).toBeGreaterThanOrEqual(10);
-      expect(size).toBeLessThanOrEqual(11);
+      expect(size).toBeGreaterThanOrEqual(12); // R2 C4：辅助字号统一 >=12
+      expect(size).toBeLessThanOrEqual(12);
       expect(node.style.fontVariantNumeric).toBe('tabular-nums');
     }
   });
