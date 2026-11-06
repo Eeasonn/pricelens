@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
 import type { FiltersState, ProductSelection } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';
-import { lawfulPlatformScope } from '../../dataModel/platformScope';
+import { lawfulPlatformScope, normalizePlatformScope } from '../../dataModel/platformScope';
 import { dimChannel } from '../../data';
 import { buildAgentContext, runAgent } from '../core';
 import { calculatePriceAdvantage } from '../priceAdvantage';
@@ -84,6 +84,20 @@ describe('t428u R5-M1 · lawfulPlatformScope 共享政策（纯函数）', () =>
     const scope = lawfulPlatformScope('DE', { platforms: ['Amazon'], shopIds: [], seller: null });
     expect(scope.platform).toEqual({ platforms: ['Amazon'], shopIds: [], seller: null });
     expect(scope.note).toBeNull();
+  });
+
+  // R6-M1：normalizePlatformScope 在迭代版（本仓库 vitest 默认 DEV → iterate）
+  // 必须与 lawfulPlatformScope 完全同行为——合法店铺级选择原样保留（不展开、
+  // 无能力说明）。稳定版的透明平台级展开见
+  // agentux-r6-stable-platform-normalization.test.ts（vi.mock appChannel）。
+  it('iterate：normalizePlatformScope 恒等于 lawfulPlatformScope（店铺级原样保留）', () => {
+    const shop = { platforms: [], shopIds: ['RU:ozon:3P'], seller: null };
+    const scoped = normalizePlatformScope('RU', shop);
+    expect(scoped.platform).toBe(shop);
+    expect(scoped.changed).toBe(false);
+    expect(scoped.note).toBeNull();
+    expect(normalizePlatformScope('RU', { platforms: [], shopIds: ['AE:noon:3P'], seller: null }).note)
+      .toBe(lawfulPlatformScope('RU', { platforms: [], shopIds: ['AE:noon:3P'], seller: null }).note);
   });
 });
 

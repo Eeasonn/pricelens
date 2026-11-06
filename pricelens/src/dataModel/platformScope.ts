@@ -16,8 +16,14 @@
 //  - seller 仅在保留单渠道且确有该卖家时有效（与 applyScopeDefaults 旧口径
 //    一致，静默剥离不产生说明）；
 //  - 剔除过平台/店铺必须给出透明说明（note），供结果卡判断边界引用。
+// R6-M1：normalizePlatformScope = lawfulPlatformScope 之上再叠加稳定版能力
+// 归一（店铺级 → 平台级，与看板 platformLevelForChannel 同政策），供 Agent
+// 计算/回看补丁/FiltersContext 落地在取数前统一走同一条路径——稳定版不再
+// 出现「计算按平台级、补丁/落地却保留 shopIds」的口径分叉；迭代版（iterate）
+// 原样返回 lawfulPlatformScope 结果，店铺级行为不变。
 // ============================================================
 import { dimChannel, dimRegion } from '../data';
+import { STABLE } from '../appChannel';
 import { sellersOfChannel } from './aggregate';
 import type { PlatformQuery } from './types';
 
@@ -94,5 +100,41 @@ export function lawfulPlatformScope(countryCode: string, platform: PlatformQuery
     droppedShopIds,
     changed: true,
     note: `已选 ${droppedLabel} 在${countryName}没有渠道，已剔除；本次按保留的 ${keptLabel} 口径计算。`,
+  };
+}
+
+/**
+ * R6-M1 · 目标国合法 + 稳定版能力的一体化平台归一（计算/补丁/落地共用）。
+ * 先 lawfulPlatformScope 做国家合法性（非法剔除/全非法回 null/R5 语义原样），
+ * 稳定版再把保留下来的合法店铺级选择透明展开为所属平台级（含平台内全部
+ * 店铺），shopIds 从实际计算/回看/落地口径中移除并给出说明：
+ *  - 展开说明必须写明「稳定版仅支持平台级」+ 原始店铺（显示名）+ 展开后的
+ *    平台，不假装保留了店铺口径；
+ *  - 混合合法/非法店铺：非法部分按 lawful 剔除说明保留，合法部分展开去重；
+ *  - seller 随店铺级一并退出（平台级口径无单渠道可挂，与旧剥离口径一致）；
+ *  - 幂等：平台级/null 输入原样返回（引用不变、无说明）；iterate 恒等于
+ *    lawfulPlatformScope（店铺级原样保留，行为不变）。
+ */
+export function normalizePlatformScope(countryCode: string, platform: PlatformQuery | null): LawfulPlatformScope {
+  const lawful = lawfulPlatformScope(countryCode, platform);
+  if (!STABLE) return lawful;
+  const kept = lawful.platform;
+  if (!kept || kept.shopIds.length === 0) return lawful;
+  const platforms = [...new Set([
+    ...kept.platforms,
+    ...kept.shopIds.map((channelId) => dimChannel.find((channel) => channel.channel_id === channelId)?.platform ?? channelId.split(':')[1] ?? ''),
+  ])].filter(Boolean);
+  const countryName = dimRegion.find((region) => region.country_code === countryCode)?.country_name ?? countryCode;
+  const shopLabel = kept.shopIds.map(displayNameOfShop).join('、');
+  const droppedLabel = [...lawful.droppedPlatforms, ...lawful.droppedShopIds.map(displayNameOfShop)].join('、');
+  // 非法剔除沿用 lawful 的措辞前缀（只保留事实部分，重算“按保留口径”的后半句
+  // ——展开后实际计算口径是平台级，原句会失真）；展开说明固定透明三要素。
+  const note = `${droppedLabel ? `已选 ${droppedLabel} 在${countryName}没有渠道，已剔除；` : ''}稳定版仅支持平台级口径：已选店铺 ${shopLabel} 已按所属平台展开为 ${platforms.join('、')} 平台（含平台内全部店铺）参与计算与回看。`;
+  return {
+    platform: { platforms, shopIds: [], seller: null },
+    droppedPlatforms: lawful.droppedPlatforms,
+    droppedShopIds: lawful.droppedShopIds,
+    changed: true,
+    note,
   };
 }

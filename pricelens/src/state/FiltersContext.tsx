@@ -25,7 +25,7 @@ import type {
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimProduct, dimRegion, dimTime } from '../data';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
-import { lawfulPlatformScope } from '../dataModel/platformScope';
+import { normalizePlatformScope } from '../dataModel/platformScope';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
@@ -307,14 +307,16 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
 
 /** 口径（国家/产业）变化后的状态整理：规范作用域、平台/店铺归一到目标国合法
  *  口径（R5-M1：共享 lawfulPlatformScope——保留合法子集，全部非法才回 null，
- *  seller 合法性同函数处理；与 Agent 计算/回看补丁同一政策，补丁落地不再被
- *  二次清改）、主分析先整组同型号合法化（R4-m1/S1：逐 SKU 过滤 / 同配置换
- *  SKU / 同型号首个合法配置），全部型号缺席才重算默认卡；开启「自动匹配竞品」
- *  的组对比区随新口径矩阵重算（矩阵分国，维表换代同样在启动读档时借此自愈） */
+ *  seller 合法性同函数处理；R6-M1：稳定版再经 normalizePlatformScope 把店铺级
+ *  透明展开为平台级——Agent 结果卡 open/apply 补丁落地后的 state 不再保留
+ *  shopIds，与计算/导航口径一致；迭代版行为不变）、主分析先整组同型号合法化
+ *  （R4-m1/S1：逐 SKU 过滤 / 同配置换 SKU / 同型号首个合法配置），全部型号
+ *  缺席才重算默认卡；开启「自动匹配竞品」的组对比区随新口径矩阵重算（矩阵
+ *  分国，维表换代同样在启动读档时借此自愈） */
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
   syncScopeRegistries(scope.countryCode);
-  const platformScope = lawfulPlatformScope(scope.countryCode, s.platform);
+  const platformScope = normalizePlatformScope(scope.countryCode, s.platform);
   // 空 mains = 用户显式清空（空态），读档/读链接时不回填默认卡；口径切换
   // 走 switchScope 的 force=true 照常重算默认卡。R4-m1：旧选择先尝试同型号
   // 合法化，落得下就保留（RU Mate X6 12+512 → ID 16+512），不再一律默认重算

@@ -7,6 +7,12 @@
 // 本文件 vi.mock appChannel 钉在 stable（与 PriceTrend stableGlobalPlatform
 // 测试同手法），锁定：seriesQueryOf 在 stable 下每组 platform = 全局平台
 //（店铺级降平台级），iterate 行为见 agentux-r5-platform-scope.test.ts。
+// R6-M1 修订：稳定版店铺级全局选择（RU:ozon:3P）此前「计算按平台级、补丁却
+// 原样保留 shopIds」——第六轮评审以 RU nova14 12+256 黑 W202619 真实数据
+// 复现（平台级 333 vs 严格 3P 395）。现在 stable 归一 = normalizePlatformScope
+//（国家合法 + 店铺级透明展开平台级）：补丁/落地不再携带 shopIds，卡边界必须
+// 透明说明「稳定版仅支持平台级 + 店铺展开为平台」。详细数值证人见
+// agentux-r6-stable-platform-normalization.test.ts。
 // ============================================================
 import { describe, expect, it, vi } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
@@ -48,7 +54,7 @@ describe('t428u R5-M1 · stable：Agent 趋势查询服从全局平台（与看�
     expect(patch.platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
   });
 
-  it('店铺级全局选择（RU:ozon:3P）降级为平台级取数（OZON），补丁 shopIds 原样', async () => {
+  it('店铺级全局选择（RU:ozon:3P）透明展开为平台级：取数/补丁/说明一致，补丁不再保留 shopIds', async () => {
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'RU',
@@ -56,12 +62,21 @@ describe('t428u R5-M1 · stable：Agent 趋势查询服从全局平台（与看�
       mains: buildCards([NOVA], { auto: true, countryCode: 'RU' }),
     };
     const response = await runAgent('RU价格趋势', buildAgentContext('dashboard', state, []));
+    const chart = response.cards.find((item) => item.kind === 'chart') as ChartResultCard;
+    expect(chart).toBeDefined();
+    // 原始输入是店铺级：图注判断边界必须透明说明「稳定版仅支持平台级 + 店铺展开」
+    expect(chart.note).toContain('稳定版仅支持平台级');
+    expect(chart.note).toContain('OZON 3P');
+    expect(chart.note).toContain('OZON');
     const table = response.cards.find((item) => item.kind === 'table') as TableResultCard;
     const novaRow = table.rows.find((row) => row[0].includes('nova 14 Pro'));
     expect(novaRow).toBeDefined();
     expect(novaRow![3]).toBe('OZON');
     const patch = openActionOf(table, '回看板下钻').target!.filterPatch!;
-    expect(patch.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:3P'], seller: null });
+    // R6-M1：实际计算按平台级，补丁不得再声称保留店铺口径（shopIds 必须移除）
+    expect(patch.platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
+    const chartPatch = openActionOf(chart, '回看板定位').target!.filterPatch!;
+    expect(chartPatch.platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
   });
 
   it('AE NOON 跨国问 RU：归一 null → 全渠道自动（DNS 有价事实），补丁 null', async () => {

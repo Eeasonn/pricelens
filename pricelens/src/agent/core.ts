@@ -1,5 +1,5 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
-import { lawfulPlatformScope } from '../dataModel/platformScope';
+import { normalizePlatformScope } from '../dataModel/platformScope';
 import { dimProduct, dimRegion, dimTime } from '../data';
 import { STABLE } from '../appChannel';
 import { platformLevelForChannel } from '../state/urlSync';
@@ -308,7 +308,10 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
   // 沿用的旧国平台（AE 的 NOON 进 RU）剔除合法子集保留、全部非法回落未选
   // 平台口径，并产出透明说明；同国合法选择幂等无说明。
   const withLawfulPlatform = (queryState: FiltersState): FiltersState => {
-    const scope = lawfulPlatformScope(queryState.countryCode, queryState.platform);
+    // R6-M1：归一 = 国家合法性 + 稳定版能力（店铺级透明展开平台级）一条路径，
+    // 在进入任何实际取数前完成——计算口径、结果卡 filterPatch 与落地 state 同源。
+    // 迭代版店铺级照旧保留（normalizePlatformScope 内按通道分流）。
+    const scope = normalizePlatformScope(queryState.countryCode, queryState.platform);
     if (scope.note) notes.push(scope.note);
     return scope.platform === queryState.platform ? queryState : { ...queryState, platform: scope.platform };
   };
@@ -629,9 +632,10 @@ function alertFilterPatch(alert: AgentAlertRecord, state: FiltersState): FilterP
   const selection = alertSelectionOf(alert, state);
   const patch: FilterPatch = {
     countryCode: state.countryCode,
-    // R5-M1：预警跳转补丁同用 lawfulPlatformScope 归一（幂等；活态 state 本就
-    // 合法，防御陈旧/手工构造的非法口径），保证落地不被二次清改。
-    platform: lawfulPlatformScope(state.countryCode, state.platform).platform,
+    // R5-M1 + R6-M1：预警跳转补丁同用 normalizePlatformScope 归一（幂等；活态
+    // state 本就合法，防御陈旧/手工构造的非法口径），稳定版店铺级选择同样先
+    // 透明展开为平台级——落地 state 与计算/导航口径不再分叉。
+    platform: normalizePlatformScope(state.countryCode, state.platform).platform,
     granularity: 'week',
     adaptive: false,
     rangeStart: alert.weekId,
@@ -658,6 +662,10 @@ function alertTarget(alert: AgentAlertRecord, state: FiltersState, page: 'alerts
 }
 
 function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: FiltersState, targetFingerprint?: string): { card: AgentResultCard | null; summary: string; steps: AgentStep[]; citations: AgentResponse['citations'] } {
+  // R6-M1：预警跳转补丁的平台归一说明（稳定版店铺级 → 平台级透明展开）同样
+  // 进入判断边界——活态 state 已是平台级时幂等无说明（不添噪音），只有陈旧/
+  // 手工构造的店铺级口径才会出现，与趋势/优势卡同一套透明规则。
+  const platformScopeNote = normalizePlatformScope(state.countryCode, state.platform).note;
   const records = alerts.slice(0, 8);
   const alert = records[0];
   if (!alert) {
@@ -676,6 +684,7 @@ function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: Fil
       note: '结果来自现有预警规则与当前订阅范围；没有触发事实时不编造事件。',
       rules,
       boundaries: [
+        ...(platformScopeNote ? [platformScopeNote] : []),
         `覆盖范围限于当前预警订阅（${state.alertSubs.length} 个系列）与 ${state.countryCode} / ${state.industry} 渠道口径；未订阅或未监控的产品不会出现在结果里。`,
         '没有触发事实只代表当前规则与阈值未命中，不等于价格没有变化；缺采周不参与规则计算，也不推断原因。',
       ],
@@ -699,6 +708,7 @@ function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: Fil
     facts: [`${alert.weekLabel}（${alert.weekId}）触发${alert.type}规则`, `折后价${direction}`, alert.gapPct != null ? `平台价差为 ${(alert.gapPct * 100).toFixed(1)}%` : '当前事件没有平台价差字段'],
     checks: ['核对促销记录与商品页面快照', '对比其他平台是否同步变化', '确认是否为单平台的短期变化'],
     boundaries: [
+      ...(platformScopeNote ? [platformScopeNote] : []),
       '预警是规则触发的确定性结果，不推断唯一因果；价格变化原因需按证据核查。',
       `覆盖范围限于当前预警订阅与 ${state.countryCode} / 当前渠道口径。`,
     ],
