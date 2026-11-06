@@ -20,6 +20,7 @@ import PriceTrend from '../index';
 vi.mock('../../../appChannel', () => ({
   APP_CHANNEL: 'stable' as const,
   STABLE: true,
+  ONLINE_ITERATE: false,
   STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
   hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
 }));

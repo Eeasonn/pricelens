@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/sync-single.mjs",
+    "build:iterate": "VITE_APP_CHANNEL=iterate vite build",
     "preview": "vite preview",
     "agent-server": "node server/agent-server.mjs",
     "gen": "echo '[deprecated] 造数脚本已被真实数据接入取代：npm run ingest' && node scripts/gen-data.mjs",

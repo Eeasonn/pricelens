@@ -25,6 +25,7 @@ npm install        # 安装依赖（已执行过则跳过）
 npm run ingest     # 真实数据接入：scripts/ingest_real.py（数据再生须连跑 patch_comp_series.py + prefill_default_shops.py）
 npm run dev        # 本地开发
 npm run build      # 产出单文件 dist/index.html 并同步覆盖仓库根 PriceLens.html（铁律：单文件版永远最新）
+npm run build:iterate # 演进版单文件 dist/index.html（三页齐全、标题带「演进版」；不同步 PriceLens.html）
 npm run typecheck  # tsc --noEmit
 npm run verify     # 聚合契约断言 + 单文件一致性（scripts/verify.mjs，47 项）
 npm run test       # vitest 金测（快照钉住图表行为）
@@ -33,6 +34,17 @@ npm run design:lint  # Google DESIGN.md linter
 npm run design:detect # Impeccable detector（未安装时安全跳过）
 npm run check      # design + typecheck + verify + test + build 全链路
 ```
+
+## 在线版双网址（稳定版 / 演进版）
+
+push main 后 GitHub Actions 在同一次 Pages 部署里构建两份单文件（`.github/workflows/deploy.yml`）：
+
+| 网址 | 构建 | 内容 |
+| --- | --- | --- |
+| `https://eeasonn.github.io/pricelens/` | `npm run build` | 稳定版：大盘走势 / 量价预测 / 情报中心三页入口不存在 |
+| `https://eeasonn.github.io/pricelens/iterate/` | `npm run build:iterate` | 演进版：与本地 dev 同为迭代版，三页齐全，标签页标题「PriceLens · 演进版」 |
+
+通道只由构建形态决定、产物内恒定，判定源唯一在 `src/appChannel.ts`；稳定版没有任何 URL 参数 / localStorage / feature flag 逃逸口，`VITE_APP_CHANNEL` 只由 `build:iterate` 脚本在构建期烙定。
 
 ## 设计执行
 

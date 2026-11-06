@@ -3,6 +3,7 @@ import { Button, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { ArrowUpOutlined } from '@ant-design/icons';
 import { usePage, PageProvider } from './state/PageContext';
+import { ONLINE_ITERATE } from './appChannel';
 import { FiltersProvider, useFilters } from './state/FiltersContext';
 import { OverviewViewProvider } from './state/OverviewViewContext';
 import { scopeLabels } from './dataModel/scope';
@@ -82,7 +83,7 @@ function AppBody() {
   // 仅迭代版（本地 dev）可达；稳定版的页 id 直达已在 PageContext（唯一页写入口）
   // 统一落回 dashboard，故此处渲染分支与标题映射原样保留即可（迭代版继续使用）。
   useEffect(() => {
-    document.title = `PriceLens · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
+    document.title = `PriceLens${ONLINE_ITERATE ? ' · 演进版' : ''} · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
   }, [page, region, country]);
   // 第一百八十四轮（Eason）：分析页（价格走势/量价走势/定价推演）共享同一页面
   // 壳（页头+筛选条+滚动容器）——页内切换只换图表主体，不再整页重挂载（顶部
