@@ -334,15 +334,23 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
  *  - 归一幂等无说明（输入已是合法平台级）→ 沿用「仍能描述当前口径」的既有说明
  *    （补丁/快照随带的说明优先于继承值——undo 整态恢复），否则清空：换国、
  *    deliberate 换平台/重置后旧说明不再成立，绝不泄漏陈旧口径；
- *  - 迭代版恒 null（无稳定版能力归一，Agent 卡内说明照旧由计算侧现场产出）。 */
+ *  - 迭代版恒 null（无稳定版能力归一，Agent 卡内说明照旧由计算侧现场产出）。
+ *  t428u R8-M1 · 候选分两层：incoming（补丁/快照随带）之后还有 inherited（落地前
+ *  state 上的既有说明）——Agent 结果卡 open/apply 补丁携带的是归一后的规范平台
+ *  且不带说明键（validateFilterPatch 也不放行该键），幂等归一无新说明时按 R7 会
+ *  把仍成立的说明清掉（同口径交接丢失 provenance）。继承同样过「国家 + 口径集合
+ *  相等」校验：真正换国/换平台/重置的旧说明描述不了新口径，自然不成立；补丁
+ *  显式 platformScopeNotice:null = deliberate 清除（跳过继承），缺键 ≠ 显式 null。 */
 function resolveScopeNotice(
   countryCode: string,
   scope: LawfulPlatformScope,
   incoming: PlatformScopeNotice | null | undefined,
+  inherited?: PlatformScopeNotice | null,
 ): PlatformScopeNotice | null {
   if (!STABLE) return null;
   if (scope.note) return { note: scope.note, countryCode, platform: scope.platform };
   if (incoming && incoming.countryCode === countryCode && platformQueryEquals(incoming.platform, scope.platform)) return incoming;
+  if (inherited && inherited.countryCode === countryCode && platformQueryEquals(inherited.platform, scope.platform)) return inherited;
   return null;
 }
 
@@ -661,20 +669,28 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           // 立即走共享「国家合法 + 能力」归一——总览级联「全部店铺·最低价」提交
           // {shopIds:[RU:ozon:3P]} 即刻落为平台级 {platforms:[OZON]}（展开说明
           // 同步可见），不再等 Agent 打开才收敛。带 platform 键 = 一次明确的新
-          // 输入：说明以本次归一结果为准，纯合法输入即清除旧说明（deliberate
-          // 换平台/回默认/Agent 补丁落地不残留陈旧展开说明），仅整态快照
-          // （undo/redo）随带的 platformScopeNotice 在口径吻合时优先沿用；
+          // 输入：说明以本次归一结果为准，仅整态快照（undo/redo）随带的
+          // platformScopeNotice 在口径吻合时优先沿用；
           // 不带 platform 键（切币种/粒度/时间等）不动平台与既有说明。跨口径
           // 补丁按目标国归一后交 switchScope/applyScopeDefaults（幂等，同政策）。
+          // R8-M1（第八轮评审 Medium）：Agent 结果卡 open/apply 补丁同样带
+          // platform 键（归一后的规范平台级、无说明键）——幂等归一无新说明时
+          // R7 会把「仍能描述当前口径」的既有说明清掉，同口径交接后页内条幅/
+          // 新查询/刷新全丢披露。缺说明键 = 继承落地前 state 上口径吻合的说明
+          //（换国/换平台的旧说明经集合校验自然不成立）；补丁显式
+          // platformScopeNotice:null = deliberate 清除，不继承。
           if (STABLE && clean.platform !== undefined) {
             const scope = normalizePlatformScope(next.countryCode, next.platform);
             const incomingNotice = isPlatformScopeNotice(clean.platformScopeNotice)
               ? clean.platformScopeNotice
               : undefined;
+            const inheritedNotice = clean.platformScopeNotice === null
+              ? null
+              : (isPlatformScopeNotice(s.platformScopeNotice) ? s.platformScopeNotice : null);
             next = {
               ...next,
               platform: scope.platform,
-              platformScopeNotice: resolveScopeNotice(next.countryCode, scope, incomingNotice),
+              platformScopeNotice: resolveScopeNotice(next.countryCode, scope, incomingNotice, inheritedNotice),
             };
           }
           const scopeChanged =

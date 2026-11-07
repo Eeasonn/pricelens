@@ -341,11 +341,19 @@ describe('t428u R7-M1 · 说明生命周期：deliberate 变更即失效，无�
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('带 platform 键的 Agent 补丁落地（平台级）= 明确新输入：说明不残留（重问无展开噪音）', async () => {
+  it('带 platform 键的 Agent 补丁落地（平台级）：R8-M1 起同口径继承既有说明；显式 null = deliberate 清除', async () => {
     const handle = renderFilters();
     act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
     expect(handle.state().platformScopeNotice).toBeTruthy();
+    // R8-M1（第八轮评审 Medium）：Agent open/apply 补丁携带归一后的规范平台级
+    // 且不带说明键——同口径交接必须继承仍成立的说明（换国/换平台的旧说明经
+    // 集合校验自然不成立，见下条换国用例）。R7 的「纯合法输入即清除」语义
+    // 由显式 platformScopeNotice:null 承接。
     act(() => { handle.actions().set({ platform: OZON_PLATFORM }); });
+    expect(handle.state().platformScopeNotice ?? null).not.toBeNull();
+    expect(handle.state().platformScopeNotice!.note).toContain('稳定版仅支持平台级');
+    expect(screen.queryByRole('status')).toBeTruthy();
+    act(() => { handle.actions().set({ platform: OZON_PLATFORM, platformScopeNotice: null }); });
     expect(handle.state().platformScopeNotice ?? null).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
   });
