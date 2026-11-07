@@ -823,8 +823,48 @@ function noDataResult(entities: AgentEntityResolution, state: FiltersState): { c
   };
 }
 
+/** R7（七审 M2 · 同一响应 scope 闭环）：全平台口径查询态——全局平台与每线
+ *  （主品/竞品）店铺口径一并清空（= 自动：该国全部渠道每周最低价，buildSeries
+ *  自动口径）。清空是 1:1 结构映射，mains 与原状态逐线同序同内容，平台表的
+ *  「与当前所选店铺口径不同」披露可按下标回看原口径（baseQueryState）。 */
+function allPlatformQueryStateOf(state: FiltersState): FiltersState {
+  return {
+    ...state,
+    platform: null,
+    mains: (Array.isArray(state.mains) ? state.mains : []).map((card) => ({
+      ...card,
+      main: card.main ? { ...card.main, platform: null } : card.main,
+      compares: (card.compares ?? []).map((sel) => ({ ...sel, platform: null })),
+    })),
+  };
+}
+
+/** 口径的用户可读渠道标签（共享）：空/未选 = 全部平台（自动）；否则按生效渠道
+ *  集合列渠道显示名（店铺级口径显示到渠道，如 "OZON 3P"）。 */
+function scopeChannelsLabel(countryCode: string, scope: { platforms: string[]; shopIds: string[] } | null): string {
+  if (!scope || (scope.platforms.length === 0 && scope.shopIds.length === 0)) return '全部平台（自动）';
+  const names = effectiveChannelIds(countryCode, scope).map((channelId) => dimChannel.find((c) => c.channel_id === channelId)?.display_name ?? channelId);
+  return [...new Set(names)].join('、');
+}
+
+/** R7（七审 M2）：全平台透明切换说明——页面原口径（每线 > 全局）存在显式勾选
+ *  时点名「本次按全部平台口径计算、与当前所选店铺口径（X）不同」；页面本就是
+ *  自动口径则无切换事实，返回 null 不虚构说明。 */
+function allPlatformSwitchNote(baseQueryState: FiltersState): string | null {
+  const labels = [...new Set(selections(baseQueryState).map((sel) => scopeChannelsLabel(baseQueryState.countryCode, effectiveLinePlatform(sel, baseQueryState.platform))))];
+  if (!labels.length || (labels.length === 1 && labels[0] === '全部平台（自动）')) return null;
+  return `本次已按全部平台口径计算（各平台渠道内最低在架价），与当前所选店铺口径（${labels.join('、')}）不同。`;
+}
+
 function queryCards(state: FiltersState, text: string, entities: AgentEntityResolution = resolveAgentEntities(text, state)): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
-  const queryState = stateForEntityQuery(state, entities, /我司|自家|华为.*价格|快搜/.test(text));
+  const baseQueryState = stateForEntityQuery(state, entities, /我司|自家|华为.*价格|快搜/.test(text));
+  // R7（七审 M2 · 同一响应 scope 闭环）：明确问「全平台/所有平台/全部平台/跨
+  // 平台」时，整条响应——chart 序列、摘要、平台表与两卡的 openPatch/followup
+  // ——一律按全平台口径真实计算（全局与每线口径一并清空），不再只把平台表
+  // spread 换成全平台、chart 仍按页面每线口径（OZON 3P 395）出图冒充同一次
+  // 比较。页面原口径保留在 baseQueryState 仅供透明披露，计算与落地不再使用。
+  const allPlatformAsked = /全平台|所有平台|全部平台|跨平台/.test(text);
+  const queryState = allPlatformAsked ? allPlatformQueryStateOf(baseQueryState) : baseQueryState;
   const query = seriesQueryOf(queryState);
   if (!query) {
     if (entities.explicitCountry || entities.explicitProduct) return noDataResult(entities, queryState);
@@ -855,20 +895,29 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
     // （全局口径与逐线口径并列陈述，各自点名实际计算口径）。
     // R3（M2）：默认电渠无价、逐线钉到有价渠道的渠道回退（FR Mate X6 →
     // Amazon 3P）同样透明说明。
-    const platformNote = [
+    // R7（七审 M2）：全平台请求的本次计算不使用任何页面平台口径——跨国归一/
+    // 渠道回退说明描述的是「未参与本次计算的口径」，附上反而误称「该线本次仅按
+    // X 计算」，故不附；差异改由 allPlatformSwitchNote 在 chart/摘要披露、平台
+    // 表逐产品披露同一事实。
+    const fallbackNote = allPlatformAsked ? '' : [
       platformCountryFallbackNote(state.platform, queryState.countryCode),
       selectionPlatformFallbackNote(state, queryState.countryCode),
       defaultChannelFallbackNote(state, queryState),
     ].filter((note): note is string => note != null).join('');
-    // R5（四审 m1）：部分完成说明进卡与摘要（有价分支不再吞缺失披露）
+    const chartPlatformNote = allPlatformAsked ? (allPlatformSwitchNote(baseQueryState) ?? '') : fallbackNote;
     const partialNote = partialCompletionNote(entities);
     const chart = {
       kind: 'chart' as const,
       id: id('chart'),
-      title: /最低|最便宜|平台/.test(text) ? `${scopeLabel}价格走势` : `${scopeLabel}价格走势摘要`,
+      title: allPlatformAsked
+        ? (scopeLabel === '当前页面' ? '全平台价格走势' : `${scopeLabel} · 全平台价格走势`)
+        : /最低|最便宜|平台/.test(text) ? `${scopeLabel}价格走势` : `${scopeLabel}价格走势摘要`,
       series: series.slice(0, 6).map((s) => ({ label: s.label, color: s.color, values: s.points.slice(-8).map((p) => ({ bucket: p.xLabel, value: p.price })) })),
-      note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。${platformNote ?? ''}${partialNote ?? ''}`,
-      actions: [{ id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: '解释这组价格趋势的关键变化和需要核查的异常点' }, { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这组价格趋势定位回当前看板', filterPatch: openPatch }],
+      note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。${chartPlatformNote}${partialNote ?? ''}`,
+      actions: [
+        { id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: allPlatformAsked ? '按全平台口径解释这组价格趋势的关键变化和需要关注的点' : '解释这组价格趋势的关键变化和需要核查的异常点' },
+        { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: allPlatformAsked ? '把这组全平台价格趋势定位回当前看板（全平台口径）' : '把这组价格趋势定位回当前看板', filterPatch: openPatch },
+      ],
       evidence: [{ id: id('evidence'), label: '价格序列', detail: `${series.length} 条系列 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }],
     };
     const rows = series.slice(0, 8).map((s) => {
@@ -895,33 +944,22 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
       //   （Y63 范围尾 202642 无价 → 实际 202638），逐产品标注、范围内全无价
       //   如实空，不拿日历尾周伪装、不跑出范围找价。
       const weeks = inRangeWeekIds(queryState);
-      const allPlatformAsked = /全平台|所有平台|全部平台|跨平台/.test(text);
-      // R7（六审 M2）：全平台透明切换时，本卡的动作必须携带「本次真实计算口径」——
-      // 定位到看板的 openPatch 把全局平台与逐线（main/compares）口径一并清空，
-      // 落地后看板就是本次比较的全平台口径（OZON 333/DNS 336/Mvideo 347 的口径），
-      // 不再回原 3P/395 口径冒充本次结果；价差解释 followup 的 prompt 自带
-      // 「全平台」字样，重放时按同一 all-platform 口径计算，不再答成原口径 395。
-      const allPlatformOpenPatch: FilterPatch = {
-        ...openPatch,
-        platform: null,
-        mains: (queryState.mains ?? []).map((card) => ({
-          ...card,
-          main: card.main ? { ...card.main, platform: null } : card.main,
-          compares: (card.compares ?? []).map((sel) => ({ ...sel, platform: null })),
-        })),
-      };
-      const tableOpenPatch = allPlatformAsked ? allPlatformOpenPatch : openPatch;
+      // R7（六审 M2 → 七审闭环）：全平台请求的 queryState 本身已是全平台口径
+      // （allPlatformQueryStateOf），openPatch 直接就是本次比较的真实口径——
+      // 落地后看板即 OZON 333/DNS 336/Mvideo 347 的全平台口径，不再回原
+      // 3P/395 冒充；价差解释 followup 的 prompt 自带「全平台」，重放同口径。
       const spreadPrompt = allPlatformAsked
         ? '解释最新有价周全平台价差及可能的核查方向（与当前所选店铺口径不同）'
         : '解释最新有价周的平台价差及可能的核查方向';
       const platformSels = flatSelections(Array.isArray(queryState.mains) ? queryState.mains : []).mainSels;
-      const scopeLabelOf = (scope: { platforms: string[]; shopIds: string[] } | null): string => {
-        if (!scope || (scope.platforms.length === 0 && scope.shopIds.length === 0)) return '全部平台（自动）';
-        const names = effectiveChannelIds(queryState.countryCode, scope).map((channelId) => dimChannel.find((c) => c.channel_id === channelId)?.display_name ?? channelId);
-        return [...new Set(names)].join('、');
-      };
-      const perProduct = platformSels.map((sel) => {
-        const effective = effectiveLinePlatform(sel, queryState.platform);
+      // R7（七审 M2）：全平台请求的 queryState 已清空每线/全局口径，「与当前
+      // 所选店铺口径（X）不同」的披露仍按页面原口径解析 effective——
+      // baseQueryState 与 queryState 的 mains 是清空前的 1:1 映射，按下标回看；
+      // 非全平台请求两者同引用，行为与旧实现完全一致。
+      const pageSels = flatSelections(Array.isArray(baseQueryState.mains) ? baseQueryState.mains : []).mainSels;
+      const scopeLabelOf = (scope: { platforms: string[]; shopIds: string[] } | null): string => scopeChannelsLabel(queryState.countryCode, scope);
+      const perProduct = platformSels.map((sel, index) => {
+        const effective = effectiveLinePlatform(pageSels[index] ?? sel, baseQueryState.platform);
         const scope = allPlatformAsked ? null : effective;
         const latestWeek = latestPricedWeekOfSelection(sel, weeks, queryState.countryCode, queryState.currency, scope);
         const spreadInfo = latestWeek
@@ -983,7 +1021,7 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
           singleNote = base + scopeTail;
         }
       }
-      const note = multi ? `${perProductNotes.join('；')}；各产品独立排序，跨产品价格不可直接比较。${platformNote ?? ''}${partialNote ?? ''}` : `${singleNote}${platformNote ?? ''}${partialNote ?? ''}`;
+      const note = multi ? `${perProductNotes.join('；')}；各产品独立排序，跨产品价格不可直接比较。${fallbackNote}${partialNote ?? ''}` : `${singleNote}${fallbackNote}${partialNote ?? ''}`;
       const evidenceDetail = multi
         ? perProduct.map((item) => item.spreadInfo.rows.length ? `${item.label} · ${item.latestWeek} · ${item.comparisonScopeLabel}` : `${item.label} · 范围内无价`).join('；')
         : perProduct[0]
@@ -997,14 +1035,14 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
         note,
         actions: [
           { id: id('action'), label: '查看价差解释', kind: 'followup', prompt: spreadPrompt },
-          { id: id('action'), label: '定位到看板', kind: 'open', prompt: allPlatformAsked ? '把本次全平台比较定位回当前看板（全平台口径）' : '把平台比较定位回当前看板', filterPatch: tableOpenPatch },
+          { id: id('action'), label: '定位到看板', kind: 'open', prompt: allPlatformAsked ? '把本次全平台比较定位回当前看板（全平台口径）' : '把平台比较定位回当前看板', filterPatch: openPatch },
         ],
         evidence: [{ id: id('evidence'), label: '平台比较', detail: evidenceDetail, source: '统一价格聚合引擎' }],
       };
     } else {
-      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: `少于两个有效点时不计算环比；结果可回到看板继续下钻。${platformNote ?? ''}${partialNote ?? ''}`, actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: `少于两个有效点时不计算环比；结果可回到看板继续下钻。${fallbackNote}${partialNote ?? ''}`, actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
     }
-    return { cards: [chart, table], citations: [{ id: id('citation'), kind: 'calculation', label: '统一价格聚合引擎', detail: `${series.length} 条系列 · ${queryState.countryCode} · ${queryState.rangeStart}–${queryState.rangeEnd}` }], steps: [step('catalog.resolve', '解析产品与口径', `${query.groups.length} 个产品组`), step('series.query', '查询价格序列', `${series.length} 条系列`), step('series.compare', '计算变化', '已完成确定性计算')], summary: rows.length ? `已按${scopeLabel}整理 ${rows.length} 个产品的价格结果。${platformNote ?? ''}${partialNote ?? ''}` : `当前范围没有足够的价格数据。${platformNote ?? ''}${partialNote ?? ''}` };
+    return { cards: [chart, table], citations: [{ id: id('citation'), kind: 'calculation', label: '统一价格聚合引擎', detail: `${series.length} 条系列 · ${queryState.countryCode} · ${queryState.rangeStart}–${queryState.rangeEnd}` }], steps: [step('catalog.resolve', '解析产品与口径', `${query.groups.length} 个产品组`), step('series.query', '查询价格序列', `${series.length} 条系列`), step('series.compare', '计算变化', '已完成确定性计算')], summary: rows.length ? `已按${scopeLabel}整理 ${rows.length} 个产品的价格结果。${chartPlatformNote}${partialNote ?? ''}` : `当前范围没有足够的价格数据。${chartPlatformNote}${partialNote ?? ''}` };
   } catch {
     return { cards: [], citations: [], steps: [step('series.query', '查询价格序列', '价格引擎返回异常', 'failed')], summary: '价格数据暂时无法读取，请刷新后重试。' };
   }
