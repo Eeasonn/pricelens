@@ -90,7 +90,7 @@ const fmtUsd = (usd: number): string => `$${Math.round(usd).toLocaleString('en-U
 function chipStyle(ink: string = color.body, bg: string = color.canvasSoft2): React.CSSProperties {
   return {
     display: 'inline-flex', alignItems: 'center', height: 18, padding: '0 6px', borderRadius: radius.pill,
-    fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap', background: bg, color: ink, border: `1px solid ${color.hairline}`,
+    fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: bg, color: ink, border: `1px solid ${color.hairline}`,
   };
 }
 
@@ -441,7 +441,7 @@ export default function IntelligenceReviewPanel({
           <Button size="small" disabled title="候选生成能力待接入，抓取逻辑另议">更新候选</Button>
         </div>
         <div style={{ fontSize: 12.5, lineHeight: 1.6, color: color.body }}>候选生成能力待接入</div>
-        <div style={{ fontSize: 11.5, lineHeight: 1.6, color: color.mute }}>
+        <div style={{ fontSize: 12, lineHeight: 1.6, color: color.mute }}>
           抓取与排序逻辑另议；接入后在此先列后审（接受 / 改参 / 拒绝 / 移除出列表），不自动写入事件。
         </div>
       </div>
@@ -459,14 +459,14 @@ export default function IntelligenceReviewPanel({
       {recommendations.length === 0 && (
         <>
           <div style={{ fontSize: 12.5, lineHeight: 1.6, color: color.body }}>当前情报没有可转化事件</div>
-          <div style={{ fontSize: 11.5, lineHeight: 1.6, color: color.mute }}>人工事件仍可在下方事件区录入。</div>
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: color.mute }}>人工事件仍可在下方事件区录入。</div>
         </>
       )}
 
       {/* 批量操作条：复选框默认不勾；跨目标只允许整理（批量移除 / 批量拒绝） */}
       {selectableIds.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: color.body }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: color.body }}>
             <input
               type="checkbox"
               aria-label="选择当前 Top5"
@@ -475,14 +475,14 @@ export default function IntelligenceReviewPanel({
             />
             全选
           </label>
-          <span style={{ fontSize: 11, color: color.mute }}>{`已选 ${selected.size} 条`}</span>
+          <span style={{ fontSize: 12, color: color.mute }}>{`已选 ${selected.size} 条`}</span>
           <Button size="small" disabled={selected.size === 0} onClick={batchRemove}>批量移除</Button>
           <Button size="small" disabled={selected.size === 0} onClick={batchReject}>批量拒绝</Button>
           <Button size="small" disabled={!batchPreviewReady} onClick={() => setBatchModalOpen(true)}>批量预览</Button>
         </div>
       )}
       {selected.size > 0 && batchReasons.length > 0 && (
-        <div data-lpl-batch-reasons style={{ fontSize: 11, lineHeight: 1.6, color: color.warningInk }}>
+        <div data-lpl-batch-reasons style={{ fontSize: 12, lineHeight: 1.6, color: color.warningInk }}>
           {batchReasons.map((reason) => <div key={reason}>{reason}</div>)}
         </div>
       )}
@@ -523,7 +523,7 @@ export default function IntelligenceReviewPanel({
           onClick={undo}
           style={{
             border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, padding: '3px 10px',
-            background: color.canvas, color: color.link, fontSize: 11.5, cursor: 'pointer', textAlign: 'left',
+            background: color.canvas, color: color.link, fontSize: 12, cursor: 'pointer', textAlign: 'left',
           }}
         >
           {lastBatchMessage}
@@ -533,7 +533,7 @@ export default function IntelligenceReviewPanel({
       {/* 已移除 / 已拒绝折叠区（可撤销恢复） */}
       {dismissedRows.length > 0 && (
         <details data-lpl-dismissed-region>
-          <summary style={{ fontSize: 11.5, color: color.mute, cursor: 'pointer' }}>{`已移除 / 已拒绝（${dismissedRows.length} · 可撤销）`}</summary>
+          <summary style={{ fontSize: 12, color: color.mute, cursor: 'pointer' }}>{`已移除 / 已拒绝（${dismissedRows.length} · 可撤销）`}</summary>
           <div style={{ display: 'grid', gap: space.sm, marginTop: space.sm }}>
             {dismissedRows.map((rec) => {
               const title = itemOf(rec.intelligenceId)?.title ?? rec.candidateId;
@@ -668,15 +668,15 @@ function CandidateRow({
         <span style={chipStyle()}>{EVIDENCE_LABEL[rec.evidenceState]}</span>
       </div>
       {item != null && (
-        <div className="tnum" style={{ fontSize: 11, color: color.mute }}>
+        <div className="tnum" style={{ fontSize: 12, color: color.mute }}>
           {`${item.sourceName} · ${item.publishedAt.slice(0, 10)} · ${DATA_STATUS_LABEL[item.dataStatus]}`}
           {item.sourceUrl == null ? ' · 暂无来源链接' : ''}
         </div>
       )}
-      <div style={{ fontSize: 11.5, lineHeight: 1.6, color: color.body }}>{item?.summary ?? rec.rationale}</div>
-      <div className="tnum" style={{ fontSize: 11.5, color: color.ink }}>{rangeText}</div>
+      <div style={{ fontSize: 12, lineHeight: 1.6, color: color.body }}>{item?.summary ?? rec.rationale}</div>
+      <div className="tnum" style={{ fontSize: 12, color: color.ink }}>{rangeText}</div>
       {(missingText !== '' || editing) && (
-        <div style={{ fontSize: 11, lineHeight: 1.6, color: color.warningInk }}>
+        <div style={{ fontSize: 12, lineHeight: 1.6, color: color.warningInk }}>
           {missingText !== '' ? missingText : '草稿编辑中（未应用）'}
         </div>
       )}
@@ -859,14 +859,14 @@ function ReviewModal({
             <b style={{ fontSize: 13, color: color.ink }}>{title}</b>
             <span style={chipStyle()}>{`情报事实 · ${DATA_STATUS_LABEL[item?.dataStatus ?? 'simulated']}`}</span>
             {item?.sourceUrl != null && (
-              <a href={item.sourceUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, marginLeft: 'auto' }}>查看原文</a>
+              <a href={item.sourceUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, marginLeft: 'auto' }}>查看原文</a>
             )}
           </div>
           <div style={{ fontSize: 12, lineHeight: 1.7, color: color.body }}>{item?.excerpt ?? '（无原文摘录）'}</div>
-          <div className="tnum" style={{ fontSize: 11, color: color.mute }}>
+          <div className="tnum" style={{ fontSize: 12, color: color.mute }}>
             {`来源 ${item?.sourceName ?? '—'} · 发布 ${item?.publishedAt.slice(0, 10) ?? '—'} · 抓取 ${item?.capturedAt.slice(0, 10) ?? '—'}${item?.sourceUrl == null ? ' · 暂无来源链接' : ''}`}
           </div>
-          <div style={{ fontSize: 11, color: color.mute }}>
+          <div style={{ fontSize: 12, color: color.mute }}>
             {`适用范围：${item?.scope.country ?? '—'} / ${item?.scope.industry ?? '—'} / ${item?.scope.channel ?? '—'}${item?.scope.product != null ? ` / ${item.scope.product}` : ''}`}
           </div>
         </section>
@@ -955,13 +955,13 @@ function ReviewModal({
 
           {/* 依据不足仍可人工完成，但必须明示人工假设 */}
           {draft.evidenceState !== 'supported' && draft.magnitudePct != null && (
-            <div data-lpl-manual-assumption style={{ display: 'grid', gap: 2, fontSize: 11.5, lineHeight: 1.6, color: color.warningInk }}>
+            <div data-lpl-manual-assumption style={{ display: 'grid', gap: 2, fontSize: 12, lineHeight: 1.6, color: color.warningInk }}>
               <span>该幅度为人工假设</span>
               <span>{`依据状态：${EVIDENCE_LABEL[draft.evidenceState]}${draft.missingFields.length > 0 ? `；缺 ${draft.missingFields.map((field) => FIELD_LABEL[field] ?? field).join('、')}` : ''}`}</span>
             </div>
           )}
           {blocking.length > 0 && (
-            <div data-lpl-blocking-issues style={{ fontSize: 11.5, lineHeight: 1.7, color: color.warningInk }}>
+            <div data-lpl-blocking-issues style={{ fontSize: 12, lineHeight: 1.7, color: color.warningInk }}>
               {blocking.map((issue) => <div key={`${issue.field}:${issue.message}`}>{`缺参 · ${FIELD_LABEL[issue.field] ?? issue.field}：${issue.message}`}</div>)}
             </div>
           )}
@@ -989,12 +989,12 @@ function ReviewModal({
             </>
           )}
           {duplicates.length > 0 && (
-            <div data-lpl-duplicate-warning style={{ fontSize: 11.5, lineHeight: 1.7, color: color.warningInk }}>
+            <div data-lpl-duplicate-warning style={{ fontSize: 12, lineHeight: 1.7, color: color.warningInk }}>
               可能重复计入：{duplicates.map((impact) => `${impact.eventId}（${impact.overlapWeekIds.length} 周重叠：${impact.overlapWeekIds[0]}…${impact.overlapWeekIds[impact.overlapWeekIds.length - 1]}）`).join('、')}
             </div>
           )}
           {sameIntelligenceApplied.length > 0 && (
-            <div data-lpl-same-intel-warning style={{ fontSize: 11.5, color: color.warningInk }}>
+            <div data-lpl-same-intel-warning style={{ fontSize: 12, color: color.warningInk }}>
               同一情报已有落点（改幅不消除提醒）：{sameIntelligenceApplied.join('、')}
             </div>
           )}
@@ -1007,11 +1007,11 @@ function ReviewModal({
               {`预测期销毛 ${fmtUsd(result.summary.forecastMargin)} → ${fmtUsd(previewResult.summary.forecastMargin)}`}
             </div>
           ) : draft.target !== 'cost-reference' && (
-            <div style={{ fontSize: 11, color: color.mute }}>
+            <div style={{ fontSize: 12, color: color.mute }}>
               完整前后差复算将在页级数据接线（任务 10）后可用；本预览已按主链同源公式列出落点与乘子，确认前不更新页面。
             </div>
           )}
-          <div style={{ fontSize: 11, color: color.mute }}>预览为只读临时计算；只有「确认应用事件」才写入既有事件集合（可撤销）。</div>
+          <div style={{ fontSize: 12, color: color.mute }}>预览为只读临时计算；只有「确认应用事件」才写入既有事件集合（可撤销）。</div>
         </section>
       </div>
     </Modal>
@@ -1090,7 +1090,7 @@ function BatchPreviewModal({
         <div className="tnum" style={{ color: overlaps.length > 0 ? color.warningInk : color.mute }}>
           重复计入：{overlaps.length > 0 ? overlaps.join('、') : '未发现范围重叠'}
         </div>
-        <div style={{ fontSize: 11, color: color.mute }}>
+        <div style={{ fontSize: 12, color: color.mute }}>
           确认后作为一个审核批次原子写入并生成同一批次号；撤销以批次为单位。任一条改参即退出批量确认，回到逐条审核。
         </div>
       </div>

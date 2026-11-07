@@ -48,7 +48,10 @@ logs/
 /docs/superpowers/
 /pricelens/docs/
 /pricelens/scripts/roadshow-narration.mjs
-/pricelens/public/
+# public/ 历史上放路演素材（不入库）；t428u Batch3 起 gtm-samples 是情报工作台
+# 的工程必需资产（CC/PD 真机照片 + ATTRIBUTION.md 授权表，须随仓分发），单独放行
+/pricelens/public/*
+!/pricelens/public/gtm-samples
 /PriceLens-UX需求文档.md
 /docs/*.xlsx
 /docs/plans/

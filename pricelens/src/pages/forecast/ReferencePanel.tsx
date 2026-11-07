@@ -109,7 +109,7 @@ const smallChipStyle = {
   height: 20,
   padding: '0 8px',
   borderRadius: radius.pill,
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 600,
   whiteSpace: 'nowrap' as const,
 };
@@ -127,7 +127,7 @@ function headButtonStyle(danger: boolean): CSSProperties {
     background: color.canvas,
     color: danger ? color.error : color.body,
     font: 'inherit',
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: 600,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
@@ -262,7 +262,7 @@ function ReferenceRoster(props: {
                 height: 20,
                 padding: '0 8px',
                 borderRadius: radius.pill,
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 600,
                 font: 'inherit',
                 cursor: 'pointer',
@@ -313,14 +313,14 @@ function ReferenceRoster(props: {
                   aria-label={`查看事件读数 ${rowLabel}`}
                   title="点击查看事件详情；再次点击关闭"
                   onClick={() => onSelectEvent(selected ? null : ev.id)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', padding: 0, font: 'inherit', fontSize: 11.5, color: color.body, cursor: 'pointer', minWidth: 0, textAlign: 'left' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', padding: 0, font: 'inherit', fontSize: 12, color: color.body, cursor: 'pointer', minWidth: 0, textAlign: 'left' }}
                 >
                   <span aria-hidden style={{ width: 8, height: 8, borderRadius: 2, background: colorOf(ev.typeId), flex: 'none' }} />
                   <span style={{ fontVariantNumeric: 'tabular-nums', color: color.ink, fontWeight: 600, whiteSpace: 'nowrap' }}>{rangeLabel}</span>
                   <span style={{ color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.label}</span>
                 </button>
                 {impact && (impact.magnitudePct != null || impact.decay !== 'unspecified') && (
-                  <span className="tnum" style={{ fontSize: 11, color: color.mute, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                  <span className="tnum" style={{ fontSize: 12, color: color.mute, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                     {`${impact.magnitudePct != null ? `${impact.magnitudePct > 0 ? '+' : impact.magnitudePct < 0 ? '−' : '±'}${Math.abs(impact.magnitudePct)}%` : '—'} · ${REFERENCE_DECAY_LABEL[impact.decay]}`}
                   </span>
                 )}
@@ -356,7 +356,7 @@ function ReferenceRoster(props: {
             );
           })}
           {filtered.length === 0 && (
-            <div role="status" style={{ fontSize: 11.5, color: color.mute, padding: '4px 0' }}>无匹配事件</div>
+            <div role="status" style={{ fontSize: 12, color: color.mute, padding: '4px 0' }}>无匹配事件</div>
           )}
         </div>
       </CollapsibleSection>
@@ -375,7 +375,7 @@ function rosterActionButtonStyle(danger: boolean): CSSProperties {
     background: color.canvas,
     color: danger ? color.error : color.body,
     font: 'inherit',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 600,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
@@ -588,12 +588,12 @@ function ReferenceChartCard({
             minWidth: 0,
           }}
         >
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: '#0053c2' }}>拖选事件时段 · Esc 取消</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#0053c2' }}>拖选事件时段 · Esc 取消</span>
           <button
             type="button"
             aria-label="取消拖选"
             onClick={onCollapseComposer}
-            style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: '#0053c2', font: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+            style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: '#0053c2', font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
           >
             取消
           </button>
@@ -654,7 +654,7 @@ function ReferenceChartCard({
       {footNote && (
         <div style={{ marginTop: space.sm, minWidth: 0 }}>
           <CollapsibleSection label="首预测周读数">
-            <div className="tnum" style={{ fontSize: 11, color: color.mute, minWidth: 0 }}>{footNote}</div>
+            <div className="tnum" style={{ fontSize: 12, color: color.mute, minWidth: 0 }}>{footNote}</div>
           </CollapsibleSection>
         </div>
       )}
@@ -1164,7 +1164,7 @@ export default function ReferencePanel({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
-                fontSize: 11.5,
+                fontSize: 12,
                 lineHeight: '16px',
                 padding: '3px 9px',
                 borderRadius: radius.pill,
@@ -1181,7 +1181,7 @@ export default function ReferencePanel({
             </button>
           ))}
           {hint.entries.length === 0 && (
-            <span style={{ fontSize: 11.5, color: color.mute }}>无可回放事件</span>
+            <span style={{ fontSize: 12, color: color.mute }}>无可回放事件</span>
           )}
           <button
             type="button"
@@ -1228,13 +1228,13 @@ export default function ReferencePanel({
               同周龄同步
             </label>
             {ws.saveState === 'unpersisted' && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: color.warningInk }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: color.warningInk }}>
                 未持久化 · 未能保存到浏览器，仅当前页面有效
                 <button
                   type="button"
                   aria-label="重试保存工作区"
                   onClick={ws.retryPersist}
-                  style={{ border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 10.5, padding: '1px 8px', cursor: 'pointer' }}
+                  style={{ border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 12, padding: '1px 8px', cursor: 'pointer' }}
                 >
                   重试
                 </button>
@@ -1372,12 +1372,12 @@ export default function ReferencePanel({
               aria-live="polite"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: space.sm, padding: '4px 10px', borderRadius: radius.control, border: `1px solid ${color.hairline}`, background: color.canvasSoft2 }}
             >
-              <span style={{ fontSize: 11, fontWeight: 600, color: color.body }}>{undoLabel}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: color.body }}>{undoLabel}</span>
               <button
                 type="button"
                 aria-label={`撤销：${undoLabel}`}
                 onClick={ws.undo}
-                style={{ border: 'none', background: 'transparent', color: color.link, font: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                style={{ border: 'none', background: 'transparent', color: color.link, font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
               >
                 撤销
               </button>
@@ -1387,7 +1387,7 @@ export default function ReferencePanel({
               2026-11-05 视觉精简二轮：随「首预测周读数」收起区默认收起 */}
           {prevGenFootnote && !panelProducts.some((p) => p.chainRefId != null && p.chainRefId === prevGenReferenceId) && (
             <CollapsibleSection label="首预测周读数">
-              <div className="tnum" style={{ fontSize: 11, color: color.mute, minWidth: 0 }}>{prevGenFootnote}</div>
+              <div className="tnum" style={{ fontSize: 12, color: color.mute, minWidth: 0 }}>{prevGenFootnote}</div>
             </CollapsibleSection>
           )}
         </>

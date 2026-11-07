@@ -57,7 +57,7 @@ export function appendTierCards(
     if (seen.has(key)) continue;
     seen.add(key);
     const card: MainProduct = { id: newCardId(), main: sel, compares: [] };
-    cards.push({ ...card, compares: autoComparesFor(card) });
+    cards.push({ ...card, compares: autoComparesFor(card, countryCode) });
   }
   if (!cards.length) return existing;
   return [...existing, ...cards];

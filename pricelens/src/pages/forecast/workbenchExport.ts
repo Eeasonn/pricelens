@@ -18,6 +18,7 @@ import type { ForecastCalendar } from './workbenchCalendar';
 import { siMonthStatusOf } from './useSiConfirmations';
 import type { SiConfirmationState } from './useSiConfirmations';
 import type { MarginView } from './marginScenarioModel';
+import { forecastMarginRateOf } from './marginScenarioModel';
 import type { IntelligenceReviewState } from './intelligenceModel';
 import {
   DOS_BAND,
@@ -148,7 +149,10 @@ export function buildWorkbenchAssumptionText(
     + (pendingCount > 0
       ? `（SI 未全部确认：主图当前为 SI 计划参考结果，未经逐月确认，不视作人工确认完成）`
       : '（12 个月已全部确认）'),
-    ...siStates.map((entry) => `- ${entry.month.key}：${entry.value.toLocaleString('en-US')} 台 · ${entry.stateText}`),
+    ...siStates.map((entry) => {
+      const reason = (params.siReasons[entry.month.key] ?? '').trim();
+      return `- ${entry.month.key}：${entry.value.toLocaleString('en-US')} 台 · ${entry.stateText}${reason !== '' ? ` · 原因：${reason}` : ''}`;
+    }),
     `库存规则：库存上限修正 min(基线 SO, 可售)，可售 = 期初库存 + SI 补货回写主图；`
     + `健康判定：DOS ${DOS_BAND.min}–${DOS_BAND.max} 天带 · 库存降幅预警 ${INV_CRASH_LIGHT_PCT}%／${INV_CRASH_HEAVY_PCT}%（阈值未核定）；`
     + `修正事实独立保留（手调不覆盖）。`,
@@ -173,6 +177,7 @@ export function buildWorkbenchAssumptionText(
     + `价格手调 ${marginView.appliedPriceCount} 周${priceWeekIds.length ? `：${priceWeekIds.join('、')}` : ''}。`,
     `预测期销毛 ${fmtMillionUsd(marginView.forecastMargin)}`
     + `（历史 ${fixture.context.historyRange} ${fmtMillionUsd(marginView.historyMargin)}）；`
+    + `销毛率 ${(() => { const rate = forecastMarginRateOf(marginView); return rate != null ? `${(rate * 100).toFixed(1)}%` : '—（无有效收入周）'; })()}（单台销毛额 = 单台收入 − 单台成本；销毛率 = 单台销毛额 ÷ 单台收入）；`
     + `预测覆盖 ${marginView.forecastCoverage.validWeeks}/${marginView.forecastCoverage.totalWeeks} 周`
     + ` · 历史覆盖 ${marginView.historyCoverage.validWeeks}/${marginView.historyCoverage.totalWeeks} 周（缺数周不计 0）。`,
     marginView.priceDemandLinked

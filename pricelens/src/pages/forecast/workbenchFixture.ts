@@ -211,6 +211,9 @@ export interface WorkbenchFixture {
   };
   context: {
     country: string;
+    /** 稳定国家 ID（R2 C1）：口径漂移判定用 ID 比较（RU vs fixture），显示名
+     *  （R国/俄罗斯）只作展示，避免同名异写误报「不一致」。 */
+    countryCode: string;
     industry: string;
     channel: string;
     product: string;

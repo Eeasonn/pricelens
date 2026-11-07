@@ -67,16 +67,23 @@ describe('PriceAdjustDialog', () => {
     expect(Number(priceInput.value)).not.toBe(resultWeek.price + (resultWeek.price - resultWeek.unitCost));
   });
 
-  it('参考说明自动带入「参考④ 11 月成本版本」，可清空后应用（reason = 空串）', () => {
+  it('参考说明自动带入「参考④ 11 月成本版本」；清空后应用被阻断（Batch 2 必填），填写后应用带原因', () => {
     const onApply = vi.fn<ComponentProps< typeof PriceAdjustDialog>['onApply']>();
     render(<PriceAdjustDialog {...makePriceDialogProps(onApply)} />);
-    const reasonInput = screen.getByLabelText('参考说明（选填）') as HTMLInputElement;
+    const reasonInput = screen.getByLabelText('参考说明（必填）') as HTMLInputElement;
     expect(reasonInput.value).toBe('参考④ 2026-11 月成本版本');
+    // 清空 → 应用禁用（价格手调必须带原因；取消不写入）
     fireEvent.change(reasonInput, { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: '应用价格调整' }));
+    const apply = screen.getByRole('button', { name: '应用价格调整' }) as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
+    expect(screen.getByText('请填写参考说明（必填）后应用')).toBeTruthy();
+    // 重新填写 → 应用回调带原因
+    fireEvent.change(reasonInput, { target: { value: '参考④ 2026-11 月成本版本上升' } });
+    expect(apply.disabled).toBe(false);
+    fireEvent.click(apply);
     expect(onApply).toHaveBeenCalledTimes(1);
     const [entries, meta] = onApply.mock.calls[0]!;
-    expect(Object.values(entries)[0]!.reason).toBe('');
+    expect(Object.values(entries)[0]!.reason).toBe('参考④ 2026-11 月成本版本上升');
     expect(meta.sourceCostMonth).toBe('2026-11');
   });
 

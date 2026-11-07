@@ -17,7 +17,7 @@ import type { FiltersState, PlatformSelection, ProductSelection } from './filter
 import type { Page } from './PageContext';
 import { hiddenInStable, STABLE } from '../appChannel';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
-import { cardsFromSelections, clampMains } from './mainSelection';
+import { cardsFromSelections, clampMains, firstLegalSelectionOfModel } from './mainSelection';
 import { getCurrentCountry } from './currentScope';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
@@ -92,17 +92,19 @@ export function platformLevelForChannel(platform: PlatformSelection | null): Pla
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null。
  *  第一百一十七轮：主分析可任意品牌（旧 ownOnly 白名单随之退役）。
  *  countryCode = 取代表色 SKU 的国家口径（链接自带 c= 时须显式传入：解析发生在
- *  数据层缺省国家切换之前，按持久化国家取色会在该国无价时把主品整个丢掉）。 */
+ *  数据层缺省国家切换之前，按持久化国家取色会在该国无价时把主品整个丢掉）。
+ *  R2（本轮返修 M1a，同步稳定线 7edadc6）：精确配置在目标国不存在（RU 的
+ *  12+512GB 链接进只有 16+512GB 的 ID）时不再整条丢弃，映射到同型号该国首个
+ *  合法配置/SKU；型号整体不在目标国 = null（调用方回落默认）。 */
 export function productSelectionOfSeriesKey(key: string, countryCode: string = getCurrentCountry()): ProductSelection | null {
   const sep = key.indexOf('__');
   if (sep < 0) return null;
   const modelId = key.slice(0, sep);
   const rom = key.slice(sep + 2);
   const row = dimProduct.find((p) => p.sku_id.startsWith(modelId + '__') && norm(p.romram) === rom);
-  if (!row) return null;
-  const skuId = lowestPriceColorSku(modelId, row.romram, countryCode);
-  if (!skuId) return null;
-  return { modelId, romram: row.romram, skuIds: [skuId] };
+  const skuId = row ? lowestPriceColorSku(modelId, row.romram, countryCode) : null;
+  if (row && skuId) return { modelId, romram: row.romram, skuIds: [skuId] };
+  return firstLegalSelectionOfModel(modelId, countryCode);
 }
 
 // 兼容旧名（预警跳转等按系列 key 解析任意产品）

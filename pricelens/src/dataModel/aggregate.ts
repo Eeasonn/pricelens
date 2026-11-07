@@ -217,6 +217,49 @@ export function platformSelectionValidFor(countryCode: string, platform: Platfor
   );
 }
 
+/** R5-M1（目标国可落地平台归一化 · 计算与落地共用的共享规则）：平台勾选按目标国
+ *  渠道表逐项过滤——整平台勾选须在该国在架，店铺（渠道）勾选须属于该国；有任一
+ *  可落地部分则保留该子集（同国 RU+OZON 等有效平台与 shopIds 原样保留，不整体
+ *  清空），全部不可落地 = null（回落目标国默认电渠，绝不解析成空渠道集导致取价
+ *  全空）。完全可落地时返回原引用（调用方可用 === 判定「未发生归一化」）。
+ *  seller 仅在其所属渠道保留时随行。 */
+export function platformSelectionForCountry(platform: PlatformQuery | null | undefined, countryCode: string): PlatformQuery | null {
+  if (!platform) return null;
+  const platforms = platform.platforms.filter((p) => dimChannel.some((c) => c.country_code === countryCode && c.platform === p));
+  const shopIds = platform.shopIds.filter((id) => channelById.get(id)?.country_code === countryCode);
+  if (!platforms.length && !shopIds.length) return null;
+  if (platforms.length === platform.platforms.length && shopIds.length === platform.shopIds.length) return platform;
+  const seller = platform.seller != null && shopIds.length === 1 && shopIds[0] === platform.shopIds[0] ? platform.seller : null;
+  return { platforms, shopIds, seller };
+}
+
+/** 平台口径项的用户可读标签：平台名原样（dim_channel.platform 即展示名，如
+ *  "OZON"/"NOON"）；渠道 id 补渠道显示名（"RU:ozon:3P（OZON 3P）"）——归一化
+ *  说明里同时保留源标识（渠道 id 可核查）与可读名，不裸吐机器 id。 */
+export function platformScopeLabel(value: string): string {
+  const hit = channelById.get(value);
+  if (!hit || hit.display_name === value) return value;
+  return `${value}（${hit.display_name}）`;
+}
+
+/** R4（三审 M1 · 共享作用域解析）：一条产品线的生效取价口径——每线显式
+ *  selection.platform 优先；未带每线口径（或空勾选）回落全局筛选
+ *  state.platform（URL shop=/plat=、Agent patch 落地、量价页全局口径来源）；
+ *  两者皆无 = null（自动：该国全部渠道每周最低价）。趋势图、Agent 趋势
+ *  queryCards、价格优势 buildPriceAdvantageResult、行级/整卡回看 patch 的
+ *  每条线一律经此解析——不允许任何消费方只读其中一层造成「趋势 395、优势
+ *  333」的双口径。店铺级（shopIds）原样参与 effectiveChannelIds 严格交集，
+ *  不降平台、不混池（迭代线店铺级策略）；空勾选视为未选，不挡全局回落。 */
+export function effectiveLinePlatform(
+  selection: { platform?: PlatformQuery | null },
+  statePlatform: PlatformQuery | null,
+): PlatformQuery | null {
+  const own = selection.platform;
+  if (own && (own.platforms.length > 0 || own.shopIds.length > 0)) return own;
+  if (statePlatform && (statePlatform.platforms.length > 0 || statePlatform.shopIds.length > 0)) return statePlatform;
+  return null;
+}
+
 /** 取价店铺文案：渠道显示名（如 "DNS 独立站"）+ 具体店铺（有意义时） */
 function shopLabelOf(row: FactPriceWeekly): string {
   const ch = channelById.get(row.channel_id);
@@ -430,6 +473,92 @@ export function platformPriceSpread(
   return out.sort((a, b) => a.price - b.price);
 }
 
+/** R5（四审 m2 · 整配置平台比较）：按整条产品线选择展开平台价目——skuIds=[]
+ *  （整配置）解析为该型号该配置在维表内的全部颜色 SKU（resolveGroup 同规则），
+ *  多 SKU 部分选择同样按实际选择聚合，不再只取首 SKU。各平台价 = 选择内各
+ *  SKU 在该平台渠道集内最低在架价（minPriceRow，裸机优先、异常价剔除）的
+ *  算术平均——与 buildSeries 周聚合（先每 SKU 渠道内最低、再跨 SKU 均值）
+ *  同构，绝不把单颜色价（黑 333）套给整配置（334）。单 SKU 时与
+ *  platformPriceSpread 数值一致。
+ *  R6（五审 M2 · 生效口径）：scope 非空（每线 selection.platform > 全局
+ *  state.platform，即 effectiveLinePlatform）时平台比较仅在该口径解析出的渠道
+ *  集合内进行——店铺级口径（OZON 3P）绝不以同平台 1P+3P 池价（333）冒充
+ *  3P 价（395），平台级口径只在勾选平台渠道内取价，seller 随口径生效；scope
+ *  空/未传（自动）= 该国全部渠道（旧行为，无 scope 默认全平台仍合法）。 */
+export function platformPriceSpreadOfSelection(
+  sel: { modelId: string; romram: string; skuIds: readonly string[] },
+  weekId: string,
+  countryCode: string,
+  currency: CurrencyMode,
+  scope?: PlatformQuery | null,
+): { members: number; wholeConfig: boolean; rows: Array<{ platform: string; price: number; skuCount: number }> } {
+  let skuIds = sel.skuIds.filter((id) => productById.has(id));
+  const wholeConfig = skuIds.length === 0;
+  if (wholeConfig) {
+    const prefix = sel.modelId + '__';
+    skuIds = dimProduct.filter((p) => p.sku_id.startsWith(prefix) && normRom(p.romram) === normRom(sel.romram)).map((p) => p.sku_id);
+  }
+  if (!skuIds.length) return { members: 0, wholeConfig, rows: [] };
+  const scopeOn = scope != null && (scope.platforms.length > 0 || scope.shopIds.length > 0);
+  const allowed = scopeOn ? new Set(effectiveChannelIds(countryCode, scope)) : null;
+  const seller = scopeOn ? sellerOfQuery(scope) : null;
+  const rows: Array<{ platform: string; price: number; skuCount: number }> = [];
+  const byPlatform = new Map<string, string[]>();
+  for (const channel of dimChannel) {
+    if (channel.country_code !== countryCode) continue;
+    if (allowed && !allowed.has(channel.channel_id)) continue;
+    const arr = byPlatform.get(channel.platform);
+    if (arr) arr.push(channel.channel_id);
+    else byPlatform.set(channel.platform, [channel.channel_id]);
+  }
+  for (const [platform, channelIds] of byPlatform) {
+    const channels = new Set(channelIds);
+    let sum = 0;
+    let cnt = 0;
+    for (const sid of skuIds) {
+      const hit = minPriceRow(countryCode, sid, weekId, channels, currency, seller);
+      if (!hit) continue;
+      sum += hit.price;
+      cnt += 1;
+    }
+    if (cnt > 0) rows.push({ platform, price: sum / cnt, skuCount: cnt });
+  }
+  rows.sort((a, b) => a.price - b.price);
+  return { members: skuIds.length, wholeConfig, rows };
+}
+
+/** R6（五审 m1 · 真实最近有价周）：选择（单 SKU / 多 SKU / 整配置 skuIds=[]）
+ *  在给定周序列（升序）内的实际最近有价周——从序列尾向前找第一个「至少一个
+ *  SKU 在口径渠道集内有有效价（minPriceRow，异常价守卫同源）」的周；范围内
+ *  全无价 = null（如实空：不跑出范围找价、不拿日历尾周伪装有价周）。scope
+ *  口径与 platformPriceSpreadOfSelection 一致：空 = 该国全部渠道；口径内全
+ *  程无价同样返回 null，不静默扩大口径找其他渠道价。 */
+export function latestPricedWeekOfSelection(
+  sel: { modelId: string; romram: string; skuIds: readonly string[] },
+  weekIds: readonly string[],
+  countryCode: string,
+  currency: CurrencyMode,
+  scope?: PlatformQuery | null,
+): string | null {
+  let skuIds = sel.skuIds.filter((id) => productById.has(id));
+  if (!skuIds.length) {
+    skuIds = dimProduct.filter((p) => p.sku_id.startsWith(sel.modelId + '__') && normRom(p.romram) === normRom(sel.romram)).map((p) => p.sku_id);
+  }
+  if (!skuIds.length || !weekIds.length) return null;
+  const scopeOn = scope != null && (scope.platforms.length > 0 || scope.shopIds.length > 0);
+  const channels = scopeOn
+    ? new Set(effectiveChannelIds(countryCode, scope))
+    : new Set(dimChannel.filter((c) => c.country_code === countryCode).map((c) => c.channel_id));
+  const seller = scopeOn ? sellerOfQuery(scope) : null;
+  for (let i = weekIds.length - 1; i >= 0; i -= 1) {
+    const wid = weekIds[i];
+    for (const sid of skuIds) {
+      if (minPriceRow(countryCode, sid, wid, channels, currency, seller) != null) return wid;
+    }
+  }
+  return null;
+}
+
 // ---------------- offer 解析（真实分期/促销/组合三列 → 三类权益） ----------------
 function findPromoForDate(countryCode: string, anchorDate: string, platform?: string): DimPromo | undefined {
   const hit = dimPromo.filter(
@@ -486,7 +615,10 @@ export function buildSeries(q: SeriesQuery): Series[] {
       channels = new Set(effectiveChannelIds(cc, explicit));
       const chs = dimChannel.filter((c) => channels.has(c.channel_id));
       const platforms = [...new Set(chs.map((c) => c.platform))];
-      badge = { label: platforms.join('/') || '已选渠道', auto: false, platforms };
+      // R6（六审透明说明）：店铺级口径用渠道显示名（如 "OZON 3P"）点名实际
+      // 参与计算的渠道——只挂平台名会把严格店铺级价误读成平台内最低价口径。
+      const label = explicit.shopIds.length ? chs.map((c) => c.display_name).join('/') : platforms.join('/');
+      badge = { label: label || '已选渠道', auto: false, platforms };
     } else {
       channels = new Set(dimChannel.filter((c) => c.country_code === cc).map((c) => c.channel_id));
       badge = {
@@ -700,6 +832,67 @@ export function lowestPriceColorSku(
     if (hit) return hit.row.sku_id;
   }
   return null;
+}
+
+/**
+ * R3（M2 · 型号在架判定的渠道回退，与 lowestPriceColorSku 同源规则）：某型号+
+ * 配置在目标国「全部在架渠道」范围内，从最新周向前回溯第一个有价周内取最低折后价
+ * 颜色的 SKU。默认电渠（lowestPriceColorSku 的渠道口径）没有任何价格事实时使用——
+ * 型号在该国 3P / 其他电渠有真实在架价 ≠ 型号无在架（真实事实：FR Mate X6 12+512
+ * 仅 Amazon 3P 有 202638–202642 五条事实，默认 Amazon 1P 全程无价）。周回溯方向、
+ * 同价 SKU 字典序与异常价守卫（minPriceOfRows 内建）完全一致，仅渠道范围放宽。
+ */
+export function lowestPriceColorSkuAnyChannel(
+  modelId: string,
+  romram: string,
+  countryCode: string = getCurrentCountry(),
+  currency: CurrencyMode = 'usd',
+): string | null {
+  const rows = dimProduct.filter((p) => p.sku_id.startsWith(modelId + '__') && normRom(p.romram) === normRom(romram));
+  if (rows.length === 0) return null;
+  const channels = new Set(dimChannel.filter((c) => c.country_code === countryCode).map((c) => c.channel_id));
+  const preferCheaperThenSku = (c: { row: FactPriceWeekly; price: number }, b: { row: FactPriceWeekly; price: number }): boolean =>
+    c.price < b.price || (c.price === b.price && c.row.sku_id < b.row.sku_id);
+  for (let i = timeRows.length - 1; i >= 0; i--) {
+    const wid = timeRows[i].week_id;
+    const weekRows: FactPriceWeekly[] = [];
+    for (const r of rows) {
+      for (const row of factRows(countryCode, r.sku_id, wid)) if (channels.has(row.channel_id)) weekRows.push(row);
+    }
+    const hit = minPriceOfRows(weekRows, (row) => displayPriceOf(row, currency), preferCheaperThenSku);
+    if (hit) return hit.row.sku_id;
+  }
+  return null;
+}
+
+/**
+ * R3（M2 · 型号在架判定 / 渠道回退共用）：产品选择在目标国「有真实价格事实」的
+ * 渠道 channel_id 列表（渠道表序去重，异常价守卫同源）。存在性探测专用——用于
+ * 说明「型号在该国哪些渠道在架」与默认电渠无价时的透明渠道回退，不参与常规
+ * 取价计算；skuIds 空 = 该配置全部颜色。
+ */
+export function pricedChannelIdsOfSelection(
+  sel: { modelId: string; romram: string; skuIds: string[] },
+  countryCode: string,
+): string[] {
+  const configRows = dimProduct.filter((p) => p.sku_id.startsWith(sel.modelId + '__') && normRom(p.romram) === normRom(sel.romram));
+  const skuIds = sel.skuIds.length ? sel.skuIds.filter((id) => productById.has(id)) : configRows.map((p) => p.sku_id);
+  if (skuIds.length === 0) return [];
+  const countryChannels = dimChannel.filter((c) => c.country_code === countryCode);
+  const byChannel = new Map<string, FactPriceWeekly[]>(countryChannels.map((c) => [c.channel_id, []]));
+  for (const wid of timeRows) {
+    for (const sid of skuIds) {
+      for (const row of factRows(countryCode, sid, wid.week_id)) {
+        byChannel.get(row.channel_id)?.push(row);
+      }
+    }
+  }
+  const out: string[] = [];
+  for (const channel of countryChannels) {
+    const rows = byChannel.get(channel.channel_id) ?? [];
+    if (minPriceOfRows(rows, (row) => row.price_local) != null) out.push(channel.channel_id);
+  }
+  return out;
 }
 
 // ---------------- 上市基线（促销力度表用） ----------------

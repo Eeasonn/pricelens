@@ -206,7 +206,7 @@ export default function ReferenceEventComposer(props: {
   };
 
   const labelStyle = (bad: boolean): CSSProperties => ({
-    fontSize: 11,
+    fontSize: 12,
     color: bad ? color.error : color.mute,
     marginBottom: 4,
   });
@@ -224,7 +224,7 @@ export default function ReferenceEventComposer(props: {
   });
 
   const weekCellStyle = (out: boolean, selected: boolean): CSSProperties => ({
-    fontSize: 11,
+    fontSize: 12,
     fontVariantNumeric: 'tabular-nums',
     color: selected ? color.onPrimary : out ? color.hairlineStrong : color.ink,
   });
@@ -304,7 +304,7 @@ export default function ReferenceEventComposer(props: {
           </button>
         </div>
         {typeUnavailable && (
-          <div style={{ marginTop: 4, fontSize: 11, color: color.warningInk }}>
+          <div style={{ marginTop: 4, fontSize: 12, color: color.warningInk }}>
             类型不可用 · 暂按「其他」显示，请另选类型（原类型 id 已保留）
           </div>
         )}
@@ -340,7 +340,7 @@ export default function ReferenceEventComposer(props: {
               <label
                 title="打开浏览器原生取色器"
                 aria-label="原生取色器选色"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: color.body, cursor: 'pointer' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: color.body, cursor: 'pointer' }}
               >
                 取色器
                 <input
@@ -375,7 +375,7 @@ export default function ReferenceEventComposer(props: {
                   else setHexDraft(resolved.type.color);
                 }}
                 placeholder="#F5A623"
-                style={{ width: 86, height: 22, boxSizing: 'border-box', padding: '0 6px', border: `1px solid ${HEX_RE.test(hexDraft.trim()) || hexDraft.trim() === '' ? color.hairlineStrong : color.error}`, borderRadius: radius.control, font: 'inherit', fontFamily: font.mono, fontSize: 11, background: color.canvas, color: color.ink }}
+                style={{ width: 86, height: 22, boxSizing: 'border-box', padding: '0 6px', border: `1px solid ${HEX_RE.test(hexDraft.trim()) || hexDraft.trim() === '' ? color.hairlineStrong : color.error}`, borderRadius: radius.control, font: 'inherit', fontFamily: font.mono, fontSize: 12, background: color.canvas, color: color.ink }}
               />
               <button
                 type="button"
@@ -384,13 +384,13 @@ export default function ReferenceEventComposer(props: {
                   setHexDraft(referenceEventDefaultColorOf(value.typeId));
                 }}
                 title="恢复该类型默认色与默认名（其他类型不受影响）"
-                style={{ height: 22, padding: '0 8px', border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, cursor: 'pointer' }}
+                style={{ height: 22, padding: '0 8px', border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 12, cursor: 'pointer' }}
               >
                 恢复默认
               </button>
             </div>
             {contrastHint && (
-              <div style={{ marginTop: 5, fontSize: 10.5, color: color.warningInk }}>{contrastHint}（非阻断提醒；类型文字始终显示）</div>
+              <div style={{ marginTop: 5, fontSize: 12, color: color.warningInk }}>{contrastHint}（非阻断提醒；类型文字始终显示）</div>
             )}
           </div>
         )}
@@ -496,7 +496,7 @@ export default function ReferenceEventComposer(props: {
                           width: '100%',
                           padding: '1px 2px',
                           marginBottom: 2,
-                          borderRadius: 5,
+                          borderRadius: radius.control,
                           border: 'none',
                           cursor: 'pointer',
                           font: 'inherit',
@@ -504,7 +504,7 @@ export default function ReferenceEventComposer(props: {
                           background: selected ? color.link : inRange ? trackColors.fill : selectSoft,
                         }}
                       >
-                        <span className="tnum" style={{ fontSize: 10, color: selected ? color.onPrimary : color.mute }}>{week.index + 1}</span>
+                        <span className="tnum" style={{ fontSize: 12, color: selected ? color.onPrimary : color.mute }}>{week.index + 1}</span>
                         {week.dayNumbers.map((dayNumber, k) => {
                           const dayMs = week.mondayMs + k * DAY_MS;
                           const dayKey = new Date(dayMs).toISOString().slice(0, 7);
@@ -518,14 +518,14 @@ export default function ReferenceEventComposer(props: {
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: 8, fontSize: 11, color: color.mute }}>第一次点击选起始周，第二次点击选止周并收起；起晚于止自动对调。</div>
+            <div style={{ marginTop: 8, fontSize: 12, color: color.mute }}>第一次点击选起始周，第二次点击选止周并收起；起晚于止自动对调。</div>
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
           <Button size="small" type="default" onClick={onPickRange} title="收起本弹层，在面板图上按下—拖动—松手选择事件时段（Esc 取消）">
             图上拖选
           </Button>
-          <span className="tnum" style={{ fontSize: 11, color: color.mute, fontVariantNumeric: 'tabular-nums' }}>
+          <span className="tnum" style={{ fontSize: 12, color: color.mute, fontVariantNumeric: 'tabular-nums' }}>
             {duration != null ? `${duration} 周` : '—'}
           </span>
         </div>
@@ -544,7 +544,7 @@ export default function ReferenceEventComposer(props: {
           style={inputStyle(show(validation.labelMissing) || show(validation.labelTooLong))}
         />
         {(show(validation.labelMissing) || show(validation.labelTooLong)) && (
-          <div style={{ marginTop: 3, fontSize: 11, color: color.error }}>
+          <div style={{ marginTop: 3, fontSize: 12, color: color.error }}>
             {validation.labelMissing ? '请填写标题' : `标题不超过 ${LABEL_MAX} 字`}
           </div>
         )}
@@ -563,7 +563,7 @@ export default function ReferenceEventComposer(props: {
           style={inputStyle(show(validation.noteMissing) || show(validation.noteTooLong))}
         />
         {(show(validation.noteMissing) || show(validation.noteTooLong)) && (
-          <div style={{ marginTop: 3, fontSize: 11, color: color.error }}>
+          <div style={{ marginTop: 3, fontSize: 12, color: color.error }}>
             {validation.noteMissing ? '请填写说明' : `说明不超过 ${NOTE_MAX} 字`}
           </div>
         )}
@@ -575,13 +575,13 @@ export default function ReferenceEventComposer(props: {
           type="button"
           aria-expanded={showImpact}
           onClick={() => toggleImpact(!showImpact)}
-          style={{ border: 'none', background: 'transparent', padding: 0, font: 'inherit', fontSize: 11, color: color.mute, cursor: 'pointer' }}
+          style={{ border: 'none', background: 'transparent', padding: 0, font: 'inherit', fontSize: 12, color: color.mute, cursor: 'pointer' }}
         >
           参考读数（选填）{showImpact ? '▾' : '▸'}
         </button>
         {showImpact && (
           <div style={{ marginTop: 6, padding: 8, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: color.body }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: color.body }}>
               幅度
               <input
                 aria-label="参考幅度（%）"
@@ -589,11 +589,11 @@ export default function ReferenceEventComposer(props: {
                 step="1"
                 value={value.impact?.magnitudePct ?? ''}
                 onChange={(event) => patchImpact({ magnitudePct: event.target.value === '' ? null : Number(event.target.value) })}
-                style={{ width: 64, height: 22, boxSizing: 'border-box', padding: '0 6px', border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, font: 'inherit', fontSize: 11, background: color.canvas, color: color.ink }}
+                style={{ width: 64, height: 22, boxSizing: 'border-box', padding: '0 6px', border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, font: 'inherit', fontSize: 12, background: color.canvas, color: color.ink }}
               />
               %
             </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: color.body }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: color.body }}>
               影响时长
               <input
                 aria-label="参考影响时长（周）"
@@ -602,11 +602,11 @@ export default function ReferenceEventComposer(props: {
                 step="1"
                 value={value.impact?.durationWeeks ?? ''}
                 onChange={(event) => patchImpact({ durationWeeks: event.target.value === '' ? null : Math.max(1, Math.round(Number(event.target.value))) })}
-                style={{ width: 52, height: 22, boxSizing: 'border-box', padding: '0 6px', border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, font: 'inherit', fontSize: 11, background: color.canvas, color: color.ink }}
+                style={{ width: 52, height: 22, boxSizing: 'border-box', padding: '0 6px', border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, font: 'inherit', fontSize: 12, background: color.canvas, color: color.ink }}
               />
               周
             </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: color.body }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: color.body }}>
               衰减
               <Select
                 size="small"
@@ -617,7 +617,7 @@ export default function ReferenceEventComposer(props: {
                 style={{ width: 78 }}
               />
             </label>
-            <div style={{ flexBasis: '100%', fontSize: 10.5, color: color.mute }}>仅历史参考标注，不参与任何模型计算</div>
+            <div style={{ flexBasis: '100%', fontSize: 12, color: color.mute }}>仅历史参考标注，不参与任何模型计算</div>
           </div>
         )}
       </div>
@@ -626,20 +626,20 @@ export default function ReferenceEventComposer(props: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: space.sm, minHeight: 16 }}>
         {saveState === 'unpersisted' ? (
           <>
-            <span style={{ fontSize: 11, fontWeight: 600, color: color.warningInk }}>未持久化</span>
-            <span style={{ fontSize: 10.5, color: color.mute }}>未能保存到浏览器，仅当前页面有效</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: color.warningInk }}>未持久化</span>
+            <span style={{ fontSize: 12, color: color.mute }}>未能保存到浏览器，仅当前页面有效</span>
             {onRetryPersist && (
               <button
                 type="button"
                 onClick={onRetryPersist}
-                style={{ border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 10.5, padding: '1px 8px', cursor: 'pointer' }}
+                style={{ border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.control, background: color.canvas, color: color.body, font: 'inherit', fontSize: 12, padding: '1px 8px', cursor: 'pointer' }}
               >
                 重试
               </button>
             )}
           </>
         ) : (
-          <span style={{ fontSize: 11, color: color.mute }}>已自动保存到本浏览器</span>
+          <span style={{ fontSize: 12, color: color.mute }}>已自动保存到本浏览器</span>
         )}
       </div>
 
@@ -716,7 +716,7 @@ const smallChipStyle: CSSProperties = {
   height: 18,
   padding: '0 8px',
   borderRadius: radius.pill,
-  fontSize: 10.5,
+  fontSize: 12,
   fontWeight: 600,
   whiteSpace: 'nowrap',
   background: color.canvasSoft2,

@@ -31,7 +31,7 @@ export function DataStatusBadge({ status }: { status: DataStatus }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill, fontSize: fontSize.caption, fontWeight: 600, whiteSpace: 'nowrap', ...style }}>
       {dataStatusText[status]}
-      <span aria-hidden style={{ marginLeft: 4, fontSize: 10, fontFamily: 'inherit' }}>{`· ${status}`}</span>
+      <span aria-hidden style={{ marginLeft: 4, fontSize: 12, fontFamily: 'inherit' }}>{`· ${status}`}</span>
     </span>
   );
 }
@@ -47,7 +47,7 @@ const factorStatusStyle: Record<FactorStatus, CSSProperties> = {
 /** 因子状态徽标：固定先验 / 待学习 / 业务假设 / 方向性判断 / 确定性计算。 */
 export function FactorStatusBadge({ status }: { status: FactorStatus }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', height: 18, padding: '0 7px', borderRadius: radius.pill, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', ...factorStatusStyle[status] }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', height: 18, padding: '0 7px', borderRadius: radius.pill, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', ...factorStatusStyle[status] }}>
       {status}
     </span>
   );

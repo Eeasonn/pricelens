@@ -3,7 +3,7 @@
 // 卡内只用 hairline 分「成本参考区 / 经营结果区」两个阅读区、一个结果，
 // 不新增嵌套卡：
 // - 成本参考区：月版本、生效成本、相对上版变化、模拟来源状态、成本编辑
-//   （只写 costOverrides，原因选填，可还原）、成本证据浮框位（版本阶梯 +
+//   （只写 costOverrides，原因必填，可还原）、成本证据浮框位（版本阶梯 +
 //   单台/周销毛算例）；方向性提示「成本上升 · 请核对价格」——成本只是
 //   是否调价的参考，系统不自动给出涨价金额；
 // - 经营结果区：销毛柱 / 价格线 / 成本阶梯 / 公式；主数字读
@@ -114,7 +114,7 @@ function RowButton({ label, onClick }: { label: string; onClick: () => void }) {
       onClick={onClick}
       style={{
         display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.control,
-        fontSize: 11, color: color.body, background: 'transparent', border: `1px solid ${color.hairline}`,
+        fontSize: 12, color: color.body, background: 'transparent', border: `1px solid ${color.hairline}`,
         cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
       }}
     >
@@ -127,7 +127,7 @@ function RowButton({ label, onClick }: { label: string; onClick: () => void }) {
 function ReadbackChip({ label, title, onJump }: { label: string; title: string; onJump?: () => void }) {
   const style: CSSProperties = {
     display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: radius.pill,
-    fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+    fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
     background: color.canvasSoft2, color: color.body, border: `1px solid ${color.hairline}`,
     ...(onJump ? { cursor: 'pointer' } : {}),
   };
@@ -141,7 +141,7 @@ const zoneHeadStyle: CSSProperties = {
   display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 10px', marginBottom: space.sm, minWidth: 0,
 };
 const zoneTitleStyle: CSSProperties = { fontSize: 12.5, fontWeight: 600, color: color.ink };
-const zoneHintStyle: CSSProperties = { fontSize: 11, lineHeight: 1.6, color: color.mute, minWidth: 0 };
+const zoneHintStyle: CSSProperties = { fontSize: 12, lineHeight: 1.6, color: color.mute, minWidth: 0 };
 
 export default function ForecastMarginCostCard({
   fixture,
@@ -195,6 +195,9 @@ export default function ForecastMarginCostCard({
   const [editingMonth, setEditingMonth] = useState<MonthKey | null>(null);
   const [editValue, setEditValue] = useState<number | null>(null);
   const [editReason, setEditReason] = useState('');
+  /** Batch 2：成本假设原因必填（保存才回写，取消不写入）。 */
+  const editReasonOk = editReason.trim() !== '';
+  const editValueOk = editValue != null && Number.isFinite(editValue) && editValue >= 0;
   const show = (key: string): boolean => !hidden.has(key);
   const toggle = (key: string) => setHidden((prev) => {
     const next = new Set(prev);
@@ -389,7 +392,7 @@ export default function ForecastMarginCostCard({
           {riseMonths.length > 0 && (
             <span
               title="成本只是调价参考：系统不自动给出涨价金额，也不联动销量；请人工核对价格"
-              style={{ fontSize: 11, fontWeight: 600, color: color.warningInk }}
+              style={{ fontSize: 12, fontWeight: 600, color: color.warningInk }}
             >
               成本上升 · 请核对价格
             </span>
@@ -401,7 +404,7 @@ export default function ForecastMarginCostCard({
           </span>
         </div>
         <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-          <div style={{ display: 'flex', gap: 10, fontSize: 10.5, fontWeight: 600, color: color.mute, padding: '2px 4px' }}>
+          <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: color.mute, padding: '2px 4px' }}>
             <span style={{ width: 96 }}>月份</span>
             <span style={{ width: 76 }}>生效成本</span>
             <span style={{ width: 76 }}>较上版</span>
@@ -420,7 +423,7 @@ export default function ForecastMarginCostCard({
                 key={monthKey}
                 style={{
                   display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
-                  fontSize: 11.5, color: color.body, padding: '2px 4px', borderRadius: radius.control,
+                  fontSize: 12, color: color.body, padding: '2px 4px', borderRadius: radius.control,
                   background: isEditing || evidenceKey === monthKey ? color.canvasSoft2 : 'transparent',
                 }}
               >
@@ -449,14 +452,21 @@ export default function ForecastMarginCostCard({
                         style={{ width: 92 }}
                       />
                       <Input
-                        aria-label={`成本假设原因 ${monthKey}（选填）`}
+                        aria-label={`成本假设原因 ${monthKey}（必填）`}
                         size="small"
                         value={editReason}
-                        placeholder="原因（选填）"
+                        placeholder="原因（必填）"
                         onChange={(event) => setEditReason(event.target.value)}
                         style={{ width: 140 }}
                       />
-                      <Button size="small" type="primary" aria-label={`保存成本假设 ${monthKey}`} onClick={() => saveEditor(monthKey)}>保存</Button>
+                      <Button
+                        size="small"
+                        type="primary"
+                        aria-label={`保存成本假设 ${monthKey}`}
+                        disabled={!editValueOk || !editReasonOk}
+                        title={editReasonOk ? '保存数值与原因（同笔写入④工作区与审计轨迹）' : '请填写成本假设原因后保存（取消不写入）'}
+                        onClick={() => { if (editValueOk && editReasonOk) saveEditor(monthKey); }}
+                      >保存</Button>
                       <Button size="small" aria-label={`取消编辑 ${monthKey}`} onClick={() => { setEditingMonth(null); setEditValue(null); setEditReason(''); }}>取消</Button>
                     </>
                   ) : (
@@ -491,12 +501,12 @@ export default function ForecastMarginCostCard({
           >
             <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
               <b style={{ fontSize: 12, color: color.ink }}>{`成本证据 · ${versionOf(evidenceKey)?.label ?? evidenceKey}`}</b>
-              <span style={{ fontSize: 11, color: color.mute }}>模拟样本 · 版本覆盖该月预测周</span>
+              <span style={{ fontSize: 12, color: color.mute }}>模拟样本 · 版本覆盖该月预测周</span>
               <button
                 type="button"
                 aria-label="关闭成本证据"
                 onClick={() => setEvidenceMonth(null)}
-                style={{ marginLeft: 'auto', border: 'none', background: 'transparent', font: 'inherit', fontSize: 11, color: color.mute, cursor: 'pointer' }}
+                style={{ marginLeft: 'auto', border: 'none', background: 'transparent', font: 'inherit', fontSize: 12, color: color.mute, cursor: 'pointer' }}
               >
                 关闭
               </button>
@@ -515,7 +525,7 @@ export default function ForecastMarginCostCard({
                 />
               ))}
             </svg>
-            <div className="tnum" style={{ fontSize: 11.5, lineHeight: 1.7, color: color.body, display: 'grid', gap: 2 }}>
+            <div className="tnum" style={{ fontSize: 12, lineHeight: 1.7, color: color.body, display: 'grid', gap: 2 }}>
               <span>
                 {`版本阶梯：${versions.map((version) => `${version.monthKey} ${fmtUsd(effectiveCostOf(version.monthKey))}`).join(' → ')}`}
               </span>
@@ -547,7 +557,7 @@ export default function ForecastMarginCostCard({
             {(view.appliedCostCount + view.appliedPriceCount > 0) && (
               <Button size="small" onClick={resetAll}>还原成本与价格基准</Button>
             )}
-            <span style={{ fontSize: 11, color: color.mute }}>成本/价格假设仅本页签会话内生效，可撤销；不进入需求主链</span>
+            <span style={{ fontSize: 12, color: color.mute }}>成本/价格假设仅本页签会话内生效，可撤销；不进入需求主链</span>
           </div>
         )}
       </div>
@@ -576,17 +586,17 @@ export default function ForecastMarginCostCard({
               return (
                 <g key={value}>
                   <line x1={LEFT} y1={gy} x2={W - RIGHT} y2={gy} stroke={value === 0 ? color.hairlineStrong : color.hairline} />
-                  <text {...axisTextProps} x={LEFT - 6} y={gy + 3.5} fontSize={10} fill={color.mute} textAnchor="end">{fmtMillionUsd(value)}</text>
+                  <text {...axisTextProps} x={LEFT - 6} y={gy + 3.5} fontSize={12} fill={color.mute} textAnchor="end">{fmtMillionUsd(value)}</text>
                 </g>
               );
             })}
             {[0, 0.5, 1].map((fraction) => {
               const value = uMin + (uMax - uMin) * fraction;
-              return <text {...axisTextProps} key={fraction} x={W - RIGHT + 6} y={yUnit(value) + 3.5} fontSize={10} fill={color.mute}>{`$${Math.round(value / 10) * 10}`}</text>;
+              return <text {...axisTextProps} key={fraction} x={W - RIGHT + 6} y={yUnit(value) + 3.5} fontSize={12} fill={color.mute}>{`$${Math.round(value / 10) * 10}`}</text>;
             })}
             {mgMonthPlan.indexes.map((monthIndex) => {
               const weekIndex = monthFirstWeekMg.get(monthKeysMg[monthIndex]!) ?? 0;
-              return <text {...axisTextProps} key={monthKeysMg[monthIndex]!} x={x(weekIndex)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{monthKeysMg[monthIndex]}</text>;
+              return <text {...axisTextProps} key={monthKeysMg[monthIndex]!} x={x(weekIndex)} y={H - 8} textAnchor="middle" fontSize={12} fill={color.mute}>{monthKeysMg[monthIndex]}</text>;
             })}
             {/* 周销毛柱：历史实（琥珀）/ 预测虚柱；正 = 零基线向上，负 = 向下（不静默丢柱）；
                 缺数周 weeklyMargin = null 不画柱（缺数不当 0，覆盖率行如实显示） */}

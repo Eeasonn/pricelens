@@ -26,7 +26,7 @@
 // 添加事件浮窗（不变，改挂在图表区内）：名称选填、起止周 = 双月周历选择器
 // （两月并排、行 = 整周[周一起]、行首 ISO 周号、选中实蓝白字、区间内浅蓝、
 // 跨月连续、‹ › 月导航；起点行→终点行选择，自动收起回填）、幅度 %、衰减
-// chips（递减/恒定）、说明选填；保存经 workbenchModel.monthSeedOfWeekRange
+// chips（递减/恒定）、说明必填（Batch 2 起）；保存经 workbenchModel.monthSeedOfWeekRange
 // 映射进既有 MarketMonthEventSeed（模型契约不变，可选 decay 形状）。
 // 衰减形状：MarketMonthEventSeed 可选 decay（缺省递减）；flat = 事件覆盖的
 // 完整月恒定乘子（首月仍按日均摊占比），公式见 marketMonthEventFactor。
@@ -35,8 +35,13 @@
 // 卡体延续定高策略（MARKET_BODY_HEIGHT=330）+ 卡内纵向滚动；图例四项
 // （实际 / 预测 / AI 基线 / 事件）全部可点显隐（WorkbenchLegend 规格）。
 // 全部视觉取 theme/tokens 既有 token 与 WorkbenchBits 既有控件语言，无新视觉。
+// 2026-11-07 Batch 2（batch2-iterate-forecast）：按月调整原因改必填（保存才
+// 回写，取消不写入）；月度事件「事件说明」改必填（说明 = 内联原因，随事件
+// label 进审计轨迹）；月度证据浮框新增数据状态行（模拟 · 数据版本 · 采集时间
+// 待确认 · 缺失字段），情报候选注入为空的待接入空态语义不变（模拟候选显式
+// 「模拟」，更新能力 title 仍「候选生成能力待接入」）。
 // ============================================================
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Input, InputNumber } from 'antd';
 import { color, font, motion, radius, selectSoft, selectSoftInk, shadow, space, trackColors } from '../../theme/tokens';
 import type { CalendarWeek } from './workbenchCalendar';
@@ -173,6 +178,7 @@ function MonthEvidencePopover({
   trendWindow,
   quarterValue,
   flip,
+  pinned,
   onAdjust,
   onClose,
 }: {
@@ -185,6 +191,8 @@ function MonthEvidencePopover({
   quarterValue: number;
   /** 锚点位于图右半区时左翻（与主图悬停浮窗同款翻转语言）。 */
   flip: boolean;
+  /** R2 M6：click/Enter/Space 钉住态（role=dialog 固定，pointerleave 不收起）。 */
+  pinned?: boolean;
   onAdjust: () => void;
   onClose: () => void;
 }) {
@@ -216,11 +224,12 @@ function MonthEvidencePopover({
   const trendReadout = trendWindow.avgMomPct != null
     ? `趋势 · 近 ${MARKET_TREND_WINDOW_MONTHS} 个月环比 ${fmtSignedPct(trendWindow.avgMomPct)}/月`
     : `趋势 · 近 ${MARKET_TREND_WINDOW_MONTHS} 个月环比无法计算（样本不足）`;
-  const layerLabelStyle: React.CSSProperties = { fontSize: 10.5, color: color.mute, letterSpacing: '0.05em' };
+  const layerLabelStyle: React.CSSProperties = { fontSize: 12, color: color.mute, letterSpacing: '0.05em' };
   return (
     <div
       data-lpl-month-popover
       data-popover-mode="evidence"
+      data-evidence-pinned={pinned || undefined}
       role="dialog"
       aria-label={`${point.key} 预测月证据`}
       onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }}
@@ -229,7 +238,7 @@ function MonthEvidencePopover({
       {/* 层① 头部：月名 + AI 基线/生效 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: space.sm, paddingRight: 16 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink }}>{`${fmtMonthCalendar(point.key)} · 预测月`}</span>
-        <span className="tnum" style={{ fontSize: 11, color: color.mute }}>{`AI 基线 ${fmtIndex(point.baseline)} · 生效 ${fmtIndex(point.value)}`}</span>
+        <span className="tnum" style={{ fontSize: 12, color: color.mute }}>{`AI 基线 ${fmtIndex(point.baseline)} · 生效 ${fmtIndex(point.value)}`}</span>
       </div>
       <button
         type="button"
@@ -244,7 +253,7 @@ function MonthEvidencePopover({
       </button>
       {/* 复算提示（含事件/手调月顶部一行） */}
       {notices.length > 0 && (
-        <div data-lpl-evidence-recalc className="tnum" style={{ marginTop: 3, fontSize: 11, color: color.warningInk }}>
+        <div data-lpl-evidence-recalc className="tnum" style={{ marginTop: 3, fontSize: 12, color: color.warningInk }}>
           {notices.join(' · ')}
         </div>
       )}
@@ -266,12 +275,12 @@ function MonthEvidencePopover({
             <polyline points={extPoints.join(' ')} fill="none" stroke={color.link} strokeWidth={1.4} strokeDasharray="4 3" />
             <circle cx={sparkX(trendWindow.months.length - 1)} cy={sparkY(trendWindow.months[trendWindow.months.length - 1].value)} r={2.5} fill={color.ink} />
             <circle cx={sparkX(sparkValues.length - 1)} cy={sparkY(point.baseline)} r={3} fill={color.link} />
-            <text x={4} y={44} fontSize={9} fill={color.mute}>{fmtMonthCalendar(trendWindow.months[0].key)}</text>
-            <text x={sparkX(trendWindow.months.length - 1)} y={44} fontSize={9} fill={color.mute} textAnchor="middle">{fmtMonthCalendar(trendWindow.months[trendWindow.months.length - 1].key)}</text>
-            <text x={256} y={44} fontSize={9} fill={color.link} textAnchor="end">{fmtMonthCalendar(point.key)}</text>
+            <text x={4} y={44} fontSize={12} fill={color.mute}>{fmtMonthCalendar(trendWindow.months[0].key)}</text>
+            <text x={sparkX(trendWindow.months.length - 1)} y={44} fontSize={12} fill={color.mute} textAnchor="middle">{fmtMonthCalendar(trendWindow.months[trendWindow.months.length - 1].key)}</text>
+            <text x={256} y={44} fontSize={12} fill={color.link} textAnchor="end">{fmtMonthCalendar(point.key)}</text>
           </svg>
         ) : (
-          <div style={{ fontSize: 11, color: color.mute, marginTop: 4 }}>实际样本不足，无法绘制趋势段</div>
+          <div style={{ fontSize: 12, color: color.mute, marginTop: 4 }}>实际样本不足，无法绘制趋势段</div>
         )}
       </div>
       {/* 层③ 月形行：去年同季三根小柱 + 占季内均值占比，本月高亮 + 构成算例 */}
@@ -303,7 +312,7 @@ function MonthEvidencePopover({
                 <div
                   className="tnum"
                   style={{
-                    fontSize: 10, marginTop: 3, whiteSpace: 'nowrap',
+                    fontSize: 12, marginTop: 3, whiteSpace: 'nowrap',
                     color: highlighted ? color.link : color.mute, fontWeight: highlighted ? 700 : 400,
                   }}
                 >
@@ -312,21 +321,32 @@ function MonthEvidencePopover({
               </div>
             );
           })}
-          <span className="tnum" style={{ flex: 1, fontSize: 11.5, padding: '4px 8px', borderRadius: radius.control, background: color.canvasSoft2, color: color.ink }}>
+          <span className="tnum" style={{ flex: 1, fontSize: 12, padding: '4px 8px', borderRadius: radius.control, background: color.canvasSoft2, color: color.ink }}>
             {calcText}
           </span>
         </div>
       </div>
+      {/* 数据状态行（Batch 2 统一取证）：状态 + 数据版本 + 采集时间（缺失写待确认）+ 缺失字段 */}
+      <div
+        data-lpl-evidence-status
+        className="tnum"
+        style={{ borderTop: `1px solid ${color.hairline}`, marginTop: 8, paddingTop: 8, fontSize: 12, color: color.mute }}
+      >
+        {`数据状态：模拟（演示样本，非实时）· 数据版本 ${fixture.meta.modelVersion} · 采集时间：待确认 · 缺失：真实大盘来源 URL / 采集时间（待接入）`}
+      </div>
       {/* 层④ 底部：就地调整入口（点击切换为调整表单，同一浮层两态） */}
       <div style={{ borderTop: `1px solid ${color.hairline}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: space.sm }}>
-        <span style={{ fontSize: 10.5, color: color.mute }}>调整后直接修正该月对应预测周</span>
+        <span style={{ fontSize: 12, color: color.mute }}>调整后直接修正该月对应预测周</span>
         <button
           type="button"
           data-lpl-evidence-adjust
           onClick={onAdjust}
+          title="就地调整该月生效值（原因必填，保存才回写；还原基线随时可退）"
           style={{
-            border: 'none', padding: '3px 12px', borderRadius: radius.control, background: color.ink,
-            color: color.onPrimary, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            // P0-2（2026-11-06）：浮框动作退出墨色实心主按钮（墨色只留给唯一主按钮），
+            // 改 hairlineStrong 描边静默样式（与主图证据浮框「微调本周」同语言）。
+            border: `1px solid ${color.hairlineStrong}`, padding: '3px 12px', borderRadius: radius.control, background: color.canvas,
+            color: color.ink, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
           调整此月
@@ -339,8 +359,8 @@ function MonthEvidencePopover({
 /**
  * 按月调整就地浮层（证据浮框「调整此月」就地切换的两态之二；与主图悬停
  * 浮窗同一浮层视觉语言：白底 + hairline + 卡片圆角 + L5 阴影）。两式输入 =
- * 调整后指数 / 增减幅%；调整原因选填（评审拍板：不得以「不填无法应用」
- * 强迫，空值照常应用）。取消 = 回到证据态（同一浮层两态，不再分开）。
+ * 调整后指数 / 增减幅%；调整原因必填（Batch 2 · 2026-11-07 起 brief §3.2：
+ * 保存才回写主图与审计轨迹，取消不写入）。取消 = 回到证据态（同一浮层两态）。
  */
 function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
   point: MarketMonthPoint;
@@ -354,6 +374,7 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
   const [absValue, setAbsValue] = useState<number | null>(point.value);
   const [pctValue, setPctValue] = useState<number | null>(0);
   const [reason, setReason] = useState(point.reason);
+  const reasonOk = reason.trim() !== '';
   const absOk = absValue != null && Number.isFinite(absValue) && absValue >= MONTH_OVERRIDE_MIN && absValue <= MONTH_OVERRIDE_MAX;
   const pctOk = pctValue != null && Number.isFinite(pctValue) && pctValue >= -50 && pctValue <= 100;
   const applyValue = mode === 'abs'
@@ -366,7 +387,7 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
       aria-pressed={mode === key}
       onClick={() => setMode(key)}
       style={{
-        border: 'none', padding: '3px 8px', fontSize: 11, cursor: 'pointer',
+        border: 'none', padding: '3px 8px', fontSize: 12, cursor: 'pointer',
         background: mode === key ? selectSoft : color.canvas,
         color: mode === key ? selectSoftInk : color.body,
         fontWeight: mode === key ? 600 : 400,
@@ -383,7 +404,7 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
       aria-label={`调整 ${point.key}`}
       style={{ ...popoverShellStyle, width: POPOVER_W, transform: flip ? 'translateX(calc(-100% - 10px))' : 'translateX(10px)' }}
     >
-      <div style={{ fontSize: 11, fontWeight: 600, color: color.mute, marginBottom: 4 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: color.mute, marginBottom: 4 }}>
         {`调整 · ${point.key}（预测月）`}
       </div>
       <div style={{ display: 'grid', gap: 2, marginBottom: 6 }} className="tnum">
@@ -423,10 +444,10 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
         )}
       </div>
       <label style={{ display: 'grid', gap: 3, fontSize: 12, fontWeight: 600, color: color.body, marginBottom: 6 }}>
-        {`调整原因（选填）`}
+        {`调整原因（必填）`}
         <Input
-          aria-label="调整原因（选填）"
-          placeholder="选填：帮助追溯调整依据"
+          aria-label="调整原因（必填）"
+          placeholder="必填：如大促流量前置，帮助追溯并写入审计轨迹"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
         />
@@ -440,15 +461,17 @@ function MonthAdjustPopover({ point, flip, onApply, onRestore, onBack }: {
           <Button
             size="small"
             type="primary"
-            disabled={applyValue == null}
-            onClick={() => { if (applyValue != null) onApply(applyValue, reason); }}
+            disabled={applyValue == null || !reasonOk}
+            onClick={() => { if (applyValue != null && reasonOk) onApply(applyValue, reason.trim()); }}
           >
             应用
           </Button>
         </span>
       </div>
-      <div style={{ marginTop: 6, fontSize: 11, color: color.mute }}>
-        只调整该月；应用后预测线即时重算，本会话内可还原（还原该月即回 AI 基线口径）。
+      <div style={{ marginTop: 6, fontSize: 12, color: reasonOk ? color.mute : color.warningInk }}>
+        {reasonOk
+          ? '只调整该月；应用后预测线即时重算并写入审计轨迹，本会话内可还原（还原该月即回 AI 基线口径）。'
+          : '请填写调整原因后应用（不填不可应用；取消不写入任何参数）。'}
       </div>
     </div>
   );
@@ -523,13 +546,13 @@ function WeekRangePicker({
                 color: selected ? color.onPrimary : color.ink,
               }}
           >
-            <span className="tnum" style={{ fontSize: 10, textAlign: 'center', color: selected ? color.onPrimary : color.mute }}>{week.weekNumber}</span>
+            <span className="tnum" style={{ fontSize: 12, textAlign: 'center', color: selected ? color.onPrimary : color.mute }}>{week.weekNumber}</span>
             {cells.map((cell, index) => (
               <span
                 key={index}
                 className="tnum"
                 style={{
-                  fontSize: 11, textAlign: 'center',
+                  fontSize: 12, textAlign: 'center',
                   color: selected ? color.onPrimary : cell.inMonth ? color.ink : color.hairlineStrong,
                 }}
               >
@@ -592,7 +615,7 @@ function WeekRangePicker({
 const headAddButtonStyle: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 3, height: 24, padding: '0 8px',
   borderRadius: radius.control, border: `1px solid ${color.hairline}`, background: color.canvas,
-  color: color.body, font: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+  color: color.body, font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 export default function MarketBusPanel({
@@ -609,7 +632,7 @@ export default function MarketBusPanel({
   fixture: WorkbenchFixture;
   params: WorkbenchParams;
   result: WorkbenchResult;
-  /** 按月调整（点击预测月浮层应用）：value = null 还原该月；reason 选填可空。 */
+  /** 按月调整（点击预测月浮层应用）：value = null 还原该月；reason 必填（Batch 2 起，不填不可应用）。 */
   onMonthOverride: (monthKey: string, value: number | null, reason: string) => void;
   /** 新增人工月度事件（周历选择器映射产物；id 由页面侧循环查重生成）。 */
   onMonthEventAdd: (event: Omit<MarketMonthEventSeed, 'id'>) => void;
@@ -626,6 +649,10 @@ export default function MarketBusPanel({
   const [hiddenSeries, setHiddenSeries] = useState<ReadonlySet<string>>(new Set());
   /** v2-1 一层化两态：evidence = 证据浮框（hover 临时）；adjust = 调整表单（就地切换，粘滞）。 */
   const [popover, setPopover] = useState<{ key: string; mode: 'evidence' | 'adjust' } | null>(null);
+  /** R2（本轮返修 M6）：月证据固定态——hover 只预览，click / Enter / Space 固定为
+   *  role=dialog 的钉住浮层；pointerleave 不收起，再次点同月 / 关闭钮 / 外部点击 /
+   *  Escape 解除并安全归还焦点到该月命中区。 */
+  const [pinnedMonth, setPinnedMonth] = useState<string | null>(null);
   /** 图内高亮开关（默认关；开 = 所有事件区间常驻底衬）。 */
   const [highlightAll, setHighlightAll] = useState(false);
   /** hover 事件方块点 → 对应周区间临时高亮（移开即恢复）。 */
@@ -659,6 +686,43 @@ export default function MarketBusPanel({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  /** 关闭钉住的月证据浮层，并把焦点安全归还该月 SVG 命中区（键盘用户不丢焦点）。 */
+  const closePinnedMonth = useCallback((monthKey: string | null) => {
+    if (monthKey != null) {
+      const hit = chartWrapRef.current?.querySelector<SVGRectElement>(`[data-month="${monthKey}"]`);
+      hit?.focus?.();
+    }
+    setPopover(null);
+    setPinnedMonth(null);
+  }, []);
+
+  // R2 M6 键盘关闭：焦点无论还在月命中区（点击后焦点不离开 SVG）还是已进入浮层
+  // dialog，Escape 都能解除钉住并归还焦点（浮层内自身的 onKeyDown 关闭不含
+  // 焦点归还，这里统一兜底）。
+  useEffect(() => {
+    if (popover?.mode !== 'evidence' || pinnedMonth == null) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      closePinnedMonth(pinnedMonth);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [closePinnedMonth, pinnedMonth, popover?.mode]);
+
+  // R2 M6 外部点击关闭：钉住态下点到图区（含浮层与月命中区）以外 = 解除钉住。
+  useEffect(() => {
+    if (popover == null || pinnedMonth == null) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const wrap = chartWrapRef.current;
+      if (wrap?.contains(event.target as Node)) return;
+      setPopover(null);
+      setPinnedMonth(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [pinnedMonth, popover]);
 
   // 统一日历（周历选择器 / 事件小标区间反推的唯一时间来源）。
   const calendar = buildForecastCalendar(fixture.calendar);
@@ -725,7 +789,9 @@ export default function MarketBusPanel({
     ? monthSeedOfWeekRange(calendar, { startWeekId: formStartWeekId, endWeekId: formEndWeekId })
     : null;
   const formMagnitudeOk = formMagnitude != null && Number.isFinite(formMagnitude) && formMagnitude >= -30 && formMagnitude <= 30;
-  const eventFormValid = formMapped != null && formWeeks?.start != null && formWeeks?.end != null && formWeekCount != null && formMagnitudeOk;
+  // Batch 2：事件说明必填（月度事件 = 人工修正，须内联原因并进审计轨迹）。
+  const formNoteOk = formNote.trim() !== '';
+  const eventFormValid = formMapped != null && formWeeks?.start != null && formWeeks?.end != null && formWeekCount != null && formMagnitudeOk && formNoteOk;
 
   const toggleSeries = (key: string) => {
     setHiddenSeries((prev) => {
@@ -937,20 +1003,20 @@ export default function MarketBusPanel({
                 data-lpl-month-feedback={feedbackPoint.key}
                 style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: space.sm, marginBottom: space.xs, padding: '4px 10px', borderRadius: radius.control, border: `1px solid ${color.hairline}`, background: color.canvasSoft2 }}
               >
-                <span className="tnum" style={{ fontSize: 11.5, fontWeight: 600, color: color.ink }}>
+                <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>
                   {`本月比值 ×${(feedback.value / feedbackPoint.baseline).toFixed(2)} · 已联动 ${linkedWeeks} 个预测周`}
                 </span>
                 <button
                   type="button"
                   onClick={() => onViewMainChart?.()}
-                  style={{ border: 'none', background: 'transparent', color: color.link, font: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                  style={{ border: 'none', background: 'transparent', color: color.link, font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
                 >
                   查看主图
                 </button>
                 <button
                   type="button"
                   onClick={() => onCheckInventory?.()}
-                  style={{ border: 'none', background: 'transparent', color: color.link, font: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                  style={{ border: 'none', background: 'transparent', color: color.link, font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
                 >
                   检查库存
                 </button>
@@ -965,11 +1031,12 @@ export default function MarketBusPanel({
               </div>
             );
           })()}
-          {/* v2-2「移开即恢复」：证据态浮层随鼠标离开图区关闭（调整态粘滞，需显式取消/应用）。 */}
+          {/* v2-2「移开即恢复」：证据态浮层随鼠标离开图区关闭（调整态粘滞，需显式取消/应用；
+              R2 M6：钉住（pinned）的证据浮层同样粘滞，pointerleave 不收起）。 */}
           <div
             ref={chartWrapRef}
             style={{ position: 'relative', flex: 1, minHeight: 0 }}
-            onMouseLeave={() => setPopover((prev) => (prev?.mode === 'evidence' ? null : prev))}
+            onMouseLeave={() => setPopover((prev) => (prev?.mode === 'evidence' && pinnedMonth == null ? null : prev))}
           >
             <svg
               viewBox={`0 0 ${chartW} ${CHART_H}`}
@@ -979,12 +1046,12 @@ export default function MarketBusPanel({
               style={{ display: 'block' }}
             >
               {/* y 轴横向 gridline 已删（2026-11-05 反馈 #5：与价格走势页一致的无网格净图），只留刻度文字 */}
-              <g fontSize={10} fill={color.mute} textAnchor="end" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <g fontSize={12} fill={color.mute} textAnchor="end" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                 {yTicks.map((tick) => (
                   <text key={tick} x={left - 6} y={ym(tick) + 3}>{tick}</text>
                 ))}
               </g>
-              <text x={left - 6} y={top - 6} fontSize={10} fill={color.mute} textAnchor="end" fontFamily={font.family}>指数</text>
+              <text x={left - 6} y={top - 6} fontSize={12} fill={color.mute} textAnchor="end" fontFamily={font.family}>指数</text>
               {/* 图内高亮（开关常开态）：所有事件区间底衬（事件色 × 0.10） */}
               {eventsVisible && highlightAll && (
                 <g data-lpl-event-bands>
@@ -1020,7 +1087,7 @@ export default function MarketBusPanel({
                   <text
                     x={left + (trendFirstIndex + trendWindow.months.length / 2) * colW}
                     y={top - 4}
-                    fontSize={10}
+                    fontSize={12}
                     fill={color.mute}
                     textAnchor="middle"
                     fontFamily={font.family}
@@ -1125,7 +1192,7 @@ export default function MarketBusPanel({
                         <text
                           x={xm(lastYearAnchor.index)}
                           y={ym(lastYearAnchor.value) - 11}
-                          fontSize={10}
+                          fontSize={12}
                           fill={color.link}
                           textAnchor="middle"
                           fontFamily={font.family}
@@ -1146,14 +1213,14 @@ export default function MarketBusPanel({
                       </>
                     )}
                     <circle data-anchor="hover-point" cx={hoverX} cy={hoverY} r={4.5} fill={color.link} stroke={color.canvas} strokeWidth={1.4} />
-                    <text data-anchor="hover-label" x={hoverX} y={hoverY + 16} fontSize={10} fill={color.link} fontWeight={600} textAnchor="middle" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <text data-anchor="hover-label" x={hoverX} y={hoverY + 16} fontSize={12} fill={color.link} fontWeight={600} textAnchor="middle" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {fmtMonthCalendar(popoverPoint.key)}
                     </text>
                   </g>
                 );
               })()}
               {/* X 轴月份刻度（季度首月出标签；全站月视图日历格式 YYYY-MM） */}
-              <g fontSize={10} fill={color.mute} textAnchor="middle" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <g fontSize={12} fill={color.mute} textAnchor="middle" fontFamily={font.family} style={{ fontVariantNumeric: 'tabular-nums' }}>
                 {months.map((point, index) => (
                   isQuarterStartMonth(point.key)
                     ? <text key={point.key} x={xm(index)} y={CHART_H - 30}>{fmtMonthCalendar(point.key)}</text>
@@ -1196,14 +1263,26 @@ export default function MarketBusPanel({
                 </g>
               )}
               {/* 预测月交互列（v2-1 证据浮框入口）：键盘可达（Tab + Enter 触发证据浮框），
-                  hover 同效；浮框内「调整此月」就地切换调整表单 */}
+                  hover 同效；浮框内「调整此月」就地切换调整表单。
+                  R2 M6：hover/focus 只预览；click / Enter / Space 钉住（role=dialog 浮层
+                  固定、pointerleave 不收起）；再次点同月解除。 */}
               {months.slice(actualCount).map((point, offset) => {
                 const index = actualCount + offset;
                 const x = left + index * colW;
+                const isPinned = pinnedMonth === point.key;
+                const pinMonth = () => {
+                  if (isPinned) {
+                    closePinnedMonth(point.key);
+                    return;
+                  }
+                  setPopover({ key: point.key, mode: 'evidence' });
+                  setPinnedMonth(point.key);
+                };
                 return (
                   <rect
                     key={`hit-${point.key}`}
                     data-month={point.key}
+                    data-month-pinned={isPinned || undefined}
                     x={x}
                     y={top}
                     width={colW}
@@ -1212,14 +1291,15 @@ export default function MarketBusPanel({
                     role="button"
                     tabIndex={0}
                     aria-label={`查看 ${point.key} 预测证据（当前 ${fmtIndex(point.value)}，AI 基线 ${fmtIndex(point.baseline)}），浮框内可调整`}
+                    aria-pressed={isPinned}
                     style={{ cursor: 'pointer' }}
-                    onMouseEnter={() => setPopover((prev) => (prev?.mode === 'adjust' ? prev : { key: point.key, mode: 'evidence' }))}
-                    onFocus={() => setPopover((prev) => (prev?.mode === 'adjust' ? prev : { key: point.key, mode: 'evidence' }))}
-                    onClick={() => setPopover({ key: point.key, mode: 'evidence' })}
+                    onMouseEnter={() => setPopover((prev) => (pinnedMonth != null || prev?.mode === 'adjust' ? prev : { key: point.key, mode: 'evidence' }))}
+                    onFocus={() => setPopover((prev) => (pinnedMonth != null || prev?.mode === 'adjust' ? prev : { key: point.key, mode: 'evidence' }))}
+                    onClick={pinMonth}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
-                        setPopover({ key: point.key, mode: 'evidence' });
+                        pinMonth();
                       }
                     }}
                   />
@@ -1229,7 +1309,7 @@ export default function MarketBusPanel({
             {/* 就地浮层（HTML 覆盖层，与主图悬停浮窗同视觉语言；两态 = 证据 / 调整表单；
                 跟随月份列定位，右半区左翻） */}
             {popoverPoint && popover && (
-              <div style={{ position: 'absolute', left: `${popoverAnchorPct}%`, top: 0, width: 0, height: 0 }}>
+              <div style={{ position: 'absolute', left: `${popoverAnchorPct}%`, top: 0, width: 0, height: 0 }} data-lpl-popover-pinned={popover.mode === 'evidence' && pinnedMonth === popover.key ? 'true' : undefined}>
                 {popover.mode === 'adjust' ? (
                   <MonthAdjustPopover
                     key={`adj-${popoverPoint.key}`}
@@ -1240,11 +1320,13 @@ export default function MarketBusPanel({
                       // B.5.6：应用后反馈「本月比值 ×… · 已联动 N 个预测周」（比值 = 应用值 ÷ AI 基线）。
                       setFeedback({ monthKey: popoverPoint.key, value });
                       setPopover(null);
+                      setPinnedMonth(null);
                     }}
                     onRestore={() => {
                       onMonthOverride(popoverPoint.key, null, '');
                       setFeedback((prev) => (prev?.monthKey === popoverPoint.key ? null : prev));
                       setPopover(null);
+                      setPinnedMonth(null);
                     }}
                     onBack={() => setPopover({ key: popoverPoint.key, mode: 'evidence' })}
                   />
@@ -1257,8 +1339,9 @@ export default function MarketBusPanel({
                     trendWindow={trendWindow}
                     quarterValue={quarterForecast.find((quarter) => quarter.key === popoverPoint.quarter)?.value ?? Number.NaN}
                     flip={popoverFlip}
+                    pinned={pinnedMonth === popoverPoint.key}
                     onAdjust={() => setPopover({ key: popoverPoint.key, mode: 'adjust' })}
-                    onClose={() => setPopover(null)}
+                    onClose={() => closePinnedMonth(pinnedMonth === popoverPoint.key ? popoverPoint.key : null)}
                   />
                 )}
               </div>
@@ -1291,7 +1374,7 @@ export default function MarketBusPanel({
                 </div>
                 <div style={{ display: 'grid', gap: space.sm - 2, marginTop: space.sm - 2 }}>
                   <label style={{ display: 'grid', gap: 3 }}>
-                    <span style={{ fontSize: 11, color: color.mute }}>事件名称（选填）</span>
+                    <span style={{ fontSize: 12, color: color.mute }}>事件名称（选填）</span>
                     <Input
                       aria-label="事件名称（选填）"
                       placeholder="如：苹果折叠屏上线"
@@ -1301,17 +1384,17 @@ export default function MarketBusPanel({
                     />
                   </label>
                   <label style={{ display: 'grid', gap: 3 }}>
-                    <span style={{ fontSize: 11, color: color.mute }}>事件说明（选填）</span>
+                    <span style={{ fontSize: 12, color: color.mute }}>事件说明（必填 · 写入审计轨迹的原因）</span>
                     <Input
-                      aria-label="事件说明（选填）"
-                      placeholder="发生了什么（选填）"
+                      aria-label="事件说明（必填）"
+                      placeholder="必填：发生了什么（如竞品新品首销，作为修正原因随事件记录）"
                       value={formNote}
                       onChange={(input) => setFormNote(input.target.value)}
                       size="small"
                     />
                   </label>
                   <div style={{ display: 'grid', gap: 3, position: 'relative' }}>
-                    <span style={{ fontSize: 11, color: color.mute }}>起止周（整周 · 含年月）</span>
+                    <span style={{ fontSize: 12, color: color.mute }}>起止周（整周 · 含年月）</span>
                     <button
                       type="button"
                       data-lpl-week-range-button
@@ -1351,7 +1434,7 @@ export default function MarketBusPanel({
                     )}
                   </div>
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.body }}>
-                    <span style={{ fontSize: 11, color: color.mute }}>幅度</span>
+                    <span style={{ fontSize: 12, color: color.mute }}>幅度</span>
                     <InputNumber
                       aria-label="事件影响幅度（%）"
                       size="small"
@@ -1367,7 +1450,7 @@ export default function MarketBusPanel({
                     />
                   </label>
                   <div style={{ display: 'grid', gap: 3 }}>
-                    <span style={{ fontSize: 11, color: color.mute }}>衰减</span>
+                    <span style={{ fontSize: 12, color: color.mute }}>衰减</span>
                     <div style={{ display: 'flex', gap: 5 }}>
                       {([
                         { key: 'decreasing', label: '递减' },
@@ -1381,7 +1464,7 @@ export default function MarketBusPanel({
                           onClick={() => setFormDecay(chip.key)}
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px',
-                            borderRadius: radius.pill, cursor: 'pointer', fontSize: 11,
+                            borderRadius: radius.pill, cursor: 'pointer', fontSize: 12,
                             border: `1px solid ${formDecay === chip.key ? color.ink : color.hairlineStrong}`,
                             background: color.canvas,
                             color: formDecay === chip.key ? color.ink : color.body,
@@ -1451,7 +1534,7 @@ export default function MarketBusPanel({
               onClick={() => setHighlightAll((prev) => !prev)}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none', padding: '2px 4px',
-                border: 'none', background: 'transparent', font: 'inherit', fontSize: 11,
+                border: 'none', background: 'transparent', font: 'inherit', fontSize: 12,
                 color: color.body, cursor: 'pointer', borderRadius: radius.control, whiteSpace: 'nowrap',
               }}
             >
@@ -1501,7 +1584,7 @@ export default function MarketBusPanel({
           />
           <CollapsibleSection label={`人工事件 · ${params.marketMonthEvents.length}`}>
             {params.marketMonthEvents.length === 0 ? (
-              <div style={{ border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px`, fontSize: 11.5, color: color.mute }}>
+              <div style={{ border: `1px dashed ${color.hairlineStrong}`, borderRadius: radius.control, padding: `${space.sm}px ${space.md}px`, fontSize: 12, color: color.mute }}>
                 暂无人工事件；卡头「＋事件」新增。
               </div>
             ) : (
@@ -1518,13 +1601,13 @@ export default function MarketBusPanel({
                       }}
                     >
                       <span aria-hidden style={{ width: 8, height: 8, borderRadius: 2, background: color.warning, flex: 'none' }} />
-                      <span className="tnum" style={{ fontVariantNumeric: 'tabular-nums', fontSize: 11, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
+                      <span className="tnum" style={{ fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
                         {eventRangeText(event)}
                       </span>
-                      <span style={{ fontSize: 11, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={rowLabel}>
+                      <span style={{ fontSize: 12, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={rowLabel}>
                         {rowLabel}
                       </span>
-                      <span className="tnum" style={{ fontSize: 11, color: color.mute, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      <span className="tnum" style={{ fontSize: 12, color: color.mute, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                         {`${fmtSignedPct(event.magnitudePct)} · ${decayLabelOf(event)}`}
                       </span>
                       <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, flex: 'none' }}>
@@ -1532,7 +1615,7 @@ export default function MarketBusPanel({
                           type="button"
                           aria-label={`编辑事件 ${rowLabel}`}
                           onClick={() => openEventForm(event)}
-                          style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 11, cursor: 'pointer', padding: 0 }}
+                          style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 12, cursor: 'pointer', padding: 0 }}
                         >
                           编辑
                         </button>
@@ -1547,7 +1630,7 @@ export default function MarketBusPanel({
                             }
                             onMonthEventRemove(event.id);
                           }}
-                          style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 11, cursor: 'pointer', padding: 0 }}
+                          style={{ border: 'none', background: 'transparent', color: color.mute, fontSize: 12, cursor: 'pointer', padding: 0 }}
                         >
                           删除
                         </button>

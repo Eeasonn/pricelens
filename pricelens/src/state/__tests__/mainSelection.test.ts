@@ -3,7 +3,7 @@
 // 逐配置成卡、换层颜色映射。卡形 = { id, main: ProductSelection | null, compares }。
 // ============================================================
 import { describe, expect, it } from 'vitest';
-import { dimProduct, dimBenchmark } from '../../data';
+import { dimProduct, dimBenchmark, dimChannel } from '../../data';
 import type { MainProduct, ProductSelection } from '../filtersTypes';
 import {
   autoComparesFor,
@@ -18,8 +18,11 @@ import {
   MAINS_CAP,
   MAX_LINES_PER_CHART,
   migrateV10,
+  remapMainsForScope,
   remapSelection,
+  remapSelectionForCountry,
   selKey,
+  selectionValidFor,
   toggleAllAuto,
   toggleCardAuto,
   withAutoOn,
@@ -362,5 +365,107 @@ describe('remapSelection（换配置/换产品的颜色映射）', () => {
     expect(out.modelId).toBe(toId);
     expect(out.romram).toBe(bRow.romram);
     expect(target.colors.some((c) => c.skuId === out.skuIds[0])).toBe(true);
+  });
+});
+
+// ============================================================
+// t428u R4-m1（四审增量）：跨口径映射的多 SKU 过滤与 selKey 去重。
+// 数据事实：Mate X6 12+512GB 仅 ES/FR/IT/RU/TR；ID 只有 16+512GB（black）；
+// nova 14 Pro 12+512GB 的 black/white 中 white 仅 MX/RU/SA。
+// ============================================================
+describe('remapSelectionForCountry（R4-m1：多 SKU 过滤所有无效 SKU / 整配置口径 / platform 保留）', () => {
+  const mateX6 = 'own-huawei-mate-x6';
+  const ru12 = dimProduct.find((p) => p.model_id === mateX6 && p.romram === '12+512 GB')!;
+  const id16 = dimProduct.find((p) => p.model_id === mateX6 && p.romram === '16+512 GB' && p.countries.includes('ID'))!;
+
+  it('精确配置在目标国：多 SKU 只保留有效子集，不能任一命中就整组保留', () => {
+    const sel: ProductSelection = { modelId: mateX6, romram: '16+512 GB', skuIds: [id16.sku_id, ru12.sku_id] };
+    const out = remapSelectionForCountry(sel, 'ID', 'phone');
+    expect(out).not.toBeNull();
+    expect(out!.romram).toBe('16+512 GB');
+    expect(out!.skuIds).toEqual([id16.sku_id]);
+  });
+
+  it('精确配置 SKU 全无效：回落同色（缺失回落最低价色）单 SKU，配置不漂移', () => {
+    const sel: ProductSelection = { modelId: mateX6, romram: '16+512 GB', skuIds: [ru12.sku_id] };
+    const out = remapSelectionForCountry(sel, 'ID', 'phone');
+    expect(out).not.toBeNull();
+    expect(out!.romram).toBe('16+512 GB');
+    expect(out!.skuIds).toEqual([id16.sku_id]);
+  });
+
+  it('整配置口径（skuIds 空）在目标国有效：原样返回（引用不变）', () => {
+    const sel: ProductSelection = { modelId: mateX6, romram: '16+512 GB', skuIds: [] };
+    expect(remapSelectionForCountry(sel, 'ID', 'phone')).toBe(sel);
+  });
+
+  it('配置在目标国不存在：同型号映射首个合法配置（RU 12+512 → ID 16+512）', () => {
+    const sel: ProductSelection = { modelId: mateX6, romram: '12+512 GB', skuIds: [ru12.sku_id] };
+    const out = remapSelectionForCountry(sel, 'ID', 'phone');
+    expect(out).not.toBeNull();
+    expect(out!.romram).toBe('16+512 GB');
+    expect(out!.skuIds).toEqual([id16.sku_id]);
+  });
+
+  it('型号整体缺席目标国 = null（调用方安全回落默认）', () => {
+    const sel: ProductSelection = { modelId: mateX6, romram: '12+512 GB', skuIds: [ru12.sku_id] };
+    expect(remapSelectionForCountry(sel, 'DE', 'phone')).toBeNull();
+  });
+
+  it('取价口径 platform 随映射保留但按目标国逐线归一（R3-M3：跨国不再 spread 残留源国渠道）', () => {
+    // 源国渠道口径（JD 不在 RU/ID 渠道表）→ 目标国不可落地，该线回自动（null）
+    const foreign = { platforms: ['JD'], shopIds: [], seller: null };
+    const selForeign: ProductSelection = { modelId: mateX6, romram: '12+512 GB', skuIds: [ru12.sku_id], platform: foreign };
+    expect(remapSelectionForCountry(selForeign, 'ID', 'phone')?.platform).toBeNull();
+    // 目标国可落地口径原样保留（引用不变）；同国映射同样原样保留
+    const idChannel = dimChannel.find((c) => c.country_code === 'ID');
+    const valid = { platforms: [], shopIds: [idChannel!.channel_id], seller: null };
+    const selValid: ProductSelection = { modelId: mateX6, romram: '16+512 GB', skuIds: [], platform: valid };
+    expect(remapSelectionForCountry(selValid, 'ID', 'phone')?.platform).toBe(valid);
+    expect(remapSelectionForCountry(selValid, 'ID', 'phone')).toBe(selValid);
+  });
+});
+
+describe('remapMainsForScope（R4-m1：映射合并按 selKey 去重 / 对比区清理 / 空对保留）', () => {
+  const mateX6 = 'own-huawei-mate-x6';
+  const ru12 = dimProduct.find((p) => p.model_id === mateX6 && p.romram === '12+512 GB')!;
+  const id16 = dimProduct.find((p) => p.model_id === mateX6 && p.romram === '16+512 GB' && p.countries.includes('ID'))!;
+  const ruSel: ProductSelection = { modelId: mateX6, romram: '12+512 GB', skuIds: [ru12.sku_id] };
+  const idSel: ProductSelection = { modelId: mateX6, romram: '16+512 GB', skuIds: [id16.sku_id] };
+
+  it('两张卡重映射到同型号同配置（RU 12+512 ×2 → ID 16+512）合并为一卡', () => {
+    const mains: MainProduct[] = [
+      { id: 'card-a', main: ruSel, compares: [] },
+      { id: 'card-b', main: { ...ruSel, skuIds: [ru12.sku_id] }, compares: [] },
+    ];
+    const out = remapMainsForScope(mains, 'ID', 'phone');
+    expect(out).not.toBeNull();
+    expect(out!.length).toBe(1);
+    expect(selKey(out![0].main!)).toBe(selKey(idSel));
+  });
+
+  it('映射后对比区逐条合法化、去重并排除与主品同组（R4-S1：compare 不重复占线）；空对卡原样保留', () => {
+    // compare#1 = 与主品同组的 RU 12+512（映射后与主品同 selKey）、compare#2 = ID 16+512
+    // （主品映射后也是 16+512 → 同组剔除）、compare#3 = 主品缺席国仍合法的第三方型号
+    const legalThird = dimProduct.find((p) => p.model_id !== mateX6 && p.industry === 'phone' && p.countries.includes('ID'))!;
+    const thirdSel: ProductSelection = { modelId: legalThird.model_id, romram: legalThird.romram, skuIds: [legalThird.sku_id] };
+    const mains: MainProduct[] = [
+      { id: 'card-a', main: ruSel, compares: [ruSel, idSel, thirdSel] },
+      { id: 'card-empty', main: null, compares: [idSel] },
+    ];
+    const out = remapMainsForScope(mains, 'ID', 'phone')!;
+    expect(out.length).toBe(2);
+    // 与重映射后主品同组的 compare（含显式传入的 16+512）一律剔除，不留重复占线
+    expect(out[0].compares.map((c) => selKey(c))).toEqual([selKey(thirdSel)]);
+    expect(out[0].main).not.toBeNull();
+    expect(selKey(out[0].main!)).toBe(selKey(idSel));
+    expect(out[1].main).toBeNull();
+    expect(out[1].compares.length).toBe(1);
+    expect(selectionValidFor(out[1].compares[0], 'ID', 'phone')).toBe(true);
+  });
+
+  it('全部型号整体缺席目标国 = null', () => {
+    const mains: MainProduct[] = [{ id: 'card-a', main: ruSel, compares: [] }];
+    expect(remapMainsForScope(mains, 'DE', 'phone')).toBeNull();
   });
 });

@@ -24,7 +24,7 @@
 // ③ 零监控空态——添加监控入口 prominent 化（中号 + 白底），不再像禁用输入框。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, Checkbox, Empty, message, Popover, Segmented, Select, Slider, Switch } from 'antd';
+import { App as AntdApp, Button, Checkbox, Empty, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import { BellOutlined, PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useAgent } from '../state/AgentContext';
@@ -303,6 +303,11 @@ export default function AlertsPage() {
   const { openAgent } = useAgent();
   const alerts = useAlerts();
   const openInDash = useOpenInDashboard();
+  // R4（双 0 收口）：本页消息全部走 antd App.useApp() 的 context hook 消息 API
+  //（App.tsx 已包 <AntdApp component={false}>）。静态 message.success 每次调用
+  // 打「Static function can not consume context」console.error，Chrome 全场景
+  // 双 0 不允许——添加监控/批量处理/阈值保存的反馈同口径收口。
+  const { message } = AntdApp.useApp();
   const { country, industry } = scopeLabels(state);
   const platformLabel = useMemo(() => {
     const selection = state.platform;
@@ -355,6 +360,12 @@ export default function AlertsPage() {
     if (typeof window === 'undefined') return;
     try { window.localStorage.setItem(ALERT_RECORDS_STORAGE, JSON.stringify(recordOverrides)); } catch { /* 本地存储不可用时继续使用内存态 */ }
   }, [recordOverrides]);
+
+  useEffect(() => {
+    const onAgentAlertUpdate = () => setRecordOverrides(readAlertRecordOverrides());
+    window.addEventListener('pricelens:alert-records-updated', onAgentAlertUpdate);
+    return () => window.removeEventListener('pricelens:alert-records-updated', onAgentAlertUpdate);
+  }, []);
 
   useEffect(() => {
     const focus = navBus.alertsFocus;

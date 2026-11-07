@@ -1,9 +1,9 @@
-import type { FiltersState } from '../state/filtersTypes';
+import type { FiltersState, ProductSelection } from '../state/filtersTypes';
 import type { AlertEvidenceStatus, AlertLifecycle, AlertPriority } from '../dataModel/alertLifecycle';
 import type { ForecastDataset } from '../pages/forecast/forecastModel';
 import type { ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 
-export type AgentIntent = 'filter' | 'query' | 'forecast_explain' | 'alert' | 'clarify';
+export type AgentIntent = 'filter' | 'query' | 'forecast_explain' | 'alert' | 'price_advantage' | 'price_alert' | 'clarify';
 /** Local What-if inputs that must travel with a forecast explanation request. */
 export interface ForecastDraftInput {
   priceDeltaPct: number;
@@ -35,6 +35,8 @@ export type AgentRunStatus =
   | 'waiting_for_approval'
   | 'partial_result'
   | 'completed'
+  /** Run finished without error but produced zero result cards; UI offers scope adjustments. */
+  | 'empty'
   | 'failed'
   | 'cancelled'
   | 'stale_context';
@@ -44,9 +46,12 @@ export type AgentEventType =
   | 'run.status'
   | 'step.started'
   | 'step.updated'
+  | 'step.completed'
   | 'approval.required'
   | 'clarification.required'
   | 'warning'
+  | 'text.delta'
+  | 'card.patch'
   | 'card.ready'
   | 'evidence.ready'
   | 'run.completed'
@@ -110,6 +115,29 @@ export interface AgentCardAction {
    * instead of silently applying them to a different scope.
    */
   target?: AgentActionTarget;
+  /**
+   * R4（M1，同步稳定线四审）：open 类「回看板定位 / 定位到看板 / 回看板下钻」
+   * 必须携带生成该卡时的完整查询口径（countryCode、mains、platform、
+   * granularity、rangeStart/End）——跨页跨国查询（AE 页问 RU nova 趋势）回看
+   * 时先落地这套 patch 再导航，不能只发 prompt 文本让目标页回落旧口径。
+   */
+  filterPatch?: FilterPatch;
+}
+
+export type AgentSuggestionIntent = 'filter' | 'query' | 'compare' | 'evidence' | 'price_advantage' | 'price_alert' | 'clarify';
+
+/** Fixed chips carry the action contract; free text still uses classifier fallback. */
+export interface AgentSuggestionAction {
+  label: string;
+  intent: AgentSuggestionIntent;
+  target?: 'comparison' | 'evidence' | 'filter_preview' | 'dashboard' | 'forecast';
+  prompt?: string;
+  /**
+   * R7（六审 m1）：draftOnly = 示例补全动作——点击只把 prompt 模板填入输入框
+   * 供用户确认/修改，绝不直接发送执行（配置归属澄清的示例问法由用户原请求
+   * 派生，仍不代替用户确认对应关系，更不允许静默换成示例里的国家/型号）。
+   */
+  draftOnly?: boolean;
 }
 
 export interface AgentActionTarget {
@@ -117,7 +145,13 @@ export interface AgentActionTarget {
   contextFingerprint: string;
   weekId?: string;
   modelId?: string;
+  alertId?: string;
+  alertType?: AgentAlertRecord['type'];
   seriesKey?: string;
+  countryCode?: string;
+  platform?: FiltersState['platform'];
+  selection?: ProductSelection;
+  compareSelection?: ProductSelection;
   forecastDraft?: ForecastDraftInput;
   forecastSnapshot?: ForecastSnapshot;
   forecastDataset?: ForecastDataset;
@@ -157,7 +191,9 @@ export interface AgentAlertRecord {
   dataVersion?: string;
   contextFingerprint?: string;
   evidenceIds?: string[];
+  evidence?: AgentEvidence[];
   evidenceStatus?: AlertEvidenceStatus;
+  countryCode?: string;
 }
 
 export interface AgentContextSnapshot {
@@ -186,9 +222,38 @@ export interface AgentStep {
   id: string;
   tool: AgentToolName;
   label: string;
-  status: 'success' | 'warning' | 'failed';
+  status: 'queued' | 'running' | 'success' | 'warning' | 'failed' | 'waiting_for_approval';
   detail: string;
   durationMs: number;
+}
+
+const TERMINAL_STEP_STATUSES: ReadonlySet<AgentStep['status']> = new Set(['success', 'warning', 'failed']);
+
+/**
+ * R3（终态收敛）：run 进入 success/empty/error/cancelled 等终态后，远端流式
+ * 响应里可能残留 running/queued/waiting_for_approval 的工具步骤。历史消息里的
+ * 工具卡必须全部呈现终态：成功类终态把未完成步骤收敛为 success，失败/取消
+ * 类终态收敛为 failed，已终态的步骤原样保留。
+ */
+export function finalizeStepsForTerminalRun(steps: AgentStep[], runStatus: AgentRunStatus): AgentStep[] {
+  const outcome: AgentStep['status'] = runStatus === 'failed' || runStatus === 'cancelled' ? 'failed' : 'success';
+  return steps.map((step) => (TERMINAL_STEP_STATUSES.has(step.status) ? step : { ...step, status: outcome }));
+}
+
+export type AgentToolCallStatus = 'queued' | 'running' | 'success' | 'failed' | 'waiting_for_approval';
+
+export interface AgentToolCall {
+  id: string;
+  tool: AgentToolName;
+  label: string;
+  status: AgentToolCallStatus;
+  inputSummary?: string;
+  outputSummary?: string;
+  durationMs?: number;
+  error?: string;
+  requestId?: string;
+  cardId?: string;
+  expandable?: boolean;
 }
 
 export interface FilterResultCard {
@@ -201,6 +266,7 @@ export interface FilterResultCard {
   warning?: string;
   actions?: AgentCardAction[];
   evidence?: AgentEvidence[];
+  contextFingerprint?: string;
 }
 
 export interface TableResultCard {
@@ -233,6 +299,48 @@ export interface AlertResultCard {
   checks: string[];
   evidence?: AgentEvidence[];
   actions?: AgentCardAction[];
+}
+
+export interface PriceAdvantageRow {
+  id: string;
+  countryCode: string;
+  weekId: string;
+  weekLabel: string;
+  channelLabel: string;
+  platform: string | null;
+  currency: 'usd' | 'local';
+  own: { modelId: string; modelName: string; romram: string; skuId: string; price: number };
+  competitor: { modelId: string; modelName: string; romram: string; skuId: string; price: number };
+  ownSelection: ProductSelection;
+  compareSelection: ProductSelection;
+  priceDiff: number;
+  priceDiffPct: number;
+  relation: 'advantage' | 'behind' | 'tie';
+  contextFingerprint: string;
+}
+
+export interface PriceAdvantageResultCard {
+  kind: 'price_advantage';
+  id: string;
+  title: string;
+  rows: PriceAdvantageRow[];
+  skuOptions: Array<{ skuId: string; label: string }>;
+  note: string;
+  currency: 'usd' | 'local';
+  contextFingerprint: string;
+  evidence?: AgentEvidence[];
+  actions?: AgentCardAction[];
+}
+
+export interface AlertListResultCard {
+  kind: 'alert_list';
+  id: string;
+  title: string;
+  alerts: AgentAlertRecord[];
+  contextFingerprint: string;
+  note: string;
+  actions?: AgentCardAction[];
+  evidence?: AgentEvidence[];
 }
 
 export interface ForecastExplanationFactor {
@@ -292,7 +400,7 @@ export interface ForecastExplanationResultCard {
   evidence?: AgentEvidence[];
 }
 
-export type AgentResultCard = FilterResultCard | TableResultCard | ChartResultCard | AlertResultCard | ForecastExplanationResultCard;
+export type AgentResultCard = FilterResultCard | TableResultCard | ChartResultCard | AlertResultCard | AlertListResultCard | PriceAdvantageResultCard | ForecastExplanationResultCard;
 
 export interface AgentResponse {
   intent: AgentIntent;
@@ -301,10 +409,15 @@ export interface AgentResponse {
   cards: AgentResultCard[];
   citations: AgentCitation[];
   suggestions: string[];
+  suggestionActions?: AgentSuggestionAction[];
   contextFingerprint: string;
-  provider?: { name: string; model: string };
+  provider?: { name: string; model: string; reason?: string };
   provenance?: AgentProvenance;
   coverage?: CoverageSummary;
+  factGuard?: {
+    status: 'verified' | 'calibrated' | 'stale_context';
+    message?: string;
+  };
 }
 
 export interface AgentEvent {
@@ -315,12 +428,17 @@ export interface AgentEvent {
   status?: AgentRunStatus;
   timestamp: string;
   message?: string;
+  delta?: string;
+  text?: string;
   tool?: AgentToolName;
   stepId?: string;
   cardId?: string;
   evidence?: AgentEvidence[];
   approval?: ApprovalRequest;
   provenance?: AgentProvenance;
+  card?: AgentResultCard;
+  patch?: Partial<AgentResultCard>;
+  toolCall?: AgentToolCall;
 }
 
 export interface AgentRun {
@@ -334,6 +452,7 @@ export interface AgentRun {
   events: AgentEvent[];
   approval?: ApprovalRequest;
   response?: AgentResponse;
+  toolCalls?: AgentToolCall[];
   error?: { code?: string; message: string };
 }
 
@@ -348,6 +467,20 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
     && typeof event.timestamp === 'string';
 }
 
+function isAgentCardDeep(value: unknown): value is AgentResultCard {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const card = value as Record<string, unknown>;
+  if (typeof card.id !== 'string' || !['filter', 'table', 'chart', 'alert', 'alert_list', 'price_advantage', 'forecast_explanation'].includes(String(card.kind))) return false;
+  if (typeof card.title !== 'string') return false;
+  if (card.kind === 'filter') return Boolean(card.patch && typeof card.patch === 'object' && Array.isArray(card.changes));
+  if (card.kind === 'table') return Array.isArray(card.columns) && Array.isArray(card.rows);
+  if (card.kind === 'chart') return Array.isArray(card.series) && typeof card.note === 'string';
+  if (card.kind === 'alert') return Boolean(card.alert && Array.isArray(card.facts) && Array.isArray(card.checks));
+  if (card.kind === 'alert_list') return Array.isArray(card.alerts) && typeof card.note === 'string';
+  if (card.kind === 'price_advantage') return Array.isArray(card.rows) && Array.isArray(card.skuOptions) && typeof card.note === 'string' && typeof card.contextFingerprint === 'string';
+  return Boolean(typeof card.contextFingerprint === 'string' && card.scope && card.current && Array.isArray(card.factors));
+}
+
 export function isContextStale(snapshot: AgentContextSnapshot, currentFingerprint: string): boolean {
   return snapshot.fingerprint !== currentFingerprint;
 }
@@ -360,13 +493,14 @@ export function isContextStale(snapshot: AgentContextSnapshot, currentFingerprin
 export function isAgentResponse(value: unknown): value is AgentResponse {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const response = value as Record<string, unknown>;
-  if (!['filter', 'query', 'forecast_explain', 'alert', 'clarify'].includes(String(response.intent))) return false;
+  if (!['filter', 'query', 'forecast_explain', 'alert', 'price_advantage', 'price_alert', 'clarify'].includes(String(response.intent))) return false;
   if (typeof response.summary !== 'string' || typeof response.contextFingerprint !== 'string') return false;
   if (!Array.isArray(response.steps) || !Array.isArray(response.cards) || !Array.isArray(response.citations) || !Array.isArray(response.suggestions)) return false;
   if (response.provider !== undefined && (!response.provider || typeof response.provider !== 'object' || typeof (response.provider as Record<string, unknown>).name !== 'string' || typeof (response.provider as Record<string, unknown>).model !== 'string')) return false;
   if (response.suggestions.some((suggestion) => typeof suggestion !== 'string')) return false;
-  if (response.steps.some((item) => !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).tool !== 'string')) return false;
-  if (response.cards.some((item) => !item || typeof item !== 'object' || !['filter', 'table', 'chart', 'alert', 'forecast_explanation'].includes(String((item as Record<string, unknown>).kind)))) return false;
+  if (response.suggestionActions !== undefined && (!Array.isArray(response.suggestionActions) || response.suggestionActions.some((item) => !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).label !== 'string' || typeof (item as Record<string, unknown>).intent !== 'string'))) return false;
+  if (response.steps.some((item) => !item || typeof item !== 'object' || typeof (item as Record<string, unknown>).tool !== 'string' || typeof (item as Record<string, unknown>).label !== 'string')) return false;
+  if (response.cards.some((item) => !isAgentCardDeep(item))) return false;
   return true;
 }
 

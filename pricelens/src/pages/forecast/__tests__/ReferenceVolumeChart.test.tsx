@@ -135,11 +135,13 @@ describe('ReferenceVolumeChart · 左量右价几何与基础渲染', () => {
       .map((node) => node.textContent ?? '')
       .filter((text) => /^W\d+$/.test(text));
     expect(relativeLabels).toEqual([]);
-    // 刻度规格（#5 对齐价格走势页 / CostBarChart）：fontFamily + 10px + tabular-nums；
-    // 首尾恒显示（edge = body + 600），中间 = mute + 400
+    // 刻度规格（#5 对齐价格走势页 / CostBarChart）：fontFamily + tabular-nums；
+    // 首尾恒显示（edge = body + 600），中间 = mute + 400。
+    // R3（r2-m1 · 预测可见业务文本 ≥12px）：刻度字号从 10px 抬到 12px
+    // （DESIGN.md 排版下限 metadata = 12px；符号 glyph 不受此限）
     const first = screen.getAllByText('2025W02')[0];
     expect(first.getAttribute('font-family')).toBe(font.family);
-    expect(first.getAttribute('font-size')).toBe('10');
+    expect(first.getAttribute('font-size')).toBe('12');
     expect(first.getAttribute('style')).toContain('tabular-nums');
     expect(first.getAttribute('fill')).toBe(color.body);
     expect(first.getAttribute('font-weight')).toBe('600');

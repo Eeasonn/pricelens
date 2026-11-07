@@ -53,6 +53,7 @@ const agentStatusSchema: JsonSchema = {
     'waiting_for_approval',
     'partial_result',
     'completed',
+    'empty',
     'failed',
     'cancelled',
     'stale_context',
@@ -66,9 +67,12 @@ const agentEventTypeSchema: JsonSchema = {
     'run.status',
     'step.started',
     'step.updated',
+    'step.completed',
     'approval.required',
     'clarification.required',
     'warning',
+    'text.delta',
+    'card.patch',
     'card.ready',
     'evidence.ready',
     'run.completed',
@@ -114,18 +118,19 @@ const responseSchema: JsonSchema = {
   additionalProperties: false,
   required: ['intent', 'summary', 'steps', 'cards', 'citations', 'suggestions', 'contextFingerprint'],
   properties: {
-    intent: { type: 'string', enum: ['filter', 'query', 'forecast_explain', 'alert', 'clarify'] },
+    intent: { type: 'string', enum: ['filter', 'query', 'forecast_explain', 'alert', 'price_advantage', 'price_alert', 'clarify'] },
     summary: { type: 'string' },
     steps: { type: 'array', items: { type: 'object' } },
     cards: { type: 'array', items: { type: 'object' } },
     citations: { type: 'array', items: { type: 'object' } },
     suggestions: { type: 'array', items: { type: 'string' } },
+    suggestionActions: { type: 'array', items: { type: 'object', required: ['label', 'intent'], properties: { label: { type: 'string' }, intent: { type: 'string', enum: ['filter', 'query', 'compare', 'evidence', 'price_advantage', 'price_alert', 'clarify'] }, target: { type: 'string' }, prompt: { type: 'string' } }, additionalProperties: false } },
     contextFingerprint: { type: 'string', minLength: 1 },
     provider: {
       type: 'object',
       additionalProperties: false,
       required: ['name', 'model'],
-      properties: { name: { type: 'string' }, model: { type: 'string' } },
+      properties: { name: { type: 'string' }, model: { type: 'string' }, reason: { type: 'string' } },
     },
     provenance: { $ref: '#/$defs/provenance' },
     coverage: {
@@ -140,6 +145,7 @@ const responseSchema: JsonSchema = {
         note: { type: 'string' },
       },
     },
+    factGuard: { type: 'object', additionalProperties: false, required: ['status'], properties: { status: { type: 'string', enum: ['verified', 'calibrated', 'stale_context'] }, message: { type: 'string' } } },
   },
 };
 
@@ -173,12 +179,17 @@ const eventSchema: JsonSchema = {
     status: agentStatusSchema,
     timestamp: { type: 'string', format: 'date-time' },
     message: { type: 'string' },
+    delta: { type: 'string' },
+    text: { type: 'string' },
     tool: toolSchema,
     stepId: { type: 'string' },
     cardId: { type: 'string' },
     evidence: { type: 'array', items: { $ref: '#/$defs/evidence' } },
     approval: { $ref: '#/$defs/approval' },
     provenance: { $ref: '#/$defs/provenance' },
+    card: { type: 'object' },
+    patch: { type: 'object' },
+    toolCall: { type: 'object' },
   },
   $defs: { provenance: provenanceSchema, evidence: evidenceSchema, approval: approvalSchema },
 };
@@ -258,6 +269,11 @@ function validateEvent(value: unknown, path: string, errors: string[]): value is
   if (value.status !== undefined && !isAgentStatus(value.status)) errors.push(`${path}.status 不是已知运行状态`);
   if (value.tool !== undefined && !isTool(value.tool)) errors.push(`${path}.tool 不是白名单工具`);
   if (value.evidence !== undefined && (!Array.isArray(value.evidence) || value.evidence.some((item) => !isRecord(item) || typeof item.label !== 'string' || typeof item.detail !== 'string'))) errors.push(`${path}.evidence 格式无效`);
+  if (value.delta !== undefined && typeof value.delta !== 'string') errors.push(`${path}.delta 必须是文本`);
+  if (value.text !== undefined && typeof value.text !== 'string') errors.push(`${path}.text 必须是文本`);
+  if (value.card !== undefined && !isRecord(value.card)) errors.push(`${path}.card 必须是对象`);
+  if (value.patch !== undefined && !isRecord(value.patch)) errors.push(`${path}.patch 必须是对象`);
+  if (value.toolCall !== undefined && (!isRecord(value.toolCall) || typeof value.toolCall.id !== 'string' || typeof value.toolCall.tool !== 'string' || typeof value.toolCall.status !== 'string')) errors.push(`${path}.toolCall 格式无效`);
   if (value.provenance !== undefined) validateProvenance(value.provenance, `${path}.provenance`, errors);
   return errors.length === 0;
 }

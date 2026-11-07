@@ -102,6 +102,9 @@ export const motion = {
   base: 240, // 模式切换、面板宽度形变、chip 滑入
   slow: 320, // 跨页接力收起
   agentFull: 720, // Agent 全屏与 dock 的同壳体连续收窄，给用户确认和空间重排时间
+  searchEntrance: 200, // 页头快速搜索面板只在打开时入场
+  searchResult: 120, // 快速搜索结果换算/换模式时的交叉淡化
+  searchExit: 140, // 快速搜索面板退场，避免关闭时瞬间消失
   enter: 'cubic-bezier(0.25, 0.8, 0.3, 1)', // 入场（快出缓停）
   exit: 'cubic-bezier(0.4, 0, 0.2, 1)', // 退场（匀出急停）
 } as const;
@@ -123,16 +126,18 @@ export const selectAccent = '#0070f3'; // 聚焦边框/选中强调（浅蓝系�
 
 // ============================================================
 // 量价参考卡 · 事件类型色板（referenceEventPalette）：事件类型库的默认
-// 八色语义 token。前四项取既有语义色（link / warning / ink / mute，与主图
-// 小事件同源色系），后四项取扩展图表色板中的既值（#0f766e / #be123c /
-// #a16207 / #0891b2）。仅作为参考卡事件类型的默认/恢复默认色，不反写主图
+// 八色语义 token。前三项与兜底项取既有语义色（link / warning / mute），挤兑
+// 取扩展图表色板的 #be123c（压力/风险类；2026-11-06 P0-2：ink 退出事件色，
+// 墨色只留给唯一主按钮，与主图 PRODUCT_EVENT_COLOR.cannibalization 同步换色
+// 保持同源），后四项取扩展图表色板中的既值（#0f766e / #be123c / #a16207 /
+// #0891b2）。仅作为参考卡事件类型的默认/恢复默认色，不反写主图
 // PRODUCT_EVENT_COLOR，不作为 UI 状态色使用；用户改色经类型库持久化，
 // 事件只存 typeId 不复制色值。语义说明见 DESIGN.md「Colors」。
 // ============================================================
 export const referenceEventPalette: readonly string[] = [
   color.link, // 竞品上市 / 我司上市（默认，同主图 competitor-launch）
   color.warning, // 促销投放（同主图营销价促色系）
-  color.ink, // 挤兑（同主图挤兑色系）
+  '#be123c', // 挤兑（压力/风险类，同主图 cannibalization；2026-11-06 起 ink 不再作事件色）
   color.mute, // 其他（中性兜底）
   '#0f766e', // 扩展：增长/份额类事件
   '#be123c', // 扩展：压力/风险类事件

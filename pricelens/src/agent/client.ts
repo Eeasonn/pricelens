@@ -1,4 +1,4 @@
-import { isAgentEvent, isAgentResponse, type AgentContextSnapshot, type AgentEvent, type AgentIntent, type AgentResponse, type ForecastContextInput, type ForecastDraftInput } from './contracts';
+import { isAgentEvent, isAgentResponse, type AgentContextSnapshot, type AgentEvent, type AgentIntent, type AgentResponse, type AgentResultCard, type ForecastContextInput, type ForecastDraftInput } from './contracts';
 import { runAgent } from './core';
 import { resolveAgentEngine } from './remoteConfig';
 
@@ -18,9 +18,89 @@ export interface AgentClient {
   run(request: AgentRunRequest, signal?: AbortSignal, onEvent?: (event: AgentEvent) => void): Promise<AgentResponse>;
 }
 
+export interface AgentStreamState {
+  text: string;
+  cards: AgentResultCard[];
+  events: AgentEvent[];
+  lastSequence: number;
+}
+
+/** Sequence-aware reducer used by the UI and fake-SSE tests. */
+export function applyAgentStreamEvent(state: AgentStreamState, event: AgentEvent, runId: string): AgentStreamState {
+  if (event.runId !== runId || event.sequence <= state.lastSequence) return state;
+  let cards = state.cards;
+  if (event.type === 'card.ready' && event.card) cards = [...cards.filter((card) => card.id !== event.card?.id), event.card];
+  if (event.type === 'card.patch' && event.cardId && event.patch) {
+    cards = cards.map((card) => card.id === event.cardId ? ({ ...card, ...event.patch } as AgentResultCard) : card);
+  }
+  return {
+    text: event.type === 'text.delta' ? `${state.text}${event.delta ?? event.text ?? ''}` : state.text,
+    cards,
+    events: [...state.events, event],
+    lastSequence: event.sequence,
+  };
+}
+
+function hasFactConflict(text: string, baseline: AgentResponse): boolean {
+  const facts = JSON.stringify(baseline.cards);
+  const numbers = [...text.matchAll(/\b\d{2,6}(?:\.\d+)?\b/g)].map((match) => match[0]);
+  return numbers.some((number) => !facts.includes(number)) && baseline.cards.length > 0;
+}
+
+/** Merge untrusted remote narrative with the deterministic baseline. */
+export function mergeRemoteResponse(baseline: AgentResponse | undefined, remote: AgentResponse, requestFingerprint?: string): AgentResponse {
+  if (!baseline) return { ...remote, factGuard: remote.factGuard ?? { status: 'verified' } };
+  const changedFacts = JSON.stringify(remote.cards) !== JSON.stringify(baseline.cards)
+    || JSON.stringify(remote.steps) !== JSON.stringify(baseline.steps)
+    || JSON.stringify(remote.citations) !== JSON.stringify(baseline.citations)
+    || JSON.stringify(remote.coverage) !== JSON.stringify(baseline.coverage);
+  const calibrated = changedFacts || hasFactConflict(remote.summary, baseline);
+  return {
+    ...baseline,
+    summary: remote.summary || baseline.summary,
+    suggestions: remote.suggestions?.length ? remote.suggestions : baseline.suggestions,
+    suggestionActions: remote.suggestionActions ?? baseline.suggestionActions,
+    provider: remote.provider ?? { name: '远端 AI 流式', model: 'remote' },
+    provenance: { ...(baseline.provenance ?? {}), ...(remote.provenance ?? {}), source: remote.provenance?.source ?? baseline.provenance?.source ?? 'pricelens-context', contextFingerprint: baseline.contextFingerprint },
+    // The remote fingerprint is intentionally retained so AgentContext can mark a stale response.
+    contextFingerprint: remote.contextFingerprint,
+    factGuard: {
+      status: requestFingerprint && remote.contextFingerprint !== requestFingerprint ? 'stale_context' : calibrated ? 'calibrated' : 'verified',
+      message: calibrated ? '已按本地数据校准：价格、SKU、范围和证据以本地确定性引擎为准。' : undefined,
+    },
+  };
+}
+
 /** 离线开发 adapter：无后端时保持页面可演示、可测试。 */
 export const localAgentClient: AgentClient = {
-  run: (request, signal) => request.baseline ? Promise.resolve(request.baseline) : runAgent(request.text, request.context, signal, request.intent, request.forecastDraft, request.forecastSnapshot, request.forecastDataset),
+  run: async (request, signal, onEvent) => {
+    const response = request.baseline ?? await runAgent(request.text, request.context, signal, request.intent, request.forecastDraft, request.forecastSnapshot, request.forecastDataset);
+    const runId = request.runId ?? request.clientRequestId;
+    const now = (): string => new Date().toISOString();
+    // run.started occupies sequence 1 in AgentContext; fallback adapters may
+    // use sequence 2, so local stage events start at 3 and remain monotonic.
+    let sequence = 2;
+    const emit = (event: AgentEvent): void => onEvent?.(event);
+    const stage = (message: string, tool: AgentEvent['tool'], status: AgentEvent['status'] = 'running'): void => {
+      sequence += 1;
+      emit({ id: `${runId}-stage-${sequence}`, runId, sequence, type: 'step.started', status, timestamp: now(), message, tool, provenance: response.provenance });
+    };
+    const complete = (message: string, tool: AgentEvent['tool']): void => {
+      sequence += 1;
+      emit({ id: `${runId}-done-${sequence}`, runId, sequence, type: 'step.completed', status: 'completed', timestamp: now(), message, tool, provenance: response.provenance });
+    };
+    const delta = (text: string): void => {
+      sequence += 1;
+      emit({ id: `${runId}-delta-${sequence}`, runId, sequence, type: 'text.delta', delta: `${text}\n`, timestamp: now(), provenance: response.provenance });
+    };
+    stage('解析意图', 'catalog.resolve'); delta('解析意图'); complete('意图已确认', 'catalog.resolve');
+    const alertRun = request.intent === 'price_alert' || response.intent === 'price_alert' || request.intent === 'alert';
+    stage(alertRun ? '读取预警' : '读取价格', alertRun ? 'alerts.query' : 'series.query'); delta(alertRun ? '读取现有预警规则与证据…' : '读取国家×渠道×周价格事实…'); complete(alertRun ? '预警事实已读取' : '价格事实已读取', alertRun ? 'alerts.query' : 'series.query');
+    stage(alertRun ? '校验证据' : '计算优势', alertRun ? 'alerts.explain' : 'series.compare'); delta(alertRun ? '校验触发规则、数据版本和证据来源…' : '按本地事实计算我司与核心竞品价差…'); complete(alertRun ? '证据已校验' : '优势已计算', alertRun ? 'alerts.explain' : 'series.compare');
+    stage('生成结论', 'view.preview'); delta(response.summary); complete('结论已生成', 'view.preview');
+    response.cards.forEach((card) => { sequence += 1; emit({ id: `${runId}-card-${card.id}`, runId, sequence, type: 'card.ready', card, cardId: card.id, timestamp: now(), provenance: response.provenance }); });
+    return response;
+  },
 };
 
 /** POST + SSE 客户端：远端 Agent 只负责叙述与编排，数值卡片仍由本地确定性引擎生成。 */
@@ -80,7 +160,7 @@ export function createSseAgentClient(options: { baseUrl: string; fetcher?: typeo
         });
         if (!response.ok) {
           const errorBody = await response.json().catch(() => null) as { fallback?: unknown } | null;
-          if (errorBody?.fallback && isAgentResponse(errorBody.fallback)) return { ...errorBody.fallback, provider: { name: '本地确定性回退', model: 'local' } };
+          if (errorBody?.fallback && isAgentResponse(errorBody.fallback)) return { ...errorBody.fallback, provider: { name: '本地确定性回退', model: 'local', reason: `远端服务返回 ${response.status}` } };
           throw new Error(`Agent 服务异常（${response.status}）`);
         }
         if (!response.body) throw new Error(`Agent 服务异常（${response.status}）`);
@@ -98,7 +178,7 @@ export function createSseAgentClient(options: { baseUrl: string; fetcher?: typeo
           if (part.done) break;
         }
         if (!responseValue) throw new Error('Agent 服务未返回完整结果');
-        return responseValue;
+        return mergeRemoteResponse(baseline, responseValue, request.context.fingerprint);
       } catch (error) {
         if (timedOut) throw new Error(`Agent 服务响应超时（${timeoutMs}ms）`);
         if ((error as Error)?.name === 'AbortError' && signal?.aborted) throw abortError('Agent 查询已取消');
@@ -132,14 +212,14 @@ export function withLocalFallback(remote: AgentClient, local: AgentClient): Agen
         onEvent?.({
           id: `${runId}-local-fallback-${Date.now().toString(36)}`,
           runId,
-          sequence: 1,
+          sequence: 2,
           type: 'step.started',
           timestamp: new Date().toISOString(),
           message: '远端 Agent 服务不可达，已使用本地确定性引擎',
           provenance: { source: 'local-deterministic', provider: LOCAL_FALLBACK_PROVIDER.name, model: LOCAL_FALLBACK_PROVIDER.model },
         });
         const response = await local.run(request, signal, onEvent);
-        return { ...response, provider: { ...LOCAL_FALLBACK_PROVIDER } };
+        return { ...response, provider: { ...LOCAL_FALLBACK_PROVIDER, reason: (error as Error)?.message || '远端不可达' } };
       }
     },
   };

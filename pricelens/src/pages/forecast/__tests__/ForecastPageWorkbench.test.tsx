@@ -81,11 +81,11 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     for (const stage of ['1', '2', '3', '4']) {
       expect(document.querySelector(`[data-pipeline-stage="${stage}"]`)).not.toBeNull();
     }
-    // 节点状态读数（B.5.1）：③SI 待确认 N / 12（基准 = 全部待确认）· ④暂不联动销量
+    // 节点状态读数（B.5.1；P0-3 紧凑形态收进节点 title）：③SI 待确认 N / 12（基准 = 全部待确认）· ④暂不联动销量
     const stage3 = document.querySelector('[data-pipeline-stage="3"]')!;
-    expect(stage3.textContent).toContain('SI 待确认 12 / 12');
+    expect(stage3.getAttribute('title')).toContain('SI 待确认 12 / 12');
     const stage4 = document.querySelector('[data-pipeline-stage="4"]')!;
-    expect(stage4.textContent).toContain('暂不联动销量');
+    expect(stage4.getAttribute('title')).toContain('暂不联动销量');
     // 点击 = 页级跨卡定位 + 返回条；不弹编辑器、不写草稿（params 键保持无值）
     fireEvent.click(stage3);
     const bar = document.querySelector('[data-cross-card-bar]');
@@ -101,11 +101,55 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     expect(document.querySelector('[data-cross-card-bar]')).toBeNull();
   });
 
+  it('Batch 2 · 步间对比与因果记录审计卡：四步结论默认露出，展开见 输入/假设/修正/证据/公式/待补契约，证据含数据状态与「采集时间：待确认」，定位只滚动', () => {
+    render(<App />);
+    const trail = document.querySelector('[data-lpl-audit-trail]') as HTMLElement | null;
+    expect(trail).not.toBeNull();
+    const text = trail!.textContent ?? '';
+    // 上下文指纹 chip（mono）+ 重算口径说明（同步确定性引擎，不伪造 loading）
+    expect(text).toContain('上下文 ');
+    expect(text).toContain('本地确定性引擎同步重算');
+    // 四步行齐全；结论默认露出（①基线合计 / ③SI 待确认 / ④销毛率）
+    for (const step of ['1', '2', '3', '4']) {
+      expect(trail!.querySelector(`[data-audit-step="${step}"]`)).not.toBeNull();
+    }
+    expect(text).toContain('基线已生成');
+    expect(text).toContain('SI 待确认 12 / 12');
+    expect(text).toContain('预测期销毛 $');
+    expect(text).toContain('销毛率 ');
+    // 正常态无失败横幅
+    expect(trail!.querySelector('[data-audit-compute-error]')).toBeNull();
+    // 展开①：五要素 + 公式 + 待补契约；证据行含数据状态/数据版本/采集时间待确认
+    fireEvent.click(trail!.querySelector('[data-audit-toggle="1"]') as HTMLButtonElement);
+    const detail = trail!.querySelector('[data-audit-detail="1"]') as HTMLElement;
+    const detailText = detail.textContent ?? '';
+    for (const label of ['输入（前一步输出 = 本步输入）', '假设', '修正（含内联原因', '证据（数据状态 · 数据版本 · 采集时间）', '计算关系（可复核）', '数据状态与待补契约']) {
+      expect(detailText).toContain(label);
+    }
+    expect(detailText).toContain('匹配规则待确认');
+    expect(detailText).toContain('采集时间：待确认');
+    expect(detailText).toContain('数据版本：workbench-demo-v3');
+    // 展开②：情报候选待接入空态如实（不造假候选）
+    fireEvent.click(trail!.querySelector('[data-audit-toggle="2"]') as HTMLButtonElement);
+    const detail2 = trail!.querySelector('[data-audit-detail="2"]') as HTMLElement;
+    expect(detail2!.textContent ?? '').toContain('候选注入为空');
+    // 展开④：销毛口径铁律文案
+    fireEvent.click(trail!.querySelector('[data-audit-toggle="4"]') as HTMLButtonElement);
+    const detail4 = trail!.querySelector('[data-audit-detail="4"]') as HTMLElement;
+    expect(detail4!.textContent ?? '').toContain('单台销毛额 = 单台收入 − 单台成本');
+    expect(detail4!.textContent ?? '').toContain('销毛率 = 单台销毛额 ÷ 单台收入');
+    // 定位 = 跨卡滚动聚焦 + 返回条（不写参数）
+    fireEvent.click(trail!.querySelector('[data-audit-locate="3"]') as HTMLButtonElement);
+    const bar = document.querySelector('[data-cross-card-bar]');
+    expect(bar).not.toBeNull();
+    expect(bar!.textContent).toContain('来自 步间审计');
+  });
+
   it('五卡齐全有序（主图→参考→大盘→③库存修正→成本销毛垫底）；SI 未全部确认页首提示；纪要层不回归', () => {
     render(<App />);
     const text = document.body.textContent ?? '';
+    // P0-3（2026-11-06）：首卡大标题「量价预测 · 推演工作台」与页签重复，已删除。
     for (const label of [
-      '量价预测 · 推演工作台',
       '量价预测主图',
       '量价参考产品',
       '② 大盘修正',
@@ -119,10 +163,15 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
       .map((label) => titles.findIndex((title) => title.includes(label)));
     expect(cardOrder.every((index) => index >= 0)).toBe(true);
     expect([...cardOrder].sort((a, b) => a - b)).toEqual(cardOrder);
-    // 范围行（8.3 Step 1 压缩）：固定样本口径 + 不随全局筛选联动保留
+    // 工具行范围摘要（P0-3 压缩）：固定样本口径 + 产品名可见，完整 7 段口径进 ？号 title。
     expect(text).toContain('固定样本 · 不随全局筛选联动');
     expect(text).toContain('HUAWEI Mate 90 · 12+512GB');
-    expect(text).toContain('币种 USD（固定）');
+    const scopeHint = document.querySelector('[aria-label="范围与口径"]');
+    expect(scopeHint).not.toBeNull();
+    const scopeTitle = scopeHint!.getAttribute('title') ?? '';
+    for (const segment of ['币种 USD（固定）', '历史 2025W45–2026W44（模拟实际）', '主参考', '参照竞品']) {
+      expect(scopeTitle).toContain(segment);
+    }
     expect(text).toContain('复制关键假设');
     // SI 未全部确认页首提示（B.5.7）：基准 = 12 个月全部待确认
     expect(text).toContain('SI 未全部确认（待确认 12 / 12）');
@@ -132,6 +181,30 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     expect(text).not.toContain('推演纪要');
     // 可见「演示实际」话术退役（数据表 caption 保留模拟语境，不在可见 hint 中）
     expect(text).not.toContain('（演示实际）');
+  });
+
+  it('P0-3 首卡收敛成单条工具行：无 h1「量价预测 · 推演工作台」；PipelineNav 紧凑并入首卡（无独立厚条 / 无「推演顺序」标签）；页级按钮 24px 小号', () => {
+    render(<App />);
+    // 不再渲染与页签重复的大标题（h1 与全文均无该字样）。
+    expect(document.querySelectorAll('h1').length).toBe(0);
+    expect(document.body.textContent ?? '').not.toContain('量价预测 · 推演工作台');
+    // 首卡 = 页签行 + 单条工具行（data-forecast-tool-row）。
+    const toolRow = document.querySelector('[data-forecast-tool-row]');
+    expect(toolRow).not.toBeNull();
+    // PipelineNav 并入首卡工具行：nav 是工具行后代，不再是独立厚条。
+    const nav = document.querySelector('[data-pipeline-nav]') as HTMLElement;
+    expect(nav).not.toBeNull();
+    expect(toolRow!.contains(nav)).toBe(true);
+    expect(nav.style.border).toBe('');
+    expect(document.body.textContent ?? '').not.toContain('推演顺序');
+    for (const stage of ['1', '2', '3', '4']) {
+      expect(document.querySelector(`[data-pipeline-stage="${stage}"]`)).not.toBeNull();
+    }
+    // 页级按钮小号（antd size=small → height 24px），不再是 32px 大按钮。
+    const agentBtn = Array.from(document.querySelectorAll('button'))
+      .find((button) => (button.textContent ?? '').includes('让 Agent 解释')) as HTMLElement;
+    expect(agentBtn).toBeDefined();
+    expect(agentBtn.className).toContain('ant-btn-sm');
   });
 
   it('④⑤ 库存修正 + 成本销毛单列全宽堆叠（2026-11-05 高保真拍板：库存卡占满全宽，不再左右分栏），卡序仍库存在前', () => {
@@ -150,13 +223,13 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     const cardTitles = cards.map((card) => card.querySelector('h2')?.textContent ?? '');
     expect(cardTitles[0]).toContain('③ 库存修正');
     expect(cardTitles[1]).toContain('成本销毛');
-    // 两卡同宽几何（2026-11-07 整改）：两卡 SVG 均按实测宽绘图（width/height 属性像素值，
-    // 缩放比 1；jsdom 无 RO 回退 720×252，与库存卡同源同高）。
+    // 两卡同宽几何（2026-11-07 整改 + 整合）：两卡都按实测宽绘图、缩放比 1——库存卡走迭代
+    // P0-1（viewBox = RO 实测宽，width 100%），成本销毛卡走实测宽像素属性；jsdom 无 RO 时
+    // 两卡同回退 720×252，同宽同高。
     for (const card of cards) {
       const svg = card.querySelector('svg[role="img"]') as SVGSVGElement | null;
       expect(svg).not.toBeNull();
-      expect(svg!.getAttribute('width')).toBe('720');
-      expect(svg!.getAttribute('height')).toBe('252');
+      expect(svg!.getAttribute('viewBox')).toBe('0 0 720 252');
     }
   });
 
@@ -204,7 +277,7 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     expect(draft ?? '').toContain('ref-pura90');
   });
 
-  it('微调（原因选填，不填即可应用）→ 复制关键假设（含原因、模拟状态与 SI 待确认）→ 切价格走势再返回草稿保留', async () => {
+  it('微调（原因必填，缺原因不可应用；取消不写入）→ 复制关键假设（含原因、模拟状态与 SI 待确认）→ 切价格走势再返回草稿保留', async () => {
     render(<App />);
     // 2026-11-05 视觉精简二轮：微调入口在主图「数据与操作」收起区（数据表）——展开后可见。
     const expandDataOps = () => fireEvent.click(screen.getByRole('button', { name: '数据与操作' }));
@@ -213,17 +286,17 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     // v3 主图数据表 = 全部预测周（52 个 WeekId）各一个微调入口
     expect(tuneButtons.length).toBe(52);
     fireEvent.click(tuneButtons[2]);
-    // 2026-11-04 评审：调整原因改选填——去掉必填拦截，不填即可应用；
-    // placeholder 引导（如「选填：帮助追溯调整依据」），空值照常提交。
-    expect(document.body.textContent).not.toContain('（必填）');
+    // Batch 2（2026-11-07）：调整原因必填（brief §3.2 数量修正旁必须填写原因）。
     const reasonInput = (document.querySelector('.ant-modal textarea')
       ?? document.querySelector('textarea[aria-label*="调整原因"]')) as HTMLTextAreaElement | null;
     expect(reasonInput).not.toBeNull();
-    expect(reasonInput!.placeholder).toContain('选填');
+    expect(reasonInput!.placeholder).toContain('必填');
     const applyButton = () => Array.from(document.querySelectorAll('button'))
       .find((button) => (button.textContent ?? '').replace(/\s/g, '') === '应用');
+    // 未填原因：应用禁用（不写入）
+    expect(applyButton()?.disabled).toBe(true);
+    fireEvent.change(reasonInput!, { target: { value: '黑五主峰周，电商资源加投' } });
     expect(applyButton()?.disabled).toBe(false);
-    if (reasonInput) fireEvent.change(reasonInput, { target: { value: '黑五主峰周，电商资源加投' } });
     fireEvent.click(applyButton()!);
     // 手调原因内联标注主图手调处（图下名录），无纪要层
     expect(document.body.textContent).toContain('手调 · 2026W47：黑五主峰周，电商资源加投');
