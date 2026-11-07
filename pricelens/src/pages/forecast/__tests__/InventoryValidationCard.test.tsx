@@ -502,6 +502,26 @@ describe('库存修正卡 · 手调覆盖截断周（supplyCapped 仍在）与�
   });
 });
 
+describe('库存修正卡 · 横轴月分组与单位标题（2026-11-07 图表过大整改）', () => {
+  it('X 轴刻度 = 月分组 YYYY-MM（无 YYYYWww 串排），单位标题「天/万台」不与顶端刻度重叠', () => {
+    const { container } = renderCard();
+    const svg = container.querySelector('svg[role="img"]') as SVGSVGElement;
+    const texts = Array.from(svg.querySelectorAll('text')).map((node) => node.textContent ?? '');
+    // 月分组：至少 2025-11 / 2026-01 这样的 YYYY-MM 标签
+    expect(texts.filter((t) => /^\d{4}-\d{2}$/.test(t)).length).toBeGreaterThan(4);
+    // 不再画周 ID 刻度
+    expect(texts.some((t) => /^\d{4}W\d{2}$/.test(t))).toBe(false);
+    // 天 / 万台 单位标题固定在 y=12（不压 TOP=28 起的绘图区顶端刻度）
+    const unitYs = svg.querySelectorAll('text');
+    const ys = Array.from(unitYs).filter((t) => t.textContent === '天' || t.textContent === '万台').map((t) => Number(t.getAttribute('y')));
+    expect(ys.length).toBe(2);
+    for (const y of ys) expect(y).toBeLessThanOrEqual(14);
+    // viewBox 宽随容器实测（jsdom 客户端宽 0 → 回退 720），不再是写死的拉伸布局
+    expect(svg.getAttribute('width')).toBe('720');
+    expect(svg.getAttribute('height')).toBe('252');
+  });
+});
+
 describe('库存修正卡 · 无修正状态', () => {
   it('SI 充足：显示「库存可支撑 / 未触发」，不挂 ±2% 徽标，无判定行', () => {
     const { container } = renderCard(fatParams());

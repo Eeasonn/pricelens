@@ -425,15 +425,16 @@ describe('成本销毛 · 默认视图与收起区（margin-card-hifi 推荐稿�
     expect(document.querySelector('[data-timetrack]')).toBeNull();
   });
 
-  it('图宽与库存卡同宽对齐：viewBox 720×252（与库存卡同尺寸）· minWidth 700 · 全期周域（首末周都在图上）', () => {
+  it('图宽按实测宽绘图（2026-11-07 整改）：jsdom 回退 viewBox 720×252，横轴改月分组 YYYY-MM', () => {
     renderCard(baseResult);
     const svg = document.querySelector('svg[role="img"]') as SVGSVGElement;
     expect(svg.getAttribute('viewBox')).toBe('0 0 720 252');
-    expect(svg.style.minWidth).toBe('700px');
-    // 全期域：周刻度覆盖整段（首周与末周标签都在）
+    expect(svg.getAttribute('width')).toBe('720');
+    expect(svg.getAttribute('height')).toBe('252');
+    // 全期域：月分组刻度覆盖首末月（YYYY-MM，画在月首周中线）
     const tickTexts = Array.from(svg.querySelectorAll('text')).map((node) => node.textContent ?? '');
-    expect(tickTexts).toContain(baseResult.weeks[0]!.weekId);
-    expect(tickTexts).toContain(baseResult.weeks[baseResult.weeks.length - 1]!.weekId);
+    expect(tickTexts.some((t) => /^\d{4}-\d{2}$/.test(t))).toBe(true);
+    expect(tickTexts.some((t) => /^\d{4}W\d{2}$/.test(t))).toBe(false);
   });
 
   it('链路条改用共享 FlowBar（去编号）：节点文本不以数字开头，与库存卡同款', () => {

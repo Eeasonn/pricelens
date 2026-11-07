@@ -154,6 +154,33 @@ export const trackColors = {
   tick: '#aeb8c6', // 中间刻度线
 } as const;
 
+// ============================================================
+// 区间量尺（2026-11-06 Eason 拍板，价格走势与量价走势共用）：拖选后图上的
+// 幅度框、箭头与极值虚线。幅度框所有读数方式同一底色——方向只靠正负号和
+// 单向箭头表达，不靠颜色；选区带沿用 selectAccent 低透明度。
+// 规则见 .impeccable/surfaces/range-ruler-volume-skeleton.md
+// ============================================================
+export const rangeRuler = {
+  // 幅度框容器 = 悬停产品卡同款（2026-11-07 Eason「极差卡片用跟产品卡片一样的风格」，替代原浅灰底）：
+  // 白底 + 1px hairline 描边 + 卡片圆角 + L2 投影，与 Chart 悬停卡 / 销毛迷你卡逐项同值
+  chipFill: color.canvas,
+  chipBorder: color.hairline,
+  chipRadius: radius.card,
+  chipShadow: shadow.l2,
+  chipText: color.ink, // 第一行：率
+  chipSubText: color.body, // 第二行：数量
+  arrow: color.body, // 量尺竖线与箭头尖
+  guide: color.mute, // 极值点拉到量尺的水平虚线
+  band: 'rgba(0, 112, 243, 0.06)', // 选区带（selectAccent 6%）
+  bandEdge: 'rgba(0, 112, 243, 0.38)', // 选区左右竖线（selectAccent 38%）
+  outside: 'rgba(255, 255, 255, 0.66)', // 选区外白幕
+} as const;
+
+/** 当前显示币种的代码（图层标注「价格 USD / 价格 RUB」用） */
+export function currencyCodeOf(currency: 'local' | 'usd'): string {
+  return currency === 'usd' ? 'USD' : getLocalCurrency();
+}
+
 /**
  * §3.3 数值显示规则：价格一律整数（调用方保证传入已取整数值）。
  * USD：千分位逗号 + 前缀 $（如 $1,234）；本币：按当前国家本币格式化——

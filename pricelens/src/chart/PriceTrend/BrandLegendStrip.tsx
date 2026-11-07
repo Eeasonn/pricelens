@@ -235,16 +235,19 @@ export function Pill({
 export function PillUnit({
   pill,
   dimmed,
+  muted,
   onToggle,
   onHover,
 }: {
   pill: PillSpec;
   dimmed: boolean;
+  /** 区间量尺选区态：线暂不显示（.45），仍可悬停 / 点击 */
+  muted?: boolean;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
 }) {
   return (
-    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch', gap: 2, flexShrink: 0, minWidth: 0 }}>
+    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch', gap: 2, flexShrink: 0, minWidth: 0, opacity: muted ? 0.45 : undefined, transition: 'opacity 160ms ease' }}>
       <PlatformRow pill={pill} dimmed={dimmed} />
       <Pill pill={pill} dimmed={dimmed} onToggle={onToggle} onHover={onHover} />
     </span>
@@ -382,6 +385,7 @@ function GroupBlock({
   group,
   hiddenKeys,
   hoverSet,
+  mutedKeys,
   onToggle,
   onHover,
   channelCtl,
@@ -391,6 +395,7 @@ function GroupBlock({
   group: LegendGroup;
   hiddenKeys: Set<string>;
   hoverSet: Set<string> | null;
+  mutedKeys?: ReadonlySet<string>;
   onToggle: (key: string) => void;
   onHover: (key: string | null) => void;
   /** 平台筛选（第一百六十二轮）：cc + 回写动作（按系列 key 定位选择项） */
@@ -440,6 +445,7 @@ function GroupBlock({
   const mainPill = pills.find((p) => p.main) ?? null; // 主品无数据/空对 = null（不画药丸也不画 vs）
   const compares = pills.filter((p) => !p.main);
   const dimOf = (p: PillSpec): boolean => hoverSet != null && !hoverSet.has(p.key);
+  const mutedOf = (p: PillSpec): boolean => mutedKeys?.has(p.key) === true && !p.hidden;
   const hasMain = mainPill != null;
   const hasCompares = compares.length > 0;
 
@@ -527,7 +533,7 @@ function GroupBlock({
               <span>店铺<br />同步</span>
             </button>
           )}
-          <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} onToggle={onToggle} onHover={onHover} />
+          <PillUnit pill={mainPill} dimmed={dimOf(mainPill)} muted={mutedOf(mainPill)} onToggle={onToggle} onHover={onHover} />
         </div>
       )}
       {mainPill && compares.length > 0 && (
@@ -558,7 +564,7 @@ function GroupBlock({
             }}
           >
             {compares.map((p) => (
-              <PillUnit key={p.key} pill={p} dimmed={dimOf(p)} onToggle={onToggle} onHover={onHover} />
+              <PillUnit key={p.key} pill={p} dimmed={dimOf(p)} muted={mutedOf(p)} onToggle={onToggle} onHover={onHover} />
             ))}
           </div>
           {lane.overflow && (
@@ -608,6 +614,7 @@ export default function BrandLegendStrip({
   channelCtl,
   syncCtlOf,
   hideChannelBadges,
+  mutedKeys,
 }: {
   /** 按选择浮窗卡序归好的组（groupsOfCards 产出：主品在前 + 本卡对比；
    *  含被屏蔽者——药丸仍渲染为虚线置灰态，可点击恢复。合并多组时同一对比
@@ -632,11 +639,15 @@ export default function BrandLegendStrip({
    *  不渲染（取数口径 = 顶部全局平台筛选器，药丸上不再挂平台/店铺概念）。
    *  缺省 false = 迭代版/量价面板头不变 */
   hideChannelBadges?: boolean;
+  /** 区间量尺（2026-11-06 Eason）：选区态只留主品——这些药丸降到 .45 表示线暂不显示，
+   *  悬停仍可临时带出那条线；不影响点击隐藏/恢复 */
+  mutedKeys?: ReadonlySet<string>;
 }) {
   const blocks = groups.filter((g) => g.series.length > 0); // 全组缺数据的卡无药丸可显
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   // 第一百一十六轮：悬停只高亮该系列自身（不再联动其对标竞品/我司）
-  const hoverSet = hoverKey != null ? new Set([hoverKey]) : null;
+  // 区间量尺：选区态时悬停只用来带出那条线，药丸本身不再把其余药丸压暗
+  const hoverSet = hoverKey != null && !mutedKeys?.size ? new Set([hoverKey]) : null;
   // 悬停残留自愈（本轮体检）：药丸的 mouseleave 是悬停态唯一清理路径——悬停期间
   // 该系列因筛选/增删产品从集合消失时药丸直接卸载、mouseleave 不触发，整图会
   // 永久停留在错误降透明。键集变化后校验悬停键是否仍在，不在即清本地态并上报
@@ -680,6 +691,7 @@ export default function BrandLegendStrip({
                 group={g}
                 hiddenKeys={hiddenKeys}
                 hoverSet={hoverSet}
+                mutedKeys={mutedKeys}
                 onToggle={onToggleHidden}
                 onHover={hover}
                 channelCtl={channelCtl}

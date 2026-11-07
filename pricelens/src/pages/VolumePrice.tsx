@@ -97,7 +97,24 @@
 //   默认店铺/默认平台自动口径）。每产品选择项上的 platform 覆写字段不再被
 //   本页消费（价格走势页图例渠道 chip 语义不变）。
 // ============================================================
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+// 2026-11-06 量价同骨架（Eason 拍板，.impeccable/surfaces/range-ruler-volume-skeleton.md
+// 「量价走势」节）：每个面板（主品视图 + 组内对比分离面板）改用价格走势同款 <Chart>——
+// ①一条价格线（本面板产品，品牌色）+ 底部销量柱量带（恒开恒柱，volumeMode="bar"）；
+// ②拖选 = Chart 内建区间量尺（时间胶囊 + 区间极差/区间涨跌切换 + 每层量尺），
+//   选区全量桶下标存页面级 brushRange（brushInWindow 换算到各面板窗口），一份选区全面板
+//   共享；桶清单变化（粒度/国家/时间筛选）即清除；③档位带不画（showTiers=false）、
+//   不下钻（enableDrill=false）；④「销毛成本」开 + 我司面板：costs（marginCostOf.unitCost，
+//   隔离周断开）+ margins（悬停销毛率迷你卡），成本值并入面板 Y 轴再按价格页同款
+//   volPlan 压缩（量带 = 压缩前总高 30%）；竞品面板无成本无销毛；⑤名称带 nameZoneWidth
+//   （随面板产品名自适应）+ paneLabels 图层标注（价格 USD / 销量 台·模拟 / 成本·模拟）。
+// 随之退役：面板内 VolumeBars 覆盖层、PointerShield 指针承接层、PanelExtremeMarks、
+// 双 SpreadRangeCard 极差卡、页面级 PanelHoverTip / 周明细卡悬停读数（分离面板）、
+// CostBarChart 成本柱呈现、「销毛呈现方式」下垂柱/顶部销毛线 Segmented、面板内可点击
+// 图例行（legendOff）、共享 Y 轴列（SplitAxisColumn——每面板 Chart 自画轴）；「时间轴
+// 同步」开关移至工具行呈现槽。合并单图（MergedCompareChart）路径原样保留（含其图下
+// 明细卡行），库存 · DOS 卡、面板时间轨、胶囊带/收纳区、组页签、全局平台筛选器不变。
+// ============================================================
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Segmented } from 'antd';
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
@@ -110,12 +127,18 @@ import ChartContentBar from '../components/ChartContentBar';
 import BrandDot from '../components/BrandMark';
 import Chart from '../chart/PriceTrend/Chart';
 import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
-// 卡顶时间筛选簇在顶部筛选条。这里只取查看窗口说明行高度，用来对齐同步按钮。
-import SplitAxisColumn from '../chart/PriceTrend/SplitAxisColumn';
-import { collectTierValues, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
+// 区间量尺与量价同骨架（2026-11-06 Eason 拍板，见 .impeccable/surfaces/range-ruler-volume-skeleton.md）：
+// 读数方式（区间极差|区间涨跌）会话态 + 选区按全量桶下标存储、按面板查看窗口换算
+import { brushInWindow, type RangeMode } from '../chart/PriceTrend/rangeRuler';
+// 名称带自适应宽（nameZoneWidthOf）与曲线系列名（curveNameOf）与价格页同源
+import { curveNameOf, nameZoneWidthOf, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
 import {
+  BREAK_PX,
   GRID,
+  PANE_HEAD_H,
+  TICK_PX,
   adaptiveRangeOf,
+  axisTickTextsOf,
   computeYAxis,
   convertWindowIds,
   dataBucketRange,
@@ -125,48 +148,36 @@ import {
   perUsdOf,
   seriesSpanRange,
   shortBucketLabel,
-  splitAxisWidth,
-  yPxOf,
   type Bucket,
-  type StripGeom,
   type YScale,
 } from '../chart/PriceTrend/helpers';
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
 import { volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
-import type { Granularity, Series, SeriesPoint } from '../dataModel/types';
-import { brandColorOf, color, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
+import type { Series, SeriesPoint } from '../dataModel/types';
+import { brandColorOf, color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 import { flatSelections } from '../state/mainSelection';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
-import VolumeBars from './volume/VolumeBars';
-import CostBarChart, { COST_RATE_H, costRateAxisMaxOf } from './volume/CostBarChart';
 import MergedCompareChart, { type MergedCompareProduct } from './volume/MergedCompareChart';
 import InventoryDosCard from './volume/InventoryDosCard';
 import { inventoryDemoOf } from './volume/inventoryDemo';
-import PanelTimeTrack, { TRACK_BLOCK_H, TRACK_RAIL_H } from './volume/PanelTimeTrack';
+import PanelTimeTrack from './volume/PanelTimeTrack';
 import HiddenTray, { HiddenVault, type HiddenTrayItem } from './volume/HiddenTray';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
-import { marginCrossX } from './volume/marginCostGeometry';
-import SpreadRangeCard from './volume/SpreadRangeCard';
-import WeekDetailCard, { SuspectActions } from './volume/WeekDetailCard';
-import PanelExtremeMarks from './volume/PanelExtremeMarks';
-import PanelHoverTip from './volume/PanelHoverTip';
+import WeekDetailCard from './volume/WeekDetailCard';
 import MainControlBand, { GroupCompareEntry } from './volume/MainControlBand';
-import PointerShield from './volume/PointerShield';
-import { detailDateOf, weekDetailModel } from './volume/weekDetail';
-import { SPREAD_CARD_H, spreadCardEmptyModel, spreadCardModel, spreadCardRow } from './volume/spreadCards';
-import { commitVolumeAxisLimit, fitVolumeLimitsByKey, normalizePanelWindow, vMaxOf, volumeRangeOf, type VolumeAxisLimits, type VolumeSlot } from './volume/volumeAxis';
-import { niceCeil } from '../dataModel/volume';
-import { formatVolumeAmount, pricePointValid, rangeBandInView, rangeSpreadOf, resolveSelectedWindow, shouldUseWanUnits, volumePointValid } from './volume/periodSummary';
+import { weekDetailModel } from './volume/weekDetail';
+import { normalizePanelWindow, vMaxOf, type VolumeSlot } from './volume/volumeAxis';
+import { formatVolumeAmount, resolveSelectedWindow, shouldUseWanUnits } from './volume/periodSummary';
+import { STABLE } from '../appChannel';
 
 // 与价格走势分离卡片同一套：拖柄骑在上边线正中，上半凸出卡片；滚动区垫高避免裁切
 const PANEL_GRIP_H = 14;
 const SCROLL_PAD_TOP = 10;
-const PANEL_GRID_TOP = 14; // 面板图顶窄空气带（同分离模式）
-// 面板内图例元信息行定高（2026-11-02 Eason：0 刻度要对在 X 轴上）：图例 30 + 上下边距 4/8；
-// 共享轴列的上偏移必须把这一行算进去，否则轴刻度整体比绘图区高出 42px（两种呈现都受影响）
-const PANEL_META_ROW_H = 30;
-const PANEL_META_H = PANEL_META_ROW_H + 4 + 8;
+/** 面板图顶窄空气带（同价格页分离面板：刻度开 = 16，全关 = 8） */
+const Y_AXIS_TOP_BAND = 16;
+/** 量带高度占比（2026-11-06 同价格页 volPlan：量带 = 压缩前总高 × 30%） */
+const VOL_BAND_RATIO = 0.3;
 const LOAD_ERROR_HINT: ReactNode = (
   <>
     数据加载异常
@@ -174,44 +185,10 @@ const LOAD_ERROR_HINT: ReactNode = (
   </>
 );
 
-const CHART_GRID_LEFT = 8; // 图贴面板左缘：名称药丸已删，产品名在面板头
-const CHART_GRID_RIGHT = 78; // 右侧预留销量轴列（轴线 + 最高值输入框）
-
-/** 品牌色 → 半透明 rgba（成本柱图例/柱面用） */
-function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return `rgba(23, 23, 23, ${alpha})`;
-  return `rgba(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)}, ${alpha})`;
-}
-
-/** 粒度名词（周/月/季）：脚注与无障碍文案随粒度换字，不把「周」硬套在月/季视图 */
-const granNounOf = (granularity: Granularity): string => (granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季');
-
 /** 面板网格列模板（2026-11-05 整改1① 对位 single-source）：胶囊带行与面板网格
- *  必须由本函数取同一条字符串——同容器宽（trackWidth 内）、同模板、同 gap、
- *  同轴列偏移（lead），胶囊组逐格居中于其面板上方 */
+ *  必须由本函数取同一条字符串——同容器宽（trackWidth 内）、同模板、同 gap，
+ *  胶囊组逐格居中于其面板上方 */
 const panelGridCols = (count: number): string => `repeat(${Math.max(1, count)}, minmax(0, 1fr))`;
-
-/** 主图图例可点击项（2026-11-05 整改2）：aria-pressed + 隐藏态降透明（全站图例
- *  显隐语言 opacity .45，SuppLegend/WorkbenchLegend 同款），glyph 形态随各系列 */
-function LegendToggleItem(props: { label: string; off: boolean; onToggle: () => void; glyph: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={!props.off}
-      title={props.off ? `显示${props.label}` : `隐藏${props.label}`}
-      onClick={props.onToggle}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-        border: 'none', background: 'none', padding: 0, font: 'inherit', fontSize: 11, lineHeight: '14px',
-        color: 'inherit', cursor: 'pointer', opacity: props.off ? 0.45 : 1,
-      }}
-    >
-      {props.glyph}
-      {props.label}
-    </button>
-  );
-}
 
 interface SlotInfo {
   isOwn: boolean;
@@ -282,24 +259,16 @@ export default function VolumePrice() {
   //      产品清单/价格类型/币种变化清空（挂进下方 scaleResetKey 复位效果） ----
   const [hiddenPanels, setHiddenPanels] = usePageViewState<string[]>('volume.hiddenPanels', () => []);
   const hiddenSet = useMemo(() => new Set(hiddenPanels), [hiddenPanels]);
-  // 销毛成本开关（2026-11-02 Eason；2026-11-03 收口：经典带成本销毛带形态与
-  // 「经典 | 成本柱」呈现切换一并退役，开启即成本柱呈现）：
-  // 关 = 经典纯量价（折线 + 销量柱，无成本无销毛带，回到最初的量价图）；
-  // 开 = 成本柱呈现（柱高折后价 + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱）。
+  // 销毛成本开关（2026-11-06 量价同骨架改版：成本柱呈现退役——开 = 价格层叠成本面积
+  // （仅我司面板），悬停看销毛率迷你卡；关 = 纯价格线 + 销量柱）。
   // 组内对比下不允许显示销毛成本（对比时放在下方不合理）：强制关、开关禁用。会话态跨页保留
   const [showMargin, setShowMargin] = usePageViewState<boolean>('volume.showMargin', () => false);
   const marginLocked = safeViewMode.kind === 'group';
   const marginOn = showMargin && !marginLocked;
-  // 呈现方式（2026-11-03 五条反馈收口）：销毛成本开关 = 呈现总开关，「经典」形态退役——
-  // 开 = 成本柱呈现（柱高折后价 + 成本位置灰线 + 销量右轴细线 + 销毛率下垂柱），关 = 纯量价
-  const costbar = marginOn;
   const toggleMargin = (): void => {
     if (marginLocked) return;
     setShowMargin(!showMargin);
   };
-  // 销毛呈现二式（2026-11-04 Eason）：下垂柱（默认，下半区）| 顶部销毛线（平滑虚线 +
-  // 最高/最低/最新三点标值，不与价格/销量共用 Y 轴）。收进 ⋯ 菜单「呈现」行，会话态。
-  const [marginLineOn, setMarginLineOn] = usePageViewState<boolean>('volume.marginLine', () => false);
   // 面板呈现二式（2026-11-04 Eason，纯量价 + 组内对比限定）：分离面板（默认 = 现状）|
   // 合并单图（组内产品合并同一张图：销量面积叠层 + 折后价平滑线，内建量/价双轴）。
   // 会话态跨页保留；仅组内对比视图出切换槽（主品视图合并不适用）；销毛开（主品视图）
@@ -398,43 +367,19 @@ export default function VolumePrice() {
   const [sliderScale, setSliderScale] = usePageViewState<number>('volume.sliderScale', () => 1);
   const [yCompress, setYCompress] = usePageViewState<boolean>('volume.yCompress', () => false);
   const [showYTicks, setShowYTicks] = usePageViewState<boolean>('volume.showYTicks', () => true);
-  // 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立
-  const [showTiers, setShowTiers] = usePageViewState<boolean>('volume.showTiers', () => true);
-  // 成本柱呈现（销毛成本开启）下档位没有作用（2026-11-02 Eason），强制不画且不留
-  // 档位列空白；用户的档位开关设置只对经典量价生效
-  const effShowTiers = marginOn ? false : showTiers;
+  // 价格档位带开关（第一百九十三轮）：2026-11-06 量价同骨架拍板「档位带不画」——
+  // 本页面板恒 showTiers={false}，齿轮里的档位开关一并撤下（showTiersToggle={false}）
   const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('volume.lineShape', () => 'auto');
   // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 全面板共享悬停纵向位置（横向虚线）
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
   // 悬停页签比率：默认周环比（与价格看板同一默认）；会话态跨页保留（192 轮）
   const [tipMode, setTipMode] = usePageViewState<'discount' | 'wow'>('volume.tipMode', () => 'wow');
-  // ---- 主图图例显隐（2026-11-05 整改2）：图例项点击切换对应图表元素显隐，
-  //      隐藏态图例降透明（全站语言 opacity .45），会话态跨页保留。键空间：
-  //      经典 = 'discounted' | 'rrp' | 'volume'；销毛成本 = 'cbPrice' | 'cbCost'
-  //      | 'cbVolume' | 'cbMargin'。图例只切显隐，不重算轴（yCfg/costBarMax
-  //      仍按全量可见面板序列）----
-  const [legendOff, setLegendOff] = usePageViewState<Record<string, boolean>>('volume.legendOff', () => ({}));
-  const legendOffOf = useCallback((key: string): boolean => legendOff[key] === true, [legendOff]);
-  const toggleLegend = useCallback((key: string): void => {
-    setLegendOff((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, [setLegendOff]);
-  // 经典模式传给 Chart 的价格口径 = 全局筛选 ∩ 图例显隐（图例隐藏只影响本页图内
-  // 渲染，不回写全局 priceTypes——顶部筛选条的价格开关语义保持独立）
-  const classicPriceTypes = useMemo(
-    () => ({
-      ...state.priceTypes,
-      discounted: state.priceTypes.discounted && !legendOffOf('discounted'),
-      rrp: state.priceTypes.rrp && !legendOffOf('rrp'),
-    }),
-    [state.priceTypes, legendOffOf],
-  );
+  // 区间读数方式（2026-11-06 同价格页）：区间极差（默认）| 区间涨跌，会话态跨页保留
+  const [rangeMode, setRangeMode] = usePageViewState<RangeMode>('volume.rangeMode', () => 'extreme');
   const [crossY, setCrossY] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false); // 刷选拖动中冻结价格 Y 轴
   // 查看窗口 = 会话态跨页保留（与价格看板对齐；范围改动等失义路径照旧复位）
   const [windowIds, setWindowIds] = usePageViewState<[string, string] | null>('volume.windowIds', () => null);
-  // 销量轴限位按面板 key 存（2026-11-01 审计 P3）：删中间面板不再把限位平移到
-  // 下一张（原按下标存依赖 scaleResetKey 兜底复位）；成员变化由 fitVolumeLimitsByKey 收纳。
-  const [volumeLimits, setVolumeLimits] = useState<Record<string, VolumeAxisLimits>>({});
   // ---- 第119轮（走查会）：同步/非同步查看时间。同步 = 全部面板共用窗口（原行为）；
   //      非同步 = 每面板独立时间轴（panelWins 记各面板窗口，null = 未单独调整过）。
   //      两项均会话态跨页保留（P1-5）。2026-11-03：开关两视图通用——主产品视图
@@ -462,29 +407,19 @@ export default function VolumePrice() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [hoverIdxs, setHoverIdxs] = useState<(number | null)[]>(() => panelSpecs.map(() => null)); // 各面板悬停时间列（同步模式恒等）
-  const [geoms, setGeoms] = useState<(StripGeom | null)[]>(() => panelSpecs.map(() => null)); // 各面板绘图区横向几何
-  // ---- 图内拖选时间段：面板级高亮（brush = 已提交，brushLive = 拖动中实时预览）。
-  //      摘要卡与高亮区间同源；未拖选时回退到本图查看窗口。 ----
-  const [brushes, setBrushes] = useState<([number, number] | null)[]>(() => panelSpecs.map(() => null));
-  const [brushLive, setBrushLive] = useState<([number, number] | null)[]>(() => panelSpecs.map(() => null));
+  // ---- 图内拖选区间（2026-11-06 同价格页）：页面级一份选区，全面板共享；
+  //      存全量桶下标，喂面板前用 brushInWindow 换算到各自查看窗口（窗口外不显示）。
+  //      拖动中的实时预览由 Chart 内部处理，松手才提交到 brushRange ----
+  const [brushRange, setBrushRange] = useState<[number, number] | null>(null);
 
   // 面板数变化（顶部筛选器增删产品）→ 各面板态数组随动（保旧值补空位）；
-  // 换产品/价格类型/币种 → 价格高度倍率与销量轴限位复位（同看板 §5.6）
+  // 换产品/价格类型/币种 → 价格高度倍率复位（同看板 §5.6）
   useEffect(() => {
     const fit = <T,>(fill: T) => (prev: T[]): T[] => Array.from({ length: panelCount }, (_, i) => prev[i] ?? fill);
     setHoverIdxs(fit<number | null>(null));
-    setGeoms(fit<StripGeom | null>(null));
-    setBrushes(fit<[number, number] | null>(null));
-    setBrushLive(fit<[number, number] | null>(null));
     setPanelWins(fit<[number, number] | null>(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelCount]);
-  // 面板成员变化（增删/换成员，含同数置换）→ 销量轴限位表按 key 收纳（见上注）
-  const panelKeysSig = JSON.stringify(panelSpecs.map((p) => p.key));
-  useEffect(() => {
-    setVolumeLimits((prev) => fitVolumeLimitsByKey(prev, panelSpecs.map((p) => p.key)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelKeysSig]);
   // 换产品/价格类型/币种才复位。比较稳定键，而不是 panelSpecs 的数组引用：
   // 每次挂载引用都是新的，无条件 setSliderScale(1) 会覆写会话里的每格高度。
   const scaleResetKey = JSON.stringify([panelSpecs.map((p) => p.key), state.priceTypes, state.currency]);
@@ -496,7 +431,6 @@ export default function VolumePrice() {
     }
     scaleResetSeenRef.current = scaleResetKey;
     setSliderScale(1);
-    setVolumeLimits({});
     // 产品清单/价格类型/币种变化 → 隐藏集清空（与价格页 hiddenKeys 复位时机对齐）
     setHiddenPanels((prev) => (prev.length === 0 ? prev : []));
   }, [scaleResetKey, panelSpecs]);
@@ -662,33 +596,21 @@ export default function VolumePrice() {
     setSynced(!synced);
   };
 
-  // 查看窗口/粒度/同步切换 → 高亮时间段下标失义，自动清除（第118/119轮）
+  // 选区（2026-11-06 同价格页）：桶清单变化 = 下标失义，选区清掉
+  //（粒度换桶 / 国家换数 / 顶部时间筛选改窗口；面板独立窗口不触发——
+  // brushInWindow 换算后窗口外自然不显示，窗口拖回来选区还在）
   useEffect(() => {
-    setBrushes((prev) => prev.map(() => null));
-    setBrushLive((prev) => prev.map(() => null));
-  }, [win.s, win.e, state.granularity, timeSynced]);
+    setBrushRange(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buckets, cc, win.s, win.e]);
 
-  // 换产品清单（顶部筛选器增删产品）→ 悬停列/高亮段随面板重置；独立窗口按面板
+  // 换产品清单（顶部筛选器增删产品）→ 悬停列随面板重置；独立窗口按面板
   // 挂在数组下标上，中间删面板会错位串到下一张面板（2026-11-01 审查 P2），一并清。
   useEffect(() => {
     setHoverIdxs(panelSpecs.map(() => null));
-    setBrushes(panelSpecs.map(() => null));
-    setBrushLive(panelSpecs.map(() => null));
     setPanelWins(panelSpecs.map(() => null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelSpecs]);
-
-  // 非同步下面板独立调时间轴只动 effWins，不触发上面的整体清除（共享窗口未变）——
-  // 第一百二十五轮：按面板窗口签名精确清，只清窗口变了的面板（下标随窗口平移失义）
-  const effWinSigsRef = useRef<string[] | null>(null);
-  useEffect(() => {
-    const prev = effWinSigsRef.current;
-    const next = effWins.map(([s, e]) => `${s}:${e}`);
-    effWinSigsRef.current = next;
-    if (!prev || next.every((sig, i) => sig === prev[i])) return;
-    setBrushes((cur) => cur.map((b, i) => (next[i] === prev[i] ? b : null)));
-    setBrushLive((cur) => cur.map((b, i) => (next[i] === prev[i] ? b : null)));
-  }, [effWins]);
 
   // 窗口切片（同分离模式 sliceVis：含边缘续接标记）；非同步时各面板按各自窗口切
   const sliceVis = (list: Series[], s: number, e: number): Series[] => {
@@ -832,27 +754,12 @@ export default function VolumePrice() {
     return out;
   }, [visiblePanels, state.granularity, state.currency]);
 
-  // ---- 共享价格 Y 轴：可见面板系列并集算一次（步长滞回 + 刷选冻结）。
-  //      被隐藏面板不进并集（设计 §5.3：隐藏即退出并集、刻度收缩，与价格页口径一致） ----
+  // ---- 可见面板系列并集（2026-11-06 起只作名称带宽度与面板 Y 轴输入；
+  //      被隐藏面板不进并集，设计 §5.3：隐藏即退出并集、刻度收缩，与价格页口径一致） ----
   const visUnion = useMemo(
     () => panelViews.filter((p) => !hiddenSet.has(p.spec.key)).flatMap((p) => p.vis),
     [panelViews, hiddenSet],
   );
-  const scaleRef = useRef<YScale | null>(null);
-  const yCfg = useMemo(() => {
-    if (adjusting && scaleRef.current) return scaleRef.current;
-    const next = computeYAxis({
-      series: visUnion,
-      priceTypes: state.priceTypes,
-      sliderScale,
-      allowBreak: yCompress,
-      perUsd: perUsdOf(state.currency),
-      prev: scaleRef.current,
-    });
-    scaleRef.current = next;
-    return next;
-  }, [visUnion, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
-  const tierValues = useMemo(() => collectTierValues(visUnion, state.priceTypes), [visUnion, state.priceTypes]);
 
 
 
@@ -913,90 +820,100 @@ export default function VolumePrice() {
     }),
     [panelData, domainIds, effWins, cc],
   );
-  // 成本柱模式 $ 刻度：从 0 起，上限覆盖可见面板的折后价与成本（柱形语义需要 0 基线）。
-  // 友商不填模拟成本（marginCostAvailabilityOf = empty，与明细卡/经典成本带同口径）：
-  // 成本不进上限、图上也不画成本线与销毛率柱
-  const costBarMax = useMemo(() => {
-    let m = 0;
-    for (const panel of panelViews) {
-      if (hiddenSet.has(panel.spec.key)) continue;
-      for (const series of panel.vis) for (const pt of series.points) if (pt.price != null && pt.price > m) m = pt.price;
-      if (marginCostAvailabilityOf(panel.spec.isOwn, marginCosts[panel.idx] ?? []) === 'empty') continue;
-      for (const point of marginCosts[panel.idx] ?? []) if (point && point.unitCost > m) m = point.unitCost;
-    }
-    return m;
-  }, [panelViews, hiddenSet, marginCosts]);
-  const yCfgCost = useMemo(() => computeYAxis({
-    series: visUnion,
-    priceTypes: state.priceTypes,
-    sliderScale: 1,
-    allowBreak: false,
-    perUsd: perUsdOf(state.currency),
-    yMin: 0,
-    yMax: costBarMax > 0 ? niceCeil(costBarMax * 1.06) : undefined,
-  }), [visUnion, state.priceTypes, state.currency, costBarMax]);
-  // 成本柱销毛率共享轴上限（2026-11-02 Eason：下方左侧加销毛率轴）：可见面板最大销毛率
-  // 向上取整到 10% 档，所有面板同一比例——下垂深度可直接横向比较；隔离周不计
-  const costRateAxisMax = useMemo(() => {
-    const rates: number[] = [];
-    for (const panel of panelViews) {
-      if (hiddenSet.has(panel.spec.key)) continue;
-      if (marginCostAvailabilityOf(panel.spec.isOwn, marginCosts[panel.idx] ?? []) === 'empty') continue;
-      const pts = panel.vis[0]?.points;
-      (marginCosts[panel.idx] ?? []).forEach((mp, i) => {
-        if (mp && pts?.[i]?.suspect !== 'quarantined') rates.push(mp.marginRate);
+  // ---- 面板价格 Y 轴（2026-11-06 量价同骨架，算法与价格页 volPlan 同一）----
+  // 「销毛成本」开：可见我司面板的模拟成本折成合成序列并入轴输入（成本面积要可见）；
+  // 隔离周成本不进图（与旧呈现同口径），合成序列同位置置 null。
+  const costAxisSeries = useMemo<Series[]>(() => {
+    if (!marginOn) return [];
+    const out: Series[] = [];
+    for (const panel of visiblePanels) {
+      if (!panel.spec.isOwn) continue;
+      const pts = marginCosts[panel.idx] ?? [];
+      if (!pts.some((mp) => mp != null)) continue;
+      const visPts = panel.vis[0]?.points ?? [];
+      out.push({
+        key: `${panel.spec.key}::cost`,
+        isOwn: panel.spec.isOwn,
+        brand: panel.brand,
+        label: panel.name,
+        skuIds: panel.spec.skuIds,
+        color: panel.vis[0]?.color ?? brandColorOf(panel.brand),
+        points: visPts.map((pt, i) => ({
+          ...pt,
+          price: pts[i] && visPts[i]?.suspect !== 'quarantined' ? pts[i]!.unitCost : null,
+          rrp: null,
+        })),
       });
     }
-    return costRateAxisMaxOf(rates);
-  }, [panelViews, hiddenSet, marginCosts]);
-  const costRateTicks = useMemo(
-    () => (costRateAxisMax > 0
-      ? [
-        { y: COST_RATE_H / 2, text: `${Math.round(costRateAxisMax * 50)}%` },
-        { y: COST_RATE_H, text: `${Math.round(costRateAxisMax * 100)}%` },
-      ]
-      : []),
-    [costRateAxisMax],
+    return out;
+  }, [marginOn, visiblePanels, marginCosts]);
+  const axisInput = useMemo(
+    () => (marginOn ? [...visUnion, ...costAxisSeries] : visUnion),
+    [marginOn, visUnion, costAxisSeries],
   );
-  // 各图销量轴上限恒自动（niceCeil 窗口内最大值）
-  const panelVMax = volumes.map((vs) => vMaxOf(vs));
-  const onVolumeAxisLimit = (key: string, kind: 'max', value: number | null, autoMax: number): void => {
-    setVolumeLimits((prev) => ({ ...prev, [key]: commitVolumeAxisLimit(prev[key], kind, value, autoMax) }));
-  };
+  // 步长滞回 prev（同价格页）：窗口平移/价格小漂移不换档；拖时间轴中（adjusting）冻结
+  const scaleRef = useRef<YScale | null>(null);
+  const yCfg = useMemo(() => {
+    if (adjusting && scaleRef.current) return scaleRef.current;
+    const next = computeYAxis({
+      series: axisInput,
+      priceTypes: state.priceTypes,
+      sliderScale,
+      allowBreak: yCompress,
+      perUsd: perUsdOf(state.currency),
+      prev: scaleRef.current,
+    });
+    scaleRef.current = next;
+    return next;
+  }, [axisInput, state.priceTypes, sliderScale, adjusting, yCompress, state.currency]);
+  // 量带规划：量带 = 压缩前总高 × 30%，价格绘图区以有效 sliderScale 等比压缩
+  //（格值与步长不变，只改每格像素高）——与价格页合并图/分离面板同一算法同一比例
+  // 2026-11-07 稳定版三轮（Eason「标题还是不好」）：图层标题 head 版式——价格标题独占图顶一行，
+  // gridTop 计入 PANE_HEAD_H（同价格页）；演进版版式不变
+  const panelGridTop = (showYTicks ? Y_AXIS_TOP_BAND : 8) + (STABLE ? PANE_HEAD_H : 0);
+  const volPlan = useMemo<{ scale: YScale; volH: number }>(() => {
+    const breaks = yCfg.breaks.length * BREAK_PX;
+    const unit = yCfg.plotHeight - breaks; // cells × TICK_PX × sliderScale
+    const totalH0 = panelGridTop + yCfg.plotHeight + GRID.bottom;
+    const volH = Math.max(40, Math.round(totalH0 * VOL_BAND_RATIO));
+    if (unit <= 0) return { scale: yCfg, volH };
+    const targetPlot = Math.max(breaks + TICK_PX, yCfg.plotHeight - volH);
+    const sEff = Math.min(3, Math.max(0.5, ((targetPlot - breaks) / unit) * sliderScale));
+    return {
+      volH,
+      scale: computeYAxis({
+        series: axisInput,
+        priceTypes: state.priceTypes,
+        sliderScale: sEff,
+        allowBreak: yCompress,
+        perUsd: perUsdOf(state.currency),
+        prev: scaleRef.current,
+      }),
+    };
+  }, [yCfg, panelGridTop, sliderScale, axisInput, state.priceTypes, yCompress, state.currency]);
+  const yFinal = volPlan.scale;
+  const volH = volPlan.volH;
+  // 名称带自适应宽（2026-11-06 同价格页 nameZoneWidthOf）：按可见面板产品名取最长
+  const nameZoneW = useMemo(() => nameZoneWidthOf(visUnion.map((s) => curveNameOf(s))), [visUnion]);
+  // 左缘 = 轴列（仅刻度，档位带不画）+ 名称带；刻度文案自适应轴列宽（同价格页）
+  const yAxisTickTexts = useMemo(() => axisTickTextsOf(yFinal), [yFinal]);
+  const gridLeft = useMemo(
+    () => estGridLeft(state.currency, showYTicks, false, yAxisTickTexts, nameZoneW),
+    [state.currency, showYTicks, yAxisTickTexts, nameZoneW],
+  );
+
+  // 合并单图明细卡行仍按全量域摘要取数（分离面板明细卡已退役——时点读数走 Chart 悬停浮层）
   const summaryLive = orderedPanels.map((p) => {
     const [viewStart, viewEnd] = effWins[p.idx] ?? [0, 0];
-    // Chart 接收的是本图查看窗口切片，brush 下标从 0 开始；摘要使用全量
-    // domain 的序列，因此需要把拖选区间平移回全量桶下标。拖动中优先采用
-    // brushLive，让上方区间变化随着当前选择即时更新；没有高亮时沿用查看窗口。
-    const selectedBrush = brushLive[p.idx] ?? brushes[p.idx];
-    const [start, end] = resolveSelectedWindow(viewStart, viewEnd, selectedBrush);
+    const [start, end] = resolveSelectedWindow(viewStart, viewEnd, null);
     return {
       key: p.key,
-      failed: p.failed,
-      prices: (p.series[0]?.points ?? []).map((pt) => pt.price),
-      // 异常守卫（2026-11-01）：隔离标记随价格序列并行携带（可信链极差用）
-      suspects: (p.series[0]?.points ?? []).map((pt) => pt.suspect),
       volumes: summaryVolumes[p.idx] ?? [],
-      startId: domainIds[start],
-      endId: domainIds[end],
-      periodCount: Math.max(0, end - start + 1),
       windowStart: start,
       windowEnd: end,
     };
   });
   const summaryRows = summaryLive;
-
-  // 几何上报（面板头下拉与槽位选择已随第一百六十七轮退役）
-  const onGeomOf = (i: number) => (g: StripGeom | null): void => {
-    setGeoms((prev) => {
-      const cur = prev[i];
-      if (cur === g) return prev;
-      if (cur && g && cur.plotLeft === g.plotLeft && cur.plotWidth === g.plotWidth && cur.n === g.n) return prev;
-      const next = [...prev];
-      next[i] = g;
-      return next;
-    });
-  };
 
   // 面板独立窗口调整（非同步）：只动自己的生效窗口
   const onPanelWindowChange = (idx: number) => (s2: number, e2: number): void => {
@@ -1009,15 +926,6 @@ export default function VolumePrice() {
       if (timeSynced) return prev.every((x) => x === v) ? prev : prev.map(() => v);
       return prev.map((x, k) => (k === idx ? v : x));
     });
-  };
-  // 图内拖选时间段（第118轮）：同步 = 全面板联动；非同步 = 各面板独立高亮
-  const onBrushChangeOf = (idx: number) => (r: [number, number] | null, committing: boolean): void => {
-    if (committing) {
-      setBrushLive((prev) => prev.map(() => null));
-      setBrushes((prev) => (timeSynced ? prev.map(() => r) : prev.map((x, k) => (k === idx ? r : x))));
-    } else {
-      setBrushLive((prev) => (timeSynced ? prev.map(() => r) : prev.map((x, k) => (k === idx ? r : x))));
-    }
   };
 
   const setPriceType = (key: 'discounted' | 'rrp', val: boolean): void => {
@@ -1032,9 +940,9 @@ export default function VolumePrice() {
     setWindowIds([buckets[s].id, buckets[e].id]);
   };
 
-  /** 「时间轴同步」开关（第119轮走查会；第126轮移到共享轴列下方、与时间轴行齐平；
-   *  第148轮改名「时间轴同步」两行竖排、与整条时间轴块垂直居中；2026-11-03 起
-   *  主产品视图同款可见，语义两视图通用）：
+  /** 「时间轴同步」开关（第119轮走查会；第148轮改名「时间轴同步」两行竖排；
+   *  2026-11-03 起主产品视图同款可见，语义两视图通用；2026-11-06 共享轴列退役后
+   *  移驻工具行呈现槽，合并单图态不渲染——合并图自带完整 X 轴）：
    *  同步 = 各图查看同一段时间，拖任一图的时间轴全部联动；非同步 = 各图时间
    *  范围独立调整（用于对齐不同上市节奏产品的可比区间） */
   const syncToggle = (
@@ -1058,96 +966,32 @@ export default function VolumePrice() {
     </button>
   );
 
-  // 轴列到面板内容顶的引导距离：组内对比面板 = 滚动区垫高 + 1px 上边框 + 拖柄内边距
-  //（原漏算边框，组视图 0 刻度比基线高 1px）；阅读视图面板无边框无内边距 = 0
-  const panelLead = reading ? 0 : SCROLL_PAD_TOP + 1 + PANEL_GRIP_H;
-
-  // 面板渲染体前置（2026-11-02 布局重排）：明细卡要在面板行之前的独立明细行渲染，
-  // 故面板体先 map 成节点数组，明细卡元素收集进 detailCards 供明细行使用。
+  // 面板渲染体（2026-11-06 量价同骨架改版）：
+  // - 分离面板（主品视图 + 组内对比）= 价格走势同款 <Chart>：本面板产品价格线 +
+  //   底部销量柱量带 + 区间量尺拖选 + 名称带/图层标注；时点读数走 Chart 悬停浮层，
+  //   页面级明细卡/极差卡/指针承接层退役。
+  // - 合并单图：panelNodes 不渲染面板，仅用于收集各产品明细卡（该路径原样保留）。
   const detailCards = new Map<string, ReactNode>();
   const panelNodes = visiblePanels.map((p, panelIndex) => {
                       const pill = pillOf(p);
-                      const row = summaryRows.find((item) => item.key === p.key);
-                      // 合并单图（2026-11-04 Eason）：明细卡观察列跟随合并图共享窗口
-                      //（分离面板 = 各面板生效窗口，现状不变）
-                      const viewStart = mergedOn ? win.s : (effWins[p.idx]?.[0] ?? 0);
-                      const brush = brushLive[p.idx] ?? brushes[p.idx] ?? null;
-                      const ranged = brush != null && !!row && !row.failed;
-                      const windowLo = row ? Math.min(row.windowStart, row.windowEnd) : 0;
-                      const windowHi = row ? Math.max(row.windowStart, row.windowEnd) : -1;
-                      const volumeSlice = row ? row.volumes.slice(windowLo, windowHi + 1) : [];
-                      // 万单位档：区间内非空值全部 ≥1 万才开（混合量级开万档会把小值抹成「0万」）
-                      const volumeWan = shouldUseWanUnits(volumeSlice);
-                      const formatVolume = (value: number) => formatVolumeAmount(value, volumeWan);
-                      // 可信链极差（2026-11-01 异常守卫）：隔离周不进极差/标注尺；
-                      // 区间内有价格但全被隔离 → 空卡「区间内无可信价格」
-                      const trustedPrices = row
-                        ? row.prices.map((v, i) => (row.suspects[i] === 'quarantined' ? null : v))
-                        : [];
-                      const priceSliceHasAny = ranged && row
-                        ? row.prices.slice(windowLo, windowHi + 1).some(pricePointValid)
-                        : false;
-                      const priceSpread = ranged && row
-                        ? rangeSpreadOf(trustedPrices.slice(windowLo, windowHi + 1), pricePointValid)
-                        : null;
-                      const volumeSpread = ranged && row
-                        ? rangeSpreadOf(row.volumes.slice(windowLo, windowHi + 1), volumePointValid)
-                        : null;
-                      // rangeSpreadOf 恒返回对象（无可信点时 min/max/spread 为 null），
-                      // 可信极差判定必须看字段而不是对象真值——否则空卡分支不可达
-                      const priceCard = priceSpread?.min != null && priceSpread.spread != null
-                        ? spreadCardModel(priceSpread, (value) => formatPrice(Math.round(value), state.currency), '价格')
-                        : priceSliceHasAny
-                          ? spreadCardEmptyModel('价格')
-                          : null;
-                      const volumeCard = volumeSpread
-                        ? spreadCardModel(volumeSpread, formatVolume, '销量')
-                        : null;
-                      const priceBand = ranged && row
-                        ? rangeBandInView(trustedPrices, row.windowStart, row.windowEnd, viewStart, pricePointValid)
-                        : null;
-                      const volumeBand = ranged && row
-                        ? rangeBandInView(row.volumes, row.windowStart, row.windowEnd, viewStart, volumePointValid)
-                        : null;
-                      const strip = geoms[p.idx];
-                      // 阅读视图 = 全部华为面板，品牌红 × N 重复刺眼（2026-11-02 反馈）：改中性墨色系
-//（价线 = ink，柱/带 = 半透明浅墨，符合「灰白+墨+单蓝强调」配色铁律）；
-// 组内对比保留品牌色以区分竞品
-const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.brand));
-                      const cardRow = strip ? spreadCardRow(strip.plotLeft, strip.plotWidth) : null;
+                      if (mergedOn) {
+                      // ---- 合并单图：明细卡观察列跟随合并图共享窗口（原行为原样保留）----
+                      const mPts = (p.series[0]?.points ?? []).slice(win.s, win.e + 1);
+                      const viewLen = mPts.length;
+                      const activeIdx = viewLen > 0 ? Math.min(viewLen - 1, Math.max(0, mergedHover ?? viewLen - 1)) : null;
+                      const activePoint = activeIdx != null ? (mPts[activeIdx] ?? null) : null;
                       const marginPoints = marginCosts[p.idx] ?? [];
                       const marginUnavailable = marginCostAvailabilityOf(p.spec.isOwn, marginPoints) === 'empty';
-                      // ---- 观察列（demo：activeIndex）：悬停列 ?? 所选区间末周 ?? 窗口末桶。
-                      //      十字线、明细卡、销量柱/销毛柱高亮、成本点全部跟同一列。
-                      //      合并单图：观察列 = 合并图悬停列 ?? 窗口末桶（共享窗口切片）。
-                      const mPts = mergedOn ? (p.series[0]?.points ?? []).slice(win.s, win.e + 1) : null;
-                      const viewLen = mergedOn ? (mPts?.length ?? 0) : (strip?.n ?? p.vis[0]?.points.length ?? 0);
-                      const brushEnd = brush ? Math.max(brush[0], brush[1]) : null;
-                      const hoverSeed = mergedOn ? mergedHover : (hoverIdxs[p.idx] ?? brushEnd);
-                      const activeIdx = viewLen > 0
-                        ? Math.min(viewLen - 1, Math.max(0, hoverSeed ?? viewLen - 1))
-                        : null;
-                      const activePoint = activeIdx != null
-                        ? (mergedOn ? (mPts?.[activeIdx] ?? null) : (p.vis[0]?.points[activeIdx] ?? null))
-                        : null;
                       const marginPoint = activeIdx != null ? marginPoints[activeIdx] ?? null : null;
-                      // 隔离周成本不进图（与水位/成本柱两形态一致：价格不可信 → 成本不显示）
-                      const marginPointsMasked = p.vis[0]?.points
-                        ? marginPoints.map((mp, mi) => (p.vis[0]?.points[mi]?.suspect === 'quarantined' ? null : mp))
-                        : marginPoints;
-                      const crossX = strip && activeIdx != null ? marginCrossX(strip, activeIdx) : null;
-                      // ---- 图下单周明细卡：缺采显示 —，环比只跟上一桶比，不借用相邻值。
-                      //      上一桶取全量域（视图切片首桶的前一周在域内可能有值，
-                      //      按切片取会把窗口首周误显成缺采「—」）。
-                      // 环比对上一**可信**点（2026-11-01 异常守卫）：只跨隔离周回看
-                      //（缺采周仍显示 —，维持「不借用相邻周」的既有口径），跨过时
-                      // 明细卡环比旁加「跨 N 隔离周」小注
+                      // ---- 单周明细卡口径：缺采显示 —，环比只跟上一**可信**桶比
+                      //      （只跨隔离周回看，缺采周仍显示 —，不借用相邻值）。
+                      //      上一桶取全量域（视图切片首桶的前一周在域内可能有值）。
                       let prevTrustedPrice: number | null = null;
                       let wowSkip = 0;
                       const wowSkipBuckets: string[] = [];
                       if (activeIdx != null) {
                         const allPts = p.series[0]?.points ?? [];
-                        for (let k = viewStart + activeIdx - 1; k >= 0; k--) {
+                        for (let k = win.s + activeIdx - 1; k >= 0; k--) {
                           const pk = allPts[k];
                           if (pk == null) break;
                           if (pk.price == null) break; // 上一桶缺采：环比 —
@@ -1160,6 +1004,13 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                           break;
                         }
                       }
+                      const row = summaryRows.find((item) => item.key === p.key);
+                      const windowLo = row ? Math.min(row.windowStart, row.windowEnd) : 0;
+                      const windowHi = row ? Math.max(row.windowStart, row.windowEnd) : -1;
+                      const volumeSlice = row ? row.volumes.slice(windowLo, windowHi + 1) : [];
+                      // 万单位档：区间内非空值全部 ≥1 万才开（混合量级开万档会把小值抹成「0万」）
+                      const volumeWan = shouldUseWanUnits(volumeSlice);
+                      const formatVolume = (value: number) => formatVolumeAmount(value, volumeWan);
                       const detail = weekDetailModel({
                         granularity: state.granularity,
                         bucketId: activePoint?.bucketId ?? '',
@@ -1167,7 +1018,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                         price: activePoint?.price ?? null,
                         rrp: activePoint?.rrp ?? null,
                         prevPrice: prevTrustedPrice,
-                        volume: activeIdx != null ? (mergedOn ? (mergedVolumes[p.idx]?.[activeIdx] ?? null) : (volumes[p.idx]?.[activeIdx] ?? null)) : null,
+                        volume: activeIdx != null ? (mergedVolumes[p.idx]?.[activeIdx] ?? null) : null,
                         marginPoint,
                         marginUnavailable,
                         formatMoney: (value) => formatPrice(Math.round(value), state.currency),
@@ -1176,35 +1027,104 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                         wowSkipBuckets,
                         priceSuspect: activePoint?.suspect,
                       });
-                      // ---- 尺寸标注尺几何：价格尺在选区左侧、销量尺在选区右侧（demo 同位），
-                      //      水平引线从极值点引到尺，极值点画空心圆
-                      const slot = strip && strip.n > 0 ? strip.plotWidth / strip.n : 0;
-                      const xAt = (index: number): number => (strip?.plotLeft ?? 0) + slot * (index + 0.5);
-                      // 价格 Y 坐标换算随呈现走：经典 = 主图 yCfg（可断轴）；成本柱 =
-                      // yCfgCost（0 基线，极值点必须落在柱顶价格帽上，两种呈现同点位语义）
-                      const priceYOf = (value: number): number => yPxOf({
-                        gridLeft: CHART_GRID_LEFT,
-                        plotLeft: strip?.plotLeft ?? CHART_GRID_LEFT,
-                        plotTop: PANEL_GRID_TOP,
-                        plotWidth: strip?.plotWidth ?? 1,
-                        plotHeight: (costbar ? yCfgCost : yCfg).plotHeight,
-                        scale: costbar ? yCfgCost : yCfg,
-                        n: strip?.n ?? 1,
-                      }, value);
-                      const [volumeAxisMin, volumeAxisMax] = volumeRangeOf(volumeLimits[p.key] ?? { max: null }, panelVMax[p.idx] ?? 1);
-                      const volumeAxisSpan = Math.max(1, volumeAxisMax - volumeAxisMin);
-                      const volumeYOf = (value: number): number => {
-                        const ratio = Math.min(1, Math.max(0, (value - volumeAxisMin) / volumeAxisSpan));
-                        return PANEL_GRID_TOP + yCfg.plotHeight - ratio * yCfg.plotHeight;
-                      };
-                      const granNoun = granNounOf(state.granularity);
+                      // 异常守卫裁定回调：观察点打标时可用（明细卡内同名行）
+                      const canExempt = !!activePoint?.suspect && activePoint.suspect !== 'exempted' && activePoint.price != null;
+                      const canIsolate = activePoint?.suspect === 'pending' && activePoint.price != null;
+                      detailCards.set(
+                        p.spec.key,
+                        <WeekDetailCard
+                        model={detail}
+                        identity={
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
+                            {/* 单行身份胶囊：品牌点 + 产品名 + 配置 chip；点击 = 隐藏面板
+                                （暂存条可恢复）。className 保留 lpl-lg-pill——隐藏/恢复的
+                                焦点承接按它定位（panelPillHostRefs 消费处） */}
+                            <span ref={(el) => registerPanelPillHost(p.spec.key, el)} style={{ display: 'inline-flex', minWidth: 0, maxWidth: '100%' }}>
+                              <button
+                                type="button"
+                                className="lpl-lg-pill"
+                                title="点击隐藏该产品"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  hidePanel(p.spec.key);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  maxWidth: '100%',
+                                  padding: '3px 9px 3px 8px',
+                                  border: `1px solid ${color.hairline}`,
+                                  borderRadius: radius.pill,
+                                  background: color.canvas,
+                                  font: 'inherit',
+                                  minWidth: 0,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <BrandDot brand={p.brand} />
+                                <span
+                                  title={pill.text}
+                                  style={{
+                                    fontSize: 12,
+                                    lineHeight: '16px',
+                                    fontWeight: 600,
+                                    color: color.ink,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}
+                                >
+                                  {pill.nameText}
+                                </span>
+                                {pill.romText && (
+                                  <span
+                                    style={{
+                                      flexShrink: 0,
+                                      fontSize: 10,
+                                      lineHeight: '14px',
+                                      fontWeight: 600,
+                                      padding: '0 6px',
+                                      borderRadius: radius.pill,
+                                      color: selectSoftInk,
+                                      background: selectSoft,
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {pill.romText}
+                                  </span>
+                                )}
+                              </button>
+                            </span>
+                          </span>
+                        }
+                        summaryId={`volume-detail-${p.idx}`}
+                        showMargin={marginOn}
+                        onExempt={canExempt ? () => markPanelPoint(p, activePoint, 'exempt') : undefined}
+                        onIsolate={canIsolate ? () => markPanelPoint(p, activePoint, 'isolate') : undefined}
+                        />
+                      );
+                      return null; // 合并态不渲染分离面板
+                      }
+                      // ---- 分离面板（2026-11-06 价格走势同款 Chart 骨架）----
+                      const ws = effWins[p.idx]?.[0] ?? 0;
+                      const we = effWins[p.idx]?.[1] ?? 0;
+                      // 页面级选区 → 本面板查看窗口下标；窗口外不显示（窗口拖回来还在）
+                      const panelBrush = brushInWindow(brushRange, ws, we);
+                      // 线与柱用品牌色（spec 拍板；不再把主品视图压成中性墨）
+                      const seriesColor = p.vis[0]?.color ?? brandColorOf(p.brand);
+                      // 「销毛成本」开 + 我司面板：成本面积 + 悬停销毛率迷你卡。
+                      // 隔离周成本不进图（价格不可信 → 成本断开，同旧呈现口径）
+                      const visPts = p.vis[0]?.points ?? [];
+                      const marginMasked = marginOn && p.spec.isOwn
+                        ? (marginCosts[p.idx] ?? []).map((mp, mi) => (visPts[mi]?.suspect === 'quarantined' ? null : mp))
+                        : null;
+                      const costs = marginMasked?.map((mp) => (mp ? mp.unitCost : null)) ?? null;
+                      const hasCost = costs?.some((v) => v != null) === true;
                       // 面板根四边用长属性而非 border 简写：阅读态同元素仅设 borderLeft，
                       // 简写↔长属性在同一次重渲染间切换会触发 React 控制台混用警告（2026-11-01 控制台卫生）
                       const panelEdge = dropTarget === p.spec.key && draggingPanel !== p.spec.key ? color.link : color.hairline;
-                      // 异常守卫裁定回调（两视图同源）：观察点打标时可用。主品视图明细卡
-                      // 退役后在面板底部裁定行复用同一份（2026-11-03 改版），组视图仍在卡内
-                      const canExempt = !!activePoint?.suspect && activePoint.suspect !== 'exempted' && activePoint.price != null;
-                      const canIsolate = activePoint?.suspect === 'pending' && activePoint.price != null;
+                      const panelPadX = reading ? 12 : 8;
                       return (
                       <div
                         key={p.key}
@@ -1284,376 +1204,63 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                           <HolderOutlined style={{ fontSize: 10 }} />
                         </span>
                         )}
-                        {/* 图表元信息行（视觉 demo：chart-meta）：左 = 图例，右 = 所选区间
-                            胶囊（含清除）；无选区时右侧留空（拖动提示语已删，2026-11-02 Eason）。定高
-                            PANEL_META_ROW_H——共享轴列按同一常量上偏移，刻度才与绘图区对齐 */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: PANEL_META_ROW_H, overflow: 'hidden', padding: '0 4px', margin: '4px 0 8px' }}>
-                          {/* 图例（2026-11-05 整改2）：全部项可点击切换对应图表元素显隐
-                              （隐藏态降透明 = 全站图例语言）；状态存会话态 volume.legendOff */}
-                          <div role="group" aria-label="图例（点击切换元素显隐）" style={{ display: 'flex', alignItems: 'center', gap: 14, color: color.mute, fontSize: 11, lineHeight: '14px', flexWrap: 'nowrap', minWidth: 0, overflow: 'hidden' }}>
-                            {costbar ? (
-                              <>
-                                <LegendToggleItem
-                                  label="折后价"
-                                  off={legendOffOf('cbPrice')}
-                                  onToggle={() => toggleLegend('cbPrice')}
-                                  glyph={<span aria-hidden style={{ width: 10, height: 12, borderRadius: 1, background: hexToRgba(seriesColor, 0.15), boxShadow: `inset 0 0 0 1.5px ${seriesColor}` }} />}
-                                />
-                                <LegendToggleItem
-                                  label="成本"
-                                  off={legendOffOf('cbCost')}
-                                  onToggle={() => toggleLegend('cbCost')}
-                                  glyph={<span aria-hidden style={{ width: 14, height: 2, background: color.mute }} />}
-                                />
-                                <LegendToggleItem
-                                  label="销量"
-                                  off={legendOffOf('cbVolume')}
-                                  onToggle={() => toggleLegend('cbVolume')}
-                                  glyph={<span aria-hidden style={{ width: 14, height: 1.5, background: selectAccent }} />}
-                                />
-                                <LegendToggleItem
-                                  label={marginLineOn ? '销毛率（顶部线 · 标注最高/最低/最新）' : '销毛率（下垂）'}
-                                  off={legendOffOf('cbMargin')}
-                                  onToggle={() => toggleLegend('cbMargin')}
-                                  glyph={<span aria-hidden style={marginLineOn ? { width: 14, height: 0, borderTop: '2px dashed #f5a623' } : { width: 8, height: 10, borderRadius: 1, background: 'rgba(245, 166, 35, 0.32)' }} />}
-                                />
-                              </>
-                            ) : (
-                              <>
-                                {state.priceTypes.discounted && (
-                                  <LegendToggleItem
-                                    label="折后价"
-                                    off={legendOffOf('discounted')}
-                                    onToggle={() => toggleLegend('discounted')}
-                                    glyph={<span aria-hidden style={{ width: 16, height: 2, background: seriesColor }} />}
-                                  />
-                                )}
-                                {state.priceTypes.rrp && (
-                                  <LegendToggleItem
-                                    label="RRP"
-                                    off={legendOffOf('rrp')}
-                                    onToggle={() => toggleLegend('rrp')}
-                                    glyph={<span aria-hidden style={{ width: 16, height: 1, background: seriesColor, opacity: 0.85 }} />}
-                                  />
-                                )}
-                                <LegendToggleItem
-                                  label="销量"
-                                  off={legendOffOf('volume')}
-                                  onToggle={() => toggleLegend('volume')}
-                                  glyph={<span aria-hidden style={{ width: 8, height: 9, borderRadius: 1, background: seriesColor, opacity: 0.22 }} />}
-                                />
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        {/* 主图 + 成本销毛带同一相对容器：十字线贯穿两图（demo：crosshair） */}
-                        <div style={{ position: 'relative' }}>
-                        {/* 所选区间胶囊（含清除）：居中悬浮在所选区间顶部（2026-11-02 Eason：原放元信息行
-                            右上角太隐晦）；横向钳在绘图区内，zIndex 压过极差卡，可点 */}
-                        {ranged && brush && row && strip && (() => {
-                          const slot = strip.plotWidth / Math.max(1, strip.n);
-                          const lo = Math.min(brush[0], brush[1]);
-                          const hi = Math.max(brush[0], brush[1]);
-                          const half = 76;
-                          const cx = Math.min(strip.plotLeft + strip.plotWidth - half, Math.max(strip.plotLeft + half, strip.plotLeft + slot * ((lo + hi + 1) / 2)));
-                          return (
-                            <span
-                              className="tnum lpl-brush-capsule"
-                              style={{
-                                position: 'absolute', top: -2, left: cx, transform: 'translateX(-50%)', zIndex: 31,
-                                display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 24, padding: '2px 4px 2px 10px',
-                                border: '1px solid rgba(0, 112, 243, 0.35)', borderRadius: radius.pill,
-                                background: selectSoft, color: selectSoftInk, fontSize: 11, lineHeight: '16px',
-                                fontFamily: font.family, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
-                              }}
-                            >
-                              {detailDateOf(state.granularity, p.vis[0]?.points[lo]?.xLabel ?? '')} — {detailDateOf(state.granularity, p.vis[0]?.points[hi]?.xLabel ?? '')}
-                              <button
-                                type="button"
-                                aria-label="清除所选区间"
-                                title="清除所选区间"
-                                className="lpl-hit"
-                                onClick={() => onBrushChangeOf(p.idx)(null, true)}
-                                style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, padding: 0, border: 0, borderRadius: radius.pill, background: 'transparent', color: selectSoftInk, fontSize: 12, lineHeight: 1, cursor: 'pointer' }}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          );
-                        })()}
-                        {/* 双极差卡（2026-11-02 反馈④）：悬浮在图表顶部表面、不占布局高度——
-                            absolute 贴绘图区顶缘下让出胶囊一行，pointerEvents 关闭以免挡住下方拖选/悬停 */}
-                        {(priceCard?.visible || volumeCard?.visible) && strip && cardRow && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', width: strip.plotWidth, position: 'absolute', top: PANEL_GRID_TOP + 14, left: strip.plotLeft, zIndex: 30, pointerEvents: 'none' }}>
-                            {priceCard?.visible
-                              ? <SpreadRangeCard title="价格极差" accent={seriesColor} model={priceCard} style={{ width: cardRow.width }} />
-                              : <span />}
-                            {volumeCard?.visible
-                              ? <SpreadRangeCard title="销量极差" accent={seriesColor} model={volumeCard} style={{ width: cardRow.width }} />
-                              : <span />}
-                          </div>
-                        )}
-                          <div
-                            className="lpl-volume-stack"
-                            tabIndex={0}
-                            role="group"
-                            aria-label={`${p.name}量价与成本销毛对照图。左右方向键切换观察${granNoun}，拖动鼠标选择区间。`}
-                            aria-describedby={detail.visible ? `volume-detail-${p.idx}` : undefined}
-                            onKeyDown={(event) => {
-                              if (viewLen <= 0 || activeIdx == null) return;
-                              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-                              event.preventDefault();
-                              const next = event.key === 'Home'
-                                ? 0
-                                : event.key === 'End'
-                                  ? viewLen - 1
-                                  : event.key === 'ArrowLeft'
-                                    ? Math.max(0, activeIdx - 1)
-                                    : Math.min(viewLen - 1, activeIdx + 1);
-                              onHoverOf(p.idx)(next);
-                            }}
-                            style={{ position: 'relative' }}
-                          >
-                          {costbar ? (
-                            <CostBarChart
-                              geom={geoms[p.idx] ?? null}
-                              plotTop={PANEL_GRID_TOP}
-                              plotHeight={yCfgCost.plotHeight}
-                              yScale={yCfgCost}
-                              points={p.vis[0]?.points ?? []}
-                              costPoints={marginUnavailable ? [] : marginPointsMasked}
-                              volumes={volumes[p.idx]}
-                              volumeAxisMax={volumeAxisMax}
-                              rateAxisMax={costRateAxisMax}
-                              marginLineOn={marginLineOn}
-                              granularity={state.granularity}
-                              hidePrice={legendOffOf('cbPrice')}
-                              hideCost={legendOffOf('cbCost')}
-                              hideVolume={legendOffOf('cbVolume')}
-                              hideMargin={legendOffOf('cbMargin')}
-                              currency={state.currency}
-                              seriesColor={seriesColor}
-                              focusIdx={activeIdx}
-                              selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
-                              onGeom={onGeomOf(p.idx)}
-                              name={p.name}
-                              emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
-                            />
-                          ) : (
-                            <>
-                              <VolumeBars
-                                geom={geoms[p.idx] ?? null}
-                                plotTop={PANEL_GRID_TOP}
-                                plotHeight={yCfg.plotHeight}
-                                values={legendOffOf('volume') ? [] : volumes[p.idx]}
-                                vMax={panelVMax[p.idx]}
-                                color={seriesColor}
-                                hoverIdx={activeIdx}
-                                axisLimits={volumeLimits[p.key] ?? { max: null }}
-                                onAxisLimit={(kind, value) => onVolumeAxisLimit(p.key, kind, value, panelVMax[p.idx] ?? 1)}
-                                selectionBand={ranged && brush ? { startIndex: brush[0], endIndex: brush[1] } : null}
-                              />
-                              <Chart
-                                series={reading ? p.vis.map((series) => ({ ...series, color: seriesColor })) : p.vis}
-                            granularity={state.granularity}
-                            currency={state.currency}
-                            // 图例显隐只影响本图渲染（整改2）：经典价格线按 图例∩全局 口径，
-                            // 不回写顶部筛选条的 priceTypes
-                            priceTypes={classicPriceTypes}
-                            gridLeft={CHART_GRID_LEFT}
-                            gridRight={CHART_GRID_RIGHT}
-                            gridTop={PANEL_GRID_TOP}
-                            chrome={false}
-                            axisChrome={false}
-                            showYTicks={showYTicks}
-                            showTiers={showTiers}
-                            enableDrill={false}
-                            windowKey={`${effWins[p.idx][0]}:${effWins[p.idx][1]}:${p.key}`}
-                            yScale={yCfg}
-                            hideNamePills
-                            lineShape={lineShape}
-                            labelMode={labelMode}
-                            markExtremes={false}
-                            showXLabels
-                            crosshairY={crossY}
-                            externalCrosshair
-                            onGeom={onGeomOf(p.idx)}
-                            emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
-                          />
-                            </>
-                          )}
-                          {/* 指针承接层：悬停列 / 拖选区间 / 横向参考位统一从面板接管 */}
-                          {strip && !p.failed && viewLen > 0 && (
-                            <PointerShield
-                              plotLeft={strip.plotLeft}
-                              plotTop={PANEL_GRID_TOP}
-                              plotWidth={strip.plotWidth}
-                              plotHeight={yCfg.plotHeight}
-                              extraBottom={marginOn ? 60 : GRID.bottom}
-                              n={viewLen}
-                              onHover={onHoverOf(p.idx)}
-                              onBrush={onBrushChangeOf(p.idx)}
-                              onCrossY={setCrossY}
-                            />
-                          )}
-                          {/* 极值点标识（2026-11-01 晚反馈定稿；2026-11-03 扩展到成本柱呈现）：
-                              选中区间内标出价格最高/最低（同心双环）与销量最高/最低（白芯菱形）
-                              的位置——形状语言与价格走势页同源，两种呈现共用 PanelExtremeMarks；
-                              title 报「锚日 + 极值类别 + 数值」。点位可悬停（g 自带命中），svg
-                              根仍不承接指针；zIndex 5 需在指针承接层之上 title 才可达。
-                              经典呈现保留观察点空心圆；成本柱的观察点圆由 CostBarChart 自绘 */}
-                          {strip && ranged && slot > 0 && (
-                            <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 5, overflow: 'visible' }}>
-                              <PanelExtremeMarks
-                                priceBand={priceBand}
-                                volumeBand={volumeBand}
-                                priceSpreadValue={priceSpread?.spread ?? null}
-                                volumeSpreadValue={volumeSpread?.spread ?? null}
-                                xAt={xAt}
-                                priceYOf={priceYOf}
-                                volumeYOf={volumeYOf}
-                                seriesColor={seriesColor}
-                                formatPriceText={(value) => formatPrice(Math.round(value), state.currency)}
-                                formatVolumeText={formatVolume}
-                                labelOf={(index) => detailDateOf(state.granularity, p.vis[0]?.points[index]?.xLabel ?? '')}
-                              />
-                              {!costbar && activePoint?.price != null && activeIdx != null && (
-                                <circle cx={xAt(activeIdx)} cy={priceYOf(activePoint.price)} r={4} fill={color.canvas} stroke={seriesColor} strokeWidth={1.5} />
-                              )}
-                            </svg>
-                          )}
-                          {/* 悬停浮窗（2026-11-03 主品视图改版）：明细卡行退役后主品观察列的
-                              时点读数收进本浮窗（组视图仍走图下明细卡）。跟随悬停列、右缘左翻，
-                              无悬停不渲染；键盘 ←/→ 走悬停通路，读数经 aria-describedby 关联 */}
-                          {reading && strip && crossX != null && hoverIdxs[p.idx] != null && detail.visible && (
-                            <PanelHoverTip
-                              model={detail}
-                              showMargin={marginOn}
-                              x={crossX}
-                              plotLeft={strip.plotLeft}
-                              plotWidth={strip.plotWidth}
-                              // 选区激活时双极差卡悬浮在绘图区顶缘（top 14 + 高 92）：浮窗压到
-                              // 其下，避免同角重叠；无选区时贴绘图区顶空气带
-                              top={PANEL_GRID_TOP + (ranged ? SPREAD_CARD_H + 26 : 4)}
-                              summaryId={`volume-detail-${p.idx}`}
-                            />
-                          )}
-                          </div>
-                          {crossX != null && (
-                            <div aria-hidden style={{ position: 'absolute', left: Math.round(crossX) - 0.5, top: PANEL_GRID_TOP, bottom: 0, width: 1, background: color.hairlineStrong, pointerEvents: 'none', zIndex: 4 }} />
-                          )}
-                        </div>
-                        {/* 图下明细卡 = 组视图承载（2026-11-03 主品视图改版）：主品视图退役
-                            明细卡行，时点读数改走悬停浮窗；组视图明细卡仍是组内主参照，
-                            身份区 = 紧凑胶囊（点击隐藏，暂存条恢复）——原「同步店铺」钮与
-                            DNS 店铺 chip 已随 2026-11-05 平台口径收口退役（取价口径统一
-                            走顶部筛选条的全局平台筛选器）。「本组对比」入口在主品视图
-                            控制区，卡片不再挂 */}
-                        {/* 明细卡收集进 detailCards（JSX children 内的语句容器：
-                            IIFE 执行 set、渲染 null——set 的返回值是 Map，
-                            直接渲染会触发 React 对可迭代对象的展开报错） */}
-                        {(() => {
-                          if (reading) return null;
-                          detailCards.set(
-                            p.spec.key,
-                            <WeekDetailCard
-                            model={detail}
-                            identity={
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
-                                {/* 单行身份胶囊：品牌点 + 产品名 + 配置 chip；点击 = 隐藏面板
-                                    （暂存条可恢复）。className 保留 lpl-lg-pill——隐藏/恢复的
-                                    焦点承接按它定位（panelPillHostRefs 消费处） */}
-                                <span ref={(el) => registerPanelPillHost(p.spec.key, el)} style={{ display: 'inline-flex', minWidth: 0, maxWidth: '100%' }}>
-                                  <button
-                                    type="button"
-                                    className="lpl-lg-pill"
-                                    title="点击隐藏该产品"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      hidePanel(p.spec.key);
-                                    }}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 5,
-                                      maxWidth: '100%',
-                                      padding: '3px 9px 3px 8px',
-                                      border: `1px solid ${color.hairline}`,
-                                      borderRadius: radius.pill,
-                                      background: color.canvas,
-                                      font: 'inherit',
-                                      minWidth: 0,
-                                      cursor: 'pointer',
-                                    }}
-                                  >
-                                    <BrandDot brand={p.brand} />
-                                    <span
-                                      title={pill.text}
-                                      style={{
-                                        fontSize: 12,
-                                        lineHeight: '16px',
-                                        fontWeight: 600,
-                                        color: color.ink,
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                      }}
-                                    >
-                                      {pill.nameText}
-                                    </span>
-                                    {pill.romText && (
-                                      <span
-                                        style={{
-                                          flexShrink: 0,
-                                          fontSize: 10,
-                                          lineHeight: '14px',
-                                          fontWeight: 600,
-                                          padding: '0 6px',
-                                          borderRadius: radius.pill,
-                                          color: selectSoftInk,
-                                          background: selectSoft,
-                                          whiteSpace: 'nowrap',
-                                        }}
-                                      >
-                                        {pill.romText}
-                                      </span>
-                                    )}
-                                  </button>
-                                </span>
-                              </span>
-                            }
-                            summaryId={`volume-detail-${p.idx}`}
-                            showMargin={marginOn}
-                            onExempt={canExempt ? () => markPanelPoint(p, activePoint, 'exempt') : undefined}
-                            onIsolate={canIsolate ? () => markPanelPoint(p, activePoint, 'isolate') : undefined}
-                            />
-                          );
-                          return null;
-                        })()}
-                        {/* 主品视图异常守卫裁定行（2026-11-03）：明细卡退役后，待核对/被隔离
-                            观察点的「确认真实价格 / 标记异常」保留在面板底部——仅在观察点
-                            打标时出现，平时不占布局（组视图走明细卡内同名行，口径同源） */}
-                        {reading && (canExempt || canIsolate) && (
-                          <div style={{ margin: '6px 12px 0' }}>
-                            <SuspectActions
-                              suspect={activePoint?.suspect}
-                              onExempt={canExempt ? () => markPanelPoint(p, activePoint, 'exempt') : undefined}
-                              onIsolate={canIsolate ? () => markPanelPoint(p, activePoint, 'isolate') : undefined}
-                            />
-                          </div>
-                        )}
-                        {/* 脚注行已删（2026-11-02 Eason：图上不要解释性用语）；本图时间轴
-                            （第一百二十三轮起同步/非同步恒在，位置对齐绘图区左右缘）：
+                        {/* 价格走势同款 Chart 骨架（2026-11-06 量价同骨架）：本面板产品一条
+                            价格线（品牌色）+ 底部销量柱量带（恒开恒柱）+ 区间量尺拖选 +
+                            名称带/图层标注。悬停明细 = Chart 内建浮层（页面级明细卡/
+                            极差卡/指针承接层已随旧组合退役） */}
+                        <Chart
+                          series={p.vis}
+                          granularity={state.granularity}
+                          currency={state.currency}
+                          priceTypes={state.priceTypes}
+                          tipMode={tipMode}
+                          gridLeft={gridLeft}
+                          gridTop={panelGridTop}
+                          axisTickTexts={yAxisTickTexts}
+                          chrome={false} // 面板不渲染设置行：统管权在页面工具行（同价格页分离面板）
+                          showYTicks={showYTicks}
+                          showTiers={false} // 档位带不画（量价同骨架拍板）
+                          enableDrill={false}
+                          windowKey={`${ws}:${we}:${p.key}`}
+                          yScale={yFinal}
+                          nameZoneWidth={nameZoneW} // 名称带（刻度右→绘图区左、与线位对齐，同价格页）
+                          paneLabels // 图层标注：价格 USD / 销量 台·模拟（有成本时价格行写「价格 / 成本」）
+                          paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行、左缘对齐轴列
+                          tipDiffBaseKey={p.vis[0]?.key ?? null}
+                          margins={hasCost ? (marginMasked ?? undefined) : undefined} // 销毛迷你卡（我司）
+                          costs={hasCost ? (costs ?? undefined) : undefined} // 成本面积（我司；Y 轴已把成本算进来）
+                          volumeOn // 量带恒开、恒为柱（本页不提供「量」开关，同拍板）
+                          volumeMode="bar"
+                          volumeColor={seriesColor}
+                          volumes={volumes[p.idx]}
+                          volumeHeight={volH}
+                          volumeOwner={p.vis[0] ? { key: p.vis[0].key, brand: p.brand, text: curveNameOf(p.vis[0]) } : null}
+                          brush={panelBrush} // 页面级选区（全量桶下标 → 本面板窗口下标）
+                          onBrushChange={(r) => setBrushRange(r ? [r[0] + ws, r[1] + ws] : null)}
+                          rangeMode={rangeMode}
+                          onRangeMode={setRangeMode}
+                          rulerKey={p.vis[0]?.key ?? null} // 价格量尺量本面板产品线
+                          anomalyActions // 指针承接层退役后，隔离点裁定入口回归图上胶囊（同价格页）
+                          lineShape={lineShape}
+                          labelMode={labelMode}
+                          markExtremes={false}
+                          showXLabels
+                          crosshairY={crossY} // 横向虚线跨全部面板
+                          onCrosshairYMove={setCrossY}
+                          crosshairIdx={hoverIdxs[p.idx] ?? null} // 时间列联动（同步 = 全面板同列）
+                          onCrosshairMove={onHoverOf(p.idx)}
+                          emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
+                        />
+                        {/* 本图时间轴（同步/非同步恒在，左右缘对齐面板绘图区）：
                             同步 = 全图查看同一段时间，拖任一条同步调整；非同步 = 各图独立调整。
                             恒渲染保证切换同步只改联动行为，面板高度与轨道横向位置不变 */}
-                        <div style={{ margin: `12px ${CHART_GRID_RIGHT}px 6px 8px` }}>
+                        <div style={{ margin: `0 ${panelPadX + GRID.right}px 6px ${panelPadX + gridLeft}px` }}>
                           <PanelTimeTrack
                             ids={domainIds}
                             lo={filterBounds[0]}
                             hi={filterBounds[1]}
-                            s={timeSynced ? win.s : effWins[p.idx][0]}
-                            e={timeSynced ? win.e : effWins[p.idx][1]}
+                            s={timeSynced ? win.s : ws}
+                            e={timeSynced ? win.e : we}
                             granularity={state.granularity}
                             onChange={timeSynced ? onWindowChange : onPanelWindowChange(p.idx)}
                             onAdjusting={setAdjusting}
@@ -1719,7 +1326,7 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
       aria-pressed={marginOn}
       aria-label={marginOn ? '隐藏销毛成本' : '显示销毛成本'}
       aria-disabled={marginLocked || undefined}
-      title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：成本柱呈现；点击回到纯量价图' : '显示销毛成本：切到成本柱呈现'}
+      title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：价格层叠成本面积，悬停看销毛率；点击关闭' : '显示销毛成本：价格层叠成本面积，悬停看销毛率'}
       onClick={toggleMargin}
       style={{
         height: 24,
@@ -1777,9 +1384,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                   sliderScale={sliderScale}
                   onSliderScale={setSliderScale}
                   showYTicks={showYTicks}
-                  showTiers={marginOn ? true : showTiers}
-                  showTiersToggle={!marginOn}
-                  onShowTiers={setShowTiers}
+                  showTiers={false}
+                  showTiersToggle={false} // 档位带不画（2026-11-06 量价同骨架拍板），齿轮不再出档位开关
                   onShowYTicks={setShowYTicks}
                   yCompress={yCompress}
                   onYCompress={setYCompress}
@@ -1798,6 +1404,9 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                        原列位）；「全部恢复」并入收纳区。组视图不出（暂存条行为不变） */
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                       {marginCtl}
+                      {/* 「时间轴同步」（共享轴列退役后移驻工具行，紧随销毛成本）：
+                          合并单图自带完整 X 轴，开关随轴列一并隐藏 */}
+                      {!mergedOn && syncToggle}
                       {reading && vaultItems.length > 0 && (
                         <>
                           <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
@@ -1806,22 +1415,10 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                       )}
                     </div>
                   }
-                  /* 主品控制带（胶囊 + 本组对比入口）2026-11-04 下移到面板上方的
-                     胶囊带行（按面板位置对齐），不再占工具行 legend/compareEntry 槽 */
-                  presentationSlot={marginOn ? (
-                    <Segmented
-                      size="small"
-                      aria-label="销毛呈现方式"
-                      value={marginLineOn ? 'line' : 'bars'}
-                      onChange={(v) => setMarginLineOn(v === 'line')}
-                      options={[
-                        { label: '下垂柱', value: 'bars' },
-                        { label: '顶部销毛线', value: 'line' },
-                      ]}
-                    />
-                  ) : safeViewMode.kind === 'group' ? (
-                    // 纯量价 + 组内对比：面板呈现二式（2026-11-04 Eason）——分离面板（默认）
-                    // | 合并单图；主品视图不出本槽（合并仅组内对比适用）
+                  /* 呈现槽（2026-11-06 量价同骨架改版）：「销毛呈现方式」二式随成本柱
+                     退役；本槽仅组内对比出 分离面板|合并单图 切换（合并态保留以便切回）。
+                     主品控制带仍在面板上方的胶囊带行 */
+                  presentationSlot={safeViewMode.kind === 'group' ? (
                     <Segmented
                       size="small"
                       aria-label="面板呈现方式"
@@ -1895,20 +1492,15 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                 </div>
               )}
             </div>
-            {/* 面板区（2026-11-02 结构重排，Eason 三条反馈）：单一横滚容器内两行——
-                行 1 = 明细卡行：左侧按轴列宽留白（卡片左边不再有刻度），列宽与面板网格完全一致；
-                行 2 = [共享 Y 轴列（sticky 钉左）][面板网格]。>3 个面板时两行同一轨道宽
-                （N/3 × 可用宽）一起横滚、轴列钉住不动；轴刻度按「面板顶 + 图例行定高」对齐绘图区。
-                第一百二十六轮：轴列纵向撑满面板区，「同步」开关落列底、与各面板时间轴同一水平线。
-                第一百八十二轮：窄视口在卡内横向拖动（minWidth 880 保面板可读下限）。
-                全隐藏空态时不渲染轴列——computeYAxis 走 0-100 空数据兜底，默认刻度与空态并排反而误导 */}
+            {/* 面板区（2026-11-06 量价同骨架改版）：单一横滚容器，共享 Y 轴列退役——
+                每个面板 Chart 自画轴（刻度/名称带/量轴右列都在面板内），>3 个面板时
+                同一轨道宽（N/3 × 可用宽）横滚。窄视口在卡内横向拖动（minWidth 880
+                保面板可读下限）。合并单图仍自带完整 X 轴全宽呈现 */}
             {(() => {
-              const axisW = visibleCount > 0 ? splitAxisWidth(state.currency, showYTicks, effShowTiers) : 0;
-              const lead = axisW > 0 ? axisW + space.md : 0;
               const trackRatio = visibleCount > 0 ? visibleCount / Math.min(visibleCount, 3) : 1;
-              const trackWidth = `calc(${lead}px + ${trackRatio} * (100% - ${lead}px))`;
-              // 列模板 single-source（2026-11-05 整改1①）：明细卡行 / 胶囊带 / 面板网格
-              // 三处必须同一条字符串、同一个 gap——胶囊带逐格居中对齐的结构化保证
+              const trackWidth = `calc(${trackRatio} * 100%)`;
+              // 列模板 single-source（2026-11-05 整改1①）：胶囊带 / 面板网格
+              // 必须同一条字符串、同一个 gap——胶囊带逐格居中对齐的结构化保证
               const gridCols = panelGridCols(visibleCount);
               const gridGap = reading ? 0 : space.md;
               const emptyBoxStyle = {
@@ -1919,9 +1511,8 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                 border: `1px dashed ${color.hairline}`,
                 borderRadius: radius.card,
               };
-              // 明细卡行（组视图主参照）：分离/合并两呈现共用——合并态观察列跟随合并图。
-              // offset = 共享轴列宽偏移（2026-11-04 Eason 看图反馈：数据卡要与各面板
-              // 对齐——行起点 = 轴列宽 + 列距，与面板网格同一起点；合并单图无轴列 = 0）
+              // 明细卡行（合并单图专用，2026-11-06 起分离面板无明细卡）：合并态观察列
+              // 跟随合并图，卡片列与合并图产品同序
               const detailRow = (offset: number) => detailCards.size > 0 ? (
                 <div style={{ marginBottom: space.sm, marginLeft: offset }}>
                   <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: gridGap }}>
@@ -1942,11 +1533,10 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                     {/* 主品控制带行（2026-11-04 Eason 看图反馈；2026-11-05 整改1① 收口）：
                         胶囊组 + 「本组对比」入口按面板位置对齐——只放**可见面板**胶囊，
                         gridColumns = 可见面板数（panelGridCols 与面板网格同一条模板
-                        字符串）、同 gap、同轴列偏移（marginLeft lead），每个胶囊组
-                        居中于其面板正上方；隐藏产品在收纳区，恢复后回原列位。随面板
-                        横滚区一起滚动，列位恒对齐 */}
+                        字符串）、同 gap，每个胶囊组居中于其面板正上方；隐藏产品在收纳区，
+                        恢复后回原列位。随面板横滚区一起滚动，列位恒对齐 */}
                     {reading && panelCount > 0 && (
-                      <div style={{ marginBottom: space.sm, marginLeft: lead }}>
+                      <div style={{ marginBottom: space.sm }}>
                         <MainControlBand
                           items={mainBandItems}
                           entries={compareEntries}
@@ -2006,71 +1596,21 @@ const seriesColor = reading ? color.ink : (p.vis[0]?.color ?? brandColorOf(p.bra
                         />
                       </>
                     ) : (
-                      <>
-                        {/* 明细信息行：紧跟工具行，每面板一张明细卡正对其面板。
-                            （2026-11-03 Eason 反馈曾去轴列缩进；2026-11-04 看图反馈
-                            恢复对齐——行起点计入共享轴列宽 + 列距，卡片列与面板列
-                            逐列对齐） */}
-                        {detailRow(lead)}
-                        <div style={{ display: 'flex', alignItems: 'stretch', gap: space.md }}>
-                          <div
-                            style={{
-                              position: 'sticky',
-                              left: 0,
-                              zIndex: 3,
-                              flex: `0 0 ${axisW}px`,
-                              background: color.canvas,
-                              // 面板顶 → 图例元信息行（定高）→ 绘图区：轴列按同一常量上偏移，
-                              // 刻度与绘图区逐像素对齐（0 刻度落在成本柱 X 轴基线上）
-                              paddingTop: panelLead + PANEL_META_H,
-                              display: 'flex',
-                              flexDirection: 'column',
-                            }}
-                          >
-                            <SplitAxisColumn
-                              yScale={marginOn ? yCfgCost : yCfg}
-                              currency={state.currency}
-                              industry={state.industry}
-                              gridLeft={estGridLeft(state.currency, showYTicks, effShowTiers)}
-                              panelGridTop={PANEL_GRID_TOP}
-                              showYTicks={showYTicks}
-                              showTiers={effShowTiers}
-                              tierValues={tierValues}
-                              belowTicks={marginOn && !marginLineOn ? costRateTicks : undefined}
-                            />
-                            <div style={{ flex: 1 }} />
-                            {/* 与时间轴轨道带对中（2026-11-05 整改3）：开关承载盒复刻轨道带
-                                几何（同 TRACK_BLOCK_H 块 + marginBottom 6，承载盒 = top 0 /
-                                高 TRACK_RAIL_H 与 PanelTimeTrack 的 rail 同值），盒内 flex
-                                居中——按钮中心恒等于轨道带中心，不再依赖按钮自身高度
-                                （原 top -5 魔法数随高度漂移，已退役）；两侧行几何由常量
-                                保证（轨道下说明行已删，2026-11-02 Eason） */}
-                            {buckets.length > 0 && visUnion.length > 0 && (
-                              <div style={{ height: TRACK_BLOCK_H, marginBottom: 6, position: 'relative', flexShrink: 0 }}>
-                                <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: TRACK_RAIL_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {syncToggle}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          {/* 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
-                              均分一行；>3 个不折行，横向拖动查看（每格恒为视口 1/3 宽）。
-                              第一百九十一轮：渲染序 = 拖拽换位序（orderedPanels）；
-                              2026-11-01 显隐改版：渲染前按隐藏集过滤，列数按可见数重算 */}
-                          <div
-                            style={{
-                              flex: '1 1 0',
-                              minWidth: 0,
-                              display: 'grid',
-                              gridTemplateColumns: gridCols,
-                              gap: gridGap,
-                              padding: `${reading ? 0 : SCROLL_PAD_TOP}px 0 0`,
-                            }}
-                          >
-                            {panelNodes}
-                          </div>
-                        </div>
-                      </>
+                      /* 并排上限 3（第一百八十轮，Eason：与价格看板同规则）——≤3 个按个数
+                          均分一行；>3 个不折行，横向拖动查看（每格恒为视口 1/3 宽）。
+                          渲染序 = 拖拽换位序（orderedPanels）；渲染前按隐藏集过滤，
+                          列数按可见数重算。共享轴列已退役：每面板 Chart 自画轴 */
+                      <div
+                        style={{
+                          minWidth: 0,
+                          display: 'grid',
+                          gridTemplateColumns: gridCols,
+                          gap: gridGap,
+                          padding: `${reading ? 0 : SCROLL_PAD_TOP}px 0 0`,
+                        }}
+                      >
+                        {panelNodes}
+                      </div>
                     )}
                   </div>
                 </div>

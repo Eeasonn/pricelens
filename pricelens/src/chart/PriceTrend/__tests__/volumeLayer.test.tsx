@@ -15,6 +15,7 @@ import { buildVolumeMarks, VOL_MARK_H, volumeBarHeightOf } from '../chartModel';
 import Chart, { tipGroupPlacement } from '../Chart';
 import ChartToolbar from '../ChartToolbar';
 import { niceCeil } from '../../../dataModel/volume';
+import { volumeBandMaxOf } from '../rangeRuler';
 import type { Series } from '../../../dataModel/types';
 
 vi.mock('echarts/core', async () => await import('./echartsStub'));
@@ -98,8 +99,9 @@ describe('第196轮整改5：量层（价格绘图区下方 + 右轴）', () => 
     expect(Number(rects[0].getAttribute('width'))).toBeCloseTo(0.62 * colW, 5);
   });
 
-  it('右轴三档刻度随量层缩放（vMax=niceCeil(max)、vMax/2、0），仅量层开启出现', async () => {
-    const vMax = niceCeil(Math.max(...VOLUMES.filter((v): v is number => v != null)));
+  it('右轴三档刻度随量层缩放（vMax=volumeBandMaxOf(max) 细档取整、vMax/2、0），仅量层开启出现', async () => {
+    // 2026-11-06 Eason 拍板「收紧」：量带上限改细档取整（原 niceCeil 会把 4,582 取到 10,000）
+    const vMax = volumeBandMaxOf(Math.max(...VOLUMES.filter((v): v is number => v != null)));
     const { container } = render(<Chart {...baseProps} volumeOn volumes={VOLUMES} volumeHeight={120} /> as ReactElement);
     await waitForGeom(container);
     expect(screen.getByText(vMax.toLocaleString('en-US'))).toBeTruthy();

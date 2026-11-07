@@ -22,6 +22,10 @@ import { getFxRate } from '../../state/fx';
 /** grid 固定边距：top 预留钉顶附框行（§6.2 附框钉在绘图区上方同一水平线） */
 export const GRID = { top: 78, bottom: 40, right: 24 } as const; // bottom 含大促图标专用行 22px + 轴标签（第四十七轮）
 
+/** 图层标题行高（2026-11-07 稳定版三轮，Eason「标题还是不好」）：标题版式 head 时，
+ *  价格标题独占图顶一行——调用方把它计入 gridTop（共享轴列按同一 gridTop 对齐） */
+export const PANE_HEAD_H = 20;
+
 /** §6.6 每格像素间距恒定（高度自适应的基准）。
  *  第十二轮 46→92：×1.0 倍率下刻度密度降一倍（同高约半数刻度，如 60K~110K 直接 10K 一档），
  *  伸缩滑杆 ×0.5 即旧版 ×1.0 的密度；

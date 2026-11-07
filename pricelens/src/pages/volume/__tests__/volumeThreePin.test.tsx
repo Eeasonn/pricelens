@@ -1,18 +1,16 @@
 // ============================================================
-// 量价页 · 2026-11-05 三针整改组装测试（Eason 看图反馈）：
-// 整改1 胶囊带逐格居中对齐 + HiddenVault 收纳区——胶囊带列模板/gap/轴列偏移
-//   与面板网格逐项相等（inline style 契约，single-source panelGridCols）；隐藏
-//   产品从胶囊带移入「销毛成本」右侧收纳区，点击恢复回原列位；主品视图无暂存条；
-// 整改2 主图图例可点击显隐——经典/销毛成本两模式图例项 aria-pressed 翻转、
-//   对应元素整组消失（经典销量柱 / 成本柱销毛率下垂柱）、会话态跨挂载保留；
-// 整改3 时间轴同步按钮与轨道带结构化对中——开关承载盒 = 轨道带同几何常量
-//   （TRACK_BLOCK_H/TRACK_RAIL_H），按钮中心 = 轨道带中心；库存 · DOS 卡 X 标签
-//   = shortBucketLabel 日历周格式（2026Wxx，不再是周三 MM-DD）。
+// 量价页 · 量价同骨架组装测试（2026-11-06 Eason 拍板，替换旧「三针整改」断言）：
+// 同骨架 = 每个面板渲染价格走势同款 <Chart>：本面板产品价格线 + 底部销量柱量带
+//   （恒开恒柱）+ 名称带图层标注（价格 USD / 销量 台·模拟）+ 区间量尺拖选入参；
+// 「销毛成本」开 = 我司面板价格层叠成本面积（cost-area svg + 成本·模拟药丸），
+//   关 = 纯价格线 + 销量柱；旧面板内可点击图例行 / 成本柱呈现 / 极差卡随之退役；
+// 「时间轴同步」开关移驻工具行（销毛成本之后，共享轴列退役）；隐藏收纳区
+//   （HiddenVault）与胶囊带对位契约、库存 · DOS 卡 X 标签保持原断言。
 // 组装模式照 volumeTimeSync.test.tsx（mock echarts + ResizeObserver 定宽）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('echarts/core', () => ({
   use: vi.fn(),
@@ -48,9 +46,6 @@ class ResizeObserverStub {
 (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
 
 import App from '../../../App';
-import { TRACK_BLOCK_H, TRACK_RAIL_H } from '../PanelTimeTrack';
-import { splitAxisWidth } from '../../../chart/PriceTrend/helpers';
-import { space } from '../../../theme/tokens';
 
 afterEach(cleanup);
 
@@ -71,16 +66,27 @@ afterAll(() => {
   delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
 });
 
-const viewStateRaw = (key: string): string | null => {
-  try {
-    return sessionStorage.getItem(`LPL3.view.${key}`);
-  } catch {
-    return null;
-  }
-};
+const bandRoot = (): HTMLElement => screen.getByRole('group', { name: '产品显示与隐藏' }) as HTMLElement;
+const bandHost = (): HTMLElement => bandRoot().parentElement as HTMLElement;
+const panelEls = (): HTMLElement[] => Array.from(document.querySelectorAll('.lpl-volume-panel')) as HTMLElement[];
+const panelGrid = (): HTMLElement => panelEls()[0]?.parentElement as HTMLElement;
+const bandPills = (): HTMLButtonElement[] =>
+  Array.from(bandRoot().querySelectorAll('button.lpl-lg-pill')) as HTMLButtonElement[];
+const vaultChips = (): HTMLButtonElement[] =>
+  Array.from(document.querySelectorAll('button[aria-label^="恢复显示"]')) as HTMLButtonElement[];
+/** 两侧 gap 的 jsdom 归一（面板网格用 gap 简写、胶囊带用 columnGap 长属性） */
+const gapOf = (el: HTMLElement): string => el.style.columnGap || el.style.gap || '0px';
 
-// 主品视图默认币种 = usd、Y 刻度线开、档位带开 → 轴列宽 = splitAxisWidth('usd', true, true)
-const expectedLead = `${splitAxisWidth('usd', true, true) + space.md}px`;
+/** 对位契约：胶囊带行与面板网格同容器宽（同父 trackWidth 内）、同模板、同 gap
+ *  （共享轴列退役后面板区无左侧偏移，胶囊带 marginLeft 为空） */
+const expectBandAlignedWithPanels = (): void => {
+  expect(bandHost().style.marginLeft).toBe('');
+  expect(bandRoot().style.gridTemplateColumns).toBe(panelGrid().style.gridTemplateColumns);
+  expect(gapOf(bandRoot())).toBe(gapOf(panelGrid()));
+  expect(panelEls().length).toBeGreaterThan(0);
+  // 逐格数量一致：胶囊组数 = 可见面板数（隐藏产品不占带内格）
+  expect(bandPills().length).toBe(panelEls().length);
+};
 
 /** 注入两张主品卡（RU/phone 各有数据的双面板场景），撑起多列对位断言 */
 const seedTwoMains = (): void => {
@@ -102,46 +108,33 @@ const seedTwoMains = (): void => {
   });
 };
 
-const bandRoot = (): HTMLElement => screen.getByRole('group', { name: '产品显示与隐藏' }) as HTMLElement;
-const bandHost = (): HTMLElement => bandRoot().parentElement as HTMLElement;
-const panelEls = (): HTMLElement[] => Array.from(document.querySelectorAll('.lpl-volume-panel')) as HTMLElement[];
-const panelGrid = (): HTMLElement => panelEls()[0]?.parentElement as HTMLElement;
-const bandPills = (): HTMLButtonElement[] =>
-  Array.from(bandRoot().querySelectorAll('button.lpl-lg-pill')) as HTMLButtonElement[];
-const vaultChips = (): HTMLButtonElement[] =>
-  Array.from(document.querySelectorAll('button[aria-label^="恢复显示"]')) as HTMLButtonElement[];
-const legendGroupFirst = (): HTMLElement =>
-  (screen.getAllByRole('group', { name: '图例（点击切换元素显隐）' })[0] as HTMLElement);
-/** 两侧 gap 的 jsdom 归一（面板网格用 gap 简写、胶囊带用 columnGap 长属性） */
-const gapOf = (el: HTMLElement): string => el.style.columnGap || el.style.gap || '0px';
-
-/** 对位契约：胶囊带行与面板网格同容器宽（同父 trackWidth 内）、同模板、同 gap、同轴列偏移 */
-const expectBandAlignedWithPanels = (): void => {
-  expect(bandHost().style.marginLeft).toBe(expectedLead);
-  expect(bandRoot().style.gridTemplateColumns).toBe(panelGrid().style.gridTemplateColumns);
-  expect(gapOf(bandRoot())).toBe(gapOf(panelGrid()));
-  expect(panelEls().length).toBeGreaterThan(0);
-  // 逐格数量一致：胶囊组数 = 可见面板数（隐藏产品不占带内格）
-  expect(bandPills().length).toBe(panelEls().length);
+const waitPanelsReady = async (): Promise<HTMLElement[]> => {
+  await waitFor(() => {
+    expect(panelEls().length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-testid="pane-label-price"]')).toBeTruthy();
+  });
+  return panelEls();
 };
 
-describe('量价页 · 三针整改（2026-11-05）', () => {
+describe('量价页 · 量价同骨架（2026-11-06）', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/?p=volume');
     sessionStorage.clear();
     filtersSeed = null; // 每例回到默认选品；需要双面板的用例自行 seedTwoMains()
   });
 
-  // ---- 整改1①：胶囊带与面板网格逐格严格居中对齐（结构化对位契约） ----
+  // ---- 胶囊带与面板网格逐格对位（整改1 契约保留） ----
 
-  it('整改1：胶囊带行 = 面板网格同模板/同 gap/同轴列偏移（inline style 逐项相等）', () => {
+  it('胶囊带行 = 面板网格同模板/同 gap（inline style 逐项相等）', async () => {
     render(<App />);
+    await waitPanelsReady();
     expectBandAlignedWithPanels();
   });
 
-  it('整改1：隐藏面板后两侧列模板同步收缩、对位契约仍成立；恢复后胶囊回原列位（双面板场景）', () => {
+  it('隐藏面板后两侧列模板同步收缩、对位契约仍成立；恢复后胶囊回原列位（双面板场景）', async () => {
     seedTwoMains();
     render(<App />);
+    await waitPanelsReady();
     expect(panelEls().length).toBe(2);
     expectBandAlignedWithPanels();
     const before = panelGrid().style.gridTemplateColumns;
@@ -160,8 +153,9 @@ describe('量价页 · 三针整改（2026-11-05）', () => {
     expect(vaultChips().length).toBe(0);
   });
 
-  it('整改1：主品视图不再渲染「已隐藏（N）」暂存条；收纳区在「销毛成本」按钮之后', () => {
+  it('主品视图不渲染「已隐藏（N）」暂存条；收纳区在「销毛成本」按钮之后', async () => {
     render(<App />);
+    await waitPanelsReady();
     fireEvent.click(bandPills()[0]);
     expect(screen.queryByText(/已隐藏（1）：/)).toBeNull(); // 暂存条只在组视图
     // 收纳区紧跟销毛成本按钮（同一 priceTypesAfter 簇，DOM 序在其后）
@@ -172,92 +166,70 @@ describe('量价页 · 三针整改（2026-11-05）', () => {
     expect(clusterChildren.indexOf(marginBtn)).toBeLessThan(clusterChildren.indexOf(vaultChips()[0].closest('[role="group"]') as HTMLElement));
   });
 
-  // ---- 整改2：主图图例可点击显隐（经典 + 销毛成本，会话态保留） ----
+  // ---- 同骨架：面板 = 价格走势同款 Chart（量带恒开恒柱 + 图层标注） ----
 
-  it('整改2（经典）：销量图例点击 → 对应销量柱整组消失、aria-pressed 翻转、会话态落盘', () => {
+  it('每面板渲染价格走势同款 Chart：量带恒开（柱）+ 图层标注（价格 / 销量·模拟）', async () => {
     render(<App />);
-    const barsCount = (): number =>
-      panelEls().reduce((acc, panel) => acc + panel.querySelectorAll('svg rect').length, 0);
-    expect(barsCount()).toBeGreaterThan(0);
-    const volBtn = Array.from(legendGroupFirst().querySelectorAll('button')).find((b) => b.textContent === '销量');
-    expect(volBtn?.getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(volBtn!);
-    expect(volBtn?.getAttribute('aria-pressed')).toBe('false');
-    expect(barsCount()).toBe(0); // VolumeBars values=[] → 销量柱整组消失
-    expect(viewStateRaw('volume.legendOff')).toContain('"volume":true');
+    const panels = await waitPanelsReady();
+    for (const panel of panels) {
+      // 名称带列顶部图层标注：价格层（币种代码）+ 销量层（台 + 模拟徽标）
+      const priceLabel = panel.querySelector('[data-testid="pane-label-price"]');
+      expect(priceLabel?.textContent).toContain('价格');
+      expect(priceLabel?.textContent).toContain('USD');
+      const volLabel = panel.querySelector('[data-testid="pane-label-volume"]');
+      expect(volLabel?.textContent).toContain('销量');
+      expect(volLabel?.textContent).toContain('模拟');
+    }
+    // 量带恒为柱：面板内 svg rect（柱模式）恒有——本页不提供「量」开关
+    const bars = panels.reduce((acc, p) => acc + p.querySelectorAll('svg rect').length, 0);
+    expect(bars).toBeGreaterThan(0);
+    // 旧面板内可点击图例行（legendOff）已退役
+    expect(screen.queryByRole('group', { name: '图例（点击切换元素显隐）' })).toBeNull();
   });
 
-  it('整改2（经典）：图例显隐跨挂载保留（会话态恢复）', () => {
+  it('销毛成本开 → 我司面板出成本面积与成本·模拟药丸；关 → 不出', async () => {
     render(<App />);
-    const volBtn = Array.from(legendGroupFirst().querySelectorAll('button')).find((b) => b.textContent === '销量');
-    fireEvent.click(volBtn!);
-    cleanup();
-    render(<App />);
-    const volBtn2 = Array.from(legendGroupFirst().querySelectorAll('button')).find((b) => b.textContent === '销量');
-    expect(volBtn2?.getAttribute('aria-pressed')).toBe('false');
-  });
-
-  it('整改2（销毛成本）：四项图例逐一切换；销毛率关 → 琥珀下垂柱整组消失', () => {
-    render(<App />);
+    await waitPanelsReady();
+    // 默认关：无成本面积、无成本药丸
+    expect(document.querySelector('[data-testid="cost-area"]')).toBeNull();
+    expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
+    // 开：价格层叠成本面积（品牌色渐变 path）+ 名称带「成本 · 模拟」药丸
     fireEvent.click(screen.getByRole('button', { name: '显示销毛成本' }));
-    const legend = legendGroupFirst();
-    const labels = Array.from(legend.querySelectorAll('button')).map((b) => b.textContent);
-    expect(labels).toEqual(['折后价', '成本', '销量', '销毛率（下垂）']);
-    const marginBtn = Array.from(legend.querySelectorAll('button')).find((b) => b.textContent?.startsWith('销毛率'));
-    const amberRects = (): number =>
-      panelEls().reduce((acc, panel) => acc + Array.from(panel.querySelectorAll('svg rect')).filter((r) => (r.getAttribute('fill') || '').includes('245, 166, 35')).length, 0);
-    expect(amberRects()).toBeGreaterThan(0);
-    fireEvent.click(marginBtn!);
-    expect(marginBtn?.getAttribute('aria-pressed')).toBe('false');
-    expect(amberRects()).toBe(0);
-    expect(viewStateRaw('volume.legendOff')).toContain('"cbMargin":true');
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="cost-area"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="cost-pill"]')).toBeTruthy();
+    });
+    expect(document.querySelector('[data-testid="cost-pill"]')?.textContent).toContain('模拟');
+    // 价格图层标注随成本出现改写为「价格 / 成本」
+    expect(document.querySelector('[data-testid="pane-label-price"]')?.textContent).toContain('成本');
+    // 关：成本面积整组消失
+    fireEvent.click(screen.getByRole('button', { name: '隐藏销毛成本' }));
+    await waitFor(() => expect(document.querySelector('[data-testid="cost-area"]')).toBeNull());
+    expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
   });
 
-  it('整改2（销毛成本）：成本图例关 → 成本灰线整组消失，价格柱不受影响', () => {
-    render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: '显示销毛成本' }));
-    const costBtn = Array.from(legendGroupFirst().querySelectorAll('button')).find((b) => b.textContent === '成本');
-    fireEvent.click(costBtn!);
-    const costLines = panelEls().flatMap((panel) => Array.from(panel.querySelectorAll('svg line')) as SVGLineElement[])
-      .filter((l) => l.getAttribute('stroke') === '#737373' && l.getAttribute('stroke-width') === '2');
-    expect(costLines.length).toBe(0);
-    // 主品阅读视图系列色 = 中性墨（171717）：柱面 fill = rgba(23, 23, 23, 0.15)
-    const priceBars = panelEls().flatMap((panel) => Array.from(panel.querySelectorAll('svg rect')) as SVGRectElement[])
-      .filter((r) => (r.getAttribute('fill') || '').includes('23, 23, 23, 0.15'));
-    expect(priceBars.length).toBeGreaterThan(0);
-  });
+  // ---- 时间轴同步开关移驻工具行（共享轴列退役） ----
 
-  // ---- 整改3：时间轴同步按钮与轨道带结构化对中 + X 轴格式审计 ----
-
-  it('整改3：同步按钮承载盒 = 轨道带同几何（同块高/同 marginBottom/承载盒 = rail 高），按钮中心 = 轨道带中心', () => {
+  it('时间轴同步开关在工具行（销毛成本之后），默认开；合并单图态隐藏', async () => {
     render(<App />);
+    await waitPanelsReady();
     const btn = screen.getByRole('button', { name: '时间轴同步' }) as HTMLElement;
-    const overlay = btn.parentElement as HTMLElement; // 承载盒：top 0 / 高 TRACK_RAIL_H，flex 居中
-    const box = overlay.parentElement as HTMLElement; // 轨道块：高 TRACK_BLOCK_H + marginBottom 6
-    expect(overlay.style.top).toBe('0px');
-    expect(overlay.style.height).toBe(`${TRACK_RAIL_H}px`);
-    expect(overlay.style.display).toBe('flex');
-    expect(box.style.height).toBe(`${TRACK_BLOCK_H}px`);
-    expect(box.style.marginBottom).toBe('6px');
-    // 面板侧时间轨同几何：块高 TRACK_BLOCK_H、marginBottom 6、rail = top 0 / TRACK_RAIL_H
-    const panel = panelEls()[0];
-    const trackWrap = Array.from(panel.children).find(
-      (el) => (el as HTMLElement).style.margin === '12px 78px 6px 8px',
-    ) as HTMLElement;
-    expect(trackWrap).toBeTruthy();
-    expect(trackWrap.style.marginBottom).toBe(box.style.marginBottom); // 两侧块底对齐
-    const trackBlock = trackWrap.firstElementChild?.firstElementChild as HTMLElement;
-    expect(trackBlock.style.height).toBe(`${TRACK_BLOCK_H}px`);
-    const rail = trackBlock.firstElementChild as HTMLElement;
-    expect(rail.style.top).toBe('0px');
-    expect(rail.style.height).toBe(`${TRACK_RAIL_H}px`);
-    // 中心对中（结构化）：承载盒中心 = rail 中心 = 10px（块内），不依赖按钮高度
-    expect(overlay.style.height).toBe(rail.style.height);
-    expect(overlay.style.top).toBe(rail.style.top);
+    const marginBtn = screen.getByRole('button', { name: '显示销毛成本' });
+    const cluster = marginBtn.parentElement as HTMLElement;
+    expect(cluster.contains(btn)).toBe(true);
+    const clusterChildren = Array.from(cluster.children);
+    expect(clusterChildren.indexOf(marginBtn)).toBeLessThan(clusterChildren.indexOf(btn));
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    // 合并单图态：开关随共享轴列一并隐藏（合并图自带完整 X 轴）
+    fireEvent.click(screen.getByRole('button', { name: /^查看 .+ 所在组的 \d+ 款对比产品$/ }));
+    fireEvent.click(screen.getByRole('button', { name: '更多显示选项' }));
+    fireEvent.click(screen.getByText('合并单图'));
+    expect(screen.queryByRole('button', { name: '时间轴同步' })).toBeNull();
   });
 
-  it('整改3：库存 · DOS 卡 X 标签 = shortBucketLabel 日历周格式（2026Wxx，不再周三 MM-DD）', () => {
+  it('库存 · DOS 卡 X 标签 = shortBucketLabel 日历周格式（2026Wxx，不再周三 MM-DD）', async () => {
     render(<App />);
+    await waitPanelsReady();
     expect(screen.getByText('库存 · DOS')).toBeTruthy();
     const svg = document.querySelector('svg[aria-label*="库存与 DOS"]') as SVGSVGElement;
     expect(svg).toBeTruthy();
@@ -266,14 +238,5 @@ describe('量价页 · 三针整改（2026-11-05）', () => {
     expect(weekLabels.length).toBeGreaterThan(0);
     // 周粒度不再出现周三日期（MM-DD）格式的轴标签
     expect(svgTexts.some((t) => /^\d{2}-\d{2}$/.test(t))).toBe(false);
-  });
-
-  it('整改3：成本柱呈现补 X 轴日历标签（2026Wxx 出现在成本柱 svg）', () => {
-    render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: '显示销毛成本' }));
-    const weekLabels = panelEls().flatMap((panel) => Array.from(panel.querySelectorAll('svg[role="img"] text')) as SVGTextElement[])
-      .map((t) => (t.textContent || '').trim())
-      .filter((t) => /^2026W\d{2}$/.test(t));
-    expect(weekLabels.length).toBeGreaterThan(0);
   });
 });

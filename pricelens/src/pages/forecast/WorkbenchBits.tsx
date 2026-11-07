@@ -9,7 +9,7 @@
 // 页级管线已用①–④编号（PipelineNav），卡内链路不再编第二套 1–5 号
 // （库存卡 3a–3e / 成本卡 4a–4d 的编号方案一并作废，直接无编号）。
 // ============================================================
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { color, motion, radius, space } from '../../theme/tokens';
 
@@ -310,3 +310,30 @@ export const wanUsdOf = (usd: number): number => Math.round(usd / 1e4);
 
 /** 带符号百分比（+8% / −6%）。 */
 export const fmtSignedPct = (value: number): string => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value)}%`;
+
+// ------------------------------------------------------------
+// 图表实测宽度（2026-11-06 Eason「图表过大」整改）：库存修正 / 成本销毛两卡的
+// SVG 此前用固定 viewBox 720 拉伸到 100% 宽——左列全宽（1344）时整图放大 1.87 倍，
+// 文字与柱随之虚胖、周刻度互相叠字。对齐大盘卡范式（MarketBusPanel）：viewBox 宽 =
+// ResizeObserver 实测渲染宽（缩放比 1，文字回归真实 px），jsdom / 无 RO 回退 720。
+// ------------------------------------------------------------
+
+/** 卡内图表区实测渲染宽 hook（px，钳 ≥320）；无 ResizeObserver 环境回退 fallback。 */
+export function useMeasuredWidth(fallback = 720): { ref: { current: HTMLDivElement | null }; width: number } {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(fallback);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width);
+        setWidth((prev) => (w >= 320 && w !== prev ? w : prev));
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, width };
+}
+

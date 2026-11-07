@@ -72,6 +72,8 @@ import type {
 import type { PlatformSelection, ProductSelection } from '../../state/filtersTypes';
 import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import Chart from './Chart';
+// 区间量尺（2026-11-06 Eason 拍板）：读数方式类型与默认值
+import { brushInWindow, type RangeMode } from './rangeRuler';
 import ChartToolbar from './ChartToolbar';
 import XBrush from './XBrush';
 import SplitTimeTrack, { normalizePanelWindow, SPLIT_TRACK_H } from './SplitTimeTrack';
@@ -92,6 +94,7 @@ import { contentSignature } from '../../components/ProductPicker/combos';
 import {
   BREAK_PX,
   GRID,
+  PANE_HEAD_H,
   TICK_PX,
   adaptiveRangeOf,
   axisTickTextsOf,
@@ -323,6 +326,11 @@ export default function PriceTrend(props: {
   // 第一百一十五轮：顶部图例带悬停的产品——合并图单键；分离模式记录面板 + 系列
   //（悬停只作用于本图：高亮该系列 + 对标映射，其余降透明，图内起点画指引虚线）
   const [legendHoverKey, setLegendHoverKey] = useState<string | null>(null);
+  // ---- 区间量尺（2026-11-06 Eason 拍板）：图内拖选 + 读数方式（区间极差/区间涨跌）。
+  //      选区 = 全量桶下标（各图按自己的查看窗口换算）；分离面板共用一个选区。
+  //      读数方式 = 会话态跨页保留 ----
+  const [brushRange, setBrushRange] = useState<[number, number] | null>(null);
+  const [rangeMode, setRangeMode] = usePageViewState<RangeMode>('dashboard.rangeMode', () => 'extreme');
   const [panelLegendHover, setPanelLegendHover] = useState<{ panel: string; key: string } | null>(null);
 
   // §5.6/§6.6：切换产品/价格类型/币种 → 滑杆倍率复位 ×1；图例显隐一并复位。
@@ -1100,6 +1108,33 @@ export default function PriceTrend(props: {
     [visSeries, ownMainKey],
   );
   const mergedVolumeColor = mergedOwnerSeries?.color ?? color.mute;
+  // 桶集合变化（粒度 / 国家 / 时间筛选）= 下标失义，选区清掉
+  useEffect(() => {
+    setBrushRange(null);
+  }, [bucketIds]);
+  // 合并图：选区换算到查看窗口；与窗口不相交时不显示（状态保留，窗口拖回来还在）
+  const mergedBrush = useMemo(() => brushInWindow(brushRange, win.s, win.e), [brushRange, win.s, win.e]);
+  const onMergedBrush = useCallback(
+    (r: [number, number] | null): void => setBrushRange(r ? [r[0] + win.s, r[1] + win.s] : null),
+    [win.s],
+  );
+
+  // 选区态只留主品（2026-11-06 Eason）：主品 = 第一组主品；悬停图顶对比品药丸可临时带出
+  const rangeMainKey = ownMainKey ?? chartSeries[0]?.key ?? null;
+  const rangeFocusKey = legendHoverKey != null && mergedBrush ? legendHoverKey : null;
+  // 图顶药丸：选区态主品以外降透明
+  const rangeMutedKeys = useMemo(
+    () => (mergedBrush && rangeMainKey != null ? new Set(chartSeries.map((s) => s.key).filter((k) => k !== rangeMainKey)) : undefined),
+    [mergedBrush, rangeMainKey, chartSeries],
+  );
+  const chartSeriesForRange = useMemo(
+    () =>
+      !mergedBrush || rangeMainKey == null
+        ? chartSeries
+        : chartSeries.filter((s) => s.key === rangeMainKey || s.key === rangeFocusKey),
+    [chartSeries, mergedBrush, rangeMainKey, rangeFocusKey],
+  );
+
   const mergedVolumeOwner = useMemo(
     () => (mergedOwnerSeries ? { key: mergedOwnerSeries.key, brand: mergedOwnerSeries.brand, text: curveNameOf(mergedOwnerSeries) } : null),
     [mergedOwnerSeries],
@@ -1208,10 +1243,16 @@ export default function PriceTrend(props: {
   // 档位小标 13px 与顶格刻度字上探 8px——原 Y_LIMIT_EDITOR_H（126px，其中卡片只占
   // 左侧 63px 宽）退役，收到 16px，合并/分图的整条空白一并归零。
   const Y_AXIS_TOP_BAND = 16;
-  const panelGridTop = yAxisVisible ? Y_AXIS_TOP_BAND : 8;
+  // 2026-11-07 稳定版三轮（Eason「标题还是不好」）：图层标题改 head 版式——价格标题独占图顶一行，
+  // gridTop 计入 PANE_HEAD_H（分离共享轴列按同一 panelGridTop 对齐，不错位）；演进版版式不变
+  const panelGridTop = (yAxisVisible ? Y_AXIS_TOP_BAND : 8) + (STABLE ? PANE_HEAD_H : 0);
   // 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；本轮拍板回归面板内）：
   // 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（渠道行改药丸上方平台行）
   const PANEL_LEGEND_H = 54;
+  // 面板头行实际高度（共享轴列 paddingTop 与面板头行同源，2026-11-07 修稳定版轴列错位）：
+  // 稳定版不出药丸带（采纳 A），只留拖柄呼吸位 10px——此前面板头收到 30 而轴列仍按 54 垫，
+  // 共享刻度整列比面板绘图区低 24px。10 + 图顶标题行 20 ≈ 原 30，绘图区纵向位置基本不变
+  const panelHeadRowH = STABLE ? 10 : PANEL_LEGEND_H;
   // ---- 第196轮整改5（量层）：量带高度规划——量带 = 压缩前总高 × 30%（Eason 口径
   //      28~32%，以视觉舒适为准），价格绘图区以有效 sliderScale 等比压缩：
   //      plot' = plot0 − volH ⇔ sEff = (plot' − 断裂条) / (cells×TICK_PX / s0)。格值与
@@ -1623,7 +1664,9 @@ export default function PriceTrend(props: {
         </div>
       )}
       {/* 药丸行（仅合并模式）：产品药丸居中；分离模式药丸在各面板内，不渲染本行 */}
-      {!compareTab && !splitActive && (
+      {/* 2026-11-07（Eason 采纳 A）：稳定版去顶排药丸带——品牌信息由名称带（悬停展开）
+          与悬停明细卡（产品名前品牌）承接；iterate 保留（顶排还承担渠道 chip / 店铺同步） */}
+      {!compareTab && !splitActive && !STABLE && (
         <div style={{ marginBottom: space.md, padding: '0 6px' }}>
           <ChartToolbar
             mode="pills"
@@ -1633,6 +1676,7 @@ export default function PriceTrend(props: {
                 hiddenKeys={hiddenKeys}
                 onToggleHidden={toggleLegend}
                 onHover={setLegendHoverKey}
+                mutedKeys={rangeMutedKeys}
                 // 第196轮复检整改3：稳定版不渲染每线渠道选择 chip / 店铺同步按钮 /
                 // 渠道小药丸（取数口径 = 顶部全局平台筛选器）；iterate 照旧
                 channelCtl={STABLE ? undefined : { cc: state.countryCode, onPick: pickChannel }}
@@ -1730,7 +1774,7 @@ export default function PriceTrend(props: {
               marginBottom: space.sm,
             }}
           >
-            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers, splitTickTexts)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + PANEL_LEGEND_H, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: `0 0 ${splitAxisWidth(state.currency, showYTicks, showTiers, splitTickTexts)}px`, paddingTop: SCROLL_PAD_TOP + PANEL_GRIP_H + panelHeadRowH, display: 'flex', flexDirection: 'column' }}>
               {splitYFinal && (
                 <SplitAxisColumn
                   yScale={splitYFinal}
@@ -1744,6 +1788,9 @@ export default function PriceTrend(props: {
                   tierValues={splitTierValues}
                 />
               )}
+              {/* 量带让位（2026-11-07 审计修）：量层开启时面板图在价格绘图区下多出量带，
+                  轴列体只到价格绘图区底——此前「时间轴同步」比各面板时间轴高出一个量带 */}
+              {splitYCfg && splitVolH > 0 && <div aria-hidden style={{ height: splitVolH, flexShrink: 0 }} />}
               {/* 「时间轴同步」开关（与各面板时间轴同一水平线）：轴列体与面板绘图区同高，
                   其下正是各面板的时间轴行——按钮与时间轴拖柄（轨道带，高 20）中心对齐，
                   不含下方日期字（第一百四十九轮澄清口径）。top -2 = 轨道带居中（-5）再补偿
@@ -1849,10 +1896,15 @@ export default function PriceTrend(props: {
                           不在共享行加小框）：本面板单组（主品药丸 + vs + 对比药丸，
                           含屏蔽者）；悬停药丸 = 该系列高亮、点击 = 屏蔽/恢复折线；
                           「店铺同步」固定在本卡主品左侧（组内同步） */}
-                      <div style={{ height: PANEL_LEGEND_H, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                      <div style={{ height: panelHeadRowH, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                        {/* 2026-11-07（Eason 采纳 A）：稳定版分离面板头不再出药丸带（拖柄保留），
+                            品牌由名称带 / 悬停卡承接；行高收窄补偿面板头高度 */}
                         <BrandLegendStrip
-                          groups={groupsOfCards([p.card], p.all)}
+                          groups={STABLE ? [] : groupsOfCards([p.card], p.all)}
                           hiddenKeys={hiddenKeys}
+                          mutedKeys={brushInWindow(brushRange, (effWins[p.key] ?? [win.s, win.e])[0], (effWins[p.key] ?? [win.s, win.e])[1])
+                            ? new Set(p.vis.map((v) => v.key).filter((k) => k !== panelExtra[p.key]?.diffBaseKey))
+                            : undefined}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
                           // 第196轮复检整改3：稳定版不渲染每线渠道 chip / 店铺同步 / 渠道小药丸
@@ -1866,7 +1918,17 @@ export default function PriceTrend(props: {
                         />
                       </div>
                       <Chart
-                        series={p.vis}
+                        series={brushInWindow(brushRange, pw[0], pw[1])
+                          ? p.vis.filter((v) => v.key === panelExtra[p.key]?.diffBaseKey || v.key === (panelLegendHover?.panel === p.key ? panelLegendHover.key : null))
+                          : p.vis}
+                        hiddenKeys={hiddenKeys}
+                        nameSeries={p.all}
+                        onToggleHidden={toggleLegend}
+                        brush={brushInWindow(brushRange, pw[0], pw[1])}
+                        onBrushChange={(r) => setBrushRange(r ? [r[0] + pw[0], r[1] + pw[0]] : null)}
+                        rangeMode={rangeMode}
+                        onRangeMode={setRangeMode}
+                        rulerKey={panelExtra[p.key]?.diffBaseKey ?? null}
                         granularity={state.granularity}
                         currency={state.currency}
                         priceTypes={state.priceTypes}
@@ -1884,6 +1946,8 @@ export default function PriceTrend(props: {
                         windowKey={`${pw[0]}:${pw[1]}:${p.key}`}
                         yScale={splitYFinal ?? undefined}
                         nameZoneWidth={nameZoneW} // 第196轮整改3（复检定版）：名称带恢复（刻度右→绘图区左、线位对齐）
+                        paneLabels // 2026-11-06：图层标注
+                        paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行
                         tipDiffBaseKey={panelExtra[p.key]?.diffBaseKey ?? null} // 第196轮整改1：价差列基准 = 本卡主品
                         margins={panelExtra[p.key]?.margins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）
                         volumeOn={volumeOn} // 第196轮整改5：量层（面板各自主品销量）
@@ -1947,7 +2011,15 @@ export default function PriceTrend(props: {
             onLabelMode={setLabelMode}
             pointPanelOpen={pointPanelOpen}
             onPointPanelToggle={() => setPointPanelOpen((v) => !v)}
-            series={chartSeries}
+            series={mergedBrush ? chartSeriesForRange : chartSeries}
+            hiddenKeys={hiddenKeys}
+            nameSeries={visSeries}
+            onToggleHidden={toggleLegend}
+            brush={mergedBrush}
+            onBrushChange={onMergedBrush}
+            rangeMode={rangeMode}
+            onRangeMode={setRangeMode}
+            rulerKey={rangeFocusKey ?? rangeMainKey}
             granularity={state.granularity}
             currency={state.currency}
             priceTypes={state.priceTypes}
@@ -1956,6 +2028,8 @@ export default function PriceTrend(props: {
             showXLabels // 第一百五十二轮：图内恢复独立时间轴（业务意见）——周刻度 YYYYWxx、
             // 密度按 axisTickPlan 抽稀；底部轨道收敛为拖柄/跨年标注的查看窗口毛刷
             nameZoneWidth={nameZoneW} // 第196轮整改3：名称带恢复（与图顶品牌图例带并存）
+            paneLabels // 2026-11-06：名称带列顶部写「价格 USD」「销量 台 模拟」
+            paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行、左缘对齐轴列
             axisTickTexts={yAxisTickTexts} // 第196轮整改2：仅刻度场景轴列宽随内容自适应
             tipDiffBaseKey={ownMainKey} // 第196轮整改1：价差列基准 = 第一组主品
             margins={mergedMargins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）

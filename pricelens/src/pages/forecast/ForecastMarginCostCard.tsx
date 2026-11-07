@@ -56,21 +56,23 @@ import {
   SectionHead,
   WorkbenchLegend,
   fmtMillionUsd,
+  useMeasuredWidth,
   workbenchCardStyle,
   type FlowStep,
   type LegendItem,
 } from './WorkbenchBits';
 import { buildAxisTicks, firstForecastIndex } from './workbenchChartSegments';
+import { axisTickPlan } from '../../chart/PriceTrend/helpers';;
 
 // 2026-11-04 视觉一致性：viewBox 宽度对齐右列实际渲染宽度（≈560-720，缩放比 ≈1，
 // 文字回归真实 px——旧 1000 宽被压缩导致轴字体过小）；图高与全站 ≈252px 对齐。
-const W = 720;
+const W_FALLBACK = 720;
+const MIN_W = 700;
 const H = 252;
 const LEFT = 52;
 const RIGHT = 50;
 const TOP = 16;
 const BOTTOM = 26;
-const PLOT_W = W - LEFT - RIGHT;
 const PLOT_H = H - TOP - BOTTOM;
 
 const fmtUnits = (value: number | null): string => (value != null ? value.toLocaleString('en-US') : '—');
@@ -184,6 +186,9 @@ export default function ForecastMarginCostCard({
   const resetAll = onResetMarginScenario ?? workspace.resetScenario;
 
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const { ref: chartRef, width: measuredW } = useMeasuredWidth(W_FALLBACK);
+  const W = Math.max(MIN_W, measuredW);
+  const PLOT_W = W - LEFT - RIGHT;
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<MonthKey | null>(null);
   const [evidenceMonth, setEvidenceMonth] = useState<MonthKey | null>(null);
@@ -276,6 +281,20 @@ export default function ForecastMarginCostCard({
   const slot = PLOT_W / weeks.length;
   const barW = Math.min(26, slot * 0.52);
   const x = (index: number): number => LEFT + (index + 0.5) * slot;
+  // 横轴：月分组刻度（主图 B.5.4 同款）——月键从主链周（WorkbenchWeekResult.monthKey）
+  // 取，MarginWeek 本身不带 monthKey；result.weeks 与 view.weeks 同序同长。
+  const sourceWeeksMg = result.weeks;
+  const monthKeysMg: string[] = [];
+  for (const week of sourceWeeksMg) {
+    if (monthKeysMg[monthKeysMg.length - 1] !== week.monthKey) monthKeysMg.push(week.monthKey);
+  }
+  const monthFirstWeekMg = new Map<string, number>();
+  sourceWeeksMg.forEach((week, index) => {
+    if (!monthFirstWeekMg.has(week.monthKey)) monthFirstWeekMg.set(week.monthKey, index);
+  });
+  const mgMonthPlan = monthKeysMg.length > 0
+    ? axisTickPlan('month', monthKeysMg, Math.max(1, Math.ceil(monthKeysMg.length / 13)), monthKeysMg.length > 1 ? [0, monthKeysMg.length - 1] : [0])
+    : { indexes: [] as number[] };
 
   // 周销毛轴：正负同轴，零基线；缺失周（weeklyMargin=null）不入域不画柱。
   const marginValues = weeks
@@ -541,15 +560,15 @@ export default function ForecastMarginCostCard({
         aria-label="经营结果区"
         style={{ borderTop: `1px solid ${color.hairline}`, marginTop: space.sm, paddingTop: space.sm, minWidth: 0 }}
       >
-        <div style={{ overflowX: 'auto' }}>
-          {/* 图宽与库存卡同宽对齐（2026-11-05 拍板实施）：viewBox 720×252 ·
-              minWidth 700 · 全期 52 周同域（页级两列改同宽由主线收口） */}
+        <div ref={chartRef} style={{ overflowX: 'auto' }}>
+          {/* 图宽与库存卡同宽对齐：两卡都按实测宽绘图（2026-11-07），全期 52 周同域 */}
           <svg
             viewBox={`0 0 ${W} ${H}`}
-            width="100%"
+            width={W}
+            height={H}
             role="img"
             aria-label={`成本销毛（经营结果 · 由上述量价与成本推导）：周销毛柱与月版本成本阶梯（${versions.map((version) => `${version.label} $${version.unitCost}`).join(' → ')}）；预测期（${fixture.context.forecastRange}）销毛 ${fmtMillionUsd(view.forecastMargin)}，历史 ${fixture.context.historyRange} 销毛 ${fmtMillionUsd(view.historyMargin)}；不回写主图。`}
-            style={{ display: 'block', height: 'auto', minWidth: 700 }}
+            style={{ display: 'block' }}
           >
             {/* 周销毛轴（$M）：0 基线强分隔，其余刻度弱网格；负值向下 */}
             {tickValues.map((value) => {
@@ -565,11 +584,9 @@ export default function ForecastMarginCostCard({
               const value = uMin + (uMax - uMin) * fraction;
               return <text {...axisTextProps} key={fraction} x={W - RIGHT + 6} y={yUnit(value) + 3.5} fontSize={10} fill={color.mute}>{`$${Math.round(value / 10) * 10}`}</text>;
             })}
-            {weeks.map((week, index) => {
-              if (index % 4 === 0 || index === weeks.length - 1) {
-                return <text {...axisTextProps} key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{week.weekId}</text>;
-              }
-              return null;
+            {mgMonthPlan.indexes.map((monthIndex) => {
+              const weekIndex = monthFirstWeekMg.get(monthKeysMg[monthIndex]!) ?? 0;
+              return <text {...axisTextProps} key={monthKeysMg[monthIndex]!} x={x(weekIndex)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{monthKeysMg[monthIndex]}</text>;
             })}
             {/* 周销毛柱：历史实（琥珀）/ 预测虚柱；正 = 零基线向上，负 = 向下（不静默丢柱）；
                 缺数周 weeklyMargin = null 不画柱（缺数不当 0，覆盖率行如实显示） */}

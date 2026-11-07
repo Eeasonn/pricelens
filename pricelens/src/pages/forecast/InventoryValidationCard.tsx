@@ -56,6 +56,7 @@ import {
   siWeeklyPlan,
 } from './workbenchModel';
 import { firstForecastIndex } from './workbenchChartSegments';
+import { axisTickPlan } from '../../chart/PriceTrend/helpers';
 import {
   CollapsibleSection,
   FlowBar,
@@ -64,6 +65,7 @@ import {
   SectionHead,
   WorkbenchLegend,
   fmtWan,
+  useMeasuredWidth,
   wanOf,
   workbenchCardStyle,
   type FlowStep,
@@ -72,14 +74,16 @@ import {
 import type { SiConfirmation, SiConfirmationState, SiSaveState } from './useSiConfirmations';
 import { siMonthStatusOf } from './useSiConfirmations';
 
-// 2026-11-04 视觉一致性：viewBox 宽度对齐左列实际渲染宽度（≈720）。
-const W = 720;
+// 2026-11-07 图表过大整改（Eason）：绘图宽 = 卡内图表区实测宽（useMeasuredWidth），
+// 缩放比恒 1——此前固定 viewBox 720 被拉到全宽 1344，整图连字放大 1.87 倍、周刻度叠字。
+// 窄于 MIN_W 时图表区横向滚动。TOP 让出单位标题行（天 / 万台），不再压顶端刻度数字。
+const W_FALLBACK = 720;
+const MIN_W = 700;
 const H = 252;
 const LEFT = 40;
 const RIGHT = 52;
-const TOP = 14;
+const TOP = 28;
 const BOTTOM = 26;
-const PLOT_W = W - LEFT - RIGHT;
 const PLOT_H = H - TOP - BOTTOM;
 
 // V2 右列迷你柱图（si-input-variants V2 语义）：期末渠道库存，月粒度 12 柱。
@@ -196,6 +200,9 @@ export default function InventoryValidationCard({
   // 回写 params；页面回写一致则无感，页面外部变更（如重置基准）按差异采纳。
   // ------------------------------------------------------------
   const [siLocal, setSiLocal] = useState<Record<string, number>>(() => ({ ...params.siPlanMonthly }));
+  const { ref: chartRef, width: measuredW } = useMeasuredWidth(W_FALLBACK);
+  const W = Math.max(MIN_W, measuredW);
+  const PLOT_W = W - LEFT - RIGHT;
   const reportedRef = useRef(siLocal);
   useEffect(() => {
     const reported = reportedRef.current;
@@ -339,6 +346,19 @@ export default function InventoryValidationCard({
   // ------------------------------------------------------------
   const weeks = result.weeks;
   const weekBucketIds = weeks.map((week) => week.weekId);
+  // 横轴：月分组刻度（主图 B.5.4 同款，YYYY-MM 画在月首周中线）——2026-11-07 整改：
+  // 原每 4 周一个 YYYYWww 在全宽下拉到 24px 间距仍显拥挤，且跨年串成「2025W452026W01」。
+  const monthKeysInv: string[] = [];
+  for (const week of weeks) {
+    if (monthKeysInv[monthKeysInv.length - 1] !== week.monthKey) monthKeysInv.push(week.monthKey);
+  }
+  const monthFirstWeekInv = new Map<string, number>();
+  weeks.forEach((week, index) => {
+    if (!monthFirstWeekInv.has(week.monthKey)) monthFirstWeekInv.set(week.monthKey, index);
+  });
+  const invMonthPlan = monthKeysInv.length > 0
+    ? axisTickPlan('month', monthKeysInv, Math.max(1, Math.ceil(monthKeysInv.length / 13)), monthKeysInv.length > 1 ? [0, monthKeysInv.length - 1] : [0])
+    : { indexes: [] as number[] };
   const forecastStart = firstForecastIndex(weeks);
   const forecastWeeks = weeks.filter((week) => week.status === 'forecast');
   const slot = PLOT_W / weeks.length;
@@ -421,13 +441,14 @@ export default function InventoryValidationCard({
       />
 
       {/* 图（渠道库存柱 + 渠道 DOS 线）：默认视图 = 卡头 + 图 + 图例（2026-11-05 拍板实施） */}
-      <div style={{ overflowX: 'auto' }}>
+      <div ref={chartRef} style={{ overflowX: 'auto' }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          width="100%"
+          width={W}
+          height={H}
           role="img"
           aria-label={`库存验证：渠道库存柱（右轴，万台）+ 渠道 DOS 线（左轴）；全流程 DOS 不上图，悬停库存柱读数值；${cappedWeeks.length ? `${cappedWeeks[0]!.weekId} 起库存上限修正（按可售量修正回写主图，修正周琥珀描边）` : '当前库存可支撑基线 SO，未触发修正'}。详细判定见下方输出框。`}
-          style={{ display: 'block', height: 'auto', minWidth: 700 }}
+          style={{ display: 'block' }}
         >
           {[0, 1].map((fraction) => {
             const gy = TOP + PLOT_H * (1 - fraction);
@@ -438,14 +459,15 @@ export default function InventoryValidationCard({
               </g>
             );
           })}
-          <text {...axisTextProps} x={LEFT - 6} y={TOP - 3} fontSize={10} fill={color.mute} textAnchor="end">天</text>
+          <text {...axisTextProps} x={LEFT - 6} y={12} fontSize={10} fill={color.mute} textAnchor="end">天</text>
           {[0, 0.5, 1].map((fraction) => (
             <text {...axisTextProps} key={fraction} x={W - RIGHT + 6} y={yInv(invMax * fraction) + 3.5} fontSize={10} fill={color.mute}>{wanOf(invMax * fraction)}</text>
           ))}
-          <text {...axisTextProps} x={W - RIGHT + 6} y={TOP - 3} fontSize={10} fill={color.mute}>万台</text>
-          {weeks.map((week, index) => (index % 4 === 0 || index === weeks.length - 1
-            ? <text {...axisTextProps} key={week.weekId} x={x(index)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{weekBucketIds[index]}</text>
-            : null))}
+          <text {...axisTextProps} x={W - RIGHT + 6} y={12} fontSize={10} fill={color.mute}>万台</text>
+          {invMonthPlan.indexes.map((monthIndex) => {
+            const weekIndex = monthFirstWeekInv.get(monthKeysInv[monthIndex]!) ?? 0;
+            return <text {...axisTextProps} key={monthKeysInv[monthIndex]!} x={x(weekIndex)} y={H - 8} textAnchor="middle" fontSize={10} fill={color.mute}>{monthKeysInv[monthIndex]}</text>;
+          })}
           {show('inv') && weeks.map((week, index) => {
             const forecast = index >= forecastStart;
             return (

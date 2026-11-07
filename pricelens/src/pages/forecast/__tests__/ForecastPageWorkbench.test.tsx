@@ -150,10 +150,14 @@ describe('量价预测推演工作台 v3 · WP6 集成', () => {
     const cardTitles = cards.map((card) => card.querySelector('h2')?.textContent ?? '');
     expect(cardTitles[0]).toContain('③ 库存修正');
     expect(cardTitles[1]).toContain('成本销毛');
-    // 两卡同宽几何：销毛图 SVG 地板宽 700（与库存卡 720×252 同源，单列全宽无横向滚动）。
-    const marginSvg = cards[1].querySelector('svg[role="img"]') as SVGSVGElement | null;
-    expect(marginSvg).not.toBeNull();
-    expect(marginSvg!.style.minWidth).toBe('700px');
+    // 两卡同宽几何（2026-11-07 整改）：两卡 SVG 均按实测宽绘图（width/height 属性像素值，
+    // 缩放比 1；jsdom 无 RO 回退 720×252，与库存卡同源同高）。
+    for (const card of cards) {
+      const svg = card.querySelector('svg[role="img"]') as SVGSVGElement | null;
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('width')).toBe('720');
+      expect(svg!.getAttribute('height')).toBe('252');
+    }
   });
 
   it('模拟标识分级（2026-11-05 第 7 条）：页首 DataStatusBadge 一处，卡级「模拟/模拟历史」chip 退役为 ？号 HintInfo', () => {

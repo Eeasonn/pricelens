@@ -76,13 +76,21 @@ async function pickPlatform(label: string): Promise<void> {
   fireEvent.click(option);
 }
 
-/** 组视图明细卡观察列折后价（span[title="折后价"]，顺序 = 面板序） */
+/** 组视图明细卡观察列折后价（span[title="折后价"]，顺序 = 产品序） */
 const detailPrices = (): string[] =>
   Array.from(document.querySelectorAll('article.lpl-volume-detail span[title="折后价"]'))
     .map((el) => (el.textContent ?? '').trim());
 
 const goGroupView = (): void => {
   fireEvent.click(screen.getByRole('button', { name: /^查看 .+ 所在组的 \d+ 款对比产品$/ }));
+};
+
+/** 组视图 + 合并单图（2026-11-06 量价同骨架后，分离面板的页面级明细卡退役——
+ *  逐产品折后价读数改从合并单图的明细卡行读取，口径断言意图不变） */
+const goGroupMerged = (): void => {
+  goGroupView();
+  fireEvent.click(screen.getByRole('button', { name: '更多显示选项' }));
+  fireEvent.click(screen.getByText('合并单图'));
 };
 
 describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () => {
@@ -139,7 +147,7 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
   it('改全局平台 → 底下所有面板重取数：UI 切换口径与 plat= 直达口径逐卡一致，且不同于默认口径', async () => {
     window.history.replaceState(null, '', '/?p=volume');
     render(<App />);
-    goGroupView();
+    goGroupMerged();
     const pricesDefault = detailPrices();
     expect(pricesDefault.length).toBeGreaterThan(0);
     await pickPlatform('OZON');
@@ -154,7 +162,7 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     sessionStorage.clear();
     window.history.replaceState(null, '', '/?p=volume&plat=OZON');
     render(<App />);
-    goGroupView();
+    goGroupMerged();
     const pricesUrl = detailPrices();
     expect(pricesUrl).toHaveLength(pricesUi.length);
     expect(pricesUrl).toEqual(pricesUi);

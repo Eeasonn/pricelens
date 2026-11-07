@@ -31,6 +31,8 @@ const harness = vi.hoisted(() => ({
   /** 全局平台（state.platform）；null = 默认电渠 */
   platform: null as unknown,
   queries: [] as { groups: { modelId: string; platform: unknown }[] }[],
+  /** Chart 桩捕获的 props（图层标题 head 版式接线断言用） */
+  chartProps: [] as Record<string, unknown>[],
   set: vi.fn(),
   noop: vi.fn(),
 }));
@@ -90,8 +92,14 @@ vi.mock('../../../state/FiltersContext', async (importOriginal) => {
   };
 });
 
-// 图主体桩（ECharts 在 jsdom 无 canvas）：本测试只关心平台化接线与图例带 DOM
-vi.mock('../Chart', () => ({ default: () => null }));
+// 图主体桩（ECharts 在 jsdom 无 canvas）：本测试只关心平台化接线与图例带 DOM；
+// 捕获 props 供图层标题 head 版式接线断言
+vi.mock('../Chart', () => ({
+  default: (p: Record<string, unknown>) => {
+    harness.chartProps.push(p);
+    return null;
+  },
+}));
 
 class ResizeObserverStub {
   observe(): void {}
@@ -117,6 +125,7 @@ beforeEach(() => {
   harness.mains = [cardOf()];
   harness.platform = null;
   harness.queries = [];
+  harness.chartProps = [];
   window.history.replaceState(null, '', '/');
 });
 
@@ -145,6 +154,51 @@ describe('稳定版价格页：每线渠道/店铺 UI 不渲染', () => {
   it('每线渠道小药丸（平台名 badge）不渲染——药丸上不再挂平台/店铺概念', async () => {
     render(<PriceTrend />);
     expect(screen.queryByText('OZON')).toBeNull();
+  });
+});
+
+describe('稳定版价格页：顶排药丸带整体移除（2026-11-07 Eason 采纳 A）', () => {
+  it('顶部产品药丸带不渲染（品牌由名称带悬停展开 + 悬停卡前缀承接）', () => {
+    render(<PriceTrend />);
+    // 药丸带唯一交互痕迹 = 「点击隐藏该产品」药丸按钮；iterate 版必有
+    expect(screen.queryByTitle('点击隐藏该产品')).toBeNull();
+  });
+
+});
+
+// 2026-11-07 稳定版三轮（Eason「标题还是不好」）：图层标题 head 版式——价格标题独占图顶行，
+// gridTop = 刻度顶带 16 + 标题行 PANE_HEAD_H 20；分离共享轴列与面板头行同源（此前面板头
+// 收到 30 而轴列仍按 54 垫，刻度整列低 24px）
+describe('稳定版价格页：图层标题 head 版式接线', () => {
+  it('合并图：paneLabelLayout = head，gridTop 计入标题行（16 + 20）', () => {
+    render(<PriceTrend />);
+    const last = harness.chartProps[harness.chartProps.length - 1];
+    expect(last.paneLabels).toBe(true);
+    expect(last.paneLabelLayout).toBe('head');
+    expect(last.gridTop).toBe(36);
+  });
+
+  it('分图：面板同版式；共享轴列 paddingTop = 滚动区 10 + 拖柄 14 + 面板头行 10（与面板头行同源）', () => {
+    const second: MainProduct = {
+      id: 'card-stable-second',
+      main: { modelId: 'HUA-Second', romram: '12GB+256GB', skuIds: ['sku-second'], platform: null },
+      compares: [],
+    };
+    harness.mains = [cardOf(), second];
+    const { container } = render(<PriceTrend />);
+    const panels = harness.chartProps.filter((p) => p.axisChrome === false);
+    expect(panels.length).toBeGreaterThan(0);
+    for (const p of panels) {
+      expect(p.paneLabelLayout).toBe('head');
+      expect(p.gridTop).toBe(36);
+    }
+    const divs = Array.from(container.querySelectorAll('div')) as HTMLDivElement[];
+    // 共享轴列容器（flex 定宽列）：paddingTop 34 = 10 + 14 + 10
+    const axisCol = divs.find((d) => d.style.flex.startsWith('0 0 ') && d.style.paddingTop !== '');
+    expect(axisCol?.style.paddingTop).toBe('34px');
+    // 面板头行（拖柄下、图上）：稳定版 10px，每面板一条
+    const headRows = divs.filter((d) => d.style.height === '10px' && d.style.padding === '0px 4px 2px');
+    expect(headRows.length).toBe(2);
   });
 });
 

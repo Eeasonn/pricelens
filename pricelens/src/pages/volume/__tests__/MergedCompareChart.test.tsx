@@ -248,11 +248,13 @@ describe('量价页 · 合并单图接线（⋯ 呈现槽 / 合并渲染 / 分�
     expect(screen.queryByLabelText('面板呈现方式')).toBeNull();
   });
 
-  it('主品视图 + 销毛开：呈现行 = 既有销毛呈现二式（面板呈现方式不出现）', () => {
+  it('主品视图 + 销毛开：销毛呈现二式随成本柱退役（⋯ 菜单仍无「呈现」行）', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: '显示销毛成本' }));
     openMore();
-    expect(screen.getByLabelText('销毛呈现方式')).toBeTruthy();
+    // 2026-11-06 量价同骨架：销毛成本 = 价格层叠成本面积（悬停看销毛率），
+    // 不再有「下垂柱 | 顶部销毛线」呈现切换；面板呈现方式仍仅组内对比适用
+    expect(screen.queryByLabelText('销毛呈现方式')).toBeNull();
     expect(screen.queryByLabelText('面板呈现方式')).toBeNull();
   });
 
