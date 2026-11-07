@@ -473,6 +473,50 @@ export function platformPriceSpread(
   return out.sort((a, b) => a.price - b.price);
 }
 
+/** R5（四审 m2 · 整配置平台比较）：按整条产品线选择展开平台价目——skuIds=[]
+ *  （整配置）解析为该型号该配置在维表内的全部颜色 SKU（resolveGroup 同规则），
+ *  多 SKU 部分选择同样按实际选择聚合，不再只取首 SKU。各平台价 = 选择内各
+ *  SKU 在该平台渠道集内最低在架价（minPriceRow，裸机优先、异常价剔除）的
+ *  算术平均——与 buildSeries 周聚合（先每 SKU 渠道内最低、再跨 SKU 均值）
+ *  同构，绝不把单颜色价（黑 333）套给整配置（334）。单 SKU 时与
+ *  platformPriceSpread 数值一致。 */
+export function platformPriceSpreadOfSelection(
+  sel: { modelId: string; romram: string; skuIds: readonly string[] },
+  weekId: string,
+  countryCode: string,
+  currency: CurrencyMode,
+): { members: number; wholeConfig: boolean; rows: Array<{ platform: string; price: number; skuCount: number }> } {
+  let skuIds = sel.skuIds.filter((id) => productById.has(id));
+  const wholeConfig = skuIds.length === 0;
+  if (wholeConfig) {
+    const prefix = sel.modelId + '__';
+    skuIds = dimProduct.filter((p) => p.sku_id.startsWith(prefix) && normRom(p.romram) === normRom(sel.romram)).map((p) => p.sku_id);
+  }
+  if (!skuIds.length) return { members: 0, wholeConfig, rows: [] };
+  const rows: Array<{ platform: string; price: number; skuCount: number }> = [];
+  const byPlatform = new Map<string, string[]>();
+  for (const channel of dimChannel) {
+    if (channel.country_code !== countryCode) continue;
+    const arr = byPlatform.get(channel.platform);
+    if (arr) arr.push(channel.channel_id);
+    else byPlatform.set(channel.platform, [channel.channel_id]);
+  }
+  for (const [platform, channelIds] of byPlatform) {
+    const channels = new Set(channelIds);
+    let sum = 0;
+    let cnt = 0;
+    for (const sid of skuIds) {
+      const hit = minPriceRow(countryCode, sid, weekId, channels, currency);
+      if (!hit) continue;
+      sum += hit.price;
+      cnt += 1;
+    }
+    if (cnt > 0) rows.push({ platform, price: sum / cnt, skuCount: cnt });
+  }
+  rows.sort((a, b) => a.price - b.price);
+  return { members: skuIds.length, wholeConfig, rows };
+}
+
 // ---------------- offer 解析（真实分期/促销/组合三列 → 三类权益） ----------------
 function findPromoForDate(countryCode: string, anchorDate: string, platform?: string): DimPromo | undefined {
   const hit = dimPromo.filter(
