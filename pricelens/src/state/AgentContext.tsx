@@ -25,6 +25,8 @@ import {
 } from '../agent';
 import type { FiltersState } from './filtersTypes';
 import { clampMains } from './mainSelection';
+import { STABLE } from '../appChannel';
+import { useAgent as useAgentStable } from './AgentContextStable';
 import { materializeAlertRecords, alertAgentContextOf, transitionAlertRecord } from '../dataModel/alertLifecycle';
 import type { AlertAction, AlertRecord } from '../dataModel/alertLifecycle';
 
@@ -464,10 +466,32 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
-export function useAgent(): AgentContextValue {
+/**
+ * 门面公共视图（2026-11-07 整合）：两线 context 值的结构化并集——公共字段取
+ * 迭代线形状（本文件 AgentContextValue），迭代线多出的流式呈现/预警撤销/重跑
+ * 字段标可选（稳定栈 useAgent 不含这些键，而消费它们的只有迭代 AgentPanel，
+ * 稳定构建不渲染）；两线同名方法的参数类型来自各自的 contracts（结构相近但
+ * 不是同一类型），门面按「参数取交集语义、返回取并集」以本文件形状声明，
+ * TS 结构化兼容各自实现。
+ */
+export type AgentContextFacade = AgentContextValue & {
+  partialText?: AgentContextValue['partialText'];
+  partialCards?: AgentContextValue['partialCards'];
+  canUndoAlert?: AgentContextValue['canUndoAlert'];
+  applyAlertAction?: AgentContextValue['applyAlertAction'];
+  undoAlertAction?: AgentContextValue['undoAlertAction'];
+  rerunWithPatch?: AgentContextValue['rerunWithPatch'];
+};
+
+export function useAgent(): AgentContextFacade {
+  // 2026-11-07 整合：稳定构建下 Agent 栈 = 稳定线实现（AgentProviderStable +
+  // CopilotStable），页面消费者（ForecastPage / AlertsPage / IntelligenceCenter /
+  // 稳定栈自身）统一经本门面取值——转发到稳定栈的 useAgent（同一 context），
+  // 页面代码不分通道；迭代构建走本文件自己的 Provider/context。
+  if (STABLE) return useAgentStable() as unknown as AgentContextFacade;
   const value = useContext(Ctx);
   if (!value) throw new Error('useAgent must be used inside AgentProvider');
-  return value;
+  return value as AgentContextFacade;
 }
 
 export type { AgentResultCard };

@@ -9,6 +9,7 @@
 // 保存写入与 CONFIG_CHANGED_EVENT 广播时失效（跨页签改配置的场景靠广播兜底）。
 // ============================================================
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
+import { canEditConfig } from '../access/role';
 
 export type DefaultShopOverrides = Record<string, string>; // countryCode → channel_id
 
@@ -40,7 +41,10 @@ export function defaultShopOverrideOf(countryCode: string): string | null {
   return readMap()[countryCode] ?? null;
 }
 
+/** 保存默认店铺覆盖表。2026-11-06 RBAC：查阅者角色写为 no-op（UI 已门控，
+ *  此处为纵深防御——缓存不失效，读取口径不变）。 */
 export function saveDefaultShopOverrides(map: DefaultShopOverrides): void {
+  if (!canEditConfig()) return;
   try {
     localStorage.setItem(LPL.cfgDefaultShop, JSON.stringify(map));
   } catch {

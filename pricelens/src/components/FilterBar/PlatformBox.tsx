@@ -107,14 +107,19 @@ export default function PlatformBox() {
     setSellerPane(null);
   }, [cc]); // 国家切换后左右列回解析态
 
-  // 单选归一读取：店铺级（shopIds[0]）优先；仅平台级 = 旧 plat= 链接兼容
+  // 单选归一读取：店铺级（shopIds[0]）优先；仅平台级 = 旧 plat= 链接兼容。
+  // R7-M1：稳定版归一可产出多平台并集（店铺展开 + 显式平台去重）——触发器
+  // 如实显示全量平台名（单选语义下再点任一店铺提交即替换），不假装只选了第一个
   const sel = normalizePlatformSelection(state.platform);
   const selectedShopId = sel?.shopIds[0] ?? null;
   const selectedSeller = selectedShopId != null ? sel?.seller ?? null : null;
   const selectedShop = selectedShopId
     ? dimChannel.find((c) => c.channel_id === selectedShopId) ?? null
     : null;
-  const selectedPlatformOnly = selectedShop ? null : (sel?.platforms[0] ?? null);
+  const multiPlatformLabel = state.platform && state.platform.shopIds.length === 0 && state.platform.platforms.length > 1
+    ? state.platform.platforms.join('、')
+    : null;
+  const selectedPlatformOnly = selectedShop ? null : (multiPlatformLabel ?? sel?.platforms[0] ?? null);
 
   // 左列激活平台：手动点选 > 已选店铺所属平台 > 默认解析 > 首个平台
   const activePlatform =

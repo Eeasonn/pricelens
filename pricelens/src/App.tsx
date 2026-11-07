@@ -19,8 +19,14 @@ import ForecastPage from './pages/ForecastPage';
 import PageHeader from './components/PageHeader';
 import FilterBar from './components/FilterBar';
 import { ChartContentProvider } from './state/chartContent';
+// 2026-11-07 整合：Agent 栈按构建通道并存——稳定版用稳定线实现（4966d02，含 R6–R8
+// 平台级归一与页内说明），迭代版用迭代线实现（e98d9b1，batch4 + R2–R7）。两边
+// useAgent 门面接口一致，页面代码不分通道。
+import { STABLE } from './appChannel';
 import { AgentProvider } from './state/AgentContext';
 import AgentPanel from './components/Copilot/AgentPanel';
+import { AgentProvider as AgentProviderStable } from './state/AgentContextStable';
+import AgentPanelStable from './components/CopilotStable/AgentPanel';
 import { color, font, shadow, space } from './theme/tokens';
 import AppErrorBoundary from './components/AppErrorBoundary';
 
@@ -53,14 +59,29 @@ export default function App() {
         <AppErrorBoundary>
           <PageProvider>
             <FiltersProvider>
-              <AgentProvider>
-                <OverviewViewProvider>
-                  <ChartContentProvider>
-                    <AppBody />
-                    <AgentPanel />
-                  </ChartContentProvider>
-                </OverviewViewProvider>
-              </AgentProvider>
+              {/* 2026-11-07 整合：Agent Provider 按构建通道切换——稳定版整树挂
+                  AgentProviderStable（稳定栈内部状态机），页头稳定组件与面板直接
+                  命中稳定 ctx；页面消费者（ForecastPage 等）经 useAgent 门面转发
+                  （稳定构建 → 稳定 ctx），页面代码不分通道。迭代版照旧。 */}
+              {STABLE ? (
+                <AgentProviderStable>
+                  <OverviewViewProvider>
+                    <ChartContentProvider>
+                      <AppBody />
+                      <AgentPanelStable />
+                    </ChartContentProvider>
+                  </OverviewViewProvider>
+                </AgentProviderStable>
+              ) : (
+                <AgentProvider>
+                  <OverviewViewProvider>
+                    <ChartContentProvider>
+                      <AppBody />
+                      <AgentPanel />
+                    </ChartContentProvider>
+                  </OverviewViewProvider>
+                </AgentProvider>
+              )}
             </FiltersProvider>
           </PageProvider>
         </AppErrorBoundary>

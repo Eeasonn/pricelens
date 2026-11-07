@@ -43,7 +43,7 @@ const result = spawnSync('npx', ['--no-install', '@google/design.md', 'lint', ..
 if (result.stderr) process.stderr.write(result.stderr);
 if (result.status === 0) process.exit(0);
 
-const unavailable = /missing packages|no packages|could not determine executable|canceled due to missing/i.test(result.stderr || '');
+const unavailable = /missing packages|no packages|could not determine executable|canceled due to missing|command not found|not found/i.test(result.stderr || '');
 if (!unavailable) process.exit(result.status ?? 1);
 
 if (strict) {

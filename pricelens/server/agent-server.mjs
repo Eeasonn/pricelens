@@ -31,13 +31,27 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function sendSse(res, payload, runId) {
+function sendSse(res, payload, runId, text = '') {
   res.writeHead(200, { ...jsonHeaders, 'content-type': 'text/event-stream; charset=utf-8', connection: 'keep-alive' });
   const now = new Date().toISOString();
+  const isAlert = /预警|异常|阈值/.test(text);
+  const isAdvantage = /价格优势|优势|价差/.test(text);
+  const stages = [
+    ['parsing', '解析意图', 'catalog.resolve', '已解析请求范围。'],
+    ['tool_running', isAlert ? '读取预警规则与价格事实' : '读取价格事实', isAlert ? 'alerts.query' : 'series.query', isAlert ? '正在读取真实预警证据。' : '正在读取真实价格事实。'],
+    ['partial_result', isAdvantage ? '计算价格优势' : isAlert ? '核对预警触发条件' : '整理确定性结果', isAdvantage ? 'series.compare' : isAlert ? 'alerts.explain' : 'series.compare', isAdvantage ? '正在计算我司与核心竞品的价差。' : isAlert ? '正在核对规则、阈值与来源。' : '正在整理确定性结果。'],
+    ['partial_result', '生成结论', 'view.preview', String(payload.summary || '').slice(0, 120)],
+  ];
   const startedEvent = { id: `${runId}-started`, runId, sequence: 1, type: 'run.started', status: 'running', timestamp: now, message: '服务端 Agent 已接收请求', provenance: payload.provenance };
-  const completedEvent = { id: `${runId}-completed`, runId, sequence: 2, type: 'run.completed', status: 'completed', timestamp: new Date().toISOString(), message: '服务端 Agent 已完成运行', provenance: payload.provenance };
   res.write(`event: run.status\ndata: ${JSON.stringify({ event: startedEvent })}\n\n`);
+  stages.forEach(([status, message, tool, delta], index) => {
+    const stepEvent = { id: `${runId}-step-${index}`, runId, sequence: index * 2 + 2, type: 'step.updated', status, timestamp: new Date().toISOString(), message, tool, provenance: payload.provenance };
+    const textEvent = { id: `${runId}-text-${index}`, runId, sequence: index * 2 + 3, type: 'text.delta', status, timestamp: new Date().toISOString(), message, tool, delta, provenance: payload.provenance };
+    res.write(`event: step.updated\ndata: ${JSON.stringify({ event: stepEvent })}\n\n`);
+    res.write(`event: text.delta\ndata: ${JSON.stringify({ event: textEvent })}\n\n`);
+  });
   res.write(`event: response\ndata: ${JSON.stringify({ type: 'response', response: payload })}\n\n`);
+  const completedEvent = { id: `${runId}-completed`, runId, sequence: stages.length * 2 + 2, type: 'run.completed', status: 'completed', timestamp: new Date().toISOString(), message: '服务端 Agent 已完成运行', provenance: payload.provenance };
   res.write(`event: run.completed\ndata: ${JSON.stringify({ event: completedEvent })}\n\n`);
   res.end();
 }
@@ -76,8 +90,8 @@ function isResponseShape(value) {
   if (typeof value.summary !== 'string' || typeof value.contextFingerprint !== 'string') return false;
   if (!Array.isArray(value.steps) || !Array.isArray(value.cards) || !Array.isArray(value.citations) || !Array.isArray(value.suggestions)) return false;
   if (value.provider !== undefined && (!value.provider || typeof value.provider !== 'object' || typeof value.provider.name !== 'string' || typeof value.provider.model !== 'string')) return false;
-  return value.suggestions.every((item) => typeof item === 'string')
-    && value.cards.every((item) => item && typeof item === 'object' && ['filter', 'table', 'chart', 'alert', 'forecast_explanation'].includes(item.kind));
+  return value.suggestions.every((item) => typeof item === 'string' || (item && typeof item === 'object' && typeof item.label === 'string' && typeof item.prompt === 'string'))
+    && value.cards.every((item) => item && typeof item === 'object' && ['filter', 'table', 'chart', 'alert', 'forecast_explanation', 'tool_call', 'price_advantage'].includes(item.kind));
 }
 
 function compactContext(body, baseline) {
@@ -176,12 +190,13 @@ async function handleRun(req, res) {
   try {
     const modelResult = await callArk(body, baseline);
     const intent = ['filter', 'query', 'forecast_explain', 'alert', 'clarify'].includes(modelResult?.intent) ? modelResult.intent : baseline.intent;
-    const suggestions = Array.isArray(modelResult?.suggestions) ? modelResult.suggestions.filter((item) => typeof item === 'string').slice(0, 3) : baseline.suggestions;
     const response = {
       ...baseline,
       intent,
       summary: typeof modelResult?.summary === 'string' && modelResult.summary.trim() ? modelResult.summary.trim() : baseline.summary,
-      suggestions: suggestions.length ? suggestions : baseline.suggestions,
+      // Stable line exposes only the baseline's three explicit core intents;
+      // the remote model is narrative-only and cannot add new chips.
+      suggestions: baseline.suggestions,
       provider: { name: 'Ark Agent Plan', model },
       provenance: {
         ...(baseline.provenance || {}),
@@ -191,7 +206,7 @@ async function handleRun(req, res) {
         generatedAt: new Date().toISOString(),
       },
     };
-    sendSse(res, response, String(body.runId || body.clientRequestId || `run-${Date.now()}`));
+    sendSse(res, response, String(body.runId || body.clientRequestId || `run-${Date.now()}`), body.text);
   } catch (error) {
     // 不把上游响应体或授权信息写入日志；客户端可选择重试或继续使用离线适配器。
     console.error('[agent] upstream request failed:', error instanceof Error ? error.message : 'unknown error');

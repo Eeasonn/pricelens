@@ -13,11 +13,16 @@
 // 第一百八十五轮（外部 UX 审计落地）：上一代关系「恢复默认」收窄为只清当前国家
 // 型号的人工维护（clearPrevGenOverridesForModels，其他国家原样保留）；默认平台
 // 店铺的取价说明与实际回退链对齐（自动 = 每周最低在架价：默认店铺→预填主店→默认平台）。
+// 2026-11-06（稳定版 RBAC + 导入导出）：页头工具行收敛 = 分区锚点 + 搜索 +
+// 角色切换（演示，正式环境将由账号权限下发）+ 导入（仅 GTM）+ 导出（GTM/查阅者）；
+// 查阅者全部写入控件 disabled 并显示横幅；长说明收进 Tooltip（对齐价格走势密度）。
 // ============================================================
-import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
-import { Button, Empty, Input, message, Popconfirm, Select, Tag, Tooltip } from 'antd';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ChangeEvent, CSSProperties, ReactNode } from 'react';
+import { Button, Empty, Input, message, Modal, Popconfirm, Segmented, Select, Tag, Tooltip } from 'antd';
+import { DownloadOutlined, InfoCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import PageHeader from '../components/PageHeader';
+import { setRole, useRole, type AccessRole } from '../access/role';
 import {
   autoPrevModelId,
   clearPrevGenOverridesForModels,
@@ -26,6 +31,14 @@ import {
   notifyConfigChanged,
   savePrevGenOverrides,
 } from '../state/configStore';
+import {
+  applyImportPayload,
+  exportConfigSnapshot,
+  parseConfigSnapshotText,
+  summarizeImportPayload,
+  type ConfigSnapshotV1,
+  type ImportPreviewSummary,
+} from '../state/configImportExport';
 import {
   defaultShopOverrideOf,
   getDefaultShopOverrides,
@@ -37,8 +50,9 @@ import { modelIdOf } from '../components/ProductCascader/tree';
 import { useFilters } from '../state/FiltersContext';
 import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
 import DataQualityBlock from './config/DataQualityBlock';
+import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import { scopeLabels } from '../dataModel/scope';
-import { color, fontSize, radius, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
+import { color, fontSize, radius, shadow, space } from '../theme/tokens';
 
 // ---------------- ② 上一代关系（型号级，与 dim_product.prev_model_id 同口径） ----------------
 
@@ -86,8 +100,17 @@ function Block({ id, title, extra, children }: { id?: string; title: string; ext
 
 const cellPadding: CSSProperties = { padding: `${space.sm}px ${space.sm}px` };
 
+/** 导出文件名：pricelens-config-<时间戳>.pricelens-config.json（推荐扩展名） */
+function configExportFileName(now = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `pricelens-config-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}.pricelens-config.json`;
+}
+
 export default function Config() {
   const { state } = useFilters();
+  // 2026-11-06 RBAC：角色切换（演示）即时刷新全页控件态；查阅者只读 + 可导出
+  const role = useRole();
+  const canEdit = role === 'gtm';
   const prevRows = useMemo(() => ownModelRows(state.countryCode), [state.countryCode]);
   const [searchTerm, setSearchTerm] = useState('');
   const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
@@ -109,8 +132,19 @@ export default function Config() {
     [state.countryCode],
   );
 
+  // 导入落盘（applyImportPayload）派发 CONFIG_CHANGED_EVENT 后重读本页局部状态；
+  // 本页各块即改即存的自身广播重读是幂等的（第一百一十五轮：无批量「保存配置」）
+  useEffect(() => {
+    const reread = (): void => {
+      setPrevMap(Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])));
+      setDefaultShopId(defaultShopOverrideOf(state.countryCode));
+    };
+    window.addEventListener(CONFIG_CHANGED_EVENT, reread);
+    return () => window.removeEventListener(CONFIG_CHANGED_EVENT, reread);
+  }, [prevRows, state.countryCode]);
+
   // 第一百一十五轮（评审）：右上「保存配置」按钮删除——本页各明细编辑即改即存
-  //（对标配置 = BenchConfigModal 保存；上一代关系 = 下拉变更即存差异），
+  //（对标配置 = BenchConfigModal 保存；上一代关系 = 下拉变更即存），
   // 不再攒一次批量提交。
 
   /** 上一代关系单行变更即存：只写与 auto 的差异（无差异 = 清除手动维护），主页即时生效。
@@ -205,6 +239,68 @@ export default function Config() {
     saveDefaultShop(first?.channel_id ?? null);
   };
 
+  // ---------------- 2026-11-06 导入/导出（快照 = LPL3.config.* 原始持久化值） ----------------
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingImport, setPendingImport] = useState<{ payload: ConfigSnapshotV1; summary: ImportPreviewSummary } | null>(null);
+
+  const onExport = (): void => {
+    const snapshot = exportConfigSnapshot();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = configExportFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+    message.success(`已导出配置快照（${link.download}）`);
+  };
+
+  const onImportFilePicked = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // 允许重复选择同一文件
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const result = parseConfigSnapshotText(text);
+      if (!result.ok || !result.payload) {
+        message.error(`导入失败：${result.error ?? '文件不合法'}`);
+        return;
+      }
+      setPendingImport({ payload: result.payload, summary: summarizeImportPayload(result.payload) });
+    } catch {
+      message.error('读取文件失败，请重试');
+    }
+  };
+
+  const confirmImport = (): void => {
+    if (!pendingImport) return;
+    const result = applyImportPayload(pendingImport.payload);
+    setPendingImport(null);
+    if (!result.applied) {
+      message.error(result.reason ?? '导入未生效');
+      return;
+    }
+    message.success('配置已导入，全部页面即时生效');
+  };
+
+  const viewerHint = '查阅者不可修改配置，请联系 GTM';
+
+  const previewRow = (label: string, value: ReactNode): ReactNode => (
+    <div key={label} style={{ display: 'grid', gridTemplateColumns: '88px minmax(0, 1fr)', gap: space.sm, fontSize: fontSize.bodySm, alignItems: 'baseline' }}>
+      <span style={{ color: color.mute }}>{label}</span>
+      <span style={{ color: color.ink, overflowWrap: 'anywhere' }}>{value}</span>
+    </div>
+  );
+
+  const benchmarkPreviewText = (summary: ImportPreviewSummary): string => {
+    if (summary.benchmarkTotal === 0) return '无人工配置 → 恢复系统默认';
+    const countries = summary.benchmarkByCountry;
+    const head = countries.slice(0, 6).map((c) => `${c.countryCode} ×${c.count}`).join(' · ');
+    const tail = countries.length > 6 ? ` 等 ${countries.length} 国` : '';
+    return `共 ${summary.benchmarkTotal} 条（${head}${tail}）`;
+  };
+
   return (
     <div style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }} data-lpl-scroll>
       {/* 第二十八轮：1440 → 1280，与看板同最低宽度 */}
@@ -214,26 +310,85 @@ export default function Config() {
         <PageHeader title="配置" />
 
         <main style={{ flex: 1, padding: space.lg }}>
+          {/* 2026-11-06：页头工具行 = 分区锚点 + 搜索 + 角色切换（演示）+ 导入 + 导出。
+              密度对齐价格走势工具行：一条横排、小控件、长说明进 Tooltip */}
           <div style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md, padding: `${space.sm}px ${space.md}px`, background: color.canvas, border: `1px solid ${color.hairline}`, borderRadius: radius.control, boxShadow: shadow.l1 }}>
             <nav aria-label="配置分区" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               {[
                 ['benchmark', '竞品对标'],
                 ['default-shop', '默认店铺'],
+                ['anomaly', '异常守卫'],
                 ['prev-gen', '上一代关系'],
                 ['fx', '汇率'],
                 ['promo', '大促日历'],
               ].map(([id, label]) => <a key={id} href={`#${id}`} style={{ color: color.link, fontSize: 11, textDecoration: 'none', padding: '3px 7px', borderRadius: radius.pill }}>{label}</a>)}
             </nav>
-            <Input
-              allowClear
-              size="small"
-              aria-label="配置搜索"
-              placeholder="搜索上一代关系型号"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              style={{ width: 220, marginLeft: 'auto' }}
-            />
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+              <Input
+                allowClear
+                size="small"
+                aria-label="配置搜索"
+                placeholder="搜索上一代关系型号"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                style={{ width: 190 }}
+              />
+              <span aria-hidden style={{ width: 1, height: 18, background: color.hairline }} />
+              {/* 角色切换（开发/演示用）：正式环境将由账号权限下发；详见
+                  docs/design/2026-11-06-access-roles.md */}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: color.mute }}>角色</span>
+                <Segmented
+                  size="small"
+                  aria-label="当前角色（演示）"
+                  value={role}
+                  onChange={(v) => setRole(v as AccessRole)}
+                  options={[
+                    { label: 'GTM', value: 'gtm' },
+                    { label: '查阅者', value: 'viewer' },
+                  ]}
+                />
+                <Tooltip title="开发/演示用角色切换：GTM 可编辑并导入导出；查阅者只读、仍可导出备份">
+                  <span style={{ fontSize: 11, color: color.mute }}>正式环境将由账号权限下发</span>
+                </Tooltip>
+              </span>
+              {/* 导入仅 GTM（applyImportPayload 内另有角色校验）；导出 GTM/查阅者皆可 */}
+              {canEdit && (
+                <Button size="small" icon={<UploadOutlined />} onClick={() => fileInputRef.current?.click()}>
+                  导入配置
+                </Button>
+              )}
+              <Button size="small" icon={<DownloadOutlined />} onClick={onExport}>
+                导出配置
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                hidden
+                aria-label="选择配置快照文件"
+                onChange={onImportFilePicked}
+              />
+            </div>
           </div>
+
+          {/* 查阅者横幅：角色态即时显隐（useRole 监听角色变更广播） */}
+          {!canEdit && (
+            <div
+              role="status"
+              style={{
+                display: 'flex', alignItems: 'center', gap: space.sm,
+                marginBottom: space.md, padding: `${space.sm}px ${space.md}px`,
+                background: color.warningSoft, color: color.warningInk,
+                border: `1px solid ${color.warning}`, borderRadius: radius.control,
+                fontSize: fontSize.bodySm,
+              }}
+            >
+              <InfoCircleOutlined style={{ flexShrink: 0 }} />
+              <span>{viewerHint}。可查看全部配置并「导出配置」备份。</span>
+            </div>
+          )}
+
           {/* ⓪ 竞品对标配置：全部已识别的对标关系（矩阵/自动/替代/人工）在此可查可改 */}
           <Block
             id="benchmark"
@@ -244,7 +399,7 @@ export default function Config() {
               </span>
             }
           >
-            <BenchmarkConfigBlock />
+            <BenchmarkConfigBlock canEdit={canEdit} />
           </Block>
 
           {/* ⓪' 默认平台店铺（第一百三十七轮）：未在筛选中选择平台时，看板按生效默认店铺取价 */}
@@ -258,9 +413,14 @@ export default function Config() {
                 cancelText="取消"
                 okButtonProps={{ size: 'small' }}
                 cancelButtonProps={{ size: 'small' }}
+                disabled={!canEdit}
                 onConfirm={() => saveDefaultShop(null)}
               >
-                <Button size="small" disabled={!defaultShopId} title={defaultShopId ? undefined : '当前无人工配置'}>
+                <Button
+                  size="small"
+                  disabled={!canEdit || !defaultShopId}
+                  title={!canEdit ? viewerHint : defaultShopId ? undefined : '当前无人工配置'}
+                >
                   清除人工配置，回到{prefillShop ? '预填' : '平台默认'}
                 </Button>
               </Popconfirm>
@@ -275,6 +435,7 @@ export default function Config() {
                 style={{ width: 170, flexShrink: 0 }}
                 aria-label="默认平台"
                 placeholder="选择平台"
+                disabled={!canEdit}
                 value={defaultShopPlatform ?? undefined}
                 options={platformRowsOfCc.map((r) => ({ value: r.platform, label: `${r.platform} · ${r.shops} 店铺` }))}
                 onChange={onDefaultPlatformChange}
@@ -284,7 +445,7 @@ export default function Config() {
                 style={{ width: 200, flexShrink: 0 }}
                 aria-label="默认店铺"
                 placeholder={defaultShopPlatform ? '选择店铺' : '先选平台'}
-                disabled={!defaultShopPlatform}
+                disabled={!canEdit || !defaultShopPlatform}
                 value={effectiveShopId ?? undefined}
                 options={shopRowsOfPlatform.map((s) => ({ value: s.id, label: s.name }))}
                 onChange={(v) => saveDefaultShop(v ?? null)}
@@ -303,16 +464,27 @@ export default function Config() {
                 </Tag>
               )}
             </div>
-            <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px' }}>
-              未在筛选条选择平台时，看板取「自动」价 = 每周最低在架价：优先取默认店铺；未设置时取预填主店；仍无则取默认平台。改动即时生效。
-              各国默认店铺已按事实数据预填（默认平台内数据最全的主店）；此处改动即人工覆盖，清除后回到预填。
-              「平台价差」预警按该国全部平台计算，不受默认店铺影响。
+            {/* 长说明收进 Tooltip（2026-11-06 密度整理）：正文只留一句回退链 */}
+            <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px', display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+              <span>未在筛选条选择平台时，看板取「自动」价 = 每周最低在架价：默认店铺 → 预填主店 → 默认平台。改动即时生效。</span>
+              <Tooltip
+                title={
+                  <div style={{ maxWidth: 340 }}>
+                    <div>· 各国默认店铺已按事实数据预填（默认平台内数据最全的主店）；</div>
+                    <div>· 此处改动即人工覆盖，清除后回到预填；</div>
+                    <div>· 「平台价差」预警按该国全部平台计算，不受默认店铺影响。</div>
+                  </div>
+                }
+              >
+                <InfoCircleOutlined aria-label="默认店铺取价完整说明" style={{ fontSize: 11, color: color.mute, cursor: 'help' }} />
+              </Tooltip>
             </div>
           </Block>
 
           {/* ⓪'' 异常价格守卫（2026-11-01 异常价格守卫；晚前反馈「数据质量」难懂改此名）：
               全局口径唯一写入口——阈值 + 人工裁定清单 */}
           <Block
+            id="anomaly"
             title="异常价格守卫"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
@@ -320,7 +492,7 @@ export default function Config() {
               </span>
             }
           >
-            <DataQualityBlock />
+            <DataQualityBlock canEdit={canEdit} />
           </Block>
 
           {/* ① 上一代关系 */}
@@ -335,12 +507,17 @@ export default function Config() {
                 cancelText="取消"
                 okButtonProps={{ size: 'small' }}
                 cancelButtonProps={{ size: 'small' }}
+                disabled={!canEdit}
                 onConfirm={restorePrevGenDefault}
               >
                 <Button
                   size="small"
-                  disabled={manualPrevCount === 0}
-                  title={manualPrevCount === 0 ? '当前国家没有人工维护的上一代关系' : undefined}
+                  disabled={!canEdit || manualPrevCount === 0}
+                  title={!canEdit
+                    ? viewerHint
+                    : manualPrevCount === 0
+                      ? '当前国家没有人工维护的上一代关系'
+                      : undefined}
                 >
                   恢复默认
                 </Button>
@@ -372,6 +549,7 @@ export default function Config() {
                       <Select
                         size="small"
                         allowClear
+                        disabled={!canEdit}
                         placeholder="未维护"
                         aria-label={`上一代关系：${r.label}`}
                         style={{ width: 170, flexShrink: 0 }}
@@ -475,6 +653,52 @@ export default function Config() {
                 })}
             </div>
           </Block>
+
+          {/* 导入预览确认（仅 GTM 能走到）：applyImportPayload 落盘前已全量校验，
+              确认后一次性写回并广播；null 键 = 恢复系统默认 */}
+          <Modal
+            open={pendingImport != null}
+            onCancel={() => setPendingImport(null)}
+            title="导入配置预览"
+            width={560}
+            centered
+            footer={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ flex: 1, fontSize: fontSize.caption, color: color.mute }}>
+                  确认后一次性覆盖当前浏览器内上述配置，全部页面即时生效；筛选与页面状态不受影响。
+                </span>
+                <Button size="small" onClick={() => setPendingImport(null)}>
+                  取消
+                </Button>
+                <Button type="primary" size="small" onClick={confirmImport}>
+                  确认导入
+                </Button>
+              </div>
+            }
+          >
+            {pendingImport && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
+                {previewRow('导出时间', `${pendingImport.summary.exportedAt.slice(0, 16).replace('T', ' ')} UTC`)}
+                {previewRow('来源通道', pendingImport.summary.appChannel === 'stable' ? '稳定版' : '迭代版')}
+                {previewRow('竞品对标', benchmarkPreviewText(pendingImport.summary))}
+                {previewRow('上一代关系', pendingImport.summary.prevGenCount > 0
+                  ? `${pendingImport.summary.prevGenCount} 个型号人工维护`
+                  : '无人工维护 → 恢复系统默认')}
+                {previewRow('默认店铺', pendingImport.summary.defaultShopCount > 0
+                  ? `${pendingImport.summary.defaultShopCount} 国人工配置`
+                  : '无人工配置 → 恢复系统默认')}
+                {previewRow('异常守卫', pendingImport.summary.anomalyRule
+                  ? pendingImport.summary.anomalyRule.enabled
+                    ? `开启（阈值 ≥${pendingImport.summary.anomalyRule.thresholdPct}%）`
+                    : `关闭（阈值 ${pendingImport.summary.anomalyRule.thresholdPct}%）`
+                  : '未配置 → 恢复默认（关闭）')}
+                {previewRow('人工裁定', pendingImport.summary.anomalyMarkCount > 0
+                  ? `${pendingImport.summary.anomalyMarkCount} 条`
+                  : '无 → 清空')}
+                {previewRow('参考汇率', pendingImport.summary.fxIncluded ? '随快照写回（只读展示，无编辑入口）' : '快照不含汇率')}
+              </div>
+            )}
+          </Modal>
         </main>
       </div>
     </div>

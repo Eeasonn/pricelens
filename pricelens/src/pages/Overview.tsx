@@ -31,6 +31,7 @@ import type { DimBenchmark } from '../dataModel/types';
 import { filterBarTheme } from '../components/FilterBar';
 import ScopeFields from '../components/FilterBar/ScopeFields';
 import PlatformBox from '../components/FilterBar/PlatformBox';
+import PlatformScopeNotice from '../components/FilterBar/PlatformScopeNotice';
 import CurrencyBox from '../components/FilterBar/CurrencyBox';
 import { OwnProductControl } from '../components/FilterBar/ProductBox';
 import { getEffectiveBenchmark } from '../state/configStore';
@@ -205,6 +206,9 @@ export default function Overview() {
                   <CurrencyBox />
                 </FilterCell>
               </div>
+              {/* R7-M1：稳定版平台口径归一说明（级联「全部店铺·最低价」提交后的
+                  透明展开 / v12 旧持久化迁移说明），页内常驻；迭代版不渲染 */}
+              <PlatformScopeNotice />
             </section>
           </ConfigProvider>
         </div>

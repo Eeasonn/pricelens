@@ -12,6 +12,7 @@
 // 本模块不依赖 aggregate（防环）；促销带判定直接读维表（任意档期，不分平台）。
 // ============================================================
 import { dimPromo } from '../data';
+import { canEditConfig } from '../access/role';
 import { CONFIG_CHANGED_EVENT, LPL } from '../state/lplKeys';
 
 /** 点级打标状态（与 SeriesPoint.suspect 同构；缺省 = 可信不打标） */
@@ -105,6 +106,7 @@ export function readAnomalyRule(): AnomalyRule {
 }
 
 export function saveAnomalyRule(rule: AnomalyRule): void {
+  if (!canEditConfig()) return; // 2026-11-06 RBAC：查阅者写为 no-op（UI 已门控，纵深防御）
   const pct = clampCustomPct(rule.thresholdPct) ?? DEFAULT_ANOMALY_RULE.thresholdPct;
   writeJson(LPL.cfgAnomalyRule, { enabled: rule.enabled === true, thresholdPct: pct });
   notifyAnomalyChanged();
@@ -123,6 +125,7 @@ function readAnomalyMarks(): AnomalyMark[] {
 
 /** 记一条人工裁定（同点覆写：先移除同 cc+系列+桶的旧记录再新增，最新在前） */
 export function addAnomalyMark(mark: AnomalyMark): void {
+  if (!canEditConfig()) return; // 2026-11-06 RBAC：查阅者写为 no-op（图上逐点裁定同为配置写路径）
   const marks = readAnomalyMarks().filter(
     (m) => !(m.countryCode === mark.countryCode && m.seriesKey === mark.seriesKey && m.bucketId === mark.bucketId),
   );
@@ -133,6 +136,7 @@ export function addAnomalyMark(mark: AnomalyMark): void {
 
 /** 撤销一条人工裁定（清单行尾「撤销」）；撤销后回到自动判定 */
 export function undoAnomalyMark(countryCode: string, seriesKey: string, bucketId: string, ts: number): void {
+  if (!canEditConfig()) return; // 2026-11-06 RBAC：查阅者写为 no-op
   const marks = readAnomalyMarks().filter(
     (m) => !(m.countryCode === countryCode && m.seriesKey === seriesKey && m.bucketId === bucketId && m.ts === ts),
   );

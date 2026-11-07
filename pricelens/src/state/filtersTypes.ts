@@ -42,6 +42,20 @@ export interface PlatformSelection {
   seller?: string | null;
 }
 
+/** t428u R7-M1 · 稳定版平台口径归一的落地说明（provenance）：load / actions.set /
+ *  换国等入口把原始完整输入（多平台 + 店铺级混存）经 normalizePlatformScope
+ *  归一后，原始店铺输入虽已从 state.platform 移除，但「为什么变成这个口径」的
+ *  透明说明随状态保留——页内常驻条幅与四类 Agent 结果卡（图/最新摘要/优势/
+ *  平台比较）据此展示展开/剔除事实。countryCode + platform 是说明的适用条件：
+ *  换国或口径再变化后不再匹配即失效（不泄漏陈旧说明）；持久化随包写入、读档
+ *  校验，刷新后同一口径下说明仍在。迭代版恒为 null/缺省（无此归一）。 */
+export interface PlatformScopeNotice {
+  note: string; // 归一说明原文（normalizePlatformScope 产出）
+  countryCode: string; // 归一发生时的目标国
+  /** 说明所描述的归一后口径；与当前 state.platform 逐集相等时说明仍然成立 */
+  platform: PlatformSelection | null;
+}
+
 export interface FiltersState {
   countryCode: string; // 有数据的国家（dim_region.enabled）
   industry: Industry; // 手机/平板/穿戴/音频（IoT/PC 有数据无矩阵）
@@ -50,6 +64,9 @@ export interface FiltersState {
   /** 主分析产品卡列表：卡序 = 分离面板序；≥2 张卡看板自动分离 */
   mains: MainProduct[];
   platform: PlatformSelection | null; // null=未选=该国默认电渠单平台口径；渠道内多店铺取最低在架价
+  /** R7-M1：稳定版平台口径归一说明（见 PlatformScopeNotice）；缺省/null = 无归一
+   *  发生或说明已失效。不参与 URL 同步；随持久化整包留存（读档按形状校验）。 */
+  platformScopeNotice?: PlatformScopeNotice | null;
   granularity: Granularity; // 默认 'month'（第二十五轮）
   /** 时间自适应（默认开）= 所选产品最早/最晚有效价格桶；上方筛选器手动修改即转为自定义。
    *  底部刷选条只负责在该极值范围内缩放查看，恢复自动时重新计算范围。 */

@@ -22,7 +22,10 @@ import { filterBarTheme } from './FilterBar';
 import CountryBox from './FilterBar/CountryBox';
 import DataHelpModal from './DataHelpModal';
 import AgentLauncher from './Copilot/AgentLauncher';
+import AgentLauncherStable from './CopilotStable/AgentLauncher';
 import PriceTrendSearch from './PriceTrendSearch';
+import PriceTrendSearchStable from './PriceTrendSearchStable';
+import { STABLE } from '../appChannel';
 import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
 
 /** 页头只留管理页签。图表内容的切换在筛选栏下方（ChartContentBar）。
@@ -126,11 +129,11 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
           <div style={{ width: 190, maxWidth: '100%' }}>
             <CountryBox />
           </div>
-          <PriceTrendSearch />
+          {STABLE ? <PriceTrendSearchStable /> : <PriceTrendSearch />}
         </ConfigProvider>
       </div>
       <div className="lpl-page-header-actions" style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
-        <AgentLauncher />
+        {STABLE ? <AgentLauncherStable /> : <AgentLauncher />}
         <nav className="lpl-page-nav" aria-label="页面" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           {VISIBLE_TABS.map((t) => (
             <span key={t.page} style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>

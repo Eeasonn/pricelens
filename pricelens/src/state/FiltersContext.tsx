@@ -19,12 +19,16 @@ import type {
   FiltersActions,
   FiltersState,
   MainProduct,
+  PlatformScopeNotice,
   PlatformSelection,
   ProductSelection,
 } from './filtersTypes';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimProduct, dimRegion, dimTime } from '../data';
 import { lowestPriceColorSku, platformSelectionForCountry, sellersOfChannel } from '../dataModel/aggregate';
+import { normalizePlatformScope, platformQueryEquals } from '../dataModel/platformScope';
+import type { LawfulPlatformScope } from '../dataModel/platformScope';
+import { STABLE } from '../appChannel';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
@@ -74,6 +78,7 @@ export const defaultFilters: FiltersState = {
   currency: 'usd', // 默认 USD（真实数据按行内汇率折算）
   priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
   agg: 'avg',
+  platformScopeNotice: null, // R7-M1：稳定版平台口径归一说明（无归一 = null）
   alertSubs: [], // 第五十二轮：预警中心订阅（默认空，入口 = 看板页签铃铛 / 总览型号块）
   alertTypes: DEFAULT_ALERT_TYPES, // 追补⑨：四类预警全局开关
   alertThresholds: DEFAULT_ALERT_THRESHOLDS, // 追补⑨：四类全局阈值（旧版共用 1.5% 一条线）
@@ -149,6 +154,15 @@ function isPlatformSelection(value: unknown): value is PlatformSelection | null 
     isStringArray(value.shopIds) &&
     (value.seller === undefined || value.seller === null || typeof value.seller === 'string')
   );
+}
+
+/** R7-M1：持久化里的归一说明（provenance）形状校验——note 文本 + 目标国 +
+ *  描述的归一后口径；坏形状跳过该字段（不入 required，不作废整包）。 */
+function isPlatformScopeNotice(value: unknown): value is PlatformScopeNotice {
+  if (!isRecord(value)) return false;
+  return typeof value.note === 'string'
+    && typeof value.countryCode === 'string'
+    && isPlatformSelection(value.platform);
 }
 
 function isPriceTypes(value: unknown): value is FiltersState['priceTypes'] {
@@ -229,6 +243,8 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       [v === 12 ? 'mains' : v === 11 ? ('legacyV11Mains' as const) : 'legacyOwn', v === 10 ? isProductSelectionArray(parsed.own) : mainsOk],
       [v === 10 ? 'legacyCompetitors' : 'platform', v === 10 ? isProductSelectionArray(parsed.competitors) : isPlatformSelection(parsed.platform)],
       ['platform', isPlatformSelection(parsed.platform)],
+      // R7-M1：归一说明随包留存（坏形状跳过，不作废整包——口径本身仍合法可恢复）
+      ['platformScopeNotice', parsed.platformScopeNotice == null || isPlatformScopeNotice(parsed.platformScopeNotice)],
       // 口径（国家/产业）随载荷恢复：写侧一直整包写入，读侧漏掉会让裸根链接的
       // 新会话静默回落 RU/phone 并把旧国家选择当无效覆盖掉。值非法/缺失 =
       // 跳过该项落默认口径（不入 required，不因此作废整包）。
@@ -251,6 +267,8 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
     const required = checks.filter(([key]) =>
       key !== 'alertTypes' && key !== 'alertThresholds' && key !== 'alertProducts'
       && key !== 'countryCode' && key !== 'industry'
+      // R7-M1：归一说明是可再生物质（口径本身可重新归一），坏形状/缺失只跳过字段
+      && key !== 'platformScopeNotice'
       // v10/v11 复用的 platform 键形随数据换代漂移（渠道 id 空间两度更换）：
       // 不再因它作废整包——无效时跳过该字段回落默认电渠（与 countryCode 同等
       // 宽限，可迁移的用户选择不陪葬）；v12 载荷 platform 仍在 required
@@ -264,7 +282,12 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       else if (key === 'legacyCompetitors') rest.legacyCompetitors = parsed.competitors as ProductSelection[];
       else if (key === 'legacyV11Mains')
         rest.legacyV11Mains = parsed.mains as { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[];
-      else if (key !== 'mains' || v === 12) (rest as UnknownRecord)[key] = (parsed as UnknownRecord)[key];
+      else if (key !== 'mains' || v === 12) {
+        // 缺失的可选字段（R7-M1 platformScopeNotice 未写入时）不落显式 undefined，
+        // 避免 spread 覆盖默认值
+        const value = (parsed as UnknownRecord)[key];
+        if (value !== undefined) (rest as UnknownRecord)[key] = value;
+      }
     }
     return rest;
   } catch {
@@ -304,11 +327,12 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
   return { mains: [] };
 }
 
+/* ---------- 迭代线实现（e98d9b1） ---------- */
 /** 口径（国家/产业）变化后的状态整理：规范作用域、平台归一化到目标国可落地
  *  范围（R5-M1 共享规则：不可落地部分剔除、全部不可落地回默认电渠，同国有效
  *  平台与 shopIds 保留）、主分析失效时按新口径重算默认卡；开启「自动匹配竞品」
  *  的组对比区随新口径矩阵重算（矩阵分国，维表换代同样在启动读档时借此自愈） */
-function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
+function applyScopeDefaultsIterate(s: FiltersState, force: boolean): FiltersState {
   // R4-m1：坏载荷/外部调用可能给出 mains:undefined——入口归一，后续 .length/.map 不崩
   const state: FiltersState = Array.isArray(s.mains) ? s : { ...s, mains: [] };
   const scope = normalizeDataScope({ countryCode: state.countryCode, industry: state.industry });
@@ -346,7 +370,7 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
  *  不跨会话复活旧选择。
  *  R5（主品口径跨国保持，2026-11-07 二审）：patch 显式携带 mains（Agent 跨国
  *  结果卡「回看价格走势」等跳转动作）且整组在目标口径有效时以 patch.mains 为准
- *  ——不恢复按国快照、不被 applyScopeDefaults(force=true) 重算成默认主品；
+ *  ——不恢复按国快照、不被 applyScopeDefaultsIterate(force=true) 重算成默认主品；
  *  无显式 mains 的普通国家切换行为保持原样（快照恢复 / 默认重算）。
  *  R2（本轮返修 M1b，同步稳定线 7edadc6）：explicitMains = 调用方补丁自身显式
  *  携带非空 mains（Agent 结果卡跨国回看/定位的 filterPatch、undo/redo 整态快照）；
@@ -354,7 +378,7 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
  *  ——否则 RU→DE→RU 会把 DE 的默认主品当成 RU 的显式选择，丢掉 RU 快照。显式
  *  口径先经 remapMainsForScope 整组合法化（同型号换目标国首个合法配置）并更新
  *  目标国快照，型号整体缺席才回落快照恢复 / 默认重算。 */
-function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false): FiltersState {
+function switchScopeIterate(prev: FiltersState, next: FiltersState, explicitMains = false): FiltersState {
   // 快照键含产业维度：纯产业切换同样要保住「回切后还原」，键只按国会把
   // 当前产业的卡覆盖进该国快照，回切时校验不过即永久丢卡
   const snapKeyOf = (cc: string, industry: string) => `${LPL.filters}.mainsOf.${cc}.${industry}`;
@@ -368,7 +392,7 @@ function switchScope(prev: FiltersState, next: FiltersState, explicitMains = fal
   // 无条件落盘（含清空后的空数组）：空数组 = 用户显式清空的合法快照，不写
   // 会让清空前的旧快照残留，来回切口径时复活、显式清空被静默撤销
   writeSnapshot(prev.countryCode, prev.industry, prev.mains);
-  // 有效性按规范后的目标口径判定（applyScopeDefaults 内部同样先 normalize，
+  // 有效性按规范后的目标口径判定（applyScopeDefaultsIterate 内部同样先 normalize，
   // 此处先取一次保证判定与落地口径一致）
   const scope = normalizeDataScope({ countryCode: next.countryCode, industry: next.industry });
   if (explicitMains) {
@@ -377,7 +401,7 @@ function switchScope(prev: FiltersState, next: FiltersState, explicitMains = fal
     // 同步为空（此后普通切走/切回都保持空态）
     if (next.mains.length === 0) {
       writeSnapshot(scope.countryCode, scope.industry, []);
-      return applyScopeDefaults({ ...next, ...scope, mains: [] }, false);
+      return applyScopeDefaultsIterate({ ...next, ...scope, mains: [] }, false);
     }
     // R2 M1a：显式口径先整组合法化——精确合法配置原样保留，同型号配置/SKU 在
     // 目标国不存在时映射到该国首个合法配置（RU Mate X6 12+512 → ID 16+512），
@@ -386,11 +410,11 @@ function switchScope(prev: FiltersState, next: FiltersState, explicitMains = fal
     const remapped = remapMainsForScope(next.mains, scope.countryCode, scope.industry);
     if (remapped) {
       writeSnapshot(scope.countryCode, scope.industry, remapped);
-      return applyScopeDefaults({ ...next, ...scope, mains: remapped }, false);
+      return applyScopeDefaultsIterate({ ...next, ...scope, mains: remapped }, false);
     }
     // 型号整体缺席 → 下方快照恢复 / 默认重算路径安全回落
   }
-  const applied = applyScopeDefaults(next, true);
+  const applied = applyScopeDefaultsIterate(next, true);
   try {
     const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode, applied.industry));
     if (raw) {
@@ -416,7 +440,7 @@ function switchScope(prev: FiltersState, next: FiltersState, explicitMains = fal
   }
   // R4-m1：无有效快照时，先尝试旧 mains 同型号重映射（remapMainsForScope 保
   // 原型号换目标国合法配置：RU Mate X6 12+512 → ID Mate X6 16+512），映射结果
-  // 同步写入目标国快照；型号整体缺席才回落 applyScopeDefaults(force=true) 的
+  // 同步写入目标国快照；型号整体缺席才回落 applyScopeDefaultsIterate(force=true) 的
   // 默认重算（RU Mate X6 → DE 无该型号 → nova 14 Pro）。显式 mains 口径已在
   // 上方分支处理，不会走到这里重复映射。
   const inheritedMains = Array.isArray(next.mains) ? next.mains : [];
@@ -424,10 +448,171 @@ function switchScope(prev: FiltersState, next: FiltersState, explicitMains = fal
     const remapped = remapMainsForScope(inheritedMains, applied.countryCode, applied.industry);
     if (remapped) {
       writeSnapshot(applied.countryCode, applied.industry, remapped);
-      return applyScopeDefaults({ ...applied, mains: remapped }, false);
+      return applyScopeDefaultsIterate({ ...applied, mains: remapped }, false);
     }
   }
   return applied;
+}
+
+/* ---------- 稳定线实现（4966d02） ---------- */
+/** t428u R7-M1 · 归一说明（provenance）的统一收口：任何入口（load / actions.set /
+ *  换国 applyScopeDefaults）过 normalizePlatformScope 后由此决定 state 上的说明——
+ *  - 本次归一产生了说明（剔除/透明展开）→ 以本次结果为准（幂等：同输入同说明，
+ *    单字段存续，不可能重复叠加）；
+ *  - 归一幂等无说明（输入已是合法平台级）→ 沿用「仍能描述当前口径」的既有说明
+ *    （补丁/快照随带的说明优先于继承值——undo 整态恢复），否则清空：换国、
+ *    deliberate 换平台/重置后旧说明不再成立，绝不泄漏陈旧口径；
+ *  - 迭代版恒 null（无稳定版能力归一，Agent 卡内说明照旧由计算侧现场产出）。
+ *  t428u R8-M1 · 候选分两层：incoming（补丁/快照随带）之后还有 inherited（落地前
+ *  state 上的既有说明）——Agent 结果卡 open/apply 补丁携带的是归一后的规范平台
+ *  且不带说明键（validateFilterPatch 也不放行该键），幂等归一无新说明时按 R7 会
+ *  把仍成立的说明清掉（同口径交接丢失 provenance）。继承同样过「国家 + 口径集合
+ *  相等」校验：真正换国/换平台/重置的旧说明描述不了新口径，自然不成立；补丁
+ *  显式 platformScopeNotice:null = deliberate 清除（跳过继承），缺键 ≠ 显式 null。 */
+function resolveScopeNotice(
+  countryCode: string,
+  scope: LawfulPlatformScope,
+  incoming: PlatformScopeNotice | null | undefined,
+  inherited?: PlatformScopeNotice | null,
+): PlatformScopeNotice | null {
+  if (!STABLE) return null;
+  if (scope.note) return { note: scope.note, countryCode, platform: scope.platform };
+  if (incoming && incoming.countryCode === countryCode && platformQueryEquals(incoming.platform, scope.platform)) return incoming;
+  if (inherited && inherited.countryCode === countryCode && platformQueryEquals(inherited.platform, scope.platform)) return inherited;
+  return null;
+}
+
+/** 口径（国家/产业）变化后的状态整理：规范作用域、平台/店铺归一到目标国合法
+ *  口径（R5-M1：共享 lawfulPlatformScope——保留合法子集，全部非法才回 null，
+ *  seller 合法性同函数处理；R6-M1：稳定版再经 normalizePlatformScope 把店铺级
+ *  透明展开为平台级——Agent 结果卡 open/apply 补丁落地后的 state 不再保留
+ *  shopIds，与计算/导航口径一致；R7-M1：归一说明随 state 落地，页内条幅与
+ *  Agent 卡边界据此展示展开/剔除事实）、主分析先整组同型号合法化
+ *  （R4-m1/S1：逐 SKU 过滤 / 同配置换 SKU / 同型号首个合法配置），全部型号
+ *  缺席才重算默认卡；开启「自动匹配竞品」的组对比区随新口径矩阵重算（矩阵
+ *  分国，维表换代同样在启动读档时借此自愈） */
+function applyScopeDefaultsStable(s: FiltersState, force: boolean): FiltersState {
+  const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
+  syncScopeRegistries(scope.countryCode);
+  const platformScope = normalizePlatformScope(scope.countryCode, s.platform);
+  const platformScopeNotice = resolveScopeNotice(scope.countryCode, platformScope, s.platformScopeNotice);
+  // 空 mains = 用户显式清空（空态），读档/读链接时不回填默认卡；口径切换
+  // 走 switchScope 的 force=true 照常重算默认卡。R4-m1：旧选择先尝试同型号
+  // 合法化，落得下就保留（RU Mate X6 12+512 → ID 16+512），不再一律默认重算
+  const sanitized = s.mains.length ? remapMainsForScope(s.mains, scope.countryCode, scope.industry) : s.mains;
+  const mains = sanitized ?? [];
+  const needMain = force || (s.mains.length > 0 && mains.length === 0);
+  const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry) : {};
+  const next: FiltersState = {
+    ...s,
+    ...scope,
+    platform: platformScope.platform,
+    platformScopeNotice,
+    mains: needMain ? (defaults.mains ?? []) : mains,
+  };
+  next.mains = next.mains.map((c) => (c.auto && c.main ? withAutoOn(c) : c));
+  return next;
+}
+
+/** 口径切换（国家/产业变化）+ 按国快照。R4-m1 普通换国优先级：
+ *  0) 切走前无条件存离建国快照（含显式清空的空数组）；
+ *  1) 目标国存在仍合法的会话快照 → 优先还原（R4-S2：对比区同口径校验/剥离、
+ *     封 COMPARES_PER_CARD_CAP，保留合法手动搭配与 auto 模式）；
+ *  2) 无快照 → 旧选择同型号映射目标国首个合法配置（RU Mate X6 12+512 →
+ *     ID 16+512），绝不把继承口径误当显式选择写回来源国快照；
+ *  3) 同型号也无 → 目标国默认重算。
+ *  显式 mains（R3 M1b + R4-S3/S4）：补丁自带 mains 键（含显式空数组）才是
+ *  显式口径——非空经 remapMainsForScope 合法化并同步目标国快照；显式空 = 清空
+ *  态，不查快照、不回填默认；显式但型号全缺席回落 (1)→(3)（不重映射旧状态，
+ *  与「显式缺型号落默认」的既有契约一致）。快照会话级（关页即清），不跨会话
+ *  复活旧选择。 */
+function switchScopeStable(prev: FiltersState, next: FiltersState, explicitMains: boolean): FiltersState {
+  // 快照键含产业维度：纯产业切换同样要保住「回切后还原」，键只按国会把
+  // 当前产业的卡覆盖进该国快照，回切时校验不过即永久丢卡
+  const snapKeyOf = (cc: string, industry: string) => `${LPL.filters}.mainsOf.${cc}.${industry}`;
+  const writeSnapshot = (cc: string, industry: string, mains: MainProduct[]) => {
+    try {
+      sessionStorage.setItem(snapKeyOf(cc, industry), JSON.stringify({ mains }));
+    } catch {
+      /* 存储不可用时跳过快照，走默认重算 */
+    }
+  };
+  // 无条件落盘（含清空后的空数组）：空数组 = 用户显式清空的合法快照，不写
+  // 会让清空前的旧快照残留，来回切口径时复活、显式清空被静默撤销
+  writeSnapshot(prev.countryCode, prev.industry, prev.mains);
+  if (explicitMains) {
+    // R4-S3：显式空数组 = 清空态——落到空看板，不查快照、不回填默认，
+    // 并把目标国快照同步为空（此后普通切走/切回都保持空态）
+    if (next.mains.length === 0) {
+      writeSnapshot(next.countryCode, next.industry, []);
+      return applyScopeDefaultsStable({ ...next, mains: [] }, false);
+    }
+    // R3 M1a/R5 + R4-S1：显式口径先整组合法化（逐 SKU 过滤/同型号映射）；
+    // 合法化后的口径同步目标国快照。auto 卡对比区仍由 applyScopeDefaultsStable
+    // 末尾 withAutoOn 按目标国矩阵重算，手动对比区只留合法条目
+    const remapped = remapMainsForScope(next.mains, next.countryCode, next.industry);
+    if (remapped) {
+      writeSnapshot(next.countryCode, next.industry, remapped);
+      return applyScopeDefaultsStable({ ...next, mains: remapped }, false);
+    }
+    // 型号整体缺席 → 下方安全回落（快照 → 默认重算）；explicitAbsent 标记
+    // 让回落不再对补丁里的缺席口径做同型号重映射（缺型号 = 落默认，不是猜旧选择）
+    return scopeFallbackStable(next, snapKeyOf, true);
+  }
+  return scopeFallbackStable(next, snapKeyOf, false);
+}
+
+/** 快照 → 同型号映射 → 默认重算的公共回落（R4-m1 优先级 1-3）。 */
+function scopeFallbackStable(
+  next: FiltersState,
+  snapKeyOf: (cc: string, industry: string) => string,
+  explicitAbsent: boolean,
+): FiltersState {
+  const applied = applyScopeDefaultsStable(next, true);
+  try {
+    const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode, applied.industry));
+    if (raw) {
+      const snap = JSON.parse(raw) as { mains: unknown };
+      const mains = isMainProductArray(snap.mains) ? snap.mains : null;
+      // 空数组也是合法快照：还原空态而非回落重算默认卡；非空快照仍须整组在新
+      // 口径有效（R3 M1a 起含配置/SKU 校验）。mainsValidFor 对空数组返回 false
+      // 的既有语义不动（读档重算判定还依赖它），此处单独放行空快照
+      if (mains && !mains.length) return { ...applied, mains: [] };
+      if (mains && mainsValidFor(mains, applied.countryCode, applied.industry)) {
+        // R4-S2：快照还原同样过整组合法化——主品逐 SKU 过滤，手动对比区按目标
+        // 口径校验/剥离（型号缺席剔除、配置漂移同型号映射）、selKey 去重、对比区
+        // 封 COMPARES_PER_CARD_CAP；auto 标记与合法手动搭配保留
+        const restored = remapMainsForScope(mains, applied.countryCode, applied.industry);
+        if (restored) {
+          return { ...applied, mains: restored.map((c) => (c.auto && c.main ? withAutoOn(c, applied.countryCode) : c)) };
+        }
+      }
+    }
+  } catch {
+    /* 坏 JSON / 类型不符：走同型号映射 / 默认重算 */
+  }
+  // R4-m1 (2)：无合法快照时，旧选择同型号映射目标国首个合法配置
+  // （RU Mate X6 12+512 → ID 16+512）。显式缺型号的回落不走这条路
+  if (!explicitAbsent && next.mains.length) {
+    const remapped = remapMainsForScope(next.mains, next.countryCode, next.industry);
+    if (remapped) return applyScopeDefaultsStable({ ...next, mains: remapped }, false);
+  }
+  // (3) 同型号也无 → 目标国默认重算
+  return applied;
+}
+
+// ------------------------------------------------------------
+// 2026-11-07 整合（稳定线 4966d02 × 迭代线 e98d9b1）：口径整理两条线各自按产品
+// 验收（稳定 R3–R8 / 迭代 R2–R7），同名函数在两线实现不同——稳定版用稳定线原样
+// 实现（含 R6–R8 平台级透明归一 + 归一说明），迭代版用迭代线原样实现（R5-M1 共享
+// 落地规则 + 每线口径归一），按构建通道 STABLE 分发；两线各自的测试锁住各自行为。
+// ------------------------------------------------------------
+function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
+  return STABLE ? applyScopeDefaultsStable(s, force) : applyScopeDefaultsIterate(s, force);
+}
+
+function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false): FiltersState {
+  return STABLE ? switchScopeStable(prev, next, explicitMains) : switchScopeIterate(prev, next, explicitMains);
 }
 
 /**
@@ -451,9 +636,17 @@ function loadBaseState(): FiltersState {
     restored = { ...defaultFilters, ...rest } as FiltersState;
     // 平台单选归一：旧持久化的多选形态（platforms 多值 / shopIds 渠道下钻）取第一个平台；
     // 稳定版再降店铺级 → 平台级（2026-11-05 复检整改3，Eason：默认视图不再钉具体店铺，
-    // 平台级自动 = 平台内每周最低价店铺；迭代版原样）
-    restored.platform = normalizePlatformSelection(restored.platform);
-    restored.platform = platformLevelForChannel(restored.platform);
+    // 平台级自动 = 平台内每周最低价店铺；迭代版原样）。
+    // R7-M1（第七轮评审）：稳定版撤掉这两道「有损前置归一」——多平台取一/店铺优先
+    // 会先把原始完整输入裁掉（DNS+AE:noon:3P 丢 DNS、DNS+RU:ozon:3P 丢 DNS），
+    // 后置的 normalizePlatformScope 只能对着残缺输入归一。原始输入原样进
+    // applyScopeDefaults，由共享的「国家合法 + 稳定版能力」一体化归一处理：
+    // 非法店铺剔除、合法店铺透明展开所属平台、与显式平台并集去重，全部过程
+    // 进归一说明（platformScopeNotice，页内可见）。迭代版路径逐字节不变。
+    if (!STABLE) {
+      restored.platform = normalizePlatformSelection(restored.platform);
+      restored.platform = platformLevelForChannel(restored.platform);
+    }
     // 迁移里的矩阵查询（groupsFromBenchmark）按数据层缺省国家取分国对标，须先切到载荷国家，
     // 否则迁移产出的对比区会被别的国家矩阵固化写回
     syncScopeRegistries(restored.countryCode);
@@ -616,12 +809,43 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
        *  空数组 = 清空态原样落地。 */
       set: (patch) =>
         setState((s) => {
+          // R4-S4：补丁里键存在但值为 undefined 不得覆盖既有状态（spread 会把
+          // undefined 写进去把 s.mains 变成 undefined），先剥离 undefined 值
           const clean = { ...patch };
           for (const key of Object.keys(clean) as Array<keyof FiltersState>) {
             if (clean[key] === undefined) delete clean[key];
           }
+          // 非 mains 数组的坏值整体忽略（防御 Agent/undo 之外的 JS 调用方）
           if (clean.mains !== undefined && !Array.isArray(clean.mains)) delete clean.mains;
-          const next: FiltersState = { ...s, ...clean };
+          let next: FiltersState = { ...s, ...clean };
+          // R7-M1（第七轮评审 Major）：稳定版带 platform 键的补丁在 setter 处
+          // 立即走共享「国家合法 + 能力」归一——总览级联「全部店铺·最低价」提交
+          // {shopIds:[RU:ozon:3P]} 即刻落为平台级 {platforms:[OZON]}（展开说明
+          // 同步可见），不再等 Agent 打开才收敛。带 platform 键 = 一次明确的新
+          // 输入：说明以本次归一结果为准，仅整态快照（undo/redo）随带的
+          // platformScopeNotice 在口径吻合时优先沿用；
+          // 不带 platform 键（切币种/粒度/时间等）不动平台与既有说明。跨口径
+          // 补丁按目标国归一后交 switchScope/applyScopeDefaults（幂等，同政策）。
+          // R8-M1（第八轮评审 Medium）：Agent 结果卡 open/apply 补丁同样带
+          // platform 键（归一后的规范平台级、无说明键）——幂等归一无新说明时
+          // R7 会把「仍能描述当前口径」的既有说明清掉，同口径交接后页内条幅/
+          // 新查询/刷新全丢披露。缺说明键 = 继承落地前 state 上口径吻合的说明
+          //（换国/换平台的旧说明经集合校验自然不成立）；补丁显式
+          // platformScopeNotice:null = deliberate 清除，不继承。
+          if (STABLE && clean.platform !== undefined) {
+            const scope = normalizePlatformScope(next.countryCode, next.platform);
+            const incomingNotice = isPlatformScopeNotice(clean.platformScopeNotice)
+              ? clean.platformScopeNotice
+              : undefined;
+            const inheritedNotice = clean.platformScopeNotice === null
+              ? null
+              : (isPlatformScopeNotice(s.platformScopeNotice) ? s.platformScopeNotice : null);
+            next = {
+              ...next,
+              platform: scope.platform,
+              platformScopeNotice: resolveScopeNotice(next.countryCode, scope, incomingNotice, inheritedNotice),
+            };
+          }
           const scopeChanged =
             (clean.countryCode != null && clean.countryCode !== s.countryCode) ||
             (clean.industry != null && clean.industry !== s.industry);
