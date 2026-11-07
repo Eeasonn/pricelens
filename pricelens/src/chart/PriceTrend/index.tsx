@@ -1097,23 +1097,59 @@ export default function PriceTrend(props: {
   const ownMainKey = ownMainSel ? seriesKeyOf(ownMainSel) : null;
   const winBucketIds = useMemo(() => bucketIds.slice(win.s, win.e + 1), [bucketIds, win.s, win.e]);
   // 合并图：主品周/月/季销量序列（与 points 同下标）+ 系列色（量层柱色 = 主品品牌色）
+  // ---- 合并多组 · 方案 B（2026-11-08 Eason 选型「主品切换」）：量带归属候选 = 各组主品；
+  //      一次只画一个（active 缺省第一组，会话态跨页保留，mains 变化后失效自动回落）；
+  //      单组 = candidates null，量带行为与原先完全一致 ----
+  const volumeCandidates = useMemo(
+    () => {
+      const mains = effMains.flatMap((c) => (c.main ? [c.main] : []));
+      if (mains.length <= 1) return null;
+      return mains.map((sel) => {
+        const key = seriesKeyOf(sel);
+        const s = visSeries.find((v) => v.key === key);
+        return {
+          key,
+          brand: s?.brand ?? '',
+          text: s ? curveNameOf(s) : key,
+          color: s?.color ?? color.mute,
+          volumes:
+            winBucketIds.length > 0
+              ? volumeByBuckets(sel.modelId, sel.romram, state.countryCode, state.granularity, winBucketIds)
+              : [],
+        };
+      });
+    },
+    [effMains, visSeries, state.countryCode, state.granularity, winBucketIds],
+  );
+  const [volumeOwnerKeyRaw, setVolumeOwnerKey] = usePageViewState<string | null>('dashboard.volumeOwnerKey', () => null);
+  const volumeActiveKey = useMemo(() => {
+    if (!volumeCandidates) return null;
+    return volumeCandidates.some((c) => c.key === volumeOwnerKeyRaw) ? volumeOwnerKeyRaw : volumeCandidates[0].key;
+  }, [volumeCandidates, volumeOwnerKeyRaw]);
+  const activeVolumeCandidate = volumeCandidates?.find((c) => c.key === volumeActiveKey) ?? null;
+  // 量带数据/颜色/归属 = active 候选优先；单组（无候选）走原路径
   const mergedVolumes = useMemo(
-    () =>
-      ownMainSel && winBucketIds.length > 0
+    () => {
+      if (activeVolumeCandidate) return activeVolumeCandidate.volumes;
+      return ownMainSel && winBucketIds.length > 0
         ? volumeByBuckets(ownMainSel.modelId, ownMainSel.romram, state.countryCode, state.granularity, winBucketIds)
-        : null,
-    [ownMainSel, winBucketIds, state.countryCode, state.granularity],
+        : null;
+    },
+    [activeVolumeCandidate, ownMainSel, winBucketIds, state.countryCode, state.granularity],
   );
   const mergedMainSeries = useMemo(
     () => (ownMainKey ? chartSeries.find((s) => s.key === ownMainKey) ?? null : null),
     [chartSeries, ownMainKey],
   );
-  // 量带归属按全量系列找（主品线被图例隐藏时不在 chartSeries，药丸仍要说明这是谁的量）
+  // 量带归属按全量系列找（主品线被图例隐藏时不在 chartSeries，药丸仍要说明这是谁的量）；
+  // 方案 B：active 候选优先（归属药丸/色点直接用候选自带信息，不依赖系列可见性）
   const mergedOwnerSeries = useMemo(
     () => (ownMainKey ? visSeries.find((s) => s.key === ownMainKey) ?? null : null),
     [visSeries, ownMainKey],
   );
-  const mergedVolumeColor = mergedOwnerSeries?.color ?? color.mute;
+  const mergedVolumeColor = activeVolumeCandidate
+    ? activeVolumeCandidate.color
+    : (mergedOwnerSeries?.color ?? color.mute);
   // 桶集合变化（粒度 / 国家 / 时间筛选）= 下标失义，选区清掉
   useEffect(() => {
     setBrushRange(null);
@@ -2045,6 +2081,9 @@ export default function PriceTrend(props: {
             volumes={mergedVolumes ?? undefined}
             volumeHeight={mergedVolH}
             volumeOwner={mergedVolumeOwner} // 复检五件套：量带归属药丸/小卡/联动高亮
+            volumeCandidates={volumeCandidates ?? undefined} // 方案 B：合并多组量带归属可切换
+            volumeActiveKey={volumeActiveKey}
+            onVolumeActiveKey={setVolumeOwnerKey}
             legendHoverKey={legendHoverKey}
             showYTicks={showYTicks}
             showTiers={showTiers}

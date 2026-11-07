@@ -75,7 +75,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, currencyCodeOf, font, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
+import { color, currencyCodeOf, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 import { measureText } from '../../components/ProductCascader';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 // 区间量尺（2026-11-06 Eason 拍板）：读数 / 量尺几何 / 量带细档上限（纯计算见 rangeRuler）
@@ -359,6 +359,16 @@ export interface ChartProps {
    *  产品名、悬停联动高亮都以它为准。用对象不用 key：主品线被图例隐藏时不在 series
    *  里，药丸仍要能说明归属。未传 / 无量数据 = 药丸、悬停层、联动都不出 */
   volumeOwner?: { key: string; brand: string; text: string } | null;
+  /** 合并多组 · 方案 B（2026-11-08 Eason 选型「主品切换」）：量带归属候选（各组主品）。
+   *  传入 ≥2 个 = 量带一次只画一个主品（volumeActiveKey 指定，缺省第一个）——柱色/上限/
+   *  极值标注/区间量尺/悬停量卡全部跟随 active；悬停量卡列出全部候选当周销量（不切换
+   *  也能比数）。切换入口 = 销量归属药丸点击循环 + 名称带候选主品药丸右侧「量」按钮。
+   *  缺省 / 单候选 = 现行为（volumeOwner/volumes/volumeColor 原样） */
+  volumeCandidates?: { key: string; brand: string; text: string; color: string; volumes: (number | null)[] }[];
+  /** 当前量带归属候选 key（受控）；缺省 = 第一个候选 */
+  volumeActiveKey?: string | null;
+  /** 切换量带归属（归属药丸循环 / 名称带「量」按钮） */
+  onVolumeActiveKey?: (key: string) => void;
   // ---- 区间量尺与量价同骨架（2026-11-06 Eason 拍板；.impeccable/surfaces/range-ruler-volume-skeleton.md）----
   /** 区间读数方式。传入 = 选区改用量尺图层（时间胶囊 + 读数切换 + 每层量尺 + 极值点），
    *  选区态隐藏全局数值标签；缺省 = 旧版选区高亮（量价旧呈现） */
@@ -554,6 +564,11 @@ function ZoneNamePill(props: {
   dimmed: boolean;
   onToggle: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
+  /** 方案 B：本 pill 是当前量带归属（描强调边） */
+  volumeActive?: boolean;
+  /** 本 pill 是量带归属候选（≥2 候选时显示「量」直切按钮） */
+  volumeSettable?: boolean;
+  onSetVolumeOwner?: () => void;
 }) {
   const { nm } = props;
   // 品牌展开字（悬停 / 键盘聚焦时显示「Huawei ·」；2026-11-07 采纳 A）
@@ -592,7 +607,7 @@ function ZoneNamePill(props: {
         style={{
           ...NAME_PILL_BOX,
           maxWidth: nm.maxW ?? 200,
-          border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : color.hairline}`,
+          border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : props.volumeActive ? selectAccent : color.hairline}`,
           cursor: 'pointer',
         }}
       >
@@ -645,6 +660,41 @@ function ZoneNamePill(props: {
           {nm.text}
         </span>
       </button>
+      {/* 方案 B：候选主品的「量」直切按钮（药丸右侧外挂，不占名称带宽）；
+          药丸本体点击 = 隐藏/恢复（2026-11-07 稳定版拍板）语义不变 */}
+      {props.volumeSettable && (
+        <button
+          type="button"
+          data-testid={`volume-owner-set-${nm.seriesKey}`}
+          aria-pressed={props.volumeActive}
+          aria-label={`设为量带归属：${nm.text}`}
+          title={props.volumeActive ? '当前量带归属' : '设为量带归属（点击切换下方销量柱到该主品）'}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!props.volumeActive) props.onSetVolumeOwner?.();
+          }}
+          style={{
+            position: 'absolute',
+            left: 'calc(100% + 4px)',
+            top: 3,
+            height: 18,
+            padding: '0 6px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            background: props.volumeActive ? selectSoft : color.canvas,
+            border: `1px solid ${props.volumeActive ? selectAccent : color.hairline}`,
+            borderRadius: radius.pill,
+            cursor: props.volumeActive ? 'default' : 'pointer',
+            fontFamily: font.family,
+            fontSize: 10,
+            lineHeight: '14px',
+            color: props.volumeActive ? selectSoftInk : color.mute,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          量
+        </button>
+      )}
       {delta && (
         <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap', opacity: props.hidden ? 0.45 : undefined }}>
           <span style={{ color: color.mute, fontWeight: 500 }}>
@@ -1287,19 +1337,30 @@ export default function Chart(props: ChartProps) {
       : tipIdxRaw;
   // 第196轮整改5：量层上限 = 窗口内最大周量向上取整；2026-11-06 Eason 拍板「收紧」——
   // 改细档（volumeBandMaxOf），4,582 不再取到 10,000。全缺 = 0（量带保留但不画柱、不出刻度）
+  // ---- 方案 B：量带归属生效值（候选缺省 = 单主品原行为）----
+  const volCands = props.volumeCandidates;
+  const volActive = volCands?.length
+    ? (volCands.find((c) => c.key === (props.volumeActiveKey ?? null)) ?? volCands[0])
+    : null;
+  const effVolumes = volActive ? volActive.volumes : props.volumes;
+  const effOwner = volActive
+    ? { key: volActive.key, brand: volActive.brand, text: volActive.text }
+    : props.volumeOwner;
+  const effColor = volActive ? volActive.color : (props.volumeColor ?? color.mute);
+
   const vMax = useMemo(() => {
     let m = 0;
-    for (const v of props.volumes ?? []) {
+    for (const v of effVolumes ?? []) {
       if (v != null && Number.isFinite(v) && v > m) m = v;
     }
     return m > 0 ? volumeBandMaxOf(m) : 0;
-  }, [props.volumes]);
+  }, [effVolumes]);
   // 2026-11-05 复检五件套④：最高/最低/最新常驻小标（纯计算见 chartModel.buildVolumeMarks）
   const volMarks = useMemo(
     () =>
       volOn && geom && vMax > 0
         ? buildVolumeMarks({
-            values: props.volumes ?? [],
+            values: effVolumes ?? [],
             vMax,
             plotLeft: geom.plotLeft,
             plotWidth: geom.plotWidth,
@@ -1308,7 +1369,7 @@ export default function Chart(props: ChartProps) {
             bandH: volBandH,
           })
         : [],
-    [volOn, geom, vMax, props.volumes, volBandH],
+    [volOn, geom, vMax, effVolumes, volBandH],
   );
   // ---- 区间量尺几何（2026-11-06）：价格层量 rulerKey 那条线，销量层量量带 ----
   const unitNoun = granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季';
@@ -1331,15 +1392,15 @@ export default function Chart(props: ChartProps) {
         color: rulerTarget.color,
       });
     }
-    if (volOn && vMax > 0 && props.volumes) {
+    if (volOn && vMax > 0 && effVolumes) {
       sides.push({
         kind: 'volume',
-        values: props.volumes,
+        values: effVolumes,
         valid: (v): v is number => v != null && Number.isFinite(v),
         yOf: (v) => plotBottom + volBandH - volumeBarHeightOf(v, vMax, volBandH),
         top: plotBottom + 1,
         bottom: plotBottom + volBandH,
-        color: props.volumeColor ?? color.mute,
+        color: effColor,
       });
     }
     return rulerLayerOf({
@@ -1354,7 +1415,7 @@ export default function Chart(props: ChartProps) {
       measure: measureAt,
       sides,
     });
-  }, [rangeActive, geom, rangeLo, rangeHi, rulerTarget, priceTypes, volOn, vMax, props.volumes, volBandH, props.volumeColor, props.rangeMode, unitNoun, currency]);
+  }, [rangeActive, geom, rangeLo, rangeHi, rulerTarget, priceTypes, volOn, vMax, effVolumes, volBandH, effColor, props.rangeMode, unitNoun, currency]);
   // 柱模式下量尺两端的柱加深（与悬停列同深度）
   const rulerBarIdx = useMemo(() => {
     const part = rulerModel?.parts.find((p) => p.kind === 'volume');
@@ -1363,7 +1424,7 @@ export default function Chart(props: ChartProps) {
 
   // 2026-11-05 复检五件套②③⑤：量带悬停 = 量值小卡 + 参考线 + 主品线高亮共用一个悬停态；
   // 高亮走名称药丸同一条线（setHoverNameKey → litKeys），不另开通道
-  const volOwnerKey = props.volumeOwner?.key ?? null;
+  const volOwnerKey = effOwner?.key ?? null;
   const volBandLive = volOn && geom != null && vMax > 0 && volOwnerKey != null;
   // 图层标题 head 版式（2026-11-07 稳定版三轮）：归属药丸贴销量标题下；名称带只有一条线且就是
   // 归属品（量价页每面板 = 一款产品）时，归属药丸与名称带价格药丸同名，不重复出
@@ -1392,7 +1453,47 @@ export default function Chart(props: ChartProps) {
   // 量值小卡（2026-11-05 Eason 看真机）：单行「销量 N 台」，容器与销毛卡同款；垂直贴量带顶，水平随卡组
   const renderVolCard = (group: TipGroupPlacement): ReactNode => {
     if (volHoverIdx == null || !geom) return null;
-    const v = props.volumes?.[volHoverIdx] ?? null;
+    const v = effVolumes?.[volHoverIdx] ?? null;
+    // 方案 B：候选 ≥2 = 每个候选主品一行（归属色点 + 名称 + 当周销量），柱只画 active
+    const rows = volCands && volCands.length > 1
+      ? volCands.map((c) => ({ key: c.key, text: c.text, color: c.color, v: c.volumes[volHoverIdx] ?? null }))
+      : null;
+    if (!rows) {
+      return (
+        <div
+          data-testid="volume-hover-card"
+          style={{
+            position: 'absolute',
+            ...tipGroupAnchor(group),
+            top: geom.plotTop + geom.plotHeight + 4,
+            height: MARGIN_MINI_H,
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: color.canvas,
+            border: `1px solid ${color.hairline}`,
+            borderRadius: radius.card,
+            boxShadow: shadow.l2,
+            padding: '0 10px',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            zIndex: 20,
+          }}
+        >
+          <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute }}>销量</span>{' '}
+          <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink }}>
+            {v != null ? fmt_mm(Math.round(v)) : '—'}
+          </span>
+          {v != null && (
+            <>
+              {' '}
+              <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute }}>台</span>
+            </>
+          )}
+        </div>
+      );
+    }
     return (
       <div
         data-testid="volume-hover-card"
@@ -1400,31 +1501,30 @@ export default function Chart(props: ChartProps) {
           position: 'absolute',
           ...tipGroupAnchor(group),
           top: geom.plotTop + geom.plotHeight + 4,
-          height: MARGIN_MINI_H,
           boxSizing: 'border-box',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
+          display: 'grid',
+          gap: 3,
           background: color.canvas,
           border: `1px solid ${color.hairline}`,
           borderRadius: radius.card,
           boxShadow: shadow.l2,
-          padding: '0 10px',
+          padding: '5px 10px 6px',
           pointerEvents: 'none',
           whiteSpace: 'nowrap',
           zIndex: 20,
         }}
       >
-        <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute }}>销量</span>{' '}
-        <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink }}>
-          {v != null ? fmt_mm(Math.round(v)) : '—'}
-        </span>
-        {v != null && (
-          <>
-            {' '}
-            <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute }}>台</span>
-          </>
-        )}
+        <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute }}>销量</span>
+        {rows.map((r) => (
+          <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: r.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 11, lineHeight: '16px', color: color.body, maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
+            <span className="tnum" style={{ fontSize: 13, lineHeight: '16px', fontWeight: 700, color: color.ink, marginLeft: 'auto' }}>
+              {r.v != null ? fmt_mm(Math.round(r.v)) : '—'}
+            </span>
+            {r.v != null && <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute }}>台</span>}
+          </div>
+        ))}
       </div>
     );
   };
@@ -1515,12 +1615,12 @@ export default function Chart(props: ChartProps) {
       {volOn && geom && (() => {
         const plotBottom = geom.plotTop + geom.plotHeight;
         const volBase = plotBottom + volBandH;
-        const volColor = props.volumeColor ?? color.mute;
+        const volColor = effColor;
         const colW = geom.plotWidth / geom.n;
         const barW = Math.max(1, 0.62 * colW); // 与 VolumeBars 同：柱宽 = 0.62 列宽
         const litIdx = hoverIdx ?? props.crosshairIdx ?? null;
         const hOf = (v: number): number => volumeBarHeightOf(v, vMax, volBandH); // 与三点标注同一映射
-        const volVals = props.volumes ?? [];
+        const volVals = effVolumes ?? [];
         const axisX = geom.plotLeft + geom.plotWidth + 10; // 与 VolumeBars 右轴同偏移
         const ticks = vMax > 0
           ? ([
@@ -1636,14 +1736,29 @@ export default function Chart(props: ChartProps) {
             {/* 量带交互层（2026-11-05 复检五件套②③⑤）：归属药丸 + 透明捕获层 + 参考线 +
                 量值小卡。捕获层只占量带（价格区悬停逻辑不动，事件照常冒泡给外层算时间列），
                 层级低于异常胶囊（8/9）与浮层（20） */}
-            {volBandLive && props.volumeOwner && (
+            {volBandLive && effOwner && (
               <>
-                {props.nameZoneWidth != null && ownerPillOn && (
-                  <span
-                    role="note"
-                    tabIndex={0}
-                    aria-label={`销量归属：${props.volumeOwner.text}`}
-                    title={`销量归属：${props.volumeOwner.text}（估算口径，非真实销量）`}
+                {props.nameZoneWidth != null && ownerPillOn && (() => {
+                  // 方案 B：候选 ≥2 = 药丸可点（循环切换归属），描强调边示意可切；
+                  // 单主品 = 原样（note 只读、hairline 边）
+                  const switchable = (volCands?.length ?? 0) > 1 && props.onVolumeActiveKey != null;
+                  const cycle = switchable
+                    ? () => {
+                        const list = volCands!;
+                        const idx = list.findIndex((c) => c.key === volActive?.key);
+                        props.onVolumeActiveKey!(list[(idx + 1) % list.length].key);
+                      }
+                    : undefined;
+                  return (
+                  <button
+                    type="button"
+                    data-testid="volume-owner-pill"
+                    aria-label={`销量归属：${effOwner.text}${switchable ? '；点击切换到下一组主品的销量' : ''}`}
+                    title={`销量归属：${effOwner.text}（估算口径，非真实销量）${switchable ? '；点击切换到下一组主品的销量' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cycle?.();
+                    }}
                     onMouseEnter={() => enterVolBand(null)}
                     onMouseLeave={leaveVolBand}
                     onFocus={() => enterVolBand(null)}
@@ -1659,14 +1774,17 @@ export default function Chart(props: ChartProps) {
                         ? Math.min(plotBottom + volBandH - 14, plotBottom + (paneHead ? VOL_OWNER_MID : 26))
                         : plotBottom + volBandH / 2,
                       transform: 'translateY(-50%)',
-                      border: `1px solid ${color.hairline}`,
+                      border: `1px solid ${switchable ? selectAccent : color.hairline}`,
+                      cursor: switchable ? 'pointer' : 'default',
                       zIndex: 6,
                     }}
                   >
-                    <BrandDot brand={props.volumeOwner.brand} />
-                    <span style={NAME_PILL_TEXT}>{props.volumeOwner.text}</span>
-                  </span>
-                )}
+                    <BrandDot brand={effOwner.brand} />
+                    <span style={NAME_PILL_TEXT}>{effOwner.text}</span>
+                    {switchable && <span aria-hidden style={{ fontSize: 10, lineHeight: '14px', color: color.mute }}>⇄</span>}
+                  </button>
+                  );
+                })()}
                 <div
                   aria-hidden
                   data-testid="volume-hover-layer"
@@ -3222,6 +3340,9 @@ export default function Chart(props: ChartProps) {
                     dimmed={litKeys != null && !litKeys.includes(nm.seriesKey)}
                     onToggle={(k) => props.onToggleHidden?.(k)}
                     onHover={setHoverNameKey}
+                    volumeActive={volActive != null && nm.seriesKey === volActive.key}
+                    volumeSettable={(volCands?.length ?? 0) > 1 && !!volCands?.some((c) => c.key === nm.seriesKey)}
+                    onSetVolumeOwner={() => props.onVolumeActiveKey?.(nm.seriesKey)}
                   />
                 ))}
               </>
