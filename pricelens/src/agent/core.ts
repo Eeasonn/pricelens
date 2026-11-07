@@ -1,4 +1,4 @@
-import { buildSeries, defaultChannelOf, effectiveLinePlatform, lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformPriceSpreadOfSelection, platformScopeLabel, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
+import { buildSeries, defaultChannelOf, effectiveChannelIds, effectiveLinePlatform, latestPricedWeekOfSelection, lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformPriceSpreadOfSelection, platformScopeLabel, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
 import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { buildCards, clampMains, flatSelections, normalizeSelectionForCountry, remapSelectionForCountry, selKey } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
@@ -152,16 +152,11 @@ function productEntitiesOfText(text: string, industry: FiltersState['industry'])
   return { entities, haystack, index: { chars, orig } };
 }
 
-/** 实体某出现段的配置点名窗口：本实体出现起点 → 下一个实体出现段开头——
- *  完整配置名只有紧跟在本实体名之后（到下一实体为止）才算本实体点名（不再
- *  整句广播；实体名之前的配置由数字对就近归属路径处理） */
-function nameWindowOf(span: [number, number], allSpans: Array<[number, number]>, haystackLength: number): [number, number] {
-  let end = haystackLength;
-  for (const [s] of allSpans) {
-    if (s >= span[1] && s < end) end = s;
-  }
-  return [span[0], end];
-}
+/** 实体某出现段的配置点名窗口已升级为分句截断版（R6 五审 M1，见
+ *  resolveAgentEntities 内 segments 构造）：完整配置名只在「本实体出现段 →
+ *  下一实体出现段开头」且中途无分句连接词（和/与/and/、…）的语段内才算
+ *  本实体点名——「nova 14 和 12+512GB Mate X6」中 nova 的窗口止于「和」，
+ *  不再把 Mate 的前置配置名吞进 nova 窗口。 */
 export interface AgentEntityResolution {
   countryCode: string;
   countryName: string;
@@ -174,6 +169,11 @@ export interface AgentEntityResolution {
    *  配置（如「nova 14 8+256」——RU 只有 12+256/12+512）。如实披露，不用
    *  页面当前配置或其他配置冒充已按请求查询。 */
   missingConfigs: string[];
+  /** R6（五审 M1 · 配置归属置信门）：句中明确点名了配置但归属关系无法可靠
+   *  解析（如「分别」要求型号与配置一一对应而数量不匹配）——非 null 时
+   *  上层必须返回诚实澄清，绝不默默把配置当未指定复用页面旧配置、扩大
+   *  枚举或编造错误的 missingConfigs。 */
+  configAmbiguity: string | null;
 }
 
 function modelPrefixes(modelName: string): string[] {
@@ -312,7 +312,17 @@ function selectionsForEntity(
 
 /** 从自然语言中解析国家和产品实体，供查询与筛选共用。
  *  R5（四审 M1）：实体出现位置消歧 + 配置对就近归属（见 productEntitiesOfText
- *  注释）——不再整句广播配置对、不再按全句最高分丢实体。 */
+ *  注释）——不再整句广播配置对、不再按全句最高分丢实体。
+ *  R6（五审 M1 · 绑定语法与置信门）：配置对归属从「有前置实体一律归最近前置」
+ *  升级为明确的绑定语法——
+ *  ① 近邻距离归属：每个配置对比较两侧最近实体的字符间距，间距小者归属；
+ *    平局后置优先（「nova 14 12+256」型后置语法保持原行为）。同时支持
+ *    实体后置配置（nova 14 12+256）与配置前置实体（12+256GB nova 14）：
+ *    「12+512GB Mate X6」紧跟 Mate X6（间距≈0）而非隔着「和」的 nova 14
+ *    → 归 Mate X6（旧缺陷归最近前置，把 Mate 的 12+512 播给 nova、用另一
+ *    实体的有效配置「救活」本实体的无效 99+999）。
+ *  ② 明确「分别」（≥2 实体且点名了配置）：按实体出现顺序与配置顺序一一对
+ *    应；数量不匹配或配置重复含糊 → configAmbiguity，上层澄清，绝不猜。 */
 export function resolveAgentEntities(text: string, state: FiltersState): AgentEntityResolution {
   const country = countryOfText(text, state.countryCode);
   const { entities, haystack, index } = productEntitiesOfText(text, state.industry);
@@ -328,34 +338,121 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
       origSpans.push({ entity, start: spanStart, end: spanEnd });
     }
   }
-  // 配置对就近归属：优先归给最近的前置实体段（“nova 14 12+256 和 Mate X6
-  // 12+512”两组配置各归各的实体，逆序同理）；无前置段时归最近的后续段；
-  // 被实体段包含的极端形态归该实体。同一配置对多次出现可归不同实体。
   const boundPairs = new Map<ProductEntity, Array<[number, number]>>();
-  for (const occurrence of configPairOccurrences(text)) {
-    let target: ProductEntity | null = null;
-    const preceders = origSpans.filter((span) => span.end <= occurrence.start);
-    if (preceders.length) {
-      target = preceders.reduce((best, cur) => (cur.end > best.end || (cur.end === best.end && cur.start > best.start) ? cur : best)).entity;
+  const bind = (target: ProductEntity, pair: [number, number]) => {
+    const list = boundPairs.get(target) ?? [];
+    if (!list.some(([ram, rom]) => ram === pair[0] && rom === pair[1])) list.push(pair);
+    boundPairs.set(target, list);
+  };
+  const occurrences = configPairOccurrences(text);
+  // 配置去重（保出现顺序）：「分别」按一一对应语义，重复配置值视为含糊
+  const distinctPairs: Array<[number, number]> = [];
+  for (const occurrence of occurrences) {
+    if (!distinctPairs.some(([ram, rom]) => ram === occurrence.pair[0] && rom === occurrence.pair[1])) distinctPairs.push(occurrence.pair);
+  }
+  const entityLabelsInOrder = [...entities].sort((a, b) => a.spans[0][0] - b.spans[0][0])
+    .map((entity) => `${entity.brand} ${entity.modelName}`);
+  let configAmbiguity: string | null = null;
+  if (/分别/.test(text) && entities.length >= 2 && distinctPairs.length > 0) {
+    if (distinctPairs.length === entities.length) {
+      // 明确「分别」：实体出现顺序 ↔ 配置出现顺序一一对应
+      const ordered = [...entities].sort((a, b) => a.spans[0][0] - b.spans[0][0]);
+      ordered.forEach((entity, i) => bind(entity, distinctPairs[i]));
     } else {
-      const followers = origSpans.filter((span) => span.start >= occurrence.end);
-      if (followers.length) {
-        target = followers.reduce((best, cur) => (cur.start < best.start ? cur : best)).entity;
-      } else {
-        target = origSpans.find((span) => span.start <= occurrence.start && occurrence.end <= span.end)?.entity ?? null;
+      configAmbiguity = `「分别」要求型号与配置一一对应：问句里有 ${entities.length} 个型号（${entityLabelsInOrder.join('、')}）和 ${distinctPairs.length} 个配置（${distinctPairs.map(([ram, rom]) => `${ram}+${rom}`).join('、')}），数量不一致，无法可靠对应。请逐个型号点名配置，例如「nova 14 12+256 和 Mate X6 12+512」。`;
+    }
+  } else {
+    // 项序列绑定：把实体段与配置对按原文位置排成一条项序列，逐个配置决定归属——
+    // ① 后置：紧邻前一实体（间隔仅空格/单位 GB，含顿号列举）→ 归该实体（后置
+    //    语法「nova 14 12+256」与顿号列表「nova 14 12+256、12+512」都归 nova）；
+    // ② 列表延续：前一配置已归属且间隔是顿号/空格列举（非「和」）→ 同前一配置
+    //    的实体（「12+256、12+512」是同一实体的配置列表，绝不因距离误归后续实体）；
+    // ③ 前置：紧邻后一实体（间隔仅空格/单位）→ 归后一实体（「12+256GB nova 14」
+    //    配置前置语法；「… 和 12+512 Mate X6」中 12+512 跨过分句词后紧跟 Mate）；
+    // ④ 兜底：两侧最近实体段按原始字符距离，平局后置优先（保持旧行为）。
+    // 「和/与/and」是分句连接词：隔着的配置不再向前一实体后置/列表延续，
+    // 改走前置或兜底——Mate 的 12+512 不再播给 nova、也就不会用另一实体的
+    // 有效配置「救活」本实体的无效 99+999。
+    type Item = { kind: 'entity'; entity: ProductEntity; start: number; end: number } | { kind: 'config'; pair: [number, number]; start: number; end: number };
+    const items: Item[] = [
+      ...origSpans.map((span): Item => ({ kind: 'entity', entity: span.entity, start: span.start, end: span.end })),
+      ...occurrences.map((occ): Item => ({ kind: 'config', pair: occ.pair, start: occ.start, end: occ.end })),
+    ].sort((a, b) => a.start - b.start);
+    const glueOf = (gap: string): 'bind' | 'clause' | 'far' => {
+      const stripped = gap.replace(/gb/ig, '').replace(/\s+/g, '');
+      if (stripped === '') return 'bind';
+      if (/^[、,，;；]+$/.test(stripped)) return 'bind';
+      if (/^(?:和|与|及|跟|还有|以及|或者|或|的|是|and|or)$/.test(stripped)) return 'clause';
+      return 'far';
+    };
+    const ownerOf = new Map<Item, ProductEntity>();
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      if (item.kind === 'entity') continue;
+      const prev = items[i - 1];
+      const next = items[i + 1];
+      const gluePrev = prev ? glueOf(text.slice(prev.end, item.start)) : 'far';
+      const glueNext = next ? glueOf(text.slice(item.end, next.start)) : 'far';
+      if (prev && prev.kind === 'entity' && gluePrev === 'bind') {
+        bind(prev.entity, item.pair);
+        ownerOf.set(item, prev.entity);
+        continue;
+      }
+      if (prev && prev.kind === 'config' && gluePrev === 'bind' && ownerOf.has(prev)) {
+        bind(ownerOf.get(prev)!, item.pair);
+        ownerOf.set(item, ownerOf.get(prev)!);
+        continue;
+      }
+      if (next && next.kind === 'entity' && glueNext === 'bind') {
+        bind(next.entity, item.pair);
+        ownerOf.set(item, next.entity);
+        continue;
+      }
+      // 兜底：两侧最近实体段按原始字符距离，平局后置优先
+      const preceders = origSpans.filter((span) => span.end <= item.start);
+      const followers = origSpans.filter((span) => span.start >= item.end);
+      const prevSpan = preceders.length ? preceders.reduce((best, cur) => (cur.end > best.end || (cur.end === best.end && cur.start > best.start) ? cur : best)) : null;
+      const nextSpan = followers.length ? followers.reduce((best, cur) => (cur.start < best.start ? cur : best)) : null;
+      const target = prevSpan && nextSpan
+        ? nextSpan.start - item.end < item.start - prevSpan.end ? nextSpan.entity : prevSpan.entity
+        : (prevSpan ?? nextSpan)?.entity
+          ?? origSpans.find((span) => span.start <= item.start && item.end <= span.end)?.entity
+          ?? null;
+      if (target) {
+        bind(target, item.pair);
+        ownerOf.set(item, target);
       }
     }
-    if (!target) continue;
-    const list = boundPairs.get(target) ?? [];
-    if (!list.some(([ram, rom]) => ram === occurrence.pair[0] && rom === occurrence.pair[1])) list.push(occurrence.pair);
-    boundPairs.set(target, list);
   }
-  const allCompactSpans = entities.flatMap((entity) => entity.spans);
+  // R6（五审 M1）：完整配置名的命中窗口在分句连接词（和/与/and/、…）处截断——
+  // 「nova 14 和 12+512GB Mate X6」里 nova 的窗口到「和」为止，不再把 Mate 的
+  // 前置配置名广播给 nova（R5 旧窗口只看下一实体起点，前置语法下 12+512GB
+  // 落在 nova 与 Mate 之间被整段吞进 nova 窗口）；连接词在原文坐标系识别
+  // （拉丁 and/or 可用 \b 边界），经 orig→compact 索引映射回紧凑坐标。
+  const compactPosAfter = (origPos: number): number => {
+    for (let ci = 0; ci < index.chars.length; ci += 1) if (index.orig[ci] >= origPos) return ci;
+    return haystack.length;
+  };
+  const CLAUSE_CONNECTOR_RE = /和|与|及|跟|还有|以及|或者|、|，|,|；|;|\band\b|\bor\b/;
+  const nameWindowOrigEndOf = (spanOrigEnd: number, nextEntityOrigStart: number): number => {
+    const slice = text.slice(spanOrigEnd, nextEntityOrigStart);
+    const hit = slice.match(CLAUSE_CONNECTOR_RE);
+    return hit?.index != null ? spanOrigEnd + hit.index : nextEntityOrigStart;
+  };
   const resolvedSelections: ProductSelection[] = [];
   const unavailableProducts: string[] = [];
   const missingConfigs: string[] = [];
   for (const entity of entities) {
-    const segments = entity.spans.map((span) => nameWindowOf(span, allCompactSpans, haystack.length));
+    const segments = entity.spans.map((span) => {
+      const spanStart = index.orig[span[0]] ?? 0;
+      const spanEnd = (index.orig[span[1] - 1] ?? spanStart) + 1;
+      let nextStart = text.length;
+      for (const other of origSpans) {
+        if (other.start >= spanEnd && other.start < nextStart) nextStart = other.start;
+      }
+      const origEnd = nameWindowOrigEndOf(spanEnd, nextStart);
+      return [span[0], compactPosAfter(origEnd)] as [number, number];
+    });
     const resolved = selectionsForEntity(entity, country.code, { boundPairs: boundPairs.get(entity) ?? [], segments, haystack }, existing);
     if (!resolved.available) unavailableProducts.push(`${entity.brand} ${entity.modelName}${resolved.missingConfigs.length ? `（点名配置 ${resolved.missingConfigs.join('、')}）` : ''}`);
     for (const config of resolved.missingConfigs) {
@@ -373,6 +470,7 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
     selections: resolvedSelections,
     unavailableProducts,
     missingConfigs,
+    configAmbiguity,
   };
 }
 
@@ -518,18 +616,21 @@ function seriesQueryOf(state: FiltersState): SeriesQuery | null {
   return { scope: { countryCode: state.countryCode, industry: state.industry }, groups, granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg };
 }
 
-/** Resolve the last fact week inside the active bucket range for platform cards. */
-function latestWeekForRange(state: FiltersState): string {
+/** 范围内的周序列（升序，按当前粒度的桶过滤）——平台比较「真实最近有价周」
+ *  的候选集：只在该序列内找有价周，不跑出范围。 */
+function inRangeWeekIds(state: FiltersState): string[] {
   const bucketOf = (time: (typeof dimTime)[number]): string => {
     if (state.granularity === 'month') return time.month_id;
     if (state.granularity === 'quarter') return time.quarter_id;
     return time.week_id;
   };
-  const inRange = dimTime.filter((time) => {
-    const bucket = bucketOf(time);
-    return bucket >= state.rangeStart && bucket <= state.rangeEnd;
-  }).sort((a, b) => a.week_id.localeCompare(b.week_id));
-  return inRange[inRange.length - 1]?.week_id ?? state.rangeEnd;
+  return dimTime
+    .filter((time) => {
+      const bucket = bucketOf(time);
+      return bucket >= state.rangeStart && bucket <= state.rangeEnd;
+    })
+    .sort((a, b) => a.week_id.localeCompare(b.week_id))
+    .map((time) => time.week_id);
 }
 
 function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolution, allowDefaultOwn = false): FiltersState {
@@ -719,22 +820,108 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
     const platformQuestion = /最低|最便宜|平台/.test(text);
     let table: AgentResultCard;
     if (platformQuestion) {
-      // R5（四审 m2）：平台比较按整条产品线选择展开——skuIds=[]（整配置）解析
-      // 为该型号该配置全部颜色、多 SKU 部分选择按实际选择聚合（各平台价 =
-      // 选择内各 SKU 平台内最低价的均值，与趋势聚合同构），不再只取
-      // first.skuIds[0]（整配置时为 undefined → 空平台表的旧缺陷），也不把
-      // 黑色单 SKU 333 套给整配置 334。
-      const first = selections(queryState)[0];
-      const latestWeek = latestWeekForRange(queryState);
-      const spreadInfo = first ? platformPriceSpreadOfSelection(first, latestWeek, queryState.countryCode, queryState.currency) : { members: 0, wholeConfig: false, rows: [] as Array<{ platform: string; price: number; skuCount: number }> };
-      const spread = spreadInfo.rows;
-      const lowest = spread[0]?.price ?? null;
-      const scopeNote = spreadInfo.wholeConfig && spread.length
-        ? `按 ${latestWeek} 各平台价排序（整配置口径：全部 ${spreadInfo.members} 个颜色 SKU，各平台价 = 选择内各 SKU 平台内最低价的均值，与趋势聚合一致）；当前最便宜平台为 ${spread[0].platform}。`
-        : spreadInfo.members > 1 && spread.length
-          ? `按 ${latestWeek} 各平台价排序（所选 ${spreadInfo.members} 个颜色 SKU 的平台内最低价均值）；当前最便宜平台为 ${spread[0].platform}。`
-          : `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0]?.platform ?? '—'}。`;
-      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, Math.round(item.price).toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `${scopeNote}${platformNote ?? ''}${partialNote ?? ''}` : `当前产品在最新有价周没有可比较的平台数据。${platformNote ?? ''}${partialNote ?? ''}`, actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板`, filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台${spreadInfo.wholeConfig ? ` · 整配置 ${spreadInfo.members} 色` : spreadInfo.members > 1 ? ` · 所选 ${spreadInfo.members} SKU` : ''}`, source: '统一价格聚合引擎' }] };
+      // R6（五审 M2/M3/m1）平台比较卡三处根治：
+      // - M3 逐产品投影：多产品（含同型号不同配置、受控整配置 skuIds=[]）各为
+      //   独立产品组——带产品列分组、各自 SKU 配置/生效口径/最新有价周与来源
+      //   独立计算，不再 selections(queryState)[0] 只答 first，也不合并排序出
+      //   一个跨产品「最便宜」误导；单产品保持旧列结构（平台/最低价/相对最低价）。
+      // - M2 生效口径：每条产品线在 effectiveLinePlatform（每线 > 全局 > 自动）
+      //   解析出的渠道集合内聚合——店铺级（OZON 3P）绝不以整平台 1P+3P 池价
+      //   （333）冒充 3P 价（395）；用户明确问「全平台/所有平台」时允许透明切
+      //   全平台，但必须在响应里说明与所选店铺口径不同；口径内全无价不静默
+      //   扩大 scope 找其他渠道价。
+      // - m1 真实最近有价周：每条产品线在范围内周序列上真实回溯最后一个有价周
+      //   （Y63 范围尾 202642 无价 → 实际 202638），逐产品标注、范围内全无价
+      //   如实空，不拿日历尾周伪装、不跑出范围找价。
+      const weeks = inRangeWeekIds(queryState);
+      const allPlatformAsked = /全平台|所有平台|全部平台|跨平台/.test(text);
+      const platformSels = flatSelections(Array.isArray(queryState.mains) ? queryState.mains : []).mainSels;
+      const scopeLabelOf = (scope: { platforms: string[]; shopIds: string[] } | null): string => {
+        if (!scope || (scope.platforms.length === 0 && scope.shopIds.length === 0)) return '全部平台（自动）';
+        const names = effectiveChannelIds(queryState.countryCode, scope).map((channelId) => dimChannel.find((c) => c.channel_id === channelId)?.display_name ?? channelId);
+        return [...new Set(names)].join('、');
+      };
+      const perProduct = platformSels.map((sel) => {
+        const effective = effectiveLinePlatform(sel, queryState.platform);
+        const scope = allPlatformAsked ? null : effective;
+        const latestWeek = latestPricedWeekOfSelection(sel, weeks, queryState.countryCode, queryState.currency, scope);
+        const spreadInfo = latestWeek
+          ? platformPriceSpreadOfSelection(sel, latestWeek, queryState.countryCode, queryState.currency, scope)
+          : { members: 0, wholeConfig: false, rows: [] as Array<{ platform: string; price: number; skuCount: number }> };
+        const repr = dimProduct.find((row) => row.model_id === sel.modelId && norm(row.romram) === norm(sel.romram));
+        const label = [repr?.brand, repr?.model_name ?? sel.modelId, sel.romram === '—' ? '' : sel.romram].filter(Boolean).join(' ');
+        return { sel, label, effective, scope, scopeLabel: scopeLabelOf(effective), comparisonScopeLabel: scopeLabelOf(scope), latestWeek, spreadInfo };
+      });
+      const multi = perProduct.length > 1;
+      const tableRows: string[][] = [];
+      const perProductNotes: string[] = [];
+      for (const item of perProduct) {
+        const spread = item.spreadInfo.rows;
+        const lowest = spread[0]?.price ?? null;
+        const skuTail = item.spreadInfo.wholeConfig
+          ? `（整配置口径：全部 ${item.spreadInfo.members} 个颜色 SKU，各平台价 = 选择内各 SKU 平台内最低价的均值，与趋势聚合一致）`
+          : item.spreadInfo.members > 1
+            ? `（所选 ${item.spreadInfo.members} 个颜色 SKU 的平台内最低价均值）`
+            : '';
+        for (const row of spread.slice(0, 8)) {
+          const pct = lowest == null || lowest === 0 ? '—' : row.price === lowest ? '最低' : `+${(((row.price - lowest) / lowest) * 100).toFixed(1)}%`;
+          tableRows.push(multi ? [item.label, row.platform, Math.round(row.price).toLocaleString(), pct] : [row.platform, Math.round(row.price).toLocaleString(), pct]);
+        }
+        if (!spread.length) {
+          perProductNotes.push(`${item.label}：当前口径（${item.comparisonScopeLabel}）与范围 ${queryState.rangeStart}–${queryState.rangeEnd} 内没有可比较的平台价格数据；已保留口径，没有扩大口径或跑出范围取其他渠道价格。`);
+          continue;
+        }
+        if (multi) {
+          const scopeTail = allPlatformAsked && item.effective
+            ? `；本次按全部平台比较，与当前所选店铺口径（${scopeLabelOf(item.effective)}）不同`
+            : item.scope
+              ? `；仅在该口径渠道内比较，未混入口径外平台/渠道价，与全平台比较不同`
+              : '';
+          perProductNotes.push(`${item.label}：${item.latestWeek} 最便宜平台 ${spread[0].platform} ${Math.round(spread[0].price).toLocaleString()}${skuTail}（口径：${item.comparisonScopeLabel}${scopeTail}）。`);
+        }
+      }
+      // 单产品：保持旧说明句式（整配置/多 SKU/单 SKU 三分支 + 当前最便宜平台），
+      // 再补生效口径说明（严格口径/全平台切换/自动）
+      let singleNote = '';
+      if (!multi) {
+        const item = perProduct[0];
+        if (!item || !item.spreadInfo.rows.length) {
+          singleNote = perProduct[0]
+            ? `${perProduct[0].label}：当前生效口径（${perProduct[0].scopeLabel}）与范围 ${queryState.rangeStart}–${queryState.rangeEnd} 内没有可比较的平台价格数据；已保留口径，没有扩大口径或跑出范围取其他渠道价格。`
+            : `当前没有可比较的平台数据。`;
+        } else {
+          const spread = item.spreadInfo.rows;
+          const base = `${item.label}：按 ${item.latestWeek} 各平台价排序（${item.spreadInfo.wholeConfig
+            ? `整配置口径：全部 ${item.spreadInfo.members} 个颜色 SKU，各平台价 = 选择内各 SKU 平台内最低价的均值，与趋势聚合一致`
+            : item.spreadInfo.members > 1
+              ? `所选 ${item.spreadInfo.members} 个颜色 SKU 的平台内最低价均值`
+              : '平台最低在架价'}）；当前最便宜平台为 ${spread[0].platform}。`;
+          const scopeTail = allPlatformAsked && item.effective
+            ? `本次按全部平台比较，与当前所选店铺口径（${scopeLabelOf(item.effective)}）不同。`
+            : item.scope
+              ? `本次按当前所选店铺口径（${item.scopeLabel}）比较：仅在该口径渠道内取价，未混入口径外平台/渠道价（与全平台比较不同）；如需全平台比较请明确说明。`
+              : `口径：全部平台自动（各平台渠道内最低在架价）。`;
+          singleNote = base + scopeTail;
+        }
+      }
+      const note = multi ? `${perProductNotes.join('；')}；各产品独立排序，跨产品价格不可直接比较。${platformNote ?? ''}${partialNote ?? ''}` : `${singleNote}${platformNote ?? ''}${partialNote ?? ''}`;
+      const evidenceDetail = multi
+        ? perProduct.map((item) => item.spreadInfo.rows.length ? `${item.label} · ${item.latestWeek} · ${item.comparisonScopeLabel}` : `${item.label} · 范围内无价`).join('；')
+        : perProduct[0]
+          ? `${perProduct[0].label} · ${perProduct[0].spreadInfo.rows.length ? `${perProduct[0].latestWeek} · ${perProduct[0].comparisonScopeLabel} · ${perProduct[0].spreadInfo.rows.length} 个平台${perProduct[0].spreadInfo.wholeConfig ? ` · 整配置 ${perProduct[0].spreadInfo.members} 色` : perProduct[0].spreadInfo.members > 1 ? ` · 所选 ${perProduct[0].spreadInfo.members} SKU` : ''}` : `${perProduct[0].comparisonScopeLabel} · 范围内无可比较平台数据`}`
+          : '范围内无可比较平台数据';
+      table = {
+        kind: 'table', id: id('table'),
+        title: multi ? '最新有价周平台比较（逐产品）' : '最新有价周平台比较',
+        columns: multi ? ['产品', '平台', '最低价', '相对最低价'] : ['平台', '最低价', '相对最低价'],
+        rows: tableRows,
+        note,
+        actions: [
+          { id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' },
+          { id: id('action'), label: '定位到看板', kind: 'open', prompt: '把平台比较定位回当前看板', filterPatch: openPatch },
+        ],
+        evidence: [{ id: id('evidence'), label: '平台比较', detail: evidenceDetail, source: '统一价格聚合引擎' }],
+      };
     } else {
       table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: `少于两个有效点时不计算环比；结果可回到看板继续下钻。${platformNote ?? ''}${partialNote ?? ''}`, actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
     }
@@ -907,10 +1094,18 @@ function priceAlertList(text: string, context: AgentContextSnapshot): { card: Al
   };
 }
 
-function suggestionActionsFor(intent: AgentIntent, clarificationReason: string | null): AgentSuggestionAction[] {
+function suggestionActionsFor(intent: AgentIntent, clarificationReason: string | null, configAmbiguous = false): AgentSuggestionAction[] {
   // R2（本轮返修 M4）：时间范围澄清卡必须给可点击的「补齐时间」动作——点击即以
   // 明确的「最近 N 周价格趋势」发起真实查询（周范围来自 dimTime 最后 N 桶，
   // 如 202635–202642，并带最新价摘要），不能只生成筛选预览。
+  // R6（五审 M1）：配置归属澄清同样给可点击的规范化问法——逐型号点名配置 /
+  // 「分别」数量一致，把歧义问法引导到可可靠归属的明确绑定语法。
+  if (configAmbiguous) {
+    return [
+      { label: '逐型号点名配置', intent: 'query', prompt: 'RU nova 14 12+256 和 Mate X6 12+512 价格趋势' },
+      { label: '分别对应（数量一致）', intent: 'query', prompt: 'RU nova 14 和 Mate X6 分别是 12+256 和 12+512 的价格趋势' },
+    ];
+  }
   if (clarificationReason === '时间范围') {
     return [
       { label: '补齐时间 · 最近 8 周', intent: 'query', prompt: '最近 8 周价格趋势' },
@@ -939,7 +1134,12 @@ export async function runAgent(
   const classifiedIntent = forcedIntent ?? classifyIntent(text);
   const entities = resolveAgentEntities(text, context.state);
   const clarificationReason = classifiedIntent === 'query' ? clarificationReasonForQuery(text, context.state, entities) : null;
-  const intent: AgentIntent = clarificationReason ? 'clarify' : classifiedIntent;
+  // R6（五审 M1 · 配置归属置信门）：句中明确点名了配置但归属关系不可靠（如
+  // 「分别」要求一一对应而数量不匹配）——消费实体配置的意图（query/filter/
+  // price_advantage）一律返回诚实澄清：绝不猜一个映射、不默默把配置当未指定
+  // 复用页面旧配置/扩大枚举，也不生成可污染看板的 openPatch/filterPatch。
+  const configAmbiguous = entities.configAmbiguity != null && ['query', 'filter', 'price_advantage'].includes(classifiedIntent);
+  const intent: AgentIntent = clarificationReason || configAmbiguous ? 'clarify' : classifiedIntent;
   if (signal?.aborted) throw new DOMException('已取消', 'AbortError');
   await new Promise<void>((resolve, reject) => {
     const timer = globalThis.setTimeout(() => { cleanup(); resolve(); }, 120);
@@ -999,12 +1199,14 @@ export async function runAgent(
     const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(stateWithRecentRange(context.state, text), text, entities);
     cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
   } else {
-    summary = clarificationReason === '产品'
-      ? '我可以继续查，但需要先确认产品。请选择一个主品或竞品，或直接告诉我型号；这样“最便宜/趋势/平台价差”才有明确对象。'
-      : clarificationReason === '时间范围'
-        ? '我可以继续查，但需要先确认时间范围。请指定最近几周/几个月，或直接说最新有价周。'
-        : '你可以让我查询价格走势、比较平台价差、解释预警，或先生成筛选预览。';
-    steps = [step('catalog.resolve', '识别问题', clarificationReason ? `需要补充${clarificationReason}` : '需要选择一个分析方向', 'warning')];
+    summary = configAmbiguous
+      ? `我可以继续查，但问句里的配置归属不明确，需要先确认。${entities.configAmbiguity}`
+      : clarificationReason === '产品'
+        ? '我可以继续查，但需要先确认产品。请选择一个主品或竞品，或直接告诉我型号；这样“最便宜/趋势/平台价差”才有明确对象。'
+        : clarificationReason === '时间范围'
+          ? '我可以继续查，但需要先确认时间范围。请指定最近几周/几个月，或直接说最新有价周。'
+          : '你可以让我查询价格走势、比较平台价差、解释预警，或先生成筛选预览。';
+    steps = [step('catalog.resolve', '识别问题', configAmbiguous ? '型号与配置无法可靠对应，需要澄清' : clarificationReason ? `需要补充${clarificationReason}` : '需要选择一个分析方向', 'warning')];
   }
   return {
     intent,
@@ -1015,12 +1217,14 @@ export async function runAgent(
     // Keep the legacy string field useful for API clients and older tests; the
     // visible UI renders the explicit suggestionActions below, which are
     // intentionally limited to the three supported entry points.
-    suggestions: clarificationReason === '产品'
-      ? ['选择一个主品或竞品', '告诉我具体型号', '指定国家和时间范围']
-      : clarificationReason === '时间范围'
-        ? ['最近 8 周哪个平台最便宜？', '最新有价周哪个平台最便宜？', '指定最近 3 个月']
-        : ['价格优势', '价格预警', '查我司产品价格'],
-    suggestionActions: suggestionActionsFor(intent, clarificationReason),
+    suggestions: configAmbiguous
+      ? ['逐个型号点名配置（如 nova 14 12+256 和 Mate X6 12+512）', '用「分别」时保持型号与配置数量一致']
+      : clarificationReason === '产品'
+        ? ['选择一个主品或竞品', '告诉我具体型号', '指定国家和时间范围']
+        : clarificationReason === '时间范围'
+          ? ['最近 8 周哪个平台最便宜？', '最新有价周哪个平台最便宜？', '指定最近 3 个月']
+          : ['价格优势', '价格预警', '查我司产品价格'],
+    suggestionActions: suggestionActionsFor(intent, clarificationReason, configAmbiguous),
     contextFingerprint: context.fingerprint,
     provenance: context.provenance ?? {
       source: 'local-deterministic',

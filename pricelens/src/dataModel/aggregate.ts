@@ -479,12 +479,18 @@ export function platformPriceSpread(
  *  SKU 在该平台渠道集内最低在架价（minPriceRow，裸机优先、异常价剔除）的
  *  算术平均——与 buildSeries 周聚合（先每 SKU 渠道内最低、再跨 SKU 均值）
  *  同构，绝不把单颜色价（黑 333）套给整配置（334）。单 SKU 时与
- *  platformPriceSpread 数值一致。 */
+ *  platformPriceSpread 数值一致。
+ *  R6（五审 M2 · 生效口径）：scope 非空（每线 selection.platform > 全局
+ *  state.platform，即 effectiveLinePlatform）时平台比较仅在该口径解析出的渠道
+ *  集合内进行——店铺级口径（OZON 3P）绝不以同平台 1P+3P 池价（333）冒充
+ *  3P 价（395），平台级口径只在勾选平台渠道内取价，seller 随口径生效；scope
+ *  空/未传（自动）= 该国全部渠道（旧行为，无 scope 默认全平台仍合法）。 */
 export function platformPriceSpreadOfSelection(
   sel: { modelId: string; romram: string; skuIds: readonly string[] },
   weekId: string,
   countryCode: string,
   currency: CurrencyMode,
+  scope?: PlatformQuery | null,
 ): { members: number; wholeConfig: boolean; rows: Array<{ platform: string; price: number; skuCount: number }> } {
   let skuIds = sel.skuIds.filter((id) => productById.has(id));
   const wholeConfig = skuIds.length === 0;
@@ -493,10 +499,14 @@ export function platformPriceSpreadOfSelection(
     skuIds = dimProduct.filter((p) => p.sku_id.startsWith(prefix) && normRom(p.romram) === normRom(sel.romram)).map((p) => p.sku_id);
   }
   if (!skuIds.length) return { members: 0, wholeConfig, rows: [] };
+  const scopeOn = scope != null && (scope.platforms.length > 0 || scope.shopIds.length > 0);
+  const allowed = scopeOn ? new Set(effectiveChannelIds(countryCode, scope)) : null;
+  const seller = scopeOn ? sellerOfQuery(scope) : null;
   const rows: Array<{ platform: string; price: number; skuCount: number }> = [];
   const byPlatform = new Map<string, string[]>();
   for (const channel of dimChannel) {
     if (channel.country_code !== countryCode) continue;
+    if (allowed && !allowed.has(channel.channel_id)) continue;
     const arr = byPlatform.get(channel.platform);
     if (arr) arr.push(channel.channel_id);
     else byPlatform.set(channel.platform, [channel.channel_id]);
@@ -506,7 +516,7 @@ export function platformPriceSpreadOfSelection(
     let sum = 0;
     let cnt = 0;
     for (const sid of skuIds) {
-      const hit = minPriceRow(countryCode, sid, weekId, channels, currency);
+      const hit = minPriceRow(countryCode, sid, weekId, channels, currency, seller);
       if (!hit) continue;
       sum += hit.price;
       cnt += 1;
@@ -515,6 +525,38 @@ export function platformPriceSpreadOfSelection(
   }
   rows.sort((a, b) => a.price - b.price);
   return { members: skuIds.length, wholeConfig, rows };
+}
+
+/** R6（五审 m1 · 真实最近有价周）：选择（单 SKU / 多 SKU / 整配置 skuIds=[]）
+ *  在给定周序列（升序）内的实际最近有价周——从序列尾向前找第一个「至少一个
+ *  SKU 在口径渠道集内有有效价（minPriceRow，异常价守卫同源）」的周；范围内
+ *  全无价 = null（如实空：不跑出范围找价、不拿日历尾周伪装有价周）。scope
+ *  口径与 platformPriceSpreadOfSelection 一致：空 = 该国全部渠道；口径内全
+ *  程无价同样返回 null，不静默扩大口径找其他渠道价。 */
+export function latestPricedWeekOfSelection(
+  sel: { modelId: string; romram: string; skuIds: readonly string[] },
+  weekIds: readonly string[],
+  countryCode: string,
+  currency: CurrencyMode,
+  scope?: PlatformQuery | null,
+): string | null {
+  let skuIds = sel.skuIds.filter((id) => productById.has(id));
+  if (!skuIds.length) {
+    skuIds = dimProduct.filter((p) => p.sku_id.startsWith(sel.modelId + '__') && normRom(p.romram) === normRom(sel.romram)).map((p) => p.sku_id);
+  }
+  if (!skuIds.length || !weekIds.length) return null;
+  const scopeOn = scope != null && (scope.platforms.length > 0 || scope.shopIds.length > 0);
+  const channels = scopeOn
+    ? new Set(effectiveChannelIds(countryCode, scope))
+    : new Set(dimChannel.filter((c) => c.country_code === countryCode).map((c) => c.channel_id));
+  const seller = scopeOn ? sellerOfQuery(scope) : null;
+  for (let i = weekIds.length - 1; i >= 0; i -= 1) {
+    const wid = weekIds[i];
+    for (const sid of skuIds) {
+      if (minPriceRow(countryCode, sid, wid, channels, currency, seller) != null) return wid;
+    }
+  }
+  return null;
 }
 
 // ---------------- offer 解析（真实分期/促销/组合三列 → 三类权益） ----------------
