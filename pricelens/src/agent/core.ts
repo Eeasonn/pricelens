@@ -1,4 +1,4 @@
-import { buildSeries, defaultChannelOf, lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformPriceSpread, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
+import { buildSeries, defaultChannelOf, effectiveLinePlatform, lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformPriceSpread, platformScopeLabel, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
 import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { buildCards, clampMains, flatSelections, normalizeSelectionForCountry, remapSelectionForCountry, selKey } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
@@ -16,6 +16,34 @@ export { buildPriceAdvantageResult, platformCountryFallbackNote, priceAdvantageC
 const id = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const norm = (s: string): string => s.replace(/\s+/g, '').toLowerCase();
 const compact = (s: string): string => s.toLocaleLowerCase().replace(/[\s_\-]+/g, '').replace(/[’']/g, '');
+
+// ---------------- R3-M2：显式配置（ROM+RAM）省单位/空格变体解析 ----------------
+// 「12+256」「12 + 256」「12+256 GB」「12 + 256GB」「12＋256」统一归一为数字对，
+// 与配置名（如「12+256 GB」「M2 8-core CPU 16-core 8+256 GB」内嵌的 8+256）
+// 组件级精确等价：RAM、ROM 都相等才算点名（12+256 ≠ 12+2560 ≠ 8+256）。
+// 只认「数字+数字」形态，不把纯数字/型号数字当配置；文本里的全部数字对都算
+// 显式提及（含多个配置，如「12+256 和 12+512」）。
+const CONFIG_PAIR_RE = /(\d{1,4})\s*[+＋]\s*(\d{1,5})/g;
+
+function configPairsOf(source: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const match of source.matchAll(CONFIG_PAIR_RE)) {
+    const pair: [number, number] = [Number(match[1]), Number(match[2])];
+    if (!out.some(([ram, rom]) => ram === pair[0] && rom === pair[1])) out.push(pair);
+  }
+  return out;
+}
+
+/** 文本里点名的显式配置数字对（RAM, ROM），去重保序 */
+export function configPairsOfText(text: string): Array<[number, number]> {
+  return configPairsOf(text);
+}
+
+/** 配置名内嵌的全部「RAM+ROM」数字对（平板长配置名取内嵌对，如
+ *  「M2 8-core CPU 16-core 8+256 GB」→ [(8,256)]；非配置形（「—」/纯数字）→ []） */
+function romramPairsOf(romram: string): Array<[number, number]> {
+  return configPairsOf(romram);
+}
 
 const COUNTRY_ALIASES: Record<string, string> = {
   巴西: 'BR', 中国: 'CN', 俄罗斯: 'RU', 俄国: 'RU', 美国: 'US', 英国: 'GB',
@@ -44,6 +72,10 @@ export interface AgentEntityResolution {
   productLabels: string[];
   selections: ProductSelection[];
   unavailableProducts: string[];
+  /** R3-M2（三审）：文本显式点名、但该型号在目标国没有任何在架配置命中的
+   *  配置（如「nova 14 8+256」——RU 只有 12+256/12+512）。如实披露，不用
+   *  页面当前配置或其他配置冒充已按请求查询。 */
+  missingConfigs: string[];
 }
 
 function modelPrefixes(modelName: string): string[] {
@@ -107,11 +139,15 @@ function defaultChannelFallbackSelection(sel: ProductSelection, countryCode: str
   return { ...sel, platform: { platforms: [], shopIds: channelIds, seller: null } };
 }
 
-/** 实体在目标国的解析选择（R3 · M1/M3）：
- *  - 配置严格遵循请求：文本点名了配置（如「12+256GB」）→ 只解析点名配置，
- *    不再枚举该型号全部配置把未请求的 12+512 一并带上；点名配置在目标国
- *    不存在但型号在架 → 同型号该国首个合法配置（与 remapSelectionForCountry
- *    同语义），型号整体缺席才 unavailable。
+/** 实体在目标国的解析选择（R3 · M1/M3；R3-M2 三审返修扩省单位/空格变体）：
+ *  - 配置严格遵循请求：文本点名了配置（完整名「12+256GB」或省单位/空格变体
+ *    「12+256」「12 + 256」「12+256 GB」）→ 只解析点名配置，不再枚举该型号
+ *    全部配置把未请求的 12+512 一并带上；数字对组件级精确（12+256 ≠
+ *    12+2560），省单位提及绝不静默回落页面当前配置（12+512/370/DNS 冒充
+ *    12+256 的旧缺陷）。
+ *  - 点名配置在目标国不存在（型号在架但该配置缺席）：唯一实体时不静默扩大
+ *    到全部配置、不改用页面配置冒充——返回 missingConfigs 让上层如实说明
+ *    「点名配置无在架数据」；多实体查询里其他实体的配置对不误伤本实体。
  *  - 页面已有合法选择优先复用（含每线取价口径 platform/shopIds/seller）：
  *    未点名配置时以页面当前该型号的合法选择为准（不扩大 mains）；点名配置
  *    与页面选择同组时同样复用原选择对象——显式型号查询不能把用户在价格页
@@ -124,14 +160,31 @@ function selectionsForEntity(
   countryCode: string,
   text: string,
   existing: ProductSelection[],
-): { selections: ProductSelection[]; available: boolean } {
+  soleEntity = true,
+): { selections: ProductSelection[]; available: boolean; missingConfigs: string[] } {
   const countryRows = entity.rows.filter((row) => row.countries.includes(countryCode));
-  if (!countryRows.length) return { selections: [], available: false };
+  if (!countryRows.length) return { selections: [], available: false, missingConfigs: [] };
   const rows = countryRows.length ? countryRows : entity.rows;
   const romrams = [...new Set(countryRows.map((row) => row.romram))];
   const haystack = compact(text);
-  // 文本点名配置 = 实体任一配置的紧凑形式（"12+256gb"）出现在文本里
-  const requested = romrams.filter((romram) => haystack.includes(compact(romram)));
+  // 文本点名配置 = 完整名紧凑形式（"12+256gb"）或省单位/空格数字对（"12+256"、
+  // "12 + 256"→compact 后同样命中）；数字对按 (RAM, ROM) 组件级精确比较
+  const mentionedPairs = configPairsOfText(text);
+  const romramPairs = new Map(romrams.map((romram) => [romram, romramPairsOf(romram)]));
+  const pairMatches = (romram: string): boolean =>
+    (romramPairs.get(romram) ?? []).some(([ram, rom]) => mentionedPairs.some(([a, b]) => a === ram && b === rom));
+  const requested = romrams.filter((romram) => haystack.includes(compact(romram)) || pairMatches(romram));
+  // 未被该型号任何配置命中的显式配置对（唯一实体时可归因于本型号；多实体查询
+  // 里配置对可能指向其他实体，不作缺失断言）
+  const unmatchedPairs = soleEntity
+    ? mentionedPairs.filter((pair) => ![...romramPairs.values()].some((pairs) => pairs.some(([ram, rom]) => ram === pair[0] && rom === pair[1])))
+    : [];
+  const missingConfigs = unmatchedPairs.map(([ram, rom]) => `${ram}+${rom}`);
+  // 唯一实体 + 文本确实带了显式配置对 + 该型号任何配置都不匹配 → 点名配置在
+  // 目标国不存在：如实缺失，不静默扩大到全部配置、不改用页面当前配置冒充
+  if (soleEntity && !requested.length && missingConfigs.length) {
+    return { selections: [], available: false, missingConfigs };
+  }
   const existingOf = (romram: string): ProductSelection | undefined =>
     existing.find((sel) => sel.modelId === entity.modelId && norm(sel.romram) === norm(romram)
       && dimProduct.some((p) => p.model_id === sel.modelId && norm(p.romram) === norm(romram) && p.countries.includes(countryCode)
@@ -152,6 +205,7 @@ function selectionsForEntity(
       selections: requested.map(build).filter((selection): selection is ProductSelection => selection != null)
         .map((selection) => defaultChannelFallbackSelection(selection, countryCode)),
       available: true,
+      missingConfigs,
     };
   }
   // 未点名配置：页面已持有该型号合法选择 → 精确沿用（不扩大配置面）；否则按
@@ -169,12 +223,13 @@ function selectionsForEntity(
       seen.add(key);
       selections.push(defaultChannelFallbackSelection(normalizeSelectionForCountry(sel, countryCode), countryCode));
     }
-    return { selections, available: true };
+    return { selections, available: true, missingConfigs: [] };
   }
   return {
     selections: romrams.map(build).filter((selection): selection is ProductSelection => selection != null)
       .map((selection) => defaultChannelFallbackSelection(selection, countryCode)),
     available: true,
+    missingConfigs: [],
   };
 }
 
@@ -189,9 +244,14 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
   const existing = selections(state);
   const resolvedSelections: ProductSelection[] = [];
   const unavailableProducts: string[] = [];
+  const missingConfigs: string[] = [];
   for (const entity of selectedEntities) {
-    const resolved = selectionsForEntity(entity, country.code, text, existing);
-    if (!resolved.available) unavailableProducts.push(`${entity.brand} ${entity.modelName}`);
+    const resolved = selectionsForEntity(entity, country.code, text, existing, selectedEntities.length === 1);
+    if (!resolved.available) unavailableProducts.push(`${entity.brand} ${entity.modelName}${resolved.missingConfigs.length ? `（点名配置 ${resolved.missingConfigs.join('、')}）` : ''}`);
+    for (const config of resolved.missingConfigs) {
+      const label = `${entity.brand} ${entity.modelName} ${config}`;
+      if (!missingConfigs.includes(label)) missingConfigs.push(label);
+    }
     resolvedSelections.push(...resolved.selections);
   }
   return {
@@ -202,6 +262,7 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
     productLabels: selectedEntities.map((entity) => `${entity.brand} ${entity.modelName}`),
     selections: resolvedSelections,
     unavailableProducts,
+    missingConfigs,
   };
 }
 
@@ -337,7 +398,11 @@ function seriesQueryOf(state: FiltersState): SeriesQuery | null {
     romram: selection.romram,
     skuIds: selection.skuIds,
     isOwn: selection.skuIds.some((sku) => dimProduct.find((p) => p.sku_id === sku)?.is_own),
-    platform: selection.platform ? { platforms: selection.platform.platforms, shopIds: selection.platform.shopIds, seller: selection.platform.seller } : null,
+    // R4（三审 M1）：趋势查询每线口径与价格优势/价格页同源——每线显式
+    // selection.platform 优先，未带每线口径回落全局 state.platform（URL shop=/
+    // plat= 等），再无 = 自动。此前只读每线：URL 全局 shop=RU:ozon:3P 时趋势
+    // 混池 333、优势 395 的双口径分裂即来源于此。
+    platform: effectiveLinePlatform(selection, state.platform),
   }));
   if (!groups.length) return null;
   return { scope: { countryCode: state.countryCode, industry: state.industry }, groups, granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg };
@@ -417,40 +482,56 @@ function defaultChannelFallbackNote(state: FiltersState, queryState: FiltersStat
   return `${parts.join('；')}；不代表其默认电渠有价格。`;
 }
 
-/** R3（M3 · 逐线口径回退透明说明）：跨国查询时逐线取价口径发生归一化（部分
- *  可落地保留子集 / 全部不可落地回自动）的产品线说明——与全局
- *  platformCountryFallbackNote 并列且只陈述事实：哪条产品线的哪个渠道口径在
- *  目标国没有在架渠道、该线本次按什么口径计算（自动 = 目标国全部渠道最低价），
- *  不冒称源国渠道在目标国有价；同国完全可落地 = null（无回退事实）。 */
+/** R3（M3 · 逐线口径回退透明说明）：跨国查询时逐线取价口径发生归一化的产品线
+ *  说明——与全局 platformCountryFallbackNote 并列且只陈述事实。R4（三审 r3-m1）：
+ *  说明按真实归一前/后/剔除子集生成分支——部分可落地（如 AE 每线 Amazon+NOON →
+ *  DE 保留 Amazon）只说明「NOON 不可用已剔除、该线本次仅按 Amazon 计算」，
+ *  绝不把保留子集说成「全部渠道最低价自动」或误称有效 Amazon 不存在；全部不可
+ *  落地才说明回自动口径。渠道项用可读标签（渠道 id + 显示名），平台项保留源
+ *  平台名；同国完全可落地 = null（无回退事实）。 */
 function selectionPlatformFallbackNote(state: FiltersState, targetCountryCode: string): string | null {
   const lines: string[] = [];
+  const targetName = dimRegion.find((region) => region.country_code === targetCountryCode)?.country_name ?? targetCountryCode;
   for (const sel of selections(state)) {
     if (!sel.platform) continue;
-    if (platformSelectionForCountry(sel.platform, targetCountryCode) === sel.platform) continue;
+    const normalized = platformSelectionForCountry(sel.platform, targetCountryCode);
+    if (normalized === sel.platform) continue;
     const raw = [...sel.platform.platforms, ...sel.platform.shopIds];
     if (!raw.length) continue;
     const name = dimProduct.find((row) => row.model_id === sel.modelId)?.model_name ?? sel.modelId;
-    const line = `${name} ${sel.romram} 的渠道口径 ${raw.join('、')}`;
+    const rawLabel = raw.map(platformScopeLabel).join('、');
+    if (!normalized) {
+      const line = `${name} ${sel.romram} 的渠道口径 ${rawLabel} 在${targetName}没有在架渠道，该线本次已按${targetName}全部渠道最低价（自动）口径计算；不代表其在${targetName}有价格`;
+      if (!lines.includes(line)) lines.push(line);
+      continue;
+    }
+    const kept = [...normalized.platforms, ...normalized.shopIds];
+    const dropped = raw.filter((value) => !kept.includes(value));
+    const line = `${name} ${sel.romram} 的渠道口径已按${targetName}可落地范围归一：${dropped.map(platformScopeLabel).join('、')} 在${targetName}没有在架渠道已剔除，该线本次仅按 ${kept.map(platformScopeLabel).join('、')} 计算；不代表被剔除部分在${targetName}有价格`;
     if (!lines.includes(line)) lines.push(line);
   }
   if (!lines.length) return null;
-  const targetName = dimRegion.find((region) => region.country_code === targetCountryCode)?.country_name ?? targetCountryCode;
-  return `${lines.join('；')} 在${targetName}没有在架渠道，对应产品线本次已按${targetName}全部渠道最低价（自动）口径计算；不代表其在${targetName}有价格。`;
+  return `${lines.join('；')}。`;
 }
 
 function noDataResult(entities: AgentEntityResolution, state: FiltersState): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
   const labels = entities.unavailableProducts.length ? entities.unavailableProducts : entities.productLabels;
   const productText = labels.length ? labels.join('、') : '当前页面选择的产品';
   const rows = labels.length ? labels.map((label) => [label, entities.countryName, '无可用价格数据']) : [[productText, entities.countryName, '无可用价格数据']];
+  // R3-M2（三审）：点名配置不存在时如实说明「点名了什么、该国有哪些配置、没有
+  // 改用其他配置」，不伪称已按请求查询、不静默扩大到全部配置
+  const configNote = entities.missingConfigs.length
+    ? `请求点名的配置（${entities.missingConfigs.join('、')}）在${entities.countryName}没有在架型号配置；已保留请求配置口径，没有改用该型号其他配置或当前页面配置代替。`
+    : '';
   const table: AgentResultCard = {
     kind: 'table', id: id('table'), title: '目标查询结果', columns: ['产品', '国家', '结果'], rows,
-    note: '已按请求的国家和产品查询；当前数据集没有可用的价格事实，因此没有沿用原看板产品代替。',
+    note: `已按请求的国家和产品查询；当前数据集没有可用的价格事实，因此没有沿用原看板产品代替。${configNote}`,
   };
   return {
     cards: [table],
     citations: [{ id: id('citation'), kind: 'fact', label: '产品与国家维表', detail: `${productText} · ${entities.countryName}` }],
     steps: [step('catalog.resolve', '解析产品与国家', `${productText} · ${entities.countryName}`, 'success'), step('series.query', '查询价格序列', '没有可用价格事实', 'warning')],
-    summary: `${productText}在${entities.countryName}没有可用的价格数据；我没有用当前页面的其他产品冒充结果。`,
+    summary: `${productText}在${entities.countryName}没有可用的价格数据；我没有用当前页面的其他产品冒充结果。${configNote}`,
   };
 }
 

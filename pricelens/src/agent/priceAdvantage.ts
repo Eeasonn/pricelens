@@ -1,4 +1,4 @@
-import { buildSeries, defaultChannelOf, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
+import { buildSeries, defaultChannelOf, effectiveLinePlatform, platformScopeLabel, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
 import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { autoComparesFor, buildCards, clampMains, remapSelectionForCountry, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
@@ -50,7 +50,11 @@ function productSeries(state: FiltersState, cards: MainProduct[]) {
       romram: selection.romram,
       skuIds: selection.skuIds,
       isOwn: isOwn(selection),
-      platform: state.platform ? { platforms: state.platform.platforms, shopIds: state.platform.shopIds, seller: state.platform.seller } : null,
+      // R4（三审 M1）：每线口径经共享规则解析（每线显式 > 全局 state.platform >
+      // 自动）——主品每线钉 OZON 3P 时优势 own 价同趋势 395，不再只读全局
+      // 被混池 333 洗掉；竞品线同规则解析（有每线口径用每线，否则全局，再否则
+      // 自动），同一次对比内不静默混两套来源。
+      platform: effectiveLinePlatform(selection, state.platform),
     }));
   });
   const unique = [...new Map(groups.map((group) => [`${group.modelId}__${compact(group.romram)}`, group])).values()];
@@ -91,8 +95,13 @@ function ownNoAlignedWeeksNote(
       .map((channelId) => dimChannel.find((c) => c.channel_id === channelId)?.display_name ?? channelId);
     if (!channels.length) continue;
     const countryName = dimRegion.find((region) => region.country_code === state.countryCode)?.country_name ?? state.countryCode;
-    const scopeLabels = [...state.platform?.platforms ?? [], ...state.platform?.shopIds ?? []]
-      .map((value) => dimChannel.find((c) => c.channel_id === value)?.display_name ?? value);
+    // R4（三审 M1）：说明里的口径 = 该线真实生效口径（每线显式 > 全局 > 自动），
+    // 与计算同源——不把每线钉的店铺口径说成全局默认电渠。
+    const scopeValues = (() => {
+      const effective = effectiveLinePlatform(card.main, state.platform);
+      return effective ? [...effective.platforms, ...effective.shopIds] : [];
+    })();
+    const scopeLabels = scopeValues.map((value) => dimChannel.find((c) => c.channel_id === value)?.display_name ?? value);
     const scopeLabel = scopeLabels.length ? scopeLabels.join('、') : `默认电渠（${dimChannel.find((c) => c.channel_id === defaultChannelOf(state.countryCode))?.display_name ?? '默认电渠'}）`;
     const meta = modelLabel(card.main);
     const line = `${meta.modelName} · ${card.main.romram} 在${countryName}当前渠道口径（${scopeLabel}）没有我司价格事实，仅在 ${channels.join('、')} 有真实在架价格`;
@@ -142,7 +151,10 @@ export function priceAdvantageCountryFallbackNote(state: FiltersState, countryCo
 /** R5（M1，同步稳定线五审）：跨国平台归一化发生实际回退（不可落地部分被剔除或
  *  整体回落默认电渠）时的透明说明——只陈述事实：哪些勾选在目标国没有在架渠道、
  *  本次按什么口径计算，不冒称原平台在目标国有价格。完全可落地 / 未勾平台 =
- *  null（无回退事实，不产生说明）。 */
+ *  null（无回退事实，不产生说明）。
+ *  R4（三审 r3-m1）：说明基于真实归一前/后/剔除子集生成——部分可落地时点名
+ *  「剔除了什么、仅按保留的什么计算」，绝不把保留子集说成全部自动；渠道项用
+ *  可读标签（渠道 id + 显示名），平台项保留源平台名。 */
 export function platformCountryFallbackNote(platform: FiltersState['platform'], countryCode: string): string | null {
   if (!platform) return null;
   const normalized = platformSelectionForCountry(platform, countryCode);
@@ -150,11 +162,15 @@ export function platformCountryFallbackNote(platform: FiltersState['platform'], 
   const raw = [...platform.platforms, ...platform.shopIds];
   if (!raw.length) return null;
   const targetName = dimRegion.find((region) => region.country_code === countryCode)?.country_name ?? countryCode;
+  const rawLabel = raw.map(platformScopeLabel).join('、');
   if (!normalized) {
-    return `平台口径 ${raw.join('、')} 在${targetName}没有在架渠道，本次已按${targetName}默认电渠口径计算；不代表其在${targetName}有价格。`;
+    return `平台口径 ${rawLabel} 在${targetName}没有在架渠道，本次已按${targetName}默认电渠口径计算；不代表其在${targetName}有价格。`;
   }
   const kept = [...normalized.platforms, ...normalized.shopIds];
-  return `平台口径已按${targetName}可落地范围归一：${raw.join('、')}中不在${targetName}在架渠道的部分已剔除，本次仅按${kept.join('、')}计算。`;
+  const dropped = raw.filter((value) => !kept.includes(value));
+  const droppedLabel = dropped.map(platformScopeLabel).join('、');
+  const keptLabel = kept.map(platformScopeLabel).join('、');
+  return `平台口径已按${targetName}可落地范围归一：${droppedLabel} 在${targetName}没有在架渠道已剔除，本次仅按 ${keptLabel} 计算；不代表被剔除部分在${targetName}有价格。`;
 }
 
 export interface PriceAdvantageResult {

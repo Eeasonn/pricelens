@@ -285,9 +285,13 @@ function AdvantageCard({ card, locked }: { card: PriceAdvantageResultCard; locke
       id: `advantage-focus-${row.id}`,
       title: '定位价格优势',
       contextFingerprint: context.fingerprint,
-      // R5（M1）：行无渠道信息回退全局平台口径时，按行所在国过共享规则归一化
-      // （源国不可落地平台落地即回落目标国默认电渠），与计算口径一致。
-      patch: { countryCode: row.countryCode, platform: row.platform ? { platforms: [row.platform], shopIds: [], seller: null } : platformSelectionForCountry(context.state.platform, row.countryCode), granularity: 'week', adaptive: false, rangeStart: row.weekId, rangeEnd: row.weekId, mains: buildCards([row.ownSelection], { auto: true, countryCode: row.countryCode }) },
+      // R4（三审 M1）：行级定位落地 = 复刻该行计算时每条线的真实生效口径——
+      // 全局层 = 参与计算的 state.platform（按行所在国过共享规则归一，含 URL
+      // shop= 店铺级，绝不明细里是 OZON 3P 395、落地却变平台池 333 的换算）；
+      // 每线层 = row.ownSelection 自带的 selection.platform 原样随 mains 落地
+      // （R6 的「按行渠道名改写全局平台」在店铺级/每线口径下会换成另一口径，
+      // 已由共享作用域解析取代）。
+      patch: { countryCode: row.countryCode, platform: platformSelectionForCountry(context.state.platform, row.countryCode), granularity: 'week', adaptive: false, rangeStart: row.weekId, rangeEnd: row.weekId, mains: buildCards([row.ownSelection], { auto: true, countryCode: row.countryCode }) },
       changes: [],
     });
     if (!result.ok) { setActionError(result.error); return; }

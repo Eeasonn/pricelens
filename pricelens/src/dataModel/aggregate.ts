@@ -233,6 +233,33 @@ export function platformSelectionForCountry(platform: PlatformQuery | null | und
   return { platforms, shopIds, seller };
 }
 
+/** 平台口径项的用户可读标签：平台名原样（dim_channel.platform 即展示名，如
+ *  "OZON"/"NOON"）；渠道 id 补渠道显示名（"RU:ozon:3P（OZON 3P）"）——归一化
+ *  说明里同时保留源标识（渠道 id 可核查）与可读名，不裸吐机器 id。 */
+export function platformScopeLabel(value: string): string {
+  const hit = channelById.get(value);
+  if (!hit || hit.display_name === value) return value;
+  return `${value}（${hit.display_name}）`;
+}
+
+/** R4（三审 M1 · 共享作用域解析）：一条产品线的生效取价口径——每线显式
+ *  selection.platform 优先；未带每线口径（或空勾选）回落全局筛选
+ *  state.platform（URL shop=/plat=、Agent patch 落地、量价页全局口径来源）；
+ *  两者皆无 = null（自动：该国全部渠道每周最低价）。趋势图、Agent 趋势
+ *  queryCards、价格优势 buildPriceAdvantageResult、行级/整卡回看 patch 的
+ *  每条线一律经此解析——不允许任何消费方只读其中一层造成「趋势 395、优势
+ *  333」的双口径。店铺级（shopIds）原样参与 effectiveChannelIds 严格交集，
+ *  不降平台、不混池（迭代线店铺级策略）；空勾选视为未选，不挡全局回落。 */
+export function effectiveLinePlatform(
+  selection: { platform?: PlatformQuery | null },
+  statePlatform: PlatformQuery | null,
+): PlatformQuery | null {
+  const own = selection.platform;
+  if (own && (own.platforms.length > 0 || own.shopIds.length > 0)) return own;
+  if (statePlatform && (statePlatform.platforms.length > 0 || statePlatform.shopIds.length > 0)) return statePlatform;
+  return null;
+}
+
 /** 取价店铺文案：渠道显示名（如 "DNS 独立站"）+ 具体店铺（有意义时） */
 function shopLabelOf(row: FactPriceWeekly): string {
   const ch = channelById.get(row.channel_id);

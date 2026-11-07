@@ -58,7 +58,7 @@ import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
-import { buildSeries, defaultPlatformAnchorOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
+import { buildSeries, defaultPlatformAnchorOf, effectiveLinePlatform, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART, COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
@@ -203,10 +203,12 @@ export default function PriceTrend(props: {
     [effMains],
   );
   // 第196轮复检整改3：stable 的实际取数口径 = 全局平台（每线覆写失效）——
-  // 全局平台变化必须进入限位作用域签名（换平台即回自动）；iterate 签名串不变
+  // 全局平台变化必须进入限位作用域签名（换平台即回自动）；R4（三审 M1）：
+  // iterate 未覆写线也回落全局平台，全局平台变化同样 = 价格线口径真实变化，
+  // 两通道都入键
   const limitScopeSig = useMemo(
-    () => `${contentSignature(effMains)}#${platformSig}#${STABLE ? JSON.stringify(stablePlatform) : ''}#${state.currency}`,
-    [effMains, platformSig, stablePlatform, state.currency],
+    () => `${contentSignature(effMains)}#${platformSig}#${STABLE ? JSON.stringify(stablePlatform) : JSON.stringify(state.platform)}#${state.currency}`,
+    [effMains, platformSig, stablePlatform, state.platform, state.currency],
   );
   // 币种或产品集一变，旧限位还停在上一币种的数字上。若等 effect 再清，
   // 这一帧会用错的端点算出过细的步长，并被冻结进后续自适应（USD→本币时刻度炸开）。
@@ -379,8 +381,11 @@ export default function PriceTrend(props: {
       // isOwn 由数据层按型号事实判定（华为产品恒真）；主分析/对比是角色，
       // 图上不因角色改样式（第一百一十七轮）。
       // 第196轮复检整改3：stable 每组 platform = 全局平台（state.platform 降级归一），
-      // 每线 sel.platform 覆写失效；iterate 保持每线覆写（与量价页全局化同款口径）
-      groups: [...mainSels, ...compareSels].map((g) => ({ ...g, isOwn: false, platform: STABLE ? stablePlatform : (g.platform ?? null) })),
+      // 每线 sel.platform 覆写失效；iterate 保持每线覆写（与量价页全局化同款口径）。
+      // R4（三审 M1）：iterate 未带每线口径的线回落全局 state.platform（经共享
+      // effectiveLinePlatform：每线 > 全局 > 自动）——与 Agent 趋势/价格优势同口径，
+      // URL shop=RU:ozon:3P 的全局店铺级不再在趋势被混池成 333。
+      groups: [...mainSels, ...compareSels].map((g) => ({ ...g, isOwn: false, platform: STABLE ? stablePlatform : effectiveLinePlatform(g, state.platform) })),
       granularity: state.granularity,
       startBucket: dataStart,
       endBucket: dataEnd,
@@ -388,7 +393,7 @@ export default function PriceTrend(props: {
       agg: state.agg,
       scope: { countryCode: state.countryCode, industry: state.industry },
     }),
-    [mainSels, compareSels, stablePlatform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry],
+    [mainSels, compareSels, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry],
   );
 
   // 取数异常 ≠ 空态（第一百八十五轮，外部 UX 审计）：异常不再静默回落空数组
@@ -732,11 +737,12 @@ export default function PriceTrend(props: {
       try {
         series = buildSeries({
           // 第196轮复检整改3：stable 每组 platform = 全局平台（与合并图同口径，
-          // 每线覆写失效）；iterate 保持每线 platform
+          // 每线覆写失效）；R4（三审 M1）：iterate 经 effectiveLinePlatform
+          // 每线覆写优先、未覆写线回落全局平台（与合并图同口径）
           groups: [...(card.main ? [card.main] : []), ...card.compares].map((g) => ({
             ...g,
             isOwn: false,
-            platform: STABLE ? stablePlatform : (g.platform ?? null),
+            platform: STABLE ? stablePlatform : effectiveLinePlatform(g, state.platform),
           })),
           granularity: state.granularity,
           startBucket: dataStart,
@@ -750,7 +756,7 @@ export default function PriceTrend(props: {
       }
       return { key: card.id, card, series, failed };
     });
-  }, [splitActive, effMains, stablePlatform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry, configVersion]);
+  }, [splitActive, effMains, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry, configVersion]);
 
   // 各面板生效窗口：同步 = 全面板共用共享窗口；独立 = 面板自己的窗口
   //（未单独调整过回落共享窗口，越界钳回可调全域并保住最小窗口跨度）
@@ -1177,8 +1183,8 @@ export default function PriceTrend(props: {
     yCompress,
     volumeOn, // 第196轮整改5：量层开合 = 价格区高度变化 → 步长冻结解冻重适配
     // 第196轮复检整改3：stable 全局平台变化 = 价格线口径真实变化 → 解冻重适配；
-    // iterate 取数走每线 platform（不入键，行为不变）
-    ...(STABLE ? [stablePlatform] : []),
+    // R4（三审 M1）：iterate 全局平台同样参与取数（未覆写线的回落层）→ 一并入键
+    ...(STABLE ? [stablePlatform] : [state.platform]),
   ]);
   const yBaseRef = useRef<{ key: string; intervalUsd: number } | null>(null);
   const yCfg = useMemo(() => {

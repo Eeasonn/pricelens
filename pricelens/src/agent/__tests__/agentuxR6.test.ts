@@ -7,9 +7,10 @@
 //    真按选中店铺取数：趋势 chart/最新表 = 395、优势 own 价 = 395（对 honor
 //    200 Pro 3P 360.60→361 为「落后」；混池 333 会翻转成「占优」，关系翻转
 //    即最强判别）、导航 patch 保留 shopIds、回看落地后再查同口径不漂移。
-//  - 口径来源（与页面一致，不另造引擎）：趋势 queryCards = 每线
-//    selection.platform（与价格页图表同源）；价格优势 = 全局 state.platform
-//    （与总览/量价全局口径同源）。两者经 effectiveChannelIds 严格交集解析。
+//  - 口径来源（R4 三审返修统一，不另造引擎）：趋势 queryCards 与价格优势都经
+//    共享 effectiveLinePlatform 解析（每线 selection.platform > 全局
+//    state.platform > 自动），价格页图表同源；两者经 effectiveChannelIds 严格
+//    交集解析。本文件的全局 3P 用例（ruAdvantageShopState）语义不变兼容。
 //  - PriceAdvantageRow 实际结构如实断言（own/competitor 各带 modelId/
 //    modelName/romram/skuId/price，行带 weekId/channelLabel/platform/
 //    priceDiff/priceDiffPct/relation）——不编造不存在的单行价字段。
