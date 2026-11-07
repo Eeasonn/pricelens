@@ -1,7 +1,7 @@
 import { buildSeries, defaultChannelOf, effectiveChannelIds, effectiveLinePlatform, latestPricedWeekOfSelection, lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformPriceSpreadOfSelection, platformScopeLabel, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
 import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { buildCards, clampMains, flatSelections, normalizeSelectionForCountry, remapSelectionForCountry, selKey } from '../state/mainSelection';
-import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
+import type { FiltersState, MainProduct, ProductSelection, PlatformSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
 import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, AgentSuggestionAction, AlertListResultCard, FilterResultCard, FilterPatch, ForecastContextInput } from './contracts';
 import { contextFingerprint } from './contracts';
@@ -207,9 +207,15 @@ function countryOfText(text: string, fallback: string): { code: string; explicit
  *  202638–202642 五条事实，默认 Amazon 1P 无价），解析出的选择逐线钉到有价
  *  渠道（店铺级并集，取数口径点名实际渠道如 "Amazon 3P"，数值与自动口径一致
  *  ——无价渠道本就不参与每周最低）。默认电渠有价 / 选择已带每线口径 = 原样，
- *  不动用户显式口径。 */
-function defaultChannelFallbackSelection(sel: ProductSelection, countryCode: string): ProductSelection {
+ *  不动用户显式口径。
+ *  R7（六审 M3）：显式全局平台口径（URL plat=/店铺筛选落地，按目标国归一后
+ *  仍非空）同样是用户约束——口径内无价时如实返回空结果，绝不越权把该线钉到
+ *  口径外的其他有价渠道（FR Boulanger 口径下 Mate X6 如实无价，不偷查
+ *  Amazon 3P 1596、不注入 shopIds）。仅自动口径（每线、全局都未指定）无价时
+ *  才透明回退有价渠道。 */
+function defaultChannelFallbackSelection(sel: ProductSelection, countryCode: string, globalPlatform: PlatformSelection | null): ProductSelection {
   if (sel.platform) return sel;
+  if (globalPlatform) return sel;
   if (lowestPriceColorSku(sel.modelId, sel.romram, countryCode) != null) return sel;
   const channelIds = pricedChannelIdsOfSelection(sel, countryCode);
   if (!channelIds.length) return sel;
@@ -238,7 +244,7 @@ function defaultChannelFallbackSelection(sel: ProductSelection, countryCode: str
 function selectionsForEntity(
   entity: ProductEntity,
   countryCode: string,
-  scope: { boundPairs: Array<[number, number]>; segments: Array<[number, number]>; haystack: string },
+  scope: { boundPairs: Array<[number, number]>; segments: Array<[number, number]>; haystack: string; globalPlatform: PlatformSelection | null },
   existing: ProductSelection[],
 ): { selections: ProductSelection[]; available: boolean; missingConfigs: string[] } {
   const countryRows = entity.rows.filter((row) => row.countries.includes(countryCode));
@@ -280,7 +286,7 @@ function selectionsForEntity(
   if (requested.length) {
     return {
       selections: requested.map(build).filter((selection): selection is ProductSelection => selection != null)
-        .map((selection) => defaultChannelFallbackSelection(selection, countryCode)),
+        .map((selection) => defaultChannelFallbackSelection(selection, countryCode, scope.globalPlatform)),
       available: true,
       missingConfigs,
     };
@@ -298,13 +304,13 @@ function selectionsForEntity(
       const key = selKey(sel);
       if (seen.has(key)) continue;
       seen.add(key);
-      selections.push(defaultChannelFallbackSelection(normalizeSelectionForCountry(sel, countryCode), countryCode));
+      selections.push(defaultChannelFallbackSelection(normalizeSelectionForCountry(sel, countryCode), countryCode, scope.globalPlatform));
     }
     return { selections, available: true, missingConfigs: [] };
   }
   return {
     selections: romrams.map(build).filter((selection): selection is ProductSelection => selection != null)
-      .map((selection) => defaultChannelFallbackSelection(selection, countryCode)),
+      .map((selection) => defaultChannelFallbackSelection(selection, countryCode, scope.globalPlatform)),
     available: true,
     missingConfigs: [],
   };
@@ -314,21 +320,33 @@ function selectionsForEntity(
  *  R5（四审 M1）：实体出现位置消歧 + 配置对就近归属（见 productEntitiesOfText
  *  注释）——不再整句广播配置对、不再按全句最高分丢实体。
  *  R6（五审 M1 · 绑定语法与置信门）：配置对归属从「有前置实体一律归最近前置」
- *  升级为明确的绑定语法——
- *  ① 近邻距离归属：每个配置对比较两侧最近实体的字符间距，间距小者归属；
- *    平局后置优先（「nova 14 12+256」型后置语法保持原行为）。同时支持
- *    实体后置配置（nova 14 12+256）与配置前置实体（12+256GB nova 14）：
- *    「12+512GB Mate X6」紧跟 Mate X6（间距≈0）而非隔着「和」的 nova 14
- *    → 归 Mate X6（旧缺陷归最近前置，把 Mate 的 12+512 播给 nova、用另一
- *    实体的有效配置「救活」本实体的无效 99+999）。
- *  ② 明确「分别」（≥2 实体且点名了配置）：按实体出现顺序与配置顺序一一对
- *    应；数量不匹配或配置重复含糊 → configAmbiguity，上层澄清，绝不猜。 */
+ *  升级为明确的绑定语法——紧邻后置 / 顿号列表延续 / 紧邻前置 / 「分别」一一对应。
+ *  R7（六审 M1 · 置信门根治）：旧兜底「两侧最近实体段按字符距离，平局后置优先」
+ *  不安全——「A 和 B 都是 12+512GB」中 512 按距离只归 B，A 未被绑定而拿页面
+ *  默认配置替答（nova 256/333 冒充 512/370）；「A x 和 y 和 B y」中 y 按距离
+ *  跨过分句词归 B，A 漏掉 y。修复口径：只认可靠语法，其余一律诚实澄清——
+ *  ① 紧邻后置：A 12+256 / A 12+256、12+512（顿号列表延续同实体）；
+ *  ② 紧邻前置：12+256GB A / … 和 12+512GB B（配置紧跟实体，间隔仅空格/单位）；
+ *  ③ 共享配置：紧邻的「都是/均为/皆为/全是 + 配置」归句中全部实体
+ *    （A 和 B 都是 12+512 → 两实体各得 12+512）；
+ *  ④ 「分别」（≥2 实体且点名了配置）：实体出现顺序 ↔ 配置出现顺序一一对应，
+ *     数量不匹配 → configAmbiguity 澄清；
+ *  ⑤ 单实体问句：唯一实体无歧义，句中全部配置对都归它（含跨「和/的」的列举）；
+ *  ⑥ 和列表延续（有可靠判据时）：配置跨「和」接在已归属配置之后，且后一实体
+ *     已自带紧邻配置（A x 和 y 和 B y → y 归 A，三组齐全）；夹在两实体之间且
+ *     恰好一侧已自带配置 → 归无配置的一侧；
+ *  ⑦ 其余（多实体、配置无法唯一归属 / 句中没有实体却点名了配置）→ configAmbiguity
+ *     诚实澄清，绝不拿页面当前配置冒答、绝不用另一实体的有效配置「救活」无效
+ *     配置（99+999 不被 Mate 的 512 带活出 370）。 */
 export function resolveAgentEntities(text: string, state: FiltersState): AgentEntityResolution {
   const country = countryOfText(text, state.countryCode);
   const { entities, haystack, index } = productEntitiesOfText(text, state.industry);
   // R3（M1）：实体解析带上页面现有选择（主品 + 对比区）——同型号合法选择连同
   // 每线取价口径一起复用，显式型号查询不把用户已钉的店铺口径洗掉
   const existing = selections(state);
+  // R7（六审 M3）：目标国的生效全局平台口径（每线>全局>自动里的「全局」层）——
+  // 显式全局口径是约束，selectionsForEntity 的渠道回退必须尊重（不越权扩大）
+  const globalPlatform = platformSelectionForCountry(state.platform, country.code);
   // 实体出现段映射回原文坐标（配置对在原文坐标系里做就近归属）
   const origSpans: Array<{ entity: ProductEntity; start: number; end: number }> = [];
   for (const entity of entities) {
@@ -361,18 +379,14 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
     } else {
       configAmbiguity = `「分别」要求型号与配置一一对应：问句里有 ${entities.length} 个型号（${entityLabelsInOrder.join('、')}）和 ${distinctPairs.length} 个配置（${distinctPairs.map(([ram, rom]) => `${ram}+${rom}`).join('、')}），数量不一致，无法可靠对应。请逐个型号点名配置，例如「nova 14 12+256 和 Mate X6 12+512」。`;
     }
-  } else {
-    // 项序列绑定：把实体段与配置对按原文位置排成一条项序列，逐个配置决定归属——
-    // ① 后置：紧邻前一实体（间隔仅空格/单位 GB，含顿号列举）→ 归该实体（后置
-    //    语法「nova 14 12+256」与顿号列表「nova 14 12+256、12+512」都归 nova）；
-    // ② 列表延续：前一配置已归属且间隔是顿号/空格列举（非「和」）→ 同前一配置
-    //    的实体（「12+256、12+512」是同一实体的配置列表，绝不因距离误归后续实体）；
-    // ③ 前置：紧邻后一实体（间隔仅空格/单位）→ 归后一实体（「12+256GB nova 14」
-    //    配置前置语法；「… 和 12+512 Mate X6」中 12+512 跨过分句词后紧跟 Mate）；
-    // ④ 兜底：两侧最近实体段按原始字符距离，平局后置优先（保持旧行为）。
-    // 「和/与/and」是分句连接词：隔着的配置不再向前一实体后置/列表延续，
-    // 改走前置或兜底——Mate 的 12+512 不再播给 nova、也就不会用另一实体的
-    // 有效配置「救活」本实体的无效 99+999。
+  } else if (occurrences.length > 0 && entities.length === 0) {
+    // 句中点名了配置但没有可归属的型号：拿页面默认配置冒答等于偷换请求口径
+    configAmbiguity = `问句里点名了配置（${distinctPairs.map(([ram, rom]) => `${ram}+${rom}`).join('、')}），但没有出现可归属的型号，无法确定配置指哪个产品。请指明型号，例如「nova 14 12+256 价格趋势」。`;
+  } else if (occurrences.length > 0) {
+    // 项序列绑定：把实体段与配置对按原文位置排成一条项序列，逐个配置决定归属。
+    // 第一遍只认可靠邻接语法（后置/顿号列表延续/前置/共享配置标记）；
+    // 「和/与/and」是分句连接词，隔着它的配置不参与邻接绑定，留待第二遍按
+    // 可靠判据裁决，判据不足 → configAmbiguity 诚实澄清（不再按字符距离兜底猜）。
     type Item = { kind: 'entity'; entity: ProductEntity; start: number; end: number } | { kind: 'config'; pair: [number, number]; start: number; end: number };
     const items: Item[] = [
       ...origSpans.map((span): Item => ({ kind: 'entity', entity: span.entity, start: span.start, end: span.end })),
@@ -385,7 +399,13 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
       if (/^(?:和|与|及|跟|还有|以及|或者|或|的|是|and|or)$/.test(stripped)) return 'clause';
       return 'far';
     };
+    // 共享配置标记：紧邻前置间隙里的「都是/均为/皆为/全是」——配置归句中全部实体
+    const sharedMarkerOf = (gap: string): boolean => {
+      const stripped = gap.replace(/gb/ig, '').replace(/\s+/g, '');
+      return /^(?:都是|均为|皆是|皆为|全是)$/.test(stripped);
+    };
     const ownerOf = new Map<Item, ProductEntity>();
+    const deferred: Array<{ kind: 'config'; pair: [number, number]; start: number; end: number }> = [];
     for (let i = 0; i < items.length; i += 1) {
       const item = items[i];
       if (item.kind === 'entity') continue;
@@ -393,6 +413,10 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
       const next = items[i + 1];
       const gluePrev = prev ? glueOf(text.slice(prev.end, item.start)) : 'far';
       const glueNext = next ? glueOf(text.slice(item.end, next.start)) : 'far';
+      if (prev && sharedMarkerOf(text.slice(prev.end, item.start))) {
+        for (const entity of entities) bind(entity, item.pair);
+        continue;
+      }
       if (prev && prev.kind === 'entity' && gluePrev === 'bind') {
         bind(prev.entity, item.pair);
         ownerOf.set(item, prev.entity);
@@ -408,19 +432,50 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
         ownerOf.set(item, next.entity);
         continue;
       }
-      // 兜底：两侧最近实体段按原始字符距离，平局后置优先
-      const preceders = origSpans.filter((span) => span.end <= item.start);
-      const followers = origSpans.filter((span) => span.start >= item.end);
-      const prevSpan = preceders.length ? preceders.reduce((best, cur) => (cur.end > best.end || (cur.end === best.end && cur.start > best.start) ? cur : best)) : null;
-      const nextSpan = followers.length ? followers.reduce((best, cur) => (cur.start < best.start ? cur : best)) : null;
-      const target = prevSpan && nextSpan
-        ? nextSpan.start - item.end < item.start - prevSpan.end ? nextSpan.entity : prevSpan.entity
-        : (prevSpan ?? nextSpan)?.entity
-          ?? origSpans.find((span) => span.start <= item.start && item.end <= span.end)?.entity
-          ?? null;
-      if (target) {
-        bind(target, item.pair);
-        ownerOf.set(item, target);
+      deferred.push(item);
+    }
+    if (deferred.length) {
+      // 第二遍（置信门）：邻接语法没绑上的配置，只有在归属无歧义时才允许绑定。
+      // 单实体问句无跨实体污染可能 → 全部归它；多实体时只认可靠判据
+      // （后一实体已自带配置的和列表延续 / 夹在两实体间且恰好一侧已自带配置），
+      // 其余一律 configAmbiguity 澄清——宁可不答，不拿页面配置或别的实体的
+      // 配置冒答。
+      const boundEntities = new Set(ownerOf.values());
+      if (entities.length === 1) {
+        for (const item of deferred) bind(entities[0], item.pair);
+      } else {
+        const unbindable: Array<[number, number]> = [];
+        for (let d = 0; d < deferred.length; d += 1) {
+          const item = deferred[d];
+          const itemIndex = items.indexOf(item);
+          const prev = items[itemIndex - 1];
+          const next = items[itemIndex + 1];
+          const gluePrev = prev ? glueOf(text.slice(prev.end, item.start)) : 'far';
+          const glueNext = next ? glueOf(text.slice(item.end, next.start)) : 'far';
+          if (prev && prev.kind === 'config' && ownerOf.has(prev) && gluePrev === 'clause'
+            && next && next.kind === 'entity' && boundEntities.has(next.entity)) {
+            // 和列表延续：后一实体已自带紧邻配置，本配置是前一配置所属实体的列举
+            bind(ownerOf.get(prev)!, item.pair);
+            ownerOf.set(item, ownerOf.get(prev)!);
+            continue;
+          }
+          if (prev && prev.kind === 'entity' && gluePrev === 'clause' && next && next.kind === 'entity' && glueNext === 'clause') {
+            // 夹在两实体之间：恰好一侧已自带配置 → 归无配置的一侧；两侧都有/都无 → 含糊
+            const prevBound = boundEntities.has(prev.entity);
+            const nextBound = boundEntities.has(next.entity);
+            if (prevBound !== nextBound) {
+              const target = prevBound ? next.entity : prev.entity;
+              bind(target, item.pair);
+              ownerOf.set(item, target);
+              continue;
+            }
+          }
+          unbindable.push(item.pair);
+        }
+        if (unbindable.length) {
+          const pairLabels = unbindable.map(([ram, rom]) => `${ram}+${rom}`);
+          configAmbiguity = `问句里的配置（${[...new Set(pairLabels)].join('、')}）无法唯一归属到型号（${entityLabelsInOrder.join('、')}）：多型号问句里配置与型号隔着「和/与」等分句连接词时可能有多种对应。请逐个型号点名配置，例如「nova 14 12+256 和 Mate X6 12+512」，或用「都是」表达共享配置（如「nova 14 和 Mate X6 都是 12+512」）。`;
+        }
       }
     }
   }
@@ -453,7 +508,7 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
       const origEnd = nameWindowOrigEndOf(spanEnd, nextStart);
       return [span[0], compactPosAfter(origEnd)] as [number, number];
     });
-    const resolved = selectionsForEntity(entity, country.code, { boundPairs: boundPairs.get(entity) ?? [], segments, haystack }, existing);
+    const resolved = selectionsForEntity(entity, country.code, { boundPairs: boundPairs.get(entity) ?? [], segments, haystack, globalPlatform }, existing);
     if (!resolved.available) unavailableProducts.push(`${entity.brand} ${entity.modelName}${resolved.missingConfigs.length ? `（点名配置 ${resolved.missingConfigs.join('、')}）` : ''}`);
     for (const config of resolved.missingConfigs) {
       const label = `${entity.brand} ${entity.modelName} ${config}`;
@@ -750,15 +805,21 @@ function noDataResult(entities: AgentEntityResolution, state: FiltersState): { c
   const configNote = entities.missingConfigs.length
     ? `请求点名的配置（${entities.missingConfigs.join('、')}）在${entities.countryName}没有在架型号配置；已保留请求配置口径，没有改用该型号其他配置或当前页面配置代替。`
     : '';
+  // R7（六审 M3 · 口径透明）：查询带显式平台口径且口径内无价时，点名本次真实
+  // 口径并声明没有越权扩大——绝不冒称「全部渠道都没有」或偷换口径取价。
+  const scopeChannels = state.platform && (state.platform.platforms.length > 0 || state.platform.shopIds.length > 0)
+    ? [...new Set(effectiveChannelIds(state.countryCode, state.platform).map((channelId) => dimChannel.find((c) => c.channel_id === channelId)?.display_name ?? channelId))]
+    : null;
+  const scopeNote = scopeChannels ? `本次已在所选平台口径（${scopeChannels.join('、')}）内查询，口径内没有价格事实；已保留口径，没有扩大口径取口径外其他渠道的价格。` : '';
   const table: AgentResultCard = {
     kind: 'table', id: id('table'), title: '目标查询结果', columns: ['产品', '国家', '结果'], rows,
-    note: `已按请求的国家和产品查询；当前数据集没有可用的价格事实，因此没有沿用原看板产品代替。${configNote}`,
+    note: `已按请求的国家和产品查询；当前数据集没有可用的价格事实，因此没有沿用原看板产品代替。${configNote}${scopeNote}`,
   };
   return {
     cards: [table],
     citations: [{ id: id('citation'), kind: 'fact', label: '产品与国家维表', detail: `${productText} · ${entities.countryName}` }],
     steps: [step('catalog.resolve', '解析产品与国家', `${productText} · ${entities.countryName}`, 'success'), step('series.query', '查询价格序列', '没有可用价格事实', 'warning')],
-    summary: `${productText}在${entities.countryName}没有可用的价格数据；我没有用当前页面的其他产品冒充结果。${configNote}`,
+    summary: `${productText}在${entities.countryName}没有可用的价格数据；我没有用当前页面的其他产品冒充结果。${configNote}${scopeNote}`,
   };
 }
 
@@ -835,6 +896,24 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
       //   如实空，不拿日历尾周伪装、不跑出范围找价。
       const weeks = inRangeWeekIds(queryState);
       const allPlatformAsked = /全平台|所有平台|全部平台|跨平台/.test(text);
+      // R7（六审 M2）：全平台透明切换时，本卡的动作必须携带「本次真实计算口径」——
+      // 定位到看板的 openPatch 把全局平台与逐线（main/compares）口径一并清空，
+      // 落地后看板就是本次比较的全平台口径（OZON 333/DNS 336/Mvideo 347 的口径），
+      // 不再回原 3P/395 口径冒充本次结果；价差解释 followup 的 prompt 自带
+      // 「全平台」字样，重放时按同一 all-platform 口径计算，不再答成原口径 395。
+      const allPlatformOpenPatch: FilterPatch = {
+        ...openPatch,
+        platform: null,
+        mains: (queryState.mains ?? []).map((card) => ({
+          ...card,
+          main: card.main ? { ...card.main, platform: null } : card.main,
+          compares: (card.compares ?? []).map((sel) => ({ ...sel, platform: null })),
+        })),
+      };
+      const tableOpenPatch = allPlatformAsked ? allPlatformOpenPatch : openPatch;
+      const spreadPrompt = allPlatformAsked
+        ? '解释最新有价周全平台价差及可能的核查方向（与当前所选店铺口径不同）'
+        : '解释最新有价周的平台价差及可能的核查方向';
       const platformSels = flatSelections(Array.isArray(queryState.mains) ? queryState.mains : []).mainSels;
       const scopeLabelOf = (scope: { platforms: string[]; shopIds: string[] } | null): string => {
         if (!scope || (scope.platforms.length === 0 && scope.shopIds.length === 0)) return '全部平台（自动）';
@@ -917,8 +996,8 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
         rows: tableRows,
         note,
         actions: [
-          { id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' },
-          { id: id('action'), label: '定位到看板', kind: 'open', prompt: '把平台比较定位回当前看板', filterPatch: openPatch },
+          { id: id('action'), label: '查看价差解释', kind: 'followup', prompt: spreadPrompt },
+          { id: id('action'), label: '定位到看板', kind: 'open', prompt: allPlatformAsked ? '把本次全平台比较定位回当前看板（全平台口径）' : '把平台比较定位回当前看板', filterPatch: tableOpenPatch },
         ],
         evidence: [{ id: id('evidence'), label: '平台比较', detail: evidenceDetail, source: '统一价格聚合引擎' }],
       };
@@ -1094,18 +1173,45 @@ function priceAlertList(text: string, context: AgentContextSnapshot): { card: Al
   };
 }
 
-function suggestionActionsFor(intent: AgentIntent, clarificationReason: string | null, configAmbiguous = false): AgentSuggestionAction[] {
+/** R7（六审 m1 · 澄清动作安全补全）：配置归属澄清的建议问法必须从用户原请求
+ *  派生（原国家 + 原型号 + 原点名配置，仅规范化绑定语法），且一律 draftOnly——
+ *  点击只把示例填入输入框，由用户确认/修改后再发送，绝不直接执行、绝不引入
+ *  原请求之外的国家或型号（旧缺陷：FR Pura 80/Mate X6 的澄清按钮硬编码发送
+ *  「RU nova 14 …」，静默换国换型号）。配置数不足时用「（补配置）」占位，
+ *  不虚构配置值。 */
+function configAmbiguitySuggestionActions(text: string, entities: AgentEntityResolution): AgentSuggestionAction[] {
+  const pairLabels = configPairsOfText(text).map(([ram, rom]) => `${ram}+${rom}`);
+  const countryPrefix = entities.explicitCountry ? `${entities.countryName} ` : '';
+  const labels = entities.productLabels;
+  const configOf = (i: number): string => {
+    if (pairLabels.length === 1) return pairLabels[0];
+    return i < pairLabels.length ? pairLabels[i] : '（补配置）';
+  };
+  const named = labels.length
+    ? labels.map((label, i) => `${label} ${configOf(i)}`).join(' 和 ')
+    : `（补型号） ${pairLabels[0] ?? '（补配置）'}`;
+  const perModelPrompt = `${countryPrefix}${named} 价格趋势`;
+  const distinctConfigs = labels.length && pairLabels.length === labels.length
+    ? pairLabels
+    : labels.length
+      ? labels.map((_, i) => configOf(i))
+      : [pairLabels[0] ?? '（补配置）'];
+  const respectivelyPrompt = `${countryPrefix}${labels.length ? labels.join('、') : '（补型号）'} 分别是 ${distinctConfigs.join('、')} 的价格趋势`;
+  return [
+    { label: '逐型号点名配置（示例填入，确认后发送）', intent: 'clarify', prompt: perModelPrompt, draftOnly: true },
+    { label: '用「分别」一一对应（示例填入，确认后发送）', intent: 'clarify', prompt: respectivelyPrompt, draftOnly: true },
+  ];
+}
+
+function suggestionActionsFor(intent: AgentIntent, clarificationReason: string | null, configAmbiguityActions?: AgentSuggestionAction[]): AgentSuggestionAction[] {
   // R2（本轮返修 M4）：时间范围澄清卡必须给可点击的「补齐时间」动作——点击即以
   // 明确的「最近 N 周价格趋势」发起真实查询（周范围来自 dimTime 最后 N 桶，
   // 如 202635–202642，并带最新价摘要），不能只生成筛选预览。
   // R6（五审 M1）：配置归属澄清同样给可点击的规范化问法——逐型号点名配置 /
   // 「分别」数量一致，把歧义问法引导到可可靠归属的明确绑定语法。
-  if (configAmbiguous) {
-    return [
-      { label: '逐型号点名配置', intent: 'query', prompt: 'RU nova 14 12+256 和 Mate X6 12+512 价格趋势' },
-      { label: '分别对应（数量一致）', intent: 'query', prompt: 'RU nova 14 和 Mate X6 分别是 12+256 和 12+512 的价格趋势' },
-    ];
-  }
+  // R7（六审 m1）：配置澄清的示例问法改为从用户原请求派生且 draftOnly（只填
+  // 输入框不执行），不再硬编码 RU nova 样本静默换国换型号。
+  if (configAmbiguityActions?.length) return configAmbiguityActions;
   if (clarificationReason === '时间范围') {
     return [
       { label: '补齐时间 · 最近 8 周', intent: 'query', prompt: '最近 8 周价格趋势' },
@@ -1224,7 +1330,7 @@ export async function runAgent(
         : clarificationReason === '时间范围'
           ? ['最近 8 周哪个平台最便宜？', '最新有价周哪个平台最便宜？', '指定最近 3 个月']
           : ['价格优势', '价格预警', '查我司产品价格'],
-    suggestionActions: suggestionActionsFor(intent, clarificationReason, configAmbiguous),
+    suggestionActions: suggestionActionsFor(intent, clarificationReason, configAmbiguous ? configAmbiguitySuggestionActions(text, entities) : undefined),
     contextFingerprint: context.fingerprint,
     provenance: context.provenance ?? {
       source: 'local-deterministic',

@@ -132,6 +132,12 @@ export interface AgentSuggestionAction {
   intent: AgentSuggestionIntent;
   target?: 'comparison' | 'evidence' | 'filter_preview' | 'dashboard' | 'forecast';
   prompt?: string;
+  /**
+   * R7（六审 m1）：draftOnly = 示例补全动作——点击只把 prompt 模板填入输入框
+   * 供用户确认/修改，绝不直接发送执行（配置归属澄清的示例问法由用户原请求
+   * 派生，仍不代替用户确认对应关系，更不允许静默换成示例里的国家/型号）。
+   */
+  draftOnly?: boolean;
 }
 
 export interface AgentActionTarget {
