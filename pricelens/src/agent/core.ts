@@ -1,5 +1,5 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
-import { normalizePlatformScope } from '../dataModel/platformScope';
+import { normalizePlatformScope, platformScopeProvenanceNote } from '../dataModel/platformScope';
 import { dimProduct, dimRegion, dimTime } from '../data';
 import { STABLE } from '../appChannel';
 import { platformLevelForChannel } from '../state/urlSync';
@@ -315,7 +315,20 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
     if (scope.note) notes.push(scope.note);
     return scope.platform === queryState.platform ? queryState : { ...queryState, platform: scope.platform };
   };
-  if (!entities.explicitCountry && !entities.explicitProduct) return { state: withLawfulPlatform(state), notes };
+  // R7-M1：Provider 落地归一留下的 provenance 说明（稳定版 load/setter 已把
+  // 店铺级原始输入归一为平台级，原始输入只在 platformScopeNotice 里保留）在
+  // 「查询最终口径 = 说明描述的口径」时进入卡边界——图卡图注、最新价格摘要、
+  // 最新有价周平台比较与优势卡的判断边界据此展示展开/剔除事实。换国/换口径后
+  // helper 内判定失效返回 null，不携带旧口径噪音；与现场归一说明互斥（已归一
+  // 输入幂等无 note），includes 去重为双保险。
+  const seedProvenance = (finalState: FiltersState): FiltersState => {
+    const provenance = platformScopeProvenanceNote(state.platformScopeNotice, finalState.countryCode, finalState.platform);
+    if (provenance && !notes.includes(provenance)) notes.push(provenance);
+    return finalState;
+  };
+  if (!entities.explicitCountry && !entities.explicitProduct) {
+    return { state: seedProvenance(withLawfulPlatform(state)), notes };
+  }
   let targetSelections = entities.selections;
   if (!entities.explicitProduct && entities.explicitCountry) {
     const remapped: ProductSelection[] = [];
@@ -340,7 +353,7 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
     targetSelections = remapped;
   }
   const mains: MainProduct[] = targetSelections.map((selection, index) => ({ id: `agent-query-${index}`, main: selection, compares: [] }));
-  return { state: withLawfulPlatform({ ...state, countryCode: entities.countryCode, mains }), notes };
+  return { state: seedProvenance(withLawfulPlatform({ ...state, countryCode: entities.countryCode, mains })), notes };
 }
 
 function stateForPriceAdvantage(state: FiltersState, entities: AgentEntityResolution): EntityQueryPlan {
@@ -665,7 +678,11 @@ function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: Fil
   // R6-M1：预警跳转补丁的平台归一说明（稳定版店铺级 → 平台级透明展开）同样
   // 进入判断边界——活态 state 已是平台级时幂等无说明（不添噪音），只有陈旧/
   // 手工构造的店铺级口径才会出现，与趋势/优势卡同一套透明规则。
-  const platformScopeNote = normalizePlatformScope(state.countryCode, state.platform).note;
+  // R7-M1：Provider 已提前归一（load/setter）时，现场归一无说明——改用落地
+  // provenance（口径吻合时），启动归一的展开事实在预警卡边界同样可见。
+  const platformScope = normalizePlatformScope(state.countryCode, state.platform);
+  const platformScopeNote = platformScope.note
+    ?? platformScopeProvenanceNote(state.platformScopeNotice, state.countryCode, platformScope.platform);
   const records = alerts.slice(0, 8);
   const alert = records[0];
   if (!alert) {

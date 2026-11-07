@@ -42,12 +42,18 @@ export default function PlatformSelectBox() {
   // 未选时呈现的默认平台（配置默认店铺归属平台 → 国家默认平台）
   const defaultPlatform = useMemo(() => defaultPlatformAnchorOf(cc), [cc]);
 
-  // 显式选择归一读取：平台级取第一个；店铺级（旧链接/总览级联写入）反查所属平台
+  // 显式选择归一读取：平台级取第一个；店铺级（旧链接/总览级联写入）反查所属平台。
+  // R7-M1：稳定版归一可产出多平台并集（店铺展开 + 显式平台去重）——单选 Select
+  // 无法表达多选态时如实显示全量（无对应 option 不落高亮），用户再选任一平台
+  // 即替换为单选；state/URL/计算口径不受显示层影响。
   const sel = normalizePlatformSelection(state.platform);
   const shopPlatform = sel != null && sel.shopIds.length > 0
     ? dimChannel.find((c) => c.channel_id === sel.shopIds[0])?.platform ?? null
     : null;
-  const explicitPlatform = sel?.platforms[0] ?? shopPlatform ?? null;
+  const multiPlatformLabel = state.platform && state.platform.shopIds.length === 0 && state.platform.platforms.length > 1
+    ? state.platform.platforms.join('、')
+    : null;
+  const explicitPlatform = multiPlatformLabel ?? sel?.platforms[0] ?? shopPlatform ?? null;
 
   return (
     <Select

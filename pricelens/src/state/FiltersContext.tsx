@@ -19,13 +19,16 @@ import type {
   FiltersActions,
   FiltersState,
   MainProduct,
+  PlatformScopeNotice,
   PlatformSelection,
   ProductSelection,
 } from './filtersTypes';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimProduct, dimRegion, dimTime } from '../data';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
-import { normalizePlatformScope } from '../dataModel/platformScope';
+import { normalizePlatformScope, platformQueryEquals } from '../dataModel/platformScope';
+import type { LawfulPlatformScope } from '../dataModel/platformScope';
+import { STABLE } from '../appChannel';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
@@ -75,6 +78,7 @@ export const defaultFilters: FiltersState = {
   currency: 'usd', // 默认 USD（真实数据按行内汇率折算）
   priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
   agg: 'avg',
+  platformScopeNotice: null, // R7-M1：稳定版平台口径归一说明（无归一 = null）
   alertSubs: [], // 第五十二轮：预警中心订阅（默认空，入口 = 看板页签铃铛 / 总览型号块）
   alertTypes: DEFAULT_ALERT_TYPES, // 追补⑨：四类预警全局开关
   alertThresholds: DEFAULT_ALERT_THRESHOLDS, // 追补⑨：四类全局阈值（旧版共用 1.5% 一条线）
@@ -150,6 +154,15 @@ function isPlatformSelection(value: unknown): value is PlatformSelection | null 
     isStringArray(value.shopIds) &&
     (value.seller === undefined || value.seller === null || typeof value.seller === 'string')
   );
+}
+
+/** R7-M1：持久化里的归一说明（provenance）形状校验——note 文本 + 目标国 +
+ *  描述的归一后口径；坏形状跳过该字段（不入 required，不作废整包）。 */
+function isPlatformScopeNotice(value: unknown): value is PlatformScopeNotice {
+  if (!isRecord(value)) return false;
+  return typeof value.note === 'string'
+    && typeof value.countryCode === 'string'
+    && isPlatformSelection(value.platform);
 }
 
 function isPriceTypes(value: unknown): value is FiltersState['priceTypes'] {
@@ -230,6 +243,8 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       [v === 12 ? 'mains' : v === 11 ? ('legacyV11Mains' as const) : 'legacyOwn', v === 10 ? isProductSelectionArray(parsed.own) : mainsOk],
       [v === 10 ? 'legacyCompetitors' : 'platform', v === 10 ? isProductSelectionArray(parsed.competitors) : isPlatformSelection(parsed.platform)],
       ['platform', isPlatformSelection(parsed.platform)],
+      // R7-M1：归一说明随包留存（坏形状跳过，不作废整包——口径本身仍合法可恢复）
+      ['platformScopeNotice', parsed.platformScopeNotice == null || isPlatformScopeNotice(parsed.platformScopeNotice)],
       // 口径（国家/产业）随载荷恢复：写侧一直整包写入，读侧漏掉会让裸根链接的
       // 新会话静默回落 RU/phone 并把旧国家选择当无效覆盖掉。值非法/缺失 =
       // 跳过该项落默认口径（不入 required，不因此作废整包）。
@@ -252,6 +267,8 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
     const required = checks.filter(([key]) =>
       key !== 'alertTypes' && key !== 'alertThresholds' && key !== 'alertProducts'
       && key !== 'countryCode' && key !== 'industry'
+      // R7-M1：归一说明是可再生物质（口径本身可重新归一），坏形状/缺失只跳过字段
+      && key !== 'platformScopeNotice'
       // v10/v11 复用的 platform 键形随数据换代漂移（渠道 id 空间两度更换）：
       // 不再因它作废整包——无效时跳过该字段回落默认电渠（与 countryCode 同等
       // 宽限，可迁移的用户选择不陪葬）；v12 载荷 platform 仍在 required
@@ -265,7 +282,12 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       else if (key === 'legacyCompetitors') rest.legacyCompetitors = parsed.competitors as ProductSelection[];
       else if (key === 'legacyV11Mains')
         rest.legacyV11Mains = parsed.mains as { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[];
-      else if (key !== 'mains' || v === 12) (rest as UnknownRecord)[key] = (parsed as UnknownRecord)[key];
+      else if (key !== 'mains' || v === 12) {
+        // 缺失的可选字段（R7-M1 platformScopeNotice 未写入时）不落显式 undefined，
+        // 避免 spread 覆盖默认值
+        const value = (parsed as UnknownRecord)[key];
+        if (value !== undefined) (rest as UnknownRecord)[key] = value;
+      }
     }
     return rest;
   } catch {
@@ -305,11 +327,31 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
   return { mains: [] };
 }
 
+/** t428u R7-M1 · 归一说明（provenance）的统一收口：任何入口（load / actions.set /
+ *  换国 applyScopeDefaults）过 normalizePlatformScope 后由此决定 state 上的说明——
+ *  - 本次归一产生了说明（剔除/透明展开）→ 以本次结果为准（幂等：同输入同说明，
+ *    单字段存续，不可能重复叠加）；
+ *  - 归一幂等无说明（输入已是合法平台级）→ 沿用「仍能描述当前口径」的既有说明
+ *    （补丁/快照随带的说明优先于继承值——undo 整态恢复），否则清空：换国、
+ *    deliberate 换平台/重置后旧说明不再成立，绝不泄漏陈旧口径；
+ *  - 迭代版恒 null（无稳定版能力归一，Agent 卡内说明照旧由计算侧现场产出）。 */
+function resolveScopeNotice(
+  countryCode: string,
+  scope: LawfulPlatformScope,
+  incoming: PlatformScopeNotice | null | undefined,
+): PlatformScopeNotice | null {
+  if (!STABLE) return null;
+  if (scope.note) return { note: scope.note, countryCode, platform: scope.platform };
+  if (incoming && incoming.countryCode === countryCode && platformQueryEquals(incoming.platform, scope.platform)) return incoming;
+  return null;
+}
+
 /** 口径（国家/产业）变化后的状态整理：规范作用域、平台/店铺归一到目标国合法
  *  口径（R5-M1：共享 lawfulPlatformScope——保留合法子集，全部非法才回 null，
  *  seller 合法性同函数处理；R6-M1：稳定版再经 normalizePlatformScope 把店铺级
  *  透明展开为平台级——Agent 结果卡 open/apply 补丁落地后的 state 不再保留
- *  shopIds，与计算/导航口径一致；迭代版行为不变）、主分析先整组同型号合法化
+ *  shopIds，与计算/导航口径一致；R7-M1：归一说明随 state 落地，页内条幅与
+ *  Agent 卡边界据此展示展开/剔除事实）、主分析先整组同型号合法化
  *  （R4-m1/S1：逐 SKU 过滤 / 同配置换 SKU / 同型号首个合法配置），全部型号
  *  缺席才重算默认卡；开启「自动匹配竞品」的组对比区随新口径矩阵重算（矩阵
  *  分国，维表换代同样在启动读档时借此自愈） */
@@ -317,6 +359,7 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   const scope = normalizeDataScope({ countryCode: s.countryCode, industry: s.industry });
   syncScopeRegistries(scope.countryCode);
   const platformScope = normalizePlatformScope(scope.countryCode, s.platform);
+  const platformScopeNotice = resolveScopeNotice(scope.countryCode, platformScope, s.platformScopeNotice);
   // 空 mains = 用户显式清空（空态），读档/读链接时不回填默认卡；口径切换
   // 走 switchScope 的 force=true 照常重算默认卡。R4-m1：旧选择先尝试同型号
   // 合法化，落得下就保留（RU Mate X6 12+512 → ID 16+512），不再一律默认重算
@@ -328,6 +371,7 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
     ...s,
     ...scope,
     platform: platformScope.platform,
+    platformScopeNotice,
     mains: needMain ? (defaults.mains ?? []) : mains,
   };
   next.mains = next.mains.map((c) => (c.auto && c.main ? withAutoOn(c) : c));
@@ -442,9 +486,17 @@ function loadBaseState(): FiltersState {
     restored = { ...defaultFilters, ...rest } as FiltersState;
     // 平台单选归一：旧持久化的多选形态（platforms 多值 / shopIds 渠道下钻）取第一个平台；
     // 稳定版再降店铺级 → 平台级（2026-11-05 复检整改3，Eason：默认视图不再钉具体店铺，
-    // 平台级自动 = 平台内每周最低价店铺；迭代版原样）
-    restored.platform = normalizePlatformSelection(restored.platform);
-    restored.platform = platformLevelForChannel(restored.platform);
+    // 平台级自动 = 平台内每周最低价店铺；迭代版原样）。
+    // R7-M1（第七轮评审）：稳定版撤掉这两道「有损前置归一」——多平台取一/店铺优先
+    // 会先把原始完整输入裁掉（DNS+AE:noon:3P 丢 DNS、DNS+RU:ozon:3P 丢 DNS），
+    // 后置的 normalizePlatformScope 只能对着残缺输入归一。原始输入原样进
+    // applyScopeDefaults，由共享的「国家合法 + 稳定版能力」一体化归一处理：
+    // 非法店铺剔除、合法店铺透明展开所属平台、与显式平台并集去重，全部过程
+    // 进归一说明（platformScopeNotice，页内可见）。迭代版路径逐字节不变。
+    if (!STABLE) {
+      restored.platform = normalizePlatformSelection(restored.platform);
+      restored.platform = platformLevelForChannel(restored.platform);
+    }
     // 迁移里的矩阵查询（groupsFromBenchmark）按数据层缺省国家取分国对标，须先切到载荷国家，
     // 否则迁移产出的对比区会被别的国家矩阵固化写回
     syncScopeRegistries(restored.countryCode);
@@ -604,7 +656,27 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           }
           // 非 mains 数组的坏值整体忽略（防御 Agent/undo 之外的 JS 调用方）
           if (clean.mains !== undefined && !Array.isArray(clean.mains)) delete clean.mains;
-          const next = { ...s, ...clean };
+          let next: FiltersState = { ...s, ...clean };
+          // R7-M1（第七轮评审 Major）：稳定版带 platform 键的补丁在 setter 处
+          // 立即走共享「国家合法 + 能力」归一——总览级联「全部店铺·最低价」提交
+          // {shopIds:[RU:ozon:3P]} 即刻落为平台级 {platforms:[OZON]}（展开说明
+          // 同步可见），不再等 Agent 打开才收敛。带 platform 键 = 一次明确的新
+          // 输入：说明以本次归一结果为准，纯合法输入即清除旧说明（deliberate
+          // 换平台/回默认/Agent 补丁落地不残留陈旧展开说明），仅整态快照
+          // （undo/redo）随带的 platformScopeNotice 在口径吻合时优先沿用；
+          // 不带 platform 键（切币种/粒度/时间等）不动平台与既有说明。跨口径
+          // 补丁按目标国归一后交 switchScope/applyScopeDefaults（幂等，同政策）。
+          if (STABLE && clean.platform !== undefined) {
+            const scope = normalizePlatformScope(next.countryCode, next.platform);
+            const incomingNotice = isPlatformScopeNotice(clean.platformScopeNotice)
+              ? clean.platformScopeNotice
+              : undefined;
+            next = {
+              ...next,
+              platform: scope.platform,
+              platformScopeNotice: resolveScopeNotice(next.countryCode, scope, incomingNotice),
+            };
+          }
           const scopeChanged =
             (clean.countryCode != null && clean.countryCode !== s.countryCode) ||
             (clean.industry != null && clean.industry !== s.industry);

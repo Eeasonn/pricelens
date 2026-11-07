@@ -26,6 +26,7 @@ import type { ThemeConfig } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import PlatformSelectBox from './PlatformSelectBox';
+import PlatformScopeNotice from './PlatformScopeNotice';
 import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
 import TimeBox from './TimeBox';
@@ -359,6 +360,9 @@ export default function FilterBar({
               </>
             )}
           </div>
+          {/* R7-M1：稳定版平台口径归一说明（店铺级展开/非法剔除的 provenance），
+              有平台筛选的页面在筛选卡内常驻展示；迭代版不渲染 */}
+          <PlatformScopeNotice />
         </section>
       </ConfigProvider>
     </div>

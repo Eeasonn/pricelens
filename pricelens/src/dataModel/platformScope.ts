@@ -26,6 +26,7 @@ import { dimChannel, dimRegion } from '../data';
 import { STABLE } from '../appChannel';
 import { sellersOfChannel } from './aggregate';
 import type { PlatformQuery } from './types';
+import type { PlatformScopeNotice } from '../state/filtersTypes';
 
 export interface LawfulPlatformScope {
   /** 归一后的合法选择；null = 未选平台（自动/全平台口径） */
@@ -42,6 +43,44 @@ export interface LawfulPlatformScope {
 
 const displayNameOfShop = (channelId: string): string =>
   dimChannel.find((channel) => channel.channel_id === channelId)?.display_name ?? channelId;
+
+/** t428u R7-M1 · 平台口径的集合相等判定（与顺序无关）：platforms/shopIds 按
+ *  集合比较（归一的并集去重不保证稳定排序），seller 一并参与。用于判断
+ *  「归一说明描述的口径」是否仍是当前口径——成立才展示/引用说明。 */
+export function platformQueryEquals(
+  a: PlatformQuery | null | undefined,
+  b: PlatformQuery | null | undefined,
+): boolean {
+  const norm = (p: PlatformQuery | null | undefined): { platforms: string[]; shopIds: string[]; seller: string | null } | null => {
+    if (!p) return null;
+    return {
+      platforms: [...new Set(p.platforms)].sort(),
+      shopIds: [...new Set(p.shopIds)].sort(),
+      seller: p.seller ?? null,
+    };
+  };
+  const x = norm(a);
+  const y = norm(b);
+  if (x === null || y === null) return x === y;
+  return x.platforms.length === y.platforms.length && x.platforms.every((v, i) => v === y.platforms[i])
+    && x.shopIds.length === y.shopIds.length && x.shopIds.every((v, i) => v === y.shopIds[i])
+    && x.seller === y.seller;
+}
+
+/** t428u R7-M1 · Provider 落地归一时的口径说明（provenance）取用：仅当
+ *  「最终口径 = 说明描述的口径」且国家一致时返回说明原文，否则 null。
+ *  稳定版 load/actions.set 已把店铺级原始输入归一为平台级——原始输入只在
+ *  provenance 里保留，趋势/摘要/优势/平台比较/预警卡据此把展开事实写进判断
+ *  边界；换国/换口径后说明自动失效，不携带旧口径噪音。 */
+export function platformScopeProvenanceNote(
+  notice: PlatformScopeNotice | null | undefined,
+  countryCode: string,
+  platform: PlatformQuery | null,
+): string | null {
+  if (!notice) return null;
+  if (notice.countryCode !== countryCode) return null;
+  return platformQueryEquals(notice.platform, platform) ? notice.note : null;
+}
 
 /**
  * 把平台/店铺选择归一到目标国合法口径。纯函数、幂等：合法选择原样返回

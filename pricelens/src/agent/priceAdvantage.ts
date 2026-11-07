@@ -1,5 +1,5 @@
 import { buildSeries } from '../dataModel/aggregate';
-import { normalizePlatformScope } from '../dataModel/platformScope';
+import { normalizePlatformScope, platformScopeProvenanceNote } from '../dataModel/platformScope';
 import { dimChannel, dimProduct, dimTime } from '../data';
 import { clampMains, flatSelections } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
@@ -78,6 +78,10 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
   // 平台级、补丁却保留 shopIds」分叉——实际计算渠道、行渠道与回看落地口径
   // 一致（平台级），展开/剔除都在卡判断边界透明说明。迭代版店铺级照旧保留。
   const platformScope = normalizePlatformScope(state.countryCode, state.platform);
+  // R7-M1：Provider 已提前归一（load/setter）时现场归一无说明——用落地
+  // provenance（口径吻合时），原始店铺输入的展开事实在优势卡判断边界保留。
+  const provenanceNote = platformScope.note
+    ?? platformScopeProvenanceNote(state.platformScopeNotice, state.countryCode, platformScope.platform);
   const scoped: FiltersState = platformScope.platform === state.platform ? state : { ...state, platform: platformScope.platform };
   const options: PriceAdvantageSkuOption[] = [];
   const seenOptions = new Set<string>();
@@ -193,7 +197,8 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
     note: rows.length ? `按 ${state.countryCode} × 渠道 × 周对齐折后价；我司更低记为占优，数字来自本地确定性价格引擎。占优 ${advantageCount} 条，落后 ${laggingCount} 条。` : '当前国家、渠道和时间范围没有同时具备我司与竞品价格事实的周。',
     boundaries: [
       // R5-M1：平台/店铺口径剔除必须透明（如「NOON 在R国没有渠道」），放在判断边界首位
-      ...(platformScope.note ? [platformScope.note] : []),
+      // R7-M1：Provider 提前归一时取落地 provenance（同一条展开说明）
+      ...(provenanceNote ? [provenanceNote] : []),
       '仅统计同一周内我司与竞品都有有效折后价的对比；缺价周不插值、不外推。',
       '占优/落后只描述相对价位，不构成因果结论；促销与渠道快照需按证据逐条核对。',
     ],

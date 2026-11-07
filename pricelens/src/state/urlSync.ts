@@ -63,8 +63,10 @@ export function normalizePlatformSelection(platform: PlatformSelection | null): 
 }
 
 /** 状态 → URL 参数（写侧）：店铺级选择写 `plat={平台}&shop={渠道id}`（平台由
- *  维表反查，反查不出按渠道 id 三段式兜底）；仅平台级（旧兼容）只写 plat=；
- *  未选两者皆空（调用方写 null 即删键，连带清掉旧链接残留）。 */
+ *  维表反查，反查不出按渠道 id 三段式兜底）；平台级写 plat=（R7-M1：多平台
+ *  并集（店铺展开/链接多值）按逗号全量序列化——读侧 listParam 对称拆分，
+ *  parse/serialize/reload 往返不丢；单平台输出与旧写侧逐字节相同）；未选两者
+ *  皆空（调用方写 null 即删键，连带清掉旧链接残留）。 */
 export function platformUrlParamsOf(
   platform: PlatformSelection | null,
 ): { plat: string | null; shop: string | null; seller: string | null } {
@@ -73,7 +75,8 @@ export function platformUrlParamsOf(
     const p = platformOfShopId(shopId);
     return { plat: p || null, shop: shopId, seller: shopId && platform?.seller ? platform.seller : null };
   }
-  return { plat: platform?.platforms[0] ?? null, shop: null, seller: null };
+  const platforms = platform?.platforms ?? [];
+  return { plat: platforms.length ? platforms.join(',') : null, shop: null, seller: null };
 }
 
 /**
@@ -130,13 +133,19 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     // （normalizePlatformSelection 先吃 shopIds）；旧多值链接取第一个归一。
     // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认口径）。
     // 稳定版（2026-11-05 复检整改3，Eason）：不再钉具体店铺——shop=/seller=
-    // 静默忽略（仅 plat= 平台级继续驱动 state.platform）；残留键由写侧统一剥离
+    // 静默忽略（仅 plat= 平台级继续驱动 state.platform）；残留键由写侧统一剥离。
+    // R7-M1（第七轮评审）：稳定版不再「多值取一」——plat= 的完整平台列表原样
+    // 读入（合法剔除/店铺展开/去重统一交给 applyScopeDefaults 的共享归一，
+    // 多平台不再被第一项吞掉）；迭代版照旧单选归一（行为不变）。
     const platforms = listParam(q, 'plat');
     const shopIds = STABLE ? [] : listParam(q, 'shop');
     if (platforms.length || shopIds.length) {
       // 卖家细化仅店铺级链接可带（shop= 单渠道）；无 shop 时静默忽略
       const seller = !STABLE && shopIds.length === 1 ? q.get('seller') || null : null;
-      out.filters.platform = normalizePlatformSelection({ platforms, shopIds, seller });
+      out.filters.platform = STABLE
+        // 平台级选择不带 seller 键（与旧归一产出的形一致，锁测逐键可比）
+        ? { platforms, shopIds: [] }
+        : normalizePlatformSelection({ platforms, shopIds, seller });
     }
     // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入
     const mainParam = q.get('main') ?? q.get('own');
