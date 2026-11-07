@@ -457,7 +457,7 @@ export default function ReferenceVolumeChart(props: {
               key={`pt-${i}`}
               x={GRID_L + plotWidth + 6}
               y={y$(v) + 3}
-              fontSize={10}
+              fontSize={12}
               fill={color.mute}
               textAnchor="start"
               fontFamily={font.family}
@@ -479,7 +479,7 @@ export default function ReferenceVolumeChart(props: {
                 x={xAt(i)}
                 y={plotBottom + 12}
                 textAnchor="middle"
-                fontSize={10}
+                fontSize={12}
                 fill={edge ? color.body : color.mute}
                 fontWeight={edge ? 600 : 400}
                 fontFamily={font.family}
@@ -606,7 +606,7 @@ export default function ReferenceVolumeChart(props: {
                   x={xAt(x)}
                   y={cy + 3.5}
                   textAnchor="middle"
-                  fontSize={10}
+                  fontSize={12}
                   fontWeight={600}
                   fill={color.mute}
                   fontFamily={font.family}
@@ -637,7 +637,7 @@ export default function ReferenceVolumeChart(props: {
               borderRadius: 6,
               fontFamily: font.family,
               fontVariantNumeric: 'tabular-nums',
-              fontSize: 11,
+              fontSize: 12,
               lineHeight: '15px',
               color: color.body,
               pointerEvents: 'none',
@@ -665,13 +665,13 @@ export default function ReferenceVolumeChart(props: {
               boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
               fontFamily: font.family,
               fontVariantNumeric: 'tabular-nums',
-              fontSize: 11,
+              fontSize: 12,
               lineHeight: '15px',
               color: color.body,
               pointerEvents: 'auto',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: color.mute }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: color.mute }}>
               区间 {weekLabelAt(reading.absStart)}–{weekLabelAt(reading.absEnd)} · {reading.weeks} 周
               <button
                 type="button"
@@ -708,13 +708,13 @@ export default function ReferenceVolumeChart(props: {
               boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
               fontFamily: font.family,
               fontVariantNumeric: 'tabular-nums',
-              fontSize: 11,
+              fontSize: 12,
               lineHeight: '15px',
               color: color.body,
               pointerEvents: 'auto',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
               <span style={{ fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
                 {`${eventRangeLabel(selectedEvent, product)} · ${selectedEvent.label}`}
               </span>
@@ -745,7 +745,7 @@ export default function ReferenceVolumeChart(props: {
                   type="button"
                   aria-label={`编辑事件 ${eventRangeLabel(selectedEvent, product)} ${selectedEvent.label}`}
                   onClick={() => props.onEditEvent?.(selectedEvent.id)}
-                  style={{ height: 20, padding: '0 8px', borderRadius: 6, border: `1px solid ${color.hairline}`, background: color.canvas, color: color.body, font: 'inherit', fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: `background ${motion.fast}ms` }}
+                  style={{ height: 20, padding: '0 8px', borderRadius: 6, border: `1px solid ${color.hairline}`, background: color.canvas, color: color.body, font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: `background ${motion.fast}ms` }}
                 >
                   编辑
                 </button>
@@ -787,7 +787,7 @@ export default function ReferenceVolumeChart(props: {
         )}
       </div>
       {missingWeeks.length > 0 && (
-        <div style={{ marginTop: 2, fontSize: 10.5, color: color.mute }}>缺数 {missingWeeks.join('、')} · 不计 0</div>
+        <div style={{ marginTop: 2, fontSize: 12, color: color.mute }}>缺数 {missingWeeks.join('、')} · 不计 0</div>
       )}
       {/* 图例行（#3/#4）：销量 / 价格 / 事件 全部可点切换显隐（aria-pressed + 隐藏态
           opacity .45）；「图内高亮」开关内联紧跟「事件」项之后（默认关） */}
@@ -815,7 +815,7 @@ export default function ReferenceVolumeChart(props: {
             border: 'none',
             background: 'transparent',
             font: 'inherit',
-            fontSize: 11,
+            fontSize: 12,
             color: color.body,
             cursor: 'pointer',
             borderRadius: 6,

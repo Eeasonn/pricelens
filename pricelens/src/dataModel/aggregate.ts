@@ -721,6 +721,67 @@ export function lowestPriceColorSku(
   return null;
 }
 
+/**
+ * R3（M2 · 型号在架判定的渠道回退，与 lowestPriceColorSku 同源规则）：某型号+
+ * 配置在目标国「全部在架渠道」范围内，从最新周向前回溯第一个有价周内取最低折后价
+ * 颜色的 SKU。默认电渠（lowestPriceColorSku 的渠道口径）没有任何价格事实时使用——
+ * 型号在该国 3P / 其他电渠有真实在架价 ≠ 型号无在架（真实事实：FR Mate X6 12+512
+ * 仅 Amazon 3P 有 202638–202642 五条事实，默认 Amazon 1P 全程无价）。周回溯方向、
+ * 同价 SKU 字典序与异常价守卫（minPriceOfRows 内建）完全一致，仅渠道范围放宽。
+ */
+export function lowestPriceColorSkuAnyChannel(
+  modelId: string,
+  romram: string,
+  countryCode: string = getCurrentCountry(),
+  currency: CurrencyMode = 'usd',
+): string | null {
+  const rows = dimProduct.filter((p) => p.sku_id.startsWith(modelId + '__') && normRom(p.romram) === normRom(romram));
+  if (rows.length === 0) return null;
+  const channels = new Set(dimChannel.filter((c) => c.country_code === countryCode).map((c) => c.channel_id));
+  const preferCheaperThenSku = (c: { row: FactPriceWeekly; price: number }, b: { row: FactPriceWeekly; price: number }): boolean =>
+    c.price < b.price || (c.price === b.price && c.row.sku_id < b.row.sku_id);
+  for (let i = timeRows.length - 1; i >= 0; i--) {
+    const wid = timeRows[i].week_id;
+    const weekRows: FactPriceWeekly[] = [];
+    for (const r of rows) {
+      for (const row of factRows(countryCode, r.sku_id, wid)) if (channels.has(row.channel_id)) weekRows.push(row);
+    }
+    const hit = minPriceOfRows(weekRows, (row) => displayPriceOf(row, currency), preferCheaperThenSku);
+    if (hit) return hit.row.sku_id;
+  }
+  return null;
+}
+
+/**
+ * R3（M2 · 型号在架判定 / 渠道回退共用）：产品选择在目标国「有真实价格事实」的
+ * 渠道 channel_id 列表（渠道表序去重，异常价守卫同源）。存在性探测专用——用于
+ * 说明「型号在该国哪些渠道在架」与默认电渠无价时的透明渠道回退，不参与常规
+ * 取价计算；skuIds 空 = 该配置全部颜色。
+ */
+export function pricedChannelIdsOfSelection(
+  sel: { modelId: string; romram: string; skuIds: string[] },
+  countryCode: string,
+): string[] {
+  const configRows = dimProduct.filter((p) => p.sku_id.startsWith(sel.modelId + '__') && normRom(p.romram) === normRom(sel.romram));
+  const skuIds = sel.skuIds.length ? sel.skuIds.filter((id) => productById.has(id)) : configRows.map((p) => p.sku_id);
+  if (skuIds.length === 0) return [];
+  const countryChannels = dimChannel.filter((c) => c.country_code === countryCode);
+  const byChannel = new Map<string, FactPriceWeekly[]>(countryChannels.map((c) => [c.channel_id, []]));
+  for (const wid of timeRows) {
+    for (const sid of skuIds) {
+      for (const row of factRows(countryCode, sid, wid.week_id)) {
+        byChannel.get(row.channel_id)?.push(row);
+      }
+    }
+  }
+  const out: string[] = [];
+  for (const channel of countryChannels) {
+    const rows = byChannel.get(channel.channel_id) ?? [];
+    if (minPriceOfRows(rows, (row) => row.price_local) != null) out.push(channel.channel_id);
+  }
+  return out;
+}
+
 // ---------------- 上市基线（促销力度表用） ----------------
 
 /** 上市基线信息（促销力度 = 折后价相对上市价的降幅；缺省国家 = 当前分析国） */

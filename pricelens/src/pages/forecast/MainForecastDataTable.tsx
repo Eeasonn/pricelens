@@ -27,7 +27,7 @@ export interface MainForecastMarginView {
 
 const thStyle: CSSProperties = {
   position: 'sticky', top: 0, zIndex: 1, background: color.canvas,
-  fontSize: 11, fontWeight: 600, color: color.mute, textAlign: 'right',
+  fontSize: 12, fontWeight: 600, color: color.mute, textAlign: 'right',
   padding: '6px 8px', borderBottom: `1px solid ${color.hairlineStrong}`, whiteSpace: 'nowrap',
 };
 const tdStyle: CSSProperties = {
@@ -137,7 +137,7 @@ export default function MainForecastDataTable({
                 <td style={{ ...tdStyle, color: weeklyMargin < 0 ? color.error : undefined }}>{fmtUsd(weeklyMargin)}</td>
                 <td style={{ ...tdStyle, textAlign: 'left' }}>
                   {chips.length > 0 && (
-                    <span style={{ marginRight: 8, color: color.mute, fontSize: 11 }} aria-label={`本周命中事件 ${chips.join('、')}`}>
+                    <span style={{ marginRight: 8, color: color.mute, fontSize: 12 }} aria-label={`本周命中事件 ${chips.join('、')}`}>
                       {chips.map((chip, index) => (
                         <span key={`${chip}-${index}`} aria-hidden style={{ display: 'inline-flex', width: 16, height: 16, marginRight: 2, borderRadius: '50%', border: `1px solid ${color.hairlineStrong}`, fontSize: 9, alignItems: 'center', justifyContent: 'center' }}>{chip}</span>
                       ))}

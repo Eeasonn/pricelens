@@ -47,11 +47,11 @@ function ReplayChart({ points, baseline }: { points: number[]; baseline: number 
   return (
     <svg viewBox={`0 0 ${REPLAY_W} ${REPLAY_H}`} width="100%" role="img" aria-label="参考品当时事实回放段" style={{ display: 'block', height: 'auto', maxWidth: '100%' }}>
       <line x1={left} y1={y(baseline)} x2={REPLAY_W - right} y2={y(baseline)} stroke={color.hairlineStrong} strokeDasharray="3 4" opacity={0.8} />
-      <text x={left} y={y(baseline) - 3} fontSize={9} fill={color.mute}>事件前水平</text>
+      <text x={left} y={y(baseline) - 3} fontSize={12} fill={color.mute}>事件前水平</text>
       <path d={path} fill="none" stroke={color.link} strokeWidth={2} />
       <line x1={left} y1={top + plotH} x2={REPLAY_W - right} y2={top + plotH} stroke={color.hairline} />
-      <text x={left} y={REPLAY_H - 6} fontSize={9} fill={color.mute}>事件首周</text>
-      <text x={REPLAY_W - right} y={REPLAY_H - 6} fontSize={9} fill={color.mute} textAnchor="end">+8 周</text>
+      <text x={left} y={REPLAY_H - 6} fontSize={12} fill={color.mute}>事件首周</text>
+      <text x={REPLAY_W - right} y={REPLAY_H - 6} fontSize={12} fill={color.mute} textAnchor="end">+8 周</text>
     </svg>
   );
 }
@@ -279,7 +279,7 @@ export default function EventReplayModal({
           onChange={(value) => { setType(value as ProductEventSeed['type']); setScenarioId(null); setMagnitude(null); setStep('edit'); }}
           options={EVENT_TYPES.map((item) => ({ value: item.key, label: item.label }))}
         />
-        <div style={{ fontSize: 11.5, color: color.mute, minWidth: 0 }}>
+        <div style={{ fontSize: 12, color: color.mute, minWidth: 0 }}>
           {typeMeta?.hint} · 大盘行业级事件在大盘卡录入；此处只收产品级小事件。
         </div>
 
@@ -288,7 +288,7 @@ export default function EventReplayModal({
           <div style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.card, padding: space.md, background: color.canvasSoft, display: 'grid', gap: space.sm, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap', minWidth: 0 }}>
               <b style={{ fontSize: 13, color: color.ink }}>{`事实回放 · ${scenario.title}`}</b>
-              <span style={{ fontSize: 11, color: color.mute, minWidth: 0 }}>{scenario.refLabel}</span>
+              <span style={{ fontSize: 12, color: color.mute, minWidth: 0 }}>{scenario.refLabel}</span>
               {/* 同类型多场景：全部回放场景可达 */}
               {scenarios.length > 1 && (
                 <Select
@@ -305,7 +305,7 @@ export default function EventReplayModal({
               <ReplayChart points={scenario.points} baseline={scenario.points[0]} />
               <div style={{ fontSize: 12, lineHeight: 1.7, color: color.body, minWidth: 0 }}>
                 {scenario.desc}
-                <div style={{ marginTop: 6, padding: '5px 8px', borderRadius: 6, background: color.warningSoft, color: color.warningInk, fontSize: 11.5 }}>
+                <div style={{ marginTop: 6, padding: '5px 8px', borderRadius: 6, background: color.warningSoft, color: color.warningInk, fontSize: 12 }}>
                   {scenario.impactText}
                 </div>
               </div>
@@ -376,7 +376,7 @@ export default function EventReplayModal({
             </label>
           </div>
           {/* 实际起止日期 + 派生周数（跨年范围照常派生；倒置显示自动排序后的区间） */}
-          <div className="tnum" role="status" style={{ fontSize: 11.5, color: rangeValid ? color.mute : color.warningInk }}>
+          <div className="tnum" role="status" style={{ fontSize: 12, color: rangeValid ? color.mute : color.warningInk }}>
             {rangeValid && ordered && startWeekId != null && endWeekId != null
               ? `实际起止 ${ordered.start.date}（周一）– ${ordered.end.endDate}（周日）· 派生 ${duration} 周${ordered.start.index > ordered.end.index ? ' · 已按起 ≤ 止自动排序' : ''}`
               : '请选择起周与止周（预测周闭区间）'}
@@ -391,14 +391,14 @@ export default function EventReplayModal({
               <div style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>
                 {`逐周影响 · ${ordered!.start.id}–${ordered!.end.id} · ${duration} 周 · ${decay === 'flat' ? '恒定' : '递减'} · 幅度（起始峰值）${fmtSignedPct(effectiveMagnitude)}`}
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', fontSize: 11.5, color: color.body }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', fontSize: 12, color: color.body }}>
                 {previewRows.map((row) => (
                   <span key={row.weekId} className="tnum" style={{ whiteSpace: 'nowrap' }}>
                     {`${row.weekId}（${row.dateLabel}）${fmtSignedPct(row.pct)}`}
                   </span>
                 ))}
               </div>
-              <div style={{ fontSize: 11, color: color.mute }}>
+              <div style={{ fontSize: 12, color: color.mute }}>
                 一个范围只生成一个事件，不自动拆条；确认应用后可在主图图下名录编辑 / 删除。
               </div>
             </div>

@@ -1,6 +1,6 @@
-import { buildSeries, lowestPriceColorSku, platformPriceSpread, platformSelectionForCountry } from '../dataModel/aggregate';
-import { dimProduct, dimRegion, dimTime } from '../data';
-import { buildCards, clampMains, flatSelections, remapSelectionForCountry, selKey } from '../state/mainSelection';
+import { buildSeries, defaultChannelOf, lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformPriceSpread, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
+import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
+import { buildCards, clampMains, flatSelections, normalizeSelectionForCountry, remapSelectionForCountry, selKey } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
 import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, AgentSuggestionAction, AlertListResultCard, FilterResultCard, FilterPatch, ForecastContextInput } from './contracts';
@@ -93,17 +93,87 @@ function productEntitiesOfText(text: string, industry: FiltersState['industry'])
   return exact.length ? exact : matched;
 }
 
-function selectionsForEntity(entity: ProductEntity, countryCode: string): { selections: ProductSelection[]; available: boolean } {
+/** R3（M2 · 透明渠道回退）：目标国默认电渠对该型号配置全程无价格事实、但其他
+ *  在架渠道有真实价格时（真实事实：FR Mate X6 12+512 仅 Amazon 3P 有
+ *  202638–202642 五条事实，默认 Amazon 1P 无价），解析出的选择逐线钉到有价
+ *  渠道（店铺级并集，取数口径点名实际渠道如 "Amazon 3P"，数值与自动口径一致
+ *  ——无价渠道本就不参与每周最低）。默认电渠有价 / 选择已带每线口径 = 原样，
+ *  不动用户显式口径。 */
+function defaultChannelFallbackSelection(sel: ProductSelection, countryCode: string): ProductSelection {
+  if (sel.platform) return sel;
+  if (lowestPriceColorSku(sel.modelId, sel.romram, countryCode) != null) return sel;
+  const channelIds = pricedChannelIdsOfSelection(sel, countryCode);
+  if (!channelIds.length) return sel;
+  return { ...sel, platform: { platforms: [], shopIds: channelIds, seller: null } };
+}
+
+/** 实体在目标国的解析选择（R3 · M1/M3）：
+ *  - 配置严格遵循请求：文本点名了配置（如「12+256GB」）→ 只解析点名配置，
+ *    不再枚举该型号全部配置把未请求的 12+512 一并带上；点名配置在目标国
+ *    不存在但型号在架 → 同型号该国首个合法配置（与 remapSelectionForCountry
+ *    同语义），型号整体缺席才 unavailable。
+ *  - 页面已有合法选择优先复用（含每线取价口径 platform/shopIds/seller）：
+ *    未点名配置时以页面当前该型号的合法选择为准（不扩大 mains）；点名配置
+ *    与页面选择同组时同样复用原选择对象——显式型号查询不能把用户在价格页
+ *    精选的每线 OZON 3P 口径洗成自动口径（395 混成 333）。
+ *  - 跨国：复用选择的每线口径按目标国共享规则归一（normalizeSelectionForCountry，
+ *    源国渠道在目标国不存在 → 该线回自动口径）；默认电渠无价时按
+ *    defaultChannelFallbackSelection 透明钉到有价渠道。 */
+function selectionsForEntity(
+  entity: ProductEntity,
+  countryCode: string,
+  text: string,
+  existing: ProductSelection[],
+): { selections: ProductSelection[]; available: boolean } {
   const countryRows = entity.rows.filter((row) => row.countries.includes(countryCode));
+  if (!countryRows.length) return { selections: [], available: false };
   const rows = countryRows.length ? countryRows : entity.rows;
   const romrams = [...new Set(countryRows.map((row) => row.romram))];
-  if (!countryRows.length) return { selections: [], available: false };
+  const haystack = compact(text);
+  // 文本点名配置 = 实体任一配置的紧凑形式（"12+256gb"）出现在文本里
+  const requested = romrams.filter((romram) => haystack.includes(compact(romram)));
+  const existingOf = (romram: string): ProductSelection | undefined =>
+    existing.find((sel) => sel.modelId === entity.modelId && norm(sel.romram) === norm(romram)
+      && dimProduct.some((p) => p.model_id === sel.modelId && norm(p.romram) === norm(romram) && p.countries.includes(countryCode)
+        && (sel.skuIds.length === 0 || sel.skuIds.includes(p.sku_id))));
+  const freshOf = (romram: string): ProductSelection | null => {
+    const configRows = rows.filter((row) => norm(row.romram) === norm(romram));
+    const skuId = lowestPriceColorSku(entity.modelId, romram, countryCode)
+      ?? lowestPriceColorSkuAnyChannel(entity.modelId, romram, countryCode)
+      ?? configRows[0]?.sku_id;
+    return skuId ? { modelId: entity.modelId, romram, skuIds: [skuId] } : null;
+  };
+  const build = (romram: string): ProductSelection | null => {
+    const reused = existingOf(romram);
+    return reused ? normalizeSelectionForCountry(reused, countryCode) : freshOf(romram);
+  };
+  if (requested.length) {
+    return {
+      selections: requested.map(build).filter((selection): selection is ProductSelection => selection != null)
+        .map((selection) => defaultChannelFallbackSelection(selection, countryCode)),
+      available: true,
+    };
+  }
+  // 未点名配置：页面已持有该型号合法选择 → 精确沿用（不扩大配置面）；否则按
+  // 型号全部在架配置解析（原行为）
+  const held = existing
+    .filter((sel) => sel.modelId === entity.modelId && dimProduct.some((p) => p.model_id === sel.modelId
+      && norm(p.romram) === norm(sel.romram) && p.countries.includes(countryCode)
+      && (sel.skuIds.length === 0 || sel.skuIds.includes(p.sku_id))));
+  if (held.length) {
+    const seen = new Set<string>();
+    const selections: ProductSelection[] = [];
+    for (const sel of held) {
+      const key = selKey(sel);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      selections.push(defaultChannelFallbackSelection(normalizeSelectionForCountry(sel, countryCode), countryCode));
+    }
+    return { selections, available: true };
+  }
   return {
-    selections: romrams.map((romram) => {
-      const configRows = rows.filter((row) => norm(row.romram) === norm(romram));
-      const skuId = lowestPriceColorSku(entity.modelId, romram, countryCode) ?? configRows[0]?.sku_id;
-      return { modelId: entity.modelId, romram, skuIds: skuId ? [skuId] : [] };
-    }).filter((selection) => selection.skuIds.length > 0),
+    selections: romrams.map(build).filter((selection): selection is ProductSelection => selection != null)
+      .map((selection) => defaultChannelFallbackSelection(selection, countryCode)),
     available: true,
   };
 }
@@ -114,12 +184,15 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
   const entities = productEntitiesOfText(text, state.industry);
   const topScore = entities[0]?.score ?? 0;
   const selectedEntities = entities.filter((entity) => entity.score === topScore);
-  const selections: ProductSelection[] = [];
+  // R3（M1）：实体解析带上页面现有选择（主品 + 对比区）——同型号合法选择连同
+  // 每线取价口径一起复用，显式型号查询不把用户已钉的店铺口径洗掉
+  const existing = selections(state);
+  const resolvedSelections: ProductSelection[] = [];
   const unavailableProducts: string[] = [];
   for (const entity of selectedEntities) {
-    const resolved = selectionsForEntity(entity, country.code);
+    const resolved = selectionsForEntity(entity, country.code, text, existing);
     if (!resolved.available) unavailableProducts.push(`${entity.brand} ${entity.modelName}`);
-    selections.push(...resolved.selections);
+    resolvedSelections.push(...resolved.selections);
   }
   return {
     countryCode: country.code,
@@ -127,7 +200,7 @@ export function resolveAgentEntities(text: string, state: FiltersState): AgentEn
     explicitCountry: country.explicit,
     explicitProduct: selectedEntities.length > 0,
     productLabels: selectedEntities.map((entity) => `${entity.brand} ${entity.modelName}`),
-    selections,
+    selections: resolvedSelections,
     unavailableProducts,
   };
 }
@@ -291,6 +364,8 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
     // （remapSelectionForCountry：RU Mate X6 12+512 → ID 16+512），不能精确
     // romram 过滤后丢型号、让看板落到默认主品（Mate 80 Pro）；映射合并按
     // selKey 去重，型号整体缺席目标国时自然消失（后续走无数据结果，不冒充）。
+    // R3（M3）：重映射内部逐线归一每线取价口径（源国渠道 → 目标国可落地范围/
+    // 自动口径），不再 spread 残留源国每线 shop。
     const seen = new Set<string>();
     targetSelections = [];
     for (const selection of selections(state)) {
@@ -316,7 +391,51 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
   // 可落地范围——源国平台（AE · NOON）在目标国（RU）不存在时计算前就回落目标
   // 国默认电渠，不再带着不可落地平台过滤出空结果；同国有效平台与 shopIds
   // 原样保留（platformSelectionForCountry 完全可落地时返回原引用）。
+  // R3（M3）：每线（selection.platform）口径已在实体解析/重映射内逐线归一，
+  // 与全局归一同规则——两处口径一致，openPatch 落地与计算不再分裂。
   return { ...state, countryCode: entities.countryCode, platform: platformSelectionForCountry(state.platform, entities.countryCode), mains };
+}
+
+/** R3（M2 · 渠道回退透明说明）：查询口径里被逐线钉到有价渠道的选择（默认电渠
+ *  对该组全程无价，如 FR Mate X6 → Amazon 3P）逐组说明回退事实——原状态没带
+ *  每线口径、默认电渠无价、本次按哪些有价渠道取数，不冒称默认电渠口径。 */
+function defaultChannelFallbackNote(state: FiltersState, queryState: FiltersState): string | null {
+  const before = selections(state);
+  const parts: string[] = [];
+  for (const sel of selections(queryState)) {
+    if (!sel.platform?.shopIds.length) continue;
+    if (before.some((prev) => selKey(prev) === selKey(sel) && prev.platform)) continue;
+    if (lowestPriceColorSku(sel.modelId, sel.romram, queryState.countryCode) != null) continue;
+    const labels = sel.platform.shopIds.map((id) => dimChannel.find((c) => c.channel_id === id)?.display_name ?? id);
+    const name = dimProduct.find((row) => row.model_id === sel.modelId)?.model_name ?? sel.modelId;
+    const defaultId = defaultChannelOf(queryState.countryCode);
+    const defaultLabel = dimChannel.find((c) => c.channel_id === defaultId)?.display_name ?? '默认电渠';
+    const line = `${name} ${sel.romram} 在${dimRegion.find((region) => region.country_code === queryState.countryCode)?.country_name ?? queryState.countryCode}默认电渠（${defaultLabel}）没有价格事实，本次已按有价渠道 ${labels.join('、')} 取数`;
+    if (!parts.includes(line)) parts.push(line);
+  }
+  if (!parts.length) return null;
+  return `${parts.join('；')}；不代表其默认电渠有价格。`;
+}
+
+/** R3（M3 · 逐线口径回退透明说明）：跨国查询时逐线取价口径发生归一化（部分
+ *  可落地保留子集 / 全部不可落地回自动）的产品线说明——与全局
+ *  platformCountryFallbackNote 并列且只陈述事实：哪条产品线的哪个渠道口径在
+ *  目标国没有在架渠道、该线本次按什么口径计算（自动 = 目标国全部渠道最低价），
+ *  不冒称源国渠道在目标国有价；同国完全可落地 = null（无回退事实）。 */
+function selectionPlatformFallbackNote(state: FiltersState, targetCountryCode: string): string | null {
+  const lines: string[] = [];
+  for (const sel of selections(state)) {
+    if (!sel.platform) continue;
+    if (platformSelectionForCountry(sel.platform, targetCountryCode) === sel.platform) continue;
+    const raw = [...sel.platform.platforms, ...sel.platform.shopIds];
+    if (!raw.length) continue;
+    const name = dimProduct.find((row) => row.model_id === sel.modelId)?.model_name ?? sel.modelId;
+    const line = `${name} ${sel.romram} 的渠道口径 ${raw.join('、')}`;
+    if (!lines.includes(line)) lines.push(line);
+  }
+  if (!lines.length) return null;
+  const targetName = dimRegion.find((region) => region.country_code === targetCountryCode)?.country_name ?? targetCountryCode;
+  return `${lines.join('；')} 在${targetName}没有在架渠道，对应产品线本次已按${targetName}全部渠道最低价（自动）口径计算；不代表其在${targetName}有价格。`;
 }
 
 function noDataResult(entities: AgentEntityResolution, state: FiltersState): { cards: AgentResultCard[]; citations: AgentResponse['citations']; steps: AgentStep[]; summary: string } {
@@ -363,7 +482,15 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
     };
     // R5（M1，同步稳定线五审）：跨国平台归一化发生回退（stateForEntityQuery 已按
     // 目标国归一）时，在卡片与摘要透明说明回退事实，不冒称源国平台在目标国有价。
-    const platformNote = platformCountryFallbackNote(state.platform, queryState.countryCode);
+    // R3（M3）：每线取价口径（selection.platform）的跨国归一回退同样透明说明
+    // （全局口径与逐线口径并列陈述，各自点名实际计算口径）。
+    // R3（M2）：默认电渠无价、逐线钉到有价渠道的渠道回退（FR Mate X6 →
+    // Amazon 3P）同样透明说明。
+    const platformNote = [
+      platformCountryFallbackNote(state.platform, queryState.countryCode),
+      selectionPlatformFallbackNote(state, queryState.countryCode),
+      defaultChannelFallbackNote(state, queryState),
+    ].filter((note): note is string => note != null).join('');
     const chart = {
       kind: 'chart' as const,
       id: id('chart'),
@@ -494,7 +621,7 @@ function forecastExplanationCards(
       // 推演工作台界面能力口径（A4 同步，2026-11-04 评审修订：把握区间带下线，大盘月粒度调整上线）。
       '参照品联动：在推演工作台切换上一代参照后，基线按同周龄比值校正（选中参照 / 默认参照）；友商参照仅作对照，不进入主链。',
       '库存上限修正：SO = min(基线 SO, 可售)，修正结果回写主图；修正周以琥珀描边标注，截断事实独立保留，手调不覆盖。',
-      '大盘月粒度：大盘工作台覆盖未来 4 个季度逐月预测，点击预测月就地调整（原因选填），调整季度经季内三月均值同步主链；人工事件三字段（起始时间/时长/幅度），月中起始按日均摊。',
+      '大盘月粒度：大盘工作台覆盖未来 4 个季度逐月预测，点击预测月就地调整（原因必填，保存才回写），调整季度经季内三月均值同步主链；人工事件三字段（起始时间/时长/幅度），月中起始按日均摊。',
       '复制关键假设：推演工作台可一键复制结构化关键假设文本（范围与模拟状态 → 模型版本 → 季度基线 → 行业事件 → 大盘月度事件与按月调整 → 上一代参照 → 产品事件 → SI → 手调原因 → 库存规则 → 结果摘要），供会议与评审直接引用。',
     ],
     boundaries: [

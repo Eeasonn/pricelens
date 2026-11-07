@@ -3,7 +3,7 @@
 // 图例（SuppLegend 规格）、数字格式。颜色全部来自 src/theme/tokens.ts；
 // 状态一律「文字 + 底色」双通道。
 // 图例规格（与主线 volume/SuppLegend 对齐）：图外底部居中行、roundRect 色块
-// 14×8 或线/虚线/▼ 形态、11px color.body、点击切换系列显隐、隐藏态
+// 14×8 或线/虚线/▼ 形态、12px color.body、点击切换系列显隐、隐藏态
 // opacity .45 + aria-pressed。
 // 2026-11-05 任务 6（IA 评审 2.3 B/C）：链路条 FlowBar 上收共享并去节点编号——
 // 页级管线已用①–④编号（PipelineNav），卡内链路不再编第二套 1–5 号
@@ -64,11 +64,11 @@ export function IoBar({ input, output }: { input: string; output: string }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
       <span
         style={{
-          flex: 'none', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4,
+          flex: 'none', fontSize: 12, fontWeight: 600, padding: '1px 6px', borderRadius: 4,
           background: strong ? color.canvasSoft2 : color.canvas, border: `1px solid ${color.hairline}`, color: color.body,
         }}
       >{label}</span>
-      <span style={{ fontSize: 11, color: strong ? color.ink : color.body, minWidth: 0 }}>{text}</span>
+      <span style={{ fontSize: 12, color: strong ? color.ink : color.body, minWidth: 0 }}>{text}</span>
     </span>
   );
   return (
@@ -85,7 +85,7 @@ export function IoBar({ input, output }: { input: string; output: string }) {
 
 // ------------------------------------------------------------
 // 共享收起区（2026-11-05 视觉精简二轮）：卡内次级信息默认收起为一条
-// 「▸ 标签」细条（canvasSoft2 底 + hairline 描边 + 11px 标签 + chevron），
+// 「▸ 标签」细条（canvasSoft2 底 + hairline 描边 + 12px 标签 + chevron），
 // 展开显示内容；不用 antd Collapse，不新增视觉语言（颜色 / 圆角 / 字号 /
 // 动效全部取既有 token）。默认非受控 useState（默认收起，组件内存态——
 // 不持久化，每次进页回到最净状态）；可选受控（open + onToggle）供布局随
@@ -98,7 +98,7 @@ export function CollapsibleSection({
   defaultOpen = false,
   children,
 }: {
-  /** 收起头标签（11px；同时是头按钮的可访问名称）。 */
+  /** 收起头标签（12px；同时是头按钮的可访问名称）。 */
   label: string;
   /** 受控开合（可选；缺省走内部 useState）。 */
   open?: boolean;
@@ -137,7 +137,7 @@ export function CollapsibleSection({
         >
           ▸
         </span>
-        <span style={{ fontSize: 11, fontWeight: 600, color: color.body, whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.body, whiteSpace: 'nowrap' }}>{label}</span>
       </button>
       {expanded && children != null && (
         <div data-collapsible-body="" style={{ marginTop: space.sm, minWidth: 0 }}>{children}</div>
@@ -192,7 +192,7 @@ export function FlowBar({ ariaLabel, steps }: { ariaLabel: string; steps: FlowSt
               title={step.title}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                borderRadius: radius.control, fontSize: 11, whiteSpace: 'nowrap',
+                borderRadius: radius.control, fontSize: 12, whiteSpace: 'nowrap',
                 fontWeight: state === 'base' ? 400 : 600,
                 ...FLOW_STEP_STYLE[state],
               }}
@@ -258,7 +258,7 @@ export function WorkbenchLegend({
 }) {
   const toggleable = onToggle != null && items.some((item) => item.key != null);
   return (
-    <div role="group" aria-label={toggleable ? '图例（点击切换系列显隐）' : '图例'} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px 14px', fontSize: 11, color: color.body, marginTop: space.sm, ...style }}>
+    <div role="group" aria-label={toggleable ? '图例（点击切换系列显隐）' : '图例'} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px 14px', fontSize: 12, color: color.body, marginTop: space.sm, ...style }}>
       {items.map((item) => {
         const key = item.key;
         if (!key) {
@@ -278,7 +278,7 @@ export function WorkbenchLegend({
             onClick={() => onToggle?.(key)}
             style={{
               display: 'inline-flex', alignItems: 'center', padding: '2px 4px', border: 'none', background: 'transparent',
-              font: 'inherit', fontSize: 11, color: color.body, cursor: 'pointer', borderRadius: radius.control,
+              font: 'inherit', fontSize: 12, color: color.body, cursor: 'pointer', borderRadius: radius.control,
               opacity: isHidden ? 0.45 : 1,
             }}
           >

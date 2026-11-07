@@ -3,7 +3,7 @@
 // 逐配置成卡、换层颜色映射。卡形 = { id, main: ProductSelection | null, compares }。
 // ============================================================
 import { describe, expect, it } from 'vitest';
-import { dimProduct, dimBenchmark } from '../../data';
+import { dimProduct, dimBenchmark, dimChannel } from '../../data';
 import type { MainProduct, ProductSelection } from '../filtersTypes';
 import {
   autoComparesFor,
@@ -412,11 +412,17 @@ describe('remapSelectionForCountry（R4-m1：多 SKU 过滤所有无效 SKU / �
     expect(remapSelectionForCountry(sel, 'DE', 'phone')).toBeNull();
   });
 
-  it('取价口径 platform 字段随映射保留（R2 遗留：此前映射会丢 platform）', () => {
-    const platform = { platforms: ['JD'], shopIds: [], seller: null };
-    const sel: ProductSelection = { modelId: mateX6, romram: '12+512 GB', skuIds: [ru12.sku_id], platform };
-    const out = remapSelectionForCountry(sel, 'ID', 'phone');
-    expect(out?.platform).toEqual(platform);
+  it('取价口径 platform 随映射保留但按目标国逐线归一（R3-M3：跨国不再 spread 残留源国渠道）', () => {
+    // 源国渠道口径（JD 不在 RU/ID 渠道表）→ 目标国不可落地，该线回自动（null）
+    const foreign = { platforms: ['JD'], shopIds: [], seller: null };
+    const selForeign: ProductSelection = { modelId: mateX6, romram: '12+512 GB', skuIds: [ru12.sku_id], platform: foreign };
+    expect(remapSelectionForCountry(selForeign, 'ID', 'phone')?.platform).toBeNull();
+    // 目标国可落地口径原样保留（引用不变）；同国映射同样原样保留
+    const idChannel = dimChannel.find((c) => c.country_code === 'ID');
+    const valid = { platforms: [], shopIds: [idChannel!.channel_id], seller: null };
+    const selValid: ProductSelection = { modelId: mateX6, romram: '16+512 GB', skuIds: [], platform: valid };
+    expect(remapSelectionForCountry(selValid, 'ID', 'phone')?.platform).toBe(valid);
+    expect(remapSelectionForCountry(selValid, 'ID', 'phone')).toBe(selValid);
   });
 });
 

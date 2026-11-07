@@ -1,5 +1,5 @@
-import { buildSeries, platformSelectionForCountry } from '../dataModel/aggregate';
-import { dimProduct, dimRegion, dimTime } from '../data';
+import { buildSeries, defaultChannelOf, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
+import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { autoComparesFor, buildCards, clampMains, remapSelectionForCountry, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { AgentCitation, AgentResponse, AgentStep, FilterPatch, PriceAdvantageResultCard, PriceAdvantageRow } from './contracts';
@@ -69,6 +69,37 @@ function productSeries(state: FiltersState, cards: MainProduct[]) {
 
 function step(tool: AgentStep['tool'], label: string, detail: string, status: AgentStep['status'] = 'success'): AgentStep {
   return { id: id('step', Math.round(Math.random() * 1_000_000)), tool, label, detail, status, durationMs: 18 };
+}
+
+/** R3（M2 · 空优势透明说明）：结果行为空时区分「型号在目标国无在架」（那是
+ *  priceAdvantageCountryFallbackNote 的安全回落场景）与「型号在架但当前渠道
+ *  口径没有我司价格事实」——后者点名该型号在目标国确有真实价格的渠道（真实
+ *  事实：FR Mate X6 12+512 仅 Amazon 3P 有 202638–202642 五条事实，默认
+ *  Amazon 1P 无价）。只陈述事实：不把缺可对齐周误写成型号缺席，不造行，
+ *  不用其他产品冒充比较对象。 */
+function ownNoAlignedWeeksNote(
+  state: FiltersState,
+  cards: MainProduct[],
+  seriesByKey: Map<string, { points: Array<{ price: number | null }> }>,
+): string | null {
+  const parts: string[] = [];
+  for (const card of cards) {
+    if (!card.main) continue;
+    const series = seriesByKey.get(`${card.main.modelId}__${compact(card.main.romram)}`);
+    if (!series || series.points.some((point) => point.price != null)) continue;
+    const channels = pricedChannelIdsOfSelection(card.main, state.countryCode)
+      .map((channelId) => dimChannel.find((c) => c.channel_id === channelId)?.display_name ?? channelId);
+    if (!channels.length) continue;
+    const countryName = dimRegion.find((region) => region.country_code === state.countryCode)?.country_name ?? state.countryCode;
+    const scopeLabels = [...state.platform?.platforms ?? [], ...state.platform?.shopIds ?? []]
+      .map((value) => dimChannel.find((c) => c.channel_id === value)?.display_name ?? value);
+    const scopeLabel = scopeLabels.length ? scopeLabels.join('、') : `默认电渠（${dimChannel.find((c) => c.channel_id === defaultChannelOf(state.countryCode))?.display_name ?? '默认电渠'}）`;
+    const meta = modelLabel(card.main);
+    const line = `${meta.modelName} · ${card.main.romram} 在${countryName}当前渠道口径（${scopeLabel}）没有我司价格事实，仅在 ${channels.join('、')} 有真实在架价格`;
+    if (!parts.includes(line)) parts.push(line);
+  }
+  if (!parts.length) return null;
+  return `${parts.join('；')}；已保留请求型号按当前渠道口径计算，没有可对齐的我司与竞品价格周，未用其他产品冒充。`;
 }
 
 /**
@@ -233,6 +264,7 @@ export function buildPriceAdvantageResult(state: FiltersState, contextFingerprin
   const limitedRows = rows.slice(0, 48);
   const advantageCount = rows.filter((row) => row.relation === 'advantage').length;
   const behindCount = rows.filter((row) => row.relation === 'behind').length;
+  const noAlignedNote = limitedRows.length ? null : ownNoAlignedWeeksNote(state, cards, seriesByKey);
   const card: PriceAdvantageResultCard = {
     kind: 'price_advantage',
     id: `price-advantage-${contextFingerprint}`,
@@ -241,7 +273,7 @@ export function buildPriceAdvantageResult(state: FiltersState, contextFingerprin
     skuOptions: [...skuOptions.entries()].map(([skuId, label]) => ({ skuId, label })),
     note: limitedRows.length
       ? `按国家 × 渠道 × 周对齐；价差 = 竞品价 − 我司价，百分比 = 价差 ÷ 竞品价。${advantageCount} 条我司占优，${behindCount} 条我司落后。`
-      : '当前国家、渠道和时间范围没有可同时对齐的我司与竞品价格事实；缺采周未插值。',
+      : `${noAlignedNote ?? ''}当前国家、渠道和时间范围没有可同时对齐的我司与竞品价格事实；缺采周未插值。`,
     currency: state.currency,
     contextFingerprint,
     evidence: [{ id: 'advantage-source', label: '价格事实', detail: `${state.countryCode} · ${state.rangeStart}–${state.rangeEnd} · ${state.currency === 'usd' ? 'USD' : '本币'}`, source: '统一价格聚合引擎' }],

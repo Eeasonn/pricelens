@@ -86,7 +86,7 @@ export default function EvidenceFrame({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: space.sm, paddingRight: 16 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: color.ink }}>{title}</span>
         {status != null && (
-          <span style={{ fontSize: 11, color: color.mute, textAlign: 'right', minWidth: 0 }}>{status}</span>
+          <span style={{ fontSize: 12, color: color.mute, textAlign: 'right', minWidth: 0 }}>{status}</span>
         )}
       </div>
       <button
@@ -104,7 +104,7 @@ export default function EvidenceFrame({
       </button>
       {/* 层② 条件 notices（一行一条，11px，琥珀墨色） */}
       {notices != null && notices.length > 0 && (
-        <div data-lpl-evidence-notices style={{ marginTop: 3, fontSize: 11, color: color.warningInk }}>
+        <div data-lpl-evidence-notices style={{ marginTop: 3, fontSize: 12, color: color.warningInk }}>
           {notices.map((notice) => (
             <div key={notice} className="tnum">{notice}</div>
           ))}
