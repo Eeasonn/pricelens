@@ -71,16 +71,17 @@
 - 通过原生 Chrome 加载目标 URL，并以 AX 树和实际截图验收：桌面显示国家/平台/DNS、USD、周范围、两产品走势/明细表；Agent 显示当前页、2 个产品、2026W19–2026W42、USD、仅折后价、来源与 Enter/Shift+Enter 操作说明。
 - 通过真实窗口缩放到 `430 × 900` CSS 像素的窄屏验收：Agent drawer、范围芯片、澄清卡、工具卡、输入区和底部来源均可见，长产品标识换行，无横向溢出；没有用 HTML 解析替代 UI。
 - 截图：`.codex-run/shots/desktop-iterate.png`（3024×1964，SHA-256 `417c7b400df9f7b7f26444c9406904e3c253ac01586bc8d6216f23a9d1454c10`）；`.codex-run/shots/narrow-iterate.png`（3024×1964 屏幕截图，窗口内容 430×900，SHA-256 `ee14770c53684dd008f40ee94d5a0e3ae9f226194bb8a9d39a5828e565adcde3`）。
-- 4310 预览由本任务 worktree 启动并在截图后关闭；现役 4302 PID `33763` 未停止或替换。
+- 4310 预览由本任务 worktree 启动并在截图后关闭；截图验收完成后才切换 4302。
 
 ## 旧产物、回滚与未完成项
 
 - 旧产物保存在 `.codex-run/backup-before-merge/PriceLens.html.before`、`dist-index.html.before`，对应 SHA-256 与状态记录在同目录。
 - 整合分支旧 PriceLens/dist 指纹：`5d9be3ea397eb7c7cf849e140d9f4bbad3bd14ce86ffe370a8de3d763e6cbb72`，6,400,937 bytes（审计记录）。
 - 若未来已合入后需回滚，使用目标 worktree 中的 `git revert -m 1 <merge-commit>`；不要 reset/stash。若切换失败，恢复 backup 中的旧单文件并按原 4302 启动命令重启，仅操作本任务启动的进程。
-- 4302 更新证据：PID `33763`、cwd `/Users/eason/zcode-wt/pricelens-integrate-t428u-20261107/pricelens` 保持不变；`curl -I http://127.0.0.1:4302/` 返回 `HTTP/1.1 200 OK`。从 `/src/agent/core.ts` 与 `/src/components/Copilot/AgentPanel.tsx` 读取到 `filterPatch`（5 次）与 `scopeLabel`（3 次），说明现役 Vite 已热加载合并源码；未停止/替换进程。
+- 4302 更新证据：切换前 PID `33763`、旧命令与旧 outDir 已记录在 `.codex-run/4302-before-rollout.txt`；旧产物 `/tmp/pl-int/dist-review-iter/index.html` 保留，SHA-256 `70e01e27e3a5ac397f97964b7531192baf3c4e0b5e94b40ea969fa8a139b8a2a`。验收通过后正常停止旧 preview，启动任务进程 PID `81529`：`vite preview --host 127.0.0.1 --port 4302 --strictPort --outDir pricelens/.codex-run/dist-review-iter-rollout-20261108`。`curl -I` 返回 `HTTP/1.1 200 OK`，响应体 SHA-256 `94567de24570198a514c54a9ee2d27012fc889b07646b4bfd4bf42d5a3f924ae`、6,495,688 bytes，与新 iterate 产物一致。
+- 切换失败恢复命令：`kill <new-pid>`，再从 `/Users/eason/zcode-wt/pricelens-integrate-t428u-20261107/pricelens` 执行旧记录中的 `vite preview --host 127.0.0.1 --port 4302 --strictPort --outDir /tmp/pl-int/dist-review-iter`。原拟清理旧目录的 `rm -rf` 被命令安全层拒绝，未执行、未删除任何旧产物。
 - 回滚：在目标 worktree 执行 `git revert -m 1 adfd776c7c16060bab1378c722b8558e751ef0f1`；如需恢复构建单文件，使用 `.codex-run/backup-before-merge/PriceLens.html.before` 与 `dist-index.html.before` 对照后再启动新进程，不能 reset/stash。
-- 未完成项：Ant Design 文档本轮未在线核实；stable 平台比较与最近有价周算法按任务边界保留未改。其余验收项已完成。
+- 未完成项：Ant Design 文档本轮未在线核实；stable 平台比较与最近有价周算法按任务边界保留未改。其余验收项已完成，未触发回滚。
 
 ## 候选启动命令
 
