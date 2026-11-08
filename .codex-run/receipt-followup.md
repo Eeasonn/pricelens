@@ -12,7 +12,7 @@
 - merge_commit: `adfd776c7c16060bab1378c722b8558e751ef0f1`
 - report_commit: `f8f4de1e44e184550d68742fc6fe41ae20f32ae7`
 - report_merge_commit: `832995f684fee6b85156b74e04a204a5b107eb28`
-- 4302: old PID 33763 replaced only after acceptance by task-owned PID 81529; HTTP 200 and response hash equals new iterate artifact; old `/tmp/pl-int/dist-review-iter` retained for rollback
+- 4302: old PID 33763 replaced only after acceptance; final task-owned PTY PID 83551; HTTP 200 and response hash equals new iterate artifact; old `/tmp/pl-int/dist-review-iter` retained for rollback
 - rollout guard: attempted `rm -rf` was rejected by command safety layer; no deletion occurred
 - report: `.codex-run/REPORT.md`
 - patch: `.codex-run/changes.patch`
