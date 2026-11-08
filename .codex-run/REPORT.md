@@ -2,7 +2,7 @@
 
 ## 结论
 
-本轮代码验证、stable/iterate 构建以及真实浏览器桌面/窄屏验收通过。完整 Vitest 的默认沙箱运行仍有 server 监听权限阻塞，低并发复跑结果以日志为准；不把该环境阻塞伪报为全套 PASS。提交与本地整合分支合入在报告生成后执行。
+本轮代码验证、stable/iterate 构建以及真实浏览器桌面/窄屏验收通过。完整 Vitest 低并发与受控串行均通过；默认沙箱的一次运行仅因 server 监听权限阻塞，已单独记录。任务 commit 已提交并合入本地整合分支，4302 保持原 PID 热加载更新。
 
 ## 分支、基线与状态
 
@@ -10,8 +10,9 @@
 - 任务分支：`codex/pricelens-agent-ux-20261108`
 - 基线：`b07e1cc56b1e0f50dbcd729f8befa2efc7713431`
 - 目标整合分支：`zcode/pricelens-integrate-t428u-20261107`，核实基线同为 `b07e1cc`
-- 本轮 commit：待本报告更新后创建（仅任务文件）
-- 目标分支合并：待任务 commit 后执行
+- 本轮 commit：`2d88441b2c8195698ac3714dc7979a651ca81202`（仅任务文件）
+- 目标分支合并：`adfd776c7c16060bab1378c722b8558e751ef0f1`，`--no-ff`，无冲突
+- 报告收口 commit：待本报告更新后创建（仅报告/回执）
 - 4302：未触碰；启动时记录的现役 PID 为 `33763`，工作目录在整合 worktree
 
 ## 变更点
@@ -76,7 +77,9 @@
 - 旧产物保存在 `.codex-run/backup-before-merge/PriceLens.html.before`、`dist-index.html.before`，对应 SHA-256 与状态记录在同目录。
 - 整合分支旧 PriceLens/dist 指纹：`5d9be3ea397eb7c7cf849e140d9f4bbad3bd14ce86ffe370a8de3d763e6cbb72`，6,400,937 bytes（审计记录）。
 - 若未来已合入后需回滚，使用目标 worktree 中的 `git revert -m 1 <merge-commit>`；不要 reset/stash。若切换失败，恢复 backup 中的旧单文件并按原 4302 启动命令重启，仅操作本任务启动的进程。
-- 未完成：提交、合入整合分支，以及核实 4302 是否能在不停止现役进程的前提下热加载新产物。
+- 4302 更新证据：PID `33763`、cwd `/Users/eason/zcode-wt/pricelens-integrate-t428u-20261107/pricelens` 保持不变；`curl -I http://127.0.0.1:4302/` 返回 `HTTP/1.1 200 OK`。从 `/src/agent/core.ts` 与 `/src/components/Copilot/AgentPanel.tsx` 读取到 `filterPatch`（5 次）与 `scopeLabel`（3 次），说明现役 Vite 已热加载合并源码；未停止/替换进程。
+- 回滚：在目标 worktree 执行 `git revert -m 1 adfd776c7c16060bab1378c722b8558e751ef0f1`；如需恢复构建单文件，使用 `.codex-run/backup-before-merge/PriceLens.html.before` 与 `dist-index.html.before` 对照后再启动新进程，不能 reset/stash。
+- 未完成项：Ant Design 文档本轮未在线核实；stable 平台比较与最近有价周算法按任务边界保留未改。其余验收项已完成。
 
 ## 候选启动命令
 
