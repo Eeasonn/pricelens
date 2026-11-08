@@ -1,0 +1,5 @@
+captured_at=2026-11-08T13:06:00+08:00
+pid=33763
+command=/Users/eason/zcode-wt/pricelens-integrate-t428u-20261107/pricelens/node_modules/.bin/vite preview --host 127.0.0.1 --port 4302 --strictPort --outDir /tmp/pl-int/dist-review-iter
+old_outdir_sha256=70e01e27e3a5ac397f97964b7531192baf3c4e0b5e94b40ea969fa8a139b8a2a
+old_outdir_bytes=6493883
