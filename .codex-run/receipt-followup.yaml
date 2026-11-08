@@ -53,4 +53,3 @@ port_4302:
 rollout_guard:
   rm_rf_rejected: true
   deletion_performed: false
-port_4302: untouched
