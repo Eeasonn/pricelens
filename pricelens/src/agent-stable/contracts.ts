@@ -407,6 +407,8 @@ export interface AgentResponse {
   citations: AgentCitation[];
   suggestions: Array<string | AgentSuggestion>;
   contextFingerprint: string;
+  /** 人可读的确定性查询口径，供结果回看与追问时持续披露。 */
+  scopeLabel?: string;
   provider?: { name: string; model: string };
   fallbackReason?: string;
   provenance?: AgentProvenance;

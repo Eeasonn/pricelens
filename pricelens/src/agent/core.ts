@@ -1,5 +1,6 @@
 import { buildSeries, defaultChannelOf, effectiveChannelIds, effectiveLinePlatform, latestPricedWeekOfSelection, lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformPriceSpreadOfSelection, platformScopeLabel, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
 import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
+import { INDUSTRY_LABELS } from '../dataModel/scope';
 import { buildCards, clampMains, flatSelections, normalizeSelectionForCountry, remapSelectionForCountry, selKey } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection, PlatformSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
@@ -915,7 +916,7 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
       series: series.slice(0, 6).map((s) => ({ label: s.label, color: s.color, values: s.points.slice(-8).map((p) => ({ bucket: p.xLabel, value: p.price })) })),
       note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。${chartPlatformNote}${partialNote ?? ''}`,
       actions: [
-        { id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: allPlatformAsked ? '按全平台口径解释这组价格趋势的关键变化和需要关注的点' : '解释这组价格趋势的关键变化和需要核查的异常点' },
+        { id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: allPlatformAsked ? '按全平台口径解释这组价格趋势的关键变化和需要关注的点' : '解释这组价格趋势的关键变化和需要核查的异常点', filterPatch: openPatch },
         { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: allPlatformAsked ? '把这组全平台价格趋势定位回当前看板（全平台口径）' : '把这组价格趋势定位回当前看板', filterPatch: openPatch },
       ],
       evidence: [{ id: id('evidence'), label: '价格序列', detail: `${series.length} 条系列 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }],
@@ -1034,13 +1035,13 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
         rows: tableRows,
         note,
         actions: [
-          { id: id('action'), label: '查看价差解释', kind: 'followup', prompt: spreadPrompt },
+          { id: id('action'), label: '查看价差解释', kind: 'followup', prompt: spreadPrompt, filterPatch: openPatch },
           { id: id('action'), label: '定位到看板', kind: 'open', prompt: allPlatformAsked ? '把本次全平台比较定位回当前看板（全平台口径）' : '把平台比较定位回当前看板', filterPatch: openPatch },
         ],
         evidence: [{ id: id('evidence'), label: '平台比较', detail: evidenceDetail, source: '统一价格聚合引擎' }],
       };
     } else {
-      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: `少于两个有效点时不计算环比；结果可回到看板继续下钻。${fallbackNote}${partialNote ?? ''}`, actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: `少于两个有效点时不计算环比；结果可回到看板继续下钻。${fallbackNote}${partialNote ?? ''}`, actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较', filterPatch: openPatch }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', filterPatch: openPatch }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
     }
     return { cards: [chart, table], citations: [{ id: id('citation'), kind: 'calculation', label: '统一价格聚合引擎', detail: `${series.length} 条系列 · ${queryState.countryCode} · ${queryState.rangeStart}–${queryState.rangeEnd}` }], steps: [step('catalog.resolve', '解析产品与口径', `${query.groups.length} 个产品组`), step('series.query', '查询价格序列', `${series.length} 条系列`), step('series.compare', '计算变化', '已完成确定性计算')], summary: rows.length ? `已按${scopeLabel}整理 ${rows.length} 个产品的价格结果。${chartPlatformNote}${partialNote ?? ''}` : `当前范围没有足够的价格数据。${chartPlatformNote}${partialNote ?? ''}` };
   } catch {
@@ -1170,16 +1171,71 @@ function forecastExplanationCards(
   };
 }
 
-/** 给所有确定性结果卡补上生成时的作用域，避免卡片按钮在筛选变化后误操作。 */
-function scopeCardActions(cards: AgentResultCard[], target: { page: string; contextFingerprint: string }): AgentResultCard[] {
+/**
+ * 生成一份可重建的完整筛选口径。它只用于 Agent 动作 envelope，不会
+ * 改写当前看板 state；追问点击后由编排层决定是否先用该 patch 重跑。
+ */
+function scopePatchOf(state: FiltersState): FilterPatch {
+  return {
+    countryCode: state.countryCode,
+    industry: state.industry,
+    mains: clampMains(state.mains.map((card) => ({
+      ...card,
+      main: card.main ? { ...card.main } : null,
+      compares: card.compares.map((compare) => ({ ...compare })),
+    }))),
+    platform: state.platform,
+    granularity: state.granularity,
+    adaptive: false,
+    rangeStart: state.rangeStart,
+    rangeEnd: state.rangeEnd,
+    currency: state.currency,
+    priceTypes: state.priceTypes,
+    agg: state.agg,
+  };
+}
+
+/** 给所有确定性结果卡补上生成时的作用域，避免卡片按钮在筛选变化后误操作。
+ * followup 同时保留顶层 filterPatch（旧消费者）和 target.filterPatch（新编排层），
+ * 这样点击追问可以重建结果生成时的国家、产品、平台与时间范围。 */
+function scopeCardActions(
+  cards: AgentResultCard[],
+  target: { page: string; contextFingerprint: string },
+  scopePatch?: FilterPatch,
+): AgentResultCard[] {
   return cards.map((card) => {
     if (!card.actions?.length) return card.kind === 'filter' ? { ...card, contextFingerprint: target.contextFingerprint } : card;
     return {
       ...card,
-      actions: card.actions.map((action) => action.target ? action : { ...action, target }),
+      actions: card.actions.map((action) => {
+        // 已显式携带的 open patch 优先于普通上下文 patch（例如跨国/跨产品查询）。
+        const actionPatch = action.filterPatch ?? action.target?.filterPatch ?? scopePatch;
+        const actionTarget = action.target
+          ? (actionPatch && !action.target.filterPatch ? { ...action.target, filterPatch: actionPatch } : action.target)
+          : (actionPatch ? { ...target, filterPatch: actionPatch } : target);
+        return {
+          ...action,
+          target: actionTarget,
+          ...(action.kind === 'followup' && actionPatch ? { filterPatch: actionPatch } : {}),
+        };
+      }),
       ...(card.kind === 'filter' ? { contextFingerprint: target.contextFingerprint } : {}),
     } as AgentResultCard;
   });
+}
+
+/** 结果消息上直接展示生成时的完整确定性口径，避免只看摘要而误以为
+ * 结果跟随当前页面。该标签只读，不会写回筛选状态。 */
+function responseScopeLabelOf(state: FiltersState): string {
+  const country = dimRegion.find((item) => item.country_code === state.countryCode)?.country_name ?? state.countryCode;
+  const products = state.mains.flatMap((card) => [card.main, ...card.compares].filter(Boolean).map((selection) => {
+    const row = dimProduct.find((item) => item.model_id === selection!.modelId && norm(item.romram) === norm(selection!.romram));
+    return `${row?.model_name ?? selection!.modelId} ${selection!.romram}`;
+  }));
+  const lineScopes = state.mains.flatMap((card) => [card.main, ...card.compares].filter((selection): selection is ProductSelection => Boolean(selection?.platform))).length;
+  const globalPlatform = state.platform ? [...state.platform.platforms, ...state.platform.shopIds].join('、') : '全部平台（自动）';
+  const platform = lineScopes ? `每线店铺优先 · 全局 ${globalPlatform}` : globalPlatform;
+  return `${country} · ${INDUSTRY_LABELS[state.industry] ?? state.industry} · ${products.length ? products.join('、') : '未选产品'} · ${platform} · ${state.rangeStart}–${state.rangeEnd} · ${state.currency === 'usd' ? 'USD' : '本币'}`;
 }
 
 function alertCard(text: string, alerts: readonly AgentAlertRecord[]): { card: AgentResultCard | null; summary: string; steps: AgentStep[]; citations: AgentResponse['citations'] } {
@@ -1299,9 +1355,11 @@ export async function runAgent(
   let summary = '';
   let steps: AgentStep[] = [];
   let citations: AgentResponse['citations'] = [];
+  let responseScopeState = context.state;
   if (intent === 'filter') {
     const card = buildFilterCard(text, context.state);
     if (card) cards.push(card);
+    responseScopeState = { ...context.state, ...buildFilterPatch(text, context.state) };
     summary = card ? '我先生成筛选预览，当前看板尚未改变。确认后才会应用。' : '我没有识别到明确的筛选变化，可以补充国家、时间、币种或 RRP 条件。';
     steps = [step('catalog.resolve', '解析筛选条件', card ? `${card.changes.length} 项待变更` : '需要补充口径', card ? 'success' : 'warning'), ...(card ? [step('view.preview', '生成筛选预览', '等待用户确认')] : [])];
   } else if (intent === 'price_advantage') {
@@ -1312,6 +1370,7 @@ export async function runAgent(
     // 留旧粒度，否则产出 month · 202635–202642 这类口径错配、价格全空。
     const rangedState = stateWithRecentRange(context.state, text);
     const advState = entities.explicitCountry ? stateForPriceAdvantageCountry(rangedState, entities.countryCode) : rangedState;
+    responseScopeState = advState;
     const result = buildPriceAdvantageResult(advState, context.fingerprint);
     // R4（M2）：跨国请求的我司主品整体缺席目标国 → 安全回落默认主品，但必须在
     // 结果卡与摘要里明确说明，不冒充用户原产品的比较。
@@ -1340,7 +1399,12 @@ export async function runAgent(
     const result = forecastExplanationCards({ page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot);
     cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
   } else if (intent === 'query') {
-    const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(stateWithRecentRange(context.state, text), text, entities);
+    const isForecastQuery = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text);
+    if (!isForecastQuery) {
+      const queryBase = stateForEntityQuery(stateWithRecentRange(context.state, text), entities, /我司|自家|华为.*价格|快搜/.test(text));
+      responseScopeState = /全平台|所有平台|全部平台|跨平台/.test(text) ? allPlatformQueryStateOf(queryBase) : queryBase;
+    }
+    const result = isForecastQuery ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(stateWithRecentRange(context.state, text), text, entities);
     cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
   } else {
     summary = configAmbiguous
@@ -1356,7 +1420,7 @@ export async function runAgent(
     intent,
     summary,
     steps,
-    cards: scopeCardActions(cards, { page: context.page, contextFingerprint: context.fingerprint }),
+    cards: scopeCardActions(cards, { page: context.page, contextFingerprint: context.fingerprint }, scopePatchOf(responseScopeState)),
     citations,
     // Keep the legacy string field useful for API clients and older tests; the
     // visible UI renders the explicit suggestionActions below, which are
@@ -1370,6 +1434,7 @@ export async function runAgent(
           : ['价格优势', '价格预警', '查我司产品价格'],
     suggestionActions: suggestionActionsFor(intent, clarificationReason, configAmbiguous ? configAmbiguitySuggestionActions(text, entities) : undefined),
     contextFingerprint: context.fingerprint,
+    scopeLabel: responseScopeLabelOf(responseScopeState),
     provenance: context.provenance ?? {
       source: 'local-deterministic',
       dataVersion: context.dataVersion,

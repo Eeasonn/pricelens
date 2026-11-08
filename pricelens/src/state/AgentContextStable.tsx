@@ -20,6 +20,7 @@ import {
   type ForecastContextInput,
   type ForecastDraftInput,
   type FilterResultCard,
+  type FilterPatch,
   type VoiceInputAdapter,
 } from '../agent-stable';
 import type { FiltersState } from './filtersTypes';
@@ -71,7 +72,7 @@ interface AgentContextValue {
   openAgent: (mode?: 'dock' | 'drawer' | 'full', prompt?: string | ({ text: string; intent?: AgentIntent; forecastDraft?: ForecastDraftInput } & ForecastContextInput)) => void;
   closeAgent: () => void;
   setMode: (mode: 'dock' | 'drawer' | 'full') => void;
-  send: (text?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, intent?: AgentIntent) => Promise<void>;
+  send: (text?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, intent?: AgentIntent, scope?: FilterPatch) => Promise<void>;
   stop: () => void;
   newConversation: () => void;
   applyFilter: (card: FilterResultCard) => { ok: boolean; error?: string };
@@ -238,11 +239,17 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   // 允许运行中折叠面板，查询继续在后台执行；launcher 会保留运行指示。
   const closeAgent = useCallback(() => { setOpen(false); }, []);
 
-  const send = useCallback(async (value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent) => {
+  const send = useCallback(async (value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent, scope?: FilterPatch) => {
     const text = (value ?? draft).trim();
     if (!text || running) return;
     setDraft('');
-    const requestContextFingerprint = context.fingerprint;
+    const scopeValidation = scope ? validateFilterPatch(scope) : { valid: true };
+    const scopedState = scope && scopeValidation.valid ? { ...context.state, ...scope } : context.state;
+    const runContext = scope && scopeValidation.valid
+      ? buildAgentContext(page, scopedState, alertRecords(alerts, scopedState, page))
+      : context;
+    const originContextFingerprint = context.fingerprint;
+    const requestContextFingerprint = runContext.fingerprint;
     appendMessage({ id: messageId('user'), role: 'user', text, prompt: text, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() });
     const explicitIntent = requestedIntent ?? pendingIntent.current;
     const explicitForecastDraft = forecastDraft ?? pendingForecastDraft.current;
@@ -258,14 +265,14 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     activeMessageId.current = assistantMessageId;
     appendMessage({ id: assistantMessageId, role: 'assistant', text: '', partialText: '', partialCards: [], kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, prompt: text, createdAt: startedAt });
     controller.current = run; cancelRequested.current = false; setRunning(true); setOpen(true); setRunStatus('parsing');
-    setActiveRun({ id: agentRunId, requestId: messageId('request'), status: 'parsing', startedAt, updatedAt: startedAt, context, events: [{ id: messageId('event'), runId: agentRunId, sequence: 1, type: 'run.started', status: 'parsing', timestamp: startedAt, message: '已接收请求', provenance: context.provenance }] });
+    setActiveRun({ id: agentRunId, requestId: messageId('request'), status: 'parsing', startedAt, updatedAt: startedAt, context: runContext, events: [{ id: messageId('event'), runId: agentRunId, sequence: 1, type: 'run.started', status: 'parsing', timestamp: startedAt, message: '已接收请求', provenance: runContext.provenance }] });
     try {
       setRunStatus('tool_running');
-      setActiveRun((prev) => prev ? { ...prev, status: 'tool_running', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'step.started', status: 'tool_running', timestamp: new Date().toISOString(), message: '正在读取确定性价格工具', tool: 'series.query', provenance: context.provenance }] } : prev);
-      const baseline = await runAgent(text, context, run.signal, explicitIntent, explicitForecastDraft, explicitForecastContext?.forecastSnapshot, explicitForecastContext?.forecastDataset);
+      setActiveRun((prev) => prev ? { ...prev, status: 'tool_running', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'step.started', status: 'tool_running', timestamp: new Date().toISOString(), message: '正在读取确定性价格工具', tool: 'series.query', provenance: runContext.provenance }] } : prev);
+      const baseline = await runAgent(text, runContext, run.signal, explicitIntent, explicitForecastDraft, explicitForecastContext?.forecastSnapshot, explicitForecastContext?.forecastDataset);
       setRunStatus('planning');
-      setActiveRun((prev) => prev ? { ...prev, status: 'planning', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status', status: 'planning', timestamp: new Date().toISOString(), message: '正在编排确定性工具', provenance: context.provenance }] } : prev);
-      const response = await agentClient.run({ text, context, clientRequestId: messageId('run'), runId: agentRunId, intent: explicitIntent, forecastDraft: explicitForecastDraft, forecastSnapshot: explicitForecastContext?.forecastSnapshot, forecastDataset: explicitForecastContext?.forecastDataset, baseline }, run.signal, (event) => {
+      setActiveRun((prev) => prev ? { ...prev, status: 'planning', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status', status: 'planning', timestamp: new Date().toISOString(), message: '正在编排确定性工具', provenance: runContext.provenance }] } : prev);
+      const response = await agentClient.run({ text, context: runContext, clientRequestId: messageId('run'), runId: agentRunId, intent: explicitIntent, forecastDraft: explicitForecastDraft, forecastSnapshot: explicitForecastContext?.forecastSnapshot, forecastDataset: explicitForecastContext?.forecastDataset, baseline }, run.signal, (event) => {
         if (runSequence.current !== runId) return;
         setActiveRun((prev) => prev ? { ...prev, status: event.status ?? prev.status, updatedAt: event.timestamp, events: [...prev.events, event] } : prev);
         if (event.status && event.status !== 'completed') setRunStatus(event.status);
@@ -304,7 +311,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         }
       });
       if (runSequence.current !== runId) return;
-      const stale = contextRef.current ? contextRef.current.fingerprint !== requestContextFingerprint : false;
+      const stale = contextRef.current ? contextRef.current.fingerprint !== (scope && scopeValidation.valid ? originContextFingerprint : requestContextFingerprint) : false;
       const responseFingerprintMismatch = response.contextFingerprint !== requestContextFingerprint;
       const nextStatus: AgentRunStatus = stale || responseFingerprintMismatch ? 'stale_context' : response.intent === 'clarify' ? 'clarification_required' : 'completed';
       setRunStatus(nextStatus);
@@ -313,8 +320,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         // R8（二轮返修）：响应指纹与请求不一致 = 不可采信的完成——不派发正常
         // run.completed，只落 run.status 说明结果动作已锁定；stale 与 clarify
         // 维持原有不派发完成事件的语义。
-        const completionEvent = stale || responseFingerprintMismatch || response.intent === 'clarify' ? null : { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.completed' as const, status: nextStatus, timestamp: new Date().toISOString(), message: '运行完成', provenance: response.provenance ?? context.provenance };
-        const events = completionEvent && prev.events.some((event) => event.type === 'run.completed') ? prev.events : completionEvent ? [...prev.events, completionEvent] : [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status' as const, status: nextStatus, timestamp: new Date().toISOString(), message: stale ? '筛选上下文已变化，结果可查看但需要重新确认口径' : responseFingerprintMismatch ? '响应口径与请求上下文不一致，结果动作已锁定' : '需要补充查询口径', provenance: response.provenance ?? context.provenance }];
+        const completionEvent = stale || responseFingerprintMismatch || response.intent === 'clarify' ? null : { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.completed' as const, status: nextStatus, timestamp: new Date().toISOString(), message: '运行完成', provenance: response.provenance ?? runContext.provenance };
+        const events = completionEvent && prev.events.some((event) => event.type === 'run.completed') ? prev.events : completionEvent ? [...prev.events, completionEvent] : [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status' as const, status: nextStatus, timestamp: new Date().toISOString(), message: stale ? '筛选上下文已变化，结果可查看但需要重新确认口径' : responseFingerprintMismatch ? '响应口径与请求上下文不一致，结果动作已锁定' : '需要补充查询口径', provenance: response.provenance ?? runContext.provenance }];
         return { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), response, events };
       });
       const messageKind: AgentMessage['kind'] = response.intent === 'clarify' ? 'clarification' : /量价预测|预测|情景/.test(text) ? 'scenario' : 'conversation';
@@ -335,12 +342,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       const userCancelled = aborted || cancelRequested.current;
       const nextStatus: AgentRunStatus = userCancelled ? 'cancelled' : 'failed';
       setRunStatus(nextStatus);
-      setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: userCancelled ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: context.provenance }] } : prev);
+      setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: userCancelled ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: runContext.provenance }] } : prev);
       setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: userCancelled ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], userCancelled ? 'cancelled' : 'failed'), prompt: text, kind: userCancelled ? 'system' : 'error', unread: true } : message));
     } finally {
       if (runSequence.current === runId) { controller.current = null; activeMessageId.current = null; setRunning(false); }
     }
-  }, [agentClient, appendMessage, context, draft, running]);
+  }, [agentClient, alerts, appendMessage, context, draft, page, running]);
 
   const stop = useCallback(() => {
     cancelRequested.current = true;

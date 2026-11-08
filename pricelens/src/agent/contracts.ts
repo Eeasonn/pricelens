@@ -143,6 +143,11 @@ export interface AgentSuggestionAction {
 export interface AgentActionTarget {
   page?: string;
   contextFingerprint: string;
+  /**
+   * 生成该动作时的完整筛选口径。追问动作会用它重建请求上下文，避免
+   * 用户在页面切换国家、平台或产品后，历史结果被当前口径静默重放。
+   */
+  filterPatch?: FilterPatch;
   weekId?: string;
   modelId?: string;
   alertId?: string;
@@ -411,6 +416,8 @@ export interface AgentResponse {
   suggestions: string[];
   suggestionActions?: AgentSuggestionAction[];
   contextFingerprint: string;
+  /** 人可读的确定性查询口径，供结果回看与追问时持续披露。 */
+  scopeLabel?: string;
   provider?: { name: string; model: string; reason?: string };
   provenance?: AgentProvenance;
   coverage?: CoverageSummary;

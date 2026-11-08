@@ -311,11 +311,13 @@ export default function ReferenceEventComposer(props: {
         {showColor && (
           <div style={{ marginTop: 6, padding: 8, border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-              {referenceEventPalette.map((paletteColor) => {
+              {referenceEventPalette.map((paletteColor, paletteIndex) => {
                 const active = paletteColor.toLowerCase() === resolved.type.color.toLowerCase();
                 return (
                   <button
-                    key={paletteColor}
+                    // The palette intentionally repeats #be123c for pressure/risk
+                    // semantics; key by position so React can keep both swatches.
+                    key={`${paletteColor}-${paletteIndex}`}
                     type="button"
                     aria-label={`色板 ${paletteColor}`}
                     aria-pressed={active}

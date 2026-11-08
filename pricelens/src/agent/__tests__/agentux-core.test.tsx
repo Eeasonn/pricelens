@@ -129,7 +129,7 @@ describe('agentux-core price advantage and price alert loops', () => {
     fireEvent.click(freshUndo);
     await waitFor(() => expect(view.container.querySelector('[data-filter-state]')?.textContent).toBe(JSON.stringify(before)));
     view.unmount();
-  });
+  }, 30000);
 
   it('远端失败先回退本地，块内重试后恢复远端叙述', async () => {
     const baseline = await runAgent('价格预警', context, undefined, 'price_alert');
