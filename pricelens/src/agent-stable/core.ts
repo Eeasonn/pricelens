@@ -1,6 +1,7 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
 import { normalizePlatformScope, platformScopeProvenanceNote } from '../dataModel/platformScope';
 import { dimProduct, dimRegion, dimTime } from '../data';
+import { INDUSTRY_LABELS } from '../dataModel/scope';
 import { STABLE } from '../appChannel';
 import { platformLevelForChannel } from '../state/urlSync';
 import { buildCards, clampMains, flatSelections, remapSelectionForCountry, selKey, withAutoOn } from '../state/mainSelection';
@@ -24,6 +25,19 @@ const CORE_SUGGESTIONS: AgentSuggestion[] = [
   suggestion('价格预警', '查看价格预警', 'alert', 'evidence'),
   suggestion('基础我司快搜', '查看当前我司产品价格概览', 'query', 'query'),
 ];
+
+function scopeLabelOf(state: FiltersState): string {
+  const country = dimRegion.find((item) => item.country_code === state.countryCode)?.country_name ?? state.countryCode;
+  const products = state.mains.flatMap((card) => [card.main, ...card.compares].filter(Boolean).map((selection) => {
+    const row = dimProduct.find((item) => item.model_id === selection!.modelId && norm(item.romram) === norm(selection!.romram));
+    return `${row?.model_name ?? selection!.modelId} ${selection!.romram}`;
+  }));
+  const lineScopes = state.mains.flatMap((card) => [card.main, ...card.compares].filter((selection): selection is ProductSelection => Boolean(selection?.platform))).length;
+  const globalPlatform = state.platform ? [...state.platform.platforms, ...state.platform.shopIds].join('、') : '全部平台（自动）';
+  const platform = lineScopes ? `每线店铺优先 · 全局 ${globalPlatform}` : globalPlatform;
+  const range = `${state.rangeStart}–${state.rangeEnd}`;
+  return `${country} · ${INDUSTRY_LABELS[state.industry] ?? state.industry} · ${products.length ? products.join('、') : '未选产品'} · ${platform} · ${range} · ${state.currency === 'usd' ? 'USD' : '本币'}`;
+}
 
 const COUNTRY_ALIASES: Record<string, string> = {
   巴西: 'BR', 中国: 'CN', 俄罗斯: 'RU', 俄国: 'RU', 美国: 'US', 英国: 'GB',
@@ -467,7 +481,7 @@ function queryCards(
       title: /最低|最便宜|平台/.test(text) ? `${scopeLabel}价格走势` : `${scopeLabel}价格走势摘要`,
       series: series.slice(0, 6).map((s) => ({ label: s.label, color: s.color, values: s.points.slice(-8).map((p) => ({ bucket: p.xLabel, value: p.price })) })),
       note: `${queryState.currency === 'usd' ? 'USD' : '本币'} · ${queryState.granularity} · ${queryState.rangeStart}–${queryState.rangeEnd}；数值来自统一价格聚合引擎。${scopeNote ? `判断边界：${scopeNote}` : ''}`,
-      actions: [{ id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: '解释这组价格趋势的关键变化和需要核查的异常点' }, { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这组价格趋势定位回当前看板', target: openTarget }],
+      actions: [{ id: id('action'), label: '解释趋势变化', kind: 'followup' as const, prompt: '解释这组价格趋势的关键变化和需要核查的异常点', target: openTarget }, { id: id('action'), label: '回看板定位', kind: 'open' as const, prompt: '把这组价格趋势定位回当前看板', target: openTarget }],
       evidence: [{ id: id('evidence'), label: '价格序列', detail: `${series.length} 条系列 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }],
     };
     const rows = series.slice(0, 8).map((s) => {
@@ -484,9 +498,9 @@ function queryCards(
       const latestWeek = latestWeekForRange(queryState);
       const spread = first ? platformPriceSpread(first.skuIds[0], latestWeek, queryState.countryCode, queryState.currency) : [];
       const lowest = spread[0]?.price ?? null;
-      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, item.price.toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0].platform}。` : '当前产品在最新有价周没有可比较的平台数据。', ...(notes.length ? { boundaries: notes } : {}), actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向' }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板`, target: openTarget }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新有价周平台比较', columns: ['平台', '最低价', '相对最低价'], rows: spread.slice(0, 8).map((item) => [item.platform, item.price.toLocaleString(), lowest == null || lowest === 0 ? '—' : item.price === lowest ? '最低' : `+${(((item.price - lowest) / lowest) * 100).toFixed(1)}%`]), note: spread.length ? `按 ${latestWeek} 的平台最低在架价排序；当前最便宜平台为 ${spread[0].platform}。` : '当前产品在最新有价周没有可比较的平台数据。', ...(notes.length ? { boundaries: notes } : {}), actions: [{ id: id('action'), label: '查看价差解释', kind: 'followup', prompt: '解释最新有价周的平台价差及可能的核查方向', target: openTarget }, { id: id('action'), label: '定位到看板', kind: 'open', prompt: `把 ${latestWeek} 的平台比较定位回看板`, target: openTarget }], evidence: [{ id: id('evidence'), label: '平台比较', detail: `${latestWeek} · ${spread.length} 个平台`, source: '统一价格聚合引擎' }] };
     } else {
-      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: '少于两个有效点时不计算环比；结果可回到看板继续下钻。', ...(notes.length ? { boundaries: notes } : {}), actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较' }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', target: openTarget }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
+      table = { kind: 'table', id: id('table'), title: '最新价格摘要', columns: ['产品', '最新价', '环比', '取价口径'], rows, note: '少于两个有效点时不计算环比；结果可回到看板继续下钻。', ...(notes.length ? { boundaries: notes } : {}), actions: [{ id: id('action'), label: '比较主竞品', kind: 'followup', prompt: '把当前产品和主竞品放在同一张价格表里比较', target: openTarget }, { id: id('action'), label: '回看板下钻', kind: 'open', prompt: '把这张价格摘要定位回当前看板继续下钻', target: openTarget }], evidence: [{ id: id('evidence'), label: '价格摘要', detail: `${rows.length} 个产品 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }] };
     }
     return { cards: [chart, table], citations: [{ id: id('citation'), kind: 'calculation', label: '统一价格聚合引擎', detail: `${series.length} 条系列 · ${queryState.countryCode} · ${queryState.rangeStart}–${queryState.rangeEnd}` }], steps: [step('catalog.resolve', '解析产品与口径', `${query.groups.length} 个产品组`), step('series.query', '查询价格序列', `${series.length} 条系列`), step('series.compare', '计算变化', '已完成确定性计算')], summary: rows.length ? `已按${scopeLabel}整理 ${rows.length} 个产品的价格结果。` : '当前范围没有足够的价格数据。' };
   } catch {
@@ -770,9 +784,11 @@ export async function runAgent(
   let steps: AgentStep[] = [];
   let citations: AgentResponse['citations'] = [];
   let suggestions: AgentResponse['suggestions'] = CORE_SUGGESTIONS;
+  let responseScopeState = context.state;
   if (intent === 'filter') {
     const card = buildFilterCard(text, context.state);
     if (card) cards.push(card);
+    responseScopeState = { ...context.state, ...buildFilterPatch(text, context.state) };
     summary = card ? '我先生成筛选预览，当前看板尚未改变。确认后才会应用。' : '我没有识别到明确的筛选变化，可以补充国家、时间、币种或 RRP 条件。';
     steps = [step('catalog.resolve', '解析筛选条件', card ? `${card.changes.length} 项待变更` : '需要补充口径', card ? 'success' : 'warning'), ...(card ? [step('view.preview', '生成筛选预览', '等待用户确认')] : [])];
   } else if (intent === 'alert') {
@@ -791,6 +807,7 @@ export async function runAgent(
       //（RU Mate X6 12+512 → ID 16+512，而不是丢掉后回落 Mate 80 Pro）；
       // 型号确实缺席才回落该国默认我司产品，回落/映射原因写进卡边界。
       const plan = stateForPriceAdvantage(queryBase, entities);
+      responseScopeState = plan.state;
       const result = buildPriceAdvantageResult(plan.state, context.fingerprint);
       if (result) {
         // R5-M1：查询口径说明（含平台剔除说明）与卡内判断边界合并去重——同一条
@@ -809,7 +826,9 @@ export async function runAgent(
         steps = [step('catalog.resolve', '解析意图', '价格优势', 'success'), step('series.query', '读取价格', '没有可用产品事实', 'warning'), step('series.compare', '计算优势', '缺少我司与竞品的共同价格点', 'warning'), step('view.preview', '生成结论', '无法计算', 'warning')];
       }
     } else {
-      const result = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text) ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(queryBase, text, entities, context.fingerprint);
+      const isForecastQuery = /量价预测|价格下调|价格上调|调整\s*\d+(?:\.\d+)?\s*%|预测情景/.test(text);
+      if (!isForecastQuery) responseScopeState = stateForEntityQuery(queryBase, entities).state;
+      const result = isForecastQuery ? forecastCards(text, { page: 'forecast', contextFingerprint: context.fingerprint }, forecastDraft, forecastDataset, forecastSnapshot) : queryCards(queryBase, text, entities, context.fingerprint);
       cards.push(...result.cards); summary = result.summary; steps = result.steps; citations = result.citations;
     }
   } else {
@@ -835,6 +854,7 @@ export async function runAgent(
     citations,
     suggestions,
     contextFingerprint: context.fingerprint,
+    scopeLabel: scopeLabelOf(responseScopeState),
     provenance: context.provenance ?? {
       source: 'local-deterministic',
       dataVersion: context.dataVersion,

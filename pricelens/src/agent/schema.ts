@@ -126,6 +126,7 @@ const responseSchema: JsonSchema = {
     suggestions: { type: 'array', items: { type: 'string' } },
     suggestionActions: { type: 'array', items: { type: 'object', required: ['label', 'intent'], properties: { label: { type: 'string' }, intent: { type: 'string', enum: ['filter', 'query', 'compare', 'evidence', 'price_advantage', 'price_alert', 'clarify'] }, target: { type: 'string' }, prompt: { type: 'string' } }, additionalProperties: false } },
     contextFingerprint: { type: 'string', minLength: 1 },
+    scopeLabel: { type: 'string' },
     provider: {
       type: 'object',
       additionalProperties: false,

@@ -141,6 +141,7 @@ const responseSchema: JsonSchema = {
       },
     },
     contextFingerprint: { type: 'string', minLength: 1 },
+    scopeLabel: { type: 'string' },
     provider: {
       type: 'object',
       additionalProperties: false,

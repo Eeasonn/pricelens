@@ -235,7 +235,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const closeAgent = useCallback(() => { setOpen(false); }, []);
 
   // runSend 允许携带合并 patch 后的 context（R4 重跑路径）；常规 send 仍用当前 context。
-  const runSend = useCallback(async (runContext: AgentContextSnapshot, value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent) => {
+  const runSend = useCallback(async (runContext: AgentContextSnapshot, value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent, originContextFingerprint?: string) => {
     const text = (value ?? draft).trim();
     if (!text || running) return;
     setDraft('');
@@ -281,7 +281,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       });
       if (runSequence.current !== runId) return;
       const responseFingerprintStale = raw.contextFingerprint !== requestContextFingerprint;
-      const requestFingerprintStale = Boolean(contextRef.current && contextRef.current.fingerprint !== requestContextFingerprint);
+      // 重跑结果卡时，runContext 是用户明确选择的旧口径；state 更新到该
+      // 口径属于有意动作，不应被自己的写回判成 stale。仍以点击前的页面指纹
+      // 作为起点，若用户在运行期间再次改变页面，结果照常锁定。
+      const requestFingerprintStale = Boolean(contextRef.current && contextRef.current.fingerprint !== (originContextFingerprint ?? requestContextFingerprint));
       const stale = responseFingerprintStale || requestFingerprintStale || raw.factGuard?.status === 'stale_context';
       // 运行成功但零结果卡 → empty：不是失败，也不是口径澄清，UI 提供「调整范围」动作。
       const nextStatus: AgentRunStatus = stale ? 'stale_context' : raw.intent === 'clarify' ? 'clarification_required' : raw.cards.length ? 'completed' : 'empty';
@@ -347,8 +350,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     setUndoSnapshots((prev) => [...prev, state].slice(-5));
     setRedoSnapshots([]);
     actions.set(nextPatch);
-    void runSend(mergedContext, text, undefined, undefined, intent);
-  }, [actions, alertOverrides, alerts, page, runSend, running, state]);
+    void runSend(mergedContext, text, undefined, undefined, intent, context.fingerprint);
+  }, [actions, alertOverrides, alerts, context.fingerprint, page, runSend, running, state]);
 
   const stop = useCallback(() => {
     runSequence.current += 1;
