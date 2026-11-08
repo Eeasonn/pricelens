@@ -10,6 +10,8 @@
 - test stability: `agentux-core.test.tsx` alert interaction timeout raised to 30s; targeted 7/7 passed (3.00s)
 - task_commit: `2d88441b2c8195698ac3714dc7979a651ca81202`
 - merge_commit: `adfd776c7c16060bab1378c722b8558e751ef0f1`
+- report_commit: `f8f4de1e44e184550d68742fc6fe41ae20f32ae7`
+- report_merge_commit: `832995f684fee6b85156b74e04a204a5b107eb28`
 - 4302: PID 33763 unchanged; HTTP 200 and merged `filterPatch`/`scopeLabel` source observed via existing Vite server; no restart/replacement
 - report: `.codex-run/REPORT.md`
 - patch: `.codex-run/changes.patch`
