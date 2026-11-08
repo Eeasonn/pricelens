@@ -284,7 +284,7 @@ function seriesQueryOf(state: FiltersState): SeriesQuery | null {
       : selection.platform ? { platforms: selection.platform.platforms, shopIds: selection.platform.shopIds, seller: selection.platform.seller } : null,
   }));
   if (!groups.length) return null;
-  return { scope: { countryCode: state.countryCode, industry: state.industry }, groups, granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg };
+  return { scope: { countryCode: state.countryCode, industry: state.industry }, groups, granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg, financingTerm: state.financingTerm };
 }
 
 /** Resolve the last fact week inside the active bucket range for platform cards. */

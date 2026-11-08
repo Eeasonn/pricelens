@@ -1,17 +1,19 @@
 # 真实数据接入报告（scripts/ingest_real.py）
 
-生成时间：2026-10-29T07:41:55+08:00
+生成时间：2026-11-08T16:09:59+08:00
 
 ## 一、总体
 
-- 输入文件 1 个，原始行 85,999
-- 清洗后事实行 84,841
-- 时间维 202619(2026-05-06) → 202642(2026-10-14)，共 24 周
-- 低侧可疑价（<15% 参考价，仅报告不剔除）79 行
-- 分国档位：136 个 国家×型号 采用矩阵声明，其余按该国参考价推算
-- 自动匹配：442 个国家×我司型号补齐竞品，1635 条对标；51 个无可比对象
-- 对标上限4：54 组超限截断 83 条，截断后共 2024 条（每配置 ≤4 款竞品）
-- 事实包 84,841 行；b64 2,472,748 B（gzip 1,854,560 B）
+- 输入文件 1 个，原始行 97,299
+- 事实源仅读取页签「全量数据」；其余页签保留为证据，不进入事实包
+- 源文件页签：全量数据表-清洗版.xlsx：全量数据, 未入全量与待复核, 不可采_没货, 复检修复记录, 统计, 其他证据, 源文件索引, 合并冲突
+- 清洗后事实行 95,946
+- 时间维 202619(2026-05-06) → 202645(2026-11-04)，共 27 周
+- 低侧可疑价（<15% 参考价，仅报告不剔除）103 行
+- 分国档位：142 个 国家×型号 采用矩阵声明，其余按该国参考价推算
+- 自动匹配：483 个国家×我司型号补齐竞品，1844 条对标；50 个无可比对象
+- 对标上限4：61 组超限截断 89 条，截断后共 2210 条（每配置 ≤4 款竞品）
+- 事实包 95,946 行；b64 2,740,860 B（gzip 2,055,645 B）
 - 修正：价格单位错位(×100) 68 行
 - 修正：价格单位错位(÷100) 31 行
 - 修正：品牌→HUAWEI 11 行
@@ -25,57 +27,51 @@
 - 剔除：无型号 309 行
 - 剔除：无汇率 0 行
 - 剔除：未知国家 0 行
-- 剔除：重复行(周×SKU×国×渠道×店铺) 848 行
+- 剔除：重复行(周×SKU×国×渠道×店铺) 1043 行
 
 ## 二、覆盖面（有数国家）
 
 | 国家 | 周数 | SKU | 事实行 | 默认电渠 | 核心电渠 |
 |---|---|---|---|---|---|
-| 法国(FR) | 12 | 127 | 1,031 | Amazon | Amazon |
-| 德国(DE) | 12 | 275 | 2,465 | Amazon | Amazon,MediaMarkt |
-| 土耳其(TR) | 16 | 146 | 1,668 | Hepsiburada | Hepsiburada,Amazon |
-| 意大利(IT) | 12 | 130 | 1,038 | Amazon | Amazon |
-| 英国(GB) | 12 | 117 | 845 | Amazon | Amazon |
-| 西班牙(ES) | 12 | 112 | 1,065 | Amazon | Amazon |
-| 罗马尼亚(RO) | 12 | 81 | 622 | eMAG | eMAG |
-| 波兰(PL) | 12 | 137 | 1,400 | MediaExpert | MediaExpert,Euro |
-| 哥伦比亚(CO) | 2 | 8 | 13 | Mercado Libre | Mercado Libre |
-| 阿根廷(AR) | 1 | 60 | 60 | Mercado Libre | Mercado Libre |
-| 秘鲁(PE) | 3 | 56 | 142 | Hiraoka | Hiraoka |
-| 巴西(BR) | 3 | 72 | 176 | Mercado Libre | Mercado Libre,Shopee,Amazon |
-| 墨西哥(MX) | 24 | 408 | 10,445 | Mercado Libre | Mercado Libre,Amazon |
-| 南非(ZA) | 5 | 131 | 513 | TAKEALOT | TAKEALOT |
-| 沙特(SA) | 20 | 679 | 16,998 | Jarir | Jarir,eXtra,Amazon |
-| 阿联酋(AE) | 21 | 330 | 6,246 | SHARAFDG | SHARAFDG,NOON,CARREFOUR |
-| 马来西亚(MY) | 24 | 388 | 5,487 | Shopee | Shopee |
-| 印尼(ID) | 24 | 245 | 3,727 | Shopee | Shopee |
-| 日本(JP) | 7 | 37 | 249 | Amazon | Amazon |
-| 新加坡(SG) | 23 | 289 | 4,250 | Shopee | Shopee |
-| 泰国(TH) | 24 | 288 | 4,270 | Shopee | Shopee |
-| 菲律宾(PH) | 24 | 350 | 4,578 | Shopee | Shopee |
-| 越南(VN) | 22 | 173 | 2,374 | Shopee | Shopee |
-| R国(RU) | 22 | 538 | 15,179 | DNS | DNS |
+| 法国(FR) | 14 | 139 | 1,310 | Amazon | Amazon |
+| 德国(DE) | 14 | 314 | 3,199 | Amazon | Amazon,MediaMarkt |
+| 土耳其(TR) | 17 | 168 | 1,820 | Hepsiburada | Hepsiburada,Amazon |
+| 意大利(IT) | 14 | 135 | 1,239 | Amazon | Amazon |
+| 英国(GB) | 14 | 127 | 1,049 | Amazon | Amazon |
+| 西班牙(ES) | 14 | 130 | 1,325 | Amazon | Amazon |
+| 罗马尼亚(RO) | 14 | 81 | 772 | eMAG | eMAG |
+| 波兰(PL) | 14 | 170 | 1,723 | MediaExpert | MediaExpert,Euro |
+| 哥伦比亚(CO) | 4 | 9 | 25 | Mercado Libre | Mercado Libre |
+| 阿根廷(AR) | 3 | 72 | 155 | Mercado Libre | Mercado Libre |
+| 智利(CL) | 2 | 35 | 67 | Mercado Libre | Mercado Libre |
+| 秘鲁(PE) | 5 | 60 | 236 | Hiraoka | Hiraoka |
+| 巴西(BR) | 5 | 97 | 341 | Mercado Libre | Mercado Libre,Shopee,Amazon |
+| 墨西哥(MX) | 26 | 431 | 11,585 | Mercado Libre | Mercado Libre,Amazon |
+| 南非(ZA) | 6 | 149 | 657 | TAKEALOT | TAKEALOT |
+| 沙特(SA) | 22 | 701 | 18,703 | Jarir | Jarir,eXtra,Amazon |
+| 阿联酋(AE) | 23 | 369 | 7,202 | SHARAFDG | SHARAFDG,NOON,CARREFOUR |
+| 马来西亚(MY) | 26 | 471 | 6,192 | Shopee | Shopee |
+| 印尼(ID) | 26 | 258 | 4,031 | Shopee | Shopee |
+| 日本(JP) | 9 | 53 | 364 | Amazon | Amazon |
+| 新加坡(SG) | 25 | 295 | 4,625 | Shopee | Shopee |
+| 泰国(TH) | 26 | 313 | 4,643 | Shopee | Shopee |
+| 菲律宾(PH) | 26 | 369 | 5,125 | Shopee | Shopee |
+| 越南(VN) | 24 | 173 | 2,561 | Shopee | Shopee |
+| R国(RU) | 24 | 548 | 16,997 | DNS | DNS |
 
 ## 三、矩阵解析未命中清单
 
-共 179 条：
+共 145 条：
 
 - [own] SA wearable「WATCH ultimate」：none
 - [comp] SA wearable「COROS PACE Pro」：none
 - [comp] SA wearable「Samsung Galaxy Watch FE」：none
 - [comp] SA wearable「Samsung Galaxy Watch FE」：none
-- [own] SA wearable「WATCH 6 Pro」：none
-- [own] SA wearable「WATCH 6」：none
 - [own] SA wearable「KIDS X1 Pro」：none
 - [own] SA wearable「KIDS X1系列」：none
 - [own] SA wearable「KIDS 4 Pro」：none
 - [comp] SA wearable「Amazfit Band 7」：none
 - [comp] SA wearable「Amazfit Band 7」：none
-- [comp] SA audio「Shokz OpenDots 2」：none
-- [comp] SA audio「Shokz OpenDots 2」：none
-- [comp] SA audio「Shokz OpenDots 2」：none
-- [comp] SA audio「Shokz OpenDots 2」：none
-- [comp] SA audio「Sony WF-1000XM5」：none
 - [comp] SA audio「Nothing Ear (a)」：none
 - [comp] SA audio「JBL Live Buds 3」：none
 - [comp] SA audio「Soundcore Liberty 4 NC」：none
@@ -86,18 +82,11 @@
 - [comp] AE wearable「COROS PACE Pro」：none
 - [comp] AE wearable「Samsung Galaxy Watch FE」：none
 - [comp] AE wearable「Samsung Galaxy Watch FE」：none
-- [own] AE wearable「WATCH 6 Pro」：none
-- [own] AE wearable「WATCH 6」：none
 - [own] AE wearable「KIDS X1 Pro」：none
 - [own] AE wearable「KIDS X1系列」：none
 - [own] AE wearable「KIDS 4 Pro」：none
 - [comp] AE wearable「Amazfit Band 7」：none
 - [comp] AE wearable「Amazfit Band 7」：none
-- [comp] AE audio「Shokz OpenDots 2」：none
-- [comp] AE audio「Shokz OpenDots 2」：none
-- [comp] AE audio「Shokz OpenDots 2」：none
-- [comp] AE audio「Shokz OpenDots 2」：none
-- [comp] AE audio「Sony WF-1000XM5」：none
 - [comp] AE audio「Nothing Ear (a)」：none
 - [comp] AE audio「JBL Live Buds 3」：none
 - [comp] AE audio「Soundcore Liberty 4 NC」：none
@@ -105,20 +94,11 @@
 - [comp] AE phone「HONOR Magic V6」：none
 - [comp] AE phone「OPPO Find X9 Pro」：none
 - [comp] PL phone「Smartfon REALME 16 Pro+ 5G」：none
-- [comp] PL audio「Sony LinkBuds Fit」：none
-- [comp] PL audio「shokz opendots 2」：none
-- [comp] PL audio「Sony LinkBuds Open」：none
-- [comp] PL audio「shokz opendots 2」：none
-- [comp] PL audio「JBL Live Pro 2 TWS」：none
-- [comp] PL audio「JBL Live Pro 2 TWS」：none
-- [comp] PL audio「JBL Live Pro 2 TWS」：none
 - [comp] PL audio「Xiaomi Redmi Buds 4 Pro」：none
 - [own] RU wearable「WATCH ultimate」：none
 - [comp] RU wearable「Garmin Fenix 7 Pro」：none
 - [comp] RU wearable「Garmin Forerunner 965」：none
 - [comp] RU wearable「COROS Pace Pro」：none
-- [own] RU wearable「WATCH 6 Pro」：none
-- [own] RU wearable「WATCH 6」：none
 - [own] RU wearable「KIDS X1 Pro」：none
 - [comp] RU wearable「Aimoto Life Button」：none
 - [comp] RU wearable「Aimoto Fun」：none
@@ -146,6 +126,7 @@
 - [comp] PH wearable「COROS Pace 3」：none
 - [comp] PH wearable「Suunto 5 Peak」：none
 - [comp] PH wearable「Garmin Venu 3」：none
+- [comp] PH wearable「Amazfit Balance」：ambiguous
 - [comp] PH wearable「Samsung Galaxy Watch6」：none
 - [comp] PH wearable「Garmin Venu 3」：none
 - [comp] PH wearable「Amazfit GTR 4」：none
@@ -160,8 +141,6 @@
 - [comp] PH wearable「Garmin Bounce」：none
 - [comp] PH wearable「Xplora X6Play」：none
 - [comp] PH wearable「realme Band 2」：none
-- [comp] PH audio「shokz opendots 2」：none
-- [comp] PH audio「shokz opendots 2」：none
 - [comp] PH audio「JBL - Soundgear Sense」：none
 - [comp] PH phone「Samsung Galaxy Z TriFold」：none
 - [comp] TH wearable「Apple Watch Ultra 2」：none
@@ -189,8 +168,6 @@
 - [comp] TH wearable「小米米兔儿童手表 S7」：none
 - [comp] TH wearable「三星 Galaxy Watch Kids 5」：none
 - [comp] TH wearable「Amazfit Band 8」：none
-- [comp] TH audio「shokz opendots 2」：none
-- [comp] TH audio「shokz opendots 2」：none
 - [comp] TH audio「JBL - Soundgear Sense」：none
 - [comp] TH phone「OPPO Find X8 Pro」：none
 - [comp] TH phone「OPPO Reno13 Pro+」：none
@@ -207,8 +184,6 @@
 - [comp] MX wearable「Garmin Fenix 7 Pro」：none
 - [comp] MX wearable「Garmin Forerunner 965」：none
 - [comp] MX wearable「COROS Pace Pro」：none
-- [own] MX wearable「WATCH 6 Pro」：none
-- [own] MX wearable「WATCH 6」：none
 - [own] MX wearable「KIDS X1 Pro」：none
 - [comp] MX wearable「imoo Watch Phone」：none
 - [comp] MX wearable「Xiaomi Kids Watch」：none
@@ -216,16 +191,12 @@
 - [comp] MX wearable「imoo Watch Phone」：none
 - [comp] MX wearable「Xiaomi Kids Watch」：none
 - [comp] MX wearable「Amazfit Band 7」：none
-- [comp] MX audio「shokz opendots 2」：none
-- [comp] MX audio「shokz opendots 2」：none
 - [comp] MX audio「Soundcore P30I」：none
 - [comp] MX phone「Honor Magic 18 Pro」：none
 - [comp] BR wearable「Samsung Galaxy Watch6」：none
 - [comp] BR wearable「Garmin Venu 3」：none
 - [comp] BR wearable「Garmin Forerunner 965」：none
 - [comp] BR wearable「COROS Pace Pro」：none
-- [own] BR wearable「WATCH 6 Pro」：none
-- [own] BR wearable「WATCH 6」：none
 - [own] BR wearable「KIDS X1 Pro」：none
 - [comp] BR wearable「Aimoto Life Button」：none
 - [comp] BR wearable「Aimoto Fun」：none
@@ -235,8 +206,6 @@
 - [comp] BR wearable「Aimoto Fun」：none
 - [comp] BR wearable「Aimoto Fun」：none
 - [comp] BR wearable「Amazfit Band 7」：none
-- [comp] BR audio「shokz opendots 2」：none
-- [comp] BR audio「shokz opendots 2」：none
 - [comp] BR audio「Soundcore P30I」：none
 - [comp] BR phone「Honor Magic 18 Pro」：none
 
@@ -258,14 +227,14 @@
 - AE｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 11 46mm GPS（sort 3）
 - AE｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 8 44mm（sort 4）
 - AE｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 11 42mm GPS（sort 1）
+- PL｜own-huawei-matepad-pro-max 13.2" WiFi 12+256 GB ← APPLE iPad Pro M4 13" WiFi 8+256 GB（sort 1）
+- PL｜own-huawei-matepad-pro-max 13.2" WiFi 12+512 GB ← APPLE iPad Pro M4 13" WiFi 8+256 GB（sort 1）
 - PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← APPLE iPad A16 11" WiFi 6+256 GB（sort 1）
 - PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 12+256 GB（sort 2）
 - PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← LENOVO Idea Tab Pro 12.7" WiFi 8+256 GB（sort 3）
 - PL｜own-huawei-matepad-12-x-2025 12" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 FE+ 13.1" WiFi 12+256 GB（sort 4）
 - PL｜own-huawei-matepad-11-5-s-2026 11.5" WiFi 12+256 GB PaperMatte ← SAMSUNG Galaxy Tab S10 Lite 10.9" WiFi 6+128 GB（sort 1）
 - PL｜own-huawei-matepad-11-5-s-2026 11.5" WiFi 12+256 GB PaperMatte ← XIAOMI Pad 8 11.2" WiFi 8+256 GB（sort 2）
-- PL｜own-huawei-matepad-11-5-s-2026 11.5" WiFi 12+256 GB PaperMatte ← LENOVO Idea Tab 11" WiFi 8+256 GB（sort 3）
-- PL｜own-huawei-matepad-11-5-s-2026 11.5" WiFi 12+256 GB PaperMatte ← LENOVO Tab Plus 11.5" WiFi 8+256 GB（sort 4）
 - RU｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
 - RU｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 2）
 - RU｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
@@ -278,10 +247,10 @@
 - PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 47mm Solar（sort 2）
 - PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 51mm AMOLED（sort 3）
 - PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 51mm Solar（sort 4）
-- PH｜own-huawei-watch-gt-7 41mm ← AMAZFIT Balance 2 —（sort 1）
-- PH｜own-huawei-watch-gt-7 46mm ← AMAZFIT Balance 2 —（sort 1）
 - PH｜own-huawei-watch-fit-5 — ← XIAOMI Band 9 Pro —（sort 1）
 - PH｜own-huawei-watch-fit-4 — ← SAMSUNG Galaxy FIT 3 —（sort 1）
+- PH｜own-huawei-watch-fit-4 — ← XIAOMI Band 9 Pro —（sort 2）
+- PH｜own-huawei-band-11 — ← XIAOMI Band 9 Active —（sort 1）
 - TH｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 1）
 - TH｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 11 42mm（sort 1）
 - TH｜own-huawei-watch-gt-7 41mm ← XIAOMI Watch S4 41mm（sort 2）
@@ -311,17 +280,25 @@
 - AR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
 - AR｜own-huawei-watch-5 46mm ← SAMSUNG Galaxy Watch 7 44mm（sort 1）
 - AR｜own-huawei-watch-5 46mm ← XIAOMI Watch S5 —（sort 2）
-- AR｜own-huawei-watch-5 46mm ← APPLE Watch SERIES 11 46mm GPS（sort 3）
+- AR｜own-huawei-watch-5 46mm ← APPLE Watch SE 3 44mm GPS（sort 3）
 - AR｜own-huawei-watch-5 46mm ← SAMSUNG Galaxy Watch 7 40mm（sort 4）
-- AR｜own-huawei-watch-fit-4-pro — ← APPLE Watch Ultra 3 —（sort 1）
+- AR｜own-huawei-watch-d3 — ← APPLE Watch SERIES 11 42mm GPS（sort 1）
+- CL｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 11 42mm GPS（sort 1）
+- CL｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 2）
+- CL｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 8 40mm（sort 3）
+- CL｜own-huawei-watch-gt-7 46mm ← APPLE Watch SERIES 11 46mm GPS（sort 1）
+- CL｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 2）
+- CL｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 8 40mm（sort 3）
+- CL｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
+- CL｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 11 42mm GPS（sort 2）
 - DE｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - DE｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - DE｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
 - DE｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
 - DE｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - DE｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
-- DE｜own-huawei-freearc — ← SOUNDCORE Liberty 5 —（sort 1）
-- DE｜own-huawei-freearc — ← SOUNDCORE P40i —（sort 2）
+- DE｜own-huawei-freearc — ← SONY LinkBuds Open —（sort 1）
+- DE｜own-huawei-freearc — ← SOUNDCORE Liberty 5 —（sort 2）
 - ES｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - ES｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - ES｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
@@ -329,7 +306,7 @@
 - ES｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - ES｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
 - ES｜own-huawei-freearc — ← SOUNDCORE P40i —（sort 1）
-- ES｜own-huawei-freebuds-7i — ← SOUNDCORE P40i —（sort 1）
+- ES｜own-huawei-freebuds-6 — ← APPLE AirPods 5 —（sort 1）
 - FR｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - FR｜own-huawei-band-11 — ← XIAOMI Band 11 Active —（sort 2）
 - FR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 6 Active —（sort 3）
@@ -345,7 +322,7 @@
 - GB｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - GB｜own-huawei-band-11-pro — ← XIAOMI Band 10 Pro —（sort 3）
 - GB｜own-huawei-freebuds-6 — ← APPLE AirPods 5 —（sort 1）
-- GB｜own-huawei-freebuds-6 — ← SOUNDCORE AeroClip 2 —（sort 2）
+- GB｜own-huawei-freebuds-6 — ← SAMSUNG Galaxy Buds 4 —（sort 2）
 - ID｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - ID｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - ID｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
@@ -353,23 +330,23 @@
 - ID｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - ID｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
 - ID｜own-huawei-freearc — ← SHOKZ OpenFit Air —（sort 1）
-- ID｜own-huawei-freearc — ← JBL Tune Beam 2 —（sort 2）
+- ID｜own-huawei-freearc — ← SHOKZ OpenFit 2+ —（sort 2）
 - IT｜own-huawei-band-11 — ← XIAOMI Redmi Watch 6 Active —（sort 1）
-- IT｜own-huawei-band-11 — ← XIAOMI Band 11 Active —（sort 2）
+- IT｜own-huawei-band-11 — ← XIAOMI Redmi Watch 6 Lite —（sort 2）
+- IT｜own-huawei-band-11 — ← XIAOMI Band 11 Active —（sort 3）
 - IT｜own-huawei-band-11-pro — ← XIAOMI Band 10 Pro —（sort 1）
 - IT｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 6 Lite —（sort 2）
 - IT｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 6 Active —（sort 3）
 - IT｜own-huawei-freebuds-6 — ← APPLE AirPods 5 —（sort 1）
 - IT｜own-huawei-freebuds-6 — ← APPLE AirPods 4 —（sort 2）
-- IT｜own-huawei-freebuds-7i — ← APPLE AirPods 4 ANC —（sort 1）
 - JP｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - JP｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - JP｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
 - JP｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
 - JP｜own-huawei-band-11-pro — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - JP｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
-- JP｜own-huawei-watch-d2 — ← APPLE Watch SE 3 40mm GPS（sort 1）
-- JP｜own-huawei-watch-d2 — ← APPLE Watch SERIES 11 42mm GPS（sort 2）
+- JP｜own-huawei-watch-d2 — ← GARMIN Forerunner 170 Music —（sort 1）
+- JP｜own-huawei-watch-d2 — ← APPLE Watch SE 3 40mm GPS（sort 2）
 - MY｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - MY｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - MY｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
@@ -405,11 +382,11 @@
 - TR｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - TR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 2）
 - TR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 6 Active —（sort 3）
-- TR｜own-huawei-freebuds-6 — ← APPLE AirPods 4 ANC —（sort 1）
-- TR｜own-huawei-freebuds-7i — ← APPLE AirPods 4 ANC —（sort 1）
-- TR｜own-huawei-freebuds-pro-5 — ← APPLE AirPods 4 ANC —（sort 1）
-- TR｜own-huawei-freeclip — ← APPLE AirPods 4 ANC —（sort 1）
-- TR｜own-huawei-freeclip-2 — ← APPLE AirPods 4 ANC —（sort 1）
+- TR｜own-huawei-freebuds-6 — ← APPLE AirPods 5 —（sort 1）
+- TR｜own-huawei-freebuds-6 — ← SAMSUNG Galaxy Buds 4 —（sort 2）
+- TR｜own-huawei-freebuds-6 — ← APPLE AirPods 4 ANC —（sort 3）
+- TR｜own-huawei-freebuds-7i — ← SAMSUNG Galaxy Buds 4 Pro —（sort 1）
+- TR｜own-huawei-freebuds-7i — ← APPLE AirPods 4 ANC —（sort 2）
 - VN｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - VN｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - VN｜own-huawei-band-11 — ← XIAOMI Band 9 Active —（sort 3）
@@ -418,14 +395,14 @@
 - VN｜own-huawei-band-11-pro — ← XIAOMI Band 10 Pro —（sort 3）
 - VN｜own-huawei-freearc — ← SHOKZ OpenFit Air —（sort 1）
 - VN｜own-huawei-freearc — ← SHOKZ OpenFit 2+ —（sort 2）
+- ZA｜own-huawei-band-10 — ← XIAOMI Redmi Watch 6 Active —（sort 1）
+- ZA｜own-huawei-band-10 — ← XIAOMI Band 10 —（sort 2）
+- ZA｜own-huawei-band-10 — ← XIAOMI Band 11 Active —（sort 3）
 - ZA｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - ZA｜own-huawei-band-11 — ← SAMSUNG Galaxy FIT 3 —（sort 2）
 - ZA｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 3）
 - ZA｜own-huawei-freebuds-7i — ← APPLE AirPods 4 ANC —（sort 1）
 - ZA｜own-huawei-freebuds-7i — ← SAMSUNG Galaxy Buds3 FE —（sort 2）
-- ZA｜own-huawei-freebuds-pro-5 — ← APPLE AirPods Pro 3 —（sort 1）
-- ZA｜own-huawei-freebuds-pro-5 — ← APPLE AirPods 4 —（sort 2）
-- ZA｜own-huawei-freebuds-pro-5 — ← APPLE AirPods 4 ANC —（sort 3）
 
 ## 五、大促日历解析
 
@@ -503,84 +480,108 @@
 
 ## 七、低侧可疑价（不剔除，待人工复核）
 
-共 79 行：单位错位修正后仍 < 15% × dim_product 参考价（ref_price_usd），仅列示：
+共 103 行：单位错位修正后仍 < 15% × dim_product 参考价（ref_price_usd），仅列示：
 
-- PH｜202619｜APPLE Watch SERIES 11 46mm GPS｜$34.40 vs 参考 $542.80
-- PH｜202619｜APPLE Watch SERIES 11 42mm｜$39.53 vs 参考 $542.80
-- PH｜202619｜APPLE Watch SERIES 11 42mm｜$39.53 vs 参考 $542.80
-- PH｜202619｜APPLE Watch SERIES 11 46mm｜$19.98 vs 参考 $542.80
-- PH｜202619｜GARMIN Instinct 3 50mm AMOLED｜$57.44 vs 参考 $597.64
+- PH｜202619｜APPLE Watch SERIES 11 46mm GPS｜$34.40 vs 参考 $543.73
+- PH｜202619｜APPLE Watch SERIES 11 42mm｜$39.53 vs 参考 $543.73
+- PH｜202619｜APPLE Watch SERIES 11 42mm｜$39.53 vs 参考 $543.73
+- PH｜202619｜APPLE Watch SERIES 11 46mm｜$19.98 vs 参考 $543.73
+- PH｜202619｜GARMIN Instinct 3 50mm AMOLED｜$57.44 vs 参考 $596.09
 - PH｜202619｜GARMIN Venu X1 —｜$115.19 vs 参考 $858.59
-- RU｜202619｜BOSE Ultra Open —｜$29.90 vs 参考 $335.78
+- RU｜202619｜BOSE Ultra Open —｜$29.90 vs 参考 $335.79
 - RU｜202619｜APPLE iPhone 16 Pro Max 12+256 GB｜$6.76 vs 参考 $1,786.40
-- RU｜202619｜APPLE iPhone 17 8+512 GB｜$6.76 vs 参考 $1,155.49
-- RU｜202619｜APPLE iPhone 17 Pro 12+256 GB｜$6.76 vs 参考 $1,628.51
-- RU｜202619｜APPLE iPhone 17 Pro 12+256 GB｜$6.76 vs 参考 $1,628.51
-- RU｜202619｜APPLE iPhone 17 Pro 12+512 GB｜$6.76 vs 参考 $1,628.51
+- RU｜202619｜APPLE iPhone 17 8+512 GB｜$6.76 vs 参考 $1,156.98
+- RU｜202619｜APPLE iPhone 17 Pro 12+256 GB｜$6.76 vs 参考 $1,628.46
+- RU｜202619｜APPLE iPhone 17 Pro 12+256 GB｜$6.76 vs 参考 $1,628.46
+- RU｜202619｜APPLE iPhone 17 Pro 12+512 GB｜$6.76 vs 参考 $1,628.46
 - RU｜202619｜APPLE iPhone 17 Pro Max 12+256 GB｜$6.76 vs 参考 $1,786.40
 - RU｜202619｜APPLE iPhone 17 Pro Max 12+256 GB｜$6.76 vs 参考 $1,786.40
-- RU｜202619｜APPLE iPhone Air 512 GB｜$6.76 vs 参考 $1,466.72
+- RU｜202619｜APPLE iPhone Air 512 GB｜$6.76 vs 参考 $1,466.98
 - RU｜202619｜XIAOMI 17 Ultra 16+512 GB｜$6.76 vs 参考 $1,599.73
-- RU｜202619｜HUAWEI nova Y73 8+128 GB｜$6.77 vs 参考 $174.25
+- RU｜202619｜HUAWEI nova Y73 8+128 GB｜$6.77 vs 参考 $178.05
 - RU｜202619｜APPLE iPhone 16 Pro 512 GB｜$6.94 vs 参考 $1,653.07
 - RU｜202619｜APPLE iPhone 16 Pro Max 12+512 GB｜$6.94 vs 参考 $1,786.40
-- RU｜202619｜APPLE iPhone 17 Pro 12+512 GB｜$6.94 vs 参考 $1,628.51
+- RU｜202619｜APPLE iPhone 17 Pro 12+512 GB｜$6.94 vs 参考 $1,628.46
 - RU｜202619｜APPLE iPhone 17 Pro Max 12+512 GB｜$6.94 vs 参考 $1,786.40
 - RU｜202619｜APPLE iPhone 17 Pro Max 12+512 GB｜$6.94 vs 参考 $1,786.40
-- RU｜202619｜APPLE iPhone Air 1 TB｜$6.94 vs 参考 $1,466.72
+- RU｜202619｜APPLE iPhone Air 1 TB｜$6.94 vs 参考 $1,466.98
 - RU｜202619｜XIAOMI 17 Ultra 16+512 GB｜$6.94 vs 参考 $1,599.73
-- RU｜202619｜HUAWEI nova Y63 6+128 GB｜$6.94 vs 参考 $142.86
+- RU｜202619｜HUAWEI nova Y63 6+128 GB｜$6.94 vs 参考 $143.39
 - RU｜202619｜XIAOMI Redmi Pad 2 11" LTE 4+128 GB｜$7.25 vs 参考 $237.20
-- RU｜202619｜HONOR Pad X8B 11" WiFi 4+128 GB｜$7.37 vs 参考 $216.62
+- RU｜202619｜HONOR Pad X8B 11" WiFi 4+128 GB｜$7.37 vs 参考 $216.76
 - RU｜202619｜XIAOMI 17 Ultra 16+1 TB｜$7.40 vs 参考 $1,599.73
 - RU｜202619｜XIAOMI 17 Ultra 16+1 TB｜$7.40 vs 参考 $1,599.73
 - RU｜202619｜HONOR Pad X9A 11.5" LTE 6+128 GB｜$8.07 vs 参考 $313.07
 - RU｜202619｜HONOR Pad X9A 11.5" WiFi 6+128 GB｜$8.07 vs 参考 $313.07
 - RU｜202619｜HONOR Pad X9A 11.5" WiFi 8+256 GB｜$8.07 vs 参考 $313.07
-- RU｜202619｜HUAWEI nova 14i 8+128 GB｜$9.21 vs 参考 $218.72
-- RU｜202619｜HUAWEI nova 14i 8+256 GB｜$9.21 vs 参考 $218.72
-- RU｜202619｜VIVO V60 Lite 12+256 GB｜$9.28 vs 参考 $319.73
-- RU｜202619｜HUAWEI nova Y73 8+256 GB｜$10.34 vs 参考 $174.25
-- RU｜202619｜SAMSUNG Galaxy Tab S10 Lite 10.9" WiFi 6+128 GB｜$12.98 vs 参考 $405.66
+- RU｜202619｜HUAWEI nova 14i 8+128 GB｜$9.21 vs 参考 $221.85
+- RU｜202619｜HUAWEI nova 14i 8+256 GB｜$9.21 vs 参考 $221.85
+- RU｜202619｜VIVO V60 Lite 12+256 GB｜$9.28 vs 参考 $323.34
+- RU｜202619｜HUAWEI nova Y73 8+256 GB｜$10.34 vs 参考 $178.05
+- RU｜202619｜SAMSUNG Galaxy Tab S10 Lite 10.9" WiFi 6+128 GB｜$12.98 vs 参考 $408.17
 - RU｜202619｜APPLE iPhone 16E 128 GB｜$15.85 vs 参考 $746.40
-- RU｜202619｜SAMSUNG Galaxy Tab S11 11" WiFi 12+256 GB｜$20.32 vs 参考 $984.82
-- RU｜202619｜XIAOMI Redmi Pad SE 11" WiFi 8+256 GB｜$20.62 vs 参考 $190.36
-- RU｜202619｜SAMSUNG Galaxy Tab A9+ 11" WiFi 8+128 GB｜$22.44 vs 参考 $225.86
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 12+256 GB｜$27.44 vs 参考 $715.91
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 8+128 GB｜$27.44 vs 参考 $715.91
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 13.1" WiFi 8+128 GB｜$27.44 vs 参考 $715.91
-- RU｜202619｜SAMSUNG Galaxy Tab S9 FE+ 12.4" WiFi 12+256 GB｜$29.97 vs 参考 $903.25
-- RU｜202619｜BOSE Ultra Open —｜$31.40 vs 参考 $335.78
+- RU｜202619｜SAMSUNG Galaxy Tab S11 11" WiFi 12+256 GB｜$20.32 vs 参考 $993.36
+- RU｜202619｜XIAOMI Redmi Pad SE 11" WiFi 8+256 GB｜$20.62 vs 参考 $190.42
+- RU｜202619｜SAMSUNG Galaxy Tab A9+ 11" WiFi 8+128 GB｜$22.44 vs 参考 $229.15
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 12+256 GB｜$27.44 vs 参考 $717.74
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" WiFi 8+128 GB｜$27.44 vs 参考 $717.74
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 13.1" WiFi 8+128 GB｜$27.44 vs 参考 $717.74
+- RU｜202619｜SAMSUNG Galaxy Tab S9 FE+ 12.4" WiFi 12+256 GB｜$29.97 vs 参考 $910.51
+- RU｜202619｜BOSE Ultra Open —｜$31.40 vs 参考 $335.79
 - RU｜202619｜HONOR Pad 10 12.1" WiFi 8+256 GB｜$43.73 vs 参考 $426.40
 - MY｜202620｜SAMSUNG Galaxy Tab S10+ 12.4" WiFi 12+256 GB｜$134.64 vs 参考 $1,266.40
-- RU｜202622｜BOSE Ultra Open —｜$25.38 vs 参考 $335.78
-- RU｜202623｜BOSE Ultra Open —｜$26.43 vs 参考 $335.78
-- ID｜202624｜HUAWEI Watch GT 6 Pro —｜$24.95 vs 参考 $358.74
-- RU｜202624｜BOSE Ultra Open —｜$18.75 vs 参考 $335.78
+- RU｜202622｜BOSE Ultra Open —｜$25.38 vs 参考 $335.79
+- RU｜202623｜BOSE Ultra Open —｜$26.43 vs 参考 $335.79
+- ID｜202624｜HUAWEI Watch GT 6 Pro —｜$24.95 vs 参考 $363.38
+- RU｜202624｜BOSE Ultra Open —｜$18.75 vs 参考 $335.79
 - SA｜202627｜XIAOMI Watch 5 —｜$45.07 vs 参考 $319.94
-- RU｜202627｜BOSE Ultra Open —｜$22.71 vs 参考 $335.78
+- RU｜202627｜BOSE Ultra Open —｜$22.71 vs 参考 $335.79
 - PH｜202628｜HUAWEI Watch Ultimate 2 —｜$47.79 vs 参考 $893.71
 - PH｜202628｜HUAWEI Watch Ultimate 2 —｜$47.79 vs 参考 $893.71
 - TH｜202628｜HUAWEI Watch Ultimate 2 —｜$41.97 vs 参考 $893.71
-- RU｜202630｜BOSE Ultra Open —｜$45.66 vs 参考 $335.78
-- RU｜202631｜BOSE Ultra Open —｜$36.52 vs 参考 $335.78
-- IT｜202632｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$333.33 vs 参考 $2,489.32
-- RU｜202632｜BOSE Ultra Open —｜$35.07 vs 参考 $335.78
-- RU｜202633｜BOSE Ultra Open —｜$30.58 vs 参考 $335.78
-- IT｜202633｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$333.33 vs 参考 $2,489.32
-- IT｜202634｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$337.21 vs 参考 $2,489.32
-- IT｜202635｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$337.21 vs 参考 $2,489.32
-- IT｜202636｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$318.60 vs 参考 $2,489.32
-- SA｜202637｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
-- IT｜202637｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$318.60 vs 参考 $2,489.32
-- AE｜202638｜APPLE iPhone Air 512 GB｜$206.67 vs 参考 $1,466.72
-- SA｜202639｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
-- DE｜202639｜APPLE iPhone Duo 12+1TB｜$350.57 vs 参考 $4,023.07
-- DE｜202639｜APPLE iPhone Duo 12+2TB｜$436.78 vs 参考 $4,023.07
-- SA｜202640｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
-- SA｜202641｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
+- RU｜202630｜BOSE Ultra Open —｜$45.66 vs 参考 $335.79
+- RU｜202631｜BOSE Ultra Open —｜$36.52 vs 参考 $335.79
+- IT｜202632｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$333.33 vs 参考 $2,493.25
+- RU｜202632｜BOSE Ultra Open —｜$35.07 vs 参考 $335.79
+- RU｜202633｜BOSE Ultra Open —｜$30.58 vs 参考 $335.79
+- IT｜202633｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$333.33 vs 参考 $2,493.25
+- IT｜202634｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$337.21 vs 参考 $2,493.25
+- IT｜202635｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$337.21 vs 参考 $2,493.25
+- IT｜202636｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$318.60 vs 参考 $2,493.25
+- SA｜202637｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $245.73
+- IT｜202637｜SAMSUNG Galaxy Z Fold8 Ultra 16+1 TB｜$318.60 vs 参考 $2,493.25
+- AE｜202638｜APPLE iPhone Air 512 GB｜$206.67 vs 参考 $1,466.98
+- SA｜202639｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $245.73
+- DE｜202639｜APPLE iPhone Duo 12+1TB｜$350.57 vs 参考 $3,594.01
+- DE｜202639｜APPLE iPhone Duo 12+2TB｜$436.78 vs 参考 $3,594.01
+- SA｜202640｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $245.73
+- SA｜202641｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $245.73
 - RO｜202641｜APPLE iPhone 17 Pro Max 12+1 TB｜$199.16 vs 参考 $1,786.40
-- BR｜202641｜APPLE Watch Ultra 3 —｜$141.43 vs 参考 $1,015.01
-- SA｜202642｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $242.90
-- DE｜202642｜APPLE iPhone Duo 12+1TB｜$342.70 vs 参考 $4,023.07
-- DE｜202642｜APPLE iPhone Duo 12+2TB｜$426.97 vs 参考 $4,023.07
+- BR｜202641｜APPLE Watch Ultra 3 —｜$141.43 vs 参考 $1,011.41
+- SA｜202642｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $245.73
+- DE｜202642｜APPLE iPhone Duo 12+1TB｜$342.70 vs 参考 $3,594.01
+- DE｜202642｜APPLE iPhone Duo 12+2TB｜$426.97 vs 参考 $3,594.01
+- SA｜202644｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $245.73
+- MY｜202644｜OPPO Watch X3 —｜$328.33 vs 参考 $2,456.77
+- MY｜202644｜OPPO Watch X3 —｜$353.20 vs 参考 $2,456.77
+- MY｜202644｜OPPO Find X10 12+256 GB｜$1132.76 vs 参考 $24,509.56
+- PH｜202644｜OPPO Find X10 12+512 GB｜$2350.71 vs 参考 $24,509.56
+- PH｜202644｜OPPO Find X10 12+512 GB｜$2350.71 vs 参考 $24,509.56
+- MY｜202644｜OPPO Find X10 12+512 GB｜$1231.28 vs 参考 $24,509.56
+- MY｜202644｜OPPO Find X10 12+512 GB｜$1231.28 vs 参考 $24,509.56
+- DE｜202644｜APPLE iPhone Duo 12+1TB｜$338.89 vs 参考 $3,594.01
+- DE｜202644｜APPLE iPhone Duo 12+2TB｜$422.22 vs 参考 $3,594.01
+- CL｜202644｜GARMIN Fenix 9 47mm AMOLED｜$152.46 vs 参考 $1,200.55
+- CL｜202644｜GARMIN Fenix 9 51mm AMOLED｜$166.91 vs 参考 $1,200.55
+- MY｜202645｜OPPO Find X10 12+256 GB｜$1274.26 vs 参考 $24,509.56
+- MY｜202645｜OPPO Find X10 12+256 GB｜$1274.26 vs 参考 $24,509.56
+- MY｜202645｜OPPO Find X10 12+512 GB｜$1396.81 vs 参考 $24,509.56
+- MY｜202645｜OPPO Find X10 12+512 GB｜$1396.81 vs 参考 $24,509.56
+- PH｜202645｜OPPO Find X10 12+512 GB｜$2361.45 vs 参考 $24,509.56
+- SA｜202645｜APPLE iPhone 17 Pro 12+512 GB｜$159.73 vs 参考 $1,628.46
+- SA｜202645｜HONOR Pad X9 11.5" WiFi 4+128 GB｜$26.40 vs 参考 $245.73
+- DE｜202645｜APPLE iPhone Duo 12+1TB｜$342.70 vs 参考 $3,594.01
+- CL｜202645｜GARMIN Fenix 9 47mm AMOLED｜$153.36 vs 参考 $1,200.55
+- CL｜202645｜GARMIN Fenix 9 51mm AMOLED｜$167.90 vs 参考 $1,200.55
+- AE｜202645｜OPPO Find X10 12+512 GB｜$2722.67 vs 参考 $24,509.56
+- AE｜202645｜OPPO Find X10 12+512 GB｜$2722.67 vs 参考 $24,509.56

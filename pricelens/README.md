@@ -65,7 +65,7 @@ verify 末项检查根目录 `PriceLens.html` 与 `dist/index.html` 逐字节一
 ## 当前默认视图：周 · USD · 我司 + 配置竞品
 
 - `defaultFilters` 当前默认粒度为 `week`，币种为 `usd`，自适应跟随开启；默认范围 = 数据跨度
-  `202619→202642`（24 周），华为默认选中 Pura 80 · 12+256（取自 `dim_region`
+  `202619→202645`（27 周），华为默认选中 Pura 80 · 12+256（取自 `dim_region`
   的 `default_own_models`），竞品由配置矩阵自动匹配带出（当前 R国 = iPhone 16 · 256、
   Galaxy S25 · 12+256、小米 15T · 12+256）。
 - 时间筛选器采用 Ant Design RangePicker 风格：自动跟随按钮与自定义范围输入并排，

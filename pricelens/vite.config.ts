@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
@@ -15,8 +15,14 @@ export default defineConfig({
       // 演进版标签页标题带「演进版」：与稳定版区分，同时作为 CI 产物自检锚点
       name: 'pricelens-iterate-title',
       transformIndexHtml(html) {
-        if (APP_CHANNEL_ENV !== 'iterate') return html;
-        return html.replace('<title>PriceLens</title>', '<title>PriceLens · 演进版</title>');
+        const channel = APP_CHANNEL_ENV === 'iterate' ? 'iterate' : 'stable';
+        const marker = `<meta name="pricelens-channel" content="${channel}">`;
+        const marked = html.includes('name="pricelens-channel"')
+          ? html
+          : html.replace('</head>', `${marker}</head>`);
+        return channel === 'iterate'
+          ? marked.replace('<title>PriceLens</title>', '<title>PriceLens · 演进版</title>')
+          : marked;
       },
     },
   ],
@@ -26,6 +32,9 @@ export default defineConfig({
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 8000,
+  },
+  test: {
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.consolidation-backup-*/**'],
   },
   server: {
     proxy: {

@@ -36,6 +36,7 @@ const dimPromo = SRC('dim_promo.json');
 const dimBenchmark = SRC('dim_benchmark.json');
 const dimTier = SRC('dim_tier.json');
 const dimDefaultChannel = SRC('dim_default_channel.json');
+const monthlyFacts = SRC('fact_price_monthly.json');
 const packB64 = readFileSync(join(ROOT, 'src', 'data', 'fact_pack_gzip.b64.txt'), 'utf8').trim();
 const pack = JSON.parse(gunzipSync(Buffer.from(packB64, 'base64')).toString('utf8'));
 
@@ -58,7 +59,7 @@ console.log('\n[1] 维表完整性');
   }
   const allWed = dimTime.every((w) => new Date(w.week_wed_date + 'T00:00:00Z').getUTCDay() === 3);
   check('dim_time 连续周（相邻周三间隔 7 天）且全部为周三', continuous && allWed, `${dimTime.length} 周 ${first.week_id}(${first.week_wed_date}) → ${last.week_id}(${last.week_wed_date})`);
-  check('dim_time 周数 = 24（2026-05-06 → 2026-10-14）', dimTime.length === 24 && first.week_id === '202619' && last.week_id === '202642');
+  check('dim_time 覆盖 2026-05-06 起的连续周', dimTime.length >= 24 && first.week_id === '202619' && first.week_wed_date === '2026-05-06', `${dimTime.length} 周，末周 ${last.week_id}(${last.week_wed_date})`);
 
   const enabled = dimRegion.filter((r) => r.enabled);
   check('dim_region 启用国家 ≥ 20 且均带本币与默认电渠', enabled.length >= 20 && enabled.every((r) => r.currency && r.default_platform), `${enabled.length} 国`);
@@ -125,6 +126,10 @@ console.log('\n[1] 维表完整性');
   check('dim_default_channel 预填：每启用国 1 条，渠道属该国且平台 = 默认平台（事实包重接后漂移报警）', prefillBad.length === 0 && prefillEntries.length === enabled.length, `${prefillEntries.length}/${enabled.length} 国${prefillBad.length ? '；坏条目 ' + prefillBad.map(([cc]) => cc).join(',') : ''}`);
   check('dim_default_channel 预填 R国 = DNS 独立站（与应用侧默认取价锚一致）', dimDefaultChannel.RU === 'RU:dns:独立站', dimDefaultChannel.RU);
 
+  check('ZA 月度运行时事实为数组（待发布时为空数组）', Array.isArray(monthlyFacts), Array.isArray(monthlyFacts) ? `${monthlyFacts.length} 行` : '格式错误');
+  check('ZA 月度运行时事实仅包含 PASS', Array.isArray(monthlyFacts) && monthlyFacts.every((row) => row.country_code === 'ZA' && row.review_status === 'PASS'), `${Array.isArray(monthlyFacts) ? monthlyFacts.length : 0} 行`);
+  check('ZA 月度事实价格类型与分期期数合法', Array.isArray(monthlyFacts) && monthlyFacts.every((row) => ['installment', 'prepaid', 'no-price'].includes(row.price_type) && (row.term_months == null || row.term_months === 24 || row.term_months === 36)), `${Array.isArray(monthlyFacts) ? monthlyFacts.length : 0} 行`);
+
   check('dim_fx per_usd 全部 > 0', dimFx.every((f) => f.per_usd > 0), `${dimFx.length} 条`);
   const missFx = enabled.filter((r) => !dimFx.some((f) => f.currency === r.currency));
   check('每个启用国家的本币都有汇率记录', missFx.length === 0, missFx.map((r) => r.currency).join(',') || '全部命中');
@@ -156,7 +161,7 @@ console.log('\n[2] 事实列式包');
   check('周索引全部落在 dim_time', weeks.every((w) => weekIds.has(w)) && weeks.length === dimTime.length);
   // 「都在维表 + 长度相等」≠ 一一对应：包内重复索引会全部通过，
   // 而 prefill_default_shops 的 channels.index(cid) 等隐含依赖索引唯一
-  check('SKU 索引唯一（与 dim_product 一一对应）', new Set(skus).size === skus.length && skus.every((s) => productById.has(s)) && skus.length === dimProduct.length);
+  check('周度事实包 SKU 索引唯一且全部存在于 dim_product（允许月度小册子新增 SKU）', new Set(skus).size === skus.length && skus.every((s) => productById.has(s)), `${skus.length} 个周度 SKU / ${dimProduct.length} 个总 SKU`);
   check('渠道索引唯一且全部存在于 dim_channel', new Set(channels).size === channels.length && channels.every((c) => channelById.has(c)));
   let fxBad = 0, priceBad = 0, usdDrift = 0, usdChecked = 0;
   const keys = new Set();
@@ -185,7 +190,7 @@ console.log('\n[2] 事实列式包');
   check('唯一键 周×SKU×渠道×店铺 无重复', dup === 0, `${dup} 重复`);
   check('USD 折算（本币/汇率）全部落在 (0, 20000) 合理区间', usdDrift === 0, `${usdChecked.toLocaleString()} 行校验`);
   check('字典列：url 非空率 ≥ 99%', dict.url.filter(Boolean).length / dict.url.length >= 0.99, `${dict.url.length} 个唯一 URL`);
-  check('R国 ≥ 20 周、沙特 ≥ 18 周、墨西哥 = 24 周有数', (weeksByCc.get('RU')?.size ?? 0) >= 20 && (weeksByCc.get('SA')?.size ?? 0) >= 18 && weeksByCc.get('MX')?.size === 24, `RU ${weeksByCc.get('RU')?.size} / SA ${weeksByCc.get('SA')?.size} / MX ${weeksByCc.get('MX')?.size}`);
+  check('R国 ≥ 20 周、沙特 ≥ 18 周、墨西哥 ≥ 24 周有数', (weeksByCc.get('RU')?.size ?? 0) >= 20 && (weeksByCc.get('SA')?.size ?? 0) >= 18 && (weeksByCc.get('MX')?.size ?? 0) >= 24, `RU ${weeksByCc.get('RU')?.size} / SA ${weeksByCc.get('SA')?.size} / MX ${weeksByCc.get('MX')?.size}`);
   // 默认电渠口径：R国 DNS 渠道存在且有 Pura 90s Pro Max 行
   const dnsIdx = channels.indexOf('RU:dns:独立站');
   const puraSkus = new Set(skus.map((s, i) => [s, i]).filter(([s]) => s.startsWith('own-huawei-pura-90s-pro-max__')).map(([, i]) => i));

@@ -126,10 +126,10 @@ describe('销量估算 · 真实数据不变量（RU × Pura 90s Pro Max 首配�
     expect([...b.entries()]).toEqual([...a.entries()]);
   });
 
-  it('全部为非负整数；周均在 202619..202642 内且每周都有事实行', () => {
+  it('全部为非负整数；周均在新批次 202619..202645 内且每周都有事实行', () => {
     expect(a.size).toBeGreaterThan(0);
     for (const [weekId, v] of a) {
-      expect(weekId >= '202619' && weekId <= '202642').toBe(true);
+      expect(weekId >= '202619' && weekId <= '202645').toBe(true);
       expect(factWeeks.has(weekId)).toBe(true);
       expect(Number.isInteger(v)).toBe(true);
       expect(v).toBeGreaterThanOrEqual(0);
@@ -146,9 +146,9 @@ describe('销量估算 · 真实数据不变量（RU × Pura 90s Pro Max 首配�
     });
   });
 
-  it('周粒度 24 周数组快照（含无事实行的 null 位）', () => {
+  it('周粒度覆盖 dim_time 全部周数组快照（含无事实行的 null 位）', () => {
     const allWeeks = dimTime.map((t) => t.week_id);
-    expect(allWeeks).toHaveLength(24);
+    expect(allWeeks).toHaveLength(27);
     expect(volumeByBuckets(MODEL, ROMRAM, CC, 'week', allWeeks)).toMatchSnapshot();
   });
 });

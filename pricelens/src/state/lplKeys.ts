@@ -17,6 +17,8 @@ export const LPL = {
   cfgAnomalyRule: 'LPL3.config.anomalyRule',
   /** 异常价格人工裁定清单（图上逐点「确认真实价格 / 标记异常」的留痕，可撤销） */
   cfgAnomalyMarks: 'LPL3.config.anomalyMarks',
+  /** 国家采集口径（来源、粒度、平台、分期期数与买断规则） */
+  cfgMarketRules: 'LPL3.config.marketRules',
   /** 最近使用的主分析组合（第一百一十七轮，选择产品浮窗快捷 chips；上限 5 组） */
   uiMainCombos: 'LPL3.ui.mainCombos',
   /** 量价参考卡事件类型库（浏览器级长期配置：内置类型颜色覆写 + 自定义类型）。

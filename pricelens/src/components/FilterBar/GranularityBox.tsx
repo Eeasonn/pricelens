@@ -10,19 +10,23 @@
 import { Segmented } from 'antd';
 import { useFilters } from '../../state/FiltersContext';
 import type { Granularity } from '../../dataModel/types';
+import { marketDataProfileOf } from '../../dataModel/marketProfile';
 
 export default function GranularityBox() {
   const { state, actions } = useFilters();
+  const profile = marketDataProfileOf(state.countryCode);
   return (
     <Segmented
       size="small"
-      aria-label="时间粒度"
+      aria-label={profile.granularityLocked ? '时间粒度（南非月度锁定）' : '时间粒度'}
       value={state.granularity}
-      options={[
-        { label: '周', value: 'week' },
-        { label: '月', value: 'month' },
-        { label: '季', value: 'quarter' },
-      ]}
+      options={profile.granularityLocked
+        ? [{ label: '月', value: 'month' }]
+        : [
+            { label: '周', value: 'week' },
+            { label: '月', value: 'month' },
+            { label: '季', value: 'quarter' },
+          ]}
       onChange={(value) => actions.setGranularity(value as Granularity)}
     />
   );

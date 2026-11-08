@@ -1084,7 +1084,6 @@ export default function Chart(props: ChartProps) {
   );
 
   // ---- 成本面积几何（2026-11-06）：缺成本的桶断开成段，不插值 ----
-  const costGradId = useId();
   const costColor = props.volumeColor ?? series[0]?.color ?? color.mute;
   const costArea = useMemo(() => {
     if (!props.costs || !geom) return null;
@@ -1307,7 +1306,11 @@ export default function Chart(props: ChartProps) {
     },
     [series, filterState.countryCode, granularity],
   );
-  const empty = series.length === 0;
+  // 有系列但所有点都缺价时也进入空态。ZA 小册子在产品未收录或尚未发布时会走这条
+  // 路径，不能继续显示一张只有 0–100 轴的空白图。
+  const hasRenderableData = series.some((item) => item.points.some((point) => primaryPriceOf(point, priceTypes) != null))
+    || (props.volumeOn === true && props.volumes?.some((value) => value != null) === true);
+  const empty = series.length === 0 || !hasRenderableData;
   const brandByKey = useMemo(() => new Map([...series, ...nameAll].map((s) => [s.key, s.brand])), [series, nameAll]);
 
   // ---- DOM 刻度/断轴/档位带数据（纯构建见 chartModel） ----
@@ -1591,17 +1594,11 @@ export default function Chart(props: ChartProps) {
           );
         })()}
       </div>
-      {/* 成本面积（2026-11-06 量价走势「销毛成本」）：与量带面积同一做法——单调平滑、品牌色
-          纵向渐变（底 .17 → 顶 .02）、无描边；基线 = 价格层底缘，压在价格线之下 */}
+      {/* 成本面积（2026-11-06 量价走势「销毛成本」）：单色浅填充 + 细边界，
+          与价格线保持同一层级，避免大面积渐变把价格层与销量层割裂。 */}
       {geom && costArea && (
         <svg aria-hidden data-testid="cost-area" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}>
-          <defs>
-            <linearGradient id={costGradId} x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor={hexToRgba(costColor, 0.17)} />
-              <stop offset="100%" stopColor={hexToRgba(costColor, 0.02)} />
-            </linearGradient>
-          </defs>
-          <path d={costArea} fill={`url(#${costGradId})`} stroke="none" />
+          <path d={costArea} fill={hexToRgba(costColor, 0.10)} stroke={hexToRgba(costColor, 0.28)} strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </svg>
       )}
       {/* ECharts 挂载层（第一百一十四轮：高度不含 tipBox 预留框——canvas 网格仍止于底边距） */}

@@ -24,7 +24,7 @@ import type {
   ProductSelection,
 } from './filtersTypes';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
-import { dimProduct, dimRegion, dimTime } from '../data';
+import { dimProduct, dimRegion, dimTime, factPriceMonthly } from '../data';
 import { lowestPriceColorSku, platformSelectionForCountry, sellersOfChannel } from '../dataModel/aggregate';
 import { normalizePlatformScope, platformQueryEquals } from '../dataModel/platformScope';
 import type { LawfulPlatformScope } from '../dataModel/platformScope';
@@ -32,6 +32,8 @@ import { STABLE } from '../appChannel';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
+import { marketDataProfileOf } from '../dataModel/marketProfile';
+import { publishedMonthlyRangeOf } from '../dataModel/monthlyFacts';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache } from '../components/ProductCascader/tree';
 import { clampMains, autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, remapMainsForScope, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
@@ -79,6 +81,7 @@ export const defaultFilters: FiltersState = {
   priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
   agg: 'avg',
   platformScopeNotice: null, // R7-M1：稳定版平台口径归一说明（无归一 = null）
+  financingTerm: null,
   alertSubs: [], // 第五十二轮：预警中心订阅（默认空，入口 = 看板页签铃铛 / 总览型号块）
   alertTypes: DEFAULT_ALERT_TYPES, // 追补⑨：四类预警全局开关
   alertThresholds: DEFAULT_ALERT_THRESHOLDS, // 追补⑨：四类全局阈值（旧版共用 1.5% 一条线）
@@ -245,6 +248,7 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       ['platform', isPlatformSelection(parsed.platform)],
       // R7-M1：归一说明随包留存（坏形状跳过，不作废整包——口径本身仍合法可恢复）
       ['platformScopeNotice', parsed.platformScopeNotice == null || isPlatformScopeNotice(parsed.platformScopeNotice)],
+      ['financingTerm', parsed.financingTerm == null || parsed.financingTerm === 24 || parsed.financingTerm === 36],
       // 口径（国家/产业）随载荷恢复：写侧一直整包写入，读侧漏掉会让裸根链接的
       // 新会话静默回落 RU/phone 并把旧国家选择当无效覆盖掉。值非法/缺失 =
       // 跳过该项落默认口径（不入 required，不因此作废整包）。
@@ -269,6 +273,7 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       && key !== 'countryCode' && key !== 'industry'
       // R7-M1：归一说明是可再生物质（口径本身可重新归一），坏形状/缺失只跳过字段
       && key !== 'platformScopeNotice'
+      && key !== 'financingTerm'
       // v10/v11 复用的 platform 键形随数据换代漂移（渠道 id 空间两度更换）：
       // 不再因它作废整包——无效时跳过该字段回落默认电渠（与 countryCode 同等
       // 宽限，可迁移的用户选择不陪葬）；v12 载荷 platform 仍在 required
@@ -314,7 +319,9 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
   const modelId = modelIdOf(candidates[0]);
   const romrams = [...new Set(candidates.filter((p) => p.model_id === modelId).map((p) => p.romram))].sort();
   for (const romram of romrams) {
-    const skuId = lowestPriceColorSku(modelId, romram, countryCode);
+    const skuId = countryCode === 'ZA'
+      ? candidates.find((p) => p.model_id === modelId && p.romram === romram && factPriceMonthly.some((row) => row.sku_id === p.sku_id && row.review_status === 'PASS' && row.price_type === 'installment'))?.sku_id ?? null
+      : lowestPriceColorSku(modelId, romram, countryCode);
     if (!skuId) continue;
     const config: ProductSelection = { modelId, romram, skuIds: [skuId] };
     // 默认卡 = 匹配竞品开（与默认视图「对比自动匹配开」的既有语义一致；
@@ -608,11 +615,31 @@ function scopeFallbackStable(
 // 落地规则 + 每线口径归一），按构建通道 STABLE 分发；两线各自的测试锁住各自行为。
 // ------------------------------------------------------------
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
-  return STABLE ? applyScopeDefaultsStable(s, force) : applyScopeDefaultsIterate(s, force);
+  const scoped = STABLE ? applyScopeDefaultsStable(s, force) : applyScopeDefaultsIterate(s, force);
+  return applyMarketDataProfile(scoped);
 }
 
 function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false): FiltersState {
   return STABLE ? switchScopeStable(prev, next, explicitMains) : switchScopeIterate(prev, next, explicitMains);
+}
+
+function applyMarketDataProfile(state: FiltersState): FiltersState {
+  const profile = marketDataProfileOf(state.countryCode);
+  if (!profile.granularityLocked) {
+    return state.financingTerm == null ? state : { ...state, financingTerm: null };
+  }
+  const publishedRange = publishedMonthlyRangeOf(factPriceMonthly, state.countryCode);
+  const range = state.granularity === profile.granularity
+    ? { start: state.rangeStart, end: state.rangeEnd }
+    : publishedRange ?? convertRangeBuckets(state.rangeStart, state.rangeEnd, state.granularity, profile.granularity);
+  const financingTerm = state.financingTerm === 24 || state.financingTerm === 36 ? state.financingTerm : null;
+  return {
+    ...state,
+    granularity: profile.granularity,
+    rangeStart: range.start,
+    rangeEnd: range.end,
+    financingTerm,
+  };
 }
 
 /**
@@ -818,6 +845,24 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           // 非 mains 数组的坏值整体忽略（防御 Agent/undo 之外的 JS 调用方）
           if (clean.mains !== undefined && !Array.isArray(clean.mains)) delete clean.mains;
           let next: FiltersState = { ...s, ...clean };
+          if (clean.countryCode != null && clean.countryCode !== s.countryCode) {
+            const profile = marketDataProfileOf(next.countryCode);
+            const publishedRange = profile.granularityLocked
+              ? publishedMonthlyRangeOf(factPriceMonthly, next.countryCode)
+              : null;
+            const range = profile.granularityLocked && publishedRange
+              ? publishedRange
+              : profile.granularityLocked && next.granularity !== profile.granularity
+                ? convertRangeBuckets(next.rangeStart, next.rangeEnd, next.granularity, profile.granularity)
+                : { start: next.rangeStart, end: next.rangeEnd };
+            next = {
+              ...next,
+              financingTerm: null,
+              granularity: profile.granularityLocked ? profile.granularity : next.granularity,
+              rangeStart: range.start,
+              rangeEnd: range.end,
+            };
+          }
           // R7-M1（第七轮评审 Major）：稳定版带 platform 键的补丁在 setter 处
           // 立即走共享「国家合法 + 能力」归一——总览级联「全部店铺·最低价」提交
           // {shopIds:[RU:ozon:3P]} 即刻落为平台级 {platforms:[OZON]}（展开说明
@@ -851,7 +896,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
             (clean.industry != null && clean.industry !== s.industry);
           const explicitMains = clean.mains !== undefined && Array.isArray(clean.mains);
           if (!scopeChanged) {
-            if (!explicitMains) return next;
+            if (!explicitMains) return applyMarketDataProfile(next);
             // R4-S4：同口径显式 mains 规范到当前口径——逐 SKU 过滤 / 同型号首个
             // 合法配置映射 / selKey 去重 / 对比区排重主品；显式空 = 清空态原样落地；
             // 型号在当前国全缺席 → 默认安全回落（与跨国显式缺型号一致）
@@ -907,6 +952,12 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
        */
       setGranularity: (g) =>
         setState((s) => {
+          const profile = marketDataProfileOf(s.countryCode);
+          if (profile.granularityLocked) {
+            if (s.granularity === profile.granularity) return s;
+            const { start, end } = convertRangeBuckets(s.rangeStart, s.rangeEnd, s.granularity, profile.granularity);
+            return { ...s, granularity: profile.granularity, rangeStart: start, rangeEnd: end };
+          }
           if (s.granularity === g) return s;
           const { start, end } = convertRangeBuckets(s.rangeStart, s.rangeEnd, s.granularity, g);
           return { ...s, granularity: g, rangeStart: start, rangeEnd: end };

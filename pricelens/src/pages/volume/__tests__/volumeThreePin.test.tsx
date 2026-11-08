@@ -4,8 +4,8 @@
 //   （恒开恒柱）+ 名称带图层标注（价格 USD / 销量 台·模拟）+ 区间量尺拖选入参；
 // 「销毛成本」开 = 我司面板价格层叠成本面积（cost-area svg + 成本·模拟药丸），
 //   关 = 纯价格线 + 销量柱；旧面板内可点击图例行 / 成本柱呈现 / 极差卡随之退役；
-// 「时间轴同步」开关移驻工具行（销毛成本之后，共享轴列退役）；隐藏收纳区
-//   （HiddenVault）与胶囊带对位契约、库存 · DOS 卡 X 标签保持原断言。
+// 「时间轴同步」开关移驻首个面板底部时间轨左侧；隐藏收纳区
+//   （HiddenVault）与胶囊带对位契约保持原断言，库存 · DOS 补充图已从页面移除。
 // 组装模式照 volumeTimeSync.test.tsx（mock echarts + ResizeObserver 定宽）。
 // ============================================================
 // @vitest-environment jsdom
@@ -171,6 +171,10 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
   it('每面板渲染价格走势同款 Chart：量带恒开（柱）+ 图层标注（价格 / 销量·模拟）', async () => {
     render(<App />);
     const panels = await waitPanelsReady();
+    const layerLegend = screen.getByTestId('volume-layer-legend');
+    expect(layerLegend.textContent).toContain('价格');
+    expect(layerLegend.textContent).toContain('成本 · 模拟');
+    expect(layerLegend.textContent).toContain('销量 · 模拟');
     for (const panel of panels) {
       // 名称带列顶部图层标注：价格层（币种代码）+ 销量层（台 + 模拟徽标）
       const priceLabel = panel.querySelector('[data-testid="pane-label-price"]');
@@ -208,17 +212,17 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
   });
 
-  // ---- 时间轴同步开关移驻工具行（共享轴列退役） ----
+  // ---- 时间轴同步开关与首个时间轨同一水平线 ----
 
-  it('时间轴同步开关在工具行（销毛成本之后），默认开；合并单图态隐藏', async () => {
+  it('时间轴同步开关在首个时间轨左侧，默认开；合并单图态隐藏', async () => {
     render(<App />);
     await waitPanelsReady();
     const btn = screen.getByRole('button', { name: '时间轴同步' }) as HTMLElement;
-    const marginBtn = screen.getByRole('button', { name: '显示销毛成本' });
-    const cluster = marginBtn.parentElement as HTMLElement;
-    expect(cluster.contains(btn)).toBe(true);
-    const clusterChildren = Array.from(cluster.children);
-    expect(clusterChildren.indexOf(marginBtn)).toBeLessThan(clusterChildren.indexOf(btn));
+    const gutter = screen.getByTestId('volume-time-sync-gutter');
+    expect(gutter.contains(btn)).toBe(true);
+    expect(gutter.style.height).toBe('52px');
+    expect(gutter.firstElementChild?.getAttribute('style')).toContain('height: 20px');
+    expect(screen.getByRole('button', { name: '显示销毛成本' }).parentElement?.contains(btn)).toBe(false);
     expect(btn.getAttribute('aria-pressed')).toBe('true');
     // 合并单图态：开关随共享轴列一并隐藏（合并图自带完整 X 轴）
     fireEvent.click(screen.getByRole('button', { name: /^查看 .+ 所在组的 \d+ 款对比产品$/ }));
@@ -227,16 +231,4 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(screen.queryByRole('button', { name: '时间轴同步' })).toBeNull();
   });
 
-  it('库存 · DOS 卡 X 标签 = shortBucketLabel 日历周格式（2026Wxx，不再周三 MM-DD）', async () => {
-    render(<App />);
-    await waitPanelsReady();
-    expect(screen.getByText('库存 · DOS')).toBeTruthy();
-    const svg = document.querySelector('svg[aria-label*="库存与 DOS"]') as SVGSVGElement;
-    expect(svg).toBeTruthy();
-    const svgTexts = Array.from(svg.querySelectorAll('text')).map((t) => (t.textContent || '').trim());
-    const weekLabels = svgTexts.filter((t) => /^2026W\d{2}$/.test(t));
-    expect(weekLabels.length).toBeGreaterThan(0);
-    // 周粒度不再出现周三日期（MM-DD）格式的轴标签
-    expect(svgTexts.some((t) => /^\d{2}-\d{2}$/.test(t))).toBe(false);
-  });
 });

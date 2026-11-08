@@ -43,38 +43,19 @@ jobs:
       - name: Tests
         working-directory: pricelens
         run: npm run test -- --run
-      - name: Build (vite build + sync-single)
+      - name: Build stable and iterate channels
         working-directory: pricelens
         env:
           # 平台预设 GLM 网关地址（仓库 Settings → Secrets and variables → Actions →
           # Variables 里的 AGENT_GATEWAY_URL）。未配置该变量时此处展开为空串 =
           # 构建不注入预设网关，前端维持纯本地引擎，向后兼容。
           VITE_AGENT_API_BASE_URL: ${{ vars.AGENT_GATEWAY_URL }}
-        run: npm run build
+        run: npm run build:channels
       - name: Verify data and build artifacts
         working-directory: pricelens
-        run: npm run verify
-      - name: Build iterate channel (在线演进版 → dist/iterate/)
-        working-directory: pricelens
-        env:
-          # 演进版同样注入平台预设 GLM 网关，在线 Agent 与稳定版一致可用
-          VITE_AGENT_API_BASE_URL: ${{ vars.AGENT_GATEWAY_URL }}
         run: |
-          # vite build 会清空 dist：先把已验证的稳定版单文件挪出，构建后再放回根路径
-          mkdir -p ../pages-assemble
-          cp dist/index.html ../pages-assemble/stable-index.html
-          npm run build:iterate
-          mkdir -p dist/iterate
-          mv dist/index.html dist/iterate/index.html
-          cp ../pages-assemble/stable-index.html dist/index.html
-          rm -rf ../pages-assemble
-          # 产物自检：演进版标题带「演进版」，稳定版不带（防通道装反）
-          grep -q "<title>PriceLens · 演进版</title>" dist/iterate/index.html
-          if grep -q "PriceLens · 演进版" dist/index.html; then
-            echo "根路径稳定版混入演进版标题，拒绝部署" >&2
-            exit 1
-          fi
-          ls -la dist dist/iterate
+          npm run verify:channels
+          npm run verify
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:

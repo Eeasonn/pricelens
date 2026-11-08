@@ -406,7 +406,12 @@
   "series": "WATCH",
   "tier": ">300",
   "own_raw": "WATCH 6 Pro",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6-pro",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 11",
@@ -453,7 +458,12 @@
   "series": "WATCH",
   "tier": ">300",
   "own_raw": "WATCH 6",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 11",
@@ -626,8 +636,8 @@
   "own_raw": "FreeClip  2 S",
   "own": [
    {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "subset"
+    "model_id": "own-huawei-freeclip-2-s",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -636,14 +646,24 @@
     "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Shokz OpenDots 2",
     "brand": "SHOKZ",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Soundcore AeroClip",
@@ -678,14 +698,24 @@
     "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Shokz OpenDots 2",
     "brand": "SHOKZ",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Soundcore AeroClip",
@@ -732,7 +762,12 @@
     "brand": "SONY",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-sony-wf-1000xm5",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Samsung Galaxy Buds3 Pro",
@@ -870,7 +905,7 @@
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-jbl-wave-beam-2",
+      "model_id": "cmp-jbl-wave-buds-2",
       "status": "subset"
      }
     ]
@@ -1641,8 +1676,8 @@
   "own_raw": "MatePad  SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se",
-    "status": "subset"
+    "model_id": "own-huawei-matepad-se-11",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -2091,7 +2126,12 @@
   "series": "WATCH",
   "tier": ">300",
   "own_raw": "WATCH 6 Pro",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6-pro",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 11",
@@ -2138,7 +2178,12 @@
   "series": "WATCH",
   "tier": ">300",
   "own_raw": "WATCH 6",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 11",
@@ -2311,8 +2356,8 @@
   "own_raw": "FreeClip  2 S",
   "own": [
    {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "subset"
+    "model_id": "own-huawei-freeclip-2-s",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -2321,14 +2366,24 @@
     "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Shokz OpenDots 2",
     "brand": "SHOKZ",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Soundcore AeroClip",
@@ -2363,14 +2418,24 @@
     "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Shokz OpenDots 2",
     "brand": "SHOKZ",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Soundcore AeroClip",
@@ -2417,7 +2482,12 @@
     "brand": "SONY",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-sony-wf-1000xm5",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Samsung Galaxy Buds3 Pro",
@@ -2555,7 +2625,7 @@
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-jbl-wave-beam-2",
+      "model_id": "cmp-jbl-wave-buds-2",
       "status": "subset"
      }
     ]
@@ -3326,8 +3396,8 @@
   "own_raw": "MatePad  SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se",
-    "status": "subset"
+    "model_id": "own-huawei-matepad-se-11",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -3873,8 +3943,8 @@
   "own_raw": "FreeClip  2 S",
   "own": [
    {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "subset"
+    "model_id": "own-huawei-freeclip-2-s",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -3895,14 +3965,24 @@
     "brand": "SONY",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-sony-linkbuds-fit",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "shokz opendots 2",
     "brand": "SHOKZ",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    }
   ]
  },
@@ -3937,14 +4017,24 @@
     "brand": "SONY",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-sony-linkbuds-open",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "shokz opendots 2",
     "brand": "SHOKZ",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    }
   ]
  },
@@ -4043,7 +4133,12 @@
     "brand": "JBL",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-jbl-live-pro-2-tws",
+      "status": "exact"
+     }
+    ]
    }
   ]
  },
@@ -4090,7 +4185,12 @@
     "brand": "JBL",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-jbl-live-pro-2-tws",
+      "status": "exact"
+     }
+    ]
    }
   ]
  },
@@ -4137,7 +4237,12 @@
     "brand": "JBL",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-jbl-live-pro-2-tws",
+      "status": "exact"
+     }
+    ]
    }
   ]
  },
@@ -4162,7 +4267,7 @@
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-jbl-tune-beam-2",
+      "model_id": "cmp-jbl-tune-buds-2",
       "status": "subset"
      }
     ]
@@ -4197,7 +4302,7 @@
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-jbl-tune-beam-2",
+      "model_id": "cmp-jbl-tune-buds-2",
       "status": "subset"
      }
     ]
@@ -4582,7 +4687,12 @@
   "series": "WATCH",
   "tier": ">300",
   "own_raw": "WATCH 6 Pro",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6-pro",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 12",
@@ -4629,7 +4739,12 @@
   "series": "WATCH",
   "tier": ">300",
   "own_raw": "WATCH 6",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 12",
@@ -4861,8 +4976,8 @@
   "own_raw": "FreeClip  2 S",
   "own": [
    {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "subset"
+    "model_id": "own-huawei-freeclip-2-s",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -5720,8 +5835,8 @@
   "own_raw": "MatePad  SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se",
-    "status": "subset"
+    "model_id": "own-huawei-matepad-se-11",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -5984,12 +6099,7 @@
     "brand": "AMAZFIT",
     "col": 3,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-amazfit-balance-2",
-      "status": "subset"
-     }
-    ]
+    "models": []
    }
   ]
  },
@@ -6300,8 +6410,8 @@
   "own_raw": "FreeClip 2  S",
   "own": [
    {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "subset"
+    "model_id": "own-huawei-freeclip-2-s",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -6322,7 +6432,12 @@
     "brand": "SHOKZ",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Anker AeroClip",
@@ -6369,7 +6484,12 @@
     "brand": "SHOKZ",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Anker AeroClip",
@@ -7288,8 +7408,8 @@
   "own_raw": "MatePad SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se",
-    "status": "subset"
+    "model_id": "own-huawei-matepad-se-11",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -7854,8 +7974,8 @@
   "own_raw": "FreeClip 2  S",
   "own": [
    {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "subset"
+    "model_id": "own-huawei-freeclip-2-s",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -7876,7 +7996,12 @@
     "brand": "SHOKZ",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Anker AeroClip",
@@ -7923,7 +8048,12 @@
     "brand": "SHOKZ",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Anker AeroClip",
@@ -8777,8 +8907,8 @@
   "own_raw": "MatePad  SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se",
-    "status": "subset"
+    "model_id": "own-huawei-matepad-se-11",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -9157,7 +9287,12 @@
   "series": "WATCH",
   "tier": ">400",
   "own_raw": "WATCH 6 Pro",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6-pro",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 12",
@@ -9204,7 +9339,12 @@
   "series": "WATCH",
   "tier": ">400",
   "own_raw": "WATCH 6",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 12",
@@ -9390,8 +9530,8 @@
   "own_raw": "FreeClip 2 S",
   "own": [
    {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "subset"
+    "model_id": "own-huawei-freeclip-2-s",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -9400,7 +9540,12 @@
     "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Anker AeroClip",
@@ -9447,7 +9592,12 @@
     "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Anker AeroClip",
@@ -10366,8 +10516,8 @@
   "own_raw": "MatePad SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se",
-    "status": "subset"
+    "model_id": "own-huawei-matepad-se-11",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -10763,7 +10913,12 @@
   "series": "WATCH",
   "tier": ">400",
   "own_raw": "WATCH 6 Pro",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6-pro",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 12",
@@ -10810,7 +10965,12 @@
   "series": "WATCH",
   "tier": ">400",
   "own_raw": "WATCH 6",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Apple Watch Series 12",
@@ -10958,8 +11118,8 @@
   "own_raw": "FreeClip 2 S",
   "own": [
    {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "subset"
+    "model_id": "own-huawei-freeclip-2-s",
+    "status": "exact"
    }
   ],
   "comps": [
@@ -10968,7 +11128,12 @@
     "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Anker AeroClip",
@@ -11015,7 +11180,12 @@
     "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Anker AeroClip",

@@ -125,6 +125,8 @@ describe('量价页 · 量价同骨架接线（2026-11-06）', () => {
     expect(panel.volumeMode).toBe('bar');
     expect(panel.volumeHeight).toBeGreaterThan(0);
     expect(Array.isArray(panel.volumes)).toBe(true);
+    // 量价页默认用平滑线；用户主动切到阶梯/自动后仍由设置项接管。
+    expect(panel.lineShape).toBe('smooth');
     expect((panel.volumeOwner as { key: string }).key).toContain('own-huawei-mate-80-pro');
     // 图层标注 + 名称带
     expect(panel.paneLabels).toBe(true);

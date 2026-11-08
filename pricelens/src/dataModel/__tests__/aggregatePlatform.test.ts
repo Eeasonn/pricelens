@@ -118,7 +118,7 @@ describe('reference FX getter', () => {
     // 84.04 = dim_fx RUB 202610 per_usd（ingest 从 fact 行内汇率取中位数）
     expect(getLocalCurrency()).toBe('RUB');
     expect(getFxRate()).toBe(latestPerUsd('RUB'));
-    expect(getFxRate()).toBe(84.04);
+    expect(getFxRate()).toBe(81.75);
 
     // 图表 perUsd 锚定与 FX 注册同源：local → 当前本币 per-USD；usd → 1
     expect(perUsdOf('local')).toBe(getFxRate());

@@ -203,7 +203,7 @@ describe('buildAlerts 规则边界', () => {
 
   it('平台价差真实口径：nova 14 12+256 @2% 触发 11 条，仅落多平台并存周；单平台周（如 202641 纯 DNS）不触发', () => {
     const gaps = buildAlerts(cfg([ownKey], 0.02)).filter((a) => a.type === 'platform-gap');
-    expect(gaps.length).toBe(11); // fact 实况：22 个采数周中 11 周该系列存在 ≥2 平台且价差 ≥2%
+    expect(gaps.length).toBe(12); // 新批次 12 周存在 ≥2 平台且价差 ≥2%
     expect(new Set(gaps.map((a) => a.weekId)).has('202641')).toBe(false); // 该周只有 DNS 行 → 无价差
     for (const a of gaps) {
       const spread = platformPriceSpread(ownSku.sku_id, a.weekId, 'RU', 'usd');
@@ -231,12 +231,12 @@ describe('buildAlerts 规则边界', () => {
     expect(g.pairHighLabel).toContain('12+512');
     expect(g.pairHighSeriesKey).toBe(PURA_512);
     expect(g.pairHighPrice!).toBeGreaterThan(g.pairLowPrice!);
-    // 锚点：最新周（202642）现价 1 021 / 1 142 USD（DNS 渠道，fact 直算）
-    expect(g.pairLowPrice).toBe(1021);
-    expect(g.pairHighPrice).toBe(1142);
+    // 锚点：新批次最新周（202645）现价 1 074 / 1 223 USD（DNS 渠道）
+    expect(g.pairLowPrice).toBe(1074);
+    expect(g.pairHighPrice).toBe(1223);
     // ownGapPct 按未取整价比（第一百三十九轮），pair 价为展示取整：容差 1e-3
     expect(g.ownGapPct!).toBeCloseTo(g.pairHighPrice! / g.pairLowPrice! - 1, 3);
-    expect(g.ownGapPct!).toBeCloseTo(0.1189, 3);
+    expect(g.ownGapPct!).toBeCloseTo(0.1387, 3);
     // 方向正确：间距 ≥ 阈值不触发
     expect(buildAlerts(cfgGap(0.05)).filter((a) => a.type === 'own-gap').length).toBe(0);
   });
@@ -305,21 +305,21 @@ describe('buildAlerts 规则边界', () => {
     // 随数据再生生效，调价/降促计数小幅上浮。
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.02));
     expect(ALL_KEYS.length).toBe(200); // RU phone 全部 系列×配置
-    expect(alerts.length).toBe(1665);
-    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1379);
-    expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(219); // 真实跨平台价差普遍存在
-    expect(alerts.filter((a) => a.type === 'promo').length).toBe(67);
+    expect(alerts.length).toBe(1894);
+    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(1578);
+    expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(247);
+    expect(alerts.filter((a) => a.type === 'promo').length).toBe(69);
   });
 
   it('真实数据全量锚 @5%：911 条（调价 673 + 平台价差 175 + 降促 63）；放开 own-gap 加 9 条档位间距', () => {
     const alerts = buildAlerts(cfg(ALL_KEYS, 0.05));
-    expect(alerts.length).toBe(911);
-    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(673);
-    expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(175);
-    expect(alerts.filter((a) => a.type === 'promo').length).toBe(63);
+    expect(alerts.length).toBe(1009);
+    expect(alerts.filter((a) => a.type === 'price-change').length).toBe(741);
+    expect(alerts.filter((a) => a.type === 'platform-gap').length).toBe(203);
+    expect(alerts.filter((a) => a.type === 'promo').length).toBe(65);
     const withGap = buildAlerts({ ...cfg(ALL_KEYS, 0.05), enabled: { ...ALL_ON, 'own-gap': true }, thresholds: { 'price-change': 0.05, promo: 0.05, 'platform-gap': 0.05, 'own-gap': 0.15 } });
     expect(withGap.filter((a) => a.type === 'own-gap').length).toBe(9); // 多档华为机型的贴近档位对
-    expect(withGap.length).toBe(920);
+    expect(withGap.length).toBe(1018);
   });
 });
 

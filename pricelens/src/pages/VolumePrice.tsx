@@ -80,7 +80,7 @@
 //   可点击切换对应元素显隐，隐藏态降透明（全站图例语言 opacity .45），会话态
 //   跨页保留（volume.legendOff）；库存卡/销毛卡图例已在各卡内支持（确认覆盖）；
 // ③X 轴格式审计收口：成本柱呈现补 X 轴日历标签行（axisTickPlan 口径，周 =
-//   2026W33，月 MM/季 Qn + 年份第二行），库存 · DOS 卡改传 shortBucketLabel
+//   2026W33，月 MM/季 Qn + 年份第二行）；库存 · DOS 补充图已从量价页移除
 //   标签（原先周粒度是周三 MM-DD）；「时间轴同步」开关承载盒改为轨道带同几何
 //   （TRACK_RAIL_H）+ flex 居中——按钮中心恒等于轨道带中心，不再依赖按钮高度。
 // ============================================================
@@ -111,8 +111,9 @@
 // 双 SpreadRangeCard 极差卡、页面级 PanelHoverTip / 周明细卡悬停读数（分离面板）、
 // CostBarChart 成本柱呈现、「销毛呈现方式」下垂柱/顶部销毛线 Segmented、面板内可点击
 // 图例行（legendOff）、共享 Y 轴列（SplitAxisColumn——每面板 Chart 自画轴）；「时间轴
-// 同步」开关移至工具行呈现槽。合并单图（MergedCompareChart）路径原样保留（含其图下
-// 明细卡行），库存 · DOS 卡、面板时间轨、胶囊带/收纳区、组页签、全局平台筛选器不变。
+// 同步」开关回到底部时间轴左侧的轴列槽，与价格走势页同一对齐语言。合并单图
+// （MergedCompareChart）路径原样保留（含其图下
+// 明细卡行），面板时间轨、胶囊带/收纳区、组页签、全局平台筛选器不变。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Segmented } from 'antd';
@@ -147,7 +148,6 @@ import {
   normalizeWindow,
   perUsdOf,
   seriesSpanRange,
-  shortBucketLabel,
   type Bucket,
   type YScale,
 } from '../chart/PriceTrend/helpers';
@@ -159,9 +159,7 @@ import { brandColorOf, color, fontSize, formatPrice, radius, selectAccent, selec
 import { flatSelections } from '../state/mainSelection';
 import { validVolumeViewMode, volumeProductRefs, type VolumeViewMode } from './volume/volumeView';
 import MergedCompareChart, { type MergedCompareProduct } from './volume/MergedCompareChart';
-import InventoryDosCard from './volume/InventoryDosCard';
-import { inventoryDemoOf } from './volume/inventoryDemo';
-import PanelTimeTrack from './volume/PanelTimeTrack';
+import PanelTimeTrack, { TRACK_BLOCK_H, TRACK_RAIL_H } from './volume/PanelTimeTrack';
 import HiddenTray, { HiddenVault, type HiddenTrayItem } from './volume/HiddenTray';
 import { marginCostAvailabilityOf, marginCostOf } from './volume/marginCost';
 import WeekDetailCard from './volume/WeekDetailCard';
@@ -369,7 +367,14 @@ export default function VolumePrice() {
   const [showYTicks, setShowYTicks] = usePageViewState<boolean>('volume.showYTicks', () => true);
   // 价格档位带开关（第一百九十三轮）：2026-11-06 量价同骨架拍板「档位带不画」——
   // 本页面板恒 showTiers={false}，齿轮里的档位开关一并撤下（showTiersToggle={false}）
-  const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('volume.lineShape', () => 'auto');
+  // 量价页的主任务是读出价格与销量的共同走势，默认使用连续曲线。
+  // 价格走势页仍保留按粒度自适应的默认策略，这里只改变本页初始视图。
+  const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('volume.lineShape', () => 'smooth');
+  // 一次性把本页旧版本的 auto 默认迁移为 smooth；迁移完成后仍允许用户主动选回 auto。
+  const initialLineShapeRef = useRef(lineShape);
+  useEffect(() => {
+    if (initialLineShapeRef.current === 'auto') setLineShape('smooth');
+  }, [setLineShape]);
   // 第一百一十四轮（评审）：价格显示（默认精简，会话态跨页保留）+ 全面板共享悬停纵向位置（横向虚线）
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('volume.labelMode', () => 'compact');
   // 悬停页签比率：默认周环比（与价格看板同一默认）；会话态跨页保留（192 轮）
@@ -470,6 +475,7 @@ export default function VolumePrice() {
               endBucket: dataEnd,
               currency: state.currency,
               agg: state.agg,
+              financingTerm: state.financingTerm,
               scope: { countryCode: cc, industry: state.industry },
             });
           } catch {
@@ -489,7 +495,7 @@ export default function VolumePrice() {
           series,
         };
       }),
-    [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg, configVersion],
+    [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, configVersion],
   );
 
   // 时间自适应（2026-11-02 Eason 纠偏）：自动范围 = 顶部所选全部产品（各卡主品 +
@@ -510,12 +516,13 @@ export default function VolumePrice() {
         endBucket: dataEnd,
         currency: state.currency,
         agg: state.agg,
+        financingTerm: state.financingTerm,
         scope: { countryCode: cc, industry: state.industry },
       });
     } catch {
       return [];
     }
-  }, [selMains, selCompares, state.granularity, dataStart, dataEnd, state.currency, state.agg, cc, state.industry, configVersion]);
+  }, [selMains, selCompares, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, cc, state.industry, configVersion]);
   const span = useMemo(() => seriesSpanRange(selectionSeries), [selectionSeries]);
   const adaptiveBounds = useMemo(
     () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0) : null),
@@ -941,8 +948,8 @@ export default function VolumePrice() {
   };
 
   /** 「时间轴同步」开关（第119轮走查会；第148轮改名「时间轴同步」两行竖排；
-   *  2026-11-03 起主产品视图同款可见，语义两视图通用；2026-11-06 共享轴列退役后
-   *  移驻工具行呈现槽，合并单图态不渲染——合并图自带完整 X 轴）：
+   *  2026-11-03 起主产品视图同款可见，语义两视图通用；量价页与价格走势页一样
+   *  放在底部时间轴轨道左侧，合并单图态不渲染——合并图自带完整 X 轴）：
    *  同步 = 各图查看同一段时间，拖任一图的时间轴全部联动；非同步 = 各图时间
    *  范围独立调整（用于对齐不同上市节奏产品的可比区间） */
   const syncToggle = (
@@ -1143,12 +1150,16 @@ export default function VolumePrice() {
                           setDropTarget(null);
                         }}
                         style={reading ? {
-                          background: 'transparent',
+                          // 主产品与组内对比共用一块轻表面，价格、成本、销量和时间轨
+                          // 由同一边界收拢，避免每个数据层像独立卡片一样漂浮。
+                          background: color.canvasSoft,
                           padding: '0 12px',
                           position: 'relative',
                           // 内部 z 序（极差卡 z30 等）封在面板内：横滚时不越过 sticky 轴列
                           isolation: 'isolate',
                           minWidth: 0,
+                          borderTop: `1px solid ${color.hairline}`,
+                          borderBottom: `1px solid ${color.hairline}`,
                           borderLeft: panelIndex > 0 ? `1px solid ${color.hairline}` : undefined,
                         } : {
                           borderTop: `1px solid ${panelEdge}`,
@@ -1249,22 +1260,65 @@ export default function VolumePrice() {
                           onCrosshairYMove={setCrossY}
                           crosshairIdx={hoverIdxs[p.idx] ?? null} // 时间列联动（同步 = 全面板同列）
                           onCrosshairMove={onHoverOf(p.idx)}
-                          emptyHint={p.failed ? LOAD_ERROR_HINT : '该产品在所选时间范围内无数据'}
+                          emptyHint={p.failed
+                            ? LOAD_ERROR_HINT
+                            : cc === 'ZA'
+                              ? '南非运营商小册子暂无该产品的已发布月度数据'
+                              : '该产品在所选时间范围内无数据'}
                         />
                         {/* 本图时间轴（同步/非同步恒在，左右缘对齐面板绘图区）：
                             同步 = 全图查看同一段时间，拖任一条同步调整；非同步 = 各图独立调整。
-                            恒渲染保证切换同步只改联动行为，面板高度与轨道横向位置不变 */}
-                        <div style={{ margin: `0 ${panelPadX + GRID.right}px 6px ${panelPadX + gridLeft}px` }}>
-                          <PanelTimeTrack
-                            ids={domainIds}
-                            lo={filterBounds[0]}
-                            hi={filterBounds[1]}
-                            s={timeSynced ? win.s : ws}
-                            e={timeSynced ? win.e : we}
-                            granularity={state.granularity}
-                            onChange={timeSynced ? onWindowChange : onPanelWindowChange(p.idx)}
-                            onAdjusting={setAdjusting}
-                          />
+                            时间轴同步按钮放在首个面板的轴列槽位，轨道带中心与价格走势页
+                            对齐；其余面板保留同宽空槽，保证所有轨道的横向起点一致。 */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            borderTop: `1px solid ${color.hairline}`,
+                            paddingTop: 8,
+                            marginBottom: 6,
+                            minWidth: 0,
+                          }}
+                        >
+                          <div
+                            aria-hidden={panelIndex !== 0 || mergedOn}
+                            data-testid={panelIndex === 0 ? 'volume-time-sync-gutter' : undefined}
+                            style={{
+                              position: 'relative',
+                              flex: `0 0 ${panelPadX + gridLeft}px`,
+                              height: TRACK_BLOCK_H,
+                              minWidth: 0,
+                            }}
+                          >
+                            {!mergedOn && panelIndex === 0 && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  height: TRACK_RAIL_H,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {syncToggle}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ flex: '1 1 auto', minWidth: 0, marginRight: panelPadX + GRID.right }}>
+                            <PanelTimeTrack
+                              ids={domainIds}
+                              lo={filterBounds[0]}
+                              hi={filterBounds[1]}
+                              s={timeSynced ? win.s : ws}
+                              e={timeSynced ? win.e : we}
+                              granularity={state.granularity}
+                              onChange={timeSynced ? onWindowChange : onPanelWindowChange(p.idx)}
+                              onAdjusting={setAdjusting}
+                            />
+                          </div>
                         </div>
                       </div>
                       );
@@ -1318,35 +1372,77 @@ export default function VolumePrice() {
     })()
     : new Map<string, ReactNode>();
 
-  // 销毛成本开关（2026-11-03 Eason 反馈：上移工具行、与齿轮/⋯ 同簇——
-  // 原位置在明细卡行左侧的轴列缩进里，独自占一行左侧留白且与齿轮不对齐）
+  // 销毛成本开关。成本层是模拟口径，采用显式图层名称 + 模拟徽标，
+  // 保留在工具簇里方便随全局图表设置一起发现；激活态用琥珀语义色区分。
   const marginCtl = (
     <button
       type="button"
+      data-testid="volume-margin-toggle"
       aria-pressed={marginOn}
       aria-label={marginOn ? '隐藏销毛成本' : '显示销毛成本'}
       aria-disabled={marginLocked || undefined}
       title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：价格层叠成本面积，悬停看销毛率；点击关闭' : '显示销毛成本：价格层叠成本面积，悬停看销毛率'}
       onClick={toggleMargin}
       style={{
-        height: 24,
-        padding: '0 8px',
+        height: 30,
+        padding: '0 10px',
         border: `1px solid ${marginOn ? color.link : color.hairline}`,
         borderRadius: radius.control,
-        background: marginOn ? selectSoft : color.canvas,
+        background: marginOn ? color.warningSoft : color.canvas,
         color: marginLocked ? color.mute : marginOn ? selectSoftInk : color.body,
         font: 'inherit',
-        fontSize: 11,
+        fontSize: fontSize.caption,
         fontWeight: 600,
-        lineHeight: '22px',
+        lineHeight: '18px',
         cursor: marginLocked ? 'not-allowed' : 'pointer',
         whiteSpace: 'nowrap',
         opacity: marginLocked ? 0.55 : 1,
         flexShrink: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
       }}
     >
-      销毛成本
+      <span aria-hidden style={{ width: 7, height: 7, borderRadius: radius.pill, background: marginOn ? color.warning : color.hairlineStrong, flexShrink: 0 }} />
+      <span>成本与销毛</span>
+      <span
+        aria-hidden
+        style={{
+          padding: '0 4px',
+          borderRadius: radius.pill,
+          color: color.warningInk,
+          background: color.warningSoft,
+          border: `1px solid ${color.warning}`,
+          fontSize: 10,
+          lineHeight: '14px',
+          fontWeight: 600,
+        }}
+      >
+        模拟
+      </span>
     </button>
+  );
+
+  // A 版图层说明：全局说明价格、可选成本和销量的视觉角色，具体数值仍由各面板内标题承载。
+  const volumeLayerLegend = (
+    <div
+      data-testid="volume-layer-legend"
+      aria-label="量价图层说明"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0, flexShrink: 1, color: color.mute, fontSize: 11, whiteSpace: 'nowrap' }}
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <i aria-hidden style={{ width: 16, height: 3, borderRadius: radius.pill, background: brandColorOf('HUAWEI') }} />
+        价格
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, opacity: marginOn ? 1 : 0.55 }}>
+        <i aria-hidden style={{ width: 12, height: 8, borderRadius: 2, background: marginOn ? 'rgba(199, 0, 11, 0.12)' : color.hairline, border: `1px solid ${marginOn ? 'rgba(199, 0, 11, 0.28)' : color.hairlineStrong}` }} />
+        成本 · 模拟
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <i aria-hidden style={{ width: 8, height: 9, borderRadius: 2, background: 'rgba(199, 0, 11, 0.22)' }} />
+        销量 · 模拟
+      </span>
+    </div>
   );
 
   return (
@@ -1390,6 +1486,7 @@ export default function VolumePrice() {
                   yCompress={yCompress}
                   onYCompress={setYCompress}
                   lineShape={lineShape}
+                  lineShapeDefault="smooth"
                   onLineShape={setLineShape}
                   priceTypes={state.priceTypes}
                   onPriceTypeToggle={setPriceType}
@@ -1404,9 +1501,8 @@ export default function VolumePrice() {
                        原列位）；「全部恢复」并入收纳区。组视图不出（暂存条行为不变） */
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                       {marginCtl}
-                      {/* 「时间轴同步」（共享轴列退役后移驻工具行，紧随销毛成本）：
-                          合并单图自带完整 X 轴，开关随轴列一并隐藏 */}
-                      {!mergedOn && syncToggle}
+                      <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
+                      {volumeLayerLegend}
                       {reading && vaultItems.length > 0 && (
                         <>
                           <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
@@ -1613,34 +1709,6 @@ export default function VolumePrice() {
                       </div>
                     )}
                   </div>
-                </div>
-              );
-            })()}
-            {/* 补充图（2026-11-03 Eason 复盘：销毛成本已由成本柱模式在主面板承担，
-                独立销毛图撤下——组件保留给量价预测页；库存 · DOS 独立图全宽呈现，
-                跟随全窗口口径（与顶部摘要一致），不进面板横滚轨道 */}
-            {(() => {
-              const own = panelViews.find((p) => p.spec.isOwn && !hiddenSet.has(p.spec.key));
-              if (!own || domainIds.length === 0) return null;
-              // X 轴标签（2026-11-05 整改3 审计修正）：改传 shortBucketLabel 日历格式
-              //（周 = 2026W33、月 = MM、季 = Qn，与主图/价格走势页同源）——原传
-              // bucket.xLabel（周 = 周三 MM-DD）与量价图轴格式不一致
-              const labels = buckets.map((b) => shortBucketLabel(state.granularity, b.id));
-              const ownVolumes = summaryVolumes[own.idx] ?? [];
-              return (
-                <div style={{ marginTop: space.xs, marginBottom: space.sm }}>
-                  <InventoryDosCard
-                    name={own.name}
-                    bucketLabels={labels}
-                    points={inventoryDemoOf({
-                      modelId: own.spec.modelId,
-                      romram: own.spec.romram,
-                      countryCode: cc,
-                      granularity: state.granularity,
-                      bucketIds: domainIds,
-                      volumes: ownVolumes,
-                    })}
-                  />
                 </div>
               );
             })()}

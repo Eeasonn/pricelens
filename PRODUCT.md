@@ -87,14 +87,14 @@ PriceLens 面向品牌方内部的价格操盘和经营分析，不是面向公�
 
 ### 数据范围
 
-- 国家维表 29 国，当前启用 24 国；产业覆盖手机、平板、穿戴、音频、PC、IoT。
-- 当前批次覆盖 499 个型号、1,121 个 SKU，时间范围为 2026-W19 至 2026-W42，共 24 周。
-- 事实表包含 84,841 行周度平台价；默认产品、国家、平台和时间范围以应用当前状态为准。
+- 国家维表 29 国，当前启用 25 国；产业覆盖手机、平板、穿戴、音频、PC、IoT。
+- 当前批次覆盖 557 个型号、1,253 个 SKU，时间范围为 2026-W19 至 2026-W45，共 27 周。
+- 事实表包含 95,946 行周度平台价；默认产品、国家、平台和时间范围以应用当前状态为准。
 
 ## Evidence on Hand
 
 - The repository contains the current React and TypeScript implementation, shared runtime tokens, chart models, tests, and the generated offline single-file build.
-- The current data batch contains 29 countries in the dimension table, 24 enabled countries, 1,121 SKUs, and 84,841 weekly platform-price facts.
+- The current data batch contains 29 countries in the dimension table, 25 enabled countries, 1,253 SKUs, and 95,946 weekly platform-price facts spanning 2026-W19 to 2026-W45.
 - Existing product, UX, roadshow, and research documents are available as historical decision records. Roadshow and recording assets are evidence of exploration, not formal product entry points or visual authority.
 - Evidence quality is incomplete by design: some intelligence and forecast surfaces are simulated or mixed and must carry an explicit status label. There are no approved customer testimonials or public consumer research materials in the current product evidence set.
 

@@ -4,7 +4,7 @@
 // + ≤3 对比；空对同样 ≤3 对比，见 COMPARES_PER_CARD_CAP），卡数上限 8。含自动
 // 匹配填充、v10/v11 持久化迁移、勾选组工具。UI 与 FiltersContext 共用；不持有状态。
 // ============================================================
-import { dimProduct } from '../data';
+import { dimProduct, factPriceMonthly } from '../data';
 import type { DimProduct } from '../dataModel/types';
 import type { MainProduct, ProductSelection } from './filtersTypes';
 // 类型再导出（2026-11-05）：PriceTrendSearch 等调用方从本模块取 MainProduct，
@@ -72,13 +72,27 @@ export function isHuaweiModel(modelId: string): boolean {
  *  整配置口径（buildSeries 会展开该配置全部颜色行），配置在该国有行即有效；
  *  非空则任一颜色 SKU 在目标国存在才算有效。 */
 export function selectionValidFor(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): boolean {
-  return dimProduct.some(
+  const productRows = dimProduct.filter(
     (p) => p.model_id === sel.modelId
       && p.industry === industry
       && p.countries.includes(countryCode)
       && norm(p.romram) === norm(sel.romram)
       && (sel.skuIds.length === 0 || sel.skuIds.includes(p.sku_id)),
   );
+  if (!productRows.length) return false;
+  if (countryCode !== 'ZA') return true;
+  const selectedSkuIds = new Set(productRows.map((p) => p.sku_id));
+  const modelName = productRows[0].model_name.trim().toLowerCase();
+  return factPriceMonthly.some((row) => row.review_status === 'PASS'
+    && row.price_type !== 'no-price'
+    && ((row.sku_id != null && selectedSkuIds.has(row.sku_id))
+      || (row.sku_id == null
+        && row.model?.trim().toLowerCase() === modelName
+        && norm(row.sku_spec ?? '') === norm(sel.romram))));
+}
+
+function selectionHasMonthlyPrice(sel: ProductSelection, countryCode: string): boolean {
+  return countryCode !== 'ZA' || selectionValidFor(sel, countryCode, dimProduct.find((p) => p.model_id === sel.modelId)?.industry ?? 'phone');
 }
 
 /** 主分析卡列表整体是否仍属于该国该产业（任一主品失效即 false，与旧 own 判定同语义） */
@@ -131,6 +145,7 @@ export function normalizeSelectionForCountry(sel: ProductSelection, countryCode:
  *  同一共享规则——否则跨国防型号重映射 spread 残留源国每线 shop，计算落地
  *  两个口径。 */
 function remapSelectionForCountryIterate(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): ProductSelection | null {
+  if (!selectionHasMonthlyPrice(sel, countryCode)) return null;
   const modelInCountry = dimProduct.some(
     (p) => p.model_id === sel.modelId && p.industry === industry && p.countries.includes(countryCode),
   );
@@ -226,6 +241,7 @@ function firstLegalSelectionOfModelStable(modelId: string, countryCode: string):
  *  - 配置整体不在目标国但型号仍在 → 同型号该国首个合法配置（颜色尽量沿用
  *    同色名，缺失回落最低价色）；型号整体缺席 = null（调用方回落默认）。 */
 function remapSelectionForCountryStable(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): ProductSelection | null {
+  if (!selectionHasMonthlyPrice(sel, countryCode)) return null;
   const configRows = dimProduct.filter(
     (p) => p.model_id === sel.modelId
       && p.industry === industry

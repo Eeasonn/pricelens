@@ -59,15 +59,18 @@ function productSeries(state: FiltersState, cards: MainProduct[]) {
   });
   const unique = [...new Map(groups.map((group) => [`${group.modelId}__${compact(group.romram)}`, group])).values()];
   if (!unique.length) return [];
-  const range = weekRangeOf(state);
+  const range = state.granularity === 'week'
+    ? weekRangeOf(state)
+    : { start: state.rangeStart, end: state.rangeEnd };
   return buildSeries({
     scope: { countryCode: state.countryCode, industry: state.industry },
     groups: unique,
-    granularity: 'week',
+    granularity: state.granularity,
     startBucket: range.start,
     endBucket: range.end,
     currency: state.currency,
     agg: state.agg,
+    financingTerm: state.financingTerm,
   });
 }
 

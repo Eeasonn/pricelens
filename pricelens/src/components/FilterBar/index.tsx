@@ -31,8 +31,10 @@ import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
 import TimeBox from './TimeBox';
 import GranularityBox from './GranularityBox';
+import MarketDataProfileControl from './MarketDataProfileControl';
 import ProductPickerFlyout from '../ProductPicker/ProductPickerModal';
 import { useFilters } from '../../state/FiltersContext';
+import { marketDataProfileOf } from '../../dataModel/marketProfile';
 import { usePage } from '../../state/PageContext';
 import { STABLE } from '../../appChannel';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
@@ -316,6 +318,8 @@ export default function FilterBar({
   showPlatform?: boolean;
 } = {}) {
   const { page } = usePage();
+  const { state } = useFilters();
+  const marketProfile = marketDataProfileOf(state.countryCode);
   return (
     <div style={{ padding: `${space.md}px ${space.lg}px 0` }}>
       <ConfigProvider theme={filterBarTheme}>
@@ -336,7 +340,7 @@ export default function FilterBar({
                 渲染条件：量价走势页恒渲染；稳定版价格走势页也渲染（价格页全局
                 平台化由 PriceTrend 侧 STABLE 门控实现，Eason 2026-11-05 复检
                 拍板「先只针对稳定版」）；迭代版价格页保留每线平台模型不渲染 */}
-            {(page === 'volume' || STABLE) && (
+            {(page === 'volume' || STABLE) && !marketProfile.granularityLocked && (
               <>
                 <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
                 <div style={{ flexShrink: 0, width: 188 }}><Field label="平台"><PlatformSelectBox /></Field></div>
@@ -349,16 +353,21 @@ export default function FilterBar({
             </div>
             {showTime && (
               <>
-                <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-                {/* 粒度常驻（2026-11-04 Eason）：币种右侧直接可切，时间簇收窄让位 */}
-                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={labelStyle}>粒度</span>
-                  <GranularityBox />
-                </div>
-                <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+                {!marketProfile.granularityLocked && (
+                  <>
+                    <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+                    {/* 粒度常驻（2026-11-04 Eason）：币种右侧直接可切，时间簇收窄让位 */}
+                    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={labelStyle}>粒度</span>
+                      <GranularityBox />
+                    </div>
+                    <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
+                  </>
+                )}
                 <TimeBox />
               </>
             )}
+            <MarketDataProfileControl />
           </div>
           {/* R7-M1：稳定版平台口径归一说明（店铺级展开/非法剔除的 provenance），
               有平台筛选的页面在筛选卡内常驻展示；迭代版不渲染 */}

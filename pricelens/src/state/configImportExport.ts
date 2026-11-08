@@ -18,9 +18,22 @@ import { APP_CHANNEL, type AppChannel } from '../appChannel';
 import { canEditConfig } from '../access/role';
 import { ANOMALY_CUSTOM_MAX, ANOMALY_CUSTOM_MIN, type AnomalyMark } from '../dataModel/anomaly';
 import type { DimBenchmark } from '../dataModel/types';
+import type { FinancingTerm } from '../dataModel/marketProfile';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 
 export const CONFIG_SNAPSHOT_SCHEMA_VERSION = 1;
+
+export interface MarketDataRuleConfig {
+  countryCode: string;
+  sourceKind: 'ecommerce-weekly' | 'operator-booklet-monthly';
+  granularity: 'week' | 'month' | 'quarter';
+  fixedPlatform: string | null;
+  financingTerms: FinancingTerm[];
+  includePrepaid: boolean;
+  includeNoPrice: boolean;
+  enabled: boolean;
+  note: string | null;
+}
 
 /** 快照 keys 的五个必含配置键 + 可选 fx；null = 无人工配置（导入时恢复默认） */
 export interface ConfigSnapshotKeys {
@@ -29,6 +42,7 @@ export interface ConfigSnapshotKeys {
   defaultShop: Record<string, string> | null;
   anomalyRule: { enabled: boolean; thresholdPct: number } | null;
   anomalyMarks: AnomalyMark[] | null;
+  marketRules?: MarketDataRuleConfig[] | null;
   /** 汇率只读展示的历史键（LPL3.config.fx）：单值（旧口径）或 币种 → 汇率 表 */
   fx: Record<string, number> | number | null;
 }
@@ -56,9 +70,11 @@ export interface ImportPreviewSummary {
   benchmarkByCountry: { countryCode: string; count: number }[];
   prevGenCount: number;
   defaultShopCount: number;
+  defaultShopProductCount: number;
   anomalyRule: { enabled: boolean; thresholdPct: number } | null;
   anomalyMarkCount: number;
   fxIncluded: boolean;
+  marketRuleCount: number;
 }
 
 export interface ImportApplyResult {
@@ -103,6 +119,7 @@ export function exportConfigSnapshot(): ConfigSnapshotV1 {
       defaultShop: (readRaw(LPL.cfgDefaultShop) as Record<string, string> | null) ?? null,
       anomalyRule: (readRaw(LPL.cfgAnomalyRule) as ConfigSnapshotKeys['anomalyRule']) ?? null,
       anomalyMarks: (readRaw(LPL.cfgAnomalyMarks) as AnomalyMark[] | null) ?? null,
+      marketRules: (readRaw(LPL.cfgMarketRules) as MarketDataRuleConfig[] | null) ?? null,
       fx: (readRaw(LPL.cfgFx) as ConfigSnapshotKeys['fx']) ?? null,
     },
   };
@@ -244,6 +261,49 @@ function validateFx(raw: unknown, out: ConfigSnapshotKeys): string | null {
   return null;
 }
 
+function validateMarketRules(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  if (raw == null) {
+    out.marketRules = null;
+    return null;
+  }
+  if (!Array.isArray(raw)) return 'marketRules（市场采集规则）必须是数组';
+  const seen = new Set<string>();
+  const rules: MarketDataRuleConfig[] = [];
+  for (const [index, value] of raw.entries()) {
+    if (!isPlainObject(value)) return `marketRules 第 ${index + 1} 行不是对象`;
+    const countryCode = value.countryCode;
+    const sourceKind = value.sourceKind;
+    const granularity = value.granularity;
+    if (!isNonEmptyString(countryCode)) return `marketRules 第 ${index + 1} 行缺少 countryCode`;
+    if (sourceKind !== 'ecommerce-weekly' && sourceKind !== 'operator-booklet-monthly') return `marketRules 第 ${index + 1} 行 sourceKind 不合法`;
+    if (granularity !== 'week' && granularity !== 'month' && granularity !== 'quarter') return `marketRules 第 ${index + 1} 行 granularity 不合法`;
+    if (seen.has(countryCode)) return `marketRules 存在重复国家 ${countryCode}`;
+    seen.add(countryCode);
+    const terms = value.financingTerms;
+    if (!Array.isArray(terms) || terms.some((term) => term !== 24 && term !== 36) || new Set(terms).size !== terms.length) {
+      return `marketRules 第 ${index + 1} 行 financingTerms 必须是 24/36 的不重复数组`;
+    }
+    if (typeof value.includePrepaid !== 'boolean' || typeof value.includeNoPrice !== 'boolean' || typeof value.enabled !== 'boolean') {
+      return `marketRules 第 ${index + 1} 行 includePrepaid/includeNoPrice/enabled 必须是布尔值`;
+    }
+    if (value.fixedPlatform != null && typeof value.fixedPlatform !== 'string') return `marketRules 第 ${index + 1} 行 fixedPlatform 类型不对`;
+    if (value.note != null && typeof value.note !== 'string') return `marketRules 第 ${index + 1} 行 note 类型不对`;
+    rules.push({
+      countryCode,
+      sourceKind,
+      granularity,
+      fixedPlatform: value.fixedPlatform == null || value.fixedPlatform === '' ? null : value.fixedPlatform,
+      financingTerms: [...terms] as FinancingTerm[],
+      includePrepaid: value.includePrepaid,
+      includeNoPrice: value.includeNoPrice,
+      enabled: value.enabled,
+      note: value.note == null || value.note === '' ? null : value.note,
+    });
+  }
+  out.marketRules = rules;
+  return null;
+}
+
 /** 全量校验导入内容：通过返回规整后的快照；失败返回友好错误（不写任何键） */
 export function validateImportPayload(raw: unknown): ImportValidationResult {
   if (!isPlainObject(raw)) return invalid('文件内容不是 JSON 对象');
@@ -255,13 +315,13 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
   if (!isPlainObject(raw.keys)) return invalid('keys（配置内容）缺失或不是对象');
 
   const keys = raw.keys;
-  const known = ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks', 'fx'];
+  const known = ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks', 'marketRules', 'fx'];
   for (const k of Object.keys(keys)) {
     if (!known.includes(k)) return invalid(`keys 含未知配置项 ${k}（本版本不支持，已拒绝整份导入）`);
   }
 
   const out: ConfigSnapshotKeys = {
-    benchmark: null, prevGen: null, defaultShop: null, anomalyRule: null, anomalyMarks: null, fx: null,
+    benchmark: null, prevGen: null, defaultShop: null, anomalyRule: null, anomalyMarks: null, marketRules: null, fx: null,
   };
   for (const required of ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks'] as const) {
     if (!Object.prototype.hasOwnProperty.call(keys, required)) {
@@ -275,6 +335,7 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
     () => validateDefaultShop(keys.defaultShop, out),
     () => validateAnomalyRule(keys.anomalyRule, out),
     () => validateAnomalyMarks(keys.anomalyMarks, out),
+    () => validateMarketRules(keys.marketRules, out),
     () => validateFx(keys.fx, out),
   ];
   for (const check of checks) {
@@ -312,6 +373,7 @@ export function summarizeImportPayload(payload: ConfigSnapshotV1): ImportPreview
     const cc = r.country_code ?? '—';
     byCountry.set(cc, (byCountry.get(cc) ?? 0) + 1);
   }
+  const defaultShopKeys = payload.keys.defaultShop ? Object.keys(payload.keys.defaultShop) : [];
   return {
     exportedAt: payload.exportedAt,
     appChannel: payload.appChannel,
@@ -320,10 +382,12 @@ export function summarizeImportPayload(payload: ConfigSnapshotV1): ImportPreview
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([countryCode, count]) => ({ countryCode, count })),
     prevGenCount: payload.keys.prevGen ? Object.keys(payload.keys.prevGen).length : 0,
-    defaultShopCount: payload.keys.defaultShop ? Object.keys(payload.keys.defaultShop).length : 0,
+    defaultShopCount: defaultShopKeys.filter((key) => !key.includes('::')).length,
+    defaultShopProductCount: defaultShopKeys.filter((key) => key.includes('::')).length,
     anomalyRule: payload.keys.anomalyRule ? { ...payload.keys.anomalyRule } : null,
     anomalyMarkCount: payload.keys.anomalyMarks?.length ?? 0,
     fxIncluded: payload.keys.fx != null,
+    marketRuleCount: payload.keys.marketRules?.length ?? 0,
   };
 }
 
@@ -344,6 +408,7 @@ export function applyImportPayload(raw: ConfigSnapshotV1): ImportApplyResult {
   writeRaw(LPL.cfgDefaultShop, keys.defaultShop);
   writeRaw(LPL.cfgAnomalyRule, keys.anomalyRule);
   writeRaw(LPL.cfgAnomalyMarks, keys.anomalyMarks);
+  writeRaw(LPL.cfgMarketRules, keys.marketRules);
   writeRaw(LPL.cfgFx, keys.fx);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));

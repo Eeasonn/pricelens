@@ -79,7 +79,7 @@ describe('t428u R5-M1 · stable：Agent 趋势查询服从全局平台（与看�
     expect(chartPatch.platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
   });
 
-  it('AE NOON 跨国问 RU：归一 null → 全渠道自动（DNS 有价事实），补丁 null', async () => {
+  it('AE NOON 跨国问 RU：归一 null → 全渠道自动，补丁 null', async () => {
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'AE',
@@ -94,8 +94,8 @@ describe('t428u R5-M1 · stable：Agent 趋势查询服从全局平台（与看�
     const novaRow = table.rows.find((row) => row[0].includes('nova 14 Pro'));
     expect(novaRow).toBeDefined();
     expect(novaRow![1]).not.toBe('—');
-    // 自动态口径徽标 = 最新有价周实际平台（RU nova 数据事实为 DNS），不是 OZON
-    expect(novaRow![3]).toBe('DNS');
+    // 自动态口径徽标 = 最新有价周实际平台，随新批次事实变化
+    expect(novaRow![3]).toBe('OZON');
     const patch = openActionOf(chart, '回看板定位').target!.filterPatch!;
     expect(patch.platform).toBeNull();
     expect(patch.countryCode).toBe('RU');

@@ -9,7 +9,7 @@ import { dimChannel, dimProduct, dimTime, factPriceWeekly } from '../../data';
 import { buildPlatformCompare, platformOrderOf } from '../platformCompare';
 
 // HUAWEI nova 14 12+256 GB：RU 有 DNS / OZON / Mvideo 多平台真实行，覆盖 22 个采数周
-// （MVM 与 M.Video 业务确认为同一平台，2026-10-27 起源表归并为 Mvideo）
+  // （MVM 与 M.Video 业务确认为同一平台，源表归并为 Mvideo）
 const ownSku = dimProduct.find((p) => p.sku_id === 'own-huawei-nova-14__12-256gb__black')!;
 const modelId = ownSku.model_id;
 const romram = ownSku.romram;
@@ -45,7 +45,7 @@ describe('buildPlatformCompare', () => {
   it('每平台线 = fact 直算的该平台真实最低价（首/中/末三周抽核，USD）', () => {
     const res = buildPlatformCompare(modelId, romram, [ownSku.sku_id], 'usd', CC);
     expect(res.weeks.length).toBeGreaterThan(10); // nova 14 全程在采：22 个可比周
-    expect(res.weeks.length).toBe(22);
+    expect(res.weeks.length).toBe(24);
     for (const idx of [0, Math.floor(res.weeks.length / 2), res.weeks.length - 1]) {
       const wk = res.weeks[idx].weekId;
       for (const s of res.series) {
@@ -58,8 +58,8 @@ describe('buildPlatformCompare', () => {
   it('真实口径：平台无该周数据 = null 点（不再有因子兜底价），且确有平台缺采', () => {
     const res = buildPlatformCompare(modelId, romram, [ownSku.sku_id], 'usd', CC);
     const nullCounts = res.series.map((s) => s.points.filter((p) => p == null).length);
-    // 锚 SKU 实况：DNS 全程在采；OZON 缺 9 周；Mvideo 仅早期零星有价
-    expect(nullCounts).toEqual([0, 9, 16]);
+    // 新批次实况：DNS 全程在采；OZON 缺 10 周；Mvideo 仅早期零星有价
+    expect(nullCounts).toEqual([0, 10, 18]);
     // null 与 fact 对齐：点为 null ⇔ 该周该平台无价行
     res.series.forEach((s) => {
       s.points.forEach((p, i) => {
@@ -85,10 +85,10 @@ describe('buildPlatformCompare', () => {
     const last = res.weeks[res.weeks.length - 1];
     expect(res.latest!.weekId).toBe(last.weekId);
     expect(res.latest!.label).toMatch(/^\d{2}-\d{2}$/);
-    // 末周（202642）只有 DNS 有价 → 高低同平台、价差 0
+    // 新批次末周同时有 DNS 与 OZON，读数按事实价差返回
     expect(res.latest!.high.platform).toBe('DNS');
-    expect(res.latest!.low.platform).toBe('DNS');
-    expect(res.latest!.gapPct).toBe(0);
+    expect(res.latest!.low.platform).toBe('OZON');
+    expect(res.latest!.gapPct).toBeGreaterThan(0);
     expect(res.latest!.high.price).toBe(Math.round(minPlatformPrice(last.weekId, 'DNS', 'usd')!));
     // 有多平台并存的历史周：高低价与手工 min/max 一致（202640：OZON 258.62 < DNS 339.37，无固定平台序）
     const dns = minPlatformPrice('202640', 'DNS', 'usd')!;

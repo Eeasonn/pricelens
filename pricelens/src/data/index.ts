@@ -14,6 +14,7 @@ import type {
   DimRegion,
   DimTier,
   DimTime,
+  FactPriceMonthly,
   FactPriceWeekly,
 } from '../dataModel/types';
 import regionJson from './dim_region.json';
@@ -25,6 +26,8 @@ import promoJson from './dim_promo.json';
 import benchmarkJson from './dim_benchmark.json';
 import tierJson from './dim_tier.json';
 import packB64 from './fact_pack_gzip.b64.txt?raw';
+import { marketDataProfileOf } from '../dataModel/marketProfile';
+import monthlyJson from './fact_price_monthly.json';
 
 export const dimRegion = regionJson as unknown as DimRegion[];
 export const dimProduct = productJson as unknown as DimProduct[];
@@ -92,8 +95,26 @@ function decodePack(pack: FactPack): FactPriceWeekly[] {
   return out;
 }
 
-export const factPriceWeekly: FactPriceWeekly[] = decodePack(
+const decodedFactPriceWeekly = decodePack(
   JSON.parse(strFromU8(gunzipSync(b64ToBytes(packB64.trim())))) as FactPack,
+);
+
+/**
+ * The weekly package is the visible source only for markets whose profile is
+ * explicitly ready for weekly e-commerce facts. ZA legacy Takealot rows stay
+ * in the compressed input for auditability and remain out of every runtime
+ * consumer because ZA uses the monthly operator-booklet fact model.
+ */
+export const factPriceWeekly: FactPriceWeekly[] = decodedFactPriceWeekly.filter((row) => {
+  const profile = marketDataProfileOf(row.country_code);
+  return profile.sourceKind === 'ecommerce-weekly' && profile.evidenceStatus === 'ready';
+});
+
+/** Published monthly facts. Only PASS rows emitted by the ZA publish workflow enter the runtime bundle. */
+export const factPriceMonthly = (monthlyJson as unknown as FactPriceMonthly[]).filter(
+  (row) => row.country_code === 'ZA'
+    && marketDataProfileOf(row.country_code).sourceKind === 'operator-booklet-monthly'
+    && row.review_status === 'PASS',
 );
 
 /** 币种 → 最新月份汇率（本币 / USD）；未知币种回 1（即视为 USD） */

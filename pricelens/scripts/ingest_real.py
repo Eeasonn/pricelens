@@ -65,7 +65,8 @@ REGION_TABLE = [
     ("EURASIA", "欧亚", "RU", "R国", 29),
 ]
 INDUSTRY_OF_CAT = {"smartphone": "phone", "tablet": "tablet", "wearable": "wearable",
-                   "earbuds": "audio", "iot": "iot", "pc": "pc"}
+                   "wearables": "wearable", "smartphones": "phone", "earbud": "audio",
+                   "earbuds": "audio", "iot": "iot", "pc": "pc", "personal computer": "pc"}
 INDUSTRY_OF_CN = {"手机": "phone", "平板": "tablet", "穿戴": "wearable", "音频": "audio"}
 TIER_LADDERS = {
     "phone": [200, 400, 600, 800, 1000],
@@ -77,7 +78,8 @@ TIER_LADDERS = {
 }
 PLATFORM_ALIASES = {
     "mercadolibre": "Mercado Libre", "amazon méxico": "Amazon", "amazon mexico": "Amazon",
-    "amazon.sa": "Amazon", "amazon tr": "Amazon", "mediamarkt tr": "MediaMarkt",
+    "mercadolivre": "Mercado Libre", "amazon.sa": "Amazon", "amazon tr": "Amazon",
+    "amazon.de": "Amazon", "amazon.com.tr": "Amazon", "mediamarkt tr": "MediaMarkt",
     "vatan bilgisayar": "Vatan",
     # 业务确认 MVM 与 M.Video 为同一平台（源表两名义互串），统一归并为 Mvideo（2026-10-27）
     "m.video": "Mvideo", "m video": "Mvideo", "mvm": "Mvideo",
@@ -130,7 +132,53 @@ GUESS_TOKENS = ["tag heuer", "apple", "iphone", "ipad", "samsung", "galaxy", "xi
 # ---------------------------------------------------------------- 基础工具
 def fold(s):
     """NFKD 折叠并去掉组合音标（vívoactive → vivoactive）。"""
-    return "".join(c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c))
+    if s is None or (isinstance(s, float) and pd.isna(s)):
+        s = ""
+    return "".join(c for c in unicodedata.normalize("NFKD", str(s)) if not unicodedata.combining(c))
+
+
+def normalize_source_columns(df):
+    """将交付表的双语表头统一为管线使用的中文字段名。
+
+    采集团队的新合并表会把英文别名放在中文表头后的换行中，例如
+    ``时间周期\\nperiod``。保留第一段中文名可以让旧版规则继续工作，
+    同时兼容直接提供中文列名或已经清洗过的历史文件。
+    """
+    renames = {}
+    for col in df.columns:
+        base = str(col).split("\\n", 1)[0].strip()
+        if base and base != col:
+            renames[col] = base
+    if renames:
+        df = df.rename(columns=renames)
+    # 旧交付偶尔使用“商品型号/规格”等同义列名。只补齐不存在的标准名，
+    # 不覆盖同一文件中已经存在的标准列。
+    aliases = {
+        "品类": ["类别", "品类名称"],
+        "型号": ["商品型号", "型号名称"],
+        "型号规格": ["规格", "商品规格"],
+        "国家/地区": ["国家地区", "国家", "地区"],
+        "平台": ["电商平台", "渠道平台"],
+        "店铺类型": ["渠道类型"],
+        "店铺名称": ["卖家名称"],
+        "显示店铺名称": ["展示店铺名称"],
+        "时间周期": ["周期", "日期"],
+        "采集时间": ["抓取时间", "采集日期"],
+    }
+    for canonical, candidates in aliases.items():
+        if canonical in df.columns:
+            continue
+        source = next((candidate for candidate in candidates if candidate in df.columns), None)
+        if source:
+            df = df.rename(columns={source: canonical})
+    required = ["时间周期", "品类", "品牌", "型号", "型号规格", "平台", "国家/地区",
+                "店铺类型", "店铺名称", "显示店铺名称", "平台建议零售价-本币",
+                "平台成交价-本币", "货币", "汇率", "是否组合销售", "分期付款",
+                "促销政策", "网址链接", "截图命名", "采集时间"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"输入表缺少必要字段：{', '.join(missing)}")
+    return df
 
 
 def sval(v):
@@ -296,7 +344,9 @@ def parse_romram(industry, spec):
             size, color = ms.group(1) + "mm", ms.group(2).strip() or "—"
         variant = " ".join(sorted({c.title().replace("Gps", "GPS").replace("Lte", "LTE") for c in conns} | set(techs)))
         disp = " ".join(x for x in [size, variant] if x) or "—"
-        return disp, disp.replace(" ", "").lower(), title_color(color) if color != "—" else "—"
+        # 无配置的穿戴设备统一使用 std 配置键。仅有颜色的行（例如 Black）
+        # 也不能生成 x，与缺规格行拆成两个“同配置”键。
+        return disp, ("std" if disp == "—" else disp.replace(" ", "").lower()), title_color(color) if color != "—" else "—"
     if industry == "pc":
         cpu = re.search(r"^(.*?)\s*\|", s)
         ram = re.search(r"RAM:\s*(\d+)", s, re.I)
@@ -561,20 +611,28 @@ def main():
     # ---------- 1. 载入事实源（主表 + incoming 增量） ----------
     files = [args.xlsx] + sorted(glob.glob(os.path.join(args.incoming, "*.xlsx")))
     frames = []
+    source_tabs = []
     for fp in files:
-        df = pd.read_excel(fp, sheet_name="全量数据")
+        workbook = pd.ExcelFile(fp)
+        if "全量数据" not in workbook.sheet_names:
+            raise ValueError(f"输入文件缺少事实源页签「全量数据」：{fp}")
+        source_tabs.append(f"{os.path.basename(fp)}：{', '.join(workbook.sheet_names)}")
+        df = workbook.parse("全量数据")
+        df = normalize_source_columns(df)
         df["__src"] = os.path.basename(fp)
         frames.append(df)
     raw = pd.concat(frames, ignore_index=True)
     n_raw = len(raw)
     log["notes"].append(f"输入文件 {len(files)} 个，原始行 {n_raw:,}")
+    log["notes"].append("事实源仅读取页签「全量数据」；其余页签保留为证据，不进入事实包")
+    log["notes"].extend(f"源文件页签：{tabs}" for tabs in source_tabs)
 
     raw = raw[raw["型号"].notna() & (raw["型号"].astype(str).str.strip() != "")].copy()
     log["dropped"]["无型号"] = n_raw - len(raw)
 
     raw["品牌"] = raw["品牌"].astype(str).str.strip().str.upper()
     raw["品类"] = raw["品类"].astype(str).str.strip()
-    raw["行业"] = raw["品类"].str.lower().map(INDUSTRY_OF_CAT)
+    raw["行业"] = raw["品类"].map(lambda value: INDUSTRY_OF_CAT.get(fold(value).strip().lower()))
     n_nocat = int(raw["行业"].isna().sum())
     # 品类按 (品牌, 归一键) 多数票修正（含缺品类行与错标行）
     raw["nkey0"] = [normkey(b, m) for b, m in zip(raw["品牌"], raw["型号"].astype(str))]

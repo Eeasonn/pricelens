@@ -399,9 +399,10 @@ export default function PriceTrend(props: {
       endBucket: dataEnd,
       currency: state.currency,
       agg: state.agg,
+      financingTerm: state.financingTerm,
       scope: { countryCode: state.countryCode, industry: state.industry },
     }),
-    [mainSels, compareSels, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry],
+    [mainSels, compareSels, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, state.countryCode, state.industry],
   );
 
   // 取数异常 ≠ 空态（第一百八十五轮，外部 UX 审计）：异常不再静默回落空数组
@@ -757,6 +758,7 @@ export default function PriceTrend(props: {
           endBucket: dataEnd,
           currency: state.currency,
           agg: state.agg,
+          financingTerm: state.financingTerm,
           scope: { countryCode: state.countryCode, industry: state.industry },
         });
       } catch {
@@ -764,7 +766,7 @@ export default function PriceTrend(props: {
       }
       return { key: card.id, card, series, failed };
     });
-  }, [splitActive, effMains, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.countryCode, state.industry, configVersion]);
+  }, [splitActive, effMains, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, state.countryCode, state.industry, configVersion]);
 
   // 各面板生效窗口：同步 = 全面板共用共享窗口；独立 = 面板自己的窗口
   //（未单独调整过回落共享窗口，越界钳回可调全域并保住最小窗口跨度）
@@ -1518,6 +1520,7 @@ export default function PriceTrend(props: {
         endBucket,
         currency: state.currency,
         agg: state.agg,
+        financingTerm: state.financingTerm,
         scope: { countryCode: state.countryCode, industry: state.industry },
       });
     } catch {
@@ -2013,7 +2016,11 @@ export default function PriceTrend(props: {
                         onCrosshairMove={onPanelHoverOf(p.key)}
                         crosshairY={splitCrossY} // 第一百一十四轮：横向虚线跨全部面板
                         onCrosshairYMove={setSplitCrossY}
-                        emptyHint={p.failed ? LOAD_ERROR_HINT : '该配置在所选时间范围内无数据'}
+                        emptyHint={p.failed
+                          ? LOAD_ERROR_HINT
+                          : state.countryCode === 'ZA'
+                            ? '南非运营商小册子暂无该产品的已发布月度数据'
+                            : '该配置在所选时间范围内无数据'}
                       />
                       {/* 本图时间轴：每张分离面板底部各自一条（同步 = 拖任一条全面板
                           联动；独立 = 只调本图）。左右缘对齐绘图区 = 卡片内边距 + 图内
@@ -2117,7 +2124,9 @@ export default function PriceTrend(props: {
                 ? LOAD_ERROR_HINT
                 : visSeries.length > 0 && chartSeries.length === 0
                   ? '所有产品已隐藏，点击上方产品名恢复显示'
-                  : undefined
+                  : state.countryCode === 'ZA'
+                    ? '南非运营商小册子暂无所选产品的已发布月度数据'
+                    : undefined
             }
           />
         </div>

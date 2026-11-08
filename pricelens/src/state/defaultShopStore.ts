@@ -1,17 +1,14 @@
 // ============================================================
-// 各国默认平台店铺覆盖（第一百三十五轮）：配置页「默认平台店铺」维护，
-// cc → channel_id（平台+店铺口径的默认取数点）。
-// 未配置的国家回落维表口径：dim_region.default_platform 的全部渠道内最低价
-// （effectiveChannelIds 的默认分支）。独立小模块：aggregate 取数层与配置页
-// 都要读它，避免 configStore ↔ aggregate 循环引用。
-// 读缓存：defaultChannelOf 在 aggregate 每次取价都会走到（预警全订阅扫描 =
-// 订阅数 × 周数线性放大），每次读盘 + JSON.parse 不划算——解析结果按模块缓存，
-// 保存写入与 CONFIG_CHANGED_EVENT 广播时失效（跨页签改配置的场景靠广播兜底）。
+// 默认平台店铺覆盖：支持国家级与我司产品级两层配置。
+// 国家级覆盖沿用 LPL3.config.defaultShop 的 cc → channel_id 结构。
+// 产品级覆盖使用 `${countryCode}::${modelId}` → channel_id，优先于国家级。
+// 未配置的国家/产品回落维表预填主店，再回默认平台。
 // ============================================================
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { canEditConfig } from '../access/role';
 
-export type DefaultShopOverrides = Record<string, string>; // countryCode → channel_id
+export const PRODUCT_DEFAULT_SHOP_SEPARATOR = '::';
+export type DefaultShopOverrides = Record<string, string>;
 
 let cachedMap: DefaultShopOverrides | null = null;
 
@@ -36,25 +33,50 @@ export function getDefaultShopOverrides(): DefaultShopOverrides {
   return readMap();
 }
 
-/** 某国配置的默认平台店铺（channel_id）；未配置返回 null */
-export function defaultShopOverrideOf(countryCode: string): string | null {
-  return readMap()[countryCode] ?? null;
+export function productDefaultShopKey(countryCode: string, modelId: string): string {
+  return `${countryCode}${PRODUCT_DEFAULT_SHOP_SEPARATOR}${modelId}`;
 }
 
-/** 保存默认店铺覆盖表。2026-11-06 RBAC：查阅者角色写为 no-op（UI 已门控，
- *  此处为纵深防御——缓存不失效，读取口径不变）。 */
+/** 某产品在某国配置的默认店铺；未配置产品级时返回 null。 */
+export function productDefaultShopOverrideOf(countryCode: string, modelId: string): string | null {
+  return readMap()[productDefaultShopKey(countryCode, modelId)] ?? null;
+}
+
+/** 某国配置的默认平台店铺（channel_id）；未配置返回 null。 */
+export function defaultShopOverrideOf(countryCode: string, modelId?: string): string | null {
+  const map = readMap();
+  if (modelId) {
+    const product = map[productDefaultShopKey(countryCode, modelId)];
+    if (product) return product;
+  }
+  return map[countryCode] ?? null;
+}
+
+/** 保存默认店铺覆盖表。查阅者角色写为 no-op。 */
 export function saveDefaultShopOverrides(map: DefaultShopOverrides): void {
   if (!canEditConfig()) return;
   try {
     localStorage.setItem(LPL.cfgDefaultShop, JSON.stringify(map));
   } catch {
-    // 隐私模式等写入失败：静默（配置仅在当次会话内由调用方状态兜底）
+    // 隐私模式等写入失败时，调用方仍保持当次会话状态。
   }
-  cachedMap = null; // 以实际落盘内容为准，下次读取重建缓存
+  cachedMap = null;
 }
 
-// 配置保存广播 → 缓存失效（含别的页签/入口直接改盘后广播的场景）。
-// 模块加载即挂、重复加载天然幂等；无 window 的环境（SSR/测试）跳过
+/** 写入或清除某个国家×产品的默认店铺。 */
+export function saveProductDefaultShop(countryCode: string, modelId: string, channelId: string | null): void {
+  const map = { ...getDefaultShopOverrides() };
+  const key = productDefaultShopKey(countryCode, modelId);
+  if (channelId) map[key] = channelId;
+  else delete map[key];
+  saveDefaultShopOverrides(map);
+}
+
+/** 当前配置中的产品级覆盖数量。 */
+export function countProductDefaultShopOverrides(map: DefaultShopOverrides = getDefaultShopOverrides()): number {
+  return Object.keys(map).filter((key) => key.includes(PRODUCT_DEFAULT_SHOP_SEPARATOR)).length;
+}
+
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener(CONFIG_CHANGED_EVENT, () => {
     cachedMap = null;

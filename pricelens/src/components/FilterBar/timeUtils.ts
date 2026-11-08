@@ -3,8 +3,9 @@
 // week = ISO 周（周三为锚），week_id = YYYYWW；month_id = YYYYMM；quarter_id = YYYYQn。
 // 优先以 dim_time（造数产物）为准；数据为空（集成前）时降级为纯日期算法 + spec 窗口常量。
 // ============================================================
-import { dimTime } from '../../data';
+import { dimTime, factPriceMonthly } from '../../data';
 import type { DimTime, Granularity } from '../../dataModel/types';
+import { getCurrentCountry } from '../../state/currentScope';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
@@ -139,7 +140,21 @@ export function computeTimeBounds(): TimeBounds {
     if (r.quarter_id < quarterMin) quarterMin = r.quarter_id;
     if (r.quarter_id > quarterMax) quarterMax = r.quarter_id;
   }
-  const dateMin = parseDate(min.week_start_date) ?? FALLBACK_BOUNDS.dateMin;
-  const dateMax = parseDate(max.week_wed_date) ?? FALLBACK_BOUNDS.dateMax;
+  const monthlyPeriods = factPriceMonthly
+    .filter((row) => row.country_code === getCurrentCountry())
+    .map((row) => row.period_id)
+    .sort();
+  if (monthlyPeriods.length) {
+    monthMin = monthlyPeriods[0];
+    monthMax = monthlyPeriods[monthlyPeriods.length - 1];
+    quarterMin = `${monthMin.slice(0, 4)}Q${Math.ceil(Number(monthMin.slice(4, 6)) / 3)}`;
+    quarterMax = `${monthMax.slice(0, 4)}Q${Math.ceil(Number(monthMax.slice(4, 6)) / 3)}`;
+  }
+  const dateMin = monthlyPeriods.length
+    ? new Date(Number(monthMin.slice(0, 4)), Number(monthMin.slice(4, 6)) - 1, 1)
+    : parseDate(min.week_start_date) ?? FALLBACK_BOUNDS.dateMin;
+  const dateMax = monthlyPeriods.length
+    ? new Date(Number(monthMax.slice(0, 4)), Number(monthMax.slice(4, 6)), 0)
+    : parseDate(max.week_wed_date) ?? FALLBACK_BOUNDS.dateMax;
   return { dateMin, dateMax, weekMin: min.week_id, weekMax: max.week_id, monthMin, monthMax, quarterMin, quarterMax };
 }

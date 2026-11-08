@@ -13,9 +13,10 @@
 //   轴上以虚线断轴符号表示；yPxOf 变分段线性映射（segs），ECharts 只负责画几何
 //   （数据喂归一化伪值 yNormOf，值轴隐藏），刻度线/标签/断轴符号/档位带全部 DOM 层绘制。
 // ============================================================
-import { dimTime } from '../../data';
+import { dimTime, factPriceMonthly } from '../../data';
 import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
 import { getFxRate } from '../../state/fx';
+import { getCurrentCountry } from '../../state/currentScope';
 
 // ---------------- 布局常量（Chart 的 grid 与 DOM 覆盖层共用） ----------------
 
@@ -888,6 +889,13 @@ export function dataBucketRange(g: Granularity): [string, string] {
     const v = r[f];
     if (lo == null || v < lo) lo = v;
     if (hi == null || v > hi) hi = v;
+  }
+  if (g === 'month') {
+    for (const row of factPriceMonthly) {
+      if (row.country_code !== getCurrentCountry()) continue;
+      if (lo == null || row.period_id < lo) lo = row.period_id;
+      if (hi == null || row.period_id > hi) hi = row.period_id;
+    }
   }
   return lo != null && hi != null ? [lo, hi] : ['000001', '999999'];
 }

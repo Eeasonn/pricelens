@@ -7,17 +7,21 @@
     "dev": "vite",
     "build": "vite build && node scripts/sync-single.mjs",
     "build:iterate": "VITE_APP_CHANNEL=iterate vite build",
+    "build:channels": "node scripts/build_channels.mjs",
     "preview": "vite preview",
     "agent-server": "node server/agent-server.mjs",
     "gen": "echo '[deprecated] 造数脚本已被真实数据接入取代：npm run ingest' && node scripts/gen-data.mjs",
     "typecheck": "tsc --noEmit",
     "verify": "node scripts/verify.mjs",
+    "verify:channels": "node scripts/verify_channels.mjs",
     "test": "vitest run",
     "design:check": "node scripts/design-check.mjs",
     "design:lint": "node scripts/design-lint.mjs",
     "design:detect": "node scripts/impeccable-detect.mjs",
     "check": "npm run design:check && npm run design:lint && npm run typecheck && npm run verify && npm run test && npm run build",
-    "ingest": "python3 scripts/ingest_real.py"
+    "ingest": "python3 scripts/ingest_real.py",
+    "ingest:za": "python3 scripts/ingest_za_booklet.py",
+    "review:za": "python3 scripts/review_za_booklet.py"
   },
   "dependencies": {
     "antd": "^5.21.0",

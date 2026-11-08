@@ -9,6 +9,7 @@
 //    （manual 优先 / dim_product auto 兜底），改后差异存 LPL3.config.prevGen
 // ② 汇率：只读——真实数据每行自带采集时汇率，USD 值按行折算；此处展示当前国家本币的月度中位汇率
 // ③ 大促日历：只读展示当前国家 dim_promo 的起始时间与促销深度——看板大促带/事件卡的口径来源
+// 默认店铺支持国家级与产品级两层覆盖，产品级使用 `${countryCode}::${modelId}` 键并优先生效。
 // 保存后 dispatchEvent(CONFIG_CHANGED_EVENT) → 主页立即生效
 // 第一百八十五轮（外部 UX 审计落地）：上一代关系「恢复默认」收窄为只清当前国家
 // 型号的人工维护（clearPrevGenOverridesForModels，其他国家原样保留）；默认平台
@@ -20,7 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties, ReactNode } from 'react';
 import { Button, Empty, Input, message, Modal, Popconfirm, Segmented, Select, Tag, Tooltip } from 'antd';
-import { DownloadOutlined, InfoCircleOutlined, UploadOutlined } from '@ant-design/icons';
+import { DownloadOutlined, FileExcelOutlined, InfoCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import PageHeader from '../components/PageHeader';
 import { setRole, useRole, type AccessRole } from '../access/role';
 import {
@@ -36,14 +37,19 @@ import {
   exportConfigSnapshot,
   parseConfigSnapshotText,
   summarizeImportPayload,
+  validateImportPayload,
   type ConfigSnapshotV1,
   type ImportPreviewSummary,
 } from '../state/configImportExport';
 import {
   defaultShopOverrideOf,
   getDefaultShopOverrides,
+  productDefaultShopKey,
+  productDefaultShopOverrideOf,
   saveDefaultShopOverrides,
+  saveProductDefaultShop,
 } from '../state/defaultShopStore';
+import { buildConfigTemplateXlsx, configTemplateFileName, parseConfigWorkbook } from '../state/configTemplate';
 import { currencyOfCountry, dimChannel, dimFx, dimProduct, dimPromo } from '../data';
 import { defaultPlatformOf, prefillDefaultChannelOf } from '../dataModel/aggregate';
 import { modelIdOf } from '../components/ProductCascader/tree';
@@ -60,6 +66,7 @@ interface PrevGenRow {
   modelId: string;
   label: string;
   launch: string;
+  industry: string;
 }
 
 /** 当前国家有数据的我司型号行（型号级去重，按首采日排序）——上一代关系维护用 */
@@ -71,7 +78,7 @@ function ownModelRows(countryCode: string): PrevGenRow[] {
     const modelId = modelIdOf(p);
     if (seen.has(modelId)) continue;
     seen.add(modelId);
-    rows.push({ modelId, label: p.model_name, launch: p.launch_date });
+    rows.push({ modelId, label: p.model_name, launch: p.launch_date, industry: p.industry });
   }
   return rows.sort((a, b) => a.launch.localeCompare(b.launch) || a.label.localeCompare(b.label));
 }
@@ -138,6 +145,7 @@ export default function Config() {
     const reread = (): void => {
       setPrevMap(Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])));
       setDefaultShopId(defaultShopOverrideOf(state.countryCode));
+      setDefaultShopVersion((v) => v + 1);
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, reread);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, reread);
@@ -187,8 +195,10 @@ export default function Config() {
   // 事实包统计的数据主店）。下拉显示「生效默认」= 覆盖 ?? 预填（与 aggregate.defaultChannelOf 回退链一致），
   // Tag 区分三态：人工覆盖 / 预填 / 维表默认（预填缺失兜底）。
   const [defaultShopId, setDefaultShopId] = useState<string | null>(() => defaultShopOverrideOf(state.countryCode));
+  const [defaultShopVersion, setDefaultShopVersion] = useState(0);
   useEffect(() => {
     setDefaultShopId(defaultShopOverrideOf(state.countryCode));
+    setDefaultShopVersion((v) => v + 1);
   }, [state.countryCode]);
   const prefillShopId = useMemo(() => prefillDefaultChannelOf(state.countryCode), [state.countryCode]);
   const prefillShop = useMemo(
@@ -227,6 +237,7 @@ export default function Config() {
     if (channelId) map[state.countryCode] = channelId;
     else delete map[state.countryCode];
     saveDefaultShopOverrides(map);
+    setDefaultShopVersion((v) => v + 1);
     notifyConfigChanged();
     message.success('默认平台店铺已保存，看板取价即时生效');
   };
@@ -237,6 +248,35 @@ export default function Config() {
     if (platform === defaultShopPlatform) return;
     const first = dimChannel.find((c) => c.country_code === state.countryCode && c.platform === platform);
     saveDefaultShop(first?.channel_id ?? null);
+  };
+
+  const countryShopOptions = useMemo(
+    () => dimChannel
+      .filter((c) => c.country_code === state.countryCode)
+      .sort((a, b) => a.platform.localeCompare(b.platform) || a.display_name.localeCompare(b.display_name))
+      .map((c) => ({ value: c.channel_id, label: `${c.platform} · ${c.display_name}` })),
+    [state.countryCode],
+  );
+  const productShopOverrideCount = useMemo(
+    () => prevRows.filter((row) => productDefaultShopOverrideOf(state.countryCode, row.modelId) != null).length,
+    [defaultShopVersion, prevRows, state.countryCode],
+  );
+
+  const saveProductShop = (modelId: string, channelId: string | null): void => {
+    if (!canEdit) return;
+    saveProductDefaultShop(state.countryCode, modelId, channelId);
+    setDefaultShopVersion((v) => v + 1);
+    notifyConfigChanged();
+    message.success('产品默认店铺已保存，看板取价即时生效');
+  };
+
+  const clearProductShops = (): void => {
+    const map = { ...getDefaultShopOverrides() };
+    for (const row of prevRows) delete map[productDefaultShopKey(state.countryCode, row.modelId)];
+    saveDefaultShopOverrides(map);
+    setDefaultShopVersion((v) => v + 1);
+    notifyConfigChanged();
+    message.success(`已清除${labels.country} ${productShopOverrideCount} 个产品默认店铺配置`);
   };
 
   // ---------------- 2026-11-06 导入/导出（快照 = LPL3.config.* 原始持久化值） ----------------
@@ -256,13 +296,29 @@ export default function Config() {
     message.success(`已导出配置快照（${link.download}）`);
   };
 
+  const onDownloadTemplate = (): void => {
+    const templateBytes = buildConfigTemplateXlsx();
+    const blob = new Blob([templateBytes.slice().buffer as ArrayBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = configTemplateFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+    message.success(`已下载配置表模板（${link.download}）`);
+  };
+
   const onImportFilePicked = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = event.target.files?.[0];
     event.target.value = ''; // 允许重复选择同一文件
     if (!file) return;
     try {
-      const text = await file.text();
-      const result = parseConfigSnapshotText(text);
+      const isWorkbook = /\.xlsx?$/i.test(file.name) || file.type.includes('spreadsheet');
+      const result = isWorkbook
+        ? validateImportPayload(parseConfigWorkbook(new Uint8Array(await file.arrayBuffer())))
+        : parseConfigSnapshotText(await file.text());
       if (!result.ok || !result.payload) {
         message.error(`导入失败：${result.error ?? '文件不合法'}`);
         return;
@@ -301,6 +357,14 @@ export default function Config() {
     return `共 ${summary.benchmarkTotal} 条（${head}${tail}）`;
   };
 
+  const defaultShopPreviewText = (summary: ImportPreviewSummary): string => {
+    const parts = [
+      summary.defaultShopCount > 0 ? `${summary.defaultShopCount} 国` : '',
+      summary.defaultShopProductCount > 0 ? `${summary.defaultShopProductCount} 个产品` : '',
+    ].filter(Boolean);
+    return parts.length ? `${parts.join('、')}人工配置` : '无人工配置 → 恢复系统默认';
+  };
+
   return (
     <div style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }} data-lpl-scroll>
       {/* 第二十八轮：1440 → 1280，与看板同最低宽度 */}
@@ -328,7 +392,7 @@ export default function Config() {
                 allowClear
                 size="small"
                 aria-label="配置搜索"
-                placeholder="搜索上一代关系型号"
+                placeholder="搜索型号或产品"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 style={{ width: 190 }}
@@ -353,6 +417,9 @@ export default function Config() {
                 </Tooltip>
               </span>
               {/* 导入仅 GTM（applyImportPayload 内另有角色校验）；导出 GTM/查阅者皆可 */}
+              <Button size="small" icon={<FileExcelOutlined />} onClick={onDownloadTemplate}>
+                下载配置表模板
+              </Button>
               {canEdit && (
                 <Button size="small" icon={<UploadOutlined />} onClick={() => fileInputRef.current?.click()}>
                   导入配置
@@ -364,7 +431,7 @@ export default function Config() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json,application/json"
+                accept=".xlsx,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 hidden
                 aria-label="选择配置快照文件"
                 onChange={onImportFilePicked}
@@ -407,23 +474,43 @@ export default function Config() {
             id="default-shop"
             title="默认平台店铺"
             extra={
-              <Popconfirm
-                title="清除后回到预填/平台默认，确定？"
-                okText="确定"
-                cancelText="取消"
-                okButtonProps={{ size: 'small' }}
-                cancelButtonProps={{ size: 'small' }}
-                disabled={!canEdit}
-                onConfirm={() => saveDefaultShop(null)}
-              >
-                <Button
-                  size="small"
-                  disabled={!canEdit || !defaultShopId}
-                  title={!canEdit ? viewerHint : defaultShopId ? undefined : '当前无人工配置'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Popconfirm
+                  title="清除国家级店铺后回到预填/平台默认，确定？"
+                  okText="确定"
+                  cancelText="取消"
+                  okButtonProps={{ size: 'small' }}
+                  cancelButtonProps={{ size: 'small' }}
+                  disabled={!canEdit}
+                  onConfirm={() => saveDefaultShop(null)}
                 >
-                  清除人工配置，回到{prefillShop ? '预填' : '平台默认'}
-                </Button>
-              </Popconfirm>
+                  <Button
+                    size="small"
+                    disabled={!canEdit || !defaultShopId}
+                    title={!canEdit ? viewerHint : defaultShopId ? undefined : '当前无国家级人工配置'}
+                  >
+                    清除国家级配置
+                  </Button>
+                </Popconfirm>
+                <Popconfirm
+                  title={`清除${labels.country} ${productShopOverrideCount} 个产品的人工店铺配置？`}
+                  description="清除后所有产品回到国家级默认店铺"
+                  okText="确定"
+                  cancelText="取消"
+                  okButtonProps={{ size: 'small' }}
+                  cancelButtonProps={{ size: 'small' }}
+                  disabled={!canEdit || productShopOverrideCount === 0}
+                  onConfirm={clearProductShops}
+                >
+                  <Button
+                    size="small"
+                    disabled={!canEdit || productShopOverrideCount === 0}
+                    title={!canEdit ? viewerHint : productShopOverrideCount ? undefined : '当前没有产品级人工配置'}
+                  >
+                    清除产品级配置
+                  </Button>
+                </Popconfirm>
+              </div>
             }
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
@@ -466,18 +553,70 @@ export default function Config() {
             </div>
             {/* 长说明收进 Tooltip（2026-11-06 密度整理）：正文只留一句回退链 */}
             <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: space.sm, lineHeight: '18px', display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-              <span>未在筛选条选择平台时，看板取「自动」价 = 每周最低在架价：默认店铺 → 预填主店 → 默认平台。改动即时生效。</span>
+              <span>国家级默认店铺适用于该国未单独配置的我司产品；产品级配置优先于国家级，未配置时回到国家级 → 预填主店 → 默认平台。</span>
               <Tooltip
                 title={
-                  <div style={{ maxWidth: 340 }}>
-                    <div>· 各国默认店铺已按事实数据预填（默认平台内数据最全的主店）；</div>
-                    <div>· 此处改动即人工覆盖，清除后回到预填；</div>
+                  <div style={{ maxWidth: 360 }}>
+                    <div>· 国家级店铺按国家统一生效；</div>
+                    <div>· 产品级店铺按当前国家逐产品覆盖，适合不同产品分属不同平台的场景；</div>
+                    <div>· 清除产品级配置后回到国家级配置；清除国家级配置后回到预填主店；</div>
                     <div>· 「平台价差」预警按该国全部平台计算，不受默认店铺影响。</div>
                   </div>
                 }
               >
                 <InfoCircleOutlined aria-label="默认店铺取价完整说明" style={{ fontSize: 11, color: color.mute, cursor: 'help' }} />
               </Tooltip>
+            </div>
+            <div style={{ marginTop: space.lg, borderTop: `1px solid ${color.hairline}`, paddingTop: space.md }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: space.sm, flexWrap: 'wrap', marginBottom: space.sm }}>
+                <div>
+                  <div style={{ fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink }}>按我司产品配置默认店铺</div>
+                  <div style={{ fontSize: fontSize.caption, color: color.mute, marginTop: 2 }}>当前国家共 {prevRows.length} 个我司产品。留空表示跟随国家级默认店铺。</div>
+                </div>
+                <Tag color={productShopOverrideCount ? 'blue' : undefined} style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>
+                  {productShopOverrideCount ? `${productShopOverrideCount} 个产品已覆盖` : '全部跟随国家级'}
+                </Tag>
+              </div>
+              <div style={{ maxHeight: 460, overflow: 'auto', border: `1px solid ${color.hairline}`, borderRadius: radius.control }}>
+                <div style={{ minWidth: 640 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) 90px minmax(250px, 1fr) 110px', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px`, background: color.canvasSoft2, borderBottom: `1px solid ${color.hairline}`, fontSize: fontSize.caption, color: color.mute, position: 'sticky', top: 0, zIndex: 1 }}>
+                    <span>我司产品</span><span>产业</span><span>生效默认店铺</span><span>配置状态</span>
+                  </div>
+                  {visiblePrevRows.map((row) => {
+                    const override = productDefaultShopOverrideOf(state.countryCode, row.modelId);
+                    const fallbackId = defaultShopOverrideOf(state.countryCode);
+                    const effectiveId = override ?? fallbackId ?? prefillShopId;
+                    const effective = dimChannel.find((c) => c.channel_id === effectiveId);
+                    return (
+                      <div key={`default-shop-${row.modelId}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.4fr) 90px minmax(250px, 1fr) 110px', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px`, borderBottom: `1px solid ${color.hairline}`, minHeight: 48 }}>
+                        <Tooltip title={`${row.label}（${row.modelId}）`}>
+                          <span style={{ color: color.ink, fontSize: fontSize.bodySm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</span>
+                        </Tooltip>
+                        <span style={{ color: color.mute, fontSize: fontSize.caption }}>{row.industry}</span>
+                        <Select
+                          size="small"
+                          allowClear
+                          showSearch
+                          optionFilterProp="label"
+                          aria-label={`默认店铺：${row.label}`}
+                          disabled={!canEdit}
+                          placeholder={effective ? `${effective.platform} · ${effective.display_name}` : '跟随国家级默认'}
+                          value={override ?? undefined}
+                          options={countryShopOptions}
+                          onChange={(value) => saveProductShop(row.modelId, value ?? null)}
+                          style={{ width: '100%' }}
+                        />
+                        {override ? (
+                          <Tag color="blue" style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px', width: 'fit-content' }}>产品覆盖</Tag>
+                        ) : (
+                          <Tag style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px', width: 'fit-content' }}>跟随国家级</Tag>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {normalizedSearch && <div style={{ marginTop: space.sm, fontSize: fontSize.caption, color: color.mute }}>搜索同时筛选上一代关系和产品默认店铺；清空搜索可恢复全部产品。</div>}
             </div>
           </Block>
 
@@ -684,9 +823,10 @@ export default function Config() {
                 {previewRow('上一代关系', pendingImport.summary.prevGenCount > 0
                   ? `${pendingImport.summary.prevGenCount} 个型号人工维护`
                   : '无人工维护 → 恢复系统默认')}
-                {previewRow('默认店铺', pendingImport.summary.defaultShopCount > 0
-                  ? `${pendingImport.summary.defaultShopCount} 国人工配置`
-                  : '无人工配置 → 恢复系统默认')}
+                {previewRow('默认店铺', defaultShopPreviewText(pendingImport.summary))}
+                {previewRow('市场采集规则', pendingImport.summary.marketRuleCount > 0
+                  ? `${pendingImport.summary.marketRuleCount} 个国家`
+                  : '无配置 → 使用系统默认口径')}
                 {previewRow('异常守卫', pendingImport.summary.anomalyRule
                   ? pendingImport.summary.anomalyRule.enabled
                     ? `开启（阈值 ≥${pendingImport.summary.anomalyRule.thresholdPct}%）`

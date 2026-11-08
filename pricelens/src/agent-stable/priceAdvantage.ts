@@ -34,11 +34,12 @@ function stateGroups(state: FiltersState, platformOverride?: string | null): Ser
       isOwn: ownSelection(selection),
       platform: platformOverride ? { platforms: [platformOverride], shopIds: [], seller: null } : selection.platform ? { platforms: selection.platform.platforms, shopIds: selection.platform.shopIds, seller: selection.platform.seller } : null,
     })),
-    granularity: 'week',
+    granularity: state.granularity,
     startBucket: state.rangeStart,
     endBucket: state.rangeEnd,
     currency: state.currency,
     agg: state.agg,
+    financingTerm: state.financingTerm,
   };
 }
 

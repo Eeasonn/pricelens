@@ -77,20 +77,20 @@ function seedConfig(): void {
 }
 
 function clearAllConfig(): void {
-  for (const key of [LPL.cfgBenchmark, LPL.cfgPrevGen, LPL.cfgDefaultShop, LPL.cfgAnomalyRule, LPL.cfgAnomalyMarks, LPL.cfgFx]) {
+  for (const key of [LPL.cfgBenchmark, LPL.cfgPrevGen, LPL.cfgDefaultShop, LPL.cfgAnomalyRule, LPL.cfgAnomalyMarks, LPL.cfgMarketRules, LPL.cfgFx]) {
     window.localStorage.removeItem(key);
   }
 }
 
 describe('exportConfigSnapshot · shape', () => {
-  it('schemaVersion=1、exportedAt ISO、appChannel 对齐通道判定、keys 六键齐', () => {
+  it('schemaVersion=1、exportedAt ISO、appChannel 对齐通道判定、keys 配置齐全', () => {
     seedConfig();
     const snap = exportConfigSnapshot();
     expect(snap.schemaVersion).toBe(1);
     expect(snap.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     expect(snap.appChannel).toBe(APP_CHANNEL);
     expect(Object.keys(snap.keys).sort()).toEqual(
-      ['anomalyMarks', 'anomalyRule', 'benchmark', 'defaultShop', 'fx', 'prevGen'],
+      ['anomalyMarks', 'anomalyRule', 'benchmark', 'defaultShop', 'fx', 'marketRules', 'prevGen'],
     );
     // 导出 = 原始持久化值（种子即落盘内容）
     expect(snap.keys.benchmark).toEqual([benchRow]);
@@ -107,6 +107,7 @@ describe('exportConfigSnapshot · shape', () => {
     expect(snap.keys.defaultShop).toBeNull();
     expect(snap.keys.anomalyRule).toBeNull();
     expect(snap.keys.anomalyMarks).toBeNull();
+    expect(snap.keys.marketRules).toBeNull();
     expect(snap.keys.fx).toBeNull();
   });
 });
@@ -158,6 +159,19 @@ describe('validateImportPayload · 坏文件一律拒绝（不半写入）', () 
       keys: { ...base().keys, anomalyMarks: [{ countryCode: 'RU', seriesKey: 'k', bucketId: '202639', action: 'delete', ts: 1 }] },
     }).error).toContain('anomalyMarks');
     expect(validateImportPayload({ ...base(), keys: { ...base().keys, fx: { RUB: -1 } } }).error).toContain('fx');
+    expect(validateImportPayload({
+      ...base(),
+      keys: { ...base().keys, marketRules: [{ countryCode: 'ZA', sourceKind: 'operator-booklet-monthly', granularity: 'month', fixedPlatform: 'VODACOM SHOP', financingTerms: [18], includePrepaid: false, includeNoPrice: false, enabled: true, note: null }] },
+    }).error).toContain('financingTerms');
+  });
+
+  it('市场采集规则可导入并保持月度/期数语义', () => {
+    const res = validateImportPayload({
+      ...base(),
+      keys: { ...base().keys, marketRules: [{ countryCode: 'ZA', sourceKind: 'operator-booklet-monthly', granularity: 'month', fixedPlatform: 'VODACOM SHOP', financingTerms: [24, 36], includePrepaid: false, includeNoPrice: false, enabled: true, note: '待复核' }] },
+    });
+    expect(res.ok).toBe(true);
+    expect(res.payload?.keys.marketRules?.[0]).toMatchObject({ countryCode: 'ZA', financingTerms: [24, 36] });
   });
 
   it('好文件（含全部键）通过校验', () => {

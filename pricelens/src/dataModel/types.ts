@@ -1,3 +1,5 @@
+import type { FinancingTerm } from './marketProfile';
+
 // ============================================================
 // §7 数据模型（星型模型）+ 图表取数契约类型
 // 2026-10-20 真实数据接入（多国 × 多产业 × 多币种）：
@@ -140,6 +142,37 @@ export interface FactPriceWeekly {
   crawl_status: 'ok';
 }
 
+/** 南非运营商小册子月度事实。仅 review_status = PASS 的行进入 published facts。 */
+export type MonthlyPriceType = 'installment' | 'prepaid' | 'no-price';
+export type MonthlyReviewStatus = 'PASS' | 'PENDING' | 'FAIL';
+export type MonthlyMatchStatus = 'matched-spec-complete' | 'matched-model' | 'unmatched' | 'pending-spec';
+
+export interface FactPriceMonthly {
+  offer_id: string;
+  period_id: string; // YYYYMM
+  country_code: string;
+  /** 发布阶段映射到 dim_product 的颜色级 SKU；staging 复核前可为空。 */
+  sku_id?: string | null;
+  platform: string;
+  store_type: StoreType;
+  brand: string | null;
+  model: string | null;
+  sku_spec: string | null;
+  price_type: MonthlyPriceType;
+  price_local: number | null;
+  currency: string;
+  fx_rate: number;
+  price_usd: number | null;
+  rrp_local: number | null;
+  term_months: 24 | 36 | null;
+  source_document: string;
+  source_page: string | number | null;
+  source_sha256: string | null;
+  review_status: MonthlyReviewStatus;
+  gate_reasons: string[];
+  match_status: MonthlyMatchStatus;
+}
+
 // ---------------- 图表取数契约（§7.3 显示层聚合口径的输出） ----------------
 
 export type Granularity = 'week' | 'month' | 'quarter';
@@ -247,6 +280,8 @@ export interface SeriesQuery {
   endBucket: string;
   currency: CurrencyMode;
   agg: AggMode; // 仅月/季生效
+  /** ZA monthly booklet facts require an explicit 24/36 term. */
+  financingTerm?: FinancingTerm | null;
   // 平台口径自第一百六十轮起下沉到每组（SkuGroupQuery.platform）——看板全局
   // 平台筛选退役（总览/预警仍用全局口径）
 }

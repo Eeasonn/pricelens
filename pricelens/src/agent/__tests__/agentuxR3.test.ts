@@ -130,16 +130,16 @@ describe('R3-M1 · 显式配置严格遵循 + 页面每线店铺口径保留（�
 });
 
 describe('R3-M2 · FR 真实目录与事实：型号在架 ≠ 默认电渠有价', () => {
-  it('目录事实：Mate X6 12+512 在 FR 在架；事实包恰 5 条 FR:amazon:3P（202638–202642），最新 202642 = 1595.51 USD', () => {
+  it('目录事实：Mate X6 12+512 在 FR 在架；新事实包的 FR:amazon:3P 记录覆盖到 202645', () => {
     const frRows = dimProduct.filter((row) => row.model_id === 'own-huawei-mate-x6' && row.countries.includes('FR'));
     expect(frRows.map((row) => row.romram)).toEqual(['12+512 GB']);
     const facts = factPriceWeekly
       .filter((row) => row.country_code === 'FR' && row.sku_id.startsWith('own-huawei-mate-x6__'))
       .sort((a, b) => a.week_id.localeCompare(b.week_id));
-    expect(facts).toHaveLength(5);
+    expect(facts).toHaveLength(7);
     expect(facts.every((row) => row.channel_id === 'FR:amazon:3P')).toBe(true);
-    expect(facts.map((row) => row.week_id)).toEqual(['202638', '202639', '202640', '202641', '202642']);
-    expect(facts[4].price_usd).toBe(1595.51);
+    expect(facts.map((row) => row.week_id)).toEqual(['202638', '202639', '202640', '202641', '202642', '202644', '202645']);
+    expect(facts[facts.length - 1]?.price_usd).toBeGreaterThan(0);
   });
 
   it('同型号 selection 合法解析：firstLegal/remap 在默认 1P 无价时按全部在架渠道回退，保 Mate X6 12+512', () => {

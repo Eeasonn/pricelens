@@ -39,7 +39,7 @@ DATA_SHEETS = ["全量数据", "未入全量与待复核", "不可采_没货"]
 # 平台归并：fold 折叠小写 → 规范名（与 ingest_real.PLATFORM_ALIASES 同口径）
 CANON = {
     "mvm": "Mvideo", "m.video": "Mvideo", "m video": "Mvideo",
-    "amazon": "Amazon", "amazon.sa": "Amazon", "amazon tr": "Amazon",
+    "amazon": "Amazon", "amazon.sa": "Amazon", "amazon tr": "Amazon", "amazon.de": "Amazon",
     "amazon mexico": "Amazon", "amazon méxico": "Amazon",
     "mediamarkt": "MediaMarkt", "mediamarkt tr": "MediaMarkt", "media markt": "MediaMarkt",
     "mercadolibre": "Mercado Libre", "mercado libre": "Mercado Libre",
@@ -71,7 +71,7 @@ PLACEHOLDERS = {"", "nan", "none", "unknown", "<na>", "<nat>", "店铺名未露�
 SHOP_CANON = {
     "amazon": "Amazon", "amazon.sa": "Amazon", "amazon sa": "Amazon",
     "amazon méxico": "Amazon", "amazon mexico": "Amazon",
-    "amazon.com.tr": "Amazon", "amazon tr": "Amazon", "amazon mx": "Amazon", "amazon_mx": "Amazon",
+    "amazon.com.tr": "Amazon", "amazon.de": "Amazon", "amazon tr": "Amazon", "amazon mx": "Amazon", "amazon_mx": "Amazon",
     "m.video": "Mvideo", "mvideo": "Mvideo",
     "mediamarkt": "MediaMarkt",
     "mercadolibre": "Mercado Libre", "mercado libre": "Mercado Libre",
@@ -91,6 +91,40 @@ def canon_of(platform):
     if platform is None or (not isinstance(platform, str) and pd.isna(platform)):
         return None
     return CANON.get(fold(platform).strip().lower())
+
+
+def normalize_source_columns(df):
+    """将双语交付表头归一为清洗规则使用的中文字段名。"""
+    renames = {}
+    for col in df.columns:
+        base = str(col).split("\n", 1)[0].strip()
+        if base and base != col:
+            renames[col] = base
+    if renames:
+        df = df.rename(columns=renames)
+    aliases = {
+        "品类": ["类别", "品类名称"],
+        "型号": ["商品型号", "型号名称"],
+        "型号规格": ["规格", "商品规格"],
+        "国家/地区": ["国家地区", "国家", "地区"],
+        "平台": ["电商平台", "渠道平台"],
+        "店铺类型": ["渠道类型"],
+        "店铺名称": ["卖家名称"],
+        "显示店铺名称": ["展示店铺名称"],
+        "时间周期": ["周期", "日期"],
+        "采集时间": ["抓取时间", "采集日期"],
+    }
+    for canonical, candidates in aliases.items():
+        if canonical in df.columns:
+            continue
+        source = next((candidate for candidate in candidates if candidate in df.columns), None)
+        if source:
+            df = df.rename(columns={source: canonical})
+    required = ["平台", "显示店铺名称", "店铺类型", "店铺名称"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"输入表缺少清洗所需字段：{', '.join(missing)}")
+    return df
 
 
 def clean_display(disp, platform_canon, store_type):
@@ -120,7 +154,7 @@ def clean_shop(shop):
 
 
 def clean_sheet(df, report, sheet):
-    df = df.copy()
+    df = normalize_source_columns(df.copy())
     pf = df["平台"].map(canon_of)
     in_family = pf.notna()
     report["平台归并"][sheet] = Counter(

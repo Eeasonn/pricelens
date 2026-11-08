@@ -669,7 +669,7 @@ function seriesQueryOf(state: FiltersState): SeriesQuery | null {
     platform: effectiveLinePlatform(selection, state.platform),
   }));
   if (!groups.length) return null;
-  return { scope: { countryCode: state.countryCode, industry: state.industry }, groups, granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg };
+  return { scope: { countryCode: state.countryCode, industry: state.industry }, groups, granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg, financingTerm: state.financingTerm };
 }
 
 /** 范围内的周序列（升序，按当前粒度的桶过滤）——平台比较「真实最近有价周」

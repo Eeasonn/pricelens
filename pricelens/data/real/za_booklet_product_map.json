@@ -1,0 +1,1672 @@
+{
+  "schema_version": "za-booklet-product-map-v1",
+  "generated_at": "2026-11-08T16:46:47+00:00",
+  "source_workbook": "1-ZA_VODACOM_manuals_2026-01_10_unified29_20261103.xlsx",
+  "rows": [
+    {
+      "brand": "APPLE",
+      "model": "Air Pods",
+      "model_id": "za-booklet-apple-airpods",
+      "sku_id": "za-booklet-apple-airpods__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "APPLE",
+      "model": "AirPods 4",
+      "model_id": "cmp-apple-airpods-4",
+      "sku_id": "cmp-apple-airpods-4__std__white",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-apple-airpods-4"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-airpods-4__std__white"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "MacBook Air M1",
+      "model_id": "za-booklet-apple-macbookairm1",
+      "sku_id": "za-booklet-apple-macbookairm1__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "APPLE",
+      "model": "Watch SERIES 11",
+      "model_id": "za-booklet-apple-watchseries11",
+      "sku_id": "za-booklet-apple-watchseries11__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-watch-series-11",
+        "za-booklet-apple-watchseries11"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-watch-series-11__42mm__titanium-gold-milanese",
+        "cmp-apple-watch-series-11__42mm__titanium-gold-pink",
+        "cmp-apple-watch-series-11__42mm__titanium-natural-grey",
+        "cmp-apple-watch-series-11__42mm__titanium-natural-milanese",
+        "cmp-apple-watch-series-11__42mm__titanium-slate-black",
+        "cmp-apple-watch-series-11__42mm__titanium-slate-milanese",
+        "cmp-apple-watch-series-11__42mmcellular__aluminium-black",
+        "cmp-apple-watch-series-11__42mmcellular__aluminium-black-black",
+        "cmp-apple-watch-series-11__42mmcellular__aluminium-grey-black",
+        "cmp-apple-watch-series-11__42mmcellular__aluminium-rose-gold-pink",
+        "cmp-apple-watch-series-11__42mmcellular__aluminium-silver-purple",
+        "cmp-apple-watch-series-11__42mmgps__aluminium-black",
+        "cmp-apple-watch-series-11__42mmgps__aluminium-black-black",
+        "cmp-apple-watch-series-11__42mmgps__aluminium-grey-black",
+        "cmp-apple-watch-series-11__42mmgps__aluminium-rose-gold-pink",
+        "cmp-apple-watch-series-11__42mmgps__aluminium-silver-purple",
+        "cmp-apple-watch-series-11__46mm__titanium-gold-milanese",
+        "cmp-apple-watch-series-11__46mm__titanium-gold-pink",
+        "cmp-apple-watch-series-11__46mm__titanium-natural-grey",
+        "cmp-apple-watch-series-11__46mm__titanium-natural-milanese",
+        "cmp-apple-watch-series-11__46mm__titanium-slate-black",
+        "cmp-apple-watch-series-11__46mm__titanium-slate-milanese",
+        "cmp-apple-watch-series-11__46mmcellular__aluminium-black",
+        "cmp-apple-watch-series-11__46mmcellular__aluminium-black-black",
+        "cmp-apple-watch-series-11__46mmcellular__aluminium-grey-black",
+        "cmp-apple-watch-series-11__46mmcellular__aluminium-rose-gold-pink",
+        "cmp-apple-watch-series-11__46mmcellular__aluminium-silver-purple",
+        "cmp-apple-watch-series-11__46mmgps__aluminium-black",
+        "cmp-apple-watch-series-11__46mmgps__aluminium-black-black",
+        "cmp-apple-watch-series-11__46mmgps__aluminium-grey-black",
+        "cmp-apple-watch-series-11__46mmgps__aluminium-rose-gold-pink",
+        "cmp-apple-watch-series-11__46mmgps__aluminium-silver-purple",
+        "za-booklet-apple-watchseries11__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPad A16",
+      "model_id": "za-booklet-apple-ipada16",
+      "sku_id": "za-booklet-apple-ipada16__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-ipad-a16",
+        "za-booklet-apple-ipada16"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-ipad-a16__11in5g6-128gb__x",
+        "cmp-apple-ipad-a16__11in5g6-256gb__x",
+        "cmp-apple-ipad-a16__11in5g6-512gb__x",
+        "cmp-apple-ipad-a16__11inwifi6-128gb__x",
+        "cmp-apple-ipad-a16__11inwifi6-256gb__x",
+        "cmp-apple-ipad-a16__11inwifi6-512gb__x",
+        "za-booklet-apple-ipada16__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPad Air M3",
+      "model_id": "za-booklet-apple-ipadairm3",
+      "sku_id": "za-booklet-apple-ipadairm3__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-ipad-air-m3",
+        "za-booklet-apple-ipadairm3"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-ipad-air-m3__11incellular8-128gb__x",
+        "cmp-apple-ipad-air-m3__11incellular8-1tb__x",
+        "cmp-apple-ipad-air-m3__11incellular8-256gb__x",
+        "cmp-apple-ipad-air-m3__11incellular8-512gb__x",
+        "cmp-apple-ipad-air-m3__11inwifi8-128gb__x",
+        "cmp-apple-ipad-air-m3__11inwifi8-1tb__x",
+        "cmp-apple-ipad-air-m3__11inwifi8-256gb__x",
+        "cmp-apple-ipad-air-m3__11inwifi8-512gb__x",
+        "cmp-apple-ipad-air-m3__13incellular8-128gb__x",
+        "cmp-apple-ipad-air-m3__13incellular8-1tb__x",
+        "cmp-apple-ipad-air-m3__13incellular8-256gb__x",
+        "cmp-apple-ipad-air-m3__13incellular8-512gb__x",
+        "cmp-apple-ipad-air-m3__13inwifi8-128gb__x",
+        "cmp-apple-ipad-air-m3__13inwifi8-1tb__x",
+        "cmp-apple-ipad-air-m3__13inwifi8-256gb__x",
+        "cmp-apple-ipad-air-m3__13inwifi8-512gb__x",
+        "za-booklet-apple-ipadairm3__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPad Air M4",
+      "model_id": "za-booklet-apple-ipadairm4",
+      "sku_id": "za-booklet-apple-ipadairm4__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-ipad-air-m4",
+        "za-booklet-apple-ipadairm4"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-ipad-air-m4__11inwifi12-128gb__x",
+        "cmp-apple-ipad-air-m4__11inwifi12-256gb__x",
+        "cmp-apple-ipad-air-m4__11inwifi8-128gb__x",
+        "cmp-apple-ipad-air-m4__11inwifi8-256gb__x",
+        "cmp-apple-ipad-air-m4__13inwifi12-128gb__x",
+        "cmp-apple-ipad-air-m4__13inwifi12-256gb__x",
+        "za-booklet-apple-ipadairm4__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPad Pro M5",
+      "model_id": "za-booklet-apple-ipadprom5",
+      "sku_id": "za-booklet-apple-ipadprom5__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-ipad-pro-m5",
+        "za-booklet-apple-ipadprom5"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-ipad-pro-m5__11incellular12-256gb__x",
+        "cmp-apple-ipad-pro-m5__11incellular12-512gb__x",
+        "cmp-apple-ipad-pro-m5__11incellular16-1tb__x",
+        "cmp-apple-ipad-pro-m5__11incellular16-1tbnano-textureglass__x",
+        "cmp-apple-ipad-pro-m5__11incellular16-2tbnano-textureglass__x",
+        "cmp-apple-ipad-pro-m5__11inwifi12-256gb__x",
+        "cmp-apple-ipad-pro-m5__11inwifi12-512gb__x",
+        "cmp-apple-ipad-pro-m5__11inwifi16-1tb__x",
+        "cmp-apple-ipad-pro-m5__11inwifi16-1tbnano-textureglass__x",
+        "cmp-apple-ipad-pro-m5__11inwifi16-2tbnano-textureglass__x",
+        "cmp-apple-ipad-pro-m5__13incellular12-256gb__x",
+        "cmp-apple-ipad-pro-m5__13incellular12-512gb__x",
+        "cmp-apple-ipad-pro-m5__13incellular16-1tb__x",
+        "cmp-apple-ipad-pro-m5__13incellular16-1tbnano-textureglass__x",
+        "cmp-apple-ipad-pro-m5__13incellular16-2tbnano-textureglass__x",
+        "cmp-apple-ipad-pro-m5__13inwifi12-256gb__x",
+        "cmp-apple-ipad-pro-m5__13inwifi12-512gb__x",
+        "cmp-apple-ipad-pro-m5__13inwifi16-1tb__x",
+        "cmp-apple-ipad-pro-m5__13inwifi16-1tbnano-textureglass__x",
+        "za-booklet-apple-ipadprom5__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone 13 128 GB",
+      "model_id": "za-booklet-apple-iphone13128gb",
+      "sku_id": "za-booklet-apple-iphone13128gb__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone 14",
+      "model_id": "cmp-apple-iphone-14",
+      "sku_id": "cmp-apple-iphone-14__4-256gb__midnight",
+      "romram": "4+256 GB",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-apple-iphone-14"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-iphone-14__4-256gb__midnight"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone 15",
+      "model_id": "za-booklet-apple-iphone15",
+      "sku_id": "za-booklet-apple-iphone15__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-iphone-15",
+        "za-booklet-apple-iphone15"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-iphone-15__8-128gb__black",
+        "cmp-apple-iphone-15__8-256gb__black",
+        "za-booklet-apple-iphone15__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone 16",
+      "model_id": "za-booklet-apple-iphone16",
+      "sku_id": "za-booklet-apple-iphone16__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-iphone-16",
+        "za-booklet-apple-iphone16"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-iphone-16__128gb__black",
+        "cmp-apple-iphone-16__256gb__pink",
+        "cmp-apple-iphone-16__512gb__pink",
+        "za-booklet-apple-iphone16__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone 16E",
+      "model_id": "za-booklet-apple-iphone16e",
+      "sku_id": "za-booklet-apple-iphone16e__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-iphone-16e",
+        "za-booklet-apple-iphone16e"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-iphone-16e__128gb__black",
+        "cmp-apple-iphone-16e__256gb__white",
+        "za-booklet-apple-iphone16e__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone 17",
+      "model_id": "za-booklet-apple-iphone17",
+      "sku_id": "za-booklet-apple-iphone17__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-iphone-17",
+        "za-booklet-apple-iphone17"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-iphone-17__8-256gb__black",
+        "cmp-apple-iphone-17__8-256gb__white",
+        "cmp-apple-iphone-17__8-512gb__black",
+        "za-booklet-apple-iphone17__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone 17 Pro",
+      "model_id": "za-booklet-apple-iphone17pro",
+      "sku_id": "za-booklet-apple-iphone17pro__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-iphone-17-pro",
+        "za-booklet-apple-iphone17pro"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-iphone-17-pro__12-1tb__black",
+        "cmp-apple-iphone-17-pro__12-1tb__blue",
+        "cmp-apple-iphone-17-pro__12-1tb__silver",
+        "cmp-apple-iphone-17-pro__12-256gb__blue",
+        "cmp-apple-iphone-17-pro__12-256gb__silver",
+        "cmp-apple-iphone-17-pro__12-2tb__blue",
+        "cmp-apple-iphone-17-pro__12-512gb__blue",
+        "cmp-apple-iphone-17-pro__12-512gb__silver",
+        "za-booklet-apple-iphone17pro__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone 17 Pro Max",
+      "model_id": "za-booklet-apple-iphone17promax",
+      "sku_id": "za-booklet-apple-iphone17promax__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-iphone-17-pro-max",
+        "za-booklet-apple-iphone17promax"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-iphone-17-pro-max__12-1tb__blue",
+        "cmp-apple-iphone-17-pro-max__12-1tb__silver",
+        "cmp-apple-iphone-17-pro-max__12-256gb__blue",
+        "cmp-apple-iphone-17-pro-max__12-256gb__silver",
+        "cmp-apple-iphone-17-pro-max__12-2tb__blue",
+        "cmp-apple-iphone-17-pro-max__12-2tb__silver",
+        "cmp-apple-iphone-17-pro-max__12-512gb__blue",
+        "cmp-apple-iphone-17-pro-max__12-512gb__silver",
+        "za-booklet-apple-iphone17promax__booklet"
+      ]
+    },
+    {
+      "brand": "APPLE",
+      "model": "iPhone Air",
+      "model_id": "za-booklet-apple-iphoneair",
+      "sku_id": "za-booklet-apple-iphoneair__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-apple-iphone-air",
+        "za-booklet-apple-iphoneair"
+      ],
+      "candidate_sku_ids": [
+        "cmp-apple-iphone-air__1tb__black",
+        "cmp-apple-iphone-air__1tb__gb-black",
+        "cmp-apple-iphone-air__256gb__black",
+        "cmp-apple-iphone-air__512gb__black",
+        "za-booklet-apple-iphoneair__booklet"
+      ]
+    },
+    {
+      "brand": "HONOR",
+      "model": "600",
+      "model_id": "za-booklet-honor-600",
+      "sku_id": "za-booklet-honor-600__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-honor-600",
+        "za-booklet-honor-600"
+      ],
+      "candidate_sku_ids": [
+        "cmp-honor-600__12-256gb__black",
+        "cmp-honor-600__12-512gb__black",
+        "cmp-honor-600__12-512gb__orange",
+        "cmp-honor-600__8-256gb__black",
+        "cmp-honor-600__8-256gb__orange",
+        "za-booklet-honor-600__booklet"
+      ]
+    },
+    {
+      "brand": "HONOR",
+      "model": "CHOICE Earbuds Clip",
+      "model_id": "za-booklet-honor-choiceearbudsclip",
+      "sku_id": "za-booklet-honor-choiceearbudsclip__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "CHOICE Earbuds X8i",
+      "model_id": "za-booklet-honor-choiceearbudsx8i",
+      "sku_id": "za-booklet-honor-choiceearbudsx8i__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "CHOICE Watch 2i",
+      "model_id": "za-booklet-honor-choicewatch2i",
+      "sku_id": "za-booklet-honor-choicewatch2i__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Choice Headphones",
+      "model_id": "za-booklet-honor-choiceheadphones",
+      "sku_id": "za-booklet-honor-choiceheadphones__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Earbuds Clip",
+      "model_id": "za-booklet-honor-earbudsclip",
+      "sku_id": "za-booklet-honor-earbudsclip__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Earbuds X7i",
+      "model_id": "za-booklet-honor-earbudsx7i",
+      "sku_id": "za-booklet-honor-earbudsx7i__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Magic Book X 14 i3",
+      "model_id": "za-booklet-honor-magicbookx14i3",
+      "sku_id": "za-booklet-honor-magicbookx14i3__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Magic V5",
+      "model_id": "za-booklet-honor-magicv5",
+      "sku_id": "za-booklet-honor-magicv5__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-honor-magic-v5",
+        "za-booklet-honor-magicv5"
+      ],
+      "candidate_sku_ids": [
+        "cmp-honor-magic-v5__12-512gb__black",
+        "cmp-honor-magic-v5__16-512gb__black",
+        "cmp-honor-magic-v5__16-512gb__dawn-gold",
+        "cmp-honor-magic-v5__16-512gb__gold",
+        "za-booklet-honor-magicv5__booklet"
+      ]
+    },
+    {
+      "brand": "HONOR",
+      "model": "Magic V6 5 G",
+      "model_id": "za-booklet-honor-magicv65g",
+      "sku_id": "za-booklet-honor-magicv65g__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Magic V6 valid from 1 September 2026 to 28 February 2027 HONOR Service Call Center",
+      "model_id": "za-booklet-honor-magicv6validfrom1september2026to28february2027honorservicecallcenter",
+      "sku_id": "za-booklet-honor-magicv6validfrom1september2026to28february2027honorservicecallcenter__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Magicbook X 14 i3 40 GB DATA 7",
+      "model_id": "za-booklet-honor-magicbookx14i340gbdata7",
+      "sku_id": "za-booklet-honor-magicbookx14i340gbdata7__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Pad X 7",
+      "model_id": "cmp-honor-pad-x7",
+      "sku_id": "cmp-honor-pad-x7__8-7inwifi4-128gb__x",
+      "romram": "8.7\" WiFi 4+128 GB",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-honor-pad-x7"
+      ],
+      "candidate_sku_ids": [
+        "cmp-honor-pad-x7__8-7inwifi4-128gb__x"
+      ]
+    },
+    {
+      "brand": "HONOR",
+      "model": "Pad X7 Wi-Fi",
+      "model_id": "za-booklet-honor-padx7wifi",
+      "sku_id": "za-booklet-honor-padx7wifi__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Pad X8A",
+      "model_id": "za-booklet-honor-padx8a",
+      "sku_id": "za-booklet-honor-padx8a__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-honor-pad-x8a",
+        "za-booklet-honor-padx8a"
+      ],
+      "candidate_sku_ids": [
+        "cmp-honor-pad-x8a__11inlte4-128gb__x",
+        "cmp-honor-pad-x8a__11inwifi4-128gb__x",
+        "za-booklet-honor-padx8a__booklet"
+      ]
+    },
+    {
+      "brand": "HONOR",
+      "model": "Pad X8B",
+      "model_id": "za-booklet-honor-padx8b",
+      "sku_id": "za-booklet-honor-padx8b__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-honor-pad-x8b",
+        "za-booklet-honor-padx8b"
+      ],
+      "candidate_sku_ids": [
+        "cmp-honor-pad-x8b__11inlte6-128gb__x",
+        "cmp-honor-pad-x8b__11inwifi4-128gb__x",
+        "cmp-honor-pad-x8b__11inwifi6-128gb__x",
+        "cmp-honor-pad-x8b__11inwifi8-128gb__x",
+        "za-booklet-honor-padx8b__booklet"
+      ]
+    },
+    {
+      "brand": "HONOR",
+      "model": "Watch 2",
+      "model_id": "za-booklet-honor-watch2",
+      "sku_id": "za-booklet-honor-watch2__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Watch 2i",
+      "model_id": "za-booklet-honor-watch2i",
+      "sku_id": "za-booklet-honor-watch2i__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "Watch 5 Ultra",
+      "model_id": "cmp-honor-watch-5-ultra",
+      "sku_id": "cmp-honor-watch-5-ultra__std__brown",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-honor-watch-5-ultra"
+      ],
+      "candidate_sku_ids": [
+        "cmp-honor-watch-5-ultra__std__brown"
+      ]
+    },
+    {
+      "brand": "HONOR",
+      "model": "Watch 6",
+      "model_id": "za-booklet-honor-watch6",
+      "sku_id": "za-booklet-honor-watch6__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-honor-watch-6",
+        "za-booklet-honor-watch6"
+      ],
+      "candidate_sku_ids": [
+        "cmp-honor-watch-6__std__black",
+        "cmp-honor-watch-6__std__brown",
+        "za-booklet-honor-watch6__booklet"
+      ]
+    },
+    {
+      "brand": "HONOR",
+      "model": "Watch X5i",
+      "model_id": "za-booklet-honor-watchx5i",
+      "sku_id": "za-booklet-honor-watchx5i__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "X5i",
+      "model_id": "za-booklet-honor-x5i",
+      "sku_id": "za-booklet-honor-x5i__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HONOR",
+      "model": "X7e",
+      "model_id": "za-booklet-honor-x7e",
+      "sku_id": "za-booklet-honor-x7e__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-honor-x7e",
+        "za-booklet-honor-x7e"
+      ],
+      "candidate_sku_ids": [
+        "cmp-honor-x7e__6-128gb__black",
+        "cmp-honor-x7e__6-256gb__black",
+        "za-booklet-honor-x7e__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Band 10",
+      "model_id": "own-huawei-band-10",
+      "sku_id": "own-huawei-band-10__std__black",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "own-huawei-band-10"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-band-10__std__black"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Band 11",
+      "model_id": "za-booklet-huawei-band11",
+      "sku_id": "za-booklet-huawei-band11__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-band-11",
+        "za-booklet-huawei-band11"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-band-11__std__black",
+        "own-huawei-band-11__std__black-polymer",
+        "own-huawei-band-11__std__white",
+        "za-booklet-huawei-band11__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Band 11 Pro",
+      "model_id": "own-huawei-band-11-pro",
+      "sku_id": "own-huawei-band-11-pro__std__black",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "own-huawei-band-11-pro"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-band-11-pro__std__black"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Fit 4 Pro",
+      "model_id": "za-booklet-huawei-fit4pro",
+      "sku_id": "za-booklet-huawei-fit4pro__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "FreeBuds SE 2",
+      "model_id": "za-booklet-huawei-freebudsse2",
+      "sku_id": "za-booklet-huawei-freebudsse2__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-freebuds-se-2",
+        "za-booklet-huawei-freebudsse2"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-freebuds-se-2__std__ceramic-white",
+        "own-huawei-freebuds-se-2__std__graphite-black",
+        "za-booklet-huawei-freebudsse2__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Freebuds SE",
+      "model_id": "za-booklet-huawei-freebudsse",
+      "sku_id": "za-booklet-huawei-freebudsse__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Freebuds SE 4",
+      "model_id": "za-booklet-huawei-freebudsse4",
+      "sku_id": "za-booklet-huawei-freebudsse4__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Mate XT",
+      "model_id": "za-booklet-huawei-matext",
+      "sku_id": "za-booklet-huawei-matext__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-mate-xt",
+        "za-booklet-huawei-matext"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-mate-xt__16-1tb__red",
+        "own-huawei-mate-xt__16-512gb__black",
+        "za-booklet-huawei-matext__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Pura 90s Pro",
+      "model_id": "za-booklet-huawei-pura90spro",
+      "sku_id": "za-booklet-huawei-pura90spro__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-pura-90s-pro",
+        "za-booklet-huawei-pura90spro"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-pura-90s-pro__12-256gb__black",
+        "own-huawei-pura-90s-pro__12-256gb__orange",
+        "own-huawei-pura-90s-pro__12-256gb__pink",
+        "own-huawei-pura-90s-pro__12-256gb__white",
+        "own-huawei-pura-90s-pro__12-512gb__black",
+        "own-huawei-pura-90s-pro__12-512gb__orange",
+        "own-huawei-pura-90s-pro__12-512gb__pink",
+        "own-huawei-pura-90s-pro__12-512gb__white",
+        "za-booklet-huawei-pura90spro__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Pura 90s Pro Max",
+      "model_id": "za-booklet-huawei-pura90spromax",
+      "sku_id": "za-booklet-huawei-pura90spromax__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-pura-90s-pro-max",
+        "za-booklet-huawei-pura90spromax"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-pura-90s-pro-max__12-256gb__black",
+        "own-huawei-pura-90s-pro-max__12-256gb__gold",
+        "own-huawei-pura-90s-pro-max__12-256gb__orange",
+        "own-huawei-pura-90s-pro-max__12-256gb__purple",
+        "own-huawei-pura-90s-pro-max__12-512gb__black",
+        "own-huawei-pura-90s-pro-max__12-512gb__gold",
+        "own-huawei-pura-90s-pro-max__12-512gb__orange",
+        "own-huawei-pura-90s-pro-max__12-512gb__purple",
+        "za-booklet-huawei-pura90spromax__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Watch 5",
+      "model_id": "za-booklet-huawei-watch5",
+      "sku_id": "za-booklet-huawei-watch5__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-watch-5",
+        "za-booklet-huawei-watch5"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-watch-5__42mm__beige",
+        "own-huawei-watch-5__42mm__black",
+        "own-huawei-watch-5__46mm__black",
+        "za-booklet-huawei-watch5__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Watch FIT 4",
+      "model_id": "za-booklet-huawei-watchfit4",
+      "sku_id": "za-booklet-huawei-watchfit4__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-watch-fit-4",
+        "za-booklet-huawei-watchfit4"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-watch-fit-4__std__black",
+        "own-huawei-watch-fit-4__std__grey",
+        "own-huawei-watch-fit-4__std__purple",
+        "own-huawei-watch-fit-4__std__white",
+        "za-booklet-huawei-watchfit4__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Watch GT 6",
+      "model_id": "za-booklet-huawei-watchgt6",
+      "sku_id": "za-booklet-huawei-watchgt6__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-watch-gt-6",
+        "za-booklet-huawei-watchgt6"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-watch-gt-6__41mm__black",
+        "own-huawei-watch-gt-6__41mm__brown",
+        "own-huawei-watch-gt-6__41mm__gold",
+        "own-huawei-watch-gt-6__41mm__purple",
+        "own-huawei-watch-gt-6__41mm__white",
+        "own-huawei-watch-gt-6__46mm__black",
+        "own-huawei-watch-gt-6__46mm__green",
+        "own-huawei-watch-gt-6__46mm__grey",
+        "own-huawei-watch-gt-6__std__x",
+        "za-booklet-huawei-watchgt6__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Watch GT Runner 2",
+      "model_id": "za-booklet-huawei-watchgtrunner2",
+      "sku_id": "za-booklet-huawei-watchgtrunner2__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "own-huawei-watch-gt-runner-2",
+        "za-booklet-huawei-watchgtrunner2"
+      ],
+      "candidate_sku_ids": [
+        "own-huawei-watch-gt-runner-2__std__black",
+        "own-huawei-watch-gt-runner-2__std__x",
+        "za-booklet-huawei-watchgtrunner2__booklet"
+      ]
+    },
+    {
+      "brand": "HUAWEI",
+      "model": "Y74s",
+      "model_id": "za-booklet-huawei-y74s",
+      "sku_id": "za-booklet-huawei-y74s__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "JBL",
+      "model": "Bluetooth speaker",
+      "model_id": "za-booklet-jbl-bluetoothspeaker",
+      "sku_id": "za-booklet-jbl-bluetoothspeaker__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "LENOVO",
+      "model": "Tab",
+      "model_id": "za-booklet-lenovo-tab",
+      "sku_id": "za-booklet-lenovo-tab__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-lenovo-tab",
+        "za-booklet-lenovo-tab"
+      ],
+      "candidate_sku_ids": [
+        "cmp-lenovo-tab__10-1inwifi4-128gb__x",
+        "cmp-lenovo-tab__10-1inwifi4-64gb__x",
+        "za-booklet-lenovo-tab__booklet"
+      ]
+    },
+    {
+      "brand": "MOTOROLA",
+      "model": "Moto Buds",
+      "model_id": "za-booklet-motorola-motobuds",
+      "sku_id": "za-booklet-motorola-motobuds__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "MOTOROLA",
+      "model": "Moto Buds and Watch Fit",
+      "model_id": "za-booklet-motorola-motobudsandwatchfit",
+      "sku_id": "za-booklet-motorola-motobudsandwatchfit__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "OPPO",
+      "model": "A40",
+      "model_id": "za-booklet-oppo-a40",
+      "sku_id": "za-booklet-oppo-a40__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "OPPO",
+      "model": "A6",
+      "model_id": "cmp-oppo-a6",
+      "sku_id": "cmp-oppo-a6__8-256gb__black",
+      "romram": "8+256 GB",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-oppo-a6"
+      ],
+      "candidate_sku_ids": [
+        "cmp-oppo-a6__8-256gb__black"
+      ]
+    },
+    {
+      "brand": "OPPO",
+      "model": "Buds 3 Pro",
+      "model_id": "za-booklet-oppo-buds3pro",
+      "sku_id": "za-booklet-oppo-buds3pro__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "OPPO",
+      "model": "Pad SE",
+      "model_id": "za-booklet-oppo-padse",
+      "sku_id": "za-booklet-oppo-padse__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-oppo-pad-se",
+        "za-booklet-oppo-padse"
+      ],
+      "candidate_sku_ids": [
+        "cmp-oppo-pad-se__11inlte4-128gb__x",
+        "cmp-oppo-pad-se__11inlte8-256gb__x",
+        "cmp-oppo-pad-se__11inwifi4-128gb__x",
+        "za-booklet-oppo-padse__booklet"
+      ]
+    },
+    {
+      "brand": "OPPO",
+      "model": "Watch R",
+      "model_id": "za-booklet-oppo-watchr",
+      "sku_id": "za-booklet-oppo-watchr__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "OPPO",
+      "model": "Watch X2",
+      "model_id": "za-booklet-oppo-watchx2",
+      "sku_id": "za-booklet-oppo-watchx2__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "REALME",
+      "model": "T01 Buds",
+      "model_id": "za-booklet-realme-t01buds",
+      "sku_id": "za-booklet-realme-t01buds__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "REALME",
+      "model": "Watch S2",
+      "model_id": "za-booklet-realme-watchs2",
+      "sku_id": "za-booklet-realme-watchs2__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "RIRO",
+      "model": "Buds",
+      "model_id": "za-booklet-riro-buds",
+      "sku_id": "za-booklet-riro-buds__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "RIRO",
+      "model": "Watch",
+      "model_id": "za-booklet-riro-watch",
+      "sku_id": "za-booklet-riro-watch__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "RIRO",
+      "model": "Watch W11",
+      "model_id": "za-booklet-riro-watchw11",
+      "sku_id": "za-booklet-riro-watchw11__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "RIVERSONG",
+      "model": "AI Buds",
+      "model_id": "za-booklet-riversong-aibuds",
+      "sku_id": "za-booklet-riversong-aibuds__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "A06",
+      "model_id": "za-booklet-samsung-a06",
+      "sku_id": "za-booklet-samsung-a06__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-a06",
+        "za-booklet-samsung-a06"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-a06__4-128gb__blue",
+        "cmp-samsung-a06__4-64gb__blue",
+        "za-booklet-samsung-a06__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "A07",
+      "model_id": "za-booklet-samsung-a07",
+      "sku_id": "za-booklet-samsung-a07__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-a07",
+        "za-booklet-samsung-a07"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-a07__4-128gb__black",
+        "cmp-samsung-a07__8-256gb__black",
+        "za-booklet-samsung-a07__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Buds",
+      "model_id": "za-booklet-samsung-galaxybuds",
+      "sku_id": "za-booklet-samsung-galaxybuds__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Buds 4",
+      "model_id": "za-booklet-samsung-galaxybuds4",
+      "sku_id": "za-booklet-samsung-galaxybuds4__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-buds-4",
+        "za-booklet-samsung-galaxybuds4"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-buds-4__std__black",
+        "cmp-samsung-galaxy-buds-4__std__white",
+        "za-booklet-samsung-galaxybuds4__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Buds 4 Pro",
+      "model_id": "za-booklet-samsung-galaxybuds4pro",
+      "sku_id": "za-booklet-samsung-galaxybuds4pro__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-buds-4-pro",
+        "za-booklet-samsung-galaxybuds4pro"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-buds-4-pro__std__black",
+        "cmp-samsung-galaxy-buds-4-pro__std__white",
+        "za-booklet-samsung-galaxybuds4pro__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Buds Core",
+      "model_id": "cmp-samsung-galaxy-buds-core",
+      "sku_id": "cmp-samsung-galaxy-buds-core__std__black",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-buds-core"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-buds-core__std__black"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Buds3 FE",
+      "model_id": "cmp-samsung-galaxy-buds3-fe",
+      "sku_id": "cmp-samsung-galaxy-buds3-fe__std__black",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-buds3-fe"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-buds3-fe__std__black"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Buds3 Pro",
+      "model_id": "cmp-samsung-galaxy-buds3-pro",
+      "sku_id": "cmp-samsung-galaxy-buds3-pro__std__silver",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-buds3-pro"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-buds3-pro__std__silver"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy FIT 3",
+      "model_id": "cmp-samsung-galaxy-fit-3",
+      "sku_id": "cmp-samsung-galaxy-fit-3__std__gray",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-fit-3"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-fit-3__std__gray"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Fold 7",
+      "model_id": "za-booklet-samsung-galaxyfold7",
+      "sku_id": "za-booklet-samsung-galaxyfold7__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Ring",
+      "model_id": "za-booklet-samsung-galaxyring",
+      "sku_id": "za-booklet-samsung-galaxyring__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Tab A11",
+      "model_id": "za-booklet-samsung-galaxytaba11",
+      "sku_id": "za-booklet-samsung-galaxytaba11__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-tab-a11",
+        "za-booklet-samsung-galaxytaba11"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-tab-a11__11inwifi6-128gb__x",
+        "cmp-samsung-galaxy-tab-a11__11inwifi8-256gb__x",
+        "cmp-samsung-galaxy-tab-a11__8-7inlte4-64gb__x",
+        "cmp-samsung-galaxy-tab-a11__8-7inlte8-128gb__x",
+        "cmp-samsung-galaxy-tab-a11__8-7inwifi4-64gb__x",
+        "cmp-samsung-galaxy-tab-a11__8-7inwifi8-128gb__x",
+        "za-booklet-samsung-galaxytaba11__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Tab S10 Lite",
+      "model_id": "za-booklet-samsung-galaxytabs10lite",
+      "sku_id": "za-booklet-samsung-galaxytabs10lite__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-tab-s10-lite",
+        "za-booklet-samsung-galaxytabs10lite"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-tab-s10-lite__10-9in5g6-128gb__x",
+        "cmp-samsung-galaxy-tab-s10-lite__10-9in5g8-256gb__x",
+        "cmp-samsung-galaxy-tab-s10-lite__10-9inwifi6-128gb__x",
+        "cmp-samsung-galaxy-tab-s10-lite__10-9inwifi8-256gb__x",
+        "za-booklet-samsung-galaxytabs10lite__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Watch 8",
+      "model_id": "za-booklet-samsung-galaxywatch8",
+      "sku_id": "za-booklet-samsung-galaxywatch8__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-watch-8",
+        "za-booklet-samsung-galaxywatch8"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-watch-8__40mm__graphite",
+        "cmp-samsung-galaxy-watch-8__40mm__silver",
+        "cmp-samsung-galaxy-watch-8__40mmlte__graphite",
+        "cmp-samsung-galaxy-watch-8__40mmlte__silver",
+        "cmp-samsung-galaxy-watch-8__44mm__graphite",
+        "cmp-samsung-galaxy-watch-8__44mm__silver",
+        "cmp-samsung-galaxy-watch-8__44mmlte__graphite",
+        "cmp-samsung-galaxy-watch-8__44mmlte__silver",
+        "za-booklet-samsung-galaxywatch8__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Watch X5i",
+      "model_id": "za-booklet-samsung-galaxywatchx5i",
+      "sku_id": "za-booklet-samsung-galaxywatchx5i__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Z Flip8",
+      "model_id": "za-booklet-samsung-galaxyzflip8",
+      "sku_id": "za-booklet-samsung-galaxyzflip8__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-z-flip8",
+        "za-booklet-samsung-galaxyzflip8"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-z-flip8__12-256gb__graphite",
+        "cmp-samsung-galaxy-z-flip8__12-512gb__graphite",
+        "za-booklet-samsung-galaxyzflip8__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Z Fold8",
+      "model_id": "za-booklet-samsung-galaxyzfold8",
+      "sku_id": "za-booklet-samsung-galaxyzfold8__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-z-fold8",
+        "za-booklet-samsung-galaxyzfold8"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-z-fold8__12-256gb__graphite",
+        "cmp-samsung-galaxy-z-fold8__12-512gb__graphite",
+        "cmp-samsung-galaxy-z-fold8__16-1tb__graphite",
+        "za-booklet-samsung-galaxyzfold8__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Galaxy Z Fold8 Ultra",
+      "model_id": "za-booklet-samsung-galaxyzfold8ultra",
+      "sku_id": "za-booklet-samsung-galaxyzfold8ultra__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-galaxy-z-fold8-ultra",
+        "za-booklet-samsung-galaxyzfold8ultra"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-galaxy-z-fold8-ultra__12-256gb__graphite",
+        "cmp-samsung-galaxy-z-fold8-ultra__12-512gb__graphite",
+        "cmp-samsung-galaxy-z-fold8-ultra__16-1tb__graphite",
+        "za-booklet-samsung-galaxyzfold8ultra__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "S25 FE",
+      "model_id": "za-booklet-samsung-s25fe",
+      "sku_id": "za-booklet-samsung-s25fe__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-s25-fe",
+        "za-booklet-samsung-s25fe"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-s25-fe__8-128gb__black",
+        "cmp-samsung-s25-fe__8-256gb__black",
+        "cmp-samsung-s25-fe__8-256gb__white",
+        "za-booklet-samsung-s25fe__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "S26",
+      "model_id": "za-booklet-samsung-s26",
+      "sku_id": "za-booklet-samsung-s26__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-s26",
+        "za-booklet-samsung-s26"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-s26__12-256gb__black",
+        "cmp-samsung-s26__12-256gb__violet",
+        "cmp-samsung-s26__12-256gb__white",
+        "cmp-samsung-s26__12-512gb__black",
+        "cmp-samsung-s26__12-512gb__sky-blue",
+        "cmp-samsung-s26__12-512gb__violet",
+        "cmp-samsung-s26__12-512gb__white",
+        "za-booklet-samsung-s26__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "S26 FE",
+      "model_id": "za-booklet-samsung-s26fe",
+      "sku_id": "za-booklet-samsung-s26fe__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-s26-fe",
+        "za-booklet-samsung-s26fe"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-s26-fe__8-128gb__graphite",
+        "cmp-samsung-s26-fe__8-256gb__graphite",
+        "cmp-samsung-s26-fe__8-512gb__graphite",
+        "za-booklet-samsung-s26fe__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "S26 Ultra",
+      "model_id": "za-booklet-samsung-s26ultra",
+      "sku_id": "za-booklet-samsung-s26ultra__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-s26-ultra",
+        "za-booklet-samsung-s26ultra"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-s26-ultra__12-1tb__black",
+        "cmp-samsung-s26-ultra__12-256gb__black",
+        "cmp-samsung-s26-ultra__12-256gb__white",
+        "cmp-samsung-s26-ultra__12-512gb__black",
+        "cmp-samsung-s26-ultra__12-512gb__sky-blue",
+        "cmp-samsung-s26-ultra__12-512gb__violet",
+        "cmp-samsung-s26-ultra__12-512gb__white",
+        "cmp-samsung-s26-ultra__16-1tb__black",
+        "cmp-samsung-s26-ultra__16-512gb__violet",
+        "za-booklet-samsung-s26ultra__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Watch 8",
+      "model_id": "za-booklet-samsung-watch8",
+      "sku_id": "za-booklet-samsung-watch8__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Z FOLD 7",
+      "model_id": "za-booklet-samsung-zfold7",
+      "sku_id": "za-booklet-samsung-zfold7__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-z-fold-7",
+        "za-booklet-samsung-zfold7"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-z-fold-7__12-1tb__black",
+        "cmp-samsung-z-fold-7__12-256gb__blue",
+        "cmp-samsung-z-fold-7__12-256gb__silver",
+        "cmp-samsung-z-fold-7__12-512gb__black",
+        "cmp-samsung-z-fold-7__12-512gb__blue",
+        "cmp-samsung-z-fold-7__12-512gb__silver",
+        "cmp-samsung-z-fold-7__16-1tb__black",
+        "za-booklet-samsung-zfold7__booklet"
+      ]
+    },
+    {
+      "brand": "SAMSUNG",
+      "model": "Z Flip 7",
+      "model_id": "za-booklet-samsung-zflip7",
+      "sku_id": "za-booklet-samsung-zflip7__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-samsung-z-flip-7",
+        "za-booklet-samsung-zflip7"
+      ],
+      "candidate_sku_ids": [
+        "cmp-samsung-z-flip-7__12-256gb__black",
+        "cmp-samsung-z-flip-7__12-512gb__black",
+        "cmp-samsung-z-flip-7__12-512gb__blue",
+        "za-booklet-samsung-zflip7__booklet"
+      ]
+    },
+    {
+      "brand": "VIVO",
+      "model": "Watch GT",
+      "model_id": "za-booklet-vivo-watchgt",
+      "sku_id": "za-booklet-vivo-watchgt__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "VIVO",
+      "model": "Y29",
+      "model_id": "za-booklet-vivo-y29",
+      "sku_id": "za-booklet-vivo-y29__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    },
+    {
+      "brand": "XIAOMI",
+      "model": "15",
+      "model_id": "za-booklet-xiaomi-15",
+      "sku_id": "za-booklet-xiaomi-15__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-xiaomi-15",
+        "za-booklet-xiaomi-15"
+      ],
+      "candidate_sku_ids": [
+        "cmp-xiaomi-15__12-512gb__black",
+        "cmp-xiaomi-15__12-512gb__white",
+        "za-booklet-xiaomi-15__booklet"
+      ]
+    },
+    {
+      "brand": "XIAOMI",
+      "model": "17",
+      "model_id": "za-booklet-xiaomi-17",
+      "sku_id": "za-booklet-xiaomi-17__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "ambiguous-model-sku",
+      "candidate_model_ids": [
+        "cmp-xiaomi-17",
+        "za-booklet-xiaomi-17"
+      ],
+      "candidate_sku_ids": [
+        "cmp-xiaomi-17__12-256gb__black",
+        "cmp-xiaomi-17__12-512gb__black",
+        "cmp-xiaomi-17__12-512gb__ice-blue",
+        "za-booklet-xiaomi-17__booklet"
+      ]
+    },
+    {
+      "brand": "XIAOMI",
+      "model": "Band 9 Active",
+      "model_id": "cmp-xiaomi-band-9-active",
+      "sku_id": "cmp-xiaomi-band-9-active__std__black",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-xiaomi-band-9-active"
+      ],
+      "candidate_sku_ids": [
+        "cmp-xiaomi-band-9-active__std__black"
+      ]
+    },
+    {
+      "brand": "XIAOMI",
+      "model": "REDMI Buds 6 Play",
+      "model_id": "cmp-xiaomi-redmi-buds-6-play",
+      "sku_id": "cmp-xiaomi-redmi-buds-6-play__std__black",
+      "romram": "—",
+      "match_status": "matched-model",
+      "mapping_kind": "unique-existing-sku",
+      "candidate_model_ids": [
+        "cmp-xiaomi-redmi-buds-6-play"
+      ],
+      "candidate_sku_ids": [
+        "cmp-xiaomi-redmi-buds-6-play__std__black"
+      ]
+    },
+    {
+      "brand": "XIAOMI",
+      "model": "Smart Air Frye L 89 2649 Xiaomi G20 Lite Vacuum 109 3339 Xiaomi Vacuum S20+ 229 7239 349 6999 389 8499 499 12499 4 G 4 G",
+      "model_id": "za-booklet-xiaomi-smartairfryel892649xiaomig20litevacuum1093339xiaomivacuums20229723934969993898499499124994g4g",
+      "sku_id": "za-booklet-xiaomi-smartairfryel892649xiaomig20litevacuum1093339xiaomivacuums20229723934969993898499499124994g4g__booklet",
+      "romram": "规格未标明",
+      "match_status": "matched-model",
+      "mapping_kind": "synthetic-model-sku",
+      "candidate_model_ids": [],
+      "candidate_sku_ids": []
+    }
+  ]
+}

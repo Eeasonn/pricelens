@@ -7,7 +7,7 @@
 // ③ 不触发（effectiveChannelIds 未选分支恒单渠道）。与 verify.mjs [1] 的预填断言同口径。
 // ============================================================
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { dimChannel, dimRegion } from '../../data';
+import { dimChannel, dimProduct, dimRegion } from '../../data';
 import { defaultChannelOf, defaultPlatformOf, effectiveChannelIds, prefillDefaultChannelOf } from '../aggregate';
 import { saveDefaultShopOverrides } from '../../state/defaultShopStore';
 
@@ -75,6 +75,27 @@ describe('defaultChannelOf 回退链：覆盖 → 预填 → null', () => {
     expect(defaultChannelOf('RU')).toBe('RU:ozon:3P');
     saveDefaultShopOverrides({});
     expect(defaultChannelOf('RU')).toBe('RU:dns:独立站');
+  });
+
+  it('产品级覆盖优先于国家级覆盖，并可单独回退', () => {
+    const modelId = dimProduct.find((product) => product.is_own && product.countries.includes('RU'))?.model_id;
+    expect(modelId).toBeTruthy();
+    saveDefaultShopOverrides({
+      RU: 'RU:dns:独立站',
+      [`RU::${modelId}`]: 'RU:ozon:3P',
+    });
+    expect(defaultChannelOf('RU', modelId)).toBe('RU:ozon:3P');
+    expect(effectiveChannelIds('RU', null, modelId)).toEqual(['RU:ozon:3P']);
+    saveDefaultShopOverrides({ RU: 'RU:dns:独立站' });
+    expect(defaultChannelOf('RU', modelId)).toBe('RU:dns:独立站');
+  });
+
+  it('产品级覆盖优先于国家级，清除或非法值回到国家级', () => {
+    saveDefaultShopOverrides({ RU: 'RU:dns:独立站', 'RU::own-huawei-ax1': 'RU:ozon:3P' });
+    expect(defaultChannelOf('RU')).toBe('RU:dns:独立站');
+    expect(defaultChannelOf('RU', 'own-huawei-ax1')).toBe('RU:ozon:3P');
+    saveDefaultShopOverrides({ RU: 'RU:dns:独立站', 'RU::own-huawei-ax1': 'SA:jarir:独立站' });
+    expect(defaultChannelOf('RU', 'own-huawei-ax1')).toBe('RU:dns:独立站');
   });
 
   it('null 兜底分支：无预填且无覆盖的国家（维表外）= null，取价渠道集为空不炸', () => {

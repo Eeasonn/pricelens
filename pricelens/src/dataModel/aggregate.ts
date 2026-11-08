@@ -18,6 +18,7 @@ import type {
   DimProduct,
   DimPromo,
   DimTime,
+  FactPriceMonthly,
   FactPriceWeekly,
   Industry,
   OfferDetail,
@@ -29,13 +30,15 @@ import type {
   SeriesQuery,
   SkuGroupQuery,
 } from './types';
-import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimRegion, dimTier, dimTime, factPriceWeekly } from '../data';
+import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimRegion, dimTier, dimTime, factPriceMonthly, factPriceWeekly } from '../data';
 import prefillJson from '../data/dim_default_channel.json';
-import { defaultShopOverrideOf } from '../state/defaultShopStore';
+import { defaultShopOverrideOf, productDefaultShopOverrideOf } from '../state/defaultShopStore';
 import { brandColorOf } from '../theme/tokens';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 import { displayPriceOf, displayRrpOf } from './currency';
 import { getCurrentCountry } from '../state/currentScope';
+import { marketDataProfileOf } from './marketProfile';
+import { monthlyFactsFor } from './monthlyFacts';
 import { anomalyManualOf, detectSuspects, promoBandHitOf, readAnomalyRule, type AnomalyMarkAction, type SuspectSourcePoint } from './anomaly';
 
 // ---------------- 基础工具 ----------------
@@ -75,6 +78,10 @@ function factIndex(): FactIndex {
 }
 /** 某国某 SKU 某周的全部渠道行（店铺级） */
 export function factRows(countryCode: string, skuId: string, weekId: string): FactPriceWeekly[] {
+  // ZA 使用运营商小册子月度事实。旧事实包中的周度电商行
+  // 不得在月度小册子口径下继续参与图表、告警或竞品价差计算。
+  const profile = marketDataProfileOf(countryCode);
+  if (profile.sourceKind !== 'ecommerce-weekly' || profile.evidenceStatus !== 'ready') return [];
   return factIndex().get(countryCode)?.get(skuId)?.get(weekId) ?? [];
 }
 
@@ -169,11 +176,14 @@ export function prefillDefaultChannelOf(countryCode: string): string | null {
  *  ① 配置页「默认平台店铺」人工覆盖（LPL3.config.defaultShop，channel 级）
  *  → ② 维表预填（数据主店，dim_default_channel.json；校验渠道属国）
  *  → ③ null（回默认平台全部渠道口径的兜底；预填全量覆盖后理论上不触发，保留防御） */
-export function defaultChannelOf(countryCode: string): string | null {
-  const o = defaultShopOverrideOf(countryCode);
-  if (o) {
-    const hit = dimChannel.find((c) => c.country_code === countryCode && c.channel_id === o);
-    if (hit) return o;
+export function defaultChannelOf(countryCode: string, modelId?: string): string | null {
+  const candidates = modelId
+    ? [productDefaultShopOverrideOf(countryCode, modelId), defaultShopOverrideOf(countryCode)]
+    : [defaultShopOverrideOf(countryCode)];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const hit = dimChannel.find((c) => c.country_code === countryCode && c.channel_id === candidate);
+    if (hit) return candidate;
   }
   return prefillDefaultChannelOf(countryCode);
 }
@@ -189,10 +199,10 @@ export function defaultPlatformAnchorOf(countryCode: string): string | null {
 
 /** 生效渠道集合：未选 = 配置的默认平台店铺（channel 级）→ 未配置再回默认平台全部渠道；
  *  显式勾选 = 平台/渠道并集（渠道级单选 = shopIds:[一个]，平台级兼容 = platforms:[一个]） */
-export function effectiveChannelIds(countryCode: string, platform: PlatformQuery | null): string[] {
+export function effectiveChannelIds(countryCode: string, platform: PlatformQuery | null, modelId?: string): string[] {
   const all = dimChannel.filter((c) => c.country_code === countryCode);
   if (!platform || (platform.platforms.length === 0 && platform.shopIds.length === 0)) {
-    const dc = defaultChannelOf(countryCode);
+    const dc = defaultChannelOf(countryCode, modelId);
     if (dc) return [dc];
     const dp = defaultPlatformOf(countryCode);
     return all.filter((c) => c.platform === dp).map((c) => c.channel_id);
@@ -595,10 +605,126 @@ function toOfferInfo(row: FactPriceWeekly, countryCode: string, anchorDate: stri
   return out.discount || out.installment || out.gift ? out : null;
 }
 
+function monthlyFactMatchesGroup(row: FactPriceMonthly, group: ResolvedGroup): boolean {
+  if (row.sku_id) return group.skuIds.includes(row.sku_id);
+  return row.model?.trim().toLowerCase() === group.modelName.trim().toLowerCase()
+    && row.sku_spec?.trim().toLowerCase() === group.romram.trim().toLowerCase();
+}
+
+function monthlyValueOf(row: FactPriceMonthly, currency: CurrencyMode): number | null {
+  if (currency === 'local') return row.price_local;
+  if (row.price_usd != null) return row.price_usd;
+  if (row.price_local == null || !(row.fx_rate > 0)) return null;
+  return row.price_local / row.fx_rate;
+}
+
+function monthlyRrpOf(row: FactPriceMonthly, currency: CurrencyMode): number | null {
+  if (row.rrp_local == null) return null;
+  return currency === 'local' ? row.rrp_local : row.rrp_local / row.fx_rate;
+}
+
+function monthlyPeriodIdsBetween(startBucket: string, endBucket: string): string[] {
+  const startYear = Number(startBucket.slice(0, 4));
+  const startMonth = Number(startBucket.slice(4, 6));
+  const endYear = Number(endBucket.slice(0, 4));
+  const endMonth = Number(endBucket.slice(4, 6));
+  if (
+    ![startYear, startMonth, endYear, endMonth].every(Number.isFinite)
+    || startMonth < 1
+    || startMonth > 12
+    || endMonth < 1
+    || endMonth > 12
+  ) return [];
+  const start = startYear * 12 + startMonth - 1;
+  const end = endYear * 12 + endMonth - 1;
+  if (start > end) return [];
+  return Array.from({ length: end - start + 1 }, (_, index) => {
+    const absolute = start + index;
+    const year = Math.floor(absolute / 12);
+    const month = absolute % 12 + 1;
+    return `${year}${String(month).padStart(2, '0')}`;
+  });
+}
+
+/**
+ * Monthly operator-booklet adapter. It intentionally has no weekly fallback
+ * and only consumes published PASS facts selected by an explicit term.
+ */
+export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPriceMonthly[] = factPriceMonthly): Series[] {
+  if (q.granularity !== 'month' || q.financingTerm == null) return [];
+  const profile = marketDataProfileOf(q.scope.countryCode);
+  if (profile.sourceKind !== 'operator-booklet-monthly') return [];
+  const rows = monthlyFactsFor(sourceRows, {
+    countryCode: q.scope.countryCode,
+    financingTerm: q.financingTerm,
+  });
+  const periodIds = monthlyPeriodIdsBetween(q.startBucket, q.endBucket);
+  if (periodIds.length === 0) return [];
+  const out: Series[] = [];
+  for (const group of q.groups) {
+    const resolved = resolveGroup(group);
+    if (!resolved) continue;
+    const groupRows = rows.filter((row) => monthlyFactMatchesGroup(row, resolved));
+    const points = periodIds.map((periodId) => {
+      const periodRows = groupRows.filter((row) => row.period_id === periodId);
+      const bySku = new Map<string, { row: FactPriceMonthly; price: number }>();
+      for (const row of periodRows) {
+        const value = monthlyValueOf(row, q.currency);
+        if (value == null) continue;
+        const key = row.sku_id ?? row.offer_id;
+        const current = bySku.get(key);
+        if (!current || value < current.price) bySku.set(key, { row, price: value });
+      }
+      const bestRows = [...bySku.values()];
+      const priceValues = bestRows.map((x) => x.price);
+      const price = priceValues.length === 0
+        ? null
+        : q.agg === 'min'
+          ? Math.min(...priceValues)
+          : priceValues.reduce((sum, value) => sum + value, 0) / priceValues.length;
+      const best = bestRows.reduce<{ row: FactPriceMonthly; price: number } | null>(
+        (current, candidate) => (!current || candidate.price < current.price ? candidate : current),
+        null,
+      );
+      const anchorDate = `${periodId.slice(0, 4)}-${periodId.slice(4, 6)}-01`;
+      return {
+        bucketId: periodId,
+        xLabel: periodId,
+        anchorDate,
+        rrp: best ? monthlyRrpOf(best.row, q.currency) : null,
+        price,
+        missing: price == null,
+        offer: null,
+        url: '',
+        shopName: best ? `${best.row.platform} ${best.row.store_type}` : null,
+        channelName: best ? `${best.row.platform} ${best.row.store_type}` : null,
+        platform: best?.row.platform ?? null,
+      } satisfies SeriesPoint;
+    });
+    const first = groupRows[0];
+    const platform = first ? { platforms: [first.platform], shopIds: [] } : null;
+    out.push({
+      key: `${group.modelId}__${normRom(resolved.romram)}`,
+      isOwn: resolved.isOwn,
+      brand: resolved.brand,
+      label: `${resolved.brand} ${resolved.modelName} ${resolved.romram}`,
+      skuIds: resolved.skuIds,
+      color: brandColorOf(resolved.brand),
+      points,
+      platform,
+      channelBadge: first
+        ? { label: `${first.platform} ${first.store_type}`, auto: false, platforms: [first.platform] }
+        : null,
+    });
+  }
+  return out;
+}
+
 // ---------------- §7.3 取数契约唯一入口 ----------------
 export function buildSeries(q: SeriesQuery): Series[] {
   if (!isDataScopeSupported(q.scope)) return [];
   const cc = q.scope.countryCode;
+  if (marketDataProfileOf(cc).sourceKind === 'operator-booklet-monthly') return buildMonthlySeries(q);
   const buckets = buildBuckets(q);
   const out: Series[] = [];
   for (const g of q.groups) {
@@ -620,7 +746,11 @@ export function buildSeries(q: SeriesQuery): Series[] {
       const label = explicit.shopIds.length ? chs.map((c) => c.display_name).join('/') : platforms.join('/');
       badge = { label: label || '已选渠道', auto: false, platforms };
     } else {
-      channels = new Set(dimChannel.filter((c) => c.country_code === cc).map((c) => c.channel_id));
+      // 产品级默认店铺只在配置了该产品覆盖时收窄自动口径，保持未配置产品的历史全平台动态最低价。
+      const productDefault = productDefaultShopOverrideOf(cc, g.modelId);
+      channels = productDefault
+        ? new Set(effectiveChannelIds(cc, null, g.modelId))
+        : new Set(dimChannel.filter((c) => c.country_code === cc).map((c) => c.channel_id));
       badge = {
         label: '自动', // 自动态在 weeklyBest 求出后回填为最新有价周的实际平台名
         auto: true,
@@ -819,7 +949,7 @@ export function lowestPriceColorSku(
 ): string | null {
   const rows = dimProduct.filter((p) => p.sku_id.startsWith(modelId + '__') && normRom(p.romram) === normRom(romram));
   if (rows.length === 0) return null;
-  const channels = new Set(effectiveChannelIds(countryCode, null));
+  const channels = new Set(effectiveChannelIds(countryCode, null, modelId));
   const preferCheaperThenSku = (c: { row: FactPriceWeekly; price: number }, b: { row: FactPriceWeekly; price: number }): boolean =>
     c.price < b.price || (c.price === b.price && c.row.sku_id < b.row.sku_id);
   for (let i = timeRows.length - 1; i >= 0; i--) {
@@ -1179,7 +1309,6 @@ export function buildOverviewMatrix(
 ): OverviewTierBand[] {
   if (!isDataScopeSupported(scope)) return [];
   const cc = scope.countryCode;
-  const channels = new Set(effectiveChannelIds(cc, platform));
   const byModel = new Map<string, DimProduct[]>();
   for (const p of dimProduct) {
     if (p.industry !== scope.industry || !p.countries.includes(cc)) continue;
@@ -1191,6 +1320,7 @@ export function buildOverviewMatrix(
   const models: OverviewModel[] = [];
   for (const [modelId, prows] of byModel) {
     const head = prows[0];
+    const channels = new Set(effectiveChannelIds(cc, platform, modelId));
     const romrams = [...new Set(prows.map((p) => p.romram))];
     const rows: OverviewRow[] = [];
     for (const rom of romrams) {

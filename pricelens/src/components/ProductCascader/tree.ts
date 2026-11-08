@@ -201,11 +201,19 @@ export function invalidateLatestPriceCache(): void {
 function latestPrices(): Map<string, { local: number | null; usd: number | null }> {
   const cc = getCurrentCountry();
   if (latestCache?.cc === cc) return latestCache.values;
-  const channels = new Set(effectiveChannelIds(cc, null));
   type Px = { local: number; usd: number | null };
   const best = new Map<string, { weekId: string; bare: Px | null; bundle: Px | null }>();
+  const modelBySku = new Map(dimProduct.map((p) => [p.sku_id, p.model_id]));
+  const channelsByModel = new Map<string, Set<string>>();
   for (const row of factPriceWeekly) {
-    if (row.country_code !== cc || row.price_local == null || !channels.has(row.channel_id)) continue;
+    if (row.country_code !== cc || row.price_local == null) continue;
+    const modelId = modelBySku.get(row.sku_id);
+    let channels = modelId ? channelsByModel.get(modelId) : undefined;
+    if (!channels) {
+      channels = new Set(effectiveChannelIds(cc, null, modelId));
+      if (modelId) channelsByModel.set(modelId, channels);
+    }
+    if (!channels.has(row.channel_id)) continue;
     let cur = best.get(row.sku_id);
     if (!cur || row.week_id > cur.weekId) {
       cur = { weekId: row.week_id, bare: null, bundle: null };

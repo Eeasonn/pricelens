@@ -75,6 +75,8 @@ export interface ChartToolbarProps {
   yCompress?: boolean;
   onYCompress?: (v: boolean) => void;
   lineShape?: LineShapeChoice;
+  /** 折线样式的页面默认值。价格走势页沿用 auto，量价页可将 smooth 作为默认而不显示脏点。 */
+  lineShapeDefault?: LineShapeChoice;
   onLineShape?: (v: LineShapeChoice) => void;
   /** 折后价/RRP 显隐（收进 ⋯ 菜单，控件外形与原先工具行胶囊一致；默认只显示折后价） */
   priceTypes?: { discounted: boolean; rrp: boolean };
@@ -276,7 +278,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     // 缺省 true = 量价页等旧调用方语义不变）
     (showTiersCtl && props.currency === 'usd' && (props.showTiers ?? true) !== (props.tiersDefault ?? true)) ||
     (showCompressCtl && props.yCompress === true) ||
-    (showShapeCtl && props.lineShape != null && props.lineShape !== 'auto');
+    (showShapeCtl && props.lineShape != null && props.lineShape !== (props.lineShapeDefault ?? 'auto'));
   // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
   // ——与每格高度滑杆「松手生效」同一语言，避免拖动全程逐帧触发提醒重算
   const [dragThreshold, setDragThreshold] = useState<number | null>(null);
