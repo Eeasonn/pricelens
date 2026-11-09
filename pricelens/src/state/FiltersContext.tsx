@@ -32,11 +32,11 @@ import { STABLE } from '../appChannel';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
-import { marketDataProfileOf } from '../dataModel/marketProfile';
+import { marketDataProfileOf, type FinancingTerm } from '../dataModel/marketProfile';
 import { publishedMonthlyRangeOf } from '../dataModel/monthlyFacts';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
-import { modelIdOf, invalidateLatestPriceCache } from '../components/ProductCascader/tree';
-import { clampMains, autoComparesFor, expandV11Cards, migrateV10, mainsValidFor, newCardId, remapMainsForScope, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
+import { modelIdOf, invalidateLatestPriceCache, productHasDataInCountry } from '../components/ProductCascader/tree';
+import { clampMains, autoComparesFor, expandV11Cards, filterMainsByFinancingTerm, migrateV10, mainsValidFor, newCardId, remapMainsForScope, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -307,12 +307,12 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
  *   矩阵未覆盖的国家回退该国该产业首个华为型号
  * - 对比区 = 该主品配置的分国对标（groupsFromBenchmark，主竞品在前）
  */
-function computeDataDefaults(countryCode: string, industry: Industry): Partial<FiltersState> {
+function computeDataDefaults(countryCode: string, industry: Industry, financingTerm: FinancingTerm | null = null): Partial<FiltersState> {
   if (!dimProduct.length) return {};
   syncScopeRegistries(countryCode);
   const region = dimRegion.find((r) => r.country_code === countryCode);
   const preferred = region?.default_own_models[industry];
-  const inCountry = (p: (typeof dimProduct)[number]) => p.is_own && p.industry === industry && p.countries.includes(countryCode);
+  const inCountry = (p: (typeof dimProduct)[number]) => p.is_own && p.industry === industry && productHasDataInCountry(p, countryCode, financingTerm);
   let candidates = preferred ? dimProduct.filter((p) => p.model_id === preferred && inCountry(p)) : [];
   if (!candidates.length) candidates = dimProduct.filter(inCountry);
   if (!candidates.length) return { mains: [] };
@@ -320,7 +320,12 @@ function computeDataDefaults(countryCode: string, industry: Industry): Partial<F
   const romrams = [...new Set(candidates.filter((p) => p.model_id === modelId).map((p) => p.romram))].sort();
   for (const romram of romrams) {
     const skuId = countryCode === 'ZA'
-      ? candidates.find((p) => p.model_id === modelId && p.romram === romram && factPriceMonthly.some((row) => row.sku_id === p.sku_id && row.review_status === 'PASS' && row.price_type === 'installment'))?.sku_id ?? null
+      ? candidates.find((p) => p.model_id === modelId && p.romram === romram && factPriceMonthly.some((row) => row.sku_id === p.sku_id
+        && row.review_status === 'PASS'
+        && row.price_type === 'installment'
+        && (row.term_months === 24 || row.term_months === 36)
+        && (financingTerm == null || row.term_months === financingTerm)
+        && row.price_local != null))?.sku_id ?? null
       : lowestPriceColorSku(modelId, romram, countryCode);
     if (!skuId) continue;
     const config: ProductSelection = { modelId, romram, skuIds: [skuId] };
@@ -346,8 +351,9 @@ function applyScopeDefaultsIterate(s: FiltersState, force: boolean): FiltersStat
   syncScopeRegistries(scope.countryCode);
   // 空 mains = 用户显式清空（空态），读档/读链接时不回填默认卡；口径切换
   // 走 switchScope 的 force=true 照常重算默认卡
-  const needMain = force || (state.mains.length > 0 && !mainsValidFor(state.mains, scope.countryCode, scope.industry));
-  const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry) : {};
+  const scopedMains = filterMainsByFinancingTerm(state.mains, scope.countryCode, scope.industry, state.financingTerm);
+  const needMain = force || (state.mains.length > 0 && !mainsValidFor(scopedMains, scope.countryCode, scope.industry, state.financingTerm));
+  const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry, state.financingTerm) : {};
   const next: FiltersState = {
     ...state,
     ...scope,
@@ -356,6 +362,7 @@ function applyScopeDefaultsIterate(s: FiltersState, force: boolean): FiltersStat
     // 默认电渠（null）
     platform: platformSelectionForCountry(state.platform, scope.countryCode),
     ...defaults,
+    mains: needMain ? (defaults.mains ?? []) : scopedMains,
   };
   // 卖家细化合法性：单渠道且该渠道确有此卖家（URL/旧持久化漂移防御）——
   // 不合法只剥 seller，渠道选择保留（回渠道内最低价口径）
@@ -430,7 +437,7 @@ function switchScopeIterate(prev: FiltersState, next: FiltersState, explicitMain
       // 空数组也是合法快照：还原空态而非回落重算默认卡；非空快照仍须整组在新
       // 口径有效。mainsValidFor 对空数组返回 false 的既有语义不动（读档重算
       // 判定还依赖它），此处单独放行空快照
-      if (mains && (!mains.length || mainsValidFor(mains, applied.countryCode, applied.industry))) {
+      if (mains && (!mains.length || mainsValidFor(mains, applied.countryCode, applied.industry, applied.financingTerm))) {
         // R4-S2（同步稳定线 5f5898d）：快照还原同样过整组合法化——主品逐 SKU
         // 过滤/同型号映射，手动对比区按目标口径校验/映射、selKey 去重、排除与
         // 主品同组的条目、封 COMPARES_PER_CARD_CAP（cap3）；auto 标记保留，auto
@@ -507,9 +514,9 @@ function applyScopeDefaultsStable(s: FiltersState, force: boolean): FiltersState
   // 走 switchScope 的 force=true 照常重算默认卡。R4-m1：旧选择先尝试同型号
   // 合法化，落得下就保留（RU Mate X6 12+512 → ID 16+512），不再一律默认重算
   const sanitized = s.mains.length ? remapMainsForScope(s.mains, scope.countryCode, scope.industry) : s.mains;
-  const mains = sanitized ?? [];
+  const mains = filterMainsByFinancingTerm(sanitized ?? [], scope.countryCode, scope.industry, s.financingTerm);
   const needMain = force || (s.mains.length > 0 && mains.length === 0);
-  const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry) : {};
+  const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry, s.financingTerm) : {};
   const next: FiltersState = {
     ...s,
     ...scope,
@@ -585,7 +592,7 @@ function scopeFallbackStable(
       // 口径有效（R3 M1a 起含配置/SKU 校验）。mainsValidFor 对空数组返回 false
       // 的既有语义不动（读档重算判定还依赖它），此处单独放行空快照
       if (mains && !mains.length) return { ...applied, mains: [] };
-      if (mains && mainsValidFor(mains, applied.countryCode, applied.industry)) {
+      if (mains && mainsValidFor(mains, applied.countryCode, applied.industry, applied.financingTerm)) {
         // R4-S2：快照还原同样过整组合法化——主品逐 SKU 过滤，手动对比区按目标
         // 口径校验/剥离（型号缺席剔除、配置漂移同型号映射）、selKey 去重、对比区
         // 封 COMPARES_PER_CARD_CAP；auto 标记与合法手动搭配保留
@@ -896,6 +903,8 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
             (clean.industry != null && clean.industry !== s.industry);
           const explicitMains = clean.mains !== undefined && Array.isArray(clean.mains);
           if (!scopeChanged) {
+            const termChanged = clean.financingTerm !== undefined && clean.financingTerm !== s.financingTerm;
+            if (termChanged) next = { ...next, mains: filterMainsByFinancingTerm(next.mains, next.countryCode, next.industry, next.financingTerm) };
             if (!explicitMains) return applyMarketDataProfile(next);
             // R4-S4：同口径显式 mains 规范到当前口径——逐 SKU 过滤 / 同型号首个
             // 合法配置映射 / selKey 去重 / 对比区排重主品；显式空 = 清空态原样落地；

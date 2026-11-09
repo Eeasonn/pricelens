@@ -6,6 +6,7 @@
 // ============================================================
 import { dimProduct, factPriceMonthly } from '../data';
 import type { DimProduct } from '../dataModel/types';
+import type { FinancingTerm } from '../dataModel/marketProfile';
 import type { MainProduct, ProductSelection } from './filtersTypes';
 // 类型再导出（2026-11-05）：PriceTrendSearch 等调用方从本模块取 MainProduct，
 // filtersTypes 仍是唯一定义源，此处仅透传
@@ -71,7 +72,12 @@ export function isHuaweiModel(modelId: string): boolean {
  *  带进只有 16+512GB 的 ID，留下合法型号下的非法 SKU / 空看板。skuIds 为空 =
  *  整配置口径（buildSeries 会展开该配置全部颜色行），配置在该国有行即有效；
  *  非空则任一颜色 SKU 在目标国存在才算有效。 */
-export function selectionValidFor(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): boolean {
+export function selectionValidFor(
+  sel: ProductSelection,
+  countryCode: string,
+  industry: DimProduct['industry'],
+  financingTerm: FinancingTerm | null = null,
+): boolean {
   const productRows = dimProduct.filter(
     (p) => p.model_id === sel.modelId
       && p.industry === industry
@@ -84,7 +90,10 @@ export function selectionValidFor(sel: ProductSelection, countryCode: string, in
   const selectedSkuIds = new Set(productRows.map((p) => p.sku_id));
   const modelName = productRows[0].model_name.trim().toLowerCase();
   return factPriceMonthly.some((row) => row.review_status === 'PASS'
-    && row.price_type !== 'no-price'
+    && row.price_type === 'installment'
+    && (row.term_months === 24 || row.term_months === 36)
+    && (financingTerm == null || row.term_months === financingTerm)
+    && row.price_local != null
     && ((row.sku_id != null && selectedSkuIds.has(row.sku_id))
       || (row.sku_id == null
         && row.model?.trim().toLowerCase() === modelName
@@ -96,10 +105,32 @@ function selectionHasMonthlyPrice(sel: ProductSelection, countryCode: string): b
 }
 
 /** 主分析卡列表整体是否仍属于该国该产业（任一主品失效即 false，与旧 own 判定同语义） */
-export function mainsValidFor(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): boolean {
+export function mainsValidFor(
+  mains: MainProduct[],
+  countryCode: string,
+  industry: DimProduct['industry'],
+  financingTerm: FinancingTerm | null = null,
+): boolean {
   const sels = mains.map((m) => m.main).filter((s): s is ProductSelection => s != null);
   if (!sels.length) return false;
-  return sels.every((sel) => selectionValidFor(sel, countryCode, industry));
+  return sels.every((sel) => selectionValidFor(sel, countryCode, industry, financingTerm));
+}
+
+/** 南非切换 24/36 期后，移除当前期数没有月度价格的主品及对比项。 */
+export function filterMainsByFinancingTerm(
+  mains: MainProduct[],
+  countryCode: string,
+  industry: DimProduct['industry'],
+  financingTerm: FinancingTerm | null,
+): MainProduct[] {
+  if (countryCode !== 'ZA' || financingTerm == null) return mains;
+  return mains.flatMap((card) => {
+    if (!card.main || !selectionValidFor(card.main, countryCode, industry, financingTerm)) return [];
+    return [{
+      ...card,
+      compares: card.compares.filter((sel) => selectionValidFor(sel, countryCode, industry, financingTerm)),
+    }];
+  });
 }
 
 /* ---------- 迭代线实现（e98d9b1） ---------- */

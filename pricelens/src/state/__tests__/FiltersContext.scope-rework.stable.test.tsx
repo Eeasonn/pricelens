@@ -154,6 +154,21 @@ describe('t428u R3 M1a · 系列键解析与 URL 非法配置映射', () => {
   });
 });
 
+describe('南非分期期数与主分析产品联动', () => {
+  it('切到当前没有价格的期数时移除无效主品，避免留下空图', () => {
+    const handle = renderFilters();
+    act(() => handle.actions().set({ countryCode: 'ZA' }));
+    expect(handle.state().countryCode).toBe('ZA');
+    expect(handle.state().mains[0]?.main?.modelId).toBe('za-booklet-huawei-matext');
+
+    act(() => handle.actions().set({ financingTerm: 36 }));
+    expect(handle.state().mains[0]?.main?.modelId).toBe('za-booklet-huawei-matext');
+
+    act(() => handle.actions().set({ financingTerm: 24 }));
+    expect(handle.state().mains).toEqual([]);
+  });
+});
+
 describe('t428u R3 M1b · 普通 UI 换国（补丁不带 mains）', () => {
   it('RU Mate X6 → DE 落默认 nova 14 Pro → RU 还原 Mate X6 12+512 会话快照', () => {
     const { state, actions } = renderFilters();

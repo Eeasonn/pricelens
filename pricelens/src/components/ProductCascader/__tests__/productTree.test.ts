@@ -6,7 +6,7 @@
 // 与档位选项（该国该产业实际存在的档位，阶梯序高→低）。
 // ============================================================
 import { describe, expect, it } from 'vitest';
-import { dimProduct } from '../../../data';
+import { dimProduct, factPriceMonthly } from '../../../data';
 import { tierOrderOf, tierOf } from '../../../dataModel/aggregate';
 import {
   buildProductTree,
@@ -15,6 +15,7 @@ import {
   modelEntryInfo,
   ownBrand,
   parseCapacity,
+  productHasDataInCountry,
   searchProductTree,
   sortModelNodes,
   tiersOfScope,
@@ -93,6 +94,36 @@ describe('buildProductTree（统一产品树）', () => {
   it('系列标题回退：无规则的型号自成一组（型号名 = 系列名）', () => {
     const lone = tree.flatMap((b) => b.series).filter((s) => s.models.length === 1 && s.title === s.models[0].label);
     expect(lone.length).toBeGreaterThan(0);
+  });
+
+  it('南非只展示有 24/36 期月度价格的产品，不放行旧目录空产品', () => {
+    const zaTree = buildProductTree('phone', 'ZA');
+    const zaModels = zaTree.flatMap((b) => b.series).flatMap((s) => s.models);
+    const zaModelNames = zaModels.map((m) => m.label);
+    expect(zaModelNames).toContain('Mate XT');
+    expect(zaModelNames).not.toContain('Mate 80 Pro');
+    expect(zaModelNames).not.toContain('nova 15 Max');
+
+    const pricedSkuIds = new Set(
+      factPriceMonthly
+        .filter((row) => row.price_type === 'installment'
+          && (row.term_months === 24 || row.term_months === 36)
+          && row.price_local != null
+          && row.sku_id != null)
+        .map((row) => row.sku_id as string),
+    );
+    const zaSkuIds = zaModels.flatMap((m) => m.romrams).flatMap((r) => r.colors).map((c) => c.skuId);
+    expect(zaSkuIds.length).toBeGreaterThan(0);
+    expect(zaSkuIds.every((skuId) => pricedSkuIds.has(skuId))).toBe(true);
+    expect(dimProduct.filter((p) => p.model_name === 'Mate 80 Pro').every((p) => !productHasDataInCountry(p, 'ZA'))).toBe(true);
+  });
+
+  it('南非已选分期期数也参与筛选：24 期不展示仅有 36 期的 Mate XT', () => {
+    const za24Models = buildProductTree('phone', 'ZA', 24).flatMap((b) => b.series).flatMap((s) => s.models);
+    const za36Models = buildProductTree('phone', 'ZA', 36).flatMap((b) => b.series).flatMap((s) => s.models);
+    expect(za24Models.map((m) => m.label)).not.toContain('Mate XT');
+    expect(za36Models.map((m) => m.label)).toContain('Mate XT');
+    expect(za24Models.map((m) => m.label)).toContain('A06');
   });
 });
 

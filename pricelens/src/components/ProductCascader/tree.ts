@@ -5,8 +5,9 @@
 // modelId 约定 = sku_id 前缀（如 `own-pura-90s-pro-max`），与 dim_benchmark.own_model_id、
 // prev/next_model_id 及 aggregate 的 modelId 同一 id 空间（已对真实产物核验）
 // ============================================================
-import { dimProduct, factPriceWeekly } from '../../data';
+import { dimProduct, factPriceMonthly, factPriceWeekly } from '../../data';
 import type { DimProduct, Industry } from '../../dataModel/types';
+import type { FinancingTerm } from '../../dataModel/marketProfile';
 import { effectiveChannelIds, lowestPriceColorSku, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { getCurrentCountry } from '../../state/currentScope';
 import type { ProductSelection } from '../../state/filtersTypes';
@@ -108,6 +109,32 @@ export interface BrandNode {
   modelCount: number;
 }
 
+/**
+ * 产品筛选器的可用性口径。
+ *
+ * 南非页面只消费运营商小册子的 24/36 期月度分期事实。维表里的 ZA
+ * 标记还保留了全量目录和旧周度渠道产品，因此不能单独用 countries 判断
+ * 是否允许选择，否则会把选中后无法绘图的产品放进筛选器。
+ */
+const zaMonthlyPricedSkuIdsByTerm: Record<FinancingTerm, Set<string>> = { 24: new Set(), 36: new Set() };
+for (const row of factPriceMonthly) {
+  if (row.price_type !== 'installment' || row.price_local == null || row.sku_id == null || row.term_months == null) continue;
+  zaMonthlyPricedSkuIdsByTerm[row.term_months].add(row.sku_id);
+}
+const zaMonthlyPricedSkuIds = new Set([...zaMonthlyPricedSkuIdsByTerm[24], ...zaMonthlyPricedSkuIdsByTerm[36]]);
+
+export function productHasDataInCountry(
+  product: DimProduct,
+  countryCode: string,
+  financingTerm: FinancingTerm | null = null,
+): boolean {
+  if (!product.countries.includes(countryCode)) return false;
+  if (countryCode !== 'ZA') return true;
+  return financingTerm == null
+    ? zaMonthlyPricedSkuIds.has(product.sku_id)
+    : zaMonthlyPricedSkuIdsByTerm[financingTerm].has(product.sku_id);
+}
+
 /** `12+256 GB` → `12+256`；`256 GB` → `256`；`1TB` → `1TB` */
 export function shortRomram(romram: string): string {
   return romram.replace(/\s*GB$/i, '').trim();
@@ -187,7 +214,7 @@ export function sortModelNodes(models: ModelNode[], mode: ModelSortMode, currenc
 
 // ---- 最新折后价索引（懒构建一次；数据静态于模块装载） ----
 
-let latestCache: { cc: string; values: Map<string, { local: number | null; usd: number | null }> } | null = null;
+let latestCache: { cc: string; financingTerm: FinancingTerm | null; values: Map<string, { local: number | null; usd: number | null }> } | null = null;
 
 /** 配置变更（默认店铺覆盖保存/清除、对标矩阵更新）后由 FiltersContext 的
  *  CONFIG_CHANGED_EVENT 处理器调用：现价索引按默认店铺口径取数，覆盖变化须重建，
@@ -198,9 +225,9 @@ export function invalidateLatestPriceCache(): void {
 
 /** 当前国家默认电渠口径下各 SKU 最新有值周的最低折后价（本币/USD）；
  *  裸机口径与 aggregate.minPriceOfRows 同规则（套装行仅在该周无非套装行时才用） */
-function latestPrices(): Map<string, { local: number | null; usd: number | null }> {
+function latestPrices(financingTerm: FinancingTerm | null = null): Map<string, { local: number | null; usd: number | null }> {
   const cc = getCurrentCountry();
-  if (latestCache?.cc === cc) return latestCache.values;
+  if (latestCache?.cc === cc && latestCache.financingTerm === financingTerm) return latestCache.values;
   type Px = { local: number; usd: number | null };
   const best = new Map<string, { weekId: string; bare: Px | null; bundle: Px | null }>();
   const modelBySku = new Map(dimProduct.map((p) => [p.sku_id, p.model_id]));
@@ -233,12 +260,35 @@ function latestPrices(): Map<string, { local: number | null; usd: number | null 
     const pick = v.bare ?? v.bundle;
     if (pick) values.set(skuId, { local: pick.local, usd: pick.usd });
   }
-  latestCache = { cc, values };
+  if (cc === 'ZA') {
+    const monthlyBest = new Map<string, { periodId: string; local: number; usd: number | null }>();
+    for (const row of factPriceMonthly) {
+      if (row.price_type !== 'installment'
+        || (row.term_months !== 24 && row.term_months !== 36)
+        || (financingTerm != null && row.term_months !== financingTerm)
+        || row.price_local == null
+        || row.sku_id == null) continue;
+      const current = monthlyBest.get(row.sku_id);
+      const candidate = { periodId: row.period_id, local: row.price_local, usd: row.price_usd };
+      if (!current || candidate.periodId > current.periodId
+        || (candidate.periodId === current.periodId && candidate.local < current.local)) {
+        monthlyBest.set(row.sku_id, candidate);
+      }
+    }
+    for (const [skuId, row] of monthlyBest) values.set(skuId, { local: row.local, usd: row.usd });
+  }
+  latestCache = { cc, financingTerm, values };
   return values;
 }
 
-function buildRomramNode(skus: DimProduct[], modelId: string, modelName: string, romram: string): RomramNode {
-  const lp = latestPrices();
+function buildRomramNode(
+  skus: DimProduct[],
+  modelId: string,
+  modelName: string,
+  romram: string,
+  financingTerm: FinancingTerm | null = null,
+): RomramNode {
+  const lp = latestPrices(financingTerm);
   const colors: ColorInfo[] = skus.map((s) => ({
     skuId: s.sku_id,
     color: s.color,
@@ -267,11 +317,11 @@ function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
   return m;
 }
 
-function groupModels(skus: DimProduct[]): ModelNode[] {
+function groupModels(skus: DimProduct[], financingTerm: FinancingTerm | null = null): ModelNode[] {
   return [...groupBy(skus, (s) => s.model_name).entries()].map(([model, modelSkus]) => {
     const modelId = modelIdOf(modelSkus[0]);
     const romrams = [...groupBy(modelSkus, (s) => s.romram).entries()]
-      .map(([rom, romSkus]) => buildRomramNode(romSkus, modelId, model, rom))
+      .map(([rom, romSkus]) => buildRomramNode(romSkus, modelId, model, rom, financingTerm))
       .sort((a, b) => compareRomram(a.romram, b.romram));
     const head = modelSkus[0];
     return {
@@ -287,24 +337,32 @@ function groupModels(skus: DimProduct[]): ModelNode[] {
 }
 
 /** 我司级联树（当前国家有数据的产品）：系列 → 产品名（仅展开）→ 配置（勾选层） */
-export function buildOwnTree(industry: Industry = 'phone', countryCode: string = getCurrentCountry()): GroupNode[] {
-  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry && p.countries.includes(countryCode)), (p) => p.series).entries()].map(([series, skus]) => ({
+export function buildOwnTree(
+  industry: Industry = 'phone',
+  countryCode: string = getCurrentCountry(),
+  financingTerm: FinancingTerm | null = null,
+): GroupNode[] {
+  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry && productHasDataInCountry(p, countryCode, financingTerm)), (p) => p.series).entries()].map(([series, skus]) => ({
     key: series,
     title: series,
-    models: groupModels(skus),
+    models: groupModels(skus, financingTerm),
   }));
 }
 
 /** 竞品级联树（当前国家、同产业）：品牌（按 §13 列序，多余品牌按字母序殿后）→ 产品名 → 配置 */
-export function buildCompetitorTree(industry?: Industry, countryCode: string = getCurrentCountry()): GroupNode[] {
-  const comp = dimProduct.filter((p) => !p.is_own && p.countries.includes(countryCode) && (industry == null || p.industry === industry));
+export function buildCompetitorTree(
+  industry?: Industry,
+  countryCode: string = getCurrentCountry(),
+  financingTerm: FinancingTerm | null = null,
+): GroupNode[] {
+  const comp = dimProduct.filter((p) => !p.is_own && productHasDataInCountry(p, countryCode, financingTerm) && (industry == null || p.industry === industry));
   const brandRank = (b: string): number => {
     const i = COMPETITOR_BRANDS.indexOf(b);
     return i >= 0 ? i : COMPETITOR_BRANDS.length;
   };
   return [...groupBy(comp, (p) => p.brand).entries()]
     .sort((a, b) => brandRank(a[0]) - brandRank(b[0]) || a[0].localeCompare(b[0]))
-    .map(([brand, skus]) => ({ key: brand, title: brand, models: groupModels(skus) }));
+    .map(([brand, skus]) => ({ key: brand, title: brand, models: groupModels(skus, financingTerm) }));
 }
 
 /** SKU 选项（品牌内按产品分组，供 Select group 用；配置页矩阵单元格复用） */
@@ -404,9 +462,13 @@ export function selectionLabel(sel: ProductSelection): string {
  *  品牌（华为置顶 → §13 矩阵列序 → 型号数降序）→ 系列（在售在前、
  *  上市新→旧；全退市置底）→ 型号（在售在前、新→旧）→ 配置（容量升序）。
  *  竞品系列来自维表 series（scripts/series_rules.py 的「代际+产品线」规则）。 */
-export function buildProductTree(industry?: Industry, countryCode: string = getCurrentCountry()): BrandNode[] {
+export function buildProductTree(
+  industry?: Industry,
+  countryCode: string = getCurrentCountry(),
+  financingTerm: FinancingTerm | null = null,
+): BrandNode[] {
   const rows = dimProduct.filter(
-    (p) => p.countries.includes(countryCode) && (industry == null || p.industry === industry),
+    (p) => productHasDataInCountry(p, countryCode, financingTerm) && (industry == null || p.industry === industry),
   );
   const ob = ownBrand();
   const brandRank = (b: string): number => {
@@ -415,7 +477,7 @@ export function buildProductTree(industry?: Industry, countryCode: string = getC
     return i >= 0 ? i : COMPETITOR_BRANDS.length;
   };
   const brands = [...groupBy(rows, (p) => p.brand).entries()].map(([brand, skus]) => {
-    const models = groupModels(skus);
+    const models = groupModels(skus, financingTerm);
     const seriesMap = new Map<string, SeriesNode>();
     for (const m of models) {
       const seriesTitle = skus.find((s) => modelIdOf(s) === m.modelId)?.series ?? m.label;
@@ -479,10 +541,14 @@ export function searchProductTree(tree: BrandNode[], query: string): BrandNode[]
 
 /** 该国某产业实际存在的价格档位（高→低；配置行去重，阶梯外档位殿后按代码序）。
  *  浮窗「档位」下拉的选项来源——只列有产品的档位，避免空选项。 */
-export function tiersOfScope(industry?: Industry, countryCode: string = getCurrentCountry()): string[] {
+export function tiersOfScope(
+  industry?: Industry,
+  countryCode: string = getCurrentCountry(),
+  financingTerm: FinancingTerm | null = null,
+): string[] {
   const present = new Set<string>();
   for (const p of dimProduct) {
-    if (!p.countries.includes(countryCode) || (industry != null && p.industry !== industry)) continue;
+    if (!productHasDataInCountry(p, countryCode, financingTerm) || (industry != null && p.industry !== industry)) continue;
     present.add(tierOf(p, countryCode));
   }
   const ladder = industry == null ? [] : [...tierOrderOf(industry)].reverse(); // 阶梯序高→低
@@ -497,10 +563,11 @@ export function filterProductTreeByTier(
   tree: BrandNode[],
   tier: string,
   countryCode: string = getCurrentCountry(),
+  financingTerm: FinancingTerm | null = null,
 ): BrandNode[] {
   const hitKeys = new Set<string>();
   for (const p of dimProduct) {
-    if (!p.countries.includes(countryCode)) continue;
+    if (!productHasDataInCountry(p, countryCode, financingTerm)) continue;
     if (tierOf(p, countryCode) !== tier) continue;
     hitKeys.add(`${modelIdOf(p)}|${p.romram}`);
   }

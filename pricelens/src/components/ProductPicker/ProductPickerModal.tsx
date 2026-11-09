@@ -321,8 +321,8 @@ function LevelSwitchPopover({
 
   // 档位过滤（配置级）与树内搜索叠加：先档位剪枝、再按关键词命中
   const scopedTree = useMemo(
-    () => (tier ? filterProductTreeByTier(fullTree, tier, state.countryCode) : fullTree),
-    [fullTree, tier, state.countryCode],
+    () => (tier ? filterProductTreeByTier(fullTree, tier, state.countryCode, state.financingTerm) : fullTree),
+    [fullTree, tier, state.countryCode, state.financingTerm],
   );
   const tree = useMemo(() => searchProductTree(scopedTree, search), [scopedTree, search]);
 
@@ -513,19 +513,19 @@ function LevelSwitchPopover({
   // ---- 档位批量动作（第一百二十三轮：替代原「按档位」模式的一键集结） ----
 
   const tierOptions = useMemo(
-    () => tiersOfScope(state.industry, state.countryCode).map((t) => ({
+    () => tiersOfScope(state.industry, state.countryCode, state.financingTerm).map((t) => ({
       value: t,
       label: tierLabelShort(TIER_LABELS[t] ?? t),
     })),
-    [state.industry, state.countryCode],
+    [state.industry, state.countryCode, state.financingTerm],
   );
   const tierOwnConfigs = useMemo(
-    () => (tier ? configsInTier(state.industry, tier, state.countryCode, true) : []),
-    [tier, state.industry, state.countryCode],
+    () => (tier ? configsInTier(state.industry, tier, state.countryCode, true, state.financingTerm) : []),
+    [tier, state.industry, state.countryCode, state.financingTerm],
   );
   const tierAllConfigs = useMemo(
-    () => (tier ? configsInTier(state.industry, tier, state.countryCode) : []),
-    [tier, state.industry, state.countryCode],
+    () => (tier ? configsInTier(state.industry, tier, state.countryCode, false, state.financingTerm) : []),
+    [tier, state.industry, state.countryCode, state.financingTerm],
   );
   // 更换主品（replace-main）同属主品语义：批量动作 = 该档逐配置建组（追加不动当前卡），
   // 不能落对比分支——那会把整档配置塞进本卡对比区（IAB 冒烟发现）
@@ -535,7 +535,7 @@ function LevelSwitchPopover({
   const tierGroupAll = (): void => {
     if (!tier) return;
     const base = ctx.kind === 'set-main' && activeCard ? mains.filter((c) => c.id !== activeCard.id) : mains;
-    let next = appendTierCards(state.industry, tier, state.countryCode, base);
+    let next = appendTierCards(state.industry, tier, state.countryCode, base, state.financingTerm);
     if (next === base) return;
     const baseIds = new Set(base.map((c) => c.id));
     // 第一百三十一轮：批量成组的新卡同样默认「匹配竞品」——appendTierCards 已按
@@ -1416,11 +1416,11 @@ function PickerPanel() {
    *  超配额的模板卡不再直进 */
   const sanitizeFresh = (cards: MainProduct[]): MainProduct[] =>
     cards
-      .filter((c) => c.main != null && selectionValidFor(c.main, state.countryCode, state.industry))
+      .filter((c) => c.main != null && selectionValidFor(c.main, state.countryCode, state.industry, state.financingTerm))
       .map((c) => ({
         ...c,
         compares: c.compares
-          .filter((s) => selectionValidFor(s, state.countryCode, state.industry))
+          .filter((s) => selectionValidFor(s, state.countryCode, state.industry, state.financingTerm))
           .slice(0, cardQuota(c)),
       }));
 
@@ -1435,7 +1435,7 @@ function PickerPanel() {
       const existing = mains.find((x) => x.id === m.cardId);
       if (!existing) continue;
       // 合并的对比项同样剔除失效条目；全失效不落地（不为此白退自动）
-      const adds = m.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry));
+      const adds = m.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry, state.financingTerm));
       if (adds.length) actions.setCardCompares(m.cardId, [...existing.compares, ...adds]);
     }
   };
@@ -1445,7 +1445,7 @@ function PickerPanel() {
     const { fresh, merges, overflowCards, overflowCompares } = planAppend(mains, c);
     const usable = sanitizeFresh(fresh);
     const totalAdds = merges.reduce(
-      (n, m) => n + m.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry)).length,
+      (n, m) => n + m.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry, state.financingTerm)).length,
       0,
     );
     if (!usable.length && !totalAdds) {

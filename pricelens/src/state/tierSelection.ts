@@ -11,6 +11,8 @@ import { lowestPriceColorSku, tierOf } from '../dataModel/aggregate';
 import { getCurrentCountry } from './currentScope';
 import type { FiltersState, MainProduct, ProductSelection } from './filtersTypes';
 import { autoComparesFor, MAINS_CAP, newCardId, selKey } from './mainSelection';
+import { productHasDataInCountry } from '../components/ProductCascader/tree';
+import type { FinancingTerm } from '../dataModel/marketProfile';
 
 const modelIdOfSku = (skuId: string): string => skuId.split('__')[0];
 
@@ -21,11 +23,12 @@ export function configsInTier(
   tier: string,
   countryCode: string = getCurrentCountry(),
   ownOnly = false,
+  financingTerm: FinancingTerm | null = null,
 ): ProductSelection[] {
   const out: ProductSelection[] = [];
   const keys = new Set<string>();
   for (const p of dimProduct) {
-    if (p.industry !== industry || !p.countries.includes(countryCode)) continue;
+    if (p.industry !== industry || !productHasDataInCountry(p, countryCode, financingTerm)) continue;
     if (ownOnly && !p.is_own) continue;
     if (tierOf(p, countryCode) !== tier) continue;
     const key = `${modelIdOfSku(p.sku_id)}|${p.romram}`;
@@ -46,8 +49,9 @@ export function appendTierCards(
   tier: string,
   countryCode: string,
   existing: MainProduct[],
+  financingTerm: FinancingTerm | null = null,
 ): MainProduct[] {
-  const configs = configsInTier(industry, tier, countryCode, true);
+  const configs = configsInTier(industry, tier, countryCode, true, financingTerm);
   if (!configs.length) return existing;
   const seen = new Set(existing.flatMap((c) => (c.main ? [selKey(c.main)] : [])));
   const cards: MainProduct[] = [];
