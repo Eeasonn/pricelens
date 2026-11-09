@@ -626,8 +626,45 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   return applyMarketDataProfile(scoped);
 }
 
-function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false): FiltersState {
-  return STABLE ? switchScopeStable(prev, next, explicitMains) : switchScopeIterate(prev, next, explicitMains);
+function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false, explicitTime = false): FiltersState {
+  const scoped = STABLE ? switchScopeStable(prev, next, explicitMains) : switchScopeIterate(prev, next, explicitMains);
+  return swapRangeSnapshot(prev, scoped, explicitTime);
+}
+
+// 2026-11-09 用户反馈「自动时间不按逻辑来」根因②：手动范围/自动态此前是全局
+// 单份，切国家/产业把上一个口径的范围原样带进新口径（自动开着会自校正，手动
+// 模式永远错位）。现随 mainsOf 快照同思路按 国家.产业 隔离：切走落盘、切入恢复；
+// 目标口径无快照（首次到访）= 回自动重算，杜绝串扰。sessionStorage = 标签页各自
+// 持有，双开标签互不污染。
+const rangeSnapKeyOf = (cc: string, industry: string) => `${LPL.filters}.rangeOf.${cc}.${industry}`;
+function swapRangeSnapshot(prev: FiltersState, scoped: FiltersState, explicitTime: boolean): FiltersState {
+  try {
+    sessionStorage.setItem(rangeSnapKeyOf(prev.countryCode, prev.industry), JSON.stringify({
+      adaptive: prev.adaptive, rangeStart: prev.rangeStart, rangeEnd: prev.rangeEnd,
+    }));
+  } catch {
+    /* 存储不可用时跳过快照 */
+  }
+  // 补丁显式带了时间（Agent 定位固定单周、链接 rs/re）= 以补丁为准，不做快照回填
+  if (explicitTime) return scoped;
+  try {
+    const raw = sessionStorage.getItem(rangeSnapKeyOf(scoped.countryCode, scoped.industry));
+    if (raw) {
+      const snap = JSON.parse(raw) as { adaptive?: unknown; rangeStart?: unknown; rangeEnd?: unknown };
+      if (typeof snap.adaptive === 'boolean') {
+        return {
+          ...scoped,
+          adaptive: snap.adaptive,
+          rangeStart: typeof snap.rangeStart === 'string' ? snap.rangeStart : scoped.rangeStart,
+          rangeEnd: typeof snap.rangeEnd === 'string' ? snap.rangeEnd : scoped.rangeEnd,
+        };
+      }
+      return scoped;
+    }
+  } catch {
+    /* 坏 JSON：保持现值 */
+  }
+  return scoped.adaptive || explicitTime ? scoped : { ...scoped, adaptive: true };
 }
 
 function applyMarketDataProfile(state: FiltersState): FiltersState {
@@ -703,6 +740,24 @@ function loadBaseState(): FiltersState {
   // 139 轮把 needMain 收紧为「mains 非空且失效才重算」时漏了这条首次路径，
   // 新用户/清过存储的浏览器首屏永远空态（第 144 轮补）
   if (!restored) return applyScopeDefaults({ ...defaultFilters }, true);
+  // 时间范围/自动态优先取本口径（国家.产业）的快照（2026-11-09：范围随 scope
+  // 隔离，见 swapRangeSnapshot 注）；本标签没访问过该口径时沿用全局 blob 值。
+  try {
+    const raw = sessionStorage.getItem(rangeSnapKeyOf(restored.countryCode, restored.industry));
+    if (raw) {
+      const snap = JSON.parse(raw) as { adaptive?: unknown; rangeStart?: unknown; rangeEnd?: unknown };
+      if (typeof snap.adaptive === 'boolean') {
+        restored = {
+          ...restored,
+          adaptive: snap.adaptive,
+          rangeStart: typeof snap.rangeStart === 'string' ? snap.rangeStart : restored.rangeStart,
+          rangeEnd: typeof snap.rangeEnd === 'string' ? snap.rangeEnd : restored.rangeEnd,
+        };
+      }
+    }
+  } catch {
+    /* 坏 JSON：沿用全局值 */
+  }
   return applyScopeDefaults(restored, false);
 }
 
@@ -914,7 +969,10 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
             if (normalized) return applyScopeDefaults({ ...next, mains: normalized }, false);
             return applyScopeDefaults(next, true);
           }
-          return switchScope(s, next, explicitMains);
+          // 显式时间键（adaptive/rangeStart/rangeEnd 任一出现在补丁）= Agent 跳转 /
+          // 链接 / 用户手选在改时间——目标口径的时间以此为准，不做快照回填/回自动
+          const explicitTime = clean.adaptive !== undefined || clean.rangeStart !== undefined || clean.rangeEnd !== undefined;
+          return switchScope(s, next, explicitMains, explicitTime);
         }),
 
       /** 回到默认视图（含数据默认主分析卡 + 其配置对比区）。直接从默认态重建，

@@ -8,7 +8,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import type { CurrencyMode, OfferInfo, Series, SeriesPoint } from '../../../dataModel/types';
-import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, fmtInt, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, xPxOf, yPxOf, type Bucket, type YScale } from '../helpers';
+import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, adaptiveMinBuckets, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, fmtInt, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, xPxOf, yPxOf, type Bucket, type YScale } from '../helpers';
 import {
   buildChangeMarks,
   buildEndpointBadges,
@@ -963,6 +963,23 @@ describe('时间自适应（seriesSpanRange / adaptiveRangeOf）', () => {
   it('钳在数据全集内：右缘不超末端（= 当前时间）、左缘不早于起点', () => {
     expect(adaptiveRangeOf(B12, [4, 11])).toEqual(['202603', '202612']); // 末端 +2 被钳
     expect(adaptiveRangeOf(B12, [0, 3])).toEqual(['202601', '202606']); // 起点 −2 被钳
+  });
+
+  it('可读下限（2026-11-09）：跨度不足 minLen 时锚数据末端向左补足，仍钳全集左缘', () => {
+    // 跨度 [7,11] 只有 5 桶，minLen=8 → 补到 [4,11]
+    expect(adaptiveRangeOf(B12, [7, 11], 0, 8)).toEqual(['202605', '202612']);
+    // 补足撞全集左缘被钳：跨度 [2,3] 2 桶，minLen=8 → 想要 [-4,3] → 钳 [0,3]
+    expect(adaptiveRangeOf(B12, [2, 3], 0, 8)).toEqual(['202601', '202604']);
+    // 跨度已足 → 不动
+    expect(adaptiveRangeOf(B12, [2, 11], 0, 8)).toEqual(['202603', '202612']);
+    // minLen=0 = 关闭下限（老行为）
+    expect(adaptiveRangeOf(B12, [7, 11], 0, 0)).toEqual(['202608', '202612']);
+  });
+
+  it('可读下限按粒度：周 8 / 月 3 / 季 2', () => {
+    expect(adaptiveMinBuckets('week')).toBe(8);
+    expect(adaptiveMinBuckets('month')).toBe(3);
+    expect(adaptiveMinBuckets('quarter')).toBe(2);
   });
 
   it('span null / 空桶 → null', () => {

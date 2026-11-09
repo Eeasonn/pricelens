@@ -24,6 +24,7 @@ import {
   type VoiceInputAdapter,
 } from '../agent';
 import type { FiltersState } from './filtersTypes';
+import { markAutoTimeExit } from './autoTimeBus';
 import { clampMains } from './mainSelection';
 import { STABLE } from '../appChannel';
 import { useAgent as useAgentStable } from './AgentContextStable';
@@ -385,6 +386,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     if (card.contextFingerprint && card.contextFingerprint !== context.fingerprint) return { ok: false, error: '当前筛选口径已变化，请重新生成预览。' };
     setUndoSnapshots((prev) => [...prev, state].slice(-5));
     setRedoSnapshots([]);
+    // 2026-11-09：补丁把自动时间关掉（价差定位/预警定位等跳转）= 静默退出路径，
+    // 打标供 TimeBox 显性提示（用户手选范围不走这里，无提示）
+    if (card.patch.adaptive === false && state.adaptive) markAutoTimeExit(card.title || 'Agent 跳转');
     actions.set(card.patch.mains ? { ...card.patch, mains: clampMains(card.patch.mains) } : card.patch);
     setAppliedFilterIds((prev) => new Set([...prev, card.id]));
     return { ok: true };

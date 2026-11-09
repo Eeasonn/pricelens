@@ -138,6 +138,7 @@ import {
   GRID,
   PANE_HEAD_H,
   TICK_PX,
+  adaptiveMinBuckets,
   adaptiveRangeOf,
   axisTickTextsOf,
   computeYAxis,
@@ -525,7 +526,7 @@ export default function VolumePrice() {
   }, [selMains, selCompares, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, cc, state.industry, configVersion]);
   const span = useMemo(() => seriesSpanRange(selectionSeries), [selectionSeries]);
   const adaptiveBounds = useMemo(
-    () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0) : null),
+    () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0, adaptiveMinBuckets(state.granularity)) : null),
     [state.adaptive, buckets, span],
   );
   const adaptiveProductKey = JSON.stringify([

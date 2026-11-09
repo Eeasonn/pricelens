@@ -9,11 +9,17 @@
 // 2026-11-04（Eason 看图反馈）：周/月/季粒度切换移出本簇（常驻筛选条
 // 币种右侧 GranularityBox），本簇收窄让位（flex 基准 280→220、上限 460→340，
 // 选择器 240→200）。
+// 2026-11-09（用户反馈「自动时间不按逻辑来」）：Agent 价差/预警定位与带
+// rs=re 的分享链接会静默退出自动——这类程序路径退出经 autoTimeBus 打标，
+// 此处消费后显示「已固定时间范围（原因）· 回自动」提示条；用户自己手选
+// 范围不走信封、无提示。
 // ============================================================
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { TimeRangeCluster } from '../../chart/PriceTrend/XBrush';
 import { dataBucketRange, enumerateBuckets, type Bucket } from '../../chart/PriceTrend/helpers';
 import { useFilters } from '../../state/FiltersContext';
+import { clearAutoTimeExit, consumeAutoTimeExit } from '../../state/autoTimeBus';
+import { color } from '../../theme/tokens';
 
 export default function TimeBox() {
   const { state, actions } = useFilters();
@@ -33,6 +39,21 @@ export default function TimeBox() {
     const end = indexOf(state.rangeEnd, Math.max(0, buckets.length - 1));
     return start <= end ? [start, end] : [end, start];
   }, [buckets, state.rangeStart, state.rangeEnd]);
+
+  // 程序路径退出自动 → 显性提示（信封在同一次 set 前打标，这里消费一次；
+  // 用户手选范围无信封 = 不提示；回自动/重新开自动 = 清提示）
+  const [exitNotice, setExitNotice] = useState<string | null>(null);
+  const prevAdaptiveRef = useRef(state.adaptive);
+  useEffect(() => {
+    if (state.adaptive) {
+      clearAutoTimeExit();
+      setExitNotice(null);
+    } else if (prevAdaptiveRef.current) {
+      const exit = consumeAutoTimeExit();
+      setExitNotice(exit ? exit.reason : null);
+    }
+    prevAdaptiveRef.current = state.adaptive;
+  }, [state.adaptive]);
 
   /** 用户明确指定极值 → 退出自动（原看板内 onRangeFilterChange 同口径，
    *  端点按桶序归正先后）。 */
@@ -60,6 +81,28 @@ export default function TimeBox() {
         onToggleAdaptive={() => actions.set({ adaptive: !state.adaptive })}
         placement="bottomRight"
       />
+      {exitNotice !== null && !state.adaptive ? (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, marginTop: 2,
+            fontSize: 11, lineHeight: '16px', color: color.mute,
+          }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            已固定时间范围（{exitNotice}），不再跟随产品变化
+          </span>
+          <button
+            type="button"
+            onClick={() => actions.set({ adaptive: true })}
+            style={{
+              flexShrink: 0, border: 'none', background: 'none', padding: 0,
+              fontSize: 11, color: color.body, textDecoration: 'underline', cursor: 'pointer',
+            }}
+          >
+            回自动
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

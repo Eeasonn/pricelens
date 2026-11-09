@@ -16,6 +16,7 @@ import { dimChannel, dimProduct } from '../data';
 import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
 import type { Page } from './PageContext';
 import { hiddenInStable, STABLE } from '../appChannel';
+import { markAutoTimeExit } from './autoTimeBus';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { cardsFromSelections, clampMains, firstLegalSelectionOfModel } from './mainSelection';
 import { getCurrentCountry } from './currentScope';
@@ -166,6 +167,7 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
       out.filters.rangeStart = rs;
       out.filters.rangeEnd = re;
       out.filters.adaptive = false;
+      markAutoTimeExit('链接指定固定范围');
     }
     const pt = q.get('pt');
     if (pt === 'd' || pt === 'r' || pt === 'dr') {

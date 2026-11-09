@@ -1020,11 +1020,20 @@ export function adaptiveRangeOf(
   buckets: Bucket[],
   span: [number, number] | null,
   pad = 2,
+  minLen = 0,
 ): [string, string] | null {
   if (!buckets.length || !span) return null;
-  const lo = Math.max(0, span[0] - pad);
   const hi = Math.min(buckets.length - 1, span[1] + pad);
+  let lo = Math.max(0, span[0] - pad);
+  // 2026-11-09 用户反馈：稀疏采数国（巴西周度仅 5-6 周）自动范围塌缩成几根柱、
+  // 没法读。跨度不足可读下限时锚数据末端向左补足（仍钳全集左缘）。
+  if (minLen > 1 && hi - lo + 1 < minLen) lo = Math.max(0, hi - minLen + 1);
   return [buckets[lo].id, buckets[hi].id];
+}
+
+/** 自动范围可读下限（按粒度）：周 8 桶 / 月 3 桶 / 季 2 桶。2026-11-09 Eason 拍板。 */
+export function adaptiveMinBuckets(g: Granularity): number {
+  return g === 'week' ? 8 : g === 'month' ? 3 : 2;
 }
 
 /** §6.3 下钻：季桶 → 该季月桶范围（2026Q3 → 202607..202609） */

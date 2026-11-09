@@ -96,6 +96,7 @@ import {
   GRID,
   PANE_HEAD_H,
   TICK_PX,
+  adaptiveMinBuckets,
   adaptiveRangeOf,
   axisTickTextsOf,
   bucketLatestWeekLabel,
@@ -443,7 +444,7 @@ export default function PriceTrend(props: {
   // 注意本 effect 声明在 granRef 联动之后：粒度切换时先换桶、自适应范围随后覆盖。
   const span = useMemo(() => seriesSpanRange(allSeries), [allSeries]);
   const adaptiveBounds = useMemo(
-    () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0) : null),
+    () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0, adaptiveMinBuckets(state.granularity)) : null),
     [state.adaptive, buckets, span],
   );
   const selectedProductKey = JSON.stringify([

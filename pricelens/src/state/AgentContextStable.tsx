@@ -24,6 +24,7 @@ import {
   type VoiceInputAdapter,
 } from '../agent-stable';
 import type { FiltersState } from './filtersTypes';
+import { markAutoTimeExit } from './autoTimeBus';
 import { materializeAlertRecords, alertAgentContextOf } from '../dataModel/alertLifecycle';
 
 export interface AgentMessage {
@@ -390,6 +391,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     if (!validation.valid) return { ok: false, error: validation.errors.join('；') };
     setUndoSnapshots((prev) => [...prev, state].slice(-5));
     setRedoSnapshots([]);
+    // 2026-11-09：补丁把自动时间关掉（价差定位/预警定位等跳转）= 静默退出路径，
+    // 打标供 TimeBox 显性提示（用户手选范围不走这里，无提示）
+    if (card.patch.adaptive === false && state.adaptive) markAutoTimeExit(card.title || 'Agent 跳转');
     actions.set(card.patch);
     setAppliedFilterIds((prev) => new Set([...prev, card.id]));
     return { ok: true };
