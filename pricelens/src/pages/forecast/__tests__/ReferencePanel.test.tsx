@@ -599,7 +599,7 @@ describe('量价参考产品 · 证据浮框（五项精简）与删除 / 撤销
     fireEvent.click(screen.getByRole('button', { name: '撤销：已保存事件' }));
     await waitFor(() => expect(within(rosterOf(mateCard)).queryByRole('button', { name: `删除事件 ${MATE_WEEKS[39]}–${MATE_WEEKS[40]} 店庆补贴` })).toBeNull());
     expect(within(mateCard).getByRole('button', { name: `查看事件读数 ${MATE_WEEKS[22]}–${MATE_WEEKS[25]} 618（改）` })).toBeTruthy();
-  });
+  }, 20000); // 全量套件下 dim_product 扩容后 fixture 变慢，默认 5s 超时（单文件跑稳定全绿）
 });
 
 // ============================================================
@@ -614,7 +614,7 @@ describe('量价参考产品 · 关闭行为（保存收起 / 空白收起 / Esc
     // 重新打开（＋事件）→ 未提交草稿仍在
     const restored = await openCreateComposer('Mate 80（上一代）');
     expect((titleInputIn(restored) as HTMLInputElement).value).toBe('未写完的事件');
-  });
+  }, 20000);
 
   it('Esc 收起编辑器（草稿保留）', async () => {
     renderPanel({ prevGenReferenceId: 'ref-mate80' });

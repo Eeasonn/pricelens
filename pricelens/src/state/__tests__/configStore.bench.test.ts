@@ -40,13 +40,12 @@ describe('benchmarkSkuIdsFor', () => {
     ]);
   });
 
-  it('R 国 Pura 80 Ultra 16+512 = 3 款且全部同 ROM（2026-10-29 拍板：1vs多不再全显，同 ROM 优先）', () => {
+  it('R 国 Pura 80 Ultra 16+512 = 3 款且全部同 ROM（维表 4 行全同 ROM 512；W45 增量新采 iPhone Air 12+512 补同型号第二配置；configStore 侧按 BENCHMARK_CAP_PER_CONFIG=3 取 sort 前三）', () => {
     const list = benchmarkSkuIdsFor('own-huawei-pura-80-ultra', '16+512 GB', 'RU');
     expect(list).toHaveLength(3);
     expect(new Set(list).size).toBe(3);
-    // 同 ROM 512（此前全显口径配的是 1TB/256 错位档）
     expect(list).toEqual([
-      'cmp-apple-iphone-air__512gb__black',
+      'cmp-apple-iphone-air__12-512gb__black',
       'cmp-samsung-s25-ultra__12-512gb__white',
       'cmp-xiaomi-17__12-512gb__black',
     ]);

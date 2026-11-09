@@ -2,7 +2,7 @@
 // t428u Batch1 返修 R6（二轮）：「最近 N 周」必须对齐 granularity='week'。
 // 复现：月/季粒度下点「补齐时间 · 最近 8 周」，recentRange 给的是周桶，
 // 但粒度仍停在 month/quarter——周桶 id 塞进月查询，产出
-// `USD · month · 202635–202642` 且真实机型最新价/环比全「—」。
+// `USD · month · 202636–202643` 且真实机型最新价/环比全「—」。
 // 契约：显式应用「最近 N 周」范围 patch（buildFilterPatch、forced query
 // 合并、Filters 收到周级 recentRange）时同步设 granularity='week'；
 // 覆盖 month / quarter → 最近 8 周、空优势「调整范围 · 最近 12 周」全部路径。
@@ -46,13 +46,13 @@ describe('t428u 返修 R6（二轮）· 「最近 N 周」对齐周粒度', () =
       // 周桶范围必须伴随周粒度（forced query 合并与 Filters 应用共用此 patch）
       expect(patch.granularity).toBe('week');
       expect(patch.rangeStart).toMatch(/^2026\d{2}$/);
-      expect(patch.rangeEnd).toBe('202645');
+      expect(patch.rangeEnd).toBe('202646');
       // 建议词条带 intent='query'，与「补齐时间 · 最近 8 周」同一强制查询路径
       const response = await runAgent('查看最近 8 周的价格趋势', buildAgentContext('dashboard', state, []), undefined, 'query');
       const chart = response.cards.find((card) => card.kind === 'chart');
       expect(chart?.kind).toBe('chart');
       if (chart?.kind === 'chart') {
-        expect(chart.note).toContain('· week · 202638–202645');
+        expect(chart.note).toContain('· week · 202639–202646');
         expect(chart.note).not.toContain(`· ${granularity} ·`);
         // 周桶落进周查询：真实机型有点位，不再整列空值
         expect(chart.series.some((series) => series.values.some((point) => point.value != null))).toBe(true);
@@ -82,8 +82,8 @@ describe('t428u 返修 R6（二轮）· 「最近 N 周」对齐周粒度', () =
     const prompt = '用最近 12 周重新计算价格优势';
     const patch = buildFilterPatch(prompt, state);
     expect(patch.granularity).toBe('week');
-    expect(patch.rangeStart).toBe('202634');
-    expect(patch.rangeEnd).toBe('202645');
+    expect(patch.rangeStart).toBe('202635');
+    expect(patch.rangeEnd).toBe('202646');
     const response = await runAgent(prompt, buildAgentContext('dashboard', state, []));
     expect(response.intent).toBe('query');
     const card = response.cards.find((item) => item.kind === 'price_advantage');

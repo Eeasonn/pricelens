@@ -148,7 +148,7 @@ describe('销量估算 · 真实数据不变量（RU × Pura 90s Pro Max 首配�
 
   it('周粒度覆盖 dim_time 全部周数组快照（含无事实行的 null 位）', () => {
     const allWeeks = dimTime.map((t) => t.week_id);
-    expect(allWeeks).toHaveLength(27);
+    expect(allWeeks).toHaveLength(28) // W46 新周（PL_1109 增量）;
     expect(volumeByBuckets(MODEL, ROMRAM, CC, 'week', allWeeks)).toMatchSnapshot();
   });
 });

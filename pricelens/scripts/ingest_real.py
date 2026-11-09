@@ -68,6 +68,11 @@ INDUSTRY_OF_CAT = {"smartphone": "phone", "tablet": "tablet", "wearable": "weara
                    "wearables": "wearable", "smartphones": "phone", "earbud": "audio",
                    "earbuds": "audio", "iot": "iot", "pc": "pc", "personal computer": "pc"}
 INDUSTRY_OF_CN = {"手机": "phone", "平板": "tablet", "穿戴": "wearable", "音频": "audio"}
+
+# 形状/颜色变体词（2026-11-09）：同款产品的形态变体（Amazfit Active 2 (Round)/(Square)）
+# 在 exact 命中时并入返回，避免 RU 新增平名 Active 2 后 exact 短路吃掉沙特/阿联酋
+# 的双形态对标。只收形状词——Watch 8 Classic 这类真分档产品不入白名单。
+VARIANT_SUFFIX_TOKENS = {"round", "square"}
 TIER_LADDERS = {
     "phone": [200, 400, 600, 800, 1000],
     "tablet": [150, 250, 350, 500, 800],
@@ -90,6 +95,7 @@ BRAND_TOKENS = {
     "APPLE": ["apple"], "SAMSUNG": ["samsung", "galaxy", "三星"], "XIAOMI": ["xiaomi", "poco", "小米"],
     "HONOR": ["honor", "荣耀"], "HUAWEI": ["huawei", "华为"], "GARMIN": ["garmin"], "AMAZFIT": ["amazfit"],
     "SOUNDCORE": ["soundcore", "anker"], "SHOKZ": ["shokz"], "SONY": ["sony"], "JBL": ["jbl"],
+    "AIMOTO": ["aimoto"],
     "BOSE": ["bose"], "COROS": ["coros", "高驰"], "LENOVO": ["lenovo", "motorola", "smartfon"],
     "OPPO": ["oppo"], "REALME": ["realme"], "NOTHING": ["nothing"], "FITBIT": ["fitbit"],
     "WHOOP": ["whoop"], "ASUS": ["asus"], "HP": ["hp"], "INFINIX": ["infinix"],
@@ -146,7 +152,9 @@ def normalize_source_columns(df):
     """
     renames = {}
     for col in df.columns:
-        base = str(col).split("\\n", 1)[0].strip()
+        base = str(col).replace("\\n", "\n").split("\n", 1)[0].strip()  # 兼容字面 \n 与真实换行两种双语表头
+        # 去掉括注（汇率(1USD=本币) → 汇率），中英文括号都剥
+        base = re.sub(r"（[^）]*）|\([^)]*\)", "", base).strip()
         if base and base != col:
             renames[col] = base
     if renames:
@@ -164,6 +172,9 @@ def normalize_source_columns(df):
         "显示店铺名称": ["展示店铺名称"],
         "时间周期": ["周期", "日期"],
         "采集时间": ["抓取时间", "采集日期"],
+        "是否组合销售": ["是否组合"],
+        "网址链接": ["网址"],
+        "截图命名": ["截图"],
     }
     for canonical, candidates in aliases.items():
         if canonical in df.columns:
@@ -900,7 +911,12 @@ def main():
         if not k:
             return [], "none", txt
         if k in pool:
-            return list(pool[k]), "exact", txt
+            mids = list(pool[k])
+            for kk, extra_mids in pool.items():
+                tail = kk[len(k):].strip() if kk.startswith(k + " ") else ""
+                if tail and all(t in VARIANT_SUFFIX_TOKENS for t in tail.split()):
+                    mids.extend(m for m in extra_mids if m not in mids)
+            return mids, "exact", txt
         nos = k.replace(" ", "")
         hit_nos = [mid for kk, mids in pool.items() if kk.replace(" ", "") == nos for mid in mids]
         if hit_nos:

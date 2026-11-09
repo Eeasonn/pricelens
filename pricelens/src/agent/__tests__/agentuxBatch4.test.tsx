@@ -228,8 +228,8 @@ describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
     fireEvent.click(screen.getByRole('button', { name: '调整范围 · 最近 12 周' }));
     await waitFor(() => {
       const next = JSON.parse(view.container.querySelector('[data-filter-state]')?.textContent ?? '{}');
-      expect(next.rangeStart).toBe('202634');
-      expect(next.rangeEnd).toBe('202645');
+      expect(next.rangeStart).toBe('202635');
+      expect(next.rangeEnd).toBe('202646');
       expect(next.adaptive).toBe(false);
     });
     const rerunCard = await waitFor(() => {
@@ -277,7 +277,7 @@ describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
     const response = await runAgent('最近 8 周哪个平台最便宜？', buildAgentContext('dashboard', state, []), undefined, 'query');
     const chart = response.cards.find((card) => card.kind === 'chart');
     expect(chart).toBeTruthy();
-    if (chart?.kind === 'chart') expect(chart.note).toContain('202638–202645');
+    if (chart?.kind === 'chart') expect(chart.note).toContain('202639–202646');
   });
 
   it('R7 真实预警展开态：行级动作位于「判断边界」之后', async () => {
@@ -333,32 +333,32 @@ describe('agentux Batch4 二审深水区：R5 主品口径跨国保持 / R6 周�
     view.unmount();
   }, 15000);
 
-  it('R6 月粒度看板「最近 8 周」：buildFilterPatch 显式切 week + 关自适应（202635–202642）', () => {
-    const monthState = { ...defaultFilters, granularity: 'month' as const, mains: buildCards([main], { auto: true }), adaptive: false, rangeStart: '202605', rangeEnd: '202610' };
+  it('R6 月粒度看板「最近 8 周」：buildFilterPatch 显式切 week + 关自适应（202636–202643）', () => {
+    const monthState = { ...defaultFilters, granularity: 'month' as const, mains: buildCards([main], { auto: true }), adaptive: false, rangeStart: '202606', rangeEnd: '202611' };
     const patch = buildFilterPatch('只看最近 8 周', monthState);
     expect(patch.granularity).toBe('week');
     expect(patch.adaptive).toBe(false);
-    expect(patch.rangeStart).toBe('202638');
-    expect(patch.rangeEnd).toBe('202645');
+    expect(patch.rangeStart).toBe('202639');
+    expect(patch.rangeEnd).toBe('202646');
     const quarterPatch = buildFilterPatch('最近 12 周', { ...monthState, granularity: 'quarter' as const });
     expect(quarterPatch.granularity).toBe('week');
-    expect(quarterPatch.rangeStart).toBe('202634');
+    expect(quarterPatch.rangeStart).toBe('202635');
   });
 
   it('R6 forced query / price_advantage 合并「最近 N 周」后的读数是 week 口径，无 month · 2026xxxx 错配', async () => {
-    const monthState = { ...defaultFilters, granularity: 'month' as const, mains: buildCards([main], { auto: true }), adaptive: false, rangeStart: '202605', rangeEnd: '202610' };
+    const monthState = { ...defaultFilters, granularity: 'month' as const, mains: buildCards([main], { auto: true }), adaptive: false, rangeStart: '202606', rangeEnd: '202611' };
     const queryResponse = await runAgent('最近 8 周哪个平台最便宜？', buildAgentContext('dashboard', monthState, []), undefined, 'query');
     const chart = queryResponse.cards.find((item): item is ChartResultCard => item.kind === 'chart');
     expect(chart).toBeTruthy();
-    expect(chart!.note).toContain('week · 202638–202645');
+    expect(chart!.note).toContain('week · 202639–202646');
     expect(JSON.stringify(queryResponse.cards)).not.toMatch(/month · 2026\d{4}/);
     // 价格优势意图同样合并周口径：行周次与证据范围都收敛到最近 8 周
     const advResponse = await runAgent('最近 8 周价格优势', buildAgentContext('dashboard', monthState, []), undefined, 'price_advantage');
     const advCard = advResponse.cards[0];
     expect(advCard?.kind).toBe('price_advantage');
     if (advCard?.kind === 'price_advantage') {
-      expect(advCard.evidence?.[0]?.detail).toContain('202638–202645');
-      for (const row of advCard.rows) expect(row.weekId >= '202638').toBe(true);
+      expect(advCard.evidence?.[0]?.detail).toContain('202639–202646');
+      for (const row of advCard.rows) expect(row.weekId >= '202639').toBe(true);
     }
   });
 });

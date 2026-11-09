@@ -19,8 +19,8 @@ describe('iterate Agent followup scope envelope', () => {
       platform: { platforms: ['NOON'], shopIds: [], seller: null },
       granularity: 'week',
       adaptive: false,
-      rangeStart: '202635',
-      rangeEnd: '202642',
+      rangeStart: '202636',
+      rangeEnd: '202643',
       mains: buildCards([NOVA]),
     };
     const response = await runAgent('RU nova 14 Pro 最近 8 周价格趋势', buildAgentContext('dashboard', state, []));
@@ -32,8 +32,8 @@ describe('iterate Agent followup scope envelope', () => {
     expect(followup?.filterPatch?.mains?.[0]?.main?.modelId).toBe('own-huawei-nova-14-pro');
     expect(followup?.filterPatch?.platform).toBeNull();
     expect(followup?.filterPatch?.granularity).toBe('week');
-    expect(followup?.filterPatch?.rangeStart).toBe('202638');
-    expect(followup?.filterPatch?.rangeEnd).toBe('202645');
+    expect(followup?.filterPatch?.rangeStart).toBe('202639');
+    expect(followup?.filterPatch?.rangeEnd).toBe('202646');
     expect(followup?.target?.filterPatch).toEqual(followup?.filterPatch);
   });
 

@@ -28,11 +28,11 @@ describe('buildOverviewMatrix 金测', () => {
     expect(bands.every((b) => b.models.length > 0)).toBe(true); // 空档不输出
   });
 
-  it('各带型号数锚点（RU phone 实况：我司 20 + 竞品 83 = 103 型号全覆盖）', () => {
+  it('各带型号数锚点（RU phone 实况：我司 20 + 竞品 86 = 106 型号全覆盖；W45 增量新采 Z TriFold/Realme 等）', () => {
     // 新批次分国档位分布：1000+ 33 / 800-1000 11 / 600-800 7 / 400-600 23 / 200-400 22 / <200 7
-    expect(bands.map((b) => b.models.length)).toEqual([33, 11, 7, 23, 22, 7]);
+    expect(bands.map((b) => b.models.length)).toEqual([34, 11, 7, 24, 23, 7]);
     expect(flatModels.filter((m) => m.isOwn)).toHaveLength(20);
-    expect(flatModels.filter((m) => !m.isOwn)).toHaveLength(83);
+    expect(flatModels.filter((m) => !m.isOwn)).toHaveLength(86);
     // 覆盖完备：矩阵型号数 = 维表中 RU 有事实行的 phone 型号数
     const ruPhoneModels = new Set(
       dimProduct.filter((p) => p.industry === 'phone' && p.countries.includes(CC)).map((p) => p.model_id),
@@ -42,8 +42,8 @@ describe('buildOverviewMatrix 金测', () => {
 
   it('带内按上市参考价（ref_price_usd）降序：1000+ 首位 iPhone Duo，首位我司 = Mate XT', () => {
     const top = bands[0].models;
-    expect(top[0].modelName).toBe('iPhone Duo');
-    expect(top[0].launchPriceUsd).toBe(3594); // 新批次 dim_product.ref_price_usd
+    expect(top[0].modelName).toBe('Galaxy Z TriFold'); // W45 增量新采 Z TriFold（新最高价竞品）
+    expect(top[0].launchPriceUsd).toBe(5004.3); // Z TriFold launch 价（W45 增量）
     expect(top[0].isOwn).toBe(false);
     expect(top.find((m) => m.isOwn)!.modelName).toBe('Mate XT');
     // 排序不变量：launchPriceUsd 降序，同价按名称字典序
@@ -62,8 +62,8 @@ describe('buildOverviewMatrix 金测', () => {
     const row = pura.rows[1];
     expect(row.skuId).toBe('own-huawei-pura-90s-pro-max__12-256gb__black'); // 默认渠道最低价色
     expect(row.asOfWeek).toBe('202645'); // 新批次最新采数周
-    expect(row.price).toBe(1073.99);
-    expect(row.rrp).toBe(1073.99); // 官网价 = 成交价（无折扣）
+    expect(row.price).toBe(1098.49); // RU_1102 增量刷新 W45 价
+    expect(row.rrp).toBe(1098.49); // 官网价 = 成交价（无折扣）
     expect(row.discountPct).toBe(0);
     expect(row.colors).toHaveLength(4); // Black / Gold / Orange / Purple 颜色次级菜单全量
     expect(row.points).toHaveLength(dimTime.length); // 序列 = dim_time 全周（缺采 = null 点）
@@ -111,7 +111,7 @@ describe('buildOverviewMatrix 金测', () => {
     const pura = findModel('own-huawei-pura-90s-pro-max');
     const allSkuIds = dimProduct.filter((p) => p.model_id === 'own-huawei-pura-90s-pro-max').map((p) => p.sku_id);
     expect(pura.lifecyclePct).toBe(lifecycleDeltaOf(allSkuIds, CC)!.pct);
-    expect(+(pura.lifecyclePct! * 100).toFixed(1)).toBe(3.0);
+    expect(+(pura.lifecyclePct! * 100).toFixed(1)).toBe(3.3); // 新增 SKUs 改变生命周期分母
     // 竞品型号不出生命周期
     expect(findModel('cmp-apple-iphone-17-pro').lifecyclePct).toBeNull();
   });
@@ -120,7 +120,7 @@ describe('buildOverviewMatrix 金测', () => {
     const rub = buildOverviewMatrix('local', undefined, null, DEFAULT_DATA_SCOPE);
     const usdRow = findModel('own-huawei-pura-90s-pro-max').rows[1];
     const rubRow = rub.flatMap((b) => b.models).find((m) => m.modelId === 'own-huawei-pura-90s-pro-max')!.rows[1];
-    expect(rubRow.price).toBe(87799); // 新批次 fact price_local 直读（本币不折算）
+    expect(rubRow.price).toBe(89999); // RU_1102 刷新 // 新批次 fact price_local 直读（本币不折算）
     const fxRow = factPriceWeekly.find(
       (r) => r.sku_id === usdRow.skuId && r.week_id === '202645' && r.channel_id === 'RU:dns:独立站',
     )!;

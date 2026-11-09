@@ -81,12 +81,12 @@ describe('A M4 · classifyIntent 不抢占含「最近 N 周」的真实查询�
   });
 
   it('runAgent（不传 forcedIntent）对「最近 8 周价格趋势」产出真实周范围查询结果', async () => {
-    const state = { ...defaultFilters, mains: buildCards([main], { auto: true }), granularity: 'month' as const, adaptive: false, rangeStart: '202605', rangeEnd: '202610' };
+    const state = { ...defaultFilters, mains: buildCards([main], { auto: true }), granularity: 'month' as const, adaptive: false, rangeStart: '202606', rangeEnd: '202611' };
     const response = await runAgent('最近 8 周价格趋势', buildAgentContext('dashboard', state, []));
     expect(response.intent).not.toBe('filter');
     expect(response.intent).not.toBe('clarify');
     const note = response.cards.map((card) => ('note' in card ? card.note : '')).join(' ');
-    expect(note).toContain('202638–202645');
+    expect(note).toContain('202639–202646');
     expect(note).toContain('week');
   });
 });
@@ -197,7 +197,7 @@ describe('A M2 · 跳 GTM 与回看共用 scopePatch（目标国 + 显式 mains 
 });
 
 describe('A M4 · 月粒度「近期价格趋势」澄清 → 点击「补齐时间 · 最近 8 周」发起真实查询', () => {
-  it('端到端：澄清卡出现补齐时间动作，点击产出新批次周范围 202638–202645 的查询结果而非筛选预览', async () => {
+  it('端到端：澄清卡出现补齐时间动作，点击产出新批次周范围 202639–202646 的查询结果而非筛选预览', async () => {
     window.sessionStorage.clear();
     const view = mountedApp();
     fireEvent.click(screen.getByRole('button', { name: '准备月粒度' }));
@@ -213,7 +213,7 @@ describe('A M4 · 月粒度「近期价格趋势」澄清 → 点击「补齐时
     fireEvent.click(clarifyChip);
     // 点击后是真实查询（价格走势摘要 + 周范围），不是筛选预览
     const queryCard = await waitFor(() => {
-      const found = [...view.container.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('202638–202645')).pop();
+      const found = [...view.container.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('202639–202646')).pop();
       expect(found).toBeTruthy();
       return found as HTMLElement;
     }, { timeout: 5000 });
@@ -318,10 +318,10 @@ describe('B m3 · 已定位撤销随消息锁定 + 回调守卫；未锁消息�
 });
 
 describe('A M3 · GTM 情报周窗：月/季结束桶取最后匹配周', () => {
-  it('weekIdRange：月 202610 与季 2026Q4 的结束边界分别落在 202644 与 202645', () => {
+  it('weekIdRange：月 202610 与季 2026Q4 的结束边界分别落在 202644 与 202646', () => {
     expect(weekIdRange('week', '202640', '202642')).toEqual(['202640', '202642']);
     expect(weekIdRange('month', '202610', '202610')).toEqual(['202641', '202644']);
-    expect(weekIdRange('quarter', '2026Q4', '2026Q4')).toEqual(['202641', '202645']);
+    expect(weekIdRange('quarter', '2026Q4', '2026Q4')).toEqual(['202641', '202646']);
   });
 
   it('RU 周/月/季口径都能看到 W42 的 Galaxy S25 Ultra 竞品条目', () => {

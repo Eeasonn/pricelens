@@ -336,12 +336,16 @@
     "substitute": false,
     "models": [
      {
+      "model_id": "cmp-amazfit-active-2",
+      "status": "exact"
+     },
+     {
       "model_id": "cmp-amazfit-active-2-round",
-      "status": "subset"
+      "status": "exact"
      },
      {
       "model_id": "cmp-amazfit-active-2-square",
-      "status": "subset"
+      "status": "exact"
      }
     ]
    }
@@ -510,7 +514,12 @@
   "series": "WATCH KIDS",
   "tier": "150<300",
   "own_raw": "KIDS  X1 Pro",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-kids-x1-pro",
+    "status": "exact"
+   }
+  ],
   "comps": []
  },
  {
@@ -520,7 +529,12 @@
   "series": "WATCH KIDS",
   "tier": "150<300",
   "own_raw": "KIDS X1系列",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-kids-x1",
+    "status": "exact"
+   }
+  ],
   "comps": []
  },
  {
@@ -2041,12 +2055,16 @@
     "substitute": false,
     "models": [
      {
+      "model_id": "cmp-amazfit-active-2",
+      "status": "exact"
+     },
+     {
       "model_id": "cmp-amazfit-active-2-round",
-      "status": "subset"
+      "status": "exact"
      },
      {
       "model_id": "cmp-amazfit-active-2-square",
-      "status": "subset"
+      "status": "exact"
      }
     ]
    }
@@ -2215,7 +2233,12 @@
   "series": "WATCH KIDS",
   "tier": "150<300",
   "own_raw": "KIDS  X1 Pro",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-kids-x1-pro",
+    "status": "exact"
+   }
+  ],
   "comps": []
  },
  {
@@ -2225,7 +2248,12 @@
   "series": "WATCH KIDS",
   "tier": "150<300",
   "own_raw": "KIDS X1系列",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-kids-x1",
+    "status": "exact"
+   }
+  ],
   "comps": []
  },
  {
@@ -4103,7 +4131,12 @@
     "brand": "GARMIN",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-garmin-forerunner-965",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "COROS Pace Pro",
@@ -5343,7 +5376,12 @@
     "brand": "GARMIN",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-garmin-forerunner-965",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "COROS Pace Pro",
@@ -6085,7 +6123,12 @@
     "brand": "GARMIN",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-garmin-fenix-8-pro",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Samsung Galaxy Watch Ultra",
@@ -6258,7 +6301,12 @@
     "brand": "GARMIN",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-garmin-forerunner-965",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Garmin Forerunner 570",
@@ -6500,7 +6548,12 @@
   "series": "WATCH KIDS",
   "tier": "150<300",
   "own_raw": "KIDS X1 Pro",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-kids-x1-pro",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Aimoto Life Button",
@@ -6514,14 +6567,24 @@
     "brand": "AIMOTO",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-aimoto-fun",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Aimoto Fun",
     "brand": "AIMOTO",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-aimoto-fun",
+      "status": "exact"
+     }
+    ]
    }
   ],
   "default": true
@@ -6533,7 +6596,12 @@
   "series": "WATCH KIDS",
   "tier": "150<300",
   "own_raw": "KIDS X1系列",
-  "own": [],
+  "own": [
+   {
+    "model_id": "own-huawei-kids-x1",
+    "status": "exact"
+   }
+  ],
   "comps": [
    {
     "raw": "Aimoto Life Button",
@@ -6547,14 +6615,24 @@
     "brand": "AIMOTO",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-aimoto-fun",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Aimoto Fun",
     "brand": "AIMOTO",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-aimoto-fun",
+      "status": "exact"
+     }
+    ]
    }
   ],
   "default": true
@@ -6580,14 +6658,24 @@
     "brand": "AIMOTO",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-aimoto-fun",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Aimoto Fun",
     "brand": "AIMOTO",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-aimoto-fun",
+      "status": "exact"
+     }
+    ]
    }
   ],
   "default": true
@@ -6921,7 +7009,12 @@
     "brand": "REALME",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-realme-buds-air-8-pro",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Soundcore Liberty 5",
@@ -7080,7 +7173,12 @@
     "brand": "SAMSUNG",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-z-trifold",
+      "status": "exact"
+     }
+    ]
    }
   ],
   "default": true
