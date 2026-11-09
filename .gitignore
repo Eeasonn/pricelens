@@ -55,3 +55,7 @@ logs/
 /PriceLens-UX需求文档.md
 /docs/*.xlsx
 /docs/plans/
+
+# 本地生产素材与整合备份，仅留本机不入库（2026-11-09 Eason 拍板）
+/pricelens-video/
+/.consolidation-backup-20261108/
