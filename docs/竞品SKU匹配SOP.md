@@ -73,7 +73,8 @@
 
 ## 6. 未命中与替代
 
-- **矩阵有、数据无**（174 条）：默认**不匹配**（图中该竞品留空，待补采）。清单见 `data/real/ingest_report.md`。
+- **矩阵有、数据无 → 置空（2026-11-09 Eason 拍板，不加猜测）**：矩阵竞品名点不中数据型号时**一律留空**，不做同族/相近代际猜测——`Fenix 8 Pro ≠ Fenix 8`（砍掉 Pro 档=换产品）、`Amazfit Active ≠ Active Max`、`JBL Wave Buds ≠ Wave Buds 2`（代际顶替）、`Galaxy S26+ ≠ S26`、`Lenovo Legion Tab ≠ Tab`。清单见 `data/real/ingest_report.md`，逐条勾兑：补采、改矩阵名、或走 `matrix_aliases` 人工指认。
+- **两条例外（仍是同品识别，非猜测）**：① 矩阵名带代际数字的短写（`Amazfit Active 2` → 数据 Active 2 Round/Square 双形状变体）；② 尺寸命名指现行代（`iPad Pro 13"` → 数据 iPad Pro M5、`iPad Air 13"` → M4，候选多出 token 全为芯片代号 m4/a16 时取最新代）。
 - **代际替代**（用下一代顶替，如矩阵写 Watch Ultra 2、数据只有 Ultra 3/4）：可选，需在 overrides 标 `substitute: true`，图表显示替代品真实名称。是否批量启用待拍板。
 - **人工指认**：`overrides.json::matrix_aliases`（把矩阵写法指认到数据型号，可带 spec 过滤）、`benchmark_manual`（人工追加对标，绕过自动规则）。
 

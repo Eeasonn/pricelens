@@ -903,12 +903,7 @@
     "brand": "JBL",
     "col": 2,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-jbl-wave-buds-2",
-      "status": "subset"
-     }
-    ]
+    "models": []
    },
    {
     "raw": "Soundcore P30i",
@@ -990,12 +985,7 @@
     "brand": "SAMSUNG",
     "col": 1,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "subset"
-     }
-    ]
+    "models": []
    },
    {
     "raw": "Apple iPhone 18 Pro",
@@ -1554,12 +1544,7 @@
     "brand": "LENOVO",
     "col": 3,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-tab",
-      "status": "subset"
-     }
-    ]
+    "models": []
    }
   ]
  },
@@ -2623,12 +2608,7 @@
     "brand": "JBL",
     "col": 2,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-jbl-wave-buds-2",
-      "status": "subset"
-     }
-    ]
+    "models": []
    },
    {
     "raw": "Soundcore P30i",
@@ -2710,12 +2690,7 @@
     "brand": "SAMSUNG",
     "col": 1,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "subset"
-     }
-    ]
+    "models": []
    },
    {
     "raw": "Apple iPhone 18 Pro",
@@ -3274,12 +3249,7 @@
     "brand": "LENOVO",
     "col": 3,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-tab",
-      "status": "subset"
-     }
-    ]
+    "models": []
    }
   ]
  },
@@ -5918,12 +5888,7 @@
     "brand": "SAMSUNG",
     "col": 2,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "subset"
-     }
-    ]
+    "models": []
    },
    {
     "raw": "Honor Magic 18 Pro",
@@ -6120,12 +6085,7 @@
     "brand": "GARMIN",
     "col": 2,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-fenix-8",
-      "status": "subset"
-     }
-    ]
+    "models": []
    },
    {
     "raw": "Samsung Galaxy Watch Ultra",
@@ -6365,12 +6325,7 @@
     "brand": "AMAZFIT",
     "col": 3,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-amazfit-active-max",
-      "status": "subset"
-     }
-    ]
+    "models": []
    }
   ],
   "default": true

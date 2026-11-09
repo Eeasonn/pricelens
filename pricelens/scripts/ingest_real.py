@@ -913,13 +913,19 @@ def main():
             if series_mode and contiguous(kt, tt):
                 scored.append((2 + 0.1 * (len(tt) - len(kt)), mids))
             elif contiguous(kt, tt):
-                if strict_own and any(re.search(r"\d", e) for e in tt if e not in kt):
-                    continue  # 型号名多出代际数字（ultimate 2）→ 非本行产品
+                extra = [e for e in tt if e not in kt]
+                if strict_own and any(re.search(r"\d", e) for e in extra):
+                    continue  # 我司侧：型号名多出代际数字（ultimate 2）→ 非本行产品
+                # 2026-11-09 Eason：矩阵竞品名不带代际数字不猜（Amazfit Active ≠ Active Max、
+                # Wave Buds ≠ Wave Buds 2、Watch Ultra ≠ Ultra2）→ 置空；唯一例外=候选多出的
+                # token 拼接后是纯芯片代号（iPad Pro 13" → iPad Pro M5[=m 5]：尺寸命名指现行代，
+                # 交给既有「取最新代」做同品识别）
+                if not strict_own and not re.search(r"\d", kt[-1]) \
+                        and not re.fullmatch(r"[ma]\d+", "".join(extra)):
+                    continue
                 scored.append((3 + 0.1 * (len(tt) - len(kt)), mids))
-            elif contiguous(tt, kt):
-                extra = [t for t in kt if t not in tt]
-                if extra and all(not re.search(r"\d", e) for e in extra) and len(extra) <= 2:
-                    scored.append((4 + 0.1 * len(extra), mids))
+            # 2026-11-09 Eason：矩阵名比数据型号名多出实词（Fenix 8 Pro vs Fenix 8）= 不同产品 →
+            # 反向子集匹配整档退役，一律置空进未命中清单待勾兑；同族就近猜测不再发生。
         cands = []
         if scored:
             scored.sort(key=lambda x: x[0])

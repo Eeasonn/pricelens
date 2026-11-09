@@ -1,6 +1,6 @@
 # 真实数据接入报告（scripts/ingest_real.py）
 
-生成时间：2026-11-09T15:15:31+08:00
+生成时间：2026-11-09T18:57:59+08:00
 
 ## 一、总体
 
@@ -11,8 +11,8 @@
 - 时间维 202619(2026-05-06) → 202645(2026-11-04)，共 27 周
 - 低侧可疑价（<15% 参考价，仅报告不剔除）103 行
 - 分国档位：320 个 国家×型号 采用矩阵声明，其余按该国参考价推算
-- 自动匹配：310 个国家×我司型号补齐竞品，1158 条对标；53 个无可比对象
-- 对标上限4：55 组超限截断 71 条，截断后共 2047 条（每配置 ≤4 款竞品）
+- 自动匹配：311 个国家×我司型号补齐竞品，1161 条对标；53 个无可比对象
+- 对标上限4：54 组超限截断 70 条，截断后共 2024 条（每配置 ≤4 款竞品）
 - 事实包 95,946 行；b64 2,740,860 B（gzip 2,055,645 B）
 - 修正：价格单位错位(×100) 68 行
 - 修正：价格单位错位(÷100) 31 行
@@ -61,7 +61,7 @@
 
 ## 三、矩阵解析未命中清单
 
-共 60 条：
+共 69 条：
 
 - [own] 沙特 wearable「WATCH ultimate」：none
 - [comp] 沙特 wearable「COROS PACE Pro」：none
@@ -75,9 +75,12 @@
 - [comp] 沙特 audio「Nothing Ear (a)」：none
 - [comp] 沙特 audio「JBL Live Buds 3」：none
 - [comp] 沙特 audio「Soundcore Liberty 4 NC」：none
+- [comp] 沙特 audio「JBL Wave Buds」：none
 - [comp] 沙特 audio「Soundcore P30i」：none
+- [comp] 沙特 phone「amsung Galaxy S26+」：none
 - [comp] 沙特 phone「HONOR Magic V6」：none
 - [comp] 沙特 phone「OPPO Find X9 Pro」：none
+- [comp] 沙特 tablet「Lenovo Legion Tab」：none
 - [own] 阿联酋 wearable「WATCH ultimate」：none
 - [comp] 阿联酋 wearable「COROS PACE Pro」：none
 - [comp] 阿联酋 wearable「Samsung Galaxy Watch FE」：none
@@ -90,21 +93,27 @@
 - [comp] 阿联酋 audio「Nothing Ear (a)」：none
 - [comp] 阿联酋 audio「JBL Live Buds 3」：none
 - [comp] 阿联酋 audio「Soundcore Liberty 4 NC」：none
+- [comp] 阿联酋 audio「JBL Wave Buds」：none
 - [comp] 阿联酋 audio「Soundcore P30i」：none
+- [comp] 阿联酋 phone「amsung Galaxy S26+」：none
 - [comp] 阿联酋 phone「HONOR Magic V6」：none
 - [comp] 阿联酋 phone「OPPO Find X9 Pro」：none
+- [comp] 阿联酋 tablet「Lenovo Legion Tab」：none
 - [comp] 南非 audio「Soundcore Liberty 4NC」：none
 - [comp] 墨西哥 wearable「Garmin Forerunner 965」：none
 - [comp] 墨西哥 wearable「COROS Pace Pro」：none
 - [comp] 墨西哥 tablet「Apple iPad Air 16」：none
 - [comp] 巴西 wearable「Garmin Forerunner 965」：none
 - [comp] 巴西 wearable「COROS Pace Pro」：none
+- [comp] 巴西 phone「Samsung Galazy S26+」：none
 - [comp] 巴西 phone「Honor Magic 18 Pro」：none
 - [comp] 巴西 tablet「Apple iPad Air 16」：none
+- [comp] 默认 wearable「Garmin Fenix 8 Pro」：none
 - [own] 默认 wearable「WATCH ultimate」：none
 - [comp] 默认 wearable「Garmin Fenix 7 Pro」：none
 - [comp] 默认 wearable「Garmin Forerunner 965」：none
 - [comp] 默认 wearable「COROS Pace Pro」：none
+- [comp] 默认 wearable「Amazfit Active」：none
 - [own] 默认 wearable「KIDS X1 Pro」：none
 - [comp] 默认 wearable「Aimoto Life Button」：none
 - [comp] 默认 wearable「Aimoto Fun」：none
@@ -163,38 +172,28 @@
 - BR｜own-huawei-watch-gt-7 41mm ← XIAOMI Watch S5 —（sort 3）
 - BR｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 1）
 - DE｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
-- DE｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 47mm AMOLED（sort 2）
-- DE｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
-- DE｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 51mm AMOLED（sort 4）
+- DE｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - ES｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
 - ES｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - FR｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
 - FR｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - GB｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
 - GB｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
-- ID｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 1）
 - IT｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
 - IT｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - MY｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
-- MY｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 2）
-- MY｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- MY｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - PH｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
-- PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 2）
-- PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 47mm Solar（sort 3）
-- PH｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 51mm AMOLED（sort 4）
 - PL｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
 - PL｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - RU｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
-- RU｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 2）
-- RU｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- RU｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - SG｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
-- SG｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 2）
 - TH｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
 - TH｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - TR｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
 - ZA｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 4 —（sort 1）
-- ZA｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 43mm AMOLED（sort 2）
-- ZA｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 3）
+- ZA｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） 47mm（sort 2）
 - AR｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - CL｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - CL｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 2）
@@ -258,6 +257,7 @@
 - TR｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 4）
 - VN｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - ZA｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 12 42mm GPS（sort 1）
+- ZA｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 2）
 - AR｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - AR｜own-huawei-watch-gt-7 41mm ← XIAOMI Watch S5 —（sort 2）
 - AR｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
@@ -266,6 +266,8 @@
 - CL｜own-huawei-watch-gt-7 41mm ← XIAOMI Watch S5 —（sort 2）
 - CL｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 1）
 - CL｜own-huawei-watch-gt-7 46mm ← XIAOMI Watch S5 —（sort 2）
+- DE｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
+- DE｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 12 42mm GPS（sort 2）
 - ES｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - ES｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 12 42mm GPS（sort 2）
 - FR｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
@@ -283,6 +285,10 @@
 - JP｜own-huawei-watch-gt-7 41mm ← XIAOMI Watch S5 —（sort 3）
 - JP｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 1）
 - MY｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
+- MY｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 12 42mm GPS（sort 2）
+- PH｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
+- PH｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 12 42mm GPS（sort 2）
+- PH｜own-huawei-watch-gt-7 41mm ← XIAOMI Watch S5 —（sort 3）
 - PL｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - PL｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 12 42mm GPS（sort 2）
 - RO｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
@@ -290,8 +296,10 @@
 - RO｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 44mm Bluetooth（sort 1）
 - RO｜own-huawei-watch-gt-7 46mm ← APPLE Watch SERIES 12 46mm GPS（sort 2）
 - RU｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
+- RU｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 12 42mm GPS（sort 2）
 - SG｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - SG｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 12 42mm GPS（sort 2）
+- SG｜own-huawei-watch-gt-7 41mm ← XIAOMI Watch S5 —（sort 3）
 - TH｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - TH｜own-huawei-watch-gt-7 41mm ← APPLE Watch SERIES 12 42mm GPS（sort 2）
 - TR｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
@@ -300,12 +308,13 @@
 - VN｜own-huawei-watch-gt-7 41mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - VN｜own-huawei-watch-gt-7 46mm ← SAMSUNG Galaxy Watch 9 40mm Bluetooth（sort 1）
 - ID｜own-huawei-watch-fit-5-pro — ← APPLE Watch SE 3 40mm GPS（sort 1）
+- ID｜own-huawei-watch-fit-5-pro — ← XIAOMI Watch S5 —（sort 2）
 - VN｜own-huawei-watch-fit-5-pro — ← APPLE Watch SE 3 40mm GPS（sort 1）
-- VN｜own-huawei-watch-fit-5-pro — ← AMAZFIT Active Max —（sort 2）
-- VN｜own-huawei-watch-fit-5-pro — ← APPLE Watch SE 3 44mm GPS（sort 3）
+- VN｜own-huawei-watch-fit-5-pro — ← APPLE Watch SE 3 44mm GPS（sort 2）
 - VN｜own-huawei-watch-fit-5 — ← XIAOMI Band 10 Pro —（sort 1）
 - VN｜own-huawei-watch-fit-5 — ← XIAOMI Redmi Watch 6 —（sort 2）
 - PE｜own-huawei-band-11-pro — ← XIAOMI Redmi Watch 5 Lite —（sort 1）
+- VN｜own-huawei-band-11-pro — ← XIAOMI Band 10 —（sort 1）
 - AR｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - AR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 2）
 - PE｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 1）
