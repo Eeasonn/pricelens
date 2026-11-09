@@ -3440,1780 +3440,12 @@
   ]
  },
  {
-  "country": "波兰",
-  "country_code": "PL",
+  "country": "南非",
+  "country_code": "ZA",
   "industry": "手机",
   "series": "Pura",
-  "tier": "~=1000",
-  "own_raw": "Pura 90s Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-pura-90s-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPhone 17",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S26 5G Dual SIM",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S25 Ultra 5G Dual SIM",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s25-ultra",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "手机",
-  "series": "Pura",
-  "tier": "1000+",
-  "own_raw": "Puro 90s Pro Max",
-  "own": [
-   {
-    "model_id": "own-huawei-pura-90s-pro-max",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPhone 17",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "iPhone 17 Pro 5G",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "iPhone 17 Pro Max 5G",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17-pro-max",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S26 Ultra 5G Dual SIM",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26-ultra",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S26+ 5G Dual SIM",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "手机",
-  "series": "Mate",
-  "tier": "1000+",
-  "own_raw": "Mate  X7",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-x7",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPhone DUO",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-duo",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "SAMSUNG Galaxy Z Fold 8 5G",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-z-fold8",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Z Fold 7 5G",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-z-fold-7",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "400-600",
-  "own_raw": "nova  14系列",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-14",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Smartfon REALME 16 Pro+ 5G",
-    "brand": "LENOVO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Smartfon MOTOROLA Edge 70 5G",
-    "brand": "LENOVO",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-edge-70",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Smartfon MOTOROLA Razr 60 5G",
-    "brand": "LENOVO",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-razr-60",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "平板",
-  "series": "MatePad PRO",
-  "tier": "800+",
-  "own_raw": "MatePad  Pro Max",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-pro-max",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPad Pro （M4）",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-pro-m4",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S11 Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11-ultra",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Galaxy Tab S11 Ultra",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11-ultra",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "平板",
-  "series": "Air",
-  "tier": "800+",
-  "own_raw": "MatePad  Air",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-air-2026",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad Air M3 Wi-Fi",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-air-m3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "SAMSUNG Galaxy Tab S11 11 Wi-Fi \"",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "SAMSUNG Galaxy Tab S10 FE+ Wi-Fi",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "平板",
-  "series": "数字",
-  "tier": "500-800",
-  "own_raw": "MatePad  12X",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-12-x-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPad 11 gen. 2025 Wi-Fi",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-a16",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Tablet SAMSUNG Galaxy Tab S10 FE Wi-Fi Szary + Rysik",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Idea Tab Pro Matt WiFi szary + KB + rysik",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-idea-tab-pro",
-      "status": "subset"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "平板",
-  "series": "数字",
-  "tier": "500-800",
-  "own_raw": "MatePad 11.5S",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-11-5-s-2026",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Tablet SAMSUNG Galaxy Tab S10 Lite 10.9 Wi-Fi Szary + rysik",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-lite",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi Pad 8 WiFi Gray",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-pad-8",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Lenovo Idea Tab Plus Matt WiFi szary + rysik + KB",
-    "brand": "LENOVO",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-idea-tab",
-      "status": "subset"
-     },
-     {
-      "model_id": "cmp-lenovo-tab-plus",
-      "status": "subset"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "平板",
-  "series": "数字",
-  "tier": "450",
-  "own_raw": "MatePad 11.5",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-11-5-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Lenovo Idea Tab Plus Matt WiFi szary + rysik",
-    "brand": "LENOVO",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-idea-tab",
-      "status": "subset"
-     },
-     {
-      "model_id": "cmp-lenovo-tab-plus",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Tablet XIAOMI Redmi Pad 2 Pro Wi-Fi Szary",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-pad-2-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Tablet LENOVO IdeaTab Matowy Ekran Wi-Fi Szary + Klawiatura + Rysik",
-    "brand": "LENOVO",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-idea-tab",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "音频",
-  "series": "FreeClip",
-  "tier": "200+",
-  "own_raw": "FreeClip  2 S",
-  "own": [
-   {
-    "model_id": "own-huawei-freeclip-2-s",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Bose Ultra Open Earbuds",
-    "brand": "BOSE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-bose-ultra-open",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Sony LinkBuds Fit",
-    "brand": "SONY",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-sony-linkbuds-fit",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-opendots-2",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "音频",
-  "series": "FreeClip",
-  "tier": "100-200",
-  "own_raw": "FreeClip 2",
-  "own": [
-   {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Bose Ultra Open Earbuds",
-    "brand": "BOSE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-bose-ultra-open",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Sony LinkBuds Open",
-    "brand": "SONY",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-sony-linkbuds-open",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-opendots-2",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "200+",
-  "own_raw": "FreeBuds  Pro 5",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-pro-5",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods Pro 3",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-pro-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Sony WF-1000XM6",
-    "brand": "SONY",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-sony-wf-1000-xm6",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Buds 4 Pro",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds-4-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100-200",
-  "own_raw": "FreeBuds NEO",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-neo",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods 5",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds 3 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds3-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "JBL Live Pro 2 TWS",
-    "brand": "JBL",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-jbl-live-pro-2-tws",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100-200",
-  "own_raw": "FreeBuds 7i",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-7i",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods 5",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds 3 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds3-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "JBL Live Pro 2 TWS",
-    "brand": "JBL",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-jbl-live-pro-2-tws",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100-200",
-  "own_raw": "FreeBuds 6",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-6",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods 5",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds 3 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds3-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "JBL Live Pro 2 TWS",
-    "brand": "JBL",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-jbl-live-pro-2-tws",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "<100",
-  "own_raw": "FreeBuds SE 4 ANC",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-se-4-anc",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "JBL Tune Buds",
-    "brand": "JBL",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-jbl-tune-buds-2",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi Redmi Buds 4 Pro",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "波兰",
-  "country_code": "PL",
-  "industry": "音频",
-  "series": "FreeArc",
-  "tier": "<100",
-  "own_raw": "FreeArc",
-  "own": [
-   {
-    "model_id": "own-huawei-freearc",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "JBL Tune Buds",
-    "brand": "JBL",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-jbl-tune-buds-2",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "SHOKZ OpenFit 2",
-    "brand": "SHOKZ",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-openfit-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "OpenFit Air",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-openfit-air",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH ultimate  2",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-ultimate-2",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch Ultra 4",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-ultra-4",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Fenix 8 Pro",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-fenix-8",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH ultimate",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Apple Watch Ultra 3",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-ultra-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Fenix 7 Pro",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH GT",
-  "tier": ">300",
-  "own_raw": "GT7  Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-7-pro",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch Series 12",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-series-12",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch 9",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-9",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH GT",
-  "tier": ">300",
-  "own_raw": "GT7",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-7",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Watch 9",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-9",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch 8",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-8",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi S5",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-watch-s5",
-      "status": "subset"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH GT",
-  "tier": ">300",
-  "own_raw": "GT Runner 2",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-runner-2",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Garmin Forerunner 965",
-    "brand": "GARMIN",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Garmin Forerunner 570",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-forerunner-570",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "COROS Pace Pro",
-    "brand": "COROS",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH  FIT",
-  "tier": "150<300",
-  "own_raw": "FIT  5 Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-fit-5-pro",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch SE 3",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-se-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi S5",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-watch-s5",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Amazfit Active",
-    "brand": "AMAZFIT",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-amazfit-active-max",
-      "status": "subset"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH  FIT",
-  "tier": "150<300",
-  "own_raw": "FIT 5",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-fit-5",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Xiaomi S5",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-watch-s5",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi Band 10 Pro",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-10-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Watch 6",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-watch-6",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH",
-  "tier": ">300",
-  "own_raw": "D3",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-d3",
-    "status": "subset"
-   }
-  ],
-  "comps": []
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH",
-  "tier": ">300",
-  "own_raw": "WATCH 6 Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-6-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch Series 12",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-series-12",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple Watch Ultra 3",
-    "brand": "APPLE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-ultra-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple Watch Ultra 4",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-ultra-4",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH",
-  "tier": ">300",
-  "own_raw": "WATCH 6",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-6",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch Series 12",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-series-12",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch 9",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-9",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH KIDS",
-  "tier": "150<300",
-  "own_raw": "KIDS  X1 Pro",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Aimoto Life Button",
-    "brand": "AIMOTO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Aimoto Fun",
-    "brand": "AIMOTO",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Aimoto Fun",
-    "brand": "AIMOTO",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH KIDS",
-  "tier": "150<300",
-  "own_raw": "KIDS X1系列",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Aimoto Life Button",
-    "brand": "AIMOTO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Aimoto Fun",
-    "brand": "AIMOTO",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Aimoto Fun",
-    "brand": "AIMOTO",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "WATCH KIDS",
-  "tier": "50<75",
-  "own_raw": "KIDS 4 Pro",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Aimoto Life Button",
-    "brand": "AIMOTO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Aimoto Fun",
-    "brand": "AIMOTO",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Aimoto Fun",
-    "brand": "AIMOTO",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "Band",
-  "tier": "25<75",
-  "own_raw": "Band  11 Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-band-11-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Xiaomi Smart Band 10",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-10",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Watch 5 lite",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-watch-5-lite",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi band 10 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-10-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "穿戴",
-  "series": "Band",
-  "tier": "25<75",
-  "own_raw": "Band 11",
-  "own": [
-   {
-    "model_id": "own-huawei-band-11",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Xiaomi Smart Band 10",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-10",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Watch 5 lite",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-watch-5-lite",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Amazfit Band 7",
-    "brand": "AMAZFIT",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "音频",
-  "series": "FreeClip",
-  "tier": "＞200",
-  "own_raw": "FreeClip  2 S",
-  "own": [
-   {
-    "model_id": "own-huawei-freeclip-2-s",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods 4 ANC",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-4-anc",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple AirPods 5",
-    "brand": "APPLE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Galaxy Buds On",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "音频",
-  "series": "FreeClip",
-  "tier": "100<200",
-  "own_raw": "FreeClip 2",
-  "own": [
-   {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods 4 ANC",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-4-anc",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple AirPods 5",
-    "brand": "APPLE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Galaxy Buds On",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "＞200",
-  "own_raw": "FreeBuds  Pro 5",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-pro-5",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods Pro 3",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-pro-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds4 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds-4-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Sony WF-1000XM6",
-    "brand": "SONY",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-sony-wf-1000-xm6",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100<200",
-  "own_raw": "FreeBuds Neo",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-neo",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Yandex Drop",
-    "brand": "OTHER",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Apple AirPods 4 ANC",
-    "brand": "APPLE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-4-anc",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple AirPods 5",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-5",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100<200",
-  "own_raw": "FreeBuds 7i",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-7i",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Buds FE",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Realme Buds air 8 pro",
-    "brand": "REALME",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Soundcore Liberty 5",
-    "brand": "SOUNDCORE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-liberty-5",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "Pura",
-  "tier": "800<1000",
-  "own_raw": "Pura  90s Pro Max",
+  "tier": "＞1000",
+  "own_raw": "Pura 90s Pro Max",
   "own": [
    {
     "model_id": "own-huawei-pura-90s-pro-max",
@@ -5244,149 +3476,6 @@
       "status": "exact"
      }
     ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "Pura",
-  "tier": "800<1000",
-  "own_raw": "Pura 90s Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-pura-90s-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPhone 17",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S26",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "Mate",
-  "tier": "＞1000",
-  "own_raw": "Mate  X7",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-x7",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Z Fold7",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-z-fold-7",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor Magic V5",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-magic-v5",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "Mate",
-  "tier": "＞1000",
-  "own_raw": "Mate XT",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-xt",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Z TriFold",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "Mate",
-  "tier": "800<1000",
-  "own_raw": "Mate 80 Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-80-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPhone 17",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S26+",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "exact"
-     }
-    ]
    },
    {
     "raw": "Honor Magic 8 Pro",
@@ -5403,1409 +3492,11 @@
   ]
  },
  {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "600<800",
-  "own_raw": "nova  16s Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-16s-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy S26 FE",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor 600 Pro",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-600-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "400<600",
-  "own_raw": "nova 16s",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-16s",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy A57",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-a57",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor 600",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-600",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "400<600",
-  "own_raw": "nova 15",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-15",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy A57",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-a57",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor 600",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-600",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "200<400",
-  "own_raw": "nova Y74",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-y74",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy A17",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-a17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor X7e",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-x7e",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Note 17 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-note17-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "200<400",
-  "own_raw": "nova 15 Max",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-15-max",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy A37",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-a37",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor X9d",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-x9d",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Note 17 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-note17-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "平板",
-  "series": "Pro",
-  "tier": ">=800",
-  "own_raw": "MatePad  Pro Max",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-pro-max",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPad Pro M5",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-pro-m5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S11 Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11-ultra",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "平板",
-  "series": "Pro",
-  "tier": ">=800",
-  "own_raw": "MatePad Pro 12.2",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-pro-2025",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPad Pro M5",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-pro-m5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S11",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "平板",
-  "series": "Air",
-  "tier": ">=800",
-  "own_raw": "MatePad  Air",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-air-2026",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPad Air M4",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-air-m4",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S11",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "平板",
-  "series": "mini",
-  "tier": "500<800",
-  "own_raw": "MatePad  mini",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-mini-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPad mini",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-mini",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "平板",
-  "series": "数字",
-  "tier": "350<500",
-  "own_raw": "MatePad  11.5",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-11-5-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPad 11",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-a16",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Pad 2 Pro",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-pad-2-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor PAD 20",
-    "brand": "HONOR",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-pad-20",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "R国",
-  "country_code": "RU",
-  "industry": "平板",
-  "series": "SE",
-  "tier": "250<350",
-  "own_raw": "MatePad  SE 11",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-se-11",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Redmi Pad 2",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-pad-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor PAD 11.5 X9A",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-pad-x9a",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab A9+",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-a9",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH ultimate  2",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-ultimate-2",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch Ultra 2",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Garmin Fenix 8",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-fenix-8",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH ultimate design",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Apple Watch Hermès",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Garmin MARQ Commander Gen 2",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "TAG Heuer Connected Calibre E4",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "D2",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-d2",
-    "status": "subset"
-   }
-  ],
-  "comps": []
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH 5系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-5",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch Series 10",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-series-10",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch7",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-7",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Venu 3",
-    "brand": "GARMIN",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH GT",
-  "tier": ">300",
-  "own_raw": "GT Runner  2",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-runner-2",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Garmin Forerunner 265",
-    "brand": "GARMIN",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-forerunner-265",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "COROS Pace 3",
-    "brand": "COROS",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Suunto 5 Peak",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH GT",
-  "tier": "150<300",
-  "own_raw": "GT7系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-7",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Watch7",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-7",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Venu 3",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Amazfit Balance",
-    "brand": "AMAZFIT",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH GT",
-  "tier": "150<300",
-  "own_raw": "GT6系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-6",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Watch6",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Garmin Venu 3",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Amazfit GTR 4",
-    "brand": "AMAZFIT",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH FIT",
-  "tier": "150<300",
-  "own_raw": "FIT5系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-fit-5",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch SE",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-se",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch FE",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Xiaomi Smart Band 9 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-9-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH FIT",
-  "tier": "75<150",
-  "own_raw": "FIT 4系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-fit-4",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch SE",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-se",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Fit3",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-fit-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi Smart Band 9 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-9-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH FIT",
-  "tier": "75<150",
-  "own_raw": "FIT 3",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Apple Watch SE",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-se",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Fit3",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-fit-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi Smart Band 9 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-9-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH KIDS",
-  "tier": "50<75",
-  "own_raw": "KIDS X1系列",
-  "own": [],
-  "comps": [
-   {
-    "raw": "imoo Watch Phone Z7",
-    "brand": "IMOO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Garmin Bounce",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Fitbit Ace 3",
-    "brand": "FITBIT",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "WATCH KIDS",
-  "tier": "50<75",
-  "own_raw": "KIDS 4 Pro",
-  "own": [],
-  "comps": [
-   {
-    "raw": "imoo Watch Phone Z6",
-    "brand": "IMOO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Garmin Bounce",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Xplora X6Play",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "穿戴",
-  "series": "Band",
-  "tier": "25<75",
-  "own_raw": "Band 11系列",
-  "own": [
-   {
-    "model_id": "own-huawei-band-11",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Xiaomi Smart Band 9",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-9-active",
-      "status": "subset"
-     },
-     {
-      "model_id": "cmp-xiaomi-band-9-pro",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Fit3",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-fit-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "realme Band 2",
-    "brand": "REALME",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "音频",
-  "series": "FreeClip",
-  "tier": "＞200",
-  "own_raw": "FreeClip 2  S",
-  "own": [
-   {
-    "model_id": "own-huawei-freeclip-2-s",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Bose Ultra Open Earbuds",
-    "brand": "BOSE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-bose-ultra-open",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-opendots-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Anker AeroClip",
-    "brand": "SOUNDCORE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-aeroclip",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "音频",
-  "series": "FreeClip",
-  "tier": "150<200",
-  "own_raw": "FreeClip 2",
-  "own": [
-   {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Bose Ultra Open Earbuds",
-    "brand": "BOSE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-bose-ultra-open",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-opendots-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Anker AeroClip",
-    "brand": "SOUNDCORE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-aeroclip",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "＞200",
-  "own_raw": "FreeBuds  Pro 5",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-pro-5",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods Pro 3",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-pro-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds4 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds-4-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Sony WF-1000XM6",
-    "brand": "SONY",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-sony-wf-1000-xm6",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100<150",
-  "own_raw": "FreeBuds Neo",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-neo",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods Pro 2",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-pro-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Soundcore Liberty 5",
-    "brand": "SOUNDCORE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-liberty-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple AirPods 5",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-5",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100<150",
-  "own_raw": "FreeBuds 7i",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-7i",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Soundcore Liberty 5",
-    "brand": "SOUNDCORE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-liberty-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds4 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds-4-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple AirPods 4 ANC",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-4-anc",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "25＜75",
-  "own_raw": "FreeBuds SE 4 ANC",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-se-4-anc",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Soundcore R60I NC",
-    "brand": "SOUNDCORE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-r60i-nc",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Soundcore P31I",
-    "brand": "SOUNDCORE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-p31i",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Soundcore P40I",
-    "brand": "SOUNDCORE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-p40i",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "音频",
-  "series": "FreeArc",
-  "tier": "100<200",
-  "own_raw": "FreeArc",
-  "own": [
-   {
-    "model_id": "own-huawei-freearc",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Shokz - OpenFit / OpenFit Air",
-    "brand": "OTHER",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-openfit-air",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Soundcore - AeroFit Pro (Anker)",
-    "brand": "SOUNDCORE",
-    "col": 2,
-    "substitute": true,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-aerofit-2-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "JBL - Soundgear Sense",
-    "brand": "JBL",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
+  "country": "南非",
+  "country_code": "ZA",
   "industry": "手机",
   "series": "Pura",
-  "tier": "800<1000",
-  "own_raw": "Pura 90s  Pro Max",
-  "own": [
-   {
-    "model_id": "own-huawei-pura-90s-pro-max",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPhone 17 Pro",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S26 Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26-ultra",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "手机",
-  "series": "Pura",
-  "tier": "800<1000",
+  "tier": "＞1000",
   "own_raw": "Pura 90s Pro",
   "own": [
    {
@@ -6815,21 +3506,9 @@
   ],
   "comps": [
    {
-    "raw": "Apple iPhone 17",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
     "raw": "Samsung Galaxy S26",
     "brand": "SAMSUNG",
-    "col": 2,
+    "col": 1,
     "substitute": false,
     "models": [
      {
@@ -6837,90 +3516,11 @@
       "status": "exact"
      }
     ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "手机",
-  "series": "Mate",
-  "tier": "＞1000",
-  "own_raw": "Mate X7",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-x7",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Z Fold7",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-z-fold-7",
-      "status": "exact"
-     }
-    ]
    },
-   {
-    "raw": "Honor Magic V5",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-magic-v5",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "手机",
-  "series": "Mate",
-  "tier": "＞1000",
-  "own_raw": "Mate XT",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-xt",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Z TriFold",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "手机",
-  "series": "Mate",
-  "tier": "800<1000",
-  "own_raw": "Mate 80 Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-80-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
    {
     "raw": "Apple iPhone 17",
     "brand": "APPLE",
-    "col": 1,
+    "col": 2,
     "substitute": false,
     "models": [
      {
@@ -6930,1477 +3530,9 @@
     ]
    },
    {
-    "raw": "Samsung Galaxy S26+",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor Magic 8 Pro",
-    "brand": "HONOR",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-magic8-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "手机",
-  "series": "Nova",
-  "tier": "200<400",
-  "own_raw": "nova Y74",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-y74",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy A17",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-a17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Note 17",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-note17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor X7e",
-    "brand": "HONOR",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-x7e",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "手机",
-  "series": "Nova",
-  "tier": "200<400",
-  "own_raw": "nova 15 Max",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-15-max",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy A37",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-a37",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Note 17 Pro",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-note17-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor X9d",
-    "brand": "HONOR",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-x9d",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "平板",
-  "series": "Pro",
-  "tier": ">=800",
-  "own_raw": "MatePad  Pro Max",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-pro-max",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad Pro M5",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-pro-m5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Tab S11 Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11-ultra",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Tab S11 / S10+",
+    "raw": "Samsung Galaxy S25",
     "brand": "SAMSUNG",
     "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "平板",
-  "series": "Pro",
-  "tier": ">=800",
-  "own_raw": "MatePad Pro 12.2",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-pro-2025",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad Pro M5",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-pro-m5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Tab S11",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "MI PAD 8 Pro",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-pad-8-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "平板",
-  "series": "Air",
-  "tier": ">=800",
-  "own_raw": "MatePad Air",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-air-2026",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad Air M4",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-air-m4",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Tab S11",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "MI PAD 8 Pro",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-pad-8-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "平板",
-  "series": "Air",
-  "tier": "500<800",
-  "own_raw": "MatePad 12 X",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-12-x-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad Air M4",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-air-m4",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Tab S10 FE+",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "MI PAD 8 Pro",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-pad-8-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "平板",
-  "series": "mini",
-  "tier": "500<800",
-  "own_raw": "MatePad mini",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-mini-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad mini",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-mini",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "平板",
-  "series": "数字",
-  "tier": "350<500",
-  "own_raw": "MatePad  11.5S",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-11-5-s-2026",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad 11",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-a16",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Tab S10 FE",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "MI PAD 8",
-    "brand": "OTHER",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-pad-8",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "平板",
-  "series": "数字",
-  "tier": "250<350",
-  "own_raw": "MatePad 11.5",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-11-5-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Honor PAD 10",
-    "brand": "HONOR",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-pad-10",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi Redmi Pad 2 Pro",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-pad-2-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "iPad 11",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-a16",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "菲律宾",
-  "country_code": "PH",
-  "industry": "平板",
-  "series": "SE",
-  "tier": "150<250",
-  "own_raw": "MatePad SE 11",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-se-11",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Honor PAD X9A",
-    "brand": "HONOR",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-pad-x9a",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi Redmi Pad 2",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-pad-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Tab A11",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-a11",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH ultimate 2",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-ultimate-2",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch Ultra 2",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Fenix 8 Solar",
-    "brand": "GARMIN",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-fenix-8",
-      "status": "subset"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH ultimate",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Apple Watch Ultra 2",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Samsung Galaxy Watch 7 Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-7",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Epix Pro",
-    "brand": "GARMIN",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH ultimate  design spring edition",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Apple Watch Ultra 2",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Fenix 8 蓝宝石版",
-    "brand": "GARMIN",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-fenix-8",
-      "status": "subset"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">300",
-  "own_raw": "WATCH ultimate  design",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Apple Watch Ultra 2",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Epix Pro 设计款",
-    "brand": "GARMIN",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "创新血压表系列",
-  "tier": "150<300",
-  "own_raw": "Watch D2",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-d2",
-    "status": "exact"
-   }
-  ],
-  "comps": []
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "数字系列",
-  "tier": "150<300",
-  "own_raw": "WATCH 5",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-5",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Watch FE",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "OPPO Watch X2",
-    "brand": "OPPO",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "小米 Watch S5 eSIM 版",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-watch-s5",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH  GT系列",
-  "tier": ">300",
-  "own_raw": "GT7 系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-7",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Watch 7 Classic",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-7",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Apple Watch S11",
-    "brand": "APPLE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-series-11",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "小米 Watch S4",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-watch-s4",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH  GT系列",
-  "tier": ">300",
-  "own_raw": "GT  Runner 2",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-runner-2",
-    "status": "subset"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Garmin Forerunner 265",
-    "brand": "GARMIN",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-forerunner-265",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Amazfit Cheetah Pro",
-    "brand": "AMAZFIT",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "高驰 Pace 3",
-    "brand": "COROS",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH  FIT系列",
-  "tier": ">300",
-  "own_raw": "FIT5 系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-fit-5",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "小米 Watch S5 Sport",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-watch-s5",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Amazfit GTS 5",
-    "brand": "AMAZFIT",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "荣耀手表 6",
-    "brand": "HONOR",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH  FIT系列",
-  "tier": ">300",
-  "own_raw": "FIT  4 系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-fit-4",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Redmi Watch 6",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-watch-6",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Amazfit Bip 5",
-    "brand": "AMAZFIT",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "荣耀手表 SE",
-    "brand": "HONOR",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "WATCH  FIT系列",
-  "tier": "150<300",
-  "own_raw": "FIT  3",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Redmi Watch 5 Lite",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-watch-5-lite",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Amazfit Bip 3 Pro",
-    "brand": "AMAZFIT",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "realme Watch 3",
-    "brand": "REALME",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "Kid系列",
-  "tier": "75<150",
-  "own_raw": "KIDS X1 系列",
-  "own": [],
-  "comps": [
-   {
-    "raw": "imoo Watch Phone Z10（小天才）",
-    "brand": "IMOO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "小米米兔儿童手表 S7",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "三星 Galaxy Watch Kids 5",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "穿戴",
-  "series": "Band系列",
-  "tier": "75<150",
-  "own_raw": "Band 11 系列",
-  "own": [
-   {
-    "model_id": "own-huawei-band-11",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "小米手环 9",
-    "brand": "XIAOMI",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-9-active",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Amazfit Band 8",
-    "brand": "AMAZFIT",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "三星 Galaxy Fit 3",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-fit-3",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "音频",
-  "series": "FreeClip",
-  "tier": "＞200",
-  "own_raw": "FreeClip 2  S",
-  "own": [
-   {
-    "model_id": "own-huawei-freeclip-2-s",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Bose Ultra Open Earbuds",
-    "brand": "BOSE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-bose-ultra-open",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-opendots-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Anker AeroClip",
-    "brand": "SOUNDCORE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-aeroclip",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "音频",
-  "series": "FreeClip",
-  "tier": "150<200",
-  "own_raw": "FreeClip 2",
-  "own": [
-   {
-    "model_id": "own-huawei-freeclip-2",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Bose Ultra Open Earbuds",
-    "brand": "BOSE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-bose-ultra-open",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-opendots-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Anker AeroClip",
-    "brand": "SOUNDCORE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-aeroclip",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "＞200",
-  "own_raw": "FreeBuds  Pro 5",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-pro-5",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods Pro 3",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-pro-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds4 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds-4-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Sony WF-1000XM6",
-    "brand": "SONY",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-sony-wf-1000-xm6",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100<150",
-  "own_raw": "FreeBuds Neo",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-neo",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple AirPods Pro 2",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-pro-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Soundcore Liberty 5",
-    "brand": "SOUNDCORE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-liberty-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple AirPods 5",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-5",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100<150",
-  "own_raw": "FreeBuds 7i",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-7i",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Soundcore Liberty 5",
-    "brand": "SOUNDCORE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-liberty-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds4 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds-4-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple AirPods 4 ANC",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-4-anc",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "25＜75",
-  "own_raw": "FreeBuds SE 4 ANC",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-se-4-anc",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Soundcore R60I NC",
-    "brand": "SOUNDCORE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-r60i-nc",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Soundcore P31I",
-    "brand": "SOUNDCORE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-p31i",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Soundcore P40I",
-    "brand": "SOUNDCORE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-p40i",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "音频",
-  "series": "FreeArc",
-  "tier": "100<200",
-  "own_raw": "FreeArc",
-  "own": [
-   {
-    "model_id": "own-huawei-freearc",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Soundcore - AeroFit Pro (Anker)",
-    "brand": "SOUNDCORE",
-    "col": 1,
-    "substitute": true,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-aerofit-2-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Shokz - OpenFit / OpenFit Air",
-    "brand": "OTHER",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-openfit-air",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "JBL - Soundgear Sense",
-    "brand": "JBL",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "手机",
-  "series": "Pura",
-  "tier": "800<1000",
-  "own_raw": "Pura 90 系列",
-  "own": [
-   {
-    "model_id": "own-huawei-pura-90s-pro",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPhone 16 Pro Max",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-16-pro-max",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S25 Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s25-ultra",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "OPPO Find X8 Pro",
-    "brand": "OPPO",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "手机",
-  "series": "Pura",
-  "tier": "＞1000",
-  "own_raw": "Pura  80 系列",
-  "own": [
-   {
-    "model_id": "own-huawei-pura-80",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPhone 16",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-16",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S25+",
-    "brand": "SAMSUNG",
-    "col": 2,
     "substitute": false,
     "models": [
      {
@@ -8408,60 +3540,16 @@
       "status": "exact"
      }
     ]
-   },
-   {
-    "raw": "OPPO Reno13 Pro+",
-    "brand": "OPPO",
-    "col": 3,
-    "substitute": false,
-    "models": []
    }
   ]
  },
  {
-  "country": "泰国",
-  "country_code": "TH",
+  "country": "南非",
+  "country_code": "ZA",
   "industry": "手机",
   "series": "Mate",
   "tier": "＞1000",
-  "own_raw": "Mate X7",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-x7",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Z Fold6",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Honor Magic V3",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "OPPO Find N5",
-    "brand": "OPPO",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "手机",
-  "series": "Mate",
-  "tier": "800<1000",
-  "own_raw": "Mate  80 Pro",
+  "own_raw": "Mate 80 Pro",
   "own": [
    {
     "model_id": "own-huawei-mate-80-pro",
@@ -8470,79 +3558,77 @@
   ],
   "comps": [
    {
-    "raw": "iPhone 16 Pro",
-    "brand": "APPLE",
+    "raw": "Samsung Galaxy S26+",
+    "brand": "SAMSUNG",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-iphone-16-pro",
+      "model_id": "cmp-samsung-s26",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Samsung Galaxy S25 Ultra",
+    "raw": "Samsung Galaxy S26 Ultra",
     "brand": "SAMSUNG",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-s25-ultra",
+      "model_id": "cmp-samsung-s26-ultra",
       "status": "exact"
      }
     ]
-   },
-   {
-    "raw": "OPPO Find X8 Pro",
-    "brand": "OPPO",
-    "col": 3,
-    "substitute": false,
-    "models": []
    }
   ]
  },
  {
-  "country": "泰国",
-  "country_code": "TH",
+  "country": "南非",
+  "country_code": "ZA",
   "industry": "手机",
-  "series": "Nova",
-  "tier": "200<400",
-  "own_raw": "nova 14 Pro",
+  "series": "nova",
+  "tier": "400<600",
+  "own_raw": "nova 15 Max",
   "own": [
    {
-    "model_id": "own-huawei-nova-14-pro",
+    "model_id": "own-huawei-nova-15-max",
     "status": "exact"
    }
   ],
   "comps": [
    {
-    "raw": "OPPO Reno13",
-    "brand": "OPPO",
+    "raw": "Samsung Galaxy A37 5G",
+    "brand": "SAMSUNG",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-oppo-reno-13f",
-      "status": "subset"
+      "model_id": "cmp-samsung-a37",
+      "status": "exact"
      }
     ]
    },
    {
-    "raw": "vivo V40 Pro",
-    "brand": "VIVO",
+    "raw": "OPPO A6 Pro 5G",
+    "brand": "OPPO",
     "col": 2,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-oppo-a6-pro",
+      "status": "exact"
+     }
+    ]
    },
    {
-    "raw": "Samsung Galaxy A56",
-    "brand": "SAMSUNG",
+    "raw": "Redmi Note 15 Pro",
+    "brand": "XIAOMI",
     "col": 3,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-a56",
+      "model_id": "cmp-xiaomi-redmi-note15-pro",
       "status": "exact"
      }
     ]
@@ -8550,12 +3636,12 @@
   ]
  },
  {
-  "country": "泰国",
-  "country_code": "TH",
+  "country": "南非",
+  "country_code": "ZA",
   "industry": "手机",
-  "series": "Nova",
-  "tier": "200<400",
-  "own_raw": "nova  Y74",
+  "series": "nova",
+  "tier": "300<400",
+  "own_raw": "nova Y74",
   "own": [
    {
     "model_id": "own-huawei-nova-y74",
@@ -8564,334 +3650,37 @@
   ],
   "comps": [
    {
-    "raw": "Samsung Galaxy A16 5G",
+    "raw": "Samsung Galaxy A36 5G",
     "brand": "SAMSUNG",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-a16",
+      "model_id": "cmp-samsung-a36",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Redmi Note 14",
+    "raw": "Redmi Note 15",
     "brand": "XIAOMI",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-redmi-note14",
+      "model_id": "cmp-xiaomi-redmi-note15",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "OPPO A5 Pro",
-    "brand": "OPPO",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-oppo-a5-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "平板",
-  "series": "Pro系列",
-  "tier": ">=800",
-  "own_raw": "MatePad Pro Max",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-pro-max",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad Pro 13 英寸 (M5)",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-pro-m5",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S10 Ultra",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "小米 Pad 9 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-pad-pro",
-      "status": "subset"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "平板",
-  "series": "Air&Mini系列",
-  "tier": ">=800",
-  "own_raw": "MatePad Air",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-air-2026",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad Air 13 英寸 (M4)",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-air-m4",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S10+",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "OPPO Pad 3 Pro",
-    "brand": "OPPO",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-oppo-pad-3-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "平板",
-  "series": "Air&Mini系列",
-  "tier": ">=800",
-  "own_raw": "MatePad mini",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-mini-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad mini 7",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-mini",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab A9+",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-a9",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "小米 Pad mini",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-pad-mini",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "平板",
-  "series": "Air&Mini系列",
-  "tier": "500<800",
-  "own_raw": "MatePad 12 X",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-12-x-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "iPad Air 11 英寸 (M4)",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-air-m4",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S10 FE",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "小米 Pad 9",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "平板",
-  "series": "数字系列",
-  "tier": "500<800",
-  "own_raw": "MatePad 11.5",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-11-5-2025",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Tab S10 FE",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "小米 Pad 9",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "OPPO Pad Air 2",
-    "brand": "OPPO",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "平板",
-  "series": "SE系列",
-  "tier": "350<500",
-  "own_raw": "MatePad 11.5S",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-11-5-s-2026",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy Tab S10 FE",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "iPad 10 代",
-    "brand": "APPLE",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-10th-gen",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "荣耀平板 X9",
+    "raw": "Honor 600 Lite",
     "brand": "HONOR",
     "col": 3,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-honor-pad-x9",
+      "model_id": "cmp-honor-600-lite",
       "status": "exact"
      }
     ]
@@ -8899,49 +3688,297 @@
   ]
  },
  {
-  "country": "泰国",
-  "country_code": "TH",
-  "industry": "平板",
-  "series": "SE系列",
-  "tier": "250<350",
-  "own_raw": "MatePad  SE 11",
+  "country": "南非",
+  "country_code": "ZA",
+  "industry": "音频",
+  "series": "FreeClip",
+  "tier": "＞200",
+  "own_raw": "FreeClip 2 S",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se-11",
+    "model_id": "own-huawei-freeclip-2-s",
     "status": "exact"
    }
   ],
   "comps": [
    {
-    "raw": "Samsung Galaxy Tab A9",
-    "brand": "SAMSUNG",
+    "raw": "shokz opendots 2",
+    "brand": "SHOKZ",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-galaxy-tab-a9",
+      "model_id": "cmp-shokz-opendots-2",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Redmi Pad SE",
-    "brand": "XIAOMI",
+    "raw": "Anker AeroClip",
+    "brand": "SOUNDCORE",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-redmi-pad-se",
+      "model_id": "cmp-soundcore-aeroclip",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "realme Pad 2",
-    "brand": "REALME",
+    "raw": "Apple AirPods 4",
+    "brand": "APPLE",
     "col": 3,
     "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-4",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "南非",
+  "country_code": "ZA",
+  "industry": "音频",
+  "series": "FreeClip",
+  "tier": "150<200",
+  "own_raw": "FreeClip 2",
+  "own": [
+   {
+    "model_id": "own-huawei-freeclip-2",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "shokz opendots 2",
+    "brand": "SHOKZ",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-shokz-opendots-2",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Anker AeroClip",
+    "brand": "SOUNDCORE",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-soundcore-aeroclip",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Apple AirPods 4",
+    "brand": "APPLE",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-4",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "南非",
+  "country_code": "ZA",
+  "industry": "音频",
+  "series": "FreeBuds",
+  "tier": "＞200",
+  "own_raw": "FreeBuds Pro 5",
+  "own": [
+   {
+    "model_id": "own-huawei-freebuds-pro-5",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple AirPods Pro 3",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-pro-3",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Buds4 Pro",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-buds-4-pro",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Sony WF-1000XM6",
+    "brand": "SONY",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-sony-wf-1000-xm6",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "南非",
+  "country_code": "ZA",
+  "industry": "音频",
+  "series": "FreeBuds",
+  "tier": "100<150",
+  "own_raw": "FreeBuds Neo",
+  "own": [
+   {
+    "model_id": "own-huawei-freebuds-neo",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple AirPods Pro 2",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-pro-2",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Soundcore Liberty 5",
+    "brand": "SOUNDCORE",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-soundcore-liberty-5",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Apple AirPods 5",
+    "brand": "APPLE",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-5",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "南非",
+  "country_code": "ZA",
+  "industry": "音频",
+  "series": "FreeBuds",
+  "tier": "100<150",
+  "own_raw": "FreeBuds 7i",
+  "own": [
+   {
+    "model_id": "own-huawei-freebuds-7i",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Soundcore Liberty 5",
+    "brand": "SOUNDCORE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-soundcore-liberty-5",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Buds4 Pro",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-buds-4-pro",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Apple AirPods 4 ANC",
+    "brand": "APPLE",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-4-anc",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "南非",
+  "country_code": "ZA",
+  "industry": "音频",
+  "series": "FreeBuds",
+  "tier": "25＜75",
+  "own_raw": "FreeBuds SE 4 ANC",
+  "own": [
+   {
+    "model_id": "own-huawei-freebuds-se-4-anc",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Soundcore Liberty 4NC",
+    "brand": "SOUNDCORE",
+    "col": 1,
+    "substitute": false,
     "models": []
+   },
+   {
+    "raw": "Soundcore R50I NC",
+    "brand": "SOUNDCORE",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-soundcore-r50i-nc",
+      "status": "exact"
+     }
+    ]
    }
   ]
  },
@@ -8972,67 +4009,13 @@
     ]
    },
    {
-    "raw": "Garmin Fenix 8 Pro",
+    "raw": "Garmin Fenix 9",
     "brand": "GARMIN",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-garmin-fenix-8",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "墨西哥",
-  "country_code": "MX",
-  "industry": "穿戴",
-  "series": "WATCH Ultimate",
-  "tier": ">400",
-  "own_raw": "WATCH ultimate",
-  "own": [],
-  "comps": [
-   {
-    "raw": "Apple Watch Ultra 3",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-ultra-3",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Garmin Fenix 7 Pro",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
+      "model_id": "cmp-garmin-fenix-9",
       "status": "exact"
      }
     ]
@@ -9106,13 +4089,13 @@
     ]
    },
    {
-    "raw": "Samsung Galaxy Watch 8",
-    "brand": "SAMSUNG",
+    "raw": "Apple Watch Series 12",
+    "brand": "APPLE",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-galaxy-watch-8",
+      "model_id": "cmp-apple-watch-series-12",
       "status": "exact"
      }
     ]
@@ -9176,13 +4159,13 @@
   ],
   "comps": [
    {
-    "raw": "Apple Watch SE 3",
+    "raw": "Apple Watch Series 12",
     "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-watch-se-3",
+      "model_id": "cmp-apple-watch-series-12",
       "status": "exact"
      }
     ]
@@ -9200,14 +4183,14 @@
     ]
    },
    {
-    "raw": "Amazfit Active",
+    "raw": "Amazfit Active Max",
     "brand": "AMAZFIT",
     "col": 3,
     "substitute": false,
     "models": [
      {
       "model_id": "cmp-amazfit-active-max",
-      "status": "subset"
+      "status": "exact"
      }
     ]
    }
@@ -9228,37 +4211,25 @@
   ],
   "comps": [
    {
-    "raw": "Xiaomi Watch S5",
-    "brand": "XIAOMI",
+    "raw": "Apple Watch SE 3",
+    "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-watch-s5",
+      "model_id": "cmp-apple-watch-se-3",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Xiaomi Band 10 Pro",
+    "raw": "Xiaomi Watch S5",
     "brand": "XIAOMI",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-band-10-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Watch 6",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-watch-6",
+      "model_id": "cmp-xiaomi-watch-s5",
       "status": "exact"
      }
     ]
@@ -9307,13 +4278,13 @@
     ]
    },
    {
-    "raw": "Apple Watch Ultra 3",
-    "brand": "APPLE",
+    "raw": "Samsung Galaxy Watch 9",
+    "brand": "SAMSUNG",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-watch-ultra-3",
+      "model_id": "cmp-samsung-galaxy-watch-9",
       "status": "exact"
      }
     ]
@@ -9376,59 +4347,9 @@
   "country": "墨西哥",
   "country_code": "MX",
   "industry": "穿戴",
-  "series": "WATCH KIDS",
-  "tier": "50<75",
-  "own_raw": "KIDS X1 Pro",
-  "own": [],
-  "comps": [
-   {
-    "raw": "imoo Watch Phone",
-    "brand": "IMOO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Xiaomi Kids Watch",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "墨西哥",
-  "country_code": "MX",
-  "industry": "穿戴",
-  "series": "WATCH KIDS",
-  "tier": "50<75",
-  "own_raw": "KIDS X1",
-  "own": [],
-  "comps": [
-   {
-    "raw": "imoo Watch Phone",
-    "brand": "IMOO",
-    "col": 1,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Xiaomi Kids Watch",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "墨西哥",
-  "country_code": "MX",
-  "industry": "穿戴",
   "series": "Band",
   "tier": "25<75",
-  "own_raw": "Band  11 Pro",
+  "own_raw": "Band 11 Pro",
   "own": [
    {
     "model_id": "own-huawei-band-11-pro",
@@ -9437,13 +4358,13 @@
   ],
   "comps": [
    {
-    "raw": "Xiaomi Smart Band 10",
+    "raw": "Xiaomi band 10 Pro",
     "brand": "XIAOMI",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-band-10",
+      "model_id": "cmp-xiaomi-band-10-pro",
       "status": "exact"
      }
     ]
@@ -9456,18 +4377,6 @@
     "models": [
      {
       "model_id": "cmp-xiaomi-redmi-watch-5-lite",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi band 10 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-10-pro",
       "status": "exact"
      }
     ]
@@ -9489,7 +4398,7 @@
   ],
   "comps": [
    {
-    "raw": "Xiaomi Smart Band 10",
+    "raw": "Xiaomi Band 10",
     "brand": "XIAOMI",
     "col": 1,
     "substitute": false,
@@ -9511,13 +4420,6 @@
       "status": "exact"
      }
     ]
-   },
-   {
-    "raw": "Amazfit Band 7",
-    "brand": "AMAZFIT",
-    "col": 3,
-    "substitute": false,
-    "models": []
    }
   ]
  },
@@ -9536,21 +4438,9 @@
   ],
   "comps": [
    {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-shokz-opendots-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
     "raw": "Anker AeroClip",
     "brand": "SOUNDCORE",
-    "col": 2,
+    "col": 1,
     "substitute": false,
     "models": [
      {
@@ -9562,7 +4452,7 @@
    {
     "raw": "Apple AirPods 4",
     "brand": "APPLE",
-    "col": 3,
+    "col": 2,
     "substitute": false,
     "models": [
      {
@@ -9588,13 +4478,13 @@
   ],
   "comps": [
    {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
+    "raw": "Apple AirPods 5",
+    "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-shokz-opendots-2",
+      "model_id": "cmp-apple-airpods-5",
       "status": "exact"
      }
     ]
@@ -9612,13 +4502,13 @@
     ]
    },
    {
-    "raw": "Apple AirPods 4",
+    "raw": "Apple AirPods 4 ANC",
     "brand": "APPLE",
     "col": 3,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-airpods-4",
+      "model_id": "cmp-apple-airpods-4-anc",
       "status": "exact"
      }
     ]
@@ -9664,7 +4554,7 @@
     ]
    },
    {
-    "raw": "Sony WF-1000XM6",
+    "raw": "SONY WF-1000-XM6",
     "brand": "SONY",
     "col": 3,
     "substitute": false,
@@ -9744,13 +4634,13 @@
   ],
   "comps": [
    {
-    "raw": "Apple AirPods Pro 2",
+    "raw": "Apple AirPods Pro 3",
     "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-airpods-pro-2",
+      "model_id": "cmp-apple-airpods-pro-3",
       "status": "exact"
      }
     ]
@@ -9796,11 +4686,16 @@
   ],
   "comps": [
    {
-    "raw": "Soundcore P30I",
+    "raw": "Soundcore p40i",
     "brand": "SOUNDCORE",
     "col": 1,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-soundcore-p40i",
+      "status": "exact"
+     }
+    ]
    },
    {
     "raw": "Redmi Buds 6 Pro",
@@ -9940,185 +4835,6 @@
   "country": "墨西哥",
   "country_code": "MX",
   "industry": "手机",
-  "series": "Mate",
-  "tier": "800<1000",
-  "own_raw": "Mate 80 Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-mate-80-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPhone 17",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S26+",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor Magic 18 Pro",
-    "brand": "HONOR",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "墨西哥",
-  "country_code": "MX",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "600<800",
-  "own_raw": "nova 16s Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-16s-pro",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy S26 FE",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s26-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor 600 Pro",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-600-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "墨西哥",
-  "country_code": "MX",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "400<600",
-  "own_raw": "nova 16s",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-16s",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung Galaxy A57",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-a57",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor 600",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-600",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "墨西哥",
-  "country_code": "MX",
-  "industry": "手机",
-  "series": "nova",
-  "tier": "400<600",
-  "own_raw": "nova Y74",
-  "own": [
-   {
-    "model_id": "own-huawei-nova-y74",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Samsung A17",
-    "brand": "SAMSUNG",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-a17",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Honor X7e",
-    "brand": "HONOR",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-honor-x7e",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Note 17 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-note17-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "墨西哥",
-  "country_code": "MX",
-  "industry": "手机",
   "series": "nova",
   "tier": "400<600",
   "own_raw": "nova 15 Max",
@@ -10204,18 +4920,6 @@
       "status": "exact"
      }
     ]
-   },
-   {
-    "raw": "Samsung Tab S11 / S10+",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s11",
-      "status": "exact"
-     }
-    ]
    }
   ]
  },
@@ -10225,11 +4929,11 @@
   "industry": "平板",
   "series": "Pro",
   "tier": ">=800",
-  "own_raw": "MatePad Pro 12.2",
+  "own_raw": "MatePad Pro 2025",
   "own": [
    {
     "model_id": "own-huawei-matepad-pro-2025",
-    "status": "subset"
+    "status": "exact"
    }
   ],
   "comps": [
@@ -10286,37 +4990,25 @@
   ],
   "comps": [
    {
-    "raw": "Apple iPad Air 11",
+    "raw": "Apple iPad Air M4",
     "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
       "model_id": "cmp-apple-ipad-air-m4",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S10 / S11",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Xiaomi Pad 7 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
+    "raw": "Samsung Galaxy Tab S11",
+    "brand": "SAMSUNG",
+    "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-pad-7-pro",
+      "model_id": "cmp-samsung-galaxy-tab-s11",
       "status": "exact"
      }
     ]
@@ -10329,7 +5021,7 @@
   "industry": "平板",
   "series": "Air",
   "tier": "500<800",
-  "own_raw": "MatePad 12 X",
+  "own_raw": "MatePad 12 X 2025",
   "own": [
    {
     "model_id": "own-huawei-matepad-12-x-2025",
@@ -10390,14 +5082,14 @@
   ],
   "comps": [
    {
-    "raw": "Apple iPad mini 7",
+    "raw": "Apple iPad mini A17 Pro",
     "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-ipad-mini",
-      "status": "subset"
+      "model_id": "cmp-apple-ipad-mini-a17-pro",
+      "status": "exact"
      }
     ]
    }
@@ -10409,7 +5101,7 @@
   "industry": "平板",
   "series": "数字",
   "tier": "350<500",
-  "own_raw": "MatePad 11.5S",
+  "own_raw": "MatePad 11.5S 2026",
   "own": [
    {
     "model_id": "own-huawei-matepad-11-5-s-2026",
@@ -10418,19 +5110,14 @@
   ],
   "comps": [
    {
-    "raw": "Apple iPad Air 11",
+    "raw": "Apple iPad Air 16",
     "brand": "APPLE",
     "col": 1,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-air-m4",
-      "status": "subset"
-     }
-    ]
+    "models": []
    },
    {
-    "raw": "Samsung Galaxy Tab S10 FE",
+    "raw": "Samsung Galaxy Tab S10 FE+",
     "brand": "SAMSUNG",
     "col": 2,
     "substitute": false,
@@ -10442,13 +5129,13 @@
     ]
    },
    {
-    "raw": "Xiaomi Pad 7",
-    "brand": "XIAOMI",
+    "raw": "MI PAD 8",
+    "brand": "OTHER",
     "col": 3,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-pad-7",
+      "model_id": "cmp-xiaomi-pad-8",
       "status": "exact"
      }
     ]
@@ -10482,25 +5169,13 @@
     ]
    },
    {
-    "raw": "Redmi Pad 2",
+    "raw": "Redmi Pad 2 Pro",
     "brand": "XIAOMI",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-redmi-pad-2",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple iPad 11",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-a16",
+      "model_id": "cmp-xiaomi-redmi-pad-2-pro",
       "status": "exact"
      }
     ]
@@ -10511,7 +5186,7 @@
   "country": "墨西哥",
   "country_code": "MX",
   "industry": "平板",
-  "series": "数字",
+  "series": "SE",
   "tier": "250<350",
   "own_raw": "MatePad SE 11",
   "own": [
@@ -10522,33 +5197,21 @@
   ],
   "comps": [
    {
-    "raw": "Samsung Galaxy Tab A11",
+    "raw": "Samsung Galaxy Tab A9+",
     "brand": "SAMSUNG",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-galaxy-tab-a11",
+      "model_id": "cmp-samsung-galaxy-tab-a9",
       "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Lenovo Tab M11",
-    "brand": "LENOVO",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-lenovo-tab-m10-plus-3rd-gen",
-      "status": "subset"
      }
     ]
    },
    {
     "raw": "Xiaomi Redmi Pad 2",
     "brand": "XIAOMI",
-    "col": 3,
+    "col": 2,
     "substitute": false,
     "models": [
      {
@@ -10586,25 +5249,13 @@
     ]
    },
    {
-    "raw": "Garmin Fenix 8 Pro",
+    "raw": "Garmin Fenix 9",
     "brand": "GARMIN",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-garmin-fenix-8",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch Ultra",
-    "brand": "SAMSUNG",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
+      "model_id": "cmp-garmin-fenix-9",
       "status": "exact"
      }
     ]
@@ -10678,13 +5329,13 @@
     ]
    },
    {
-    "raw": "Samsung Galaxy Watch 8",
-    "brand": "SAMSUNG",
+    "raw": "Apple Watch Series 12",
+    "brand": "APPLE",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-galaxy-watch-8",
+      "model_id": "cmp-apple-watch-series-12",
       "status": "exact"
      }
     ]
@@ -10709,48 +5360,6 @@
   "industry": "穿戴",
   "series": "WATCH GT",
   "tier": "150<300",
-  "own_raw": "GT6系列",
-  "own": [
-   {
-    "model_id": "own-huawei-watch-gt-6",
-    "status": "series"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple Watch Series 11",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-watch-series-11",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Watch6",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": []
-   },
-   {
-    "raw": "Garmin Venu 3",
-    "brand": "GARMIN",
-    "col": 3,
-    "substitute": false,
-    "models": []
-   }
-  ]
- },
- {
-  "country": "巴西",
-  "country_code": "BR",
-  "industry": "穿戴",
-  "series": "WATCH GT",
-  "tier": "300-400",
   "own_raw": "GT Runner 2",
   "own": [
    {
@@ -10767,21 +5376,9 @@
     "models": []
    },
    {
-    "raw": "Garmin Forerunner 570",
-    "brand": "GARMIN",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-garmin-forerunner-570",
-      "status": "exact"
-     }
-    ]
-   },
-   {
     "raw": "COROS Pace Pro",
     "brand": "COROS",
-    "col": 3,
+    "col": 2,
     "substitute": false,
     "models": []
    }
@@ -10802,38 +5399,38 @@
   ],
   "comps": [
    {
-    "raw": "Apple Watch SE 3",
+    "raw": "Apple Watch Series 12",
     "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-watch-se-3",
+      "model_id": "cmp-apple-watch-series-12",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Xiaomi S5",
+    "raw": "Xiaomi Watch S5",
     "brand": "XIAOMI",
     "col": 2,
     "substitute": false,
     "models": [
      {
       "model_id": "cmp-xiaomi-watch-s5",
-      "status": "subset"
+      "status": "exact"
      }
     ]
    },
    {
-    "raw": "Amazfit Active",
+    "raw": "Amazfit Active Max",
     "brand": "AMAZFIT",
     "col": 3,
     "substitute": false,
     "models": [
      {
       "model_id": "cmp-amazfit-active-max",
-      "status": "subset"
+      "status": "exact"
      }
     ]
    }
@@ -10854,37 +5451,25 @@
   ],
   "comps": [
    {
-    "raw": "Xiaomi S5",
-    "brand": "XIAOMI",
+    "raw": "Apple Watch SE 3",
+    "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-watch-s5",
-      "status": "subset"
-     }
-    ]
-   },
-   {
-    "raw": "Xiaomi Band 10 Pro",
-    "brand": "XIAOMI",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-band-10-pro",
+      "model_id": "cmp-apple-watch-se-3",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Redmi Watch 6",
+    "raw": "Xiaomi Watch S5",
     "brand": "XIAOMI",
-    "col": 3,
+    "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-redmi-watch-6",
+      "model_id": "cmp-xiaomi-watch-s5",
       "status": "exact"
      }
     ]
@@ -10933,13 +5518,13 @@
     ]
    },
    {
-    "raw": "Apple Watch Ultra 3",
-    "brand": "APPLE",
+    "raw": "Samsung Galaxy Watch 9",
+    "brand": "SAMSUNG",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-watch-ultra-3",
+      "model_id": "cmp-samsung-galaxy-watch-9",
       "status": "exact"
      }
     ]
@@ -11002,8 +5587,963 @@
   "country": "巴西",
   "country_code": "BR",
   "industry": "穿戴",
+  "series": "Band",
+  "tier": "25<75",
+  "own_raw": "Band 11 Pro",
+  "own": [
+   {
+    "model_id": "own-huawei-band-11-pro",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Xiaomi band 10 Pro",
+    "brand": "XIAOMI",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-band-10-pro",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Redmi Watch 5 lite",
+    "brand": "XIAOMI",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-redmi-watch-5-lite",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "穿戴",
+  "series": "Band",
+  "tier": "25<75",
+  "own_raw": "Band 11",
+  "own": [
+   {
+    "model_id": "own-huawei-band-11",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Xiaomi Band 10",
+    "brand": "XIAOMI",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-band-10",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Redmi Watch 5 lite",
+    "brand": "XIAOMI",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-redmi-watch-5-lite",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "音频",
+  "series": "FreeClip",
+  "tier": "100<200",
+  "own_raw": "FreeClip 2",
+  "own": [
+   {
+    "model_id": "own-huawei-freeclip-2",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple AirPods 5",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-5",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Anker AeroClip",
+    "brand": "SOUNDCORE",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-soundcore-aeroclip",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Apple AirPods 4 ANC",
+    "brand": "APPLE",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-4-anc",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "音频",
+  "series": "FreeBuds",
+  "tier": "＞200",
+  "own_raw": "FreeBuds Pro 5",
+  "own": [
+   {
+    "model_id": "own-huawei-freebuds-pro-5",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple AirPods Pro 3",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-pro-3",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Buds4 Pro",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-buds-4-pro",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "SONY WF-1000-XM6",
+    "brand": "SONY",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-sony-wf-1000-xm6",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "音频",
+  "series": "FreeBuds",
+  "tier": "100<200",
+  "own_raw": "FreeBuds NEO",
+  "own": [
+   {
+    "model_id": "own-huawei-freebuds-neo",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple AirPods Pro 3",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-pro-3",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Soundcore Liberty 5",
+    "brand": "SOUNDCORE",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-soundcore-liberty-5",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Apple AirPods 5",
+    "brand": "APPLE",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-airpods-5",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "音频",
+  "series": "FreeBuds",
+  "tier": "50＜100",
+  "own_raw": "FreeBuds SE 4 ANC",
+  "own": [
+   {
+    "model_id": "own-huawei-freebuds-se-4-anc",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Soundcore p40i",
+    "brand": "SOUNDCORE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-soundcore-p40i",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Redmi Buds 6 Pro",
+    "brand": "XIAOMI",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-redmi-buds-6-pro",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "手机",
+  "series": "Pura",
+  "tier": "800<1000",
+  "own_raw": "Pura 80 Pro",
+  "own": [
+   {
+    "model_id": "own-huawei-pura-80-pro",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple iPhone 17",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-iphone-17",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "手机",
+  "series": "Mate",
+  "tier": "800<1000",
+  "own_raw": "Mate X7",
+  "own": [
+   {
+    "model_id": "own-huawei-mate-x7",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple iPhone 17",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-iphone-17",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galazy S26+",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-s26",
+      "status": "subset"
+     }
+    ]
+   },
+   {
+    "raw": "Honor Magic 18 Pro",
+    "brand": "HONOR",
+    "col": 3,
+    "substitute": false,
+    "models": []
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "手机",
+  "series": "nova",
+  "tier": "400<600",
+  "own_raw": "nova 15 Max",
+  "own": [
+   {
+    "model_id": "own-huawei-nova-15-max",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Samsung Galaxy A37",
+    "brand": "SAMSUNG",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-a37",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Redmi Note 17 Pro",
+    "brand": "XIAOMI",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-redmi-note17-pro",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "平板",
+  "series": "mini",
+  "tier": "150<250",
+  "own_raw": "MatePad mini",
+  "own": [
+   {
+    "model_id": "own-huawei-matepad-mini-2025",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple iPad mini A17 Pro",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-ipad-mini-a17-pro",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "平板",
+  "series": "数字",
+  "tier": "350<500",
+  "own_raw": "MatePad 11.5S 2026",
+  "own": [
+   {
+    "model_id": "own-huawei-matepad-11-5-s-2026",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple iPad Air 16",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": []
+   },
+   {
+    "raw": "Samsung Galaxy Tab S10 FE+",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "MI PAD 8",
+    "brand": "OTHER",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-pad-8",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "巴西",
+  "country_code": "BR",
+  "industry": "平板",
+  "series": "数字",
+  "tier": "250<350",
+  "own_raw": "MatePad 11.5",
+  "own": [
+   {
+    "model_id": "own-huawei-matepad-11-5-2025",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Samsung Galaxy Tab S10 Lite",
+    "brand": "SAMSUNG",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-tab-s10-lite",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Redmi Pad 2 Pro",
+    "brand": "XIAOMI",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-redmi-pad-2-pro",
+      "status": "exact"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH Ultimate",
+  "tier": ">300",
+  "own_raw": "WATCH ultimate 2",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-ultimate-2",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple Watch Ultra 4",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-ultra-4",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Garmin Fenix 8 Pro",
+    "brand": "GARMIN",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-garmin-fenix-8",
+      "status": "subset"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Watch Ultra",
+    "brand": "SAMSUNG",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH Ultimate",
+  "tier": ">300",
+  "own_raw": "WATCH ultimate",
+  "own": [],
+  "comps": [
+   {
+    "raw": "Apple Watch Ultra 3",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-ultra-3",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Garmin Fenix 7 Pro",
+    "brand": "GARMIN",
+    "col": 2,
+    "substitute": false,
+    "models": []
+   },
+   {
+    "raw": "Samsung Galaxy Watch Ultra",
+    "brand": "SAMSUNG",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-watch-ultra-2025",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH GT",
+  "tier": ">300",
+  "own_raw": "GT7 Pro",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-gt-7-pro",
+    "status": "subset"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple Watch Series 12",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-series-12",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Watch 9",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-watch-9",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH GT",
+  "tier": ">300",
+  "own_raw": "GT7",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-gt-7",
+    "status": "subset"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Samsung Galaxy Watch 9",
+    "brand": "SAMSUNG",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-watch-9",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Apple Watch Series 12",
+    "brand": "APPLE",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-series-12",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Xiaomi S5",
+    "brand": "XIAOMI",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-watch-s5",
+      "status": "subset"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH GT",
+  "tier": ">300",
+  "own_raw": "GT Runner 2",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-gt-runner-2",
+    "status": "subset"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Garmin Forerunner 965",
+    "brand": "GARMIN",
+    "col": 1,
+    "substitute": false,
+    "models": []
+   },
+   {
+    "raw": "Garmin Forerunner 570",
+    "brand": "GARMIN",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-garmin-forerunner-570",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "COROS Pace Pro",
+    "brand": "COROS",
+    "col": 3,
+    "substitute": false,
+    "models": []
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH FIT",
+  "tier": "150<300",
+  "own_raw": "FIT 5 Pro",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-fit-5-pro",
+    "status": "subset"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple Watch SE 3",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-se-3",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Xiaomi S5",
+    "brand": "XIAOMI",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-watch-s5",
+      "status": "subset"
+     }
+    ]
+   },
+   {
+    "raw": "Amazfit Active",
+    "brand": "AMAZFIT",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-amazfit-active-max",
+      "status": "subset"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH FIT",
+  "tier": "150<300",
+  "own_raw": "FIT 5",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-fit-5",
+    "status": "subset"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Xiaomi S5",
+    "brand": "XIAOMI",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-watch-s5",
+      "status": "subset"
+     }
+    ]
+   },
+   {
+    "raw": "Xiaomi Band 10 Pro",
+    "brand": "XIAOMI",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-band-10-pro",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Redmi Watch 6",
+    "brand": "XIAOMI",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-redmi-watch-6",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH",
+  "tier": ">300",
+  "own_raw": "D3",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-d3",
+    "status": "subset"
+   }
+  ],
+  "comps": [],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH",
+  "tier": ">300",
+  "own_raw": "WATCH 6 Pro",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6-pro",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple Watch Series 12",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-series-12",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Apple Watch Ultra 3",
+    "brand": "APPLE",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-ultra-3",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Apple Watch Ultra 4",
+    "brand": "APPLE",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-ultra-4",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH",
+  "tier": ">300",
+  "own_raw": "WATCH 6",
+  "own": [
+   {
+    "model_id": "own-huawei-watch-6",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple Watch Series 12",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-watch-series-12",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Watch 9",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-watch-9",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
   "series": "WATCH KIDS",
-  "tier": "150-300",
+  "tier": "150<300",
   "own_raw": "KIDS X1 Pro",
   "own": [],
   "comps": [
@@ -11028,15 +6568,16 @@
     "substitute": false,
     "models": []
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "穿戴",
   "series": "WATCH KIDS",
-  "tier": "150-300",
-  "own_raw": "KIDS X1",
+  "tier": "150<300",
+  "own_raw": "KIDS X1系列",
   "own": [],
   "comps": [
    {
@@ -11060,15 +6601,102 @@
     "substitute": false,
     "models": []
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "WATCH KIDS",
+  "tier": "50<75",
+  "own_raw": "KIDS 4 Pro",
+  "own": [],
+  "comps": [
+   {
+    "raw": "Aimoto Life Button",
+    "brand": "AIMOTO",
+    "col": 1,
+    "substitute": false,
+    "models": []
+   },
+   {
+    "raw": "Aimoto Fun",
+    "brand": "AIMOTO",
+    "col": 2,
+    "substitute": false,
+    "models": []
+   },
+   {
+    "raw": "Aimoto Fun",
+    "brand": "AIMOTO",
+    "col": 3,
+    "substitute": false,
+    "models": []
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
   "industry": "穿戴",
   "series": "Band",
   "tier": "25<75",
-  "own_raw": "Band 11系列",
+  "own_raw": "Band 11 Pro",
+  "own": [
+   {
+    "model_id": "own-huawei-band-11-pro",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Xiaomi Smart Band 10",
+    "brand": "XIAOMI",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-band-10",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Redmi Watch 5 lite",
+    "brand": "XIAOMI",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-redmi-watch-5-lite",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Xiaomi band 10 Pro",
+    "brand": "XIAOMI",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-band-10-pro",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "穿戴",
+  "series": "Band",
+  "tier": "25<75",
+  "own_raw": "Band 11",
   "own": [
    {
     "model_id": "own-huawei-band-11",
@@ -11077,25 +6705,25 @@
   ],
   "comps": [
    {
-    "raw": "Samsung Galaxy Fit3",
-    "brand": "SAMSUNG",
+    "raw": "Xiaomi Smart Band 10",
+    "brand": "XIAOMI",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-galaxy-fit-3",
+      "model_id": "cmp-xiaomi-band-10",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Xiaomi Smart Band 10",
+    "raw": "Redmi Watch 5 lite",
     "brand": "XIAOMI",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-band-10",
+      "model_id": "cmp-xiaomi-redmi-watch-5-lite",
       "status": "exact"
      }
     ]
@@ -11107,11 +6735,12 @@
     "substitute": false,
     "models": []
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "音频",
   "series": "FreeClip",
   "tier": "＞200",
@@ -11124,46 +6753,42 @@
   ],
   "comps": [
    {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
+    "raw": "Apple AirPods 4 ANC",
+    "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-shokz-opendots-2",
+      "model_id": "cmp-apple-airpods-4-anc",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Anker AeroClip",
-    "brand": "SOUNDCORE",
+    "raw": "Apple AirPods 5",
+    "brand": "APPLE",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-soundcore-aeroclip",
+      "model_id": "cmp-apple-airpods-5",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Apple AirPods 4",
-    "brand": "APPLE",
+    "raw": "Galaxy Buds On",
+    "brand": "SAMSUNG",
     "col": 3,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-4",
-      "status": "exact"
-     }
-    ]
+    "models": []
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "音频",
   "series": "FreeClip",
   "tier": "100<200",
@@ -11176,46 +6801,42 @@
   ],
   "comps": [
    {
-    "raw": "shokz opendots 2",
-    "brand": "SHOKZ",
+    "raw": "Apple AirPods 4 ANC",
+    "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-shokz-opendots-2",
+      "model_id": "cmp-apple-airpods-4-anc",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Anker AeroClip",
-    "brand": "SOUNDCORE",
+    "raw": "Apple AirPods 5",
+    "brand": "APPLE",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-soundcore-aeroclip",
+      "model_id": "cmp-apple-airpods-5",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Apple AirPods 4",
-    "brand": "APPLE",
+    "raw": "Galaxy Buds On",
+    "brand": "SAMSUNG",
     "col": 3,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-4",
-      "status": "exact"
-     }
-    ]
+    "models": []
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "音频",
   "series": "FreeBuds",
   "tier": "＞200",
@@ -11263,67 +6884,16 @@
      }
     ]
    }
-  ]
- },
- {
-  "country": "巴西",
-  "country_code": "BR",
-  "industry": "音频",
-  "series": "FreeBuds",
-  "tier": "100<200",
-  "own_raw": "FreeBuds 7i",
-  "own": [
-   {
-    "model_id": "own-huawei-freebuds-7i",
-    "status": "exact"
-   }
   ],
-  "comps": [
-   {
-    "raw": "Soundcore Liberty 5",
-    "brand": "SOUNDCORE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-soundcore-liberty-5",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Buds4 Pro",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-buds-4-pro",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Apple AirPods 4 ANC",
-    "brand": "APPLE",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-4-anc",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "音频",
   "series": "FreeBuds",
   "tier": "100<200",
-  "own_raw": "FreeBuds NEO",
+  "own_raw": "FreeBuds Neo",
   "own": [
    {
     "model_id": "own-huawei-freebuds-neo",
@@ -11332,25 +6902,20 @@
   ],
   "comps": [
    {
-    "raw": "Apple AirPods Pro 2",
-    "brand": "APPLE",
+    "raw": "Yandex Drop",
+    "brand": "OTHER",
     "col": 1,
     "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-airpods-pro-2",
-      "status": "exact"
-     }
-    ]
+    "models": []
    },
    {
-    "raw": "Soundcore Liberty 5",
-    "brand": "SOUNDCORE",
+    "raw": "Apple AirPods 4 ANC",
+    "brand": "APPLE",
     "col": 2,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-soundcore-liberty-5",
+      "model_id": "cmp-apple-airpods-4-anc",
       "status": "exact"
      }
     ]
@@ -11367,46 +6932,60 @@
      }
     ]
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "音频",
   "series": "FreeBuds",
-  "tier": "50＜100",
-  "own_raw": "FreeBuds SE 4 ANC",
+  "tier": "100<200",
+  "own_raw": "FreeBuds 7i",
   "own": [
    {
-    "model_id": "own-huawei-freebuds-se-4-anc",
+    "model_id": "own-huawei-freebuds-7i",
     "status": "exact"
    }
   ],
   "comps": [
    {
-    "raw": "Soundcore P30I",
-    "brand": "SOUNDCORE",
+    "raw": "Samsung Galaxy Buds FE",
+    "brand": "SAMSUNG",
     "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-buds-fe",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Realme Buds air 8 pro",
+    "brand": "REALME",
+    "col": 2,
     "substitute": false,
     "models": []
    },
    {
-    "raw": "Redmi Buds 6 Pro",
-    "brand": "XIAOMI",
-    "col": 2,
+    "raw": "Soundcore Liberty 5",
+    "brand": "SOUNDCORE",
+    "col": 3,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-xiaomi-redmi-buds-6-pro",
+      "model_id": "cmp-soundcore-liberty-5",
       "status": "exact"
      }
     ]
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "手机",
   "series": "Pura",
   "tier": "800<1000",
@@ -11442,11 +7021,12 @@
      }
     ]
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "手机",
   "series": "Pura",
   "tier": "800<1000",
@@ -11482,51 +7062,12 @@
      }
     ]
    }
-  ]
- },
- {
-  "country": "巴西",
-  "country_code": "BR",
-  "industry": "手机",
-  "series": "Pura",
-  "tier": "800<1000",
-  "own_raw": "Pura 80 Pro",
-  "own": [
-   {
-    "model_id": "own-huawei-pura-80-pro",
-    "status": "exact"
-   }
   ],
-  "comps": [
-   {
-    "raw": "Apple iPhone 16",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-iphone-16",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy S25",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-s25",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "手机",
   "series": "Mate",
   "tier": "＞1000",
@@ -11562,11 +7103,36 @@
      }
     ]
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
+  "industry": "手机",
+  "series": "Mate",
+  "tier": "＞1000",
+  "own_raw": "Mate XT",
+  "own": [
+   {
+    "model_id": "own-huawei-mate-xt",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Samsung Galaxy Z TriFold",
+    "brand": "SAMSUNG",
+    "col": 1,
+    "substitute": false,
+    "models": []
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
   "industry": "手机",
   "series": "Mate",
   "tier": "800<1000",
@@ -11603,20 +7169,149 @@
     ]
    },
    {
-    "raw": "Honor Magic 18 Pro",
+    "raw": "Honor Magic 8 Pro",
     "brand": "HONOR",
     "col": 3,
     "substitute": false,
-    "models": []
+    "models": [
+     {
+      "model_id": "cmp-honor-magic8-pro",
+      "status": "exact"
+     }
+    ]
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
+  "industry": "手机",
+  "series": "nova",
+  "tier": "600<800",
+  "own_raw": "nova 16s Pro",
+  "own": [
+   {
+    "model_id": "own-huawei-nova-16s-pro",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Samsung Galaxy S26 FE",
+    "brand": "SAMSUNG",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-s26-fe",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Honor 600 Pro",
+    "brand": "HONOR",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-honor-600-pro",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
   "industry": "手机",
   "series": "nova",
   "tier": "400<600",
+  "own_raw": "nova 16s",
+  "own": [
+   {
+    "model_id": "own-huawei-nova-16s",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Samsung Galaxy A57",
+    "brand": "SAMSUNG",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-a57",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Honor 600",
+    "brand": "HONOR",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-honor-600",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "手机",
+  "series": "nova",
+  "tier": "400<600",
+  "own_raw": "nova 15",
+  "own": [
+   {
+    "model_id": "own-huawei-nova-15",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Samsung Galaxy A57",
+    "brand": "SAMSUNG",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-a57",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Honor 600",
+    "brand": "HONOR",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-honor-600",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "手机",
+  "series": "nova",
+  "tier": "200<400",
   "own_raw": "nova Y74",
   "own": [
    {
@@ -11626,7 +7321,7 @@
   ],
   "comps": [
    {
-    "raw": "Samsung A17",
+    "raw": "Samsung Galaxy A17",
     "brand": "SAMSUNG",
     "col": 1,
     "substitute": false,
@@ -11661,14 +7356,15 @@
      }
     ]
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "手机",
   "series": "nova",
-  "tier": "400<600",
+  "tier": "200<400",
   "own_raw": "nova 15 Max",
   "own": [
    {
@@ -11713,11 +7409,135 @@
      }
     ]
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
+  "industry": "平板",
+  "series": "Pro",
+  "tier": ">=800",
+  "own_raw": "MatePad Pro Max",
+  "own": [
+   {
+    "model_id": "own-huawei-matepad-pro-max",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple iPad Pro M5",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-ipad-pro-m5",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Tab S11 Ultra",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-tab-s11-ultra",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "平板",
+  "series": "Pro",
+  "tier": ">=800",
+  "own_raw": "MatePad Pro 12.2",
+  "own": [
+   {
+    "model_id": "own-huawei-matepad-pro-2025",
+    "status": "subset"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple iPad Pro M5",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-ipad-pro-m5",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Tab S11",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-tab-s11",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "平板",
+  "series": "Air",
+  "tier": ">=800",
+  "own_raw": "MatePad Air",
+  "own": [
+   {
+    "model_id": "own-huawei-matepad-air-2026",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Apple iPad Air M4",
+    "brand": "APPLE",
+    "col": 1,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-apple-ipad-air-m4",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Tab S11",
+    "brand": "SAMSUNG",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-samsung-galaxy-tab-s11",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
   "industry": "平板",
   "series": "mini",
   "tier": "500<800",
@@ -11741,66 +7561,15 @@
      }
     ]
    }
-  ]
+  ],
+  "default": true
  },
  {
-  "country": "巴西",
-  "country_code": "BR",
+  "country": "默认",
+  "country_code": null,
   "industry": "平板",
   "series": "数字",
   "tier": "350<500",
-  "own_raw": "MatePad 11.5S",
-  "own": [
-   {
-    "model_id": "own-huawei-matepad-11-5-s-2026",
-    "status": "exact"
-   }
-  ],
-  "comps": [
-   {
-    "raw": "Apple iPad 11",
-    "brand": "APPLE",
-    "col": 1,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-apple-ipad-a16",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Samsung Galaxy Tab S10 FE",
-    "brand": "SAMSUNG",
-    "col": 2,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-samsung-galaxy-tab-s10-fe",
-      "status": "exact"
-     }
-    ]
-   },
-   {
-    "raw": "Redmi Pad 2 Pro",
-    "brand": "XIAOMI",
-    "col": 3,
-    "substitute": false,
-    "models": [
-     {
-      "model_id": "cmp-xiaomi-redmi-pad-2-pro",
-      "status": "exact"
-     }
-    ]
-   }
-  ]
- },
- {
-  "country": "巴西",
-  "country_code": "BR",
-  "industry": "平板",
-  "series": "数字",
-  "tier": "250<350",
   "own_raw": "MatePad 11.5",
   "own": [
    {
@@ -11810,21 +7579,62 @@
   ],
   "comps": [
    {
-    "raw": "Samsung Galaxy Tab S10 Lite",
-    "brand": "SAMSUNG",
+    "raw": "Apple iPad 11",
+    "brand": "APPLE",
     "col": 1,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-samsung-galaxy-tab-s10-lite",
+      "model_id": "cmp-apple-ipad-a16",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Redmi Pad 2",
+    "raw": "Redmi Pad 2 Pro",
     "brand": "XIAOMI",
     "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-xiaomi-redmi-pad-2-pro",
+      "status": "exact"
+     }
+    ]
+   },
+   {
+    "raw": "Honor PAD 20",
+    "brand": "HONOR",
+    "col": 3,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-honor-pad-20",
+      "status": "exact"
+     }
+    ]
+   }
+  ],
+  "default": true
+ },
+ {
+  "country": "默认",
+  "country_code": null,
+  "industry": "平板",
+  "series": "SE",
+  "tier": "250<350",
+  "own_raw": "MatePad SE 11",
+  "own": [
+   {
+    "model_id": "own-huawei-matepad-se-11",
+    "status": "exact"
+   }
+  ],
+  "comps": [
+   {
+    "raw": "Redmi Pad 2",
+    "brand": "XIAOMI",
+    "col": 1,
     "substitute": false,
     "models": [
      {
@@ -11834,17 +7644,30 @@
     ]
    },
    {
-    "raw": "Apple iPad 11",
-    "brand": "APPLE",
+    "raw": "Honor PAD 11.5 X9A",
+    "brand": "HONOR",
+    "col": 2,
+    "substitute": false,
+    "models": [
+     {
+      "model_id": "cmp-honor-pad-x9a",
+      "status": "subset"
+     }
+    ]
+   },
+   {
+    "raw": "Samsung Galaxy Tab A9+",
+    "brand": "SAMSUNG",
     "col": 3,
     "substitute": false,
     "models": [
      {
-      "model_id": "cmp-apple-ipad-a16",
+      "model_id": "cmp-samsung-galaxy-tab-a9",
       "status": "exact"
      }
     ]
    }
-  ]
+  ],
+  "default": true
  }
 ]

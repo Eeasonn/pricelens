@@ -67,7 +67,7 @@ afterEach(cleanup);
 
 /** 数据事实（dim_product）：Mate X6 12+512GB 仅 ES/FR/IT/RU/TR，ID 只有 16+512GB；
  *  nova 14 Pro 12+512GB 在 DE 与 RU 均在售；DE/ID 无 default_own_models，默认主品
- *  = 该国首个我司手机型号（DE = nova 14 Pro，ID = Mate 80 Pro）。 */
+ *  = 该国首个我司手机型号（DE = nova 14 Pro 走兜底，ID = Mate X7 默认矩阵显式声明）。 */
 const MATE_X6_RU: ProductSelection = { modelId: 'own-huawei-mate-x6', romram: '12+512 GB', skuIds: ['own-huawei-mate-x6__12-512gb__black'] };
 const MATE_X6_ID: ProductSelection = { modelId: 'own-huawei-mate-x6', romram: '16+512 GB', skuIds: ['own-huawei-mate-x6__16-512gb__black'] };
 const NOVA_14_PRO: ProductSelection = { modelId: 'own-huawei-nova-14-pro', romram: '12+512 GB', skuIds: ['own-huawei-nova-14-pro__12-512gb__black'] };
@@ -149,7 +149,7 @@ describe('t428u R3 M1a · 系列键解析与 URL 非法配置映射', () => {
     // R4-m1：型号在 ID 存在（16+512GB）→ 同型号首个合法配置，不再整组回落默认卡；
     // 非法 12+512GB/SKU 也不得原样保留
     expect(state().mains[0].main).toEqual(MATE_X6_ID);
-    expect(state().mains[0].main?.modelId).not.toBe('own-huawei-mate-80-pro');
+    expect(state().mains[0].main?.modelId).not.toBe('own-huawei-mate-x7');
     expect(selectionValidFor(state().mains[0].main!, 'ID', 'phone')).toBe(true);
   });
 });
@@ -194,10 +194,10 @@ describe('t428u R3 M1b · 普通 UI 换国（补丁不带 mains）', () => {
     act(() => actions().setMains([mateX6RuCard()]));
     act(() => actions().set({ countryCode: 'ID' }));
     expect(state().countryCode).toBe('ID');
-    // 非法 12+512GB 不保留；同型号在该国仍 in-sale → 16+512GB，而不是 ID 默认 Mate 80 Pro
+    // 非法 12+512GB 不保留；同型号在该国仍 in-sale → 16+512GB，而不是 ID 默认 Mate X7
     expect(state().mains[0].main).not.toEqual(MATE_X6_RU);
     expect(state().mains[0].main).toEqual(MATE_X6_ID);
-    expect(state().mains[0].main?.modelId).not.toBe('own-huawei-mate-80-pro');
+    expect(state().mains[0].main?.modelId).not.toBe('own-huawei-mate-x7');
     expect(selectionValidFor(state().mains[0].main!, 'ID', 'phone')).toBe(true);
   });
 
@@ -259,7 +259,7 @@ describe('t428u R3 M1a · 显式 mains 跨国（Agent filterPatch 口径）', ()
       mains: [{ id: 'card-absent', main: { modelId: 'own-huawei-pura-999', romram: '12+256 GB', skuIds: ['own-huawei-pura-999__12-256gb__black'] }, compares: [], auto: false }],
     }));
     expect(state().countryCode).toBe('ID');
-    expect(state().mains[0].main?.modelId).toBe('own-huawei-mate-80-pro');
+    expect(state().mains[0].main?.modelId).toBe('own-huawei-mate-x7');
     expect(selectionValidFor(state().mains[0].main!, 'ID', 'phone')).toBe(true);
   });
 });

@@ -175,10 +175,11 @@ describe('t428u R5-M1 · 合法口径绝不放大清空（同国 OZON / 店铺�
     const card = response.cards.find((item) => item.kind === 'price_advantage') as PriceAdvantageResultCard;
     expect(card.rows.length).toBeGreaterThan(0);
     for (const row of card.rows) expect(row.channel).toBe('OZON');
-    // 真实数据事实：OZON 渠道 2026-W36 我司 330 USD（评审复现值）
-    const w36 = card.rows.find((row) => row.weekId === '202636');
-    expect(w36).toBeDefined();
-    expect(w36!.ownPrice).toBe(330);
+    // 真实数据事实：OZON 渠道 2026-W45 我司 364 USD（默认矩阵改版后自动对手集变化，
+    // 2026-W36 的旧对手 Reno 13F 不再在 OZON 对标集内，锚顺移至最新交叠周）
+    const w45 = card.rows.find((row) => row.weekId === '202645');
+    expect(w45).toBeDefined();
+    expect(w45!.ownPrice).toBe(364);
     const patch = openActionOf(card, 'price-advantage-open').target!.filterPatch!;
     expect(patch.platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
     expect(card.boundaries?.every((line) => !line.includes('没有渠道'))).toBe(true);

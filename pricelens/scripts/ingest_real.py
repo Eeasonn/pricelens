@@ -995,28 +995,31 @@ def main():
                 out.append(alts)   # "Tab S11/S10+" → 备选列表，解析时依次尝试
         return out
 
+    # 默认块（国家列=「默认」）：2026-11-09 起，分国块只写差异，其余 国家×我司型号
+    # 全部套用默认块——分国块显式声明的 (cc, 我司型号) 对默认块让位。
+    DEFAULT_COUNTRY = "默认"
+    default_rows = [m for m in matrix_rows if m["country"] == DEFAULT_COUNTRY]
+    country_rows = [m for m in matrix_rows if m["country"] != DEFAULT_COUNTRY]
+
     matrix_resolution = []
+    country_entries = []
+    default_resolution = []
     bench = []
     unresolved = []
     matrix_tier_decl = {}   # (cc, own model_id) -> (lo, hi) 矩阵声明档位（分国）
-    for mi, m in enumerate(matrix_rows):
-        cc = cc_of(m["country"])
+    declared_own = set()    # 分国块显式声明的 (cc, own model_id)
+
+    def resolve_matrix_row(m):
+        """矩阵行解析（与国家无关）：我司型号 + 竞品型号 → (entry, own_mids, ind)。"""
         ind = INDUSTRY_OF_CN.get(m["industry"] or "")
-        entry = {"country": m["country"], "country_code": cc, "industry": m["industry"],
+        entry = {"country": m["country"], "country_code": cc_of(m["country"]), "industry": m["industry"],
                  "series": m["series"], "tier": m["tier"], "own_raw": m["product"], "own": [], "comps": []}
-        matrix_resolution.append(entry)
-        if not cc or not ind or not m["product"]:
-            if m["product"]:
-                unresolved.append({"kind": "own", "text": m["product"], "country": m["country"], "why": "国家/产业缺失"})
-            continue
+        if not ind or not m["product"]:
+            return entry, [], ind
         own_mids, st, txt = resolve_name("HUAWEI", ind, m["product"], strict_own=True)
         entry["own"] = [{"model_id": x, "status": st} for x in own_mids]
-        declared = parse_tier_text(m["tier"])
-        if declared:
-            for om in own_mids:
-                matrix_tier_decl[(cc, om)] = declared
         if not own_mids:
-            unresolved.append({"kind": "own", "text": txt, "country": cc, "industry": ind, "why": st})
+            unresolved.append({"kind": "own", "text": txt, "country": m["country"], "industry": ind, "why": st})
         comp_entries = []
         seen_models = set()
         for ci, cell in enumerate(m["comps"]):
@@ -1032,11 +1035,15 @@ def main():
                                      "substitute": txt2 in substitute_hits,
                                      "models": [{"model_id": x, "status": st2} for x in mids]})
                 if not mids:
-                    unresolved.append({"kind": "comp", "text": txt2, "country": cc, "industry": ind, "why": st2})
+                    unresolved.append({"kind": "comp", "text": txt2, "country": m["country"], "industry": ind, "why": st2})
                 else:
                     for x in mids:
                         seen_models.add(x)
         entry["comps"] = comp_entries
+        return entry, own_mids, ind
+
+    def emit_matrix_bench(own_mids, comp_entries, cc, ind):
+        """我司×竞品按配置配对产出对标行（国家 cc；source=matrix/substitute）。"""
         for om in own_mids:
             own_cfg = country_configs(om, cc)
             if not own_cfg:
@@ -1058,6 +1065,44 @@ def main():
                                       "competitor_sku_id": rep, "sort": sort_by_cfg[own_r],
                                       "source": "substitute" if centry.get("substitute") else "matrix",
                                       "note": centry["raw"]})
+
+    # 第一遍：分国块（显式声明优先）
+    for m in country_rows:
+        cc = cc_of(m["country"])
+        ind = INDUSTRY_OF_CN.get(m["industry"] or "")
+        entry, own_mids, _ = resolve_matrix_row(m)
+        entry["country_code"] = cc
+        matrix_resolution.append(entry)
+        country_entries.append(entry)
+        if not cc or not ind or not m["product"]:
+            if m["product"]:
+                unresolved.append({"kind": "own", "text": m["product"], "country": m["country"], "why": "国家/产业缺失"})
+            continue
+        declared = parse_tier_text(m["tier"])
+        if declared:
+            for om in own_mids:
+                matrix_tier_decl[(cc, om)] = declared
+                declared_own.add((cc, om))
+        emit_matrix_bench(own_mids, entry["comps"], cc, ind)
+
+    # 第二遍：默认块 × 有数据国家（分国块已声明的 (cc, 我司型号) 让位）
+    data_ccs = sorted({cc for p in DIM_PRODUCT for cc in p["countries"]})
+    for m in default_rows:
+        entry, own_mids, ind = resolve_matrix_row(m)
+        entry["default"] = True
+        default_resolution.append(entry)
+        if not ind or not m["product"]:
+            continue
+        declared = parse_tier_text(m["tier"])
+        for om in own_mids:
+            if declared:
+                for cc in data_ccs:
+                    if (cc, om) not in declared_own:
+                        matrix_tier_decl[(cc, om)] = declared
+            for cc in data_ccs:
+                if (cc, om) not in declared_own:
+                    emit_matrix_bench([om], entry["comps"], cc, ind)
+    matrix_resolution.extend(default_resolution)
     # 人工对标追加
     for mb in bench_manual:
         cand = [p for p in DIM_PRODUCT
@@ -1237,14 +1282,26 @@ def main():
     log["notes"].append(f"对标上限{BENCH_MAX}：{over_groups} 组超限截断 {trimmed_pairs} 条，"
                         f"截断后共 {len(bench)} 条（每配置 ≤{BENCH_MAX} 款竞品）")
 
-    # 每国×产业默认我司型号（矩阵序首个有数型号）
-    for m, entry in zip(matrix_rows, matrix_resolution):
+    # 每国×产业默认我司型号（矩阵序首个有数型号；分国块优先，默认块只补缺口）
+    for m, entry in zip(country_rows, country_entries):
         cc = cc_of(m["country"])
         ind = INDUSTRY_OF_CN.get(m["industry"] or "")
         if not cc or not ind:
             continue
         r = region_by_cc.get(cc)
         if r and ind not in r["default_own_models"]:
+            for o in entry["own"]:
+                if any(p["model_id"] == o["model_id"] and cc in p["countries"] for p in DIM_PRODUCT):
+                    r["default_own_models"][ind] = o["model_id"]
+                    break
+    for entry in default_resolution:
+        ind = INDUSTRY_OF_CN.get(entry["industry"] or "")
+        if not ind:
+            continue
+        for cc in data_ccs:
+            r = region_by_cc.get(cc)
+            if not r or ind in r["default_own_models"]:
+                continue
             for o in entry["own"]:
                 if any(p["model_id"] == o["model_id"] and cc in p["countries"] for p in DIM_PRODUCT):
                     r["default_own_models"][ind] = o["model_id"]
