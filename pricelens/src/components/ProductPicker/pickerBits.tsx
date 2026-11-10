@@ -154,7 +154,7 @@ export function innerLayerOpen(): boolean {
   );
 }
 
-// ---------------- 颜色 chip（次级筛选：点开换色 / 多色均价） ----------------
+// ---------------- 版本 chip（次级筛选：收颜色/表盘/联网方式，点开切换 / 多选均价） ----------------
 
 export function colorLabelOf(node: RomramNode | undefined, skuIds: string[]): string {
   if (!node) return '';
@@ -208,8 +208,8 @@ export function ColorChip({
           换色浮层（全局 button 外观重置已剥默认样式，视觉与 span 版一致） */}
       <button
         type="button"
-        title={`颜色 ${label} · 点击切换`}
-        aria-label={`颜色 ${label}，点击切换`}
+        title={`版本 ${label} · 点击切换`}
+        aria-label={`版本 ${label}，点击切换`}
         className="lpl-pk-ghost"
         style={{
           display: 'inline-flex',

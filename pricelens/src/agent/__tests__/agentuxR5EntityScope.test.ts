@@ -344,7 +344,7 @@ describe('四审 m2 · 整配置（skuIds=[]）平台比较展开全部颜色（
       ['OZON', '358', '+6.4%'],
     ]);
     expect(table!.note).toContain('整配置');
-    expect(table!.note).toContain('全部 2 个颜色 SKU');
+    expect(table!.note).toContain('全部 2 个版本 SKU');
     expect(table!.note).toContain('与趋势聚合一致');
     expect(table!.note).toContain('最便宜平台为 DNS');
     // 不把黑色单 SKU 的 333/最低 OZON 套给整配置

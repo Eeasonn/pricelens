@@ -993,9 +993,9 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
         const spread = item.spreadInfo.rows;
         const lowest = spread[0]?.price ?? null;
         const skuTail = item.spreadInfo.wholeConfig
-          ? `（整配置口径：全部 ${item.spreadInfo.members} 个颜色 SKU，各平台价 = 选择内各 SKU 平台内最低价的均值，与趋势聚合一致）`
+          ? `（整配置口径：全部 ${item.spreadInfo.members} 个版本 SKU，各平台价 = 选择内各 SKU 平台内最低价的均值，与趋势聚合一致）`
           : item.spreadInfo.members > 1
-            ? `（所选 ${item.spreadInfo.members} 个颜色 SKU 的平台内最低价均值）`
+            ? `（所选 ${item.spreadInfo.members} 个版本 SKU 的平台内最低价均值）`
             : '';
         for (const row of spread.slice(0, 8)) {
           const pct = lowest == null || lowest === 0 ? '—' : row.price === lowest ? '最低' : `+${(((row.price - lowest) / lowest) * 100).toFixed(1)}%`;
@@ -1026,9 +1026,9 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
         } else {
           const spread = item.spreadInfo.rows;
           const base = `${item.label}：按 ${item.latestWeek} 各平台价排序（${item.spreadInfo.wholeConfig
-            ? `整配置口径：全部 ${item.spreadInfo.members} 个颜色 SKU，各平台价 = 选择内各 SKU 平台内最低价的均值，与趋势聚合一致`
+            ? `整配置口径：全部 ${item.spreadInfo.members} 个版本 SKU，各平台价 = 选择内各 SKU 平台内最低价的均值，与趋势聚合一致`
             : item.spreadInfo.members > 1
-              ? `所选 ${item.spreadInfo.members} 个颜色 SKU 的平台内最低价均值`
+              ? `所选 ${item.spreadInfo.members} 个版本 SKU 的平台内最低价均值`
               : '平台最低在架价'}）；当前最便宜平台为 ${spread[0].platform}。`;
           const scopeTail = allPlatformAsked && item.effective
             ? `本次按全部平台比较，与当前所选店铺口径（${scopeLabelOf(item.effective)}）不同。`

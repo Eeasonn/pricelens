@@ -4,8 +4,8 @@
 // 2026-11-10 Eason（matrix-only 临时口径）：「矩阵 / 自动 / 替代 / 人工」四层逻辑
 // 先取消——生效对标只有矩阵直配一种来源，矩阵没给的即为空；本页编辑暂不生效
 // （按钮停用 + 说明），浏览器里的历史人工快照已停用并给清除入口。
-// 竞品 chip 显示 型号 · 配置 · 变体（2026-11-10 塌缩后穿戴/平板的表盘、联网方式
-// 并入变体文案，核对匹配关系时需要看到它）。
+// 竞品 chip 显示 型号 · 配置（塌缩后仍在外面的配置层级）；收进「版本」次级
+// 菜单的变体（表盘/联网方式/颜色）不在本表体现（2026-11-10 Eason 二轮）。
 // 第一百九十轮（外部 UX 审计落地）：竞品行挂 .lpl-bm-row、配置名列挂 .lpl-bm-cfg
 // （窄屏自动换行重排，修复 390px 下竞品 chips 被裁切、「编辑」覆盖内容）；
 // 「编辑」补 aria-label（图标按钮无可见文字，读屏需要上下文名称）。
@@ -23,18 +23,18 @@ import { useFilters } from '../../state/FiltersContext';
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
 import { color, fontSize, radius, space } from '../../theme/tokens';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
+import { configTextOf } from '../../components/ProductCascader/tree';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
 /** matrix-only：维表只发 source=matrix 行，本页所有对标统一挂矩阵标签 */
 const MATRIX_TAG = { text: '矩阵', fg: '#0053c2', bg: '#e8f1ff', hint: '产品竞品矩阵直接配置' };
 
-/** 竞品显示名：型号 · 配置 · 变体（'—' 段整段隐藏，与全局配置文案约定一致） */
-function competitorLabel(p: { model_name: string; romram: string; color: string }): string {
-  const parts = [p.model_name];
-  if (p.romram && p.romram !== '—') parts.push(p.romram);
-  if (p.color && p.color !== '—') parts.push(p.color);
-  return parts.join(' · ');
+/** 竞品显示名 = 型号 · 配置（仍在配置层级的产业）；收进「版本」次级菜单的
+ *  变体（表盘/联网方式/颜色）不在本表体现（2026-11-10 Eason）。 */
+function competitorLabel(p: { model_name: string; romram: string }): string {
+  const cfg = configTextOf(p.romram);
+  return cfg ? `${p.model_name} · ${cfg}` : p.model_name;
 }
 
 export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boolean }) {
@@ -153,9 +153,10 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                     key={r.romram}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderTop: `1px solid ${color.hairline}` }}
                   >
-                    {/* 配置名列：宽度/不收缩交给 .lpl-bm-cfg（窄屏独占一行），仅保留字重与排版 */}
+                    {/* 配置名列：宽度/不收缩交给 .lpl-bm-cfg（窄屏独占一行），仅保留字重与排版；
+                        塌缩后穿戴无配置层级 → 留空（2026-11-10 Eason：本表只体现「外面」的干净信息） */}
                     <span className="tnum lpl-bm-cfg" style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>
-                      {r.romram}
+                      {configTextOf(r.romram)}
                     </span>
                     <span style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {comps.length === 0 ? (
@@ -192,7 +193,7 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                       icon={<EditOutlined />}
                       disabled
                       title={canEdit ? '当前按矩阵直配，人工配置暂不生效' : '查阅者不可修改配置，请联系 GTM'}
-                      aria-label={`编辑 ${m.modelName} ${r.romram} 的竞品对标`}
+                      aria-label={`编辑 ${[m.modelName, configTextOf(r.romram)].filter(Boolean).join(' ')} 的竞品对标`}
                     >
                       编辑
                     </Button>

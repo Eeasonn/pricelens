@@ -269,7 +269,7 @@ function ProductCascadeControl({
       onLabelClick: () => updateConfigs([r], !chosen),
       trailing: colorLabel && (
         <button
-          type="button" title={`颜色 ${colorLabel} · 点击修改`}
+          type="button" title={`版本 ${colorLabel} · 点击修改`}
           onClick={(e) => { e.stopPropagation(); setColorPanelKey(r.key); }}
           onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           style={{ ...COLOR_CHIP, width: 'auto', border: '1px solid rgba(0, 112, 243, 0.40)', fontFamily: 'inherit' }}

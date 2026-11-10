@@ -55,7 +55,7 @@ export default function ColorFlyout({
       }}
     >
       <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-        颜色
+        版本
         <span style={{ fontWeight: 400, color: color.mute }}>
           {' '}· {modelNameOf(node.modelId)}{configTextOf(node.romram) ? ` ${configTextOf(node.romram)}` : ''}
         </span>
