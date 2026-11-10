@@ -160,7 +160,7 @@ describe('量价页 · 量价同骨架接线（2026-11-06）', () => {
 
     const own = panels[ownKey as string];
     const cmp = panels[cmpKey as string];
-    // 我司：成本面积（unitCost 数值）+ 销毛迷你卡数据，长度与销量/点序列一致
+    // 我司：成本细线（unitCost 数值）+ 销毛迷你卡数据，长度与销量/点序列一致
     const costs = own.costs as (number | null)[];
     const margins = own.margins as ({ marginRate: number } | null)[];
     expect(Array.isArray(costs)).toBe(true);

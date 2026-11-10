@@ -829,7 +829,7 @@ export default function VolumePrice() {
     [panelData, domainIds, effWins, cc],
   );
   // ---- 面板价格 Y 轴（2026-11-06 量价同骨架，算法与价格页 volPlan 同一）----
-  // 「销毛成本」开：可见我司面板的模拟成本折成合成序列并入轴输入（成本面积要可见）；
+  // 「销毛成本」开：可见我司面板的模拟成本折成合成序列并入轴输入（成本细线要可见）；
   // 隔离周成本不进图（与旧呈现同口径），合成序列同位置置 null。
   const costAxisSeries = useMemo<Series[]>(() => {
     if (!marginOn) return [];
@@ -1121,7 +1121,7 @@ export default function VolumePrice() {
                       const panelBrush = brushInWindow(brushRange, ws, we);
                       // 线与柱用品牌色（spec 拍板；不再把主品视图压成中性墨）
                       const seriesColor = p.vis[0]?.color ?? brandColorOf(p.brand);
-                      // 「销毛成本」开 + 我司面板：成本面积 + 悬停销毛率迷你卡。
+                      // 「销毛成本」开 + 我司面板：成本细线 + 悬停销毛率迷你卡。
                       // 隔离周成本不进图（价格不可信 → 成本断开，同旧呈现口径）
                       const visPts = p.vis[0]?.points ?? [];
                       const marginMasked = marginOn && p.spec.isOwn
@@ -1153,7 +1153,8 @@ export default function VolumePrice() {
                         style={reading ? {
                           // 主产品与组内对比共用一块轻表面，价格、成本、销量和时间轨
                           // 由同一边界收拢，避免每个数据层像独立卡片一样漂浮。
-                          background: color.canvasSoft,
+                          // 2026-11-10 Eason：底色对齐价格走势页——白底，不再垫灰。
+                          background: color.canvas,
                           padding: '0 12px',
                           position: 'relative',
                           // 内部 z 序（极差卡 z30 等）封在面板内：横滚时不越过 sticky 轴列
@@ -1240,7 +1241,7 @@ export default function VolumePrice() {
                           paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行、左缘对齐轴列
                           tipDiffBaseKey={p.vis[0]?.key ?? null}
                           margins={hasCost ? (marginMasked ?? undefined) : undefined} // 销毛迷你卡（我司）
-                          costs={hasCost ? (costs ?? undefined) : undefined} // 成本面积（我司；Y 轴已把成本算进来）
+                          costs={hasCost ? (costs ?? undefined) : undefined} // 成本细线（我司；Y 轴已把成本算进来）
                           volumeOn // 量带恒开、恒为柱（本页不提供「量」开关，同拍板）
                           volumeMode="bar"
                           volumeColor={seriesColor}
@@ -1382,7 +1383,7 @@ export default function VolumePrice() {
       aria-pressed={marginOn}
       aria-label={marginOn ? '隐藏销毛成本' : '显示销毛成本'}
       aria-disabled={marginLocked || undefined}
-      title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：价格层叠成本面积，悬停看销毛率；点击关闭' : '显示销毛成本：价格层叠成本面积，悬停看销毛率'}
+      title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：价格层叠成本细线，悬停看销毛率；点击关闭' : '显示销毛成本：价格层叠成本细线，悬停看销毛率'}
       onClick={toggleMargin}
       style={{
         height: 30,
@@ -1436,7 +1437,7 @@ export default function VolumePrice() {
         价格
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, opacity: marginOn ? 1 : 0.55 }}>
-        <i aria-hidden style={{ width: 12, height: 8, borderRadius: 2, background: marginOn ? 'rgba(199, 0, 11, 0.12)' : color.hairline, border: `1px solid ${marginOn ? 'rgba(199, 0, 11, 0.28)' : color.hairlineStrong}` }} />
+        <i aria-hidden style={{ width: 14, height: 3, borderRadius: radius.pill, background: marginOn ? 'rgba(199, 0, 11, 0.45)' : color.hairlineStrong }} />
         成本 · 模拟
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>

@@ -377,7 +377,7 @@ export interface ChartProps {
   onRangeMode?: (m: RangeMode) => void;
   /** 价格量尺量哪条线；缺省 = tipDiffBaseKey，再缺省 = 第一条 */
   rulerKey?: string | null;
-  /** 成本面积（与 points 同下标，显示币种；模拟成本）：价格层画成本面积、名称带出「成本 模拟」
+  /** 成本细线（与 points 同下标，显示币种；模拟成本）：价格层画成本细线、名称带出「成本 模拟」
    *  药丸、悬停主卡加「当月成本」脚行。Y 轴须由调用方把成本算进去 */
   costs?: readonly (number | null)[];
   /** 图层标注：名称带列顶部写「价格 USD」（有成本写「价格 / 成本」）与「销量 台 模拟」；需 nameZoneWidth */
@@ -1083,19 +1083,17 @@ export default function Chart(props: ChartProps) {
     [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes, nameZoneWProp],
   );
 
-  // ---- 成本面积几何（2026-11-06）：缺成本的桶断开成段，不插值 ----
+  // ---- 成本细线几何（2026-11-10 Eason：成本从面积改细线）：缺成本的桶断开成段，不插值。
+  // 复用面积上缘的同一条 Fritsch–Carlson 平滑曲线（open path，不落底、不闭合）。
   const costColor = props.volumeColor ?? series[0]?.color ?? color.mute;
-  const costArea = useMemo(() => {
+  const costLine = useMemo(() => {
     if (!props.costs || !geom) return null;
-    const base = (geom.plotTop + geom.plotHeight).toFixed(1);
     const colW = geom.plotWidth / geom.n;
     let d = '';
     let run: Array<{ x: number; y: number }> = [];
     const flush = (): void => {
       if (run.length >= 2) {
-        const x0 = run[0].x.toFixed(1);
-        const xn = run[run.length - 1].x.toFixed(1);
-        d += `M ${x0} ${base} L ${x0} ${run[0].y.toFixed(1)} ${smoothAreaSegments(run)} L ${xn} ${base} Z `;
+        d += `M ${run[0].x.toFixed(1)} ${run[0].y.toFixed(1)} ${smoothAreaSegments(run)} `;
       }
       run = [];
     };
@@ -1594,11 +1592,11 @@ export default function Chart(props: ChartProps) {
           );
         })()}
       </div>
-      {/* 成本面积（2026-11-06 量价走势「销毛成本」）：单色浅填充 + 细边界，
-          与价格线保持同一层级，避免大面积渐变把价格层与销量层割裂。 */}
-      {geom && costArea && (
-        <svg aria-hidden data-testid="cost-area" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}>
-          <path d={costArea} fill={hexToRgba(costColor, 0.10)} stroke={hexToRgba(costColor, 0.28)} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      {/* 成本细线（2026-11-10 Eason：成本从面积改细线）：同色降透明细线、不填充，
+          与价格线同一层级但明显退后（模拟口径），不再出现「水味」浅填充。 */}
+      {geom && costLine && (
+        <svg aria-hidden data-testid="cost-line" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}>
+          <path d={costLine} fill="none" stroke={hexToRgba(costColor, 0.45)} strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         </svg>
       )}
       {/* ECharts 挂载层（第一百一十四轮：高度不含 tipBox 预留框——canvas 网格仍止于底边距） */}
@@ -2383,7 +2381,7 @@ export default function Chart(props: ChartProps) {
             // volumes 现兼作量层数据源，量层开启时悬停卡仍保持五列（量层已有右轴刻度，
             // Eason 口径：卡片不膨胀），销量数字由右轴承载
             const volVal = tipBoxOn ? (props.volumes?.[tipIdx] ?? null) : null;
-            // 2026-11-06：成本面积开着时，主卡多一行当月成本（模拟）
+            // 成本细线开着时，主卡多一行当月成本（模拟）
             const costVal = props.costs?.[tipIdx] ?? null;
             const costDot = costVal != null && !tipBoxOn ? (
               <span
@@ -3346,7 +3344,7 @@ export default function Chart(props: ChartProps) {
             );
           })()}
           {/* 图层标注（2026-11-06）：名称带列顶部写清每层是什么、单位是什么；
-              成本面积在名称带有一颗药丸，纵向贴成本起点、避开产品名称药丸 */}
+              成本细线开着时名称带有一颗药丸，纵向贴成本起点、避开产品名称药丸 */}
           {props.paneLabels && geom && props.nameZoneWidth != null && (() => {
             const left = Math.max(2, geom.plotLeft - props.nameZoneWidth + 4);
             const plotBottom = geom.plotTop + geom.plotHeight;

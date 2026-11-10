@@ -252,7 +252,7 @@ describe('量价页 · 合并单图接线（⋯ 呈现槽 / 合并渲染 / 分�
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: '显示销毛成本' }));
     openMore();
-    // 2026-11-06 量价同骨架：销毛成本 = 价格层叠成本面积（悬停看销毛率），
+    // 量价同骨架：销毛成本 = 价格层叠成本细线（悬停看销毛率），
     // 不再有「下垂柱 | 顶部销毛线」呈现切换；面板呈现方式仍仅组内对比适用
     expect(screen.queryByLabelText('销毛呈现方式')).toBeNull();
     expect(screen.queryByLabelText('面板呈现方式')).toBeNull();

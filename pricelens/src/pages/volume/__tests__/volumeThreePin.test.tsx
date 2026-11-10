@@ -2,7 +2,7 @@
 // 量价页 · 量价同骨架组装测试（2026-11-06 Eason 拍板，替换旧「三针整改」断言）：
 // 同骨架 = 每个面板渲染价格走势同款 <Chart>：本面板产品价格线 + 底部销量柱量带
 //   （恒开恒柱）+ 名称带图层标注（价格 USD / 销量 台·模拟）+ 区间量尺拖选入参；
-// 「销毛成本」开 = 我司面板价格层叠成本面积（cost-area svg + 成本·模拟药丸），
+// 「销毛成本」开 = 我司面板价格层叠成本细线（cost-line svg + 成本·模拟药丸），
 //   关 = 纯价格线 + 销量柱；旧面板内可点击图例行 / 成本柱呈现 / 极差卡随之退役；
 // 「时间轴同步」开关移驻首个面板底部时间轨左侧；隐藏收纳区
 //   （HiddenVault）与胶囊带对位契约保持原断言，库存 · DOS 补充图已从页面移除。
@@ -191,24 +191,24 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(screen.queryByRole('group', { name: '图例（点击切换元素显隐）' })).toBeNull();
   });
 
-  it('销毛成本开 → 我司面板出成本面积与成本·模拟药丸；关 → 不出', async () => {
+  it('销毛成本开 → 我司面板出成本细线与成本·模拟药丸；关 → 不出', async () => {
     render(<App />);
     await waitPanelsReady();
-    // 默认关：无成本面积、无成本药丸
-    expect(document.querySelector('[data-testid="cost-area"]')).toBeNull();
+    // 默认关：无成本细线、无成本药丸
+    expect(document.querySelector('[data-testid="cost-line"]')).toBeNull();
     expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
-    // 开：价格层叠成本面积（品牌色渐变 path）+ 名称带「成本 · 模拟」药丸
+    // 开：价格层叠成本细线（品牌色降透明 1.25px path）+ 名称带「成本 · 模拟」药丸
     fireEvent.click(screen.getByRole('button', { name: '显示销毛成本' }));
     await waitFor(() => {
-      expect(document.querySelector('[data-testid="cost-area"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="cost-line"]')).toBeTruthy();
       expect(document.querySelector('[data-testid="cost-pill"]')).toBeTruthy();
     });
     expect(document.querySelector('[data-testid="cost-pill"]')?.textContent).toContain('模拟');
     // 价格图层标注随成本出现改写为「价格 / 成本」
     expect(document.querySelector('[data-testid="pane-label-price"]')?.textContent).toContain('成本');
-    // 关：成本面积整组消失
+    // 关：成本细线整组消失
     fireEvent.click(screen.getByRole('button', { name: '隐藏销毛成本' }));
-    await waitFor(() => expect(document.querySelector('[data-testid="cost-area"]')).toBeNull());
+    await waitFor(() => expect(document.querySelector('[data-testid="cost-line"]')).toBeNull());
     expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
   });
 
