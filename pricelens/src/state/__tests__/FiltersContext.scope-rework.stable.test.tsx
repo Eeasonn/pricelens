@@ -155,17 +155,17 @@ describe('t428u R3 M1a · 系列键解析与 URL 非法配置映射', () => {
 });
 
 describe('南非分期期数与主分析产品联动', () => {
-  it('切到当前没有价格的期数时移除无效主品，避免留下空图', () => {
+  it('切到当前没有价格的期数时移除无效主品，避免留下空图（2026-11-10 新册全量换：ZA 默认主品 = Mate 80 Pro，仅 36 期有价）', () => {
     const handle = renderFilters();
     act(() => handle.actions().set({ countryCode: 'ZA' }));
     expect(handle.state().countryCode).toBe('ZA');
-    expect(handle.state().mains[0]?.main?.modelId).toBe('za-booklet-huawei-matext');
+    expect(handle.state().mains[0]?.main?.modelId).toBe('own-huawei-mate-80-pro');
 
     act(() => handle.actions().set({ financingTerm: 36 }));
-    expect(handle.state().mains[0]?.main?.modelId).toBe('za-booklet-huawei-matext');
+    expect(handle.state().mains[0]?.main?.modelId).toBe('own-huawei-mate-80-pro');
 
     act(() => handle.actions().set({ financingTerm: 24 }));
-    expect(handle.state().mains).toEqual([]);
+    expect(handle.state().mains).toEqual([]); // Mate 80 Pro 新册仅 36 期有价
   });
 });
 

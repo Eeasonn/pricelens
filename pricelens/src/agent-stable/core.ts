@@ -110,8 +110,28 @@ function productEntitiesOfText(text: string, industry: FiltersState['industry'])
   const matched = [...groups.values()]
     .filter((entity) => entity.industry === industry && entity.score > 0)
     .sort((a, b) => Number(b.exact) - Number(a.exact) || b.score - a.score || a.modelName.localeCompare(b.modelName));
-  const exact = matched.filter((entity) => entity.exact);
-  return exact.length ? exact : matched;
+  // 2026-11-10 ZA 新册全量换后目录存在同名双条目（za-booklet-huawei-matex6『Mate X6』
+  // 与主目录 own-huawei-mate-x6）：实体扫描按名称折叠为一则——小册子条目的行并入
+  // 主目录实体（modelId 取非 booklet 侧），否则「分别/和列表」的数量判定会数重。
+  // 仅 booklet 独有的名字（Y74s 等）保留，南非文本查询不受影响。
+  const nameKey = (entity: { brand: string; modelName: string }): string => `${entity.brand}|${entity.modelName.toUpperCase()}`;
+  const bookletRowsByName = new Map<string, typeof dimProduct>();
+  const folded: Array<{ modelId: string; modelName: string; brand: string; industry: string; rows: typeof dimProduct; score: number; exact: boolean }> = [];
+  for (const entity of matched) {
+    if (entity.modelId.startsWith('za-booklet-')) {
+      const rows = bookletRowsByName.get(nameKey(entity)) ?? [];
+      rows.push(...entity.rows);
+      bookletRowsByName.set(nameKey(entity), rows);
+      continue;
+    }
+    folded.push(entity);
+  }
+  for (const entity of folded) {
+    const extra = bookletRowsByName.get(nameKey(entity));
+    if (extra?.length) entity.rows.push(...extra);
+  }
+  const exact = folded.filter((entity) => entity.exact);
+  return exact.length ? exact : folded;
 }
 
 function selectionsForEntity(entity: ProductEntity, countryCode: string): { selections: ProductSelection[]; available: boolean } {

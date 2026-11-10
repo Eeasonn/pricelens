@@ -59,3 +59,7 @@ logs/
 # 本地生产素材与整合备份，仅留本机不入库（2026-11-09 Eason 拍板）
 /pricelens-video/
 /.consolidation-backup-20261108/
+
+# ZA 发布器回滚备份（本地保留，不入库）
+*.json.bak
+*.bak

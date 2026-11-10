@@ -79,15 +79,20 @@ def tier_for(industry: str, candidate: dict[str, Any] | None) -> str:
 
 def read_source_models(path: Path) -> list[tuple[str, str]]:
     frame = pd.read_excel(path, sheet_name="全量数据")
+    frame.columns = [str(c).split("\n", 1)[0].strip() for c in frame.columns]  # 双语表头归一
     columns = {str(column).split("\n", 1)[0].split("/", 1)[0].strip(): column for column in frame.columns}
     brand_col = columns.get("品牌")
     model_col = columns.get("型号")
     if not brand_col or not model_col:
         raise ValueError("全量数据缺少品牌或型号列")
+    # 2026-11-09 新一代自审计册子的提取型号名会粘坏（NEWHUAWEIWatch Ultimate Pro 2），
+    # 与 ingest_za_booklet.clean_booklet_model_name 同口径剥品牌前缀后再归并
+    from ingest_za_booklet import clean_booklet_model_name
     seen: dict[tuple[str, str], tuple[str, str]] = {}
     for _, row in frame.iterrows():
         brand, model = text(row.get(brand_col)), text(row.get(model_col))
         if brand and model:
+            model = clean_booklet_model_name(brand, model)
             seen.setdefault((key(brand), key(model)), (brand, model))
     return list(seen.values())
 

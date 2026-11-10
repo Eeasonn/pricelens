@@ -115,13 +115,29 @@ function productEntitiesOfText(text: string, industry: FiltersState['industry'])
   const { chars, orig } = compactIndex(text);
   const haystack = chars.join('');
   const groups = new Map<string, { modelId: string; modelName: string; brand: string; industry: string; rows: typeof dimProduct; prefixes: string[] }>();
+  // 2026-11-10 ZA 新册全量换后目录存在同名双条目（za-booklet-*『Mate X6』与主目录
+  // own-huawei-mate-x6）：同 (品牌, 型号名) 的 booklet 条目行并入主目录组，modelId
+  // 取非 booklet 侧——否则实体数成倍，「分别/和列表」的数量判定会数重。仅 booklet
+  // 独有的名字（Y74s 等）保留独立组，南非文本查询不受影响。
+  const bookletRowsByName = new Map<string, typeof dimProduct>();
   for (const row of dimProduct) {
+    if (row.model_id.startsWith('za-booklet-')) {
+      const nameKey = `${row.brand}|${row.model_name.toUpperCase()}`;
+      const rows = bookletRowsByName.get(nameKey) ?? [];
+      rows.push(row);
+      bookletRowsByName.set(nameKey, rows);
+      continue;
+    }
     const existing = groups.get(row.model_id);
     if (existing) {
       existing.rows.push(row);
       continue;
     }
     groups.set(row.model_id, { modelId: row.model_id, modelName: row.model_name, brand: row.brand, industry: row.industry, rows: [row], prefixes: modelPrefixes(row.model_name) });
+  }
+  for (const [nameKey, rows] of bookletRowsByName) {
+    const host = [...groups.values()].find((group) => `${group.brand}|${group.modelName.toUpperCase()}` === nameKey);
+    if (host) host.rows.push(...rows);
   }
   const candidates: ProductEntity[] = [];
   for (const group of groups.values()) {

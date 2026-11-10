@@ -225,8 +225,147 @@ def load_product_map() -> dict[tuple[str, str], dict[str, Any]]:
     }
 
 
+def clean_booklet_model_name(brand: Any, model: Any) -> str:
+    """新一代自审计册子（2026-11-09 起）的提取型号名会把品牌词粘进型号
+    （NEWHUAWEIWatch Ultimate Pro 2 / HUAWEIFit 4 Pro），逐层剥掉 NEW 与
+    品牌前缀，得到可匹配目录与产品映射的型号名。"""
+    s = " ".join(str(model or "").split())
+    prefixes = {b.upper() for b in ([text(brand)] if text(brand) else [])} | {
+        "NEW", "HUAWEI", "SAMSUNG", "APPLE", "XIAOMI", "HONOR", "OPPO", "VIVO", "REALME", "MOTOROLA", "RIRO",
+    }
+    for _ in range(4):
+        up = s.upper()
+        hit = next((b for b in sorted(prefixes, key=len, reverse=True) if b and up.startswith(b) and len(s) > len(b)), None)
+        if not hit:
+            break
+        s = s[len(hit):].lstrip()
+    return " ".join(s.split())
+
+
+def build_records_selfaudit(
+    workbook_path: Path,
+    book: pd.ExcelFile,
+    owner_approved: bool,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """新一代自审计交付分支（2026-11-09 全量换，Eason 拍板）：页签 =
+    全量数据 / 提取审计 / 汇率与标准 / 统计 / 规则说明；行内自带 24/36/48 期
+    分期宽列与行级汇率，无复核台账三件套。运行时契约只收 24/36 期分期与预付
+    （48 期列不入运行时，仅 48 有价的行计数进报告）；复核语义 = owner-approved
+    （必填完整且型号级匹配 → PASS，reason=owner_approved_source_import）。"""
+    all_data = read_sheet(book, "全量数据")
+    candidates = load_product_candidates()
+    product_map = load_product_map()
+    gate_status = "owner-approved"
+    records: list[dict[str, Any]] = []
+    dropped_48_only = 0
+
+    for source_index, (_, row) in enumerate(all_data.iterrows(), start=2):
+        brand = text(row.get("品牌"))
+        model_clean = clean_booklet_model_name(brand, row.get("型号"))
+        sku_spec = text(row.get("型号规格"))
+        mapped = product_map.get((key(brand), key(model_clean)))
+        match = match_product(brand, model_clean, sku_spec, candidates, mapped)
+        if owner_approved and match["match_status"] == "matched-model" and not sku_spec:
+            sku_spec = match.get("romram") or "—"
+        # matched-model（型号级、无规格）的 sku_id 可为空：运行时/产品树按 sku 对账，
+        # 取该型号首个目录 SKU 作代表色位（与旧映射表的 unique-existing-sku 行为一致）
+        if match["sku_id"] is None and match.get("candidate_sku_ids"):
+            match = {**match, "sku_id": match["candidate_sku_ids"][0]}
+        period_id = period_id_of(row.get("时间周期"))
+        base_offer = text(row.get("截图命名")) or (f"VDC-{period_id}-row{source_index}" if period_id else None)
+        fx_rate = number(row.get("汇率"))
+
+        def emit(price_type: str, price_local: float | None, term_months: int | None, price_usd: float | None, suffix: str) -> None:
+            offer_id = f"{base_offer}-{suffix}" if base_offer else None
+            required_ok = bool(
+                offer_id and period_id and brand and model_clean
+                and price_type in {"installment", "prepaid", "no-price"}
+                and (price_type == "no-price" or price_local is not None)
+                and (price_type != "installment" or term_months in {24, 36})
+            )
+            matched_ok = match["match_status"] in {"matched-spec-complete", "matched-model"}
+            review_status = "PASS" if (owner_approved and required_ok and matched_ok) else "PENDING"
+            reasons: list[str] = []
+            if not required_ok:
+                reasons.append("required_field_missing")
+            if not matched_ok:
+                reasons.append(match["match_status"])
+            records.append(
+                {
+                    "source_row": source_index,
+                    "source_workbook": workbook_path.name,
+                    "offer_id": offer_id,
+                    "period_id": period_id,
+                    "country_code": "ZA",
+                    "platform": text(row.get("平台")) or "VODACOM SHOP",
+                    "store_type": text(row.get("店铺类型")) or "1P",
+                    "brand": brand,
+                    "model": model_clean,
+                    "sku_spec": sku_spec,
+                    "model_id": match["model_id"],
+                    "romram": match["romram"],
+                    "sku_id": match["sku_id"],
+                    "candidate_model_ids": match["candidate_model_ids"],
+                    "candidate_sku_ids": match["candidate_sku_ids"],
+                    "match_status": match["match_status"],
+                    "price_type": price_type,
+                    "price_local": price_local,
+                    "currency": text(row.get("货币")) or "ZAR",
+                    "fx_rate": fx_rate,
+                    "price_usd": price_usd,
+                    "rrp_local": None,
+                    "term_months": term_months,
+                    "offer_review_status": None,
+                    "page_review_status": None,
+                    "review_status": review_status,
+                    "gate_status": gate_status,
+                    "source_gate_status": gate_status,
+                    "publish_basis": "owner-approved-source-import",
+                    "gate_reasons": sorted(set(reasons)),
+                    "source_document": workbook_path.name,
+                    "source_page": source_page_of(base_offer),
+                    "source_sha256": None,
+                    "source_page_ref": f"{workbook_path.name}#page={source_page_of(base_offer) or ''}".rstrip('#='),
+                    "source_url": text(row.get("网址链接")),
+                    "source_screenshot": text(row.get("截图命名")),
+                    "promotion_text": text(row.get("促销政策")),
+                    "installment_text": text(row.get("分期付款")),
+                    "bundle": text(row.get("是否组合销售")) in {"Y", "YES", "TRUE", "是"},
+                }
+            )
+
+        prepaid = number(row.get("平台成交价-本币"))
+        prepaid_usd = number(row.get("平台成交价-美金"))
+        i24 = number(row.get("24期分期价-本币"))
+        i36 = number(row.get("36期分期价-本币"))
+        i48 = number(row.get("48期分期价-本币"))
+        if prepaid is not None:
+            emit("prepaid", prepaid, None, prepaid_usd, "pp")
+        for term, value in ((24, i24), (36, i36)):
+            if value is None:
+                continue
+            usd = round(value / fx_rate, 2) if fx_rate else None
+            emit("installment", value, term, usd, f"i{term}")
+        if prepaid is None and i24 is None and i36 is None and i48 is not None:
+            dropped_48_only += 1  # 仅 48 期有价：契约外，不入运行时（staging 不落行）
+
+    metadata = {
+        "schema_version": "za-operator-booklet-staging-v1",
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "source_workbook": workbook_path.name,
+        "source_sheets": book.sheet_names,
+        "gate_status": gate_status,
+        "source_gate_status": gate_status,
+        "publish_basis": "owner-approved-source-import",
+        "dropped_48_only_rows": dropped_48_only,
+    }
+    return metadata, records
+
+
 def build_records(workbook_path: Path, owner_approved: bool = False) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     book = pd.ExcelFile(workbook_path)
+    if {"复核台账", "报价明细", "页面审计"} - set(book.sheet_names) and {"提取审计", "规则说明"} <= set(book.sheet_names):
+        return build_records_selfaudit(workbook_path, book, owner_approved)
     required_sheets = {"全量数据", "复核台账", "报价明细", "页面审计", "统计"}
     missing = sorted(required_sheets - set(book.sheet_names))
     if missing:

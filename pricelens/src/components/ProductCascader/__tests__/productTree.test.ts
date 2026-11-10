@@ -96,13 +96,13 @@ describe('buildProductTree（统一产品树）', () => {
     expect(lone.length).toBeGreaterThan(0);
   });
 
-  it('南非只展示有 24/36 期月度价格的产品，不放行旧目录空产品', () => {
+  it('南非只展示有 24/36 期月度价格的产品，不放行旧目录空产品（2026-11-10 新册全量换：Mate 80 Pro / nova 15 Max 新册有分期价，进入名录）', () => {
     const zaTree = buildProductTree('phone', 'ZA');
     const zaModels = zaTree.flatMap((b) => b.series).flatMap((s) => s.models);
     const zaModelNames = zaModels.map((m) => m.label);
     expect(zaModelNames).toContain('Mate XT');
-    expect(zaModelNames).not.toContain('Mate 80 Pro');
-    expect(zaModelNames).not.toContain('nova 15 Max');
+    expect(zaModelNames).toContain('Mate 80 Pro'); // 新册含其 24/36 期分期价
+    expect(zaModelNames).toContain('nova 15 Max');
 
     const pricedSkuIds = new Set(
       factPriceMonthly
@@ -114,8 +114,8 @@ describe('buildProductTree（统一产品树）', () => {
     );
     const zaSkuIds = zaModels.flatMap((m) => m.romrams).flatMap((r) => r.colors).map((c) => c.skuId);
     expect(zaSkuIds.length).toBeGreaterThan(0);
+    // 不变量：树上每个 ZA SKU 都有 24/36 期月度价（不放行旧目录空产品）
     expect(zaSkuIds.every((skuId) => pricedSkuIds.has(skuId))).toBe(true);
-    expect(dimProduct.filter((p) => p.model_name === 'Mate 80 Pro').every((p) => !productHasDataInCountry(p, 'ZA'))).toBe(true);
   });
 
   it('南非已选分期期数也参与筛选：24 期不展示仅有 36 期的 Mate XT', () => {
@@ -123,7 +123,9 @@ describe('buildProductTree（统一产品树）', () => {
     const za36Models = buildProductTree('phone', 'ZA', 36).flatMap((b) => b.series).flatMap((s) => s.models);
     expect(za24Models.map((m) => m.label)).not.toContain('Mate XT');
     expect(za36Models.map((m) => m.label)).toContain('Mate XT');
-    expect(za24Models.map((m) => m.label)).toContain('A06');
+    // 新册全量换后 A06 不再上架；24 期锚改用 iPhone 17（新册含其 24 期月供）
+    expect(za24Models.map((m) => m.label)).toContain('iPhone 17');
+    expect(za24Models.map((m) => m.label)).not.toContain('A06');
   });
 });
 
