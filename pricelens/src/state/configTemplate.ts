@@ -151,6 +151,85 @@ export function buildConfigTemplateXlsx(): Uint8Array {
   return zipSync(files, { level: 6 });
 }
 
+
+
+/**
+ * 把当前配置快照填进与模板同构的工作簿（2026-11-10：导出配置 = xlsx，与导入
+ * 同一份表结构，Excel 直接可编辑后再导回）。fx 为只读历史键，不进配置表
+ * （与模板口径一致）。marketRules 为 null 时导出仅含表头（导入后 = 无自定义规则）。
+ */
+export function exportConfigWorkbookXlsx(snapshot: ConfigSnapshotV1): Uint8Array {
+  const keys = snapshot.keys;
+  const rowsFor: Record<SheetName, CellValue[][]> = {
+    说明: SHEET_DEFINITIONS[0].rows,
+    市场采集规则: [
+      SHEET_DEFINITIONS[1].rows[0],
+      ...(keys.marketRules ?? []).map((rule) => [
+        rule.countryCode, rule.sourceKind, rule.granularity, rule.fixedPlatform ?? '',
+        rule.financingTerms.join(','), rule.includePrepaid, rule.includeNoPrice, rule.enabled, rule.note ?? '',
+      ] as CellValue[]),
+    ],
+    默认店铺: [
+      SHEET_DEFINITIONS[2].rows[0],
+      ...Object.entries(keys.defaultShop ?? {})
+        .filter(([storeKey]) => !storeKey.includes('::'))
+        .map(([country, channel]) => {
+          const segments = channel.split(':');
+          return [country, segments[1] ?? '', channel, '', true, ''] as CellValue[];
+        }),
+    ],
+    产品默认店铺: [
+      SHEET_DEFINITIONS[3].rows[0],
+      ...Object.entries(keys.defaultShop ?? {})
+        .filter(([storeKey]) => storeKey.includes('::'))
+        .map(([storeKey, channel]) => {
+          const [country, model] = storeKey.split('::');
+          const segments = channel.split(':');
+          return [country, model, channel, '', true, ''] as CellValue[];
+        }),
+    ],
+    竞品对标: [
+      SHEET_DEFINITIONS[4].rows[0],
+      ...(keys.benchmark ?? []).map((row) => [
+        row.country_code, row.own_model_id, row.own_romram, row.competitor_sku_id,
+        row.sort, row.source, row.note ?? '',
+      ] as CellValue[]),
+    ],
+    上一代关系: [
+      SHEET_DEFINITIONS[5].rows[0],
+      ...Object.entries(keys.prevGen ?? {}).map(([model, previous]) => [model, previous ?? '', ''] as CellValue[]),
+    ],
+    异常规则: [
+      SHEET_DEFINITIONS[6].rows[0],
+      ...(keys.anomalyRule ? [[keys.anomalyRule.enabled, keys.anomalyRule.thresholdPct, ''] as CellValue[]] : []),
+    ],
+    人工裁定: [
+      SHEET_DEFINITIONS[7].rows[0],
+      ...(keys.anomalyMarks ?? []).map((mark) => [
+        mark.countryCode, mark.seriesKey, mark.bucketId, mark.action,
+        mark.granularity ?? '', mark.label, mark.price ?? '', mark.wow ?? '', mark.ts, '',
+      ] as CellValue[]),
+    ],
+  };
+  const files: Record<string, Uint8Array> = {
+    '[Content_Types].xml': strToU8(contentTypesXml()),
+    '_rels/.rels': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`),
+    'xl/workbook.xml': strToU8(workbookXml()),
+    'xl/_rels/workbook.xml.rels': strToU8(workbookRelsXml()),
+    'xl/styles.xml': strToU8(stylesXml()),
+  };
+  for (const sheet of SHEET_DEFINITIONS) {
+    const rows = rowsFor[sheet.name];
+    files[`xl/worksheets/sheet${SHEET_DEFINITIONS.indexOf(sheet) + 1}.xml`] = strToU8(worksheetXml({ name: sheet.name, rows, widths: sheet.widths }));
+  }
+  return zipSync(files, { level: 6 });
+}
+
+export function configExportFileName(now = new Date()): string {
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  return `pricelens-config-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}.xlsx`;
+}
+
 export function configTemplateFileName(now = new Date()): string {
   const pad = (value: number): string => String(value).padStart(2, '0');
   return `pricelens-config-template-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}.xlsx`;

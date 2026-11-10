@@ -49,7 +49,7 @@ import {
   saveDefaultShopOverrides,
   saveProductDefaultShop,
 } from '../state/defaultShopStore';
-import { buildConfigTemplateXlsx, configTemplateFileName, parseConfigWorkbook } from '../state/configTemplate';
+import { buildConfigTemplateXlsx, configTemplateFileName, configExportFileName as configWorkbookFileName, exportConfigWorkbookXlsx, parseConfigWorkbook } from '../state/configTemplate';
 import { currencyOfCountry, dimChannel, dimFx, dimProduct, dimPromo } from '../data';
 import { defaultPlatformOf, prefillDefaultChannelOf } from '../dataModel/aggregate';
 import { modelIdOf } from '../components/ProductCascader/tree';
@@ -106,12 +106,6 @@ function Block({ id, title, extra, children }: { id?: string; title: string; ext
 }
 
 const cellPadding: CSSProperties = { padding: `${space.sm}px ${space.sm}px` };
-
-/** 导出文件名：pricelens-config-<时间戳>.pricelens-config.json（推荐扩展名） */
-function configExportFileName(now = new Date()): string {
-  const p = (n: number): string => String(n).padStart(2, '0');
-  return `pricelens-config-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}.pricelens-config.json`;
-}
 
 export default function Config() {
   const { state } = useFilters();
@@ -284,16 +278,21 @@ export default function Config() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingImport, setPendingImport] = useState<{ payload: ConfigSnapshotV1; summary: ImportPreviewSummary } | null>(null);
 
+  // 2026-11-10（Eason：导入导出应为表格而非 json）：导出 = 与模板同构的 xlsx
+  // （Excel 可直接编辑后从「导入配置表」导回）；导入沿用 parseConfigWorkbook，
+  // 旧 .pricelens-config.json 快照仍可导入（parseConfigSnapshotText 兼容）。
   const onExport = (): void => {
-    const snapshot = exportConfigSnapshot();
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const bytes = exportConfigWorkbookXlsx(exportConfigSnapshot());
+    const blob = new Blob([bytes.slice().buffer as ArrayBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = configExportFileName();
+    link.download = configWorkbookFileName();
     link.click();
     URL.revokeObjectURL(url);
-    message.success(`已导出配置快照（${link.download}）`);
+    message.success(`已导出配置表（${link.download}）`);
   };
 
   const onDownloadTemplate = (): void => {
