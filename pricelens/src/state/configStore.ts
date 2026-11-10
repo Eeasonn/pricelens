@@ -95,6 +95,12 @@ export function getEffectiveBenchmark(): DimBenchmark[] {
  * 第一百一十六轮：输出钳在每配置上限内（BENCHMARK_CAP_PER_CONFIG，现为 3）——维表已按「人工→矩阵列序→替代→自动」截断，
  * 此处兜底早期手动配置/旧持久化等未经截断的来源。
  */
+/** 人工对标快照行数（存在即整表接管语义的可见性：横幅提示 + 一键恢复默认用） */
+export function manualBenchmarkCount(): number {
+  const manual = readJson<DimBenchmark[]>(LPL.cfgBenchmark);
+  return Array.isArray(manual) ? manual.length : 0;
+}
+
 export function benchmarkSkuIdsFor(modelId: string, romram: string, countryCode: string = getCurrentCountry()): string[] {
   const rows = getEffectiveBenchmark().filter(
     (r) => r.own_model_id === modelId && (r.country_code == null || r.country_code === countryCode),

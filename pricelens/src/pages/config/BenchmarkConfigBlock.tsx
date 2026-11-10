@@ -16,7 +16,7 @@ import { dimProduct } from '../../data';
 import { buildOverviewMatrix, TIER_LABELS, type OverviewModel } from '../../dataModel/aggregate';
 import { INDUSTRY_LABELS, industriesOfCountry } from '../../dataModel/scope';
 import type { DimBenchmark, Industry } from '../../dataModel/types';
-import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark } from '../../state/configStore';
+import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark, manualBenchmarkCount, saveBenchmark } from '../../state/configStore';
 import { useFilters } from '../../state/FiltersContext';
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
 import { color, fontSize, radius, space } from '../../theme/tokens';
@@ -47,8 +47,35 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
     const h = () => setTick((t) => t + 1);
     window.addEventListener(CONFIG_CHANGED_EVENT, h);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, h);
+    {manualCount > 0 ? (
+      <div
+        role="status"
+        style={{
+          display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm,
+          padding: `${space.sm}px ${space.sm}px`, background: '#fff7e6',
+          border: `1px solid #ffd591`, borderRadius: radius.control,
+          fontSize: fontSize.caption, color: '#874d00',
+        }}
+      >
+        <span style={{ flex: 1, minWidth: 0 }}>
+          对标当前为<b>人工维护快照</b>（{manualCount} 条，整表接管）：随包维表的更新不会自动生效。
+        </span>
+        <Button size="small" onClick={restoreAll}>恢复全部默认（{manualCount} 条 → 维表）</Button>
+      </div>
+    ) : null}
   }, []);
   const bench = useMemo(() => getEffectiveBenchmark(), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 2026-11-10 用户反馈「刷新了还是旧的」：人工快照是「存在即整表接管」语义，
+  // 随包维表更新会被静默遮蔽——人工快照存在时挂横幅提示 + 一键恢复全部默认。
+  const [manualCount, setManualCount] = useState(() => manualBenchmarkCount());
+  const restoreAll = (): void => {
+    saveBenchmark(null);
+    setManualCount(0);
+    window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
+    // tick 依赖只挂 CONFIG_CHANGED_EVENT，手动 set 保证本块立即回落维表默认
+    setTick((t) => t + 1);
+  };
   const bands = useMemo(
     () => buildOverviewMatrix(state.currency, bench, null, { countryCode: cc, industry }),
     [bench, state.currency, cc, industry],
