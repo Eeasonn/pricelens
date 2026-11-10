@@ -1,22 +1,23 @@
 # 真实数据接入报告（scripts/ingest_real.py）
 
-生成时间：2026-11-10T19:10:04+08:00
+生成时间：2026-11-10T20:46:33+08:00
 
 ## 一、总体
 
 - matrix-only：2 条替代别名停用置空（Honor X9b Max; Soundcore - AeroFit Pro (Anker)）
-- 输入文件 4 个，原始行 98,155
+- 输入文件 5 个，原始行 98,235
 - 事实源仅读取页签「全量数据」；其余页签保留为证据，不进入事实包
 - 源文件页签：全量数据表-清洗版.xlsx：全量数据, 未入全量与待复核, 不可采_没货, 复检修复记录, 统计, 其他证据, 源文件索引, 合并冲突
 - 源文件页签：BR_20261104.xlsx：全量数据, 未入全量_具体原因, 不可采_没货, 复检修复记录, 统计
+- 源文件页签：MX_20261109.xlsx：全量数据, 未入全量_具体原因, 不可采_没货, 库存另存, 复检修复记录, 统计, 汇率与标准
 - 源文件页签：PL_W46_20261111.xlsx：全量数据, 未入全量_具体原因, 不可采_没货, 统计, 复检修复记录
 - 源文件页签：RU_20261102.xlsx：全量数据, 未入全量_具体原因, 不可采_没货, 统计, 复检修复记录
-- 清洗后事实行 96,550
+- 清洗后事实行 96,630
 - 时间维 202619(2026-05-06) → 202646(2026-11-11)，共 28 周
 - 低侧可疑价（<15% 参考价，仅报告不剔除）104 行
 - 分国档位：363 个 国家×型号 采用矩阵声明，其余按该国参考价推算
-- 对标上限4：4 组超限截断 6 条，截断后共 787 条（每配置 ≤4 款竞品）
-- 事实包 96,550 行；b64 2,774,320 B（gzip 2,080,738 B）
+- 对标上限4：4 组超限截断 6 条，截断后共 789 条（每配置 ≤4 款竞品）
+- 事实包 96,630 行；b64 2,776,816 B（gzip 2,082,612 B）
 - 修正：价格单位错位(×100) 68 行
 - 修正：价格单位错位(÷100) 31 行
 - 修正：品牌→APPLE 2 行
@@ -50,7 +51,7 @@
 | 智利(CL) | 2 | 35 | 67 | Mercado Libre | Mercado Libre |
 | 秘鲁(PE) | 5 | 60 | 236 | Hiraoka | Hiraoka |
 | 巴西(BR) | 5 | 97 | 341 | Mercado Libre | Mercado Libre,Shopee,Amazon |
-| 墨西哥(MX) | 26 | 431 | 11,585 | Mercado Libre | Mercado Libre,Amazon |
+| 墨西哥(MX) | 27 | 437 | 11,665 | Mercado Libre | Mercado Libre,Amazon |
 | 南非(ZA) | 6 | 149 | 657 | TAKEALOT | TAKEALOT |
 | 沙特(SA) | 22 | 701 | 18,703 | Jarir | Jarir,eXtra,Amazon |
 | 阿联酋(AE) | 23 | 369 | 7,202 | SHARAFDG | SHARAFDG,NOON,CARREFOUR |
@@ -405,7 +406,7 @@
 - RU｜202619｜APPLE iPhone Air 1 TB｜$6.94 vs 参考 $1,466.88
 - RU｜202619｜XIAOMI 17 Ultra 16+512 GB｜$6.94 vs 参考 $1,599.73
 - RU｜202619｜HUAWEI nova Y63 6+128 GB｜$6.94 vs 参考 $143.39
-- RU｜202619｜XIAOMI Redmi Pad 2 11" 4+128 GB｜$7.25 vs 参考 $237.47
+- RU｜202619｜XIAOMI Redmi Pad 2 11" 4+128 GB｜$7.25 vs 参考 $237.56
 - RU｜202619｜HONOR Pad X8B 11" 4+128 GB｜$7.37 vs 参考 $216.76
 - RU｜202619｜XIAOMI 17 Ultra 16+1 TB｜$7.40 vs 参考 $1,599.73
 - RU｜202619｜XIAOMI 17 Ultra 16+1 TB｜$7.40 vs 参考 $1,599.73
@@ -418,12 +419,12 @@
 - RU｜202619｜HUAWEI nova Y73 8+256 GB｜$10.34 vs 参考 $178.05
 - RU｜202619｜SAMSUNG Galaxy Tab S10 Lite 10.9" 6+128 GB｜$12.98 vs 参考 $408.17
 - RU｜202619｜APPLE iPhone 16E 128 GB｜$15.85 vs 参考 $746.40
-- RU｜202619｜SAMSUNG Galaxy Tab S11 11" 12+256 GB｜$20.32 vs 参考 $993.38
+- RU｜202619｜SAMSUNG Galaxy Tab S11 11" 12+256 GB｜$20.32 vs 参考 $993.36
 - RU｜202619｜XIAOMI Redmi Pad SE 11" 8+256 GB｜$20.62 vs 参考 $190.42
 - RU｜202619｜SAMSUNG Galaxy Tab A9+ 11" 8+128 GB｜$22.44 vs 参考 $225.86
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" 12+256 GB｜$27.44 vs 参考 $718.83
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" 8+128 GB｜$27.44 vs 参考 $718.83
-- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 13.1" 8+128 GB｜$27.44 vs 参考 $718.83
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" 12+256 GB｜$27.44 vs 参考 $718.71
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 10.9" 8+128 GB｜$27.44 vs 参考 $718.71
+- RU｜202619｜SAMSUNG Galaxy Tab S10 FE+ 13.1" 8+128 GB｜$27.44 vs 参考 $718.71
 - RU｜202619｜SAMSUNG Galaxy Tab S9 FE+ 12.4" 12+256 GB｜$29.97 vs 参考 $910.51
 - RU｜202619｜BOSE Ultra Open —｜$31.40 vs 参考 $335.78
 - RU｜202619｜HONOR Pad 10 12.1" 8+256 GB｜$43.73 vs 参考 $426.40
@@ -467,7 +468,7 @@
 - PH｜202644｜OPPO Find X10 12+512 GB｜$2350.71 vs 参考 $24,509.56
 - MY｜202644｜OPPO Find X10 12+512 GB｜$1231.28 vs 参考 $24,509.56
 - MY｜202644｜OPPO Find X10 12+512 GB｜$1231.28 vs 参考 $24,509.56
-- DE｜202644｜APPLE iPhone 18 Pro Max 12+2TB｜$333.33 vs 参考 $2,248.19
+- DE｜202644｜APPLE iPhone 18 Pro Max 12+2TB｜$333.33 vs 参考 $2,260.82
 - DE｜202644｜APPLE iPhone Duo 12+1TB｜$338.89 vs 参考 $3,572.69
 - DE｜202644｜APPLE iPhone Duo 12+2TB｜$422.22 vs 参考 $3,572.69
 - CL｜202644｜GARMIN Fenix 9 —｜$152.46 vs 参考 $1,200.55

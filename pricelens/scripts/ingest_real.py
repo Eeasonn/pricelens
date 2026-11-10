@@ -390,8 +390,13 @@ def to_week_wed(d):
 
 
 def parse_datetime_cell(v):
-    if v is None or (isinstance(v, float) and pd.isna(v)):
+    if v is None:
         return None
+    try:
+        if pd.isna(v):      # NaT/NaN（NaT 是 datetime 子类且为真值，必须在其前拦下）
+            return None
+    except (TypeError, ValueError):
+        pass  # 非标量（列表等）按原逻辑走
     if isinstance(v, datetime):
         return v
     s = str(v).strip()

@@ -1,6 +1,6 @@
 {
   "schema_version": "za-booklet-product-map-v1",
-  "generated_at": "2026-11-10T11:10:05+00:00",
+  "generated_at": "2026-11-10T12:49:31+00:00",
   "source_workbook": "ZA_VODACOM_1109.xlsx",
   "rows": [
     {
@@ -455,6 +455,7 @@
         "za-booklet-apple-iphone17pro"
       ],
       "candidate_sku_ids": [
+        "cmp-apple-iphone-17-pro__12-1tb__12-1tb",
         "cmp-apple-iphone-17-pro__12-1tb__black",
         "cmp-apple-iphone-17-pro__12-1tb__blue",
         "cmp-apple-iphone-17-pro__12-1tb__silver",
@@ -1290,6 +1291,7 @@
         "za-booklet-huawei-watchfit5pro"
       ],
       "candidate_sku_ids": [
+        "own-huawei-watch-fit-5-pro__42mmcellular__aluminium-black-black",
         "own-huawei-watch-fit-5-pro__std__black",
         "own-huawei-watch-fit-5-pro__std__orange",
         "own-huawei-watch-fit-5-pro__std__white",
