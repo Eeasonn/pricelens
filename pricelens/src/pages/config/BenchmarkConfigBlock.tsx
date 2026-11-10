@@ -47,22 +47,6 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
     const h = () => setTick((t) => t + 1);
     window.addEventListener(CONFIG_CHANGED_EVENT, h);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, h);
-    {manualCount > 0 ? (
-      <div
-        role="status"
-        style={{
-          display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm,
-          padding: `${space.sm}px ${space.sm}px`, background: '#fff7e6',
-          border: `1px solid #ffd591`, borderRadius: radius.control,
-          fontSize: fontSize.caption, color: '#874d00',
-        }}
-      >
-        <span style={{ flex: 1, minWidth: 0 }}>
-          对标当前为<b>人工维护快照</b>（{manualCount} 条，整表接管）：随包维表的更新不会自动生效。
-        </span>
-        <Button size="small" onClick={restoreAll}>恢复全部默认（{manualCount} 条 → 维表）</Button>
-      </div>
-    ) : null}
   }, []);
   const bench = useMemo(() => getEffectiveBenchmark(), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -106,6 +90,23 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
   );
 
   return (
+    <>
+      {manualCount > 0 ? (
+      <div
+        role="status"
+        style={{
+          display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm,
+          padding: `${space.sm}px ${space.sm}px`, background: '#fff7e6',
+          border: `1px solid #ffd591`, borderRadius: radius.control,
+          fontSize: fontSize.caption, color: '#874d00',
+        }}
+      >
+        <span style={{ flex: 1, minWidth: 0 }}>
+          对标当前为<b>人工维护快照</b>（{manualCount} 条，整表接管）：随包维表的更新不会自动生效。
+        </span>
+        <Button size="small" onClick={restoreAll}>恢复全部默认（{manualCount} 条 → 维表）</Button>
+      </div>
+    ) : null}
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap', marginBottom: space.base }}>
         <Segmented
@@ -213,5 +214,6 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
         onClose={() => setEditing(null)}
       />
     </div>
+    </>
   );
 }
