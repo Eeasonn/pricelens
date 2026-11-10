@@ -2,7 +2,7 @@
 // 量价页 · 量价同骨架组装测试（2026-11-06 Eason 拍板，替换旧「三针整改」断言）：
 // 同骨架 = 每个面板渲染价格走势同款 <Chart>：本面板产品价格线 + 底部销量柱量带
 //   （恒开恒柱）+ 名称带图层标注（价格 USD / 销量 台·模拟）+ 区间量尺拖选入参；
-// 「销毛成本」开 = 我司面板价格层叠成本细线（cost-line svg + 成本·模拟药丸），
+// 成本常驻（2026-11-10 Eason）：我司面板价格层恒叠成本细线（cost-line svg + 成本·模拟药丸），
 //   关 = 纯价格线 + 销量柱；旧面板内可点击图例行 / 成本柱呈现 / 极差卡随之退役；
 // 「时间轴同步」开关移驻首个面板底部时间轨左侧；隐藏收纳区
 //   （HiddenVault）与胶囊带对位契约保持原断言，库存 · DOS 补充图已从页面移除。
@@ -143,7 +143,7 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(panelEls().length).toBe(1);
     expect(panelGrid().style.gridTemplateColumns).not.toBe(before);
     expectBandAlignedWithPanels();
-    // 收纳区出现对应芯片（工具行「销毛成本」右侧），点击恢复
+    // 收纳区出现对应芯片（图表工具簇内），点击恢复
     const chip = vaultChips()[0];
     expect(chip).toBeTruthy();
     expect(screen.queryByText(/已隐藏（1）：/)).toBeNull(); // 主品视图无暂存条
@@ -153,22 +153,20 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(vaultChips().length).toBe(0);
   });
 
-  it('主品视图不渲染「已隐藏（N）」暂存条；收纳区在「销毛成本」按钮之后', async () => {
+  it('主品视图不渲染「已隐藏（N）」暂存条；收纳区芯片落在图表工具簇内（「成本与销毛」按钮已退役）', async () => {
     render(<App />);
     await waitPanelsReady();
     fireEvent.click(bandPills()[0]);
     expect(screen.queryByText(/已隐藏（1）：/)).toBeNull(); // 暂存条只在组视图
-    // 收纳区紧跟销毛成本按钮（同一 priceTypesAfter 簇，DOM 序在其后）
-    const marginBtn = screen.getByRole('button', { name: '显示销毛成本' });
-    const cluster = marginBtn.parentElement as HTMLElement;
-    expect(cluster.contains(vaultChips()[0])).toBe(true);
-    const clusterChildren = Array.from(cluster.children);
-    expect(clusterChildren.indexOf(marginBtn)).toBeLessThan(clusterChildren.indexOf(vaultChips()[0].closest('[role="group"]') as HTMLElement));
+    expect(screen.queryByRole('button', { name: '显示销毛成本' })).toBeNull();
+    const chip = vaultChips()[0];
+    expect(chip).toBeTruthy();
+    expect(chip.closest('[role="group"]')).toBeTruthy();
   });
 
   // ---- 同骨架：面板 = 价格走势同款 Chart（量带恒开恒柱 + 图层标注） ----
 
-  it('每面板渲染价格走势同款 Chart：量带恒开（柱）+ 图层标注（价格 / 销量·模拟）', async () => {
+  it('每面板渲染价格走势同款 Chart：量柱并入绘图区（volumeInline）+ 图层标注（价格 / 右轴销量）', async () => {
     render(<App />);
     const panels = await waitPanelsReady();
     const layerLegend = screen.getByTestId('volume-layer-legend');
@@ -176,13 +174,12 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(layerLegend.textContent).toContain('成本 · 模拟');
     expect(layerLegend.textContent).toContain('销量 · 模拟');
     for (const panel of panels) {
-      // 名称带列顶部图层标注：价格层（币种代码）+ 销量层（台 + 模拟徽标）
+      // 名称带列顶部图层标注只剩价格层；销量层标由绘图区右轴 caption 承接（2026-11-10）
       const priceLabel = panel.querySelector('[data-testid="pane-label-price"]');
       expect(priceLabel?.textContent).toContain('价格');
       expect(priceLabel?.textContent).toContain('USD');
-      const volLabel = panel.querySelector('[data-testid="pane-label-volume"]');
-      expect(volLabel?.textContent).toContain('销量');
-      expect(volLabel?.textContent).toContain('模拟');
+      expect(panel.querySelector('[data-testid="pane-label-volume"]')).toBeNull();
+      expect(panel.querySelector('[data-testid="volume-inline-caption"]')?.textContent).toContain('销量');
     }
     // 量带恒为柱：面板内 svg rect（柱模式）恒有——本页不提供「量」开关
     const bars = panels.reduce((acc, p) => acc + p.querySelectorAll('svg rect').length, 0);
@@ -191,25 +188,19 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(screen.queryByRole('group', { name: '图例（点击切换元素显隐）' })).toBeNull();
   });
 
-  it('销毛成本开 → 我司面板出成本细线与成本·模拟药丸；关 → 不出', async () => {
+  it('成本常驻：我司面板恒出成本细线与成本·模拟药丸（「成本与销毛」按钮退役）', async () => {
     render(<App />);
     await waitPanelsReady();
-    // 默认关：无成本细线、无成本药丸
-    expect(document.querySelector('[data-testid="cost-line"]')).toBeNull();
-    expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
-    // 开：价格层叠成本细线（品牌色降透明 1.25px path）+ 名称带「成本 · 模拟」药丸
-    fireEvent.click(screen.getByRole('button', { name: '显示销毛成本' }));
+    expect(screen.queryByRole('button', { name: '显示销毛成本' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '隐藏销毛成本' })).toBeNull();
+    // 价格层叠成本细线（品牌色降透明 1.25px path）+ 名称带「成本 · 模拟」药丸，恒在
     await waitFor(() => {
       expect(document.querySelector('[data-testid="cost-line"]')).toBeTruthy();
       expect(document.querySelector('[data-testid="cost-pill"]')).toBeTruthy();
     });
     expect(document.querySelector('[data-testid="cost-pill"]')?.textContent).toContain('模拟');
-    // 价格图层标注随成本出现改写为「价格 / 成本」
+    // 价格图层标注随成本改写为「价格 / 成本」
     expect(document.querySelector('[data-testid="pane-label-price"]')?.textContent).toContain('成本');
-    // 关：成本细线整组消失
-    fireEvent.click(screen.getByRole('button', { name: '隐藏销毛成本' }));
-    await waitFor(() => expect(document.querySelector('[data-testid="cost-line"]')).toBeNull());
-    expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
   });
 
   // ---- 时间轴同步开关与首个时间轨同一水平线 ----
@@ -222,7 +213,7 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(gutter.contains(btn)).toBe(true);
     expect(gutter.style.height).toBe('52px');
     expect(gutter.firstElementChild?.getAttribute('style')).toContain('height: 20px');
-    expect(screen.getByRole('button', { name: '显示销毛成本' }).parentElement?.contains(btn)).toBe(false);
+    expect(screen.getByTestId('volume-layer-legend').contains(btn)).toBe(false);
     expect(btn.getAttribute('aria-pressed')).toBe('true');
     // 合并单图态：开关随共享轴列一并隐藏（合并图自带完整 X 轴）
     fireEvent.click(screen.getByRole('button', { name: /^查看 .+ 所在组的 \d+ 款对比产品$/ }));

@@ -261,19 +261,16 @@ export default function VolumePrice() {
   // 销毛成本开关（2026-11-06 量价同骨架改版：成本柱呈现退役——开 = 价格层叠成本面积
   // （仅我司面板），悬停看销毛率迷你卡；关 = 纯价格线 + 销量柱）。
   // 组内对比下不允许显示销毛成本（对比时放在下方不合理）：强制关、开关禁用。会话态跨页保留
-  const [showMargin, setShowMargin] = usePageViewState<boolean>('volume.showMargin', () => false);
+  // 成本常驻（2026-11-10 Eason）：成本细线不再依赖「成本与销毛」开关——我司面板
+  // 恒画模拟成本细线（并入 Y 轴），悬停明细带当月成本与销毛率；销量柱并入同一绘图区
+  // （volumeInline）。组内对比仍不显示成本（对比时放在下方不合理）：沿用 marginLocked。
   const marginLocked = safeViewMode.kind === 'group';
-  const marginOn = showMargin && !marginLocked;
-  const toggleMargin = (): void => {
-    if (marginLocked) return;
-    setShowMargin(!showMargin);
-  };
   // 面板呈现二式（2026-11-04 Eason，纯量价 + 组内对比限定）：分离面板（默认 = 现状）|
   // 合并单图（组内产品合并同一张图：销量面积叠层 + 折后价平滑线，内建量/价双轴）。
   // 会话态跨页保留；仅组内对比视图出切换槽（主品视图合并不适用）；销毛开（主品视图）
   // 的「呈现」行仍是既有销毛呈现二式，互不占用。
   const [mergedCompare, setMergedCompare] = usePageViewState<boolean>('volume.mergedCompare', () => false);
-  const mergedOn = !marginOn && safeViewMode.kind === 'group' && mergedCompare;
+  const mergedOn = safeViewMode.kind === 'group' && mergedCompare;
   // 合并单图观察列（瞬态，不持久化）：联动图内列高亮/读值浮层与图下各产品明细卡
   const [mergedHover, setMergedHover] = useState<number | null>(null);
 
@@ -829,10 +826,10 @@ export default function VolumePrice() {
     [panelData, domainIds, effWins, cc],
   );
   // ---- 面板价格 Y 轴（2026-11-06 量价同骨架，算法与价格页 volPlan 同一）----
-  // 「销毛成本」开：可见我司面板的模拟成本折成合成序列并入轴输入（成本细线要可见）；
+  // 成本常驻：我司面板的模拟成本折成合成序列并入轴输入（成本细线恒可见）；
   // 隔离周成本不进图（与旧呈现同口径），合成序列同位置置 null。
   const costAxisSeries = useMemo<Series[]>(() => {
-    if (!marginOn) return [];
+    if (marginLocked) return [];
     const out: Series[] = [];
     for (const panel of visiblePanels) {
       if (!panel.spec.isOwn) continue;
@@ -854,10 +851,10 @@ export default function VolumePrice() {
       });
     }
     return out;
-  }, [marginOn, visiblePanels, marginCosts]);
+  }, [marginLocked, visiblePanels, marginCosts]);
   const axisInput = useMemo(
-    () => (marginOn ? [...visUnion, ...costAxisSeries] : visUnion),
-    [marginOn, visUnion, costAxisSeries],
+    () => (marginLocked ? visUnion : [...visUnion, ...costAxisSeries]),
+    [marginLocked, visUnion, costAxisSeries],
   );
   // 步长滞回 prev（同价格页）：窗口平移/价格小漂移不换档；拖时间轴中（adjusting）冻结
   const scaleRef = useRef<YScale | null>(null);
@@ -1107,7 +1104,7 @@ export default function VolumePrice() {
                           </span>
                         }
                         summaryId={`volume-detail-${p.idx}`}
-                        showMargin={marginOn}
+                        showMargin
                         onExempt={canExempt ? () => markPanelPoint(p, activePoint, 'exempt') : undefined}
                         onIsolate={canIsolate ? () => markPanelPoint(p, activePoint, 'isolate') : undefined}
                         />
@@ -1121,10 +1118,10 @@ export default function VolumePrice() {
                       const panelBrush = brushInWindow(brushRange, ws, we);
                       // 线与柱用品牌色（spec 拍板；不再把主品视图压成中性墨）
                       const seriesColor = p.vis[0]?.color ?? brandColorOf(p.brand);
-                      // 「销毛成本」开 + 我司面板：成本细线 + 悬停销毛率迷你卡。
+                      // 我司面板：成本细线常驻 + 悬停销毛率迷你卡。
                       // 隔离周成本不进图（价格不可信 → 成本断开，同旧呈现口径）
                       const visPts = p.vis[0]?.points ?? [];
-                      const marginMasked = marginOn && p.spec.isOwn
+                      const marginMasked = p.spec.isOwn
                         ? (marginCosts[p.idx] ?? []).map((mp, mi) => (visPts[mi]?.suspect === 'quarantined' ? null : mp))
                         : null;
                       const costs = marginMasked?.map((mp) => (mp ? mp.unitCost : null)) ?? null;
@@ -1243,6 +1240,7 @@ export default function VolumePrice() {
                           margins={hasCost ? (marginMasked ?? undefined) : undefined} // 销毛迷你卡（我司）
                           costs={hasCost ? (costs ?? undefined) : undefined} // 成本细线（我司；Y 轴已把成本算进来）
                           volumeOn // 量带恒开、恒为柱（本页不提供「量」开关，同拍板）
+                          volumeInline // 2026-11-10 Eason：销量柱并入价格绘图区（一个图，不再有独立量带）
                           volumeMode="bar"
                           volumeColor={seriesColor}
                           volumes={volumes[p.idx]}
@@ -1376,54 +1374,6 @@ export default function VolumePrice() {
 
   // 销毛成本开关。成本层是模拟口径，采用显式图层名称 + 模拟徽标，
   // 保留在工具簇里方便随全局图表设置一起发现；激活态用琥珀语义色区分。
-  const marginCtl = (
-    <button
-      type="button"
-      data-testid="volume-margin-toggle"
-      aria-pressed={marginOn}
-      aria-label={marginOn ? '隐藏销毛成本' : '显示销毛成本'}
-      aria-disabled={marginLocked || undefined}
-      title={marginLocked ? '本组对比下不显示销毛成本' : marginOn ? '显示中：价格层叠成本细线，悬停看销毛率；点击关闭' : '显示销毛成本：价格层叠成本细线，悬停看销毛率'}
-      onClick={toggleMargin}
-      style={{
-        height: 30,
-        padding: '0 10px',
-        border: `1px solid ${marginOn ? color.link : color.hairline}`,
-        borderRadius: radius.control,
-        background: marginOn ? color.warningSoft : color.canvas,
-        color: marginLocked ? color.mute : marginOn ? selectSoftInk : color.body,
-        font: 'inherit',
-        fontSize: fontSize.caption,
-        fontWeight: 600,
-        lineHeight: '18px',
-        cursor: marginLocked ? 'not-allowed' : 'pointer',
-        whiteSpace: 'nowrap',
-        opacity: marginLocked ? 0.55 : 1,
-        flexShrink: 0,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-      }}
-    >
-      <span aria-hidden style={{ width: 7, height: 7, borderRadius: radius.pill, background: marginOn ? color.warning : color.hairlineStrong, flexShrink: 0 }} />
-      <span>成本与销毛</span>
-      <span
-        aria-hidden
-        style={{
-          padding: '0 4px',
-          borderRadius: radius.pill,
-          color: color.warningInk,
-          background: color.warningSoft,
-          border: `1px solid ${color.warning}`,
-          fontSize: 10,
-          lineHeight: '14px',
-          fontWeight: 600,
-        }}
-      >
-        模拟
-      </span>
-    </button>
-  );
 
   // A 版图层说明：全局说明价格、可选成本和销量的视觉角色，具体数值仍由各面板内标题承载。
   const volumeLayerLegend = (
@@ -1436,8 +1386,8 @@ export default function VolumePrice() {
         <i aria-hidden style={{ width: 16, height: 3, borderRadius: radius.pill, background: brandColorOf('HUAWEI') }} />
         价格
       </span>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, opacity: marginOn ? 1 : 0.55 }}>
-        <i aria-hidden style={{ width: 14, height: 3, borderRadius: radius.pill, background: marginOn ? 'rgba(199, 0, 11, 0.45)' : color.hairlineStrong }} />
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <i aria-hidden style={{ width: 14, height: 3, borderRadius: radius.pill, background: 'rgba(199, 0, 11, 0.45)' }} />
         成本 · 模拟
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1502,7 +1452,6 @@ export default function VolumePrice() {
                        产品以迷你芯片直显（>3 枚收缩为 +N），点击恢复面板显示（胶囊回
                        原列位）；「全部恢复」并入收纳区。组视图不出（暂存条行为不变） */
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      {marginCtl}
                       <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
                       {volumeLayerLegend}
                       {reading && vaultItems.length > 0 && (

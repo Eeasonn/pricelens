@@ -4,8 +4,8 @@
 // 每个面板渲染价格走势同款 <Chart>，本测试用 Chart 桩捕获 props 钉住接线契约：
 // ①量带恒开恒柱（volumeOn + volumeMode="bar"）+ paneLabels 图层标注 + 量带归属
 //   （volumeOwner）+ 量尺入参（rangeMode/onRangeMode/rulerKey/brush/onBrushChange）；
-// ②「销毛成本」开：我司面板传 costs（marginCostOf().unitCost，与窗口点对齐）+
-//   margins（悬停销毛率迷你卡），竞品面板两个都不传；关：我司面板也不传；
+// ②成本常驻（2026-11-10）：我司面板恒传 costs（marginCostOf().unitCost，与窗口点对齐）+
+//   margins（悬停销毛率迷你卡）+ volumeInline（量柱并入绘图区），竞品面板 costs/margins 都不传；
 // ③档位带不画（showTiers=false）、不下钻（enableDrill=false）、名称带自适应宽。
 // 组装模式照 ../../chart/PriceTrend/__tests__/volumeOwnerWiring.test.tsx
 // （mock buildSeries / FiltersContext / Chart；页面其余取数走真实模型）。
@@ -146,12 +146,9 @@ describe('量价页 · 量价同骨架接线（2026-11-06）', () => {
     expect(panel.enableDrill).toBe(false);
   });
 
-  it('销毛成本开：我司面板传 costs + margins（unitCost 数值、与窗口点对齐）；竞品面板都不传', () => {
+  it('成本常驻：我司面板传 costs + margins + volumeInline（unitCost 数值、与窗口点对齐）；竞品面板不传成本', () => {
     harness.mains = [OWN_CARD, CMP_CARD];
     render(<App />);
-    fireEvent.click(
-      document.querySelector('button[aria-label="显示销毛成本"]') as HTMLButtonElement,
-    );
     const panels = latestPanels();
     const ownKey = Object.keys(panels).find((k) => k.startsWith('own-'));
     const cmpKey = Object.keys(panels).find((k) => k.startsWith('cmp-'));
@@ -173,13 +170,7 @@ describe('量价页 · 量价同骨架接线（2026-11-06）', () => {
     expect(cmp.margins).toBeUndefined();
     // 图层标注随成本出现：价格行写「价格 / 成本」（Chart 内部渲染，这里钉数据入参）
     expect(own.costs).toBeDefined();
-  });
-
-  it('销毛成本关（默认）：我司面板也不传 costs / margins', () => {
-    harness.mains = [OWN_CARD];
-    render(<App />);
-    const panel = harness.chartProps[harness.chartProps.length - 1];
-    expect(panel.costs).toBeUndefined();
-    expect(panel.margins).toBeUndefined();
+    // 量柱并入绘图区：Chart 收 volumeInline（不再有独立量带）
+    expect(own.volumeInline).toBe(true);
   });
 });

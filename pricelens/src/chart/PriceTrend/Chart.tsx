@@ -351,6 +351,9 @@ export interface ChartProps {
   volumeOn?: boolean;
   /** ⑤量层形态：柱（默认，视觉与量价页 VolumeBars 同常量）| 面积（纯半透明面积无描边） */
   volumeMode?: 'bar' | 'area';
+  /** ⑤量柱并入价格绘图区（2026-11-10 Eason 量价页一个图）：不再有独立量带——
+   *  柱贴绘图区底缘（右轴 = 销量三档刻度），图高不含量带；缺省 = 既有量带版式 */
+  volumeInline?: boolean;
   /** ⑤量层柱/面积颜色（品牌色，index 层取我司主品系列色） */
   volumeColor?: string;
   /** ⑤量带高度 px（index 层按「压缩后总高 30%」算好传入）；缺省 = 图高 30% 兜底 */
@@ -883,8 +886,12 @@ export default function Chart(props: ChartProps) {
   //      右缘让出量轴列（VOL_AXIS_RIGHT_W），价格区与量带之间无分界线 ----
   const volOn = props.volumeOn === true;
   const volumeGradId = useId(); // 量层面积渐变 id（多面板实例防冲突）
-  const volBandH = volOn
+  // volumeInline：量柱并入绘图区——独立量带高度归零，柱高映射改为绘图区底部 30%
+  const volBandH = volOn && props.volumeInline !== true
     ? Math.max(40, Math.round(props.volumeHeight ?? (gridTop + scale.plotHeight + GRID.bottom) * 0.3))
+    : 0;
+  const volInlineH = volOn && props.volumeInline === true
+    ? Math.max(40, Math.round(scale.plotHeight * 0.3))
     : 0;
   const gridRight = props.gridRight ?? (volOn ? VOL_AXIS_RIGHT_W : GRID.right);
   const chartH = gridTop + Math.round(animH) + GRID.bottom + volBandH;
@@ -1366,11 +1373,11 @@ export default function Chart(props: ChartProps) {
             plotLeft: geom.plotLeft,
             plotWidth: geom.plotWidth,
             n: geom.n,
-            bandTop: geom.plotTop + geom.plotHeight,
-            bandH: volBandH,
+            bandTop: props.volumeInline === true ? geom.plotTop + geom.plotHeight - volInlineH : geom.plotTop + geom.plotHeight,
+            bandH: props.volumeInline === true ? volInlineH : volBandH,
           })
         : [],
-    [volOn, geom, vMax, effVolumes, volBandH],
+    [volOn, geom, vMax, effVolumes, volBandH, volInlineH, props.volumeInline],
   );
   // ---- 区间量尺几何（2026-11-06）：价格层量 rulerKey 那条线，销量层量量带 ----
   const unitNoun = granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季';
@@ -1394,13 +1401,16 @@ export default function Chart(props: ChartProps) {
       });
     }
     if (volOn && vMax > 0 && effVolumes) {
+      // inline：量柱并入绘图区——量尺销量层同样映射到绘图区底部 30% 区域
+      const rBase = props.volumeInline === true ? plotBottom - volInlineH : plotBottom + volBandH;
+      const rH = props.volumeInline === true ? volInlineH : volBandH;
       sides.push({
         kind: 'volume',
         values: effVolumes,
         valid: (v): v is number => v != null && Number.isFinite(v),
-        yOf: (v) => plotBottom + volBandH - volumeBarHeightOf(v, vMax, volBandH),
-        top: plotBottom + 1,
-        bottom: plotBottom + volBandH,
+        yOf: (v) => rBase + rH - volumeBarHeightOf(v, vMax, rH),
+        top: rBase + 1,
+        bottom: rBase + rH,
         color: effColor,
       });
     }
@@ -1416,7 +1426,7 @@ export default function Chart(props: ChartProps) {
       measure: measureAt,
       sides,
     });
-  }, [rangeActive, geom, rangeLo, rangeHi, rulerTarget, priceTypes, volOn, vMax, effVolumes, volBandH, effColor, props.rangeMode, unitNoun, currency]);
+  }, [rangeActive, geom, rangeLo, rangeHi, rulerTarget, priceTypes, volOn, vMax, effVolumes, volBandH, volInlineH, props.volumeInline, effColor, props.rangeMode, unitNoun, currency]);
   // 柱模式下量尺两端的柱加深（与悬停列同深度）
   const rulerBarIdx = useMemo(() => {
     const part = rulerModel?.parts.find((p) => p.kind === 'volume');
@@ -1609,18 +1619,20 @@ export default function Chart(props: ChartProps) {
           volumes 未传或全缺 = 量带保留（布局稳定）但不画柱、不出刻度 */}
       {volOn && geom && (() => {
         const plotBottom = geom.plotTop + geom.plotHeight;
-        const volBase = plotBottom + volBandH;
+        // inline：柱贴绘图区底缘；量带版式：柱基线在图底下方的量带底
+        const volBase = props.volumeInline === true ? plotBottom : plotBottom + volBandH;
+        const effBandH = props.volumeInline === true ? volInlineH : volBandH;
         const volColor = effColor;
         const colW = geom.plotWidth / geom.n;
         const barW = Math.max(1, 0.62 * colW); // 与 VolumeBars 同：柱宽 = 0.62 列宽
         const litIdx = hoverIdx ?? props.crosshairIdx ?? null;
-        const hOf = (v: number): number => volumeBarHeightOf(v, vMax, volBandH); // 与三点标注同一映射
+        const hOf = (v: number): number => volumeBarHeightOf(v, vMax, effBandH); // 与三点标注同一映射
         const volVals = effVolumes ?? [];
         const axisX = geom.plotLeft + geom.plotWidth + 10; // 与 VolumeBars 右轴同偏移
         const ticks = vMax > 0
           ? ([
-              [vMax, plotBottom],
-              [vMax / 2, plotBottom + volBandH / 2],
+              [vMax, volBase - effBandH],
+              [vMax / 2, volBase - effBandH / 2],
               [0, volBase],
             ] as [number, number][]).map(([v, y]) => ({ label: Math.round(v).toLocaleString('en-US'), y }))
           : [];
@@ -1658,7 +1670,8 @@ export default function Chart(props: ChartProps) {
         })();
         return (
           <>
-            <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
+            {/* inline：柱叠在价格绘图区内（画在 ECharts 之上、价格文字标注之下） */}
+            <svg aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: props.volumeInline === true ? 2 : 1 }}>
               {props.volumeMode === 'area' ? (
                 <>
                   {/* 纵向渐变（从下往上渐隐）：底部 0.17 → 顶部 0.02（2026-11-05 复检
@@ -1689,10 +1702,11 @@ export default function Chart(props: ChartProps) {
               )}
             </svg>
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
-              {/* 右轴线（仅量层）：贴绘图区右缘外侧，随量层缩放的三档刻度 */}
+              {/* 右轴线（仅量层）：贴绘图区右缘外侧，随量层缩放的三档刻度；
+                  inline = 轴画在绘图区内右缘（柱区高度），带版式画在量带 */}
               {vMax > 0 && (
                 <>
-                  <div style={{ position: 'absolute', left: axisX, top: plotBottom, width: 1, height: volBandH, background: color.hairline }} />
+                  <div style={{ position: 'absolute', left: axisX, top: volBase - effBandH, width: 1, height: effBandH, background: color.hairline }} />
                   {ticks.map((t, ti) => (
                     <div key={`vt-${ti}`} style={{ position: 'absolute', left: axisX - 4, top: t.y - 6, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ width: 4, height: 1, background: color.hairlineStrong }} />
@@ -1701,6 +1715,28 @@ export default function Chart(props: ChartProps) {
                       </span>
                     </div>
                   ))}
+                  {props.volumeInline === true && props.paneLabels && (
+                    <div
+                      data-testid="volume-inline-caption"
+                      style={{
+                        position: 'absolute', left: axisX - 118, top: volBase - effBandH - 15, width: 114,
+                        display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 3,
+                        fontSize: 10, lineHeight: '13px', color: color.mute, whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <span style={{ fontWeight: 600, color: color.ink, fontSize: 11 }}>销量</span>
+                      <span>台</span>
+                      <span
+                        aria-hidden
+                        style={{
+                          fontSize: 9, lineHeight: '12px', fontWeight: 600, color: '#b45309',
+                          background: '#fff7e6', borderRadius: radius.pill, padding: '0 5px',
+                        }}
+                      >
+                        模拟
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
               {/* 最高/最低/最新常驻标注（2026-11-05 Eason 看真机：去框，纯数字，与价格线
@@ -1764,10 +1800,12 @@ export default function Chart(props: ChartProps) {
                       left: Math.max(2, geom.plotLeft - props.nameZoneWidth + 4), // 与名称带药丸同列
                       // 有图层节头时：贴节头下一行（节头 + 归属药丸成组，不再悬空带中）；
                       // head 版式 = 贴销量标题下（标题在量带左上、与价格最低刻度字留白）；
-                      // 无节头 = 量带内垂直居中（原行为）
-                      top: props.paneLabels
-                        ? Math.min(plotBottom + volBandH - 14, plotBottom + (paneHead ? VOL_OWNER_MID : 26))
-                        : plotBottom + volBandH / 2,
+                      // 无节头 = 量带内垂直居中（原行为）；inline = 绘图区左下角内侧
+                      top: props.volumeInline === true
+                        ? plotBottom - 16
+                        : props.paneLabels
+                          ? Math.min(plotBottom + volBandH - 14, plotBottom + (paneHead ? VOL_OWNER_MID : 26))
+                          : plotBottom + volBandH / 2,
                       transform: 'translateY(-50%)',
                       border: `1px solid ${switchable ? selectAccent : color.hairline}`,
                       cursor: switchable ? 'pointer' : 'default',
@@ -1780,6 +1818,8 @@ export default function Chart(props: ChartProps) {
                   </button>
                   );
                 })()}
+                {/* inline：量柱悬停走绘图区既有 hover（柱随 hoverIdx 点亮），不再有独立量带捕获层 */}
+                {props.volumeInline !== true && (
                 <div
                   aria-hidden
                   data-testid="volume-hover-layer"
@@ -1790,6 +1830,7 @@ export default function Chart(props: ChartProps) {
                   onMouseLeave={leaveVolBand}
                   style={{ position: 'absolute', left: geom.plotLeft, top: plotBottom, width: geom.plotWidth, height: volBandH, zIndex: 6 }}
                 />
+                )}
                 {volHoverIdx != null && (
                   <div
                     aria-hidden
@@ -3398,7 +3439,7 @@ export default function Chart(props: ChartProps) {
             return (
               <>
                 {pane('price', priceHeaderY, props.costs ? '价格 / 成本' : '价格', currencyCodeOf(currency), false)}
-                {volOn && pane('volume', volHeaderY, '销量', '台', true)}
+                {volOn && props.volumeInline !== true && pane('volume', volHeaderY, '销量', '台', true)}
                 {costPill}
               </>
             );
