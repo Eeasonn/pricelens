@@ -201,7 +201,9 @@ describe('t428u R3 m3 · 锁定消息上的改筛选控件双保险（disabled +
 });
 
 describe('t428u R3 m3 · 已定位价格优势卡的 撤销定位 随锁禁用', () => {
-  const NOVA = { modelId: 'own-huawei-nova-14-pro', romram: '12+512 GB', skuIds: ['own-huawei-nova-14-pro__12-512gb__black'] };
+  // matrix-only（2026-11-10）：优势卡需真实行，主品改用矩阵有覆盖的 nova 15 12+256
+  // （旧锚 nova 14 Pro 无矩阵对比位，优势恒 0 行、行级定位按钮不存在）。
+  const NOVA = { modelId: 'own-huawei-nova-15', romram: '12+256 GB', skuIds: ['own-huawei-nova-15__12-256gb__black'] };
 
   function lockedHarness(locked: boolean, card: PriceAdvantageResultCard): ReactNode {
     return (

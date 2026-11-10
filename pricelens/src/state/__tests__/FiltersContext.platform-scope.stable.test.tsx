@@ -54,7 +54,10 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-const NOVA: ProductSelection = { modelId: 'own-huawei-nova-14-pro', romram: '12+512 GB', skuIds: ['own-huawei-nova-14-pro__12-512gb__black'] };
+// matrix-only（2026-11-10）：优势卡用例主品改用 AE/RU 双在架且两国矩阵都有覆盖的
+// nova 15 Max 8+256（旧锚 nova 14 Pro 在 RU 无矩阵对比位，优势恒 0 行）；
+// FR/DE 平台归一用例不取价，沿用同常量不受影响。
+const NOVA: ProductSelection = { modelId: 'own-huawei-nova-15-max', romram: '8+256 GB', skuIds: ['own-huawei-nova-15-max__8-256gb__black'] };
 
 let currentState: FiltersState | null = null;
 let currentActions: FiltersActions | null = null;
@@ -150,7 +153,7 @@ describe('t428u R5-M1 · 优势卡 filterPatch 落地一致性（计算口径 = 
     // 落地 state 与补丁完全同口径（平台不再被二次清改出不同结果）
     expect(handle.state().countryCode).toBe(patch.countryCode);
     expect(handle.state().platform).toEqual(patch.platform ?? null);
-    expect(handle.state().mains.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-14-pro')).toBe(true);
+    expect(handle.state().mains.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-15-max')).toBe(true);
     // 落地重算 = 原卡（评审复现的 0→N 跳变不可能再发生）
     const recomputed = calculatePriceAdvantage(handle.state());
     expect(recomputed).toBeTruthy();

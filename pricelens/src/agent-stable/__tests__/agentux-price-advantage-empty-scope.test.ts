@@ -23,6 +23,9 @@ import { buildAgentContext, runAgent } from '../core';
 import type { AgentCardAction, PriceAdvantageResultCard } from '../contracts';
 
 const NOVA: FiltersState['mains'][number]['main'] = { modelId: 'own-huawei-nova-14-pro', romram: '12+512 GB', skuIds: ['own-huawei-nova-14-pro__12-512gb__black'] };
+// matrix-only（2026-11-10）：非空卡主品改用矩阵有覆盖的 RU nova 15 12+256
+// （旧锚 nova 14 Pro 无矩阵对比位，优势恒 0 行）；DE 空卡用例保留 nova 14 Pro。
+const NOVA15: FiltersState['mains'][number]['main'] = { modelId: 'own-huawei-nova-15', romram: '12+256 GB', skuIds: ['own-huawei-nova-15__12-256gb__black'] };
 
 /** DE · 季粒度 · 2025Q1–2025Q2（数据范围外 → 空结果）· nova 14 Pro 主品 */
 function deEmptyQuarterState(): FiltersState {
@@ -67,11 +70,11 @@ describe('t428u R3 m2 · 空价格优势卡回看口径（粒度×范围桶同�
     expect(patch.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-14-pro')).toBe(true);
   });
 
-  it('非空卡（RU nova 14 Pro 默认周范围）：filterPatch 仍是周粒度 + 真实参与对比的周桶', async () => {
+  it('非空卡（RU nova 15 12+256 默认周范围）：filterPatch 仍是周粒度 + 真实参与对比的周桶', async () => {
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'RU',
-      mains: buildCards([NOVA!], { auto: true, countryCode: 'RU' }),
+      mains: buildCards([NOVA15!], { auto: true, countryCode: 'RU' }),
     };
     const response = await runAgent('价格优势', buildAgentContext('dashboard', state, []));
     const card = response.cards.find((item) => item.kind === 'price_advantage');

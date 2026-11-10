@@ -96,9 +96,9 @@ export default function ColorFlyout({
           color: color.mute,
         }}
       >
-        多选颜色时，折后价取所选颜色的均价。
+        默认勾选价格最低的一项；多选时折后价取所选各项的均价。
         <a onClick={onReset} style={{ fontSize: 11, marginLeft: 4 }}>
-          恢复默认色
+          恢复默认
         </a>
       </div>
     </div>

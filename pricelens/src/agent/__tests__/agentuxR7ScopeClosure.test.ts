@@ -1,21 +1,24 @@
 // ============================================================
 // t428u R7 返修 · 七审 M2 scope 闭环（2026-11-07）真实链路回归
 // （真实事实包、真实 runAgent 自然分类，零 mock、无 forcedIntent）。
-//  六审 M2 只把平台表 spread 换成全平台口径（333/336/347）与表动作
-//  openPatch 清空口径，但同一响应里 chart 序列 / 摘要 / chart 卡 openPatch
-//  仍按页面每线口径（OZON 3P）计算——人工复看真实截图实锤：最新一条响应
-//  「当前页面价格走势」chart 395（红柱）与紧随的「最新有价周平台比较」表
-//  333/336/347 并存，同一响应内部 scope 自相矛盾。修复口径（core.ts
-//  queryCards）：明确问「全平台/所有平台/全部平台/跨平台」时，查询态本身
-//  切全平台（allPlatformQueryStateOf：全局平台与每线 main/compares 店铺口径
-//  一并清空 = 自动：该国全部渠道每周最低价），chart 序列、摘要、平台表与
-//  两卡 openPatch / followup prompt 全部同源同口径；页面原口径保留在
-//  baseQueryState 仅供「与当前所选店铺口径（X）不同」透明披露。普通
-// （非全平台）请求严格保持每线 > 全局 > 自动生效口径（395 不漂移）。
-// 数据事实（fact_price_weekly · USD）：RU nova 14 12+256 黑 202619：
-// OZON 1P 333 / DNS 336 / Mvideo 347 / OZON 3P 395；Mate X6 12+512 黑
-// 202619：Mvideo 1184 / DNS 1210 / OZON 3P 1422。FR Mate X6 12+512 黑：
-// 仅 Amazon 3P 有 202638–202642 五条，202642 = 1596（范围内更早周无价）。
+//  六审 M2 只把平台表 spread 换成全平台口径与表动作 openPatch 清空口径，
+//  但同一响应里 chart 序列 / 摘要 / chart 卡 openPatch 仍按页面每线口径
+//  （OZON 3P）计算——人工复看真实截图实锤：最新一条响应「当前页面价格走势」
+//  chart（红柱）与紧随的「最新有价周平台比较」表并存，同一响应内部 scope
+//  自相矛盾。修复口径（core.ts queryCards）：明确问「全平台/所有平台/全部
+//  平台/跨平台」时，查询态本身切全平台（allPlatformQueryStateOf：全局平台
+//  与每线 main/compares 店铺口径一并清空 = 自动：该国全部渠道每周最低价），
+//  chart 序列、摘要、平台表与两卡 openPatch / followup prompt 全部同源同口径；
+//  页面原口径保留在 baseQueryState 仅供「与当前所选店铺口径（X）不同」透明
+//  披露。普通（非全平台）请求严格保持每线 > 全局 > 自动生效口径（不漂移）。
+// 数据事实（fact_price_weekly · USD）。matrix-only（2026-11-10）重锚：旧证人
+// nova 14 12+256 黑在 RU 无矩阵对比位（竞品回落全局的口径披露链路失效），改用
+// 矩阵覆盖的 nova 15 12+256 黑 W202619：OZON 1P 693.67 / DNS 342.76（→343）/
+// Mvideo 342.76（→343）/ OZON 3P 453.31（→453，严格 3P）；全平台混池 343；
+// 平台表 = DNS 343 / Mvideo 343 / OZON 453（DNS/Mvideo 同价按渠道表序 DNS 在前）。
+// Mate X6 12+512 黑 202619：Mvideo 1184 / DNS 1210 / OZON 3P 1422（未重锚，
+// 事实未变）。FR Mate X6 12+512 黑：仅 Amazon 3P 有 202638–202642 五条，
+// 202642 = 1596（范围内更早周无价）。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { dimProduct } from '../../data';
@@ -31,9 +34,9 @@ const OZON_3P: PlatformSelection = { platforms: [], shopIds: ['RU:ozon:3P'], sel
 const DNS_PLATFORM: PlatformSelection = { platforms: ['DNS'], shopIds: [], seller: null };
 const FR_BOULANGER: PlatformSelection = { platforms: ['Boulanger'], shopIds: [], seller: null };
 
-const novaBlack256 = dimProduct.find((row) => row.sku_id === 'own-huawei-nova-14__12-256gb__black')!;
+const novaBlack256 = dimProduct.find((row) => row.sku_id === 'own-huawei-nova-15__12-256gb__black')!;
 const mateBlack512 = dimProduct.find((row) => row.sku_id === 'own-huawei-mate-x6__12-512gb__black')!;
-const NOVA_12256 = { modelId: 'own-huawei-nova-14', romram: novaBlack256.romram, skuIds: [novaBlack256.sku_id] };
+const NOVA_12256 = { modelId: 'own-huawei-nova-15', romram: novaBlack256.romram, skuIds: [novaBlack256.sku_id] };
 const MATE_12512 = { modelId: 'own-huawei-mate-x6', romram: mateBlack512.romram, skuIds: [mateBlack512.sku_id] };
 
 async function ask(state: FiltersState, text: string) {
@@ -118,28 +121,29 @@ async function expectAllPlatformClosed(state: FiltersState, text: string, expect
   expect(response.intent).toBe('query');
   const chart = chartOf(response);
   const table = tableOf(response);
-  // chart：全平台真实序列（W19 自动口径 = 各平台渠道内最低 333），绝无 395
+  // chart：全平台真实序列（W19 自动口径 = 各平台渠道内最低 343），绝无严格 3P 的 453
   expect(chart.title).toBe('全平台价格走势');
-  const novaSeries = chart.series.find((s) => s.label.includes('nova 14') && !s.label.includes('Pro'))!;
+  const novaSeries = chart.series.find((s) => s.label.includes('nova 15'))!;
   expect(novaSeries.values).toHaveLength(1);
-  expect(novaSeries.values[0].value).toBe(333);
-  expect(chart.series.every((s) => s.values.every((p) => p.value !== 395))).toBe(true);
+  expect(novaSeries.values[0].value).toBe(343);
+  expect(chart.series.every((s) => s.values.every((p) => p.value !== 453))).toBe(true);
   // 透明披露：chart note 与摘要都点名与页面店铺口径不同
   expect(chart.note).toContain('本次已按全部平台口径计算');
   expect(chart.note).toContain(`与当前所选店铺口径（${expectedCaliber}）不同`);
   expect(response.summary).toContain('本次已按全部平台口径计算');
-  // 平台表：全平台实际价目
-  expect(table.rows.map((row) => row[0])).toEqual(['OZON', 'DNS', 'Mvideo']);
-  expect(table.rows.map((row) => row[1])).toEqual(['333', '336', '347']);
+  // 平台表：全平台实际价目（DNS/Mvideo 同价 343，按渠道表序 DNS 在前；OZON 453）
+  expect(table.rows.map((row) => row[0])).toEqual(['DNS', 'Mvideo', 'OZON']);
+  expect(table.rows.map((row) => row[1])).toEqual(['343', '343', '453']);
   expect(table.note).toContain('本次按全部平台比较');
-  // 整条响应（摘要 + 每卡 note/series/rows/evidence）不残留旧口径 395
-  expect(wholeResponseBody(response).includes('395')).toBe(false);
+  // chart 序列不残留每线 3P 口径 453（全平台表格里的 OZON 453 是该平台真实
+  // 最低价，属全平台口径的一部分；口径闭环由 chart 数值 + 引擎对照锁死）
+  expect(JSON.stringify(chart.series)).not.toContain('453');
   // 响应内每张卡的每个 open 动作都携带同一全平台 openPatch
   const openPatches = response.cards.flatMap((card) => (card.actions ?? []).filter((a) => a.kind === 'open').map((a) => a.filterPatch));
   expect(openPatches.length).toBeGreaterThanOrEqual(2);
   for (const patch of openPatches) {
     expect(patch?.platform).toBeNull();
-    const novaMain = patch?.mains?.find((m) => m.main?.modelId === 'own-huawei-nova-14');
+    const novaMain = patch?.mains?.find((m) => m.main?.modelId === 'own-huawei-nova-15');
     expect(novaMain?.main?.platform ?? null).toBeNull();
     expect(novaMain?.main?.romram).toBe('12+256 GB');
     expect((novaMain?.compares ?? []).every((sel) => (sel.platform ?? null) === null)).toBe(true);
@@ -148,7 +152,7 @@ async function expectAllPlatformClosed(state: FiltersState, text: string, expect
 }
 
 describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应（chart/摘要/表/各卡 openPatch）统一全平台口径', () => {
-  it('初问「全平台哪个平台最便宜？」：chart 333（非 395）、表 333/336/347、摘要披露、每卡 open 动作全平台 openPatch', async () => {
+  it('初问「全平台哪个平台最便宜？」：chart 343（非 453）、表 343/343/453、摘要披露、每卡 open 动作全平台 openPatch', async () => {
     await expectAllPlatformClosed(ruNovaGlobalDnsPerLine3PState(), '全平台哪个平台最便宜？', 'OZON 3P、DNS 独立站');
   });
 
@@ -164,10 +168,10 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     const cardValues = chart.series[0].values.map((p) => p.value);
     expect(cardValues).toEqual(allPlatformEngine[0].points.slice(-8).map((p) => p.price));
     expect(cardValues).not.toEqual(perLine3PEngine[0].points.slice(-8).map((p) => p.price));
-    expect(perLine3PEngine[0].points[0].price).toBe(395);
+    expect(perLine3PEngine[0].points[0].price).toBe(453);
   });
 
-  it('『查看价差解释』followup 在原页面状态重放：整条响应同样全平台（chart 333 / 表 333/336/347 / 每卡 openPatch），无 395', async () => {
+  it('『查看价差解释』followup 在原页面状态重放：整条响应同样全平台（chart 343 / 表 343/343/453 / 每卡 openPatch），无 453 序列', async () => {
     const state = ruNovaGlobalDnsPerLine3PState();
     const first = await ask(state, '全平台哪个平台最便宜？');
     const followup = (tableOf(first).actions ?? []).find((a) => a.kind === 'followup');
@@ -182,9 +186,9 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     expect(followup?.prompt).toContain('全平台');
     const replay = await ask(state, followup!.prompt!);
     expect(replay.intent).toBe('query');
-    const series = chartOf(replay).series.find((s) => s.label.includes('nova 14') && !s.label.includes('Pro'))!;
-    expect(series.values[0].value).toBe(333);
-    expect(wholeResponseBody(replay).includes('395')).toBe(false);
+    const series = chartOf(replay).series.find((s) => s.label.includes('nova 15'))!;
+    expect(series.values[0].value).toBe(343);
+    expect(JSON.stringify(chartOf(replay).series)).not.toContain('453');
   });
 
   it('每卡 open 动作落地后再问：全平台仍 333/336/347；普通问法按落地后口径（自动）也 333/336/347，不回 3P 395', async () => {
@@ -194,9 +198,9 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
       const landed: FiltersState = { ...state, ...(patch ?? {}) } as FiltersState;
       expect(landed.platform).toBeNull();
       const againAll = await ask(landed, '全平台哪个平台最便宜？');
-      expect(tableOf(againAll).rows.map((row) => row[1])).toEqual(['333', '336', '347']);
+      expect(tableOf(againAll).rows.map((row) => row[1])).toEqual(['343', '343', '453']);
       const againPlain = await ask(landed, '按当前所选店铺口径，哪个平台最便宜？');
-      expect(tableOf(againPlain).rows.map((row) => row[1])).toEqual(['333', '336', '347']);
+      expect(tableOf(againPlain).rows.map((row) => row[1])).toEqual(['343', '343', '453']);
       expect(tableOf(againPlain).note).toContain('全部平台自动');
     }
   });
@@ -206,20 +210,20 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     const response = await ask(state, '按当前所选店铺口径，哪个平台最便宜？');
     expect(response.intent).toBe('query');
     const chart = chartOf(response);
-    const novaSeries = chart.series.find((s) => s.label.includes('nova 14') && !s.label.includes('Pro'))!;
-    expect(novaSeries.values[0].value).toBe(395);
+    const novaSeries = chart.series.find((s) => s.label.includes('nova 15'))!;
+    expect(novaSeries.values[0].value).toBe(453);
     expect(chart.title).toBe('当前页面价格走势');
-    expect(tableOf(response).rows).toEqual([['OZON', '395', '最低']]);
+    expect(tableOf(response).rows).toEqual([['OZON', '453', '最低']]);
     expect(chart.note).not.toContain('全部平台口径计算');
   });
 
-  it('六矩阵保真 · 仅全局 DNS（无每线）：全平台问法 chart/表 333/336/347；普通问法按 DNS 口径 chart/表 336', async () => {
+  it('六矩阵保真 · 仅全局 DNS（无每线）：全平台问法 chart/表 343/343/453；普通问法按 DNS 口径 chart/表 343', async () => {
     const state = ruNovaGlobalDnsOnlyState();
     await expectAllPlatformClosed(state, '全平台哪个平台最便宜？', 'DNS 独立站');
     const plain = await ask(state, '按当前所选店铺口径，哪个平台最便宜？');
-    const novaSeries = chartOf(plain).series.find((s) => s.label.includes('nova 14') && !s.label.includes('Pro'))!;
-    expect(novaSeries.values[0].value).toBe(336);
-    expect(tableOf(plain).rows).toEqual([['DNS', '336', '最低']]);
+    const novaSeries = chartOf(plain).series.find((s) => s.label.includes('nova 15'))!;
+    expect(novaSeries.values[0].value).toBe(343);
+    expect(tableOf(plain).rows).toEqual([['DNS', '343', '最低']]);
   });
 
   it('六矩阵保真 · 全自动（无全局无每线）：全平台问法 chart 333 且不虚构「与所选口径不同」（本就自动口径）', async () => {
@@ -227,10 +231,10 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     const response = await ask(state, '全平台哪个平台最便宜？');
     expect(response.intent).toBe('query');
     const chart = chartOf(response);
-    const novaSeries = chart.series.find((s) => s.label.includes('nova 14') && !s.label.includes('Pro'))!;
-    expect(novaSeries.values[0].value).toBe(333);
+    const novaSeries = chart.series.find((s) => s.label.includes('nova 15'))!;
+    expect(novaSeries.values[0].value).toBe(343);
     expect(chart.note).not.toContain('与当前所选店铺口径');
-    expect(tableOf(response).rows.map((row) => row[1])).toEqual(['333', '336', '347']);
+    expect(tableOf(response).rows.map((row) => row[1])).toEqual(['343', '343', '453']);
     expect(tableOf(response).note).toContain('全部平台自动');
   });
 
@@ -241,21 +245,23 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     const chart = chartOf(response);
     const table = tableOf(response);
     expect(table.title).toBe('最新有价周平台比较（逐产品）');
-    const novaSeries = chart.series.find((s) => s.label.includes('nova 14') && !s.label.includes('Pro'))!;
+    const novaSeries = chart.series.find((s) => s.label.includes('nova 15'))!;
     const mateSeries = chart.series.find((s) => s.label.includes('Mate X6'))!;
-    expect(novaSeries.values[0].value).toBe(333);
+    expect(novaSeries.values[0].value).toBe(343);
     expect(mateSeries.values[0].value).toBe(1184);
-    expect(chart.series.every((s) => s.values.every((p) => p.value !== 395 && p.value !== 1422))).toBe(true);
-    const novaRows = table.rows.filter((row) => row[0].includes('nova 14') && !row[0].includes('Pro'));
+    expect(chart.series.every((s) => s.values.every((p) => p.value !== 453 && p.value !== 1422))).toBe(true);
+    const novaRows = table.rows.filter((row) => row[0].includes('nova 15'));
     const mateRows = table.rows.filter((row) => row[0].includes('Mate X6'));
-    expect(novaRows[0][2]).toBe('333');
+    expect(novaRows[0][2]).toBe('343');
     expect(mateRows[0][2]).toBe('1,184');
-    expect(wholeResponseBody(response).includes('395')).toBe(false);
+    // chart 序列不残留每线 3P 口径（453/1422 属平台表 OZON 列真实最低价，同上）
+    expect(JSON.stringify(chart.series)).not.toContain('453');
+    expect(JSON.stringify(chart.series)).not.toContain('1,422');
     const openPatches = response.cards.flatMap((card) => (card.actions ?? []).filter((a) => a.kind === 'open').map((a) => a.filterPatch));
     expect(openPatches.length).toBeGreaterThanOrEqual(2);
     for (const patch of openPatches) {
       expect(patch?.platform).toBeNull();
-      for (const modelId of ['own-huawei-nova-14', 'own-huawei-mate-x6']) {
+      for (const modelId of ['own-huawei-nova-15', 'own-huawei-mate-x6']) {
         const main = patch?.mains?.find((m) => m.main?.modelId === modelId);
         expect(main?.main?.platform ?? null).toBeNull();
       }
@@ -292,11 +298,11 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     for (const patch of openPatches) expect(patch?.platform).toBeNull();
   });
 
-  it('普通趋势（非全平台）口径保持：『价格趋势』在每线 3P + 全局 DNS 下 chart 仍 395', async () => {
+  it('普通趋势（非全平台）口径保持：『价格趋势』在每线 3P + 全局 DNS 下 chart 仍 453', async () => {
     const state = ruNovaGlobalDnsPerLine3PState();
     const response = await ask(state, '价格趋势');
     expect(response.intent).toBe('query');
-    const novaSeries = chartOf(response).series.find((s) => s.label.includes('nova 14') && !s.label.includes('Pro'))!;
-    expect(novaSeries.values[0].value).toBe(395);
+    const novaSeries = chartOf(response).series.find((s) => s.label.includes('nova 15'))!;
+    expect(novaSeries.values[0].value).toBe(453);
   });
 });

@@ -272,8 +272,30 @@ describe('t428u R6-M1 · FiltersProvider 落地一致（补丁 → state → 重
 });
 
 describe('t428u R6-M1 · 优势卡全链路（行渠道 = 实际计算渠道 OZON）', () => {
-  it('店铺级输入：W202619 我司价 333（不是严格 3P 的 395），行渠道全为 OZON，边界透明展开', async () => {
-    const response = await runAgent('RU价格优势', buildAgentContext('dashboard', witnessState(), []));
+  // matrix-only（2026-11-10）：手机侧已无「OZON 1P < 3P 同周」的矩阵覆盖证人
+  // （旧锚 nova 14 的矩阵对手 honor 200 Pro / redmi note15 pro 已退役），优势卡
+  // 证人改用平板 MatePad Pro 2025 12.2" 12+512 PaperMatte（RU 矩阵对手 =
+  // Galaxy Tab S11 11" 12+256；own 202619 OZON 1P 1024.64 < 3P 1046.97 → 平台级
+  // 1025 ≠ 严格 3P 1047，判别力同构；Tab S11 的 OZON 1P 20.32 脏行低于参考价
+  // 5% 被行级守卫剔除，OZON 最低 = 3P 916.67 → 917）。
+  const TABLET: ProductSelection = { modelId: 'own-huawei-matepad-pro-2025', romram: '12.2" 12+512 GB PaperMatte', skuIds: ['own-huawei-matepad-pro-2025__12-2inwifi12-512gbpapermatte__x'] };
+  function tabletWitnessState(platform: PlatformSelection = OZON_3P_SHOP): FiltersState {
+    return {
+      ...defaultFilters,
+      countryCode: 'RU',
+      industry: 'tablet',
+      platform,
+      mains: buildCards([TABLET], { auto: true, countryCode: 'RU' }),
+      granularity: 'week',
+      adaptive: false,
+      rangeStart: '202619',
+      rangeEnd: '202619',
+      currency: 'usd',
+    };
+  }
+
+  it('店铺级输入：W202619 我司平板价 1025（不是严格 3P 的 1047），行渠道全为 OZON，边界透明展开', async () => {
+    const response = await runAgent('RU价格优势', buildAgentContext('dashboard', tabletWitnessState(), []));
     const card = response.cards.find((item) => item.kind === 'price_advantage') as PriceAdvantageResultCard;
     expect(card).toBeDefined();
     expect(card.countryCode).toBe('RU');
@@ -282,14 +304,18 @@ describe('t428u R6-M1 · 优势卡全链路（行渠道 = 实际计算渠道 OZO
       expect(row.channel).toBe('OZON');
       expect(row.target.platform).toBe('OZON');
     }
-    // 证人周：我司 333 vs 竞品（honor 200 pro OZON 最低 361 / redmi note15 pro 387）
-    const w19 = card.rows.filter((row) => row.weekId === '202619' && row.ownModelId === 'own-huawei-nova-14');
+    // 证人周：我司平板 1025 vs 唯一矩阵对手 Tab S11（OZON 最低 917；其 OZON 1P
+    // 20.32 脏行低于参考价 5% 被行级守卫剔除，平台最低落在 3P 916.67）
+    const w19 = card.rows.filter((row) => row.weekId === '202619' && row.ownModelId === 'own-huawei-matepad-pro-2025');
     expect(w19.length).toBeGreaterThan(0);
     for (const row of w19) {
-      expect(row.ownPrice).toBe(333);
-      expect(row.ownPrice).not.toBe(395);
-      expect(row.direction).toBe('advantage');
+      expect(row.ownPrice).toBe(1025);
+      expect(row.ownPrice).not.toBe(1047);
     }
+    const tabRow = w19.find((row) => row.competitorModelId === 'cmp-samsung-galaxy-tab-s11');
+    expect(tabRow).toBeTruthy();
+    expect(tabRow!.competitorPrice).toBe(917);
+    expect(tabRow!.direction).toBe('lagging');
     expect(card.boundaries?.[0]).toContain('稳定版仅支持平台级');
     expect(card.boundaries?.[0]).toContain('OZON 3P');
     const patch = openActionOf(card, 'price-advantage-open').target!.filterPatch!;

@@ -2,6 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 真实数据接入管线（多国多产业 cutover）。
+2026-11-10 Eason 两项拍板落地：
+  ① matrix-only：生效竞品对标只来自《产品竞品矩阵》直配；自动匹配（4b）、替代
+    （substitute 别名）、人工（benchmark_manual）三层停用——矩阵没给的置空。
+  ② 竞品匹配层级塌缩：穿戴取消 表盘大小/联网方式/颜色 层级（romram→'—'，规格进
+    color 变体文案）；平板取消 联网方式 层级（romram 去连接词，连接词进 color）。
+    sku_id 恒不变（见 parse_romram docstring 的稳定性契约）。
 输入（默认仓库根，可用参数覆盖）：
   全量数据表.xlsx        主事实（sheet「全量数据」，29 列）；增量补录放 data/real/incoming/*.xlsx（同 29 列即可）
   产品竞品矩阵.txt       默认产品选择矩阵（区域/国家/产业/系列/产品/价格挡位/竞品1..3）
@@ -115,13 +121,6 @@ OWN_SERIES_RULES = [
     ("matepadmini", "MatePad mini"), ("matepadse", "MatePad SE"), ("matepad", "MatePad 数字系列"), ("matebook", "MateBook"),
     ("matex", "Mate"), ("mate", "Mate"), ("pura", "Pura"), ("nova", "nova"),
 ]
-AUTO_INDUSTRIES = ("phone", "tablet", "wearable", "audio")
-BRAND_PRIORITY = {
-    "phone": ["APPLE", "SAMSUNG", "XIAOMI", "HONOR", "OPPO", "VIVO", "LENOVO", "TRANSSION"],
-    "tablet": ["APPLE", "SAMSUNG", "XIAOMI", "HONOR", "LENOVO", "OPPO", "INFINIX"],
-    "wearable": ["APPLE", "SAMSUNG", "GARMIN", "XIAOMI", "HONOR", "AMAZFIT", "COROS", "WHOOP", "FITBIT"],
-    "audio": ["APPLE", "SAMSUNG", "SONY", "BOSE", "XIAOMI", "JBL", "SOUNDCORE", "SHOKZ"],
-}
 PROMO_COUNTRY = {"德国": "DE", "r国": "RU", "沙特": "SA", "南非": "ZA",
                  "马来西亚": "MY", "泰国": "TH", "菲律宾": "PH"}
 DEPTH_MAP = {"大促": "深", "高": "深", "中促": "中", "中": "中", "小促": "浅", "低": "浅"}
@@ -249,7 +248,7 @@ def is_size_token(t):
 def parse_tier_text(code):
     s = (code or "").replace("＞", ">").replace("＜", "<").replace("≥", ">=").strip()
     for pat in (r"(\d+(?:\.\d+)?)\s*[-–~<]\s*(\d+(?:\.\d+)?)",
-                r"(?:>=?>|>)\s*(\d+(?:\.\d+)?)",
+                r"(?:>=|>)\s*(\d+(?:\.\d+)?)",
                 r"(\d+(?:\.\d+)?)\s*\+",
                 r"<\s*(\d+(?:\.\d+)?)",
                 r"~?=?\s*(\d+(?:\.\d+)?)"):
@@ -311,22 +310,32 @@ def title_color(c):
 
 
 def parse_romram(industry, spec):
-    """型号规格 → (romram 显示文案, rom_key, color)。"""
+    """型号规格 → (romram 显示文案, rom_key, color 变体文案, color_key)。
+
+    2026-11-10 Eason（竞品匹配层级塌缩，收进「颜色」次级菜单）：
+    - 穿戴：表盘大小 / GPS·WIFI·Cellular 等联网方式 / AMOLED·Solar 材质不再是配置层级
+      —— romram 统一 '—'（型号级），原规格并入 color 变体文案（如 '46mm GPS Black'）；
+    - 平板：WIFI / LTE / 5G / Cellular 联网方式不再是配置层级——romram 只留
+      尺寸 + 内存 + 特殊屏（PaperMatte 等），联网方式并入 color 变体文案（'WiFi'/'LTE'/…）。
+    **sku_id 稳定性契约**：rom_key / color_key 恒等于塌缩前的旧键——事实包、ZA 月度
+    发布文件、分享链接（main=modelId__romram）、浏览器持久化全都引用 sku_id；
+    塌缩只改展示字段（romram / color），绝不回写 id 键。
+    """
     s = (sval(spec) or "").strip()
     if not s or s in {"-", "\\", "/"}:
-        return "—", "std", "—"
+        return "—", "std", "—", "—"
     if industry == "phone":
         m = re.match(r"^(\d+)\s*\+\s*(\d+)\s*(TB|T|GB|G)?\s*(?:GB)?\s+(.+)$", s, re.I)
         if m:
             ram, rom, unit, color = m.group(1), m.group(2), (m.group(3) or "GB").upper(), m.group(4).strip()
             unit = "TB" if unit in ("T", "TB") else "GB"
-            return f"{ram}+{rom} {unit}", f"{ram}+{rom}{unit}".lower(), unit_free_color(color)
+            return f"{ram}+{rom} {unit}", f"{ram}+{rom}{unit}".lower(), unit_free_color(color), unit_free_color(color)
         m = re.match(r"^(\d+)\s*(GB|TB|T)\s+(.+)$", s, re.I)
         if m:
             rom, unit, color = m.group(1), m.group(2).upper(), m.group(3).strip()
             unit = "TB" if unit in ("T", "TB") else "GB"
-            return f"{rom} {unit}", f"{rom}{unit}".lower(), unit_free_color(color)
-        return s, slug(s), title_color(s)
+            return f"{rom} {unit}", f"{rom}{unit}".lower(), unit_free_color(color), unit_free_color(color)
+        return s, slug(s), title_color(s), title_color(s)
     if industry == "tablet":
         parts = [p.strip() for p in s.split("/")]
         size = next((p for p in parts if re.match(r"^\d+(\.\d+)?(″|\"|in)", p, re.I)), "")
@@ -342,7 +351,9 @@ def parse_romram(industry, spec):
         variant = next((p for p in parts if p.lower() in {"papermatte", "nano-texture glass"}), "")
         disp = " ".join(x for x in [size, conn, memd, variant] if x)
         key = disp.replace('"', "in").replace("″", "in").replace(" ", "").lower()
-        return disp, key, "—"
+        # 塌缩：配置键保留联网方式（sku_id 稳定），展示 romram 去联网方式、联网方式进变体文案
+        disp_nowifi = " ".join(x for x in [size, memd, variant] if x) or "—"
+        return disp_nowifi, key, (conn or "—"), "—"
     if industry == "wearable":
         conn_pat = re.compile(r"\b(GPS\s*\+\s*Cellular|Cellular|LTE|GPS|Bluetooth|WiFi)\b", re.I)
         tech_pat = re.compile(r"\b(AMOLED|Solar)\b", re.I)
@@ -355,18 +366,23 @@ def parse_romram(industry, spec):
             size, color = ms.group(1) + "mm", ms.group(2).strip() or "—"
         variant = " ".join(sorted({c.title().replace("Gps", "GPS").replace("Lte", "LTE") for c in conns} | set(techs)))
         disp = " ".join(x for x in [size, variant] if x) or "—"
+        color_disp = title_color(color) if color != "—" else "—"
         # 无配置的穿戴设备统一使用 std 配置键。仅有颜色的行（例如 Black）
-        # 也不能生成 x，与缺规格行拆成两个“同配置”键。
-        return disp, ("std" if disp == "—" else disp.replace(" ", "").lower()), title_color(color) if color != "—" else "—"
+        # 也不能生成 x，与缺规格行拆成两个"同配置"键。
+        key = "std" if disp == "—" else disp.replace(" ", "").lower()
+        # 塌缩：配置键保留尺寸+联网（sku_id 稳定），展示 romram='—'（型号级）、
+        # 尺寸+联网+颜色整体并入变体文案（颜色菜单承载表盘/GPS 层级）
+        label = " ".join(x for x in [disp if disp != "—" else "", color_disp if color_disp != "—" else ""] if x)
+        return "—", key, (label or "—"), color_disp
     if industry == "pc":
         cpu = re.search(r"^(.*?)\s*\|", s)
         ram = re.search(r"RAM:\s*(\d+)", s, re.I)
         sto = re.search(r"STO:\s*(\d+(?:\.\d+)?)\s*(TB|GB)?", s, re.I)
         ramd = f"{ram.group(1)}+" if ram else ""
-        stod = (sto.group(1) + (" TB" if (sto.group(2) or "GB").upper().startswith("T") else " GB")) if sto else ""
+        stod = (sto.group(1) + (" TB" if (sto.group(2) or "").upper().startswith("T") else " GB")) if sto else ""
         disp = ((cpu.group(1).strip() + " " if cpu else "") + ramd + stod).strip() or s
-        return disp, disp.replace(" ", "").lower(), "—"
-    return "—", "std", title_color(s)
+        return disp, disp.replace(" ", "").lower(), "—", "—"
+    return "—", "std", title_color(s), title_color(s)
 
 
 def to_week_wed(d):
@@ -479,7 +495,8 @@ def pair_configs(own_cfgs, comp_cfgs, industry):
     都多 → 一一对应（同 ROM 同 RAM > 同 ROM > ROM 就近；平板叠尺寸就近），
     2026-10-29 起改全局贪心（每轮取剩余最优 (我司,友商) 对）——修复按我司字典序
     贪心的挤出（12+512 抢走友商唯一 16+512，16+512 只剩 12+1TB）。
-    穿戴：表盘尺寸档（<43mm 小 / ≥43mm 大）+ 蜂窝偏好一致 + 尺寸就近；友商 1 配置 → 全对。
+    穿戴：2026-11-10 层级塌缩后双侧均只剩型号级单配置（'—'）→ 走通用 1:1 分支；
+    （塌缩前口径=表盘尺寸档+蜂窝偏好+尺寸就近，随 matrix-only 轮退役）。
     音频/IoT/PC：1:1。"""
     if not own_cfgs or not comp_cfgs:
         return []
@@ -529,30 +546,6 @@ def pair_configs(own_cfgs, comp_cfgs, industry):
             pairs.append((own_cfgs[i], comp_cfgs[j]))
             used_o.add(i)
             used_c.add(j)
-        return pairs
-    if industry == "wearable":
-        if len(comp_cfgs) == 1:
-            return [(o, comp_cfgs[0]) for o in own_cfgs]
-        of = [cfg_features(industry, c) for c in own_cfgs]
-        cf = [cfg_features(industry, c) for c in comp_cfgs]
-        if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
-            same = [j for j in range(len(cf)) if cf[j]["cellular"] == of[0]["cellular"]] or list(range(len(cf)))
-            ranked = sorted(same, key=lambda j: (cf[j]["mm"] is None, abs((cf[j]["mm"] or 0) - (of[0]["mm"] or 0))))
-            return [(own_cfgs[0], comp_cfgs[j]) for j in ranked[:4]]
-        used, pairs = set(), []
-        for i, o in enumerate(of):
-            best = None
-            for j, c in enumerate(cf):
-                if j in used:
-                    continue
-                sc = (3 if ((o["mm"] or 0) < 43) != ((c["mm"] or 0) < 43) else 0)
-                sc += 1 if c["cellular"] != o["cellular"] else 0
-                sc += abs((c["mm"] or 0) - (o["mm"] or 0)) / 100
-                if best is None or sc < best[0]:
-                    best = (sc, j)
-            if best:
-                pairs.append((own_cfgs[i], comp_cfgs[best[1]]))
-                used.add(best[1])
         return pairs
     if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
         return [(own_cfgs[0], c) for c in comp_cfgs]
@@ -614,10 +607,16 @@ def main():
         OV = json.load(f)
     model_aliases = {tuple(k.split("|", 1)): v for k, v in (OV.get("model_aliases") or {}).items()}
     matrix_aliases = OV.get("matrix_aliases") or {}
+    # 2026-11-10 Eason（matrix-only）：「替代」别名停用——矩阵名在采数里没有真身就置空，
+    # 不再近似映射到别款（Honor X9b Max→Pad X9A 这类）；纯笔误/正名别名（iPad 11→iPad A16）
+    # 保留，它们只是同一款产品的名称归一，不构成替代。
+    skipped_substitute = [k for k, v in matrix_aliases.items() if v.get("substitute")]
+    matrix_aliases = {k: v for k, v in matrix_aliases.items() if not v.get("substitute")}
     brand_fixes = OV.get("brand_fixes") or []
-    bench_manual = OV.get("benchmark_manual") or []
     core_platform_ov = OV.get("core_platform_overrides") or {}
     log = {"dropped": Counter(), "fixed": Counter(), "notes": []}
+    if skipped_substitute:
+        log["notes"].append(f"matrix-only：{len(skipped_substitute)} 条替代别名停用置空（{'; '.join(skipped_substitute)}）")
 
     # ---------- 1. 载入事实源（主表 + incoming 增量） ----------
     files = [args.xlsx] + sorted(glob.glob(os.path.join(args.incoming, "*.xlsx")))
@@ -745,10 +744,12 @@ def main():
     raw["romram"] = [x[0] for x in rr]
     raw["rom_key"] = [x[1] for x in rr]
     raw["color"] = [x[2] for x in rr]
+    raw["color_key"] = [x[3] for x in rr]
 
     raw["prefix"] = raw["品牌"].eq("HUAWEI").map({True: "own", False: "cmp"})
     raw["model_id"] = raw["prefix"] + "-" + raw["品牌"].map(slug) + "-" + raw["model_name"].map(slug)
-    raw["sku_id"] = raw["model_id"] + "__" + raw["rom_key"].map(slug) + "__" + raw["color"].map(slug)
+    # sku_id 用 color_key（塌缩前旧颜色键）而非展示 color——2026-11-10 塌缩不改 sku_id
+    raw["sku_id"] = raw["model_id"] + "__" + raw["rom_key"].map(slug) + "__" + raw["color_key"].map(slug)
 
     before = len(raw)
     raw["__price"] = raw["平台成交价-本币"].fillna(1e18)
@@ -883,8 +884,6 @@ def main():
         n, m = len(sub), len(full)
         return any(full[i:i + n] == sub for i in range(m - n + 1)) if n else False
 
-    substitute_hits = set()
-
     def resolve_name(brand, industry, text, strict_own=False):
         """矩阵名 → ([model_id], status, 规范后原文)。status: exact|series|subset|reverse|none
         strict_own（第115轮）：我司侧解析——子集匹配时型号名多出的代际数字 token
@@ -896,8 +895,6 @@ def main():
             brand = ma.get("brand", brand)
             text = ma["model"]
             spec_hint = ma.get("spec")
-            if ma.get("substitute"):
-                substitute_hits.add(txt)
         text = clean_matrix_text(text)
         k = normkey(brand, text)
         pool = universe.get((brand, industry))
@@ -1054,7 +1051,6 @@ def main():
                     if mids:
                         break
                 comp_entries.append({"raw": " / ".join(alts), "brand": bguess, "col": ci + 1,
-                                     "substitute": txt2 in substitute_hits,
                                      "models": [{"model_id": x, "status": st2} for x in mids]})
                 if not mids:
                     unresolved.append({"kind": "comp", "text": txt2, "country": m["country"], "industry": ind, "why": st2})
@@ -1065,7 +1061,11 @@ def main():
         return entry, own_mids, ind
 
     def emit_matrix_bench(own_mids, comp_entries, cc, ind):
-        """我司×竞品按配置配对产出对标行（国家 cc；source=matrix/substitute）。"""
+        """我司×竞品按配置配对产出对标行（国家 cc；source 恒 matrix）。
+
+        2026-11-10 Eason（matrix-only）：对标只来自矩阵直配——矩阵未覆盖的
+        国家×型号不再自动补齐（4b 自动匹配已退役），矩阵名点不中采数型号即置空
+        （resolve_name 严格匹配 + 替代别名停用）。"""
         for om in own_mids:
             own_cfg = country_configs(om, cc)
             if not own_cfg:
@@ -1085,7 +1085,7 @@ def main():
                         sort_by_cfg[own_r] += 1
                         bench.append({"country_code": cc, "own_model_id": om, "own_romram": own_r,
                                       "competitor_sku_id": rep, "sort": sort_by_cfg[own_r],
-                                      "source": "substitute" if centry.get("substitute") else "matrix",
+                                      "source": "matrix",
                                       "note": centry["raw"]})
 
     # 第一遍：分国块（显式声明优先）
@@ -1125,20 +1125,8 @@ def main():
                 if (cc, om) not in declared_own:
                     emit_matrix_bench([om], entry["comps"], cc, ind)
     matrix_resolution.extend(default_resolution)
-    # 人工对标追加
-    for mb in bench_manual:
-        cand = [p for p in DIM_PRODUCT
-                if p["brand"] == mb["comp_brand"]
-                and nkey_of[p["model_id"]] == normkey(mb["comp_brand"], mb["comp_model"])
-                and mb["comp_romram"] in ("*", p["romram"])]
-        cand = [p for p in cand if mb.get("country", p["countries"][0]) in p["countries"]]
-        if not cand:
-            unresolved.append({"kind": "manual", "text": str(mb), "why": "未找到竞品 SKU"})
-            continue
-        bench.append({"country_code": mb.get("country", cand[0]["countries"][0]),
-                      "own_model_id": mb["own_model"], "own_romram": mb["own_romram"],
-                      "competitor_sku_id": cand[0]["sku_id"], "sort": int(mb.get("sort", 99)),
-                      "source": "manual", "note": "manual"})
+    # 2026-11-10 Eason（matrix-only）：人工对标追加（overrides.benchmark_manual）停用——
+    # 生效对标只有矩阵直配一种来源；历史勾兑条目保留在 overrides.json 里不丢失。
 
     # 分国档位：该国矩阵有声明 → 业务声明；否则按该国 RRP（缺则成交价）USD 中位数落产业阶梯。
     # 全局 tier_code = 各国档位的众数（并列取高），仅作无国家上下文时的兜底。
@@ -1174,103 +1162,12 @@ def main():
     log["notes"].append(f"分国档位：{declared_n} 个 国家×型号 采用矩阵声明，其余按该国参考价推算")
 
     # ---------- 4b. 自动竞品匹配（矩阵未覆盖的 国家×我司型号） ----------
-    price_med = raw.dropna(subset=["price_usd"]).groupby(["model_id", "cc"])["price_usd"].median()
-    matrix_pairs = defaultdict(Counter)       # own model -> Counter(comp model) 跨国矩阵知识
-    for entry in matrix_resolution:
-        for o in entry["own"]:
-            for ce in entry["comps"]:
-                for cm in ce["models"]:
-                    matrix_pairs[o["model_id"]][cm["model_id"]] += 1
-    covered = {(b["country_code"], b["own_model_id"]) for b in bench}
-    name_of = {}
-    brand_of = {}
-    ind_of = {}
-    for p in DIM_PRODUCT:
-        name_of[p["model_id"]] = p["model_name"]
-        brand_of[p["model_id"]] = p["brand"]
-        ind_of[p["model_id"]] = p["industry"]
-    comp_models_cc = defaultdict(set)         # (cc, industry) -> comp model ids with data
-    own_models_cc = set()
-    for p in DIM_PRODUCT:
-        if p["industry"] not in AUTO_INDUSTRIES:
-            continue
-        for cc in p["countries"]:
-            if p["is_own"]:
-                own_models_cc.add((cc, p["model_id"]))
-            else:
-                comp_models_cc[(cc, p["industry"])].add(p["model_id"])
-    auto_rows = []
-    auto_bench = 0
-    for cc, om in sorted(own_models_cc):
-        if (cc, om) in covered:
-            continue
-        ind = ind_of[om]
-        own_price = price_med.get((om, cc))
-        own_price = float(own_price) if own_price is not None and pd.notna(own_price) else None
-        pool = comp_models_cc.get((cc, ind), set())
-        picks = []
-        for cm, freq in matrix_pairs[om].most_common():
-            if cm in pool and len(picks) < 3:
-                picks.append((cm, f"矩阵他国同款竞品（{freq} 国）"))
-        if own_price and len(picks) < 3:
-            ranked = []
-            for cm in pool:
-                if any(cm == x[0] for x in picks):
-                    continue
-                cp = price_med.get((cm, cc))
-                if cp is None or pd.isna(cp):
-                    continue
-                rel = float(cp) / own_price - 1
-                if abs(rel) > 0.35:
-                    continue
-                br = brand_of[cm]
-                rank = BRAND_PRIORITY[ind].index(br) if br in BRAND_PRIORITY[ind] else len(BRAND_PRIORITY[ind])
-                ranked.append((abs(rel) + 0.04 * rank, rel, rank, cm))
-            ranked.sort()
-            used_brands = {brand_of[x[0]] for x in picks}
-            for _, rel, rank, cm in ranked:          # 先每品牌一个
-                if len(picks) >= 3:
-                    break
-                if brand_of[cm] in used_brands:
-                    continue
-                used_brands.add(brand_of[cm])
-                picks.append((cm, f"同档就近：价差 {rel:+.0%}"))
-            for _, rel, rank, cm in ranked:          # 再补足
-                if len(picks) >= 3:
-                    break
-                if any(cm == x[0] for x in picks):
-                    continue
-                picks.append((cm, f"同档就近：价差 {rel:+.0%}"))
-        if not picks:
-            auto_rows.append({"cc": cc, "industry": ind, "own": om, "own_price": own_price,
-                              "comp": None, "comp_price": None, "reason": "该国无可比竞品数据" if not pool else "无价格或价差>35%"})
-            continue
-        own_cfg = country_configs(om, cc)
-        sort_by_cfg = Counter()
-        seen_pair = set()
-        for cm, reason in picks:
-            cp = price_med.get((cm, cc))
-            auto_rows.append({"cc": cc, "industry": ind, "own": om, "own_price": own_price,
-                              "comp": cm, "comp_price": float(cp) if cp is not None and pd.notna(cp) else None,
-                              "reason": reason})
-            comp_cfg = country_configs(cm, cc)
-            for own_r, comp_r in pair_configs(own_cfg, comp_cfg, ind):
-                rep_id = rep_sku(cm, comp_r, cc)
-                if not rep_id or (own_r, rep_id) in seen_pair:
-                    continue
-                seen_pair.add((own_r, rep_id))
-                sort_by_cfg[own_r] += 1
-                bench.append({"country_code": cc, "own_model_id": om, "own_romram": own_r,
-                              "competitor_sku_id": rep_id, "sort": sort_by_cfg[own_r],
-                              "source": "auto", "note": reason})
-                auto_bench += 1
-    log["notes"].append(f"自动匹配：{len({(r['cc'], r['own']) for r in auto_rows if r['comp']})} 个国家×我司型号补齐竞品，"
-                        f"{auto_bench} 条对标；{len([r for r in auto_rows if not r['comp']])} 个无可比对象")
-    write_auto_list(args, auto_rows, name_of, brand_of, region_by_cc)
-
+    # 2026-11-10 Eason（matrix-only）：自动匹配、替代、人工三层全部停用——
+    # 生效对标 = 矩阵直配，矩阵没给的（国家×型号×配置）就留空。恢复三层逻辑
+    # 请回退本提交（git log 查「matrix-only」），历史规则在 4b 旧实现里。
     # ---------- 4c. 对标上限（第115轮评审拍板）：每 国家×我司型号×配置 最多 4 款竞品 ----------
-    # 来源优先级：人工 > 矩阵（列序）> 替代 > 自动；先保「每竞品型号至多一款配置」的
-    # 品牌覆盖面，槽位富余（<4）时才允许同型号第二配置补位；截断后组内 sort 重排 1..n。
+    # 先保「每竞品型号至多一款配置」的品牌覆盖面，槽位富余（<4）时才允许同型号
+    # 第二配置补位；截断后组内 sort 重排 1..n。
     BENCH_MAX = 4
     bench_priority = lambda b: ({"manual": 0, "matrix": 1, "substitute": 2, "auto": 3}.get(b["source"], 4), b.get("sort", 99))
     bench_groups = defaultdict(list)
@@ -1280,7 +1177,7 @@ def main():
     trimmed_pairs = 0
     for rows in bench_groups.values():
         rows.sort(key=bench_priority)  # 稳定排序：同优先级保持矩阵列序/生成序
-        picked, picked_models = [], set()
+        picked, picked_models, picked_skus = [], set(), set()
         for b in rows:  # 第一遍：每竞品型号取一款
             if len(picked) >= BENCH_MAX:
                 break
@@ -1288,12 +1185,14 @@ def main():
             if mid in picked_models:
                 continue
             picked_models.add(mid)
+            picked_skus.add(b["competitor_sku_id"])
             picked.append(b)
-        for b in rows:  # 第二遍：槽位富余补同型号其他配置
+        for b in rows:  # 第二遍：槽位富余补同型号其他配置（sku 已入选的不重复补）
             if len(picked) >= BENCH_MAX:
                 break
-            if b in picked:
+            if b in picked or b["competitor_sku_id"] in picked_skus:
                 continue
+            picked_skus.add(b["competitor_sku_id"])
             picked.append(b)
         trimmed_pairs += len(rows) - len(picked)
         for i, b in enumerate(picked):
@@ -1470,64 +1369,6 @@ def tier_label(industry, code):
         return f"${int(m.group(1)):,}–{int(m.group(2)):,}"
     m = re.match(r"(\d+)\+", code)
     return f"旗舰 · ${int(m.group(1))}+" if m else code
-
-
-def write_auto_list(args, rows, name_of, brand_of, region_by_cc):
-    """自动匹配清单：docs/竞品自动匹配清单-最新.md + .xlsx（固定名覆盖写保证幂等；供业务讨论勾兑）。"""
-    docs = os.path.join(REPO, "docs")
-    os.makedirs(docs, exist_ok=True)
-    day = datetime.now().strftime("%Y-%m-%d")
-    md_name, xlsx_name = "竞品自动匹配清单-最新.md", "竞品自动匹配清单-最新.xlsx"
-    # 清理历史日期戳版本（跨天重跑不累积过期清单）；固定名「最新」不在清理范围
-    for old in (glob.glob(os.path.join(docs, "竞品自动匹配清单-*.md"))
-                + glob.glob(os.path.join(docs, "竞品自动匹配清单-*.xlsx"))):
-        if os.path.basename(old) not in (md_name, xlsx_name):
-            os.remove(old)
-    ind_cn = {"phone": "手机", "tablet": "平板", "wearable": "穿戴", "audio": "音频"}
-    L = [f"# 竞品自动匹配清单（{day}）", "",
-         "矩阵未覆盖的「国家 × 我司型号」由规则自动配竞品：优先沿用产品竞品矩阵在其他国家给同一我司型号配过的竞品（有该国数据者），不足 3 个时按同产业、价差 ±35% 内就近补齐（品牌优先序：手机 Apple>Samsung>Xiaomi>Honor>OPPO>vivo；平板 Apple>Samsung>Xiaomi>Honor>Lenovo；穿戴 Apple>Samsung>Garmin>Xiaomi>Honor>Amazfit；音频 Apple>Samsung>Sony>Bose>Xiaomi>JBL>Soundcore），每品牌先取一个。价格 = 该国平台成交价 USD 中位数（全渠道）。",
-         "", "**请逐行勾兑：保留 / 替换 / 删除**，结论回填 `pricelens/data/real/overrides.json` 的 `benchmark_manual` 或告知后由我更新规则。", ""]
-    by = defaultdict(list)
-    for r in rows:
-        by[(r["cc"], r["industry"])].append(r)
-    for (cc, ind) in sorted(by, key=lambda k: (region_by_cc[k[0]]["sort"], k[1])):
-        L.append(f"## {region_by_cc[cc]['country_name']}（{cc}）· {ind_cn.get(ind, ind)}")
-        L.append("")
-        L.append("| 我司型号 | 我司中位价 USD | 竞品 | 竞品中位价 USD | 价差 | 依据 |")
-        L.append("|---|---|---|---|---|---|")
-        for r in by[(cc, ind)]:
-            own = name_of.get(r["own"], r["own"])
-            op = f"{r['own_price']:,.0f}" if r["own_price"] else "—"
-            if r["comp"]:
-                comp = f"{brand_of[r['comp']]} {name_of[r['comp']]}"
-                cp = f"{r['comp_price']:,.0f}" if r["comp_price"] else "—"
-                diff = f"{r['comp_price'] / r['own_price'] - 1:+.0%}" if r["comp_price"] and r["own_price"] else "—"
-            else:
-                comp, cp, diff = "（无）", "—", "—"
-            L.append(f"| {own} | {op} | {comp} | {cp} | {diff} | {r['reason']} |")
-        L.append("")
-    write_atomic(os.path.join(docs, md_name), "\n".join(L))
-    try:
-        from openpyxl import Workbook
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "自动匹配清单"
-        ws.append(["国家", "产业", "我司型号", "我司中位价USD", "竞品品牌", "竞品型号", "竞品中位价USD", "价差", "依据", "业务结论(保留/替换/删除)", "备注"])
-        for r in sorted(rows, key=lambda r: (region_by_cc[r["cc"]]["sort"], r["industry"], r["own"])):
-            ws.append([region_by_cc[r["cc"]]["country_name"], ind_cn.get(r["industry"], r["industry"]), name_of.get(r["own"], r["own"]),
-                       round(r["own_price"]) if r["own_price"] else None,
-                       brand_of.get(r["comp"], "") if r["comp"] else "", name_of.get(r["comp"], "") if r["comp"] else "（无）",
-                       round(r["comp_price"]) if r["comp_price"] else None,
-                       (round(r["comp_price"] / r["own_price"] - 1, 3) if r["comp_price"] and r["own_price"] else None),
-                       r["reason"], "", ""])
-        for col, w in zip("ABCDEFGHIJK", [10, 8, 24, 14, 12, 28, 14, 8, 30, 22, 20]):
-            ws.column_dimensions[col].width = w
-        ws.freeze_panes = "A2"
-        buf = BytesIO()
-        wb.save(buf)
-        write_atomic(os.path.join(docs, xlsx_name), buf.getvalue())
-    except Exception as e:  # openpyxl 缺失不阻塞
-        print("[ingest] xlsx 清单未生成:", e)
 
 
 def write_report(args, log, raw, dim_region, bench, unresolved, matrix_resolution,

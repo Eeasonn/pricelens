@@ -89,12 +89,32 @@ console.log('\n[1] 维表完整性');
   check('tier_by_country 覆盖该 SKU 全部国家且代码合法（型号级映射，键可多于本 SKU 国家）', badTierCc.length === 0, badTierCc.slice(0, 3).map((p) => p.sku_id).join(' ') || '全部命中');
   const ruPura = dimProduct.find((p) => p.model_id === 'own-huawei-pura-90s-pro-max');
   check('R国 Pura 90s Pro Max 分国档位 = 矩阵声明 800-1000', ruPura?.tier_by_country?.RU === '800-1000', ruPura?.tier_by_country?.RU);
+  // 2026-11-10 层级塌缩：穿戴 romram='—'、平板 romram 去联网方式——「一显示文案多配置键」
+  // 在这两个产业是设计事实（键保留联网方式/尺寸，display 塌缩），1T/1TB 归一断言只对
+  // display ⇔ 键仍一一对应的产业保留。
   const unitDup = new Map();
-  for (const p of dimProduct) { const k = p.model_id + '|' + p.romram; const set = unitDup.get(k) ?? new Set(); set.add(p.sku_id.split('__')[1]); unitDup.set(k, set); }
-  check('同配置显示文案只对应一个配置键（1T/1TB 单位已归一）', [...unitDup.values()].every((s) => s.size === 1));
+  for (const p of dimProduct) {
+    if (p.industry === 'wearable' || p.industry === 'tablet') continue;
+    const k = p.model_id + '|' + p.romram; const set = unitDup.get(k) ?? new Set(); set.add(p.sku_id.split('__')[1]); unitDup.set(k, set);
+  }
+  check('同配置显示文案只对应一个配置键（1T/1TB 单位已归一；穿戴/平板塌缩后豁免）', [...unitDup.values()].every((s) => s.size === 1));
   check('颜色列不含单位词（GB/TB）', dimProduct.every((p) => !/^(gb|tb)$/i.test(p.color)));
-  const autoBench = dimBenchmark.filter((b) => b.source === 'auto');
-  check('自动匹配对标 ≥ 1000 条且全部竞品在该国有数据', autoBench.length >= 1000 && autoBench.every((b) => productById.get(b.competitor_sku_id)?.countries.includes(b.country_code)), `${autoBench.length} 条`);
+  check('穿戴配置层级已塌缩（romram ∈ {—, 规格未标明}，表盘/联网并入颜色变体）',
+    dimProduct.filter((p) => p.industry === 'wearable').every((p) => p.romram === '—' || p.romram === '规格未标明'));
+  check('平板配置层级已塌缩（romram 不含 WiFi/LTE/5G/Cellular，联网方式并入颜色变体）',
+    dimProduct.filter((p) => p.industry === 'tablet').every((p) => !/\b(wifi|lte|5g|cellular)\b/i.test(p.romram)));
+  // 2026-11-10 matrix-only：自动匹配退役——对标全部来自矩阵直配，且竞品 SKU 在维表
+  const benchCaps = new Map();
+  let benchOver = 0;
+  for (const b of dimBenchmark) {
+    const k = `${b.country_code}|${b.own_model_id}|${b.own_romram}`;
+    const n = (benchCaps.get(k) ?? 0) + 1;
+    benchCaps.set(k, n);
+    if (n > 4) benchOver++;
+  }
+  check('matrix-only：对标全部 source=matrix 且竞品 SKU 在维表',
+    dimBenchmark.length > 0 && dimBenchmark.every((b) => b.source === 'matrix' && productById.get(b.competitor_sku_id) != null), `${dimBenchmark.length} 条`);
+  check('每 国家×型号×配置 对标 ≤ 4（ingest 侧上限）', benchOver === 0);
   const modelTier = new Map();
   let tierMixed = 0;
   for (const p of dimProduct) {

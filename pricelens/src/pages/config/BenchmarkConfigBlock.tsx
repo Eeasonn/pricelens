@@ -1,9 +1,11 @@
 // ============================================================
 // 配置页「竞品对标配置」区块（2026-10-20 评审后补回：总览页置灰后对标维护入口丢失）。
-// 当前国家（页头）× 产业（本块切换）下，列出全部我司型号 × 配置 → 对标竞品，
-// 来源标签：矩阵（产品竞品矩阵直配）/ 自动（矩阵未覆盖时按同款/同档就近自动匹配）/
-// 替代（矩阵竞品无数据用近似品）/ 人工（本页编辑）。「编辑」复用 BenchConfigModal
-// （候选区同档优先 + 品牌筛选 + ↑↓排序 + 恢复默认），保存走 manual 快照 + 事件广播。
+// 当前国家（页头）× 产业（本块切换）下，列出全部我司型号 × 配置 → 对标竞品。
+// 2026-11-10 Eason（matrix-only 临时口径）：「矩阵 / 自动 / 替代 / 人工」四层逻辑
+// 先取消——生效对标只有矩阵直配一种来源，矩阵没给的即为空；本页编辑暂不生效
+// （按钮停用 + 说明），浏览器里的历史人工快照已停用并给清除入口。
+// 竞品 chip 显示 型号 · 配置 · 变体（2026-11-10 塌缩后穿戴/平板的表盘、联网方式
+// 并入变体文案，核对匹配关系时需要看到它）。
 // 第一百九十轮（外部 UX 审计落地）：竞品行挂 .lpl-bm-row、配置名列挂 .lpl-bm-cfg
 // （窄屏自动换行重排，修复 390px 下竞品 chips 被裁切、「编辑」覆盖内容）；
 // 「编辑」补 aria-label（图标按钮无可见文字，读屏需要上下文名称）。
@@ -13,7 +15,7 @@ import { Button, Empty, Popover, Segmented, Tooltip } from 'antd';
 import { EditOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { dimProduct } from '../../data';
-import { buildOverviewMatrix, TIER_LABELS, type OverviewModel } from '../../dataModel/aggregate';
+import { buildOverviewMatrix, TIER_LABELS } from '../../dataModel/aggregate';
 import { INDUSTRY_LABELS, industriesOfCountry } from '../../dataModel/scope';
 import type { DimBenchmark, Industry } from '../../dataModel/types';
 import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark, manualBenchmarkCount, saveBenchmark } from '../../state/configStore';
@@ -21,16 +23,19 @@ import { useFilters } from '../../state/FiltersContext';
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
 import { color, fontSize, radius, space } from '../../theme/tokens';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
-import BenchConfigModal from '../overview/BenchConfigModal';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
-const SOURCE_TAG: Record<DimBenchmark['source'], { text: string; fg: string; bg: string; hint: string }> = {
-  matrix: { text: '矩阵', fg: '#0053c2', bg: '#e8f1ff', hint: '产品竞品矩阵直接配置' },
-  auto: { text: '自动', fg: color.body, bg: color.canvasSoft, hint: '矩阵未覆盖：沿用矩阵他国同款，或同产业价差 ±35% 内就近匹配' },
-  substitute: { text: '替代', fg: '#b45309', bg: '#fff7e6', hint: '矩阵竞品在数据中不存在，用近似替代品' },
-  manual: { text: '人工', fg: '#15803d', bg: '#ecfdf3', hint: '本页人工配置' },
-};
+/** matrix-only：维表只发 source=matrix 行，本页所有对标统一挂矩阵标签 */
+const MATRIX_TAG = { text: '矩阵', fg: '#0053c2', bg: '#e8f1ff', hint: '产品竞品矩阵直接配置' };
+
+/** 竞品显示名：型号 · 配置 · 变体（'—' 段整段隐藏，与全局配置文案约定一致） */
+function competitorLabel(p: { model_name: string; romram: string; color: string }): string {
+  const parts = [p.model_name];
+  if (p.romram && p.romram !== '—') parts.push(p.romram);
+  if (p.color && p.color !== '—') parts.push(p.color);
+  return parts.join(' · ');
+}
 
 export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boolean }) {
   const { state } = useFilters();
@@ -50,10 +55,10 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
   }, []);
   const bench = useMemo(() => getEffectiveBenchmark(), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 2026-11-10 用户反馈「刷新了还是旧的」：人工快照是「存在即整表接管」语义，
-  // 随包维表更新会被静默遮蔽——人工快照存在时挂横幅提示 + 一键恢复全部默认。
+  // matrix-only：人工快照已停用（getEffectiveBenchmark 不再读它）。浏览器里若还留着
+  // 历史快照，挂横幅说明「已停用」并给清除入口——避免误以为旧的人工配置仍在生效。
   const [manualCount, setManualCount] = useState(() => manualBenchmarkCount());
-  const restoreAll = (): void => {
+  const clearManual = (): void => {
     saveBenchmark(null);
     setManualCount(0);
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
@@ -67,8 +72,6 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
   const ownModels = useMemo(() => bands.flatMap((b) => b.models).filter((m) => m.isOwn), [bands]);
   const productById = useMemo(() => new Map(dimProduct.map((p) => [p.sku_id, p])), []);
 
-  const [editing, setEditing] = useState<{ model: OverviewModel; rom: string | null } | null>(null);
-
   const compsOf = (modelId: string, romram: string): DimBenchmark[] =>
     bench
       .filter((b) => (b.country_code ?? cc) === cc && b.own_model_id === modelId && norm(b.own_romram) === norm(romram))
@@ -77,15 +80,13 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
   const totalPairs = ownModels.reduce((n, m) => n + m.rows.reduce((k, r) => k + compsOf(m.modelId, r.romram).length, 0), 0);
 
   // 第一百一十五轮（评审）：把匹配逻辑讲清在界面上——数据从哪来、优先级、上限。
-  // 业务语义表述，不含工程细节（UI 禁解释性工程文案铁律）。
+  // 业务语义表述，不含工程细节（UI 禁解释性工程文案铁律）。2026-11-10 起 matrix-only。
   const matchLogic = (
     <div style={{ maxWidth: 380, fontSize: 12, lineHeight: '20px', color: color.body }}>
       <div style={{ fontWeight: 600, color: color.ink, marginBottom: 4 }}>竞品怎么匹配</div>
       <div>① 以《产品竞品矩阵》为准：每个国家、每款产品按矩阵列出的竞品直配，列序即优先级。</div>
-      <div>② 矩阵未覆盖的国家和型号：优先沿用矩阵其他国家为同款产品配过的竞品；仍有空缺时，在同档位（价差 ±35% 以内）就近补齐，每个品牌先取一款。</div>
-      <div>③ 矩阵指名的竞品在该国没有在售数据时，以近似款替代。</div>
-      <div>④ 本页可人工增删与调序，人工配置优先于以上规则。</div>
-      <div style={{ marginTop: 4, fontWeight: 600, color: color.ink }}>每款产品每个配置最多 {BENCHMARK_CAP_PER_CONFIG} 个竞品；超出时按 人工 → 矩阵列序 → 就近补齐 的顺序保留前 {BENCHMARK_CAP_PER_CONFIG} 个，同型号多配置只占富余名额。</div>
+      <div>② 矩阵里没给的国家和产品、以及矩阵指名但该国没有在售数据的竞品，一律留空——不自动补齐、不用近似款。</div>
+      <div style={{ marginTop: 4, fontWeight: 600, color: color.ink }}>每款产品每个配置最多 {BENCHMARK_CAP_PER_CONFIG} 个竞品；超出时按矩阵列序保留前 {BENCHMARK_CAP_PER_CONFIG} 个，同型号多配置只占富余名额。</div>
     </div>
   );
 
@@ -102,9 +103,9 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
         }}
       >
         <span style={{ flex: 1, minWidth: 0 }}>
-          对标当前为<b>人工维护快照</b>（{manualCount} 条，整表接管）：随包维表的更新不会自动生效。
+          检测到历史<b>人工维护快照</b>（{manualCount} 条）：当前口径下已停用，不再整表接管。
         </span>
-        <Button size="small" onClick={restoreAll}>恢复全部默认（{manualCount} 条 → 维表）</Button>
+        <Button size="small" onClick={clearManual}>清除旧快照（{manualCount} 条）</Button>
       </div>
     ) : null}
     <div>
@@ -124,13 +125,11 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
           </Button>
         </Popover>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          {(Object.keys(SOURCE_TAG) as DimBenchmark['source'][]).map((k) => (
-            <Tooltip key={k} title={SOURCE_TAG[k].hint}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: SOURCE_TAG[k].fg, background: SOURCE_TAG[k].bg, borderRadius: radius.pill, padding: '0 7px', lineHeight: '16px' }}>
-                {SOURCE_TAG[k].text}
-              </span>
-            </Tooltip>
-          ))}
+          <Tooltip title={MATRIX_TAG.hint}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: MATRIX_TAG.fg, background: MATRIX_TAG.bg, borderRadius: radius.pill, padding: '0 7px', lineHeight: '16px' }}>
+              {MATRIX_TAG.text}
+            </span>
+          </Tooltip>
         </span>
       </div>
 
@@ -164,7 +163,6 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                       ) : (
                         comps.map((b) => {
                           const p = productById.get(b.competitor_sku_id);
-                          const tag = SOURCE_TAG[b.source] ?? SOURCE_TAG.manual;
                           return (
                             <span
                               key={b.competitor_sku_id}
@@ -177,9 +175,9 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                             >
                               {b.sort === 1 && <span style={{ color: color.link, background: '#e8f1ff', borderRadius: 8, padding: '0 6px', fontSize: 11 }}>主竞品</span>}
                               <BrandDot brand={p?.brand ?? ''} />
-                              {p ? `${p.model_name} · ${p.romram}` : b.competitor_sku_id}
-                              <span style={{ fontSize: 10, fontWeight: 600, color: tag.fg, background: tag.bg, borderRadius: radius.pill, padding: '0 5px', lineHeight: '14px' }}>
-                                {tag.text}
+                              {p ? competitorLabel(p) : b.competitor_sku_id}
+                              <span style={{ fontSize: 10, fontWeight: 600, color: MATRIX_TAG.fg, background: MATRIX_TAG.bg, borderRadius: radius.pill, padding: '0 5px', lineHeight: '14px' }}>
+                                {MATRIX_TAG.text}
                               </span>
                             </span>
                           );
@@ -187,14 +185,14 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                       )}
                     </span>
                     {/* 图标按钮无可见文字：读屏念「编辑」需带型号 + 配置上下文（第一百九十轮）。
-                        2026-11-06 RBAC：查阅者禁编辑（BenchConfigModal 内部另有纵深门控） */}
+                        matrix-only 临时口径：编辑入口保留但不生效（人工层停用）；
+                        2026-11-06 RBAC：查阅者本就禁编辑 */}
                     <Button
                       size="small"
                       icon={<EditOutlined />}
-                      disabled={!canEdit}
-                      title={canEdit ? undefined : '查阅者不可修改配置，请联系 GTM'}
+                      disabled
+                      title={canEdit ? '当前按矩阵直配，人工配置暂不生效' : '查阅者不可修改配置，请联系 GTM'}
                       aria-label={`编辑 ${m.modelName} ${r.romram} 的竞品对标`}
-                      onClick={() => setEditing({ model: m, rom: r.romram })}
                     >
                       编辑
                     </Button>
@@ -205,14 +203,6 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
           ))}
         </div>
       )}
-
-      <BenchConfigModal
-        open={editing != null}
-        model={editing?.model ?? null}
-        bands={bands}
-        initialRomram={editing?.rom ?? null}
-        onClose={() => setEditing(null)}
-      />
     </div>
     </>
   );

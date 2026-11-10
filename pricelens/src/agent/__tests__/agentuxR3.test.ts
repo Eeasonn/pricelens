@@ -35,6 +35,10 @@ const nova14ProRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-
 const NOVA14PRO = { modelId: 'own-huawei-nova-14-pro', romram: nova14ProRow.romram, skuIds: [nova14ProRow.sku_id] };
 const mateX6Row = dimProduct.find((row) => row.model_id === 'own-huawei-mate-x6' && row.romram === '12+512 GB')!;
 const MATE_X6 = { modelId: 'own-huawei-mate-x6', romram: mateX6Row.romram, skuIds: [mateX6Row.sku_id] };
+// matrix-only（2026-11-10）：FR 手机无矩阵覆盖，跨国 FR 优势用例主品改用 FR 矩阵
+// 有覆盖的穿戴 WATCH FIT 5（RU/FR 双在架；FR 事实 202631–202635 仅 Amazon 3P）。
+const watchFit5Row = dimProduct.find((row) => row.sku_id === 'own-huawei-watch-fit-5__std__black')!;
+const WATCH_FIT_5 = { modelId: 'own-huawei-watch-fit-5', romram: watchFit5Row.romram, skuIds: [watchFit5Row.sku_id] };
 
 /** RU 页 · nova 14 主品挂每线 OZON 3P（价格页店铺药丸同步后的形态）· 单周 202619 */
 function ruNova14ShopState(): FiltersState {
@@ -159,41 +163,46 @@ describe('R3-M2 · FR 真实目录与事实：型号在架 ≠ 默认电渠有�
     expect(frMains!.some((card) => card.main?.modelId === 'own-huawei-mate-x6' && card.main.romram === '12+512 GB')).toBe(true);
   });
 
-  it('RU Mate X6 问「FR 价格优势」（无 forcedIntent）：保 Mate X6 不误报不换 Pura，真实行 1596 · Amazon 3P', async () => {
+  it('RU WATCH FIT 5 问「FR 价格优势」（无 forcedIntent）：保 WATCH FIT 5 不误报不换 Pura，真实行 · Amazon 3P', async () => {
+    // matrix-only（2026-11-10）：FR 无手机矩阵，本用例改用 FR 矩阵覆盖的穿戴
+    // WATCH FIT 5（RU 页穿戴产业问 FR 优势）；「型号在架 ≠ 默认电渠有价」的
+    // 结构语义不变——主品保留请求型号、行全部 FR、渠道随真实事实（202631–
+    // 202635 仅 Amazon 3P 有价）。穿戴层级塌缩后 romram = '—'。
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'RU',
-      mains: buildCards([MATE_X6], { auto: true, countryCode: 'RU' }),
+      industry: 'wearable',
+      mains: buildCards([WATCH_FIT_5], { auto: true, countryCode: 'RU' }),
       adaptive: false,
-      rangeStart: '202619',
-      rangeEnd: '202642',
+      rangeStart: '202631',
+      rangeEnd: '202635',
     };
     const response = await runAgent('FR 价格优势', buildAgentContext('dashboard', state, []));
     expect(response.intent).toBe('price_advantage');
     const card = response.cards.find((item): item is PriceAdvantageResultCard => item.kind === 'price_advantage');
     expect(card).toBeTruthy();
-    // 主品就是请求的 Mate X6（skuOptions 带型号口径），绝不是回落默认 Pura 80
-    expect(card!.skuOptions.some((option) => option.label.includes('Mate X6'))).toBe(true);
+    // 主品就是请求的 WATCH FIT 5（skuOptions 带型号口径），绝不是回落默认 Pura
+    expect(card!.skuOptions.some((option) => option.label.includes('WATCH FIT 5'))).toBe(true);
     expect(card!.skuOptions.every((option) => !option.label.includes('Pura'))).toBe(true);
-    // 型号在架：不出现「均无在架型号」误报；真实行全部 FR · Mate X6 12+512
+    // 型号在架：不出现「均无在架型号」误报；真实行全部 FR · WATCH FIT 5
     expect(card!.note).not.toContain('均无在架型号');
     expect(card!.rows.length).toBeGreaterThan(0);
     for (const row of card!.rows) {
       expect(row.countryCode).toBe('FR');
-      expect(row.own.modelId).toBe('own-huawei-mate-x6');
-      expect(row.own.romram).toBe('12+512 GB');
+      expect(row.own.modelId).toBe('own-huawei-watch-fit-5');
+      expect(row.own.romram).toBe('—');
       expect(row.channelLabel).toBe('Amazon 3P');
     }
-    // 最新周真实值可核查：202642 = 1596（事实 1420 EUR / 0.89 = 1595.51 取整）
-    const latest = card!.rows.find((row) => row.weekId === '202642');
+    // 最新周真实值可核查：202635 = 228（事实 196 EUR / 0.86 = 227.91 取整）
+    const latest = card!.rows.find((row) => row.weekId === '202635');
     expect(latest).toBeTruthy();
-    expect(latest!.own.price).toBe(1596);
-    // 回看 scopePatch：目标国 FR + 真实周范围 + mains 保 Mate X6（非空、合法）
+    expect(latest!.own.price).toBe(228);
+    // 回看 scopePatch：目标国 FR + 真实周范围 + mains 保 WATCH FIT 5（非空、合法）
     const patch = advantageScopePatch(state, card!.rows);
     expect(patch.countryCode).toBe('FR');
     expect(patch.granularity).toBe('week');
-    expect(patch.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-mate-x6')).toBe(true);
-    expect(patch.mains?.every((mainCard) => mainCard.main?.modelId !== 'own-huawei-pura-80-ultra')).toBe(true);
+    expect(patch.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-watch-fit-5')).toBe(true);
+    expect(patch.mains?.every((mainCard) => mainCard.main?.modelId !== 'own-huawei-pura-90s-pro-max')).toBe(true);
   });
 
   it('FR 页显式钉 Amazon 1P 问「价格优势」：行空时如实解释（默认电渠无我司价、3P 有真实在架价），不造行不换型号', async () => {

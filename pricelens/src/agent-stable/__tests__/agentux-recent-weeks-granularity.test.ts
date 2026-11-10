@@ -23,9 +23,11 @@ import { buildCards } from '../../state/mainSelection';
 import { buildAgentContext, buildFilterPatch, runAgent } from '../core';
 import type { ChartResultCard, TableResultCard } from '../contracts';
 
-const NOVA: FiltersState['mains'][number]['main'] = { modelId: 'own-huawei-nova-14-pro', romram: '12+512 GB', skuIds: ['own-huawei-nova-14-pro__12-512gb__black'] };
+// matrix-only（2026-11-10）：主品改用矩阵有覆盖的 nova 15 12+256（旧锚
+// nova 14 Pro 在 RU 无矩阵对比位，「最近 12 周」优势重跑恒 0 行假空卡）。
+const NOVA: FiltersState['mains'][number]['main'] = { modelId: 'own-huawei-nova-15', romram: '12+256 GB', skuIds: ['own-huawei-nova-15__12-256gb__black'] };
 
-/** 月/季粒度下的真实看板状态（手动范围桶与粒度自洽，nova 14 Pro 主品 + RU 矩阵对比区） */
+/** 月/季粒度下的真实看板状态（手动范围桶与粒度自洽，nova 15 主品 + RU 矩阵对比区） */
 function stateWithGranularity(granularity: 'month' | 'quarter'): FiltersState {
   return {
     ...defaultFilters,
@@ -60,7 +62,7 @@ describe('t428u 返修 R6（二轮）· 「最近 N 周」对齐周粒度', () =
       const table = response.cards.find((card) => card.kind === 'table');
       expect(table?.kind).toBe('table');
       if (table?.kind === 'table') {
-        const ownRow = table.rows.find((row) => row[0].includes('nova 14 Pro'));
+        const ownRow = table.rows.find((row) => row[0].includes('nova 15'));
         expect(ownRow).toBeDefined();
         expect(ownRow?.[1]).toBeDefined();
         expect(ownRow?.[1]).not.toBe('—');
@@ -95,14 +97,14 @@ describe('t428u 返修 R6（二轮）· 「最近 N 周」对齐周粒度', () =
       // 回看动作的 filterPatch 同样保持周粒度并携带主品口径（R5）
       const openAction = card.actions?.find((action) => action.id === 'price-advantage-open');
       expect(openAction?.target?.filterPatch?.granularity).toBe('week');
-      expect(openAction?.target?.filterPatch?.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-14-pro')).toBe(true);
+      expect(openAction?.target?.filterPatch?.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-15')).toBe(true);
     }
     // 产出卡图表侧（若同轮带出图表）粒度不再回退月桶
     const chart = response.cards.find((item) => item.kind === 'chart') as ChartResultCard | undefined;
     if (chart) expect(chart.note).not.toContain('· month ·');
     const table = response.cards.find((item) => item.kind === 'table') as TableResultCard | undefined;
     if (table) {
-      const ownRow = table.rows.find((row) => row[0].includes('nova 14 Pro'));
+      const ownRow = table.rows.find((row) => row[0].includes('nova 15'));
       expect(ownRow?.[1]).not.toBe('—');
     }
   });

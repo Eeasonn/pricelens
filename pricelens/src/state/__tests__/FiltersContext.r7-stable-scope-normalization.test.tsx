@@ -96,6 +96,20 @@ function seedV12Storage(platform: unknown): void {
   }));
 }
 
+/** matrix-only（2026-11-10）平板证人版载荷：优势卡需要矩阵覆盖 + OZON 1P<3P 的
+ *  同周真实事实——nova 14 的矩阵对手已退役，改用 MatePad Pro 2025 12.2" 12+512
+ *  PaperMatte（矩阵对手 Tab S11；own OZON 1P 1024.64 < 3P 1046.97）。 */
+function seedV12StorageTablet(platform: unknown): void {
+  localStorage.setItem('LPL3.filters', JSON.stringify({
+    countryCode: 'RU', industry: 'tablet',
+    mains: [{ id: 'seed-tab-1', main: { modelId: 'own-huawei-matepad-pro-2025', romram: '12.2" 12+512 GB PaperMatte', skuIds: ['own-huawei-matepad-pro-2025__12-2inwifi12-512gbpapermatte__x'] }, compares: [], auto: true }],
+    platform,
+    granularity: 'week', adaptive: false, rangeStart: '202619', rangeEnd: '202619',
+    currency: 'usd', priceTypes: { discounted: true, rrp: false }, agg: 'avg',
+    alertSubs: [], v: 12,
+  }));
+}
+
 const novaSummaryRow = (table: TableResultCard): string[] | undefined =>
   table.rows.find((row) => row[0].includes('nova 14') && !row[0].includes('Pro'));
 
@@ -271,16 +285,22 @@ describe('t428u R7-M1 · 纯 3P legacy 载荷的四类结果卡：展开说明�
     expect(tablePatch.platform).toEqual(OZON_PLATFORM);
   });
 
-  it('价格优势卡：判断边界首位为展开说明，W202619 我司 333，补丁平台级无 shopIds', async () => {
-    const state = pure3PLoadedState();
+  it('价格优势卡：判断边界首位为展开说明，W202619 我司平板 1025（非严格 3P 的 1047），补丁平台级无 shopIds', async () => {
+    // matrix-only（2026-11-10）：优势卡证人改用平板载荷（nova 14 无矩阵对比位，
+    // 优势恒 0 行）；「展开说明首位 + 平台级价格 + 平台级补丁」的语义不变。
+    seedV12StorageTablet(OZON_3P_SHOP);
+    renderFilters();
+    const state = currentState!;
+    expect(state.platform).toEqual(OZON_PLATFORM);
+    expect(state.platformScopeNotice).toBeTruthy();
     const response = await runAgent('价格优势', buildAgentContext('dashboard', state, []));
     const card = response.cards.find((item) => item.kind === 'price_advantage') as PriceAdvantageResultCard;
     expect(card).toBeDefined();
     expect(card.boundaries?.[0]).toContain('稳定版仅支持平台级');
     expect(card.boundaries?.[0]).toContain('OZON 3P');
-    const w19 = card.rows.filter((row) => row.weekId === '202619' && row.ownModelId === 'own-huawei-nova-14');
+    const w19 = card.rows.filter((row) => row.weekId === '202619' && row.ownModelId === 'own-huawei-matepad-pro-2025');
     expect(w19.length).toBeGreaterThan(0);
-    for (const row of w19) expect(row.ownPrice).toBe(333);
+    for (const row of w19) expect(row.ownPrice).toBe(1025);
     const patch = openActionOf(card, '回看价格走势').target!.filterPatch!;
     expect(patch.platform).toEqual(OZON_PLATFORM);
   });

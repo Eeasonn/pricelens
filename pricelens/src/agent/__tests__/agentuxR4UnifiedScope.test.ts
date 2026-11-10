@@ -4,11 +4,13 @@
 // advantageScopePatch / factPriceWeekly，零 mock、无 forcedIntent——自然分类链
 // classifyIntent → query / price_advantage）：
 //  - 三审 M1：每线 3P 口径必须贯穿趋势与优势——共享 effectiveLinePlatform
-//    （每线显式 > 全局 state.platform > 自动）。最强反例（评审复现）：RU nova 14
-//    12+256GB 黑色 week202619 主品每线 OZON 3P（394.59→395），趋势 395 而
-//    优势只读全局被混池成 333（1P 332.62 最低）、对 honor 200 Pro 361 误报
-//    +28 占优。修复后优势 own 395 / honor 落后 -34；整卡回看、行级定位落地、
-//    再问全部仍 395；URL 全局 shop=3P 的趋势/优势也统一 395（不再趋势 333）。
+//    （每线显式 > 全局 state.platform > 自动）。matrix-only（2026-11-10）重锚：
+//    旧证人 nova 14 12+256 黑在 RU 无矩阵对比位（优势恒 0 行），改用矩阵覆盖的
+//    nova 15 12+256 黑 week202634 主品每线 OZON 3P（31650₽/85.1645=371.63→372），
+//    趋势 372 而优势只读全局会被混池成 352（DNS 29999₽/85.1645=352.25 最低）。
+//    优势 own 372 / 对手 A57 586、HONOR 600 540（矩阵对手，价差 +214/+168）；
+//    整卡回看、行级定位落地、再问全部仍 372；URL 全局 shop=3P 的趋势/优势也
+//    统一 372（不再趋势 352）。
 //  - 三审 M2：显式配置省单位/空格变体（12+256、12 + 256、12+256 GB、12＋256）
 //    必须严格解析为该配置（333 / OZON 自动），当前页面持有 12+512（370/DNS）
 //    时绝不静默沿用；明确无效配置（8+256）如实说明，不扩大配置面。
@@ -41,8 +43,29 @@ const nova14_512_Row = dimProduct.find((row) => row.sku_id === 'own-huawei-nova-
 const NOVA14_12512 = { modelId: 'own-huawei-nova-14', romram: nova14_512_Row.romram, skuIds: [nova14_512_Row.sku_id] };
 const nova14ProRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-14-pro' && row.romram === '12+512 GB')!;
 const NOVA14PRO = { modelId: 'own-huawei-nova-14-pro', romram: nova14ProRow.romram, skuIds: [nova14ProRow.sku_id] };
+// matrix-only（2026-11-10）：M1 的「每线 3P 贯穿趋势与优势」主品改用矩阵有覆盖的
+// nova 15 12+256（旧锚 nova 14 在 RU 无矩阵对比位，优势恒 0 行）；证人周同步移到
+// 202634——nova 15 与矩阵对手（A57 12+256 / HONOR 600 12+256）在该周同有真实价
+// （own：OZON 3P 31650 ₽ / 85.1645 = 371.63 → 372；自动混池 DNS 29999 ₽ / 85.1645
+// = 352.25 → 352；A57 灰 Mvideo 585.81 → 586；HONOR 600 DNS 540.12 → 540）。
+const nova15Row = dimProduct.find((row) => row.sku_id === 'own-huawei-nova-15__12-256gb__black')!;
+const NOVA15_12256 = { modelId: 'own-huawei-nova-15', romram: nova15Row.romram, skuIds: [nova15Row.sku_id] };
 
-/** RU 页 · nova 14 12+256 主品挂每线 OZON 3P（价格页店铺药丸同步后的形态）· 单周 202619 */
+/** RU 页 · nova 15 12+256 主品挂每线 OZON 3P（价格页店铺药丸同步后的形态）· 单周 202634 */
+function ruNova15PerLineShopState(): FiltersState {
+  const cards = buildCards([NOVA15_12256], { auto: true, countryCode: 'RU' });
+  return {
+    ...defaultFilters,
+    countryCode: 'RU',
+    platform: null,
+    mains: cards.map((card) => (card.main ? { ...card, main: { ...card.main, platform: OZON_3P } } : card)),
+    adaptive: false,
+    rangeStart: '202634',
+    rangeEnd: '202634',
+  };
+}
+
+/** RU 页 · nova 14 12+256 主品挂每线 OZON 3P · 单周 202619（M2 显式配置用例沿用） */
 function ruNova14PerLineShopState(): FiltersState {
   const cards = buildCards([NOVA14_12256], { auto: true, countryCode: 'RU' });
   return {
@@ -112,47 +135,54 @@ describe('三审 M1 · 共享生效口径 effectiveLinePlatform（每线 > 全�
     expect(effectiveLinePlatform({}, null)).toBeNull();
   });
 
-  it('最强反例：趋势 395/OZON 3P，同会话价格优势 own 395、对 honor 200 Pro 落后 -34（绝不 333/+28 占优）', async () => {
-    const state = ruNova14PerLineShopState();
-    // 趋势：395 / OZON 3P（与价格页每线药丸一致）
+  it('最强反例：趋势 372/OZON 3P，同会话价格优势 own 372、对 A57 586 / HONOR 600 540 落后值如实为占优（绝不 352 混池）', async () => {
+    const state = ruNova15PerLineShopState();
+    // 趋势：372 / OZON 3P（与价格页每线药丸一致；自动混池是 352/DNS）
     const { table } = await trendCardsOf(state, '价格趋势');
-    expect(table.rows[0][1]).toBe('395');
+    expect(table.rows[0][1]).toBe('372');
     expect(table.rows[0][3]).toBe('OZON 3P');
-    // 优势：own 全部 395、渠道点名 OZON 3P；honor 361 → -34 落后（真实事实
-    // 360.60；旧缺陷 own 混池 333 → +28 占优，方向翻转）
+    // 优势：own 全部 372、渠道点名 OZON 3P；A57 586 → +214、HONOR 600 540 →
+    // +168（真实事实 585.81/540.12；旧缺陷 own 混池 352 会把价差洗成 234/188——
+    // 本断言锁「每线 3P 价随优势，不读全局混池」）
     const { card } = await advantageCardOf(state);
-    const rows19 = card.rows.filter((row) => row.weekId === '202619');
-    expect(rows19.length).toBeGreaterThan(0);
-    expect(rows19.every((row) => row.own.price === 395)).toBe(true);
-    expect(rows19.some((row) => row.own.price === 333)).toBe(false);
-    expect(rows19.every((row) => row.channelLabel === 'OZON 3P')).toBe(true);
-    const honorRow = rows19.find((row) => row.competitor.modelId === 'cmp-honor-200-pro');
+    const rows34 = card.rows.filter((row) => row.weekId === '202634');
+    expect(rows34.length).toBeGreaterThan(0);
+    expect(rows34.every((row) => row.own.price === 372)).toBe(true);
+    expect(rows34.some((row) => row.own.price === 352)).toBe(false);
+    expect(rows34.every((row) => row.channelLabel === 'OZON 3P')).toBe(true);
+    const honorRow = rows34.find((row) => row.competitor.modelId === 'cmp-honor-600');
     expect(honorRow).toBeTruthy();
-    expect(honorRow!.competitor.price).toBe(361);
-    expect(honorRow!.priceDiff).toBe(361 - 395);
-    expect(honorRow!.relation).toBe('behind');
-    // 同周全部行为「我司落后」（redmi 自动 333 → -62），没有一条被误报占优
-    expect(rows19.every((row) => row.relation === 'behind')).toBe(true);
-    expect(rows19.some((row) => row.relation === 'advantage')).toBe(false);
+    expect(honorRow!.competitor.price).toBe(540);
+    expect(honorRow!.priceDiff).toBe(540 - 372);
+    expect(honorRow!.relation).toBe('advantage');
+    const a57Row = rows34.find((row) => row.competitor.modelId === 'cmp-samsung-a57');
+    expect(a57Row).toBeTruthy();
+    expect(a57Row!.competitor.price).toBe(586);
+    expect(a57Row!.priceDiff).toBe(586 - 372);
+    expect(a57Row!.relation).toBe('advantage');
+    // 关系方向全部由真实价差导出（nova 15 低于两款矩阵对手 → 全部占优），
+    // 没有一条被误报反向
+    expect(rows34.every((row) => row.relation === 'advantage')).toBe(true);
+    expect(rows34.some((row) => row.relation === 'behind')).toBe(false);
   });
 
-  it('整卡回看（advantageScopePatch）：全局层落地 null + mains 每线 shopIds 保留；落地后再问仍 395/落后', async () => {
-    const state = ruNova14PerLineShopState();
+  it('整卡回看（advantageScopePatch）：全局层落地 null + mains 每线 shopIds 保留；落地后再问仍 372/占优', async () => {
+    const state = ruNova15PerLineShopState();
     const first = await advantageCardOf(state);
     const patch = advantageScopePatch(state, first.card.rows);
     expect(patch.platform).toBeNull(); // 全局层 = 参与计算的全局口径（null），不偷换
     expect(patch.mains?.[0]?.main?.platform?.shopIds).toEqual(['RU:ozon:3P']);
     const landed: FiltersState = { ...state, ...patch, platform: patch.platform ?? null } as FiltersState;
     const again = await advantageCardOf(landed);
-    const rows19 = again.card.rows.filter((row) => row.weekId === '202619');
-    expect(rows19.every((row) => row.own.price === 395)).toBe(true);
-    expect(rows19.every((row) => row.channelLabel === 'OZON 3P')).toBe(true);
-    const honorAgain = rows19.find((row) => row.competitor.modelId === 'cmp-honor-200-pro');
-    expect(honorAgain!.relation).toBe('behind');
+    const rows34 = again.card.rows.filter((row) => row.weekId === '202634');
+    expect(rows34.every((row) => row.own.price === 372)).toBe(true);
+    expect(rows34.every((row) => row.channelLabel === 'OZON 3P')).toBe(true);
+    const honorAgain = rows34.find((row) => row.competitor.modelId === 'cmp-honor-600');
+    expect(honorAgain!.relation).toBe('advantage');
   });
 
-  it('行级定位 patch 独立复刻（AgentPanel jump 同式）：全局层 null + 每线 3P 随 ownSelection；落地后趋势仍 395', async () => {
-    const state = ruNova14PerLineShopState();
+  it('行级定位 patch 独立复刻（AgentPanel jump 同式）：全局层 null + 每线 3P 随 ownSelection；落地后趋势仍 372', async () => {
+    const state = ruNova15PerLineShopState();
     const { card } = await advantageCardOf(state);
     const row = card.rows[0];
     expect(row).toBeTruthy();
@@ -171,26 +201,36 @@ describe('三审 M1 · 共享生效口径 effectiveLinePlatform（每线 > 全�
     expect(patch.mains[0]?.main?.platform?.shopIds).toEqual(['RU:ozon:3P']);
     const landed: FiltersState = { ...state, ...patch, platform: patch.platform ?? null } as FiltersState;
     const { table } = await trendCardsOf(landed, '价格趋势');
-    expect(table.rows[0][1]).toBe('395');
+    expect(table.rows[0][1]).toBe('372');
     expect(table.rows[0][3]).toBe('OZON 3P');
   });
 
-  it('URL 全局 shop=3P 旁证统一：趋势与优势都 395/OZON 3P（旧缺陷趋势混池 333 与优势 395 双口径）', async () => {
+  it('URL 全局 shop=3P 旁证统一：趋势与优势都 478/OZON 3P（旧缺陷趋势混池 427 与优势 478 双口径）', async () => {
+    // 全局店铺级 3P 下对手线同口径（只吃 OZON 3P 事实）——nova 15 12+256 的矩阵
+    // 对手仅 HONOR 600 12+256 在 202645 有 OZON 3P 行（671.18），证人周取 202645：
+    // own OZON 3P min(478.07, 478.31) → 478；自动混池 427（DNS 427.18）。
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'RU',
       platform: OZON_3P,
-      mains: buildCards([NOVA14_12256], { auto: true, countryCode: 'RU' }),
+      mains: buildCards([NOVA15_12256], { auto: true, countryCode: 'RU' }),
       adaptive: false,
-      rangeStart: '202619',
-      rangeEnd: '202619',
+      rangeStart: '202645',
+      rangeEnd: '202645',
     };
     const { table } = await trendCardsOf(state, '价格趋势');
-    expect(table.rows[0][1]).toBe('395');
+    expect(table.rows[0][1]).toBe('478');
     expect(table.rows[0][3]).toBe('OZON 3P');
     const { card } = await advantageCardOf(state);
-    const rows19 = card.rows.filter((row) => row.weekId === '202619');
-    expect(rows19.every((row) => row.own.price === 395)).toBe(true);
+    const rows45 = card.rows.filter((row) => row.weekId === '202645');
+    expect(rows45.length).toBeGreaterThan(0);
+    expect(rows45.every((row) => row.own.price === 478)).toBe(true);
+    expect(rows45.every((row) => row.channelLabel === 'OZON 3P')).toBe(true);
+    const honorRow = rows45.find((row) => row.competitor.modelId === 'cmp-honor-600');
+    expect(honorRow).toBeTruthy();
+    expect(honorRow!.competitor.price).toBe(671);
+    expect(honorRow!.priceDiff).toBe(671 - 478);
+    expect(honorRow!.relation).toBe('advantage');
   });
 });
 

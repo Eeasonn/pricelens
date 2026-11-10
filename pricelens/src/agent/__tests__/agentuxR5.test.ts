@@ -20,13 +20,15 @@ import { advantageScopePatch, platformCountryFallbackNote, stateForPriceAdvantag
 import type { ChartResultCard, PriceAdvantageResultCard, TableResultCard } from '../contracts';
 
 // ---- 数据事实（dim_channel）：AE 平台 = CARREFOUR/JUMBO/NOON/SHARAFDG；
-// RU 平台 = DNS/Mvideo/OZON（NOON 不在 RU）；nova 14 Pro 12+512GB 在 AE 与 RU
-// 均在售（跨国同配置合法保留）。----
+// RU 平台 = DNS/Mvideo/OZON（NOON 不在 RU）。matrix-only（2026-11-10）：主品改用
+// AE/RU 双在架且两国矩阵都有覆盖的 nova 15 Max 8+256 GB（旧锚 nova 14 Pro 在 RU
+// 无矩阵对比位，跨国/同国优势恒 0 行）；其 RU 矩阵对手 = A37 8+256 / HONOR X9D
+// 8+256 / Redmi Note17 Pro 8+256。
 const NOON_AE: PlatformSelection = { platforms: ['NOON'], shopIds: [], seller: null };
 const OZON_RU: PlatformSelection = { platforms: ['OZON'], shopIds: [], seller: null };
 const OZON_RU_SHOP: PlatformSelection = { platforms: [], shopIds: ['RU:ozon:3P'], seller: null };
-const novaRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-14-pro')!;
-const NOVA = { modelId: 'own-huawei-nova-14-pro', romram: novaRow.romram, skuIds: [novaRow.sku_id] };
+const novaRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-15-max' && row.romram === '8+256 GB')!;
+const NOVA = { modelId: 'own-huawei-nova-15-max', romram: novaRow.romram, skuIds: [novaRow.sku_id] };
 
 /** AE 页 · nova 14 Pro 主品 · 平台勾选 NOON（评审复现口径） */
 function aeNoonNovaState(): FiltersState {
@@ -127,12 +129,12 @@ describe('R5-M1 · platformCountryFallbackNote 透明说明（不冒称源国平
 });
 
 describe('R5-M1 · 价格优势跨国计算（无 forcedIntent 自然语言链）', () => {
-  it('stateForPriceAdvantageCountry：AE·NOON + nova → RU 平台归一 null、主品 nova 合法保留', () => {
+  it('stateForPriceAdvantageCountry：AE·NOON + nova 15 Max → RU 平台归一 null、主品 nova 15 Max 合法保留', () => {
     const next = stateForPriceAdvantageCountry(aeNoonNovaState(), 'RU');
     expect(next.countryCode).toBe('RU');
     expect(next.platform).toBeNull();
     expect(next.mains.length).toBeGreaterThan(0);
-    expect(next.mains.every((card) => card.main?.modelId === 'own-huawei-nova-14-pro')).toBe(true);
+    expect(next.mains.every((card) => card.main?.modelId === 'own-huawei-nova-15-max')).toBe(true);
   });
 
   it('AE·NOON 问「RU 价格优势」：计算前归一化 → 有实际行（非 0 行）、行全部 R国、卡片透明说明回退', async () => {
@@ -160,14 +162,14 @@ describe('R5-M1 · 价格优势跨国计算（无 forcedIntent 自然语言链�
     const weekIds = [...new Set(card.rows.map((row) => row.weekId))].sort();
     expect(patch.rangeStart).toBe(weekIds[0]);
     expect(patch.rangeEnd).toBe(weekIds[weekIds.length - 1]);
-    expect(patch.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-14-pro')).toBe(true);
+    expect(patch.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-15-max')).toBe(true);
   });
 });
 
 describe('R5-M1 · 价格趋势跨国计算（无 forcedIntent 自然语言链）', () => {
-  it('AE·NOON 问「RU nova 14 Pro 价格趋势」：chart 有真实价格点、说明回退、open 动作平台归一落地', async () => {
+  it('AE·NOON 问「RU nova 15 Max 价格趋势」：chart 有真实价格点、说明回退、open 动作平台归一落地', async () => {
     const state = aeNoonNovaState();
-    const response = await runAgent('RU nova 14 Pro 价格趋势', buildAgentContext('dashboard', state, []));
+    const response = await runAgent('RU nova 15 Max 价格趋势', buildAgentContext('dashboard', state, []));
     expect(response.intent).toBe('query');
     const chart = response.cards.find((item): item is ChartResultCard => item.kind === 'chart');
     const table = response.cards.find((item): item is TableResultCard => item.kind === 'table');
@@ -184,7 +186,7 @@ describe('R5-M1 · 价格趋势跨国计算（无 forcedIntent 自然语言链�
       for (const action of open) {
         expect(action.filterPatch?.countryCode).toBe('RU');
         expect(action.filterPatch?.platform).toBeNull();
-        expect(action.filterPatch?.mains?.every((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-14-pro')).toBe(true);
+        expect(action.filterPatch?.mains?.every((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-15-max')).toBe(true);
       }
     }
     expect(response.summary).toContain('NOON');
@@ -201,7 +203,7 @@ describe('R5-M1 · 价格趋势跨国计算（无 forcedIntent 自然语言链�
     const open = (chart!.actions ?? []).find((action) => action.kind === 'open');
     expect(open?.filterPatch?.countryCode).toBe('RU');
     expect(open?.filterPatch?.platform).toBeNull();
-    expect(open?.filterPatch?.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-14-pro')).toBe(true);
+    expect(open?.filterPatch?.mains?.some((mainCard) => mainCard.main?.modelId === 'own-huawei-nova-15-max')).toBe(true);
   });
 });
 

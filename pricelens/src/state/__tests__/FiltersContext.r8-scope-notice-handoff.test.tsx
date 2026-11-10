@@ -100,6 +100,20 @@ function seedV12Storage(platform: unknown): void {
   }));
 }
 
+/** matrix-only（2026-11-10）平板证人版载荷：优势卡 open 交接需要真实行——
+ *  nova 14 的矩阵对手已退役，改用 MatePad Pro 2025 12.2" 12+512 PaperMatte
+ *  （矩阵对手 Tab S11；own W202619 OZON 平台级 1025 ≠ 严格 3P 1047）。 */
+function seedV12StorageTablet(platform: unknown): void {
+  localStorage.setItem('LPL3.filters', JSON.stringify({
+    countryCode: 'RU', industry: 'tablet',
+    mains: [{ id: 'seed-tab-1', main: { modelId: 'own-huawei-matepad-pro-2025', romram: '12.2" 12+512 GB PaperMatte', skuIds: ['own-huawei-matepad-pro-2025__12-2inwifi12-512gbpapermatte__x'] }, compares: [], auto: true }],
+    platform,
+    granularity: 'week', adaptive: false, rangeStart: '202619', rangeEnd: '202619',
+    currency: 'usd', priceTypes: { discounted: true, rrp: false }, agg: 'avg',
+    alertSubs: [], v: 12,
+  }));
+}
+
 const novaSummaryRow = (table: TableResultCard): string[] | undefined =>
   table.rows.find((row) => row[0].includes('nova 14') && !row[0].includes('Pro'));
 
@@ -194,7 +208,9 @@ describe('t428u R8-M1 · 纯 3P legacy 载荷：四类结果卡 open 落地后�
   });
 
   it('价格优势卡「回看价格走势」：open 补丁落地继承说明，新查询判断边界首位仍披露，重载保留', async () => {
-    seedV12Storage(OZON_3P_SHOP);
+    // matrix-only（2026-11-10）：优势卡证人改用平板载荷（nova 14 无矩阵对比位，
+    // 优势恒 0 行）；「open 落地继承说明 + 新查询披露 + 重载保留」语义不变。
+    seedV12StorageTablet(OZON_3P_SHOP);
     const handle = renderFilters();
     const original = handle.state().platformScopeNotice!;
 
@@ -211,9 +227,9 @@ describe('t428u R8-M1 · 纯 3P legacy 载荷：四类结果卡 open 落地后�
     const card2 = second.cards.find((item) => item.kind === 'price_advantage') as PriceAdvantageResultCard;
     expect(card2.boundaries?.[0]).toContain('稳定版仅支持平台级');
     expect(card2.boundaries?.[0]).toContain('OZON 3P');
-    const w19 = card2.rows.filter((row) => row.weekId === '202619' && row.ownModelId === 'own-huawei-nova-14');
+    const w19 = card2.rows.filter((row) => row.weekId === '202619' && row.ownModelId === 'own-huawei-matepad-pro-2025');
     expect(w19.length).toBeGreaterThan(0);
-    for (const row of w19) expect(row.ownPrice).toBe(333);
+    for (const row of w19) expect(row.ownPrice).toBe(1025);
 
     expect(await persistedNotice()).toEqual(original);
     const reloaded = reloadFilters();

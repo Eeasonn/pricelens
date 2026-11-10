@@ -29,9 +29,10 @@ afterEach(() => cleanup());
 const own = dimProduct.find((row) => row.is_own && row.industry === 'phone' && row.countries.includes('RU'))!;
 const main = { modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] };
 const state = { ...defaultFilters, mains: buildCards([main], { auto: true }), adaptive: false, rangeStart: '202619', rangeEnd: '202642' };
-/** 二审 R5：AE/RU 双在架、且非两国默认主品的 own 型号（nova 14 pro）——
- *  用于验证「回看价格走势」跨国切换不会被重算成默认 Pura */
-const novaRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-14-pro')!;
+/** 二审 R5：AE/RU 双在架、且非两国默认主品的 own 型号——matrix-only（2026-11-10）
+ *  后改用矩阵有覆盖的 nova 15 Max 8+256（旧锚 nova 14 Pro 在 RU 无矩阵对比位，
+ *  RU 优势恒 0 行），用于验证「回看价格走势」跨国切换不会被重算成默认 Pura */
+const novaRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-15-max' && row.romram === '8+256 GB')!;
 const novaMain = { modelId: novaRow.model_id, romram: novaRow.romram, skuIds: [lowestPriceColorSku(novaRow.model_id, novaRow.romram, 'RU') ?? novaRow.sku_id] };
 
 function AppHarness() {
@@ -306,7 +307,7 @@ describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
 });
 
 describe('agentux Batch4 二审深水区：R5 主品口径跨国保持 / R6 周粒度强同步', () => {
-  it('R5 面板：AE 主品 Nova 14 Pro 问「RU 价格优势」→「回看价格走势」后主品仍是 Nova（不回落默认 Pura）', async () => {
+  it('R5 面板：AE 主品 nova 15 Max 问「RU 价格优势」→「回看价格走势」后主品仍是 nova 15 Max（不回落默认 Pura）', async () => {
     window.sessionStorage.clear();
     const view = mountedApp();
     fireEvent.click(screen.getByRole('button', { name: '准备 AE Nova' }));
@@ -320,15 +321,15 @@ describe('agentux Batch4 二审深水区：R5 主品口径跨国保持 / R6 周�
       expect(found).toBeTruthy();
       return found as HTMLElement;
     });
-    // 结果行按请求国 RU 计算且主品是 Nova（跨国计算口径正确）
-    const novaRows = within(card).getAllByRole('button', { name: /定位 .*nova 14 pro.* \d{6}/i });
+    // 结果行按请求国 RU 计算且主品是 nova 15 Max（跨国计算口径正确）
+    const novaRows = within(card).getAllByRole('button', { name: /定位 .*nova 15 max.* \d{6}/i });
     expect(novaRows.length).toBeGreaterThan(0);
     fireEvent.click(within(card).getByRole('button', { name: '回看价格走势' }));
     await waitFor(() => {
       const next = JSON.parse(view.container.querySelector('[data-filter-state]')?.textContent ?? '{}');
       expect(next.countryCode).toBe('RU');
       // 关键断言：filterPatch 携带的主品口径在跨国切换后保留，不被默认 Pura 重算
-      expect(next.mains.map((item: { main: { modelId: string } | null }) => item.main?.modelId)).toEqual(['own-huawei-nova-14-pro']);
+      expect(next.mains.map((item: { main: { modelId: string } | null }) => item.main?.modelId)).toEqual(['own-huawei-nova-15-max']);
     }, { timeout: 3000 });
     view.unmount();
   }, 15000);

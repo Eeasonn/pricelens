@@ -34,7 +34,12 @@ import { buildAgentContext, runAgent } from '../core';
 import { calculatePriceAdvantage } from '../priceAdvantage';
 import type { AgentCardAction, ChartResultCard, PriceAdvantageResultCard, TableResultCard } from '../contracts';
 
-const NOVA: ProductSelection = { modelId: 'own-huawei-nova-14-pro', romram: '12+512 GB', skuIds: ['own-huawei-nova-14-pro__12-512gb__black'] };
+// matrix-only（2026-11-10）：主品改用 AE/RU 双在架且两国矩阵都有覆盖的
+// nova 15 Max 8+256（旧锚 nova 14 Pro 在 RU 无矩阵对比位，优势恒 0 行假空卡）。
+const NOVA: ProductSelection = { modelId: 'own-huawei-nova-15-max', romram: '8+256 GB', skuIds: ['own-huawei-nova-15-max__8-256gb__black'] };
+// FR→DE 跨国共有平台用例：DE 无手机矩阵，改用 DE/FR 矩阵双覆盖的音频
+// FreeBuds Neo（DE 矩阵对手 = AirPods 4 ANC / AirPods 5，DE Amazon 1P 有双方事实）。
+const FREEBUDS_NEO: ProductSelection = { modelId: 'own-huawei-freebuds-neo', romram: '—', skuIds: ['own-huawei-freebuds-neo__std__black'] };
 
 /** 真实渠道维表事实：RU 平台集合 = DNS/OZON/Mvideo；AE 有 NOON；DE/FR 共有 Amazon */
 const RU_PLATFORMS = [...new Set(dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.platform))];
@@ -175,8 +180,10 @@ describe('t428u R5-M1 · 合法口径绝不放大清空（同国 OZON / 店铺�
     const card = response.cards.find((item) => item.kind === 'price_advantage') as PriceAdvantageResultCard;
     expect(card.rows.length).toBeGreaterThan(0);
     for (const row of card.rows) expect(row.channel).toBe('OZON');
-    // 真实数据事实：OZON 渠道 2026-W45 我司 364 USD（默认矩阵改版后自动对手集变化，
-    // 2026-W36 的旧对手 Reno 13F 不再在 OZON 对标集内，锚顺移至最新交叠周）
+    // 真实数据事实：OZON 渠道 2026-W45 我司 364 USD（matrix-only 后 nova 15 Max
+    // 8+256 的 OZON 对手集 = A37 木炭黑 / HONOR X9D / Redmi Note17 Pro，均与
+    // 我司同周在 OZON 有真实价；2026-W36 的旧对手 Reno 13F 不再在 OZON 对标集内，
+    // 锚顺移至最新交叠周）
     const w45 = card.rows.find((row) => row.weekId === '202645');
     expect(w45).toBeDefined();
     expect(w45!.ownPrice).toBe(364);
@@ -235,11 +242,14 @@ describe('t428u R5-M1 · 合法口径绝不放大清空（同国 OZON / 店铺�
   });
 
   it('跨国共有平台（FR Amazon → DE）：合法保留，无剔除说明，补丁仍是 Amazon', async () => {
+    // matrix-only（2026-11-10）：DE 无手机矩阵，本用例改用 DE/FR 矩阵双覆盖的
+    // 音频 FreeBuds Neo（「合法跨国平台不被剔除」语义不变）。
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'FR',
+      industry: 'audio',
       platform: { platforms: ['Amazon'], shopIds: [], seller: null },
-      mains: buildCards([NOVA], { auto: true, countryCode: 'FR' }),
+      mains: buildCards([FREEBUDS_NEO], { auto: true, countryCode: 'FR' }),
     };
     expect(AE_PLATFORMS).not.toContain('Amazon');
     const response = await runAgent('DE价格优势', buildAgentContext('dashboard', state, []));
@@ -263,7 +273,7 @@ describe('t428u R5-M1 · AE NOON → RU 趋势：同一归一口径（图 + 摘�
     expect(chart.note).toContain('没有渠道');
     const table = response.cards.find((item) => item.kind === 'table') as TableResultCard;
     expect(table).toBeDefined();
-    const novaRow = table.rows.find((row) => row[0].includes('nova 14 Pro'));
+    const novaRow = table.rows.find((row) => row[0].includes('nova 15 Max'));
     expect(novaRow).toBeDefined();
     expect(novaRow![1]).not.toBe('—');
     expect(table.boundaries?.some((line) => line.includes('NOON'))).toBe(true);

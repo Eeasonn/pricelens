@@ -97,14 +97,17 @@ describe('buildOverviewMatrix 金测', () => {
     expect(c0.colors.some((c) => c.skuId === c0.skuId)).toBe(true);
   });
 
-  it('矩阵未覆盖的型号由自动匹配补齐（Mate X6 / Pura 80 Ultra 在 RU 矩阵无行 → source=auto）；benchmark 入参可整体置空', () => {
+  it('matrix-only（2026-11-10 Eason）：矩阵未覆盖的型号（RU Mate X6 / Pura 80 Ultra）竞品列表为空数组；benchmark 入参可整体置空', () => {
+    // 自动匹配层退役：矩阵没有映射行的型号不再按「他国同款 + 同档 ±35%」补竞品（dim_benchmark 已无 source=auto 行）
     for (const mid of ['own-huawei-mate-x6', 'own-huawei-pura-80-ultra']) {
-      expect(findModel(mid).comps.length).toBeGreaterThan(0);
-      const sources = new Set(dimBenchmark.filter((b) => b.country_code === CC && b.own_model_id === mid).map((b) => b.source));
-      expect([...sources]).toEqual(['auto']);
+      expect(dimBenchmark.filter((b) => b.country_code === CC && b.own_model_id === mid)).toEqual([]);
+      expect(findModel(mid).comps).toEqual([]);
     }
+    // 全库 source 标签只有 'matrix'（787 行）
+    expect(new Set(dimBenchmark.map((b) => b.source))).toEqual(new Set(['matrix']));
+    // benchmark 入参整体置空 → 全部型号竞品为空
     const empty = buildOverviewMatrix('usd', [], null, DEFAULT_DATA_SCOPE);
-    expect(empty.flatMap((b) => b.models).find((m) => m.modelId === 'own-huawei-pura-90s-pro-max')!.comps).toEqual([]);
+    expect(empty.flatMap((b) => b.models).every((m) => m.comps.length === 0)).toBe(true);
   });
 
   it('生命周期（模型全 SKU 口径）：等于 lifecycleDeltaOf 独立计算；真实数据口径为「首销季 → 末季季均折后价(本币)」', () => {

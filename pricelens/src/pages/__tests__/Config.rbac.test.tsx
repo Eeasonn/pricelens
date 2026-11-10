@@ -1,8 +1,10 @@
 // ============================================================
 // 配置页 RBAC 组件测试（2026-11-06 稳定版：GTM/查阅者权限分组 + 导入导出）：
-// - 默认 gtm：工具行有「导入配置」「导出配置」，无查阅者横幅，可编辑控件可用
+// - 默认 gtm：工具行有「导入配置」「导出配置」，无查阅者横幅
 // - 切换查阅者：横幅出现「查阅者不可修改配置，请联系 GTM」；导入入口不渲染；
 //   导出仍可用；竞品「编辑」/ 异常守卫开关 / 上一代下拉 / 默认店铺下拉全部禁用
+// - matrix-only 临时口径（2026-11-10）：竞品「编辑」恒禁用，title 按角色区分
+//   （GTM = 矩阵直配、查阅者 = 不可修改配置）
 // - 角色切换标注「正式环境将由账号权限下发」（开发/演示用）
 // echarts mock 同 appShell.test（App 壳整体渲染，只验证 React 组装）。
 // ============================================================
@@ -120,10 +122,11 @@ describe('配置页 · 切换查阅者（viewer）', () => {
   it('竞品「编辑」、异常守卫开关、上一代下拉、默认店铺下拉全部禁用', () => {
     render(<App />);
     fireEvent.click(segItem('查阅者'));
-    // 竞品对标「编辑」按钮（任意一枚）
+    // 竞品对标「编辑」按钮（任意一枚）：禁用 + title 标注查阅者不可改
     const edit = buttonByText('编辑');
     expect(edit).not.toBeNull();
     expect(edit!.disabled).toBe(true);
+    expect(edit!.title).toContain('查阅者');
     // 异常守卫开关（页面唯一 switch）
     const guardSwitch = screen.getByRole('switch').closest('.ant-switch');
     expect(guardSwitch?.classList.contains('ant-switch-disabled')).toBe(true);
@@ -131,13 +134,17 @@ describe('配置页 · 切换查阅者（viewer）', () => {
     expect(document.querySelectorAll('.ant-select-disabled').length).toBeGreaterThan(0);
   });
 
-  it('切回 GTM：横幅消失、编辑控件恢复可用', () => {
+  it('切回 GTM：横幅消失；竞品「编辑」恒禁用（matrix-only：title 标注矩阵直配），导入入口恢复', () => {
     render(<App />);
     fireEvent.click(segItem('查阅者'));
     expect(screen.getByText(/查阅者不可修改配置/)).toBeDefined();
     fireEvent.click(segItem('GTM'));
     expect(screen.queryByText(/查阅者不可修改配置/)).toBeNull();
-    expect(buttonByText('编辑')!.disabled).toBe(false);
+    // matrix-only 临时口径（2026-11-10）：编辑入口保留但不生效，GTM 态同样禁用，
+    // title 区分角色（GTM = 矩阵直配、查阅者 = 不可修改配置）
+    const edit = buttonByText('编辑')!;
+    expect(edit.disabled).toBe(true);
+    expect(edit.title).toContain('矩阵直配');
     expect(buttonByText('导入配置')).not.toBeNull();
   });
 });

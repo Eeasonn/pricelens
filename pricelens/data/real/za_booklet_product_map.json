@@ -1,6 +1,6 @@
 {
   "schema_version": "za-booklet-product-map-v1",
-  "generated_at": "2026-11-10T00:02:31+00:00",
+  "generated_at": "2026-11-10T11:10:05+00:00",
   "source_workbook": "ZA_VODACOM_1109.xlsx",
   "rows": [
     {
@@ -79,7 +79,7 @@
       "model": "Watch SE",
       "model_id": "cmp-apple-watch-se",
       "sku_id": "cmp-apple-watch-se__40mmcellular__silver",
-      "romram": "40mm Cellular",
+      "romram": "—",
       "match_status": "matched-model",
       "mapping_kind": "unique-existing-sku",
       "candidate_model_ids": [
@@ -852,7 +852,7 @@
       "model": "Pad X9",
       "model_id": "cmp-honor-pad-x9",
       "sku_id": "cmp-honor-pad-x9__11-5inwifi4-128gb__x",
-      "romram": "11.5\" WiFi 4+128 GB",
+      "romram": "11.5\" 4+128 GB",
       "match_status": "matched-model",
       "mapping_kind": "unique-existing-sku",
       "candidate_model_ids": [
@@ -2151,7 +2151,7 @@
       "model": "Galaxy Tab S10+",
       "model_id": "cmp-samsung-galaxy-tab-s10",
       "sku_id": "cmp-samsung-galaxy-tab-s10__12-4inwifi12-256gb__x",
-      "romram": "12.4\" WiFi 12+256 GB",
+      "romram": "12.4\" 12+256 GB",
       "match_status": "matched-model",
       "mapping_kind": "unique-existing-sku",
       "candidate_model_ids": [

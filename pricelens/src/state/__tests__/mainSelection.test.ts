@@ -30,7 +30,12 @@ import {
 } from '../mainSelection';
 import { buildProductTree, type RomramNode } from '../../components/ProductCascader/tree';
 
-const ruOwn = dimProduct.find((p) => p.is_own && p.countries.includes('RU'))!;
+// matrix-only 口径（2026-11-10）：矩阵没覆盖的 own 组不再产出对比行，own 锚不能取
+// dimProduct 首个 RU own 行（FreeArc，矩阵无覆盖）——锚定 RU Pura 90s Pro 12+256 GB
+// （矩阵 2 行：iPhone 17 / S26，见 dim_benchmark RU 手机组）。
+const ruOwn = dimProduct.find(
+  (p) => p.is_own && p.model_id === 'own-huawei-pura-90s-pro' && p.countries.includes('RU') && p.romram === '12+256 GB',
+)!;
 const ruOwnModel = ruOwn.sku_id.split('__')[0];
 const ruOwnRom = ruOwn.romram;
 const ownSel: ProductSelection = {

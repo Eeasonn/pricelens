@@ -30,7 +30,9 @@ afterEach(() => cleanup());
 
 const own = dimProduct.find((row) => row.is_own && row.industry === 'phone' && row.countries.includes('RU'))!;
 const main = { modelId: own.model_id, romram: own.romram, skuIds: [own.sku_id] };
-const novaRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-14-pro')!;
+// matrix-only（2026-11-10）：跨国 AE→RU 优势主品改用矩阵有覆盖的 nova 15 Max 8+256
+// （旧锚 nova 14 Pro 在 RU 无矩阵对比位，优势恒 0 行、scopePatch 无 mains）
+const novaRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-15-max' && row.romram === '8+256 GB')!;
 const novaMain = { modelId: novaRow.model_id, romram: novaRow.romram, skuIds: [lowestPriceColorSku(novaRow.model_id, novaRow.romram, 'RU') ?? novaRow.sku_id] };
 
 function AppHarness() {
@@ -150,8 +152,8 @@ describe('A M1 · 普通上下文 stale 的消息级副作用锁（组件方向�
     const gtm = within(card).getByRole('button', { name: '跳 GTM 情报' }) as HTMLButtonElement;
     expect(back.disabled).toBe(false);
     expect(gtm.disabled).toBe(false);
-    // 跨国结果行按 RU 计算且主品是 Nova（不拿 AE 矩阵冒充）
-    expect(within(card).getAllByRole('button', { name: /定位 .*nova 14 pro.* \d{6}/i }).length).toBeGreaterThan(0);
+    // 跨国结果行按 RU 计算且主品是 nova 15 Max（不拿 AE 矩阵冒充）
+    expect(within(card).getAllByRole('button', { name: /定位 .*nova 15 max.* \d{6}/i }).length).toBeGreaterThan(0);
     view.unmount();
   });
 });
@@ -171,7 +173,7 @@ describe('A M2 · 跳 GTM 与回看共用 scopePatch（目标国 + 显式 mains 
       expect(window.location.search).toContain('c=RU');
       const next = filterStateOf(view);
       expect(next.countryCode).toBe('RU');
-      expect((next.mains as Array<{ main: { modelId: string } | null }>).map((item) => item.main?.modelId)).toEqual(['own-huawei-nova-14-pro']);
+      expect((next.mains as Array<{ main: { modelId: string } | null }>).map((item) => item.main?.modelId)).toEqual(['own-huawei-nova-15-max']);
     });
     view.unmount();
   });
@@ -190,7 +192,7 @@ describe('A M2 · 跳 GTM 与回看共用 scopePatch（目标国 + 显式 mains 
       expect(window.location.search).not.toContain('p=intelligence');
       expect(window.location.search).toContain('c=RU');
       const next = filterStateOf(view);
-      expect((next.mains as Array<{ main: { modelId: string } | null }>).map((item) => item.main?.modelId)).toEqual(['own-huawei-nova-14-pro']);
+      expect((next.mains as Array<{ main: { modelId: string } | null }>).map((item) => item.main?.modelId)).toEqual(['own-huawei-nova-15-max']);
     });
     view.unmount();
   });

@@ -203,11 +203,12 @@ describe('异常守卫 · 规则与人工裁定存取', () => {
 
 describe('异常守卫 · buildSeries 端到端锚点（真实数据）', () => {
   it('默认关闭（2026-11-05 Eason 拍板）：同场景不产隔离点，脱敏线不受守卫影响', () => {
-    const row = dimProduct.find((p) => p.model_id === 'cmp-samsung-galaxy-watch-8-classic' && p.romram === '46mm');
+    // 层级塌缩（2026-11-10）：穿戴 romram 一律 '—'（表盘尺寸并进 color='46mm Black'）；sku_id 不变，按 sku_id 定位
+    const row = dimProduct.find((p) => p.sku_id === 'cmp-samsung-galaxy-watch-8-classic__46mm__black');
     expect(row).toBeDefined();
     const [startBucket, endBucket] = dataBucketRange('week');
     const series = buildSeries({
-      groups: [{ modelId: 'cmp-samsung-galaxy-watch-8-classic', romram: '46mm', skuIds: [row!.sku_id], isOwn: false }],
+      groups: [{ modelId: 'cmp-samsung-galaxy-watch-8-classic', romram: '—', skuIds: [row!.sku_id], isOwn: false }],
       granularity: 'week',
       startBucket,
       endBucket,
@@ -223,11 +224,13 @@ describe('异常守卫 · buildSeries 端到端锚点（真实数据）', () => 
   it('显式开启后：DE 穿戴 Galaxy Watch 8 Classic 46mm 2026W39 为瞬态隔离点（50%）', () => {
     saveAnomalyRule({ enabled: true, thresholdPct: 50 });
     try {
-      const row = dimProduct.find((p) => p.model_id === 'cmp-samsung-galaxy-watch-8-classic' && p.romram === '46mm');
+      // 层级塌缩（2026-11-10）：查找锚改 sku_id（romram 键已 '—'）；锚值 2026W39 / 50% 瞬态
+      // 来自同一事实行（sku_id 未变），且显式单 SKU 取数，塌缩不影响中位基数 → 原样成立
+      const row = dimProduct.find((p) => p.sku_id === 'cmp-samsung-galaxy-watch-8-classic__46mm__black');
       expect(row).toBeDefined();
       const [startBucket, endBucket] = dataBucketRange('week');
       const series = buildSeries({
-        groups: [{ modelId: 'cmp-samsung-galaxy-watch-8-classic', romram: '46mm', skuIds: [row!.sku_id], isOwn: false }],
+        groups: [{ modelId: 'cmp-samsung-galaxy-watch-8-classic', romram: '—', skuIds: [row!.sku_id], isOwn: false }],
         granularity: 'week',
         startBucket,
         endBucket,

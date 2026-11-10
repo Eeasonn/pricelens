@@ -33,6 +33,10 @@ const mateX6RuRow = dimProduct.find((row) => row.model_id === 'own-huawei-mate-x
 const MATE_X6_RU = { modelId: 'own-huawei-mate-x6', romram: '12+512 GB', skuIds: [mateX6RuRow.sku_id] };
 const MATE_X6_ID_SKU = dimProduct.find((row) => row.model_id === 'own-huawei-mate-x6' && row.romram === '16+512 GB' && row.countries.includes('ID'))!;
 const MATE_X6_ID = { modelId: 'own-huawei-mate-x6', romram: '16+512 GB', skuIds: [MATE_X6_ID_SKU.sku_id] };
+// matrix-only（2026-11-10）：需要真实优势行的跨国用例改用 RU/ID 矩阵双覆盖的
+// Mate X7 16+512（旧锚 Mate X6 在 ID 无矩阵对比位，优势恒 0 行）。
+const mateX7RuRow = dimProduct.find((row) => row.model_id === 'own-huawei-mate-x7' && row.romram === '16+512 GB' && row.countries.includes('RU'))!;
+const MATE_X7_RU = { modelId: 'own-huawei-mate-x7', romram: mateX7RuRow.romram, skuIds: [mateX7RuRow.sku_id] };
 const novaRow = dimProduct.find((row) => row.model_id === 'own-huawei-nova-14-pro')!;
 const NOVA_RU = { modelId: 'own-huawei-nova-14-pro', romram: novaRow.romram, skuIds: [lowestPriceColorSku(novaRow.model_id, novaRow.romram, 'RU') ?? novaRow.sku_id] };
 const puraRow = dimProduct.find((row) => row.model_id === 'own-huawei-pura-90s-pro-max')!;
@@ -131,8 +135,11 @@ describe('R4-M2 · 跨国 queryState 统一保型号重映射', () => {
     expect(next.mains[0].main?.modelId).not.toBe('own-huawei-mate-80-pro');
   });
 
-  it('runAgent（无 forcedIntent）：RU Mate X6 问「ID 价格优势」→ 行全部 Mate X6 · ID · 16+512，非 Mate 80', async () => {
-    const state = { ...defaultFilters, countryCode: 'RU' as const, mains: buildCards([MATE_X6_RU], { auto: true }) };
+  it('runAgent（无 forcedIntent）：RU Mate X7 问「ID 价格优势」→ 行全部 Mate X7 · ID · 16+512，非 Mate 80', async () => {
+    // matrix-only（2026-11-10）：旧锚 Mate X6 在 ID 无矩阵对比位（优势恒 0 行），
+    // 改用 RU/ID 矩阵双覆盖的 Mate X7 16+512；「保型号重映射、不落目标国默认
+    // 主品（Mate 80 Pro）」的语义不变。
+    const state = { ...defaultFilters, countryCode: 'RU' as const, mains: buildCards([MATE_X7_RU], { auto: true }) };
     const response = await runAgent('ID 价格优势', buildAgentContext('dashboard', state, []));
     expect(response.intent).toBe('price_advantage');
     const card = response.cards.find((entry) => entry.kind === 'price_advantage');
@@ -141,8 +148,9 @@ describe('R4-M2 · 跨国 queryState 统一保型号重映射', () => {
     expect(card.rows.length).toBeGreaterThan(0);
     for (const row of card.rows) {
       expect(row.countryCode).toBe('ID');
-      expect(row.own.modelId).toBe('own-huawei-mate-x6');
+      expect(row.own.modelId).toBe('own-huawei-mate-x7');
       expect(row.own.romram).toBe('16+512 GB');
+      expect(row.own.modelId).not.toBe('own-huawei-mate-80-pro');
     }
     expect(card.rows.some((row) => row.own.price > 0)).toBe(true);
     // 正常重映射不触发回落说明

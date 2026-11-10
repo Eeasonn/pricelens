@@ -3,6 +3,8 @@
 // 原样保留，快照删空清键，无快照空操作，saveBenchmark(null) 全量语义不变；
 // clearPrevGenOverridesForModels 只清指定型号的上一代覆盖，
 // savePrevGenOverrides(null) 全量语义不变。
+// matrix-only 临时口径（2026-11-10）：依赖「人工快照接管生效读取」的 4 个用例以
+// it.skip 保留（快照写入/清除路径本身未删，恢复人工层时解除 skip）。
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   autoPrevModelId,
@@ -56,7 +58,8 @@ const realSku = (i: number): string =>
   dimProduct.filter((p) => !p.is_own).map((p) => p.sku_id)[i] ?? '';
 
 describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
-  it('只把目标配置回退维表默认，其他国家/型号/配置的行原样保留', () => {
+  // matrix-only 临时口径（2026-11-10 Eason）：人工对标层停用，getEffectiveBenchmark 忽略人工快照；恢复人工层时解除 skip
+  it.skip('只把目标配置回退维表默认，其他国家/型号/配置的行原样保留', () => {
     // 无快照 = 维表默认的生效视图（每配置截到 BENCHMARK_CAP_PER_CONFIG 款；维表按旧上限
     // 生成，超过当前 BENCHMARK_CAP_PER_CONFIG 的行在生效口径里被截掉，不再与维表逐行相等）
     const baseline = getEffectiveBenchmark();
@@ -76,7 +79,8 @@ describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
     expect(benchmarkSkuIdsFor(MID, ROM, CC)).toEqual(targetRows.map((r) => r.competitor_sku_id));
   });
 
-  it('别组的人工行不被误伤（他国同型号也保留）', () => {
+  // matrix-only 临时口径（2026-11-10 Eason）：人工对标层停用，getEffectiveBenchmark 忽略人工快照；恢复人工层时解除 skip
+  it.skip('别组的人工行不被误伤（他国同型号也保留）', () => {
     const deManual: DimBenchmark = {
       country_code: 'DE',
       own_model_id: MID,
@@ -96,7 +100,8 @@ describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
     expect(after.filter((r) => r.country_code === 'DE')).toEqual([deManual]);
   });
 
-  it('快照因此删空则整键清除（全表回默认）', () => {
+  // matrix-only 临时口径（2026-11-10 Eason）：人工对标层停用，getEffectiveBenchmark 忽略人工快照；恢复人工层时解除 skip
+  it.skip('快照因此删空则整键清除（全表回默认）', () => {
     const baseline = getEffectiveBenchmark(); // 无快照的默认生效视图（见上一用例注释）
     // 维表里没有默认行的「幽灵组」，清掉后快照无行可剩 → 键应被移除
     const ghost: DimBenchmark = {
@@ -129,7 +134,8 @@ describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
     expect((rawBench() ?? []).filter(isTarget)).toEqual(targetRows);
   });
 
-  it('全量 API 原语义不变：saveBenchmark(null) 清整份快照回默认', () => {
+  // matrix-only 临时口径（2026-11-10 Eason）：人工对标层停用，getEffectiveBenchmark 忽略人工快照；恢复人工层时解除 skip
+  it.skip('全量 API 原语义不变：saveBenchmark(null) 清整份快照回默认', () => {
     saveBenchmark([{ ...targetRows[0], competitor_sku_id: realSku(7), source: 'manual' as const }]);
     expect(benchmarkSkuIdsFor(MID, ROM, CC)).toEqual([realSku(7)]);
 

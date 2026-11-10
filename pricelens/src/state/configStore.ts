@@ -45,36 +45,31 @@ function writeJson(key: string, value: unknown): void {
 export const BENCHMARK_CAP_PER_CONFIG = 3;
 
 /**
- * 生效的默认竞品矩阵：用户手动配置（source=manual，存 LPL3.config.benchmark）优先，
- * 未配置时回退 src/data 的 dimBenchmark（source=auto）。
- * 两条路径统一按「国家 × 型号 × 配置（ROMRAM 去空格归一）」截到每配置 3 款
- * （BENCHMARK_CAP_PER_CONFIG，组内按 sort 升序、稳定）：benchmarkSkuIdsFor 的查询
- * 路径早有此兜底，但总览矩阵 / 对标弹窗直接整表消费——旧手动快照等未经截断的
- * 来源不在此处钳住，会出现每配置超过上限、与编辑侧硬限分叉。
+ * 生效的默认竞品矩阵。
+ *
+ * 2026-11-10 Eason 拍板（matrix-only，临时口径）：「矩阵 / 自动 / 替代 / 人工」四层
+ * 逻辑先取消——生效对标 = 随包维表 dimBenchmark（管线只发矩阵直配行，矩阵没给的
+ * 国家×型号×配置即为空）。浏览器里的人工快照（LPL3.config.benchmark）不再接管：
+ * 旧语义是「存在即整表接管」，会把矩阵更新静默遮蔽成旧数据。快照本身不删
+ * （manualBenchmarkCount 仍可读、配置页给清除入口），恢复人工层时把下方读取接回即可。
+ *
+ * 按「国家 × 型号 × 配置（ROMRAM 去空格归一）」截到每配置 3 款
+ * （BENCHMARK_CAP_PER_CONFIG，组内按 sort 升序、稳定）。
  */
 export function getEffectiveBenchmark(): DimBenchmark[] {
-  const manual = readJson<DimBenchmark[]>(LPL.cfgBenchmark);
-  let rows: DimBenchmark[];
-  if (Array.isArray(manual)) {
-    // 真实数据接入后 SKU/国家 id 空间全换：只认带国家码且竞品 SKU 仍存在的行；
-    // 过滤后为空（典型 = 旧造数时代的手动快照）→ 视为无手动配置，回退维表默认
-    const skuOk = new Set(dimProduct.map((p) => p.sku_id));
-    const valid = manual.filter(
-      (r) => r != null && typeof r === 'object' && typeof r.competitor_sku_id === 'string'
-        && typeof r.country_code === 'string' && skuOk.has(r.competitor_sku_id),
-    );
-    if (valid.length > 0) {
-      rows = valid;
-    } else {
-      rows = dimBenchmark;
-    }
-  } else {
-    rows = dimBenchmark;
-  }
-  // 组内按 sort 升序取前 BENCHMARK_CAP_PER_CONFIG 款的竞品集合，再按原表顺序过滤——不重排整表，
-  // 对标弹窗整快照保存时不产生无谓的行序变化
+  // matrix-only 生效表；先按「国家×型号×配置×竞品 SKU」首见去重——防御历史快照/
+  // 潜在维表重复行（2026-11-10 曾因 >=N 档位解析 bug 产出重复行，见 ingest 侧修复）
+  const rowsRaw: DimBenchmark[] = dimBenchmark;
+  const seen = new Set<string>();
+  const rows: DimBenchmark[] = rowsRaw.filter((r) => {
+    const k = `${r.country_code}|${r.own_model_id}|${(r.own_romram ?? '').replace(/\s+/g, '')}|${r.competitor_sku_id}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  // 组内按 sort 升序取前 BENCHMARK_CAP_PER_CONFIG 款的竞品集合，再按原表顺序过滤——不重排整表
   const keep = new Map<string, Set<string>>();
-  // own_romram 未在前置过滤里校验类型（旧快照可能缺字段），归一前兜底空串
+  // own_romram 归一前兜底空串（维表行恒有该字段，防御历史形状）
   const groupOf = (r: DimBenchmark): string => `${r.country_code}|${r.own_model_id}|${(r.own_romram ?? '').replace(/\s+/g, '')}`;
   for (const r of [...rows].sort((a, b) => a.sort - b.sort)) {
     const key = groupOf(r);
