@@ -26,6 +26,7 @@ import {
   buildTickRows,
   bucketLabeledIdx,
   curveNameOf,
+  LABEL_LINE_HEIGHT,
   LIFECYCLE_ROW_H,
   NAME_LEADER_PX,
   priceLabelW,
@@ -263,6 +264,24 @@ describe('buildLabelPlan compact（每系列仅 最高/最低/最新 三价，�
     const detail = planOf();
     expect(detail.pos).toBeUndefined();
     expect(detail.dy['s1']).toBeDefined();
+  });
+
+  it('2026-11-10 审计修（末端标签防碰）：相邻系列终点价相近 → 两枚精简标签上下各让半行', () => {
+    // 两条线都升段收尾（最新标签都标上方）：s2 终点 1025 与 s1 终点 1020 同列且
+    // 图上纵向差远小于一行高——实拍「1 115 / 1 042」字面相触场景；
+    // 规则 = 横向重叠且纵向间距 < 一行高才生效，上标 −半行 / 下标 +半行
+    const a = mkSeries({ key: 's1', points: [1000, 990, 980, 970, 1020].map((v, i) => PT({ price: v, bucketId: `w${i}` })) });
+    const b = mkSeries({ key: 's2', points: [1060, 1050, 1040, 1015, 1025].map((v, i) => PT({ price: v, bucketId: `w${i}` })) });
+    const scale = computeYAxis({ series: [a, b], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const geom = mkGeom(scale, 1200, 5, scale.plotHeight + 96 + GRID.bottom);
+    // fixture 前提自检：两终点在图上纵向差 < 一行高（LABEL_LINE_HEIGHT）
+    expect(Math.abs(yPxOf(geom, 1020) - yPxOf(geom, 1025))).toBeLessThan(LABEL_LINE_HEIGHT);
+    const plan = buildLabelPlan({ geom, series: [a, b], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: new Map(), labelMode: 'compact', markExtremes: false });
+    expect(plan.pos?.['s1']?.[4]).toBe('top');
+    expect(plan.pos?.['s2']?.[4]).toBe('top');
+    // 上标（s2 值更高 = 屏幕更上）上移半行、下标（s1）下移半行
+    expect(plan.dy['s2']?.[4]).toBe(-LABEL_LINE_HEIGHT / 2);
+    expect(plan.dy['s1']?.[4]).toBe(LABEL_LINE_HEIGHT / 2);
   });
 });
 

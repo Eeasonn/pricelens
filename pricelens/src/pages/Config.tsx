@@ -107,11 +107,46 @@ function Block({ id, title, extra, children }: { id?: string; title: string; ext
 
 const cellPadding: CSSProperties = { padding: `${space.sm}px ${space.sm}px` };
 
+// 子导航分区表（id 与下方各 Block 锚点一致，抽成常量供滚动跟随与渲染共用）
+const CONFIG_SECTIONS: ReadonlyArray<readonly [string, string]> = [
+  ['benchmark', '竞品对标'],
+  ['default-shop', '默认店铺'],
+  ['anomaly', '异常守卫'],
+  ['prev-gen', '上一代关系'],
+  ['fx', '汇率'],
+  ['promo', '大促日历'],
+];
+
 export default function Config() {
   const { state } = useFilters();
   // 2026-11-06 RBAC：角色切换（演示）即时刷新全页控件态；查阅者只读 + 可导出
   const role = useRole();
   const canEdit = role === 'gtm';
+  // UI 审计修复（2026-11-10）：子导航此前六个分区全是同款蓝链接，当前分区无选中态。
+  // 选中态与页头「配置」当前页标记同语法：墨色文字 + 2px 墨色短下划线 + aria-current="page"；
+  // 点击即时标记，滚动时按分区顶边位置跟随（jsdom 无滚动事件，测试走点击路径断言）。
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const [activeSection, setActiveSection] = useState<string>(CONFIG_SECTIONS[0]![0]);
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    if (!root) return undefined;
+    // 标记线 = 容器顶 + 96px（与锚点 scrollMarginTop 76 同量级，留出粘性工具行高度）；
+    // 取顶边已越过标记线的最后一个分区；滚到底兜底取最后一个分区（末段分区够不到标记线）
+    const onScroll = (): void => {
+      const marker = root.getBoundingClientRect().top + 96;
+      let current = CONFIG_SECTIONS[0]![0];
+      for (const [id] of CONFIG_SECTIONS) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= marker) current = id;
+      }
+      if (root.scrollHeight > 0 && root.scrollTop + root.clientHeight >= root.scrollHeight - 1) {
+        current = CONFIG_SECTIONS[CONFIG_SECTIONS.length - 1]![0];
+      }
+      setActiveSection(current);
+    };
+    root.addEventListener('scroll', onScroll, { passive: true });
+    return () => root.removeEventListener('scroll', onScroll);
+  }, []);
   const prevRows = useMemo(() => ownModelRows(state.countryCode), [state.countryCode]);
   const [searchTerm, setSearchTerm] = useState('');
   const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
@@ -365,7 +400,7 @@ export default function Config() {
   };
 
   return (
-    <div style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }} data-lpl-scroll>
+    <div ref={scrollRootRef} style={{ height: '100%', overflowX: 'auto', overflowY: 'auto', background: color.canvasSoft }} data-lpl-scroll>
       {/* 第二十八轮：1440 → 1280，与看板同最低宽度 */}
       <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader；第一百一十五轮：右上「保存配置」删除——
@@ -377,14 +412,31 @@ export default function Config() {
               密度对齐价格走势工具行：一条横排、小控件、长说明进 Tooltip */}
           <div style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md, padding: `${space.sm}px ${space.md}px`, background: color.canvas, border: `1px solid ${color.hairline}`, borderRadius: radius.control, boxShadow: shadow.l1 }}>
             <nav aria-label="配置分区" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {[
-                ['benchmark', '竞品对标'],
-                ['default-shop', '默认店铺'],
-                ['anomaly', '异常守卫'],
-                ['prev-gen', '上一代关系'],
-                ['fx', '汇率'],
-                ['promo', '大促日历'],
-              ].map(([id, label]) => <a key={id} href={`#${id}`} style={{ color: color.link, fontSize: 11, textDecoration: 'none', padding: '3px 7px', borderRadius: radius.pill }}>{label}</a>)}
+              {/* 当前分区选中态与 PageHeader 当前页标记同语法（墨色 + 2px 墨色下划线 +
+                  aria-current="page"；2026-11-10 UI 审计：六个分区同为蓝链接，
+                  分不清当前所在分区）。非当前项保持蓝链接；
+                  透明 2px 底边占位，选中切换不跳动 */}
+              {CONFIG_SECTIONS.map(([id, label]) => {
+                const active = activeSection === id;
+                return (
+                  <a
+                    key={id}
+                    href={`#${id}`}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => setActiveSection(id)}
+                    style={{
+                      color: active ? color.ink : color.link,
+                      fontWeight: active ? 600 : 400,
+                      fontSize: 11,
+                      textDecoration: 'none',
+                      padding: '3px 7px',
+                      borderBottom: `2px solid ${active ? color.ink : 'transparent'}`,
+                    }}
+                  >
+                    {label}
+                  </a>
+                );
+              })}
             </nav>
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
               <Input

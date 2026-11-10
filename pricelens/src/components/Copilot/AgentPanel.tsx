@@ -30,9 +30,10 @@ import { platformSelectionForCountry } from '../../dataModel/aggregate';
 import { usePage } from '../../state/PageContext';
 import { navBus } from '../../state/navBus';
 import type { AgentCardAction, AgentEvidence, AgentIntent, AgentResponse, AgentResultCard, AgentRun, AgentStep, AlertListResultCard, AlertResultCard, ChartResultCard, FilterResultCard, ForecastExplanationResultCard, PriceAdvantageResultCard, PriceAdvantageRow, TableResultCard, AgentSuggestionAction } from '../../agent';
-import { advantageScopePatch, classifyIntent, describeAgentEngine, recentRangePatch, resolveAgentEngine } from '../../agent';
+import { advantageScopePatch, classifyIntent, recentRangePatch } from '../../agent';
 import { AGENT_FOLLOWUP_ACTIONS, AGENT_STATUS_LABELS, agentSuggestionsForPage, platformShortcutLabel } from './agentCopy';
 import { color, fontSize, formatPrice, motion, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
+import { modelNameOf } from '../ProductCascader/tree';
 import { PANEL_EXIT_MS } from '../../theme/motion';
 import { APP_CHANNEL } from '../../appChannel';
 
@@ -55,7 +56,10 @@ function ContextChips() {
     return id;
   };
   const skuChip = state.mains.find((card) => card.main)?.main;
-  const skuLabel = skuChip ? `口径 · ${skuChip.modelId} · ${skuChip.romram} · ${skuChip.skuIds[0] ?? '默认 SKU'}` : '未选产品';
+  // 2026-11-10 UI 审计：口径 chip 此前裸显 modelId + 配置 + SKU slug，同一机器串
+  // 出现两遍（slug 内嵌 modelId）。改用现有显示名逻辑 modelNameOf（人类可读），
+  // SKU slug 只留一处保住可追溯性；机器 id 不再单独暴露。
+  const skuLabel = skuChip ? `口径 · ${modelNameOf(skuChip.modelId)} · ${skuChip.romram} · ${skuChip.skuIds[0] ?? '默认 SKU'}` : '未选产品';
   const chips = [`当前页 · ${context.pageLabel ?? context.page}`, `${state.countryCode} · ${INDUSTRY_LABELS[state.industry] ?? state.industry}`, productCount ? `${productCount} 个产品` : '未选产品', ...(skuChip ? [skuLabel] : []), `${formatBucket(state.rangeStart)}–${formatBucket(state.rangeEnd)}`, state.currency === 'usd' ? 'USD' : '本币', state.priceTypes.rrp ? '含 RRP' : '仅折后价'];
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: `${space.sm}px ${space.base}px`, borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}>{chips.map((chip, index) => <span key={chip} style={{ fontSize: 12, color: index === 0 ? selectSoftInk : color.body, border: `1px solid ${index === 0 ? selectSoftInk : color.hairline}`, borderRadius: radius.pill, padding: '3px 8px', background: index === 0 ? selectSoft : color.canvas }}>{chip}</span>)}{contextStale && <span role="status" style={{ fontSize: 12, color: color.warningInk, border: `1px solid ${color.warning}`, borderRadius: radius.pill, padding: '3px 8px', background: color.warningSoft }}>上下文已更新 · 旧结果需重新确认</span>}</div>;
 }
@@ -606,8 +610,6 @@ export default function AgentPanel() {
     if (distanceToBottom < 96) node.scrollTop = node.scrollHeight;
   }, [messages, running]);
   if (!open && !mounted) return null;
-  // 引擎来源标注：每次打开面板重读 localStorage 自配，与 defaultAgentClient 同一解析口径。
-  const engine = describeAgentEngine(resolveAgentEngine());
   const full = mode === 'full';
   const drawer = mode === 'drawer';
   const nextMode = full ? 'dock' : drawer ? 'full' : 'drawer';
@@ -648,7 +650,10 @@ export default function AgentPanel() {
       {running && <div role="status" aria-live="polite" aria-atomic="true" style={{ color: color.mute, fontSize: 12, display: 'grid', gap: 6 }}><div className="lpl-agent-generating-skeleton" aria-hidden="true"><span /><span /><span /></div><span><span aria-hidden="true">·</span> {AGENT_STATUS_LABELS[runStatus] ?? '生成结果中…'}</span>{partialText && <div data-streaming-text style={{ color: color.ink, whiteSpace: 'pre-wrap' }}>{partialText}</div>}{partialCards.map((card) => <ResultCard key={`partial-${card.id}`} card={card} />)}</div>}
     </div>
     {showPresetSuggestions && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 10px', background: color.canvasSoft }}>{suggestions.map((suggestion) => <button type="button" key={suggestion.label} onClick={() => { void send(suggestion.prompt ?? suggestion.label, undefined, undefined, suggestionSendIntent(suggestion)); }} style={{ fontSize: 12, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '5px 8px', cursor: 'pointer' }}>{suggestion.label}</button>)}</div>}
-    <div style={{ flexShrink: 0, padding: '10px 12px 12px', borderTop: `1px solid ${color.hairline}`, background: color.canvas }}><div style={{ display: 'flex', alignItems: 'end', gap: 7 }}><Input.TextArea ref={inputRef} aria-label="向 PriceLens Agent 提问" autoSize={{ minRows: 1, maxRows: 5 }} value={draft} placeholder="问价格、平台或预警…" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} /> <Tooltip title={voiceAvailable ? '语音输入' : '浏览器不支持语音输入'}><button type="button" aria-label="语音输入" disabled={!voiceAvailable || voiceListening || running} onClick={() => void startVoice()} style={{ ...iconButtonStyle, width: 32, height: 32, color: voiceListening ? color.link : color.body, opacity: voiceAvailable ? 1 : 0.45 }}>{voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}</button></Tooltip>{running ? <Button aria-label="停止运行" icon={<StopOutlined />} onClick={stop} /> : <Button type="primary" aria-label="发送" icon={<SendOutlined />} onClick={() => void send()} disabled={!draft.trim()} />}</div><div style={{ marginTop: 5, fontSize: 12, color: color.mute }}>Enter 发送 · Shift+Enter 换行 · {platformShortcutLabel()} 快捷入口{!voiceAvailable && ' · 当前浏览器不支持语音输入，请直接文字提问'}</div><div role="note" aria-label="Agent 引擎来源" title={engine.hint} style={{ marginTop: 2, fontSize: 12, color: color.mute }}>{engine.label}</div></div>
+    <div style={{ flexShrink: 0, padding: '10px 12px 12px', borderTop: `1px solid ${color.hairline}`, background: color.canvas }}><div style={{ display: 'flex', alignItems: 'end', gap: 7 }}><Input.TextArea ref={inputRef} aria-label="向 PriceLens Agent 提问" autoSize={{ minRows: 1, maxRows: 5 }} value={draft} placeholder="问价格、平台或预警…" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} /> <Tooltip title={voiceAvailable ? '语音输入' : '浏览器不支持语音输入'}><button type="button" aria-label="语音输入" disabled={!voiceAvailable || voiceListening || running} onClick={() => void startVoice()} style={{ ...iconButtonStyle, width: 32, height: 32, color: voiceListening ? color.link : color.body, opacity: voiceAvailable ? 1 : 0.45 }}>{voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}</button></Tooltip>{running ? <Button aria-label="停止运行" icon={<StopOutlined />} onClick={stop} /> : <Button type="primary" aria-label="发送" icon={<SendOutlined />} onClick={() => void send()} disabled={!draft.trim()} />}</div>{/* 2026-11-10 UI 审计：输入区下方原第二行「引擎来源」小字（网关/模型/兜底）
+          是实现名词，不对业务用户展示——渲染端撤下；引擎来源契约仍在
+          agent/remoteConfig.ts（resolveAgentEngine / describeAgentEngine），
+          逐条回答的「事实来源」标注不受影响。键盘提示行保留 */}<div style={{ marginTop: 5, fontSize: 12, color: color.mute }}>Enter 发送 · Shift+Enter 换行 · {platformShortcutLabel()} 快捷入口{!voiceAvailable && ' · 当前浏览器不支持语音输入，请直接文字提问'}</div></div>
   </aside>;
 }
 

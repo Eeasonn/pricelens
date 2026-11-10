@@ -557,15 +557,14 @@ button.lpl-map-card:hover {
 .lpl-fade-out-o { animation: lplFadeOutPure 140ms ease forwards; }
 
 /* ============================================================
-   第一百九十轮（外部 UX 审计落地）：窄屏（<640px）信息层级——预警概览条
-   两栏改一栏、事件行允许换行（产品名不再过度截断）；配置页竞品对标行
-   纵向重排（配置独占一行、竞品区换行、编辑入口右侧独立占位）。
+   第一百九十轮（外部 UX 审计落地）：窄屏（<640px）信息层级——事件行允许
+   换行（产品名不再过度截断）；配置页竞品对标行纵向重排（配置独占一行、
+   竞品区换行、编辑入口右侧独立占位）。（2026-11-10 审计修复轮：预警概览
+   改单排状态带，.lpl-alert-ov 两栏规则随之退役）
    ============================================================ */
-.lpl-alert-ov { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .lpl-bm-row { flex-wrap: wrap; row-gap: 6px; }
 .lpl-bm-cfg { width: 150px; flex-shrink: 0; }
 @media (max-width: 639.98px) {
-  .lpl-alert-ov { grid-template-columns: 1fr; }
   .lpl-alert-toolbar { align-items: stretch !important; }
   .lpl-alert-toolbar > h3 { flex: 0 0 100%; }
   .lpl-alert-toolbar .lpl-alert-add-monitor { width: 100% !important; min-width: 0 !important; }

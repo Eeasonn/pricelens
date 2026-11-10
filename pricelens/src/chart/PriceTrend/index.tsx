@@ -1557,9 +1557,10 @@ export default function PriceTrend(props: {
     else setPanelHoverIdxs((prev) => (prev[key] === v ? prev : { ...prev, [key]: v }));
   };
 
-  /** 「时间轴同步」开关（第148轮改名两行「时间轴/同步」；与各面板时间轴同一
-      水平线）：开 = 各面板查看同一段时间，拖任一面板的时间轴全部联动；
-      关 = 各面板时间范围独立调整（用于对齐不同上市节奏产品的可比区间） */
+  /** 「时间轴同步」开关（2026-11-10 审计：两行竖排改单行，与量价页统一，
+      胶囊宽随文字不换行；与各面板时间轴同一水平线）：开 = 各面板查看同一段
+      时间，拖任一面板的时间轴全部联动；关 = 各面板时间范围独立调整（用于
+      对齐不同上市节奏产品的可比区间） */
   const syncToggle = (
     <button
       type="button"
@@ -1573,11 +1574,10 @@ export default function PriceTrend(props: {
         background: synced ? selectSoft : color.canvas,
         color: synced ? selectSoftInk : color.body,
         font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-        lineHeight: '13px',
+        whiteSpace: 'nowrap',
       }}
     >
-      <span style={{ display: 'block' }}>时间轴</span>
-      <span style={{ display: 'block' }}>同步</span>
+      时间轴同步
     </button>
   );
 

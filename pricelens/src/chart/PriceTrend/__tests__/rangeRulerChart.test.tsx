@@ -192,12 +192,13 @@ describe('图层标注（paneLabels）', () => {
     expect(volume?.textContent).toContain('模拟');
   });
 
-  it('成本数据传入：价格标注变「价格 / 成本」，出成本药丸', async () => {
+  it('成本数据传入：价格标注变「价格 / 成本」；浮动成本胶囊已去重删除（2026-11-10 审计）', async () => {
     const costs = [400, 400, 400, 400, 400];
     const { container } = render(<Chart {...baseProps} costs={costs} volumeColor="#c7000b" /> as ReactElement);
     await waitForGeom(container);
     expect(document.querySelector('[data-testid="pane-label-price"]')?.textContent).toContain('成本');
-    expect(document.querySelector('[data-testid="cost-pill"]')?.textContent).toContain('成本');
+    // 浮动「成本·模拟」胶囊（cost-pill）删除：成本层归属 = 顶部图例行 + 价格节头 + 细线本体
+    expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
   });
 
   it('未传 nameZoneWidth：不出图层标注（无名称带可挂）', async () => {
@@ -274,6 +275,17 @@ describe('悬停卡成本脚行', () => {
     fireEvent.mouseMove(wrap, { clientX: 300, clientY: 200 });
     await Promise.resolve();
     expect(document.querySelector('[data-testid="tip-cost-row"]')?.textContent).toContain('当月成本');
+  });
+
+  it('成本细线去平滑（2026-11-10 审计修）：path 只含 M/L 直线段，不画「下滑回升」曲线叙事', async () => {
+    const costs = [400, 500, 480, 520, 460];
+    const { container } = render(<Chart {...baseProps} costs={costs} volumeColor="#c7000b" /> as ReactElement);
+    await waitForGeom(container);
+    const path = document.querySelector('[data-testid="cost-line"] path');
+    expect(path).toBeTruthy();
+    const d = path?.getAttribute('d') ?? '';
+    expect(d).not.toContain('C'); // 无贝塞尔段（此前复用面积平滑曲线）
+    expect(d).toContain('L'); // 逐桶直线连接
   });
 });
 

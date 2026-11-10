@@ -9,6 +9,10 @@
 // 第一百九十轮（外部 UX 审计落地）：竞品行挂 .lpl-bm-row、配置名列挂 .lpl-bm-cfg
 // （窄屏自动换行重排，修复 390px 下竞品 chips 被裁切、「编辑」覆盖内容）；
 // 「编辑」补 aria-label（图标按钮无可见文字，读屏需要上下文名称）。
+// 2026-11-10 UI 审计落地：行尾「矩阵」徽章 tooltip 与禁用「编辑」title 统一为
+// MATRIX_READONLY_HINT（此前徽章孤词无解释、两处口径不一致）；禁用标签色
+// 加深到 color.mute 并钉死 not-allowed 光标；分组标题条底色退役无出处的
+// #f3f8ff，改取 color.canvasSoft2（中性分组内衬）。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Empty, Popover, Segmented, Tooltip } from 'antd';
@@ -21,14 +25,19 @@ import type { DimBenchmark, Industry } from '../../dataModel/types';
 import { BENCHMARK_CAP_PER_CONFIG, getEffectiveBenchmark, manualBenchmarkCount, saveBenchmark } from '../../state/configStore';
 import { useFilters } from '../../state/FiltersContext';
 import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
-import { color, fontSize, radius, space } from '../../theme/tokens';
+import { color, fontSize, radius, space, selectSoft, selectSoftInk } from '../../theme/tokens';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 import { configTextOf } from '../../components/ProductCascader/tree';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
-/** matrix-only：维表只发 source=matrix 行，本页所有对标统一挂矩阵标签 */
-const MATRIX_TAG = { text: '矩阵', fg: '#0053c2', bg: '#e8f1ff', hint: '产品竞品矩阵直接配置' };
+/** 矩阵只读口径的唯一说明句：行尾「矩阵」徽章 tooltip 与禁用「编辑」按钮 title
+ *  同源引用（2026-11-10 UI 审计：徽章孤词无解释、两处口径不一致） */
+export const MATRIX_READONLY_HINT = '竞品关系由对标矩阵统一下发，此处只读';
+
+/** matrix-only：维表只发 source=matrix 行，本页所有对标统一挂矩阵标签；
+ *  色/底取文档化 token（selectSoftInk/selectSoft 同值），不再存硬编码副本 */
+const MATRIX_TAG = { text: '矩阵', fg: selectSoftInk, bg: selectSoft, hint: MATRIX_READONLY_HINT };
 
 /** 竞品显示名 = 型号 · 配置（仍在配置层级的产业）；收进「版本」次级菜单的
  *  变体（表盘/联网方式/颜色）不在本表体现（2026-11-10 Eason）。 */
@@ -139,7 +148,10 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
         <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
           {ownModels.map((m) => (
             <div key={m.modelId} style={{ border: `1px solid ${color.hairline}`, borderRadius: radius.control, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#f3f8ff' }}>
+              {/* 分组标题条是静态分组内衬，无选中/链接语义 → 取中性内衬 token
+                  canvasSoft2（2026-11-10 UI 审计：原 #f3f8ff 无出处；蓝在此块只保留给
+                  矩阵徽章的 selectSoft 语义），与默认店铺表头同一语法 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: color.canvasSoft2 }}>
                 <BrandDot brand={m.brand} />
                 <span style={{ fontSize: 13, fontWeight: 650, color: color.ink }}>{m.modelName}</span>
                 <span style={{ fontSize: fontSize.caption, color: color.mute }}>{tierLabelShort(TIER_LABELS[m.tierCode] ?? m.tierCode)}</span>
@@ -174,7 +186,7 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                                 border: `1px solid ${color.hairlineStrong}`, borderRadius: radius.pill, whiteSpace: 'nowrap',
                               }}
                             >
-                              {b.sort === 1 && <span style={{ color: color.link, background: '#e8f1ff', borderRadius: 8, padding: '0 6px', fontSize: 11 }}>主竞品</span>}
+                              {b.sort === 1 && <span style={{ color: color.link, background: selectSoft, borderRadius: 8, padding: '0 6px', fontSize: 11 }}>主竞品</span>}
                               <BrandDot brand={p?.brand ?? ''} />
                               {p ? competitorLabel(p) : b.competitor_sku_id}
                               <span style={{ fontSize: 10, fontWeight: 600, color: MATRIX_TAG.fg, background: MATRIX_TAG.bg, borderRadius: radius.pill, padding: '0 5px', lineHeight: '14px' }}>
@@ -187,13 +199,16 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                     </span>
                     {/* 图标按钮无可见文字：读屏念「编辑」需带型号 + 配置上下文（第一百九十轮）。
                         matrix-only 临时口径：编辑入口保留但不生效（人工层停用）；
-                        2026-11-06 RBAC：查阅者本就禁编辑 */}
+                        2026-11-06 RBAC：查阅者本就禁编辑。
+                        2026-11-10 UI 审计：disabled 标签色取 color.mute（默认禁用灰过虚不可读），
+                        与 antd 默认 not-allowed 光标一并内联钉死 */}
                     <Button
                       size="small"
                       icon={<EditOutlined />}
                       disabled
-                      title={canEdit ? '当前按矩阵直配，人工配置暂不生效' : '查阅者不可修改配置，请联系 GTM'}
+                      title={canEdit ? MATRIX_READONLY_HINT : '查阅者不可修改配置，请联系 GTM'}
                       aria-label={`编辑 ${[m.modelName, configTextOf(r.romram)].filter(Boolean).join(' ')} 的竞品对标`}
+                      style={{ color: color.mute, cursor: 'not-allowed' }}
                     >
                       编辑
                     </Button>

@@ -355,6 +355,47 @@ export function buildLabelPlan(p: {
       if (change.has(i)) pushPrice(i, false, mk ? endpointLabelDistance(mk) : LABEL_DISTANCE);
     });
   }
+  // 2026-11-10 审计修（精简标签末端防碰撞）：compact 标签不进避让推挤（三标签几何
+  // 天然分离的假设只对单系列成立），相邻系列的终点价相近时右缘标签字面相触（实拍
+  // 「1 115」与「1 042」）。轻量防碰：两标签横向重叠且期望位纵向间距 < 一行高时，
+  // 上标上移半行、下标下移半行（dy ∓ 半行，ECharts offset 同轴）；无碰撞 dy 恒 0，
+  // 常规布局分毫不变。三枚以上连撞时按 y 序逐对让位（确定性序：上标先处理）
+  if (compact) {
+    const half = LABEL_LINE_HEIGHT / 2;
+    const dist = 6; // 与 buildOption compact 标签 distance 同值
+    type CompactBox = { key: string; i: number; left: number; right: number; top: number };
+    const boxes: CompactBox[] = [];
+    for (const s of series) {
+      const posMap = compactPos[s.key];
+      if (!posMap) continue;
+      for (const [idxStr, pos] of Object.entries(posMap)) {
+        const i = Number(idxStr);
+        const v = primaryPriceOf(s.points[i], priceTypes);
+        if (v == null) continue;
+        const cx = xPxOf(geom, i);
+        const w = priceW(fmtInt(v));
+        const y = yPxOf(geom, v);
+        boxes.push({
+          key: s.key,
+          i,
+          left: cx - w / 2,
+          right: cx + w / 2,
+          top: pos === 'bottom' ? y + dist : y - dist - LABEL_LINE_HEIGHT,
+        });
+      }
+    }
+    boxes.sort((a, b) => a.top - b.top || a.left - b.left); // 自上而下（确定序）
+    for (let a = 0; a < boxes.length; a++) {
+      for (let b = a + 1; b < boxes.length; b++) {
+        const A = boxes[a];
+        const B = boxes[b];
+        const xOverlap = A.left < B.right && B.left < A.right;
+        if (!xOverlap || Math.abs(A.top - B.top) >= LABEL_LINE_HEIGHT) continue;
+        (compactDy[A.key] ??= {})[A.i] = (compactDy[A.key][A.i] ?? 0) - half;
+        (compactDy[B.key] ??= {})[B.i] = (compactDy[B.key][B.i] ?? 0) + half;
+      }
+    }
+  }
   // 系列名称小药丸（第八十二轮再版）：品牌点+型号名，统一灰字；点击 = 切换折线
   // 显隐（取代上方页签）。第九十轮：来源链接行删除（跳转入口收编）。
   // 第一百一十五轮：名称带（forceNameZone 等距分布）随「名称上移顶部品牌图例带」
@@ -762,7 +803,10 @@ export function volumeBarHeightOf(v: number, vMax: number, bandH: number): numbe
 
 /** 量带三点标注行高（10px 纯数字，无框） */
 export const VOL_MARK_H = 14;
-export type VolumeMarkKind = 'max' | 'min' | 'latest';
+export type VolumeMarkKind = 'max' | 'min' | 'latest' | 'plain';
+/** 2026-11-10 审计修（标注规则统一）：有效柱数 ≤ 此值 = 全部柱标注——实拍 5 柱只标
+ *  3 根（最高/最低/最新）像渲染遗漏；> 此值沿用三点规则（极值 + 最新，窄窗口不堆数字） */
+export const VOL_ALL_MARK_MAX = 8;
 export interface VolumeMark {
   idx: number;
   kind: VolumeMarkKind;
@@ -773,9 +817,11 @@ export interface VolumeMark {
   h: number;
 }
 
-/** 量带最高/最低/最新常驻标注：最高点标上方、最低点标下方、最新点看来向（较前一有值桶
- *  回落标下、否则标上，与价格精简标签 posOf 同规则）；同一桶身兼多职只出一枚（最高 >
- *  最低 > 最新）。null = 无数据不参与；0 是真实值（退市后估算为 0）参与最低/最新。
+/** 量带常驻数值标注（2026-11-10 审计修：规则统一）：有效柱数 ≤ VOL_ALL_MARK_MAX（8）
+ *  时全部柱标注（普通柱贴自己柱顶上方），> 8 沿用三点规则——最高点标上方、最低点标
+ *  下方、最新点看来向（较前一有值桶回落标下、否则标上，与价格精简标签 posOf 同规则）；
+ *  同一桶身兼多职只出一枚（最高 > 最低 > 最新）。null = 无数据不参与；0 是真实值
+ *  （退市后估算为 0）参与最低/最新。文案走 fmtInt（图上裸数惯例，空格千分位）。
  *  横向钳入绘图区（最新点常在最右桶，不钳会压到右轴刻度）；带内独立走 resolveCollisions，
  *  与价格标签互不影响。 */
 export function buildVolumeMarks(p: {
@@ -802,17 +848,20 @@ export function buildVolumeMarks(p: {
   }
   const lastI = idxs[idxs.length - 1];
   const prevOfLast = idxs.length >= 2 ? val(idxs[idxs.length - 2]) : null;
-  const kindOf = (i: number): VolumeMarkKind => (i === maxI ? 'max' : i === minI ? 'min' : 'latest');
+  // 标注集：少柱全标、多柱三点（确定性规则，两分支都不看窗宽——同一规则恒定执行）
+  const labeled = idxs.length <= VOL_ALL_MARK_MAX ? idxs : [...new Set([maxI, minI, lastI])];
+  const kindOf = (i: number): VolumeMarkKind => (i === maxI ? 'max' : i === minI ? 'min' : i === lastI ? 'latest' : 'plain');
   const below = (i: number): boolean => {
     const kind = kindOf(i);
     if (kind === 'max') return false;
     if (kind === 'min') return true;
+    if (kind === 'plain') return false; // 全标模式的普通柱：贴柱顶上方（柱向上生长，上方必空）
     return prevOfLast != null && val(i) < prevOfLast;
   };
   const colW = p.plotWidth / p.n;
   const bandBottom = p.bandTop + p.bandH;
-  const items: AvoidItem[] = [...new Set([maxI, minI, lastI])].map((i) => {
-    const text = Math.round(val(i)).toLocaleString('en-US');
+  const items: AvoidItem[] = labeled.map((i) => {
+    const text = fmtInt(Math.round(val(i)));
     const w = Math.round(text.length * 6.2) + 2; // 10px 等宽数字（无框，只留描边余量）
     const left = Math.max(p.plotLeft, Math.min(p.plotLeft + colW * (i + 0.5) - w / 2, p.plotLeft + p.plotWidth - w));
     const pointY = bandBottom - volumeBarHeightOf(val(i), p.vMax, p.bandH);

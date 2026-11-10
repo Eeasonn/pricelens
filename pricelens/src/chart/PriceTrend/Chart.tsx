@@ -1090,8 +1090,11 @@ export default function Chart(props: ChartProps) {
     [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes, nameZoneWProp],
   );
 
-  // ---- 成本细线几何（2026-11-10 Eason：成本从面积改细线）：缺成本的桶断开成段，不插值。
-  // 复用面积上缘的同一条 Fritsch–Carlson 平滑曲线（open path，不落底、不闭合）。
+  // ---- 成本细线几何（2026-11-10 Eason：成本从面积改细线；同日审计修：去平滑）：
+  // 缺成本的桶断开成段，不插值。2026-11-10 审计修：不再复用面积上缘的 Fritsch–Carlson
+  // 平滑曲线——月度模拟成本被平滑会画出「下滑回升」的曲线叙事，也与价格阶梯线混淆；
+  // 改逐点直线段（每段 L 连接，open path 不闭合），断周分段 run 与样式（0.45 透明、
+  // 1.25px）全不变，渲染处 path 只换 d 值来源。
   const costColor = props.volumeColor ?? series[0]?.color ?? color.mute;
   const costLine = useMemo(() => {
     if (!props.costs || !geom) return null;
@@ -1100,7 +1103,7 @@ export default function Chart(props: ChartProps) {
     let run: Array<{ x: number; y: number }> = [];
     const flush = (): void => {
       if (run.length >= 2) {
-        d += `M ${run[0].x.toFixed(1)} ${run[0].y.toFixed(1)} ${smoothAreaSegments(run)} `;
+        d += `M ${run[0].x.toFixed(1)} ${run[0].y.toFixed(1)} ${run.slice(1).map((p) => `L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')} `;
       }
       run = [];
     };
@@ -1461,6 +1464,11 @@ export default function Chart(props: ChartProps) {
   const mainTipShown =
     !tipBoxOn && geom != null && tipIdx != null && tipIdx < geom.n
     && series.some((s) => primaryPriceOf(s.points[tipIdx], priceTypes) != null);
+  // 2026-11-10 审计修（浮层三层叠压）：销毛迷你卡开（margins 传入）且主卡在场时，
+  // 「↔ 拖动选择时间段」提示退场——横向虚线（纯光标参考线，恒最低层）+ 迷你卡 + 主卡
+  // 已是完整读数态，再叠提示就是三层浮层、间距只剩 ~13px。未悬停/悬停无价列时提示
+  // 照常出现（拖选可发现性不丢）；tipBox 预留框模式主卡不入画，提示不受影响
+  const marginTipLive = props.margins != null && mainTipShown;
   // 量值小卡（2026-11-05 Eason 看真机）：单行「销量 N 台」，容器与销毛卡同款；垂直贴量带顶，水平随卡组
   const renderVolCard = (group: TipGroupPlacement): ReactNode => {
     if (volHoverIdx == null || !geom) return null;
@@ -1745,7 +1753,8 @@ export default function Chart(props: ChartProps) {
               {(rangeActive ? [] : volMarks).map((m) => (
                 <span
                   key={`vm-${m.idx}`}
-                  data-testid={`volume-mark-${m.kind}`}
+                  // 2026-11-10 审计修：≤8 柱全标后普通柱不是三点极值，testid 带桶下标防重复
+                  data-testid={m.kind === 'plain' ? `volume-mark-idx-${m.idx}` : `volume-mark-${m.kind}`}
                   style={{
                     position: 'absolute',
                     left: m.x,
@@ -2452,12 +2461,15 @@ export default function Chart(props: ChartProps) {
             //（gap 6），不再用固定 324 留白。第一百八十四轮：列宽换算成 px 供表头
             // 与数据行共用（ch 随字号变化，10px 表头与 13/14px 数值同 ch 数不同宽 =
             // 此前表头与列错位的根因），表头与数值一律列内居中
-            const priceCh = Math.max(...rows.map((r) => fmt_mm(r.v).length));
+            // 2026-11-10 审计修：RRP/折后价是钱数读数，改用 formatPrice（与图下明细表
+            // 同口径：USD = $2,244）；列宽 ch 估算随同一格式，防止 $ 前缀溢出定宽列。
+            // 图上点标/量尺的 fmtInt 裸数惯例不变（helpers.fmtInt 注释明示的图表惯例）
+            const priceCh = Math.max(...rows.map((r) => formatPrice(Math.round(r.v), currency).length));
             const rrpCh = Math.max(
               2,
               ...rows.map((r) => {
                 const rr = r.s.points[tipIdx].rrp;
-                return rr != null ? fmt_mm(rr).length : 0;
+                return rr != null ? formatPrice(Math.round(rr), currency).length : 0;
               }),
             );
             const priceW = Math.round(priceCh * 8.4) + 8; // 数值 14px tabular：数字 ≈0.6em
@@ -2496,9 +2508,21 @@ export default function Chart(props: ChartProps) {
             };
             const diffTexts = rows.map(({ s }) => diffCellOf(s)?.text ?? '');
             const diffW = rateColWidth('价差', diffTexts);
+            // 2026-11-10 审计修：基准（我司）当周无价 → 它不在 rows（主列过滤有价行）、
+            // 价差列全「—」，用户无从得知原因。置位后卡内出 12px mute 说明行；有数据不出
+            const baseAbsent = showDiffCol && diffBase != null && primaryPriceOf(diffBase.points[tipIdx], priceTypes) == null;
             const body = (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
+                  {/* 2026-11-10 审计修：周粒度卡头补双标识「2026W35 · 08-26」——周 ID 是
+                      技术标记，走等宽 mute（DESIGN.md typography 约定，与明细表列头
+                      「周号+日期」双行同语言）；月/季卡头已自带期间身份，不加 */}
+                  {granularity === 'week' && (
+                    <span style={{ fontFamily: font.mono, fontWeight: 400, color: color.mute, marginRight: 6, whiteSpace: 'nowrap' }}>
+                      {rangeBucketLabel('week', series[0]?.points[tipIdx]?.bucketId ?? '')}
+                      {' ·'}
+                    </span>
+                  )}
                   {fmt_hoverDate(granularity, series[0]?.points[tipIdx]?.xLabel ?? '')}
                 </div>
                 {/* 列标题行（第一百八十轮立完整表头；第一百八十四轮，Eason：列序改
@@ -2574,12 +2598,12 @@ export default function Chart(props: ChartProps) {
                           className="tnum"
                           style={{ width: rrpW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
                         >
-                          {pt?.rrp != null ? fmt_mm(pt.rrp) : '0'}
+                          {pt?.rrp != null ? formatPrice(Math.round(pt.rrp), currency) : '0'}
                         </span>
                         {/* 竖线满行高（188 轮）：相邻行首尾相续、上接表头线 = 一条贯穿 */}
                         <span aria-hidden style={{ width: 1, height: 20, background: color.hairlineStrong, flexShrink: 0 }} />
                         <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>
-                          {fmt_mm(v)}
+                          {formatPrice(Math.round(v), currency)}
                         </span>
                         <span aria-hidden style={{ width: 1, height: 20, background: color.hairlineStrong, flexShrink: 0 }} />
                         <span style={{ width: rateW, flexShrink: 0, display: 'inline-flex', justifyContent: 'center', overflow: 'hidden' }}>
@@ -2689,6 +2713,23 @@ export default function Chart(props: ChartProps) {
                     </Fragment>
                   );
                 })}
+                {/* 基准缺席说明（2026-11-10 审计修）：我司基准当周无数据时价差不可比，
+                    文字明说而不是留一列空破折号；脚行语言与销量/成本行一致 */}
+                {baseAbsent && (
+                  <div
+                    data-testid="tip-base-absent"
+                    style={{
+                      marginTop: 2,
+                      paddingTop: 3,
+                      borderTop: `1px solid ${color.hairline}`,
+                      fontSize: 12,
+                      lineHeight: '16px',
+                      color: color.mute,
+                    }}
+                  >
+                    基准（我司）当周无数据，价差不可比
+                  </div>
+                )}
                 {/* 第一百一十三轮：销量行（量价看板传入 volumes 时）——价格行同语言：
                     顶部 1px hairline 分隔、行高 18px，小灰字 label + tnum 数值右对齐；
                     该列值 null（缺采/未传）整行不渲染 */}
@@ -2732,8 +2773,9 @@ export default function Chart(props: ChartProps) {
                   >
                     <span style={{ flexShrink: 0 }}>当月成本</span>
                     <span style={SIM_BADGE}>模拟</span>
+                    {/* 2026-11-10 审计修：成本同为钱数读数，与 RRP/折后价同走 formatPrice */}
                     <span className="tnum" style={{ marginLeft: 'auto', flexShrink: 0, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-                      {fmtInt(costVal)}
+                      {formatPrice(Math.round(costVal), currency)}
                     </span>
                   </div>
                 )}
@@ -2785,7 +2827,7 @@ export default function Chart(props: ChartProps) {
               rulerModel && rulerModel.side !== 'left' ? 'left' : undefined,
             );
             const left = group.mainLeft;
-            const tipContentH = rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0) + (costVal != null ? 23 : 0);
+            const tipContentH = rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0) + (costVal != null ? 23 : 0) + (baseAbsent ? 21 : 0);
             const topRaw = Math.min(Math.max(geom.plotTop + 8, 40), geom.plotTop + geom.plotHeight - 36 - tipContentH);
             // 第196轮整改4：销毛迷你卡在浮层上方 8px——浮层整体下移腾出卡位
             // （仍钳在绘图区内；绘图区过矮放不下时回落贴顶，接受与浮层轻叠）
@@ -2926,7 +2968,10 @@ export default function Chart(props: ChartProps) {
             )}
           {/* 横向虚线（第一百一十四轮，评审）：跟随鼠标纵向位置实时变化——本图悬停
               （hoverY，逐像素）优先，缺省回落外部联动 crosshairY（多面板共享 Y 轴，
-              任一面板悬停 → 全部面板同高度画线，横向虚线横跨所有图） */}
+              任一面板悬停 → 全部面板同高度画线，横向虚线横跨所有图）。
+              2026-11-10 审计确认：这是纯光标参考线（不带数值、不挂图例），恒画在
+              zIndex 1 最底层、被悬停卡组盖住——与销毛迷你卡/主卡无归属关系，读数
+              归属由卡组承担；迷你卡在悬停时另隐「拖动选择时间段」提示避免三层叠压 */}
           {(hoverY ?? props.crosshairY ?? null) != null &&
             (hoverY ?? props.crosshairY)! >= geom.plotTop &&
             (hoverY ?? props.crosshairY)! <= geom.plotTop + geom.plotHeight && (
@@ -2950,7 +2995,7 @@ export default function Chart(props: ChartProps) {
           {rulerOn && geom && (() => {
             // 区间量尺（2026-11-06）：没有选区时悬停给拖选提示；有选区画量尺图层
             if (!rangeActive || !rulerModel) {
-              if (brushDragRef.current || hoverIdx == null || props.showBrushHint === false) return null;
+              if (brushDragRef.current || hoverIdx == null || props.showBrushHint === false || marginTipLive) return null;
               return (
                 <div
                   style={{
@@ -3019,7 +3064,7 @@ export default function Chart(props: ChartProps) {
               : (props.brush ?? null);
             const dateOf = (i: number): string => fmt_hoverDate(granularity, series[0]?.points[i]?.xLabel ?? '');
             if (!range || range[1] < range[0]) {
-              if (drag || hoverIdx == null || props.showBrushHint === false) return null;
+              if (drag || hoverIdx == null || props.showBrushHint === false || marginTipLive) return null;
               return (
                 <div
                   style={{
@@ -3384,8 +3429,11 @@ export default function Chart(props: ChartProps) {
               </>
             );
           })()}
-          {/* 图层标注（2026-11-06）：名称带列顶部写清每层是什么、单位是什么；
-              成本细线开着时名称带有一颗药丸，纵向贴成本起点、避开产品名称药丸 */}
+          {/* 图层标注（2026-11-06）：名称带列顶部写清每层是什么、单位是什么。
+              2026-11-10 审计修（量价页图例去重）：浮动「成本·模拟」胶囊删除——
+              成本层已由顶部图例行（成本·模拟）、图内成本细线与价格节头「价格 / 成本」
+              承载，胶囊是第二处浮动标注（同名元素一次呈现原则）；价格系列名称药丸
+              是系列锚点，保留不动 */}
           {props.paneLabels && geom && props.nameZoneWidth != null && (() => {
             const left = Math.max(2, geom.plotLeft - props.nameZoneWidth + 4);
             const plotBottom = geom.plotTop + geom.plotHeight;
@@ -3406,26 +3454,6 @@ export default function Chart(props: ChartProps) {
                 {simulated && <span style={SIM_BADGE}>模拟</span>}
               </span>
             );
-            let costPill: JSX.Element | null = null;
-            const firstCost = props.costs?.findIndex((v) => v != null && Number.isFinite(v)) ?? -1;
-            if (props.costs && firstCost >= 0 && firstCost < geom.n) {
-              const clampTop = (t: number): number => Math.min(plotBottom - 26, Math.max(geom.plotTop + 4, t));
-              let top = clampTop(yPxOf(geom, props.costs[firstCost] as number) - 12);
-              for (const nm of labelPlan.names) {
-                if (Math.abs(top - nm.y) < 26) top = clampTop(nm.y + 28);
-              }
-              costPill = (
-                <span
-                  key="cost-pill"
-                  data-testid="cost-pill"
-                  style={{ ...NAME_PILL_BOX, position: 'absolute', left, top, border: `1px solid ${color.hairline}`, pointerEvents: 'none', zIndex: 8 }}
-                >
-                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: 2, background: hexToRgba(costColor, 0.24), flexShrink: 0 }} />
-                  <span style={NAME_PILL_TEXT}>成本</span>
-                  <span style={SIM_BADGE}>模拟</span>
-                </span>
-              );
-            }
             // 二轮重排（Eason「位置有点奇怪」）：节头不再浮在层边缘——
             // 价格节头贴最高那颗名称药丸上方（成为药丸组的组头）；
             // 销量节头贴销量带顶，销量归属药丸移到节头同一行右侧（成组，不再悬空带中）。
@@ -3440,7 +3468,6 @@ export default function Chart(props: ChartProps) {
               <>
                 {pane('price', priceHeaderY, props.costs ? '价格 / 成本' : '价格', currencyCodeOf(currency), false)}
                 {volOn && props.volumeInline !== true && pane('volume', volHeaderY, '销量', '台', true)}
-                {costPill}
               </>
             );
           })()}

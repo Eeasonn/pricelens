@@ -91,7 +91,8 @@ export default function MainControlBand(props: {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 5,
-              maxWidth: 180,
+              // 2026-11-10 审计：180 会把常见全名截成「Mate…」而周围大量留白，放宽两档
+              maxWidth: 280,
               padding: '3px 9px 3px 8px',
               border: `1px ${item.hidden ? 'dashed' : 'solid'} ${item.hidden ? color.hairlineStrong : color.hairline}`,
               borderRadius: radius.pill,
@@ -163,7 +164,8 @@ export function GroupCompareEntry(props: {
         background: 'transparent',
         font: 'inherit',
         fontSize: 12,
-        color: color.body,
+        // 2026-11-10 审计：mute/body 灰弱似说明文字，导航入口回归 link 语义色
+        color: color.link,
         cursor: 'pointer',
         whiteSpace: 'nowrap',
         padding: '4px 2px',

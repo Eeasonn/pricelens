@@ -945,11 +945,13 @@ export default function VolumePrice() {
     setWindowIds([buckets[s].id, buckets[e].id]);
   };
 
-  /** 「时间轴同步」开关（第119轮走查会；第148轮改名「时间轴同步」两行竖排；
+  /** 「时间轴同步」开关（第119轮走查会；第148轮改名「时间轴同步」；
    *  2026-11-03 起主产品视图同款可见，语义两视图通用；量价页与价格走势页一样
    *  放在底部时间轴轨道左侧，合并单图态不渲染——合并图自带完整 X 轴）：
    *  同步 = 各图查看同一段时间，拖任一图的时间轴全部联动；非同步 = 各图时间
-   *  范围独立调整（用于对齐不同上市节奏产品的可比区间） */
+   *  范围独立调整（用于对齐不同上市节奏产品的可比区间）。
+   *  2026-11-10 审计修：文案合并单行「时间轴同步」（竖排两行读成两个词），
+   *  胶囊宽随文字、whiteSpace 锁不换行 */
   const syncToggle = (
     <button
       type="button"
@@ -963,11 +965,10 @@ export default function VolumePrice() {
         background: synced ? selectSoft : color.canvas,
         color: synced ? selectSoftInk : color.body,
         font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-        lineHeight: '13px',
+        lineHeight: '13px', whiteSpace: 'nowrap',
       }}
     >
-      <span style={{ display: 'block' }}>时间轴</span>
-      <span style={{ display: 'block' }}>同步</span>
+      时间轴同步
     </button>
   );
 

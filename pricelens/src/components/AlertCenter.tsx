@@ -5,6 +5,8 @@
 //   （无字实心铃 / 带字整组按钮 / 文字链接），重构后同一组件同一语义；
 // - useAlerts()：引擎统一入参（state → AlertCfg），页面/总览列/看板共用一份结果；
 // - TypePill / TYPE_STYLE / pctText：类型徽标与文案（总览预警列、预警页共用）。
+// - AlertLifecycleTag：处理生命周期标签（收件箱/详情抽屉共用）；「待处理」中性化
+//   （第一百九十一轮，桌面实拍审计——不再与「调价」类型 chip 同款撞色）。
 // 四类预警（alerts.ts）：调价 / 折扣 / 平台价差 / 档位间距。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
@@ -166,7 +168,24 @@ export function AlertLifecycleTag({ lifecycle }: { lifecycle: AlertLifecycle }) 
     dismissed: { color: color.alert.lifecycle.dismissed.fg, bg: color.alert.lifecycle.dismissed.bg },
   };
   const s = palette[lifecycle];
-  return <Tag style={{ margin: 0, border: 0, color: s.color, background: s.bg, fontSize: 11 }}>{ALERT_LIFECYCLE_LABEL[lifecycle]}</Tag>;
+  // 「待处理」改中性样式（第一百九十一轮，桌面实拍审计）：原 new = #e8f1ff 底 + #0053c2 字，
+  // 与「调价」类型 chip 同款，收件箱同一行里「状态」列 ×「触发读数」列撞成两颗蓝药丸、
+  // 两个维度无法区分——处理状态是流程信息，改白底 + 1px hairline 描边 + mute 字，
+  // 不抢类型色的语义；其余生命周期（已解决绿/已确认灰等）沿用既有 token 不动
+  const neutral = lifecycle === 'new';
+  return (
+    <Tag
+      style={{
+        margin: 0,
+        border: neutral ? `1px solid ${color.hairline}` : 0,
+        color: neutral ? color.mute : s.color,
+        background: neutral ? color.canvas : s.bg,
+        fontSize: 11,
+      }}
+    >
+      {ALERT_LIFECYCLE_LABEL[lifecycle]}
+    </Tag>
+  );
 }
 
 export interface AlertDetailDrawerProps {

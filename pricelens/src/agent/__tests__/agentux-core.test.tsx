@@ -23,7 +23,9 @@ function AppHarness() {
   const { openAgent } = useAgent();
   const { state: filterState, actions } = useFilters();
   const prepareAlerts = () => actions.setAlertSubs([`${own.model_id}__${own.romram.replace(/\s+/g, '')}`], true);
-  return <><button type="button" onClick={() => openAgent('dock')}>打开 Agent</button><button type="button" onClick={prepareAlerts}>准备预警</button><AgentPanel /><output data-filter-state>{JSON.stringify(filterState)}</output></>;
+  // UI 审计测试用：把主分析卡设为已知我司产品（上下文口径 chip 的显示名/slug 断言依据）
+  const setMainProduct = () => actions.setMains(buildCards([main], { auto: true }));
+  return <><button type="button" onClick={() => openAgent('dock')}>打开 Agent</button><button type="button" onClick={prepareAlerts}>准备预警</button><button type="button" onClick={setMainProduct}>设定主品</button><AgentPanel /><output data-filter-state>{JSON.stringify(filterState)}</output></>;
 }
 
 function mountedApp() {
@@ -177,5 +179,37 @@ describe('agentux-core price advantage and price alert loops', () => {
     stream = applyAgentStreamEvent(stream, { id: 'old-2', runId: 'old-run', sequence: 2, type: 'text.delta', delta: '旧', timestamp: new Date().toISOString() }, 'new-run');
     expect(stream.text).toBe('新');
     expect(stream.events.map((event) => event.runId)).toEqual(['new-run']);
+  });
+});
+
+// ============================================================
+// 2026-11-10 UI 审计（面板输入区 + 上下文条信息密度）：
+// ① 输入框下方的「引擎来源」小字（本地确定性/平台预设网关/GLM 叙述/本地兜底）
+//    是实现名词，不再对业务用户展示——渲染端撤下（契约仍在 agent/remoteConfig.ts）；
+//    键盘提示行（Enter 发送 · Shift+Enter 换行）保留。
+// ② 顶部上下文条口径 chip：显示名 + 配置 + SKU slug（机器串只留 slug 一处），
+//    不再裸显 modelId 把同一机器串暴露两遍。
+// ============================================================
+describe('Agent 面板输入区与上下文条（UI 审计 2026-11-10）', () => {
+  it('输入区不再渲染引擎来源实现名词行，键盘提示行保留', async () => {
+    mountedApp();
+    fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
+    await screen.findByRole('textbox', { name: '向 PriceLens Agent 提问' });
+    // 两种引擎来源的 label 值都不得出现（env 有无远端地址均覆盖）
+    expect(screen.queryByText('本地确定性引擎 · 离线可用')).toBeNull();
+    expect(screen.queryByText('平台预设网关 · GLM 叙述 · 本地兜底')).toBeNull();
+    expect(screen.queryByText('远端 Agent 叙述 · 本地引擎兜底')).toBeNull();
+    expect(screen.getByText(/Enter 发送 · Shift\+Enter 换行/)).toBeTruthy();
+  });
+
+  it('上下文口径 chip 用显示名，SKU 机器串只保留 slug 一处', async () => {
+    mountedApp();
+    fireEvent.click(screen.getByRole('button', { name: '设定主品' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
+    await screen.findByRole('textbox', { name: '向 PriceLens Agent 提问' });
+    const chip = screen.getAllByText((content) => content.startsWith('口径 · '))[0];
+    expect(chip).toBeTruthy();
+    // 完整口径：显示名（modelNameOf）+ 配置 + SKU slug，机器 id 不再单独成段
+    expect(chip.textContent).toBe(`口径 · ${own.model_name} · ${own.romram} · ${own.sku_id}`);
   });
 });

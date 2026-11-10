@@ -188,19 +188,21 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(screen.queryByRole('group', { name: '图例（点击切换元素显隐）' })).toBeNull();
   });
 
-  it('成本常驻：我司面板恒出成本细线与成本·模拟药丸（「成本与销毛」按钮退役）', async () => {
+  it('成本常驻：我司面板恒出成本细线，浮动「成本·模拟」胶囊已去重删除（「成本与销毛」按钮退役）', async () => {
     render(<App />);
     await waitPanelsReady();
     expect(screen.queryByRole('button', { name: '显示销毛成本' })).toBeNull();
     expect(screen.queryByRole('button', { name: '隐藏销毛成本' })).toBeNull();
-    // 价格层叠成本细线（品牌色降透明 1.25px path）+ 名称带「成本 · 模拟」药丸，恒在
+    // 价格层叠成本细线（品牌色降透明 1.25px path）恒在；成本层归属 = 顶部图例行
+    // （成本·模拟）+ 价格节头「价格 / 成本」——2026-11-10 审计去重：浮动成本胶囊删除
     await waitFor(() => {
       expect(document.querySelector('[data-testid="cost-line"]')).toBeTruthy();
-      expect(document.querySelector('[data-testid="cost-pill"]')).toBeTruthy();
     });
-    expect(document.querySelector('[data-testid="cost-pill"]')?.textContent).toContain('模拟');
+    expect(document.querySelector('[data-testid="cost-pill"]')).toBeNull();
     // 价格图层标注随成本改写为「价格 / 成本」
     expect(document.querySelector('[data-testid="pane-label-price"]')?.textContent).toContain('成本');
+    // 顶部图例行仍是成本层的具名图例（2026-11-06 拍板元素，不随胶囊删除放宽）
+    expect(screen.getByTestId('volume-layer-legend').textContent).toContain('成本 · 模拟');
   });
 
   // ---- 时间轴同步开关与首个时间轨同一水平线 ----

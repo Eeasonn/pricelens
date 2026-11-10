@@ -324,13 +324,16 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(lineOpacity('#1d1d1f')).toBeUndefined(); // 价格区悬停不触发量带联动降淡
   });
 
-  it('④三点标注：柱|面积两模式都标，随量开关出现/消失，无量数据不标', async () => {
+  it('④常驻标注（≤8 柱全标）：柱|面积两模式都标，随量开关出现/消失，无量数据不标', async () => {
     for (const mode of ['bar', 'area'] as const) {
       const { container } = render(<Chart {...props} volumeMode={mode} /> as ReactElement);
       await waitForGeom(container);
-      expect(screen.getByTestId('volume-mark-max').textContent).toBe('6,100');
-      expect(screen.getByTestId('volume-mark-min').textContent).toBe('3,000');
-      expect(screen.getByTestId('volume-mark-latest').textContent).toBe('4,000');
+      // 2026-11-10 审计修：4 根有效柱 ≤ 8 → 全部标注（不再是 5 柱只标 3 根的「渲染遗漏」观感）；
+      // 文案走 fmtInt 图上裸数惯例（空格千分位，与价格标签同）
+      expect(screen.getByTestId('volume-mark-max').textContent).toBe('6 100');
+      expect(screen.getByTestId('volume-mark-min').textContent).toBe('3 000');
+      expect(screen.getByTestId('volume-mark-latest').textContent).toBe('4 000');
+      expect(screen.getByTestId('volume-mark-idx-0').textContent).toBe('5 200'); // 普通柱也带数
       // 去框：纯数字文本（品牌色 / 10px / 等宽数字），无底色无边框
       for (const kind of ['max', 'min', 'latest']) {
         const mark = screen.getByTestId(`volume-mark-${kind}`);
@@ -352,28 +355,37 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(screen.queryByTestId('volume-mark-max')).toBeNull();
   });
 
-  it('④标注位置与避让（buildVolumeMarks）：最高在上/最低在下/最新看来向，同桶只一枚，不出带不越右缘不互压', () => {
+  it('④标注位置与避让（buildVolumeMarks）：≤8 柱全标、最高在上/最低在下/最新看来向，同桶只一枚，不出带不越右缘不互压', () => {
     const base = { vMax: niceCeil(6100), plotLeft: 100, plotWidth: 500, n: 5, bandTop: 400, bandH: 120 };
     const marks = buildVolumeMarks({ ...base, values: DISTINCT });
     const of = (k: string) => marks.find((m) => m.kind === k)!;
     const pointY = (v: number): number => base.bandTop + base.bandH - volumeBarHeightOf(v, base.vMax, base.bandH);
+    expect(marks.length).toBe(4); // 4 根有效柱 ≤ 8 → 全标（2026-11-10 审计修：规则统一）
     expect(of('max').y + VOL_MARK_H).toBeLessThanOrEqual(pointY(6100));
     expect(of('min').y).toBeGreaterThanOrEqual(pointY(3000));
     expect(of('latest').y).toBeGreaterThanOrEqual(pointY(4000)); // 4000 < 前值 6100 → 回落标下方
+    // 普通柱贴自己柱顶上方（plain = 非极值桶，全标模式新增；此处 idx0=5200 非三点极值）
+    expect(of('plain').idx).toBe(0);
+    expect(of('plain').y + VOL_MARK_H).toBeLessThanOrEqual(pointY(5200));
     // 来向反过来：最新较前值上升 → 标上方
     const rising = buildVolumeMarks({ ...base, values: [5200, 3000, 3500, 4000, 4500] }).find((m) => m.idx === 4)!;
     expect(rising.kind).toBe('latest');
     expect(rising.y + VOL_MARK_H).toBeLessThanOrEqual(pointY(4500));
-    // 同桶身兼最低+最新 → 只一枚
+    // 同桶身兼最低+最新 → 只一枚（该桶保留最低位）；全标下其余柱照标
     const merged = buildVolumeMarks({ ...base, values: [5200, 4800, null, 6100, 3900] });
-    expect(merged.map((m) => m.text)).toEqual(['6,100', '3,900']);
+    expect(merged.map((m) => m.text)).toEqual(['5 200', '4 800', '6 100', '3 900']);
     // 只一个有值桶 → 一枚；全空 → 不标
     expect(buildVolumeMarks({ ...base, values: [null, 2000, null, null, null] }).length).toBe(1);
     expect(buildVolumeMarks({ ...base, values: [null, null, null, null, null] })).toEqual([]);
-    // 窄带 + 相邻近值：盒互不相交、不出带、不越右缘
-    const tight = { ...base, plotWidth: 90, n: 5, bandH: 70 };
+    // >8 柱回落三点规则（极值 + 最新，窄窗口不堆数字）——规则一致执行的另一半
+    const nine = [5200, 3000, 3500, 4000, 4500, 4300, 4600, 4100, 4400];
+    const many = buildVolumeMarks({ ...base, n: 9, values: nine });
+    expect(many.length).toBe(3);
+    expect(many.map((m) => m.kind).sort()).toEqual(['latest', 'max', 'min']);
+    // 全标 + 相邻近值（列宽 ≥ 标签宽的真实面板）：盒互不相交、不出带、不越右缘
+    const tight = { ...base, plotWidth: 500, n: 5, bandH: 120 };
     const crowded = buildVolumeMarks({ ...tight, values: [6000, 6100, 5900, 6050, 5950] });
-    expect(crowded.length).toBe(3);
+    expect(crowded.length).toBe(5);
     for (const m of crowded) {
       expect(m.y).toBeGreaterThanOrEqual(tight.bandTop);
       expect(m.y + m.h).toBeLessThanOrEqual(tight.bandTop + tight.bandH);

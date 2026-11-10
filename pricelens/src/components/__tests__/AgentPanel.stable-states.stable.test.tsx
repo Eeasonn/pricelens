@@ -262,7 +262,9 @@ describe('t428u 返修 R5（二轮）· 跨国回看保留结果卡的主品口�
   beforeEach(() => resetTo('/?p=dashboard&c=AE&main=own-huawei-nova-14-pro__12%2B512GB'));
 
   it('AE + nova 14 Pro 问「RU 价格优势」→ 回看后 RU 上下文主品仍是 nova 14 Pro，而非 RU 默认主品', async () => {
-    const novaChip = 'own-huawei-nova-14-pro · 12+512 GB · own-huawei-nova-14-pro__12-512gb__black';
+    // 2026-11-10 审计修复：口径 chip 改「口径 · 显示名 · 配置 · SKU slug」
+    // （机器串只随 slug 出现一次，与演进版 Copilot/AgentPanel 同契约），断言随新契约重锚
+    const novaChip = '口径 · nova 14 Pro · 12+512 GB · own-huawei-nova-14-pro__12-512gb__black';
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
     const panel = screen.getByRole('dialog');

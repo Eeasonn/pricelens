@@ -112,7 +112,7 @@ describe('合并多组 · 量带归属切换（方案 B）', () => {
     await waitForGeom(container);
     expect(document.body.textContent).toContain('6,000');
     expect(document.body.textContent).not.toContain('2,000');
-    expect(screen.getByTestId('volume-mark-max').textContent).toBe('5,000');
+    expect(screen.getByTestId('volume-mark-max').textContent).toBe('5 000'); // 图上裸数 = fmtInt 空格千分位（2026-11-10 审计修）
     expect(screen.getByLabelText('设为量带归属：nova 14 256').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByLabelText('设为量带归属：Pura 80 12').getAttribute('aria-pressed')).toBe('false');
   });

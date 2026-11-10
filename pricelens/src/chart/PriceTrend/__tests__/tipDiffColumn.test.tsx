@@ -126,3 +126,46 @@ describe('第196轮整改1：悬停小卡价差列（与明细表 diffPct 同源
     expect(screen.queryByText('价差')).toBeNull();
   });
 });
+
+// ============================================================
+// 2026-11-10 UI 审计修：悬停卡三处收敛——
+// ① RRP/折后价钱数读数改 formatPrice（与图下明细表同口径，USD = $990）；
+// ② 周粒度卡头「周 ID · 日期」双标识；③ 基准（我司）当周无数据时文字说明，
+// 不再只留一列空破折号。
+// ============================================================
+describe('2026-11-10 审计修：悬停卡（formatPrice 读数 / 周 ID 双标识 / 基准缺席说明）', () => {
+  it('RRP/折后价列 = formatPrice 读数（USD $ 前缀千分位，与明细表一致）', async () => {
+    const { container } = render(<Chart {...baseProps} tipDiffBaseKey={OWN} /> as ReactElement);
+    await waitForGeom(container);
+    hoverColumn(container, 1);
+    expect(screen.getByText('$990')).toBeTruthy(); // 主品折后价 990
+    expect(screen.getByText('$1,090')).toBeTruthy(); // 主品 RRP = price + 100
+    expect(screen.getByText('$1,080')).toBeTruthy(); // 对比行折后价
+    // 旧裸数格式不再出现（钱数一律带币种前缀）
+    expect(screen.queryByText('990')).toBeNull();
+  });
+
+  it('周粒度卡头 = 「周 ID · 日期」双标识（2026W21 · 05-06）', async () => {
+    const { container } = render(<Chart {...baseProps} tipDiffBaseKey={OWN} /> as ReactElement);
+    await waitForGeom(container);
+    hoverColumn(container, 1);
+    // 周号（等宽 mute 前缀）+ 原日期都在卡头
+    expect(screen.getByText('2026W21 ·')).toBeTruthy();
+    expect(screen.getByText('05-06')).toBeTruthy();
+  });
+
+  it('基准（我司）当周无数据：卡内出 12px mute 说明行；有数据的列不出', async () => {
+    const gappy = [mk(OWN, 'HUAWEI', 'HUAWEI Mate 70 12GB', [1000, null, 980, 970, 960]), mk(COMP, 'APPLE', 'iPhone 17 128GB', [1100, 1080, 1060, 1040, 1020])];
+    const { container } = render(<Chart {...baseProps} series={gappy} tipDiffBaseKey={OWN} /> as ReactElement);
+    await waitForGeom(container);
+    hoverColumn(container, 1); // 主品该列缺价：价差列全「—」+ 说明行
+    const note = document.querySelector('[data-testid="tip-base-absent"]') as HTMLElement | null;
+    expect(note?.textContent).toBe('基准（我司）当周无数据，价差不可比');
+    expect(note?.style.fontSize).toBe('12px');
+    cleanup();
+    const ok = render(<Chart {...baseProps} tipDiffBaseKey={OWN} /> as ReactElement);
+    await waitForGeom(ok.container);
+    hoverColumn(ok.container, 1);
+    expect(document.querySelector('[data-testid="tip-base-absent"]')).toBeNull();
+  });
+});

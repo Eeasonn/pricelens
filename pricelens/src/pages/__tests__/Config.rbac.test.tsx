@@ -4,7 +4,10 @@
 // - 切换查阅者：横幅出现「查阅者不可修改配置，请联系 GTM」；导入入口不渲染；
 //   导出仍可用；竞品「编辑」/ 异常守卫开关 / 上一代下拉 / 默认店铺下拉全部禁用
 // - matrix-only 临时口径（2026-11-10）：竞品「编辑」恒禁用，title 按角色区分
-//   （GTM = 矩阵直配、查阅者 = 不可修改配置）
+//   （GTM = MATRIX_READONLY_HINT 统一说明句、查阅者 = 不可修改配置）；
+//   禁用标签色 = color.mute、光标 not-allowed
+// - 子导航当前分区有选中态（aria-current + 墨色 + 2px 墨色下划线，点击跟随；
+//   2026-11-10 UI 审计：此前六个分区同为蓝链接，分不清所在分区）
 // - 角色切换标注「正式环境将由账号权限下发」（开发/演示用）
 // echarts mock 同 appShell.test（App 壳整体渲染，只验证 React 组装）。
 // ============================================================
@@ -39,6 +42,7 @@ class ResizeObserverStub {
 
 import App from '../../App';
 import { ACCESS_ROLE_KEY } from '../../access/role';
+import { MATRIX_READONLY_HINT } from '../config/BenchmarkConfigBlock';
 
 // 本仓库 vitest jsdom 不带 localStorage：装内存桩（同 DataQualityBlock.test 手法）
 beforeAll(() => {
@@ -105,6 +109,31 @@ describe('配置页 · 默认 GTM', () => {
     render(<App />);
     expect(screen.getByText('正式环境将由账号权限下发')).toBeDefined();
   });
+
+  // 2026-11-10 UI 审计：子导航当前分区选中态（与页头当前页标记同语法）
+  it('子导航当前分区有选中态：aria-current + 墨色文字 + 2px 墨色下划线，点击跟随分区', () => {
+    render(<App />);
+    const nav = document.querySelector('nav[aria-label="配置分区"]') as HTMLElement | null;
+    expect(nav).not.toBeNull();
+    // 默认落在第一个分区「竞品对标」，且全导航恰好一处 aria-current
+    const currents = () => Array.from(nav!.querySelectorAll('a[aria-current="page"]')) as HTMLElement[];
+    expect(currents()).toHaveLength(1);
+    expect(currents()[0]!.textContent).toBe('竞品对标');
+    // 选中态可从样式断言：墨色文字 + 2px 墨色下划线（jsdom 序列化为 rgb）
+    expect(currents()[0]!.style.color).toBe('rgb(23, 23, 23)');
+    expect(currents()[0]!.style.fontWeight).toBe('600');
+    expect(currents()[0]!.style.borderBottomWidth).toBe('2px');
+    expect(currents()[0]!.style.borderBottomColor).toBe('rgb(23, 23, 23)');
+    // 非当前项保持蓝链接（无 aria-current、无墨色）
+    const prevGen = nav!.querySelector('a[href="#prev-gen"]') as HTMLAnchorElement;
+    expect(prevGen.getAttribute('aria-current')).toBeNull();
+    expect(prevGen.style.color).toBe('rgb(0, 112, 243)');
+    // 点击「上一代关系」→ aria-current 跟随移动
+    fireEvent.click(prevGen);
+    expect(currents()).toHaveLength(1);
+    expect(currents()[0]!.textContent).toBe('上一代关系');
+    expect(prevGen.getAttribute('aria-current')).toBe('page');
+  });
 });
 
 describe('配置页 · 切换查阅者（viewer）', () => {
@@ -134,17 +163,21 @@ describe('配置页 · 切换查阅者（viewer）', () => {
     expect(document.querySelectorAll('.ant-select-disabled').length).toBeGreaterThan(0);
   });
 
-  it('切回 GTM：横幅消失；竞品「编辑」恒禁用（matrix-only：title 标注矩阵直配），导入入口恢复', () => {
+  it('切回 GTM：横幅消失；竞品「编辑」恒禁用（matrix-only：title = 矩阵只读统一说明句），导入入口恢复', () => {
     render(<App />);
     fireEvent.click(segItem('查阅者'));
     expect(screen.getByText(/查阅者不可修改配置/)).toBeDefined();
     fireEvent.click(segItem('GTM'));
     expect(screen.queryByText(/查阅者不可修改配置/)).toBeNull();
-    // matrix-only 临时口径（2026-11-10）：编辑入口保留但不生效，GTM 态同样禁用，
-    // title 区分角色（GTM = 矩阵直配、查阅者 = 不可修改配置）
+    // matrix-only 临时口径（2026-11-10）：编辑入口保留但不生效，GTM 态同样禁用；
+    // title 与行尾「矩阵」徽章 tooltip 同源（MATRIX_READONLY_HINT，两处口径一致）；
+    // 2026-11-10 UI 审计：禁用标签色取 color.mute（默认禁用灰过虚）+ not-allowed 光标
     const edit = buttonByText('编辑')!;
     expect(edit.disabled).toBe(true);
-    expect(edit.title).toContain('矩阵直配');
+    expect(edit.title).toBe(MATRIX_READONLY_HINT);
+    // jsdom 将 hex 序列化为 rgb（color.mute = #737373 = rgb(115,115,115)）
+    expect(edit.style.color).toBe('rgb(115, 115, 115)');
+    expect(edit.style.cursor).toBe('not-allowed');
     expect(buttonByText('导入配置')).not.toBeNull();
   });
 });

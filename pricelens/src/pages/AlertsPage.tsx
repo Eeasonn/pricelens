@@ -22,9 +22,17 @@
 //    单品开关、全局/单品阈值触发器、阈值滑杆、品牌筛选/排序/添加监控下拉）；
 // ② 窄屏信息层级——概览条、预警行、产品名挂 lpl-alert-* 类（窄屏单列/换行/不截断，桌面观感不变）；
 // ③ 零监控空态——添加监控入口 prominent 化（中号 + 白底），不再像禁用输入框。
+// 第一百九十一轮（桌面 1440×900 实拍审计落地）：
+// ① 首屏密度——概览两卡 + 四块统计砖（6 砖约 320px、计数四处重复）合并为一排紧凑状态带：
+//    计数与标签同行小间距、零值项弱化（hairlineStrong 数字 + mute 标签），两卡副行细节
+//    移入 title 兜底——删的是版式冗余不是信息；总行高 ~40px，处理收件箱在 900px 视口上移；
+// ② 「让 Agent 解释最新预警」从悬置画布移入处理收件箱卡头右侧（与副标同行右对齐）；
+// ③ 空态——添加监控主操作描边加强一档（ConfigProvider 作用域主题，见 prominentSelectTheme）、
+//    占位文案去「＋」前缀（右端已有 PlusOutlined，双加号冗余）、空态卡视口内垂直居中。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { App as AntdApp, Button, Checkbox, Empty, Popover, Segmented, Select, Slider, Switch } from 'antd';
+import { App as AntdApp, Button, Checkbox, ConfigProvider, Empty, Popover, Segmented, Select, Slider, Switch } from 'antd';
+import type { ThemeConfig } from 'antd';
 import { BellOutlined, PlusOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useAgent } from '../state/AgentContext';
@@ -284,6 +292,13 @@ function useOpenInDashboard() {
 }
 
 const ALERT_RECORDS_STORAGE = 'LPL.alert.records.v1';
+
+/** 空态主操作输入框主题（第一百九十一轮，桌面实拍审计）：全局 antd colorBorder=hairline
+ *  (#ebebeb) 让主操作在白卡上几乎扫不出——描边加强一档到 hairlineStrong；只作用于
+ *  空态 prominent Select（工具行小入口维持全局弱描边，仍是次级操作） */
+const prominentSelectTheme: ThemeConfig = {
+  components: { Select: { colorBorder: color.hairlineStrong } },
+};
 
 function readAlertRecordOverrides(): Record<string, Partial<AlertRecord>> {
   if (typeof window === 'undefined') return {};
@@ -638,6 +653,14 @@ export default function AlertsPage() {
     [latestList, typeFilter, brandFilter, modelFilter, statusFilter],
   );
   const gapItems = useMemo(() => latestFiltered.filter((a) => a.type === 'own-gap'), [latestFiltered]);
+  // 第一百九十一轮（桌面实拍审计）：概览两卡副行细节收进 title 兜底——状态带只留「数字+标签」，
+  // 原文案逐字保留在悬停提示里，删版式不删信息（非交互统计沿用页内 title 惯例，不占用 aria 名）。
+  // 「只看正常」时历史被口径刻意隐藏（filtered 早退为 []），尾注「历史 0 条」会误读为
+  // 无历史记录——该分支维持原状不拼历史尾注
+  const overviewDetail = statusFilter === 'normal'
+    ? '这些系列在当前类型下没有最新预警'
+    : `最新触发 ${scopedLatestCount > 0 ? `${weekTag(scopedLatest[0].weekId)}（${scopedLatest[0].weekLabel} 采集周）` : '—'}${scopedLatestCount > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}${filtered.length !== latestFiltered.length ? ` · 历史 ${filtered.length} 条` : ''}`;
+  const monitorDetail = `${ownBrand()} ${ownCount} · 其他品牌 ${subCount - ownCount} · 单独设置 ${Object.keys(state.alertProducts).length} 项`;
   const matrixEmptyText = modelFilter
     ? '该产品尚未启用预警监控，或当前筛选下没有匹配系列'
     : statusFilter === 'alerts'
@@ -987,31 +1010,37 @@ export default function AlertsPage() {
    *  选中即订阅 + 反馈 + 定位到新行（多品牌时新行位置不可预期，避免「加没加上」的疑惑） */
   // 第一百九十轮（外部 UX 审计落地）：prominent = 零监控空态主操作（中号 + 白底），
   // 与工具行小号入口区分——空态下不再像禁用输入框
-  const renderAddMonitor = (width: number, prominent?: boolean): JSX.Element => (
-    <Select
-      className="lpl-alert-add-monitor"
-      showSearch
-      size={prominent ? 'middle' : 'small'}
-      placeholder="＋ 添加监控（搜索品牌 / 型号 / 产品）"
-      aria-label="添加监控产品"
-      style={{ width, ...(prominent ? { background: color.canvas } : {}) }}
-      value={null}
-      filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-      onChange={(key) => {
-        if (!key) return;
-        actions.setAlertSubs([key as string], true);
-        const label = allSeries.find((s) => s.key === key)?.label ?? '';
-        message.success(`已添加监控：${label}`);
-        setBrandFilter([]);
-        setStatusFilter('all');
-        setFocusAlert({ seriesKey: key as string, type: 'price-change', weekId: '' });
-      }}
-      options={allSeries
-        .filter((s) => !state.alertSubs.includes(s.key))
-        .map((s) => ({ value: s.key, label: s.label }))}
-      suffixIcon={<PlusOutlined />}
-    />
-  );
+  // 第一百九十一轮（桌面实拍审计）：① 占位文案去「＋」前缀（右端已有 PlusOutlined 图标，
+  // 双加号冗余）；② prominent 态经 prominentSelectTheme 加强描边（见常量处注释）
+  const renderAddMonitor = (width: number, prominent?: boolean): JSX.Element => {
+    const select = (
+      <Select
+        className="lpl-alert-add-monitor"
+        showSearch
+        size={prominent ? 'middle' : 'small'}
+        placeholder="添加监控（搜索品牌 / 型号 / 产品）"
+        aria-label="添加监控产品"
+        style={{ width, ...(prominent ? { background: color.canvas } : {}) }}
+        value={null}
+        filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+        onChange={(key) => {
+          if (!key) return;
+          actions.setAlertSubs([key as string], true);
+          const label = allSeries.find((s) => s.key === key)?.label ?? '';
+          message.success(`已添加监控：${label}`);
+          setBrandFilter([]);
+          setStatusFilter('all');
+          setFocusAlert({ seriesKey: key as string, type: 'price-change', weekId: '' });
+        }}
+        options={allSeries
+          .filter((s) => !state.alertSubs.includes(s.key))
+          .map((s) => ({ value: s.key, label: s.label }))}
+        suffixIcon={<PlusOutlined />}
+      />
+    );
+    // 描边加强只给空态主操作（ConfigProvider 作用域主题，不外溢到工具行小入口）
+    return prominent ? <ConfigProvider theme={prominentSelectTheme}>{select}</ConfigProvider> : select;
+  };
 
   // 零监控首启态（第一百八十二轮评审）：概览条零统计、无效筛选、阈值表头、历史事件
   // 全部退场，空看板正中一句说明 + 添加入口；加上第一个监控后恢复完整界面
@@ -1023,7 +1052,9 @@ export default function AlertsPage() {
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader title="预警中心" />
 
-        <main style={{ flex: 1, padding: space.lg }}>
+        {/* 空态时主区转纵向 flex（第一百九十一轮）：矩阵卡 flex:1 撑满剩余视口并垂直居中，
+            不再停在页面上部、下方留 ~480px 纯空；非空态保持常规文档流不变 */}
+        <main style={{ flex: 1, padding: space.lg, ...(emptyMode ? { display: 'flex', flexDirection: 'column' } : null) }}>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: space.sm, color: color.mute, fontSize: 11 }}>
             <span>{country} · {industry}</span>
             <span aria-hidden>·</span>
@@ -1041,92 +1072,75 @@ export default function AlertsPage() {
               <Button size="small" style={{ marginLeft: 'auto', height: 22, fontSize: 11 }} onClick={() => setModelFilter(null)}>查看全部产品</Button>
             </div>
           )}
-          {/* ① 概览条（类看板摘要；第一百八十二轮：类型分布卡撤除——工具行类型筛选
-              同口径重复，统计保留两件套；零监控时整条隐藏） */}
+          {/* ① 概览状态带（第一百九十一轮，桌面 1440×900 实拍审计落地）：原「两卡 +
+              四砖」两排统计合并为一排紧凑带——计数与标签同行小间距、零值弱化
+              （hairlineStrong 数字 + mute 标签），两卡副行细节移入 title 兜底，
+              删的是版式冗余不是信息；零监控时整条隐藏不变 */}
           {!emptyMode && (
-            // 第一百九十轮（外部 UX 审计落地）：栅格样式移入 lpl-alert-ov（窄屏一列，桌面不变）
             <section
-              className="lpl-alert-ov"
+              aria-label="预警处理摘要"
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: `4px ${space.sm}px`,
                 background: color.canvas,
                 boxShadow: shadow.l1,
                 borderRadius: radius.card,
-                padding: space.base,
+                padding: '8px 16px',
                 marginBottom: space.md,
               }}
             >
-              <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: overviewCount > 0 ? color.ink : color.hairlineStrong }}>
-                    {overviewCount}
-                  </span>
-                  <span style={{ fontSize: 12, color: color.mute }}>{overviewUnit}</span>
-                </div>
-                <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                  {statusFilter === 'normal'
-                    ? '这些系列在当前类型下没有最新预警'
-                    : (
-                      <>
-                        最新触发 {scopedLatestCount > 0 ? `${weekTag(scopedLatest[0].weekId)}（${scopedLatest[0].weekLabel} 采集周）` : '—'}
-                        {scopedLatestCount > 0 ? ` · 涉及 ${latestModelCount} 个产品` : ''}
-                      </>
-                    )}
-                  {/* 「只看正常」时历史被口径刻意隐藏（filtered 早退为 []），此时
-                      尾注「历史 0 条」会误读为无历史记录——该分支不显示历史尾注 */}
-                  {statusFilter !== 'normal' && filtered.length !== latestFiltered.length ? ` · 历史 ${filtered.length} 条` : ''}
-                </div>
-              </div>
-              <div style={{ background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px', minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span className="tnum" style={{ fontSize: 24, lineHeight: '30px', fontWeight: 700, color: color.ink }}>
-                    {subCount}
-                  </span>
-                  <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
-                </div>
-                <div className="tnum" style={{ fontSize: 11, color: color.mute, marginTop: 2 }}>
-                  {ownBrand()} {ownCount} · 其他品牌 {subCount - ownCount} · 单独设置 {Object.keys(state.alertProducts).length} 项
-                </div>
-              </div>
+              <span title={overviewDetail} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
+                <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: overviewCount > 0 ? color.ink : color.hairlineStrong }}>
+                  {overviewCount}
+                </span>
+                <span style={{ fontSize: 12, color: color.mute }}>{overviewUnit}</span>
+              </span>
+              <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
+              <span title={monitorDetail} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
+                <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink }}>
+                  {subCount}
+                </span>
+                <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
+              </span>
+              <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
+              {([
+                ['pending', '待处理', recordSummary.pending, color.alert.lifecycle.new.fg],
+                ['observing', '观察中', recordSummary.observing, color.alert.lifecycle.investigating.fg],
+                ['resolved', '已解决', recordSummary.resolved, color.alert.lifecycle.resolved.fg],
+                ['stale', '数据陈旧', recordSummary.stale, color.alert.evidence.pending],
+              ] as const).map(([key, label, count, fg]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setRecordFilter(key);
+                  }}
+                  aria-label={`筛选${label} ${count} 条`}
+                  aria-pressed={recordFilter === key}
+                  style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, border: 0, cursor: 'pointer', padding: '2px 6px', background: 'transparent', borderRadius: radius.control, outline: recordFilter === key ? `2px solid ${color.link}` : undefined }}
+                >
+                  {/* 零值弱化不占位：数字 hairlineStrong + 标签 mute；非零数字保留生命周期语义色 */}
+                  <span className="tnum" style={{ fontSize: 14, lineHeight: '18px', fontWeight: 700, color: count > 0 ? fg : color.hairlineStrong }}>{count}</span>
+                  <span style={{ fontSize: 12, color: count > 0 ? color.body : color.mute }}>{label}</span>
+                </button>
+              ))}
             </section>
           )}
 
           {!emptyMode && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: space.md }}>
-              <Button size="small" onClick={() => openAgent('dock', agentAlertPrompt)}>
-                让 Agent 解释最新预警
-              </Button>
-            </div>
-          )}
-
-          {!emptyMode && (
             <>
-              <section className="lpl-alert-ov" style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.base, marginBottom: space.md }} aria-label="预警处理摘要">
-                {([
-                  ['pending', '待处理', recordSummary.pending, color.alert.lifecycle.new.fg],
-                  ['observing', '观察中', recordSummary.observing, color.alert.lifecycle.investigating.fg],
-                  ['resolved', '已解决', recordSummary.resolved, color.alert.lifecycle.resolved.fg],
-                  ['stale', '数据陈旧', recordSummary.stale, color.alert.evidence.pending],
-                ] as const).map(([key, label, count, fg]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      setRecordFilter(key);
-                    }}
-                    aria-label={`筛选${label} ${count} 条`}
-                    style={{ display: 'block', textAlign: 'left', width: '100%', border: 0, cursor: 'pointer', outline: recordFilter === key ? `2px solid ${color.link}` : undefined, background: color.canvasSoft, borderRadius: radius.card, padding: '10px 14px' }}
-                  >
-                    <div className="tnum" style={{ fontSize: 22, lineHeight: '28px', fontWeight: 700, color: count > 0 ? fg : color.hairlineStrong }}>{count}</div>
-                    <div style={{ fontSize: 12, color: color.mute }}>{label}</div>
-                  </button>
-                ))}
-              </section>
-
               <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg, marginBottom: space.md }} aria-label="预警处理收件箱">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
                   <h3 style={{ margin: 0, fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>处理收件箱</h3>
                   <span style={{ fontSize: 11, color: color.mute }}>{inboxRecords.length} 条最新事件</span>
                   <span style={{ flex: 1 }} />
+                  {/* 第一百九十一轮（桌面实拍审计）：解释入口从悬置画布移入卡头右侧，
+                      与「N 条最新事件」副标同行右对齐，不再独占一行推挤首屏 */}
+                  <Button size="small" onClick={() => openAgent('dock', agentAlertPrompt)}>
+                    让 Agent 解释最新预警
+                  </Button>
                   {selectedRecordIds.size > 0 && <>
                     <span style={{ fontSize: 11, color: color.mute }}>已选 {selectedRecordIds.size}</span>
                     <Button size="small" onClick={() => updateSelected({ kind: 'acknowledge' })}>批量确认</Button>
@@ -1161,10 +1175,22 @@ export default function AlertsPage() {
           )}
 
           {/* ②③ 监控矩阵（工具行 + 列头规则 + 品牌分组行 + own-gap 成对条）。
-              零监控首启态：正中说明 + 添加入口，工具行/阈值表头/矩阵全部退场 */}
-          <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg, marginBottom: space.md }}>
+              零监控首启态：正中说明 + 添加入口，工具行/阈值表头/矩阵全部退场；
+              卡身 flex:1 撑满剩余视口、内容垂直居中（第一百九十一轮，桌面实拍审计），
+              minHeight 兜底矮视口防裁切；非空态维持常规文档流与下边距 */}
+          <section
+            style={{
+              background: color.canvas,
+              boxShadow: shadow.l1,
+              borderRadius: radius.card,
+              padding: space.lg,
+              ...(emptyMode
+                ? { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', marginBottom: 0 }
+                : { marginBottom: space.md }),
+            }}
+          >
             {emptyMode ? (
-              <div style={{ padding: '44px 16px 48px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <div style={{ minHeight: 360, padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                 <BellOutlined style={{ fontSize: 30, color: color.hairlineStrong }} />
                 <div style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>尚未监控任何产品</div>
                 <div style={{ fontSize: 12, color: color.mute }}>添加监控后，这里按周汇总调价、折扣、平台价差与档位间距预警</div>

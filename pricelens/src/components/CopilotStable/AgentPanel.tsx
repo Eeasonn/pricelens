@@ -16,11 +16,11 @@ import {
 import { Button, Input, Tooltip } from 'antd';
 import { useAgent } from '../../state/AgentContextStable';
 import { INDUSTRY_LABELS } from '../../dataModel/scope';
+import { modelNameOf } from '../ProductCascader/tree';
 import { usePage } from '../../state/PageContext';
 import { navBus } from '../../state/navBus';
 import { buildCards } from '../../state/mainSelection';
 import type { AgentCardAction, AgentEvidence, AgentResponse, AgentResultCard, AgentRun, AlertResultCard, ChartResultCard, FilterResultCard, ForecastExplanationResultCard, PriceAdvantageResultCard, TableResultCard, ToolCallCard } from '../../agent-stable';
-import { describeAgentEngine, resolveAgentEngine } from '../../agent-stable';
 import { AGENT_FOLLOWUP_SUGGESTIONS, AGENT_STATUS_LABELS, agentProviderLabel, agentSuggestionsForPage, platformShortcutLabel } from './agentCopy';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 
@@ -57,11 +57,12 @@ function ContextChips() {
     if (state.granularity === 'month') return `${id.slice(0, 4)}-${id.slice(4)}`;
     return id;
   };
-  const productChips = state.mains.filter((card) => card.main).slice(0, 4).map((card) => {
-    const main = card.main!;
-    return `${main.modelId} · ${main.romram} · ${main.skuIds[0] ?? '默认 SKU'}`;
-  });
-  const chips = [`当前页 · ${context.pageLabel ?? context.page}`, `${state.countryCode} · ${INDUSTRY_LABELS[state.industry] ?? state.industry}`, productCount ? `${productCount} 个产品` : '未选产品', ...productChips, `${formatBucket(state.rangeStart)}–${formatBucket(state.rangeEnd)}`, state.currency === 'usd' ? 'USD' : '本币', state.priceTypes.rrp ? '含 RRP' : '仅折后价'];
+  const skuChip = state.mains.find((card) => card.main)?.main;
+  // 2026-11-10 UI 审计（与演进版 Copilot/AgentPanel 同修）：口径 chip 此前裸显
+  // modelId + 配置 + SKU slug，同一机器串出现两遍（slug 内嵌 modelId）。改用
+  // 现有显示名逻辑 modelNameOf（人类可读），SKU slug 只留一处保住可追溯性。
+  const skuLabel = skuChip ? `口径 · ${modelNameOf(skuChip.modelId)} · ${skuChip.romram} · ${skuChip.skuIds[0] ?? '默认 SKU'}` : '未选产品';
+  const chips = [`当前页 · ${context.pageLabel ?? context.page}`, `${state.countryCode} · ${INDUSTRY_LABELS[state.industry] ?? state.industry}`, productCount ? `${productCount} 个产品` : '未选产品', ...(skuChip ? [skuLabel] : []), `${formatBucket(state.rangeStart)}–${formatBucket(state.rangeEnd)}`, state.currency === 'usd' ? 'USD' : '本币', state.priceTypes.rrp ? '含 RRP' : '仅折后价'];
   return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '9px 16px', borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}>{chips.map((chip, index) => <span key={chip} style={{ fontSize: 11, color: index === 0 ? selectSoftInk : color.body, border: `1px solid ${index === 0 ? selectSoftInk : color.hairline}`, borderRadius: radius.pill, padding: '3px 8px', background: index === 0 ? selectSoft : color.canvas }}>{chip}</span>)}{contextStale && <span role="status" style={{ fontSize: 11, color: color.warningInk, border: `1px solid ${color.warning}`, borderRadius: radius.pill, padding: '3px 8px', background: color.warningSoft }}>上下文已更新 · 旧结果需重新确认</span>}</div>;
 }
 
@@ -501,8 +502,8 @@ export default function AgentPanel() {
     if (distanceToBottom < 96) node.scrollTop = node.scrollHeight;
   }, [messages, running]);
   if (!open && !rendered) return null;
-  // 引擎来源标注：每次打开面板重读 localStorage 自配，与 defaultAgentClient 同一解析口径。
-  const engine = describeAgentEngine(resolveAgentEngine());
+  // 引擎来源标注已撤下（2026-11-10 审计：网关/模型/兜底是实现名词，不写给业务用户；
+  // 解析契约仍在 agent-stable/remoteConfig.ts，面板不再渲染）。
   const full = mode === 'full';
   const drawer = mode === 'drawer';
   const nextMode = full ? 'dock' : drawer ? 'full' : 'drawer';
@@ -522,7 +523,7 @@ export default function AgentPanel() {
       <RunTimeline run={activeRun} />
     </div>
     {!messages.length && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 10px', background: color.canvasSoft }}>{suggestions.map((suggestion) => { const label = suggestionLabel(suggestion); const prompt = suggestionPrompt(suggestion); return <button type="button" key={label} onClick={() => void send(prompt, undefined, undefined, suggestionIntent(suggestion))} style={{ fontSize: 11, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '5px 8px', cursor: 'pointer' }}>{label}</button>; })}</div>}
-    <div style={{ flexShrink: 0, padding: '10px 12px 12px', borderTop: `1px solid ${color.hairline}`, background: color.canvas }}><div style={{ display: 'flex', alignItems: 'end', gap: 7 }}><Input.TextArea ref={inputRef} aria-label="向 PriceLens Agent 提问" autoSize={{ minRows: 1, maxRows: 5 }} value={draft} placeholder="问价格、平台或预警…" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} /> <Tooltip title={voiceAvailable ? '语音输入' : '浏览器不支持语音输入'}><button type="button" aria-label="语音输入" disabled={!voiceAvailable || voiceListening || running} onClick={() => void startVoice()} style={{ ...iconButtonStyle, width: 32, height: 32, color: voiceListening ? color.link : color.body, opacity: voiceAvailable ? 1 : 0.45 }}>{voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}</button></Tooltip>{running ? <Button aria-label="停止运行" icon={<StopOutlined />} onClick={stop} /> : <Button type="primary" aria-label="发送" icon={<SendOutlined />} onClick={() => void send()} disabled={!draft.trim()} />}</div><div style={{ marginTop: 5, fontSize: 10, color: color.mute }}>Enter 发送 · Shift+Enter 换行 · {platformShortcutLabel()} 快捷入口</div><div role="note" aria-label="Agent 引擎来源" title={engine.hint} style={{ marginTop: 2, fontSize: 10, color: color.mute }}>{engine.label}</div></div>
+    <div style={{ flexShrink: 0, padding: '10px 12px 12px', borderTop: `1px solid ${color.hairline}`, background: color.canvas }}><div style={{ display: 'flex', alignItems: 'end', gap: 7 }}><Input.TextArea ref={inputRef} aria-label="向 PriceLens Agent 提问" autoSize={{ minRows: 1, maxRows: 5 }} value={draft} placeholder="问价格、平台或预警…" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} /> <Tooltip title={voiceAvailable ? '语音输入' : '浏览器不支持语音输入'}><button type="button" aria-label="语音输入" disabled={!voiceAvailable || voiceListening || running} onClick={() => void startVoice()} style={{ ...iconButtonStyle, width: 32, height: 32, color: voiceListening ? color.link : color.body, opacity: voiceAvailable ? 1 : 0.45 }}>{voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}</button></Tooltip>{running ? <Button aria-label="停止运行" icon={<StopOutlined />} onClick={stop} /> : <Button type="primary" aria-label="发送" icon={<SendOutlined />} onClick={() => void send()} disabled={!draft.trim()} />}</div><div style={{ marginTop: 5, fontSize: 10, color: color.mute }}>Enter 发送 · Shift+Enter 换行 · {platformShortcutLabel()} 快捷入口</div></div>
   </aside>;
 }
 
