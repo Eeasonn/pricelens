@@ -1,9 +1,9 @@
 // ============================================================
 // 配置页「竞品对标配置」区块（2026-10-20 评审后补回：总览页置灰后对标维护入口丢失）。
 // 当前国家（页头）× 产业（本块切换）下，列出全部我司型号 × 配置 → 对标竞品。
-// 2026-11-10 Eason（matrix-only 临时口径）：「矩阵 / 自动 / 替代 / 人工」四层逻辑
-// 先取消——生效对标只有矩阵直配一种来源，矩阵没给的即为空；本页编辑暂不生效
-// （按钮停用 + 说明），浏览器里的历史人工快照已停用并给清除入口。
+// 2026-11-10 Eason（matrix-only 临时口径）：四层逻辑取消、编辑按钮停用。
+// 2026-11-11 Eason：编辑恢复（不再置灰）——矩阵为基底，人工编辑按「国家×型号×配置」
+// 组覆盖生效（configStore.getEffectiveBenchmark），历史人工快照原样回归按组生效。
 // 竞品 chip 显示 型号 · 配置（塌缩后仍在外面的配置层级）；收进「版本」次级
 // 菜单的变体（表盘/联网方式/颜色）不在本表体现（2026-11-10 Eason 二轮）。
 // 第一百九十轮（外部 UX 审计落地）：竞品行挂 .lpl-bm-row、配置名列挂 .lpl-bm-cfg
@@ -28,12 +28,14 @@ import { CONFIG_CHANGED_EVENT } from '../../state/lplKeys';
 import { color, fontSize, radius, space, selectSoft, selectSoftInk } from '../../theme/tokens';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 import { configTextOf } from '../../components/ProductCascader/tree';
+import BenchConfigModal from '../overview/BenchConfigModal';
+import type { OverviewModel } from '../../dataModel/aggregate';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
-/** 矩阵只读口径的唯一说明句：行尾「矩阵」徽章 tooltip 与禁用「编辑」按钮 title
- *  同源引用（2026-11-10 UI 审计：徽章孤词无解释、两处口径不一致） */
-export const MATRIX_READONLY_HINT = '竞品关系由对标矩阵统一下发，此处只读';
+/** 行尾「矩阵」徽章 tooltip 与「编辑」按钮 title 同源说明句（2026-11-11 起
+ *  人工编辑恢复：矩阵为基底、人工编辑过的组以人工为准） */
+export const MATRIX_READONLY_HINT = '竞品关系来源：对标矩阵；人工编辑过的组以人工为准';
 
 /** matrix-only：维表只发 source=matrix 行，本页所有对标统一挂矩阵标签；
  *  色/底取文档化 token（selectSoftInk/selectSoft 同值），不再存硬编码副本 */
@@ -67,6 +69,9 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
   // matrix-only：人工快照已停用（getEffectiveBenchmark 不再读它）。浏览器里若还留着
   // 历史快照，挂横幅说明「已停用」并给清除入口——避免误以为旧的人工配置仍在生效。
   const [manualCount, setManualCount] = useState(() => manualBenchmarkCount());
+  // 2026-11-11 Eason：编辑按钮恢复（不再置灰）——点开对标配置弹窗（矩阵为基底，
+  // 人工编辑按「国家×型号×配置」组覆盖生效）
+  const [editing, setEditing] = useState<{ model: OverviewModel; romram: string } | null>(null);
   const clearManual = (): void => {
     saveBenchmark(null);
     setManualCount(0);
@@ -95,6 +100,7 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
       <div style={{ fontWeight: 600, color: color.ink, marginBottom: 4 }}>竞品怎么匹配</div>
       <div>① 以《产品竞品矩阵》为准：每个国家、每款产品按矩阵列出的竞品直配，列序即优先级。</div>
       <div>② 矩阵里没给的国家和产品、以及矩阵指名但该国没有在售数据的竞品，一律留空——不自动补齐、不用近似款。</div>
+      <div>③ 每行「编辑」可人工调整该配置的竞品：编辑过的组以人工为准，其余仍随矩阵更新。</div>
       <div style={{ marginTop: 4, fontWeight: 600, color: color.ink }}>每款产品每个配置最多 {BENCHMARK_CAP_PER_CONFIG} 个竞品；超出时按矩阵列序保留前 {BENCHMARK_CAP_PER_CONFIG} 个，同型号多配置只占富余名额。</div>
     </div>
   );
@@ -112,9 +118,9 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
         }}
       >
         <span style={{ flex: 1, minWidth: 0 }}>
-          检测到历史<b>人工维护快照</b>（{manualCount} 条）：当前口径下已停用，不再整表接管。
+          检测到<b>人工维护对标</b>（{manualCount} 条）：按「国家 × 产品 × 配置」组生效，覆盖同组矩阵；其余产品仍随矩阵更新。
         </span>
-        <Button size="small" onClick={clearManual}>清除旧快照（{manualCount} 条）</Button>
+        <Button size="small" onClick={clearManual}>清除人工对标（{manualCount} 条）</Button>
       </div>
     ) : null}
     <div>
@@ -198,17 +204,15 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                       )}
                     </span>
                     {/* 图标按钮无可见文字：读屏念「编辑」需带型号 + 配置上下文（第一百九十轮）。
-                        matrix-only 临时口径：编辑入口保留但不生效（人工层停用）；
-                        2026-11-06 RBAC：查阅者本就禁编辑。
-                        2026-11-10 UI 审计：disabled 标签色取 color.mute（默认禁用灰过虚不可读），
-                        与 antd 默认 not-allowed 光标一并内联钉死 */}
+                        2026-11-11 Eason：编辑按钮恢复可点（打开对标配置弹窗，人工按组生效）；
+                        2026-11-06 RBAC：查阅者仍禁编辑（保持置灰 + 说明） */}
                     <Button
                       size="small"
                       icon={<EditOutlined />}
-                      disabled
-                      title={canEdit ? MATRIX_READONLY_HINT : '查阅者不可修改配置，请联系 GTM'}
+                      disabled={!canEdit}
+                      title={canEdit ? '编辑该配置的对标竞品' : '查阅者不可修改配置，请联系 GTM'}
                       aria-label={`编辑 ${[m.modelName, configTextOf(r.romram)].filter(Boolean).join(' ')} 的竞品对标`}
-                      style={{ color: color.mute, cursor: 'not-allowed' }}
+                      onClick={() => setEditing({ model: m, romram: r.romram })}
                     >
                       编辑
                     </Button>
@@ -218,6 +222,15 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
             </div>
           ))}
         </div>
+      )}
+      {editing && (
+        <BenchConfigModal
+          open
+          model={editing.model}
+          bands={bands}
+          initialRomram={editing.romram}
+          onClose={() => setEditing(null)}
+        />
       )}
     </div>
     </>

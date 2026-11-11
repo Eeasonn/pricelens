@@ -261,7 +261,9 @@ export default function TrendTables(props: {
   // 产品列宽随视口收窄（第一百八十九轮）；两区块在同一张 grid 上，列宽单一来源
   // 天然逐列对齐。宽屏 prodW = W_PROD，行为逐像素不变
   const prodW = narrowViewport ? W_PROD_NARROW : W_PROD;
-  const gridCols = `${prodW}px ${W_CONF}px ${W_TYPE}px repeat(${n}, ${W_TIME}px)`;
+  // 时间列 minmax(100px, 1fr)：容器宽于自然宽时均分拉伸填满（2026-11-11 Eason），
+  // 窄于 minWidth 时照常横向滚动（minWidth = 冻结三列 + n×100 为地板）
+  const gridCols = `${prodW}px ${W_CONF}px ${W_TYPE}px repeat(${n}, minmax(${W_TIME}px, 1fr))`;
   const frozenW = prodW + W_CONF + W_TYPE;
 
   /** 单元格通用样式；c = 网格列号（0 起）：首列外每列左缘 1px hairline

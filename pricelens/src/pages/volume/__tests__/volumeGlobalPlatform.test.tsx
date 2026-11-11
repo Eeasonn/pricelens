@@ -76,6 +76,20 @@ async function pickPlatform(label: string): Promise<void> {
   fireEvent.click(option);
 }
 
+/** 下拉顶部的「默认」按钮（2026-11-11：默认不再是平齐选项，提出为顶部按钮） */
+async function pickDefault(): Promise<void> {
+  const input = platformInput();
+  fireEvent.mouseDown(input?.closest('.ant-select-selector') ?? input);
+  const dropdown = await waitFor(() => {
+    const el = [...document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')].pop();
+    if (!el) throw new Error('平台下拉未展开');
+    return el;
+  });
+  const btn = dropdown.querySelector('[role="button"]');
+  if (!btn) throw new Error('默认按钮未找到');
+  fireEvent.click(btn);
+}
+
 /** 组视图明细卡观察列折后价（span[title="折后价"]，顺序 = 产品序） */
 const detailPrices = (): string[] =>
   Array.from(document.querySelectorAll('article.lpl-volume-detail span[title="折后价"]'))
@@ -121,8 +135,9 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     const currency = [...bar!.querySelectorAll('span')].find((el) => el.textContent === '币种');
     expect(currency).not.toBeNull();
     expect((plat!.compareDocumentPosition(currency!) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);
-    // 未选时呈现解析后的默认平台（RU 默认 = DNS）
-    expect(platformShown()).toBe('默认 · DNS');
+    // 未选时触发器占位呈现解析后的默认平台（RU 默认 = DNS；2026-11-11 占位形态）
+    const ph = document.querySelector('.ant-select-selection-placeholder');
+    expect(ph?.textContent).toBe('默认 · DNS');
   });
 
   it('选平台写 state.platform（URL plat= 链接同键）；选回默认删除 plat；每卡选店/店铺同步入口不再存在', async () => {
@@ -131,7 +146,7 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     await pickPlatform('OZON');
     await waitFor(() => expect(window.location.search).toContain('plat=OZON'));
     expect(platformShown()).toBe('OZON');
-    await pickPlatform('默认 · DNS');
+    await pickDefault();
     await waitFor(() => {
       const q = new URLSearchParams(window.location.search);
       expect(q.get('plat')).toBeNull();

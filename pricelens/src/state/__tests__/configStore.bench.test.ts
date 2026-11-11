@@ -65,8 +65,8 @@ describe('benchmarkSkuIdsFor', () => {
     expect(benchmarkSkuIdsFor('own-huawei-pura-90s-pro', '12+256 GB', 'RU')).toEqual(ruRows);
   });
 
-  // matrix-only 临时口径（2026-11-10 Eason）：人工对标层停用，getEffectiveBenchmark 忽略人工快照；恢复人工层时解除 skip
-  it.skip(`手动快照超 ${BENCHMARK_CAP_PER_CONFIG} 款时按 sort 兜底截断（旧持久化回归锚）`, () => {
+  // 2026-11-11 Eason：人工层按组覆盖回归，解除 2026-11-10 的 skip
+  it(`手动快照超 ${BENCHMARK_CAP_PER_CONFIG} 款时按 sort 兜底截断（旧持久化回归锚）`, () => {
     const ruComps = dimProduct.filter((p) => !p.is_own && p.countries.includes('RU')).map((p) => p.sku_id);
     const rows = ruComps.slice(0, 6).map((sku, i) => row(i + 1, sku));
     expect(rows).toHaveLength(6);
@@ -80,13 +80,13 @@ describe('benchmarkSkuIdsFor', () => {
     }
   });
 
-  it('matrix-only：注入人工快照后 getEffectiveBenchmark/benchmarkSkuIdsFor 仍返回维表结果（快照被忽略）', () => {
+  it('人工快照按组覆盖：该组以快照为准，未覆盖组仍随维表（2026-11-11 语义）', () => {
     // 无快照时的生效视图 = 纯维表（截到每配置 3 款）
-    const baseline = getEffectiveBenchmark();
     const baselineForTarget = benchmarkSkuIdsFor('own-huawei-pura-90s-pro', '12+256 GB', 'RU');
+    const baselineOther = benchmarkSkuIdsFor('own-huawei-pura-90s-pro', '12+512 GB', 'RU');
     expect(baselineForTarget.length).toBeGreaterThan(0);
     try {
-      // 人工快照试图接管 RU Pura 90s Pro 12+256 组（换成快照行 + 幽灵竞品），saveBenchmark 照常落盘
+      // 人工快照只覆盖 RU Pura 90s Pro 12+256 这一组（幽灵竞品整组替换）
       const ghost: DimBenchmark = {
         country_code: 'RU',
         own_model_id: 'own-huawei-pura-90s-pro',
@@ -98,9 +98,13 @@ describe('benchmarkSkuIdsFor', () => {
       saveBenchmark([ghost]);
       // 快照确实写入 localStorage（保存/导入路径语义未删）
       expect(mem.get(LPL.cfgBenchmark)).not.toBeNull();
-      // 但生效读取只认维表：整表与该组取数都不受快照影响
-      expect(getEffectiveBenchmark()).toEqual(baseline);
-      expect(benchmarkSkuIdsFor('own-huawei-pura-90s-pro', '12+256 GB', 'RU')).toEqual(baselineForTarget);
+      // 被覆盖组 = 快照行（矩阵行让位）；未覆盖组照常随维表
+      expect(benchmarkSkuIdsFor('own-huawei-pura-90s-pro', '12+256 GB', 'RU')).toEqual(['cmp-ghost__std__black']);
+      expect(benchmarkSkuIdsFor('own-huawei-pura-90s-pro', '12+512 GB', 'RU')).toEqual(baselineOther);
+      // 整表不再等于纯维表基线（该组已变）
+      expect(getEffectiveBenchmark()).not.toContainEqual(
+        dimBenchmark.find((r) => r.country_code === 'RU' && r.own_model_id === 'own-huawei-pura-90s-pro' && r.own_romram === '12+256 GB')!,
+      );
     } finally {
       saveBenchmark(null); // 清理手动快照，避免影响其他用例
     }

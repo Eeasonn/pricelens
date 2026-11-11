@@ -47,21 +47,33 @@ export const BENCHMARK_CAP_PER_CONFIG = 3;
 /**
  * 生效的默认竞品矩阵。
  *
- * 2026-11-10 Eason 拍板（matrix-only，临时口径）：「矩阵 / 自动 / 替代 / 人工」四层
- * 逻辑先取消——生效对标 = 随包维表 dimBenchmark（管线只发矩阵直配行，矩阵没给的
- * 国家×型号×配置即为空）。浏览器里的人工快照（LPL3.config.benchmark）不再接管：
- * 旧语义是「存在即整表接管」，会把矩阵更新静默遮蔽成旧数据。快照本身不删
- * （manualBenchmarkCount 仍可读、配置页给清除入口），恢复人工层时把下方读取接回即可。
+ * 2026-11-11 Eason：对标配置编辑恢复（按钮不再置灰），人工层以「按组覆盖」语义
+ * 回归，取代 2026-11-10 的 matrix-only 临时口径——人工快照只覆盖其显式包含的
+ * 「国家 × 型号 × 配置」组（整组替换为快照行），未覆盖的组照常随维表矩阵更新，
+ * 不再有「存在即整表接管、矩阵更新被旧快照静默遮蔽」的问题。
  *
  * 按「国家 × 型号 × 配置（ROMRAM 去空格归一）」截到每配置 3 款
  * （BENCHMARK_CAP_PER_CONFIG，组内按 sort 升序、稳定）。
  */
 export function getEffectiveBenchmark(): DimBenchmark[] {
-  // matrix-only 生效表；先按「国家×型号×配置×竞品 SKU」首见去重——防御历史快照/
-  // 潜在维表重复行（2026-11-10 曾因 >=N 档位解析 bug 产出重复行，见 ingest 侧修复）
-  const rowsRaw: DimBenchmark[] = dimBenchmark;
+  // 人工快照行（防御性过滤形状；组键 = 国家×型号×配置，ROMRAM 去空格归一）
+  const manual = readJson<DimBenchmark[]>(LPL.cfgBenchmark);
+  const manualRows = Array.isArray(manual)
+    ? manual.filter((r) => r != null && typeof r === 'object' && typeof r.competitor_sku_id === 'string'
+      && typeof r.country_code === 'string' && typeof r.own_model_id === 'string')
+    : [];
+  const manualGroups = new Set<string>();
+  for (const r of manualRows) {
+    manualGroups.add(`${r.country_code}|${r.own_model_id}|${(r.own_romram ?? '').replace(/\s+/g, '')}`);
+  }
+  // 矩阵行剔除被人工覆盖的组，再拼接人工行；首见去重——防御历史快照/潜在维表
+  // 重复行（2026-11-10 曾因 >=N 档位解析 bug 产出重复行，见 ingest 侧修复）
+  const rowsRaw: DimBenchmark[] = dimBenchmark.filter((r) => {
+    const k = `${r.country_code}|${r.own_model_id}|${(r.own_romram ?? '').replace(/\s+/g, '')}`;
+    return !manualGroups.has(k);
+  });
   const seen = new Set<string>();
-  const rows: DimBenchmark[] = rowsRaw.filter((r) => {
+  const rows: DimBenchmark[] = [...rowsRaw, ...manualRows].filter((r) => {
     const k = `${r.country_code}|${r.own_model_id}|${(r.own_romram ?? '').replace(/\s+/g, '')}|${r.competitor_sku_id}`;
     if (seen.has(k)) return false;
     seen.add(k);

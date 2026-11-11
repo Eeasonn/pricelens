@@ -1,6 +1,6 @@
 // ============================================================
-// 量价页「时间轴同步」开关（2026-11-03 主产品视图补同款，两视图通用）：
-// ① 主产品视图（默认视图）首个面板底部时间轨左侧出现「时间轴同步」开关，默认开
+// 量价页「轴同步」开关（2026-11-03 主产品视图补同款，两视图通用）：
+// ① 主产品视图（默认视图）首个面板底部时间轨左侧出现「轴同步」开关，默认开
 //    （volume.synced 默认 true → timeSynced 派生：各面板共用一段查看时间）；
 // ② 点击关 → 按压态翻转、状态写入会话态 volume.synced，各面板拿到独立窗口
 //    种子（panelWins 由共享窗口填充 = 可独立调整，不再恒等联动）；
@@ -56,13 +56,13 @@ const viewStateRaw = (key: string): string | null => {
     return null;
   }
 };
-const syncToggle = (): HTMLButtonElement => screen.getByRole('button', { name: '时间轴同步' }) as HTMLButtonElement;
+const syncToggle = (): HTMLButtonElement => screen.getByRole('button', { name: '轴同步' }) as HTMLButtonElement;
 const panelWinsStored = (): unknown[] => {
   const raw = viewStateRaw('volume.panelWins');
   return raw ? (JSON.parse(raw) as unknown[]) : [];
 };
 
-describe('量价页 · 时间轴同步开关（主产品视图）', () => {
+describe('量价页 · 轴同步开关（主产品视图）', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/?p=volume');
     sessionStorage.clear();

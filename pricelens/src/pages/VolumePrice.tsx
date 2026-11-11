@@ -955,7 +955,7 @@ export default function VolumePrice() {
   const syncToggle = (
     <button
       type="button"
-      aria-label="时间轴同步"
+      aria-label="轴同步"
       aria-pressed={synced}
       title={synced ? '同步：各图共用一段查看时间' : '独立：各图分别调整'}
       onClick={toggleSynced}
@@ -968,7 +968,7 @@ export default function VolumePrice() {
         lineHeight: '13px', whiteSpace: 'nowrap',
       }}
     >
-      时间轴同步
+      轴同步
     </button>
   );
 

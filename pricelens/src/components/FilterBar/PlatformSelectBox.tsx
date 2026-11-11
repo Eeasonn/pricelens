@@ -54,20 +54,56 @@ export default function PlatformSelectBox() {
     ? state.platform.platforms.join('、')
     : null;
   const explicitPlatform = multiPlatformLabel ?? sel?.platforms[0] ?? shopPlatform ?? null;
+  const autoLabel = defaultPlatform ? `默认 · ${defaultPlatform}` : '默认 · 全部';
+
+  // 2026-11-11 Eason：「默认」不再是与平台平齐的选项（会出现 Jarir 重复两项），
+  // 提出为下拉顶部按钮——选中态高亮，点击回自动口径
+  const defaultButton = (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={explicitPlatform == null}
+      onClick={() => actions.set({ platform: null })}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          actions.set({ platform: null });
+        }
+      }}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        margin: 4, padding: '5px 8px', borderRadius: 6, cursor: 'pointer',
+        background: explicitPlatform == null ? 'rgba(0, 112, 243, 0.10)' : 'transparent',
+        color: explicitPlatform == null ? '#0062d9' : 'rgba(0, 0, 0, 0.88)',
+        fontWeight: explicitPlatform == null ? 600 : 400, fontSize: 14,
+      }}
+    >
+      <span>{autoLabel}</span>
+      {explicitPlatform == null ? <span style={{ fontSize: 12 }}>✓</span> : null}
+    </div>
+  );
 
   return (
     <Select
+      key={explicitPlatform ?? '__auto__'}
       id="scope-platform"
       aria-label="平台"
-      value={explicitPlatform ?? AUTO_VALUE}
+      value={explicitPlatform ?? undefined}
+      // 未选（自动口径）= 无值 + 占位「默认 · …」；key 随状态重挂载，
+      // 防 rc-select 半受控下按钮回到自动后残留上一次平台文案
+      placeholder={autoLabel}
+      allowClear={false}
       onChange={(v) => {
-        if (v === AUTO_VALUE) actions.set({ platform: null });
-        else actions.set({ platform: { platforms: [v], shopIds: [] } });
+        actions.set({ platform: { platforms: [v as string], shopIds: [] } });
       }}
-      options={[
-        { value: AUTO_VALUE, label: defaultPlatform ? `默认 · ${defaultPlatform}` : '默认 · 全部' },
-        ...platforms.map((p) => ({ value: p, label: p })),
-      ]}
+      options={platforms.map((p) => ({ value: p, label: p }))}
+      dropdownRender={(menu) => (
+        <>
+          {defaultButton}
+          <div style={{ height: 1, background: 'rgba(5, 5, 5, 0.06)', margin: '4px 0' }} />
+          {menu}
+        </>
+      )}
       style={{ width: '100%' }}
     />
   );

@@ -163,21 +163,16 @@ describe('配置页 · 切换查阅者（viewer）', () => {
     expect(document.querySelectorAll('.ant-select-disabled').length).toBeGreaterThan(0);
   });
 
-  it('切回 GTM：横幅消失；竞品「编辑」恒禁用（matrix-only：title = 矩阵只读统一说明句），导入入口恢复', () => {
+  it('切回 GTM：横幅消失；竞品「编辑」恢复可点（2026-11-11：title = 编辑说明句），导入入口恢复', () => {
     render(<App />);
     fireEvent.click(segItem('查阅者'));
     expect(screen.getByText(/查阅者不可修改配置/)).toBeDefined();
     fireEvent.click(segItem('GTM'));
     expect(screen.queryByText(/查阅者不可修改配置/)).toBeNull();
-    // matrix-only 临时口径（2026-11-10）：编辑入口保留但不生效，GTM 态同样禁用；
-    // title 与行尾「矩阵」徽章 tooltip 同源（MATRIX_READONLY_HINT，两处口径一致）；
-    // 2026-11-10 UI 审计：禁用标签色取 color.mute（默认禁用灰过虚）+ not-allowed 光标
+    // 2026-11-11 Eason：编辑按钮恢复可点（人工按组生效）；查阅者态仍禁用（RBAC）
     const edit = buttonByText('编辑')!;
-    expect(edit.disabled).toBe(true);
-    expect(edit.title).toBe(MATRIX_READONLY_HINT);
-    // jsdom 将 hex 序列化为 rgb（color.mute = #737373 = rgb(115,115,115)）
-    expect(edit.style.color).toBe('rgb(115, 115, 115)');
-    expect(edit.style.cursor).toBe('not-allowed');
+    expect(edit.disabled).toBe(false);
+    expect(edit.title).toBe('编辑该配置的对标竞品');
     expect(buttonByText('导入配置')).not.toBeNull();
   });
 });

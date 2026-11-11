@@ -1,9 +1,8 @@
 // ============================================================
-// 竞品对标配置块组件级测试（2026-11-10 UI 审计落地回归）：
-// - matrix-only 只读态的「矩阵」孤词徽章有 tooltip 统一说明句（MATRIX_READONLY_HINT）；
-// - 禁用「编辑」按钮 title 与徽章 tooltip 同源同句（两处口径一致，可从 DOM 断言）；
-// - 禁用「编辑」标签色 = color.mute（antd 默认禁用灰过虚）且光标 not-allowed；
-// - 查阅者态 title 保持「查阅者不可修改配置」（RBAC 语义不受统一句影响）。
+// 竞品对标配置块组件级测试（2026-11-10 UI 审计落地回归；2026-11-11 编辑恢复重锚）：
+// - 「矩阵」徽章有 tooltip 统一说明句（MATRIX_READONLY_HINT）；
+// - 「编辑」按钮恢复可点（2026-11-11 Eason：不再置灰）：GTM 态可点击打开对标
+//   配置弹窗（title = 编辑说明句）；查阅者态仍禁编辑（RBAC 语义不变）。
 // 组件只读 useFilters（Context 自带默认值 + noop actions），可直渲染；
 // localStorage 桩同 DataQualityBlock.test 手法。
 // ============================================================
@@ -39,8 +38,8 @@ const editButton = (): HTMLButtonElement | null => {
   return el ? (el.closest('button') as HTMLButtonElement) : null;
 };
 
-describe('BenchmarkConfigBlock · 矩阵直配只读态（UI 审计 2026-11-10）', () => {
-  it('行尾「矩阵」徽章悬停出统一说明句（tooltip 与禁用编辑 title 同源）', async () => {
+describe('BenchmarkConfigBlock · 编辑恢复（2026-11-11）', () => {
+  it('行尾「矩阵」徽章悬停出统一说明句（tooltip 同源）', async () => {
     render(<BenchmarkConfigBlock />);
     // 行尾孤词徽章是导航行上的第一个「矩阵」（竞品 chip 内的小徽章在其后）
     const badge = screen.getAllByText('矩阵')[0]!;
@@ -49,18 +48,18 @@ describe('BenchmarkConfigBlock · 矩阵直配只读态（UI 审计 2026-11-10�
     expect(await screen.findByText(MATRIX_READONLY_HINT)).toBeTruthy();
   });
 
-  it('禁用「编辑」按钮：title = 统一说明句、标签色 color.mute、光标 not-allowed', () => {
+  it('「编辑」按钮恢复可点：title = 编辑说明句、可点击打开对标配置弹窗', () => {
     render(<BenchmarkConfigBlock />);
     const edit = editButton();
     expect(edit).not.toBeNull();
-    expect(edit!.disabled).toBe(true);
-    expect(edit!.title).toBe(MATRIX_READONLY_HINT);
-    // jsdom 将 hex 序列化为 rgb（color.mute = #737373 = rgb(115,115,115)）
-    expect(edit!.style.color).toBe('rgb(115, 115, 115)');
-    expect(edit!.style.cursor).toBe('not-allowed');
+    expect(edit!.disabled).toBe(false);
+    expect(edit!.title).toBe('编辑该配置的对标竞品');
+    fireEvent.click(edit!);
+    // 弹窗打开：标题「配置对标 · 型号」出现
+    expect(screen.getAllByText(/配置对标/).length).toBeGreaterThan(0);
   });
 
-  it('查阅者态：title 保持「查阅者不可修改配置，请联系 GTM」', () => {
+  it('查阅者态：按钮仍禁用（RBAC），title 保持「查阅者不可修改配置」', () => {
     render(<BenchmarkConfigBlock canEdit={false} />);
     const edit = editButton();
     expect(edit).not.toBeNull();

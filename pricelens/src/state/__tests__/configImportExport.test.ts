@@ -184,8 +184,6 @@ describe('validateImportPayload · 坏文件一律拒绝（不半写入）', () 
 
 describe('applyImportPayload · round-trip 与权限', () => {
   it('导出 → 清配置 → 导入 → 恢复，并派发 CONFIG_CHANGED_EVENT（defaultShop 读缓存随之失效）', () => {
-    // matrix-only 口径（2026-11-10）：基准 = 空配置时的纯维表生效视图
-    const benchmarkBaseline = getEffectiveBenchmark();
     seedConfig();
     const snap: ConfigSnapshotV1 = JSON.parse(JSON.stringify(exportConfigSnapshot()));
     clearAllConfig();
@@ -199,10 +197,11 @@ describe('applyImportPayload · round-trip 与权限', () => {
 
     expect(result.applied).toBe(true);
     expect(fired).toHaveBeenCalledTimes(1);
-    // matrix-only 临时口径：导入仍把 benchmark 快照写入 localStorage（saveBenchmark 语义不变），
-    // 但生效读取只认维表 dimBenchmark，人工快照不改变 getEffectiveBenchmark 返回
+    // 2026-11-11 人工层按组覆盖回归：导入仍把 benchmark 快照写入 localStorage，
+    // 生效读取 = 快照覆盖其所在组（该组以快照为准），其余组随维表 dimBenchmark
     expect(window.localStorage.getItem(LPL.cfgBenchmark)).toEqual(JSON.stringify([benchRow]));
-    expect(getEffectiveBenchmark()).toEqual(benchmarkBaseline);
+    expect(getEffectiveBenchmark().some((r) => r.competitor_sku_id === benchRow.competitor_sku_id
+      && r.country_code === benchRow.country_code && r.own_model_id === benchRow.own_model_id)).toBe(true);
     expect(getPrevGenOverrides()).toEqual({ 'own-huawei-pura-90s-pro': 'own-huawei-pura-80-ultra' });
     expect(defaultShopOverrideOf('RU')).toBe('ozon-flagship');
     expect(readAnomalyRule()).toEqual({ enabled: true, thresholdPct: 30 });

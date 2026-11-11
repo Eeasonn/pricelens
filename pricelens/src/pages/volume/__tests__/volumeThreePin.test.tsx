@@ -4,7 +4,7 @@
 //   （恒开恒柱）+ 名称带图层标注（价格 USD / 销量 台·模拟）+ 区间量尺拖选入参；
 // 成本常驻（2026-11-10 Eason）：我司面板价格层恒叠成本细线（cost-line svg + 成本·模拟药丸），
 //   关 = 纯价格线 + 销量柱；旧面板内可点击图例行 / 成本柱呈现 / 极差卡随之退役；
-// 「时间轴同步」开关移驻首个面板底部时间轨左侧；隐藏收纳区
+// 「轴同步」开关移驻首个面板底部时间轨左侧；隐藏收纳区
 //   （HiddenVault）与胶囊带对位契约保持原断言，库存 · DOS 补充图已从页面移除。
 // 组装模式照 volumeTimeSync.test.tsx（mock echarts + ResizeObserver 定宽）。
 // ============================================================
@@ -205,12 +205,12 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     expect(screen.getByTestId('volume-layer-legend').textContent).toContain('成本 · 模拟');
   });
 
-  // ---- 时间轴同步开关与首个时间轨同一水平线 ----
+  // ---- 轴同步开关与首个时间轨同一水平线 ----
 
-  it('时间轴同步开关在首个时间轨左侧，默认开；合并单图态隐藏', async () => {
+  it('轴同步开关在首个时间轨左侧，默认开；合并单图态隐藏', async () => {
     render(<App />);
     await waitPanelsReady();
-    const btn = screen.getByRole('button', { name: '时间轴同步' }) as HTMLElement;
+    const btn = screen.getByRole('button', { name: '轴同步' }) as HTMLElement;
     const gutter = screen.getByTestId('volume-time-sync-gutter');
     expect(gutter.contains(btn)).toBe(true);
     expect(gutter.style.height).toBe('52px');
@@ -221,7 +221,7 @@ describe('量价页 · 量价同骨架（2026-11-06）', () => {
     fireEvent.click(screen.getByRole('button', { name: /^查看 .+ 所在组的 \d+ 款对比产品$/ }));
     fireEvent.click(screen.getByRole('button', { name: '更多显示选项' }));
     fireEvent.click(screen.getByText('合并单图'));
-    expect(screen.queryByRole('button', { name: '时间轴同步' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '轴同步' })).toBeNull();
   });
 
 });

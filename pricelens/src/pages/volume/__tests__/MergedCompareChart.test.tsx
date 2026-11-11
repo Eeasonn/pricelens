@@ -286,7 +286,7 @@ describe('量价页 · 合并单图接线（⋯ 呈现槽 / 合并渲染 / 分�
     expect(document.querySelectorAll('button.lpl-lg-pill').length).toBeGreaterThan(1);
     // 面板级时间轨与「同步」开关退场（合并图自带完整 X 轴）
     expect(screen.queryAllByRole('slider', { name: '本图时间起点' }).length).toBe(0);
-    expect(screen.queryByRole('button', { name: '时间轴同步' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '轴同步' })).toBeNull();
     // X 轴日历周格式（YYYYWxx）
     expect(screen.getAllByText(/^2026W\d{2}$/).length).toBeGreaterThan(0);
     // 会话态落盘
