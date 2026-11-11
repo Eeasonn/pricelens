@@ -42,8 +42,9 @@ describe('monthly booklet facts', () => {
     const facts = [row({ price_type: 'prepaid', term_months: null }), row({ offer_id: 'offer-3', price_type: 'no-price', price_local: null, price_usd: null, term_months: null })];
     expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'installment', financingTerms: [24] })).toEqual([]);
     expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'prepaid', financingTerms: [] })).toHaveLength(1);
-    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: null, financingTerms: [], includePrepaid: true })).toHaveLength(1);
-    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: null, financingTerms: [], includeNoPrice: true })).toHaveLength(1);
+    // 2026-11-11：financingType=null = 全部有价行（ZA 明细月度字段聚合的数据源；
+    // no-price 行仍需显式 includeNoPrice 才放行，与聚合过滤等价）
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: null, financingTerms: [] })).toHaveLength(1);
   });
 
   it('defaults to published review status only', () => {

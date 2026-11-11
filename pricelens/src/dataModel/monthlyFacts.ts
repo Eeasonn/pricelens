@@ -26,11 +26,15 @@ export function monthlyFactsFor(
     if (row.country_code !== query.countryCode) return false;
     if (!allowedStatuses.includes(row.review_status)) return false;
     if (row.price_type === 'installment') {
-      return query.financingType === 'installment'
-        && (query.financingTerms.length === 0
-          || (row.term_months != null && query.financingTerms.includes(row.term_months)));
+      // financingType=null = 不限口径（ZA 明细月度字段聚合的全量取数用）
+      return query.financingType == null
+        || (query.financingType === 'installment'
+          && (query.financingTerms.length === 0
+            || (row.term_months != null && query.financingTerms.includes(row.term_months))));
     }
-    if (row.price_type === 'prepaid') return query.financingType === 'prepaid' || query.includePrepaid === true;
+    if (row.price_type === 'prepaid') {
+      return query.financingType === 'prepaid' || query.includePrepaid === true || query.financingType == null;
+    }
     return query.includeNoPrice === true;
   });
 }

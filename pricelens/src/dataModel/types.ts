@@ -164,7 +164,11 @@ export interface FactPriceMonthly {
   fx_rate: number;
   price_usd: number | null;
   rrp_local: number | null;
-  term_months: 24 | 36 | null;
+  /** 后付合约月供对应合约期总价（册子「N期总价」列）；先付/无价行 = null */
+  total_local?: number | null;
+  total_usd?: number | null;
+  term_months: 24 | 36 | 48 | null;
+  promotion_text?: string | null;
   source_document: string;
   source_page: string | number | null;
   source_sha256: string | null;
@@ -213,6 +217,15 @@ export interface SeriesPoint {
   offer: OfferInfo | null;
   url: string;
   shopName: string | null; // 取价店铺（渠道显示名 · 店铺名）
+  /** ZA 运营商小册子月度明细字段（2026-11-11 Eason 明细改造）：逐月各口径最低价
+   *  与促销原文——明细表 ZA 分支的行数据源 */
+  finance?: {
+    selling: number | null;
+    i24: number | null; t24: number | null;
+    i36: number | null; t36: number | null;
+    i48: number | null; t48: number | null;
+    promo: string | null;
+  } | null;
   /** 取数渠道（平台-店铺显示名，如 OZON 3P；自动口径每周随最低价来源变化） */
   channelName?: string | null;
   platform?: string | null; // 取价平台（dim_channel.platform，随最低价行带出；明细表平台列）

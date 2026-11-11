@@ -94,6 +94,31 @@ def price_type_of(value: Any) -> str:
     return "installment"
 
 
+def spec_romram_text(value: Any) -> str:
+    """册子规格串 → 配置展示文案（'12.2"/WiFi/8+256 GB' → '12.2" 8+256 GB'；
+    '256GB 5G' → '256 GB'）。剥联网词、GB/TB 补空格；空 → ''（调用方落
+    「规格未标明」）。"""
+    s = text(value) or ""
+    s = re.sub(r"\b(WI-?FI\d?|LTE|5G|4G|E-SIM|ESIM|DUAL\s*SIM)\b", " ", s, flags=re.I)
+    s = re.sub(r"(\d)(GB|TB)", r"\1 \2", s, flags=re.I)
+    s = " ".join(s.split())
+    return s
+
+
+def storage_gb_of(value: Any) -> int | None:
+    """规格串里的容量（GB 数，TB 折算）——取最后一个容量 token（'12+256 GB' →
+    256；'256GB 5G' → 256；'1TB' → 1024）。无容量 token = None。"""
+    s = text(value) or ""
+    hits = re.findall(r"(\d+(?:\.\d+)?)\s*(TB|GB)", s, flags=re.I)
+    if not hits:
+        return None
+    num, unit = hits[-1]
+    v = float(num)
+    if unit.upper() == "TB":
+        v *= 1024
+    return int(v)
+
+
 def term_months_of(value: Any) -> int | None:
     label = text(value) or ""
     match = re.search(r"(24|36|48)", label)
@@ -160,6 +185,15 @@ def match_product(
         }
     spec_key = key(spec)
     spec_hits = [item for item in hits if key(item.get("romram")) == spec_key]
+    if len(spec_hits) != 1:
+        # 宽松规格兜底（2026-11-11 Eason）：册子规格只写容量（'256GB 5G'，不含
+        # 运行内存/联网词）——与目录 SKU 的容量（rom 尾数）对齐，唯一命中即
+        # 精确匹配（颜色/颜色键本就不随册子下发，不丢层）
+        storage = storage_gb_of(spec)
+        if storage is not None:
+            by_storage = [item for item in hits if storage_gb_of(item.get("romram") or "") == storage]
+            if len(by_storage) == 1:
+                spec_hits = by_storage
     if len(spec_hits) == 1:
         return {
             "match_status": "matched-spec-complete",
@@ -264,6 +298,25 @@ def build_records_selfaudit(
         sku_spec = text(row.get("型号规格"))
         mapped = product_map.get((key(brand), key(model_clean)))
         match = match_product(brand, model_clean, sku_spec, candidates, mapped)
+        # 2026-11-11 Eason：规格兜底提升——历史 product_map 命中（mapped）时不走
+        # match_product 的 spec 匹配，这里按「同容量唯一 SKU」补一次精确提升，
+        # 册子写了容量的行不再落「规格未标明」
+        if sku_spec and match["match_status"] in {"matched-model", "unmatched", "pending-spec"}:
+            storage = storage_gb_of(sku_spec)
+            hits = [item for item in candidates.get((key(brand), key(model_clean)), [])
+                    if not str(item.get("sku_id", "")).startswith("za-booklet-")
+                    and storage_gb_of(item.get("romram") or "") == storage] if storage is not None else []
+            if len(hits) >= 1:
+                # 同规格多色（册子不下发颜色层）取 sku_id 字典序最小作代表色
+                best = min(hits, key=lambda c: c["sku_id"])
+                match = {
+                    "match_status": "matched-spec-complete",
+                    "model_id": best["model_id"],
+                    "romram": best["romram"],
+                    "sku_id": best["sku_id"],
+                    "candidate_model_ids": sorted({c["model_id"] for c in candidates.get((key(brand), key(model_clean)), [])}),
+                    "candidate_sku_ids": [c["sku_id"] for c in candidates.get((key(brand), key(model_clean)), [])],
+                }
         if owner_approved and match["match_status"] == "matched-model" and not sku_spec:
             sku_spec = match.get("romram") or "—"
         # matched-model（型号级、无规格）的 sku_id 可为空：运行时/产品树按 sku 对账，
@@ -274,7 +327,7 @@ def build_records_selfaudit(
         base_offer = text(row.get("截图命名")) or (f"VDC-{period_id}-row{source_index}" if period_id else None)
         fx_rate = number(row.get("汇率"))
 
-        def emit(price_type: str, price_local: float | None, term_months: int | None, price_usd: float | None, suffix: str) -> None:
+        def emit(price_type: str, price_local: float | None, term_months: int | None, price_usd: float | None, suffix: str, total_local: float | None = None, total_usd: float | None = None) -> None:
             offer_id = f"{base_offer}-{suffix}" if base_offer else None
             required_ok = bool(
                 offer_id and period_id and brand and model_clean
@@ -313,6 +366,8 @@ def build_records_selfaudit(
                     "fx_rate": fx_rate,
                     "price_usd": price_usd,
                     "rrp_local": None,
+                    "total_local": total_local if price_type == "installment" else None,
+                    "total_usd": total_usd if price_type == "installment" else None,
                     "term_months": term_months,
                     "offer_review_status": None,
                     "page_review_status": None,
@@ -336,15 +391,19 @@ def build_records_selfaudit(
         prepaid = number(row.get("平台成交价-本币"))
         prepaid_usd = number(row.get("平台成交价-美金"))
         i24 = number(row.get("24期分期价-本币"))
+        t24 = number(row.get("24期总价-本币"))
         i36 = number(row.get("36期分期价-本币"))
+        t36 = number(row.get("36期总价-本币"))
         i48 = number(row.get("48期分期价-本币"))
+        t48 = number(row.get("48期总价-本币"))
         if prepaid is not None:
             emit("prepaid", prepaid, None, prepaid_usd, "pp")
-        for term, value in ((24, i24), (36, i36), (48, i48)):
+        for term, value, total in ((24, i24, t24), (36, i36, t36), (48, i48, t48)):
             if value is None:
                 continue
             usd = round(value / fx_rate, 2) if fx_rate else None
-            emit("installment", value, term, usd, f"i{term}")
+            total_usd = round(total / fx_rate, 2) if total is not None and fx_rate else None
+            emit("installment", value, term, usd, f"i{term}", total_local=total, total_usd=total_usd)
     metadata = {
         "schema_version": "za-operator-booklet-staging-v1",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

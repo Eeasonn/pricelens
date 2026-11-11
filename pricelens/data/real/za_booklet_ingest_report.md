@@ -1,6 +1,6 @@
 # ZA Vodacom 小册子导入报告
 
-生成时间：2026-11-11T06:56:33+00:00
+生成时间：2026-11-11T10:33:07+00:00
 源文件：ZA_VODACOM_1109.xlsx
 门禁状态：owner-approved
 
@@ -14,7 +14,7 @@
 - 发布状态：PUBLISHED
 - 复核状态：{'PASS': 1886}
 - 价格类型：{'installment': 1241, 'prepaid': 645}
-- SKU 匹配：{'matched-model': 1886}
+- SKU 匹配：{'matched-spec-complete': 960, 'matched-model': 926}
 
 ## 发布条件
 

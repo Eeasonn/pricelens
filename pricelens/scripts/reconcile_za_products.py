@@ -77,7 +77,7 @@ def tier_for(industry: str, candidate: dict[str, Any] | None) -> str:
     }[industry]
 
 
-def read_source_models(path: Path) -> list[tuple[str, str]]:
+def read_source_models(path: Path) -> list[tuple[str, str, str]]:
     frame = pd.read_excel(path, sheet_name="全量数据")
     frame.columns = [str(c).split("\n", 1)[0].strip() for c in frame.columns]  # 双语表头归一
     columns = {str(column).split("\n", 1)[0].split("/", 1)[0].strip(): column for column in frame.columns}
@@ -87,13 +87,17 @@ def read_source_models(path: Path) -> list[tuple[str, str]]:
         raise ValueError("全量数据缺少品牌或型号列")
     # 2026-11-09 新一代自审计册子的提取型号名会粘坏（NEWHUAWEIWatch Ultimate Pro 2），
     # 与 ingest_za_booklet.clean_booklet_model_name 同口径剥品牌前缀后再归并
-    from ingest_za_booklet import clean_booklet_model_name
-    seen: dict[tuple[str, str], tuple[str, str]] = {}
+    from ingest_za_booklet import clean_booklet_model_name, spec_romram_text, storage_gb_of
+    spec_col = columns.get("型号规格")
+    seen: dict[tuple[str, str, str], tuple[str, str, str]] = {}
     for _, row in frame.iterrows():
         brand, model = text(row.get(brand_col)), text(row.get(model_col))
-        if brand and model:
-            model = clean_booklet_model_name(brand, model)
-            seen.setdefault((key(brand), key(model)), (brand, model))
+        if not brand or not model:
+            continue
+        model = clean_booklet_model_name(brand, model)
+        spec = spec_romram_text(text(row.get(spec_col))) if spec_col else ""
+        # 同型号按规格分条（册子写了容量的落容量级，没写的落型号级「规格未标明」）
+        seen.setdefault((key(brand), key(model), spec), (brand, model, spec))
     return list(seen.values())
 
 
@@ -107,8 +111,10 @@ def build(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         by_key[(key(product.get("brand")), key(product.get("model_name")))].append(product)
 
     mapping: list[dict[str, Any]] = []
+    from ingest_za_booklet import storage_gb_of  # build 作用域内可用（同 read_source_models 的局部导入惯例）
+
     used_product_ids = {p["sku_id"] for p in products}
-    for brand, model in read_source_models(path):
+    for brand, model, spec in read_source_models(path):
         candidates = by_key.get((key(brand), key(model)), [])
         if len(candidates) == 1:
             candidate = candidates[0]
@@ -132,9 +138,38 @@ def build(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
         base = candidates[0] if candidates else None
         industry = industry_for(model, candidates)
+        # 规格级优先（2026-11-11 Eason：册子写了容量的落容量级 SKU，不再一律
+        # 型号级「规格未标明」；穿戴产业不参与——塌缩契约 romram ∈ {—, 规格未标明}）
+        if spec and industry != "wearable":
+            storage = storage_gb_of(spec)
+            if storage is not None:
+                spec_hits = [c for c in candidates
+                             if storage_gb_of(c.get("romram") or "") == storage]
+                if len(spec_hits) >= 1:
+                    # 同规格多色取 sku_id 字典序最小作代表（册子不下发颜色层）
+                    candidate = min(spec_hits, key=lambda c: c["sku_id"])
+                    countries = list(candidate.get("countries") or [])
+                    if "ZA" not in countries:
+                        countries.append("ZA")
+                        candidate["countries"] = countries
+                    candidate.setdefault("tier_by_country", {})["ZA"] = candidate.get("tier_code", "300-400")
+                    mapping.append({
+                        "brand": brand,
+                        "model": model,
+                        "model_id": candidate["model_id"],
+                        "sku_id": candidate["sku_id"],
+                        "romram": candidate.get("romram") or "—",
+                        "match_status": "matched-spec",
+                        "mapping_kind": "spec-existing-sku",
+                        "candidate_model_ids": sorted({c["model_id"] for c in candidates}),
+                        "candidate_sku_ids": [c["sku_id"] for c in candidates],
+                    })
+                    continue
         tier = tier_for(industry, base)
         model_id = f"za-booklet-{key(brand)}-{key(model)}"
-        sku_id = f"{model_id}__booklet"
+        # 同型号多条规格（2026-11-11 规格级分条）按规格分键，避免 synthetic 碰撞
+        spec_slug = key(spec).replace(" ", "-") if spec else "booklet"
+        sku_id = f"{model_id}__{spec_slug}"
         if sku_id in used_product_ids:
             raise ValueError(f"ZA synthetic SKU collision: {sku_id}")
         used_product_ids.add(sku_id)
@@ -146,7 +181,7 @@ def build(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             "is_own": brand == "HUAWEI",
             "series": base.get("series", model) if base else model,
             "model_name": model,
-            "romram": MODEL_LEVEL_ROMRAM,
+            "romram": (spec or MODEL_LEVEL_ROMRAM) if industry != "wearable" else MODEL_LEVEL_ROMRAM,
             "color": "—",
             "tier_code": tier,
             "ref_price_usd": base.get("ref_price_usd") if base else None,

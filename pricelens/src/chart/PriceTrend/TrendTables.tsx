@@ -65,6 +65,8 @@ const W_TIME = 100;
 const MAIN_TINT = '#f3f8ff';
 /** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer） */
 const DETAIL_SPAN = 6;
+/** ZA 运营商小册子明细行数（平台成交价 + 24/36/48 期分期价与总价 ×2 + 促销政策） */
+const ZA_DETAIL_SPAN = 8;
 
 /** 取证行小件样式：图标 + 文字，链接色（button / a 共用） */
 const EVID_STYLE: CSSProperties = {
@@ -218,26 +220,46 @@ export default function TrendTables(props: {
     markCopied('diff', await copyText(lines.join('\n')));
   };
   const onCopyDetail = async (): Promise<void> => {
-    const TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
     // 近 4 周环比独立成列（第一百八十九轮，Eason 定版收敛）：表头在「类型」后，
     // 与表同列结构；只随每个产品首行（RRP 行）输出一次，其余行留空串
-    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '付费', '类型', '近4周环比', ...dates].join('\t')];
+    const isZa = viewBlocks.some((b) => b.g.series.some((sr) => sr.financeLabel != null));
+    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '付费', ...(isZa ? ['促销政策'] : []), '类型', '近4周环比', ...dates].join('\t')];
+    const STD_TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
+    const ZA_TYPES = ['平台成交价', '24期分期价', '24期总价', '36期分期价', '36期总价', '48期分期价', '48期总价', '促销政策'] as const;
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
         const change = fourWeekTextOf(s);
-        for (const ty of TYPES) {
+        const zaMode = s.financeLabel != null;
+        const rowsDef: Array<[string, (pt: (typeof s.points)[number]) => string]> = zaMode
+          ? ZA_TYPES.map((ty) => [ty, (pt) => {
+              const f = pt.finance;
+              if (!f) return '—';
+              if (ty === '平台成交价') return f.selling != null ? formatPrice(f.selling, currency) : '—';
+              if (ty === '促销政策') return f.promo ?? '—';
+              const v = ty === '24期分期价' ? f.i24
+                : ty === '24期总价' ? f.t24
+                : ty === '36期分期价' ? f.i36
+                : ty === '36期总价' ? f.t36
+                : ty === '48期分期价' ? f.i48
+                : f.t48;
+              return v != null ? formatPrice(v, currency) : '—';
+            }] as [string, (pt: (typeof s.points)[number]) => string])
+          : STD_TYPES.map((ty) => [ty, (pt) => {
+              if (ty === 'RRP') return formatPrice(pt.rrp, currency);
+              if (ty === '折后价') return formatPrice(pt.price, currency);
+              if (ty === '折扣率') {
+                const disc = discountOf(pt);
+                return disc != null ? fmtPct(disc) : '—';
+              }
+              if (ty === '平台-店铺') return pt.channelName ?? '—';
+              if (ty === '取证') return pt.url || '—';
+              return offerText(pt) || '—';
+            }] as [string, (pt: (typeof s.points)[number]) => string]);
+        for (const [ty, get] of rowsDef) {
           const cells = cols.map(({ i }) => {
             const pt = s.points[i];
             if (!pt) return '—';
-            if (ty === 'RRP') return formatPrice(pt.rrp, currency);
-            if (ty === '折后价') return formatPrice(pt.price, currency);
-            if (ty === '折扣率') {
-              const disc = discountOf(pt);
-              return disc != null ? fmtPct(disc) : '—';
-            }
-            if (ty === '平台-店铺') return pt.channelName ?? '—';
-            if (ty === '取证') return pt.url || '—';
-            return offerText(pt) || '—';
+            return get(pt);
           });
           lines.push(
             [
@@ -245,6 +267,7 @@ export default function TrendTables(props: {
               dedupeSpecText(s.label),
               configTextOf(b.specByKey.get(s.key)?.romram),
               s.financeLabel ?? '',
+              zaMode ? (s.points[cols[0]?.i ?? 0]?.finance?.promo ?? '') : '',
               ty,
               ty === 'RRP' ? change : '',
               ...cells,
@@ -561,9 +584,14 @@ export default function TrendTables(props: {
               url: pt?.url ?? '',
             });
           };
+          // 2026-11-11 Eason：ZA 运营商小册子口径的明细字段替换（平台成交价 /
+          // 24·36·48 期分期价与总价 / 促销政策）；其他口径维持标准六行
+          const isZaFinance = s.financeLabel != null && s.points.some((pt) => pt.finance != null);
+          const span = isZaFinance ? ZA_DETAIL_SPAN : DETAIL_SPAN;
           const rows: JSX.Element[] = [
-            ...identityCells(s, b.specByKey, DETAIL_SPAN, p, main, fourWeekChanges.get(s.key) ?? null, true),
+            ...identityCells(s, b.specByKey, span, p, main, fourWeekChanges.get(s.key) ?? null, true),
           ];
+          if (!isZaFinance) {
           // RRP 行
           rows.push(typeCell('RRP', main, `${p}-rrp`));
           rows.push(
@@ -700,6 +728,58 @@ export default function TrendTables(props: {
               );
             }),
           )
+          } else {
+          // ZA 运营商小册子月度明细行（2026-11-11 Eason 字段改造）：平台成交价 /
+          // 24·36·48 期分期价与总价 / 促销政策；取证与渠道列月度固定不出
+          const finAt = (i: number) => s.points[i]?.finance ?? undefined;
+          const finMoneyRows: Array<[string, (f: ReturnType<typeof finAt>) => number | null]> = [
+            ['平台成交价', (f) => f?.selling ?? null],
+            ['24期分期价', (f) => f?.i24 ?? null],
+            ['24期总价', (f) => f?.t24 ?? null],
+            ['36期分期价', (f) => f?.i36 ?? null],
+            ['36期总价', (f) => f?.t36 ?? null],
+            ['48期分期价', (f) => f?.i48 ?? null],
+            ['48期总价', (f) => f?.t48 ?? null],
+          ];
+          for (const [label, get] of finMoneyRows) {
+            rows.push(typeCell(label, main, `${p}-fin-${label}`));
+            rows.push(
+              ...cols.map(({ bk, i }, ri) => {
+                const f0 = finAt(i);
+              const v = f0 ? get(f0) : null;
+                return (
+                  <div key={`${p}-fin-${label}-${bk.id}`} role="cell" style={{ ...cell(3 + ri), gridColumn: String(4 + ri), justifyContent: 'flex-end', background: bg }}>
+                    {v != null ? (
+                      <span className="tnum" style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap' }}>
+                        {formatPrice(v, currency)}
+                      </span>
+                    ) : (
+                      emptyCell
+                    )}
+                  </div>
+                );
+              }),
+            );
+          }
+          // 促销政策行（册子促销原文，全文换行显示）
+          rows.push(typeCell('促销政策', main, `${p}-promo`));
+          rows.push(
+            ...cols.map(({ bk, i }, ri) => {
+              const promo = finAt(i)?.promo ?? null;
+              return (
+                <div key={`${p}-promo-${bk.id}`} role="cell" style={{ ...cell(3 + ri), gridColumn: String(4 + ri), alignItems: 'flex-start', background: bg }}>
+                  {promo ? (
+                    <span style={{ fontSize: 10, lineHeight: '13px', color: color.body, wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                      {promo}
+                    </span>
+                  ) : (
+                    emptyCell
+                  )}
+                </div>
+              );
+            }),
+          )
+          }
           return (
             <div key={p} role="row" style={{ display: 'contents' }}>
               {rows}
