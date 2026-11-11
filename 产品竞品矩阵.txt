@@ -110,7 +110,7 @@
 			Air	MatePad Air	>=800	Apple iPad Air M4 11"	Samsung Galaxy Tab S11	
 			mini	MatePad mini	500<800	Apple iPad mini		
 			数字	MatePad 11.5	350<500	Apple iPad 11	Redmi Pad 2 Pro	Honor PAD 20
-			SE	MatePad SE 11	250<350	Redmi Pad 2	Honor PAD 11.5 X9A	Samsung Galaxy Tab A9+
+			SE	MatePad SE 11	250<350	HONOR Pad X8b	Samsung Galaxy Tab A11	Xiaomi Redmi Pad 2
 中东非	南非	手机	Pura	Pura 90s Pro Max	＞1000	Apple iPhone 17 Pro	Samsung Galaxy S26 Ultra	Honor Magic 8 Pro
 				Pura 90s Pro	＞1000	Samsung Galaxy S26	Apple iPhone 17	Samsung Galaxy S25
 			Mate	Mate 80 Pro	＞1000	Samsung Galaxy S26+	Samsung Galaxy S26 Ultra	-

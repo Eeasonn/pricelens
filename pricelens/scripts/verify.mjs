@@ -167,7 +167,13 @@ console.log('\n[1] 维表完整性');
   check('dim_benchmark 竞品 SKU 与我司型号均在该国有数据、sort ≥ 1', badBench.length === 0, `${dimBenchmark.length} 条 / ${new Set(dimBenchmark.map((b) => b.country_code)).size} 国`);
   check('dim_benchmark source ∈ {matrix,substitute,manual,auto}', dimBenchmark.every((b) => ['matrix', 'substitute', 'manual', 'auto'].includes(b.source)));
   const ruBench = dimBenchmark.filter((b) => b.country_code === 'RU' && b.own_model_id === 'own-huawei-pura-90s-pro-max');
-  check('R国 Pura 90s Pro Max 对标 = iPhone 17 Pro + S26 Ultra 同 ROM 配对（共 4 条）', ruBench.length === 4 && ruBench.every((b) => productById.get(b.competitor_sku_id).romram === b.own_romram), ruBench.map((b) => `${b.own_romram}←${productById.get(b.competitor_sku_id).model_name}`).join('；'));
+  // 2026-11-11 pair_configs 修订（Eason）：便宜对便宜 + 同 RAM 认领——12+256 对
+  // 两竞品的同档 12+256；12+512 对两竞品的同 RAM 族（12+512 / 12+1TB / 16+1TB）
+  const ruPairs = (cfg) => ruBench.filter((b) => b.own_romram === cfg)
+    .map((b) => productById.get(b.competitor_sku_id).romram).sort().join('|');
+  check('R国 Pura 90s Pro Max 对标 = iPhone 17 Pro + S26 Ultra 便宜对便宜（12+256×2 + 12+512 同 RAM 族×4）',
+    ruPairs('12+256 GB') === '12+256 GB|12+256 GB' && ruPairs('12+512 GB') === '12+1 TB|12+512 GB|12+512 GB|16+1 TB',
+    ruBench.map((b) => `${b.own_romram}←${productById.get(b.competitor_sku_id).model_name} ${productById.get(b.competitor_sku_id).romram}`).join('；'));
 }
 
 // ---------------- 2. 事实包 ----------------

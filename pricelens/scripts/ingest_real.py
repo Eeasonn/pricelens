@@ -492,71 +492,116 @@ def cfg_features(industry, romram):
 
 
 def pair_configs(own_cfgs, comp_cfgs, industry):
-    """SKU 级配置匹配（2026-10-20 拍板；2026-10-29 Eason 修订两点）：
-    手机/平板 ROM+RAM，优先 ROM；
-    手机「我司 1 配置 vs 友商多配置」不再全显（2026-10-29）——优先同 ROM（全部
-    同 ROM 变体，通常 1 个）；友商无同 ROM = 就近只配一个；
-    华为多配置 vs 友商 1 配置 → 全部对友商该配置；
-    都多 → 一一对应（同 ROM 同 RAM > 同 ROM > ROM 就近；平板叠尺寸就近），
-    2026-10-29 起改全局贪心（每轮取剩余最优 (我司,友商) 对）——修复按我司字典序
-    贪心的挤出（12+512 抢走友商唯一 16+512，16+512 只剩 12+1TB）。
+    """SKU 级配置匹配（2026-11-11 Eason 三条修订，取代 2026-10-29 全局贪心）：
+    平板先按屏幕尺寸分桶：两侧尺寸各自升序 rank-zip（12.2→11"、13.2→13"，
+    图3：MatePad Pro 2025 全部 12.2 对 M5 11 寸、13.2 对苹果 13 寸）；
+    我司单尺寸 = 友商最近尺寸（图2：MatePad Pro Max 13.2 → iPad Pro M5 13"）。
+    桶内按（存储, 内存）升序「便宜对便宜」：
+      两侧数量相等 → 一一对应（图1：nova 12+256 对 Honor 600 8+256、
+        12+512 对 600 12+256）；
+      友商更多 → 我司认领同 RAM 的全部友商变体（存储升序 ≤4；图4：iPad Air M4
+        8+128/8+256 归我司 8+256、12+128/12+256 归我司 12+256）；无主友商按
+        存储（次按内存）就近归档；
+      我司更多（PaperMatte 等友商没有的变体）→ 每个我司配置配最近友商，友商复用
+        （图3：两行 PaperMatte 也拿到 iPad Pro M5）。
+    手机同三分支（无尺寸层）。我司 1 配置 vs 友商多配置维持 2026-10-29 口径
+    （同存储全变体 ≤4 → 就近一个）。
     穿戴：2026-11-10 层级塌缩后双侧均只剩型号级单配置（'—'）→ 走通用 1:1 分支；
-    （塌缩前口径=表盘尺寸档+蜂窝偏好+尺寸就近，随 matrix-only 轮退役）。
     音频/IoT/PC：1:1。"""
     if not own_cfgs or not comp_cfgs:
         return []
-    if industry in ("phone", "tablet"):
-        if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
-            # 2026-10-29 平板同手机原则（Eason）：优先同 ROM（联网一致优先、尺寸就近，
-            # 最多 4）；友商无同 ROM = 就近只配一个（尺寸就近 → ROM 就近）
-            o = cfg_features(industry, own_cfgs[0])
-            feats = {c: cfg_features(industry, c) for c in comp_cfgs}
+
+    def feats(cfg):
+        return cfg_features(industry, cfg)
+
+    def rank_key(cfg):
+        f = feats(cfg)
+        return (f["rom"] or 0, f["ram"] or 0)
+
+    def pair_flat(o_cfgs, c_cfgs):
+        if len(o_cfgs) == 1 and len(c_cfgs) > 1:
+            # 2026-10-29 口径保持：优先同存储（全部同存储变体 ≤4）；友商无同存储 = 就近一个
+            o = feats(o_cfgs[0])
+            f_map = {c: feats(c) for c in c_cfgs}
 
             def in_key(c):
-                f = feats[c]
+                f = f_map[c]
                 return (0 if (o["in"] and f["in"] and f["in"] == o["in"]) else 1,
                         abs((f["in"] or 0) - (o["in"] or 0)) if o["in"] and f["in"] else 1)
 
-            same = [c for c in comp_cfgs if o["rom"] and feats[c]["rom"] == o["rom"]]
+            same = [c for c in c_cfgs if o["rom"] and f_map[c]["rom"] == o["rom"]]
             if same:
-                return [(own_cfgs[0], c) for c in sorted(same, key=in_key)[:4]]
+                return [(o_cfgs[0], c) for c in sorted(same, key=in_key)[:4]]
+
             def close(c):
-                f = feats[c]
+                f = f_map[c]
                 return (in_key(c), abs((f["rom"] or 0) - (o["rom"] or 0)), c)
-            return [(own_cfgs[0], sorted(comp_cfgs, key=close)[0])]
+            return [(o_cfgs[0], sorted(c_cfgs, key=close)[0])]
+        o = sorted(o_cfgs, key=rank_key)
+        c = sorted(c_cfgs, key=rank_key)
+        if len(o) == len(c):
+            return list(zip(o, c))
+        if len(c) > len(o):
+            # 友商更多：同 RAM 全变体归我司（≤4），无主友商按存储（次按内存）就近归档
+            of = [feats(x) for x in o]
+            claims = {i: [] for i in range(len(o))}
+            for j, y in enumerate(c):
+                f = feats(y)
+                same_ram = [i for i in range(len(o)) if of[i]["ram"] and of[i]["ram"] == f["ram"]]
+                if len(same_ram) == 1:
+                    claims[same_ram[0]].append(j)
+                else:
+                    best = min(range(len(o)), key=lambda i: (abs((of[i]["rom"] or 0) - (f["rom"] or 0)),
+                                                             abs((of[i]["ram"] or 0) - (f["ram"] or 0)), i))
+                    claims[best].append(j)
+            pairs = []
+            for i in range(len(o)):
+                for j in sorted(claims[i], key=lambda j: rank_key(c[j]))[:4]:
+                    pairs.append((o[i], c[j]))
+            return pairs
+        # 我司更多（PaperMatte 等友商没有的变体）：每个我司配置配最近友商，友商复用
+        return [(x, min(c, key=lambda y: (abs(rank_key(x)[0] - rank_key(y)[0]),
+                                          abs(rank_key(x)[1] - rank_key(y)[1]), y))) for x in o]
+
+    if industry not in ("phone", "tablet"):
+        if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
+            return [(own_cfgs[0], c) for c in comp_cfgs]
         if len(comp_cfgs) == 1:
             return [(o, comp_cfgs[0]) for o in own_cfgs]
-        of = [cfg_features(industry, c) for c in own_cfgs]
-        cf = [cfg_features(industry, c) for c in comp_cfgs]
+        return [(own_cfgs[0], comp_cfgs[0])]
 
-        def score(o, c):
-            if o["rom"] and c["rom"]:
-                if o["rom"] == c["rom"]:
-                    sc = 0 if o["ram"] == c["ram"] else 1 + abs((o["ram"] or 0) - (c["ram"] or 0)) / 100
-                else:
-                    sc = 2 + abs((o["rom"] or 0) - (c["rom"] or 0)) / max(o["rom"], c["rom"])
+    if industry == "tablet":
+        own_sizes = sorted({feats(x)["in"] for x in own_cfgs if feats(x)["in"]})
+        comp_sizes = sorted({feats(x)["in"] for x in comp_cfgs if feats(x)["in"]})
+        if own_sizes and comp_sizes and (len(own_sizes) > 1 or len(comp_sizes) > 1):
+            if len(own_sizes) == 1:
+                s = own_sizes[0]
+                size_map = {s: min(comp_sizes, key=lambda t: (abs(t - s), t))}
             else:
-                sc = 5
-            if industry == "tablet" and o["in"] and c["in"]:
-                sc += abs(o["in"] - c["in"]) / 10
-            return sc
-
-        # 全局贪心（2026-10-29）：每轮取剩余配对里得分最低的 (我司,友商)，同分按
-        # 我司/友商序稳定——修复按我司序贪心的挤出（12+512 先抢友商唯一 16+512）
-        cand = sorted((score(o, c), i, j) for i, o in enumerate(of) for j, c in enumerate(cf))
-        used_o, used_c, pairs = set(), set(), []
-        for sc, i, j in cand:
-            if i in used_o or j in used_c:
-                continue
-            pairs.append((own_cfgs[i], comp_cfgs[j]))
-            used_o.add(i)
-            used_c.add(j)
-        return pairs
-    if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
-        return [(own_cfgs[0], c) for c in comp_cfgs]
-    if len(comp_cfgs) == 1:
-        return [(o, comp_cfgs[0]) for o in own_cfgs]
-    return [(own_cfgs[0], comp_cfgs[0])]
+                size_map = {s: comp_sizes[i] if i < len(comp_sizes) else comp_sizes[-1]
+                            for i, s in enumerate(own_sizes)}
+            o_by_size, c_by_size, rest_o, rest_c = {}, {}, [], []
+            for x in own_cfgs:
+                fin = feats(x)["in"]
+                if fin:
+                    o_by_size.setdefault(fin, []).append(x)
+                else:
+                    rest_o.append(x)
+            for y in comp_cfgs:
+                fin = feats(y)["in"]
+                if fin:
+                    c_by_size.setdefault(fin, []).append(y)
+                else:
+                    rest_c.append(y)
+            pairs = []
+            for s, grp in o_by_size.items():
+                tgt = size_map.get(s) or min(comp_sizes, key=lambda t: (abs(t - s), t))
+                pairs.extend(pair_flat(grp, c_by_size.get(tgt, [])))
+            if rest_o:
+                flat_c = [y for ys in c_by_size.values() for y in ys] or comp_cfgs
+                pairs.extend(pair_flat(rest_o, rest_c or flat_c))
+            return pairs
+    return pair_flat(own_cfgs, comp_cfgs)
 
 
 def derive_series(p):
@@ -744,6 +789,14 @@ def main():
             name = " ".join(toks[1:]) or name
         canon[(b, k)] = name
     raw["model_name"] = [canon[(b, k)] for b, k in zip(raw["品牌"], raw["nkey"])]
+
+    # 我司规格纠偏（2026-11-11 Eason 拍板）：R国 W45 增量（RU_20261102.xlsx）把
+    # MatePad Air 2026 的型号规格误写为 12.2"/…（W39 全量与官网均只有 12" 款，不存
+    # 在 12.2 寸）→ 归并回 12"，rom_key/color_key 回旧键，价格并回既有 12" SKU。
+    _air122 = raw["model_name"].eq("MatePad Air 2026") & raw["型号规格"].astype(str).str.contains('12.2"', regex=False)
+    if _air122.any():
+        log["fixed"]["MatePad Air 2026 规格 12.2→12（R国 W45 采集笔误归并）"] = int(_air122.sum())
+        raw.loc[_air122, "型号规格"] = raw.loc[_air122, "型号规格"].str.replace('12.2"', '12"', regex=False)
 
     rr = [parse_romram(ind, sp) for ind, sp in zip(raw["行业"], raw["型号规格"])]
     raw["romram"] = [x[0] for x in rr]

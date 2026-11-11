@@ -1,6 +1,6 @@
 {
   "schema_version": "za-booklet-product-map-v1",
-  "generated_at": "2026-11-11T00:55:51+00:00",
+  "generated_at": "2026-11-11T02:14:42+00:00",
   "source_workbook": "ZA_VODACOM_1109.xlsx",
   "rows": [
     {
@@ -1275,6 +1275,7 @@
         "own-huawei-matepad-se__11inwifi4-128gb__x",
         "own-huawei-matepad-se__11inwifi6-128gb__x",
         "own-huawei-matepad-se__11inwifi8-128gb__x",
+        "own-huawei-matepad-se__4-128gb__x",
         "za-booklet-huawei-matepadse__booklet"
       ]
     },

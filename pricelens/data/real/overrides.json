@@ -8,7 +8,9 @@
   "benchmark_manual：[{country, own_model(model_id), own_romram(配置文案或 *), comp_brand, comp_model(型号原文), comp_romram(或 *), sort}]，人工追加对标。",
   "core_platform_overrides：{国家码: [平台名…]}，补「国家主要电渠」未覆盖的国家（沙特/阿联酋等按数据行数兜底，可在此定版）。"
  ],
- "model_aliases": {},
+ "model_aliases": {
+  "HUAWEI|matepad se 11": "matepad se"
+ },
  "matrix_aliases": {
   "Puro 90s Pro Max": {
    "brand": "HUAWEI",
@@ -59,6 +61,10 @@
   "iPad 11": {
    "brand": "APPLE",
    "model": "iPad A16"
+  },
+  "MatePad SE 11": {
+   "brand": "HUAWEI",
+   "model": "MatePad SE"
   }
  },
  "brand_fixes": [

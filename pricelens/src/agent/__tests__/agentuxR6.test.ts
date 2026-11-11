@@ -90,7 +90,7 @@ describe('R6 · 趋势查询真实 3P 价格（runAgent → queryCards → build
 });
 
 describe('R6 · 价格优势真实 3P 价格（runAgent → buildPriceAdvantageResult，零 mock）', () => {
-  it('week202645 行 own 价 = 478、渠道点名 OZON 3P；对 HONOR 600（3P 671）为「占优」——混池 427 会把价差洗成 +244', async () => {
+  it('week202645 行 own 价 = 478、渠道点名 OZON 3P；对 HONOR 600（3P 611，2026-11-11 修订后绑定 8+256）为「占优」——混池 427 会把价差洗大', async () => {
     const state = ruAdvantageShopState();
     const response = await runAgent('RU 价格优势', buildAgentContext('dashboard', state, []));
     expect(response.intent).toBe('price_advantage');
@@ -106,8 +106,8 @@ describe('R6 · 价格优势真实 3P 价格（runAgent → buildPriceAdvantageR
     // 3P 下我司 478 占优 +193；若口径被扩大成平台池（own=427）价差虚增成 +244
     const honorRow = rows45.find((row) => row.competitor.modelId === 'cmp-honor-600');
     expect(honorRow).toBeTruthy();
-    expect(honorRow!.competitor.price).toBe(671);
-    expect(honorRow!.priceDiff).toBe(671 - 478);
+    expect(honorRow!.competitor.price).toBe(611);
+    expect(honorRow!.priceDiff).toBe(611 - 478);
     expect(honorRow!.relation).toBe('advantage');
   });
 

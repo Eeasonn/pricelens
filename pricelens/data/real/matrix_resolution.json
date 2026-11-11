@@ -1574,7 +1574,7 @@
   "own_raw": "MatePad  SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se-11",
+    "model_id": "own-huawei-matepad-se",
     "status": "exact"
    }
   ],
@@ -3189,7 +3189,7 @@
   "own_raw": "MatePad  SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se-11",
+    "model_id": "own-huawei-matepad-se",
     "status": "exact"
    }
   ],
@@ -4891,7 +4891,7 @@
   "own_raw": "MatePad SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se-11",
+    "model_id": "own-huawei-matepad-se",
     "status": "exact"
    }
   ],
@@ -7241,40 +7241,40 @@
   "own_raw": "MatePad SE 11",
   "own": [
    {
-    "model_id": "own-huawei-matepad-se-11",
+    "model_id": "own-huawei-matepad-se",
     "status": "exact"
    }
   ],
   "comps": [
    {
-    "raw": "Redmi Pad 2",
-    "brand": "XIAOMI",
+    "raw": "HONOR Pad X8b",
+    "brand": "HONOR",
     "col": 1,
     "models": [
      {
-      "model_id": "cmp-xiaomi-redmi-pad-2",
+      "model_id": "cmp-honor-pad-x8b",
       "status": "exact"
      }
     ]
    },
    {
-    "raw": "Honor PAD 11.5 X9A",
-    "brand": "HONOR",
+    "raw": "Samsung Galaxy Tab A11",
+    "brand": "SAMSUNG",
     "col": 2,
     "models": [
      {
-      "model_id": "cmp-honor-pad-x9a",
-      "status": "subset"
+      "model_id": "cmp-samsung-galaxy-tab-a11",
+      "status": "exact"
      }
     ]
    },
    {
-    "raw": "Samsung Galaxy Tab A9+",
-    "brand": "SAMSUNG",
+    "raw": "Xiaomi Redmi Pad 2",
+    "brand": "XIAOMI",
     "col": 3,
     "models": [
      {
-      "model_id": "cmp-samsung-galaxy-tab-a9",
+      "model_id": "cmp-xiaomi-redmi-pad-2",
       "status": "exact"
      }
     ]
