@@ -86,11 +86,14 @@ export function nameZoneWidthOf(names: readonly string[]): number {
 }
 
 /** 曲线上的系列名（第十轮）：去品牌前缀（品牌由色点/图例卡表达）+ 去容量后缀 GB。
- *  第一百一十五轮：TB 场景保留单位（"16+1 TB" 不缩成 "16+1"，否则容量读歧义）。 */
+ *  第一百一十五轮：TB 场景保留单位（"16+1 TB" 不缩成 "16+1"，否则容量读歧义）。
+ *  2026-11-11 Eason：ZA 运营商小册子口径在名称药丸后标注分期（· 36期 / · 先付），
+ *  多期数勾选时每条线各自带期数，同名系列才能分辨是哪一档月供。 */
 export function curveNameOf(s: Series): string {
   const bp = `${s.brand} `;
   const noBrand = s.label.startsWith(bp) ? s.label.slice(bp.length) : s.label;
-  return noBrand.replace(/\s*GB$/i, '').trim();
+  const base = noBrand.replace(/\s*GB$/i, '').trim();
+  return s.financeTag ? `${base} · ${s.financeTag}` : base;
 }
 
 /** 渲染期文案去重（第110轮，评审）：产品标签偶发单位重复（如「16+1 TB TB」）或

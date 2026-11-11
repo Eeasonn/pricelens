@@ -725,6 +725,7 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
       points,
       platform,
       financeLabel,
+      financeTag: planTerm === 'prepaid' ? '先付' : `${planTerm}期`,
       channelBadge: first
         ? { label: `${first.platform} ${first.store_type}`, auto: false, platforms: [first.platform] }
         : null,

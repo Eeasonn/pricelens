@@ -260,6 +260,8 @@ export interface Series {
   channelBadge?: { label: string; auto: boolean; platforms: string[] } | null;
   /** ZA 运营商小册子口径的付费方式标注（先付 / 月供 · 36期）；明细表产品格第二行 + 复制列 */
   financeLabel?: string | null;
+  /** 药丸短标注（2026-11-11 Eason：线侧名称药丸标分期）：'先付' / '36期'，随 financeLabel 同源生成 */
+  financeTag?: string | null;
 }
 
 export interface DataScope {

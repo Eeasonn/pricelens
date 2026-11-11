@@ -16,12 +16,15 @@ export default function MarketDataProfileControl() {
     }
   }, [actions, profile.granularity, profile.granularityLocked, state.granularity]);
 
-  // 2026-11-11 Eason：进页默认「后付 · 36 期」——册子里行数最多的口径，不再默认空白
+  // 2026-11-11 Eason：进页默认「后付 · 36 期」——册子里行数最多的口径，不再默认空白。
+  // 只在「从未选过」(financingType==null) 时兜底：不能拿 financingTerms.length===0 当
+  // 未选信号——切到先付后 applyMarketDataProfile 会把 terms 清空（先付无期数，正确
+  // 行为），此 effect 若据此回弹后付·36，先付就永远切不过去（2026-11-11 实机回弹 BUG）。
   useEffect(() => {
-    if (profile.granularityLocked && (state.financingType == null || state.financingTerms.length === 0)) {
+    if (profile.granularityLocked && state.financingType == null) {
       actions.set({ financingType: 'installment', financingTerms: [36] });
     }
-  }, [actions, profile.granularityLocked, state.financingType, state.financingTerms.length]);
+  }, [actions, profile.granularityLocked, state.financingType]);
 
   if (!profile.granularityLocked) return null;
 
