@@ -656,7 +656,7 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
   if (profile.sourceKind !== 'operator-booklet-monthly') return [];
   const rows = monthlyFactsFor(sourceRows, {
     countryCode: q.scope.countryCode,
-    financingTerm: q.financingTerm,
+    financingTerm: q.financingTerm ?? null,
   });
   const periodIds = monthlyPeriodIdsBetween(q.startBucket, q.endBucket);
   if (periodIds.length === 0) return [];
@@ -703,6 +703,11 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
     });
     const first = groupRows[0];
     const platform = first ? { platforms: [first.platform], shopIds: [] } : null;
+    const financeLabel = q.financingTerm === 'prepaid'
+      ? '先付'
+      : q.financingTerm != null
+        ? `月供 · ${q.financingTerm}期`
+        : null;
     out.push({
       key: `${group.modelId}__${normRom(resolved.romram)}`,
       isOwn: resolved.isOwn,
@@ -712,6 +717,7 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
       color: brandColorOf(resolved.brand),
       points,
       platform,
+      financeLabel,
       channelBadge: first
         ? { label: `${first.platform} ${first.store_type}`, auto: false, platforms: [first.platform] }
         : null,

@@ -96,7 +96,7 @@ def price_type_of(value: Any) -> str:
 
 def term_months_of(value: Any) -> int | None:
     label = text(value) or ""
-    match = re.search(r"(24|36)", label)
+    match = re.search(r"(24|36|48)", label)
     return int(match.group(1)) if match else None
 
 
@@ -249,8 +249,7 @@ def build_records_selfaudit(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """新一代自审计交付分支（2026-11-09 全量换，Eason 拍板）：页签 =
     全量数据 / 提取审计 / 汇率与标准 / 统计 / 规则说明；行内自带 24/36/48 期
-    分期宽列与行级汇率，无复核台账三件套。运行时契约只收 24/36 期分期与预付
-    （48 期列不入运行时，仅 48 有价的行计数进报告）；复核语义 = owner-approved
+    分期宽列与行级汇率，无复核台账三件套。运行时契约收 24/36/48 期分期与预付（2026-11-11 Eason：48 期入运行时）；复核语义 = owner-approved
     （必填完整且型号级匹配 → PASS，reason=owner_approved_source_import）。"""
     all_data = read_sheet(book, "全量数据")
     candidates = load_product_candidates()
@@ -281,7 +280,7 @@ def build_records_selfaudit(
                 offer_id and period_id and brand and model_clean
                 and price_type in {"installment", "prepaid", "no-price"}
                 and (price_type == "no-price" or price_local is not None)
-                and (price_type != "installment" or term_months in {24, 36})
+                and (price_type != "installment" or term_months in {24, 36, 48})
             )
             matched_ok = match["match_status"] in {"matched-spec-complete", "matched-model"}
             review_status = "PASS" if (owner_approved and required_ok and matched_ok) else "PENDING"
@@ -341,14 +340,11 @@ def build_records_selfaudit(
         i48 = number(row.get("48期分期价-本币"))
         if prepaid is not None:
             emit("prepaid", prepaid, None, prepaid_usd, "pp")
-        for term, value in ((24, i24), (36, i36)):
+        for term, value in ((24, i24), (36, i36), (48, i48)):
             if value is None:
                 continue
             usd = round(value / fx_rate, 2) if fx_rate else None
             emit("installment", value, term, usd, f"i{term}")
-        if prepaid is None and i24 is None and i36 is None and i48 is not None:
-            dropped_48_only += 1  # 仅 48 期有价：契约外，不入运行时（staging 不落行）
-
     metadata = {
         "schema_version": "za-operator-booklet-staging-v1",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -357,7 +353,6 @@ def build_records_selfaudit(
         "gate_status": gate_status,
         "source_gate_status": gate_status,
         "publish_basis": "owner-approved-source-import",
-        "dropped_48_only_rows": dropped_48_only,
     }
     return metadata, records
 

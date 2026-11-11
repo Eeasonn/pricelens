@@ -6,7 +6,7 @@
 // ============================================================
 import { dimProduct, factPriceMonthly } from '../data';
 import type { DimProduct } from '../dataModel/types';
-import type { FinancingTerm } from '../dataModel/marketProfile';
+import type { FinancingPlan, FinancingTerm } from '../dataModel/marketProfile';
 import type { MainProduct, ProductSelection } from './filtersTypes';
 // 类型再导出（2026-11-05）：PriceTrendSearch 等调用方从本模块取 MainProduct，
 // filtersTypes 仍是唯一定义源，此处仅透传
@@ -76,7 +76,7 @@ export function selectionValidFor(
   sel: ProductSelection,
   countryCode: string,
   industry: DimProduct['industry'],
-  financingTerm: FinancingTerm | null = null,
+  financingTerm: FinancingPlan | null = null,
 ): boolean {
   const productRows = dimProduct.filter(
     (p) => p.model_id === sel.modelId
@@ -109,7 +109,7 @@ export function mainsValidFor(
   mains: MainProduct[],
   countryCode: string,
   industry: DimProduct['industry'],
-  financingTerm: FinancingTerm | null = null,
+  financingTerm: FinancingPlan | null = null,
 ): boolean {
   const sels = mains.map((m) => m.main).filter((s): s is ProductSelection => s != null);
   if (!sels.length) return false;
@@ -121,7 +121,7 @@ export function filterMainsByFinancingTerm(
   mains: MainProduct[],
   countryCode: string,
   industry: DimProduct['industry'],
-  financingTerm: FinancingTerm | null,
+  financingTerm: FinancingPlan | null,
 ): MainProduct[] {
   if (countryCode !== 'ZA' || financingTerm == null) return mains;
   return mains.flatMap((card) => {

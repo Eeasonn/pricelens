@@ -221,7 +221,7 @@ export default function TrendTables(props: {
     const TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
     // 近 4 周环比独立成列（第一百八十九轮，Eason 定版收敛）：表头在「类型」后，
     // 与表同列结构；只随每个产品首行（RRP 行）输出一次，其余行留空串
-    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '类型', '近4周环比', ...dates].join('\t')];
+    const lines = [[...(multi ? ['组'] : []), '产品', '配置', '付费', '类型', '近4周环比', ...dates].join('\t')];
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
         const change = fourWeekTextOf(s);
@@ -244,6 +244,7 @@ export default function TrendTables(props: {
               ...(multi ? [groupOrdinal(b.ordinal)] : []),
               dedupeSpecText(s.label),
               configTextOf(b.specByKey.get(s.key)?.romram),
+              s.financeLabel ?? '',
               ty,
               ty === 'RRP' ? change : '',
               ...cells,
@@ -347,6 +348,12 @@ export default function TrendTables(props: {
               </span>
             )}
           </span>
+          {s.financeLabel ? (
+            // ZA 运营商小册子口径（2026-11-11）：先付 / 月供 · N期 随产品格第二行标注
+            <span style={{ fontSize: 11, color: color.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+              {s.financeLabel}
+            </span>
+          ) : null}
           {fourWeekChange !== undefined && (
             // 2026-11-03 反馈：「近4周环比」旁加问号悬停口径说明——明确是「4 周均值 ÷
             // 上一段 4 周均值」，杜绝「最新一天 ÷ 4 周均值」误读；原原生 title 并入

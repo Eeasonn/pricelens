@@ -1,9 +1,9 @@
 import type { FactPriceMonthly, MonthlyPriceType, MonthlyReviewStatus } from './types';
-import type { FinancingTerm } from './marketProfile';
+import type { FinancingPlan } from './marketProfile';
 
 export interface MonthlyFactQuery {
   countryCode: string;
-  financingTerm: FinancingTerm | null;
+  financingTerm: FinancingPlan | null;
   includePrepaid?: boolean;
   includeNoPrice?: boolean;
   reviewStatuses?: readonly MonthlyReviewStatus[];
@@ -23,9 +23,9 @@ export function monthlyFactsFor(
     if (row.country_code !== query.countryCode) return false;
     if (!allowedStatuses.includes(row.review_status)) return false;
     if (row.price_type === 'installment') {
-      return query.financingTerm != null && row.term_months === query.financingTerm;
+      return query.financingTerm != null && query.financingTerm !== 'prepaid' && row.term_months === query.financingTerm;
     }
-    if (row.price_type === 'prepaid') return query.includePrepaid === true;
+    if (row.price_type === 'prepaid') return query.financingTerm === 'prepaid' || query.includePrepaid === true;
     return query.includeNoPrice === true;
   });
 }

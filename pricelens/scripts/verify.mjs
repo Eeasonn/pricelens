@@ -148,7 +148,7 @@ console.log('\n[1] 维表完整性');
 
   check('ZA 月度运行时事实为数组（待发布时为空数组）', Array.isArray(monthlyFacts), Array.isArray(monthlyFacts) ? `${monthlyFacts.length} 行` : '格式错误');
   check('ZA 月度运行时事实仅包含 PASS', Array.isArray(monthlyFacts) && monthlyFacts.every((row) => row.country_code === 'ZA' && row.review_status === 'PASS'), `${Array.isArray(monthlyFacts) ? monthlyFacts.length : 0} 行`);
-  check('ZA 月度事实价格类型与分期期数合法', Array.isArray(monthlyFacts) && monthlyFacts.every((row) => ['installment', 'prepaid', 'no-price'].includes(row.price_type) && (row.term_months == null || row.term_months === 24 || row.term_months === 36)), `${Array.isArray(monthlyFacts) ? monthlyFacts.length : 0} 行`);
+  check('ZA 月度事实价格类型与分期期数合法', Array.isArray(monthlyFacts) && monthlyFacts.every((row) => ['installment', 'prepaid', 'no-price'].includes(row.price_type) && (row.term_months == null || row.term_months === 24 || row.term_months === 36 || row.term_months === 48)), `${Array.isArray(monthlyFacts) ? monthlyFacts.length : 0} 行`);
 
   check('dim_fx per_usd 全部 > 0', dimFx.every((f) => f.per_usd > 0), `${dimFx.length} 条`);
   const missFx = enabled.filter((r) => !dimFx.some((f) => f.currency === r.currency));

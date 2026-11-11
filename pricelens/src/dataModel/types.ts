@@ -1,4 +1,4 @@
-import type { FinancingTerm } from './marketProfile';
+import type { FinancingPlan, FinancingTerm } from './marketProfile';
 
 // ============================================================
 // §7 数据模型（星型模型）+ 图表取数契约类型
@@ -245,6 +245,8 @@ export interface Series {
   /** 本系列实际取价渠道（auto = 该产品日常价最低渠道）；null = 该产品无任何渠道数据。
    *  platforms = 渠道归属平台集（大促档期带按各线渠道平台并集过滤） */
   channelBadge?: { label: string; auto: boolean; platforms: string[] } | null;
+  /** ZA 运营商小册子口径的付费方式标注（先付 / 月供 · 36期）；明细表产品格第二行 + 复制列 */
+  financeLabel?: string | null;
 }
 
 export interface DataScope {
@@ -281,7 +283,7 @@ export interface SeriesQuery {
   currency: CurrencyMode;
   agg: AggMode; // 仅月/季生效
   /** ZA monthly booklet facts require an explicit 24/36 term. */
-  financingTerm?: FinancingTerm | null;
+  financingTerm?: FinancingPlan | null;
   // 平台口径自第一百六十轮起下沉到每组（SkuGroupQuery.platform）——看板全局
   // 平台筛选退役（总览/预警仍用全局口径）
 }

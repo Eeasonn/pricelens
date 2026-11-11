@@ -32,7 +32,7 @@ import { STABLE } from '../appChannel';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
-import { marketDataProfileOf, type FinancingTerm } from '../dataModel/marketProfile';
+import { marketDataProfileOf, type FinancingPlan, type FinancingTerm } from '../dataModel/marketProfile';
 import { publishedMonthlyRangeOf } from '../dataModel/monthlyFacts';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache, productHasDataInCountry } from '../components/ProductCascader/tree';
@@ -248,7 +248,8 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       ['platform', isPlatformSelection(parsed.platform)],
       // R7-M1：归一说明随包留存（坏形状跳过，不作废整包——口径本身仍合法可恢复）
       ['platformScopeNotice', parsed.platformScopeNotice == null || isPlatformScopeNotice(parsed.platformScopeNotice)],
-      ['financingTerm', parsed.financingTerm == null || parsed.financingTerm === 24 || parsed.financingTerm === 36],
+      ['financingTerm', parsed.financingTerm == null || parsed.financingTerm === 24 || parsed.financingTerm === 36
+        || parsed.financingTerm === 48 || parsed.financingTerm === 'prepaid'],
       // 口径（国家/产业）随载荷恢复：写侧一直整包写入，读侧漏掉会让裸根链接的
       // 新会话静默回落 RU/phone 并把旧国家选择当无效覆盖掉。值非法/缺失 =
       // 跳过该项落默认口径（不入 required，不因此作废整包）。
@@ -307,7 +308,7 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
  *   矩阵未覆盖的国家回退该国该产业首个华为型号
  * - 对比区 = 该主品配置的分国对标（groupsFromBenchmark，主竞品在前）
  */
-function computeDataDefaults(countryCode: string, industry: Industry, financingTerm: FinancingTerm | null = null): Partial<FiltersState> {
+function computeDataDefaults(countryCode: string, industry: Industry, financingTerm: FinancingPlan | null = null): Partial<FiltersState> {
   if (!dimProduct.length) return {};
   syncScopeRegistries(countryCode);
   const region = dimRegion.find((r) => r.country_code === countryCode);
@@ -322,10 +323,10 @@ function computeDataDefaults(countryCode: string, industry: Industry, financingT
     const skuId = countryCode === 'ZA'
       ? candidates.find((p) => p.model_id === modelId && p.romram === romram && factPriceMonthly.some((row) => row.sku_id === p.sku_id
         && row.review_status === 'PASS'
-        && row.price_type === 'installment'
-        && (row.term_months === 24 || row.term_months === 36)
-        && (financingTerm == null || row.term_months === financingTerm)
-        && row.price_local != null))?.sku_id ?? null
+        && row.price_local != null
+        && (financingTerm == null || (financingTerm === 'prepaid'
+          ? row.price_type === 'prepaid'
+          : row.price_type === 'installment' && row.term_months === financingTerm))))?.sku_id ?? null
       : lowestPriceColorSku(modelId, romram, countryCode);
     if (!skuId) continue;
     const config: ProductSelection = { modelId, romram, skuIds: [skuId] };
@@ -676,7 +677,11 @@ function applyMarketDataProfile(state: FiltersState): FiltersState {
   const range = state.granularity === profile.granularity
     ? { start: state.rangeStart, end: state.rangeEnd }
     : publishedRange ?? convertRangeBuckets(state.rangeStart, state.rangeEnd, state.granularity, profile.granularity);
-  const financingTerm = state.financingTerm === 24 || state.financingTerm === 36 ? state.financingTerm : null;
+  // 2026-11-11 Eason：先付/后付两级口径——非法/未选回落「后付 · 36 期」（进页即有数据）
+  const financingTerm = state.financingTerm === 24 || state.financingTerm === 36 || state.financingTerm === 48
+    || state.financingTerm === 'prepaid'
+    ? state.financingTerm
+    : 36;
   return {
     ...state,
     granularity: profile.granularity,

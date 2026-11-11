@@ -7,7 +7,7 @@
 // ============================================================
 import { dimProduct, factPriceMonthly, factPriceWeekly } from '../../data';
 import type { DimProduct, Industry } from '../../dataModel/types';
-import type { FinancingTerm } from '../../dataModel/marketProfile';
+import type { FinancingPlan, FinancingTerm } from '../../dataModel/marketProfile';
 import { effectiveChannelIds, lowestPriceColorSku, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { getCurrentCountry } from '../../state/currentScope';
 import type { ProductSelection } from '../../state/filtersTypes';
@@ -116,23 +116,28 @@ export interface BrandNode {
  * 标记还保留了全量目录和旧周度渠道产品，因此不能单独用 countries 判断
  * 是否允许选择，否则会把选中后无法绘图的产品放进筛选器。
  */
-const zaMonthlyPricedSkuIdsByTerm: Record<FinancingTerm, Set<string>> = { 24: new Set(), 36: new Set() };
+const zaMonthlyPricedSkuIdsByTerm: Record<FinancingTerm, Set<string>> = { 24: new Set(), 36: new Set(), 48: new Set() };
+const zaMonthlyPrepaidSkuIds = new Set<string>();
 for (const row of factPriceMonthly) {
-  if (row.price_type !== 'installment' || row.price_local == null || row.sku_id == null || row.term_months == null) continue;
-  zaMonthlyPricedSkuIdsByTerm[row.term_months].add(row.sku_id);
+  if (row.price_local == null || row.sku_id == null) continue;
+  if (row.price_type === 'installment' && row.term_months != null) zaMonthlyPricedSkuIdsByTerm[row.term_months].add(row.sku_id);
+  if (row.price_type === 'prepaid') zaMonthlyPrepaidSkuIds.add(row.sku_id);
 }
-const zaMonthlyPricedSkuIds = new Set([...zaMonthlyPricedSkuIdsByTerm[24], ...zaMonthlyPricedSkuIdsByTerm[36]]);
+const zaMonthlyPricedSkuIds = new Set([
+  ...zaMonthlyPricedSkuIdsByTerm[24], ...zaMonthlyPricedSkuIdsByTerm[36], ...zaMonthlyPricedSkuIdsByTerm[48],
+  ...zaMonthlyPrepaidSkuIds,
+]);
 
 export function productHasDataInCountry(
   product: DimProduct,
   countryCode: string,
-  financingTerm: FinancingTerm | null = null,
+  financingPlan: FinancingPlan | null = null,
 ): boolean {
   if (!product.countries.includes(countryCode)) return false;
   if (countryCode !== 'ZA') return true;
-  return financingTerm == null
-    ? zaMonthlyPricedSkuIds.has(product.sku_id)
-    : zaMonthlyPricedSkuIdsByTerm[financingTerm].has(product.sku_id);
+  if (financingPlan == null) return zaMonthlyPricedSkuIds.has(product.sku_id);
+  if (financingPlan === 'prepaid') return zaMonthlyPrepaidSkuIds.has(product.sku_id);
+  return zaMonthlyPricedSkuIdsByTerm[financingPlan].has(product.sku_id);
 }
 
 /** `12+256 GB` → `12+256`；`256 GB` → `256`；`1TB` → `1TB` */
@@ -214,7 +219,7 @@ export function sortModelNodes(models: ModelNode[], mode: ModelSortMode, currenc
 
 // ---- 最新折后价索引（懒构建一次；数据静态于模块装载） ----
 
-let latestCache: { cc: string; financingTerm: FinancingTerm | null; values: Map<string, { local: number | null; usd: number | null }> } | null = null;
+let latestCache: { cc: string; financingPlan: FinancingPlan | null; values: Map<string, { local: number | null; usd: number | null }> } | null = null;
 
 /** 配置变更（默认店铺覆盖保存/清除、对标矩阵更新）后由 FiltersContext 的
  *  CONFIG_CHANGED_EVENT 处理器调用：现价索引按默认店铺口径取数，覆盖变化须重建，
@@ -225,9 +230,9 @@ export function invalidateLatestPriceCache(): void {
 
 /** 当前国家默认电渠口径下各 SKU 最新有值周的最低折后价（本币/USD）；
  *  裸机口径与 aggregate.minPriceOfRows 同规则（套装行仅在该周无非套装行时才用） */
-function latestPrices(financingTerm: FinancingTerm | null = null): Map<string, { local: number | null; usd: number | null }> {
+function latestPrices(financingPlan: FinancingPlan | null = null): Map<string, { local: number | null; usd: number | null }> {
   const cc = getCurrentCountry();
-  if (latestCache?.cc === cc && latestCache.financingTerm === financingTerm) return latestCache.values;
+  if (latestCache?.cc === cc && latestCache.financingPlan === financingPlan) return latestCache.values;
   type Px = { local: number; usd: number | null };
   const best = new Map<string, { weekId: string; bare: Px | null; bundle: Px | null }>();
   const modelBySku = new Map(dimProduct.map((p) => [p.sku_id, p.model_id]));
@@ -263,11 +268,14 @@ function latestPrices(financingTerm: FinancingTerm | null = null): Map<string, {
   if (cc === 'ZA') {
     const monthlyBest = new Map<string, { periodId: string; local: number; usd: number | null }>();
     for (const row of factPriceMonthly) {
-      if (row.price_type !== 'installment'
-        || (row.term_months !== 24 && row.term_months !== 36)
-        || (financingTerm != null && row.term_months !== financingTerm)
-        || row.price_local == null
-        || row.sku_id == null) continue;
+      if (row.price_type === 'prepaid'
+        ? financingPlan != null && financingPlan !== 'prepaid'
+        : financingPlan == null || financingPlan === 'prepaid' || row.term_months !== financingPlan
+        || false) {
+        // 口径不匹配：先付模式只吃 prepaid 行、后付模式只吃对应期数的 installment 行
+        continue;
+      }
+      if (row.price_local == null || row.sku_id == null) continue;
       const current = monthlyBest.get(row.sku_id);
       const candidate = { periodId: row.period_id, local: row.price_local, usd: row.price_usd };
       if (!current || candidate.periodId > current.periodId
@@ -277,7 +285,7 @@ function latestPrices(financingTerm: FinancingTerm | null = null): Map<string, {
     }
     for (const [skuId, row] of monthlyBest) values.set(skuId, { local: row.local, usd: row.usd });
   }
-  latestCache = { cc, financingTerm, values };
+  latestCache = { cc, financingPlan, values };
   return values;
 }
 
@@ -286,9 +294,9 @@ function buildRomramNode(
   modelId: string,
   modelName: string,
   romram: string,
-  financingTerm: FinancingTerm | null = null,
+  financingPlan: FinancingPlan | null = null,
 ): RomramNode {
-  const lp = latestPrices(financingTerm);
+  const lp = latestPrices(financingPlan);
   const colors: ColorInfo[] = skus.map((s) => ({
     skuId: s.sku_id,
     color: s.color,
@@ -317,11 +325,11 @@ function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
   return m;
 }
 
-function groupModels(skus: DimProduct[], financingTerm: FinancingTerm | null = null): ModelNode[] {
+function groupModels(skus: DimProduct[], financingPlan: FinancingPlan | null = null): ModelNode[] {
   return [...groupBy(skus, (s) => s.model_name).entries()].map(([model, modelSkus]) => {
     const modelId = modelIdOf(modelSkus[0]);
     const romrams = [...groupBy(modelSkus, (s) => s.romram).entries()]
-      .map(([rom, romSkus]) => buildRomramNode(romSkus, modelId, model, rom, financingTerm))
+      .map(([rom, romSkus]) => buildRomramNode(romSkus, modelId, model, rom, financingPlan))
       .sort((a, b) => compareRomram(a.romram, b.romram));
     const head = modelSkus[0];
     return {
@@ -340,12 +348,12 @@ function groupModels(skus: DimProduct[], financingTerm: FinancingTerm | null = n
 export function buildOwnTree(
   industry: Industry = 'phone',
   countryCode: string = getCurrentCountry(),
-  financingTerm: FinancingTerm | null = null,
+  financingPlan: FinancingPlan | null = null,
 ): GroupNode[] {
-  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry && productHasDataInCountry(p, countryCode, financingTerm)), (p) => p.series).entries()].map(([series, skus]) => ({
+  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry && productHasDataInCountry(p, countryCode, financingPlan)), (p) => p.series).entries()].map(([series, skus]) => ({
     key: series,
     title: series,
-    models: groupModels(skus, financingTerm),
+    models: groupModels(skus, financingPlan),
   }));
 }
 
@@ -353,16 +361,16 @@ export function buildOwnTree(
 export function buildCompetitorTree(
   industry?: Industry,
   countryCode: string = getCurrentCountry(),
-  financingTerm: FinancingTerm | null = null,
+  financingPlan: FinancingPlan | null = null,
 ): GroupNode[] {
-  const comp = dimProduct.filter((p) => !p.is_own && productHasDataInCountry(p, countryCode, financingTerm) && (industry == null || p.industry === industry));
+  const comp = dimProduct.filter((p) => !p.is_own && productHasDataInCountry(p, countryCode, financingPlan) && (industry == null || p.industry === industry));
   const brandRank = (b: string): number => {
     const i = COMPETITOR_BRANDS.indexOf(b);
     return i >= 0 ? i : COMPETITOR_BRANDS.length;
   };
   return [...groupBy(comp, (p) => p.brand).entries()]
     .sort((a, b) => brandRank(a[0]) - brandRank(b[0]) || a[0].localeCompare(b[0]))
-    .map(([brand, skus]) => ({ key: brand, title: brand, models: groupModels(skus, financingTerm) }));
+    .map(([brand, skus]) => ({ key: brand, title: brand, models: groupModels(skus, financingPlan) }));
 }
 
 /** SKU 选项（品牌内按产品分组，供 Select group 用；配置页矩阵单元格复用） */
@@ -465,10 +473,10 @@ export function selectionLabel(sel: ProductSelection): string {
 export function buildProductTree(
   industry?: Industry,
   countryCode: string = getCurrentCountry(),
-  financingTerm: FinancingTerm | null = null,
+  financingPlan: FinancingPlan | null = null,
 ): BrandNode[] {
   const rows = dimProduct.filter(
-    (p) => productHasDataInCountry(p, countryCode, financingTerm) && (industry == null || p.industry === industry),
+    (p) => productHasDataInCountry(p, countryCode, financingPlan) && (industry == null || p.industry === industry),
   );
   const ob = ownBrand();
   const brandRank = (b: string): number => {
@@ -477,7 +485,7 @@ export function buildProductTree(
     return i >= 0 ? i : COMPETITOR_BRANDS.length;
   };
   const brands = [...groupBy(rows, (p) => p.brand).entries()].map(([brand, skus]) => {
-    const models = groupModels(skus, financingTerm);
+    const models = groupModels(skus, financingPlan);
     const seriesMap = new Map<string, SeriesNode>();
     for (const m of models) {
       const seriesTitle = skus.find((s) => modelIdOf(s) === m.modelId)?.series ?? m.label;
@@ -544,11 +552,11 @@ export function searchProductTree(tree: BrandNode[], query: string): BrandNode[]
 export function tiersOfScope(
   industry?: Industry,
   countryCode: string = getCurrentCountry(),
-  financingTerm: FinancingTerm | null = null,
+  financingPlan: FinancingPlan | null = null,
 ): string[] {
   const present = new Set<string>();
   for (const p of dimProduct) {
-    if (!productHasDataInCountry(p, countryCode, financingTerm) || (industry != null && p.industry !== industry)) continue;
+    if (!productHasDataInCountry(p, countryCode, financingPlan) || (industry != null && p.industry !== industry)) continue;
     present.add(tierOf(p, countryCode));
   }
   const ladder = industry == null ? [] : [...tierOrderOf(industry)].reverse(); // 阶梯序高→低
@@ -563,11 +571,11 @@ export function filterProductTreeByTier(
   tree: BrandNode[],
   tier: string,
   countryCode: string = getCurrentCountry(),
-  financingTerm: FinancingTerm | null = null,
+  financingPlan: FinancingPlan | null = null,
 ): BrandNode[] {
   const hitKeys = new Set<string>();
   for (const p of dimProduct) {
-    if (!productHasDataInCountry(p, countryCode, financingTerm)) continue;
+    if (!productHasDataInCountry(p, countryCode, financingPlan)) continue;
     if (tierOf(p, countryCode) !== tier) continue;
     hitKeys.add(`${modelIdOf(p)}|${p.romram}`);
   }

@@ -12,7 +12,7 @@ import { getCurrentCountry } from './currentScope';
 import type { FiltersState, MainProduct, ProductSelection } from './filtersTypes';
 import { autoComparesFor, MAINS_CAP, newCardId, selKey } from './mainSelection';
 import { productHasDataInCountry } from '../components/ProductCascader/tree';
-import type { FinancingTerm } from '../dataModel/marketProfile';
+import type { FinancingPlan, FinancingTerm } from '../dataModel/marketProfile';
 
 const modelIdOfSku = (skuId: string): string => skuId.split('__')[0];
 
@@ -23,7 +23,7 @@ export function configsInTier(
   tier: string,
   countryCode: string = getCurrentCountry(),
   ownOnly = false,
-  financingTerm: FinancingTerm | null = null,
+  financingTerm: FinancingPlan | null = null,
 ): ProductSelection[] {
   const out: ProductSelection[] = [];
   const keys = new Set<string>();
@@ -49,7 +49,7 @@ export function appendTierCards(
   tier: string,
   countryCode: string,
   existing: MainProduct[],
-  financingTerm: FinancingTerm | null = null,
+  financingTerm: FinancingPlan | null = null,
 ): MainProduct[] {
   const configs = configsInTier(industry, tier, countryCode, true, financingTerm);
   if (!configs.length) return existing;

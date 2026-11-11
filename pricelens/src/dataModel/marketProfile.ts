@@ -2,7 +2,9 @@
  * Country-specific collection semantics shared by stable and iterate.
  * ZA is sourced from operator booklets rather than weekly e-commerce pages.
  */
-export type FinancingTerm = 24 | 36;
+export type FinancingTerm = 24 | 36 | 48;
+/** 付费口径：数值 = 后付合约期数；'prepaid' = 先付（买断价） */
+export type FinancingPlan = FinancingTerm | 'prepaid';
 
 export interface MarketDataProfile {
   countryCode: string;
@@ -20,7 +22,7 @@ const ZA_PROFILE: MarketDataProfile = {
   evidenceStatus: 'ready',
   granularity: 'month',
   granularityLocked: true,
-  financingTerms: [24, 36],
+  financingTerms: [24, 36, 48],
   fixedPlatform: 'VODACOM SHOP',
 };
 

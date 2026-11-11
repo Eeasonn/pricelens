@@ -16,6 +16,13 @@ export default function MarketDataProfileControl() {
     }
   }, [actions, profile.granularity, profile.granularityLocked, state.granularity]);
 
+  // 2026-11-11 Eason：进页默认「后付 · 36 期」——册子里行数最多的口径，不再默认空白
+  useEffect(() => {
+    if (profile.granularityLocked && state.financingTerm == null) {
+      actions.set({ financingTerm: 36 });
+    }
+  }, [actions, profile.granularityLocked, state.financingTerm]);
+
   if (!profile.granularityLocked) return null;
 
   return (
@@ -26,20 +33,34 @@ export default function MarketDataProfileControl() {
       {profile.evidenceStatus === 'ready' ? <Tag color="blue" style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px' }}>已导入</Tag> : null}
       <span style={{ fontSize: fontSize.caption, color: color.body, whiteSpace: 'nowrap' }}>月度</span>
       <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>{profile.fixedPlatform ?? 'VODACOM SHOP'}</span>
-      <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>分期期数</span>
+      <span style={{ fontSize: fontSize.caption, color: color.body, whiteSpace: 'nowrap' }}>付费方式</span>
       <Segmented
         size="small"
-        aria-label="南非分期期数"
-        value={state.financingTerm ?? undefined}
-        options={profile.financingTerms.map((term) => ({ label: `${term} 期`, value: term }))}
-        onChange={(value) => actions.set({ financingTerm: value as 24 | 36 })}
+        aria-label="南非付费方式"
+        value={state.financingTerm === 'prepaid' ? 'prepaid' : 'installment'}
+        options={[
+          { label: '先付', value: 'prepaid' },
+          { label: '后付', value: 'installment' },
+        ]}
+        onChange={(value) => actions.set({ financingTerm: value === 'prepaid' ? 'prepaid' : 36 })}
       />
-      {state.financingTerm == null ? <span role="status" style={{ fontSize: fontSize.caption, color: color.warningInk, whiteSpace: 'nowrap' }}>请选择 24 或 36 期</span> : null}
+      {state.financingTerm !== 'prepaid' ? (
+        <>
+          <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>期数</span>
+          <Segmented
+            size="small"
+            aria-label="南非分期期数"
+            value={typeof state.financingTerm === 'number' ? state.financingTerm : 36}
+            options={profile.financingTerms.map((term) => ({ label: `${term} 期`, value: term }))}
+            onChange={(value) => actions.set({ financingTerm: value as 24 | 36 | 48 })}
+          />
+        </>
+      ) : null}
       {profile.evidenceStatus === 'pending-review' ? <span role="status" style={{ fontSize: fontSize.caption, color: color.warningInk, whiteSpace: 'nowrap' }}>待复核，暂不参与计算</span> : null}
       {profile.evidenceStatus === 'ready' ? <span role="status" style={{ fontSize: fontSize.caption, color: color.warningInk, whiteSpace: 'nowrap' }}>规格未标明，按型号汇总</span> : null}
       <Tooltip title={profile.evidenceStatus === 'ready'
-        ? '南非价格来自 VODACOM SHOP 运营商小册子，按月记录。当前已导入真实采集价格，源表未提供容量或版本信息时按型号级汇总，并保留原始来源与门禁状态。'
-        : '南非价格来自运营商小册子，按月记录。复核通过并接入月度事实后，选择分期期数才显示对应价格。'}>
+        ? '南非价格来自 VODACOM SHOP 运营商小册子，按月记录。先付 = 一次性买断价；后付 = 合约月供，按期数取价。源表未提供容量或版本信息时按型号级汇总，并保留原始来源与门禁状态。'
+        : '南非价格来自运营商小册子，按月记录。先付 = 一次性买断价；后付 = 合约月供，按期数取价。'}>
         <InfoCircleOutlined aria-label="南非数据口径说明" style={{ color: color.mute, fontSize: 12 }} />
       </Tooltip>
     </div>

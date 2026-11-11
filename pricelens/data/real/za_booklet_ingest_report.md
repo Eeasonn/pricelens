@@ -1,20 +1,20 @@
 # ZA Vodacom 小册子导入报告
 
-生成时间：2026-11-10T00:14:13+00:00
+生成时间：2026-11-11T06:56:33+00:00
 源文件：ZA_VODACOM_1109.xlsx
 门禁状态：owner-approved
 
 ## 结果
 
-- 全量数据行：1,696
-- offer 数：1,468
-- 有价记录：1,696
+- 全量数据行：1,886
+- offer 数：1,621
+- 有价记录：1,886
 - 无价格记录：0
-- 发布行：1,696
+- 发布行：1,886
 - 发布状态：PUBLISHED
-- 复核状态：{'PASS': 1696}
-- 价格类型：{'installment': 1051, 'prepaid': 645}
-- SKU 匹配：{'matched-model': 1696}
+- 复核状态：{'PASS': 1886}
+- 价格类型：{'installment': 1241, 'prepaid': 645}
+- SKU 匹配：{'matched-model': 1886}
 
 ## 发布条件
 
@@ -33,4 +33,4 @@
 原始附件的其他页签保留为证据和复核依据，不作为事实源写入 weekly real fact pack。
 发布方式：owner-approved-source-import。
 月度发布应由后续 FactPriceMonthly 读取 published 文件，继续保留 period_id、term_months、price_type 和 source provenance。
-当前 runtime monthly facts：/Users/eason/Documents/Eason's Projects/Price Intelligence/pricelens/src/data/fact_price_monthly.json（1,696 行）。
+当前 runtime monthly facts：/Users/eason/Documents/Eason's Projects/Price Intelligence/pricelens/src/data/fact_price_monthly.json（1,886 行）。

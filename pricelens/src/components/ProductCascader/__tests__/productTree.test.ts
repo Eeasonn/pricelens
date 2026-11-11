@@ -96,7 +96,7 @@ describe('buildProductTree（统一产品树）', () => {
     expect(lone.length).toBeGreaterThan(0);
   });
 
-  it('南非只展示有 24/36 期月度价格的产品，不放行旧目录空产品（2026-11-10 新册全量换：Mate 80 Pro / nova 15 Max 新册有分期价，进入名录）', () => {
+  it('南非只展示有小册子月度价（任一付费口径/期数）的产品，不放行旧目录空产品（2026-11-11 先付/后付+48 期：Mate 80 Pro / nova 15 Max 新册有分期价，进入名录）', () => {
     const zaTree = buildProductTree('phone', 'ZA');
     const zaModels = zaTree.flatMap((b) => b.series).flatMap((s) => s.models);
     const zaModelNames = zaModels.map((m) => m.label);
@@ -106,10 +106,9 @@ describe('buildProductTree（统一产品树）', () => {
 
     const pricedSkuIds = new Set(
       factPriceMonthly
-        .filter((row) => row.price_type === 'installment'
-          && (row.term_months === 24 || row.term_months === 36)
-          && row.price_local != null
-          && row.sku_id != null)
+        .filter((row) => row.price_local != null && row.sku_id != null
+          && (row.price_type === 'prepaid'
+            || (row.price_type === 'installment' && (row.term_months === 24 || row.term_months === 36 || row.term_months === 48))))
         .map((row) => row.sku_id as string),
     );
     const zaSkuIds = zaModels.flatMap((m) => m.romrams).flatMap((r) => r.colors).map((c) => c.skuId);

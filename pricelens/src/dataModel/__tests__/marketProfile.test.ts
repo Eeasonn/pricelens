@@ -9,7 +9,7 @@ describe('market data profiles', () => {
       evidenceStatus: 'ready',
       granularity: 'month',
       granularityLocked: true,
-      financingTerms: [24, 36],
+      financingTerms: [24, 36, 48],
     });
   });
 
