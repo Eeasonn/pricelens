@@ -722,17 +722,9 @@ export default function PriceTrend(props: {
   // 独立查看时间下面板窗口不同、下标失义：只亮悬停面板自己（panelHoverIdxs 按面板记）
   const [splitHoverIdx, setSplitHoverIdx] = useState<number | null>(null);
   const [panelHoverIdxs, setPanelHoverIdxs] = useState<Record<string, number | null>>({});
-  // 跨产品/竞品视角下价位跨度天然拉大 → 多组进入时（分图或合并，第一百二十三轮⑥
-  // 起不再只看分图态）自动开「Y 轴自动压缩」。第一百九十二轮：yCompress 改会话态
-  // 后，自动开启哨兵一并会话化（useRef 每次重挂即清零，切看板回来会在用户已手动
-  // 关闭的情况下再次强制打开）——本会话只自动开一次，之后尊重用户设置
-  const [yCompressAutoDone, setYCompressAutoDone] = usePageViewState<boolean>('dashboard.yCompressAuto', () => false);
-  useEffect(() => {
-    if (multiCards && !yCompressAutoDone) {
-      setYCompressAutoDone(true);
-      setYCompress(true);
-    }
-  }, [multiCards, yCompressAutoDone, setYCompressAutoDone, setYCompress]);
+  // 2026-11-12 Eason：价格走势默认不开启「Y 轴自动压缩」——第192轮的多卡自动
+  // 开启闩（multiCards 首现强制 setYCompress(true)）退役；yCompress 保持默认关，
+  // 需要时在 Y 轴设置里手动开。
   // 面板顺序（第七十九轮：卡片上边线拖移把手拖拽换位，取代已移除的箭头调序）
   const [panelOrder, setPanelOrder] = useState<string[]>([]); // 面板 key 序；空 = own 序
   const [draggingPanel, setDraggingPanel] = useState<string | null>(null);
@@ -1705,9 +1697,9 @@ export default function PriceTrend(props: {
               onOffersOn={setOffersOn}
               changeThreshold={changeThreshold}
               onChangeThreshold={setChangeThreshold}
-              // 第196轮复检整改3：稳定版隐藏「多平台对比」入口（每产品多店铺取数
-              // 概念随全局平台化退役；PlatformCompareView 代码保留，iterate 照旧）
-              compareEntry={STABLE ? undefined : platformCtl}
+              // 2026-11-12 Eason：多平台对比进稳定版（第196轮曾随全局平台化隐藏
+              // 入口，现恢复；PlatformCompareView 本就无通道门禁）
+              compareEntry={platformCtl}
             />
           </div>
         </div>

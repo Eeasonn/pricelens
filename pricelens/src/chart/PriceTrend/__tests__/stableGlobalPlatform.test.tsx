@@ -3,7 +3,7 @@
 // vi.mock 把 appChannel 钉在 stable（vitest 本体 = dev 形态 = iterate）——
 // ①每线渠道选择 chip（取价平台小药丸弹层）不渲染；
 // ②店铺同步按钮不渲染；每线渠道小药丸（平台名）不渲染；
-// ③「多平台对比」入口不渲染（PlatformCompareView 代码保留，本测试不涉）；
+// ③「多平台对比」入口渲染（2026-11-12 Eason：功能进稳定版；第196轮曾隐藏）；
 // ④价格页全部 series group 的 platform = 全局 state.platform（店铺级降级为
 //   平台级），每线 sel.platform 覆写失效——改全局平台 → 取数口径真实变化；
 // ⑤URL：shop=/seller= 在 stable 忽略（readUrlOverrides 不再吃进 state.platform），
@@ -146,9 +146,9 @@ describe('稳定版价格页：每线渠道/店铺 UI 不渲染', () => {
     expect(screen.queryByRole('button', { name: /^(取消)?店铺同步$/ })).toBeNull();
   });
 
-  it('「多平台对比」入口不存在（PlatformCompareView 代码保留）', async () => {
+  it('「多平台对比」入口渲染（2026-11-12 Eason：功能进稳定版；iterate 同款见回归测试）', async () => {
     render(<PriceTrend />);
-    expect(screen.queryByText('多平台对比 →')).toBeNull();
+    expect(screen.getByText('多平台对比 →')).toBeTruthy();
   });
 
   it('每线渠道小药丸（平台名 badge）不渲染——药丸上不再挂平台/店铺概念', async () => {
