@@ -78,7 +78,7 @@
 全部	默认	穿戴	WATCH Ultimate	WATCH ultimate 2	>300	Apple Watch Ultra 4	Garmin Fenix 8 Pro	Samsung Galaxy Watch Ultra
 				WATCH ultimate	>300	Apple Watch Ultra 3	Garmin Fenix 7 Pro	Samsung Galaxy Watch Ultra
 			WATCH GT	GT7 Pro	>300	Apple Watch Series 12	Samsung Galaxy Watch 9	
-				GT7	>300	Samsung Galaxy Watch 9	Apple Watch Series 12	Xiaomi S5
+				GT7	>300	Samsung Galaxy Watch 9	Samsung Galaxy Watch 8	Xiaomi S5
 				GT Runner 2	>300	Garmin Forerunner 965	Garmin Forerunner 570	COROS Pace Pro
 			WATCH FIT	FIT 5 Pro	150<300	Apple Watch SE 3	Xiaomi S5	Amazfit Active
 				FIT 5	150<300	Xiaomi S5	Xiaomi Band 10 Pro	Redmi Watch 6

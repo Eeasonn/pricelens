@@ -1,6 +1,6 @@
 # 真实数据接入报告（scripts/ingest_real.py）
 
-生成时间：2026-11-10T20:46:33+08:00
+生成时间：2026-11-11T08:48:44+08:00
 
 ## 一、总体
 
@@ -16,7 +16,7 @@
 - 时间维 202619(2026-05-06) → 202646(2026-11-11)，共 28 周
 - 低侧可疑价（<15% 参考价，仅报告不剔除）104 行
 - 分国档位：363 个 国家×型号 采用矩阵声明，其余按该国参考价推算
-- 对标上限4：4 组超限截断 6 条，截断后共 789 条（每配置 ≤4 款竞品）
+- 对标上限4：4 组超限截断 6 条，截断后共 792 条（每配置 ≤4 款竞品）
 - 事实包 96,630 行；b64 2,776,816 B（gzip 2,082,612 B）
 - 修正：价格单位错位(×100) 68 行
 - 修正：价格单位错位(÷100) 31 行
@@ -219,52 +219,55 @@
 - ZA｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 12 —（sort 1）
 - ZA｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 9 —（sort 2）
 - AR｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- AR｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 2）
+- AR｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
+- AR｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - CL｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- CL｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 2）
+- CL｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
+- CL｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - DE｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- DE｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- DE｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - DE｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - ES｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- ES｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- ES｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - ES｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - FR｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- FR｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- FR｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - FR｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - GB｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- GB｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- GB｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - GB｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - ID｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- ID｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 2）
+- ID｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
+- ID｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - IT｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- IT｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- IT｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - JP｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- JP｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
-- JP｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
+- JP｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 2）
 - MY｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- MY｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- MY｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - MY｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
+- PE｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 1）
 - PH｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- PH｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- PH｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - PH｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - PL｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- PL｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- PL｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - PL｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - RO｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- RO｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
 - RU｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- RU｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- RU｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - RU｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - SG｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- SG｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- SG｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - SG｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - TH｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- TH｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- TH｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - TH｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - TR｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
-- TR｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 12 —（sort 2）
+- TR｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - TR｜own-huawei-watch-gt-7 — ← XIAOMI Watch S5 —（sort 3）
 - VN｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 9 —（sort 1）
+- VN｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 —（sort 2）
 - DE｜own-huawei-watch-gt-runner-2 — ← GARMIN Forerunner 570 —（sort 1）
 - ES｜own-huawei-watch-fit-5-pro — ← APPLE Watch SE 3 —（sort 1）
 - FR｜own-huawei-watch-fit-5-pro — ← APPLE Watch SE 3 —（sort 1）
@@ -285,9 +288,9 @@
 - VN｜own-huawei-watch-fit-5-pro — ← APPLE Watch SE 3 —（sort 1）
 - ID｜own-huawei-watch-fit-5 — ← XIAOMI Watch S5 —（sort 1）
 - ID｜own-huawei-watch-fit-5 — ← XIAOMI Band 10 Pro —（sort 2）
-- ID｜own-huawei-watch-fit-5 — ← XIAOMI Redmi Watch 6 —（sort 3）
 - IT｜own-huawei-watch-fit-5 — ← XIAOMI Band 10 Pro —（sort 1）
 - JP｜own-huawei-watch-fit-5 — ← XIAOMI Watch S5 —（sort 1）
+- JP｜own-huawei-watch-fit-5 — ← XIAOMI Band 10 Pro —（sort 2）
 - RO｜own-huawei-watch-fit-5 — ← XIAOMI Redmi Watch 6 —（sort 1）
 - TR｜own-huawei-watch-fit-5 — ← XIAOMI Watch S5 —（sort 1）
 - VN｜own-huawei-watch-fit-5 — ← XIAOMI Band 10 Pro —（sort 1）
@@ -298,7 +301,6 @@
 - AR｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - AR｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 2）
 - PE｜own-huawei-band-11 — ← XIAOMI Redmi Watch 5 Lite —（sort 1）
-- VN｜own-huawei-band-11 — ← XIAOMI Band 10 —（sort 1）
 - PE｜own-huawei-matepad-pro-2025 13.2" 12+512 GB PaperMatte ← SAMSUNG Galaxy Tab S11 11" 12+128 GB（sort 1）
 - PE｜own-huawei-matepad-11-5-2025 11.5" 8+128 GB ← XIAOMI Redmi Pad 2 Pro 12.1" 6+128 GB（sort 1）
 - PE｜own-huawei-matepad-11-5-2025 11.5" 8+256 GB PaperMatte ← XIAOMI Redmi Pad 2 Pro 12.1" 6+128 GB（sort 1）

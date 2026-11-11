@@ -5896,12 +5896,12 @@
     ]
    },
    {
-    "raw": "Apple Watch Series 12",
-    "brand": "APPLE",
+    "raw": "Samsung Galaxy Watch 8",
+    "brand": "SAMSUNG",
     "col": 2,
     "models": [
      {
-      "model_id": "cmp-apple-watch-series-12",
+      "model_id": "cmp-samsung-galaxy-watch-8",
       "status": "exact"
      }
     ]
