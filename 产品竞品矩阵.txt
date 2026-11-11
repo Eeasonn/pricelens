@@ -1,19 +1,4 @@
 区域	国家	产业	系列	产品	价格挡位（USD）	品牌-竞品1	品牌-竞品2	品牌-竞品3
-中东非	沙特	穿戴	WATCH Ultimate	WATCH ultimate  2	>300	Apple Watch  Ultra 3	Samsung Galaxy  Watch Ultra	Garmin Fenix 8
-中东非	沙特			WATCH ultimate	>300	Apple  Watch Ultra 3	Samsung  Galaxy Watch Ultra	Garmin  Fenix 8
-中东非	沙特		WATCH GT	GT7  Pro	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8	Garmin  Venu 4
-中东非	沙特			GT7	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  vívoactive 6
-中东非	沙特			GT Runner 2	>300	Garmin  Forerunner 970	Garmin  Forerunner 570	COROS  PACE Pro
-中东非	沙特		WATCH FIT	FIT  5 Pro	150<300	Apple  Watch SE 3	Samsung  Galaxy Watch FE	Garmin  vívoactive 6
-中东非	沙特			FIT 5	150<300	Samsung  Galaxy Watch FE	Xiaomi  Watch S4	Amazfit  Active 2
-中东非	沙特		WATCH	D3	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Xiaomi  Watch S4
-中东非	沙特			WATCH 6 Pro	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  Venu 4
-中东非	沙特			WATCH 6	>300	Apple  Watch Series 11	Samsung  Galaxy Watch8 Classic	Garmin  Venu 4
-中东非	沙特		WATCH KIDS	KIDS  X1 Pro	150<300	-		
-中东非	沙特			KIDS X1系列	150<300	-		
-中东非	沙特			KIDS 4 Pro	50<75	-		
-中东非	沙特		Band	Band  11 Pro	25<75	Xiaomi  Smart Band 10	Samsung  Galaxy Fit3	Amazfit  Band 7
-中东非	沙特			Band 11	25<75	Xiaomi  Smart Band 10	Samsung  Galaxy Fit3	Amazfit  Band 7
 中东非	沙特	音频	FreeClip	FreeClip  2 S	＞200	Shokz  OpenDots 2	Shokz  OpenDots 2	Soundcore  AeroClip
 中东非	沙特			FreeClip 2	100<200	Shokz  OpenDots 2	Shokz  OpenDots 2	Soundcore  AeroClip
 中东非	沙特		FreeBuds	FreeBuds  Pro 5	＞200	Apple  AirPods Pro 3	Sony  WF-1000XM5	Samsung  Galaxy Buds3 Pro

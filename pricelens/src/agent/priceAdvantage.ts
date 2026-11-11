@@ -245,7 +245,9 @@ export function buildPriceAdvantageResult(state: FiltersState, contextFingerprin
     const ownSeries = seriesByKey.get(ownKey);
     if (!ownSeries) continue;
     const ownMeta = modelLabel(card.main);
-    skuOptions.set(ownMeta.skuId, `${ownMeta.modelName} · ${card.main.romram}`);
+    // 2026-11-11 Eason：配置段置空（—/规格未标明）时选项名不带「· …」尾缀
+    const ownCfg = card.main.romram !== '—' && card.main.romram !== '规格未标明' ? card.main.romram : '';
+    skuOptions.set(ownMeta.skuId, ownCfg ? `${ownMeta.modelName} · ${ownCfg}` : ownMeta.modelName);
     for (const competitor of competitors) {
       const competitorKey = `${competitor.modelId}__${compact(competitor.romram)}`;
       const competitorSeries = seriesByKey.get(competitorKey);

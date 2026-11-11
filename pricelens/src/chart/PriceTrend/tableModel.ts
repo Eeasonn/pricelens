@@ -31,19 +31,38 @@ export interface LegendGroup extends TableGroup {
   ordinal: number; // 1 起 = 选择浮窗卡序（与宽表 groupOrdinal 同源）
 }
 
+/** 选择键 ↔ 系列 key 匹配（2026-11-11 融资后缀感知）：ZA 运营商小册子月度系列
+ *  key 带期数后缀（`__i24/__i36/__i48/__pp`，两级付费口径多期展开），而选择键
+ *  （modelId__romram）无后缀——裸相等会漏配，宽表分组因此整组落空（明细表消失）。
+ *  裸相等或前缀 + `__` 边界（`watchgt6__` 不会误吞 `watchgt6pro__…`）均算命中。 */
+export function seriesKeyMatches(seriesKey: string, selectionKey: string): boolean {
+  return seriesKey === selectionKey || seriesKey.startsWith(`${selectionKey}__`);
+}
+
 /** 按选择浮窗卡序把系列归组（第一百二十三轮④⑤，图例带与宽表共用的取数口）：
  *  每卡一组（id = 卡 id），组内 = 主品在前 + 对比按卡内序；所选系列在 series
- *  列表里无数据时跳过该条目；同一对比被多卡引用时各组各出一条（组内语义完整）。 */
+ *  列表里无数据时跳过该条目；同一对比被多卡引用时各组各出一条（组内语义完整）。
+ *  融资后缀变体（2026-11-11）：一条选择认领其全部期数变体（勾几期表里就有几条）。 */
 export function groupsOfCards(cards: MainProduct[], series: Series[]): LegendGroup[] {
   const byKey = new Map(series.map((s) => [s.key, s]));
   return cards.map((card, i) => {
     const out: Series[] = [];
     const seen = new Set<string>();
     const pick = (sel: ProductSelection): void => {
-      const hit = byKey.get(seriesKeyOf(sel));
-      if (hit && !seen.has(hit.key)) {
-        seen.add(hit.key);
-        out.push(hit);
+      const base = seriesKeyOf(sel);
+      const hit = byKey.get(base);
+      if (hit) {
+        if (!seen.has(hit.key)) {
+          seen.add(hit.key);
+          out.push(hit);
+        }
+        return;
+      }
+      for (const s of series) {
+        if (!seen.has(s.key) && seriesKeyMatches(s.key, base)) {
+          seen.add(s.key);
+          out.push(s);
+        }
       }
     };
     if (card.main) pick(card.main);
@@ -57,10 +76,11 @@ export function seriesKeyOf(sel: { modelId: string; romram: string }): string {
   return `${sel.modelId}__${sel.romram.replace(/\s+/g, '')}`;
 }
 
-/** 价差基准 = 本组主分析产品；主品未选或在所选范围内无数据时为 null（不出价差） */
+/** 价差基准 = 本组主分析产品；主品未选或在所选范围内无数据时为 null（不出价差）。
+ *  匹配走 seriesKeyMatches（融资后缀感知，2026-11-11） */
 export function baseKeyOf(group: Pick<TableGroup, 'mainKey' | 'series'>): string | null {
   if (group.mainKey == null) return null;
-  return group.series.some((s) => s.key === group.mainKey) ? group.mainKey : null;
+  return group.series.some((s) => seriesKeyMatches(s.key, group.mainKey!)) ? group.mainKey : null;
 }
 
 /** 日期列文案：周 = MM-DD（桶 xLabel 原样，不带周号）；月 = YYYY-MM；季 = 原样 */
@@ -143,7 +163,7 @@ export function compareKeysOfGroups(groups: LegendGroup[]): string[] {
   const out: string[] = [];
   for (const g of groups) {
     for (const s of g.series) {
-      if (s.key !== g.mainKey) out.push(s.key);
+      if (g.mainKey == null || !seriesKeyMatches(s.key, g.mainKey)) out.push(s.key);
     }
   }
   return out;

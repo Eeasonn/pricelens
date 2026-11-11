@@ -150,9 +150,11 @@ export function shortRomram(romram: string): string {
 }
 
 /** 配置展示段（第一百五十三轮）：'—' = 无配置层级（穿戴/音频等产品），展示为空——
- *  消费方对空串整段隐藏（chip 不渲染、文本不留「· —」尾缀、表格留空格） */
+ *  消费方对空串整段隐藏（chip 不渲染、文本不留「· —」尾缀、表格留空格）。
+ *  2026-11-11 Eason：「规格未标明」（ZA 册子型号级合成行）同样不展示——
+ *  即便确实没标，也不把这几个字亮在界面上，留空即可。 */
 export function configTextOf(romram: string | null | undefined): string {
-  return romram && romram !== '—' ? romram : '';
+  return romram && romram !== '—' && romram !== '规格未标明' ? romram : '';
 }
 
 /** 配置容量解析（排序用）：`12+256 GB` → [12, 256]；`16+1 TB` → [16, 1024]；
@@ -311,12 +313,14 @@ function buildRomramNode(
     latestUsd: lp.get(s.sku_id)?.usd ?? null,
   }));
   const short = shortRomram(romram);
+  // 2026-11-11 Eason：配置段置空时（—/规格未标明）节点名不带「· …」尾缀
+  const hasCfg = configTextOf(romram) !== '';
   return {
     key: `${modelId}|${romram}`,
     modelId,
     romram,
     shortRomram: short,
-    label: `${modelName} · ${short}`,
+    label: hasCfg ? `${modelName} · ${short}` : modelName,
     colors,
     selectableColors: colors.filter((c) => c.color !== '—'),
   };

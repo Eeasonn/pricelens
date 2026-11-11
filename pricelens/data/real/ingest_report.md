@@ -1,6 +1,6 @@
 # 真实数据接入报告（scripts/ingest_real.py）
 
-生成时间：2026-11-11T10:14:40+08:00
+生成时间：2026-11-11T23:45:23+08:00
 
 ## 一、总体
 
@@ -16,7 +16,7 @@
 - 时间维 202619(2026-05-06) → 202646(2026-11-11)，共 28 周
 - 低侧可疑价（<15% 参考价，仅报告不剔除）104 行
 - 分国档位：378 个 国家×型号 采用矩阵声明，其余按该国参考价推算
-- 对标上限4：5 组超限截断 9 条，截断后共 890 条（每配置 ≤4 款竞品）
+- 对标上限4：5 组超限截断 9 条，截断后共 887 条（每配置 ≤4 款竞品）
 - 事实包 96,628 行；b64 2,776,768 B（gzip 2,082,575 B）
 - 修正：MatePad Air 2026 规格 12.2→12（R国 W45 采集笔误归并） 6 行
 - 修正：价格单位错位(×100) 68 行
@@ -67,15 +67,8 @@
 
 ## 三、矩阵解析未命中清单
 
-共 53 条：
+共 46 条：
 
-- [own] 沙特 wearable「WATCH ultimate」：none
-- [comp] 沙特 wearable「COROS PACE Pro」：none
-- [comp] 沙特 wearable「Samsung Galaxy Watch FE」：none
-- [comp] 沙特 wearable「Samsung Galaxy Watch FE」：none
-- [own] 沙特 wearable「KIDS 4 Pro」：none
-- [comp] 沙特 wearable「Amazfit Band 7」：none
-- [comp] 沙特 wearable「Amazfit Band 7」：none
 - [comp] 沙特 audio「Nothing Ear (a)」：none
 - [comp] 沙特 audio「JBL Live Buds 3」：none
 - [comp] 沙特 audio「Soundcore Liberty 4 NC」：none
@@ -125,14 +118,14 @@
 
 ## 四、对标样例（每国前 8 条）
 
-- SA｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 —（sort 1）
-- SA｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） —（sort 2）
-- SA｜own-huawei-watch-ultimate-2 — ← GARMIN Fenix 8 —（sort 3）
-- SA｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 11 —（sort 1）
-- SA｜own-huawei-watch-gt-7-pro — ← SAMSUNG Galaxy Watch 8 —（sort 2）
-- SA｜own-huawei-watch-gt-7-pro — ← GARMIN Venu 4 —（sort 3）
-- SA｜own-huawei-watch-gt-7 — ← APPLE Watch SERIES 11 —（sort 1）
-- SA｜own-huawei-watch-gt-7 — ← SAMSUNG Galaxy Watch 8 Classic —（sort 2）
+- SA｜own-huawei-freebuds-pro-5 — ← APPLE AirPods Pro 3 —（sort 1）
+- SA｜own-huawei-freebuds-pro-5 — ← SAMSUNG Galaxy Buds3 Pro —（sort 2）
+- SA｜own-huawei-freebuds-7i — ← APPLE AirPods 5 —（sort 1）
+- SA｜own-huawei-freebuds-7i — ← SAMSUNG Galaxy Buds FE —（sort 2）
+- SA｜own-huawei-freebuds-neo — ← XIAOMI Redmi Buds 6 Pro —（sort 1）
+- SA｜own-huawei-freebuds-se-4-anc — ← XIAOMI Redmi Buds 6 Lite —（sort 1）
+- SA｜own-huawei-pura-90s-pro-max 12+256 GB ← SAMSUNG S26 Ultra 12+256 GB（sort 1）
+- SA｜own-huawei-pura-90s-pro-max 12+256 GB ← APPLE iPhone 18 Pro Max 12+256 GB（sort 2）
 - AE｜own-huawei-watch-ultimate-2 — ← APPLE Watch Ultra 3 —（sort 1）
 - AE｜own-huawei-watch-ultimate-2 — ← SAMSUNG Galaxy Watch Ultra（2025） —（sort 2）
 - AE｜own-huawei-watch-gt-7-pro — ← APPLE Watch SERIES 11 —（sort 1）

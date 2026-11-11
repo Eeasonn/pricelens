@@ -668,14 +668,43 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
     : (q.financingTerms != null && q.financingTerms.length > 0
       ? [...q.financingTerms].sort((a, b) => a - b)
       : [24, 36, 48]);
+  // 2026-11-11 Eason 明细改造（批次5缺半的补齐）：逐月聚合各口径价与促销原文——
+  // 明细表 ZA 分支的数据源。取数源 = 全量口径行（financingType null，含先付），
+  // 不随本系列的 planTerm 收窄：36期系列的平台成交价列也要有值，反之亦然。
+  const rowsAll = monthlyFactsFor(sourceRows, {
+    countryCode: q.scope.countryCode,
+    financingType: null,
+    financingTerms: [],
+  });
   for (const group of q.groups) {
     const resolved = resolveGroup(group);
     if (!resolved) continue;
     const groupRows0 = rows.filter((row) => monthlyFactMatchesGroup(row, resolved));
+    const groupRowsAll = rowsAll.filter((row) => monthlyFactMatchesGroup(row, resolved));
     for (const planTerm of planTerms) {
     const groupRows = q.financingType === 'prepaid'
       ? groupRows0
       : groupRows0.filter((row) => row.term_months === planTerm);
+    const finMoneyOf = (row: FactPriceMonthly, local: number | null | undefined, usd: number | null | undefined): number | null =>
+      (q.currency === 'usd' ? usd : local) ?? null;
+    const minOf = (values: number[]): number | null => (values.length ? Math.min(...values) : null);
+    const financeOf = (periodId: string): SeriesPoint['finance'] => {
+      const periodRowsAll = groupRowsAll.filter((row) => row.period_id === periodId);
+      if (periodRowsAll.length === 0) return null;
+      const prepaid = periodRowsAll.filter((row) => row.price_type === 'prepaid');
+      const inst = (term: number) => periodRowsAll.filter((row) => row.price_type === 'installment' && row.term_months === term);
+      const finance: NonNullable<SeriesPoint['finance']> = {
+        selling: minOf(prepaid.map((row) => finMoneyOf(row, row.price_local, row.price_usd)).filter((v): v is number => v != null)),
+        i24: minOf(inst(24).map((row) => finMoneyOf(row, row.price_local, row.price_usd)).filter((v): v is number => v != null)),
+        t24: minOf(inst(24).map((row) => finMoneyOf(row, row.total_local, row.total_usd)).filter((v): v is number => v != null)),
+        i36: minOf(inst(36).map((row) => finMoneyOf(row, row.price_local, row.price_usd)).filter((v): v is number => v != null)),
+        t36: minOf(inst(36).map((row) => finMoneyOf(row, row.total_local, row.total_usd)).filter((v): v is number => v != null)),
+        i48: minOf(inst(48).map((row) => finMoneyOf(row, row.price_local, row.price_usd)).filter((v): v is number => v != null)),
+        t48: minOf(inst(48).map((row) => finMoneyOf(row, row.total_local, row.total_usd)).filter((v): v is number => v != null)),
+        promo: periodRowsAll.map((row) => row.promotion_text ?? null).find((t) => !!t) ?? null,
+      };
+      return finance;
+    };
     const points = periodIds.map((periodId) => {
       const periodRows = groupRows.filter((row) => row.period_id === periodId);
       const bySku = new Map<string, { row: FactPriceMonthly; price: number }>();
@@ -710,6 +739,7 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
         shopName: best ? `${best.row.platform} ${best.row.store_type}` : null,
         channelName: best ? `${best.row.platform} ${best.row.store_type}` : null,
         platform: best?.row.platform ?? null,
+        finance: financeOf(periodId),
       } satisfies SeriesPoint;
     });
     const first = groupRows[0];
@@ -719,7 +749,8 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
       key: `${group.modelId}__${normRom(resolved.romram)}${q.financingType === 'prepaid' ? '__pp' : `__i${planTerm}`}`,
       isOwn: resolved.isOwn,
       brand: resolved.brand,
-      label: `${resolved.brand} ${resolved.modelName} ${resolved.romram}`,
+      // 2026-11-11 Eason：「规格未标明」（型号级合成 romram）不进系列名——药丸留空
+      label: [resolved.brand, resolved.modelName, resolved.romram === '规格未标明' ? '' : resolved.romram].filter(Boolean).join(' '),
       skuIds: resolved.skuIds,
       color: brandColorOf(resolved.brand),
       points,
@@ -937,8 +968,9 @@ export function buildSeries(q: SeriesQuery): Series[] {
       key,
       isOwn: rg.isOwn,
       brand: rg.brand,
-      // 无配置层级的产品（romram '—'，第一百五十三轮）系列名不带「—」尾缀
-      label: [rg.brand, rg.modelName, rg.romram === '—' ? '' : rg.romram].filter(Boolean).join(' '),
+      // 无配置层级的产品（romram '—'，第一百五十三轮）系列名不带「—」尾缀；
+      // 「规格未标明」（ZA 册子型号级合成行，2026-11-11 Eason）同样不亮在界面上
+      label: [rg.brand, rg.modelName, rg.romram === '—' || rg.romram === '规格未标明' ? '' : rg.romram].filter(Boolean).join(' '),
 
       skuIds: [...rg.skuIds],
       color,

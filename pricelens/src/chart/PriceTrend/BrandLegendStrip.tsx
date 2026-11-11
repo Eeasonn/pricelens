@@ -87,13 +87,15 @@ const MAIN_BORDER = 'rgba(0, 112, 243, 0.35)';
 function romTextOf(key: string): string {
   const sep = key.indexOf('__');
   const modelId = sep <= 0 ? key : key.slice(0, sep);
-  const normRom = sep <= 0 ? '' : key.slice(sep + 2);
+  // 2026-11-11：ZA 月度系列 key 带融资期数后缀（__i36/__pp），反查前先剥掉
+  const normRom = sep <= 0 ? '' : key.slice(sep + 2).split('__')[0];
   const rows = dimProduct.filter((p) => p.model_id === modelId);
   const row = normRom
     ? rows.find((p) => p.romram.replace(/\s+/g, '') === normRom) ?? rows[0]
     : rows[0];
   const rom = row?.romram ?? '';
-  return rom === '—' ? '' : rom;
+  // 2026-11-11 Eason：「规格未标明」不亮在图例 chip 上（同 '—' 留空）
+  return rom === '—' || rom === '规格未标明' ? '' : rom;
 }
 
 interface PillSpec {

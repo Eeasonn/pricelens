@@ -75,7 +75,7 @@ export default function MarketDataProfileControl() {
         </>
       ) : null}
       {profile.evidenceStatus === 'pending-review' ? <span role="status" style={{ fontSize: fontSize.caption, color: color.warningInk, whiteSpace: 'nowrap' }}>待复核，暂不参与计算</span> : null}
-      {profile.evidenceStatus === 'ready' ? <span role="status" style={{ fontSize: fontSize.caption, color: color.warningInk, whiteSpace: 'nowrap' }}>规格未标明，按型号汇总</span> : null}
+      {profile.evidenceStatus === 'ready' ? <span role="status" style={{ fontSize: fontSize.caption, color: color.warningInk, whiteSpace: 'nowrap' }}>按型号汇总</span> : null}
       <Tooltip title={profile.evidenceStatus === 'ready'
         ? '南非价格来自 VODACOM SHOP 运营商小册子，按月记录。先付 = 一次性买断价；后付 = 合约月供，期数可多选（勾几期看几期，每期各一条线）。源表未提供容量或版本信息时按型号级汇总。'
         : '南非价格来自运营商小册子，按月记录。先付 = 一次性买断价；后付 = 合约月供，期数可多选。'}>

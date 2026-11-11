@@ -152,8 +152,15 @@ def match_product(
     brand_key = key(brand)
     model_key = key(model)
     if mapped is not None:
+        status = mapped.get("match_status", "matched-model")
+        # 2026-11-11：reconcile 的 spec-existing-sku（'matched-spec'）= 已按容量
+        # 落到具体 SKU，与本脚本 'matched-spec-complete' 同义——原样透传会卡 PASS
+        # 门禁（仅认 matched-spec-complete/matched-model），重跑全链时运行时掉行
+        # （1886→1031）。同义翻译在此单点收口。
+        if status == "matched-spec":
+            status = "matched-spec-complete"
         return {
-            "match_status": mapped.get("match_status", "matched-model"),
+            "match_status": status,
             "model_id": mapped.get("model_id"),
             "romram": mapped.get("romram"),
             "sku_id": mapped.get("sku_id"),

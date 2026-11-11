@@ -35,6 +35,7 @@ import {
   groupOrdinal,
   latestIdxOf,
   offerText,
+  seriesKeyMatches,
   type DetailBucket,
   type TableGroup,
 } from './tableModel';
@@ -168,7 +169,8 @@ export default function TrendTables(props: {
     () =>
       groups.map((g, i) => {
         const baseKey = baseKeyOf(g);
-        const base = baseKey != null ? g.series.find((s) => s.key === baseKey) ?? null : null;
+        // 主品系列 key 匹配走融资后缀感知谓词（2026-11-11：ZA 月度系列带 __i36/__pp 期数后缀）
+        const base = baseKey != null ? g.series.find((s) => seriesKeyMatches(s.key, baseKey)) ?? null : null;
         return {
           g,
           ordinal: i + 1,
