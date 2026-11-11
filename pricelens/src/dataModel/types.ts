@@ -1,4 +1,4 @@
-import type { FinancingPlan, FinancingTerm } from './marketProfile';
+import type { FinancingPlan, FinancingTerm, FinancingType } from './marketProfile';
 
 // ============================================================
 // §7 数据模型（星型模型）+ 图表取数契约类型
@@ -283,7 +283,8 @@ export interface SeriesQuery {
   currency: CurrencyMode;
   agg: AggMode; // 仅月/季生效
   /** ZA monthly booklet facts require an explicit 24/36 term. */
-  financingTerm?: FinancingPlan | null;
+  financingType?: FinancingType | null;
+  financingTerms?: FinancingTerm[];
   // 平台口径自第一百六十轮起下沉到每组（SkuGroupQuery.platform）——看板全局
   // 平台筛选退役（总览/预警仍用全局口径）
 }

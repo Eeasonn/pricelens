@@ -3,6 +3,8 @@
  * ZA is sourced from operator booklets rather than weekly e-commerce pages.
  */
 export type FinancingTerm = 24 | 36 | 48;
+/** 付费口径：'prepaid'=先付（买断价）；'installment'=后付合约月供 */
+export type FinancingType = 'prepaid' | 'installment';
 /** 付费口径：数值 = 后付合约期数；'prepaid' = 先付（买断价） */
 export type FinancingPlan = FinancingTerm | 'prepaid';
 

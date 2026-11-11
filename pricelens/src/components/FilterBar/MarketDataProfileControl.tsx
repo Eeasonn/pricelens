@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Segmented, Tag, Tooltip } from 'antd';
+import { Checkbox, Segmented, Tag, Tooltip } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { marketDataProfileOf } from '../../dataModel/marketProfile';
 import { useFilters } from '../../state/FiltersContext';
@@ -18,12 +18,15 @@ export default function MarketDataProfileControl() {
 
   // 2026-11-11 Eason：进页默认「后付 · 36 期」——册子里行数最多的口径，不再默认空白
   useEffect(() => {
-    if (profile.granularityLocked && state.financingTerm == null) {
-      actions.set({ financingTerm: 36 });
+    if (profile.granularityLocked && (state.financingType == null || state.financingTerms.length === 0)) {
+      actions.set({ financingType: 'installment', financingTerms: [36] });
     }
-  }, [actions, profile.granularityLocked, state.financingTerm]);
+  }, [actions, profile.granularityLocked, state.financingType, state.financingTerms.length]);
 
   if (!profile.granularityLocked) return null;
+
+  const payType = state.financingType === 'prepaid' ? 'prepaid' : 'installment';
+  const terms = Array.isArray(state.financingTerms) ? state.financingTerms : [];
 
   return (
     <div role="group" aria-label="市场采集口径" style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', minWidth: 0 }}>
@@ -37,30 +40,42 @@ export default function MarketDataProfileControl() {
       <Segmented
         size="small"
         aria-label="南非付费方式"
-        value={state.financingTerm === 'prepaid' ? 'prepaid' : 'installment'}
+        value={payType}
         options={[
           { label: '先付', value: 'prepaid' },
           { label: '后付', value: 'installment' },
         ]}
-        onChange={(value) => actions.set({ financingTerm: value === 'prepaid' ? 'prepaid' : 36 })}
+        onChange={(value) => actions.set(value === 'prepaid'
+          ? { financingType: 'prepaid' }
+          : { financingType: 'installment', financingTerms: terms.length > 0 ? terms : [36] })}
       />
-      {state.financingTerm !== 'prepaid' ? (
+      {payType === 'installment' ? (
         <>
           <span style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>期数</span>
-          <Segmented
-            size="small"
-            aria-label="南非分期期数"
-            value={typeof state.financingTerm === 'number' ? state.financingTerm : 36}
-            options={profile.financingTerms.map((term) => ({ label: `${term} 期`, value: term }))}
-            onChange={(value) => actions.set({ financingTerm: value as 24 | 36 | 48 })}
-          />
+          {/* 2026-11-11 Eason：期数多选——勾几期看几期，每期各出一条月供线 */}
+          {profile.financingTerms.map((term) => {
+            const on = terms.includes(term);
+            return (
+              <Checkbox
+                key={term}
+                checked={on}
+                onChange={() => {
+                  const next = on ? terms.filter((t) => t !== term) : [...terms, term].sort((a, b) => a - b);
+                  actions.set({ financingTerms: next });
+                }}
+                style={{ fontSize: fontSize.caption, lineHeight: '18px' }}
+              >
+                {term} 期
+              </Checkbox>
+            );
+          })}
         </>
       ) : null}
       {profile.evidenceStatus === 'pending-review' ? <span role="status" style={{ fontSize: fontSize.caption, color: color.warningInk, whiteSpace: 'nowrap' }}>待复核，暂不参与计算</span> : null}
       {profile.evidenceStatus === 'ready' ? <span role="status" style={{ fontSize: fontSize.caption, color: color.warningInk, whiteSpace: 'nowrap' }}>规格未标明，按型号汇总</span> : null}
       <Tooltip title={profile.evidenceStatus === 'ready'
-        ? '南非价格来自 VODACOM SHOP 运营商小册子，按月记录。先付 = 一次性买断价；后付 = 合约月供，按期数取价。源表未提供容量或版本信息时按型号级汇总，并保留原始来源与门禁状态。'
-        : '南非价格来自运营商小册子，按月记录。先付 = 一次性买断价；后付 = 合约月供，按期数取价。'}>
+        ? '南非价格来自 VODACOM SHOP 运营商小册子，按月记录。先付 = 一次性买断价；后付 = 合约月供，期数可多选（勾几期看几期，每期各一条线）。源表未提供容量或版本信息时按型号级汇总。'
+        : '南非价格来自运营商小册子，按月记录。先付 = 一次性买断价；后付 = 合约月供，期数可多选。'}>
         <InfoCircleOutlined aria-label="南非数据口径说明" style={{ color: color.mute, fontSize: 12 }} />
       </Tooltip>
     </div>

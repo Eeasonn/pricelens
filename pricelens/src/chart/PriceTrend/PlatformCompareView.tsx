@@ -627,7 +627,8 @@ export default function PlatformCompareView(props: {
         endBucket: dataEnd,
         currency: state.currency,
         agg: state.agg,
-        financingTerm: state.financingTerm,
+        financingType: state.financingType,
+    financingTerms: state.financingTerms,
         scope: { countryCode: cc, industry: state.industry },
       });
     } catch {
@@ -643,7 +644,7 @@ export default function PlatformCompareView(props: {
       })),
       failed,
     };
-  }, [product, repSkuId, shops, state.granularity, state.currency, state.agg, state.financingTerm, cc, state.industry, configVersion]);
+  }, [product, repSkuId, shops, state.granularity, state.currency, state.agg, state.financingType, state.financingTerms, cc, state.industry, configVersion]);
   const shopSeries = shopSeriesRes.series;
 
   // 窗口切片 + 边缘续接标记（与主图 visSeries 同逻辑）

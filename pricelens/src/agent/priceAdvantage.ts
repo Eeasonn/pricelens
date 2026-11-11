@@ -70,7 +70,8 @@ function productSeries(state: FiltersState, cards: MainProduct[]) {
     endBucket: range.end,
     currency: state.currency,
     agg: state.agg,
-    financingTerm: state.financingTerm,
+    financingType: state.financingType,
+    financingTerms: state.financingTerms,
   });
 }
 

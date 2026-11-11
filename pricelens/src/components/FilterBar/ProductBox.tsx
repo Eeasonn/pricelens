@@ -76,8 +76,8 @@ function ProductCascadeControl({
 }) {
   const { state } = useFilters();
   const tree = useMemo(
-    () => buildOwnTree(state.industry, state.countryCode, state.financingTerm),
-    [state.industry, state.countryCode, state.financingTerm],
+    () => buildOwnTree(state.industry, state.countryCode, state.financingType, state.financingTerms),
+    [state.industry, state.countryCode, state.financingType, state.financingType, state.financingTerms],
   );
   const list = selection;
   const writeList = (next: ProductSelection[]): void => onSelectionChange(next);

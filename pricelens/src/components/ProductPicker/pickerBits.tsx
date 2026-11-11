@@ -241,8 +241,8 @@ export function ColorChip({
 export function useTreeData() {
   const { state } = useFilters();
   const fullTree = useMemo(
-    () => buildProductTree(state.industry, state.countryCode, state.financingTerm),
-    [state.industry, state.countryCode, state.financingTerm],
+    () => buildProductTree(state.industry, state.countryCode, state.financingType, state.financingTerms),
+    [state.industry, state.countryCode, state.financingType, state.financingType, state.financingTerms],
   );
   const romramByKey = useMemo(() => {
     const m = new Map<string, RomramNode>();

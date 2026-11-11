@@ -400,10 +400,11 @@ export default function PriceTrend(props: {
       endBucket: dataEnd,
       currency: state.currency,
       agg: state.agg,
-      financingTerm: state.financingTerm,
+      financingType: state.financingType,
+    financingTerms: state.financingTerms,
       scope: { countryCode: state.countryCode, industry: state.industry },
     }),
-    [mainSels, compareSels, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, state.countryCode, state.industry],
+    [mainSels, compareSels, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingType, state.financingTerms, state.countryCode, state.industry],
   );
 
   // 取数异常 ≠ 空态（第一百八十五轮，外部 UX 审计）：异常不再静默回落空数组
@@ -759,7 +760,8 @@ export default function PriceTrend(props: {
           endBucket: dataEnd,
           currency: state.currency,
           agg: state.agg,
-          financingTerm: state.financingTerm,
+          financingType: state.financingType,
+    financingTerms: state.financingTerms,
           scope: { countryCode: state.countryCode, industry: state.industry },
         });
       } catch {
@@ -767,7 +769,7 @@ export default function PriceTrend(props: {
       }
       return { key: card.id, card, series, failed };
     });
-  }, [splitActive, effMains, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, state.countryCode, state.industry, configVersion]);
+  }, [splitActive, effMains, stablePlatform, state.platform, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingType, state.financingTerms, state.countryCode, state.industry, configVersion]);
 
   // 各面板生效窗口：同步 = 全面板共用共享窗口；独立 = 面板自己的窗口
   //（未单独调整过回落共享窗口，越界钳回可调全域并保住最小窗口跨度）
@@ -1521,7 +1523,8 @@ export default function PriceTrend(props: {
         endBucket,
         currency: state.currency,
         agg: state.agg,
-        financingTerm: state.financingTerm,
+        financingType: state.financingType,
+    financingTerms: state.financingTerms,
         scope: { countryCode: state.countryCode, industry: state.industry },
       });
     } catch {

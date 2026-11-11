@@ -473,7 +473,8 @@ export default function VolumePrice() {
               endBucket: dataEnd,
               currency: state.currency,
               agg: state.agg,
-              financingTerm: state.financingTerm,
+              financingType: state.financingType,
+        financingTerms: state.financingTerms,
               scope: { countryCode: cc, industry: state.industry },
             });
           } catch {
@@ -493,7 +494,7 @@ export default function VolumePrice() {
           series,
         };
       }),
-    [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, configVersion],
+    [panelSpecs, cc, state.industry, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingType, state.financingTerms, configVersion],
   );
 
   // 时间自适应（2026-11-02 Eason 纠偏）：自动范围 = 顶部所选全部产品（各卡主品 +
@@ -514,13 +515,14 @@ export default function VolumePrice() {
         endBucket: dataEnd,
         currency: state.currency,
         agg: state.agg,
-        financingTerm: state.financingTerm,
+        financingType: state.financingType,
+        financingTerms: state.financingTerms,
         scope: { countryCode: cc, industry: state.industry },
       });
     } catch {
       return [];
     }
-  }, [selMains, selCompares, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingTerm, cc, state.industry, configVersion]);
+  }, [selMains, selCompares, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingType, cc, state.industry, configVersion]);
   const span = useMemo(() => seriesSpanRange(selectionSeries), [selectionSeries]);
   const adaptiveBounds = useMemo(
     () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0, adaptiveMinBuckets(state.granularity)) : null),

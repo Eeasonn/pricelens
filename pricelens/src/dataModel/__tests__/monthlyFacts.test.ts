@@ -31,21 +31,24 @@ const row = (overrides: Partial<FactPriceMonthly> = {}): FactPriceMonthly => ({
 describe('monthly booklet facts', () => {
   it('requires an explicit matching installment term', () => {
     const facts = [row(), row({ offer_id: 'offer-2', term_months: 36 })];
-    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingTerm: null })).toEqual([]);
-    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingTerm: 24 }).map((x) => x.offer_id)).toEqual(['offer-1']);
-    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingTerm: 36 }).map((x) => x.offer_id)).toEqual(['offer-2']);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'installment', financingTerms: [] })).toHaveLength(2);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'installment', financingTerms: [24] }).map((x) => x.offer_id)).toEqual(['offer-1']);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'installment', financingTerms: [36] }).map((x) => x.offer_id)).toEqual(['offer-2']);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'installment', financingTerms: [24, 36] })).toHaveLength(2);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'prepaid', financingTerms: [] })).toEqual([]);
   });
 
   it('keeps prepaid and no-price rows out unless explicitly requested', () => {
     const facts = [row({ price_type: 'prepaid', term_months: null }), row({ offer_id: 'offer-3', price_type: 'no-price', price_local: null, price_usd: null, term_months: null })];
-    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingTerm: 24 })).toEqual([]);
-    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingTerm: 24, includePrepaid: true })).toHaveLength(1);
-    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingTerm: 24, includeNoPrice: true })).toHaveLength(1);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'installment', financingTerms: [24] })).toEqual([]);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: 'prepaid', financingTerms: [] })).toHaveLength(1);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: null, financingTerms: [], includePrepaid: true })).toHaveLength(1);
+    expect(monthlyFactsFor(facts, { countryCode: 'ZA', financingType: null, financingTerms: [], includeNoPrice: true })).toHaveLength(1);
   });
 
   it('defaults to published review status only', () => {
-    expect(monthlyFactsFor([row({ review_status: 'PENDING' })], { countryCode: 'ZA', financingTerm: 24 })).toEqual([]);
-    expect(monthlyFactsFor([row({ review_status: 'PENDING' })], { countryCode: 'ZA', financingTerm: 24, reviewStatuses: ['PENDING'] })).toHaveLength(1);
+    expect(monthlyFactsFor([row({ review_status: 'PENDING' })], { countryCode: 'ZA', financingType: 'installment', financingTerms: [24] })).toEqual([]);
+    expect(monthlyFactsFor([row({ review_status: 'PENDING' })], { countryCode: 'ZA', financingType: 'installment', financingTerms: [24], reviewStatuses: ['PENDING'] })).toHaveLength(1);
   });
 
   it('labels the three price types', () => {
@@ -75,7 +78,8 @@ describe('monthly booklet facts', () => {
       endBucket: '202606',
       currency: 'local',
       agg: 'avg',
-      financingTerm: 24,
+      financingType: 'installment',
+      financingTerms: [24],
     }, source);
     expect(series.points.map((point) => point.price)).toEqual([100, null]);
     expect(series.points.map((point) => point.bucketId)).toEqual(['202605', '202606']);

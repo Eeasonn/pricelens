@@ -118,8 +118,8 @@ describe('buildProductTree（统一产品树）', () => {
   });
 
   it('南非已选分期期数也参与筛选：24 期不展示仅有 36 期的 Mate XT', () => {
-    const za24Models = buildProductTree('phone', 'ZA', 24).flatMap((b) => b.series).flatMap((s) => s.models);
-    const za36Models = buildProductTree('phone', 'ZA', 36).flatMap((b) => b.series).flatMap((s) => s.models);
+    const za24Models = buildProductTree('phone', 'ZA', 'installment', [24]).flatMap((b) => b.series).flatMap((s) => s.models);
+    const za36Models = buildProductTree('phone', 'ZA', 'installment', [36]).flatMap((b) => b.series).flatMap((s) => s.models);
     expect(za24Models.map((m) => m.label)).not.toContain('Mate XT');
     expect(za36Models.map((m) => m.label)).toContain('Mate XT');
     // 新册全量换后 A06 不再上架；24 期锚改用 iPhone 17（新册含其 24 期月供）

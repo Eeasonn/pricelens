@@ -1,9 +1,12 @@
 import type { FactPriceMonthly, MonthlyPriceType, MonthlyReviewStatus } from './types';
-import type { FinancingPlan } from './marketProfile';
+import type { FinancingPlan, FinancingTerm } from './marketProfile';
 
 export interface MonthlyFactQuery {
   countryCode: string;
-  financingTerm: FinancingPlan | null;
+  /** 付费口径：'prepaid' = 只吃先付行；'installment' = 只吃后付行（按期数集过滤） */
+  financingType: 'prepaid' | 'installment' | null;
+  /** 后付期数多选（空数组 = 不限期数）；先付口径下忽略 */
+  financingTerms: FinancingTerm[];
   includePrepaid?: boolean;
   includeNoPrice?: boolean;
   reviewStatuses?: readonly MonthlyReviewStatus[];
@@ -23,9 +26,11 @@ export function monthlyFactsFor(
     if (row.country_code !== query.countryCode) return false;
     if (!allowedStatuses.includes(row.review_status)) return false;
     if (row.price_type === 'installment') {
-      return query.financingTerm != null && query.financingTerm !== 'prepaid' && row.term_months === query.financingTerm;
+      return query.financingType === 'installment'
+        && (query.financingTerms.length === 0
+          || (row.term_months != null && query.financingTerms.includes(row.term_months)));
     }
-    if (row.price_type === 'prepaid') return query.financingTerm === 'prepaid' || query.includePrepaid === true;
+    if (row.price_type === 'prepaid') return query.financingType === 'prepaid' || query.includePrepaid === true;
     return query.includeNoPrice === true;
   });
 }

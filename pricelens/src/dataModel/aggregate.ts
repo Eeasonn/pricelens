@@ -651,20 +651,31 @@ function monthlyPeriodIdsBetween(startBucket: string, endBucket: string): string
  * and only consumes published PASS facts selected by an explicit term.
  */
 export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPriceMonthly[] = factPriceMonthly): Series[] {
-  if (q.granularity !== 'month' || q.financingTerm == null) return [];
+  if (q.granularity !== 'month' || q.financingType == null) return [];
   const profile = marketDataProfileOf(q.scope.countryCode);
   if (profile.sourceKind !== 'operator-booklet-monthly') return [];
   const rows = monthlyFactsFor(sourceRows, {
     countryCode: q.scope.countryCode,
-    financingTerm: q.financingTerm ?? null,
+    financingType: q.financingType,
+    financingTerms: q.financingTerms ?? [],
   });
   const periodIds = monthlyPeriodIdsBetween(q.startBucket, q.endBucket);
   if (periodIds.length === 0) return [];
   const out: Series[] = [];
+  // 2026-11-11 Eason：后付期数多选——每个勾选期数各出一条系列（先付 = 单系列）
+  const planTerms: Array<number | 'prepaid'> = q.financingType === 'prepaid'
+    ? ['prepaid']
+    : (q.financingTerms != null && q.financingTerms.length > 0
+      ? [...q.financingTerms].sort((a, b) => a - b)
+      : [24, 36, 48]);
   for (const group of q.groups) {
     const resolved = resolveGroup(group);
     if (!resolved) continue;
-    const groupRows = rows.filter((row) => monthlyFactMatchesGroup(row, resolved));
+    const groupRows0 = rows.filter((row) => monthlyFactMatchesGroup(row, resolved));
+    for (const planTerm of planTerms) {
+    const groupRows = q.financingType === 'prepaid'
+      ? groupRows0
+      : groupRows0.filter((row) => row.term_months === planTerm);
     const points = periodIds.map((periodId) => {
       const periodRows = groupRows.filter((row) => row.period_id === periodId);
       const bySku = new Map<string, { row: FactPriceMonthly; price: number }>();
@@ -703,13 +714,9 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
     });
     const first = groupRows[0];
     const platform = first ? { platforms: [first.platform], shopIds: [] } : null;
-    const financeLabel = q.financingTerm === 'prepaid'
-      ? '先付'
-      : q.financingTerm != null
-        ? `月供 · ${q.financingTerm}期`
-        : null;
+    const financeLabel = planTerm === 'prepaid' ? '先付' : `月供 · ${planTerm}期`;
     out.push({
-      key: `${group.modelId}__${normRom(resolved.romram)}`,
+      key: `${group.modelId}__${normRom(resolved.romram)}${q.financingType === 'prepaid' ? '__pp' : `__i${planTerm}`}`,
       isOwn: resolved.isOwn,
       brand: resolved.brand,
       label: `${resolved.brand} ${resolved.modelName} ${resolved.romram}`,
@@ -722,6 +729,7 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
         ? { label: `${first.platform} ${first.store_type}`, auto: false, platforms: [first.platform] }
         : null,
     });
+    }
   }
   return out;
 }

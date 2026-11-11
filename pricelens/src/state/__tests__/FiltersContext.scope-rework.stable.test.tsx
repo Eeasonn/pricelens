@@ -161,11 +161,12 @@ describe('南非分期期数与主分析产品联动', () => {
     expect(handle.state().countryCode).toBe('ZA');
     expect(handle.state().mains[0]?.main?.modelId).toBe('own-huawei-mate-80-pro');
 
-    act(() => handle.actions().set({ financingTerm: 36 }));
+    act(() => handle.actions().set({ financingType: 'installment', financingTerms: [36] }));
     expect(handle.state().mains[0]?.main?.modelId).toBe('own-huawei-mate-80-pro');
 
-    act(() => handle.actions().set({ financingTerm: 24 }));
-    expect(handle.state().mains).toEqual([]); // Mate 80 Pro 新册仅 36 期有价
+    // 2026-11-11 Eason（BUG 修复）：切期数不再清空已选产品——口径无数据时保留选卡
+    act(() => handle.actions().set({ financingType: 'installment', financingTerms: [24] }));
+    expect(handle.state().mains[0]?.main?.modelId).toBe('own-huawei-mate-80-pro');
   });
 });
 

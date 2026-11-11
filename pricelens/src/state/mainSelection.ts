@@ -7,6 +7,7 @@
 import { dimProduct, factPriceMonthly } from '../data';
 import type { DimProduct } from '../dataModel/types';
 import type { FinancingPlan, FinancingTerm } from '../dataModel/marketProfile';
+import type { FinancingType } from './filtersTypes';
 import type { MainProduct, ProductSelection } from './filtersTypes';
 // 类型再导出（2026-11-05）：PriceTrendSearch 等调用方从本模块取 MainProduct，
 // filtersTypes 仍是唯一定义源，此处仅透传
@@ -76,7 +77,8 @@ export function selectionValidFor(
   sel: ProductSelection,
   countryCode: string,
   industry: DimProduct['industry'],
-  financingTerm: FinancingPlan | null = null,
+  financingType: FinancingType | null = null,
+  financingTerms: FinancingTerm[] = [],
 ): boolean {
   const productRows = dimProduct.filter(
     (p) => p.model_id === sel.modelId
@@ -89,10 +91,18 @@ export function selectionValidFor(
   if (countryCode !== 'ZA') return true;
   const selectedSkuIds = new Set(productRows.map((p) => p.sku_id));
   const modelName = productRows[0].model_name.trim().toLowerCase();
+  // 付费口径匹配（2026-11-11 先付/后付两级）：先付 = prepaid 行；后付 = installment
+  // 行且期数 ∈ 多选集（空集 = 不限期数）
+  const termOk = (row: typeof factPriceMonthly[number]): boolean => {
+    if (financingType === 'prepaid') return row.price_type === 'prepaid';
+    if (financingType === 'installment') {
+      return row.price_type === 'installment'
+        && (financingTerms.length === 0 || (row.term_months != null && financingTerms.includes(row.term_months)));
+    }
+    return row.price_local != null;
+  };
   return factPriceMonthly.some((row) => row.review_status === 'PASS'
-    && row.price_type === 'installment'
-    && (row.term_months === 24 || row.term_months === 36)
-    && (financingTerm == null || row.term_months === financingTerm)
+    && termOk(row)
     && row.price_local != null
     && ((row.sku_id != null && selectedSkuIds.has(row.sku_id))
       || (row.sku_id == null
@@ -109,28 +119,20 @@ export function mainsValidFor(
   mains: MainProduct[],
   countryCode: string,
   industry: DimProduct['industry'],
-  financingTerm: FinancingPlan | null = null,
+  financingType: FinancingType | null = null,
+  financingTerms: FinancingTerm[] = [],
 ): boolean {
   const sels = mains.map((m) => m.main).filter((s): s is ProductSelection => s != null);
   if (!sels.length) return false;
-  return sels.every((sel) => selectionValidFor(sel, countryCode, industry, financingTerm));
+  return sels.every((sel) => selectionValidFor(sel, countryCode, industry, financingType, financingTerms));
 }
 
-/** 南非切换 24/36 期后，移除当前期数没有月度价格的主品及对比项。 */
+/** 2026-11-11 Eason（BUG 修复）：切换付费口径/期数不再清空已选产品——
+ *  口径切换只是查看方式，产品无该口径数据时保留选卡并显示空态提示。 */
 export function filterMainsByFinancingTerm(
   mains: MainProduct[],
-  countryCode: string,
-  industry: DimProduct['industry'],
-  financingTerm: FinancingPlan | null,
 ): MainProduct[] {
-  if (countryCode !== 'ZA' || financingTerm == null) return mains;
-  return mains.flatMap((card) => {
-    if (!card.main || !selectionValidFor(card.main, countryCode, industry, financingTerm)) return [];
-    return [{
-      ...card,
-      compares: card.compares.filter((sel) => selectionValidFor(sel, countryCode, industry, financingTerm)),
-    }];
-  });
+  return mains;
 }
 
 /* ---------- 迭代线实现（e98d9b1） ---------- */

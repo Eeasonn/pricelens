@@ -39,7 +39,8 @@ function stateGroups(state: FiltersState, platformOverride?: string | null): Ser
     endBucket: state.rangeEnd,
     currency: state.currency,
     agg: state.agg,
-    financingTerm: state.financingTerm,
+    financingType: state.financingType,
+    financingTerms: state.financingTerms,
   };
 }
 

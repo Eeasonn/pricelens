@@ -9,10 +9,10 @@
 // 主品可任意品牌，对比区也可含华为产品。
 // ============================================================
 import type { AggMode, CurrencyMode, Granularity, Industry } from '../dataModel/types';
-import type { FinancingPlan, FinancingTerm } from '../dataModel/marketProfile';
+import type { FinancingPlan, FinancingTerm, FinancingType } from '../dataModel/marketProfile';
 import type { AlertProductRule, AlertThresholds, AlertTypeSwitches } from '../dataModel/alerts';
 export type { AlertProductRule, AlertThresholds, AlertTypeSwitches };
-export type { FinancingTerm };
+export type { FinancingTerm, FinancingType };
 
 /** 一个"产品名+ROMRAM"勾选组（默认勾选落 ROMRAM 层、自动带最低价颜色） */
 export interface ProductSelection {
@@ -69,8 +69,11 @@ export interface FiltersState {
   /** R7-M1：稳定版平台口径归一说明（见 PlatformScopeNotice）；缺省/null = 无归一
    *  发生或说明已失效。不参与 URL 同步；随持久化整包留存（读档按形状校验）。 */
   platformScopeNotice?: PlatformScopeNotice | null;
-  /** ZA operator-booklet market: required financing term for price facts. */
-  financingTerm: FinancingPlan | null;
+  /** ZA operator-booklet market：付费口径（先付/后付）；非册子市场 = null */
+  financingType: FinancingType | null;
+  /** ZA operator-booklet market：后付期数多选（financingType='installment' 时生效；
+   *  空数组 = 全部期数）。2026-11-11 Eason：后付期数支持多选。 */
+  financingTerms: FinancingTerm[];
   granularity: Granularity; // 默认 'month'（第二十五轮）
   /** 时间自适应（默认开）= 所选产品最早/最晚有效价格桶；上方筛选器手动修改即转为自定义。
    *  底部刷选条只负责在该极值范围内缩放查看，恢复自动时重新计算范围。 */
