@@ -34,6 +34,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 8000,
   },
   test: {
+    setupFiles: ['./src/test/browserSetup.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.consolidation-backup-*/**'],
   },
   server: {

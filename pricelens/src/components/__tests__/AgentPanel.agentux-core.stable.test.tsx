@@ -51,7 +51,7 @@ describe('agentux-core AgentPanel interaction', () => {
     fireEvent.click(within(panel).getByRole('button', { name: '价格优势' }));
     await waitFor(() => expect(within(panel).getByText('价格优势对比')).toBeTruthy(), { timeout: 4000 });
     expect(within(panel).getByText('只看占优机型')).toBeTruthy();
-    expect(within(panel).getAllByText('本地确定性').length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText('价格数据分析').length).toBeGreaterThan(0);
   });
 
 });

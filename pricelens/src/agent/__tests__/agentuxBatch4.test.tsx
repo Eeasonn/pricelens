@@ -90,7 +90,7 @@ describe('agentux Batch4 面板交互（empty 卡 / 药丸 / 降级文案）', (
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     await submit('解释最新预警');
     const emptyCard = await screen.findByText('无结果 · 当前口径没有可展示的结果');
-    expect(view.container.querySelector('[data-agent-empty-card]')).toBeTruthy();
+    expect(view.baseElement.querySelector('[data-agent-empty-card]')).toBeTruthy();
     expect(screen.getByText(/暂无快照/)).toBeTruthy();
     void emptyCard;
     fireEvent.click(screen.getByRole('button', { name: '缩小到最近 8 周' }));
@@ -103,7 +103,7 @@ describe('agentux Batch4 面板交互（empty 卡 / 药丸 / 降级文案）', (
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     await submit('价格优势');
     await screen.findByText('价格优势 · 我司 vs 核心竞品');
-    const cards = view.container.querySelectorAll('[data-agent-result-card]');
+    const cards = view.baseElement.querySelectorAll('[data-agent-result-card]');
     const card = within(cards[cards.length - 1] as HTMLElement);
     // 结论 → 事实 → 规则/计算边界：规则文案带标签展示
     expect(card.getByText(/规则 · 计算边界/)).toBeTruthy();
@@ -121,17 +121,18 @@ describe('agentux Batch4 面板交互（empty 卡 / 药丸 / 降级文案）', (
     view.unmount();
   });
 
-  it('语音不可用时给出可见降级文案，而不是只剩禁用图标', () => {
+  it('语音不可用时隐藏不可用操作，保留文字输入', () => {
     const view = mountedApp();
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
-    expect(screen.getByText(/当前浏览器不支持语音输入，请直接文字提问/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '语音输入' })).toBeNull();
+    expect(screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' }).hasAttribute('disabled')).toBe(false);
     view.unmount();
   });
 });
 
 describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
   const lastResultCard = (view: ReturnType<typeof mountedApp>) => {
-    const cards = view.container.querySelectorAll('[data-agent-result-card]');
+    const cards = view.baseElement.querySelectorAll('[data-agent-result-card]');
     return cards[cards.length - 1] as HTMLElement;
   };
   /** 运行中的 partialCards 也带 data-agent-result-card；先等消息级「事实来源」
@@ -139,7 +140,7 @@ describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
   const findCompletedCard = async (view: ReturnType<typeof mountedApp>, matcher: (card: Element) => boolean) => {
     await waitFor(() => expect(screen.getAllByText(/事实来源：本地确定性引擎/).length).toBeGreaterThan(0));
     return waitFor(() => {
-      const found = [...view.container.querySelectorAll('[data-agent-result-card]')].filter(matcher).pop();
+      const found = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].filter(matcher).pop();
       expect(found).toBeTruthy();
       return found as HTMLElement;
     });
@@ -164,7 +165,7 @@ describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     await submit('解释最新预警');
     await screen.findByText('无结果 · 当前口径没有可展示的结果');
-    expect(view.container.querySelectorAll('[data-tool-call-card]').length).toBeGreaterThan(0);
+    expect(view.baseElement.querySelectorAll('[data-tool-call-card]').length).toBeGreaterThan(0);
     expect(screen.queryByText('运行中')).toBeNull();
     expect(screen.getByText('已完成 · 注意')).toBeTruthy();
     view.unmount();
@@ -205,7 +206,7 @@ describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
     fireEvent.click(screen.getByRole('button', { name: '准备口径' }));
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     await submit('查我司产品价格');
-    const chartOf = () => [...view.container.querySelectorAll('[data-agent-result-card]')].find((card) => card.textContent?.includes('价格走势')) as HTMLElement;
+    const chartOf = () => [...view.baseElement.querySelectorAll('[data-agent-result-card]')].find((card) => card.textContent?.includes('价格走势')) as HTMLElement;
     await findCompletedCard(view, (card) => Boolean(card.textContent?.includes('价格走势')));
     // 换币种 → contextFingerprint 变化：open 导航动作进入 stale 保护
     fireEvent.click(screen.getByRole('button', { name: '换口径' }));
@@ -234,7 +235,7 @@ describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
       expect(next.adaptive).toBe(false);
     });
     const rerunCard = await waitFor(() => {
-      const advantageCards = [...view.container.querySelectorAll('[data-agent-result-card]')].filter((card) => card.textContent?.includes('价格优势 · 我司 vs 核心竞品'));
+      const advantageCards = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].filter((card) => card.textContent?.includes('价格优势 · 我司 vs 核心竞品'));
       expect(advantageCards.length).toBe(2);
       const latest = advantageCards[advantageCards.length - 1] as HTMLElement;
       expect(within(latest).getAllByRole('button', { name: /定位 / }).length).toBeGreaterThan(0);
@@ -242,7 +243,9 @@ describe('agentux Batch4 收口：共性缺陷 R1–R8 免疫修复', () => {
     });
     expect(rerunCard.textContent).not.toContain('筛选预览');
     view.unmount();
-  });
+    // This integration case performs two real deterministic queries and a full
+    // scope transition; the default 5s budget is not an interaction SLA.
+  }, 15000);
 
   it('R5 纯函数：AE 页问「RU 价格优势」按请求国 RU 计算并取 RU 竞品矩阵', async () => {
     const aeState = { ...defaultFilters, countryCode: 'AE', mains: buildCards([main], { auto: true, countryCode: 'AE' }) };
@@ -317,7 +320,7 @@ describe('agentux Batch4 二审深水区：R5 主品口径跨国保持 / R6 周�
     // 脱挂节点（点击不冒泡 = 静默无效）
     await waitFor(() => expect(screen.getAllByText(/事实来源：本地确定性引擎/).length).toBeGreaterThan(0), { timeout: 5000 });
     const card = await waitFor(() => {
-      const found = [...view.container.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('价格优势 · 我司 vs 核心竞品')).pop();
+      const found = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('价格优势 · 我司 vs 核心竞品')).pop();
       expect(found).toBeTruthy();
       return found as HTMLElement;
     });

@@ -67,7 +67,7 @@ const filterStateOf = (view: ReturnType<typeof render>): Record<string, unknown>
 async function awaitCompletedAdvantageCard(view: ReturnType<typeof render>, minFactNotes = 1): Promise<HTMLElement> {
   await waitFor(() => expect(screen.getAllByText(/事实来源：本地确定性引擎/).length).toBeGreaterThanOrEqual(minFactNotes), { timeout: 5000 });
   return waitFor(() => {
-    const found = [...view.container.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('价格优势 · 我司 vs 核心竞品')).pop();
+    const found = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('价格优势 · 我司 vs 核心竞品')).pop();
     expect(found).toBeTruthy();
     return found as HTMLElement;
   });
@@ -112,7 +112,7 @@ describe('A M1 · 普通上下文 stale 的消息级副作用锁（组件方向�
     // 真实 UI 换 DE（普通国家切换，不带 mains）→ 指纹变化 → 消息级锁
     fireEvent.click(screen.getByRole('button', { name: '换到 DE' }));
     await waitFor(() => {
-      const lockedMessage = [...view.container.querySelectorAll('[data-agent-message]')].find((node) => node.getAttribute('data-message-locked') === 'true');
+      const lockedMessage = [...view.baseElement.querySelectorAll('[data-agent-message]')].find((node) => node.getAttribute('data-message-locked') === 'true');
       expect(lockedMessage).toBeTruthy();
     });
     expect((within(card).getByRole('button', { name: '回看价格走势' }) as HTMLButtonElement).disabled).toBe(true);
@@ -145,7 +145,7 @@ describe('A M1 · 普通上下文 stale 的消息级副作用锁（组件方向�
     await submit('RU 价格优势');
     const card = await awaitCompletedAdvantageCard(view);
     // 结果行目标是 RU，但消息指纹 = 创建时 AE 页指纹；页面没变 → 不 stale
-    const messages = [...view.container.querySelectorAll('[data-agent-message]')];
+    const messages = [...view.baseElement.querySelectorAll('[data-agent-message]')];
     const staleMessages = messages.filter((node) => node.getAttribute('data-message-locked') === 'true');
     expect(staleMessages).toHaveLength(0);
     const back = within(card).getByRole('button', { name: '回看价格走势' }) as HTMLButtonElement;
@@ -215,12 +215,12 @@ describe('A M4 · 月粒度「近期价格趋势」澄清 → 点击「补齐时
     fireEvent.click(clarifyChip);
     // 点击后是真实查询（价格走势摘要 + 周范围），不是筛选预览
     const queryCard = await waitFor(() => {
-      const found = [...view.container.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('202639–202646')).pop();
+      const found = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('202639–202646')).pop();
       expect(found).toBeTruthy();
       return found as HTMLElement;
     }, { timeout: 5000 });
     expect(queryCard.textContent).toContain('价格走势摘要');
-    const messages = view.container.querySelectorAll('[data-agent-result-card]');
+    const messages = view.baseElement.querySelectorAll('[data-agent-result-card]');
     for (const node of messages) expect(node.textContent).not.toContain('筛选预览（尚未应用）');
     view.unmount();
   });
@@ -238,7 +238,7 @@ describe('A M5 · 预警行折叠头只留触发器；全部行级按钮在判�
     // 先等终态消息（「事实来源」note 只在完成后渲染），避免抓到流式 partial 卡
     await waitFor(() => expect(screen.getAllByText(/事实来源：本地确定性引擎/).length).toBeGreaterThan(0), { timeout: 5000 });
     const cardEl = await waitFor(() => {
-      const found = [...view.container.querySelectorAll('[data-agent-result-card]')].find((element) => /[1-9]\d* 条当前事件/.test(element.textContent ?? ''));
+      const found = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].find((element) => /[1-9]\d* 条当前事件/.test(element.textContent ?? ''));
       expect(found).toBeTruthy();
       return found as HTMLElement;
     }, { timeout: 5000 });

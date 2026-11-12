@@ -1,43 +1,21 @@
-// ============================================================
-// 组件库评估结论（t428u Batch4，2026-11-07 实核；详见
-// docs/design/zcode-briefs/batch4-iterate-agent.md §8）：
-// @ant-design/x license=MIT（npm 2.10.0），但新版 peer 依赖 antd^6，
-// 与本仓 antd^5 冲突 → 不引入。对话壳（气泡/发送区/状态机/结果卡）继续在
-// 树内 Copilot 壳迭代，视觉服从 DESIGN.md 与 tokens.ts 唯一色值源。
-// ============================================================
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import {
-  AudioOutlined,
-  CheckOutlined,
-  CloseOutlined,
-  CompressOutlined,
-  ExpandOutlined,
-  FullscreenExitOutlined,
-  LoadingOutlined,
-  PlusOutlined,
-  RedoOutlined,
-  SendOutlined,
-  StopOutlined,
-  UndoOutlined,
-} from '@ant-design/icons';
-import { Button, Input, Tooltip } from 'antd';
-import { gsap } from 'gsap';
-import { useAgent } from '../../state/AgentContext';
+// Channel-specific business cards; conversation behavior lives in Assistant/AgentThread.
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { CheckOutlined, RedoOutlined, UndoOutlined } from '@ant-design/icons';
+import { Button } from 'antd';
+import { AgentThread } from '../Assistant/AgentThread';
+import { useAgent, type AgentMessage } from '../../state/AgentContext';
 import { buildCards } from '../../state/mainSelection';
 import { dimProduct } from '../../data';
 import { INDUSTRY_LABELS } from '../../dataModel/scope';
 import { platformSelectionForCountry } from '../../dataModel/aggregate';
 import { usePage } from '../../state/PageContext';
 import { navBus } from '../../state/navBus';
-import type { AgentCardAction, AgentEvidence, AgentIntent, AgentResponse, AgentResultCard, AgentRun, AgentStep, AlertListResultCard, AlertResultCard, ChartResultCard, FilterResultCard, ForecastExplanationResultCard, PriceAdvantageResultCard, PriceAdvantageRow, TableResultCard, AgentSuggestionAction } from '../../agent';
+import type { AgentCardAction, AgentEvidence, AgentIntent, AgentResponse, AgentResultCard, AgentRunStatus, AgentStep, AlertListResultCard, AlertResultCard, ChartResultCard, FilterResultCard, ForecastExplanationResultCard, PriceAdvantageResultCard, PriceAdvantageRow, TableResultCard, AgentSuggestionAction } from '../../agent';
 import { advantageScopePatch, classifyIntent, recentRangePatch } from '../../agent';
-import { AGENT_FOLLOWUP_ACTIONS, AGENT_STATUS_LABELS, agentSuggestionsForPage, platformShortcutLabel } from './agentCopy';
-import { color, fontSize, formatPrice, motion, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
+import { AGENT_FOLLOWUP_ACTIONS, AGENT_STATUS_LABELS, agentSuggestionsForPage } from './agentCopy';
+import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import { modelNameOf } from '../ProductCascader/tree';
-import { PANEL_EXIT_MS } from '../../theme/motion';
 import { APP_CHANNEL } from '../../appChannel';
-
-const panelWidth = 440;
 
 /** 工作台捷径药丸只在迭代渠道渲染：stable 渠道 intelligence/forecast 不可达
  *  （go() 会落回 dashboard），渲染出来就是假捷径。 */
@@ -56,19 +34,17 @@ function ContextChips() {
     return id;
   };
   const skuChip = state.mains.find((card) => card.main)?.main;
-  // 2026-11-10 UI 审计：口径 chip 此前裸显 modelId + 配置 + SKU slug，同一机器串
-  // 出现两遍（slug 内嵌 modelId）。改用现有显示名逻辑 modelNameOf（人类可读），
-  // SKU slug 只留一处保住可追溯性；机器 id 不再单独暴露。
-  const skuLabel = skuChip ? `口径 · ${modelNameOf(skuChip.modelId)} · ${skuChip.romram} · ${skuChip.skuIds[0] ?? '默认 SKU'}` : '未选产品';
+  // Default scope is readable; the technical SKU identifier stays in the tooltip.
+  const skuLabel = skuChip ? `口径 · ${modelNameOf(skuChip.modelId)} · ${skuChip.romram}` : '未选产品';
   const chips = [`当前页 · ${context.pageLabel ?? context.page}`, `${state.countryCode} · ${INDUSTRY_LABELS[state.industry] ?? state.industry}`, productCount ? `${productCount} 个产品` : '未选产品', ...(skuChip ? [skuLabel] : []), `${formatBucket(state.rangeStart)}–${formatBucket(state.rangeEnd)}`, state.currency === 'usd' ? 'USD' : '本币', state.priceTypes.rrp ? '含 RRP' : '仅折后价'];
-  return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: `${space.sm}px ${space.base}px`, borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}>{chips.map((chip, index) => <span key={chip} style={{ fontSize: 12, color: index === 0 ? selectSoftInk : color.body, border: `1px solid ${index === 0 ? selectSoftInk : color.hairline}`, borderRadius: radius.pill, padding: '3px 8px', background: index === 0 ? selectSoft : color.canvas }}>{chip}</span>)}{contextStale && <span role="status" style={{ fontSize: 12, color: color.warningInk, border: `1px solid ${color.warning}`, borderRadius: radius.pill, padding: '3px 8px', background: color.warningSoft }}>上下文已更新 · 旧结果需重新确认</span>}</div>;
+  return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: `${space.sm}px ${space.base}px`, borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}>{chips.map((chip, index) => <span key={chip} title={chip === skuLabel ? skuChip?.skuIds[0] : undefined} style={{ fontSize: 12, color: index === 0 ? selectSoftInk : color.body, border: `1px solid ${index === 0 ? selectSoftInk : color.hairline}`, borderRadius: radius.pill, padding: '3px 8px', background: index === 0 ? selectSoft : color.canvas }}>{chip}</span>)}{contextStale && <span role="status" style={{ fontSize: 12, color: color.warningInk, border: `1px solid ${color.warning}`, borderRadius: radius.pill, padding: '3px 8px', background: color.warningSoft }}>上下文已更新 · 旧结果需重新确认</span>}</div>;
 }
 
 export function AgentProviderBadge({ response }: { response?: AgentResponse }) {
   const name = response?.provider?.name ?? '本地确定性';
   const fallback = /回退|fallback/i.test(name);
   const remote = /远端|remote|glm|ai/i.test(name) && !fallback;
-  const label = fallback ? `本地回退${response?.provider?.reason ? ` · ${response.provider.reason}` : ''}` : remote ? '远端 AI 流式' : '本地确定性';
+  const label = fallback ? '本地数据结果 · 在线分析暂不可用' : remote ? '在线分析' : '本地数据结果';
   return <span data-provider-badge style={{ ...mutedBadge, color: fallback ? color.warningInk : remote ? color.link : color.body, background: fallback ? color.warningSoft : color.canvas }}>{label}</span>;
 }
 
@@ -138,16 +114,6 @@ function CardActions({ actions, locked }: { actions?: AgentCardAction[]; locked?
   {actionError && <div role="alert" style={warningStyle}>{actionError}</div>}</div>;
 }
 
-function StepTimeline({ response }: { response: AgentResponse }) {
-  if (!response) return null;
-  return <details style={{ margin: '7px 0 10px', color: color.mute, fontSize: 12 }}>
-    <summary style={{ cursor: 'pointer', color: color.body }}>执行步骤 · {response.steps.filter((s) => s.status === 'success').length}/{response.steps.length} 完成</summary>
-    <div style={{ display: 'grid', gap: 5, marginTop: 7, paddingLeft: 4 }}>
-      {response.steps.map((s) => <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ color: s.status === 'failed' ? color.error : s.status === 'warning' ? color.warning : color.link }}>{s.status === 'success' ? '✓' : s.status === 'warning' ? '!' : '×'}</span><span>{s.label}</span><span style={{ color: color.mute }}>· {s.detail}</span></div>)}
-    </div>
-  </details>;
-}
-
 const quickPillStyle: CSSProperties = { fontSize: 12, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' };
 
 /** 药丸快捷动作：DESIGN.md 规定胶囊圆角仅用于标签/快捷动作；每个药丸必须绑定
@@ -200,42 +166,17 @@ export function ToolCallCard({ step, onApply, onRetry, applyError }: { step: Age
   return <div data-tool-call-card style={{ margin: `${space.xs}px 0`, padding: space.sm, border: `1px solid ${failed ? color.error : color.hairline}`, borderRadius: radius.control, background: color.canvas }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: fontSize.caption }}><span aria-hidden style={{ color: failed ? color.error : status === 'warning' ? color.warning : color.link }}>{status === 'failed' ? '×' : status === 'warning' ? '!' : '✓'}</span><strong style={{ color: color.ink }}>{step.label}</strong><span style={{ color: color.mute }}>{statusLabel}</span><span style={{ marginLeft: 'auto', color: color.mute }}>{step.durationMs}ms</span></div>
     <div style={{ marginTop: space.xs, fontSize: fontSize.caption, color: color.body }}>{step.detail}</div>
-    <div style={{ display: 'flex', gap: 7, marginTop: 6 }}><button type="button" onClick={() => setOpen((value) => !value)} style={textButtonStyle}>{open ? '收起明细' : '展开明细'}</button>{onApply && <button type="button" onClick={apply} style={textButtonStyle}>应用筛选</button>}{failed && onRetry && <button type="button" onClick={onRetry} style={textButtonStyle}>重试此步</button>}</div>
+    <div style={{ display: 'flex', gap: 7, marginTop: 6 }}><button type="button" onClick={() => setOpen((value) => !value)} style={textButtonStyle}>{open ? '收起明细' : '展开明细'}</button>{onApply && <button type="button" onClick={apply} style={textButtonStyle}>应用筛选</button>}{failed && onRetry && <button type="button" onClick={onRetry} style={textButtonStyle}>重新运行查询</button>}</div>
     {open && <div role="region" style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${color.hairline}`, color: color.mute, fontSize: fontSize.caption }}>工具：{step.tool} · request 可追溯 · 只读确定性数据</div>}
     {(applyError ?? actionError) && <div role="alert" style={{ marginTop: 6, color: color.error, fontSize: fontSize.caption }}>{applyError ?? actionError}</div>}
   </div>;
 }
 
-/** Structured run events are deliberately summarized; hidden model reasoning is never rendered. */
-function RunTimeline({ run }: { run: AgentRun | null }) {
-  if (!run?.events.length) return null;
-  return <details open={run.status !== 'completed'} style={{ margin: '7px 0 10px', color: color.mute, fontSize: 12 }}>
-    <summary style={{ cursor: 'pointer', color: color.body }}>运行活动 · {run.events.length} 条</summary>
-    <div style={{ display: 'grid', gap: 5, marginTop: 7, paddingLeft: 4 }}>
-      {run.events.slice(-8).map((event) => <div key={event.id} style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span style={{ color: event.status === 'failed' ? color.error : event.status === 'completed' ? color.link : color.mute }}>•</span>
-        <span>{event.message ?? event.type}</span>
-        {event.tool && <span style={{ color: color.mute }}>· {event.tool}</span>}
-      </div>)}
-    </div>
-  </details>;
-}
-
-function StageTimeline({ run }: { run: AgentRun | null }) {
-  if (!run) return null;
-  const messages = run.events.map((event) => event.message ?? '').join(' · ');
-  const alertRun = messages.includes('读取预警') || messages.includes('校验证据');
-  const stages = ['解析意图', alertRun ? '读取预警' : '读取价格', alertRun ? '校验证据' : '计算优势', '生成结论'];
-  const completed = stages.map((stage) => messages.includes(stage) && (messages.includes(`${stage}已`) || messages.includes('结论已生成')));
-  const current = run.status === 'completed' ? stages.length : Math.max(0, stages.findIndex((stage) => !messages.includes(stage)));
-  return <div data-agent-stage-timeline role="status" aria-label="Agent 执行阶段" style={{ display: 'grid', gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))`, gap: 5, margin: '7px 0 10px' }}>{stages.map((stage, index) => <div key={stage} style={{ padding: '5px 6px', border: `1px solid ${completed[index] || index < current ? selectAccent : color.hairline}`, borderRadius: radius.control, background: completed[index] || index < current ? selectSoft : color.canvas, color: completed[index] || index < current ? selectSoftInk : color.mute, fontSize: 12, textAlign: 'center' }}>{completed[index] || index < current ? '✓ ' : index === current ? '· ' : ''}{stage}</div>)}</div>;
-}
-
-function FilterCard({ card, locked }: { card: FilterResultCard; locked?: boolean }) {
+function FilterCard({ card, locked, hardLocked = locked }: { card: FilterResultCard; locked?: boolean; hardLocked?: boolean }) {
   const { appliedFilterIds, applyFilter, canUndo, undoFilter, canRedo, redoFilter, setDraft } = useAgent();
   const applied = appliedFilterIds.has(card.id);
   const [applyError, setApplyError] = useState<string | undefined>();
-  const apply = () => { const result = applyFilter(card); setApplyError(result.ok ? undefined : result.error ?? '应用筛选失败'); };
+  const apply = () => { if (locked) return; const result = applyFilter(card); setApplyError(result.ok ? undefined : result.error ?? '应用筛选失败'); };
   return <div className="lpl-agent-result-card" data-agent-result-card style={cardStyle}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.title}</span><span style={mutedBadge}>只读预览</span></div>
     <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>
@@ -243,15 +184,14 @@ function FilterCard({ card, locked }: { card: FilterResultCard; locked?: boolean
     </div>
     {card.warning && <div style={warningStyle}>{card.warning}</div>}
     <div style={actionRowStyle}>
-      {/* R2（本轮返修 B m3，同步稳定线 7edadc6）：applied 态的撤销/重做同样是
-          改回全局筛选的副作用动作（appliedFilterIds 全局共享，同 id 卡可能在
-          早前未锁消息上应用过、随后出现在锁定消息里），锁定消息上一并禁用 +
-          回调守卫；「继续修改」只回填输入框，不锁。 */}
-      {applied ? <><span style={{ color: color.link, fontSize: 12 }}><CheckOutlined /> 已应用</span>{canUndo && <button type="button" disabled={locked} aria-disabled={locked} title={locked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { if (locked) return; undoFilter(); }} style={{ ...textButtonStyle, opacity: locked ? 0.5 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}><UndoOutlined /> 撤销</button>}{canRedo && <button type="button" disabled={locked} aria-disabled={locked} title={locked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { if (locked) return; redoFilter(); }} style={{ ...textButtonStyle, opacity: locked ? 0.5 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}><RedoOutlined /> 重做</button>}</> : <><Button size="small" type="primary" disabled={locked} title={locked ? '响应口径与请求不一致，该动作已锁定' : undefined} onClick={apply}>应用到看板</Button><Button size="small" onClick={() => setDraft(card.prompt ?? '')}>继续修改</Button></>}
+      {/* Applying this validated preview changes its own scope fingerprint.
+          Keep its reversible controls available; malformed/streaming responses
+          remain hard-locked even when another message applied the same card id. */}
+      {applied ? <><span style={{ color: color.link, fontSize: 12 }}><CheckOutlined /> 已应用</span>{canUndo && <button type="button" disabled={hardLocked} aria-disabled={hardLocked} title={hardLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { if (hardLocked) return; undoFilter(); }} style={{ ...textButtonStyle, opacity: hardLocked ? 0.5 : 1, cursor: hardLocked ? 'not-allowed' : 'pointer' }}><UndoOutlined /> 撤销</button>}{canRedo && <button type="button" disabled={hardLocked} aria-disabled={hardLocked} title={hardLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { if (hardLocked) return; redoFilter(); }} style={{ ...textButtonStyle, opacity: hardLocked ? 0.5 : 1, cursor: hardLocked ? 'not-allowed' : 'pointer' }}><RedoOutlined /> 重做</button>}</> : <><Button size="small" type="primary" disabled={locked} title={locked ? '响应口径与请求不一致，该动作已锁定' : undefined} onClick={apply}>应用到看板</Button><Button size="small" onClick={() => setDraft(card.prompt ?? '')}>继续修改</Button></>}
     </div>
     {applyError && <div role="alert" style={warningStyle}>应用失败：{applyError}</div>}
     <EvidenceList evidence={card.evidence} />
-    <CardActions actions={card.actions} />
+    <CardActions actions={card.actions} locked={locked} />
   </div>;
 }
 
@@ -460,8 +400,8 @@ function ForecastExplanationCard({ card, locked }: { card: ForecastExplanationRe
   </div>;
 }
 
-function ResultCard({ card, locked }: { card: AgentResultCard; locked?: boolean }) {
-  if (card.kind === 'filter') return <FilterCard card={card} locked={locked} />;
+function ResultCard({ card, locked, hardLocked }: { card: AgentResultCard; locked?: boolean; hardLocked?: boolean }) {
+  if (card.kind === 'filter') return <FilterCard card={card} locked={locked} hardLocked={hardLocked} />;
   if (card.kind === 'table') return <TableCard card={card} locked={locked} />;
   if (card.kind === 'chart') return <ChartCard card={card} locked={locked} />;
   if (card.kind === 'price_advantage') return <AdvantageCard card={card} locked={locked} />;
@@ -471,10 +411,10 @@ function ResultCard({ card, locked }: { card: AgentResultCard; locked?: boolean 
 }
 
 function Citations({ response }: { response: AgentResponse }) {
-  if (!response.citations.length && !response.provenance) return null;
+  if (!response.citations.length && !response.provenance && !response.provider) return null;
   return <details style={{ marginTop: space.sm, fontSize: 12, color: color.mute }}>
     <summary style={{ cursor: 'pointer', color: color.body }}>依据与口径 · {response.citations.length}</summary>
-    <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>{response.citations.map((citation) => <div key={citation.id} style={{ padding: '5px 7px', borderLeft: `2px solid ${color.hairlineStrong}`, background: color.canvas }}>{citation.label} · {citation.detail}</div>)}{response.provenance && <div style={{ padding: '5px 7px', borderLeft: `2px solid ${color.link}`, background: color.canvas }}>运行来源 · {response.provenance.source}{response.provenance.dataVersion ? ` · 数据 ${response.provenance.dataVersion}` : ''}{response.provenance.ruleVersion ? ` · 规则 ${response.provenance.ruleVersion}` : ''}</div>}</div>
+    <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>{response.provider && <div>分析方式：{response.provider.name}{response.provider.reason ? ` · ${response.provider.reason}` : ''}</div>}{response.citations.map((citation) => <div key={citation.id} style={{ padding: '5px 7px', borderLeft: `2px solid ${color.hairlineStrong}`, background: color.canvas }}>{citation.label} · {citation.detail}</div>)}{response.provenance && <div style={{ padding: '5px 7px', borderLeft: `2px solid ${color.link}`, background: color.canvas }}>运行来源 · {response.provenance.source}{response.provenance.dataVersion ? ` · 数据 ${response.provenance.dataVersion}` : ''}{response.provenance.ruleVersion ? ` · 规则 ${response.provenance.ruleVersion}` : ''}</div>}</div>
   </details>;
 }
 
@@ -487,174 +427,144 @@ const warningStyle: CSSProperties = { marginTop: 8, padding: '6px 8px', backgrou
 const noteStyle: CSSProperties = { marginTop: 8, color: color.mute, fontSize: fontSize.caption, lineHeight: 1.45 };
 const tableHeadStyle: CSSProperties = { textAlign: 'left', color: color.mute, fontWeight: 500, padding: '4px 5px', borderBottom: `1px solid ${color.hairline}` };
 const tableCellStyle: CSSProperties = { padding: '5px', borderBottom: `1px solid ${color.hairline}`, whiteSpace: 'nowrap', color: color.body };
-  const messageKindLabel: Record<string, string> = { proactive: '实时预警', clarification: '需要澄清', system: '系统状态', scenario: '情景分析', error: '运行异常', conversation: '结论' };
+const messageKindLabel: Record<string, string> = { proactive: '实时预警', clarification: '需要澄清', system: '系统状态', scenario: '情景分析', error: '运行异常', conversation: '结论' };
 
+type ConversationMessage = AgentMessage & {
+  status?: AgentRunStatus;
+  partialText?: string;
+  partialCards?: AgentResultCard[];
+  streaming: boolean;
+  failed: boolean;
+  cancelled: boolean;
+  isContextStale: boolean;
+  hardLocked: boolean;
+};
+
+/** The channel adapter owns facts and scope guards, never composer or scrolling state. */
 export default function AgentPanel() {
-  const { open, mode, running, runStatus, activeRun, partialText, partialCards, voiceListening, voiceAvailable, messages, draft, context, setDraft, closeAgent, setMode, send, stop, newConversation, startVoice, markRead, applyFilter } = useAgent();
+  const agent = useAgent();
+  const { running, runStatus, activeRun, partialText, partialCards, messages, context, setDraft, send, applyFilter } = agent;
   const { go } = usePage();
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const panelRef = useRef<HTMLElement | null>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
-  const wasOpenRef = useRef(false);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const modeTransitionTimerRef = useRef<number | null>(null);
-  const [mounted, setMounted] = useState(open);
-  const [modeTransitionMs, setModeTransitionMs] = useState<number>(motion.base);
-  const [compactViewport, setCompactViewport] = useState(
-    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 1023.98px)').matches,
-  );
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-    const media = window.matchMedia('(max-width: 1023.98px)');
-    const onChange = (): void => setCompactViewport(media.matches);
-    onChange();
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-  }, []);
-  const compactModal = compactViewport || mode !== 'dock';
-  // Keep the panel mounted long enough to play its 140ms exit. The provider
-  // closes the logical surface immediately so focus and background runs keep
-  // their existing semantics; this local mount only owns presentation.
-  useEffect(() => {
-    if (open) setMounted(true);
-  }, [open]);
-  useEffect(() => {
-    const node = panelRef.current;
-    if (!node || !mounted) return undefined;
-    const mm = gsap.matchMedia();
-    let cancelled = false;
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (match) => {
-      const reduceMotion = Boolean(match.conditions?.reduceMotion);
-      gsap.killTweensOf(node);
-      if (open) {
-        gsap.fromTo(
-          node,
-          { autoAlpha: 0, x: reduceMotion ? 0 : 24 },
-          { autoAlpha: 1, x: 0, duration: reduceMotion ? 0 : motion.fast / 1000, ease: motion.enter },
-        );
-      } else {
-        gsap.to(node, {
-          autoAlpha: 0,
-          x: reduceMotion ? 0 : 24,
-          duration: reduceMotion ? 0 : PANEL_EXIT_MS / 1000,
-          ease: motion.exit,
-          onComplete: () => {
-            if (!cancelled) setMounted(false);
-          },
-        });
-      }
+  const threadMessages = useMemo(() => {
+    const source: AgentMessage[] = [...messages];
+    // Legacy consumers may still provide global partials. The current provider keeps
+    // one assistant message ID from run start through completion/cancellation.
+    const last = source[source.length - 1];
+    const activeMessage = source.find((message) => message.role === 'assistant' && message.status && !['idle', 'completed', 'empty', 'failed', 'cancelled', 'stale_context', 'clarification_required'].includes(message.status));
+    if (running && !activeMessage && (!last || last.role !== 'assistant' || last.response || last.kind === 'proactive')) {
+      source.push({
+        id: `stream-${activeRun?.id ?? 'pending'}`,
+        role: 'assistant',
+        text: partialText ?? '',
+        createdAt: activeRun?.startedAt ?? last?.createdAt ?? new Date(0).toISOString(),
+        kind: 'conversation',
+        prompt: last?.prompt ?? last?.text,
+        contextFingerprint: context.fingerprint,
+        actionsLocked: true,
+      });
+    }
+    return source.map((original, index): ConversationMessage => {
+      const message = original as AgentMessage & { status?: AgentRunStatus; partialText?: string; partialCards?: AgentResultCard[] };
+      const streaming = running && (activeMessage ? message.id === activeMessage.id : index === source.length - 1) && message.role === 'assistant' && !message.response && message.kind !== 'proactive';
+      const isContextStale = Boolean(message.contextFingerprint && message.contextFingerprint !== context.fingerprint);
+      return {
+        ...message,
+        text: streaming ? message.partialText || partialText || message.text : message.text,
+        partialCards: message.partialCards ?? (streaming ? partialCards : undefined),
+        actionsLocked: Boolean(message.actionsLocked || isContextStale || streaming),
+        hardLocked: Boolean(message.actionsLocked || streaming),
+        streaming,
+        failed: message.status === 'failed' || message.kind === 'error',
+        cancelled: message.status === 'cancelled',
+        isContextStale,
+      };
     });
-    return () => {
-      cancelled = true;
-      mm.revert();
-    };
-  }, [mounted, open]);
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node || !mounted) return undefined;
-    const mm = gsap.matchMedia();
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (match) => {
-      const reduceMotion = Boolean(match.conditions?.reduceMotion);
-      const pending = [...node.querySelectorAll<HTMLElement>('[data-agent-message]')].filter((item) => item.dataset.motionReady !== 'true');
-      pending.forEach((item) => { item.dataset.motionReady = 'true'; });
-      if (pending.length) {
-        gsap.fromTo(pending, { autoAlpha: 0, y: reduceMotion ? 0 : 8 }, { autoAlpha: 1, y: 0, duration: reduceMotion ? 0 : 0.18, stagger: reduceMotion ? 0 : 0.04, ease: 'power2.out' });
-      }
-      const cards = [...node.querySelectorAll<HTMLElement>('[data-agent-result-card]')].filter((item) => item.dataset.motionReady !== 'true');
-      cards.forEach((item) => { item.dataset.motionReady = 'true'; });
-      if (cards.length) {
-        gsap.fromTo(cards, { autoAlpha: 0, y: reduceMotion ? 0 : 8 }, { autoAlpha: 1, y: 0, duration: reduceMotion ? 0 : 0.16, stagger: reduceMotion ? 0 : 0.05, ease: 'power1.out' });
-      }
-    });
-    return () => mm.revert();
-  }, [messages.length, mounted]);
-  useEffect(() => {
-    if (open && !wasOpenRef.current) openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (!open && wasOpenRef.current) { openerRef.current?.focus(); openerRef.current = null; }
-    wasOpenRef.current = open;
-  }, [open]);
-  useEffect(() => {
-    if (!open || !compactModal) return undefined;
-    const node = panelRef.current;
-    if (!node) return undefined;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return;
-      const focusable = [...node.querySelectorAll<HTMLElement>('button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')].filter((item) => item.getClientRects().length > 0 && getComputedStyle(item).visibility !== 'hidden');
-      if (!focusable.length) { event.preventDefault(); node.focus(); return; }
-      const first = focusable[0]; const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    node.addEventListener('keydown', onKeyDown);
-    return () => node.removeEventListener('keydown', onKeyDown);
-  }, [compactModal, open]);
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      event.preventDefault();
-      closeAgent();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [closeAgent, open]);
-  useEffect(() => { if (open && !running) markRead(); }, [markRead, open, running, messages.length]);
-  useEffect(() => { if (open) window.setTimeout(() => inputRef.current?.focus(), 0); }, [open]);
-  useEffect(() => () => {
-    if (modeTransitionTimerRef.current !== null) window.clearTimeout(modeTransitionTimerRef.current);
-  }, []);
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    const distanceToBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-    if (distanceToBottom < 96) node.scrollTop = node.scrollHeight;
-  }, [messages, running]);
-  if (!open && !mounted) return null;
-  const full = mode === 'full';
-  const drawer = mode === 'drawer';
-  const nextMode = full ? 'dock' : drawer ? 'full' : 'drawer';
-  const modeLabel = full ? '退出全屏' : drawer ? '全屏' : '展开抽屉';
-  const changeMode = (next: 'dock' | 'drawer' | 'full') => {
-    const duration = full || next === 'full' ? motion.agentFull : motion.base;
-    setModeTransitionMs(duration);
-    if (modeTransitionTimerRef.current !== null) window.clearTimeout(modeTransitionTimerRef.current);
-    modeTransitionTimerRef.current = window.setTimeout(() => setModeTransitionMs(motion.base), duration);
-    setMode(next);
-  };
+  }, [messages, running, activeRun?.id, activeRun?.startedAt, partialText, partialCards, context.fingerprint]);
   const suggestions: readonly AgentSuggestionAction[] = messages.length ? AGENT_FOLLOWUP_ACTIONS : agentSuggestionsForPage(context.page);
-  const showPresetSuggestions = !messages.length || (!running && !messages.some((message) => message.response));
-  return <aside id="pricelens-agent-panel" ref={panelRef} className="lpl-agent-panel" data-agent-mode={mode} role="dialog" aria-modal={compactModal ? 'true' : undefined} aria-hidden={!open || undefined} aria-labelledby="pricelens-agent-title" tabIndex={-1} style={{ position: 'fixed', zIndex: 100, top: full || compactViewport ? 0 : 64, right: 0, bottom: 0, width: full ? '100%' : drawer ? 'min(640px, 100%)' : `min(${panelWidth}px, 100%)`, maxWidth: '100%', display: 'flex', flexDirection: 'column', background: color.canvas, boxShadow: full ? 'none' : shadow.l2, borderLeft: `1px solid ${color.hairline}`, borderTop: `2px solid ${color.link}`, opacity: 1, pointerEvents: open ? 'auto' : 'none', willChange: full || drawer ? 'width, top, transform, opacity' : 'transform, opacity', transition: `width ${modeTransitionMs}ms ${motion.enter}, top ${modeTransitionMs}ms ${motion.enter}, opacity ${modeTransitionMs}ms ${motion.enter}` }}>
-    <header style={{ height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', borderBottom: `1px solid ${color.hairline}`, boxShadow: shadow.l1 }}>
-      <div><div id="pricelens-agent-title" style={{ fontWeight: 600, fontSize: 14 }}>PriceLens Agent</div><div role="status" aria-live="polite" aria-atomic="true" style={{ fontSize: fontSize.caption, color: running ? color.link : runStatus === 'stale_context' || runStatus === 'empty' ? color.warningInk : color.mute }}>{AGENT_STATUS_LABELS[runStatus] ?? AGENT_STATUS_LABELS.idle}</div></div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Tooltip title="新对话"><button type="button" aria-label="新对话" onClick={newConversation} style={iconButtonStyle}><PlusOutlined /></button></Tooltip><Tooltip title={modeLabel}><button type="button" aria-label={modeLabel} onClick={() => changeMode(nextMode)} style={iconButtonStyle}>{full ? <FullscreenExitOutlined /> : drawer ? <ExpandOutlined /> : <CompressOutlined />}</button></Tooltip><Tooltip title={running ? '关闭面板（后台继续运行）' : '关闭'}><button type="button" aria-label={running ? '关闭 Agent，后台继续运行' : '关闭 Agent'} onClick={closeAgent} style={iconButtonStyle}><CloseOutlined /></button></Tooltip></div>
-    </header>
-    <ContextChips />
-    <div ref={scrollRef} role="log" aria-live="off" aria-relevant="additions text" aria-busy={running} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px 20px', background: color.canvasSoft }}>
-      <div data-agent-live-status role="status" aria-live="polite" aria-atomic="true" style={{ minHeight: 16, marginBottom: 7, color: running ? color.link : runStatus === 'empty' ? color.warningInk : color.mute, fontSize: 12 }}>{AGENT_STATUS_LABELS[runStatus] ?? AGENT_STATUS_LABELS.idle}{runStatus === 'failed' ? ' · 连接中断/本地回退' : ''}{runStatus === 'empty' ? ' · 可缩小时间范围或补充产品口径' : ''}</div>
-      {running && <StageTimeline run={activeRun} />}
-      {activeRun && <RunTimeline run={activeRun} />}
-      {!messages.length && <div style={{ padding: '18px 4px 10px' }}><div style={{ fontSize: 20, fontWeight: 600, color: color.ink }}>问 PriceLens</div><p style={{ margin: '6px 0 16px', color: color.body, fontSize: 13 }}>在当前页面里查询价格、比较平台，或者解释预警。Agent 会先展示口径和证据，再给出结果。</p></div>}
-      {messages.map((message) => {
-        // R2（本轮返修 A M1）：普通上下文 stale 的消息级副作用锁——消息创建时的
-        // contextFingerprint 与当前上下文指纹不一致（用户换了国家/筛选/页面）时，
-        // 与 actionsLocked（响应口径与请求不一致）合并成同一个锁：所有改全局筛选
-        // / 导航 / scope / 定位 / 撤销重做的动作禁用 + 回调守卫；只读 evidence 与
-        // 发起当前上下文新查询的纯 prompt 建议（输入框/追问/重试）不锁。
-        // 边界：跨国查询（AE 页问 RU 优势）的消息指纹是创建时的 AE 页指纹，页面
-        // 未变即不 stale，可回看/跳 GTM 到 RU；锁定只看指纹，不把结果目标国与
-        // 创建指纹比较。
-        const isContextStale = Boolean(message.contextFingerprint && message.contextFingerprint !== context.fingerprint);
-        const messageLocked = Boolean(message.actionsLocked || isContextStale);
-        return <div key={message.id} data-agent-message data-message-locked={messageLocked || undefined} style={{ marginBottom: 16, paddingLeft: message.role === 'assistant' ? 10 : 0, borderLeft: message.role === 'assistant' ? `2px solid ${color.link}` : 'none' }}><div style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}>{message.role === 'assistant' && <span style={{ alignSelf: 'flex-start', margin: '3px 6px 0 0', padding: '2px 6px', borderRadius: radius.pill, background: message.kind === 'proactive' ? color.warningSoft : color.canvas, color: message.kind === 'proactive' ? color.warningInk : color.link, fontSize: 12, whiteSpace: 'nowrap' }}>PriceLens · {messageKindLabel[message.kind ?? 'conversation']} {message.response && <AgentProviderBadge response={message.response} />}</span>}<div style={{ maxWidth: '92%', padding: message.role === 'user' ? '8px 11px' : '0', background: message.role === 'user' ? color.ink : 'transparent', color: message.role === 'user' ? color.onPrimary : color.ink, borderRadius: message.role === 'user' ? radius.card : 0, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{message.text}</div></div>{message.kind === 'proactive' && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{message.alert && <span className="tnum" style={{ fontSize: 12, color: color.mute }}>优先级 {message.alert.priority ?? '—'} · {message.alert.weekId} · {formatPrice(message.alert.price, context.state.currency)}</span>}<button type="button" disabled={messageLocked} aria-disabled={messageLocked} title={messageLocked ? '消息基于较早筛选快照，动作已锁定' : undefined} onClick={() => { if (messageLocked || !message.alert) return; navBus.alertsFocus = { alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint, modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName, seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId }; go('alerts'); }} style={{ ...textButtonStyle, opacity: messageLocked ? 0.5 : 1, cursor: messageLocked ? 'not-allowed' : 'pointer' }}>查看预警</button><button type="button" disabled={messageLocked} aria-disabled={messageLocked} title={messageLocked ? '消息基于较早筛选快照，动作已锁定' : undefined} onClick={() => { if (messageLocked || !message.alert) return; navBus.dashboardFocusWeekId = message.alert.weekId; go('dashboard'); }} style={{ ...textButtonStyle, opacity: messageLocked ? 0.5 : 1, cursor: messageLocked ? 'not-allowed' : 'pointer' }}>回看板</button><button type="button" onClick={() => { const prompt = '价格预警'; setDraft(prompt); void send(prompt, undefined, undefined, 'price_alert'); }} style={textButtonStyle}>让 Agent 解释</button></div>}{message.kind === 'error' && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 6 }}>重试</button>}{isContextStale && <div role="status" style={{ marginTop: 4, fontSize: fontSize.caption, color: color.warningInk }}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}{message.response && <><div role="note" style={{ marginTop: 5, fontSize: fontSize.caption, color: message.response.factGuard?.status === 'stale_context' ? color.warningInk : color.mute }}>事实来源：本地确定性引擎 / 远端叙述{message.response.factGuard?.message ? ` · ${message.response.factGuard.message}` : ''}</div>{message.response.scopeLabel && <div data-agent-scope role="note" style={{ marginTop: 4, fontSize: fontSize.caption, color: color.body }}>本次结果口径：{message.response.scopeLabel}</div>}{message.response.provider?.name.includes('回退') && message.prompt && <button type="button" onClick={() => void send(message.prompt)} style={{ ...textButtonStyle, marginTop: 5 }}>重试远端</button>}<StepTimeline response={message.response} />{message.response.steps.map((step) => <ToolCallCard key={`tool-${step.id}`} step={step} onApply={!messageLocked && step.tool === 'view.preview' ? () => { const filter = message.response?.cards.find((card): card is FilterResultCard => card.kind === 'filter'); return filter ? applyFilter(filter) : { ok: false, error: '没有可应用的筛选预览' }; } : undefined} onRetry={message.prompt ? () => void send(message.prompt) : undefined} />)}{message.response.cards.map((card) => <ResultCard key={card.id} card={card} locked={messageLocked} />)}{message.response.cards.length === 0 && message.response.intent !== 'clarify' && <EmptyResultCard onNarrowRange={() => { void send('只看最近 8 周', undefined, undefined, 'filter'); }} onRefine={() => { setDraft(''); window.setTimeout(() => inputRef.current?.focus(), 0); }} />}<Citations response={message.response} /><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: space.sm }}>{(message.response.suggestionActions ?? message.response.suggestions.map((label) => ({ label, intent: 'query' as const, prompt: label, draftOnly: undefined }))).map((suggestion) => <button type="button" key={suggestion.label} disabled={running} title={suggestion.draftOnly ? '示例问法填入输入框，请确认或修改后再发送（不会自动执行）' : '在当前上下文发起一次新查询'} onClick={() => { if (suggestion.draftOnly) { setDraft(suggestion.prompt ?? suggestion.label); window.setTimeout(() => inputRef.current?.focus(), 0); return; } setDraft(suggestion.label); void send(suggestion.prompt ?? suggestion.label, undefined, undefined, suggestionSendIntent(suggestion)); }} style={{ fontSize: 12, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' }}>{suggestion.label}</button>)}</div></>}</div>;
-      })}
-      {running && <div role="status" aria-live="polite" aria-atomic="true" style={{ color: color.mute, fontSize: 12, display: 'grid', gap: 6 }}><div className="lpl-agent-generating-skeleton" aria-hidden="true"><span /><span /><span /></div><span><span aria-hidden="true">·</span> {AGENT_STATUS_LABELS[runStatus] ?? '生成结果中…'}</span>{partialText && <div data-streaming-text style={{ color: color.ink, whiteSpace: 'pre-wrap' }}>{partialText}</div>}{partialCards.map((card) => <ResultCard key={`partial-${card.id}`} card={card} />)}</div>}
-    </div>
-    {showPresetSuggestions && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 16px 10px', background: color.canvasSoft }}>{suggestions.map((suggestion) => <button type="button" key={suggestion.label} onClick={() => { void send(suggestion.prompt ?? suggestion.label, undefined, undefined, suggestionSendIntent(suggestion)); }} style={{ fontSize: 12, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '5px 8px', cursor: 'pointer' }}>{suggestion.label}</button>)}</div>}
-    <div style={{ flexShrink: 0, padding: '10px 12px 12px', borderTop: `1px solid ${color.hairline}`, background: color.canvas }}><div style={{ display: 'flex', alignItems: 'end', gap: 7 }}><Input.TextArea ref={inputRef} aria-label="向 PriceLens Agent 提问" autoSize={{ minRows: 1, maxRows: 5 }} value={draft} placeholder="问价格、平台或预警…" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} /> <Tooltip title={voiceAvailable ? '语音输入' : '浏览器不支持语音输入'}><button type="button" aria-label="语音输入" disabled={!voiceAvailable || voiceListening || running} onClick={() => void startVoice()} style={{ ...iconButtonStyle, width: 32, height: 32, color: voiceListening ? color.link : color.body, opacity: voiceAvailable ? 1 : 0.45 }}>{voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}</button></Tooltip>{running ? <Button aria-label="停止运行" icon={<StopOutlined />} onClick={stop} /> : <Button type="primary" aria-label="发送" icon={<SendOutlined />} onClick={() => void send()} disabled={!draft.trim()} />}</div>{/* 2026-11-10 UI 审计：输入区下方原第二行「引擎来源」小字（网关/模型/兜底）
-          是实现名词，不对业务用户展示——渲染端撤下；引擎来源契约仍在
-          agent/remoteConfig.ts（resolveAgentEngine / describeAgentEngine），
-          逐条回答的「事实来源」标注不受影响。键盘提示行保留 */}<div style={{ marginTop: 5, fontSize: 12, color: color.mute }}>Enter 发送 · Shift+Enter 换行 · {platformShortcutLabel()} 快捷入口{!voiceAvailable && ' · 当前浏览器不支持语音输入，请直接文字提问'}</div></div>
-  </aside>;
-}
+  const showSuggestions = !messages.length || (!running && !messages.some((message) => message.response));
 
-const iconButtonStyle: CSSProperties = { width: 28, height: 28, display: 'inline-grid', placeItems: 'center', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvas, color: color.body, cursor: 'pointer' };
+  return <AgentThread
+    controller={agent}
+    messages={threadMessages}
+    statusLabel={AGENT_STATUS_LABELS[runStatus] ?? AGENT_STATUS_LABELS.idle}
+    context={<ContextChips />}
+    suggestions={showSuggestions ? suggestions : []}
+    onSuggestion={(suggestion, focusComposer) => {
+      if (running) return;
+      if (suggestion.draftOnly) {
+        setDraft(suggestion.prompt ?? suggestion.label);
+        focusComposer();
+      } else {
+        void send(suggestion.prompt ?? suggestion.label, undefined, undefined, suggestionSendIntent(suggestion));
+      }
+    }}
+    renderHeader={(message) => message.role === 'assistant' ? <>
+      <span>{messageKindLabel[message.kind ?? 'conversation']}</span>
+      {message.response && <AgentProviderBadge response={message.response} />}
+    </> : null}
+    renderMessage={(message, { focusComposer }) => {
+      if (message.role === 'user') return null;
+      const locked = Boolean(message.actionsLocked);
+      const response = message.response;
+      return <>
+        {message.kind === 'proactive' && <div style={actionRowStyle}>
+          {message.alert && <span className="tnum" style={noteStyle}>优先级 {message.alert.priority ?? '—'} · {message.alert.weekId} · {formatPrice(message.alert.price, context.state.currency)}</span>}
+          <button type="button" disabled={locked} aria-disabled={locked} onClick={() => {
+            if (locked || !message.alert) return;
+            navBus.alertsFocus = {
+              alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint,
+              modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName,
+              seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId,
+            };
+            go('alerts');
+          }} style={textButtonStyle}>查看预警</button>
+          <button type="button" disabled={locked} aria-disabled={locked} onClick={() => {
+            if (locked || !message.alert) return;
+            navBus.dashboardFocusWeekId = message.alert.weekId;
+            go('dashboard');
+          }} style={textButtonStyle}>回看板</button>
+          <button type="button" disabled={running} onClick={() => { void send('价格预警', undefined, undefined, 'price_alert'); }} style={textButtonStyle}>让 Agent 解释</button>
+        </div>}
+        {message.isContextStale && <div role="note" style={warningStyle}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}
+        {response && <>
+          <div role="note" style={{ ...noteStyle, color: response.factGuard?.status === 'stale_context' ? color.warningInk : color.mute }}>
+            事实来源：本地确定性引擎{response.provider?.name.includes('远端') && !response.provider.name.includes('回退') ? ' · 远端叙述' : ''}{response.factGuard?.message ? ` · ${response.factGuard.message}` : ''}
+          </div>
+          {response.scopeLabel && <div data-agent-scope role="note" style={{ ...noteStyle, color: color.body }}>本次结果口径：{response.scopeLabel}</div>}
+          {response.cards.map((card) => <ResultCard key={card.id} card={card} locked={locked} hardLocked={message.hardLocked} />)}
+          {response.cards.length === 0 && response.intent !== 'clarify' && <EmptyResultCard
+            onNarrowRange={() => { if (!running) void send('只看最近 8 周', undefined, undefined, 'filter'); }}
+            onRefine={() => { setDraft(''); focusComposer(); }}
+          />}
+          {response.steps.length > 0 && <details style={noteStyle}>
+            <summary style={{ cursor: 'pointer', color: color.body }}>执行记录 · {response.steps.length} 项</summary>
+            {response.steps.map((step) => <ToolCallCard
+              key={step.id}
+              step={step}
+              onApply={!locked && step.tool === 'view.preview' ? () => {
+                const filter = response.cards.find((card): card is FilterResultCard => card.kind === 'filter');
+                return filter ? applyFilter(filter) : { ok: false, error: '没有可应用的筛选预览' };
+              } : undefined}
+              onRetry={!running && message.prompt ? () => { void send(message.prompt); } : undefined}
+            />)}
+          </details>}
+          <Citations response={response} />
+          {response.provider?.name.includes('回退') && message.prompt && <button type="button" disabled={running} onClick={() => { if (!running) void send(message.prompt); }} title="按当前范围重新查询并重试远端叙述" style={{ ...textButtonStyle, marginTop: space.sm }}>重试远端</button>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm }}>
+            {(response.suggestionActions ?? response.suggestions.map((label) => ({ label, intent: 'query' as const, prompt: label, draftOnly: undefined }))).map((suggestion) => <button
+              type="button" key={suggestion.label} disabled={running}
+              title={suggestion.draftOnly ? '填入输入框，确认后再发送' : '在当前上下文发起一次新查询'}
+              onClick={() => {
+                if (running) return;
+                if (suggestion.draftOnly) { setDraft(suggestion.prompt ?? suggestion.label); focusComposer(); }
+                else void send(suggestion.prompt ?? suggestion.label, undefined, undefined, suggestionSendIntent(suggestion));
+              }}
+              style={quickPillStyle}
+            >{suggestion.label}</button>)}
+          </div>
+        </>}
+        {!response && message.partialCards?.map((card) => <ResultCard key={card.id} card={card} locked hardLocked />)}
+      </>;
+    }}
+  />;
+}

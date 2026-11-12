@@ -122,10 +122,10 @@ describe('R8 responseFingerprintMismatch：run.completed 隔离 + 消息动作�
     await waitFor(() => expect(screen.getAllByText('筛选已变化 · 结果需重新确认').length).toBeGreaterThan(0), { timeout: 5000 });
     // 时间线绝不出现 run.completed（流里先到的「运行完成」也被剔除），只保留 stale 收尾
     await waitFor(() => expect(screen.queryByText('运行完成')).toBeNull());
-    expect(screen.getAllByText(/筛选上下文已变化，结果可查看但需要重新确认口径/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/响应的筛选上下文与请求不一致，结果仅供参考，动作已锁定/).length).toBeGreaterThan(0);
     // R8：消息动作锁定——apply/open/query(followup) disabled，copy 豁免
     const tableCard = await waitFor(() => {
-      const found = [...view.container.querySelectorAll('[data-agent-result-card]')].find((element) => element.textContent?.includes('平台比较（口径存疑）'));
+      const found = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].find((element) => element.textContent?.includes('平台比较（口径存疑）'));
       expect(found).toBeTruthy();
       return found as HTMLElement;
     });
@@ -150,7 +150,7 @@ describe('R8 responseFingerprintMismatch：run.completed 隔离 + 消息动作�
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     await submit('查我司产品价格');
     const advCard = await waitFor(() => {
-      const found = [...view.container.querySelectorAll('[data-agent-result-card]')].find((element) => element.textContent?.includes('价格优势 · 口径存疑'));
+      const found = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].find((element) => element.textContent?.includes('价格优势 · 口径存疑'));
       expect(found).toBeTruthy();
       return found as HTMLElement;
     }, { timeout: 5000 });

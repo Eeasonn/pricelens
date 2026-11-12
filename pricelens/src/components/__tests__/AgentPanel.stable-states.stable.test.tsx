@@ -148,14 +148,14 @@ describe('t428u AgentPanel · 药丸动作真实跳转（保留当前上下文�
 describe('t428u AgentPanel · running 可取消，cancelled 可重试', () => {
   beforeEach(() => resetTo('/?p=dashboard'));
 
-  it('运行中点「取消本次调用」→ 已取消提示 + 重试本次查询入口', async () => {
+  it('运行中点「停止运行」→ 已取消提示 + 按当前范围重试入口', async () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
     const panel = screen.getByRole('dialog');
     fireEvent.click(within(panel).getByRole('button', { name: '价格优势' }));
-    fireEvent.click(within(panel).getByRole('button', { name: '取消本次调用' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '停止运行' }));
     await waitFor(() => expect(within(panel).getByText('已取消这次查询。')).toBeTruthy(), { timeout: 4000 });
-    expect(within(panel).getByRole('button', { name: '重试本次查询' })).toBeTruthy();
+    expect(within(panel).getByRole('button', { name: '按当前范围重试' })).toBeTruthy();
   });
 });
 
@@ -209,6 +209,11 @@ describe('t428u 返修 R3 · 终态后不残留「运行中」工具卡', () => 
     expect(panel.querySelectorAll('[data-tool-status="running"], [data-tool-status="queued"]')).toHaveLength(0);
     const toolCards = Array.from(panel.querySelectorAll('[data-tool-status]'));
     expect(toolCards.length).toBeGreaterThan(0);
+    const execution = panel.querySelector<HTMLDetailsElement>('[data-agent-execution]');
+    expect(execution).toBeTruthy();
+    expect(execution?.open).toBe(false);
+    expect(within(panel).queryByText(/工具与运行活动/)).toBeNull();
+    expect(within(panel).queryByText(/执行步骤 ·/)).toBeNull();
     for (const card of toolCards) {
       expect(['success', 'failed', 'cancelled']).toContain(card.getAttribute('data-tool-status'));
     }
@@ -231,7 +236,7 @@ describe('t428u 返修 R3 · 终态后不残留「运行中」工具卡', () => 
     fireEvent.click(within(panel).getByRole('button', { name: '价格优势' }));
     // 等流事件先产生至少一张工具活动卡，再取消——终态必须把它收敛掉
     await waitFor(() => expect(panel.querySelectorAll('[data-tool-status]').length).toBeGreaterThan(0), { timeout: 4000 });
-    fireEvent.click(within(panel).getByRole('button', { name: '取消本次调用' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '停止运行' }));
     await waitFor(() => {
       expect(panel.querySelectorAll('[data-tool-status="running"], [data-tool-status="queued"]')).toHaveLength(0);
       expect(panel.querySelectorAll('[data-tool-status="cancelled"]').length).toBeGreaterThan(0);
@@ -262,9 +267,9 @@ describe('t428u 返修 R5（二轮）· 跨国回看保留结果卡的主品口�
   beforeEach(() => resetTo('/?p=dashboard&c=AE&main=own-huawei-nova-14-pro__12%2B512GB'));
 
   it('AE + nova 14 Pro 问「RU 价格优势」→ 回看后 RU 上下文主品仍是 nova 14 Pro，而非 RU 默认主品', async () => {
-    // 2026-11-10 审计修复：口径 chip 改「口径 · 显示名 · 配置 · SKU slug」
-    // （机器串只随 slug 出现一次，与演进版 Copilot/AgentPanel 同契约），断言随新契约重锚
-    const novaChip = '口径 · nova 14 Pro · 12+512 GB · own-huawei-nova-14-pro__12-512gb__black';
+    // 2026-11-10 审计修复：口径 chip 只展示可读产品名与配置，内部 SKU id 不进入主界面
+    // 与迭代版同契约；跨国回看仍保留同一产品与配置。
+    const novaChip = '口径 · nova 14 Pro · 12+512 GB';
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
     const panel = screen.getByRole('dialog');
@@ -290,7 +295,8 @@ describe('t428u 返修 R5（二轮）· 跨国回看保留结果卡的主品口�
     expect(decodedSearch).toContain('c=RU');
     expect(decodedSearch).toContain('main=own-huawei-nova-14-pro__12+512GB');
     expect(decodedSearch).not.toContain('pura-90s');
-  });
+    // Initial scope, query and cross-country navigation each have their own wait.
+  }, 15000);
 });
 
 describe('t428u 返修 R7 · 预警展开行动作在判断边界之后', () => {

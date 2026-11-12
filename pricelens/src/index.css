@@ -88,17 +88,6 @@ button[aria-disabled='true'] {
   cursor: not-allowed;
 }
 
-.lpl-price-search-shell:hover:not(:focus-within) {
-  border-color: #a1a1a1 !important;
-}
-.lpl-price-search-shell:has(input:focus-visible) {
-  border-color: #0070f3 !important;
-  box-shadow: 0 0 0 1px #0070f3, 0 0 0 3px #e8f1ff !important;
-}
-.lpl-price-search-shell input:focus-visible {
-  outline: none;
-}
-
 /* Agent generation stays legible without a looping AI icon. The sheen is a
    single, short-lived status treatment; reduced motion disables its travel. */
 .lpl-agent-generating-skeleton {

@@ -66,14 +66,14 @@ vi.mock('../../agent-stable', async (importOriginal) => {
 });
 
 import App from '../../App';
-import { FiltersProvider, defaultFilters } from '../../state/FiltersContext';
-import { AgentProvider } from '../../state/AgentContextStable';
+import { FiltersProvider, defaultFilters, useFilters } from '../../state/FiltersContext';
+import { AgentProvider, useAgent } from '../../state/AgentContextStable';
 import { PageProvider } from '../../state/PageContext';
 import type { FiltersState } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';
 import { calculatePriceAdvantage } from '../../agent-stable/priceAdvantage';
 import type { FilterResultCard, PriceAdvantageResultCard, ToolCallCard } from '../../agent-stable/contracts';
-import { CardActionsLockedContext, PriceAdvantageCard } from '../CopilotStable/AgentPanel';
+import AgentPanel, { CardActionsLockedContext, PriceAdvantageCard } from '../CopilotStable/AgentPanel';
 
 beforeEach(() => {
   const w = window as unknown as { localStorage?: Storage };
@@ -177,7 +177,9 @@ describe('t428u R3 m3 · 锁定消息上的改筛选控件双保险（disabled +
     expect((detailSummary.closest('details') as HTMLDetailsElement).open).toBe(false);
     fireEvent.click(detailSummary);
     expect((detailSummary.closest('details') as HTMLDetailsElement).open).toBe(true);
-  });
+    // Two full App queries each calculate a real baseline and a released reply.
+    // Budget the integration work independently from the individual waitFor checks.
+  }, 60000);
 
   it('ToolCallCard.filterCard 的 应用筛选/撤销恢复 在锁定消息上双双禁用，点击无副作用', async () => {
     const panel = openPanel();
@@ -253,5 +255,58 @@ describe('t428u R3 m3 · 已定位价格优势卡的 撤销定位 随锁禁用',
       expect(node).toBeDefined();
       expect((node!.closest('details') as HTMLDetailsElement).open).toBe(true);
     });
+  });
+});
+
+
+describe('assistant-ui · 过期预览与撤销边界', () => {
+  function ScopeControls() {
+    const { state, actions } = useFilters();
+    const { openAgent } = useAgent();
+    return <>
+      <button type="button" onClick={() => openAgent()}>打开测试 Agent</button>
+      <button type="button" onClick={() => actions.set({ currency: 'local' })}>外部切换本币</button>
+      <output data-testid="current-currency">{state.currency}</output>
+    </>;
+  }
+
+  function openScopedPanel() {
+    render(<FiltersProvider><PageProvider><AgentProvider><ScopeControls /><AgentPanel /></AgentProvider></PageProvider></FiltersProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '打开测试 Agent' }));
+    return screen.getByRole('dialog');
+  }
+
+  it.each(['filter', 'tool'] as const)('当前范围改变后，旧 %s 预览不能覆盖新筛选', async (kind) => {
+    const panel = openScopedPanel();
+    await sendFromPanel(panel, '只看美元');
+    await waitFor(() => expect(bridge.pending.length).toBe(1));
+    const filter: FilterResultCard = { ...craftedFilterCard('stale-preview'), patch: { currency: 'usd' } };
+    bridge.pending[0].release({ cards: [kind === 'tool' ? craftedToolCard(filter) : filter] });
+    await waitFor(() => expect(within(panel).getByText('价格数据分析')).toBeTruthy());
+    if (kind === 'tool') {
+      const details = panel.querySelector<HTMLDetailsElement>('[data-agent-execution]');
+      expect(details).toBeTruthy();
+      fireEvent.click(details!.querySelector('summary')!);
+    }
+    const apply = within(panel).getByRole('button', { name: kind === 'tool' ? '应用筛选' : '应用到看板' }) as HTMLButtonElement;
+    expect(apply.disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '外部切换本币' }));
+    await waitFor(() => expect(apply.disabled).toBe(true));
+    fireEvent.click(apply);
+    expect(screen.getByTestId('current-currency').textContent).toBe('local');
+  });
+
+  it('应用导致范围改变后仍能撤销，恢复应用前筛选', async () => {
+    const panel = openScopedPanel();
+    await sendFromPanel(panel, '只看本币');
+    await waitFor(() => expect(bridge.pending.length).toBe(1));
+    bridge.pending[0].release({ cards: [craftedFilterCard('undo-preview')] });
+    const apply = await within(panel).findByRole('button', { name: '应用到看板' });
+    fireEvent.click(apply);
+    await waitFor(() => expect(screen.getByTestId('current-currency').textContent).toBe('local'));
+    const undo = within(panel).getByRole('button', { name: /撤销/ }) as HTMLButtonElement;
+    expect(undo.disabled).toBe(false);
+    fireEvent.click(undo);
+    await waitFor(() => expect(screen.getByTestId('current-currency').textContent).toBe('usd'));
   });
 });

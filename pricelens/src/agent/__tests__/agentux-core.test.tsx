@@ -79,8 +79,8 @@ describe('agentux-core price advantage and price alert loops', () => {
     const before = JSON.parse(view.container.querySelector('[data-filter-state]')?.textContent ?? '{}');
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     fireEvent.click(await screen.findByRole('button', { name: '价格预警' }));
-    await waitFor(() => expect(view.container.querySelectorAll('[data-agent-result-card]').length).toBeGreaterThan(0));
-    const resultCards = view.container.querySelectorAll('[data-agent-result-card]');
+    await waitFor(() => expect(screen.getAllByText(/事实来源：本地确定性引擎/).length).toBeGreaterThan(0));
+    const resultCards = view.baseElement.querySelectorAll('[data-agent-result-card]');
     const resultCard = resultCards[resultCards.length - 1] as HTMLElement | undefined;
     expect(resultCard).toBeTruthy();
     const card = within(resultCard as HTMLElement);
@@ -110,8 +110,9 @@ describe('agentux-core price advantage and price alert loops', () => {
     const input = screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' });
     fireEvent.change(input, { target: { value: '价格预警' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
-    await waitFor(() => expect(view.container.querySelectorAll('[data-agent-message]').length).toBeGreaterThan(4), { timeout: 5000 });
-    const freshCards = view.container.querySelectorAll('[data-agent-result-card]');
+    // A placeholder now exists while streaming; wait for the second validated answer.
+    await waitFor(() => expect(screen.getAllByText(/事实来源：本地确定性引擎/).length).toBeGreaterThanOrEqual(2), { timeout: 5000 });
+    const freshCards = view.baseElement.querySelectorAll('[data-agent-result-card]');
     const freshCardEl = freshCards[freshCards.length - 1] as HTMLElement;
     const freshCard = within(freshCardEl);
     // 新预警卡（未锁）上状态流转可用并可撤销（状态流转不改筛选指纹，消息保持未锁）
@@ -158,7 +159,7 @@ describe('agentux-core price advantage and price alert loops', () => {
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     fireEvent.click(await screen.findByRole('button', { name: '价格优势' }));
     await screen.findByText('价格优势 · 我司 vs 核心竞品');
-    const resultCards = view.container.querySelectorAll('[data-agent-result-card]');
+    const resultCards = view.baseElement.querySelectorAll('[data-agent-result-card]');
     const resultCard = resultCards[resultCards.length - 1] as HTMLElement;
     const card = within(resultCard);
     expect(screen.getAllByRole('button', { name: '价格优势' }).length).toBeGreaterThan(0);
@@ -202,14 +203,15 @@ describe('Agent 面板输入区与上下文条（UI 审计 2026-11-10）', () =>
     expect(screen.getByText(/Enter 发送 · Shift\+Enter 换行/)).toBeTruthy();
   });
 
-  it('上下文口径 chip 用显示名，SKU 机器串只保留 slug 一处', async () => {
+  it('上下文口径 chip 只显示产品与配置，技术 SKU 仅留在详情提示', async () => {
     mountedApp();
     fireEvent.click(screen.getByRole('button', { name: '设定主品' }));
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     await screen.findByRole('textbox', { name: '向 PriceLens Agent 提问' });
     const chip = screen.getAllByText((content) => content.startsWith('口径 · '))[0];
     expect(chip).toBeTruthy();
-    // 完整口径：显示名（modelNameOf）+ 配置 + SKU slug，机器 id 不再单独成段
-    expect(chip.textContent).toBe(`口径 · ${own.model_name} · ${own.romram} · ${own.sku_id}`);
+    // 默认口径只读到显示名与配置；技术标识通过 tooltip 保留可追溯性。
+    expect(chip.textContent).toBe(`口径 · ${own.model_name} · ${own.romram}`);
+    expect(chip.getAttribute('title')).toBe(own.sku_id);
   });
 });

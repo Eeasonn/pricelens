@@ -47,6 +47,10 @@ export interface AgentMessage {
   /** 原始请求，用于错误结果一键重试。 */
   prompt?: string;
   alert?: AgentAlertRecord;
+  /** A request keeps one assistant message through streaming and its terminal state. */
+  status?: AgentRunStatus;
+  partialText?: string;
+  partialCards?: AgentResultCard[];
 }
 
 interface AgentContextValue {
@@ -184,6 +188,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   // 远端服务即使收到 abort 也可能晚到；序号让旧响应无法覆盖新会话。
   const runSequence = useRef(0);
   const streamSequence = useRef(0);
+  const activeMessageId = useRef<string | null>(null);
+  useEffect(() => () => {
+    runSequence.current += 1;
+    controller.current?.abort();
+    controller.current = null;
+  }, []);
   const pendingIntent = useRef<AgentIntent | undefined>(undefined);
   const pendingForecastDraft = useRef<ForecastDraftInput | undefined>(undefined);
   const pendingForecastContext = useRef<ForecastContextInput | undefined>(undefined);
@@ -238,7 +248,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   // runSend 允许携带合并 patch 后的 context（R4 重跑路径）；常规 send 仍用当前 context。
   const runSend = useCallback(async (runContext: AgentContextSnapshot, value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent, originContextFingerprint?: string) => {
     const text = (value ?? draft).trim();
-    if (!text || running) return;
+    // React state updates are batched: the ref also rejects a second send in the same tick.
+    if (!text || controller.current) return;
     setDraft('');
     const requestContextFingerprint = runContext.fingerprint;
     appendMessage({ id: messageId('user'), role: 'user', text, prompt: text, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() });
@@ -252,12 +263,16 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const runId = ++runSequence.current;
     const agentRunId = messageId('run');
     const startedAt = new Date().toISOString();
+    const assistantMessageId = messageId('assistant');
+    activeMessageId.current = assistantMessageId;
+    appendMessage({ id: assistantMessageId, role: 'assistant', text: '', partialText: '', partialCards: [], status: 'parsing', actionsLocked: true, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, prompt: text, createdAt: startedAt });
     controller.current = run; streamSequence.current = 0; setRunning(true); setOpen(true); setRunStatus('parsing'); setPartialText(''); setPartialCards([]);
     setActiveRun({ id: agentRunId, requestId: messageId('request'), status: 'parsing', startedAt, updatedAt: startedAt, context: runContext, events: [{ id: messageId('event'), runId: agentRunId, sequence: 1, type: 'run.started', status: 'parsing', timestamp: startedAt, message: '已接收请求', provenance: runContext.provenance }] });
     try {
       setRunStatus('tool_running');
       setActiveRun((prev) => prev ? { ...prev, status: 'tool_running', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'step.started', status: 'tool_running', timestamp: new Date().toISOString(), message: '正在读取确定性价格工具', tool: 'series.query', provenance: runContext.provenance }] } : prev);
       const baseline = await runAgent(text, runContext, run.signal, explicitIntent, explicitForecastDraft, explicitForecastContext?.forecastSnapshot, explicitForecastContext?.forecastDataset);
+      if (runSequence.current !== runId) return;
       setRunStatus('planning');
       setActiveRun((prev) => prev ? { ...prev, status: 'planning', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status', status: 'planning', timestamp: new Date().toISOString(), message: '正在编排确定性工具', provenance: runContext.provenance }] } : prev);
       const raw = await agentClient.run({ text, context: runContext, clientRequestId: messageId('run'), runId: agentRunId, intent: explicitIntent, forecastDraft: explicitForecastDraft, forecastSnapshot: explicitForecastContext?.forecastSnapshot, forecastDataset: explicitForecastContext?.forecastDataset, baseline }, run.signal, (event) => {
@@ -265,6 +280,14 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         if (event.runId !== agentRunId) return;
         if (event.sequence <= streamSequence.current) return;
         streamSequence.current = event.sequence;
+        setMessages((prev) => prev.map((message) => {
+          if (message.id !== assistantMessageId) return message;
+          const streamedText = event.type === 'text.delta' ? `${message.partialText ?? ''}${event.delta ?? event.text ?? ''}` : message.partialText;
+          const cardId = event.type === 'card.ready' ? event.card?.id : event.type === 'card.patch' ? event.cardId : undefined;
+          const trusted = cardId ? baseline.cards.find((card) => card.id === cardId) : undefined;
+          const cards = trusted ? [...(message.partialCards ?? []).filter((card) => card.id !== trusted.id), trusted] : message.partialCards;
+          return { ...message, text: streamedText ?? message.text, partialText: streamedText, partialCards: cards, status: event.status === 'completed' ? 'partial_result' : event.status ?? message.status };
+        }));
         setPartialText((prev) => event.type === 'text.delta' ? `${prev}${event.delta ?? event.text ?? ''}` : prev);
         setPartialCards((prev) => {
           if (event.type === 'card.ready' && event.card) {
@@ -309,7 +332,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         return { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), response, events };
       });
       const messageKind: AgentMessage['kind'] = response.intent === 'clarify' ? 'clarification' : /量价预测|预测|情景/.test(text) ? 'scenario' : 'conversation';
-      appendMessage({ id: messageId('assistant'), role: 'assistant', text: response.summary, response, prompt: text, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, actionsLocked: responseFingerprintStale, createdAt: new Date().toISOString() });
+      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: response.summary, response, partialText: undefined, partialCards: undefined, status: nextStatus, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, actionsLocked: responseFingerprintStale } : message));
     } catch (error) {
       if (runSequence.current !== runId) return;
       // R3（二审）：只有用户主动 stop（controller.abort / runAgent 对 abort 的
@@ -321,16 +344,21 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       const messageText = typeof rawMessage === 'string' && rawMessage ? rawMessage : 'Agent 服务暂时不可用。';
       const nextStatus: AgentRunStatus = cancelled ? 'cancelled' : 'failed';
       setRunStatus(nextStatus);
-      // 失败/取消同样收敛终态：activeRun 落 completedAt + 终态事件；该消息不带
-      // response（无工具卡可残留），流式残留的 partial 文本/卡在 finally 清空。
+      // Interrupted output remains readable on its original message, without a completed
+      // response or enabled dashboard mutations.
       setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: cancelled ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: runContext.provenance }] } : prev);
-      appendMessage({ id: messageId('assistant'), role: 'assistant', text: cancelled ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, prompt: text, kind: cancelled ? 'system' : 'error', unread: true, createdAt: new Date().toISOString() });
+      const notice = cancelled ? '已取消这次查询。' : `这次运行没有完成：${messageText}`;
+      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: message.partialText ? `${message.partialText}\n\n${notice}` : notice, partialText: undefined, status: nextStatus, actionsLocked: true, kind: cancelled ? 'system' : 'error', unread: true } : message));
     } finally {
-      // R3：失败/取消终态不留流式残留——partial 文本与卡立即清空（健康终态的消息
-      // 已带完整 response，步骤经 finalizeStepsForTerminalRun 收敛）。
-      setPartialText('');
-      setPartialCards([]);
-      if (runSequence.current === runId) { controller.current = null; setRunning(false); }
+      // Only the owner may clear the compatibility stream buffers; an obsolete request
+      // can settle after a replacement request has already started streaming.
+      if (runSequence.current === runId) {
+        setPartialText('');
+        setPartialCards([]);
+        controller.current = null;
+        activeMessageId.current = null;
+        setRunning(false);
+      }
     }
   }, [agentClient, appendMessage, draft, running]);
 
@@ -341,7 +369,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
    *  只生成预览的纯 filter；重跑使用合并 patch 后的 context，既不读旧 state，
    *  也不会因 fingerprint 变化把新结果误标为过期口径。 */
   const rerunWithPatch = useCallback((text: string, intent: AgentIntent, patch: FilterPatch) => {
-    if (running) return;
+    if (controller.current) return;
     const validation = validateFilterPatch(patch);
     if (!validation.valid) return;
     const nextPatch = patch.mains ? { ...patch, mains: clampMains(patch.mains) } : patch;
@@ -355,9 +383,17 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   }, [actions, alertOverrides, alerts, context.fingerprint, page, runSend, running, state]);
 
   const stop = useCallback(() => {
+    if (!controller.current) return;
     runSequence.current += 1;
     controller.current?.abort();
     controller.current = null;
+    const cancelledMessageId = activeMessageId.current;
+    setMessages((prev) => prev.map((message) => message.id === cancelledMessageId && !message.response
+      ? { ...message, text: message.partialText ? `${message.partialText}\n\n已取消这次查询。` : '已取消这次查询。', partialText: undefined, status: 'cancelled', actionsLocked: true, kind: 'system', unread: true }
+      : message));
+    activeMessageId.current = null;
+    setPartialText('');
+    setPartialCards([]);
     // 立刻允许下一次提问；被取消的旧响应由 runSequence 丢弃。
     setRunning(false);
     setRunStatus('cancelled');
@@ -378,7 +414,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       }],
     } : prev);
   }, []);
-  const newConversation = useCallback(() => { if (!running) { setMessages([]); setDraft(''); setUndoSnapshots([]); setRedoSnapshots([]); setAlertUndoSnapshots([]); setAppliedFilterIds(new Set()); setActiveRun(null); setRunStatus('idle'); } }, [running]);
+  const newConversation = useCallback(() => { if (!controller.current) { setMessages([]); setDraft(''); setPartialText(''); setPartialCards([]); setUndoSnapshots([]); setRedoSnapshots([]); setAlertUndoSnapshots([]); setAppliedFilterIds(new Set()); setActiveRun(null); setRunStatus('idle'); } }, []);
 
   const applyFilter = useCallback((card: FilterResultCard) => {
     const validation = validateFilterPatch(card.patch);

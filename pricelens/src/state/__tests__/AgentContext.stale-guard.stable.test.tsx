@@ -147,9 +147,10 @@ describe('t428u 返修 R8（二轮）· 错指纹响应隔离副作用动作', (
     // 页面上下文不变，仅响应自身指纹错配（远端串写/迟到串指纹）
     (bridge.pending[0] as PendingRun).release({ contextFingerprint: 'ctx-forged-scope' });
     await waitFor(() => expect(within(panel).getByText(/响应口径与当前上下文不一致 · 结果可查看，动作已锁定/)).toBeTruthy(), { timeout: 4000 });
-    // 未派发正常 run.completed 完成事件：只落 run.status 说明动作已锁定
-    expect(within(panel).queryByText('运行完成')).toBeNull();
-    expect(within(panel).getByText('响应口径与请求上下文不一致，结果动作已锁定')).toBeTruthy();
+    // 公共状态与消息锁继续披露错口径；不再依赖已撤下的重复事件时间线。
+    expect(within(panel).getByText('筛选已变化 · 结果需重新确认')).toBeTruthy();
+    expect(within(panel).queryByText('结果已在 Agent 面板生成')).toBeNull();
+    expect(panel.querySelector('[data-agent-message][data-message-locked]')).toBeTruthy();
     // 结果卡确定性结果保留（可读）
     expect(within(panel).getByText('价格优势对比')).toBeTruthy();
     // open 类动作全部禁用（回看价格走势 / 打开价格预警；锁定态可达名带「结果口径未确认」后缀）

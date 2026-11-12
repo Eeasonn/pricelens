@@ -20,12 +20,13 @@ describe('agentux P1-3/P1-4 tool cards', () => {
     expect(screen.getByRole('alert').textContent).toContain('当前筛选口径已变化');
   });
 
-  it('shows explicit provider labels for remote and fallback results', () => {
+  it('shows clear analysis availability for remote and local fallback results', () => {
     const remote: AgentResponse = { intent: 'query', summary: '远端', steps: [], cards: [], citations: [], suggestions: [], contextFingerprint: 'ctx-1', provider: { name: '远端 AI 流式', model: 'remote' } };
-    const fallback: AgentResponse = { ...remote, provider: { name: '本地确定性回退', model: 'local' } };
+    const fallback: AgentResponse = { ...remote, provider: { name: '本地确定性回退', model: 'local', reason: 'Agent 服务异常（404）' } };
     const { rerender } = render(<AgentProviderBadge response={remote} />);
-    expect(screen.getByText('远端 AI 流式')).toBeTruthy();
+    expect(screen.getByText('在线分析')).toBeTruthy();
     rerender(<AgentProviderBadge response={fallback} />);
-    expect(screen.getByText(/本地回退/)).toBeTruthy();
+    expect(screen.getByText('本地数据结果 · 在线分析暂不可用')).toBeTruthy();
+    expect(screen.queryByText(/404/)).toBeNull();
   });
 });

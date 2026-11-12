@@ -123,6 +123,6 @@ describe('t428u 返修 R3（二轮）· 普通异常失败不冒充取消', () =
     expect(failedCards.length).toBeGreaterThan(0);
     for (const card of failedCards) expect(card.textContent).toContain('失败');
     // 错误消息保留 prompt，可一键重试
-    expect(within(panel).getByRole('button', { name: '重试' })).toBeTruthy();
+    expect(within(panel).getByRole('button', { name: '按当前范围重试' })).toBeTruthy();
   });
 });

@@ -45,6 +45,9 @@ export interface AgentMessage {
    * 该消息结果保留可读，但所有副作用动作被隔离禁用（AgentPanel 渲染层消费）。
    */
   staleMismatch?: boolean;
+  /** Incomplete output stays readable but cannot mutate the dashboard. */
+  actionsLocked?: boolean;
+  status?: AgentRunStatus;
   /** Incremental assistant output is kept separate from the final response. */
   partialText?: string;
   partialCards?: AgentResultCard[];
@@ -192,11 +195,16 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const contextRef = useRef<AgentContextSnapshot | null>(null);
   // 远端服务即使收到 abort 也可能晚到；序号让旧响应无法覆盖新会话。
   const runSequence = useRef(0);
-  const cancelRequested = useRef(false);
+  const streamSequence = useRef(0);
   const pendingIntent = useRef<AgentIntent | undefined>(undefined);
   const pendingForecastDraft = useRef<ForecastDraftInput | undefined>(undefined);
   const pendingForecastContext = useRef<ForecastContextInput | undefined>(undefined);
   const activeMessageId = useRef<string | null>(null);
+  useEffect(() => () => {
+    runSequence.current += 1;
+    controller.current?.abort();
+    controller.current = null;
+  }, []);
   const seenProactiveAlerts = useRef<Set<string>>(new Set());
   const agentClient = useMemo(() => defaultAgentClient(), []);
   const voice = useMemo<VoiceInputAdapter>(() => defaultVoiceAdapter(), []);
@@ -242,7 +250,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
   const send = useCallback(async (value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent, scope?: FilterPatch) => {
     const text = (value ?? draft).trim();
-    if (!text || running) return;
+    // Ref ownership rejects duplicate submissions before React commits running=true.
+    if (!text || controller.current) return;
     setDraft('');
     const scopeValidation = scope ? validateFilterPatch(scope) : { valid: true };
     const scopedState = scope && scopeValidation.valid ? { ...context.state, ...scope } : context.state;
@@ -264,18 +273,22 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const startedAt = new Date().toISOString();
     const assistantMessageId = messageId('assistant');
     activeMessageId.current = assistantMessageId;
-    appendMessage({ id: assistantMessageId, role: 'assistant', text: '', partialText: '', partialCards: [], kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, prompt: text, createdAt: startedAt });
-    controller.current = run; cancelRequested.current = false; setRunning(true); setOpen(true); setRunStatus('parsing');
+    appendMessage({ id: assistantMessageId, role: 'assistant', text: '', partialText: '', partialCards: [], status: 'parsing', actionsLocked: true, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, prompt: text, createdAt: startedAt });
+    controller.current = run; streamSequence.current = 0; setRunning(true); setOpen(true); setRunStatus('parsing');
     setActiveRun({ id: agentRunId, requestId: messageId('request'), status: 'parsing', startedAt, updatedAt: startedAt, context: runContext, events: [{ id: messageId('event'), runId: agentRunId, sequence: 1, type: 'run.started', status: 'parsing', timestamp: startedAt, message: '已接收请求', provenance: runContext.provenance }] });
     try {
       setRunStatus('tool_running');
       setActiveRun((prev) => prev ? { ...prev, status: 'tool_running', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'step.started', status: 'tool_running', timestamp: new Date().toISOString(), message: '正在读取确定性价格工具', tool: 'series.query', provenance: runContext.provenance }] } : prev);
       const baseline = await runAgent(text, runContext, run.signal, explicitIntent, explicitForecastDraft, explicitForecastContext?.forecastSnapshot, explicitForecastContext?.forecastDataset);
+      if (runSequence.current !== runId) return;
       setRunStatus('planning');
       setActiveRun((prev) => prev ? { ...prev, status: 'planning', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status', status: 'planning', timestamp: new Date().toISOString(), message: '正在编排确定性工具', provenance: runContext.provenance }] } : prev);
       const response = await agentClient.run({ text, context: runContext, clientRequestId: messageId('run'), runId: agentRunId, intent: explicitIntent, forecastDraft: explicitForecastDraft, forecastSnapshot: explicitForecastContext?.forecastSnapshot, forecastDataset: explicitForecastContext?.forecastDataset, baseline }, run.signal, (event) => {
         if (runSequence.current !== runId) return;
+        if (event.runId !== agentRunId || event.sequence <= streamSequence.current) return;
+        streamSequence.current = event.sequence;
         setActiveRun((prev) => prev ? { ...prev, status: event.status ?? prev.status, updatedAt: event.timestamp, events: [...prev.events, event] } : prev);
+        setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, status: event.status === 'completed' ? 'partial_result' : event.status ?? message.status } : message));
         if (event.status && event.status !== 'completed') setRunStatus(event.status);
         const candidate = event as AgentEventLike;
         if (candidate.type === 'text.delta' && typeof candidate.delta === 'string') {
@@ -332,26 +345,28 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         // R3：响应路径到达即终态——先按稳定 id/工具名合并完成态，再收敛残留
         // running/queued 工具卡，消息里不允许再出现「运行中」的工具活动卡。
         const partialCards = finalizeLiveToolCards(mergeCompletedToolCards(message.partialCards ?? [], completedTools), 'success');
-        return { ...message, text: response.summary, response, partialText: undefined, partialCards, provider: response.provider, fallbackReason: response.fallbackReason ?? message.fallbackReason, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, staleMismatch: responseFingerprintMismatch || undefined };
+        return { ...message, text: response.summary, response, partialText: undefined, partialCards, status: nextStatus, actionsLocked: responseFingerprintMismatch, provider: response.provider, fallbackReason: response.fallbackReason ?? message.fallbackReason, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, staleMismatch: responseFingerprintMismatch || undefined };
       }));
     } catch (error) {
       if (runSequence.current !== runId) return;
-      const aborted = error instanceof Error && error.name === 'AbortError';
-      const messageText = error instanceof Error && error.message ? error.message : 'Agent 服务暂时不可用。';
-      // R3（二轮返修）：只有用户取消（AbortError / stop 置位）才是 cancelled；
+      const aborted = typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
+      const rawMessage = typeof error === 'object' && error !== null ? (error as { message?: unknown }).message : undefined;
+      const messageText = typeof rawMessage === 'string' && rawMessage ? rawMessage : 'Agent 服务暂时不可用。';
+      // R3（二轮返修）：只有取消异常才是 cancelled（stop 已同步更新并隔离旧 run）；
       // 普通异常失败收敛为 failed，残留 running 工具卡标「失败」而非「已取消」。
-      const userCancelled = aborted || cancelRequested.current;
+      const userCancelled = aborted;
       const nextStatus: AgentRunStatus = userCancelled ? 'cancelled' : 'failed';
       setRunStatus(nextStatus);
       setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: userCancelled ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: runContext.provenance }] } : prev);
-      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: userCancelled ? '已取消这次查询。' : `这次运行没有完成：${messageText}`, partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], userCancelled ? 'cancelled' : 'failed'), prompt: text, kind: userCancelled ? 'system' : 'error', unread: true } : message));
+      const notice = userCancelled ? '已取消这次查询。' : `这次运行没有完成：${messageText}`;
+      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: message.partialText ? `${message.partialText}\n\n${notice}` : notice, partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], userCancelled ? 'cancelled' : 'failed'), status: nextStatus, actionsLocked: true, prompt: text, kind: userCancelled ? 'system' : 'error', unread: true } : message));
     } finally {
       if (runSequence.current === runId) { controller.current = null; activeMessageId.current = null; setRunning(false); }
     }
   }, [agentClient, alerts, appendMessage, context, draft, page, running]);
 
   const stop = useCallback(() => {
-    cancelRequested.current = true;
+    if (!controller.current) return;
     runSequence.current += 1;
     controller.current?.abort();
     controller.current = null;
@@ -360,7 +375,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const cancelledMessageId = activeMessageId.current;
     if (cancelledMessageId) {
       setMessages((prev) => prev.map((message) => message.id === cancelledMessageId && !message.response
-        ? { ...message, text: '已取消这次查询。', partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], 'cancelled'), kind: 'system', unread: true }
+        ? { ...message, text: message.partialText ? `${message.partialText}\n\n已取消这次查询。` : '已取消这次查询。', partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], 'cancelled'), status: 'cancelled', actionsLocked: true, kind: 'system', unread: true }
         : message));
     }
     // 立刻允许下一次提问；被取消的旧响应由 runSequence 丢弃。
@@ -384,7 +399,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       }],
     } : prev);
   }, []);
-  const newConversation = useCallback(() => { if (!running) { setMessages([]); setDraft(''); setUndoSnapshots([]); setRedoSnapshots([]); setAppliedFilterIds(new Set()); setActiveRun(null); setRunStatus('idle'); } }, [running]);
+  const newConversation = useCallback(() => { if (!controller.current) { setMessages([]); setDraft(''); setUndoSnapshots([]); setRedoSnapshots([]); setAppliedFilterIds(new Set()); setActiveRun(null); setRunStatus('idle'); } }, []);
 
   const applyFilter = useCallback((card: FilterResultCard) => {
     const validation = validateFilterPatch(card.patch);
