@@ -1,13 +1,15 @@
-// 2026-11-09 用户反馈「自动时间不按逻辑来」根因①修复：Agent 价差/预警定位与
-// 带 rs=re 的分享链接会静默退出自动时间——程序路径退出经 autoTimeBus 打标，
-// TimeBox 消费后显示「已固定时间范围（原因）· 回自动」提示条；用户自己手选
-// 范围不走信封、无提示。本文件锁行为。
+// 2026-11-13 时间筛选单值化（Eason）：「自动时间/回到自动」按钮与「已固定时间
+// 范围」提示条退役——时间筛选簇 = 最晚时间单值选择器（最早时间由看板底部时间
+// 拖块控制）。本文件锁新行为：
+// ① 自动时间按钮不存在；② 选择器值 = 当前最晚桶（周短格式）；
+// ③ endChangePatch 状态机：更早终点保持起点 / 终点早于起点时起点钉到终点 /
+//    越界值拒绝。
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import TimeBox from '../FilterBar/TimeBox';
+import TimeBox, { endChangePatch } from '../FilterBar/TimeBox';
+import { dataBucketRange, enumerateBuckets } from '../../chart/PriceTrend/helpers';
 import { FiltersProvider } from '../../state/FiltersContext';
-import { markAutoTimeExit, clearAutoTimeExit } from '../../state/autoTimeBus';
 
 if (typeof window.localStorage !== 'object') {
   const map = new Map<string, string>();
@@ -33,47 +35,47 @@ function freshEnv(): void {
   window.sessionStorage.clear();
   window.localStorage.clear();
   window.history.replaceState(null, '', window.location.pathname);
-  clearAutoTimeExit();
 }
 
-const toggleAuto = (view: ReturnType<typeof render>): void => {
-  const btn = view.container.querySelector('button[aria-label="自动时间"], button[aria-label="回到自动时间"]');
-  if (!btn) throw new Error('自动时间按钮不存在');
-  fireEvent.click(btn);
-};
-
-describe('TimeBox · 程序路径退出自动时间的显性提示', () => {
-  it('带信封退出：显示原因 + 一键回自动', () => {
+describe('TimeBox · 最晚时间单值选择器（2026-11-13）', () => {
+  it('「自动时间」按钮退役：时间簇内无任何自动开关、无固定范围提示条', () => {
     freshEnv();
     const view = render(<FiltersProvider><TimeBox /></FiltersProvider>);
-    expect(screen.queryByText(/已固定时间范围/)).toBeNull();
-    markAutoTimeExit('Agent 跳转');
-    act(() => { toggleAuto(view); });
-    const hint = screen.getByText(/已固定时间范围（Agent 跳转）/);
-    expect(hint).toBeTruthy();
-    // 一键回自动
-    fireEvent.click(screen.getByRole('button', { name: '回自动' }));
-    expect(screen.queryByText(/已固定时间范围/)).toBeNull();
-    const btn = view.container.querySelector('button[aria-label="自动时间"]');
-    expect(btn?.getAttribute('aria-pressed')).toBe('true');
+    expect(view.container.querySelector('button[aria-label="自动时间"]')).toBeNull();
+    expect(view.container.querySelector('button[aria-label="回到自动时间"]')).toBeNull();
+    expect(view.container.textContent).not.toContain('已固定时间范围');
   });
 
-  it('用户手选范围退出（无信封）：不打扰', () => {
+  it('单值选择器存在，可访问名 = 最晚时间（周），值 = 当前最晚桶短格式', () => {
     freshEnv();
     const view = render(<FiltersProvider><TimeBox /></FiltersProvider>);
-    act(() => { toggleAuto(view); });
-    expect(view.container.querySelector('button[aria-label="回到自动时间"]')).toBeTruthy();
-    expect(screen.queryByText(/已固定时间范围/)).toBeNull();
+    const input = view.container.querySelector<HTMLInputElement>('.xbrush-range-picker input');
+    expect(input).toBeTruthy();
+    // aria 由 TimeRangeCluster 的 effect 回填（jsdom 下 effect 同步跑）
+    expect(input?.getAttribute('aria-label')).toBe('最晚时间（周）');
+    const value = input?.value ?? '';
+    expect(value).toMatch(/^\d{4}W\d{2}$/);
   });
 
-  it('回自动后信封清空：再次手选退出不再显示旧原因', () => {
-    freshEnv();
-    const view = render(<FiltersProvider><TimeBox /></FiltersProvider>);
-    markAutoTimeExit('预警定位');
-    act(() => { toggleAuto(view); });
-    expect(screen.getByText(/已固定时间范围（预警定位）/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '回自动' }));
-    act(() => { toggleAuto(view); }); // 这次没有新信封
-    expect(screen.queryByText(/已固定时间范围/)).toBeNull();
+  it('endChangePatch：更早终点保持起点，恒置 adaptive=false', () => {
+    const buckets = enumerateBuckets('week', ...dataBucketRange('week'));
+    const start = buckets[10].id;
+    const end = buckets[20].id;
+    const target = buckets[18].id;
+    expect(endChangePatch(start, buckets, target)).toEqual({ adaptive: false, rangeEnd: target });
+  });
+
+  it('endChangePatch：终点早于起点 → 起点一并钉到终点（起点 ≤ 终点不变式）', () => {
+    const buckets = enumerateBuckets('week', ...dataBucketRange('week'));
+    const start = buckets[20].id;
+    const target = buckets[12].id;
+    expect(endChangePatch(start, buckets, target)).toEqual({
+      adaptive: false, rangeStart: target, rangeEnd: target,
+    });
+  });
+
+  it('endChangePatch：不在数据全集的桶 id = null（拒绝，不落状态）', () => {
+    const buckets = enumerateBuckets('week', ...dataBucketRange('week'));
+    expect(endChangePatch(buckets[10].id, buckets, '299901')).toBeNull();
   });
 });

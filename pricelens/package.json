@@ -21,7 +21,8 @@
     "check": "npm run design:check && npm run design:lint && npm run typecheck && npm run verify && npm run test && npm run build",
     "ingest": "python3 scripts/ingest_real.py",
     "ingest:za": "python3 scripts/ingest_za_booklet.py",
-    "review:za": "python3 scripts/review_za_booklet.py"
+    "review:za": "python3 scripts/review_za_booklet.py",
+    "portable": "node scripts/build_portable.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.35",

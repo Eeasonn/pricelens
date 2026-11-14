@@ -20,7 +20,8 @@ import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
 import { platformPriceSpread, priceForSelection, lowestPriceColorSku } from './aggregate';
 import { anomalyManualOf, detectSuspects, promoBandHitOf, readAnomalyRule } from './anomaly';
 import { displayRrpOf } from './currency';
-import { errorProvenance, REAL_ALERT_PROVENANCE, type DataProvenance, type DataResult } from './provenance';
+import { errorProvenance, type DataProvenance, type DataResult } from './provenance';
+import { weeklyPriceProvenanceOf } from './priceProvenance';
 
 export type AlertType = 'price-change' | 'promo' | 'platform-gap' | 'own-gap';
 
@@ -202,7 +203,7 @@ function effThreshold(cfg: AlertCfg, key: string, type: AlertType): number {
 export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   const currency = cfg.currency ?? 'usd';
   const scope = cfg.scope ?? DEFAULT_DATA_SCOPE;
-  const provenance = cfg.provenance ?? REAL_ALERT_PROVENANCE;
+  const provenance = cfg.provenance ?? weeklyPriceProvenanceOf(scope);
   // 与其他取数入口保持一致：不支持的国家/产业不产生任何预警。
   if (!isDataScopeSupported(scope)) return [];
   // 持久化状态或外部调用可能带重复/空 key；重复订阅会导致重复事件，且 own-gap
@@ -442,8 +443,8 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
 /** Adapter-facing wrapper: callers can distinguish no scope, no triggers and
  * a failed calculation instead of treating every empty array as the same. */
 export function buildAlertResult(cfg: AlertCfg): DataResult<AlertItem[]> {
-  const provenance = cfg.provenance ?? REAL_ALERT_PROVENANCE;
   const scope = cfg.scope ?? DEFAULT_DATA_SCOPE;
+  const provenance = cfg.provenance ?? weeklyPriceProvenanceOf(scope);
   if (!isDataScopeSupported(scope)) {
     return {
       state: 'empty',

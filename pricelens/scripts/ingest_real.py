@@ -492,20 +492,18 @@ def cfg_features(industry, romram):
 
 
 def pair_configs(own_cfgs, comp_cfgs, industry):
-    """SKU 级配置匹配（2026-11-11 Eason 三条修订，取代 2026-10-29 全局贪心）：
-    平板先按屏幕尺寸分桶：两侧尺寸各自升序 rank-zip（12.2→11"、13.2→13"，
-    图3：MatePad Pro 2025 全部 12.2 对 M5 11 寸、13.2 对苹果 13 寸）；
-    我司单尺寸 = 友商最近尺寸（图2：MatePad Pro Max 13.2 → iPad Pro M5 13"）。
-    桶内按（存储, 内存）升序「便宜对便宜」：
-      两侧数量相等 → 一一对应（图1：nova 12+256 对 Honor 600 8+256、
-        12+512 对 600 12+256）；
-      友商更多 → 我司认领同 RAM 的全部友商变体（存储升序 ≤4；图4：iPad Air M4
-        8+128/8+256 归我司 8+256、12+128/12+256 归我司 12+256）；无主友商按
-        存储（次按内存）就近归档；
-      我司更多（PaperMatte 等友商没有的变体）→ 每个我司配置配最近友商，友商复用
-        （图3：两行 PaperMatte 也拿到 iPad Pro M5）。
-    手机同三分支（无尺寸层）。我司 1 配置 vs 友商多配置维持 2026-10-29 口径
-    （同存储全变体 ≤4 → 就近一个）。
+    """SKU 级配置匹配（2026-11-13 Eason，取代 2026-11-11 升序 zip）：
+    平板先按屏幕尺寸分桶（规则不变）；桶内/手机按「锚点 + ROM→RAM 两级级联 +
+    配置占用」：
+      ① 锚点：ROM+RAM 完全一致的 1:1 先配（我司配置按存储升序）；
+      ② 级联：无锚点的我司配置先取 ROM 一致，没有往下一档存储（往上仅兜底）；
+         桶内再取 RAM 一致，没有取下一档 RAM；
+      ③ 占用：每个竞品配置只被一个我司配置行占用（nova 8+256 行配走 X9D 8+256
+         后，8+512 行在同桶取 12+256——2026-11-13 例）；全部被占用才复用
+         （平板单配置竞品如 iPad Pro M5 被两行 PaperMatte 共用，规则不变）；
+      ④ 富余：仍未配对的竞品配置按同距离键归档最近我司配置（≤4，保留同 RAM
+         全变体富余行，如 iPad Air M4 8+128/8+256 归我司 8+256）。
+    我司 1 配置 vs 友商多配置维持 2026-10-29 口径（同存储全变体 ≤4 → 就近一个）。
     穿戴：2026-11-10 层级塌缩后双侧均只剩型号级单配置（'—'）→ 走通用 1:1 分支；
     音频/IoT/PC：1:1。"""
     if not own_cfgs or not comp_cfgs:
@@ -537,31 +535,73 @@ def pair_configs(own_cfgs, comp_cfgs, industry):
                 f = f_map[c]
                 return (in_key(c), abs((f["rom"] or 0) - (o["rom"] or 0)), c)
             return [(o_cfgs[0], sorted(c_cfgs, key=close)[0])]
+        # 2026-11-13 Eason：多对多改「锚点 + ROM→RAM 两级级联 + 配置占用」，取代
+        # 2026-11-11 的升序 zip（zip 按位置配对无视语义：nova 8+256 曾配 A37 8+128）。
+        # 规则：① ROM 一致的先配，没有则往下一档存储（只往下，往上仅兜底）；
+        # ② 桶内 RAM 一致的先配，没有则取下一档 RAM；
+        # ③ 每个竞品配置只被一个我司配置行占用（8+256 行配走 X9D 8+256 后，
+        #    8+512 行在同桶只能取 12+256）；全部被占用才复用（平板单配置竞品）；
+        # ④ 富余竞品配置按同距离键归档到最近我司配置（保留同 RAM 全变体的富余行）。
         o = sorted(o_cfgs, key=rank_key)
         c = sorted(c_cfgs, key=rank_key)
-        if len(o) == len(c):
-            return list(zip(o, c))
-        if len(c) > len(o):
-            # 友商更多：同 RAM 全变体归我司（≤4），无主友商按存储（次按内存）就近归档
-            of = [feats(x) for x in o]
-            claims = {i: [] for i in range(len(o))}
-            for j, y in enumerate(c):
-                f = feats(y)
-                same_ram = [i for i in range(len(o)) if of[i]["ram"] and of[i]["ram"] == f["ram"]]
-                if len(same_ram) == 1:
-                    claims[same_ram[0]].append(j)
-                else:
-                    best = min(range(len(o)), key=lambda i: (abs((of[i]["rom"] or 0) - (f["rom"] or 0)),
-                                                             abs((of[i]["ram"] or 0) - (f["ram"] or 0)), i))
-                    claims[best].append(j)
-            pairs = []
-            for i in range(len(o)):
-                for j in sorted(claims[i], key=lambda j: rank_key(c[j]))[:4]:
-                    pairs.append((o[i], c[j]))
-            return pairs
-        # 我司更多（PaperMatte 等友商没有的变体）：每个我司配置配最近友商，友商复用
-        return [(x, min(c, key=lambda y: (abs(rank_key(x)[0] - rank_key(y)[0]),
-                                          abs(rank_key(x)[1] - rank_key(y)[1]), y))) for x in o]
+        cf = {x: feats(x) for x in c}
+
+        def rom_rank(o_rom, c_rom):
+            """(级, 桶内距离)：一致 0 < 往下档 1 < 往上档 2（往上仅兜底）。"""
+            if o_rom and c_rom:
+                if c_rom == o_rom:
+                    return (0, 0)
+                if c_rom < o_rom:
+                    return (1, o_rom - c_rom)
+                return (2, c_rom - o_rom)
+            return (3, 0)
+
+        def ram_rank(o_ram, c_ram):
+            if o_ram and c_ram:
+                if c_ram == o_ram:
+                    return (0, 0)
+                if c_ram < o_ram:
+                    return (1, o_ram - c_ram)
+                return (2, c_ram - o_ram)
+            return (3, 0)
+
+        def cand_key(o_f, x):
+            f = cf[x]
+            return (rom_rank(o_f["rom"], f["rom"]), ram_rank(o_f["ram"], f["ram"]), x)
+
+        # Phase A：锚点 = ROM+RAM 完全一致，1:1 先占（own 升序）
+        pairs = []
+        claimed = set()
+        o_f = {x: feats(x) for x in o}
+        for x in o:
+            f = o_f[x]
+            hit = next((y for y in c if y not in claimed
+                        and cf[y]["rom"] == f["rom"] and cf[y]["ram"] == f["ram"]), None)
+            if hit is not None:
+                claimed.add(hit)
+                pairs.append((x, hit))
+        # Phase B：无锚点我司配置级联回退（未被占用优先，全部占用才复用）
+        for x in o:
+            if any(p[0] == x for p in pairs):
+                continue
+            f = o_f[x]
+            free = [y for y in c if y not in claimed]
+            pool = free or c
+            hit = min(pool, key=lambda y: cand_key(f, y))
+            if free:
+                claimed.add(hit)
+            pairs.append((x, hit))
+        # Phase C：富余竞品配置归档到最近我司配置（同 RAM 全变体的富余行，≤4/我司配置）
+        extras = {}
+        for y in c:
+            if y in claimed:
+                continue
+            best = min(o, key=lambda x: (cand_key(o_f[x], y), x))
+            extras.setdefault(best, []).append(y)
+        for x, ys in extras.items():
+            for y in sorted(ys, key=lambda y: rank_key(y))[:4]:
+                pairs.append((x, y))
+        return pairs
 
     if industry not in ("phone", "tablet"):
         if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
@@ -634,6 +674,34 @@ def guess_brand(text):
             if b:
                 return b
     return "OTHER"
+
+
+# 2026-11-13 Eason：药丸品牌内联判定（dim_product.brand_inline）。
+# 业务规则：型号名一眼能认出品牌的（iPhone、Galaxy、Redmi Note…）药丸不内联品牌词
+# （悬停 title 恒出全名）；看不出的（小米数字系列 15/16、Samsung A37、Honor X9D 这类
+# 裸型号名）固定内联品牌。判定 = 型号名不含任何「品牌词/系列特征词」→ 内联。
+# 人工例外走 overrides.brand_inline_overrides（model_id → bool）。
+SERIES_NAME_MARKERS = [
+    # Apple 产品线（品牌词 apple 之外的名字级特征）
+    "iphone", "ipad", "macbook", "mac ", "airpods",
+    # Samsung / Xiaomi / Honor 产品线
+    "galaxy", "redmi", "poco", "magic",
+    # 华为系（自有产品名自带身份）
+    "mate", "pura", "nova", "enjoy", "freebuds", "freearc", "freeclip",
+    "watch gt", "watch fit", "watch ultimate", "watch kids", "watch d",
+    # PC 特征线
+    "thinkpad", "ideapad", "yoga",
+]
+ALL_NAME_MARKERS = sorted({t for ts in BRAND_TOKENS.values() for t in ts} | set(SERIES_NAME_MARKERS),
+                          key=len, reverse=True)
+
+
+def is_brand_inline(model_name):
+    """型号名不含品牌词/系列特征词 = 名字本身认不出品牌 → 药丸内联品牌词（True）。"""
+    t = fold(sval(model_name) or "").lower()
+    if not t:
+        return True
+    return not any(tok in t for tok in ALL_NAME_MARKERS)
 
 
 # ---------------------------------------------------------------- 主流程
@@ -911,6 +979,7 @@ def main():
             "sku_id": sku, "model_id": mid, "industry": ind, "brand": head["品牌"],
             "is_own": head["prefix"] == "own", "series": "",
             "model_name": head["model_name"], "romram": head["romram"], "color": head["color"],
+            "brand_inline": is_brand_inline(head["model_name"]),
             "tier_code": tier_code_of(ref, ind),
             "ref_price_usd": round(float(ref), 1) if pd.notna(ref) else None,
             "launch_date": str(g["week_wed"].min()), "eol_date": None,
@@ -924,6 +993,11 @@ def main():
             model_min[p["model_id"]] = p["tier_code"]
     for p in DIM_PRODUCT:
         p["tier_code"] = model_min[p["model_id"]]
+    # 品牌内联人工覆写（2026-11-13）：overrides.brand_inline_overrides = {model_id: bool}
+    for _mid, _v in (OV.get("brand_inline_overrides") or {}).items():
+        for p in DIM_PRODUCT:
+            if p["model_id"] == _mid and isinstance(_v, bool):
+                p["brand_inline"] = _v
     wks = raw.groupby(["sku_id", "cc"])["week_id"].nunique()
     SKU_CC_WEEKS.update({k: int(v) for k, v in wks.items()})
     ind_of_model = {p["model_id"]: p["industry"] for p in DIM_PRODUCT}

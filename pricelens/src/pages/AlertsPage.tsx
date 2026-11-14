@@ -70,7 +70,8 @@ import BrandDot from '../components/BrandMark';
 import { AlertBell, AlertDetailDrawer, AlertLifecycleTag, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
 import { color, fontSize, formatPrice, radius, shadow, space, selectSoft } from '../theme/tokens';
 import { scopeLabels } from '../dataModel/scope';
-import { REAL_ALERT_PROVENANCE, provenanceSummary } from '../dataModel/provenance';
+import { provenanceSummary } from '../dataModel/provenance';
+import { weeklyPriceProvenanceOf } from '../dataModel/priceProvenance';
 
 /** 四类规则的文案与滑杆量程（追补⑨定稿沿用） */
 const TYPE_RULES: Record<
@@ -453,6 +454,7 @@ export default function AlertsPage() {
     scope: { countryCode: state.countryCode, industry: state.industry },
     platform: state.platform,
   }), [state.alertSubs, state.alertTypes, state.alertThresholds, state.alertProducts, state.currency, state.countryCode, state.industry, state.platform]);
+  const sourceProvenance = weeklyPriceProvenanceOf(alertCfg.scope);
   const records = useMemo(
     () => materializeAlertRecords(latestList, alertCfg, recordOverrides),
     [latestList, alertCfg, recordOverrides],
@@ -1062,9 +1064,9 @@ export default function AlertsPage() {
             <span aria-hidden>·</span>
             <span>{state.currency === 'usd' ? 'USD' : '本币'}</span>
             <span aria-hidden>·</span>
-            <span title="当前页面数据覆盖的最新采集周">最新采集 {latestList[0] ? weekTag(latestList[0].weekId) : '—'}</span>
+            <span title="当前监控范围内最新触发预警的周，不代表最新采集周">最新触发 {latestList[0] ? weekTag(latestList[0].weekId) : '—'}</span>
             <span aria-hidden>·</span>
-            <span title="预警计算使用与价格事实表同一批次；缺采周不插值" style={{ color: color.body }}>{provenanceSummary(REAL_ALERT_PROVENANCE)}</span>
+            <span title={`${sourceProvenance.source.version}；${sourceProvenance.notes?.join(' ')}`} style={{ color: color.body }}>{provenanceSummary(sourceProvenance)}</span>
           </div>
           {modelFilter && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: space.md, padding: '8px 12px', border: `1px solid ${color.link}33`, borderRadius: radius.control, background: selectSoft, color: color.body, fontSize: 12 }}>

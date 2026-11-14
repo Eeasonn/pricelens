@@ -227,8 +227,9 @@ describe('PriceLens Agent deterministic core', () => {
   it('attaches provenance to the context and deterministic response', async () => {
     const context = buildAgentContext('dashboard', state, []);
     expect(context.provenance?.source).toBe('pricelens-context');
-    expect(context.dataVersion).toBe('local-data-v1');
+    expect(context.dataVersion).toMatch(/^weekly-sha256-[a-f0-9]{64}$/);
     const response = await runAgent('最近有价周哪个平台最便宜？', context);
+    expect(response.provenance?.dataVersion).toBe(context.dataVersion);
     expect(response.provenance?.contextFingerprint).toBe(context.fingerprint);
     expect(isContextStale(context, `${context.fingerprint}-new`)).toBe(true);
   });

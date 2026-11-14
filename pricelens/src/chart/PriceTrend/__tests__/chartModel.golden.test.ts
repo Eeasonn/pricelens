@@ -8,7 +8,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import type { CurrencyMode, OfferInfo, Series, SeriesPoint } from '../../../dataModel/types';
-import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, adaptiveMinBuckets, adaptiveRangeOf, bucketSpans, computeYAxis, fmtAxisTick, fmtInt, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, xPxOf, yPxOf, type Bucket, type YScale } from '../helpers';
+import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, defaultTailBuckets, tailDefaultRange, bucketSpans, computeYAxis, fmtAxisTick, fmtInt, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, xPxOf, yPxOf, type Bucket, type YScale } from '../helpers';
 import {
   buildChangeMarks,
   buildEndpointBadges,
@@ -947,12 +947,12 @@ describe('小件', () => {
   });
 });
 
-// ---------------- 时间自适应（helper 支持 padding；看板自动模式传 0） ----------------
+// ---------------- 默认查看窗口（2026-11-13 时间筛选单值化，取代自适应全程跨度） ----------------
 
 const mkBuckets = (n: number): Bucket[] =>
   Array.from({ length: n }, (_, i) => ({ id: `2026${String(i + 1).padStart(2, '0')}`, xLabel: '' }));
 
-describe('时间自适应（seriesSpanRange / adaptiveRangeOf）', () => {
+describe('默认查看窗口（seriesSpanRange / tailDefaultRange）', () => {
   const B12 = mkBuckets(12); // 202601..202612
 
   it('跨度 = 任一系列有值（price 或 rrp）的最小/最大下标', () => {
@@ -971,39 +971,34 @@ describe('时间自适应（seriesSpanRange / adaptiveRangeOf）', () => {
     expect(seriesSpanRange([s])).toBeNull();
   });
 
-  it('自动极值模式不加 padding，左端就是最早有效价格桶', () => {
-    expect(adaptiveRangeOf(B12, [2, 7], 0)).toEqual(['202603', '202608']);
+  it('默认窗口 = 跨度末端向前 N 桶（周 12）；12 桶跨度 → 锚跨度起点整段覆盖', () => {
+    expect(tailDefaultRange(B12, [2, 11], 'week')).toEqual(['202603', '202612']);
   });
 
-  it('自适应范围 = 跨度 ±2 个桶（spec 例：202603-202608 → 可选 202601-202610）', () => {
-    expect(adaptiveRangeOf(B12, [2, 7])).toEqual(['202601', '202610']);
+  it('跨度短于默认窗口 → 锚跨度起点（不早于产品在售起点，不造空桶）', () => {
+    expect(tailDefaultRange(B12, [2, 7], 'week')).toEqual(['202603', '202608']);
   });
 
-  it('钳在数据全集内：右缘不超末端（= 当前时间）、左缘不早于起点', () => {
-    expect(adaptiveRangeOf(B12, [4, 11])).toEqual(['202603', '202612']); // 末端 +2 被钳
-    expect(adaptiveRangeOf(B12, [0, 3])).toEqual(['202601', '202606']); // 起点 −2 被钳
+  it('跨度长于默认窗口 → 只取近段（右缘 = 最晚有价桶）', () => {
+    const B20 = mkBuckets(20); // 202601..202620
+    expect(tailDefaultRange(B20, [0, 19], 'week')).toEqual(['202609', '202620']);
+    expect(tailDefaultRange(B20, [3, 19], 'week')).toEqual(['202609', '202620']);
   });
 
-  it('可读下限（2026-11-09）：跨度不足 minLen 时锚数据末端向左补足，仍钳全集左缘', () => {
-    // 跨度 [7,11] 只有 5 桶，minLen=8 → 补到 [4,11]
-    expect(adaptiveRangeOf(B12, [7, 11], 0, 8)).toEqual(['202605', '202612']);
-    // 补足撞全集左缘被钳：跨度 [2,3] 2 桶，minLen=8 → 想要 [-4,3] → 钳 [0,3]
-    expect(adaptiveRangeOf(B12, [2, 3], 0, 8)).toEqual(['202601', '202604']);
-    // 跨度已足 → 不动
-    expect(adaptiveRangeOf(B12, [2, 11], 0, 8)).toEqual(['202603', '202612']);
-    // minLen=0 = 关闭下限（老行为）
-    expect(adaptiveRangeOf(B12, [7, 11], 0, 0)).toEqual(['202608', '202612']);
+  it('默认窗口按粒度：月 6 / 季 4（跨度长于窗口时取近段）', () => {
+    expect(tailDefaultRange(B12, [0, 11], 'month')).toEqual(['202607', '202612']);
+    expect(tailDefaultRange(B12, [0, 11], 'quarter')).toEqual(['202609', '202612']);
   });
 
-  it('可读下限按粒度：周 8 / 月 3 / 季 2', () => {
-    expect(adaptiveMinBuckets('week')).toBe(8);
-    expect(adaptiveMinBuckets('month')).toBe(3);
-    expect(adaptiveMinBuckets('quarter')).toBe(2);
+  it('窗口长度按粒度：周 12 / 月 6 / 季 4', () => {
+    expect(defaultTailBuckets('week')).toBe(12);
+    expect(defaultTailBuckets('month')).toBe(6);
+    expect(defaultTailBuckets('quarter')).toBe(4);
   });
 
   it('span null / 空桶 → null', () => {
-    expect(adaptiveRangeOf(B12, null)).toBeNull();
-    expect(adaptiveRangeOf([], [0, 1])).toBeNull();
+    expect(tailDefaultRange(B12, null, 'week')).toBeNull();
+    expect(tailDefaultRange([], [0, 1], 'week')).toBeNull();
   });
 });
 
@@ -1057,22 +1052,6 @@ describe('真实数据快照（ingest 2026-10-20）', () => {
     expect(buildTickRows(geom)).toMatchSnapshot('tickRows');
     expect(labelPlan).toMatchSnapshot('labelPlan');
     expect({ marks: [...marks.entries()], seriesTypes: (option!.series as Record<string, unknown>[]).map((s) => s.type) }).toMatchSnapshot('marks+types');
-  });
-});
-
-// ---------------- 第五十轮：页面快照注册表（历史点取证 = 截图） ----------------
-
-describe('snapshotFor（demo 轮转绑定）', () => {
-  it('同一 (店铺, 周) 恒定同一张；结果总在注册表内且字段齐全', async () => {
-    const { snapshotFor } = await import('../../../data/snapshots');
-    const a = snapshotFor('Ozon Россия', '202641');
-    const b = snapshotFor('Ozon Россия', '202641');
-    expect(b).toBe(a); // 确定性
-    expect(a.src.length).toBeGreaterThan(0);
-    expect(/^\d{4}-\d{2}-\d{2}$/.test(a.capturedAt)).toBe(true); // 采集日期
-    expect(a.sourceLabel.length).toBeGreaterThan(0);
-    expect(a.pageLabel.length).toBeGreaterThan(0);
-    expect(snapshotFor('TrueSmart', '202620').capturedAt).toBe(a.capturedAt); // 同批采集
   });
 });
 

@@ -85,6 +85,7 @@ import {
   curveNameOf,
   dedupeSpecText,
   nameZoneWidthOf,
+  seriesPillMetaOf,
   type LineShapeChoice,
   type PromoBand,
 } from './chartModel';
@@ -96,8 +97,7 @@ import {
   GRID,
   PANE_HEAD_H,
   TICK_PX,
-  adaptiveMinBuckets,
-  adaptiveRangeOf,
+  tailDefaultRange,
   axisTickTextsOf,
   bucketLatestWeekLabel,
   bucketSpans,
@@ -176,9 +176,10 @@ export default function PriceTrend(props: {
   const effMains = state.mains;
   const mainsEmpty = effMains.length === 0;
   // 第196轮复检整改3（2026-11-05，Eason）：稳定版价格页取数口径 = 顶部全局平台
-  // 筛选器（state.platform，与量价页 2026-11-05 同源同键）；店铺级选择先降级为
-  // 平台级（平台内每周最低价店铺自动口径）——每产品选择项上的 platform 覆写在
-  // stable 失效。iterate = null 哨兵，取数仍走每线 platform
+  // 筛选器（state.platform，与量价页 2026-11-05 同源同键）。2026-11-14（Eason「平台
+  // 还是能选到店铺」）：店铺级降级退役（platformLevelForChannel = 透传）——店铺级
+  // 全局选择原样钉该店铺取价；平台级/自动 = 平台内每周最低价（折扣率最大）店铺。
+  // 每产品选择项上的 platform 覆写在 stable 仍失效。iterate = null 哨兵，走每线 platform
   const stablePlatform = useMemo(() => (STABLE ? platformLevelForChannel(state.platform) : null), [state.platform]);
   // 合并图（单卡）取数组：全部主品配置 + 全部对比区并集（按卡序去重）
   const { mainSels, compareSels } = useMemo(() => flatSelections(effMains), [effMains]);
@@ -438,52 +439,54 @@ export default function PriceTrend(props: {
   // 桶 id 序（面板时间轴的全域刻度输入，与 buckets 同序）
   const bucketIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
 
-  // ---- 时间自适应：上方极值筛选器 = 所选产品最早/最晚有效价格桶 ----
+  // ---- 默认时间窗口（2026-11-13 Eason 时间筛选单值化，取代自动全程跨度）：
+  // 跟随态（adaptive 默认开）= 所选产品跨度末端向前取 N 桶（周12/月6/季4）——
+  // 选完产品图表默认只展示近期窗口；更早历史靠底部时间拖块左拉（拖动即固定范围）。
   // 范围变化时窗口复位为整个范围。即使新增产品落在原有跨度内，也要重新套用一次
-  // 自动极值（例如从总览聚焦周进入后，清除局部窗口）。
-  // 关闭时清 key；用户手动刷选后的自定义范围不受产品变化影响。
-  // 注意本 effect 声明在 granRef 联动之后：粒度切换时先换桶、自适应范围随后覆盖。
+  // 默认窗口（例如从总览聚焦周进入后，清除局部窗口）。
+  // 手动固定（拖块/单值选择器置 adaptive=false）后不再跟随；口径切换/重置视图回默认。
+  // 注意本 effect 声明在 granRef 联动之后：粒度切换时先换桶、默认窗口随后覆盖。
   const span = useMemo(() => seriesSpanRange(allSeries), [allSeries]);
-  const adaptiveBounds = useMemo(
-    () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0, adaptiveMinBuckets(state.granularity)) : null),
-    [state.adaptive, buckets, span],
+  const tailBounds = useMemo(
+    () => (state.adaptive ? tailDefaultRange(buckets, span, state.granularity) : null),
+    [state.adaptive, buckets, span, state.granularity],
   );
   const selectedProductKey = JSON.stringify([
     mainSels.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
     compareSels.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
   ]);
-  const adaptiveKey = adaptiveBounds
-    ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}|${selectedProductKey}`
+  const tailKey = tailBounds
+    ? `${state.granularity}|${tailBounds[0]}|${tailBounds[1]}|${selectedProductKey}`
     : '';
-  const adaptiveAppliedRef = useRef('');
-  // 本轮（视图态跨页保留）：挂载首跑若范围已与自动极值一致（会话态恢复场景，
+  const tailAppliedRef = useRef('');
+  // 本轮（视图态跨页保留）：挂载首跑若范围已与默认窗口一致（会话态恢复场景，
   // rangeStart/End 已持久化）则不复位窗口——切页返回时持久化恢复的 windowIds
-  // 不被自适应重套清掉；范围确有变化（如从总览换国进入）仍按原样复位
-  const adaptiveMountedRef = useRef(false);
+  // 不被默认窗口重套清掉；范围确有变化（如从总览换国进入）仍按原样复位
+  const tailMountedRef = useRef(false);
   useLayoutEffect(() => {
-    if (!adaptiveBounds) {
-      adaptiveAppliedRef.current = '';
+    if (!tailBounds) {
+      tailAppliedRef.current = '';
       return;
     }
-    if (adaptiveAppliedRef.current === adaptiveKey) return;
-    // 自适应开着时，范围 = 顶部所选全部产品（主品 + 对比产品）的有效价格跨度；量价页
-    // 自 2026-11-02 起同一口径（flatSelections 合并图取数），两页往返范围不再抖动。
+    if (tailAppliedRef.current === tailKey) return;
+    // 默认窗口 = 顶部所选全部产品（主品 + 对比产品）跨度的近段；量价页同一口径
+    // （flatSelections 合并图取数），两页往返范围不再抖动。
     // 端点不一致就重套，不因现范围仍盖住一部分数据就沿用旧跨度。
     // 挂载时端点已经一致：保留会话里的查看窗口。范围若变化，先同步 rangeWatch 基线，
     // 避免紧随其后的 rangeWatch 清掉挂载焦点周刚设的查看窗口。
-    adaptiveAppliedRef.current = adaptiveKey;
-    const rangeUnchanged = state.rangeStart === adaptiveBounds[0] && state.rangeEnd === adaptiveBounds[1];
+    tailAppliedRef.current = tailKey;
+    const rangeUnchanged = state.rangeStart === tailBounds[0] && state.rangeEnd === tailBounds[1];
     if (!rangeUnchanged) {
-      actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
-      rangeWatchRef.current = { gran: state.granularity, key: `${adaptiveBounds[0]}|${adaptiveBounds[1]}` };
+      actions.set({ rangeStart: tailBounds[0], rangeEnd: tailBounds[1] });
+      rangeWatchRef.current = { gran: state.granularity, key: `${tailBounds[0]}|${tailBounds[1]}` };
     }
-    if (adaptiveMountedRef.current || !rangeUnchanged) {
-      commitWindowIds(null); // 窗口复位 = 整个自动极值范围
-      commitPanelWins({}); // 自适应重算 → 面板独立窗口一并回落共享窗口
+    if (tailMountedRef.current || !rangeUnchanged) {
+      commitWindowIds(null); // 窗口复位 = 整个默认窗口范围
+      commitPanelWins({}); // 默认窗口重算 → 面板独立窗口一并回落共享窗口
     }
-    adaptiveMountedRef.current = true;
+    tailMountedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adaptiveKey]);
+  }, [tailKey]);
 
   // 面板集合变化（选择浮窗增删卡）→ 独立窗口失义，整体回落共享窗口
   const panelKeysKey = JSON.stringify(effMains.map((c) => c.id));
@@ -526,7 +529,8 @@ export default function PriceTrend(props: {
     setFocusWeekId(null); // 时间筛选器变化 = 焦点周完成使命（第一百九十轮）
   }, [state.granularity, state.rangeStart, state.rangeEnd]);
 
-  // 左侧时间筛选器的范围 = 底部窗口轨道的范围；窗口本身仍可在轨道内缩放查看。
+  // 顶部时间筛选器（单值最晚时间）+ 底部拖块共同决定筛选范围 [rangeStart, rangeEnd]；
+  // 查看窗口（焦点周下钻）仍可在筛选范围内临时缩放，筛选范围一变即复位。
   const filterBounds = useMemo<[number, number]>(() => {
     const indexOf = (id: string, fallback: number): number => {
       const i = buckets.findIndex((b) => b.id === id);
@@ -1089,7 +1093,14 @@ export default function PriceTrend(props: {
   //      （dataModel/volume 与 pages/volume/marginCost，量价侧文件零改动）。销量 =
   //      量层柱/面积数据源；销毛 = 悬停小卡上方的迷你卡（月版本模拟模型，非真实成本；
   //      桶无有效价月 = null → 卡内显「—」，不造假口径）。对比产品不出销毛卡 ----
-  const ownMainCard = useMemo(() => effMains.find((c) => c.main) ?? null, [effMains]);
+  // 我司主品（2026-11-13 Eason：销量只认我司）——竞品当第一组主品时量带回落到
+  // 首个我司主品组；全竞品 = 无量带
+  const ownMainCard = useMemo(
+    () =>
+      effMains.find((c) => c.main && visSeries.find((v) => v.key === seriesKeyOf(c.main!))?.isOwn === true) ??
+      null,
+    [effMains, visSeries],
+  );
   const ownMainSel = ownMainCard?.main ?? null;
   const ownMainKey = ownMainSel ? seriesKeyOf(ownMainSel) : null;
   const winBucketIds = useMemo(() => bucketIds.slice(win.s, win.e + 1), [bucketIds, win.s, win.e]);
@@ -1099,7 +1110,11 @@ export default function PriceTrend(props: {
   //      单组 = candidates null，量带行为与原先完全一致 ----
   const volumeCandidates = useMemo(
     () => {
-      const mains = effMains.flatMap((c) => (c.main ? [c.main] : []));
+      // 销量只认我司主品（2026-11-13 Eason）：竞品当组主品不入候选、不出「量」按钮
+      // （模拟销量口径 = 我司产品，与销毛卡 isOwn 门控同语义）
+      const mains = effMains
+        .flatMap((c) => (c.main ? [c.main] : []))
+        .filter((sel) => visSeries.find((v) => v.key === seriesKeyOf(sel))?.isOwn === true);
       if (mains.length <= 1) return null;
       return mains.map((sel) => {
         const key = seriesKeyOf(sel);
@@ -1360,11 +1375,12 @@ export default function PriceTrend(props: {
   const yAxisTickTexts = useMemo(() => axisTickTextsOf(yFinal), [yFinal]);
   // 第196轮整改3（名称带恢复，蓝本 987da34^）：带宽 = 当前图上可见产品名自适应
   // （nameZoneWidthOf，钳 [112, 320]、以名称完整不换行为准，旧基准 188）；合并图与
-  // 全部分离面板统一取全局最长名（面板保持等宽）
+  // 全部分离面板统一取全局最长名（面板保持等宽）。2026-11-13 两行药丸：传两行
+  // 规格（行1 = 品牌词+产品名、行2 = 配置 chip），带宽取两行较宽者
   const nameZoneW = useMemo(
     () =>
       nameZoneWidthOf(
-        (splitActive ? panelViews.flatMap((p) => p.vis) : chartSeries).map((s) => curveNameOf(s)),
+        (splitActive ? panelViews.flatMap((p) => p.vis) : chartSeries).map((s) => seriesPillMetaOf(s)),
       ),
     [splitActive, panelViews, chartSeries],
   );
@@ -1536,6 +1552,15 @@ export default function PriceTrend(props: {
     if (!buckets[s] || !buckets[e]) return;
     setFocusWeekId(null); // 用户主动刷选 = 焦点带完成使命（第一百九十轮）
     commitWindowIds([buckets[s].id, buckets[e].id]);
+  };
+
+  // 2026-11-13 时间筛选单值化：合并模式底部拖块 = 筛选范围编辑器——轨道全域 =
+  // 数据全集，两手柄直接写最早/最晚时间（单值选择器只管最晚时间）。拖动 =
+  // 固定范围（adaptive 置 false，退出跟随产品的默认近段窗口）。
+  const onFilterRangeChange = (s: number, e: number): void => {
+    if (!buckets[s] || !buckets[e]) return;
+    setFocusWeekId(null);
+    actions.set({ adaptive: false, rangeStart: buckets[s].id, rangeEnd: buckets[e].id });
   };
 
   /** 独立模式下面板时间轴只动自己的生效窗口（共享窗口未变）。 */
@@ -2127,18 +2152,19 @@ export default function PriceTrend(props: {
           />
         </div>
       )}
-      {/* X 刷选条（合并模式唯一底部时间轴，第一百三十一轮波2起为纯查看窗口轨道）：
-          只调整上方极值范围内的查看窗口；时间筛选在顶部筛选条。 */}
+      {/* X 刷选条（合并模式唯一底部时间轴；2026-11-13 起为筛选范围编辑器）：
+          轨道全域 = 数据全集，两手柄 = 最早/最晚时间直接落筛选器；最晚时间单值
+          选择器在顶部筛选条。 */}
           {!compareTab && !splitActive && buckets.length > 0 && visSeries.length > 0 && (
             <XBrush
               buckets={buckets}
-              s={win.s}
-              e={win.e}
-              lo={filterBounds[0]}
-              hi={filterBounds[1]}
+              s={filterBounds[0]}
+              e={filterBounds[1]}
+              lo={0}
+              hi={buckets.length - 1}
               plotLeft={gridLeft}
               granularity={state.granularity}
-              onChange={onWindowChange}
+              onChange={onFilterRangeChange}
               onAdjusting={setAdjusting}
             />
           )}

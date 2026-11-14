@@ -138,8 +138,7 @@ import {
   GRID,
   PANE_HEAD_H,
   TICK_PX,
-  adaptiveMinBuckets,
-  adaptiveRangeOf,
+  tailDefaultRange,
   axisTickTextsOf,
   computeYAxis,
   convertWindowIds,
@@ -524,41 +523,44 @@ export default function VolumePrice() {
     }
   }, [selMains, selCompares, state.granularity, dataStart, dataEnd, state.currency, state.agg, state.financingType, cc, state.industry, configVersion]);
   const span = useMemo(() => seriesSpanRange(selectionSeries), [selectionSeries]);
-  const adaptiveBounds = useMemo(
-    () => (state.adaptive ? adaptiveRangeOf(buckets, span, 0, adaptiveMinBuckets(state.granularity)) : null),
-    [state.adaptive, buckets, span],
+  // 2026-11-13 时间筛选单值化：跟随态默认窗口 = 所选产品跨度末端向前 N 桶
+  // （周12/月6/季4），取代旧「自动全程跨度」；手动固定（拖块/单值选择器置
+  // adaptive=false）后不再跟随，口径切换/重置视图回默认。
+  const tailBounds = useMemo(
+    () => (state.adaptive ? tailDefaultRange(buckets, span, state.granularity) : null),
+    [state.adaptive, buckets, span, state.granularity],
   );
-  const adaptiveProductKey = JSON.stringify([
+  const tailProductKey = JSON.stringify([
     selMains.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
     selCompares.map(({ modelId, romram }) => `${modelId}|${romram}`).sort(),
   ]);
-  const adaptiveKey = adaptiveBounds
-    ? `${state.granularity}|${adaptiveBounds[0]}|${adaptiveBounds[1]}|${adaptiveProductKey}`
+  const tailKey = tailBounds
+    ? `${state.granularity}|${tailBounds[0]}|${tailBounds[1]}|${tailProductKey}`
     : '';
-  const adaptiveAppliedRef = useRef('');
-  const adaptiveMountedRef = useRef(false);
+  const tailAppliedRef = useRef('');
+  const tailMountedRef = useRef(false);
   useLayoutEffect(() => {
-    if (!adaptiveBounds) {
-      adaptiveAppliedRef.current = '';
+    if (!tailBounds) {
+      tailAppliedRef.current = '';
       return;
     }
-    if (adaptiveAppliedRef.current === adaptiveKey) return;
-    // 端点与本页跨度不一致就重套，即使现范围仍盖住主产品数据。
+    if (tailAppliedRef.current === tailKey) return;
+    // 端点与本页默认窗口不一致就重套，即使现范围仍盖住主产品数据。
     // 挂载时端点已经一致：保留会话里的查看窗口。
-    adaptiveAppliedRef.current = adaptiveKey;
-    const rangeUnchanged = state.rangeStart === adaptiveBounds[0] && state.rangeEnd === adaptiveBounds[1];
+    tailAppliedRef.current = tailKey;
+    const rangeUnchanged = state.rangeStart === tailBounds[0] && state.rangeEnd === tailBounds[1];
     if (!rangeUnchanged) {
-      actions.set({ rangeStart: adaptiveBounds[0], rangeEnd: adaptiveBounds[1] });
-      rangeWatchRef.current = { gran: state.granularity, key: `${adaptiveBounds[0]}|${adaptiveBounds[1]}` };
+      actions.set({ rangeStart: tailBounds[0], rangeEnd: tailBounds[1] });
+      rangeWatchRef.current = { gran: state.granularity, key: `${tailBounds[0]}|${tailBounds[1]}` };
       setWindowIds(null);
       setPanelWins((prev) => prev.map(() => null));
-    } else if (adaptiveMountedRef.current) {
+    } else if (tailMountedRef.current) {
       setWindowIds(null);
       setPanelWins((prev) => prev.map(() => null));
     }
-    adaptiveMountedRef.current = true;
+    tailMountedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adaptiveKey]);
+  }, [tailKey]);
 
   // 第一百三十一轮波2：时间筛选器上移顶部筛选条后，改范围不再经过本页——
   // 顶部时间簇手动选段（或页外改动）时查看窗口整体复位为新范围（原

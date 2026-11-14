@@ -1,17 +1,15 @@
 // ============================================================
 // t428u Round 7 R7-M1 · 稳定版平台口径归一的入口统一（setter 即时归一 +
 // 旧持久化原始完整输入不再被有损前置归一裁掉）。
-// 第七轮评审 Major 的两条复现：
-//  1) 自然 UI（总览级联「全部店铺·最低价」提交 {shopIds:[RU:ozon:3P]}）在
-//     Provider 同口径 actions.set 的直接返回分支原样落地——raw shopIds 留在
-//     state 里直到 Agent 打开才收敛；要求 setter 处立即归一 + 页内可见说明；
-//  2) v12 旧持久化先经 normalizePlatformSelection（店铺优先/多平台取一）+
-//     platformLevelForChannel 两道有损前置归一：DNS+AE:noon:3P 丢 DNS 回落
-//     null（auto 333），DNS+RU:ozon:3P 丢 DNS 只剩 OZON，纯 3P 的展开说明
-//     在启动时丢失。要求原始完整输入直达共享「国家合法 + 稳定版能力」归一：
-//     非法剔除、合法店铺透明展开所属平台、与显式平台并集去重、说明全程保留。
+// 2026-11-14 Eason 拍板「平台还是能选到店铺」：R6-M1/R7-M1 的「稳定版仅支持
+// 平台级」店铺展开政策退役——合法店铺级选择在 setter/持久化/URL/Agent 全链路
+// 原样保留（钉该店铺集严格取价），无展开说明；非法剔除说明（R5）保留。
+// 保留的归一纪律：setter/落地仍走 normalizePlatformScope（lawful）——非法店铺
+// 剔除并透明说明、全部非法回落 null（自动全平台）；多值输入不再去重/展开，
+// 并集语义由数据层 effectiveChannelIds 承担。
 // 真实数据证人（生产事实包）：RU nova 14（非 Pro）12+256GB Black W202619 USD
-// —— OZON 1P 332.62 / 3P 394.59：平台级 OZON = 333；DNS 独立站 335.98 → 336。
+// —— OZON 1P 332.62 / 3P 394.59：平台级 OZON = 333；严格 3P = 395；DNS 独立站
+// 335.98 → 336。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,6 +55,7 @@ afterEach(cleanup);
 
 const OZON_PLATFORM: PlatformSelection = { platforms: ['OZON'], shopIds: [], seller: null };
 const OZON_3P_SHOP: PlatformSelection = { platforms: [], shopIds: ['RU:ozon:3P'], seller: null };
+const AE_NOON_SHOP: PlatformSelection = { platforms: [], shopIds: ['AE:noon:3P'], seller: null };
 
 let currentState: FiltersState | null = null;
 let currentActions: FiltersActions | null = null;
@@ -98,7 +97,7 @@ function seedV12Storage(platform: unknown): void {
 
 /** matrix-only（2026-11-10）平板证人版载荷：优势卡需要矩阵覆盖 + OZON 1P<3P 的
  *  同周真实事实——nova 14 的矩阵对手已退役，改用 MatePad Pro 2025 12.2" 12+512
- *  PaperMatte（矩阵对手 Tab S11；own OZON 1P 1024.64 < 3P 1046.97）。 */
+ *  PaperMatte（矩阵对手 Tab S11；own OZON 1P 1024.64 → 1025、3P 1046.97 → 1047）。 */
 function seedV12StorageTablet(platform: unknown): void {
   localStorage.setItem('LPL3.filters', JSON.stringify({
     countryCode: 'RU', industry: 'tablet',
@@ -120,49 +119,41 @@ function openActionOf(card: { actions?: AgentCardAction[] }, label: string): Age
   return open!;
 }
 
-describe('t428u R7-M1 · 同口径 actions.set 店铺级提交在 setter 处立即归一（自然 UI 写入口径）', () => {
-  it('总览级联「全部店铺·最低价」形提交 {shopIds:[RU:ozon:3P]}：state 即时平台级 + 页内可见展开说明 + URL/存储无 shop', async () => {
+describe('t428u R7-M1 · 同口径 actions.set 店铺级提交原样落地（2026-11-14 店铺级恢复）', () => {
+  it('总览级联形提交 {shopIds:[RU:ozon:3P]}：state 即时店铺级保留、无展开说明、URL/存储带 shop', async () => {
     const handle = renderFilters();
     act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
-    // 不带 mains、不换国——此前该分支原样返回 raw shopIds，直到 Agent 打开才收敛
-    expect(handle.state().platform).toEqual(OZON_PLATFORM);
-    expect(handle.state().platform!.shopIds).toEqual([]);
-    const notice = handle.state().platformScopeNotice;
-    expect(notice).toBeTruthy();
-    expect(notice!.note).toContain('稳定版仅支持平台级');
-    expect(notice!.note).toContain('OZON 3P');
-    expect(notice!.countryCode).toBe('RU');
-    expect(notice!.platform).toEqual(OZON_PLATFORM);
-    // 页内条幅（组件路由）立即可见，不等 Agent
-    const banner = screen.getByRole('status');
-    expect(banner.getAttribute('data-platform-scope-note')).not.toBeNull();
-    expect(banner.textContent).toContain('稳定版仅支持平台级');
-    // URL / 持久化同步落平台级
+    expect(handle.state().platform).toEqual(OZON_3P_SHOP);
+    expect(handle.state().platform!.shopIds).toEqual(['RU:ozon:3P']);
+    // 合法店铺级不产生归一说明（展开政策退役），页内无条幅
+    expect(handle.state().platformScopeNotice ?? null).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    // URL / 持久化同步店铺级
     await waitFor(() => {
       expect(window.location.search).toContain('plat=OZON');
-      expect(window.location.search).not.toContain('shop=');
+      expect(window.location.search).toContain('shop=');
     });
     const persisted = JSON.parse(localStorage.getItem('LPL3.filters') ?? '{}');
-    expect(persisted.platform).toEqual(OZON_PLATFORM);
+    expect(persisted.platform).toEqual(OZON_3P_SHOP);
   });
 
-  it('混合/多店铺输入在 setter 处并集去重：1P+3P → OZON 单平台；DNS+店铺 → DNS、OZON', () => {
+  it('混合/多店铺输入原样保留（不去重不展开，并集语义由渠道层承担）', () => {
     const handle = renderFilters();
     act(() => { handle.actions().set({ platform: { platforms: [], shopIds: ['RU:ozon:1P', 'RU:ozon:3P'], seller: null } }); });
-    expect(handle.state().platform).toEqual(OZON_PLATFORM);
+    expect(handle.state().platform).toEqual({ platforms: [], shopIds: ['RU:ozon:1P', 'RU:ozon:3P'], seller: null });
     act(() => { handle.actions().set({ platform: { platforms: ['DNS'], shopIds: ['RU:ozon:3P', 'RU:dns:独立站'], seller: null } }); });
-    expect(handle.state().platform).toEqual({ platforms: ['DNS', 'OZON'], shopIds: [], seller: null });
-    expect(handle.state().platformScopeNotice!.note).toContain('DNS、OZON');
+    expect(handle.state().platform).toEqual({ platforms: ['DNS'], shopIds: ['RU:ozon:3P', 'RU:dns:独立站'], seller: null });
+    expect(handle.state().platformScopeNotice ?? null).toBeNull();
   });
 
-  it('同输入重复提交幂等：说明单条不叠加，条幅文本不重复出现', () => {
+  it('同输入重复提交幂等：state 稳定、无说明无条幅噪音', () => {
     const handle = renderFilters();
     act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
-    const first = handle.state().platformScopeNotice!.note;
+    const first = handle.state().platform;
     act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
-    expect(handle.state().platformScopeNotice!.note).toBe(first);
-    expect(screen.getAllByRole('status')).toHaveLength(1);
-    expect(screen.getByRole('status').textContent!.split('稳定版仅支持平台级').length - 1).toBe(1);
+    expect(handle.state().platform).toEqual(first);
+    expect(handle.state().platformScopeNotice ?? null).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });
 
@@ -186,38 +177,34 @@ describe('t428u R7-M1 · v12 旧持久化：原始完整输入直达共享归一
     expect(row![3]).toBe('DNS');
   });
 
-  it('DNS + 合法店铺（RU:ozon:3P）：并集保留 DNS+OZON（不是只剩 OZON），state/URL/重载稳定', async () => {
+  it('DNS + 合法店铺（RU:ozon:3P）：并集原样保留（DNS 平台 + OZON 店铺），state/URL/重载稳定', async () => {
     seedV12Storage({ platforms: ['DNS'], shopIds: ['RU:ozon:3P'], seller: null });
     const handle = renderFilters();
-    expect(handle.state().platform).toEqual({ platforms: ['DNS', 'OZON'], shopIds: [], seller: null });
-    expect(handle.state().platformScopeNotice!.note).toContain('展开为 DNS、OZON');
+    expect(handle.state().platform).toEqual({ platforms: ['DNS'], shopIds: ['RU:ozon:3P'], seller: null });
+    expect(handle.state().platformScopeNotice ?? null).toBeNull();
     await waitFor(() => {
-      expect(window.location.search).toContain('plat=DNS%2COZON');
+      expect(window.location.search).toContain('plat=DNS');
+      expect(window.location.search).toContain('shop=');
     });
-    expect(window.location.search).not.toContain('shop=');
     const persisted = JSON.parse(localStorage.getItem('LPL3.filters') ?? '{}');
-    expect(persisted.platform).toEqual({ platforms: ['DNS', 'OZON'], shopIds: [], seller: null });
-    // 重载（同浏览器再次挂载 Provider，读已归一的持久化 + plat= 链接同值）——
-    // 口径与说明都稳定（URL 解析产出的 seller 键缺省不影响集合语义）
+    expect(persisted.platform).toEqual({ platforms: ['DNS'], shopIds: ['RU:ozon:3P'], seller: null });
+    // 重载（同浏览器再次挂载 Provider，读已归一的持久化 + plat/shop 链接同值）——口径稳定
     cleanup();
     const reloaded = renderFilters();
-    expect(reloaded.state().platform!.platforms).toEqual(['DNS', 'OZON']);
-    expect(reloaded.state().platform!.shopIds).toEqual([]);
-    expect(reloaded.state().platformScopeNotice?.note).toContain('展开为 DNS、OZON');
+    expect(reloaded.state().platform!.platforms).toEqual(['DNS']);
+    expect(reloaded.state().platform!.shopIds).toEqual(['RU:ozon:3P']);
+    expect(reloaded.state().platformScopeNotice ?? null).toBeNull();
     await waitFor(() => {
-      expect(window.location.search).toContain('plat=DNS%2COZON');
+      expect(window.location.search).toContain('shop=');
     });
   });
 
-  it('纯合法 3P 店铺（RU:ozon:3P）：启动即 OZON 平台级 + 页内可见展开说明', () => {
+  it('纯合法 3P 店铺（RU:ozon:3P）：启动即店铺级保留 + 无展开说明', () => {
     seedV12Storage(OZON_3P_SHOP);
     const handle = renderFilters();
-    expect(handle.state().platform).toEqual(OZON_PLATFORM);
-    const notice = handle.state().platformScopeNotice;
-    expect(notice).toBeTruthy();
-    expect(notice!.note).toContain('稳定版仅支持平台级');
-    expect(notice!.note).toContain('OZON 3P');
-    expect(screen.getByRole('status').textContent).toContain('稳定版仅支持平台级');
+    expect(handle.state().platform).toEqual(OZON_3P_SHOP);
+    expect(handle.state().platformScopeNotice ?? null).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('纯合法平台级（OZON）：无说明无噪音；全部非法（NOON 平台 + AE 店铺）回落 null 并保留透明说明', () => {
@@ -241,81 +228,77 @@ describe('t428u R7-M1 · v12 旧持久化：原始完整输入直达共享归一
     expect(screen.getByRole('status').textContent).toContain('自动');
   });
 
-  it('说明随持久化跨刷新保留（provenance 不因幂等重载丢失）', () => {
+  it('店铺级跨刷新保留（provenance 无说明噪音，platform 原样）', () => {
     seedV12Storage(OZON_3P_SHOP);
     const handle = renderFilters();
-    expect(handle.state().platformScopeNotice).toBeTruthy();
+    expect(handle.state().platform).toEqual(OZON_3P_SHOP);
     cleanup();
     currentState = null; currentActions = null;
     const reloaded = renderFilters();
-    expect(reloaded.state().platform!.platforms).toEqual(['OZON']);
-    expect(reloaded.state().platform!.shopIds).toEqual([]);
-    expect(reloaded.state().platformScopeNotice?.note).toContain('稳定版仅支持平台级');
-    expect(screen.getByRole('status')).toBeTruthy();
+    expect(reloaded.state().platform).toEqual(OZON_3P_SHOP);
+    expect(reloaded.state().platformScopeNotice ?? null).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });
 
-describe('t428u R7-M1 · 纯 3P legacy 载荷的四类结果卡：展开说明进每个输出，补丁无店铺', () => {
-  // 纯 3P 启动归一后的真实 Provider state（load 后的形态）
+describe('t428u R7-M1 · 纯 3P legacy 载荷的四类结果卡：店铺级严格取价，补丁带店铺', () => {
+  // 纯 3P 启动后的真实 Provider state（load 后的形态）
   function pure3PLoadedState(): FiltersState {
     seedV12Storage(OZON_3P_SHOP);
     const handle = renderFilters();
     const state = handle.state();
-    expect(state.platform).toEqual(OZON_PLATFORM);
-    expect(state.platformScopeNotice).toBeTruthy();
+    expect(state.platform).toEqual(OZON_3P_SHOP);
+    expect(state.platformScopeNotice ?? null).toBeNull();
     return state;
   }
 
-  it('趋势图卡 + 最新价格摘要：图注与表边界都携带展开说明，最新价 333 / 口径 OZON，open 补丁平台级', async () => {
+  it('趋势图卡 + 最新价格摘要：最新价 395（严格 3P）/ 口径 OZON 3P，open 补丁带店铺', async () => {
     const state = pure3PLoadedState();
     const response = await runAgent('价格趋势', buildAgentContext('dashboard', state, []));
     const chart = response.cards.find((item) => item.kind === 'chart') as ChartResultCard;
     const table = response.cards.find((item) => item.kind === 'table') as TableResultCard;
     expect(chart).toBeDefined();
     expect(table).toBeDefined();
-    expect(chart.note).toContain('稳定版仅支持平台级');
-    expect(chart.note).toContain('OZON 3P');
-    expect(table.boundaries?.some((line) => line.includes('稳定版仅支持平台级'))).toBe(true);
+    expect(chart.note).not.toContain('稳定版仅支持平台级');
+    expect(table.boundaries?.some((line) => line.includes('稳定版仅支持平台级')) ?? false).toBe(false);
     const row = novaSummaryRow(table);
-    expect(row![1]).toBe('333');
-    expect(row![3]).toBe('OZON');
+    expect(row![1]).toBe('395');
+    expect(row![3]).toBe('OZON 3P');
     const chartPatch = openActionOf(chart, '回看板定位').target!.filterPatch!;
     const tablePatch = openActionOf(table, '回看板下钻').target!.filterPatch!;
-    expect(chartPatch.platform).toEqual(OZON_PLATFORM);
-    expect(tablePatch.platform).toEqual(OZON_PLATFORM);
+    expect(chartPatch.platform).toEqual(OZON_3P_SHOP);
+    expect(tablePatch.platform).toEqual(OZON_3P_SHOP);
   });
 
-  it('价格优势卡：判断边界首位为展开说明，W202619 我司平板 1025（非严格 3P 的 1047），补丁平台级无 shopIds', async () => {
+  it('价格优势卡：W202619 我司平板 1047（严格 3P，非平台级 1025），补丁带店铺级 shopIds', async () => {
     // matrix-only（2026-11-10）：优势卡证人改用平板载荷（nova 14 无矩阵对比位，
-    // 优势恒 0 行）；「展开说明首位 + 平台级价格 + 平台级补丁」的语义不变。
+    // 优势恒 0 行）；「店铺级严格取价 + 店铺级补丁」的语义不变。
     seedV12StorageTablet(OZON_3P_SHOP);
     renderFilters();
     const state = currentState!;
-    expect(state.platform).toEqual(OZON_PLATFORM);
-    expect(state.platformScopeNotice).toBeTruthy();
+    expect(state.platform).toEqual(OZON_3P_SHOP);
+    expect(state.platformScopeNotice ?? null).toBeNull();
     const response = await runAgent('价格优势', buildAgentContext('dashboard', state, []));
     const card = response.cards.find((item) => item.kind === 'price_advantage') as PriceAdvantageResultCard;
     expect(card).toBeDefined();
-    expect(card.boundaries?.[0]).toContain('稳定版仅支持平台级');
-    expect(card.boundaries?.[0]).toContain('OZON 3P');
+    expect(card.boundaries?.some((line) => line.includes('稳定版仅支持平台级')) ?? false).toBe(false);
     const w19 = card.rows.filter((row) => row.weekId === '202619' && row.ownModelId === 'own-huawei-matepad-pro-2025');
     expect(w19.length).toBeGreaterThan(0);
-    for (const row of w19) expect(row.ownPrice).toBe(1025);
+    for (const row of w19) expect(row.ownPrice).toBe(1047);
     const patch = openActionOf(card, '回看价格走势').target!.filterPatch!;
-    expect(patch.platform).toEqual(OZON_PLATFORM);
+    expect(patch.platform).toEqual(OZON_3P_SHOP);
   });
 
-  it('平台比较卡（最新有价周平台比较）：边界携带展开说明', async () => {
+  it('平台比较卡（最新有价周平台比较）：无展开说明噪音', async () => {
     const state = pure3PLoadedState();
     const response = await runAgent('nova 14 哪个平台最便宜', buildAgentContext('dashboard', state, []));
     const table = response.cards.find((item) => item.kind === 'table') as TableResultCard;
     expect(table).toBeDefined();
     expect(table.title).toBe('最新有价周平台比较');
-    expect(table.boundaries?.some((line) => line.includes('稳定版仅支持平台级'))).toBe(true);
-    expect(table.boundaries?.some((line) => line.includes('OZON 3P'))).toBe(true);
+    expect(table.boundaries?.some((line) => line.includes('稳定版仅支持平台级')) ?? false).toBe(false);
   });
 
-  it('预警卡：判断边界引用落地 provenance（启动归一的展开事实同样可见）', async () => {
+  it('预警卡：判断边界无展开说明', async () => {
     const state = pure3PLoadedState();
     const alert: AgentAlertRecord = {
       key: 'price-change|own-huawei-nova-14__12+256GB|202619',
@@ -340,20 +323,21 @@ describe('t428u R7-M1 · 纯 3P legacy 载荷的四类结果卡：展开说明�
     const card = response.cards.find((item) => item.kind === 'alert');
     expect(card).toBeDefined();
     if (card?.kind !== 'alert') return;
-    expect(card.boundaries?.[0]).toContain('稳定版仅支持平台级');
+    expect(card.boundaries?.some((line) => line.includes('稳定版仅支持平台级')) ?? false).toBe(false);
   });
 });
 
-describe('t428u R7-M1 · 说明生命周期：deliberate 变更即失效，无关补丁不清说明', () => {
-  it('显式选合法平台（DNS）→ 说明清空条幅消失；reset 同样不残留', () => {
+describe('t428u R7-M1 · 说明生命周期（剔除说明）：deliberate 变更即失效，无关补丁不清说明', () => {
+  it('非法店铺回落 null（带剔除说明）→ 显式选合法平台清空条幅；reset 同样不残留', () => {
     const handle = renderFilters();
-    act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
+    act(() => { handle.actions().set({ platform: AE_NOON_SHOP }); });
+    expect(handle.state().platform ?? null).toBeNull();
     expect(handle.state().platformScopeNotice).toBeTruthy();
     expect(screen.queryByRole('status')).toBeTruthy();
     act(() => { handle.actions().set({ platform: { platforms: ['DNS'], shopIds: [], seller: null } }); });
     expect(handle.state().platformScopeNotice ?? null).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
-    act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
+    act(() => { handle.actions().set({ platform: AE_NOON_SHOP }); });
     expect(handle.state().platformScopeNotice).toBeTruthy();
     act(() => { handle.actions().reset(); });
     expect(handle.state().platform ?? null).toBeNull();
@@ -361,63 +345,64 @@ describe('t428u R7-M1 · 说明生命周期：deliberate 变更即失效，无�
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('带 platform 键的 Agent 补丁落地（平台级）：R8-M1 起同口径继承既有说明；显式 null = deliberate 清除', async () => {
+  it('带 platform 键的 Agent 补丁落地（null 口径）：R8-M1 起同口径继承既有剔除说明；显式 null = deliberate 清除', async () => {
     const handle = renderFilters();
-    act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
-    expect(handle.state().platformScopeNotice).toBeTruthy();
-    // R8-M1（第八轮评审 Medium）：Agent open/apply 补丁携带归一后的规范平台级
-    // 且不带说明键——同口径交接必须继承仍成立的说明（换国/换平台的旧说明经
-    // 集合校验自然不成立，见下条换国用例）。R7 的「纯合法输入即清除」语义
-    // 由显式 platformScopeNotice:null 承接。
-    act(() => { handle.actions().set({ platform: OZON_PLATFORM }); });
-    expect(handle.state().platformScopeNotice ?? null).not.toBeNull();
-    expect(handle.state().platformScopeNotice!.note).toContain('稳定版仅支持平台级');
+    act(() => { handle.actions().set({ platform: AE_NOON_SHOP }); });
+    const notice = handle.state().platformScopeNotice;
+    expect(notice).toBeTruthy();
+    // R8-M1（第八轮评审 Medium）：Agent open/apply 补丁携带归一后的规范口径
+    // 且不带说明键——同口径交接必须继承仍成立的说明。null 口径补丁 = 同口径
+    // （自动全平台），剔除说明继承；显式 platformScopeNotice:null 承接 deliberate 清除。
+    act(() => { handle.actions().set({ platform: null }); });
+    expect(handle.state().platform ?? null).toBeNull();
+    expect(handle.state().platformScopeNotice ?? null).not.toBeFalsy();
+    expect(handle.state().platformScopeNotice!.note).toContain('没有渠道');
     expect(screen.queryByRole('status')).toBeTruthy();
-    act(() => { handle.actions().set({ platform: OZON_PLATFORM, platformScopeNotice: null }); });
+    act(() => { handle.actions().set({ platform: null, platformScopeNotice: null }); });
     expect(handle.state().platformScopeNotice ?? null).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
+    void notice;
   });
 
-  it('换国后旧国说明不泄漏：RU 展开说明 → DE 剔除说明（或清空），绝不展示 RU 口径旧文', () => {
+  it('换国后旧国说明不泄漏：RU 合法店铺 → DE 非法剔除说明（或清空），绝不展示 RU 口径旧文', () => {
     const handle = renderFilters();
     act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
-    const ruNote = handle.state().platformScopeNotice!.note;
-    expect(ruNote).toContain('OZON 3P');
+    expect(handle.state().platformScopeNotice ?? null).toBeNull();
     act(() => { handle.actions().set({ countryCode: 'DE' }); });
     expect(handle.state().countryCode).toBe('DE');
-    // OZON 在 DE 无渠道 → null + DE 剔除说明；RU 的展开说明不再出现
+    // OZON 在 DE 无渠道 → null + DE 剔除说明；RU 的店铺口径不再出现
     expect(handle.state().platform ?? null).toBeNull();
     const notice = handle.state().platformScopeNotice;
     if (notice) {
       expect(notice.countryCode).toBe('DE');
-      expect(notice.note).not.toBe(ruNote);
+      expect(notice.note).toContain('没有渠道');
     }
   });
 
-  it('无关补丁（币种/粒度/时间）不清既有说明', () => {
+  it('无关补丁（币种/粒度/时间）不清既有剔除说明', () => {
     const handle = renderFilters();
-    act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
+    act(() => { handle.actions().set({ platform: AE_NOON_SHOP }); });
     const before = handle.state().platformScopeNotice!;
     act(() => { handle.actions().set({ currency: 'local' }); });
     expect(handle.state().platformScopeNotice).toEqual(before);
     act(() => { handle.actions().set({ granularity: 'month' }); });
     expect(handle.state().platformScopeNotice).toEqual(before);
-    expect(screen.getByRole('status').textContent).toContain('稳定版仅支持平台级');
+    expect(screen.getByRole('status').textContent).toContain('没有渠道');
   });
 
   it('整态快照补丁（undo 形）随带说明口径吻合时恢复', () => {
     const handle = renderFilters();
-    act(() => { handle.actions().set({ platform: OZON_3P_SHOP }); });
+    act(() => { handle.actions().set({ platform: AE_NOON_SHOP }); });
     const snapshot: FiltersState = { ...handle.state() };
     act(() => { handle.actions().set({ platform: { platforms: ['DNS'], shopIds: [], seller: null } }); });
     expect(handle.state().platformScopeNotice ?? null).toBeNull();
     act(() => { handle.actions().set(snapshot); });
-    expect(handle.state().platform).toEqual(OZON_PLATFORM);
-    expect(handle.state().platformScopeNotice?.note).toContain('稳定版仅支持平台级');
+    expect(handle.state().platform ?? null).toBeNull();
+    expect(handle.state().platformScopeNotice?.note).toContain('没有渠道');
   });
 });
 
-describe('t428u R7-M1 · 稳定版 URL：多平台不取一、往返不丢', () => {
+describe('t428u R7-M1 · 稳定版 URL：多平台不取一、店铺级恢复后 shop= 优先、往返不丢', () => {
   function withWindowSearch<T>(search: string, fn: () => T): T {
     const g = globalThis as { window?: unknown };
     const prev = g.window;
@@ -430,16 +415,21 @@ describe('t428u R7-M1 · 稳定版 URL：多平台不取一、往返不丢', () 
     }
   }
 
-  it('readUrlOverrides：plat=DNS,OZON 全量读入（不取第一个）；plat 与 shop 同存时 shop= 静默忽略、显式平台保留', () => {
+  it('readUrlOverrides：plat=DNS,OZON 全量读入（不取第一个）；plat 与 shop 同存——异平台混合并集保留', () => {
     const multi = withWindowSearch('?c=RU&plat=DNS,OZON', () => readUrlOverrides());
     expect(multi.filters.platform).toEqual({ platforms: ['DNS', 'OZON'], shopIds: [] });
+    // plat=DNS ≠ 店铺归属平台（OZON）→ 混合并集 {DNS 平台 + OZON 店铺} 原样保留；
+    // plat= 恰为店铺归属平台时按纯店铺级归一（不放大成整平台口径）
     const withShop = withWindowSearch('?c=RU&plat=DNS&shop=RU:ozon:3P', () => readUrlOverrides());
-    expect(withShop.filters.platform).toEqual({ platforms: ['DNS'], shopIds: [] });
+    expect(withShop.filters.platform).toEqual({ platforms: ['DNS'], shopIds: ['RU:ozon:3P'], seller: null });
+    const pureShop = withWindowSearch('?c=RU&plat=OZON&shop=RU:ozon:3P', () => readUrlOverrides());
+    expect(pureShop.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:3P'], seller: null });
   });
 
-  it('platformUrlParamsOf：多平台全量序列化；单平台输出与旧写侧一致（迭代版路径不变）', () => {
+  it('platformUrlParamsOf：多平台全量序列化；店铺级写 plat+shop（迭代版路径不变）', () => {
     expect(platformUrlParamsOf({ platforms: ['DNS', 'OZON'], shopIds: [], seller: null }).plat).toBe('DNS,OZON');
     expect(platformUrlParamsOf(OZON_PLATFORM)).toEqual({ plat: 'OZON', shop: null, seller: null });
+    expect(platformUrlParamsOf(OZON_3P_SHOP)).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null });
     expect(platformUrlParamsOf(null)).toEqual({ plat: null, shop: null, seller: null });
   });
 
@@ -451,6 +441,17 @@ describe('t428u R7-M1 · 稳定版 URL：多平台不取一、往返不丢', () 
     expect(handle.state().platformScopeNotice ?? null).toBeNull(); // 合法输入无说明（无噪音）
     await waitFor(() => {
       expect(window.location.search).toContain('plat=DNS%2COZON');
+    });
+  });
+
+  it('URL 店铺级（shop=）→ Provider 落地 → 再序列化往返带 shop', async () => {
+    window.history.replaceState(null, '', '/?p=dashboard&c=RU&shop=RU:ozon:3P&rs=202619&re=202619');
+    const handle = renderFilters();
+    expect(handle.state().platform).toEqual(OZON_3P_SHOP);
+    expect(handle.state().platformScopeNotice ?? null).toBeNull();
+    await waitFor(() => {
+      expect(window.location.search).toContain('shop=');
+      expect(window.location.search).toContain('plat=OZON');
     });
   });
 });

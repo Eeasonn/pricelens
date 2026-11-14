@@ -67,6 +67,40 @@ export function clampPanelPos(
   };
 }
 
+/** 主浮窗可读最小高（2026-11-13 Eason「任何情况下产品筛选框都不显示不全」）：
+ *  下方剩余空间不足此高且上方更宽裕时，浮窗翻到锚点上方（底边贴触发器顶向上长） */
+export const PICKER_MIN_PANEL_H = 320;
+
+export interface PanelPlacement {
+  /** true = 翻到锚点上方（渲染用 bottom 锚定，面板向上长） */
+  above: boolean;
+  /** above = false 时面板 top（已钳进视口安全边距）；above = true 时填 0（不用） */
+  top: number;
+  /** above = true 时面板 bottom 距视口顶的距离（锚顶 − 6px 缝）；above = false 填 0 */
+  bottom: number;
+  /** maxHeight（px）：below = 视口底安全边距 − top；above = 锚顶 − 6 − 上缘安全边距 */
+  maxH: number;
+}
+
+/** 主浮窗纵向落位（纯函数；水平钳制仍走 clampPanelPos）：默认锚点下方（锚底 + 6）。
+ *  下方放不下一块可读面板（< PICKER_MIN_PANEL_H）且上方更宽裕 → 翻上方——
+ *  旧逻辑恒向下、锚点贴视口底时 maxHeight 只剩 PICKER_MIN_VISIBLE 的缝（浮窗
+ *  「显示不全」）。两侧都不足时取更宽裕一侧，配合 maxHeight 收口，任何视口下
+ *  浮窗都可滚动读全、上下缘恒不越 24px 安全边距。 */
+export function panelPlacementOf(anchorTop: number, anchorBottom: number, vw: number, vh: number): PanelPlacement {
+  const GAP = 6;
+  const belowTop = Math.min(
+    Math.max(anchorBottom + GAP, PICKER_EDGE),
+    Math.max(PICKER_EDGE, vh - PICKER_EDGE - PICKER_MIN_VISIBLE),
+  );
+  const belowSpace = vh - PICKER_EDGE - belowTop;
+  const aboveSpace = anchorTop - GAP - PICKER_EDGE;
+  if (belowSpace < PICKER_MIN_PANEL_H && aboveSpace > belowSpace) {
+    return { above: true, top: PICKER_EDGE, bottom: vh - anchorTop + GAP, maxH: Math.max(PICKER_MIN_VISIBLE, Math.round(aboveSpace)) };
+  }
+  return { above: false, top: belowTop, bottom: 0, maxH: Math.max(PICKER_MIN_VISIBLE, Math.round(belowSpace)) };
+}
+
 /** 浮窗焦点归还（主浮窗 / 模板编辑浮窗共用）：调用时记下当前焦点元素
  *  （= 打开浮窗的触发器），返回的函数在浮窗关闭/卸载时把焦点还回去；
  *  触发器已不在文档中（随外层浮窗一并卸载）则跳过，由更外层继续归还。 */

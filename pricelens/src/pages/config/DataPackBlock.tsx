@@ -1,0 +1,149 @@
+// ============================================================
+// 配置页 · 数据包区块（2026-11-14 Eason「价格数据完全以导入方式承载 +
+// 本地可运行、可快速迁移到其他电脑」）：
+//  - 导入数据包：单文件 JSON（buildDataPack 产物）→ applyDataPack 原位置换 +
+//    IndexedDB 持久化 → 刷新后由两段式启动自动载入；浏览器拒绝持久化时
+//    仅本会话生效（memory 置换仍在，UI 明确提示）；
+//  - 导出当前数据包：当前内存态（内置或已导入）序列化下载——迁移 = 拷
+//    PriceLens.html + 数据包两个文件；
+//  - 还原内置数据：清持久化 + 刷新（内置数据始终兜底，不会被导入破坏）。
+// 查阅者（RBAC）：只读——导入/还原置灰（改的是本机数据承载），导出不限制。
+// 数据校验与置换全部在 data/index.ts applyDataPack（先解码校验后整体提交）。
+// ============================================================
+import { useRef, useState } from 'react';
+import type { ChangeEvent, CSSProperties } from 'react';
+import { Button, Popconfirm, Tooltip, message } from 'antd';
+import { DownloadOutlined, RollbackOutlined, UploadOutlined } from '@ant-design/icons';
+import { buildDataPack, dataMeta, applyDataPack, type DataPackMeta } from '../../data';
+import { clearDataPack, saveDataPack } from '../../data/dataPackStore';
+import { color } from '../../theme/tokens';
+
+const packFileNameOf = (generatedAt: string): string => {
+  const d = new Date(generatedAt);
+  const ymd = Number.isNaN(d.getTime()) ? 'export' : `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  return `pricelens-数据包-${ymd}.json`;
+};
+
+const fmtTime = (iso: string | null): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('zh-CN', { hour12: false });
+};
+
+const infoLine: CSSProperties = { fontSize: 12, lineHeight: '20px', color: color.body };
+
+export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
+  const meta: DataPackMeta = dataMeta();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onImportFile = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // 同一文件可重复选择
+    if (!file || busy) return;
+    setBusy(true);
+    try {
+      const text = await file.text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        message.error('文件不是有效的 JSON');
+        return;
+      }
+      const applied = applyDataPack(parsed);
+      if (!applied.ok) {
+        message.error(`导入失败：${applied.error}`);
+        return;
+      }
+      const { persisted } = await saveDataPack(parsed as Parameters<typeof saveDataPack>[0]);
+      message.success(persisted ? '数据包已导入并持久化，即将刷新页面' : '数据包已导入（本次会话生效；浏览器未允许持久化），即将刷新页面');
+      window.setTimeout(() => window.location.reload(), 700);
+    } catch (error) {
+      message.error(`导入失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onExport = (): void => {
+    const pack = buildDataPack();
+    const blob = new Blob([JSON.stringify(pack)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = packFileNameOf(pack.generatedAt);
+    a.click();
+    URL.revokeObjectURL(url);
+    message.success('数据包已导出（与 PriceLens.html 一起拷贝即可迁移）');
+  };
+
+  const onReset = async (): Promise<void> => {
+    await clearDataPack();
+    message.success('已还原为内置数据，即将刷新页面');
+    window.setTimeout(() => window.location.reload(), 700);
+  };
+
+  const readOnlyHint = '查阅者不可更改本机数据承载，请联系 GTM';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 720 }}>
+      <div style={infoLine}>
+        当前数据来源：
+        <span style={{ fontWeight: 600, color: meta.source === 'imported' ? '#0062d9' : undefined }}>
+          {meta.source === 'imported' ? '导入数据包' : '内置数据'}
+        </span>
+        {'　'}数据包生成时间：{fmtTime(meta.generatedAt)}
+        {'　'}导入应用时间：{fmtTime(meta.appliedAt)}
+      </div>
+      <div style={infoLine} className="tnum">
+        事实周行 {meta.counts.factWeekly.toLocaleString()} · 月度行 {meta.counts.factMonthly.toLocaleString()} · SKU{' '}
+        {meta.counts.products.toLocaleString()} · 渠道 {meta.counts.channels.toLocaleString()} · 国家 {meta.counts.regions.toLocaleString()} · 时间桶{' '}
+        {meta.counts.timeBuckets.toLocaleString()}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Tooltip title={canEdit ? '选择 buildDataPack 产出的 .json 数据包' : readOnlyHint}>
+          <Button
+            type="primary"
+            icon={<UploadOutlined />}
+            disabled={!canEdit || busy}
+            aria-label="导入数据包"
+            onClick={() => fileRef.current?.click()}
+          >
+            导入数据包
+          </Button>
+        </Tooltip>
+        <Button icon={<DownloadOutlined />} aria-label="导出当前数据包" onClick={onExport} disabled={busy}>
+          导出当前数据包
+        </Button>
+        <Tooltip title={canEdit ? '清除持久化数据包并回落内置数据' : readOnlyHint}>
+          <Popconfirm
+            title="还原内置数据？"
+            description="将清除本机持久化的导入数据包，刷新后回到出厂内置数据。"
+            okText="还原"
+            cancelText="取消"
+            disabled={!canEdit || busy}
+            onConfirm={onReset}
+          >
+            <Button icon={<RollbackOutlined />} disabled={!canEdit || busy} aria-label="还原内置数据">
+              还原内置数据
+            </Button>
+          </Popconfirm>
+        </Tooltip>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          aria-label="数据包文件"
+          style={{ display: 'none' }}
+          onChange={onImportFile}
+        />
+      </div>
+      <div style={{ ...infoLine, color: 'rgba(0,0,0,0.45)' }}>
+        便携迁移：把 PriceLens.html（应用）与本数据包拷到目标电脑 → 双击打开应用 → 配置页「导入数据包」。导入保存在本机浏览器
+        IndexedDB，不影响其他人；「还原内置数据」随时可回出厂口径。导入只替换价格/维表数据，不改动个人配置（选品、模板、阈值用
+        「配置导入导出」另行搬运）。
+      </div>
+    </div>
+  );
+}

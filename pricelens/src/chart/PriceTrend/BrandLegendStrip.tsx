@@ -2,8 +2,11 @@
 // 组/角色图例带（第一百一十五轮立为品牌分块，第一百二十三轮④结合产品对改版）：
 // 价格看板图顶的药丸带按主分析组分块（组 = 选择产品浮窗里的一张卡）——
 // 块内 = 主品药丸（浅蓝底 + 蓝描边 + 加粗，角色强调）→ 灰色小字 vs →
-// 对比药丸（卡内序，白底灰描边）。药丸固定两行（第一百四十五轮，Eason：必须
-// 带品牌名）——第一行 = 品牌色点 + 品牌名，第二行 = 产品名 + 型号 + 最新页外链；
+// 对比药丸（卡内序，白底灰描边）。药丸固定两行——第一行 = 品牌色点 + [品牌词
+// （brand_inline 时）] + 产品名，第二行 = 型号蓝底 chip；品牌规则（2026-11-13
+// Eason）：型号名一眼认出品牌的（iPhone/Galaxy/Redmi…）不内联品牌词（悬停 title
+// 恒出全名），看不出的（小米数字系列/A37/X9D 这类裸型号名）恒内联——取代第一百
+// 四十五轮「必须带品牌名」的恒显口径，判定来自清洗层 dim_product.brand_inline。
 // 多组时块首「第 N 组」小字，单组不显示；空对无主品药丸也不画 vs。药丸点击 =
 // 屏蔽/恢复折线（虚线置灰态可恢复），悬停 = 该系列高亮、其余降透明。块间灰色
 // 短竖线分隔；空间不足时先压缩对比区，实际放不下才出块内 ‹›（主品药丸恒可见、
@@ -55,13 +58,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { Popover } from 'antd';
 import ChannelSelectPopover from '../../components/ChannelSelectPopover';
 import { DownOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
-import BrandDot, { brandLabelOf } from '../../components/BrandMark';
+import BrandDot, { brandLabelOf, fullModelName } from '../../components/BrandMark';
 import { dimProduct } from '../../data';
 import { COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import { curveNameOf } from './chartModel';
 import type { LegendGroup } from './tableModel';
 import { color, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import { scrollBehaviorOf } from '../../theme/motion';
+
+/** sku → 主数据行（品牌内联判定用；dimProduct 静态导入，模块级建一次索引） */
+const productBySku = new Map(dimProduct.map((p) => [p.sku_id, p]));
 
 /** 块内对比区最宽 = 3 颗药丸预算（与每组对比硬上限同值；主品药丸不占此预算、
  *  恒可见）。空间不足时对比区压缩，实测溢出才出块内 ‹›。 */
@@ -101,7 +107,10 @@ function romTextOf(key: string): string {
 interface PillSpec {
   key: string;
   brand: string;
-  brandLabel: string; // 品牌展示名（Huawei/Apple/…，第一行；第一百四十五轮）
+  brandLabel: string; // 品牌展示名（Huawei/Apple/…；brand_inline 时在第一行）
+  /** 品牌内联（2026-11-13 Eason）：true = 第一行带品牌词；false/null = 名称即可认出
+   *  品牌，品牌只在悬停 title 显示（清洗层 dim_product.brand_inline；缺省 = 恒带） */
+  brandInline?: boolean;
   text: string;
   /** 产品名（第一百七十八轮）：text 去掉配置后缀的余部（第二行加粗段） */
   nameText: string;
@@ -174,28 +183,25 @@ export function Pill({
         ...look,
       }}
     >
-      {/* 第一行：品牌色点 + 品牌名（第一百四十五轮，Eason：药丸必须带品牌） */}
+      {/* 第一行：品牌色点 + [品牌词（brand_inline 时）] + 产品名（2026-11-13 品牌规则，
+          Eason：型号名一眼认出品牌的不内联品牌词，悬停 title 恒出全名） */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
         <BrandDot brand={pill.brand} />
+        {pill.brandInline !== false && (
+          <span
+            style={{
+              fontSize: 10,
+              lineHeight: '12px',
+              color: color.mute,
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            {pill.brandLabel}
+          </span>
+        )}
         <span
-          style={{
-            fontSize: 10,
-            lineHeight: '12px',
-            color: color.mute,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {pill.brandLabel}
-        </span>
-      </span>
-      {/* 第二行：产品名（加粗）+ 型号蓝底 chip（第一百七十八轮，Eason：参考多平台
-          对比的产品框风格——「Pura 80 Pro 12+512 GB」= 名称墨色加粗 + 配置浅蓝底）；
-          无配置层级产品（romram '—'，第一百五十三轮）不出 chip */}
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
-        <span
-          title={pill.text}
+          title={fullModelName(pill.brand, pill.text)}
           style={{
             fontSize: 11,
             lineHeight: '14px',
@@ -208,7 +214,12 @@ export function Pill({
         >
           {pill.nameText}
         </span>
-        {pill.romText && (
+      </span>
+      {/* 第二行：型号蓝底 chip（第一百七十八轮，Eason：参考多平台对比的产品框风格
+          ——名称墨色加粗 + 配置浅蓝底）；无配置层级产品（romram '—'，第一百五十三轮）
+          不出 chip，药丸回落单行 */}
+      {pill.romText && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', maxWidth: '100%' }}>
           <span
             style={{
               flexShrink: 0,
@@ -224,8 +235,8 @@ export function Pill({
           >
             {pill.romText}
           </span>
-        )}
-      </span>
+        </span>
+      )}
     </button>
   );
 }
@@ -422,10 +433,14 @@ function GroupBlock({
     // 后缀匹配按「原文 / 去 GB 两种形」兜底
     const romBase = rom.replace(/\s*GB$/i, '').trim();
     const suffix = text.endsWith(rom) ? rom : romBase;
+    // 品牌内联（2026-11-13）：清洗层 dim_product.brand_inline（型号级同值），按系列
+    // 首个 SKU 查回；未带列的旧数据 = undefined → 第一行恒带品牌词（旧口径兜底）
+    const firstRow = s.skuIds.length ? productBySku.get(s.skuIds[0]) : undefined;
     return {
       key: s.key,
       brand: s.brand,
       brandLabel: brandLabelOf(s.brand),
+      brandInline: firstRow ? firstRow.brand_inline !== false : undefined,
       text,
       nameText: rom && suffix && text.endsWith(suffix) ? text.slice(0, text.length - suffix.length).trim() : text,
       romText: rom,

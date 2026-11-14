@@ -54,7 +54,7 @@ describe('t428u R5-M1 · stable：Agent 趋势查询服从全局平台（与看�
     expect(patch.platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
   });
 
-  it('店铺级全局选择（RU:ozon:3P）透明展开为平台级：取数/补丁/说明一致，补丁不再保留 shopIds', async () => {
+  it('店铺级全局选择（RU:ozon:3P）原样钉店铺：口径列 = OZON 3P、补丁保留 shopIds（2026-11-14 店铺级恢复）', async () => {
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'RU',
@@ -64,19 +64,17 @@ describe('t428u R5-M1 · stable：Agent 趋势查询服从全局平台（与看�
     const response = await runAgent('RU价格趋势', buildAgentContext('dashboard', state, []));
     const chart = response.cards.find((item) => item.kind === 'chart') as ChartResultCard;
     expect(chart).toBeDefined();
-    // 原始输入是店铺级：图注判断边界必须透明说明「稳定版仅支持平台级 + 店铺展开」
-    expect(chart.note).toContain('稳定版仅支持平台级');
-    expect(chart.note).toContain('OZON 3P');
-    expect(chart.note).toContain('OZON');
+    // 展开说明退役：合法店铺级不产生「稳定版仅支持平台级」噪音
+    expect(chart.note).not.toContain('稳定版仅支持平台级');
     const table = response.cards.find((item) => item.kind === 'table') as TableResultCard;
     const novaRow = table.rows.find((row) => row[0].includes('nova 14 Pro'));
     expect(novaRow).toBeDefined();
-    expect(novaRow![3]).toBe('OZON');
+    expect(novaRow![3]).toBe('OZON 3P');
     const patch = openActionOf(table, '回看板下钻').target!.filterPatch!;
-    // R6-M1：实际计算按平台级，补丁不得再声称保留店铺口径（shopIds 必须移除）
-    expect(patch.platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
+    // 补丁与计算同口径：店铺级 shopIds 原样保留
+    expect(patch.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:3P'], seller: null });
     const chartPatch = openActionOf(chart, '回看板定位').target!.filterPatch!;
-    expect(chartPatch.platform).toEqual({ platforms: ['OZON'], shopIds: [], seller: null });
+    expect(chartPatch.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:3P'], seller: null });
   });
 
   it('AE NOON 跨国问 RU：归一 null → 全渠道自动，补丁 null', async () => {

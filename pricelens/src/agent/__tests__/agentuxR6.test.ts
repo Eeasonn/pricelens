@@ -103,11 +103,13 @@ describe('R6 · 价格优势真实 3P 价格（runAgent → buildPriceAdvantageR
     expect(rows45.every((row) => row.own.price === 427)).toBe(false);
     expect(rows45.every((row) => row.channelLabel === 'OZON 3P')).toBe(true);
     // HONOR 600 12+256 在 OZON 3P 同周 54990₽/81.93 = 671.18（点价 671）：严格
-    // 3P 下我司 478 占优 +193；若口径被扩大成平台池（own=427）价差虚增成 +244
+    // 3P 下我司 478 占优 +193；若口径被扩大成平台池（own=427）价差虚增成 +244。
+    // 2026-11-13 匹配修订后 nova 15 12+256 的矩阵对手恒 = 600 12+256（锚点全一致），
+    // 与本注释既有口径对齐（旧断言 611 = 修订前的 8+256 zip 错配）
     const honorRow = rows45.find((row) => row.competitor.modelId === 'cmp-honor-600');
     expect(honorRow).toBeTruthy();
-    expect(honorRow!.competitor.price).toBe(611);
-    expect(honorRow!.priceDiff).toBe(611 - 478);
+    expect(honorRow!.competitor.price).toBe(671);
+    expect(honorRow!.priceDiff).toBe(671 - 478);
     expect(honorRow!.relation).toBe('advantage');
   });
 

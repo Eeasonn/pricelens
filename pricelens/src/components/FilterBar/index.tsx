@@ -326,7 +326,9 @@ export default function FilterBar({
         {/* 时间范围弹层锚定在其筛选簇自身（第一百四十二轮对齐修复），卡片根不再是定位容器 */}
         <section className="lpl-fb" data-lpl-filter-bar style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: `8px ${space.lg}px` }}>
           {/* 第一百八十二轮：行允许换行（rowGap 8）——≥1280 视口仍单行不变；
-              窄视口筛选簇折行而非把整页撑出横向裁切 */}
+              窄视口筛选簇折行而非把整页撑出横向裁切。
+              2026-11-13（Eason）：时间簇定宽 132、不再 flex-grow 抢位——唯一弹性列
+              回归「选择产品」（chip 内部省略号兜底），其余筛选器全部定宽保一行 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, rowGap: 8, minHeight: 30, flexWrap: 'wrap' }}>
             <ScopeFields />
             {/* 入口列弹性让位（第一百三十一轮波2收窄：basis 320→260、minWidth 240→200，

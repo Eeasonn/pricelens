@@ -1,47 +1,69 @@
 // ============================================================
-// 电商页面快照注册表（第五十轮）：历史价格点的「取证」改为页面截图展示——
-// 历史时点打开商城现页没有意义（价格/上下架早已变化），点击悬停「快照」图标
-// 弹窗看采集当时的页面截图，截图上方标注采集日期。
-// demo 阶段：三张真实电商截屏（2026-10-15 采集，M.Video ×2 / DNS ×1），
-// 按 (店铺, 周) 稳定哈希轮转绑定，保证同一时点恒定同一张；
-// 数据接入后本文件替换为 fact.snapshot_url 直读，接口不变。
+// 电商页面快照证据注册表（2026-11-11 页面快照证据绑定）：
+// 截图按实际商品 URL 绑定（取代第五十轮的 (店铺, 周) 哈希轮转——无关示例图不再
+// 冒充任何商品的历史凭证）。历史截图（kind:'historical'）还须匹配采集周
+// （record.weekId === 所选周桶）；后补的当前页面截图（kind:'current-page'）是
+// 独立证据类别，不能自动成为历史凭证——快照浮窗对 current 显式提示
+// 「非所选周期凭证」。没有匹配就返回空，不制造占位证据。
+// 截图旁的 *.source.json 保存采集元数据与 SHA256（取证；本表字段与其同源）。
+// 数据接入后历史证据改由 fact.snapshot_url 直读，匹配语义不变。
 // ============================================================
-import dnsIphone17 from '../assets/snapshots/dns-iphone17.jpg';
-import mvideoPura80 from '../assets/snapshots/mvideo-pura80.jpg';
-import mvideoSearch from '../assets/snapshots/mvideo-search.jpg';
+import dnsPura90sCurrent from '../assets/snapshots/dns-pura90s-20261111-current.jpg';
+import captureMeta from '../assets/snapshots/dns-pura90s-20261111-source.json';
 
 export interface PageSnapshot {
   src: string; // 截图（构建期内嵌 data URL）
-  capturedAt: string; // 采集日期 YYYY-MM-DD
+  sourceUrl: string; // 采集时的商品页 URL（URL 级绑定）
+  capturedAt: string; // 采集时点 ISO（截图实际采集时间，非所选周期日期）
   sourceLabel: string; // 来源商城
   pageLabel: string; // 页面说明
+  /** historical = 历史页面证据（须匹配 weekId）；current-page = 后补当前页证据 */
+  kind: 'historical' | 'current-page';
+  /** 历史证据所属统计周（YYYYWW）；current-page 不带 */
+  weekId?: string;
+  priceText: string; // 截图页面价（原币种，截图当时的页面显示价）
 }
 
-const SNAPSHOTS: PageSnapshot[] = [
+/** 当前页面补充证据（2026-11-11 DNS 真实商品深链截图；元数据见同目录 source.json） */
+const REGISTRY: PageSnapshot[] = [
   {
-    src: mvideoPura80,
-    capturedAt: '2026-10-15',
-    sourceLabel: 'М.Видео',
-    pageLabel: 'HUAWEI Pura 80 Pro 12/512 产品页 · 69 999 ₽（−23%）',
-  },
-  {
-    src: mvideoSearch,
-    capturedAt: '2026-10-15',
-    sourceLabel: 'М.Видео',
-    pageLabel: 'Pura 80 系列搜索结果页 · 全系在架价',
-  },
-  {
-    src: dnsIphone17,
-    capturedAt: '2026-10-15',
+    src: dnsPura90sCurrent,
+    sourceUrl: captureMeta.url,
+    capturedAt: captureMeta.capturedAt,
     sourceLabel: 'DNS',
-    pageLabel: 'Apple iPhone 17 256GB 产品页 · 86 999 ₽',
+    pageLabel: 'HUAWEI Pura 90s Pro Max 12/256 Black 商品现页 · 86 499 ₽',
+    kind: 'current-page',
+    priceText: '86 499 ₽',
   },
 ];
 
-/** 稳定轮转：同一 (店铺, 周) 恒定取同一张快照（确定性，刷新/换机一致） */
-export function snapshotFor(shopName: string | null, weekId: string): PageSnapshot {
-  const key = `${shopName ?? ''}|${weekId}`;
-  let h = 5381;
-  for (let i = 0; i < key.length; i++) h = ((h * 33) ^ key.charCodeAt(i)) >>> 0;
-  return SNAPSHOTS[h % SNAPSHOTS.length];
+/** URL 归一：只接受 http(s) 商品深链；剥 hash 锚点（同页定位不算换页），
+ *  保留 query（同一商品页不同参数视为不同 URL，如 ?sku=512 的变体页）。 */
+function normalizeUrl(raw: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+}
+
+/** 按商品 URL（+ 历史证据的采集周）匹配页面快照；无匹配恒返回双 null，
+ *  绝不轮转占位。extra = 调用方临时注入的证据（测试/未来 fact 直读）。 */
+export function snapshotFor(
+  url: string,
+  weekId?: string,
+  extra: PageSnapshot[] = [],
+): { historical: PageSnapshot | null; current: PageSnapshot | null } {
+  const key = normalizeUrl(url);
+  if (!key) return { historical: null, current: null };
+  const pool = [...REGISTRY, ...extra];
+  const sameUrl = (r: PageSnapshot): boolean => normalizeUrl(r.sourceUrl) === key;
+  const historical = weekId
+    ? pool.find((r) => r.kind === 'historical' && r.weekId === weekId && sameUrl(r)) ?? null
+    : null;
+  const current = pool.find((r) => r.kind === 'current-page' && sameUrl(r)) ?? null;
+  return { historical, current };
 }

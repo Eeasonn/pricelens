@@ -19,7 +19,7 @@ import {
   type AlertItem,
 } from '../alerts';
 import { platformPriceSpread } from '../aggregate';
-import { REAL_ALERT_PROVENANCE } from '../provenance';
+import { weeklyPriceProvenanceOf } from '../priceProvenance';
 
 const SCOPE = { countryCode: 'RU', industry: 'phone' } as const;
 
@@ -77,8 +77,9 @@ describe('buildAlerts 规则边界', () => {
   it('每条预警携带统一事实源与 as-of，不因币种或类型改变', () => {
     const alerts = buildAlerts(cfg([ownKey, compKey], 0.02));
     expect(alerts.length).toBeGreaterThan(0);
-    expect(alerts.every((a) => a.provenance === REAL_ALERT_PROVENANCE)).toBe(true);
-    expect(alerts.every((a) => a.provenance.asOf === '2026-W42')).toBe(true);
+    const source = weeklyPriceProvenanceOf({ countryCode: 'RU', industry: 'phone' });
+    expect(alerts.every((a) => a.provenance === source)).toBe(true);
+    expect(alerts.every((a) => a.provenance.asOf === source.asOf)).toBe(true);
   });
 
   it('adapter wrapper 区分 ready 与 out-of-scope empty', () => {

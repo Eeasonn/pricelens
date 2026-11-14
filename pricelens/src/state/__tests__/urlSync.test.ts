@@ -64,9 +64,17 @@ describe('platform/shop single-select normalization', () => {
     // 旧多选持久化：platforms 多值 → 取第一个（平台级兼容），shopIds 清空
     const multi: PlatformSelection = { platforms: ['OZON', 'DNS'], shopIds: [] };
     expect(normalizePlatformSelection(multi)).toEqual({ platforms: ['OZON'], shopIds: [] });
-    // platforms 与 shopIds 同存：店铺级优先，platforms 不得残留
-    expect(normalizePlatformSelection({ platforms: ['DNS'], shopIds: ['RU:ozon:1P'] })).toEqual({
+    // platforms 与 shopIds 同存（2026-11-14 店铺级恢复）：plat= 恰为店铺归属平台
+    // → 纯店铺级（platforms 清空，不放大成整平台口径）
+    expect(normalizePlatformSelection({ platforms: ['OZON'], shopIds: ['RU:ozon:1P'] })).toEqual({
       platforms: [],
+      shopIds: ['RU:ozon:1P'],
+      seller: null,
+    });
+    // plat= 为店铺归属平台之外的显式平台 → 混合并集原样保留（effectiveChannelIds
+    // = DNS 全渠道 ∪ 该店铺，R5 并集语义由数据层承担）
+    expect(normalizePlatformSelection({ platforms: ['DNS'], shopIds: ['RU:ozon:1P'] })).toEqual({
+      platforms: ['DNS'],
       shopIds: ['RU:ozon:1P'],
       seller: null,
     });
@@ -86,14 +94,18 @@ describe('platform/shop single-select normalization', () => {
     expect(out.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:1P'], seller: null });
   });
 
-  it('readUrlOverrides：旧多值链接 plat=OZON,DNS 取第一个归一为平台级单选', () => {
+  it('readUrlOverrides：旧多值链接 plat=OZON,DNS 全量读入（R7-M1 多平台不取一）', () => {
     const out = withWindowSearch('?c=RU&plat=OZON,DNS', () => readUrlOverrides());
-    expect(out.filters.platform).toEqual({ platforms: ['OZON'], shopIds: [] });
+    expect(out.filters.platform).toEqual({ platforms: ['OZON', 'DNS'], shopIds: [] });
   });
 
-  it('readUrlOverrides：plat 与 shop 同存时 shop 优先（单店口径）', () => {
-    const out = withWindowSearch('?c=RU&plat=DNS&shop=RU:ozon:1P', () => readUrlOverrides());
-    expect(out.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:1P'], seller: null });
+  it('readUrlOverrides：plat 与 shop 同存——plat= 恰为店铺归属平台 → 纯店铺级；异平台 → 混合并集', () => {
+    // plat=OZON = RU:ozon:1P 所属平台 → 纯店铺级（platforms 清空）
+    const pure = withWindowSearch('?c=RU&plat=OZON&shop=RU:ozon:1P', () => readUrlOverrides());
+    expect(pure.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:1P'], seller: null });
+    // plat=DNS ≠ RU:ozon:1P 所属平台（OZON）→ 混合并集原样保留
+    const mixed = withWindowSearch('?c=RU&plat=DNS&shop=RU:ozon:1P', () => readUrlOverrides());
+    expect(mixed.filters.platform).toEqual({ platforms: ['DNS'], shopIds: ['RU:ozon:1P'], seller: null });
   });
 
   it('readUrlOverrides：未带平台参数时不产生 platform 覆写', () => {

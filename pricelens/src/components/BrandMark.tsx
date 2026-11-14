@@ -23,6 +23,21 @@ export function fullModelName(brand: string, modelName: string): string {
   return modelName.toLowerCase().startsWith(b.toLowerCase()) ? modelName : `${b} ${modelName}`;
 }
 
+/** 药丸品牌内联（2026-11-13 Eason）：型号名一眼认不出品牌（小米数字系列/A37/X9D
+ *  这类裸型号名）= 药丸第一行固定带品牌词；一眼能认出的（iPhone/Galaxy/Redmi…）
+ *  返回 null（品牌只在悬停 title 显示）。判定来自清洗层 dim_product.brand_inline
+ *  （ingest is_brand_inline + overrides 人工覆写）；旧数据未带列时按既有语义回退
+ *  （名字已含品牌词 = null，否则带品牌词）。 */
+export function pillBrandLabel(p: { brand: string; model_name: string; brand_inline?: boolean }): string | null {
+  if (p.brand_inline != null) return p.brand_inline ? brandLabelOf(p.brand) : null;
+  return fullModelName(p.brand, p.model_name) === p.model_name ? null : brandLabelOf(p.brand);
+}
+
+/** 药丸悬停全名：品牌词恒在（无论是否内联都以此显示完整身份），供 title 使用 */
+export function pillHoverLabel(p: { brand: string; model_name: string; brand_inline?: boolean }): string {
+  return fullModelName(p.brand, p.model_name);
+}
+
 /** 品牌色小圆点：所有品牌名前的前置标记（筛选器触发器/级联品牌列/图上系列名/钉顶卡片） */
 export default function BrandDot({
   brand,

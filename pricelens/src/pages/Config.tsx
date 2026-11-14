@@ -56,6 +56,7 @@ import { modelIdOf } from '../components/ProductCascader/tree';
 import { useFilters } from '../state/FiltersContext';
 import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
 import DataQualityBlock from './config/DataQualityBlock';
+import DataPackBlock from './config/DataPackBlock';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
@@ -115,6 +116,7 @@ const CONFIG_SECTIONS: ReadonlyArray<readonly [string, string]> = [
   ['prev-gen', '上一代关系'],
   ['fx', '汇率'],
   ['promo', '大促日历'],
+  ['data-pack', '数据包'],
 ];
 
 export default function Config() {
@@ -842,6 +844,21 @@ export default function Config() {
                   );
                 })}
             </div>
+          </Block>
+
+          {/* 数据包（2026-11-14 Eason「价格数据完全以导入方式承载 + 本地可运行、
+              可快速迁移到其他电脑」）：导入/导出/还原内置——应用单文件 +
+              数据包两文件即可在任意电脑完整运行；查阅者只读 */}
+          <Block
+            id="data-pack"
+            title="数据包"
+            extra={
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>
+                价格数据导入承载 · 应用 + 数据包两文件即可迁移到其他电脑
+              </span>
+            }
+          >
+            <DataPackBlock canEdit={canEdit} />
           </Block>
 
           {/* 导入预览确认（仅 GTM 能走到）：applyImportPayload 落盘前已全量校验，

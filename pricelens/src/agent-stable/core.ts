@@ -15,6 +15,7 @@ import { simpleDemoDataset as forecastFixture } from '../pages/forecast/forecast
 import { createForecastSnapshot, type ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 import { provenanceSummary } from '../dataModel/provenance';
 import { buildPriceAdvantageResult } from './priceAdvantage';
+import { priceDataVersionOf } from '../dataModel/priceProvenance';
 
 const id = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const norm = (s: string): string => s.replace(/\s+/g, '').toLowerCase();
@@ -289,10 +290,10 @@ function selections(state: FiltersState): ProductSelection[] {
 }
 
 function seriesQueryOf(state: FiltersState): SeriesQuery | null {
-  // R5-M1：stable 看板取数每组 platform = 全局平台（PriceTrend 第196轮整改3
-  // 口径，店铺级经 platformLevelForChannel 降平台级）；Agent 趋势/平台查询必须
-  // 同口径，否则卡上数值与回看落地后的看板渠道集不同（如全局选 OZON 时卡按
-  // 全渠道自动算、落地却是 OZON）。iterate 保持每线覆写（现状不变）。
+  // R5-M1：stable 看板取数每组 platform = 全局平台/店铺（PriceTrend 第196轮整改3
+  // 口径；2026-11-14 店铺级恢复，platformLevelForChannel = 透传）；Agent 趋势/平台
+  // 查询必须同口径，否则卡上数值与回看落地后的看板渠道集不同（如全局选 OZON 时
+  // 卡按全渠道自动算、落地却是 OZON）。iterate 保持每线覆写（现状不变）。
   const stablePlatform = STABLE ? platformLevelForChannel(state.platform) : null;
   const groups = selections(state).map((selection) => ({
     modelId: selection.modelId,
@@ -725,7 +726,7 @@ function alertCard(text: string, alerts: readonly AgentAlertRecord[], state: Fil
       .filter((type) => state.alertTypes[type])
       .map((type) => ({ 'price-change': '调价', promo: '折扣', 'platform-gap': '平台价差', 'own-gap': '档位间距' })[type])
       .join(' / ');
-    const rules = `已按本地预警规则快照核对启用中的规则（${enabledRules || '无启用规则'}）与当前阈值（调价 ±${(state.alertThresholds['price-change'] * 100).toFixed(1)}% · 折扣 ${(state.alertThresholds.promo * 100).toFixed(1)}% · 平台价差 ${(state.alertThresholds['platform-gap'] * 100).toFixed(1)}% · 档位间距 低于${(state.alertThresholds['own-gap'] * 100).toFixed(0)}%）；核对 ${state.alertSubs.length} 个订阅系列在 ${state.countryCode} / ${state.industry} 口径下的触发结果；规则版本 price-rules-v1 · 数据 local-data-v1。`;
+    const rules = `已按本地预警规则快照核对启用中的规则（${enabledRules || '无启用规则'}）与当前阈值（调价 ±${(state.alertThresholds['price-change'] * 100).toFixed(1)}% · 折扣 ${(state.alertThresholds.promo * 100).toFixed(1)}% · 平台价差 ${(state.alertThresholds['platform-gap'] * 100).toFixed(1)}% · 档位间距 低于${(state.alertThresholds['own-gap'] * 100).toFixed(0)}%）；核对 ${state.alertSubs.length} 个订阅系列在 ${state.countryCode} / ${state.industry} 口径下的触发结果；规则版本 price-rules-v1 · 数据 ${priceDataVersionOf(state)}。`;
     const card: AgentResultCard = {
       kind: 'table',
       id: id('alert-empty'),
@@ -905,12 +906,11 @@ export function buildAgentContext(page: string, state: FiltersState, alerts: rea
     alerts,
     createdAt: new Date().toISOString(),
     fingerprint,
-    // 数据版本由真实数据接入时替换为 manifest.version；在本地演示中保持可审计常量。
-    dataVersion: 'local-data-v1',
+    dataVersion: priceDataVersionOf(state),
     ruleVersion: 'price-rules-v1',
     provenance: {
       source: 'pricelens-context',
-      dataVersion: 'local-data-v1',
+      dataVersion: priceDataVersionOf(state),
       ruleVersion: 'price-rules-v1',
       contextFingerprint: fingerprint,
     },

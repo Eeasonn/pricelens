@@ -106,6 +106,7 @@ import {
   cascadePlacementOf,
   clampPanelPos,
   captureFocusRestore,
+  panelPlacementOf,
   pillW,
   textW,
   useTopEscClose,
@@ -809,6 +810,33 @@ function LevelSwitchPopover({
   const bodyW = narrow ? Math.max(280, widthCap) : Math.max(360, Math.min(panelW + 20, widthCap));
   // 落位翻转（第一百九十轮）：锚点左侧放不下浮层宽 → 改锚右缘向左展开
   const placement = trigX ? cascadePlacementOf(trigX.left, bodyW, typeof window === 'undefined' ? 1280 : window.innerWidth) : 'bottomLeft';
+  // 浮层钳进视口（2026-11-13 Eason「产品筛选框被遮挡」）：浮层宽 = 四列自适应和，
+  // 可逼近视口宽（上限 min(vw-48, 1100)）——antd 对超宽浮层的自动平移会把左缘
+  // 推出屏幕外（vw=1000、宽 957、锚点居中时实测 left -202，品牌列整列不可达）。
+  // 打开/宽度变化/视口变化后量测一次，越界就沿 antd 原 transform 叠加 X 平移，
+  // 钳回 24px 安全边距（bodyW ≤ vw-48 保证钳完右缘也不越界）。
+  useEffect(() => {
+    if (!open) return;
+    const clamp = (): void => {
+      const el = document.querySelector<HTMLElement>('.lpl-cascade-popover');
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const EDGE = 24;
+      const dx = r.left < EDGE ? EDGE - r.left : r.right > vw - EDGE ? vw - EDGE - r.right : 0;
+      if (dx !== 0) {
+        const m = new DOMMatrix(getComputedStyle(el).transform);
+        el.style.transform = `translate(${Math.round(m.m41 + dx)}px, ${Math.round(m.m42)}px)`;
+      }
+    };
+    clamp();
+    const t = window.setTimeout(clamp, 350); // antd 落位/入场动画稳定后再兜一次
+    window.addEventListener('resize', clamp);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('resize', clamp);
+    };
+  }, [open, bodyW]);
   // set-main 的空组卡在批量动作中会被移除，封顶判定按移除后的基数算
   const tierBase = ctx.kind === 'set-main' && activeCard ? mains.filter((c) => c.id !== activeCard.id) : mains;
   const tierGroupDisabled = tierBase.length >= MAINS_CAP || tierOwnConfigs.length === 0;
@@ -1129,7 +1157,9 @@ export default function ProductPickerFlyout({
 }) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  // 落位（2026-11-13 扩展）：above = 翻到锚点上方（bottom 锚定向上长）——锚点贴
+  // 视口底时旧逻辑仍向下开，maxHeight 只剩 52px 缝（浮窗「显示不全」）
+  const [pos, setPos] = useState<{ left: number; top: number; above: boolean; bottom: number; maxH: number } | null>(null);
   // 焦点只随浮窗首次落位移入一次（resize 跟随重算落点时不抢回焦点）
   const didFocusRef = useRef(false);
   // 第一百九十轮（外部 UX 审计落地）：退场动画——open 变假先挂 .lpl-fade-out
@@ -1159,6 +1189,8 @@ export default function ProductPickerFlyout({
   // 宽度走 CSS min(860px, calc(100vw - 48px))（与钳制用的同一宽度算式），
   // 左右至少留 24px 边距、顶边不越界；底边由渲染处 maxHeight 按钳制后
   // top 收口——任何落点下浮窗都不越视口。
+  // 2026-11-13（Eason）：纵向落位改 panelPlacementOf——下方不足一块可读面板
+  // 且上方更宽裕时翻到锚点上方（bottom 锚定），任何视口下浮窗都完整可读。
   useEffect(() => {
     if (!open) return;
     const measure = (): void => {
@@ -1167,7 +1199,9 @@ export default function ProductPickerFlyout({
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const w = Math.min(860, vw - 48); // 与下方 style.width 的 min() 同式
-      setPos(clampPanelPos(r.left, r.bottom + 6, w, vw, vh));
+      const place = panelPlacementOf(r.top, r.bottom, vw, vh);
+      const clamp = clampPanelPos(r.left, place.above ? PICKER_EDGE : place.top, w, vw, vh);
+      setPos({ left: clamp.left, top: place.top, above: place.above, bottom: place.bottom, maxH: place.maxH });
     };
     measure();
     window.addEventListener('resize', measure);
@@ -1236,7 +1270,8 @@ export default function ProductPickerFlyout({
               data-lpl-picker-panel
               className={renderState === 'closing' ? 'lpl-fade-out' : 'lpl-fade-in'}
               /* 第一百八十五轮：dialog 语义 + 焦点入口（tabIndex=-1 供编程聚焦）；
-               * maxHeight 按钳制后 top 动态收口，底边恒在视口内（24px 边距） */
+               * maxHeight 按落位动态收口，上/下缘恒在视口内（24px 边距）；
+               * 2026-11-13 翻上方态用 bottom 锚定（面板向上长，底边贴触发器顶 6px 缝） */
               role="dialog"
               aria-modal="true"
               aria-label="选择产品"
@@ -1244,10 +1279,11 @@ export default function ProductPickerFlyout({
               style={{
                 position: 'fixed',
                 left: pos.left,
-                top: pos.top,
+                ...(pos.above
+                  ? { bottom: pos.bottom, maxHeight: pos.maxH }
+                  : { top: pos.top, maxHeight: `calc(100vh - ${Math.round(pos.top) + PICKER_EDGE}px)` }),
                 zIndex: PANEL_Z,
                 width: 'min(860px, calc(100vw - 48px))',
-                maxHeight: `calc(100vh - ${Math.round(pos.top) + PICKER_EDGE}px)`,
                 overflowY: 'auto',
                 background: color.canvas,
                 borderRadius: radius.card,

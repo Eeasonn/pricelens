@@ -135,15 +135,15 @@ describe('三审 M1 · 共享生效口径 effectiveLinePlatform（每线 > 全�
     expect(effectiveLinePlatform({}, null)).toBeNull();
   });
 
-  it('最强反例：趋势 372/OZON 3P，同会话价格优势 own 372、对 A57（新绑定 8+128）/ HONOR 600（新绑定 8+256，493）落后值如实为占优（绝不 352 混池）', async () => {
+  it('最强反例：趋势 372/OZON 3P，同会话价格优势 own 372、对 A57（2026-11-13 匹配修订后绑定 12+256）/ HONOR 600（同绑 12+256，540）落后值如实为占优（绝不 352 混池）', async () => {
     const state = ruNova15PerLineShopState();
     // 趋势：372 / OZON 3P（与价格页每线药丸一致；自动混池是 352/DNS）
     const { table } = await trendCardsOf(state, '价格趋势');
     expect(table.rows[0][1]).toBe('372');
     expect(table.rows[0][3]).toBe('OZON 3P');
-    // 优势：own 全部 372、渠道点名 OZON 3P；2026-11-11 pair_configs 修订后 nova 15
-    // 12+256 对 A57 8+128、HONOR 600 8+256（便宜对便宜），真实事实价以实际取数为准
-    // （本断言锁「每线 3P 价随优势，不读全局混池」）
+    // 优势：own 全部 372、渠道点名 OZON 3P；2026-11-13 pair_configs 锚点修订后
+    // nova 15 12+256 对 A57 12+256、HONOR 600 12+256（存储内存全一致），真实事实价
+    // 以实际取数为准（本断言锁「每线 3P 价随优势，不读全局混池」）
     const { card } = await advantageCardOf(state);
     const rows34 = card.rows.filter((row) => row.weekId === '202634');
     expect(rows34.length).toBeGreaterThan(0);
@@ -152,13 +152,13 @@ describe('三审 M1 · 共享生效口径 effectiveLinePlatform（每线 > 全�
     expect(rows34.every((row) => row.channelLabel === 'OZON 3P')).toBe(true);
     const honorRow = rows34.find((row) => row.competitor.modelId === 'cmp-honor-600');
     expect(honorRow).toBeTruthy();
-    expect(honorRow!.competitor.price).toBe(493);
-    expect(honorRow!.priceDiff).toBe(493 - 372);
+    expect(honorRow!.competitor.price).toBe(540);
+    expect(honorRow!.priceDiff).toBe(540 - 372);
     expect(honorRow!.relation).toBe('advantage');
     const a57Row = rows34.find((row) => row.competitor.modelId === 'cmp-samsung-a57');
     expect(a57Row).toBeTruthy();
-    expect(a57Row!.competitor.price).toBe(423);
-    expect(a57Row!.priceDiff).toBe(423 - 372);
+    expect(a57Row!.competitor.price).toBe(586);
+    expect(a57Row!.priceDiff).toBe(586 - 372);
     expect(a57Row!.relation).toBe('advantage');
     // 关系方向全部由真实价差导出（nova 15 低于两款矩阵对手 → 全部占优），
     // 没有一条被误报反向
@@ -206,9 +206,10 @@ describe('三审 M1 · 共享生效口径 effectiveLinePlatform（每线 > 全�
   });
 
   it('URL 全局 shop=3P 旁证统一：趋势与优势都 478/OZON 3P（旧缺陷趋势混池 427 与优势 478 双口径）', async () => {
-    // 全局店铺级 3P 下对手线同口径（只吃 OZON 3P 事实）——nova 15 12+256 的矩阵
-    // 对手仅 HONOR 600 12+256 在 202645 有 OZON 3P 行（671.18），证人周取 202645：
-    // own OZON 3P min(478.07, 478.31) → 478；自动混池 427（DNS 427.18）。
+    // 全局店铺级 3P 下对手线同口径（只吃 OZON 3P 事实）——2026-11-13 匹配修订后
+    // nova 15 12+256 的矩阵对手 = HONOR 600 12+256（存储内存全一致），其在 202645
+    // 有 OZON 3P 行（671.18），证人周取 202645：own OZON 3P min(478.07, 478.31) →
+    // 478；自动混池 427（DNS 427.18）。
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'RU',
@@ -228,8 +229,8 @@ describe('三审 M1 · 共享生效口径 effectiveLinePlatform（每线 > 全�
     expect(rows45.every((row) => row.channelLabel === 'OZON 3P')).toBe(true);
     const honorRow = rows45.find((row) => row.competitor.modelId === 'cmp-honor-600');
     expect(honorRow).toBeTruthy();
-    expect(honorRow!.competitor.price).toBe(611);
-    expect(honorRow!.priceDiff).toBe(611 - 478);
+    expect(honorRow!.competitor.price).toBe(671);
+    expect(honorRow!.priceDiff).toBe(671 - 478);
     expect(honorRow!.relation).toBe('advantage');
   });
 });

@@ -28,9 +28,22 @@ describe('alert lifecycle contracts', () => {
     expect(record.alertId).toBe(alertIdOf(alert));
     expect(record.id).toBe(record.alertId);
     expect(record.ruleSnapshot.threshold).toBe(0.02);
+    expect(record.dataVersion).toBe(alert.provenance.source.version);
+    expect(record.ruleSnapshot.dataVersion).toBe(alert.provenance.source.version);
     expect(record.ruleVersion).toContain('price-change');
     expect(record.evidence.length).toBeGreaterThan(0);
     expect(record.activities[0].kind).toBe('triggered');
+  });
+
+  it('preserves a historical event version when the current source changes', () => {
+    const alert = buildAlerts(cfg)[0];
+    const historical = { ...alert, provenance: { ...alert.provenance, source: { ...alert.provenance.source, version: 'historical-batch' } } };
+    const [oldRecord] = materializeAlertRecords([historical], cfg, {}, { now: '2026-11-01T00:00:00.000Z' });
+    const [record] = materializeAlertRecords([alert], cfg, { [oldRecord.alertId]: oldRecord }, { now: '2026-11-11T00:00:00.000Z' });
+    expect(record.dataVersion).toBe('historical-batch');
+    expect(record.provenance.source.version).toBe('historical-batch');
+    expect(record.ruleSnapshot).toEqual(oldRecord.ruleSnapshot);
+    expect(alertAgentContextOf(record).dataVersion).toBe('historical-batch');
   });
 
   it('supports auditable transitions and rejects invalid transition', () => {

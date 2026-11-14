@@ -1,8 +1,9 @@
 // ============================================================
 // 量带归属接线（2026-11-05 复检五件套）：index → Chart 的 volumeOwner / margins。
 // Chart 用桩捕获 props（ECharts 在 jsdom 无 canvas，渲染行为由 volumeLayer 覆盖）——
-// ①合并图 = 第一张卡主品；②分图 = 每面板各自主品；③主品是竞品时不出销毛（口径 = 我司产品），
-// 量带归属仍如实显示其名（药丸说的就是这条量是谁的）。
+// ①合并图 = 第一张卡主品；②分图 = 每面板各自主品；③主品是竞品时不出销毛（口径 = 我司产品）。
+// 2026-11-13 Eason 拍板「销量只认我司」：合并图竞品主品不再出任量带归属（无量带/
+// 无「量」按钮）；分图面板仍如实显示各自主品（演进版逐面板量价呈现不变）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -100,13 +101,13 @@ describe('量带归属接线', () => {
     expect(keysOfB).not.toContain('HUA-A__12GB+256GB');
   });
 
-  it('主品是竞品：销毛卡不出（合并 / 分图都门控），量带归属如实显示其名', () => {
+  it('主品是竞品：销毛卡不出、合并图量带归属为空（2026-11-13 销量只认我司）；分图如实显示', () => {
     harness.ownModels = new Set();
     harness.mains = [card('c1', 'IPHONE')];
     render(<PriceTrend />);
     const merged = harness.chartProps[harness.chartProps.length - 1];
     expect(merged.margins).toBeUndefined();
-    expect((merged.volumeOwner as { brand: string }).brand).toBe('APPLE');
+    expect(merged.volumeOwner).toBeNull();
     cleanup();
     harness.chartProps = [];
     harness.mains = [card('c1', 'IPHONE'), card('c2', 'GALAXY')];
@@ -114,5 +115,13 @@ describe('量带归属接线', () => {
     const panels = [...latestByOwner().values()];
     expect(panels.length).toBeGreaterThanOrEqual(2);
     for (const p of panels) expect(p.margins).toBeUndefined();
+  });
+
+  it('我司主品 + 竞品主品混组：合并图量带只归我司主品（竞品主品不出「量」候选）', () => {
+    harness.mains = [card('c1', 'IPHONE'), card('c2', 'HUA-A')];
+    render(<PriceTrend />);
+    const merged = harness.chartProps[harness.chartProps.length - 1];
+    expect((merged.volumeOwner as { key: string } | null)?.key).toBe('HUA-A__12GB+256GB');
+    expect(merged.volumeCandidates).toBeUndefined(); // 我司主品仅 1 组 → 候选 null（单组路径）
   });
 });

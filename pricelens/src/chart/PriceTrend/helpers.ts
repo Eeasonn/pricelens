@@ -988,7 +988,7 @@ export function tailWindowIds(ids: string[], len: number): [string, string] | nu
   return [ids[Math.max(0, ids.length - len)], ids[ids.length - 1]];
 }
 
-// ---------------- 时间自适应（自动极值 = 所选产品最早/最晚有效价格桶） ----------------
+// ---------------- 默认查看窗口（2026-11-13 Eason 时间筛选单值化） ----------------
 
 /**
  * 所选系列的数据跨度（全集桶下标区间）：任一点有折后价或 RRP 即算在售。
@@ -1009,31 +1009,26 @@ export function seriesSpanRange(series: Series[]): [number, number] | null {
   return lo != null && hi != null ? [lo, hi] : null;
 }
 
-/**
- * 自适应可选范围 = 跨度 ±pad 个桶，钳在数据全集内；看板自动模式传 pad=0，
- * 因而上方筛选器直接显示产品最早/最晚有效价格桶：
- * 左缘不早于数据起点、右缘不晚于数据末端（数据生成到当前时间，即"不超当前时间"）。
- * 例：跨度 202603..202608 → 可选 202601..202610；跨度到 202610 → 右缘钳 202610。
- * 无桶/无跨度 → null。
- */
-export function adaptiveRangeOf(
-  buckets: Bucket[],
-  span: [number, number] | null,
-  pad = 2,
-  minLen = 0,
-): [string, string] | null {
-  if (!buckets.length || !span) return null;
-  const hi = Math.min(buckets.length - 1, span[1] + pad);
-  let lo = Math.max(0, span[0] - pad);
-  // 2026-11-09 用户反馈：稀疏采数国（巴西周度仅 5-6 周）自动范围塌缩成几根柱、
-  // 没法读。跨度不足可读下限时锚数据末端向左补足（仍钳全集左缘）。
-  if (minLen > 1 && hi - lo + 1 < minLen) lo = Math.max(0, hi - minLen + 1);
-  return [buckets[lo].id, buckets[hi].id];
+/** 默认窗口长度（按粒度）：周 12 桶 / 月 6 桶 / 季 4 桶。选完产品图表默认只展示
+ *  近期窗口（右缘 = 最晚有价桶，左缘 = 往前推 N 桶）；更早历史靠底部时间拖块左拉。 */
+export function defaultTailBuckets(g: Granularity): number {
+  return g === 'week' ? 12 : g === 'month' ? 6 : 4;
 }
 
-/** 自动范围可读下限（按粒度）：周 8 桶 / 月 3 桶 / 季 2 桶。2026-11-09 Eason 拍板。 */
-export function adaptiveMinBuckets(g: Granularity): number {
-  return g === 'week' ? 8 : g === 'month' ? 3 : 2;
+/**
+ * 默认时间范围 = 所选产品跨度末端向前取 N 桶（2026-11-13 取代自适应全程跨度）：
+ * 端点 = span[1]（最晚有价桶，钳全集）；起点 = max(span[0], span[1] − N + 1)——
+ * 跨度不足 N 桶时锚数据起点（不造空桶）。无桶/无跨度 → null（调用方保持现范围）。
+ */
+export function tailDefaultRange(
+  buckets: Bucket[],
+  span: [number, number] | null,
+  g: Granularity,
+): [string, string] | null {
+  if (!buckets.length || !span) return null;
+  const hi = Math.min(buckets.length - 1, span[1]);
+  const lo = Math.max(0, span[0], hi - (defaultTailBuckets(g) - 1));
+  return [buckets[lo].id, buckets[hi].id];
 }
 
 /** §6.3 下钻：季桶 → 该季月桶范围（2026Q3 → 202607..202609） */
@@ -1159,6 +1154,12 @@ export interface AvoidItem {
   /** 第196轮整改3（zone 模式恢复）：名称已按带内等距分布放置——渲染层按单行
    *  nowrap 药丸绘制（带宽按名称自适应预留，不换行） */
   zone?: boolean;
+  /** 名称带两行药丸（2026-11-13 Eason）：行1 = 色点 + [品牌词（brand_inline 判定，
+   *  null = 品牌只在悬停出）] + 产品名（去配置后缀）、行2 = 配置 chip（非空才出）。
+   *  仅传了 pillSpecOf 的 zone 项携带 */
+  nameText?: string;
+  brandWord?: string | null;
+  cfgText?: string;
 }
 
 export interface AvoidResult {
@@ -1184,6 +1185,11 @@ export interface AvoidResult {
     hidden?: boolean;
     /** 第196轮整改3：名称带内等距分布项（渲染单行 nowrap） */
     zone?: boolean;
+    /** 名称带两行药丸（2026-11-13）：行1 产品名（去配置后缀）/ 品牌词（brand_inline，
+     *  null = 只在悬停出）/ 行2 配置 chip（非空才出）；仅 zone 项携带 */
+    nameText?: string;
+    brandWord?: string | null;
+    cfgText?: string;
   }[];
 }
 
@@ -1240,6 +1246,14 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number): AvoidRes
         hidden: it.hidden,
         // 第196轮整改3：仅带内项带 zone 标记（锚定模式字段缺省，不进金测序列化）
         ...(it.zone ? { zone: true as const } : {}),
+        // 两行药丸字段（2026-11-13）：仅带 pillSpecOf 的 zone 项携带（缺省不进序列化）
+        ...(it.nameText != null
+          ? {
+              nameText: it.nameText,
+              brandWord: it.brandWord ?? null,
+              ...(it.cfgText ? { cfgText: it.cfgText } : {}),
+            }
+          : {}),
       });
     }
   }

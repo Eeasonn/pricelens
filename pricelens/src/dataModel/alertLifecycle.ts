@@ -181,7 +181,7 @@ export function ruleSnapshotOf(
   cfg: AlertCfg,
   options: { dataVersion?: string; engineVersion?: string; capturedAt?: string } = {},
 ): AlertRuleSnapshot {
-  const dataVersion = options.dataVersion ?? 'local-demo';
+  const dataVersion = options.dataVersion ?? alert.provenance.source.version ?? 'unknown';
   const engineVersion = options.engineVersion ?? 'alerts-v1';
   const productRule = cfg.products?.[alert.seriesKey];
   const type = alert.type;
@@ -273,6 +273,7 @@ export function toAlertRecord(
   const stableId = options.existing?.alertId ?? options.existing?.id ?? alertIdOf(alert);
   const record: AlertRecord = {
     ...alert,
+    provenance: options.existing?.provenance ?? alert.provenance,
     id: stableId,
     alertId: stableId,
     lifecycle: options.existing?.lifecycle ?? 'new',

@@ -113,22 +113,6 @@ export const DEMO_FULL_FORECAST_PROVENANCE: DataProvenance = {
   notes: ['用于拟合和验模；学习结果通过质量门槛后才可进入预测。'],
 };
 
-/** Price facts are real, but the current batch is intentionally marked delayed. */
-export const REAL_ALERT_PROVENANCE: DataProvenance = {
-  dataStatus: 'real',
-  source: {
-    id: 'fact-price-weekly',
-    label: '周度平台价格事实表',
-    kind: 'internal_fact',
-    version: '2026-W42',
-  },
-  asOf: '2026-W42',
-  refreshedAt: '2026-10-15T06:00:00+08:00',
-  freshness: 'stale',
-  coverage: { from: '2026-W19', to: '2026-W42', grain: 'week', records: 84841 },
-  notes: ['价格事实来自采集批次；无价格周保持缺采，不插值。'],
-};
-
 export const DEMO_INTELLIGENCE_PROVENANCE: DataProvenance = {
   dataStatus: 'simulated',
   source: {

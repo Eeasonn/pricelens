@@ -1,17 +1,13 @@
 // ============================================================
-// §6.5 时间范围：时间筛选簇（TimeRangeCluster）+ 当前筛选范围内的查看窗口轨道。
-// 自动模式按所选产品的最早/最晚有效价格桶更新筛选器；窗口只负责缩放查看。
+// §6.5 时间范围：时间筛选簇（TimeRangeCluster = 最晚时间单值选择器，2026-11-13
+// 单值化：「自动时间」按钮退役、区间选择改单值——最早时间由底部时间拖块控制）
+// + 时间拖块（XBrush 默认导出 = 筛选范围编辑器：轨道全域 = 数据全集，两手柄
+// 直接写最早/最晚时间）。
 // 第一百一十九轮（走查会）：左侧时间筛选簇抽成 TimeRangeCluster 导出组件。
-// 第一百二十三轮：刻度主行恒短格式（周=MM-DD/月=MM/季=Qn，窗口两端拖柄标签同样
-// 短格式、只加粗区分），年份独立第二行（最左显示刻度恒带、换年刻度带）；拖柄两端
-// 标签与中间刻度改按像素区间避让（原按桶数让位在窄轨道/密周窗口下仍叠字）。
-// 第一百三十一轮波2：时间筛选器统一上移顶部筛选条（FilterBar/TimeBox）——刷选条
-// 左列（时间筛选/「同步」占位）整列退役，本组件收敛为纯查看窗口轨道（价格看板
-// 合并模式专用），通栏一行、左右缘与绘图区对齐；TimeRangeCluster 仍由本文件导出
-// （顶部筛选条 TimeBox 在用）。波2修：TimeRangeCluster 弹层即时开关（不依赖
-// CSS transitionend）+ 再点输入框关闭，见 TimeRangeCluster 注。
-// 第一百五十一轮修：再点输入框切换误吞面板 portal 冒泡点击（点翻月箭头整面板
-// 收起），按 DOM 包含关系过滤，见 TimeRangeCluster 内注。
+// 第一百三十一轮波2：时间筛选器统一上移顶部筛选条（FilterBar/TimeBox）。
+// 刻度主行恒短格式、年份独立第二行、拖柄标签像素避让（第一百二十三轮）沿用。
+// 弹层交互契约（即时开关/外点 Escape 直关/再点输入框切换/弹层内白名单）见
+// TimeRangeCluster 注——历史轮记从略。
 // ============================================================
 import dayjs, { type Dayjs } from 'dayjs';
 import { CalendarOutlined } from '@ant-design/icons';
@@ -23,18 +19,16 @@ import { filterBarTheme } from '../../components/FilterBar';
 import type { AggMode, Granularity } from '../../dataModel/types';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { axisTickPlan, fullBucketLabel, GRID, hideOverlappingTicks, MIN_WINDOW, panWindow, type Bucket } from './helpers';
-import { color, font, fontSize, radius, selectAccent, selectSoft, selectSoftInk, trackColors } from '../../theme/tokens';
+import { color, font, fontSize, radius, selectAccent, trackColors } from '../../theme/tokens';
 
 export interface TimeRangeClusterProps {
   buckets: Bucket[];
-  /** 上方极值筛选器对应的桶区间。 */
-  lo: number;
-  hi: number;
-  adaptive: boolean;
+  /** 当前最晚桶（筛选范围右端 = 单值选择器的值）。 */
+  endId: string;
   granularity: Granularity;
-  /** 修改上方极值筛选器，退出自动模式。 */
-  onRangeChange: (startId: string, endId: string) => void;
-  onToggleAdaptive: () => void;
+  /** 改最晚时间（2026-11-13 单值化：最早时间由看板底部时间拖块控制）。
+   *  手动选定 = 固定时间范围（退出跟随产品的默认窗口）。 */
+  onEndChange: (endId: string) => void;
   /** 月/季聚合。周粒度不展示；不传则面板里不出现聚合方式。 */
   agg?: AggMode;
   onAggChange?: (agg: AggMode) => void;
@@ -44,17 +38,16 @@ export interface TimeRangeClusterProps {
   popupContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
-/** 时间筛选簇 = 「自动」跟随开关 + 时间范围选择器。
- *  独立导出：底部刷选条与量价卡顶工具行共用同一交互。
- *  第一百三十一轮波2修：①弹层显隐不依赖 CSS 过渡（transitionName 置空，即时
- *  开关）；②外点/Escape 关闭改由本组件直接 setState（rc-picker 把关闭延迟一帧
- *  raf，在 rAF 挂起的嵌入 webview 里永不执行 → 弹层关不掉，见下方 effect 注）；
- *  ③再点输入框 = 关闭切换（rc-picker 原生对输入框点击恒保持打开）。
- *  2026-11-04（Eason 看图反馈）：周/月/季粒度切换移出时间筛选簇——常驻顶部
- *  筛选条币种右侧（FilterBar GranularityBox），时间簇收窄让位；弹层内不再
- *  重复出粒度 Segmented（原「切粒度关弹层再重开」的锚点重算机制随之退役）。 */
+/** 时间筛选簇 = 最晚时间单值选择器（2026-11-13 Eason：自动时间按钮退役、
+ *  区间选择改单值——最早时间由看板底部时间拖块控制）。
+ *  独立导出：顶部筛选条 TimeBox 在用。
+ *  弹层交互契约沿用：①弹层显隐不依赖 CSS 过渡（transitionName 置空，即时开关）；
+ *  ②外点/Escape 关闭改由本组件直接 setState（rc-picker 把关闭延迟一帧 raf，
+ *  在 rAF 挂起的嵌入 webview 里永不执行 → 弹层关不掉）；③再点输入框 = 关闭切换
+ *  （rc-picker 原生对输入框点击恒保持打开）；④弹层内点击经 xbrush-range-popup
+ *  类白名单放行（选段/切聚合不收面板）。 */
 export function TimeRangeCluster(props: TimeRangeClusterProps) {
-  const { buckets, lo, hi, adaptive, granularity, onRangeChange, onToggleAdaptive, agg, onAggChange, placement = 'topLeft', popupContainerRef } = props;
+  const { buckets, endId, granularity, onEndChange, agg, onAggChange, placement = 'topLeft', popupContainerRef } = props;
   const narrow = useNarrowViewport();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [rangeOpen, setRangeOpen] = useState(false);
@@ -111,28 +104,17 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
     if (granularity === 'month' && /^\d{6}$/.test(id)) return `${id.slice(0, 4)}-${id.slice(4)}`;
     return id;
   };
-  const startId = buckets[lo]?.id ?? buckets[0].id;
-  const endId = buckets[hi]?.id ?? buckets[n - 1].id;
   const granularityLabel: Record<Granularity, string> = { week: '周', month: '月', quarter: '季' };
   const pickerMode: 'week' | 'month' | 'quarter' = granularity;
-  const pickerValue: [Dayjs, Dayjs] = [
-    dayjs(dateOfBucket(startId, granularity) ?? new Date()),
-    dayjs(dateOfBucket(endId, granularity) ?? new Date()),
-  ];
+  const pickerValue = dayjs(dateOfBucket(endId, granularity) ?? new Date());
   const pickerFormat = (value: Dayjs): string => formatId(bucketIdOfDate(value.toDate(), granularity));
   const disabledDate = (value: Dayjs): boolean => {
     const id = bucketIdOfDate(value.toDate(), granularity);
-    const index = buckets.findIndex((bucket) => bucket.id === id);
-    return index < lo || index > hi;
+    return buckets.findIndex((bucket) => bucket.id === id) < 0;
   };
-  const onPickerChange = (values: [Dayjs | null, Dayjs | null] | null): void => {
-    const start = values?.[0];
-    const end = values?.[1];
-    if (!start || !end) return;
-    onRangeChange(
-      bucketIdOfDate(start.toDate(), granularity),
-      bucketIdOfDate(end.toDate(), granularity),
-    );
+  const onPickerChange = (value: Dayjs | null): void => {
+    if (!value) return;
+    onEndChange(bucketIdOfDate(value.toDate(), granularity));
     setRangeOpen(false);
   };
   const renderPickerPanel = (panel: ReactNode): ReactNode => (
@@ -140,7 +122,7 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px 6px', borderBottom: `1px solid ${color.hairline}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ color: color.body, fontSize: fontSize.caption, fontWeight: 600 }}>
-            筛选范围（{granularityLabel[granularity]}）
+            最晚时间（{granularityLabel[granularity]}）
           </span>
         </div>
         {granularity !== 'week' && onAggChange && (
@@ -157,38 +139,22 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
           </div>
         )}
         <div style={{ color: color.mute, fontSize: 11, lineHeight: '16px' }}>
-          跟随产品有效价格范围；手动选择后退出自动
+          选最晚时间；更早范围用看板底部时间拖块向左拉
         </div>
       </div>
       {panel}
     </div>
   );
 
-  // 第一百八十二轮（评审）：RangePicker 的两个输入框可访问名区分开始/结束
-  // （antd 只支持整簇一个 aria-label，读屏无法分辨正在填哪一端）
+  // 单值选择器可访问名（第一百八十二轮双输入区分开始/结束的机制随区间退役）
   useEffect(() => {
     const inputs = rootRef.current?.querySelectorAll<HTMLInputElement>('.xbrush-range-picker input');
     if (!inputs) return;
-    inputs[0]?.setAttribute('aria-label', `时间范围开始（${granularityLabel[granularity]}）`);
-    inputs[1]?.setAttribute('aria-label', `时间范围结束（${granularityLabel[granularity]}）`);
+    inputs[0]?.setAttribute('aria-label', `最晚时间（${granularityLabel[granularity]}）`);
   });
 
   return (
     <div ref={rootRef} style={{ position: 'relative', display: 'flex', alignItems: narrow ? 'stretch' : 'center', flexDirection: narrow ? 'column' : 'row', gap: 6, minWidth: 0, width: narrow ? '100%' : undefined }}>
-      <button
-        type="button"
-        aria-label={adaptive ? '自动时间' : '回到自动时间'}
-        aria-pressed={adaptive}
-        title={adaptive ? '自动时间：跟随产品有效价格范围；手动选择后退出自动' : '回到自动时间范围'}
-        onClick={onToggleAdaptive}
-        style={{
-          height: narrow ? 44 : 30, padding: narrow ? '0 12px' : '0 9px', borderRadius: radius.control,
-          border: `1px solid ${adaptive ? selectAccent : color.hairlineStrong}`,
-          background: adaptive ? selectSoft : color.canvas,
-          color: adaptive ? selectSoftInk : color.body,
-          font: 'inherit', fontSize: fontSize.caption, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-        }}
-      >{adaptive ? '自动时间' : '回到自动'}</button>
       {/* 输入框再点 = 开↔关切换（同步 setState）：打开/关闭都不依赖 rc-picker
           内部那帧 raf（受控开启同样被延迟，挂起环境里点输入框打不开），与关闭
           兜底同一思路。display:contents 不产生盒模型，选择器沿用簇内原 flex 尺寸。
@@ -209,16 +175,14 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
         style={{ display: 'contents' }}
       >
         <ConfigProvider locale={zhCN} theme={filterBarTheme}>
-          <DatePicker.RangePicker
+          <DatePicker
             key={pickerMode}
-            aria-label="时间范围筛选器"
+            aria-label="最晚时间筛选器"
             className="xbrush-range-picker"
             classNames={{ popup: { root: 'xbrush-range-popup' } }}
             value={pickerValue}
             picker={pickerMode}
             format={pickerFormat}
-            separator={<span style={{ color: color.mute }}>→</span>}
-            prefix={<span style={{ color: color.mute, fontSize: fontSize.caption }}>{granularityLabel[granularity]}</span>}
             suffixIcon={<CalendarOutlined style={{ color: color.mute }} />}
             allowClear={false}
             inputReadOnly
@@ -230,7 +194,7 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
             placement={placement}
             transitionName="" // 弹层即时开关：不依赖 CSS transitionend（嵌入 webview 不回报，见上注）
             getPopupContainer={() => popupContainerRef?.current ?? rootRef.current ?? document.body}
-            style={{ minWidth: 0, flex: '1 1 160px', width: narrow ? '100%' : 200, height: narrow ? 44 : 30 }}
+            style={{ minWidth: 0, flex: narrow ? '1 1 auto' : '0 0 132px', width: narrow ? '100%' : 132, height: narrow ? 44 : 30 }}
           />
         </ConfigProvider>
       </span>
@@ -240,16 +204,18 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
 
 export interface XBrushProps {
   buckets: Bucket[];
-  /** 当前查看窗口，始终位于 [lo, hi] 内。 */
+  /** 当前筛选范围（轨道上的选中段），始终位于 [lo, hi] 内。 */
   s: number;
   e: number;
-  /** 上方极值筛选器对应的桶区间（轨道 = 该范围）。 */
+  /** 轨道全域 = 数据全集桶区间（2026-11-13 起拖块直接编辑筛选范围，
+   *  轨道不再是筛选范围本身）。 */
   lo: number;
   hi: number;
   /** 与图表绘图区左缘对齐：轨道通栏一行，左缘内缩到绘图区、右缘到容器右缘。 */
   plotLeft: number;
   granularity: Granularity;
-  /** 调整下方查看窗口，不改变上方极值筛选器。 */
+  /** 改筛选范围（2026-11-13：起点 = 最早时间、终点 = 最晚时间直接落筛选器；
+   *  旧语义「只调查看窗口不改筛选」随时间筛选单值化退役）。 */
   onChange: (s: number, e: number) => void;
   onAdjusting?: (v: boolean) => void;
 }
@@ -435,8 +401,8 @@ export default function XBrush(props: XBrushProps) {
       >
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 28, borderRadius: 6, background: trackColors.rail, boxShadow: `inset 0 0 0 1px ${color.hairline}` }} />
           <div
-            title="拖动调整查看窗口，不改变筛选范围"
-            aria-label="平移时间段"
+            title="拖动调整时间范围：起点 = 最早时间，终点 = 最晚时间"
+            aria-label="平移时间范围"
             style={{
               position: 'absolute', left: `${pct(s)}%`, width: `${pct(e + 1) - pct(s)}%`, top: 0, height: 28,
               borderRadius: 6, background: panning ? trackColors.fillStrong : trackColors.fill,
@@ -468,7 +434,7 @@ export default function XBrush(props: XBrushProps) {
           })}
           <div
             style={{ ...handleStyle('start'), left: `${pct(s)}%` }} role="slider" tabIndex={0}
-            aria-label="时间范围起点" aria-valuemin={lo} aria-valuemax={Math.max(lo, e - MIN_WINDOW + 1)} aria-valuenow={s} aria-valuetext={rangeLabel(s)}
+            aria-label="最早时间" aria-valuemin={lo} aria-valuemax={Math.max(lo, e - MIN_WINDOW + 1)} aria-valuenow={s} aria-valuetext={rangeLabel(s)}
             onKeyDown={(event) => {
               if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
               event.preventDefault();
@@ -481,7 +447,7 @@ export default function XBrush(props: XBrushProps) {
           </div>
           <div
             style={{ ...handleStyle('end'), left: `${pct(e + 1)}%` }} role="slider" tabIndex={0}
-            aria-label="时间范围终点" aria-valuemin={Math.min(hi, s + MIN_WINDOW - 1)} aria-valuemax={hi} aria-valuenow={e} aria-valuetext={rangeLabel(e)}
+            aria-label="最晚时间" aria-valuemin={Math.min(hi, s + MIN_WINDOW - 1)} aria-valuemax={hi} aria-valuenow={e} aria-valuetext={rangeLabel(e)}
             onKeyDown={(event) => {
               if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
               event.preventDefault();

@@ -3,7 +3,7 @@ import { normalizePlatformScope, platformScopeProvenanceNote } from '../dataMode
 import { dimChannel, dimProduct, dimTime } from '../data';
 import { clampMains, flatSelections } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
-import type { Series, SeriesQuery } from '../dataModel/types';
+import type { PlatformQuery, Series, SeriesQuery } from '../dataModel/types';
 import type { AgentActionTarget, AgentCardAction, AgentStep, FilterPatch, PriceAdvantageDirection, PriceAdvantageResultCard, PriceAdvantageRow, PriceAdvantageSkuOption } from './contracts';
 
 export interface PriceAdvantageResult {
@@ -21,7 +21,7 @@ const seriesKey = (series: Series, selection: ProductSelection): boolean => seri
 const ownSelection = (selection: ProductSelection): boolean => selection.skuIds.some((skuId) => dimProduct.find((row) => row.sku_id === skuId)?.is_own === true);
 const rowId = (own: ProductSelection, competitor: ProductSelection, weekId: string): string => `${own.modelId}:${own.romram}:${own.skuIds[0] ?? ''}::${competitor.modelId}:${competitor.romram}:${competitor.skuIds[0] ?? ''}::${weekId}`;
 
-function stateGroups(state: FiltersState, platformOverride?: string | null): SeriesQuery | null {
+function stateGroups(state: FiltersState, platformOverride?: PlatformQuery | null): SeriesQuery | null {
   const { mainSels, compareSels } = flatSelections(state.mains);
   const selections = [...mainSels, ...compareSels];
   if (!selections.length) return null;
@@ -32,7 +32,9 @@ function stateGroups(state: FiltersState, platformOverride?: string | null): Ser
       romram: selection.romram,
       skuIds: selection.skuIds,
       isOwn: ownSelection(selection),
-      platform: platformOverride ? { platforms: [platformOverride], shopIds: [], seller: null } : selection.platform ? { platforms: selection.platform.platforms, shopIds: selection.platform.shopIds, seller: selection.platform.seller } : null,
+      platform: platformOverride
+        ? { platforms: platformOverride.platforms, shopIds: platformOverride.shopIds, seller: platformOverride.seller ?? null }
+        : selection.platform ? { platforms: selection.platform.platforms, shopIds: selection.platform.shopIds, seller: selection.platform.seller } : null,
     })),
     granularity: state.granularity,
     startBucket: state.rangeStart,
@@ -44,15 +46,27 @@ function stateGroups(state: FiltersState, platformOverride?: string | null): Ser
   };
 }
 
-function platformCandidates(state: FiltersState): Array<string | null> {
+/** 取数候选 = 口径查询 + 行渠道标签（平台级候选按平台；2026-11-13 店铺级恢复后
+ *  店铺级候选 = 店铺集本身严格取价，行渠道标签取店铺所属平台名并集） */
+interface PlatformCandidate {
+  label: string;
+  query: PlatformQuery | null;
+}
+
+function platformCandidates(state: FiltersState): PlatformCandidate[] {
   const selected = state.platform;
-  if (selected?.platforms?.length) return [...new Set(selected.platforms)];
+  if (selected?.platforms?.length) {
+    return [...new Set(selected.platforms)].map((p) => ({ label: p, query: { platforms: [p], shopIds: [], seller: null } }));
+  }
   if (selected?.shopIds?.length) {
-    const platforms = dimChannel.filter((channel) => selected.shopIds.includes(channel.channel_id)).map((channel) => channel.platform);
-    if (platforms.length) return [...new Set(platforms)];
+    // 店铺级候选 = 店铺集本身（不映射回平台名放大成平台级——2026-11-14 修复：
+    // 旧逻辑把 RU:ozon:3P 放大成 OZON 全渠道，优势卡我司价取到平台级 1025 而非
+    // 严格 3P 的 1047）；行渠道标签 = 店铺所属平台名并集
+    const label = [...new Set(selected.shopIds.map((id) => dimChannel.find((channel) => channel.channel_id === id)?.platform ?? id.split(':')[1] ?? ''))].filter(Boolean).join('、');
+    return [{ label, query: { platforms: [], shopIds: [...selected.shopIds], seller: selected.seller ?? null } }];
   }
   const platforms = dimChannel.filter((channel) => channel.country_code === state.countryCode).map((channel) => channel.platform);
-  return platforms.length ? [...new Set(platforms)] : [null];
+  return platforms.length ? [...new Set(platforms)].map((p) => ({ label: p, query: { platforms: [p], shopIds: [], seller: null } })) : [{ label: 'auto', query: null }];
 }
 
 function bySelection(series: readonly Series[], selection: ProductSelection): Series | undefined {
@@ -74,11 +88,10 @@ function directionOf(gap: number): PriceAdvantageDirection {
  */
 export function calculatePriceAdvantage(state: FiltersState, contextFingerprint = ''): PriceAdvantageResultCard | null {
   // R5-M1 + R6-M1：取数前先把平台/店铺口径经 normalizePlatformScope 归一
-  // （国家合法性 + 稳定版店铺级透明展开平台级，与 FiltersContext.applyScopeDefaults
-  // 同一政策）。跨国查询沿用的旧国平台（如 AE 的 NOON 带进 RU）不再以空渠道集
-  // 参与计算产出 0 行假空卡；稳定版店铺级选择（如 RU:ozon:3P）不再「计算按
-  // 平台级、补丁却保留 shopIds」分叉——实际计算渠道、行渠道与回看落地口径
-  // 一致（平台级），展开/剔除都在卡判断边界透明说明。迭代版店铺级照旧保留。
+  // （国家合法性；2026-11-14 店铺级恢复后 = lawful 透传，与
+  // FiltersContext.applyScopeDefaults 同一政策）。跨国查询沿用的旧国平台
+  //（如 AE 的 NOON 带进 RU）不再以空渠道集参与计算产出 0 行假空卡；店铺级
+  // 选择按店铺集严格取价（不放大成平台级），剔除/展开说明仅在非法剔除时出现。
   const platformScope = normalizePlatformScope(state.countryCode, state.platform);
   // R7-M1：Provider 已提前归一（load/setter）时现场归一无说明——用落地
   // provenance（口径吻合时），原始店铺输入的展开事实在优势卡判断边界保留。
@@ -88,8 +101,8 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
   const options: PriceAdvantageSkuOption[] = [];
   const seenOptions = new Set<string>();
   const rows: PriceAdvantageRow[] = [];
-  for (const platform of platformCandidates(scoped)) {
-    const query = stateGroups(scoped, platform);
+  for (const candidate of platformCandidates(scoped)) {
+    const query = stateGroups(scoped, candidate.query);
     if (!query) continue;
     const series = buildSeries(query);
     for (const main of state.mains) {
@@ -115,9 +128,9 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
           if (ownPoint.suspect === 'quarantined' || competitorPoint.suspect === 'quarantined') continue;
           const gap = competitorPoint.price - ownPoint.price;
           rows.push({
-            id: rowId(main.main, compare, `${platform ?? 'auto'}:${ownPoint.bucketId}`),
+            id: rowId(main.main, compare, `${candidate.label ?? 'auto'}:${ownPoint.bucketId}`),
             countryCode: state.countryCode,
-            channel: platform ?? ownPoint.platform ?? competitorPoint.platform ?? '自动渠道',
+            channel: candidate.label || ownPoint.platform || competitorPoint.platform || '自动渠道',
             weekId: ownPoint.bucketId,
             weekLabel: weekLabelOf(ownPoint.bucketId),
             ownModelId: main.main.modelId,
@@ -135,7 +148,7 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
             gapPct: competitorPoint.price === 0 ? null : gap / competitorPoint.price,
             direction: directionOf(gap),
             currency: state.currency,
-            target: { modelId: main.main.modelId, romram: main.main.romram, skuIds: [...main.main.skuIds], weekId: ownPoint.bucketId, platform: platform ?? ownPoint.platform ?? competitorPoint.platform ?? null },
+            target: { modelId: main.main.modelId, romram: main.main.romram, skuIds: [...main.main.skuIds], weekId: ownPoint.bucketId, platform: candidate.label || ownPoint.platform || competitorPoint.platform || null },
           });
         }
       }
@@ -166,8 +179,8 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
     adaptive: false,
     // R5-M1 + R6-M1：补丁平台 = 归一后的实际计算口径（不是原始 state.platform）
     // ——FiltersContext 落地用同一 normalizePlatformScope 校验，合法即原样保留
-    //（稳定版店铺级已展开为平台级，补丁不再携带 shopIds），计算口径与回看口径
-    // 不可能再分叉。
+    //（2026-11-14 店铺级恢复：店铺级补丁携带 shopIds，与计算口径一致），计算
+    // 口径与回看口径不可能再分叉。
     platform: platformScope.platform,
     // R4-M1 同口径补全：币种/价格类型/汇总参与计算，回看必须一并带回，
     // 否则「用 USD 重算的优势卡」回看落回本币口径，结果与卡脱节。

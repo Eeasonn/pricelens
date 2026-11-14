@@ -76,3 +76,53 @@ describe('cascadePlacementOf（级联浮层落位翻转）', () => {
     expect(cascadePlacementOf(636, 1104, 1152)).toBe('bottomRight');
   });
 });
+
+// ============================================================
+// 主浮窗纵向落位翻转（panelPlacementOf，2026-11-13 Eason「任何情况下产品
+// 筛选框都不显示不全」）：下方放不下一块可读面板（< PICKER_MIN_PANEL_H）且
+// 上方更宽裕 → 翻上方（bottom = vh − 锚顶 + 6，向上长）；两侧都不足取更宽裕侧。
+// ============================================================
+import { PICKER_MIN_PANEL_H, panelPlacementOf } from '../pickerBits';
+
+describe('panelPlacementOf（主浮窗纵向落位翻转）', () => {
+  it('锚点居中、下方空间足 → 下方原位（top = 锚底 + 6），maxHeight 到视口底安全边距', () => {
+    const p = panelPlacementOf(100, 140, 1280, 800);
+    expect(p.above).toBe(false);
+    expect(p.top).toBe(146);
+    expect(p.maxH).toBe(800 - PICKER_EDGE - 146);
+  });
+
+  it('锚点贴视口底（下方被钳成 52px 缝）→ 翻上方，bottom = vh − 锚顶 + 6', () => {
+    const vh = 800;
+    const p = panelPlacementOf(760, 790, 1280, vh);
+    expect(p.above).toBe(true);
+    expect(p.bottom).toBe(vh - 760 + 6);
+    expect(p.maxH).toBe(760 - 6 - PICKER_EDGE);
+  });
+
+  it('下方刚够一块可读面板 → 不翻（保持向下）', () => {
+    // 下方 = vh − 24 − (锚底+6) = 600 − 24 − 246 = 330 ≥ 320
+    const p = panelPlacementOf(100, 240, 1280, 600);
+    expect(p.above).toBe(false);
+    expect(p.top).toBe(246);
+  });
+
+  it('视口很矮、两侧都不足 → 取更宽裕一侧', () => {
+    // 下方 52px 缝、上方 360 → 翻上
+    const p = panelPlacementOf(390, 420, 1280, 420);
+    expect(p.above).toBe(true);
+    expect(p.maxH).toBe(390 - 6 - PICKER_EDGE);
+    // 上方只剩 30、下方 300 → 保持向下
+    const p2 = panelPlacementOf(60, 90, 1280, 420);
+    expect(p2.above).toBe(false);
+    expect(p2.maxH).toBe(300);
+  });
+
+  it('极端矮视口两侧都不足 → 取更宽裕一侧，maxHeight 不低于最小可见高（可滚动读全）', () => {
+    // vh=120：下方钳成 52px 缝、上方只剩 10px → 取下侧 52
+    const p = panelPlacementOf(40, 70, 1280, 120);
+    expect(p.above).toBe(false);
+    expect(p.maxH).toBe(PICKER_MIN_VISIBLE);
+    expect(PICKER_MIN_PANEL_H).toBe(320);
+  });
+});

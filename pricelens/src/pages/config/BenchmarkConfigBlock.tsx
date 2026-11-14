@@ -99,8 +99,9 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
     <div style={{ maxWidth: 380, fontSize: 12, lineHeight: '20px', color: color.body }}>
       <div style={{ fontWeight: 600, color: color.ink, marginBottom: 4 }}>竞品怎么匹配</div>
       <div>① 以《产品竞品矩阵》为准：每个国家、每款产品按矩阵列出的竞品直配，列序即优先级。</div>
-      <div>② 矩阵里没给的国家和产品、以及矩阵指名但该国没有在售数据的竞品，一律留空——不自动补齐、不用近似款。</div>
-      <div>③ 每行「编辑」可人工调整该配置的竞品：编辑过的组以人工为准，其余仍随矩阵更新。</div>
+      <div>② 配置对配置：先取存储一致，没有则往下一档存储；再取内存一致，没有则取下一档内存；同一竞品配置只归一个我司配置行。</div>
+      <div>③ 矩阵里没给的国家和产品、以及矩阵指名但该国没有在售数据的竞品，一律留空——不自动补齐、不用近似款。</div>
+      <div>④ 每行「编辑」可人工调整该配置的竞品：编辑过的组以人工为准，其余仍随矩阵更新。</div>
       <div style={{ marginTop: 4, fontWeight: 600, color: color.ink }}>每款产品每个配置最多 {BENCHMARK_CAP_PER_CONFIG} 个竞品；超出时按矩阵列序保留前 {BENCHMARK_CAP_PER_CONFIG} 个，同型号多配置只占富余名额。</div>
     </div>
   );

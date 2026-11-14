@@ -247,11 +247,11 @@ describe('稳定版价格页：取数口径 = 全局平台（每线覆写失效�
   });
 });
 
-describe('稳定版 URL：shop=/seller= 忽略并剥离，plat= 继续驱动', () => {
-  it('readUrlOverrides 忽略 shop=/seller=（不再吃进 state.platform）', async () => {
+describe('稳定版 URL：店铺级恢复（2026-11-14 Eason「平台还是能选到店铺」），shop= 驱动店铺级', () => {
+  it('readUrlOverrides 吃进 shop=/seller=：店铺级单选 + seller 随行', async () => {
     const { readUrlOverrides } = await import('../../../state/urlSync');
     window.history.replaceState(null, '', '/?shop=RU:ozon:3P&seller=X&c=RU');
-    expect(readUrlOverrides().filters.platform).toBeUndefined();
+    expect(readUrlOverrides().filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:3P'], seller: 'X' });
   });
 
   it('plat= 平台级继续驱动 state.platform', async () => {
@@ -260,16 +260,17 @@ describe('稳定版 URL：shop=/seller= 忽略并剥离，plat= 继续驱动', (
     expect(readUrlOverrides().filters.platform).toEqual(DNS_PLATFORM);
   });
 
-  it('platformLevelForChannel：店铺级降级为平台级（渠道反查平台）', async () => {
+  it('platformLevelForChannel：退役为透传（店铺级原样保留，2026-11-14）', async () => {
     const { platformLevelForChannel } = await import('../../../state/urlSync');
-    expect(platformLevelForChannel(OZON_SHOP)).toEqual({ platforms: ['OZON'], shopIds: [] });
-    expect(platformLevelForChannel(DNS_PLATFORM)).toEqual(DNS_PLATFORM);
+    expect(platformLevelForChannel(OZON_SHOP)).toBe(OZON_SHOP);
+    expect(platformLevelForChannel(DNS_PLATFORM)).toBe(DNS_PLATFORM);
     expect(platformLevelForChannel(null)).toBeNull();
   });
 
-  it('写侧：店铺级经降级后只产 plat=（shop=/seller= 为空 → 写 null 剥键）', async () => {
+  it('写侧：店铺级写 plat+shop 双键（seller 随行）；平台级只产 plat=', async () => {
     const { platformUrlParamsOf, platformLevelForChannel } = await import('../../../state/urlSync');
-    const out = platformUrlParamsOf(platformLevelForChannel(OZON_SHOP));
-    expect(out).toEqual({ plat: 'OZON', shop: null, seller: null });
+    expect(platformUrlParamsOf(platformLevelForChannel(OZON_SHOP))).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null });
+    expect(platformUrlParamsOf(platformLevelForChannel({ ...OZON_SHOP, seller: 'X' }))).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: 'X' });
+    expect(platformUrlParamsOf(platformLevelForChannel(DNS_PLATFORM))).toEqual({ plat: 'DNS', shop: null, seller: null });
   });
 });

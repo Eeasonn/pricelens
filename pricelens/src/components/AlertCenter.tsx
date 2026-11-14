@@ -231,7 +231,7 @@ export function AlertDetailDrawer({ record, open, onClose, onAction, onOpenAgent
           <div className="tnum" style={{ marginTop: 3, fontSize: 12, color: color.mute }}>{record.romram} · {record.weekLabel} · {record.weekId}</div>
           <div style={{ marginTop: 10, padding: '9px 10px', borderRadius: radius.card, background: color.canvasSoft, color: color.body, fontSize: 12 }}>{valueSummary}</div>
         </div>
-        <div style={{ padding: '14px 20px', display: 'grid', gap: 14 }}>
+        <div style={{ padding: '14px 20px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 14, overflowWrap: 'anywhere' }}>
           <section>
             <div style={{ fontSize: 11, fontWeight: 700, color: color.mute, marginBottom: 7 }}>触发事实</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>

@@ -1,22 +1,16 @@
-// ============================================================
-// §6.4 页面快照浮窗（第五十轮新增）：点击周视图悬停「快照」图标弹出。
-// 取证语义重构：历史价格点不再跳商城现页（现页价格早已变化，取证失真），
-// 改为展示采集当时的电商页面截图——截图上方一行「采集日期 + 来源商城 + 当时价格」，
-// 截图主体下方弱化保留「打开商城现页」次链接（活页仅作参考，不作取证）。
-// 快照注册表见 src/data/snapshots.ts（demo 轮转绑定；接入后换 fact.snapshot_url）。
-// ============================================================
 import { Modal } from 'antd';
 import { ExportOutlined } from '@ant-design/icons';
 import { color, fontSize, radius, shadow, space } from '../../theme/tokens';
 import { snapshotFor } from '../../data/snapshots';
 
 export interface SnapshotInfo {
-  seriesLabel: string; // 产品名（品牌+型号+ROMRAM）
-  shopName: string | null; // 最低价来源店铺
-  bucketId: string; // 周桶 id（YYYYWW）
-  dateText: string; // 该周锚日文案（MM-DD）
-  priceText: string; // 该时点价格（已格式化，显示币种）
-  url: string; // 商城现页（弱化次链接）
+  seriesLabel: string;
+  shopName: string | null;
+  bucketId: string;
+  granularity: 'week' | 'month' | 'quarter';
+  dateText: string;
+  priceText: string;
+  url: string;
 }
 
 export interface SnapshotModalProps {
@@ -26,76 +20,55 @@ export interface SnapshotModalProps {
 
 export default function SnapshotModal({ info, onClose }: SnapshotModalProps) {
   if (!info) return null;
-  const snap = snapshotFor(info.shopName, info.bucketId);
+  const { historical, current } = snapshotFor(info.url, info.granularity === 'week' ? info.bucketId : '');
+  const snapshot = historical ?? current;
+  const week = info.granularity === 'week' && /^\d{6}$/.test(info.bucketId)
+    ? `${info.bucketId.slice(0, 4)}-W${info.bucketId.slice(4)}` : info.bucketId;
+  const safeUrl = /^https?:\/\//i.test(info.url) ? info.url : null;
   return (
     <Modal
       open
       centered
       footer={null}
-      width={640}
+      width={1120}
       onCancel={onClose}
-      title={null}
-      styles={{
-        content: { borderRadius: radius.modal, boxShadow: shadow.l5, padding: space.lg },
-        header: { display: 'none' },
-      }}
+      title="页面快照"
+      styles={{ content: { borderRadius: radius.modal, boxShadow: shadow.l5, padding: space.lg } }}
     >
-      {/* 标题行：产品 · 时点 · 来源 */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, marginBottom: space.xs }}>
-        <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>页面快照</span>
-        <span style={{ fontSize: fontSize.caption, color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {info.seriesLabel} · {info.dateText} · {info.shopName ?? '电商平台'}
-        </span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.sm, color: color.body, fontSize: fontSize.bodySm }}>
+        <span>{info.seriesLabel}</span>
+        <span>{info.shopName ?? '电商平台'}</span>
+        <span className="tnum">所选历史事实 · {week} · {info.dateText} · {info.priceText}</span>
       </div>
-      {/* 截图上方：采集日期（口径行）+ 该时点价格 */}
-      <div
-        className="tnum"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: space.sm,
-          padding: `${space.xs}px ${space.sm}px`,
-          background: color.canvasSoft2,
-          borderRadius: radius.control,
-          fontSize: fontSize.caption,
-          color: color.body,
-        }}
-      >
-        <span>
-          采集日期 <span style={{ fontWeight: 600, color: color.ink }}>{snap.capturedAt}</span>
-        </span>
-        <span style={{ color: color.hairlineStrong }}>|</span>
-        <span>
-          当时价格 <span style={{ fontWeight: 600, color: color.ink }}>{info.priceText}</span>
-        </span>
-        <span style={{ marginLeft: 'auto', color: color.mute }}>{snap.sourceLabel} · {snap.pageLabel}</span>
+      <div role="status" style={{
+        marginTop: space.md, padding: space.md, borderRadius: radius.control,
+        background: historical ? color.canvasSoft2 : color.warningSoft,
+        color: historical ? color.body : color.warningInk, fontSize: fontSize.bodySm,
+      }}>
+        {historical
+          ? '已匹配该商品与所选周期的历史页面快照。'
+          : current
+            ? `暂无 ${week} 历史快照。下图为当前页面补充证据，不能证明所选周期的价格。`
+            : '暂无快照。未找到与该商品及所选周期匹配的页面证据。'}
       </div>
-      {/* 截图主体 */}
-      <img
-        src={snap.src}
-        alt={`${snap.sourceLabel} 页面快照（采集于 ${snap.capturedAt}）`}
-        style={{
-          display: 'block',
-          width: '100%',
-          marginTop: space.sm,
-          borderRadius: radius.control,
-          border: `1px solid ${color.hairline}`,
-        }}
-      />
-      {/* 页脚：取证口径 + 弱化的活页次链接 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: space.md, marginTop: space.sm }}>
-        <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-          历史时点以页面快照取证
-        </span>
-        <a
-          href={info.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          style={{ marginLeft: 'auto', fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}
-        >
-          打开商城现页 <ExportOutlined />
-        </a>
+      {snapshot && <>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.sm, alignItems: 'baseline', marginTop: space.md, color: color.body, fontSize: fontSize.bodySm }}>
+          <strong style={{ color: color.ink }}>{historical ? '历史页面证据' : '当前页面补充证据'}</strong>
+          <span className="tnum">截图采集 {snapshot.capturedAt.replace('T', ' ').replace('Z', ' UTC')}</span>
+          <span>{snapshot.sourceLabel}</span>
+          <span className="tnum">截图页面价 {snapshot.priceText}</span>
+        </div>
+        <img
+          src={snapshot.src}
+          alt={`${snapshot.sourceLabel} · ${snapshot.pageLabel} · ${snapshot.capturedAt} · ${historical ? '历史页面证据' : '当前页面补充证据，非所选周期凭证'}`}
+          style={{ display: 'block', width: '100%', marginTop: space.sm, borderRadius: radius.control, border: `1px solid ${color.hairline}` }}
+        />
+      </>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: space.md, marginTop: space.md, fontSize: fontSize.caption, color: color.mute }}>
+        <span>历史事实按所选统计周期展示；截图保留实际采集时点及原币种。</span>
+        {safeUrl && <a href={safeUrl} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} style={{ marginLeft: 'auto', color: color.link }}>
+          打开商城现页 <ExportOutlined aria-hidden />
+        </a>}
       </div>
     </Modal>
   );

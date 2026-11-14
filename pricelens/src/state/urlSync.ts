@@ -15,8 +15,7 @@
 import { dimChannel, dimProduct } from '../data';
 import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
 import type { Page } from './PageContext';
-import { hiddenInStable, STABLE } from '../appChannel';
-import { markAutoTimeExit } from './autoTimeBus';
+import { hiddenInStable } from '../appChannel';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { cardsFromSelections, clampMains, firstLegalSelectionOfModel } from './mainSelection';
 import { getCurrentCountry } from './currentScope';
@@ -43,54 +42,64 @@ function platformOfShopId(shopId: string): string {
   return dimChannel.find((c) => c.channel_id === shopId)?.platform ?? shopId.split(':')[1] ?? '';
 }
 
-/** 平台/店铺单选归一：筛选器选到「某平台下的某个店铺」，state.platform 承载
- *  单渠道（店铺级）或单平台（旧兼容）两种形态。归一守卫沿用（多值取一；
- *  渠道是否属于当前国家由 applyScopeDefaults 的 platformSelectionValidFor 校验，
- *  越界渠道回落默认口径）：
- *  - shopIds 有值 = 店铺（渠道）级单选，取第一个且**绝不同时带 platforms**——
- *    数据层 effectiveChannelIds 为并集规则（platforms 命中即整平台渠道入池），
- *    店铺级选择残留 platforms 会放大成整平台口径；
- *  - 否则 platforms 取第一个 = 仅平台级（旧 plat= 链接 / 旧持久化兼容）；
- *  - 空选 / null = null（默认口径：配置的默认平台店铺 → 默认平台全部渠道）。 */
+/** 平台/店铺选择归一：筛选器选到「某平台下的某个店铺」，state.platform 承载
+ *  单渠道（店铺级）、单平台（旧兼容）或混合并集（显式平台 + 店铺，2026-11-14
+ *  店铺级恢复后合法——数据层 effectiveChannelIds = 平台渠道 ∪ 店铺）。
+ *  归一守卫：渠道是否属于当前国家由 applyScopeDefaults 的
+ *  platformSelectionValidFor 校验，越界渠道回落默认口径。
+ *  - shopIds 有值 = 店铺（渠道）级。platforms 集合恰为店铺所属平台（旧链接
+ *    「plat= 店铺归属平台 + shop=」）→ 按纯店铺级归一（platforms 清空，不放大
+ *    成整平台口径）；platforms 里有店铺所属平台之外的显式平台 → 混合并集原样
+ *    保留（多店铺照留，并集语义由 effectiveChannelIds 承担）；seller 仅单渠道
+ *    时有意义（空串按未选处理，第一百四十一轮）；
+ *  - 无 shopIds = 仅平台级多值取一（旧 plat= 链接 / 旧持久化兼容；R7-M1 的
+ *    「多平台全量读入」在 readUrlOverrides 读侧先行保真，不经本函数塌缩）；
+ *  - 空选 / null = null（默认口径：配置的默认平台店铺 → 默认平台全部渠道，
+ *    取价 = 平台内每周折扣率最大的店铺）。 */
 export function normalizePlatformSelection(platform: PlatformSelection | null): PlatformSelection | null {
   if (!platform) return null;
   if (platform.shopIds.length > 0) {
     // 卖家细化仅在单渠道时有意义；空串按未选处理（第一百四十一轮）
     const seller = platform.shopIds.length === 1 && platform.seller ? platform.seller : null;
+    if (platform.platforms.length > 0) {
+      const shopPlatform = platformOfShopId(platform.shopIds[0]);
+      const extra = platform.platforms.filter((p) => p !== shopPlatform);
+      if (extra.length > 0) return { platforms: extra, shopIds: [...platform.shopIds], seller };
+    }
     return { platforms: [], shopIds: [platform.shopIds[0]], seller };
   }
   if (platform.platforms.length > 0) return { platforms: [platform.platforms[0]], shopIds: [] };
   return null;
 }
 
-/** 状态 → URL 参数（写侧）：店铺级选择写 `plat={平台}&shop={渠道id}`（平台由
- *  维表反查，反查不出按渠道 id 三段式兜底）；平台级写 plat=（R7-M1：多平台
- *  并集（店铺展开/链接多值）按逗号全量序列化——读侧 listParam 对称拆分，
- *  parse/serialize/reload 往返不丢；单平台输出与旧写侧逐字节相同）；未选两者
- *  皆空（调用方写 null 即删键，连带清掉旧链接残留）。 */
+/** 状态 → URL 参数（写侧）：店铺级选择写 `shop={渠道id}` + `plat=`（混合口径 =
+ *  显式平台集与店铺所属平台全量逗号序列化；纯店铺级 = 店铺归属平台，由维表
+ *  反查，反查不出按渠道 id 三段式兜底）；平台级写 plat=（R7-M1：多平台
+ *  并集按逗号全量序列化——读侧 listParam 对称拆分，parse/serialize/reload
+ *  往返不丢；单平台输出与旧写侧逐字节相同）；未选两者皆空（调用方写 null 即
+ *  删键，连带清掉旧链接残留）。 */
 export function platformUrlParamsOf(
   platform: PlatformSelection | null,
 ): { plat: string | null; shop: string | null; seller: string | null } {
   const shopId = platform?.shopIds[0];
   if (shopId) {
-    const p = platformOfShopId(shopId);
-    return { plat: p || null, shop: shopId, seller: shopId && platform?.seller ? platform.seller : null };
+    const shopPlatform = platformOfShopId(shopId);
+    const mixed = [...new Set([...(platform?.platforms ?? []), shopPlatform])].filter(Boolean);
+    return { plat: mixed.join(',') || null, shop: shopId, seller: shopId && platform?.seller ? platform.seller : null };
   }
   const platforms = platform?.platforms ?? [];
   return { plat: platforms.length ? platforms.join(',') : null, shop: null, seller: null };
 }
 
 /**
- * 稳定版平台归一（2026-11-05 复检整改3，Eason「删除每产品选店铺」收口）：
- * 店铺级（shopIds 单渠道）选择降级为平台级——稳定版不再钉具体店铺，平台级自动
- * = 平台内每周最低价店铺（effectiveChannelIds 平台级并集语义）。入口包括：
- * 旧持久化（v12 载荷存过店铺级全局平台）、总览级联写入的 state.platform。
- * 迭代版原样返回（行为不变）。null / 平台级 = 原样。
+ * 退役透传（2026-11-14 Eason「平台还是能选到店铺」）：稳定版店铺级降级闸退役
+ * ——店铺级（shopIds 单渠道）选择在两通道同政策原样保留（数据层
+ * effectiveChannelIds 店铺级 = 严格单渠道取价；平台级/自动 = 平台内每周最低价
+ * 店铺 = 每周折扣率最大店铺口径，不变）。函数保留壳以稳住看板/持久化/URL 写侧/
+ * Agent 四处调用点签名，不再改写任何输入。
  */
 export function platformLevelForChannel(platform: PlatformSelection | null): PlatformSelection | null {
-  if (!STABLE || !platform || platform.shopIds.length === 0) return platform;
-  const p = platformOfShopId(platform.shopIds[0]);
-  return p ? { platforms: [p], shopIds: [] } : null;
+  return platform;
 }
 
 /** 系列反查：seriesKey → ProductSelection（romram 原文 + 最低价颜色 SKU）；不存在 = null。
@@ -133,20 +142,24 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     // 平台/店铺单选：plat = 平台、shop = 渠道 id（店铺级）；同存时 shop= 优先
     // （normalizePlatformSelection 先吃 shopIds）；旧多值链接取第一个归一。
     // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认口径）。
-    // 稳定版（2026-11-05 复检整改3，Eason）：不再钉具体店铺——shop=/seller=
-    // 静默忽略（仅 plat= 平台级继续驱动 state.platform）；残留键由写侧统一剥离。
-    // R7-M1（第七轮评审）：稳定版不再「多值取一」——plat= 的完整平台列表原样
-    // 读入（合法剔除/店铺展开/去重统一交给 applyScopeDefaults 的共享归一，
-    // 多平台不再被第一项吞掉）；迭代版照旧单选归一（行为不变）。
+    // 2026-11-14（Eason「平台还是能选到店铺」）：稳定版恢复读 shop=/seller=
+    //（2026-11-05 复检整改3 的「stable 静默忽略店铺级」随店铺级恢复一并退役），
+    // 两通道同一 normalizePlatformSelection 归一路径；是否钉到具体店铺由
+    // PlatformSelectBox 的店铺级选项表达，自动口径 = 平台内每周折扣率最大店铺。
     const platforms = listParam(q, 'plat');
-    const shopIds = STABLE ? [] : listParam(q, 'shop');
+    const shopIds = listParam(q, 'shop');
     if (platforms.length || shopIds.length) {
       // 卖家细化仅店铺级链接可带（shop= 单渠道）；无 shop 时静默忽略
-      const seller = !STABLE && shopIds.length === 1 ? q.get('seller') || null : null;
-      out.filters.platform = STABLE
-        // 平台级选择不带 seller 键（与旧归一产出的形一致，锁测逐键可比）
-        ? { platforms, shopIds: [] }
-        : normalizePlatformSelection({ platforms, shopIds, seller });
+      const seller = shopIds.length === 1 ? q.get('seller') || null : null;
+      if (shopIds.length) {
+        // 店铺级（含混合并集）：normalizePlatformSelection 归一——旧链接
+        // 「plat= 店铺归属平台」不放大成整平台，显式异平台混合原样保留
+        out.filters.platform = normalizePlatformSelection({ platforms, shopIds, seller });
+      } else {
+        // R7-M1：平台级列表原样读入（合法剔除交给 applyScopeDefaults），不取第一个；
+        // 无 seller（平台级不吃 seller 键，与旧归一产出的形一致，锁测逐键可比）
+        out.filters.platform = { platforms, shopIds: [] };
+      }
     }
     // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入
     const mainParam = q.get('main') ?? q.get('own');
@@ -160,14 +173,14 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     }
     // 第一百三十八轮：时间范围 / 价格显示 / 汇总口径进链接——价格操盘最核心的上下文
     // 就是「看哪段时间、折后价还是含 RRP、平均还是最小」。rs/re = 手动范围（形状合法
-    // 且 rs ≤ re），读入即退出自适应（链接指定范围 = 固定范围语义）；自适应态不写这些键。
+    // 且 rs ≤ re），读入即固定范围（2026-11-13 时间筛选单值化后「退出自适应提示条」
+    // 随自动时间按钮一并退役，语义 = 链接指定范围直接生效）。
     const rs = q.get('rs');
     const re = q.get('re');
     if (isBucketId(rs) && isBucketId(re) && rs <= re) {
       out.filters.rangeStart = rs;
       out.filters.rangeEnd = re;
       out.filters.adaptive = false;
-      markAutoTimeExit('链接指定固定范围');
     }
     const pt = q.get('pt');
     if (pt === 'd' || pt === 'r' || pt === 'dr') {

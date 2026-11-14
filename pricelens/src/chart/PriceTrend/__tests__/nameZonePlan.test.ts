@@ -15,7 +15,7 @@ import {
   computeYAxis,
   yPxOf,
 } from '../helpers';
-import { ZONE_LINE_H, buildLabelPlan, nameZoneWidthOf } from '../chartModel';
+import { ZONE_CFG_ROW_H, ZONE_LINE_H, buildLabelPlan, nameZoneWidthOf } from '../chartModel';
 import type { Series } from '../../../dataModel/types';
 
 const mk = (key: string, label: string, prices: number[]): Series => ({
@@ -208,5 +208,82 @@ describe('第196轮整改3：名称带宽度自适应（nameZoneWidthOf）', () 
   it('空集回落旧基准 188（第115轮回收前的固定带宽）', () => {
     expect(nameZoneWidthOf([])).toBe(NAME_BAND_W);
     expect(NAME_BAND_W).toBe(188);
+  });
+
+  it('两行 spec（2026-11-13）：宽计入品牌词与 chip 行、取两行较宽者；字符串入参行为不变', () => {
+    const base = 'Mate 70 Pro 典藏版';
+    const wStr = nameZoneWidthOf([base]);
+    const wSpec = nameZoneWidthOf([{ name: base, brandWord: 'Huawei', cfg: '12+256 GB' }]);
+    expect(wStr).toBeGreaterThan(NAME_BAND_MIN_W); // 基准串不触下限（确保比较未被钳平）
+    expect(wSpec).toBeGreaterThan(wStr); // 品牌词加宽行1
+    const wChip = nameZoneWidthOf([{ name: 'X', cfg: '16+1 TB 折叠屏旗舰版配置' }]);
+    expect(wChip).toBeGreaterThan(nameZoneWidthOf([{ name: 'X' }])); // chip 行顶起带宽
+    expect(wSpec).toBeLessThanOrEqual(NAME_BAND_MAX_W);
+    expect(wChip).toBeLessThanOrEqual(NAME_BAND_MAX_W);
+  });
+});
+
+describe('名称带两行药丸（2026-11-13 Eason）：pillSpecOf 注入', () => {
+  const mkGeom2 = (series: Series[]) => {
+    const scale = computeYAxis({ series, priceTypes, sliderScale: 1, allowBreak: false, perUsd: 1 });
+    return {
+      gridLeft: 258,
+      plotLeft: 258,
+      plotTop: 36,
+      plotWidth: 600,
+      plotHeight: scale.plotHeight,
+      scale,
+      n: 3,
+    };
+  };
+
+  it('pillSpecOf：zone 项携带 nameText/brandWord/cfgText，盒高计入 chip 行', () => {
+    const series = [mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1010, 1020])];
+    const g = mkGeom2(series);
+    const plan = buildLabelPlan({
+      geom: g,
+      series,
+      granularity: 'week',
+      priceTypes,
+      endpointMarks: marks,
+      nameZone: { width: 188 },
+      pillSpecOf: () => ({ name: 'Mate 70', brandWord: 'Huawei', cfg: '12+256 GB' }),
+    });
+    expect(plan.names.length).toBe(1);
+    const nm = plan.names[0];
+    expect(nm.nameText).toBe('Mate 70');
+    expect(nm.brandWord).toBe('Huawei');
+    expect(nm.cfgText).toBe('12+256 GB');
+    expect(nm.h).toBe(ZONE_LINE_H + ZONE_CFG_ROW_H + 6); // 行1 + chip 行 + 内边距
+  });
+
+  it('无配置层级（cfg 空）：不出 cfgText 字段、盒高回落单行，brandWord 照带', () => {
+    const series = [mk('OWN__1', 'HUAWEI Watch 4', [1000, 1010, 1020])];
+    const g = mkGeom2(series);
+    const plan = buildLabelPlan({
+      geom: g,
+      series,
+      granularity: 'week',
+      priceTypes,
+      endpointMarks: marks,
+      nameZone: { width: 188 },
+      pillSpecOf: () => ({ name: 'Watch 4', brandWord: null, cfg: '' }),
+    });
+    const nm = plan.names[0];
+    expect(nm.cfgText).toBeUndefined();
+    expect(nm.brandWord).toBeNull();
+    expect(nm.nameText).toBe('Watch 4');
+    expect(nm.h).toBe(ZONE_LINE_H + 6);
+  });
+
+  it('不传 pillSpecOf：zone 项无两行字段、几何与旧版一致（金测不受影响）', () => {
+    const series = [mk('OWN__1', 'HUAWEI Mate 70 12GB', [1000, 1010, 1020])];
+    const g = mkGeom2(series);
+    const plan = buildLabelPlan({ geom: g, series, granularity: 'week', priceTypes, endpointMarks: marks, nameZone: { width: 188 } });
+    const nm = plan.names[0];
+    expect(nm.nameText).toBeUndefined();
+    expect(nm.brandWord).toBeUndefined();
+    expect(nm.cfgText).toBeUndefined();
+    expect(nm.h).toBe(ZONE_LINE_H + 6);
   });
 });

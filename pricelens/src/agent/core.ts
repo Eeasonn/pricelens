@@ -11,6 +11,7 @@ import type { ForecastDraftInput } from './contracts';
 import { simpleDemoDataset as forecastFixture } from '../pages/forecast/forecastDatasetRegistry';
 import { createForecastSnapshot, type ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
 import { provenanceSummary } from '../dataModel/provenance';
+import { priceDataVersionOf } from '../dataModel/priceProvenance';
 import { buildPriceAdvantageResult, platformCountryFallbackNote, priceAdvantageCountryFallbackNote, stateForPriceAdvantageCountry } from './priceAdvantage';
 export { buildPriceAdvantageResult, platformCountryFallbackNote, priceAdvantageCountryFallbackNote, stateForPriceAdvantageCountry } from './priceAdvantage';
 
@@ -1273,7 +1274,7 @@ function priceAlertList(text: string, context: AgentContextSnapshot): { card: Al
     note: alerts.length
       ? '预警来自现有四类规则：调价、折扣、平台价差、档位间距。展开每条可查看触发事实、规则版本与来源。'
       : '当前国家、产业、订阅和平台口径下没有触发事件；没有用其他范围的数据填充。',
-    evidence: [{ id: 'alert-engine', label: '预警规则', detail: `${context.ruleVersion ?? 'price-rules-v1'} · ${context.dataVersion ?? 'local-data-v1'}`, source: '预警确定性引擎' }],
+    evidence: [{ id: 'alert-engine', label: '预警规则', detail: `${context.ruleVersion ?? 'price-rules-v1'} · ${context.dataVersion ?? 'unknown'}`, source: '预警确定性引擎' }],
   };
   return {
     card,
@@ -1482,12 +1483,11 @@ export function buildAgentContext(page: string, state: FiltersState, alerts: rea
     alerts,
     createdAt: new Date().toISOString(),
     fingerprint,
-    // 数据版本由真实数据接入时替换为 manifest.version；在本地演示中保持可审计常量。
-    dataVersion: 'local-data-v1',
+    dataVersion: priceDataVersionOf(state),
     ruleVersion: 'price-rules-v1',
     provenance: {
       source: 'pricelens-context',
-      dataVersion: 'local-data-v1',
+      dataVersion: priceDataVersionOf(state),
       ruleVersion: 'price-rules-v1',
       contextFingerprint: fingerprint,
     },

@@ -42,6 +42,10 @@ export interface DimProduct {
   series: string;
   model_name: string;
   romram: string; // 配置显示文案，如 "12+256 GB" / '11.5" WiFi 8+128 GB' / "46mm GPS" / "—"
+  /** 药丸品牌内联（2026-11-13 Eason）：型号名看不出品牌（小米数字系列/A37/X9D 这类
+   *  裸型号名）= true，药丸第一行固定带品牌词；一眼能认出的（iPhone/Galaxy/Redmi…）
+   *  = false，品牌只在悬停 title 显示。ingest 侧 is_brand_inline 判定 + 人工覆写。 */
+  brand_inline?: boolean;
   color: string; // 首字母大写；无颜色 "—"
   tier_code: TierCode; // 型号级全局兜底档位（各国档位众数）；有国家上下文时用 tier_by_country
   /** 分国档位：该国矩阵有声明用业务声明，否则按该国参考价（RRP USD 中位数）落产业阶梯 */

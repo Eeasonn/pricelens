@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   DEMO_FORECAST_PROVENANCE,
   DEMO_INTELLIGENCE_PROVENANCE,
-  REAL_ALERT_PROVENANCE,
   errorProvenance,
   freshnessLabel,
   missingProvenance,
   provenanceSummary,
 } from '../provenance';
+import { weeklyPriceDataVersion, weeklyPriceProvenanceOf } from '../priceProvenance';
 
 describe('shared source / freshness contract', () => {
   it('keeps source, data status, as-of and refresh metadata explicit', () => {
@@ -17,11 +17,10 @@ describe('shared source / freshness contract', () => {
       asOf: 'W10',
       freshness: 'unknown',
     });
-    expect(REAL_ALERT_PROVENANCE).toMatchObject({
+    expect(weeklyPriceProvenanceOf({ countryCode: 'RU', industry: 'phone' })).toMatchObject({
       dataStatus: 'real',
-      source: { kind: 'internal_fact' },
-      asOf: '2026-W42',
-      freshness: 'stale',
+      source: { kind: 'internal_fact', version: weeklyPriceDataVersion },
+      freshness: 'unknown',
     });
     expect(DEMO_INTELLIGENCE_PROVENANCE.asOf).toBe('2026-10-30');
     expect(provenanceSummary(DEMO_FORECAST_PROVENANCE)).toContain('截至 W10');

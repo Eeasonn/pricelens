@@ -581,6 +581,7 @@ export default function TrendTables(props: {
               seriesLabel: dedupeSpecText(s.label),
               shopName: pt?.shopName ?? null,
               bucketId: pt?.bucketId ?? buckets[i].id,
+              granularity,
               dateText: bucketDateText(granularity, pt?.xLabel || buckets[i].xLabel),
               priceText: formatPrice(pt?.price ?? null, currency),
               url: pt?.url ?? '',

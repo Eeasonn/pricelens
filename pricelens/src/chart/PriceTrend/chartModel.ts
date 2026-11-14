@@ -10,6 +10,8 @@
 import type { EChartsOption } from 'echarts';
 import type { CurrencyMode, DimPromo, Granularity, Industry, OfferDetail, OfferInfo, OfferKind, Series, SeriesPoint } from '../../dataModel/types';
 import { tierBandsOf } from '../../dataModel/aggregate';
+import { dimProduct } from '../../data';
+import { pillBrandLabel } from '../../components/BrandMark';
 import { color, font, fontSize } from '../../theme/tokens';
 // 第196轮整改3：名称带宽度按名称真实像素宽自适应（measureText = 13px canvas 量宽，
 // 药丸字号 11px → ×11/13 换算；与组件层同一量宽源，避免再造一套字符估算）
@@ -61,6 +63,9 @@ export const ZONE_LINE_H = 16;
 /** 生命周期第二行占高（第三十二轮）：11px 字号 13px 行高 + 行距 1——
  *  必须计入名称避让盒，否则相邻名称互压 ~14px（用户底线：名称互不遮挡） */
 export const LIFECYCLE_ROW_H = 14;
+/** 名称带两行药丸的第二行（配置 chip）占高（2026-11-13 Eason）：10px 字号 14px
+ *  行高 + 行距 2——同样计入避让盒（计划盒 = 渲染盒纪律同生命周期行） */
+export const ZONE_CFG_ROW_H = 16;
 /** 聚焦模式阈值（第三十二轮）：系列数 > 阈值时图面名称/生命周期行退场，
  *  识别走「悬停折线高亮单系列」+ 钉顶图例卡——0 个常驻名称 = 0 遮挡 */
 export const FOCUS_MODE_THRESHOLD = 8;
@@ -75,12 +80,32 @@ export const Y_TICK_FONT = 12;
  *  内边距 16 + 描边 2，再加 2px 渲染余量 */
 const ZONE_PILL_CHROME_W = 32;
 
+/** 名称带两行药丸规格（2026-11-13 Eason 名称带改版）：行1 = 色点 + [品牌词
+ *  （brand_inline 判定）] + 产品名；行2 = 配置 chip（'' = 无配置层级，单行回落）。
+ *  字符串入参 = 单行药丸（量价页同源调用不变）。 */
+export interface NameZonePillSpec {
+  /** 行1 产品名（curveNameOf 全名去配置后缀） */
+  name: string;
+  /** 行1 品牌词（清洗层 dim_product.brand_inline；null = 名称即可认出品牌） */
+  brandWord?: string | null;
+  /** 行2 配置 chip 文案（如「12+256 GB」；空 = 不出 chip） */
+  cfg?: string | null;
+}
+
 /** 名称带自适应宽（第196轮整改3）：以「名称完整不换行」为准——取最长药丸实宽，
  *  钳 [NAME_BAND_MIN_W, NAME_BAND_MAX_W]；旧版（987da34^）为固定 188px 基准。
- *  names 传空 = 回落基准 NAME_BAND_W（带常驻，图例带之外的第二定位语言） */
-export function nameZoneWidthOf(names: readonly string[]): number {
+ *  两行药丸（2026-11-13）取行1（品牌词按 10px 计宽）与行2 chip（含左右 padding）
+ *  的较宽者；字符串入参按单行。names 传空 = 回落基准 NAME_BAND_W（带常驻，
+ *  图例带之外的第二定位语言） */
+export function nameZoneWidthOf(names: readonly (string | NameZonePillSpec)[]): number {
   if (names.length === 0) return NAME_BAND_W;
-  const maxPill = names.reduce((max, t) => Math.max(max, measureText(t) * (11 / 13) + ZONE_PILL_CHROME_W), 0);
+  const maxPill = names.reduce((max, it) => {
+    const spec = typeof it === 'string' ? { name: it } : it;
+    const brandW = spec.brandWord ? measureText(spec.brandWord) * (10 / 13) + 4 : 0;
+    const row1 = brandW + measureText(spec.name) * (11 / 13);
+    const row2 = spec.cfg ? measureText(spec.cfg) * (11 / 13) + 4 : 0; // 纯文字（无 chip 底）+ 余量 4
+    return Math.max(max, Math.max(row1, row2) + ZONE_PILL_CHROME_W);
+  }, 0);
   // 带内左右各留 4（buildLabelPlan：盒宽 = 带宽 − 8），少留会把药丸压窄 3px、量带药丸被截断
   return Math.min(NAME_BAND_MAX_W, Math.max(NAME_BAND_MIN_W, Math.ceil(maxPill) + 8));
 }
@@ -94,6 +119,28 @@ export function curveNameOf(s: Series): string {
   const noBrand = s.label.startsWith(bp) ? s.label.slice(bp.length) : s.label;
   const base = noBrand.replace(/\s*GB$/i, '').trim();
   return s.financeTag ? `${base} · ${s.financeTag}` : base;
+}
+
+/** sku → 主数据行（品牌内联判定用；dimProduct 静态导入，模块级建一次索引） */
+const productBySku = new Map(dimProduct.map((p) => [p.sku_id, p]));
+
+/** 名称带两行药丸元信息单一来源（2026-11-13 Eason；图顶药丸带 BrandLegendStrip
+ *  同款拆行口径）：curveNameOf 全名剥配置后缀 = 行1 产品名，后缀 = 行2 chip 文案
+ *  （romram '—'/'规格未标明' = 无配置层级，不出 chip）；品牌词按清洗层
+ *  dim_product.brand_inline（型号级同值，按系列首个 SKU 查回；无行 = null）。
+ *  分期标注（financeTag）留在行1——多期数勾选时同名系列靠它分辨月供档。 */
+export function seriesPillMetaOf(s: Series): NameZonePillSpec {
+  const text = curveNameOf(s);
+  const row = s.skuIds.length ? productBySku.get(s.skuIds[0]) : undefined;
+  const romRaw = (row?.romram ?? '').trim();
+  const rom = romRaw === '—' || romRaw === '规格未标明' ? '' : romRaw;
+  const romBase = rom.replace(/\s*GB$/i, '').trim();
+  const suffix = rom && (text.endsWith(rom) ? rom : romBase);
+  return {
+    name: suffix ? text.slice(0, text.length - suffix.length).trim() : text,
+    brandWord: row ? pillBrandLabel(row) : null,
+    cfg: suffix || '',
+  };
 }
 
 /** 渲染期文案去重（第110轮，评审）：产品标签偶发单位重复（如「16+1 TB TB」）或
@@ -255,6 +302,10 @@ export function buildLabelPlan(p: {
   labelMode?: 'detail' | 'compact';
   /** compact 时是否标最高/最低。缺省标出。量价常驻只留最新价。 */
   markExtremes?: boolean;
+  /** 名称带两行药丸元信息（2026-11-13 Eason 名称带改版）：传入 = zone 项携带
+   *  nameText/brandWord/cfgText（行1 = 色点+[品牌词]+产品名、行2 = 配置 chip，
+   *  chip 行计入避让盒）；缺省 = 单行药丸（原几何与字段，金测不受影响） */
+  pillSpecOf?: (s: Series) => NameZonePillSpec;
   /** 第196轮整改3（zone 模式恢复，蓝本 = 987da34^ buildLabelPlan forceNameZone）；
    *  2026-11-05 复检定版：传入 = 全部名称药丸固定进「Y 轴刻度标签右侧、绘图区
    *  左缘」的名称预留带（width = 带宽，带右缘贴绘图区左缘），药丸期望位 = 该线
@@ -424,9 +475,13 @@ export function buildLabelPlan(p: {
     const py = yPxOf(geom, v0);
     const nameText = curveNameOf(s);
     const nw = nameW(nameText);
-    const fullH = ZONE_LINE_H + 6 + (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
+    // 两行药丸元信息（2026-11-13 Eason 名称带改版）：行2 配置 chip 行计入避让盒；
+    // 缺省（未传 pillSpecOf）= 单行，几何与字段与旧版一致
+    const pillSpec = p.pillSpecOf?.(s);
+    const cfgText = pillSpec?.cfg || '';
+    const fullH = ZONE_LINE_H + (cfgText ? ZONE_CFG_ROW_H : 0) + 6 + (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
     if (zone) {
-      // 名称带内：盒固定带宽（药丸单行 nowrap，带宽按名称自适应预留，见 nameZoneWidthOf）；
+      // 名称带内：盒固定带宽（药丸行内 nowrap，带宽按名称自适应预留，见 nameZoneWidthOf）；
       // 期望位 = 首桶 y 居中，钳在带内（带 = 绘图区同高）——重叠避让交给 resolveCollisions
       const desired = Math.min(
         Math.max(py - fullH / 2, geom.plotTop + 2),
@@ -448,6 +503,14 @@ export function buildLabelPlan(p: {
         anchorY: py,
         hidden: hidden || undefined,
         zone: true,
+        // 两行字段仅在传了 pillSpecOf 时携带（缺省不带，金测序列化不变）
+        ...(pillSpec
+          ? {
+              nameText: pillSpec.name,
+              brandWord: pillSpec.brandWord ?? null,
+              ...(cfgText ? { cfgText } : {}),
+            }
+          : {}),
       });
       return;
     }

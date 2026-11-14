@@ -130,8 +130,10 @@ import {
   primaryPriceOf,
   resolveLineShape,
   scaleToDisplay,
+  seriesPillMetaOf,
   thinTickRows,
   type LineShapeChoice,
+  type NameZonePillSpec,
   type PromoBand,
   type SeriesNameItem,
   type SuspectBadge,
@@ -415,7 +417,9 @@ const VOL_CARD_EST_W = 130;
  *  三卡贴线边对不齐 22px（2026-11-05 真机量出） */
 const TIP_MAIN_CHROME_W = 22;
 /** 名称药丸规格单一来源（名称带 / 量带归属同款，2026-11-05 Eason：两处完全一致）：
- *  外框高 = 行高 16 + 上下内边距 3 + 描边 1 = 24 */
+ *  单行外框高 = 行高 16 + 上下内边距 3 + 描边 1 = 24。名称带两行药丸（2026-11-13
+ *  Eason 名称带改版：行1 = 色点+[品牌词]+产品名、行2 = 配置 chip）在此基础上叠
+ *  column 方向（见 ZoneNamePill 内 nm.cfgText 分支） */
 const NAME_PILL_BOX: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -609,6 +613,11 @@ function ZoneNamePill(props: {
         onBlur={() => { setBrandOpen(false); props.onHover(null); }}
         style={{
           ...NAME_PILL_BOX,
+          // 两行药丸（2026-11-13 Eason 名称带改版）：行1 = 色点+[品牌词]+产品名、
+          // 行2 = 配置 chip——叠 column 方向；单行/锚定模式布局不变
+          ...(nm.cfgText
+            ? { flexDirection: 'column' as const, alignItems: 'flex-start' as const, rowGap: 2 }
+            : {}),
           maxWidth: nm.maxW ?? 200,
           border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : props.volumeActive ? selectAccent : color.hairline}`,
           cursor: 'pointer',
@@ -637,31 +646,73 @@ function ZoneNamePill(props: {
             {brandLabelOf(props.brand)}
           </span>
         )}
-        <BrandDot brand={props.brand} />
-        <span
-          data-testid="name-pill-text"
-          style={
-            nm.zone
-              ? // 第196轮整改3：名称带内单行 nowrap——带宽按名称实测自适应预留
-                // （nameZoneWidthOf），正常不换行不省略；overflow 可见兜底极端长名
-                NAME_PILL_TEXT
-              : nm.maxW != null
-                ? {
-                    display: '-webkit-box',
-                    WebkitBoxOrient: 'vertical' as const,
-                    WebkitLineClamp: 2,
-                    overflow: 'hidden',
-                    wordBreak: 'break-word',
-                    whiteSpace: 'normal',
-                    fontSize: 11,
-                    lineHeight: '16px',
-                    color: color.body,
-                  }
-                : { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
-          }
-        >
-          {nm.text}
-        </span>
+        {nm.cfgText ? (
+          /* 两行药丸（2026-11-13 Eason 名称带改版）：行1 = 色点 + [品牌词（brand_inline
+              时，Eason：型号名一眼认出品牌的不内联、看不出的恒内联）] + 产品名；
+              行2 = 配置纯文字（二轮拍板：不带任何背景；'—'/规格未标明 = 无配置层级
+              不出配置行，回落单行）。品牌悬停行照旧（非内联时品牌在此显现） */
+          <>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+              <BrandDot brand={props.brand} />
+              {nm.brandWord != null && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    lineHeight: '12px',
+                    color: color.mute,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}
+                >
+                  {nm.brandWord}
+                </span>
+              )}
+              <span data-testid="name-pill-text" style={NAME_PILL_TEXT}>
+                {nm.nameText ?? nm.text}
+              </span>
+            </span>
+            <span
+              className="tnum"
+              style={{
+                flexShrink: 0,
+                fontSize: 10,
+                lineHeight: '14px',
+                color: color.mute,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {nm.cfgText}
+            </span>
+          </>
+        ) : (
+          <>
+            <BrandDot brand={props.brand} />
+            <span
+              data-testid="name-pill-text"
+              style={
+                nm.zone
+                  ? // 第196轮整改3：名称带内单行 nowrap——带宽按名称实测自适应预留
+                    // （nameZoneWidthOf），正常不换行不省略；overflow 可见兜底极端长名
+                    NAME_PILL_TEXT
+                  : nm.maxW != null
+                    ? {
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical' as const,
+                        WebkitLineClamp: 2,
+                        overflow: 'hidden',
+                        wordBreak: 'break-word',
+                        whiteSpace: 'normal',
+                        fontSize: 11,
+                        lineHeight: '16px',
+                        color: color.body,
+                      }
+                    : { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
+              }
+            >
+              {nm.text}
+            </span>
+          </>
+        )}
       </button>
       {/* 方案 B：候选主品的「量」直切按钮（药丸右侧外挂，不占名称带宽）；
           药丸本体点击 = 隐藏/恢复（2026-11-07 稳定版拍板）语义不变 */}
@@ -1070,6 +1121,15 @@ export default function Chart(props: ChartProps) {
   // 击穿 labelPlan memo
   const nameZoneWProp = props.nameZoneWidth;
 
+  // 名称带两行药丸元信息（2026-11-13 Eason 名称带改版）：brand_inline 品牌词 +
+  // 配置拆行。series ∪ nameAll（屏蔽态药丸走 nameOnly）统一查表，缺行回落单行
+  const pillMetaByKey = useMemo(() => {
+    const m = new Map<string, NameZonePillSpec>();
+    for (const s of nameAll) m.set(s.key, seriesPillMetaOf(s));
+    for (const s of series) m.set(s.key, seriesPillMetaOf(s));
+    return m;
+  }, [series, nameAll]);
+
   const labelPlan = useMemo(
     () =>
       buildLabelPlan({
@@ -1084,10 +1144,12 @@ export default function Chart(props: ChartProps) {
         hideNames: props.hideNamePills === true, // 第一百一十三轮：量价面板禁画名称药丸
         labelMode, // 第一百一十四轮：精简 = 仅最高/最低/最新三价
         markExtremes: props.markExtremes,
+        // 两行药丸（2026-11-13 名称带改版）：zone 项带品牌词/配置拆行与 chip 行高
+        pillSpecOf: (s) => pillMetaByKey.get(s.key) ?? { name: curveNameOf(s), brandWord: null, cfg: '' },
         // 第196轮整改3：名称带（传入才启用）
         nameZone: nameZoneWProp != null ? { width: nameZoneWProp } : undefined,
       }),
-    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes, nameZoneWProp],
+    [geom, series, granularity, priceTypes, endpointMarks, lifecycleDeltas, props.hiddenKeys, nameAll, props.hideNamePills, labelMode, props.markExtremes, nameZoneWProp, pillMetaByKey],
   );
 
   // ---- 成本细线几何（2026-11-10 Eason：成本从面积改细线；同日审计修：去平滑）：
@@ -1404,8 +1466,11 @@ export default function Chart(props: ChartProps) {
       });
     }
     if (volOn && vMax > 0 && effVolumes) {
-      // inline：量柱并入绘图区——量尺销量层同样映射到绘图区底部 30% 区域
-      const rBase = props.volumeInline === true ? plotBottom - volInlineH : plotBottom + volBandH;
+      // inline：量柱并入绘图区——量尺销量层同样映射到绘图区底部 30% 区域；
+      // classic：量带 = plotBottom 起向下 volBandH（第196轮整改5 布局，938 行同源）——
+      // 2026-11-13 修复：原写成 plotBottom + volBandH（错下移一条带高，极值点/幅度框
+      // 落到 x 轴标签与时间轨道上）
+      const rBase = props.volumeInline === true ? plotBottom - volInlineH : plotBottom;
       const rH = props.volumeInline === true ? volInlineH : volBandH;
       sides.push({
         kind: 'volume',

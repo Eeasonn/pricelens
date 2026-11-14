@@ -74,8 +74,8 @@ export const defaultFilters: FiltersState = {
   mains: [],
   platform: DEFAULT_PLATFORM_SELECTION, // null = 该国默认电渠
   granularity: 'week', // 第四十二轮：默认周（迪总「时间默认取周」）
-  adaptive: true, // 第十九轮：时间自适应默认开
-  rangeStart: firstWeek, // 与周粒度自洽的默认范围（自适应开时会被数据跨度覆盖）
+  adaptive: true, // 2026-11-13 时间筛选单值化：true = 默认近段窗口（周12/月6/季4）跟产品；手动改时间置 false 固定。「自动时间」按钮已退役，字段仅作状态壳（旧持久化/Agent 补丁兼容）
+  rangeStart: firstWeek, // 与周粒度自洽的默认范围（跟随态会被默认近段窗口覆盖）
   rangeEnd: lastWeek,
   currency: 'usd', // 默认 USD（真实数据按行内汇率折算）
   priceTypes: { discounted: true, rrp: false }, // 第五十轮：RRP 默认不勾选（图面聚焦折后价；要看账面价手动勾回）
@@ -848,14 +848,13 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     // 平台/店铺单选写入：店铺级选择 = plat={平台}&shop={渠道id}（平台由渠道反查）；
     // 仅平台级（旧兼容）只写 plat=；未选 = 双 null 删键（连同旧链接残留的 shop=）。
     // 与 readUrlOverrides 的归一化读取对称（读侧同存时 shop= 优先，数据层不动）。
-    // 稳定版（2026-11-05 复检整改3，Eason）：不再钉具体店铺——state.platform 先经
-    // platformLevelForChannel 降级（平台级），shop=/seller= 恒写 null 删键，把旧
-    // 链接/旧会话残留从地址栏剥离；plat= 继续承载全局平台（价格/量价两页同键，
-    // 与读侧「stable 忽略 shop=」成对，互不打架）。迭代版 = platformLevelForChannel
-    // 原样透传，写入行为逐字节不变
+    // 2026-11-14（Eason「平台还是能选到店铺」）：稳定版店铺级恢复——
+    // platformLevelForChannel 退役为透传，店铺级写 plat+shop 双键、seller 随行；
+    // 平台级/自动口径仍只写 plat=（价格/量价两页同键，与读侧成对）
     const { plat, shop, seller } = platformUrlParamsOf(platformLevelForChannel(state.platform));
     // 第一百三十八轮：时间范围/价格显示/汇总口径入链（rs/re/pt/agg）——分享链接
-    // 带全取数上下文；自适应态不写范围（接收方随数据自动算），读入 rs/re 即退出自适应
+    // 带全取数上下文。2026-11-13 时间筛选单值化：范围恒为「当前生效窗口」（默认
+    // 近段或手动固定），恒写 rs/re（旧自适应态不写键的口径随自动时间退役）
     const ptCode = state.priceTypes.discounted && state.priceTypes.rrp
       ? 'dr'
       : state.priceTypes.discounted
@@ -872,8 +871,8 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       plat,
       shop,
       seller,
-      rs: state.adaptive ? null : state.rangeStart || null,
-      re: state.adaptive ? null : state.rangeEnd || null,
+      rs: state.rangeStart || null,
+      re: state.rangeEnd || null,
       pt: ptCode,
       agg: state.agg,
     });
@@ -884,7 +883,6 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     state.currency,
     state.mains,
     state.platform,
-    state.adaptive,
     state.rangeStart,
     state.rangeEnd,
     state.priceTypes,
