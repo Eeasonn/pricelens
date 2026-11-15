@@ -47,13 +47,13 @@ SHOWCASE = {
 
 def load_rows():
     """解码事实包（gzip + base64 列式 JSON，与应用 src/data/index.ts 同一套格式）并装配维表。"""
-    b64 = (DATA_DIR / 'fact_pack_gzip.b64.txt').read_text().strip()
+    b64 = (DATA_DIR / 'fact_pack_gzip.b64.txt').read_text(encoding='utf-8').strip()
     pack = json.loads(gzip.decompress(base64.b64decode(b64)))
 
-    dim_product = {p['sku_id']: p for p in json.loads((DATA_DIR / 'dim_product.json').read_text())}
-    dim_channel = {c['channel_id']: c for c in json.loads((DATA_DIR / 'dim_channel.json').read_text())}
-    dim_region = {r['country_code']: r for r in json.loads((DATA_DIR / 'dim_region.json').read_text())}
-    dim_time = {t['week_id']: t for t in json.loads((DATA_DIR / 'dim_time.json').read_text())}
+    dim_product = {p['sku_id']: p for p in json.loads((DATA_DIR / 'dim_product.json').read_text(encoding='utf-8'))}
+    dim_channel = {c['channel_id']: c for c in json.loads((DATA_DIR / 'dim_channel.json').read_text(encoding='utf-8'))}
+    dim_region = {r['country_code']: r for r in json.loads((DATA_DIR / 'dim_region.json').read_text(encoding='utf-8'))}
+    dim_time = {t['week_id']: t for t in json.loads((DATA_DIR / 'dim_time.json').read_text(encoding='utf-8'))}
 
     weeks, skus, channels, d = pack['weeks'], pack['skus'], pack['channels'], pack['dict']
     c = pack['cols']

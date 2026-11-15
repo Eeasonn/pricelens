@@ -17,7 +17,10 @@ export interface PriceAdvantageResult {
 // the configuration key. Preserve that exact key so local cards can be joined
 // without silently dropping every competitor row.
 const modelKey = (selection: ProductSelection): string => `${selection.modelId}__${selection.romram.replace(/\s+/g, '')}`;
-const seriesKey = (series: Series, selection: ProductSelection): boolean => series.key === modelKey(selection);
+// 融资后缀感知（2026-11-16 审视修复，与 tableModel.seriesKeyMatches 同语义）：
+// ZA 月度融资系列 key 带 __i24/__pp 后缀——裸相等会让优势卡对比行整行静默落空
+const seriesKey = (series: Series, selection: ProductSelection): boolean =>
+  series.key === modelKey(selection) || series.key.startsWith(`${modelKey(selection)}__`);
 const ownSelection = (selection: ProductSelection): boolean => selection.skuIds.some((skuId) => dimProduct.find((row) => row.sku_id === skuId)?.is_own === true);
 const rowId = (own: ProductSelection, competitor: ProductSelection, weekId: string): string => `${own.modelId}:${own.romram}:${own.skuIds[0] ?? ''}::${competitor.modelId}:${competitor.romram}:${competitor.skuIds[0] ?? ''}::${weekId}`;
 
@@ -55,8 +58,18 @@ interface PlatformCandidate {
 
 function platformCandidates(state: FiltersState): PlatformCandidate[] {
   const selected = state.platform;
+  // 店铺标签：dimChannel 反查平台名（渠道 id 的机器形态不该直接出现在结果卡上）
+  const shopLabelOf = (id: string): string => dimChannel.find((channel) => channel.channel_id === id)?.platform ?? id.split(':')[1] ?? id;
   if (selected?.platforms?.length) {
-    return [...new Set(selected.platforms)].map((p) => ({ label: p, query: { platforms: [p], shopIds: [], seller: null } }));
+    const platCands = [...new Set(selected.platforms)].map((p) => ({ label: p, query: { platforms: [p], shopIds: [], seller: null } }));
+    // 混合并集（显式平台 + 店铺，2026-11-14 起 URL 双端保留）此前在此整支被吞：
+    // 只按显式平台出候选，钉定的店铺既不算店铺候选也不并入平台候选——优势
+    // 计算静默缩窄口径。补店铺级候选（2026-11-16 审视修复）
+    const shopCands = [...new Set(selected.shopIds ?? [])].map((id) => ({
+      label: shopLabelOf(id),
+      query: { platforms: [], shopIds: [id], seller: selected.seller ?? null } as PlatformQuery,
+    }));
+    return [...platCands, ...shopCands];
   }
   if (selected?.shopIds?.length) {
     // 店铺级候选 = 店铺集本身（不映射回平台名放大成平台级——2026-11-14 修复：

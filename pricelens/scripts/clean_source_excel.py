@@ -97,7 +97,10 @@ def normalize_source_columns(df):
     """将双语交付表头归一为清洗规则使用的中文字段名。"""
     renames = {}
     for col in df.columns:
-        base = str(col).split("\n", 1)[0].strip()
+        # 兼容字面 "\n" 转义与真实换行两种交付形态（与 ingest_real 同口径，
+        # 2026-11-16 审视修复——清洗版是 ingest 的唯一输入源，口径分叉会把
+        # 字面 \n 交付直接卡死在链路最上游）
+        base = str(col).replace("\\n", "\n").split("\n", 1)[0].strip()
         if base and base != col:
             renames[col] = base
     if renames:

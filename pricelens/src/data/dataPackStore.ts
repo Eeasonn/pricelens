@@ -34,10 +34,17 @@ function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => 
     (db) =>
       new Promise<T>((resolve, reject) => {
         const tx = db.transaction(STORE, mode);
+        // 错误/中止路径同样要关连接（2026-11-16 审视修复：此前只有 complete 关，
+        // 失败时连接滞留到 GC；低频操作，连不关只是积压，但失败语义要干净）
+        const closeAnd = (fn: () => void): void => {
+          try { db.close(); } catch { /* 已关 */ }
+          fn();
+        };
         const request = run(tx.objectStore(STORE));
         request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error ?? new Error('IndexedDB 操作失败'));
+        request.onerror = () => closeAnd(() => reject(request.error ?? new Error('IndexedDB 操作失败')));
         tx.oncomplete = () => db.close();
+        tx.onabort = () => closeAnd(() => reject(tx.error ?? new Error('IndexedDB 事务中止')));
       }),
   );
 }
@@ -62,11 +69,15 @@ export async function saveDataPack(pack: PricelensDataPack): Promise<{ persisted
   }
 }
 
-/** 清除持久化数据包（还原内置数据）；环境不可用时静默视为已清除 */
-export async function clearDataPack(): Promise<void> {
+/** 清除持久化数据包（还原内置数据）。返回 cleared = 是否确认删除成功——
+ *  false 时 UI 必须如实提示而不是谎报「已还原」（刷新后包会被重新载入，
+ *  用户操作与结果相反）。环境不可用视为已清除（本就没有持久化包）。 */
+export async function clearDataPack(): Promise<{ cleared: boolean }> {
   try {
     await withStore('readwrite', (store) => store.delete(KEY) as IDBRequest<undefined>);
-  } catch {
-    /* 环境不可用 = 本就没有持久化包 */
+    return { cleared: true };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('不支持 IndexedDB')) return { cleared: true };
+    return { cleared: false };
   }
 }

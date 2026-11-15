@@ -68,6 +68,37 @@ function b64ToBytes(b64: string): Uint8Array {
 
 const round2 = (v: number): number => Math.round(v * 100) / 100;
 
+/** 解码前的结构校验（2026-11-16 审视修复）：数据包是外部输入（配置页导入），
+ *  「能解压」≠「结构完好」——列长错位会静默产出 undefined 行、fx≤0 会产出
+ *  Infinity 价格直接进图。任何一条不满足即抛错，走 applyDataPack 的整体放弃。 */
+function validateFactPack(pack: FactPack): void {
+  const fail = (msg: string): never => { throw new Error(`事实包结构无效：${msg}`); };
+  const { weeks, skus, channels, dict, cols } = pack;
+  if (!Array.isArray(weeks) || !weeks.every((w) => typeof w === 'string')) fail('weeks 表缺失或非字符串数组');
+  if (!Array.isArray(skus) || !skus.every((s) => typeof s === 'string')) fail('skus 表缺失或非字符串数组');
+  if (!Array.isArray(channels) || !channels.every((c) => typeof c === 'string')) fail('channels 表缺失或非字符串数组');
+  for (const key of ['url', 'shot', 'inst', 'promo', 'seller'] as const) {
+    if (!Array.isArray(dict?.[key])) fail(`字典 ${key} 缺失`);
+  }
+  const n = cols?.w?.length;
+  if (typeof n !== 'number' || n === 0) fail('列式数据为空');
+  for (const key of ['w', 's', 'h', 'rrp', 'p', 'fx', 'dd', 'da', 'b', 'inst', 'promo', 'url', 'shot', 'seller', 't'] as const) {
+    const col = cols[key];
+    if (!Array.isArray(col) || col.length !== n) fail(`列 ${key} 长度 (${col?.length}) 与行数 (${n}) 不一致`);
+  }
+  for (let i = 0; i < n; i++) {
+    if (cols.w[i] < 0 || cols.w[i] >= weeks.length) fail(`行 ${i} 的周索引越界`);
+    if (cols.s[i] < 0 || cols.s[i] >= skus.length) fail(`行 ${i} 的 SKU 索引越界`);
+    if (cols.h[i] < 0 || cols.h[i] >= channels.length) fail(`行 ${i} 的渠道索引越界`);
+    const fx = cols.fx[i];
+    if (typeof fx !== 'number' || !Number.isFinite(fx) || fx <= 0) fail(`行 ${i} 的汇率非正数（会产生 Infinity 价格）`);
+    if (cols.inst[i] >= dict.inst.length || cols.promo[i] >= dict.promo.length
+      || cols.url[i] >= dict.url.length || cols.shot[i] >= dict.shot.length || cols.seller[i] >= dict.seller.length) {
+      fail(`行 ${i} 的字典索引越界`);
+    }
+  }
+}
+
 function decodePack(pack: FactPack): FactPriceWeekly[] {
   const { weeks, skus, channels, dict, cols } = pack;
   const n = cols.w.length;
@@ -216,7 +247,9 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     if (typeof p.factPackB64 !== 'string' || !p.factPackB64.trim()) return { ok: false, error: '数据包缺少事实包' };
     if (!Array.isArray(p.monthly)) return { ok: false, error: '数据包缺少月度事实' };
     // 先解码校验（失败抛错走 catch，内置数据不受污染），再整体提交
-    const decoded = decodePack(JSON.parse(strFromU8(gunzipSync(b64ToBytes(p.factPackB64.trim())))) as FactPack);
+    const raw = JSON.parse(strFromU8(gunzipSync(b64ToBytes(p.factPackB64.trim())))) as FactPack;
+    validateFactPack(raw);
+    const decoded = decodePack(raw);
     const weekly = filterWeeklyRows(decoded);
     const monthly = (p.monthly as FactPriceMonthly[]).filter(
       (row) => row.country_code === 'ZA'
@@ -230,9 +263,19 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     replaceInPlace(dimFx, p.dims.fx);
     replaceInPlace(dimPromo, p.dims.promo);
     replaceInPlace(dimBenchmark, p.dims.benchmark);
-    // tier = 对象（ladders/labels），按键在位替换
-    for (const key of Object.keys(dimTier) as (keyof DimTier)[]) delete dimTier[key];
-    Object.assign(dimTier, p.dims.tier);
+    // tier = 对象（ladders/labels），按键在位替换。两道守卫（2026-11-16 审视修复）：
+    // ① 同引用自换（buildDataPack 活引用 apply 回自己）与数组路径对称——先删空再
+    //   从自身 assign = 整个清空，aggregate 的 Object.entries(dimTier.labels) 直接崩；
+    // ② 键复制不走 Object.assign——它会命中 __proto__ setter（原型被改）且
+    //   constructor 键因继承属性 non-writable 被静默丢；逐自有键显式写入并拦危险键。
+    if (p.dims.tier !== dimTier) {
+      const nextTier = p.dims.tier as unknown as Record<string, unknown>;
+      for (const key of Object.keys(dimTier) as (keyof DimTier)[]) delete dimTier[key];
+      for (const key of Object.keys(nextTier)) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+        (dimTier as unknown as Record<string, unknown>)[key] = nextTier[key];
+      }
+    }
     replaceInPlace(factPriceWeekly, weekly);
     replaceInPlace(factPriceMonthly, monthly);
     currentFactPackB64 = p.factPackB64.trim();

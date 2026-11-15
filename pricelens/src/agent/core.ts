@@ -939,7 +939,8 @@ function queryCards(state: FiltersState, text: string, entities: AgentEntityReso
       evidence: [{ id: id('evidence'), label: '价格序列', detail: `${series.length} 条系列 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }],
     };
     const rows = series.slice(0, 8).map((s) => {
-      const valued = s.points.filter((p) => p.price != null);
+      // 隔离点不参与计算（全站口径；2026-11-16 审视修复，同 agent-stable）
+      const valued = s.points.filter((p) => p.price != null && p.suspect !== 'quarantined');
       const latest = valued[valued.length - 1]?.price ?? null;
       const previous = valued[valued.length - 2]?.price ?? null;
       const change = latest != null && previous != null && previous !== 0 ? `${(((latest - previous) / previous) * 100).toFixed(1)}%` : '—';

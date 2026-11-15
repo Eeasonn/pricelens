@@ -111,10 +111,22 @@ function NodeSlider({
   );
 }
 
-/** 读数（点击展开依据抽屉） */
+/** 读数（点击展开依据抽屉）。键盘只响应 Enter/Space（2026-11-16 审视修复）：
+ *  此前 onKeyDown 无条件触发，Tab 移焦即开抽屉，键盘用户无法穿越读数区 */
 function Metric({ label, value, sub, onOpen }: { label: string; value: string; sub?: string; onOpen: () => void }) {
   return (
-    <div style={{ minWidth: 0, cursor: 'pointer' }} onClick={onOpen} role="button" tabIndex={0} onKeyDown={onOpen}>
+    <div
+      style={{ minWidth: 0, cursor: 'pointer' }}
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          onOpen();
+        }
+      }}
+    >
       <div style={{ fontSize: fontSize.caption, color: color.mute, whiteSpace: 'nowrap' }}>{label}</div>
       <div style={{ fontSize: fontSize.bodyMd, color: color.ink, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
         {value}
@@ -345,10 +357,13 @@ export default function PricingPage() {
   };
   const saveScheme = (): void => {
     const id = Date.now();
+    // 方案序号自增（2026-11-16 审视修复）：saved.length + 1 在删除方案后会与
+    // 既有 label 重名；id 单调递增保证不撞名（key 用 id，本来就不冲突）
+    const nextNo = Math.max(0, ...saved.map((s) => Number(s.label.match(/^方案 (\d+)$/)?.[1] ?? 0))) + 1;
     setSaved([
       ...saved.slice(-7),
       {
-        id, label: `方案 ${saved.length + 1}`, productKey, scenario, price,
+        id, label: `方案 ${nextNo}`, productKey, scenario, price,
         marketYoy, marketBand, costYoy, costBand, elasticity, comp,
         soWan: result.firstYearSoWan, p10Wan: result.p10Wan, p90Wan: result.p90Wan, marginYi: result.marginTotalYi,
         marketNodes: { ...marketNodeEdits }, costNodes: { ...costNodeEdits }, weeklyPrices: [...weeklyPrices],
@@ -574,7 +589,14 @@ export default function PricingPage() {
                     role="button"
                     tabIndex={0}
                     onClick={() => restoreScheme(s)}
-                    onKeyDown={() => restoreScheme(s)}
+                    // 只响应 Enter/Space（2026-11-16 审视修复）：此前 Tab 扫过
+                    // 即逐个改写全部推演参数（产品/场景/拖柄值）
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Enter' || ev.key === ' ') {
+                        ev.preventDefault();
+                        restoreScheme(s);
+                      }
+                    }}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 4px 0 10px',
                       borderRadius: radius.pill, fontSize: fontSize.caption, color: color.body,

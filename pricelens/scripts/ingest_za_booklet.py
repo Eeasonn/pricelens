@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import tempfile
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -397,6 +398,10 @@ def build_records_selfaudit(
 
         prepaid = number(row.get("平台成交价-本币"))
         prepaid_usd = number(row.get("平台成交价-美金"))
+        # USD 兜底（2026-11-16 审视修复）：prepaid 行此前只信「平台成交价-美金」列，
+        # 列缺时本币视图有价、USD 视图静默消失；与 installment 分支对齐按 fx 换算兜底
+        if prepaid_usd is None and prepaid is not None and fx_rate:
+            prepaid_usd = round(prepaid / fx_rate, 2)
         i24 = number(row.get("24期分期价-本币"))
         t24 = number(row.get("24期总价-本币"))
         i36 = number(row.get("36期分期价-本币"))
@@ -508,7 +513,7 @@ def build_records(workbook_path: Path, owner_approved: bool = False) -> tuple[di
             and text(row.get("型号"))
             and price_type in {"installment", "prepaid", "no-price"}
             and (price_type == "no-price" or price_local is not None)
-            and (price_type != "installment" or term_months in {24, 36})
+            and (price_type != "installment" or term_months in {24, 36, 48})
         )
         review_status, generated_reasons = review_status_of(
             gate_status=gate_status,
@@ -617,10 +622,18 @@ def write_outputs(
         "match_status_counts": dict(match_statuses),
         "rows": records,
     }
-    staging.write_text(json.dumps(staging_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    published.write_text(json.dumps(published_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    runtime_output.parent.mkdir(parents=True, exist_ok=True)
-    runtime_output.write_text(json.dumps(published_rows, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    # 三份产物原子写（2026-11-16 审视修复）：进程中断不再留半截 JSON
+    # （runtime 是 src/data 运行时输入，半截文件会让下一次构建直接挂）
+    def write_text_atomic(path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as stream:
+            stream.write(content)
+            temp = Path(stream.name)
+        temp.replace(path)
+
+    write_text_atomic(staging, json.dumps(staging_payload, ensure_ascii=False, indent=2) + "\n")
+    write_text_atomic(published, json.dumps(published_payload, ensure_ascii=False, indent=2) + "\n")
+    write_text_atomic(runtime_output, json.dumps(published_rows, ensure_ascii=False, separators=(",", ":")) + "\n")
     reasons = Counter(reason for record in records for reason in record["gate_reasons"])
     lines = [
         "# ZA Vodacom 小册子导入报告",

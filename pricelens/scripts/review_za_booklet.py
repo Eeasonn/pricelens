@@ -82,7 +82,7 @@ def row_gate_reasons(row: dict[str, Any]) -> list[str]:
         reasons.append("invalid_price_type")
     if row.get("price_type") != "no-price" and row.get("price_local") is None:
         reasons.append("price_missing")
-    if row.get("price_type") == "installment" and row.get("term_months") not in {24, 36}:
+    if row.get("price_type") == "installment" and row.get("term_months") not in {24, 36, 48}:
         reasons.append("invalid_term_months")
     return sorted(set(reasons))
 
@@ -113,7 +113,9 @@ def apply_decisions(rows: list[dict[str, Any]], decisions: dict[str, Any], revie
         reasons = row_gate_reasons(row)
         if decision.get("review_status") == "FAIL":
             reasons.append("reviewer_fail")
-        row["gate_reasons"] = sorted(set(reasons + ([str(notes)] if notes and reasons else [])))
+        # 审阅备注只进 review_notes/review_history，不混进 gate_reasons——
+        # gate_reasons 是前端原因分类的枚举空间，自由文本会污染分类（2026-11-16 审视修复）
+        row["gate_reasons"] = sorted(set(reasons))
         row["review_status"] = "PASS" if not row["gate_reasons"] else ("FAIL" if decision.get("review_status") == "FAIL" else "PENDING")
         if before != json.dumps(row, ensure_ascii=False, sort_keys=True):
             changed += 1
@@ -123,6 +125,11 @@ def apply_decisions(rows: list[dict[str, Any]], decisions: dict[str, Any], revie
 def publish(staging: Path, decisions_path: Path, published: Path, runtime: Path, audit: Path, dry_run: bool) -> dict[str, Any]:
     payload = read_json(staging, {})
     rows = list(payload.get("rows", []))
+    # fail-closed（2026-11-16 审视修复）：staging 缺失/空 rows 此前会走完整个
+    # publish 流程并把 runtime 覆写成 []（ZA 月度视图瞬间无数据）。输入缺失是
+    # 链路故障，应响亮失败而不是产出空产物。
+    if not rows:
+        raise SystemExit(f"[review-za] staging 无可发布行（{staging} 缺失或为空）——中止发布，runtime 未改动")
     decision_payload = read_json(decisions_path, {"decisions": {}})
     decisions, reviewer, reviewed_at = decision_map(decision_payload)
     rows, changed = apply_decisions(rows, decisions, reviewer, reviewed_at)

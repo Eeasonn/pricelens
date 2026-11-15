@@ -119,11 +119,24 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+/** platform 字段形状（2026-11-16 审视修复）：undefined/null = 自动口径合法；
+ *  显式对象必须 platforms/shopIds 双字符串数组 + seller 字符串|null。本文件
+ *  自述威胁模型含「手工编辑过的存储」——坏 platform（如 shopIds 非数组）此前
+ *  直通状态树，在 aggregate.effectiveChannelIds 的 .includes 处崩渲染。 */
+function isPlatformSelectionShape(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!isRecord(value)) return false;
+  return isStringArray(value.platforms)
+    && isStringArray(value.shopIds)
+    && (value.seller === undefined || value.seller === null || typeof value.seller === 'string');
+}
+
 function isProductSelection(value: unknown): value is ProductSelection {
   if (!isRecord(value)) return false;
   return typeof value.modelId === 'string'
     && typeof value.romram === 'string'
-    && isStringArray(value.skuIds);
+    && isStringArray(value.skuIds)
+    && isPlatformSelectionShape(value.platform);
 }
 
 function isProductSelectionArray(value: unknown): value is ProductSelection[] {
@@ -810,7 +823,15 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
   } else if (Object.keys(url.filters).length > 0) {
     restored = { ...restored, ...url.filters };
   }
-  return applyScopeDefaults(restored, false);
+  const withDefaults = applyScopeDefaults(restored, false);
+  // 2026-11-16 审视修复：URL 直链跨口径（?c=/ind= 目标口径 ≠ 持久化口径）此前
+  // 只走 applyScopeDefaults，绕过 switchScope 的范围快照交换——持久化口径的手动
+  // 时间范围/自动态原样串进新口径（buildBuckets 按桶 id 过滤，目标国被截成错误
+  // 窗口甚至整页空图）。现按 swapRangeSnapshot 同语义补齐：显式带时间（rs/re
+  // 读入即 adaptive=false）= URL 为准；否则读目标口径快照、无快照回自动重算。
+  const crossScope = withDefaults.countryCode !== base.countryCode || withDefaults.industry !== base.industry;
+  if (!crossScope) return withDefaults;
+  return swapRangeSnapshot(base, withDefaults, url.filters.adaptive === false);
 }
 
 function loadInitialState(): FiltersState {

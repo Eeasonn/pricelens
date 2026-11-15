@@ -1105,7 +1105,7 @@ def main():
             tl = [x.split() for x in keys]
             if len(set(len(x) for x in tl)) == 1:
                 diff_cols = [j for j in range(len(tl[0])) if len({t[j] for t in tl}) > 1]
-                if len(diff_cols) == 1 and all(re.fullmatch(r"[ma]?\d*", tl[0][diff_cols[0]]) for t in tl):
+                if len(diff_cols) == 1 and all(re.fullmatch(r"[ma]?\d*", t[diff_cols[0]]) for t in tl):
                     j = diff_cols[0]
                     cands = [cands[max(range(len(tl)), key=lambda i2: int(re.sub(r"\D", "", tl[i2][j]) or 0))]]
         if spec_hint:

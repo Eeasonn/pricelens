@@ -70,13 +70,19 @@ export default function PlatformSelectBox() {
   const multiPlatformLabel = state.platform && state.platform.shopIds.length === 0 && state.platform.platforms.length > 1
     ? state.platform.platforms.join('、')
     : null;
+  // 混合并集（显式平台 + 店铺，2026-11-14 起 URL 双端保留）：单选框表达不了并集，
+  // 如实拼出「店铺 + 显式平台」——此前落到店铺行只显示店铺名，显式平台被静默
+  // 隐藏，展示口径与计算口径（并集）不符（2026-11-16 审视修复）
+  const mixedLabel = state.platform && state.platform.shopIds.length > 0 && state.platform.platforms.length > 0
+    ? [shopName, ...state.platform.platforms].filter(Boolean).join(' + ')
+    : null;
   const selectedValue = shopId
     ? `${CHAN_PREFIX}${shopId}`
     : sel?.platforms[0]
       ? `${PLAT_PREFIX}${sel.platforms[0]}`
       : undefined;
   const autoLabel = defaultPlatform ? `默认 · ${defaultPlatform}` : '默认 · 全部';
-  const isAuto = selectedValue === undefined && multiPlatformLabel == null;
+  const isAuto = selectedValue === undefined && multiPlatformLabel == null && mixedLabel == null;
 
   // 2026-11-11 Eason：「默认」不再是与平台平齐的选项（会出现 Jarir 重复两项），
   // 提出为下拉顶部按钮——选中态高亮，点击回自动口径
@@ -107,13 +113,13 @@ export default function PlatformSelectBox() {
 
   return (
     <Select
-      key={selectedValue ?? multiPlatformLabel ?? '__auto__'}
+      key={selectedValue ?? multiPlatformLabel ?? mixedLabel ?? '__auto__'}
       id="scope-platform"
       aria-label="平台"
       value={selectedValue}
       // 未选（自动口径）= 无值 + 占位「默认 · …」；key 随状态重挂载，
       // 防 rc-select 半受控下按钮回到自动后残留上一次平台文案
-      placeholder={multiPlatformLabel ?? autoLabel}
+      placeholder={multiPlatformLabel ?? mixedLabel ?? autoLabel}
       allowClear={false}
       // 选中项展示：店铺剥掉缩进只出店铺名（平台归属由下拉层级表达）
       labelRender={({ label }) => <span>{String(label ?? '').replace(/^\u2003+/, '')}</span>}

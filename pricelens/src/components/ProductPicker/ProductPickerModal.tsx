@@ -148,6 +148,11 @@ import {
 const norm = (s: string): string => s.replace(/\s+/g, '');
 const nodeSelKey = (r: RomramNode): string => `${r.modelId}|${norm(r.romram)}`;
 
+// 级联浮层每实例类序号（2026-11-16 审视修复）：.lpl-cascade-popover 被多处弹层
+// 共用，视口钳回不能靠 document.querySelector 取文档序第一个——两个本类浮层
+// 并存（关闭动画期/嵌套浮窗）时会钳到别的浮层。每实例派发独立类精确定位。
+let cascadePopSeq = 0;
+
 // ---------------- 浮窗落点上下文 ----------------
 
 type PickerCtx =
@@ -292,6 +297,8 @@ function LevelSwitchPopover({
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
   const [modelSort, setModelSort] = useState<ModelSortMode>('default'); // 型号列排序
+  // 本实例浮层类（视口钳回的精确定位用，见 cascadePopSeq 注）
+  const popCls = useRef(`lpl-cascade-popover-i${++cascadePopSeq}`).current;
   // 锚点量测（第一百九十轮）：打开与视口变化时记录左右缘，供落位翻转判定
   const triggerRef = useRef<HTMLSpanElement>(null);
   const [trigX, setTrigX] = useState<{ left: number; right: number } | null>(null);
@@ -818,7 +825,7 @@ function LevelSwitchPopover({
   useEffect(() => {
     if (!open) return;
     const clamp = (): void => {
-      const el = document.querySelector<HTMLElement>('.lpl-cascade-popover');
+      const el = document.querySelector<HTMLElement>(`.${popCls}`);
       if (!el) return;
       const r = el.getBoundingClientRect();
       const vw = window.innerWidth;
@@ -836,7 +843,7 @@ function LevelSwitchPopover({
       window.clearTimeout(t);
       window.removeEventListener('resize', clamp);
     };
-  }, [open, bodyW]);
+  }, [open, bodyW, popCls]);
   // set-main 的空组卡在批量动作中会被移除，封顶判定按移除后的基数算
   const tierBase = ctx.kind === 'set-main' && activeCard ? mains.filter((c) => c.id !== activeCard.id) : mains;
   const tierGroupDisabled = tierBase.length >= MAINS_CAP || tierOwnConfigs.length === 0;
@@ -848,7 +855,7 @@ function LevelSwitchPopover({
       open={open}
       zIndex={POPOVER_Z}
       destroyOnHidden
-      classNames={{ root: 'lpl-cascade-popover' }}
+      classNames={{ root: `lpl-cascade-popover ${popCls}` }}
       onOpenChange={(o) => {
         setOpen(o);
         setSearch('');
@@ -1205,7 +1212,15 @@ export default function ProductPickerFlyout({
     };
     measure();
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    // 滚动跟进（2026-11-16 审视修复）：面板 position:fixed 而锚点会随页面滚动，
+    // 此前只在 open/resize 时量测——浮窗开着滚动页面后锚点坐标整体过期，
+    // panelPlacementOf 的翻转结论也过期（锚点滚出视口后方向可能反转）。
+    // capture = 页面内任意滚动容器（含浮窗内部列表外的区域）都能触发；passive。
+    window.addEventListener('scroll', measure, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, { capture: true });
+    };
   }, [open]);
 
   // 焦点归还（第一百八十五轮）：打开时记下触发器（页内「选择产品」钮），

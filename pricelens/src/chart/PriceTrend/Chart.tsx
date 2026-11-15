@@ -138,6 +138,7 @@ import {
   type SeriesNameItem,
   type SuspectBadge,
 } from './chartModel';
+import { seriesKeyMatches } from './tableModel';
 import { addAnomalyMark, readAnomalyRule } from '../../dataModel/anomaly';
 import OfferPopover from './OfferPopover';
 import ChartToolbar from './ChartToolbar';
@@ -1090,7 +1091,7 @@ export default function Chart(props: ChartProps) {
 
   // ---- 端点标记（S=真实起点 / E=连续 3 区间无值才确认的截止 / in·out=窗口续接点），
   //      语义详见 chartModel.buildEndpointMarks；canvas 不画默认符号，DOM 徽标接管 ----
-  const endpointMarks = useMemo(() => buildEndpointMarks(series), [series]);
+  const endpointMarks = useMemo(() => buildEndpointMarks(series, priceTypes), [series, priceTypes]);
   // 第一百二十五轮：跨接吸收的孤立有值点集（悬停小圆点不叠画）；系列级缓存避免每次悬停重算
   const absorbedByKey = useMemo(
     () => new Map(series.map((s) => [s.key, gapAbsorbedIdx(s.points)])),
@@ -1446,8 +1447,12 @@ export default function Chart(props: ChartProps) {
   );
   // ---- 区间量尺几何（2026-11-06）：价格层量 rulerKey 那条线，销量层量量带 ----
   const unitNoun = granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季';
+  // 融资后缀感知（2026-11-16 审视修复）：rulerKey/tipDiffBaseKey 传入的是选择键，
+  // ZA 融资系列 key 带 __i24/__pp 后缀——裸相等会双双落空、静默量到 series[0]
   const rulerTarget =
-    series.find((s) => s.key === props.rulerKey) ?? series.find((s) => s.key === props.tipDiffBaseKey) ?? series[0] ?? null;
+    series.find((s) => props.rulerKey != null && seriesKeyMatches(s.key, props.rulerKey))
+    ?? series.find((s) => props.tipDiffBaseKey != null && seriesKeyMatches(s.key, props.tipDiffBaseKey))
+    ?? series[0] ?? null;
   const rulerModel = useMemo(() => {
     if (!rangeActive || !geom) return null;
     const plotBottom = geom.plotTop + geom.plotHeight;
@@ -1929,7 +1934,7 @@ export default function Chart(props: ChartProps) {
           </>
         );
       })()}
-      {empty && (
+      {(empty || !geom) && (
         <div
           style={{
             height: '100%',
@@ -1939,7 +1944,12 @@ export default function Chart(props: ChartProps) {
             fontSize: fontSize.bodySm,
           }}
         >
-          {props.emptyHint ?? '暂无数据，请先在上方筛选器选择产品'}
+          {/* geom=null 且有数据（2026-11-16 审视修复）：此前只渲染空高度 div = 整块
+              白卡无任何提示——buildGeom 宽度下限守卫触发（名称带 320 顶格 + 量轴 +
+              面板 minWidth 组合）时用户面对无解释的空白。给出可行动的文案。 */}
+          {empty
+            ? props.emptyHint ?? '暂无数据，请先在上方筛选器选择产品'
+            : '绘图区空间不足（产品名较长或面板过窄），请加宽视口或减少分图列数'}
         </div>
       )}
       {geom && (
@@ -2495,7 +2505,9 @@ export default function Chart(props: ChartProps) {
             // 第196轮整改5：销量行只在 tipBox 模式（量价看板预留框）出现——价格走势页的
             // volumes 现兼作量层数据源，量层开启时悬停卡仍保持五列（量层已有右轴刻度，
             // Eason 口径：卡片不膨胀），销量数字由右轴承载
-            const volVal = tipBoxOn ? (props.volumes?.[tipIdx] ?? null) : null;
+            // 销量行跟随量层当前归属候选（effVolumes）——props.volumes 是首候选
+            // 原始序列，候选切换后这里会错列（2026-11-16 审视修复）
+            const volVal = tipBoxOn ? (effVolumes?.[tipIdx] ?? null) : null;
             // 成本细线开着时，主卡多一行当月成本（模拟）
             const costVal = props.costs?.[tipIdx] ?? null;
             const costDot = costVal != null && !tipBoxOn ? (
@@ -2559,7 +2571,9 @@ export default function Chart(props: ChartProps) {
             // 主品行留空、任一侧缺价或主品价 ≤ 0 显「—」（hairlineStrong 同明细表空格）。
             // 仅当图上还有对比行时出列（全部为主品 = 与宽表 hasDiff=false 同语义，不出）
             const diffBase =
-              props.tipDiffBaseKey != null ? series.find((s) => s.key === props.tipDiffBaseKey) ?? null : null;
+              props.tipDiffBaseKey != null
+                ? series.find((s) => seriesKeyMatches(s.key, props.tipDiffBaseKey!)) ?? null
+                : null;
             const showDiffCol = diffBase != null && rows.some((r) => r.s.key !== diffBase.key);
             const diffCellOf = (s: (typeof series)[number]): { text: string; color: string } | null => {
               if (!diffBase || s.key === diffBase.key) return null; // 主品行留空（基准）

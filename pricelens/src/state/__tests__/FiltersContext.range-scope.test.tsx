@@ -107,4 +107,36 @@ describe('时间范围/自动态按 国家.产业 隔离（swapRangeSnapshot）'
     const view = render(<FiltersProvider><RangeProbe /></FiltersProvider>);
     expect(rangeOf(view)).toMatchObject({ cc: 'RU', adaptive: false, rs: '2026W25', re: '2026W32' });
   });
+
+  // 2026-11-16 审视修复：启动 URL 直链跨口径（?c= 目标国 ≠ 持久化国）此前绕过
+  // 快照交换——DE 的手动范围原样串进 RU。现走 swapRangeSnapshot 同语义。
+  it('启动 URL 直链跨国：目标国无快照 = 回自动，旧国手动范围不串入且被落盘保全', () => {
+    freshStorage();
+    // 持久化 = DE 手动 41-45；无 RU 快照
+    window.localStorage.setItem(LPL.filters, JSON.stringify({ ...defaultFilters, countryCode: 'DE', adaptive: false, rangeStart: '2026W41', rangeEnd: '2026W45', v: 12 }));
+    window.history.replaceState(null, '', '?c=RU');
+    const view = render(<FiltersProvider><RangeProbe /></FiltersProvider>);
+    expect(rangeOf(view)).toMatchObject({ cc: 'RU', adaptive: true });
+    // DE 的手动范围没有被丢弃：boot 落盘回 DE 快照，切回 DE 还能恢复
+    expect(JSON.parse(window.sessionStorage.getItem(`${LPL.filters}.rangeOf.DE.phone`) ?? '{}'))
+      .toMatchObject({ adaptive: false, rangeStart: '2026W41', rangeEnd: '2026W45' });
+  });
+
+  it('启动 URL 直链跨国：目标国有快照 = 恢复目标国自己的手动范围', () => {
+    freshStorage();
+    window.localStorage.setItem(LPL.filters, JSON.stringify({ ...defaultFilters, countryCode: 'DE', adaptive: false, rangeStart: '2026W41', rangeEnd: '2026W45', v: 12 }));
+    window.sessionStorage.setItem(`${LPL.filters}.rangeOf.RU.phone`, JSON.stringify({ adaptive: false, rangeStart: '2026W25', rangeEnd: '2026W32' }));
+    window.history.replaceState(null, '', '?c=RU');
+    const view = render(<FiltersProvider><RangeProbe /></FiltersProvider>);
+    expect(rangeOf(view)).toMatchObject({ cc: 'RU', adaptive: false, rs: '2026W25', re: '2026W32' });
+  });
+
+  it('启动 URL 直链跨国且显式带时间（rs/re）：URL 时间为准，不做快照回填', () => {
+    freshStorage();
+    window.localStorage.setItem(LPL.filters, JSON.stringify({ ...defaultFilters, countryCode: 'DE', adaptive: false, rangeStart: '2026W41', rangeEnd: '2026W45', v: 12 }));
+    window.sessionStorage.setItem(`${LPL.filters}.rangeOf.RU.phone`, JSON.stringify({ adaptive: false, rangeStart: '2026W25', rangeEnd: '2026W32' }));
+    window.history.replaceState(null, '', '?c=RU&rs=202610&re=202614');
+    const view = render(<FiltersProvider><RangeProbe /></FiltersProvider>);
+    expect(rangeOf(view)).toMatchObject({ cc: 'RU', adaptive: false, rs: '202610', re: '202614' });
+  });
 });

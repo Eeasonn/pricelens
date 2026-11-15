@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import tempfile
 import unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -215,13 +216,23 @@ def build(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     return products, [payload]
 
 
+def write_text_atomic(path: Path, content: str) -> None:
+    """临时文件 + 原子替换——进程中断不再留半截 JSON 在 src/data 运行时维表里
+    （2026-11-16 审视修复，口径同 review_za_booklet.write_json_atomic）。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as stream:
+        stream.write(content)
+        temp = Path(stream.name)
+    temp.replace(path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xlsx", type=Path, default=DEFAULT_XLSX)
     args = parser.parse_args()
     products, payloads = build(args.xlsx)
-    PRODUCT_JSON.write_text(json.dumps(products, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
-    MAP_JSON.write_text(json.dumps(payloads[0], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(PRODUCT_JSON, json.dumps(products, ensure_ascii=False, separators=(",", ":")) + "\n")
+    write_text_atomic(MAP_JSON, json.dumps(payloads[0], ensure_ascii=False, indent=2) + "\n")
     print(json.dumps({"products": len(products), "mappings": len(payloads[0]["rows"]), "map": str(MAP_JSON)}, ensure_ascii=False))
 
 

@@ -295,7 +295,7 @@ function BenchConfigModalInner({ open, model, bands, initialRomram, onClose }: B
 
           {/* 已配置（当前 ROM）：首位 = 主竞品★，↑↓ 微调次序（预警中心重构收编原配置页排序能力） */}
           {sectionTitle(
-            `已配置对标（${currentRows.length}/4）`,
+            `已配置对标（${currentRows.length}/${BENCHMARK_CAP_PER_CONFIG}）`,
             '首位为主竞品 · ↑↓ 调整次序',
           )}
           {currentRows.length === 0 ? (

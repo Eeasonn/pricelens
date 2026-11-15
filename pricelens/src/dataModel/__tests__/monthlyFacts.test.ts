@@ -1,7 +1,25 @@
+// @vitest-environment jsdom
+// （月度守卫用例要读写 localStorage 人工裁定存储——本环境的 jsdom 同样不带
+// localStorage，与 FiltersContext.range-scope.test.tsx 同款内存桩）
 import { describe, expect, it } from 'vitest';
+
+if (typeof window.localStorage !== 'object') {
+  const map = new Map<string, string>();
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => map.get(key) ?? null,
+      setItem: (key: string, value: string) => { map.set(key, String(value)); },
+      removeItem: (key: string) => { map.delete(key); },
+      clear: () => { map.clear(); },
+      key: (index: number) => [...map.keys()][index] ?? null,
+      get length() { return map.size; },
+    },
+  });
+}
 import { buildMonthlySeries } from '../aggregate';
 import { monthlyFactsFor, monthlyPriceTypeLabel, publishedMonthlyRangeOf } from '../monthlyFacts';
-import type { FactPriceMonthly } from '../types';
+import type { FactPriceMonthly, SeriesQuery } from '../types';
 
 const row = (overrides: Partial<FactPriceMonthly> = {}): FactPriceMonthly => ({
   offer_id: 'offer-1',
@@ -84,5 +102,45 @@ describe('monthly booklet facts', () => {
     }, source);
     expect(series.points.map((point) => point.price)).toEqual([100, null]);
     expect(series.points.map((point) => point.bucketId)).toEqual(['202605', '202606']);
+  });
+
+  it('月度路径消费人工裁定：裸键裁定（量价页 markPanelPoint 形态）命中带 __i24 后缀的系列点（2026-11-16 守卫补齐）', () => {
+    const source = [row({
+      period_id: '202605',
+      sku_id: 'own-huawei-nova-14__12-256gb__black',
+      model: 'nova 14',
+      sku_spec: '12+256 GB',
+      price_local: 100,
+    })];
+    const query: SeriesQuery = {
+      scope: { countryCode: 'ZA', industry: 'phone' },
+      groups: [{ modelId: 'own-huawei-nova-14', romram: '12+256 GB', skuIds: ['own-huawei-nova-14__12-256gb__black'], isOwn: true }],
+      granularity: 'month',
+      startBucket: '202605',
+      endBucket: '202605',
+      currency: 'local',
+      agg: 'avg',
+      financingType: 'installment',
+      financingTerms: [24],
+    };
+    // 无裁定：点干净
+    const [plain] = buildMonthlySeries(query, source);
+    expect(plain.points[0].suspect).toBeUndefined();
+    // 裁定键 = 裸键 modelId__romramNorm（不带 __i24 后缀）+ 月 id 桶
+    // （守卫规则未启用时 detectSuspects 整体短路——与周路径同语义，须启用规则）
+    localStorage.setItem('LPL3.config.anomalyRule', JSON.stringify({ enabled: true, thresholdPct: 50 }));
+    localStorage.setItem('LPL3.config.anomalyMarks', JSON.stringify([
+      { countryCode: 'ZA', seriesKey: 'own-huawei-nova-14__12+256GB', bucketId: '202605', action: 'isolate', ts: 1 },
+    ]));
+    try {
+      const [marked] = buildMonthlySeries(query, source);
+      // 隔离 ≠ 删除：原值保留，suspect 只是可信链退出信号
+      expect(marked.points[0].price).toBe(100);
+      expect(marked.points[0].suspect).toBe('quarantined');
+      expect(marked.points[0].suspectReason).toBe('manual');
+    } finally {
+      localStorage.removeItem('LPL3.config.anomalyMarks');
+      localStorage.removeItem('LPL3.config.anomalyRule');
+    }
   });
 });

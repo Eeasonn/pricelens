@@ -132,7 +132,7 @@ import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
 // 读数方式（区间极差|区间涨跌）会话态 + 选区按全量桶下标存储、按面板查看窗口换算
 import { brushInWindow, type RangeMode } from '../chart/PriceTrend/rangeRuler';
 // 名称带自适应宽（nameZoneWidthOf）与曲线系列名（curveNameOf）与价格页同源
-import { curveNameOf, nameZoneWidthOf, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
+import { curveNameOf, nameZoneWidthOf, seriesPillMetaOf, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
 import {
   BREAK_PX,
   GRID,
@@ -504,7 +504,10 @@ export default function VolumePrice() {
   // 本 effect 声明在粒度换算之后：切粒度先换桶，自适应范围随后覆盖。
   const { mainSels: selMains, compareSels: selCompares } = useMemo(() => flatSelections(state.mains), [state.mains]);
   const selectionSeries = useMemo<Series[]>(() => {
-    const groups = [...selMains, ...selCompares].map((g) => ({ ...g, isOwn: false }));
+    // 跨度取数剥掉每线平台覆写（2026-11-16 审视修复）：页面渲染口径 = 全局
+    // state.platform（:334 面板取数同源），flatSelections 原样携带 selection.platform
+    // 会让 buildSeries 按覆写口径取值——自动范围的端点因此与画面数据错开
+    const groups = [...selMains, ...selCompares].map((g) => ({ ...g, isOwn: false, platform: null }));
     if (groups.length === 0) return [];
     try {
       return buildSeries({
@@ -902,8 +905,11 @@ export default function VolumePrice() {
   }, [yCfg, panelGridTop, sliderScale, axisInput, state.priceTypes, yCompress, state.currency]);
   const yFinal = volPlan.scale;
   const volH = volPlan.volH;
-  // 名称带自适应宽（2026-11-06 同价格页 nameZoneWidthOf）：按可见面板产品名取最长
-  const nameZoneW = useMemo(() => nameZoneWidthOf(visUnion.map((s) => curveNameOf(s))), [visUnion]);
+  // 名称带自适应宽（2026-11-06 同价格页 nameZoneWidthOf）：按可见面板产品名取最长。
+  // 2026-11-16 审视修复：Chart 内药丸恒按两行（seriesPillMetaOf，行1 含品牌词）
+  // 渲染，此前按单行全名估宽——品牌词长于配置后缀时（如 Samsung vs 128）行1
+  // 实需宽超估算，药丸外溢名称带右缘、避让盒随之低估。传两行 spec 与渲染同源。
+  const nameZoneW = useMemo(() => nameZoneWidthOf(visUnion.map((s) => seriesPillMetaOf(s))), [visUnion]);
   // 左缘 = 轴列（仅刻度，档位带不画）+ 名称带；刻度文案自适应轴列宽（同价格页）
   const yAxisTickTexts = useMemo(() => axisTickTextsOf(yFinal), [yFinal]);
   const gridLeft = useMemo(
@@ -990,7 +996,15 @@ export default function VolumePrice() {
                       const viewLen = mPts.length;
                       const activeIdx = viewLen > 0 ? Math.min(viewLen - 1, Math.max(0, mergedHover ?? viewLen - 1)) : null;
                       const activePoint = activeIdx != null ? (mPts[activeIdx] ?? null) : null;
-                      const marginPoints = marginCosts[p.idx] ?? [];
+                      // 「当月成本/销毛」列与观察列必须同窗（2026-11-16 审视修复）：
+                      // marginCosts 按各面板独立窗口（effWins）切片，观察列/销量列按
+                      // 共享窗（win）切片——关时间轴同步拖过独立窗再切合并呈现时，
+                      // marginPoints[activeIdx] 会按错位下标取到另一个月的成本。
+                      // 按桶 id 重排成共享窗位置数组（含缺成本桶的 null 对齐）。
+                      const costByBucket = new Map(
+                        (marginCosts[p.idx] ?? []).filter((mp) => mp != null).map((mp) => [mp.bucketId, mp]),
+                      );
+                      const marginPoints = domainIds.slice(win.s, win.e + 1).map((id) => costByBucket.get(id) ?? null);
                       const marginUnavailable = marginCostAvailabilityOf(p.spec.isOwn, marginPoints) === 'empty';
                       const marginPoint = activeIdx != null ? marginPoints[activeIdx] ?? null : null;
                       // ---- 单周明细卡口径：缺采显示 —，环比只跟上一**可信**桶比

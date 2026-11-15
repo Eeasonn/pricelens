@@ -16,6 +16,7 @@ import { Button, Popconfirm, Tooltip, message } from 'antd';
 import { DownloadOutlined, RollbackOutlined, UploadOutlined } from '@ant-design/icons';
 import { buildDataPack, dataMeta, applyDataPack, type DataPackMeta } from '../../data';
 import { clearDataPack, saveDataPack } from '../../data/dataPackStore';
+import { canEditConfig } from '../../access/role';
 import { color } from '../../theme/tokens';
 
 const packFileNameOf = (generatedAt: string): string => {
@@ -41,6 +42,12 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
     const file = event.target.files?.[0];
     event.target.value = ''; // 同一文件可重复选择
     if (!file || busy) return;
+    // 防纵深（2026-11-16 审视修复）：与全站写 API 门控模式一致——按钮置灰之外
+    // 入口函数再校验一次 canEditConfig（role.ts 防御清单登记）
+    if (!canEditConfig()) {
+      message.error('查阅者不可更改本机数据承载，请联系 GTM');
+      return;
+    }
     setBusy(true);
     try {
       const text = await file.text();
@@ -57,7 +64,13 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
         return;
       }
       const { persisted } = await saveDataPack(parsed as Parameters<typeof saveDataPack>[0]);
-      message.success(persisted ? '数据包已导入并持久化，即将刷新页面' : '数据包已导入（本次会话生效；浏览器未允许持久化），即将刷新页面');
+      if (!persisted) {
+        // 不能刷新（2026-11-16 审视修复）：持久化失败时刷新 = 两段式启动读不到
+        // 包、回落内置数据，刚导入的结果被静默撤销。保留本会话内存态并明确警告。
+        message.warning('数据包已导入，但浏览器未允许持久化（隐私模式 / 配额限制），仅本次会话生效——刷新或关闭后会回到原数据。如需长期使用，请调整浏览器设置后重新导入。', 6);
+        return;
+      }
+      message.success('数据包已导入并持久化，即将刷新页面');
       window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
       message.error(`导入失败：${error instanceof Error ? error.message : String(error)}`);
@@ -79,7 +92,13 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
   };
 
   const onReset = async (): Promise<void> => {
-    await clearDataPack();
+    // cleared=false（删除失败）时不能刷新：刷新后 applyPersistedDataPack 会把
+    // 没删掉的包重新载入，界面说「已还原」而数据原封不动（2026-11-16 审视修复）
+    const { cleared } = await clearDataPack();
+    if (!cleared) {
+      message.warning('清除持久化数据包失败（存储被占用或不可写），尚未还原——请关闭其他打开了本应用的标签页后重试。');
+      return;
+    }
     message.success('已还原为内置数据，即将刷新页面');
     window.setTimeout(() => window.location.reload(), 700);
   };

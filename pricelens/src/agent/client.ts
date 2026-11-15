@@ -204,21 +204,34 @@ export const LOCAL_FALLBACK_PROVIDER = { name: '本地确定性回退', model: '
 export function withLocalFallback(remote: AgentClient, local: AgentClient): AgentClient {
   return {
     async run(request, signal, onEvent) {
+      // 远端事件的最高 sequence（2026-11-16 审视修复）：回退事件此前恒写
+      // sequence: 2——远端中途失败（已发 seq≥2 事件）后，回退说明事件与本地
+      // 阶段事件会被 reducer 的「丢 sequence ≤ lastSequence」整体吞掉，
+      // 「已回退本地引擎」提示与本地进度在 mid-stream 失败场景全不出现。
+      let lastSequence = 0;
+      const trackRemote = (event: AgentEvent): void => {
+        lastSequence = Math.max(lastSequence, event.sequence ?? 0);
+        onEvent?.(event);
+      };
+      const emitLocal = (event: AgentEvent): void => {
+        lastSequence += 1;
+        onEvent?.({ ...event, sequence: lastSequence });
+      };
       try {
-        return await remote.run(request, signal, onEvent);
+        return await remote.run(request, signal, trackRemote);
       } catch (error) {
         if ((error as Error)?.name === 'AbortError' && signal?.aborted) throw error;
         const runId = request.runId ?? request.clientRequestId;
-        onEvent?.({
+        emitLocal({
           id: `${runId}-local-fallback-${Date.now().toString(36)}`,
           runId,
-          sequence: 2,
+          sequence: lastSequence + 1,
           type: 'step.started',
           timestamp: new Date().toISOString(),
           message: '远端 Agent 服务不可达，已使用本地确定性引擎',
           provenance: { source: 'local-deterministic', provider: LOCAL_FALLBACK_PROVIDER.name, model: LOCAL_FALLBACK_PROVIDER.model },
         });
-        const response = await local.run(request, signal, onEvent);
+        const response = await local.run(request, signal, emitLocal);
         return { ...response, provider: { ...LOCAL_FALLBACK_PROVIDER, reason: (error as Error)?.message || '远端不可达' } };
       }
     },

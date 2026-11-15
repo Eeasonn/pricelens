@@ -23,9 +23,6 @@ const dataDir = join(pricelensRoot, 'src', 'data');
 const readJson = (name) => JSON.parse(readFileSync(join(dataDir, name), 'utf8'));
 
 const dim = (name) => readJson(`${name}.json`);
-const today = new Date();
-const ymd = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-const outDir = join(repoRoot, 'portable', `PriceLens-便携版-${ymd}`);
 const htmlSrc = join(repoRoot, 'PriceLens.html');
 
 if (!noBuild) {
@@ -38,6 +35,12 @@ if (!noBuild) {
 } else {
   console.log('[portable] --no-build：直接使用现有 PriceLens.html');
 }
+
+// 日期在 build 之后取（2026-11-16 审视修复）：此前 ymd 在 npm build 前算好，
+// 跨午夜跑装配时文件夹/数据包文件名与包内 generatedAt 差一天
+const today = new Date();
+const ymd = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+const outDir = join(repoRoot, 'portable', `PriceLens-便携版-${ymd}`);
 
 if (!readFileSync(htmlSrc, 'utf8').includes('<meta name="pricelens-channel" content="stable">')) {
   console.error('[portable] PriceLens.html 不是稳定版单文件产物（缺 stable 通道标记），中止装配');

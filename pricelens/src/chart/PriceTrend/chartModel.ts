@@ -128,16 +128,23 @@ const productBySku = new Map(dimProduct.map((p) => [p.sku_id, p]));
  *  同款拆行口径）：curveNameOf 全名剥配置后缀 = 行1 产品名，后缀 = 行2 chip 文案
  *  （romram '—'/'规格未标明' = 无配置层级，不出 chip）；品牌词按清洗层
  *  dim_product.brand_inline（型号级同值，按系列首个 SKU 查回；无行 = null）。
- *  分期标注（financeTag）留在行1——多期数勾选时同名系列靠它分辨月供档。 */
+ *  分期标注（financeTag）留在行1——多期数勾选时同名系列靠它分辨月供档。
+ *  2026-11-16 审视修复：配置后缀匹配必须先剥掉「 · {financeTag}」再对基名做
+ *  endsWith——ZA 月度系列行1 = 「名 配置 · 36期」，此前对全名盲匹配失败后仍按
+ *  后缀长度从尾部砍字符，把「36期」切掉、配置重复进行1、行尾悬空「·」，
+ *  多期数勾选时同名系列的药丸变得完全无法分辨；不匹配时保留全名不出行2
+ *  （与 BrandLegendStrip 的守卫口径对齐）。 */
 export function seriesPillMetaOf(s: Series): NameZonePillSpec {
   const text = curveNameOf(s);
   const row = s.skuIds.length ? productBySku.get(s.skuIds[0]) : undefined;
   const romRaw = (row?.romram ?? '').trim();
   const rom = romRaw === '—' || romRaw === '规格未标明' ? '' : romRaw;
   const romBase = rom.replace(/\s*GB$/i, '').trim();
-  const suffix = rom && (text.endsWith(rom) ? rom : romBase);
+  const tag = s.financeTag ? ` · ${s.financeTag}` : '';
+  const base = tag && text.endsWith(tag) ? text.slice(0, text.length - tag.length) : text;
+  const suffix = rom && (base.endsWith(rom) ? rom : base.endsWith(romBase) ? romBase : '');
   return {
-    name: suffix ? text.slice(0, text.length - suffix.length).trim() : text,
+    name: suffix ? `${base.slice(0, base.length - suffix.length).trim()}${tag}` : text,
     brandWord: row ? pillBrandLabel(row) : null,
     cfg: suffix || '',
   };
@@ -226,26 +233,31 @@ export function buildGeom(p: {
 
 /** S = 真实开头（该段连续有值区间的首点）；E = 真实截止（其后连续 3 个区间均无值才
  *  确认——数据末端/最新批次一律不标 E）；in/out = 窗口左/右缘的续接点（窗口外
- *  2 周内仍有数据，非真实首尾）。key = `${seriesKey}|${pointIdx}` */
-export function buildEndpointMarks(series: Series[]): Map<string, SeriesMark> {
+ *  2 周内仍有数据，非真实首尾）。key = `${seriesKey}|${pointIdx}`。
+ *  priceTypes（2026-11-16 审视修复）：端点判定要与画出来的主价线同价源——仅勾
+ *  RRP 时折线画的是 rrp，此前只读 price，「有价无折」的段首/截止点一个徽标
+ *  都不出（与锚 primaryPriceOf 的徽标落点错位）。 */
+export function buildEndpointMarks(series: Series[], priceTypes?: PriceTypes): Map<string, SeriesMark> {
   const marks = new Map<string, SeriesMark>();
+  const val = priceTypes
+    ? (s: Series, i: number): number | null => (s.points[i] ? primaryPriceOf(s.points[i], priceTypes) : null)
+    : (s: Series, i: number): number | null => s.points[i]?.price ?? null;
   for (const s of series) {
     const n = s.points.length;
-    const val = (i: number): number | null => s.points[i]?.price ?? null;
     const isStart = (i: number): boolean => {
-      if (val(i) == null) return false;
+      if (val(s, i) == null) return false;
       if (i === 0) return !s.edgeStart;
-      if (val(i - 1) != null) return false;
-      return i === 1 || val(i - 2) == null; // 前面连续两周无值才算新开头（1 周断采视为连续）
+      if (val(s, i - 1) != null) return false;
+      return i === 1 || val(s, i - 2) == null; // 前面连续两周无值才算新开头（1 周断采视为连续）
     };
     const isEnd = (i: number): boolean => {
-      if (val(i) == null) return false;
-      if (i + 1 < n && val(i + 1) != null) return false; // 非段尾
+      if (val(s, i) == null) return false;
+      if (i + 1 < n && val(s, i + 1) != null) return false; // 非段尾
       // 其后连续 3 个区间都无值才确认截止；数据末端观察不足 3 个区间，不标 E
-      return i + 3 < n && val(i + 1) == null && val(i + 2) == null && val(i + 3) == null;
+      return i + 3 < n && val(s, i + 1) == null && val(s, i + 2) == null && val(s, i + 3) == null;
     };
     for (let i = 0; i < n; i++) {
-      if (val(i) == null) continue;
+      if (val(s, i) == null) continue;
       const st = isStart(i);
       const en = isEnd(i);
       if (i === 0 && s.edgeStart) marks.set(`${s.key}|${i}`, 'in');
@@ -1135,6 +1147,10 @@ export function buildPromoBands(p: {
   for (const promo of p.promos) {
     const ps = utc(promo.start_date);
     const pe = utc(promo.end_date);
+    // 非日期串（dimTime 缺行时 bucketSpans 回退桶 id）解析出 NaN 后，下面的
+    // 相交比较恒 false → 每条促销都「相交」，产出 NaN 分数把渲染层像素算成
+    // NaN。不可解析一律跳过该促销（2026-11-16 审视修复）
+    if (!Number.isFinite(ps) || !Number.isFinite(pe)) continue;
     let startIdx = -1;
     let endIdx = -1;
     let startFrac = 0;
@@ -1142,6 +1158,7 @@ export function buildPromoBands(p: {
     for (let i = 0; i < p.spans.length; i++) {
       const bs = utc(p.spans[i].start);
       const be = utc(p.spans[i].end);
+      if (!Number.isFinite(bs) || !Number.isFinite(be)) continue;
       if (ps > be || pe < bs) continue;
       const len = Math.max(1, be - bs);
       if (startIdx < 0) {

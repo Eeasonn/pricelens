@@ -131,7 +131,7 @@ import { platformLevelForChannel } from '../../state/urlSync';
 import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
 import PlatformCompareView from './PlatformCompareView';
 import PointPanel from './PointPanel';
-import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
+import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange, seriesKeyMatches, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 import { pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, syncComparesWithMain, type PlatformSyncCardSnap } from './platformSync';
@@ -597,11 +597,15 @@ export default function PriceTrend(props: {
   // 点自动被消除；显式选了平台/渠道仍全员同写。
   const pickChannel = useCallback(
     (seriesKey: string, sel: PlatformSelection | null) => {
-      const idx = seriesKey.indexOf('__');
+      // 融资后缀感知（2026-11-16 审视修复）：ZA 月度融资系列 key 带 __i24/__pp
+      // 后缀，先剥后缀再还原选择键（selKey = 型号|配置）——否则写进
+      // setSelectionPlatform 的键带残尾，平台/店铺选择静默落空
+      const bare = seriesKey.replace(/__(?:i\d+|pp)$/, '');
+      const idx = bare.indexOf('__');
       if (idx <= 0) return;
-      const key = `${seriesKey.slice(0, idx)}|${seriesKey.slice(idx + 2)}`;
+      const key = `${bare.slice(0, idx)}|${bare.slice(idx + 2)}`;
       const owner = effMains.find((c) =>
-        [c.main, ...c.compares].some((s) => s && seriesKeyOf(s) === seriesKey),
+        [c.main, ...c.compares].some((s) => s && seriesKeyMatches(seriesKey, seriesKeyOf(s))),
       );
       if (owner && platformSyncMapRef.current[owner.id]) {
         // 同步中点「自动」（第一百九十一轮，Eason 五点）：主品回自动，对比品钉定
@@ -610,7 +614,7 @@ export default function PriceTrend(props: {
         // 自动 = null 落到徽标解析实际平台。不能直传 null——开启同步后主品徽标
         // auto=false，解析出 null 会整组散伙，同步名存实亡
         if (sel == null) {
-          const badge = owner.main ? visSeries.find((s) => s.key === seriesKeyOf(owner.main!))?.channelBadge ?? null : null;
+          const badge = owner.main ? visSeries.find((s) => seriesKeyMatches(s.key, seriesKeyOf(owner.main!)))?.channelBadge ?? null : null;
           const pinned = pinnedSelectionFromBadge(badge, owner.main?.platform ?? null);
           actions.setMains(
             effMains.map((c) =>
@@ -661,7 +665,7 @@ export default function PriceTrend(props: {
         setPlatformSyncStore((prev) => ({ ...prev, [cardId]: { on: false, snap: null } }));
         return;
       }
-      const badge = card.main ? visSeries.find((s) => s.key === seriesKeyOf(card.main!))?.channelBadge ?? null : null;
+      const badge = card.main ? visSeries.find((s) => seriesKeyMatches(s.key, seriesKeyOf(card.main!)))?.channelBadge ?? null : null;
       const synced = syncComparesWithMain(card, badge);
       if (!synced) {
         message.info(SYNC_BLOCKED_HINT);
@@ -849,7 +853,7 @@ export default function PriceTrend(props: {
     return (seriesKey: string, bucketId: string) => {
       if (state.granularity === 'week') return;
       const s = panel.series.find((x) => x.key === seriesKey);
-      const grp = groups.find((g) => `${g.modelId}__${g.romram.replace(/\s+/g, '')}` === seriesKey);
+      const grp = groups.find((g) => seriesKeyMatches(seriesKey, `${g.modelId}__${g.romram.replace(/\s+/g, '')}`));
       if (!s || !grp) return;
       setDrill({
         // platform 随系列带出（与合并图 onDrill 同口径）：钉定平台/店铺的面板线
@@ -899,7 +903,11 @@ export default function PriceTrend(props: {
     });
     const byCard = new Map<number, typeof summary>();
     for (const it of summary) {
-      const card = keyToCard.get(it.key);
+      // 融资后缀感知（2026-11-16 审视修复）：it.key 是系列 key（ZA 融资带 __i24/
+      // __pp），keyToCard 键是选择键——先精确再前缀匹配，否则摘要项整条落空
+      const card = keyToCard.get(it.key)
+        ?? [...keyToCard.entries()].find(([k]) => seriesKeyMatches(it.key, k))?.[1]
+        ?? null;
       if (card == null) continue;
       const arr = byCard.get(card);
       if (arr) arr.push(it);
@@ -1097,7 +1105,7 @@ export default function PriceTrend(props: {
   // 首个我司主品组；全竞品 = 无量带
   const ownMainCard = useMemo(
     () =>
-      effMains.find((c) => c.main && visSeries.find((v) => v.key === seriesKeyOf(c.main!))?.isOwn === true) ??
+      effMains.find((c) => c.main && visSeries.find((v) => seriesKeyMatches(v.key, seriesKeyOf(c.main!)))?.isOwn === true) ??
       null,
     [effMains, visSeries],
   );
@@ -1114,7 +1122,7 @@ export default function PriceTrend(props: {
       // （模拟销量口径 = 我司产品，与销毛卡 isOwn 门控同语义）
       const mains = effMains
         .flatMap((c) => (c.main ? [c.main] : []))
-        .filter((sel) => visSeries.find((v) => v.key === seriesKeyOf(sel))?.isOwn === true);
+        .filter((sel) => visSeries.find((v) => seriesKeyMatches(v.key, seriesKeyOf(sel)))?.isOwn === true);
       if (mains.length <= 1) return null;
       return mains.map((sel) => {
         const key = seriesKeyOf(sel);
@@ -1150,13 +1158,13 @@ export default function PriceTrend(props: {
     [activeVolumeCandidate, ownMainSel, winBucketIds, state.countryCode, state.granularity],
   );
   const mergedMainSeries = useMemo(
-    () => (ownMainKey ? chartSeries.find((s) => s.key === ownMainKey) ?? null : null),
+    () => (ownMainKey ? chartSeries.find((s) => seriesKeyMatches(s.key, ownMainKey)) ?? null : null),
     [chartSeries, ownMainKey],
   );
   // 量带归属按全量系列找（主品线被图例隐藏时不在 chartSeries，药丸仍要说明这是谁的量）；
   // 方案 B：active 候选优先（归属药丸/色点直接用候选自带信息，不依赖系列可见性）
   const mergedOwnerSeries = useMemo(
-    () => (ownMainKey ? visSeries.find((s) => s.key === ownMainKey) ?? null : null),
+    () => (ownMainKey ? visSeries.find((s) => seriesKeyMatches(s.key, ownMainKey)) ?? null : null),
     [visSeries, ownMainKey],
   );
   const mergedVolumeColor = activeVolumeCandidate
@@ -1226,7 +1234,7 @@ export default function PriceTrend(props: {
       const ids = bucketIds.slice(ps, pe + 1);
       const sel = p.card.main;
       const key = sel ? seriesKeyOf(sel) : null;
-      const mainSeries = key ? p.all.find((s) => s.key === key) ?? null : null;
+      const mainSeries = key ? p.all.find((s) => seriesKeyMatches(s.key, key)) ?? null : null;
       m[p.key] = {
         volumes:
           sel && ids.length > 0
@@ -1242,7 +1250,7 @@ export default function PriceTrend(props: {
                 bucketIds: ids,
               })
             : null,
-        volumeColor: (key ? p.all.find((s) => s.key === key)?.color : null) ?? color.mute,
+        volumeColor: (key ? p.all.find((s) => seriesKeyMatches(s.key, key))?.color : null) ?? color.mute,
         volumeOwner: mainSeries ? { key: mainSeries.key, brand: mainSeries.brand, text: curveNameOf(mainSeries) } : null,
         diffBaseKey: key,
       };
@@ -1511,7 +1519,9 @@ export default function PriceTrend(props: {
 
   const onDrill = (seriesKey: string, bucketId: string): void => {
     const s = allSeries.find((x) => x.key === seriesKey);
-    const sel = selByKey.get(seriesKey);
+    // 融资后缀感知（2026-11-16 审视修复）：ZA 融资系列 key 带 __i24/__pp 后缀，
+    // selByKey 键是选择键——裸 get 会 get 不到，月粒度下钻点击静默无响应
+    const sel = [...selByKey.entries()].find(([k]) => seriesKeyMatches(seriesKey, k))?.[1];
     if (!s || !sel || state.granularity === 'week') return;
     const group: SkuGroupQuery = { modelId: sel.modelId, romram: sel.romram, skuIds: s.skuIds, isOwn: s.isOwn, platform: s.platform ?? null };
     setDrill({
@@ -1891,6 +1901,7 @@ export default function PriceTrend(props: {
                   const isDropTarget = dropTarget === p.key && !isDragging;
                   // 本面板生效窗口（同步 = 共享窗口；独立 = 面板自己的窗口）
                   const pw = effWins[p.key] ?? ([win.s, win.e] as [number, number]);
+                  const diffBaseOfPanel = panelExtra[p.key]?.diffBaseKey ?? null;
                   return (
                     <div
                       key={p.key}
@@ -1985,7 +1996,7 @@ export default function PriceTrend(props: {
                       </div>
                       <Chart
                         series={brushInWindow(brushRange, pw[0], pw[1])
-                          ? p.vis.filter((v) => v.key === panelExtra[p.key]?.diffBaseKey || v.key === (panelLegendHover?.panel === p.key ? panelLegendHover.key : null))
+                          ? p.vis.filter((v) => (diffBaseOfPanel ? seriesKeyMatches(v.key, diffBaseOfPanel) : false) || v.key === (panelLegendHover?.panel === p.key ? panelLegendHover.key : null))
                           : p.vis}
                         hiddenKeys={hiddenKeys}
                         nameSeries={p.all}

@@ -1,6 +1,6 @@
 import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataModel/aggregate';
 import { normalizePlatformScope, platformScopeProvenanceNote } from '../dataModel/platformScope';
-import { dimProduct, dimRegion, dimTime } from '../data';
+import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { INDUSTRY_LABELS } from '../dataModel/scope';
 import { STABLE } from '../appChannel';
 import { platformLevelForChannel } from '../state/urlSync';
@@ -34,7 +34,10 @@ function scopeLabelOf(state: FiltersState): string {
     return `${row?.model_name ?? selection!.modelId} ${selection!.romram}`;
   }));
   const lineScopes = state.mains.flatMap((card) => [card.main, ...card.compares].filter((selection): selection is ProductSelection => Boolean(selection?.platform))).length;
-  const globalPlatform = state.platform ? [...state.platform.platforms, ...state.platform.shopIds].join('、') : '全部平台（自动）';
+  // 店铺键反查显示名（2026-11-16 审视修复）：渠道 id（RU:ozon:3P 机器形态）此前
+  // 直接拼进口径标签，与演进栈的 display_name 口径不一致
+  const shopDisplay = (id: string): string => dimChannel.find((channel) => channel.channel_id === id)?.display_name ?? id;
+  const globalPlatform = state.platform ? [...state.platform.platforms, ...state.platform.shopIds.map(shopDisplay)].join('、') : '全部平台（自动）';
   const platform = lineScopes ? `每线店铺优先 · 全局 ${globalPlatform}` : globalPlatform;
   const range = `${state.rangeStart}–${state.rangeEnd}`;
   return `${country} · ${INDUSTRY_LABELS[state.industry] ?? state.industry} · ${products.length ? products.join('、') : '未选产品'} · ${platform} · ${range} · ${state.currency === 'usd' ? 'USD' : '本币'}`;
@@ -506,7 +509,10 @@ function queryCards(
       evidence: [{ id: id('evidence'), label: '价格序列', detail: `${series.length} 条系列 · ${queryState.rangeStart}–${queryState.rangeEnd}`, source: '统一价格聚合引擎' }],
     };
     const rows = series.slice(0, 8).map((s) => {
-      const valued = s.points.filter((p) => p.price != null);
+      // 隔离点不参与计算（全站口径；2026-11-16 审视修复）——buildSeries 保留
+      // quarantined 原值只为取证，此前「最新价/环比」直接采用被隔离原值，
+      // 与优势卡/预警的剔除口径矛盾且卡上无任何标记
+      const valued = s.points.filter((p) => p.price != null && p.suspect !== 'quarantined');
       const latest = valued[valued.length - 1]?.price ?? null;
       const previous = valued[valued.length - 2]?.price ?? null;
       const change = latest != null && previous != null && previous !== 0 ? `${(((latest - previous) / previous) * 100).toFixed(1)}%` : '—';

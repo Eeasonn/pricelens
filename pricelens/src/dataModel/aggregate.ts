@@ -705,7 +705,7 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
       };
       return finance;
     };
-    const points = periodIds.map((periodId) => {
+    const points: SeriesPoint[] = periodIds.map((periodId) => {
       const periodRows = groupRows.filter((row) => row.period_id === periodId);
       const bySku = new Map<string, { row: FactPriceMonthly; price: number }>();
       for (const row of periodRows) {
@@ -742,6 +742,26 @@ export function buildMonthlySeries(q: SeriesQuery, sourceRows: readonly FactPric
         finance: financeOf(periodId),
       } satisfies SeriesPoint;
     });
+    // ---- 异常价格守卫（2026-11-16 审视修复）：月度路径此前完全不跑守卫——
+    //      隔离语义在 ZA 视图整体失效；量价页 markPanelPoint 写下的人工裁定
+    //      （裸键 modelId__romram、月 id 桶）也永远匹配不上带 __pp/__i24/__i36
+    //      后缀的月度系列键。与周路径点级判定（:942 段）同语义：裁定键取裸键、
+    //      裁定按点桶直配（ZA 粒度锁月，点桶 = 月 id）、detectSuspects 在月度
+    //      点序列上判定。隔离 ≠ 删除——原值留在点结构里，suspect 只作下游
+    //      可信链的退出信号。 ----
+    const anomalyRule = readAnomalyRule();
+    const manualRaw = anomalyManualOf(q.scope.countryCode, `${group.modelId}__${normRom(resolved.romram)}`);
+    if (anomalyRule.enabled || manualRaw.size > 0) {
+      const verdicts = detectSuspects(
+        points.map((pt) => ({ bucketId: pt.bucketId, price: pt.price, rrp: pt.rrp, anchorDate: pt.anchorDate })),
+        { rule: anomalyRule, manual: manualRaw, promoHit: promoBandHitOf(q.scope.countryCode) },
+      );
+      for (const [i, v] of verdicts) {
+        points[i].suspect = v.state;
+        points[i].suspectReason = v.reason;
+        points[i].suspectWow = v.wow;
+      }
+    }
     const first = groupRows[0];
     const platform = first ? { platforms: [first.platform], shopIds: [] } : null;
     const financeLabel = planTerm === 'prepaid' ? '先付' : `月供 · ${planTerm}期`;
