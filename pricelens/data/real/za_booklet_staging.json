@@ -1,6 +1,6 @@
 {
   "schema_version": "za-operator-booklet-staging-v1",
-  "generated_at": "2026-11-11T15:51:08+00:00",
+  "generated_at": "2026-11-16T00:42:13+00:00",
   "source_workbook": "ZA_VODACOM_1109.xlsx",
   "source_sheets": [
     "全量数据",
@@ -14,7 +14,7 @@
   "publish_basis": "owner-approved-source-import",
   "publish_status": "PUBLISHED",
   "row_count": 1886,
-  "offer_count": 1621,
+  "offer_count": 1883,
   "priced_row_count": 1886,
   "no_price_row_count": 0,
   "review_status_counts": {
@@ -25,8 +25,8 @@
     "prepaid": 645
   },
   "match_status_counts": {
-    "matched-spec-complete": 982,
-    "matched-model": 904
+    "matched-spec-complete": 972,
+    "matched-model": 914
   },
   "rows": [
     {
@@ -90,8 +90,8 @@
       "model": "Z FOLD 7",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-z-fold-7",
-      "romram": "12+512 GB",
-      "sku_id": "cmp-samsung-z-fold-7__12-512gb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-z-fold-7__12-256gb__blue",
       "candidate_model_ids": [
         "cmp-samsung-z-fold-7"
       ],
@@ -182,7 +182,7 @@
     {
       "source_row": 4,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p04-xGalaxyTabS-i36",
+      "offer_id": "VDC-2026-01-p04-xGalaxyTabS-i36--h0b597801",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -229,7 +229,7 @@
     {
       "source_row": 5,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p04-xGalaxyTabS-i36",
+      "offer_id": "VDC-2026-01-p04-xGalaxyTabS-i36--hd198178e",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -879,8 +879,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -931,8 +931,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -983,8 +983,8 @@
       "model": "Z FOLD 7",
       "sku_spec": "1TB",
       "model_id": "cmp-samsung-z-fold-7",
-      "romram": "12+512 GB",
-      "sku_id": "cmp-samsung-z-fold-7__12-512gb__black",
+      "romram": "12+1 TB",
+      "sku_id": "cmp-samsung-z-fold-7__12-1tb__black",
       "candidate_model_ids": [
         "cmp-samsung-z-fold-7"
       ],
@@ -2688,7 +2688,7 @@
     {
       "source_row": 42,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xOPPOWatchX-pp",
+      "offer_id": "VDC-2026-01-p23-xOPPOWatchX-pp--h04576701",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -2731,7 +2731,7 @@
     {
       "source_row": 42,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xOPPOWatchX-i36",
+      "offer_id": "VDC-2026-01-p23-xOPPOWatchX-i36--h7888715b",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -2774,7 +2774,7 @@
     {
       "source_row": 43,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xOPPOWatchX-pp",
+      "offer_id": "VDC-2026-01-p23-xOPPOWatchX-pp--hd58be856",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -2817,7 +2817,7 @@
     {
       "source_row": 43,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xOPPOWatchX-i36",
+      "offer_id": "VDC-2026-01-p23-xOPPOWatchX-i36--h991c1a77",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -3154,7 +3154,7 @@
     {
       "source_row": 47,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-pp--hbdf5a597",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -3210,7 +3210,7 @@
     {
       "source_row": 47,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-i36--h96b9759e",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -3605,7 +3605,7 @@
     {
       "source_row": 52,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-pp--h69946d59",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -3648,7 +3648,7 @@
     {
       "source_row": 52,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-i36--hf12fb184",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -3857,7 +3857,7 @@
     {
       "source_row": 54,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-pp--h5fb8fe17",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -3907,7 +3907,7 @@
     {
       "source_row": 54,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-01-p23-xGalaxyWatc-i36--ha242d12d",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -4425,8 +4425,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -4519,8 +4519,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -4567,8 +4567,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -4615,8 +4615,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -4663,8 +4663,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -4788,7 +4788,7 @@
     {
       "source_row": 67,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17-i24",
+      "offer_id": "VDC-2026-01-p31-xiPhone17-i24--heacbac7a",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -4837,7 +4837,7 @@
     {
       "source_row": 67,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17-i36",
+      "offer_id": "VDC-2026-01-p31-xiPhone17-i36--h64262cae",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -4886,7 +4886,7 @@
     {
       "source_row": 67,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17-i48",
+      "offer_id": "VDC-2026-01-p31-xiPhone17-i48--h08005bad",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -4935,7 +4935,7 @@
     {
       "source_row": 68,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17-i24",
+      "offer_id": "VDC-2026-01-p31-xiPhone17-i24--hfa59a495",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -4984,7 +4984,7 @@
     {
       "source_row": 68,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17-i36",
+      "offer_id": "VDC-2026-01-p31-xiPhone17-i36--he14331ad",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -5033,7 +5033,7 @@
     {
       "source_row": 68,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17-i48",
+      "offer_id": "VDC-2026-01-p31-xiPhone17-i48--he7e2bf1a",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -5229,7 +5229,7 @@
     {
       "source_row": 70,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i24",
+      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i24--h631e3dc4",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -5284,7 +5284,7 @@
     {
       "source_row": 70,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i36--h815e1671",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -5339,7 +5339,7 @@
     {
       "source_row": 70,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i48--h898e34fc",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -5559,7 +5559,7 @@
     {
       "source_row": 72,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i24",
+      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i24--hbf463e1a",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -5613,7 +5613,7 @@
     {
       "source_row": 72,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i36--h592f16e8",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -5667,7 +5667,7 @@
     {
       "source_row": 72,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-01-p31-xiPhone17Pr-i48--hae76d533",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6060,7 +6060,7 @@
     {
       "source_row": 76,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p32-xAirPods4-pp",
+      "offer_id": "VDC-2026-01-p32-xAirPods4-pp--h35c8145d",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6107,7 +6107,7 @@
     {
       "source_row": 76,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p32-xAirPods4-i36",
+      "offer_id": "VDC-2026-01-p32-xAirPods4-i36--h46ef353f",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6154,7 +6154,7 @@
     {
       "source_row": 77,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p32-xAirPods4-pp",
+      "offer_id": "VDC-2026-01-p32-xAirPods4-pp--h8de9f6c2",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6201,7 +6201,7 @@
     {
       "source_row": 77,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p32-xAirPods4-i36",
+      "offer_id": "VDC-2026-01-p32-xAirPods4-i36--h7439092a",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6372,20 +6372,19 @@
     {
       "source_row": 79,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p33-xiPadProM5-pp",
+      "offer_id": "VDC-2026-01-p33-xiPadProM5-pp--h8b4da64e",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
       "store_type": "1P",
       "brand": "APPLE",
       "model": "iPad Pro M5",
-      "sku_spec": null,
+      "sku_spec": "—",
       "model_id": "cmp-apple-ipad-pro-m5",
-      "romram": "11\" 12+256 GB",
+      "romram": null,
       "sku_id": "cmp-apple-ipad-pro-m5__11incellular12-256gb__x",
       "candidate_model_ids": [
-        "cmp-apple-ipad-pro-m5",
-        "za-booklet-apple-ipadprom5"
+        "cmp-apple-ipad-pro-m5"
       ],
       "candidate_sku_ids": [
         "cmp-apple-ipad-pro-m5__11incellular12-256gb__x",
@@ -6406,10 +6405,9 @@
         "cmp-apple-ipad-pro-m5__13inwifi12-256gb__x",
         "cmp-apple-ipad-pro-m5__13inwifi12-512gb__x",
         "cmp-apple-ipad-pro-m5__13inwifi16-1tb__x",
-        "cmp-apple-ipad-pro-m5__13inwifi16-1tbnano-textureglass__x",
-        "za-booklet-apple-ipadprom5__booklet"
+        "cmp-apple-ipad-pro-m5__13inwifi16-1tbnano-textureglass__x"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "prepaid",
       "price_local": 25999.0,
       "currency": "ZAR",
@@ -6439,20 +6437,19 @@
     {
       "source_row": 79,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p33-xiPadProM5-i36",
+      "offer_id": "VDC-2026-01-p33-xiPadProM5-i36--hf111b4d3",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
       "store_type": "1P",
       "brand": "APPLE",
       "model": "iPad Pro M5",
-      "sku_spec": null,
+      "sku_spec": "—",
       "model_id": "cmp-apple-ipad-pro-m5",
-      "romram": "11\" 12+256 GB",
+      "romram": null,
       "sku_id": "cmp-apple-ipad-pro-m5__11incellular12-256gb__x",
       "candidate_model_ids": [
-        "cmp-apple-ipad-pro-m5",
-        "za-booklet-apple-ipadprom5"
+        "cmp-apple-ipad-pro-m5"
       ],
       "candidate_sku_ids": [
         "cmp-apple-ipad-pro-m5__11incellular12-256gb__x",
@@ -6473,10 +6470,9 @@
         "cmp-apple-ipad-pro-m5__13inwifi12-256gb__x",
         "cmp-apple-ipad-pro-m5__13inwifi12-512gb__x",
         "cmp-apple-ipad-pro-m5__13inwifi16-1tb__x",
-        "cmp-apple-ipad-pro-m5__13inwifi16-1tbnano-textureglass__x",
-        "za-booklet-apple-ipadprom5__booklet"
+        "cmp-apple-ipad-pro-m5__13inwifi16-1tbnano-textureglass__x"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 1029.0,
       "currency": "ZAR",
@@ -6506,7 +6502,7 @@
     {
       "source_row": 80,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p33-xiPadProM5-pp",
+      "offer_id": "VDC-2026-01-p33-xiPadProM5-pp--hb790000a",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6573,7 +6569,7 @@
     {
       "source_row": 80,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p33-xiPadProM5-i36",
+      "offer_id": "VDC-2026-01-p33-xiPadProM5-i36--h0e570b46",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6649,11 +6645,10 @@
       "model": "iPhone Air",
       "sku_spec": "256GB 128GB",
       "model_id": "cmp-apple-iphone-air",
-      "romram": "12+1 TB",
+      "romram": null,
       "sku_id": "cmp-apple-iphone-air__12-1tb__black",
       "candidate_model_ids": [
-        "cmp-apple-iphone-air",
-        "za-booklet-apple-iphoneair"
+        "cmp-apple-iphone-air"
       ],
       "candidate_sku_ids": [
         "cmp-apple-iphone-air__12-1tb__black",
@@ -6662,10 +6657,9 @@
         "cmp-apple-iphone-air__1tb__black",
         "cmp-apple-iphone-air__1tb__gb-black",
         "cmp-apple-iphone-air__256gb__black",
-        "cmp-apple-iphone-air__512gb__black",
-        "za-booklet-apple-iphoneair__256gb128gb"
+        "cmp-apple-iphone-air__512gb__black"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 1329.0,
       "currency": "ZAR",
@@ -6861,7 +6855,7 @@
     {
       "source_row": 83,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p33-xWatchSE3-pp",
+      "offer_id": "VDC-2026-01-p33-xWatchSE3-pp--h5587c673",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6918,7 +6912,7 @@
     {
       "source_row": 83,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p33-xWatchSE3-i36",
+      "offer_id": "VDC-2026-01-p33-xWatchSE3-i36--h53eb3f4e",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -6975,7 +6969,7 @@
     {
       "source_row": 84,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p33-xWatchSE3-pp",
+      "offer_id": "VDC-2026-01-p33-xWatchSE3-pp--h24c49ac7",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -7032,7 +7026,7 @@
     {
       "source_row": 84,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p33-xWatchSE3-i36",
+      "offer_id": "VDC-2026-01-p33-xWatchSE3-i36--h40b73878",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -7416,8 +7410,8 @@
       "model": "nova Y73",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-y73",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-y73__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-y73__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-y73"
       ],
@@ -7464,8 +7458,8 @@
       "model": "nova Y73",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-y73",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-y73__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-y73__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-y73"
       ],
@@ -7695,20 +7689,19 @@
     {
       "source_row": 91,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p38-xMatePadSE-i36",
+      "offer_id": "VDC-2026-01-p38-xMatePadSE-i36--hf80c62e7",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
       "store_type": "1P",
       "brand": "HUAWEI",
       "model": "MatePad SE",
-      "sku_spec": null,
+      "sku_spec": "—",
       "model_id": "own-huawei-matepad-se",
-      "romram": "11\" 4+128 GB",
+      "romram": null,
       "sku_id": "own-huawei-matepad-se__11inlte4-128gb__x",
       "candidate_model_ids": [
-        "own-huawei-matepad-se",
-        "za-booklet-huawei-matepadse"
+        "own-huawei-matepad-se"
       ],
       "candidate_sku_ids": [
         "own-huawei-matepad-se__11inlte4-128gb__x",
@@ -7716,10 +7709,9 @@
         "own-huawei-matepad-se__11inwifi4-128gb__x",
         "own-huawei-matepad-se__11inwifi6-128gb__x",
         "own-huawei-matepad-se__11inwifi8-128gb__x",
-        "own-huawei-matepad-se__4-128gb__x",
-        "za-booklet-huawei-matepadse__booklet"
+        "own-huawei-matepad-se__4-128gb__x"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 199.0,
       "currency": "ZAR",
@@ -7749,20 +7741,19 @@
     {
       "source_row": 92,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-01-p38-xMatePadSE-i36",
+      "offer_id": "VDC-2026-01-p38-xMatePadSE-i36--h686414da",
       "period_id": "202601",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
       "store_type": "1P",
       "brand": "HUAWEI",
       "model": "MatePad SE",
-      "sku_spec": null,
+      "sku_spec": "—",
       "model_id": "own-huawei-matepad-se",
-      "romram": "11\" 4+128 GB",
+      "romram": null,
       "sku_id": "own-huawei-matepad-se__11inlte4-128gb__x",
       "candidate_model_ids": [
-        "own-huawei-matepad-se",
-        "za-booklet-huawei-matepadse"
+        "own-huawei-matepad-se"
       ],
       "candidate_sku_ids": [
         "own-huawei-matepad-se__11inlte4-128gb__x",
@@ -7770,10 +7761,9 @@
         "own-huawei-matepad-se__11inwifi4-128gb__x",
         "own-huawei-matepad-se__11inwifi6-128gb__x",
         "own-huawei-matepad-se__11inwifi8-128gb__x",
-        "own-huawei-matepad-se__4-128gb__x",
-        "za-booklet-huawei-matepadse__booklet"
+        "own-huawei-matepad-se__4-128gb__x"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 379.0,
       "currency": "ZAR",
@@ -10216,8 +10206,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -10264,8 +10254,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -10312,8 +10302,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -10360,8 +10350,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -10502,8 +10492,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -10553,8 +10543,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -10604,8 +10594,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -10655,8 +10645,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -10707,8 +10697,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -10759,8 +10749,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -11362,8 +11352,8 @@
       "model": "iPhone Air",
       "sku_spec": "256GB",
       "model_id": "cmp-apple-iphone-air",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-apple-iphone-air__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-apple-iphone-air__12-256gb__black",
       "candidate_model_ids": [
         "cmp-apple-iphone-air",
         "za-booklet-apple-iphoneair"
@@ -11417,8 +11407,8 @@
       "model": "iPhone Air",
       "sku_spec": "256GB",
       "model_id": "cmp-apple-iphone-air",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-apple-iphone-air__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-apple-iphone-air__12-256gb__black",
       "candidate_model_ids": [
         "cmp-apple-iphone-air",
         "za-booklet-apple-iphoneair"
@@ -11546,7 +11536,7 @@
     {
       "source_row": 138,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p23-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-02-p23-xWatchSERIE-pp--h27d6c31d",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -11629,7 +11619,7 @@
     {
       "source_row": 138,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p23-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-02-p23-xWatchSERIE-i36--h3b154ccd",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -11859,7 +11849,7 @@
     {
       "source_row": 140,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-pp--ha9aa52b7",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -11914,7 +11904,7 @@
     {
       "source_row": 140,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-i36--h4b91bf97",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -11969,7 +11959,7 @@
     {
       "source_row": 140,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-i48--h898e34fc",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12024,7 +12014,7 @@
     {
       "source_row": 141,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-pp--hc3578398",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12078,7 +12068,7 @@
     {
       "source_row": 141,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-i36--hbc5ff3e8",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12132,7 +12122,7 @@
     {
       "source_row": 141,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-02-p22-xiPhone17Pr-i48--ha66255a3",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12186,7 +12176,7 @@
     {
       "source_row": 142,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xAirPodsPro-pp",
+      "offer_id": "VDC-2026-02-p22-xAirPodsPro-pp--h8a600fce",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12233,7 +12223,7 @@
     {
       "source_row": 142,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xAirPodsPro-i36",
+      "offer_id": "VDC-2026-02-p22-xAirPodsPro-i36--hf6407ea8",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12374,7 +12364,7 @@
     {
       "source_row": 144,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xAirPodsPro-pp",
+      "offer_id": "VDC-2026-02-p22-xAirPodsPro-pp--h5663d3f4",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12421,7 +12411,7 @@
     {
       "source_row": 144,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p22-xAirPodsPro-i36",
+      "offer_id": "VDC-2026-02-p22-xAirPodsPro-i36--h56025c33",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12821,11 +12811,10 @@
       "model": "iPhone Air",
       "sku_spec": "256GB 128GB",
       "model_id": "cmp-apple-iphone-air",
-      "romram": "12+1 TB",
+      "romram": null,
       "sku_id": "cmp-apple-iphone-air__12-1tb__black",
       "candidate_model_ids": [
-        "cmp-apple-iphone-air",
-        "za-booklet-apple-iphoneair"
+        "cmp-apple-iphone-air"
       ],
       "candidate_sku_ids": [
         "cmp-apple-iphone-air__12-1tb__black",
@@ -12834,10 +12823,9 @@
         "cmp-apple-iphone-air__1tb__black",
         "cmp-apple-iphone-air__1tb__gb-black",
         "cmp-apple-iphone-air__256gb__black",
-        "cmp-apple-iphone-air__512gb__black",
-        "za-booklet-apple-iphoneair__256gb128gb"
+        "cmp-apple-iphone-air__512gb__black"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 1179.0,
       "currency": "ZAR",
@@ -12867,7 +12855,7 @@
     {
       "source_row": 149,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p23-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-02-p23-xWatchSERIE-pp--hb7c958e6",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -12950,7 +12938,7 @@
     {
       "source_row": 149,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p23-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-02-p23-xWatchSERIE-i36--h587b41ed",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -13939,7 +13927,7 @@
     {
       "source_row": 158,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p25-multi-pp",
+      "offer_id": "VDC-2026-02-p25-multi-pp--h680f1eb6",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -13982,7 +13970,7 @@
     {
       "source_row": 158,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p25-multi-i36",
+      "offer_id": "VDC-2026-02-p25-multi-i36--hadf57191",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14025,7 +14013,7 @@
     {
       "source_row": 159,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p25-multi-pp",
+      "offer_id": "VDC-2026-02-p25-multi-pp--h798267aa",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14072,7 +14060,7 @@
     {
       "source_row": 159,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p25-multi-i36",
+      "offer_id": "VDC-2026-02-p25-multi-i36--h3858c7e7",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14307,7 +14295,7 @@
     {
       "source_row": 162,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-xZFlip7-pp",
+      "offer_id": "VDC-2026-02-p27-xZFlip7-pp--he6043bc7",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14356,7 +14344,7 @@
     {
       "source_row": 162,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-xZFlip7-i36",
+      "offer_id": "VDC-2026-02-p27-xZFlip7-i36--h6075516b",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14405,7 +14393,7 @@
     {
       "source_row": 163,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-xZFlip7-pp",
+      "offer_id": "VDC-2026-02-p27-xZFlip7-pp--h92928be8",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14454,7 +14442,7 @@
     {
       "source_row": 163,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-xZFlip7-i36",
+      "offer_id": "VDC-2026-02-p27-xZFlip7-i36--h18c37c67",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14601,7 +14589,7 @@
     {
       "source_row": 165,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-02-p27-xGalaxyWatc-pp--hbdf5a597",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14657,7 +14645,7 @@
     {
       "source_row": 165,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-02-p27-xGalaxyWatc-i36--h96b9759e",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14713,7 +14701,7 @@
     {
       "source_row": 166,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-02-p27-xGalaxyWatc-pp--hebab4d06",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14763,7 +14751,7 @@
     {
       "source_row": 166,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-02-p27-xGalaxyWatc-i36--h16fd958d",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14913,7 +14901,7 @@
     {
       "source_row": 168,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-multi-pp",
+      "offer_id": "VDC-2026-02-p27-multi-pp--h005a9918",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14956,7 +14944,7 @@
     {
       "source_row": 168,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-multi-i36",
+      "offer_id": "VDC-2026-02-p27-multi-i36--h332a4bdb",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -14999,7 +14987,7 @@
     {
       "source_row": 169,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-multi-pp",
+      "offer_id": "VDC-2026-02-p27-multi-pp--h1dc76132",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -15046,7 +15034,7 @@
     {
       "source_row": 169,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-02-p27-multi-i36",
+      "offer_id": "VDC-2026-02-p27-multi-i36--h2fa00089",
       "period_id": "202602",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -18226,7 +18214,7 @@
     {
       "source_row": 205,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p01-xS26-pp",
+      "offer_id": "VDC-2026-03-p01-xS26-pp--hbdf48a34",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -18235,8 +18223,8 @@
       "model": "S26",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -18281,7 +18269,7 @@
     {
       "source_row": 205,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p01-xS26-i36",
+      "offer_id": "VDC-2026-03-p01-xS26-i36--h6591c598",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -18290,8 +18278,8 @@
       "model": "S26",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -18336,7 +18324,7 @@
     {
       "source_row": 206,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p01-xS26-pp",
+      "offer_id": "VDC-2026-03-p01-xS26-pp--h67e40700",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -18345,8 +18333,8 @@
       "model": "S26+",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -18391,7 +18379,7 @@
     {
       "source_row": 206,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p01-xS26-i36",
+      "offer_id": "VDC-2026-03-p01-xS26-i36--h73e2c2fc",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -18400,8 +18388,8 @@
       "model": "S26+",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -18446,7 +18434,7 @@
     {
       "source_row": 207,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p44-xS26-i24",
+      "offer_id": "VDC-2026-03-p44-xS26-i24--h3e60662b",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -18455,8 +18443,8 @@
       "model": "S26+",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -18501,7 +18489,7 @@
     {
       "source_row": 207,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p44-xS26-i36",
+      "offer_id": "VDC-2026-03-p44-xS26-i36--h160ed485",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -18510,8 +18498,8 @@
       "model": "S26+",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -18565,8 +18553,8 @@
       "model": "S26 Ultra",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -18622,8 +18610,8 @@
       "model": "S26 Ultra",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -18679,8 +18667,8 @@
       "model": "S26 Ultra",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -19068,7 +19056,7 @@
     {
       "source_row": 214,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p09-multi-pp",
+      "offer_id": "VDC-2026-03-p09-multi-pp--h8a600fce",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -19115,7 +19103,7 @@
     {
       "source_row": 214,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p09-multi-i36",
+      "offer_id": "VDC-2026-03-p09-multi-i36--hf6407ea8",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -19162,7 +19150,7 @@
     {
       "source_row": 215,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p09-multi-pp",
+      "offer_id": "VDC-2026-03-p09-multi-pp--h5663d3f4",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -19209,7 +19197,7 @@
     {
       "source_row": 215,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p09-multi-i36",
+      "offer_id": "VDC-2026-03-p09-multi-i36--h56025c33",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -19256,7 +19244,7 @@
     {
       "source_row": 216,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p09-multi-pp",
+      "offer_id": "VDC-2026-03-p09-multi-pp--h35c8145d",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -19303,7 +19291,7 @@
     {
       "source_row": 216,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p09-multi-i36",
+      "offer_id": "VDC-2026-03-p09-multi-i36--hf597a046",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -19847,8 +19835,8 @@
       "model": "nova Y73",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-y73",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-y73__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-y73__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-y73"
       ],
@@ -19895,8 +19883,8 @@
       "model": "nova Y73",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-y73",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-y73__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-y73__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-y73"
       ],
@@ -20179,8 +20167,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -20227,8 +20215,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -20275,8 +20263,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -20564,8 +20552,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -20616,8 +20604,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -20668,8 +20656,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -20966,7 +20954,7 @@
     {
       "source_row": 237,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p22-xiPhone15-i36",
+      "offer_id": "VDC-2026-03-p22-xiPhone15-i36--h61746e04",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -21014,7 +21002,7 @@
     {
       "source_row": 237,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p22-xiPhone15-i48",
+      "offer_id": "VDC-2026-03-p22-xiPhone15-i48--h448dd28f",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -21110,7 +21098,7 @@
     {
       "source_row": 238,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p22-xiPhone15-i36",
+      "offer_id": "VDC-2026-03-p22-xiPhone15-i36--h6990aa03",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -21158,7 +21146,7 @@
     {
       "source_row": 238,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p22-xiPhone15-i48",
+      "offer_id": "VDC-2026-03-p22-xiPhone15-i48--hcc6b97cd",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -21566,8 +21554,8 @@
       "model": "iPhone Air",
       "sku_spec": "256GB",
       "model_id": "cmp-apple-iphone-air",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-apple-iphone-air__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-apple-iphone-air__12-256gb__black",
       "candidate_model_ids": [
         "cmp-apple-iphone-air",
         "za-booklet-apple-iphoneair"
@@ -21621,8 +21609,8 @@
       "model": "iPhone Air",
       "sku_spec": "256GB",
       "model_id": "cmp-apple-iphone-air",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-apple-iphone-air__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-apple-iphone-air__12-256gb__black",
       "candidate_model_ids": [
         "cmp-apple-iphone-air",
         "za-booklet-apple-iphoneair"
@@ -21676,8 +21664,8 @@
       "model": "iPhone Air",
       "sku_spec": "256GB",
       "model_id": "cmp-apple-iphone-air",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-apple-iphone-air__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-apple-iphone-air__12-256gb__black",
       "candidate_model_ids": [
         "cmp-apple-iphone-air",
         "za-booklet-apple-iphoneair"
@@ -21731,8 +21719,8 @@
       "model": "iPhone Air",
       "sku_spec": "256GB",
       "model_id": "cmp-apple-iphone-air",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-apple-iphone-air__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-apple-iphone-air__12-256gb__black",
       "candidate_model_ids": [
         "cmp-apple-iphone-air",
         "za-booklet-apple-iphoneair"
@@ -21777,7 +21765,7 @@
     {
       "source_row": 244,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-pp--h60c92d59",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -21831,7 +21819,7 @@
     {
       "source_row": 244,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-i36--hd3cec255",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -21885,7 +21873,7 @@
     {
       "source_row": 244,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-i48--h5defe635",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -21939,7 +21927,7 @@
     {
       "source_row": 245,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-pp--h5e5b097c",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -21994,7 +21982,7 @@
     {
       "source_row": 245,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-i36--h9be774e3",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -22049,7 +22037,7 @@
     {
       "source_row": 245,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-03-p23-xiPhone17Pr-i48--h733a0c4b",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -22214,7 +22202,7 @@
     {
       "source_row": 247,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-03-p23-xWatchSERIE-pp--hb7c958e6",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -22297,7 +22285,7 @@
     {
       "source_row": 247,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-03-p23-xWatchSERIE-i36--h587b41ed",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -22380,7 +22368,7 @@
     {
       "source_row": 248,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-03-p23-xWatchSERIE-pp--h27d6c31d",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -22463,7 +22451,7 @@
     {
       "source_row": 248,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p23-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-03-p23-xWatchSERIE-i36--h71c3366f",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -23580,8 +23568,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -23631,8 +23619,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -23673,7 +23661,7 @@
     {
       "source_row": 260,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p27-xZFlip7-pp",
+      "offer_id": "VDC-2026-03-p27-xZFlip7-pp--he6043bc7",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -23722,7 +23710,7 @@
     {
       "source_row": 260,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p27-xZFlip7-i36",
+      "offer_id": "VDC-2026-03-p27-xZFlip7-i36--h6075516b",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -23771,7 +23759,7 @@
     {
       "source_row": 261,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p27-xZFlip7-pp",
+      "offer_id": "VDC-2026-03-p27-xZFlip7-pp--h3234395f",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -23820,7 +23808,7 @@
     {
       "source_row": 261,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p27-xZFlip7-i36",
+      "offer_id": "VDC-2026-03-p27-xZFlip7-i36--h616b77cf",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -23869,7 +23857,7 @@
     {
       "source_row": 262,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p27-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-03-p27-xGalaxyWatc-pp--hbdf5a597",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -23925,7 +23913,7 @@
     {
       "source_row": 262,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p27-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-03-p27-xGalaxyWatc-i36--h96b9759e",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -23981,7 +23969,7 @@
     {
       "source_row": 263,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p27-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-03-p27-xGalaxyWatc-pp--hebab4d06",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -24031,7 +24019,7 @@
     {
       "source_row": 263,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p27-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-03-p27-xGalaxyWatc-i36--h16fd958d",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -24539,7 +24527,7 @@
     {
       "source_row": 269,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p29-multi-pp",
+      "offer_id": "VDC-2026-03-p29-multi-pp--h2d485303",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -24597,7 +24585,7 @@
     {
       "source_row": 269,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p29-multi-i36",
+      "offer_id": "VDC-2026-03-p29-multi-i36--h76cf16e7",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -24655,7 +24643,7 @@
     {
       "source_row": 270,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p29-multi-pp",
+      "offer_id": "VDC-2026-03-p29-multi-pp--h85ab79ac",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -24698,7 +24686,7 @@
     {
       "source_row": 270,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p29-multi-i36",
+      "offer_id": "VDC-2026-03-p29-multi-i36--he093ca48",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -26291,7 +26279,7 @@
     {
       "source_row": 287,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p39-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-03-p39-xGalaxyBuds-pp--h1dc76132",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -26338,7 +26326,7 @@
     {
       "source_row": 287,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p39-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-03-p39-xGalaxyBuds-i36--h2fa00089",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -26485,7 +26473,7 @@
     {
       "source_row": 289,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p39-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-03-p39-xGalaxyBuds-pp--h3d941000",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -26535,7 +26523,7 @@
     {
       "source_row": 289,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p39-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-03-p39-xGalaxyBuds-i36--ha4209d79",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -27280,7 +27268,7 @@
     {
       "source_row": 298,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p44-xS26-i24",
+      "offer_id": "VDC-2026-03-p44-xS26-i24--h26bfe9f3",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -27289,11 +27277,10 @@
       "model": "S26",
       "sku_spec": "512GB 3.7GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
+      "romram": null,
       "sku_id": "cmp-samsung-s26__12-256gb__black",
       "candidate_model_ids": [
-        "cmp-samsung-s26",
-        "za-booklet-samsung-s26"
+        "cmp-samsung-s26"
       ],
       "candidate_sku_ids": [
         "cmp-samsung-s26__12-256gb__black",
@@ -27302,10 +27289,9 @@
         "cmp-samsung-s26__12-512gb__black",
         "cmp-samsung-s26__12-512gb__sky-blue",
         "cmp-samsung-s26__12-512gb__violet",
-        "cmp-samsung-s26__12-512gb__white",
-        "za-booklet-samsung-s26__512gb37gb"
+        "cmp-samsung-s26__12-512gb__white"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 1129.0,
       "currency": "ZAR",
@@ -27335,7 +27321,7 @@
     {
       "source_row": 298,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-03-p44-xS26-i36",
+      "offer_id": "VDC-2026-03-p44-xS26-i36--h583b4857",
       "period_id": "202603",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -27344,11 +27330,10 @@
       "model": "S26",
       "sku_spec": "512GB 3.7GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
+      "romram": null,
       "sku_id": "cmp-samsung-s26__12-256gb__black",
       "candidate_model_ids": [
-        "cmp-samsung-s26",
-        "za-booklet-samsung-s26"
+        "cmp-samsung-s26"
       ],
       "candidate_sku_ids": [
         "cmp-samsung-s26__12-256gb__black",
@@ -27357,10 +27342,9 @@
         "cmp-samsung-s26__12-512gb__black",
         "cmp-samsung-s26__12-512gb__sky-blue",
         "cmp-samsung-s26__12-512gb__violet",
-        "cmp-samsung-s26__12-512gb__white",
-        "za-booklet-samsung-s26__512gb37gb"
+        "cmp-samsung-s26__12-512gb__white"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 849.0,
       "currency": "ZAR",
@@ -27399,11 +27383,10 @@
       "model": "S26 Ultra",
       "sku_spec": "512GB 7.6GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
+      "romram": null,
       "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
       "candidate_model_ids": [
-        "cmp-samsung-s26-ultra",
-        "za-booklet-samsung-s26ultra"
+        "cmp-samsung-s26-ultra"
       ],
       "candidate_sku_ids": [
         "cmp-samsung-s26-ultra__12-1tb__black",
@@ -27414,10 +27397,9 @@
         "cmp-samsung-s26-ultra__12-512gb__violet",
         "cmp-samsung-s26-ultra__12-512gb__white",
         "cmp-samsung-s26-ultra__16-1tb__black",
-        "cmp-samsung-s26-ultra__16-512gb__violet",
-        "za-booklet-samsung-s26ultra__512gb76gb"
+        "cmp-samsung-s26-ultra__16-512gb__violet"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 1849.0,
       "currency": "ZAR",
@@ -27456,11 +27438,10 @@
       "model": "S26 Ultra",
       "sku_spec": "512GB 7.6GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
+      "romram": null,
       "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
       "candidate_model_ids": [
-        "cmp-samsung-s26-ultra",
-        "za-booklet-samsung-s26ultra"
+        "cmp-samsung-s26-ultra"
       ],
       "candidate_sku_ids": [
         "cmp-samsung-s26-ultra__12-1tb__black",
@@ -27471,10 +27452,9 @@
         "cmp-samsung-s26-ultra__12-512gb__violet",
         "cmp-samsung-s26-ultra__12-512gb__white",
         "cmp-samsung-s26-ultra__16-1tb__black",
-        "cmp-samsung-s26-ultra__16-512gb__violet",
-        "za-booklet-samsung-s26ultra__512gb76gb"
+        "cmp-samsung-s26-ultra__16-512gb__violet"
       ],
-      "match_status": "matched-spec-complete",
+      "match_status": "matched-model",
       "price_type": "installment",
       "price_local": 1449.0,
       "currency": "ZAR",
@@ -27850,8 +27830,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -27907,8 +27887,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -27964,8 +27944,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -28021,8 +28001,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -28726,8 +28706,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -28777,8 +28757,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -28828,8 +28808,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -29182,8 +29162,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -29234,8 +29214,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -29286,8 +29266,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -29478,7 +29458,7 @@
     {
       "source_row": 330,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-xS26-pp",
+      "offer_id": "VDC-2026-04-p15-xS26-pp--he5524b27",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -29533,7 +29513,7 @@
     {
       "source_row": 330,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-xS26-i36",
+      "offer_id": "VDC-2026-04-p15-xS26-i36--hf2f13786",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -29588,7 +29568,7 @@
     {
       "source_row": 331,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xiPhone16E-i36",
+      "offer_id": "VDC-2026-04-p13-xiPhone16E-i36--h793f9b1d",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -29636,7 +29616,7 @@
     {
       "source_row": 331,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xiPhone16E-i48",
+      "offer_id": "VDC-2026-04-p13-xiPhone16E-i48--h9b5a3b7e",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -29684,7 +29664,7 @@
     {
       "source_row": 332,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xiPhone15-i36",
+      "offer_id": "VDC-2026-04-p13-xiPhone15-i36--h7293ffd8",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -29732,7 +29712,7 @@
     {
       "source_row": 332,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xiPhone15-i48",
+      "offer_id": "VDC-2026-04-p13-xiPhone15-i48--ha7b1ed27",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -30383,7 +30363,7 @@
     {
       "source_row": 337,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xiPhone16E-i36",
+      "offer_id": "VDC-2026-04-p13-xiPhone16E-i36--h770a16e0",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -30431,7 +30411,7 @@
     {
       "source_row": 337,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xiPhone16E-i48",
+      "offer_id": "VDC-2026-04-p13-xiPhone16E-i48--h40c7e555",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -30527,7 +30507,7 @@
     {
       "source_row": 338,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xiPhone15-i36",
+      "offer_id": "VDC-2026-04-p13-xiPhone15-i36--hfb2ac810",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -30575,7 +30555,7 @@
     {
       "source_row": 338,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xiPhone15-i48",
+      "offer_id": "VDC-2026-04-p13-xiPhone15-i48--h48e23bf2",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -30866,7 +30846,7 @@
     {
       "source_row": 341,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xAirPods4-pp",
+      "offer_id": "VDC-2026-04-p13-xAirPods4-pp--hc7a2962d",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -30913,7 +30893,7 @@
     {
       "source_row": 341,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xAirPods4-i36",
+      "offer_id": "VDC-2026-04-p13-xAirPods4-i36--h7439092a",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -30960,7 +30940,7 @@
     {
       "source_row": 342,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xAirPods4-pp",
+      "offer_id": "VDC-2026-04-p13-xAirPods4-pp--h35c8145d",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31007,7 +30987,7 @@
     {
       "source_row": 342,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xAirPods4-i36",
+      "offer_id": "VDC-2026-04-p13-xAirPods4-i36--hf597a046",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31195,7 +31175,7 @@
     {
       "source_row": 345,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-04-p13-xWatchSERIE-pp--hb7c958e6",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31278,7 +31258,7 @@
     {
       "source_row": 345,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-04-p13-xWatchSERIE-i36--h587b41ed",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31469,7 +31449,7 @@
     {
       "source_row": 347,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-04-p13-xWatchSERIE-pp--h27d6c31d",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31552,7 +31532,7 @@
     {
       "source_row": 347,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-04-p13-xWatchSERIE-i36--h71c3366f",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31635,7 +31615,7 @@
     {
       "source_row": 348,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xWatchSE3-pp",
+      "offer_id": "VDC-2026-04-p13-xWatchSE3-pp--h5587c673",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31692,7 +31672,7 @@
     {
       "source_row": 348,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xWatchSE3-i36",
+      "offer_id": "VDC-2026-04-p13-xWatchSE3-i36--h53eb3f4e",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31749,7 +31729,7 @@
     {
       "source_row": 349,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xWatchSE3-pp",
+      "offer_id": "VDC-2026-04-p13-xWatchSE3-pp--h24c49ac7",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -31806,7 +31786,7 @@
     {
       "source_row": 349,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p13-xWatchSE3-i36",
+      "offer_id": "VDC-2026-04-p13-xWatchSE3-i36--h3251ba73",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33115,7 +33095,7 @@
     {
       "source_row": 363,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-xS26-pp",
+      "offer_id": "VDC-2026-04-p15-xS26-pp--h2e9c9e83",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33170,7 +33150,7 @@
     {
       "source_row": 363,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-xS26-i36",
+      "offer_id": "VDC-2026-04-p15-xS26-i36--h420367af",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33437,7 +33417,7 @@
     {
       "source_row": 366,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-multi-pp",
+      "offer_id": "VDC-2026-04-p15-multi-pp--h0532795d",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33487,7 +33467,7 @@
     {
       "source_row": 366,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-multi-i36",
+      "offer_id": "VDC-2026-04-p15-multi-i36--ha3af1344",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33649,7 +33629,7 @@
     {
       "source_row": 368,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-multi-pp",
+      "offer_id": "VDC-2026-04-p15-multi-pp--h5fb8fe17",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33699,7 +33679,7 @@
     {
       "source_row": 368,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-multi-i36",
+      "offer_id": "VDC-2026-04-p15-multi-i36--ha242d12d",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33749,7 +33729,7 @@
     {
       "source_row": 369,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-multi-pp",
+      "offer_id": "VDC-2026-04-p15-multi-pp--h77f747be",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33792,7 +33772,7 @@
     {
       "source_row": 369,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p15-multi-i36",
+      "offer_id": "VDC-2026-04-p15-multi-i36--h1b1ee73b",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33835,7 +33815,7 @@
     {
       "source_row": 370,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p16-multi-i36",
+      "offer_id": "VDC-2026-04-p16-multi-i36--h69719aa7",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -33968,7 +33948,7 @@
     {
       "source_row": 372,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p16-multi-pp",
+      "offer_id": "VDC-2026-04-p16-multi-pp--h2d485303",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -34026,7 +34006,7 @@
     {
       "source_row": 372,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p16-multi-i36",
+      "offer_id": "VDC-2026-04-p16-multi-i36--h76cf16e7",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -34084,7 +34064,7 @@
     {
       "source_row": 373,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p16-multi-pp",
+      "offer_id": "VDC-2026-04-p16-multi-pp--h0a6cc2ce",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -34134,7 +34114,7 @@
     {
       "source_row": 373,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-04-p16-multi-i36",
+      "offer_id": "VDC-2026-04-p16-multi-i36--h6aacdc2b",
       "period_id": "202604",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -36619,7 +36599,7 @@
     {
       "source_row": 403,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xiPhone15-i36",
+      "offer_id": "VDC-2026-05-p24-xiPhone15-i36--hfb2ac810",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -36667,7 +36647,7 @@
     {
       "source_row": 403,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xiPhone15-i48",
+      "offer_id": "VDC-2026-05-p24-xiPhone15-i48--h48e23bf2",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -36715,7 +36695,7 @@
     {
       "source_row": 404,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p05-xiPhone16E-i36",
+      "offer_id": "VDC-2026-05-p05-xiPhone16E-i36--h26891a85",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -36763,7 +36743,7 @@
     {
       "source_row": 404,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p05-xiPhone16E-i48",
+      "offer_id": "VDC-2026-05-p05-xiPhone16E-i48--h2b2fcffb",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -36859,7 +36839,7 @@
     {
       "source_row": 405,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xiPhone16E-i36",
+      "offer_id": "VDC-2026-05-p24-xiPhone16E-i36--h7e00c917",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -36907,7 +36887,7 @@
     {
       "source_row": 405,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xiPhone16E-i48",
+      "offer_id": "VDC-2026-05-p24-xiPhone16E-i48--h673727ea",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -37098,7 +37078,7 @@
     {
       "source_row": 408,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p05-xiPhone16E-i36",
+      "offer_id": "VDC-2026-05-p05-xiPhone16E-i36--hbf75e8af",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -37146,7 +37126,7 @@
     {
       "source_row": 408,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p05-xiPhone16E-i48",
+      "offer_id": "VDC-2026-05-p05-xiPhone16E-i48--hbd47fb5a",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -37194,7 +37174,7 @@
     {
       "source_row": 409,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xiPhone16E-i36",
+      "offer_id": "VDC-2026-05-p24-xiPhone16E-i36--hbbcfa9d8",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -37242,7 +37222,7 @@
     {
       "source_row": 409,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xiPhone16E-i48",
+      "offer_id": "VDC-2026-05-p24-xiPhone16E-i48--h4f819cf7",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -37987,8 +37967,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -38035,8 +38015,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -38517,8 +38497,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -39370,8 +39350,8 @@
       "model": "S25 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s25-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s25-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s25-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s25-ultra"
       ],
@@ -39422,8 +39402,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -39479,8 +39459,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -39536,8 +39516,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -39731,7 +39711,7 @@
     {
       "source_row": 441,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xiPhone15-i36",
+      "offer_id": "VDC-2026-05-p24-xiPhone15-i36--h2d3f5fb7",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -39779,7 +39759,7 @@
     {
       "source_row": 441,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xiPhone15-i48",
+      "offer_id": "VDC-2026-05-p24-xiPhone15-i48--h02cc3b95",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -39827,7 +39807,7 @@
     {
       "source_row": 442,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xAirPods4-pp",
+      "offer_id": "VDC-2026-05-p24-xAirPods4-pp--hc7a2962d",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -39874,7 +39854,7 @@
     {
       "source_row": 442,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xAirPods4-i36",
+      "offer_id": "VDC-2026-05-p24-xAirPods4-i36--h7439092a",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -39921,7 +39901,7 @@
     {
       "source_row": 443,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xAirPods4-pp",
+      "offer_id": "VDC-2026-05-p24-xAirPods4-pp--hace9633d",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -39968,7 +39948,7 @@
     {
       "source_row": 443,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p24-xAirPods4-i36",
+      "offer_id": "VDC-2026-05-p24-xAirPods4-i36--hf597a046",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -40833,7 +40813,7 @@
     {
       "source_row": 451,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p25-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-05-p25-xWatchSERIE-pp--h563ecd92",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -40916,7 +40896,7 @@
     {
       "source_row": 451,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p25-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-05-p25-xWatchSERIE-i36--h2d5ea024",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -40999,7 +40979,7 @@
     {
       "source_row": 452,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p25-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-05-p25-xWatchSERIE-pp--h0c0d1a2b",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -41082,7 +41062,7 @@
     {
       "source_row": 452,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p25-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-05-p25-xWatchSERIE-i36--h71c3366f",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -41165,7 +41145,7 @@
     {
       "source_row": 453,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p25-xWatchSE3-pp",
+      "offer_id": "VDC-2026-05-p25-xWatchSE3-pp--h7dc6ad1b",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -41222,7 +41202,7 @@
     {
       "source_row": 453,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p25-xWatchSE3-i36",
+      "offer_id": "VDC-2026-05-p25-xWatchSE3-i36--h53eb3f4e",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -41279,7 +41259,7 @@
     {
       "source_row": 454,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p25-xWatchSE3-pp",
+      "offer_id": "VDC-2026-05-p25-xWatchSE3-pp--h337c734c",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -41336,7 +41316,7 @@
     {
       "source_row": 454,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p25-xWatchSE3-i36",
+      "offer_id": "VDC-2026-05-p25-xWatchSE3-i36--h3251ba73",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -42217,7 +42197,7 @@
     {
       "source_row": 464,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p29-xZFlip7-pp",
+      "offer_id": "VDC-2026-05-p29-xZFlip7-pp--h4c52d026",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -42266,7 +42246,7 @@
     {
       "source_row": 464,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p29-xZFlip7-i36",
+      "offer_id": "VDC-2026-05-p29-xZFlip7-i36--ha6a1d460",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -42315,7 +42295,7 @@
     {
       "source_row": 465,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p29-xZFlip7-pp",
+      "offer_id": "VDC-2026-05-p29-xZFlip7-pp--ha52c7cb3",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -42364,7 +42344,7 @@
     {
       "source_row": 465,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p29-xZFlip7-i36",
+      "offer_id": "VDC-2026-05-p29-xZFlip7-i36--h5724d582",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -42422,8 +42402,8 @@
       "model": "Z FOLD 7",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-z-fold-7",
-      "romram": "12+512 GB",
-      "sku_id": "cmp-samsung-z-fold-7__12-512gb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-z-fold-7__12-256gb__blue",
       "candidate_model_ids": [
         "cmp-samsung-z-fold-7"
       ],
@@ -42476,8 +42456,8 @@
       "model": "Z FOLD 7",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-z-fold-7",
-      "romram": "12+512 GB",
-      "sku_id": "cmp-samsung-z-fold-7__12-512gb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-z-fold-7__12-256gb__blue",
       "candidate_model_ids": [
         "cmp-samsung-z-fold-7"
       ],
@@ -42806,7 +42786,7 @@
     {
       "source_row": 471,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p31-multi-pp",
+      "offer_id": "VDC-2026-05-p31-multi-pp--h85ab79ac",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -42849,7 +42829,7 @@
     {
       "source_row": 471,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p31-multi-i36",
+      "offer_id": "VDC-2026-05-p31-multi-i36--h6e0cffde",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -42892,7 +42872,7 @@
     {
       "source_row": 472,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p31-multi-pp",
+      "offer_id": "VDC-2026-05-p31-multi-pp--h2d485303",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -42950,7 +42930,7 @@
     {
       "source_row": 472,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p31-multi-i36",
+      "offer_id": "VDC-2026-05-p31-multi-i36--h76cf16e7",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -43008,7 +42988,7 @@
     {
       "source_row": 473,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p31-multi-pp",
+      "offer_id": "VDC-2026-05-p31-multi-pp--h0a6cc2ce",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -43058,7 +43038,7 @@
     {
       "source_row": 473,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p31-multi-i36",
+      "offer_id": "VDC-2026-05-p31-multi-i36--h6aacdc2b",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -44045,7 +44025,7 @@
     {
       "source_row": 484,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p38-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-05-p38-xGalaxyBuds-pp--h0532795d",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -44095,7 +44075,7 @@
     {
       "source_row": 484,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p38-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-05-p38-xGalaxyBuds-i36--ha3af1344",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -44341,7 +44321,7 @@
     {
       "source_row": 487,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p38-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-05-p38-xGalaxyBuds-pp--h3d941000",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -44391,7 +44371,7 @@
     {
       "source_row": 487,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p38-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-05-p38-xGalaxyBuds-i36--ha4209d79",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45179,7 +45159,7 @@
     {
       "source_row": 496,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-05-p39-xGalaxyWatc-pp--h77f747be",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45222,7 +45202,7 @@
     {
       "source_row": 496,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-05-p39-xGalaxyWatc-i36--h1b1ee73b",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45265,7 +45245,7 @@
     {
       "source_row": 497,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-05-p39-xGalaxyWatc-pp--h5fb8fe17",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45315,7 +45295,7 @@
     {
       "source_row": 497,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-05-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-05-p39-xGalaxyWatc-i36--ha242d12d",
       "period_id": "202605",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45510,7 +45490,7 @@
     {
       "source_row": 501,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p01-multi-i36",
+      "offer_id": "VDC-2026-06-p01-multi-i36--hc3d52cf4",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45565,7 +45545,7 @@
     {
       "source_row": 502,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p21-xS26-i36",
+      "offer_id": "VDC-2026-06-p21-xS26-i36--hd41fe80c",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45620,7 +45600,7 @@
     {
       "source_row": 503,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p29-xS26-pp",
+      "offer_id": "VDC-2026-06-p29-xS26-pp--h4656e78a",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45675,7 +45655,7 @@
     {
       "source_row": 503,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p29-xS26-i36",
+      "offer_id": "VDC-2026-06-p29-xS26-i36--hf20a27ad",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45840,7 +45820,7 @@
     {
       "source_row": 505,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p01-multi-i36",
+      "offer_id": "VDC-2026-06-p01-multi-i36--h134caa2b",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -45849,8 +45829,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -45906,8 +45886,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -45963,8 +45943,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -46020,8 +46000,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -46217,7 +46197,7 @@
     {
       "source_row": 511,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p21-xS26-i36",
+      "offer_id": "VDC-2026-06-p21-xS26-i36--ha1d5f30b",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -46272,7 +46252,7 @@
     {
       "source_row": 512,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p29-xS26-pp",
+      "offer_id": "VDC-2026-06-p29-xS26-pp--ha28c0ff9",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -46327,7 +46307,7 @@
     {
       "source_row": 512,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p29-xS26-i36",
+      "offer_id": "VDC-2026-06-p29-xS26-i36--h111ad3e7",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -47031,8 +47011,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -47122,8 +47102,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -47173,8 +47153,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -47224,8 +47204,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -47616,7 +47596,7 @@
     {
       "source_row": 530,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xiPhone16E-i36",
+      "offer_id": "VDC-2026-06-p22-xiPhone16E-i36--h5d0c3a9e",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -47664,7 +47644,7 @@
     {
       "source_row": 530,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xiPhone16E-i48",
+      "offer_id": "VDC-2026-06-p22-xiPhone16E-i48--hbb004c7b",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -47760,7 +47740,7 @@
     {
       "source_row": 531,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xiPhone15-i36",
+      "offer_id": "VDC-2026-06-p22-xiPhone15-i36--hfb2ac810",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -47808,7 +47788,7 @@
     {
       "source_row": 531,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xiPhone15-i48",
+      "offer_id": "VDC-2026-06-p22-xiPhone15-i48--h48e23bf2",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48003,7 +47983,7 @@
     {
       "source_row": 533,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xiPhone16E-i36",
+      "offer_id": "VDC-2026-06-p22-xiPhone16E-i36--hbbcfa9d8",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48051,7 +48031,7 @@
     {
       "source_row": 533,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xiPhone16E-i48",
+      "offer_id": "VDC-2026-06-p22-xiPhone16E-i48--h4f819cf7",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48099,7 +48079,7 @@
     {
       "source_row": 534,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xiPhone15-i36",
+      "offer_id": "VDC-2026-06-p22-xiPhone15-i36--h2d8f9264",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48147,7 +48127,7 @@
     {
       "source_row": 534,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xiPhone15-i48",
+      "offer_id": "VDC-2026-06-p22-xiPhone15-i48--h11208027",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48195,7 +48175,7 @@
     {
       "source_row": 535,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xAirPods4-pp",
+      "offer_id": "VDC-2026-06-p22-xAirPods4-pp--hc7a2962d",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48242,7 +48222,7 @@
     {
       "source_row": 535,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xAirPods4-i36",
+      "offer_id": "VDC-2026-06-p22-xAirPods4-i36--h68ae8cb6",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48289,7 +48269,7 @@
     {
       "source_row": 536,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xAirPods4-pp",
+      "offer_id": "VDC-2026-06-p22-xAirPods4-pp--h1903f0d0",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48336,7 +48316,7 @@
     {
       "source_row": 536,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p22-xAirPods4-i36",
+      "offer_id": "VDC-2026-06-p22-xAirPods4-i36--hf597a046",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48893,7 +48873,7 @@
     {
       "source_row": 542,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p23-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-06-p23-xWatchSERIE-pp--hdb191003",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -48976,7 +48956,7 @@
     {
       "source_row": 542,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p23-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-06-p23-xWatchSERIE-i36--h205ad257",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -49059,7 +49039,7 @@
     {
       "source_row": 543,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p23-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-06-p23-xWatchSERIE-pp--h0c0d1a2b",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -49142,7 +49122,7 @@
     {
       "source_row": 543,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p23-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-06-p23-xWatchSERIE-i36--h8ea65058",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -49225,7 +49205,7 @@
     {
       "source_row": 544,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p23-xWatchSE3-pp",
+      "offer_id": "VDC-2026-06-p23-xWatchSE3-pp--hc6be427a",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -49282,7 +49262,7 @@
     {
       "source_row": 544,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p23-xWatchSE3-i36",
+      "offer_id": "VDC-2026-06-p23-xWatchSE3-i36--h53eb3f4e",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -49339,7 +49319,7 @@
     {
       "source_row": 545,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p23-xWatchSE3-pp",
+      "offer_id": "VDC-2026-06-p23-xWatchSE3-pp--h337c734c",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -49396,7 +49376,7 @@
     {
       "source_row": 545,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p23-xWatchSE3-i36",
+      "offer_id": "VDC-2026-06-p23-xWatchSE3-i36--h3251ba73",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -49945,7 +49925,7 @@
     {
       "source_row": 551,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p25-multi-pp",
+      "offer_id": "VDC-2026-06-p25-multi-pp--h0e248589",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -49988,7 +49968,7 @@
     {
       "source_row": 551,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p25-multi-i36",
+      "offer_id": "VDC-2026-06-p25-multi-i36--hee04582d",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -50031,7 +50011,7 @@
     {
       "source_row": 552,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p25-multi-pp",
+      "offer_id": "VDC-2026-06-p25-multi-pp--ha989f944",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -50074,7 +50054,7 @@
     {
       "source_row": 552,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p25-multi-i36",
+      "offer_id": "VDC-2026-06-p25-multi-i36--hb4ddc830",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -50499,7 +50479,7 @@
     {
       "source_row": 557,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p31-multi-pp",
+      "offer_id": "VDC-2026-06-p31-multi-pp--h5805d6fa",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -50557,7 +50537,7 @@
     {
       "source_row": 557,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p31-multi-i36",
+      "offer_id": "VDC-2026-06-p31-multi-i36--h76cf16e7",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -50701,7 +50681,7 @@
     {
       "source_row": 559,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p31-multi-pp",
+      "offer_id": "VDC-2026-06-p31-multi-pp--h0a6cc2ce",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -50751,7 +50731,7 @@
     {
       "source_row": 559,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p31-multi-i36",
+      "offer_id": "VDC-2026-06-p31-multi-i36--h12eca731",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -51887,7 +51867,7 @@
     {
       "source_row": 571,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p38-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-06-p38-xGalaxyBuds-pp--h0532795d",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -51937,7 +51917,7 @@
     {
       "source_row": 571,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p38-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-06-p38-xGalaxyBuds-i36--ha3af1344",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -52089,7 +52069,7 @@
     {
       "source_row": 573,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p38-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-06-p38-xGalaxyBuds-pp--h3d941000",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -52139,7 +52119,7 @@
     {
       "source_row": 573,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p38-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-06-p38-xGalaxyBuds-i36--ha4209d79",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -53115,7 +53095,7 @@
     {
       "source_row": 584,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-06-p39-xGalaxyWatc-pp--h77f747be",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -53158,7 +53138,7 @@
     {
       "source_row": 584,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-06-p39-xGalaxyWatc-i36--h1b1ee73b",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -53201,7 +53181,7 @@
     {
       "source_row": 585,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-06-p39-xGalaxyWatc-pp--h5fb8fe17",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -53251,7 +53231,7 @@
     {
       "source_row": 585,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-06-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-06-p39-xGalaxyWatc-i36--ha242d12d",
       "period_id": "202606",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -54156,7 +54136,7 @@
     {
       "source_row": 596,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p21-xS26-i36",
+      "offer_id": "VDC-2026-07-p21-xS26-i36--h70f5d8b2",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -54211,7 +54191,7 @@
     {
       "source_row": 597,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p29-xS26-pp",
+      "offer_id": "VDC-2026-07-p29-xS26-pp--h4add2ce4",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -54266,7 +54246,7 @@
     {
       "source_row": 597,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p29-xS26-i36",
+      "offer_id": "VDC-2026-07-p29-xS26-i36--h68f417ce",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -54330,8 +54310,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -54387,8 +54367,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -54444,8 +54424,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -54501,8 +54481,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -54604,7 +54584,7 @@
     {
       "source_row": 602,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p21-xS26-i36",
+      "offer_id": "VDC-2026-07-p21-xS26-i36--hecd4bffb",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -54659,7 +54639,7 @@
     {
       "source_row": 603,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p29-xS26-pp",
+      "offer_id": "VDC-2026-07-p29-xS26-pp--h4656e78a",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -54714,7 +54694,7 @@
     {
       "source_row": 603,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p29-xS26-i36",
+      "offer_id": "VDC-2026-07-p29-xS26-i36--hf20a27ad",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -55586,8 +55566,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -55634,8 +55614,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -55682,8 +55662,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -55730,8 +55710,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -55907,8 +55887,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -56092,7 +56072,7 @@
     {
       "source_row": 625,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xiPhone15-i36",
+      "offer_id": "VDC-2026-07-p22-xiPhone15-i36--hed16f3f6",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56140,7 +56120,7 @@
     {
       "source_row": 625,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xiPhone15-i48",
+      "offer_id": "VDC-2026-07-p22-xiPhone15-i48--h48e23bf2",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56188,7 +56168,7 @@
     {
       "source_row": 626,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xiPhone15-i36",
+      "offer_id": "VDC-2026-07-p22-xiPhone15-i36--h4a31748a",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56236,7 +56216,7 @@
     {
       "source_row": 626,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xiPhone15-i48",
+      "offer_id": "VDC-2026-07-p22-xiPhone15-i48--h02cc3b95",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56479,7 +56459,7 @@
     {
       "source_row": 628,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xiPhone15-i36",
+      "offer_id": "VDC-2026-07-p22-xiPhone15-i36--ha5995c1c",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56527,7 +56507,7 @@
     {
       "source_row": 628,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xiPhone15-i48",
+      "offer_id": "VDC-2026-07-p22-xiPhone15-i48--h35c15567",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56815,7 +56795,7 @@
     {
       "source_row": 631,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xAirPods4-pp",
+      "offer_id": "VDC-2026-07-p22-xAirPods4-pp--hafda0c04",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56862,7 +56842,7 @@
     {
       "source_row": 631,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xAirPods4-i36",
+      "offer_id": "VDC-2026-07-p22-xAirPods4-i36--h68ae8cb6",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56909,7 +56889,7 @@
     {
       "source_row": 632,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xAirPods4-pp",
+      "offer_id": "VDC-2026-07-p22-xAirPods4-pp--h6c6315ef",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -56956,7 +56936,7 @@
     {
       "source_row": 632,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p22-xAirPods4-i36",
+      "offer_id": "VDC-2026-07-p22-xAirPods4-i36--hf597a046",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57448,7 +57428,7 @@
     {
       "source_row": 637,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-pp--h0cde49cf",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57502,7 +57482,7 @@
     {
       "source_row": 637,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-i36--ha5c027e4",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57556,7 +57536,7 @@
     {
       "source_row": 637,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-i48--h2bbbb9c7",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57610,7 +57590,7 @@
     {
       "source_row": 638,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-pp--h96a54119",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57665,7 +57645,7 @@
     {
       "source_row": 638,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-i36--hfa68bbf8",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57720,7 +57700,7 @@
     {
       "source_row": 638,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-07-p23-xiPhone17Pr-i48--h54bd7589",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57775,7 +57755,7 @@
     {
       "source_row": 639,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-07-p23-xWatchSERIE-pp--h06ef06cf",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57858,7 +57838,7 @@
     {
       "source_row": 639,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-07-p23-xWatchSERIE-i36--h69af64d1",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -57941,7 +57921,7 @@
     {
       "source_row": 640,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-07-p23-xWatchSERIE-pp--h3db8f5f5",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -58024,7 +58004,7 @@
     {
       "source_row": 640,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-07-p23-xWatchSERIE-i36--h4b96f26e",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -58107,7 +58087,7 @@
     {
       "source_row": 641,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xWatchSE3-pp",
+      "offer_id": "VDC-2026-07-p23-xWatchSE3-pp--hc6be427a",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -58164,7 +58144,7 @@
     {
       "source_row": 641,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xWatchSE3-i36",
+      "offer_id": "VDC-2026-07-p23-xWatchSE3-i36--h3780fb2a",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -58221,7 +58201,7 @@
     {
       "source_row": 642,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xWatchSE3-pp",
+      "offer_id": "VDC-2026-07-p23-xWatchSE3-pp--hab3bd2e0",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -58278,7 +58258,7 @@
     {
       "source_row": 642,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p23-xWatchSE3-i36",
+      "offer_id": "VDC-2026-07-p23-xWatchSE3-i36--hd340d738",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -59643,7 +59623,7 @@
     {
       "source_row": 656,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p31-multi-pp",
+      "offer_id": "VDC-2026-07-p31-multi-pp--h5805d6fa",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -59701,7 +59681,7 @@
     {
       "source_row": 656,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p31-multi-i36",
+      "offer_id": "VDC-2026-07-p31-multi-i36--hbfb2cc8a",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -59759,7 +59739,7 @@
     {
       "source_row": 657,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p31-multi-pp",
+      "offer_id": "VDC-2026-07-p31-multi-pp--he43295d8",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -59809,7 +59789,7 @@
     {
       "source_row": 657,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p31-multi-i36",
+      "offer_id": "VDC-2026-07-p31-multi-i36--hc343fc94",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -61572,7 +61552,7 @@
     {
       "source_row": 676,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p38-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-07-p38-xGalaxyBuds-pp--h0532795d",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -61622,7 +61602,7 @@
     {
       "source_row": 676,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p38-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-07-p38-xGalaxyBuds-i36--ha3af1344",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -61774,7 +61754,7 @@
     {
       "source_row": 678,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p38-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-07-p38-xGalaxyBuds-pp--h3d941000",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -61824,7 +61804,7 @@
     {
       "source_row": 678,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p38-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-07-p38-xGalaxyBuds-i36--ha4209d79",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -62800,7 +62780,7 @@
     {
       "source_row": 689,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-07-p39-xGalaxyWatc-pp--h292cd18d",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -62843,7 +62823,7 @@
     {
       "source_row": 689,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-07-p39-xGalaxyWatc-i36--h1b1ee73b",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -62886,7 +62866,7 @@
     {
       "source_row": 690,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-07-p39-xGalaxyWatc-pp--hab34ce2c",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -62936,7 +62916,7 @@
     {
       "source_row": 690,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-07-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-07-p39-xGalaxyWatc-i36--ha242d12d",
       "period_id": "202607",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -63750,7 +63730,7 @@
     {
       "source_row": 699,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFli-i24",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFli-i24--hd37288d7",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -63800,7 +63780,7 @@
     {
       "source_row": 699,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFli-i36",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFli-i36--h31f8ec31",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -63850,7 +63830,7 @@
     {
       "source_row": 700,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFli-i24",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFli-i24--h35a59e27",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -63900,7 +63880,7 @@
     {
       "source_row": 700,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFli-i36",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFli-i36--h4665f3d6",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64154,7 +64134,7 @@
     {
       "source_row": 703,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i24",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i24--h90435d70",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64206,7 +64186,7 @@
     {
       "source_row": 703,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i36",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i36--hcfae133e",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64258,7 +64238,7 @@
     {
       "source_row": 703,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i48",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i48--h7c4c303f",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64310,7 +64290,7 @@
     {
       "source_row": 704,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i24",
+      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i24--h91120e4c",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64362,7 +64342,7 @@
     {
       "source_row": 704,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i36",
+      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i36--h4d4263a7",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64414,7 +64394,7 @@
     {
       "source_row": 704,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i48",
+      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i48--h60c1ac56",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64466,7 +64446,7 @@
     {
       "source_row": 705,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p02-xS26-i36",
+      "offer_id": "VDC-2026-08-p02-xS26-i36--h24581b9f",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64521,7 +64501,7 @@
     {
       "source_row": 706,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p21-xS26-i36",
+      "offer_id": "VDC-2026-08-p21-xS26-i36--h70f5d8b2",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64576,7 +64556,7 @@
     {
       "source_row": 707,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p23-xS26-pp",
+      "offer_id": "VDC-2026-08-p23-xS26-pp--ha28c0ff9",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64631,7 +64611,7 @@
     {
       "source_row": 707,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p23-xS26-i36",
+      "offer_id": "VDC-2026-08-p23-xS26-i36--h111ad3e7",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64686,7 +64666,7 @@
     {
       "source_row": 708,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p02-xS26-i36",
+      "offer_id": "VDC-2026-08-p02-xS26-i36--hf706d893",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64741,7 +64721,7 @@
     {
       "source_row": 709,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p21-xS26-i36",
+      "offer_id": "VDC-2026-08-p21-xS26-i36--hecd4bffb",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64796,7 +64776,7 @@
     {
       "source_row": 710,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p23-xS26-pp",
+      "offer_id": "VDC-2026-08-p23-xS26-pp--h4656e78a",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64851,7 +64831,7 @@
     {
       "source_row": 710,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p23-xS26-i36",
+      "offer_id": "VDC-2026-08-p23-xS26-i36--hf20a27ad",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -64915,8 +64895,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -64972,8 +64952,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -65767,8 +65747,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -65815,8 +65795,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -65863,8 +65843,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -66286,8 +66266,8 @@
       "model": "A36",
       "sku_spec": "128GB",
       "model_id": "cmp-samsung-a36",
-      "romram": "8+256 GB",
-      "sku_id": "cmp-samsung-a36__8-256gb__black",
+      "romram": "6+128 GB",
+      "sku_id": "cmp-samsung-a36__6-128gb__black",
       "candidate_model_ids": [
         "cmp-samsung-a36"
       ],
@@ -67267,7 +67247,7 @@
     {
       "source_row": 739,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i36--h1e3447cd",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67322,7 +67302,7 @@
     {
       "source_row": 739,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i48--h733a0c4b",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67377,7 +67357,7 @@
     {
       "source_row": 740,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-pp--h96a54119",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67432,7 +67412,7 @@
     {
       "source_row": 740,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i36--hfa68bbf8",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67487,7 +67467,7 @@
     {
       "source_row": 740,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i48--h54bd7589",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67542,7 +67522,7 @@
     {
       "source_row": 741,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i24",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i24--h5afc94df",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67594,7 +67574,7 @@
     {
       "source_row": 741,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i36",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i36--h6d539cec",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67646,7 +67626,7 @@
     {
       "source_row": 741,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i48",
+      "offer_id": "VDC-2026-08-p22-xGalaxyZFol-i48--h3b8d0741",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67698,7 +67678,7 @@
     {
       "source_row": 742,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i24",
+      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i24--ha7ce3771",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67750,7 +67730,7 @@
     {
       "source_row": 742,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i36",
+      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i36--hce647b0f",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67802,7 +67782,7 @@
     {
       "source_row": 742,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i48",
+      "offer_id": "VDC-2026-08-p43-xGalaxyZFol-i48--hc5287384",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67854,7 +67834,7 @@
     {
       "source_row": 743,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-pp--h38cc5b9c",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67904,7 +67884,7 @@
     {
       "source_row": 743,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-i36--hf49f8b9a",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -67954,7 +67934,7 @@
     {
       "source_row": 744,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-pp--hab34ce2c",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68004,7 +67984,7 @@
     {
       "source_row": 744,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-i36--ha242d12d",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68054,7 +68034,7 @@
     {
       "source_row": 745,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-pp--h7202c8c7",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68110,7 +68090,7 @@
     {
       "source_row": 745,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-i36--h1567ccbb",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68166,7 +68146,7 @@
     {
       "source_row": 746,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-pp--h0d30bbe9",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68222,7 +68202,7 @@
     {
       "source_row": 746,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-i36--h93b92a08",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68278,7 +68258,7 @@
     {
       "source_row": 747,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-pp--he78044bd",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68330,7 +68310,7 @@
     {
       "source_row": 747,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-08-p26-xGalaxyWatc-i36--hed84de2e",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68480,7 +68460,7 @@
     {
       "source_row": 749,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p27-xRedmiNote1-pp",
+      "offer_id": "VDC-2026-08-p27-xRedmiNote1-pp--he5f09e15",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68530,7 +68510,7 @@
     {
       "source_row": 749,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p27-xRedmiNote1-i36",
+      "offer_id": "VDC-2026-08-p27-xRedmiNote1-i36--h839cd6c9",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68580,7 +68560,7 @@
     {
       "source_row": 750,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p27-xRedmiNote1-pp",
+      "offer_id": "VDC-2026-08-p27-xRedmiNote1-pp--h9dcb2c43",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68633,7 +68613,7 @@
     {
       "source_row": 750,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p27-xRedmiNote1-i36",
+      "offer_id": "VDC-2026-08-p27-xRedmiNote1-i36--hb7d0f610",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68686,7 +68666,7 @@
     {
       "source_row": 751,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p27-xRedmiNote1-pp",
+      "offer_id": "VDC-2026-08-p27-xRedmiNote1-pp--h3f84cde2",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68739,7 +68719,7 @@
     {
       "source_row": 751,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p27-xRedmiNote1-i36",
+      "offer_id": "VDC-2026-08-p27-xRedmiNote1-i36--h51fb1ea6",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68792,7 +68772,7 @@
     {
       "source_row": 752,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xiPhone15-i36",
+      "offer_id": "VDC-2026-08-p28-xiPhone15-i36--hfb2ac810",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68840,7 +68820,7 @@
     {
       "source_row": 752,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xiPhone15-i48",
+      "offer_id": "VDC-2026-08-p28-xiPhone15-i48--h48e23bf2",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68888,7 +68868,7 @@
     {
       "source_row": 753,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xiPhone15-i36",
+      "offer_id": "VDC-2026-08-p28-xiPhone15-i36--h2d3f5fb7",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -68936,7 +68916,7 @@
     {
       "source_row": 753,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xiPhone15-i48",
+      "offer_id": "VDC-2026-08-p28-xiPhone15-i48--h02cc3b95",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -69179,7 +69159,7 @@
     {
       "source_row": 755,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xiPhone15-i36",
+      "offer_id": "VDC-2026-08-p28-xiPhone15-i36--hae3b0ed2",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -69227,7 +69207,7 @@
     {
       "source_row": 755,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xiPhone15-i48",
+      "offer_id": "VDC-2026-08-p28-xiPhone15-i48--h335e501f",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -69467,7 +69447,7 @@
     {
       "source_row": 758,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xAirPods4-pp",
+      "offer_id": "VDC-2026-08-p28-xAirPods4-pp--hafda0c04",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -69514,7 +69494,7 @@
     {
       "source_row": 758,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xAirPods4-i36",
+      "offer_id": "VDC-2026-08-p28-xAirPods4-i36--h68ae8cb6",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -69561,7 +69541,7 @@
     {
       "source_row": 759,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xAirPods4-pp",
+      "offer_id": "VDC-2026-08-p28-xAirPods4-pp--h6c6315ef",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -69608,7 +69588,7 @@
     {
       "source_row": 759,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p28-xAirPods4-i36",
+      "offer_id": "VDC-2026-08-p28-xAirPods4-i36--hf597a046",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -70100,7 +70080,7 @@
     {
       "source_row": 764,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-pp--h0cde49cf",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -70154,7 +70134,7 @@
     {
       "source_row": 764,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i36--ha5c027e4",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -70208,7 +70188,7 @@
     {
       "source_row": 764,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-08-p29-xiPhone17Pr-i48--h2bbbb9c7",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -70538,7 +70518,7 @@
     {
       "source_row": 767,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xWatchSE3-pp",
+      "offer_id": "VDC-2026-08-p29-xWatchSE3-pp--h6969389e",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -70595,7 +70575,7 @@
     {
       "source_row": 767,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xWatchSE3-i36",
+      "offer_id": "VDC-2026-08-p29-xWatchSE3-i36--hee98152c",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -70652,7 +70632,7 @@
     {
       "source_row": 768,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xWatchSE3-pp",
+      "offer_id": "VDC-2026-08-p29-xWatchSE3-pp--h8df5b054",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -70709,7 +70689,7 @@
     {
       "source_row": 768,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p29-xWatchSE3-i36",
+      "offer_id": "VDC-2026-08-p29-xWatchSE3-i36--hed804397",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -71492,7 +71472,7 @@
     {
       "source_row": 777,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p33-multi-pp",
+      "offer_id": "VDC-2026-08-p33-multi-pp--h5805d6fa",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -71550,7 +71530,7 @@
     {
       "source_row": 777,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p33-multi-i36",
+      "offer_id": "VDC-2026-08-p33-multi-i36--h76cf16e7",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -71608,7 +71588,7 @@
     {
       "source_row": 778,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p33-multi-pp",
+      "offer_id": "VDC-2026-08-p33-multi-pp--he43295d8",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -71658,7 +71638,7 @@
     {
       "source_row": 778,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p33-multi-i36",
+      "offer_id": "VDC-2026-08-p33-multi-i36--hc343fc94",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73082,7 +73062,7 @@
     {
       "source_row": 793,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p38-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-08-p38-xGalaxyBuds-pp--h3d941000",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73132,7 +73112,7 @@
     {
       "source_row": 793,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p38-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-08-p38-xGalaxyBuds-i36--ha4209d79",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73276,7 +73256,7 @@
     {
       "source_row": 795,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p38-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-08-p38-xGalaxyBuds-pp--h0532795d",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73326,7 +73306,7 @@
     {
       "source_row": 795,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p38-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-08-p38-xGalaxyBuds-i36--ha3af1344",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73658,7 +73638,7 @@
     {
       "source_row": 799,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-pp--h113a90ab",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73714,7 +73694,7 @@
     {
       "source_row": 799,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-i36--h574de08a",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73770,7 +73750,7 @@
     {
       "source_row": 800,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-pp--h2ff20e0a",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73826,7 +73806,7 @@
     {
       "source_row": 800,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-i36--h96b9759e",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73882,7 +73862,7 @@
     {
       "source_row": 801,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-pp--hd2299a65",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -73925,7 +73905,7 @@
     {
       "source_row": 801,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-08-p39-xGalaxyWatc-i36--hc3c5bad5",
       "period_id": "202608",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75319,7 +75299,7 @@
     {
       "source_row": 818,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xS26-pp",
+      "offer_id": "VDC-2026-09-p12-xS26-pp--hbdf48a34",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75328,8 +75308,8 @@
       "model": "S26",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -75374,7 +75354,7 @@
     {
       "source_row": 818,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xS26-i36",
+      "offer_id": "VDC-2026-09-p12-xS26-i36--h0064d7a0",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75383,8 +75363,8 @@
       "model": "S26",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -75438,8 +75418,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -75495,8 +75475,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -75552,8 +75532,8 @@
       "model": "S26 Ultra",
       "sku_spec": "256GB",
       "model_id": "cmp-samsung-s26-ultra",
-      "romram": "12+1 TB",
-      "sku_id": "cmp-samsung-s26-ultra__12-1tb__black",
+      "romram": "12+256 GB",
+      "sku_id": "cmp-samsung-s26-ultra__12-256gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26-ultra",
         "za-booklet-samsung-s26ultra"
@@ -75600,7 +75580,7 @@
     {
       "source_row": 821,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xS26-pp",
+      "offer_id": "VDC-2026-09-p12-xS26-pp--h67e40700",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75609,8 +75589,8 @@
       "model": "S26+",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -75655,7 +75635,7 @@
     {
       "source_row": 821,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xS26-i36",
+      "offer_id": "VDC-2026-09-p12-xS26-i36--h8d03a1b7",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75664,8 +75644,8 @@
       "model": "S26+",
       "sku_spec": "512GB",
       "model_id": "cmp-samsung-s26",
-      "romram": "12+256 GB",
-      "sku_id": "cmp-samsung-s26__12-256gb__black",
+      "romram": "12+512 GB",
+      "sku_id": "cmp-samsung-s26__12-512gb__black",
       "candidate_model_ids": [
         "cmp-samsung-s26",
         "za-booklet-samsung-s26"
@@ -75710,7 +75690,7 @@
     {
       "source_row": 822,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-pp--hb00e3067",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75766,7 +75746,7 @@
     {
       "source_row": 822,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-i36--h73471b83",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75822,7 +75802,7 @@
     {
       "source_row": 823,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-pp--hc63adcd2",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75878,7 +75858,7 @@
     {
       "source_row": 823,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-i36--he9c9c729",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75934,7 +75914,7 @@
     {
       "source_row": 824,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-pp--h38cc5b9c",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -75984,7 +75964,7 @@
     {
       "source_row": 824,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-09-p12-xGalaxyWatc-i36--h3412e04d",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -76687,8 +76667,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -77275,7 +77255,7 @@
     {
       "source_row": 840,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p14-xRedmiNote1-pp",
+      "offer_id": "VDC-2026-09-p14-xRedmiNote1-pp--he5f09e15",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77325,7 +77305,7 @@
     {
       "source_row": 840,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p14-xRedmiNote1-i36",
+      "offer_id": "VDC-2026-09-p14-xRedmiNote1-i36--h839cd6c9",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77375,7 +77355,7 @@
     {
       "source_row": 841,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p14-xRedmiNote1-pp",
+      "offer_id": "VDC-2026-09-p14-xRedmiNote1-pp--h9dcb2c43",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77428,7 +77408,7 @@
     {
       "source_row": 841,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p14-xRedmiNote1-i36",
+      "offer_id": "VDC-2026-09-p14-xRedmiNote1-i36--hb7d0f610",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77481,7 +77461,7 @@
     {
       "source_row": 842,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone15-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone15-i36--hfb2ac810",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77529,7 +77509,7 @@
     {
       "source_row": 842,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone15-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone15-i48--h48e23bf2",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77577,7 +77557,7 @@
     {
       "source_row": 843,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone15-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone15-i36--h2d3f5fb7",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77625,7 +77605,7 @@
     {
       "source_row": 843,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone15-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone15-i48--h02cc3b95",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77817,7 +77797,7 @@
     {
       "source_row": 845,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone15-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone15-i36--h572c63b3",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -77865,7 +77845,7 @@
     {
       "source_row": 845,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone15-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone15-i48--h6facf817",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78204,7 +78184,7 @@
     {
       "source_row": 848,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone16E-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone16E-i36--hbdefae09",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78252,7 +78232,7 @@
     {
       "source_row": 848,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone16E-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone16E-i48--hddd1dfc1",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78300,7 +78280,7 @@
     {
       "source_row": 849,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone16E-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone16E-i36--h7bc598ad",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78348,7 +78328,7 @@
     {
       "source_row": 849,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone16E-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone16E-i48--h4f819cf7",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78543,7 +78523,7 @@
     {
       "source_row": 851,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-pp--h711d80ec",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78597,7 +78577,7 @@
     {
       "source_row": 851,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i36--h8dd289f2",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78651,7 +78631,7 @@
     {
       "source_row": 851,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i48--he5a96cbc",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78705,7 +78685,7 @@
     {
       "source_row": 852,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i24",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i24--h217986cf",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78759,7 +78739,7 @@
     {
       "source_row": 852,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i36--h5ce1af08",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78813,7 +78793,7 @@
     {
       "source_row": 852,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i48--h63ccd550",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78867,7 +78847,7 @@
     {
       "source_row": 853,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i36--h345fe1ec",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78922,7 +78902,7 @@
     {
       "source_row": 853,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i48--hbd39066c",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -78977,7 +78957,7 @@
     {
       "source_row": 854,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-pp--h7b26b774",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79032,7 +79012,7 @@
     {
       "source_row": 854,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i36--hf15c0320",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79087,7 +79067,7 @@
     {
       "source_row": 854,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i48--h8fc9f274",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79142,7 +79122,7 @@
     {
       "source_row": 855,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-pp--hdeba9cf7",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79196,7 +79176,7 @@
     {
       "source_row": 855,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i36--h643662e7",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79250,7 +79230,7 @@
     {
       "source_row": 855,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-09-p15-xiPhone17Pr-i48--h894b9d43",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79304,7 +79284,7 @@
     {
       "source_row": 856,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i24",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i24--h87c269a7",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79358,7 +79338,7 @@
     {
       "source_row": 856,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i36--h00496260",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79412,7 +79392,7 @@
     {
       "source_row": 856,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i48--h63ccd550",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79466,7 +79446,7 @@
     {
       "source_row": 857,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xWatchSE3-pp",
+      "offer_id": "VDC-2026-09-p15-xWatchSE3-pp--hab3bd2e0",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79523,7 +79503,7 @@
     {
       "source_row": 857,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xWatchSE3-i36",
+      "offer_id": "VDC-2026-09-p15-xWatchSE3-i36--h0e22b3aa",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79856,7 +79836,7 @@
     {
       "source_row": 860,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xWatchSE3-pp",
+      "offer_id": "VDC-2026-09-p15-xWatchSE3-pp--hc6be427a",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79913,7 +79893,7 @@
     {
       "source_row": 860,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xWatchSE3-i36",
+      "offer_id": "VDC-2026-09-p15-xWatchSE3-i36--haf547170",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -79970,7 +79950,7 @@
     {
       "source_row": 861,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xAirPods4-pp",
+      "offer_id": "VDC-2026-09-p15-xAirPods4-pp--hafda0c04",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -80017,7 +79997,7 @@
     {
       "source_row": 861,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xAirPods4-i36",
+      "offer_id": "VDC-2026-09-p15-xAirPods4-i36--h68ae8cb6",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -80064,7 +80044,7 @@
     {
       "source_row": 862,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xAirPods4-pp",
+      "offer_id": "VDC-2026-09-p15-xAirPods4-pp--h6c6315ef",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -80111,7 +80091,7 @@
     {
       "source_row": 862,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p15-xAirPods4-i36",
+      "offer_id": "VDC-2026-09-p15-xAirPods4-i36--hf597a046",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -80728,7 +80708,7 @@
     {
       "source_row": 869,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p16-xCHOICEEarb-pp",
+      "offer_id": "VDC-2026-09-p16-xCHOICEEarb-pp--h74189e47",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -80771,7 +80751,7 @@
     {
       "source_row": 869,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p16-xCHOICEEarb-i36",
+      "offer_id": "VDC-2026-09-p16-xCHOICEEarb-i36--h19f03806",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -80814,7 +80794,7 @@
     {
       "source_row": 870,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p16-xCHOICEEarb-pp",
+      "offer_id": "VDC-2026-09-p16-xCHOICEEarb-pp--h926be22d",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -80857,7 +80837,7 @@
     {
       "source_row": 870,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p16-xCHOICEEarb-i36",
+      "offer_id": "VDC-2026-09-p16-xCHOICEEarb-i36--h2011f1bb",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -81276,7 +81256,7 @@
     {
       "source_row": 875,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p17-multi-pp",
+      "offer_id": "VDC-2026-09-p17-multi-pp--hd9c392ba",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -81327,7 +81307,7 @@
     {
       "source_row": 875,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p17-multi-i36",
+      "offer_id": "VDC-2026-09-p17-multi-i36--haed6a164",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -81378,7 +81358,7 @@
     {
       "source_row": 876,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p17-multi-pp",
+      "offer_id": "VDC-2026-09-p17-multi-pp--he43295d8",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -81428,7 +81408,7 @@
     {
       "source_row": 876,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p17-multi-i36",
+      "offer_id": "VDC-2026-09-p17-multi-i36--hc343fc94",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -81478,7 +81458,7 @@
     {
       "source_row": 877,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p17-multi-pp",
+      "offer_id": "VDC-2026-09-p17-multi-pp--h83f419ba",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -81525,7 +81505,7 @@
     {
       "source_row": 877,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p17-multi-i36",
+      "offer_id": "VDC-2026-09-p17-multi-i36--h749de50e",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -82837,7 +82817,7 @@
     {
       "source_row": 891,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p20-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-09-p20-xGalaxyBuds-pp--h3d941000",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -82887,7 +82867,7 @@
     {
       "source_row": 891,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p20-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-09-p20-xGalaxyBuds-i36--ha4209d79",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83031,7 +83011,7 @@
     {
       "source_row": 893,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p20-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-09-p20-xGalaxyBuds-pp--h0532795d",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83081,7 +83061,7 @@
     {
       "source_row": 893,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p20-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-09-p20-xGalaxyBuds-i36--ha3af1344",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83382,7 +83362,7 @@
     {
       "source_row": 896,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i24",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i24--h758ddfb8",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83437,7 +83417,7 @@
     {
       "source_row": 896,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i36--h27be18c9",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83492,7 +83472,7 @@
     {
       "source_row": 896,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-09-p23-xiPhone17Pr-i48--h898e34fc",
       "period_id": "202609",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83794,7 +83774,7 @@
     {
       "source_row": 901,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p01-multi-i36",
+      "offer_id": "VDC-2026-10-p01-multi-i36--h902a2dc3",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83844,7 +83824,7 @@
     {
       "source_row": 901,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p01-multi-i48",
+      "offer_id": "VDC-2026-10-p01-multi-i48--h0b9d3f6f",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83894,7 +83874,7 @@
     {
       "source_row": 902,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p01-multi-i36",
+      "offer_id": "VDC-2026-10-p01-multi-i36--hd5458ae7",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -83944,7 +83924,7 @@
     {
       "source_row": 902,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p01-multi-i48",
+      "offer_id": "VDC-2026-10-p01-multi-i48--h7da3752e",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -84825,8 +84805,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -84873,8 +84853,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -84921,8 +84901,8 @@
       "model": "nova 14i",
       "sku_spec": "256GB",
       "model_id": "own-huawei-nova-14i",
-      "romram": "8+128 GB",
-      "sku_id": "own-huawei-nova-14i__8-128gb__black",
+      "romram": "8+256 GB",
+      "sku_id": "own-huawei-nova-14i__8-256gb__black",
       "candidate_model_ids": [
         "own-huawei-nova-14i"
       ],
@@ -86097,7 +86077,7 @@
     {
       "source_row": 932,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-pp--hc63adcd2",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86153,7 +86133,7 @@
     {
       "source_row": 932,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-i36--hb728f26f",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86209,7 +86189,7 @@
     {
       "source_row": 933,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-pp--hb00e3067",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86265,7 +86245,7 @@
     {
       "source_row": 933,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-i36--h73471b83",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86421,7 +86401,7 @@
     {
       "source_row": 935,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-pp",
+      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-pp--he78044bd",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86473,7 +86453,7 @@
     {
       "source_row": 935,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-i36",
+      "offer_id": "VDC-2026-10-p12-xGalaxyWatc-i36--hca1782fe",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86681,7 +86661,7 @@
     {
       "source_row": 938,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone15-i36",
+      "offer_id": "VDC-2026-10-p14-xiPhone15-i36--hf9d99831",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86729,7 +86709,7 @@
     {
       "source_row": 938,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone15-i48",
+      "offer_id": "VDC-2026-10-p14-xiPhone15-i48--h48e23bf2",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86777,7 +86757,7 @@
     {
       "source_row": 939,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone15-i36",
+      "offer_id": "VDC-2026-10-p14-xiPhone15-i36--hc676fa48",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -86825,7 +86805,7 @@
     {
       "source_row": 939,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone15-i48",
+      "offer_id": "VDC-2026-10-p14-xiPhone15-i48--h60b7f16f",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87017,7 +86997,7 @@
     {
       "source_row": 941,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone15-i36",
+      "offer_id": "VDC-2026-10-p14-xiPhone15-i36--h65e9458d",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87065,7 +87045,7 @@
     {
       "source_row": 941,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone15-i48",
+      "offer_id": "VDC-2026-10-p14-xiPhone15-i48--h6facf817",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87455,7 +87435,7 @@
     {
       "source_row": 944,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone16E-i36",
+      "offer_id": "VDC-2026-10-p14-xiPhone16E-i36--h2d028248",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87503,7 +87483,7 @@
     {
       "source_row": 944,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone16E-i48",
+      "offer_id": "VDC-2026-10-p14-xiPhone16E-i48--h5aee4639",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87551,7 +87531,7 @@
     {
       "source_row": 945,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone16E-i36",
+      "offer_id": "VDC-2026-10-p14-xiPhone16E-i36--h7bc598ad",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87599,7 +87579,7 @@
     {
       "source_row": 945,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone16E-i48",
+      "offer_id": "VDC-2026-10-p14-xiPhone16E-i48--h4f819cf7",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87647,7 +87627,7 @@
     {
       "source_row": 946,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-pp--h60a9be30",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87701,7 +87681,7 @@
     {
       "source_row": 946,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i36--hdf487422",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87755,7 +87735,7 @@
     {
       "source_row": 946,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i48--h8d8a7dc1",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87809,7 +87789,7 @@
     {
       "source_row": 947,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i24",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i24--h297905b2",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87863,7 +87843,7 @@
     {
       "source_row": 947,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i36--hc3bc07f7",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87917,7 +87897,7 @@
     {
       "source_row": 947,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i48--heffe710d",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -87971,7 +87951,7 @@
     {
       "source_row": 948,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i36--hf385a6a7",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88026,7 +88006,7 @@
     {
       "source_row": 948,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i48--h5cad1a15",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88081,7 +88061,7 @@
     {
       "source_row": 949,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i24",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i24--he8192dcb",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88136,7 +88116,7 @@
     {
       "source_row": 949,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i36--hb826a8b8",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88191,7 +88171,7 @@
     {
       "source_row": 949,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i48--h898e34fc",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88246,7 +88226,7 @@
     {
       "source_row": 950,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-pp",
+      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-pp--he337f22d",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88300,7 +88280,7 @@
     {
       "source_row": 950,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i36--h18023955",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88354,7 +88334,7 @@
     {
       "source_row": 950,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-10-p14-xiPhone17Pr-i48--h8d8a7dc1",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88408,7 +88388,7 @@
     {
       "source_row": 951,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i24",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i24--he6fc3fac",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88462,7 +88442,7 @@
     {
       "source_row": 951,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i36",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i36--h61da0ee8",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88516,7 +88496,7 @@
     {
       "source_row": 951,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i48",
+      "offer_id": "VDC-2026-10-p23-xiPhone17Pr-i48--heffe710d",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88570,7 +88550,7 @@
     {
       "source_row": 952,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-10-p14-xWatchSERIE-pp--h06ef06cf",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88653,7 +88633,7 @@
     {
       "source_row": 952,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-10-p14-xWatchSERIE-i36--h69af64d1",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88736,7 +88716,7 @@
     {
       "source_row": 953,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-10-p14-xWatchSERIE-pp--hecc6c26c",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -88791,7 +88771,7 @@
     {
       "source_row": 953,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-10-p14-xWatchSERIE-i36--h3f89e774",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -89001,7 +88981,7 @@
     {
       "source_row": 956,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-10-p14-xWatchSERIE-pp--h3db8f5f5",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -89084,7 +89064,7 @@
     {
       "source_row": 956,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-10-p14-xWatchSERIE-i36--h4b96f26e",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -89167,7 +89147,7 @@
     {
       "source_row": 957,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSERIE-pp",
+      "offer_id": "VDC-2026-10-p14-xWatchSERIE-pp--h8296d62f",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -89222,7 +89202,7 @@
     {
       "source_row": 957,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSERIE-i36",
+      "offer_id": "VDC-2026-10-p14-xWatchSERIE-i36--h17275ee9",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -89371,7 +89351,7 @@
     {
       "source_row": 959,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSE3-pp",
+      "offer_id": "VDC-2026-10-p14-xWatchSE3-pp--hc6be427a",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -89428,7 +89408,7 @@
     {
       "source_row": 959,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSE3-i36",
+      "offer_id": "VDC-2026-10-p14-xWatchSE3-i36--h53eb3f4e",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -89485,7 +89465,7 @@
     {
       "source_row": 960,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSE3-pp",
+      "offer_id": "VDC-2026-10-p14-xWatchSE3-pp--hab3bd2e0",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -89542,7 +89522,7 @@
     {
       "source_row": 960,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p14-xWatchSE3-i36",
+      "offer_id": "VDC-2026-10-p14-xWatchSE3-i36--h3251ba73",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -90777,7 +90757,7 @@
     {
       "source_row": 973,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p17-multi-pp",
+      "offer_id": "VDC-2026-10-p17-multi-pp--hd9c392ba",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -90828,7 +90808,7 @@
     {
       "source_row": 973,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p17-multi-i36",
+      "offer_id": "VDC-2026-10-p17-multi-i36--haed6a164",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -90879,7 +90859,7 @@
     {
       "source_row": 974,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p17-multi-pp",
+      "offer_id": "VDC-2026-10-p17-multi-pp--he43295d8",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -90929,7 +90909,7 @@
     {
       "source_row": 974,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p17-multi-i36",
+      "offer_id": "VDC-2026-10-p17-multi-i36--hc343fc94",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -91605,7 +91585,7 @@
     {
       "source_row": 982,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p18-xRedmiNote1-pp",
+      "offer_id": "VDC-2026-10-p18-xRedmiNote1-pp--hc270cdb9",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -91655,7 +91635,7 @@
     {
       "source_row": 982,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p18-xRedmiNote1-i36",
+      "offer_id": "VDC-2026-10-p18-xRedmiNote1-i36--h0276a677",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -91705,7 +91685,7 @@
     {
       "source_row": 983,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p18-xRedmiNote1-pp",
+      "offer_id": "VDC-2026-10-p18-xRedmiNote1-pp--h69551403",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -91754,7 +91734,7 @@
     {
       "source_row": 983,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p18-xRedmiNote1-i36",
+      "offer_id": "VDC-2026-10-p18-xRedmiNote1-i36--h60a80b5d",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -93073,7 +93053,7 @@
     {
       "source_row": 996,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p21-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-10-p21-xGalaxyBuds-pp--h3d941000",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -93123,7 +93103,7 @@
     {
       "source_row": 996,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p21-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-10-p21-xGalaxyBuds-i36--ha4209d79",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -93267,7 +93247,7 @@
     {
       "source_row": 998,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p21-xGalaxyBuds-pp",
+      "offer_id": "VDC-2026-10-p21-xGalaxyBuds-pp--h0532795d",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -93317,7 +93297,7 @@
     {
       "source_row": 998,
       "source_workbook": "ZA_VODACOM_1109.xlsx",
-      "offer_id": "VDC-2026-10-p21-xGalaxyBuds-i36",
+      "offer_id": "VDC-2026-10-p21-xGalaxyBuds-i36--ha3af1344",
       "period_id": "202610",
       "country_code": "ZA",
       "platform": "VODACOM SHOP",
@@ -93563,5 +93543,7 @@
       "installment_text": "支持36/48个月合约月供",
       "bundle": false
     }
-  ]
+  ],
+  "last_reviewed_at": "2026-11-16T00:42:33+00:00",
+  "last_reviewed_by": ""
 }

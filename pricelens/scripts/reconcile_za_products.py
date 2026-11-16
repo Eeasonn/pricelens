@@ -26,7 +26,8 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCT_JSON = ROOT / "src" / "data" / "dim_product.json"
 MAP_JSON = ROOT / "data" / "real" / "za_booklet_product_map.json"
-DEFAULT_XLSX = Path("/tmp/codex-remote-attachments/01a1ba22-61a2-7f23-a829-c088607b8170/5A1CD1B6-C2A6-4205-B9C0-7DB931EB2AC2/1-ZA_VODACOM_manuals_2026-01_10_unified29_20261103.xlsx")
+# 源册本地稳定路径（2026-11-16 审视修复，同 ingest_za_booklet——不再指向 /tmp 临时附件）
+DEFAULT_XLSX = ROOT / "data" / "real" / "booklet" / "ZA_VODACOM_1109.xlsx"
 MODEL_LEVEL_ROMRAM = "规格未标明"
 
 TIER_LADDERS = {

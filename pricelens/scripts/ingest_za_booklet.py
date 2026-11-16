@@ -12,6 +12,7 @@ review gates pass.  It deliberately does not write the weekly real fact pack.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import tempfile
@@ -26,7 +27,9 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
-DEFAULT_XLSX = Path("/tmp/codex-remote-attachments/01a1ba22-61a2-7f23-a829-c088607b8170/5A1CD1B6-C2A6-4205-B9C0-7DB931EB2AC2/1-ZA_VODACOM_manuals_2026-01_10_unified29_20261103.xlsx")
+# 源册本地稳定路径（2026-11-16 审视修复，收掉「默认指向 /tmp 临时附件」挂账）：
+# xlsx 本体不入库（.gitignore data/real/booklet/），换新册放同目录同名即可重跑
+DEFAULT_XLSX = ROOT / "data" / "real" / "booklet" / "ZA_VODACOM_1109.xlsx"
 DEFAULT_STAGING = ROOT / "data" / "real" / "za_booklet_staging.json"
 DEFAULT_PUBLISHED = ROOT / "data" / "real" / "za_booklet_published.json"
 DEFAULT_REPORT = ROOT / "data" / "real" / "za_booklet_ingest_report.md"
@@ -160,6 +163,21 @@ def match_product(
         # （1886→1031）。同义翻译在此单点收口。
         if status == "matched-spec":
             status = "matched-spec-complete"
+        # 2026-11-16 审视修复：册子行没写规格时，不得顶着「规格精确匹配」的
+        # 状态绑具体容量 SKU（精度虚报 + 容量归属靠文件行序偶然）。降级为型号级
+        # 匹配、sku_id 交还代表色位逻辑（优先目录真身，不含 synthetic 占位）。
+        if status == "matched-spec-complete" and not text(sku_spec):
+            catalog = [c for c in candidates.get((brand_key, model_key), [])
+                       if not str(c.get("sku_id", "")).startswith("za-booklet-")]
+            fallback_catalog = catalog or candidates.get((brand_key, model_key), [])
+            return {
+                "match_status": "matched-model",
+                "model_id": mapped.get("model_id"),
+                "romram": None,
+                "sku_id": None,
+                "candidate_model_ids": sorted({c["model_id"] for c in fallback_catalog}) or mapped.get("candidate_model_ids", []),
+                "candidate_sku_ids": [c["sku_id"] for c in fallback_catalog] or mapped.get("candidate_sku_ids", []),
+            }
         return {
             "match_status": status,
             "model_id": mapped.get("model_id"),
@@ -253,6 +271,17 @@ def review_status_of(
     return ("PASS", reasons) if not reasons else ("PENDING", reasons)
 
 
+_MAP_STATUS_PRIORITY = {
+    # 同 (品牌, 型号) 多条映射条目时的取用优先级（2026-11-16 审视修复）：
+    # 精确规格绑定 > 型号级；同优先级保留文件序最后一条（与旧 last-wins 一致）。
+    # 旧字典推导无条件后行覆盖——matched-spec 条目会被文件尾部的 synthetic 兜底
+    # 条目顶掉（或反之），18 个多键条目的取用由文件行序偶然决定。
+    "matched-spec": 0,
+    "matched-spec-complete": 0,
+    "matched-model": 1,
+}
+
+
 def load_product_map() -> dict[tuple[str, str], dict[str, Any]]:
     if not PRODUCT_MAP_JSON.exists():
         return {}
@@ -260,11 +289,18 @@ def load_product_map() -> dict[tuple[str, str], dict[str, Any]]:
     rows = payload.get("rows", payload) if isinstance(payload, dict) else payload
     if not isinstance(rows, list):
         return {}
-    return {
-        (key(row.get("brand")), key(row.get("model"))): row
-        for row in rows
-        if isinstance(row, dict) and key(row.get("brand")) and key(row.get("model"))
-    }
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        if isinstance(row, dict) and key(row.get("brand")) and key(row.get("model")):
+            grouped.setdefault((key(row.get("brand")), key(row.get("model"))), []).append(row)
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for map_key, members in grouped.items():
+        # 升序按优先级排，同级按 -index（后出现者先）→ 首元素 = 最优优先级中文件序最后一条
+        out[map_key] = sorted(
+            enumerate(members),
+            key=lambda pair: (_MAP_STATUS_PRIORITY.get(str(pair[1].get("match_status")), 2), -pair[0]),
+        )[0][1]
+    return out
 
 
 def clean_booklet_model_name(brand: Any, model: Any) -> str:
@@ -308,9 +344,22 @@ def build_records_selfaudit(
         match = match_product(brand, model_clean, sku_spec, candidates, mapped)
         # 2026-11-11 Eason：规格兜底提升——历史 product_map 命中（mapped）时不走
         # match_product 的 spec 匹配，这里按「同容量唯一 SKU」补一次精确提升，
-        # 册子写了容量的行不再落「规格未标明」
-        if sku_spec and match["match_status"] in {"matched-model", "unmatched", "pending-spec"}:
-            storage = storage_gb_of(sku_spec)
+        # 册子写了容量的行不再落「规格未标明」。
+        # 2026-11-16 审视修复加第二条：册子写了容量但映射条目绑的是另一容量
+        # （映射陈旧/条目来自其他页）→ 以册子容量为准重配；重配不出唯一命中
+        # → 降级型号级（不再顶着精确匹配绑错容量）。
+        row_storage = storage_gb_of(sku_spec) if sku_spec else None
+        mapped_capacity_conflict = (
+            match["match_status"] == "matched-spec-complete"
+            and row_storage is not None
+            and storage_gb_of(match.get("romram") or "") is not None
+            and storage_gb_of(match.get("romram") or "") != row_storage
+        )
+        if sku_spec and (
+            match["match_status"] in {"matched-model", "unmatched", "pending-spec"}
+            or mapped_capacity_conflict
+        ):
+            storage = row_storage
             hits = [item for item in candidates.get((key(brand), key(model_clean)), [])
                     if not str(item.get("sku_id", "")).startswith("za-booklet-")
                     and storage_gb_of(item.get("romram") or "") == storage] if storage is not None else []
@@ -324,6 +373,19 @@ def build_records_selfaudit(
                     "sku_id": best["sku_id"],
                     "candidate_model_ids": sorted({c["model_id"] for c in candidates.get((key(brand), key(model_clean)), [])}),
                     "candidate_sku_ids": [c["sku_id"] for c in candidates.get((key(brand), key(model_clean)), [])],
+                }
+            elif mapped_capacity_conflict:
+                # 册子容量在目录里配不出唯一命中 → 降级型号级，代表色位走目录真身
+                catalog = [c for c in candidates.get((key(brand), key(model_clean)), [])
+                           if not str(c.get("sku_id", "")).startswith("za-booklet-")]
+                fallback_catalog = catalog or candidates.get((key(brand), key(model_clean)), [])
+                match = {
+                    "match_status": "matched-model",
+                    "model_id": match.get("model_id"),
+                    "romram": None,
+                    "sku_id": None,
+                    "candidate_model_ids": sorted({c["model_id"] for c in fallback_catalog}),
+                    "candidate_sku_ids": [c["sku_id"] for c in fallback_catalog],
                 }
         if owner_approved and match["match_status"] == "matched-model" and not sku_spec:
             sku_spec = match.get("romram") or "—"
@@ -416,6 +478,23 @@ def build_records_selfaudit(
             usd = round(value / fx_rate, 2) if fx_rate else None
             total_usd = round(total / fx_rate, 2) if total is not None and fx_rate else None
             emit("installment", value, term, usd, f"i{term}", total_local=total, total_usd=total_usd)
+    # offer_id 消歧（2026-11-16 审视修复）：同一截图名下多个产品/套餐档共用
+    # base 时（当前册子 213 组、478 行），人工裁定按 offer_id 命中——撞键会让
+    # 裁定整组误伤不同产品，同键不同价还会让前端 min 兜底取错套餐价。全部成员
+    # 追加 8 位内容哈希；内容完全一致的真重复采集保持同 id（= 同一逻辑 offer，
+    # 裁定命中两者正是预期语义）。哈希对同一册子内容字节稳定。
+    def _content_key(rec: dict[str, Any]) -> list[Any]:
+        return [rec["model"], rec["sku_spec"], rec.get("promotion_text"), rec["price_type"],
+                rec.get("term_months"), rec.get("price_local"), rec.get("total_local")]
+
+    by_offer: dict[str, set[tuple]] = {}
+    for rec in records:
+        by_offer.setdefault(rec["offer_id"] or "", set()).add(tuple(_content_key(rec)))
+    for rec in records:
+        if rec["offer_id"] and len(by_offer.get(rec["offer_id"], set())) > 1:
+            digest = hashlib.sha256(json.dumps(_content_key(rec), ensure_ascii=False).encode("utf-8")).hexdigest()[:8]
+            rec["offer_id"] = f"{rec['offer_id']}--h{digest}"
+
     metadata = {
         "schema_version": "za-operator-booklet-staging-v1",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

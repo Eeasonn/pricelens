@@ -66,3 +66,6 @@ logs/
 
 # 便携版装配产物（PriceLens.html 副本 + 数据包，本地产物不入库）
 portable/
+
+# ZA 册子源表（内部数据不入库，产物 JSON 承载）
+pricelens/data/real/booklet/*.xlsx

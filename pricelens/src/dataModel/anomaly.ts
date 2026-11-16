@@ -196,7 +196,28 @@ const EPS = 1e-9;
 export function detectSuspects(points: SuspectSourcePoint[], ctx: DetectSuspectsCtx): Map<number, SuspectVerdict> {
   const out = new Map<number, SuspectVerdict>();
   const rule = ctx.rule;
-  if (!rule.enabled || !(rule.thresholdPct > 0)) return out;
+  // 人工裁定独立于总开关（2026-11-16 审视修复）：守卫规则关闭 = 关「自动检测」，
+  // 不应连带废掉图上手工裁定——周/月路径调用方都已按「规则关 || 有裁定」放行，
+  // 此前这里的短路让「有裁定 + 规则关」的组合整段失效（裁定静默不生效）。
+  // 规则关时只跑人工裁定通道（阈值检测跳过），其余逻辑与开启时逐字节一致。
+  if (!rule.enabled || !(rule.thresholdPct > 0)) {
+    const hasManual = ctx.manual != null && ctx.manual.size > 0;
+    if (!hasManual) return out;
+    const n = points.length;
+    let prevIdx = -1;
+    for (let i = 0; i < n; i++) {
+      const p = points[i].price;
+      if (p == null || !(p > 0)) continue;
+      const manual = ctx.manual!.get(points[i].bucketId);
+      if (manual === 'exempt' || manual === 'isolate') {
+        const prev = prevIdx >= 0 ? points[prevIdx].price ?? null : null;
+        const wow = prev != null && prev > 0 ? p / prev - 1 : null;
+        out.set(i, { state: manual === 'exempt' ? 'exempted' : 'quarantined', reason: 'manual', wow });
+      }
+      prevIdx = i;
+    }
+    return out;
+  }
   const t = rule.thresholdPct / 100;
   const n = points.length;
   let prevIdx = -1; // 上一原始有值点（检测基准）

@@ -2,7 +2,7 @@
 // 异常价格守卫（2026-11-01 数据质量口径）测试：
 // - detectSuspects 判定纯函数：V 型隔离 / 持续位移（K=2 只标注）/ 末端候选 /
 //   促销带下跌放行 / RRP 同步放行 / 人工裁定双向 / 脏点后干净回弹不误伤 /
-//   缺采跨周延续 / 首点不判 / 阈值含等于 / 关闭态零输出 / 可信链跨隔离；
+//   缺采跨周延续 / 首点不判 / 阈值含等于 / 关闭态只剩人工裁定通道 / 可信链跨隔离；
 // - 规则与人工裁定的存取（默认 50 开、非法档位钳制、同点覆写、撤销）；
 // - buildSeries 端到端锚点（真实数据：DE 穿戴 Galaxy Watch 8 Classic 46mm
 //   2026W39 为瞬态隔离点——脏数据批次里真实存在的 V 型）。
@@ -157,9 +157,16 @@ describe('detectSuspects · 判定纯函数', () => {
     expect(verdict.reason).toBe('manual');
   });
 
-  it('关闭守卫 → 零输出（人工裁定也停）', () => {
+  it('关闭守卫：自动检测停、人工裁定仍生效（2026-11-16 语义修正）；无裁定 = 零输出', () => {
     const manual = new Map([['w1', 'isolate' as const]]);
-    expect(stateOf({ prices: [100, 250, 102], ctx: { rule: RULE(50, false), manual } }).size).toBe(0);
+    const v = stateOf({ prices: [100, 250, 102], ctx: { rule: RULE(50, false), manual } });
+    expect(v.size).toBe(1);
+    const [idx, verdict] = [...v][0];
+    expect(idx).toBe(1);
+    expect(verdict.state).toBe('quarantined');
+    expect(verdict.reason).toBe('manual');
+    // 无人工裁定 = 自动检测不跑 = 零输出
+    expect(stateOf({ prices: [100, 250, 102], ctx: { rule: RULE(50, false) } }).size).toBe(0);
   });
 
   it('连续异常串保守处理：第二点贴近脏水平不成候选（宁可漏，人工隔离兜底）', () => {

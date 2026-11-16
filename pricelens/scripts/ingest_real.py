@@ -805,7 +805,16 @@ def main():
     raw = raw[raw["week_id"].notna()].copy()
 
     raw["汇率"] = pd.to_numeric(raw["汇率"], errors="coerce")
-    inv = raw["汇率"].notna() & (raw["汇率"] < 1) & (~raw["货币"].isin(["EUR", "GBP"]))
+    # 汇率倒挂修正（2026-11-16 审视修复：硬白名单 → 币种中位数自校验）——供方
+    # 偶发把「1 单位 = X USD」当成 per-USD 交付（如 RUB 给成 0.0125）。旧逻辑对
+    # 一切 <1 非 EUR/GBP 币种整组取倒数：合法 <1 币种（KWD≈0.31）未来接入会被
+    # 整组错翻 ×10，且因全国同错、单位错位中位数校验全部失效（纯静默）。新判据
+    # 按币种全体行中位数自校验：常态 ≥1 的币种出现 <1 行 = 倒挂；常态 ≤1 的币种
+    # 出现 >1 行 = 倒挂（对称补口）。整列同向翻转仍不可辨（与旧逻辑同限）。
+    _fx_med = raw.groupby("货币")["汇率"].transform("median")
+    inv = raw["汇率"].notna() & (
+        ((raw["汇率"] < 1) & (_fx_med >= 1)) | ((raw["汇率"] > 1) & (_fx_med > 0) & (_fx_med <= 1))
+    )
     log["fixed"]["汇率倒挂(取倒数)"] = int(inv.sum())
     raw.loc[inv, "汇率"] = 1 / raw.loc[inv, "汇率"]
     raw["汇率"] = raw.groupby(["cc", "week_id"])["汇率"].transform(lambda s: s.fillna(s.median()))
@@ -858,6 +867,19 @@ def main():
         canon[(b, k)] = name
     raw["model_name"] = [canon[(b, k)] for b, k in zip(raw["品牌"], raw["nkey"])]
 
+    # 「+」碰撞哨兵（2026-11-16 审视修复）：normkey 把 '+' 归入标点类，"X" 与
+    # "X+" 归一成同一 nkey → 同 model_id → 同 sku 键互相吞行。当前数据无碰撞对
+    # （已核：S26/S26+ 无并存在售）；一旦未来型号对撞，让它在 ingest 报告里响，
+    # 而不是静默并型。只对「仅差一个 +」的型号名对告警，正常别名合并不受扰。
+    _plus_pairs: list[str] = []
+    for (b, k), g in raw.groupby(["品牌", "nkey"]):
+        names = {str(n).strip() for n in g["型号"].astype(str)}
+        names.discard("")
+        if len(names) > 1 and len({n.rstrip("+").strip() for n in names}) < len(names):
+            _plus_pairs.append(f"{b}: {' / '.join(sorted(names))}")
+    if _plus_pairs:
+        log["notes"].append("⚠ normkey 加号碰撞（同 nkey 下型号名仅差 +，型号/SKU 键互吞风险）: " + "; ".join(_plus_pairs))
+
     # 我司规格纠偏（2026-11-11 Eason 拍板）：R国 W45 增量（RU_20261102.xlsx）把
     # MatePad Air 2026 的型号规格误写为 12.2"/…（W39 全量与官网均只有 12" 款，不存
     # 在 12.2 寸）→ 归并回 12"，rom_key/color_key 回旧键，价格并回既有 12" SKU。
@@ -881,8 +903,10 @@ def main():
     raw["__price"] = raw["平台成交价-本币"].fillna(1e18)
     # 有价行优先：同键同采集时间时缺价行(1e18)按纯价格排序会排在有价行之后被 keep="last"
     # 保留，有价行反被丢 → 追加「有价布尔」升序键，保证同时间戳下有价行排在无价行之后。
+    # 同秒并列时保留最低价（2026-11-16 审视修复）：__price 升序 + keep="last" 实为
+    # 取价格最高行，与全站最低价口径反向且无文档背书——改为降序，keep last = 最低价。
     raw["__has_price"] = raw["__price"].ne(1e18)
-    raw = raw.sort_values(["crawled_at", "__has_price", "__price"]).drop_duplicates(
+    raw = raw.sort_values(["crawled_at", "__has_price", "__price"], ascending=[True, True, False]).drop_duplicates(
         subset=["week_id", "sku_id", "cc", "平台", "店铺类型", "店铺名称"], keep="last")
     log["dropped"]["重复行(周×SKU×国×渠道×店铺)"] = before - len(raw)
     log["notes"].append(f"清洗后事实行 {len(raw):,}")

@@ -1,20 +1,20 @@
 # ZA Vodacom 小册子导入报告
 
-生成时间：2026-11-11T15:51:08+00:00
+生成时间：2026-11-16T00:42:13+00:00
 源文件：ZA_VODACOM_1109.xlsx
 门禁状态：owner-approved
 
 ## 结果
 
 - 全量数据行：1,886
-- offer 数：1,621
+- offer 数：1,883
 - 有价记录：1,886
 - 无价格记录：0
 - 发布行：1,886
 - 发布状态：PUBLISHED
 - 复核状态：{'PASS': 1886}
 - 价格类型：{'installment': 1241, 'prepaid': 645}
-- SKU 匹配：{'matched-spec-complete': 982, 'matched-model': 904}
+- SKU 匹配：{'matched-spec-complete': 972, 'matched-model': 914}
 
 ## 发布条件
 

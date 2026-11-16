@@ -138,6 +138,11 @@ describe('monthly booklet facts', () => {
       expect(marked.points[0].price).toBe(100);
       expect(marked.points[0].suspect).toBe('quarantined');
       expect(marked.points[0].suspectReason).toBe('manual');
+      // 规则关 = 只停自动检测，人工裁定仍生效（2026-11-16 语义修正）
+      localStorage.removeItem('LPL3.config.anomalyRule');
+      const [noRule] = buildMonthlySeries(query, source);
+      expect(noRule.points[0].suspect).toBe('quarantined');
+      expect(noRule.points[0].suspectReason).toBe('manual');
     } finally {
       localStorage.removeItem('LPL3.config.anomalyMarks');
       localStorage.removeItem('LPL3.config.anomalyRule');
