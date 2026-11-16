@@ -156,6 +156,18 @@ export default function ChannelScopeBox() {
     return autoColumnWidth(full, { extraW: noteBudget, min: 200, max: 340 });
   }, [paneChannel, paneSellers]);
 
+  // 平台/渠道列同样按内容测定宽（2026-11-17 Eason 二次反馈「还是有空白」：
+  // 浮层硬定宽时短名单列右缘留白——三列全部内容测定，浮层宽=可见列宽和）
+  const badgeW = measureText('默认') * (fontSize.caption / 13) + 10 + space.xs;
+  const platformColWidth = useMemo(
+    () => autoColumnWidth(platformItems, { extraW: badgeW + space.xs + 16, min: 150, max: 280 }),
+    [platformItems, badgeW],
+  );
+  const channelColWidth = useMemo(
+    () => (expanded ? autoColumnWidth(channelItems, { extraW: space.xs + 16, min: 150, max: 280 }) : 0),
+    [channelItems, expanded],
+  );
+
   // 触发器文案：钉卖家 = 「渠道 · 卖家」；钉渠道（旧链接）= 渠道名；平台级 = 平台名；
   // 多平台并集如实全量；自动 = 占位「默认 · 平台锚」
   const fullShopLabel = selShop ? (selSeller ? `${selShop.display_name} · ${selSeller}` : selShop.display_name) : '';
@@ -188,13 +200,13 @@ export default function ChannelScopeBox() {
       content={
         <div
           style={{
-            // 宽度随已展开列数自适应（2026-11-17 Eason：未展开不留空白区域）——
-            // 平台列 208 + 渠道列 208 + 卖家列（内容测定宽）；触发器居筛选条中部、
-            // 浮层向左展开，三列全开时总宽须留出视口余量（maxWidth 钳视口）
+            // 宽度 = 可见列内容测定宽之和（2026-11-17 Eason 二次反馈：短名单列
+            // 硬定宽右缘留白——三列全走内容测定）；触发器居筛选条中部、浮层向左
+            // 展开，三列全开时总宽须留出视口余量（Math.min 钳视口）
             width: narrow
               ? 'min(420px, calc(100vw - 48px))'
               : Math.min(
-                  208 + (expanded ? 208 : 0) + (paneChannel != null && sellerColWidth > 0 ? sellerColWidth : 0),
+                  platformColWidth + channelColWidth + (paneChannel != null && sellerColWidth > 0 ? sellerColWidth : 0),
                   typeof window !== 'undefined' ? window.innerWidth - 24 : 720,
                 ),
             transition: 'width 160ms ease',
@@ -240,9 +252,9 @@ export default function ChannelScopeBox() {
             stepped={narrow}
             levelLabels={['平台', '渠道', '卖家']}
             columns={[
-              { items: platformItems },
-              ...(expanded
-                ? [{ items: channelItems, width: 208 }]
+              { items: platformItems, width: platformColWidth },
+              ...(expanded && channelColWidth > 0
+                ? [{ items: channelItems, width: channelColWidth }]
                 : []),
               ...(paneChannel != null && sellerColWidth > 0
                 ? [{ items: sellerItems, width: sellerColWidth }]
