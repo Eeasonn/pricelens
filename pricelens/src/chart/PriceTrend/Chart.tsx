@@ -89,7 +89,6 @@ import { prefersReducedMotion } from '../../theme/motion';
 import {
   BREAK_PX,
   GRID,
-  gapAbsorbedIdx,
   TICK_PX,
   TICK_DASH_W,
   axisChrome,
@@ -1080,11 +1079,6 @@ export default function Chart(props: ChartProps) {
   // ---- 端点标记（S=真实起点 / E=连续 3 区间无值才确认的截止 / in·out=窗口续接点），
   //      语义详见 chartModel.buildEndpointMarks；canvas 不画默认符号，DOM 徽标接管 ----
   const endpointMarks = useMemo(() => buildEndpointMarks(series, priceTypes), [series, priceTypes]);
-  // 第一百二十五轮：跨接吸收的孤立有值点集（悬停小圆点不叠画）；系列级缓存避免每次悬停重算
-  const absorbedByKey = useMemo(
-    () => new Map(series.map((s) => [s.key, gapAbsorbedIdx(s.points)])),
-    [series],
-  );
 
   // ---- 生命周期调价幅度（第二十七轮：仅季粒度，系列名第二行）----
   // 恒本币、锚在数据（与窗口/显示币种无关）；完结/在售统显「生命周期 −X%」（第二十九轮：不再带「暂」）
@@ -1891,7 +1885,6 @@ export default function Chart(props: ChartProps) {
                     {effOwner.cfg ? (
                       <span style={{ fontSize: 10, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap' }}>{effOwner.cfg}</span>
                     ) : null}
-                    {switchable && <span aria-hidden style={{ fontSize: 10, lineHeight: '14px', color: color.mute }}>▾</span>}
                   </button>
                   {switchable && ownerMenuOpen && (
                     <div
@@ -3405,7 +3398,7 @@ export default function Chart(props: ChartProps) {
               const v = pt ? primaryPriceOf(pt, priceTypes) : null;
               if (v == null) return null;
               const mk = endpointMarks.get(`${s.key}|${tipIdx}`);
-              if (mk || absorbedByKey.get(s.key)?.has(tipIdx)) return null; // 端点徽标已在同位表达 / 跨接孤立点无可见点
+              if (mk) return null; // 端点徽标已在同位表达（2026-11-17 起孤立点保留落点与标签）
               const dim = litKeys != null && !litKeys.includes(s.key);
               return (
                 <span

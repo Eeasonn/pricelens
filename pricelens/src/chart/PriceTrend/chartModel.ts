@@ -27,7 +27,6 @@ import {
   estGridLeft,
   fmtAxisTick,
   fmtInt,
-  gapAbsorbedIdx,
   gapRuns,
   resolveCollisions,
   segTicks,
@@ -339,7 +338,6 @@ export function buildLabelPlan(p: {
   const demoteExtremes = series.length > FOCUS_MODE_THRESHOLD;
   for (const s of series) {
     const pts = s.points;
-    const absorbed = gapAbsorbedIdx(pts); // 孤立有值周不产生数值标签（第二十四轮）
     const valIdx: number[] = [];
     pts.forEach((pt, i) => {
       // 已隔离点不进标签候选（计算层走可信链；原值经 tooltip/表格/胶囊可见）
@@ -366,7 +364,6 @@ export function buildLabelPlan(p: {
         return prev != null && cur != null && cur < prev ? 'bottom' : 'top';
       };
       for (const i of allowed) {
-        if (absorbed.has(i)) continue;
         (compactDy[s.key] ??= {})[i] = 0;
         (compactPos[s.key] ??= {})[i] = posOf(i);
       }
@@ -392,7 +389,6 @@ export function buildLabelPlan(p: {
       change.add(minI);
     }
     const pushPrice = (i: number, pinned: boolean, dist: number = LABEL_DISTANCE): void => {
-      if (absorbed.has(i)) return;
       const v = primaryPriceOf(pts[i], priceTypes);
       if (v == null) return;
       const text = fmtInt(v);
@@ -658,14 +654,13 @@ export function buildOption(p: {
       // symbolSize 0 而非 symbol 'none'（ECharts 的 line 标签画在符号元素上，
       // symbol 'none' 会连数值标签一起吞掉；size 0 只隐符号、标签照常渲染）。
       // 被跨接段吸收的孤立有值周同样不画点（第二十四轮：标签在 buildLabelPlan 一并抑制）
-      const absorbed = gapAbsorbedIdx(s.points);
       const data = s.points.map((pt, i) => {
         const mark = endpointMarks.get(`${s.key}|${i}`);
         // 已隔离点：主线在此断开（不参与可信链渲染；原值由空心点/胶囊/表格承载）
         const quarantined = pt.suspect === 'quarantined';
         return {
           value: pt.price != null && !quarantined ? yNormOf(geom, pt.price) : null,
-          symbolSize: mark || absorbed.has(i) ? 0 : undefined,
+          symbolSize: mark ? 0 : undefined,
           label: {
             show: pt.price != null && !quarantined && !dim && dyMap[i] !== undefined,
             position: posMap?.[i] ?? ('top' as const),

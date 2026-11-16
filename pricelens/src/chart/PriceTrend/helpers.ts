@@ -1060,45 +1060,15 @@ export function monthWeeks(mid: string): [string, string] | null {
 
 // ---------------- 缺采（§6.4；第二十四轮：仅虚线跨接，撤销空心插值点） ----------------
 
-/**
- * 被跨接段吸收的孤立有值点集合（第二十四轮）：某有值周的左右紧邻都是缺采时，该周
- * 不再展示数据点/数值标签，虚线桥整段直连越过——用户口径：虚线段中间不应残留孤立点
- * （如 iPhone 17 8+256 @202620）。系列在窗口内的首个/末个有值点不吸收（唯一/双有值点
- * 的短系列不能整条消失）；M-o-M-o-M 链式形态迭代吸收到不动点。
- */
-export function gapAbsorbedIdx(pts: SeriesPoint[]): Set<number> {
-  const valIdx: number[] = [];
-  pts.forEach((pt, i) => {
-    if (pt.price != null) valIdx.push(i);
-  });
-  if (valIdx.length <= 2) return new Set();
-  const first = valIdx[0];
-  const last = valIdx[valIdx.length - 1];
-  const out = new Set<number>();
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const i of valIdx) {
-      if (i === first || i === last || out.has(i)) continue;
-      const lGap = pts[i - 1].price == null || out.has(i - 1); // i>first ⇒ i-1 在界内
-      const rGap = pts[i + 1].price == null || out.has(i + 1); // i<last ⇒ i+1 在界内
-      if (lGap && rGap) {
-        out.add(i);
-        changed = true;
-      }
-    }
-  }
-  return out;
-}
 
-/** 缺采连续段（两侧都有有值点才会自然跨接）；被吸收的孤立有值点并入所在跨接段，
- *  跨接桥整段直连、不在中途落点（第二十四轮） */
+/** 缺采连续段（两侧都有有值点才会自然跨接）。2026-11-17 Eason 推翻第二十四轮
+ *  「孤立有值点吸收」口径：孤点保留落点/标签，两侧各自虚线桥接到它——虚线逻辑
+ *  全线一致（有值即锚点），不再出现「孤点被虚线直连越过」。 */
 export function gapRuns(pts: SeriesPoint[]): [number, number][] {
-  const absorbed = gapAbsorbedIdx(pts);
   const runs: [number, number][] = [];
   let start = -1;
   for (let i = 0; i < pts.length; i++) {
-    if (pts[i].missing || absorbed.has(i)) {
+    if (pts[i].missing) {
       if (start < 0) start = i;
     } else if (start >= 0) {
       runs.push([start, i - 1]);

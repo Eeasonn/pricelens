@@ -8,7 +8,7 @@
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import type { CurrencyMode, OfferInfo, Series, SeriesPoint } from '../../../dataModel/types';
-import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, defaultTailBuckets, tailDefaultRange, bucketSpans, computeYAxis, fmtAxisTick, fmtInt, gapAbsorbedIdx, gapRuns, panWindow, segTicks, seriesSpanRange, xPxOf, yPxOf, type Bucket, type YScale } from '../helpers';
+import { GRID, MIN_PX_PER_SERIES, NAME_ZONE_W, TICK_PX, BREAK_PX, defaultTailBuckets, tailDefaultRange, bucketSpans, computeYAxis, fmtAxisTick, fmtInt, gapRuns, panWindow, segTicks, seriesSpanRange, xPxOf, yPxOf, type Bucket, type YScale } from '../helpers';
 import {
   buildChangeMarks,
   buildEndpointBadges,
@@ -250,15 +250,15 @@ describe('buildLabelPlan compact（每系列仅 最高/最低/最新 三价，�
     expect(Object.keys(resting.dy['s1'] ?? {}).sort()).toEqual(['3']);
   });
 
-  it('跨接孤立点（absorbed）不产生精简标签；detail 模式不带 pos 字段（旧口径不变）', () => {
-    // M-o-M-o-M + 连续尾段：中间孤立点（90@2）被吸收，最低标签随之退场
+  it('跨接孤立点保留标签（2026-11-17 Eason 推翻吸收口径）；detail 模式不带 pos 字段（旧口径不变）', () => {
+    // M-o-M-o-M + 连续尾段：中间孤立点（90@2）保留落点/标签，两侧虚线各自桥接
     const gappy2 = [100, null, 90, null, 130, 110, 108, 106].map((v, i) => PT({ price: v, bucketId: `w${i}`, missing: v == null }));
     const gScale = computeYAxis({ series: [mkSeries({ points: gappy2 })], priceTypes: DISC_ONLY, sliderScale: 1 });
     const gGeom = mkGeom(gScale, 1200, 8, gScale.plotHeight + 96 + GRID.bottom);
     const plan = buildLabelPlan({ geom: gGeom, series: [mkSeries({ points: gappy2 })], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: new Map(), labelMode: 'compact' });
     const dy = plan.dy['s1'] ?? {};
-    expect(dy[2]).toBeUndefined(); // 孤立最低点（90）被吸收 → 不标
-    expect(plan.pos?.['s1']?.[2]).toBeUndefined();
+    expect(dy[2]).toBe(0); // 孤立最低点（90）保留标签（新口径：有值即锚点）
+    expect(plan.pos?.['s1']?.[2]).toBe('bottom'); // 孤立点 = 全段最低 → 下方
     expect(dy[7]).toBeDefined(); // 最新连续段末点
     // detail 模式：无 pos 字段（与旧输出逐字段一致）
     const detail = planOf();
@@ -748,30 +748,22 @@ describe('币种档位锚定（perUsd）', () => {
   });
 });
 
-// ---------------- 缺采跨接·孤立有值周吸收（第二十四轮用户口径回归） ----------------
-// 用户口径：虚线跨接段中间不应残留任何数据点——两侧缺采夹一个有价周（如 iPhone 17
-// 8+256 @202620）时，该周并入缺采段：不画点、不放数值标签、两段短桥合并为一条整桥。
+// ---------------- 缺采跨接·孤立有值周保留（2026-11-17 Eason 推翻第二十四轮吸收口径） ----------------
+// 新用户口径：虚线逻辑全线一致——有值周即锚点，孤立有值周保留落点/数值标签，
+// 两侧各自虚线桥接到它；不再出现「孤点被整桥直连越过」。
 
-describe('缺采跨接·孤立点吸收', () => {
+describe('缺采跨接·孤立点保留', () => {
   const ok = (price: number): SeriesPoint => PT({ price });
   const miss = (): SeriesPoint => PT({ price: null, missing: true });
 
-  it('gapAbsorbedIdx：两侧缺采的有值周被吸收；首末有值点与 ≤2 有值点系列不吸收', () => {
-    expect([...gapAbsorbedIdx([ok(100), miss(), ok(110), miss(), ok(120)])]).toEqual([2]);
-    // 链式 M-o-M-o-M：迭代吸收到不动点
-    expect([...gapAbsorbedIdx([ok(100), miss(), ok(110), miss(), ok(120), miss(), ok(130)])]).toEqual([2, 4]);
-    // 首个/末个有值点不吸收（M-o-M-o-M 两端只有 2 个有值点）
-    expect(gapAbsorbedIdx([miss(), ok(100), miss(), ok(110), miss()]).size).toBe(0);
-    // 两侧有值 → 不吸收；缺采不夹孤立点 → 空集
-    expect(gapAbsorbedIdx([ok(100), miss(), ok(110), ok(120), miss(), ok(130)]).size).toBe(0);
-  });
-
-  it('gapRuns：吸收后两段短桥合并为一条整桥（[ok M ok M ok] → 单一 run [1,3]）', () => {
-    expect(gapRuns([ok(100), miss(), ok(110), miss(), ok(120)])).toEqual([[1, 3]]);
+  it('gapRuns：孤立有值周两侧的缺采段各自成 run（孤点是桥接锚点）', () => {
+    expect(gapRuns([ok(100), miss(), ok(110), miss(), ok(120)])).toEqual([[1, 1], [3, 3]]);
     expect(gapRuns([ok(100), miss(), ok(110), ok(120), miss(), ok(130)])).toEqual([[1, 1], [4, 4]]);
+    // 首尾缺采不产桥（无外侧锚点）
+    expect(gapRuns([miss(), ok(100), miss()])).toEqual([]);
   });
 
-  it('buildOption/labelPlan：孤立周 symbolSize=0、无数值标签，跨接桥只此一条', () => {
+  it('buildOption/labelPlan：孤立周保留数据点与数值标签，两条短桥各自锚到孤点', () => {
     const pts = [ok(100), miss(), ok(110), miss(), ok(120)];
     const s = mkSeries({ points: pts, edgeStart: false, edgeEnd: false });
     const scale = computeYAxis({ series: [s], priceTypes: DISC_ONLY, sliderScale: 1 });
@@ -780,11 +772,11 @@ describe('缺采跨接·孤立点吸收', () => {
     const plan = buildLabelPlan({ geom, series: [s], granularity: 'week', priceTypes: DISC_ONLY, endpointMarks: marks });
     const option = buildOption({ geom, series: [s], priceTypes: DISC_ONLY, granularity: 'week', labelPlan: plan, gridTop: 96, endpointMarks: marks })!;
     const seriesArr = option.series as Record<string, unknown>[];
-    // 1 主线 + 1 条合并整桥（i0→i4），不再有别的系列
-    expect(seriesArr).toHaveLength(2);
+    // 1 主线 + 2 条短桥（i0→i2、i2→i4），不再有别的系列
+    expect(seriesArr).toHaveLength(3);
     const mainData = seriesArr[0].data as { symbolSize?: number; label?: { show: boolean } }[];
-    expect(mainData[2].symbolSize).toBe(0); // 孤立周不画点
-    expect((plan.dy['s1'] ?? {})[2]).toBeUndefined(); // 也不放数值标签
+    expect(mainData[2].symbolSize).toBeUndefined(); // 孤立周照常画点
+    expect((plan.dy['s1'] ?? {})[2]).toBeDefined(); // 数值标签照常放
   });
 });
 
