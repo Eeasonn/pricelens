@@ -64,12 +64,12 @@ const W_TIME = 100;
 /** 主分析产品行底色（浅蓝；第一百二十三轮按角色着色——主品行衬浅蓝、对比行白底，
  *  与图例带主品药丸同语言，不再按品牌归属着色） */
 const MAIN_TINT = '#f3f8ff';
-/** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / 取证 / offer） */
+/** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / 记录 / offer）——2026-11-17 Eason：「取证」更名「记录」 */
 const DETAIL_SPAN = 6;
 /** ZA 运营商小册子明细行数（平台成交价 + 24/36/48 期分期价与总价 ×2 + 促销政策） */
 const ZA_DETAIL_SPAN = 8;
 
-/** 取证行小件样式：图标 + 文字，链接色（button / a 共用） */
+/** 记录行小件样式：图标 + 文字，链接色（button / a 共用） */
 const EVID_STYLE: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -226,7 +226,7 @@ export default function TrendTables(props: {
     // 与表同列结构；只随每个产品首行（RRP 行）输出一次，其余行留空串
     const isZa = viewBlocks.some((b) => b.g.series.some((sr) => sr.financeLabel != null));
     const lines = [[...(multi ? ['组'] : []), '产品', '配置', '付费', ...(isZa ? ['促销政策'] : []), '类型', '近4周环比', ...dates].join('\t')];
-    const STD_TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '取证', 'offer'] as const;
+    const STD_TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '记录', 'offer'] as const;
     const ZA_TYPES = ['平台成交价', '24期分期价', '24期总价', '36期分期价', '36期总价', '48期分期价', '48期总价', '促销政策'] as const;
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
@@ -254,7 +254,7 @@ export default function TrendTables(props: {
                 return disc != null ? fmtPct(disc) : '—';
               }
               if (ty === '平台-店铺') return pt.channelName ?? '—';
-              if (ty === '取证') return pt.url || '—';
+              if (ty === '记录') return pt.url || '—';
               return offerText(pt) || '—';
             }] as [string, (pt: (typeof s.points)[number]) => string]);
         for (const [ty, get] of rowsDef) {
@@ -687,7 +687,7 @@ export default function TrendTables(props: {
             }),
           )
           // 取证行：该时点页面快照入口 + 最新时点商城现页
-          rows.push(typeCell('取证', main, `${p}-evid`));
+          rows.push(typeCell('记录', main, `${p}-evid`));
           rows.push(
             ...cols.map(({ bk, i }, ri) => {
               const url = s.points[i]?.url || '';
