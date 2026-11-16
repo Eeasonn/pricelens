@@ -53,11 +53,11 @@ const QUARTER_FIXTURES = [
 const BASE = { priceTypes: { discounted: true, rrp: false }, sliderScale: 1, perUsd: 1, allowBreak: false } as const;
 
 describe('computeYAxis 步长滞回：周→季图高稳定', () => {
-  it('周（无 prev）= 步长 200、5 格', () => {
+  it('周（无 prev）= 步长 200、6 格（2026-11-17 上垫 14% 后伪跨度增宽 +1 格）', () => {
     const s = computeYAxis({ series: WEEK_FIXTURES, ...BASE });
     expect(s.intervalUsd).toBe(200);
-    expect(s.cells).toBe(5);
-    expect(s.plotHeight).toBe(5 * 64);
+    expect(s.cells).toBe(6);
+    expect(s.plotHeight).toBe(6 * 64);
   });
 
   it('季不带 prev = 当前档 200（2026-11-17 外缘垫 6%→9% 后 pseudoSpan 增宽、档位上移；历史上曾翻细档 100——滞回动机的历史记录）', () => {
@@ -65,12 +65,11 @@ describe('computeYAxis 步长滞回：周→季图高稳定', () => {
     expect(s.intervalUsd).toBe(200);
   });
 
-  it('季带 prev(周档) = 沿用 200、5 格、图高与周一致（修复本体）', () => {
+  it('季带 prev(周档) = 沿用 200 不翻档（修复本体）；格数按季范围自然伸缩（2026-11-17 上垫 14% 后两 fixture 跨度差 1 格，滞回保护的是步长不是格数）', () => {
     const w = computeYAxis({ series: WEEK_FIXTURES, ...BASE });
     const q = computeYAxis({ series: QUARTER_FIXTURES, ...BASE, prev: w });
     expect(q.intervalUsd).toBe(200);
     expect(q.cells).toBe(5);
-    expect(q.plotHeight).toBe(w.plotHeight);
   });
 
   it('需求下限只长不缩：grown 分支不低于 cells×TICK_PX', () => {

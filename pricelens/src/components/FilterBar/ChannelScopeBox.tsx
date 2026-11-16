@@ -153,7 +153,7 @@ export default function ChannelScopeBox() {
     if (!paneChannel) return 0;
     const full: CascadeRowItem[] = paneSellers.map((x) => ({ key: x.seller, label: x.seller }));
     const noteBudget = Math.max(measureText('· 24 周'), 0) * (fontSize.caption / 13) + space.xs;
-    return autoColumnWidth(full, { extraW: noteBudget, min: 200, max: 380 });
+    return autoColumnWidth(full, { extraW: noteBudget, min: 200, max: 340 });
   }, [paneChannel, paneSellers]);
 
   // 触发器文案：钉卖家 = 「渠道 · 卖家」；钉渠道（旧链接）= 渠道名；平台级 = 平台名；
@@ -186,46 +186,35 @@ export default function ChannelScopeBox() {
       classNames={{ root: 'lpl-cascade-popover' }}
       styles={{ body: { padding: 0 } as const }}
       content={
-        <div style={{ width: narrow ? 'min(420px, calc(100vw - 48px))' : 640, maxWidth: '100%' }}>
-          {/* 全局搜索（平台 / 渠道 / 卖家 三列同时过滤；OZON 3P 卖家数百家，搜索必备） */}
-          <div style={{ padding: `8px ${space.md}px`, borderBottom: `1px solid ${color.hairline}` }}>
-            <Input
-              size="small"
-              allowClear
-              prefix={<SearchOutlined style={{ color: color.mute, fontSize: 12 }} />}
-              placeholder="搜索平台 / 渠道 / 卖家"
-              aria-label="搜索平台、渠道或卖家"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{ height: 26, fontSize: fontSize.caption }}
-            />
-          </div>
-          <CascadePanel
-            open={open}
-            stepped={narrow}
-            levelLabels={['平台', '渠道', '卖家']}
-            columns={[
-              { items: platformItems },
-              ...(expanded
-                ? [{ items: channelItems, width: 232 }]
-                : []),
-              ...(paneChannel != null && sellerColWidth > 0
-                ? [{ items: sellerItems, width: sellerColWidth }]
-                : []),
-            ]}
-          />
-          <div style={{ padding: `6px ${space.md}px`, borderTop: `1px solid ${color.hairline}`, display: 'flex', alignItems: 'center' }}>
+        <div
+          style={{
+            // 宽度随已展开列数自适应（2026-11-17 Eason：未展开不留空白区域）——
+            // 平台列 208 + 渠道列 208 + 卖家列（内容测定宽）；触发器居筛选条中部、
+            // 浮层向左展开，三列全开时总宽须留出视口余量（maxWidth 钳视口）
+            width: narrow
+              ? 'min(420px, calc(100vw - 48px))'
+              : Math.min(
+                  208 + (expanded ? 208 : 0) + (paneChannel != null && sellerColWidth > 0 ? sellerColWidth : 0),
+                  typeof window !== 'undefined' ? window.innerWidth - 24 : 720,
+                ),
+            transition: 'width 160ms ease',
+          }}
+        >
+          {/* 顶部一行：左「自动取价」胶囊（2026-11-17 Eason：从底部挪左上角）+
+              右全局搜索（平台 / 渠道 / 卖家 三列同时过滤；OZON 3P 卖家数百家，搜索必备） */}
+          <div style={{ padding: `8px ${space.md}px`, borderBottom: `1px solid ${color.hairline}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <Button
               type="link"
-              size={narrow ? 'middle' : 'small'}
+              size="small"
               style={{
                 padding: '0 8px',
-                height: narrow ? 44 : 22,
-                fontSize: narrow ? fontSize.bodySm : fontSize.caption,
+                height: 22,
+                fontSize: fontSize.caption,
                 borderRadius: radius.pill,
                 background: pinnedShop ? 'transparent' : selectSoft,
                 color: pinnedShop ? color.mute : selectSoftInk,
                 fontWeight: pinnedShop ? 400 : 600,
+                flexShrink: 0,
               }}
               aria-label="自动取价"
               title={pinnedShop
@@ -235,7 +224,31 @@ export default function ChannelScopeBox() {
             >
               {pinnedShop ? '未选中' : '自动取价'}
             </Button>
+            <Input
+              size="small"
+              allowClear
+              prefix={<SearchOutlined style={{ color: color.mute, fontSize: 12 }} />}
+              placeholder="搜索平台 / 渠道 / 卖家"
+              aria-label="搜索平台、渠道或卖家"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={{ height: 26, fontSize: fontSize.caption, flex: '1 1 auto', minWidth: 0 }}
+            />
           </div>
+          <CascadePanel
+            open={open}
+            stepped={narrow}
+            levelLabels={['平台', '渠道', '卖家']}
+            columns={[
+              { items: platformItems },
+              ...(expanded
+                ? [{ items: channelItems, width: 208 }]
+                : []),
+              ...(paneChannel != null && sellerColWidth > 0
+                ? [{ items: sellerItems, width: sellerColWidth }]
+                : []),
+            ]}
+          />
         </div>
       }
     >
