@@ -505,10 +505,11 @@ export function computeYAxis(params: {
   //      向上取整会把拖到的上限又顶回原位（拖了没动，真机验收发现）
   const dataBounds = [axisMinU, ...validCuts, axisMaxU];
   const innerPad = interval0 * 0.6;
-  // 外缘垫演进：6% → 上下 9%（同日早轮）→ 上 14% / 下 9%（2026-11-17 Eason 二次反馈
-  // 「上空白区域仍然留的不够」——悬停小卡锚鼠标十字后主要靠上方白带展开不压线）
+  // 外缘垫演进：6% → 上下 9% → 上 14%（同日两次反馈）→ 上 18% / 下 9%
+  // （2026-11-17 Eason 三次反馈「增大图表上方的空白空间，让用户更倾向于在上面显示」
+  // ——卡片恒十字右上、靠上方白带展开不压线；下侧 9% 不变）
   const padLo = yMinOv != null ? 0 : -rawSpanU * 0.09;
-  const padHi = yMaxOv != null ? 0 : -rawSpanU * 0.14;
+  const padHi = yMaxOv != null ? 0 : -rawSpanU * 0.18;
   const segDomains: { min: number; max: number }[] = [];
   for (let i = 0; i < dataBounds.length - 1; i++) {
     const lo = dataBounds[i] + (i === 0 ? padLo : innerPad);
@@ -540,7 +541,7 @@ export function computeYAxis(params: {
   // （单段）的伪跨度 = 全域 ±6% 外缘，与断轴档取更粗者。
   // （步长比较/吸附/滞回全部发生在 USD 空间；本币步长只在出口 tierLocal 换算一次）
   const intervalRaw = niceStep(pseudoSpan0 / TARGET_CELLS);
-  const intervalCont = niceStep((rawSpanU * 1.23) / TARGET_CELLS); // 上 14%+下 9% 外缘垫复现（2026-11-17 同步）
+  const intervalCont = niceStep((rawSpanU * 1.27) / TARGET_CELLS); // 上 18%+下 9% 外缘垫复现（2026-11-17 同步）
   // 冻结自适应（第一百六十八轮）：步长直接沿用冻结值，不再选档、不再滞回
   let interval = params.freeze ? params.freeze.intervalUsd : segDomains.length > 1 ? Math.max(intervalRaw, intervalCont) : intervalRaw;
   let snapped = snapWith(interval);

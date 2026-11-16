@@ -415,6 +415,9 @@ const VOL_AXIS_RIGHT_W = 56;
 /** 第196轮整改4（2026-11-05 复检收敛）：销毛迷你卡高度——只留「销毛率 + 模拟
  *  徽标 + 大数字」单行（毛利/成本小字段随复检删除），高相应收窄 */
 const MARGIN_MINI_H = 30;
+/** 悬停卡固定 chrome 高（卡头「周 ID · 日期」行 + 列头行 + 间距）——卡底贴十字定位用
+ *  （tipContentH 只含数据行高度，2026-11-17 十字右上定位补此项） */
+const TIP_HEAD_CHROME_H = 40;
 /** 量值小卡的翻侧估算宽：只在主卡不存在（该列无价）时用来定侧，渲染宽随内容 */
 const VOL_CARD_EST_W = 130;
 /** 价格主卡外框比 W 多出的宽：content-box 下 width 只管内容区，左右内边距 10+10 与描边
@@ -2961,14 +2964,16 @@ export default function Chart(props: ChartProps) {
                 : { mainLeft: Math.max(geom.plotLeft + 8, x0 - mainW), side: 'left', edgeX: Math.max(geom.plotLeft + 8, x0 - mainW) + mainW };
             const left = group.mainLeft;
             const tipContentH = rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0) + (costVal != null ? 23 : 0) + (baseAbsent ? 21 : 0);
-            // 纵向锚 = 鼠标 hoverY（逐像素，量带内已置 null → 回落贴顶），钳在绘图区内
+            // 2026-11-17 Eason 三拍板：①卡片恒在十字右上（top = hoverY − 卡组总高，
+            // 卡体悬在指针上方空间、不随下延伸压线）②**允许溢出绘图区**（去掉原贴顶/
+            // 贴底钳制——鼠标在图顶时卡片整体越过图顶带显示，「图表卡片是遮盖在全局
+            // 最上方的卡片」zIndex 同步提到极差卡之上）③销毛率开关关闭时主卡不再下移
+            // 留迷你卡空位（原条件只看 margins 数据，关开关仍下移 38px 留白——改看开关）
             const hoverTop = hoverY ?? props.crosshairY ?? null;
-            const topRaw = hoverTop != null
-              ? Math.min(Math.max(hoverTop, geom.plotTop + 2), geom.plotTop + geom.plotHeight - 36 - tipContentH)
-              : Math.min(Math.max(geom.plotTop + 8, 40), geom.plotTop + geom.plotHeight - 36 - tipContentH);
-            // 第196轮整改4：销毛迷你卡在浮层上方 8px——浮层整体下移腾出卡位
-            // （仍钳在绘图区内；绘图区过矮放不下时回落贴顶，接受与浮层轻叠）
-            const top = props.margins != null ? Math.min(topRaw + MARGIN_MINI_H + 8, geom.plotTop + geom.plotHeight - 36 - tipContentH) : topRaw;
+            const marginSlotH = props.margins != null && props.marginMiniOn !== false ? MARGIN_MINI_H + 8 : 0;
+            // 卡头(标题行+列头 ≈40px) 不在 tipContentH（只算数据行）里——卡底要贴十字，
+            // 总高须补 chrome，否则卡体下半盖住鼠标交点
+            const top = hoverTop != null ? hoverTop - tipContentH - TIP_HEAD_CHROME_H - marginSlotH : geom.plotTop + 8;
             // 第196轮整改4（2026-11-05 复检收敛，Eason：只留销毛率）：悬停浮层上方
             // 8px、左右缘对齐同一 left——同一圆角/描边/投影语言；卡内单行 =
             // 「销毛率 + 模拟徽标 + 大数字销毛率」（单台毛利/成本小字段随复检删除，
@@ -2980,7 +2985,7 @@ export default function Chart(props: ChartProps) {
                 style={{
                   position: 'absolute',
                   ...tipGroupAnchor(group),
-                  top: Math.max(2, top - 8 - MARGIN_MINI_H),
+                  top: top - 8 - MARGIN_MINI_H, // 允许越图顶（2026-11-17 Eason：卡片全局最上层）
                   width: 148,
                   height: MARGIN_MINI_H,
                   boxSizing: 'border-box',
@@ -2993,7 +2998,7 @@ export default function Chart(props: ChartProps) {
                   boxShadow: shadow.l2,
                   padding: '0 10px',
                   pointerEvents: 'none',
-                  zIndex: 20,
+                  zIndex: 46,
                 }}
               >
                 <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute, flexShrink: 0 }}>销毛率</span>
@@ -3022,7 +3027,8 @@ export default function Chart(props: ChartProps) {
                     boxShadow: shadow.l2,
                     padding: '6px 10px 7px',
                     pointerEvents: 'none',
-                    zIndex: 20,
+                    zIndex: 46, // 全局最上层（2026-11-17 Eason：卡片允许溢出绘图区，盖过图顶带/极差标注）
+
                   }}
                 >
                   {body}

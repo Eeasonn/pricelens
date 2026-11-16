@@ -65,11 +65,11 @@ describe('computeYAxis 步长滞回：周→季图高稳定', () => {
     expect(s.intervalUsd).toBe(200);
   });
 
-  it('季带 prev(周档) = 沿用 200 不翻档（修复本体）；格数按季范围自然伸缩（2026-11-17 上垫 14% 后两 fixture 跨度差 1 格，滞回保护的是步长不是格数）', () => {
+  it('季带 prev(周档) = 沿用 200 不翻档（修复本体）；格数按季范围自然伸缩（2026-11-17 上垫 18% 后两 fixture 同为 6 格，滞回保护的是步长不是格数）', () => {
     const w = computeYAxis({ series: WEEK_FIXTURES, ...BASE });
     const q = computeYAxis({ series: QUARTER_FIXTURES, ...BASE, prev: w });
     expect(q.intervalUsd).toBe(200);
-    expect(q.cells).toBe(5);
+    expect(q.cells).toBe(6);
   });
 
   it('需求下限只长不缩：grown 分支不低于 cells×TICK_PX', () => {
@@ -77,6 +77,6 @@ describe('computeYAxis 步长滞回：周→季图高稳定', () => {
     // 老实现会把总高收到 240（< availPx 320）；钳底后恒 ≥ availPx
     const s = computeYAxis({ series: QUARTER_FIXTURES, ...BASE, prev: computeYAxis({ series: WEEK_FIXTURES, ...BASE }) });
     expect(s.plotHeight).toBeGreaterThanOrEqual(s.cells * 64);
-    expect(s.plotHeight).toBe(320);
+    expect(s.plotHeight).toBe(384); // 2026-11-17 上垫 18% 后 cells=6
   });
 });
