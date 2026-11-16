@@ -43,6 +43,9 @@ export default defineConfig({
     'import.meta.env.VITE_APP_CHANNEL': JSON.stringify(APP_CHANNEL_ENV),
     __PRICE_WEEKLY_DATA_VERSION__: JSON.stringify(dataVersion('weekly', ['fact_pack_gzip.b64.txt', 'dim_time.json', ...sharedDataFiles])),
     __PRICE_MONTHLY_DATA_VERSION__: JSON.stringify(dataVersion('monthly', ['fact_price_monthly.json', ...sharedDataFiles])),
+    // 构建墙钟时间（2026-11-17）：数据版本哈希只随数据变，代码变了哈希不变——
+    // 配置页显示构建时间用于分辨「两台机器打开的是不是同一份单文件」（Windows 缓存旧 HTML 类问题）
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   build: {
     target: 'es2020',

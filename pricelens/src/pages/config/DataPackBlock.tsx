@@ -114,6 +114,10 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
         </span>
         {'　'}数据包生成时间：{fmtTime(meta.generatedAt)}
         {'　'}导入应用时间：{fmtTime(meta.appliedAt)}
+        {/* 构建时间（2026-11-17）：分辨「两台机器打开的是不是同一份单文件」——
+            数据烘死在 HTML 里，文件版本 = 数据版本；Windows 缓存旧 HTML 时此值
+            会明显偏旧（强刷/换最新文件即对齐） */}
+        {'　'}构建时间：{fmtTime(__BUILD_TIME__)}
       </div>
       <div style={infoLine} className="tnum">
         事实周行 {meta.counts.factWeekly.toLocaleString()} · 月度行 {meta.counts.factMonthly.toLocaleString()} · SKU{' '}
