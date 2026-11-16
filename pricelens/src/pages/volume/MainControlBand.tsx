@@ -20,7 +20,7 @@
 //   item.hidden 虚线形态保留为组件级契约（量价页不再传入 hidden=true）。
 // 2026-11-05（Eason 指令 · 平台口径收口）：DNS 店铺 chip 退役——「不允许每个
 //   产品单独选择平台店铺」，取价平台统一走顶部筛选条的全局平台筛选器
-//   （FilterBar.PlatformSelectBox 写 state.platform）；channel/channelCtl 字段
+//   （FilterBar 平台筛选器写 state.platform）；channel/channelCtl 字段
 //   与 ChannelSelectPopover 浮层随之从本组件删除（价格走势页共用件保留）。
 // 本组件只改布局位置，不改任何取数/筛选数据流。
 // ============================================================

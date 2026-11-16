@@ -285,11 +285,14 @@ export interface SkuGroupQuery {
 
 /** 平台选择：platforms = 勾整平台（其下全部渠道）；shopIds = 勾到渠道（channel_id）；
  *  seller = 渠道内具体卖家店铺（第一百四十一轮）：仅在 shopIds 单渠道时有意义，
- *  缺省/null = 该渠道全部卖家取最低在架价（默认口径） */
+ *  缺省/null = 该渠道全部卖家取最低在架价（默认口径）；types = 平台勾选的店铺
+ *  类型子集（2026-11-17 Eason「平台、类型、店铺」筛选器）：仅过滤平台级命中
+ *  （shopIds 命中直通），缺省/空 = 全部类型 */
 export interface PlatformQuery {
   platforms: string[];
   shopIds: string[];
   seller?: string | null;
+  types?: StoreType[];
 }
 
 /** §7.3 取数契约唯一入口的查询参数 */

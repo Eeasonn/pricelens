@@ -22,10 +22,9 @@ import { configTextOf } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
 import { color, fontSize, motion, radius } from '../../theme/tokens';
-import { getLocalCurrency } from '../../state/fx';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
-import { diffPct } from './helpers';
+import { curCodeOf, diffPct, moneyPlain } from './helpers';
 import { dedupeSpecText } from './chartModel';
 import {
   baseKeyOf,
@@ -45,18 +44,7 @@ import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 
 export type { DetailBucket, TableGroup } from './tableModel';
 
-/** 金额数值（无货币符号；2026-11-17 Eason：符号从单元格退场，币种缩写进行头括号）。
- *  分组口径与 formatLocalMoney 同源（RUB = ru-RU 空格千分位，其余 en-US）。 */
-function moneyPlain(v: number | null | undefined, currency: 'local' | 'usd'): string {
-  if (v == null) return '—';
-  if (currency === 'usd') return v.toLocaleString('en-US');
-  const code = getLocalCurrency();
-  return code === 'RUB' ? v.toLocaleString('ru-RU').replace(/\u00A0/g, ' ') : v.toLocaleString('en-US');
-}
-/** 币种缩写（行头括号用）：usd = USD；local = 当前国家本币代码（fx 注册） */
-function curCodeOf(currency: 'local' | 'usd'): string {
-  return currency === 'usd' ? 'USD' : getLocalCurrency();
-}
+// moneyPlain / curCodeOf 上提到 helpers（2026-11-17：悬停小卡片金额同口径去货币符号）
 /** 周桶 id（202631）→「2026W31」：明细表头第一行与图上轴标签同语言（第一百八十二轮：
  *  图上 2026W19、表内只写 05-06 的口径割裂改为「周号＋日期」双行） */
 function weekIdText(id: string, withYear = true): string {
@@ -73,7 +61,9 @@ const W_PROD = 236;
  *  这份列宽定义（gridCols/frozenW 均由本常量同源派生），收窄后逐列仍对齐 */
 const W_PROD_NARROW = 140;
 const W_CONF = 96;
-const W_TYPE = 76;
+/** 76 → 108（2026-11-17 Eason：行头带币种缩写「折后价（RUB）」后原 76px 预留不够、
+ *  文字伸出列缘——按最长行头「平台成交价（RUB）」（ZA 8 行版）12px 宽度预留） */
+const W_TYPE = 108;
 const W_TIME = 100;
 /** 主分析产品行底色（浅蓝；第一百二十三轮按角色着色——主品行衬浅蓝、对比行白底，
  *  与图例带主品药丸同语言，不再按品牌归属着色） */

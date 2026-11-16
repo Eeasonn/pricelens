@@ -197,19 +197,40 @@ export function defaultPlatformAnchorOf(countryCode: string): string | null {
   return defaultPlatformOf(countryCode);
 }
 
-/** 生效渠道集合：未选 = 配置的默认平台店铺（channel 级）→ 未配置再回默认平台全部渠道；
- *  显式勾选 = 平台/渠道并集（渠道级单选 = shopIds:[一个]，平台级兼容 = platforms:[一个]） */
+/** 生效渠道集合（2026-11-17 Eason「平台默认一个，每一周都默认该平台下价格最低的
+ *  店铺价格」改口径）：未选 = 产品级人工指定渠道 → 国家级人工覆盖（配置页显式
+ *  意图，单渠道严格取价）→ 默认平台全部渠道池（dim_default_channel 预填主店单渠道
+ *  锚退役；每周恒同平台、店铺漂移取池内最低在架价——上一轮 0e40723 的「主店严格
+ *  取价」由本轮进一步放宽为「平台内每周最低价店铺」，平台一致、店铺每周动态）；
+ *  显式勾选 = 平台/渠道并集，types 只过滤平台级命中（shopIds 命中直通；类型子集
+ *  = 1P/3P/独立站） */
 export function effectiveChannelIds(countryCode: string, platform: PlatformQuery | null, modelId?: string): string[] {
   const all = dimChannel.filter((c) => c.country_code === countryCode);
   if (!platform || (platform.platforms.length === 0 && platform.shopIds.length === 0)) {
-    const dc = defaultChannelOf(countryCode, modelId);
-    if (dc) return [dc];
+    // 人工显式配置优先保留单渠道严格取价（产品级覆盖 > 国家级覆盖）
+    if (modelId) {
+      const override = productDefaultShopOverrideOf(countryCode, modelId);
+      if (override && dimChannel.some((c) => c.country_code === countryCode && c.channel_id === override)) return [override];
+    }
+    const globalOverride = defaultShopOverrideOf(countryCode);
+    if (globalOverride && dimChannel.some((c) => c.country_code === countryCode && c.channel_id === globalOverride)) return [globalOverride];
+    // 取价锚 = 国家默认平台（dim_region.default_platform）——不走 defaultPlatformAnchorOf
+    //（那是促销档期锚，经预填主店反推；RU 主店 = DNS 独立站 ≠ 国家默认平台 OZON，
+    // 2026-11-17 实测抓到：「平台默认一个」必须锚用户视角的国家主要电渠）
     const dp = defaultPlatformOf(countryCode);
     return all.filter((c) => c.platform === dp).map((c) => c.channel_id);
   }
+  const types = platform.types ?? [];
   const out: string[] = [];
   for (const c of all) {
-    if (platform.platforms.includes(c.platform) || platform.shopIds.includes(c.channel_id)) out.push(c.channel_id);
+    if (platform.shopIds.includes(c.channel_id)) {
+      out.push(c.channel_id); // 店铺精确命中直通，不受类型过滤
+      continue;
+    }
+    if (platform.platforms.includes(c.platform)) {
+      if (types.length > 0 && !types.includes(c.store_type)) continue;
+      out.push(c.channel_id);
+    }
   }
   return out;
 }

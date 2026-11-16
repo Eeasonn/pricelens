@@ -192,19 +192,19 @@ describe('R3-M2 · FR 真实目录与事实：型号在架 ≠ 默认电渠有�
     expect(card!.skuOptions.every((option) => !option.label.includes('Pura'))).toBe(true);
     // 型号在架：不出现「均无在架型号」误报
     expect(card!.note).not.toContain('均无在架型号');
-    // 2026-11-17 起自动口径 = 默认锚严格取价：FR 默认锚 = FR:amazon:1P 无 WATCH
-    // FIT 5 事实行 → 行空（缺采不回落 Amazon 3P）——透明说明点名默认电渠无价、
-    // 该型号仅在 Amazon 3P 有真实在架价格，未用其他产品冒充
-    expect(card!.rows).toHaveLength(0);
-    expect(card!.note).toContain('WATCH FIT 5');
-    expect(card!.note).toContain('没有我司价格事实');
-    expect(card!.note).toContain('Amazon 3P');
-    expect(card!.note).toContain('未用其他产品冒充');
-    // 回看 scopePatch：空结果回原状态国 RU、保持原粒度、不带 mains（不污染看板）
+    // 2026-11-17 再改口径（Eason「平台内每周最低价店铺」）：自动 = FR 默认平台
+    // Amazon 全部渠道池（1P+3P）——FIT 5 在 Amazon 3P 有真实在架价，池内每周
+    // 最低价如实出行（2026-11-17 上午的「默认锚无事实 → 行空 + 透明说明」语义
+    // 随池化退役；该说明只保留给显式钉渠道的场景，见下一用例）
+    expect(card!.rows.length).toBeGreaterThan(0);
+    expect(card!.rows.every((r) => r.own.modelId === 'own-huawei-watch-fit-5')).toBe(true);
+    expect(card!.rows[0].channelLabel).toBe('Amazon 3P');
+    expect(card!.note).not.toContain('均无在架型号');
+    expect(card!.note).not.toContain('没有我司价格事实');
+    // 回看 scopePatch：有真实结果 → 落 FR + FIT 5（auto 口径保持），不再回 RU
     const patch = advantageScopePatch(state, card!.rows);
-    expect(patch.countryCode).toBe('RU');
+    expect(patch.countryCode).toBe('FR');
     expect(patch.granularity).toBe('week');
-    expect(patch.mains).toBeUndefined();
   });
 
   it('FR 页显式钉 Amazon 1P 问「价格优势」：行空时如实解释（默认电渠无我司价、3P 有真实在架价），不造行不换型号', async () => {
@@ -244,16 +244,17 @@ describe('R3-M2 · FR 真实目录与事实：型号在架 ≠ 默认电渠有�
     const last = chart.series[0].values[chart.series[0].values.length - 1];
     expect(last.value).toBe(1596);
     expect(table.rows[0][1]).toBe('1,596');
-    expect(table.rows[0][3]).toBe('Amazon 3P');
-    // 渠道回退透明说明：默认电渠无价、按有价渠道取数，不冒称默认电渠口径
-    expect(chart.note).toContain('Amazon 3P');
-    expect(chart.note).toContain('默认电渠');
-    expect(chart.note).toContain('没有价格事实');
-    // openPatch 同口径落地：FR + Mate X6 + 逐线钉有价渠道
+    // 2026-11-17 池化后：自动 = Amazon 平台池（1P+3P 每周最低价，恰好恒由 3P 提供
+    // 1596），渠道读数 = 平台名（Amazon）——「平台一致、店铺每周动态」的口径表达
+    expect(table.rows[0][3]).toBe('Amazon');
+    // 透明渠道回退说明不再出现：默认口径（平台池）本身有价，无需回退
+    expect(chart.note).not.toContain('默认电渠');
+    expect(chart.note).not.toContain('没有价格事实');
+    // openPatch 同口径落地：FR + Mate X6 + auto 口径直落（platform null，不再逐线钉 3P）
     const open = (chart.actions ?? []).find((action) => action.kind === 'open');
     expect(open?.filterPatch?.countryCode).toBe('FR');
     expect(open?.filterPatch?.mains?.[0]?.main?.modelId).toBe('own-huawei-mate-x6');
-    expect(open?.filterPatch?.mains?.[0]?.main?.platform?.shopIds).toEqual(['FR:amazon:3P']);
+    expect(open?.filterPatch?.platform ?? null).toBeNull();
   });
 });
 

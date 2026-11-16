@@ -872,7 +872,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     // 2026-11-14（Eason「平台还是能选到店铺」）：稳定版店铺级恢复——
     // platformLevelForChannel 退役为透传，店铺级写 plat+shop 双键、seller 随行；
     // 平台级/自动口径仍只写 plat=（价格/量价两页同键，与读侧成对）
-    const { plat, shop, seller } = platformUrlParamsOf(platformLevelForChannel(state.platform));
+    const { plat, shop, seller, ctype } = platformUrlParamsOf(platformLevelForChannel(state.platform));
     // 第一百三十八轮：时间范围/价格显示/汇总口径入链（rs/re/pt/agg）——分享链接
     // 带全取数上下文。2026-11-13 时间筛选单值化：范围恒为「当前生效窗口」（默认
     // 近段或手动固定），恒写 rs/re（旧自适应态不写键的口径随自动时间退役）
@@ -892,6 +892,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       plat,
       shop,
       seller,
+      ctype,
       rs: state.rangeStart || null,
       re: state.rangeEnd || null,
       pt: ptCode,

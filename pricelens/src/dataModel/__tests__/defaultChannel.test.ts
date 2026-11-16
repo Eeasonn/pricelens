@@ -43,18 +43,28 @@ describe('预填完整性（dim_default_channel.json 全量覆盖启用国）', 
     expect(prefillDefaultChannelOf('_comment')).toBeNull();
   });
 
-  it('预填全量生效：无覆盖时每国默认口径 = 单渠道（null 兜底分支不触发）', () => {
+  it('预填全量生效：无覆盖时每国默认口径 = 默认平台全部渠道池（2026-11-17 Eason 改口径：平台内每周最低价店铺；池含预填主店）', () => {
     for (const r of enabledRegions) {
       const cc = r.country_code;
-      expect(effectiveChannelIds(cc, null), cc).toEqual([prefillDefaultChannelOf(cc)]);
+      const ids = effectiveChannelIds(cc, null);
+      const expected = dimChannel
+        .filter((c) => c.country_code === cc && c.platform === r.default_platform)
+        .map((c) => c.channel_id);
+      expect(ids, cc).toEqual(expected);
+      expect(ids.length, `${cc} 渠道池非空`).toBeGreaterThan(0);
+      expect(ids, `${cc} 池应含预填主店`).toContain(prefillDefaultChannelOf(cc));
     }
   });
 });
 
 describe('defaultChannelOf 回退链：覆盖 → 预填 → null', () => {
-  it('无覆盖 = 预填（RU → DNS 独立站，verify 冒烟同锚）', () => {
+  it('无覆盖 = 预填（RU → DNS 独立站，verify 冒烟同锚）；取价渠道池 = 国家默认平台池（2026-11-17 改口径：RU 默认平台 = DNS，池内每周最低价店铺）', () => {
     expect(defaultChannelOf('RU')).toBe('RU:dns:独立站');
-    expect(effectiveChannelIds('RU', null)).toEqual(['RU:dns:独立站']);
+    const dp = defaultPlatformOf('RU');
+    expect(dp).toBe('DNS');
+    expect(effectiveChannelIds('RU', null)).toEqual(
+      dimChannel.filter((c) => c.country_code === 'RU' && c.platform === dp).map((c) => c.channel_id),
+    );
   });
 
   it('人工覆盖优先于预填：覆盖 RU → OZON 后单渠道口径随之切换', () => {

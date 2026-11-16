@@ -92,7 +92,7 @@
 // ②「店铺同步」按钮退役（组视图明细卡 + 会话态 volume.storeSync / 快照还原
 //   链路整体删除；platformSync.ts 纯函数由价格走势页继续使用）；
 // ③面板取价口径改读全局平台筛选器——顶部筛选条「产品」后的平台 Select
-//   （FilterBar.PlatformSelectBox）写 state.platform，本页 panelSpecs 全部
+//   （FilterBar.ChannelScopeBox，2026-11-17 三级级联）写 state.platform，本页 panelSpecs 全部
 //   面板按它取数（选平台 = 该平台全部渠道、平台内每周最低价店铺；默认 =
 //   默认店铺/默认平台自动口径）。每产品选择项上的 platform 覆写字段不再被
 //   本页消费（价格走势页图例渠道 chip 语义不变）。

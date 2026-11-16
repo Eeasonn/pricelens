@@ -428,9 +428,9 @@ describe('t428u R7-M1 · 稳定版 URL：多平台不取一、店铺级恢复后
 
   it('platformUrlParamsOf：多平台全量序列化；店铺级写 plat+shop（迭代版路径不变）', () => {
     expect(platformUrlParamsOf({ platforms: ['DNS', 'OZON'], shopIds: [], seller: null }).plat).toBe('DNS,OZON');
-    expect(platformUrlParamsOf(OZON_PLATFORM)).toEqual({ plat: 'OZON', shop: null, seller: null });
-    expect(platformUrlParamsOf(OZON_3P_SHOP)).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null });
-    expect(platformUrlParamsOf(null)).toEqual({ plat: null, shop: null, seller: null });
+    expect(platformUrlParamsOf(OZON_PLATFORM)).toEqual({ plat: 'OZON', shop: null, seller: null, ctype: null });
+    expect(platformUrlParamsOf(OZON_3P_SHOP)).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null, ctype: null });
+    expect(platformUrlParamsOf(null)).toEqual({ plat: null, shop: null, seller: null, ctype: null });
   });
 
   it('支持 URL 多平台 → Provider 落地 → 再序列化往返稳定', async () => {

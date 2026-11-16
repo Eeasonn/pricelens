@@ -14,6 +14,7 @@
 // ============================================================
 import { dimChannel, dimProduct } from '../data';
 import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
+import type { StoreType } from '../dataModel/types';
 import type { Page } from './PageContext';
 import { hiddenInStable } from '../appChannel';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
@@ -59,16 +60,28 @@ function platformOfShopId(shopId: string): string {
 export function normalizePlatformSelection(platform: PlatformSelection | null): PlatformSelection | null {
   if (!platform) return null;
   if (platform.shopIds.length > 0) {
-    // 卖家细化仅在单渠道时有意义；空串按未选处理（第一百四十一轮）
+    // 卖家细化仅在单渠道时有意义；空串按未选处理（第一百四十一轮）。
+    // types 只过滤平台级命中，店铺级归一时清掉（2026-11-17）
     const seller = platform.shopIds.length === 1 && platform.seller ? platform.seller : null;
     if (platform.platforms.length > 0) {
       const shopPlatform = platformOfShopId(platform.shopIds[0]);
       const extra = platform.platforms.filter((p) => p !== shopPlatform);
-      if (extra.length > 0) return { platforms: extra, shopIds: [...platform.shopIds], seller };
+      if (extra.length > 0)
+        return {
+          platforms: extra,
+          shopIds: [...platform.shopIds],
+          seller,
+          ...(platform.types?.length ? { types: platform.types } : {}),
+        };
     }
     return { platforms: [], shopIds: [platform.shopIds[0]], seller };
   }
-  if (platform.platforms.length > 0) return { platforms: [platform.platforms[0]], shopIds: [] };
+  if (platform.platforms.length > 0)
+    return {
+      platforms: [platform.platforms[0]],
+      shopIds: [],
+      ...(platform.types?.length ? { types: platform.types } : {}),
+    };
   return null;
 }
 
@@ -80,15 +93,17 @@ export function normalizePlatformSelection(platform: PlatformSelection | null): 
  *  删键，连带清掉旧链接残留）。 */
 export function platformUrlParamsOf(
   platform: PlatformSelection | null,
-): { plat: string | null; shop: string | null; seller: string | null } {
+): { plat: string | null; shop: string | null; seller: string | null; ctype: string | null } {
   const shopId = platform?.shopIds[0];
+  // ctype = 平台勾选的类型子集（2026-11-17「平台、类型、店铺」筛选器）；店铺级直通不写
+  const ctype = shopId ? null : platform?.types?.length ? platform.types.join(',') : null;
   if (shopId) {
     const shopPlatform = platformOfShopId(shopId);
     const mixed = [...new Set([...(platform?.platforms ?? []), shopPlatform])].filter(Boolean);
-    return { plat: mixed.join(',') || null, shop: shopId, seller: shopId && platform?.seller ? platform.seller : null };
+    return { plat: mixed.join(',') || null, shop: shopId, seller: shopId && platform?.seller ? platform.seller : null, ctype };
   }
   const platforms = platform?.platforms ?? [];
-  return { plat: platforms.length ? platforms.join(',') : null, shop: null, seller: null };
+  return { plat: platforms.length ? platforms.join(',') : null, shop: null, seller: null, ctype };
 }
 
 /**
@@ -145,20 +160,24 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     // 2026-11-14（Eason「平台还是能选到店铺」）：稳定版恢复读 shop=/seller=
     //（2026-11-05 复检整改3 的「stable 静默忽略店铺级」随店铺级恢复一并退役），
     // 两通道同一 normalizePlatformSelection 归一路径；是否钉到具体店铺由
-    // PlatformSelectBox 的店铺级选项表达，自动口径 = 平台内每周折扣率最大店铺。
+    // ChannelScopeBox 的店铺行表达（2026-11-17 三级级联替换 PlatformSelectBox），
+    // 自动口径 = 默认平台池内每周最低价店铺。
     const platforms = listParam(q, 'plat');
     const shopIds = listParam(q, 'shop');
+    // ctype = 平台勾选的类型子集（2026-11-17「平台、类型、店铺」筛选器）；
+    // 旧链接无此键 = 全部类型（缺省），与既有链接逐字节兼容
+    const ctypes = listParam(q, 'ctype').filter((t): t is StoreType => t === '1P' || t === '3P' || t === '独立站');
     if (platforms.length || shopIds.length) {
       // 卖家细化仅店铺级链接可带（shop= 单渠道）；无 shop 时静默忽略
       const seller = shopIds.length === 1 ? q.get('seller') || null : null;
       if (shopIds.length) {
         // 店铺级（含混合并集）：normalizePlatformSelection 归一——旧链接
         // 「plat= 店铺归属平台」不放大成整平台，显式异平台混合原样保留
-        out.filters.platform = normalizePlatformSelection({ platforms, shopIds, seller });
+        out.filters.platform = normalizePlatformSelection({ platforms, shopIds, seller, types: ctypes });
       } else {
         // R7-M1：平台级列表原样读入（合法剔除交给 applyScopeDefaults），不取第一个；
         // 无 seller（平台级不吃 seller 键，与旧归一产出的形一致，锁测逐键可比）
-        out.filters.platform = { platforms, shopIds: [] };
+        out.filters.platform = { platforms, shopIds: [], types: ctypes.length ? ctypes : undefined };
       }
     }
     // 第一百一十七轮：main = 主分析配置 key 列表；旧链接的 own 参数同语义读入

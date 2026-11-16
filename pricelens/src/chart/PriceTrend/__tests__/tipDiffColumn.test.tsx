@@ -129,20 +129,21 @@ describe('第196轮整改1：悬停小卡价差列（与明细表 diffPct 同源
 
 // ============================================================
 // 2026-11-10 UI 审计修：悬停卡三处收敛——
-// ① RRP/折后价钱数读数改 formatPrice（与图下明细表同口径，USD = $990）；
-// ② 周粒度卡头「周 ID · 日期」双标识；③ 基准（我司）当周无数据时文字说明，
-// 不再只留一列空破折号。
+// ① RRP/折后价钱数读数（2026-11-17 Eason：去货币符号 → moneyPlain 纯数千分位，
+//   与明细表同口径；币种缩写进表头括号）；
+// ② 周粒度卡头「周 ID · 日期」双标识（2026-11-17：两段字体/颜色/字号统一）；
+// ③ 基准（我司）当周无数据时文字说明，不再只留一列空破折号。
 // ============================================================
-describe('2026-11-10 审计修：悬停卡（formatPrice 读数 / 周 ID 双标识 / 基准缺席说明）', () => {
-  it('RRP/折后价列 = formatPrice 读数（USD $ 前缀千分位，与明细表一致）', async () => {
+describe('悬停卡（金额纯数读数 / 周 ID 双标识 / 基准缺席说明）', () => {
+  it('RRP/折后价列 = moneyPlain 纯数读数（千分位无货币符号；2026-11-17 Eason）', async () => {
     const { container } = render(<Chart {...baseProps} tipDiffBaseKey={OWN} /> as ReactElement);
     await waitForGeom(container);
     hoverColumn(container, 1);
-    expect(screen.getByText('$990')).toBeTruthy(); // 主品折后价 990
-    expect(screen.getByText('$1,090')).toBeTruthy(); // 主品 RRP = price + 100
-    expect(screen.getByText('$1,080')).toBeTruthy(); // 对比行折后价
-    // 旧裸数格式不再出现（钱数一律带币种前缀）
-    expect(screen.queryByText('990')).toBeNull();
+    expect(screen.getByText('990')).toBeTruthy(); // 主品折后价 990
+    expect(screen.getByText('1,090')).toBeTruthy(); // 主品 RRP = price + 100
+    expect(screen.getByText('1,080')).toBeTruthy(); // 对比行折后价
+    // 旧带符号格式不再出现（小卡片金额一律纯数，币种缩写在表头括号）
+    expect(screen.queryByText('$990')).toBeNull();
   });
 
   it('周粒度卡头 = 「周 ID · 日期」双标识（2026W21 · 05-06）', async () => {

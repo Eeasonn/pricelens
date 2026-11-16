@@ -269,8 +269,8 @@ describe('稳定版 URL：店铺级恢复（2026-11-14 Eason「平台还是能�
 
   it('写侧：店铺级写 plat+shop 双键（seller 随行）；平台级只产 plat=', async () => {
     const { platformUrlParamsOf, platformLevelForChannel } = await import('../../../state/urlSync');
-    expect(platformUrlParamsOf(platformLevelForChannel(OZON_SHOP))).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null });
-    expect(platformUrlParamsOf(platformLevelForChannel({ ...OZON_SHOP, seller: 'X' }))).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: 'X' });
-    expect(platformUrlParamsOf(platformLevelForChannel(DNS_PLATFORM))).toEqual({ plat: 'DNS', shop: null, seller: null });
+    expect(platformUrlParamsOf(platformLevelForChannel(OZON_SHOP))).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null, ctype: null });
+    expect(platformUrlParamsOf(platformLevelForChannel({ ...OZON_SHOP, seller: 'X' }))).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: 'X', ctype: null });
+    expect(platformUrlParamsOf(platformLevelForChannel(DNS_PLATFORM))).toEqual({ plat: 'DNS', shop: null, seller: null, ctype: null });
   });
 });

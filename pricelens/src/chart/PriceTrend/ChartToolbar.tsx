@@ -115,13 +115,18 @@ export interface ChartToolbarProps {
   /** 异常价格守卫状态行（2026-11-01 晚反馈：收进 ⋯ 菜单）——调用方传入
    *  AnomalyQualityChip（menuRow 形态），渲染在 ⋯ 弹层底部（hairline 分隔） */
   anomalySlot?: ReactNode;
-  // ---- 第196轮整改5（量层，Eason）：「量」开关 = 大促档期组框左侧（同组框首位），
-  //      默认关、视觉同组框 Checkbox 语言；开启后同组追加 柱|面积 Segmented。
+  // ---- 第196轮整改5（量层，Eason）：「量」开关 = 组框首位，默认关、视觉同组框
+  //      Checkbox 语言。2026-11-17（Eason）：大促档期/促销权益两开关收进 ⋯ 菜单，
+  //      组框只剩 量 + 销毛率；量层形态「柱|面积」切换已退役（恒柱）。
   //      仅价格走势页（index 层 actions 行）传入，其余调用方零变化 ----
   /** 量层开关（缺省不传 = 不渲染量控件） */
   volumeOn?: boolean;
   /** 量层开关提交 */
   onVolumeOn?: (v: boolean) => void;
+  /** 销毛率小卡开关（2026-11-17 Eason）：悬停浮层上方「销毛率」迷你卡显隐；缺省不传 = 不渲染控件 */
+  marginOn?: boolean;
+  /** 销毛率开关提交 */
+  onMarginOn?: (v: boolean) => void;
   /** 量层形态（柱|面积；开启后才出现） */
   volumeMode?: 'bar' | 'area';
   /** 量层形态提交 */
@@ -253,10 +258,12 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     props.onTipMode != null ||
     props.onLabelMode != null ||
     props.onPointPanelToggle != null;
-  const showMore = hasDisplay || showMarks || props.presentationSlot != null;
+  // 大促档期/促销权益收进 ⋯（2026-11-17 Eason）：showPromo = ⋯ 菜单里出现这两枚开关
+  const showMore = hasDisplay || showMarks || props.presentationSlot != null || showPromo;
   // ⋯ 按钮title 随实际收进的项生成（预测页等复用方只收部分项时不再罗列无关词）
   const moreItems = [
     props.presentationSlot != null ? '呈现' : null,
+    showPromo ? '大促档期' : null,
     props.onPriceTypeToggle != null ? '折后价' : null,
     props.onTipMode != null ? '页签显示' : null,
     props.onLabelMode != null ? (props.labelModeLabel ?? '价格显示') : null,
@@ -269,7 +276,8 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     (props.onTipMode != null && props.tipMode === 'discount') ||
     (props.onLabelMode != null && props.labelMode === 'detail') ||
     props.pointPanelOpen === true ||
-    props.changeThreshold != null;
+    props.changeThreshold != null ||
+    showPromo && (props.promoBandsOn || props.offersOn);
   const gearDirty =
     (props.compactLeft === true && props.yLimit != null && (props.yLimit.min != null || props.yLimit.max != null)) ||
     (showScaleCtl && props.sliderScale != null && Math.abs(props.sliderScale - 1) > 0.001) ||
@@ -439,11 +447,11 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           {props.legend}
         </div>
       )}
-      {/* 功能键同一排：量（第196轮整改5）+ 大促档期 + 促销权益，然后 ⋯。折后价/页签/
-          价格显示/时点摘要在 ⋯ 内，控件外形与原先露在外面时一致。量开关在大促档期
-          左侧（Eason 指定位置），同组框语言：默认关、开启浅蓝勾选；开启后同组追加
-          量层形态恒柱（切换已退役 2026-11-17）。 */}
-      {showRight && showPromo && (
+      {/* 功能键同一排：量 + 销毛率（2026-11-17 Eason：大促档期/促销权益收进 ⋯ 菜单，
+          组框只剩这两个图层开关），然后 ⋯。折后价/页签/价格显示/时点摘要/大促档期/
+          促销权益都在 ⋯ 内，控件外形与原先露在外面时一致。同组框语言：默认关、
+          开启浅蓝勾选。 */}
+      {showRight && (props.onVolumeOn != null || props.onMarginOn != null) && (
         <div
           style={{
             display: 'flex',
@@ -459,25 +467,21 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           }}
         >
           {props.onVolumeOn != null && (
-            <>
-              <Checkbox checked={props.volumeOn ?? false} onChange={(e) => props.onVolumeOn!(e.target.checked)}>
-                <span style={{ fontSize: 12 }}>量</span>
-              </Checkbox>
-              {/* 量层形态「柱|面积」切换退役（2026-11-17 Eason）：恒柱 */}
-            </>
+            <Checkbox checked={props.volumeOn ?? false} onChange={(e) => props.onVolumeOn!(e.target.checked)}>
+              <span style={{ fontSize: 12 }}>量</span>
+            </Checkbox>
           )}
-          <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
-            <span style={{ fontSize: 12 }}>大促档期</span>
-          </Checkbox>
-          <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
-            <span style={{ fontSize: 12 }}>促销权益</span>
-          </Checkbox>
+          {props.onMarginOn != null && (
+            <Checkbox checked={props.marginOn ?? false} onChange={(e) => props.onMarginOn!(e.target.checked)}>
+              <span style={{ fontSize: 12 }}>销毛率</span>
+            </Checkbox>
+          )}
         </div>
       )}
       {showRight && showMore && (
         // 无中区圆框组的页面（量价/部分内嵌图）⋯ 靠右收尾，与看板第一行同构；
-        // 有圆框组时它已带 marginLeft auto，⋯ 自然跟在其后
-        <span style={{ marginLeft: showPromo ? undefined : 'auto', display: 'inline-flex', flexShrink: 0 }}>
+        // 有量/销毛率组框时它已带 marginLeft auto，⋯ 自然跟在其后
+        <span style={{ marginLeft: props.onVolumeOn != null || props.onMarginOn != null ? undefined : 'auto', display: 'inline-flex', flexShrink: 0 }}>
         <Popover
           trigger="click"
           open={moreOpen}
@@ -491,6 +495,18 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: color.mute, fontSize: 12 }}>
                     呈现{' '}
                     {props.presentationSlot}
+                  </span>
+                )}
+                {/* 大促档期 / 促销权益（2026-11-17 Eason：从工具行组框收进 ⋯）——
+                    控件外形与原先组框 Checkbox 一致 */}
+                {showPromo && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+                    <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
+                      <span style={{ fontSize: 12 }}>大促档期</span>
+                    </Checkbox>
+                    <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
+                      <span style={{ fontSize: 12 }}>促销权益</span>
+                    </Checkbox>
                   </span>
                 )}
                 {props.onPriceTypeToggle && props.priceTypes != null && (

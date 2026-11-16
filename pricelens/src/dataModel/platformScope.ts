@@ -52,12 +52,13 @@ export function platformQueryEquals(
   a: PlatformQuery | null | undefined,
   b: PlatformQuery | null | undefined,
 ): boolean {
-  const norm = (p: PlatformQuery | null | undefined): { platforms: string[]; shopIds: string[]; seller: string | null } | null => {
+  const norm = (p: PlatformQuery | null | undefined): { platforms: string[]; shopIds: string[]; seller: string | null; types: string[] } | null => {
     if (!p) return null;
     return {
       platforms: [...new Set(p.platforms)].sort(),
       shopIds: [...new Set(p.shopIds)].sort(),
       seller: p.seller ?? null,
+      types: [...new Set(p.types ?? [])].sort(),
     };
   };
   const x = norm(a);
@@ -65,7 +66,8 @@ export function platformQueryEquals(
   if (x === null || y === null) return x === y;
   return x.platforms.length === y.platforms.length && x.platforms.every((v, i) => v === y.platforms[i])
     && x.shopIds.length === y.shopIds.length && x.shopIds.every((v, i) => v === y.shopIds[i])
-    && x.seller === y.seller;
+    && x.seller === y.seller && x.types.length === y.types.length
+    && x.types.every((v, i) => v === y.types[i]);
 }
 
 /** t428u R7-M1 · Provider 落地归一时的口径说明（provenance）取用：仅当
@@ -94,7 +96,7 @@ export function lawfulPlatformScope(countryCode: string, platform: PlatformQuery
   const ccShopIds = new Set(channels.map((channel) => channel.channel_id));
   if (!platform || (platform.platforms.length === 0 && platform.shopIds.length === 0)) {
     // 空选择上残留的孤儿 seller（无渠道可挂）沿用旧口径静默剥掉
-    const normalized = platform?.seller ? { platforms: [], shopIds: [], seller: null } : platform;
+    const normalized = platform?.seller ? { platforms: [], shopIds: [], seller: null, types: platform.types } : platform;
     return { platform: normalized, droppedPlatforms: [], droppedShopIds: [], changed: normalized !== platform, note: null };
   }
   const droppedPlatforms = platform.platforms.filter((name) => !ccPlatforms.has(name));
@@ -109,7 +111,7 @@ export function lawfulPlatformScope(countryCode: string, platform: PlatformQuery
       : null;
     const changed = seller !== (platform.seller ?? null);
     return {
-      platform: changed ? { platforms: platform.platforms, shopIds: platform.shopIds, seller } : platform,
+      platform: changed ? { platforms: platform.platforms, shopIds: platform.shopIds, seller, types: platform.types } : platform,
       droppedPlatforms: [],
       droppedShopIds: [],
       changed,
@@ -135,7 +137,7 @@ export function lawfulPlatformScope(countryCode: string, platform: PlatformQuery
     : null;
   const keptLabel = [...keptPlatforms, ...keptShopIds.map(displayNameOfShop)].join('、');
   return {
-    platform: { platforms: keptPlatforms, shopIds: keptShopIds, seller },
+    platform: { platforms: keptPlatforms, shopIds: keptShopIds, seller, types: platform.types },
     droppedPlatforms,
     droppedShopIds,
     changed: true,

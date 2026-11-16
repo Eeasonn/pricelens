@@ -60,9 +60,9 @@ describe('computeYAxis 步长滞回：周→季图高稳定', () => {
     expect(s.plotHeight).toBe(5 * 64);
   });
 
-  it('季不带 prev 会翻细档（记录旧行为——为什么必须滞回）', () => {
+  it('季不带 prev = 当前档 200（2026-11-17 外缘垫 6%→9% 后 pseudoSpan 增宽、档位上移；历史上曾翻细档 100——滞回动机的历史记录）', () => {
     const s = computeYAxis({ series: QUARTER_FIXTURES, ...BASE });
-    expect(s.intervalUsd).toBe(100);
+    expect(s.intervalUsd).toBe(200);
   });
 
   it('季带 prev(周档) = 沿用 200、5 格、图高与周一致（修复本体）', () => {

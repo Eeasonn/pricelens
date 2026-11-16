@@ -324,6 +324,9 @@ export default function PriceTrend(props: {
   // 量层（第196轮整改5，Eason 领导要求）：默认关；开启 = 价格绘图区下方叠销量带
   // （柱|面积两模式，柱视觉与量价页 VolumeBars 同源）。会话态跨页保留（与 Y 轴设置同约定）
   const [volumeOn, setVolumeOn] = usePageViewState<boolean>('dashboard.volumeOn', () => false);
+  // 销毛率小卡开关（2026-11-17 Eason「量旁边加一个销毛率的按钮」）：控制悬停浮层
+  // 上方「销毛率」迷你卡显隐；默认开 = 保持既有可见行为。会话态与量开关同约定
+  const [marginOn, setMarginOn] = usePageViewState<boolean>('dashboard.marginOn', () => true);
   const [volumeMode, setVolumeMode] = usePageViewState<'bar' | 'area'>('dashboard.volumeMode', () => 'bar');
   // 第一百一十四轮：分离模式横向虚线（跨面板共享悬停纵向位置；与 splitHoverIdx 同机制）
   const [splitCrossY, setSplitCrossY] = useState<number | null>(null);
@@ -1737,8 +1740,10 @@ export default function PriceTrend(props: {
               onLabelMode={setLabelMode}
               pointPanelOpen={pointPanelOpen}
               onPointPanelToggle={() => setPointPanelOpen((v) => !v)}
-              volumeOn={volumeOn} // 第196轮整改5（量层）：大促档期左侧开关 + 柱|面积
+              volumeOn={volumeOn} // 第196轮整改5（量层）；2026-11-17 组框 = 量+销毛率
               onVolumeOn={setVolumeOn}
+              marginOn={marginOn} // 2026-11-17 Eason：销毛率小卡开关（量旁）
+              onMarginOn={setMarginOn}
               volumeMode={volumeMode}
               onVolumeMode={setVolumeMode}
               promoBandsOn={promoBandsOn}
@@ -2042,6 +2047,7 @@ export default function PriceTrend(props: {
                         paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行
                         tipDiffBaseKey={panelExtra[p.key]?.diffBaseKey ?? null} // 第196轮整改1：价差列基准 = 本卡主品
                         margins={panelExtra[p.key]?.margins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）
+                        marginMiniOn={marginOn} // 2026-11-17：销毛率小卡开关（与合并图同开关）
                         volumeOn={volumeOn} // 第196轮整改5：量层（面板各自主品销量）
                         volumeMode={volumeMode}
                         volumeColor={panelExtra[p.key]?.volumeColor}
@@ -2129,6 +2135,7 @@ export default function PriceTrend(props: {
             axisTickTexts={yAxisTickTexts} // 第196轮整改2：仅刻度场景轴列宽随内容自适应
             tipDiffBaseKey={ownMainKey} // 第196轮整改1：价差列基准 = 第一组主品
             margins={mergedMargins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）
+            marginMiniOn={marginOn} // 2026-11-17 Eason：销毛率小卡开关（量旁按钮控制）
             volumeOn={volumeOn} // 第196轮整改5：量层（柱|面积 + 右轴）
             volumeMode={volumeMode}
             volumeColor={mergedVolumeColor}

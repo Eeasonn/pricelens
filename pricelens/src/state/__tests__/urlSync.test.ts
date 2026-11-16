@@ -142,11 +142,13 @@ describe('seller-level platform selection', () => {
       plat: 'OZON',
       shop: 'RU:ozon:3P',
       seller: 'Epicenter',
+      ctype: null,
     });
     expect(platformUrlParamsOf({ platforms: [], shopIds: ['RU:ozon:3P'] })).toEqual({
       plat: 'OZON',
       shop: 'RU:ozon:3P',
       seller: null,
+      ctype: null,
     });
     expect(platformUrlParamsOf({ platforms: ['DNS'], shopIds: [] }).seller).toBeNull();
   });
@@ -162,14 +164,18 @@ describe('seller-level platform selection', () => {
 describe('platform/shop url params write', () => {
   it('platformUrlParamsOf：店铺级写 plat+shop（平台由维表反查），平台级只写 plat，未选两者皆空', () => {
     // 店铺级：plat 从 dimChannel 反查（RU:ozon:1P → OZON）
-    expect(platformUrlParamsOf({ platforms: [], shopIds: ['RU:ozon:1P'] })).toEqual({ plat: 'OZON', shop: 'RU:ozon:1P', seller: null });
-    // 仅平台级（旧兼容）：只写 plat=
-    expect(platformUrlParamsOf({ platforms: ['DNS'], shopIds: [] })).toEqual({ plat: 'DNS', shop: null, seller: null });
-    // 未选：两者皆 null（写侧删键）
-    expect(platformUrlParamsOf(null)).toEqual({ plat: null, shop: null, seller: null });
-    expect(platformUrlParamsOf({ platforms: [], shopIds: [] })).toEqual({ plat: null, shop: null, seller: null });
+    expect(platformUrlParamsOf({ platforms: [], shopIds: ['RU:ozon:1P'] })).toEqual({ plat: 'OZON', shop: 'RU:ozon:1P', seller: null, ctype: null });
+    // 仅平台级（旧兼容）：只写 plat=（2026-11-17：ctype= 类型子集新键，未选恒 null 删键）
+    expect(platformUrlParamsOf({ platforms: ['DNS'], shopIds: [] })).toEqual({ plat: 'DNS', shop: null, seller: null, ctype: null });
+    // 未选：全键 null（写侧删键）
+    expect(platformUrlParamsOf(null)).toEqual({ plat: null, shop: null, seller: null, ctype: null });
+    expect(platformUrlParamsOf({ platforms: [], shopIds: [] })).toEqual({ plat: null, shop: null, seller: null, ctype: null });
     // 维表查不到的渠道 id：按三段式 id 的平台段兜底反查
-    expect(platformUrlParamsOf({ platforms: [], shopIds: ['XX:ghost:1P'] })).toEqual({ plat: 'ghost', shop: 'XX:ghost:1P', seller: null });
+    expect(platformUrlParamsOf({ platforms: [], shopIds: ['XX:ghost:1P'] })).toEqual({ plat: 'ghost', shop: 'XX:ghost:1P', seller: null, ctype: null });
+    // 平台级 + 类型子集（2026-11-17「平台、类型、店铺」筛选器）：ctype= 逗号序列化
+    expect(platformUrlParamsOf({ platforms: ['OZON'], shopIds: [], types: ['3P', '独立站'] })).toEqual({
+      plat: 'OZON', shop: null, seller: null, ctype: '3P,独立站',
+    });
   });
 });
 

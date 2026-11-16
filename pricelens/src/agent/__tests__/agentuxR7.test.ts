@@ -404,14 +404,14 @@ describe('六审 M3 · FR 显式全局口径不被自动回退越权', () => {
     }
   });
 
-  it('自动口径对照（R3 语义保真）：同页 platform=null 问「FR Mate X6 12+512GB 价格趋势」→ 透明回退 1596 · Amazon 3P', async () => {
+  it('自动口径对照：同页 platform=null 问「FR Mate X6 12+512GB 价格趋势」→ 1596 · Amazon（2026-11-17 池化：自动 = Amazon 平台池每周最低价，3P 恰为提供者；透明渠道回退说明退役）', async () => {
     const { chart, table } = await trendOf(frMateBoulangerState(null), 'FR Mate X6 12+512GB 价格趋势');
     expect(chart.series).toHaveLength(1);
     const last = chart.series[0].values[chart.series[0].values.length - 1];
     expect(last.value).toBe(1596);
-    expect(table.rows[0][3]).toBe('Amazon 3P');
-    expect(chart.note).toContain('默认电渠');
-    expect(chart.note).toContain('没有价格事实');
+    expect(table.rows[0][3]).toBe('Amazon');
+    expect(chart.note).not.toContain('默认电渠');
+    expect(chart.note).not.toContain('没有价格事实');
   });
 
   it('显式 Amazon 1P 同为约束：如实无价并点名口径（不回退 3P）', async () => {

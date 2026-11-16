@@ -15,8 +15,23 @@
 // ============================================================
 import { dimTime, factPriceMonthly } from '../../data';
 import type { CurrencyMode, Granularity, Series, SeriesPoint } from '../../dataModel/types';
-import { getFxRate } from '../../state/fx';
+import { getFxRate, getLocalCurrency } from '../../state/fx';
 import { getCurrentCountry } from '../../state/currentScope';
+
+// ---------------- 金额读数（2026-11-17 Eason：图表小卡片去货币符号） ----------------
+
+/** 金额数值（无货币符号；分组口径与明细表同源：RUB = ru-RU 空格千分位，其余 en-US）。
+ *  原实现住在 TrendTables（明细表行头括号轮），2026-11-17 悬停小卡片同口径后上提共享。 */
+export function moneyPlain(v: number | null | undefined, currency: 'local' | 'usd'): string {
+  if (v == null) return '—';
+  if (currency === 'usd') return v.toLocaleString('en-US');
+  const code = getLocalCurrency();
+  return code === 'RUB' ? v.toLocaleString('ru-RU').replace(/\u00A0/g, ' ') : v.toLocaleString('en-US');
+}
+/** 币种缩写（行头括号用）：usd = USD；local = 当前国家本币代码（fx 注册） */
+export function curCodeOf(currency: 'local' | 'usd'): string {
+  return currency === 'usd' ? 'USD' : getLocalCurrency();
+}
 
 // ---------------- 布局常量（Chart 的 grid 与 DOM 覆盖层共用） ----------------
 
@@ -490,8 +505,10 @@ export function computeYAxis(params: {
   //      向上取整会把拖到的上限又顶回原位（拖了没动，真机验收发现）
   const dataBounds = [axisMinU, ...validCuts, axisMaxU];
   const innerPad = interval0 * 0.6;
-  const padLo = yMinOv != null ? 0 : -rawSpanU * 0.06;
-  const padHi = yMaxOv != null ? 0 : -rawSpanU * 0.06;
+  // 外缘垫 6% → 9%（2026-11-17 Eason：悬停小卡改锚鼠标十字后，上下空间要刻意
+  // 留白——鼠标停在上/下白带触发的卡片从白带展开，不压数据线；整格吸附仍会再扩）
+  const padLo = yMinOv != null ? 0 : -rawSpanU * 0.09;
+  const padHi = yMaxOv != null ? 0 : -rawSpanU * 0.09;
   const segDomains: { min: number; max: number }[] = [];
   for (let i = 0; i < dataBounds.length - 1; i++) {
     const lo = dataBounds[i] + (i === 0 ? padLo : innerPad);
@@ -523,7 +540,7 @@ export function computeYAxis(params: {
   // （单段）的伪跨度 = 全域 ±6% 外缘，与断轴档取更粗者。
   // （步长比较/吸附/滞回全部发生在 USD 空间；本币步长只在出口 tierLocal 换算一次）
   const intervalRaw = niceStep(pseudoSpan0 / TARGET_CELLS);
-  const intervalCont = niceStep((rawSpanU * 1.12) / TARGET_CELLS);
+  const intervalCont = niceStep((rawSpanU * 1.18) / TARGET_CELLS); // ±9% 外缘垫复现（2026-11-17 调整同步）
   // 冻结自适应（第一百六十八轮）：步长直接沿用冻结值，不再选档、不再滞回
   let interval = params.freeze ? params.freeze.intervalUsd : segDomains.length > 1 ? Math.max(intervalRaw, intervalCont) : intervalRaw;
   let snapped = snapWith(interval);

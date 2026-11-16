@@ -14,8 +14,9 @@
 // 单组摘要 chip 第二行不再写「无对比」，改示「平台对比」（悬停全量摘要保持
 // 产品对语义不动——细节仍真实）；产品对比子视图行为与现状完全一致。
 // 2026-11-05（Eason 指令）：全局平台筛选器回归并改版——紧随「选择产品」入口
-// 渲染一枚平台 Select（PlatformSelectBox：选项 = 该国 dim_channel 平台集合，
-// 默认 = 现默认平台，写入 state.platform），筛选结果作用于看板下方所有产品；
+// 渲染一枚平台筛选器（2026-11-17 Eason「平台、类型、店铺」三级级联：
+// ChannelScopeBox，选项 = 该国 dim_channel 平台→类型→店铺，写入 state.platform
+// 含 types 子集），筛选结果作用于看板下方所有产品；
 // 每产品单独选店铺的入口（量价页 DNS chip / 店铺同步）同日退役。原「平台 /
 // 店铺」三级级联（PlatformBox）从筛选条撤下（总览页矩阵仍在用该组件，文件
 // 保留）；showPlatform prop 退役为 no-op，仅为 App.AnalysisShell 既有传参保留。
@@ -25,7 +26,7 @@ import { ConfigProvider, Tooltip } from 'antd';
 import type { ThemeConfig } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { color, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
-import PlatformSelectBox from './PlatformSelectBox';
+import ChannelScopeBox from './ChannelScopeBox';
 import PlatformScopeNotice from './PlatformScopeNotice';
 import CurrencyBox from './CurrencyBox';
 import ScopeFields from './ScopeFields';
@@ -345,7 +346,7 @@ export default function FilterBar({
             {(page === 'volume' || STABLE) && !marketProfile.granularityLocked && (
               <>
                 <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-                <div style={{ flexShrink: 0, width: 188 }}><Field label="平台"><PlatformSelectBox /></Field></div>
+                <div style={{ flexShrink: 0, width: 188 }}><Field label="平台"><ChannelScopeBox /></Field></div>
               </>
             )}
             <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />

@@ -177,6 +177,6 @@ describe('iterate 回归：URL shop=/seller= 照常、platformLevelForChannel �
   });
 
   it('写侧照常产出 shop=/seller=（店铺级选择入链语义不变）', () => {
-    expect(platformUrlParamsOf(OZON_SHOP)).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null });
+    expect(platformUrlParamsOf(OZON_SHOP)).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null, ctype: null });
   });
 });

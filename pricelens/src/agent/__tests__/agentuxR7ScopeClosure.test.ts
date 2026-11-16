@@ -284,11 +284,11 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     const table = tableOf(response);
     const series = chart.series.find((s) => s.label.includes('Mate X6'))!;
     const values = series.values.map((p) => p.value);
-    // openPatch 清空全局 Boulanger 后 chart 走自动口径：2026-11-17 起自动 = 默认锚
-    // 严格取价（FR 默认锚 = FR:amazon:1P，该品全程无事实行）→ 8 桶全缺采 null，
-    // 不再回落 Amazon 3P（旧「每周全平台最低价」口径曾在 202638–202642 取 1596）
+    // openPatch 清空全局 Boulanger 后 chart 走自动口径：2026-11-17 池化（Eason
+    // 「平台内每周最低价店铺」）= Amazon 平台池（1P+3P），3P 有价 → 202638–202642
+    // 恢复有值（末值 1596；上午「默认锚单渠道全程缺采 null」语义随池化退役）
     expect(values).toHaveLength(8);
-    expect(values.every((v) => v === null)).toBe(true);
+    expect(values[values.length - 1]).toBe(1596);
     // 与引擎自动口径逐一相等（真实聚合，不是手挑数字）
     const engine = buildSeries({
       scope: { countryCode: 'FR', industry: state.industry },

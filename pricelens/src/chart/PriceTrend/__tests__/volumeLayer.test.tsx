@@ -183,15 +183,18 @@ describe('第196轮整改5：工具行「量」开关（大促档期左侧 + 柱
     onOffersOn: vi.fn(),
   };
 
-  it('量开关在大促档期之前（左侧同组），默认关；点击开启回调 true', () => {
+  it('组框 = 量 + 销毛率（2026-11-17 Eason：大促档期/促销权益收进 ⋯ 菜单）；量默认关，点击开启回调 true', () => {
     const onVolumeOn = vi.fn();
-    render(<ChartToolbar {...toolbarBase} volumeOn={false} onVolumeOn={onVolumeOn} /> as ReactElement);
+    render(<ChartToolbar {...toolbarBase} volumeOn={false} onVolumeOn={onVolumeOn} marginOn={false} onMarginOn={vi.fn()} /> as ReactElement);
     const box = screen.getByText('量').closest('div')!.parentElement!.parentElement!;
     const labels = Array.from(box.querySelectorAll('label span')).map((s) => s.textContent);
     const volIdx = labels.indexOf('量');
-    const promoIdx = labels.indexOf('大促档期');
+    const marginIdx = labels.indexOf('销毛率');
     expect(volIdx).toBeGreaterThanOrEqual(0);
-    expect(promoIdx).toBeGreaterThan(volIdx); // 量在大促档期左侧
+    expect(marginIdx).toBeGreaterThan(volIdx); // 销毛率在量右侧（同组框）
+    // 大促档期/促销权益不再在工具行（收进 ⋯ 菜单——⋯ 按钮 title 罗列）
+    expect(labels).not.toContain('大促档期');
+    expect(screen.getByRole('button', { name: '更多显示选项' }).getAttribute('title')).toContain('大促档期');
     fireEvent.click(screen.getByText('量'));
     expect(onVolumeOn).toHaveBeenCalledWith(true);
   });
@@ -202,10 +205,12 @@ describe('第196轮整改5：工具行「量」开关（大促档期左侧 + 柱
     expect(screen.queryByText('面积')).toBeNull();
   });
 
-  it('未传量回调（量价/预测页等调用方）→ 不渲染量控件，原组框不变', () => {
+  it('未传量/销毛回调（量价/预测页等调用方）→ 不渲染组框；大促档期收 ⋯（未展开不出 DOM，⋯ 按钮 title 罗列）', () => {
     render(<ChartToolbar {...toolbarBase} /> as ReactElement);
     expect(screen.queryByText('量')).toBeNull();
-    expect(screen.getByText('大促档期')).toBeTruthy();
+    expect(screen.queryByText('销毛率')).toBeNull();
+    expect(screen.queryByText('大促档期')).toBeNull(); // 收进 ⋯，未展开不出 DOM
+    expect(screen.getByRole('button', { name: '更多显示选项' }).getAttribute('title')).toContain('大促档期');
   });
 });
 
@@ -479,7 +484,7 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     const layer = layerOf(container);
     fireEvent.mouseMove(layer, { clientX: colX(1), clientY: px(layer.style.top) + 10 });
     const { main, margin, volume } = cardEls(container);
-    expect(px(main.style.left)).toBeCloseTo(colX(1) + 16, 5);
+    expect(px(main.style.left)).toBeCloseTo(colX(1), 5); // 左上角对齐十字中心（2026-11-17 去 16px 偏移）
     expect(px(margin.style.left)).toBe(px(main.style.left));
     expect(px(volume.style.left)).toBe(px(main.style.left));
     expect(margin.style.transform).toBe('');
@@ -497,7 +502,7 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
       + px(main.style.borderLeftWidth) + px(main.style.borderRightWidth);
     expect(outerW).toBe(px(main.style.width) + 22);
     const mainRight = px(main.style.left) + outerW;
-    expect(mainRight).toBeCloseTo(colX(4) - 16, 5); // 外框不越过触发线（留 16px）
+    expect(mainRight).toBeCloseTo(colX(4), 5); // 外框右缘 = 触发线（左上角锚十字；翻转不留 16px）
     expect(px(margin.style.left)).toBeCloseTo(mainRight, 5);
     expect(px(volume.style.left)).toBeCloseTo(mainRight, 5);
     expect(margin.style.transform).toBe('translateX(-100%)');

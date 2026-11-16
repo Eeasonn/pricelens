@@ -93,8 +93,10 @@ import {
   TICK_DASH_W,
   axisChrome,
   computeYAxis,
+  curCodeOf,
   diffPct,
   fmtInt,
+  moneyPlain,
   perUsdOf,
   smoothAreaSegments,
   xPxOf,
@@ -348,6 +350,9 @@ export interface ChartProps {
   /** ④销毛迷你卡数据（我司主品逐桶销毛点，与 points 同下标对齐；index 层经
    *  marginCostOf 计算）：非空数组时悬停浮层上方再浮一张迷你卡；该桶无数据显「—」 */
   margins?: readonly (MarginCostPoint | null)[];
+  /** 销毛率小卡开关（2026-11-17 Eason「量旁边加一个销毛率的按钮」）：false = 不渲染
+   *  迷你卡；缺省 true = 既有调用方（量价页等）行为不变 */
+  marginMiniOn?: boolean;
   /** ⑤量层开关（工具行「量」）：开启 = 价格绘图区下方叠量带（volumeHeight 定高），
    *  数据源 = volumes（与 points 同下标）。量价页等未传 = 不渲染 */
   volumeOn?: boolean;
@@ -2286,7 +2291,7 @@ export default function Chart(props: ChartProps) {
                         <div style={{ width: 224 }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: color.ink }}>{title}</div>
                           <div className="tnum" style={{ marginTop: 4, fontSize: 12, color: color.body }}>
-                            原值 {formatPrice(Math.round(v), currency)}
+                            原值 {moneyPlain(Math.round(v), currency)}
                             {b.wow != null ? ` · 较上一有值点 ${b.wow > 0 ? '+' : '−'}${Math.round(Math.abs(b.wow) * 100)}%` : ''}
                           </div>
                           <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -2573,18 +2578,29 @@ export default function Chart(props: ChartProps) {
             // 与数据行共用（ch 随字号变化，10px 表头与 13/14px 数值同 ch 数不同宽 =
             // 此前表头与列错位的根因），表头与数值一律列内居中
             // 2026-11-10 审计修：RRP/折后价是钱数读数，改用 formatPrice（与图下明细表
-            // 同口径：USD = $2,244）；列宽 ch 估算随同一格式，防止 $ 前缀溢出定宽列。
+            // 同口径）；2026-11-17（Eason）：小卡片金额去货币符号 → moneyPlain（纯数，
+            // 明细表同口径），币种缩写进表头括号；列宽同时容纳表头文字与数值。
             // 图上点标/量尺的 fmtInt 裸数惯例不变（helpers.fmtInt 注释明示的图表惯例）
-            const priceCh = Math.max(...rows.map((r) => formatPrice(Math.round(r.v), currency).length));
+            const cur = curCodeOf(currency);
+            const priceCh = Math.max(...rows.map((r) => moneyPlain(Math.round(r.v), currency).length));
             const rrpCh = Math.max(
               2,
               ...rows.map((r) => {
                 const rr = r.s.points[tipIdx].rrp;
-                return rr != null ? formatPrice(Math.round(rr), currency).length : 0;
+                return rr != null ? moneyPlain(Math.round(rr), currency).length : 0;
               }),
             );
-            const priceW = Math.round(priceCh * 8.4) + 8; // 数值 14px tabular：数字 ≈0.6em
-            const rrpW = Math.max(30, Math.round(rrpCh * 7.2) + 8); // 数值 12px tabular
+            /** 10px 表头文字估宽（中文全角 ≈10.5、拉丁/括号 ≈6）——金额去符号后表头
+             *  「折后价（RUB）」可能比数值列宽，列宽取两者较大防表头溢出 */
+            const tipHeaderW = (label: string): number => {
+              let w = 0;
+              for (const ch of label) w += ch.charCodeAt(0) > 0x2e7f ? 10.5 : 6;
+              return Math.ceil(w) + 8;
+            };
+            const rrpHeader = `RRP（${cur}）`;
+            const priceHeader = `折后价（${cur}）`;
+            const priceW = Math.max(Math.round(priceCh * 8.4) + 8, tipHeaderW(priceHeader)); // 数值 14px tabular：数字 ≈0.6em
+            const rrpW = Math.max(30, Math.round(rrpCh * 7.2) + 8, tipHeaderW(rrpHeader)); // 数值 12px tabular
             const rateLabel = props.tipMode === 'discount' ? '折扣率' : '周环比';
             const rateValues = rows.map(({ s, v }) => {
               const pt = s.points[tipIdx];
@@ -2627,11 +2643,11 @@ export default function Chart(props: ChartProps) {
             const body = (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 3 }}>
-                  {/* 2026-11-10 审计修：周粒度卡头补双标识「2026W35 · 08-26」——周 ID 是
-                      技术标记，走等宽 mute（DESIGN.md typography 约定，与明细表列头
-                      「周号+日期」双行同语言）；月/季卡头已自带期间身份，不加 */}
+                  {/* 2026-11-10 审计修：周粒度卡头补双标识「2026W35 · 08-26」。
+                      2026-11-17（Eason）：两段字体/颜色/字号统一——周 ID 不再走等宽
+                      mute 差异化，与右侧日期同 ink 600 12px（读感为一句话标题） */}
                   {granularity === 'week' && (
-                    <span style={{ fontFamily: font.mono, fontWeight: 400, color: color.mute, marginRight: 6, whiteSpace: 'nowrap' }}>
+                    <span style={{ marginRight: 6, whiteSpace: 'nowrap' }}>
                       {rangeBucketLabel('week', series[0]?.points[tipIdx]?.bucketId ?? '')}
                       {' ·'}
                     </span>
@@ -2645,9 +2661,9 @@ export default function Chart(props: ChartProps) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, lineHeight: '13px', fontWeight: 600, color: color.ink }}>
                   <span style={{ width: 8, flexShrink: 0 }} />
                   <span style={{ flex: '1 1 0', minWidth: 0 }}>产品</span>
-                  <span className="tnum" style={{ width: rrpW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>RRP</span>
+                  <span className="tnum" style={{ width: rrpW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>{rrpHeader}</span>
                   <span aria-hidden style={{ width: 1, height: 13, background: color.hairlineStrong, flexShrink: 0 }} />
-                  <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>折后价</span>
+                  <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>{priceHeader}</span>
                   <span aria-hidden style={{ width: 1, height: 13, background: color.hairlineStrong, flexShrink: 0 }} />
                   <span style={{ width: rateW, textAlign: 'center', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     {rateLabel}
@@ -2711,12 +2727,12 @@ export default function Chart(props: ChartProps) {
                           className="tnum"
                           style={{ width: rrpW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
                         >
-                          {pt?.rrp != null ? formatPrice(Math.round(pt.rrp), currency) : '0'}
+                          {pt?.rrp != null ? moneyPlain(Math.round(pt.rrp), currency) : '0'}
                         </span>
                         {/* 竖线满行高（188 轮）：相邻行首尾相续、上接表头线 = 一条贯穿 */}
                         <span aria-hidden style={{ width: 1, height: 20, background: color.hairlineStrong, flexShrink: 0 }} />
                         <span className="tnum" style={{ width: priceW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 14, fontWeight: 600, color: color.ink }}>
-                          {formatPrice(Math.round(v), currency)}
+                          {moneyPlain(Math.round(v), currency)}
                         </span>
                         <span aria-hidden style={{ width: 1, height: 20, background: color.hairlineStrong, flexShrink: 0 }} />
                         <span style={{ width: rateW, flexShrink: 0, display: 'inline-flex', justifyContent: 'center', overflow: 'hidden' }}>
@@ -2886,9 +2902,9 @@ export default function Chart(props: ChartProps) {
                   >
                     <span style={{ flexShrink: 0 }}>当月成本</span>
                     <span style={SIM_BADGE}>模拟</span>
-                    {/* 2026-11-10 审计修：成本同为钱数读数，与 RRP/折后价同走 formatPrice */}
+                    {/* 2026-11-10 审计修：成本同为钱数读数；2026-11-17 随小卡片去货币符号 → moneyPlain */}
                     <span className="tnum" style={{ marginLeft: 'auto', flexShrink: 0, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-                      {formatPrice(Math.round(costVal), currency)}
+                      {moneyPlain(Math.round(costVal), currency)}
                     </span>
                   </div>
                 )}
@@ -2926,22 +2942,30 @@ export default function Chart(props: ChartProps) {
                 </div>
               );
             }
-            // ---- 浮层模式：跟随十字竖线，右缘自动左翻；左翻越界再钳回绘图区左缘 ----
+            // ---- 浮层模式（2026-11-17 Eason 改锚）：卡片左上角 = 十字中心（竖线 x0 +
+            // 鼠标 hoverY）——跟随鼠标上下移动；水平仍贴竖线、右缘放不下翻左侧，
+            // 左翻越界再钳回绘图区左缘。Y 轴上下留白（computeYAxis ±9% 外缘垫）+
+            // 白带同属悬停触发区 = 鼠标停在白带时卡片从白带展开、不压数据线 ----
             const x0 = xPxOf(geom, tipIdx);
             const nameEst = Math.max(...rows.map((r) => brandLabelOf(r.s.brand).length + 1 + curveNameOf(r.s).length)) * 6.2 + 14;
             const hasSnap = rows.some((r) => r.s.points[tipIdx]?.price != null);
-            const W = Math.ceil(20 + 6 * 6 + 2 + rateW + priceCh * 8.5 + rrpCh * 7.3 + Math.max(96, nameEst)) + (hasSnap ? 16 : 0) + (showDiffCol ? diffW + 7 : 0);
+            const W = Math.ceil(20 + 6 * 6 + 2 + rateW + Math.max(priceW, priceCh * 8.5) + Math.max(rrpW, rrpCh * 7.3) + Math.max(96, nameEst)) + (hasSnap ? 16 : 0) + (showDiffCol ? diffW + 7 : 0);
             // 2026-11-05 Eason 看真机：销毛 / 销量 / 主卡一组，主卡定侧，小卡贴主卡的贴线边对齐
-            const group = tipGroupPlacement(
-              geom.plotLeft,
-              geom.plotWidth,
-              x0,
-              W + TIP_MAIN_CHROME_W,
-              rulerModel && rulerModel.side !== 'left' ? 'left' : undefined,
-            );
+            const mainW = W + TIP_MAIN_CHROME_W;
+            const fitsRight = x0 + mainW <= geom.plotLeft + geom.plotWidth;
+            const fitsLeftPlain = x0 - mainW >= geom.plotLeft;
+            const group: TipGroupPlacement = rulerModel && rulerModel.side !== 'left' && fitsLeftPlain
+              ? { mainLeft: x0 - mainW, side: 'left', edgeX: x0 } // 量尺在右侧：放得下就放左，不盖量尺
+              : fitsRight
+                ? { mainLeft: x0, side: 'right', edgeX: x0 }
+                : { mainLeft: Math.max(geom.plotLeft + 8, x0 - mainW), side: 'left', edgeX: Math.max(geom.plotLeft + 8, x0 - mainW) + mainW };
             const left = group.mainLeft;
             const tipContentH = rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0) + (costVal != null ? 23 : 0) + (baseAbsent ? 21 : 0);
-            const topRaw = Math.min(Math.max(geom.plotTop + 8, 40), geom.plotTop + geom.plotHeight - 36 - tipContentH);
+            // 纵向锚 = 鼠标 hoverY（逐像素，量带内已置 null → 回落贴顶），钳在绘图区内
+            const hoverTop = hoverY ?? props.crosshairY ?? null;
+            const topRaw = hoverTop != null
+              ? Math.min(Math.max(hoverTop, geom.plotTop + 2), geom.plotTop + geom.plotHeight - 36 - tipContentH)
+              : Math.min(Math.max(geom.plotTop + 8, 40), geom.plotTop + geom.plotHeight - 36 - tipContentH);
             // 第196轮整改4：销毛迷你卡在浮层上方 8px——浮层整体下移腾出卡位
             // （仍钳在绘图区内；绘图区过矮放不下时回落贴顶，接受与浮层轻叠）
             const top = props.margins != null ? Math.min(topRaw + MARGIN_MINI_H + 8, geom.plotTop + geom.plotHeight - 36 - tipContentH) : topRaw;
@@ -2951,7 +2975,7 @@ export default function Chart(props: ChartProps) {
             // 卡高相应收窄；该桶无数据显「—」）。tipBox 模式（量价看板预留框）不出
             // 迷你卡；margins 未传（量价/下钻等）不渲染
             const mpt = props.margins?.[tipIdx] ?? null;
-            const marginMini = props.margins != null && (
+            const marginMini = props.margins != null && props.marginMiniOn !== false && (
               <div
                 style={{
                   position: 'absolute',

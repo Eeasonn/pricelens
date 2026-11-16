@@ -8,7 +8,7 @@
 // 「主分析 / 对比」是角色（用户指定），与数据层 is_own（华为产品的事实）正交：
 // 主品可任意品牌，对比区也可含华为产品。
 // ============================================================
-import type { AggMode, CurrencyMode, Granularity, Industry } from '../dataModel/types';
+import type { AggMode, CurrencyMode, Granularity, Industry, StoreType } from '../dataModel/types';
 import type { FinancingPlan, FinancingTerm, FinancingType } from '../dataModel/marketProfile';
 import type { AlertProductRule, AlertThresholds, AlertTypeSwitches } from '../dataModel/alerts';
 export type { AlertProductRule, AlertThresholds, AlertTypeSwitches };
@@ -42,6 +42,10 @@ export interface PlatformSelection {
   /** 第一百四十一轮：渠道内具体卖家店铺（事实行 seller）。仅在 shopIds 单渠道时
    *  有意义；缺省/null = 该渠道全部卖家取最低在架价（默认口径）。 */
   seller?: string | null;
+  /** 2026-11-17（Eason「平台、类型、店铺」筛选器）：平台勾选的类型子集
+   *  （1P / 3P / 独立站）。仅过滤**平台级命中**的渠道（shopIds 命中直通不受滤）；
+   *  缺省/空 = 该平台全部类型（平台内每周最低价店铺，默认口径）。 */
+  types?: StoreType[];
 }
 
 /** t428u R7-M1 · 稳定版平台口径归一的落地说明（provenance）：load / actions.set /
