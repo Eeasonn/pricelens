@@ -4,7 +4,7 @@
 // ①candidates ≥2：量带（vMax 刻度/柱色/极值标注/区间量尺/悬停量卡归属）跟随
 //   volumeActiveKey；缺省第一个候选；未知 key 回落第一个；单候选/缺省 = 原行为。
 // ②切换入口：销量归属药丸点击循环（描强调边 + ⇄）；名称带候选主品药丸右侧
-//   「量」按钮直接指定（药丸本体点击 = 隐藏/恢复，语义不变）。
+//   归属药丸点击弹候选菜单选择（2026-11-17；名称带「量」直切按钮退役）。
 // ③悬停量卡：候选 ≥2 时每个候选主品一行（色点+名称+当周销量），柱只画 active。
 // 名称带 pill 文本 = curveNameOf（去品牌/GB），aria 文案据此取 'nova 14 256'。
 // ============================================================
@@ -101,7 +101,7 @@ describe('合并多组 · 量带归属切换（方案 B）', () => {
   it('缺省 = 第一个候选：量轴上限按候选 A（2,000）、归属药丸 = A 且描强调边', async () => {
     const { container } = render(<Chart {...baseProps} /> as ReactElement);
     await waitForGeom(container);
-    expect(screen.getByLabelText('销量归属：Pura 80 12GB；点击切换到下一组主品的销量')).toBeTruthy();
+    expect(screen.getByLabelText('销量归属：Pura 80 12GB；点击选择量带归属产品')).toBeTruthy();
     expect(document.body.textContent).toContain('1,500');
     const pill = document.querySelector('[data-testid="volume-owner-pill"]') as HTMLElement;
     expect(pill.style.border).toContain('rgb(0, 112, 243)');
@@ -113,31 +113,33 @@ describe('合并多组 · 量带归属切换（方案 B）', () => {
     expect(document.body.textContent).toContain('6,000');
     expect(document.body.textContent).not.toContain('2,000');
     expect(screen.getByTestId('volume-mark-max').textContent).toBe('5 000'); // 图上裸数 = fmtInt 空格千分位（2026-11-10 审计修）
-    expect(screen.getByLabelText('设为量带归属：nova 14 256').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByLabelText('设为量带归属：Pura 80 12').getAttribute('aria-pressed')).toBe('false');
+    // 归属药丸名称行 = 当前候选（2026-11-17：候选菜单取代名称带「量」直切按钮）
+    expect(screen.getByTestId('volume-owner-name').textContent).toBe('nova 14 256GB');
   });
 
-  it('归属药丸点击 = 循环切换（A → B）', async () => {
+  it('归属药丸点击 = 弹出候选菜单；点选 B 行切换（A → B）并收起菜单', async () => {
     const onKey = vi.fn();
     const { container } = render(<Chart {...baseProps} onVolumeActiveKey={onKey} /> as ReactElement);
     await waitForGeom(container);
     fireEvent.click(screen.getByTestId('volume-owner-pill'));
+    const menu = screen.getByTestId('volume-owner-menu');
+    expect(menu.getAttribute('role')).toBe('menu');
+    const rows = [...menu.querySelectorAll('button')];
+    expect(rows).toHaveLength(2);
+    fireEvent.click(rows[1]); // 候选 B
     expect(onKey).toHaveBeenCalledWith(OWN_B);
   });
 
-  it('名称带候选药丸右侧「量」按钮：点击直接指定归属；药丸本体点击仍是隐藏/恢复', async () => {
-    const onKey = vi.fn();
+  it('名称带不再有「量」直切按钮（2026-11-17 Eason：切换收敛到归属药丸菜单）；名称带药丸本体隐藏语义不变', async () => {
     const onToggle = vi.fn();
-    const { container } = render(<Chart {...baseProps} onVolumeActiveKey={onKey} onToggleHidden={onToggle} /> as ReactElement);
+    const { container } = render(<Chart {...baseProps} onToggleHidden={onToggle} /> as ReactElement);
     await waitForGeom(container);
-    fireEvent.click(screen.getByLabelText('设为量带归属：nova 14 256'));
-    expect(onKey).toHaveBeenLastCalledWith(OWN_B);
-    // active（受控 prop）未随回调变化 → A 仍是当前归属，点已归属品 = no-op（不重复派发）
-    fireEvent.click(screen.getByLabelText('设为量带归属：Pura 80 12'));
-    expect(onKey).toHaveBeenCalledTimes(1);
-    // 药丸本体 = 隐藏语义（title 不变），点「量」不触发隐藏
-    expect(screen.getAllByTitle('点击隐藏该产品').length).toBe(2);
-    expect(onToggle).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(/设为量带归属/)).toBeNull();
+    // 名称带药丸本体 = 隐藏/恢复语义（不变）：点主品药丸触发 onToggle
+    const namePills = screen.getAllByTitle('点击隐藏该产品');
+    expect(namePills.length).toBe(2);
+    fireEvent.click(namePills[0]);
+    expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
   it('悬停量卡：候选 ≥2 = 每个候选一行（名称+当周销量）', async () => {
@@ -166,7 +168,7 @@ describe('合并多组 · 量带归属切换（方案 B）', () => {
     expect(screen.queryByLabelText(/设为量带归属/)).toBeNull();
     const pill = document.querySelector('[data-testid="volume-owner-pill"]') as HTMLElement;
     expect(pill.style.border).toContain('rgb(235, 235, 235)');
-    expect(pill.textContent).not.toContain('⇄');
+    expect(pill.textContent).not.toContain('▾');
     // 悬停量带捕获层（React 合成事件在捕获层自身，不从 wrap 冒泡下来）
     const band = document.querySelector('[data-testid="volume-hover-layer"]') as HTMLElement;
     fireEvent.mouseMove(band, { clientX: 300 });
@@ -177,6 +179,6 @@ describe('合并多组 · 量带归属切换（方案 B）', () => {
   it('未知 activeKey 回落第一个候选（mains 变化后失效自愈）', async () => {
     const { container } = render(<Chart {...baseProps} volumeActiveKey="GONE__1TB" /> as ReactElement);
     await waitForGeom(container);
-    expect(screen.getByLabelText('销量归属：Pura 80 12GB；点击切换到下一组主品的销量')).toBeTruthy();
+    expect(screen.getByLabelText('销量归属：Pura 80 12GB；点击选择量带归属产品')).toBeTruthy();
   });
 });

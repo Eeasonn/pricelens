@@ -577,10 +577,7 @@ function ZoneNamePill(props: {
   onToggle: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
   /** 方案 B：本 pill 是当前量带归属（描强调边） */
-  volumeActive?: boolean;
   /** 本 pill 是量带归属候选（≥2 候选时显示「量」直切按钮） */
-  volumeSettable?: boolean;
-  onSetVolumeOwner?: () => void;
 }) {
   const { nm } = props;
   // 品牌展开字（悬停 / 键盘聚焦时显示「Huawei ·」；2026-11-07 采纳 A）
@@ -624,7 +621,7 @@ function ZoneNamePill(props: {
             ? { flexDirection: 'column' as const, alignItems: 'flex-start' as const, rowGap: 2 }
             : {}),
           maxWidth: nm.maxW ?? 200,
-          border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : props.volumeActive ? selectAccent : color.hairline}`,
+          border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : color.hairline}`,
           cursor: 'pointer',
         }}
       >
@@ -719,41 +716,8 @@ function ZoneNamePill(props: {
           </>
         )}
       </button>
-      {/* 方案 B：候选主品的「量」直切按钮（药丸右侧外挂，不占名称带宽）；
-          药丸本体点击 = 隐藏/恢复（2026-11-07 稳定版拍板）语义不变 */}
-      {props.volumeSettable && (
-        <button
-          type="button"
-          data-testid={`volume-owner-set-${nm.seriesKey}`}
-          aria-pressed={props.volumeActive}
-          aria-label={`设为量带归属：${nm.text}`}
-          title={props.volumeActive ? '当前量带归属' : '设为量带归属（点击切换下方销量柱到该主品）'}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!props.volumeActive) props.onSetVolumeOwner?.();
-          }}
-          style={{
-            position: 'absolute',
-            left: 'calc(100% + 4px)',
-            top: 3,
-            height: 18,
-            padding: '0 6px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            background: props.volumeActive ? selectSoft : color.canvas,
-            border: `1px solid ${props.volumeActive ? selectAccent : color.hairline}`,
-            borderRadius: radius.pill,
-            cursor: props.volumeActive ? 'default' : 'pointer',
-            fontFamily: font.family,
-            fontSize: 10,
-            lineHeight: '14px',
-            color: props.volumeActive ? selectSoftInk : color.mute,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          量
-        </button>
-      )}
+      {/* 方案 B 切换入口迁移（2026-11-17 Eason）：名称带药丸不再外挂「量」直切按钮
+          （多我司产品时一排「量」chip 视觉噪）；切换统一收敛到量带归属药丸的候选菜单 */}
       {delta && (
         <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap', opacity: props.hidden ? 0.45 : undefined }}>
           <span style={{ color: color.mute, fontWeight: 500 }}>
@@ -789,6 +753,25 @@ export default function Chart(props: ChartProps) {
   // 量带悬停态（2026-11-05 复检五件套③⑤）：null = 未悬停；idx = 捕获层 x→桶下标；
   // idx=null = 悬停/聚焦在量带药丸上（只联动高亮，不出量值小卡）
   const [volHover, setVolHover] = useState<{ idx: number | null } | null>(null);
+  // 量带归属候选菜单（2026-11-17 Eason：点击归属药丸弹出候选列表选择，取代盲循环切换）
+  const [ownerMenuOpen, setOwnerMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!ownerMenuOpen) return undefined;
+    const onDocPointerDown = (e: PointerEvent): void => {
+      const path = (e.composedPath?.() ?? []) as Node[];
+      if (path.some((n) => n instanceof Element && (n.closest('[data-testid="volume-owner-pill"]') != null || n.closest('[data-testid="volume-owner-menu"]') != null))) return;
+      setOwnerMenuOpen(false);
+    };
+    const onDocKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOwnerMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    document.addEventListener('keydown', onDocKeyDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
+      document.removeEventListener('keydown', onDocKeyDown, true);
+    };
+  }, [ownerMenuOpen]);
   // ---- 第118轮：图内拖选时间段（量价看板）----
   // 拖动数据在 ref 内逐帧变化（anchor/当前列/起点横距/是否已越过拖动阈值），
   // dragging + brushTick 仅驱动重渲；松手提交或清除（见 window 监听 effect）
@@ -1853,25 +1836,28 @@ export default function Chart(props: ChartProps) {
             {volBandLive && effOwner && (
               <>
                 {props.nameZoneWidth != null && ownerPillOn && (() => {
-                  // 方案 B：候选 ≥2 = 药丸可点（循环切换归属），描强调边示意可切；
-                  // 单主品 = 原样（note 只读、hairline 边）
+                  // 方案 B 切换交互优化（2026-11-17 Eason「盲循环效果不好」）：候选 ≥2 =
+                  // 点击归属药丸弹出候选菜单（色点+名称+型号，当前项 ✓），点选切换；
+                  // 单主品 = 原样（只读、hairline 边）
                   const switchable = (volCands?.length ?? 0) > 1 && props.onVolumeActiveKey != null;
-                  const cycle = switchable
-                    ? () => {
-                        const list = volCands!;
-                        const idx = list.findIndex((c) => c.key === volActive?.key);
-                        props.onVolumeActiveKey!(list[(idx + 1) % list.length].key);
-                      }
-                    : undefined;
+                  const pillLeft = Math.max(2, geom.plotLeft - props.nameZoneWidth + 4); // 与名称带药丸同列
+                  const pillTop = props.volumeInline === true
+                    ? plotBottom - (effOwner.cfg ? 26 : 16)
+                    : props.paneLabels
+                      ? Math.min(plotBottom + volBandH - 14, plotBottom + (paneHead ? VOL_OWNER_MID : 26))
+                      : plotBottom + volBandH / 2;
                   return (
+                  <>
                   <button
                     type="button"
                     data-testid="volume-owner-pill"
-                    aria-label={`销量归属：${effOwner.text}${switchable ? '；点击切换到下一组主品的销量' : ''}`}
-                    title={`销量归属：${effOwner.text}（估算口径，非真实销量）${switchable ? '；点击切换到下一组主品的销量' : ''}`}
+                    aria-label={`销量归属：${effOwner.text}${switchable ? '；点击选择量带归属产品' : ''}`}
+                    aria-expanded={switchable ? ownerMenuOpen : undefined}
+                    aria-haspopup={switchable ? 'menu' : undefined}
+                    title={`销量归属：${effOwner.text}（估算口径，非真实销量）${switchable ? '；点击选择量带归属产品' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      cycle?.();
+                      if (switchable) setOwnerMenuOpen((o) => !o);
                     }}
                     onMouseEnter={() => enterVolBand(null)}
                     onMouseLeave={leaveVolBand}
@@ -1883,15 +1869,11 @@ export default function Chart(props: ChartProps) {
                       // 行2 = 型号纯文字；column + rowGap 2 与 ZoneNamePill 同款叠法
                       ...(effOwner.cfg ? { flexDirection: 'column' as const, alignItems: 'flex-start' as const, rowGap: 2 } : {}),
                       position: 'absolute',
-                      left: Math.max(2, geom.plotLeft - props.nameZoneWidth + 4), // 与名称带药丸同列
+                      left: pillLeft,
                       // 有图层节头时：贴节头下一行（节头 + 归属药丸成组，不再悬空带中）；
                       // head 版式 = 贴销量标题下（标题在量带左上、与价格最低刻度字留白）；
                       // 无节头 = 量带内垂直居中（原行为）；inline = 绘图区左下角内侧
-                      top: props.volumeInline === true
-                        ? plotBottom - (effOwner.cfg ? 26 : 16)
-                        : props.paneLabels
-                          ? Math.min(plotBottom + volBandH - 14, plotBottom + (paneHead ? VOL_OWNER_MID : 26))
-                          : plotBottom + volBandH / 2,
+                      top: pillTop,
                       transform: 'translateY(-50%)',
                       border: `1px solid ${switchable ? selectAccent : color.hairline}`,
                       cursor: switchable ? 'pointer' : 'default',
@@ -1905,8 +1887,48 @@ export default function Chart(props: ChartProps) {
                     {effOwner.cfg ? (
                       <span style={{ fontSize: 10, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap' }}>{effOwner.cfg}</span>
                     ) : null}
-                    {switchable && <span aria-hidden style={{ fontSize: 10, lineHeight: '14px', color: color.mute }}>⇄</span>}
+                    {switchable && <span aria-hidden style={{ fontSize: 10, lineHeight: '14px', color: color.mute }}>▾</span>}
                   </button>
+                  {switchable && ownerMenuOpen && (
+                    <div
+                      data-testid="volume-owner-menu"
+                      role="menu"
+                      aria-label="选择量带归属产品"
+                      style={{
+                        position: 'absolute', zIndex: 30, left: pillLeft, top: pillTop + 20, minWidth: 172,
+                        padding: 4, background: color.canvas, border: `1px solid ${color.hairlineStrong}`,
+                        borderRadius: radius.control, boxShadow: shadow.l2, display: 'flex', flexDirection: 'column', gap: 2,
+                      }}
+                    >
+                      {volCands!.map((c) => {
+                        const active = c.key === volActive?.key;
+                        return (
+                          <button
+                            key={c.key}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={active}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              props.onVolumeActiveKey!(c.key);
+                              setOwnerMenuOpen(false);
+                            }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px',
+                              borderRadius: radius.control, border: 'none', cursor: 'pointer',
+                              background: active ? selectSoft : 'transparent', textAlign: 'left', fontFamily: font.family,
+                            }}
+                          >
+                            <BrandDot brand={c.brand} />
+                            <span style={{ fontSize: 11, lineHeight: '16px', color: active ? selectSoftInk : color.body, whiteSpace: 'nowrap' }}>{c.name ?? c.text}</span>
+                            {c.cfg ? <span style={{ fontSize: 10, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap' }}>{c.cfg}</span> : null}
+                            {active && <span aria-hidden style={{ marginLeft: 'auto', fontSize: 10, lineHeight: '14px', color: selectSoftInk }}>✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  </>
                   );
                 })()}
                 {/* inline：量柱悬停走绘图区既有 hover（柱随 hoverIdx 点亮），不再有独立量带捕获层 */}
@@ -3519,9 +3541,6 @@ export default function Chart(props: ChartProps) {
                     dimmed={litKeys != null && !litKeys.includes(nm.seriesKey)}
                     onToggle={(k) => props.onToggleHidden?.(k)}
                     onHover={setHoverNameKey}
-                    volumeActive={volActive != null && nm.seriesKey === volActive.key}
-                    volumeSettable={(volCands?.length ?? 0) > 1 && !!volCands?.some((c) => c.key === nm.seriesKey)}
-                    onSetVolumeOwner={() => props.onVolumeActiveKey?.(nm.seriesKey)}
                   />
                 ))}
               </>
