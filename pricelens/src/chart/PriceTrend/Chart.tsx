@@ -753,6 +753,7 @@ export default function Chart(props: ChartProps) {
   // 量带悬停态（2026-11-05 复检五件套③⑤）：null = 未悬停；idx = 捕获层 x→桶下标；
   // idx=null = 悬停/聚焦在量带药丸上（只联动高亮，不出量值小卡）
   const [volHover, setVolHover] = useState<{ idx: number | null } | null>(null);
+  const volumeOwnerPillRef = useRef<HTMLButtonElement | null>(null);
   // 量带归属候选菜单（2026-11-17 Eason：点击归属药丸弹出候选列表选择，取代盲循环切换）
   const [ownerMenuOpen, setOwnerMenuOpen] = useState(false);
   useEffect(() => {
@@ -1849,6 +1850,7 @@ export default function Chart(props: ChartProps) {
                   return (
                   <>
                   <button
+                    ref={volumeOwnerPillRef}
                     type="button"
                     data-testid="volume-owner-pill"
                     aria-label={`销量归属：${effOwner.text}${switchable ? '；点击选择量带归属产品' : ''}`}
@@ -1868,6 +1870,8 @@ export default function Chart(props: ChartProps) {
                       // 两行呈现（2026-11-17 Eason，与名称带两行药丸同款）：行1 = 色点+名称、
                       // 行2 = 型号纯文字；column + rowGap 2 与 ZoneNamePill 同款叠法
                       ...(effOwner.cfg ? { flexDirection: 'column' as const, alignItems: 'flex-start' as const, rowGap: 2 } : {}),
+                      // V4（2026-11-17 Eason 选型）：两行保留、内边距收紧
+                      padding: '3px 9px',
                       position: 'absolute',
                       left: pillLeft,
                       // 有图层节头时：贴节头下一行（节头 + 归属药丸成组，不再悬空带中）；
@@ -1895,8 +1899,11 @@ export default function Chart(props: ChartProps) {
                       role="menu"
                       aria-label="选择量带归属产品"
                       style={{
-                        position: 'absolute', zIndex: 30, left: pillLeft, top: pillTop + 20, minWidth: 172,
-                        padding: 4, background: color.canvas, border: `1px solid ${color.hairlineStrong}`,
+                        // V4：菜单从药丸右侧水平弹出、与药丸同一垂直中线（不再向下堆叠增高量带区）
+                        position: 'absolute', zIndex: 30,
+                        left: pillLeft + (volumeOwnerPillRef.current?.offsetWidth ?? 120) + 10,
+                        top: pillTop, transform: 'translateY(-50%)',
+                        minWidth: 176, padding: 4, background: color.canvas, border: `1px solid ${color.hairlineStrong}`,
                         borderRadius: radius.control, boxShadow: shadow.l2, display: 'flex', flexDirection: 'column', gap: 2,
                       }}
                     >

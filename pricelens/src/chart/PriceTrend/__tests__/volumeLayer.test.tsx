@@ -267,9 +267,9 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     // 量带内垂直居中（定位锚 = 量带中线，不依赖药丸高）
     expect(px(pill.style.top)).toBe(px(layer.style.top) + BAND_H / 2);
     expect(pill.style.transform).toBe('translateY(-50%)');
-    // 规格与名称带药丸一致：内边距 / 圆角 / 文字；不截断（无 maxWidth / 省略号，长度随内容）
+    // 圆角与名称带药丸一致；内边距 = V4 收紧口径 3px 9px（2026-11-17，与名称带 3px 8px 有意区分）
     const namePill = screen.getByRole('button', { name: 'Mate 70 12' });
-    expect(pill.style.padding).toBe(namePill.style.padding);
+    expect(pill.style.padding).toBe('3px 9px');
     expect(pill.style.borderRadius).toBe(namePill.style.borderRadius);
     expect(pill.style.gap).toBe(namePill.style.gap);
     // 名称行 span（2026-11-17 起归属药丸支持两行：行1 = 色点+名称、行2 = 型号纯文字）
