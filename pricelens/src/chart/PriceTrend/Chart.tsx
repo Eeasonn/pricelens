@@ -364,13 +364,13 @@ export interface ChartProps {
   /** ⑤量带归属（2026-11-05 复检五件套）：这条量是谁的——量带左缘小药丸、量值小卡
    *  产品名、悬停联动高亮都以它为准。用对象不用 key：主品线被图例隐藏时不在 series
    *  里，药丸仍要能说明归属。未传 / 无量数据 = 药丸、悬停层、联动都不出 */
-  volumeOwner?: { key: string; brand: string; text: string } | null;
+  volumeOwner?: { key: string; brand: string; text: string; name?: string; cfg?: string } | null;
   /** 合并多组 · 方案 B（2026-11-08 Eason 选型「主品切换」）：量带归属候选（各组主品）。
    *  传入 ≥2 个 = 量带一次只画一个主品（volumeActiveKey 指定，缺省第一个）——柱色/上限/
    *  极值标注/区间量尺/悬停量卡全部跟随 active；悬停量卡列出全部候选当周销量（不切换
    *  也能比数）。切换入口 = 销量归属药丸点击循环 + 名称带候选主品药丸右侧「量」按钮。
    *  缺省 / 单候选 = 现行为（volumeOwner/volumes/volumeColor 原样） */
-  volumeCandidates?: { key: string; brand: string; text: string; color: string; volumes: (number | null)[] }[];
+  volumeCandidates?: { key: string; brand: string; text: string; name?: string; cfg?: string; color: string; volumes: (number | null)[] }[];
   /** 当前量带归属候选 key（受控）；缺省 = 第一个候选 */
   volumeActiveKey?: string | null;
   /** 切换量带归属（归属药丸循环 / 名称带「量」按钮） */
@@ -1422,7 +1422,7 @@ export default function Chart(props: ChartProps) {
     : null;
   const effVolumes = volActive ? volActive.volumes : props.volumes;
   const effOwner = volActive
-    ? { key: volActive.key, brand: volActive.brand, text: volActive.text }
+    ? { key: volActive.key, brand: volActive.brand, text: volActive.text, name: volActive.name, cfg: volActive.cfg }
     : props.volumeOwner;
   const effColor = volActive ? volActive.color : (props.volumeColor ?? color.mute);
 
@@ -1879,13 +1879,16 @@ export default function Chart(props: ChartProps) {
                     onBlur={leaveVolBand}
                     style={{
                       ...NAME_PILL_BOX,
+                      // 两行呈现（2026-11-17 Eason，与名称带两行药丸同款）：行1 = 色点+名称、
+                      // 行2 = 型号纯文字；column + rowGap 2 与 ZoneNamePill 同款叠法
+                      ...(effOwner.cfg ? { flexDirection: 'column' as const, alignItems: 'flex-start' as const, rowGap: 2 } : {}),
                       position: 'absolute',
                       left: Math.max(2, geom.plotLeft - props.nameZoneWidth + 4), // 与名称带药丸同列
                       // 有图层节头时：贴节头下一行（节头 + 归属药丸成组，不再悬空带中）；
                       // head 版式 = 贴销量标题下（标题在量带左上、与价格最低刻度字留白）；
                       // 无节头 = 量带内垂直居中（原行为）；inline = 绘图区左下角内侧
                       top: props.volumeInline === true
-                        ? plotBottom - 16
+                        ? plotBottom - (effOwner.cfg ? 26 : 16)
                         : props.paneLabels
                           ? Math.min(plotBottom + volBandH - 14, plotBottom + (paneHead ? VOL_OWNER_MID : 26))
                           : plotBottom + volBandH / 2,
@@ -1895,8 +1898,13 @@ export default function Chart(props: ChartProps) {
                       zIndex: 6,
                     }}
                   >
-                    <BrandDot brand={effOwner.brand} />
-                    <span style={NAME_PILL_TEXT}>{effOwner.text}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+                      <BrandDot brand={effOwner.brand} />
+                      <span data-testid="volume-owner-name" style={NAME_PILL_TEXT}>{effOwner.name ?? effOwner.text}</span>
+                    </span>
+                    {effOwner.cfg ? (
+                      <span style={{ fontSize: 10, lineHeight: '14px', color: color.mute, whiteSpace: 'nowrap' }}>{effOwner.cfg}</span>
+                    ) : null}
                     {switchable && <span aria-hidden style={{ fontSize: 10, lineHeight: '14px', color: color.mute }}>⇄</span>}
                   </button>
                   );

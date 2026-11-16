@@ -16,7 +16,8 @@
 // 全链路用真实生产 runAgent + FiltersProvider（含页内条幅组件路由与持久化），
 // 断言落在落地后的 LATEST state / LATEST 查询卡 / 重载，不吃历史卡残留。
 // 真实数据证人（生产事实包）：RU nova 14（非 Pro）12+256GB Black W202619 USD
-// —— 自动全平台口径 = 333（OZON 1P 332.62 周内最低）；DNS 独立站 335.98 → 336。
+// —— 自动口径 = 默认锚 DNS 独立站 335.98 → 336（2026-11-17 默认锚语义；旧
+// 「每周全平台最低价」口径曾取 OZON 1P 332.62 → 333）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -170,14 +171,15 @@ describe('t428u R8-M1 · 全非法店铺载荷（null 口径 + 剔除说明）�
     expect(screen.getAllByRole('status')).toHaveLength(1);
     expect(screen.getByRole('status').textContent).toContain('没有渠道');
 
-    // 新查询（落地后的 state 重新跑真实 runAgent）：LATEST 图注 + 摘要边界 + 自动口径 333
+    // 新查询（落地后的 state 重新跑真实 runAgent）：LATEST 图注 + 摘要边界 + 自动口径 336
+    // （2026-11-17 起自动口径 = 默认锚 DNS 独立站；旧全平台最低价口径曾为 333）
     const second = await runAgent('价格趋势', buildAgentContext('dashboard', handle.state(), []));
     const chart2 = second.cards.find((item) => item.kind === 'chart') as ChartResultCard;
     const table2 = second.cards.find((item) => item.kind === 'table') as TableResultCard;
     expect(chart2.note).toContain('没有渠道');
     expect(table2.boundaries?.some((line) => line.includes('没有渠道'))).toBe(true);
     const row = novaSummaryRow(table2);
-    expect(row![1]).toBe('333');
+    expect(row![1]).toBe('336');
 
     // 持久化 + 重载：说明与原始一致（URL 解析产出的 seller 键缺省不影响集合语义）
     expect(await persistedNotice()).toEqual(original);
@@ -206,7 +208,8 @@ describe('t428u R8-M1 · 全非法店铺载荷（null 口径 + 剔除说明）�
     const chart2 = second.cards.find((item) => item.kind === 'chart') as ChartResultCard;
     expect(table2.boundaries?.some((line) => line.includes('没有渠道'))).toBe(true);
     expect(chart2.note).toContain('没有渠道');
-    expect(novaSummaryRow(table2)![1]).toBe('333');
+    // 自动口径 = 默认锚 DNS 独立站（2026-11-17；旧全平台最低价口径曾为 333）
+    expect(novaSummaryRow(table2)![1]).toBe('336');
 
     expect(await persistedNotice()).toEqual(original);
     const reloaded = reloadFilters();

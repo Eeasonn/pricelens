@@ -1012,10 +1012,11 @@ export function seriesSpanRange(series: Series[]): [number, number] | null {
   return lo != null && hi != null ? [lo, hi] : null;
 }
 
-/** 默认窗口长度（按粒度）：周 12 桶 / 月 6 桶 / 季 4 桶。选完产品图表默认只展示
- *  近期窗口（右缘 = 最晚有价桶，左缘 = 往前推 N 桶）；更早历史靠底部时间拖块左拉。 */
+/** 默认窗口长度（按粒度）：周 8 桶（2026-11-17 Eason：选完产品默认只选中近 8 周，
+ *  原 12 桶退役）/ 月 6 桶 / 季 4 桶。选完产品图表默认只展示近期窗口（右缘 = 最晚
+ *  有价桶，左缘 = 往前推 N 桶）；更早历史靠底部时间拖块左拉（域左边界 = 数据最小周）。 */
 export function defaultTailBuckets(g: Granularity): number {
-  return g === 'week' ? 12 : g === 'month' ? 6 : 4;
+  return g === 'week' ? 8 : g === 'month' ? 6 : 4;
 }
 
 /**

@@ -272,8 +272,10 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(pill.style.padding).toBe(namePill.style.padding);
     expect(pill.style.borderRadius).toBe(namePill.style.borderRadius);
     expect(pill.style.gap).toBe(namePill.style.gap);
-    const text = pill.querySelector('span:last-child') as HTMLElement;
-    const nameText = namePill.querySelector('span:last-child') as HTMLElement;
+    // 名称行 span（2026-11-17 起归属药丸支持两行：行1 = 色点+名称、行2 = 型号纯文字）
+    const text = pill.querySelector('[data-testid="volume-owner-name"]') as HTMLElement;
+    const nameText = namePill.querySelector('[data-testid="name-pill-text"]') as HTMLElement;
+    expect(text.textContent).toBe('Mate 70 12');
     expect(text.style.fontSize).toBe('11px');
     expect(text.style.fontSize).toBe(nameText.style.fontSize);
     expect(text.style.lineHeight).toBe(nameText.style.lineHeight);

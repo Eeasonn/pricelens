@@ -7,18 +7,22 @@
 //  chart（红柱）与紧随的「最新有价周平台比较」表并存，同一响应内部 scope
 //  自相矛盾。修复口径（core.ts queryCards）：明确问「全平台/所有平台/全部
 //  平台/跨平台」时，查询态本身切全平台（allPlatformQueryStateOf：全局平台
-//  与每线 main/compares 店铺口径一并清空 = 自动：该国全部渠道每周最低价），
+//  与每线 main/compares 店铺口径一并清空 = 自动口径；2026-11-17 起自动 =
+//  默认锚严格取价，该国默认店铺无价 = 缺采、不回落其他平台），
 //  chart 序列、摘要、平台表与两卡 openPatch / followup prompt 全部同源同口径；
 //  页面原口径保留在 baseQueryState 仅供「与当前所选店铺口径（X）不同」透明
 //  披露。普通（非全平台）请求严格保持每线 > 全局 > 自动生效口径（不漂移）。
 // 数据事实（fact_price_weekly · USD）。matrix-only（2026-11-10）重锚：旧证人
 // nova 14 12+256 黑在 RU 无矩阵对比位（竞品回落全局的口径披露链路失效），改用
 // 矩阵覆盖的 nova 15 12+256 黑 W202619：OZON 1P 693.67 / DNS 342.76（→343）/
-// Mvideo 342.76（→343）/ OZON 3P 453.31（→453，严格 3P）；全平台混池 343；
+// Mvideo 342.76（→343）/ OZON 3P 453.31（→453，严格 3P）；自动（默认锚 DNS）
+// 343（旧「每周全平台最低价」口径同为 343，DNS 本就是最低）；
 // 平台表 = DNS 343 / Mvideo 343 / OZON 453（DNS/Mvideo 同价按渠道表序 DNS 在前）。
 // Mate X6 12+512 黑 202619：Mvideo 1184 / DNS 1210 / OZON 3P 1422（未重锚，
-// 事实未变）。FR Mate X6 12+512 黑：仅 Amazon 3P 有 202638–202642 五条，
-// 202642 = 1596（范围内更早周无价）。
+// 事实未变）；2026-11-17 起自动口径锚 RU:dns:独立站 → Mate 自动 = 1210（旧全
+// 平台最低价口径曾取 Mvideo 1184）。FR Mate X6 12+512 黑：仅 Amazon 3P 有
+// 202638–202642 五条，202642 = 1596；FR 默认锚 = FR:amazon:1P（无该品事实行）
+// → 自动口径全程缺采（不回落 3P），平台表 Amazon 1596 属逐平台候选口径不变。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { dimProduct } from '../../data';
@@ -121,7 +125,8 @@ async function expectAllPlatformClosed(state: FiltersState, text: string, expect
   expect(response.intent).toBe('query');
   const chart = chartOf(response);
   const table = tableOf(response);
-  // chart：全平台真实序列（W19 自动口径 = 各平台渠道内最低 343），绝无严格 3P 的 453
+  // chart：全平台真实序列（W19 自动口径 = 默认锚 DNS 342.76 → 343；DNS 本就是最低，
+  // 旧「每周全平台最低价」口径同值），绝无严格 3P 的 453
   expect(chart.title).toBe('全平台价格走势');
   const novaSeries = chart.series.find((s) => s.label.includes('nova 15'))!;
   expect(novaSeries.values).toHaveLength(1);
@@ -238,7 +243,7 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     expect(tableOf(response).note).toContain('全部平台自动');
   });
 
-  it('多产品全平台：chart 两系列 nova 333 / Mate 1184、逐产品表、每卡 openPatch 清空全部产品线口径', async () => {
+  it('多产品全平台：chart 两系列 nova 343 / Mate 1210（自动 = 默认锚 DNS，2026-11-17）、逐产品表、每卡 openPatch 清空全部产品线口径', async () => {
     const state = ruMultiProductPerLine3PState();
     const response = await ask(state, '全平台哪个平台最便宜？');
     expect(response.intent).toBe('query');
@@ -248,7 +253,10 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     const novaSeries = chart.series.find((s) => s.label.includes('nova 15'))!;
     const mateSeries = chart.series.find((s) => s.label.includes('Mate X6'))!;
     expect(novaSeries.values[0].value).toBe(343);
-    expect(mateSeries.values[0].value).toBe(1184);
+    // openPatch 清空每线口径后 chart 走自动口径 = 默认锚 DNS 独立站（2026-11-17；
+    // 旧全平台最低价口径曾漂移取 Mvideo 1184）；平台表 1,184 是 OZON 3P 每线清空前
+    // 逐平台候选口径的列值，不受自动锚影响
+    expect(mateSeries.values[0].value).toBe(1210);
     expect(chart.series.every((s) => s.values.every((p) => p.value !== 453 && p.value !== 1422))).toBe(true);
     const novaRows = table.rows.filter((row) => row[0].includes('nova 15'));
     const mateRows = table.rows.filter((row) => row[0].includes('Mate X6'));
@@ -268,7 +276,7 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     }
   });
 
-  it('多周全平台真实聚合（FR Mate X6 · 202619–202642 仅 202638–202642 有价）：chart 末值 1596、空周如实 null、= 引擎全平台输出', async () => {
+  it('多周全平台真实聚合（FR Mate X6 · 202619–202642 仅 Amazon 3P 202638–202642 有价）：自动口径锚 FR:amazon:1P 无事实 → 全程缺采如实 null、= 引擎自动输出；平台表仍 Amazon 1596（逐平台候选口径，2026-11-17 默认锚语义）', async () => {
     const state = frMateBoulangerState();
     const response = await ask(state, '全平台哪个平台最便宜？');
     expect(response.intent).toBe('query');
@@ -276,19 +284,19 @@ describe('七审 M2 · 同一响应 scope 闭环：全平台请求整条响应�
     const table = tableOf(response);
     const series = chart.series.find((s) => s.label.includes('Mate X6'))!;
     const values = series.values.map((p) => p.value);
-    // 尾 8 桶（202635–202642）：前三周无价 null，202638–202642 五周有价、末值 1596
+    // openPatch 清空全局 Boulanger 后 chart 走自动口径：2026-11-17 起自动 = 默认锚
+    // 严格取价（FR 默认锚 = FR:amazon:1P，该品全程无事实行）→ 8 桶全缺采 null，
+    // 不再回落 Amazon 3P（旧「每周全平台最低价」口径曾在 202638–202642 取 1596）
     expect(values).toHaveLength(8);
-    expect(values.slice(0, 3).every((v) => v === null)).toBe(true);
-    expect(values.slice(3).every((v) => v != null)).toBe(true);
-    expect(values[values.length - 1]).toBe(1596);
-    // 与引擎全平台口径逐一相等（真实聚合，不是手挑数字）
+    expect(values.every((v) => v === null)).toBe(true);
+    // 与引擎自动口径逐一相等（真实聚合，不是手挑数字）
     const engine = buildSeries({
       scope: { countryCode: 'FR', industry: state.industry },
       groups: [{ modelId: MATE_12512.modelId, romram: MATE_12512.romram, skuIds: MATE_12512.skuIds, isOwn: true, platform: null }],
       granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg,
     });
     expect(values).toEqual(engine[0].points.slice(-8).map((p) => p.price));
-    // 表按最新有价周 202642 Amazon 1596，披露与全局 Boulanger 口径不同
+    // 平台表按最新有价周 202642 Amazon 1596（逐平台候选口径不受自动锚影响），披露与全局 Boulanger 口径不同
     expect(table.rows[0]).toEqual(['Amazon', '1,596', '最低']);
     expect(table.note).toContain('202642');
     expect(table.note).toContain('本次按全部平台比较');

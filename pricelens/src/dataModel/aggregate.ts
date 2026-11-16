@@ -812,11 +812,11 @@ export function buildSeries(q: SeriesQuery): Series[] {
       const label = explicit.shopIds.length ? chs.map((c) => c.display_name).join('/') : platforms.join('/');
       badge = { label: label || '已选渠道', auto: false, platforms };
     } else {
-      // 产品级默认店铺只在配置了该产品覆盖时收窄自动口径，保持未配置产品的历史全平台动态最低价。
-      const productDefault = productDefaultShopOverrideOf(cc, g.modelId);
-      channels = productDefault
-        ? new Set(effectiveChannelIds(cc, null, g.modelId))
-        : new Set(dimChannel.filter((c) => c.country_code === cc).map((c) => c.channel_id));
+      // 自动口径（2026-11-17 Eason 推翻第一百六十轮「未配置产品全平台动态最低价」）：
+      // 未显式勾选 = 按默认锚取价——产品级默认店铺覆盖 → 国家默认店铺（dim_default_channel
+      // 预填，RU = DNS 独立站）→ 默认平台全部渠道。所选产品每一周都从同一默认锚取价，
+      // 不再每周跨平台漂移；该周默认锚无价 = 缺采（虚线桥接），不回落其他平台。
+      channels = new Set(effectiveChannelIds(cc, null, g.modelId));
       badge = {
         label: '自动', // 自动态在 weeklyBest 求出后回填为最新有价周的实际平台名
         auto: true,

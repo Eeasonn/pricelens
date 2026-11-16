@@ -132,8 +132,7 @@ import ChartToolbar from '../chart/PriceTrend/ChartToolbar';
 // 读数方式（区间极差|区间涨跌）会话态 + 选区按全量桶下标存储、按面板查看窗口换算
 import { brushInWindow, type RangeMode } from '../chart/PriceTrend/rangeRuler';
 // 名称带自适应宽（nameZoneWidthOf）与曲线系列名（curveNameOf）与价格页同源
-import { curveNameOf, nameZoneWidthOf, seriesPillMetaOf, type LineShapeChoice } from '../chart/PriceTrend/chartModel';
-import {
+import { curveNameOf, nameZoneWidthOf, seriesPillMetaOf, type LineShapeChoice } from '../chart/PriceTrend/chartModel';import {
   BREAK_PX,
   GRID,
   PANE_HEAD_H,
@@ -1264,7 +1263,7 @@ export default function VolumePrice() {
                           volumeColor={seriesColor}
                           volumes={volumes[p.idx]}
                           volumeHeight={volH}
-                          volumeOwner={p.vis[0] ? { key: p.vis[0].key, brand: p.brand, text: curveNameOf(p.vis[0]) } : null}
+                          volumeOwner={p.vis[0] ? { key: p.vis[0].key, brand: p.brand, text: curveNameOf(p.vis[0]), name: seriesPillMetaOf(p.vis[0]).name, cfg: seriesPillMetaOf(p.vis[0]).cfg ?? '' } : null}
                           brush={panelBrush} // 页面级选区（全量桶下标 → 本面板窗口下标）
                           onBrushChange={(r) => setBrushRange(r ? [r[0] + ws, r[1] + ws] : null)}
                           rangeMode={rangeMode}

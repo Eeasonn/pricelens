@@ -26,9 +26,12 @@
 //    一律 draftOnly（点击只填输入框、不执行），不再硬编码发送「RU nova …」
 //    静默换国换型号。
 // 数据事实（fact_price_weekly · USD）：RU nova 14 12+256 黑 202619：OZON 1P
-// 333 / DNS 336 / Mvideo 347 / OZON 3P 395；nova 14 12+512 黑 202619 自动 =
+// 333 / DNS 336 / Mvideo 347 / OZON 3P 395；2026-11-17 起自动口径 = 默认锚
+// 严格取价（RU 默认锚 = DNS 独立站）→ nova 14 12+256 黑自动 = DNS 336（旧
+// 「每周全平台最低价」口径曾取 OZON 333）；nova 14 12+512 黑 202619 自动 =
 // DNS 370；nova 14 Pro 12+512 = DNS 465；Mate X6 12+512 黑 202619：Mvideo
-// 1184 最低 / DNS 1210 / OZON 3P 1422。FR Mate X6 12+512：仅 Amazon 3P
+// 1184 最低 / DNS 1210（自动 = 默认锚 DNS 1210，旧口径曾漂移取 Mvideo
+// 1184）/ OZON 3P 1422。FR Mate X6 12+512：仅 Amazon 3P
 // 202638–202642 五条，202642 = 1596。
 // ============================================================
 import { describe, expect, it } from 'vitest';
@@ -65,7 +68,7 @@ function ruHolding12512State(): FiltersState {
   };
 }
 
-/** 评审复现初始态 B：页面持有 nova 14 12+256（旧缺陷：nova 未被绑定 → 拿页面 256/333 替答 512/370） */
+/** 评审复现初始态 B：页面持有 nova 14 12+256（旧缺陷：nova 未被绑定 → 拿页面 256 自动价替答 512/370） */
 function ruHolding12256State(): FiltersState {
   return {
     ...defaultFilters,
@@ -131,7 +134,7 @@ describe('六审 M1 · 共享配置语法（都是/均为 → 全部实体各得
   it.each([
     ['页面初始持有 12+512', () => ruHolding12512State()],
     ['页面初始持有 12+256（旧缺陷复现态）', () => ruHolding12256State()],
-  ])('「%s」：问「RU nova 14 和 Mate X6 都是12+512GB价格趋势」→ nova 370/DNS + Mate 1184/Mvideo，绝不 333', async (_tag, makeState) => {
+  ])('「%s」：问「RU nova 14 和 Mate X6 都是12+512GB价格趋势」→ nova 370/DNS + Mate 1210/DNS，绝不页面 256 自动价', async (_tag, makeState) => {
     const { chart, table, response } = await trendOf(makeState(), 'RU nova 14 和 Mate X6 都是12+512GB价格趋势');
     expect(chart.series).toHaveLength(2);
     expect(table.rows).toHaveLength(2);
@@ -140,21 +143,24 @@ describe('六审 M1 · 共享配置语法（都是/均为 → 全部实体各得
     expect(novaRow[0]).toContain('12+512');
     expect(novaRow[1]).toBe('370');
     expect(novaRow[3]).toBe('DNS');
-    expect(mateRow[1]).toBe('1,184');
-    expect(mateRow[3]).toBe('Mvideo');
-    // 页面持有的 12+256（333/OZON）绝不冒充共享 12+512 的答案
+    // Mate 无每线口径 = 自动（默认锚 DNS 独立站，2026-11-17 起；旧全平台最低价曾取 Mvideo 1184）
+    expect(mateRow[1]).toBe('1,210');
+    expect(mateRow[3]).toBe('DNS');
+    // 页面持有的 12+256 绝不冒充共享 12+512 的答案：旧口径错答值 = 333/OZON，
+    // 2026-11-17 默认锚口径下页面 12+256 自动价 = 336/DNS——两个错答值都不得出现
     const body = `${response.summary}\n${chart.note}\n${table.note}\n${table.rows.flat().join('|')}`;
     expect(body.includes('333')).toBe(false);
+    expect(body.includes('336')).toBe(false);
     expect(body.includes('部分完成')).toBe(false);
   });
 
-  it('逆序共享等价：「RU Mate X6 和 nova 14 都是 12+512 价格趋势」同样两组 370+1184', async () => {
+  it('逆序共享等价：「RU Mate X6 和 nova 14 都是 12+512 价格趋势」同样两组 370+1210', async () => {
     const { table } = await trendOf(ruHolding12256State(), 'RU Mate X6 和 nova 14 都是 12+512 价格趋势');
     expect(table.rows).toHaveLength(2);
     const novaRow = table.rows.find((row) => row[0].includes('nova 14') && !row[0].includes('Pro'))!;
     const mateRow = table.rows.find((row) => row[0].includes('Mate X6'))!;
     expect(novaRow[1]).toBe('370');
-    expect(mateRow[1]).toBe('1,184');
+    expect(mateRow[1]).toBe('1,210');
   });
 
   it('「均为」同为共享标记：「RU nova 14 与 Mate X6 均为 12+512 价格趋势」两组', async () => {
@@ -189,43 +195,45 @@ describe('六审 M1 · 共享配置语法（都是/均为 → 全部实体各得
     expect(body.includes('333')).toBe(false);
   });
 
-  it('共享有效 + 逐实体无效共存：「nova 14 99+999 和 Mate X6 都是 12+512」→ 370+1184 如实答 + 99+999 缺失披露', async () => {
+  it('共享有效 + 逐实体无效共存：「nova 14 99+999 和 Mate X6 都是 12+512」→ 370+1210 如实答 + 99+999 缺失披露', async () => {
     const { chart, table, response } = await trendOf(ruHolding12256State(), 'RU nova 14 99+999 和 Mate X6 都是 12+512 价格趋势');
     expect(chart.series).toHaveLength(2);
     const novaRow = table.rows.find((row) => row[0].includes('nova 14') && !row[0].includes('Pro'))!;
     const mateRow = table.rows.find((row) => row[0].includes('Mate X6'))!;
     expect(novaRow[1]).toBe('370');
-    expect(mateRow[1]).toBe('1,184');
+    // Mate 自动口径 = 默认锚 DNS 独立站（2026-11-17 起；旧全平台最低价曾取 Mvideo 1184）
+    expect(mateRow[1]).toBe('1,210');
     expect(response.summary).toContain('99+999');
     expect(response.summary).toContain('部分完成');
   });
 });
 
 describe('六审 M1 · 和列表延续与置信门（距离兜底已移除）', () => {
-  it('「RU nova 14 12+256 和 12+512 和 Mate X6 12+512 价格趋势」→ 三组 333/370/1184，不漏 nova 512', async () => {
+  it('「RU nova 14 12+256 和 12+512 和 Mate X6 12+512 价格趋势」→ 三组 336/370/1210，不漏 nova 512', async () => {
     const { chart, table } = await trendOf(ruHolding12256State(), 'RU nova 14 12+256 和 12+512 和 Mate X6 12+512 价格趋势');
     expect(chart.series).toHaveLength(3);
     expect(table.rows).toHaveLength(3);
     const nova256 = table.rows.find((row) => row[0].includes('12+256') && row[0].includes('nova 14'))!;
     const nova512 = table.rows.find((row) => row[0].includes('12+512') && row[0].includes('nova 14') && !row[0].includes('Pro'))!;
     const mate = table.rows.find((row) => row[0].includes('Mate X6'))!;
-    expect(nova256[1]).toBe('333');
+    // 自动口径 = 默认锚 DNS 独立站（2026-11-17 起）：nova 256 = 336（旧全平台最低曾取 OZON 333）、Mate = 1210（旧曾取 Mvideo 1184）
+    expect(nova256[1]).toBe('336');
     expect(nova512[1]).toBe('370');
-    expect(mate[1]).toBe('1,184');
+    expect(mate[1]).toBe('1,210');
   });
 
-  it('顿号语义等价（对照）：「nova 14 12+256、12+512 和 Mate X6 12+512」同样三组 333/370/1184', async () => {
+  it('顿号语义等价（对照）：「nova 14 12+256、12+512 和 Mate X6 12+512」同样三组 336/370/1210', async () => {
     const { table } = await trendOf(ruHolding12256State(), 'RU nova 14 12+256、12+512 和 Mate X6 12+512 价格趋势');
     expect(table.rows).toHaveLength(3);
     const prices = table.rows.map((row) => row[1]).sort();
-    expect(prices).toEqual(['1,184', '333', '370'].sort());
+    expect(prices).toEqual(['1,210', '336', '370'].sort());
   });
 
-  it('单实体跨「和」列举安全：「RU nova 14 12+256 和 12+512 价格趋势」→ 两组 333+370（无跨实体污染可能）', async () => {
+  it('单实体跨「和」列举安全：「RU nova 14 12+256 和 12+512 价格趋势」→ 两组 336+370（无跨实体污染可能）', async () => {
     const { chart, table } = await trendOf(ruHolding12256State(), 'RU nova 14 12+256 和 12+512 价格趋势');
     expect(chart.series).toHaveLength(2);
     const prices = table.rows.map((row) => row[1]).sort();
-    expect(prices).toEqual(['333', '370'].sort());
+    expect(prices).toEqual(['336', '370'].sort());
   });
 
   it('夹在两实体之间且恰好一侧已配：「nova 14 和 12+512 和 Mate X6 12+256」→ 12+512 归 nova（370）；Mate 12+256 如实缺失不被救活', async () => {
@@ -294,15 +302,15 @@ describe('六审 M2 · 全平台表动作携带本次真实计算 scope', () => 
     expect(novaMain?.main?.romram).toBe('12+256 GB');
   });
 
-  it('全平台 openPatch 落地后再问：趋势回到自动口径 333/OZON（不再每线 3P 395 漂移）', async () => {
+  it('全平台 openPatch 落地后再问：趋势回到自动口径 336/DNS（2026-11-17 默认锚 DNS 独立站；旧全平台最低价口径曾为 333/OZON；不再每线 3P 395 漂移）', async () => {
     const state = ruNovaGlobalDnsPerLine3PState();
     const first = await platformTableOf(state, '全平台哪个平台最便宜？');
     const open = (first.table.actions ?? []).find((action) => action.kind === 'open');
     const landed: FiltersState = { ...state, ...(open?.filterPatch ?? {}) } as FiltersState;
     const trend = await trendOf(landed, '价格趋势');
     const novaRow = trend.table.rows.find((row) => row[0].includes('nova 14'))!;
-    expect(novaRow[1]).toBe('333');
-    expect(novaRow[3]).toBe('OZON');
+    expect(novaRow[1]).toBe('336');
+    expect(novaRow[3]).toBe('DNS');
     const again = await platformTableOf(landed, '按当前所选店铺口径，哪个平台最便宜？');
     expect(again.table.rows.map((row) => row[0])).toEqual(['OZON', 'DNS', 'Mvideo']);
     expect(again.table.rows[0][1]).toBe('333');

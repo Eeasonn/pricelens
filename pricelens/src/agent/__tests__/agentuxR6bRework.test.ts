@@ -2,10 +2,11 @@
 // t428u R6b 返修（五审增量 3Major/1Minor · 2026-11-07）真实链路回归
 // （真实事实包、真实 runAgent 自然分类，零 mock、无 forcedIntent）：
 //  - 五审 M1 Major · 配置绑定语法与置信门：支持配置前置实体
-//    （「12+256GB nova 14 和 12+512GB Mate X6」恰好两组 333+1184，绝不把
-//    Mate 的 512 归给 nova 混出 370/DNS 第三组）；明确「分别」按实体顺序与
-//    配置顺序一一对应（页面初始 512 / 256 均恰好 nova 333 + Mate 1184、
-//    不再虚假声称请求 Mate 256 缺失）；无效 99+999 前置 nova 时只 Mate 1184
+//    （「12+256GB nova 14 和 12+512GB Mate X6」恰好两组 336+1210，绝不把
+//    Mate 的 512 归给 nova 混出 370 第三组；2026-11-17 起自动口径 = 默认锚
+//    DNS 独立站，两条自动行标签均为 DNS）；明确「分别」按实体顺序与
+//    配置顺序一一对应（页面初始 512 / 256 均恰好 nova 336 + Mate 1210、
+//    不再虚假声称请求 Mate 256 缺失）；无效 99+999 前置 nova 时只 Mate 1210
 //    + nova 缺失如实披露，绝不被另一实体的 512「救活」；「分别」数量不匹配
 //    返回诚实澄清（不生成可污染看板的卡），不再冒答。
 //  - 五审 M2 Major · 平台表生效口径：每条产品线在 effectiveLinePlatform
@@ -25,6 +26,9 @@
 // Mate X6 12+512 黑 202619：Mvideo 1184.11（1184）/ DNS 1209.85（1210）/
 // OZON 3P 1422.29（1422）。nova Y63 6+128 黑：最后有价周 202638 Mvideo
 // 136.31（136）。nova 14 12+512 黑 202619 自动 = DNS 369.86（370）。
+// 2026-11-17 起自动口径 = 默认锚严格取价（RU 默认锚 = DNS 独立站）：
+// nova 14 12+256 黑自动 = DNS 336、Mate X6 12+512 黑自动 = DNS 1210
+// （旧「每周全平台最低价」口径曾漂移取 OZON 333 / Mvideo 1184）。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { dimProduct, dimTime } from '../../data';
@@ -109,26 +113,29 @@ async function platformTableOf(state: FiltersState, text: string) {
   return { table: table!, response };
 }
 
-/** 两组共用断言：恰好 nova 14/12+256（333/OZON）+ Mate X6/12+512（1184/Mvideo） */
+/** 两组共用断言：恰好 nova 14/12+256（336/DNS 自动）+ Mate X6/12+512（1210/DNS
+ *  自动）。2026-11-17 起自动口径 = 默认锚 DNS 独立站，两条自动行标签均为 DNS——
+ *  「DNS」字样不再是第三组证据，第三组排除改由系列结构断言承担。 */
 function expectExactlyNova256Mate512(chart: ChartResultCard, table: TableResultCard) {
   expect(chart.series).toHaveLength(2);
   expect(table.rows).toHaveLength(2);
   const novaRow = table.rows.find((row) => row[0].includes('nova 14') && !row[0].includes('Pro') && !row[0].includes('14i'))!;
   const mateRow = table.rows.find((row) => row[0].includes('Mate X6'))!;
   expect(novaRow[0]).toContain('12+256');
-  expect(novaRow[1]).toBe('333');
-  expect(novaRow[3]).toBe('OZON');
+  expect(novaRow[1]).toBe('336');
+  expect(novaRow[3]).toBe('DNS');
   expect(mateRow[0]).toContain('12+512');
-  expect(mateRow[1]).toBe('1,184');
-  expect(mateRow[3]).toBe('Mvideo');
+  expect(mateRow[1]).toBe('1,210');
+  expect(mateRow[3]).toBe('DNS');
   const body = `${chart.note}\n${table.note}\n${table.rows.flat().join('|')}`;
   expect(body.includes('370')).toBe(false);
-  expect(body.includes('DNS')).toBe(false);
+  // 绝不出现 nova 14 12+512 的第三组系列（Mate 的 512 不归给 nova）
+  expect(chart.series.filter((s) => s.label.includes('nova 14') && s.label.includes('12+512') && !s.label.includes('Pro'))).toHaveLength(0);
   expect(body.includes('14i')).toBe(false);
 }
 
 describe('五审 M1 · 配置前置实体绑定（不再一律归最近前置）', () => {
-  it('forward 前置完整 GB：「RU 12+256GB nova 14 和 12+512GB Mate X6 价格趋势」恰好两组 333+1184', async () => {
+  it('forward 前置完整 GB：「RU 12+256GB nova 14 和 12+512GB Mate X6 价格趋势」恰好两组 336+1210', async () => {
     const { chart, table } = await trendOf(ruHolding12512State(), 'RU 12+256GB nova 14 和 12+512GB Mate X6 价格趋势');
     expectExactlyNova256Mate512(chart, table);
   });
@@ -157,13 +164,14 @@ describe('五审 M1 · 配置前置实体绑定（不再一律归最近前置）
     expectExactlyNova256Mate512(again.chart, again.table);
   });
 
-  it('无效 99+999 前置 nova：只 Mate 1184/Mvideo + nova 99+999 如实缺失，绝不被 Mate 的 512 救活出 370', async () => {
+  it('无效 99+999 前置 nova：只 Mate 1210/DNS + nova 99+999 如实缺失，绝不被 Mate 的 512 救活出 370', async () => {
     const { chart, table, response } = await trendOf(ruHolding12256State(), 'RU 99+999 nova 14 和 12+512GB Mate X6 价格趋势');
     expect(chart.series).toHaveLength(1);
     expect(chart.series[0].label.includes('Mate X6')).toBe(true);
     expect(table.rows).toHaveLength(1);
-    expect(table.rows[0][1]).toBe('1,184');
-    expect(table.rows[0][3]).toBe('Mvideo');
+    // Mate 自动口径 = 默认锚 DNS 独立站（2026-11-17 起；旧全平台最低价曾取 Mvideo 1184）
+    expect(table.rows[0][1]).toBe('1,210');
+    expect(table.rows[0][3]).toBe('DNS');
     expect(response.summary).toContain('99+999');
     expect(response.summary).toContain('部分完成');
     const body = `${chart.note}\n${table.note}\n${table.rows.flat().join('|')}\n${response.summary}`;
@@ -176,7 +184,7 @@ describe('五审 M1 · 明确「分别」按顺序一一对应（页面初始配
   it.each([
     ['页面初始 12+512', () => ruHolding12512State()],
     ['页面初始 12+256', () => ruHolding12256State()],
-  ])('「%s」下分别问 → nova 333/OZON + Mate 1184/Mvideo，无虚假 Mate 256 缺失', async (_tag, makeState) => {
+  ])('「%s」下分别问 → nova 336/DNS + Mate 1210/DNS，无虚假 Mate 256 缺失', async (_tag, makeState) => {
     const { chart, table, response } = await trendOf(makeState(), 'RU nova 14 和 Mate X6 分别是12+256和12+512的价格趋势');
     expectExactlyNova256Mate512(chart, table);
     // 旧缺陷：把两个配置都归 Mate → nova 复用页面 512/370 + 虚假声称请求 Mate 256 缺失

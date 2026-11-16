@@ -65,9 +65,9 @@ describe('R6 · buildSeries 真实事实价格（nova 14 12+256GB 黑色 · RU �
     expect(seriesOf(OZON_1P).points[0]?.channelName).toBe('OZON 1P');
   });
 
-  it('平台级 OZON 与自动口径 = 333（平台内/全国每周最低价落 1P，文档化差异非缺陷）', () => {
+  it('平台级 OZON = 333（平台内最低价）；自动 = 默认锚主店价 336（2026-11-17 起自动不再全渠道取低）', () => {
     expect(seriesOf(OZON_PLATFORM).points[0]?.price).toBe(333);
-    expect(seriesOf(null).points[0]?.price).toBe(333);
+    expect(seriesOf(null).points[0]?.price).toBe(336);
   });
 });
 

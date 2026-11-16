@@ -972,17 +972,17 @@ describe('默认查看窗口（seriesSpanRange / tailDefaultRange）', () => {
   });
 
   it('默认窗口 = 跨度末端向前 N 桶（周 12）；12 桶跨度 → 锚跨度起点整段覆盖', () => {
-    expect(tailDefaultRange(B12, [2, 11], 'week')).toEqual(['202603', '202612']);
+    expect(tailDefaultRange(B12, [2, 11], 'week')).toEqual(['202605', '202612']);
   });
 
   it('跨度短于默认窗口 → 锚跨度起点（不早于产品在售起点，不造空桶）', () => {
     expect(tailDefaultRange(B12, [2, 7], 'week')).toEqual(['202603', '202608']);
   });
 
-  it('跨度长于默认窗口 → 只取近段（右缘 = 最晚有价桶）', () => {
+  it('跨度长于默认窗口 → 只取近段（右缘 = 最晚有价桶；2026-11-17 起周窗 = 8 桶）', () => {
     const B20 = mkBuckets(20); // 202601..202620
-    expect(tailDefaultRange(B20, [0, 19], 'week')).toEqual(['202609', '202620']);
-    expect(tailDefaultRange(B20, [3, 19], 'week')).toEqual(['202609', '202620']);
+    expect(tailDefaultRange(B20, [0, 19], 'week')).toEqual(['202613', '202620']);
+    expect(tailDefaultRange(B20, [3, 19], 'week')).toEqual(['202613', '202620']);
   });
 
   it('默认窗口按粒度：月 6 / 季 4（跨度长于窗口时取近段）', () => {
@@ -990,8 +990,8 @@ describe('默认查看窗口（seriesSpanRange / tailDefaultRange）', () => {
     expect(tailDefaultRange(B12, [0, 11], 'quarter')).toEqual(['202609', '202612']);
   });
 
-  it('窗口长度按粒度：周 12 / 月 6 / 季 4', () => {
-    expect(defaultTailBuckets('week')).toBe(12);
+  it('窗口长度按粒度：周 8 / 月 6 / 季 4（2026-11-17 Eason：周窗 12→8）', () => {
+    expect(defaultTailBuckets('week')).toBe(8);
     expect(defaultTailBuckets('month')).toBe(6);
     expect(defaultTailBuckets('quarter')).toBe(4);
   });

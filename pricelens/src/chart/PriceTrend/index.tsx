@@ -1126,11 +1126,14 @@ export default function PriceTrend(props: {
       if (mains.length <= 1) return null;
       return mains.map((sel) => {
         const key = seriesKeyOf(sel);
-        const s = visSeries.find((v) => v.key === key);
+        const s = visSeries.find((v) => seriesKeyMatches(v.key, key));
+        const pill = s ? seriesPillMetaOf(s) : null;
         return {
           key,
           brand: s?.brand ?? '',
           text: s ? curveNameOf(s) : key,
+          name: pill?.name ?? (s ? curveNameOf(s) : key),
+          cfg: pill?.cfg ?? '',
           color: s?.color ?? color.mute,
           volumes:
             winBucketIds.length > 0
@@ -1198,7 +1201,7 @@ export default function PriceTrend(props: {
   );
 
   const mergedVolumeOwner = useMemo(
-    () => (mergedOwnerSeries ? { key: mergedOwnerSeries.key, brand: mergedOwnerSeries.brand, text: curveNameOf(mergedOwnerSeries) } : null),
+    () => (mergedOwnerSeries ? { key: mergedOwnerSeries.key, brand: mergedOwnerSeries.brand, text: curveNameOf(mergedOwnerSeries), name: seriesPillMetaOf(mergedOwnerSeries).name, cfg: seriesPillMetaOf(mergedOwnerSeries).cfg ?? '' } : null),
     [mergedOwnerSeries],
   );
   // 合并图：主品逐桶销毛（输入 = 显示币种折后价窗口序列；模拟月版本模型）
@@ -1224,7 +1227,7 @@ export default function PriceTrend(props: {
         volumes: (number | null)[] | null;
         margins: (MarginCostPoint | null)[] | null;
         volumeColor: string;
-        volumeOwner: { key: string; brand: string; text: string } | null;
+        volumeOwner: { key: string; brand: string; text: string; name?: string; cfg?: string } | null;
         diffBaseKey: string | null;
       }
     > = {};
@@ -1251,7 +1254,7 @@ export default function PriceTrend(props: {
               })
             : null,
         volumeColor: (key ? p.all.find((s) => seriesKeyMatches(s.key, key))?.color : null) ?? color.mute,
-        volumeOwner: mainSeries ? { key: mainSeries.key, brand: mainSeries.brand, text: curveNameOf(mainSeries) } : null,
+        volumeOwner: mainSeries ? { key: mainSeries.key, brand: mainSeries.brand, text: curveNameOf(mainSeries), name: seriesPillMetaOf(mainSeries).name, cfg: seriesPillMetaOf(mainSeries).cfg ?? '' } : null,
         diffBaseKey: key,
       };
     }

@@ -86,7 +86,7 @@ describe('量带归属接线', () => {
     harness.mains = [card('c1', 'HUA-A')];
     render(<PriceTrend />);
     const last = harness.chartProps[harness.chartProps.length - 1];
-    expect(last.volumeOwner).toEqual({ key: 'HUA-A__12GB+256GB', brand: 'HUAWEI', text: 'HUA-A 12GB+256' });
+    expect(last.volumeOwner).toEqual({ key: 'HUA-A__12GB+256GB', brand: 'HUAWEI', text: 'HUA-A 12GB+256', name: 'HUA-A 12GB+256', cfg: '' });
     expect(last.margins).toBeTruthy();
   });
 

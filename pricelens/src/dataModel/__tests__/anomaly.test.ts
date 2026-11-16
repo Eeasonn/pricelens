@@ -228,26 +228,27 @@ describe('异常守卫 · buildSeries 端到端锚点（真实数据）', () => 
     expect(series[0].points.filter((pt) => pt.suspect === 'quarantined')).toEqual([]);
   });
 
-  it('显式开启后：DE 穿戴 Galaxy Watch 8 Classic 46mm 2026W39 为瞬态隔离点（50%）', () => {
+  it('显式开启后：GB 穿戴 FreeBuds SE 2 2026W36 为瞬态隔离点（50%；2026-11-17 默认锚口径重锚）', () => {
     saveAnomalyRule({ enabled: true, thresholdPct: 50 });
     try {
-      // 层级塌缩（2026-11-10）：查找锚改 sku_id（romram 键已 '—'）；锚值 2026W39 / 50% 瞬态
-      // 来自同一事实行（sku_id 未变），且显式单 SKU 取数，塌缩不影响中位基数 → 原样成立
-      const row = dimProduct.find((p) => p.sku_id === 'cmp-samsung-galaxy-watch-8-classic__46mm__black');
+      // 自动口径改默认锚严格取价（2026-11-17 Eason）后，原 Galaxy Watch W39 全渠道
+      // 最低价 V 型不再成立；新真数据锚 = GB:amazon:1P 下 FreeBuds SE 2 2026W36
+      // 27.4 → 54.1（+97%）→ 27.0（回弹，RRP 稳定非官方调价）——瞬态 V 型
+      const row = dimProduct.find((p) => p.sku_id === 'own-huawei-freebuds-se-2__std__ceramic-white');
       expect(row).toBeDefined();
       const [startBucket, endBucket] = dataBucketRange('week');
       const series = buildSeries({
-        groups: [{ modelId: 'cmp-samsung-galaxy-watch-8-classic', romram: '—', skuIds: [row!.sku_id], isOwn: false }],
+        groups: [{ modelId: 'own-huawei-freebuds-se-2', romram: '—', skuIds: [row!.sku_id], isOwn: true }],
         granularity: 'week',
         startBucket,
         endBucket,
         currency: 'usd',
         agg: 'avg',
-        scope: { countryCode: 'DE', industry: 'wearable' },
+        scope: { countryCode: 'GB', industry: 'wearable' },
       });
       expect(series).toHaveLength(1);
       const isolated = series[0].points.filter((pt) => pt.suspect === 'quarantined');
-      expect(isolated.map((pt) => pt.bucketId)).toEqual(['202639']);
+      expect(isolated.map((pt) => pt.bucketId)).toEqual(['202633', '202636']); // 同系列两次真实瞬态
       expect(isolated[0].suspectReason).toBe('transient');
       expect(isolated[0].suspectWow).toBeGreaterThan(0.5);
     } finally {

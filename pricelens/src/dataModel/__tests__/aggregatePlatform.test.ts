@@ -3,13 +3,14 @@
 // - 真实数据无平台因子：shopName = 所选渠道的显示名 · 店铺，取价 = 渠道集合内最低在架价；
 // - 参考汇率已删（fact 行内汇率）：getFxRate() = 当前国家本币的最新 per-USD 中位数。
 // 锚点均从 factPriceWeekly / dimChannel 独立直算，随数据重生成自动对齐。
-// 第一百六十轮：平台口径下沉到每组——显式勾选随组传入。第一百六十二轮自动
-// 语义改每周动态：组缺省 = 每周取该国全部平台-店铺最低价（channelBadge =
-// 「自动」+ 全平台集），badge 显式态 label = 平台名。
+// 第一百六十轮：平台口径下沉到每组——显式勾选随组传入。2026-11-17 Eason 推翻
+// 第一百六十二轮「自动 = 全渠道每周动态最低价」：组缺省 = 默认锚严格取价
+//（产品级默认店铺覆盖 → dim_default_channel 预填主店 → 默认平台渠道集），
+// 每周都从同一锚取价不跨平台漂移；badge = 「自动」+ 锚渠道集。
 // ============================================================
 import { afterEach, describe, expect, it } from 'vitest';
 import { dimChannel, dimProduct, factPriceWeekly, latestPerUsd } from '../../data';
-import { buildSeries } from '../aggregate';
+import { buildSeries, effectiveChannelIds } from '../aggregate';
 import { getFxRate, getLocalCurrency, setLocalCurrencyByCountry } from '../../state/fx';
 import { perUsdOf } from '../../chart/PriceTrend/helpers';
 
@@ -45,20 +46,22 @@ describe('aggregate platform/source口径', () => {
     const pt = (platform: { platforms: string[]; shopIds: [] | string[] } | null) =>
       buildSeries({ ...baseQuery, groups: baseQuery.groups.map((g) => ({ ...g, platform })) })[0].points[0];
 
-    // 缺省 = 自动（第一百六十二轮）：每周取该国全部平台-店铺最低价，badge.platforms
-    // = 全平台集（渠道表插入序）；label = 最新有价周的实际取数平台（自动态不显示「自动」）。
+    // 缺省 = 自动（2026-11-17 默认锚口径）：每周取默认锚渠道集内最低价（RU =
+    // dim_default_channel 预填主店 DNS 独立站），badge.platforms = 锚平台集；
+    // label = 最新有价周的实际取数平台（自动态不显示「自动」）。
     const autoSeries = buildSeries({ ...baseQuery })[0];
-    const allPlatforms = [...new Set(dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.platform))];
+    const anchorChannels = effectiveChannelIds('RU', null, anchorSku.model_id);
+    expect(anchorChannels).toEqual(['RU:dns:独立站']); // 国家默认锚 = 预填主店
+    const anchorPlatforms = [...new Set(dimChannel.filter((c) => anchorChannels.includes(c.channel_id)).map((c) => c.platform))];
     const channelById = new Map(dimChannel.map((c) => [c.channel_id, c]));
     const lastPriced = [...autoSeries.points].reverse().find((p) => p.price != null)!;
     const bestRow = factPriceWeekly
-      .filter((r) => r.country_code === 'RU' && r.sku_id === anchorSku.sku_id && r.week_id === lastPriced.bucketId && r.price_usd != null && !r.bundle)
+      .filter((r) => r.country_code === 'RU' && r.sku_id === anchorSku.sku_id && r.week_id === lastPriced.bucketId && r.price_usd != null && !r.bundle && anchorChannels.includes(r.channel_id))
       .sort((a, b) => a.price_usd! - b.price_usd!)[0];
     const lastPlatform = channelById.get(bestRow.channel_id)!.platform;
-    expect(autoSeries.channelBadge).toEqual({ label: lastPlatform, auto: true, platforms: allPlatforms });
-    // 首点价 = 该周全渠道最低价（fact 直算对拍）
-    const allChannels = dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.channel_id);
-    expect(autoSeries.points[0].price).toBe(Math.round(minUsdPrice(anchorSku.sku_id, ANCHOR_WEEK, allChannels)!));
+    expect(autoSeries.channelBadge).toEqual({ label: lastPlatform, auto: true, platforms: anchorPlatforms });
+    // 首点价 = 该周默认锚内最低价（fact 直算对拍）
+    expect(autoSeries.points[0].price).toBe(Math.round(minUsdPrice(anchorSku.sku_id, ANCHOR_WEEK, anchorChannels)!));
     // 显式 OZON → 该平台最低价行（3P 渠道）文案以 OZON 开头（卖家名 UNREADABLE 不冗余，带出）
     expect(pt({ platforms: ['OZON'], shopIds: [] })!.shopName).toMatch(/^OZON/);
     // 勾到具体渠道（channel_id）→ 同渠道文案
@@ -70,21 +73,21 @@ describe('aggregate platform/source口径', () => {
     expect(union.shopName).toBe(pt({ platforms: ['OZON'], shopIds: [] })!.shopName);
   });
 
-  it('自动 = 每周全渠道最低价且渠道名随周变（channelName）；显式勾选压过自动且 label 为平台名', () => {
+  it('自动 = 默认锚每周严格取价（渠道名恒主店，不跨平台漂移）；显式勾选压过自动且 label 为平台名', () => {
     const s = buildSeries({ ...baseQuery })[0];
-    const allChannels = dimChannel.filter((c) => c.country_code === 'RU').map((c) => c.channel_id);
-    // 每个有价点 = 该周全渠道最低价；渠道名随最低价来源（点列独立）
+    const anchorChannels = effectiveChannelIds('RU', null, anchorSku.model_id);
+    // 每个有价点 = 该周默认锚内最低价；渠道名恒锚主店（2026-11-17：不再随全渠道漂移）
     for (let i = 0; i < s.points.length; i++) {
       const pt = s.points[i];
       const wk = pt.bucketId;
-      const expectV = minUsdPrice(anchorSku.sku_id, wk, allChannels);
+      const expectV = minUsdPrice(anchorSku.sku_id, wk, anchorChannels);
       if (expectV == null) {
         expect(pt.price).toBeNull();
         continue;
       }
       expect(pt.price).toBe(Math.round(expectV));
       const nameById = new Map(dimChannel.map((c) => [c.channel_id, c.display_name]));
-      const bestCh = allChannels
+      const bestCh = anchorChannels
         .map((id) => ({ id, v: minUsdPrice(anchorSku.sku_id, wk, [id]) }))
         .filter((x) => x.v != null)
         .sort((a, b) => a.v! - b.v!)[0];

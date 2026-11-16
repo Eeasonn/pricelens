@@ -2,7 +2,8 @@
 // t428u Round 5 R5-M1 · 稳定版（生产构建）Agent 查询平台口径镜像。
 // 稳定版价格走势看板取数每组 platform = 全局平台（PriceTrend 第196轮整改3：
 // STABLE ? platformLevelForChannel(state.platform) : 每线覆写）。Agent 的
-// 趋势/平台查询此前忽略全局平台（每组 platform=null → 全渠道自动），导致
+// 趋势/平台查询此前忽略全局平台（每组 platform=null → 自动口径；2026-11-17
+// 起自动口径 = 默认锚严格取价，不再每周跨平台漂移），导致
 // 「全局选 OZON 时卡按全渠道算、回看落地却是 OZON」的第二类口径分叉。
 // 本文件 vi.mock appChannel 钉在 stable（与 PriceTrend stableGlobalPlatform
 // 测试同手法），锁定：seriesQueryOf 在 stable 下每组 platform = 全局平台
@@ -77,7 +78,7 @@ describe('t428u R5-M1 · stable：Agent 趋势查询服从全局平台（与看�
     expect(chartPatch.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:3P'], seller: null });
   });
 
-  it('AE NOON 跨国问 RU：归一 null → 全渠道自动，补丁 null', async () => {
+  it('AE NOON 跨国问 RU：归一 null → 自动口径（2026-11-17 起默认锚 DNS），补丁 null', async () => {
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'AE',
@@ -92,8 +93,9 @@ describe('t428u R5-M1 · stable：Agent 趋势查询服从全局平台（与看�
     const novaRow = table.rows.find((row) => row[0].includes('nova 14 Pro'));
     expect(novaRow).toBeDefined();
     expect(novaRow![1]).not.toBe('—');
-    // 自动态口径徽标 = 最新有价周实际平台，随新批次事实变化
-    expect(novaRow![3]).toBe('OZON');
+    // 自动态口径徽标 = 默认锚平台（2026-11-17 起自动口径 = 默认锚 RU:dns:独立站 →
+    // DNS；旧「每周全平台最低价」口径随周漂移、曾取 OZON）
+    expect(novaRow![3]).toBe('DNS');
     const patch = openActionOf(chart, '回看板定位').target!.filterPatch!;
     expect(patch.platform).toBeNull();
     expect(patch.countryCode).toBe('RU');
