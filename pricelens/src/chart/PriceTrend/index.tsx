@@ -1147,8 +1147,20 @@ export default function PriceTrend(props: {
   const [volumeOwnerKeyRaw, setVolumeOwnerKey] = usePageViewState<string | null>('dashboard.volumeOwnerKey', () => null);
   const volumeActiveKey = useMemo(() => {
     if (!volumeCandidates) return null;
-    return volumeCandidates.some((c) => c.key === volumeOwnerKeyRaw) ? volumeOwnerKeyRaw : volumeCandidates[0].key;
-  }, [volumeCandidates, volumeOwnerKeyRaw]);
+    if (volumeCandidates.some((c) => c.key === volumeOwnerKeyRaw)) return volumeOwnerKeyRaw;
+    // 默认归属 = 最新有价最低的我司候选（2026-11-17 Eason：默认看最低价产品的量）；
+    // 无价的候选排最后；并列保持候选序
+    const latestPrice = (key: string): number => {
+      const s = visSeries.find((v) => seriesKeyMatches(v.key, key));
+      if (!s) return Number.POSITIVE_INFINITY;
+      for (let i = s.points.length - 1; i >= 0; i--) {
+        const p = s.points[i].price;
+        if (p != null) return p;
+      }
+      return Number.POSITIVE_INFINITY;
+    };
+    return [...volumeCandidates].sort((a, b) => latestPrice(a.key) - latestPrice(b.key))[0].key;
+  }, [volumeCandidates, volumeOwnerKeyRaw, visSeries]);
   const activeVolumeCandidate = volumeCandidates?.find((c) => c.key === volumeActiveKey) ?? null;
   // 量带数据/颜色/归属 = active 候选优先；单组（无候选）走原路径
   const mergedVolumes = useMemo(

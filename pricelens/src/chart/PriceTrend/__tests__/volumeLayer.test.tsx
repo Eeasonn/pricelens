@@ -196,13 +196,10 @@ describe('第196轮整改5：工具行「量」开关（大促档期左侧 + 柱
     expect(onVolumeOn).toHaveBeenCalledWith(true);
   });
 
-  it('开启后同组追加 柱|面积 Segmented；点「面积」回调 area', () => {
-    const onVolumeMode = vi.fn();
-    render(<ChartToolbar {...toolbarBase} volumeOn onVolumeOn={vi.fn()} volumeMode="bar" onVolumeMode={onVolumeMode} /> as ReactElement);
-    expect(screen.getByText('柱')).toBeTruthy();
-    expect(screen.getByText('面积')).toBeTruthy();
-    fireEvent.click(screen.getByText('面积'));
-    expect(onVolumeMode).toHaveBeenCalledWith('area');
+  it('量层形态「柱|面积」切换已退役（2026-11-17 Eason：恒柱）；量开关保留', () => {
+    render(<ChartToolbar {...toolbarBase} volumeOn onVolumeOn={vi.fn()} volumeMode="bar" onVolumeMode={vi.fn()} /> as ReactElement);
+    expect(screen.getByText('量')).toBeTruthy();
+    expect(screen.queryByText('面积')).toBeNull();
   });
 
   it('未传量回调（量价/预测页等调用方）→ 不渲染量控件，原组框不变', () => {

@@ -21,7 +21,8 @@ import BrandDot from '../../components/BrandMark';
 import { configTextOf } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, fontSize, formatPrice, motion, radius } from '../../theme/tokens';
+import { color, fontSize, motion, radius } from '../../theme/tokens';
+import { getLocalCurrency } from '../../state/fx';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { diffPct } from './helpers';
@@ -44,11 +45,24 @@ import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 
 export type { DetailBucket, TableGroup } from './tableModel';
 
+/** 金额数值（无货币符号；2026-11-17 Eason：符号从单元格退场，币种缩写进行头括号）。
+ *  分组口径与 formatLocalMoney 同源（RUB = ru-RU 空格千分位，其余 en-US）。 */
+function moneyPlain(v: number | null | undefined, currency: 'local' | 'usd'): string {
+  if (v == null) return '—';
+  if (currency === 'usd') return v.toLocaleString('en-US');
+  const code = getLocalCurrency();
+  return code === 'RUB' ? v.toLocaleString('ru-RU').replace(/\u00A0/g, ' ') : v.toLocaleString('en-US');
+}
+/** 币种缩写（行头括号用）：usd = USD；local = 当前国家本币代码（fx 注册） */
+function curCodeOf(currency: 'local' | 'usd'): string {
+  return currency === 'usd' ? 'USD' : getLocalCurrency();
+}
 /** 周桶 id（202631）→「2026W31」：明细表头第一行与图上轴标签同语言（第一百八十二轮：
  *  图上 2026W19、表内只写 05-06 的口径割裂改为「周号＋日期」双行） */
-function weekIdText(id: string): string {
+function weekIdText(id: string, withYear = true): string {
   const m = /^(\d{4})(\d{1,2})$/.exec(id);
-  return m ? `${m[1]}W${Number(m[2])}` : id;
+  if (!m) return id;
+  return withYear ? `${m[1]}W${Number(m[2])}` : `W${Number(m[2])}`;
 }
 
 // ---- 列宽（左缘冻结三列：产品/配置/类型 + 时间列） ----
@@ -236,7 +250,7 @@ export default function TrendTables(props: {
           ? ZA_TYPES.map((ty) => [ty, (pt) => {
               const f = pt.finance;
               if (!f) return '—';
-              if (ty === '平台成交价') return f.selling != null ? formatPrice(f.selling, currency) : '—';
+              if (ty === '平台成交价') return f.selling != null ? moneyPlain(f.selling, currency) : '—';
               if (ty === '促销政策') return f.promo ?? '—';
               const v = ty === '24期分期价' ? f.i24
                 : ty === '24期总价' ? f.t24
@@ -244,11 +258,11 @@ export default function TrendTables(props: {
                 : ty === '36期总价' ? f.t36
                 : ty === '48期分期价' ? f.i48
                 : f.t48;
-              return v != null ? formatPrice(v, currency) : '—';
+              return v != null ? moneyPlain(v, currency) : '—';
             }] as [string, (pt: (typeof s.points)[number]) => string])
           : STD_TYPES.map((ty) => [ty, (pt) => {
-              if (ty === 'RRP') return formatPrice(pt.rrp, currency);
-              if (ty === '折后价') return formatPrice(pt.price, currency);
+              if (ty === 'RRP') return moneyPlain(pt.rrp, currency);
+              if (ty === '折后价') return moneyPlain(pt.price, currency);
               if (ty === '折扣率') {
                 const disc = discountOf(pt);
                 return disc != null ? fmtPct(disc) : '—';
@@ -482,7 +496,10 @@ export default function TrendTables(props: {
     )),
     ...cols.map(({ bk, i }, ri) => {
       const d = dates[i];
-      const wk = granularity === 'week' ? weekIdText(bk.id) : null;
+      // 周列头（2026-11-17 Eason）：只写 Wxx，跨年列才带年份（与图上时间轨同规则）
+      const prevId = ri > 0 ? cols[ri - 1].bk.id : null;
+      const crossYear = granularity === 'week' && prevId != null && bk.id.slice(0, 4) !== prevId.slice(0, 4);
+      const wk = granularity === 'week' ? weekIdText(bk.id, crossYear) : null;
       return (
         <div
           key={`${gid}-h-${part}-${bk.id}`}
@@ -583,7 +600,7 @@ export default function TrendTables(props: {
               bucketId: pt?.bucketId ?? buckets[i].id,
               granularity,
               dateText: bucketDateText(granularity, pt?.xLabel || buckets[i].xLabel),
-              priceText: formatPrice(pt?.price ?? null, currency),
+              priceText: moneyPlain(pt?.price ?? null, currency),
               url: pt?.url ?? '',
             });
           };
@@ -596,7 +613,7 @@ export default function TrendTables(props: {
           ];
           if (!isZaFinance) {
           // RRP 行
-          rows.push(typeCell('RRP', main, `${p}-rrp`));
+          rows.push(typeCell(`RRP（${curCodeOf(currency)}）`, main, `${p}-rrp`));
           rows.push(
             ...cols.map(({ bk, i }, ri) => {
               const pt = s.points[i];
@@ -604,7 +621,7 @@ export default function TrendTables(props: {
                 <div key={`${p}-rrp-${bk.id}`} role="cell" style={{ ...cell(3 + ri), gridColumn: String(4 + ri), justifyContent: 'flex-end', background: bg }}>
                   {pt?.rrp != null ? (
                     <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap' }}>
-                      {formatPrice(pt.rrp, currency)}
+                      {moneyPlain(pt.rrp, currency)}
                     </span>
                   ) : (
                     emptyCell
@@ -615,7 +632,7 @@ export default function TrendTables(props: {
           )
           // 折后价行（事实层：原值永远照显；异常守卫打标点加琥珀「疑」角标——
           // title 带环比与规则，计算行（折扣率/近4周环比）另走可信链）
-          rows.push(typeCell('折后价', main, `${p}-price`));
+          rows.push(typeCell(`折后价（${curCodeOf(currency)}）`, main, `${p}-price`));
           rows.push(
             ...cols.map(({ bk, i }, ri) => {
               const pt = s.points[i];
@@ -632,7 +649,7 @@ export default function TrendTables(props: {
                 <div key={`${p}-price-${bk.id}`} role="cell" style={{ ...cell(3 + ri), gridColumn: String(4 + ri), justifyContent: 'flex-end', background: bg }}>
                   {pt?.price != null ? (
                     <span className="tnum" style={{ fontSize: 12, fontWeight: 600, color: color.ink, whiteSpace: 'nowrap' }}>
-                      {formatPrice(pt.price, currency)}
+                      {moneyPlain(pt.price, currency)}
                       {suspect && (
                         <sup
                           title={`${suspectText}${wowText}${suspect === 'quarantined' ? '：已隔离，不参与计算' : ''}`}
@@ -745,7 +762,7 @@ export default function TrendTables(props: {
             ['48期总价', (f) => f?.t48 ?? null],
           ];
           for (const [label, get] of finMoneyRows) {
-            rows.push(typeCell(label, main, `${p}-fin-${label}`));
+            rows.push(typeCell(`${label}（${curCodeOf(currency)}）`, main, `${p}-fin-${label}`));
             rows.push(
               ...cols.map(({ bk, i }, ri) => {
                 const f0 = finAt(i);
@@ -754,7 +771,7 @@ export default function TrendTables(props: {
                   <div key={`${p}-fin-${label}-${bk.id}`} role="cell" style={{ ...cell(3 + ri), gridColumn: String(4 + ri), justifyContent: 'flex-end', background: bg }}>
                     {v != null ? (
                       <span className="tnum" style={{ fontSize: 12, color: color.body, whiteSpace: 'nowrap' }}>
-                        {formatPrice(v, currency)}
+                        {moneyPlain(v, currency)}
                       </span>
                     ) : (
                       emptyCell

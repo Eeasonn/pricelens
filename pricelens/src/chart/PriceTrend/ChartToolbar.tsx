@@ -442,7 +442,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
       {/* 功能键同一排：量（第196轮整改5）+ 大促档期 + 促销权益，然后 ⋯。折后价/页签/
           价格显示/时点摘要在 ⋯ 内，控件外形与原先露在外面时一致。量开关在大促档期
           左侧（Eason 指定位置），同组框语言：默认关、开启浅蓝勾选；开启后同组追加
-          柱|面积 Segmented（量层形态）。 */}
+          量层形态恒柱（切换已退役 2026-11-17）。 */}
       {showRight && showPromo && (
         <div
           style={{
@@ -463,17 +463,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
               <Checkbox checked={props.volumeOn ?? false} onChange={(e) => props.onVolumeOn!(e.target.checked)}>
                 <span style={{ fontSize: 12 }}>量</span>
               </Checkbox>
-              {props.volumeOn && props.onVolumeMode != null && (
-                <Segmented
-                  size="small"
-                  value={props.volumeMode ?? 'bar'}
-                  onChange={(v) => props.onVolumeMode!(v as 'bar' | 'area')}
-                  options={[
-                    { label: '柱', value: 'bar' },
-                    { label: '面积', value: 'area' },
-                  ]}
-                />
-              )}
+              {/* 量层形态「柱|面积」切换退役（2026-11-17 Eason）：恒柱 */}
             </>
           )}
           <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
