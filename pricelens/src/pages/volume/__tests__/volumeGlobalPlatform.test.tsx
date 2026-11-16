@@ -4,12 +4,12 @@
 // 平台筛选器，它筛选的结果会作用于底下所有的产品。我们不允许每个产品单独选择
 // 平台店铺。」
 // 覆盖三件事：
-// ① FilterBar 平台位置断言：平台级联（2026-11-17 Eason「平台、类型、店铺」三级
-//    ChannelScopeBox 替换单 Select）紧随「选择产品」入口之后、币种之前，默认
-//    占位「默认 · DNS」（取价 = 该平台池每周最低价店铺）；
-// ② 写路径断言：平台行导航 + 「全部类型 · 最低价」提交 → state.platform =
-//    平台级单选（URL plat= 链接同键），底部「回到自动」→ platform = null（plat
-//    键删除）；每卡取价平台 chip / 店铺同步钮不再出现（volumeStoreSync 旧契约随功能删除）；
+// ① FilterBar 平台位置断言：平台级联（2026-11-17 Eason 二轮定版：平台→渠道→卖家
+//    三级 ChannelScopeBox，平台行单击只选平台、再点才展开下一层）紧随「选择产品」
+//    入口之后、币种之前，默认占位「默认 · DNS」（取价 = 该平台池每周最低价店铺）；
+// ② 写路径断言：平台行单击 → state.platform = 平台级单选（URL plat= 链接同键），
+//    底部「自动取价 / 未选中」按钮 → platform = null（plat 键删除）；每卡取价平台
+//    chip / 店铺同步钮不再出现（volumeStoreSync 旧契约随功能删除）；
 // ③ 数据口径断言：UI 切平台后组视图明细卡（观察列 = 窗口末桶）价格口径变化，
 //    且与 plat= 直达链接的整页口径完全一致——「筛选结果作用于底下所有产品」。
 // 组装模式照已删除的 volumeStoreSync.test.tsx（App 全量渲染 + echarts mock）。
@@ -66,39 +66,43 @@ const scopeShown = (): string => scopeTrigger()?.textContent ?? '';
 async function openScope(): Promise<HTMLElement> {
   fireEvent.click(scopeTrigger());
   return await waitFor(() => {
-    const el = [...document.querySelectorAll('.lpl-cascade-popover')].find(
+    const all = [...document.querySelectorAll('.lpl-cascade-popover')].filter(
       (n) => !(n as HTMLElement).classList.contains('ant-popover-hidden'),
     );
-    if (!el) throw new Error('平台级联浮层未展开');
-    return el as HTMLElement;
+    if (!all.length) throw new Error('平台级联浮层未展开');
+    return all[all.length - 1] as HTMLElement;
   });
 }
 
-/** 平台行（导航激活）→ 中列「全部类型 · 最低价」（提交平台级口径）——级联两步 */
+/** 平台行单击 = 只选平台（不展开下一层；2026-11-17 二轮：选中与展开分离） */
 async function pickPlatform(label: string): Promise<void> {
   const panel = await openScope();
   const row = [...panel.querySelectorAll('[role="treeitem"]')]
     .find((n) => n.getAttribute('aria-label') === label);
   if (!row) throw new Error(`平台行未找到：${label}`);
   fireEvent.click(row);
-  const allRow = await waitFor(() => {
-    const el = [...panel.querySelectorAll('[role="treeitem"]')]
-      .find((n) => n.getAttribute('aria-label') === '全部类型 · 最低价');
-    if (!el) throw new Error('「全部类型 · 最低价」行未出现');
-    return el as HTMLElement;
-  });
-  fireEvent.click(allRow);
 }
 
-/** 底部「回到自动」按钮 = platform null（占位回到「默认 · 平台」） */
+/** 底部「自动取价 / 未选中」按钮 = platform null（aria-label 恒定「自动取价」，文本随状态）。
+ *  pickPlatform 后浮层仍开着——此处只在浮层已关时重新打开，防二次触发点击把它关掉 */
 async function pickDefault(): Promise<void> {
-  const panel = await openScope();
+  const panel = await openScopeIfClosed();
   const btn = await waitFor(() => {
-    const el = panel.querySelector('button[aria-label="回到自动"]') as HTMLButtonElement | null;
-    if (!el) throw new Error('回到自动按钮未找到');
+    const el = panel.querySelector('button[aria-label="自动取价"]') as HTMLButtonElement | null;
+    if (!el) throw new Error('自动取价按钮未找到');
     return el;
   });
   fireEvent.click(btn);
+}
+
+/** 浮层已开则复用；已关才点触发器（antd Popover trigger=click 的第二次点击 = 关闭）。
+ *  多实例时取最后一个非 hidden（destroyOnHidden 卸载有动画延迟，旧树可能仍在 DOM） */
+async function openScopeIfClosed(): Promise<HTMLElement> {
+  const visible = [...document.querySelectorAll('.lpl-cascade-popover')].filter(
+    (n) => !(n as HTMLElement).classList.contains('ant-popover-hidden'),
+  );
+  if (visible.length) return visible[visible.length - 1] as HTMLElement;
+  return openScope();
 }
 
 /** 组视图明细卡观察列折后价（span[title="折后价"]，顺序 = 产品序） */
@@ -150,16 +154,26 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     expect(scopeShown()).toBe('默认 · DNS');
   });
 
-  it('选平台写 state.platform（URL plat= 链接同键）；选回默认删除 plat；每卡选店/店铺同步入口不再存在', async () => {
+  it('平台行单击写 state.platform（URL plat= 链接同键，且不展开下一层）；自动取价删除 plat；每卡选店/店铺同步入口不再存在', async () => {
     window.history.replaceState(null, '', '/?p=volume');
     render(<App />);
+    const panel0 = await openScope();
     await pickPlatform('OZON');
     await waitFor(() => expect(window.location.search).toContain('plat=OZON'));
-    expect(scopeShown()).toBe('OZON · 全部类型');
+    // 单击只选平台：渠道层不出现（再点一次才展开——选中与展开分离）
+    expect([...panel0.querySelectorAll('[role="group"]')]).toHaveLength(1);
+    expect(scopeShown()).toBe('OZON');
     await pickDefault();
     await waitFor(() => {
       const q = new URLSearchParams(window.location.search);
       expect(q.get('plat')).toBeNull();
+    });
+    // 回自动后按钮文案回「自动取价」；钉店铺时显示「未选中」（按钮文本随状态切换）
+    await waitFor(() => {
+      const b = [...document.querySelectorAll('button[aria-label="自动取价"]')]
+        .filter((n) => !(n.closest('.lpl-cascade-popover') as HTMLElement | null)?.classList.contains('ant-popover-hidden'))
+        .pop();
+      expect(b?.textContent).toBe('自动取价');
     });
     // 每产品不再单独选平台店铺（2026-11-05 指令）：取价平台 chip 与店铺同步钮全无
     expect(document.querySelectorAll('button[aria-label^="取价平台："]')).toHaveLength(0);
@@ -167,6 +181,42 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     expect(document.querySelectorAll('button[aria-pressed]')).toEqual(
       expect.not.arrayContaining([expect.objectContaining({ textContent: expect.stringContaining('同步店铺') })]),
     );
+  });
+
+  it('钉卖家：平台行再点展开渠道层 → 渠道行展开卖家列 → 卖家行提交 = shop+seller 入链、底部按钮变「未选中」', async () => {
+    window.history.replaceState(null, '', '/?p=volume');
+    render(<App />);
+    const panel = await openScope();
+    // 平台行第一击 = 只选平台
+    fireEvent.click([...panel.querySelectorAll('[role="treeitem"]')].find((n) => n.getAttribute('aria-label') === 'OZON')!);
+    await waitFor(() => expect(window.location.search).toContain('plat=OZON'));
+    // 第二击 = 展开渠道层
+    fireEvent.click([...panel.querySelectorAll('[role="treeitem"]')].find((n) => n.getAttribute('aria-label') === 'OZON')!);
+    const channelRow = await waitFor(() => {
+      const el = [...panel.querySelectorAll('[role="treeitem"]')].find((n) => (n.getAttribute('aria-label') ?? '').startsWith('OZON 3P'));
+      if (!el) throw new Error('渠道层未展开');
+      return el;
+    });
+    fireEvent.click(channelRow);
+    // 卖家列首行提交
+    const sellerRow = await waitFor(() => {
+      const col = [...panel.querySelectorAll('[role="group"]')].pop()!;
+      const el = col.querySelector('[role="treeitem"]') as HTMLElement | null;
+      if (!el) throw new Error('卖家列未展开');
+      return el;
+    });
+    fireEvent.click(sellerRow);
+    await waitFor(() => {
+      const q = new URLSearchParams(window.location.search);
+      expect(q.get('shop')).toBeTruthy();
+      expect(q.get('seller')).toBeTruthy();
+    });
+    // 触发器显示「渠道 · 卖家」（自动取价未生效；底部按钮文案随 pinnedShop 切「未选中」——
+    // 浮层提交后即关闭，按钮文本走浏览器人验，这里锚触发器与 URL 双键）
+    await waitFor(() => {
+      const t = document.querySelector('[data-testid="channel-scope-trigger"]')?.textContent ?? '';
+      expect(t).toContain('OZON 3P');
+    });
   });
 
   it('改全局平台 → 底下所有面板重取数：UI 切换口径与 plat= 直达口径逐卡一致，且不同于默认口径', async () => {
@@ -181,7 +231,7 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
       expect(next).not.toEqual(pricesDefault); // 至少逐卡口径变化（平台内每周最低价店铺）
       return next;
     });
-    expect(scopeShown()).toBe('OZON · 全部类型');
+    expect(scopeShown()).toBe('OZON');
     // 直达链接（plat=OZON）整页口径 = UI 切换后的口径（两页共用同一 state.platform）
     cleanup();
     sessionStorage.clear();
