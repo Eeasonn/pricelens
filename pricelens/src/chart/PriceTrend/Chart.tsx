@@ -459,9 +459,13 @@ const VOL_OWNER_MID = VOL_TITLE_DROP + 16 + 6 + 12;
 /** 浮层/参照线数值格式（第三十五轮）：千分位整数 */
 const fmt_mm = (v: number): string => v.toLocaleString('en-US');
 
-/** 区间胶囊里的桶文案（与时间轴同口径：周带年份） */
-function rangeBucketLabel(g: Granularity, id: string): string {
-  if (g === 'week') return /^\d{6}$/.test(id) ? `${id.slice(0, 4)}W${id.slice(4)}` : id;
+/** 区间胶囊里的桶文案（2026-11-17 Eason：周默认 Wxx，配对两端同年时不带年份、
+ *  跨年各带年份；withYear=true 单点读数（悬停卡）保留完整年周自证）；月/季不变 */
+function rangeBucketLabel(g: Granularity, id: string, withYear = true): string {
+  if (g === 'week') {
+    if (!/^\d{6}$/.test(id)) return id;
+    return withYear ? `${id.slice(0, 4)}W${id.slice(4)}` : `W${id.slice(4)}`;
+  }
   if (g === 'month') return /^\d{6}$/.test(id) ? `${id.slice(0, 4)}-${id.slice(4)}` : id;
   return id;
 }
@@ -3108,7 +3112,14 @@ export default function Chart(props: ChartProps) {
               );
             }
             const ids = series[0]?.points.map((pt) => pt.bucketId) ?? [];
-            const labelOf = (i: number): string => rangeBucketLabel(granularity, ids[i] ?? '');
+            // 周配对感知（2026-11-17 Eason）：选区两端同年 = 两侧都只写 Wxx；
+            // 跨年或单点选区 = 保留完整年周。非周粒度不变。
+            const loId = ids[rangeLo] ?? '';
+            const hiId = ids[rangeHi] ?? '';
+            const weekPairCrossYear = /^\d{6}$/.test(loId) && /^\d{6}$/.test(hiId)
+              && loId.slice(0, 4) !== hiId.slice(0, 4);
+            const withYear = granularity !== 'week' || rangeLo === rangeHi || weekPairCrossYear;
+            const labelOf = (i: number): string => rangeBucketLabel(granularity, ids[i] ?? '', withYear);
             const rangeText = rangeLo === rangeHi ? labelOf(rangeLo) : `${labelOf(rangeLo)} – ${labelOf(rangeHi)}`;
             const fmtPrice = (v: number): string => formatPrice(Math.round(v), currency);
             return (

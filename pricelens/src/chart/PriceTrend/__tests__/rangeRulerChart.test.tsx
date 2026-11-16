@@ -103,7 +103,7 @@ describe('区间量尺（Chart 接线）', () => {
     expect(document.querySelector('[data-testid="range-ruler-price"]')).toBeTruthy();
     expect(document.querySelector('[data-testid="range-ruler-volume"]')).toBeTruthy();
     // 时间胶囊 + 两种读数方式按钮
-    expect(screen.getByText('2026W21 – 2026W23')).toBeTruthy();
+    expect(screen.getByText('W21 – W23')).toBeTruthy();
     expect(screen.getByRole('button', { name: RANGE_MODE_LABEL.extreme })).toBeTruthy();
     expect(screen.getByRole('button', { name: RANGE_MODE_LABEL.trend })).toBeTruthy();
     // 朗读摘要

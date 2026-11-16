@@ -696,11 +696,12 @@ export function fullBucketLabel(g: Granularity, id: string): string {
   return id;
 }
 
-/** 桶短文案：周 = YYYYWxx（第一百五十二轮：时间轴周刻度自带年份，如 2026W24——
- *  刻度只保留拖柄首尾与跨年后，标签必须自证年月）；月 = MM / 季 = Qn */
+/** 桶短文案：周 = Wxx（2026-11-17 Eason：默认只写周序，年份信息走 yearText
+ *  独立行、只在跨年处出现；原第一百五十二轮「自带年份 YYYYWxx」口径退役）；
+ *  月 = MM / 季 = Qn */
 export function shortBucketLabel(g: Granularity, id: string): string {
   if (g === 'week') {
-    return /^\d{6}$/.test(id) ? `${id.slice(0, 4)}W${id.slice(4)}` : id;
+    return /^\d{6}$/.test(id) ? `W${id.slice(4)}` : id;
   }
   if (g === 'month') return id.slice(4);
   return `Q${id.slice(5)}`;
@@ -741,7 +742,9 @@ export function axisTickPlan(g: Granularity, ids: string[], step: number, marks:
     yearText: (i) => {
       const k = indexes.indexOf(i);
       if (k < 0) return null;
-      if (k === 0) return yearOf(i); // 最左侧显示的刻度恒带年份
+      // 周（2026-11-17 Eason）：短文案已改 Wxx，年份只在跨年刻度出现——最左侧
+      // 不再恒带年份。月/季短文案（MM/Qn）不含年份信息，最左侧恒带保持原口径。
+      if (k === 0) return g === 'week' ? null : yearOf(i);
       const prev = indexes[k - 1];
       for (let m = prev + 1; m <= i; m++) {
         if (yearOf(m) !== yearOf(m - 1)) return yearOf(m); // 与上一显示刻度之间换年

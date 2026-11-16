@@ -117,18 +117,17 @@ describe('MergedCompareChart · 合并单图', () => {
     expect(c2.querySelectorAll('path[stroke="#c7000b"][fill="none"]').length).toBe(1);
   });
 
-  it('X 轴日历周格式（2026W33），窗口两端边界刻度加粗、年份独立第二行', () => {
+  it('X 轴日历周格式（W33，2026-11-17 起不带年份），窗口两端边界刻度加粗、年份独立第二行', () => {
     renderChart();
-    // 短格式 = YYYYWxx（shortBucketLabel 口径，与主图一致）；与边界刻度距离 ≤1 的
+    // 短格式 = Wxx（shortBucketLabel 口径，2026-11-17 起不带年份，与主图一致）；与边界刻度距离 ≤1 的
     // 抽稀刻度让位（axisTickPlan 同口径）——W32/W35 不显示，W33/W34 显示
-    expect(screen.getByText('2026W33')).toBeTruthy();
-    expect(screen.getByText('2026W34')).toBeTruthy();
-    expect(screen.queryByText('2026W35')).toBeNull();
+    expect(screen.getByText('W33')).toBeTruthy();
+    expect(screen.getByText('W34')).toBeTruthy();
+    expect(screen.queryByText('W35')).toBeNull();
     // 边界刻度（窗口两端，marks）恒显示并加粗
-    expect(screen.getByText('2026W31').getAttribute('font-weight')).toBe('600');
-    expect(screen.getByText('2026W36').getAttribute('font-weight')).toBe('600');
-    // 最左显示刻度恒带年份（axisTickPlan yearText）
-    expect(screen.getByText('2026')).toBeTruthy();
+    expect(screen.getByText('W31').getAttribute('font-weight')).toBe('600');
+    expect(screen.getByText('W36').getAttribute('font-weight')).toBe('600');
+
   });
 
   it('图例：组内产品名列表（品牌色点），常驻图例行', () => {
@@ -140,14 +139,14 @@ describe('MergedCompareChart · 合并单图', () => {
 
   it('hover：canvasSoft2 列底衬 + 列读值浮层（每产品 价格 · 销量，缺采显 —）', () => {
     const { container } = renderChart();
-    // plotWidth = 800-56-78 = 666，slot = 111 → clientX 300 落第 2 列（2026W33）
+    // plotWidth = 800-56-78 = 666，slot = 111 → clientX 300 落第 2 列（W33）
     fireEvent.pointerMove(screen.getByTestId('merged-compare-pointer'), { clientX: 300 });
     // 列底衬（canvasSoft2 = #f5f5f5）
     expect(container.querySelector('rect[fill="#f5f5f5"]')).toBeTruthy();
     // 读值浮层：日期头 + 两产品行（价格 / 销量；p1 销量缺采显 —）
     expect(screen.getByText('$690')).toBeTruthy();
     expect(screen.getByText('$790')).toBeTruthy();
-    const tip = screen.getByText('2026W33', { selector: 'div.tnum' });
+    const tip = screen.getByText('W33', { selector: 'div.tnum' });
     expect(tip).toBeTruthy();
     // 移出 → 浮层与底衬退场
     fireEvent.pointerLeave(screen.getByTestId('merged-compare-pointer'));

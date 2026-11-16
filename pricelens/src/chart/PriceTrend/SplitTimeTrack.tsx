@@ -228,22 +228,23 @@ export default function SplitTimeTrack(props: {
       {midLines.map((i) => (
         <span key={`mid-tick-${i}`} aria-hidden="true" style={{ position: 'absolute', left: `${pct(i + lo) + 0.5 / n}%`, top: 7, width: 1, height: 6, transform: 'translateX(-50%)', background: trackColors.tick, pointerEvents: 'none' }} />
       ))}
-      {/* 两端拖柄标签：短格式 + 年份第二行（周标签自带年份 YYYYWxx 不再加年行，
-          第一百五十二轮）；向轨道内侧偏移避免顶到轨道边缘裁切 */}
+      {/* 两端拖柄标签：短格式 + 年份第二行（2026-11-17 Eason：周短文案改 Wxx，
+          年行由 yearText 决定——只在跨年处出现；月/季最左恒带保持原口径）。
+          向轨道内侧偏移避免顶到轨道边缘裁切 */}
       <span aria-hidden="true" style={{ ...edgeLabelStyle('-12%'), left: `${pct(markS + lo)}%` }}>
         <span>{plan.dateText(markS)}</span>
-        {granularity !== 'week' && plan.yearText(markS) && <em style={{ fontStyle: 'italic', color: color.mute }}>{plan.yearText(markS)}</em>}
+        {plan.yearText(markS) && <em style={{ fontStyle: 'italic', color: color.mute }}>{plan.yearText(markS)}</em>}
       </span>
       <span aria-hidden="true" style={{ ...edgeLabelStyle('-88%'), left: `${pct(markE + lo + 1)}%` }}>
         <span>{plan.dateText(markE)}</span>
-        {granularity !== 'week' && plan.yearText(markE) && <em style={{ fontStyle: 'italic', color: color.mute }}>{plan.yearText(markE)}</em>}
+        {plan.yearText(markE) && <em style={{ fontStyle: 'italic', color: color.mute }}>{plan.yearText(markE)}</em>}
       </span>
       {midLabels.map((i) => {
         const year = plan.yearText(i);
         return (
           <span key={`mid-label-${i}`} aria-hidden="true" style={midLabelStyle(i)}>
             <span>{plan.dateText(i)}</span>
-            {granularity !== 'week' && year && <em style={{ fontStyle: 'italic', color: color.mute }}>{year}</em>}
+            {year && <em style={{ fontStyle: 'italic', color: color.mute }}>{year}</em>}
           </span>
         );
       })}

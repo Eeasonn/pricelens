@@ -1,8 +1,8 @@
 // ============================================================
 // 时间轴刻度计划金测（第一百一十九轮引入；第一百二十三轮改口径；第一百五十二轮
-// 再改：周主行 = YYYYWxx 自带年份如 2026W24、跨年判定取桶号年）；年份独立第二行
-// （月/季：最左侧显示的刻度恒带年份，其余刻度与上一显示刻度之间换年才带）；与
-// 边界贴得太近的抽稀刻度让位；像素让位纯函数 hideOverlappingTicks。
+// 再改：跨年判定取桶号年）；2026-11-17 Eason：周短文案 = Wxx（年份信息收进
+// yearText 独立行、只在跨年处出现，最左侧不再恒带）；月/季最左恒带保持原口径；
+// 与边界贴得太近的抽稀刻度让位；像素让位纯函数 hideOverlappingTicks。
 // 图轴（chartModel）/ 刷选轨道（XBrush）/ 面板独立轨道（PanelTimeTrack）同源。
 // ============================================================
 import { describe, expect, it } from 'vitest';
@@ -23,12 +23,12 @@ describe('桶文案：完整 / 短格式', () => {
     expect(shortBucketLabel('quarter', '2026Q1')).toBe('Q1');
   });
 
-  it('周：完整 = 锚日 YYYYMMDD（无分隔符，仅留给无障碍文案），短 = YYYYWxx（自带年份）；维表没有的周号回退桶号', () => {
+  it('周：完整 = 锚日 YYYYMMDD（无分隔符，仅留给无障碍文案），短 = Wxx（2026-11-17 起不带年份）；维表没有的周号回退桶号', () => {
     const r = dimTime[Math.floor(dimTime.length / 2)];
     expect(fullBucketLabel('week', r.week_id)).toBe(r.week_wed_date.replace(/-/g, ''));
     expect(fullBucketLabel('week', r.week_id)).toMatch(/^\d{8}$/);
-    expect(shortBucketLabel('week', r.week_id)).toBe(`${r.week_id.slice(0, 4)}W${r.week_id.slice(4)}`);
-    expect(shortBucketLabel('week', r.week_id)).toMatch(/^\d{4}W\d{2}$/);
+    expect(shortBucketLabel('week', r.week_id)).toBe(`W${r.week_id.slice(4)}`);
+    expect(shortBucketLabel('week', r.week_id)).toMatch(/^W\d{2}$/);
     expect(fullBucketLabel('week', '000001')).toBe('000001');
   });
 });
@@ -97,18 +97,19 @@ describe('axisTickPlan（第一百二十三轮口径）', () => {
     expect(plan.yearText(0)).toBe('2026');
   });
 
-  it('周粒度：边界主行 = YYYYWxx 自带年份（完整格式只留给无障碍文案）', () => {
+  it('周粒度：边界主行 = Wxx；最左刻度不再恒带年份行（2026-11-17 口径）', () => {
     const r = dimTime[Math.floor(dimTime.length / 2)];
     const plan = axisTickPlan('week', [r.week_id], 1, [0]);
-    expect(plan.dateText(0)).toBe(`${r.week_id.slice(0, 4)}W${r.week_id.slice(4)}`);
-    expect(plan.yearText(0)).toBe(r.week_id.slice(0, 4)); // 跨年判定取桶号年（152 轮）
+    expect(plan.dateText(0)).toBe(`W${r.week_id.slice(4)}`);
+    expect(plan.yearText(0)).toBeNull(); // 年份只在跨年处出现
   });
 
-  it('周粒度跨年：换年刻度年行 = 桶号年（标签 2027W01 自证年份，消费方省略年行）', () => {
+  it('周粒度跨年：换年刻度年行 = 桶号年（跨年处出现年份，152 轮判定口径保留）', () => {
     const plan = axisTickPlan('week', ['202651', '202652', '202653', '202701'], 1, [0, 3]);
     expect(plan.indexes).toEqual([0, 3]); // 1、2 与两端 mark 相邻 → 让位
-    expect(plan.dateText(3)).toBe('2027W01');
+    expect(plan.dateText(3)).toBe('W01');
     expect(plan.yearText(3)).toBe('2027'); // 202653 → 202701 换年（按桶号年判定）
+    expect(plan.yearText(0)).toBeNull(); // 非跨年侧不再恒带
   });
 });
 

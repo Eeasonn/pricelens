@@ -156,27 +156,27 @@ describe('CostBarChart · 销毛呈现二式', () => {
 
   // ---- 2026-11-05 整改3：X 轴日历标签（axisTickPlan / shortBucketLabel 口径） ----
 
-  it('周粒度 X 标签 = 2026W33 日历周格式（两端恒显示、抽稀口径与主图一致）', () => {
+  it('周粒度 X 标签 = W33（2026-11-17 起短文案不带年份；两端恒显示、抽稀口径与主图一致）', () => {
     const { container } = renderChart(false);
     const svg = container.querySelector('svg')!;
     const texts = textsOf(svg);
-    expect(texts).toContain('2026W30');
-    expect(texts).toContain('2026W33');
-    expect(texts).toContain('2026W35');
+    expect(texts).toContain('W30');
+    expect(texts).toContain('W33');
+    expect(texts).toContain('W35');
     // 周标签不出现年第二行（YYYYWxx 自带年份）；抽稀 = axisTickPlan（step 1 +
     // 两端 marks ±1 避让 → 0/2/3/5 共 4 个显示刻度，与主图同一份计划）
-    const weekLabels = texts.filter((t) => /^2026W\d{2}$/.test(t));
+    const weekLabels = texts.filter((t) => /^W\d{2}$/.test(t));
     expect(weekLabels.length).toBe(4);
-    expect(weekLabels).toEqual(['2026W30', '2026W32', '2026W33', '2026W35']);
+    expect(weekLabels).toEqual(['W30', 'W32', 'W33', 'W35']);
     // 下垂柱模式：标签画在销毛区下方（baseline + COST_MARGIN_ZONE_H + 14），不与柱下 % 标签同带
-    const firstLabel = Array.from(svg.querySelectorAll('text')).find((t) => (t.textContent || '').trim() === '2026W30');
+    const firstLabel = Array.from(svg.querySelectorAll('text')).find((t) => (t.textContent || '').trim() === 'W30');
     expect(Number(firstLabel?.getAttribute('y'))).toBe(PLOT_TOP + PLOT_HEIGHT + COST_MARGIN_ZONE_H + 14);
   });
 
   it('顶部销毛线模式：X 标签画在基线下（与合并单图同几何），格式不变', () => {
     const { container } = renderChart(true);
     const svg = container.querySelector('svg')!;
-    const firstLabel = Array.from(svg.querySelectorAll('text')).find((t) => (t.textContent || '').trim() === '2026W30');
+    const firstLabel = Array.from(svg.querySelectorAll('text')).find((t) => (t.textContent || '').trim() === 'W30');
     expect(Number(firstLabel?.getAttribute('y'))).toBe(PLOT_TOP + PLOT_HEIGHT + 15);
   });
 
