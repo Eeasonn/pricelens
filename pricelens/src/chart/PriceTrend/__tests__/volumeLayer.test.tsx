@@ -482,12 +482,16 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     const { container } = render(<Chart {...props} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     const layer = layerOf(container);
-    fireEvent.mouseMove(layer, { clientX: colX(1), clientY: px(layer.style.top) + 10 });
+    // 悬停绘图区中部（+10 落图顶带把悬停清空）
+    fireEvent.mouseMove(layer, { clientX: colX(1), clientY: px(layer.style.top) + 120 });
     const { main, margin, volume } = cardEls(container);
-    expect(px(main.style.left)).toBeCloseTo(colX(1), 5); // 左上角对齐十字中心（2026-11-17 去 16px 偏移）
+    expect(px(main.style.left)).toBeCloseTo(colX(1), 5); // 左缘 = 十字竖线（2026-11-17 去 16px 偏移）
     expect(px(margin.style.left)).toBe(px(main.style.left));
     expect(px(volume.style.left)).toBe(px(main.style.left));
-    expect(margin.style.transform).toBe('');
+    // 2026-11-17 终拍板「严格卡点右上」：主卡左下角钉十字（translateY(-100%)）、
+    // 销毛卡 translateY(calc(-100% - 8px)) 堆叠在主卡正上方 8px；右放 = 无 translateX
+    expect(main.style.transform).toBe('translateY(-100%)');
+    expect(margin.style.transform).toBe('translateY(calc(-100% - 8px))');
     expect(volume.style.transform).toBe('');
   });
 
@@ -495,7 +499,8 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     const { container } = render(<Chart {...props} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     const layer = layerOf(container);
-    fireEvent.mouseMove(layer, { clientX: colX(4), clientY: px(layer.style.top) + 10 });
+    // 悬停绘图区中部（+10 会落图顶带把悬停清空，主卡走贴顶回落、transform 不挂）
+    fireEvent.mouseMove(layer, { clientX: colX(4), clientY: px(layer.style.top) + 120 });
     const { main, margin, volume } = cardEls(container);
     // 主卡 content-box：外框右缘 = left + 内容宽 + 左右内边距 + 左右描边（真机按外框贴线）
     const outerW = px(main.style.width) + px(main.style.paddingLeft) + px(main.style.paddingRight)
@@ -505,10 +510,14 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(mainRight).toBeCloseTo(colX(4), 5); // 外框右缘 = 触发线（左上角锚十字；翻转不留 16px）
     expect(px(margin.style.left)).toBeCloseTo(mainRight, 5);
     expect(px(volume.style.left)).toBeCloseTo(mainRight, 5);
-    expect(margin.style.transform).toBe('translateX(-100%)');
+    // 2026-11-17 终拍板「严格卡点右上」：主/销毛卡同 top + transform 锚定——
+    // 主卡左下角钉十字（translateY(-100%) + 左翻 translateX(-100%)），销毛卡
+    // translateY(calc(-100% - 8px)) 堆叠在主卡正上方 8px（零估算高度）
+    expect(main.style.transform).toBe('translate(-100%, -100%)');
+    expect(margin.style.transform).toBe('translateY(calc(-100% - 8px)) translateX(-100%)');
+    expect(margin.style.top).toBe(main.style.top);
     expect(volume.style.transform).toBe('translateX(-100%)');
-    // 垂直：销毛卡贴主卡上方 8px，销量卡贴量带顶
-    expect(px(main.style.top) - px(margin.style.top) - px(margin.style.height)).toBe(8);
+    // 垂直：销量卡贴量带顶（销毛卡垂直锚定已由 transform 断言覆盖）
     expect(px(volume.style.top)).toBe(px(layer.style.top) + 4);
   });
 

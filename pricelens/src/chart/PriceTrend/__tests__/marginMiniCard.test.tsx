@@ -146,10 +146,11 @@ describe('第196轮整改4：销毛迷你卡（悬停小卡上方；2026-11-05 �
     const tipStyle = tip.style;
     // 左缘对齐
     expect(miniStyle.left).toBe(tipStyle.left);
-    // 上间距 = 价格卡 top − 迷你卡 top − 迷你卡高 = 8px
-    const gap = Number(tipStyle.top.replace('px', '')) - Number(miniStyle.top.replace('px', '')) - Number(miniStyle.height.replace('px', ''));
-    expect(gap).toBe(8);
-    // 迷你卡在价格卡上方（top 更小）
-    expect(Number(miniStyle.top.replace('px', ''))).toBeLessThan(Number(tipStyle.top.replace('px', '')));
+    // 2026-11-17 终拍板「严格卡点右上」：两卡同 top（锚十字）+ transform 堆叠——
+    // 价格卡左下角钉十字（translateY(-100%)），迷你卡 translateY(calc(-100% - 8px))
+    // = 堆叠在价格卡正上方 8px（零估算高度，8px 间距由 transform 表达）
+    expect(miniStyle.top).toBe(tipStyle.top);
+    expect(tipStyle.transform).toBe('translateY(-100%)');
+    expect(miniStyle.transform).toBe('translateY(calc(-100% - 8px))');
   });
 });
