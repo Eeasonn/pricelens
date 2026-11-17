@@ -849,27 +849,37 @@ function LevelSwitchPopover({
   // 浮层钳进视口（2026-11-13 Eason「产品筛选框被遮挡」）：浮层宽 = 四列自适应和，
   // 可逼近视口宽（上限 min(vw-48, 1100)）——antd 对超宽浮层的自动平移会把左缘
   // 推出屏幕外（vw=1000、宽 957、锚点居中时实测 left -202，品牌列整列不可达）。
-  // 打开/宽度变化/视口变化后量测一次，越界就沿 antd 原 transform 叠加 X 平移，
-  // 钳回 24px 安全边距（bodyW ≤ vw-48 保证钳完右缘也不越界）。
+  // 2026-11-18 重写（Eason「弹出的产品筛选器卡片闪现」）：旧 margin 累积式有两条
+  // 致命时序——①空组素框路径 popup 初挂时仍处 antd 隐藏态（left:-1000vw），clamp
+  // 误判越界写入 marginLeft≈19224 拉回；②antd 随后正式定位的 left 本身混入 -1000vw
+  // 残差（实测 -18644，视觉恰被 ① 的 margin 凑对），350ms 兜底 clamp 见「含 margin
+  // 已在界内」走复位分支清掉 margin → 浮层瞬间飞回屏外 = 卡片闪现。改判据重写式：
+  // 隐藏态（left 含 vw）不判定；检测「style.left 数值 ≠ 视觉位置」即残差污染，
+  // 按触发器位置直接重写干净的 fixed 定位（右缘起算优先、放不下翻左侧、钳边距），
+  // 不再依赖 margin/transform 叠加，antd 后续重写 left 也由下一轮 clamp 重新纠正。
   useEffect(() => {
     if (!open) return;
     const clamp = (): void => {
       const el = document.querySelector<HTMLElement>(`.${popCls}`);
       if (!el) return;
+      if ((el.style.left || '').includes('vw')) return; // antd 隐藏态不判定
       const r = el.getBoundingClientRect();
       const vw = window.innerWidth;
       const EDGE = 24;
-      const dx = r.left < EDGE ? EDGE - r.left : r.right > vw - EDGE ? vw - EDGE - r.right : 0;
-      // 2026-11-17 改 margin 累积式（原 transform 叠加单向无复位：浮层超宽被钳后
-      // 内容收窄/视口变宽，antd 重对齐回界内时 dx=0 不清残留 → 永久横移）。
-      // marginLeft 与 antd 对齐用的 transform 互不覆盖，dx=0 时可清零复位；
-      // rect 已含旧 margin，prev + dx 即目标绝对值，不会二次累计
-      if (dx !== 0) {
-        const prev = parseFloat(el.style.marginLeft || '0') || 0;
-        el.style.marginLeft = `${Math.round(prev + dx)}px`;
-      } else if (el.style.marginLeft) {
-        el.style.marginLeft = ''; // 已入界：清除历史钳回量（复位分支）
-      }
+      const declared = parseFloat(el.style.left || '0');
+      const clean = Math.abs(declared - r.left) < 2 && r.left >= EDGE - 2 && r.right <= vw - EDGE + 2;
+      if (clean) return;
+      const trig = triggerRef.current?.getBoundingClientRect();
+      if (!trig || trig.width === 0) return;
+      const popW = Math.round(r.width) || Math.round(bodyW);
+      let left = trig.right + 8; // 默认锚触发器右缘右侧
+      if (left + popW > vw - EDGE) left = trig.left - popW - 8; // 放不下 → 左侧展开
+      left = Math.max(EDGE, Math.min(left, vw - EDGE - popW));
+      const top = Math.max(EDGE, Math.min(trig.bottom + 8, window.innerHeight - r.height - 24));
+      el.style.position = 'fixed';
+      el.style.left = `${Math.round(left)}px`;
+      el.style.top = `${Math.round(top)}px`;
+      el.style.marginLeft = '';
     };
     clamp();
     const t = window.setTimeout(clamp, 350); // antd 落位/入场动画稳定后再兜一次
