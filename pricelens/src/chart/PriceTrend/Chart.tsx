@@ -3022,14 +3022,18 @@ export default function Chart(props: ChartProps) {
             // 卡高相应收窄；该桶无数据显「—」）。tipBox 模式（量价看板预留框）不出
             // 迷你卡；margins 未传（量价/下钻等）不渲染
             const mpt = props.margins?.[tipIdx] ?? null;
+            // 2026-11-17 Eason「销毛率选中后小卡片不见了」：2a69768 改「严格卡点右上」
+            // 后迷你卡仍按自身高度 translateY(calc(-100% - 8px)) 上移，而主卡按主卡
+            // 高度上移（~60-100px）——迷你卡落进主卡矩形内被同 z-index 的主卡盖住。
+            // 修复 = 迷你卡改为**主卡容器的子元素**、bottom: calc(100% + 8px) 精确
+            // 叠在主卡上方 8px（% 基准 = 主卡高度，transform 翻转/钳制路径统一免估算）；
+            // 贴线边对齐（side left = 右缘对齐，side right = 左缘对齐）。
             const marginMini = props.margins != null && props.marginMiniOn !== false && (
               <div
                 style={{
                   position: 'absolute',
-                  // 钳制路径 = 直接坐标（left 贴主卡左缘、top = 主卡上方 8px，无 transform）；
-                  // transform 路径 = 与主卡同 top、translateY(calc(-100% - 8px)) 堆叠主卡正上方
-                  ...(panelClamp ? { left: group.mainLeft } : tipGroupAnchor(group)),
-                  top: panelClamp ? top - 8 - MARGIN_MINI_H : top,
+                  bottom: 'calc(100% + 8px)',
+                  ...(group.side === 'left' ? { right: 0 } : { left: 0 }),
                   width: 148,
                   height: MARGIN_MINI_H,
                   boxSizing: 'border-box',
@@ -3042,12 +3046,6 @@ export default function Chart(props: ChartProps) {
                   boxShadow: shadow.l2,
                   padding: '0 10px',
                   pointerEvents: 'none',
-                  transform: panelClamp
-                    ? undefined
-                    : tipTranslate
-                      ? `translateY(calc(-100% - 8px)) ${group.side === 'left' ? 'translateX(-100%)' : ''}`.trim()
-                      : undefined,
-                  zIndex: panelClamp ? 20 : 46,
                 }}
               >
                 <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute, flexShrink: 0 }}>销毛率</span>
@@ -3062,25 +3060,34 @@ export default function Chart(props: ChartProps) {
             return (
               <>
                 {costDot}
-                {marginMini}
                 {volHoverIdx != null && renderVolCard()}
+                {/* 定位容器：left/top/transform（十字锚定 + 翻转）全部上提一层，
+                    迷你卡（bottom 锚）与价格卡（relative）在其内堆叠 */}
                 <div
                   style={{
                     position: 'absolute',
                     left,
                     top,
-                    width: W,
-                    background: color.canvas,
-                    border: `1px solid ${color.hairline}`,
-                    borderRadius: radius.card,
-                    boxShadow: shadow.l2,
-                    padding: '6px 10px 7px',
-                    pointerEvents: 'none',
                     transform: tipTranslate, // 左下角严格钉十字交点（右上；左翻=左下角镜像）；钳制路径 = undefined
                     zIndex: panelClamp ? 20 : 46, // 全局最上层（transform 路径允许溢出绘图区）；钳制路径 = 面板内
+                    pointerEvents: 'none',
                   }}
                 >
-                  {body}
+                  {marginMini}
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: W,
+                      background: color.canvas,
+                      border: `1px solid ${color.hairline}`,
+                      borderRadius: radius.card,
+                      boxShadow: shadow.l2,
+                      padding: '6px 10px 7px',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {body}
+                  </div>
                 </div>
               </>
             );

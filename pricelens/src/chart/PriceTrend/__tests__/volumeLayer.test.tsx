@@ -471,8 +471,8 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
   const cardEls = (container: HTMLElement) => {
     const zIndexed = (el: Element): HTMLElement => el.closest('div[style*="z-index"]') as HTMLElement;
     return {
-      main: zIndexed(screen.getByText('周环比')),
-      margin: zIndexed(screen.getByText('销毛率')),
+      main: zIndexed(screen.getByText('周环比')), // 2026-11-17 覆盖修复后 = 定位 wrapper（left/top/transform 锚）
+      margin: screen.getByText('销毛率').closest('div[style*="bottom"]') as HTMLElement, // bottom 锚的迷你卡（wrapper 子元素）
       volume: container.querySelector('[data-testid="volume-hover-card"]') as HTMLElement,
     };
   };
@@ -486,13 +486,15 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     fireEvent.mouseMove(layer, { clientX: colX(1), clientY: px(layer.style.top) + 120 });
     const { main, margin, volume } = cardEls(container);
     expect(px(main.style.left)).toBeCloseTo(colX(1), 5); // 左缘 = 十字竖线（2026-11-17 去 16px 偏移）
-    expect(px(margin.style.left)).toBe(px(main.style.left));
     // 2026-11-17 M2 统一锚定：销量卡恒居中锚列（left = 列中心 x0 = 主卡 left，卡宽自适应）
     expect(px(volume.style.left)).toBe(px(main.style.left));
-    // 2026-11-17 终拍板「严格卡点右上」：主卡左下角钉十字（translateY(-100%)）、
-    // 销毛卡 translateY(calc(-100% - 8px)) 堆叠在主卡正上方 8px；销量卡 translateX(-50%) 居中
+    // 2026-11-17 覆盖修复：迷你卡 = wrapper 子元素、bottom: calc(100% + 8px) 精确叠
+    // 主卡正上方 8px（旧 translateY(calc(-100% - 8px)) 按迷你卡自身高度上移，落进
+    // 主卡矩形内被盖住）；右侧放置 = 左缘对齐
+    expect(margin.style.bottom).toBe('calc(100% + 8px)');
+    expect(margin.style.left).toBe('0px');
+    expect(margin.parentElement).toBe(main);
     expect(main.style.transform).toBe('translateY(-100%)');
-    expect(margin.style.transform).toBe('translateY(calc(-100% - 8px))');
     expect(volume.style.transform).toBe('translateX(-50%)');
   });
 
@@ -506,19 +508,18 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     // 2026-11-17 transform 锚定：left 恒 = 十字交点 x0（translate(-100%,-100%) 完成
     // 左翻定位——视觉右缘 = style.left = 触发线），绝不再减 mainW/钳图左缘
     expect(px(main.style.left)).toBeCloseTo(colX(4), 5);
-    expect(px(margin.style.left)).toBe(px(main.style.left));
     // 2026-11-17 M2：销量卡居中锚列（left = 同一列中心，不再随主卡翻侧/贴边）
     expect(px(volume.style.left)).toBe(px(main.style.left));
-    // 2026-11-17 终拍板「严格卡点右上」：主/销毛卡同 top + transform 锚定——
-    // 主卡左下角钉十字（translateY(-100%) + 左翻 translateX(-100%)），销毛卡
-    // translateY(calc(-100% - 8px)) 堆叠在主卡正上方 8px（零估算高度）
+    // 2026-11-17 覆盖修复：迷你卡同 wrapper（翻转一体跟随）+ 叠放锚不变；左翻 =
+    // 贴线边（右缘）对齐
+    expect(margin.parentElement).toBe(main);
+    expect(margin.style.bottom).toBe('calc(100% + 8px)');
+    expect(margin.style.right).toBe('0px');
     expect(main.style.transform).toBe('translate(-100%, -100%)');
-    expect(margin.style.transform).toBe('translateY(calc(-100% - 8px)) translateX(-100%)');
-    expect(margin.style.top).toBe(main.style.top);
     // 2026-11-17 M2：销量卡恒 translateX(-50%) 居中锚列，多我司候选卡宽自适应
     // 不再按估算宽翻侧（旧 translateX(-100%) 跟翻退役）
     expect(volume.style.transform).toBe('translateX(-50%)');
-    // 垂直：销量卡贴量带顶（销毛卡垂直锚定已由 transform 断言覆盖）
+    // 垂直：销量卡贴量带顶（销毛卡叠放锚已由 bottom 断言覆盖）
     expect(px(volume.style.top)).toBe(px(layer.style.top) + 4);
   });
 
@@ -555,9 +556,12 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     //（transform 路径 left 恒 = x0，此处必不等）
     expect(px(main.style.left)).toBeLessThan(colX(4));
     expect(px(main.style.left)).toBeGreaterThanOrEqual(GRID_LEFT + 8);
-    // 销毛迷你卡：旧式直接坐标（主卡上方 8px），无 translateY
+    // 销毛迷你卡：wrapper 子元素 bottom 锚（主卡上方 8px），无 translateY；钳制路径
+    // wrapper top 已含迷你卡槽下移（Math.min 钳回），叠放由 bottom 相对主卡高度表达
     expect(margin.style.transform).toBe('');
-    expect(px(margin.style.top)).toBe(px(main.style.top) - 8 - 30);
+    expect(margin.style.bottom).toBe('calc(100% + 8px)');
+    expect(margin.style.right).toBe('0px');
+    expect(margin.parentElement).toBe(main);
     // 销量卡：直接坐标钳回面板内（右缘 −150 半宽兜底），无 transform
     expect(volume.style.transform).toBe('');
     expect(px(volume.style.left)).toBe(GRID_LEFT + plotWidth - 150);

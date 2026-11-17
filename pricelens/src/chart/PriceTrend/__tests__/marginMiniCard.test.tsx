@@ -134,23 +134,22 @@ describe('第196轮整改4：销毛迷你卡（悬停小卡上方；2026-11-05 �
     expect(screen.queryByText('销毛率')).toBeNull();
   });
 
-  it('迷你卡位于价格小卡上方 8px、左缘对齐（左右对齐 + 上下间距 8px）', async () => {
+  it('迷你卡锚在价格小卡容器内 bottom: calc(100% + 8px) = 精确叠在主卡正上方 8px（2026-11-17 覆盖修复）', async () => {
     const margins: (MarginCostPoint | null)[] = [mp({}), null, null, null, null];
     const { container } = render(<Chart {...baseProps} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     hoverColumn(container, 0);
-    // 迷你卡 = 含「销毛率」标题的绝对定位卡；价格小卡 = 含「周环比」表头的卡
-    const mini = screen.getByText('销毛率').closest('div[style*="z-index"]') as HTMLElement;
-    const tip = screen.getByText('周环比').closest('div[style*="z-index"]') as HTMLElement;
-    const miniStyle = mini.style;
-    const tipStyle = tip.style;
-    // 左缘对齐
-    expect(miniStyle.left).toBe(tipStyle.left);
-    // 2026-11-17 终拍板「严格卡点右上」：两卡同 top（锚十字）+ transform 堆叠——
-    // 价格卡左下角钉十字（translateY(-100%)），迷你卡 translateY(calc(-100% - 8px))
-    // = 堆叠在价格卡正上方 8px（零估算高度，8px 间距由 transform 表达）
-    expect(miniStyle.top).toBe(tipStyle.top);
-    expect(tipStyle.transform).toBe('translateY(-100%)');
-    expect(miniStyle.transform).toBe('translateY(calc(-100% - 8px))');
+    // 迷你卡 = bottom 锚的绝对定位卡；价格小卡 = 含「周环比」表头的 relative 卡
+    const mini = screen.getByText('销毛率').closest('div[style*="bottom"]') as HTMLElement;
+    const tip = screen.getByText('周环比').closest('div[style*="position"]') as HTMLElement;
+    // 同一容器：mini 与价格卡共享 wrapper 的 left/top/transform（十字锚定 + 翻转一体）
+    expect(mini.parentElement).toBe(tip.parentElement);
+    // 叠放：bottom = 主卡高度 100% + 8px（% 基准 = 主卡实际高度，不再按迷你卡自身
+    // 高度上移——2a69768 的旧算术把迷你卡落进主卡矩形内被盖住）
+    expect(mini.style.bottom).toBe('calc(100% + 8px)');
+    // 贴线边对齐：右侧放置（col 0 十字靠左）= 左缘对齐
+    expect(mini.style.left).toBe('0px');
+    // 十字锚定上提到 wrapper：transform 断言保持
+    expect(mini.parentElement!.style.transform).toBe('translateY(-100%)');
   });
 });
