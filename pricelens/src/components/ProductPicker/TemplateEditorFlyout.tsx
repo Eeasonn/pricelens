@@ -104,6 +104,28 @@ function PickPopover({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const tree = useMemo(() => searchProductTree(fullTree, search), [fullTree, search]);
+  // 关闭守卫（2026-11-17「点了又立马退出」同款，见 ProductPickerModal.LevelSwitchPopover）：
+  // onOpenChange(false) 须有真实按下背书；无背书/触发器连点抖动（开窗 <400ms）一律否决。
+  const openedAtRef = useRef(0);
+  const lastDownRef = useRef<{ at: number; insideAnchor: boolean }>({ at: 0, insideAnchor: false });
+  useEffect(() => {
+    if (!open) return;
+    const record = (e: Event): void => {
+      const t = e.target instanceof Element ? e.target : null;
+      lastDownRef.current = { at: Date.now(), insideAnchor: !!t && !!trigRef.current?.contains(t) };
+    };
+    document.addEventListener('mousedown', record, true);
+    document.addEventListener('pointerdown', record, true);
+    document.addEventListener('touchstart', record, true);
+    return () => {
+      document.removeEventListener('mousedown', record, true);
+      document.removeEventListener('pointerdown', record, true);
+      document.removeEventListener('touchstart', record, true);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (open) openedAtRef.current = Date.now();
+  }, [open]);
 
   // 打开/搜索时定位：优先当前条目的型号路径，否则首个结果
   const [path, setPath] = useState<[string, string, string] | null>(null);
@@ -317,6 +339,16 @@ function PickPopover({
       destroyOnHidden
       classNames={{ root: `lpl-cascade-popover ${popCls}` }}
       onOpenChange={(o) => {
+        if (!o) {
+          const now = Date.now();
+          const down = lastDownRef.current;
+          const witnessed = down.at > 0 && now - down.at < 350;
+          const spurious = !witnessed || (down.insideAnchor && now - openedAtRef.current < 400);
+          if (spurious) return;
+        } else {
+          openedAtRef.current = Date.now();
+          lastDownRef.current = { at: 0, insideAnchor: false };
+        }
         setOpen(o);
         setSearch('');
       }}

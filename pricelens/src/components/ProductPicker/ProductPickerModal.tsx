@@ -297,6 +297,30 @@ function LevelSwitchPopover({
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
   const [modelSort, setModelSort] = useState<ModelSortMode>('default'); // 型号列排序
+  // 关闭守卫（2026-11-17 Eason「点击产品点了又立马退出」）：树浮层在人手输入下
+  // 开窗 ~250ms 后被无事件背书的关闭请求闪关（自动化单击/双击/事件重放均无法
+  // 复现，仅真实长按/连点抖动触发，且同一环境受控点击稳定）。守卫 =
+  // onOpenChange(false) 必须有文档级真实按下事件背书才执行：
+  //   · 锚点（触发器外壳）外的真实按下 → 放行（点外面关，标准交互）
+  //   · 无按下背书，或仅锚点内按下（连点/抖动）且开窗 <400ms → 否决，保持开窗
+  // 选品与 Esc 走 pickConfig/closeAll 直关，不经 onOpenChange，不受守卫影响。
+  const openedAtRef = useRef(0);
+  const lastDownRef = useRef<{ at: number; insideAnchor: boolean }>({ at: 0, insideAnchor: false });
+  useEffect(() => {
+    if (!open) return;
+    const record = (e: Event): void => {
+      const t = e.target instanceof Element ? e.target : null;
+      lastDownRef.current = { at: Date.now(), insideAnchor: !!t && !!triggerRef.current?.contains(t) };
+    };
+    document.addEventListener('mousedown', record, true);
+    document.addEventListener('pointerdown', record, true);
+    document.addEventListener('touchstart', record, true);
+    return () => {
+      document.removeEventListener('mousedown', record, true);
+      document.removeEventListener('pointerdown', record, true);
+      document.removeEventListener('touchstart', record, true);
+    };
+  }, [open]);
   // 本实例浮层类（视口钳回的精确定位用，见 cascadePopSeq 注）
   const popCls = useRef(`lpl-cascade-popover-i${++cascadePopSeq}`).current;
   // 锚点量测（第一百九十轮）：打开与视口变化时记录左右缘，供落位翻转判定
@@ -326,6 +350,11 @@ function LevelSwitchPopover({
   useEffect(() => {
     if (openSignal) setOpen(true);
   }, [openSignal]);
+
+  // 开窗时刻统一锚定（含 openSignal 直开路径），供关闭守卫的连点窗口判定
+  useEffect(() => {
+    if (open) openedAtRef.current = Date.now();
+  }, [open]);
 
   // 档位过滤（配置级）与树内搜索叠加：先档位剪枝、再按关键词命中
   const scopedTree = useMemo(
@@ -863,6 +892,16 @@ function LevelSwitchPopover({
       destroyOnHidden
       classNames={{ root: `lpl-cascade-popover ${popCls}` }}
       onOpenChange={(o) => {
+        if (!o) {
+          const now = Date.now();
+          const down = lastDownRef.current;
+          const witnessed = down.at > 0 && now - down.at < 350; // 开窗后有过真实按下
+          const spurious = !witnessed || (down.insideAnchor && now - openedAtRef.current < 400);
+          if (spurious) return; // 否决无背书/连点抖动的关闭，保持开窗
+        } else {
+          openedAtRef.current = Date.now();
+          lastDownRef.current = { at: 0, insideAnchor: false };
+        }
         setOpen(o);
         setSearch('');
         if (!o) setTier(null); // 关窗档位筛选回「全部档位」
