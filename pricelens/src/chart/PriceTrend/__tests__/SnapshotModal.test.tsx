@@ -23,10 +23,11 @@ describe('snapshot evidence boundary', () => {
     expect(screen.queryByText(/当时价格/)).toBeNull();
   });
 
-  it('shows a genuine empty evidence state rather than a substitute picture', () => {
+  it('shows an explicitly-flagged demo placeholder when no real evidence matches（2026-11-17 Eason 恢复模拟占位，推翻 11-11「如实空态」拍板；模拟徽标防冒充）', () => {
     render(<SnapshotModal info={{ ...info, url: 'https://www.dns-shop.ru/product/another/' }} onClose={() => {}} />);
-    expect(screen.getByRole('status').textContent).toContain('暂无快照');
-    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('模拟占位图');
+    expect(screen.getByText('模拟')).toBeTruthy(); // 显式模拟徽标（不冒充真实凭证）
+    expect(screen.getByRole('img')).toBeTruthy();
   });
 
   it('does not expose an unsafe live-page link', () => {

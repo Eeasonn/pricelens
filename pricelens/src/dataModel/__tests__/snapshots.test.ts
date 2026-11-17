@@ -10,11 +10,32 @@ describe('page evidence matching', () => {
     expect(snapshotFor(capture.url, '202646').historical).toBeNull();
   });
 
-  it('does not assign an unrelated image to a missing URL, another product, or a different variant query', () => {
-    for (const url of ['', 'DNS', 'javascript:alert(1)', 'https://www.dns-shop.ru/product/another/', `${capture.url}?sku=512`]) {
-      expect(snapshotFor(url, '202645')).toEqual({ historical: null, current: null });
+  it('does not assign a REAL evidence image to a missing URL, another product, or a different variant query; falls back to explicitly-flagged demo placeholder instead (2026-11-17 Eason 恢复模拟占位)', () => {
+    // 合法 http 深链但无真实匹配 → 模拟占位（demo:true 显式标注）
+    for (const url of ['https://www.dns-shop.ru/product/another/', `${capture.url}?sku=512`]) {
+      const r = snapshotFor(url, '202645');
+      expect(r.historical).toBeNull();
+      expect(r.current).toBeNull();
+      expect(r.demo?.demo).toBe(true);
+    }
+    // 非法/空 URL（无合法商品深链）= 无轮转上下文，真实证据与占位都不给
+    for (const url of ['', 'DNS', 'javascript:alert(1)']) {
+      const r = snapshotFor(url, '202645');
+      expect(r.historical).toBeNull();
+      expect(r.current).toBeNull();
+      expect(r.demo).toBeNull();
     }
     expect(snapshotFor(`${capture.url}#details`, '202645').current).not.toBeNull();
+    expect(snapshotFor(`${capture.url}#details`, '202645').demo).toBeNull(); // 有真实证据则不给占位
+  });
+
+  it('demo placeholder rotates stably per (url, week) — same input, same image', () => {
+    const a = snapshotFor('https://www.dns-shop.ru/product/another/', '202645');
+    const b = snapshotFor('https://www.dns-shop.ru/product/another/', '202645');
+    expect(a.demo).toBe(b.demo);
+    const c = snapshotFor('https://www.dns-shop.ru/product/another/', '202644');
+    expect(a.demo).not.toBeNull();
+    expect(c.demo).not.toBeNull();
   });
 
   it('requires both product URL and explicit historical week before attributing a historical capture', () => {
