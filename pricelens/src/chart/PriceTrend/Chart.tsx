@@ -2958,7 +2958,10 @@ export default function Chart(props: ChartProps) {
               ? { mainLeft: x0 - mainW, side: 'left', edgeX: x0 } // 量尺在右侧：放得下就放左，不盖量尺
               : fitsRight
                 ? { mainLeft: x0, side: 'right', edgeX: x0 }
-                : { mainLeft: Math.max(geom.plotLeft + 8, x0 - mainW), side: 'left', edgeX: Math.max(geom.plotLeft + 8, x0 - mainW) + mainW };
+                // 2026-11-17 Eason「挪到后面应该自适应卡片在左上角，不能离这么远」：
+                // 左翻贴十字（卡右缘=触发线），不再钳回绘图区左缘——卡片允许全局
+                // 溢出显示（zIndex 46），钳制反而制造卡片离十字一整屏的跳远
+                : { mainLeft: x0 - mainW, side: 'left', edgeX: x0 };
             const left = group.mainLeft;
             // 2026-11-17 Eason 终拍板「严格卡点在右上角」：top = hoverY 原值 + CSS
             // translateY(-100%) 把卡片**左下角精确钉在十字交点**（估算高度必有像素级
