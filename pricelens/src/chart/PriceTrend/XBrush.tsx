@@ -56,6 +56,8 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
   const rangeOpenRef = useRef(false);
   rangeOpenRef.current = rangeOpen;
   const pressOpenRef = useRef(false);
+  // 完成选择的时刻戳：供 handleOpenChange 拦截 rc-picker 选择后的重开请求。
+  const justPickedAtRef = useRef(0);
   const n = buckets.length;
   // 关闭兜底（第一百三十一轮波2修）：rc-picker 的外点/Escape 关闭被刻意延迟一帧
   // （useDelayState 的 raf(doUpdate)，防快速开→关抖动），在 rAF 被挂起的环境
@@ -115,7 +117,20 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
   const onPickerChange = (value: Dayjs | null): void => {
     if (!value) return;
     onEndChange(bucketIdOfDate(value.toDate(), granularity));
+    // 选周即关面板（完成选择）。主动 blur：rc-picker 选完值后 input 仍持焦点，
+    // 会紧接着回调 onOpenChange(true) 把面板重新拉起——而其内部状态已随「完成
+    // 选择」复位，重开的弹层点格子不再触发 onChange，表现为「第一次选周生效、
+    // 之后再选全部卡死」（2026-11-17 Eason 报：面板内选 45 后改选 46 回不去）。
+    // 焦点在，重开请求就在；blur 断根，短窗口守卫拦已排队的那一次。
+    justPickedAtRef.current = Date.now();
+    (document.activeElement as HTMLElement | null)?.blur?.();
     setRangeOpen(false);
+  };
+  // 选择后的重开拉扯守卫：同上，onOpenChange(true) 在完成选择后的短窗口内
+  // 一律忽略（直 setState，不依赖 rc-picker 内部 raf——同关闭兜底思路）。
+  const handleOpenChange = (open: boolean): void => {
+    if (open && Date.now() - justPickedAtRef.current < 350) return;
+    setRangeOpen(open);
   };
   const renderPickerPanel = (panel: ReactNode): ReactNode => (
     <div style={{ display: 'flex', flexDirection: 'column', maxWidth: narrow ? 'calc(100vw - 16px)' : undefined }}>
@@ -188,7 +203,7 @@ export function TimeRangeCluster(props: TimeRangeClusterProps) {
             inputReadOnly
             disabledDate={disabledDate}
             open={rangeOpen}
-            onOpenChange={setRangeOpen}
+            onOpenChange={handleOpenChange}
             onChange={onPickerChange}
             panelRender={renderPickerPanel}
             placement={placement}
