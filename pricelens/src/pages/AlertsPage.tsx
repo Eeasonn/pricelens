@@ -1595,6 +1595,22 @@ function AddMonitorControl({ prominent, onAdded }: {
   const { message } = AntdApp.useApp();
   const narrow = useNarrowViewport();
   const [menuOpen, setMenuOpen] = useState(false);
+  // 关闭守卫（同 ProductPickerModal 架构；2026-11-18 Eason 报「点型号层整窗关闭、
+  // ＋全部型号无反应」）：点型号行展开新列时 CascadePanel 内容重建，click 冒泡到
+  // document 时原 target 已 detach，rc-trigger 的外部点击判定 closest 失败 → 误关
+  // 整窗（＋全部型号的 stopPropagation 随行被吞）。capture 记录最近按下是否落在
+  // 本浮层内，400ms 内的 close 请求且按下在浮层内 → 判为误判关闭，否决。
+  const lastDownRef = useRef<{ at: number; inPopup: boolean }>({ at: 0, inPopup: false });
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onDocPointerDown = (e: PointerEvent): void => {
+      const path = (e.composedPath?.() ?? []) as Node[];
+      const inPopup = path.some((n) => n instanceof Element && n.closest('.lpl-monitor-pop') != null);
+      lastDownRef.current = { at: Date.now(), inPopup };
+    };
+    document.addEventListener('pointerdown', onDocPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown, true);
+  }, [menuOpen]);
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
   const [modelSort, setModelSort] = useState<ModelSortMode>('default');
@@ -1742,8 +1758,17 @@ function AddMonitorControl({ prominent, onAdded }: {
       arrow={false}
       placement="bottomRight"
       destroyOnHidden
+      rootClassName="lpl-monitor-pop"
       getPopupContainer={(t) => (t.parentElement as HTMLElement) ?? document.body}
       onOpenChange={(open) => {
+        if (!open) {
+          const down = lastDownRef.current;
+          // 1200ms 窗覆盖第四列展开的渲染时长；浮层内点击本无合法关闭路径
+          //（无关闭按钮，Esc 由 useTopEscClose 走、不产生浮层内按下）
+          if (down.at > 0 && Date.now() - down.at < 1200 && down.inPopup) return; // 浮层内点击引发的误判关闭：否决
+        } else {
+          lastDownRef.current = { at: 0, inPopup: false };
+        }
         setMenuOpen(open);
         if (open) {
           setSearch('');
