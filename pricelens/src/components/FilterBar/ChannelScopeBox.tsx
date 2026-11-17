@@ -1,23 +1,22 @@
 // ============================================================
-// §5.2 平台 / 渠道 / 卖家 三级级联筛选器（2026-11-17，Eason 二轮定版：截图对齐
-// 旧三级级联形态，替上午版「平台→类型→店铺」）：
-//   左列 平台（单击 = 只选平台；已选中行再点一次 = 展开渠道层）
-//   中列 渠道（平台×店铺类型，如「OZON 3P」；点击 = 展开该渠道卖家列，纯导航）
+// §5.2 平台 / 渠道 / 卖家 三级级联筛选器（2026-11-17，Eason 三轮定版）：
+//   左列 平台（单击 = 只切换平台选择，永不展开；行尾 › 按钮 = 打开/收起该平台的
+//        渠道层手动选择——选中与展开彻底分离，三轮指令）
+//   中列 渠道（平台×店铺类型，如「OZON 3P」；点击 = 切换卖家列指向，纯导航）
 //   右列 卖家（渠道内具体卖家店铺，行尾「· N 周」覆盖数；点击 = 钉该卖家取价）
-// 顶部全局搜索框（平台 / 渠道 / 卖家 三列同时过滤）。
-// 相对旧 PlatformBox 的四点收敛（Eason 本轮指令）：
-//   ① 行尾「· N 店铺」小注全部去掉（卖家行「· N 周」保留）；
-//   ② 第三列顶部「渠道自动」行退役——渠道内自动取价不再提供；
-//   ③ 只保留底部一枚「自动取价」按钮 = 平台内每周最低价店铺（自动口径）；
-//     选中具体店铺后按钮文案变「未选中」，点击回自动；
-//   ④ 平台行「单击只选平台、再点才展开下一层」（选中与展开分离）。
+// 展开规则（三轮指令）：
+//   · 自动取价生效（未钉店铺）→ 打开面板只显示平台列，用户选到平台即可；
+//   · 自动取价未生效（已钉店铺，按钮=「未选中」）→ 打开面板自动下钻到第二层，
+//     且第三层一并带出（渠道列+卖家列同屏），暗示用户改选具体店铺；
+//   · 手动点行尾 › 展开渠道层时同样把卖家列带出（见第二层必带第三层）。
+// 顶部全局搜索框（平台 / 渠道 / 卖家 三列同时过滤）+ 左上「自动取价/未选中」按钮。
 // 取价语义：自动（null）= 默认平台池每周最低价店铺；选平台 = 该平台池；
 //   钉卖家 = 严格单渠道单卖家（shopIds + seller，与旧链接 shop=/seller= 同键）。
 // 触发器占位「默认 · {平台锚}」；已选店铺显示「渠道 · 卖家」。
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Popover } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { defaultPlatformAnchorOf, sellersOfChannel } from '../../dataModel/aggregate';
 import { dimChannel } from '../../data';
@@ -102,29 +101,76 @@ export default function ChannelScopeBox() {
   const pinnedShop = selShop != null;
   const selectedPlatform = selShop?.platform ?? selPlatforms[0] ?? null;
 
-  /** 平台行点击（选中与展开分离）：未选中 → 只选平台（不展开）；已选中 → 展开渠道层 */
+  /** 平台行点击（三轮指令）：只切换平台选择，永不展开下级。已在浏览渠道层时
+   *  展开目标跟随切换到新选平台（卖家列回落新平台首渠道）；未展开保持平台列 */
   const onPlatformRow = (p: string): void => {
-    if (selectedPlatform === p) {
+    commit({ platforms: [p], shopIds: [], seller: null });
+    if (expanded != null) {
       setExpanded(p);
-      setPaneChannel(null);
-      setQuery('');
-    } else {
-      commit({ platforms: [p], shopIds: [], seller: null });
-      setExpanded(null);
-      setPaneChannel(null);
+      setPaneChannel(rows.find((r) => r.platform === p)?.shops[0]?.channel_id ?? null);
     }
   };
 
+  /** 展开/收起某平台的渠道层（行尾 › 按钮）：展开时第三层一并带出（三轮指令：
+   *  第二层弹出必带第三层），卖家列回落该平台首渠道 */
+  const toggleExpand = (p: string): void => {
+    if (expanded === p) {
+      setExpanded(null);
+      setPaneChannel(null);
+    } else {
+      setExpanded(p);
+      setPaneChannel(rows.find((r) => r.platform === p)?.shops[0]?.channel_id ?? null);
+    }
+  };
+
+  /** 平台行尾 › 按钮（下钻入口）：只管展开/收起，不改选择。lpl-hit 外扩命中区
+   *  要求按钮自身 position:relative（否则 ::after 锚页级祖先劫持点击，两次撞坑） */
+  const expandBtnOf = (p: string) => (
+    <button
+      type="button"
+      className="lpl-hit"
+      aria-label={expanded === p ? `收起 ${p} 渠道层` : `展开 ${p} 渠道层`}
+      aria-expanded={expanded === p}
+      title={expanded === p ? '收起渠道层' : '展开渠道层，手动选渠道/店铺'}
+      onClick={(e) => {
+        e.stopPropagation();
+        toggleExpand(p);
+      }}
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 18,
+        height: 18,
+        borderRadius: radius.pill,
+        border: `1px solid ${expanded === p ? 'rgba(0, 112, 243, 0.35)' : color.hairline}`,
+        background: expanded === p ? selectSoft : 'transparent',
+        color: expanded === p ? selectSoftInk : color.mute,
+        cursor: 'pointer',
+        flexShrink: 0,
+      }}
+    >
+      <RightOutlined style={{ fontSize: 9 }} />
+    </button>
+  );
+
   const q = query.trim().toLowerCase();
 
-  // 左列平台行：点击 = 选中/展开（见上）；行尾只有「默认」徽标（·N 店铺 已按本轮指令去掉）
+  // 左列平台行：点击名字 = 只切换平台（永不展开）；行尾 = 「默认」徽标（如适用）
+  // + › 下钻按钮（打开渠道层手动选择）
   const platformRows = rows.filter((r) => !q || r.platform.toLowerCase().includes(q));
   const platformItems: CascadeRowItem[] = platformRows.map((r) => ({
     key: r.platform,
     label: r.platform,
     active: expanded === r.platform || (expanded == null && selectedPlatform === r.platform),
     onActivate: () => onPlatformRow(r.platform),
-    trailing: defaultPlatform === r.platform ? <DefaultPill /> : undefined,
+    trailing: (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        {defaultPlatform === r.platform ? <DefaultPill /> : null}
+        {expandBtnOf(r.platform)}
+      </span>
+    ),
   }));
 
   // 中列渠道行（纯导航 = 展开卖家列）：行尾无小注
@@ -202,9 +248,17 @@ export default function ChannelScopeBox() {
       onOpenChange={(next) => {
         setOpen(next);
         if (next) {
-          setExpanded(null); // 每次打开回平台列（单击选平台 / 再点展开）
-          setPaneChannel(null);
           setQuery('');
+          // 三轮指令：自动取价未生效（已钉店铺，按钮=「未选中」）→ 打开面板自动
+          // 下钻到钉过的渠道层并把卖家列一并带出，暗示改选具体店铺；
+          // 自动取价生效 → 只显示平台列（选到平台即可，下钻走行尾 › 按钮）
+          if (selShop) {
+            setExpanded(selShop.platform);
+            setPaneChannel(selShop.channel_id);
+          } else {
+            setExpanded(null);
+            setPaneChannel(null);
+          }
         }
       }}
       arrow={false}

@@ -5,7 +5,8 @@
 // 平台店铺。」
 // 覆盖三件事：
 // ① FilterBar 平台位置断言：平台级联（2026-11-17 Eason 二轮定版：平台→渠道→卖家
-//    三级 ChannelScopeBox，平台行单击只选平台、再点才展开下一层）紧随「选择产品」
+//    三级 ChannelScopeBox，三轮定版：平台名单击只切换（永不展开）、行尾 › 下钻、
+//    钉店铺态开面板自动带出第二三层）紧随「选择产品」
 //    入口之后、币种之前，默认占位「默认 · DNS」（取价 = 该平台池每周最低价店铺）；
 // ② 写路径断言：平台行单击 → state.platform = 平台级单选（URL plat= 链接同键），
 //    底部「自动取价 / 未选中」按钮 → platform = null（plat 键删除）；每卡取价平台
@@ -160,7 +161,7 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     const panel0 = await openScope();
     await pickPlatform('OZON');
     await waitFor(() => expect(window.location.search).toContain('plat=OZON'));
-    // 单击只选平台：渠道层不出现（再点一次才展开——选中与展开分离）
+    // 单击只选平台：渠道层不出现（三轮定版——名字点击永不展开，下钻走行尾 ›）
     expect([...panel0.querySelectorAll('[role="group"]')]).toHaveLength(1);
     expect(scopeShown()).toBe('OZON');
     await pickDefault();
@@ -183,15 +184,21 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     );
   });
 
-  it('钉卖家：平台行再点展开渠道层 → 渠道行展开卖家列 → 卖家行提交 = shop+seller 入链、底部按钮变「未选中」', async () => {
+  it('钉卖家：平台行行尾 › 展开渠道层（第三层随层带出）→ 渠道行切卖家列 → 卖家行提交 = shop+seller 入链、触发器「渠道 · 卖家」', async () => {
     window.history.replaceState(null, '', '/?p=volume');
     render(<App />);
     const panel = await openScope();
-    // 平台行第一击 = 只选平台
+    // 平台行单击 = 只选平台（名字点击永不展开）
     fireEvent.click([...panel.querySelectorAll('[role="treeitem"]')].find((n) => n.getAttribute('aria-label') === 'OZON')!);
     await waitFor(() => expect(window.location.search).toContain('plat=OZON'));
-    // 第二击 = 展开渠道层
-    fireEvent.click([...panel.querySelectorAll('[role="treeitem"]')].find((n) => n.getAttribute('aria-label') === 'OZON')!);
+    // 行尾 › 按钮 = 打开渠道层（三轮指令：第二层展开必带第三层卖家列）
+    const expandBtn = await waitFor(() => {
+      const row = [...panel.querySelectorAll('[role="treeitem"]')].find((n) => n.getAttribute('aria-label') === 'OZON');
+      const b = row?.querySelector('button[aria-label="展开 OZON 渠道层"]') as HTMLButtonElement | null;
+      if (!b) throw new Error('下钻按钮未出现');
+      return b;
+    });
+    fireEvent.click(expandBtn);
     const channelRow = await waitFor(() => {
       const el = [...panel.querySelectorAll('[role="treeitem"]')].find((n) => (n.getAttribute('aria-label') ?? '').startsWith('OZON 3P'));
       if (!el) throw new Error('渠道层未展开');
