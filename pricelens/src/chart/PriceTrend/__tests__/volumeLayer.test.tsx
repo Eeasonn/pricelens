@@ -502,14 +502,11 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     // 悬停绘图区中部（+10 会落图顶带把悬停清空，主卡走贴顶回落、transform 不挂）
     fireEvent.mouseMove(layer, { clientX: colX(4), clientY: px(layer.style.top) + 120 });
     const { main, margin, volume } = cardEls(container);
-    // 主卡 content-box：外框右缘 = left + 内容宽 + 左右内边距 + 左右描边（真机按外框贴线）
-    const outerW = px(main.style.width) + px(main.style.paddingLeft) + px(main.style.paddingRight)
-      + px(main.style.borderLeftWidth) + px(main.style.borderRightWidth);
-    expect(outerW).toBe(px(main.style.width) + 22);
-    const mainRight = px(main.style.left) + outerW;
-    expect(mainRight).toBeCloseTo(colX(4), 5); // 外框右缘 = 触发线（左上角锚十字；翻转不留 16px）
-    expect(px(margin.style.left)).toBeCloseTo(mainRight, 5);
-    expect(px(volume.style.left)).toBeCloseTo(mainRight, 5);
+    // 2026-11-17 transform 锚定：left 恒 = 十字交点 x0（translate(-100%,-100%) 完成
+    // 左翻定位——视觉右缘 = style.left = 触发线），绝不再减 mainW/钳图左缘
+    expect(px(main.style.left)).toBeCloseTo(colX(4), 5);
+    expect(px(margin.style.left)).toBe(px(main.style.left));
+    expect(px(volume.style.left)).toBe(px(main.style.left));
     // 2026-11-17 终拍板「严格卡点右上」：主/销毛卡同 top + transform 锚定——
     // 主卡左下角钉十字（translateY(-100%) + 左翻 translateX(-100%)），销毛卡
     // translateY(calc(-100% - 8px)) 堆叠在主卡正上方 8px（零估算高度）

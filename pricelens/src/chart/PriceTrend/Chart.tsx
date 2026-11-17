@@ -2954,14 +2954,15 @@ export default function Chart(props: ChartProps) {
             const mainW = W + TIP_MAIN_CHROME_W;
             const fitsRight = x0 + mainW <= geom.plotLeft + geom.plotWidth;
             const fitsLeftPlain = x0 - mainW >= geom.plotLeft;
+            // 2026-11-17 Eason「挪到后面应该自适应卡片在左上角，不能离这么远」：
+            // transform 锚定体系下 left 恒 = 十字交点 x0（translate 自身完成左右定位——
+            // 右放 translateY(-100%) 卡在十字右上；左翻 translate(-100%,-100%) 卡在左上、
+            // 视觉右缘贴十字），**绝不再减 mainW 或钳回图左缘**（旧双算曾让卡片离十字一整屏）
             const group: TipGroupPlacement = rulerModel && rulerModel.side !== 'left' && fitsLeftPlain
-              ? { mainLeft: x0 - mainW, side: 'left', edgeX: x0 } // 量尺在右侧：放得下就放左，不盖量尺
+              ? { mainLeft: x0, side: 'left', edgeX: x0 } // 量尺在右侧：放得下就放左，不盖量尺
               : fitsRight
                 ? { mainLeft: x0, side: 'right', edgeX: x0 }
-                // 2026-11-17 Eason「挪到后面应该自适应卡片在左上角，不能离这么远」：
-                // 左翻贴十字（卡右缘=触发线），不再钳回绘图区左缘——卡片允许全局
-                // 溢出显示（zIndex 46），钳制反而制造卡片离十字一整屏的跳远
-                : { mainLeft: x0 - mainW, side: 'left', edgeX: x0 };
+                : { mainLeft: x0, side: 'left', edgeX: x0 };
             const left = group.mainLeft;
             // 2026-11-17 Eason 终拍板「严格卡点在右上角」：top = hoverY 原值 + CSS
             // translateY(-100%) 把卡片**左下角精确钉在十字交点**（估算高度必有像素级
