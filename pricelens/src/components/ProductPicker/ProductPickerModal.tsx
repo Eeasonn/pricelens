@@ -831,9 +831,15 @@ function LevelSwitchPopover({
       const vw = window.innerWidth;
       const EDGE = 24;
       const dx = r.left < EDGE ? EDGE - r.left : r.right > vw - EDGE ? vw - EDGE - r.right : 0;
+      // 2026-11-17 改 margin 累积式（原 transform 叠加单向无复位：浮层超宽被钳后
+      // 内容收窄/视口变宽，antd 重对齐回界内时 dx=0 不清残留 → 永久横移）。
+      // marginLeft 与 antd 对齐用的 transform 互不覆盖，dx=0 时可清零复位；
+      // rect 已含旧 margin，prev + dx 即目标绝对值，不会二次累计
       if (dx !== 0) {
-        const m = new DOMMatrix(getComputedStyle(el).transform);
-        el.style.transform = `translate(${Math.round(m.m41 + dx)}px, ${Math.round(m.m42)}px)`;
+        const prev = parseFloat(el.style.marginLeft || '0') || 0;
+        el.style.marginLeft = `${Math.round(prev + dx)}px`;
+      } else if (el.style.marginLeft) {
+        el.style.marginLeft = ''; // 已入界：清除历史钳回量（复位分支）
       }
     };
     clamp();

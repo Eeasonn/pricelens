@@ -478,7 +478,7 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
   };
   const margins = DISTINCT.map(() => ({ bucketId: '2026-06', monthId: '2026-06', unitRevenue: 900, unitCost: 600, unitMargin: 300, marginRate: 0.32, simulated: true as const }));
 
-  it('三卡同侧：主卡在右 = 销毛卡 / 销量卡左缘与主卡左缘对齐一线', async () => {
+  it('三卡同侧：主卡在右 = 销毛卡左缘与主卡左缘对齐一线，销量卡居中锚列（translateX(-50%)）', async () => {
     const { container } = render(<Chart {...props} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     const layer = layerOf(container);
@@ -487,15 +487,16 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     const { main, margin, volume } = cardEls(container);
     expect(px(main.style.left)).toBeCloseTo(colX(1), 5); // 左缘 = 十字竖线（2026-11-17 去 16px 偏移）
     expect(px(margin.style.left)).toBe(px(main.style.left));
+    // 2026-11-17 M2 统一锚定：销量卡恒居中锚列（left = 列中心 x0 = 主卡 left，卡宽自适应）
     expect(px(volume.style.left)).toBe(px(main.style.left));
     // 2026-11-17 终拍板「严格卡点右上」：主卡左下角钉十字（translateY(-100%)）、
-    // 销毛卡 translateY(calc(-100% - 8px)) 堆叠在主卡正上方 8px；右放 = 无 translateX
+    // 销毛卡 translateY(calc(-100% - 8px)) 堆叠在主卡正上方 8px；销量卡 translateX(-50%) 居中
     expect(main.style.transform).toBe('translateY(-100%)');
     expect(margin.style.transform).toBe('translateY(calc(-100% - 8px))');
-    expect(volume.style.transform).toBe('');
+    expect(volume.style.transform).toBe('translateX(-50%)');
   });
 
-  it('三卡同翻：主卡翻到左侧 = 销毛卡 / 销量卡一起翻，右缘与主卡右缘对齐一线；垂直位置不变', async () => {
+  it('三卡同翻：主卡翻到左侧 = 销毛卡一起翻；销量卡不再跟翻（恒居中锚列）；垂直位置不变', async () => {
     const { container } = render(<Chart {...props} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     const layer = layerOf(container);
@@ -506,6 +507,7 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     // 左翻定位——视觉右缘 = style.left = 触发线），绝不再减 mainW/钳图左缘
     expect(px(main.style.left)).toBeCloseTo(colX(4), 5);
     expect(px(margin.style.left)).toBe(px(main.style.left));
+    // 2026-11-17 M2：销量卡居中锚列（left = 同一列中心，不再随主卡翻侧/贴边）
     expect(px(volume.style.left)).toBe(px(main.style.left));
     // 2026-11-17 终拍板「严格卡点右上」：主/销毛卡同 top + transform 锚定——
     // 主卡左下角钉十字（translateY(-100%) + 左翻 translateX(-100%)），销毛卡
@@ -513,12 +515,14 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(main.style.transform).toBe('translate(-100%, -100%)');
     expect(margin.style.transform).toBe('translateY(calc(-100% - 8px)) translateX(-100%)');
     expect(margin.style.top).toBe(main.style.top);
-    expect(volume.style.transform).toBe('translateX(-100%)');
+    // 2026-11-17 M2：销量卡恒 translateX(-50%) 居中锚列，多我司候选卡宽自适应
+    // 不再按估算宽翻侧（旧 translateX(-100%) 跟翻退役）
+    expect(volume.style.transform).toBe('translateX(-50%)');
     // 垂直：销量卡贴量带顶（销毛卡垂直锚定已由 transform 断言覆盖）
     expect(px(volume.style.top)).toBe(px(layer.style.top) + 4);
   });
 
-  it('该列无价（主卡不在场）：销量卡自己定侧，照常显示', async () => {
+  it('该列无价（主卡不在场）：销量卡同一居中锚列路径（translateX(-50%)），照常显示', async () => {
     const gap = twoSeries.map((s) => ({ ...s, points: s.points.map((pt, i) => (i === 1 ? { ...pt, price: null, rrp: null, missing: true } : pt)) }));
     const { container } = render(<Chart {...props} series={gap} /> as ReactElement);
     await waitForGeom(container);
@@ -527,6 +531,36 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(screen.queryByText('周环比')).toBeNull();
     const card = screen.getByTestId('volume-hover-card');
     expect(card.textContent).toBe('销量 3,000 台');
-    expect(px(card.style.left)).toBeCloseTo(colX(1) + 16, 5);
+    // 2026-11-17 M2：独立路径同主卡在场路径——left = 列中心 + translateX(-50%) 居中
+    //（旧 tipGroupPlacement 估算宽 130 翻侧在多候选 ~220px 时判错右溢，已退役）
+    expect(px(card.style.left)).toBeCloseTo(colX(1), 5);
+    expect(card.style.transform).toBe('translateX(-50%)');
+    expect(px(card.style.top)).toBe(px(layer.style.top) + 4);
+  });
+
+  it('tipPanelClamp（量价页分离面板）：主卡走「估算+钳制」路径——无 transform、top 被 Math.min 钳回绘图区、销量/销毛卡直接坐标不出面板', async () => {
+    const { container } = render(<Chart {...props} margins={margins} tipPanelClamp /> as ReactElement);
+    await waitForGeom(container);
+    const layer = layerOf(container);
+    // 悬停最右列量带：指针在量带内 hoverY=null → 锚绘图区底缘；mousemove 冒泡主卡同列在场
+    fireEvent.mouseMove(layer, { clientX: colX(4), clientY: px(layer.style.top) + 120 });
+    const { main, margin, volume } = cardEls(container);
+    const plotBottom = px(layer.style.top);
+    // 主卡钳制：tipContentH = 2 价格行 × 20 = 40 → top = min(max(484, plotTop+8),
+    // plotBottom−36−40)；销毛迷你卡槽下移 38 后仍被同一上限 Math.min 钳回
+    expect(px(main.style.top)).toBe(plotBottom - 36 - 40);
+    expect(main.style.transform).toBe(''); // 钳制路径直接坐标，无 translateY
+    expect(main.style.zIndex).toBe('20'); // 面板内（transform 路径 = 46 溢出全局）
+    // 左翻 + 左缘钳制：右缘放不下 → left = max(plotLeft+8, x0−mainW) 落在列中心左侧
+    //（transform 路径 left 恒 = x0，此处必不等）
+    expect(px(main.style.left)).toBeLessThan(colX(4));
+    expect(px(main.style.left)).toBeGreaterThanOrEqual(GRID_LEFT + 8);
+    // 销毛迷你卡：旧式直接坐标（主卡上方 8px），无 translateY
+    expect(margin.style.transform).toBe('');
+    expect(px(margin.style.top)).toBe(px(main.style.top) - 8 - 30);
+    // 销量卡：直接坐标钳回面板内（右缘 −150 半宽兜底），无 transform
+    expect(volume.style.transform).toBe('');
+    expect(px(volume.style.left)).toBe(GRID_LEFT + plotWidth - 150);
+    expect(px(volume.style.top)).toBe(plotBottom + 4);
   });
 });

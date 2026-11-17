@@ -263,6 +263,7 @@ export default function PlatformBox() {
     <Popover
       trigger="click"
       open={open}
+      getPopupContainer={(t) => (t.parentElement as HTMLElement) ?? document.body} // 随页面滚动容器跟随（2026-11-17 全量审视 M4）
       onOpenChange={(next) => {
         setOpen(next);
         if (next) {

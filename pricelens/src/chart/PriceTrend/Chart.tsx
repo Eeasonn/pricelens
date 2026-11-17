@@ -353,6 +353,13 @@ export interface ChartProps {
   /** 销毛率小卡开关（2026-11-17 Eason「量旁边加一个销毛率的按钮」）：false = 不渲染
    *  迷你卡；缺省 true = 既有调用方（量价页等）行为不变 */
   marginMiniOn?: boolean;
+  /** 悬停卡面板钳制路径（2026-11-17 量价页修复）：true = 主卡/销毛迷你卡改走「估算 +
+   *  钳制」旧定位——量价页分离面板的祖先 .lpl-card-scroll（overflowX auto）与 section
+   *  （overflow hidden）会裁掉 transform 锚定路径的上溢/左溢卡片，故 top 按 tipContentH
+   *  估算钳回绘图区内、left 翻转 + 左缘钳制、zIndex 20（面板内）、无 transform（直接
+   *  坐标）。缺省 false = transform 锚定（left 恒 x0、top = hoverY、translateY(-100%)、
+   *  zIndex 46 溢出全局最上层，价格走势页/合并单图用） */
+  tipPanelClamp?: boolean;
   /** ⑤量层开关（工具行「量」）：开启 = 价格绘图区下方叠量带（volumeHeight 定高），
    *  数据源 = volumes（与 points 同下标）。量价页等未传 = 不渲染 */
   volumeOn?: boolean;
@@ -415,8 +422,6 @@ const VOL_AXIS_RIGHT_W = 56;
 /** 第196轮整改4（2026-11-05 复检收敛）：销毛迷你卡高度——只留「销毛率 + 模拟
  *  徽标 + 大数字」单行（毛利/成本小字段随复检删除），高相应收窄 */
 const MARGIN_MINI_H = 30;
-/** 量值小卡的翻侧估算宽：只在主卡不存在（该列无价）时用来定侧，渲染宽随内容 */
-const VOL_CARD_EST_W = 130;
 /** 价格主卡外框比 W 多出的宽：content-box 下 width 只管内容区，左右内边距 10+10 与描边
  *  1+1 在外。翻侧与贴线边必须按外框算——此前按 W 算，左翻时主卡右缘越过触发线 6px，
  *  三卡贴线边对不齐 22px（2026-11-05 真机量出） */
@@ -1526,21 +1531,29 @@ export default function Chart(props: ChartProps) {
   // 已是完整读数态，再叠提示就是三层浮层、间距只剩 ~13px。未悬停/悬停无价列时提示
   // 照常出现（拖选可发现性不丢）；tipBox 预留框模式主卡不入画，提示不受影响
   const marginTipLive = props.margins != null && mainTipShown;
-  // 量值小卡（2026-11-05 Eason 看真机）：单行「销量 N 台」，容器与销毛卡同款；垂直贴量带顶，水平随卡组
-  const renderVolCard = (group: TipGroupPlacement): ReactNode => {
+  // 量值小卡（2026-11-05 Eason 看真机）：单行「销量 N 台」，容器与销毛卡同款；垂直贴量带顶。
+  // 2026-11-17 M2 统一锚定：水平恒居中锚列（left = 列中心 + translateX(-50%)）——卡宽随
+  // 内容自适应（多我司候选 ~220px），不再按 VOL_CARD_EST_W 估算宽做翻侧判定（估窄判错
+  // 右溢出）。tipPanelClamp（量价页分离面板）= 面板祖先裁溢出，改直接坐标钳回面板内
+  //（transform 居中后渲染宽不可知，按 150px 半宽近似钳边）
+  const renderVolCard = (): ReactNode => {
     if (volHoverIdx == null || !geom) return null;
     const v = effVolumes?.[volHoverIdx] ?? null;
     // 方案 B：候选 ≥2 = 每个候选主品一行（归属色点 + 名称 + 当周销量），柱只画 active
     const rows = volCands && volCands.length > 1
       ? volCands.map((c) => ({ key: c.key, text: c.text, color: c.color, v: c.volumes[volHoverIdx] ?? null }))
       : null;
+    const x0 = xPxOf(geom, volHoverIdx);
+    const anchorStyle: CSSProperties = props.tipPanelClamp === true
+      ? { left: Math.max(geom.plotLeft + 8, Math.min(x0, geom.plotLeft + geom.plotWidth - 150)) }
+      : { left: x0, transform: 'translateX(-50%)' };
     if (!rows) {
       return (
         <div
           data-testid="volume-hover-card"
           style={{
             position: 'absolute',
-            ...tipGroupAnchor(group),
+            ...anchorStyle,
             top: geom.plotTop + geom.plotHeight + 4,
             height: MARGIN_MINI_H,
             boxSizing: 'border-box',
@@ -1575,7 +1588,7 @@ export default function Chart(props: ChartProps) {
         data-testid="volume-hover-card"
         style={{
           position: 'absolute',
-          ...tipGroupAnchor(group),
+          ...anchorStyle,
           top: geom.plotTop + geom.plotHeight + 4,
           boxSizing: 'border-box',
           display: 'grid',
@@ -1965,9 +1978,8 @@ export default function Chart(props: ChartProps) {
                     }}
                   />
                 )}
-                {/* 主卡在场时销量卡由主卡分支渲染（同组定侧）；该列无价时自己定侧 */}
-                {volHoverIdx != null && !mainTipShown
-                  && renderVolCard(tipGroupPlacement(geom.plotLeft, geom.plotWidth, xPxOf(geom, volHoverIdx), VOL_CARD_EST_W))}
+                {/* 主卡在场时销量卡由主卡分支渲染；该列无价时自己出卡（同一居中锚列路径） */}
+                {volHoverIdx != null && !mainTipShown && renderVolCard()}
               </>
             )}
           </>
@@ -2191,7 +2203,8 @@ export default function Chart(props: ChartProps) {
                     title={`较前一有值点${down ? '下降' : '上涨'} ${pct}%`}
                     style={{
                       position: 'absolute',
-                      left: xPxOf(geom, i),
+                      // 左右缘钳制（2026-11-17 全量审视 M6：translateX(-50%) 下端点胶囊半宽越界）
+                      left: Math.max(geom.plotLeft + 44, Math.min(xPxOf(geom, i), geom.plotLeft + geom.plotWidth - 44)),
                       top: yPxOf(geom, v) + 9,
                       transform: 'translateX(-50%)',
                       padding: '0 5px',
@@ -2228,7 +2241,8 @@ export default function Chart(props: ChartProps) {
               const dim = litKeys != null && !litKeys.includes(b.seriesKey);
               const text = suspectBadgeText(b);
               const title = suspectTitleText(b, anomalyRule.thresholdPct);
-              const x = xPxOf(geom, b.idx);
+              // 左右缘钳制（2026-11-17 全量审视 M6）：胶囊 translateX(-50%) 下端点半宽越界
+              const x = Math.max(geom.plotLeft + 40, Math.min(xPxOf(geom, b.idx), geom.plotLeft + geom.plotWidth - 40));
               const y = yPxOf(geom, v);
               const amber = b.state !== 'exempted';
               const dotColor = b.state === 'quarantined' ? color.mute : '#b45309';
@@ -2942,10 +2956,14 @@ export default function Chart(props: ChartProps) {
                 </div>
               );
             }
-            // ---- 浮层模式（2026-11-17 Eason 改锚）：卡片左上角 = 十字中心（竖线 x0 +
-            // 鼠标 hoverY）——跟随鼠标上下移动；水平仍贴竖线、右缘放不下翻左侧，
-            // 左翻越界再钳回绘图区左缘。Y 轴上下留白（computeYAxis ±9% 外缘垫）+
-            // 白带同属悬停触发区 = 鼠标停在白带时卡片从白带展开、不压数据线 ----
+            // ---- 浮层模式：双定位路径（2026-11-17 量价页修复）。① 默认 = transform 锚定：
+            // left 恒 = 十字交点 x0、top = hoverY 原值，translateY(-100%) 把左下角精确钉在
+            // 十字上（零估算高度），允许溢出绘图区（zIndex 46 全局最上层）——价格走势页用。
+            // ② tipPanelClamp（量价页分离面板）：面板祖先 .lpl-card-scroll（overflowX auto）
+            // 与 section（overflow hidden）会裁掉上溢/左溢的卡片（切头/切边）→ 恢复旧
+            // 「估算 + 钳制」路径：top 按 tipContentH 估算钳回绘图区内、left 翻转 + 左缘
+            // 钳制、zIndex 20（面板内）、无 transform（直接坐标）----
+            const panelClamp = props.tipPanelClamp === true;
             const x0 = xPxOf(geom, tipIdx);
             const nameEst = Math.max(...rows.map((r) => brandLabelOf(r.s.brand).length + 1 + curveNameOf(r.s).length)) * 6.2 + 14;
             const hasSnap = rows.some((r) => r.s.points[tipIdx]?.price != null);
@@ -2954,32 +2972,49 @@ export default function Chart(props: ChartProps) {
             const mainW = W + TIP_MAIN_CHROME_W;
             const fitsRight = x0 + mainW <= geom.plotLeft + geom.plotWidth;
             const fitsLeftPlain = x0 - mainW >= geom.plotLeft;
-            // 2026-11-17 Eason「挪到后面应该自适应卡片在左上角，不能离这么远」：
-            // transform 锚定体系下 left 恒 = 十字交点 x0（translate 自身完成左右定位——
-            // 右放 translateY(-100%) 卡在十字右上；左翻 translate(-100%,-100%) 卡在左上、
-            // 视觉右缘贴十字），**绝不再减 mainW 或钳回图左缘**（旧双算曾让卡片离十字一整屏）
-            const group: TipGroupPlacement = rulerModel && rulerModel.side !== 'left' && fitsLeftPlain
-              ? { mainLeft: x0, side: 'left', edgeX: x0 } // 量尺在右侧：放得下就放左，不盖量尺
-              : fitsRight
-                ? { mainLeft: x0, side: 'right', edgeX: x0 }
-                : { mainLeft: x0, side: 'left', edgeX: x0 };
+            // 量尺在右侧放得下就放左，不盖量尺。transform 路径 left 恒 = 十字交点 x0
+            //（2026-11-17「挪到后面应该自适应卡片在左上角」——translate 自身完成左右定位，
+            // 绝不再减 mainW 或钳回图左缘）；钳制路径恢复旧翻转 + 左缘钳制
+            //（右放 x0 / 左翻 Math.max(plotLeft + 8, x0 − mainW)）
+            const group: TipGroupPlacement = panelClamp
+              ? rulerModel && rulerModel.side !== 'left' && fitsLeftPlain
+                ? { mainLeft: x0 - mainW, side: 'left', edgeX: x0 } // 量尺在右侧：放得下就放左，不盖量尺
+                : fitsRight
+                  ? { mainLeft: x0, side: 'right', edgeX: x0 }
+                  : { mainLeft: Math.max(geom.plotLeft + 8, x0 - mainW), side: 'left', edgeX: Math.max(geom.plotLeft + 8, x0 - mainW) + mainW }
+              : rulerModel && rulerModel.side !== 'left' && fitsLeftPlain
+                ? { mainLeft: x0, side: 'left', edgeX: x0 }
+                : fitsRight
+                  ? { mainLeft: x0, side: 'right', edgeX: x0 }
+                  : { mainLeft: x0, side: 'left', edgeX: x0 };
             const left = group.mainLeft;
             // 2026-11-17 Eason 终拍板「严格卡点在右上角」：top = hoverY 原值 + CSS
             // translateY(-100%) 把卡片**左下角精确钉在十字交点**（估算高度必有像素级
             // 偏差，transform 锚定零估算）；右缘放不下翻左 = 左下角镜像（translateX(-100%)）。
             // 允许溢出绘图区（贴顶钳制已退役），zIndex 46 = 全局最上层；销毛迷你卡与主卡
             // 同 top、translateY(calc(-100% - 8px)) 堆叠在主卡正上方，开关关闭自然无空位
-            const hoverTop = hoverY ?? props.crosshairY ?? null;
             // 锚点：优先鼠标 hoverY（绘图区逐像素）；指针在量带内时 hoverY 为 null
             // （横虚线口径不画），但十字竖线与卡片仍在——锚到绘图区底缘，卡片同样
-            // 严格右上展开（在量带上方空间，不压线）
+            // 严格右上展开（在量带上方空间，不压线）。钳制路径把锚点钳回面板绘图区内
             const tipAnchorY = hoverY ?? props.crosshairY ?? (tipIdxRaw != null ? geom.plotTop + geom.plotHeight : null);
-            const tipTranslate = tipAnchorY == null
-              ? undefined
-              : group.side === 'left'
-                ? 'translate(-100%, -100%)'
-                : 'translateY(-100%)';
-            const top = tipAnchorY ?? geom.plotTop + 8;
+            const tipContentH = rows.length * 20 + nOfferLines * 16 + (volVal != null ? 23 : 0) + (costVal != null ? 23 : 0) + (baseAbsent ? 21 : 0);
+            const tipTranslate = panelClamp
+              ? undefined // 钳制路径直接坐标定位，无 translateY
+              : tipAnchorY == null
+                ? undefined
+                : group.side === 'left'
+                  ? 'translate(-100%, -100%)'
+                  : 'translateY(-100%)';
+            const top = panelClamp
+              ? (() => {
+                  // 旧「估算 + 钳制」：topRaw 钳在 [plotTop+8, plotBottom−36−tipContentH]；
+                  // 销毛迷你卡槽开（margins 传入且开关未关）时主卡再下移让出上方卡位
+                  const topRaw = Math.min(Math.max(tipAnchorY ?? geom.plotTop + 8, geom.plotTop + 8), geom.plotTop + geom.plotHeight - 36 - tipContentH);
+                  return props.margins != null && props.marginMiniOn !== false
+                    ? Math.min(topRaw + MARGIN_MINI_H + 8, geom.plotTop + geom.plotHeight - 36 - tipContentH)
+                    : topRaw;
+                })()
+              : tipAnchorY ?? geom.plotTop + 8;
             // 第196轮整改4（2026-11-05 复检收敛，Eason：只留销毛率）：悬停浮层上方
             // 8px、左右缘对齐同一 left——同一圆角/描边/投影语言；卡内单行 =
             // 「销毛率 + 模拟徽标 + 大数字销毛率」（单台毛利/成本小字段随复检删除，
@@ -2990,8 +3025,10 @@ export default function Chart(props: ChartProps) {
               <div
                 style={{
                   position: 'absolute',
-                  ...tipGroupAnchor(group),
-                  top, // 与主卡同 top；translateY(calc(-100% - 8px)) 堆叠在主卡正上方 8px
+                  // 钳制路径 = 直接坐标（left 贴主卡左缘、top = 主卡上方 8px，无 transform）；
+                  // transform 路径 = 与主卡同 top、translateY(calc(-100% - 8px)) 堆叠主卡正上方
+                  ...(panelClamp ? { left: group.mainLeft } : tipGroupAnchor(group)),
+                  top: panelClamp ? top - 8 - MARGIN_MINI_H : top,
                   width: 148,
                   height: MARGIN_MINI_H,
                   boxSizing: 'border-box',
@@ -3004,8 +3041,12 @@ export default function Chart(props: ChartProps) {
                   boxShadow: shadow.l2,
                   padding: '0 10px',
                   pointerEvents: 'none',
-                  transform: tipTranslate ? `translateY(calc(-100% - 8px)) ${group.side === 'left' ? 'translateX(-100%)' : ''}`.trim() : undefined,
-                  zIndex: 46,
+                  transform: panelClamp
+                    ? undefined
+                    : tipTranslate
+                      ? `translateY(calc(-100% - 8px)) ${group.side === 'left' ? 'translateX(-100%)' : ''}`.trim()
+                      : undefined,
+                  zIndex: panelClamp ? 20 : 46,
                 }}
               >
                 <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute, flexShrink: 0 }}>销毛率</span>
@@ -3021,7 +3062,7 @@ export default function Chart(props: ChartProps) {
               <>
                 {costDot}
                 {marginMini}
-                {volHoverIdx != null && renderVolCard(group)}
+                {volHoverIdx != null && renderVolCard()}
                 <div
                   style={{
                     position: 'absolute',
@@ -3034,8 +3075,8 @@ export default function Chart(props: ChartProps) {
                     boxShadow: shadow.l2,
                     padding: '6px 10px 7px',
                     pointerEvents: 'none',
-                    transform: tipTranslate, // 左下角严格钉十字交点（右上；左翻=左下角镜像）
-                    zIndex: 46, // 全局最上层（2026-11-17 Eason：卡片允许溢出绘图区，盖过图顶带/极差标注）
+                    transform: tipTranslate, // 左下角严格钉十字交点（右上；左翻=左下角镜像）；钳制路径 = undefined
+                    zIndex: panelClamp ? 20 : 46, // 全局最上层（transform 路径允许溢出绘图区）；钳制路径 = 面板内
                   }}
                 >
                   {body}
@@ -3627,7 +3668,12 @@ export default function Chart(props: ChartProps) {
           })()}
           {/* offer 图标（仅周视图；点击浮窗） */}
           {offerMarkers.map((m) => (
-            <OfferPopover key={m.key} x={m.x} y={m.y} offer={m.offer} />
+            <OfferPopover
+              key={m.key}
+              x={Math.max(geom.plotLeft + 44, Math.min(m.x, geom.plotLeft + geom.plotWidth - 44))}
+              y={m.y}
+              offer={m.offer}
+            />
           ))}
           {/* 快照取证弹窗（第一百四十轮追补）：入口在悬停明细每行行尾（图面不画
               图标，第一百一十四轮撤图面悬停图标的原则不变）；图下明细表取证列

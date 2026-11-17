@@ -18,6 +18,7 @@ import { createPortal } from 'react-dom';
 import { Input, message, Popconfirm, Popover, Tooltip } from 'antd';
 import { DeleteOutlined, SearchOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
 import { PANEL_EXIT_MS, prefersReducedMotion } from '../../theme/motion';
+import { cascadePlacementOf } from './pickerBits';
 import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import {
   configTextOf,
@@ -267,6 +268,46 @@ function PickPopover({
   const panelW = columns.reduce((w, c) => w + (c.width ?? 0), 0);
   const widthCap = Math.min(typeof window === 'undefined' ? 1148 : window.innerWidth - 48, 1100);
   const bodyW = narrow ? Math.max(280, widthCap) : Math.max(360, Math.min(panelW + 20, widthCap));
+  // 2026-11-17 全量审视补齐（190 轮钳回/翻转修复漏掉的第二个调用点）：
+  // 触发器量测 → cascadePlacementOf 落位翻转 + per-instance 类 clamp（margin 累积式，可复位）
+  const trigRef = useRef<HTMLDivElement | null>(null);
+  const popCls = useMemo(() => `lpl-cascade-popover-pick-${Math.floor(Math.random() * 1e9).toString(36)}`, []);
+  const [trigLeft, setTrigLeft] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const measure = (): void => {
+      const r = trigRef.current?.getBoundingClientRect();
+      if (r) setTrigLeft(r.left);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
+  const placement = cascadePlacementOf(trigLeft, bodyW, typeof window === 'undefined' ? 1280 : window.innerWidth);
+  useEffect(() => {
+    if (!open) return;
+    const clamp = (): void => {
+      const el = document.querySelector<HTMLElement>(`.${popCls}`);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const EDGE = 24;
+      const dx = r.left < EDGE ? EDGE - r.left : r.right > vw - EDGE ? vw - EDGE - r.right : 0;
+      if (dx !== 0) {
+        const prev = parseFloat(el.style.marginLeft || '0') || 0;
+        el.style.marginLeft = `${Math.round(prev + dx)}px`;
+      } else if (el.style.marginLeft) {
+        el.style.marginLeft = '';
+      }
+    };
+    clamp();
+    const t = window.setTimeout(clamp, 350);
+    window.addEventListener('resize', clamp);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('resize', clamp);
+    };
+  }, [open, bodyW, popCls]);
 
   return (
     <Popover
@@ -274,12 +315,12 @@ function PickPopover({
       open={open}
       zIndex={POPOVER_Z}
       destroyOnHidden
-      classNames={{ root: 'lpl-cascade-popover' }}
+      classNames={{ root: `lpl-cascade-popover ${popCls}` }}
       onOpenChange={(o) => {
         setOpen(o);
         setSearch('');
       }}
-      placement="bottomLeft"
+      placement={placement}
       styles={{ body: { padding: 10, width: bodyW } }}
       content={
         <div>
@@ -307,7 +348,7 @@ function PickPopover({
         </div>
       }
     >
-      {children}
+      <div ref={trigRef} style={{ width: '100%', minWidth: 0 }}>{children}</div>
     </Popover>
   );
 }

@@ -67,6 +67,13 @@ export default function ChannelScopeBox() {
   const defaultPlatform = useMemo(() => defaultPlatformAnchorOf(cc), [cc]);
 
   const [open, setOpen] = useState(false);
+  // 视口宽（浮层钳视口计算用；resize 跟随重算，2026-11-17 全量审视补）
+  const [vw, setVw] = useState(typeof window === 'undefined' ? 1280 : window.innerWidth);
+  useEffect(() => {
+    const onResize = (): void => setVw(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   // 已展开渠道层的平台（null = 只显示平台列——「单击只选平台，再点展开下一层」）
   const [expanded, setExpanded] = useState<string | null>(null);
   // 卖家列展开的渠道（null = 不显示卖家列）
@@ -163,9 +170,16 @@ export default function ChannelScopeBox() {
     () => autoColumnWidth(platformItems, { extraW: badgeW + space.xs + 16, min: 150, max: 280 }),
     [platformItems, badgeW],
   );
+  // 渠道列宽按「未过滤全量清单」测定（与 sellerColWidth 同口径——搜索时列宽不跳）
   const channelColWidth = useMemo(
-    () => (expanded ? autoColumnWidth(channelItems, { extraW: space.xs + 16, min: 150, max: 280 }) : 0),
-    [channelItems, expanded],
+    () =>
+      expanded
+        ? autoColumnWidth(
+            (rows.find((r) => r.platform === expanded)?.shops ?? []).map((s2) => ({ key: s2.channel_id, label: s2.display_name })),
+            { extraW: space.xs + 16, min: 150, max: 280 },
+          )
+        : 0,
+    [expanded, rows],
   );
 
   // 触发器文案：钉卖家 = 「渠道 · 卖家」；钉渠道（旧链接）= 渠道名；平台级 = 平台名；
@@ -184,6 +198,7 @@ export default function ChannelScopeBox() {
     <Popover
       trigger="click"
       open={open}
+      getPopupContainer={(t) => (t.parentElement as HTMLElement) ?? document.body}
       onOpenChange={(next) => {
         setOpen(next);
         if (next) {
@@ -207,8 +222,9 @@ export default function ChannelScopeBox() {
               ? 'min(420px, calc(100vw - 48px))'
               : Math.min(
                   platformColWidth + channelColWidth + (paneChannel != null && sellerColWidth > 0 ? sellerColWidth : 0),
-                  typeof window !== 'undefined' ? window.innerWidth - 24 : 720,
+                  vw - 24,
                 ),
+            overflowX: 'auto', // 钳视口时列横滚兜底（2026-11-17 全量审视：不再静默裁卖家列）
             transition: 'width 160ms ease',
           }}
         >

@@ -714,6 +714,7 @@ export default function MainForecastChart({
               click/Enter = 固定（role=dialog）。固定态粘滞（页面周销弹窗打开时
               保持），Esc 先回证据再关闭。 */}
           {focusAnchor != null && (
+            <div style={{ position: 'absolute', left: `${(x(focusAnchor.startIdx) / chartW) * 100}%`, top: 0, width: 0, height: 0 }}>
             <EventEvidence
               event={focusAnchor.event}
               order={focusAnchor.order}
@@ -725,8 +726,10 @@ export default function MainForecastChart({
                 else setHoverEventId(null);
               }}
             />
+            </div>
           )}
           {focusAnchor == null && promoFocusActive && forecastPromoWindow != null && (
+            <div style={{ position: 'absolute', left: `${(x(promoStartIndex) / chartW) * 100}%`, top: 0, width: 0, height: 0 }}>
             <PromoEvidence
               promo={forecastPromoWindow}
               duration={durationOfWeekRange(calendar, forecastPromoWindow)}
@@ -737,9 +740,11 @@ export default function MainForecastChart({
                 else setHoverEventId(null);
               }}
             />
+            </div>
           )}
           {focusAnchor == null && !promoFocusActive && activeWeek != null && activeIndex != null && (
             pinnedIndex != null ? (
+              <div style={{ position: 'absolute', left: `${(x(activeIndex) / chartW) * 100}%`, top: 0, width: 0, height: 0 }}>
               <WeekEvidence
                 week={activeWeek}
                 learning={result.learning}
@@ -747,14 +752,15 @@ export default function MainForecastChart({
                 promoLabel={fixture.promoWindows.find((window) => window.id === coveringPromoId(calendar, fixture, activeWeek.weekId))?.label ?? null}
                 displayPrice={displayPriceOf(activeWeek)}
                 modelVersion={fixture.meta.modelVersion}
-                leftPct={(x(activeIndex) / chartW) * 100}
                 flip={activeIndex > weeks.length / 2}
                 pinned
                 onFocusCard={onFocusCard}
                 onTuneWeek={onTuneWeek}
                 onClose={() => setPinnedIndex(null)}
               />
+              </div>
             ) : (
+              <div style={{ position: 'absolute', left: `${(x(activeIndex) / chartW) * 100}%`, top: 0, width: 0, height: 0 }}>
               <WeekEvidence
                 week={activeWeek}
                 learning={result.learning}
@@ -762,12 +768,12 @@ export default function MainForecastChart({
                 promoLabel={fixture.promoWindows.find((window) => window.id === coveringPromoId(calendar, fixture, activeWeek.weekId))?.label ?? null}
                 displayPrice={displayPriceOf(activeWeek)}
                 modelVersion={fixture.meta.modelVersion}
-                leftPct={(x(activeIndex) / chartW) * 100}
                 flip={activeIndex > weeks.length / 2}
                 onFocusCard={onFocusCard}
                 onTuneWeek={onTuneWeek}
                 onClose={() => setHoverIndex(null)}
               />
+              </div>
             )
           )}
         </div>
@@ -1024,7 +1030,6 @@ function WeekEvidence({
   promoLabel,
   displayPrice,
   modelVersion,
-  leftPct,
   flip,
   pinned,
   onFocusCard,
@@ -1039,7 +1044,6 @@ function WeekEvidence({
   displayPrice: number;
   /** 数据版本（fixture.meta.modelVersion；数据状态行展示）。 */
   modelVersion: string;
-  leftPct: number;
   flip: boolean;
   pinned?: boolean;
   onFocusCard?: (card: MainChartFocusCard, weekId: string) => void;

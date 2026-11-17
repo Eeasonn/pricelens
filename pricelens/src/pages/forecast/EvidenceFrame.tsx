@@ -73,7 +73,10 @@ export default function EvidenceFrame({
         }
       }}
       style={{
-        position: 'absolute', top: 0, zIndex: 6,
+        // 2026-11-17 锚定修正：外壳相对调用方的「零尺寸锚点 div」定位（left:0），
+        // 锚点自带列位置（left: pct%）——原先无 left 时静态位置恒在图左缘、
+        // 右半区 flip 后整卡被 overflowX:auto 祖先裁掉
+        position: 'absolute', top: 0, left: 0, zIndex: 6,
         width, maxWidth: 'calc(100vw - 24px)',
         transform: flip ? 'translateX(calc(-100% - 10px))' : 'translateX(10px)',
         background: color.canvas, border: `1px solid ${color.hairline}`, borderRadius: radius.card,
