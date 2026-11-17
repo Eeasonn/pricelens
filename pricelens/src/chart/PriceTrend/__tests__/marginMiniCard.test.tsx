@@ -111,20 +111,22 @@ describe('第196轮整改4：销毛迷你卡（悬停小卡上方；2026-11-05 �
     expect(screen.getByText('销毛率')).toBeTruthy();
     // 数据状态显性：模拟徽标（simulated 必须文字标注，不能只靠颜色）
     expect(screen.getByText('模拟')).toBeTruthy();
-    // 销毛率大数字（marginRate × 100 保留 1 位小数）
-    expect(screen.getByText('37.4%')).toBeTruthy();
+    // 2026-11-17 Eason：数值直接写占位「xx.x%」——不放推算数（非真实口径显性）
+    expect(screen.getByText('xx.x%')).toBeTruthy();
+    expect(screen.queryByText('37.4%')).toBeNull();
     // 复检收敛：单台毛利/成本小字段不再出现
     expect(screen.queryByText('毛利 $370 · 成本 $620')).toBeNull();
   });
 
-  it('该桶无销毛数据（月模型无有效价月 → null）→ 销毛率显「—」，卡仍在', async () => {
+  it('该桶无销毛数据（月模型无有效价月 → null）→ 占位「xx.x%」不变，卡仍在', async () => {
     const margins: (MarginCostPoint | null)[] = [null, null, null, null, null];
     const { container } = render(<Chart {...baseProps} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     hoverColumn(container, 0);
     expect(screen.getByText('销毛率')).toBeTruthy();
-    // 大数字格「—」（仅此一处：毛利/成本段已随复检删除）
-    expect(screen.getByText('—')).toBeTruthy();
+    // 占位文案恒「xx.x%」（Eason：写的就是 x，不放任何推算数）
+    expect(screen.getByText('xx.x%')).toBeTruthy();
+    expect(screen.queryByText('—')).toBeNull();
   });
 
   it('margins 未传（量价/下钻等调用方）→ 不渲染迷你卡', async () => {

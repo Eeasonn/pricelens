@@ -3021,7 +3021,6 @@ export default function Chart(props: ChartProps) {
             // 「销毛率 + 模拟徽标 + 大数字销毛率」（单台毛利/成本小字段随复检删除，
             // 卡高相应收窄；该桶无数据显「—」）。tipBox 模式（量价看板预留框）不出
             // 迷你卡；margins 未传（量价/下钻等）不渲染
-            const mpt = props.margins?.[tipIdx] ?? null;
             // 2026-11-17 Eason「销毛率选中后小卡片不见了」：2a69768 改「严格卡点右上」
             // 后迷你卡仍按自身高度 translateY(calc(-100% - 8px)) 上移，而主卡按主卡
             // 高度上移（~60-100px）——迷你卡落进主卡矩形内被同 z-index 的主卡盖住。
@@ -3050,10 +3049,11 @@ export default function Chart(props: ChartProps) {
               >
                 <span style={{ fontSize: 10, lineHeight: '13px', color: color.mute, flexShrink: 0 }}>销毛率</span>
                 {/* 数据状态显性（PRODUCT.md：simulated 必须文字标注）——销毛为
-                    量价侧月版本模拟模型，非真实成本口径 */}
+                    量价侧月版本模拟模型，非真实成本口径。2026-11-17 Eason：数值直接
+                    写占位「xx.x%」——不放推算数，观众不会误读成真实销毛 */}
                 <span style={SIM_BADGE}>模拟</span>
                 <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink, marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                  {mpt ? `${(mpt.marginRate * 100).toFixed(1)}%` : '—'}
+                  xx.x%
                 </span>
               </div>
             );
