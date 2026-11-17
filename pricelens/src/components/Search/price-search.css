@@ -20,11 +20,6 @@
   color: var(--qs-ink); caret-color: var(--qs-ink); font-size: var(--qs-caption);
 }
 .lpl-quick-search-shell input::placeholder { color: var(--qs-mute); opacity: 1; }
-.lpl-quick-search-voice {
-  display: grid; place-items: center; width: var(--qs-lg); height: var(--qs-lg); padding: 0; flex-shrink: 0;
-  border: 0; border-radius: var(--qs-control-radius); background: transparent; color: var(--qs-body);
-}
-.lpl-quick-search-voice:not(:disabled):hover { background: var(--qs-hover); }
 .lpl-quick-search kbd { flex-shrink: 0; font-family: var(--qs-mono); font-size: var(--qs-caption); line-height: 1; color: var(--qs-mute); }
 .lpl-quick-search-panel {
   position: fixed; z-index: 90; display: flex; flex-direction: column; overflow: hidden;

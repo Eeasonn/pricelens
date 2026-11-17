@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
-import { ArrowRightOutlined, AudioOutlined, LoadingOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, LoadingOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
 import { color, font, fontSize, motion, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import './price-search.css';
 
@@ -26,9 +26,6 @@ interface Props {
   activeIndex: number;
   shortcut: string;
   running: boolean;
-  voiceAvailable: boolean;
-  voiceListening: boolean;
-  voiceError?: string | null;
   failure: string | null;
   status: string;
   completed: boolean;
@@ -41,7 +38,6 @@ interface Props {
   onSelect: (index: number, skuId?: string) => void;
   onSuggestion: (index: number) => void;
   onSubmit: () => void;
-  onVoice: () => void;
   onOpenAgent: () => void;
 }
 
@@ -107,11 +103,6 @@ export function PriceSearchSurface(props: Props) {
         aria-expanded={open} aria-describedby={activeId} value={query} placeholder="搜索产品或价格问题"
         onFocus={props.onOpen} onChange={(event) => props.onQuery(event.target.value)}
         onKeyDown={(event) => { if (!event.nativeEvent.isComposing && event.keyCode !== 229) props.onKeyDown(event); }} />
-      <button type="button" className="lpl-quick-search-voice" aria-label="搜索语音输入"
-        title={props.voiceAvailable ? '语音输入' : '当前浏览器不支持语音输入'}
-        disabled={!props.voiceAvailable || props.voiceListening || props.running} onClick={props.onVoice}>
-        {props.voiceListening ? <LoadingOutlined spin /> : <AudioOutlined />}
-      </button>
       <kbd aria-label={`快捷键 ${props.shortcut}`}>{props.shortcut}</kbd>
     </div>
     {renderedOpen && <div ref={panelRef} id="pricelens-price-search-results" className="lpl-quick-search-panel"
@@ -169,7 +160,6 @@ export function PriceSearchSurface(props: Props) {
           </div>
           {props.failure && <p role="alert" className="lpl-quick-search-error">{props.failure}</p>}
         </section>}
-        {props.voiceError && <p role="alert" className="lpl-quick-search-error">{props.voiceError}</p>}
       </div>
       <div className="lpl-quick-search-footer">{mode === 'products' ? '↑ ↓ 选择 · Enter 切换产品' : 'Enter 开始分析'}<span>Esc 关闭</span></div>
     </div>}

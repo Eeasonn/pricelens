@@ -17,8 +17,8 @@ function Harness({ initialMessages = [], initialDraft = '', mode = 'dock' }: {
   const [messages, setMessages] = useState(initialMessages);
   finish = () => setRunning(false);
   return <AgentThread
-    controller={{ open, mode, draft, running, voiceAvailable: false, voiceListening: false,
-      setDraft, setMode: vi.fn(), closeAgent: () => setOpen(false), markRead: vi.fn(), startVoice: vi.fn(),
+    controller={{ open, mode, draft, running,
+      setDraft, setMode: vi.fn(), closeAgent: () => setOpen(false), markRead: vi.fn(),
       send: async (text) => {
         ask(text); setDraft(''); setRunning(true);
         setMessages((current) => [...current, { id: 'user-new', role: 'user', text: text ?? '', createdAt: new Date().toISOString() }]);

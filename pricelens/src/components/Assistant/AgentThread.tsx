@@ -6,7 +6,7 @@ import {
 } from '@assistant-ui/react';
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown';
 import {
-  ArrowDownOutlined, ArrowUpOutlined, AudioOutlined, CheckOutlined, CloseOutlined,
+  ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, CloseOutlined,
   CopyOutlined, EditOutlined, ExpandOutlined, FullscreenExitOutlined, PlusOutlined,
   ReloadOutlined, StopOutlined,
 } from '@ant-design/icons';
@@ -31,8 +31,6 @@ interface ThreadController {
   mode: 'dock' | 'drawer' | 'full';
   running: boolean;
   draft: string;
-  voiceAvailable: boolean;
-  voiceListening: boolean;
   setDraft: (value: string) => void;
   send: (text?: string) => Promise<void>;
   stop: () => void;
@@ -40,7 +38,6 @@ interface ThreadController {
   closeAgent: () => void;
   setMode: (mode: 'dock' | 'drawer' | 'full') => void;
   markRead: () => void;
-  startVoice: () => Promise<void>;
 }
 
 interface ThreadSuggestion { label: string; prompt?: string; draftOnly?: boolean }
@@ -254,13 +251,12 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
             <div className="aui-composer-toolbar">
               <span className="aui-composer-hint">{controller.running ? '正在查询 · 可先写下一个问题' : 'Enter 发送 · Shift+Enter 换行'}</span>
               <div className="aui-header-actions">
-                {controller.voiceAvailable && <button type="button" className="aui-icon-button" aria-label="语音输入" title="语音输入" disabled={controller.running || controller.voiceListening} onClick={() => void controller.startVoice()}><AudioOutlined /></button>}
                 {controller.running ? <ComposerPrimitive.Cancel className="aui-send" aria-label="停止运行"><StopOutlined /></ComposerPrimitive.Cancel>
                   : <ComposerPrimitive.Send className="aui-send" aria-label="发送"><ArrowUpOutlined /></ComposerPrimitive.Send>}
               </div>
             </div>
           </ComposerPrimitive.Root>
-          <p className="aui-composer-note">{controller.voiceListening ? '正在听，请说出问题…' : '查询不会自动修改看板，应用筛选前会请你确认。'}</p>
+          <p className="aui-composer-note">查询不会自动修改看板，应用筛选前会请你确认。</p>
         </div>
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>

@@ -6,7 +6,6 @@ import {
   buildAgentContext,
   contextFingerprint as agentContextFingerprint,
   defaultAgentClient,
-  defaultVoiceAdapter,
   runAgent,
   validateFilterPatch,
   type AgentContextSnapshot,
@@ -21,7 +20,6 @@ import {
   type ForecastDraftInput,
   type FilterResultCard,
   type FilterPatch,
-  type VoiceInputAdapter,
 } from '../agent-stable';
 import type { FiltersState } from './filtersTypes';
 import { materializeAlertRecords, alertAgentContextOf } from '../dataModel/alertLifecycle';
@@ -61,8 +59,6 @@ interface AgentContextValue {
   running: boolean;
   runStatus: AgentRunStatus;
   activeRun: AgentRun | null;
-  voiceListening: boolean;
-  voiceAvailable: boolean;
   messages: AgentMessage[];
   draft: string;
   context: AgentContextSnapshot;
@@ -82,7 +78,6 @@ interface AgentContextValue {
   undoFilter: () => void;
   redoFilter: () => void;
   markRead: () => void;
-  startVoice: (onTranscript?: (transcript: string) => void) => Promise<void>;
 }
 
 const Ctx = createContext<AgentContextValue | null>(null);
@@ -184,7 +179,6 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState(false);
   const [runStatus, setRunStatus] = useState<AgentRunStatus>('idle');
   const [activeRun, setActiveRun] = useState<AgentRun | null>(null);
-  const [voiceListening, setVoiceListening] = useState(false);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [appliedFilterIds, setAppliedFilterIds] = useState<ReadonlySet<string>>(new Set());
@@ -206,7 +200,6 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   }, []);
   const seenProactiveAlerts = useRef<Set<string>>(new Set());
   const agentClient = useMemo(() => defaultAgentClient(), []);
-  const voice = useMemo<VoiceInputAdapter>(() => defaultVoiceAdapter(), []);
   const context = useMemo(() => buildAgentContext(page, state, alertRecords(alerts, state, page)), [alerts, page, state]);
   useEffect(() => { contextRef.current = context; }, [context]);
   const appendMessage = useCallback((message: AgentMessage) => {
@@ -430,23 +423,6 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     setMessages((prev) => prev.some((message) => message.unread) ? prev.map((message) => ({ ...message, unread: false })) : prev);
   }, []);
 
-  const startVoice = useCallback(async (onTranscript?: (transcript: string) => void) => {
-    if (!voice.available || voiceListening || running) return;
-    setVoiceListening(true);
-    try {
-      const result = await voice.listen();
-      if (onTranscript) onTranscript(result.transcript);
-      else setDraft((prev) => `${prev}${prev ? ' ' : ''}${result.transcript}`);
-    }
-    catch (error) {
-      if (!(error instanceof Error && error.name === 'AbortError')) {
-        const detail = error instanceof Error && error.message ? error.message : '浏览器未返回语音结果。';
-        appendMessage({ id: messageId('assistant'), role: 'assistant', text: `语音输入失败：${detail}`, kind: 'error', unread: true, createdAt: new Date().toISOString() });
-      }
-    }
-    finally { setVoiceListening(false); }
-  }, [appendMessage, running, voice, voiceListening]);
-
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!event.defaultPrevented && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openAgent('dock'); }
@@ -457,10 +433,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   }, [open, running, openAgent]);
 
   const value: AgentContextValue = {
-    open, mode, running, runStatus, activeRun, voiceListening, voiceAvailable: voice.available, messages, draft, context, appliedFilterIds, canUndo: undoSnapshots.length > 0, canRedo: redoSnapshots.length > 0,
+    open, mode, running, runStatus, activeRun, messages, draft, context, appliedFilterIds, canUndo: undoSnapshots.length > 0, canRedo: redoSnapshots.length > 0,
     contextStale: messages.some((message) => Boolean(message.contextFingerprint && message.contextFingerprint !== context.fingerprint)),
     unreadCount: messages.filter((message) => message.unread).length,
-    setDraft, openAgent, closeAgent, setMode, send, stop, newConversation, applyFilter, undoFilter, redoFilter, markRead, startVoice,
+    setDraft, openAgent, closeAgent, setMode, send, stop, newConversation, applyFilter, undoFilter, redoFilter, markRead,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

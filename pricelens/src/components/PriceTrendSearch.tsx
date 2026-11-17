@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { dimProduct, dimRegion } from '../data';
-import { defaultVoiceAdapter, type VoiceInputAdapter } from '../agent/voice';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { usePage } from '../state/PageContext';
@@ -105,10 +104,6 @@ export default function PriceTrendSearch() {
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const submittedPromptRef = useRef('');
-  const voiceAbortRef = useRef<AbortController | null>(null);
-  const voice = useMemo<VoiceInputAdapter>(() => defaultVoiceAdapter(), []);
-  const [voiceListening, setVoiceListening] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const parsed = useMemo(() => parsePriceTrendSearch(query, state.countryCode), [query, state.countryCode]);
   const hits = useMemo(() => productHits(parsed.productQuery, parsed.countryCode, state.industry).slice(0, parsed.productQuery.trim() ? 6 : 4), [parsed.countryCode, parsed.productQuery, state.industry]);
@@ -159,7 +154,6 @@ export default function PriceTrendSearch() {
   }, [open]);
   useEffect(() => () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-    voiceAbortRef.current?.abort();
   }, []);
 
   // The panel lifecycle is separate from its result content. This keeps a
@@ -218,28 +212,6 @@ export default function PriceTrendSearch() {
     inputRef.current?.blur();
   };
 
-  const startSearchVoice = async () => {
-    if (!voice.available || voiceListening || running) return;
-    const controller = new AbortController();
-    voiceAbortRef.current = controller;
-    setVoiceError(null);
-    setVoiceListening(true);
-    try {
-      const result = await voice.listen(controller.signal);
-      setQuery(result.transcript.trim());
-      setMode('products');
-      setOpen(true);
-      window.setTimeout(() => inputRef.current?.focus(), 0);
-    } catch (error) {
-      if (!(error instanceof Error && error.name === 'AbortError')) {
-        setVoiceError(error instanceof Error ? error.message : '语音输入失败，请重试。');
-      }
-    } finally {
-      if (voiceAbortRef.current === controller) voiceAbortRef.current = null;
-      setVoiceListening(false);
-    }
-  };
-
   const animateFilterHandoff = () => {
     const filter = document.querySelector<HTMLElement>('.lpl-fb');
     if (!filter) return;
@@ -287,11 +259,10 @@ export default function PriceTrendSearch() {
   return <PriceSearchSurface rootRef={rootRef} inputRef={inputRef} panelRef={panelRef} resultsRef={resultsRef}
     open={open} renderedOpen={renderedOpen} mode={mode} query={query} countryCode={parsed.countryCode}
     products={hits.map((hit) => ({ ...hit, brand: brandLabelOf(hit.brand), configurations: hit.variants }))}
-    activeIndex={activeIndex} shortcut={shortcutLabel} running={running} voiceAvailable={voice.available}
-    voiceListening={voiceListening} voiceError={voiceError} failure={aiFailureMessage} status={aiStatusMessage}
+    activeIndex={activeIndex} shortcut={shortcutLabel} running={running} failure={aiFailureMessage} status={aiStatusMessage}
     completed={sameAsSubmitted && runStatus === 'completed'} suggestions={[...PRICE_TREND_AI_SUGGESTIONS]}
     onOpen={() => setOpen(true)} onQuery={(value) => { setQuery(value); setOpen(true); }}
-    onMode={setMode} onActive={setActiveIndex} onVoice={() => void startSearchVoice()}
+    onMode={setMode} onActive={setActiveIndex}
     onSelect={(index, skuId) => selectProduct(hits[index], skuId ? hits[index].variants.find((variant) => variant.skuId === skuId) : undefined)}
     onSuggestion={(index) => useSuggestion(PRICE_TREND_AI_SUGGESTIONS[index])} onSubmit={searchWithAgent}
     onOpenAgent={() => openAgent('dock', submittedPromptRef.current)}

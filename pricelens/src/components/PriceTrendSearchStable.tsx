@@ -86,7 +86,7 @@ export function cardOf(hit: ProductHit, skuId = hit.skuId): MainProduct {
 export default function PriceTrendSearch() {
   const { page } = usePage();
   const { state, actions } = useFilters();
-  const { open: agentOpen, openAgent, send, running, runStatus, activeRun, voiceAvailable, voiceListening, startVoice } = useAgent();
+  const { open: agentOpen, openAgent, send, running, runStatus, activeRun } = useAgent();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -214,13 +214,10 @@ export default function PriceTrendSearch() {
   return <PriceSearchSurface rootRef={rootRef} inputRef={inputRef} panelRef={panelRef}
     open={open} renderedOpen={renderedOpen} mode={mode} query={query} countryCode={state.countryCode}
     products={hits.map((hit) => ({ ...hit, brand: brandLabelOf(hit.brand), configurations: hit.configOptions }))}
-    activeIndex={activeIndex} shortcut={shortcutLabel} running={running} voiceAvailable={voiceAvailable}
-    voiceListening={voiceListening} failure={aiFailureMessage} status={aiStatusMessage}
+    activeIndex={activeIndex} shortcut={shortcutLabel} running={running} failure={aiFailureMessage} status={aiStatusMessage}
     completed={sameAsSubmitted && runStatus === 'completed'} suggestions={PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => suggestion.label)}
     onOpen={() => openSearch()} onQuery={(value) => { setQuery(value); openSearch(); }}
-    onMode={setMode} onActive={setActiveIndex} onVoice={() => void startVoice((transcript) => {
-      setQuery((previous) => `${previous}${previous ? ' ' : ''}${transcript}`); openSearch();
-    })}
+    onMode={setMode} onActive={setActiveIndex}
     onSelect={(index, skuId) => selectProduct(hits[index], skuId)}
     onSuggestion={(index) => useSuggestion(PRICE_TREND_AI_SUGGESTIONS[index])} onSubmit={searchWithAgent}
     onOpenAgent={() => openAgent('dock', submittedPromptRef.current)}
