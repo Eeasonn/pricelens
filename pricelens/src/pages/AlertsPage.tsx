@@ -38,16 +38,21 @@
 // ③ 添加监控从 Select 搜索换产品级联（antd Cascader + CascadePanel 三列：品牌→型号→配置，
 //    与筛选条产品筛选器同构同语言；勾选即订阅、取消勾选即移除）；行尾铃铛退役改 ✕
 //    （Popconfirm 二次确认——铃铛语义是订阅开关不是删除，误点即整行消失是本轮反馈原话）。
+// 拍板轮（同日「V1a 其他全部按推荐」）：B2 Agent 深链即时生效（生产者派发
+// pricelens:alerts-focus，页内不失效）/ B3 竞品 平台价差·档位间距「—（仅华为）」/
+// B4 own-gap 只在涉事两档行亮徽标（低档/高档角色）/ B6 脏订阅整行「无价格数据」N-A/
+// B7 跨口径订阅提示条 / V4 概览带可点化（点计数切只看异常再点回全部·监控中=清全部筛选）/
+// V5a 「＋ 添加监控」主按钮化（级联本体不动）/ V5b 齿轮弹层补阈值滑杆快捷覆写（own-gap
+// 阈值仍型号级只给开关）；V1 移除交互拍板 A = Popconfirm 维持现行。
 // ============================================================
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { App as AntdApp, Badge, Button, Cascader, ConfigProvider, Empty, Popconfirm, Popover, Segmented, Select, Slider, Switch } from 'antd';
-import type { ThemeConfig } from 'antd';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { App as AntdApp, Badge, Button, Empty, Popconfirm, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import { BellOutlined, CloseOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { navBus } from '../state/navBus';
-import { dimChannel, dimProduct, dimRegion } from '../data';
+import { dimChannel, dimProduct, dimTime } from '../data';
 import {
   alertSeriesMeta,
   groupAlertsBySeries,
@@ -69,7 +74,7 @@ import {
 } from '../dataModel/alertLifecycle';
 import { productSelectionOfSeriesKey } from '../state/urlSync';
 import { getEffectiveBenchmark } from '../state/configStore';
-import { defaultPlatformAnchorOf } from '../dataModel/aggregate';
+import { defaultPlatformAnchorOf, priceForSelection } from '../dataModel/aggregate';
 import { autoComparesFor, buildCards } from '../state/mainSelection';
 import usePageViewState from '../state/usePageViewState';
 import { buildProductTree, ownBrand, type RomramNode } from '../components/ProductCascader/tree';
@@ -304,13 +309,6 @@ function useOpenInDashboard() {
 
 const ALERT_RECORDS_STORAGE = 'LPL.alert.records.v1';
 
-/** 空态主操作输入框主题（第一百九十一轮，桌面实拍审计）：全局 antd colorBorder=hairline
- *  (#ebebeb) 让主操作在白卡上几乎扫不出——描边加强一档到 hairlineStrong；只作用于
- *  空态 prominent Select（工具行小入口维持全局弱描边，仍是次级操作） */
-const prominentSelectTheme: ThemeConfig = {
-  components: { Select: { colorBorder: color.hairlineStrong } },
-};
-
 function readAlertRecordOverrides(): Record<string, Partial<AlertRecord>> {
   if (typeof window === 'undefined') return {};
   try {
@@ -392,7 +390,9 @@ export default function AlertsPage() {
     return () => window.removeEventListener('pricelens:alert-records-updated', onAgentAlertUpdate);
   }, []);
 
-  useEffect(() => {
+  // Agent 深链消费（B2 修复）：挂载消费走跨页深链；已在预警页时生产者派发
+  // pricelens:alerts-focus 自定义事件驱动即时消费（原 [] effect 在页内深链永不触发）
+  const consumeAlertsFocus = useCallback(() => {
     const focus = navBus.alertsFocus;
     if (!focus) return;
     if (focus.modelId) setModelFilter({ id: focus.modelId, name: focus.modelName ?? focus.modelId });
@@ -404,7 +404,16 @@ export default function AlertsPage() {
       setExpanded(new Set([`${focus.seriesKey}|${focus.type}`]));
     }
     navBus.alertsFocus = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    consumeAlertsFocus();
+  }, [consumeAlertsFocus]);
+  useEffect(() => {
+    const onAlertsFocus = (): void => consumeAlertsFocus();
+    window.addEventListener('pricelens:alerts-focus', onAlertsFocus);
+    return () => window.removeEventListener('pricelens:alerts-focus', onAlertsFocus);
+  }, [consumeAlertsFocus]);
 
   // 国家/产业切换 → 品牌筛选失效（brandFilter 会话态跨页保留，但品牌组随口径重建；
   // 旧口径品牌残留会让矩阵全不命中、误落「尚未添加监控产品」空态）。与总览页同款
@@ -450,6 +459,34 @@ export default function AlertsPage() {
       .map((g) => ({ ...g, rows: [...g.rows].sort((a, b) => a.meta.label.localeCompare(b.meta.label)) }))
       .sort((a, b) => (a.isOwn === b.isOwn ? a.brand.localeCompare(b.brand) : a.isOwn ? -1 : 1));
   }, [state.alertSubs, state.countryCode, state.industry]);
+
+  // ---- B6/B7（2026-11-17 拍板轮）：脏订阅与跨口径订阅识别 ----
+  // 脏订阅 = 系列在当前口径全周无价格事实（旧搜索下拉的历史遗留）：矩阵行整行 N/A，
+  // 不再恒「正常」假阴性。口径 = 代表 SKU 任一周有价（与引擎代表色单 SKU 同近似）。
+  const noDataRowKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const key of state.alertSubs) {
+      const meta = alertSeriesMeta(key, { countryCode: state.countryCode, industry: state.industry });
+      if (!meta) continue; // 跨口径订阅归 B7 提示，不在此列
+      let hasPrice = false;
+      for (let i = dimTime.length - 1; i >= 0; i--) {
+        if (priceForSelection(meta.skuId, dimTime[i].week_id, state.countryCode, null, 'usd')) {
+          hasPrice = true;
+          break;
+        }
+      }
+      if (!hasPrice) set.add(key);
+    }
+    return set;
+  }, [state.alertSubs, state.countryCode, state.industry]);
+  // 跨口径订阅数（他国/他产业下 meta = null）：空态误读「没订阅过」的提示条数据源
+  const foreignSubCount = useMemo(
+    () =>
+      state.alertSubs.filter(
+        (key) => alertSeriesMeta(key, { countryCode: state.countryCode, industry: state.industry }) == null,
+      ).length,
+    [state.alertSubs, state.countryCode, state.industry],
+  );
 
   const bySeries = useMemo(() => groupAlertsBySeries(alerts), [alerts]);
   // 最新态（第五十五轮，用户口径：主视觉只报最新、历史进次级）：计数与单元格都按「每系列×类型最新一条」
@@ -812,7 +849,7 @@ export default function AlertsPage() {
     );
   };
 
-  // ---- 矩阵单元格（三态：— / 正常 / 触发徽标；own-gap = 型号级）----
+  // ---- 矩阵单元格（三态：— / 正常 / 触发徽标；own-gap = 型号级涉事行亮）----
   const renderCell = (rowKey: string, meta: AlertSeriesMeta, t: AlertType): ReactNode => {
     const dim = typeFilter !== 'all' && typeFilter !== t;
     const wrap = (children: ReactNode): ReactNode => (
@@ -833,40 +870,66 @@ export default function AlertsPage() {
         {children}
       </div>
     );
-    // 档位间距：型号级阈值（列头全局调）——华为行显「型号级 + 触发数」，竞品行「—」；
-    // 第一百九十二轮：产品级开关可关掉本档参与（引擎同口径 = 该档退出成对计算）
+    // N/A 语言（2026-11-17 拍板 V2）：引擎不可能触发的格子诚实标注原因，不再假「正常」
+    const naCell = (why: string): ReactNode => (
+      <span style={{ fontSize: 11, color: color.hairlineStrong, textAlign: 'center', lineHeight: '13px' }}>
+        —
+        <span style={{ fontSize: 10, display: 'block' }}>{why}</span>
+      </span>
+    );
+    // B6：脏订阅（当前口径全周无价格事实）——整行 N/A，不再恒「正常」假阴性
+    if (noDataRowKeys.has(rowKey)) {
+      return wrap(
+        <span title="该产品在当前口径无价格数据，暂不产生预警；可点行尾 ✕ 移除监控" style={{ fontSize: 11, color: color.hairlineStrong, textAlign: 'center', lineHeight: '13px', cursor: 'help' }}>
+          —
+          <span style={{ fontSize: 10, display: 'block' }}>无价格数据</span>
+        </span>,
+      );
+    }
+    // 档位间距：型号级阈值（列头全局调）——竞品行「—（仅华为）」；产品级开关可关掉
+    // 本档参与（引擎同口径 = 该档退出成对计算）；B4：只在涉事两档行亮徽标（低价档/
+    // 高档角色），同型号其余档位行弱化为灰字「型号级」，不再每行重复亮 ×N
     if (t === 'own-gap') {
       if (!meta.isOwn) {
-        return wrap(<span style={{ fontSize: 11, color: color.hairlineStrong }}>—</span>);
+        return wrap(naCell('仅华为'));
       }
       const gapOn = state.alertProducts[rowKey]?.types?.['own-gap'] ?? state.alertTypes['own-gap'];
       if (!gapOn) {
         return wrap(<span style={{ fontSize: 11, color: color.hairlineStrong }}>—</span>);
       }
-      const n = (gapByModel.get(rowKey.split('__')[0]) ?? []).length;
+      const myPairs = (gapByModel.get(rowKey.split('__')[0]) ?? []).filter(
+        (a) => a.seriesKey === rowKey || a.pairHighSeriesKey === rowKey,
+      );
+      if (myPairs.length === 0) {
+        return wrap(<span style={{ fontSize: 11, color: color.mute }}>型号级</span>);
+      }
+      const asLow = myPairs.filter((a) => a.seriesKey === rowKey).length;
+      const asHigh = myPairs.length - asLow;
+      const role = asLow > 0 && asHigh > 0 ? '成对' : asLow > 0 ? '低档' : '高档';
       return wrap(
         <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          {n > 0 ? (
-            <span
-              style={{
-                padding: '0 6px',
-                fontSize: 10,
-                fontWeight: 700,
-                lineHeight: '16px',
-                borderRadius: radius.pill,
-                color: TYPE_STYLE['own-gap'].fg,
-                background: TYPE_STYLE['own-gap'].bg,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              型号级{n > 1 ? ` ×${n}` : ''}
-            </span>
-          ) : (
-            <span style={{ fontSize: 11, color: color.mute }}>型号级</span>
-          )}
-          {n > 0 && <span style={{ fontSize: 11, color: color.mute }}>成对明细见下</span>}
+          <span
+            title={`本档参与 ${myPairs.length} 对档位间距（${asLow} 对作为低价档、${asHigh} 对作为高价档），成对明细见型号组下方`}
+            style={{
+              padding: '0 6px',
+              fontSize: 10,
+              fontWeight: 700,
+              lineHeight: '16px',
+              borderRadius: radius.pill,
+              color: TYPE_STYLE['own-gap'].fg,
+              background: TYPE_STYLE['own-gap'].bg,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            型号级 · {role}{myPairs.length > 1 ? ` ×${myPairs.length}` : ''}
+          </span>
+          <span style={{ fontSize: 11, color: color.mute }}>成对明细见下</span>
         </span>,
       );
+    }
+    // B3：平台价差引擎仅对华为系列触发——竞品行诚实 N/A，不再渲染覆写触发器
+    if (t === 'platform-gap' && !meta.isOwn) {
+      return wrap(naCell('仅华为'));
     }
     const rule = state.alertProducts[rowKey];
     const on = rule?.types?.[t] ?? state.alertTypes[t];
@@ -921,9 +984,10 @@ export default function AlertsPage() {
     );
   };
 
-  // ---- 单产品规则设置（第一百九十二轮 Eason ②）：行尾齿轮 = 四类开关一处设置。
-  //      覆写语义与单元格一致：与全局同值即清键回落；竞品行 平台价差/档位间距 引擎
-  //      本就仅华为触发 → 禁用标注「仅华为」。own-gap 关档 = 退出型号内成对计算。 ----
+  // ---- 单产品规则设置（行尾齿轮）：四类开关 + 阈值滑杆一处设置（第一百九十二轮 ② +
+  //      拍板轮 V5b 增强）。覆写语义与单元格一致：与全局同值即清键回落；竞品行
+  //      平台价差/档位间距 引擎本就仅华为触发 → 禁用标注「仅华为」；own-gap 阈值仍为
+  //      型号级全局（只给开关），关档 = 退出型号内成对计算。 ----
   const renderRowSettings = (key: string, meta: AlertSeriesMeta): ReactNode => {
     const rule = state.alertProducts[key];
     const overridden = rule != null && (Object.keys(rule.types ?? {}).length > 0 || Object.keys(rule.thresholds ?? {}).length > 0);
@@ -938,46 +1002,73 @@ export default function AlertsPage() {
       if (next[t] === state.alertTypes[t]) delete next[t]; // 与全局同值 = 清键回落
       actions.setAlertProductRule(key, { ...(rule ?? {}), types: next });
     };
+    const setRuleThreshold = (t: AlertType, pct: number): void => {
+      const r = TYPE_RULES[t];
+      const next = { ...(rule?.thresholds ?? {}), [t]: pct };
+      const nextVal = next[t];
+      if (nextVal != null && Math.abs(nextVal - state.alertThresholds[t]) < 1e-9) delete next[t]; // 与全局同值 = 清键回落
+      actions.setAlertProductRule(key, { ...(rule ?? {}), thresholds: next });
+      message.success(`${meta.label}的${r.name}阈值已保存`, 1.2);
+    };
     return (
       <Popover
         trigger="click"
         placement="bottomRight"
         content={
-          <div style={{ width: 272 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 2 }}>该产品的预警类型</div>
-            <div style={{ fontSize: 11, color: color.mute, marginBottom: 8, lineHeight: '15px' }}>
-              关闭某类 = 该产品不再扫描此类预警；未单独设置时跟随列头全局开关与阈值
+          <div style={{ width: 344 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 2 }}>该产品的预警规则</div>
+            <div style={{ fontSize: 11, color: color.mute, marginBottom: 10, lineHeight: '15px' }}>
+              每类独立开关与阈值；未单独设置时跟随列头全局；与全局同值自动回落
             </div>
-            <div style={{ display: 'grid', gap: 9 }}>
+            <div style={{ display: 'grid', gap: 11 }}>
               {rows.map(({ t, ownOnly }) => {
                 const r = TYPE_RULES[t];
                 const na = ownOnly === true && !meta.isOwn;
                 const on = rule?.types?.[t] ?? state.alertTypes[t];
-                const isOverridden = rule?.types?.[t] != null;
+                const typeOverridden = rule?.types?.[t] != null;
+                const thrOverridden = rule?.thresholds?.[t] != null;
+                const thrVal = +((rule?.thresholds?.[t] ?? state.alertThresholds[t]) * 100).toFixed(1);
                 return (
-                  <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Switch
-                      size="small"
-                      checked={on}
-                      disabled={na}
-                      aria-label={`${meta.label} ${r.name}开关`}
-                      onChange={(v) => setRuleType(t, v)}
-                    />
-                    <span style={{ fontSize: 12, color: na ? color.mute : color.ink, flex: 1, minWidth: 0 }}>
-                      {r.name.replace('预警', '')}
-                    </span>
-                    <span style={{ fontSize: 11, flexShrink: 0, color: na ? color.hairlineStrong : isOverridden ? color.link : color.mute }}>
-                      {na ? '仅华为' : isOverridden ? '已单独设置' : '跟随全局'}
-                    </span>
+                  <div key={t}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Switch
+                        size="small"
+                        checked={on}
+                        disabled={na}
+                        aria-label={`${meta.label} ${r.name}开关`}
+                        onChange={(v) => setRuleType(t, v)}
+                      />
+                      <span style={{ fontSize: 12, color: na ? color.mute : color.ink, flex: 1, minWidth: 0 }}>
+                        {r.name.replace('预警', '')}
+                      </span>
+                      <span style={{ fontSize: 11, flexShrink: 0, color: na ? color.hairlineStrong : typeOverridden || thrOverridden ? color.link : color.mute }}>
+                        {na ? '仅华为' : typeOverridden || thrOverridden ? '已单独设置' : '跟随全局'}
+                      </span>
+                    </div>
+                    {/* V5b：阈值滑杆快捷覆写（own-gap 阈值型号级全局——只给开关不给滑杆；
+                        竞品不可用行（na）不渲染滑杆；开关关闭时滑杆一并禁用） */}
+                    {!r.below && !na && (
+                      <div style={{ display: 'flex', alignItems: 'center', marginTop: 3 }}>
+                        <ThresholdSlider
+                          min={r.min}
+                          max={r.max}
+                          step={r.step}
+                          disabled={na || !on}
+                          value={thrVal}
+                          below={r.below}
+                          label={`${meta.label} ${r.name}阈值滑杆`}
+                          onCommit={(pct) => setRuleThreshold(t, pct)}
+                        />
+                        {thrOverridden && <span style={{ fontSize: 10, color: color.link, marginLeft: 2 }}>＊</span>}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
-            {meta.isOwn && (
-              <div style={{ marginTop: 9, fontSize: 11, color: color.mute, lineHeight: '15px' }}>
-                档位间距为型号级阈值（列头调整）；关闭某档位 = 该档位退出型号内成对计算
-              </div>
-            )}
+            <div style={{ marginTop: 10, fontSize: 11, color: color.mute, lineHeight: '15px' }}>
+              带 ＊ 为已单独设置，拖动松手生效；档位间距为型号级阈值（列头调整），关闭某档位 = 该档位退出型号内成对计算
+            </div>
             {overridden && (
               <div style={{ marginTop: 9, textAlign: 'right' }}>
                 <Button
@@ -1042,11 +1133,23 @@ export default function AlertsPage() {
           >
             <BrandDot brand={meta.brand} />
             <span
-              title={meta.label}
-              style={{ fontSize: 12, fontWeight: 600, color: color.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              title={noDataRowKeys.has(key) ? `${meta.label}（当前口径无价格数据，暂不产生预警）` : meta.label}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: noDataRowKeys.has(key) ? color.mute : color.ink,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
             >
               {meta.label}
             </span>
+            {noDataRowKeys.has(key) && (
+              <span style={{ fontSize: 10, color: color.hairlineStrong, flexShrink: 0, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '15px' }}>
+                无价格数据
+              </span>
+            )}
           </div>
           {ORDER.map((t) => (
             <CellSlot key={t}>{renderCell(key, meta, t)}</CellSlot>
@@ -1149,20 +1252,55 @@ export default function AlertsPage() {
                 marginBottom: space.md,
               }}
             >
-              <span title={overviewDetail} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
-                <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: overviewCount > 0 ? color.ink : color.hairlineStrong }}>
-                  {overviewCount}
+              {/* V4（2026-11-17 拍板）：概览带可点化——「N 条最新预警」点击切只看异常
+                  （再点回全部），「N 个系列监控中」点击清全部筛选（补退役芯片缺的回路） */}
+              {statusFilter === 'normal' ? (
+                <span title={overviewDetail} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
+                  <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: overviewCount > 0 ? color.ink : color.hairlineStrong }}>
+                    {overviewCount}
+                  </span>
+                  <span style={{ fontSize: 12, color: color.mute }}>{overviewUnit}</span>
                 </span>
-                <span style={{ fontSize: 12, color: color.mute }}>{overviewUnit}</span>
-              </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter(statusFilter === 'alerts' ? 'all' : 'alerts')}
+                  aria-pressed={statusFilter === 'alerts'}
+                  aria-label={`最新预警 ${overviewCount} 条，点击${statusFilter === 'alerts' ? '回到全部状态' : '只看异常'}`}
+                  title={statusFilter === 'alerts' ? '再点一次回到全部状态' : overviewDetail}
+                  style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, minWidth: 0, border: 0, background: 'transparent', padding: '2px 6px', borderRadius: radius.control, cursor: 'pointer', outline: statusFilter === 'alerts' ? `2px solid ${color.link}` : undefined }}
+                >
+                  <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: statusFilter === 'alerts' ? color.link : overviewCount > 0 ? color.ink : color.hairlineStrong }}>
+                    {overviewCount}
+                  </span>
+                  <span style={{ fontSize: 12, color: statusFilter === 'alerts' ? color.link : color.mute }}>
+                    {overviewUnit}{statusFilter === 'alerts' ? ' · 只看异常（再点回全部）' : ''}
+                  </span>
+                </button>
+              )}
               <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
-              <span title={monitorDetail} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
+              <button
+                type="button"
+                onClick={clearAlertFilters}
+                aria-label={`监控 ${subCount} 个系列，点击清除全部筛选（类型 / 品牌 / 状态 / 产品定位）`}
+                title={`${monitorDetail} · 点击清除全部筛选`}
+                style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, minWidth: 0, border: 0, background: 'transparent', padding: '2px 6px', borderRadius: radius.control, cursor: 'pointer' }}
+              >
                 <span className="tnum" style={{ fontSize: 16, lineHeight: '20px', fontWeight: 700, color: color.ink }}>
                   {subCount}
                 </span>
                 <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
-              </span>
+              </button>
               <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
+              {/* B7（2026-11-17 拍板）：跨口径订阅显式提示，不再静默隐没 */}
+              {foreignSubCount > 0 && (
+                <span
+                  title="这些监控属于其他国家 / 产业口径，在本页不产生预警"
+                  style={{ fontSize: 12, color: color.body }}
+                >
+                  另有 <span className="tnum" style={{ fontWeight: 700 }}>{foreignSubCount}</span> 个监控属于其他口径
+                </span>
+              )}
             </section>
           )}
 
@@ -1186,7 +1324,13 @@ export default function AlertsPage() {
                 <BellOutlined style={{ fontSize: 30, color: color.hairlineStrong }} />
                 <div style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>尚未监控任何产品</div>
                 <div style={{ fontSize: 12, color: color.mute }}>添加监控后，这里按周汇总调价、折扣、平台价差与档位间距预警</div>
-                <AddMonitorControl width={380} prominent onAdded={onMonitorAdded} />
+                {/* B7（2026-11-17 拍板）：跨口径订阅不静默隐没——空态时显式提示 */}
+                {foreignSubCount > 0 && (
+                  <div style={{ fontSize: 12, color: color.body, background: color.canvasSoft, borderRadius: radius.control, padding: '6px 14px' }}>
+                    另有 {foreignSubCount} 个监控属于其他口径（他国 / 他产业），切回对应口径可见
+                  </div>
+                )}
+                <AddMonitorControl prominent onAdded={onMonitorAdded} />
                 <Button size="small" onClick={() => openAgent('dock', `帮我设置预警监控（${country} · ${industry}），建议先监控哪些产品并说明原因`)}>让 Agent 帮我设置</Button>
               </div>
             ) : (
@@ -1254,7 +1398,7 @@ export default function AlertsPage() {
                 让 Agent 解释最新预警
               </Button>
               <span aria-hidden style={{ width: 1, height: 22, background: color.hairline, flexShrink: 0 }} />
-              <AddMonitorControl width={320} onAdded={onMonitorAdded} />
+              <AddMonitorControl onAdded={onMonitorAdded} />
             </div>
 
             {/* 列头与矩阵共用横向滚动容器（第一百八十二轮：窄视口只在卡内拖动，
@@ -1425,9 +1569,8 @@ function CellSlot({ children }: { children: ReactNode }) {
 // 勾选 = 订阅、取消勾选 = 移除监控（与行尾 ✕ 同一操作），品牌/型号行勾选 = 整组批量；
 // 叶行点文字 = 单档切换。candidates 与 useAlerts 同口径（当前国家/产业）。
 // ============================================================
-function AddMonitorControl({ width, prominent, onAdded }: {
-  width: number;
-  /** 零监控空态主操作（中号 + 白底描边加强，与工具行小入口区分） */
+function AddMonitorControl({ prominent, onAdded }: {
+  /** 零监控空态主操作（中号主按钮，与工具行小号区分） */
   prominent?: boolean;
   /** 勾选产生新增订阅时回调（页面清筛选 + 滚动定位新行） */
   onAdded?: (addedKeys: string[]) => void;
@@ -1504,17 +1647,22 @@ function AddMonitorControl({ width, prominent, onAdded }: {
     onLabelClick: () => setRange([r], !isSub(r.modelId, r.romram)),
     onCheckChange: (checked) => setRange([r], checked),
   }));
-  const cascader = (
-    <Cascader
-      className="lpl-alert-add-monitor"
-      style={{ width, ...(prominent ? { background: color.canvas } : {}) }}
-      multiple
-      options={[]}
-      value={[]}
-      placeholder="添加监控（品牌 / 型号 / 配置）"
-      aria-label="添加监控产品"
-      suffixIcon={<PlusOutlined />}
-      popupRender={() => (
+  // V5a（2026-11-17 拍板）：触发器从灰占位输入框升级为「＋ 添加监控」主按钮——
+  // 级联面板本体不动（CascadePanel 三列 品牌→型号→配置 + 勾选即订阅/取消即移除）
+  return (
+    <Popover
+      trigger="click"
+      open={menuOpen}
+      arrow={false}
+      placement="bottomRight"
+      destroyOnHidden
+      getPopupContainer={(t) => (t.parentElement as HTMLElement) ?? document.body}
+      onOpenChange={(open) => {
+        setMenuOpen(open);
+        if (open) setActivePath([brands[0]?.key ?? '', brands[0]?.models[0]?.modelId ?? '']);
+      }}
+      styles={{ body: { padding: 0 } as const }}
+      content={
         <CascadePanel
           open={menuOpen}
           columns={[
@@ -1523,13 +1671,11 @@ function AddMonitorControl({ width, prominent, onAdded }: {
             { items: leafItems },
           ]}
         />
-      )}
-      onOpenChange={(open) => {
-        setMenuOpen(open);
-        if (open) setActivePath([brands[0]?.key ?? '', brands[0]?.models[0]?.modelId ?? '']);
-      }}
-    />
+      }
+    >
+      <Button type="primary" size={prominent ? 'middle' : 'small'} icon={<PlusOutlined />} aria-label="添加监控产品">
+        添加监控
+      </Button>
+    </Popover>
   );
-  // 描边加强只给空态主操作（ConfigProvider 作用域主题，不外溢到工具行小入口）
-  return prominent ? <ConfigProvider theme={prominentSelectTheme}>{cascader}</ConfigProvider> : cascader;
 }

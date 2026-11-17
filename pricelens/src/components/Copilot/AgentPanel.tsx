@@ -324,6 +324,8 @@ function AlertListCard({ card, locked }: { card: AlertListResultCard; locked?: b
     if (locked) return;
     const modelId = alert.seriesKey?.split('__')[0] ?? '';
     navBus.alertsFocus = { alertId: alert.alertId, contextFingerprint: alert.contextFingerprint, modelId, modelName: alert.modelName, seriesKey: alert.seriesKey, type: alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: alert.weekId };
+    // B2：已在预警页时 go() 不重挂、navBus 挂载期消费永不触发——派发事件驱动即时消费
+    window.dispatchEvent(new Event('pricelens:alerts-focus'));
     go('alerts');
   };
   const mark = (alert: AlertListResultCard['alerts'][number]) => {
@@ -516,6 +518,8 @@ export default function AgentPanel() {
               modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName,
               seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId,
             };
+            // B2：同页深链即时消费（见 alertsPage 处注释）
+            window.dispatchEvent(new Event('pricelens:alerts-focus'));
             go('alerts');
           }} style={textButtonStyle}>查看预警</button>
           <button type="button" disabled={locked} aria-disabled={locked} onClick={() => {

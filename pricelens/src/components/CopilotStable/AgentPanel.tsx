@@ -139,6 +139,8 @@ function CardActions({ actions, onEvidence }: { actions?: AgentCardAction[]; onE
               type: target.alertType as 'price-change' | 'promo' | 'platform-gap' | 'own-gap' | undefined,
               weekId: target.weekId,
             };
+            // B2：已在预警页时 go() 不重挂——派发事件驱动预警页即时消费（同 iterate 通道）
+            window.dispatchEvent(new Event('pricelens:alerts-focus'));
           }
           if (target?.page === 'dashboard' && target.weekId) navBus.dashboardFocusWeekId = target.weekId;
           const targetPage = action.target?.page;
@@ -458,6 +460,8 @@ export default function AgentPanel() {
           <button type="button" disabled={stale || locked} onClick={() => {
             if (stale || locked) return;
             if (message.alert) navBus.alertsFocus = { alertId: message.alert.alertId, contextFingerprint: message.alert.contextFingerprint, modelId: message.alert.seriesKey?.split('__')[0] ?? '', modelName: message.alert.modelName, seriesKey: message.alert.seriesKey, type: message.alert.type as 'price-change' | 'promo' | 'platform-gap' | 'own-gap', weekId: message.alert.weekId };
+            // B2：同页深链即时消费（见 target?.alertId 处注释）
+            window.dispatchEvent(new Event('pricelens:alerts-focus'));
             go('alerts');
           }} style={textButtonStyle}>查看预警</button>
           <button type="button" disabled={stale || locked} onClick={() => {
