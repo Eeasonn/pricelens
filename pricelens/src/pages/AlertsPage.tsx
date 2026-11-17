@@ -46,8 +46,8 @@
 // 阈值仍型号级只给开关）；V1 移除交互拍板 A = Popconfirm 维持现行。
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { App as AntdApp, Badge, Button, Empty, Popconfirm, Popover, Segmented, Select, Slider, Switch } from 'antd';
-import { BellOutlined, CloseOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
+import { App as AntdApp, Badge, Button, Empty, Input, Popconfirm, Popover, Segmented, Select, Slider, Switch } from 'antd';
+import { BellOutlined, CloseOutlined, PlusOutlined, SearchOutlined, SettingOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
@@ -74,15 +74,29 @@ import {
 } from '../dataModel/alertLifecycle';
 import { productSelectionOfSeriesKey } from '../state/urlSync';
 import { getEffectiveBenchmark } from '../state/configStore';
-import { defaultPlatformAnchorOf, priceForSelection } from '../dataModel/aggregate';
+import { defaultPlatformAnchorOf, priceForSelection, TIER_LABELS } from '../dataModel/aggregate';
+import { tierLabelShort } from '../chart/PriceTrend/helpers';
 import { autoComparesFor, buildCards } from '../state/mainSelection';
 import usePageViewState from '../state/usePageViewState';
-import { buildProductTree, ownBrand, type RomramNode } from '../components/ProductCascader/tree';
-import { CascadePanel, type CascadeRowItem } from '../components/ProductCascader';
+import { useNarrowViewport } from '../state/useNarrowViewport';
+import {
+  buildProductTree,
+  filterProductTreeByTier,
+  modelEntryInfo,
+  ownBrand,
+  searchProductTree,
+  sortModelNodes,
+  tiersOfScope,
+  type ModelNode,
+  type ModelSortMode,
+  type RomramNode,
+} from '../components/ProductCascader/tree';
+import { CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../components/ProductCascader';
+import { POPOVER_H, pillW, ROW_GAP, StateTag, textW } from '../components/ProductPicker/pickerBits';
 import PageHeader from '../components/PageHeader';
-import BrandDot from '../components/BrandMark';
+import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import { AlertDetailDrawer, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
-import { color, fontSize, formatPrice, radius, shadow, space, selectSoft } from '../theme/tokens';
+import { color, fontSize, formatPrice, radius, shadow, space, selectSoft, selectSoftInk } from '../theme/tokens';
 import { scopeLabels } from '../dataModel/scope';
 import { provenanceSummary } from '../dataModel/provenance';
 import { weeklyPriceProvenanceOf } from '../dataModel/priceProvenance';
@@ -1562,93 +1576,165 @@ function CellSlot({ children }: { children: ReactNode }) {
 }
 
 // ============================================================
-// 添加监控级联（第一百九十二轮 Eason ③）：与筛选条产品筛选器同构——
-// antd Cascader 外壳（触发器恒占位「添加监控」，不显已选标签：监控清单本身就在矩阵）
-// + CascadePanel 三列（品牌→型号→配置，buildProductTree 当前国家/产业有数据的产品，
-// 华为置顶——旧 Select 候选含无价格数据的产品，勾了也永远「正常」，这里天然排除）。
-// 勾选 = 订阅、取消勾选 = 移除监控（与行尾 ✕ 同一操作），品牌/型号行勾选 = 整组批量；
-// 叶行点文字 = 单档切换。candidates 与 useAlerts 同口径（当前国家/产业）。
+// 添加监控选择树（2026-11-17 Eason「要跟产品筛选器完全一样」定版）：形态复刻看板
+// 「选择产品」浮窗（ProductPickerModal 同款）——顶部 搜索（品牌/系列/型号/容量）+
+// 档位下拉 + 排序（默认/价格/名称）Segmented；四列 品牌（色点 + N 型号）→系列→
+// 型号（＋全部型号胶囊 + 档位 · 现价灰字）→配置（「监控中」尾注）。纯函数链
+// （searchProductTree / filterProductTreeByTier / sortModelNodes / modelEntryInfo）
+// 全部复用 ProductCascader/tree，视觉同源。语义 = 订阅：点配置行 toggle 监控，
+// 「＋ 全部型号」= 该型号（档位收窄内）全部配置加入监控；动作只写 alertSubs，
+// 不触看板建卡语义。候选 = buildProductTree 当前国家/产业有数据的产品（华为置顶）。
 // ============================================================
 function AddMonitorControl({ prominent, onAdded }: {
   /** 零监控空态主操作（中号主按钮，与工具行小号区分） */
   prominent?: boolean;
-  /** 勾选产生新增订阅时回调（页面清筛选 + 滚动定位新行） */
+  /** 新增订阅时回调（页面清筛选 + 滚动定位新行） */
   onAdded?: (addedKeys: string[]) => void;
 }) {
   const { state, actions } = useFilters();
   const { message } = AntdApp.useApp();
+  const narrow = useNarrowViewport();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activePath, setActivePath] = useState<[string, string] | null>(null);
+  const [search, setSearch] = useState('');
+  const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
+  const [modelSort, setModelSort] = useState<ModelSortMode>('default');
+  const [path, setPath] = useState<[string, string, string] | null>(null);
   const seriesKeyOf = (modelId: string, romram: string): string => `${modelId}__${romram.replace(/\s+/g, '')}`;
-  // 品牌→型号两列（系列层拍平：监控粒度 = 型号×配置，与订阅空间 seriesKey 一致）
-  const brands = useMemo(
-    () =>
-      buildProductTree(state.industry, state.countryCode).map((b) => ({
-        key: b.key,
-        title: b.title,
-        models: b.series.flatMap((s) => s.models),
-      })),
+  const isSub = (modelId: string, romram: string): boolean => state.alertSubs.includes(seriesKeyOf(modelId, romram));
+  // 树链（与 ProductPickerModal 同构）：build → 档位过滤（仅选中档位时）→ 搜索过滤
+  const baseTree = useMemo(() => buildProductTree(state.industry, state.countryCode), [state.industry, state.countryCode]);
+  const scopedTree = useMemo(
+    () => (tier ? filterProductTreeByTier(baseTree, tier, state.countryCode) : baseTree),
+    [baseTree, tier, state.countryCode],
+  );
+  const tree = useMemo(() => searchProductTree(scopedTree, search), [scopedTree, search]);
+  const brand = tree.find((b) => b.key === path?.[0]) ?? tree[0];
+  const series = brand?.series.find((s) => s.key === path?.[1]) ?? brand?.series[0];
+  const model = series?.models.find((m) => m.modelId === path?.[2]) ?? series?.models[0];
+  const tierOptions = useMemo(
+    () => tiersOfScope(state.industry, state.countryCode).map((t) => ({ value: t, label: tierLabelShort(TIER_LABELS[t] ?? t) })),
     [state.industry, state.countryCode],
   );
-  const activeBrand = brands.find((b) => b.key === activePath?.[0]) ?? brands[0];
-  const activeModel = activeBrand?.models.find((m) => m.modelId === activePath?.[1]) ?? activeBrand?.models[0];
-  const isSub = (modelId: string, romram: string): boolean => state.alertSubs.includes(seriesKeyOf(modelId, romram));
-  const checkOf = (nodes: RomramNode[]): CascadeRowItem['checkState'] => {
-    const count = nodes.filter((r) => isSub(r.modelId, r.romram)).length;
-    return count === nodes.length && count > 0 ? 'checked' : count > 0 ? 'indeterminate' : 'none';
+  /** 型号行尾「档位缩写 · 现价」灰字（与看板选择产品浮窗同拼接） */
+  const modelTagText = (m: ModelNode): string => {
+    const { tierCode, price } = modelEntryInfo(m, state.currency);
+    const tierText = tierCode ? tierLabelShort((TIER_LABELS[tierCode] ?? tierCode).replace(/^(入门|旗舰) · /, '')) : '';
+    const priceText = price != null ? formatPrice(Math.round(price), state.currency) : '';
+    return [tierText, priceText].filter(Boolean).join(' · ');
   };
-  const setRange = (nodes: RomramNode[], on: boolean): void => {
-    const current = new Set(state.alertSubs);
-    const add: string[] = [];
-    const del: string[] = [];
-    for (const r of nodes) {
-      const k = seriesKeyOf(r.modelId, r.romram);
-      if (on && !current.has(k)) add.push(k);
-      else if (!on && current.has(k)) del.push(k);
-    }
-    if (add.length === 0 && del.length === 0) return;
-    if (add.length > 0) actions.setAlertSubs(add, true);
-    if (del.length > 0) actions.setAlertSubs(del, false);
-    if (add.length > 0) {
-      onAdded?.(add);
-      message.success(
-        add.length === 1
-          ? `已添加监控：${nodes.find((r) => seriesKeyOf(r.modelId, r.romram) === add[0])?.label ?? add[0]}`
-          : `已添加监控 ${add.length} 个系列`,
-      );
+  const toggleSub = (r: RomramNode): void => {
+    const k = seriesKeyOf(r.modelId, r.romram);
+    if (isSub(r.modelId, r.romram)) {
+      actions.setAlertSubs([k], false);
+      message.success(`已移除监控：${r.label}`);
     } else {
-      message.success(`已移除监控 ${del.length} 个系列`);
+      actions.setAlertSubs([k], true);
+      onAdded?.([k]);
+      message.success(`已添加监控：${r.label}`);
     }
   };
-  const brandItems: CascadeRowItem[] = brands.map((b) => {
-    const nodes = b.models.flatMap((m) => m.romrams);
+  const addAllConfigs = (m: ModelNode): void => {
+    const targets = m.romrams.filter((r) => !isSub(r.modelId, r.romram));
+    if (targets.length === 0) {
+      message.info(`${m.label} 全部配置已在监控中`);
+      return;
+    }
+    const keys = targets.map((r) => seriesKeyOf(r.modelId, r.romram));
+    actions.setAlertSubs(keys, true);
+    onAdded?.(keys);
+    message.success(`已添加监控 ${targets.length} 个系列（${m.label}）`);
+  };
+  const brandItems: CascadeRowItem[] = tree.map((b) => ({
+    key: b.key,
+    label: brandLabelOf(b.key),
+    leading: <BrandDot brand={b.key} />,
+    active: brand?.key === b.key,
+    onActivate: () => setPath([b.key, b.series[0]?.key ?? '', b.series[0]?.models[0]?.modelId ?? '']),
+    trailing: <span style={{ fontSize: 10, color: color.mute, flexShrink: 0 }}>{b.modelCount} 型号</span>,
+  }));
+  const seriesItems: CascadeRowItem[] = (brand?.series ?? []).map((s) => ({
+    key: s.key,
+    label: s.title,
+    active: series?.key === s.key,
+    onActivate: () => setPath([brand.key, s.key, s.models[0]?.modelId ?? '']),
+    trailing: s.eol ? (
+      <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px', flexShrink: 0 }}>退市</span>
+    ) : undefined,
+  }));
+  const sortedModels = sortModelNodes(series?.models ?? [], modelSort, state.currency);
+  const modelItems: CascadeRowItem[] = sortedModels.map((m) => {
+    const tag = modelTagText(m);
     return {
-      key: b.key,
-      label: b.title,
-      active: activeBrand?.key === b.key,
-      checkState: checkOf(nodes),
-      onActivate: () => setActivePath([b.key, b.models[0]?.modelId ?? '']),
-      onCheckChange: (checked) => setRange(nodes, checked),
-    };
+      key: m.modelId,
+      label: m.label,
+      leading: <BrandDot brand={m.brand} />,
+      active: model?.modelId === m.modelId,
+      onActivate: () => setPath([brand.key, series.key, m.modelId]),
+      trailing: (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {m.eol && (
+            <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
+          )}
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={`将 ${m.label} 全部配置加入监控`}
+            title={`该产品全部配置加入监控（${m.romrams.length} 个配置）`}
+            onClick={(e) => {
+              e.stopPropagation();
+              addAllConfigs(m);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation();
+              addAllConfigs(m);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              height: 20,
+              padding: '0 8px',
+              borderRadius: radius.pill,
+              fontSize: 11,
+              color: selectSoftInk,
+              background: color.canvas,
+              border: '1px solid rgba(0, 112, 243, 0.35)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <PlusOutlined style={{ fontSize: 9 }} /> 全部型号
+          </span>
+          {tag && <span className="tnum" style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{tag}</span>}
+        </span>
+      ),
+    } satisfies CascadeRowItem;
   });
-  const modelItems: CascadeRowItem[] = (activeBrand?.models ?? []).map((m) => ({
-    key: m.modelId,
-    label: m.label,
-    active: activeModel?.modelId === m.modelId,
-    checkState: checkOf(m.romrams),
-    onActivate: () => activeBrand && setActivePath([activeBrand.key, m.modelId]),
-    onCheckChange: (checked) => setRange(m.romrams, checked),
-  }));
-  const leafItems: CascadeRowItem[] = (activeModel?.romrams ?? []).map((r) => ({
-    key: r.key,
-    label: r.romram,
-    active: false,
-    checkState: isSub(r.modelId, r.romram) ? 'checked' : 'none',
-    onLabelClick: () => setRange([r], !isSub(r.modelId, r.romram)),
-    onCheckChange: (checked) => setRange([r], checked),
-  }));
-  // V5a（2026-11-17 拍板）：触发器从灰占位输入框升级为「＋ 添加监控」主按钮——
-  // 级联面板本体不动（CascadePanel 三列 品牌→型号→配置 + 勾选即订阅/取消即移除）
+  const romramItems: CascadeRowItem[] = (model?.romrams ?? []).map((r) => {
+    const subbed = isSub(r.modelId, r.romram);
+    return {
+      key: r.key,
+      label: r.romram,
+      onLabelClick: () => toggleSub(r),
+      trailing: subbed ? <StateTag text="监控中" /> : undefined,
+    } satisfies CascadeRowItem;
+  });
+  // 列宽预留（同看板浮窗口径：label + 行尾完整可见，不省略号）
+  const brandExtra = tree.reduce((w, b) => Math.max(w, textW(`${b.modelCount} 型号`, 10)), 0) + ROW_GAP + 26;
+  const eolPillW = textW('退市', 10) + 8;
+  const seriesExtra = ((brand?.series ?? []).some((s) => s.eol) ? eolPillW + ROW_GAP : 0) + 20;
+  const allCfgPillW = pillW('全部型号', 11) + 12; // ＋ 图标 9 + 内间隙 3
+  const modelTagW = sortedModels.reduce((w, m) => Math.max(w, textW(modelTagText(m), 10)), 0);
+  const modelExtra = ((sortedModels.some((m) => m.eol) ? eolPillW + 6 : 0) + allCfgPillW + 6 + modelTagW + ROW_GAP) + 12;
+  const romramExtra = textW('监控中', 10) + ROW_GAP + 12;
+  const columns: CascadeColumnSpec[] = [
+    { items: brandItems, extraW: brandExtra },
+    { items: seriesItems, extraW: seriesExtra },
+    { items: modelItems, extraW: modelExtra },
+    { items: romramItems, extraW: romramExtra },
+  ];
   return (
     <Popover
       trigger="click"
@@ -1659,18 +1745,53 @@ function AddMonitorControl({ prominent, onAdded }: {
       getPopupContainer={(t) => (t.parentElement as HTMLElement) ?? document.body}
       onOpenChange={(open) => {
         setMenuOpen(open);
-        if (open) setActivePath([brands[0]?.key ?? '', brands[0]?.models[0]?.modelId ?? '']);
+        if (open) {
+          setSearch('');
+          setTier(null); // 开窗回全部档位（与看板浮窗同约定）
+          const b0 = tree[0];
+          setPath([b0?.key ?? '', b0?.series[0]?.key ?? '', b0?.series[0]?.models[0]?.modelId ?? '']);
+        }
       }}
-      styles={{ body: { padding: 0 } as const }}
+      styles={{ body: { padding: 10 } as const }}
       content={
-        <CascadePanel
-          open={menuOpen}
-          columns={[
-            { items: brandItems },
-            { items: modelItems },
-            { items: leafItems },
-          ]}
-        />
+        <div>
+          <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'stretch' : 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <Input
+              allowClear
+              size={narrow ? 'middle' : 'small'}
+              prefix={<SearchOutlined style={{ color: color.mute }} />}
+              placeholder="搜索品牌 / 系列 / 型号 / 容量"
+              aria-label="搜索品牌、系列、型号或容量"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ flex: narrow ? undefined : '1 1 200px', width: narrow ? '100%' : undefined, minWidth: 0 }}
+            />
+            <Select
+              size={narrow ? 'middle' : 'small'}
+              aria-label="价格档位"
+              value={tier ?? ''}
+              onChange={(v) => setTier(v === '' ? null : v)}
+              style={{ width: narrow ? '100%' : 138, flexShrink: 0 }}
+              popupMatchSelectWidth={false}
+              getPopupContainer={(node) => node.closest('.ant-popover') ?? document.body}
+              options={[{ value: '', label: '全部档位' }, ...tierOptions]}
+            />
+            <Segmented
+              size={narrow ? 'middle' : 'small'}
+              aria-label="型号排序"
+              value={modelSort}
+              onChange={(v) => setModelSort(v as ModelSortMode)}
+              options={[
+                { label: '默认', value: 'default' },
+                { label: '价格', value: 'price' },
+                { label: '名称', value: 'name' },
+              ]}
+            />
+          </div>
+          <div style={{ display: 'flex', minWidth: 0, overflowX: 'auto' }}>
+            <CascadePanel columns={columns} fill={!narrow} height={POPOVER_H} stepped={narrow} />
+          </div>
+        </div>
       }
     >
       <Button type="primary" size={prominent ? 'middle' : 'small'} icon={<PlusOutlined />} aria-label="添加监控产品">
