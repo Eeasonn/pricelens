@@ -120,10 +120,17 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
         {'　'}构建时间：{fmtTime(__BUILD_TIME__)}
       </div>
       <div style={infoLine} className="tnum">
-        事实周行 {meta.counts.factWeekly.toLocaleString()} · 月度行 {meta.counts.factMonthly.toLocaleString()} · SKU{' '}
-        {meta.counts.products.toLocaleString()} · 渠道 {meta.counts.channels.toLocaleString()} · 国家 {meta.counts.regions.toLocaleString()} · 时间桶{' '}
+        事实周行 {meta.counts.factWeekly.toLocaleString()} · 月度行 {meta.counts.factMonthly.toLocaleString()} · 销量行{' '}
+        {meta.counts.factSales.toLocaleString()} · SKU {meta.counts.products.toLocaleString()} · 渠道{' '}
+        {meta.counts.channels.toLocaleString()} · 国家 {meta.counts.regions.toLocaleString()} · 时间桶{' '}
         {meta.counts.timeBuckets.toLocaleString()}
       </div>
+      {meta.source === 'imported' && meta.salesUnmatched > 0 && (
+        <div style={{ ...infoLine, color: '#ad6800' }}>
+          销量归一提示：{meta.salesUnmatched.toLocaleString()} 行因国家/型号名未匹配被丢弃（可修
+          salesProductAliases 别名后重新导入）{meta.salesSkipped > 0 ? `；另有 ${meta.salesSkipped.toLocaleString()} 行周期间/QTY 非法跳过` : ''}。
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Tooltip title={canEdit ? '选择 buildDataPack 产出的 .json 数据包' : readOnlyHint}>
           <Button

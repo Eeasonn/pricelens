@@ -23,7 +23,11 @@ import type {
   DimTime,
   FactPriceMonthly,
   FactPriceWeekly,
+  FactSalesWeekly,
+  SalesSourceRow,
 } from '../dataModel/types';
+import { normalizeSalesRows } from '../dataModel/salesIngest';
+import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import regionJson from './dim_region.json';
 import productJson from './dim_product.json';
 import channelJson from './dim_channel.json';
@@ -158,13 +162,22 @@ export const factPriceMonthly = (monthlyJson as unknown as FactPriceMonthly[]).f
     && row.review_status === 'PASS',
 );
 
+// ---------------- 真实销量（PSI 周表，2026-11-17 接口预留） ----------------
+
+/** 已解析真实销量事实。默认空 = 量价销量走估算口径（dataModel/volume）；
+ *  数据包 v2（sales 数组 = PSI 源行）导入后在此原位置换（引用不变）。 */
+export const factSalesWeekly: FactSalesWeekly[] = [];
+
 // ---------------- 数据包（2026-11-14 Eason：价格数据完全以导入方式承载） ----------------
 
 /** 单文件数据包：维表 + gzip 事实包（与构建期内嵌同格式）+ 月度事实 + 元信息。
- *  迁移 = 拷贝这一个文件到目标电脑，配置页「数据包 → 导入」即可完全替换内置数据。 */
+ *  迁移 = 拷贝这一个文件到目标电脑，配置页「数据包 → 导入」即可完全替换内置数据。
+ *  v2（2026-11-17）：新增 sales（PSI 周销量源行，原样承载、apply 时归一解析）
+ *  与 salesProductAliases（PSI Product 原文 → 内部 model_name 别名）。v1 包仍可导入
+ *  （sales 视为空 → 销量回落估算口径）。 */
 export interface PricelensDataPack {
   kind: 'pricelens-data-pack';
-  v: 1;
+  v: 2;
   generatedAt: string;
   dims: {
     region: DimRegion[];
@@ -178,7 +191,15 @@ export interface PricelensDataPack {
   };
   factPackB64: string;
   monthly: FactPriceMonthly[];
+  /** PSI 周销量源行（SalesSourceRow 原样承载；空/缺省 = 销量走估算） */
+  sales?: SalesSourceRow[];
+  /** PSI Product 原文 → 内部型号显示名（model_name）别名；解析失败行计入 unmatched */
+  salesProductAliases?: Record<string, string>;
 }
+
+/** v1 旧包（无销量段）；applyDataPack 兼容导入 */
+export type LegacyPricelensDataPack = Omit<PricelensDataPack, 'v' | 'sales' | 'salesProductAliases'> & { v: 1 };
+export type AnyPricelensDataPack = PricelensDataPack | LegacyPricelensDataPack;
 
 export interface DataPackMeta {
   source: 'builtin' | 'imported';
@@ -189,11 +210,16 @@ export interface DataPackMeta {
   counts: {
     factWeekly: number;
     factMonthly: number;
+    factSales: number;
     products: number;
     channels: number;
     regions: number;
     timeBuckets: number;
   };
+  /** PSI 源行里国家/型号解析失败的行数（>0 = 别名表有缺口，契约文档 §诊断） */
+  salesUnmatched: number;
+  /** 周期间/QTY 非法被跳过的行数 */
+  salesSkipped: number;
 }
 
 /** 当前数据来源信息（内置 / 导入包）；UI 的数据信息卡读取 */
@@ -204,20 +230,26 @@ let dataMetaState: DataPackMeta = {
   counts: {
     factWeekly: factPriceWeekly.length,
     factMonthly: factPriceMonthly.length,
+    factSales: factSalesWeekly.length,
     products: dimProduct.length,
     channels: dimChannel.length,
     regions: dimRegion.length,
     timeBuckets: dimTime.length,
   },
+  salesUnmatched: 0,
+  salesSkipped: 0,
 };
 export function dataMeta(): DataPackMeta {
-  return { ...dataMetaState };
+  return { ...dataMetaState, counts: { ...dataMetaState.counts } };
 }
 
 /** 当前生效的 gzip 事实包与原始月度数组（重导出数据包用——内存里只有解码后的
  *  行，压缩包原文必须随应用/初始化保留，否则导出会把导入的数据丢回内置版） */
 let currentFactPackB64 = packB64.trim();
 let currentMonthlyRaw = monthlyJson as unknown as FactPriceMonthly[];
+/** 当前生效的 PSI 销量源行与别名（重导出数据包用；与 factSalesWeekly 同步置换） */
+let currentSalesRaw: SalesSourceRow[] = [];
+let currentSalesAliases: Record<string, string> = {};
 
 const replaceInPlace = <T,>(target: T[], next: T[]): void => {
   if (target === next) return; // 同引用自换（buildDataPack 活引用 → apply 回自己）= 无操作
@@ -231,12 +263,15 @@ const rebuildFxIndex = (): void => {
 };
 
 /** 校验并应用数据包：全部置换原位完成（导出引用不变），任一步失败即整体放弃
- *  （先解码校验、后提交），内置数据不受污染。月度仍按 ZA PASS 口径过滤。 */
+ *  （先解码校验、后提交），内置数据不受污染。月度仍按 ZA PASS 口径过滤。
+ *  v2 追加：sales（PSI 源行）在维表置换后归一解析进 factSalesWeekly（型号解析
+ *  依赖新 dimProduct），未匹配/跳过行数进 meta 供诊断；成功后广播
+ *  CONFIG_CHANGED_EVENT 让下游缓存（销量/现价索引等）整包失效。 */
 export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['counts'] } | { ok: false; error: string } {
   try {
-    const p = pack as PricelensDataPack | null;
+    const p = pack as AnyPricelensDataPack | null;
     if (!p || typeof p !== 'object') return { ok: false, error: '不是有效的数据包文件' };
-    if (p.kind !== 'pricelens-data-pack' || p.v !== 1) return { ok: false, error: '数据包类型或版本不匹配（需要 pricelens-data-pack v1）' };
+    if (p.kind !== 'pricelens-data-pack' || (p.v !== 1 && p.v !== 2)) return { ok: false, error: '数据包类型或版本不匹配（需要 pricelens-data-pack v1/v2）' };
     const dims = p.dims;
     if (!dims || typeof dims !== 'object') return { ok: false, error: '数据包缺少维表' };
     const required = { region: dims.region, product: dims.product, channel: dims.channel, time: dims.time, fx: dims.fx, promo: dims.promo, benchmark: dims.benchmark } as Record<string, unknown>;
@@ -246,6 +281,8 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     if (!dims.tier || typeof dims.tier !== 'object' || !dims.tier.ladders) return { ok: false, error: '数据包缺少维表 tier' };
     if (typeof p.factPackB64 !== 'string' || !p.factPackB64.trim()) return { ok: false, error: '数据包缺少事实包' };
     if (!Array.isArray(p.monthly)) return { ok: false, error: '数据包缺少月度事实' };
+    const sales = p.v === 2 && Array.isArray(p.sales) ? p.sales : [];
+    const salesAliases = p.v === 2 && p.salesProductAliases && typeof p.salesProductAliases === 'object' ? p.salesProductAliases : {};
     // 先解码校验（失败抛错走 catch，内置数据不受污染），再整体提交
     const raw = JSON.parse(strFromU8(gunzipSync(b64ToBytes(p.factPackB64.trim())))) as FactPack;
     validateFactPack(raw);
@@ -278,12 +315,18 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     }
     replaceInPlace(factPriceWeekly, weekly);
     replaceInPlace(factPriceMonthly, monthly);
+    // 销量：维表就位后归一解析（型号解析要用新 dimProduct），整体置换
+    const resolvedSales = normalizeSalesRows(sales, { regions: dimRegion, products: dimProduct, aliases: salesAliases });
+    replaceInPlace(factSalesWeekly, resolvedSales.facts);
     currentFactPackB64 = p.factPackB64.trim();
     currentMonthlyRaw = p.monthly;
+    currentSalesRaw = sales;
+    currentSalesAliases = salesAliases;
     rebuildFxIndex();
     const counts: DataPackMeta['counts'] = {
       factWeekly: factPriceWeekly.length,
       factMonthly: factPriceMonthly.length,
+      factSales: factSalesWeekly.length,
       products: dimProduct.length,
       channels: dimChannel.length,
       regions: dimRegion.length,
@@ -294,18 +337,22 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
       generatedAt: typeof p.generatedAt === 'string' ? p.generatedAt : null,
       appliedAt: new Date().toISOString(),
       counts,
+      salesUnmatched: resolvedSales.unmatched,
+      salesSkipped: resolvedSales.skipped,
     };
+    // 下游模块级缓存（量价 volCache、树现价索引等）整包失效——与配置页保存同通道
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
     return { ok: true, counts };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-/** 把当前内存态序列化为数据包（维表取活跃引用、事实包/月度取当前生效原文）。 */
+/** 把当前内存态序列化为数据包（维表取活跃引用、事实包/月度/销量源行取当前生效原文）。 */
 export function buildDataPack(): PricelensDataPack {
   return {
     kind: 'pricelens-data-pack',
-    v: 1,
+    v: 2,
     generatedAt: new Date().toISOString(),
     dims: {
       region: dimRegion,
@@ -319,6 +366,8 @@ export function buildDataPack(): PricelensDataPack {
     },
     factPackB64: currentFactPackB64,
     monthly: currentMonthlyRaw,
+    sales: currentSalesRaw,
+    salesProductAliases: currentSalesAliases,
   };
 }
 

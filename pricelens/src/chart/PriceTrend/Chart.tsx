@@ -83,6 +83,7 @@ import { rulerLayerOf, rulerSummaryOf, volumeBandMaxOf, type RangeMode, type Rul
 import RangeRulerLayer from './RangeRulerLayer';
 // 第196轮整改4（销毛小卡）：只 import 量价侧销毛模型类型（数据由 index 层计算传入）
 import type { MarginCostPoint } from '../../pages/volume/marginCost';
+import { salesSourceOf } from '../../dataModel/volume';
 import { useFilters } from '../../state/FiltersContext';
 // 第一百八十五轮（外部 UX 审计）：JS 动画统一吃系统「减少动态效果」设置
 import { prefersReducedMotion } from '../../theme/motion';
@@ -1868,7 +1869,7 @@ export default function Chart(props: ChartProps) {
                     aria-label={`销量归属：${effOwner.text}${switchable ? '；点击选择量带归属产品' : ''}`}
                     aria-expanded={switchable ? ownerMenuOpen : undefined}
                     aria-haspopup={switchable ? 'menu' : undefined}
-                    title={`销量归属：${effOwner.text}（估算口径，非真实销量）${switchable ? '；点击选择量带归属产品' : ''}`}
+                    title={`销量归属：${effOwner.text}（${salesSourceOf() === 'psi-weekly' ? 'PSI 真实销量' : '估算口径，非真实销量'}）${switchable ? '；点击选择量带归属产品' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (switchable) setOwnerMenuOpen((o) => !o);

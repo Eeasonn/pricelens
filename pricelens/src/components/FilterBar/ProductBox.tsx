@@ -253,7 +253,8 @@ function ProductCascadeControl({
     const chosen = findSelection(list, r);
     const selectedColors = pool.filter((c) => chosen?.skuIds.includes(c.skuId));
     const defaultColor = pool.find((c) => c.skuId === defaultColorSkuIds(r)[0])?.color ?? pool[0]?.color;
-    const colorLabel = selectedColors.length > 1
+    // 全 '—' 颜色池（穿戴表盘升配置维后的节点等）= 无次级信息，不渲染版本胶囊
+    const colorLabel = pool.every((c) => c.color === '—') ? '' : selectedColors.length > 1
       ? `${selectedColors[0].color}+${selectedColors.length - 1}`
       : selectedColors[0]?.color ?? defaultColor;
     return {
@@ -283,7 +284,7 @@ function ProductCascadeControl({
     const chosen = findSelection(list, r);
     const selectedColors = pool.filter((c) => chosen?.skuIds.includes(c.skuId));
     const defaultColor = pool.find((c) => c.skuId === defaultColorSkuIds(r)[0])?.color ?? pool[0]?.color;
-    const colorLabel = selectedColors.length > 1
+    const colorLabel = pool.every((c) => c.color === '—') ? '' : selectedColors.length > 1
       ? `${selectedColors[0].color}+${selectedColors.length - 1}`
       : selectedColors[0]?.color ?? defaultColor;
     return Math.max(w, measureText(colorLabel ?? '') * (11 / 13));

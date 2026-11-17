@@ -99,8 +99,17 @@ console.log('\n[1] 维表完整性');
   }
   check('同配置显示文案只对应一个配置键（1T/1TB 单位已归一；穿戴/平板塌缩后豁免）', [...unitDup.values()].every((s) => s.size === 1));
   check('颜色列不含单位词（GB/TB）', dimProduct.every((p) => !/^(gb|tb)$/i.test(p.color)));
-  check('穿戴配置层级已塌缩（romram ∈ {—, 规格未标明}，表盘/联网并入颜色变体）',
-    dimProduct.filter((p) => p.industry === 'wearable').every((p) => p.romram === '—' || p.romram === '规格未标明'));
+  // 2026-11-17 穿戴结构化（Eason offer/PSI 契约，取代 2026-11-10 塌缩口径）：
+  // 表盘大小 = 配置维度（romram=表盘 41mm/46mm…且 cat1 同值）；无尺寸/唯一尺寸
+  // = romram '—'（或规格未标明）且 cat1 空——颜色等次级信息留在 color。
+  const WEAR_SIZE_RE = /^\d+(?:\.\d+)?mm$/;
+  const badWear = dimProduct.filter((p) => {
+    if (p.industry !== 'wearable') return false;
+    if (WEAR_SIZE_RE.test(p.romram)) return p.cat1 !== p.romram;
+    return (p.romram === '—' || p.romram === '规格未标明') && (p.cat1 != null);
+  });
+  check('穿戴配置层级已结构化（表盘 romram/cat1 同值；无尺寸 romram=— 且 cat1 空）',
+    badWear.length === 0, badWear.slice(0, 3).map((p) => `${p.sku_id}:${p.romram}/${p.cat1}`).join(' ') || '全部命中');
   check('平板配置层级已塌缩（romram 不含 WiFi/LTE/5G/Cellular，联网方式并入颜色变体）',
     dimProduct.filter((p) => p.industry === 'tablet').every((p) => !/\b(wifi|lte|5g|cellular)\b/i.test(p.romram)));
   // 2026-11-10 matrix-only：自动匹配退役——对标全部来自矩阵直配，且竞品 SKU 在维表

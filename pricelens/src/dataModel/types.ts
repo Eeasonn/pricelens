@@ -58,6 +58,15 @@ export interface DimProduct {
   countries: string[]; // 有事实行的国家码
   prev_model_id?: string | null;
   next_model_id?: string | null;
+  /**
+   * 维度1（2026-11-17 真实销量对齐，Eason offer/PSI 契约 Category1）：
+   * 手机/平板 = 存储（`12+512 GB`）；穿戴 = 表盘（`42mm`，不涉及/唯一尺寸 = null）；
+   * 音频/iot = null（产品级）。null = 未回填（销量匹配回落到 romram/color 解析）；
+   * 显示文案仍走 romram，本字段只做结构与匹配。
+   */
+  cat1?: string | null;
+  /** 维度2（Category2）：平板 = 屏幕（`11.5"`）；其余产业 null。 */
+  cat2?: string | null;
 }
 
 export type StoreType = '1P' | '3P' | '独立站';
@@ -179,6 +188,41 @@ export interface FactPriceMonthly {
   review_status: MonthlyReviewStatus;
   gate_reasons: string[];
   match_status: MonthlyMatchStatus;
+}
+
+// ---------------- 真实销量（PSI 周表，2026-11-17 Eason 契约） ----------------
+
+/**
+ * PSI 销量源行（外部输入原样承载，不要求先归一）——对应公司 Agent 产出的
+ * 「Product SKU 拆列 + QTY 按粒度汇总」后的周表：
+ *   Management Country/Region → country；Product → product；
+ *   Category1/Category2 → category1/category2；PeriodID → periodId；QTY → qty。
+ * 数据包 v2 的 sales 数组即为本结构；applyDataPack 时经 salesIngest 归一解析。
+ */
+export interface SalesSourceRow {
+  /** 国家（国家码 / 中文国名 / 英文国名均可，归一层映射；解不出 = 计入 unmatched） */
+  country: string;
+  /** 型号名（与 offer 看板 model 同一口径；可用 salesProductAliases 挂别名） */
+  product: string;
+  /** 维度1：手机/平板=存储；穿戴=表盘；音频=空 */
+  category1?: string | null;
+  /** 维度2：平板=屏幕；其余为空 */
+  category2?: string | null;
+  /** 周期间：YYYY0WW（如 2026043）；兼容 YYYYWW；非法 = 计入 skipped */
+  periodId: string;
+  /** 销量（台）；非正数 = 计入 skipped */
+  qty: number;
+}
+
+/** 已解析销量事实（应用内消费形态）：周 × 国家 × 型号 × 维度1 × 维度2，
+ *  同键多行已求和；cat1/cat2 空串 = 该维度不存在（音频产品级）。 */
+export interface FactSalesWeekly {
+  week_id: string; // YYYYWW（periodId 归一后）
+  country_code: string;
+  model_id: string; // 内部型号 id（own-/cmp- 前缀），由 product 解析
+  cat1: string;
+  cat2: string;
+  qty: number;
 }
 
 // ---------------- 图表取数契约（§7.3 显示层聚合口径的输出） ----------------

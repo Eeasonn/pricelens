@@ -193,6 +193,9 @@ export function innerLayerOpen(): boolean {
 export function colorLabelOf(node: RomramNode | undefined, skuIds: string[]): string {
   if (!node) return '';
   const pool = node.selectableColors.length ? node.selectableColors : node.colors;
+  // 2026-11-17 穿戴结构化（表盘升配置维）：配置下无任何实色（全 '—'）= 没有次级
+  // 信息可切，版本胶囊整个不渲染（ Watch 6 42mm 配置这类节点不再亮一枚「—」）
+  if (pool.every((c) => c.color === '—')) return '';
   const chosen = pool.filter((c) => skuIds.includes(c.skuId));
   if (chosen.length > 1) return `${chosen[0].color}+${chosen.length - 1}`;
   if (chosen.length === 1) return chosen[0].color;

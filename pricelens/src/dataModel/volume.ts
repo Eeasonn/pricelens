@@ -1,16 +1,20 @@
 // ============================================================
 // 第112轮（2026-10-21）量价看板 · 销量估算纯计算层。
-// 事实表无销量字段：按「产业基准 × 档位 × 品牌 × 国家 × 配置份额 × 生命周期 ×
-// 折扣深度 × 促销档期 × 确定性微扰」推算周销量（台）。全链路无随机数
-// （微扰 = FNV-1a 哈希），同输入两次调用逐字节一致，可金测。
-// 销量为估算口径，接入真实销量后替换（页面已带对应脚注）。
-// 口径约束：
+// 2026-11-17（Eason 真实销量契约）：接入 PSI 周销量（数据包 v2 sales →
+// factSalesWeekly）——真实优先：某型号某国存在任何销量行即整模型走真实口径
+// （配置粒度按维度 cat1/cat2 精确匹配，同维度不同 info 的配置共享同一销量 =
+// Eason「不同 info 的销量视为一致」）；该国无该型号销量行 → 回落估算（新旧
+// 国家/型号覆盖差异不混口径在同一系列上）。真实口径下销量周独立于价格事实周。
+// 估算口径（事实表无销量时的推算，全链路无随机数、可金测）：
+//   产业基准 × 档位 × 品牌 × 国家 × 配置份额 × 生命周期 × 折扣深度 × 促销档期
+//   × 确定性微扰；
 //   - 只对「该周该配置在该国至少有一条事实行」的周给值（任意渠道行即算在架）；
 //   - 月/季 = 桶内周求和；无任何周有值 → null；
 //   - 结果 Math.round 为非负整数；不随平台/币种变化（恒本币口径的事实行）。
 // ============================================================
-import { dimProduct, dimPromo, dimTime } from '../data';
+import { dimProduct, dimPromo, dimTime, factSalesWeekly } from '../data';
 import type { DimProduct, FactPriceWeekly, Granularity, Industry } from './types';
+import { effectiveCatsOf } from './salesIngest';
 import { defaultPlatformAnchorOf, factRows, minPriceOfRows, tierOf, tierOrderOf } from './aggregate';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 
@@ -180,7 +184,14 @@ function configShares(modelId: string, cc: string): Map<string, number> {
   return out;
 }
 
-// ---------------- 周销量估算 ----------------
+// ---------------- 周销量（真实优先，估算兜底） ----------------
+
+/** 当前销量口径：'psi-weekly' = 已导入 PSI 真实销量（数据包 v2）；
+ *  'estimated' = 估算口径。页面脚注/悬停说明据此显性标注。 */
+export type SalesSource = 'estimated' | 'psi-weekly';
+export function salesSourceOf(): SalesSource {
+  return factSalesWeekly.length > 0 ? 'psi-weekly' : 'estimated';
+}
 
 const volCache = new Map<string, Map<string, number>>();
 
@@ -193,9 +204,29 @@ if (typeof window !== 'undefined') {
   });
 }
 
+/** PSI 真实周销量（真实优先路径）：该型号在该国存在任何销量行 → 返回本配置
+ *  维度（cat1/cat2 按 effectiveCatsOf 解析，与 PSI 归一同函数同键）的周求和 Map；
+ *  该型号该国完全无销量行 → null（整系列回落估算，不混口径）。
+ *  同维度不同 info（颜色/联网等）的配置共享同一销量（Eason 2026-11-17 口径）。 */
+function realSalesOf(head: DimProduct, countryCode: string): Map<string, number> | null {
+  if (factSalesWeekly.length === 0) return null;
+  const { cat1, cat2 } = effectiveCatsOf(head);
+  const byWeek = new Map<string, number>();
+  let modelCovered = false;
+  for (const row of factSalesWeekly) {
+    if (row.country_code !== countryCode || row.model_id !== head.model_id) continue;
+    modelCovered = true;
+    if (row.cat1 === cat1 && row.cat2 === cat2) {
+      byWeek.set(row.week_id, (byWeek.get(row.week_id) ?? 0) + row.qty);
+    }
+  }
+  return modelCovered ? byWeek : null;
+}
+
 /**
- * 某型号 × 配置（汇总全部颜色 SKU）在某国的周销量估算。
- * 只含「该周该配置在该国至少有一条事实行」的周；值为非负整数（台）。
+ * 某型号 × 配置（汇总全部颜色 SKU）在某国的周销量：PSI 真实优先（该型号该国
+ * 有销量行即整模型走真实），否则估算。
+ * 估算口径只含「该周该配置在该国至少有一条事实行」的周；值为非负整数（台）。
  */
 export function volumeOfConfig(modelId: string, romram: string, countryCode: string): Map<string, number> {
   const cacheKey = `${countryCode}|${modelId}|${romram}`;
@@ -208,6 +239,12 @@ export function volumeOfConfig(modelId: string, romram: string, countryCode: str
     return out;
   }
   const head = rows[0];
+  // 真实优先：该型号在该国有 PSI 销量行 → 整模型真实口径（真实周独立于价格事实周）
+  const real = realSalesOf(head, countryCode);
+  if (real) {
+    volCache.set(cacheKey, real);
+    return real;
+  }
   const ladder = tierOrderOf(head.industry);
   const tierCode = tierOf(head, countryCode);
   const share = configShares(modelId, countryCode).get(head.romram) ?? 1;

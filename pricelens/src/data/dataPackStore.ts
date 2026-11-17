@@ -6,7 +6,7 @@
 // persisted:false——导入仍在当前会话生效（内存置换），UI 据此提示
 // 「数据包仅本次会话生效」。每次操作独立开连接（低频操作，无需连接池）。
 // ============================================================
-import type { PricelensDataPack } from './index';
+import type { AnyPricelensDataPack, LegacyPricelensDataPack, PricelensDataPack } from './index';
 
 const DB_NAME = 'pricelens-data';
 const DB_VERSION = 1;
@@ -50,9 +50,9 @@ function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => 
 }
 
 /** 读取持久化的数据包；无包或环境不可用 = null（回落内置数据） */
-export async function loadDataPack(): Promise<PricelensDataPack | null> {
+export async function loadDataPack(): Promise<AnyPricelensDataPack | null> {
   try {
-    const raw = await withStore<PricelensDataPack | undefined>('readonly', (store) => store.get(KEY) as IDBRequest<PricelensDataPack | undefined>);
+    const raw = await withStore<AnyPricelensDataPack | undefined>('readonly', (store) => store.get(KEY) as IDBRequest<AnyPricelensDataPack | undefined>);
     return raw ?? null;
   } catch {
     return null;
@@ -60,7 +60,7 @@ export async function loadDataPack(): Promise<PricelensDataPack | null> {
 }
 
 /** 写入数据包；persisted = false 表示环境拒绝持久化（本会话仍生效） */
-export async function saveDataPack(pack: PricelensDataPack): Promise<{ persisted: boolean }> {
+export async function saveDataPack(pack: PricelensDataPack | LegacyPricelensDataPack): Promise<{ persisted: boolean }> {
   try {
     await withStore('readwrite', (store) => store.put(pack, KEY) as IDBRequest<IDBValidKey>);
     return { persisted: true };

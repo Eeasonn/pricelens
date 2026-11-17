@@ -12,8 +12,9 @@
 // ============================================================
 import { beforeEach, describe, expect, it } from 'vitest';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
-import { applyDataPack, buildDataPack, currencyOfCountry, dataMeta, dimTier, factPriceWeekly, type PricelensDataPack } from '../index';
+import { applyDataPack, buildDataPack, currencyOfCountry, dataMeta, dimTier, factPriceWeekly, factSalesWeekly, type PricelensDataPack } from '../index';
 import { clearDataPack, loadDataPack, saveDataPack } from '../dataPackStore';
+import { salesSourceOf, volumeOfConfig } from '../../dataModel/volume';
 
 // 内置态深快照（buildDataPack 的 dims 是活引用，必须 JSON 断开再留底）
 const ORIGINAL: PricelensDataPack = JSON.parse(JSON.stringify(buildDataPack()));
@@ -30,7 +31,7 @@ describe('buildDataPack / applyDataPack round-trip', () => {
   it('内置数据打包 → 应用：ok、元信息变 imported、事实行数与维表长度保持一致', () => {
     const pack = buildDataPack();
     expect(pack.kind).toBe('pricelens-data-pack');
-    expect(pack.v).toBe(1);
+    expect(pack.v).toBe(2);
     const before = dataMeta().counts;
     const applied = applyDataPack(pack);
     expect(applied.ok).toBe(true);
@@ -149,6 +150,78 @@ describe('applyDataPack 校验失败整体放弃（内置数据不受污染）',
     expect((dimTier as unknown as Record<string, unknown>).polluted).toBeUndefined();
     expect(Object.getPrototypeOf(dimTier)).toBe(Object.prototype);
     expect(Object.keys(dimTier.ladders).length).toBeGreaterThan(0);
+  });
+});
+
+describe('数据包 v2 · PSI 销量（2026-11-17 接口预留）', () => {
+  /** v1 旧包形态（无 sales 段） */
+  const toV1 = (): Record<string, unknown> => {
+    const pack = JSON.parse(JSON.stringify(buildDataPack())) as Record<string, unknown>;
+    pack.v = 1;
+    delete pack.sales;
+    delete pack.salesProductAliases;
+    return pack;
+  };
+  const watchSales = [
+    { country: 'R国', product: 'Watch 6', category1: '42mm', periodId: '2026043', qty: 123 },
+  ];
+
+  it('内置态销量口径 = 估算（factSalesWeekly 空）', () => {
+    expect(factSalesWeekly.length).toBe(0);
+    expect(salesSourceOf()).toBe('estimated');
+  });
+
+  it('v2 包带 sales：归一解析（R国/Watch6/2026043 → RU/own/202643）进 factSalesWeekly，量价取数走真实', () => {
+    const pack = buildDataPack() as PricelensDataPack & { sales: typeof watchSales };
+    pack.sales = watchSales;
+    const applied = applyDataPack(pack);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    expect(applied.counts.factSales).toBe(1);
+    expect(dataMeta().salesUnmatched).toBe(0);
+    expect(factSalesWeekly).toEqual([
+      { week_id: '202643', country_code: 'RU', model_id: 'own-huawei-watch-6', cat1: '42mm', cat2: '', qty: 123 },
+    ]);
+    expect(salesSourceOf()).toBe('psi-weekly');
+    // 真实优先：该型号该国存在销量行 → 整模型走 PSI（42mm 配置 = 表盘维度精确命中）
+    const weekly = volumeOfConfig('own-huawei-watch-6', '42mm', 'RU');
+    expect(weekly.get('202643')).toBe(123);
+    expect(weekly.has('202619')).toBe(false); // 无销量周不产值（真实周独立于价格事实周）
+    // restore 后回估算口径
+    restore();
+    expect(salesSourceOf()).toBe('estimated');
+  });
+
+  it('同键多行求和；解析失败行计入 salesUnmatched', () => {
+    const pack = buildDataPack() as PricelensDataPack & { sales: unknown[] };
+    pack.sales = [
+      ...watchSales,
+      { country: 'RU', product: 'watch6', category1: '42mm', periodId: '202643', qty: 7 },
+      { country: 'RU', product: '不存在型号', periodId: '2026043', qty: 5 },
+    ];
+    const applied = applyDataPack(pack);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    expect(applied.counts.factSales).toBe(1);
+    expect(factSalesWeekly[0].qty).toBe(130);
+    expect(dataMeta().salesUnmatched).toBe(1);
+    restore();
+  });
+
+  it('v1 旧包兼容：ok、sales 视为空（销量回落估算）', () => {
+    const applied = applyDataPack(toV1());
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    expect(applied.counts.factSales).toBe(0);
+    expect(salesSourceOf()).toBe('estimated');
+    restore();
+  });
+
+  it('未知版本（v3）→ 拒绝', () => {
+    const pack = { ...buildDataPack(), v: 3 } as unknown as PricelensDataPack;
+    const applied = applyDataPack(pack);
+    expect(applied.ok).toBe(false);
+    if (!applied.ok) expect(applied.error).toContain('v1/v2');
   });
 });
 
