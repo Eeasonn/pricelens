@@ -28,12 +28,21 @@
 //    移入 title 兜底——删的是版式冗余不是信息；总行高 ~40px，处理收件箱在 900px 视口上移；
 // ② 「让 Agent 解释最新预警」从悬置画布移入处理收件箱卡头右侧（与副标同行右对齐）；
 // ③ 空态——添加监控主操作描边加强一档（ConfigProvider 作用域主题，见 prominentSelectTheme）、
-//    占位文案去「＋」前缀（右端已有 PlusOutlined，双加号冗余）、空态卡视口内垂直居中。
+//    占位文案去「＋」前缀（右端已有 PlusOutlined 图标，双加号冗余）、空态卡视口内垂直居中。
+// 第一百九十二轮（2026-11-17 Eason 三指令，预警中心真实使用化）：
+// ① 处理收件箱整卡剔除（含批量处理/全选/生命周期筛选芯片）——处理生命周期仅保留
+//    Agent 深链详情抽屉通道（recordOverrides 持久化与 pricelens:alert-records-updated 不动）；
+// ② 每产品独立四类开关：行尾新增「规则设置」齿轮（调价/折扣/平台价差/档位间距 四 Switch，
+//    覆写语义与单元格一致 = 与全局同值即清键回落；own-gap 引擎同步改为按产品参与成对计算，
+//    关档位 = 该系列退出型号内成对；竞品行 平台价差/档位间距 禁用标注仅华为）；
+// ③ 添加监控从 Select 搜索换产品级联（antd Cascader + CascadePanel 三列：品牌→型号→配置，
+//    与筛选条产品筛选器同构同语言；勾选即订阅、取消勾选即移除）；行尾铃铛退役改 ✕
+//    （Popconfirm 二次确认——铃铛语义是订阅开关不是删除，误点即整行消失是本轮反馈原话）。
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { App as AntdApp, Button, Checkbox, ConfigProvider, Empty, Popover, Segmented, Select, Slider, Switch } from 'antd';
+import { App as AntdApp, Badge, Button, Cascader, ConfigProvider, Empty, Popconfirm, Popover, Segmented, Select, Slider, Switch } from 'antd';
 import type { ThemeConfig } from 'antd';
-import { BellOutlined, PlusOutlined } from '@ant-design/icons';
+import { BellOutlined, CloseOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
 import { usePage } from '../state/PageContext';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
@@ -54,7 +63,6 @@ import {
   ALERT_PRIORITY_LABEL,
   alertAgentContextOf,
   materializeAlertRecords,
-  summarizeAlertRecords,
   transitionAlertRecord,
   type AlertAction,
   type AlertRecord,
@@ -64,10 +72,11 @@ import { getEffectiveBenchmark } from '../state/configStore';
 import { defaultPlatformAnchorOf } from '../dataModel/aggregate';
 import { autoComparesFor, buildCards } from '../state/mainSelection';
 import usePageViewState from '../state/usePageViewState';
-import { ownBrand } from '../components/ProductCascader/tree';
+import { buildProductTree, ownBrand, type RomramNode } from '../components/ProductCascader/tree';
+import { CascadePanel, type CascadeRowItem } from '../components/ProductCascader';
 import PageHeader from '../components/PageHeader';
 import BrandDot from '../components/BrandMark';
-import { AlertBell, AlertDetailDrawer, AlertLifecycleTag, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
+import { AlertDetailDrawer, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
 import { color, fontSize, formatPrice, radius, shadow, space, selectSoft } from '../theme/tokens';
 import { scopeLabels } from '../dataModel/scope';
 import { provenanceSummary } from '../dataModel/provenance';
@@ -158,8 +167,9 @@ function ThresholdSlider({
   );
 }
 
-/** 矩阵列栅格：产品 ｜ 四类 ｜ 铃铛列（第五十五轮 150 → 172：格内放最新预警凝练详情） */
-const MATRIX_COLS = 'minmax(0,1fr) repeat(4, 172px) 44px';
+/** 矩阵列栅格：产品 ｜ 四类 ｜ 行尾操作列（第一百九十二轮 44 → 68：齿轮+✕ 两钮；
+ *  第五十五轮类型列 150 → 172：格内放最新预警凝练详情） */
+const MATRIX_COLS = 'minmax(0,1fr) repeat(4, 172px) 68px';
 
 /** 方向箭头（与看板 buildChangeMarks 同色：跌/折扣加深 = 琥珀 ↓、涨/收窄 = 蓝 ↑） */
 function dirArrowOf(a: AlertItem): ReactNode {
@@ -349,10 +359,9 @@ export default function AlertsPage() {
   // 历史事件 = 次级视图（第五十五轮，用户：主视觉只报最新，历史收进次级），默认折叠
   const [showHistory, setShowHistory] = usePageViewState<boolean>('alerts.showHistory', () => false);
   // P0/P1 处理状态先落本地，结构与后端 AlertRecord 保持一致；服务端接入时只替换持久化 adapter。
+  // （第一百九十二轮收件箱剔除后仅剩 Agent 深链详情抽屉这一条消费通道）
   const [recordOverrides, setRecordOverrides] = useState<Record<string, Partial<AlertRecord>>>(readAlertRecordOverrides);
-  const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
   const [detailRecordId, setDetailRecordId] = useState<string | null>(null);
-  const [recordFilter, setRecordFilter] = useState<'all' | 'pending' | 'observing' | 'resolved' | 'stale'>('all');
   const toggleExp = (k: string): void =>
     setExpanded((prev) => {
       const n = new Set(prev);
@@ -460,20 +469,6 @@ export default function AlertsPage() {
     [latestList, alertCfg, recordOverrides],
   );
   const recordsById = useMemo(() => new Map(records.map((record) => [record.alertId, record])), [records]);
-  const recordSummary = useMemo(() => summarizeAlertRecords(records), [records]);
-  const inboxRecords = useMemo(() => {
-    const selectedTypes = typeFilter === 'all' ? null : typeFilter;
-    return records
-      .filter((record) => (selectedTypes == null || record.type === selectedTypes)
-        && (brandFilter.length === 0 || brandFilter.includes(record.brand))
-        && (!modelFilter || record.seriesKey.startsWith(`${modelFilter.id}__`))
-        && (recordFilter === 'all'
-          || (recordFilter === 'pending' && (record.lifecycle === 'new' || record.lifecycle === 'acknowledged' || record.lifecycle === 'action_required'))
-          || (recordFilter === 'observing' && (record.lifecycle === 'investigating' || record.lifecycle === 'snoozed'))
-          || (recordFilter === 'resolved' && (record.lifecycle === 'resolved' || record.lifecycle === 'dismissed'))
-          || (recordFilter === 'stale' && (record.evidenceStatus === 'stale' || record.evidenceStatus === 'missing'))))
-      .slice(0, 100);
-  }, [records, typeFilter, brandFilter, modelFilter, recordFilter]);
   const detailRecord = detailRecordId ? recordsById.get(detailRecordId) ?? null : null;
   const updateRecord = (record: AlertRecord, action: AlertAction): void => {
     const next = transitionAlertRecord(record, action);
@@ -484,36 +479,6 @@ export default function AlertsPage() {
     setRecordOverrides((prev) => ({ ...prev, [record.alertId]: next }));
     message.success(`${ALERT_LIFECYCLE_LABEL[next.lifecycle]} · ${record.modelName}`);
   };
-  const updateSelected = (action: AlertAction): void => {
-    const selected = records.filter((record) => selectedRecordIds.has(record.alertId));
-    if (selected.length === 0) return;
-    let skipped = 0;
-    const patch: Record<string, Partial<AlertRecord>> = {};
-    for (const record of selected) {
-      const next = transitionAlertRecord(record, action);
-      if (next) patch[record.alertId] = next;
-      else skipped += 1;
-    }
-    if (Object.keys(patch).length > 0) setRecordOverrides((prev) => ({ ...prev, ...patch }));
-    setSelectedRecordIds(new Set());
-    message.success(`已处理 ${Object.keys(patch).length} 条${skipped ? `，跳过 ${skipped} 条状态冲突` : ''}`);
-  };
-  const toggleSelected = (id: string, checked: boolean): void => {
-    setSelectedRecordIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id); else next.delete(id);
-      return next;
-    });
-  };
-  const selectedAll = inboxRecords.length > 0 && inboxRecords.every((record) => selectedRecordIds.has(record.alertId));
-  const toggleSelectAll = (checked: boolean): void => setSelectedRecordIds(checked ? new Set(inboxRecords.map((record) => record.alertId)) : new Set());
-  useEffect(() => {
-    const visible = new Set(inboxRecords.map((record) => record.alertId));
-    setSelectedRecordIds((prev) => {
-      const next = new Set([...prev].filter((id) => visible.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [inboxRecords]);
   const latestBySeries = useMemo(() => groupAlertsBySeries(latestList), [latestList]);
   const scopedLatest = useMemo(() => {
     const matchBrand = (brand: string): boolean => brandFilter.length === 0 || brandFilter.includes(brand);
@@ -675,20 +640,14 @@ export default function AlertsPage() {
   const agentAlertPrompt = `解释预警中心当前筛选下的最新预警：${alertTypeLabel}、${alertStatusLabel}${brandFilter.length ? `、品牌 ${brandFilter.join('、')}` : ''}${modelFilter ? `、产品 ${modelFilter.name}` : ''}。请列出触发事实、证据关联和下一步核查动作。`;
   const hasAlertFilters = typeFilter !== 'all' || brandFilter.length > 0 || modelFilter != null || statusFilter !== 'all';
 
-  // 添加监控候选：当前国家/产业可分析的系列（华为在前，按 label 字典序）——
-  // 其他口径的产品在本页不产预警，不进候选
-  const allSeries = useMemo(() => {
-    const seen = new Set<string>();
-    const list: { key: string; label: string; isOwn: boolean }[] = [];
-    for (const p of dimProduct) {
-      if (p.industry !== state.industry || !p.countries.includes(state.countryCode)) continue;
-      const key = `${p.sku_id.split('__')[0]}__${p.romram.replace(/\s+/g, '')}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      list.push({ key, label: [p.brand, p.model_name, p.romram === '—' ? '' : p.romram].filter(Boolean).join(' '), isOwn: p.is_own === true });
-    }
-    return list.sort((a, b) => (a.isOwn === b.isOwn ? a.label.localeCompare(b.label) : a.isOwn ? -1 : 1));
-  }, [state.countryCode, state.industry]);
+  // 添加监控（第一百九十二轮 Eason ③）：级联勾选后清品牌/状态筛选并滚动定位到新行
+  //（多品牌时新行位置不可预期，避免「加没加上」的疑惑——原 Select onChange 同款承诺）
+  const onMonitorAdded = (addedKeys: string[]): void => {
+    if (addedKeys.length === 0) return;
+    setBrandFilter([]);
+    setStatusFilter('all');
+    setFocusAlert({ seriesKey: addedKeys[0], type: 'price-change', weekId: '' });
+  };
 
   // ---- 矩阵列头：类型名 + 全局开关 + 阈值 Popover（「全局规则」收编于此）----
   const renderTypeHead = (t: AlertType): ReactNode => {
@@ -874,9 +833,14 @@ export default function AlertsPage() {
         {children}
       </div>
     );
-    // 档位间距：型号级、不参与产品覆写——华为行显「型号级 + 触发数」，竞品行「—」
+    // 档位间距：型号级阈值（列头全局调）——华为行显「型号级 + 触发数」，竞品行「—」；
+    // 第一百九十二轮：产品级开关可关掉本档参与（引擎同口径 = 该档退出成对计算）
     if (t === 'own-gap') {
       if (!meta.isOwn) {
+        return wrap(<span style={{ fontSize: 11, color: color.hairlineStrong }}>—</span>);
+      }
+      const gapOn = state.alertProducts[rowKey]?.types?.['own-gap'] ?? state.alertTypes['own-gap'];
+      if (!gapOn) {
         return wrap(<span style={{ fontSize: 11, color: color.hairlineStrong }}>—</span>);
       }
       const n = (gapByModel.get(rowKey.split('__')[0]) ?? []).length;
@@ -957,7 +921,107 @@ export default function AlertsPage() {
     );
   };
 
-  // ---- 矩阵行：产品 ｜ 四类 ｜ 铃铛；展开明细条随行渲染 ----
+  // ---- 单产品规则设置（第一百九十二轮 Eason ②）：行尾齿轮 = 四类开关一处设置。
+  //      覆写语义与单元格一致：与全局同值即清键回落；竞品行 平台价差/档位间距 引擎
+  //      本就仅华为触发 → 禁用标注「仅华为」。own-gap 关档 = 退出型号内成对计算。 ----
+  const renderRowSettings = (key: string, meta: AlertSeriesMeta): ReactNode => {
+    const rule = state.alertProducts[key];
+    const overridden = rule != null && (Object.keys(rule.types ?? {}).length > 0 || Object.keys(rule.thresholds ?? {}).length > 0);
+    const rows: { t: AlertType; ownOnly?: boolean }[] = [
+      { t: 'price-change' },
+      { t: 'promo' },
+      { t: 'platform-gap', ownOnly: true },
+      { t: 'own-gap', ownOnly: true },
+    ];
+    const setRuleType = (t: AlertType, v: boolean): void => {
+      const next = { ...(rule?.types ?? {}), [t]: v };
+      if (next[t] === state.alertTypes[t]) delete next[t]; // 与全局同值 = 清键回落
+      actions.setAlertProductRule(key, { ...(rule ?? {}), types: next });
+    };
+    return (
+      <Popover
+        trigger="click"
+        placement="bottomRight"
+        content={
+          <div style={{ width: 272 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: color.ink, marginBottom: 2 }}>该产品的预警类型</div>
+            <div style={{ fontSize: 11, color: color.mute, marginBottom: 8, lineHeight: '15px' }}>
+              关闭某类 = 该产品不再扫描此类预警；未单独设置时跟随列头全局开关与阈值
+            </div>
+            <div style={{ display: 'grid', gap: 9 }}>
+              {rows.map(({ t, ownOnly }) => {
+                const r = TYPE_RULES[t];
+                const na = ownOnly === true && !meta.isOwn;
+                const on = rule?.types?.[t] ?? state.alertTypes[t];
+                const isOverridden = rule?.types?.[t] != null;
+                return (
+                  <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Switch
+                      size="small"
+                      checked={on}
+                      disabled={na}
+                      aria-label={`${meta.label} ${r.name}开关`}
+                      onChange={(v) => setRuleType(t, v)}
+                    />
+                    <span style={{ fontSize: 12, color: na ? color.mute : color.ink, flex: 1, minWidth: 0 }}>
+                      {r.name.replace('预警', '')}
+                    </span>
+                    <span style={{ fontSize: 11, flexShrink: 0, color: na ? color.hairlineStrong : isOverridden ? color.link : color.mute }}>
+                      {na ? '仅华为' : isOverridden ? '已单独设置' : '跟随全局'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {meta.isOwn && (
+              <div style={{ marginTop: 9, fontSize: 11, color: color.mute, lineHeight: '15px' }}>
+                档位间距为型号级阈值（列头调整）；关闭某档位 = 该档位退出型号内成对计算
+              </div>
+            )}
+            {overridden && (
+              <div style={{ marginTop: 9, textAlign: 'right' }}>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    actions.setAlertProductRule(key, null);
+                    message.success(`已恢复全局设置：${meta.label}`, 1.2);
+                  }}
+                >
+                  全部恢复跟随全局
+                </Button>
+              </div>
+            )}
+          </div>
+        }
+      >
+        {/* 有任意覆写（开关/阈值）时齿轮挂蓝点提示「该产品已脱离全局默认」 */}
+        <Badge dot={overridden} color={color.link}>
+          <button
+            type="button"
+            className="lpl-hit"
+            aria-label={`${meta.label} 预警规则设置`}
+            title="该产品的预警类型设置"
+            style={{
+              position: 'relative', // .lpl-hit::after 挂在本体上（命中区外扩不落页级祖先）
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 24,
+              height: 24,
+              borderRadius: radius.control,
+              color: overridden ? color.link : color.mute,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <SettingOutlined style={{ fontSize: 12 }} />
+          </button>
+        </Badge>
+      </Popover>
+    );
+  };
+
+  // ---- 矩阵行：产品 ｜ 四类 ｜ 行尾操作（齿轮设置 + ✕ 移除）；展开明细条随行渲染 ----
   const renderSeriesRow = (key: string, meta: AlertSeriesMeta, idx: number): ReactNode => {
     const items = bySeries.get(key) ?? [];
     const openTs = ORDER.filter((t) => t !== 'own-gap' && expanded.has(`${key}|${t}`));
@@ -987,12 +1051,42 @@ export default function AlertsPage() {
           {ORDER.map((t) => (
             <CellSlot key={t}>{renderCell(key, meta, t)}</CellSlot>
           ))}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingBlock: 8 }}>
-            <AlertBell
-              subscribed={state.alertSubs.includes(key)}
-              count={latestBySeries.get(key)?.length ?? 0}
-              onToggle={() => actions.toggleAlertSub(key)}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, paddingBlock: 8 }}>
+            {renderRowSettings(key, meta)}
+            {/* 第一百九十二轮 Eason ③：铃铛退役改 ✕——铃铛语义是订阅开关不是删除，
+                误点即整行消失（反馈原话「点了之后就直接没掉了」）；✕ 走 Popconfirm 二次确认 */}
+            <Popconfirm
+              title="移除该监控？"
+              description={`移除后「${meta.label}」不再产生预警，可随时重新添加`}
+              okText="移除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => {
+                actions.toggleAlertSub(key);
+                message.success(`已移除监控：${meta.label}`);
+              }}
+            >
+              <button
+                type="button"
+                className="lpl-hit"
+                aria-label={`移除监控 ${meta.label}`}
+                title="移除监控"
+                style={{
+                  position: 'relative', // .lpl-hit::after 挂在本体上（命中区外扩不落页级祖先）
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 24,
+                  height: 24,
+                  borderRadius: radius.control,
+                  color: color.mute,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <CloseOutlined style={{ fontSize: 12 }} />
+              </button>
+            </Popconfirm>
           </div>
         </div>
         {openTs.length > 0 && (
@@ -1006,42 +1100,6 @@ export default function AlertsPage() {
         )}
       </div>
     );
-  };
-
-  /** 添加监控入口（第一百八十二轮抽公用）：工具行与零监控空状态各渲染一份；
-   *  选中即订阅 + 反馈 + 定位到新行（多品牌时新行位置不可预期，避免「加没加上」的疑惑） */
-  // 第一百九十轮（外部 UX 审计落地）：prominent = 零监控空态主操作（中号 + 白底），
-  // 与工具行小号入口区分——空态下不再像禁用输入框
-  // 第一百九十一轮（桌面实拍审计）：① 占位文案去「＋」前缀（右端已有 PlusOutlined 图标，
-  // 双加号冗余）；② prominent 态经 prominentSelectTheme 加强描边（见常量处注释）
-  const renderAddMonitor = (width: number, prominent?: boolean): JSX.Element => {
-    const select = (
-      <Select
-        className="lpl-alert-add-monitor"
-        showSearch
-        size={prominent ? 'middle' : 'small'}
-        placeholder="添加监控（搜索品牌 / 型号 / 产品）"
-        aria-label="添加监控产品"
-        style={{ width, ...(prominent ? { background: color.canvas } : {}) }}
-        value={null}
-        filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-        onChange={(key) => {
-          if (!key) return;
-          actions.setAlertSubs([key as string], true);
-          const label = allSeries.find((s) => s.key === key)?.label ?? '';
-          message.success(`已添加监控：${label}`);
-          setBrandFilter([]);
-          setStatusFilter('all');
-          setFocusAlert({ seriesKey: key as string, type: 'price-change', weekId: '' });
-        }}
-        options={allSeries
-          .filter((s) => !state.alertSubs.includes(s.key))
-          .map((s) => ({ value: s.key, label: s.label }))}
-        suffixIcon={<PlusOutlined />}
-      />
-    );
-    // 描边加强只给空态主操作（ConfigProvider 作用域主题，不外溢到工具行小入口）
-    return prominent ? <ConfigProvider theme={prominentSelectTheme}>{select}</ConfigProvider> : select;
   };
 
   // 零监控首启态（第一百八十二轮评审）：概览条零统计、无效筛选、阈值表头、历史事件
@@ -1074,13 +1132,11 @@ export default function AlertsPage() {
               <Button size="small" style={{ marginLeft: 'auto', height: 22, fontSize: 11 }} onClick={() => setModelFilter(null)}>查看全部产品</Button>
             </div>
           )}
-          {/* ① 概览状态带（第一百九十一轮，桌面 1440×900 实拍审计落地）：原「两卡 +
-              四砖」两排统计合并为一排紧凑带——计数与标签同行小间距、零值弱化
-              （hairlineStrong 数字 + mute 标签），两卡副行细节移入 title 兜底，
-              删的是版式冗余不是信息；零监控时整条隐藏不变 */}
+          {/* ① 概览状态带（第一百九十一轮紧凑带；第一百九十二轮收件箱剔除后
+              生命周期四芯片随卡退役，只留 最新预警数 ｜ 监控范围 两段计数） */}
           {!emptyMode && (
             <section
-              aria-label="预警处理摘要"
+              aria-label="预警概览"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -1107,73 +1163,7 @@ export default function AlertsPage() {
                 <span style={{ fontSize: 12, color: color.mute }}>个系列监控中</span>
               </span>
               <span aria-hidden style={{ width: 1, height: 16, background: color.hairline, flexShrink: 0 }} />
-              {([
-                ['pending', '待处理', recordSummary.pending, color.alert.lifecycle.new.fg],
-                ['observing', '观察中', recordSummary.observing, color.alert.lifecycle.investigating.fg],
-                ['resolved', '已解决', recordSummary.resolved, color.alert.lifecycle.resolved.fg],
-                ['stale', '数据陈旧', recordSummary.stale, color.alert.evidence.pending],
-              ] as const).map(([key, label, count, fg]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    setRecordFilter(key);
-                  }}
-                  aria-label={`筛选${label} ${count} 条`}
-                  aria-pressed={recordFilter === key}
-                  style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, border: 0, cursor: 'pointer', padding: '2px 6px', background: 'transparent', borderRadius: radius.control, outline: recordFilter === key ? `2px solid ${color.link}` : undefined }}
-                >
-                  {/* 零值弱化不占位：数字 hairlineStrong + 标签 mute；非零数字保留生命周期语义色 */}
-                  <span className="tnum" style={{ fontSize: 14, lineHeight: '18px', fontWeight: 700, color: count > 0 ? fg : color.hairlineStrong }}>{count}</span>
-                  <span style={{ fontSize: 12, color: count > 0 ? color.body : color.mute }}>{label}</span>
-                </button>
-              ))}
             </section>
-          )}
-
-          {!emptyMode && (
-            <>
-              <section style={{ background: color.canvas, boxShadow: shadow.l1, borderRadius: radius.card, padding: space.lg, marginBottom: space.md }} aria-label="预警处理收件箱">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
-                  <h3 style={{ margin: 0, fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>处理收件箱</h3>
-                  <span style={{ fontSize: 11, color: color.mute }}>{inboxRecords.length} 条最新事件</span>
-                  <span style={{ flex: 1 }} />
-                  {/* 第一百九十一轮（桌面实拍审计）：解释入口从悬置画布移入卡头右侧，
-                      与「N 条最新事件」副标同行右对齐，不再独占一行推挤首屏 */}
-                  <Button size="small" onClick={() => openAgent('dock', agentAlertPrompt)}>
-                    让 Agent 解释最新预警
-                  </Button>
-                  {selectedRecordIds.size > 0 && <>
-                    <span style={{ fontSize: 11, color: color.mute }}>已选 {selectedRecordIds.size}</span>
-                    <Button size="small" onClick={() => updateSelected({ kind: 'acknowledge' })}>批量确认</Button>
-                    <Button size="small" onClick={() => updateSelected({ kind: 'investigate' })}>批量核查</Button>
-                    <Button size="small" onClick={() => updateSelected({ kind: 'snooze', until: new Date(Date.now() + 24 * 3600 * 1000).toISOString() })}>批量静默</Button>
-                    <Button size="small" onClick={() => openAgent('dock', `请汇总所选 ${selectedRecordIds.size} 条预警，按优先级说明触发事实、证据缺口和下一步动作：${JSON.stringify(records.filter((record) => selectedRecordIds.has(record.alertId)).map(alertAgentContextOf))}`)}>让 Agent 汇总</Button>
-                  </>}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '30px 86px 80px minmax(180px, 1fr) minmax(150px, 1fr) 90px', alignItems: 'center', gap: 8, padding: '5px 6px', borderBottom: `1px solid ${color.hairline}`, color: color.mute, fontSize: 11 }}>
-                  <Checkbox checked={selectedAll} onChange={(event) => toggleSelectAll(event.target.checked)} aria-label="全选最新预警" />
-                  <span>状态</span><span>优先级</span><span>产品</span><span>触发读数</span><span>证据</span>
-                </div>
-                {inboxRecords.length === 0 ? <div style={{ padding: '22px 0', color: color.mute, fontSize: 12, textAlign: 'center' }}>当前筛选下没有最新事件</div> : inboxRecords.map((record) => (
-                  <div
-                    key={record.alertId}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setDetailRecordId(record.alertId)}
-                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setDetailRecordId(record.alertId); } }}
-                    style={{ display: 'grid', gridTemplateColumns: '30px 86px 80px minmax(180px, 1fr) minmax(150px, 1fr) 90px', alignItems: 'center', gap: 8, padding: '8px 6px', borderBottom: `1px solid ${color.hairline}`, cursor: 'pointer' }}
-                  >
-                    <span onClick={(event) => event.stopPropagation()}><Checkbox checked={selectedRecordIds.has(record.alertId)} onChange={(event) => toggleSelected(record.alertId, event.target.checked)} aria-label={`选择 ${record.modelName} 预警`} /></span>
-                    <span><AlertLifecycleTag lifecycle={record.lifecycle} /></span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: color.alert.priority[record.priority] }}>{ALERT_PRIORITY_LABEL[record.priority]}</span>
-                    <span style={{ minWidth: 0 }}><div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600, color: color.ink }}>{record.brand} {record.modelName}</div><div style={{ fontSize: 11, color: color.mute }}>{record.romram} · {record.weekLabel}</div></span>
-                    <span style={{ minWidth: 0 }}><TypePill type={record.type} /> <span className="tnum" style={{ marginLeft: 5, fontSize: 11, color: color.body }}>{alertDigest(record, state.currency)}</span></span>
-                    <span style={{ fontSize: 11, color: record.evidenceStatus === 'verified' ? color.alert.evidence.verified : color.alert.evidence.pending }}>{record.evidence.length} 条 · {record.evidenceStatus === 'verified' ? '已核验' : '待核查'}</span>
-                  </div>
-                ))}
-              </section>
-            </>
           )}
 
           {/* ②③ 监控矩阵（工具行 + 列头规则 + 品牌分组行 + own-gap 成对条）。
@@ -1196,7 +1186,7 @@ export default function AlertsPage() {
                 <BellOutlined style={{ fontSize: 30, color: color.hairlineStrong }} />
                 <div style={{ fontSize: 15, fontWeight: 600, color: color.ink }}>尚未监控任何产品</div>
                 <div style={{ fontSize: 12, color: color.mute }}>添加监控后，这里按周汇总调价、折扣、平台价差与档位间距预警</div>
-                {renderAddMonitor(380, true)}
+                <AddMonitorControl width={380} prominent onAdded={onMonitorAdded} />
                 <Button size="small" onClick={() => openAgent('dock', `帮我设置预警监控（${country} · ${industry}），建议先监控哪些产品并说明原因`)}>让 Agent 帮我设置</Button>
               </div>
             ) : (
@@ -1259,8 +1249,12 @@ export default function AlertsPage() {
                 </Button>
               )}
               <span style={{ flex: 1 }} />
+              {/* 「让 Agent 解释」从收件箱卡头移入工具行（第一百九十二轮收件箱剔除） */}
+              <Button size="small" onClick={() => openAgent('dock', agentAlertPrompt)}>
+                让 Agent 解释最新预警
+              </Button>
               <span aria-hidden style={{ width: 1, height: 22, background: color.hairline, flexShrink: 0 }} />
-              {renderAddMonitor(320)}
+              <AddMonitorControl width={320} onAdded={onMonitorAdded} />
             </div>
 
             {/* 列头与矩阵共用横向滚动容器（第一百八十二轮：窄视口只在卡内拖动，
@@ -1421,4 +1415,121 @@ export default function AlertsPage() {
 /** 单元格 key 包装（renderCell 返回的 div 需要稳定的列表 key） */
 function CellSlot({ children }: { children: ReactNode }) {
   return <>{children}</>;
+}
+
+// ============================================================
+// 添加监控级联（第一百九十二轮 Eason ③）：与筛选条产品筛选器同构——
+// antd Cascader 外壳（触发器恒占位「添加监控」，不显已选标签：监控清单本身就在矩阵）
+// + CascadePanel 三列（品牌→型号→配置，buildProductTree 当前国家/产业有数据的产品，
+// 华为置顶——旧 Select 候选含无价格数据的产品，勾了也永远「正常」，这里天然排除）。
+// 勾选 = 订阅、取消勾选 = 移除监控（与行尾 ✕ 同一操作），品牌/型号行勾选 = 整组批量；
+// 叶行点文字 = 单档切换。candidates 与 useAlerts 同口径（当前国家/产业）。
+// ============================================================
+function AddMonitorControl({ width, prominent, onAdded }: {
+  width: number;
+  /** 零监控空态主操作（中号 + 白底描边加强，与工具行小入口区分） */
+  prominent?: boolean;
+  /** 勾选产生新增订阅时回调（页面清筛选 + 滚动定位新行） */
+  onAdded?: (addedKeys: string[]) => void;
+}) {
+  const { state, actions } = useFilters();
+  const { message } = AntdApp.useApp();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activePath, setActivePath] = useState<[string, string] | null>(null);
+  const seriesKeyOf = (modelId: string, romram: string): string => `${modelId}__${romram.replace(/\s+/g, '')}`;
+  // 品牌→型号两列（系列层拍平：监控粒度 = 型号×配置，与订阅空间 seriesKey 一致）
+  const brands = useMemo(
+    () =>
+      buildProductTree(state.industry, state.countryCode).map((b) => ({
+        key: b.key,
+        title: b.title,
+        models: b.series.flatMap((s) => s.models),
+      })),
+    [state.industry, state.countryCode],
+  );
+  const activeBrand = brands.find((b) => b.key === activePath?.[0]) ?? brands[0];
+  const activeModel = activeBrand?.models.find((m) => m.modelId === activePath?.[1]) ?? activeBrand?.models[0];
+  const isSub = (modelId: string, romram: string): boolean => state.alertSubs.includes(seriesKeyOf(modelId, romram));
+  const checkOf = (nodes: RomramNode[]): CascadeRowItem['checkState'] => {
+    const count = nodes.filter((r) => isSub(r.modelId, r.romram)).length;
+    return count === nodes.length && count > 0 ? 'checked' : count > 0 ? 'indeterminate' : 'none';
+  };
+  const setRange = (nodes: RomramNode[], on: boolean): void => {
+    const current = new Set(state.alertSubs);
+    const add: string[] = [];
+    const del: string[] = [];
+    for (const r of nodes) {
+      const k = seriesKeyOf(r.modelId, r.romram);
+      if (on && !current.has(k)) add.push(k);
+      else if (!on && current.has(k)) del.push(k);
+    }
+    if (add.length === 0 && del.length === 0) return;
+    if (add.length > 0) actions.setAlertSubs(add, true);
+    if (del.length > 0) actions.setAlertSubs(del, false);
+    if (add.length > 0) {
+      onAdded?.(add);
+      message.success(
+        add.length === 1
+          ? `已添加监控：${nodes.find((r) => seriesKeyOf(r.modelId, r.romram) === add[0])?.label ?? add[0]}`
+          : `已添加监控 ${add.length} 个系列`,
+      );
+    } else {
+      message.success(`已移除监控 ${del.length} 个系列`);
+    }
+  };
+  const brandItems: CascadeRowItem[] = brands.map((b) => {
+    const nodes = b.models.flatMap((m) => m.romrams);
+    return {
+      key: b.key,
+      label: b.title,
+      active: activeBrand?.key === b.key,
+      checkState: checkOf(nodes),
+      onActivate: () => setActivePath([b.key, b.models[0]?.modelId ?? '']),
+      onCheckChange: (checked) => setRange(nodes, checked),
+    };
+  });
+  const modelItems: CascadeRowItem[] = (activeBrand?.models ?? []).map((m) => ({
+    key: m.modelId,
+    label: m.label,
+    active: activeModel?.modelId === m.modelId,
+    checkState: checkOf(m.romrams),
+    onActivate: () => activeBrand && setActivePath([activeBrand.key, m.modelId]),
+    onCheckChange: (checked) => setRange(m.romrams, checked),
+  }));
+  const leafItems: CascadeRowItem[] = (activeModel?.romrams ?? []).map((r) => ({
+    key: r.key,
+    label: r.romram,
+    active: false,
+    checkState: isSub(r.modelId, r.romram) ? 'checked' : 'none',
+    onLabelClick: () => setRange([r], !isSub(r.modelId, r.romram)),
+    onCheckChange: (checked) => setRange([r], checked),
+  }));
+  const cascader = (
+    <Cascader
+      className="lpl-alert-add-monitor"
+      style={{ width, ...(prominent ? { background: color.canvas } : {}) }}
+      multiple
+      options={[]}
+      value={[]}
+      placeholder="添加监控（品牌 / 型号 / 配置）"
+      aria-label="添加监控产品"
+      suffixIcon={<PlusOutlined />}
+      popupRender={() => (
+        <CascadePanel
+          open={menuOpen}
+          columns={[
+            { items: brandItems },
+            { items: modelItems },
+            { items: leafItems },
+          ]}
+        />
+      )}
+      onOpenChange={(open) => {
+        setMenuOpen(open);
+        if (open) setActivePath([brands[0]?.key ?? '', brands[0]?.models[0]?.modelId ?? '']);
+      }}
+    />
+  );
+  // 描边加强只给空态主操作（ConfigProvider 作用域主题，不外溢到工具行小入口）
+  return prominent ? <ConfigProvider theme={prominentSelectTheme}>{cascader}</ConfigProvider> : cascader;
 }

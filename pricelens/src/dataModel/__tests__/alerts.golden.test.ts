@@ -244,6 +244,35 @@ describe('buildAlerts 规则边界', () => {
     expect(buildAlerts(cfgGap(0.05)).filter((a) => a.type === 'own-gap').length).toBe(0);
   });
 
+  it('产品级 own-gap 开关（2026-11-17 Eason ②）：关一档 = 退出成对；全局关 + 两档产品显式开 = 仍成对', () => {
+    const mk = (products?: AlertCfg['products'], ownGapGlobal = true): AlertCfg => ({
+      subs: [PURA_256, PURA_512],
+      enabled: { ...ALL_OFF, 'own-gap': ownGapGlobal },
+      thresholds: { 'price-change': 0, promo: 0, 'platform-gap': 0, 'own-gap': 0.15 },
+      products,
+      scope: SCOPE,
+    });
+    // 阳性对照：无覆写时恰成一对（256 低 × 512 高）
+    expect(buildAlerts(mk()).filter((a) => a.type === 'own-gap')).toHaveLength(1);
+    // 关高价档 = 该档退出成对 → 型号内只剩单档，无对可成
+    expect(
+      buildAlerts(mk({ [PURA_512]: { types: { 'own-gap': false } } })).filter((a) => a.type === 'own-gap'),
+    ).toHaveLength(0);
+    // 关低价档同理
+    expect(
+      buildAlerts(mk({ [PURA_256]: { types: { 'own-gap': false } } })).filter((a) => a.type === 'own-gap'),
+    ).toHaveLength(0);
+    // 全局关 + 两档产品显式开 = 覆写越过全局闸（与前三类产品覆写语义一致）
+    expect(
+      buildAlerts(
+        mk({
+          [PURA_256]: { types: { 'own-gap': true } },
+          [PURA_512]: { types: { 'own-gap': true } },
+        }, false),
+      ).filter((a) => a.type === 'own-gap'),
+    ).toHaveLength(1);
+  });
+
   it('阈值单调：严阈值(15%)预警集 ⊆ 宽阈值(5%)预警集（全 RU-phone 订阅，两侧均非空）', () => {
     const wide = new Set(buildAlerts(cfg(ALL_KEYS, 0.05)).map((a: AlertItem) => a.key));
     const strict = buildAlerts(cfg(ALL_KEYS, 0.15)).map((a) => a.key);

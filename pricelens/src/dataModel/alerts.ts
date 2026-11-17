@@ -6,7 +6,8 @@
 // - 平台价差预警 platform-gap = 仅华为品牌：同一周各平台独立折后价最高/最低差 ≥ 阈值；
 // - 档位间距预警 own-gap（追补⑨新增）= 同型号相邻 ROM 档（按最新现价升序）
 //   间距 = 高价/低价 − 1 **低于** 阈值 → 两档太近、价位没有合理分开（方向与前三类相反，
-//   属型号/档位结构层，阈值为全局级不按产品覆盖）；
+//   属型号/档位结构层，阈值为全局级；类型开关自 2026-11-17 起可按产品（系列）覆写，
+//   关某档 = 该档退出型号内成对计算——Eason「每个产品独立设置四类开关」）；
 // - 缺采周不打断比较链（prev 跨缺采延续，与 buildChangeMarks 同口径）；
 // - 价格口径（第一百三十八轮对齐）= 代表色单 SKU（lowestPriceColorSku 最低价颜色，
 //   与看板默认取色/总览/多平台比价同源；原全色均值口径淘汰）；平台随 cfg.platform
@@ -46,7 +47,7 @@ export interface AlertCfg {
   subs: string[]; // 启用预警的系列（modelId__romram去空格）
   enabled: AlertTypeSwitches; // 四类全局开关
   thresholds: AlertThresholds; // 四类全局阈值
-  /** 按产品覆写（own-gap 为型号级，不参与产品覆写） */
+  /** 按产品覆写（own-gap 阈值仍为型号级全局；类型开关可按产品覆写 = 关档位退出成对） */
   products?: Record<string, AlertProductRule>;
   currency?: CurrencyMode;
   /** 数据作用域；缺省 = 当前 demo 的 RU / phone。 */
@@ -198,7 +199,8 @@ function effThreshold(cfg: AlertCfg, key: string, type: AlertType): number {
 /**
  * 订阅系列的预警扫描（唯一入口，追补⑨改配置对象入参）。
  * own-gap = 型号级结构预警：订阅内的华为系列按型号分组，组内 ≥2 档时按各档
- * 「最新有值周现价」升序做相邻对，间距低于阈值即报（不随产品覆写）。
+ * 「最新有值周现价」升序做相邻对，间距低于阈值即报（阈值全局；产品级开关可把
+ * 单档移出成对计算——effEnabled 按档回落，与前三类覆写语义一致，2026-11-17）。
  */
 export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   const currency = cfg.currency ?? 'usd';
@@ -357,7 +359,9 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
   }
   // 档位间距预警（追补⑨，型号级）：订阅内华为系列按型号分组，最新有值现价相邻对
   const ownGapThreshold = positiveThreshold(cfg.thresholds['own-gap']);
-  if (cfg.enabled['own-gap'] && ownGapThreshold != null) {
+  // 全局开关不再作外层闸（2026-11-17 产品级覆写）：参与与否按档 effEnabled 回落——
+  // 无覆写时等价旧口径（全局关 = 全部不参与），有覆写时产品显式开可越过全局关
+  if (ownGapThreshold != null) {
     const latestOf = (key: string): { price: number; weekId: string; weekLabel: string } | null => {
       const meta = metaOf(key);
       if (!meta || !meta.isOwn) return null;
@@ -379,6 +383,7 @@ export function buildAlerts(cfg: AlertCfg): AlertItem[] {
     for (const key of subs) {
       const meta = metaOf(key);
       if (!meta?.isOwn) continue;
+      if (!effEnabled(cfg, key, 'own-gap')) continue; // 产品级关闭 = 该档退出成对计算
       const modelId = key.split('__')[0];
       const arr = byModel.get(modelId);
       if (arr) arr.push(key);
