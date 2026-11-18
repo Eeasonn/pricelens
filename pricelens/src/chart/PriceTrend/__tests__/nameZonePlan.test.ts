@@ -287,3 +287,57 @@ describe('名称带两行药丸（2026-11-13 Eason）：pillSpecOf 注入', () =
     expect(nm.h).toBe(ZONE_LINE_H + 6);
   });
 });
+
+describe('2026-11-18 Eason「不能出现卡片重叠」：两行药丸放不下 → 降级单行 + 底界钳制', () => {
+  // 6 条两行药丸（每盒 38px，Σ228+间隙 20=248）：plotHeight 压到 160 → 两行总高
+  // 必然装不下 → 全带降级单行（盒 22），栈总高 152 ≤ 160 装得下、互不相交、不越底
+  const many = (n: number): Series[] =>
+    Array.from({ length: n }, (_, k) =>
+      mk(`OWN__${k}`, `HUAWEI Model ${k} 12GB`, [800 + k * 8, 805 + k * 8, 810 + k * 8]));
+  const series6 = many(6);
+  const scale6 = computeYAxis({ series: series6, priceTypes, sliderScale: 1, allowBreak: false, perUsd: 1 });
+  const g6 = {
+    gridLeft: 258, plotLeft: 258, plotTop: 36, plotWidth: 600,
+    plotHeight: 160, scale: { ...scale6, plotHeight: 160 }, n: 3,
+  };
+  const pillOf = (s: Series) => ({ name: `Model ${s.key.slice(-1)}`, brandWord: null as string | null, cfg: '12+256 GB' });
+  const plan6 = buildLabelPlan({
+    geom: g6, series: series6, granularity: 'week', priceTypes, endpointMarks: marks,
+    nameZone: { width: 188 }, pillSpecOf: pillOf,
+  });
+
+  it('总高超绘图区 → cfgText 全部剥掉（单行路径，配置并进名称行不丢信息）', () => {
+    expect(plan6.names).toHaveLength(6);
+    for (const nm of plan6.names) expect(nm.cfgText).toBeUndefined();
+  });
+
+  it('降级后互不相交且全部盒在绘图区内（不侵量带——真机重叠根治断言）', () => {
+    const GAP = 4;
+    const bottom = g6.plotTop + g6.plotHeight;
+    for (const nm of plan6.names) {
+      expect(nm.y + nm.h).toBeLessThanOrEqual(bottom + 1e-6);
+    }
+    for (let i = 0; i < plan6.names.length; i++) {
+      for (let j = i + 1; j < plan6.names.length; j++) {
+        const a = plan6.names[i];
+        const b = plan6.names[j];
+        const vDisjoint = a.y + a.h + GAP <= b.y + 1e-6 || b.y + b.h + GAP <= a.y + 1e-6;
+        expect(vDisjoint).toBe(true);
+      }
+    }
+  });
+
+  it('放得下时两行药丸保持原样（降级只在溢出时触发）', () => {
+    // 同 6 系列、正常绘图区高（computeYAxis 自适应 ≥ 数百 px）→ 两行全保留
+    const scaleFit = computeYAxis({ series: series6, priceTypes, sliderScale: 1, allowBreak: false, perUsd: 1 });
+    const gFit = {
+      gridLeft: 258, plotLeft: 258, plotTop: 36, plotWidth: 600,
+      plotHeight: scaleFit.plotHeight, scale: scaleFit, n: 3,
+    };
+    const planFit = buildLabelPlan({
+      geom: gFit, series: series6, granularity: 'week', priceTypes, endpointMarks: marks,
+      nameZone: { width: 188 }, pillSpecOf: pillOf,
+    });
+    expect(planFit.names.every((nm) => nm.cfgText === '12+256 GB')).toBe(true);
+  });
+});

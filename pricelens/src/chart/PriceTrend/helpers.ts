@@ -1193,8 +1193,11 @@ export interface AvoidResult {
  * 与 x 区间重叠的已放置标签保持间距，冲突时向上移（推挤量 = dy）。
  * 第二遍放次要候选（变价点等）——期望位无冲突才放置，冲突即隐藏：
  * 长窗口下宁缺不叠，杜绝旧版"逐个上推"堆出的数值高塔。
+ * 2026-11-18 Eason「不能出现卡片重叠」：新增 bottom（绘图区底）——堆叠找位与
+ * 最终落位都钳在绘图区内。此前无底界，多系列两行药丸总高超界时会一路下推溢出
+ * 绘图区、落进量带与量带归属药丸叠置（真机复现）。
  */
-export function resolveCollisions(items: AvoidItem[], plotTop: number): AvoidResult {
+export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: number): AvoidResult {
   const dy: Record<string, Record<number, number>> = {};
   const names: AvoidResult['names'] = [];
   const GAP = 4;
@@ -1212,15 +1215,24 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number): AvoidRes
       if (xOverlap) top = Math.min(top, q.top - it.h - GAP);
     }
     top = Math.max(plotTop + 2, top);
-    // clamp 到顶后仍可能与已放置标签重叠（多系列同时被裁出 Y 视野）→ 向下堆叠找空位
+    // clamp 到顶后仍可能与已放置标签重叠（多系列同时被裁出 Y 视野）→ 向下堆叠找空位；
+    // 底界钳制（2026-11-18）：仅 zone 药丸与价格标签——下推不得越过绘图区底
+    // （bottom − 盒高），极端放不下时停在底界（zone 由调用方先做「降级单行」保证
+    // 装得下，此处只是兜底防线）。锚定模式名称塔保持旧语义（互不相交优先，
+    // 金测「盒互不相交」钉此契约）
+    const clampBottom = bottom != null && (it.kind === 'price' || it.zone === true);
     for (let guard = 0; guard < 64; guard++) {
       const hit = placed.find(
         (q) =>
           it.left < q.right && q.left < it.right && top < q.top + q.h + GAP && top + it.h + GAP > q.top,
       );
       if (!hit) break;
-      top = hit.top + hit.h + GAP;
+      const next = hit.top + hit.h + GAP;
+      const capped = clampBottom ? Math.min(next, bottom! - it.h) : next;
+      if (capped <= top) { top = capped; break; } // 底界吸收后不再前进：停（极端防线）
+      top = capped;
     }
+    if (clampBottom) top = Math.min(top, bottom! - it.h);
     placed.push({ left: it.left, right: it.right, top, h: it.h });
     if (it.kind === 'price') {
       (dy[it.seriesKey] ??= {})[it.pointIdx] = top - it.top;

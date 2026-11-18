@@ -469,7 +469,24 @@ export function buildLabelPlan(p: {
   const zone = p.nameZone;
   const zoneBoxW = zone ? Math.max(24, zone.width - 8) : 0;
   const zoneLeft = zone ? Math.max(2, geom.plotLeft - zone.width + 4) : 0;
-  const pushNameItem = (s: Series, hidden: boolean): void => {
+  // 名称药丸两段式（2026-11-18 Eason「不能出现卡片重叠」）：先收集全部候选，再判
+  // 「两行药丸总高 + 间隙是否装得下绘图区」——装不下 = 整带降级单行（名称 + 配置
+  // 并一行，信息不丢、盒高减半）。此前直接入队，避让向下堆叠无底界，多系列两行
+  // 药丸会溢出绘图区底部、落进量带与量带归属药丸叠置（真机复现）。
+  interface NameCandidate {
+    s: Series;
+    hidden: boolean;
+    pillSpec: NameZonePillSpec | undefined;
+    cfgText: string;
+    fullH: number;
+    fi: number;
+    px: number;
+    py: number;
+    nameText: string;
+    nw: number;
+  }
+  const nameCandidates: NameCandidate[] = [];
+  const collectNameItem = (s: Series, hidden: boolean): void => {
     if (p.hideNames === true) return; // 第一百一十三轮：整体禁画名称药丸
     const pts = s.points;
     const valIdx: number[] = [];
@@ -488,6 +505,29 @@ export function buildLabelPlan(p: {
     const pillSpec = p.pillSpecOf?.(s);
     const cfgText = pillSpec?.cfg || '';
     const fullH = ZONE_LINE_H + (cfgText ? ZONE_CFG_ROW_H : 0) + 6 + (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
+    nameCandidates.push({ s, hidden, pillSpec, cfgText, fullH, fi, px, py, nameText, nw });
+  };
+  for (const s of series) collectNameItem(s, p.hiddenKeys?.has(s.key) ?? false);
+  for (const s of p.nameOnlySeries ?? []) {
+    if (!series.some((v) => v.key === s.key)) collectNameItem(s, true);
+  }
+  // 带内两行药丸装得下判定（名称带同 x 一列纵排）：Σ盒高 + 4px 间隙 > 绘图区高
+  // → 全带降级单行（盒高 16+6=22，配置并进名称行；两行字段不再携带 → 渲染走
+  // 单行路径）。生命周期行保留（行高另计，随 fullH 重算）。
+  const ZONE_STACK_GAP = 4;
+  if (zone && nameCandidates.length > 0) {
+    const totalTwoRow = nameCandidates.reduce((acc, c) => acc + c.fullH, 0) + ZONE_STACK_GAP * (nameCandidates.length - 1);
+    if (totalTwoRow > geom.plotHeight - 4) {
+      for (const c of nameCandidates) {
+        if (!c.cfgText) continue;
+        c.pillSpec = c.pillSpec ? { ...c.pillSpec, cfg: '' } : undefined;
+        c.cfgText = '';
+        c.fullH = ZONE_LINE_H + 6 + (p.lifecycleRow?.(c.s.key) ? LIFECYCLE_ROW_H : 0);
+      }
+    }
+  }
+  for (const c of nameCandidates) {
+    const { s, hidden, pillSpec, cfgText, fullH, fi, px, py, nameText, nw } = c;
     if (zone) {
       // 名称带内：盒固定带宽（药丸行内 nowrap，带宽按名称自适应预留，见 nameZoneWidthOf）；
       // 期望位 = 首桶 y 居中，钳在带内（带 = 绘图区同高）——重叠避让交给 resolveCollisions
@@ -511,7 +551,8 @@ export function buildLabelPlan(p: {
         anchorY: py,
         hidden: hidden || undefined,
         zone: true,
-        // 两行字段仅在传了 pillSpecOf 时携带（缺省不带，金测序列化不变）
+        // 两行字段仅在传了 pillSpecOf 且带配置行时携带（降级单行 = cfgText 空 →
+        // 渲染走单行路径、显示 nm.text 全名）
         ...(pillSpec
           ? {
               nameText: pillSpec.name,
@@ -520,7 +561,7 @@ export function buildLabelPlan(p: {
             }
           : {}),
       });
-      return;
+      continue;
     }
     // 起点太靠左时名称钳到容器左缘（原停驻名称预留带的分支已随名称带上移退役）
     const left = Math.max(2, px - 8 - nw);
@@ -539,15 +580,12 @@ export function buildLabelPlan(p: {
       anchorY: py,
       hidden: hidden || undefined,
     });
-  };
-  for (const s of series) pushNameItem(s, p.hiddenKeys?.has(s.key) ?? false);
-  for (const s of p.nameOnlySeries ?? []) {
-    if (!series.some((v) => v.key === s.key)) pushNameItem(s, true);
   }
   // 带内名称与价格标签同走一遍避让（pinned = 期望位冲突时最小位移上推；带内同 x，
   // 线位相邻的名称互相推离，极端贴顶时钳 plotTop+2 再向下堆叠——resolveCollisions
-  // 既有守卫）。锚定模式语义不变。
-  const res = resolveCollisions(items, geom.plotTop);
+  // 既有守卫；2026-11-18 起带底界 = 绘图区底，堆叠永不越界侵量带）。
+  // 锚定模式语义不变。
+  const res = resolveCollisions(items, geom.plotTop, geom.plotTop + geom.plotHeight);
   const names = res.names;
   // 精简标签直出表覆盖合并（compact 模式下 res.dy 恒空——价格项未进避让）
   return compact
