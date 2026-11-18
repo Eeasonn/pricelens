@@ -12,7 +12,7 @@ import type { ReactElement } from 'react';
 import { waitForGeom } from './chartTestUtils';
 import { lastSetOption } from './echartsStub';
 import { buildVolumeMarks, VOL_MARK_H, volumeBarHeightOf } from '../chartModel';
-import Chart, { tipGroupPlacement } from '../Chart';
+import Chart from '../Chart';
 import ChartToolbar from '../ChartToolbar';
 import { niceCeil } from '../../../dataModel/volume';
 import { volumeBandMaxOf } from '../rangeRuler';
@@ -457,16 +457,6 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     // 回到价格区：纵向位置照常上报（价格悬停逻辑未受影响）
     fireEvent.mouseMove(container.firstElementChild as Element, { clientX: colX(1), clientY: 120 });
     expect(onY).toHaveBeenLastCalledWith(120);
-  });
-
-  it('三卡同组定位（tipGroupPlacement）：主卡定侧，贴线边 = 卡在右取主卡左缘 / 卡在左取主卡右缘', () => {
-    const right = tipGroupPlacement(100, 800, 300, 400);
-    expect(right).toEqual({ mainLeft: 316, side: 'right', edgeX: 316 });
-    const left = tipGroupPlacement(100, 800, 800, 400);
-    expect(left).toEqual({ mainLeft: 384, side: 'left', edgeX: 784 }); // 右缘 = 触发线 − 16
-    // 左翻越绘图区左缘被钳回：贴线边跟主卡实际位置走，三卡不脱节
-    const clamped = tipGroupPlacement(100, 300, 300, 280);
-    expect(clamped).toEqual({ mainLeft: 108, side: 'left', edgeX: 388 });
   });
 
   const cardEls = (container: HTMLElement) => {
