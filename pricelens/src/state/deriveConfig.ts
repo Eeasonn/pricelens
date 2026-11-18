@@ -10,7 +10,7 @@
 // ============================================================
 import type { DimBenchmark, DimProduct, DimPromo } from '../dataModel/types';
 import { normkey } from '../dataModel/ingestText';
-import { compileSeriesRule, type SeriesRule } from '../dataModel/offerSeries';
+import { compileSeriesRule, fillTemplate, type SeriesRule } from '../dataModel/offerSeries';
 import type { OfferAliasRow } from '../dataModel/offerIngest';
 import { LPL } from './lplKeys';
 
@@ -61,7 +61,8 @@ function seriesRulesCompiled(): CompiledSeriesRule[] | null {
   return seriesRulesCache ?? null;
 }
 
-/** 型号 → 系列名（读时派生）：配置规则命中优先（含内置链），无配置回存值。
+/** 型号 → 系列名（读时派生，纯配置驱动）：配置规则逐条命中（系列名支持 {n}/{w}
+ *  模板引用第 1 捕获组），无配置规则 = 保持导入时派生的存值（当时=配置或兜底）。
  *  产品树等呈现层统一走此函数，改系列规则立即生效、无需重导数据包。 */
 export function effectiveSeriesOf(p: Pick<DimProduct, 'brand' | 'model_name' | 'is_own' | 'series'>): string {
   const rules = seriesRulesCompiled();
@@ -71,7 +72,7 @@ export function effectiveSeriesOf(p: Pick<DimProduct, 'brand' | 'model_name' | '
     if (rule.brand.toLowerCase() !== p.brand.toLowerCase()) continue;
     if (rule.rx != null) {
       const m = p.model_name.match(rule.rx);
-      if (m) return rule.series;
+      if (m) return fillTemplate(rule.series, m[1]);
     } else if (rule.prefix != null) {
       const prefix = rule.prefix;
       if (p.model_name.toLowerCase().startsWith(prefix.toLowerCase()) || k.startsWith(prefix.toLowerCase().replace(/\s+/g, ''))) {

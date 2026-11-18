@@ -309,8 +309,9 @@ describe('数据包 v3 · 原表模式（应用内归一派生）', () => {
     expect(phone).toBeDefined();
     expect(phone!.romram).toBe('12+512 GB');
     expect(phone!.cat1).toBe('12+512 GB');
+    // 无配置表规则时走兜底：我司 = 型号名首词（Mate 80 Pro → Mate）；无阶梯配置 = 无档位
     expect(phone!.series).toBe('Mate');
-    expect(phone!.tier_code).toBeTruthy();
+    expect(phone!.tier_code).toBe('—');
     // model 级参考价 = 两存储档 rrp 中位数 (1124.99+874.99)/2 = 999.99 → 1000.0
     expect(phone!.ref_price_usd).toBeCloseTo(1000, 0);
     // 平板：屏幕 + 存储双键、WiFi 塌缩进颜色
@@ -329,9 +330,10 @@ describe('数据包 v3 · 原表模式（应用内归一派生）', () => {
     expect(gt6pro!.romram).toBe('—');
     expect(gt6pro!.color).toBe('Black');
     expect(gt6pro!.cat1).toBeNull();
-    // 竞品系列（内置规则 port）：小米数字线
+    // 竞品无配置规则 = 兜底「型号名本身」（显性语义：没配置就没归组；
+    // 配置命中路径见「系列规则读时生效」用例）
     const xiaomi = [...bySku.values()].find((p) => p.brand === 'XIAOMI');
-    expect(xiaomi!.series).toBe('Xiaomi 数字系列');
+    expect(xiaomi!.series).toBe('15');
     expect(xiaomi!.is_own).toBe(false);
     // 渠道：官网→独立站、平台第三方卖家→3P，channel_id 形态
     expect(dimBenchmark).toBeDefined();

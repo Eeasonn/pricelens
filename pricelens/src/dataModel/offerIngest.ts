@@ -19,7 +19,7 @@ import {
   ccOf, fold, industryOfCat, isBrandInline, mapSourceColumns, normkey, parseDatetimeCell,
   parsePct, PLATFORM_ALIASES, slug, STORE_ALIASES, titleColor, unitFreeColor, weekOf,
 } from './ingestText';
-import { BUILTIN_MODEL_ALIASES, BUILTIN_TIER_LADDERS, seriesOfModel, tierCodeOf, tierLabel, tierRank, type IngestIndustry, type SeriesRule } from './offerSeries';
+import { seriesOfModel, tierCodeOf, tierLabel, tierRank, type IngestIndustry, type SeriesRule } from './offerSeries';
 
 /** offer 原样行：字段名原样（双语表头在引擎内归一），值保持原文 */
 export type OfferSourceRow = Record<string, unknown>;
@@ -27,11 +27,11 @@ export type OfferSourceRow = Record<string, unknown>;
 export interface OfferAliasRow { brand: string; from: string; to: string }
 
 export interface OfferIngestCtx {
-  /** 系列规则配置表（null = 用内置默认） */
+  /** 系列规则配置表（null/空 = 无归组规则，全部兜底：我司=型号名首词、竞品=型号名本身） */
   seriesRules: SeriesRule[] | null;
-  /** 型号别名配置表（null = 仅内置别名） */
+  /** 型号别名配置表（null/空 = 无别名） */
   modelAliasRows: OfferAliasRow[] | null;
-  /** 分档阶梯配置表（按产业覆盖内置 TIER_LADDERS；null = 全内置） */
+  /** 分档阶梯配置表（产业 → USD 价格点；该产业无配置 = 无档位 '—'） */
   tierLadders: Record<string, number[]> | null;
   /** 大促档期配置表（null/空 = 无大促带） */
   promoRows: DimPromo[] | null;
@@ -332,8 +332,8 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
     return undefined;
   };
 
-  // 2. 别名表（内置 + 配置表）：品牌|归一键 → 目标归一键
-  const aliasMap = new Map<string, string>(Object.entries(BUILTIN_MODEL_ALIASES));
+  // 2. 别名表（完全来自配置表——显性语义：没配置就没别名）：品牌|归一键 → 目标归一键
+  const aliasMap = new Map<string, string>();
   for (const row of ctx.modelAliasRows ?? []) {
     const brand = str(row.brand).trim();
     const from = str(row.from).trim();
@@ -685,7 +685,7 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
   }
 
   // 10. 参考价 / 分国档位 / 系列 / 产品维
-  const ladders = { ...BUILTIN_TIER_LADDERS, ...(ctx.tierLadders ?? {}) } as Record<string, number[]>;
+  const ladders = { ...(ctx.tierLadders ?? {}) } as Record<string, number[]>;
   const refByModel = new Map<string, number>();
   {
     const rrpMed = new Map<string, number[]>();
