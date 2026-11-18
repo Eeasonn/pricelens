@@ -58,6 +58,12 @@ export interface ConfigSnapshotKeys {
   tierLadders?: Record<string, number[]> | null;
   /** 大促档期（空 = 无大促带） */
   promoRows?: DimPromo[] | null;
+  // —— C3 解析字典四键（2026-11-18 显性化）：解析器出厂词汇（空 = 出厂默认，
+  //  与业务规则「空 = 无规则」语义不同）；有行 = 全量替换 ——
+  countryAliases?: Record<string, string> | null;
+  platformAliases?: Record<string, string> | null;
+  storeAliases?: Record<string, string> | null;
+  industryOfCat?: Record<string, string> | null;
 }
 
 /** 单一 JSON 快照（推荐扩展名 .pricelens-config.json） */
@@ -93,6 +99,10 @@ export interface ImportPreviewSummary {
   benchmarkMatrixCount: number;
   tierLadderCount: number;
   promoRowCount: number;
+  countryAliasCount: number;
+  platformAliasCount: number;
+  storeAliasCount: number;
+  industryOfCatCount: number;
 }
 
 export interface ImportApplyResult {
@@ -144,6 +154,10 @@ export function exportConfigSnapshot(): ConfigSnapshotV1 {
       benchmarkMatrix: (readRaw(LPL.cfgBenchmarkMatrix) as DimBenchmark[] | null) ?? null,
       tierLadders: (readRaw(LPL.cfgTierLadders) as Record<string, number[]> | null) ?? null,
       promoRows: (readRaw(LPL.cfgPromoRows) as DimPromo[] | null) ?? null,
+      countryAliases: (readRaw(LPL.cfgCountryAliases) as Record<string, string> | null) ?? null,
+      platformAliases: (readRaw(LPL.cfgPlatformAliases) as Record<string, string> | null) ?? null,
+      storeAliases: (readRaw(LPL.cfgStoreAliases) as Record<string, string> | null) ?? null,
+      industryOfCat: (readRaw(LPL.cfgIndustryOfCat) as Record<string, string> | null) ?? null,
     },
   };
 }
@@ -447,6 +461,52 @@ function validatePromoRows(raw: unknown, out: ConfigSnapshotKeys): string | null
   return null;
 }
 
+// —— C3 解析字典四键（2026-11-18 显性化）：Record<别名, 值> 形态；值域校验 ——
+
+function validateAliasMap(
+  raw: unknown,
+  out: ConfigSnapshotKeys,
+  key: 'countryAliases' | 'platformAliases' | 'storeAliases' | 'industryOfCat',
+  label: string,
+  valueCheck?: (value: string) => boolean,
+  valueError?: string,
+): string | null {
+  if (raw == null) {
+    out[key] = null;
+    return null;
+  }
+  if (!isPlainObject(raw)) return `${key}（${label}）必须是「别名 → 值」对象`;
+  for (const [alias, value] of Object.entries(raw)) {
+    if (!alias || typeof value !== 'string' || !value) {
+      return `${key}（${label}）别名「${alias}」的值缺失或不是字符串`;
+    }
+    if (valueCheck && !valueCheck(value)) {
+      return `${key}（${label}）别名「${alias}」的值「${value}」不合法${valueError ? `（${valueError}）` : ''}`;
+    }
+  }
+  out[key] = raw as Record<string, string>;
+  return null;
+}
+
+const CC_RE = /^[A-Z]{2}$/;
+const INDUSTRY_RE = /^(phone|tablet|wearable|audio|iot|pc)$/;
+
+function validateCountryAliases(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  return validateAliasMap(raw, out, 'countryAliases', '国家别名', (v) => CC_RE.test(v), '需要两位大写国家码，如 SA / RU');
+}
+
+function validatePlatformAliases(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  return validateAliasMap(raw, out, 'platformAliases', '平台别名');
+}
+
+function validateStoreAliases(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  return validateAliasMap(raw, out, 'storeAliases', '店铺类型别名', (v) => v === '1P' || v === '3P' || v === '独立站', '只允许 1P / 3P / 独立站');
+}
+
+function validateIndustryOfCat(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  return validateAliasMap(raw, out, 'industryOfCat', '品类映射', (v) => INDUSTRY_RE.test(v), '只允许 phone/tablet/wearable/audio/iot/pc');
+}
+
 /** 全量校验导入内容：通过返回规整后的快照；失败返回友好错误（不写任何键） */
 export function validateImportPayload(raw: unknown): ImportValidationResult {
   if (!isPlainObject(raw)) return invalid('文件内容不是 JSON 对象');
@@ -459,7 +519,8 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
 
   const keys = raw.keys;
   const known = ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks', 'marketRules', 'fx',
-    'seriesRules', 'modelAliases', 'benchmarkMatrix', 'tierLadders', 'promoRows'];
+    'seriesRules', 'modelAliases', 'benchmarkMatrix', 'tierLadders', 'promoRows',
+    'countryAliases', 'platformAliases', 'storeAliases', 'industryOfCat'];
   for (const k of Object.keys(keys)) {
     if (!known.includes(k)) return invalid(`keys 含未知配置项 ${k}（本版本不支持，已拒绝整份导入）`);
   }
@@ -467,6 +528,7 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
   const out: ConfigSnapshotKeys = {
     benchmark: null, prevGen: null, defaultShop: null, anomalyRule: null, anomalyMarks: null, marketRules: null, fx: null,
     seriesRules: null, modelAliases: null, benchmarkMatrix: null, tierLadders: null, promoRows: null,
+    countryAliases: null, platformAliases: null, storeAliases: null, industryOfCat: null,
   };
   for (const required of ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks'] as const) {
     if (!Object.prototype.hasOwnProperty.call(keys, required)) {
@@ -487,6 +549,10 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
     () => validateBenchmarkMatrix(keys.benchmarkMatrix, out),
     () => validateTierLadders(keys.tierLadders, out),
     () => validatePromoRows(keys.promoRows, out),
+    () => validateCountryAliases(keys.countryAliases, out),
+    () => validatePlatformAliases(keys.platformAliases, out),
+    () => validateStoreAliases(keys.storeAliases, out),
+    () => validateIndustryOfCat(keys.industryOfCat, out),
   ];
   for (const check of checks) {
     const failure = step(check());
@@ -543,6 +609,10 @@ export function summarizeImportPayload(payload: ConfigSnapshotV1): ImportPreview
     benchmarkMatrixCount: payload.keys.benchmarkMatrix?.length ?? 0,
     tierLadderCount: payload.keys.tierLadders ? Object.keys(payload.keys.tierLadders).length : 0,
     promoRowCount: payload.keys.promoRows?.length ?? 0,
+    countryAliasCount: payload.keys.countryAliases ? Object.keys(payload.keys.countryAliases).length : 0,
+    platformAliasCount: payload.keys.platformAliases ? Object.keys(payload.keys.platformAliases).length : 0,
+    storeAliasCount: payload.keys.storeAliases ? Object.keys(payload.keys.storeAliases).length : 0,
+    industryOfCatCount: payload.keys.industryOfCat ? Object.keys(payload.keys.industryOfCat).length : 0,
   };
 }
 
@@ -570,8 +640,42 @@ export function applyImportPayload(raw: ConfigSnapshotV1): ImportApplyResult {
   writeRaw(LPL.cfgBenchmarkMatrix, keys.benchmarkMatrix);
   writeRaw(LPL.cfgTierLadders, keys.tierLadders);
   writeRaw(LPL.cfgPromoRows, keys.promoRows);
+  writeRaw(LPL.cfgCountryAliases, keys.countryAliases);
+  writeRaw(LPL.cfgPlatformAliases, keys.platformAliases);
+  writeRaw(LPL.cfgStoreAliases, keys.storeAliases);
+  writeRaw(LPL.cfgIndustryOfCat, keys.industryOfCat);
+  // 服务模式（2026-11-18 前后端分离）：配置同时 POST 服务器（服务器存 config.json
+  // 并自动重派生；失败不阻断本地生效——本地是读时消费点，服务器是派生权威）
+  void syncConfigToServer(raw).catch(() => undefined);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
   }
   return { applied: true, summary: summarizeImportPayload(checked.payload) };
+}
+
+/** 配置同步到服务器（服务模式才发；WP-D）：把「已校验快照的 keys 派生配置段」
+ *  转成服务器 config.json 形态。服务器收到后存盘并对已导入原包自动重派生。 */
+async function syncConfigToServer(raw: ConfigSnapshotV1): Promise<void> {
+  const { isServiceMode } = await import('../data/serviceMode');
+  if (!isServiceMode()) return;
+  const serverConfig = {
+    seriesRules: raw.keys.seriesRules ?? undefined,
+    modelAliases: raw.keys.modelAliases ?? undefined,
+    tierLadders: raw.keys.tierLadders ?? undefined,
+    promoRows: raw.keys.promoRows ?? undefined,
+    benchmarkMatrix: raw.keys.benchmarkMatrix ?? undefined,
+    dictionaries: raw.keys.countryAliases || raw.keys.platformAliases || raw.keys.storeAliases || raw.keys.industryOfCat
+      ? {
+        countryCodes: raw.keys.countryAliases ?? undefined,
+        platformAliases: raw.keys.platformAliases ?? undefined,
+        storeAliases: raw.keys.storeAliases ?? undefined,
+        industryOfCat: raw.keys.industryOfCat ?? undefined,
+      }
+      : undefined,
+  };
+  await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(serverConfig),
+  });
 }

@@ -25,6 +25,10 @@ export const CONFIG_TEMPLATE_SHEETS = [
   '对标矩阵',
   '分档阶梯',
   '大促档期',
+  '国家别名',
+  '平台别名',
+  '店铺类型别名',
+  '品类映射',
 ] as const;
 
 type SheetName = (typeof CONFIG_TEMPLATE_SHEETS)[number];
@@ -58,6 +62,10 @@ const SHEET_DEFINITIONS: SheetData[] = [
       ['对标矩阵', '一行一条竞品关系（country_code × own_model_id × own_romram × competitor_sku_id）。有数据行 = 整体替换默认矩阵层，人工裁定不受影响。导入原表模式数据包（v3）后矩阵来自本页签。'],
       ['分档阶梯', '一行一个产业（phone/tablet/wearable/audio/iot/pc）+ 逗号分隔的 USD 价格点（如 200,400,600,800,1000）。系统不含内置阶梯（显性配置）：产业无行 = 该产业无档位。'],
       ['大促档期', '一行一个档期：国家码、促销名、开始/结束日期（YYYY-MM-DD）、深浅（浅/中/深）、平台（逗号分隔，留空 = 全部平台）。整页签留空 = 无大促带。'],
+      ['国家别名', '一行一条「原文 → 两位国家码」（中英文国名/简称均收，如 沙特→SA、turkiye→TR）。与业务规则不同：字典是解析器出厂词汇，整页签留空 = 用出厂默认词汇表，有数据行 = 全量替换。改后点数据包区「用当前配置表重新派生」。'],
+      ['平台别名', '一行一条「别名 → 平台名」（如 mvm→Mvideo）。留空 = 出厂默认；有行 = 全量替换。'],
+      ['店铺类型别名', '一行一条「原文 → 1P/3P/独立站」（如 平台型零售商→1P）。留空 = 出厂默认；有行 = 全量替换。未识别的店铺类型一律按 3P。'],
+      ['品类映射', '一行一条「品类原文 → 产业（phone/tablet/wearable/audio/iot/pc）」（如 手机→phone）。留空 = 出厂默认；有行 = 全量替换。未识别品类的行会被剔除并计数。'],
     ],
   },
   {
@@ -119,6 +127,26 @@ const SHEET_DEFINITIONS: SheetData[] = [
     name: '大促档期',
     widths: [14, 24, 14, 14, 16, 24],
     rows: [['country_code', '促销名', '开始日期', '结束日期', '深浅（浅/中/深）', '平台（逗号分隔，留空=全部）']],
+  },
+  {
+    name: '国家别名',
+    widths: [34, 16],
+    rows: [['别名（中英文/简称）', '国家码']],
+  },
+  {
+    name: '平台别名',
+    widths: [30, 24],
+    rows: [['别名', '平台名']],
+  },
+  {
+    name: '店铺类型别名',
+    widths: [26, 18],
+    rows: [['别名', '店铺类型（1P/3P/独立站）']],
+  },
+  {
+    name: '品类映射',
+    widths: [26, 18],
+    rows: [['品类原文', '产业（phone/tablet/wearable/audio/iot/pc）']],
   },
 ];
 
@@ -273,6 +301,22 @@ export function exportConfigWorkbookXlsx(snapshot: ConfigSnapshotV1): Uint8Array
         row.platforms ? row.platforms.join(',') : '',
       ] as CellValue[]),
     ],
+    国家别名: [
+      SHEET_DEFINITIONS[13].rows[0],
+      ...Object.entries(keys.countryAliases ?? {}).map(([alias, cc]) => [alias, cc] as CellValue[]),
+    ],
+    平台别名: [
+      SHEET_DEFINITIONS[14].rows[0],
+      ...Object.entries(keys.platformAliases ?? {}).map(([alias, platform]) => [alias, platform] as CellValue[]),
+    ],
+    店铺类型别名: [
+      SHEET_DEFINITIONS[15].rows[0],
+      ...Object.entries(keys.storeAliases ?? {}).map(([alias, storeType]) => [alias, storeType] as CellValue[]),
+    ],
+    品类映射: [
+      SHEET_DEFINITIONS[16].rows[0],
+      ...Object.entries(keys.industryOfCat ?? {}).map(([raw, industry]) => [raw, industry] as CellValue[]),
+    ],
   };
   const files: Record<string, Uint8Array> = {
     '[Content_Types].xml': strToU8(contentTypesXml()),
@@ -299,7 +343,12 @@ export function configTemplateFileName(now = new Date()): string {
 }
 
 function unescapeXml(value: string): string {
-  return value.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  // 数字字符实体（&#21697; / &#x54C1;）：openpyxl 等生成器对非 ASCII 默认转义——
+  // 合法 OOXML，读器必须解码（否则中文表头全对不上、页签静默解析为空）
+  return value
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 }
 
 function attributeOf(attributes: string, name: string): string | null {
@@ -416,6 +465,10 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
   const benchmarkMatrixRows = rowsByHeader(sheetByName(files, '对标矩阵', sharedStrings));
   const tierLadderRows = rowsByHeader(sheetByName(files, '分档阶梯', sharedStrings));
   const promoRows = rowsByHeader(sheetByName(files, '大促档期', sharedStrings));
+  const countryAliasRows = rowsByHeader(sheetByName(files, '国家别名', sharedStrings));
+  const platformAliasRows = rowsByHeader(sheetByName(files, '平台别名', sharedStrings));
+  const storeAliasRows = rowsByHeader(sheetByName(files, '店铺类型别名', sharedStrings));
+  const industryRows = rowsByHeader(sheetByName(files, '品类映射', sharedStrings));
 
   const marketRules: MarketDataRuleConfig[] = marketRuleRows.map((row) => {
     const terms = textValue(get(row, 'financing_terms（24,36）', 'financing_terms', '分期期数'))
@@ -537,6 +590,23 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
       channel_raw: platformsRaw,
     };
   }).filter((row) => row.country_code && row.promo_name && row.start_date && row.end_date);
+  // —— C3 解析字典四页签（2026-11-18 显性化）：Record 形态；空 = null（出厂默认） ——
+  const readAliasSheet = (rows: Record<string, CellValue>[], aliasCol: string, valueCol: string): Record<string, string> | null => {
+    const out: Record<string, string> = {};
+    for (const row of rows) {
+      const alias = textValue(get(row, aliasCol));
+      const value = textValue(get(row, valueCol));
+      if (alias && value) out[alias] = value;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  };
+  const countryAliases = readAliasSheet(countryAliasRows, '别名（中英文/简称）', '国家码');
+  const platformAliases = readAliasSheet(platformAliasRows, '别名', '平台名');
+  const storeAliases = readAliasSheet(storeAliasRows, '别名', '店铺类型（1P/3P/独立站）');
+  const industryOfCatRaw = readAliasSheet(industryRows, '品类原文', '产业（phone/tablet/wearable/audio/iot/pc）');
+  const industryOfCat: Record<string, string> | null = industryOfCatRaw
+    ? Object.fromEntries(Object.entries(industryOfCatRaw).map(([k, v]) => [k, v.trim().toLowerCase()]))
+    : null;
   return {
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
@@ -554,6 +624,10 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
       benchmarkMatrix,
       tierLadders,
       promoRows: promoTable,
+      countryAliases,
+      platformAliases,
+      storeAliases,
+      industryOfCat,
     },
   };
 }

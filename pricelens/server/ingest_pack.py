@@ -75,6 +75,8 @@ COUNTRY_CODES = {
     "墨西哥": "MX", "巴西": "BR", "保加利亚": "BG", "智利": "CL", "秘鲁": "PE",
     "哥伦比亚": "CO", "阿根廷": "AR", "南非": "ZA", "土耳其": "TR", "越南": "VN",
     "新加坡": "SG", "日本": "JP",
+    # PSI 侧独有别名（与前端 DEFAULT_COUNTRY_ALIASES 并集同源）
+    "turkiye": "TR", "uk": "GB", "britain": "GB", "saudi": "SA",
 }
 SERIES_NAME_MARKERS = [
     "iphone", "ipad", "macbook", "mac ", "airpods",
@@ -220,12 +222,20 @@ def normkey(brand, name):
     return " ".join(out)
 
 
-def industry_of_cat(raw):
-    return INDUSTRY_OF_CAT.get(fold(raw).strip().lower())
+def industry_of_cat(raw, table=None):
+    return (table or INDUSTRY_OF_CAT).get(fold(raw).strip().lower())
 
 
-def cc_of(name):
-    return COUNTRY_CODES.get(fold(name).strip().lower())
+def cc_of(name, table=None):
+    return (table or COUNTRY_CODES).get(fold(name).strip().lower())
+
+
+def platform_alias_of(name, table=None):
+    return (table or PLATFORM_ALIASES).get(fold(name).lower(), name)
+
+
+def store_alias_of(name, table=None):
+    return (table or STORE_ALIASES).get(name, name)
 
 
 def parse_pct(v):
@@ -740,7 +750,13 @@ def build_from_offers(offers, ctx):
         k = canon_keys.get(field)
         return src.get(k) if k else None
 
-    # 2. 别名表（完全来自配置）
+    # 2. 别名表（完全来自配置）；C3 字典默认在此解一次（None = 出厂默认整套，
+    #    与前端 ingestText.DEFAULT_DICTIONARIES 同源——config.json dictionaries 覆盖）
+    dicts = ctx.get("dictionaries") or {}
+    dict_industry = dicts.get("industryOfCat") or INDUSTRY_OF_CAT
+    dict_country = dicts.get("countryCodes") or COUNTRY_CODES
+    dict_platform = dicts.get("platformAliases") or PLATFORM_ALIASES
+    dict_store = dicts.get("storeAliases") or STORE_ALIASES
     alias_map = {}
     for row in ctx.get("modelAliasRows") or []:
         brand = jstr(row.get("brand")).strip().upper()
@@ -757,11 +773,11 @@ def build_from_offers(offers, ctx):
         if not model_raw:
             diag["droppedBy"]["无型号"] = diag["droppedBy"].get("无型号", 0) + 1
             continue
-        industry = industry_of_cat(field_of(src, "品类"))
+        industry = industry_of_cat(field_of(src, "品类"), dict_industry)
         if not industry:
             diag["droppedBy"]["行业未识别"] = diag["droppedBy"].get("行业未识别", 0) + 1
             continue
-        cc = cc_of(field_of(src, "国家/地区"))
+        cc = cc_of(field_of(src, "国家/地区"), dict_country)
         if not cc:
             diag["droppedBy"]["未知国家"] = diag["droppedBy"].get("未知国家", 0) + 1
             continue
@@ -772,9 +788,9 @@ def build_from_offers(offers, ctx):
         nkey = normkey(brand or "—", model_raw)
         nkey = alias_map.get(f"{brand}|{nkey}", nkey)
         platform_raw = jstr(field_of(src, "平台")).strip()
-        platform = PLATFORM_ALIASES.get(fold(platform_raw).lower(), platform_raw)
+        platform = platform_alias_of(platform_raw, dict_platform)
         store_raw = jstr(field_of(src, "店铺类型")).strip()
-        mapped_store = STORE_ALIASES.get(store_raw, store_raw)
+        mapped_store = store_alias_of(store_raw, dict_store)
         store_type = mapped_store if mapped_store in ("1P", "3P", "独立站") else "3P"
         crawled = parse_datetime_cell(field_of(src, "采集时间"))
         rows.append({
@@ -1465,6 +1481,9 @@ def ctx_from_config(config, region_base_path):
         "promoRows": config.get("promoRows") or None,
         "benchmarkRows": config.get("benchmarkMatrix") or None,
         "regionBase": region_base,
+        # C3 字典（2026-11-18 显性化）：config.json dictionaries 段（前端配置表
+        # 「国家别名/平台别名/店铺类型别名/品类映射」四页签同步上来）；缺省 = 出厂默认
+        "dictionaries": config.get("dictionaries") or None,
     }
 
 

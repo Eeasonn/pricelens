@@ -13,6 +13,7 @@
 //   音频   cat1=空（产品级）           cat2=空
 // ============================================================
 import type { DimProduct, DimRegion, SalesSourceRow } from './types';
+import { DEFAULT_COUNTRY_ALIASES } from './ingestText';
 
 // ---------------- 周期间：YYYY0WW（2026043）/ YYYYWW（202643）→ YYYYWW ----------------
 
@@ -39,28 +40,21 @@ export function normalizePeriodId(raw: string | number | null | undefined): stri
 
 // ---------------- 国家：国家码 / 中文国名 / 英文国名 → country_code ----------------
 
-/** 常见英文国名 → 国家码（dim_region.country_name 是中文，PSI 的
- *  Management Country/Region 可能给英文原文；R国=Russia 按 Eason 口径）。 */
-const COUNTRY_NAME_ALIASES: Record<string, string> = {
-  russia: 'RU', germany: 'DE', france: 'FR', turkey: 'TR', turkiye: 'TR', italy: 'IT',
-  uk: 'GB', 'united kingdom': 'GB', britain: 'GB', spain: 'ES', romania: 'RO',
-  poland: 'PL', bulgaria: 'BG', colombia: 'CO', argentina: 'AR', chile: 'CL',
-  peru: 'PE', brazil: 'BR', mexico: 'MX', 'south africa': 'ZA', kuwait: 'KW',
-  egypt: 'EG', 'saudi arabia': 'SA', saudi: 'SA', uae: 'AE', 'united arab emirates': 'AE',
-  malaysia: 'MY', indonesia: 'ID', japan: 'JP', singapore: 'SG', 'hong kong': 'HK',
-  thailand: 'TH', philippines: 'PH', vietnam: 'VN',
-};
-
 /** Management Country/Region → country_code（dim_region 内已登记才返回）。
- *  接受 国家码（ru/RU）/ 中文国名（R国、德国）/ 英文国名（Russia）；解不出 = null。 */
-export function normalizeCountryCode(raw: string | null | undefined, regions: DimRegion[]): string | null {
+ *  接受 国家码（ru/RU）/ 中文国名（R国、德国）/ 英文国名（Russia）；解不出 = null。
+ *  2026-11-18 C3 显性化：别名表第 3 参注入（默认 = ingestText DEFAULT_COUNTRY_ALIASES
+ *  并集——原 PSI 侧独有 COUNTRY_NAME_ALIASES 已收编进出厂默认，两侧同源）。 */
+export function normalizeCountryCode(
+  raw: string | null | undefined,
+  regions: DimRegion[],
+  countryAliases?: Record<string, string>,
+): string | null {
   if (raw == null) return null;
   const s = String(raw).trim();
   if (!s) return null;
   const upper = s.toUpperCase();
   if (regions.some((r) => r.country_code === upper)) return upper;
-  const lower = s.toLowerCase();
-  const alias = COUNTRY_NAME_ALIASES[lower];
+  const alias = (countryAliases ?? DEFAULT_COUNTRY_ALIASES)[s.toLowerCase()];
   if (alias && regions.some((r) => r.country_code === alias)) return alias;
   const byName = regions.find((r) => r.country_name === s || r.region_name === s);
   return byName ? byName.country_code : null;
@@ -221,7 +215,7 @@ export interface NormalizedSales {
 /** PSI 源行归一 + 同键（国家×型号×cat1×cat2×周）求和。纯函数：不改输入。 */
 export function normalizeSalesRows(
   rows: SalesSourceRow[],
-  ctx: { regions: DimRegion[]; products: DimProduct[]; aliases?: Record<string, string> },
+  ctx: { regions: DimRegion[]; products: DimProduct[]; aliases?: Record<string, string>; countryAliases?: Record<string, string> },
 ): NormalizedSales {
   const unmatched = ctx.products.length === 0 ? rows.length : 0;
   if (ctx.products.length === 0) return { facts: [], unmatched, skipped: 0 };
@@ -235,7 +229,7 @@ export function normalizeSalesRows(
       skipped += 1;
       continue;
     }
-    const cc = normalizeCountryCode(row?.country, ctx.regions);
+    const cc = normalizeCountryCode(row?.country, ctx.regions, ctx.countryAliases);
     const modelId = resolveModelId(row?.product, ctx.products, ctx.aliases);
     if (cc == null || modelId == null) {
       bad += 1;

@@ -919,6 +919,18 @@ export default function Config() {
                 {previewRow('大促档期', pendingImport.summary.promoRowCount > 0
                   ? `${pendingImport.summary.promoRowCount} 个档期`
                   : '无 → 无大促带')}
+                {previewRow('国家别名', pendingImport.summary.countryAliasCount > 0
+                  ? `${pendingImport.summary.countryAliasCount} 条（offer 侧 + PSI 销量侧共用）`
+                  : '未配置 → 出厂默认词汇')}
+                {previewRow('平台别名', pendingImport.summary.platformAliasCount > 0
+                  ? `${pendingImport.summary.platformAliasCount} 条`
+                  : '未配置 → 出厂默认词汇')}
+                {previewRow('店铺类型别名', pendingImport.summary.storeAliasCount > 0
+                  ? `${pendingImport.summary.storeAliasCount} 条`
+                  : '未配置 → 出厂默认词汇')}
+                {previewRow('品类映射', pendingImport.summary.industryOfCatCount > 0
+                  ? `${pendingImport.summary.industryOfCatCount} 条`
+                  : '未配置 → 出厂默认词汇')}
               </div>
             )}
           </Modal>

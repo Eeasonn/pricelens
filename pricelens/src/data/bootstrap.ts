@@ -14,9 +14,51 @@
 import { applyDataPack } from './index';
 import { clearDataPack, loadDataPack } from './dataPackStore';
 import { detectServiceMode, fetchServerPack } from './serviceMode';
+import { LPL } from '../state/lplKeys';
+
+/** 服务模式配置镜像（WP-D）：启动时 GET /api/config → 写入 localStorage 同名键
+ *  （读时消费点零改动）。服务器权威：快照缺的段 = 移除本地键（对齐服务器状态），
+ *  防本机与服务器漂移。任何失败静默跳过（本地配置仍可用）。 */
+async function mirrorServerConfig(): Promise<void> {
+  try {
+    const res = await fetch('/api/config', { cache: 'no-store' });
+    if (!res.ok) return;
+    const cfg = (await res.json()) as Record<string, unknown> | null;
+    if (!cfg || typeof cfg !== 'object') return;
+    const dicts = (cfg.dictionaries ?? null) as Record<string, unknown> | null;
+    const mapping: Array<[string, string]> = [
+      [LPL.cfgSeriesRules, 'seriesRules'],
+      [LPL.cfgModelAliases, 'modelAliases'],
+      [LPL.cfgTierLadders, 'tierLadders'],
+      [LPL.cfgPromoRows, 'promoRows'],
+      [LPL.cfgBenchmarkMatrix, 'benchmarkMatrix'],
+      [LPL.cfgCountryAliases, dicts ? 'countryCodes' : ''],
+      [LPL.cfgPlatformAliases, dicts ? 'platformAliases' : ''],
+      [LPL.cfgStoreAliases, dicts ? 'storeAliases' : ''],
+      [LPL.cfgIndustryOfCat, dicts ? 'industryOfCat' : ''],
+    ];
+    const store = (typeof localStorage !== 'undefined' ? localStorage : null);
+    if (!store) return;
+    for (const [key, src] of mapping) {
+      if (!src) continue;
+      const value = src === 'countryCodes' || src === 'platformAliases' || src === 'storeAliases' || src === 'industryOfCat'
+        ? dicts?.[src]
+        : cfg[src];
+      try {
+        if (value == null) store.removeItem(key);
+        else store.setItem(key, JSON.stringify(value));
+      } catch {
+        /* 存储不可用：静默降级 */
+      }
+    }
+  } catch {
+    // 服务器未启动 / 网络问题——静默跳过
+  }
+}
 
 export async function applyPersistedDataPack(): Promise<void> {
   if (await detectServiceMode()) {
+    await mirrorServerConfig();
     try {
       const serverPack = await fetchServerPack();
       if (serverPack) {

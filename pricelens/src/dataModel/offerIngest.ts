@@ -16,8 +16,9 @@
 import type { DimBenchmark, DimChannel, DimFx, DimProduct, DimPromo, DimRegion, DimTier, DimTime, FactPriceWeekly } from './types';
 import { normalizeCaseSize, normalizeScreen, normalizeScreenColumn, normalizeStorage, stripScreenPrefix } from './salesIngest';
 import {
-  ccOf, fold, industryOfCat, isBrandInline, mapSourceColumns, normkey, parseDatetimeCell,
-  parsePct, PLATFORM_ALIASES, slug, STORE_ALIASES, titleColor, unitFreeColor, weekOf,
+  ccOf, DEFAULT_DICTIONARIES, fold, industryOfCat, isBrandInline, mapSourceColumns, normkey, parseDatetimeCell,
+  parsePct, platformAliasOf, slug, storeAliasOf, titleColor, unitFreeColor, weekOf,
+  type IngestDictionaries,
 } from './ingestText';
 import { seriesOfModel, tierCodeOf, tierLabel, tierRank, type IngestIndustry, type SeriesRule } from './offerSeries';
 
@@ -39,6 +40,9 @@ export interface OfferIngestCtx {
   benchmarkRows: DimBenchmark[] | null;
   /** 地区基座（内置 dim_region：静态区域/国名/sort） */
   regionBase: DimRegion[];
+  /** C3 解析字典（2026-11-18 显性化；null = 出厂默认——字典是解析器词汇，
+   *  空表语义与业务规则不同：业务规则空 = 无规则，字典空 = 出厂词兜底） */
+  dictionaries?: IngestDictionaries | null;
 }
 
 export interface OfferIngestDiag {
@@ -333,6 +337,8 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
   };
 
   // 2. 别名表（完全来自配置表——显性语义：没配置就没别名）：品牌|归一键 → 目标归一键
+  //（C3 字典默认在此解一次：null = 出厂默认整套）
+  const dicts: IngestDictionaries = ctx.dictionaries ?? DEFAULT_DICTIONARIES;
   const aliasMap = new Map<string, string>();
   for (const row of ctx.modelAliasRows ?? []) {
     // 配置表别名行品牌同样归一大写（与行级归一同一口径，键两侧才对得上）
@@ -351,9 +357,9 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
     const modelRaw = str(fieldOf(src, '型号')).trim();
     // 空「型号」行剔除（对齐 ingest_real.py:758——否则 slug('')='x' 生成 *-x 幻影型号）
     if (!modelRaw) { bump(diag.droppedBy, '无型号'); continue; }
-    const industry = industryOfCat(fieldOf(src, '品类'));
+    const industry = industryOfCat(fieldOf(src, '品类'), dicts.industryOfCat);
     if (!industry) { bump(diag.droppedBy, '行业未识别'); continue; }
-    const cc = ccOf(fieldOf(src, '国家/地区'));
+    const cc = ccOf(fieldOf(src, '国家/地区'), dicts.countryCodes);
     if (!cc) { bump(diag.droppedBy, '未知国家'); continue; }
     const wk = weekOf(fieldOf(src, '时间周期'));
     if (!wk) { bump(diag.droppedBy, '无周期'); continue; }
@@ -361,10 +367,10 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
     const alias = aliasMap.get(`${brand}|${nkey}`);
     if (alias) nkey = alias;
     const platformRaw = str(fieldOf(src, '平台')).trim();
-    const platform = PLATFORM_ALIASES[fold(platformRaw).toLowerCase()] ?? platformRaw;
+    const platform = platformAliasOf(platformRaw, dicts.platformAliases);
     const storeRaw = str(fieldOf(src, '店铺类型')).trim();
     // 店铺类型钳制到合法三值，未知一律归 3P（对齐 ingest_real.py:798 where(isin(...),'3P')）
-    const mappedStore = STORE_ALIASES[storeRaw] ?? storeRaw;
+    const mappedStore = storeAliasOf(storeRaw, dicts.storeAliases);
     const storeType = (['1P', '3P', '独立站'] as readonly string[]).includes(mappedStore)
       ? (mappedStore as DimChannel['store_type'])
       : ('3P' as DimChannel['store_type']);

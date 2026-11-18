@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+// @ts-ignore 测试运行时读二进制资产（仓库未装 @types/node；仅 vitest 使用）
+import { readFileSync } from 'node:fs';
 import { buildConfigTemplateXlsx, exportConfigWorkbookXlsx, parseConfigWorkbook } from '../configTemplate';
 import { validateImportPayload } from '../configImportExport';
 
@@ -13,8 +15,7 @@ describe('config workbook template', () => {
 });
 
 
-describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
-  const snapshot = {
+const snapshotBase = () => ({
     schemaVersion: 1 as const,
     exportedAt: '2026-11-10T00:00:00.000Z',
     appChannel: 'stable' as const,
@@ -48,10 +49,11 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
         { promo_id: 'SA-白五-SA-2026-11-26', country_code: 'SA', promo_name: '白五', start_date: '2026-11-26', end_date: '2026-11-29', depth_hint: '中' as const, platforms: null, channel_raw: '' },
       ],
     },
-  };
+  });
 
+describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
   it('导出 → 解析 → 严格校验通过，且各分区字段逐一还原', () => {
-    const bytes = exportConfigWorkbookXlsx(snapshot);
+    const bytes = exportConfigWorkbookXlsx(snapshotBase());
     const parsed = parseConfigWorkbook(bytes);
     const result = validateImportPayload(parsed);
     expect(result.ok).toBe(true);
@@ -64,11 +66,11 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
     expect(parsed.keys.anomalyRule).toEqual({ enabled: true, thresholdPct: 12 });
     expect(parsed.keys.anomalyMarks).toHaveLength(1);
     expect(parsed.keys.anomalyMarks?.[0]).toMatchObject({ countryCode: 'RU', action: 'exempt', granularity: 'week', price: 1098.49, ts: 1731129600000 });
-    expect(parsed.keys.marketRules).toEqual(snapshot.keys.marketRules);
+    expect(parsed.keys.marketRules).toEqual(snapshotBase().keys.marketRules);
     // —— 2026-11-18 配置表化五页签 round-trip ——
-    expect(parsed.keys.seriesRules).toEqual(snapshot.keys.seriesRules);
-    expect(parsed.keys.modelAliases).toEqual(snapshot.keys.modelAliases);
-    expect(parsed.keys.benchmarkMatrix).toEqual(snapshot.keys.benchmarkMatrix);
+    expect(parsed.keys.seriesRules).toEqual(snapshotBase().keys.seriesRules);
+    expect(parsed.keys.modelAliases).toEqual(snapshotBase().keys.modelAliases);
+    expect(parsed.keys.benchmarkMatrix).toEqual(snapshotBase().keys.benchmarkMatrix);
     expect(parsed.keys.tierLadders).toEqual({ phone: [200, 400, 800], tablet: [150, 500] });
     expect(parsed.keys.promoRows).toEqual([
       expect.objectContaining({ country_code: 'RU', promo_name: '双11', depth_hint: '深', platforms: ['OZON', 'DNS'] }),
@@ -77,7 +79,7 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
   });
 
   it('校验拒绝坏行：正则无效 / 阶梯非正数 / 日期倒挂（整份拒绝）', () => {
-    const base = parseConfigWorkbook(exportConfigWorkbookXlsx(snapshot));
+    const base = parseConfigWorkbook(exportConfigWorkbookXlsx(snapshotBase()));
     const withKeys = (keys: Record<string, unknown>): unknown => ({ ...base, keys: { ...base.keys, ...keys } });
     expect(validateImportPayload(withKeys({ seriesRules: [{ brand: 'X', pattern: 're:[', series: 'Y' }] })).ok).toBe(false);
     expect(validateImportPayload(withKeys({ tierLadders: { phone: [200, -1] } })).ok).toBe(false);
@@ -85,7 +87,7 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
   });
 
   it('空快照：各分区仅表头 → 与模板解析语义一致（恢复默认）', () => {
-    const bytes = exportConfigWorkbookXlsx({ ...snapshot, keys: { benchmark: [], prevGen: {}, defaultShop: {}, anomalyRule: null, anomalyMarks: [], marketRules: null, fx: null } });
+    const bytes = exportConfigWorkbookXlsx({ ...snapshotBase(), keys: { benchmark: [], prevGen: {}, defaultShop: {}, anomalyRule: null, anomalyMarks: [], marketRules: null, fx: null } });
     const parsed = parseConfigWorkbook(bytes);
     expect(validateImportPayload(parsed).ok).toBe(true);
     expect(parsed.keys).toMatchObject({ benchmark: [], prevGen: {}, defaultShop: {}, anomalyRule: null, anomalyMarks: [], marketRules: [], fx: null });
@@ -93,9 +95,9 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
 
   it('2026-11-18 审计 P1-3/P2-5：带空格平台名不被切碎；矩阵空国家码解析为 null 通配', () => {
     const bytes = exportConfigWorkbookXlsx({
-      ...snapshot,
+      ...snapshotBase(),
       keys: {
-        ...snapshot.keys,
+        ...snapshotBase().keys,
         promoRows: [
           { promo_id: 'MX-BuenFin-MX-2026-11-20', country_code: 'MX', promo_name: 'Buen Fin', start_date: '2026-11-20', end_date: '2026-11-23', depth_hint: '深' as const, platforms: ['Mercado Libre', 'Amazon'], channel_raw: 'Mercado Libre,Amazon' },
         ],
@@ -111,5 +113,62 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
     expect(parsed.keys.promoRows?.[0]).toMatchObject({ platforms: ['Mercado Libre', 'Amazon'] });
     // 空国家码单元格 → null 通配（旧实现空串 = 永不匹配任何国家的死行）
     expect(parsed.keys.benchmarkMatrix?.[0]).toMatchObject({ country_code: null });
+  });
+});
+
+describe('C3 字典四页签 + openpyxl 预填表 round-trip（2026-11-18 显性化）', () => {
+  it('字典四页签导出 → 解析 → 校验全链（空 = null 出厂默认语义）', () => {
+    const bytes = exportConfigWorkbookXlsx({
+      ...snapshotBase(),
+      keys: {
+        ...snapshotBase().keys,
+        countryAliases: { 土耳朵: 'TR', turkiye: 'TR' },
+        platformAliases: { 某平台: 'Mvideo' },
+        storeAliases: { 平台型零售商: '1P' },
+        industryOfCat: { 手环: 'wearable' },
+      },
+    } as Parameters<typeof exportConfigWorkbookXlsx>[0]);
+    const parsed = parseConfigWorkbook(bytes);
+    expect(parsed.keys.countryAliases).toEqual({ 土耳朵: 'TR', turkiye: 'TR' });
+    expect(parsed.keys.platformAliases).toEqual({ 某平台: 'Mvideo' });
+    expect(parsed.keys.storeAliases).toEqual({ 平台型零售商: '1P' });
+    expect(parsed.keys.industryOfCat).toEqual({ 手环: 'wearable' });
+    const result = validateImportPayload(parsed);
+    expect(result.ok).toBe(true);
+  });
+
+  it('值域校验：坏国家码 / 坏店铺类型 / 坏产业 → 整份拒绝并给出行级错误', () => {
+    const bad1 = parseConfigWorkbook(exportConfigWorkbookXlsx({
+      ...snapshotBase(),
+      keys: { ...snapshotBase().keys, countryAliases: { 某国: 'sa' } },
+    } as Parameters<typeof exportConfigWorkbookXlsx>[0]));
+    expect(validateImportPayload(bad1).ok).toBe(false);
+    const bad2 = parseConfigWorkbook(exportConfigWorkbookXlsx({
+      ...snapshotBase(),
+      keys: { ...snapshotBase().keys, storeAliases: { 官网: '官网' } },
+    } as Parameters<typeof exportConfigWorkbookXlsx>[0]));
+    expect(validateImportPayload(bad2).ok).toBe(false);
+    const bad3 = parseConfigWorkbook(exportConfigWorkbookXlsx({
+      ...snapshotBase(),
+      keys: { ...snapshotBase().keys, industryOfCat: { 手机: 'phones' } },
+    } as Parameters<typeof exportConfigWorkbookXlsx>[0]));
+    expect(validateImportPayload(bad3).ok).toBe(false);
+  });
+
+  it('openpyxl 预填表（scripts/build_handoff_config.py 产物）可被 fflate 读器解析且计数对齐', () => {
+    // 生成的 public/handoff-config.xlsx = 内部交接「必导」文件——此处钉住
+    // openpyxl 产物 ↔ 前端最小 OOXML 读器的兼容性与九页签计数
+    const bytes = new Uint8Array(readFileSync(new URL('../../../public/handoff-config.xlsx', import.meta.url)));
+    const parsed = parseConfigWorkbook(bytes);
+    expect(parsed.keys.seriesRules?.length).toBe(133);
+    expect(parsed.keys.modelAliases?.length).toBe(1);
+    expect(parsed.keys.benchmarkMatrix?.length).toBe(950);
+    expect(parsed.keys.tierLadders && Object.keys(parsed.keys.tierLadders).length).toBe(6);
+    expect(parsed.keys.promoRows?.length).toBe(66);
+    expect(parsed.keys.countryAliases && Object.keys(parsed.keys.countryAliases).length).toBe(56);
+    expect(parsed.keys.platformAliases && Object.keys(parsed.keys.platformAliases).length).toBe(13);
+    expect(parsed.keys.storeAliases && Object.keys(parsed.keys.storeAliases).length).toBe(6);
+    expect(parsed.keys.industryOfCat && Object.keys(parsed.keys.industryOfCat).length).toBe(16);
+    expect(validateImportPayload(parsed).ok).toBe(true);
   });
 });

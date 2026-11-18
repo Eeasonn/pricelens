@@ -90,7 +90,7 @@ describe('exportConfigSnapshot · shape', () => {
     expect(snap.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     expect(snap.appChannel).toBe(APP_CHANNEL);
     expect(Object.keys(snap.keys).sort()).toEqual(
-      ['anomalyMarks', 'anomalyRule', 'benchmark', 'benchmarkMatrix', 'defaultShop', 'fx', 'marketRules', 'modelAliases', 'prevGen', 'promoRows', 'seriesRules', 'tierLadders'],
+      ['anomalyMarks', 'anomalyRule', 'benchmark', 'benchmarkMatrix', 'countryAliases', 'defaultShop', 'fx', 'industryOfCat', 'marketRules', 'modelAliases', 'platformAliases', 'prevGen', 'promoRows', 'seriesRules', 'storeAliases', 'tierLadders'],
     );
     // 导出 = 原始持久化值（种子即落盘内容）
     expect(snap.keys.benchmark).toEqual([benchRow]);

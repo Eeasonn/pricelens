@@ -63,33 +63,29 @@ export function normkey(brand: string, name: unknown): string {
 }
 
 /** 品类列 → 产业（中英文同收） */
-const INDUSTRY_OF_CAT: Record<string, IngestIndustryStrict> = {
-  smartphone: 'phone', tablets: 'tablet', tablet: 'tablet', wearables: 'wearable', wearable: 'wearable',
-  smartphones: 'phone', phone: 'phone', earbud: 'audio', earbuds: 'audio', iot: 'iot',
-  pc: 'pc', 'personal computer': 'pc', 手机: 'phone', 平板: 'tablet', 穿戴: 'wearable', 音频: 'audio',
-};
 type IngestIndustryStrict = 'phone' | 'tablet' | 'wearable' | 'audio' | 'iot' | 'pc';
-export function industryOfCat(raw: unknown): IngestIndustryStrict | null {
-  const key = fold(raw).trim().toLowerCase();
-  return INDUSTRY_OF_CAT[key] ?? null;
+
+// ---------------- C3 解析字典（2026-11-18 Eason 拍板显性化）----------------
+// 语义与业务规则页签不同：字典是**解析器出厂词汇**——空表 = 出厂默认兜底
+//（业务规则空表 = 无规则诚实降级）；有行 = 全量替换。配置来源 = 配置表
+// 四页签（国家别名/平台别名/店铺类型别名/品类映射），state/deriveDictionaries.ts
+// 读时合并注入引擎（OfferIngestCtx.dictionaries / normalizeCountryCode 第 4 参）。
+
+/** C3 四字典形态（全部 alias/value 映射） */
+export interface IngestDictionaries {
+  /** 国家别名：原文（含中英文/简称）→ 两位国家码（offer 侧 ccOf 与 PSI 侧共用） */
+  countryCodes: Record<string, string>;
+  /** 平台别名：归并键 → 平台名（mvm → Mvideo） */
+  platformAliases: Record<string, string>;
+  /** 店铺类型别名：原文 → 1P/3P/独立站 */
+  storeAliases: Record<string, string>;
+  /** 品类映射：品类原文 → 产业 */
+  industryOfCat: Record<string, IngestIndustryStrict>;
 }
 
-/** 平台名义归并（源表两名义互串，如 MVM/M.Video → Mvideo） */
-export const PLATFORM_ALIASES: Record<string, string> = {
-  mercadolibre: 'Mercado Libre', 'amazon méxico': 'Amazon', 'amazon mexico': 'Amazon',
-  mercadolivre: 'Mercado Libre', 'amazon.sa': 'Amazon', 'amazon tr': 'Amazon',
-  'amazon.de': 'Amazon', 'amazon.com.tr': 'Amazon', 'mediamarkt tr': 'MediaMarkt',
-  'vatan bilgisayar': 'Vatan',
-  'm.video': 'Mvideo', 'm video': 'Mvideo', mvm: 'Mvideo',
-};
-
-/** 店铺类型归一到 1P/3P/独立站 */
-export const STORE_ALIASES: Record<string, string> = {
-  平台型零售商: '1P', 平台第三方卖家: '3P', marketplace: '3P', 跨境3p: '3P', '3p_international': '3P', 官网: '独立站',
-};
-
-/** 国家/地区原文 → 国家码（含中文简称与英文别名；ingest_real.py COUNTRY_CODES） */
-const COUNTRY_CODES: Record<string, string> = {
+/** 出厂默认：offer 侧 COUNTRY_CODES ∪ PSI 侧 COUNTRY_NAME_ALIASES（salesIngest
+ *  独有的 turkiye/saudi/britain/uk 等一并收编——两侧默认同源，配置替换同时生效） */
+export const DEFAULT_COUNTRY_ALIASES: Record<string, string> = {
   'saudi arabia': 'SA', russia: 'RU', mexico: 'MX', malaysia: 'MY',
   philippines: 'PH', thailand: 'TH', singapore: 'SG', indonesia: 'ID',
   'united arab emirates': 'AE', ae: 'AE', germany: 'DE', vietnam: 'VN',
@@ -102,9 +98,54 @@ const COUNTRY_CODES: Record<string, string> = {
   墨西哥: 'MX', 巴西: 'BR', 保加利亚: 'BG', 智利: 'CL', 秘鲁: 'PE',
   哥伦比亚: 'CO', 阿根廷: 'AR', 南非: 'ZA', 土耳其: 'TR', 越南: 'VN',
   新加坡: 'SG', 日本: 'JP',
+  // PSI 侧独有别名（收编进并集）
+  turkiye: 'TR', uk: 'GB', britain: 'GB', saudi: 'SA',
 };
-export function ccOf(name: unknown): string | null {
-  return COUNTRY_CODES[fold(name).trim().toLowerCase()] ?? null;
+
+export const DEFAULT_PLATFORM_ALIASES: Record<string, string> = {
+  mercadolibre: 'Mercado Libre', 'amazon méxico': 'Amazon', 'amazon mexico': 'Amazon',
+  mercadolivre: 'Mercado Libre', 'amazon.sa': 'Amazon', 'amazon tr': 'Amazon',
+  'amazon.de': 'Amazon', 'amazon.com.tr': 'Amazon', 'mediamarkt tr': 'MediaMarkt',
+  'vatan bilgisayar': 'Vatan',
+  'm.video': 'Mvideo', 'm video': 'Mvideo', mvm: 'Mvideo',
+};
+
+export const DEFAULT_STORE_ALIASES: Record<string, string> = {
+  平台型零售商: '1P', 平台第三方卖家: '3P', marketplace: '3P', 跨境3p: '3P', '3p_international': '3P', 官网: '独立站',
+};
+
+export const DEFAULT_INDUSTRY_OF_CAT: Record<string, IngestIndustryStrict> = {
+  smartphone: 'phone', tablets: 'tablet', tablet: 'tablet', wearables: 'wearable', wearable: 'wearable',
+  smartphones: 'phone', phone: 'phone', earbud: 'audio', earbuds: 'audio', iot: 'iot',
+  pc: 'pc', 'personal computer': 'pc', 手机: 'phone', 平板: 'tablet', 穿戴: 'wearable', 音频: 'audio',
+};
+
+/** 出厂默认整套（deriveDictionaries 空表兜底 / Python 侧对齐参照） */
+export const DEFAULT_DICTIONARIES: IngestDictionaries = {
+  countryCodes: DEFAULT_COUNTRY_ALIASES,
+  platformAliases: DEFAULT_PLATFORM_ALIASES,
+  storeAliases: DEFAULT_STORE_ALIASES,
+  industryOfCat: DEFAULT_INDUSTRY_OF_CAT,
+};
+
+export function industryOfCat(raw: unknown, dict?: Record<string, IngestIndustryStrict>): IngestIndustryStrict | null {
+  const key = fold(raw).trim().toLowerCase();
+  return (dict ?? DEFAULT_INDUSTRY_OF_CAT)[key] ?? null;
+}
+
+/** 平台名义归并（源表两名义互串，如 MVM/M.Video → Mvideo） */
+export function platformAliasOf(name: string, dict?: Record<string, string>): string {
+  return (dict ?? DEFAULT_PLATFORM_ALIASES)[fold(name).toLowerCase()] ?? name;
+}
+
+/** 店铺类型归一（未知值原样返回，由调用方钳制到 1P/3P/独立站） */
+export function storeAliasOf(name: string, dict?: Record<string, string>): string {
+  return (dict ?? DEFAULT_STORE_ALIASES)[name] ?? name;
+}
+
+/** 国家/地区原文 → 国家码（含中文简称与英文别名；offer 侧入口） */
+export function ccOf(name: unknown, dict?: Record<string, string>): string | null {
+  return (dict ?? DEFAULT_COUNTRY_ALIASES)[fold(name).trim().toLowerCase()] ?? null;
 }
 
 /** 折扣率单元格 → 负小数（-0.15）；「-15%」「15%」「-0.15」全收 */

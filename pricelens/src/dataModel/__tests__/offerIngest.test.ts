@@ -243,3 +243,35 @@ describe('配置表 ctx 参与派生', () => {
     expect(result.dims.benchmark).toHaveLength(1);
   });
 });
+
+describe('C3 解析字典注入（2026-11-18 显性化）', () => {
+  it('自定义国家别名/品类映射/平台别名/店铺类型别名全量替换生效；不传 = 出厂默认', () => {
+    // 注入字典：自定义国名「露西亚」→ RU、品类「智慧机」→ phone、平台「某电商」→ Mvideo、店铺「旗舰店」→ 1P
+    const dictionaries = {
+      countryCodes: { 露西亚: 'RU' },
+      industryOfCat: { 智慧机: 'phone' as const },
+      platformAliases: { 某电商: 'Mvideo' },
+      storeAliases: { 旗舰店: '1P' },
+    };
+    const result = run([
+      baseRow({ '国家/地区': '露西亚', 品类: '智慧机', 平台: '某电商', 店铺类型: '旗舰店' }),
+    ], { dictionaries });
+    expect(result.factRows).toHaveLength(1);
+    expect(result.factRows[0].country_code).toBe('RU');
+    expect(result.dims.product[0].industry).toBe('phone');
+    expect(result.dims.channel[0].platform).toBe('Mvideo');
+    expect(result.dims.channel[0].store_type).toBe('1P');
+    // 全量替换语义：出厂词汇失效（「R国」不在自定义字典里 → 该行未知国家剔除；
+    // 混一行有效行验证剔除计数——全无效行会被引擎保护性拒绝）
+    const result2 = run([
+      baseRow({ '国家/地区': '露西亚', 品类: '智慧机', 平台: '某电商', 店铺类型: '旗舰店' }),
+      baseRow({ '国家/地区': 'R国', 品类: '智慧机', 平台: '某电商', 店铺类型: '旗舰店' }),
+    ], { dictionaries });
+    expect(result2.factRows).toHaveLength(1);
+    expect(result2.diag.droppedBy['未知国家']).toBe(1);
+    // 不传 = 出厂默认行为不变
+    const result3 = run([baseRow()]);
+    expect(result3.factRows).toHaveLength(1);
+    expect(result3.factRows[0].country_code).toBe('RU');
+  });
+});

@@ -31,6 +31,12 @@ export const LPL = {
   cfgTierLadders: 'LPL3.config.tierLadders',
   /** 大促档期（国家 × 促销 × 起止 × 深浅 × 平台；空表 = 无大促带） */
   cfgPromoRows: 'LPL3.config.promoRows',
+  /** C3 解析字典四页签（2026-11-18 显性化）：空表 = 出厂默认（解析器词汇，
+   *  与业务规则的「空 = 无规则」语义不同）；有行 = 全量替换 */
+  cfgCountryAliases: 'LPL3.config.countryAliases',
+  cfgPlatformAliases: 'LPL3.config.platformAliases',
+  cfgStoreAliases: 'LPL3.config.storeAliases',
+  cfgIndustryOfCat: 'LPL3.config.industryOfCat',
   /** 最近使用的主分析组合（第一百一十七轮，选择产品浮窗快捷 chips；上限 5 组） */
   uiMainCombos: 'LPL3.ui.mainCombos',
   /** 量价参考卡事件类型库（浏览器级长期配置：内置类型颜色覆写 + 自定义类型）。

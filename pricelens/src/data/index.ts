@@ -29,6 +29,7 @@ import type {
 import { normalizeSalesRows } from '../dataModel/salesIngest';
 import { buildFromOffers, type OfferIngestDiag, type OfferIngestCtx, type OfferSourceRow } from '../dataModel/offerIngest';
 import { readBenchmarkMatrix, readModelAliasRows, readPromoRows, readSeriesRules, readTierLadders } from '../state/deriveConfig';
+import { readCountryAliases, readDictionaries } from '../state/deriveDictionaries';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import regionJson from './dim_region.json';
 import productJson from './dim_product.json';
@@ -390,6 +391,7 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
         promoRows: readPromoRows(),
         benchmarkRows: readBenchmarkMatrix(),
         regionBase: builtinRegionBase,
+        dictionaries: readDictionaries(),
       };
       const built = buildFromOffers(offers, ctx);
       offersRows = offers.length;
@@ -449,8 +451,9 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     }
     replaceInPlace(factPriceWeekly, weekly);
     replaceInPlace(factPriceMonthly, monthly);
-    // 销量：维表就位后归一解析（型号解析要用新 dimProduct），整体置换
-    const resolvedSales = normalizeSalesRows(sales, { regions: dimRegion, products: dimProduct, aliases: salesAliases });
+    // 销量：维表就位后归一解析（型号解析要用新 dimProduct），整体置换；
+    // C3 国家别名字典（2026-11-18 显性化）注入 PSI 侧归一
+    const resolvedSales = normalizeSalesRows(sales, { regions: dimRegion, products: dimProduct, aliases: salesAliases, countryAliases: readCountryAliases() ?? undefined });
     replaceInPlace(factSalesWeekly, resolvedSales.facts);
     currentFactPackB64 = p.factPackB64.trim();
     currentMonthlyRaw = p.monthly;
