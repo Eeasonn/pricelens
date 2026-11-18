@@ -7,6 +7,9 @@
 // ============================================================
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { ConfigSnapshotV1, MarketDataRuleConfig } from './configImportExport';
+import type { DimBenchmark, DimPromo } from '../dataModel/types';
+import type { SeriesRule } from '../dataModel/offerSeries';
+import type { OfferAliasRow } from '../dataModel/offerIngest';
 
 export const CONFIG_TEMPLATE_SHEETS = [
   '说明',
@@ -17,6 +20,11 @@ export const CONFIG_TEMPLATE_SHEETS = [
   '上一代关系',
   '异常规则',
   '人工裁定',
+  '系列规则',
+  '型号别名',
+  '对标矩阵',
+  '分档阶梯',
+  '大促档期',
 ] as const;
 
 type SheetName = (typeof CONFIG_TEMPLATE_SHEETS)[number];
@@ -45,6 +53,11 @@ const SHEET_DEFINITIONS: SheetData[] = [
       ['市场采集规则', '按国家维护来源类型、时间粒度、固定平台、分期期数和买断/无价格是否参与。ZA 规则由系统门禁保护，未发布事实不会进入运行时。'],
       ['证据与口径', '配置表只维护规则和关系，不写入价格事实。真实、演示、混合数据状态仍由系统数据层展示。'],
       ['恢复默认', '要清除全部人工配置，请在对应页签删除数据行，再导入配置表。异常规则删除整行会恢复关闭和默认阈值。'],
+      ['系列规则', '一行一条「品牌 × 型号规则 → 系列名」。规则默认按型号名前缀匹配（同时匹配归一键），以 re: 开头则为正则。整页签留空 = 用系统内置规则；同一条规则重复导入会覆盖内置。'],
+      ['型号别名', '一行一条「品牌 × 原始型号 → 目标型号」，价格侧型号解析与 PSI 销量解析共用。整页签留空 = 仅用内置别名。'],
+      ['对标矩阵', '一行一条竞品关系（country_code × own_model_id × own_romram × competitor_sku_id）。有数据行 = 整体替换默认矩阵层，人工裁定不受影响。导入原表模式数据包（v3）后矩阵来自本页签。'],
+      ['分档阶梯', '一行一个产业（phone/tablet/wearable/audio/iot/pc）+ 逗号分隔的 USD 价格点（如 200,400,600,800,1000）。整页签留空 = 用内置阶梯。'],
+      ['大促档期', '一行一个档期：国家码、促销名、开始/结束日期（YYYY-MM-DD）、深浅（浅/中/深）、平台（逗号分隔，留空 = 全部平台）。整页签留空 = 无大促带。'],
     ],
   },
   {
@@ -81,6 +94,31 @@ const SHEET_DEFINITIONS: SheetData[] = [
     name: '人工裁定',
     widths: [18, 34, 18, 14, 16, 34, 16, 16, 16, 24],
     rows: [['countryCode', 'seriesKey', 'bucketId', 'action', 'granularity', 'label', 'price', 'wow', 'ts', 'note']],
+  },
+  {
+    name: '系列规则',
+    widths: [18, 34, 28],
+    rows: [['品牌', '规则', '系列名']],
+  },
+  {
+    name: '型号别名',
+    widths: [18, 30, 30],
+    rows: [['品牌', '原始型号', '目标型号']],
+  },
+  {
+    name: '对标矩阵',
+    widths: [14, 28, 18, 30, 10, 30],
+    rows: [['country_code', 'own_model_id', 'own_romram', 'competitor_sku_id', 'sort', 'note']],
+  },
+  {
+    name: '分档阶梯',
+    widths: [14, 46],
+    rows: [['产业', '阶梯（逗号分隔 USD 价格点）']],
+  },
+  {
+    name: '大促档期',
+    widths: [14, 24, 14, 14, 16, 24],
+    rows: [['country_code', '促销名', '开始日期', '结束日期', '深浅（浅/中/深）', '平台（逗号分隔，留空=全部）']],
   },
 ];
 
@@ -208,6 +246,31 @@ export function exportConfigWorkbookXlsx(snapshot: ConfigSnapshotV1): Uint8Array
       ...(keys.anomalyMarks ?? []).map((mark) => [
         mark.countryCode, mark.seriesKey, mark.bucketId, mark.action,
         mark.granularity ?? '', mark.label, mark.price ?? '', mark.wow ?? '', mark.ts, '',
+      ] as CellValue[]),
+    ],
+    系列规则: [
+      SHEET_DEFINITIONS[8].rows[0],
+      ...(keys.seriesRules ?? []).map((rule) => [rule.brand, rule.pattern, rule.series] as CellValue[]),
+    ],
+    型号别名: [
+      SHEET_DEFINITIONS[9].rows[0],
+      ...(keys.modelAliases ?? []).map((row) => [row.brand, row.from, row.to] as CellValue[]),
+    ],
+    对标矩阵: [
+      SHEET_DEFINITIONS[10].rows[0],
+      ...(keys.benchmarkMatrix ?? []).map((row) => [
+        row.country_code, row.own_model_id, row.own_romram, row.competitor_sku_id, row.sort, row.note ?? '',
+      ] as CellValue[]),
+    ],
+    分档阶梯: [
+      SHEET_DEFINITIONS[11].rows[0],
+      ...Object.entries(keys.tierLadders ?? {}).map(([industry, points]) => [industry, points.join(',')] as CellValue[]),
+    ],
+    大促档期: [
+      SHEET_DEFINITIONS[12].rows[0],
+      ...(keys.promoRows ?? []).map((row) => [
+        row.country_code, row.promo_name, row.start_date, row.end_date, row.depth_hint,
+        row.platforms ? row.platforms.join(',') : '',
       ] as CellValue[]),
     ],
   };
@@ -348,6 +411,11 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
   const prevGenRows = rowsByHeader(sheetByName(files, '上一代关系', sharedStrings));
   const anomalyRuleRows = rowsByHeader(sheetByName(files, '异常规则', sharedStrings));
   const markRows = rowsByHeader(sheetByName(files, '人工裁定', sharedStrings));
+  const seriesRuleRows = rowsByHeader(sheetByName(files, '系列规则', sharedStrings));
+  const modelAliasRows = rowsByHeader(sheetByName(files, '型号别名', sharedStrings));
+  const benchmarkMatrixRows = rowsByHeader(sheetByName(files, '对标矩阵', sharedStrings));
+  const tierLadderRows = rowsByHeader(sheetByName(files, '分档阶梯', sharedStrings));
+  const promoRows = rowsByHeader(sheetByName(files, '大促档期', sharedStrings));
 
   const marketRules: MarketDataRuleConfig[] = marketRuleRows.map((row) => {
     const terms = textValue(get(row, 'financing_terms（24,36）', 'financing_terms', '分期期数'))
@@ -412,6 +480,57 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
     wow: numberValue(get(row, 'wow', '环比')),
     ts: numberValue(get(row, 'ts', '时间戳')) ?? Date.now(),
   }));
+  // —— 2026-11-18 配置表化五页签：原表没有、后加的派生规则（null = 页签缺省 = 恢复系统默认） ——
+  const seriesRules: SeriesRule[] = seriesRuleRows.map((row) => ({
+    brand: textValue(get(row, '品牌')),
+    pattern: textValue(get(row, '规则')),
+    series: textValue(get(row, '系列名')),
+  })).filter((rule) => rule.brand && rule.pattern && rule.series);
+  const modelAliases: OfferAliasRow[] = modelAliasRows.map((row) => ({
+    brand: textValue(get(row, '品牌')),
+    from: textValue(get(row, '原始型号')),
+    to: textValue(get(row, '目标型号')),
+  })).filter((row) => row.brand && row.from && row.to);
+  const benchmarkMatrix: DimBenchmark[] = benchmarkMatrixRows.map((row) => ({
+    country_code: textValue(get(row, 'country_code', '国家码')),
+    own_model_id: textValue(get(row, 'own_model_id', '我司型号 id', '我司型号ID')),
+    own_romram: textValue(get(row, 'own_romram', 'own_romram（配置）', '配置')),
+    competitor_sku_id: textValue(get(row, 'competitor_sku_id', '竞品 sku id', '竞品SKU')),
+    sort: numberValue(get(row, 'sort', '排序')) ?? 0,
+    source: 'matrix' as const,
+    note: nullableText(get(row, 'note', '备注')) ?? undefined,
+  }));
+  const tierLadders: Record<string, number[]> = {};
+  for (const row of tierLadderRows) {
+    const industry = textValue(get(row, '产业')).trim().toLowerCase();
+    if (!industry) continue;
+    const points = textValue(get(row, '阶梯（逗号分隔 USD 价格点）', '阶梯'))
+      .split(/[,，\s]+/)
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n > 0)
+      .sort((a, b) => a - b);
+    if (points.length > 0) tierLadders[industry] = points;
+  }
+  const promoTable: DimPromo[] = promoRows.map((row) => {
+    const cc = textValue(get(row, 'country_code', '国家码'));
+    const name = textValue(get(row, '促销名'));
+    const start = textValue(get(row, '开始日期'));
+    const end = textValue(get(row, '结束日期'));
+    const depthRaw = textValue(get(row, '深浅（浅/中/深）', '深浅'));
+    const platformsRaw = textValue(get(row, '平台（逗号分隔，留空=全部）', '平台'));
+    const platforms = platformsRaw ? platformsRaw.split(/[,，\s]+/).filter(Boolean) : null;
+    const depthHint: DimPromo['depth_hint'] = depthRaw === '浅' || depthRaw === '中' ? depthRaw : '深';
+    return {
+      promo_id: `${cc}-${name}-${start}`,
+      country_code: cc,
+      promo_name: name,
+      start_date: start,
+      end_date: end,
+      depth_hint: depthHint,
+      platforms,
+      channel_raw: platformsRaw,
+    };
+  }).filter((row) => row.country_code && row.promo_name && row.start_date && row.end_date);
   return {
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
@@ -424,6 +543,11 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
       anomalyMarks,
       marketRules,
       fx: null,
+      seriesRules,
+      modelAliases,
+      benchmarkMatrix,
+      tierLadders,
+      promoRows: promoTable,
     },
   };
 }

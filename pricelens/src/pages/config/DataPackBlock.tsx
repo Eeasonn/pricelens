@@ -13,9 +13,10 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties } from 'react';
 import { Button, Popconfirm, Tooltip, message } from 'antd';
-import { DownloadOutlined, RollbackOutlined, UploadOutlined } from '@ant-design/icons';
+import { DownloadOutlined, ReloadOutlined, RollbackOutlined, UploadOutlined } from '@ant-design/icons';
 import { buildDataPack, dataMeta, applyDataPack, type DataPackMeta } from '../../data';
-import { clearDataPack, saveDataPack } from '../../data/dataPackStore';
+import { clearDataPack, loadDataPack, saveDataPack } from '../../data/dataPackStore';
+import { useConfigVersion } from '../../state/configStore';
 import { canEditConfig } from '../../access/role';
 import { color } from '../../theme/tokens';
 
@@ -34,9 +35,39 @@ const fmtTime = (iso: string | null): string => {
 const infoLine: CSSProperties = { fontSize: 12, lineHeight: '20px', color: color.body };
 
 export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
+  useConfigVersion();
   const meta: DataPackMeta = dataMeta();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // 2026-11-18 配置表化：原表模式（v3）包的派生结果依赖当前配置表（系列规则/型号
+  // 别名/对标矩阵/分档阶梯/大促档期）。配置表导入后点此按钮 = 用持久化包重跑归一
+  // 派生（不改包本身，只重算维表/事实），避免「改了表还要重新选文件导一遍」。
+  const onRederive = async (): Promise<void> => {
+    if (busy) return;
+    if (!canEditConfig()) {
+      message.error('查阅者不可更改本机数据承载，请联系 GTM');
+      return;
+    }
+    setBusy(true);
+    try {
+      const stored = await loadDataPack();
+      if (!stored) {
+        message.warning('本机没有持久化的数据包（当前数据为内置或未持久化），无需重新派生');
+        return;
+      }
+      const applied = applyDataPack(stored);
+      if (!applied.ok) {
+        message.error(`重新派生失败：${applied.error}`);
+        return;
+      }
+      message.success(`已按当前配置表重新派生（${applied.counts.products.toLocaleString()} SKU / ${applied.counts.factWeekly.toLocaleString()} 事实行）`);
+    } catch (error) {
+      message.error(`重新派生失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const onImportFile = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = event.target.files?.[0];
@@ -110,7 +141,7 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
       <div style={infoLine}>
         当前数据来源：
         <span style={{ fontWeight: 600, color: meta.source === 'imported' ? '#0062d9' : undefined }}>
-          {meta.source === 'imported' ? '导入数据包' : '内置数据'}
+          {meta.source === 'imported' ? `导入数据包（v${meta.packVersion}${meta.packVersion === 3 ? ' · 原表模式' : ''}）` : '内置数据'}
         </span>
         {'　'}数据包生成时间：{fmtTime(meta.generatedAt)}
         {'　'}导入应用时间：{fmtTime(meta.appliedAt)}
@@ -125,6 +156,16 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
         {meta.counts.channels.toLocaleString()} · 国家 {meta.counts.regions.toLocaleString()} · 时间桶{' '}
         {meta.counts.timeBuckets.toLocaleString()}
       </div>
+      {meta.offersDiag && (Object.keys(meta.offersDiag.droppedBy).length > 0 || Object.keys(meta.offersDiag.fixed).length > 0) && (
+        <div style={{ ...infoLine, color: '#ad6800' }}>
+          原表归一（{meta.offersRows.toLocaleString()} 行 → {meta.offersDiag.rowsOut.toLocaleString()} 事实行）：
+          {Object.entries(meta.offersDiag.droppedBy).map(([k, v]) => `剔除 ${k} ×${v.toLocaleString()}`).join('、') || '无剔除'}
+          {Object.keys(meta.offersDiag.fixed).length > 0
+            ? `；自动修复 ${Object.entries(meta.offersDiag.fixed).map(([k, v]) => `${k} ×${v.toLocaleString()}`).join('、')}`
+            : ''}
+          。
+        </div>
+      )}
       {meta.source === 'imported' && meta.salesUnmatched > 0 && (
         <div style={{ ...infoLine, color: '#ad6800' }}>
           销量归一提示：{meta.salesUnmatched.toLocaleString()} 行因国家/型号名未匹配被丢弃（可修
@@ -146,6 +187,13 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
         <Button icon={<DownloadOutlined />} aria-label="导出当前数据包" onClick={onExport} disabled={busy}>
           导出当前数据包
         </Button>
+        {meta.packVersion === 3 && (
+          <Tooltip title={canEdit ? '配置表（系列规则/型号别名/对标矩阵/分档阶梯/大促档期）更新后，用持久化数据包重跑归一派生' : readOnlyHint}>
+            <Button icon={<ReloadOutlined />} disabled={!canEdit || busy} aria-label="用当前配置表重新派生" onClick={onRederive}>
+              用当前配置表重新派生
+            </Button>
+          </Tooltip>
+        )}
         <Tooltip title={canEdit ? '清除持久化数据包并回落内置数据' : readOnlyHint}>
           <Popconfirm
             title="还原内置数据？"

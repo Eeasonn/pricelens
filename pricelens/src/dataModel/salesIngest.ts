@@ -185,7 +185,7 @@ export function resolveModelId(
 
 /** 型号维度口径（匹配两侧同用）：优先 DimProduct.cat1/cat2 显式回填；
  *  未回填时按产业从 romram/color 回落解析（手机=存储、平板=屏幕+存储、
- *  穿戴=表盘从 color、音频/iot/pc=产品级）。 */
+ *  穿戴=表盘（romram 优先、回落 color 兼容未回填的历史行）、音频/iot/pc=产品级）。 */
 export function effectiveCatsOf(p: DimProduct): { cat1: string; cat2: string } {
   if (p.cat1 != null || p.cat2 != null) return { cat1: p.cat1 ?? '', cat2: p.cat2 ?? '' };
   switch (p.industry) {
@@ -194,7 +194,8 @@ export function effectiveCatsOf(p: DimProduct): { cat1: string; cat2: string } {
     case 'tablet':
       return { cat1: normalizeStorage(stripScreenPrefix(p.romram)), cat2: normalizeScreen(p.romram) ?? '' };
     case 'wearable':
-      return { cat1: normalizeCaseSize(p.color) ?? '', cat2: '' };
+      // 2026-11-18 结构化后表盘已升配置维（romram=41mm），回落 color 兼容未回填历史行
+      return { cat1: normalizeCaseSize(p.romram) ?? normalizeCaseSize(p.color) ?? '', cat2: '' };
     default:
       return { cat1: '', cat2: '' };
   }

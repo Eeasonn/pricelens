@@ -904,6 +904,21 @@ export default function Config() {
                   ? `${pendingImport.summary.anomalyMarkCount} 条`
                   : '无 → 清空')}
                 {previewRow('参考汇率', pendingImport.summary.fxIncluded ? '随快照写回（只读展示，无编辑入口）' : '快照不含汇率')}
+                {previewRow('系列规则', pendingImport.summary.seriesRuleCount > 0
+                  ? `${pendingImport.summary.seriesRuleCount} 条（原表模式派生用；空表 = 内置默认）`
+                  : '无自定义 → 使用系统内置规则')}
+                {previewRow('型号别名', pendingImport.summary.modelAliasCount > 0
+                  ? `${pendingImport.summary.modelAliasCount} 条（价格侧 + PSI 销量侧共用）`
+                  : '无自定义 → 仅内置别名')}
+                {previewRow('对标矩阵', pendingImport.summary.benchmarkMatrixCount > 0
+                  ? `${pendingImport.summary.benchmarkMatrixCount} 条（整体替换矩阵层；人工裁定不受影响）`
+                  : '无 → 恢复数据层矩阵')}
+                {previewRow('分档阶梯', pendingImport.summary.tierLadderCount > 0
+                  ? `${pendingImport.summary.tierLadderCount} 个产业自定义`
+                  : '无 → 使用系统内置阶梯')}
+                {previewRow('大促档期', pendingImport.summary.promoRowCount > 0
+                  ? `${pendingImport.summary.promoRowCount} 个档期`
+                  : '无 → 无大促带')}
               </div>
             )}
           </Modal>

@@ -11,6 +11,7 @@ import type { FinancingPlan, FinancingTerm } from '../../dataModel/marketProfile
 import type { FinancingType } from '../../dataModel/marketProfile';
 import { effectiveChannelIds, lowestPriceColorSku, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { getCurrentCountry } from '../../state/currentScope';
+import { effectiveSeriesOf } from '../../state/deriveConfig';
 import type { ProductSelection } from '../../state/filtersTypes';
 
 /** 竞品品牌列顺序（§13 矩阵列序一致） */
@@ -363,7 +364,7 @@ export function buildOwnTree(
   financingType: FinancingType | null = null,
   financingTerms: FinancingTerm[] = [],
 ): GroupNode[] {
-  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry && productHasDataInCountry(p, countryCode, financingType, financingTerms)), (p) => p.series).entries()].map(([series, skus]) => ({
+  return [...groupBy(dimProduct.filter((p) => p.is_own && p.industry === industry && productHasDataInCountry(p, countryCode, financingType, financingTerms)), (p) => effectiveSeriesOf(p)).entries()].map(([series, skus]) => ({
     key: series,
     title: series,
     models: groupModels(skus, financingType, financingTerms),
@@ -503,7 +504,10 @@ export function buildProductTree(
     const models = groupModels(skus, financingType, financingTerms);
     const seriesMap = new Map<string, SeriesNode>();
     for (const m of models) {
-      const seriesTitle = skus.find((s) => modelIdOf(s) === m.modelId)?.series ?? m.label;
+      const seriesTitle = (() => {
+        const sku = skus.find((s) => modelIdOf(s) === m.modelId);
+        return sku ? effectiveSeriesOf(sku) : m.label;
+      })();
       const key = `${brand}|${seriesTitle}`;
       let node = seriesMap.get(key);
       if (!node) {

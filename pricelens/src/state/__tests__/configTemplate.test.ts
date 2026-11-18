@@ -34,6 +34,19 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
         { countryCode: 'RU', sourceKind: 'ecommerce-weekly' as const, granularity: 'week' as const, fixedPlatform: null, financingTerms: [], includePrepaid: true, includeNoPrice: false, enabled: true, note: '含,逗号 备注' },
       ],
       fx: null,
+      seriesRules: [
+        { brand: 'XIAOMI', pattern: '15', series: 'Xiaomi 数字系列' },
+        { brand: 'HUAWEI', pattern: 're:^Mate 80', series: 'Mate80 测试线' },
+      ],
+      modelAliases: [{ brand: 'HUAWEI', from: 'MatePad SE 11', to: 'MatePad SE' }],
+      benchmarkMatrix: [
+        { country_code: 'RU', own_model_id: 'own-huawei-mate-80-pro', own_romram: '12+512 GB', competitor_sku_id: 'cmp-xiaomi-15__12-256gb__green', sort: 0, source: 'matrix' as const },
+      ],
+      tierLadders: { phone: [200, 400, 800], tablet: [150, 500] },
+      promoRows: [
+        { promo_id: 'RU-双11-RU-2026-11-01', country_code: 'RU', promo_name: '双11', start_date: '2026-11-01', end_date: '2026-11-11', depth_hint: '深' as const, platforms: ['OZON', 'DNS'], channel_raw: 'OZON,DNS' },
+        { promo_id: 'SA-白五-SA-2026-11-26', country_code: 'SA', promo_name: '白五', start_date: '2026-11-26', end_date: '2026-11-29', depth_hint: '中' as const, platforms: null, channel_raw: '' },
+      ],
     },
   };
 
@@ -52,6 +65,23 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
     expect(parsed.keys.anomalyMarks).toHaveLength(1);
     expect(parsed.keys.anomalyMarks?.[0]).toMatchObject({ countryCode: 'RU', action: 'exempt', granularity: 'week', price: 1098.49, ts: 1731129600000 });
     expect(parsed.keys.marketRules).toEqual(snapshot.keys.marketRules);
+    // —— 2026-11-18 配置表化五页签 round-trip ——
+    expect(parsed.keys.seriesRules).toEqual(snapshot.keys.seriesRules);
+    expect(parsed.keys.modelAliases).toEqual(snapshot.keys.modelAliases);
+    expect(parsed.keys.benchmarkMatrix).toEqual(snapshot.keys.benchmarkMatrix);
+    expect(parsed.keys.tierLadders).toEqual({ phone: [200, 400, 800], tablet: [150, 500] });
+    expect(parsed.keys.promoRows).toEqual([
+      expect.objectContaining({ country_code: 'RU', promo_name: '双11', depth_hint: '深', platforms: ['OZON', 'DNS'] }),
+      expect.objectContaining({ country_code: 'SA', promo_name: '白五', depth_hint: '中', platforms: null }),
+    ]);
+  });
+
+  it('校验拒绝坏行：正则无效 / 阶梯非正数 / 日期倒挂（整份拒绝）', () => {
+    const base = parseConfigWorkbook(exportConfigWorkbookXlsx(snapshot));
+    const withKeys = (keys: Record<string, unknown>): unknown => ({ ...base, keys: { ...base.keys, ...keys } });
+    expect(validateImportPayload(withKeys({ seriesRules: [{ brand: 'X', pattern: 're:[', series: 'Y' }] })).ok).toBe(false);
+    expect(validateImportPayload(withKeys({ tierLadders: { phone: [200, -1] } })).ok).toBe(false);
+    expect(validateImportPayload(withKeys({ promoRows: [{ country_code: 'RU', promo_name: 'X', start_date: '2026-12-01', end_date: '2026-11-01', depth_hint: '深', platforms: null, channel_raw: '' }] })).ok).toBe(false);
   });
 
   it('空快照：各分区仅表头 → 与模板解析语义一致（恢复默认）', () => {

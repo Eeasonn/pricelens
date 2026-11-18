@@ -11,7 +11,7 @@
 // Map）都在置换完成后才初始化。dim_default_channel 预填维表暂不随包（消费方
 // aggregate 静态导入自有绑定，v1 挂账）。
 // ============================================================
-import { gunzipSync, strFromU8 } from 'fflate';
+import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import type {
   DimBenchmark,
   DimChannel,
@@ -27,6 +27,8 @@ import type {
   SalesSourceRow,
 } from '../dataModel/types';
 import { normalizeSalesRows } from '../dataModel/salesIngest';
+import { buildFromOffers, type OfferIngestDiag, type OfferIngestCtx, type OfferSourceRow } from '../dataModel/offerIngest';
+import { readBenchmarkMatrix, readModelAliasRows, readPromoRows, readSeriesRules, readTierLadders } from '../state/deriveConfig';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import regionJson from './dim_region.json';
 import productJson from './dim_product.json';
@@ -48,6 +50,13 @@ export const dimFx = fxJson as unknown as DimFx[];
 export const dimPromo = promoJson as unknown as DimPromo[];
 export const dimBenchmark = benchmarkJson as unknown as DimBenchmark[];
 export const dimTier = tierJson as unknown as DimTier;
+
+/** 原表模式（v3）地区基座：内置 29 国静态属性在模块初始化时快照一次——v3 应用时
+ *  以它为基座重算 enabled/currency/core_platforms，避免把上一次导入的派生值当基座 */
+const builtinRegionBase: DimRegion[] = regionJson.map((r) => {
+  const row = r as unknown as DimRegion;
+  return { ...row, core_platforms: [...row.core_platforms], default_own_models: { ...row.default_own_models } };
+});
 
 interface FactPack {
   v: number;
@@ -174,7 +183,11 @@ export const factSalesWeekly: FactSalesWeekly[] = [];
  *  迁移 = 拷贝这一个文件到目标电脑，配置页「数据包 → 导入」即可完全替换内置数据。
  *  v2（2026-11-17）：新增 sales（PSI 周销量源行，原样承载、apply 时归一解析）
  *  与 salesProductAliases（PSI Product 原文 → 内部 model_name 别名）。v1 包仍可导入
- *  （sales 视为空 → 销量回落估算口径）。 */
+ *  （sales 视为空 → 销量回落估算口径）。
+ *  v3（2026-11-18 Eason「原表没有、后加的内容全部配置表化」）：原表模式——只装
+ *  offer 原样行（offers，中文字段名原样），维表/事实/派生字段全部由应用内
+ *  offerIngest 归一派生；系列规则/型号别名/对标矩阵/分档阶梯/大促档期走配置表
+ *  （配置页「导入配置」xlsx 五页签，apply 时读入参与派生）。 */
 export interface PricelensDataPack {
   kind: 'pricelens-data-pack';
   v: 2;
@@ -197,9 +210,22 @@ export interface PricelensDataPack {
   salesProductAliases?: Record<string, string>;
 }
 
+/** v3 原表模式包：只装原样数据（offer 行 + PSI 行），派生全部在应用内 */
+export interface RawPricelensDataPack {
+  kind: 'pricelens-data-pack';
+  v: 3;
+  generatedAt: string;
+  /** offer 原样行（双语中文表头或契约 §2.1 拆列形态均可，引擎自适应） */
+  offers: OfferSourceRow[];
+  sales?: SalesSourceRow[];
+  salesProductAliases?: Record<string, string>;
+  /** ZA 月度事实（可选；缺省 = 无月度数据） */
+  monthly?: FactPriceMonthly[];
+}
+
 /** v1 旧包（无销量段）；applyDataPack 兼容导入 */
 export type LegacyPricelensDataPack = Omit<PricelensDataPack, 'v' | 'sales' | 'salesProductAliases'> & { v: 1 };
-export type AnyPricelensDataPack = PricelensDataPack | LegacyPricelensDataPack;
+export type AnyPricelensDataPack = PricelensDataPack | LegacyPricelensDataPack | RawPricelensDataPack;
 
 export interface DataPackMeta {
   source: 'builtin' | 'imported';
@@ -207,6 +233,8 @@ export interface DataPackMeta {
   generatedAt: string | null;
   /** 导入应用时间；内置 = null */
   appliedAt: string | null;
+  /** 应用的包版本（内置 = 0；v1/v2 规范化包 / v3 原表模式包） */
+  packVersion: number;
   counts: {
     factWeekly: number;
     factMonthly: number;
@@ -220,6 +248,10 @@ export interface DataPackMeta {
   salesUnmatched: number;
   /** 周期间/QTY 非法被跳过的行数 */
   salesSkipped: number;
+  /** v3 原表行数（v1/v2 = 0） */
+  offersRows: number;
+  /** v3 原表归一诊断（剔除/修复明细；v1/v2 = null） */
+  offersDiag: OfferIngestDiag | null;
 }
 
 /** 当前数据来源信息（内置 / 导入包）；UI 的数据信息卡读取 */
@@ -227,6 +259,7 @@ let dataMetaState: DataPackMeta = {
   source: 'builtin',
   generatedAt: null,
   appliedAt: null,
+  packVersion: 0,
   counts: {
     factWeekly: factPriceWeekly.length,
     factMonthly: factPriceMonthly.length,
@@ -238,9 +271,17 @@ let dataMetaState: DataPackMeta = {
   },
   salesUnmatched: 0,
   salesSkipped: 0,
+  offersRows: 0,
+  offersDiag: null,
 };
 export function dataMeta(): DataPackMeta {
-  return { ...dataMetaState, counts: { ...dataMetaState.counts } };
+  return {
+    ...dataMetaState,
+    counts: { ...dataMetaState.counts },
+    offersDiag: dataMetaState.offersDiag
+      ? { ...dataMetaState.offersDiag, droppedBy: { ...dataMetaState.offersDiag.droppedBy }, fixed: { ...dataMetaState.offersDiag.fixed } }
+      : null,
+  };
 }
 
 /** 当前生效的 gzip 事实包与原始月度数组（重导出数据包用——内存里只有解码后的
@@ -250,6 +291,9 @@ let currentMonthlyRaw = monthlyJson as unknown as FactPriceMonthly[];
 /** 当前生效的 PSI 销量源行与别名（重导出数据包用；与 factSalesWeekly 同步置换） */
 let currentSalesRaw: SalesSourceRow[] = [];
 let currentSalesAliases: Record<string, string> = {};
+/** 当前生效包的版本与原表模式 offers 原样行（重导出用：v3 源导出仍是 v3） */
+let currentPackVersion: number = 0;
+let currentOffersRaw: OfferSourceRow[] = [];
 
 const replaceInPlace = <T,>(target: T[], next: T[]): void => {
   if (target === next) return; // 同引用自换（buildDataPack 活引用 → apply 回自己）= 无操作
@@ -262,16 +306,103 @@ const rebuildFxIndex = (): void => {
   for (const f of [...dimFx].sort((a, b) => (a.month_id < b.month_id ? -1 : 1))) latestFxByCurrency.set(f.currency, f.per_usd);
 };
 
+/** 事实行数组 → 列式包 gzip+base64（encodeFactPack 与 decodePack 严格对称：
+ *  列存本币价（rrp_local/price_local）、fx 正数、五字典去重长文本） */
+function encodeFactPackB64(rows: FactPriceWeekly[]): string {
+  const weeks = [...new Set(rows.map((r) => r.week_id))].sort();
+  const skus = [...new Set(rows.map((r) => r.sku_id))].sort();
+  const channels = [...new Set(rows.map((r) => r.channel_id))].sort();
+  const weekIdx = new Map(weeks.map((w, i) => [w, i] as const));
+  const skuIdx = new Map(skus.map((s, i) => [s, i] as const));
+  const chIdx = new Map(channels.map((c, i) => [c, i] as const));
+  const dictArrs: { url: string[]; shot: string[]; inst: (string | null)[]; promo: (string | null)[]; seller: string[] } = { url: [], shot: [], inst: [], promo: [], seller: [] };
+  const dictPos: Record<string, Map<string, number>> = { url: new Map(), shot: new Map(), inst: new Map(), promo: new Map(), seller: new Map() };
+  const didx = (kind: keyof typeof dictArrs, val: string | null): number => {
+    const pos = dictPos[kind];
+    const key = val ?? '\u0000null';
+    const found = pos.get(key);
+    if (found != null) return found;
+    const i = dictArrs[kind].length;
+    (dictArrs[kind] as (string | null)[]).push(val);
+    pos.set(key, i);
+    return i;
+  };
+  const cols: FactPack['cols'] = { w: [], s: [], h: [], rrp: [], p: [], fx: [], dd: [], da: [], b: [], inst: [], promo: [], url: [], shot: [], seller: [], t: [] };
+  for (const r of rows) {
+    cols.w.push(weekIdx.get(r.week_id) ?? 0);
+    cols.s.push(skuIdx.get(r.sku_id) ?? 0);
+    cols.h.push(chIdx.get(r.channel_id) ?? 0);
+    cols.rrp.push(r.rrp_local);
+    cols.p.push(r.price_local);
+    cols.fx.push(typeof r.fx === 'number' && Number.isFinite(r.fx) && r.fx > 0 ? r.fx : 1);
+    cols.dd.push(r.discount_display);
+    cols.da.push(r.discount_actual);
+    cols.b.push(r.bundle ? 1 : 0);
+    cols.inst.push(didx('inst', r.installment ?? null));
+    cols.promo.push(didx('promo', r.promo_text ?? null));
+    cols.url.push(didx('url', r.url || ''));
+    cols.shot.push(didx('shot', r.screenshot || ''));
+    cols.seller.push(didx('seller', r.seller || '—'));
+    cols.t.push(r.crawled_at || '');
+  }
+  const pack = { v: 1, weeks, skus, channels, dict: dictArrs, cols };
+  const gz = gzipSync(strToU8(JSON.stringify(pack)), { level: 6 });
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < gz.length; i += CHUNK) {
+    bin += String.fromCharCode(...gz.subarray(i, Math.min(i + CHUNK, gz.length)));
+  }
+  return btoa(bin);
+}
+
 /** 校验并应用数据包：全部置换原位完成（导出引用不变），任一步失败即整体放弃
  *  （先解码校验、后提交），内置数据不受污染。月度仍按 ZA PASS 口径过滤。
  *  v2 追加：sales（PSI 源行）在维表置换后归一解析进 factSalesWeekly（型号解析
  *  依赖新 dimProduct），未匹配/跳过行数进 meta 供诊断；成功后广播
- *  CONFIG_CHANGED_EVENT 让下游缓存（销量/现价索引等）整包失效。 */
+ *  CONFIG_CHANGED_EVENT 让下游缓存（销量/现价索引等）整包失效。
+ *  v3（原表模式）：offers 原样行 → offerIngest 归一派生（维表/事实/系列/分档/
+ *  渠道/汇率全部在应用内构建；配置表五页签读入参与派生）→ 编码成规范化包走
+ *  同一应用管线。 */
 export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['counts'] } | { ok: false; error: string } {
   try {
-    const p = pack as AnyPricelensDataPack | null;
-    if (!p || typeof p !== 'object') return { ok: false, error: '不是有效的数据包文件' };
-    if (p.kind !== 'pricelens-data-pack' || (p.v !== 1 && p.v !== 2)) return { ok: false, error: '数据包类型或版本不匹配（需要 pricelens-data-pack v1/v2）' };
+    const p0 = pack as AnyPricelensDataPack | null;
+    if (!p0 || typeof p0 !== 'object') return { ok: false, error: '不是有效的数据包文件' };
+    if (p0.kind !== 'pricelens-data-pack' || (p0.v !== 1 && p0.v !== 2 && p0.v !== 3)) return { ok: false, error: '数据包类型或版本不匹配（需要 pricelens-data-pack v1/v2/v3）' };
+
+    // v3 原表模式：先归一派生成规范化包，再走统一应用管线
+    let offersRows = 0;
+    let offersDiag: OfferIngestDiag | null = null;
+    let p: PricelensDataPack | LegacyPricelensDataPack = p0 as PricelensDataPack | LegacyPricelensDataPack;
+    if (p0.v === 3) {
+      const rawPack = p0 as RawPricelensDataPack;
+      const offers = Array.isArray(rawPack.offers) ? rawPack.offers : [];
+      if (offers.length === 0) return { ok: false, error: '原表模式数据包 offers 段为空（至少需要 1 行采集明细）' };
+      if (!offers.every((r) => r != null && typeof r === 'object' && !Array.isArray(r))) {
+        return { ok: false, error: 'offers 必须是对象数组（每行一条采集明细）' };
+      }
+      const ctx: OfferIngestCtx = {
+        seriesRules: readSeriesRules(),
+        modelAliasRows: readModelAliasRows(),
+        tierLadders: readTierLadders(),
+        promoRows: readPromoRows(),
+        benchmarkRows: readBenchmarkMatrix(),
+        regionBase: builtinRegionBase,
+      };
+      const built = buildFromOffers(offers, ctx);
+      offersRows = offers.length;
+      offersDiag = built.diag;
+      p = {
+        kind: 'pricelens-data-pack',
+        v: 2,
+        generatedAt: typeof rawPack.generatedAt === 'string' ? rawPack.generatedAt : '',
+        dims: built.dims,
+        factPackB64: encodeFactPackB64(built.factRows),
+        monthly: Array.isArray(rawPack.monthly) ? rawPack.monthly : [],
+        sales: Array.isArray(rawPack.sales) ? rawPack.sales : [],
+        salesProductAliases: rawPack.salesProductAliases && typeof rawPack.salesProductAliases === 'object' ? rawPack.salesProductAliases : {},
+      };
+    }
+
     const dims = p.dims;
     if (!dims || typeof dims !== 'object') return { ok: false, error: '数据包缺少维表' };
     const required = { region: dims.region, product: dims.product, channel: dims.channel, time: dims.time, fx: dims.fx, promo: dims.promo, benchmark: dims.benchmark } as Record<string, unknown>;
@@ -322,6 +453,8 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     currentMonthlyRaw = p.monthly;
     currentSalesRaw = sales;
     currentSalesAliases = salesAliases;
+    currentPackVersion = p0.v;
+    currentOffersRaw = p0.v === 3 ? (p0 as RawPricelensDataPack).offers : [];
     rebuildFxIndex();
     const counts: DataPackMeta['counts'] = {
       factWeekly: factPriceWeekly.length,
@@ -334,11 +467,14 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     };
     dataMetaState = {
       source: 'imported',
-      generatedAt: typeof p.generatedAt === 'string' ? p.generatedAt : null,
+      generatedAt: typeof p.generatedAt === 'string' && p.generatedAt ? p.generatedAt : null,
       appliedAt: new Date().toISOString(),
+      packVersion: p0.v,
       counts,
       salesUnmatched: resolvedSales.unmatched,
       salesSkipped: resolvedSales.skipped,
+      offersRows,
+      offersDiag,
     };
     // 下游模块级缓存（量价 volCache、树现价索引等）整包失效——与配置页保存同通道
     if (typeof window !== 'undefined') window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
@@ -348,8 +484,21 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
   }
 }
 
-/** 把当前内存态序列化为数据包（维表取活跃引用、事实包/月度/销量源行取当前生效原文）。 */
-export function buildDataPack(): PricelensDataPack {
+/** 把当前内存态序列化为数据包（维表取活跃引用、事实包/月度/销量源行取当前生效
+ *  原文）。v3 原表模式源导出仍是 v3（offers 原样行原样带出，重导出不退化为规范化
+ *  包——重新导入时配置表的新值能重新参与派生）。 */
+export function buildDataPack(): PricelensDataPack | RawPricelensDataPack {
+  if (currentPackVersion === 3) {
+    return {
+      kind: 'pricelens-data-pack',
+      v: 3,
+      generatedAt: new Date().toISOString(),
+      offers: currentOffersRaw,
+      sales: currentSalesRaw,
+      salesProductAliases: currentSalesAliases,
+      monthly: currentMonthlyRaw,
+    };
+  }
   return {
     kind: 'pricelens-data-pack',
     v: 2,

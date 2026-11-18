@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { canEditConfig } from '../access/role';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
+import { readBenchmarkMatrix } from './deriveConfig';
 import { dimBenchmark, dimProduct } from '../data';
 import type { DimBenchmark } from '../dataModel/types';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
@@ -68,7 +69,11 @@ export function getEffectiveBenchmark(): DimBenchmark[] {
   }
   // 矩阵行剔除被人工覆盖的组，再拼接人工行；首见去重——防御历史快照/潜在维表
   // 重复行（2026-11-10 曾因 >=N 档位解析 bug 产出重复行，见 ingest 侧修复）
-  const rowsRaw: DimBenchmark[] = dimBenchmark.filter((r) => {
+  // 2026-11-18 配置表化：对标矩阵页签有行 = 整体替换数据层矩阵（原表模式 v3 包
+  // 无内置矩阵时它就是唯一矩阵源；人工层「按组覆盖」语义不受影响）
+  const matrixConfig = readBenchmarkMatrix();
+  const matrixBase: DimBenchmark[] = matrixConfig ?? dimBenchmark;
+  const rowsRaw: DimBenchmark[] = matrixBase.filter((r) => {
     const k = `${r.country_code}|${r.own_model_id}|${(r.own_romram ?? '').replace(/\s+/g, '')}`;
     return !manualGroups.has(k);
   });

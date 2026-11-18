@@ -19,6 +19,18 @@ export const LPL = {
   cfgAnomalyMarks: 'LPL3.config.anomalyMarks',
   /** 国家采集口径（来源、粒度、平台、分期期数与买断规则） */
   cfgMarketRules: 'LPL3.config.marketRules',
+  /** 系列归组规则（2026-11-18 配置表化：原表没有、后加的派生规则走配置导入；
+   *  行 = { brand, pattern, series }，pattern 前缀匹配、re: 开头为正则；
+   *  空表 = 用内置默认（offerSeries.ts port 自 scripts 管线），同键覆盖内置 */
+  cfgSeriesRules: 'LPL3.config.seriesRules',
+  /** 型号别名（品牌|原始型号 → 目标型号；价格侧型号解析与 PSI 销量解析共用） */
+  cfgModelAliases: 'LPL3.config.modelAliases',
+  /** 对标矩阵层（有行 = 整体替换数据层 dimBenchmark 矩阵；人工层覆盖语义不变） */
+  cfgBenchmarkMatrix: 'LPL3.config.benchmarkMatrix',
+  /** 产业价格分档阶梯（产业 → 价格点数组；空表 = 内置 TIER_LADDERS） */
+  cfgTierLadders: 'LPL3.config.tierLadders',
+  /** 大促档期（国家 × 促销 × 起止 × 深浅 × 平台；空表 = 无大促带） */
+  cfgPromoRows: 'LPL3.config.promoRows',
   /** 最近使用的主分析组合（第一百一十七轮，选择产品浮窗快捷 chips；上限 5 组） */
   uiMainCombos: 'LPL3.ui.mainCombos',
   /** 量价参考卡事件类型库（浏览器级长期配置：内置类型颜色覆写 + 自定义类型）。

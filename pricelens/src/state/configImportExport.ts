@@ -17,8 +17,10 @@
 import { APP_CHANNEL, type AppChannel } from '../appChannel';
 import { canEditConfig } from '../access/role';
 import { ANOMALY_CUSTOM_MAX, ANOMALY_CUSTOM_MIN, type AnomalyMark } from '../dataModel/anomaly';
-import type { DimBenchmark } from '../dataModel/types';
+import type { DimBenchmark, DimPromo } from '../dataModel/types';
 import type { FinancingTerm } from '../dataModel/marketProfile';
+import type { SeriesRule } from '../dataModel/offerSeries';
+import type { OfferAliasRow } from '../dataModel/offerIngest';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 
 export const CONFIG_SNAPSHOT_SCHEMA_VERSION = 1;
@@ -45,6 +47,17 @@ export interface ConfigSnapshotKeys {
   marketRules?: MarketDataRuleConfig[] | null;
   /** 汇率只读展示的历史键（LPL3.config.fx）：单值（旧口径）或 币种 → 汇率 表 */
   fx: Record<string, number> | number | null;
+  // —— 2026-11-18 配置表化五键：原表没有、后加的派生规则（null = 页签缺省 = 恢复系统默认） ——
+  /** 系列归组规则（品牌 × 型号规则 → 系列名；规则=前缀，re: 开头=正则；空 = 内置默认） */
+  seriesRules?: SeriesRule[] | null;
+  /** 型号别名（品牌 × 原始型号 → 目标型号；价格侧与 PSI 销量侧共用；空 = 仅内置） */
+  modelAliases?: OfferAliasRow[] | null;
+  /** 对标矩阵层（有行 = 整体替换默认矩阵层；人工层不受影响） */
+  benchmarkMatrix?: DimBenchmark[] | null;
+  /** 产业价格分档阶梯（产业 → USD 价格点数组；空 = 内置 TIER_LADDERS） */
+  tierLadders?: Record<string, number[]> | null;
+  /** 大促档期（空 = 无大促带） */
+  promoRows?: DimPromo[] | null;
 }
 
 /** 单一 JSON 快照（推荐扩展名 .pricelens-config.json） */
@@ -75,6 +88,11 @@ export interface ImportPreviewSummary {
   anomalyMarkCount: number;
   fxIncluded: boolean;
   marketRuleCount: number;
+  seriesRuleCount: number;
+  modelAliasCount: number;
+  benchmarkMatrixCount: number;
+  tierLadderCount: number;
+  promoRowCount: number;
 }
 
 export interface ImportApplyResult {
@@ -121,6 +139,11 @@ export function exportConfigSnapshot(): ConfigSnapshotV1 {
       anomalyMarks: (readRaw(LPL.cfgAnomalyMarks) as AnomalyMark[] | null) ?? null,
       marketRules: (readRaw(LPL.cfgMarketRules) as MarketDataRuleConfig[] | null) ?? null,
       fx: (readRaw(LPL.cfgFx) as ConfigSnapshotKeys['fx']) ?? null,
+      seriesRules: (readRaw(LPL.cfgSeriesRules) as SeriesRule[] | null) ?? null,
+      modelAliases: (readRaw(LPL.cfgModelAliases) as OfferAliasRow[] | null) ?? null,
+      benchmarkMatrix: (readRaw(LPL.cfgBenchmarkMatrix) as DimBenchmark[] | null) ?? null,
+      tierLadders: (readRaw(LPL.cfgTierLadders) as Record<string, number[]> | null) ?? null,
+      promoRows: (readRaw(LPL.cfgPromoRows) as DimPromo[] | null) ?? null,
     },
   };
 }
@@ -304,6 +327,110 @@ function validateMarketRules(raw: unknown, out: ConfigSnapshotKeys): string | nu
   return null;
 }
 
+function validateSeriesRules(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  if (raw == null) {
+    out.seriesRules = null;
+    return null;
+  }
+  if (!Array.isArray(raw)) return 'seriesRules（系列规则）必须是数组';
+  for (const [i, r] of raw.entries()) {
+    if (!isPlainObject(r)) return `seriesRules（系列规则）第 ${i + 1} 行不是对象`;
+    if (!isNonEmptyString(r.brand) || !isNonEmptyString(r.pattern) || !isNonEmptyString(r.series)) {
+      return `seriesRules（系列规则）第 ${i + 1} 行缺少品牌/规则/系列名`;
+    }
+    if (r.pattern.toLowerCase().startsWith('re:')) {
+      try {
+        // eslint-disable-next-line no-new
+        new RegExp(r.pattern.slice(3));
+      } catch {
+        return `seriesRules（系列规则）第 ${i + 1} 行正则无效：${r.pattern}`;
+      }
+    }
+  }
+  out.seriesRules = raw as SeriesRule[];
+  return null;
+}
+
+function validateModelAliases(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  if (raw == null) {
+    out.modelAliases = null;
+    return null;
+  }
+  if (!Array.isArray(raw)) return 'modelAliases（型号别名）必须是数组';
+  for (const [i, r] of raw.entries()) {
+    if (!isPlainObject(r)) return `modelAliases（型号别名）第 ${i + 1} 行不是对象`;
+    if (!isNonEmptyString(r.brand) || !isNonEmptyString(r.from) || !isNonEmptyString(r.to)) {
+      return `modelAliases（型号别名）第 ${i + 1} 行缺少品牌/原始型号/目标型号`;
+    }
+  }
+  out.modelAliases = raw as OfferAliasRow[];
+  return null;
+}
+
+function validateBenchmarkMatrix(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  if (raw == null) {
+    out.benchmarkMatrix = null;
+    return null;
+  }
+  if (!Array.isArray(raw)) return 'benchmarkMatrix（对标矩阵）必须是数组';
+  for (const [i, r] of raw.entries()) {
+    if (!isPlainObject(r)) return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行不是对象`;
+    if (!isNonEmptyString(r.own_model_id) || !isNonEmptyString(r.competitor_sku_id)) {
+      return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行缺少我司/竞品型号 id`;
+    }
+    if (r.country_code != null && typeof r.country_code !== 'string') return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行国家码类型不对`;
+    if (r.own_romram != null && typeof r.own_romram !== 'string') return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行配置类型不对`;
+    if (typeof r.sort !== 'number' || !Number.isFinite(r.sort)) return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行次序（sort）不是数字`;
+  }
+  out.benchmarkMatrix = raw as DimBenchmark[];
+  return null;
+}
+
+function validateTierLadders(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  if (raw == null) {
+    out.tierLadders = null;
+    return null;
+  }
+  if (!isPlainObject(raw)) return 'tierLadders（分档阶梯）必须是 产业 → 价格点数组 对象';
+  for (const [ind, value] of Object.entries(raw)) {
+    if (!ind) return 'tierLadders（分档阶梯）存在空产业';
+    if (!Array.isArray(value) || value.length === 0 || value.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v <= 0)) {
+      return `tierLadders（分档阶梯）${ind} 必须是正数价格点数组`;
+    }
+    const sorted = [...(value as number[])].sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i] === sorted[i - 1]) return `tierLadders（分档阶梯）${ind} 存在重复价格点`;
+    }
+  }
+  out.tierLadders = raw as Record<string, number[]>;
+  return null;
+}
+
+function validatePromoRows(raw: unknown, out: ConfigSnapshotKeys): string | null {
+  if (raw == null) {
+    out.promoRows = null;
+    return null;
+  }
+  if (!Array.isArray(raw)) return 'promoRows（大促档期）必须是数组';
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  for (const [i, r] of raw.entries()) {
+    if (!isPlainObject(r)) return `promoRows（大促档期）第 ${i + 1} 行不是对象`;
+    if (!isNonEmptyString(r.country_code) || !isNonEmptyString(r.promo_name)) {
+      return `promoRows（大促档期）第 ${i + 1} 行缺少国家码/促销名`;
+    }
+    if (!isNonEmptyString(r.start_date) || !dateRe.test(r.start_date) || !isNonEmptyString(r.end_date) || !dateRe.test(r.end_date)) {
+      return `promoRows（大促档期）第 ${i + 1} 行开始/结束日期必须是 YYYY-MM-DD`;
+    }
+    if (r.end_date < r.start_date) return `promoRows（大促档期）第 ${i + 1} 行结束日期早于开始日期`;
+    if (r.depth_hint != null && r.depth_hint !== '浅' && r.depth_hint !== '中' && r.depth_hint !== '深') {
+      return `promoRows（大促档期）第 ${i + 1} 行深浅只允许 浅/中/深`;
+    }
+    if (r.platforms != null && !Array.isArray(r.platforms)) return `promoRows（大促档期）第 ${i + 1} 行平台必须是字符串数组`;
+  }
+  out.promoRows = raw as DimPromo[];
+  return null;
+}
+
 /** 全量校验导入内容：通过返回规整后的快照；失败返回友好错误（不写任何键） */
 export function validateImportPayload(raw: unknown): ImportValidationResult {
   if (!isPlainObject(raw)) return invalid('文件内容不是 JSON 对象');
@@ -315,13 +442,15 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
   if (!isPlainObject(raw.keys)) return invalid('keys（配置内容）缺失或不是对象');
 
   const keys = raw.keys;
-  const known = ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks', 'marketRules', 'fx'];
+  const known = ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks', 'marketRules', 'fx',
+    'seriesRules', 'modelAliases', 'benchmarkMatrix', 'tierLadders', 'promoRows'];
   for (const k of Object.keys(keys)) {
     if (!known.includes(k)) return invalid(`keys 含未知配置项 ${k}（本版本不支持，已拒绝整份导入）`);
   }
 
   const out: ConfigSnapshotKeys = {
     benchmark: null, prevGen: null, defaultShop: null, anomalyRule: null, anomalyMarks: null, marketRules: null, fx: null,
+    seriesRules: null, modelAliases: null, benchmarkMatrix: null, tierLadders: null, promoRows: null,
   };
   for (const required of ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks'] as const) {
     if (!Object.prototype.hasOwnProperty.call(keys, required)) {
@@ -337,6 +466,11 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
     () => validateAnomalyMarks(keys.anomalyMarks, out),
     () => validateMarketRules(keys.marketRules, out),
     () => validateFx(keys.fx, out),
+    () => validateSeriesRules(keys.seriesRules, out),
+    () => validateModelAliases(keys.modelAliases, out),
+    () => validateBenchmarkMatrix(keys.benchmarkMatrix, out),
+    () => validateTierLadders(keys.tierLadders, out),
+    () => validatePromoRows(keys.promoRows, out),
   ];
   for (const check of checks) {
     const failure = step(check());
@@ -388,6 +522,11 @@ export function summarizeImportPayload(payload: ConfigSnapshotV1): ImportPreview
     anomalyMarkCount: payload.keys.anomalyMarks?.length ?? 0,
     fxIncluded: payload.keys.fx != null,
     marketRuleCount: payload.keys.marketRules?.length ?? 0,
+    seriesRuleCount: payload.keys.seriesRules?.length ?? 0,
+    modelAliasCount: payload.keys.modelAliases?.length ?? 0,
+    benchmarkMatrixCount: payload.keys.benchmarkMatrix?.length ?? 0,
+    tierLadderCount: payload.keys.tierLadders ? Object.keys(payload.keys.tierLadders).length : 0,
+    promoRowCount: payload.keys.promoRows?.length ?? 0,
   };
 }
 
@@ -410,6 +549,11 @@ export function applyImportPayload(raw: ConfigSnapshotV1): ImportApplyResult {
   writeRaw(LPL.cfgAnomalyMarks, keys.anomalyMarks);
   writeRaw(LPL.cfgMarketRules, keys.marketRules);
   writeRaw(LPL.cfgFx, keys.fx);
+  writeRaw(LPL.cfgSeriesRules, keys.seriesRules);
+  writeRaw(LPL.cfgModelAliases, keys.modelAliases);
+  writeRaw(LPL.cfgBenchmarkMatrix, keys.benchmarkMatrix);
+  writeRaw(LPL.cfgTierLadders, keys.tierLadders);
+  writeRaw(LPL.cfgPromoRows, keys.promoRows);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(CONFIG_CHANGED_EVENT));
   }
