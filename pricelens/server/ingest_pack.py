@@ -1388,62 +1388,120 @@ def load_to_sqlite(db_path, raw_pack, built, pack_id, config=None):
               jstr(s.get("periodId")) or None, jnum(s.get("qty"))]
              for ix, s in enumerate(sales)])
         # 匹配小表 + DIM + DWD（全部从派生结果导出，不重复计算）
-        dims = built["dims"]
-        cur.executemany("INSERT OR REPLACE INTO map_model VALUES (?,?,?,?,?,?)",
-                        [[p["model_id"], p["brand"], p["model_name"], 1 if p["is_own"] else 0,
-                          p["series"], p["industry"]] for p in dims["product"]])
-        cur.executemany("INSERT OR REPLACE INTO map_sku VALUES (?,?,?,?,?,?)",
-                        [[p["sku_id"], p["model_id"], slug(p["romram"]),
-                          slug(p["color"]), p["romram"], p["color"]] for p in dims["product"]])
-        # map_spec_split：型号 × 规格原文 → 拆列结果（build 第 7 步收集的匹配样本）
-        cur.executemany("INSERT OR REPLACE INTO map_spec_split VALUES (?,?,?,?,?,?)",
-                        [[mid, spec, parts[0], parts[1], parts[2], parts[3]]
-                         for (mid, spec), parts in (built.get("specSplit") or {}).items()])
-        cur.executemany("INSERT OR REPLACE INTO map_tier VALUES (?,?,?,?)",
-                        [[p["model_id"], p["tier_code"], p["ref_price_usd"],
-                          json.dumps(p["tier_by_country"], ensure_ascii=False)] for p in dims["product"]])
-        cur.executemany("INSERT INTO dim_channel VALUES (?,?,?,?,?,?)",
-                        [[c["channel_id"], c["country_code"], c["platform"], c["store_type"],
-                          c["display_name"], c["shops"]] for c in dims["channel"]])
-        cur.executemany("INSERT INTO dim_time VALUES (?,?,?,?,?)",
-                        [[t["week_id"], t["week_wed_date"], t["month_id"], t["quarter_id"],
-                          t["week_start_date"]] for t in dims["time"]])
-        cur.executemany("INSERT OR REPLACE INTO dim_fx VALUES (?,?,?)",
-                        [[f["currency"], f["month_id"], f["per_usd"]] for f in dims["fx"]])
-        cur.executemany("INSERT OR REPLACE INTO dim_region VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        [[r["country_code"], r.get("region_code"), r.get("region_name"),
-                          r.get("country_name"), 1 if r.get("enabled") else 0, r.get("sort"),
-                          r.get("currency"), json.dumps(r.get("core_platforms") or [], ensure_ascii=False),
-                          r.get("default_platform"),
-                          json.dumps(r.get("default_own_models") or {}, ensure_ascii=False)]
-                         for r in dims["region"]])
-        cur.executemany("INSERT INTO dim_promo VALUES (?,?,?,?,?,?,?,?)",
-                        [[p.get("promo_id"), p["country_code"], p["promo_name"], p["start_date"],
-                          p["end_date"], p.get("depth_hint"),
-                          json.dumps(p.get("platforms"), ensure_ascii=False) if p.get("platforms") is not None else None,
-                          p.get("channel_raw") or ""] for p in dims["promo"]])
-        cur.executemany("INSERT INTO dim_benchmark VALUES (?,?,?,?,?,?,?)",
-                        [[b.get("country_code"), b["own_model_id"], b.get("own_romram") or "",
-                          b["competitor_sku_id"], b.get("sort") or 0, b.get("source") or "matrix",
-                          b.get("note")] for b in dims["benchmark"]])
-        tier = dims["tier"]
-        cur.execute("INSERT INTO dim_tier VALUES (?,?)",
-                    [json.dumps(tier.get("ladders") or {}, ensure_ascii=False),
-                     json.dumps(tier.get("labels") or {}, ensure_ascii=False)])
-        fact = built["factRows"]
-        cur.executemany("INSERT INTO fact_price_weekly VALUES (" + ",".join("?" * 19) + ")",
-                        [[r["week_id"], r["sku_id"], r["country_code"], r["channel_id"], r["seller"],
-                          r["rrp_local"], r["price_local"], r["fx"], r["rrp_usd"], r["price_usd"],
-                          r["discount_display"], r["discount_actual"], 1 if r["bundle"] else 0,
-                          r["installment"], r["promo_text"], r["url"], r["screenshot"],
-                          r["crawled_at"], r["crawl_status"]] for r in fact])
-        now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        cur.execute("INSERT OR REPLACE INTO meta_import VALUES (?,?,?,?,?,?)",
-                    [pack_id, now, "v3-offers", built["diag"]["rowsIn"], built["diag"]["rowsOut"],
-                     json.dumps(built["diag"], ensure_ascii=False)])
+        _load_dims_and_facts(cur, built["dims"], built["factRows"], pack_id,
+                             spec_split=built.get("specSplit") or {}, kind="v3-offers",
+                             diag=built.get("diag"))
         conn.commit()
     finally:
         conn.close()
+
+
+def _load_dims_and_facts(cur, dims, fact_rows, pack_id, spec_split=None, kind="pack", diag=None):
+    """dims + fact_rows + 匹配小表落库（v3 派生结果与 v1/v2 包共用段）"""
+    cur.executemany("INSERT OR REPLACE INTO map_model VALUES (?,?,?,?,?,?)",
+                    [[p["model_id"], p["brand"], p["model_name"], 1 if p.get("is_own") else 0,
+                      p.get("series"), p.get("industry")] for p in dims["product"]])
+    cur.executemany("INSERT OR REPLACE INTO map_sku VALUES (?,?,?,?,?,?)",
+                    [[p["sku_id"], p.get("model_id"), slug(p.get("romram")),
+                      slug(p.get("color")), p.get("romram"), p.get("color")] for p in dims["product"]])
+    # map_spec_split：型号 × 规格原文 → 拆列结果（v3 走 build 收集样本；v1/v2 无原表
+    # 中间行，按 SKU 维度等价登记——键挂接语义一致）
+    split_rows = [[mid, spec, parts[0], parts[1], parts[2], parts[3]]
+                  for (mid, spec), parts in (spec_split or {}).items()] or [
+        [p.get("model_id"), p.get("romram") or "—", p.get("romram") or "—",
+         slug(p.get("romram")) or "std", p.get("color") or "—", slug(p.get("color")) or "—"]
+        for p in dims["product"]]
+    cur.executemany("INSERT OR REPLACE INTO map_spec_split VALUES (?,?,?,?,?,?)", split_rows)
+    cur.executemany("INSERT OR REPLACE INTO map_tier VALUES (?,?,?,?)",
+                    [[p["model_id"], p.get("tier_code", "—"), p.get("ref_price_usd"),
+                      json.dumps(p.get("tier_by_country") or {}, ensure_ascii=False)] for p in dims["product"]])
+    cur.executemany("INSERT INTO dim_channel VALUES (?,?,?,?,?,?)",
+                    [[c["channel_id"], c["country_code"], c["platform"], c["store_type"],
+                      c["display_name"], c.get("shops")] for c in dims["channel"]])
+    cur.executemany("INSERT INTO dim_time VALUES (?,?,?,?,?)",
+                    [[t["week_id"], t["week_wed_date"], t["month_id"], t["quarter_id"],
+                      t["week_start_date"]] for t in dims["time"]])
+    cur.executemany("INSERT OR REPLACE INTO dim_fx VALUES (?,?,?)",
+                    [[f["currency"], f["month_id"], f["per_usd"]] for f in dims["fx"]])
+    cur.executemany("INSERT OR REPLACE INTO dim_region VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    [[r["country_code"], r.get("region_code"), r.get("region_name"),
+                      r.get("country_name"), 1 if r.get("enabled") else 0, r.get("sort"),
+                      r.get("currency"), json.dumps(r.get("core_platforms") or [], ensure_ascii=False),
+                      r.get("default_platform"),
+                      json.dumps(r.get("default_own_models") or {}, ensure_ascii=False)]
+                     for r in dims["region"]])
+    cur.executemany("INSERT INTO dim_promo VALUES (?,?,?,?,?,?,?,?)",
+                    [[p.get("promo_id"), p["country_code"], p["promo_name"], p["start_date"],
+                      p["end_date"], p.get("depth_hint"),
+                      json.dumps(p.get("platforms"), ensure_ascii=False) if p.get("platforms") is not None else None,
+                      p.get("channel_raw") or ""] for p in dims.get("promo") or []])
+    cur.executemany("INSERT INTO dim_benchmark VALUES (?,?,?,?,?,?,?)",
+                    [[b.get("country_code"), b["own_model_id"], b.get("own_romram") or "",
+                      b["competitor_sku_id"], b.get("sort") or 0, b.get("source") or "matrix",
+                      b.get("note")] for b in dims.get("benchmark") or []])
+    tier = dims.get("tier") or {}
+    cur.execute("INSERT INTO dim_tier VALUES (?,?)",
+                [json.dumps(tier.get("ladders") or {}, ensure_ascii=False),
+                 json.dumps(tier.get("labels") or {}, ensure_ascii=False)])
+    cur.executemany("INSERT INTO fact_price_weekly VALUES (" + ",".join("?" * 19) + ")",
+                    [[r["week_id"], r["sku_id"], r["country_code"], r["channel_id"], r["seller"],
+                      r["rrp_local"], r["price_local"], r["fx"], r.get("rrp_usd"), r.get("price_usd"),
+                      r["discount_display"], r["discount_actual"], 1 if r.get("bundle") else 0,
+                      r["installment"], r["promo_text"], r["url"], r["screenshot"],
+                      r["crawled_at"], r.get("crawl_status", "ok")] for r in fact_rows])
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    cur.execute("INSERT OR REPLACE INTO meta_import VALUES (?,?,?,?,?,?)",
+                [pack_id, now, kind, diag.get("rowsIn") if diag else len(fact_rows),
+                 len(fact_rows), json.dumps(diag or {"rowsOut": len(fact_rows)}, ensure_ascii=False)])
+
+
+def load_v2_pack_to_sqlite(db_path, v2_pack, pack_id):
+    """v1/v2 规范化包落 SQLite（2026-11-18 补「把所有数据都更新上去」）：解码
+    factPackB64 列式 → 展开事实行，dims 原样入库；ODS offer 层无原表（v3 主链
+    才有），sales 段（如有）照落 ods_psi_sales。"""
+    blob = base64.b64decode(v2_pack["factPackB64"])
+    pack = json.loads(gzip.decompress(blob).decode("utf-8"))
+    weeks, skus, channels = pack["weeks"], pack["skus"], pack["channels"]
+    d = pack["dict"]
+    cols = pack["cols"]
+    n = len(cols["w"])
+    fact_rows = []
+    for i in range(n):
+        cid = channels[cols["h"][i]]
+        fact_rows.append({
+            "week_id": weeks[cols["w"][i]], "sku_id": skus[cols["s"][i]],
+            "country_code": cid.split(":")[0], "channel_id": cid,
+            "seller": d["seller"][cols["seller"][i]],
+            "rrp_local": cols["rrp"][i], "price_local": cols["p"][i], "fx": cols["fx"][i],
+            "rrp_usd": jr2(cols["rrp"][i] / cols["fx"][i]) if cols["rrp"][i] is not None else None,
+            "price_usd": jr2(cols["p"][i] / cols["fx"][i]) if cols["p"][i] is not None else None,
+            "discount_display": cols["dd"][i], "discount_actual": cols["da"][i],
+            "bundle": bool(cols["b"][i]),
+            "installment": d["inst"][cols["inst"][i]], "promo_text": d["promo"][cols["promo"][i]],
+            "url": d["url"][cols["url"][i]], "screenshot": d["shot"][cols["shot"][i]],
+            "crawled_at": cols["t"][i], "crawl_status": "ok",
+        })
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(SCHEMA)
+        cur = conn.cursor()
+        for table in ("ods_offer_raw", "ods_psi_sales", "map_model", "map_sku", "map_spec_split",
+                      "map_tier", "map_alias", "dim_channel", "dim_time", "dim_fx", "dim_region",
+                      "dim_promo", "dim_benchmark", "dim_tier", "fact_price_weekly"):
+            cur.execute(f"DELETE FROM {table}")
+        sales = v2_pack.get("sales") or []
+        cur.executemany(
+            "INSERT INTO ods_psi_sales VALUES (?,?,?,?,?,?,?,?)",
+            [[pack_id, ix, jstr(s.get("country")) or None, jstr(s.get("product")) or None,
+              jstr(s.get("category1")) or None, jstr(s.get("category2")) or None,
+              jstr(s.get("periodId")) or None, jnum(s.get("qty"))]
+             for ix, s in enumerate(sales)])
+        _load_dims_and_facts(cur, v2_pack["dims"], fact_rows, pack_id, kind="v1v2-pack")
+        conn.commit()
+    finally:
+        conn.close()
+    return len(fact_rows)
 
 
 def _sqlite_scalar(v):

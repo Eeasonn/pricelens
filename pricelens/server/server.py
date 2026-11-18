@@ -114,8 +114,12 @@ def do_ingest(pack):
         v2_pack, diag, pack_id = ingest_pack.ingest_v3_pack(pack, config, REGION_BASE, DB_PATH)
         note = f"pack_id={pack_id}"
     else:
-        v2_pack = pack  # v1/v2 已是编码态：透传存档（SQLite 不落库，ODS 只在 v3 主链）
-        note = "v2 透传"
+        # v1/v2 已是编码态：透传存档 + SQLite 落库（解码列式展开事实与维表——
+        # 「把所有数据都更新上去」的全量承载；ODS offer 原样层仅 v3 主链有）
+        rows = ingest_pack.load_v2_pack_to_sqlite(DB_PATH, pack, datetime.now().strftime("%Y%m%d-%H%M%S"))
+        v2_pack = pack
+        diag = {"rowsOut": rows, "rowsIn": rows}
+        note = f"v1v2 落库 {rows} 行"
     _write_json(LAST_IMPORT_PATH, pack)
     _write_json(LATEST_PACK_PATH, v2_pack)
     return v2_pack, diag, note
