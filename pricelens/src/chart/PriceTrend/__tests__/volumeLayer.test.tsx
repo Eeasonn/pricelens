@@ -496,10 +496,12 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(margin.style.left).toBe('0px');
     expect(margin.parentElement).toBe(main);
     expect(main.style.transform).toBe('translateY(-100%)');
-    expect(volume.style.transform).toBe('translateX(-50%)');
+    // 2026-11-18 Eason「销量卡也要左侧或右侧对齐」：主卡在场 = 贴线边对齐
+    //（side right = 卡左缘贴 edgeX，无 transform；独立路径仍居中锚列）
+    expect(volume.style.transform).toBe('');
   });
 
-  it('三卡同翻：主卡翻到左侧 = 销毛卡一起翻；销量卡不再跟翻（恒居中锚列）；垂直位置不变', async () => {
+  it('三卡同翻：主卡翻到左侧 = 销毛卡一起翻；销量卡跟翻（右缘贴 edgeX）；垂直位置不变', async () => {
     const { container } = render(<Chart {...props} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     const layer = layerOf(container);
@@ -517,9 +519,7 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(margin.style.bottom).toBe('calc(100% + 8px)');
     expect(margin.style.right).toBe('0px');
     expect(main.style.transform).toBe('translate(-100%, -100%)');
-    // 2026-11-17 M2：销量卡恒 translateX(-50%) 居中锚列，多我司候选卡宽自适应
-    // 不再按估算宽翻侧（旧 translateX(-100%) 跟翻退役）
-    expect(volume.style.transform).toBe('translateX(-50%)');
+    expect(volume.style.transform).toBe('translateX(-100%)');
     // 垂直：销量卡贴量带顶（销毛卡叠放锚已由 bottom 断言覆盖）
     expect(px(volume.style.top)).toBe(px(layer.style.top) + 4);
   });
@@ -563,8 +563,8 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(margin.parentElement).toBe(main);
     expect(margin.style.bottom).toBe('calc(100% + 8px)');
     expect(margin.style.right).toBe('0px');
-    // 销量卡：不 portal（贴量带顶、图内不出界），恒居中锚列
-    expect(volume.style.transform).toBe('translateX(-50%)');
+    // 销量卡：不 portal（贴量带顶、图内不出界）；跟随主卡左翻（右缘贴 edgeX）
+    expect(volume.style.transform).toBe('translateX(-100%)');
     expect(px(volume.style.top)).toBe(px(layer.style.top) + 4);
   });
 });

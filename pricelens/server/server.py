@@ -26,6 +26,7 @@ API（前端 vite dev proxy 与生产同源相对路径共用）：
   POST /api/datapack/reset  → 清空服务端数据（回到 web 前端内置兜底数据）
 静态：GET / 与 /assets… → web/ 下文件。
 """
+import csv
 import json
 import os
 import re
@@ -58,6 +59,102 @@ DB_PATH = os.path.join(DATA_DIR, "pricelens.db")
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 LAST_IMPORT_PATH = os.path.join(DATA_DIR, "last-import.json")
 LATEST_PACK_PATH = os.path.join(DATA_DIR, "latest-pack.json")
+# 数据文件夹（2026-11-18 Eason「后端数据极其简单，统一在一个文件夹承载、可直接
+# 编辑、改完前端就变化」）：offers.csv（街价原表行）+ sales.csv（PSI 销量行）
+# + config.json（配置，嵌套结构保持 JSON）= 唯一数据源。
+# 2026-11-18 晚追加（Eason「json 不方便编辑，改 csv」）：数据文件改 **CSV**——
+# Excel/WPS 双击直接编辑；UTF-8 带 BOM（中文 Excel 打开不乱码）；值全文本由引擎
+# 归一层原样收（jnum/parseDatetime 既有口径，逐字对齐不变）。csv 优先于同名 json
+# （.json 仍兼容读取，拆写恒产 csv 并删旧 json 防双源歧义）。任何 API 请求前检查
+# mtime——文件被编辑（Excel 保存即触发）→ 自动重派生 → 前端轮询 ping 自动刷新。
+OFFERS_PATH = os.path.join(DATA_DIR, "offers.csv")
+SALES_PATH = os.path.join(DATA_DIR, "sales.csv")
+OFFERS_JSON = os.path.join(DATA_DIR, "offers.json")  # 旧形态兼容读取
+SALES_JSON = os.path.join(DATA_DIR, "sales.json")
+BUILD_STAMP = {"mtime": -1.0}  # 进程内上次构建时的源文件最大 mtime
+
+
+def _offers_path():
+    return OFFERS_PATH if os.path.exists(OFFERS_PATH) else (OFFERS_JSON if os.path.exists(OFFERS_JSON) else None)
+
+
+def _sales_path():
+    return SALES_PATH if os.path.exists(SALES_PATH) else (SALES_JSON if os.path.exists(SALES_JSON) else None)
+
+
+def _read_rows(path):
+    """CSV/JSON 统一读为行 dict 数组：CSV 用 utf-8-sig（BOM 自剥）+ DictReader
+    （RFC4180 引号内逗号/换行自动处理），值全字符串——引擎归一层原样收。"""
+    if path is None:
+        return []
+    if path.endswith(".csv"):
+        with open(path, "r", encoding="utf-8-sig", newline="") as f:
+            return [dict(r) for r in csv.DictReader(f)]
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_rows_csv(path, rows):
+    """行数组写 CSV（utf-8-sig BOM：中文 Windows Excel 双击直开不乱码；\r\n 行尾）。
+    表头 = 首行键序（保持列序稳定，编辑器里不跳列）；空数组只写空文件占位。"""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        if rows:
+            headers = list(rows[0].keys())
+            writer.writerow(headers)
+            for r in rows:
+                writer.writerow(["" if r.get(h) is None else r.get(h) for h in headers])
+    os.replace(tmp, path)
+
+
+def _folder_mtime():
+    parts = [CONFIG_PATH, OFFERS_PATH, OFFERS_JSON, SALES_PATH, SALES_JSON]
+    mt = [os.path.getmtime(p) for p in parts if os.path.exists(p)]
+    return max(mt) if mt else -1.0
+
+
+def maybe_rebuild():
+    """源文件被编辑 → 自动重派生（所有 API 请求前调用；mtime 未变 = 零开销）"""
+    mt = _folder_mtime()
+    if mt <= BUILD_STAMP["mtime"]:
+        return
+    with INGEST_LOCK, STATE_LOCK:
+        mt = _folder_mtime()  # 双检（锁内再读一次，防并发竞态）
+        if mt <= BUILD_STAMP["mtime"]:
+            return
+        try:
+            offers_path = _offers_path()
+            if offers_path is None:
+                BUILD_STAMP["mtime"] = mt
+                return
+            offers = _read_rows(offers_path)
+            sales = _read_rows(_sales_path())
+            pack = {
+                "kind": "pricelens-data-pack", "v": 3,
+                "generatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                "offers": offers, "sales": sales, "salesProductAliases": {}, "monthly": [],
+            }
+            config = _read_json(CONFIG_PATH) or {}
+            v2_pack, diag, pack_id = ingest_pack.ingest_v3_pack(pack, config, REGION_BASE, DB_PATH)
+            _write_json(LATEST_PACK_PATH, v2_pack)
+            BUILD_STAMP["mtime"] = mt
+            print(f"[pricelens-server] 数据文件变更已重派生（{diag.get('rowsOut')} 事实行，pack_id={pack_id}）")
+        except Exception:  # noqa: BLE001 —— 编辑坏档时保旧包、报完整栈
+            BUILD_STAMP["mtime"] = mt  # 坏档不无限重试；修好文件后 mtime 再变即重建
+            traceback.print_exc()
+
+
+def _split_folder_files(pack):
+    """v3 上传包拆写为可编辑数据文件（offers.csv/sales.csv，删旧 json 防双源歧义）
+    → 文件夹成唯一源"""
+    if pack.get("v") == 3:
+        _write_rows_csv(OFFERS_PATH, pack.get("offers") or [])
+        _write_rows_csv(SALES_PATH, pack.get("sales") or [])
+        for old in (OFFERS_JSON, SALES_JSON):
+            if os.path.exists(old):
+                os.remove(old)
 
 INGEST_LOCK = threading.Lock()  # 同一时刻只跑一次 ingest（大包同步处理，串行化）
 STATE_LOCK = threading.Lock()
@@ -152,14 +249,16 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- API ----------
     def _api(self, method):
         path = urlparse(self.path).path
+        maybe_rebuild()  # 数据文件被编辑 → 自动重派生（mtime 未变 = 零开销）
         if method == "GET" and path == "/api/ping":
             return self._send_json({"ok": True, "service": "pricelens-server",
+                                    "editableFolder": _offers_path() is not None,
                                     "hasPack": os.path.exists(LATEST_PACK_PATH),
                                     "meta": _pack_meta()})
         if method == "GET" and path == "/api/pack":
             pack = _read_json(LATEST_PACK_PATH)
             if pack is None:
-                return self._send_json({"error": "尚无数据包（先 POST /api/datapack）"}, 404)
+                return self._send_json({"error": "尚无数据包（先 POST /api/datapack 或在 data/ 放 offers.csv）"}, 404)
             body = json.dumps(pack, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -175,14 +274,34 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     if path == "/api/rederive":
                         pack = _read_json(LAST_IMPORT_PATH)
-                        if pack is None:
+                        if pack is None and _offers_path() is None:
                             return self._send_json({"error": "服务端尚无已导入的数据包"}, 400)
+                        if _offers_path() is not None:
+                            offers = _read_rows(_offers_path())
+                            sales = _read_rows(_sales_path())
+                            pack = {"kind": "pricelens-data-pack", "v": 3,
+                                    "generatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                                    "offers": offers, "sales": sales,
+                                    "salesProductAliases": {}, "monthly": []}
                     else:
                         raw = self._read_body()
                         if not raw:
                             return self._send_json({"error": "请求体为空（需要数据包 JSON）"}, 400)
                         pack = json.loads(raw.decode("utf-8"))
+                        if pack.get("v") == 3:
+                            # 文件夹为唯一源：v3 上传拆写为 offers.csv/sales.csv，
+                            # 走同一条文件夹重派生路径（编辑与上传殊途同归）
+                            _split_folder_files(pack)
+                            offers = _read_rows(_offers_path())
+                            sales = _read_rows(_sales_path())
+                            pack = {"kind": "pricelens-data-pack", "v": 3,
+                                    "generatedAt": pack.get("generatedAt")
+                                    or datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                                    "offers": offers, "sales": sales,
+                                    "salesProductAliases": pack.get("salesProductAliases") or {},
+                                    "monthly": pack.get("monthly") or []}
                     v2_pack, diag, note = do_ingest(pack)
+                    BUILD_STAMP["mtime"] = _folder_mtime()  # 上传路径同步推进 stamp，防 maybe_rebuild 重复跑
                     return self._send_json({
                         "ok": True, "note": note, "diag": diag,
                         "meta": _pack_meta(),
@@ -199,26 +318,42 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(config, dict):
                     return self._send_json({"error": "配置必须是 JSON 对象"}, 400)
                 _write_json(CONFIG_PATH, config)
-                # 有已导入原包时自动重派生（配置是派生输入）
+                # 有数据源时自动重派生（配置是派生输入；文件夹源由 maybe_rebuild
+                # 的 mtime 变化在下一次请求触发，此处主动立即跑一次给前端诊断回执）
                 rederived = False
                 diag = None
-                if os.path.exists(LAST_IMPORT_PATH):
+                if _offers_path() is not None:
+                    with INGEST_LOCK:
+                        try:
+                            offers = _read_rows(_offers_path())
+                            sales = _read_rows(_sales_path())
+                            cfg_pack = {"kind": "pricelens-data-pack", "v": 3,
+                                        "generatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                                        "offers": offers, "sales": sales,
+                                        "salesProductAliases": {}, "monthly": []}
+                            _, diag, _ = do_ingest(cfg_pack)
+                            BUILD_STAMP["mtime"] = _folder_mtime()
+                            rederived = True
+                        except Exception:  # noqa: BLE001 —— 配置坏行时保配置、报派生错误
+                            traceback.print_exc()
+                elif os.path.exists(LAST_IMPORT_PATH):
                     pack = _read_json(LAST_IMPORT_PATH)
                     if pack and pack.get("v") == 3:
                         with INGEST_LOCK:
                             try:
                                 _, diag, _ = do_ingest(pack)
                                 rederived = True
-                            except Exception:  # noqa: BLE001 —— 配置坏行时保配置、报派生错误
+                            except Exception:  # noqa: BLE001
                                 traceback.print_exc()
                 return self._send_json({"ok": True, "rederived": rederived, "diag": diag})
             except ValueError as e:
                 return self._send_json({"error": f"配置 JSON 无效：{e}"}, 400)
         if method == "POST" and path == "/api/datapack/reset":
             with INGEST_LOCK, STATE_LOCK:
-                for p in (LAST_IMPORT_PATH, LATEST_PACK_PATH):
+                for p in (LAST_IMPORT_PATH, LATEST_PACK_PATH, OFFERS_PATH, OFFERS_JSON, SALES_PATH, SALES_JSON):
                     if os.path.exists(p):
                         os.remove(p)
+                BUILD_STAMP["mtime"] = _folder_mtime()
                 if os.path.exists(DB_PATH):
                     conn = sqlite3.connect(DB_PATH)
                     try:
@@ -270,13 +405,27 @@ class Handler(BaseHTTPRequestHandler):
         return self._send_json({"error": "POST 只接受 /api/*"}, 404)
 
 
+def _migrate_last_import_to_folder():
+    """一次性迁移：旧 last-import.json（v3）拆写为 offers.csv/sales.csv——
+    数据文件夹成为唯一源后，历史导入的原包不丢"""
+    if _offers_path() is not None or not os.path.exists(LAST_IMPORT_PATH):
+        return
+    pack = _read_json(LAST_IMPORT_PATH)
+    if pack and pack.get("v") == 3:
+        _split_folder_files(pack)
+        print("[pricelens-server] 已把历史导入包拆写为 data/offers.csv + sales.csv（可编辑源）")
+
+
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
+    _migrate_last_import_to_folder()
     addr = ("127.0.0.1", PORT)
     httpd = ThreadingHTTPServer(addr, Handler)
     url = f"http://localhost:{PORT}"
     print(f"[pricelens-server] {url}  web={WEB_DIR}  data={DATA_DIR}")
-    print(f"[pricelens-server] 已导入数据包：{'有' if os.path.exists(LATEST_PACK_PATH) else '无（前端用内置兜底数据）'}")
+    src = "data/ 文件夹（offers.csv + sales.csv + config.json，可直接编辑）" if _offers_path() is not None \
+        else "无（前端用内置兜底数据；把 v3 数据包 JSON 的 offers/sales 段放进 data/ 即可）"
+    print(f"[pricelens-server] 数据源：{src}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

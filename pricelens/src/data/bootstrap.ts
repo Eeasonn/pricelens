@@ -13,7 +13,7 @@
 // ============================================================
 import { applyDataPack } from './index';
 import { clearDataPack, loadDataPack } from './dataPackStore';
-import { detectServiceMode, fetchServerPack } from './serviceMode';
+import { detectServiceMode, fetchServerPack, watchServerPack } from './serviceMode';
 import { LPL } from '../state/lplKeys';
 
 /** 服务模式配置镜像（WP-D）：启动时 GET /api/config → 写入 localStorage 同名键
@@ -63,7 +63,10 @@ export async function applyPersistedDataPack(): Promise<void> {
       const serverPack = await fetchServerPack();
       if (serverPack) {
         const applied = applyDataPack(serverPack);
-        if (applied.ok) return;
+        if (applied.ok) {
+          watchServerPack(); // 数据看门：data/ 文件夹被编辑 → 自动重派生 → 刷新载新包
+          return;
+        }
         console.warn('[PriceLens 数据] 服务器数据包无效，回落本机持久化数据：', applied.error);
       }
     } catch (error) {

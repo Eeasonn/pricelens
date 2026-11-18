@@ -1534,10 +1534,12 @@ export default function Chart(props: ChartProps) {
   // 照常出现（拖选可发现性不丢）；tipBox 预留框模式主卡不入画，提示不受影响
   const marginTipLive = props.margins != null && mainTipShown;
   // 量值小卡（2026-11-05 Eason 看真机）：单行「销量 N 台」，容器与销毛卡同款；垂直贴量带顶。
-  // 2026-11-17 M2 统一锚定：水平恒居中锚列（left = 列中心 + translateX(-50%)）——卡宽随
-  // 内容自适应（多我司候选 ~220px），不再按 VOL_CARD_EST_W 估算宽做翻侧判定（估窄判错
-  // 右溢出）
-  const renderVolCard = (): ReactNode => {
+  // 2026-11-17 M2 统一锚定：水平居中锚列（left = 列中心 + translateX(-50%)）。
+  // 2026-11-18 Eason「销量卡片也要跟上面的卡片一样，保持左侧或右侧对齐」：主卡在
+  // 场时改贴线边对齐——与主卡同 side（右 = 卡左缘贴 edgeX；左 = 卡右缘贴 edgeX，
+  // translateX(-100%)），销量卡与主卡/销毛卡成组同侧；align 缺省（独立路径，该列
+  // 无价主卡不在场）保留居中锚列。
+  const renderVolCard = (align?: { x: number; side: 'left' | 'right' }): ReactNode => {
     if (volHoverIdx == null || !geom) return null;
     const v = effVolumes?.[volHoverIdx] ?? null;
     // 方案 B：候选 ≥2 = 每个候选主品一行（归属色点 + 名称 + 当周销量），柱只画 active
@@ -1545,7 +1547,11 @@ export default function Chart(props: ChartProps) {
       ? volCands.map((c) => ({ key: c.key, text: c.text, color: c.color, v: c.volumes[volHoverIdx] ?? null }))
       : null;
     const x0 = xPxOf(geom, volHoverIdx);
-    const anchorStyle: CSSProperties = { left: x0, transform: 'translateX(-50%)' };
+    const anchorStyle: CSSProperties = align
+      ? align.side === 'left'
+        ? { left: align.x, transform: 'translateX(-100%)' }
+        : { left: align.x }
+      : { left: x0, transform: 'translateX(-50%)' };
     if (!rows) {
       return (
         <div
@@ -3067,7 +3073,7 @@ export default function Chart(props: ChartProps) {
             return (
               <>
                 {costDot}
-                {volHoverIdx != null && renderVolCard()}
+                {volHoverIdx != null && renderVolCard({ x: group.edgeX, side: group.side })}
                 {/* 定位容器：portal 到 body + fixed（整页最上层、任何位置不被图容器/
                     页卡/横滚容器的 overflow 裁剪），left/top/transform（十字锚定 + 翻转）
                     全部上提一层，迷你卡（bottom 锚）与价格卡（relative）在其内堆叠 */}

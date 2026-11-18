@@ -313,12 +313,15 @@ def parse_datetime_cell(v):
             hh = int(g[3]) if len(g) > 3 else 0
             mi = int(g[4]) if len(g) > 4 else 0
             ss = int(g[5]) if len(g) > 5 else 0
-            return datetime(int(g[0]), int(g[1]), int(g[2]), hh, mi, ss)
+            # JS new Date 语义：越界时/分/秒自动进位（99 分 = 1 时 39 分；脏采集
+            # 时间行前端不报错照收）——Python datetime 直构会抛错，改 timedelta
+            # 组合保持逐字对齐
+            return datetime(int(g[0]), int(g[1]), int(g[2])) + timedelta(hours=hh, minutes=mi, seconds=ss)
     # JS new Date(s) 兜底：常见斜杠/紧凑格式
     m = re.match(r"^(\d{4})/(\d{1,2})/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?", s)
     if m:
         g = m.groups()
-        return datetime(int(g[0]), int(g[1]), int(g[2]), int(g[3] or 0), int(g[4] or 0))
+        return datetime(int(g[0]), int(g[1]), int(g[2])) + timedelta(hours=int(g[3] or 0), minutes=int(g[4] or 0))
     try:
         return datetime.fromisoformat(s)
     except ValueError:

@@ -51,3 +51,37 @@ export async function fetchServerPack(): Promise<unknown | null> {
     return null;
   }
 }
+
+/** 服务模式数据看门（2026-11-18 Eason「数据文件编辑完前端就变化」）：轮询
+ *  /api/ping 的 meta.generatedAt——服务器侧 data/ 文件夹（offers.json/sales.json/
+ *  config.json）被编辑后自动重派生、包 generatedAt 变化 → 刷新页面载新包。
+ *  仅可见标签页轮询（后台标签不打扰，切回时下一拍刷新）。 */
+export function watchServerPack(intervalMs = 15000): void {
+  if (typeof window === 'undefined' || serviceModeDetected !== true) return;
+  let lastSeen: string | null = null;
+  const poll = async (): Promise<void> => {
+    if (document.visibilityState !== 'visible') return;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2500);
+      try {
+        const res = await fetch('/api/ping', { signal: controller.signal, cache: 'no-store' });
+        if (!res.ok) return;
+        const info = (await res.json()) as { hasPack?: unknown; meta?: { generatedAt?: string } | null };
+        if (info?.hasPack !== true) return;
+        const gen = info.meta?.generatedAt ?? '';
+        if (lastSeen == null) {
+          lastSeen = gen; // 首拍只建立基线（启动时装载的即当前包）
+          return;
+        }
+        if (gen !== lastSeen) window.location.reload();
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      // 服务器暂不可达：静默，下拍再试
+    }
+  };
+  window.setInterval(poll, intervalMs);
+  void poll();
+}
