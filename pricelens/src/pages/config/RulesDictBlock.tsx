@@ -31,12 +31,15 @@ function SourceTag({ configured, count, fallback }: { configured: boolean; count
 
 const hintStyle = { fontSize: fontSize.caption, color: color.mute, marginBottom: 8 } as const;
 
-/** 通用小表（两列映射字典）：columns 由调用方给出，数据全量展示 */
+/** 通用小表（两列映射字典）：columns 由调用方给出，数据全量展示。
+ *  2026-11-18 审计：rowKey 首列值（品牌列）大面积重复 → React 重复 key；改
+ *  渲染前注入索引键（dataSource 每渲染静态重建，索引稳定且唯一）。 */
 function DictTable<T extends Record<string, unknown>>({ rows, columns }: { rows: T[]; columns: ColumnsType<T> }) {
+  const keyed = rows.map((r, i) => ({ ...r, __k: i }));
   return (
     <Table
       size="small"
-      rowKey={(r) => String(Object.values(r)[0])}
+      rowKey="__k"
       columns={columns}
       dataSource={rows}
       pagination={rows.length > 20 ? { pageSize: 20, showSizeChanger: false, hideOnSinglePage: true } : false}
@@ -73,7 +76,7 @@ function MatrixTable({ rows }: { rows: NonNullable<ReturnType<typeof readBenchma
       />
       <Table
         size="small"
-        rowKey={(r) => `${r.country_code ?? '*'}|${r.own_model_id}|${r.own_romram}|${r.competitor_sku_id}`}
+        rowKey={(r) => `${r.country_code ?? '*'}|${r.own_model_id}|${r.own_romram}|${r.competitor_sku_id}|${rows.indexOf(r)}`}
         columns={columns}
         dataSource={filtered}
         pagination={{ pageSize: 20, showSizeChanger: false }}

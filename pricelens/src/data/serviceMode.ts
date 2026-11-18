@@ -8,26 +8,36 @@
 //    编码 v2 包，117MB 原表 ≈ 10-20MB）、导入 POST /api/datapack（File 直接做
 //    body 流式上传，前端零内存压力——浏览器端 v3 导入 117MB 必崩的根治）；
 //  - 单文件模式（兜底保留）：外网演示 / 无 Python 环境，IndexedDB 链路原样。
+// 2026-11-18 审计加固：探测失败不再永久缓存（watchServerPack 双向自愈——离线
+// 模式下服务器中途出现也会自动切入）；所有 fetch 带超时纪律（探测/轮询 2.5s、
+// 启动拉包/镜像 4s、导入上传 5 分钟上限）；轮询幂等护栏；重建中（rebuilding）
+// 跳过基线对比，防止把「重建完成前的旧包」当成基线。
 // ============================================================
 
 let serviceModeDetected: boolean | null = null;
+let watcherStarted = false;
 
-/** 启动探测：/api/ping 2.5s 超时；任何失败（含 file:// 协议拒载）= 离线模式 */
+const fetchWithTimeout = async (url: string, ms: number, init?: RequestInit): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal, cache: 'no-store' });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** 启动探测：/api/ping 2.5s 超时；任何失败（含 file:// 协议拒载）= 离线模式。
+ *  结果仅作本次会话初值——离线模式下 watchServerPack 会持续重探（服务器中途
+ *  出现自动切入服务模式），不再永久缓存。 */
 export async function detectServiceMode(): Promise<boolean> {
   if (serviceModeDetected != null) return serviceModeDetected;
   try {
-    const controller = new AbortController();
-    // 全局 setTimeout（浏览器与 node 测试环境通用；不用 window.setTimeout）
-    const timer = setTimeout(() => controller.abort(), 2500);
-    try {
-      const res = await fetch('/api/ping', { signal: controller.signal, cache: 'no-store' });
-      if (res.ok) {
-        const info = (await res.json()) as { ok?: unknown };
-        serviceModeDetected = info?.ok === true;
-        return serviceModeDetected;
-      }
-    } finally {
-      clearTimeout(timer);
+    const res = await fetchWithTimeout('/api/ping', 2500);
+    if (res.ok) {
+      const info = (await res.json()) as { ok?: unknown };
+      serviceModeDetected = info?.ok === true;
+      return serviceModeDetected;
     }
   } catch {
     // file:// / 服务器未启动 / 超时——全部静默回落离线模式
@@ -44,7 +54,7 @@ export function isServiceMode(): boolean {
 /** 服务器最新 v2 包（服务模式启动装载用）；无包/失败 = null（回落 IndexedDB/内置） */
 export async function fetchServerPack(): Promise<unknown | null> {
   try {
-    const res = await fetch('/api/pack', { cache: 'no-store' });
+    const res = await fetchWithTimeout('/api/pack', 4000);
     if (!res.ok) return null;
     return (await res.json()) as unknown;
   } catch {
@@ -52,32 +62,44 @@ export async function fetchServerPack(): Promise<unknown | null> {
   }
 }
 
-/** 服务模式数据看门（2026-11-18 Eason「数据文件编辑完前端就变化」）：轮询
- *  /api/ping 的 meta.generatedAt——服务器侧 data/ 文件夹（offers.json/sales.json/
- *  config.json）被编辑后自动重派生、包 generatedAt 变化 → 刷新页面载新包。
- *  仅可见标签页轮询（后台标签不打扰，切回时下一拍刷新）。 */
-export function watchServerPack(intervalMs = 15000): void {
-  if (typeof window === 'undefined' || serviceModeDetected !== true) return;
-  let lastSeen: string | null = null;
+/** 服务模式数据看门（2026-11-18 Eason「数据文件编辑完前端就变化」）：
+ *  - 服务模式：轮询 /api/ping 的 meta.generatedAt 与**已装载包**的基线对比
+ *    （基线由调用方传入，堵「启动装载与首拍之间发生重建被吞」的窗口）；
+ *    rebuilding=true（服务器后台重建中）跳过——等完成后下拍再比；
+ *    变化 → 刷新页面载新包。仅可见标签页轮询。
+ *  - 离线模式（探测失败过）：持续重探——服务器中途启动/从挂死恢复时自动
+ *    reload 切入服务模式（修复审计「探测负结果永久缓存 × 服务器恢复不可达」）。
+ *  幂等：watcherStarted 护栏，重复调用只挂一个 interval。 */
+export function watchServerPack(baselineGeneratedAt: string | null, intervalMs = 15000): void {
+  if (typeof window === 'undefined' || watcherStarted) return;
+  watcherStarted = true;
+  let lastGen: string | null = baselineGeneratedAt ?? null;
   const poll = async (): Promise<void> => {
     if (document.visibilityState !== 'visible') return;
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 2500);
-      try {
-        const res = await fetch('/api/ping', { signal: controller.signal, cache: 'no-store' });
-        if (!res.ok) return;
-        const info = (await res.json()) as { hasPack?: unknown; meta?: { generatedAt?: string } | null };
-        if (info?.hasPack !== true) return;
-        const gen = info.meta?.generatedAt ?? '';
-        if (lastSeen == null) {
-          lastSeen = gen; // 首拍只建立基线（启动时装载的即当前包）
-          return;
-        }
-        if (gen !== lastSeen) window.location.reload();
-      } finally {
-        clearTimeout(timer);
+      const res = await fetchWithTimeout('/api/ping', 2500);
+      if (!res.ok) return;
+      const info = (await res.json()) as {
+        ok?: unknown;
+        hasPack?: unknown;
+        rebuilding?: unknown;
+        meta?: { generatedAt?: string } | null;
+      };
+      if (info?.ok !== true) return;
+      if (serviceModeDetected !== true) {
+        // 离线模式自愈：服务器出现了（有数据源即值得切入服务模式）→ 重载
+        if (info.hasPack === true) window.location.reload();
+        return;
       }
+      if (info.rebuilding === true) return; // 后台重建中：等完成，不比对旧包
+      if (info.hasPack !== true) return;
+      const gen = info.meta?.generatedAt ?? '';
+      if (!gen) return;
+      if (lastGen == null) {
+        lastGen = gen; // 未传基线（兜底）：首拍建立基线
+        return;
+      }
+      if (gen !== lastGen) window.location.reload();
     } catch {
       // 服务器暂不可达：静默，下拍再试
     }

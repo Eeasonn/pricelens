@@ -654,7 +654,12 @@ export function applyImportPayload(raw: ConfigSnapshotV1): ImportApplyResult {
 }
 
 /** 配置同步到服务器（服务模式才发；WP-D）：把「已校验快照的 keys 派生配置段」
- *  转成服务器 config.json 形态。服务器收到后存盘并对已导入原包自动重派生。 */
+ *  转成服务器 config.json 形态。服务器收到后存盘并对已导入原包自动重派生。
+ *  2026-11-18 审计加固：失败不再静默——快照落 LPL3.config.syncPending 待发
+ *  队列，下次服务模式启动时 mirrorServerConfig 重发（离线/瞬断期间导入的
+ *  配置不再被服务器旧配置在下次启动镜像时静默覆盖丢失）。 */
+const SYNC_PENDING_KEY = 'LPL3.config.syncPending';
+
 async function syncConfigToServer(raw: ConfigSnapshotV1): Promise<void> {
   const { isServiceMode } = await import('../data/serviceMode');
   if (!isServiceMode()) return;
@@ -673,9 +678,26 @@ async function syncConfigToServer(raw: ConfigSnapshotV1): Promise<void> {
       }
       : undefined,
   };
-  await fetch('/api/config', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(serverConfig),
-  });
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    let res: Response;
+    try {
+      res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverConfig),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch {
+    try {
+      localStorage.setItem(SYNC_PENDING_KEY, JSON.stringify(serverConfig));
+    } catch {
+      /* 存储不可用：只能放弃（下次导入会再同步） */
+    }
+  }
 }

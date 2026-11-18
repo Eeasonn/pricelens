@@ -115,8 +115,14 @@ def _folder_mtime():
     return max(mt) if mt else -1.0
 
 
+def _now_tag():
+    """generatedAt 毫秒级：秒级会在同一秒两次重建时产出同串，前端轮询漏检变更"""
+    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+
+
 def maybe_rebuild():
-    """源文件被编辑 → 自动重派生（所有 API 请求前调用；mtime 未变 = 零开销）"""
+    """源文件被编辑 → 自动重派生（阻塞版：显式操作 datapack/rederive/config 用；
+    mtime 未变 = 零开销）"""
     mt = _folder_mtime()
     if mt <= BUILD_STAMP["mtime"]:
         return
@@ -133,7 +139,7 @@ def maybe_rebuild():
             sales = _read_rows(_sales_path())
             pack = {
                 "kind": "pricelens-data-pack", "v": 3,
-                "generatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                "generatedAt": _now_tag(),
                 "offers": offers, "sales": sales, "salesProductAliases": {}, "monthly": [],
             }
             config = _read_json(CONFIG_PATH) or {}
@@ -144,6 +150,50 @@ def maybe_rebuild():
         except Exception:  # noqa: BLE001 —— 编辑坏档时保旧包、报完整栈
             BUILD_STAMP["mtime"] = mt  # 坏档不无限重试；修好文件后 mtime 再变即重建
             traceback.print_exc()
+
+
+REBUILDING = {"flag": False}
+
+
+def _rebuild_worker(mt):
+    """后台重建线程体（ping/pack 非阻塞路径用）"""
+    try:
+        with INGEST_LOCK:
+            cur = _folder_mtime()
+            if cur <= BUILD_STAMP["mtime"]:
+                return  # 已被阻塞路径或上一线程处理
+            offers_path = _offers_path()
+            if offers_path is None:
+                BUILD_STAMP["mtime"] = cur
+                return
+            offers = _read_rows(offers_path)
+            sales = _read_rows(_sales_path())
+            pack = {
+                "kind": "pricelens-data-pack", "v": 3,
+                "generatedAt": _now_tag(),
+                "offers": offers, "sales": sales, "salesProductAliases": {}, "monthly": [],
+            }
+            config = _read_json(CONFIG_PATH) or {}
+            v2_pack, diag, pack_id = ingest_pack.ingest_v3_pack(pack, config, REGION_BASE, DB_PATH)
+            _write_json(LATEST_PACK_PATH, v2_pack)
+            BUILD_STAMP["mtime"] = cur
+            print(f"[pricelens-server] 数据文件变更已重派生（{diag.get('rowsOut')} 事实行，pack_id={pack_id}）")
+    except Exception:  # noqa: BLE001 —— 编辑坏档时保旧包、报完整栈
+        BUILD_STAMP["mtime"] = _folder_mtime()
+        traceback.print_exc()
+    finally:
+        REBUILDING["flag"] = False
+
+
+def kick_rebuild_if_dirty():
+    """非阻塞重建踢一脚（ping/pack 快路径用——2026-11-18 审计：重建持锁 10-60s
+    会把 ping 一起堵死，前端探测超时静默降级离线模式）。dirty 且没有在跑 →
+    起后台线程；进行中/未 dirty = 立即返回。"""
+    mt = _folder_mtime()
+    if mt <= BUILD_STAMP["mtime"] or REBUILDING["flag"]:
+        return
+    REBUILDING["flag"] = True
+    threading.Thread(target=_rebuild_worker, args=(mt,), daemon=True).start()
 
 
 def _split_folder_files(pack):
@@ -249,13 +299,23 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- API ----------
     def _api(self, method):
         path = urlparse(self.path).path
-        maybe_rebuild()  # 数据文件被编辑 → 自动重派生（mtime 未变 = 零开销）
+        # 快路径（ping/pack）= 非阻塞踢一脚：重建在后台线程跑、立即响应旧包 +
+        # rebuilding 标志（2026-11-18 审计：阻塞版会把 ping 堵 10-60s，前端探测
+        # 超时静默降级离线模式、启动白屏整个重建时长）。显式操作（datapack/
+        # rederive/config POST）保持阻塞版等完成回执。
+        dirty = _folder_mtime() > BUILD_STAMP["mtime"]
+        if dirty and not REBUILDING["flag"]:
+            kick_rebuild_if_dirty()
+        rebuilding = REBUILDING["flag"] or (dirty and BUILD_STAMP["mtime"] < _folder_mtime())
         if method == "GET" and path == "/api/ping":
             return self._send_json({"ok": True, "service": "pricelens-server",
                                     "editableFolder": _offers_path() is not None,
+                                    "rebuilding": rebuilding,
                                     "hasPack": os.path.exists(LATEST_PACK_PATH),
                                     "meta": _pack_meta()})
         if method == "GET" and path == "/api/pack":
+            if rebuilding:
+                return self._send_json({"error": "数据文件重建中，稍后再取（前端轮询会自动拿到新包）"}, 503)
             pack = _read_json(LATEST_PACK_PATH)
             if pack is None:
                 return self._send_json({"error": "尚无数据包（先 POST /api/datapack 或在 data/ 放 offers.csv）"}, 404)
@@ -280,7 +340,7 @@ class Handler(BaseHTTPRequestHandler):
                             offers = _read_rows(_offers_path())
                             sales = _read_rows(_sales_path())
                             pack = {"kind": "pricelens-data-pack", "v": 3,
-                                    "generatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                                    "generatedAt": _now_tag(),
                                     "offers": offers, "sales": sales,
                                     "salesProductAliases": {}, "monthly": []}
                     else:
@@ -296,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
                             sales = _read_rows(_sales_path())
                             pack = {"kind": "pricelens-data-pack", "v": 3,
                                     "generatedAt": pack.get("generatedAt")
-                                    or datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                                    or _now_tag(),
                                     "offers": offers, "sales": sales,
                                     "salesProductAliases": pack.get("salesProductAliases") or {},
                                     "monthly": pack.get("monthly") or []}
@@ -328,7 +388,7 @@ class Handler(BaseHTTPRequestHandler):
                             offers = _read_rows(_offers_path())
                             sales = _read_rows(_sales_path())
                             cfg_pack = {"kind": "pricelens-data-pack", "v": 3,
-                                        "generatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                                        "generatedAt": _now_tag(),
                                         "offers": offers, "sales": sales,
                                         "salesProductAliases": {}, "monthly": []}
                             _, diag, _ = do_ingest(cfg_pack)

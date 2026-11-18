@@ -1232,7 +1232,7 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: 
       if (capped <= top) { top = capped; break; } // 底界吸收后不再前进：停（极端防线）
       top = capped;
     }
-    if (clampBottom) top = Math.min(top, bottom! - it.h);
+    if (clampBottom) top = Math.max(plotTop + 2, Math.min(top, bottom! - it.h)); // 上界防御：盒高超绘图区的退化输入不再把标签顶到图上方
     placed.push({ left: it.left, right: it.right, top, h: it.h });
     if (it.kind === 'price') {
       (dy[it.seriesKey] ??= {})[it.pointIdx] = top - it.top;

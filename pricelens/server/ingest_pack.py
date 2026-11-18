@@ -76,7 +76,7 @@ COUNTRY_CODES = {
     "哥伦比亚": "CO", "阿根廷": "AR", "南非": "ZA", "土耳其": "TR", "越南": "VN",
     "新加坡": "SG", "日本": "JP",
     # PSI 侧独有别名（与前端 DEFAULT_COUNTRY_ALIASES 并集同源）
-    "turkiye": "TR", "uk": "GB", "britain": "GB", "saudi": "SA",
+    "turkiye": "TR", "uk": "GB", "britain": "GB", "saudi": "SA", "uae": "AE",
 }
 SERIES_NAME_MARKERS = [
     "iphone", "ipad", "macbook", "mac ", "airpods",
@@ -1471,13 +1471,19 @@ def load_v2_pack_to_sqlite(db_path, v2_pack, pack_id):
     fact_rows = []
     for i in range(n):
         cid = channels[cols["h"][i]]
+        # fx 防除零（2026-11-18 审计：外部 v1/v2 包不经前端 validateFactPack，
+        # fx<=0 畸形值在此除零崩——兜底为 1，USD 列失真但落库与包透传不断）
+        fx_i = cols["fx"][i]
+        if not (isinstance(fx_i, (int, float)) and math.isfinite(fx_i) and fx_i > 0):
+            fx_i = 1
+        price_i, rrp_i = cols["p"][i], cols["rrp"][i]
         fact_rows.append({
             "week_id": weeks[cols["w"][i]], "sku_id": skus[cols["s"][i]],
             "country_code": cid.split(":")[0], "channel_id": cid,
             "seller": d["seller"][cols["seller"][i]],
-            "rrp_local": cols["rrp"][i], "price_local": cols["p"][i], "fx": cols["fx"][i],
-            "rrp_usd": jr2(cols["rrp"][i] / cols["fx"][i]) if cols["rrp"][i] is not None else None,
-            "price_usd": jr2(cols["p"][i] / cols["fx"][i]) if cols["p"][i] is not None else None,
+            "rrp_local": rrp_i, "price_local": price_i, "fx": fx_i,
+            "rrp_usd": jr2(rrp_i / fx_i) if rrp_i is not None else None,
+            "price_usd": jr2(price_i / fx_i) if price_i is not None else None,
             "discount_display": cols["dd"][i], "discount_actual": cols["da"][i],
             "bundle": bool(cols["b"][i]),
             "installment": d["inst"][cols["inst"][i]], "promo_text": d["promo"][cols["promo"][i]],

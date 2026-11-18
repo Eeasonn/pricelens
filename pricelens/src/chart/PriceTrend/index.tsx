@@ -1403,14 +1403,8 @@ export default function PriceTrend(props: {
   // （nameZoneWidthOf，钳 [112, 320]、以名称完整不换行为准，旧基准 188）；合并图与
   // 全部分离面板统一取全局最长名（面板保持等宽）。2026-11-13 两行药丸：传两行
   // 规格（行1 = 品牌词+产品名、行2 = 配置 chip），带宽取两行较宽者
-  const nameZoneW = useMemo(
-    () =>
-      nameZoneWidthOf(
-        (splitActive ? panelViews.flatMap((p) => p.vis) : chartSeries).map((s) => seriesPillMetaOf(s)),
-      ),
-    [splitActive, panelViews, chartSeries],
-  );
-  const gridLeft = estGridLeft(state.currency, showYTicks, showTiers, yAxisTickTexts, nameZoneW);
+  // nameZoneW / gridLeft 移至 splitYFinal 之后（2026-11-18 审计：降级单行的带宽
+  // 预留要与 buildLabelPlan 的降级判定同一条件、同一口径——需要 zoneScale.plotHeight）
 
   // 分离显示共享 Y 轴：全面板 series 并集算一次（各面板受控传入同一 yScale，刻度逐像素一致）。
   // 第五十四轮追补②：补上步长滞回 prev——此前缺 prev，季粒度把促销低谷平均掉后
@@ -1473,6 +1467,25 @@ export default function PriceTrend(props: {
   }, [splitActive, volumeOn, splitYCfg, panelGridTop, sliderScale, panelViews, state.priceTypes, yCompress, state.currency, yLimitLive, yAdaptKey]);
   // 量层开启 = 面板与共享轴列都吃压缩后的模型（关闭 = 原模型，行为不变）
   const splitYFinal = splitVolPlan && volumeOn ? splitVolPlan.scale : splitYCfg;
+  // 名称带宽预留与「两行降级单行」判定同源（2026-11-18 审计：降级后单行全文
+  // 「名称 + 配置」比两行的任一行都宽——带宽仍按两行预留会横向溢出名称带压进
+  // 绘图区）。同一条件（Σ两行盒高+间隙 vs 绘图区高，多留 18px 保守余量对齐
+  // 生命周期行的近似）→ 降级时按单行全文重预留。buildLabelPlan 内做真实判定
+  // （geom.plotHeight 同源 scale.plotHeight），两侧判定一致。
+  const nameZoneW = useMemo(() => {
+    const pills = (splitActive ? panelViews.flatMap((p) => p.vis) : chartSeries).map((s) => seriesPillMetaOf(s));
+    const zoneScale = splitActive ? splitYFinal : yFinal;
+    const zonePlotH = zoneScale?.plotHeight ?? Number.POSITIVE_INFINITY;
+    const GAP = 4;
+    const twoRowH = (p: ReturnType<typeof seriesPillMetaOf>): number => 16 + (p.cfg ? 16 : 0) + 6;
+    const totalTwoRow = pills.reduce((acc, p) => acc + twoRowH(p), 0) + GAP * Math.max(0, pills.length - 1);
+    if (totalTwoRow > zonePlotH - 4 - 18) {
+      return nameZoneWidthOf(pills.map((p) => (p.cfg ? { ...p, name: `${p.name} ${p.cfg}`.trim(), cfg: '' } : p)));
+    }
+    return nameZoneWidthOf(pills);
+  }, [splitActive, panelViews, chartSeries, splitYFinal, yFinal]);
+  const gridLeft = estGridLeft(state.currency, showYTicks, showTiers, yAxisTickTexts, nameZoneW);
+
   const splitVolH = splitVolPlan && volumeOn ? splitVolPlan.volH : 0;
   useEffect(() => {
     if (splitYFinal) splitYBaseRef.current = { key: yAdaptKey, intervalUsd: splitYFinal.intervalUsd };

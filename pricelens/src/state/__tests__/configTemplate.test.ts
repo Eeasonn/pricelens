@@ -165,7 +165,7 @@ describe('C3 字典四页签 + openpyxl 预填表 round-trip（2026-11-18 显性
     expect(parsed.keys.benchmarkMatrix?.length).toBe(950);
     expect(parsed.keys.tierLadders && Object.keys(parsed.keys.tierLadders).length).toBe(6);
     expect(parsed.keys.promoRows?.length).toBe(66);
-    expect(parsed.keys.countryAliases && Object.keys(parsed.keys.countryAliases).length).toBe(56);
+    expect(parsed.keys.countryAliases && Object.keys(parsed.keys.countryAliases).length).toBe(57);
     expect(parsed.keys.platformAliases && Object.keys(parsed.keys.platformAliases).length).toBe(13);
     expect(parsed.keys.storeAliases && Object.keys(parsed.keys.storeAliases).length).toBe(6);
     expect(parsed.keys.industryOfCat && Object.keys(parsed.keys.industryOfCat).length).toBe(16);

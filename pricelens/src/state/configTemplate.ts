@@ -591,19 +591,34 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
     };
   }).filter((row) => row.country_code && row.promo_name && row.start_date && row.end_date);
   // —— C3 解析字典四页签（2026-11-18 显性化）：Record 形态；空 = null（出厂默认） ——
-  const readAliasSheet = (rows: Record<string, CellValue>[], aliasCol: string, valueCol: string): Record<string, string> | null => {
+  // 2026-11-18 审计加固：有数据行但期望表头不存在（用户改了表头/半角括号）→
+  // 抛错拒绝整份文件，不再静默产 null 被当成「恢复出厂默认」白丢数据。
+  const readAliasSheet = (sheetName: string, rows: Record<string, CellValue>[], aliasCol: string, valueCol: string): Record<string, string> | null => {
+    if (rows.length > 0) {
+      const sample = rows[0];
+      const hasAlias = Object.keys(sample).some((k) => k === aliasCol);
+      const hasValue = Object.keys(sample).some((k) => k === valueCol);
+      if (!hasAlias || !hasValue) {
+        throw new Error(`页签「${sheetName}」表头不符：应含「${aliasCol}」与「${valueCol}」两列（请勿修改表头文字）。`);
+      }
+    }
     const out: Record<string, string> = {};
     for (const row of rows) {
       const alias = textValue(get(row, aliasCol));
       const value = textValue(get(row, valueCol));
+      // 原型危险键（__proto__ 等 JSON 自有属性）：运行时 Set 语义 no-op 静默丢
+      // ——导入侧显性拒绝，与「整份校验」承诺一致
+      if (alias === '__proto__' || alias === 'constructor' || alias === 'prototype') {
+        throw new Error(`页签「${sheetName}」存在不合法的别名「${alias}」，已拒绝整份导入。`);
+      }
       if (alias && value) out[alias] = value;
     }
     return Object.keys(out).length > 0 ? out : null;
   };
-  const countryAliases = readAliasSheet(countryAliasRows, '别名（中英文/简称）', '国家码');
-  const platformAliases = readAliasSheet(platformAliasRows, '别名', '平台名');
-  const storeAliases = readAliasSheet(storeAliasRows, '别名', '店铺类型（1P/3P/独立站）');
-  const industryOfCatRaw = readAliasSheet(industryRows, '品类原文', '产业（phone/tablet/wearable/audio/iot/pc）');
+  const countryAliases = readAliasSheet('国家别名', countryAliasRows, '别名（中英文/简称）', '国家码');
+  const platformAliases = readAliasSheet('平台别名', platformAliasRows, '别名', '平台名');
+  const storeAliases = readAliasSheet('店铺类型别名', storeAliasRows, '别名', '店铺类型（1P/3P/独立站）');
+  const industryOfCatRaw = readAliasSheet('品类映射', industryRows, '品类原文', '产业（phone/tablet/wearable/audio/iot/pc）');
   const industryOfCat: Record<string, string> | null = industryOfCatRaw
     ? Object.fromEntries(Object.entries(industryOfCatRaw).map(([k, v]) => [k, v.trim().toLowerCase()]))
     : null;

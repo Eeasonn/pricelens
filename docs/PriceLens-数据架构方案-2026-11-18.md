@@ -217,7 +217,7 @@ info 共享同一销量，不摊分）；无销量行的型号回落估算（不
 
 | # | 表 | 粒度 | 字段 | 出厂默认量 |
 |---|---|---|---|---|
-| C3-1 | 国家别名 | 一行 = 别名 | `alias → country_code`（中英文/简称，含 PSI 侧 turkiye/uk/britain/saudi 并集） | 56 条 |
+| C3-1 | 国家别名 | 一行 = 别名 | `alias → country_code`（中英文/简称，含 PSI 侧 turkiye/uk/britain/saudi 并集） | 57 条 |
 | C3-2 | 平台别名 | 一行 = 别名 | `alias → platform`（`mvm→Mvideo`、`amazon.sa→Amazon`…） | 13 条 |
 | C3-3 | 店铺类型别名 | 一行 = 别名 | `alias → store_type`（平台型零售商→1P、官网→独立站…） | 6 条 |
 | C3-4 | 品类映射 | 一行 = 品类原文 | `category_raw → industry`（手机→phone…） | 16 条 |

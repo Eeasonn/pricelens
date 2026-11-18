@@ -99,7 +99,7 @@ export const DEFAULT_COUNTRY_ALIASES: Record<string, string> = {
   哥伦比亚: 'CO', 阿根廷: 'AR', 南非: 'ZA', 土耳其: 'TR', 越南: 'VN',
   新加坡: 'SG', 日本: 'JP',
   // PSI 侧独有别名（收编进并集）
-  turkiye: 'TR', uk: 'GB', britain: 'GB', saudi: 'SA',
+  turkiye: 'TR', uk: 'GB', britain: 'GB', saudi: 'SA', uae: 'AE',
 };
 
 export const DEFAULT_PLATFORM_ALIASES: Record<string, string> = {

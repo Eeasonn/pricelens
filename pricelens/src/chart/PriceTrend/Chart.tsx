@@ -760,6 +760,27 @@ export default function Chart(props: ChartProps) {
   const volumeOwnerPillRef = useRef<HTMLButtonElement | null>(null);
   // 量带归属候选菜单（2026-11-17 Eason：点击归属药丸弹出候选列表选择，取代盲循环切换）
   const [ownerMenuOpen, setOwnerMenuOpen] = useState(false);
+  // portal 悬停卡滚动跟随（2026-11-18 审计）：卡坐标 = 渲染期现读的容器视口
+  // rect，而页面滚动/横滚容器拖动不触发任何状态变化 → fixed 卡钉死旧视口位置
+  // 飘移。悬停存续时监听 scroll（capture 捕获一切滚动容器）+ 容器 wheel，rAF
+  // 合帧强制一次重渲染（rect 重读）。
+  const [ , setScrollTick] = useState(0);
+  const hoverLiveRef = useRef(false);
+  useEffect(() => {
+    let raf = 0;
+    const bump = (): void => {
+      if (!hoverLiveRef.current || raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        setScrollTick((t) => t + 1);
+      });
+    };
+    window.addEventListener('scroll', bump, true); // capture：页面级+横滚容器全捕获
+    return () => {
+      window.removeEventListener('scroll', bump, true);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
   useEffect(() => {
     if (!ownerMenuOpen) return undefined;
     const onDocPointerDown = (e: PointerEvent): void => {
@@ -1524,6 +1545,9 @@ export default function Chart(props: ChartProps) {
     setHoverNameKey(null);
   }, [volHover, volBandLive]);
   const volHoverIdx = volBandLive && geom && volHover?.idx != null && volHover.idx < geom.n ? volHover.idx : null;
+  // portal 悬停卡滚动跟随（见上方 scroll 监听）：悬停存续标记（渲染期同步赋值，
+  // bump 在事件期读 ref——值即本渲染的悬停态）
+  hoverLiveRef.current = tipIdx != null || volHoverIdx != null;
   // 该列价格主卡是否在场（与下方悬停明细 rows 判定同源）：在场 = 销量卡随主卡定侧，否则自己定侧
   const mainTipShown =
     !tipBoxOn && geom != null && tipIdx != null && tipIdx < geom.n
@@ -3070,10 +3094,14 @@ export default function Chart(props: ChartProps) {
             const visualLeft = flipped ? rawLeft - cardW : rawLeft;
             const clampedVisual = vw > 0 ? Math.max(8, Math.min(visualLeft, vw - cardW - 8)) : visualLeft;
             const viewLeft = flipped ? clampedVisual + cardW : clampedVisual;
+            // 钳制位移量（视口 px；图容器无缩放 → 同 px）：钳制激活时主卡贴线边
+            // 视觉移位，销量卡 align.x 加同一 delta 才保持「成组一线」
+            //（2026-11-18 审计：销量卡恒钉原始 edgeX，钳制一激活对齐即破）
+            const clampDelta = clampedVisual - visualLeft;
             return (
               <>
                 {costDot}
-                {volHoverIdx != null && renderVolCard({ x: group.edgeX, side: group.side })}
+                {volHoverIdx != null && renderVolCard({ x: group.edgeX + clampDelta, side: group.side })}
                 {/* 定位容器：portal 到 body + fixed（整页最上层、任何位置不被图容器/
                     页卡/横滚容器的 overflow 裁剪），left/top/transform（十字锚定 + 翻转）
                     全部上提一层，迷你卡（bottom 锚）与价格卡（relative）在其内堆叠 */}

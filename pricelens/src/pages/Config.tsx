@@ -362,8 +362,10 @@ export default function Config() {
         return;
       }
       setPendingImport({ payload: result.payload, summary: summarizeImportPayload(result.payload) });
-    } catch {
-      message.error('读取文件失败，请重试');
+    } catch (error) {
+      // parseConfigWorkbook 会抛业务校验错（页签表头不符/危险别名）——透出具体
+      // 原因而非笼统「读取失败」
+      message.error(`导入失败：${error instanceof Error ? error.message : '读取文件失败，请重试'}`);
     }
   };
 

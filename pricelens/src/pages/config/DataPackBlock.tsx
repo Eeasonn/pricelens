@@ -47,13 +47,28 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
   const [busy, setBusy] = useState(false);
   const serviceMode = isServiceMode();
 
-  // 服务器 API 结果（服务模式导入/重派生返回的 {ok, error, diag, meta}）
+  // 服务器 API 结果（服务模式导入/重派生返回的 {ok, error, diag, meta}）。
+  // 2026-11-18 审计加固：AbortController 超时（上传+派生 5 分钟上限）——服务器
+  // 挂死时 fetch 永不 settle 曾让 busy 恒 true + message.loading(0) 双重泄漏。
   const postServer = async (path: string, body?: BodyInit): Promise<{ error?: string; diag?: DataPackMeta['offersDiag'] }> => {
-    const res = await fetch(path, {
-      method: 'POST',
-      ...(body != null ? { body } : {}),
-      headers: body != null ? { 'Content-Type': 'application/json' } : undefined,
-    });
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 5 * 60 * 1000);
+    let res: Response;
+    try {
+      res = await fetch(path, {
+        method: 'POST',
+        ...(body != null ? { body } : {}),
+        headers: body != null ? { 'Content-Type': 'application/json' } : undefined,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      window.clearTimeout(timer);
+      throw new Error(error instanceof DOMException && error.name === 'AbortError'
+        ? '服务器响应超时（5 分钟）——请检查服务器进程是否还在运行，稍后重试'
+        : `无法连接服务器：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      window.clearTimeout(timer);
+    }
     const info = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; diag?: DataPackMeta['offersDiag'] } | null;
     if (!res.ok || !info?.ok) throw new Error(info?.error || `服务器响应异常（HTTP ${res.status}）`);
     return { diag: info.diag };
@@ -168,18 +183,34 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
   };
 
   const onReset = async (): Promise<void> => {
-    if (serviceMode) {
-      try {
-        await postServer('/api/datapack/reset');
-      } catch (error) {
-        message.error(`还原失败：${error instanceof Error ? error.message : String(error)}`);
-        return;
-      }
-      await clearDataPack(); // 本机旧包一并清掉（服务模式优先服务器包，但防回退混淆）
-      message.success('服务器数据已清空，即将刷新页面（回落内置数据）');
-      window.setTimeout(() => window.location.reload(), 700);
+    // 2026-11-18 审计加固：与导入/重派生同款三道门——busy 防并发（reset 在途时
+    // 再点导入会两操作交错）、RBAC 纵深（Popconfirm disabled 之外的入口函数复检）
+    if (busy) return;
+    if (!canEditConfig()) {
+      message.error('查阅者不可更改本机数据承载，请联系 GTM');
       return;
     }
+    setBusy(true);
+    try {
+      if (serviceMode) {
+        try {
+          await postServer('/api/datapack/reset');
+        } catch (error) {
+          message.error(`还原失败：${error instanceof Error ? error.message : String(error)}`);
+          return;
+        }
+        // 本机旧包一并清掉（服务模式优先服务器包，但防回退混淆）；清失败不能
+        // 刷新——applyPersistedDataPack 会把没删掉的包重新载入，与单文件分支
+        // 同一 2026-11-16 语义
+        const { cleared } = await clearDataPack();
+        if (!cleared) {
+          message.warning('服务器数据已清空，但本机持久化包清除失败（存储被占用）——请关闭其他标签页后重试，暂不刷新。');
+          return;
+        }
+        message.success('服务器数据已清空，即将刷新页面（回落内置数据）');
+        window.setTimeout(() => window.location.reload(), 700);
+        return;
+      }
     // cleared=false（删除失败）时不能刷新：刷新后 applyPersistedDataPack 会把
     // 没删掉的包重新载入，界面说「已还原」而数据原封不动（2026-11-16 审视修复）
     const { cleared } = await clearDataPack();
@@ -189,6 +220,9 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
     }
     message.success('已还原为内置数据，即将刷新页面');
     window.setTimeout(() => window.location.reload(), 700);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const readOnlyHint = '查阅者不可更改本机数据承载，请联系 GTM';
