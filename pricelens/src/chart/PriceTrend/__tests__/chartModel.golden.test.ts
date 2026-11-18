@@ -582,12 +582,14 @@ describe('buildTickRows / buildTierBoxes / badges / offer', () => {
       gift: { kind: 'gift', promoName: '黑五', headline: '赠保护壳', detail: '下单赠 保护壳', endDate: '2026-11-28', remainingDays: 5 },
     };
     expect(offerLineItems(combo)).toEqual([
-      { kind: 'discount', label: '折扣', text: '券 −12%' },
-      { kind: 'installment', label: '分期', text: '12 期免息' },
-      { kind: 'gift', label: '赠品', text: '赠保护壳' },
+      { kind: 'discount', label: '折扣', text: '券 −12%', detail: '平台券' },
+      { kind: 'installment', label: '分期', text: '12 期免息', detail: '先享后付' },
+      { kind: 'gift', label: '赠品', text: '赠保护壳', detail: '下单赠 保护壳' },
     ]);
     // 只有单类权益时只出一行
-    expect(offerLineItems({ gift: combo.gift })).toEqual([{ kind: 'gift', label: '赠品', text: '赠保护壳' }]);
+    expect(offerLineItems({ gift: combo.gift })).toEqual([
+      { kind: 'gift', label: '赠品', text: '赠保护壳', detail: '下单赠 保护壳' },
+    ]);
     expect(offerLineItems(null)).toEqual([]);
   });
 });

@@ -104,7 +104,10 @@ def _write_rows_csv(path, rows):
         with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
             w = csv.writer(f)
             if rows:
-                headers = list(rows[0].keys())
+                # 表头 = 全行键并集（首次出现序）：原表行键集合逐行不同（稀疏列/
+                # 行业差异），只取首行键会整列丢（真机踩过：首行音频行无 RRP →
+                # 「平台建议零售价-本币」全列丢失，RRP/参考价/档位全线失真）
+                headers = list(dict.fromkeys(k for r in rows for k in (r or {}).keys()))
                 w.writerow(headers)
                 for r in rows:
                     w.writerow(["" if r.get(h) is None else r.get(h) for h in headers])

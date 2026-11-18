@@ -2856,6 +2856,7 @@ export default function Chart(props: ChartProps) {
                       >
                         <span style={{ color: color.mute, flexShrink: 0 }}>{it.label}</span>
                         <span
+                          title={it.detail} // 2026-11-18 Eason「显示不下」：截断行悬停看源列全文
                           style={{
                             color: color.warning,
                             whiteSpace: 'nowrap',
@@ -3712,7 +3713,10 @@ export default function Chart(props: ChartProps) {
             return (
               <>
                 {pane('price', priceHeaderY, props.costs ? '价格 / 成本' : '价格', currencyCodeOf(currency), false)}
-                {volOn && props.volumeInline !== true && pane('volume', volHeaderY, '销量', '台', true)}
+                {/* 销量节头徽标接口径（2026-11-18）：PSI 真实销量不标「模拟」（此前硬编码 true
+                    在真实口径下误标——演示事故级）；估算口径维持「模拟」。归属药丸 title 已有
+                    PSI/估算口径切换（salesSourceOf） */}
+                {volOn && props.volumeInline !== true && pane('volume', volHeaderY, '销量', '台', salesSourceOf() !== 'psi-weekly')}
               </>
             );
           })()}

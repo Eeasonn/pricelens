@@ -614,11 +614,11 @@ function toOfferInfo(row: FactPriceWeekly, countryCode: string, anchorDate: stri
   const out: OfferInfo = {};
   if (row.promo_text) {
     const first = row.promo_text.split('/')[0]?.trim() ?? '';
-    out.discount = mk('discount', first.length > 20 ? `${first.slice(0, 20)}…` : first || '平台促销', row.promo_text, promo?.end_date ?? anchorDate);
+    out.discount = mk('discount', first.length > 32 ? `${first.slice(0, 32)}…` : first || '平台促销', row.promo_text, promo?.end_date ?? anchorDate);
   }
   if (row.installment) {
     const head = row.installment.split('/')[0]?.trim() ?? '';
-    out.installment = mk('installment', head.length > 16 ? `${head.slice(0, 16)}…` : head || '分期付款', row.installment, anchorDate);
+    out.installment = mk('installment', head.length > 24 ? `${head.slice(0, 24)}…` : head || '分期付款', row.installment, anchorDate);
   }
   if (row.bundle) {
     out.gift = mk('gift', '组合销售', '该上架为组合/套装销售，页面价为套装价', anchorDate);

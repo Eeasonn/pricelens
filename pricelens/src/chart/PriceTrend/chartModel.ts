@@ -846,14 +846,17 @@ export function offerSummary(offer: OfferInfo | null | undefined): string {
 }
 
 /** 悬停浮窗结构化三字段行（第五十轮）：折扣/分期/赠品 各占一行（只出有值的字段），
- *  label 为固定类别名，text = 该权益的一眼短文案（headline） */
+ *  label 为固定类别名，text = 该权益的一眼短文案（headline）、detail = 源列全文
+ *  （2026-11-18 Eason「促销折扣显示不下」：headline 截断 20→32，行挂 title 全文
+ *  悬停可读——截断只是显示层，源表综合 offer 信息不做语义拆分） */
 export function offerLineItems(
   offer: OfferInfo | null | undefined,
-): { kind: OfferKind; label: string; text: string }[] {
+): { kind: OfferKind; label: string; text: string; detail: string }[] {
   return offerList(offer).map((d) => ({
     kind: d.kind,
     label: d.kind === 'discount' ? '折扣' : d.kind === 'installment' ? '分期' : '赠品',
     text: d.headline,
+    detail: d.detail,
   }));
 }
 
