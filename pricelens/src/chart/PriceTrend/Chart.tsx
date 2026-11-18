@@ -3051,8 +3051,19 @@ export default function Chart(props: ChartProps) {
             );
             // 2026-11-18 portal 化：图内坐标（left/top 相对图容器原点）+ 容器视口 rect
             // = fixed 视口坐标。rect 在渲染期现读（鼠标移动即重算，滚动后随下一次
-            // 重渲染校正）；jsdom rect 全 0 → 视口坐标 = 图内坐标原值（测试兼容）
+            // 重渲染校正）；jsdom rect 全 0 → 视口坐标 = 图内坐标原值（测试兼容）。
+            // 水平视口钳制（分图窄面板真机发现）：卡比面板宽且左翻时视觉左缘可越出
+            // 视口被屏幕切掉——垂直锚定不动（严格钉点），水平按「transform 后的视觉
+            // 左缘」钳回 [8, vw-卡宽-8] 再还原 style.left（右放 = left 本身；左翻 =
+            // left-卡宽）。Eason「完全覆盖在界面之上」的完整性之义
             const hostRect = wrapRef.current?.getBoundingClientRect();
+            const cardW = W + TIP_MAIN_CHROME_W;
+            const rawLeft = (hostRect?.left ?? 0) + left;
+            const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+            const flipped = group.side === 'left';
+            const visualLeft = flipped ? rawLeft - cardW : rawLeft;
+            const clampedVisual = vw > 0 ? Math.max(8, Math.min(visualLeft, vw - cardW - 8)) : visualLeft;
+            const viewLeft = flipped ? clampedVisual + cardW : clampedVisual;
             return (
               <>
                 {costDot}
@@ -3064,9 +3075,9 @@ export default function Chart(props: ChartProps) {
                   <div
                     style={{
                       position: 'fixed',
-                      left: (hostRect?.left ?? 0) + left,
+                      left: viewLeft,
                       top: (hostRect?.top ?? 0) + top,
-                      transform: tipTranslate, // 左下角严格钉十字交点（右上；左翻=左下角镜像）
+                      transform: tipTranslate, // 左下角严格钉十字交点（右上；左翻=左下角镜像）；水平越界已上提钳制
                       zIndex: 46, // 全局最上层（允许溢出绘图区，portal 后真实可见）
                       pointerEvents: 'none',
                     }}
