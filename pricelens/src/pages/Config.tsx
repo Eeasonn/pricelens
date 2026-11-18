@@ -57,6 +57,7 @@ import { useFilters } from '../state/FiltersContext';
 import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
 import DataQualityBlock from './config/DataQualityBlock';
 import DataPackBlock from './config/DataPackBlock';
+import RulesDictBlock from './config/RulesDictBlock';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
@@ -116,6 +117,7 @@ const CONFIG_SECTIONS: ReadonlyArray<readonly [string, string]> = [
   ['prev-gen', '上一代关系'],
   ['fx', '汇率'],
   ['promo', '大促日历'],
+  ['rules-dict', '规则与字典'],
   ['data-pack', '数据包'],
 ];
 
@@ -844,6 +846,22 @@ export default function Config() {
                   );
                 })}
             </div>
+          </Block>
+
+          {/* 规则与字典（2026-11-18 Eason「所有配置表在前端配置界面呈现」）：
+              九张规则/字典表只读呈现（系列规则/型号别名/对标矩阵/分档阶梯/大促
+              档期 + C3 四字典）——来源标注 + 空表语义 + 大表搜索分页；只读，
+              编辑主通道仍是 Excel → 导入配置 */}
+          <Block
+            id="rules-dict"
+            title="规则与字典"
+            extra={
+              <span style={{ fontSize: fontSize.caption, color: color.mute }}>
+                九张规则/字典表当前生效内容 · 编辑走 Excel 导入
+              </span>
+            }
+          >
+            <RulesDictBlock />
           </Block>
 
           {/* 数据包（2026-11-14 Eason「价格数据完全以导入方式承载 + 本地可运行、
