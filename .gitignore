@@ -69,3 +69,4 @@ portable/
 
 # ZA 册子源表（内部数据不入库，产物 JSON 承载）
 pricelens/data/real/booklet/*.xlsx
+pricelens/server/data/
