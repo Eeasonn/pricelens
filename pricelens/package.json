@@ -22,7 +22,9 @@
     "ingest": "python3 scripts/ingest_real.py",
     "ingest:za": "python3 scripts/ingest_za_booklet.py",
     "review:za": "python3 scripts/review_za_booklet.py",
-    "portable": "node scripts/build_portable.mjs"
+    "portable": "node scripts/build_portable.mjs",
+    "server": "python3 -X utf8 server/server.py",
+    "server:bundle": "node scripts/build_server_bundle.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.35",
